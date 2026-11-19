@@ -1,9 +1,7 @@
-package featured
+package featured_test
 
 import (
-	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/internal/core/ports"
+	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
@@ -17,9 +15,27 @@ import (
 	"github.com/google/uuid"
 )
 
-func newTrackFeat(t *testing.T, userId shared.UserId, title string) *domain.Track {
+const (
+	backfillPageSize    = 200
+	backfillMaxPages    = 50
+	backfillCooldown    = 5 * time.Minute
+	backfillItemTimeout = 10 * time.Second
+	backfillTimeBudget  = 45 * time.Second
+)
+
+type manualClock struct{ at time.Time }
+
+func newManualClock() *manualClock {
+	return &manualClock{at: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
+}
+
+func (c *manualClock) now() time.Time { return c.at }
+
+func (c *manualClock) advance(d time.Duration) { c.at = c.at.Add(d) }
+
+func newTrackFeat(t *testing.T, userId shared.UserId, title string) *catalog.Track {
 	t.Helper()
-	track, err := domain.NewTrack(userId, title, "Artist", "Album")
+	track, err := catalog.NewTrack(userId, title, "Artist", "Album")
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
@@ -31,17 +47,17 @@ func TestBackfillFeaturedService(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 
 	t.Run("resolves and persists, idempotent", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
+		repo := catalog.NewInMemoryTrackRepo()
 		t1 := newTrackFeat(t, userId, "Track A")
 		t2 := newTrackFeat(t, userId, "Track B")
 		repo.Seed(t1)
 		repo.Seed(t2)
 
-		resolver := catalogtest.FeaturedResolver{ByTitle: map[string][]domain.FeaturedArtist{
-			"Track A": {{Name: "Guest", MBID: "m1", Role: domain.RoleFeatured}},
+		resolver := catalog.InMemoryFeaturedResolver{ByTitle: map[string][]catalog.FeaturedArtist{
+			"Track A": {catalog.NewFeaturedArtistIdentityOnly("Guest", "m1", 0)},
 		}}
-		svc := NewBackfillFeaturedService(repo, repo, resolver)
-		svc.admission = newBackfillAdmission(0, time.Now)
+		clock := newManualClock()
+		svc := catalog.NewBackfillFeaturedService(repo, repo, resolver, catalog.WithBackfillClock(clock.now))
 
 		res, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
@@ -54,6 +70,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 			t.Errorf("t1 featured = %+v", t1.FeaturedArtists)
 		}
 
+		clock.advance(backfillCooldown)
 		res2, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
 			t.Fatalf("second Execute: %v", err)
@@ -64,9 +81,9 @@ func TestBackfillFeaturedService(t *testing.T) {
 	})
 
 	t.Run("per-track resolver error is skipped, not fatal", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
+		repo := catalog.NewInMemoryTrackRepo()
 		repo.Seed(newTrackFeat(t, userId, "X"))
-		svc := NewBackfillFeaturedService(repo, repo, catalogtest.FeaturedResolver{Err: errors.New("provider down")})
+		svc := catalog.NewBackfillFeaturedService(repo, repo, catalog.InMemoryFeaturedResolver{Err: errors.New("provider down")})
 		res, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
 			t.Fatalf("expected nil error, got %v", err)
@@ -77,9 +94,9 @@ func TestBackfillFeaturedService(t *testing.T) {
 	})
 
 	t.Run("resolver error is counted as failed", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
+		repo := catalog.NewInMemoryTrackRepo()
 		repo.Seed(newTrackFeat(t, userId, "X"))
-		svc := NewBackfillFeaturedService(repo, repo, catalogtest.FeaturedResolver{Err: errors.New("provider down")})
+		svc := catalog.NewBackfillFeaturedService(repo, repo, catalog.InMemoryFeaturedResolver{Err: errors.New("provider down")})
 		res, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
 			t.Fatalf("expected nil error, got %v", err)
@@ -94,21 +111,21 @@ func TestBackfillFeaturedService(t *testing.T) {
 		t2 := newTrackFeat(t, userId, "Track 2")
 		t3 := newTrackFeat(t, userId, "Track 3")
 		repo := &orderedTrackRepo{
-			TrackRepo:      catalogtest.NewTrackRepo(),
-			order:          []*domain.Track{t1, t2, t3},
-			failReplaceID:  t2.ID,
-			failReplaceErr: errors.New("db down"),
+			InMemoryTrackRepo: catalog.NewInMemoryTrackRepo(),
+			order:             []*catalog.Track{t1, t2, t3},
+			failReplaceID:     t2.ID,
+			failReplaceErr:    errors.New("db down"),
 		}
 		repo.Seed(t1)
 		repo.Seed(t2)
 		repo.Seed(t3)
 
-		resolver := catalogtest.FeaturedResolver{ByTitle: map[string][]domain.FeaturedArtist{
-			"Track 1": {{Name: "Guest 1", MBID: "m1", Role: domain.RoleFeatured}},
-			"Track 2": {{Name: "Guest 2", MBID: "m2", Role: domain.RoleFeatured}},
-			"Track 3": {{Name: "Guest 3", MBID: "m3", Role: domain.RoleFeatured}},
+		resolver := catalog.InMemoryFeaturedResolver{ByTitle: map[string][]catalog.FeaturedArtist{
+			"Track 1": {catalog.NewFeaturedArtistIdentityOnly("Guest 1", "m1", 0)},
+			"Track 2": {catalog.NewFeaturedArtistIdentityOnly("Guest 2", "m2", 0)},
+			"Track 3": {catalog.NewFeaturedArtistIdentityOnly("Guest 3", "m3", 0)},
 		}}
-		svc := NewBackfillFeaturedService(repo, repo, resolver)
+		svc := catalog.NewBackfillFeaturedService(repo, repo, resolver)
 
 		res, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
@@ -129,12 +146,12 @@ func TestBackfillFeaturedService(t *testing.T) {
 	})
 
 	t.Run("oversized library is bounded by the page cap", func(t *testing.T) {
-		page := make([]*domain.Track, backfillPageSize)
+		page := make([]*catalog.Track, backfillPageSize)
 		for i := range page {
 			page[i] = newTrackFeat(t, userId, "Untagged")
 		}
-		repo := &unboundedTrackRepo{TrackRepo: catalogtest.NewTrackRepo(), page: page}
-		svc := NewBackfillFeaturedService(repo, repo, catalogtest.FeaturedResolver{})
+		repo := &unboundedTrackRepo{InMemoryTrackRepo: catalog.NewInMemoryTrackRepo(), page: page}
+		svc := catalog.NewBackfillFeaturedService(repo, repo, catalog.InMemoryFeaturedResolver{})
 
 		res, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
@@ -143,6 +160,14 @@ func TestBackfillFeaturedService(t *testing.T) {
 		if want := backfillMaxPages * backfillPageSize; res.Scanned != want {
 			t.Fatalf("result = %+v, want scanned %d (capped at %d pages)", res, want, backfillMaxPages)
 		}
+		if len(repo.limits) != backfillMaxPages {
+			t.Fatalf("listed %d pages, want %d", len(repo.limits), backfillMaxPages)
+		}
+		for i, limit := range repo.limits {
+			if limit != backfillPageSize {
+				t.Fatalf("page %d asked for %d tracks, want %d", i, limit, backfillPageSize)
+			}
+		}
 	})
 
 	t.Run("context cancellation stops the loop between pages", func(t *testing.T) {
@@ -150,14 +175,14 @@ func TestBackfillFeaturedService(t *testing.T) {
 		t1 := newTrackFeat(t, userId, "Track 1")
 		t2 := newTrackFeat(t, userId, "Track 2")
 		repo := &orderedTrackRepo{
-			TrackRepo: catalogtest.NewTrackRepo(),
-			order:     []*domain.Track{t1, t2},
-			pageSize:  1,
+			InMemoryTrackRepo: catalog.NewInMemoryTrackRepo(),
+			order:             []*catalog.Track{t1, t2},
+			pageSize:          1,
 		}
 		repo.Seed(t1)
 		repo.Seed(t2)
 		resolver := &cancelingResolver{cancelOn: "Track 1", cancel: cancel}
-		svc := NewBackfillFeaturedService(repo, repo, resolver)
+		svc := catalog.NewBackfillFeaturedService(repo, repo, resolver)
 
 		res, err := svc.Execute(cctx, userId, 0)
 		if !errors.Is(err, context.Canceled) {
@@ -170,14 +195,14 @@ func TestBackfillFeaturedService(t *testing.T) {
 
 	t.Run("context cancellation stops the loop within a page", func(t *testing.T) {
 		cctx, cancel := context.WithCancel(ctx)
-		tracks := []*domain.Track{
+		tracks := []*catalog.Track{
 			newTrackFeat(t, userId, "Track 1"),
 			newTrackFeat(t, userId, "Track 2"),
 			newTrackFeat(t, userId, "Track 3"),
 		}
-		repo := &orderedTrackRepo{TrackRepo: catalogtest.NewTrackRepo(), order: tracks}
+		repo := &orderedTrackRepo{InMemoryTrackRepo: catalog.NewInMemoryTrackRepo(), order: tracks}
 		resolver := &cancelingResolver{cancelOn: "Track 1", cancel: cancel}
-		svc := NewBackfillFeaturedService(repo, repo, resolver)
+		svc := catalog.NewBackfillFeaturedService(repo, repo, resolver)
 
 		res, err := svc.Execute(cctx, userId, 0)
 		if !errors.Is(err, context.Canceled) {
@@ -189,13 +214,12 @@ func TestBackfillFeaturedService(t *testing.T) {
 	})
 
 	t.Run("hung resolver lookup times out, counts as failed, and the loop continues", func(t *testing.T) {
-		repo := &orderedTrackRepo{TrackRepo: catalogtest.NewTrackRepo(), order: []*domain.Track{
+		repo := &orderedTrackRepo{InMemoryTrackRepo: catalog.NewInMemoryTrackRepo(), order: []*catalog.Track{
 			newTrackFeat(t, userId, "Hangs"),
 			newTrackFeat(t, userId, "Fine"),
 		}}
 		resolver := &hangingResolver{hangOn: "Hangs"}
-		svc := NewBackfillFeaturedService(repo, repo, resolver)
-		svc.itemTimeout = 20 * time.Millisecond
+		svc := catalog.NewBackfillFeaturedService(repo, repo, resolver, catalog.WithBackfillItemTimeout(20*time.Millisecond))
 
 		start := time.Now()
 		res, err := svc.Execute(ctx, userId, 0)
@@ -216,8 +240,8 @@ func TestBackfillFeaturedService(t *testing.T) {
 	t.Run("second run while one is in flight is rejected", func(t *testing.T) {
 		release := make(chan struct{})
 		entered := make(chan struct{})
-		repo := &orderedTrackRepo{TrackRepo: catalogtest.NewTrackRepo(), order: []*domain.Track{newTrackFeat(t, userId, "T")}}
-		svc := NewBackfillFeaturedService(repo, repo, &blockingResolver{entered: entered, release: release})
+		repo := &orderedTrackRepo{InMemoryTrackRepo: catalog.NewInMemoryTrackRepo(), order: []*catalog.Track{newTrackFeat(t, userId, "T")}}
+		svc := catalog.NewBackfillFeaturedService(repo, repo, &blockingResolver{entered: entered, release: release})
 
 		done := make(chan error, 1)
 		go func() {
@@ -226,8 +250,8 @@ func TestBackfillFeaturedService(t *testing.T) {
 		}()
 		<-entered
 
-		if _, err := svc.Execute(ctx, userId, 0); !errors.Is(err, ErrBackfillInProgress) {
-			t.Fatalf("concurrent run: want ErrBackfillInProgress, got %v", err)
+		if _, err := svc.Execute(ctx, userId, 0); !errors.Is(err, catalog.ErrBackfillInProgress) {
+			t.Fatalf("concurrent run: want catalog.ErrBackfillInProgress, got %v", err)
 		}
 		otherUser := shared.NewUserId(uuid.New())
 		if _, err := svc.Execute(ctx, otherUser, 0); err != nil {
@@ -240,33 +264,32 @@ func TestBackfillFeaturedService(t *testing.T) {
 	})
 
 	t.Run("run within cooldown is rejected until the window passes", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
+		repo := catalog.NewInMemoryTrackRepo()
 		repo.Seed(newTrackFeat(t, userId, "T"))
-		svc := NewBackfillFeaturedService(repo, repo, catalogtest.FeaturedResolver{})
-		clock := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-		svc.admission = newBackfillAdmission(backfillCooldown, func() time.Time { return clock })
+		clock := newManualClock()
+		svc := catalog.NewBackfillFeaturedService(repo, repo, catalog.InMemoryFeaturedResolver{}, catalog.WithBackfillClock(clock.now))
 
 		if _, err := svc.Execute(ctx, userId, 0); err != nil {
 			t.Fatalf("first run: %v", err)
 		}
-		clock = clock.Add(backfillCooldown - time.Second)
+		clock.advance(backfillCooldown - time.Second)
 		res, err := svc.Execute(ctx, userId, 0)
-		if !errors.Is(err, ErrBackfillCoolingDown) || res != nil {
-			t.Fatalf("run within cooldown: want ErrBackfillCoolingDown and nil result, got %+v, %v", res, err)
+		if !errors.Is(err, catalog.ErrBackfillCoolingDown) || res != nil {
+			t.Fatalf("run within cooldown: want catalog.ErrBackfillCoolingDown and nil result, got %+v, %v", res, err)
 		}
-		if ErrBackfillCoolingDown.HTTPStatus() != 429 || ErrBackfillInProgress.HTTPStatus() != 409 {
+		if catalog.ErrBackfillCoolingDown.HTTPStatus() != 429 || catalog.ErrBackfillInProgress.HTTPStatus() != 409 {
 			t.Fatalf("throttle errors must map to 429/409")
 		}
-		clock = clock.Add(time.Second)
+		clock.advance(time.Second)
 		if _, err := svc.Execute(ctx, userId, 0); err != nil {
 			t.Fatalf("run after cooldown: %v", err)
 		}
 	})
 
 	t.Run("a negative offset is refused without spending the cooldown", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
+		repo := catalog.NewInMemoryTrackRepo()
 		repo.Seed(newTrackFeat(t, userId, "T"))
-		svc := NewBackfillFeaturedService(repo, repo, catalogtest.FeaturedResolver{})
+		svc := catalog.NewBackfillFeaturedService(repo, repo, catalog.InMemoryFeaturedResolver{})
 
 		res, err := svc.Execute(ctx, userId, -1)
 		if res != nil {
@@ -281,16 +304,16 @@ func TestBackfillFeaturedService(t *testing.T) {
 	})
 
 	t.Run("canceled run still starts the cooldown", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
+		repo := catalog.NewInMemoryTrackRepo()
 		repo.Seed(newTrackFeat(t, userId, "T"))
-		svc := NewBackfillFeaturedService(repo, repo, catalogtest.FeaturedResolver{})
+		svc := catalog.NewBackfillFeaturedService(repo, repo, catalog.InMemoryFeaturedResolver{})
 		cctx, cancel := context.WithCancel(ctx)
 		cancel()
 
 		if _, err := svc.Execute(cctx, userId, 0); !errors.Is(err, context.Canceled) {
 			t.Fatalf("want context.Canceled, got %v", err)
 		}
-		if _, err := svc.Execute(ctx, userId, 0); !errors.Is(err, ErrBackfillCoolingDown) {
+		if _, err := svc.Execute(ctx, userId, 0); !errors.Is(err, catalog.ErrBackfillCoolingDown) {
 			t.Fatalf("aborting a run must not skip the cooldown, got %v", err)
 		}
 	})
@@ -304,11 +327,11 @@ func TestBackfill_LibraryOverCap_ReportsTruncated(t *testing.T) {
 	const tail = 5
 
 	repo := newNumberedTrackRepo(t, userId, capTracks+tail)
-	resolver := catalogtest.FeaturedResolver{ByTitle: map[string][]domain.FeaturedArtist{
-		pastTheCap: {{Name: "Guest", MBID: "m1", Role: domain.RoleFeatured}},
+	resolver := catalog.InMemoryFeaturedResolver{ByTitle: map[string][]catalog.FeaturedArtist{
+		pastTheCap: {catalog.NewFeaturedArtistIdentityOnly("Guest", "m1", 0)},
 	}}
-	svc := NewBackfillFeaturedService(repo, repo, resolver)
-	svc.admission = newBackfillAdmission(0, time.Now)
+	clock := newManualClock()
+	svc := catalog.NewBackfillFeaturedService(repo, repo, resolver, catalog.WithBackfillClock(clock.now))
 
 	first, err := svc.Execute(ctx, userId, 0)
 	if err != nil {
@@ -321,6 +344,7 @@ func TestBackfill_LibraryOverCap_ReportsTruncated(t *testing.T) {
 		t.Fatalf("first run = %+v, want scanned and next offset %d", first, capTracks)
 	}
 
+	clock.advance(backfillCooldown)
 	second, err := svc.Execute(ctx, userId, first.NextOffset)
 	if err != nil {
 		t.Fatalf("follow-up run: %v", err)
@@ -342,7 +366,7 @@ type cancelingResolver struct {
 	calls    int
 }
 
-func (r *cancelingResolver) Resolve(_ context.Context, _, title string) ([]domain.FeaturedArtist, error) {
+func (r *cancelingResolver) Resolve(_ context.Context, _, title string) ([]catalog.FeaturedArtist, error) {
 	r.calls++
 	if title == r.cancelOn {
 		r.cancel()
@@ -355,7 +379,7 @@ type hangingResolver struct {
 	calls  int
 }
 
-func (r *hangingResolver) Resolve(ctx context.Context, _, title string) ([]domain.FeaturedArtist, error) {
+func (r *hangingResolver) Resolve(ctx context.Context, _, title string) ([]catalog.FeaturedArtist, error) {
 	r.calls++
 	if title == r.hangOn {
 		<-ctx.Done()
@@ -369,7 +393,7 @@ type blockingResolver struct {
 	release chan struct{}
 }
 
-func (r *blockingResolver) Resolve(context.Context, string, string) ([]domain.FeaturedArtist, error) {
+func (r *blockingResolver) Resolve(context.Context, string, string) ([]catalog.FeaturedArtist, error) {
 	first := false
 	r.once.Do(func() { first = true })
 	if first {
@@ -380,45 +404,47 @@ func (r *blockingResolver) Resolve(context.Context, string, string) ([]domain.Fe
 }
 
 type unboundedTrackRepo struct {
-	*catalogtest.TrackRepo
-	page []*domain.Track
+	*catalog.InMemoryTrackRepo
+	page   []*catalog.Track
+	limits []int
 }
 
-func (r *unboundedTrackRepo) ListForUser(_ context.Context, _ shared.UserId, _, _ int) ([]*domain.Track, int, error) {
+func (r *unboundedTrackRepo) ListForUser(_ context.Context, _ shared.UserId, limit, _ int) ([]*catalog.Track, int, error) {
+	r.limits = append(r.limits, limit)
 	return r.page, 1 << 30, nil
 }
 
 type numberedTrackRepo struct {
-	*catalogtest.TrackRepo
+	*catalog.InMemoryTrackRepo
 	t       *testing.T
 	userId  shared.UserId
 	total   int
-	byTitle map[string]*domain.Track
+	byTitle map[string]*catalog.Track
 }
 
 func newNumberedTrackRepo(t *testing.T, userId shared.UserId, total int) *numberedTrackRepo {
 	return &numberedTrackRepo{
-		TrackRepo: catalogtest.NewTrackRepo(),
-		t:         t,
-		userId:    userId,
-		total:     total,
-		byTitle:   make(map[string]*domain.Track, total),
+		InMemoryTrackRepo: catalog.NewInMemoryTrackRepo(),
+		t:                 t,
+		userId:            userId,
+		total:             total,
+		byTitle:           make(map[string]*catalog.Track, total),
 	}
 }
 
-func (r *numberedTrackRepo) ListForUser(_ context.Context, _ shared.UserId, limit, offset int) ([]*domain.Track, int, error) {
+func (r *numberedTrackRepo) ListForUser(_ context.Context, _ shared.UserId, limit, offset int) ([]*catalog.Track, int, error) {
 	end := min(offset+limit, r.total)
 	if offset >= end {
 		return nil, r.total, nil
 	}
-	page := make([]*domain.Track, 0, end-offset)
+	page := make([]*catalog.Track, 0, end-offset)
 	for i := offset; i < end; i++ {
 		page = append(page, r.track(fmt.Sprintf("Track %d", i+1)))
 	}
 	return page, r.total, nil
 }
 
-func (r *numberedTrackRepo) track(title string) *domain.Track {
+func (r *numberedTrackRepo) track(title string) *catalog.Track {
 	if existing, ok := r.byTitle[title]; ok {
 		return existing
 	}
@@ -428,7 +454,7 @@ func (r *numberedTrackRepo) track(title string) *domain.Track {
 	return track
 }
 
-func (r *numberedTrackRepo) featuredArtistsOf(title string) []domain.FeaturedArtist {
+func (r *numberedTrackRepo) featuredArtistsOf(title string) []catalog.FeaturedArtist {
 	track, ok := r.byTitle[title]
 	if !ok {
 		return nil
@@ -437,14 +463,14 @@ func (r *numberedTrackRepo) featuredArtistsOf(title string) []domain.FeaturedArt
 }
 
 type orderedTrackRepo struct {
-	*catalogtest.TrackRepo
-	order          []*domain.Track
-	failReplaceID  domain.TrackId
+	*catalog.InMemoryTrackRepo
+	order          []*catalog.Track
+	failReplaceID  catalog.TrackId
 	failReplaceErr error
 	pageSize       int
 }
 
-func (r *orderedTrackRepo) ListForUser(_ context.Context, _ shared.UserId, limit, offset int) ([]*domain.Track, int, error) {
+func (r *orderedTrackRepo) ListForUser(_ context.Context, _ shared.UserId, limit, offset int) ([]*catalog.Track, int, error) {
 	total := len(r.order)
 	if offset >= total {
 		return nil, total, nil
@@ -460,18 +486,18 @@ func (r *orderedTrackRepo) ListForUser(_ context.Context, _ shared.UserId, limit
 	return page, total, nil
 }
 
-func (r *orderedTrackRepo) ReplaceFeaturedArtists(ctx context.Context, id domain.TrackId, userId shared.UserId, feats []domain.FeaturedArtist) error {
+func (r *orderedTrackRepo) ReplaceFeaturedArtists(ctx context.Context, id catalog.TrackId, userId shared.UserId, feats []catalog.FeaturedArtist) error {
 	if r.failReplaceErr != nil && id == r.failReplaceID {
 		return r.failReplaceErr
 	}
-	return r.TrackRepo.ReplaceFeaturedArtists(ctx, id, userId, feats)
+	return r.InMemoryTrackRepo.ReplaceFeaturedArtists(ctx, id, userId, feats)
 }
 
 type stallsAfterFirstResolver struct {
 	calls int
 }
 
-func (r *stallsAfterFirstResolver) Resolve(ctx context.Context, _, _ string) ([]domain.FeaturedArtist, error) {
+func (r *stallsAfterFirstResolver) Resolve(ctx context.Context, _, _ string) ([]catalog.FeaturedArtist, error) {
 	r.calls++
 	if r.calls > 1 {
 		<-ctx.Done()
@@ -483,7 +509,7 @@ func TestBackfill_TimeBudgetSpent_TruncatesAndSkipsCooldown(t *testing.T) {
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	repo := newNumberedTrackRepo(t, userId, 3)
-	svc := NewBackfillFeaturedService(repo, repo, &stallsAfterFirstResolver{}, WithBackfillTimeBudget(50*time.Millisecond))
+	svc := catalog.NewBackfillFeaturedService(repo, repo, &stallsAfterFirstResolver{}, catalog.WithBackfillTimeBudget(50*time.Millisecond))
 
 	start := time.Now()
 	res, err := svc.Execute(ctx, userId, 0)
@@ -498,7 +524,7 @@ func TestBackfill_TimeBudgetSpent_TruncatesAndSkipsCooldown(t *testing.T) {
 	}
 
 	resumed, err := svc.Execute(ctx, userId, res.NextOffset)
-	if errors.Is(err, ErrBackfillCoolingDown) {
+	if errors.Is(err, catalog.ErrBackfillCoolingDown) {
 		t.Fatalf("resume after a budget-truncated run was refused: %v", err)
 	}
 	if err != nil || resumed == nil {
@@ -507,10 +533,10 @@ func TestBackfill_TimeBudgetSpent_TruncatesAndSkipsCooldown(t *testing.T) {
 }
 
 type stallingListRepo struct {
-	*catalogtest.TrackRepo
+	*catalog.InMemoryTrackRepo
 }
 
-func (r *stallingListRepo) ListForUser(ctx context.Context, _ shared.UserId, _, _ int) ([]*domain.Track, int, error) {
+func (r *stallingListRepo) ListForUser(ctx context.Context, _ shared.UserId, _, _ int) ([]*catalog.Track, int, error) {
 	<-ctx.Done()
 	return nil, 0, ctx.Err()
 }
@@ -518,8 +544,8 @@ func (r *stallingListRepo) ListForUser(ctx context.Context, _ shared.UserId, _, 
 func TestBackfill_TimeBudgetSpentInsideListing_TruncatesAndSkipsCooldown(t *testing.T) {
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
-	repo := &stallingListRepo{TrackRepo: catalogtest.NewTrackRepo()}
-	svc := NewBackfillFeaturedService(repo, repo, catalogtest.FeaturedResolver{}, WithBackfillTimeBudget(50*time.Millisecond))
+	repo := &stallingListRepo{InMemoryTrackRepo: catalog.NewInMemoryTrackRepo()}
+	svc := catalog.NewBackfillFeaturedService(repo, repo, catalog.InMemoryFeaturedResolver{}, catalog.WithBackfillTimeBudget(50*time.Millisecond))
 
 	res, err := svc.Execute(ctx, userId, 7)
 	if err != nil {
@@ -529,34 +555,34 @@ func TestBackfill_TimeBudgetSpentInsideListing_TruncatesAndSkipsCooldown(t *test
 		t.Fatalf("result = %+v, want truncated with next offset 7", res)
 	}
 
-	if _, err := svc.Execute(ctx, userId, res.NextOffset); errors.Is(err, ErrBackfillCoolingDown) {
+	if _, err := svc.Execute(ctx, userId, res.NextOffset); errors.Is(err, catalog.ErrBackfillCoolingDown) {
 		t.Fatalf("resume after a budget-truncated run was refused: %v", err)
 	}
 }
 
 type featuringErrLister struct {
-	ports.FeaturedArtistRepository
+	catalog.FeaturedArtistRepository
 	err error
 }
 
-func (f featuringErrLister) ListTracksFeaturing(_ context.Context, _ shared.UserId, _ domain.FeaturedArtist) ([]*domain.Track, error) {
+func (f featuringErrLister) ListTracksFeaturing(_ context.Context, _ shared.UserId, _ catalog.FeaturedArtist) ([]*catalog.Track, error) {
 	return nil, f.err
 }
 
 func TestListFeaturingService_Execute(t *testing.T) {
 	ctx := context.Background()
-	userId := catalogtest.UserId()
-	sza, _ := domain.NewFeaturedArtist("SZA", "", 0)
-	drake, _ := domain.NewFeaturedArtist("Drake", "", 0)
+	userId := catalog.FixtureUserId()
+	sza := catalog.NewFeaturedArtistIdentityOnly("SZA", "", 0)
+	drake := catalog.NewFeaturedArtistIdentityOnly("Drake", "", 0)
 
 	t.Run("returns only the tracks featuring the queried artist", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
-		withSza := catalogtest.SeedTrack(t, repo, userId, "Feature", "Artist", "Album")
-		withSza.FeaturedArtists = []domain.FeaturedArtist{sza}
-		withDrake := catalogtest.SeedTrack(t, repo, userId, "Other", "Artist", "Album")
-		withDrake.FeaturedArtists = []domain.FeaturedArtist{drake}
-		catalogtest.SeedTrack(t, repo, userId, "Plain", "Artist", "Album")
-		svc := NewListFeaturingService(repo)
+		repo := catalog.NewInMemoryTrackRepo()
+		withSza := catalog.SeedTrack(t, repo, userId, "Feature", "Artist", "Album")
+		withSza.FeaturedArtists = []catalog.FeaturedArtist{sza}
+		withDrake := catalog.SeedTrack(t, repo, userId, "Other", "Artist", "Album")
+		withDrake.FeaturedArtists = []catalog.FeaturedArtist{drake}
+		catalog.SeedTrack(t, repo, userId, "Plain", "Artist", "Album")
+		svc := catalog.NewListFeaturingService(repo)
 
 		got, err := svc.Execute(ctx, userId, sza)
 		if err != nil {
@@ -571,10 +597,10 @@ func TestListFeaturingService_Execute(t *testing.T) {
 	})
 
 	t.Run("returns nothing when no track features the artist", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
-		withDrake := catalogtest.SeedTrack(t, repo, userId, "Other", "Artist", "Album")
-		withDrake.FeaturedArtists = []domain.FeaturedArtist{drake}
-		svc := NewListFeaturingService(repo)
+		repo := catalog.NewInMemoryTrackRepo()
+		withDrake := catalog.SeedTrack(t, repo, userId, "Other", "Artist", "Album")
+		withDrake.FeaturedArtists = []catalog.FeaturedArtist{drake}
+		svc := catalog.NewListFeaturingService(repo)
 
 		got, err := svc.Execute(ctx, userId, sza)
 		if err != nil {
@@ -586,11 +612,11 @@ func TestListFeaturingService_Execute(t *testing.T) {
 	})
 
 	t.Run("excludes a matching track owned by another user", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
+		repo := catalog.NewInMemoryTrackRepo()
 		other := shared.NewUserId(uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
-		theirs := catalogtest.SeedTrack(t, repo, other, "Feature", "Artist", "Album")
-		theirs.FeaturedArtists = []domain.FeaturedArtist{sza}
-		svc := NewListFeaturingService(repo)
+		theirs := catalog.SeedTrack(t, repo, other, "Feature", "Artist", "Album")
+		theirs.FeaturedArtists = []catalog.FeaturedArtist{sza}
+		svc := catalog.NewListFeaturingService(repo)
 
 		got, err := svc.Execute(ctx, userId, sza)
 		if err != nil {
@@ -602,13 +628,13 @@ func TestListFeaturingService_Execute(t *testing.T) {
 	})
 
 	t.Run("matches by identity key regardless of the queried display name", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
-		stored, _ := domain.NewFeaturedArtist("SZA", "mbid-1", 0)
-		track := catalogtest.SeedTrack(t, repo, userId, "Feature", "Artist", "Album")
-		track.FeaturedArtists = []domain.FeaturedArtist{stored}
-		svc := NewListFeaturingService(repo)
+		repo := catalog.NewInMemoryTrackRepo()
+		stored := catalog.NewFeaturedArtistIdentityOnly("SZA", "mbid-1", 0)
+		track := catalog.SeedTrack(t, repo, userId, "Feature", "Artist", "Album")
+		track.FeaturedArtists = []catalog.FeaturedArtist{stored}
+		svc := catalog.NewListFeaturingService(repo)
 
-		query, _ := domain.NewFeaturedArtist("Solana", "mbid-1", 0)
+		query := catalog.NewFeaturedArtistIdentityOnly("Solana", "mbid-1", 0)
 		got, err := svc.Execute(ctx, userId, query)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -620,7 +646,7 @@ func TestListFeaturingService_Execute(t *testing.T) {
 
 	t.Run("repo error propagates", func(t *testing.T) {
 		errRepo := errors.New("db error")
-		svc := NewListFeaturingService(featuringErrLister{err: errRepo})
+		svc := catalog.NewListFeaturingService(featuringErrLister{err: errRepo})
 
 		_, err := svc.Execute(ctx, userId, sza)
 
@@ -631,4 +657,85 @@ func TestListFeaturingService_Execute(t *testing.T) {
 			t.Errorf("error = %q, want it to wrap with 'list featuring'", err.Error())
 		}
 	})
+}
+
+type deadlineRecordingRepo struct {
+	*catalog.InMemoryTrackRepo
+	track     *catalog.Track
+	deadlines []time.Time
+}
+
+func (r *deadlineRecordingRepo) ListForUser(ctx context.Context, _ shared.UserId, _, offset int) ([]*catalog.Track, int, error) {
+	deadline, _ := ctx.Deadline()
+	r.deadlines = append(r.deadlines, deadline)
+	if offset > 0 {
+		return nil, 1, nil
+	}
+	return []*catalog.Track{r.track}, 1, nil
+}
+
+type deadlineRecordingResolver struct {
+	deadlines []time.Time
+}
+
+func (r *deadlineRecordingResolver) Resolve(ctx context.Context, _, _ string) ([]catalog.FeaturedArtist, error) {
+	deadline, _ := ctx.Deadline()
+	r.deadlines = append(r.deadlines, deadline)
+	return nil, nil
+}
+
+func assertOneDeadline(t *testing.T, what string, got []time.Time, before, after time.Time, bound time.Duration) {
+	t.Helper()
+	if len(got) != 1 || got[0].Before(before.Add(bound)) || got[0].After(after.Add(bound)) {
+		t.Errorf("%s deadlines = %v, want one %s past the call (%v to %v)", what, got, bound, before.Add(bound), after.Add(bound))
+	}
+}
+
+func TestBackfill_BoundsEachLookupAndTheWholeRun(t *testing.T) {
+	cases := []struct {
+		name  string
+		build func(*deadlineRecordingRepo, *deadlineRecordingResolver) *catalog.BackfillFeaturedService
+	}{
+		{"defaults", func(repo *deadlineRecordingRepo, res *deadlineRecordingResolver) *catalog.BackfillFeaturedService {
+			return catalog.NewBackfillFeaturedService(repo, repo, res)
+		}},
+		{"zero overrides keep the defaults", func(repo *deadlineRecordingRepo, res *deadlineRecordingResolver) *catalog.BackfillFeaturedService {
+			return catalog.NewBackfillFeaturedService(repo, repo, res, catalog.WithBackfillItemTimeout(0), catalog.WithBackfillTimeBudget(0))
+		}},
+		{"negative overrides keep the defaults", func(repo *deadlineRecordingRepo, res *deadlineRecordingResolver) *catalog.BackfillFeaturedService {
+			return catalog.NewBackfillFeaturedService(repo, repo, res, catalog.WithBackfillItemTimeout(-time.Second), catalog.WithBackfillTimeBudget(-time.Second))
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			userId := catalog.FixtureUserId()
+			repo := &deadlineRecordingRepo{InMemoryTrackRepo: catalog.NewInMemoryTrackRepo(), track: newTrackFeat(t, userId, "T")}
+			resolver := &deadlineRecordingResolver{}
+			svc := tc.build(repo, resolver)
+
+			before := time.Now()
+			if _, err := svc.Execute(context.Background(), userId, 0); err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			after := time.Now()
+
+			assertOneDeadline(t, "lookup", resolver.deadlines, before, after, backfillItemTimeout)
+			assertOneDeadline(t, "listing", repo.deadlines, before, after, backfillTimeBudget)
+		})
+	}
+}
+
+func TestBackfill_ANilClockKeepsTheWallClock(t *testing.T) {
+	ctx := context.Background()
+	userId := catalog.FixtureUserId()
+	repo := catalog.NewInMemoryTrackRepo()
+	repo.Seed(newTrackFeat(t, userId, "T"))
+	svc := catalog.NewBackfillFeaturedService(repo, repo, catalog.InMemoryFeaturedResolver{}, catalog.WithBackfillClock(nil))
+
+	if _, err := svc.Execute(ctx, userId, 0); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	if _, err := svc.Execute(ctx, userId, 0); !errors.Is(err, catalog.ErrBackfillCoolingDown) {
+		t.Fatalf("an immediate rerun = %v, want ErrBackfillCoolingDown on the wall clock", err)
+	}
 }
