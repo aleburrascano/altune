@@ -55,7 +55,7 @@ function extractGoFuncBody(source: string, funcName: string): string {
   const plain = new RegExp(`\\nfunc ${funcName}\\([^)]*\\)[^{]*\\{`);
   const method = new RegExp(`\\nfunc \\([^)]*\\) ${funcName}\\([^)]*\\)[^{]*\\{`);
   const m = plain.exec(source) ?? method.exec(source);
-  if (!m) throw new Error(`func ${funcName} not found in middleware.go`);
+  if (!m) throw new Error(`func ${funcName} not found in the auth middleware source`);
   const braceIdx = m.index + m[0].length - 1;
   const closeIdx = findMatchingBrace(source, braceIdx);
   return source.slice(braceIdx + 1, closeIdx);
@@ -81,7 +81,14 @@ function goSourcesUnder(dir: string): string[] {
     .map((file) => path.join(dir, file));
 }
 
+let foundMiddlewareSource: string | undefined;
+
 function middlewareSource(): string {
+  foundMiddlewareSource ??= findMiddlewareSource();
+  return foundMiddlewareSource;
+}
+
+function findMiddlewareSource(): string {
   const authModule = path.join(REPO_ROOT!, 'services', 'go-api', 'internal', 'auth');
   const sources = goSourcesUnder(authModule)
     .map((file) => fs.readFileSync(file, 'utf8'))
