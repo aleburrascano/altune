@@ -1,6 +1,9 @@
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { driveAppState, type AppStateDriver } from '@shared/lifecycle';
+import {
+  driveAppState,
+  type AppStateDriver,
+} from '@testing/fakes/lifecycle/inMemoryAppStateSource';
 import { HEALTH_BATCH, createHealthTally } from '@shared/telemetry';
 
 const { __http } = require('@testing/doubles/fetch.js');

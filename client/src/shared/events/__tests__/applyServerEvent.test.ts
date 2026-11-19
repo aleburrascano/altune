@@ -21,7 +21,8 @@ import { apiClientOfflinePort } from '@testing/apiClientPorts';
 import { flushOutbox } from '@shared/telemetry';
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { applyServerEvent, settleTrackPatches } from '@shared/events';
+import { applyServerEvent } from '@shared/events';
+import { settleTrackPatches } from '@shared/events/__tests__/settleTrackPatches';
 import type { JsonObject } from '@shared/files';
 import type { ServerEvent } from '@shared/events';
 

@@ -11,7 +11,7 @@ import { apiClientOfflinePort } from '@testing/apiClientPorts';
 
 import { useRemoveDownloads, downloadStats, DangerZoneCard } from '@features/settings';
 import type { ClearHistoryState } from '@features/settings';
-import { recordLogs, type RecordedLogs } from '@shared/log';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 
 provideOfflinePort(apiClientOfflinePort);
 const { __http } = require('@testing/doubles/fetch.js');

@@ -11,6 +11,9 @@ import {
   useReacquireTrack,
   useRetryAcquisition,
   TracksList,
+  LibraryPortProvider,
+} from '@features/library';
+import {
   setup,
   track,
   playlist,
@@ -22,9 +25,8 @@ import {
   page,
   TRACKS_KEY,
   pagedIds,
-  createMemoryLibraryPort,
-  LibraryPortProvider,
-} from '@features/library';
+} from '@features/library/__tests__/trackMutationFixtures';
+import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
 import { ApiError, NetworkError, RETRY_TAIL } from '@shared/failure';
 import { useTrackStatusStore } from '@shared/acquisition';
 import { usePinnedStore } from '@shared/offline';

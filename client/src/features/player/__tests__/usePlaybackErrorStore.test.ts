@@ -15,9 +15,9 @@ import {
   usePlaybackErrorStore,
   _resetPlaybackHealthForTest,
   flushPlaybackHealth,
-  libraryTrack,
 } from '@features/player';
-import { recordLogs, type RecordedLogs } from '@shared/log';
+import { libraryTrack } from '@features/player/__tests__/fixtures';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 const { __http } = require('@testing/doubles/fetch.js');
 const HEALTH_ROUTE = 'POST /v1/discovery/events';
 const HTTP_ACCEPTED = 202;

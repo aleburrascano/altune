@@ -10,7 +10,7 @@ import { idlePlayback } from '@testing/queryHarness';
 import { PlaylistDetailScreen } from '@features/library';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import { usePinnedStore } from '@shared/offline';
-import { recordLogs, type RecordedLogs } from '@shared/log';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 import { HttpLibraryPorts } from '@features/library/__tests__/HttpLibraryPorts';
 import { acceptTelemetry, shownFailureSurfaces } from '@features/library/__tests__/failureShown';
 const { __http } = require('@testing/doubles/fetch.js');

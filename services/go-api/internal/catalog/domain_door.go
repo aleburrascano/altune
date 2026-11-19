@@ -8,6 +8,18 @@ type (
 	TrackId    = domain.TrackId
 )
 
+type (
+	Playlist        = domain.Playlist
+	PlaylistId      = domain.PlaylistId
+	PlaylistSummary = domain.PlaylistSummary
+	PlaylistTrack   = domain.PlaylistTrack
+)
+
+var (
+	ErrPlaylistFull           = domain.ErrPlaylistFull
+	ErrTrackAlreadyInPlaylist = domain.ErrTrackAlreadyInPlaylist
+)
+
 var (
 	CleanSearchKeys           = domain.CleanSearchKeys
 	KnownCatalogProviders     = domain.KnownCatalogProviders
@@ -40,6 +52,7 @@ type (
 )
 
 const (
-	MaxCatalogSources = domain.MaxCatalogSources
-	SortYear          = domain.SortYear
+	MaxCatalogSources      = domain.MaxCatalogSources
+	MaxLibrarySearchLength = domain.MaxLibrarySearchLength
+	SortYear               = domain.SortYear
 )

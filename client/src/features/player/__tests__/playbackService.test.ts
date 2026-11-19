@@ -11,14 +11,13 @@ import {
   redactPlaybackErrorMessage,
   playbackService,
   resetPlaybackForSignOut,
-  previewTrack,
-  libraryTrackWithId,
   httpPlaybackPort,
   installPlaybackPort,
 } from '@features/player';
+import { previewTrack, libraryTrackWithId } from '@features/player/__tests__/fixtures';
 import * as nativeTrackSwap from '@features/player/adapters/native/nativeTrackSwap';
 import { signInTestUser } from '@testing/signInTestUser';
-import { recordLogs, type RecordedLogs } from '@shared/log';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 const RESTART_THRESHOLD_MS = 3_000;
 const QUEUE_OUT_OF_SYNC_MESSAGE = 'The queue fell out of sync. Tap retry to reload it.';
 const QUEUE_UPDATE_FAILED_MESSAGE = "Couldn't update the queue. Tap retry to resync.";

@@ -3,7 +3,6 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { ApiError, NetworkError } from '@shared/failure';
 import {
-  createMemoryLibraryPort,
   LibraryPortProvider,
   useLibraryAlbums,
   useLibraryArtists,
@@ -11,8 +10,10 @@ import {
   usePlaylistActions,
   usePlaylistsView,
 } from '@features/library';
+import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
 import type { LibraryPort } from '@features/library';
-import { PlaylistsPortProvider, createMemoryPlaylistsPort } from '@shared/playlists';
+import { PlaylistsPortProvider } from '@shared/playlists';
+import { createMemoryPlaylistsPort } from '@testing/fakes/playlists/inMemoryPlaylistsPort';
 
 const playlistsPort = createMemoryPlaylistsPort();
 const SECRET = 'daft punk discovery bootleg';

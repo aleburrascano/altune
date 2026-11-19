@@ -1,4 +1,8 @@
-import { useResetPassword, createSupabaseAuthMock, runAsyncAuthHook } from '@features/signIn';
+import { useResetPassword } from '@features/signIn';
+import {
+  createSupabaseAuthMock,
+  runAsyncAuthHook,
+} from '@features/signIn/__tests__/testUtils/authTestUtils';
 const { resetPasswordForEmail } = createSupabaseAuthMock('resetPasswordForEmail');
 
 const requestResetFor = (email: string) =>

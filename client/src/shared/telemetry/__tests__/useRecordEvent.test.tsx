@@ -7,7 +7,7 @@ import { signInTestUser } from '@testing/signInTestUser';
 
 import { applyKillSwitches } from '@shared/killSwitch';
 import type { DiscoveryEvent } from '@shared/telemetry';
-import { recordLogs, type RecordedLogs } from '@shared/log';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 
 const TRACKING_FAILED = '[discovery] event tracking failed';
 

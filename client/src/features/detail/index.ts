@@ -32,10 +32,6 @@ export {
 export { useAlbumTracks } from '@features/detail/core/useAlbumTracks';
 export { useDetailEnrichments } from '@features/detail/core/useDetailEnrichments';
 export { useArtistContent } from '@features/detail/core/useArtistContent';
-export {
-  createMemoryDetailPort,
-  recordWarnings,
-} from '@features/detail/__tests__/memoryDetailPort';
 export { DetailBodyLayout, DetailScaffold } from '@features/detail/view/DetailScaffold';
 export { DiscographySections } from '@features/detail/view/DiscographySections';
 export { AlbumCardsSkeleton } from '@features/detail/view/DetailSkeleton';
@@ -88,11 +84,6 @@ export { SectionError } from '@features/detail/view/Section';
 export { isAcquirable, unreleasedAsResult } from '@features/detail/core/unreleasedTrack';
 export { unreleasedView } from '@features/detail/core/unreleasedView';
 export { useAlbumDetailState } from '@features/detail/view/useAlbumDetailState';
-export type {
-  DetailWarning,
-  RecordingDetailPort,
-  MemoryDetailSeed,
-} from '@features/detail/__tests__/memoryDetailPort';
 export { useAlbumSaveAll } from '@features/detail/view/useAlbumSaveAll';
 export { useRelatedTracks } from '@features/detail/core/useRelatedTracks';
 export { useAlbumDiscovery, useArtistDiscovery } from '@features/detail/view/useEntityDiscovery';

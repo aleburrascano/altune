@@ -4,8 +4,8 @@ import {
   beginNativeLoad,
   endNativeLoad,
   shouldApplyActiveIndex,
-  previewTrackList,
 } from '@features/player';
+import { previewTrackList } from '@features/player/__tests__/fixtures';
 beforeEach(() => {
   endNativeLoad();
 });

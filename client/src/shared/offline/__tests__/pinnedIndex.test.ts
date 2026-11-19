@@ -8,10 +8,14 @@ import {
   setPinnedIndexFileStore,
   type PinnedEntry,
 } from '@shared/offline';
-import { type StoredDirectory, createMemoryFileStore, type MemoryFileStore } from '@shared/files';
+import { type StoredDirectory } from '@shared/files';
+import {
+  createMemoryFileStore,
+  type MemoryFileStore,
+} from '@testing/fakes/files/inMemoryFileStore';
 import { asTrackId, type TrackId } from '@shared/catalog';
 import { expectType, type IsExactlyAssignable, type Not } from '@testing/typeAssertions';
-import { recordLogs, type RecordedLogs } from '@shared/log';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 
 const INDEX_SCHEMA_VERSION = 1;
 

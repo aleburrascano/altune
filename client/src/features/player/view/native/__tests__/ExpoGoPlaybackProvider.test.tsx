@@ -4,7 +4,7 @@ import { asTrackId } from '@shared/catalog';
 import { usePlayback } from '@shared/playback';
 import type { PlaybackContextValue, PlaybackTrack } from '@shared/playback';
 import { ExpoGoPlaybackProvider } from '@features/player';
-import { recordLogs, type RecordedLogs } from '@shared/log';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 
 const devFlag = globalThis as unknown as { __DEV__: boolean };
 

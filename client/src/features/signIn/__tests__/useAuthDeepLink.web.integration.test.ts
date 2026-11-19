@@ -1,7 +1,8 @@
 import { renderHook, act } from '@testing-library/react-native';
 import * as Linking from 'expo-linking';
 
-import { createSupabaseAuthMock, useAuthDeepLink } from '@features/signIn';
+import { useAuthDeepLink } from '@features/signIn';
+import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn() }) }));
 jest.mock('expo-linking', () => ({

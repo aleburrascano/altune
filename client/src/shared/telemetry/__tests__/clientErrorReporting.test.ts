@@ -5,7 +5,7 @@ import {
   installGlobalErrorReporting,
   reportClientError,
 } from '@shared/telemetry';
-import { recordLogs } from '@shared/log';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 
 const { __http } = require('@testing/doubles/fetch.js');
 

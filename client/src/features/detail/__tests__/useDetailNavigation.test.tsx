@@ -2,8 +2,10 @@ import { act, renderHook } from '@testing-library/react-native';
 import type { DiscoveryResult } from '@shared/catalog';
 import { readDetailHandoff } from '@shared/navigation';
 
-import { useLateralNav, createMemoryDetailPort } from '@features/detail';
-import type { DetailPort, DetailWarning, RecordingDetailPort } from '@features/detail';
+import { useLateralNav } from '@features/detail';
+import { createMemoryDetailPort } from '@testing/fakes/detail/inMemoryDetailPort';
+import type { DetailPort } from '@features/detail';
+import type { DetailWarning, RecordingDetailPort } from '@testing/fakes/detail/inMemoryDetailPort';
 import { createPortWrapper, createTestQueryClient } from '@testing/queryHarness';
 
 import {

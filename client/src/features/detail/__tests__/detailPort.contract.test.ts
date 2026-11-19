@@ -1,6 +1,6 @@
 import { asTrackId } from '@shared/catalog';
 import type { CreateTrackRequest, ListTracksResponse, TrackResponse } from '@shared/catalog';
-import { createMemoryDetailPort } from '@features/detail';
+import { createMemoryDetailPort } from '@testing/fakes/detail/inMemoryDetailPort';
 import { httpDetailPort } from '@features/detail/adapters/http/httpDetailPort';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { signInTestUser } from '@testing/queryHarness';

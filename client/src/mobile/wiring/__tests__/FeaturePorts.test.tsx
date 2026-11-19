@@ -1,17 +1,19 @@
 import { renderHook } from '@testing-library/react-native';
 import type { PropsWithChildren } from 'react';
 
-import { createMemoryAcquisitionPort, useAcquisitionPort } from '@shared/acquisition';
-import { createMemoryPlaylistsPort, usePlaylistsPort } from '@shared/playlists';
-import { createMemoryDetailPort, useDetailPort } from '@features/detail';
-import {
-  createMemoryDiscoverPort,
-  createMemoryFavoritesPort,
-  useDiscoverPort,
-  useFavoritesPort,
-} from '@features/discovery';
-import { createMemoryLibraryPort, useLibraryPort } from '@features/library';
-import { createMemorySettingsPort, useSettingsPort } from '@features/settings';
+import { useAcquisitionPort } from '@shared/acquisition';
+import { createMemoryAcquisitionPort } from '@testing/fakes/acquisition/inMemoryAcquisitionPort';
+import { usePlaylistsPort } from '@shared/playlists';
+import { createMemoryPlaylistsPort } from '@testing/fakes/playlists/inMemoryPlaylistsPort';
+import { useDetailPort } from '@features/detail';
+import { createMemoryDetailPort } from '@testing/fakes/detail/inMemoryDetailPort';
+import { useDiscoverPort, useFavoritesPort } from '@features/discovery';
+import { createMemoryDiscoverPort } from '@testing/fakes/discovery/inMemoryDiscoverPort';
+import { createMemoryFavoritesPort } from '@testing/fakes/discovery/inMemoryFavoritesPort';
+import { useLibraryPort } from '@features/library';
+import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
+import { useSettingsPort } from '@features/settings';
+import { createMemorySettingsPort } from '@testing/fakes/settings/inMemorySettingsPort';
 import { FeaturePorts, httpFeaturePorts, type FeaturePortSet } from '@/mobile';
 
 function useEveryPort(): FeaturePortSet {

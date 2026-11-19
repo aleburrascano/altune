@@ -13,8 +13,6 @@ import (
 
 const MaxPlaylistsPerUser = 1_000
 
-var maxPlaylistsPerUser = MaxPlaylistsPerUser
-
 var ErrTooManyPlaylists = &domain.CodedError{
 	Msg:    "playlist limit reached",
 	Status: 400,
@@ -64,12 +62,12 @@ func (s *PlaylistLifecycleService) Create(ctx context.Context, userId shared.Use
 }
 
 func (s *PlaylistLifecycleService) requirePlaylistSpace(ctx context.Context, userId shared.UserId) error {
-	held, err := s.playlistRepo.CountForUser(ctx, userId, maxPlaylistsPerUser)
+	held, err := s.playlistRepo.CountForUser(ctx, userId, MaxPlaylistsPerUser)
 	if err != nil {
 		return domain.WrapRepoError(ctx, "count playlists", err)
 	}
-	if held >= maxPlaylistsPerUser {
-		slog.WarnContext(ctx, "catalog.too_many_playlists", "user_id", userId.String(), "cap", maxPlaylistsPerUser)
+	if held >= MaxPlaylistsPerUser {
+		slog.WarnContext(ctx, "catalog.too_many_playlists", "user_id", userId.String(), "cap", MaxPlaylistsPerUser)
 		return ErrTooManyPlaylists
 	}
 	return nil

@@ -1,13 +1,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
+import { CheckEmailNotice, SignUpScreen, PASSWORD_REQUIREMENTS_HINT } from '@features/signIn';
 import {
-  CheckEmailNotice,
-  SignUpScreen,
-  PASSWORD_REQUIREMENTS_HINT,
   authPortWrapper,
   createSupabaseAuthMock,
-} from '@features/signIn';
+} from '@features/signIn/__tests__/testUtils/authTestUtils';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 
 jest.mock('expo-router', () => {

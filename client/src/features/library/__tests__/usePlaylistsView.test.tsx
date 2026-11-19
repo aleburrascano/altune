@@ -4,16 +4,17 @@ import type { ReactElement, ReactNode } from 'react';
 import { asPlaylistId } from '@shared/catalog';
 import type { PlaylistDetailResponse } from '@shared/catalog';
 import {
-  createMemoryLibraryPort,
   LibraryPortProvider,
   GROUP_PAGE_SIZE,
   usePlaylistActions,
   usePlaylistsView,
 } from '@features/library';
+import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
 import type { LibraryPort } from '@features/library';
 import { SortControl } from '@shared/ui';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
-import { PlaylistsPortProvider, createMemoryPlaylistsPort } from '@shared/playlists';
+import { PlaylistsPortProvider } from '@shared/playlists';
+import { createMemoryPlaylistsPort } from '@testing/fakes/playlists/inMemoryPlaylistsPort';
 
 const playlistsPort = createMemoryPlaylistsPort();
 

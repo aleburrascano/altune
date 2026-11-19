@@ -4,12 +4,11 @@ import { type ResolvedAudioUrl } from '@shared/apiClient';
 import { asTrackId, type TrackId } from '@shared/catalog';
 import { ApiError } from '@shared/failure';
 import { signInTestUser } from '@testing/signInTestUser';
+import { type StoredDirectory, type StoredFile } from '@shared/files';
 import {
-  type StoredDirectory,
-  type StoredFile,
   createMemoryFileStore,
   type MemoryFileStore,
-} from '@shared/files';
+} from '@testing/fakes/files/inMemoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
 import { notifyIdentityChange, runSignOutCleanups } from '@shared/session';
 import {

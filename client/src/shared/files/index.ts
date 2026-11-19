@@ -10,5 +10,3 @@ export { createFileStoreSlot } from '@shared/files/shell/fileStore';
 export type { FileStore, StoredDirectory, StoredFile } from '@shared/files/shell/fileStore';
 export type { JsonObject, JsonValue } from '@shared/files/core/json';
 export { extFromUrl } from '@shared/files/core/urlExtension';
-export { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
-export type { MemoryFileStore } from '@shared/files/__tests__/memoryFileStore';

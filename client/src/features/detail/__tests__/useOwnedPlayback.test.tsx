@@ -9,8 +9,8 @@ import {
   type OwnedPlaybackContext,
   useSaveTrack,
   type SaveTrack,
-  createMemoryDetailPort,
 } from '@features/detail';
+import { createMemoryDetailPort } from '@testing/fakes/detail/inMemoryDetailPort';
 import {
   createPortWrapper,
   createTestQueryClient,

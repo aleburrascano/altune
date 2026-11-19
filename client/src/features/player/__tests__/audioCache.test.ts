@@ -7,9 +7,8 @@ import {
   evictAllCached,
   evictCachedFile,
   findCached,
-  previewTrack,
-  libraryTrackWithId,
 } from '@features/player';
+import { previewTrack, libraryTrackWithId } from '@features/player/__tests__/fixtures';
 const { __fs } = FileSystem as unknown as {
   __fs: {
     seedDirectory(uri: string): void;

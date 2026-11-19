@@ -3,12 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 import { StyleSheet } from 'react-native';
 
 import { darkTheme, spacing } from '@shared/ui';
-import {
-  AuthGate,
-  InvalidRecoveryLinkNotice,
-  SessionExpiredNotice,
-  createSupabaseAuthMock,
-} from '@features/signIn';
+import { AuthGate, InvalidRecoveryLinkNotice, SessionExpiredNotice } from '@features/signIn';
+import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
 jest.mock('expo-router', () => ({
   useSegments: () => [],
   useRouter: () => ({ replace: jest.fn(), push: jest.fn(), back: jest.fn() }),

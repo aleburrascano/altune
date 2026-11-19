@@ -1,7 +1,8 @@
 import { StyleSheet } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { resultFixture, SectionGrid } from '@features/discovery';
+import { SectionGrid } from '@features/discovery';
+import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { darkTheme } from '@shared/ui';
 
 const BODY_ID = 'discover-grid-card-body-album-0';

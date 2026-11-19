@@ -9,8 +9,8 @@ import {
   useDiscoverClearSearchHistory,
   useSearchHistory,
   DiscoverPortProvider,
-  createMemoryDiscoverPort,
 } from '@features/discovery';
+import { createMemoryDiscoverPort } from '@testing/fakes/discovery/inMemoryDiscoverPort';
 import type { DiscoverPort } from '@features/discovery';
 import { signInTestUser } from '@testing/signInTestUser';
 const { __http } = require('@testing/doubles/fetch.js');

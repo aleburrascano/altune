@@ -14,13 +14,12 @@ import {
   setPinnedFileStore,
   withPinnedBytesCached,
 } from '@shared/offline';
+import { type StoredDirectory, type StoredFile } from '@shared/files';
 import {
-  type StoredDirectory,
-  type StoredFile,
   createMemoryFileStore,
   type MemoryFileStore,
-} from '@shared/files';
-import { recordLogs } from '@shared/log';
+} from '@testing/fakes/files/inMemoryFileStore';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 
 type FsFailureKind = 'write' | 'read' | 'delete' | 'download' | 'createDirectory' | 'list';
 

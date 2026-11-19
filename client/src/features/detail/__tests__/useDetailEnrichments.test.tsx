@@ -3,7 +3,8 @@ import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { DiscoveryResult } from '@shared/catalog';
 import { _resetDetailHealthForTest, httpDetailPort, useDetailEnrichments } from '@features/detail';
-import type { DetailPort, DetailWarning } from '@features/detail';
+import type { DetailPort } from '@features/detail';
+import type { DetailWarning } from '@testing/fakes/detail/inMemoryDetailPort';
 import {
   createPortWrapper,
   createTestQueryClient,

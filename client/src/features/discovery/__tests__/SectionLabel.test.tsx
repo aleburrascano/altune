@@ -3,7 +3,8 @@ import { StyleSheet, type TextStyle } from 'react-native';
 import { render as renderBare, screen } from '@testing-library/react-native';
 
 import { darkTheme, spacing } from '@shared/ui';
-import { BlendedSection, DiscoverBody, TopResultCard, resultFixture } from '@features/discovery';
+import { BlendedSection, DiscoverBody, TopResultCard } from '@features/discovery';
+import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import type { ResultsCommonProps } from '@features/discovery';
 import { PlaybackContext } from '@shared/playback';
 import { idlePlayback } from '@testing/queryHarness';

@@ -1,4 +1,4 @@
-import { createMemoryAuthPort } from '@features/signIn';
+import { createMemoryAuthPort } from '@features/signIn/__tests__/memoryAuthPort';
 import type { AuthPort } from '@features/signIn';
 import { httpAuthPort } from '@features/signIn/adapters/http/httpAuthPort';
 

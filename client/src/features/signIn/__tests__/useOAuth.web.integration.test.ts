@@ -1,12 +1,12 @@
 import { renderHook, act } from '@testing-library/react-native';
 import * as WebBrowser from 'expo-web-browser';
 
+import { useOAuth } from '@features/signIn';
 import {
   authPortWrapper,
   createAuthPortMock,
   createSupabaseAuthMock,
-  useOAuth,
-} from '@features/signIn';
+} from '@features/signIn/__tests__/testUtils/authTestUtils';
 
 const AUTH_ACTION_TIMEOUT_MS = 20_000;
 

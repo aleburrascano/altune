@@ -6,7 +6,7 @@ import type { PlaybackTrack } from '@shared/playback';
 import { useQueueStore } from '@shared/playback';
 import { notifyIdentityChange, runSignOutCleanups } from '@shared/session';
 import { reloadWidget, writeCoverFromUrl, writeSnapshot } from '@modules/altune-widget';
-import { recordLogs } from '@shared/log';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 jest.mock('@modules/altune-widget', () => ({

@@ -2,7 +2,8 @@ import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { Keyboard } from 'react-native';
 
-import { useResultTap, resultFixture } from '@features/discovery';
+import { useResultTap } from '@features/discovery';
+import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { readDetailHandoff } from '@shared/navigation';
 import { runSignOutCleanups } from '@shared/session';
 import { makeWrapper } from '@testing/makeWrapper';

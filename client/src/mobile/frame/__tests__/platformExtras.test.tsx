@@ -10,8 +10,10 @@ import * as base from '@/mobile/frame/platformExtras';
 import * as android from '@/mobile/frame/platformExtras.android';
 import * as web from '@/mobile/frame/platformExtras.web';
 
-import { createMemoryLibraryPort, LibraryPortProvider } from '@features/library';
-import { PlaylistsPortProvider, createMemoryPlaylistsPort } from '@shared/playlists';
+import { LibraryPortProvider } from '@features/library';
+import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
+import { PlaylistsPortProvider } from '@shared/playlists';
+import { createMemoryPlaylistsPort } from '@testing/fakes/playlists/inMemoryPlaylistsPort';
 
 const playlistsPort = createMemoryPlaylistsPort();
 const mockNavigationBar = jest.fn();

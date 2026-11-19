@@ -2,7 +2,7 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { DiscoverySearchResponse } from '@shared/catalog';
-import { createMemoryFileStore } from '@shared/files';
+import { createMemoryFileStore } from '@testing/fakes/files/inMemoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
 import { discoveryKeys } from '@shared/query';
 
@@ -16,7 +16,7 @@ import {
 } from '@features/discovery';
 import { signInTestUser } from '@testing/signInTestUser';
 import { FeaturePorts, httpFeaturePorts } from '@/mobile';
-import { recordLogs } from '@shared/log';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 const { __http } = require('@testing/doubles/fetch.js');
 
 jest.mock('expo-router', () => ({

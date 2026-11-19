@@ -198,6 +198,7 @@ const localPlugin = {
     'no-parent-relative-imports': require('./eslint/rules/no-parent-relative-imports'),
     'top-level-function-declarations': require('./eslint/rules/top-level-function-declarations'),
     'no-raw-style-numbers': require('./eslint/rules/no-raw-style-numbers'),
+    'no-test-code-in-app': require('./eslint/rules/no-test-code-in-app'),
   },
 };
 
@@ -250,6 +251,13 @@ const noRawStyleNumbers = {
   rules: { 'local/no-raw-style-numbers': 'error' },
 };
 
+const noTestCodeInApp = {
+  files: ['src/**/*.{ts,tsx,js,mjs}'],
+  ignores: [...TEST_FILES, 'src/**/*.test.{ts,tsx}'],
+  plugins: { local: localPlugin },
+  rules: { 'local/no-test-code-in-app': 'error' },
+};
+
 const SRC_ONLY = 'src/**/*';
 
 const onlyWithinSrc = (block) => {
@@ -286,6 +294,7 @@ module.exports = [
   noParentRelativeImports,
   topLevelFunctionDeclarations,
   noRawStyleNumbers,
+  noTestCodeInApp,
   {
     ignores: ['node_modules/**', '.expo/**', 'dist/**', 'web-build/**', 'coverage/**'],
   },

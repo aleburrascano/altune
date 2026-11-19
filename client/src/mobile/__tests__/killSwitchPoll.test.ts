@@ -1,4 +1,4 @@
-import { createMemoryFileStore } from '@shared/files';
+import { createMemoryFileStore } from '@testing/fakes/files/inMemoryFileStore';
 import { isLoopEnabled, setKillSwitchFileStore } from '@shared/killSwitch';
 
 import { startKillSwitchPolling } from '@/mobile';

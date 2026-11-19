@@ -1,10 +1,7 @@
 import TrackPlayer, { RepeatMode, State } from 'react-native-track-player';
 
-import {
-  createMemoryPlaybackPort,
-  installPlaybackPort,
-  startWidgetCommands,
-} from '@features/player';
+import { installPlaybackPort, startWidgetCommands } from '@features/player';
+import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
 import { asTrackId } from '@shared/catalog';
 import { trackKey, type PlaybackTrack, orderedQueueTracks, useQueueStore } from '@shared/playback';
 import { notifyIdentityChange } from '@shared/session';
@@ -14,7 +11,7 @@ import {
   reloadWidget,
 } from '@modules/altune-widget';
 import { fakeAuthClient } from '@testing/fakeAuthClient';
-import { recordLogs } from '@shared/log';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 
 type LooseAuth = { getSession: () => Promise<unknown> };
 

@@ -5,11 +5,10 @@ import { ContractError } from '@shared/failure';
 import {
   activeNativeTrackId,
   toNativeTrack,
-  libraryTrack,
-  previewTrack,
   httpPlaybackPort,
   installPlaybackPort,
 } from '@features/player';
+import { libraryTrack, previewTrack } from '@features/player/__tests__/fixtures';
 beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);
 });

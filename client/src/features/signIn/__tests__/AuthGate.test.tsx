@@ -2,12 +2,8 @@ import { render, screen, act } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Text } from 'react-native';
 
-import {
-  AuthGate,
-  clearRecoveryUnlock,
-  markRecoveryUnlocked,
-  createSupabaseAuthMock,
-} from '@features/signIn';
+import { AuthGate, clearRecoveryUnlock, markRecoveryUnlocked } from '@features/signIn';
+import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
 let mockSegments: string[] = [];
 const mockReplace = jest.fn();
 

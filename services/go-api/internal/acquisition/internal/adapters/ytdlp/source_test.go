@@ -1,20 +1,21 @@
-package ytdlp
+package ytdlp_test
 
 import (
-	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
-	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition"
 	"context"
-	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
+	"slices"
+	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 )
 
-func findRequest() ports.FindRequest {
-	return ports.FindRequest{
+func findRequest() acquisition.FindRequest {
+	return acquisition.FindRequest{
 		Title:  "Blinding Lights",
 		Artist: "The Weeknd",
 		Album:  "After Hours",
@@ -22,184 +23,144 @@ func findRequest() ports.FindRequest {
 	}
 }
 
-func candidatesPerSpec(spec string, n int) []ports.AudioCandidate {
-	out := make([]ports.AudioCandidate, 0, n)
-	for i := range n {
-		out = append(out, ports.AudioCandidate{
-			Title: spec,
-			URL:   fmt.Sprintf("https://example.test/%s/%d", spec, i),
-		})
+func findRequestSpecs() []string {
+	var specs []string
+	for _, query := range []string{"USUG11904206", "Blinding Lights The Weeknd", "Blinding Lights The Weeknd After Hours", "Blinding Lights The Weeknd audio"} {
+		specs = append(specs, "ytsearch5:"+query, "scsearch5:"+query)
 	}
-	return out
+	slices.Sort(specs)
+	return specs
+}
+
+func findWithYtDlp(t *testing.T, s *acquisition.YtDlpAudioSearcher) ([]acquisition.AudioCandidate, error) {
+	t.Helper()
+	return acquisition.NewYtDlpSource(s).Find(context.Background(), findRequest())
+}
+
+func find(t *testing.T) ([]acquisition.AudioCandidate, error) {
+	t.Helper()
+	return findWithYtDlp(t, acquisition.NewYtDlpAudioSearcher("", "", ""))
 }
 
 func TestSource_Find_RunsEveryQueryEvenAfterEnoughCandidatesAreFound(t *testing.T) {
-	var mu sync.Mutex
-	var specs []string
-	src := NewSource(withRunner(func(_ context.Context, spec string) ([]ports.AudioCandidate, error) {
-		mu.Lock()
-		specs = append(specs, spec)
-		mu.Unlock()
-		return candidatesPerSpec(spec, 5), nil
-	}))
+	calls := installSearch(t, "emit 5")
 
-	got, err := src.Find(context.Background(), findRequest())
+	got, err := find(t)
 	if err != nil {
 		t.Fatalf("Find error: %v", err)
 	}
 
-	wantSearches := len(searchQueries(findRequest())) * len(searchEngines)
-	if len(specs) != wantSearches {
-		t.Fatalf("searches = %d %v, want all %d even though the first query's engines already return %d candidates",
-			len(specs), specs, wantSearches, 5)
+	if specs := searchedSpecs(t, calls); !slices.Equal(specs, findRequestSpecs()) {
+		t.Fatalf("searches = %v, want all of %v even though the first query's engines already return 5 candidates", specs, findRequestSpecs())
 	}
-	if len(got) != wantSearches*5 {
-		t.Fatalf("merged candidates = %d, want %d", len(got), wantSearches*5)
+	if len(got) != 8*5 {
+		t.Fatalf("merged candidates = %d, want %d", len(got), 8*5)
 	}
 }
 
 func TestSource_Find_QueryFailureLogRedactsTheCookiePath(t *testing.T) {
 	logs := captureLogs(t)
-	src := NewSource(withRunner(func(context.Context, string) ([]ports.AudioCandidate, error) {
-		return nil, cookieJarError()
-	}))
 
-	if _, err := src.Find(context.Background(), findRequest()); err == nil {
+	if _, err := findWithYtDlp(t, acquisition.NewYtDlpAudioSearcher("", secretCookiePath, "")); err == nil {
 		t.Fatal("every query failed, Find reported no error")
 	}
 
-	logged := logs.String()
-	if !strings.Contains(logged, "acquisition.search_query_failed") {
-		t.Fatalf("expected the query failure log, got:\n%s", logged)
+	logged := loggedErrors(t, logs, "acquisition.search_query_failed")
+	if len(logged) != 4 {
+		t.Fatalf("query failure logs = %q, want one per query", logged)
 	}
-	if strings.Contains(logged, "/secret") {
-		t.Fatalf("the cookie jar path leaked into the log:\n%s", logged)
-	}
-	if !strings.Contains(logged, "exit status 1") {
-		t.Fatalf("redaction dropped the diagnostic text:\n%s", logged)
+	for _, line := range logged {
+		if strings.Contains(line, "/secret") {
+			t.Fatalf("the cookie jar path leaked into the log: %s", line)
+		}
+		if !strings.Contains(line, "no such file or directory") {
+			t.Fatalf("redaction dropped the diagnostic text: %s", line)
+		}
 	}
 }
 
 func TestSource_Find_RunsEveryQueryWhileCandidatesStayScarce(t *testing.T) {
-	var mu sync.Mutex
-	var specs []string
-	src := NewSource(withRunner(func(_ context.Context, spec string) ([]ports.AudioCandidate, error) {
-		mu.Lock()
-		specs = append(specs, spec)
-		mu.Unlock()
-		return candidatesPerSpec(spec, 1), nil
-	}))
+	calls := installSearch(t, "emit 1")
 
-	got, err := src.Find(context.Background(), findRequest())
+	got, err := find(t)
 	if err != nil {
 		t.Fatalf("Find error: %v", err)
 	}
 
-	wantSearches := len(searchQueries(findRequest())) * len(searchEngines)
-	if len(specs) != wantSearches {
-		t.Fatalf("searches = %d %v, want all %d when no query is fruitful", len(specs), specs, wantSearches)
+	if specs := searchedSpecs(t, calls); !slices.Equal(specs, findRequestSpecs()) {
+		t.Fatalf("searches = %v, want all of %v when no query is fruitful", specs, findRequestSpecs())
 	}
-	if len(got) != wantSearches {
-		t.Fatalf("merged candidates = %d, want %d", len(got), wantSearches)
-	}
-}
-
-func concurrencySafeRunner(run func(spec string) ([]ports.AudioCandidate, error)) searchRunner {
-	var mu sync.Mutex
-	return func(_ context.Context, spec string) ([]ports.AudioCandidate, error) {
-		mu.Lock()
-		defer mu.Unlock()
-		return run(spec)
+	if len(got) != 8 {
+		t.Fatalf("merged candidates = %d, want 8", len(got))
 	}
 }
 
 func TestSource_Find_MustHold9_ISRCQueryWithManyHitsStillRunsEveryOtherQueryVariant(t *testing.T) {
-	req := findRequest()
-	seen := map[string]bool{}
-	src := NewSource(withRunner(concurrencySafeRunner(func(spec string) ([]ports.AudioCandidate, error) {
-		seen[spec] = true
-		if strings.Contains(spec, req.ISRC) {
-			return candidatesPerSpec(spec, 10), nil
-		}
-		return candidatesPerSpec(spec, 1), nil
-	})))
+	calls := installSearch(t, "emit 1", searchAnswer{"*USUG11904206", "emit 10"})
 
-	got, err := src.Find(context.Background(), req)
+	got, err := find(t)
 	if err != nil {
 		t.Fatalf("Find error: %v", err)
 	}
 
-	wantQueries := searchQueries(req)
-	if len(wantQueries) < 4 {
-		t.Fatalf("findRequest fixture carries only %d query variants, want at least 4 to prove this", len(wantQueries))
+	if specs := searchedSpecs(t, calls); !slices.Equal(specs, findRequestSpecs()) {
+		t.Fatalf("searches = %v, want all of %v: the ISRC hit count must never suppress another query variant", specs, findRequestSpecs())
 	}
-	for _, query := range wantQueries {
-		for _, engine := range searchEngines {
-			if !seen[engine+query] {
-				t.Fatalf("spec %q never ran, want the ISRC hit count to never suppress another query variant", engine+query)
-			}
-		}
-	}
-
-	wantCandidates := 10*len(searchEngines) + (len(wantQueries)-1)*len(searchEngines)
-	if len(got) != wantCandidates {
-		t.Fatalf("merged candidates = %d, want %d (the ISRC hits on both engines plus one per other query/engine pair)", len(got), wantCandidates)
+	if want := 10*2 + 3*2; len(got) != want {
+		t.Fatalf("merged candidates = %d, want %d (the ISRC hits on both engines plus one per other query/engine pair)", len(got), want)
 	}
 }
 
-func TestSource_Find_NeverRunsMoreThanFourSearchesAtOnce(t *testing.T) {
-	var mu sync.Mutex
-	current, maxSeen := 0, 0
-	src := NewSource(withRunner(func(_ context.Context, spec string) ([]ports.AudioCandidate, error) {
-		mu.Lock()
-		current++
-		if current > maxSeen {
-			maxSeen = current
+func concurrencyMeasuringSearch(t *testing.T) string {
+	t.Helper()
+	running, counts := t.TempDir(), filepath.Join(t.TempDir(), "counts")
+	installSearch(t, "touch '"+running+"/'$$; ls '"+running+"' | wc -l >> '"+counts+"'; sleep 0.3; rm -f '"+running+"/'$$; emit 1")
+	return counts
+}
+
+func mostSearchesSeenAtOnce(t *testing.T, counts string) int {
+	t.Helper()
+	raw, err := os.ReadFile(counts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	most := 0
+	for line := range strings.Lines(string(raw)) {
+		seen, err := strconv.Atoi(strings.TrimSpace(line))
+		if err != nil {
+			t.Fatalf("count line %q: %v", line, err)
 		}
-		mu.Unlock()
+		most = max(most, seen)
+	}
+	return most
+}
 
-		time.Sleep(20 * time.Millisecond)
+func TestSource_Find_NeverRunsMoreThanFourSearchesAtOnce(t *testing.T) {
+	counts := concurrencyMeasuringSearch(t)
 
-		mu.Lock()
-		current--
-		mu.Unlock()
-
-		return candidatesPerSpec(spec, 1), nil
-	}))
-
-	if _, err := src.Find(context.Background(), findRequest()); err != nil {
+	if _, err := find(t); err != nil {
 		t.Fatalf("Find error: %v", err)
 	}
 
-	if maxSeen > maxConcurrentSearches {
-		t.Fatalf("max concurrent searches observed = %d, want no more than %d", maxSeen, maxConcurrentSearches)
-	}
-	if maxSeen < maxConcurrentSearches {
-		t.Fatalf("max concurrent searches observed = %d, want the bound of %d to actually be reached", maxSeen, maxConcurrentSearches)
+	if most := mostSearchesSeenAtOnce(t, counts); most != 4 {
+		t.Fatalf("max concurrent searches observed = %d, want the bound of 4 reached and never passed", most)
 	}
 }
 
 func TestSource_Find_OrderIsDeterministicAndSurvivesOneFailingSearch(t *testing.T) {
-	newSrc := func() *Source {
-		return NewSource(withRunner(concurrencySafeRunner(func(spec string) ([]ports.AudioCandidate, error) {
-			if strings.Contains(spec, "scsearch5:") && strings.Contains(spec, "audio") {
-				return nil, errors.New("soundcloud blew up")
-			}
-			return candidatesPerSpec(spec, 1), nil
-		})))
-	}
+	installSearch(t, "emit 1", searchAnswer{"scsearch5:*audio*", "fail 'soundcloud blew up'"})
 
-	first, err := newSrc().Find(context.Background(), findRequest())
+	first, err := find(t)
 	if err != nil {
 		t.Fatalf("Find error: %v", err)
 	}
-	second, err := newSrc().Find(context.Background(), findRequest())
+	second, err := find(t)
 	if err != nil {
 		t.Fatalf("Find error: %v", err)
 	}
 
-	if len(first) == 0 {
-		t.Fatal("Find returned no candidates despite only one of eight searches failing")
+	if len(first) != 7 {
+		t.Fatalf("Find returned %d candidates, want 7 with only one of eight searches failing", len(first))
 	}
 	if !reflect.DeepEqual(first, second) {
 		t.Fatalf("Find order changed across runs with identical fake responses:\nfirst:  %+v\nsecond: %+v", first, second)
@@ -207,42 +168,31 @@ func TestSource_Find_OrderIsDeterministicAndSurvivesOneFailingSearch(t *testing.
 }
 
 func TestSource_Find_ThreeOfFourQueriesFailingStillMergesTheSurvivor(t *testing.T) {
-	req := findRequest()
-	survivorQuery := searchQueries(req)[len(searchQueries(req))-1]
-	src := NewSource(withRunner(concurrencySafeRunner(func(spec string) ([]ports.AudioCandidate, error) {
-		if strings.Contains(spec, survivorQuery) {
-			return candidatesPerSpec(spec, 1), nil
-		}
-		return nil, errors.New("provider blew up")
-	})))
+	installSearch(t, "fail 'provider blew up'", searchAnswer{`*"Blinding Lights The Weeknd audio"`, "emit 1"})
 
-	got, err := src.Find(context.Background(), req)
+	got, err := find(t)
 	if err != nil {
 		t.Fatalf("Find error: %v, want nil since one query variant still answered", err)
 	}
-	if len(got) != len(searchEngines) {
-		t.Fatalf("merged candidates = %d, want %d (only the surviving query's engines)", len(got), len(searchEngines))
+	if len(got) != 2 {
+		t.Fatalf("merged candidates = %d, want 2 (only the surviving query's engines)", len(got))
 	}
 }
 
 func TestSource_Find_EveryQueryUnavailableIsSourceUnavailable(t *testing.T) {
-	src := NewSource(withRunner(func(context.Context, string) ([]ports.AudioCandidate, error) {
-		return nil, &acqdomain.SourceUnavailableError{Source: SourceName, Err: errors.New("throttled")}
-	}))
+	installSearch(t, "fail 'ERROR: HTTP Error 429: Too Many Requests'")
 
-	_, err := src.Find(context.Background(), findRequest())
+	_, err := find(t)
 
-	if !acqdomain.IsSourceUnavailable(err) {
+	if !isSourceUnavailable(err) {
 		t.Fatalf("Find error = %v, want a source-unavailable error when every query and engine is unavailable", err)
 	}
 }
 
 func TestSource_Find_NoQueryFindsAnythingReturnsEmptyNotError(t *testing.T) {
-	src := NewSource(withRunner(func(context.Context, string) ([]ports.AudioCandidate, error) {
-		return nil, nil
-	}))
+	installSearch(t, "true")
 
-	got, err := src.Find(context.Background(), findRequest())
+	got, err := find(t)
 	if err != nil {
 		t.Fatalf("Find error: %v, want nil when every search simply found nothing", err)
 	}
@@ -251,26 +201,16 @@ func TestSource_Find_NoQueryFindsAnythingReturnsEmptyNotError(t *testing.T) {
 	}
 }
 
-const drinkingInLA = "https://soundcloud.com/bran-van-3000/drinking-in-l-a-3"
-
-func soundCloudFindRequest() ports.FindRequest {
-	return ports.FindRequest{Title: "Drinking in L.A.", Artist: "Bran Van 3000"}
+func soundCloudOnlySearch(flatDuration float64, inspect string) string {
+	flat := fmt.Sprintf(`{"title":"Drinking in L.A.","webpage_url":"%s","duration":%g}`, soundCloudTrackURL, flatDuration)
+	return ytDlpByMode(searchAnswers("true", searchAnswer{"scsearch5:*", "echo '" + flat + "'"}), inspect, "")
 }
 
-func soundCloudSearcher(flat ports.AudioCandidate, inspect inspectRunner) *YtDlpAudioSearcher {
-	s := withRunner(func(_ context.Context, spec string) ([]ports.AudioCandidate, error) {
-		if strings.HasPrefix(spec, "scsearch5:") {
-			return []ports.AudioCandidate{flat}, nil
-		}
-		return nil, nil
-	})
-	s.inspect = inspect
-	return s
-}
-
-func findUnplayable(t *testing.T, s *YtDlpAudioSearcher) string {
+func findUnplayable(t *testing.T, flatDuration float64, inspect string) string {
 	t.Helper()
-	got, err := NewSource(s).Find(context.Background(), soundCloudFindRequest())
+	installYtDlp(t, soundCloudOnlySearch(flatDuration, inspect))
+	got, err := acquisition.NewYtDlpSource(acquisition.NewYtDlpAudioSearcher("", "", "")).
+		Find(context.Background(), acquisition.FindRequest{Title: "Drinking in L.A.", Artist: "Bran Van 3000"})
 	if err != nil {
 		t.Fatalf("Find error: %v", err)
 	}
@@ -280,59 +220,42 @@ func findUnplayable(t *testing.T, s *YtDlpAudioSearcher) string {
 	return got[0].Unplayable
 }
 
-func staticInspection(result inspection) inspectRunner {
-	return func(context.Context, string) (inspection, error) { return result, nil }
+func inspected(json string) string {
+	return "echo '" + json + "'"
 }
 
 func TestSource_Find_MustHold8_SoundCloudTrackWithOnlyEncryptedFormatsIsMarkedDRM(t *testing.T) {
-	info := inspectionFromInfo(inspectedInfo{Duration: 240, Formats: []inspectedFormat{
-		{FormatID: "hls_aac_160k_encrypted", VCodec: "none", HasDRM: true},
-		{FormatID: "hls_opus_64k", VCodec: "none", Protocol: "m3u8_native_encrypted"},
-	}})
-	s := soundCloudSearcher(ports.AudioCandidate{Title: "Drinking in L.A.", URL: drinkingInLA, Duration: 240}, staticInspection(info))
+	inspect := inspected(`{"duration":240,"formats":[{"format_id":"hls_aac_160k","vcodec":"none","has_drm":true},{"format_id":"hls_opus_64k","vcodec":"none","protocol":"m3u8_native_encrypted"}]}`)
 
-	if got := findUnplayable(t, s); got != "drm" {
+	if got := findUnplayable(t, 240, inspect); got != "drm" {
 		t.Fatalf("Unplayable = %q, want drm", got)
 	}
 }
 
 func TestSource_Find_SoundCloudTrackWithAClearFormatStaysPlayable(t *testing.T) {
-	info := inspectionFromInfo(inspectedInfo{Duration: 240, Formats: []inspectedFormat{
-		{FormatID: "hls_aac_160k_encrypted", VCodec: "none", HasDRM: true},
-		{FormatID: "http_mp3_0_0", VCodec: "none", HasDRM: false},
-	}})
-	s := soundCloudSearcher(ports.AudioCandidate{Title: "Drinking in L.A.", URL: drinkingInLA, Duration: 240}, staticInspection(info))
+	inspect := inspected(`{"duration":240,"formats":[{"format_id":"hls_aac_160k_encrypted","vcodec":"none","has_drm":true},{"format_id":"http_mp3_0_0","vcodec":"none","has_drm":false}]}`)
 
-	if got := findUnplayable(t, s); got != "" {
+	if got := findUnplayable(t, 240, inspect); got != "" {
 		t.Fatalf("Unplayable = %q, want playable", got)
 	}
 }
 
 func TestSource_Find_SoundCloudThirtySecondExtractOfALongerTrackIsMarkedPreview(t *testing.T) {
-	s := soundCloudSearcher(ports.AudioCandidate{Title: "Drinking in L.A.", URL: drinkingInLA, Duration: 240},
-		staticInspection(inspection{Duration: 30}))
-
-	if got := findUnplayable(t, s); got != "preview" {
+	if got := findUnplayable(t, 240, inspected(`{"duration":30}`)); got != "preview" {
 		t.Fatalf("Unplayable = %q, want preview", got)
 	}
 }
 
 func TestSource_Find_SoundCloudPreviewFormatURLIsMarkedPreview(t *testing.T) {
-	info := inspectionFromInfo(inspectedInfo{Duration: 240, Formats: []inspectedFormat{
-		{FormatID: "http_mp3_1_0", VCodec: "none", URL: "https://cf-media.sndcdn.com/preview/abc.mp3"},
-	}})
-	s := soundCloudSearcher(ports.AudioCandidate{Title: "Drinking in L.A.", URL: drinkingInLA, Duration: 240}, staticInspection(info))
+	inspect := inspected(`{"duration":240,"formats":[{"format_id":"http_mp3_1_0","vcodec":"none","url":"https://cf-media.sndcdn.com/preview/abc.mp3"}]}`)
 
-	if got := findUnplayable(t, s); got != "preview" {
+	if got := findUnplayable(t, 240, inspect); got != "preview" {
 		t.Fatalf("Unplayable = %q, want preview", got)
 	}
 }
 
 func TestSource_Find_TrackThatIsReallyThirtySecondsStaysPlayable(t *testing.T) {
-	s := soundCloudSearcher(ports.AudioCandidate{Title: "Drinking in L.A.", URL: drinkingInLA, Duration: 30},
-		staticInspection(inspection{Duration: 30}))
-
-	if got := findUnplayable(t, s); got != "" {
+	if got := findUnplayable(t, 30, inspected(`{"duration":30}`)); got != "" {
 		t.Fatalf("Unplayable = %q, want playable", got)
 	}
 }
@@ -340,21 +263,18 @@ func TestSource_Find_TrackThatIsReallyThirtySecondsStaysPlayable(t *testing.T) {
 func TestSource_Find_PreviewDurationBoundaries(t *testing.T) {
 	cases := []struct {
 		name       string
-		extract    float64
+		extract    string
 		flat       float64
 		unplayable string
 	}{
-		{"extract at the slack edge is a preview", 30.5, 240, "preview"},
-		{"extract past the slack edge is playable", 30.6, 240, ""},
-		{"flat duration at the margin is playable", 30, 35, ""},
-		{"flat duration past the margin is a preview", 30, 35.1, "preview"},
+		{"extract at the slack edge is a preview", "30.5", 240, "preview"},
+		{"extract past the slack edge is playable", "30.6", 240, ""},
+		{"flat duration at the margin is playable", "30", 35, ""},
+		{"flat duration past the margin is a preview", "30", 35.1, "preview"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := soundCloudSearcher(ports.AudioCandidate{Title: "Drinking in L.A.", URL: drinkingInLA, Duration: tc.flat},
-				staticInspection(inspection{Duration: tc.extract}))
-
-			if got := findUnplayable(t, s); got != tc.unplayable {
+			if got := findUnplayable(t, tc.flat, inspected(`{"duration":`+tc.extract+`}`)); got != tc.unplayable {
 				t.Fatalf("Unplayable = %q, want %q", got, tc.unplayable)
 			}
 		})
@@ -363,10 +283,8 @@ func TestSource_Find_PreviewDurationBoundaries(t *testing.T) {
 
 func TestSource_Find_InspectionFailureLeavesTheCandidatePlayableAndIsLogged(t *testing.T) {
 	logs := captureLogs(t)
-	s := soundCloudSearcher(ports.AudioCandidate{Title: "Drinking in L.A.", URL: drinkingInLA, Duration: 240},
-		func(context.Context, string) (inspection, error) { return inspection{}, errors.New("boom") })
 
-	if got := findUnplayable(t, s); got != "" {
+	if got := findUnplayable(t, 240, "fail 'boom'"); got != "" {
 		t.Fatalf("Unplayable = %q, want fail-open", got)
 	}
 	if !strings.Contains(logs.String(), "acquisition.soundcloud_inspect_failed") {
@@ -374,50 +292,87 @@ func TestSource_Find_InspectionFailureLeavesTheCandidatePlayableAndIsLogged(t *t
 	}
 }
 
-func TestSource_Find_InspectsOnlySoundCloudURLsAndOncePerURL(t *testing.T) {
-	var mu sync.Mutex
-	inspected := map[string]int{}
-	s := withRunner(func(context.Context, string) ([]ports.AudioCandidate, error) {
-		return []ports.AudioCandidate{
-			{Title: "yt", URL: "https://www.youtube.com/watch?v=aaaaaaaaaaa", Duration: 240},
-			{Title: "sc", URL: drinkingInLA, Duration: 240},
-		}, nil
-	})
-	s.inspect = func(_ context.Context, u string) (inspection, error) {
-		mu.Lock()
-		inspected[u]++
-		mu.Unlock()
-		return inspection{Duration: 240}, nil
+func inspectedURLs(t *testing.T, calls string) []string {
+	t.Helper()
+	var urls []string
+	for _, argv := range recordedCalls(t, calls) {
+		if slices.Contains(argv, "-J") {
+			urls = append(urls, argv[len(argv)-1])
+		}
 	}
-	src := NewSource(s)
+	return urls
+}
+
+func TestSource_Find_InspectsOnlySoundCloudURLsAndOncePerURL(t *testing.T) {
+	bothSources := `printf '%s\n%s\n' '{"title":"yt","webpage_url":"https://www.youtube.com/watch?v=aaaaaaaaaaa","duration":240}' '{"title":"sc","webpage_url":"` + soundCloudTrackURL + `","duration":240}'`
+	calls := installYtDlp(t, ytDlpByMode(bothSources, inspected(`{"duration":240}`), ""))
+	src := acquisition.NewYtDlpSource(acquisition.NewYtDlpAudioSearcher("", "", ""))
 
 	for range 2 {
-		if _, err := src.Find(context.Background(), soundCloudFindRequest()); err != nil {
+		if _, err := src.Find(context.Background(), acquisition.FindRequest{Title: "Drinking in L.A.", Artist: "Bran Van 3000"}); err != nil {
 			t.Fatalf("Find error: %v", err)
 		}
 	}
 
-	if len(inspected) != 1 || inspected[drinkingInLA] != 1 {
-		t.Fatalf("inspected = %v, want only the soundcloud url, once", inspected)
+	if urls := inspectedURLs(t, calls); !slices.Equal(urls, []string{soundCloudTrackURL}) {
+		t.Fatalf("inspected = %v, want only the soundcloud url, once", urls)
 	}
 }
 
-func TestInspectionCache_ExpiresAfterADayAndEvictsOldestBeyondTheBound(t *testing.T) {
-	cache := newInspectionCache()
-	now := time.Now()
-	cache.now = func() time.Time { return now }
+func soundCloudTracks(from, to int) []acquisition.AudioCandidate {
+	var tracks []acquisition.AudioCandidate
+	for i := from; i <= to; i++ {
+		tracks = append(tracks, acquisition.AudioCandidate{URL: fmt.Sprintf("https://soundcloud.com/a/track-%d", i), Duration: 240})
+	}
+	return tracks
+}
 
-	for i := range inspectCacheMax + 1 {
-		cache.put(fmt.Sprintf("u%d", i), inspection{Duration: 1})
+func TestMarkUnplayable_RemembersTheLatest500InspectionsAndForgetsTheOldest(t *testing.T) {
+	calls := installYtDlp(t, inspectedAs(`{"duration":240}`))
+	s := acquisition.NewYtDlpAudioSearcher("", "", "")
+	mark := func(tracks []acquisition.AudioCandidate) { s.MarkUnplayable(context.Background(), tracks) }
+
+	mark(soundCloudTracks(0, 0))
+	mark(soundCloudTracks(1, 500))
+	mark(soundCloudTracks(1, 500))
+	if got := len(inspectedURLs(t, calls)); got != 501 {
+		t.Fatalf("inspections = %d, want 501: the newest 500 were all still remembered", got)
 	}
-	if _, ok := cache.get("u0"); ok {
-		t.Fatal("oldest entry survived past the bound")
+
+	mark(soundCloudTracks(0, 0))
+	if got := len(inspectedURLs(t, calls)); got != 502 {
+		t.Fatalf("inspections = %d, want 502: the oldest was forgotten past the bound", got)
 	}
-	if _, ok := cache.get("u1"); !ok {
-		t.Fatal("entry within the bound was evicted")
+}
+
+func TestMarkUnplayable_ReinspectsAURLOnceItsDayIsUp(t *testing.T) {
+	calls := installYtDlp(t, inspectedAs(`{"duration":240}`))
+	inspectedAt := time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)
+	now := inspectedAt
+	s := acquisition.NewYtDlpAudioSearcher("", "", "").WithInspectionClock(func() time.Time { return now })
+	inspectionsAt := func(at time.Time) int {
+		now = at
+		s.MarkUnplayable(context.Background(), soundCloudTracks(0, 0))
+		return len(inspectedURLs(t, calls))
 	}
-	now = now.Add(inspectCacheTTL + time.Second)
-	if _, ok := cache.get("u1"); ok {
-		t.Fatal("entry served after its 24h expiry")
+
+	inspectionsAt(inspectedAt)
+	if got := inspectionsAt(inspectedAt.Add(24*time.Hour - time.Nanosecond)); got != 1 {
+		t.Fatalf("inspections = %d, want the first still served just before 24h", got)
+	}
+	if got := inspectionsAt(inspectedAt.Add(24 * time.Hour)); got != 2 {
+		t.Fatalf("inspections = %d, want a fresh inspection once 24h have passed", got)
+	}
+}
+
+func TestMarkUnplayable_ANilInspectionClockKeepsTheRealOne(t *testing.T) {
+	calls := installYtDlp(t, inspectedAs(`{"duration":240}`))
+	s := acquisition.NewYtDlpAudioSearcher("", "", "").WithInspectionClock(nil)
+
+	s.MarkUnplayable(context.Background(), soundCloudTracks(0, 0))
+	s.MarkUnplayable(context.Background(), soundCloudTracks(0, 0))
+
+	if got := len(inspectedURLs(t, calls)); got != 1 {
+		t.Fatalf("inspections = %d, want the second served from the cache", got)
 	}
 }

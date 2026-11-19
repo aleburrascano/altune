@@ -1,8 +1,11 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { DiscoveryResult, DiscoverySource } from '@shared/catalog';
-import { driveAppState, type AppStateDriver } from '@shared/lifecycle';
-import { recordLogs, type RecordedLogs } from '@shared/log';
+import {
+  driveAppState,
+  type AppStateDriver,
+} from '@testing/fakes/lifecycle/inMemoryAppStateSource';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 import { HEALTH_BATCH } from '@shared/telemetry';
 
 import {

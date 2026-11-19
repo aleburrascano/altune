@@ -9,10 +9,12 @@ import {
   parseAuthLink,
   OAUTH_BROWSER_TIMEOUT_MS,
   useOAuth,
+} from '@features/signIn';
+import {
   authPortWrapper,
   createAuthPortMock,
   createSupabaseAuthMock,
-} from '@features/signIn';
+} from '@features/signIn/__tests__/testUtils/authTestUtils';
 const AUTH_ACTION_TIMEOUT_MS = 20_000;
 
 const mockStateUpdates: unknown[] = [];

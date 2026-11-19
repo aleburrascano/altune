@@ -11,11 +11,9 @@ import { useTrackStatusStore } from '@shared/acquisition';
 import { usePinnedStore } from '@shared/offline';
 import { TRACK_CACHE_FAMILIES } from '@shared/events';
 import type { ReactNode } from 'react';
+import { LibraryPortProvider, useDeleteTracks, useDeleteTrack } from '@features/library';
+import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
 import {
-  createMemoryLibraryPort,
-  LibraryPortProvider,
-  useDeleteTracks,
-  useDeleteTrack,
   track,
   page,
   TRACKS_KEY,
@@ -29,8 +27,9 @@ import {
   playlist,
   PLAYLIST_KEY,
   READY,
-} from '@features/library';
-import type { LibraryPort, RecordingDialogs } from '@features/library';
+} from '@features/library/__tests__/trackMutationFixtures';
+import type { LibraryPort } from '@features/library';
+import type { RecordingDialogs } from '@features/library/__tests__/recordingDialogs';
 import { libraryKeys } from '@shared/query';
 import { signInTestUser } from '@testing/signInTestUser';
 

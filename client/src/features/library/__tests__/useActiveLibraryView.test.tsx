@@ -14,12 +14,14 @@ import {
   TRACK_SORT_OPTIONS,
   type LibraryChip,
   type SortKey,
-  createMemoryLibraryPort,
-  type MemoryLibrarySeed,
-  track,
   LibraryPortProvider,
   useLibraryNavigation,
 } from '@features/library';
+import {
+  createMemoryLibraryPort,
+  type MemoryLibrarySeed,
+} from '@testing/fakes/library/inMemoryLibraryPort';
+import { track } from '@features/library/__tests__/trackMutationFixtures';
 import type { Navigator } from '@shared/navigation';
 import { signInTestUser } from '@testing/signInTestUser';
 import { acceptTelemetry, shownFailureSurfaces } from '@features/library/__tests__/failureShown';

@@ -5,9 +5,11 @@ import { StyleSheet } from 'react-native';
 import { asPlaylistId } from '@shared/catalog';
 import type { PlaylistDetailResponse } from '@shared/catalog';
 import { Sidebar, darkTheme } from '@shared/ui';
-import { createMemoryLibraryPort, LibraryPortProvider, SidebarPlaylists } from '@features/library';
+import { LibraryPortProvider, SidebarPlaylists } from '@features/library';
+import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
 import type { LibraryPort } from '@features/library';
-import { PlaylistsPortProvider, createMemoryPlaylistsPort } from '@shared/playlists';
+import { PlaylistsPortProvider } from '@shared/playlists';
+import { createMemoryPlaylistsPort } from '@testing/fakes/playlists/inMemoryPlaylistsPort';
 
 const playlistsPort = createMemoryPlaylistsPort();
 const mockPush = jest.fn();

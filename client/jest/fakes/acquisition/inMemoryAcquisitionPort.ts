@@ -21,11 +21,11 @@ export function createMemoryAcquisitionPort({
   const retried: TrackId[] = [];
   return {
     port: {
-      retryAcquisition: async (trackId) => {
-        await Promise.resolve();
-        if (!seeded.has(trackId)) throw new ApiError(NOT_FOUND_STATUS, 'track not found');
-        retried.push(trackId);
-      },
+      retryAcquisition: (trackId) =>
+        Promise.resolve().then(() => {
+          if (!seeded.has(trackId)) throw new ApiError(NOT_FOUND_STATUS, 'track not found');
+          retried.push(trackId);
+        }),
     },
     retried,
   };

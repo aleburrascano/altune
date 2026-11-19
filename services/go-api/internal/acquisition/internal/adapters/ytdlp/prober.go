@@ -34,6 +34,14 @@ func WithSkipRecorder(r ports.VerifySkipRecorder) func(*FfprobeProber) {
 	return func(p *FfprobeProber) { p.skips = r }
 }
 
+func WithDecodeTimeout(timeout time.Duration) func(*FfprobeProber) {
+	return func(p *FfprobeProber) {
+		if timeout > 0 {
+			p.decodeTimeout = timeout
+		}
+	}
+}
+
 func NewFfprobeProber(ffmpegLocation string, opts ...func(*FfprobeProber)) *FfprobeProber {
 	p := &FfprobeProber{
 		ffprobe:       binpath.Resolve("ffprobe", ffmpegLocation),

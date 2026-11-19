@@ -9,15 +9,14 @@ import {
 } from '@tanstack/react-query';
 import { asPlaylistId, asTrackId } from '@shared/catalog';
 import type { ListTracksResponse, TrackResponse, PlaylistDetailResponse } from '@shared/catalog';
-import {
-  useTrackStatusStore,
-  AcquisitionPortProvider,
-  createMemoryAcquisitionPort,
-} from '@shared/acquisition';
+import { useTrackStatusStore, AcquisitionPortProvider } from '@shared/acquisition';
+import { createMemoryAcquisitionPort } from '@testing/fakes/acquisition/inMemoryAcquisitionPort';
 import type { TrackStatus, AcquisitionPort } from '@shared/acquisition';
 import { libraryKeys, playlistKeys } from '@shared/query';
 import { runSignOutCleanups } from '@shared/session';
-import { LibraryPortProvider, createMemoryLibraryPort, recordingDialogs } from '@features/library';
+import { LibraryPortProvider } from '@features/library';
+import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
+import { recordingDialogs } from '@features/library/__tests__/recordingDialogs';
 import type { LibraryPort } from '@features/library';
 import { trackResponseFactory } from '@testing/factories';
 
