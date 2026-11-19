@@ -336,6 +336,10 @@ func TestExecute_FailureReasonResolvesToSpecificMessage(t *testing.T) {
 	}
 }
 
+func inPlaceMatch(recordings ...ports.LinkedRecording) ports.RecordingMatch {
+	return ports.RecordingMatch{AcoustID: "ac-1", Results: []ports.AcoustIDResult{{ID: "ac-1", Score: 0.97, Recordings: recordings}}}
+}
+
 type stubResolver struct {
 	identity ports.RecordingIdentity
 	err      error
