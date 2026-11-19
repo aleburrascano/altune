@@ -16,17 +16,21 @@ import {
   resetPlaybackForSignOut,
   withNativeQueue,
   installPlaybackPort,
+  httpPlaybackPort,
+} from '@features/player';
+import {
   libraryTrack,
   previewTrack,
   libraryTrackWithId,
   cdnAudioUrls,
+} from '@features/player/__tests__/fixtures';
+import {
   createMemoryPlaybackPort,
   type MemoryPlaybackSeed,
-  httpPlaybackPort,
-} from '@features/player';
+} from '@features/player/__tests__/memoryPlaybackPort';
 import '@features/player/adapters/native/loadNativeTrack';
 import { signInTestUser } from '@testing/signInTestUser';
-import { recordLogs, type RecordedLogs } from '@shared/log';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 
 const NATIVE_QUEUE_OP_TIMEOUT_MS = 15_000;
 

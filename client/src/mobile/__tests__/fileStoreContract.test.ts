@@ -1,4 +1,5 @@
-import { type FileStore, createMemoryFileStore } from '@shared/files';
+import { type FileStore } from '@shared/files';
+import { createMemoryFileStore } from '@testing/fakes/files/inMemoryFileStore';
 
 import { nativeFileStore } from '@/mobile';
 

@@ -17,10 +17,13 @@ import {
   persistOutbox,
   setOutboxFileStore,
 } from '@shared/telemetry';
-import { createMemoryFileStore } from '@shared/files';
+import { createMemoryFileStore } from '@testing/fakes/files/inMemoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
-import { recordLogs, type RecordedLogs } from '@shared/log';
-import { driveAppState, type AppStateDriver } from '@shared/lifecycle';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
+import {
+  driveAppState,
+  type AppStateDriver,
+} from '@testing/fakes/lifecycle/inMemoryAppStateSource';
 
 const { fakeFetch, FakeResponse, __http } = require('@testing/doubles/fetch.js');
 
@@ -524,8 +527,10 @@ function bootFreshApp(): FreshApp {
   jest.isolateModules(() => {
     const signIn = require('@testing/signInTestUser') as { signInTestUser: () => Promise<void> };
     void signIn.signInTestUser();
-    const lifecycle = require('@shared/lifecycle') as { driveAppState: typeof driveAppState };
-    const log = require('@shared/log') as { recordLogs: typeof recordLogs };
+    const lifecycle = require('@testing/fakes/lifecycle/inMemoryAppStateSource') as {
+      driveAppState: typeof driveAppState;
+    };
+    const log = require('@testing/fakes/log/inMemoryLogger') as { recordLogs: typeof recordLogs };
     log.recordLogs();
     app = {
       appState: lifecycle.driveAppState(),

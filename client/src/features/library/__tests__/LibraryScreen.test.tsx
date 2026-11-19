@@ -6,18 +6,16 @@ import { ApiError } from '@shared/failure';
 import { PlaybackContext } from '@shared/playback';
 import { libraryKeys } from '@shared/query';
 
-import {
-  createMemoryLibraryPort,
-  playlist,
-  track,
-  LibraryPortProvider,
-  LibraryScreen,
-} from '@features/library';
+import { LibraryPortProvider, LibraryScreen } from '@features/library';
+import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
+import { playlist, track } from '@features/library/__tests__/trackMutationFixtures';
 import { idlePlayback } from '@testing/queryHarness';
 import type { LibraryPort } from '@features/library';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
-import { PlaylistsPortProvider, createMemoryPlaylistsPort } from '@shared/playlists';
-import { AcquisitionPortProvider, createMemoryAcquisitionPort } from '@shared/acquisition';
+import { PlaylistsPortProvider } from '@shared/playlists';
+import { createMemoryPlaylistsPort } from '@testing/fakes/playlists/inMemoryPlaylistsPort';
+import { AcquisitionPortProvider } from '@shared/acquisition';
+import { createMemoryAcquisitionPort } from '@testing/fakes/acquisition/inMemoryAcquisitionPort';
 import { usePinnedStore } from '@shared/offline';
 import { signInTestUser } from '@testing/signInTestUser';
 import { acceptTelemetry, shownFailureSurfaces } from '@features/library/__tests__/failureShown';

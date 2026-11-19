@@ -1,9 +1,13 @@
 import * as FileSystem from 'expo-file-system';
 
 import { ApiError, NetworkError } from '@shared/failure';
-import { createMemoryFileStore, type MemoryFileStore } from '@shared/files';
+import {
+  createMemoryFileStore,
+  type MemoryFileStore,
+} from '@testing/fakes/files/inMemoryFileStore';
 
-import { createMemoryOfflinePort, runDownloadQueue, setPinnedFileStore } from '@shared/offline';
+import { runDownloadQueue, setPinnedFileStore } from '@shared/offline';
+import { createMemoryOfflinePort } from '@shared/offline/__tests__/memoryOfflinePort';
 import type { OfflinePort, PinnedEntry } from '@shared/offline';
 import { signInTestUser } from '@testing/signInTestUser';
 import { asTrackId, type TrackId } from '@shared/catalog';

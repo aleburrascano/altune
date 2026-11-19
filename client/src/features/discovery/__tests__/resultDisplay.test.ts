@@ -1,4 +1,5 @@
-import { kindLabel, resultKey, resultSecondaryLine, resultFixture } from '@features/discovery';
+import { kindLabel, resultKey, resultSecondaryLine } from '@features/discovery';
+import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import type { DiscoveryKind, DiscoveryResult } from '@shared/catalog';
 
 describe('kindLabel renders the user-facing kind label', () => {

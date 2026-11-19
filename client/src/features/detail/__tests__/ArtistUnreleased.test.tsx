@@ -1,7 +1,7 @@
 import { AccessibilityInfo, Linking } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { DiscoveryResult } from '@shared/catalog';
-import { recordLogs } from '@shared/log';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 import { readDetailHandoff } from '@shared/navigation';
 
 import {

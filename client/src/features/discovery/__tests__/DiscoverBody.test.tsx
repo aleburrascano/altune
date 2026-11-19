@@ -2,7 +2,8 @@ import React from 'react';
 import { Dimensions, Platform } from 'react-native';
 import { act, fireEvent, render as renderBare, screen } from '@testing-library/react-native';
 
-import { DiscoverBody, resultFixture } from '@features/discovery';
+import { DiscoverBody } from '@features/discovery';
+import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import type { DiscoverView } from '@features/discovery';
 import type { ResultSection } from '@shared/catalog';
 import { PlaybackContext } from '@shared/playback';

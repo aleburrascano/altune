@@ -7,11 +7,11 @@ import { makeWrapper } from '@testing/makeWrapper';
 import { signInTestUser } from '@testing/signInTestUser';
 import {
   httpSettingsPort,
-  createMemorySettingsPort,
   useBackfillFeatured,
   SettingsPortProvider,
   useSettingsPort,
 } from '@features/settings';
+import { createMemorySettingsPort } from '@testing/fakes/settings/inMemorySettingsPort';
 import type { SettingsPort } from '@features/settings';
 import { ApiError, NetworkError } from '@shared/apiClient';
 import { LONG_REQUEST_TIMEOUT_MS, REQUEST_TIMEOUT_MS } from '@shared/apiConfig';

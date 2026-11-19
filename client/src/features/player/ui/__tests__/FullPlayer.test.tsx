@@ -5,7 +5,8 @@ import { asTrackId } from '@shared/catalog';
 import { PlaybackContext, useQueueStore } from '@shared/playback';
 import type { PlaybackContextValue, PlaybackErrorKind } from '@shared/playback';
 
-import { libraryTrack, FullPlayer } from '@features/player';
+import { FullPlayer } from '@features/player';
+import { libraryTrack } from '@features/player/__tests__/fixtures';
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: jest.fn() }),
 }));

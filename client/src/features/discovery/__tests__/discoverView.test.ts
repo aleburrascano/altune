@@ -6,8 +6,8 @@ import {
   asyncViewForDiscoverView,
   type DiscoverHookState,
   type DiscoverView,
-  resultFixture,
 } from '@features/discovery';
+import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/catalog';
 import type { AsyncView } from '@shared/ui';
 

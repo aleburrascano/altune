@@ -2,7 +2,8 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { DiscoverySearchResponse } from '@shared/catalog';
-import { useDiscoverLogic, setSearchState, resultFixture } from '@features/discovery';
+import { useDiscoverLogic, setSearchState } from '@features/discovery';
+import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { signInTestUser } from '@testing/signInTestUser';
 import { FeaturePorts, httpFeaturePorts } from '@/mobile';
 jest.mock('expo-router', () => ({

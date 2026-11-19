@@ -1,0 +1,7 @@
+{
+  "removed": [
+    "T1 src/shared/killSwitch/__tests__/killSwitch.test.ts imports core/killSwitch.ts, behind killSwitch's door"
+  ],
+  "added": [],
+  "clones": 0
+}

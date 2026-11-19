@@ -10,7 +10,7 @@ import {
   ApiError,
   NetworkError,
 } from '@shared/apiClient';
-import { recordLogs, type RecordedLogs } from '@shared/log';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 import { asTrackId, type TrackId } from '@shared/catalog';
 import { apiBase } from '@shared/apiConfig';
 import { ContractError } from '@shared/failure';

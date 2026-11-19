@@ -5,15 +5,15 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { AcquisitionPortProvider } from '@shared/acquisition';
 import { asTrackId } from '@shared/catalog';
 import { ApiError, NetworkError } from '@shared/failure';
-import { recordLogs, warn, type RecordedLogs } from '@shared/log';
+import { warn } from '@shared/log';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 
+import { LibraryPortProvider, FeaturingScreen } from '@features/library';
+import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
 import {
-  createMemoryLibraryPort,
-  LibraryPortProvider,
-  FeaturingScreen,
   recordingDialogs,
   type RecordingDialogs,
-} from '@features/library';
+} from '@features/library/__tests__/recordingDialogs';
 import type { LibraryPort } from '@features/library';
 import { readDetailHandoff } from '@shared/navigation';
 import { trackResponseFactory } from '@testing/factories';

@@ -1,7 +1,8 @@
 import React from 'react';
 import { render as renderBare, screen } from '@testing-library/react-native';
 
-import { FilteredResults, resultFixture } from '@features/discovery';
+import { FilteredResults } from '@features/discovery';
+import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import type { DiscoveryResult } from '@shared/catalog';
 import type { SearchCorrection, ResultsCommonProps } from '@features/discovery';
 import { PlaybackContext } from '@shared/playback';

@@ -3,7 +3,7 @@ import { asPlaylistId } from '@shared/catalog';
 import { canPlay } from '@shared/playback';
 
 import { asRepeatMode, fromWireSource, parseQueueState, toWireSource } from '@features/player';
-import { recordLogs } from '@shared/log';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 
 describe('toWireSource — store source to snake_case wire shape', () => {
   it('maps null to null', () => {

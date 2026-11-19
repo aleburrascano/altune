@@ -10,7 +10,7 @@ import {
   type ClearHistoryState,
 } from '@features/settings';
 import { asTrackId } from '@shared/catalog';
-import { recordLogs, type RecordedLogs } from '@shared/log';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 
 const { __fs } = FileSystem as unknown as {
   __fs: {

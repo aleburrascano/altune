@@ -1,10 +1,10 @@
 import {
   httpPlaybackPort,
   startPlaybackService,
-  createMemoryPlaybackPort,
   installPlaybackPort,
   playbackPort,
 } from '@features/player';
+import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
 import type * as PlayerDoor from '@features/player';
 
 describe('activePlaybackPort', () => {

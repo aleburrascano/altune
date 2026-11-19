@@ -20,14 +20,21 @@ import {
   type QueueRestoreStage,
   playbackService,
   installPlaybackPort,
+} from '@features/player';
+import {
   previewTrack,
   libraryTrackWithId,
   cdnAudioUrls,
+} from '@features/player/__tests__/fixtures';
+import {
   createMemoryPlaybackPort,
   type MemoryPlaybackSeed,
-} from '@features/player';
-import { recordLogs } from '@shared/log';
-import { driveAppState, type AppStateDriver } from '@shared/lifecycle';
+} from '@features/player/__tests__/memoryPlaybackPort';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+import {
+  driveAppState,
+  type AppStateDriver,
+} from '@testing/fakes/lifecycle/inMemoryAppStateSource';
 
 const player = TrackPlayer as unknown as { getQueue: jest.Mock };
 const { __player } = jest.requireMock('react-native-track-player') as {

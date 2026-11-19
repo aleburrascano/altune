@@ -1,12 +1,11 @@
 import { asPlaylistId } from '@shared/catalog';
 import type { QueueSource } from '@shared/playback';
 
+import { buildTrackPayload, hasCrossedListenThreshold } from '@features/player';
 import {
-  buildTrackPayload,
-  hasCrossedListenThreshold,
   libraryTrack as buildLibraryTrack,
   previewTrack as buildPreviewTrack,
-} from '@features/player';
+} from '@features/player/__tests__/fixtures';
 const LISTEN_THRESHOLD_MS = 30_000;
 const SHORT_TRACK_MS = 40_000;
 const HALF_SHORT_TRACK_MS = 20_000;

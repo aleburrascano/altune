@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import type * as LifecycleNamespace from '@shared/lifecycle';
+import type * as AppStateFake from '@testing/fakes/lifecycle/inMemoryAppStateSource';
 import * as SessionNamespace from '@shared/telemetry/eventSession';
 
 const SESSION_INACTIVITY_MS = 1_800_000;
@@ -26,8 +26,10 @@ function fakeClock(initialNow: number) {
 
 function loadFreshSession(initialNow: number) {
   jest.resetModules();
-  const lifecycle: typeof LifecycleNamespace = require('@shared/lifecycle');
-  const appState = lifecycle.driveAppState('active');
+  const {
+    driveAppState,
+  }: typeof AppStateFake = require('@testing/fakes/lifecycle/inMemoryAppStateSource');
+  const appState = driveAppState('active');
   const rawSession: typeof SessionNamespace = require('@shared/telemetry/eventSession');
   const clock = fakeClock(initialNow);
   const session = { getSessionId: () => rawSession.getSessionId(clock.now, clock.monotonic) };

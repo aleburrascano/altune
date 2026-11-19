@@ -1,5 +1,8 @@
-import * as killSwitchModule from '@shared/killSwitch/core/killSwitch';
-import { createMemoryFileStore, type FileStore, type MemoryFileStore } from '@shared/files';
+import { type FileStore } from '@shared/files';
+import {
+  createMemoryFileStore,
+  type MemoryFileStore,
+} from '@testing/fakes/files/inMemoryFileStore';
 
 import {
   applyKillSwitches,
@@ -123,11 +126,13 @@ describe('kill switches', () => {
   it('on a cold start, with no setup call, reads the switches the last session persisted', () => {
     jest.isolateModules(() => {
       const files = require('@shared/files') as {
-        createMemoryFileStore: typeof createMemoryFileStore;
         setDeviceFileStore: (device: FileStore) => void;
       };
+      const fakes = require('@testing/fakes/files/inMemoryFileStore') as {
+        createMemoryFileStore: typeof createMemoryFileStore;
+      };
       const fresh = require('@shared/killSwitch') as { isLoopEnabled: typeof isLoopEnabled };
-      const device = files.createMemoryFileStore();
+      const device = fakes.createMemoryFileStore();
       device.files.set(SWITCH_URI, JSON.stringify({ sse_enabled: false }));
       files.setDeviceFileStore(device);
 
@@ -186,16 +191,5 @@ describe('kill switches', () => {
     unsubscribe();
     applyKillSwitches({});
     expect(listener).toHaveBeenCalledTimes(2);
-  });
-});
-
-describe('killSwitch module surface', () => {
-  it('exposes the switch API and keeps its keys, URL and timings private', () => {
-    expect(Object.keys(killSwitchModule).sort()).toEqual([
-      'applyKillSwitches',
-      'isLoopEnabled',
-      'onKillSwitchChange',
-      'setKillSwitchFileStore',
-    ]);
   });
 });

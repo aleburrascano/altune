@@ -12,9 +12,11 @@ import {
   type DetailPort,
   useAlbumDetailState,
   SAVE_ALL_CONCURRENCY,
+} from '@features/detail';
+import {
   createMemoryDetailPort,
   type MemoryDetailSeed,
-} from '@features/detail';
+} from '@testing/fakes/detail/inMemoryDetailPort';
 import { createPortWrapper, createTestQueryClient, idlePlayback } from '@testing/queryHarness';
 
 import {

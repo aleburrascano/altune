@@ -4,7 +4,10 @@ import { useQueueStore } from '@shared/playback';
 import type { PlaybackTrack } from '@shared/playback';
 
 import { usePlaybackPosition } from '@features/player';
-import { driveAppState, type AppStateDriver } from '@shared/lifecycle';
+import {
+  driveAppState,
+  type AppStateDriver,
+} from '@testing/fakes/lifecycle/inMemoryAppStateSource';
 
 const { __player } = jest.requireMock('react-native-track-player');
 

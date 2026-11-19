@@ -4,7 +4,7 @@ import { apiClientPlaylistsPort } from '@testing/apiClientPorts';
 import { signInTestUser } from '@testing/signInTestUser';
 import { ApiError } from '@shared/failure';
 
-import { createMemoryPlaylistsPort } from '@shared/playlists';
+import { createMemoryPlaylistsPort } from '@testing/fakes/playlists/inMemoryPlaylistsPort';
 import type { PlaylistsPort } from '@shared/playlists';
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 

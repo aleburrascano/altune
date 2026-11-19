@@ -2,7 +2,7 @@ import { createElement } from 'react';
 import { act, renderRouter } from 'expo-router/testing-library';
 
 import { useNavigator, type Navigator } from '@shared/navigation/index';
-import { createMemoryNavigator } from '@shared/navigation';
+import { createMemoryNavigator } from '@testing/fakes/navigation/inMemoryNavigator';
 
 function expoRouterNavigator(): Navigator {
   let captured: Navigator | undefined;

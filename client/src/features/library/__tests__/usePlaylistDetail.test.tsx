@@ -4,7 +4,8 @@ import type { ReactNode } from 'react';
 import { asPlaylistId, NO_PLAYLIST_ID } from '@shared/catalog';
 import type { PlaylistDetailResponse } from '@shared/catalog';
 import { playlistKeys } from '@shared/query';
-import { createMemoryLibraryPort, LibraryPortProvider, usePlaylistDetail } from '@features/library';
+import { LibraryPortProvider, usePlaylistDetail } from '@features/library';
+import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
 import type { LibraryPort } from '@features/library';
 const detail: PlaylistDetailResponse = {
   id: asPlaylistId('p1'),

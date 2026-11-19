@@ -13,7 +13,7 @@ import {
   guardedMutationOptions,
   SessionEndedError,
 } from '@shared/session';
-import { recordLogs } from '@shared/log';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 describe('signOutCleanup registry', () => {
   it('runs every registered cleanup, once per registration', () => {
     const first = jest.fn();

@@ -5,7 +5,8 @@ import { asTrackId } from '@shared/catalog';
 import { PlaybackContext, useQueueStore } from '@shared/playback';
 import type { PlaybackContextValue, PlaybackErrorKind } from '@shared/playback';
 
-import { libraryTrack, MiniPlayer } from '@features/player';
+import { MiniPlayer } from '@features/player';
+import { libraryTrack } from '@features/player/__tests__/fixtures';
 import { setPlatformOS } from '@testing/setPlatformOS';
 import { WINDOW_WIDTH, setWindowWidth } from '@testing/setWindowWidth';
 

@@ -1,7 +1,8 @@
 import { act, render, screen, waitFor } from '@testing-library/react-native';
 import { Platform } from 'react-native';
 
-import { _resetConsumedCredentialForTest, createSupabaseAuthMock } from '@features/signIn';
+import { _resetConsumedCredentialForTest } from '@features/signIn';
+import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
 import { AuthCallbackScreen } from '@features/signIn/ui/AuthCallbackScreen.web';
 import * as nativeWebOrigin from '@shared/device/core/webOrigin';
 import * as browserWebOrigin from '@shared/device/core/webOrigin.web';

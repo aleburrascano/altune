@@ -1,7 +1,8 @@
 import type { Favorite, FavoriteRef } from '@shared/apiClient';
 import { asFavoriteKey } from '@shared/catalog';
 import { signInTestUser } from '@testing/signInTestUser';
-import { httpFavoritesPort, createMemoryFavoritesPort } from '@features/discovery';
+import { httpFavoritesPort } from '@features/discovery';
+import { createMemoryFavoritesPort } from '@testing/fakes/discovery/inMemoryFavoritesPort';
 import type { FavoritesPort } from '@features/discovery';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');

@@ -2,7 +2,8 @@ import { asTrackId } from '@shared/catalog';
 import type { PlaybackTrack } from '@shared/playback';
 import { useQueueStore } from '@shared/playback';
 
-import { savedQueueLists, libraryTrack, previewTrack } from '@features/player';
+import { savedQueueLists } from '@features/player';
+import { libraryTrack, previewTrack } from '@features/player/__tests__/fixtures';
 const MAX_SAVED_QUEUE_IDS = 10_000;
 
 const OVERFLOW = 2_000;

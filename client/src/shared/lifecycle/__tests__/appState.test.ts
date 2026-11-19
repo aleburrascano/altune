@@ -1,10 +1,10 @@
 import {
-  driveAppState,
   isAppActive,
   setAppStateSource,
   subscribeAppState,
   type AppLifecycleState,
 } from '@shared/lifecycle';
+import { driveAppState } from '@testing/fakes/lifecycle/inMemoryAppStateSource';
 
 describe('appState', () => {
   it('calls the listener on each app state change', () => {

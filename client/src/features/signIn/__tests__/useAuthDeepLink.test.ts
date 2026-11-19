@@ -4,11 +4,8 @@ import { Alert, Platform } from 'react-native';
 
 import { _resetOutboxForTest } from '@shared/telemetry';
 
-import {
-  _resetConsumedCredentialForTest,
-  useAuthDeepLink,
-  createSupabaseAuthMock,
-} from '@features/signIn';
+import { _resetConsumedCredentialForTest, useAuthDeepLink } from '@features/signIn';
+import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
 const mockRouter = { replace: jest.fn() };
 
 jest.mock('expo-router', () => ({ useRouter: () => mockRouter }));

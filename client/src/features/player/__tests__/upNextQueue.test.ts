@@ -6,8 +6,8 @@ import {
   queueMenuOptions,
   queueSourceLabel,
   type QueueMenuContext,
-  libraryTrack,
 } from '@features/player';
+import { libraryTrack } from '@features/player/__tests__/fixtures';
 describe('queueSourceLabel', () => {
   it.each<[string, QueueSource | null, string]>([
     ['null', null, 'Queue'],

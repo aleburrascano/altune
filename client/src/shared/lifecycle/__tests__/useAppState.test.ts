@@ -1,12 +1,10 @@
 import { act, renderHook } from '@testing-library/react-native';
 
+import { useAppStateChange, useIsForeground, type AppLifecycleState } from '@shared/lifecycle';
 import {
   driveAppState,
-  useAppStateChange,
-  useIsForeground,
-  type AppLifecycleState,
   type AppStateDriver,
-} from '@shared/lifecycle';
+} from '@testing/fakes/lifecycle/inMemoryAppStateSource';
 
 type Listener = (state: AppLifecycleState) => void;
 

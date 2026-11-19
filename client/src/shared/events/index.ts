@@ -28,7 +28,6 @@ export type {
 export { applyServerEvent } from '@shared/events/shell/applyServerEvent';
 export type { EventCache } from '@shared/events/core/eventCache';
 export type { ParsedBlock, ServerEvent } from '@shared/events/core/sseFrames';
-export { settleTrackPatches } from '@shared/events/__tests__/settleTrackPatches';
 export { SERVER_EVENT_TYPES, isServerEventType } from '@shared/events/core/serverEventTypes';
 export {
   patchPlaylistName,
@@ -39,12 +38,3 @@ export { PLAYLIST_HANDLERS } from '@shared/events/shell/playlistEvents';
 export { SSEClient } from '@shared/events/shell/sseClient';
 export type { StreamIO, StreamRequest } from '@shared/events/shell/sseClient';
 export { isServerEvent, parseChunk } from '@shared/events/core/sseFrames';
-export {
-  makeInfinite,
-  makePage,
-  makePlaylistDetail,
-  makeTrack,
-  newClient,
-  registerUnfetchedQuery,
-  seedTracksPrefix,
-} from '@shared/events/__tests__/trackCacheFixtures';

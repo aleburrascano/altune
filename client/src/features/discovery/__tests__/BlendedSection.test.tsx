@@ -1,7 +1,8 @@
 import React from 'react';
 import { fireEvent, render as renderBare, screen } from '@testing-library/react-native';
 
-import { BlendedSection, resultFixture } from '@features/discovery';
+import { BlendedSection } from '@features/discovery';
+import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import type { DiscoveryResult, ResultSection } from '@shared/catalog';
 import type { ResultsCommonProps } from '@features/discovery';
 import { PlaybackContext } from '@shared/playback';

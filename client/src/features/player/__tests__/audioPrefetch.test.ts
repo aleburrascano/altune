@@ -18,16 +18,20 @@ import {
   wasSwappedToLocal,
   _resetPlaybackHealthForTest,
   flushPlaybackHealth,
+  httpPlaybackPort,
+} from '@features/player';
+import {
   libraryTrack,
   libraryTrackWithId,
   cdnAudioUrls,
+} from '@features/player/__tests__/fixtures';
+import {
   createMemoryPlaybackPort,
   type MemoryPlaybackSeed,
-  httpPlaybackPort,
-} from '@features/player';
+} from '@features/player/__tests__/memoryPlaybackPort';
 import * as audioCache from '@features/player/adapters/native/audioCache';
 import { signInTestUser } from '@testing/signInTestUser';
-import { recordLogs, type RecordedLogs } from '@shared/log';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 
 const PREFETCH_STALL_TIMEOUT_MS = 15_000;
 

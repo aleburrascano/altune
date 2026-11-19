@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { createMemoryFileStore } from '@shared/files';
+import { createMemoryFileStore } from '@testing/fakes/files/inMemoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
 import {
   enqueueCritical,

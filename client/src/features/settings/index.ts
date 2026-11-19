@@ -25,7 +25,6 @@ export { failureCopyForAction } from '@features/settings/core/failureCopyForActi
 export { LibraryCard } from '@features/settings/view/LibraryCard';
 export type { DownloadStats } from '@features/settings/core/downloadStatsModel';
 export { OfflineDownloadsCard } from '@features/settings/view/OfflineDownloadsCard';
-export { createMemorySettingsPort } from '@features/settings/__tests__/memorySettingsPort';
 export { useBackfillFeatured } from '@features/settings/view/useBackfillFeatured';
 export { accountEmail } from '@features/settings/shell/useAccountEmail';
 export { useSettingsClearSearchHistory } from '@features/settings/view/useSettingsClearSearchHistory';

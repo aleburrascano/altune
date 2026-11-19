@@ -7,7 +7,6 @@ export { LyricsSheet } from '@features/player/ui/LyricsSheet';
 export { QueueSheet, QueueRow } from '@features/player/ui/QueueSheet';
 export { startPlaybackService } from '@features/player/adapters/startPlaybackService';
 export { httpPlaybackPort } from '@features/player/adapters/http/httpPlaybackPort';
-export { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
 export { installPlaybackPort, playbackPort } from '@features/player/shell/activePlaybackPort';
 export {
   MAX_PREFETCH_FILE_BYTES,
@@ -18,14 +17,6 @@ export {
   evictCachedFile,
   findCached,
 } from '@features/player/adapters/native/audioCache';
-export {
-  cdnAudioUrls,
-  libraryTrack,
-  libraryTrackList,
-  libraryTrackWithId,
-  previewTrack,
-  previewTrackList,
-} from '@features/player/__tests__/fixtures';
 export type { PlaybackPort } from '@features/player/ports/playbackPort';
 export { evictCached, prefetchNext } from '@features/player/adapters/native/audioPrefetch';
 export {
@@ -43,7 +34,6 @@ export {
   recordQueueSaveFailure,
   recordQueueStateRejected,
 } from '@features/player/domain/playbackHealth';
-export type { MemoryPlaybackSeed } from '@features/player/__tests__/memoryPlaybackPort';
 export {
   createNativePlaybackActions,
   ignoringNativeRejection,

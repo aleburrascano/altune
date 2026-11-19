@@ -6,7 +6,8 @@ import { PlaybackContext, useQueueStore } from '@shared/playback';
 import type { PlaybackContextValue } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';
 
-import { libraryTrack, PlayerBar } from '@features/player';
+import { PlayerBar } from '@features/player';
+import { libraryTrack } from '@features/player/__tests__/fixtures';
 const RESTART_THRESHOLD_MS = 3_000;
 
 const mockPush = jest.fn();

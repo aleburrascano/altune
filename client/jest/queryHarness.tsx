@@ -7,8 +7,10 @@ import type { PlaybackContextValue } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';
 import { PlaybackContext } from '@shared/playback';
 
-import { DetailPortProvider, recordWarnings } from '@features/detail';
-import type { DetailPort, RecordingDetailPort } from '@features/detail';
+import { DetailPortProvider } from '@features/detail';
+import { recordWarnings } from '@testing/fakes/detail/inMemoryDetailPort';
+import type { DetailPort } from '@features/detail';
+import type { RecordingDetailPort } from '@testing/fakes/detail/inMemoryDetailPort';
 import { FeaturePorts, httpFeaturePorts, type FeaturePortSet } from '@/mobile';
 
 interface WrapperProps {

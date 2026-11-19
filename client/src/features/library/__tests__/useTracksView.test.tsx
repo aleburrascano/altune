@@ -11,13 +11,9 @@ import { View } from 'react-native';
 import { asTrackId } from '@shared/catalog';
 import type { TrackResponse } from '@shared/catalog';
 import type { ActiveView, LibraryPort } from '@features/library';
-import {
-  createMemoryLibraryPort,
-  track,
-  LibraryPortProvider,
-  useSelection,
-  useTracksView,
-} from '@features/library';
+import { LibraryPortProvider, useSelection, useTracksView } from '@features/library';
+import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
+import { track } from '@features/library/__tests__/trackMutationFixtures';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 
 const noop = () => undefined;

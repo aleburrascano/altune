@@ -1,5 +1,6 @@
-import { consoleLogger, recordLogs, setLogger, warn } from '@shared/log';
-import type { LoggedLine } from '@shared/log';
+import { consoleLogger, setLogger, warn } from '@shared/log';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+import type { LoggedLine } from '@testing/fakes/log/inMemoryLogger';
 
 function sinkRecording(lines: LoggedLine[]): Pick<Console, 'warn'> {
   return {

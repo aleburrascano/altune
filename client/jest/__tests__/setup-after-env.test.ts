@@ -36,7 +36,8 @@ describe('setup-after-env', () => {
   });
 
   describe('logger reset between tests', () => {
-    const { recordLogs, warn } = require('../../src/shared/log');
+    const { warn } = require('../../src/shared/log');
+    const { recordLogs } = require('../fakes/log/inMemoryLogger');
     let earlier: { warnings: unknown[] };
 
     beforeAll(() => {
@@ -50,7 +51,8 @@ describe('setup-after-env', () => {
   });
 
   describe('app state reset between tests', () => {
-    const { driveAppState, subscribeAppState } = require('../../src/shared/lifecycle');
+    const { subscribeAppState } = require('../../src/shared/lifecycle');
+    const { driveAppState } = require('../fakes/lifecycle/inMemoryAppStateSource');
     const heard: string[] = [];
     let earlier: { change(state: string): void };
 

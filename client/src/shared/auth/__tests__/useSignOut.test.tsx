@@ -6,7 +6,7 @@ import { ApiError, NetworkError } from '@shared/failure';
 
 import { useSignOut } from '@shared/auth';
 import { onSignOut } from '@shared/session';
-import { recordLogs, type RecordedLogs } from '@shared/log';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 
 const mockSignOut = jest.fn();
 

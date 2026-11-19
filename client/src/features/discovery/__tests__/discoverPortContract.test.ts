@@ -9,14 +9,14 @@ import { ApiError } from '@shared/failure';
 import { signInTestUser } from '@testing/signInTestUser';
 import {
   httpDiscoverPort,
-  createMemoryDiscoverPort,
-  resultFixture,
   useAutocompleteSuggestions,
   useDiscoverSearch,
   useSearchHistory,
   DiscoverPortProvider,
   useDiscoverPort,
 } from '@features/discovery';
+import { createMemoryDiscoverPort } from '@testing/fakes/discovery/inMemoryDiscoverPort';
+import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import type { DiscoverPort } from '@features/discovery';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
