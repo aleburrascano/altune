@@ -260,6 +260,7 @@ func (a *App) wireCatalogServices(
 			catalogTrackRepo,
 			catalog.WithAddTrackEvents(tap),
 			catalog.WithAcquisitionScheduler(audio.scheduler),
+			catalog.WithAddTrackClock(time.Now),
 		),
 		listTracksSvc:         catalog.NewListTracksService(catalogTrackRepo),
 		deleteTrackSvc:        catalog.NewDeleteTrackService(catalogTrackRepo, audio.audioStore, catalog.WithDeleteTrackEvents(tap), catalog.WithDeleteTrackMetrics(audioStoreMetrics), catalog.WithDeleteTrackOrphanQueue(orphanedAudio)),

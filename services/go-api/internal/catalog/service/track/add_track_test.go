@@ -1,12 +1,11 @@
-package track
+package track_test
 
 import (
-	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog"
+	"altune/go-api/internal/shared/events"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -15,68 +14,65 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
 )
+
+const addTrackScheduleBound = 5 * time.Second
 
 func strptr(s string) *string { return &s }
 
-func withTrackCap(t *testing.T, limit int) {
-	t.Helper()
-	prev := maxTracksPerUser
-	maxTracksPerUser = limit
-	t.Cleanup(func() { maxTracksPerUser = prev })
+type fullLibraryRepo struct {
+	*catalog.InMemoryTrackRepo
+	fullFor shared.UserId
+}
+
+func (r fullLibraryRepo) CountForUser(ctx context.Context, userId shared.UserId, atMost int) (int, error) {
+	if userId == r.fullFor {
+		return atMost, nil
+	}
+	return r.InMemoryTrackRepo.CountForUser(ctx, userId, atMost)
 }
 
 func TestAddTrack_RejectsPastUserCap(t *testing.T) {
 	ctx := context.Background()
-	userId := catalogtest.UserId()
-	repo := catalogtest.NewTrackRepo()
-	withTrackCap(t, 3)
-	for i := range maxTracksPerUser {
-		catalogtest.SeedTrack(t, repo, userId, fmt.Sprintf("Held %d", i), "Artist", "Album")
-	}
-	svc := NewAddTrackService(repo)
+	userId := catalog.FixtureUserId()
+	repo := fullLibraryRepo{InMemoryTrackRepo: catalog.NewInMemoryTrackRepo(), fullFor: userId}
+	svc := catalog.NewAddTrackService(repo)
 
-	out, err := svc.Execute(ctx, userId, AddTrackInput{Title: "One Too Many", Artist: "Artist", Album: "Album"})
+	out, err := svc.Execute(ctx, userId, catalog.AddTrackInput{Title: "One Too Many", Artist: "Artist", Album: "Album"})
 
-	if !errors.Is(err, ErrLibraryFull) {
+	if !errors.Is(err, catalog.ErrLibraryFull) {
 		t.Fatalf("error = %v, want ErrLibraryFull", err)
 	}
 	if out != nil {
 		t.Fatalf("output = %+v, want nil", out)
 	}
-	if len(repo.Tracks) != maxTracksPerUser {
-		t.Fatalf("stored tracks = %d, want %d: the refused save must not insert", len(repo.Tracks), maxTracksPerUser)
+	if len(repo.Tracks) != 0 {
+		t.Fatalf("stored tracks = %d, want 0: the refused save must not insert", len(repo.Tracks))
 	}
 }
 
 func TestAddTrack_CapCountsOnlyTheCallersTracks(t *testing.T) {
 	ctx := context.Background()
-	repo := catalogtest.NewTrackRepo()
-	withTrackCap(t, 2)
-	for i := range maxTracksPerUser {
-		catalogtest.SeedTrack(t, repo, catalogtest.OtherUserId(), fmt.Sprintf("Theirs %d", i), "Artist", "Album")
-	}
-	svc := NewAddTrackService(repo)
+	repo := fullLibraryRepo{InMemoryTrackRepo: catalog.NewInMemoryTrackRepo(), fullFor: catalog.FixtureOtherUserId()}
+	svc := catalog.NewAddTrackService(repo)
 
-	out, err := svc.Execute(ctx, catalogtest.UserId(), AddTrackInput{Title: "Mine", Artist: "Artist", Album: "Album"})
+	out, err := svc.Execute(ctx, catalog.FixtureUserId(), catalog.AddTrackInput{Title: "Mine", Artist: "Artist", Album: "Album"})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	if !out.Created {
-		t.Fatal("Created = false, want true: another owner's rows are not this caller's cap")
+		t.Fatal("Created = false, want true: another owner's full library is not this caller's cap")
 	}
 }
 
 func TestAddTrackService_IdempotencyKeyReturnsExisting(t *testing.T) {
 	ctx := context.Background()
-	userId := catalogtest.UserId()
-	repo := catalogtest.NewTrackRepo()
-	svc := NewAddTrackService(repo)
+	userId := catalog.FixtureUserId()
+	repo := catalog.NewInMemoryTrackRepo()
+	svc := catalog.NewAddTrackService(repo)
 	key := "save-abc-123"
 
-	first, err := svc.Execute(ctx, userId, AddTrackInput{
+	first, err := svc.Execute(ctx, userId, catalog.AddTrackInput{
 		Title: "One", Artist: "Artist", Album: "Album", IdempotencyKey: strptr(key),
 	})
 	if err != nil {
@@ -86,7 +82,7 @@ func TestAddTrackService_IdempotencyKeyReturnsExisting(t *testing.T) {
 		t.Fatalf("first Created = false, want true")
 	}
 
-	second, err := svc.Execute(ctx, userId, AddTrackInput{
+	second, err := svc.Execute(ctx, userId, catalog.AddTrackInput{
 		Title: "Different Title", Artist: "Other", Album: "Other", IdempotencyKey: strptr(key),
 	})
 	if err != nil {
@@ -105,10 +101,10 @@ func TestAddTrackService_IdempotencyKeyReturnsExisting(t *testing.T) {
 
 func TestAddTrackService_RejectsEmptyIdempotencyKey(t *testing.T) {
 	ctx := context.Background()
-	repo := catalogtest.NewTrackRepo()
-	svc := NewAddTrackService(repo)
+	repo := catalog.NewInMemoryTrackRepo()
+	svc := catalog.NewAddTrackService(repo)
 
-	_, err := svc.Execute(ctx, catalogtest.UserId(), AddTrackInput{
+	_, err := svc.Execute(ctx, catalog.FixtureUserId(), catalog.AddTrackInput{
 		Title: "T", Artist: "A", Album: "Al", IdempotencyKey: strptr(""),
 	})
 	if err == nil || !strings.Contains(err.Error(), "idempotency_key must not be empty") {
@@ -118,66 +114,46 @@ func TestAddTrackService_RejectsEmptyIdempotencyKey(t *testing.T) {
 
 func TestAddTrackService_Execute(t *testing.T) {
 	ctx := context.Background()
-	userId := catalogtest.UserId()
+	userId := catalog.FixtureUserId()
 	errRepo := errors.New("db connection lost")
 
 	tests := []struct {
 		name        string
-		input       AddTrackInput
-		setup       func(*catalogtest.TrackRepo)
+		input       catalog.AddTrackInput
+		setup       func(*catalog.InMemoryTrackRepo)
 		wantCreated bool
 		wantTitle   string
 		wantErr     string
 	}{
 		{
-			name: "new track is created",
-			input: AddTrackInput{
-				Title:  "Track",
-				Artist: "Artist",
-				Album:  "Album",
-			},
+			name:        "new track is created",
+			input:       catalog.AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album"},
 			wantCreated: true,
 			wantTitle:   "Track",
 		},
 		{
-			name: "duplicate returns existing track not created",
-			input: AddTrackInput{
-				Title:  "Existing",
-				Artist: "Artist",
-				Album:  "Album",
-			},
-			setup: func(repo *catalogtest.TrackRepo) {
-				catalogtest.SeedTrack(t, repo, userId, "Existing", "Artist", "Album")
+			name:  "duplicate returns existing track not created",
+			input: catalog.AddTrackInput{Title: "Existing", Artist: "Artist", Album: "Album"},
+			setup: func(repo *catalog.InMemoryTrackRepo) {
+				catalog.SeedTrack(t, repo, userId, "Existing", "Artist", "Album")
 			},
 			wantCreated: false,
 			wantTitle:   "Existing",
 		},
 		{
-			name: "empty title returns validation error",
-			input: AddTrackInput{
-				Title:  "",
-				Artist: "Artist",
-				Album:  "Album",
-			},
+			name:    "empty title returns validation error",
+			input:   catalog.AddTrackInput{Title: "", Artist: "Artist", Album: "Album"},
 			wantErr: "track title required",
 		},
 		{
-			name: "empty artist returns validation error",
-			input: AddTrackInput{
-				Title:  "Track",
-				Artist: "",
-				Album:  "Album",
-			},
+			name:    "empty artist returns validation error",
+			input:   catalog.AddTrackInput{Title: "Track", Artist: "", Album: "Album"},
 			wantErr: "track artist required",
 		},
 		{
-			name: "repo error propagates",
-			input: AddTrackInput{
-				Title:  "Track",
-				Artist: "Artist",
-				Album:  "Album",
-			},
-			setup: func(repo *catalogtest.TrackRepo) {
+			name:  "repo error propagates",
+			input: catalog.AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album"},
+			setup: func(repo *catalog.InMemoryTrackRepo) {
 				repo.ErrOnAdd = errRepo
 			},
 			wantErr: "db connection lost",
@@ -186,11 +162,11 @@ func TestAddTrackService_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := catalogtest.NewTrackRepo()
+			repo := catalog.NewInMemoryTrackRepo()
 			if tt.setup != nil {
 				tt.setup(repo)
 			}
-			svc := NewAddTrackService(repo)
+			svc := catalog.NewAddTrackService(repo)
 
 			out, err := svc.Execute(ctx, userId, tt.input)
 
@@ -219,14 +195,26 @@ func TestAddTrackService_Execute(t *testing.T) {
 	}
 }
 
-func TestTrackAddedPayload(t *testing.T) {
-	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Midnight City", "M83", "Hurry Up, We're Dreaming")
+func addWithRecordedEvents(t *testing.T, input catalog.AddTrackInput) (*catalog.Track, map[string]any) {
+	t.Helper()
+	pub := &catalog.InMemoryRecordingPublisher{}
+	svc := catalog.NewAddTrackService(catalog.NewInMemoryTrackRepo(),
+		catalog.WithAcquisitionScheduler(&catalog.InMemoryScheduler{}), catalog.WithAddTrackEvents(pub))
+	out, err := svc.Execute(context.Background(), catalog.FixtureUserId(), input)
 	if err != nil {
-		t.Fatalf("new track: %v", err)
+		t.Fatalf("Execute: %v", err)
 	}
+	payload := pub.Last(events.TypeTrackAddedToLibrary)
+	if payload == nil {
+		t.Fatal("no track_added_to_library event published")
+	}
+	return out.Track, payload
+}
 
-	p := trackAddedPayload(track)
+func TestTrackAddedPayload(t *testing.T) {
+	track, p := addWithRecordedEvents(t, catalog.AddTrackInput{
+		Title: "Midnight City", Artist: "M83", Album: "Hurry Up, We're Dreaming",
+	})
 
 	if p["id"] != track.ID.String() {
 		t.Errorf("id = %v, want %s", p["id"], track.ID.String())
@@ -243,107 +231,56 @@ func TestTrackAddedPayload(t *testing.T) {
 	if p["acquisition_status"] != track.AcquisitionStatus.String() {
 		t.Errorf("acquisition_status = %v", p["acquisition_status"])
 	}
-}
-
-func TestTrackAddedPayload_EmptyAlbumIsNil(t *testing.T) {
-	track := &domain.Track{
-		ID:     domain.NewTrackId(),
-		UserId: shared.NewUserId(uuid.New()),
-		Title:  "Single",
-		Artist: "Artist",
-		Album:  "",
-	}
-
-	if album := trackAddedPayload(track)["album"]; album != nil {
-		t.Errorf("empty album = %v, want JSON null", album)
+	if _, ok := p["audio_ref"]; ok {
+		t.Error("track_added payload exposes audio_ref")
 	}
 }
 
 func TestTrackAddedPayload_SingleCarriesTheTitleAsAlbum(t *testing.T) {
-	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Single", "Artist", "")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
+	_, p := addWithRecordedEvents(t, catalog.AddTrackInput{Title: "Single", Artist: "Artist"})
 
-	if album := trackAddedPayload(track)["album"]; album != "Single" {
+	if album := p["album"]; album != "Single" {
 		t.Errorf("album = %v, want the title", album)
 	}
 }
 
 func TestTrackAddedPayload_MatchesRESTDTOByteForByte(t *testing.T) {
-	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Midnight City", "M83", "Hurry Up, We're Dreaming")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	dur := 240.5
-	artwork := "https://cdn.example/art.jpg"
-	year := 2011
-	genre := "electronic"
-	trackNo := 4
-	albumArtist := "M83"
-	isrc := "USUM71100001"
-	audioRef := "obj/abc123"
-	reason := "no_source"
-	track.DurationSeconds = &dur
-	track.ArtworkURL = &artwork
-	track.Year = &year
-	track.Genre = &genre
-	track.TrackNumber = &trackNo
-	track.AlbumArtist = &albumArtist
-	track.ISRC = &isrc
-	track.AudioRef = &audioRef
-	track.FailureReason = &reason
-	track.AcquisitionStatus = domain.AcquisitionFailed
-	track.FeaturedArtists = []domain.FeaturedArtist{
-		domain.NewFeaturedArtistIdentityOnly("Susanne Sundfor", "11111111-2222-3333-4444-555555555555", 4567),
+	pub := &catalog.InMemoryRecordingPublisher{}
+	svc := catalog.NewAddTrackService(catalog.NewInMemoryTrackRepo(),
+		catalog.WithAcquisitionScheduler(&catalog.InMemoryScheduler{}), catalog.WithAddTrackEvents(pub))
+
+	status, restBody := postTrack(t, svc, catalog.FixtureUserId(), `{
+		"title": "Midnight City", "artist": "M83", "album": "Hurry Up, We're Dreaming",
+		"duration_seconds": 240.5, "artwork_url": "https://cdn.example/art.jpg", "year": 2011,
+		"genre": "electronic", "track_number": 4, "album_artist": "M83", "isrc": "USUM71100001",
+		"featured_artists": [{"name": "Susanne Sundfor", "mbid": "11111111-2222-3333-4444-555555555555", "deezer_id": 4567}]
+	}`)
+	if status != 201 {
+		t.Fatalf("POST /tracks status = %d, body %s", status, restBody)
 	}
 
-	restJSON := canonicalJSON(t, mustMarshal(t, TrackToDTO(track)))
-
-	payload := trackAddedPayload(track)
-	if payload["track_id"] != track.ID.String() {
-		t.Errorf("track_id = %v, want %s", payload["track_id"], track.ID.String())
+	payload := pub.Last(events.TypeTrackAddedToLibrary)
+	if payload == nil || payload["track_id"] != payload["id"] {
+		t.Fatalf("payload = %v, want track_id equal to id", payload)
 	}
 	delete(payload, "track_id")
-	sseJSON := canonicalJSON(t, mustMarshal(t, payload))
-
-	if restJSON != sseJSON {
+	restJSON := canonicalJSON(t, restBody)
+	if sseJSON := canonicalJSON(t, mustMarshal(t, payload)); restJSON != sseJSON {
 		t.Errorf("SSE payload diverged from REST DTO\n REST: %s\n  SSE: %s", restJSON, sseJSON)
 	}
-}
-
-func mustMarshal(t *testing.T, v any) []byte {
-	t.Helper()
-	raw, err := json.Marshal(v)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
+	if !strings.Contains(restJSON, `"featured_artists":[{`) || !strings.Contains(restJSON, `"isrc":"USUM71100001"`) {
+		t.Errorf("REST DTO = %s, want every saved field present so the comparison covers them", restJSON)
 	}
-	return raw
-}
-
-func canonicalJSON(t *testing.T, raw []byte) string {
-	t.Helper()
-	var v any
-	if err := json.Unmarshal(raw, &v); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	out, err := json.Marshal(v)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	return string(out)
 }
 
 func TestAddTrackService_RefusedScheduleFailsTrack(t *testing.T) {
 	ctx := context.Background()
-	repo := catalogtest.NewTrackRepo()
-	sched := &catalogtest.Scheduler{Err: errors.New("acquisition queue is full")}
-	pub := &catalogtest.RecordingPlaylistPublisher{}
-	svc := NewAddTrackService(repo, WithAcquisitionScheduler(sched), WithAddTrackEvents(pub))
+	repo := catalog.NewInMemoryTrackRepo()
+	sched := &catalog.InMemoryScheduler{Err: errors.New("acquisition queue is full")}
+	pub := &catalog.InMemoryRecordingPublisher{}
+	svc := catalog.NewAddTrackService(repo, catalog.WithAcquisitionScheduler(sched), catalog.WithAddTrackEvents(pub))
 
-	out, err := svc.Execute(ctx, catalogtest.UserId(), AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album"})
+	out, err := svc.Execute(ctx, catalog.FixtureUserId(), catalog.AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album"})
 	if err != nil {
 		t.Fatalf("Execute = %v, want the track created despite the refused schedule", err)
 	}
@@ -352,62 +289,109 @@ func TestAddTrackService_RefusedScheduleFailsTrack(t *testing.T) {
 	}
 
 	stored, _ := repo.GetByID(ctx, out.Track.ID, out.Track.UserId)
-	if stored == nil || stored.AcquisitionStatus != domain.AcquisitionFailed {
+	if stored == nil || stored.AcquisitionStatus != catalog.AcquisitionFailed {
 		t.Fatalf("stored track = %+v, want failed (not stranded pending)", stored)
 	}
-	if stored.FailureReason == nil || *stored.FailureReason != string(domain.FailureAcquisitionRefused) {
-		t.Errorf("failure reason = %v, want %q", stored.FailureReason, domain.FailureAcquisitionRefused)
+	if stored.FailureReason == nil || *stored.FailureReason != string(shared.FailureAcquisitionRefused) {
+		t.Errorf("failure reason = %v, want %q", stored.FailureReason, shared.FailureAcquisitionRefused)
 	}
 	if stored.AcquisitionStartedAt != nil {
 		t.Error("in-flight marker left set on a track whose job was never queued")
 	}
-	if got := pub.Last("track_acquisition_failed"); got == nil || got["reason"] != string(domain.FailureAcquisitionRefused) {
-		t.Errorf("track_acquisition_failed payload = %v, want reason %q", got, domain.FailureAcquisitionRefused)
+	if got := pub.Last(events.TypeTrackAcquisitionFailed); got == nil || got["reason"] != string(shared.FailureAcquisitionRefused) {
+		t.Errorf("track_acquisition_failed payload = %v, want reason %q", got, shared.FailureAcquisitionRefused)
 	}
 }
 
 func TestAddTrackService_RefusedScheduleUnpersistedStaysPending(t *testing.T) {
 	ctx := context.Background()
-	repo := catalogtest.NewTrackRepo()
+	repo := catalog.NewInMemoryTrackRepo()
 	repo.ErrOnUpdate = errors.New("db down")
-	pub := &catalogtest.RecordingPlaylistPublisher{}
-	sched := &catalogtest.Scheduler{Err: errors.New("acquisition queue is full")}
-	svc := NewAddTrackService(repo, WithAcquisitionScheduler(sched), WithAddTrackEvents(pub))
+	pub := &catalog.InMemoryRecordingPublisher{}
+	sched := &catalog.InMemoryScheduler{Err: errors.New("acquisition queue is full")}
+	svc := catalog.NewAddTrackService(repo, catalog.WithAcquisitionScheduler(sched), catalog.WithAddTrackEvents(pub))
 
-	out, err := svc.Execute(ctx, catalogtest.UserId(), AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album"})
+	out, err := svc.Execute(ctx, catalog.FixtureUserId(), catalog.AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album"})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if out.Track.AcquisitionStatus != domain.AcquisitionPending || out.Track.AcquisitionStartedAt == nil {
+	if out.Track.AcquisitionStatus != catalog.AcquisitionPending || out.Track.AcquisitionStartedAt == nil {
 		t.Errorf("returned track = %v (started_at %v), want pending as stored", out.Track.AcquisitionStatus, out.Track.AcquisitionStartedAt)
 	}
-	if pub.Last("track_acquisition_failed") != nil {
+	if pub.Last(events.TypeTrackAcquisitionFailed) != nil {
 		t.Error("published track_acquisition_failed for a failure that was never persisted")
 	}
 }
 
 func TestAddTrackService_AcceptedScheduleLeavesTrackPending(t *testing.T) {
 	ctx := context.Background()
-	repo := catalogtest.NewTrackRepo()
-	pub := &catalogtest.RecordingPlaylistPublisher{}
-	svc := NewAddTrackService(repo, WithAcquisitionScheduler(&catalogtest.Scheduler{}), WithAddTrackEvents(pub))
+	repo := catalog.NewInMemoryTrackRepo()
+	pub := &catalog.InMemoryRecordingPublisher{}
+	svc := catalog.NewAddTrackService(repo, catalog.WithAcquisitionScheduler(&catalog.InMemoryScheduler{}), catalog.WithAddTrackEvents(pub))
 
-	out, err := svc.Execute(ctx, catalogtest.UserId(), AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album"})
+	out, err := svc.Execute(ctx, catalog.FixtureUserId(), catalog.AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album"})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if out.Track.AcquisitionStatus != domain.AcquisitionPending {
+	if out.Track.AcquisitionStatus != catalog.AcquisitionPending {
 		t.Errorf("status = %v, want pending while the queued job runs", out.Track.AcquisitionStatus)
 	}
-	if pub.Last("track_acquisition_failed") != nil {
+	if pub.Last(events.TypeTrackAcquisitionFailed) != nil {
 		t.Error("published track_acquisition_failed for an accepted schedule")
 	}
 }
 
-func TestAddTrackService_ValidatesRanges(t *testing.T) {
+func TestAddTrackService_ForwardsSourceURLToScheduler(t *testing.T) {
 	ctx := context.Background()
-	userId := catalogtest.UserId()
+	sched := &catalog.InMemoryScheduler{}
+	svc := catalog.NewAddTrackService(catalog.NewInMemoryTrackRepo(), catalog.WithAcquisitionScheduler(sched))
 
+	scURL := "https://soundcloud.com/liltecca/fell-in-love"
+	if _, err := svc.Execute(ctx, catalog.FixtureUserId(), catalog.AddTrackInput{
+		Title:     "Fell In Love",
+		Artist:    "Lil Tecca",
+		SourceURL: &scURL,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(sched.SourceURLs) != 1 || sched.SourceURLs[0] != scURL {
+		t.Fatalf("scheduler should receive source URL %q, got %v", scURL, sched.SourceURLs)
+	}
+}
+
+func TestAddTrackService_NoSourceURL_ForwardsEmpty(t *testing.T) {
+	ctx := context.Background()
+	sched := &catalog.InMemoryScheduler{}
+	svc := catalog.NewAddTrackService(catalog.NewInMemoryTrackRepo(), catalog.WithAcquisitionScheduler(sched))
+
+	if _, err := svc.Execute(ctx, catalog.FixtureUserId(), catalog.AddTrackInput{Title: "Some Track", Artist: "Some Artist"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(sched.SourceURLs) != 1 || sched.SourceURLs[0] != "" {
+		t.Fatalf("scheduler should receive an empty source URL, got %v", sched.SourceURLs)
+	}
+}
+
+func assertRejectedBeforePersistence(t *testing.T, input catalog.AddTrackInput, wantErr string) {
+	t.Helper()
+	repo := catalog.NewInMemoryTrackRepo()
+	out, err := catalog.NewAddTrackService(repo).Execute(context.Background(), catalog.FixtureUserId(), input)
+
+	if err == nil {
+		t.Fatalf("expected a validation error, got nil (out=%+v)", out)
+	}
+	sharedtest.AssertValidationError(t, err)
+	if !strings.Contains(err.Error(), wantErr) {
+		t.Fatalf("error = %q, want it to mention %q", err.Error(), wantErr)
+	}
+	if len(repo.Tracks) != 0 {
+		t.Fatalf("stored %d tracks, want the invalid track rejected before persistence", len(repo.Tracks))
+	}
+}
+
+func TestAddTrackService_ValidatesRanges(t *testing.T) {
 	negDuration := -100.0
 	posInfDuration := math.Inf(1)
 	nanDuration := math.NaN()
@@ -420,82 +404,32 @@ func TestAddTrackService_ValidatesRanges(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		mutate  func(*AddTrackInput)
+		mutate  func(*catalog.AddTrackInput)
 		wantErr string
 	}{
-		{
-			name:    "negative duration is rejected",
-			mutate:  func(in *AddTrackInput) { in.DurationSeconds = &negDuration },
-			wantErr: "duration_seconds",
-		},
-		{
-			name:    "+Inf duration is rejected",
-			mutate:  func(in *AddTrackInput) { in.DurationSeconds = &posInfDuration },
-			wantErr: "duration_seconds",
-		},
-		{
-			name:    "NaN duration is rejected",
-			mutate:  func(in *AddTrackInput) { in.DurationSeconds = &nanDuration },
-			wantErr: "duration_seconds",
-		},
-		{
-			name:    "duration above the cap is rejected",
-			mutate:  func(in *AddTrackInput) { in.DurationSeconds = &hugeDuration },
-			wantErr: "duration_seconds",
-		},
-		{
-			name:    "zero track number is rejected",
-			mutate:  func(in *AddTrackInput) { in.TrackNumber = &zeroTrackNumber },
-			wantErr: "track_number",
-		},
-		{
-			name:    "negative track number is rejected",
-			mutate:  func(in *AddTrackInput) { in.TrackNumber = &negTrackNumber },
-			wantErr: "track_number",
-		},
-		{
-			name:    "out-of-range track number is rejected",
-			mutate:  func(in *AddTrackInput) { in.TrackNumber = &hugeTrackNumber },
-			wantErr: "track_number",
-		},
-		{
-			name:    "far-future year is rejected",
-			mutate:  func(in *AddTrackInput) { in.Year = &farFutureYear },
-			wantErr: "year",
-		},
-		{
-			name:    "ancient year is rejected",
-			mutate:  func(in *AddTrackInput) { in.Year = &ancientYear },
-			wantErr: "year",
-		},
+		{"negative duration is rejected", func(in *catalog.AddTrackInput) { in.DurationSeconds = &negDuration }, "duration_seconds"},
+		{"+Inf duration is rejected", func(in *catalog.AddTrackInput) { in.DurationSeconds = &posInfDuration }, "duration_seconds"},
+		{"NaN duration is rejected", func(in *catalog.AddTrackInput) { in.DurationSeconds = &nanDuration }, "duration_seconds"},
+		{"duration above the cap is rejected", func(in *catalog.AddTrackInput) { in.DurationSeconds = &hugeDuration }, "duration_seconds"},
+		{"zero track number is rejected", func(in *catalog.AddTrackInput) { in.TrackNumber = &zeroTrackNumber }, "track_number"},
+		{"negative track number is rejected", func(in *catalog.AddTrackInput) { in.TrackNumber = &negTrackNumber }, "track_number"},
+		{"out-of-range track number is rejected", func(in *catalog.AddTrackInput) { in.TrackNumber = &hugeTrackNumber }, "track_number"},
+		{"far-future year is rejected", func(in *catalog.AddTrackInput) { in.Year = &farFutureYear }, "year"},
+		{"ancient year is rejected", func(in *catalog.AddTrackInput) { in.Year = &ancientYear }, "year"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := catalogtest.NewTrackRepo()
-			svc := NewAddTrackService(repo)
-			input := AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album"}
+			input := catalog.AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album"}
 			tt.mutate(&input)
-
-			out, err := svc.Execute(ctx, userId, input)
-
-			if err == nil {
-				t.Fatalf("expected a validation error, got nil (out=%+v)", out)
-			}
-			sharedtest.AssertValidationError(t, err)
-			if !strings.Contains(err.Error(), tt.wantErr) {
-				t.Fatalf("error = %q, want it to mention %q", err.Error(), tt.wantErr)
-			}
-			if len(repo.Tracks) != 0 {
-				t.Fatalf("stored %d tracks, want the invalid track rejected before persistence", len(repo.Tracks))
-			}
+			assertRejectedBeforePersistence(t, input, tt.wantErr)
 		})
 	}
 }
 
 func TestAddTrackService_YearCeilingSitsOneYearPastTheClock(t *testing.T) {
 	ctx := context.Background()
-	userId := catalogtest.UserId()
+	userId := catalog.FixtureUserId()
 	pinned := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
 
 	tests := []struct {
@@ -509,9 +443,9 @@ func TestAddTrackService_YearCeilingSitsOneYearPastTheClock(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := catalogtest.NewTrackRepo()
-			svc := NewAddTrackService(repo, WithAddTrackClock(func() time.Time { return pinned }))
-			input := AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album", Year: &tt.year}
+			repo := catalog.NewInMemoryTrackRepo()
+			svc := catalog.NewAddTrackService(repo, catalog.WithAddTrackClock(func() time.Time { return pinned }))
+			input := catalog.AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album", Year: &tt.year}
 
 			_, err := svc.Execute(ctx, userId, input)
 
@@ -527,10 +461,20 @@ func TestAddTrackService_YearCeilingSitsOneYearPastTheClock(t *testing.T) {
 	}
 }
 
-func TestAddTrackService_ValidatesFreeFormFields(t *testing.T) {
-	ctx := context.Background()
-	userId := catalogtest.UserId()
+func TestAddTrackService_ANilClockKeepsTheWallClock(t *testing.T) {
+	repo := catalog.NewInMemoryTrackRepo()
+	nextYear := time.Now().UTC().Year() + 1
+	svc := catalog.NewAddTrackService(repo, catalog.WithAddTrackClock(nil))
 
+	_, err := svc.Execute(context.Background(), catalog.FixtureUserId(), catalog.AddTrackInput{
+		Title: "Track", Artist: "Artist", Album: "Album", Year: &nextYear,
+	})
+	if err != nil || len(repo.Tracks) != 1 {
+		t.Fatalf("Execute = %v, stored %d; want next year accepted against the wall clock", err, len(repo.Tracks))
+	}
+}
+
+func TestAddTrackService_ValidatesFreeFormFields(t *testing.T) {
 	oversized := strings.Repeat("x", 301)
 	malformedURL := "not a url"
 	schemelessURL := "example.com/song.mp3"
@@ -540,102 +484,39 @@ func TestAddTrackService_ValidatesFreeFormFields(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		mutate  func(*AddTrackInput)
+		mutate  func(*catalog.AddTrackInput)
 		wantErr string
 	}{
-		{
-			name:    "oversized artwork_url is rejected",
-			mutate:  func(in *AddTrackInput) { in.ArtworkURL = &oversized },
-			wantErr: "artwork_url",
-		},
-		{
-			name:    "oversized album is rejected",
-			mutate:  func(in *AddTrackInput) { in.Album = oversized },
-			wantErr: "album",
-		},
-		{
-			name:    "oversized genre is rejected",
-			mutate:  func(in *AddTrackInput) { in.Genre = &oversized },
-			wantErr: "genre",
-		},
-		{
-			name:    "oversized album_artist is rejected",
-			mutate:  func(in *AddTrackInput) { in.AlbumArtist = &oversized },
-			wantErr: "album_artist",
-		},
-		{
-			name:    "oversized isrc is rejected",
-			mutate:  func(in *AddTrackInput) { in.ISRC = &oversized },
-			wantErr: "isrc",
-		},
-		{
-			name:    "malformed source_url is rejected",
-			mutate:  func(in *AddTrackInput) { in.SourceURL = &malformedURL },
-			wantErr: "source_url",
-		},
-		{
-			name:    "schemeless source_url is rejected",
-			mutate:  func(in *AddTrackInput) { in.SourceURL = &schemelessURL },
-			wantErr: "source_url",
-		},
-		{
-			name:    "non-http source_url is rejected",
-			mutate:  func(in *AddTrackInput) { in.SourceURL = &ftpURL },
-			wantErr: "source_url",
-		},
-		{
-			name:    "metadata-endpoint source_url is rejected",
-			mutate:  func(in *AddTrackInput) { in.SourceURL = &metadataURL },
-			wantErr: "source_url must target a public host",
-		},
-		{
-			name:    "loopback source_url is rejected",
-			mutate:  func(in *AddTrackInput) { in.SourceURL = &loopbackURL },
-			wantErr: "source_url must target a public host",
-		},
-		{
-			name:    "oversized source_url is rejected",
-			mutate:  func(in *AddTrackInput) { in.SourceURL = &oversized },
-			wantErr: "source_url",
-		},
+		{"oversized artwork_url is rejected", func(in *catalog.AddTrackInput) { in.ArtworkURL = &oversized }, "artwork_url"},
+		{"oversized album is rejected", func(in *catalog.AddTrackInput) { in.Album = oversized }, "album"},
+		{"oversized genre is rejected", func(in *catalog.AddTrackInput) { in.Genre = &oversized }, "genre"},
+		{"oversized album_artist is rejected", func(in *catalog.AddTrackInput) { in.AlbumArtist = &oversized }, "album_artist"},
+		{"oversized isrc is rejected", func(in *catalog.AddTrackInput) { in.ISRC = &oversized }, "isrc"},
+		{"malformed source_url is rejected", func(in *catalog.AddTrackInput) { in.SourceURL = &malformedURL }, "source_url"},
+		{"schemeless source_url is rejected", func(in *catalog.AddTrackInput) { in.SourceURL = &schemelessURL }, "source_url"},
+		{"non-http source_url is rejected", func(in *catalog.AddTrackInput) { in.SourceURL = &ftpURL }, "source_url"},
+		{"metadata-endpoint source_url is rejected", func(in *catalog.AddTrackInput) { in.SourceURL = &metadataURL }, "source_url must target a public host"},
+		{"loopback source_url is rejected", func(in *catalog.AddTrackInput) { in.SourceURL = &loopbackURL }, "source_url must target a public host"},
+		{"oversized source_url is rejected", func(in *catalog.AddTrackInput) { in.SourceURL = &oversized }, "source_url"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := catalogtest.NewTrackRepo()
-			svc := NewAddTrackService(repo)
-			input := AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album"}
+			input := catalog.AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album"}
 			tt.mutate(&input)
-
-			out, err := svc.Execute(ctx, userId, input)
-
-			if err == nil {
-				t.Fatalf("expected a validation error, got nil (out=%+v)", out)
-			}
-			sharedtest.AssertValidationError(t, err)
-			if !strings.Contains(err.Error(), tt.wantErr) {
-				t.Fatalf("error = %q, want it to mention %q", err.Error(), tt.wantErr)
-			}
-			if len(repo.Tracks) != 0 {
-				t.Fatalf("stored %d tracks, want the invalid track rejected before persistence", len(repo.Tracks))
-			}
+			assertRejectedBeforePersistence(t, input, tt.wantErr)
 		})
 	}
 }
 
 func TestAddTrackService_AcceptsValidFreeFormFields(t *testing.T) {
-	ctx := context.Background()
-	userId := catalogtest.UserId()
-
 	artwork := "https://cdn.example.com/art.jpg"
 	genre := "Jazz"
 	albumArtist := "Various Artists"
 	isrc := "USUM71703861"
 	sourceURL := "https://example.com/song.mp3"
 
-	repo := catalogtest.NewTrackRepo()
-	svc := NewAddTrackService(repo)
-	input := AddTrackInput{
+	out, err := catalog.NewAddTrackService(catalog.NewInMemoryTrackRepo()).Execute(context.Background(), catalog.FixtureUserId(), catalog.AddTrackInput{
 		Title:       "Track",
 		Artist:      "Artist",
 		Album:       "Album",
@@ -644,9 +525,7 @@ func TestAddTrackService_AcceptsValidFreeFormFields(t *testing.T) {
 		AlbumArtist: &albumArtist,
 		ISRC:        &isrc,
 		SourceURL:   &sourceURL,
-	}
-
-	out, err := svc.Execute(ctx, userId, input)
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -659,25 +538,18 @@ func TestAddTrackService_AcceptsValidFreeFormFields(t *testing.T) {
 }
 
 func TestAddTrackService_AcceptsValidRanges(t *testing.T) {
-	ctx := context.Background()
-	userId := catalogtest.UserId()
-
 	duration := 210.5
 	trackNumber := 7
 	year := time.Now().UTC().Year()
 
-	repo := catalogtest.NewTrackRepo()
-	svc := NewAddTrackService(repo)
-	input := AddTrackInput{
+	out, err := catalog.NewAddTrackService(catalog.NewInMemoryTrackRepo()).Execute(context.Background(), catalog.FixtureUserId(), catalog.AddTrackInput{
 		Title:           "Track",
 		Artist:          "Artist",
 		Album:           "Album",
 		DurationSeconds: &duration,
 		TrackNumber:     &trackNumber,
 		Year:            &year,
-	}
-
-	out, err := svc.Execute(ctx, userId, input)
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -693,44 +565,43 @@ func TestAddTrackService_AcceptsValidRanges(t *testing.T) {
 }
 
 func TestAddTrackService_ScheduleBoundedByTimeout(t *testing.T) {
-	sched := &catalogtest.StuckScheduler{}
-	svc := NewAddTrackService(catalogtest.NewTrackRepo(), WithAcquisitionScheduler(sched))
+	sched := &catalog.InMemoryStuckScheduler{}
+	svc := catalog.NewAddTrackService(catalog.NewInMemoryTrackRepo(), catalog.WithAcquisitionScheduler(sched))
 
 	start := time.Now()
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() { time.Sleep(20 * time.Millisecond); cancel() }()
-	if _, err := svc.Execute(ctx, catalogtest.UserId(), AddTrackInput{Title: "T", Artist: "A", Album: "B"}); err != nil {
+	if _, err := svc.Execute(ctx, catalog.FixtureUserId(), catalog.AddTrackInput{Title: "T", Artist: "A", Album: "B"}); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	catalogtest.AssertScheduleDeadline(t, sched, start, ScheduleTimeout)
+	catalog.AssertScheduleDeadline(t, sched, start, addTrackScheduleBound)
 }
 
 func TestAddTrackService_ScheduleTimeoutFailsTrack(t *testing.T) {
-	repo := catalogtest.NewTrackRepo()
-	svc := NewAddTrackService(repo, WithAcquisitionScheduler(&catalogtest.StuckScheduler{}))
+	svc := catalog.NewAddTrackService(catalog.NewInMemoryTrackRepo(), catalog.WithAcquisitionScheduler(&catalog.InMemoryStuckScheduler{}))
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
 
-	out, err := svc.Execute(ctx, catalogtest.UserId(), AddTrackInput{Title: "T", Artist: "A", Album: "B"})
+	out, err := svc.Execute(ctx, catalog.FixtureUserId(), catalog.AddTrackInput{Title: "T", Artist: "A", Album: "B"})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if out.Track.AcquisitionStatus != domain.AcquisitionFailed {
+	if out.Track.AcquisitionStatus != catalog.AcquisitionFailed {
 		t.Errorf("status = %v, want failed after a timed-out schedule", out.Track.AcquisitionStatus)
 	}
-	if out.Track.FailureReason == nil || *out.Track.FailureReason != string(domain.FailureAcquisitionRefused) {
-		t.Errorf("failure reason = %v, want %q", out.Track.FailureReason, domain.FailureAcquisitionRefused)
+	if out.Track.FailureReason == nil || *out.Track.FailureReason != string(shared.FailureAcquisitionRefused) {
+		t.Errorf("failure reason = %v, want %q", out.Track.FailureReason, shared.FailureAcquisitionRefused)
 	}
 }
 
 func TestAddTrackService_RefusedScheduleWithFailedPersistLeavesTrackClaimable(t *testing.T) {
 	ctx := context.Background()
-	repo := catalogtest.NewTrackRepo()
+	repo := catalog.NewInMemoryTrackRepo()
 	repo.ErrOnUpdate = errors.New("db down")
-	sched := &catalogtest.Scheduler{Err: errors.New("acquisition queue is full")}
-	svc := NewAddTrackService(repo, WithAcquisitionScheduler(sched))
+	sched := &catalog.InMemoryScheduler{Err: errors.New("acquisition queue is full")}
+	svc := catalog.NewAddTrackService(repo, catalog.WithAcquisitionScheduler(sched))
 
-	out, err := svc.Execute(ctx, catalogtest.UserId(), AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album"})
+	out, err := svc.Execute(ctx, catalog.FixtureUserId(), catalog.AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album"})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -739,29 +610,15 @@ func TestAddTrackService_RefusedScheduleWithFailedPersistLeavesTrackClaimable(t 
 	if err != nil || stored == nil {
 		t.Fatalf("GetByID: track = %v, err = %v", stored, err)
 	}
-	if stored.AcquisitionStatus == domain.AcquisitionPending && !repo.Claimable(stored.ID) {
+	if stored.AcquisitionStatus == catalog.AcquisitionPending && !repo.Claimable(stored.ID) {
 		t.Fatal("stored track is pending and unclaimable: nothing will ever acquire or fail it")
 	}
 }
 
-func TestApplyOptions_ANilClockKeepsTheWallClock(t *testing.T) {
-	clocks := map[string]func() time.Time{
-		"add track": NewAddTrackService(nil, WithAddTrackClock(nil)).now,
-	}
-
-	before := time.Now()
-	for name, now := range clocks {
-		if got := now(); got.Before(before) {
-			t.Errorf("%s clock = %v, want the wall clock at or after %v", name, got, before)
-		}
-	}
-}
-
 func TestAddTrackService_Execute_KeepsTheClientDurationAsCatalogLength(t *testing.T) {
-	repo := catalogtest.NewTrackRepo()
 	duration := 235.0
 
-	out, err := NewAddTrackService(repo).Execute(context.Background(), catalogtest.UserId(), AddTrackInput{
+	out, err := catalog.NewAddTrackService(catalog.NewInMemoryTrackRepo()).Execute(context.Background(), catalog.FixtureUserId(), catalog.AddTrackInput{
 		Title: "Track", Artist: "Artist", Album: "Album", DurationSeconds: &duration,
 	})
 	if err != nil {
@@ -777,20 +634,19 @@ func TestAddTrackService_Execute_KeepsTheClientDurationAsCatalogLength(t *testin
 }
 
 func TestAddTrackService_PinsTheCatalogIdentity(t *testing.T) {
-	repo := catalogtest.NewTrackRepo()
 	explicit := false
 	mbid := "5B11F4CE-A62D-471E-81FC-A69A8278C7DA"
-	input := AddTrackInput{
+	input := catalog.AddTrackInput{
 		Title: "Diamonds", Artist: "Rihanna", Album: "Unapologetic",
 		CatalogMBID: &mbid, CatalogExplicit: &explicit,
-		CatalogSources: []domain.CatalogSource{
+		CatalogSources: []catalog.CatalogSource{
 			{Provider: "deezer", ExternalID: "1"},
 			{Provider: "deezer", ExternalID: "1"},
 			{Provider: "spotify", ExternalID: "s"},
 		},
 	}
 
-	out, err := NewAddTrackService(repo).Execute(context.Background(), catalogtest.UserId(), input)
+	out, err := catalog.NewAddTrackService(catalog.NewInMemoryTrackRepo()).Execute(context.Background(), catalog.FixtureUserId(), input)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -808,35 +664,32 @@ func TestAddTrackService_PinsTheCatalogIdentity(t *testing.T) {
 
 func TestAddTrackService_RejectsInvalidCatalogIdentity(t *testing.T) {
 	badMBID := "not-a-uuid"
-	tooMany := make([]domain.CatalogSource, domain.MaxCatalogSources+1)
+	tooMany := make([]catalog.CatalogSource, catalog.MaxCatalogSources+1)
 	for i := range tooMany {
-		tooMany[i] = domain.CatalogSource{Provider: "deezer", ExternalID: fmt.Sprint(i)}
+		tooMany[i] = catalog.CatalogSource{Provider: "deezer", ExternalID: fmt.Sprint(i)}
 	}
 	tests := []struct {
 		name   string
-		mutate func(*AddTrackInput)
+		mutate func(*catalog.AddTrackInput)
 	}{
-		{"bad mbid", func(in *AddTrackInput) { in.CatalogMBID = &badMBID }},
-		{"unknown provider", func(in *AddTrackInput) {
-			in.CatalogSources = []domain.CatalogSource{{Provider: "napster", ExternalID: "1"}}
+		{"bad mbid", func(in *catalog.AddTrackInput) { in.CatalogMBID = &badMBID }},
+		{"unknown provider", func(in *catalog.AddTrackInput) {
+			in.CatalogSources = []catalog.CatalogSource{{Provider: "napster", ExternalID: "1"}}
 		}},
-		{"too many sources", func(in *AddTrackInput) { in.CatalogSources = tooMany }},
-		{"empty external id", func(in *AddTrackInput) {
-			in.CatalogSources = []domain.CatalogSource{{Provider: "deezer"}}
+		{"too many sources", func(in *catalog.AddTrackInput) { in.CatalogSources = tooMany }},
+		{"empty external id", func(in *catalog.AddTrackInput) {
+			in.CatalogSources = []catalog.CatalogSource{{Provider: "deezer"}}
 		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := catalogtest.NewTrackRepo()
-			input := AddTrackInput{Title: "T", Artist: "A", Album: "B"}
+			repo := catalog.NewInMemoryTrackRepo()
+			input := catalog.AddTrackInput{Title: "T", Artist: "A", Album: "B"}
 			tt.mutate(&input)
 
-			out, err := NewAddTrackService(repo).Execute(context.Background(), catalogtest.UserId(), input)
+			out, err := catalog.NewAddTrackService(repo).Execute(context.Background(), catalog.FixtureUserId(), input)
 
-			var validation *domain.ValidationError
-			if !errors.As(err, &validation) {
-				t.Fatalf("err = %v, want a validation error", err)
-			}
+			sharedtest.AssertValidationError(t, err)
 			if out != nil || len(repo.Tracks) != 0 {
 				t.Fatalf("a refused save must not insert: out=%v stored=%d", out, len(repo.Tracks))
 			}
@@ -845,16 +698,16 @@ func TestAddTrackService_RejectsInvalidCatalogIdentity(t *testing.T) {
 }
 
 func TestAddTrackService_KeepsThePickedSoundCloudURLOnItsCatalogSource(t *testing.T) {
-	repo := catalogtest.NewTrackRepo()
-	userId := catalogtest.UserId()
+	repo := catalog.NewInMemoryTrackRepo()
+	userId := catalog.FixtureUserId()
 	pick := "https://soundcloud.com/artist/track"
-	input := AddTrackInput{
+	input := catalog.AddTrackInput{
 		Title: "Track", Artist: "Artist", Album: "Album",
-		CatalogSources: []domain.CatalogSource{{Provider: "deezer", ExternalID: "1"}},
+		CatalogSources: []catalog.CatalogSource{{Provider: "deezer", ExternalID: "1"}},
 		SourceURL:      &pick,
 	}
 
-	out, err := NewAddTrackService(repo).Execute(context.Background(), userId, input)
+	out, err := catalog.NewAddTrackService(repo).Execute(context.Background(), userId, input)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -862,7 +715,7 @@ func TestAddTrackService_KeepsThePickedSoundCloudURLOnItsCatalogSource(t *testin
 	if err != nil || stored == nil {
 		t.Fatalf("GetByID: %v, %v", stored, err)
 	}
-	want := []domain.CatalogSource{
+	want := []catalog.CatalogSource{
 		{Provider: "deezer", ExternalID: "1"},
 		{Provider: "soundcloud", ExternalID: pick, URL: pick},
 	}
@@ -872,16 +725,16 @@ func TestAddTrackService_KeepsThePickedSoundCloudURLOnItsCatalogSource(t *testin
 }
 
 func TestAddTrackService_FullCatalogSourcesWithPickedSoundCloudURLStillAdds(t *testing.T) {
-	repo := catalogtest.NewTrackRepo()
-	userId := catalogtest.UserId()
+	repo := catalog.NewInMemoryTrackRepo()
+	userId := catalog.FixtureUserId()
 	pick := "https://soundcloud.com/artist/track"
-	sources := make([]domain.CatalogSource, domain.MaxCatalogSources)
+	sources := make([]catalog.CatalogSource, catalog.MaxCatalogSources)
 	for i := range sources {
-		sources[i] = domain.CatalogSource{Provider: "deezer", ExternalID: strconv.Itoa(i + 1)}
+		sources[i] = catalog.CatalogSource{Provider: "deezer", ExternalID: strconv.Itoa(i + 1)}
 	}
-	input := AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album", CatalogSources: sources, SourceURL: &pick}
+	input := catalog.AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album", CatalogSources: sources, SourceURL: &pick}
 
-	out, err := NewAddTrackService(repo).Execute(context.Background(), userId, input)
+	out, err := catalog.NewAddTrackService(repo).Execute(context.Background(), userId, input)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}

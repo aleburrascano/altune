@@ -8,6 +8,7 @@ type (
 	InMemoryFeaturedResolver   = memory.FeaturedResolver
 	InMemoryOrphanedAudioQueue = memory.OrphanedAudioQueue
 	InMemoryPlaylistRepo       = memory.PlaylistRepo
+	InMemoryRecordingPublisher = memory.RecordingPlaylistPublisher
 	InMemoryScheduler          = memory.Scheduler
 	InMemoryStuckScheduler     = memory.StuckScheduler
 	InMemoryTrackRepo          = memory.TrackRepo

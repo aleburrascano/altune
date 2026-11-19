@@ -34,8 +34,12 @@ const (
 
 type (
 	AlbumGroup     = domain.AlbumGroup
+	CatalogSource  = domain.CatalogSource
 	FeaturedArtist = domain.FeaturedArtist
 	LibraryQuery   = domain.LibraryQuery
 )
 
-const SortYear = domain.SortYear
+const (
+	MaxCatalogSources = domain.MaxCatalogSources
+	SortYear          = domain.SortYear
+)

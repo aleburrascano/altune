@@ -11,6 +11,8 @@ type (
 	SetTrackNumberService = track.SetTrackNumberService
 )
 
+var ErrLibraryFull = track.ErrLibraryFull
+
 var (
 	NewAddTrackService         = track.NewAddTrackService
 	NewDeleteTrackService      = track.NewDeleteTrackService
@@ -18,6 +20,7 @@ var (
 	NewListTracksService       = track.NewListTracksService
 	NewSetTrackNumberService   = track.NewSetTrackNumberService
 	WithAcquisitionScheduler   = track.WithAcquisitionScheduler
+	WithAddTrackClock          = track.WithAddTrackClock
 	WithAddTrackEvents         = track.WithAddTrackEvents
 	WithDeleteTrackEvents      = track.WithDeleteTrackEvents
 	WithDeleteTrackMetrics     = track.WithDeleteTrackMetrics
