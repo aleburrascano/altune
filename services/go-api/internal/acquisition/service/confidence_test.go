@@ -85,6 +85,7 @@ func TestScoreConfidence(t *testing.T) {
 		{"soft", acquisition.ConfidenceEvidence{Verdict: "soft", AcoustIDScore: 0.95}, 204, 0.85},
 		{"hard with a low score", acquisition.ConfidenceEvidence{Verdict: "hard", AcoustIDScore: 0.8}, 204, 0.85},
 		{"soft with a low score stays at the unknown cap", acquisition.ConfidenceEvidence{Verdict: "soft", AcoustIDScore: 0.8}, 204, 0.8},
+		{"hard at exactly the low-score cutoff keeps full confidence", acquisition.ConfidenceEvidence{Verdict: "hard", AcoustIDScore: 0.92}, 204, 0.95},
 		{"hard with no score recorded", acquisition.ConfidenceEvidence{Verdict: "hard"}, 204, 0.95},
 		{"topic one second off", acquisition.ConfidenceEvidence{Verdict: "unknown", Channel: channelTopic, DurationDeltaSeconds: secs(1)}, 204, 0.7},
 		{"other channel twenty seconds off", acquisition.ConfidenceEvidence{Verdict: "unknown", Channel: channelOther, DurationDeltaSeconds: secs(20)}, 204, 0.2},
@@ -126,7 +127,7 @@ func (tornerWatch) Watch(context.Context, string) (acquisition.YtmWatch, error) 
 	}, nil
 }
 
-func TestConfidence_ACreditedPinnedVideoClearsTheFloor(t *testing.T) {
+func TestScoreConfidence_ATopicChannelTrackSixSecondsShortClearsTheFloor(t *testing.T) {
 	req := acquisition.FindRequest{
 		Title:          "Tornerò",
 		Artist:         "I Santo California",
@@ -150,14 +151,15 @@ func TestConfidence_ACreditedPinnedVideoClearsTheFloor(t *testing.T) {
 
 func secs(v float64) *float64 { return &v }
 
-func TestScoreConfidence_AnUnknownVerdictScoresFromZeroToEightTenths(t *testing.T) {
+func TestScoreConfidence_AnUnknownVerdictScoresFromZeroToTheUnknownCap(t *testing.T) {
 	lowest := acquisition.ConfidenceEvidence{Channel: channelOther, DurationDeltaSeconds: secs(90), Qualifiers: []string{"edit"}}
 	highest := acquisition.ConfidenceEvidence{Channel: channelTopic, Resolved: true, DurationDeltaSeconds: secs(0)}
+	unknownCap := acquisition.ScoreConfidence(acquisition.ConfidenceEvidence{Verdict: "soft", AcoustIDScore: 0.5}, 204)
 
 	if got := acquisition.ScoreConfidence(lowest, 204); got != 0 {
 		t.Errorf("lowest unknown score = %v, want 0: a constant change that drops it below 0 needs the zero clamp back", got)
 	}
-	if got := acquisition.ScoreConfidence(highest, 204); got != 0.8 {
-		t.Errorf("highest unknown score = %v, want 0.8: a constant change that lifts it past the unknown cap needs the cap back", got)
+	if got := acquisition.ScoreConfidence(highest, 204); got != unknownCap {
+		t.Errorf("highest unknown score = %v, want the unknown cap %v that a weak soft match falls to: a constant change that splits them needs the cap back", got, unknownCap)
 	}
 }
