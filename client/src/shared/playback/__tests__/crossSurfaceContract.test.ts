@@ -15,6 +15,36 @@ function findGoApiRoot(): string | null {
 
 const GO_API_ROOT = findGoApiRoot();
 
+function isGoSourceFile(name: string): boolean {
+  return name.endsWith('.go') && !name.endsWith('_test.go');
+}
+
+function goSourceFilesUnder(dir: string): string[] {
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  const own = entries
+    .filter((entry) => entry.isFile() && isGoSourceFile(entry.name))
+    .map((entry) => path.join(dir, entry.name));
+  const nested = entries
+    .filter((entry) => entry.isDirectory())
+    .flatMap((entry) => goSourceFilesUnder(path.join(dir, entry.name)));
+  return [...own, ...nested];
+}
+
+const CURRENT_TRACK_RESPONSE_DECLARATION = /^type currentTrackResponse struct \{/m;
+const SOURCE_KIND_LIBRARY_DECLARATION = /^\s*SourceKindLibrary\s*=/m;
+
+function playbackGoFileDeclaring(declaration: RegExp): string {
+  const found = goSourceFilesUnder(path.join(GO_API_ROOT!, 'internal', 'playback')).filter((file) =>
+    declaration.test(fs.readFileSync(file, 'utf8')),
+  );
+  if (found.length !== 1) {
+    throw new Error(
+      `expected one playback Go file declaring ${declaration}, found ${found.length}: ${found.join(', ')}`,
+    );
+  }
+  return found[0]!;
+}
+
 const STRUCT_FIELD_LINE = /^\s*\w+\s+(\S+)\s+`json:"([a-zA-Z_]+)(?:,omitempty)?"`/gm;
 
 function extractGoStruct(source: string, structName: string): string {
@@ -90,7 +120,7 @@ describe('cross-surface contract, derived from services/go-api at test time', ()
 
   it('currentTrackToPlaybackTrack reads only fields the queue-state currentTrackResponse actually sends', () => {
     const queueHandlerSource = fs.readFileSync(
-      path.join(GO_API_ROOT!, 'internal', 'playback', 'adapters', 'handler', 'queue_handler.go'),
+      playbackGoFileDeclaring(CURRENT_TRACK_RESPONSE_DECLARATION),
       'utf8',
     );
     const goFields = deriveGoFieldTypes(
@@ -112,7 +142,7 @@ describe('cross-surface contract, derived from services/go-api at test time', ()
 
   it('the artwork_url and duration_seconds fields currentTrackToPlaybackTrack coerces are nullable on the Go side', () => {
     const queueHandlerSource = fs.readFileSync(
-      path.join(GO_API_ROOT!, 'internal', 'playback', 'adapters', 'handler', 'queue_handler.go'),
+      playbackGoFileDeclaring(CURRENT_TRACK_RESPONSE_DECLARATION),
       'utf8',
     );
     const goFields = deriveGoFieldTypes(
@@ -125,7 +155,7 @@ describe('cross-surface contract, derived from services/go-api at test time', ()
 
   it("the queueSourceDTO kind values match the QueueSource union's kinds exactly", () => {
     const queueSourceGoSource = fs.readFileSync(
-      path.join(GO_API_ROOT!, 'internal', 'playback', 'domain', 'queue_source.go'),
+      playbackGoFileDeclaring(SOURCE_KIND_LIBRARY_DECLARATION),
       'utf8',
     );
     const goKinds = new Set<string>();

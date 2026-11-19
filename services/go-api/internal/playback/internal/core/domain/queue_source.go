@@ -2,7 +2,6 @@ package domain
 
 import (
 	"fmt"
-	"net/url"
 	"strings"
 )
 
@@ -45,12 +44,12 @@ func (s QueueSource) normalized() QueueSource {
 func (s QueueSource) String() string {
 	switch s.Kind {
 	case SourceKindPlaylist:
-		return SourceKindPlaylist + ":" + url.QueryEscape(s.PlaylistId) + ":" + url.QueryEscape(s.Name)
+		return SourceKindPlaylist + ":" + escape(s.PlaylistId) + ":" + escape(s.Name)
 	case SourceKindSearch:
 		if s.Query == "" {
 			return SourceKindSearch
 		}
-		return SourceKindSearch + ":" + url.QueryEscape(s.Query)
+		return SourceKindSearch + ":" + escape(s.Query)
 	case SourceKindLibrary:
 		return SourceKindLibrary
 	}
@@ -121,10 +120,62 @@ func validatedFallback(fallback string) (string, error) {
 	return fallback, nil
 }
 
-func unescape(value string) (string, bool) {
-	decoded, err := url.QueryUnescape(value)
-	if err != nil {
-		return "", false
+const (
+	upperHex   = "0123456789ABCDEF"
+	hexDigits  = "0123456789ABCDEFabcdef"
+	unreserved = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~"
+)
+
+func escape(value string) string {
+	var out strings.Builder
+	for i := 0; i < len(value); i++ {
+		out.WriteString(escapedForm(value[i]))
 	}
-	return decoded, true
+	return out.String()
+}
+
+func escapedForm(c byte) string {
+	if strings.IndexByte(unreserved, c) >= 0 {
+		return string(c)
+	}
+	if c == ' ' {
+		return "+"
+	}
+	return string([]byte{'%', upperHex[c>>4], upperHex[c&15]})
+}
+
+func unescape(value string) (string, bool) {
+	var out strings.Builder
+	for i := 0; i < len(value); i++ {
+		switch value[i] {
+		case '+':
+			out.WriteByte(' ')
+		case '%':
+			c, ok := escapedByte(value, i)
+			if !ok {
+				return "", false
+			}
+			out.WriteByte(c)
+			i += 2
+		default:
+			out.WriteByte(value[i])
+		}
+	}
+	return out.String(), true
+}
+
+func escapedByte(value string, i int) (byte, bool) {
+	if i+2 >= len(value) {
+		return 0, false
+	}
+	hi, lo := hexDigit(value[i+1]), hexDigit(value[i+2])
+	return byte(hi<<4 | lo), hi >= 0 && lo >= 0
+}
+
+func hexDigit(c byte) int {
+	d := strings.IndexByte(hexDigits, c)
+	if d >= len(upperHex) {
+		return d - 6
+	}
+	return d
 }

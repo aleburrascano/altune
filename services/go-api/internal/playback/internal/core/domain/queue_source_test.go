@@ -8,6 +8,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -260,6 +262,96 @@ func TestFormatQueueSource_EveryAcceptedKindFormatsToNonEmptyToken(t *testing.T)
 		}
 		if got == "" {
 			t.Errorf("formatSource(%q) = empty token", kind)
+		}
+	}
+}
+
+var codecSeeds = []string{
+	"", "%", "%4", "%Z", "%ZZ", "%4G", "%G4", "%e9", "%E9", "100%", "%%41", "a+b", "a b", "+", "%2B", "%20", "~-_.",
+	"Sigur Rós", "東京", "🎵 mix", "Caf%C3%A9", "%F0%9F%8E%B5", "a:b/c?d=e&f", "\x00\xff\xc3",
+}
+
+func codecCases() []string {
+	cases := append([]string{}, codecSeeds...)
+	for b := 0; b < 256; b++ {
+		c := string([]byte{byte(b)})
+		cases = append(cases, c, "%"+c+"0", "%0"+c)
+	}
+	for r := rune(0x80); r < 0x800; r++ {
+		cases = append(cases, string(r))
+	}
+	for r := rune(0x800); r < 0x10000; r += 0x1000 {
+		cases = append(cases, string(r))
+	}
+	for _, r := range []rune{0x10000, 0x40000, 0x80000, 0xC0000, 0x100000} {
+		cases = append(cases, string(r))
+	}
+	return cases
+}
+
+func storedForm(value string) string {
+	stored := playback.QueueSource{Kind: "playlist", PlaylistId: value}.String()
+	return strings.TrimSuffix(strings.TrimPrefix(stored, "playlist:"), ":")
+}
+
+func readableOverJSON(value string) string {
+	raw, _ := json.Marshal(value)
+	var out string
+	_ = json.Unmarshal(raw, &out)
+	return out
+}
+
+func assertReadMatchesNetURL(t *testing.T, encoded string) {
+	t.Helper()
+	want, err := url.QueryUnescape(encoded)
+	got := sourceRead(t, "search:"+encoded)
+	if err != nil {
+		if got != nil {
+			t.Fatalf("search:%s read as %+v, net/url rejects it: %v", encoded, got, err)
+		}
+		return
+	}
+	if got == nil || got.Query != readableOverJSON(want) {
+		t.Fatalf("search:%s read as %+v, net/url decodes %q", encoded, got, want)
+	}
+}
+
+func assertCodecMatchesNetURL(t *testing.T, value string) {
+	t.Helper()
+	if got, want := storedForm(value), url.QueryEscape(value); got != want {
+		t.Fatalf("%q stored as %q, net/url escapes it to %q", value, got, want)
+	}
+	assertReadMatchesNetURL(t, value)
+	assertReadMatchesNetURL(t, url.QueryEscape(value))
+}
+
+func TestQueueSourceCodecMatchesNetURLForEveryByteAndUTF8Lead(t *testing.T) {
+	for _, value := range codecCases() {
+		assertCodecMatchesNetURL(t, value)
+	}
+}
+
+func FuzzQueueSourceCodecMatchesNetURL(f *testing.F) {
+	for _, seed := range codecSeeds {
+		f.Add(seed)
+	}
+	f.Fuzz(assertCodecMatchesNetURL)
+}
+
+func TestStoredSourceIdsStillReadAsTheSameSource(t *testing.T) {
+	for stored, want := range map[string]playback.QueueSource{
+		"playlist:7c9e6679-7425-40de-944b-e07fc1f90ae7:Road+trip": {Kind: "playlist", PlaylistId: "7c9e6679-7425-40de-944b-e07fc1f90ae7", Name: "Road trip"},
+		"playlist:a%3Ab:Best+of%3A+2019":                          {Kind: "playlist", PlaylistId: "a:b", Name: "Best of: 2019"},
+		"playlist:42:Caf%C3%A9+%E6%9D%B1%E4%BA%AC+%F0%9F%8E%B5":   {Kind: "playlist", PlaylistId: "42", Name: "Café 東京 🎵"},
+		"search:sigur+r%C3%B3s":                                   {Kind: "search", Query: "sigur rós"},
+		"search:AC%2FDC+%26+friends":                              {Kind: "search", Query: "AC/DC & friends"},
+		"search:100%25+pure~":                                     {Kind: "search", Query: "100% pure~"},
+	} {
+		if got := sourceRead(t, stored); got == nil || *got != *dtoOf(want) {
+			t.Errorf("stored source_id %q read as %+v, want %+v", stored, got, want)
+		}
+		if got := want.String(); got != stored {
+			t.Errorf("%+v now stores as %q, existing rows hold %q", want, got, stored)
 		}
 	}
 }

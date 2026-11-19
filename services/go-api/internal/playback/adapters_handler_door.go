@@ -1,6 +1,6 @@
 package playback
 
-import handler "altune/go-api/internal/playback/adapters/handler"
+import handler "altune/go-api/internal/playback/internal/adapters/handler"
 
 type (
 	QueueHandler        = handler.QueueHandler
