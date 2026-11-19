@@ -57,7 +57,7 @@ func WithDeleteTrackOrphanQueue(q ports.OrphanedAudioRecorder) func(*DeleteTrack
 func (s *DeleteTrackService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
 	deleted, audioRef, err := s.trackRepo.Delete(ctx, trackId, userId)
 	if err != nil {
-		return fmt.Errorf("delete track: %w", err)
+		return domain.WrapRepoError(ctx, "delete track", err)
 	}
 	if !deleted {
 		return domain.ErrTrackNotFound

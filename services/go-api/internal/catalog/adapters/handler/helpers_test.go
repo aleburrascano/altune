@@ -5,10 +5,13 @@ import (
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/requestuser"
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +19,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func asBearer(next http.Handler) http.Handler {
@@ -263,4 +267,58 @@ func (rig *writeRig) seedPlaylistAndTrack(t *testing.T, user shared.UserId) (cat
 	playlist := catalog.SeedPlaylist(t, rig.playlists, user, "Seeded")
 	track := catalog.SeedTrack(t, rig.tracks, user, "Seeded Track", "Artist", "Album")
 	return playlist.ID, track.ID
+}
+
+func pgxTrackRoutes(pool *pgxpool.Pool) chi.Router {
+	repo := catalog.NewPgxCatalogTrackRepository(pool)
+	tracks := catalog.NewTrackHandler(
+		catalog.NewAddTrackService(repo),
+		catalog.NewListTracksService(repo),
+		catalog.NewGetTrackStatusService(repo),
+		catalog.NewDeleteTrackService(repo, catalog.NewInMemoryAudioStore()),
+		catalog.NewSetTrackNumberService(repo),
+		catalog.NewFeaturedArtistHandler(
+			catalog.NewBackfillFeaturedService(repo, repo, catalog.InMemoryFeaturedResolver{}),
+			catalog.NewListFeaturingService(repo),
+		),
+	)
+	router := newRouter()
+	router.Route("/tracks", func(r chi.Router) { r.Mount("/", tracks.Routes()) })
+	return router
+}
+
+func refusedPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+	return poolAt(t, "postgres://altune:secret@"+addr+"/altune?sslmode=disable")
+}
+
+func testPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("DATABASE_URL not set, skipping integration test")
+	}
+	return poolAt(t, dbURL)
+}
+
+func poolAt(t *testing.T, dbURL string) *pgxpool.Pool {
+	t.Helper()
+	pool, err := pgxpool.New(context.Background(), dbURL)
+	if err != nil {
+		t.Fatalf("pgxpool.New: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	return pool
+}
+
+func assertCatalogTemporarilyUnavailable(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	assertStatus(t, rec, http.StatusServiceUnavailable)
+	assertErrorCode(t, rec, "catalog.temporarily_unavailable")
 }

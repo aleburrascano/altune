@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/catalog/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
-	"fmt"
 	"log/slog"
 	"time"
 )
@@ -60,7 +59,7 @@ func (s *AudioURLService) Resolve(ctx context.Context, userId shared.UserId, tra
 	tracks, err := s.trackRepo.ListByIDs(ctx, userId, trackIds)
 	dbDuration := time.Since(dbStart)
 	if err != nil {
-		return nil, fmt.Errorf("resolve audio url: %w", err)
+		return nil, domain.WrapRepoError(ctx, "resolve audio urls", err)
 	}
 	byID := make(map[domain.TrackId]*domain.Track, len(tracks))
 	for _, t := range tracks {

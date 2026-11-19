@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/catalog/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
-	"fmt"
 )
 
 type GetTrackStatusService struct {
@@ -50,7 +49,7 @@ func (s *ListTracksService) Execute(ctx context.Context, userId shared.UserId, q
 
 	tracks, total, err := s.lensRepo.ListFilteredForUser(ctx, userId, query)
 	if err != nil {
-		return nil, fmt.Errorf("list tracks: %w", err)
+		return nil, domain.WrapRepoError(ctx, "list tracks", err)
 	}
 
 	return &ListTracksOutput{
