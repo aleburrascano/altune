@@ -184,27 +184,29 @@ func (s *BackgroundAcquisitionScheduler) Resume() {
 	notifyWake(s.wake)
 }
 
-func (s *BackgroundAcquisitionScheduler) runWorker(claim func() (ports.Job, bool), wake <-chan struct{}) {
+func (s *BackgroundAcquisitionScheduler) runWorker(claim func() (ports.Job, bool), wake chan struct{}) {
 	defer s.runnersWG.Done()
 	for {
 		if s.closed.Load() {
 			return
 		}
-		if s.paused.Load() {
-			if !s.idleWait(wake) {
-				return
-			}
-			continue
-		}
-		job, ok := claim()
+		job, ok := s.nextJob(claim)
 		if !ok {
 			if !s.idleWait(wake) {
 				return
 			}
 			continue
 		}
+		notifyWake(wake)
 		s.runClaimedJob(job)
 	}
+}
+
+func (s *BackgroundAcquisitionScheduler) nextJob(claim func() (ports.Job, bool)) (ports.Job, bool) {
+	if s.paused.Load() {
+		return ports.Job{}, false
+	}
+	return claim()
 }
 
 func (s *BackgroundAcquisitionScheduler) claimJob() (ports.Job, bool) {

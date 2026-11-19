@@ -196,7 +196,7 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   duration.go            which window applies — durationWithinTolerance, lengthCorroborated, durationAcceptable (the windows are `domain.LengthTolerance`)
   registry.go            SourceRegistry — fans Find across sources into per-source slots, routes Fetch by candidate.Source
   rejection.go           RejectionStage, CandidateRejection, recordRejection, summarizeRejections
-  source_key.go          sourceKey / SourceKeys / mergeSourceKeys — the normalized rejected_source_keys identity
+  source_key.go          sourceKey — the normalized rejected_source_keys identity (acquire.go's mergeSourceKeys builds the exclusion list from it)
   failure_reason.go      failureReason, failureCode, isCancellation, withCancellation, reasonForStep
   temp_workspace.go      SweepStaleTempDirs — startup call into ports.TempWorkspace.SweepAbandoned (the reap itself lives in adapters/tempfs); CleanupTemp(ctx, ws, ac) removes TempDir through ports.TempWorkspace; also holds `defaultTempWorkspace`, nil in production and set by the service tests
   scheduler.go           BackgroundAcquisitionScheduler, Pause/Resume, Status, Shutdown
