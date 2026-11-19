@@ -18,9 +18,10 @@ type (
 )
 
 var (
-	ErrDBTransient          = ports.ErrDBTransient
-	ErrTrackMissing         = ports.ErrTrackMissing
-	ErrTrackVersionConflict = ports.ErrTrackVersionConflict
+	ErrDBTransient                  = ports.ErrDBTransient
+	ErrPlaylistChangedDuringReorder = ports.ErrPlaylistChangedDuringReorder
+	ErrTrackMissing                 = ports.ErrTrackMissing
+	ErrTrackVersionConflict         = ports.ErrTrackVersionConflict
 )
 
 type FeaturedArtistResolver = ports.FeaturedArtistResolver
