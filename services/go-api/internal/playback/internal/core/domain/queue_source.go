@@ -122,24 +122,26 @@ func validatedFallback(fallback string) (string, error) {
 
 const (
 	upperHex   = "0123456789ABCDEF"
-	hexDigits  = upperHex + "abcdef"
+	hexDigits  = "0123456789ABCDEFabcdef"
 	unreserved = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~"
 )
 
 func escape(value string) string {
 	var out strings.Builder
 	for i := 0; i < len(value); i++ {
-		c := value[i]
-		switch {
-		case strings.IndexByte(unreserved, c) >= 0:
-			out.WriteByte(c)
-		case c == ' ':
-			out.WriteByte('+')
-		default:
-			out.Write([]byte{'%', upperHex[c>>4], upperHex[c&15]})
-		}
+		out.WriteString(escapedForm(value[i]))
 	}
 	return out.String()
+}
+
+func escapedForm(c byte) string {
+	if strings.IndexByte(unreserved, c) >= 0 {
+		return string(c)
+	}
+	if c == ' ' {
+		return "+"
+	}
+	return string([]byte{'%', upperHex[c>>4], upperHex[c&15]})
 }
 
 func unescape(value string) (string, bool) {
