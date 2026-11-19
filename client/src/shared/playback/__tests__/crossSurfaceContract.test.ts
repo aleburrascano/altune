@@ -15,6 +15,26 @@ function findGoApiRoot(): string | null {
 
 const GO_API_ROOT = findGoApiRoot();
 
+function goSourceFilesUnder(dir: string): string[] {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return goSourceFilesUnder(full);
+    return entry.name.endsWith('.go') && !entry.name.endsWith('_test.go') ? [full] : [];
+  });
+}
+
+function playbackGoFileDeclaring(declaration: RegExp): string {
+  const found = goSourceFilesUnder(path.join(GO_API_ROOT!, 'internal', 'playback')).filter((file) =>
+    declaration.test(fs.readFileSync(file, 'utf8')),
+  );
+  if (found.length !== 1) {
+    throw new Error(
+      `expected one playback Go file declaring ${declaration}, found ${found.length}: ${found.join(', ')}`,
+    );
+  }
+  return found[0]!;
+}
+
 const STRUCT_FIELD_LINE = /^\s*\w+\s+(\S+)\s+`json:"([a-zA-Z_]+)(?:,omitempty)?"`/gm;
 
 function extractGoStruct(source: string, structName: string): string {
@@ -90,7 +110,7 @@ describe('cross-surface contract, derived from services/go-api at test time', ()
 
   it('currentTrackToPlaybackTrack reads only fields the queue-state currentTrackResponse actually sends', () => {
     const queueHandlerSource = fs.readFileSync(
-      path.join(GO_API_ROOT!, 'internal', 'playback', 'adapters', 'handler', 'queue_handler.go'),
+      playbackGoFileDeclaring(/^type currentTrackResponse struct \{/m),
       'utf8',
     );
     const goFields = deriveGoFieldTypes(
@@ -112,7 +132,7 @@ describe('cross-surface contract, derived from services/go-api at test time', ()
 
   it('the artwork_url and duration_seconds fields currentTrackToPlaybackTrack coerces are nullable on the Go side', () => {
     const queueHandlerSource = fs.readFileSync(
-      path.join(GO_API_ROOT!, 'internal', 'playback', 'adapters', 'handler', 'queue_handler.go'),
+      playbackGoFileDeclaring(/^type currentTrackResponse struct \{/m),
       'utf8',
     );
     const goFields = deriveGoFieldTypes(
@@ -125,7 +145,7 @@ describe('cross-surface contract, derived from services/go-api at test time', ()
 
   it("the queueSourceDTO kind values match the QueueSource union's kinds exactly", () => {
     const queueSourceGoSource = fs.readFileSync(
-      path.join(GO_API_ROOT!, 'internal', 'playback', 'domain', 'queue_source.go'),
+      playbackGoFileDeclaring(/^\s*SourceKindLibrary\s*=/m),
       'utf8',
     );
     const goKinds = new Set<string>();
