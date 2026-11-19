@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-base_ref=${1:?usage: kit-self-tests.sh <base-ref>. Runs the repo script self-tests that need the private module-spec kit, which GitHub cannot reach}
+base_ref=${1:?usage: kit-self-tests.sh <base-ref>. Runs the repo script self-tests that need the module-spec kit}
 cd "$(git rev-parse --show-toplevel)"
 base=$(git merge-base "$base_ref" HEAD) || { echo "kit-self-tests: no merge base with $base_ref" >&2; exit 3; }
 changed=$(git diff --name-only "$base" HEAD)
