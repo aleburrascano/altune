@@ -23,13 +23,23 @@ function goPath(...segments: string[]): string {
   return path.join(GO_API_ROOT!, ...segments);
 }
 
-function goSourceFilesUnder(dir: string): string[] {
-  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) return goSourceFilesUnder(full);
-    return entry.name.endsWith('.go') && !entry.name.endsWith('_test.go') ? [full] : [];
-  });
+function isGoSourceFile(name: string): boolean {
+  return name.endsWith('.go') && !name.endsWith('_test.go');
 }
+
+function goSourceFilesUnder(dir: string): string[] {
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  const own = entries
+    .filter((entry) => entry.isFile() && isGoSourceFile(entry.name))
+    .map((entry) => path.join(dir, entry.name));
+  const nested = entries
+    .filter((entry) => entry.isDirectory())
+    .flatMap((entry) => goSourceFilesUnder(path.join(dir, entry.name)));
+  return [...own, ...nested];
+}
+
+const QUEUE_HANDLER_ROUTES_DECLARATION = /^func \(h \*QueueHandler\) Routes\(\)/m;
+const QUEUE_STATE_RESPONSE_DECLARATION = /^type queueStateResponse struct \{/m;
 
 function playbackGoFileDeclaring(declaration: RegExp): string {
   const found = goSourceFilesUnder(path.join(GO_API_ROOT!, 'internal', 'playback')).filter((file) =>
@@ -167,7 +177,7 @@ const MOUNT_HANDLER_FILES: Record<string, string[]> = {
   'cat.playlistHandler': ['internal', 'catalog', 'adapters', 'handler', 'playlist_handler.go'],
   get queueHandler() {
     return path
-      .relative(GO_API_ROOT!, playbackGoFileDeclaring(/^func \(h \*QueueHandler\) Routes\(\)/m))
+      .relative(GO_API_ROOT!, playbackGoFileDeclaring(QUEUE_HANDLER_ROUTES_DECLARATION))
       .split(path.sep);
   },
   discoveryH: ['internal', 'discovery', 'adapters', 'handler', 'discovery_handler.go'],
@@ -646,7 +656,7 @@ describe('audioURLDTO (audio_url_handler.go) <-> ResolvedAudioUrl (audio.ts) —
 
 describe('queue-state pair (queue_handler.go) <-> QueueStateResponse / SaveQueueStateRequest (playback.ts)', () => {
   const queueHandlerSource = fs.readFileSync(
-    playbackGoFileDeclaring(/^type queueStateResponse struct \{/m),
+    playbackGoFileDeclaring(QUEUE_STATE_RESPONSE_DECLARATION),
     'utf8',
   );
   const playbackSource = fs.readFileSync(path.join(API_CLIENT_ADAPTERS_DIR, 'playback.ts'), 'utf8');
