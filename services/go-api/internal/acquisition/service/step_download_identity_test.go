@@ -127,7 +127,10 @@ func TestExecute_TheAudioVerdictLogCapsTheResultsAndTheirRecordings(t *testing.T
 	acquireIdentifiedAs(t, results)
 
 	logged := loggedVerdictResults(t, buf)
-	if len(logged) != loggedCap || len(logged[0].Recordings) != loggedCap {
-		t.Fatalf("logged %d results with %d recordings, want both capped at %d", len(logged), len(logged[0].Recordings), loggedCap)
+	if len(logged) != loggedCap {
+		t.Fatalf("logged %d results, want the cap %d", len(logged), loggedCap)
+	}
+	if got := len(logged[0].Recordings); got != loggedCap {
+		t.Fatalf("logged %d recordings, want the cap %d", got, loggedCap)
 	}
 }

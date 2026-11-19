@@ -6,10 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -19,35 +15,6 @@ const (
 	pinnedBoysDontCry = "2b2af12b-48f1-444e-8591-cacb9f88f02a"
 	inPlaceRef        = "u/the cure/boys dont cry.mp3"
 )
-
-type resolver struct {
-	identity acquisition.RecordingIdentity
-	err      error
-	queries  []acquisition.RecordingQuery
-}
-
-func (r *resolver) Resolve(_ context.Context, q acquisition.RecordingQuery) (acquisition.RecordingIdentity, error) {
-	r.queries = append(r.queries, q)
-	return r.identity, r.err
-}
-
-func resolvedTo(mbid string) *resolver {
-	return &resolver{identity: acquisition.RecordingIdentity{MBID: mbid, MBIDs: []string{mbid}}}
-}
-
-type identifier struct {
-	mu    sync.Mutex
-	match acquisition.RecordingMatch
-	err   error
-	calls int
-}
-
-func (i *identifier) Identify(context.Context, string, float64) (acquisition.RecordingMatch, error) {
-	i.mu.Lock()
-	defer i.mu.Unlock()
-	i.calls++
-	return i.match, i.err
-}
 
 func identifiedAs(recordings ...acquisition.LinkedRecording) *identifier {
 	return &identifier{match: acquisition.RecordingMatch{
@@ -96,19 +63,6 @@ func liveVersionLookup() versionLookup {
 	return versionLookup{facts: map[string]acquisition.RecordingFacts{
 		"live-mbid": {MBID: "live-mbid", Title: "Boys Don't Cry", Disambiguation: "live"},
 	}}
-}
-
-type storedAudio struct{}
-
-func (storedAudio) Exists(context.Context, string) (bool, error) { return true, nil }
-
-func (storedAudio) Store(context.Context, string, string) error { return nil }
-
-func (storedAudio) Delete(context.Context, string) error { return nil }
-
-func (storedAudio) CopyStored(_ context.Context, audioRef, dir string) (string, error) {
-	path := filepath.Join(dir, "stored"+filepath.Ext(audioRef))
-	return path, os.WriteFile(path, []byte("stored bytes"), 0o600)
 }
 
 type inPlaceWiring struct {
@@ -244,7 +198,7 @@ func TestCheckInPlace_AFileTheFingerprintLinksToTheBoundRecordingMatches(t *test
 
 	finding := checkInPlace(t, inPlaceWiring{identifier: identifiedAs(boysDontCry(pinnedBoysDontCry)), previews: previews}, inPlaceTrack())
 
-	if finding.Fingerprint != acquisition.Matches || finding.Verdict != "hard" || finding.Basis != "acoustid" || finding.Score != 0.97 {
+	if finding.Fingerprint != acquisition.Matches || finding.Verdict != string(acquisition.VerdictHard) || finding.Basis != "acoustid" || finding.Score != 0.97 {
 		t.Errorf("finding = %+v, want a hard acoustid match at 0.97", finding)
 	}
 	if len(previews.targets) != 0 {
@@ -261,7 +215,7 @@ func TestCheckInPlace_AFileTheFingerprintLinksToAnotherVersionContradicts(t *tes
 
 	finding := checkInPlace(t, wiring, live)
 
-	if finding.Fingerprint != acquisition.Contradicts || finding.Verdict != "contradicted" || !finding.Lowers {
+	if finding.Fingerprint != acquisition.Contradicts || finding.Verdict != string(acquisition.VerdictContradicted) || !finding.Lowers {
 		t.Errorf("finding = %+v, want the other version to contradict", finding)
 	}
 }
@@ -384,8 +338,8 @@ func TestCheckInPlace_WithoutAnIdentifierOrStoredAudioReaderItSaysSo(t *testing.
 
 	finding, err := svc.CheckInPlace(context.Background(), inPlaceTrack())
 
-	if err == nil || !strings.Contains(err.Error(), "cannot be checked in place") || finding.Answered() {
-		t.Errorf("CheckInPlace = %+v, %v, want an error saying the file cannot be checked in place", finding, err)
+	if !errors.Is(err, acquisition.ErrInPlaceUnavailable) || finding.Answered() {
+		t.Errorf("CheckInPlace = %+v, %v, want ErrInPlaceUnavailable", finding, err)
 	}
 }
 
