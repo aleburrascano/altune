@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -148,8 +149,6 @@ func TestPgxFeaturedArtistRepo_LegacyKeyRowStillMatches(t *testing.T) {
 	}
 }
 
-const featuringResultCap = 2000
-
 const bulkFeaturingSQL = `INSERT INTO track_featured_artists (track_id, featured_artist_id, position)
 	SELECT t.id, $2, 0 FROM unnest($1::uuid[]) AS t(id)`
 
@@ -183,19 +182,79 @@ func TestPgxFeaturedArtistRepo_ListTracksFeaturing_StopsAtTheLibraryPageCap(t *t
 	pool := testPool(t)
 	userId := shared.NewUserId(uuid.New())
 	cleanupFeaturedArtists(t, pool, userId)
-	ids := ascendingTrackIds(featuringResultCap + 1)
+	ids := ascendingTrackIds(catalog.MaxLibraryPageSize + 1)
 	insertBulkTracks(ctx, t, pool, userId, ids)
 	fa := catalog.FeaturedArtist{Name: "Capped Guest", MBID: "mb-capped-guest", Role: catalog.RoleFeatured}
 	seedFeaturedOnAll(ctx, t, pool, userId, fa, ids)
 
 	got, err := catalog.NewPgxCatalogTrackRepository(pool).ListTracksFeaturing(ctx, userId, fa)
 
-	if err != nil || len(got) != featuringResultCap {
-		t.Fatalf("ListTracksFeaturing = %d tracks, err %v; want the %d cap of %d featuring", len(got), err, featuringResultCap, len(ids))
+	if err != nil || len(got) != catalog.MaxLibraryPageSize {
+		t.Fatalf("ListTracksFeaturing = %d tracks, err %v; want the %d cap of %d featuring", len(got), err, catalog.MaxLibraryPageSize, len(ids))
 	}
 	for i, track := range got {
 		if want := ids[len(ids)-1-i]; track.ID != want {
 			t.Fatalf("track %d = %s, want %s: tracks added together come largest id first, and the cap drops the smallest, which sits first on disk", i, track.ID, want)
 		}
+	}
+}
+
+func addFeaturedTrackAt(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId, id catalog.TrackId, addedAt time.Time, fa catalog.FeaturedArtist) {
+	t.Helper()
+	track := newTestTrackForDB(t, userId)
+	track.ID = id
+	track.AddedAt = addedAt
+	cleanupTrack(t, pool, id, userId)
+	repo := catalog.NewPgxCatalogTrackRepository(pool)
+	if _, _, err := repo.Add(ctx, track); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+	if err := repo.ReplaceFeaturedArtists(ctx, id, userId, []catalog.FeaturedArtist{fa}); err != nil {
+		t.Fatalf("ReplaceFeaturedArtists() error = %v", err)
+	}
+}
+
+func featuringIds(tracks []*catalog.Track) []catalog.TrackId {
+	ids := make([]catalog.TrackId, len(tracks))
+	for i, track := range tracks {
+		ids[i] = track.ID
+	}
+	return ids
+}
+
+func TestPgxFeaturedArtistRepo_ListTracksFeaturing_LeavesOutAnotherUsersTracks(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	owner, other := shared.NewUserId(uuid.New()), shared.NewUserId(uuid.New())
+	cleanupFeaturedArtists(t, pool, owner)
+	cleanupFeaturedArtists(t, pool, other)
+	fa := catalog.FeaturedArtist{Name: "Shared Guest", MBID: "mb-shared-guest-" + uuid.NewString(), Role: catalog.RoleFeatured}
+	ids := ascendingTrackIds(2)
+	addedAt := time.Now().UTC().Truncate(time.Second)
+	addFeaturedTrackAt(ctx, t, pool, owner, ids[0], addedAt, fa)
+	addFeaturedTrackAt(ctx, t, pool, other, ids[1], addedAt, fa)
+
+	got, err := catalog.NewPgxCatalogTrackRepository(pool).ListTracksFeaturing(ctx, owner, fa)
+
+	if err != nil || !slices.Equal(featuringIds(got), ids[:1]) {
+		t.Fatalf("ListTracksFeaturing(owner) = %v, err %v; want only the owner's track %v, none of the other user's", featuringIds(got), err, ids[:1])
+	}
+}
+
+func TestPgxFeaturedArtistRepo_ListTracksFeaturing_NewestAddedComesFirst(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	userId := shared.NewUserId(uuid.New())
+	cleanupFeaturedArtists(t, pool, userId)
+	fa := catalog.FeaturedArtist{Name: "Ordered Guest", MBID: "mb-ordered-guest-" + uuid.NewString(), Role: catalog.RoleFeatured}
+	ids := ascendingTrackIds(2)
+	addedAt := time.Now().UTC().Truncate(time.Second)
+	addFeaturedTrackAt(ctx, t, pool, userId, ids[0], addedAt, fa)
+	addFeaturedTrackAt(ctx, t, pool, userId, ids[1], addedAt.Add(-time.Hour), fa)
+
+	got, err := catalog.NewPgxCatalogTrackRepository(pool).ListTracksFeaturing(ctx, userId, fa)
+
+	if err != nil || !slices.Equal(featuringIds(got), ids) {
+		t.Fatalf("ListTracksFeaturing = %v, err %v; want %v: the newest added first, though its id is the smaller", featuringIds(got), err, ids)
 	}
 }
