@@ -1,0 +1,17 @@
+{
+  "removed": [
+    "B3 internal/playback/adapters/handler/queue_handler.go imports github.com/go-chi/chi/v5, which module-spec.json does not list under pure",
+    "B3 internal/playback/adapters/handler/queue_handler.go imports net/http",
+    "B3 internal/playback/adapters/handler/queue_state_rate_limit.go imports net/http",
+    "B3 internal/playback/domain/queue_source.go imports net/url",
+    "C12 internal/playback/adapters/handler/queue_handler.go adapters/handler/queue_handler.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "C12 internal/playback/adapters/handler/queue_state_rate_limit.go adapters/handler/queue_state_rate_limit.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "C12 internal/playback/domain/queue_position.go domain/queue_position.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "C12 internal/playback/domain/queue_source.go domain/queue_source.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "C12 internal/playback/domain/queue_state.go domain/queue_state.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "C12 internal/playback/domain/queue_validation_error.go domain/queue_validation_error.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "C12 internal/playback/domain/repeat_mode.go domain/repeat_mode.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module"
+  ],
+  "added": [],
+  "clones": 0
+}
