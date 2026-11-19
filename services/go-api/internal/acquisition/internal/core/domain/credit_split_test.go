@@ -1,6 +1,7 @@
-package domain
+package domain_test
 
 import (
+	"altune/go-api/internal/acquisition"
 	"slices"
 	"testing"
 )
@@ -16,24 +17,24 @@ func TestSplitCredit(t *testing.T) {
 		"Beyoncé":          {"Beyoncé"},
 	}
 	for in, want := range cases {
-		if got := SplitCredit(in); !slices.Equal(got, want) {
+		if got := acquisition.SplitCredit(in); !slices.Equal(got, want) {
 			t.Errorf("SplitCredit(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
 
 func TestFeaturedCredits(t *testing.T) {
-	if got := FeaturedCredits("Song (feat. Beyoncé & JAY-Z)"); !slices.Equal(got, []string{"Beyoncé", "JAY-Z"}) {
+	if got := acquisition.FeaturedCredits("Song (feat. Beyoncé & JAY-Z)"); !slices.Equal(got, []string{"Beyoncé", "JAY-Z"}) {
 		t.Errorf("got %q", got)
 	}
-	if got := FeaturedCredits("Song"); got != nil {
+	if got := acquisition.FeaturedCredits("Song"); got != nil {
 		t.Errorf("got %q, want nil", got)
 	}
 }
 
 func TestCreditBrackets_StripsFeaturingLikeFeat(t *testing.T) {
 	for _, in := range []string{"Song (featuring X)", "Song [ft. X]", "Song (with X)", "Song (bonus)"} {
-		if got := CreditBrackets.ReplaceAllString(in, ""); got != "Song" {
+		if got := acquisition.CreditBrackets.ReplaceAllString(in, ""); got != "Song" {
 			t.Errorf("%q -> %q", in, got)
 		}
 	}

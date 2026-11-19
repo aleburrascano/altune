@@ -7,8 +7,4 @@ var (
 	NewUploadSource   = fixture.NewUploadSource
 )
 
-const (
-	ArtTrackURL       = fixture.ArtTrackURL
-	FixtureSourceName = fixture.SourceName
-	UploadSourceName  = fixture.UploadSourceName
-)
+const ArtTrackURL = fixture.ArtTrackURL

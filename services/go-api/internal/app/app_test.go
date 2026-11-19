@@ -16,12 +16,12 @@ import (
 func TestApplyStartupSwitches_AcquisitionPausedPausesWiredScheduler(t *testing.T) {
 	a := &App{
 		cfg: &config.Config{
-			MusicDir:                t.TempDir(),
-			YtMusicEnabled:          true,
-			AcquisitionFixtureOptIn: true,
-			AcquisitionPaused:       true,
+			MusicDir:          t.TempDir(),
+			YtMusicEnabled:    true,
+			AcquisitionPaused: true,
 		},
-		sem: make(chan struct{}, 1),
+		sem:            make(chan struct{}, 1),
+		fixtureSources: fixtureTiers(),
 	}
 
 	wired, err := a.wireCatalog(t.Context(), nil, &discovery.Discovery{})

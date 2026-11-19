@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"math"
 	"os"
+	"os/exec"
+	"path"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -18,10 +21,12 @@ const (
 	uploadChannel        = "Fixture Uploads"
 )
 
+var fixtureClip = []byte("one clip of fixture audio")
+
 func fetchedSize(t *testing.T, seconds float64) int {
 	t.Helper()
 	outDir := t.TempDir()
-	fetched, err := acquisition.NewArtTrackSource().Fetch(context.Background(), acquisition.AudioCandidate{Duration: seconds}, outDir)
+	fetched, err := acquisition.NewArtTrackSource(fixtureClip).Fetch(context.Background(), acquisition.AudioCandidate{Duration: seconds}, outDir)
 	if err != nil {
 		t.Fatalf("Fetch(%v): %v", seconds, err)
 	}
@@ -57,7 +62,7 @@ func TestSource_FetchTilesTheClipToCoverTheDurationWithinBounds(t *testing.T) {
 
 func TestSource_FetchWritesDirectlyInOutDir(t *testing.T) {
 	outDir := t.TempDir()
-	fetched, err := acquisition.NewArtTrackSource().Fetch(context.Background(), acquisition.AudioCandidate{Duration: 212}, outDir)
+	fetched, err := acquisition.NewArtTrackSource(fixtureClip).Fetch(context.Background(), acquisition.AudioCandidate{Duration: 212}, outDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,11 +71,39 @@ func TestSource_FetchWritesDirectlyInOutDir(t *testing.T) {
 	}
 }
 
+func TestSource_NoBinaryEmbedsAudio(t *testing.T) {
+	out, err := exec.Command("go", "list", "-deps", "-f", `{{range .EmbedFiles}}{{$.ImportPath}} {{.}}{{"\n"}}{{end}}`, "altune/go-api/cmd/...").Output()
+	if err != nil {
+		t.Fatalf("go list -deps: %v", err)
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if ext := strings.ToLower(path.Ext(line)); ext == ".mp3" || ext == ".m4a" || ext == ".opus" || ext == ".wav" {
+			t.Errorf("a binary embeds audio: %s, want the fixture clip passed in by tests", line)
+		}
+	}
+}
+
+func TestSource_FetchWritesTheClipItWasGiven(t *testing.T) {
+	for _, source := range []acquisition.AudioSource{acquisition.NewArtTrackSource(fixtureClip), acquisition.NewUploadSource(fixtureClip)} {
+		fetched, err := source.Fetch(context.Background(), acquisition.AudioCandidate{}, t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		written, err := os.ReadFile(fetched.Path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(written) != string(fixtureClip) {
+			t.Errorf("%s wrote %q, want the clip it was given %q", source.Name(), written, fixtureClip)
+		}
+	}
+}
+
 func TestSource_FetchRefusesCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	outDir := t.TempDir()
-	if _, err := acquisition.NewArtTrackSource().Fetch(ctx, acquisition.AudioCandidate{}, outDir); err == nil {
+	if _, err := acquisition.NewArtTrackSource(fixtureClip).Fetch(ctx, acquisition.AudioCandidate{}, outDir); err == nil {
 		t.Fatal("fetch on a cancelled context must fail")
 	}
 	if entries, _ := os.ReadDir(outDir); len(entries) != 0 {
@@ -121,7 +154,7 @@ func prodUpload(t *testing.T, req acquisition.FindRequest, entry map[string]any)
 func TestFind_FixtureCandidatesAreShapedLikeProd(t *testing.T) {
 	req := acquisition.FindRequest{Title: "Song", Artist: "Artist", Album: "Album", Duration: 179.6}
 
-	art := findOne(t, acquisition.NewArtTrackSource(), req)
+	art := findOne(t, acquisition.NewArtTrackSource(fixtureClip), req)
 	wantArt := prodArtTrack(t, req, acquisition.YtmSong{Type: acquisition.VideoTypeATV, Title: "Song", Artists: []string{"Artist"}, Album: "Album", DurationSeconds: 180})
 	wantArt.URL = acquisition.ArtTrackURL
 	if !reflect.DeepEqual(art, wantArt) {
@@ -131,7 +164,7 @@ func TestFind_FixtureCandidatesAreShapedLikeProd(t *testing.T) {
 		t.Fatalf("art track %+v must be a resolved art_track with no channel", art)
 	}
 
-	upload := findOne(t, acquisition.NewUploadSource(), req)
+	upload := findOne(t, acquisition.NewUploadSource(fixtureClip), req)
 	wantUpload := prodUpload(t, req, map[string]any{"title": "Song", "duration": 180, "webpage_url": uploadURL, "channel": uploadChannel})
 	if !reflect.DeepEqual(upload, wantUpload) {
 		t.Fatalf("upload %+v, want %+v", upload, wantUpload)
@@ -139,7 +172,7 @@ func TestFind_FixtureCandidatesAreShapedLikeProd(t *testing.T) {
 	if upload.Kind != acquisition.KindUpload || upload.IsResolved() || upload.Channel == "" || upload.Channel == req.Artist {
 		t.Fatalf("upload %+v must be an unresolved upload from a neutral channel", upload)
 	}
-	if acquisition.NewArtTrackSource().Name() == acquisition.NewUploadSource().Name() || art.URL == upload.URL {
+	if acquisition.NewArtTrackSource(fixtureClip).Name() == acquisition.NewUploadSource(fixtureClip).Name() || art.URL == upload.URL {
 		t.Fatal("the two fixture sources must differ in name and URL")
 	}
 }
@@ -147,7 +180,7 @@ func TestFind_FixtureCandidatesAreShapedLikeProd(t *testing.T) {
 func TestFind_UnknownDurationBecomesTheDefaultLength(t *testing.T) {
 	for _, in := range []float64{0, -3, math.NaN(), math.Inf(1)} {
 		req := acquisition.FindRequest{Title: "Song", Artist: "Artist", Duration: in}
-		for _, source := range []acquisition.AudioSource{acquisition.NewArtTrackSource(), acquisition.NewUploadSource()} {
+		for _, source := range []acquisition.AudioSource{acquisition.NewArtTrackSource(fixtureClip), acquisition.NewUploadSource(fixtureClip)} {
 			if got := findOne(t, source, req).Duration; got != unknownLengthSeconds {
 				t.Errorf("%s: duration %v became %v, want %d", source.Name(), in, got, unknownLengthSeconds)
 			}

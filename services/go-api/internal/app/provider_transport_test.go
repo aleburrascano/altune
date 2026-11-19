@@ -4,70 +4,17 @@ import (
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/egress"
-	"altune/go-api/internal/shared/httptrace"
 	"context"
 	"errors"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
 	"testing"
 )
-
-func writeFixture(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	body := `{"label":"x","exchanges":[{"method":"GET","url":"http://example.test/search?q=a","status":200,"response_body":"{\"ok\":true}"}]}`
-	if err := os.WriteFile(filepath.Join(dir, "corpus.json"), []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return dir
-}
-
-func TestProviderTransport_ProdNeverBuildsReplayer(t *testing.T) {
-	dir := writeFixture(t)
-	cases := []config.Config{
-		{Env: "production", ProviderReplayOptIn: true, ProviderReplayDir: dir},
-		{Env: "", ProviderReplayOptIn: true, ProviderReplayDir: dir},
-		{Env: "test", ProviderReplayOptIn: false, ProviderReplayDir: dir},
-		{Env: "test", ProviderReplayOptIn: true},
-	}
-	for _, c := range cases {
-		rt, err := providerTransport(&c)
-		if err != nil || rt != nil {
-			t.Fatalf("cfg %+v: got transport %v err %v, want nil", c, rt, err)
-		}
-	}
-}
-
-func TestProviderTransport_ReplaysStickyAndErrorsOnMiss(t *testing.T) {
-	cfg := &config.Config{Env: "test", ProviderReplayOptIn: true, ProviderReplayDir: writeFixture(t)}
-	rt, err := providerTransport(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := rt.(*httptrace.Replayer); !ok {
-		t.Fatalf("got %T, want *httptrace.Replayer", rt)
-	}
-	for i := 0; i < 2; i++ {
-		req, _ := http.NewRequest(http.MethodGet, "http://example.test/search?q=a", nil)
-		resp, err := rt.RoundTrip(req)
-		if err != nil {
-			t.Fatalf("call %d: %v", i, err)
-		}
-		_ = resp.Body.Close()
-	}
-	miss, _ := http.NewRequest(http.MethodGet, "http://example.test/other", nil)
-	if resp, err := rt.RoundTrip(miss); err == nil {
-		_ = resp.Body.Close()
-		t.Fatal("unmatched request must error")
-	}
-}
 
 func TestNilTransportResolvesToOneSharedLiveTransport(t *testing.T) {
 	first := newClientFactory(nil).roundTripper()
@@ -193,35 +140,6 @@ func recordWarnings(t *testing.T) *warnRecorder {
 	return rec
 }
 
-func TestProviderTransport_IgnoredReplayOptInWarnsNamingFlagAndEnv(t *testing.T) {
-	rec := recordWarnings(t)
-
-	rt, err := providerTransport(&config.Config{Env: "production", ProviderReplayOptIn: true, ProviderReplayDir: writeFixture(t)})
-	if err != nil || rt != nil {
-		t.Fatalf("got transport %v err %v, want nil nil", rt, err)
-	}
-
-	warns := rec.warnsNaming("PROVIDER_REPLAY_ENABLED")
-	if len(warns) != 1 {
-		t.Fatalf("got %d PROVIDER_REPLAY_ENABLED warnings, want 1", len(warns))
-	}
-	if warns[0]["env"] != "production" {
-		t.Errorf("warning env = %q, want production", warns[0]["env"])
-	}
-}
-
-func TestProviderTransport_ReplayOptInOffLogsNothing(t *testing.T) {
-	rec := recordWarnings(t)
-
-	if _, err := providerTransport(&config.Config{Env: "production", ProviderReplayDir: writeFixture(t)}); err != nil {
-		t.Fatal(err)
-	}
-
-	if n := len(rec.records); n != 0 {
-		t.Fatalf("got %d log records with the opt-in off, want 0", n)
-	}
-}
-
 func TestWarnIgnoredStartupOptIns_NamesEachIgnoredHook(t *testing.T) {
 	cases := []struct {
 		name string
@@ -230,8 +148,6 @@ func TestWarnIgnoredStartupOptIns_NamesEachIgnoredHook(t *testing.T) {
 		want int
 	}{
 		{"test auth in production", config.Config{Env: "production", TestAuthOptIn: true}, "TEST_AUTH_ENABLED", 1},
-		{"fixture in staging", config.Config{Env: "staging", AcquisitionFixtureOptIn: true}, "ACQUISITION_FIXTURE_ENABLED", 1},
-		{"fixture honoured in test", config.Config{Env: "test", AcquisitionFixtureOptIn: true}, "ACQUISITION_FIXTURE_ENABLED", 0},
 		{"test auth off", config.Config{Env: "production"}, "TEST_AUTH_ENABLED", 0},
 	}
 	for _, tc := range cases {

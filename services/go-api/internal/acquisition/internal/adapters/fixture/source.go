@@ -7,7 +7,6 @@ import (
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"bytes"
 	"context"
-	_ "embed"
 	"math"
 	"os"
 	"path/filepath"
@@ -25,22 +24,20 @@ const (
 	fetchedName                           = "fixture.mp3"
 )
 
-//go:embed clip.mp3
-var clip []byte
-
 var _ ports.AudioSource = (*Source)(nil)
 
 type Source struct {
 	name acqdomain.SourceName
 	emit func(ports.FindRequest) ports.AudioCandidate
+	clip []byte
 }
 
-func NewArtTrackSource() *Source {
-	return &Source{name: SourceName, emit: artTrackCandidate}
+func NewArtTrackSource(clip []byte) *Source {
+	return &Source{name: SourceName, emit: artTrackCandidate, clip: clip}
 }
 
-func NewUploadSource() *Source {
-	return &Source{name: UploadSourceName, emit: uploadCandidate}
+func NewUploadSource(clip []byte) *Source {
+	return &Source{name: UploadSourceName, emit: uploadCandidate, clip: clip}
 }
 
 func (s *Source) Name() acqdomain.SourceName { return s.name }
@@ -82,7 +79,7 @@ func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outD
 		return ports.FetchedAudio{}, err
 	}
 	path := filepath.Join(outDir, fetchedName)
-	audio := bytes.Repeat(clip, clipRepeats(candidate.Duration))
+	audio := bytes.Repeat(s.clip, clipRepeats(candidate.Duration))
 	if err := os.WriteFile(path, audio, 0o600); err != nil {
 		return ports.FetchedAudio{}, err
 	}
