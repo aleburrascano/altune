@@ -1,7 +1,7 @@
-package eval
+package eval_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,108 +9,128 @@ import (
 )
 
 type fakeSearcher struct {
-	byQuery map[string][]domain.SearchResult
+	byQuery map[string][]discovery.SearchResult
 	err     error
 }
 
-func (f *fakeSearcher) Search(_ context.Context, query string) ([]domain.SearchResult, error) {
+func (f *fakeSearcher) Search(_ context.Context, query string) ([]discovery.SearchResult, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
 	return f.byQuery[query], nil
 }
 
-func evalTrack(title, artist string) domain.SearchResult {
-	return domain.SearchResult{Kind: domain.ResultKindTrack, Title: title, Subtitle: artist}
+type answersEveryQuery []discovery.SearchResult
+
+func (a answersEveryQuery) Search(context.Context, string) ([]discovery.SearchResult, error) {
+	return a, nil
 }
 
-func album(title, artist string) domain.SearchResult {
-	return domain.SearchResult{Kind: domain.ResultKindAlbum, Title: title, Subtitle: artist}
+func evalOne(t *testing.T, entity discovery.LibraryEntity, searcher discovery.Searcher, k int) discovery.EvalResult {
+	t.Helper()
+	report := discovery.RunLibraryEvalMode(context.Background(), []discovery.LibraryEntity{entity}, searcher, 1, k, discovery.QueryExact, nil)
+	if len(report.Results) != 1 {
+		t.Fatalf("got %d results, want 1", len(report.Results))
+	}
+	return report.Results[0]
+}
+
+func matchesEntity(t *testing.T, result discovery.SearchResult, entity discovery.LibraryEntity) bool {
+	t.Helper()
+	return evalOne(t, entity, answersEveryQuery{result}, 1).Outcome == discovery.EvalPass
+}
+
+func evalTrack(title, artist string) discovery.SearchResult {
+	return discovery.SearchResult{Kind: discovery.ResultKindTrack, Title: title, Subtitle: artist}
+}
+
+func album(title, artist string) discovery.SearchResult {
+	return discovery.SearchResult{Kind: discovery.ResultKindAlbum, Title: title, Subtitle: artist}
 }
 
 func TestEvalOne(t *testing.T) {
-	entity := LibraryEntity{Title: "HUMBLE.", Artist: "Kendrick Lamar"}
+	entity := discovery.LibraryEntity{Title: "HUMBLE.", Artist: "Kendrick Lamar"}
 	query := "Kendrick Lamar HUMBLE."
 
 	tests := []struct {
 		name        string
-		entity      LibraryEntity
-		results     []domain.SearchResult
+		entity      discovery.LibraryEntity
+		results     []discovery.SearchResult
 		searchErr   error
 		k           int
-		wantOutcome EvalOutcome
+		wantOutcome discovery.EvalOutcome
 		wantPos     int
 		wantTopKind string
 	}{
 		{
 			name:        "entity at #1 passes top-1",
 			entity:      entity,
-			results:     []domain.SearchResult{evalTrack("HUMBLE.", "Kendrick Lamar"), album("DAMN.", "Kendrick Lamar")},
+			results:     []discovery.SearchResult{evalTrack("HUMBLE.", "Kendrick Lamar"), album("DAMN.", "Kendrick Lamar")},
 			k:           1,
-			wantOutcome: EvalPass,
+			wantOutcome: discovery.EvalPass,
 			wantPos:     0,
 		},
 		{
 			name:        "entity below #1 fails at k=1",
 			entity:      entity,
-			results:     []domain.SearchResult{album("DAMN.", "Kendrick Lamar"), evalTrack("HUMBLE.", "Kendrick Lamar")},
+			results:     []discovery.SearchResult{album("DAMN.", "Kendrick Lamar"), evalTrack("HUMBLE.", "Kendrick Lamar")},
 			k:           1,
-			wantOutcome: EvalFailWrongTop,
+			wantOutcome: discovery.EvalFailWrongTop,
 			wantTopKind: "album",
 		},
 		{
 			name:        "entity below #1 passes within top-3",
 			entity:      entity,
-			results:     []domain.SearchResult{album("DAMN.", "Kendrick Lamar"), evalTrack("HUMBLE.", "Kendrick Lamar")},
+			results:     []discovery.SearchResult{album("DAMN.", "Kendrick Lamar"), evalTrack("HUMBLE.", "Kendrick Lamar")},
 			k:           3,
-			wantOutcome: EvalPass,
+			wantOutcome: discovery.EvalPass,
 			wantPos:     1,
 		},
 		{
 			name:        "case-insensitive title and artist still match",
 			entity:      entity,
-			results:     []domain.SearchResult{evalTrack("humble.", "kendrick lamar")},
+			results:     []discovery.SearchResult{evalTrack("humble.", "kendrick lamar")},
 			k:           3,
-			wantOutcome: EvalPass,
+			wantOutcome: discovery.EvalPass,
 			wantPos:     0,
 		},
 		{
 			name:        "empty results fail as no-results",
 			entity:      entity,
-			results:     []domain.SearchResult{},
+			results:     []discovery.SearchResult{},
 			k:           3,
-			wantOutcome: EvalFailNoResults,
+			wantOutcome: discovery.EvalFailNoResults,
 		},
 		{
 			name:        "search error fails as no-results",
 			entity:      entity,
 			searchErr:   errors.New("provider down"),
 			k:           3,
-			wantOutcome: EvalFailNoResults,
+			wantOutcome: discovery.EvalFailNoResults,
 		},
 		{
 			name:        "empty artist is skipped",
-			entity:      LibraryEntity{Title: "Untitled", Artist: "   "},
+			entity:      discovery.LibraryEntity{Title: "Untitled", Artist: "   "},
 			k:           3,
-			wantOutcome: EvalSkipped,
+			wantOutcome: discovery.EvalSkipped,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			searcher := &fakeSearcher{
-				byQuery: map[string][]domain.SearchResult{query: tt.results},
+				byQuery: map[string][]discovery.SearchResult{query: tt.results},
 				err:     tt.searchErr,
 			}
-			got := evalOneQuery(context.Background(), query, tt.entity, searcher, tt.k)
+			got := evalOne(t, tt.entity, searcher, tt.k)
 
 			if got.Outcome != tt.wantOutcome {
 				t.Fatalf("outcome = %v, want %v", got.Outcome, tt.wantOutcome)
 			}
-			if tt.wantOutcome == EvalPass && got.MatchPosition != tt.wantPos {
+			if tt.wantOutcome == discovery.EvalPass && got.MatchPosition != tt.wantPos {
 				t.Errorf("MatchPosition = %d, want %d", got.MatchPosition, tt.wantPos)
 			}
-			if tt.wantOutcome == EvalFailWrongTop {
+			if tt.wantOutcome == discovery.EvalFailWrongTop {
 				if got.Top == nil {
 					t.Fatalf("expected Top to be recorded on wrong-top failure")
 				}
@@ -128,23 +148,23 @@ func TestEvalOne(t *testing.T) {
 func TestMatchesEntity(t *testing.T) {
 	tests := []struct {
 		name   string
-		result domain.SearchResult
-		entity LibraryEntity
+		result discovery.SearchResult
+		entity discovery.LibraryEntity
 		want   bool
 	}{
-		{"exact title and artist", evalTrack("HUMBLE.", "Kendrick Lamar"), LibraryEntity{Title: "HUMBLE.", Artist: "Kendrick Lamar"}, true},
-		{"artist prefix embedded in title", evalTrack("A-Ha - Take On Me", "a-ha"), LibraryEntity{Title: "Take On Me", Artist: "a-ha"}, true},
-		{"track-number prefix in title", evalTrack("07-The Best Was Yet To Come", "Bryan Adams"), LibraryEntity{Title: "The Best Was Yet To Come", Artist: "Bryan Adams"}, true},
-		{"reuploader subtitle but artist in title", domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Lil Tecca - Yup", Subtitle: "lost_files"}, LibraryEntity{Title: "Yup", Artist: "Lil Tecca"}, true},
-		{"short title not substring-matched", evalTrack("Going Home", "Drake"), LibraryEntity{Title: "Go", Artist: "Drake"}, false},
-		{"different track same artist", evalTrack("DAMN.", "Kendrick Lamar"), LibraryEntity{Title: "HUMBLE.", Artist: "Kendrick Lamar"}, false},
-		{"album is never a track match", album("Circles", "Post Malone"), LibraryEntity{Title: "Circles", Artist: "Post Malone"}, false},
-		{"symbol-only artist matches via subtitle", domain.SearchResult{Kind: domain.ResultKindTrack, Title: "CARNIVAL", Subtitle: "¥$"}, LibraryEntity{Title: "CARNIVAL", Artist: "¥$"}, true},
-		{"symbol-only artist rejects wrong result", domain.SearchResult{Kind: domain.ResultKindTrack, Title: "CARNIVAL", Subtitle: "Some Cover Band"}, LibraryEntity{Title: "CARNIVAL", Artist: "¥$"}, false},
+		{"exact title and artist", evalTrack("HUMBLE.", "Kendrick Lamar"), discovery.LibraryEntity{Title: "HUMBLE.", Artist: "Kendrick Lamar"}, true},
+		{"artist prefix embedded in title", evalTrack("A-Ha - Take On Me", "a-ha"), discovery.LibraryEntity{Title: "Take On Me", Artist: "a-ha"}, true},
+		{"track-number prefix in title", evalTrack("07-The Best Was Yet To Come", "Bryan Adams"), discovery.LibraryEntity{Title: "The Best Was Yet To Come", Artist: "Bryan Adams"}, true},
+		{"reuploader subtitle but artist in title", discovery.SearchResult{Kind: discovery.ResultKindTrack, Title: "Lil Tecca - Yup", Subtitle: "lost_files"}, discovery.LibraryEntity{Title: "Yup", Artist: "Lil Tecca"}, true},
+		{"short title not substring-matched", evalTrack("Going Home", "Drake"), discovery.LibraryEntity{Title: "Go", Artist: "Drake"}, false},
+		{"different track same artist", evalTrack("DAMN.", "Kendrick Lamar"), discovery.LibraryEntity{Title: "HUMBLE.", Artist: "Kendrick Lamar"}, false},
+		{"album is never a track match", album("Circles", "Post Malone"), discovery.LibraryEntity{Title: "Circles", Artist: "Post Malone"}, false},
+		{"symbol-only artist matches via subtitle", discovery.SearchResult{Kind: discovery.ResultKindTrack, Title: "CARNIVAL", Subtitle: "¥$"}, discovery.LibraryEntity{Title: "CARNIVAL", Artist: "¥$"}, true},
+		{"symbol-only artist rejects wrong result", discovery.SearchResult{Kind: discovery.ResultKindTrack, Title: "CARNIVAL", Subtitle: "Some Cover Band"}, discovery.LibraryEntity{Title: "CARNIVAL", Artist: "¥$"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := matchesEntity(tt.result, tt.entity); got != tt.want {
+			if got := matchesEntity(t, tt.result, tt.entity); got != tt.want {
 				t.Errorf("matchesEntity = %v, want %v", got, tt.want)
 			}
 		})
@@ -152,19 +172,19 @@ func TestMatchesEntity(t *testing.T) {
 }
 
 func TestRunLibraryEvalMode_Aggregation(t *testing.T) {
-	entities := []LibraryEntity{
+	entities := []discovery.LibraryEntity{
 		{Title: "HUMBLE.", Artist: "Kendrick Lamar"},
 		{Title: "Circles", Artist: "Post Malone"},
 		{Title: "Ghost Track", Artist: "Nobody"},
 		{Title: "Orphan", Artist: ""},
 	}
-	searcher := &fakeSearcher{byQuery: map[string][]domain.SearchResult{
+	searcher := &fakeSearcher{byQuery: map[string][]discovery.SearchResult{
 		"Kendrick Lamar HUMBLE.": {evalTrack("HUMBLE.", "Kendrick Lamar")},
 		"Post Malone Circles":    {album("Circles", "Post Malone"), evalTrack("Circles", "Post Malone")},
 		"Nobody Ghost Track":     {},
 	}}
 
-	report := RunLibraryEvalMode(context.Background(), entities, searcher, 2, 3, QueryExact, nil)
+	report := discovery.RunLibraryEvalMode(context.Background(), entities, searcher, 2, 3, discovery.QueryExact, nil)
 
 	if report.K != 3 {
 		t.Errorf("K = %d, want 3", report.K)
@@ -200,14 +220,14 @@ func TestRunLibraryEvalMode_Aggregation(t *testing.T) {
 
 func TestEvalOutcome_StringAndJSON(t *testing.T) {
 	tests := []struct {
-		o    EvalOutcome
+		o    discovery.EvalOutcome
 		want string
 	}{
-		{EvalPass, "pass"},
-		{EvalFailWrongTop, "fail_wrong_top"},
-		{EvalFailNoResults, "fail_no_results"},
-		{EvalSkipped, "skipped"},
-		{EvalOutcomeUnknown, "unknown"},
+		{discovery.EvalPass, "pass"},
+		{discovery.EvalFailWrongTop, "fail_wrong_top"},
+		{discovery.EvalFailNoResults, "fail_no_results"},
+		{discovery.EvalSkipped, "skipped"},
+		{discovery.EvalOutcomeUnknown, "unknown"},
 	}
 	for _, tt := range tests {
 		if got := tt.o.String(); got != tt.want {
@@ -220,25 +240,33 @@ func TestEvalOutcome_StringAndJSON(t *testing.T) {
 	}
 }
 
-func TestQueryMode_QueryForAndLabel(t *testing.T) {
-	e := LibraryEntity{Title: "HUMBLE.", Artist: "Kendrick Lamar"}
-	if got := QueryExact.queryFor(e); got != "Kendrick Lamar HUMBLE." {
-		t.Errorf("exact query = %q", got)
+func TestRunLibraryEvalMode_EachModeSearchesItsOwnQueryAndLabelsItsCorpus(t *testing.T) {
+	e := discovery.LibraryEntity{Title: "HUMBLE.", Artist: "Kendrick Lamar"}
+	cases := []struct {
+		mode       discovery.QueryMode
+		wantQuery  string
+		wantCorpus string
+	}{
+		{discovery.QueryExact, "Kendrick Lamar HUMBLE.", ""},
+		{discovery.QueryTitleOnly, "HUMBLE.", "hard"},
 	}
-	if got := QueryTitleOnly.queryFor(e); got != "HUMBLE." {
-		t.Errorf("title-only query = %q", got)
-	}
-	if QueryExact.label() != "" || QueryTitleOnly.label() != "hard" {
-		t.Errorf("labels = %q/%q, want \"\"/hard", QueryExact.label(), QueryTitleOnly.label())
+	for _, tc := range cases {
+		r := discovery.RunLibraryEvalMode(context.Background(), []discovery.LibraryEntity{e}, &fakeSearcher{}, 1, 3, tc.mode, nil)
+		if len(r.Results) != 1 || r.Results[0].Query != tc.wantQuery {
+			t.Fatalf("mode %v results = %+v, want one result for query %q", tc.mode, r.Results, tc.wantQuery)
+		}
+		if r.Corpus != tc.wantCorpus {
+			t.Errorf("mode %v corpus = %q, want %q", tc.mode, r.Corpus, tc.wantCorpus)
+		}
 	}
 }
 
 func TestRunLibraryEvalMode_AllSkippedReportsZeroRates(t *testing.T) {
-	entities := []LibraryEntity{
+	entities := []discovery.LibraryEntity{
 		{Title: "One", Artist: ""},
 		{Title: "Two", Artist: "   "},
 	}
-	report := RunLibraryEvalMode(context.Background(), entities, &fakeSearcher{}, 1, 3, QueryTitleOnly, nil)
+	report := discovery.RunLibraryEvalMode(context.Background(), entities, &fakeSearcher{}, 1, 3, discovery.QueryTitleOnly, nil)
 	if report.Evaluated != 0 || report.Skipped != 2 {
 		t.Fatalf("Evaluated/Skipped = %d/%d, want 0/2", report.Evaluated, report.Skipped)
 	}
@@ -256,30 +284,30 @@ func TestOutcomeEnumsMarshalJSON(t *testing.T) {
 		in   any
 		want string
 	}{
-		{"ArtistIntentUnknown", ArtistIntentUnknown, `"unknown"`},
-		{"ArtistIntentPass", ArtistIntentPass, `"pass"`},
-		{"ArtistIntentBuried", ArtistIntentBuried, `"buried"`},
-		{"ArtistIntentBelowK", ArtistIntentBelowK, `"below_k"`},
-		{"ArtistIntentAbsent", ArtistIntentAbsent, `"absent"`},
-		{"ArtistIntentNoResults", ArtistIntentNoResults, `"no_results"`},
-		{"ArtistIntentSkipped", ArtistIntentSkipped, `"skipped"`},
-		{"ArtistIntentOutOfRange", ArtistIntentOutcome(99), `"unknown"`},
-		{"GapStrengthUnknown", GapStrengthUnknown, `"unknown"`},
-		{"GapStrong", GapStrong, `"strong"`},
-		{"GapWeak", GapWeak, `"weak"`},
-		{"GapAbandoned", GapAbandoned, `"abandoned"`},
-		{"GapStrengthOutOfRange", GapStrength(99), `"unknown"`},
-		{"EvalOutcomeUnknown", EvalOutcomeUnknown, `"unknown"`},
-		{"EvalPass", EvalPass, `"pass"`},
-		{"EvalFailWrongTop", EvalFailWrongTop, `"fail_wrong_top"`},
-		{"EvalFailNoResults", EvalFailNoResults, `"fail_no_results"`},
-		{"EvalSkipped", EvalSkipped, `"skipped"`},
-		{"EvalOutcomeOutOfRange", EvalOutcome(99), `"unknown"`},
+		{"ArtistIntentUnknown", discovery.ArtistIntentUnknown, `"unknown"`},
+		{"ArtistIntentPass", discovery.ArtistIntentPass, `"pass"`},
+		{"ArtistIntentBuried", discovery.ArtistIntentBuried, `"buried"`},
+		{"ArtistIntentBelowK", discovery.ArtistIntentBelowK, `"below_k"`},
+		{"ArtistIntentAbsent", discovery.ArtistIntentAbsent, `"absent"`},
+		{"ArtistIntentNoResults", discovery.ArtistIntentNoResults, `"no_results"`},
+		{"ArtistIntentSkipped", discovery.ArtistIntentSkipped, `"skipped"`},
+		{"ArtistIntentOutOfRange", discovery.ArtistIntentOutcome(99), `"unknown"`},
+		{"GapStrengthUnknown", discovery.GapStrengthUnknown, `"unknown"`},
+		{"GapStrong", discovery.GapStrong, `"strong"`},
+		{"GapWeak", discovery.GapWeak, `"weak"`},
+		{"GapAbandoned", discovery.GapAbandoned, `"abandoned"`},
+		{"GapStrengthOutOfRange", discovery.GapStrength(99), `"unknown"`},
+		{"EvalOutcomeUnknown", discovery.EvalOutcomeUnknown, `"unknown"`},
+		{"EvalPass", discovery.EvalPass, `"pass"`},
+		{"EvalFailWrongTop", discovery.EvalFailWrongTop, `"fail_wrong_top"`},
+		{"EvalFailNoResults", discovery.EvalFailNoResults, `"fail_no_results"`},
+		{"EvalSkipped", discovery.EvalSkipped, `"skipped"`},
+		{"EvalOutcomeOutOfRange", discovery.EvalOutcome(99), `"unknown"`},
 		{"EmbeddedInStruct", struct {
-			A ArtistIntentOutcome `json:"a"`
-			G GapStrength         `json:"g"`
-			E EvalOutcome         `json:"e"`
-		}{ArtistIntentBelowK, GapWeak, EvalFailWrongTop}, `{"a":"below_k","g":"weak","e":"fail_wrong_top"}`},
+			A discovery.ArtistIntentOutcome `json:"a"`
+			G discovery.GapStrength         `json:"g"`
+			E discovery.EvalOutcome         `json:"e"`
+		}{discovery.ArtistIntentBelowK, discovery.GapWeak, discovery.EvalFailWrongTop}, `{"a":"below_k","g":"weak","e":"fail_wrong_top"}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -295,28 +323,28 @@ func TestOutcomeEnumsMarshalJSON(t *testing.T) {
 }
 
 func TestMatchesEntity_VersionLabelsAndKnownRecording(t *testing.T) {
-	studio := LibraryEntity{Title: "Bohemian Rhapsody", Artist: "Queen"}
-	known := LibraryEntity{Title: "Bohemian Rhapsody", Artist: "Queen", Known: &KnownRecording{ISRCs: []string{"GBUM71029604"}}}
-	withISRC := func(title, isrc string) domain.SearchResult {
+	studio := discovery.LibraryEntity{Title: "Bohemian Rhapsody", Artist: "Queen"}
+	known := discovery.LibraryEntity{Title: "Bohemian Rhapsody", Artist: "Queen", Known: &discovery.KnownRecording{ISRCs: []string{"GBUM71029604"}}}
+	withISRC := func(title, isrc string) discovery.SearchResult {
 		r := evalTrack(title, "Queen")
 		r.ISRC = isrc
 		return r
 	}
 	tests := []struct {
 		name   string
-		result domain.SearchResult
-		entity LibraryEntity
+		result discovery.SearchResult
+		entity discovery.LibraryEntity
 		want   bool
 	}{
 		{"the Live Aid recording is not the studio song", evalTrack("Bohemian Rhapsody (Live Aid)", "Queen"), studio, false},
-		{"a live entity matches its live recording", evalTrack("Bohemian Rhapsody (Live Aid)", "Queen"), LibraryEntity{Title: "Bohemian Rhapsody (Live Aid)", Artist: "Queen"}, true},
+		{"a live entity matches its live recording", evalTrack("Bohemian Rhapsody (Live Aid)", "Queen"), discovery.LibraryEntity{Title: "Bohemian Rhapsody (Live Aid)", Artist: "Queen"}, true},
 		{"known ISRC in provider formatting matches", withISRC("Bohemian Rhapsody", "gb-um7-10-29604"), known, true},
 		{"right title and artist but another ISRC does not match", withISRC("Bohemian Rhapsody", "GBUM71805979"), known, false},
 		{"right title and artist with no ISRC does not match a known recording", withISRC("Bohemian Rhapsody", ""), known, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := matchesEntity(tt.result, tt.entity); got != tt.want {
+			if got := matchesEntity(t, tt.result, tt.entity); got != tt.want {
 				t.Errorf("matchesEntity = %v, want %v", got, tt.want)
 			}
 		})

@@ -1,0 +1,31 @@
+{
+  "removed": [
+    "T1 internal/discovery/service/eval/artist_intent_eval_test.go imports domain/enums.go, behind discovery's door",
+    "T1 internal/discovery/service/eval/artist_intent_eval_test.go imports domain/search_result.go, behind discovery's door",
+    "T1 internal/discovery/service/eval/artist_intent_eval_test.go is in package eval, so it sees inside the module: use package eval_test and import the door",
+    "T1 internal/discovery/service/eval/correction_eval_test.go imports domain/vocabulary.go, behind discovery's door",
+    "T1 internal/discovery/service/eval/correction_eval_test.go imports service/vocabulary/correction.go, behind discovery's door",
+    "T1 internal/discovery/service/eval/correction_eval_test.go is in package eval, so it sees inside the module: use package eval_test and import the door",
+    "T1 internal/discovery/service/eval/diversity_eval_test.go imports domain/enums.go, behind discovery's door",
+    "T1 internal/discovery/service/eval/diversity_eval_test.go imports domain/search_result.go, behind discovery's door",
+    "T1 internal/discovery/service/eval/diversity_eval_test.go is in package eval, so it sees inside the module: use package eval_test and import the door",
+    "T1 internal/discovery/service/eval/failure_test.go is in package eval, so it sees inside the module: use package eval_test and import the door",
+    "T1 internal/discovery/service/eval/fixtures_test.go imports domain/enums.go, behind discovery's door",
+    "T1 internal/discovery/service/eval/fixtures_test.go imports domain/search_result.go, behind discovery's door",
+    "T1 internal/discovery/service/eval/fixtures_test.go is in package eval, so it sees inside the module: use package eval_test and import the door",
+    "T1 internal/discovery/service/eval/health_eval_test.go imports domain/enums.go, behind discovery's door",
+    "T1 internal/discovery/service/eval/health_eval_test.go imports domain/search_result.go, behind discovery's door",
+    "T1 internal/discovery/service/eval/health_eval_test.go is in package eval, so it sees inside the module: use package eval_test and import the door",
+    "T1 internal/discovery/service/eval/library_eval_test.go imports domain/enums.go, behind discovery's door",
+    "T1 internal/discovery/service/eval/library_eval_test.go imports domain/search_result.go, behind discovery's door",
+    "T1 internal/discovery/service/eval/library_eval_test.go is in package eval, so it sees inside the module: use package eval_test and import the door",
+    "T1 internal/discovery/service/eval/merge_eval_test.go imports domain/enums.go, behind discovery's door",
+    "T1 internal/discovery/service/eval/merge_eval_test.go imports domain/search_result.go, behind discovery's door",
+    "T1 internal/discovery/service/eval/merge_eval_test.go is in package eval, so it sees inside the module: use package eval_test and import the door",
+    "T1 internal/discovery/service/eval/replay_test.go imports domain/enums.go, behind discovery's door",
+    "T1 internal/discovery/service/eval/replay_test.go imports domain/search_result.go, behind discovery's door",
+    "T1 internal/discovery/service/eval/replay_test.go is in package eval, so it sees inside the module: use package eval_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}

@@ -3,9 +3,13 @@ package discovery
 import eval "altune/go-api/internal/discovery/service/eval"
 
 type (
+	ArtistIntentOutcome    = eval.ArtistIntentOutcome
 	ArtistIntentReport     = eval.ArtistIntentReport
 	ArtistIntentResult     = eval.ArtistIntentResult
 	Baselines              = eval.Baselines
+	BehavioralCorpus       = eval.BehavioralCorpus
+	BehavioralCorpusEntry  = eval.BehavioralCorpusEntry
+	CandidateRanking       = eval.CandidateRanking
 	CorrectionReport       = eval.CorrectionReport
 	CoverageGap            = eval.CoverageGap
 	CoverageReportA        = eval.CoverageReportA
@@ -15,8 +19,10 @@ type (
 	DetailItem             = eval.DetailItem
 	DetailReport           = eval.DetailReport
 	DiversityReport        = eval.DiversityReport
+	EvalOutcome            = eval.EvalOutcome
 	EvalReport             = eval.EvalReport
 	FailureRecord          = eval.FailureRecord
+	GapStrength            = eval.GapStrength
 	GateResult             = eval.GateResult
 	HarnessReport          = eval.HarnessReport
 	HealthReport           = eval.HealthReport
@@ -62,20 +68,24 @@ var (
 )
 
 const (
-	ArtistIntentAbsent = eval.ArtistIntentAbsent
-	ArtistIntentBelowK = eval.ArtistIntentBelowK
-	ArtistIntentBuried = eval.ArtistIntentBuried
-	ArtistIntentPass   = eval.ArtistIntentPass
-	EvalFailNoResults  = eval.EvalFailNoResults
-	EvalFailWrongTop   = eval.EvalFailWrongTop
-	EvalPass           = eval.EvalPass
-	EvalSkipped        = eval.EvalSkipped
-	HasIDAttr          = eval.HasIDAttr
-	PopBandAttr        = eval.PopBandAttr
-	QueryExact         = eval.QueryExact
-	QueryTitleOnly     = eval.QueryTitleOnly
-	ScriptAttr         = eval.ScriptAttr
-	TokenCountAttr     = eval.TokenCountAttr
+	ArtistIntentAbsent    = eval.ArtistIntentAbsent
+	ArtistIntentBelowK    = eval.ArtistIntentBelowK
+	ArtistIntentBuried    = eval.ArtistIntentBuried
+	ArtistIntentNoResults = eval.ArtistIntentNoResults
+	ArtistIntentPass      = eval.ArtistIntentPass
+	ArtistIntentSkipped   = eval.ArtistIntentSkipped
+	ArtistIntentUnknown   = eval.ArtistIntentUnknown
+	EvalFailNoResults     = eval.EvalFailNoResults
+	EvalFailWrongTop      = eval.EvalFailWrongTop
+	EvalOutcomeUnknown    = eval.EvalOutcomeUnknown
+	EvalPass              = eval.EvalPass
+	EvalSkipped           = eval.EvalSkipped
+	HasIDAttr             = eval.HasIDAttr
+	PopBandAttr           = eval.PopBandAttr
+	QueryExact            = eval.QueryExact
+	QueryTitleOnly        = eval.QueryTitleOnly
+	ScriptAttr            = eval.ScriptAttr
+	TokenCountAttr        = eval.TokenCountAttr
 )
 
 type (
@@ -85,7 +95,8 @@ type (
 )
 
 const (
-	GapAbandoned = eval.GapAbandoned
-	GapStrong    = eval.GapStrong
-	GapWeak      = eval.GapWeak
+	GapAbandoned       = eval.GapAbandoned
+	GapStrong          = eval.GapStrong
+	GapStrengthUnknown = eval.GapStrengthUnknown
+	GapWeak            = eval.GapWeak
 )

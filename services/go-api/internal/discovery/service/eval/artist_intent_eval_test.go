@@ -1,78 +1,87 @@
-package eval
+package eval_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"context"
 	"errors"
 	"reflect"
 	"testing"
 )
 
-func artistCard(name string) domain.SearchResult {
-	return domain.SearchResult{Kind: domain.ResultKindArtist, Title: name}
+func artistCard(name string) discovery.SearchResult {
+	return discovery.SearchResult{Kind: discovery.ResultKindArtist, Title: name}
+}
+
+func evalOneArtist(t *testing.T, artist string, searcher discovery.Searcher, k int) discovery.ArtistIntentResult {
+	t.Helper()
+	report := discovery.RunArtistIntentEval(context.Background(), []string{artist}, searcher, 1, k, "", nil)
+	if len(report.Results) != 1 {
+		t.Fatalf("got %d results, want 1", len(report.Results))
+	}
+	return report.Results[0]
 }
 
 func TestEvalOneArtist_Outcomes(t *testing.T) {
 	tests := []struct {
 		name        string
 		artist      string
-		results     []domain.SearchResult
+		results     []discovery.SearchResult
 		searchErr   error
 		k           int
-		wantOutcome ArtistIntentOutcome
+		wantOutcome discovery.ArtistIntentOutcome
 		wantArtist  int
 		wantTrack   int
 	}{
 		{
 			name:        "artist card at #1 passes",
 			artist:      "Drake",
-			results:     []domain.SearchResult{artistCard("Drake"), evalTrack("Drake", "Someone")},
+			results:     []discovery.SearchResult{artistCard("Drake"), evalTrack("Drake", "Someone")},
 			k:           3,
-			wantOutcome: ArtistIntentPass,
+			wantOutcome: discovery.ArtistIntentPass,
 			wantArtist:  0,
 			wantTrack:   1,
 		},
 		{
 			name:   "artist below K with same-name track inside K is buried",
 			artist: "Drake",
-			results: []domain.SearchResult{
+			results: []discovery.SearchResult{
 				evalTrack("Drake", "Someone"),
 				album("Drake", "Other"),
 				artistCard("Drake"),
 			},
 			k:           2,
-			wantOutcome: ArtistIntentBuried,
+			wantOutcome: discovery.ArtistIntentBuried,
 			wantArtist:  2,
 			wantTrack:   0,
 		},
 		{
 			name:   "artist below K without a usurping track is below_k",
 			artist: "Drake",
-			results: []domain.SearchResult{
+			results: []discovery.SearchResult{
 				album("Drake", "Other"),
 				album("Drake Again", "Other"),
 				artistCard("Drake"),
 			},
 			k:           2,
-			wantOutcome: ArtistIntentBelowK,
+			wantOutcome: discovery.ArtistIntentBelowK,
 			wantArtist:  2,
 			wantTrack:   -1,
 		},
 		{
 			name:        "no artist card anywhere is absent",
 			artist:      "Drake",
-			results:     []domain.SearchResult{evalTrack("Drake", "Someone")},
+			results:     []discovery.SearchResult{evalTrack("Drake", "Someone")},
 			k:           3,
-			wantOutcome: ArtistIntentAbsent,
+			wantOutcome: discovery.ArtistIntentAbsent,
 			wantArtist:  -1,
 			wantTrack:   0,
 		},
 		{
 			name:        "empty results are no_results",
 			artist:      "Drake",
-			results:     []domain.SearchResult{},
+			results:     []discovery.SearchResult{},
 			k:           3,
-			wantOutcome: ArtistIntentNoResults,
+			wantOutcome: discovery.ArtistIntentNoResults,
 			wantArtist:  -1,
 			wantTrack:   -1,
 		},
@@ -81,7 +90,7 @@ func TestEvalOneArtist_Outcomes(t *testing.T) {
 			artist:      "Drake",
 			searchErr:   errors.New("providers down"),
 			k:           3,
-			wantOutcome: ArtistIntentNoResults,
+			wantOutcome: discovery.ArtistIntentNoResults,
 			wantArtist:  -1,
 			wantTrack:   -1,
 		},
@@ -89,7 +98,7 @@ func TestEvalOneArtist_Outcomes(t *testing.T) {
 			name:        "symbol-only name is skipped",
 			artist:      "†††",
 			k:           3,
-			wantOutcome: ArtistIntentSkipped,
+			wantOutcome: discovery.ArtistIntentSkipped,
 			wantArtist:  -1,
 			wantTrack:   -1,
 		},
@@ -97,10 +106,10 @@ func TestEvalOneArtist_Outcomes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			searcher := &fakeSearcher{
-				byQuery: map[string][]domain.SearchResult{tt.artist: tt.results},
+				byQuery: map[string][]discovery.SearchResult{tt.artist: tt.results},
 				err:     tt.searchErr,
 			}
-			got := evalOneArtist(context.Background(), tt.artist, searcher, tt.k)
+			got := evalOneArtist(t, tt.artist, searcher, tt.k)
 
 			if got.Outcome != tt.wantOutcome {
 				t.Fatalf("outcome = %v, want %v", got.Outcome, tt.wantOutcome)
@@ -120,14 +129,14 @@ func TestEvalOneArtist_Outcomes(t *testing.T) {
 
 func TestRunArtistIntentEval_AggregationAndRates(t *testing.T) {
 	artists := []string{"Pass", "Buried", "Absent", "Ghost", "†††"}
-	searcher := &fakeSearcher{byQuery: map[string][]domain.SearchResult{
+	searcher := &fakeSearcher{byQuery: map[string][]discovery.SearchResult{
 		"Pass":   {artistCard("Pass")},
 		"Buried": {evalTrack("Buried", "Cover Band"), album("Buried", "x"), artistCard("Buried")},
 		"Absent": {evalTrack("Absent", "Someone")},
 		"Ghost":  {},
 	}}
 
-	report := RunArtistIntentEval(context.Background(), artists, searcher, 1, 2, "hard", nil)
+	report := discovery.RunArtistIntentEval(context.Background(), artists, searcher, 1, 2, "hard", nil)
 
 	if report.Total != 5 || report.Evaluated != 4 {
 		t.Errorf("Total/Evaluated = %d/%d, want 5/4", report.Total, report.Evaluated)
@@ -153,7 +162,7 @@ func TestRunArtistIntentEval_AggregationAndRates(t *testing.T) {
 	}
 
 	metrics := report.Metrics()
-	byName := map[string]NamedMetric{}
+	byName := map[string]discovery.NamedMetric{}
 	for _, m := range metrics {
 		byName[m.Name] = m
 	}
@@ -171,7 +180,7 @@ func TestRunArtistIntentEval_AggregationAndRates(t *testing.T) {
 	outcomes := map[string]bool{}
 	for _, f := range fails {
 		outcomes[f.Reason] = true
-		if f.Attrs[TokenCountAttr] == nil {
+		if f.Attrs[discovery.TokenCountAttr] == nil {
 			t.Errorf("failure %q missing token_count attr", f.Query)
 		}
 	}
@@ -183,7 +192,7 @@ func TestRunArtistIntentEval_AggregationAndRates(t *testing.T) {
 }
 
 func TestArtistIntentReport_ZeroEvaluatedRatesAreZero(t *testing.T) {
-	var r ArtistIntentReport
+	var r discovery.ArtistIntentReport
 	if r.Top1Rate() != 0 || r.TopKRate() != 0 || r.BuriedRate() != 0 || r.AbsentRate() != 0 {
 		t.Error("all rates must be 0 when nothing was evaluated (no division by zero)")
 	}
@@ -191,16 +200,16 @@ func TestArtistIntentReport_ZeroEvaluatedRatesAreZero(t *testing.T) {
 
 func TestArtistIntentOutcome_StringAndJSON(t *testing.T) {
 	tests := []struct {
-		o    ArtistIntentOutcome
+		o    discovery.ArtistIntentOutcome
 		want string
 	}{
-		{ArtistIntentPass, "pass"},
-		{ArtistIntentBuried, "buried"},
-		{ArtistIntentBelowK, "below_k"},
-		{ArtistIntentAbsent, "absent"},
-		{ArtistIntentNoResults, "no_results"},
-		{ArtistIntentSkipped, "skipped"},
-		{ArtistIntentUnknown, "unknown"},
+		{discovery.ArtistIntentPass, "pass"},
+		{discovery.ArtistIntentBuried, "buried"},
+		{discovery.ArtistIntentBelowK, "below_k"},
+		{discovery.ArtistIntentAbsent, "absent"},
+		{discovery.ArtistIntentNoResults, "no_results"},
+		{discovery.ArtistIntentSkipped, "skipped"},
+		{discovery.ArtistIntentUnknown, "unknown"},
 	}
 	for _, tt := range tests {
 		if got := tt.o.String(); got != tt.want {
@@ -214,12 +223,12 @@ func TestArtistIntentOutcome_StringAndJSON(t *testing.T) {
 }
 
 func TestRunArtistIntentEval_KeepsAResultPerQueryAndNamesTheFailures(t *testing.T) {
-	searcher := &fakeSearcher{byQuery: map[string][]domain.SearchResult{
+	searcher := &fakeSearcher{byQuery: map[string][]discovery.SearchResult{
 		"Air":   {evalTrack("Air", "Someone"), album("Air", "Someone"), evalTrack("Air Supply", "Other"), artistCard("Air")},
 		"Drake": {artistCard("Drake")},
 	}}
 
-	report := RunArtistIntentEval(context.Background(), []string{"Air", "Drake"}, searcher, 1, 3, "", nil)
+	report := discovery.RunArtistIntentEval(context.Background(), []string{"Air", "Drake"}, searcher, 1, 3, "", nil)
 
 	if len(report.Results) != 2 {
 		t.Fatalf("Results = %d, want 2", len(report.Results))
