@@ -127,6 +127,40 @@ func TestScheduler_ResumeRunsAJobThatWaitedWhilePaused(t *testing.T) {
 	})
 }
 
+func TestScheduler_ResumeStartsTheWholeBacklogOnEveryIdleWorker(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var wg sync.WaitGroup
+		acquirer := &holdingAcquirer{release: make(chan struct{})}
+		scheduler := acquisition.NewBackgroundAcquisitionScheduler(acquirer, &wg, make(chan struct{}, 4))
+		defer scheduler.Shutdown(context.Background())
+		defer close(acquirer.release)
+		user := kernel.NewUserId(uuid.New())
+
+		synctest.Wait()
+		for range 8 {
+			if err := scheduler.Schedule(context.Background(), user, kernel.NewTrackId(), ""); err != nil {
+				t.Fatalf("Schedule = %v, want nil", err)
+			}
+			synctest.Wait()
+		}
+		scheduler.Pause()
+		for range 4 {
+			acquirer.release <- struct{}{}
+		}
+		synctest.Wait()
+		if got := acquirer.count(); got != 4 {
+			t.Fatalf("%d of 8 adds started before Resume, want the 4 that held the workers and none while paused", got)
+		}
+
+		scheduler.Resume()
+		synctest.Wait()
+
+		if got := acquirer.count(); got != 8 {
+			t.Fatalf("%d of 8 adds started after Resume, want the 4 backlogged adds on the 4 idle workers before the poll interval", got)
+		}
+	})
+}
+
 func TestScheduler_AnUpgradeRunsAtOnceWhileAcquireWorkersAreIdle(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var wg sync.WaitGroup
