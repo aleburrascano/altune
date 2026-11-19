@@ -523,39 +523,35 @@ func trackHeldByJob(t *testing.T, hold func(*BackgroundAcquisitionScheduler) err
 	return scheduler, drain
 }
 
-func TestReacquireAdmission_PlainJobInFlight_RefusesAndRefundsCooldown(t *testing.T) {
-	track := readyTrack(t)
+func TestBackgroundScheduler_AReplaceWaitsOutAPlainJobOnTheSameTrack(t *testing.T) {
+	userId, trackId := shared.NewUserId(uuid.New()), domain.NewTrackId()
 	scheduler, drain := trackHeldByJob(t, func(s *BackgroundAcquisitionScheduler) error {
-		return s.Schedule(context.Background(), track.UserId, track.ID, "")
+		return s.Schedule(context.Background(), userId, trackId, "")
 	})
-	admission := NewReacquireAdmission(newFakeCooldownStore())
-	replace := func() error { return scheduler.ScheduleReplace(context.Background(), track.UserId, track.ID) }
 
-	if err := admission.Admit(context.Background(), track, replace); !errors.Is(err, acqdomain.ErrTrackJobInFlight) {
-		t.Fatalf("reacquire while a plain job runs = %v, want ErrTrackJobInFlight", err)
+	if err := scheduler.ScheduleReplace(context.Background(), userId, trackId); !errors.Is(err, acqdomain.ErrTrackJobInFlight) {
+		t.Fatalf("replace while a plain job runs = %v, want ErrTrackJobInFlight", err)
 	}
 	drain()
 
-	if err := admission.Admit(context.Background(), track, replace); err != nil {
-		t.Errorf("reacquire after the plain job settled = %v, want nil (cooldown must not be burned by the dropped replace)", err)
+	if err := scheduler.ScheduleReplace(context.Background(), userId, trackId); err != nil {
+		t.Errorf("replace after the plain job settled = %v, want nil", err)
 	}
 }
 
-func TestRetryAdmission_ReplaceInFlight_RefusesAndRefundsCooldown(t *testing.T) {
-	track := failedTrack(t)
+func TestBackgroundScheduler_ARetryWaitsOutAReplaceOnTheSameTrack(t *testing.T) {
+	userId, trackId := shared.NewUserId(uuid.New()), domain.NewTrackId()
 	scheduler, drain := trackHeldByJob(t, func(s *BackgroundAcquisitionScheduler) error {
-		return s.ScheduleReplace(context.Background(), track.UserId, track.ID)
+		return s.ScheduleReplace(context.Background(), userId, trackId)
 	})
-	admission := NewRetryAdmission(newFakeCooldownStore())
-	retry := func() error { return scheduler.Schedule(context.Background(), track.UserId, track.ID, "") }
 
-	if err := admission.Admit(context.Background(), track, retry); !errors.Is(err, acqdomain.ErrTrackJobInFlight) {
+	if err := scheduler.Schedule(context.Background(), userId, trackId, ""); !errors.Is(err, acqdomain.ErrTrackJobInFlight) {
 		t.Fatalf("retry while a replace runs = %v, want ErrTrackJobInFlight", err)
 	}
 	drain()
 
-	if err := admission.Admit(context.Background(), track, retry); err != nil {
-		t.Errorf("retry after the replace settled = %v, want nil (cooldown must not be burned by the dropped retry)", err)
+	if err := scheduler.Schedule(context.Background(), userId, trackId, ""); err != nil {
+		t.Errorf("retry after the replace settled = %v, want nil", err)
 	}
 }
 
@@ -1494,8 +1490,6 @@ func TestAcquireTrackAudioService_RefuseQueued_AlreadySettledTrack_IsQuietNoOp(t
 	}
 }
 
-func scheduleQueued() error { return nil }
-
 func TestBackgroundScheduler_InflightDedupIsNotARefusal(t *testing.T) {
 	repo := &blockingRepo{started: make(chan struct{}), release: make(chan struct{})}
 	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
@@ -1525,26 +1519,6 @@ func TestBackgroundScheduler_AfterShutdownRefuses(t *testing.T) {
 
 	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); !errors.Is(err, acqdomain.ErrSchedulerShutdown) {
 		t.Errorf("Schedule after shutdown = %v, want ErrSchedulerShutdown", err)
-	}
-}
-
-func TestAdmission_ScheduleSkippedWhenNotAdmitted(t *testing.T) {
-	called := false
-	schedule := func() error { called = true; return nil }
-
-	if err := NewRetryAdmission(newFakeCooldownStore()).Admit(context.Background(), readyTrack(t), schedule); !errors.Is(err, acqdomain.ErrRetryNotFailed) {
-		t.Fatalf("Admit = %v, want ErrRetryNotFailed", err)
-	}
-	a := NewRetryAdmission(newFakeCooldownStore())
-	track := failedTrack(t)
-	if err := a.Admit(context.Background(), track, scheduleQueued); err != nil {
-		t.Fatalf("first Admit = %v, want nil", err)
-	}
-	if err := a.Admit(context.Background(), track, schedule); !errors.Is(err, acqdomain.ErrCooldownActive) {
-		t.Fatalf("second Admit = %v, want ErrCooldownActive", err)
-	}
-	if called {
-		t.Error("schedule ran for a request admission refused")
 	}
 }
 
