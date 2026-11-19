@@ -2682,7 +2682,7 @@ func seededPendingQueue(t *testing.T) *claimSignalQueue {
 
 func driveWorkerLoops(s *BackgroundAcquisitionScheduler, loops int) {
 	for range loops + 1 {
-		s.wake <- struct{}{}
+		s.lanes.acquire <- struct{}{}
 	}
 }
 

@@ -1072,3 +1072,14 @@ func TestRunPipeline_AFailingUpdateTrackRollsBackOnlyTheEarlierStages(t *testing
 		t.Errorf("status = %v, audio_ref = %v, want ready on old-ref", got.AcquisitionStatus, got.AudioRef)
 	}
 }
+
+func TestExcludes_MatchesAcrossURLSpellings(t *testing.T) {
+	r := ReplaceState{ExcludeKeys: []string{sourceKey("https://music.youtube.com/watch?v=dQw4w9WgXcQ")}}
+
+	if !r.excludes("https://www.youtube.com/watch?v=dQw4w9WgXcQ") {
+		t.Error("a replace must not hand back the same video under its other URL")
+	}
+	if r.excludes("https://www.youtube.com/watch?v=aaaaaaaaaaa") {
+		t.Error("a different video must not be excluded")
+	}
+}

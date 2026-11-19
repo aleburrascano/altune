@@ -55,6 +55,7 @@ type BackgroundAcquisitionScheduler struct {
 	stop      chan struct{}
 	closeOnce sync.Once
 	wake      chan struct{}
+	lanes     laneWakes
 
 	admitMu sync.RWMutex
 
@@ -93,6 +94,7 @@ func NewBackgroundAcquisitionScheduler(
 		baseCtx:           ctx,
 		stop:              make(chan struct{}),
 		wake:              make(chan struct{}, 1),
+		lanes:             newLaneWakes(),
 		log:               newJobLog(),
 		now:               time.Now,
 		events:            events.NoopPublisher(),
@@ -114,6 +116,8 @@ func NewBackgroundAcquisitionScheduler(
 			s.notifier.Listen(s.baseCtx, s.wake)
 		}()
 	}
+	s.runnersWG.Add(1)
+	go s.fanOutWakes()
 
 	workers := cap(sem)
 	if workers < 1 {
@@ -121,7 +125,7 @@ func NewBackgroundAcquisitionScheduler(
 	}
 	for range workers {
 		s.runnersWG.Add(1)
-		go s.runWorker(s.claimJob)
+		go s.runWorker(s.claimJob, s.lanes.acquire)
 	}
 	s.startUpgradeWorkers()
 	return s
@@ -139,7 +143,7 @@ func (s *BackgroundAcquisitionScheduler) startUpgradeWorkers() {
 	claim := func() (ports.Job, bool) { return s.claimFrom(queue.ClaimUpgrade) }
 	for range s.upgradeWorkers {
 		s.runnersWG.Add(1)
-		go s.runWorker(claim)
+		go s.runWorker(claim, s.lanes.upgrade)
 	}
 }
 
@@ -180,27 +184,29 @@ func (s *BackgroundAcquisitionScheduler) Resume() {
 	notifyWake(s.wake)
 }
 
-func (s *BackgroundAcquisitionScheduler) runWorker(claim func() (ports.Job, bool)) {
+func (s *BackgroundAcquisitionScheduler) runWorker(claim func() (ports.Job, bool), wake chan struct{}) {
 	defer s.runnersWG.Done()
 	for {
 		if s.closed.Load() {
 			return
 		}
-		if s.paused.Load() {
-			if !s.idleWait() {
-				return
-			}
-			continue
-		}
-		job, ok := claim()
+		job, ok := s.nextJob(claim)
 		if !ok {
-			if !s.idleWait() {
+			if !s.idleWait(wake) {
 				return
 			}
 			continue
 		}
+		notifyWake(wake)
 		s.runClaimedJob(job)
 	}
+}
+
+func (s *BackgroundAcquisitionScheduler) nextJob(claim func() (ports.Job, bool)) (ports.Job, bool) {
+	if s.paused.Load() {
+		return ports.Job{}, false
+	}
+	return claim()
 }
 
 func (s *BackgroundAcquisitionScheduler) claimJob() (ports.Job, bool) {
@@ -234,11 +240,33 @@ func (s *BackgroundAcquisitionScheduler) claimNext(claim claimFunc) (ports.Job, 
 	return job, true
 }
 
-func (s *BackgroundAcquisitionScheduler) idleWait() bool {
+type laneWakes struct {
+	acquire chan struct{}
+	upgrade chan struct{}
+}
+
+func newLaneWakes() laneWakes {
+	return laneWakes{acquire: make(chan struct{}, 1), upgrade: make(chan struct{}, 1)}
+}
+
+func (s *BackgroundAcquisitionScheduler) fanOutWakes() {
+	defer s.runnersWG.Done()
+	for {
+		select {
+		case <-s.wake:
+			notifyWake(s.lanes.acquire)
+			notifyWake(s.lanes.upgrade)
+		case <-s.stop:
+			return
+		}
+	}
+}
+
+func (s *BackgroundAcquisitionScheduler) idleWait(wake <-chan struct{}) bool {
 	timer := time.NewTimer(s.pollInterval)
 	defer timer.Stop()
 	select {
-	case <-s.wake:
+	case <-wake:
 		return true
 	case <-timer.C:
 		return true

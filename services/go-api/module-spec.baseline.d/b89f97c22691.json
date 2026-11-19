@@ -1,0 +1,7 @@
+{
+  "removed": [
+    "T1 internal/acquisition/service/source_key_test.go is in package service, so it sees inside the module: use package service_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}
