@@ -9,6 +9,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -35,7 +36,7 @@ func resolveOneReadyTrack(t *testing.T, opts ...func(*catalog.AudioURLHandler)) 
 	repo, router := audioURLRoutes(catalog.NewInMemoryAudioStore(), opts...)
 	track := catalog.SeedReadyTrack(t, repo, catalog.FixtureUserId(), "Track", "Artist", "Album", "audio/ok.opus")
 
-	rec := postJSON(t, router, "/audio-urls", resolveRequest{TrackIDs: []string{track.ID.UUID().String()}})
+	rec := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{track.ID.UUID().String()}}))
 
 	assertStatus(t, rec, http.StatusOK)
 	var resp map[string]any
@@ -68,10 +69,10 @@ func unknownTrackIDs(n int) []string {
 func TestAudioURLs_TheBatchCapIsTwoHundred(t *testing.T) {
 	_, router := audioURLRoutes(catalog.NewInMemoryAudioStore())
 
-	atCap := postJSON(t, router, "/audio-urls", resolveRequest{TrackIDs: unknownTrackIDs(audioURLBatchCap)})
+	atCap := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: unknownTrackIDs(audioURLBatchCap)}))
 	assertStatus(t, atCap, http.StatusOK)
 
-	overCap := postJSON(t, router, "/audio-urls", resolveRequest{TrackIDs: unknownTrackIDs(audioURLBatchCap + 1)})
+	overCap := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: unknownTrackIDs(audioURLBatchCap + 1)}))
 	assertStatus(t, overCap, http.StatusBadRequest)
 	assertErrorCode(t, overCap, "catalog.batch_too_large")
 }
@@ -79,7 +80,7 @@ func TestAudioURLs_TheBatchCapIsTwoHundred(t *testing.T) {
 func TestAudioURLs_RejectsAMalformedTrackIDWithItsOwnCode(t *testing.T) {
 	_, router := audioURLRoutes(catalog.NewInMemoryAudioStore())
 
-	rec := postJSON(t, router, "/audio-urls", resolveRequest{TrackIDs: []string{"not-a-uuid"}})
+	rec := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{"not-a-uuid"}}))
 
 	assertStatus(t, rec, http.StatusBadRequest)
 	assertErrorCode(t, rec, "catalog.invalid_track_id")
@@ -89,7 +90,7 @@ func TestAudioURLs_ResponseIsNeverCached(t *testing.T) {
 	repo, router := audioURLRoutes(catalog.NewInMemoryAudioStore())
 	track := catalog.SeedReadyTrack(t, repo, catalog.FixtureUserId(), "Track", "Artist", "Album", "audio/ok.opus")
 
-	rec := postJSON(t, router, "/audio-urls", resolveRequest{TrackIDs: []string{track.ID.UUID().String()}})
+	rec := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{track.ID.UUID().String()}}))
 
 	assertStatus(t, rec, http.StatusOK)
 	assertPrivateAudioHeaders(t, rec, "private, no-store")
@@ -117,7 +118,8 @@ func TestCorrelationID_ReachesCatalogServiceLogs(t *testing.T) {
 	catalog.NewAudioURLHandler(catalog.NewAudioURLService(repo, failingSigner{catalog.NewInMemoryAudioStore()})).Routes(router)
 
 	const inbound = "trace-abc12345"
-	req := jsonRequest(t, http.MethodPost, "/audio-urls", resolveRequest{TrackIDs: []string{track.ID.UUID().String()}})
+	req := httptest.NewRequest(http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{track.ID.UUID().String()}}))
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Correlation-ID", inbound)
 	rec := sendAs(router, req, catalog.FixtureUserId())
 

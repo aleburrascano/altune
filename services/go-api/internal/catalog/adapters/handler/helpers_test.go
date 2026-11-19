@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/shared/requestuser"
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -30,24 +29,95 @@ func asBearer(next http.Handler) http.Handler {
 	})
 }
 
-func trackRoutes(repo *catalog.InMemoryTrackRepo, opts ...func(*catalog.TrackHandler)) chi.Router {
-	return trackRoutesWithBackfill(repo, catalog.NewBackfillFeaturedService(repo, repo, catalog.InMemoryFeaturedResolver{}), opts...)
+type trackDeps struct {
+	scheduler *catalog.InMemoryScheduler
+	backfill  *catalog.BackfillFeaturedService
 }
 
-func trackRoutesWithBackfill(repo *catalog.InMemoryTrackRepo, backfill *catalog.BackfillFeaturedService, opts ...func(*catalog.TrackHandler)) chi.Router {
+func (d trackDeps) addOptions() []func(*catalog.AddTrackService) {
+	if d.scheduler == nil {
+		return nil
+	}
+	return []func(*catalog.AddTrackService){catalog.WithAcquisitionScheduler(d.scheduler)}
+}
+
+func (d trackDeps) backfillFor(repo *catalog.InMemoryTrackRepo) *catalog.BackfillFeaturedService {
+	if d.backfill != nil {
+		return d.backfill
+	}
+	return catalog.NewBackfillFeaturedService(repo, repo, catalog.InMemoryFeaturedResolver{})
+}
+
+func newRouter() chi.Router {
+	router := chi.NewRouter()
+	router.Use(asBearer)
+	return router
+}
+
+func trackRoutes(repo *catalog.InMemoryTrackRepo, opts ...func(*catalog.TrackHandler)) chi.Router {
+	return trackRoutesWith(repo, trackDeps{}, opts...)
+}
+
+func trackRoutesWith(repo *catalog.InMemoryTrackRepo, deps trackDeps, opts ...func(*catalog.TrackHandler)) chi.Router {
+	router := newRouter()
+	mountTracks(router, repo, deps, opts...)
+	return router
+}
+
+func mountTracks(router chi.Router, repo *catalog.InMemoryTrackRepo, deps trackDeps, opts ...func(*catalog.TrackHandler)) {
 	tracks := catalog.NewTrackHandler(
-		catalog.NewAddTrackService(repo),
+		catalog.NewAddTrackService(repo, deps.addOptions()...),
 		catalog.NewListTracksService(repo),
 		catalog.NewGetTrackStatusService(repo),
 		catalog.NewDeleteTrackService(repo, catalog.NewInMemoryAudioStore()),
 		catalog.NewSetTrackNumberService(repo),
-		catalog.NewFeaturedArtistHandler(backfill, catalog.NewListFeaturingService(repo)),
+		catalog.NewFeaturedArtistHandler(deps.backfillFor(repo), catalog.NewListFeaturingService(repo)),
 		opts...,
 	)
-	router := chi.NewRouter()
-	router.Use(asBearer)
 	router.Route("/tracks", func(r chi.Router) { r.Mount("/", tracks.Routes()) })
+}
+
+func playlistRoutes(playlists *catalog.InMemoryPlaylistRepo, tracks *catalog.InMemoryTrackRepo, opts ...func(*catalog.PlaylistHandler)) chi.Router {
+	router := newRouter()
+	mountPlaylists(router, playlists, tracks, opts...)
 	return router
+}
+
+func mountPlaylists(router chi.Router, playlists *catalog.InMemoryPlaylistRepo, tracks *catalog.InMemoryTrackRepo, opts ...func(*catalog.PlaylistHandler)) {
+	h := catalog.NewPlaylistHandler(
+		catalog.NewPlaylistLifecycleService(playlists),
+		catalog.NewPlaylistMembershipService(playlists, tracks),
+		opts...,
+	)
+	router.Mount("/playlists", h.Routes())
+}
+
+func request(t *testing.T, router http.Handler, method, path string, body io.Reader) *httptest.ResponseRecorder {
+	t.Helper()
+	return requestAs(t, router, catalog.FixtureUserId(), method, path, body)
+}
+
+func requestAs(t *testing.T, router http.Handler, user shared.UserId, method, path string, body io.Reader) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(method, path, body)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	return sendAs(router, req, user)
+}
+
+func requestAnonymous(t *testing.T, router http.Handler, method, path string, body io.Reader) *httptest.ResponseRecorder {
+	t.Helper()
+	return sendAnonymous(router, httptest.NewRequest(method, path, body))
+}
+
+func newWriteRig(trackOpts []func(*catalog.TrackHandler), playlistOpts []func(*catalog.PlaylistHandler)) *writeRig {
+	tracks := catalog.NewInMemoryTrackRepo()
+	playlists := catalog.NewInMemoryPlaylistRepo()
+	router := newRouter()
+	mountTracks(router, tracks, trackDeps{}, trackOpts...)
+	mountPlaylists(router, playlists, tracks, playlistOpts...)
+	return &writeRig{router: router, tracks: tracks, playlists: playlists}
 }
 
 func sendAs(router http.Handler, req *http.Request, user shared.UserId) *httptest.ResponseRecorder {
@@ -59,26 +129,6 @@ func sendAnonymous(router http.Handler, req *http.Request) *httptest.ResponseRec
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	return rec
-}
-
-func serve(router http.Handler, method, path string) *httptest.ResponseRecorder {
-	return sendAs(router, httptest.NewRequest(method, path, nil), catalog.FixtureUserId())
-}
-
-func jsonRequest(t *testing.T, method, path string, v any) *http.Request {
-	t.Helper()
-	body, err := json.Marshal(v)
-	if err != nil {
-		t.Fatalf("encode request body: %v", err)
-	}
-	req := httptest.NewRequest(method, path, bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	return req
-}
-
-func postJSON(t *testing.T, router http.Handler, path string, v any) *httptest.ResponseRecorder {
-	t.Helper()
-	return sendAs(router, jsonRequest(t, http.MethodPost, path, v), catalog.FixtureUserId())
 }
 
 func assertStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
@@ -170,86 +220,10 @@ func jsonBody(t *testing.T, v any) *bytes.Buffer {
 	return buf
 }
 
-func request(t *testing.T, router http.Handler, method, path string, body io.Reader) *httptest.ResponseRecorder {
-	t.Helper()
-	req := httptest.NewRequest(method, path, body)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	return sendAs(router, req, catalog.FixtureUserId())
-}
-
-func requestAnonymous(t *testing.T, router http.Handler, method, path string, body io.Reader) *httptest.ResponseRecorder {
-	t.Helper()
-	return sendAnonymous(router, httptest.NewRequest(method, path, body))
-}
-
-func makeTrack(userId shared.UserId, title, artist, album string) *catalog.Track {
-	track, err := catalog.NewTrack(userId, title, artist, album)
-	if err != nil {
-		panic(fmt.Sprintf("make track %q: %v", title, err))
-	}
-	return track
-}
-
-func makePlaylist(userId shared.UserId, name string) *catalog.Playlist {
-	playlist, err := catalog.NewPlaylist(userId, name, time.Now())
-	if err != nil {
-		panic(fmt.Sprintf("make playlist %q: %v", name, err))
-	}
-	return playlist
-}
-
-func buildTrackHandler(repo *catalog.InMemoryTrackRepo, scheduler *catalog.InMemoryScheduler) chi.Router {
-	var addOpts []func(*catalog.AddTrackService)
-	if scheduler != nil {
-		addOpts = append(addOpts, catalog.WithAcquisitionScheduler(scheduler))
-	}
-	tracks := catalog.NewTrackHandler(
-		catalog.NewAddTrackService(repo, addOpts...),
-		catalog.NewListTracksService(repo),
-		catalog.NewGetTrackStatusService(repo),
-		catalog.NewDeleteTrackService(repo, catalog.NewInMemoryAudioStore()),
-		catalog.NewSetTrackNumberService(repo),
-		catalog.NewFeaturedArtistHandler(
-			catalog.NewBackfillFeaturedService(repo, repo, catalog.InMemoryFeaturedResolver{}),
-			catalog.NewListFeaturingService(repo),
-		),
-	)
-	router := chi.NewRouter()
-	router.Use(asBearer)
-	router.Route("/tracks", func(r chi.Router) { r.Mount("/", tracks.Routes()) })
-	return router
-}
-
-func buildPlaylistHandler(playlists *catalog.InMemoryPlaylistRepo, tracks *catalog.InMemoryTrackRepo) chi.Router {
-	h := catalog.NewPlaylistHandler(
-		catalog.NewPlaylistLifecycleService(playlists),
-		catalog.NewPlaylistMembershipService(playlists, tracks),
-	)
-	router := chi.NewRouter()
-	router.Use(asBearer)
-	router.Mount("/playlists", h.Routes())
-	return router
-}
-
 type writeRig struct {
 	router    chi.Router
 	tracks    *catalog.InMemoryTrackRepo
 	playlists *catalog.InMemoryPlaylistRepo
-}
-
-func newWriteRig(trackOpts []func(*catalog.TrackHandler), playlistOpts []func(*catalog.PlaylistHandler)) *writeRig {
-	tracks := catalog.NewInMemoryTrackRepo()
-	playlists := catalog.NewInMemoryPlaylistRepo()
-	playlistH := catalog.NewPlaylistHandler(
-		catalog.NewPlaylistLifecycleService(playlists),
-		catalog.NewPlaylistMembershipService(playlists, tracks),
-		playlistOpts...,
-	)
-	r := trackRoutes(tracks, trackOpts...)
-	r.Mount("/playlists", playlistH.Routes())
-	return &writeRig{router: r, tracks: tracks, playlists: playlists}
 }
 
 func newThrottledWriteRig(now func() time.Time) *writeRig {
@@ -261,7 +235,7 @@ func newThrottledWriteRig(now func() time.Time) *writeRig {
 
 func (rig *writeRig) post(t *testing.T, user shared.UserId, path string, body any) *httptest.ResponseRecorder {
 	t.Helper()
-	return sendAs(rig.router, jsonRequest(t, http.MethodPost, path, body), user)
+	return requestAs(t, rig.router, user, http.MethodPost, path, jsonBody(t, body))
 }
 
 func (rig *writeRig) createTrack(t *testing.T, user shared.UserId, title string) *httptest.ResponseRecorder {

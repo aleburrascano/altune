@@ -23,7 +23,6 @@ var (
 var (
 	CleanSearchKeys           = domain.CleanSearchKeys
 	KnownCatalogProviders     = domain.KnownCatalogProviders
-	NewPlaylist               = domain.NewPlaylist
 	NewTrack                  = domain.NewTrack
 	NewTrackId                = domain.NewTrackId
 	NormalizeCatalogMBID      = domain.NormalizeCatalogMBID

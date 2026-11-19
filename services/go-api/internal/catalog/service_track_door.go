@@ -5,8 +5,8 @@ import track "altune/go-api/internal/catalog/service/track"
 type (
 	AddTrackInput         = track.AddTrackInput
 	AddTrackService       = track.AddTrackService
-	FeaturedArtistDTO     = track.FeaturedArtistDTO
 	DeleteTrackService    = track.DeleteTrackService
+	FeaturedArtistDTO     = track.FeaturedArtistDTO
 	GetTrackStatusService = track.GetTrackStatusService
 	ListTracksService     = track.ListTracksService
 	SetTrackNumberService = track.SetTrackNumberService
