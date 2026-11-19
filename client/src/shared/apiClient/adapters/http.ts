@@ -1,4 +1,4 @@
-import { isWebPlatform, platformName, telemetryVersion, shareAnalytics } from '@shared/device';
+import { isWebPlatform, platformName, telemetryVersion } from '@shared/device';
 import {
   supabase,
   withinAuthDeadline,
@@ -142,11 +142,6 @@ function tunnelWarningHeader(): Record<string, string> {
   return { 'ngrok-skip-browser-warning': '1' };
 }
 
-function analyticsHeader(): Record<string, string> {
-  if (shareAnalytics()) return {};
-  return { 'X-Altune-Analytics': 'off' };
-}
-
 async function requestHeaders(
   path: string,
   correlationId: string | undefined,
@@ -157,7 +152,6 @@ async function requestHeaders(
     ...(correlationId === undefined ? {} : { [CORRELATION_HEADER]: correlationId }),
     'X-Altune-App-Version': telemetryVersion(),
     'X-Altune-Platform': platformName(),
-    ...analyticsHeader(),
     ...((init?.headers ?? {}) as Record<string, string>),
     Authorization: await authorization(path, correlationId),
   };
