@@ -5,6 +5,7 @@ import service "altune/go-api/internal/acquisition/service"
 type (
 	AcquireTrackAudioService       = service.AcquireTrackAudioService
 	BackgroundAcquisitionScheduler = service.BackgroundAcquisitionScheduler
+	ConfidenceEvidence             = service.Evidence
 	TrackRef                       = service.TrackRef
 	VerdictKind                    = service.VerdictKind
 	VerifySkipCounter              = service.VerifySkipCounter
@@ -20,6 +21,8 @@ var (
 	NewReacquireAdmission             = service.NewReacquireAdmission
 	NewRetryAdmission                 = service.NewRetryAdmission
 	NewSourceRegistry                 = service.NewSourceRegistry
+	ScoreConfidence                   = service.ScoreConfidence
+	SourceKindOf                      = service.SourceKindOf
 	SweepStaleTempDirs                = service.SweepStaleTempDirs
 	UnrequestedQualifiers             = service.UnrequestedQualifiers
 	UploaderSourceKind                = service.UploaderSourceKind
@@ -55,8 +58,12 @@ var (
 type DownloadLimiter = service.DownloadLimiter
 
 const (
-	VerdictContradicted = service.VerdictContradicted
-	VerdictHard         = service.VerdictHard
+	VerdictContradicted  = service.VerdictContradicted
+	VerdictDifferentSong = service.VerdictDifferentSong
+	VerdictHard          = service.VerdictHard
+	VerdictOtherVersion  = service.VerdictOtherVersion
+	VerdictSoft          = service.VerdictSoft
+	VerdictUnknown       = service.VerdictUnknown
 )
 
 var ErrInPlaceUnavailable = service.ErrInPlaceUnavailable

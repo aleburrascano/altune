@@ -57,7 +57,7 @@ func unknownConfidence(e Evidence, trackSeconds float64) float64 {
 	if len(e.Qualifiers) > 0 {
 		total -= qualifierPenalty
 	}
-	return math.Round(math.Min(math.Max(total, 0), unknownCap)*confidenceScale) / confidenceScale
+	return math.Round(total*confidenceScale) / confidenceScale
 }
 
 func channelBonus(class string) float64 {

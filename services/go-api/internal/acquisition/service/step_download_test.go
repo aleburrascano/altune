@@ -2407,6 +2407,11 @@ func TestJudgeAttempt_AnOtherVersionIsHeldOrRejectedByLength(t *testing.T) {
 		{"plain title on length is accepted", "Artist - Song", 200, attemptAccepted, ""},
 		{"other version on length is held", "Song (Radio Edit)", 203, attemptHeld, ""},
 		{"other version 30s off is rejected", "Song (Radio Edit)", 230, 0, fmt.Sprintf(rejectOtherVersionOffLengthFmt, 30.0)},
+		{"other version exactly the 6s allowance long is held", "Song (Radio Edit)", 206, attemptHeld, ""},
+		{"other version exactly the 6s allowance short is held", "Song (Radio Edit)", 194, attemptHeld, ""},
+		{"other version just past the allowance long is rejected", "Song (Radio Edit)", 206.5, 0, fmt.Sprintf(rejectOtherVersionOffLengthFmt, 6.5)},
+		{"other version just past the allowance short is rejected", "Song (Radio Edit)", 193.5, 0, fmt.Sprintf(rejectOtherVersionOffLengthFmt, -6.5)},
+		{"other version inside the loose window but past the allowance is rejected", "Song (Radio Edit)", 214, 0, fmt.Sprintf(rejectOtherVersionOffLengthFmt, 14.0)},
 		{"other version with no probed length is rejected", "Song (Radio Edit)", 0, 0, rejectOtherVersionLengthUnknown},
 	}
 	for _, tt := range tests {
