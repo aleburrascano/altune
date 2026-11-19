@@ -290,14 +290,14 @@ func (failingNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*
 	return nil, errors.New("lookup now-playing track: context deadline exceeded")
 }
 
-func getResume(t *testing.T, nowPlaying nowPlayingReader, opts ...playback.QueueServiceOption) (int, map[string]json.RawMessage) {
+func getResume(t *testing.T, nowPlaying nowPlayingReader) (int, map[string]json.RawMessage) {
 	t.Helper()
 	repo := &recordingRepo{saved: &playback.QueueState{
 		TrackIds:     []string{"00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"},
 		CurrentIdx:   1,
 		NaturalOrder: []string{"00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"},
 	}}
-	h := playback.NewQueueHandler(playback.NewQueueService(repo, nowPlaying, opts...))
+	h := playback.NewQueueHandler(playback.NewQueueService(repo, nowPlaying))
 	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
 	req = req.WithContext(requestuser.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
 	rec := httptest.NewRecorder()
@@ -329,33 +329,6 @@ func TestHandleGet_FailedNowPlayingLookupIsDistinguishableFromAbsentTrack(t *tes
 	}
 	if v, ok := absent["current_track_unavailable"]; ok {
 		t.Errorf("an absent track is not a failure; current_track_unavailable must be omitted, got %s", v)
-	}
-}
-
-type panickingNowPlaying struct{ t *testing.T }
-
-func (p panickingNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*playback.NowPlayingTrack, error) {
-	p.t.Error("nowPlaying.Lookup called with PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED=false")
-	return nil, errors.New("lookup must not run while disabled")
-}
-
-func TestHandleGet_DisabledNowPlayingEnrichmentSkipsLookupAndStillResumes(t *testing.T) {
-	code, body := getResume(t, panickingNowPlaying{t: t}, playback.WithNowPlayingEnrichment(false))
-
-	if code != http.StatusOK {
-		t.Fatalf("resume must still succeed with 200 when enrichment is disabled, got %d", code)
-	}
-	if got := string(body["current_index"]); got != "1" {
-		t.Errorf("resume must still return the queue state, current_index=%q", got)
-	}
-	if got := string(body["track_ids"]); got != `["00000000-0000-4000-8000-000000000001","00000000-0000-4000-8000-000000000002"]` {
-		t.Errorf("resume must still return the queue track ids, got %s", got)
-	}
-	if v, ok := body["current_track"]; ok {
-		t.Errorf("disabled enrichment must omit current_track, got %s", v)
-	}
-	if v, ok := body["current_track_unavailable"]; ok {
-		t.Errorf("disabled enrichment is not a failure; current_track_unavailable must be omitted, got %s", v)
 	}
 }
 
@@ -404,11 +377,11 @@ func TestHandleSavePosition_InvalidBodyIsBadRequest(t *testing.T) {
 }
 
 func TestHandleSavePosition_UnappliedSaveIsConflictWithItsCode(t *testing.T) {
-	for code, err := range map[string]error{
-		"playback.stale_queue_write":       fmt.Errorf("update: %w", playback.ErrStaleQueueWrite),
-		"playback.queue_position_mismatch": fmt.Errorf("update: %w", playback.ErrQueuePositionMismatch),
+	for want, err := range map[string]error{
+		`{"detail":"queue state not saved: a newer snapshot is already stored","code":"playback.stale_queue_write"}`:                               fmt.Errorf("update: %w", playback.ErrStaleQueueWrite),
+		`{"detail":"queue position not saved: the stored queue does not hold that track at that index","code":"playback.queue_position_mismatch"}`: fmt.Errorf("update: %w", playback.ErrQueuePositionMismatch),
 	} {
-		t.Run(code, func(t *testing.T) {
+		t.Run(want, func(t *testing.T) {
 			rec := httptest.NewRecorder()
 
 			newHandler(&recordingRepo{positionErr: err}).Routes().ServeHTTP(rec, positionPut(`{"current_index":0,"current_track_id":"00000000-0000-4000-8000-000000000001","position_ms":1}`))
@@ -416,8 +389,8 @@ func TestHandleSavePosition_UnappliedSaveIsConflictWithItsCode(t *testing.T) {
 			if rec.Code != http.StatusConflict {
 				t.Fatalf("got status %d body %q, want 409", rec.Code, rec.Body.String())
 			}
-			if !strings.Contains(rec.Body.String(), `"code":"`+code+`"`) {
-				t.Errorf("expected code %q in body, got %q", code, rec.Body.String())
+			if got := strings.TrimSpace(rec.Body.String()); got != want {
+				t.Errorf("body = %s, want %s", got, want)
 			}
 		})
 	}

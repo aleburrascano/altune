@@ -1,4 +1,4 @@
-package domain
+package ports
 
 type StaleWriteError struct {
 	msg  string

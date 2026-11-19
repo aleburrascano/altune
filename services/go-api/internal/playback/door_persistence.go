@@ -15,8 +15,8 @@ type (
 const RepeatAll = domain.RepeatAll
 
 var (
-	ErrStaleQueueWrite       = domain.ErrStaleQueueWrite
-	ErrQueueStateUnavailable = domain.ErrQueueStateUnavailable
-	ErrQueuePositionMismatch = domain.ErrQueuePositionMismatch
+	ErrStaleQueueWrite       = ports.ErrStaleQueueWrite
+	ErrQueueStateUnavailable = ports.ErrQueueStateUnavailable
+	ErrQueuePositionMismatch = ports.ErrQueuePositionMismatch
 	ErrCorruptStoredState    = ports.ErrCorruptStoredState
 )

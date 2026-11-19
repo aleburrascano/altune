@@ -535,44 +535,27 @@ func (c *countingNowPlaying) Lookup(_ context.Context, _ shared.UserId, trackId 
 	return &playback.NowPlayingTrack{Id: trackId, Title: "Track " + trackId}, nil
 }
 
-func TestQueueService_ResumeView_NowPlayingEnrichmentKillSwitch(t *testing.T) {
-	tests := []struct {
-		name      string
-		opts      []playback.QueueServiceOption
-		wantCalls int
-		wantTrack bool
-	}{
-		{name: "default enabled", opts: nil, wantCalls: 1, wantTrack: true},
-		{name: "explicitly enabled", opts: []playback.QueueServiceOption{playback.WithNowPlayingEnrichment(true)}, wantCalls: 1, wantTrack: true},
-		{name: "disabled", opts: []playback.QueueServiceOption{playback.WithNowPlayingEnrichment(false)}, wantCalls: 0, wantTrack: false},
+func TestQueueService_ResumeView_LooksUpTheNowPlayingTrackWhilePlaying(t *testing.T) {
+	reader := &countingNowPlaying{}
+	svc := playback.NewQueueService(newInMemoryQueueRepo(), reader)
+	user := testUser()
+	if err := svc.Save(context.Background(), user, playback.SaveQueueStateInput{
+		TrackIds: []string{trk("x"), trk("y")}, CurrentIdx: 1, RepeatMode: "off",
+	}); err != nil {
+		t.Fatalf("save: %v", err)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			reader := &countingNowPlaying{}
-			svc := playback.NewQueueService(newInMemoryQueueRepo(), reader, tt.opts...)
-			user := testUser()
-			if err := svc.Save(context.Background(), user, playback.SaveQueueStateInput{
-				TrackIds: []string{trk("x"), trk("y")}, CurrentIdx: 1, RepeatMode: "off",
-			}); err != nil {
-				t.Fatalf("save: %v", err)
-			}
 
-			view, err := svc.ResumeView(context.Background(), user)
-			if err != nil {
-				t.Fatalf("resume must succeed regardless of the switch: %v", err)
-			}
-			if reader.calls != tt.wantCalls {
-				t.Errorf("nowPlaying.Lookup calls = %d, want %d", reader.calls, tt.wantCalls)
-			}
-			if got := view.CurrentTrack != nil; got != tt.wantTrack {
-				t.Errorf("current track embedded = %v, want %v (%+v)", got, tt.wantTrack, view.CurrentTrack)
-			}
-			if view.CurrentTrackUnavailable {
-				t.Error("a disabled lookup is an operator choice, not a dependency fault; CurrentTrackUnavailable must stay false")
-			}
-			if view.State == nil || len(view.State.TrackIds) != 2 || view.State.CurrentIdx != 1 {
-				t.Errorf("resume must still return the stored queue, got %+v", view.State)
-			}
-		})
+	view, err := svc.ResumeView(context.Background(), user)
+	if err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+	if reader.calls != 1 {
+		t.Errorf("nowPlaying.Lookup calls = %d, want 1 while a track is playing", reader.calls)
+	}
+	if view.CurrentTrack == nil || view.CurrentTrack.Id != trk("y") {
+		t.Errorf("current track = %+v, want the playing track %s embedded", view.CurrentTrack, trk("y"))
+	}
+	if view.CurrentTrackUnavailable {
+		t.Error("a successful lookup must not mark the current track unavailable")
 	}
 }

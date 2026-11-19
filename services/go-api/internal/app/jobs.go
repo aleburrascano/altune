@@ -39,9 +39,11 @@ var jobTable = []jobSpec{
 	{jobUnreleasedRefresh, true},
 }
 
+var alwaysOnJobs = map[jobName]bool{jobDeletedIdentityErasure: true}
+
 var (
-	knownJobNames = jobNamesWhere(func(jobSpec) bool { return true })
-	alertableJobs = jobNamesWhere(func(spec jobSpec) bool { return spec.alertable })
+	switchableJobNames = jobNamesWhere(func(spec jobSpec) bool { return !alwaysOnJobs[spec.name] })
+	alertableJobs      = jobNamesWhere(func(spec jobSpec) bool { return spec.alertable })
 )
 
 func jobNamesWhere(keep func(jobSpec) bool) []jobName {
@@ -54,8 +56,8 @@ func jobNamesWhere(keep func(jobSpec) bool) []jobName {
 	return names
 }
 
-func isKnownJobName(name jobName) bool {
-	for _, known := range knownJobNames {
+func isSwitchableJobName(name jobName) bool {
+	for _, known := range switchableJobNames {
 		if known == name {
 			return true
 		}

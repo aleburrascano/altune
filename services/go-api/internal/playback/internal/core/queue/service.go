@@ -22,23 +22,12 @@ type SaveQueueStateInput struct {
 }
 
 type Service struct {
-	repo               ports.QueueStateRepository
-	nowPlaying         ports.NowPlayingReader
-	enrichmentDisabled bool
+	repo       ports.QueueStateRepository
+	nowPlaying ports.NowPlayingReader
 }
 
-type Option func(*Service)
-
-func WithNowPlayingEnrichment(enabled bool) Option {
-	return func(s *Service) { s.enrichmentDisabled = !enabled }
-}
-
-func New(repo ports.QueueStateRepository, nowPlaying ports.NowPlayingReader, opts ...Option) *Service {
-	s := &Service{repo: repo, nowPlaying: nowPlaying}
-	for _, opt := range opts {
-		opt(s)
-	}
-	return s
+func New(repo ports.QueueStateRepository, nowPlaying ports.NowPlayingReader) *Service {
+	return &Service{repo: repo, nowPlaying: nowPlaying}
 }
 
 func (s *Service) Save(ctx context.Context, userId shared.UserId, input SaveQueueStateInput) error {
@@ -131,7 +120,7 @@ func (s *Service) ResumeView(ctx context.Context, userId shared.UserId) (*Resume
 
 	view := &ResumeView{State: state}
 	trackId, isPlaying := state.CurrentTrackId()
-	if !isPlaying || s.enrichmentDisabled {
+	if !isPlaying {
 		return view, nil
 	}
 

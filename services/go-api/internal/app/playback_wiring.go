@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 )
 
@@ -22,7 +21,7 @@ type playbackWiring struct {
 func (a *App) wirePlayback(ctx context.Context, trackRepo *catalog.PgxTrackRepository) playbackWiring {
 	metrics := playback.NewExpvarPlaybackMetrics()
 	queueStateRepo := playback.NewPgxQueueStateRepository(a.pool, playback.WithQueueStateMetrics(metrics))
-	queueSvc := newQueueService(ctx, queueStateRepo, trackRepo, metrics, a.cfg.HasNowPlayingEnrichment())
+	queueSvc := newQueueService(queueStateRepo, trackRepo, metrics)
 	return playbackWiring{
 		handler: newQueueHandler(queueSvc, metrics, queueRateLimit(a.cfg)),
 		forgetDeletedIdentities: playback.NewErasureSweeper(
@@ -39,21 +38,15 @@ type playbackMetricsSink interface {
 }
 
 func newQueueService(
-	ctx context.Context,
 	queueStateRepo playback.QueueStateRepository,
 	trackRepo *catalog.PgxTrackRepository,
 	metrics playbackMetricsSink,
-	enrichmentEnabled bool,
 ) *playback.QueueService {
-	if !enrichmentEnabled {
-		slog.InfoContext(ctx, "playback: now-playing enrichment disabled via PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED")
-	}
 	nowPlayingReader := playback.NewNowPlayingReader(catalogTrackSource{tracks: trackRepo},
 		playback.WithNowPlayingMetrics(metrics),
 		playback.WithNowPlayingLookupTimeout(nowPlayingLookupTimeout),
 		playback.WithNowPlayingClock(time.Now))
-	return playback.NewQueueService(queueStateRepo, nowPlayingReader,
-		playback.WithNowPlayingEnrichment(enrichmentEnabled))
+	return playback.NewQueueService(queueStateRepo, nowPlayingReader)
 }
 
 func newQueueHandler(queueSvc *playback.QueueService, metrics playbackMetricsSink, limit playback.QueueStateRateLimit) *playback.QueueHandler {
