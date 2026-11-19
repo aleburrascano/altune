@@ -123,17 +123,22 @@ const bulkTracksSQL = `INSERT INTO tracks (id, user_id, title, artist, dedup_key
 
 func seedBulkTracks(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId, n int) []catalog.TrackId {
 	t.Helper()
-	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE user_id = $1`, userId.UUID())
-	})
 	ids := make([]catalog.TrackId, n)
 	for i := range ids {
 		ids[i] = catalog.NewTrackId()
 	}
-	if _, err := pool.Exec(ctx, bulkTracksSQL, trackUUIDs(ids), userId.UUID()); err != nil {
-		t.Fatalf("seed %d tracks: %v", n, err)
-	}
+	insertBulkTracks(ctx, t, pool, userId, ids)
 	return ids
+}
+
+func insertBulkTracks(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId, ids []catalog.TrackId) {
+	t.Helper()
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE user_id = $1`, userId.UUID())
+	})
+	if _, err := pool.Exec(ctx, bulkTracksSQL, trackUUIDs(ids), userId.UUID()); err != nil {
+		t.Fatalf("seed %d tracks: %v", len(ids), err)
+	}
 }
 
 func trackUUIDs(ids []catalog.TrackId) []uuid.UUID {
