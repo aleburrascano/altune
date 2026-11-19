@@ -1,8 +1,7 @@
-package handler
+package handler_test
 
 import (
-	"altune/go-api/internal/catalog/catalogtest"
-	trackservice "altune/go-api/internal/catalog/service/track"
+	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
 	"encoding/json"
@@ -71,18 +70,18 @@ func TestHandleListTracks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := catalogtest.NewTrackRepo()
+			repo := catalog.NewInMemoryTrackRepo()
 			for i := 0; i < tt.seedCount; i++ {
-				repo.Seed(makeTrack(testUserId, "Track "+string(rune('A'+i)), "Artist", "Album"))
+				repo.Seed(makeTrack(catalog.FixtureUserId(), "Track "+string(rune('A'+i)), "Artist", "Album"))
 			}
-			_, router := buildTrackHandler(repo, nil)
+			router := buildTrackHandler(repo, nil)
 
-			rec := serve(t, router, http.MethodGet, "/tracks"+tt.query, nil)
+			rec := request(t, router, http.MethodGet, "/tracks"+tt.query, nil)
 
 			assertStatus(t, rec, tt.wantStatus)
 			assertJSON(t, rec)
 
-			var body ListTracksResponse
+			var body catalog.ListTracksResponse
 			decodeJSON(t, rec, &body)
 			if len(body.Items) != tt.wantItemsLen {
 				t.Errorf("len(Items) = %d, want %d", len(body.Items), tt.wantItemsLen)
@@ -101,10 +100,10 @@ func TestHandleListTracks(t *testing.T) {
 }
 
 func TestHandleListTracks_NoAuth(t *testing.T) {
-	repo := catalogtest.NewTrackRepo()
-	_, router := buildTrackHandler(repo, nil)
+	repo := catalog.NewInMemoryTrackRepo()
+	router := buildTrackHandler(repo, nil)
 
-	rec := serveNoAuth(t, router, http.MethodGet, "/tracks", nil)
+	rec := requestAnonymous(t, router, http.MethodGet, "/tracks", nil)
 
 	assertStatus(t, rec, http.StatusUnauthorized)
 }
@@ -119,7 +118,7 @@ func TestHandleCreateTrack(t *testing.T) {
 	}{
 		{
 			name: "valid track returns 201 Created",
-			body: CreateTrackRequest{
+			body: catalog.CreateTrackRequest{
 				Title:  "New Track",
 				Artist: "New Artist",
 			},
@@ -128,7 +127,7 @@ func TestHandleCreateTrack(t *testing.T) {
 		},
 		{
 			name: "dedup hit returns 200 OK",
-			body: CreateTrackRequest{
+			body: catalog.CreateTrackRequest{
 				Title:  "Existing",
 				Artist: "Artist",
 			},
@@ -138,7 +137,7 @@ func TestHandleCreateTrack(t *testing.T) {
 		},
 		{
 			name: "missing title returns 400",
-			body: CreateTrackRequest{
+			body: catalog.CreateTrackRequest{
 				Title:  "",
 				Artist: "Artist",
 			},
@@ -146,7 +145,7 @@ func TestHandleCreateTrack(t *testing.T) {
 		},
 		{
 			name: "missing artist returns 400",
-			body: CreateTrackRequest{
+			body: catalog.CreateTrackRequest{
 				Title:  "Track",
 				Artist: "",
 			},
@@ -161,25 +160,25 @@ func TestHandleCreateTrack(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := catalogtest.NewTrackRepo()
+			repo := catalog.NewInMemoryTrackRepo()
 			if tt.seedDedup {
-				repo.Seed(makeTrack(testUserId, "Existing", "Artist", ""))
+				repo.Seed(makeTrack(catalog.FixtureUserId(), "Existing", "Artist", ""))
 			}
-			_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
+			router := buildTrackHandler(repo, &catalog.InMemoryScheduler{})
 
 			var rec *httptest.ResponseRecorder
 			switch b := tt.body.(type) {
 			case string:
-				rec2 := serve(t, router, http.MethodPost, "/tracks", strings.NewReader(b))
+				rec2 := request(t, router, http.MethodPost, "/tracks", strings.NewReader(b))
 				rec = rec2
 			default:
-				rec = serve(t, router, http.MethodPost, "/tracks", jsonBody(t, b))
+				rec = request(t, router, http.MethodPost, "/tracks", jsonBody(t, b))
 			}
 
 			assertStatus(t, rec, tt.wantStatus)
 
 			if tt.wantStatus == http.StatusCreated || tt.wantStatus == http.StatusOK {
-				var resp TrackResponse
+				var resp catalog.TrackResponse
 				decodeJSON(t, rec, &resp)
 				if resp.Title != tt.wantField {
 					t.Errorf("Title = %q, want %q", resp.Title, tt.wantField)
@@ -198,13 +197,13 @@ func TestHandleCreateTrack(t *testing.T) {
 func TestHandleDeleteTrack(t *testing.T) {
 	tests := []struct {
 		name       string
-		trackIdFn  func(repo *catalogtest.TrackRepo) string
+		trackIdFn  func(repo *catalog.InMemoryTrackRepo) string
 		wantStatus int
 	}{
 		{
 			name: "existing track returns 204",
-			trackIdFn: func(repo *catalogtest.TrackRepo) string {
-				track := makeTrack(testUserId, "To Delete", "Artist", "Album")
+			trackIdFn: func(repo *catalog.InMemoryTrackRepo) string {
+				track := makeTrack(catalog.FixtureUserId(), "To Delete", "Artist", "Album")
 				repo.Seed(track)
 				return track.ID.UUID().String()
 			},
@@ -212,14 +211,14 @@ func TestHandleDeleteTrack(t *testing.T) {
 		},
 		{
 			name: "not found returns 404",
-			trackIdFn: func(repo *catalogtest.TrackRepo) string {
+			trackIdFn: func(repo *catalog.InMemoryTrackRepo) string {
 				return uuid.New().String()
 			},
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name: "invalid UUID returns 400",
-			trackIdFn: func(repo *catalogtest.TrackRepo) string {
+			trackIdFn: func(repo *catalog.InMemoryTrackRepo) string {
 				return "not-a-uuid"
 			},
 			wantStatus: http.StatusBadRequest,
@@ -228,11 +227,11 @@ func TestHandleDeleteTrack(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := catalogtest.NewTrackRepo()
+			repo := catalog.NewInMemoryTrackRepo()
 			trackId := tt.trackIdFn(repo)
-			_, router := buildTrackHandler(repo, nil)
+			router := buildTrackHandler(repo, nil)
 
-			rec := serve(t, router, http.MethodDelete, "/tracks/"+trackId, nil)
+			rec := request(t, router, http.MethodDelete, "/tracks/"+trackId, nil)
 
 			assertStatus(t, rec, tt.wantStatus)
 		})
@@ -244,19 +243,19 @@ func TestHandleDeleteTrack_LogsActor(t *testing.T) {
 	defer slog.SetDefault(prev)
 	ring := logging.Setup("info", false)
 
-	repo := catalogtest.NewTrackRepo()
-	track := makeTrack(testUserId, "To Delete", "Artist", "Album")
+	repo := catalog.NewInMemoryTrackRepo()
+	track := makeTrack(catalog.FixtureUserId(), "To Delete", "Artist", "Album")
 	repo.Seed(track)
-	_, router := buildTrackHandler(repo, nil)
+	router := buildTrackHandler(repo, nil)
 
-	assertStatus(t, serve(t, router, http.MethodDelete, "/tracks/"+track.ID.UUID().String(), nil), http.StatusNoContent)
+	assertStatus(t, request(t, router, http.MethodDelete, "/tracks/"+track.ID.UUID().String(), nil), http.StatusNoContent)
 
 	for _, r := range ring.Snapshot() {
 		if r.Message != "track.delete" {
 			continue
 		}
-		if r.Attrs["user_id"] != testUserId.String() || r.Attrs["track_id"] != track.ID.String() {
-			t.Fatalf("track.delete attrs = %v, want user_id %s and track_id %s", r.Attrs, testUserId, track.ID)
+		if r.Attrs["user_id"] != catalog.FixtureUserId().String() || r.Attrs["track_id"] != track.ID.String() {
+			t.Fatalf("track.delete attrs = %v, want user_id %s and track_id %s", r.Attrs, catalog.FixtureUserId(), track.ID)
 		}
 		return
 	}
@@ -267,24 +266,24 @@ func TestHandleCreateTrack_NulByteRejected(t *testing.T) {
 	withNul := "a\x00b"
 	tests := []struct {
 		name string
-		body CreateTrackRequest
+		body catalog.CreateTrackRequest
 	}{
-		{"title", CreateTrackRequest{Title: withNul, Artist: "Artist"}},
-		{"artist", CreateTrackRequest{Title: "Title", Artist: withNul}},
-		{"album", CreateTrackRequest{Title: "Title", Artist: "Artist", Album: &withNul}},
-		{"genre", CreateTrackRequest{Title: "Title", Artist: "Artist", Genre: &withNul}},
-		{"isrc", CreateTrackRequest{Title: "Title", Artist: "Artist", ISRC: &withNul}},
+		{"title", catalog.CreateTrackRequest{Title: withNul, Artist: "Artist"}},
+		{"artist", catalog.CreateTrackRequest{Title: "Title", Artist: withNul}},
+		{"album", catalog.CreateTrackRequest{Title: "Title", Artist: "Artist", Album: &withNul}},
+		{"genre", catalog.CreateTrackRequest{Title: "Title", Artist: "Artist", Genre: &withNul}},
+		{"isrc", catalog.CreateTrackRequest{Title: "Title", Artist: "Artist", ISRC: &withNul}},
 		{
 			"featured artist name",
-			CreateTrackRequest{
+			catalog.CreateTrackRequest{
 				Title:           "Title",
 				Artist:          "Artist",
-				FeaturedArtists: []trackservice.FeaturedArtistDTO{{Name: withNul}},
+				FeaturedArtists: []catalog.FeaturedArtistDTO{{Name: withNul}},
 			},
 		},
 		{
 			"source url",
-			CreateTrackRequest{
+			catalog.CreateTrackRequest{
 				Title:     "Title",
 				Artist:    "Artist",
 				SourceURL: strPtr("https://example.com/" + withNul),
@@ -293,9 +292,9 @@ func TestHandleCreateTrack_NulByteRejected(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, router := buildTrackHandler(catalogtest.NewTrackRepo(), &catalogtest.Scheduler{})
+			router := buildTrackHandler(catalog.NewInMemoryTrackRepo(), &catalog.InMemoryScheduler{})
 
-			rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, tt.body))
+			rec := request(t, router, http.MethodPost, "/tracks", jsonBody(t, tt.body))
 
 			assertStatus(t, rec, http.StatusBadRequest)
 		})
@@ -303,11 +302,11 @@ func TestHandleCreateTrack_NulByteRejected(t *testing.T) {
 }
 
 func TestHandleCreateTrack_NulByteInIdempotencyKeyRejected(t *testing.T) {
-	_, router := buildTrackHandler(catalogtest.NewTrackRepo(), &catalogtest.Scheduler{})
-	body := CreateTrackRequest{Title: "Title", Artist: "Artist"}
+	router := buildTrackHandler(catalog.NewInMemoryTrackRepo(), &catalog.InMemoryScheduler{})
+	body := catalog.CreateTrackRequest{Title: "Title", Artist: "Artist"}
 	req := httptest.NewRequest(http.MethodPost, "/tracks", jsonBody(t, body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer fake-token")
+	req.Header.Set("Authorization", "Bearer "+catalog.FixtureUserId().String())
 	req.Header.Set("Idempotency-Key", "a\x00b")
 	rec := httptest.NewRecorder()
 
@@ -317,8 +316,8 @@ func TestHandleCreateTrack_NulByteInIdempotencyKeyRejected(t *testing.T) {
 }
 
 func TestHandleCreateTrack_ResponseShape(t *testing.T) {
-	repo := catalogtest.NewTrackRepo()
-	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
+	repo := catalog.NewInMemoryTrackRepo()
+	router := buildTrackHandler(repo, &catalog.InMemoryScheduler{})
 
 	dur := 180.5
 	artwork := "https://example.com/art.jpg"
@@ -326,7 +325,7 @@ func TestHandleCreateTrack_ResponseShape(t *testing.T) {
 	genre := "Rock"
 	albumArtist := "Various Artists"
 	isrc := "USRC12345678"
-	body := CreateTrackRequest{
+	body := catalog.CreateTrackRequest{
 		Title:           "Full Track",
 		Artist:          "Full Artist",
 		Album:           strPtr("Full Album"),
@@ -338,7 +337,7 @@ func TestHandleCreateTrack_ResponseShape(t *testing.T) {
 		ISRC:            &isrc,
 	}
 
-	rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
+	rec := request(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 
 	assertStatus(t, rec, http.StatusCreated)
 
@@ -354,22 +353,22 @@ func TestHandleCreateTrack_ResponseShape(t *testing.T) {
 }
 
 func TestHandleCreateTrackPersistsTrackNumber(t *testing.T) {
-	repo := catalogtest.NewTrackRepo()
-	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
+	repo := catalog.NewInMemoryTrackRepo()
+	router := buildTrackHandler(repo, &catalog.InMemoryScheduler{})
 
 	trackNumber := 7
-	body := CreateTrackRequest{
+	body := catalog.CreateTrackRequest{
 		Title:       "Dreams",
 		Artist:      "Fleetwood Mac",
 		Album:       strPtr("Rumours"),
 		TrackNumber: &trackNumber,
 	}
 
-	rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
+	rec := request(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 
 	assertStatus(t, rec, http.StatusCreated)
 
-	var resp TrackResponse
+	var resp catalog.TrackResponse
 	decodeJSON(t, rec, &resp)
 	if resp.TrackNumber == nil {
 		t.Fatal("track_number was dropped: the client sends it on every album-context save")
@@ -380,16 +379,16 @@ func TestHandleCreateTrackPersistsTrackNumber(t *testing.T) {
 }
 
 func TestHandleCreateTrackOmitsTrackNumberWhenAbsent(t *testing.T) {
-	repo := catalogtest.NewTrackRepo()
-	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
+	repo := catalog.NewInMemoryTrackRepo()
+	router := buildTrackHandler(repo, &catalog.InMemoryScheduler{})
 
-	body := CreateTrackRequest{Title: "Single", Artist: "Artist"}
+	body := catalog.CreateTrackRequest{Title: "Single", Artist: "Artist"}
 
-	rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
+	rec := request(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 
 	assertStatus(t, rec, http.StatusCreated)
 
-	var resp TrackResponse
+	var resp catalog.TrackResponse
 	decodeJSON(t, rec, &resp)
 	if resp.TrackNumber != nil {
 		t.Errorf("TrackNumber = %d, want nil for a track saved outside an album context", *resp.TrackNumber)
@@ -403,16 +402,16 @@ func TestHandleSetTrackNumber(t *testing.T) {
 	defer slog.SetDefault(prev)
 	ring := logging.Setup("info", false)
 
-	repo := catalogtest.NewTrackRepo()
-	track := makeTrack(testUserId, "Dreams", "Fleetwood Mac", "Rumours")
+	repo := catalog.NewInMemoryTrackRepo()
+	track := makeTrack(catalog.FixtureUserId(), "Dreams", "Fleetwood Mac", "Rumours")
 	repo.Seed(track)
-	_, router := buildTrackHandler(repo, nil)
+	router := buildTrackHandler(repo, nil)
 	path := "/tracks/" + track.ID.UUID().String() + "/track-number"
 
-	rec := serve(t, router, http.MethodPatch, path, jsonBody(t, SetTrackNumberRequest{TrackNumber: 3}))
+	rec := request(t, router, http.MethodPatch, path, jsonBody(t, catalog.SetTrackNumberRequest{TrackNumber: 3}))
 	assertStatus(t, rec, http.StatusNoContent)
 
-	rec = serve(t, router, http.MethodPatch, path, jsonBody(t, SetTrackNumberRequest{TrackNumber: 9}))
+	rec = request(t, router, http.MethodPatch, path, jsonBody(t, catalog.SetTrackNumberRequest{TrackNumber: 9}))
 	assertStatus(t, rec, http.StatusNoContent)
 
 	stored, ok := repo.Tracks[track.ID.String()]
@@ -433,10 +432,10 @@ func TestHandleSetTrackNumber(t *testing.T) {
 }
 
 func TestHandleSetTrackNumber_NotFound(t *testing.T) {
-	repo := catalogtest.NewTrackRepo()
+	repo := catalog.NewInMemoryTrackRepo()
 	foreign := makeTrack(shared.NewUserId(uuid.New()), "Theirs", "Artist", "Album")
 	repo.Seed(foreign)
-	_, router := buildTrackHandler(repo, nil)
+	router := buildTrackHandler(repo, nil)
 
 	tests := []struct{ name, trackId string }{
 		{"nonexistent track", uuid.New().String()},
@@ -444,8 +443,8 @@ func TestHandleSetTrackNumber_NotFound(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := serve(t, router, http.MethodPatch, "/tracks/"+tt.trackId+"/track-number",
-				jsonBody(t, SetTrackNumberRequest{TrackNumber: 4}))
+			rec := request(t, router, http.MethodPatch, "/tracks/"+tt.trackId+"/track-number",
+				jsonBody(t, catalog.SetTrackNumberRequest{TrackNumber: 4}))
 			assertStatus(t, rec, http.StatusNotFound)
 		})
 	}
@@ -454,21 +453,21 @@ func TestHandleSetTrackNumber_NotFound(t *testing.T) {
 	}
 }
 
-func featuredDTOs(n int) []trackservice.FeaturedArtistDTO {
-	out := make([]trackservice.FeaturedArtistDTO, n)
+func featuredDTOs(n int) []catalog.FeaturedArtistDTO {
+	out := make([]catalog.FeaturedArtistDTO, n)
 	for i := range out {
-		out[i] = trackservice.FeaturedArtistDTO{Name: fmt.Sprintf("Guest %d", i)}
+		out[i] = catalog.FeaturedArtistDTO{Name: fmt.Sprintf("Guest %d", i)}
 	}
 	return out
 }
 
 func TestHandleCreateTrack_RejectsTooManyFeaturedArtists(t *testing.T) {
-	repo := catalogtest.NewTrackRepo()
-	sched := &catalogtest.Scheduler{}
-	_, router := buildTrackHandler(repo, sched)
-	body := CreateTrackRequest{Title: "Posse Cut", Artist: "Everyone", FeaturedArtists: featuredDTOs(trackservice.MaxFeaturedArtistsPerTrack + 1)}
+	repo := catalog.NewInMemoryTrackRepo()
+	sched := &catalog.InMemoryScheduler{}
+	router := buildTrackHandler(repo, sched)
+	body := catalog.CreateTrackRequest{Title: "Posse Cut", Artist: "Everyone", FeaturedArtists: featuredDTOs(catalog.MaxFeaturedArtistsPerTrack + 1)}
 
-	rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
+	rec := request(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 
 	assertStatus(t, rec, http.StatusBadRequest)
 	if !strings.Contains(rec.Body.String(), "featured_artists") {
@@ -480,34 +479,34 @@ func TestHandleCreateTrack_RejectsTooManyFeaturedArtists(t *testing.T) {
 }
 
 func TestHandleCreateTrack_AcceptsFeaturedArtistsAtCap(t *testing.T) {
-	repo := catalogtest.NewTrackRepo()
-	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
-	body := CreateTrackRequest{Title: "Posse Cut", Artist: "Everyone", FeaturedArtists: featuredDTOs(trackservice.MaxFeaturedArtistsPerTrack)}
+	repo := catalog.NewInMemoryTrackRepo()
+	router := buildTrackHandler(repo, &catalog.InMemoryScheduler{})
+	body := catalog.CreateTrackRequest{Title: "Posse Cut", Artist: "Everyone", FeaturedArtists: featuredDTOs(catalog.MaxFeaturedArtistsPerTrack)}
 
-	rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
+	rec := request(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 
 	assertStatus(t, rec, http.StatusCreated)
 	for _, tr := range repo.Tracks {
-		if got := len(tr.FeaturedArtists); got != trackservice.MaxFeaturedArtistsPerTrack {
-			t.Errorf("stored %d featured artists, want %d", got, trackservice.MaxFeaturedArtistsPerTrack)
+		if got := len(tr.FeaturedArtists); got != catalog.MaxFeaturedArtistsPerTrack {
+			t.Errorf("stored %d featured artists, want %d", got, catalog.MaxFeaturedArtistsPerTrack)
 		}
 	}
 }
 
 func TestHandleCreateTrack_RejectsOversizedFeaturedArtistFields(t *testing.T) {
 	longMBID := strings.Repeat("a", 37)
-	cases := map[string]trackservice.FeaturedArtistDTO{
+	cases := map[string]catalog.FeaturedArtistDTO{
 		"name": {Name: strings.Repeat("n", 301)},
 		"mbid": {Name: "Guest", MBID: &longMBID},
 	}
 	for field, dto := range cases {
 		t.Run(field, func(t *testing.T) {
-			repo := catalogtest.NewTrackRepo()
-			sched := &catalogtest.Scheduler{}
-			_, router := buildTrackHandler(repo, sched)
-			body := CreateTrackRequest{Title: "Song", Artist: "Artist", FeaturedArtists: []trackservice.FeaturedArtistDTO{dto}}
+			repo := catalog.NewInMemoryTrackRepo()
+			sched := &catalog.InMemoryScheduler{}
+			router := buildTrackHandler(repo, sched)
+			body := catalog.CreateTrackRequest{Title: "Song", Artist: "Artist", FeaturedArtists: []catalog.FeaturedArtistDTO{dto}}
 
-			rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
+			rec := request(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 
 			assertStatus(t, rec, http.StatusBadRequest)
 			if !strings.Contains(rec.Body.String(), "featured_artists "+field) {
@@ -521,11 +520,11 @@ func TestHandleCreateTrack_RejectsOversizedFeaturedArtistFields(t *testing.T) {
 }
 
 func TestHandleCreateTrack_RejectsOversizedAlbum(t *testing.T) {
-	repo := catalogtest.NewTrackRepo()
-	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
-	body := CreateTrackRequest{Title: "Song", Artist: "Artist", Album: strPtr(strings.Repeat("a", 301))}
+	repo := catalog.NewInMemoryTrackRepo()
+	router := buildTrackHandler(repo, &catalog.InMemoryScheduler{})
+	body := catalog.CreateTrackRequest{Title: "Song", Artist: "Artist", Album: strPtr(strings.Repeat("a", 301))}
 
-	rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
+	rec := request(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 
 	assertStatus(t, rec, http.StatusBadRequest)
 	if len(repo.Tracks) != 0 {
@@ -534,23 +533,23 @@ func TestHandleCreateTrack_RejectsOversizedAlbum(t *testing.T) {
 }
 
 func TestHandleCreateTrack_AcceptsAlbumAtCap(t *testing.T) {
-	repo := catalogtest.NewTrackRepo()
-	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
-	body := CreateTrackRequest{Title: "Song", Artist: "Artist", Album: strPtr(strings.Repeat("a", 300))}
+	repo := catalog.NewInMemoryTrackRepo()
+	router := buildTrackHandler(repo, &catalog.InMemoryScheduler{})
+	body := catalog.CreateTrackRequest{Title: "Song", Artist: "Artist", Album: strPtr(strings.Repeat("a", 300))}
 
-	rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
+	rec := request(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 
 	assertStatus(t, rec, http.StatusCreated)
 }
 
 func TestHandleCreateTrack_AcceptsFeaturedArtistFieldsAtCap(t *testing.T) {
-	repo := catalogtest.NewTrackRepo()
-	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
+	repo := catalog.NewInMemoryTrackRepo()
+	router := buildTrackHandler(repo, &catalog.InMemoryScheduler{})
 	mbid := "f27ec8db-af05-4f36-916e-3d57f91ecf5e"
 	name := strings.Repeat("n", 300)
-	body := CreateTrackRequest{Title: "Song", Artist: "Artist", FeaturedArtists: []trackservice.FeaturedArtistDTO{{Name: name, MBID: &mbid}}}
+	body := catalog.CreateTrackRequest{Title: "Song", Artist: "Artist", FeaturedArtists: []catalog.FeaturedArtistDTO{{Name: name, MBID: &mbid}}}
 
-	rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
+	rec := request(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 
 	assertStatus(t, rec, http.StatusCreated)
 	if len(repo.Tracks) != 1 {
@@ -571,12 +570,12 @@ func TestHandleCreateTrack_RejectsInternalSourceURL(t *testing.T) {
 		"http://10.0.0.1/",
 	} {
 		t.Run(sourceURL, func(t *testing.T) {
-			repo := catalogtest.NewTrackRepo()
-			sched := &catalogtest.Scheduler{}
-			_, router := buildTrackHandler(repo, sched)
-			body := CreateTrackRequest{Title: "Dreams", Artist: "Fleetwood Mac", SourceURL: strPtr(sourceURL)}
+			repo := catalog.NewInMemoryTrackRepo()
+			sched := &catalog.InMemoryScheduler{}
+			router := buildTrackHandler(repo, sched)
+			body := catalog.CreateTrackRequest{Title: "Dreams", Artist: "Fleetwood Mac", SourceURL: strPtr(sourceURL)}
 
-			rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
+			rec := request(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 
 			assertStatus(t, rec, http.StatusBadRequest)
 			if !strings.Contains(rec.Body.String(), "public host") {
@@ -590,12 +589,12 @@ func TestHandleCreateTrack_RejectsInternalSourceURL(t *testing.T) {
 }
 
 func TestHandleCreateTrack_SchedulesPublicSourceURL(t *testing.T) {
-	sched := &catalogtest.Scheduler{}
-	_, router := buildTrackHandler(catalogtest.NewTrackRepo(), sched)
+	sched := &catalog.InMemoryScheduler{}
+	router := buildTrackHandler(catalog.NewInMemoryTrackRepo(), sched)
 	sourceURL := "https://soundcloud.com/fleetwoodmac/dreams"
-	body := CreateTrackRequest{Title: "Dreams", Artist: "Fleetwood Mac", SourceURL: strPtr(sourceURL)}
+	body := catalog.CreateTrackRequest{Title: "Dreams", Artist: "Fleetwood Mac", SourceURL: strPtr(sourceURL)}
 
-	rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
+	rec := request(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
 
 	assertStatus(t, rec, http.StatusCreated)
 	if len(sched.SourceURLs) != 1 || sched.SourceURLs[0] != sourceURL {
@@ -606,10 +605,10 @@ func TestHandleCreateTrack_SchedulesPublicSourceURL(t *testing.T) {
 func TestHandleCreateTrack_RejectsUnencodableDuration(t *testing.T) {
 	for _, raw := range []string{"1e400", "-1e400", "1.7976931348623157e308", "1e300", "604801"} {
 		t.Run(raw, func(t *testing.T) {
-			repo := catalogtest.NewTrackRepo()
-			_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
+			repo := catalog.NewInMemoryTrackRepo()
+			router := buildTrackHandler(repo, &catalog.InMemoryScheduler{})
 
-			rec := serve(t, router, http.MethodPost, "/tracks", createTrackWithRawDuration(raw))
+			rec := request(t, router, http.MethodPost, "/tracks", createTrackWithRawDuration(raw))
 
 			assertStatus(t, rec, http.StatusBadRequest)
 			if len(repo.Tracks) != 0 {
@@ -620,10 +619,10 @@ func TestHandleCreateTrack_RejectsUnencodableDuration(t *testing.T) {
 }
 
 func TestHandleCreateTrack_AcceptsMaxDuration(t *testing.T) {
-	repo := catalogtest.NewTrackRepo()
-	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
+	repo := catalog.NewInMemoryTrackRepo()
+	router := buildTrackHandler(repo, &catalog.InMemoryScheduler{})
 
-	rec := serve(t, router, http.MethodPost, "/tracks", createTrackWithRawDuration("604800"))
+	rec := request(t, router, http.MethodPost, "/tracks", createTrackWithRawDuration("604800"))
 
 	assertStatus(t, rec, http.StatusCreated)
 }
@@ -633,18 +632,18 @@ func createTrackWithRawDuration(raw string) *strings.Reader {
 }
 
 func TestCreateTrack_ThrottlesPerUser(t *testing.T) {
-	clock := newAudioFakeClock()
+	clock := newFakeClock()
 	rig := newThrottledWriteRig(clock.now)
 	user := shared.NewUserId(uuid.New())
 
 	for i := range trackWriteBurst {
-		rec := rig.createTrack(user, fmt.Sprintf("Inside %d", i))
+		rec := rig.createTrack(t, user, fmt.Sprintf("Inside %d", i))
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("create %d inside the burst must store, got %d (%s)", i, rec.Code, rec.Body.String())
 		}
 	}
 	for i := range 20 {
-		assertWriteThrottled(t, rig.createTrack(user, fmt.Sprintf("Flood %d", i)), "1")
+		assertWriteThrottled(t, rig.createTrack(t, user, fmt.Sprintf("Flood %d", i)), "1")
 	}
 
 	if len(rig.tracks.Tracks) != trackWriteBurst {
@@ -652,7 +651,40 @@ func TestCreateTrack_ThrottlesPerUser(t *testing.T) {
 	}
 
 	clock.advance(trackWriteEvery)
-	if rec := rig.createTrack(user, "After refill"); rec.Code != http.StatusCreated {
+	if rec := rig.createTrack(t, user, "After refill"); rec.Code != http.StatusCreated {
 		t.Fatalf("a refilled token must admit the next create, got %d (%s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleListTracks_EchoesTheRequestedOffset(t *testing.T) {
+	repo := catalog.NewInMemoryTrackRepo()
+	for _, title := range []string{"One", "Two", "Three"} {
+		repo.Seed(makeTrack(catalog.FixtureUserId(), title, "Artist", "Album"))
+	}
+	router := buildTrackHandler(repo, nil)
+
+	rec := request(t, router, http.MethodGet, "/tracks?offset=2", nil)
+
+	assertStatus(t, rec, http.StatusOK)
+	var body catalog.ListTracksResponse
+	decodeJSON(t, rec, &body)
+	if body.Offset != 2 || len(body.Items) != 1 {
+		t.Fatalf("offset = %d with %d items, want offset 2 echoed with the 1 remaining item", body.Offset, len(body.Items))
+	}
+}
+
+func TestHandleListTracks_FiltersByTheSearchTerm(t *testing.T) {
+	repo := catalog.NewInMemoryTrackRepo()
+	repo.Seed(makeTrack(catalog.FixtureUserId(), "Enter Sandman", "Metallica", "Metallica"))
+	repo.Seed(makeTrack(catalog.FixtureUserId(), "Dreams", "Fleetwood Mac", "Rumours"))
+	router := buildTrackHandler(repo, nil)
+
+	rec := request(t, router, http.MethodGet, "/tracks?q=metallica", nil)
+
+	assertStatus(t, rec, http.StatusOK)
+	var body catalog.ListTracksResponse
+	decodeJSON(t, rec, &body)
+	if body.Total != 1 || len(body.Items) != 1 || body.Items[0].Title != "Enter Sandman" {
+		t.Fatalf("search returned total %d, items %+v; want only Enter Sandman", body.Total, body.Items)
 	}
 }

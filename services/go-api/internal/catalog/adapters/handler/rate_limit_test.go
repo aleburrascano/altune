@@ -101,67 +101,6 @@ func assertAudioThrottled(t *testing.T, rec *httptest.ResponseRecorder, wantRetr
 	assertThrottled(t, rec, "catalog.audio_rate_limited", wantRetryAfter)
 }
 
-func assertThrottled(t *testing.T, rec *httptest.ResponseRecorder, wantCode, wantRetryAfter string) {
-	t.Helper()
-	if rec.Code != http.StatusTooManyRequests {
-		t.Fatalf("status = %d, want 429 (body: %s)", rec.Code, rec.Body.String())
-	}
-	if !strings.Contains(rec.Body.String(), `"code":"`+wantCode+`"`) {
-		t.Fatalf("throttled body must carry the %s code, got %q", wantCode, rec.Body.String())
-	}
-	if got := rec.Header().Get("Retry-After"); got != wantRetryAfter {
-		t.Fatalf("Retry-After = %q, want %q", got, wantRetryAfter)
-	}
-}
-
-func TestStreamRateLimit_FloodFromOnePrincipalIsThrottled(t *testing.T) {
-	clock := newFakeClock()
-	rig := newAudioRig([]func(*catalog.StreamHandler){catalog.WithStreamLimiterClock(clock.now)}, nil)
-	user := shared.NewUserId(uuid.New())
-	track := rig.seedTracks(t, user, 1)[0]
-
-	for i := range streamBurst {
-		if rec := rig.stream(user, track, ""); rec.Code != http.StatusOK {
-			t.Fatalf("request %d inside the burst must stream, got %d", i, rec.Code)
-		}
-	}
-	for range 50 {
-		assertAudioThrottled(t, rig.stream(user, track, "bytes=0-1"), "1")
-	}
-	if rig.store.streams != streamBurst {
-		t.Fatalf("throttled requests must not reach object storage: %d streams, want %d", rig.store.streams, streamBurst)
-	}
-
-	clock.advance(streamEvery)
-	if rec := rig.stream(user, track, "bytes=0-1"); rec.Code != http.StatusPartialContent {
-		t.Fatalf("a refilled token must admit the next range request, got %d", rec.Code)
-	}
-}
-
-func TestAudioURLRateLimit_FloodFromOnePrincipalIsThrottled(t *testing.T) {
-	clock := newFakeClock()
-	rig := newAudioRig(nil, []func(*catalog.AudioURLHandler){catalog.WithAudioURLLimiterClock(clock.now)})
-	user := shared.NewUserId(uuid.New())
-	track := rig.seedTracks(t, user, 1)[0]
-
-	for i := range audioURLBurst {
-		if rec := rig.resolve(user, track); rec.Code != http.StatusOK {
-			t.Fatalf("request %d inside the burst must resolve, got %d", i, rec.Code)
-		}
-	}
-	for range 50 {
-		assertAudioThrottled(t, rig.resolve(user, track), "1")
-	}
-	if rig.store.presigns != audioURLBurst {
-		t.Fatalf("throttled requests must not presign: %d presigns, want %d", rig.store.presigns, audioURLBurst)
-	}
-
-	clock.advance(audioURLEvery)
-	if rec := rig.resolve(user, track); rec.Code != http.StatusOK {
-		t.Fatalf("a refilled token must admit the next resolve, got %d", rec.Code)
-	}
-}
-
 func TestAudioRateLimit_IsPerPrincipalAndPerEndpoint(t *testing.T) {
 	clock := newFakeClock()
 	rig := newAudioRig(
@@ -254,40 +193,6 @@ func TestAudioRateLimit_DefaultsAdmitRealClientTraffic(t *testing.T) {
 	}
 }
 
-type writeRig struct {
-	router    chi.Router
-	tracks    *catalog.InMemoryTrackRepo
-	playlists *catalog.InMemoryPlaylistRepo
-}
-
-func newWriteRig(trackOpts []func(*catalog.TrackHandler), playlistOpts []func(*catalog.PlaylistHandler)) *writeRig {
-	tracks := catalog.NewInMemoryTrackRepo()
-	playlists := catalog.NewInMemoryPlaylistRepo()
-	playlistH := catalog.NewPlaylistHandler(
-		catalog.NewPlaylistLifecycleService(playlists),
-		catalog.NewPlaylistMembershipService(playlists, tracks),
-		playlistOpts...,
-	)
-	r := trackRoutes(tracks, trackOpts...)
-	r.Mount("/playlists", playlistH.Routes())
-	return &writeRig{router: r, tracks: tracks, playlists: playlists}
-}
-
-func (rig *writeRig) post(t *testing.T, user shared.UserId, path string, body any) *httptest.ResponseRecorder {
-	t.Helper()
-	return sendAs(rig.router, jsonRequest(t, http.MethodPost, path, body), user)
-}
-
-func (rig *writeRig) createTrack(t *testing.T, user shared.UserId, title string) *httptest.ResponseRecorder {
-	t.Helper()
-	return rig.post(t, user, "/tracks/", map[string]string{"title": title, "artist": "Artist", "album": "Album"})
-}
-
-func (rig *writeRig) createPlaylist(t *testing.T, user shared.UserId, name string) *httptest.ResponseRecorder {
-	t.Helper()
-	return rig.post(t, user, "/playlists/", map[string]string{"name": name})
-}
-
 func TestWriteRateLimits_DefaultsAdmitRealClientTraffic(t *testing.T) {
 	clock := newFakeClock()
 	rig := newWriteRig(
@@ -317,49 +222,75 @@ type limitedEndpoint struct {
 	every      time.Duration
 	code       string
 	retryAfter string
-	open       func(t *testing.T, clocks ...func() time.Time) func(i int) *httptest.ResponseRecorder
+	open       func(t *testing.T, clocks ...func() time.Time) endpointProbe
 }
 
-func openStream(t *testing.T, clocks ...func() time.Time) func(int) *httptest.ResponseRecorder {
+type endpointProbe struct {
+	hit     func(i int) *httptest.ResponseRecorder
+	reached func() int
+}
+
+func openStream(t *testing.T, clocks ...func() time.Time) endpointProbe {
 	var opts []func(*catalog.StreamHandler)
 	for _, clock := range clocks {
 		opts = append(opts, catalog.WithStreamLimiterClock(clock))
 	}
 	rig := newAudioRig(opts, nil)
 	track := rig.seedTracks(t, catalog.FixtureUserId(), 1)[0]
-	return func(int) *httptest.ResponseRecorder { return rig.stream(catalog.FixtureUserId(), track, "bytes=0-1") }
+	return endpointProbe{
+		hit:     func(int) *httptest.ResponseRecorder { return rig.stream(catalog.FixtureUserId(), track, "bytes=0-1") },
+		reached: func() int { return rig.store.streams },
+	}
 }
 
-func openAudioURLs(t *testing.T, clocks ...func() time.Time) func(int) *httptest.ResponseRecorder {
+func openAudioURLs(t *testing.T, clocks ...func() time.Time) endpointProbe {
 	var opts []func(*catalog.AudioURLHandler)
 	for _, clock := range clocks {
 		opts = append(opts, catalog.WithAudioURLLimiterClock(clock))
 	}
 	rig := newAudioRig(nil, opts)
 	track := rig.seedTracks(t, catalog.FixtureUserId(), 1)[0]
-	return func(int) *httptest.ResponseRecorder { return rig.resolve(catalog.FixtureUserId(), track) }
+	return endpointProbe{
+		hit:     func(int) *httptest.ResponseRecorder { return rig.resolve(catalog.FixtureUserId(), track) },
+		reached: func() int { return rig.store.presigns },
+	}
 }
 
-func openTrackWrites(t *testing.T, clocks ...func() time.Time) func(int) *httptest.ResponseRecorder {
+func openTrackWrites(t *testing.T, clocks ...func() time.Time) endpointProbe {
 	var opts []func(*catalog.TrackHandler)
 	for _, clock := range clocks {
 		opts = append(opts, catalog.WithTrackWriteLimiterClock(clock))
 	}
 	rig := newWriteRig(opts, nil)
-	return func(i int) *httptest.ResponseRecorder {
-		return rig.createTrack(t, catalog.FixtureUserId(), fmt.Sprintf("Track %d", i))
+	return endpointProbe{
+		hit: func(i int) *httptest.ResponseRecorder {
+			return rig.createTrack(t, catalog.FixtureUserId(), fmt.Sprintf("Track %d", i))
+		},
+		reached: func() int { return countHeld(t, rig.tracks.CountForUser) },
 	}
 }
 
-func openPlaylistWrites(t *testing.T, clocks ...func() time.Time) func(int) *httptest.ResponseRecorder {
+func openPlaylistWrites(t *testing.T, clocks ...func() time.Time) endpointProbe {
 	var opts []func(*catalog.PlaylistHandler)
 	for _, clock := range clocks {
 		opts = append(opts, catalog.WithPlaylistWriteLimiterClock(clock))
 	}
 	rig := newWriteRig(nil, opts)
-	return func(i int) *httptest.ResponseRecorder {
-		return rig.createPlaylist(t, catalog.FixtureUserId(), fmt.Sprintf("Playlist %d", i))
+	return endpointProbe{
+		hit: func(i int) *httptest.ResponseRecorder {
+			return rig.createPlaylist(t, catalog.FixtureUserId(), fmt.Sprintf("Playlist %d", i))
+		},
+		reached: func() int { return countHeld(t, rig.playlists.CountForUser) },
 	}
+}
+
+func countHeld(t *testing.T, count func(context.Context, shared.UserId, int) (int, error)) int {
+	t.Helper()
+	held, err := count(context.Background(), catalog.FixtureUserId(), 1<<20)
+	if err != nil {
+		t.Fatalf("count stored rows: %v", err)
+	}
+	return held
 }
 
 var limitedEndpoints = []limitedEndpoint{
@@ -369,20 +300,29 @@ var limitedEndpoints = []limitedEndpoint{
 	{"playlist writes", playlistWriteBurst, playlistWriteEvery, "catalog.write_rate_limited", "1", openPlaylistWrites},
 }
 
-func assertDefaultBoundary(t *testing.T, ep limitedEndpoint, clock *fakeClock, hit func(int) *httptest.ResponseRecorder) {
+func assertReached(t *testing.T, probe endpointProbe, want int, why string) {
+	t.Helper()
+	if got := probe.reached(); got != want {
+		t.Fatalf("%s: storage reached %d times, want %d", why, got, want)
+	}
+}
+
+func assertDefaultBoundary(t *testing.T, ep limitedEndpoint, clock *fakeClock, probe endpointProbe) {
 	t.Helper()
 	for i := range ep.burst {
-		if rec := hit(i); rec.Code == http.StatusTooManyRequests {
+		if rec := probe.hit(i); rec.Code == http.StatusTooManyRequests {
 			t.Fatalf("request %d of the default burst of %d was throttled", i+1, ep.burst)
 		}
 	}
-	assertThrottled(t, hit(ep.burst), ep.code, ep.retryAfter)
+	assertThrottled(t, probe.hit(ep.burst), ep.code, ep.retryAfter)
 	clock.advance(ep.every - time.Millisecond)
-	assertThrottled(t, hit(ep.burst+1), ep.code, ep.retryAfter)
+	assertThrottled(t, probe.hit(ep.burst+1), ep.code, ep.retryAfter)
+	assertReached(t, probe, ep.burst, "a throttled request must never reach storage")
 	clock.advance(time.Millisecond)
-	if rec := hit(ep.burst + 2); rec.Code == http.StatusTooManyRequests {
+	if rec := probe.hit(ep.burst + 2); rec.Code == http.StatusTooManyRequests {
 		t.Fatalf("one default interval of %s must refill a token, still throttled", ep.every)
 	}
+	assertReached(t, probe, ep.burst+1, "a refilled token must reach storage")
 }
 
 func TestRateLimits_DefaultsHoldAtTheirBoundary(t *testing.T) {

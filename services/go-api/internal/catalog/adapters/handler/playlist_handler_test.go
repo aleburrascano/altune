@@ -1,7 +1,7 @@
-package handler
+package handler_test
 
 import (
-	"altune/go-api/internal/catalog/catalogtest"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/shared/httputil"
 	shared "altune/go-api/internal/shared/kernel"
 	"encoding/json"
@@ -11,8 +11,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	catdomain "altune/go-api/internal/catalog/domain"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -27,23 +25,23 @@ func TestHandleCreatePlaylist(t *testing.T) {
 	}{
 		{
 			name:       "valid name returns 201",
-			body:       CreatePlaylistRequest{Name: "My Favorites"},
+			body:       catalog.CreatePlaylistRequest{Name: "My Favorites"},
 			wantStatus: http.StatusCreated,
 			wantName:   "My Favorites",
 		},
 		{
 			name:       "empty name returns 400",
-			body:       CreatePlaylistRequest{Name: ""},
+			body:       catalog.CreatePlaylistRequest{Name: ""},
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name:       "whitespace-only name returns 400",
-			body:       CreatePlaylistRequest{Name: " \t\n "},
+			body:       catalog.CreatePlaylistRequest{Name: " \t\n "},
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name:       "surrounding whitespace is trimmed from the stored name",
-			body:       CreatePlaylistRequest{Name: "  My Favorites\t"},
+			body:       catalog.CreatePlaylistRequest{Name: "  My Favorites\t"},
 			wantStatus: http.StatusCreated,
 			wantName:   "My Favorites",
 		},
@@ -56,21 +54,21 @@ func TestHandleCreatePlaylist(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plRepo := catalogtest.NewPlaylistRepo()
-			trRepo := catalogtest.NewTrackRepo()
-			_, router := buildPlaylistHandler(plRepo, trRepo)
+			plRepo := catalog.NewInMemoryPlaylistRepo()
+			trRepo := catalog.NewInMemoryTrackRepo()
+			router := buildPlaylistHandler(plRepo, trRepo)
 
 			var rec *httptest.ResponseRecorder
 			if tt.body == nil {
-				rec = serve(t, router, http.MethodPost, "/playlists", strings.NewReader("{invalid"))
+				rec = request(t, router, http.MethodPost, "/playlists", strings.NewReader("{invalid"))
 			} else {
-				rec = serve(t, router, http.MethodPost, "/playlists", jsonBody(t, tt.body))
+				rec = request(t, router, http.MethodPost, "/playlists", jsonBody(t, tt.body))
 			}
 
 			assertStatus(t, rec, tt.wantStatus)
 
 			if tt.wantStatus == http.StatusCreated {
-				var resp PlaylistResponse
+				var resp catalog.PlaylistResponse
 				decodeJSON(t, rec, &resp)
 				if resp.Name != tt.wantName {
 					t.Errorf("Name = %q, want %q", resp.Name, tt.wantName)
@@ -109,19 +107,19 @@ func TestHandleListPlaylists(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plRepo := catalogtest.NewPlaylistRepo()
-			trRepo := catalogtest.NewTrackRepo()
+			plRepo := catalog.NewInMemoryPlaylistRepo()
+			trRepo := catalog.NewInMemoryTrackRepo()
 			for i := 0; i < tt.seedCount; i++ {
-				plRepo.Seed(makePlaylist(testUserId, "Playlist "+string(rune('A'+i))))
+				plRepo.Seed(makePlaylist(catalog.FixtureUserId(), "Playlist "+string(rune('A'+i))))
 			}
-			_, router := buildPlaylistHandler(plRepo, trRepo)
+			router := buildPlaylistHandler(plRepo, trRepo)
 
-			rec := serve(t, router, http.MethodGet, "/playlists", nil)
+			rec := request(t, router, http.MethodGet, "/playlists", nil)
 
 			assertStatus(t, rec, tt.wantStatus)
 			assertJSON(t, rec)
 
-			var body httputil.List[PlaylistResponse]
+			var body httputil.List[catalog.PlaylistResponse]
 			decodeJSON(t, rec, &body)
 			if len(body.Items) != tt.wantItemsLen {
 				t.Errorf("len(Items) = %d, want %d", len(body.Items), tt.wantItemsLen)
@@ -151,12 +149,12 @@ func TestHandleListPlaylistsServesOneWindow(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			plRepo := seededPlaylistRepo(seeded)
-			_, router := buildPlaylistHandler(plRepo, catalogtest.NewTrackRepo())
+			router := buildPlaylistHandler(plRepo, catalog.NewInMemoryTrackRepo())
 
-			rec := serve(t, router, http.MethodGet, "/playlists"+tt.query, nil)
+			rec := request(t, router, http.MethodGet, "/playlists"+tt.query, nil)
 
 			assertStatus(t, rec, http.StatusOK)
-			var body httputil.List[PlaylistResponse]
+			var body httputil.List[catalog.PlaylistResponse]
 			decodeJSON(t, rec, &body)
 			if len(body.Items) != tt.wantItemsLen {
 				t.Errorf("len(Items) = %d, want %d of %d seeded", len(body.Items), tt.wantItemsLen, seeded)
@@ -168,7 +166,7 @@ func TestHandleListPlaylistsServesOneWindow(t *testing.T) {
 func TestHandleListPlaylistsPagesWithoutRepeatingARow(t *testing.T) {
 	const seeded = 60
 	plRepo := seededPlaylistRepo(seeded)
-	_, router := buildPlaylistHandler(plRepo, catalogtest.NewTrackRepo())
+	router := buildPlaylistHandler(plRepo, catalog.NewInMemoryTrackRepo())
 
 	first := listedPlaylistIds(t, router, "")
 	second := listedPlaylistIds(t, router, "?offset=50")
@@ -186,38 +184,38 @@ func TestHandleListPlaylistsPagesWithoutRepeatingARow(t *testing.T) {
 }
 
 func TestHandleListPlaylistsCapsAnOversizedLimit(t *testing.T) {
-	plRepo := seededPlaylistRepo(catdomain.MaxLibraryPageSize + 1)
-	_, router := buildPlaylistHandler(plRepo, catalogtest.NewTrackRepo())
+	plRepo := seededPlaylistRepo(catalog.MaxLibraryPageSize + 1)
+	router := buildPlaylistHandler(plRepo, catalog.NewInMemoryTrackRepo())
 
 	got := listedPlaylistIds(t, router, "?limit=999999")
 
-	if len(got) != catdomain.MaxLibraryPageSize {
-		t.Errorf("len(Items) = %d, want the %d row cap", len(got), catdomain.MaxLibraryPageSize)
+	if len(got) != catalog.MaxLibraryPageSize {
+		t.Errorf("len(Items) = %d, want the %d row cap", len(got), catalog.MaxLibraryPageSize)
 	}
 }
 
 func TestHandleListPlaylistsRejectsANegativeOffset(t *testing.T) {
 	plRepo := seededPlaylistRepo(1)
-	_, router := buildPlaylistHandler(plRepo, catalogtest.NewTrackRepo())
+	router := buildPlaylistHandler(plRepo, catalog.NewInMemoryTrackRepo())
 
-	rec := serve(t, router, http.MethodGet, "/playlists?offset=-1", nil)
+	rec := request(t, router, http.MethodGet, "/playlists?offset=-1", nil)
 
 	assertStatus(t, rec, http.StatusBadRequest)
 }
 
-func seededPlaylistRepo(count int) *catalogtest.PlaylistRepo {
-	repo := catalogtest.NewPlaylistRepo()
+func seededPlaylistRepo(count int) *catalog.InMemoryPlaylistRepo {
+	repo := catalog.NewInMemoryPlaylistRepo()
 	for i := 0; i < count; i++ {
-		repo.Seed(makePlaylist(testUserId, "Playlist "+strconv.Itoa(i)))
+		repo.Seed(makePlaylist(catalog.FixtureUserId(), "Playlist "+strconv.Itoa(i)))
 	}
 	return repo
 }
 
 func listedPlaylistIds(t *testing.T, router chi.Router, query string) []uuid.UUID {
 	t.Helper()
-	rec := serve(t, router, http.MethodGet, "/playlists"+query, nil)
+	rec := request(t, router, http.MethodGet, "/playlists"+query, nil)
 	assertStatus(t, rec, http.StatusOK)
-	var body httputil.List[PlaylistResponse]
+	var body httputil.List[catalog.PlaylistResponse]
 	decodeJSON(t, rec, &body)
 	ids := make([]uuid.UUID, len(body.Items))
 	for i, item := range body.Items {
@@ -229,29 +227,29 @@ func listedPlaylistIds(t *testing.T, router chi.Router, query string) []uuid.UUI
 func TestHandleGetPlaylist(t *testing.T) {
 	tests := []struct {
 		name       string
-		setup      func(*catalogtest.PlaylistRepo, *catalogtest.TrackRepo) string
+		setup      func(*catalog.InMemoryPlaylistRepo, *catalog.InMemoryTrackRepo) string
 		wantStatus int
 	}{
 		{
 			name: "found returns detail with tracks",
-			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) string {
-				pl := makePlaylist(testUserId, "Rock")
-				track := makeTrack(testUserId, "Track", "Artist", "Album")
-				plRepo.SeedWithTracks(pl, []*catdomain.Track{track})
+			setup: func(plRepo *catalog.InMemoryPlaylistRepo, trRepo *catalog.InMemoryTrackRepo) string {
+				pl := makePlaylist(catalog.FixtureUserId(), "Rock")
+				track := makeTrack(catalog.FixtureUserId(), "Track", "Artist", "Album")
+				plRepo.SeedWithTracks(pl, []*catalog.Track{track})
 				return pl.ID.UUID().String()
 			},
 			wantStatus: http.StatusOK,
 		},
 		{
 			name: "not found returns 404",
-			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) string {
+			setup: func(plRepo *catalog.InMemoryPlaylistRepo, trRepo *catalog.InMemoryTrackRepo) string {
 				return uuid.New().String()
 			},
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name: "invalid ID returns 400",
-			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) string {
+			setup: func(plRepo *catalog.InMemoryPlaylistRepo, trRepo *catalog.InMemoryTrackRepo) string {
 				return "not-a-uuid"
 			},
 			wantStatus: http.StatusBadRequest,
@@ -260,17 +258,17 @@ func TestHandleGetPlaylist(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plRepo := catalogtest.NewPlaylistRepo()
-			trRepo := catalogtest.NewTrackRepo()
+			plRepo := catalog.NewInMemoryPlaylistRepo()
+			trRepo := catalog.NewInMemoryTrackRepo()
 			playlistId := tt.setup(plRepo, trRepo)
-			_, router := buildPlaylistHandler(plRepo, trRepo)
+			router := buildPlaylistHandler(plRepo, trRepo)
 
-			rec := serve(t, router, http.MethodGet, "/playlists/"+playlistId, nil)
+			rec := request(t, router, http.MethodGet, "/playlists/"+playlistId, nil)
 
 			assertStatus(t, rec, tt.wantStatus)
 
 			if tt.wantStatus == http.StatusOK {
-				var resp PlaylistDetailResponse
+				var resp catalog.PlaylistDetailResponse
 				decodeJSON(t, rec, &resp)
 				if resp.Name != "Rock" {
 					t.Errorf("Name = %q, want %q", resp.Name, "Rock")
@@ -289,13 +287,13 @@ func TestHandleGetPlaylist(t *testing.T) {
 func TestHandleDeletePlaylist(t *testing.T) {
 	tests := []struct {
 		name       string
-		setup      func(*catalogtest.PlaylistRepo) string
+		setup      func(*catalog.InMemoryPlaylistRepo) string
 		wantStatus int
 	}{
 		{
 			name: "existing returns 204",
-			setup: func(repo *catalogtest.PlaylistRepo) string {
-				pl := makePlaylist(testUserId, "To Delete")
+			setup: func(repo *catalog.InMemoryPlaylistRepo) string {
+				pl := makePlaylist(catalog.FixtureUserId(), "To Delete")
 				repo.Seed(pl)
 				return pl.ID.UUID().String()
 			},
@@ -303,14 +301,14 @@ func TestHandleDeletePlaylist(t *testing.T) {
 		},
 		{
 			name: "not found returns 404",
-			setup: func(repo *catalogtest.PlaylistRepo) string {
+			setup: func(repo *catalog.InMemoryPlaylistRepo) string {
 				return uuid.New().String()
 			},
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name: "invalid ID returns 400",
-			setup: func(repo *catalogtest.PlaylistRepo) string {
+			setup: func(repo *catalog.InMemoryPlaylistRepo) string {
 				return "bad-id"
 			},
 			wantStatus: http.StatusBadRequest,
@@ -319,12 +317,12 @@ func TestHandleDeletePlaylist(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plRepo := catalogtest.NewPlaylistRepo()
-			trRepo := catalogtest.NewTrackRepo()
+			plRepo := catalog.NewInMemoryPlaylistRepo()
+			trRepo := catalog.NewInMemoryTrackRepo()
 			playlistId := tt.setup(plRepo)
-			_, router := buildPlaylistHandler(plRepo, trRepo)
+			router := buildPlaylistHandler(plRepo, trRepo)
 
-			rec := serve(t, router, http.MethodDelete, "/playlists/"+playlistId, nil)
+			rec := request(t, router, http.MethodDelete, "/playlists/"+playlistId, nil)
 
 			assertStatus(t, rec, tt.wantStatus)
 		})
@@ -334,73 +332,73 @@ func TestHandleDeletePlaylist(t *testing.T) {
 func TestHandleRenamePlaylist(t *testing.T) {
 	tests := []struct {
 		name       string
-		setup      func(*catalogtest.PlaylistRepo) string
+		setup      func(*catalog.InMemoryPlaylistRepo) string
 		body       any
 		wantStatus int
 	}{
 		{
 			name: "valid rename returns 200",
-			setup: func(repo *catalogtest.PlaylistRepo) string {
-				pl := makePlaylist(testUserId, "Old Name")
+			setup: func(repo *catalog.InMemoryPlaylistRepo) string {
+				pl := makePlaylist(catalog.FixtureUserId(), "Old Name")
 				repo.Seed(pl)
 				return pl.ID.UUID().String()
 			},
-			body:       RenamePlaylistRequest{Name: "New Name"},
+			body:       catalog.RenamePlaylistRequest{Name: "New Name"},
 			wantStatus: http.StatusOK,
 		},
 		{
 			name: "not found returns 404",
-			setup: func(repo *catalogtest.PlaylistRepo) string {
+			setup: func(repo *catalog.InMemoryPlaylistRepo) string {
 				return uuid.New().String()
 			},
-			body:       RenamePlaylistRequest{Name: "New Name"},
+			body:       catalog.RenamePlaylistRequest{Name: "New Name"},
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name: "empty name returns 400",
-			setup: func(repo *catalogtest.PlaylistRepo) string {
-				pl := makePlaylist(testUserId, "Has Name")
+			setup: func(repo *catalog.InMemoryPlaylistRepo) string {
+				pl := makePlaylist(catalog.FixtureUserId(), "Has Name")
 				repo.Seed(pl)
 				return pl.ID.UUID().String()
 			},
-			body:       RenamePlaylistRequest{Name: ""},
+			body:       catalog.RenamePlaylistRequest{Name: ""},
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name: "whitespace-only name returns 400",
-			setup: func(repo *catalogtest.PlaylistRepo) string {
-				pl := makePlaylist(testUserId, "Has Name")
+			setup: func(repo *catalog.InMemoryPlaylistRepo) string {
+				pl := makePlaylist(catalog.FixtureUserId(), "Has Name")
 				repo.Seed(pl)
 				return pl.ID.UUID().String()
 			},
-			body:       RenamePlaylistRequest{Name: "   \t "},
+			body:       catalog.RenamePlaylistRequest{Name: "   \t "},
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name: "surrounding whitespace is trimmed on rename",
-			setup: func(repo *catalogtest.PlaylistRepo) string {
-				pl := makePlaylist(testUserId, "Old Name")
+			setup: func(repo *catalog.InMemoryPlaylistRepo) string {
+				pl := makePlaylist(catalog.FixtureUserId(), "Old Name")
 				repo.Seed(pl)
 				return pl.ID.UUID().String()
 			},
-			body:       RenamePlaylistRequest{Name: " New Name  "},
+			body:       catalog.RenamePlaylistRequest{Name: " New Name  "},
 			wantStatus: http.StatusOK,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plRepo := catalogtest.NewPlaylistRepo()
-			trRepo := catalogtest.NewTrackRepo()
+			plRepo := catalog.NewInMemoryPlaylistRepo()
+			trRepo := catalog.NewInMemoryTrackRepo()
 			playlistId := tt.setup(plRepo)
-			_, router := buildPlaylistHandler(plRepo, trRepo)
+			router := buildPlaylistHandler(plRepo, trRepo)
 
-			rec := serve(t, router, http.MethodPatch, "/playlists/"+playlistId, jsonBody(t, tt.body))
+			rec := request(t, router, http.MethodPatch, "/playlists/"+playlistId, jsonBody(t, tt.body))
 
 			assertStatus(t, rec, tt.wantStatus)
 
 			if tt.wantStatus == http.StatusOK {
-				var resp PlaylistResponse
+				var resp catalog.PlaylistResponse
 				decodeJSON(t, rec, &resp)
 				if resp.Name != "New Name" {
 					t.Errorf("Name = %q, want %q", resp.Name, "New Name")
@@ -413,15 +411,15 @@ func TestHandleRenamePlaylist(t *testing.T) {
 func TestHandleAddTrack(t *testing.T) {
 	tests := []struct {
 		name       string
-		setup      func(*catalogtest.PlaylistRepo, *catalogtest.TrackRepo) (string, uuid.UUID)
+		setup      func(*catalog.InMemoryPlaylistRepo, *catalog.InMemoryTrackRepo) (string, uuid.UUID)
 		wantStatus int
 	}{
 		{
 			name: "valid add returns 204",
-			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (string, uuid.UUID) {
-				pl := makePlaylist(testUserId, "My List")
+			setup: func(plRepo *catalog.InMemoryPlaylistRepo, trRepo *catalog.InMemoryTrackRepo) (string, uuid.UUID) {
+				pl := makePlaylist(catalog.FixtureUserId(), "My List")
 				plRepo.Seed(pl)
-				track := makeTrack(testUserId, "Track", "Artist", "Album")
+				track := makeTrack(catalog.FixtureUserId(), "Track", "Artist", "Album")
 				trRepo.Seed(track)
 				return pl.ID.UUID().String(), track.ID.UUID()
 			},
@@ -429,9 +427,9 @@ func TestHandleAddTrack(t *testing.T) {
 		},
 		{
 			name: "duplicate track returns 409 Conflict",
-			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (string, uuid.UUID) {
-				pl := makePlaylist(testUserId, "My List")
-				track := makeTrack(testUserId, "Track", "Artist", "Album")
+			setup: func(plRepo *catalog.InMemoryPlaylistRepo, trRepo *catalog.InMemoryTrackRepo) (string, uuid.UUID) {
+				pl := makePlaylist(catalog.FixtureUserId(), "My List")
+				track := makeTrack(catalog.FixtureUserId(), "Track", "Artist", "Album")
 				trRepo.Seed(track)
 				_ = pl.AddTrack(track.ID, time.Now())
 				plRepo.Seed(pl)
@@ -441,8 +439,8 @@ func TestHandleAddTrack(t *testing.T) {
 		},
 		{
 			name: "playlist not found returns 404",
-			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (string, uuid.UUID) {
-				track := makeTrack(testUserId, "Track", "Artist", "Album")
+			setup: func(plRepo *catalog.InMemoryPlaylistRepo, trRepo *catalog.InMemoryTrackRepo) (string, uuid.UUID) {
+				track := makeTrack(catalog.FixtureUserId(), "Track", "Artist", "Album")
 				trRepo.Seed(track)
 				return uuid.New().String(), track.ID.UUID()
 			},
@@ -450,8 +448,8 @@ func TestHandleAddTrack(t *testing.T) {
 		},
 		{
 			name: "track not found returns 404",
-			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (string, uuid.UUID) {
-				pl := makePlaylist(testUserId, "My List")
+			setup: func(plRepo *catalog.InMemoryPlaylistRepo, trRepo *catalog.InMemoryTrackRepo) (string, uuid.UUID) {
+				pl := makePlaylist(catalog.FixtureUserId(), "My List")
 				plRepo.Seed(pl)
 				return pl.ID.UUID().String(), uuid.New()
 			},
@@ -461,14 +459,14 @@ func TestHandleAddTrack(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plRepo := catalogtest.NewPlaylistRepo()
-			trRepo := catalogtest.NewTrackRepo()
+			plRepo := catalog.NewInMemoryPlaylistRepo()
+			trRepo := catalog.NewInMemoryTrackRepo()
 			playlistId, trackUUID := tt.setup(plRepo, trRepo)
-			_, router := buildPlaylistHandler(plRepo, trRepo)
+			router := buildPlaylistHandler(plRepo, trRepo)
 
-			body := AddTrackToPlaylistRequest{TrackID: trackUUID}
+			body := catalog.AddTrackToPlaylistRequest{TrackID: trackUUID}
 
-			rec := serve(t, router, http.MethodPost, "/playlists/"+playlistId+"/tracks", jsonBody(t, body))
+			rec := request(t, router, http.MethodPost, "/playlists/"+playlistId+"/tracks", jsonBody(t, body))
 
 			assertStatus(t, rec, tt.wantStatus)
 		})
@@ -478,18 +476,18 @@ func TestHandleAddTrack(t *testing.T) {
 func TestHandleAddTracks(t *testing.T) {
 	tests := []struct {
 		name        string
-		setup       func(*catalogtest.PlaylistRepo, *catalogtest.TrackRepo) (string, []uuid.UUID)
+		setup       func(*catalog.InMemoryPlaylistRepo, *catalog.InMemoryTrackRepo) (string, []uuid.UUID)
 		wantStatus  int
 		wantAdded   int
 		wantSkipped int
 	}{
 		{
 			name: "valid batch returns the added and skipped counts",
-			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (string, []uuid.UUID) {
-				pl := makePlaylist(testUserId, "My List")
+			setup: func(plRepo *catalog.InMemoryPlaylistRepo, trRepo *catalog.InMemoryTrackRepo) (string, []uuid.UUID) {
+				pl := makePlaylist(catalog.FixtureUserId(), "My List")
 				plRepo.Seed(pl)
-				first := makeTrack(testUserId, "First", "Artist", "Album")
-				second := makeTrack(testUserId, "Second", "Artist", "Album")
+				first := makeTrack(catalog.FixtureUserId(), "First", "Artist", "Album")
+				second := makeTrack(catalog.FixtureUserId(), "Second", "Artist", "Album")
 				trRepo.Seed(first)
 				trRepo.Seed(second)
 				return pl.ID.UUID().String(), []uuid.UUID{first.ID.UUID(), second.ID.UUID()}
@@ -499,10 +497,10 @@ func TestHandleAddTracks(t *testing.T) {
 		},
 		{
 			name: "a track already in the playlist is skipped, not a conflict",
-			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (string, []uuid.UUID) {
-				pl := makePlaylist(testUserId, "My List")
-				existing := makeTrack(testUserId, "Existing", "Artist", "Album")
-				fresh := makeTrack(testUserId, "Fresh", "Artist", "Album")
+			setup: func(plRepo *catalog.InMemoryPlaylistRepo, trRepo *catalog.InMemoryTrackRepo) (string, []uuid.UUID) {
+				pl := makePlaylist(catalog.FixtureUserId(), "My List")
+				existing := makeTrack(catalog.FixtureUserId(), "Existing", "Artist", "Album")
+				fresh := makeTrack(catalog.FixtureUserId(), "Fresh", "Artist", "Album")
 				trRepo.Seed(existing)
 				trRepo.Seed(fresh)
 				_ = pl.AddTrack(existing.ID, time.Now())
@@ -515,10 +513,10 @@ func TestHandleAddTracks(t *testing.T) {
 		},
 		{
 			name: "an unowned track is skipped, not a 404",
-			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (string, []uuid.UUID) {
-				pl := makePlaylist(testUserId, "My List")
+			setup: func(plRepo *catalog.InMemoryPlaylistRepo, trRepo *catalog.InMemoryTrackRepo) (string, []uuid.UUID) {
+				pl := makePlaylist(catalog.FixtureUserId(), "My List")
 				plRepo.Seed(pl)
-				owned := makeTrack(testUserId, "Owned", "Artist", "Album")
+				owned := makeTrack(catalog.FixtureUserId(), "Owned", "Artist", "Album")
 				trRepo.Seed(owned)
 				return pl.ID.UUID().String(), []uuid.UUID{owned.ID.UUID(), uuid.New()}
 			},
@@ -528,8 +526,8 @@ func TestHandleAddTracks(t *testing.T) {
 		},
 		{
 			name: "empty track_ids returns 400",
-			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (string, []uuid.UUID) {
-				pl := makePlaylist(testUserId, "My List")
+			setup: func(plRepo *catalog.InMemoryPlaylistRepo, trRepo *catalog.InMemoryTrackRepo) (string, []uuid.UUID) {
+				pl := makePlaylist(catalog.FixtureUserId(), "My List")
 				plRepo.Seed(pl)
 				return pl.ID.UUID().String(), []uuid.UUID{}
 			},
@@ -537,8 +535,8 @@ func TestHandleAddTracks(t *testing.T) {
 		},
 		{
 			name: "playlist not found returns 404",
-			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (string, []uuid.UUID) {
-				track := makeTrack(testUserId, "Track", "Artist", "Album")
+			setup: func(plRepo *catalog.InMemoryPlaylistRepo, trRepo *catalog.InMemoryTrackRepo) (string, []uuid.UUID) {
+				track := makeTrack(catalog.FixtureUserId(), "Track", "Artist", "Album")
 				trRepo.Seed(track)
 				return uuid.New().String(), []uuid.UUID{track.ID.UUID()}
 			},
@@ -548,21 +546,21 @@ func TestHandleAddTracks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plRepo := catalogtest.NewPlaylistRepo()
-			trRepo := catalogtest.NewTrackRepo()
+			plRepo := catalog.NewInMemoryPlaylistRepo()
+			trRepo := catalog.NewInMemoryTrackRepo()
 			playlistId, trackUUIDs := tt.setup(plRepo, trRepo)
-			_, router := buildPlaylistHandler(plRepo, trRepo)
+			router := buildPlaylistHandler(plRepo, trRepo)
 
-			body := AddTracksToPlaylistRequest{TrackIDs: trackUUIDs}
+			body := catalog.AddTracksToPlaylistRequest{TrackIDs: trackUUIDs}
 
-			rec := serve(t, router, http.MethodPost, "/playlists/"+playlistId+"/tracks/batch", jsonBody(t, body))
+			rec := request(t, router, http.MethodPost, "/playlists/"+playlistId+"/tracks/batch", jsonBody(t, body))
 
 			assertStatus(t, rec, tt.wantStatus)
 
 			if tt.wantStatus != http.StatusOK {
 				return
 			}
-			var resp AddTracksToPlaylistResponse
+			var resp catalog.AddTracksToPlaylistResponse
 			decodeJSON(t, rec, &resp)
 			if resp.Added != tt.wantAdded {
 				t.Errorf("Added = %d, want %d", resp.Added, tt.wantAdded)
@@ -577,13 +575,13 @@ func TestHandleAddTracks(t *testing.T) {
 func TestHandleRemoveTrack(t *testing.T) {
 	tests := []struct {
 		name       string
-		setup      func(*catalogtest.PlaylistRepo) (string, string)
+		setup      func(*catalog.InMemoryPlaylistRepo) (string, string)
 		wantStatus int
 	}{
 		{
 			name: "existing track returns 204",
-			setup: func(repo *catalogtest.PlaylistRepo) (string, string) {
-				pl := makePlaylist(testUserId, "My List")
+			setup: func(repo *catalog.InMemoryPlaylistRepo) (string, string) {
+				pl := makePlaylist(catalog.FixtureUserId(), "My List")
 				repo.Seed(pl)
 				return pl.ID.UUID().String(), uuid.New().String()
 			},
@@ -591,22 +589,22 @@ func TestHandleRemoveTrack(t *testing.T) {
 		},
 		{
 			name: "playlist not found returns 404",
-			setup: func(repo *catalogtest.PlaylistRepo) (string, string) {
+			setup: func(repo *catalog.InMemoryPlaylistRepo) (string, string) {
 				return uuid.New().String(), uuid.New().String()
 			},
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name: "invalid playlist ID returns 400",
-			setup: func(repo *catalogtest.PlaylistRepo) (string, string) {
+			setup: func(repo *catalog.InMemoryPlaylistRepo) (string, string) {
 				return "bad-id", uuid.New().String()
 			},
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name: "invalid track ID returns 400",
-			setup: func(repo *catalogtest.PlaylistRepo) (string, string) {
-				pl := makePlaylist(testUserId, "My List")
+			setup: func(repo *catalog.InMemoryPlaylistRepo) (string, string) {
+				pl := makePlaylist(catalog.FixtureUserId(), "My List")
 				repo.Seed(pl)
 				return pl.ID.UUID().String(), "bad-id"
 			},
@@ -616,12 +614,12 @@ func TestHandleRemoveTrack(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plRepo := catalogtest.NewPlaylistRepo()
-			trRepo := catalogtest.NewTrackRepo()
+			plRepo := catalog.NewInMemoryPlaylistRepo()
+			trRepo := catalog.NewInMemoryTrackRepo()
 			playlistId, trackId := tt.setup(plRepo)
-			_, router := buildPlaylistHandler(plRepo, trRepo)
+			router := buildPlaylistHandler(plRepo, trRepo)
 
-			rec := serve(t, router, http.MethodDelete, "/playlists/"+playlistId+"/tracks/"+trackId, nil)
+			rec := request(t, router, http.MethodDelete, "/playlists/"+playlistId+"/tracks/"+trackId, nil)
 
 			assertStatus(t, rec, tt.wantStatus)
 		})
@@ -631,16 +629,16 @@ func TestHandleRemoveTrack(t *testing.T) {
 func TestHandleRemoveTracks(t *testing.T) {
 	tests := []struct {
 		name        string
-		setup       func(*catalogtest.PlaylistRepo, *catalogtest.TrackRepo) (string, []uuid.UUID)
+		setup       func(*catalog.InMemoryPlaylistRepo, *catalog.InMemoryTrackRepo) (string, []uuid.UUID)
 		wantStatus  int
 		wantRemoved int
 	}{
 		{
 			name: "valid batch returns the removed count",
-			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (string, []uuid.UUID) {
-				pl := makePlaylist(testUserId, "My List")
-				first := makeTrack(testUserId, "First", "Artist", "Album")
-				second := makeTrack(testUserId, "Second", "Artist", "Album")
+			setup: func(plRepo *catalog.InMemoryPlaylistRepo, trRepo *catalog.InMemoryTrackRepo) (string, []uuid.UUID) {
+				pl := makePlaylist(catalog.FixtureUserId(), "My List")
+				first := makeTrack(catalog.FixtureUserId(), "First", "Artist", "Album")
+				second := makeTrack(catalog.FixtureUserId(), "Second", "Artist", "Album")
 				trRepo.Seed(first)
 				trRepo.Seed(second)
 				_ = pl.AddTrack(first.ID, time.Now())
@@ -653,9 +651,9 @@ func TestHandleRemoveTracks(t *testing.T) {
 		},
 		{
 			name: "a track that is not in the playlist is skipped, not a 404",
-			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (string, []uuid.UUID) {
-				pl := makePlaylist(testUserId, "My List")
-				member := makeTrack(testUserId, "Member", "Artist", "Album")
+			setup: func(plRepo *catalog.InMemoryPlaylistRepo, trRepo *catalog.InMemoryTrackRepo) (string, []uuid.UUID) {
+				pl := makePlaylist(catalog.FixtureUserId(), "My List")
+				member := makeTrack(catalog.FixtureUserId(), "Member", "Artist", "Album")
 				trRepo.Seed(member)
 				_ = pl.AddTrack(member.ID, time.Now())
 				plRepo.Seed(pl)
@@ -666,8 +664,8 @@ func TestHandleRemoveTracks(t *testing.T) {
 		},
 		{
 			name: "empty track_ids returns 400",
-			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (string, []uuid.UUID) {
-				pl := makePlaylist(testUserId, "My List")
+			setup: func(plRepo *catalog.InMemoryPlaylistRepo, trRepo *catalog.InMemoryTrackRepo) (string, []uuid.UUID) {
+				pl := makePlaylist(catalog.FixtureUserId(), "My List")
 				plRepo.Seed(pl)
 				return pl.ID.UUID().String(), []uuid.UUID{}
 			},
@@ -675,7 +673,7 @@ func TestHandleRemoveTracks(t *testing.T) {
 		},
 		{
 			name: "playlist not found returns 404",
-			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (string, []uuid.UUID) {
+			setup: func(plRepo *catalog.InMemoryPlaylistRepo, trRepo *catalog.InMemoryTrackRepo) (string, []uuid.UUID) {
 				return uuid.New().String(), []uuid.UUID{uuid.New()}
 			},
 			wantStatus: http.StatusNotFound,
@@ -684,21 +682,21 @@ func TestHandleRemoveTracks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plRepo := catalogtest.NewPlaylistRepo()
-			trRepo := catalogtest.NewTrackRepo()
+			plRepo := catalog.NewInMemoryPlaylistRepo()
+			trRepo := catalog.NewInMemoryTrackRepo()
 			playlistId, trackUUIDs := tt.setup(plRepo, trRepo)
-			_, router := buildPlaylistHandler(plRepo, trRepo)
+			router := buildPlaylistHandler(plRepo, trRepo)
 
-			body := RemoveTracksFromPlaylistRequest{TrackIDs: trackUUIDs}
+			body := catalog.RemoveTracksFromPlaylistRequest{TrackIDs: trackUUIDs}
 
-			rec := serve(t, router, http.MethodDelete, "/playlists/"+playlistId+"/tracks", jsonBody(t, body))
+			rec := request(t, router, http.MethodDelete, "/playlists/"+playlistId+"/tracks", jsonBody(t, body))
 
 			assertStatus(t, rec, tt.wantStatus)
 
 			if tt.wantStatus != http.StatusOK {
 				return
 			}
-			var resp RemoveTracksFromPlaylistResponse
+			var resp catalog.RemoveTracksFromPlaylistResponse
 			decodeJSON(t, rec, &resp)
 			if resp.Removed != tt.wantRemoved {
 				t.Errorf("Removed = %d, want %d", resp.Removed, tt.wantRemoved)
@@ -707,19 +705,19 @@ func TestHandleRemoveTracks(t *testing.T) {
 	}
 
 	t.Run("the single-track path still addresses exactly that track", func(t *testing.T) {
-		plRepo := catalogtest.NewPlaylistRepo()
-		trRepo := catalogtest.NewTrackRepo()
-		pl := makePlaylist(testUserId, "My List")
-		keep := makeTrack(testUserId, "Keep", "Artist", "Album")
-		drop := makeTrack(testUserId, "Drop", "Artist", "Album")
+		plRepo := catalog.NewInMemoryPlaylistRepo()
+		trRepo := catalog.NewInMemoryTrackRepo()
+		pl := makePlaylist(catalog.FixtureUserId(), "My List")
+		keep := makeTrack(catalog.FixtureUserId(), "Keep", "Artist", "Album")
+		drop := makeTrack(catalog.FixtureUserId(), "Drop", "Artist", "Album")
 		trRepo.Seed(keep)
 		trRepo.Seed(drop)
 		_ = pl.AddTrack(keep.ID, time.Now())
 		_ = pl.AddTrack(drop.ID, time.Now())
 		plRepo.Seed(pl)
-		_, router := buildPlaylistHandler(plRepo, trRepo)
+		router := buildPlaylistHandler(plRepo, trRepo)
 
-		rec := serve(t, router, http.MethodDelete,
+		rec := request(t, router, http.MethodDelete,
 			"/playlists/"+pl.ID.UUID().String()+"/tracks/"+drop.ID.UUID().String(), nil)
 
 		assertStatus(t, rec, http.StatusNoContent)
@@ -732,38 +730,38 @@ func TestHandleRemoveTracks(t *testing.T) {
 func TestHandleReorder(t *testing.T) {
 	tests := []struct {
 		name       string
-		setup      func(*catalogtest.PlaylistRepo) string
+		setup      func(*catalog.InMemoryPlaylistRepo) string
 		body       any
 		wantStatus int
 	}{
 		{
 			name: "valid reorder returns 204",
-			setup: func(repo *catalogtest.PlaylistRepo) string {
-				pl := makePlaylist(testUserId, "My List")
+			setup: func(repo *catalog.InMemoryPlaylistRepo) string {
+				pl := makePlaylist(catalog.FixtureUserId(), "My List")
 				repo.Seed(pl)
 				return pl.ID.UUID().String()
 			},
-			body:       ReorderTracksRequest{TrackIDs: []uuid.UUID{}},
+			body:       catalog.ReorderTracksRequest{TrackIDs: []uuid.UUID{}},
 			wantStatus: http.StatusNoContent,
 		},
 		{
 			name: "playlist not found returns 404",
-			setup: func(repo *catalogtest.PlaylistRepo) string {
+			setup: func(repo *catalog.InMemoryPlaylistRepo) string {
 				return uuid.New().String()
 			},
-			body:       ReorderTracksRequest{TrackIDs: []uuid.UUID{}},
+			body:       catalog.ReorderTracksRequest{TrackIDs: []uuid.UUID{}},
 			wantStatus: http.StatusNotFound,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plRepo := catalogtest.NewPlaylistRepo()
-			trRepo := catalogtest.NewTrackRepo()
+			plRepo := catalog.NewInMemoryPlaylistRepo()
+			trRepo := catalog.NewInMemoryTrackRepo()
 			playlistId := tt.setup(plRepo)
-			_, router := buildPlaylistHandler(plRepo, trRepo)
+			router := buildPlaylistHandler(plRepo, trRepo)
 
-			rec := serve(t, router, http.MethodPatch, "/playlists/"+playlistId+"/tracks/reorder", jsonBody(t, tt.body))
+			rec := request(t, router, http.MethodPatch, "/playlists/"+playlistId+"/tracks/reorder", jsonBody(t, tt.body))
 
 			assertStatus(t, rec, tt.wantStatus)
 		})
@@ -771,10 +769,10 @@ func TestHandleReorder(t *testing.T) {
 }
 
 func TestPlaylistBatchRoutes_EmptyTrackIDsCarryACode(t *testing.T) {
-	plRepo := catalogtest.NewPlaylistRepo()
-	playlist := makePlaylist(testUserId, "My List")
+	plRepo := catalog.NewInMemoryPlaylistRepo()
+	playlist := makePlaylist(catalog.FixtureUserId(), "My List")
 	plRepo.Seed(playlist)
-	_, router := buildPlaylistHandler(plRepo, catalogtest.NewTrackRepo())
+	router := buildPlaylistHandler(plRepo, catalog.NewInMemoryTrackRepo())
 	tracksPath := "/playlists/" + playlist.ID.UUID().String() + "/tracks"
 
 	routes := []struct{ method, path string }{
@@ -783,9 +781,9 @@ func TestPlaylistBatchRoutes_EmptyTrackIDsCarryACode(t *testing.T) {
 	}
 	for _, route := range routes {
 		t.Run(route.method, func(t *testing.T) {
-			body := jsonBody(t, AddTracksToPlaylistRequest{TrackIDs: []uuid.UUID{}})
+			body := jsonBody(t, catalog.AddTracksToPlaylistRequest{TrackIDs: []uuid.UUID{}})
 
-			rec := serve(t, router, route.method, route.path, body)
+			rec := request(t, router, route.method, route.path, body)
 
 			assertStatus(t, rec, http.StatusBadRequest)
 			assertErrorCode(t, rec, "catalog.track_ids_required")
@@ -794,78 +792,78 @@ func TestPlaylistBatchRoutes_EmptyTrackIDsCarryACode(t *testing.T) {
 }
 
 func TestHandleGetPlaylist_EncodesAfterHugeDurationsSubmitted(t *testing.T) {
-	trRepo := catalogtest.NewTrackRepo()
-	_, trackRouter := buildTrackHandler(trRepo, &catalogtest.Scheduler{})
+	trRepo := catalog.NewInMemoryTrackRepo()
+	trackRouter := buildTrackHandler(trRepo, &catalog.InMemoryScheduler{})
 	for _, title := range []string{"Dreams", "Rhiannon"} {
 		body := `{"title":"` + title + `","artist":"Fleetwood Mac","duration_seconds":1.7976931348623157e308}`
-		serve(t, trackRouter, http.MethodPost, "/tracks", strings.NewReader(body))
+		request(t, trackRouter, http.MethodPost, "/tracks", strings.NewReader(body))
 	}
-	stored := make([]*catdomain.Track, 0, len(trRepo.Tracks))
+	stored := make([]*catalog.Track, 0, len(trRepo.Tracks))
 	for _, track := range trRepo.Tracks {
 		stored = append(stored, track)
 	}
-	plRepo := catalogtest.NewPlaylistRepo()
-	pl, err := catdomain.NewPlaylist(testUserId, "Long", time.Now())
+	plRepo := catalog.NewInMemoryPlaylistRepo()
+	pl, err := catalog.NewPlaylist(catalog.FixtureUserId(), "Long", time.Now())
 	if err != nil {
 		t.Fatalf("new playlist: %v", err)
 	}
 	plRepo.SeedWithTracks(pl, stored)
-	_, playlistRouter := buildPlaylistHandler(plRepo, trRepo)
+	playlistRouter := buildPlaylistHandler(plRepo, trRepo)
 
-	rec := serve(t, playlistRouter, http.MethodGet, "/playlists/"+pl.ID.UUID().String(), nil)
+	rec := request(t, playlistRouter, http.MethodGet, "/playlists/"+pl.ID.UUID().String(), nil)
 
 	assertStatus(t, rec, http.StatusOK)
-	var resp PlaylistDetailResponse
+	var resp catalog.PlaylistDetailResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("playlist detail is not valid JSON (%v): %q", err, rec.Body.String())
 	}
 }
 
 func TestPlaylistWrites_ThrottlePerUser(t *testing.T) {
-	clock := newAudioFakeClock()
+	clock := newFakeClock()
 	rig := newThrottledWriteRig(clock.now)
 	noisy, quiet := shared.NewUserId(uuid.New()), shared.NewUserId(uuid.New())
 	playlistId, trackId := rig.seedPlaylistAndTrack(t, noisy)
 
-	if rec := rig.createPlaylist(noisy, "First"); rec.Code != http.StatusCreated {
+	if rec := rig.createPlaylist(t, noisy, "First"); rec.Code != http.StatusCreated {
 		t.Fatalf("create inside the burst must store, got %d (%s)", rec.Code, rec.Body.String())
 	}
-	if rec := rig.addTrackToPlaylist(noisy, playlistId, trackId); rec.Code != http.StatusNoContent {
+	if rec := rig.addTrackToPlaylist(t, noisy, playlistId, trackId); rec.Code != http.StatusNoContent {
 		t.Fatalf("add inside the burst must store, got %d (%s)", rec.Code, rec.Body.String())
 	}
-	if rec := rig.addTracksToPlaylist(noisy, playlistId, trackId); rec.Code != http.StatusOK {
+	if rec := rig.addTracksToPlaylist(t, noisy, playlistId, trackId); rec.Code != http.StatusOK {
 		t.Fatalf("batch add inside the burst must be served, got %d (%s)", rec.Code, rec.Body.String())
 	}
 	for i := range playlistWriteBurst - 3 {
-		if rec := rig.createPlaylist(noisy, "Filler "+strconv.Itoa(i)); rec.Code != http.StatusCreated {
+		if rec := rig.createPlaylist(t, noisy, "Filler "+strconv.Itoa(i)); rec.Code != http.StatusCreated {
 			t.Fatalf("create %d inside the burst must store, got %d (%s)", i, rec.Code, rec.Body.String())
 		}
 	}
 
-	assertWriteThrottled(t, rig.createPlaylist(noisy, "Past the burst"), "1")
-	assertWriteThrottled(t, rig.addTrackToPlaylist(noisy, playlistId, trackId), "1")
-	assertWriteThrottled(t, rig.addTracksToPlaylist(noisy, playlistId, trackId), "1")
+	assertWriteThrottled(t, rig.createPlaylist(t, noisy, "Past the burst"), "1")
+	assertWriteThrottled(t, rig.addTrackToPlaylist(t, noisy, playlistId, trackId), "1")
+	assertWriteThrottled(t, rig.addTracksToPlaylist(t, noisy, playlistId, trackId), "1")
 
-	if rec := rig.createPlaylist(quiet, "Untouched"); rec.Code != http.StatusCreated {
+	if rec := rig.createPlaylist(t, quiet, "Untouched"); rec.Code != http.StatusCreated {
 		t.Fatalf("another user's write budget must be untouched, got %d (%s)", rec.Code, rec.Body.String())
 	}
 }
 
 func TestPlaylistWrites_LeaveReadsAndRemovalsUnthrottled(t *testing.T) {
-	clock := newAudioFakeClock()
+	clock := newFakeClock()
 	rig := newThrottledWriteRig(clock.now)
 	user := shared.NewUserId(uuid.New())
 	playlistId, trackId := rig.seedPlaylistAndTrack(t, user)
 
-	if rec := rig.addTrackToPlaylist(user, playlistId, trackId); rec.Code != http.StatusNoContent {
+	if rec := rig.addTrackToPlaylist(t, user, playlistId, trackId); rec.Code != http.StatusNoContent {
 		t.Fatalf("the budgeted add must store, got %d (%s)", rec.Code, rec.Body.String())
 	}
 	for i := range playlistWriteBurst - 1 {
-		if rec := rig.createPlaylist(user, "Filler "+strconv.Itoa(i)); rec.Code != http.StatusCreated {
+		if rec := rig.createPlaylist(t, user, "Filler "+strconv.Itoa(i)); rec.Code != http.StatusCreated {
 			t.Fatalf("create %d inside the burst must store, got %d (%s)", i, rec.Code, rec.Body.String())
 		}
 	}
-	assertWriteThrottled(t, rig.addTrackToPlaylist(user, playlistId, trackId), "1")
+	assertWriteThrottled(t, rig.addTrackToPlaylist(t, user, playlistId, trackId), "1")
 
 	req := httptest.NewRequest(http.MethodGet, "/playlists/", nil)
 	req.Header.Set("Authorization", "Bearer "+user.String())
@@ -881,5 +879,57 @@ func TestPlaylistWrites_LeaveReadsAndRemovalsUnthrottled(t *testing.T) {
 	rig.router.ServeHTTP(remove, req)
 	if remove.Code != http.StatusNoContent {
 		t.Fatalf("remove with a spent write budget = %d, want 204 (%s)", remove.Code, remove.Body.String())
+	}
+}
+
+func TestHandleListPlaylists_ReportsEachPlaylistsTrackCount(t *testing.T) {
+	plRepo := catalog.NewInMemoryPlaylistRepo()
+	pl := makePlaylist(catalog.FixtureUserId(), "Rock")
+	plRepo.SeedWithTracks(pl, []*catalog.Track{
+		makeTrack(catalog.FixtureUserId(), "One", "Artist", "Album"),
+		makeTrack(catalog.FixtureUserId(), "Two", "Artist", "Album"),
+	})
+	router := buildPlaylistHandler(plRepo, catalog.NewInMemoryTrackRepo())
+
+	rec := request(t, router, http.MethodGet, "/playlists", nil)
+
+	assertStatus(t, rec, http.StatusOK)
+	var body httputil.List[catalog.PlaylistResponse]
+	decodeJSON(t, rec, &body)
+	if len(body.Items) != 1 || body.Items[0].TrackCount != 2 {
+		t.Fatalf("listed = %+v, want one playlist with track_count 2", body.Items)
+	}
+}
+
+func TestHandleCreatePlaylist_SendsArtworkAsAnEmptyArrayNotNull(t *testing.T) {
+	router := buildPlaylistHandler(catalog.NewInMemoryPlaylistRepo(), catalog.NewInMemoryTrackRepo())
+
+	rec := request(t, router, http.MethodPost, "/playlists", jsonBody(t, catalog.CreatePlaylistRequest{Name: "Empty"}))
+
+	assertStatus(t, rec, http.StatusCreated)
+	if !strings.Contains(rec.Body.String(), `"preview_artwork_urls":[]`) {
+		t.Fatalf("body = %s, want preview_artwork_urls as [] so clients can iterate it", rec.Body.String())
+	}
+}
+
+func TestHandleGetPlaylist_SumsTheTrackDurations(t *testing.T) {
+	plRepo := catalog.NewInMemoryPlaylistRepo()
+	pl := makePlaylist(catalog.FixtureUserId(), "Timed")
+	first, second := 100.5, 200.0
+	one := makeTrack(catalog.FixtureUserId(), "One", "Artist", "Album")
+	one.DurationSeconds = &first
+	two := makeTrack(catalog.FixtureUserId(), "Two", "Artist", "Album")
+	two.DurationSeconds = &second
+	untimed := makeTrack(catalog.FixtureUserId(), "Untimed", "Artist", "Album")
+	plRepo.SeedWithTracks(pl, []*catalog.Track{one, two, untimed})
+	router := buildPlaylistHandler(plRepo, catalog.NewInMemoryTrackRepo())
+
+	rec := request(t, router, http.MethodGet, "/playlists/"+pl.ID.UUID().String(), nil)
+
+	assertStatus(t, rec, http.StatusOK)
+	var resp catalog.PlaylistDetailResponse
+	decodeJSON(t, rec, &resp)
+	if resp.TotalDurationSeconds != 300.5 {
+		t.Fatalf("total_duration_seconds = %v, want 300.5", resp.TotalDurationSeconds)
 	}
 }

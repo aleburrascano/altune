@@ -23,6 +23,7 @@ var (
 var (
 	CleanSearchKeys           = domain.CleanSearchKeys
 	KnownCatalogProviders     = domain.KnownCatalogProviders
+	NewPlaylist               = domain.NewPlaylist
 	NewTrack                  = domain.NewTrack
 	NewTrackId                = domain.NewTrackId
 	NormalizeCatalogMBID      = domain.NormalizeCatalogMBID
@@ -53,6 +54,7 @@ type (
 
 const (
 	MaxCatalogSources      = domain.MaxCatalogSources
+	MaxLibraryPageSize     = domain.MaxLibraryPageSize
 	MaxLibrarySearchLength = domain.MaxLibrarySearchLength
 	SortYear               = domain.SortYear
 )
