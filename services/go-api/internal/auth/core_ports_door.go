@@ -3,8 +3,12 @@ package auth
 import ports "altune/go-api/internal/auth/internal/core/ports"
 
 type (
-	TokenVerifier = ports.TokenVerifier
-	VerifierFunc  = ports.VerifierFunc
+	InvalidTokenError = ports.InvalidTokenError
+	TokenVerifier     = ports.TokenVerifier
+	VerifiedToken     = ports.VerifiedToken
+	VerifierFunc      = ports.VerifierFunc
 )
+
+const ReasonSignatureInvalid = ports.ReasonSignatureInvalid
 
 var NoopTokenRevoker = ports.NoopTokenRevoker

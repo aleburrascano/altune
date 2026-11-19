@@ -85,12 +85,19 @@ func (t *failureThrottle) makeRoom(now time.Time) {
 	if len(t.clients) < t.limits.MaxClients {
 		return
 	}
+	t.pruneRefilled(now)
+	t.evictFullest(now, t.limits.MaxClients-max(1, t.limits.MaxClients/10))
+}
+
+func (t *failureThrottle) pruneRefilled(now time.Time) {
 	for key, lim := range t.clients {
 		if lim.TokensAt(now) >= float64(t.limits.Burst) {
 			delete(t.clients, key)
 		}
 	}
-	lowWater := t.limits.MaxClients - max(1, t.limits.MaxClients/10)
+}
+
+func (t *failureThrottle) evictFullest(now time.Time, lowWater int) {
 	byTokens := make(map[string]float64, len(t.clients))
 	keys := make([]string, 0, len(t.clients))
 	for key, lim := range t.clients {

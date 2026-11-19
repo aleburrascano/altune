@@ -1,9 +1,10 @@
-package middleware_test
+package auth_test
 
 import (
 	"altune/go-api/internal/auth"
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"testing"
 	"time"
@@ -135,4 +136,27 @@ func TestFailureThrottle_ExhaustedClientSurvivesEvictionChurn(t *testing.T) {
 	if admitted(handler, attacker) {
 		t.Fatal("exhausted client got a fresh burst after eviction churn")
 	}
+}
+
+func churnAddr(i int) string {
+	return fmt.Sprintf("10.%d.%d.%d:4444", i>>16&255, i>>8&255, i&255)
+}
+
+func BenchmarkFailureThrottle_BenignChurn(b *testing.B) { benchmarkChurn(b, 3*time.Second) }
+
+func BenchmarkFailureThrottle_AttackChurn(b *testing.B) { benchmarkChurn(b, 0) }
+
+func benchmarkChurn(b *testing.B, step time.Duration) {
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.DiscardHandler))
+	b.Cleanup(func() { slog.SetDefault(prev) })
+	handler, clock := limitedMiddleware(auth.FailureLimits{Burst: 20, Refill: 3 * time.Second, MaxClients: 10_000})
+	var worst time.Duration
+	for i := 0; b.Loop(); i++ {
+		clock.advance(step)
+		start := time.Now()
+		serveBearer(handler, churnAddr(i), "garbage")
+		worst = max(worst, time.Since(start))
+	}
+	b.ReportMetric(float64(worst.Microseconds()), "worst-µs")
 }

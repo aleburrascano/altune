@@ -1,4 +1,4 @@
-package domain
+package ports
 
 import (
 	shared "altune/go-api/internal/shared/kernel"

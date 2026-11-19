@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"altune/go-api/internal/auth/domain"
 	"altune/go-api/internal/auth/internal/core/ports"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/requestuser"
@@ -78,37 +77,37 @@ type authenticator struct {
 func (a authenticator) bearer(w http.ResponseWriter, r *http.Request) (string, bool) {
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
-		a.rej.rejectToken(w, r, domain.ReasonMissing, "missing authorization header", nil)
+		a.rej.rejectToken(w, r, ports.ReasonMissing, "missing authorization header", nil)
 		return "", false
 	}
 	token, ok := bearerToken(authHeader)
 	if !ok {
-		a.rej.rejectToken(w, r, domain.ReasonMalformed, "malformed authorization header", nil)
+		a.rej.rejectToken(w, r, ports.ReasonMalformed, "malformed authorization header", nil)
 		return "", false
 	}
 	return token, true
 }
 
-func (a authenticator) verify(w http.ResponseWriter, r *http.Request, token string) (domain.VerifiedToken, bool) {
+func (a authenticator) verify(w http.ResponseWriter, r *http.Request, token string) (ports.VerifiedToken, bool) {
 	attempt, retryAfter, admitted := a.throttle.admit(requestuser.ClientKey(r))
 	if !admitted {
 		a.rej.rejectThrottled(w, r, retryAfter)
-		return domain.VerifiedToken{}, false
+		return ports.VerifiedToken{}, false
 	}
 	verified, err := a.verifier.Verify(r.Context(), token)
 	if err != nil {
 		a.rej.rejectFailedVerification(w, r, err)
-		return domain.VerifiedToken{}, false
+		return ports.VerifiedToken{}, false
 	}
 	if verified.ExpiresAt.IsZero() {
-		a.rej.rejectToken(w, r, domain.ReasonClaimMissingEXP, "invalid token", nil)
-		return domain.VerifiedToken{}, false
+		a.rej.rejectToken(w, r, ports.ReasonClaimMissingEXP, "invalid token", nil)
+		return ports.VerifiedToken{}, false
 	}
 	attempt.succeeded()
 	return verified, true
 }
 
-func contextFor(ctx context.Context, t domain.VerifiedToken) context.Context {
+func contextFor(ctx context.Context, t ports.VerifiedToken) context.Context {
 	return requestuser.ContextWithTokenExpiry(requestuser.ContextWithUserID(ctx, t.UserID), t.ExpiresAt)
 }
 
@@ -137,7 +136,7 @@ type rejecter struct {
 }
 
 func (rej rejecter) rejectFailedVerification(w http.ResponseWriter, r *http.Request, err error) {
-	var invalidToken *domain.InvalidTokenError
+	var invalidToken *ports.InvalidTokenError
 	if errors.As(err, &invalidToken) {
 		rej.rejectToken(w, r, invalidToken.Reason, "invalid token", err)
 		return
@@ -186,12 +185,12 @@ func (rej rejecter) rejectVerifierUnavailable(w http.ResponseWriter, r *http.Req
 	writeAuthUnavailable(w)
 }
 
-func (rej rejecter) rejectToken(w http.ResponseWriter, r *http.Request, reason domain.TokenRejectReason, detail string, err error) {
+func (rej rejecter) rejectToken(w http.ResponseWriter, r *http.Request, reason ports.TokenRejectReason, detail string, err error) {
 	rej.metrics.TokenRejected(string(reason))
 	writeUnauthorized(w, r, reason, detail, err)
 }
 
-func writeUnauthorized(w http.ResponseWriter, r *http.Request, reason domain.TokenRejectReason, detail string, err error) {
+func writeUnauthorized(w http.ResponseWriter, r *http.Request, reason ports.TokenRejectReason, detail string, err error) {
 	attrs := []any{
 		"reason", string(reason),
 		"detail", detail,
