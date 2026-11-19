@@ -2,6 +2,7 @@ package audio_test
 
 import (
 	"altune/go-api/internal/catalog"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
 	"testing"
@@ -28,22 +29,31 @@ func (s *recordingSigner) PresignGet(_ context.Context, audioRef string, ttl tim
 	return "https://signed.example/" + audioRef, nil
 }
 
+type failingTrackLister struct {
+	*catalog.InMemoryTrackRepo
+	err error
+}
+
+func (r failingTrackLister) ListByIDs(context.Context, shared.UserId, []catalog.TrackId) ([]*catalog.Track, error) {
+	return nil, r.err
+}
+
 func TestAudioURLService_Resolve(t *testing.T) {
 	ctx := context.Background()
 	userId := catalog.FixtureUserId()
 
-	t.Run("ready tracks get signed urls, non-streamable are skipped", func(t *testing.T) {
+	t.Run("ready tracks get signed urls, non-streamable and unknown ids are skipped", func(t *testing.T) {
 		repo := catalog.NewInMemoryTrackRepo()
 		ready := catalog.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 		pending := catalog.SeedTrack(t, repo, userId, "Pending", "Artist", "Album")
 		svc := catalog.NewAudioURLService(repo, newRecordingSigner())
 
-		out, err := svc.Resolve(ctx, userId, []catalog.TrackId{ready.ID, pending.ID})
+		out, err := svc.Resolve(ctx, userId, []catalog.TrackId{ready.ID, pending.ID, catalog.NewTrackId()})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(out) != 1 {
-			t.Fatalf("expected 1 url (pending skipped), got %d", len(out))
+			t.Fatalf("expected 1 url (pending and unknown skipped), got %d", len(out))
 		}
 		if out[0].TrackID != ready.ID {
 			t.Errorf("url track = %v, want %v", out[0].TrackID, ready.ID)
@@ -109,6 +119,21 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		}
 		if out[0].Version != "" {
 			t.Errorf("version = %q, want empty so the client keeps its existing copy", out[0].Version)
+		}
+	})
+
+	t.Run("a failed track lookup surfaces the error instead of an empty result", func(t *testing.T) {
+		errLookup := errors.New("track lookup down")
+		repo := failingTrackLister{InMemoryTrackRepo: catalog.NewInMemoryTrackRepo(), err: errLookup}
+		svc := catalog.NewAudioURLService(repo, newRecordingSigner())
+
+		out, err := svc.Resolve(ctx, userId, []catalog.TrackId{catalog.NewTrackId()})
+
+		if !errors.Is(err, errLookup) {
+			t.Fatalf("error = %v, want %v", err, errLookup)
+		}
+		if out != nil {
+			t.Fatalf("resolved = %+v, want nil alongside the error", out)
 		}
 	})
 
