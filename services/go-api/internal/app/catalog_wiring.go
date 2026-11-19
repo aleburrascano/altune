@@ -316,9 +316,8 @@ func (t sourceTiers) all() []acquisition.AudioSource {
 }
 
 func (a *App) acquisitionSources(ctx context.Context) (sourceTiers, acquisition.AcquisitionVerification) {
-	if a.cfg.AcquisitionFixtureEnabled() {
-		slog.WarnContext(ctx, "acquisition: fixture audio source replaces every live source", "env", a.cfg.Env)
-		return sourceTiers{first: []acquisition.AudioSource{acquisition.NewArtTrackSource()}, fallback: []acquisition.AudioSource{acquisition.NewUploadSource()}}, acquisition.AcquisitionVerification{}
+	if a.fixtureSources != nil {
+		return *a.fixtureSources, acquisition.AcquisitionVerification{}
 	}
 	searcher := a.newYtDlpSearcher()
 	tools := acquisition.AcquisitionVerification{YtDlp: searcher.Available()}
@@ -336,14 +335,14 @@ func (a *App) innerTubeClient(ctx context.Context) *http.Client {
 }
 
 func (a *App) sourceCanarySearcher() *acquisition.YtDlpAudioSearcher {
-	if a.cfg.AcquisitionFixtureEnabled() {
+	if a.fixtureSources != nil {
 		return nil
 	}
 	return a.newYtDlpSearcher()
 }
 
 func (a *App) sourceCanaryYTMClient() *acquisition.YtmSearchClient {
-	if a.cfg.AcquisitionFixtureEnabled() {
+	if a.fixtureSources != nil {
 		return nil
 	}
 	return a.budgetedYTMSearchClient(context.Background())

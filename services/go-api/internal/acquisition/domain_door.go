@@ -24,3 +24,9 @@ var (
 	LengthLoose = domain.LengthLoose
 	LengthTight = domain.LengthTight
 )
+
+var (
+	CreditBrackets  = domain.CreditBrackets
+	FeaturedCredits = domain.FeaturedCredits
+	SplitCredit     = domain.SplitCredit
+)

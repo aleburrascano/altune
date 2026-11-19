@@ -56,6 +56,8 @@ type App struct {
 	backgroundStarts []backgroundJob
 
 	jobs runloop.JobRegistry
+
+	fixtureSources *sourceTiers
 }
 
 type electionController interface {
@@ -121,17 +123,13 @@ func (a *App) setup(ctx context.Context) error {
 	a.eventBus = events.NewInProcessBus()
 	a.eventTap = observe.NewEventTap(a.eventBus)
 
-	clientTransport, err := providerTransport(a.cfg)
-	if err != nil {
-		return fmt.Errorf("provider replay: %w", err)
-	}
 	warnIgnoredStartupOptIns(ctx, a.cfg)
 
 	if err := a.applyDisabledJobs(ctx); err != nil {
 		return fmt.Errorf("startup switches: %w", err)
 	}
 
-	disc, err := discovery.New(a.discoveryDeps(ctx, newClientFactory(clientTransport)))
+	disc, err := discovery.New(a.discoveryDeps(ctx, newClientFactory(nil)))
 	if err != nil {
 		return fmt.Errorf("discovery: %w", err)
 	}

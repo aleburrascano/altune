@@ -1,0 +1,7 @@
+{
+  "removed": [
+    "T1 internal/acquisition/internal/core/domain/credit_split_test.go is in package domain, so it sees inside the module: use package domain_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}

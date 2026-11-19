@@ -12,6 +12,7 @@ import (
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -175,41 +176,49 @@ func (r *fixtureTrackRepo) AudioRefInUse(_ context.Context, _ string, _ catalog.
 	return false, nil
 }
 
-func TestAcquisitionSources_FixtureNeverWiredOutsideOptedInNonProd(t *testing.T) {
-	cases := []config.Config{
-		{Env: "production", AcquisitionFixtureOptIn: true, YtDLPEnabled: true},
-		{Env: "staging", AcquisitionFixtureOptIn: true, YtDLPEnabled: true},
-		{Env: "", AcquisitionFixtureOptIn: true, YtDLPEnabled: true},
-		{Env: "test", AcquisitionFixtureOptIn: false, YtDLPEnabled: true},
-	}
-	for _, c := range cases {
-		sources, _ := (&App{cfg: &c}).acquisitionSources(t.Context())
-		names := sourceNames(sources.all())
-		if containsSource(names, acquisition.FixtureSourceName) || containsSource(names, acquisition.UploadSourceName) || !containsSource(names, acquisition.YtDlpSourceName) {
-			t.Fatalf("cfg env=%q optIn=%v: sources %v, want live sources and no fixture", c.Env, c.AcquisitionFixtureOptIn, names)
-		}
+//go:embed testdata/clip.mp3
+var fixtureClip []byte
+
+func fixtureTiers() *sourceTiers {
+	return &sourceTiers{
+		first:    []acquisition.AudioSource{acquisition.NewArtTrackSource(fixtureClip)},
+		fallback: []acquisition.AudioSource{acquisition.NewUploadSource(fixtureClip)},
 	}
 }
 
-func TestAcquisitionSources_OptedInTestEnvUsesOnlyFixtures(t *testing.T) {
-	cfg := &config.Config{Env: "test", AcquisitionFixtureOptIn: true, YtMusicEnabled: true, YtDLPEnabled: true}
-	sources, _ := (&App{cfg: cfg}).acquisitionSources(t.Context())
-	assertFixtureTiers(t, sources)
-}
+func TestAcquisitionSources_InjectedFixturesReplaceEveryLiveSourceAndCanary(t *testing.T) {
+	fixtures := fixtureTiers()
+	a := &App{cfg: &config.Config{Env: "test", YtMusicEnabled: true, YtDLPEnabled: true}, fixtureSources: fixtures}
 
-func assertFixtureTiers(t *testing.T, sources sourceTiers) {
-	t.Helper()
+	sources, tools := a.acquisitionSources(t.Context())
+
 	first, fallback := sourceNames(sources.first), sourceNames(sources.fallback)
-	if len(first) != 1 || first[0] != acquisition.FixtureSourceName || len(fallback) != 1 || fallback[0] != acquisition.UploadSourceName {
-		t.Fatalf("tiers first=%v fallback=%v, want [%q] and [%q]", first, fallback, acquisition.FixtureSourceName, acquisition.UploadSourceName)
+	wantFirst, wantFallback := sourceNames(fixtures.first), sourceNames(fixtures.fallback)
+	if len(first) != 1 || first[0] != wantFirst[0] || len(fallback) != 1 || fallback[0] != wantFallback[0] {
+		t.Fatalf("tiers first=%v fallback=%v, want %v and %v", first, fallback, wantFirst, wantFallback)
+	}
+	if tools.YtDlp {
+		t.Error("tools report yt-dlp available, want no live tool behind injected fixtures")
+	}
+	if a.sourceCanarySearcher() != nil || a.sourceCanaryYTMClient() != nil {
+		t.Error("a source canary is wired, want none behind injected fixtures")
 	}
 }
 
-func TestAcquisitionFixture_TiersMirrorProd(t *testing.T) {
-	cfg := &config.Config{Env: "test", AcquisitionFixtureOptIn: true, YtMusicEnabled: true, YtDLPEnabled: true}
-	sources, _ := (&App{cfg: cfg}).acquisitionSources(t.Context())
-	assertFixtureTiers(t, sources)
+func TestAcquisitionSources_WithoutInjectedFixturesWiresLiveSourcesAndCanaries(t *testing.T) {
+	a := &App{cfg: &config.Config{Env: "test", YtDLPEnabled: true}}
 
+	sources, _ := a.acquisitionSources(t.Context())
+
+	if names := sourceNames(sources.all()); !containsSource(names, acquisition.YtDlpSourceName) {
+		t.Fatalf("sources %v, want the live yt-dlp source", names)
+	}
+	if a.sourceCanarySearcher() == nil || a.sourceCanaryYTMClient() == nil {
+		t.Error("a source canary is missing, want both wired for live sources")
+	}
+}
+
+func TestAcquisitionFixture_FirstTierArtTrackIsTheStoredSource(t *testing.T) {
 	musicDir := t.TempDir()
 	track := acquireWithFixture(t, musicDir)
 	assertReadyWithAudio(t, track, musicDir)
@@ -236,7 +245,7 @@ func TestAcquisitionFixture_FetchedAudioPassesProbeAndDecodeGates(t *testing.T) 
 
 func acquireWithFixture(t *testing.T, musicDir string, opts ...func(*acquisition.AcquireTrackAudioService)) *catalog.Track {
 	t.Helper()
-	sources, _ := (&App{cfg: &config.Config{Env: "test", AcquisitionFixtureOptIn: true}}).acquisitionSources(t.Context())
+	sources, _ := (&App{cfg: &config.Config{}, fixtureSources: fixtureTiers()}).acquisitionSources(t.Context())
 	userID := shared.NewUserId(uuid.New())
 	track, err := catalog.NewTrack(userID, "Fixture Song", "Fixture Artist", "")
 	if err != nil || track.SetDuration(212) != nil {
@@ -556,9 +565,10 @@ func TestWireCatalogScheduler_RecordsOutcomeThroughThePostgresStore(t *testing.T
 	}
 
 	a := &App{
-		cfg:  &config.Config{Env: "test", AcquisitionFixtureOptIn: true, MusicDir: t.TempDir()},
-		sem:  make(chan struct{}, 1),
-		pool: pool,
+		cfg:            &config.Config{Env: "test", MusicDir: t.TempDir()},
+		sem:            make(chan struct{}, 1),
+		pool:           pool,
+		fixtureSources: fixtureTiers(),
 	}
 	tap := observe.NewEventTap(events.NewInProcessBus())
 	wired, err := a.wireCatalog(t.Context(), tap, &discovery.Discovery{})
@@ -666,12 +676,6 @@ func TestWireCatalogRejectsPartialOCIS3EvenWithMusicDir(t *testing.T) {
 	if wired.scheduler != nil {
 		t.Error("scheduler must not be wired when the audio store fails")
 	}
-}
-
-func TestAcquisitionSources_ProviderReplayUsesOnlyFixtures(t *testing.T) {
-	cfg := &config.Config{Env: "test", ProviderReplayOptIn: true, ProviderReplayDir: t.TempDir(), YtDLPEnabled: true}
-	sources, _ := (&App{cfg: cfg}).acquisitionSources(t.Context())
-	assertFixtureTiers(t, sources)
 }
 
 func TestBuildAcquisitionScheduler_AcquisitionPausedStartsPausedBeforeStartupSwitches(t *testing.T) {
