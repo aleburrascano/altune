@@ -62,7 +62,7 @@ func (s *YtDlpAudioSearcher) runCanaryProbe(parent, ctx context.Context, source 
 		"--no-warnings", "--simulate", "-f", format, "--print", "%(duration)s", "--", ytDlpURL(source.URL),
 	}, cookieFile)
 
-	stdout, stderr, err := execcmd.Run(ctx, s.binary, args...)
+	stdout, stderr, err := execcmd.Run(ctx, ytDlpBinary, args...)
 	if stopped := s.canaryStopped(parent, ctx); stopped != nil {
 		return stopped
 	}

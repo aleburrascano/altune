@@ -27,8 +27,6 @@ const (
 	previewFlatMargin    = 5.0
 )
 
-type inspectRunner func(ctx context.Context, trackURL string) (inspection, error)
-
 type inspection struct {
 	Duration       float64
 	AudioFormats   int
@@ -185,7 +183,7 @@ func (s *YtDlpAudioSearcher) inspectCached(ctx context.Context, trackURL string)
 	if result, ok := s.inspections.get(trackURL); ok {
 		return result, nil
 	}
-	result, err := s.inspect(ctx, trackURL)
+	result, err := s.runYtDlpInspect(ctx, trackURL)
 	if err != nil {
 		return inspection{}, err
 	}
@@ -204,7 +202,7 @@ func (s *YtDlpAudioSearcher) runYtDlpInspect(ctx context.Context, trackURL strin
 	defer cleanup()
 
 	args := s.authFlags([]string{"-J", "--no-download", "--no-warnings", "--", trackURL}, cookieFile)
-	stdout, stderr, err := execcmd.Run(inspectCtx, s.binary, args...)
+	stdout, stderr, err := execcmd.Run(inspectCtx, ytDlpBinary, args...)
 	if err != nil {
 		return inspection{}, fmt.Errorf("yt-dlp inspect: %w (stderr: %s)", err, embeddedStderr(stderr))
 	}

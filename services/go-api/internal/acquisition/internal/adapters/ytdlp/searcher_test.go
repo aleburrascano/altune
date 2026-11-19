@@ -1,33 +1,34 @@
-package ytdlp
+package ytdlp_test
 
 import (
-	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
-	"altune/go-api/internal/acquisition/internal/core/ports"
-	"bytes"
+	"altune/go-api/internal/acquisition"
 	"context"
-	"errors"
-	"fmt"
-	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 	"unicode/utf8"
 )
 
-const secretCookiePath = "/secret/cookies.txt"
+const (
+	secretCookiePath    = "/secret/cookies.txt"
+	soundCloudTrackURL  = "https://soundcloud.com/bran-van-3000/drinking-in-l-a-3"
+	stderrTruncated     = "...(truncated)"
+	embeddedStderrLimit = 2048
+)
 
 func TestYtDlpAudioSearcher_Search(t *testing.T) {
+	if os.Getenv("YTDLP_LIVE") != "1" {
+		t.Skip("set YTDLP_LIVE=1 to search YouTube and SoundCloud with the real yt-dlp")
+	}
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
-		t.Skip("yt-dlp not installed, skipping integration test")
+		t.Fatalf("YTDLP_LIVE=1 but yt-dlp is not on PATH: %v", err)
 	}
 
-	searcher := NewYtDlpAudioSearcher("", "", "")
+	searcher := acquisition.NewYtDlpAudioSearcher("", "", "")
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -51,107 +52,33 @@ func TestYtDlpAudioSearcher_Search(t *testing.T) {
 	}
 }
 
-func withStubYtDlp(t *testing.T, stdout string) {
+func downloadArgv(t *testing.T, s *acquisition.YtDlpAudioSearcher, url string) []string {
 	t.Helper()
-	dir := t.TempDir()
-	script := "#!/bin/sh\ncat <<'ALTUNE_EOF'\n" + stdout + "\nALTUNE_EOF\n"
-	if err := os.WriteFile(filepath.Join(dir, "yt-dlp"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-}
-
-func withDecoyYtDlp(t *testing.T) {
-	t.Helper()
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "yt-dlp"), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-}
-
-func stubDownloaderAt(t *testing.T, outDir string) string {
-	t.Helper()
-	binary := filepath.Join(t.TempDir(), "custom-yt-dlp")
-	script := "#!/bin/sh\nhead -c 20480 /dev/zero > " + filepath.Join(outDir, "stub.m4a") + "\n" +
-		"echo 'altune-output-path:" + filepath.Join(outDir, "stub.m4a") + "'\n"
-	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	return binary
-}
-
-func TestYtDlpAudioSearcher_Download_RunsTheConfiguredBinary(t *testing.T) {
-	withDecoyYtDlp(t)
 	outDir := t.TempDir()
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.binary = stubDownloaderAt(t, outDir)
-
-	got, err := s.Download(context.Background(), "https://youtube.com/watch?v=1", outDir)
-	if err != nil {
+	calls := installYtDlp(t, stubDownload(outDir))
+	if _, err := s.Download(context.Background(), url, outDir); err != nil {
 		t.Fatalf("Download error: %v", err)
 	}
-
-	if want := filepath.Join(outDir, "stub.m4a"); got.Path != want {
-		t.Fatalf("Download = %q, want the file the configured binary produced (%q)", got.Path, want)
-	}
-}
-
-func argvRecordingDownloaderAt(t *testing.T, outDir string) (binary, argvFile string) {
-	t.Helper()
-	dir := t.TempDir()
-	binary, argvFile = filepath.Join(dir, "recording-yt-dlp"), filepath.Join(dir, "argv")
-	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"" + argvFile + "\"\n" +
-		"head -c 20480 /dev/zero > \"" + filepath.Join(outDir, "stub.m4a") + "\"\n" +
-		"echo 'altune-output-path:" + filepath.Join(outDir, "stub.m4a") + "'\n"
-	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	return binary, argvFile
+	return onlyCall(t, calls)
 }
 
 func TestDownload_MaxFilesizeFlagIsTheDownloadedFileCap(t *testing.T) {
-	withDecoyYtDlp(t)
-	outDir := t.TempDir()
-	binary, argvFile := argvRecordingDownloaderAt(t, outDir)
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.binary = binary
+	argv := downloadArgv(t, acquisition.NewYtDlpAudioSearcher("", "", ""), youTubeWatchURL)
 
-	if _, err := s.Download(context.Background(), "https://youtube.com/watch?v=1", outDir); err != nil {
-		t.Fatalf("Download error: %v", err)
+	if got := flagValue(t, argv, "--max-filesize"); got != "209715200" {
+		t.Fatalf("--max-filesize %q, want the 200 MiB downloaded-file cap", got)
 	}
-
-	raw, err := os.ReadFile(argvFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	argv := strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n")
-	for i, arg := range argv {
-		if arg != "--max-filesize" {
-			continue
-		}
-		if i+1 >= len(argv) || argv[i+1] != strconv.Itoa(maxDownloadedFileBytes) {
-			t.Fatalf("argv = %q, want --max-filesize followed by %q", argv, strconv.Itoa(maxDownloadedFileBytes))
-		}
-		return
-	}
-	t.Fatalf("argv = %q, want it to carry --max-filesize", argv)
 }
 
-func captureLogs(t *testing.T) *bytes.Buffer {
+func searchOneQuery(t *testing.T) ([]acquisition.AudioCandidate, error) {
 	t.Helper()
-	var logs bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &logs
+	return acquisition.NewYtDlpAudioSearcher("", "", "").SearchQueries(context.Background(), []string{"q"})
 }
 
-func TestRunYtDlpSearch_OutputThatParsesToNothingIsAnError(t *testing.T) {
-	withStubYtDlp(t, "garbage\nmore garbage")
-	s := NewYtDlpAudioSearcher("", "", "")
+func TestSearch_OutputThatParsesToNothingIsAnError(t *testing.T) {
+	installSearch(t, "printf 'garbage\\nmore garbage\\n'")
 
-	_, err := s.runYtDlpSearch(context.Background(), "ytsearch5:q")
+	_, err := searchOneQuery(t)
 
 	if err == nil {
 		t.Fatal("unparsable output reported as a successful empty search, want an error")
@@ -161,13 +88,11 @@ func TestRunYtDlpSearch_OutputThatParsesToNothingIsAnError(t *testing.T) {
 	}
 }
 
-func TestRunYtDlpSearch_MixedOutputKeepsGoodEntriesAndLogsSkipped(t *testing.T) {
-	withStubYtDlp(t, `{"title":"Good","webpage_url":"https://youtube.com/watch?v=1","duration":12}`+
-		"\ngarbage\n"+`{"title":"No URL"}`)
+func TestSearch_MixedOutputKeepsGoodEntriesAndLogsSkipped(t *testing.T) {
+	installSearch(t, `printf '%s\ngarbage\n%s\n' '{"title":"Good","webpage_url":"https://youtube.com/watch?v=1","duration":12}' '{"title":"No URL"}'`)
 	logs := captureLogs(t)
-	s := NewYtDlpAudioSearcher("", "", "")
 
-	got, err := s.runYtDlpSearch(context.Background(), "ytsearch5:q")
+	got, err := searchOneQuery(t)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -180,11 +105,10 @@ func TestRunYtDlpSearch_MixedOutputKeepsGoodEntriesAndLogsSkipped(t *testing.T) 
 	}
 }
 
-func TestRunYtDlpSearch_NoOutputIsAnEmptyResult(t *testing.T) {
-	withStubYtDlp(t, "")
-	s := NewYtDlpAudioSearcher("", "", "")
+func TestSearch_NoOutputIsAnEmptyResult(t *testing.T) {
+	installSearch(t, "true")
 
-	got, err := s.runYtDlpSearch(context.Background(), "ytsearch5:q")
+	got, err := searchOneQuery(t)
 	if err != nil {
 		t.Fatalf("a search that found nothing must not error, got: %v", err)
 	}
@@ -193,17 +117,7 @@ func TestRunYtDlpSearch_NoOutputIsAnEmptyResult(t *testing.T) {
 	}
 }
 
-func withFailingYtDlp(t *testing.T, stderr string) {
-	t.Helper()
-	dir := t.TempDir()
-	script := "#!/bin/sh\necho '" + stderr + "' >&2\nexit 1\n"
-	if err := os.WriteFile(filepath.Join(dir, "yt-dlp"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-}
-
-func TestRunYtDlpSearch_ClassifiesASourceThatRefusedToAnswer(t *testing.T) {
+func TestSearch_ClassifiesASourceThatRefusedToAnswer(t *testing.T) {
 	tests := []struct {
 		name            string
 		stderr          string
@@ -216,129 +130,97 @@ func TestRunYtDlpSearch_ClassifiesASourceThatRefusedToAnswer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			withFailingYtDlp(t, tt.stderr)
-			s := NewYtDlpAudioSearcher("", "", "")
+			installSearch(t, "fail '"+tt.stderr+"'")
 
-			_, err := s.runYtDlpSearch(context.Background(), "ytsearch5:q")
+			_, err := searchOneQuery(t)
 
 			if err == nil {
 				t.Fatal("a yt-dlp that exited 1 reported no error")
 			}
-			if got := acqdomain.IsSourceUnavailable(err); got != tt.wantUnavailable {
-				t.Errorf("IsSourceUnavailable(%v) = %v, want %v", err, got, tt.wantUnavailable)
+			if got := isSourceUnavailable(err); got != tt.wantUnavailable {
+				t.Errorf("source unavailable(%v) = %v, want %v", err, got, tt.wantUnavailable)
 			}
 		})
 	}
 }
 
 func TestYtDlpAudioSearcher_Download_MissingBinaryIsAnUnavailableSource(t *testing.T) {
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.binary = filepath.Join(t.TempDir(), "yt-dlp-absent")
+	withoutAnyBinaries(t)
 
-	_, err := s.Download(context.Background(), "https://youtube.com/watch?v=1", t.TempDir())
+	_, err := acquisition.NewYtDlpAudioSearcher("", "", "").Download(context.Background(), youTubeWatchURL, t.TempDir())
 
-	if !acqdomain.IsSourceUnavailable(err) {
+	if !isSourceUnavailable(err) {
 		t.Errorf("Download error = %v, want a missing yt-dlp to read as an unavailable source", err)
 	}
 }
 
-func cookieJarError() error {
-	return fmt.Errorf("yt-dlp search: %w (stderr: ERROR: unable to open --cookies %s)",
-		errors.New("exit status 1"), secretCookiePath)
-}
-
 func TestYtDlpAudioSearcher_Search_EngineFailureLogRedactsTheCookiePath(t *testing.T) {
 	logs := captureLogs(t)
-	s := withRunner(func(context.Context, string) ([]ports.AudioCandidate, error) {
-		return nil, cookieJarError()
-	})
+	s := acquisition.NewYtDlpAudioSearcher("", secretCookiePath, "")
 
 	if _, err := s.SearchQueries(context.Background(), []string{"q"}); err == nil {
 		t.Fatal("every engine failed, Search reported no error")
 	}
 
-	logged := logs.String()
-	if !strings.Contains(logged, "acquisition.engine_search_failed") {
-		t.Fatalf("expected the engine failure log, got:\n%s", logged)
+	logged := loggedErrors(t, logs, "acquisition.engine_search_failed")
+	if len(logged) != 2 {
+		t.Fatalf("engine failure logs = %q, want one per engine", logged)
 	}
-	if strings.Contains(logged, "/secret") {
-		t.Fatalf("the cookie jar path leaked into the log:\n%s", logged)
-	}
-	if !strings.Contains(logged, "exit status 1") {
-		t.Fatalf("redaction dropped the diagnostic text:\n%s", logged)
+	for _, line := range logged {
+		if strings.Contains(line, "/secret") {
+			t.Fatalf("the cookie jar path leaked into the log: %s", line)
+		}
+		if !strings.Contains(line, "no such file or directory") {
+			t.Fatalf("redaction dropped the diagnostic text: %s", line)
+		}
 	}
 }
 
 func TestNewYtDlpAudioSearcher_ReturnsNonNil(t *testing.T) {
-	searcher := NewYtDlpAudioSearcher("", "", "")
-	if searcher == nil {
+	if acquisition.NewYtDlpAudioSearcher("", "", "") == nil {
 		t.Fatal("NewYtDlpAudioSearcher returned nil")
 	}
 }
 
-func TestNewYtDlpAudioSearcher_StoresConfig(t *testing.T) {
-	searcher := NewYtDlpAudioSearcher("/usr/bin/ffmpeg", "/tmp/cookies.txt", "deno")
-	if searcher.ffmpegLocation != "/usr/bin/ffmpeg" {
-		t.Errorf("ffmpegLocation = %q, want %q", searcher.ffmpegLocation, "/usr/bin/ffmpeg")
+func TestNewYtDlpAudioSearcher_PassesItsConfigToYtDlp(t *testing.T) {
+	jar := cookieJar(t, "cookies.txt", "jar")
+	argv := downloadArgv(t, acquisition.NewYtDlpAudioSearcher("/usr/bin/ffmpeg", jar, "deno"), youTubeWatchURL)
+
+	if !hasFlagValue(argv, "--ffmpeg-location", "/usr/bin/ffmpeg") {
+		t.Errorf("argv = %q, want --ffmpeg-location /usr/bin/ffmpeg", argv)
 	}
-	if searcher.cookieFile != "/tmp/cookies.txt" {
-		t.Errorf("cookieFile = %q, want %q", searcher.cookieFile, "/tmp/cookies.txt")
+	if !slices.Contains(argv, "--cookies") {
+		t.Errorf("argv = %q, want the configured cookie jar passed with --cookies", argv)
 	}
-	if searcher.jsRuntime != "deno" {
-		t.Errorf("jsRuntime = %q, want %q", searcher.jsRuntime, "deno")
+	if !hasFlagValue(argv, "--js-runtimes", "deno") {
+		t.Errorf("argv = %q, want --js-runtimes deno", argv)
 	}
 }
 
 func TestYtDlpAudioSearcher_Available_MissingBinary(t *testing.T) {
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.binary = filepath.Join(t.TempDir(), "yt-dlp-absent")
-	if s.Available() {
+	withoutAnyBinaries(t)
+	if acquisition.NewYtDlpAudioSearcher("", "", "").Available() {
 		t.Error("Available() = true for a missing yt-dlp binary, want false")
 	}
 }
 
 func TestYtDlpAudioSearcher_Available_PresentBinary(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "yt-dlp")
-	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.binary = path
-	if !s.Available() {
+	withoutAnyBinaries(t)
+	installYtDlp(t, "")
+	if !acquisition.NewYtDlpAudioSearcher("", "", "").Available() {
 		t.Error("Available() = false for a present yt-dlp binary, want true")
 	}
 }
 
-func withRunner(r searchRunner) *YtDlpAudioSearcher {
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.runSearch = r
-	return s
-}
-
 func TestYtDlpAudioSearcher_Search_QueriesBothEngines(t *testing.T) {
-	var mu sync.Mutex
-	var specs []string
-	s := withRunner(func(_ context.Context, spec string) ([]ports.AudioCandidate, error) {
-		mu.Lock()
-		specs = append(specs, spec)
-		mu.Unlock()
-		switch spec {
-		case "ytsearch5:song artist":
-			return []ports.AudioCandidate{{Title: "YT", URL: "https://youtube.com/watch?v=1"}}, nil
-		case "scsearch5:song artist":
-			return []ports.AudioCandidate{{Title: "SC", URL: "https://soundcloud.com/x/leak"}}, nil
-		}
-		return nil, nil
-	})
+	calls := installSearch(t, "emit 1")
 
-	got, err := s.SearchQueries(context.Background(), []string{"song artist"})
+	got, err := acquisition.NewYtDlpAudioSearcher("", "", "").SearchQueries(context.Background(), []string{"song artist"})
 	if err != nil {
 		t.Fatalf("Search error: %v", err)
 	}
 
-	slices.Sort(specs)
-	if !slices.Equal(specs, []string{"scsearch5:song artist", "ytsearch5:song artist"}) {
+	if specs := searchedSpecs(t, calls); !slices.Equal(specs, []string{"scsearch5:song artist", "ytsearch5:song artist"}) {
 		t.Fatalf("engine specs = %v, want yt and sc", specs)
 	}
 	if len(got) != 2 {
@@ -347,12 +229,9 @@ func TestYtDlpAudioSearcher_Search_QueriesBothEngines(t *testing.T) {
 }
 
 func TestYtDlpAudioSearcher_Search_DedupsByURL(t *testing.T) {
-	dup := ports.AudioCandidate{Title: "Dup", URL: "https://soundcloud.com/x/same"}
-	s := withRunner(func(_ context.Context, _ string) ([]ports.AudioCandidate, error) {
-		return []ports.AudioCandidate{dup}, nil
-	})
+	installSearch(t, `echo '{"title":"Dup","webpage_url":"https://soundcloud.com/x/same"}'`)
 
-	got, err := s.SearchQueries(context.Background(), []string{"q"})
+	got, err := searchOneQuery(t)
 	if err != nil {
 		t.Fatalf("Search error: %v", err)
 	}
@@ -362,60 +241,30 @@ func TestYtDlpAudioSearcher_Search_DedupsByURL(t *testing.T) {
 }
 
 func TestYtDlpAudioSearcher_Search_OneEngineFails(t *testing.T) {
-	s := withRunner(func(_ context.Context, spec string) ([]ports.AudioCandidate, error) {
-		if spec == "ytsearch5:q" {
-			return nil, errors.New("youtube blew up")
-		}
-		return []ports.AudioCandidate{{Title: "SC", URL: "https://soundcloud.com/x/leak"}}, nil
-	})
+	installSearch(t, "emit 1", searchAnswer{"ytsearch5:q", "fail 'youtube blew up'"})
 
-	got, err := s.SearchQueries(context.Background(), []string{"q"})
+	got, err := searchOneQuery(t)
 	if err != nil {
 		t.Fatalf("a single engine failure must not fail the search, got: %v", err)
 	}
-	if len(got) != 1 || got[0].Title != "SC" {
+	if len(got) != 1 || got[0].Title != "scsearch5:q" {
 		t.Fatalf("expected the surviving engine's candidate, got %+v", got)
 	}
 }
 
 func TestYtDlpAudioSearcher_Search_BothEnginesFail(t *testing.T) {
-	s := withRunner(func(_ context.Context, _ string) ([]ports.AudioCandidate, error) {
-		return nil, errors.New("down")
-	})
+	installSearch(t, "fail 'down'")
 
-	if _, err := s.SearchQueries(context.Background(), []string{"q"}); err == nil {
+	if _, err := searchOneQuery(t); err == nil {
 		t.Fatal("expected an error when every engine fails")
 	}
 }
 
 func TestYtDlpAudioSearcher_Download_RejectsAnOversizeOutput(t *testing.T) {
-	outDir := t.TempDir()
-	binary := filepath.Join(t.TempDir(), "big-yt-dlp")
-	script := "#!/bin/sh\ntruncate -s 210M \"" + filepath.Join(outDir, "big.m4a") + "\"\n" +
-		"echo 'altune-output-path:" + filepath.Join(outDir, "big.m4a") + "'\n"
-	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.binary = binary
-
-	_, err := s.Download(context.Background(), "https://youtube.com/watch?v=1", outDir)
+	_, err := downloadWithScript(t, "truncate -s 210M OUT/big.m4a; echo altune-output-path:OUT/big.m4a")
 	if err == nil || !strings.Contains(err.Error(), "too large") {
 		t.Fatalf("Download error = %v, want a too-large rejection", err)
 	}
-}
-
-func downloadWithScript(t *testing.T, body string) (ports.FetchedAudio, error) {
-	t.Helper()
-	outDir := t.TempDir()
-	binary := filepath.Join(t.TempDir(), "fake-yt-dlp")
-	script := "#!/bin/sh\n" + strings.ReplaceAll(body, "OUT", outDir) + "\n"
-	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.binary = binary
-	return s.Download(context.Background(), "https://youtube.com/watch?v=1", outDir)
 }
 
 func TestDownload_UsesThePathYtDlpPrinted(t *testing.T) {
@@ -449,17 +298,22 @@ func TestDownload_UsesThePathYtDlpPrinted(t *testing.T) {
 	})
 }
 
-func TestParseOutputPath_ReadsRealYtDlpStdout(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("testdata", "ytdlp_2026.08.19_soundcloud_download_stdout.txt"))
+func TestDownload_ReadsRealYtDlpStdout(t *testing.T) {
+	stdout, err := filepath.Abs(filepath.Join("testdata", "ytdlp_2026.08.19_soundcloud_download_stdout.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	stdout := string(raw)
-	if want := "/tmp/dl2 out/The Sound Of Silence (Simon & Garfunkel).m4a"; parseOutputPath(stdout) != want {
-		t.Fatalf("parseOutputPath = %q, want %q", parseOutputPath(stdout), want)
+
+	got, err := downloadWithScript(t, "truncate -s 20K 'OUT/The Sound Of Silence (Simon & Garfunkel).m4a'; sed 's|/tmp/dl2 out|OUT|' '"+stdout+"'")
+	if err != nil {
+		t.Fatalf("Download error: %v", err)
 	}
-	if got, want := parseSourceFormat(stdout), (ports.SourceFormat{ID: "hls_aac_160k", Codec: "mp4a.40.2", Kbps: 160}); got != want {
-		t.Fatalf("parseSourceFormat = %+v, want %+v", got, want)
+
+	if want := "The Sound Of Silence (Simon & Garfunkel).m4a"; filepath.Base(got.Path) != want {
+		t.Fatalf("Download path = %q, want %q", got.Path, want)
+	}
+	if want := (acquisition.SourceFormat{ID: "hls_aac_160k", Codec: "mp4a.40.2", Kbps: 160}); got.Format != want {
+		t.Fatalf("Download format = %+v, want %+v", got.Format, want)
 	}
 }
 
@@ -485,81 +339,32 @@ func TestYtDlpAudioSearcher_Download_ReturnsThePrintedFile(t *testing.T) {
 	}
 }
 
-func hangingBinary(t *testing.T) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "yt-dlp")
-	if err := os.WriteFile(path, []byte("#!/bin/sh\nexec sleep 30\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	return path
-}
-
 func TestDownload_TimeoutUnderLiveParentIsSourceUnavailable(t *testing.T) {
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.binary = hangingBinary(t)
-	s.downloadTimeout = 100 * time.Millisecond
+	installYtDlp(t, "exec sleep 30")
+	s := acquisition.NewYtDlpAudioSearcher("", "", "").WithDownloadTimeout(100 * time.Millisecond)
 
-	_, err := s.Download(context.Background(), "https://youtube.com/watch?v=1", t.TempDir())
+	_, err := s.Download(context.Background(), youTubeWatchURL, t.TempDir())
 
-	if !acqdomain.IsSourceUnavailable(err) {
+	if !isSourceUnavailable(err) {
 		t.Fatalf("Download err = %v, want a source-unavailable error", err)
 	}
 }
 
 func TestDownload_ParentCancellationIsNotSourceUnavailable(t *testing.T) {
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.binary = hangingBinary(t)
+	installYtDlp(t, "exec sleep 30")
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	_, err := s.Download(ctx, "https://youtube.com/watch?v=1", t.TempDir())
+	_, err := acquisition.NewYtDlpAudioSearcher("", "", "").Download(ctx, youTubeWatchURL, t.TempDir())
 
-	if err == nil || acqdomain.IsSourceUnavailable(err) {
+	if err == nil || isSourceUnavailable(err) {
 		t.Fatalf("Download err = %v, want a plain error", err)
 	}
 }
 
-func formatArgRecorder(t *testing.T, outDir, stdout string) (binary, argsFile string) {
-	t.Helper()
-	argsFile = filepath.Join(t.TempDir(), "args")
-	script := "#!/bin/sh\nfor a in \"$@\"; do echo \"$a\"; done > \"" + argsFile + "\"\n"
-	if outDir != "" {
-		script += "truncate -s 1M \"" + filepath.Join(outDir, "out.m4a") + "\"\n"
-		script += "echo 'altune-output-path:" + filepath.Join(outDir, "out.m4a") + "'\n"
-	}
-	if stdout != "" {
-		script += "echo '" + stdout + "'\n"
-	}
-	return withYtDlpScript(t, script), argsFile
-}
-
-func formatFlag(t *testing.T, argsFile string) string {
-	t.Helper()
-	raw, err := os.ReadFile(argsFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	args := strings.Split(strings.TrimSpace(string(raw)), "\n")
-	for i, a := range args {
-		if a == "-f" && i+1 < len(args) {
-			return args[i+1]
-		}
-	}
-	t.Fatalf("no -f flag in yt-dlp args %q", args)
-	return ""
-}
-
 func TestDownload_FallsBackToACombinedFormatWhenNoAudioOnlyStreamExists(t *testing.T) {
-	outDir := t.TempDir()
-	s := NewYtDlpAudioSearcher("", "", "")
-	var argsFile string
-	s.binary, argsFile = formatArgRecorder(t, outDir, "")
+	got := downloadFormat(t)
 
-	if _, err := s.Download(context.Background(), "https://youtube.com/watch?v=1", outDir); err != nil {
-		t.Fatalf("Download() = %v, want nil", err)
-	}
-
-	got := formatFlag(t, argsFile)
 	audioOnly, combined, ok := strings.Cut(got, "/best[")
 	if !ok || !strings.HasSuffix(audioOnly, "/bestaudio") {
 		t.Errorf("-f %q, want audio-only streams preferred before any combined format", got)
@@ -569,22 +374,15 @@ func TestDownload_FallsBackToACombinedFormatWhenNoAudioOnlyStreamExists(t *testi
 	}
 }
 
-const liveJarContents = "# live cookie jar"
-
-func jarWritingYtDlpAt(t *testing.T, path, outDir string) {
+func jarWritingYtDlp(t *testing.T, outDir string) {
 	t.Helper()
-	script := "#!/bin/sh\n" +
-		"prev=\"\"\n" +
-		"for arg in \"$@\"; do\n" +
-		"  if [ \"$prev\" = \"--cookies\" ]; then echo '# saved by yt-dlp' > \"$arg\" || exit 1; fi\n" +
-		"  prev=\"$arg\"\n" +
-		"done\n" +
-		"echo '{\"title\":\"Song\",\"webpage_url\":\"https://www.youtube.com/watch?v=aaaaaaaaaaa\"}'\n" +
-		"head -c 20480 /dev/zero > \"" + filepath.Join(outDir, "stub.m4a") + "\"\n" +
-		"echo 'altune-output-path:" + filepath.Join(outDir, "stub.m4a") + "'\n"
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	installYtDlp(t, "prev=\"\"\n"+
+		"for arg in \"$@\"; do\n"+
+		"  if [ \"$prev\" = \"--cookies\" ]; then echo '# saved by yt-dlp' > \"$arg\" || exit 1; fi\n"+
+		"  prev=\"$arg\"\n"+
+		"done\n"+
+		"echo '{\"title\":\"Song\",\"webpage_url\":\"https://www.youtube.com/watch?v=aaaaaaaaaaa\"}'\n"+
+		stubDownload(outDir))
 }
 
 func readOnlyLiveJar(t *testing.T) string {
@@ -605,13 +403,10 @@ func assertLiveJarUntouched(t *testing.T, jar string) {
 }
 
 func TestYtDlpAudioSearcher_Search_WorksAgainstAReadOnlyCookieJar(t *testing.T) {
-	binDir := t.TempDir()
-	jarWritingYtDlpAt(t, filepath.Join(binDir, "yt-dlp"), t.TempDir())
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	jarWritingYtDlp(t, t.TempDir())
 	jar := readOnlyLiveJar(t)
 
-	s := NewYtDlpAudioSearcher("", jar, "")
-	got, err := s.runYtDlpSearch(context.Background(), "ytsearch5:song")
+	got, err := acquisition.NewYtDlpAudioSearcher("", jar, "").SearchQueries(context.Background(), []string{"song"})
 	if err != nil {
 		t.Fatalf("search error: %v", err)
 	}
@@ -622,14 +417,11 @@ func TestYtDlpAudioSearcher_Search_WorksAgainstAReadOnlyCookieJar(t *testing.T) 
 }
 
 func TestYtDlpAudioSearcher_Download_WorksAgainstAReadOnlyCookieJar(t *testing.T) {
-	withDecoyYtDlp(t)
 	outDir := t.TempDir()
+	jarWritingYtDlp(t, outDir)
 	jar := readOnlyLiveJar(t)
 
-	s := NewYtDlpAudioSearcher("", jar, "")
-	s.binary = filepath.Join(t.TempDir(), "yt-dlp")
-	jarWritingYtDlpAt(t, s.binary, outDir)
-
+	s := acquisition.NewYtDlpAudioSearcher("", jar, "")
 	if _, err := s.Download(context.Background(), "https://www.youtube.com/watch?v=aaaaaaaaaaa", outDir); err != nil {
 		t.Fatalf("download error: %v", err)
 	}
@@ -637,72 +429,61 @@ func TestYtDlpAudioSearcher_Download_WorksAgainstAReadOnlyCookieJar(t *testing.T
 }
 
 func TestYtDlpAudioSearcher_SearchQueries_MergesEveryQueryAndEngine(t *testing.T) {
-	s := withRunner(func(_ context.Context, spec string) ([]ports.AudioCandidate, error) {
-		return []ports.AudioCandidate{{Title: spec, URL: "https://example.test/" + spec}}, nil
-	})
+	installSearch(t, "emit 1")
 
-	got, err := s.SearchQueries(context.Background(), []string{"a", "b"})
+	got, err := acquisition.NewYtDlpAudioSearcher("", "", "").SearchQueries(context.Background(), []string{"a", "b"})
 	if err != nil {
 		t.Fatalf("SearchQueries error: %v", err)
 	}
-	if len(got) != len(searchEngines)*2 {
-		t.Fatalf("merged candidates = %d, want %d (every query against every engine)", len(got), len(searchEngines)*2)
+	if len(got) != 4 {
+		t.Fatalf("merged candidates = %d, want 4 (every query against both engines)", len(got))
 	}
 }
 
 func TestYtDlpAudioSearcher_SearchQueries_AllQueriesUnavailableIsSourceUnavailable(t *testing.T) {
-	s := withRunner(func(context.Context, string) ([]ports.AudioCandidate, error) {
-		return nil, &acqdomain.SourceUnavailableError{Source: SourceName, Err: errors.New("throttled")}
-	})
+	installSearch(t, "fail 'ERROR: HTTP Error 429: Too Many Requests'")
 
-	_, err := s.SearchQueries(context.Background(), []string{"a", "b"})
+	_, err := acquisition.NewYtDlpAudioSearcher("", "", "").SearchQueries(context.Background(), []string{"a", "b"})
 
-	if !acqdomain.IsSourceUnavailable(err) {
+	if !isSourceUnavailable(err) {
 		t.Fatalf("SearchQueries error = %v, want a source-unavailable error when every query and engine is unavailable", err)
 	}
 }
 
 func TestYtDlpAudioSearcher_DownloadPreview_RequestsOnlyTheLeadingSectionBeforeTheURL(t *testing.T) {
-	withDecoyYtDlp(t)
 	outDir := t.TempDir()
-	binary, argvFile := argvRecordingDownloaderAt(t, outDir)
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.binary = binary
+	calls := installYtDlp(t, stubDownload(outDir))
 
-	if _, err := s.DownloadPreview(context.Background(), "https://youtube.com/watch?v=1", outDir, 130); err != nil {
+	if _, err := acquisition.NewYtDlpAudioSearcher("", "", "").DownloadPreview(context.Background(), youTubeWatchURL, outDir, 130); err != nil {
 		t.Fatalf("DownloadPreview error: %v", err)
 	}
 
-	raw, err := os.ReadFile(argvFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	argv := strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n")
+	argv := onlyCall(t, calls)
 	sections, separator := slices.Index(argv, "--download-sections"), slices.Index(argv, "--")
 	if sections < 0 || argv[sections+1] != "*0-130" || sections > separator {
 		t.Fatalf("argv = %q, want --download-sections *0-130 before --", argv)
 	}
 }
 
+func inspectedAs(json string) string {
+	return ytDlpByMode("", "echo '"+json+"'", "")
+}
+
 func TestYtDlpAudioSearcher_MarkUnplayable_SetsTheExactPersistedReasonStrings(t *testing.T) {
-	drm := inspectionFromInfo(inspectedInfo{Duration: 240, Formats: []inspectedFormat{
-		{FormatID: "hls_aac_160k_encrypted", VCodec: "none", HasDRM: true},
-	}})
 	cases := []struct {
 		name       string
-		inspection inspection
+		inspection string
 		want       string
 	}{
-		{"drm", drm, "drm"},
-		{"preview", inspection{Duration: 30}, "preview"},
+		{"drm", `{"duration":240,"formats":[{"format_id":"hls_aac_160k_encrypted","vcodec":"none"}]}`, "drm"},
+		{"preview", `{"duration":30}`, "preview"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			s := withRunner(nil)
-			s.inspect = staticInspection(tc.inspection)
-			candidates := []ports.AudioCandidate{{Title: "Drinking in L.A.", URL: drinkingInLA, Duration: 240}}
+			installYtDlp(t, inspectedAs(tc.inspection))
+			candidates := []acquisition.AudioCandidate{{Title: "Drinking in L.A.", URL: soundCloudTrackURL, Duration: 240}}
 
-			s.MarkUnplayable(context.Background(), candidates)
+			acquisition.NewYtDlpAudioSearcher("", "", "").MarkUnplayable(context.Background(), candidates)
 
 			if got := candidates[0].Unplayable; got != tc.want {
 				t.Fatalf("Unplayable = %q, want %q", got, tc.want)
@@ -711,28 +492,12 @@ func TestYtDlpAudioSearcher_MarkUnplayable_SetsTheExactPersistedReasonStrings(t 
 	}
 }
 
-const leakyStderrScript = "#!/bin/sh\n" +
-	"echo \"ERROR: unable to open /home/op/secrets/cookies.txt https://cdn.example/a?Expires=1&token=SIGNEDTOKEN123456&Signature=SIGNEDSIG987654\" >&2\n" +
+const leakyStderr = "echo \"ERROR: unable to open /home/op/secrets/cookies.txt https://cdn.example/a?Expires=1&token=SIGNEDTOKEN123456&Signature=SIGNEDSIG987654\" >&2\n" +
 	"head -c 100000 /dev/zero | tr '\\0' 'x' >&2\n" +
-	"exit 1\n"
+	"exit 1"
 
-func withLeakyYtDlp(t *testing.T) string {
+func assertStderrEmbeddedSafely(t *testing.T, msg string) {
 	t.Helper()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "yt-dlp")
-	if err := os.WriteFile(path, []byte(leakyStderrScript), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	return path
-}
-
-func assertStderrEmbeddedSafely(t *testing.T, err error) {
-	t.Helper()
-	if err == nil {
-		t.Fatal("expected an error from the failing binary")
-	}
-	msg := err.Error()
 	if !strings.Contains(msg, "(stderr: ") {
 		t.Fatalf("error lost its stderr section (binary not run?): %q", msg)
 	}
@@ -741,108 +506,129 @@ func assertStderrEmbeddedSafely(t *testing.T, err error) {
 			t.Errorf("error leaks %q: %.300s", leak, msg)
 		}
 	}
-	if limit := maxEmbeddedStderrBytes + 512; len(msg) > limit {
+	if limit := embeddedStderrLimit + 512; len(msg) > limit {
 		t.Errorf("error is %d bytes, want <= %d", len(msg), limit)
 	}
 }
 
+func failedError(t *testing.T, err error) string {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected an error from the failing binary")
+	}
+	return err.Error()
+}
+
 func TestYtDlpAudioSearcher_SearchRedactsAndCapsStderr(t *testing.T) {
-	withLeakyYtDlp(t)
-	s := NewYtDlpAudioSearcher("", "", "")
-	_, err := s.SearchQueries(context.Background(), []string{"q"})
-	assertStderrEmbeddedSafely(t, err)
+	installYtDlp(t, leakyStderr)
+	_, err := searchOneQuery(t)
+	assertStderrEmbeddedSafely(t, failedError(t, err))
 }
 
 func TestYtDlpAudioSearcher_DownloadRedactsAndCapsStderr(t *testing.T) {
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.binary = withLeakyYtDlp(t)
-	_, err := s.Download(context.Background(), "https://example.com/v", t.TempDir())
-	assertStderrEmbeddedSafely(t, err)
+	installYtDlp(t, leakyStderr)
+	_, err := acquisition.NewYtDlpAudioSearcher("", "", "").Download(context.Background(), "https://example.com/v", t.TempDir())
+	assertStderrEmbeddedSafely(t, failedError(t, err))
 }
 
-func TestYtDlpAudioSearcher_InspectRedactsAndCapsStderr(t *testing.T) {
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.binary = withLeakyYtDlp(t)
-	_, err := s.runYtDlpInspect(context.Background(), "https://soundcloud.com/a/b")
-	assertStderrEmbeddedSafely(t, err)
+func TestYtDlpAudioSearcher_InspectFailureLogCapsStderr(t *testing.T) {
+	installYtDlp(t, leakyStderr)
+	logs := captureLogs(t)
+	candidates := []acquisition.AudioCandidate{{URL: soundCloudTrackURL, Duration: 240}}
+
+	acquisition.NewYtDlpAudioSearcher("", "", "").MarkUnplayable(context.Background(), candidates)
+
+	logged := loggedErrors(t, logs, "acquisition.soundcloud_inspect_failed")
+	if len(logged) != 1 {
+		t.Fatalf("inspect failure logs = %d, want 1", len(logged))
+	}
+	assertStderrEmbeddedSafely(t, logged[0])
 }
 
-func TestEmbeddedStderr_CapsOnRuneBoundaryWithSuffix(t *testing.T) {
-	got := embeddedStderr(strings.Repeat("é", maxEmbeddedStderrBytes))
-	if !strings.HasSuffix(got, stderrTruncatedSuffix) {
+func embeddedDownloadStderr(t *testing.T, stderr string) string {
+	t.Helper()
+	installYtDlp(t, "printf '%s' '"+stderr+"' >&2\nexit 1")
+	_, err := acquisition.NewYtDlpAudioSearcher("", "", "").Download(context.Background(), youTubeWatchURL, t.TempDir())
+	_, embedded, found := strings.Cut(failedError(t, err), "(stderr: ")
+	if !found {
+		t.Fatalf("Download error = %v, want an embedded stderr section", err)
+	}
+	return strings.TrimSuffix(embedded, ")")
+}
+
+func TestDownload_EmbeddedStderrIsCappedOnARuneBoundaryWithASuffix(t *testing.T) {
+	got := embeddedDownloadStderr(t, "x"+strings.Repeat("é", embeddedStderrLimit))
+	body, truncated := strings.CutSuffix(got, stderrTruncated)
+	if !truncated {
 		t.Fatalf("missing truncation suffix: %.40q", got[len(got)-40:])
 	}
-	body := strings.TrimSuffix(got, stderrTruncatedSuffix)
-	if !utf8.ValidString(body) || len(body) > maxEmbeddedStderrBytes {
+	if !utf8.ValidString(body) || len(body) > embeddedStderrLimit {
 		t.Errorf("body invalid or over cap: valid=%v len=%d", utf8.ValidString(body), len(body))
 	}
-	if short := embeddedStderr("boom"); short != "boom" {
+	if short := embeddedDownloadStderr(t, "boom"); short != "boom" {
 		t.Errorf("short stderr changed: %q", short)
 	}
 }
 
-func recordedArgv(t *testing.T, s *YtDlpAudioSearcher, call func(ctx context.Context, s *YtDlpAudioSearcher, outDir string)) []string {
-	t.Helper()
-	withDecoyYtDlp(t)
-	outDir := t.TempDir()
-	var argvFile string
-	s.binary, argvFile = argvRecordingDownloaderAt(t, outDir)
-	pathDir := t.TempDir()
-	if err := os.Symlink(s.binary, filepath.Join(pathDir, "yt-dlp")); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", pathDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	call(context.Background(), s, outDir)
-	raw, err := os.ReadFile(argvFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n")
+type ytDlpCaller struct {
+	marker string
+	call   func(ctx context.Context, s *acquisition.YtDlpAudioSearcher, outDir string)
 }
 
-var ytDlpCallers = map[string]func(ctx context.Context, s *YtDlpAudioSearcher, outDir string){
-	"search": func(ctx context.Context, s *YtDlpAudioSearcher, _ string) {
-		_, _ = s.runYtDlpSearch(ctx, "ytsearch5:x")
-	},
-	"download": func(ctx context.Context, s *YtDlpAudioSearcher, outDir string) {
-		_, _ = s.Download(ctx, "https://youtube.com/watch?v=1", outDir)
-	},
-	"inspect": func(ctx context.Context, s *YtDlpAudioSearcher, _ string) {
-		_, _ = s.runYtDlpInspect(ctx, "https://soundcloud.com/a/b")
-	},
-	"canary": func(ctx context.Context, s *YtDlpAudioSearcher, _ string) {
-		_ = s.Canary(ctx, YouTubeCanary)
-	},
+var ytDlpCallers = map[string]ytDlpCaller{
+	"search": {"--dump-json", func(ctx context.Context, s *acquisition.YtDlpAudioSearcher, _ string) {
+		_, _ = s.SearchQueries(ctx, []string{"x"})
+	}},
+	"download": {"-x", func(ctx context.Context, s *acquisition.YtDlpAudioSearcher, outDir string) {
+		_, _ = s.Download(ctx, youTubeWatchURL, outDir)
+	}},
+	"inspect": {"-J", func(ctx context.Context, s *acquisition.YtDlpAudioSearcher, _ string) {
+		s.MarkUnplayable(ctx, []acquisition.AudioCandidate{{URL: "https://soundcloud.com/a/b"}})
+	}},
+	"canary": {"--simulate", func(ctx context.Context, s *acquisition.YtDlpAudioSearcher, _ string) {
+		_ = s.Canary(ctx, acquisition.YouTubeCanary)
+	}},
+}
+
+func recordedArgv(t *testing.T, s *acquisition.YtDlpAudioSearcher, caller ytDlpCaller) []string {
+	t.Helper()
+	outDir := t.TempDir()
+	calls := installYtDlp(t, ytDlpByMode("", "echo '{\"duration\":240}'", stubDownload(outDir)))
+	caller.call(context.Background(), s, outDir)
+	return callWith(t, calls, caller.marker)
 }
 
 func TestYtDlpAudioSearcher_RemoteComponentFlags_PerCaller(t *testing.T) {
 	cases := []struct {
 		name string
-		with func(s *YtDlpAudioSearcher) *YtDlpAudioSearcher
+		with func(s *acquisition.YtDlpAudioSearcher) *acquisition.YtDlpAudioSearcher
 		want []string
 	}{
 		{
-			"default fetches ejs:github", func(s *YtDlpAudioSearcher) *YtDlpAudioSearcher { return s },
+			"default fetches ejs:github", func(s *acquisition.YtDlpAudioSearcher) *acquisition.YtDlpAudioSearcher { return s },
 			[]string{"--js-runtimes", "node", "--remote-components", "ejs:github"},
 		},
 		{
-			"configured spec", func(s *YtDlpAudioSearcher) *YtDlpAudioSearcher { return s.WithRemoteComponents("ejs:npm") },
+			"configured spec", func(s *acquisition.YtDlpAudioSearcher) *acquisition.YtDlpAudioSearcher {
+				return s.WithRemoteComponents("ejs:npm")
+			},
 			[]string{"--js-runtimes", "node", "--remote-components", "ejs:npm"},
 		},
 		{
-			"empty spec drops the fetch", func(s *YtDlpAudioSearcher) *YtDlpAudioSearcher { return s.WithRemoteComponents("") },
+			"empty spec drops the fetch", func(s *acquisition.YtDlpAudioSearcher) *acquisition.YtDlpAudioSearcher {
+				return s.WithRemoteComponents("")
+			},
 			[]string{"--js-runtimes", "node"},
 		},
 	}
-	for caller, call := range ytDlpCallers {
+	for name, caller := range ytDlpCallers {
 		for _, tc := range cases {
-			t.Run(caller+"/"+tc.name, func(t *testing.T) {
-				s := tc.with(NewYtDlpAudioSearcher("", "", "node"))
-				argv := recordedArgv(t, s, call)
+			t.Run(name+"/"+tc.name, func(t *testing.T) {
+				argv := recordedArgv(t, tc.with(acquisition.NewYtDlpAudioSearcher("", "", "node")), caller)
 				if len(argv) < len(tc.want) || strings.Join(argv[:len(tc.want)], " ") != strings.Join(tc.want, " ") {
 					t.Fatalf("argv = %q, want it to start with %q", argv, tc.want)
 				}
-				if len(tc.want) == 2 && strings.Contains(strings.Join(argv, " "), "--remote-components") {
+				if len(tc.want) == 2 && slices.Contains(argv, "--remote-components") {
 					t.Fatalf("argv = %q, want no --remote-components", argv)
 				}
 			})
@@ -851,10 +637,10 @@ func TestYtDlpAudioSearcher_RemoteComponentFlags_PerCaller(t *testing.T) {
 }
 
 func TestYtDlpAudioSearcher_NoJSRuntimeEmitsNoComponentFlags(t *testing.T) {
-	for caller, call := range ytDlpCallers {
-		t.Run(caller, func(t *testing.T) {
-			argv := strings.Join(recordedArgv(t, NewYtDlpAudioSearcher("", "", ""), call), " ")
-			if strings.Contains(argv, "--js-runtimes") || strings.Contains(argv, "--remote-components") {
+	for name, caller := range ytDlpCallers {
+		t.Run(name, func(t *testing.T) {
+			argv := recordedArgv(t, acquisition.NewYtDlpAudioSearcher("", "", ""), caller)
+			if slices.Contains(argv, "--js-runtimes") || slices.Contains(argv, "--remote-components") {
 				t.Fatalf("argv = %q, want no runtime or component flags", argv)
 			}
 		})
@@ -864,10 +650,10 @@ func TestYtDlpAudioSearcher_NoJSRuntimeEmitsNoComponentFlags(t *testing.T) {
 func TestYtDlpAudioSearcher_Download_ReportsTheFormatYtDlpFetched(t *testing.T) {
 	cases := []struct {
 		name, line string
-		want       ports.SourceFormat
+		want       acquisition.SourceFormat
 	}{
-		{"audio-only opus", "251|opus|129.6", ports.SourceFormat{ID: "251", Codec: "opus", Kbps: 130}},
-		{"combined video has no audio bitrate", "18|mp4a.40.2|NA", ports.SourceFormat{ID: "18", Codec: "mp4a.40.2"}},
+		{"audio-only opus", "251|opus|129.6", acquisition.SourceFormat{ID: "251", Codec: "opus", Kbps: 130}},
+		{"combined video has no audio bitrate", "18|mp4a.40.2|NA", acquisition.SourceFormat{ID: "18", Codec: "mp4a.40.2"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -884,27 +670,14 @@ func TestYtDlpAudioSearcher_Download_ReportsTheFormatYtDlpFetched(t *testing.T) 
 
 func TestYtDlpAudioSearcher_Download_WithoutAFormatLineStillReturnsTheFile(t *testing.T) {
 	got, err := downloadWithScript(t, "truncate -s 20K OUT/a.m4a; echo altune-output-path:OUT/a.m4a")
-	if err != nil || filepath.Base(got.Path) != "a.m4a" || got.Format != (ports.SourceFormat{}) {
+	if err != nil || filepath.Base(got.Path) != "a.m4a" || got.Format != (acquisition.SourceFormat{}) {
 		t.Fatalf("Download = %+v, %v, want a.m4a with an unknown format", got, err)
 	}
 }
 
 func TestYtDlpAudioSearcher_Download_AsksForTheFormatOnlyOnceTheFileIsFinal(t *testing.T) {
-	withDecoyYtDlp(t)
-	outDir := t.TempDir()
-	binary, argvFile := argvRecordingDownloaderAt(t, outDir)
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.binary = binary
+	argv := downloadArgv(t, acquisition.NewYtDlpAudioSearcher("", "", ""), youTubeWatchURL)
 
-	if _, err := s.Download(context.Background(), "https://youtube.com/watch?v=1", outDir); err != nil {
-		t.Fatal(err)
-	}
-
-	raw, err := os.ReadFile(argvFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	argv := strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n")
 	print, separator := slices.Index(argv, "--print"), slices.Index(argv, "--")
 	if print < 0 || print > separator || !strings.HasPrefix(argv[print+1], "after_move:altune-source-format:") {
 		t.Fatalf("argv = %q, want --print after_move:altune-source-format:... before --", argv)
@@ -913,9 +686,9 @@ func TestYtDlpAudioSearcher_Download_AsksForTheFormatOnlyOnceTheFileIsFinal(t *t
 
 func TestYtDlpAudioSearcher_POTokenURL_ReachesEveryCaller(t *testing.T) {
 	const potURL = "http://altune-pot:4416"
-	for caller, call := range ytDlpCallers {
-		t.Run(caller, func(t *testing.T) {
-			argv := recordedArgv(t, NewYtDlpAudioSearcher("", "", "node").WithPOTokenURL(potURL), call)
+	for name, caller := range ytDlpCallers {
+		t.Run(name, func(t *testing.T) {
+			argv := recordedArgv(t, acquisition.NewYtDlpAudioSearcher("", "", "node").WithPOTokenURL(potURL), caller)
 			if !hasFlagValue(argv, "--extractor-args", "youtubepot-bgutilhttp:base_url="+potURL) {
 				t.Fatalf("argv = %q, want --extractor-args youtubepot-bgutilhttp:base_url=%s", argv, potURL)
 			}
@@ -924,9 +697,9 @@ func TestYtDlpAudioSearcher_POTokenURL_ReachesEveryCaller(t *testing.T) {
 }
 
 func TestYtDlpAudioSearcher_NoPOTokenURLEmitsNoExtractorArgs(t *testing.T) {
-	for caller, call := range ytDlpCallers {
-		t.Run(caller, func(t *testing.T) {
-			argv := recordedArgv(t, NewYtDlpAudioSearcher("", "", "node"), call)
+	for name, caller := range ytDlpCallers {
+		t.Run(name, func(t *testing.T) {
+			argv := recordedArgv(t, acquisition.NewYtDlpAudioSearcher("", "", "node"), caller)
 			if strings.Contains(strings.Join(argv, " "), "youtubepot") {
 				t.Fatalf("argv = %q, want no token provider flag", argv)
 			}
@@ -934,16 +707,7 @@ func TestYtDlpAudioSearcher_NoPOTokenURLEmitsNoExtractorArgs(t *testing.T) {
 	}
 }
 
-func hasFlagValue(argv []string, flag, value string) bool {
-	for i := 0; i+1 < len(argv); i++ {
-		if argv[i] == flag && argv[i+1] == value {
-			return true
-		}
-	}
-	return false
-}
-
-func TestYtDlpURL_SendsYouTubeWatchLinksThroughYouTubeMusic(t *testing.T) {
+func TestDownload_SendsYouTubeWatchLinksThroughYouTubeMusic(t *testing.T) {
 	cases := map[string]string{
 		"https://www.youtube.com/watch?v=XDC3uH1FSgw":                "https://music.youtube.com/watch?v=XDC3uH1FSgw",
 		"https://youtube.com/watch?v=XDC3uH1FSgw":                    "https://music.youtube.com/watch?v=XDC3uH1FSgw",
@@ -957,24 +721,27 @@ func TestYtDlpURL_SendsYouTubeWatchLinksThroughYouTubeMusic(t *testing.T) {
 		"https://notyoutube.com/watch?v=XDC3uH1FSgw":                 "https://notyoutube.com/watch?v=XDC3uH1FSgw",
 	}
 	for in, want := range cases {
-		if got := ytDlpURL(in); got != want {
-			t.Errorf("ytDlpURL(%q) = %q, want %q", in, got, want)
-		}
+		t.Run(in, func(t *testing.T) {
+			argv := downloadArgv(t, acquisition.NewYtDlpAudioSearcher("", "", ""), in)
+			if got := argv[len(argv)-1]; got != want {
+				t.Errorf("Download(%q) fetched %q, want %q", in, got, want)
+			}
+		})
 	}
 }
 
 func TestYtDlpAudioSearcher_DownloadPreviewAndCanaryFetchYouTubeThroughYouTubeMusic(t *testing.T) {
-	for caller, call := range map[string]func(ctx context.Context, s *YtDlpAudioSearcher, outDir string){
-		"download": func(ctx context.Context, s *YtDlpAudioSearcher, outDir string) {
+	for name, caller := range map[string]ytDlpCaller{
+		"download": {"-x", func(ctx context.Context, s *acquisition.YtDlpAudioSearcher, outDir string) {
 			_, _ = s.Download(ctx, "https://www.youtube.com/watch?v=XDC3uH1FSgw", outDir)
-		},
-		"preview": func(ctx context.Context, s *YtDlpAudioSearcher, outDir string) {
+		}},
+		"preview": {"-x", func(ctx context.Context, s *acquisition.YtDlpAudioSearcher, outDir string) {
 			_, _ = s.DownloadPreview(ctx, "https://youtu.be/XDC3uH1FSgw", outDir, 30)
-		},
+		}},
 		"canary": ytDlpCallers["canary"],
 	} {
-		t.Run(caller, func(t *testing.T) {
-			argv := recordedArgv(t, NewYtDlpAudioSearcher("", "", ""), call)
+		t.Run(name, func(t *testing.T) {
+			argv := recordedArgv(t, acquisition.NewYtDlpAudioSearcher("", "", ""), caller)
 			last := argv[len(argv)-1]
 			if !strings.HasPrefix(last, "https://music.youtube.com/watch?v=") {
 				t.Fatalf("yt-dlp got %q, want a music.youtube.com watch URL", last)
@@ -984,11 +751,11 @@ func TestYtDlpAudioSearcher_DownloadPreviewAndCanaryFetchYouTubeThroughYouTubeMu
 }
 
 func TestYtDlpAudioSearcher_Download_AsksForAACIntoM4AWithAFixedEncodeBitrate(t *testing.T) {
-	argv := strings.Join(recordedArgv(t, NewYtDlpAudioSearcher("", "", ""), ytDlpCallers["download"]), "\n")
+	argv := strings.Join(downloadArgv(t, acquisition.NewYtDlpAudioSearcher("", "", ""), youTubeWatchURL), "\n")
 	for _, want := range []string{
 		"-f\n140/bestaudio[ext=m4a]/bestaudio/",
 		"--audio-format\nm4a",
-		"--audio-quality\n" + fmt.Sprintf("%dK", aacEncodeKbps),
+		"--audio-quality\n128K",
 	} {
 		if !strings.Contains(argv, want) {
 			t.Errorf("argv = %q, want it to contain %q", argv, want)
@@ -1013,25 +780,28 @@ func TestYtDlpAudioSearcher_Download_RejectsWhenNoM4AIsProduced(t *testing.T) {
 	}
 }
 
-func TestYtDlpEntry_ASearchResultIsAnUpload(t *testing.T) {
-	c := CandidateFromEntry(Entry{Title: "Bruno Mars - Finesse", WebpageURL: "https://www.youtube.com/watch?v=x"})
+func TestSearch_ASearchResultIsAnUpload(t *testing.T) {
+	installSearch(t, `echo '{"title":"Bruno Mars - Finesse","webpage_url":"https://www.youtube.com/watch?v=x","duration":185,"channel":"Bruno Mars","categories":["Music"],"view_count":42}'`)
 
-	if c.Kind != ports.KindUpload {
-		t.Errorf("Kind = %q, want an upload", c.Kind)
+	got, err := searchOneQuery(t)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("Search = %+v, %v, want the one entry", got, err)
+	}
+	want := acquisition.AudioCandidate{
+		Title: "Bruno Mars - Finesse", Duration: 185, URL: "https://www.youtube.com/watch?v=x",
+		Channel: "Bruno Mars", Categories: []string{"Music"}, ViewCount: 42, Kind: acquisition.KindUpload,
+	}
+	if c := got[0]; c.Title != want.Title || c.Duration != want.Duration || c.URL != want.URL || c.Channel != want.Channel ||
+		!slices.Equal(c.Categories, want.Categories) || c.ViewCount != want.ViewCount || c.Kind != want.Kind {
+		t.Errorf("candidate = %+v, want %+v", c, want)
 	}
 }
 
 func previewWithScript(t *testing.T, body string) (string, error) {
 	t.Helper()
 	outDir := t.TempDir()
-	binary := filepath.Join(t.TempDir(), "fake-yt-dlp")
-	script := "#!/bin/sh\n" + strings.ReplaceAll(body, "OUT", outDir) + "\n"
-	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.binary = binary
-	return s.DownloadPreview(context.Background(), "https://youtube.com/watch?v=1", outDir, 30)
+	installYtDlp(t, strings.ReplaceAll(body, "OUT", outDir))
+	return acquisition.NewYtDlpAudioSearcher("", "", "").DownloadPreview(context.Background(), youTubeWatchURL, outDir, 30)
 }
 
 func TestDownload_RejectsAPrintedPathThatClimbsOutOfTheOutputDir(t *testing.T) {
@@ -1095,4 +865,47 @@ func TestDownloadPreview_ErrorsWhenNoPathIsPrinted(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "no output path printed by yt-dlp") {
 		t.Fatalf("DownloadPreview error = %v, want no output path printed by yt-dlp", err)
 	}
+}
+
+func TestDownload_ANonPositiveTimeoutKeepsTheDefault(t *testing.T) {
+	outDir := t.TempDir()
+	installYtDlp(t, stubDownload(outDir))
+	s := acquisition.NewYtDlpAudioSearcher("", "", "").WithDownloadTimeout(0)
+
+	if _, err := s.Download(context.Background(), youTubeWatchURL, outDir); err != nil {
+		t.Fatalf("Download error = %v, want nil: a zero timeout must leave the default in place", err)
+	}
+}
+
+func TestDownload_UsesATempCopyOfTheCookieJarAndCleansItUp(t *testing.T) {
+	outDir := t.TempDir()
+	jar := cookieJar(t, "cookies.txt", liveJarContents)
+	capture := captureCookieJar(t, stubDownload(outDir))
+
+	if _, err := acquisition.NewYtDlpAudioSearcher("", jar, "").Download(context.Background(), youTubeWatchURL, outDir); err != nil {
+		t.Fatalf("Download error = %v, want nil", err)
+	}
+
+	capture.assertTempCopyUsedAndRemoved(t, jar)
+}
+
+func TestMarkUnplayable_InspectionUsesATempCopyOfTheCookieJarAndCleansItUp(t *testing.T) {
+	jar := cookieJar(t, "cookies.txt", liveJarContents)
+	capture := captureCookieJar(t, "echo '{\"duration\":240}'")
+
+	acquisition.NewYtDlpAudioSearcher("", jar, "").MarkUnplayable(context.Background(),
+		[]acquisition.AudioCandidate{{URL: soundCloudTrackURL, Duration: 240}})
+
+	capture.assertTempCopyUsedAndRemoved(t, jar)
+}
+
+func TestSearch_UsesATempCopyOfTheCookieJarAndCleansItUp(t *testing.T) {
+	jar := cookieJar(t, "cookies.txt", liveJarContents)
+	capture := captureCookieJar(t, "")
+
+	if _, err := acquisition.NewYtDlpAudioSearcher("", jar, "").SearchQueries(context.Background(), []string{"q"}); err != nil {
+		t.Fatalf("SearchQueries error = %v, want nil", err)
+	}
+
+	capture.assertTempCopyUsedAndRemoved(t, jar)
 }

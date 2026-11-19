@@ -12,6 +12,7 @@ var (
 	NewFfprobeProber      = ytdlp.NewFfprobeProber
 	NewYtDlpSource        = ytdlp.NewSource
 	NewYtDlpAudioSearcher = ytdlp.NewYtDlpAudioSearcher
+	WithDecodeTimeout     = ytdlp.WithDecodeTimeout
 	WithSkipRecorder      = ytdlp.WithSkipRecorder
 )
 
