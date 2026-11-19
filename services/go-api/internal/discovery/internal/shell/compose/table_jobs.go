@@ -14,8 +14,6 @@ var artworkAskingOrder = []rowName{
 
 var consensusAskingOrder = []rowName{rowMusicBrainz, rowDiscogs, rowITunes, rowYouTube, rowSoundCloud}
 
-var neverVerifiesIdentity = []domain.ProviderName{domain.ProviderSoundCloud}
-
 func (t *providerTable) searchProviders() []ports.SearchProvider {
 	var searchers []ports.SearchProvider
 	for _, p := range t.providers {
@@ -34,14 +32,6 @@ func (t *providerTable) artistProviders() map[domain.ProviderName]ports.ArtistCo
 		}
 	}
 	return artists
-}
-
-func (t *providerTable) identityVerifiers() map[domain.ProviderName]ports.ArtistContentProvider {
-	verifiers := t.artistProviders()
-	for _, id := range neverVerifiesIdentity {
-		delete(verifiers, id)
-	}
-	return verifiers
 }
 
 func (t *providerTable) albumProviders() map[domain.ProviderName]ports.AlbumContentProvider {

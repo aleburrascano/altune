@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/discovery/internal/core/ports"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
+	"encoding/json"
 	"os"
 	"strconv"
 	"strings"
@@ -34,9 +35,7 @@ func TestPgxIdentityStore_RoundTrip(t *testing.T) {
 
 	_, _ = pool.Exec(ctx, `DELETE FROM entity_identity WHERE external_id IN ('234701081','987654')`)
 
-	if err := store.PersistBridges(ctx, domain.ResultKindArtist, mbid, xref); err != nil {
-		t.Fatalf("PersistBridges: %v", err)
-	}
+	seedIdentity(t, pool, domain.ResultKindArtist, mbid, xref)
 
 	for provider, externalID := range xref {
 		gotMBID, gotXref, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, domain.ProviderKey(provider), externalID)
@@ -58,34 +57,6 @@ func TestPgxIdentityStore_RoundTrip(t *testing.T) {
 
 	if _, _, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, "deezer", "does-not-exist"); ok {
 		t.Error("lookup of unknown id hit, want miss")
-	}
-
-	newMBID := "11111111-2222-3333-4444-555555555555"
-	if err := store.PersistBridges(ctx, domain.ResultKindArtist, newMBID, map[domain.ProviderKey]string{"deezer": "234701081"}); err != nil {
-		t.Fatalf("re-PersistBridges: %v", err)
-	}
-	gotMBID, gotXref, _ := store.LookupByProviderID(ctx, domain.ResultKindArtist, "deezer", "234701081")
-	if gotMBID != newMBID {
-		t.Errorf("after upsert mbid = %q, want %q", gotMBID, newMBID)
-	}
-	if _, has := gotXref["discogs"]; has {
-		t.Errorf("MBID change kept the old artist's discogs edge, xref = %v", gotXref)
-	}
-	if gotXref["deezer"] != "234701081" {
-		t.Errorf("xref lost the re-learned deezer edge, xref = %v", gotXref)
-	}
-
-	if err := store.Invalidate(ctx, domain.ResultKindArtist, "deezer", "234701081"); err != nil {
-		t.Fatalf("Invalidate: %v", err)
-	}
-	if _, _, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, "deezer", "234701081"); ok {
-		t.Error("invalidated identity still resolves, want miss")
-	}
-	if _, _, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, "discogs", "987654"); !ok {
-		t.Error("sibling row was deleted by Invalidate, want it untouched")
-	}
-	if err := store.Invalidate(ctx, domain.ResultKindArtist, "deezer", "does-not-exist"); err != nil {
-		t.Errorf("Invalidate of missing row: %v, want nil", err)
 	}
 
 	_, _ = pool.Exec(ctx, `DELETE FROM entity_identity WHERE external_id IN ('234701081','987654')`)
@@ -136,9 +107,7 @@ func TestPgxIdentityStore_LookupByProviderIDsIsOneQuery(t *testing.T) {
 		id := batchTestIDPrefix + strconv.Itoa(i)
 		refs[i] = ports.IdentityRef{Kind: domain.ResultKindTrack, Provider: domain.ProviderKeyDeezer, ExternalID: id}
 		if i%2 == 0 {
-			if err := store.PersistBridges(ctx, domain.ResultKindTrack, "mbid-"+id, map[domain.ProviderKey]string{"deezer": id, "discogs": "d" + id}); err != nil {
-				t.Fatalf("seed %s: %v", id, err)
-			}
+			seedIdentity(t, pool, domain.ResultKindTrack, "mbid-"+id, map[domain.ProviderKey]string{"deezer": id, "discogs": "d" + id})
 		}
 	}
 
@@ -185,9 +154,7 @@ func TestPgxIdentityStore_LookupByProviderIDsKeysOnKind(t *testing.T) {
 	cleanup()
 	t.Cleanup(cleanup)
 
-	if err := store.PersistBridges(ctx, domain.ResultKindArtist, "artist-mbid", map[domain.ProviderKey]string{"deezer": id}); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
+	seedIdentity(t, pool, domain.ResultKindArtist, "artist-mbid", map[domain.ProviderKey]string{"deezer": id})
 	artist := ports.IdentityRef{Kind: domain.ResultKindArtist, Provider: domain.ProviderKeyDeezer, ExternalID: id}
 	album := ports.IdentityRef{Kind: domain.ResultKindAlbum, Provider: domain.ProviderKeyDeezer, ExternalID: id}
 
@@ -229,38 +196,17 @@ func TestPgxIdentityStore_LookupByProviderID_CorruptXrefWarnsAndKeepsHit(t *test
 	}
 }
 
-func TestPgxIdentityStore_PersistBridges_MBIDChangeReplacesXref(t *testing.T) {
-	sharedtest.RequireIntegration(t)
-	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
+func seedIdentity(t *testing.T, pool *pgxpool.Pool, kind domain.ResultKind, mbid string, xref map[domain.ProviderKey]string) {
+	t.Helper()
+	blob, err := json.Marshal(xref)
 	if err != nil {
-		t.Fatalf("connect: %v", err)
+		t.Fatalf("marshal xref: %v", err)
 	}
-	defer pool.Close()
-	cleanup := `DELETE FROM entity_identity WHERE external_id IN ('mbidchg-d1','mbidchg-a1','mbidchg-d2')`
-	_, _ = pool.Exec(ctx, cleanup)
-	defer pool.Exec(ctx, cleanup)
-	store := NewPgxIdentityStore(pool)
-	kind := domain.ResultKindArtist
-
-	if err := store.PersistBridges(ctx, kind, "mbid-m1", map[domain.ProviderKey]string{"deezer": "mbidchg-d1", "applemusic": "mbidchg-a1"}); err != nil {
-		t.Fatalf("persist M1: %v", err)
-	}
-	if err := store.PersistBridges(ctx, kind, "mbid-m1", map[domain.ProviderKey]string{"deezer": "mbidchg-d1", "discogs": "mbidchg-d2"}); err != nil {
-		t.Fatalf("persist M1 again: %v", err)
-	}
-	if _, xref, _ := store.LookupByProviderID(ctx, kind, "deezer", "mbidchg-d1"); xref["applemusic"] != "mbidchg-a1" {
-		t.Fatalf("same-MBID relearn must merge, xref = %v", xref)
-	}
-
-	if err := store.PersistBridges(ctx, kind, "mbid-m2", map[domain.ProviderKey]string{"deezer": "mbidchg-d1"}); err != nil {
-		t.Fatalf("persist M2: %v", err)
-	}
-	mbid, xref, ok := store.LookupByProviderID(ctx, kind, "deezer", "mbidchg-d1")
-	if !ok || mbid != "mbid-m2" {
-		t.Fatalf("lookup = (%q, %v), want mbid-m2", mbid, ok)
-	}
-	if len(xref) != 1 || xref["deezer"] != "mbidchg-d1" {
-		t.Errorf("xref = %v, want only the new artist's deezer edge", xref)
+	for provider, externalID := range xref {
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO entity_identity (provider, external_id, kind, mbid, xref) VALUES ($1, $2, $3, $4, $5)`,
+			provider, externalID, kind.String(), mbid, blob); err != nil {
+			t.Fatalf("seed %s:%s: %v", provider, externalID, err)
+		}
 	}
 }

@@ -73,14 +73,13 @@ func discoveryProviderSettings(cfg *config.Config) discovery.ProviderSettings {
 
 func discoverySearchSettings(cfg *config.Config) discovery.SearchSettings {
 	return discovery.SearchSettings{
-		Deadline:                cfg.DiscoverySearchDeadline,
-		TailDemotion:            cfg.TailDemotionEnabled,
-		CrossKindProminence:     cfg.CrossKindProminenceEnabled,
-		Exploration:             cfg.ExplorationEnabled,
-		ExplorationRate:         cfg.ExplorationRate,
-		IdentityVerifyOnPersist: cfg.IdentityVerifyOnPersist,
-		BehavioralRanking:       cfg.BehavioralRankingEnabled,
-		ProviderCacheTTL:        cfg.DiscoveryProviderCacheTTL,
+		Deadline:            cfg.DiscoverySearchDeadline,
+		TailDemotion:        cfg.TailDemotionEnabled,
+		CrossKindProminence: cfg.CrossKindProminenceEnabled,
+		Exploration:         cfg.ExplorationEnabled,
+		ExplorationRate:     cfg.ExplorationRate,
+		BehavioralRanking:   cfg.BehavioralRankingEnabled,
+		ProviderCacheTTL:    cfg.DiscoveryProviderCacheTTL,
 	}
 }
 

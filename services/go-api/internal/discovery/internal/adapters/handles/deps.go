@@ -46,14 +46,13 @@ type ProviderSettings struct {
 }
 
 type SearchSettings struct {
-	Deadline                time.Duration
-	TailDemotion            bool
-	CrossKindProminence     bool
-	Exploration             bool
-	ExplorationRate         float64
-	IdentityVerifyOnPersist bool
-	BehavioralRanking       bool
-	ProviderCacheTTL        time.Duration
+	Deadline            time.Duration
+	TailDemotion        bool
+	CrossKindProminence bool
+	Exploration         bool
+	ExplorationRate     float64
+	BehavioralRanking   bool
+	ProviderCacheTTL    time.Duration
 }
 
 type UnreleasedSettings struct {

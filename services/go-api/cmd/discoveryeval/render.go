@@ -136,7 +136,6 @@ func renderHealth(report discovery.HealthReport) string {
 	out := fmt.Sprintf("# Discovery health gauges (report-only) — %s\n\n", time.Now().UTC().Format(time.RFC3339))
 	out += fmt.Sprintf("- Searches: %d, result rows: %d\n", report.Searches, report.Results)
 	out += fmt.Sprintf("- Artwork fill-rate: %.1f%% (%d of %d)\n", report.FillRate*100, report.WithArtwork, report.Results)
-	out += fmt.Sprintf("- Identity-bridge hit-rate: %.1f%% (%d merged via bridge)\n", report.BridgeHitRate*100, report.BridgedMerges)
 	out += fmt.Sprintf("- Latency: p50 %dms · p95 %dms · max %dms\n", report.LatencyP50Ms, report.LatencyP95Ms, report.LatencyMaxMs)
 	out += "\n_These gauges are tracked for visibility only — they never gate._\n"
 	return out

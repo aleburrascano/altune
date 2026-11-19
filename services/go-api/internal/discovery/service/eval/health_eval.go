@@ -5,20 +5,16 @@ import (
 	"sort"
 	"sync"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type HealthReport struct {
-	Searches      int     `json:"searches"`
-	Results       int     `json:"results"`
-	WithArtwork   int     `json:"with_artwork"`
-	BridgedMerges int     `json:"bridged_merges"`
-	FillRate      float64 `json:"fill_rate"`
-	BridgeHitRate float64 `json:"bridge_hit_rate"`
-	LatencyP50Ms  int64   `json:"latency_p50_ms"`
-	LatencyP95Ms  int64   `json:"latency_p95_ms"`
-	LatencyMaxMs  int64   `json:"latency_max_ms"`
+	Searches     int     `json:"searches"`
+	Results      int     `json:"results"`
+	WithArtwork  int     `json:"with_artwork"`
+	FillRate     float64 `json:"fill_rate"`
+	LatencyP50Ms int64   `json:"latency_p50_ms"`
+	LatencyP95Ms int64   `json:"latency_p95_ms"`
+	LatencyMaxMs int64   `json:"latency_max_ms"`
 }
 
 func RunHealthEval(ctx context.Context, entities []LibraryEntity, searcher Searcher, concurrency int, progress func(done, total int)) HealthReport {
@@ -26,7 +22,6 @@ func RunHealthEval(ctx context.Context, entities []LibraryEntity, searcher Searc
 		mu        sync.Mutex
 		results   int
 		artwork   int
-		bridged   int
 		latencies []int64
 	)
 
@@ -48,22 +43,17 @@ func RunHealthEval(ctx context.Context, entities []LibraryEntity, searcher Searc
 			if r.ImageURL != "" {
 				artwork++
 			}
-			if r.ResolutionTier.Tier == domain.EntityResolutionBridge {
-				bridged++
-			}
 		}
 		mu.Unlock()
 	})
 
 	report := HealthReport{
-		Searches:      len(latencies),
-		Results:       results,
-		WithArtwork:   artwork,
-		BridgedMerges: bridged,
+		Searches:    len(latencies),
+		Results:     results,
+		WithArtwork: artwork,
 	}
 	if results > 0 {
 		report.FillRate = float64(artwork) / float64(results)
-		report.BridgeHitRate = float64(bridged) / float64(results)
 	}
 	report.LatencyP50Ms = percentile(latencies, 50)
 	report.LatencyP95Ms = percentile(latencies, 95)
@@ -90,7 +80,6 @@ func percentile(samples []int64, p int) int64 {
 func (r HealthReport) HealthMetrics() []NamedMetric {
 	return []NamedMetric{
 		{Name: "health.fill_rate", Value: r.FillRate, HigherIsBetter: true},
-		{Name: "health.bridge_hit_rate", Value: r.BridgeHitRate, HigherIsBetter: true},
 		{Name: "health.latency_p50_ms", Value: float64(r.LatencyP50Ms), HigherIsBetter: false},
 		{Name: "health.latency_p95_ms", Value: float64(r.LatencyP95Ms), HigherIsBetter: false},
 	}

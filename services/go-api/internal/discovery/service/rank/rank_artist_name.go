@@ -8,5 +8,5 @@ func isStrongNamedArtist(r domain.SearchResult, queryNorm string) bool {
 	if r.Kind != domain.ResultKindArtist || queryNorm == "" || matchName(r.Title) != matchName(queryNorm) {
 		return false
 	}
-	return r.ArtistMBID != "" || len(providersOf(r)) >= strongArtistProviders
+	return len(providersOf(r)) >= strongArtistProviders
 }

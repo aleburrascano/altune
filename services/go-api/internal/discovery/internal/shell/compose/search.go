@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/discovery/internal/adapters/handles"
 	"altune/go-api/internal/discovery/internal/adapters/persistence"
 	"altune/go-api/internal/discovery/internal/core/ports"
-	"altune/go-api/internal/discovery/service/identity"
 	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/discovery/service/rank"
 	"altune/go-api/internal/discovery/service/related"
@@ -44,7 +43,7 @@ func unrecordedOptions(w wiring, breaker *providercall.CircuitBreaker) []searchO
 	named := rankingOptions(w.deps.Search, w.stores)
 	named = append(named, explorationAndDeadlineOptions(w.deps.Search)...)
 	named = append(named, artworkAndRelatedOptions(w.table, w.stores, w.artwork, breaker)...)
-	named = append(named, identityOptions(w.deps.Search, w.table, w.stores)...)
+	named = append(named, identityOptions(w.stores)...)
 	named = append(named, resultCacheOptions(w.deps.Search, w.stores)...)
 	named = append(named, enrichmentCacheOptions(w.stores)...)
 	return append(named, vocabularyOptions(w.stores)...)
@@ -101,18 +100,13 @@ func artworkAndRelatedOptions(t *providerTable, s handles.Stores, artwork ports.
 	}
 }
 
-func identityOptions(settings handles.SearchSettings, t *providerTable, s handles.Stores) []searchOption {
+func identityOptions(s handles.Stores) []searchOption {
 	var named []searchOption
 	if s.Pool != nil {
 		named = append(named, searchOption{"favorites", search.WithFavorites(persistence.NewPgxFavoritesRepository(s.Pool))})
 	}
 	if s.Identities != nil {
 		named = append(named, searchOption{"identity_store", search.WithIdentityStore(s.Identities)})
-	}
-	anchor := t.named(rowMusicBrainz).artistAnchor
-	if settings.IdentityVerifyOnPersist && anchor != nil {
-		verifier := identity.NewIdentityVerifier(anchor, t.identityVerifiers())
-		named = append(named, searchOption{"identity_verifier", search.WithIdentityVerifier(verifier)})
 	}
 	return named
 }
@@ -135,7 +129,6 @@ func enrichmentCacheOptions(s handles.Stores) []searchOption {
 	enrichmentCache := cache.NewRedisEnrichmentCache(s.Redis, s.CacheOption())
 	return []searchOption{
 		{"artwork_cache", search.WithArtworkCache(cache.NewRedisArtworkCache(s.Redis, s.CacheOption()))},
-		{"identity_bridge", search.WithIdentityBridge(enrichmentCache)},
 		{"mbid_index", search.WithMBIDIndex(enrichmentCache)},
 	}
 }

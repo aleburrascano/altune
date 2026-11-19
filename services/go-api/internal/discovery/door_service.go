@@ -92,6 +92,5 @@ var (
 	UpstreamDown          = memory.UpstreamDown
 	V2Album               = memory.V2Album
 	WithISRC              = memory.WithISRC
-	WithMBID              = memory.WithMBID
 	WithPop               = memory.WithPop
 )

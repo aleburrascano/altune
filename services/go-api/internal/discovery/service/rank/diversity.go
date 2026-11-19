@@ -2,7 +2,6 @@ package rank
 
 import (
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/internal/core/release"
 	"altune/go-api/internal/shared/textnorm"
 )
 
@@ -84,7 +83,6 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		primaryPop float64
 		otherIdxs  []int
 	}
-	ambiguous := ambiguousArtistNamesFlat(results)
 	groups := make(map[string]*group)
 	order := []string{}
 
@@ -92,14 +90,7 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		if r.Kind != domain.ResultKindArtist {
 			continue
 		}
-		norm := textnorm.NormalizeForMatch(r.Title)
-		key := norm
-		if ambiguous[norm] {
-			key = norm + "\x00" + r.ArtistMBID
-			if r.ArtistMBID == "" && len(r.Sources) > 0 {
-				key = norm + "\x00" + release.SourceKey(r.Sources[0].Provider, r.Sources[0].ExternalID)
-			}
-		}
+		key := textnorm.NormalizeForMatch(r.Title)
 		pop := r.Popularity
 		g, exists := groups[key]
 		if !exists {

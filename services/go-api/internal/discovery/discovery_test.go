@@ -468,7 +468,6 @@ func TestSearchSettings_EachSwitchAddsItsOptionOnlyWhenOn(t *testing.T) {
 		{"TailDemotion", func(h *harness) { h.deps.Search.TailDemotion = true }, "tail_demotion"},
 		{"CrossKindProminence", func(h *harness) { h.deps.Search.CrossKindProminence = true }, "cross_kind_prominence"},
 		{"Exploration", func(h *harness) { h.deps.Search.Exploration = true }, "exploration"},
-		{"IdentityVerifyOnPersist", func(h *harness) { h.deps.Search.IdentityVerifyOnPersist = true }, "identity_verifier"},
 		{"BehavioralRanking", func(h *harness) { h.deps.Search.BehavioralRanking = true }, "behavioral_ranking"},
 		{"Activity", func(h *harness) { h.deps.Activity = &activityRecorder{} }, "activity"},
 		{"Pool", func(h *harness) { h.deps.Pool = unreachablePool(h.t) }, "favorites"},
@@ -490,16 +489,6 @@ func TestSearchSettings_EachSwitchAddsItsOptionOnlyWhenOn(t *testing.T) {
 				t.Errorf("%s on, yet search was not given %q; options %v", tt.setting, tt.option, on.searchOptions())
 			}
 		})
-	}
-}
-
-func TestSearchSettings_IdentityVerifierNeedsMusicBrainz(t *testing.T) {
-	h := newHarness(t, everyProviderOff())
-	h.deps.Search.IdentityVerifyOnPersist = true
-	h.start()
-
-	if slices.Contains(h.searchOptions(), "identity_verifier") {
-		t.Error("an identity verifier was wired without a MusicBrainz anchor")
 	}
 }
 
@@ -773,12 +762,14 @@ func storedIdentityHarness(t *testing.T, providers discovery.ProviderSettings) *
 	t.Helper()
 	pool := integrationPool(t)
 	ctx := context.Background()
-	store := discovery.NewPgxIdentityStore(pool)
-	xref := map[discovery.ProviderKey]string{"deezer": "1"}
-	if err := store.PersistBridges(ctx, discovery.ResultKindArtist, probeArtistMBID, xref); err != nil {
+	forget := func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM entity_identity WHERE provider = 'deezer' AND external_id = '1' AND kind = 'artist'`)
+	}
+	forget()
+	if _, err := pool.Exec(ctx, `INSERT INTO entity_identity (provider, external_id, kind, mbid, xref) VALUES ('deezer', '1', 'artist', $1, '{"deezer":"1"}')`, probeArtistMBID); err != nil {
 		t.Fatalf("seed identity: %v", err)
 	}
-	t.Cleanup(func() { _ = store.Invalidate(context.Background(), discovery.ResultKindArtist, "deezer", "1") })
+	t.Cleanup(forget)
 	h := newHarness(t, providers)
 	h.deps.Pool = pool
 	return h
@@ -1002,7 +993,6 @@ func everySearchSettingOn(h *harness) {
 	h.deps.Search.TailDemotion = true
 	h.deps.Search.CrossKindProminence = true
 	h.deps.Search.Exploration = true
-	h.deps.Search.IdentityVerifyOnPersist = true
 	h.deps.Search.BehavioralRanking = true
 }
 
@@ -1022,7 +1012,7 @@ func TestRankingOnlySearch_RanksWithoutDeadlineArtworkResultCachesOrRecording(t 
 	h.start().RankingOnlySearch()
 
 	assertLines(t, h.optionsLoggedAs("discovery.ranking_only_search"), []string{
-		"history", "tail_demotion", "cross_kind_prominence", "artwork_cache", "identity_bridge", "mbid_index", "vocabulary",
+		"history", "tail_demotion", "cross_kind_prominence", "artwork_cache", "mbid_index", "vocabulary",
 	})
 }
 

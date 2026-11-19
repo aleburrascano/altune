@@ -17,6 +17,8 @@ type (
 	DiscographySuspectRate   = ports.DiscographySuspectRate
 	GeniusSongCatalog        = ports.GeniusSongCatalog
 	ISRCRecording            = ports.ISRCRecording
+	IdentityHit              = ports.IdentityHit
+	IdentityRef              = ports.IdentityRef
 	IdentityStore            = ports.IdentityStore
 	MBRecording              = ports.MBRecording
 	MBRecordingDetail        = ports.MBRecordingDetail
