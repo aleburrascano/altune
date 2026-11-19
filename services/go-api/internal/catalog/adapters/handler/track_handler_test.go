@@ -12,7 +12,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -635,25 +634,24 @@ func createTrackWithRawDuration(raw string) *strings.Reader {
 
 func TestCreateTrack_ThrottlesPerUser(t *testing.T) {
 	clock := newAudioFakeClock()
-	limit := AudioRateLimit{Every: 2 * time.Second, Burst: 5}
-	rig := newThrottledWriteRig(limit, clock.now)
+	rig := newThrottledWriteRig(clock.now)
 	user := shared.NewUserId(uuid.New())
 
-	for i := range limit.Burst {
+	for i := range trackWriteBurst {
 		rec := rig.createTrack(user, fmt.Sprintf("Inside %d", i))
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("create %d inside the burst must store, got %d (%s)", i, rec.Code, rec.Body.String())
 		}
 	}
 	for i := range 20 {
-		assertWriteThrottled(t, rig.createTrack(user, fmt.Sprintf("Flood %d", i)), "2")
+		assertWriteThrottled(t, rig.createTrack(user, fmt.Sprintf("Flood %d", i)), "1")
 	}
 
-	if len(rig.tracks.Tracks) != limit.Burst {
-		t.Fatalf("stored tracks = %d, want %d: a throttled create must not insert", len(rig.tracks.Tracks), limit.Burst)
+	if len(rig.tracks.Tracks) != trackWriteBurst {
+		t.Fatalf("stored tracks = %d, want %d: a throttled create must not insert", len(rig.tracks.Tracks), trackWriteBurst)
 	}
 
-	clock.advance(limit.Every)
+	clock.advance(trackWriteEvery)
 	if rec := rig.createTrack(user, "After refill"); rec.Code != http.StatusCreated {
 		t.Fatalf("a refilled token must admit the next create, got %d (%s)", rec.Code, rec.Body.String())
 	}

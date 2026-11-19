@@ -208,10 +208,16 @@ func newWriteRig(trackOpts []func(*TrackHandler), playlistOpts []func(*PlaylistH
 	return &writeRig{router: r, tracks: tracks, playlists: playlists}
 }
 
-func newThrottledWriteRig(limit AudioRateLimit, now func() time.Time) *writeRig {
+const (
+	trackWriteBurst    = 200
+	trackWriteEvery    = 500 * time.Millisecond
+	playlistWriteBurst = 60
+)
+
+func newThrottledWriteRig(now func() time.Time) *writeRig {
 	return newWriteRig(
-		[]func(*TrackHandler){WithTrackWriteRateLimit(limit), WithTrackWriteLimiterClock(now)},
-		[]func(*PlaylistHandler){WithPlaylistWriteRateLimit(limit), WithPlaylistWriteLimiterClock(now)},
+		[]func(*TrackHandler){WithTrackWriteLimiterClock(now)},
+		[]func(*PlaylistHandler){WithPlaylistWriteLimiterClock(now)},
 	)
 }
 

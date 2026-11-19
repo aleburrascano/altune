@@ -205,24 +205,23 @@ func (s *probeCountingStore) Exists(ctx context.Context, audioRef string) (bool,
 
 func TestHandleRecover_FloodFromOnePrincipalIsThrottled(t *testing.T) {
 	clock := newFakeClock()
-	limit := catalog.AudioRateLimit{Every: 2 * time.Second, Burst: 3}
 	store := &probeCountingStore{InMemoryAudioStore: catalog.NewInMemoryAudioStore()}
-	repo, router := streamRoutes(store, catalog.WithStreamRateLimit(limit), catalog.WithStreamLimiterClock(clock.now))
+	repo, router := streamRoutes(store, catalog.WithStreamLimiterClock(clock.now))
 	track := seedReady(t, repo, "Track", "audio/present.opus")
 	store.Seed("audio/present.opus", []byte("fake-audio-data"))
 	path := "/tracks/" + track.ID.UUID().String() + "/audio/recover"
 
-	for i := range limit.Burst {
+	for i := range streamBurst {
 		if rec := serve(router, http.MethodPost, path); rec.Code != http.StatusAccepted {
 			t.Fatalf("recover %d inside the burst must be accepted, got %d", i, rec.Code)
 		}
 	}
-	assertAudioThrottled(t, serve(router, http.MethodPost, path), "2")
+	assertAudioThrottled(t, serve(router, http.MethodPost, path), "1")
 
-	if store.probes != limit.Burst {
-		t.Fatalf("a throttled recover must not probe storage: %d HEADs, want %d", store.probes, limit.Burst)
+	if store.probes != streamBurst {
+		t.Fatalf("a throttled recover must not probe storage: %d HEADs, want %d", store.probes, streamBurst)
 	}
-	clock.advance(limit.Every)
+	clock.advance(streamEvery)
 	if rec := serve(router, http.MethodPost, path); rec.Code != http.StatusAccepted {
 		t.Fatalf("a refilled token must admit the next recover, got %d", rec.Code)
 	}

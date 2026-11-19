@@ -8,27 +8,12 @@ import (
 	"time"
 )
 
-type AudioRateLimit = httputil.RateLimit
-
-var DefaultStreamRateLimit = AudioRateLimit{
-	Every: time.Second,
-	Burst: 120,
-}
-
-var DefaultAudioURLRateLimit = AudioRateLimit{
-	Every: 250 * time.Millisecond,
-	Burst: 300,
-}
-
-var DefaultTrackWriteRateLimit = AudioRateLimit{
-	Every: 500 * time.Millisecond,
-	Burst: 200,
-}
-
-var DefaultPlaylistWriteRateLimit = AudioRateLimit{
-	Every: time.Second,
-	Burst: 60,
-}
+var (
+	streamRateLimit        = httputil.RateLimit{Every: time.Second, Burst: 120}
+	audioURLRateLimit      = httputil.RateLimit{Every: 250 * time.Millisecond, Burst: 300}
+	trackWriteRateLimit    = httputil.RateLimit{Every: 500 * time.Millisecond, Burst: 200}
+	playlistWriteRateLimit = httputil.RateLimit{Every: time.Second, Burst: 60}
+)
 
 var (
 	errAudioRateLimited = &domain.CodedError{
@@ -45,14 +30,14 @@ var (
 
 type rateLimitMiddleware = func(http.Handler) http.Handler
 
-func newAudioRateLimiter(limit AudioRateLimit, now func() time.Time) rateLimitMiddleware {
+func newAudioRateLimiter(limit httputil.RateLimit, now func() time.Time) rateLimitMiddleware {
 	return newUserRateLimiter(limit, now, errAudioRateLimited)
 }
 
-func newWriteRateLimiter(limit AudioRateLimit, now func() time.Time) rateLimitMiddleware {
+func newWriteRateLimiter(limit httputil.RateLimit, now func() time.Time) rateLimitMiddleware {
 	return newUserRateLimiter(limit, now, errWriteRateLimited)
 }
 
-func newUserRateLimiter(limit AudioRateLimit, now func() time.Time, refused error) rateLimitMiddleware {
+func newUserRateLimiter(limit httputil.RateLimit, now func() time.Time, refused error) rateLimitMiddleware {
 	return httputil.NewUserRateLimiter(limit, now).Middleware(httputil.UserKey(requestuser.UserIDFromContext), refused, nil)
 }

@@ -17,24 +17,16 @@ import (
 	"github.com/google/uuid"
 )
 
-type fakeClock struct {
-	mu sync.Mutex
-	t  time.Time
-}
-
-func newFakeClock() *fakeClock { return &fakeClock{t: time.Unix(1_700_000_000, 0)} }
-
-func (c *fakeClock) now() time.Time {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.t
-}
-
-func (c *fakeClock) advance(d time.Duration) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.t = c.t.Add(d)
-}
+const (
+	streamBurst        = 120
+	streamEvery        = time.Second
+	audioURLBurst      = 300
+	audioURLEvery      = 250 * time.Millisecond
+	trackWriteBurst    = 200
+	trackWriteEvery    = 500 * time.Millisecond
+	playlistWriteBurst = 60
+	playlistWriteEvery = time.Second
+)
 
 type countingAudioStore struct {
 	*catalog.InMemoryAudioStore
@@ -124,24 +116,23 @@ func assertThrottled(t *testing.T, rec *httptest.ResponseRecorder, wantCode, wan
 
 func TestStreamRateLimit_FloodFromOnePrincipalIsThrottled(t *testing.T) {
 	clock := newFakeClock()
-	limit := catalog.AudioRateLimit{Every: 2 * time.Second, Burst: 5}
-	rig := newAudioRig([]func(*catalog.StreamHandler){catalog.WithStreamRateLimit(limit), catalog.WithStreamLimiterClock(clock.now)}, nil)
+	rig := newAudioRig([]func(*catalog.StreamHandler){catalog.WithStreamLimiterClock(clock.now)}, nil)
 	user := shared.NewUserId(uuid.New())
 	track := rig.seedTracks(t, user, 1)[0]
 
-	for i := range limit.Burst {
+	for i := range streamBurst {
 		if rec := rig.stream(user, track, ""); rec.Code != http.StatusOK {
 			t.Fatalf("request %d inside the burst must stream, got %d", i, rec.Code)
 		}
 	}
 	for range 50 {
-		assertAudioThrottled(t, rig.stream(user, track, "bytes=0-1"), "2")
+		assertAudioThrottled(t, rig.stream(user, track, "bytes=0-1"), "1")
 	}
-	if rig.store.streams != limit.Burst {
-		t.Fatalf("throttled requests must not reach object storage: %d streams, want %d", rig.store.streams, limit.Burst)
+	if rig.store.streams != streamBurst {
+		t.Fatalf("throttled requests must not reach object storage: %d streams, want %d", rig.store.streams, streamBurst)
 	}
 
-	clock.advance(limit.Every)
+	clock.advance(streamEvery)
 	if rec := rig.stream(user, track, "bytes=0-1"); rec.Code != http.StatusPartialContent {
 		t.Fatalf("a refilled token must admit the next range request, got %d", rec.Code)
 	}
@@ -149,12 +140,11 @@ func TestStreamRateLimit_FloodFromOnePrincipalIsThrottled(t *testing.T) {
 
 func TestAudioURLRateLimit_FloodFromOnePrincipalIsThrottled(t *testing.T) {
 	clock := newFakeClock()
-	limit := catalog.AudioRateLimit{Every: time.Second, Burst: 5}
-	rig := newAudioRig(nil, []func(*catalog.AudioURLHandler){catalog.WithAudioURLRateLimit(limit), catalog.WithAudioURLLimiterClock(clock.now)})
+	rig := newAudioRig(nil, []func(*catalog.AudioURLHandler){catalog.WithAudioURLLimiterClock(clock.now)})
 	user := shared.NewUserId(uuid.New())
 	track := rig.seedTracks(t, user, 1)[0]
 
-	for i := range limit.Burst {
+	for i := range audioURLBurst {
 		if rec := rig.resolve(user, track); rec.Code != http.StatusOK {
 			t.Fatalf("request %d inside the burst must resolve, got %d", i, rec.Code)
 		}
@@ -162,11 +152,11 @@ func TestAudioURLRateLimit_FloodFromOnePrincipalIsThrottled(t *testing.T) {
 	for range 50 {
 		assertAudioThrottled(t, rig.resolve(user, track), "1")
 	}
-	if rig.store.presigns != limit.Burst {
-		t.Fatalf("throttled requests must not presign: %d presigns, want %d", rig.store.presigns, limit.Burst)
+	if rig.store.presigns != audioURLBurst {
+		t.Fatalf("throttled requests must not presign: %d presigns, want %d", rig.store.presigns, audioURLBurst)
 	}
 
-	clock.advance(limit.Every)
+	clock.advance(audioURLEvery)
 	if rec := rig.resolve(user, track); rec.Code != http.StatusOK {
 		t.Fatalf("a refilled token must admit the next resolve, got %d", rec.Code)
 	}
@@ -174,17 +164,18 @@ func TestAudioURLRateLimit_FloodFromOnePrincipalIsThrottled(t *testing.T) {
 
 func TestAudioRateLimit_IsPerPrincipalAndPerEndpoint(t *testing.T) {
 	clock := newFakeClock()
-	one := catalog.AudioRateLimit{Every: time.Hour, Burst: 1}
 	rig := newAudioRig(
-		[]func(*catalog.StreamHandler){catalog.WithStreamRateLimit(one), catalog.WithStreamLimiterClock(clock.now)},
-		[]func(*catalog.AudioURLHandler){catalog.WithAudioURLRateLimit(one), catalog.WithAudioURLLimiterClock(clock.now)},
+		[]func(*catalog.StreamHandler){catalog.WithStreamLimiterClock(clock.now)},
+		[]func(*catalog.AudioURLHandler){catalog.WithAudioURLLimiterClock(clock.now)},
 	)
 	noisy, quiet := shared.NewUserId(uuid.New()), shared.NewUserId(uuid.New())
 	noisyTrack := rig.seedTracks(t, noisy, 1)[0]
 	quietTrack := rig.seedTracks(t, quiet, 1)[0]
 
-	rig.stream(noisy, noisyTrack, "")
-	assertAudioThrottled(t, rig.stream(noisy, noisyTrack, ""), "3600")
+	for range streamBurst {
+		rig.stream(noisy, noisyTrack, "bytes=0-1")
+	}
+	assertAudioThrottled(t, rig.stream(noisy, noisyTrack, ""), "1")
 
 	if rec := rig.resolve(noisy, noisyTrack); rec.Code != http.StatusOK {
 		t.Fatalf("a spent stream budget must not throttle audio-urls, got %d", rec.Code)
@@ -326,33 +317,33 @@ type limitedEndpoint struct {
 	every      time.Duration
 	code       string
 	retryAfter string
-	open       func(t *testing.T, clock func() time.Time, limit *catalog.AudioRateLimit) func(i int) *httptest.ResponseRecorder
+	open       func(t *testing.T, clocks ...func() time.Time) func(i int) *httptest.ResponseRecorder
 }
 
-func openStream(t *testing.T, clock func() time.Time, limit *catalog.AudioRateLimit) func(int) *httptest.ResponseRecorder {
-	opts := []func(*catalog.StreamHandler){catalog.WithStreamLimiterClock(clock)}
-	if limit != nil {
-		opts = append(opts, catalog.WithStreamRateLimit(*limit))
+func openStream(t *testing.T, clocks ...func() time.Time) func(int) *httptest.ResponseRecorder {
+	var opts []func(*catalog.StreamHandler)
+	for _, clock := range clocks {
+		opts = append(opts, catalog.WithStreamLimiterClock(clock))
 	}
 	rig := newAudioRig(opts, nil)
 	track := rig.seedTracks(t, catalog.FixtureUserId(), 1)[0]
 	return func(int) *httptest.ResponseRecorder { return rig.stream(catalog.FixtureUserId(), track, "bytes=0-1") }
 }
 
-func openAudioURLs(t *testing.T, clock func() time.Time, limit *catalog.AudioRateLimit) func(int) *httptest.ResponseRecorder {
-	opts := []func(*catalog.AudioURLHandler){catalog.WithAudioURLLimiterClock(clock)}
-	if limit != nil {
-		opts = append(opts, catalog.WithAudioURLRateLimit(*limit))
+func openAudioURLs(t *testing.T, clocks ...func() time.Time) func(int) *httptest.ResponseRecorder {
+	var opts []func(*catalog.AudioURLHandler)
+	for _, clock := range clocks {
+		opts = append(opts, catalog.WithAudioURLLimiterClock(clock))
 	}
 	rig := newAudioRig(nil, opts)
 	track := rig.seedTracks(t, catalog.FixtureUserId(), 1)[0]
 	return func(int) *httptest.ResponseRecorder { return rig.resolve(catalog.FixtureUserId(), track) }
 }
 
-func openTrackWrites(t *testing.T, clock func() time.Time, limit *catalog.AudioRateLimit) func(int) *httptest.ResponseRecorder {
-	opts := []func(*catalog.TrackHandler){catalog.WithTrackWriteLimiterClock(clock)}
-	if limit != nil {
-		opts = append(opts, catalog.WithTrackWriteRateLimit(*limit))
+func openTrackWrites(t *testing.T, clocks ...func() time.Time) func(int) *httptest.ResponseRecorder {
+	var opts []func(*catalog.TrackHandler)
+	for _, clock := range clocks {
+		opts = append(opts, catalog.WithTrackWriteLimiterClock(clock))
 	}
 	rig := newWriteRig(opts, nil)
 	return func(i int) *httptest.ResponseRecorder {
@@ -360,10 +351,10 @@ func openTrackWrites(t *testing.T, clock func() time.Time, limit *catalog.AudioR
 	}
 }
 
-func openPlaylistWrites(t *testing.T, clock func() time.Time, limit *catalog.AudioRateLimit) func(int) *httptest.ResponseRecorder {
-	opts := []func(*catalog.PlaylistHandler){catalog.WithPlaylistWriteLimiterClock(clock)}
-	if limit != nil {
-		opts = append(opts, catalog.WithPlaylistWriteRateLimit(*limit))
+func openPlaylistWrites(t *testing.T, clocks ...func() time.Time) func(int) *httptest.ResponseRecorder {
+	var opts []func(*catalog.PlaylistHandler)
+	for _, clock := range clocks {
+		opts = append(opts, catalog.WithPlaylistWriteLimiterClock(clock))
 	}
 	rig := newWriteRig(nil, opts)
 	return func(i int) *httptest.ResponseRecorder {
@@ -372,10 +363,10 @@ func openPlaylistWrites(t *testing.T, clock func() time.Time, limit *catalog.Aud
 }
 
 var limitedEndpoints = []limitedEndpoint{
-	{"stream", 120, time.Second, "catalog.audio_rate_limited", "1", openStream},
-	{"audio-urls", 300, 250 * time.Millisecond, "catalog.audio_rate_limited", "1", openAudioURLs},
-	{"track writes", 200, 500 * time.Millisecond, "catalog.write_rate_limited", "1", openTrackWrites},
-	{"playlist writes", 60, time.Second, "catalog.write_rate_limited", "1", openPlaylistWrites},
+	{"stream", streamBurst, streamEvery, "catalog.audio_rate_limited", "1", openStream},
+	{"audio-urls", audioURLBurst, audioURLEvery, "catalog.audio_rate_limited", "1", openAudioURLs},
+	{"track writes", trackWriteBurst, trackWriteEvery, "catalog.write_rate_limited", "1", openTrackWrites},
+	{"playlist writes", playlistWriteBurst, playlistWriteEvery, "catalog.write_rate_limited", "1", openPlaylistWrites},
 }
 
 func assertDefaultBoundary(t *testing.T, ep limitedEndpoint, clock *fakeClock, hit func(int) *httptest.ResponseRecorder) {
@@ -398,42 +389,16 @@ func TestRateLimits_DefaultsHoldAtTheirBoundary(t *testing.T) {
 	for _, ep := range limitedEndpoints {
 		t.Run(ep.name, func(t *testing.T) {
 			clock := newFakeClock()
-			assertDefaultBoundary(t, ep, clock, ep.open(t, clock.now, nil))
+			assertDefaultBoundary(t, ep, clock, ep.open(t, clock.now))
 		})
 	}
 }
 
-func TestRateLimits_ANonPositiveIntervalKeepsTheDefault(t *testing.T) {
+func TestRateLimits_ANilClockKeepsTheClockAlreadySet(t *testing.T) {
 	for _, ep := range limitedEndpoints {
-		for _, every := range []time.Duration{0, -time.Second} {
-			t.Run(fmt.Sprintf("%s/%s", ep.name, every), func(t *testing.T) {
-				clock := newFakeClock()
-				limit := catalog.AudioRateLimit{Every: every, Burst: 1}
-				assertDefaultBoundary(t, ep, clock, ep.open(t, clock.now, &limit))
-			})
-		}
+		t.Run(ep.name, func(t *testing.T) {
+			clock := newFakeClock()
+			assertDefaultBoundary(t, ep, clock, ep.open(t, clock.now, nil))
+		})
 	}
-}
-
-func TestRateLimits_ANilClockFallsBackToTheWallClock(t *testing.T) {
-	one := catalog.AudioRateLimit{Every: time.Hour, Burst: 1}
-	rig := newAudioRig(
-		[]func(*catalog.StreamHandler){catalog.WithStreamRateLimit(one), catalog.WithStreamLimiterClock(nil)},
-		[]func(*catalog.AudioURLHandler){catalog.WithAudioURLRateLimit(one), catalog.WithAudioURLLimiterClock(nil)},
-	)
-	track := rig.seedTracks(t, catalog.FixtureUserId(), 1)[0]
-
-	rig.stream(catalog.FixtureUserId(), track, "")
-	assertAudioThrottled(t, rig.stream(catalog.FixtureUserId(), track, ""), "3600")
-	rig.resolve(catalog.FixtureUserId(), track)
-	assertAudioThrottled(t, rig.resolve(catalog.FixtureUserId(), track), "3600")
-
-	writes := newWriteRig(
-		[]func(*catalog.TrackHandler){catalog.WithTrackWriteRateLimit(one), catalog.WithTrackWriteLimiterClock(nil)},
-		[]func(*catalog.PlaylistHandler){catalog.WithPlaylistWriteRateLimit(one), catalog.WithPlaylistWriteLimiterClock(nil)},
-	)
-	writes.createTrack(t, catalog.FixtureUserId(), "First")
-	assertThrottled(t, writes.createTrack(t, catalog.FixtureUserId(), "Second"), "catalog.write_rate_limited", "3600")
-	writes.createPlaylist(t, catalog.FixtureUserId(), "First")
-	assertThrottled(t, writes.createPlaylist(t, catalog.FixtureUserId(), "Second"), "catalog.write_rate_limited", "3600")
 }

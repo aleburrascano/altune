@@ -823,8 +823,7 @@ func TestHandleGetPlaylist_EncodesAfterHugeDurationsSubmitted(t *testing.T) {
 
 func TestPlaylistWrites_ThrottlePerUser(t *testing.T) {
 	clock := newAudioFakeClock()
-	limit := AudioRateLimit{Every: time.Second, Burst: 3}
-	rig := newThrottledWriteRig(limit, clock.now)
+	rig := newThrottledWriteRig(clock.now)
 	noisy, quiet := shared.NewUserId(uuid.New()), shared.NewUserId(uuid.New())
 	playlistId, trackId := rig.seedPlaylistAndTrack(t, noisy)
 
@@ -836,6 +835,11 @@ func TestPlaylistWrites_ThrottlePerUser(t *testing.T) {
 	}
 	if rec := rig.addTracksToPlaylist(noisy, playlistId, trackId); rec.Code != http.StatusOK {
 		t.Fatalf("batch add inside the burst must be served, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	for i := range playlistWriteBurst - 3 {
+		if rec := rig.createPlaylist(noisy, "Filler "+strconv.Itoa(i)); rec.Code != http.StatusCreated {
+			t.Fatalf("create %d inside the burst must store, got %d (%s)", i, rec.Code, rec.Body.String())
+		}
 	}
 
 	assertWriteThrottled(t, rig.createPlaylist(noisy, "Past the burst"), "1")
@@ -849,14 +853,19 @@ func TestPlaylistWrites_ThrottlePerUser(t *testing.T) {
 
 func TestPlaylistWrites_LeaveReadsAndRemovalsUnthrottled(t *testing.T) {
 	clock := newAudioFakeClock()
-	rig := newThrottledWriteRig(AudioRateLimit{Every: time.Hour, Burst: 1}, clock.now)
+	rig := newThrottledWriteRig(clock.now)
 	user := shared.NewUserId(uuid.New())
 	playlistId, trackId := rig.seedPlaylistAndTrack(t, user)
 
 	if rec := rig.addTrackToPlaylist(user, playlistId, trackId); rec.Code != http.StatusNoContent {
-		t.Fatalf("the one budgeted add must store, got %d (%s)", rec.Code, rec.Body.String())
+		t.Fatalf("the budgeted add must store, got %d (%s)", rec.Code, rec.Body.String())
 	}
-	assertWriteThrottled(t, rig.addTrackToPlaylist(user, playlistId, trackId), "3600")
+	for i := range playlistWriteBurst - 1 {
+		if rec := rig.createPlaylist(user, "Filler "+strconv.Itoa(i)); rec.Code != http.StatusCreated {
+			t.Fatalf("create %d inside the burst must store, got %d (%s)", i, rec.Code, rec.Body.String())
+		}
+	}
+	assertWriteThrottled(t, rig.addTrackToPlaylist(user, playlistId, trackId), "1")
 
 	req := httptest.NewRequest(http.MethodGet, "/playlists/", nil)
 	req.Header.Set("Authorization", "Bearer "+user.String())

@@ -15,7 +15,6 @@ import (
 type PlaylistHandler struct {
 	lifecycle    *playlistservice.PlaylistLifecycleService
 	membership   *playlistservice.PlaylistMembershipService
-	writeLimit   AudioRateLimit
 	now          func() time.Time
 	writeLimiter rateLimitMiddleware
 }
@@ -24,26 +23,21 @@ func NewPlaylistHandler(lifecycle *playlistservice.PlaylistLifecycleService, mem
 	h := &PlaylistHandler{
 		lifecycle:  lifecycle,
 		membership: membership,
-		writeLimit: DefaultPlaylistWriteRateLimit,
 		now:        time.Now,
 	}
 	for _, opt := range opts {
 		opt(h)
 	}
-	h.writeLimiter = newWriteRateLimiter(h.writeLimit, h.now)
+	h.writeLimiter = newWriteRateLimiter(playlistWriteRateLimit, h.now)
 	return h
 }
 
-func WithPlaylistWriteRateLimit(limit AudioRateLimit) func(*PlaylistHandler) {
+func WithPlaylistWriteLimiterClock(now func() time.Time) func(*PlaylistHandler) {
 	return func(h *PlaylistHandler) {
-		if limit.Every > 0 {
-			h.writeLimit = limit
+		if now != nil {
+			h.now = now
 		}
 	}
-}
-
-func WithPlaylistWriteLimiterClock(now func() time.Time) func(*PlaylistHandler) {
-	return func(h *PlaylistHandler) { h.now = now }
 }
 
 func (h *PlaylistHandler) Routes() chi.Router {
