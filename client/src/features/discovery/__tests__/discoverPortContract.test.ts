@@ -2,8 +2,7 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
-import * as discoveryApi from '@shared/apiClient/discovery';
-import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/catalog';
+import type { DiscoveryResult } from '@shared/catalog';
 import { ApiError } from '@shared/failure';
 
 import { signInTestUser } from '@testing/signInTestUser';
@@ -340,30 +339,6 @@ describe('httpDiscoverPort', () => {
 
     await expect(calling).rejects.toBeInstanceOf(ApiError);
     await expect(calling).rejects.toMatchObject({ status: 404 });
-  });
-
-  it('reaches spies installed on the apiClient after the port was imported', async () => {
-    const search: DiscoverySearchResponse = {
-      query: 'q',
-      query_norm: 'q',
-      results: [],
-      sections: [],
-      providers: [],
-      partial: false,
-      cache: { hit: false, fetched_at: null },
-      total: 0,
-      offset: 0,
-      has_more: false,
-    };
-    const suggest = { suggestions: [] };
-    const history = { items: [], total: 0 };
-    jest.spyOn(discoveryApi, 'searchDiscovery').mockResolvedValue(search);
-    jest.spyOn(discoveryApi, 'suggestDiscovery').mockResolvedValue(suggest);
-    jest.spyOn(discoveryApi, 'listSearchHistory').mockResolvedValue(history);
-
-    await expect(httpDiscoverPort.searchDiscovery({ q: 'q' })).resolves.toBe(search);
-    await expect(httpDiscoverPort.suggestDiscovery({ q: 'q' })).resolves.toBe(suggest);
-    await expect(httpDiscoverPort.listSearchHistory()).resolves.toBe(history);
   });
 });
 

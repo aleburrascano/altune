@@ -26,7 +26,7 @@ export {
   recordSearchHistory,
   searchDiscovery,
   suggestDiscovery,
-} from '@shared/apiClient/discovery';
+} from '@shared/apiClient/adapters/discovery';
 export type {
   ArtistContentOptions,
   ArtistContentResponse,
