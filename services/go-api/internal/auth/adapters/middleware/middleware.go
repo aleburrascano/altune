@@ -31,8 +31,10 @@ type middlewareConfig struct {
 
 func WithFailureLimits(limits FailureLimits, now func() time.Time) MiddlewareOption {
 	return func(c *middlewareConfig) {
-		c.limits = limits
-		c.now = now
+		c.limits = limits.orDefaults()
+		if now != nil {
+			c.now = now
+		}
 	}
 }
 

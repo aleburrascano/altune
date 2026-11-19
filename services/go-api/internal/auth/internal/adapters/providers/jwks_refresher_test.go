@@ -2,10 +2,35 @@ package providers_test
 
 import (
 	"altune/go-api/internal/auth"
+	"context"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestJWKSRefresher_ForcedFetchStaysBoundedOnceTheVerifierContextEnds(t *testing.T) {
+	server, _ := newCountingJWKSServer(t, 0, nil)
+	clock := &testClock{}
+	ctx, cancel := context.WithCancel(context.Background())
+	verifier, err := auth.NewSupabaseJWTVerifier(ctx, server.URL, testProjectURL, testAudience,
+		auth.WithJWKSClock(clock.now), auth.WithJWKSFetchTimeout(200*time.Millisecond))
+	if err != nil {
+		t.Fatalf("create verifier: %v", err)
+	}
+	cancel()
+
+	for attempt := range 5 {
+		caller, done := context.WithTimeout(context.Background(), 3*time.Second)
+		start := time.Now()
+		_, err := verifier.Verify(caller, "any-token")
+		elapsed := time.Since(start)
+		done()
+		if err == nil || elapsed > time.Second {
+			t.Fatalf("attempt %d after the verifier context ended: err %v after %s, want a fetch failure within the 200ms fetch timeout", attempt+1, err, elapsed)
+		}
+		clock.advance(backoffCap)
+	}
+}
 
 func TestJWKSRefresher_BackoffDoublesToCapWithinEqualJitter(t *testing.T) {
 	f, jwks := newRotatingFixture(t)
@@ -25,7 +50,7 @@ func TestJWKSRefresher_BackoffDoublesToCapWithinEqualJitter(t *testing.T) {
 		}
 		clock.advance(step/2 - time.Nanosecond)
 		_, err := verifier.Verify(t.Context(), "any-token")
-		assertErrorSays(t, err, backoffMessage)
+		assertErrorIs(t, err, auth.ErrJWKSRefreshBackoff)
 		if cause := strings.TrimPrefix(fetchErr.Error(), "fetch JWKS: "); !strings.HasSuffix(err.Error(), cause) {
 			t.Fatalf("attempt %d: backoff %q does not carry the last failure %q", i+1, err, cause)
 		}

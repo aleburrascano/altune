@@ -29,6 +29,37 @@ func admitted(handler http.Handler, addr string) bool {
 	return serveBearer(handler, addr, "garbage").Code != http.StatusTooManyRequests
 }
 
+func TestFailureThrottle_NonPositiveLimitsAndNilClockKeepTheDefaults(t *testing.T) {
+	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
+	cases := []struct {
+		name   string
+		limits auth.FailureLimits
+		now    func() time.Time
+		burst  int
+	}{
+		{"all zero", auth.FailureLimits{}, clock.now, 20},
+		{"zero refill", auth.FailureLimits{Burst: 3, MaxClients: 10}, clock.now, 3},
+		{"negative refill", auth.FailureLimits{Burst: 3, Refill: -time.Second, MaxClients: 10}, clock.now, 3},
+		{"zero max clients", auth.FailureLimits{Burst: 3, Refill: time.Hour}, clock.now, 3},
+		{"negative burst", auth.FailureLimits{Burst: -1, Refill: time.Hour, MaxClients: 10}, clock.now, 20},
+		{"nil clock", auth.FailureLimits{Burst: 3, Refill: time.Hour, MaxClients: 10}, nil, 3},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			next, _ := noopHandler()
+			handler := auth.Middleware(failingVerifier(), auth.WithFailureLimits(tc.limits, tc.now))(next)
+			codes := map[int]int{}
+			for i := range tc.burst + 5 {
+				admitted(handler, clientAddr(i))
+				codes[serveBearer(handler, "203.0.113.7:1", "garbage").Code]++
+			}
+			if codes[http.StatusUnauthorized] != tc.burst || codes[http.StatusTooManyRequests] != 5 {
+				t.Fatalf("%d failed attempts from one client: %v, want %d x 401 then 5 x 429", tc.burst+5, codes, tc.burst)
+			}
+		})
+	}
+}
+
 func TestFailureThrottle_TrackedClientsStayBounded(t *testing.T) {
 	handler, _ := limitedMiddleware(auth.FailureLimits{Burst: 2, Refill: time.Hour, MaxClients: 8})
 

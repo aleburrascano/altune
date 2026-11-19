@@ -8,6 +8,10 @@ type (
 )
 
 var (
+	ErrJWKSBodyTooLarge       = providers.ErrJWKSBodyTooLarge
+	ErrJWKSEmptyKeySet        = providers.ErrJWKSEmptyKeySet
+	ErrJWKSRefreshBackoff     = providers.ErrJWKSRefreshBackoff
+	ErrJWKSStale              = providers.ErrJWKSStale
 	NewSupabaseJWTVerifier    = providers.NewSupabaseJWTVerifier
 	WithJWKSBackgroundRefresh = providers.WithJWKSBackgroundRefresh
 	WithJWKSClock             = providers.WithJWKSClock

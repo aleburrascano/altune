@@ -46,7 +46,7 @@ func checkJWKSRedirect(req *http.Request, via []*http.Request) error {
 
 const maxJWKSBodyBytes = 1 << 20
 
-var errJWKSBodyTooLarge = fmt.Errorf("JWKS response body exceeds %d bytes", maxJWKSBodyBytes)
+var ErrJWKSBodyTooLarge = fmt.Errorf("JWKS response body exceeds %d bytes", maxJWKSBodyBytes)
 
 type cappedJWKSBodyTransport struct{ base http.RoundTripper }
 
@@ -69,7 +69,7 @@ func (b *cappedJWKSBody) Read(p []byte) (int, error) {
 	b.remaining -= int64(n)
 	if b.remaining < 0 {
 		_ = b.body.Close()
-		return n, errJWKSBodyTooLarge
+		return n, ErrJWKSBodyTooLarge
 	}
 	return n, err
 }

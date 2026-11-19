@@ -31,9 +31,6 @@ const (
 	staleAfter     = time.Hour
 	backoffCap     = 30 * time.Second
 	unknownKidGap  = 30 * time.Second
-	staleMessage   = "JWKS key set is stale"
-	backoffMessage = "JWKS refresh backing off after failure"
-	noKeysMessage  = "JWKS response contains no keys"
 )
 
 var fastBackgroundRefresh = auth.WithJWKSBackgroundRefresh(time.Second, time.Second)
@@ -145,6 +142,13 @@ func assertErrorSays(t *testing.T, err error, want string) {
 	t.Helper()
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("error %v, want one saying %q", err, want)
+	}
+}
+
+func assertErrorIs(t *testing.T, err, target error) {
+	t.Helper()
+	if !errors.Is(err, target) {
+		t.Fatalf("error %v, want %v", err, target)
 	}
 }
 
@@ -374,7 +378,7 @@ func TestSupabaseJWTVerifier_CheckHealth(t *testing.T) {
 	}
 
 	jwks.down.Store(false)
-	assertErrorSays(t, verifier.CheckHealth(t.Context()), backoffMessage)
+	assertErrorIs(t, verifier.CheckHealth(t.Context()), auth.ErrJWKSRefreshBackoff)
 
 	clock.advance(backoffCap)
 	if err := verifier.CheckHealth(t.Context()); err != nil {
@@ -403,7 +407,7 @@ func TestSupabaseJWTVerifier_CheckHealthDegradesAfterSustainedBackgroundRefreshF
 
 	clock.advance(time.Nanosecond)
 	err := verifier.CheckHealth(t.Context())
-	assertErrorSays(t, err, staleMessage)
+	assertErrorIs(t, err, auth.ErrJWKSStale)
 	assertErrorSays(t, err, "consecutive background refresh failures")
 
 	jwks.down.Store(false)
@@ -420,8 +424,8 @@ func TestSupabaseJWTVerifier_EmptyKeySetDoesNotResetStaleness(t *testing.T) {
 	jwks.publishNoKeys()
 	clock.advance(staleAfter + time.Minute)
 	_, err := verifier.Verify(t.Context(), f.validToken(t))
-	assertErrorSays(t, err, staleMessage)
-	assertErrorSays(t, verifier.CheckHealth(t.Context()), staleMessage)
+	assertErrorIs(t, err, auth.ErrJWKSStale)
+	assertErrorIs(t, verifier.CheckHealth(t.Context()), auth.ErrJWKSStale)
 
 	jwks.rotate(t, &f.privateKey.PublicKey, f.keyID)
 	clock.advance(backoffCap)
@@ -591,7 +595,7 @@ func TestSupabaseJWTVerifier_UnknownKidDuringRefreshBackoffIsUnavailable(t *test
 
 	_, err = verifier.Verify(t.Context(), token)
 	assertVerifierUnavailable(t, err)
-	assertErrorSays(t, err, backoffMessage)
+	assertErrorIs(t, err, auth.ErrJWKSRefreshBackoff)
 	if got := jwks.hits.Load(); got != 0 {
 		t.Fatalf("JWKS fetches during backoff: got %d, want 0", got)
 	}
@@ -636,7 +640,7 @@ func TestSupabaseJWTVerifier_ColdStartWithNoKeysIsUnhealthyUntilKeysArrive(t *te
 	clock := &testClock{}
 	verifier := newVerifier(t, f.jwksServer.URL, auth.WithJWKSClock(clock.now))
 
-	assertErrorSays(t, verifier.CheckHealth(t.Context()), noKeysMessage)
+	assertErrorIs(t, verifier.CheckHealth(t.Context()), auth.ErrJWKSEmptyKeySet)
 
 	jwks.rotate(t, &f.privateKey.PublicKey, f.keyID)
 	clock.advance(backoffCap)
@@ -771,7 +775,7 @@ func TestSupabaseJWTVerifier_VerifyRefusesKeySetPastStalenessBound(t *testing.T)
 	clock.advance(staleAfter + time.Minute)
 
 	_, err := verifier.Verify(t.Context(), token)
-	assertErrorSays(t, err, staleMessage)
+	assertErrorIs(t, err, auth.ErrJWKSStale)
 	assertVerifierUnavailable(t, err)
 
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
@@ -793,7 +797,7 @@ func TestSupabaseJWTVerifier_VerifyAcceptsAgainOnceKeySetRefreshes(t *testing.T)
 	jwks.down.Store(true)
 	clock.advance(staleAfter + time.Minute)
 	_, err := verifier.Verify(t.Context(), token)
-	assertErrorSays(t, err, staleMessage)
+	assertErrorIs(t, err, auth.ErrJWKSStale)
 
 	jwks.down.Store(false)
 	waitFor(t, 10*time.Second, "Verify to accept after the endpoint recovers", func() bool {
@@ -833,6 +837,101 @@ func TestSupabaseJWTVerifier_DefaultRevokerAcceptsToken(t *testing.T) {
 func TestSupabaseJWTVerifier_RevokerErrorIsUnavailableNotInvalid(t *testing.T) {
 	err := verifyWithRevoker(t, auth.WithTokenRevoker(stubRevoker{err: errors.New("store down")}))
 	assertVerifierUnavailable(t, err)
+}
+
+type recordingRevoker struct {
+	user     shared.UserId
+	issuedAt time.Time
+}
+
+func (r *recordingRevoker) Revoked(_ context.Context, user shared.UserId, issuedAt time.Time) (bool, error) {
+	r.user, r.issuedAt = user, issuedAt
+	return false, nil
+}
+
+func TestSupabaseJWTVerifier_RevokerSeesTheTokensSubjectAndIssuedAt(t *testing.T) {
+	f := newTestJWTFixture(t)
+	revoker := &recordingRevoker{}
+	verifier := newVerifier(t, f.jwksServer.URL, auth.WithTokenRevoker(revoker))
+	claims := validClaims(f.issuer, f.audience)
+	iat := time.Now().Add(-10 * time.Minute).Truncate(time.Second)
+	claims["iat"] = iat
+
+	if _, err := verifier.Verify(t.Context(), f.signToken(t, claims)); err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+
+	if revoker.user.String() != claims["sub"] || !revoker.issuedAt.Equal(iat) {
+		t.Fatalf("revoker asked about (%s, %v), want the token's (%s, %v)", revoker.user, revoker.issuedAt, claims["sub"], iat)
+	}
+}
+
+func TestSupabaseJWTVerifier_InvalidSignature(t *testing.T) {
+	f := newTestJWTFixture(t)
+	verifier := f.newVerifier(t)
+	f.privateKey = generateRSAKey(t)
+
+	_, err := verifier.Verify(t.Context(), f.validToken(t))
+
+	assertInvalidTokenReason(t, err, string(auth.ReasonSignatureInvalid))
+}
+
+func TestSupabaseJWTVerifier_RejectsAForeignIssuerOrAudience(t *testing.T) {
+	cases := []struct {
+		name, claim, value, reason string
+	}{
+		{"foreign issuer", "iss", "https://other-project.supabase.co/auth/v1", "claim_invalid_iss"},
+		{"foreign audience", "aud", "anon", "claim_invalid_aud"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newTestJWTFixture(t)
+			verifier := f.newVerifier(t)
+			claims := validClaims(f.issuer, f.audience)
+			claims[tc.claim] = tc.value
+
+			_, err := verifier.Verify(t.Context(), f.signToken(t, claims))
+
+			assertInvalidTokenReason(t, err, tc.reason)
+		})
+	}
+}
+
+func TestSupabaseJWTVerifier_LifetimeBoundIsOneHourPlusSkew(t *testing.T) {
+	f := newTestJWTFixture(t)
+	verifier := f.newVerifier(t)
+	iat := time.Now().Add(-1 * time.Minute).Truncate(time.Second)
+
+	if _, err := verifier.Verify(t.Context(), tokenWithLifetime(t, f, iat, time.Hour+5*time.Second)); err != nil {
+		t.Fatalf("lifetime of exactly 1h plus the 5s skew: %v", err)
+	}
+	_, err := verifier.Verify(t.Context(), tokenWithLifetime(t, f, iat, time.Hour+6*time.Second))
+	assertInvalidTokenReason(t, err, "claim_invalid_iat")
+}
+
+func TestSupabaseJWTVerifier_NonPositiveOrNilOptionsKeepTheDefaults(t *testing.T) {
+	cases := map[string]auth.SupabaseJWTVerifierOption{
+		"zero fetch timeout":     auth.WithJWKSFetchTimeout(0),
+		"negative fetch timeout": auth.WithJWKSFetchTimeout(-time.Second),
+		"nil clock":              auth.WithJWKSClock(nil),
+	}
+	for name, opt := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := newTestJWTFixture(t)
+			metrics := &countingAuthMetrics{}
+			verifier := newVerifier(t, f.jwksServer.URL, opt, auth.WithJWKSMetrics(metrics))
+
+			if _, err := verifier.Verify(t.Context(), f.validToken(t)); err != nil {
+				t.Fatalf("Verify: %v", err)
+			}
+			if err := verifier.CheckHealth(t.Context()); err != nil {
+				t.Fatalf("CheckHealth: %v", err)
+			}
+			if got := metrics.jwksFailures.Load(); got != 0 {
+				t.Fatalf("JWKSFetchFailed %d, want 0: the option broke the startup fetch", got)
+			}
+		})
+	}
 }
 
 func warnRecords(t *testing.T, buf *bytes.Buffer) []map[string]any {

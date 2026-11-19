@@ -21,15 +21,16 @@ const defaultJWKSRefreshWindow = time.Minute
 
 const jwksStaleAfter = time.Hour
 
-var errJWKSStale = errors.New("JWKS key set is stale")
+var ErrJWKSStale = errors.New("JWKS key set is stale")
 
 var errJWKSRefreshRecent = errors.New("JWKS refreshed recently")
 
-var errJWKSRefreshBackoff = errors.New("JWKS refresh backing off after failure")
+var ErrJWKSRefreshBackoff = errors.New("JWKS refresh backing off after failure")
 
 type jwksRefresher struct {
-	fetch func(context.Context) error
-	now   func() time.Time
+	fetch        func(context.Context) error
+	now          func() time.Time
+	fetchTimeout time.Duration
 
 	mu          sync.Mutex
 	inflight    *jwksRefreshCall
@@ -48,8 +49,8 @@ type jwksRefreshCall struct {
 	err  error
 }
 
-func newJWKSRefresher(fetch func(context.Context) error, now func() time.Time) *jwksRefresher {
-	return &jwksRefresher{fetch: fetch, now: now}
+func newJWKSRefresher(fetch func(context.Context) error, now func() time.Time, fetchTimeout time.Duration) *jwksRefresher {
+	return &jwksRefresher{fetch: fetch, now: now, fetchTimeout: fetchTimeout}
 }
 
 func (r *jwksRefresher) Refresh(ctx context.Context) error {
@@ -83,7 +84,7 @@ func (r *jwksRefresher) join(minAge time.Duration) (*jwksRefreshCall, error) {
 		return nil, errJWKSRefreshRecent
 	}
 	if wait := r.notBefore.Sub(r.now()); wait > 0 {
-		return nil, fmt.Errorf("%w (retry in %s): %w", errJWKSRefreshBackoff, wait.Round(time.Millisecond), r.lastErr)
+		return nil, fmt.Errorf("%w (retry in %s): %w", ErrJWKSRefreshBackoff, wait.Round(time.Millisecond), r.lastErr)
 	}
 	r.inflight = &jwksRefreshCall{done: make(chan struct{})}
 	go r.run(r.inflight)
@@ -91,7 +92,9 @@ func (r *jwksRefresher) join(minAge time.Duration) (*jwksRefreshCall, error) {
 }
 
 func (r *jwksRefresher) run(call *jwksRefreshCall) {
-	call.err = r.fetch(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), r.fetchTimeout)
+	defer cancel()
+	call.err = r.fetch(ctx)
 	r.settle(call)
 	close(call.done)
 }
@@ -137,7 +140,7 @@ func (r *jwksRefresher) checkFresh() error {
 		return nil
 	}
 	err := fmt.Errorf("%w: last successful refresh %s ago (bound %s), %d consecutive background refresh failures",
-		errJWKSStale, age.Round(time.Second), jwksStaleAfter, r.bgFailures)
+		ErrJWKSStale, age.Round(time.Second), jwksStaleAfter, r.bgFailures)
 	cause := r.bgErr
 	if cause == nil {
 		cause = r.lastErr

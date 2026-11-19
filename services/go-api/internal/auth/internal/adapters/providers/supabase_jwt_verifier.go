@@ -71,13 +71,17 @@ func WithTokenRevoker(r ports.TokenRevoker) SupabaseJWTVerifierOption {
 
 func WithJWKSClock(now func() time.Time) SupabaseJWTVerifierOption {
 	return func(v *SupabaseJWTVerifier) {
-		v.schedule.now = now
+		if now != nil {
+			v.schedule.now = now
+		}
 	}
 }
 
 func WithJWKSFetchTimeout(timeout time.Duration) SupabaseJWTVerifierOption {
 	return func(v *SupabaseJWTVerifier) {
-		v.schedule.fetchTimeout = timeout
+		if timeout > 0 {
+			v.schedule.fetchTimeout = timeout
+		}
 	}
 }
 
@@ -116,7 +120,7 @@ func newSupabaseJWTVerifier(jwksURL, projectURL, audience string, opts []Supabas
 	for _, opt := range opts {
 		opt(v)
 	}
-	v.refresher = newJWKSRefresher(v.forceRefresh, v.schedule.now)
+	v.refresher = newJWKSRefresher(v.forceRefresh, v.schedule.now, v.schedule.fetchTimeout)
 	return v
 }
 
@@ -156,11 +160,11 @@ type jwksErrSink func(error)
 
 func (f jwksErrSink) Error(err error) { f(err) }
 
-var errJWKSEmptyKeySet = errors.New("JWKS response contains no keys")
+var ErrJWKSEmptyKeySet = errors.New("JWKS response contains no keys")
 
 func (v *SupabaseJWTVerifier) onKeySetFetched(_ string, set jwk.Set) (jwk.Set, error) {
 	if set.Len() == 0 {
-		return nil, errJWKSEmptyKeySet
+		return nil, ErrJWKSEmptyKeySet
 	}
 	v.refresher.recordKeySet()
 	return set, nil

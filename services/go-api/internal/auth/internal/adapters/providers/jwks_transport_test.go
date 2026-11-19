@@ -16,10 +16,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 
-const (
-	maxJWKSBody     = 1 << 20
-	tooLargeMessage = "JWKS response body exceeds 1048576 bytes"
-)
+const maxJWKSBody = 1 << 20
 
 func TestNewSupabaseJWTVerifier_RejectsPlaintextJWKSURL(t *testing.T) {
 	for _, raw := range []string{
@@ -151,7 +148,7 @@ func TestCappedJWKSBody_ReadsUpToTheCapAndFailsPastIt(t *testing.T) {
 				t.Fatalf("a %d-byte key set: %v", tc.size, err)
 			}
 			if !tc.ok {
-				assertErrorSays(t, err, tooLargeMessage)
+				assertErrorIs(t, err, auth.ErrJWKSBodyTooLarge)
 			}
 		})
 	}
@@ -171,7 +168,7 @@ func TestCappedJWKSBodyTransport_CapsDecompressedBytes(t *testing.T) {
 
 	_, err := verifier.Verify(t.Context(), f.validToken(t))
 
-	assertErrorSays(t, err, tooLargeMessage)
+	assertErrorIs(t, err, auth.ErrJWKSBodyTooLarge)
 }
 
 func TestSupabaseJWTVerifier_OversizedJWKSBodyKeepsCachedKeys(t *testing.T) {
