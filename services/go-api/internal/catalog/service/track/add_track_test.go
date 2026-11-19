@@ -16,26 +16,42 @@ import (
 	"time"
 )
 
-const addTrackScheduleBound = 5 * time.Second
+const (
+	addTrackScheduleBound = 5 * time.Second
+	libraryTrackCap       = 50_000
+)
 
 func strptr(s string) *string { return &s }
 
 type fullLibraryRepo struct {
 	*catalog.InMemoryTrackRepo
-	fullFor shared.UserId
+	fullFor     shared.UserId
+	askedAtMost []int
 }
 
-func (r fullLibraryRepo) CountForUser(ctx context.Context, userId shared.UserId, atMost int) (int, error) {
+func newFullLibraryRepo(fullFor shared.UserId) *fullLibraryRepo {
+	return &fullLibraryRepo{InMemoryTrackRepo: catalog.NewInMemoryTrackRepo(), fullFor: fullFor}
+}
+
+func (r *fullLibraryRepo) CountForUser(ctx context.Context, userId shared.UserId, atMost int) (int, error) {
+	r.askedAtMost = append(r.askedAtMost, atMost)
 	if userId == r.fullFor {
 		return atMost, nil
 	}
 	return r.InMemoryTrackRepo.CountForUser(ctx, userId, atMost)
 }
 
+func (r *fullLibraryRepo) assertAskedForTheCap(t *testing.T) {
+	t.Helper()
+	if len(r.askedAtMost) != 1 || r.askedAtMost[0] != libraryTrackCap {
+		t.Errorf("CountForUser bounds = %v, want one count bounded at the %d-track cap", r.askedAtMost, libraryTrackCap)
+	}
+}
+
 func TestAddTrack_RejectsPastUserCap(t *testing.T) {
 	ctx := context.Background()
 	userId := catalog.FixtureUserId()
-	repo := fullLibraryRepo{InMemoryTrackRepo: catalog.NewInMemoryTrackRepo(), fullFor: userId}
+	repo := newFullLibraryRepo(userId)
 	svc := catalog.NewAddTrackService(repo)
 
 	out, err := svc.Execute(ctx, userId, catalog.AddTrackInput{Title: "One Too Many", Artist: "Artist", Album: "Album"})
@@ -49,11 +65,12 @@ func TestAddTrack_RejectsPastUserCap(t *testing.T) {
 	if len(repo.Tracks) != 0 {
 		t.Fatalf("stored tracks = %d, want 0: the refused save must not insert", len(repo.Tracks))
 	}
+	repo.assertAskedForTheCap(t)
 }
 
 func TestAddTrack_CapCountsOnlyTheCallersTracks(t *testing.T) {
 	ctx := context.Background()
-	repo := fullLibraryRepo{InMemoryTrackRepo: catalog.NewInMemoryTrackRepo(), fullFor: catalog.FixtureOtherUserId()}
+	repo := newFullLibraryRepo(catalog.FixtureOtherUserId())
 	svc := catalog.NewAddTrackService(repo)
 
 	out, err := svc.Execute(ctx, catalog.FixtureUserId(), catalog.AddTrackInput{Title: "Mine", Artist: "Artist", Album: "Album"})
@@ -63,6 +80,7 @@ func TestAddTrack_CapCountsOnlyTheCallersTracks(t *testing.T) {
 	if !out.Created {
 		t.Fatal("Created = false, want true: another owner's full library is not this caller's cap")
 	}
+	repo.assertAskedForTheCap(t)
 }
 
 func TestAddTrackService_IdempotencyKeyReturnsExisting(t *testing.T) {
