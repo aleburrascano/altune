@@ -15,9 +15,9 @@ const jwksRefreshBackoffCap = 30 * time.Second
 
 const jwksUnknownKeyRefreshInterval = 30 * time.Second
 
-var jwksBackgroundRefreshInterval = 15 * time.Minute
+const defaultJWKSRefreshInterval = 15 * time.Minute
 
-var jwksRefreshWindow = time.Minute
+const defaultJWKSRefreshWindow = time.Minute
 
 const jwksStaleAfter = time.Hour
 
@@ -28,9 +28,8 @@ var errJWKSRefreshRecent = errors.New("JWKS refreshed recently")
 var errJWKSRefreshBackoff = errors.New("JWKS refresh backing off after failure")
 
 type jwksRefresher struct {
-	fetch  func(context.Context) error
-	now    func() time.Time
-	jitter func(time.Duration) time.Duration
+	fetch func(context.Context) error
+	now   func() time.Time
 
 	mu          sync.Mutex
 	inflight    *jwksRefreshCall
@@ -49,8 +48,8 @@ type jwksRefreshCall struct {
 	err  error
 }
 
-func newJWKSRefresher(fetch func(context.Context) error) *jwksRefresher {
-	return &jwksRefresher{fetch: fetch, now: time.Now, jitter: equalJitter}
+func newJWKSRefresher(fetch func(context.Context) error, now func() time.Time) *jwksRefresher {
+	return &jwksRefresher{fetch: fetch, now: now}
 }
 
 func (r *jwksRefresher) Refresh(ctx context.Context) error {
@@ -80,21 +79,19 @@ func (r *jwksRefresher) join(minAge time.Duration) (*jwksRefreshCall, error) {
 	if r.inflight != nil {
 		return r.inflight, nil
 	}
-	if minAge > 0 && !r.lastSuccess.IsZero() && r.now().Sub(r.lastSuccess) < minAge {
+	if r.now().Sub(r.lastSuccess) < minAge {
 		return nil, errJWKSRefreshRecent
 	}
 	if wait := r.notBefore.Sub(r.now()); wait > 0 {
 		return nil, fmt.Errorf("%w (retry in %s): %w", errJWKSRefreshBackoff, wait.Round(time.Millisecond), r.lastErr)
 	}
 	r.inflight = &jwksRefreshCall{done: make(chan struct{})}
-	go r.run(r.inflight, jwksFetchTimeout)
+	go r.run(r.inflight)
 	return r.inflight, nil
 }
 
-func (r *jwksRefresher) run(call *jwksRefreshCall, timeout time.Duration) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	call.err = r.fetch(ctx)
+func (r *jwksRefresher) run(call *jwksRefreshCall) {
+	call.err = r.fetch(context.Background())
 	r.settle(call)
 	close(call.done)
 }
@@ -109,7 +106,7 @@ func (r *jwksRefresher) settle(call *jwksRefreshCall) {
 	}
 	r.failures++
 	r.lastErr = call.err
-	r.notBefore = r.now().Add(r.jitter(jwksRefreshBackoff(r.failures)))
+	r.notBefore = r.now().Add(equalJitter(jwksRefreshBackoff(r.failures)))
 }
 
 func (r *jwksRefresher) recordKeySet() {

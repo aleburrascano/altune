@@ -1,76 +1,107 @@
-package middleware
+package middleware_test
 
 import (
-	"strconv"
+	"altune/go-api/internal/auth"
+	"context"
+	"fmt"
+	"net/http"
 	"testing"
 	"time"
 )
 
-func TestFailureThrottle_TrackedClientsStayBounded(t *testing.T) {
-	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
-	limits := FailureLimits{Burst: 2, Refill: time.Hour, MaxClients: 8}
-	throttle := newFailureThrottle(limits, clock.now)
+func clientAddr(i int) string {
+	return fmt.Sprintf("198.18.%d.%d:4444", i/250, i%250+1)
+}
 
-	for i := range 1000 {
-		if _, _, ok := throttle.admit("client-" + strconv.Itoa(i)); !ok {
-			t.Fatalf("fresh client %d refused", i)
-		}
-	}
-	if got := len(throttle.clients); got > limits.MaxClients {
-		t.Fatalf("tracked clients: got %d, want at most %d", got, limits.MaxClients)
+func failingVerifier() auth.VerifierFunc {
+	return func(context.Context, string) (auth.VerifiedToken, error) {
+		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
 	}
 }
 
-func TestFailureThrottle_EvictionScanIsAmortised(t *testing.T) {
+func limitedMiddleware(limits auth.FailureLimits) (http.Handler, *fakeClock) {
 	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
-	limits := FailureLimits{Burst: 1, Refill: time.Hour, MaxClients: 100}
-	throttle := newFailureThrottle(limits, clock.now)
-	for i := range limits.MaxClients {
-		throttle.admit("client-" + strconv.Itoa(i))
+	next, _ := noopHandler()
+	return auth.Middleware(failingVerifier(), auth.WithFailureLimits(limits, clock.now))(next), clock
+}
+
+func admitted(handler http.Handler, addr string) bool {
+	return serveBearer(handler, addr, "garbage").Code != http.StatusTooManyRequests
+}
+
+func TestFailureThrottle_TrackedClientsStayBounded(t *testing.T) {
+	handler, _ := limitedMiddleware(auth.FailureLimits{Burst: 2, Refill: time.Hour, MaxClients: 8})
+
+	for i := range 1000 {
+		if !admitted(handler, clientAddr(i)) {
+			t.Fatalf("fresh client %d refused", i)
+		}
 	}
 
-	throttle.admit("overflow")
-	if got := len(throttle.clients); got > limits.MaxClients-limits.MaxClients/10+1 {
-		t.Fatalf("after overflow: %d tracked clients, want eviction down to low water", got)
+	first := admitted(handler, clientAddr(0))
+	second := admitted(handler, clientAddr(0))
+	if !first || !second {
+		t.Fatal("the first client still holds its spent token after 999 newer clients: tracked clients grew past the bound")
+	}
+}
+
+func TestFailureThrottle_EvictionDropsToTheLowWaterMark(t *testing.T) {
+	limits := auth.FailureLimits{Burst: 2, Refill: time.Hour, MaxClients: 100}
+	handler, _ := limitedMiddleware(limits)
+	const keepers, spenders = 90, 10
+	for i := range keepers {
+		admitted(handler, clientAddr(i))
+		admitted(handler, clientAddr(i))
+	}
+	for i := keepers; i < keepers+spenders; i++ {
+		admitted(handler, clientAddr(i))
+	}
+
+	admitted(handler, "203.0.113.200:1")
+
+	forgotten := 0
+	for i := keepers; i < keepers+spenders; i++ {
+		admitted(handler, clientAddr(i))
+		if admitted(handler, clientAddr(i)) {
+			forgotten++
+		}
+	}
+	if forgotten != spenders {
+		t.Fatalf("after one overflow, %d of the %d least-penalised clients were forgotten, want all %d (eviction down to low water, not one at a time)", forgotten, spenders, spenders)
 	}
 }
 
 func TestFailureThrottle_RefilledClientsArePrunedBeforeEvictingPenalisedOnes(t *testing.T) {
-	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
-	limits := FailureLimits{Burst: 1, Refill: time.Minute, MaxClients: 2}
-	throttle := newFailureThrottle(limits, clock.now)
+	handler, clock := limitedMiddleware(auth.FailureLimits{Burst: 1, Refill: time.Minute, MaxClients: 2})
 
-	throttle.admit("idle")
+	admitted(handler, "203.0.113.1:1")
 	clock.advance(time.Minute)
-	throttle.admit("attacker")
-	throttle.admit("newcomer")
+	admitted(handler, "203.0.113.2:1")
+	admitted(handler, "203.0.113.3:1")
 
-	if _, _, ok := throttle.admit("attacker"); ok {
+	if admitted(handler, "203.0.113.2:1") {
 		t.Fatal("penalised client was evicted in favour of pruning a refilled one")
 	}
 }
 
 func TestFailureThrottle_ExhaustedClientSurvivesEvictionChurn(t *testing.T) {
-	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
-	limits := FailureLimits{Burst: 2, Refill: time.Hour, MaxClients: 50}
-	throttle := newFailureThrottle(limits, clock.now)
+	limits := auth.FailureLimits{Burst: 2, Refill: time.Hour, MaxClients: 50}
+	handler, _ := limitedMiddleware(limits)
 	for i := range limits.MaxClients - 1 {
-		throttle.admit("client-" + strconv.Itoa(i))
+		admitted(handler, clientAddr(i))
 	}
-	throttle.admit("attacker")
-	throttle.admit("attacker")
-	if _, _, ok := throttle.admit("attacker"); ok {
+	const attacker = "203.0.113.66:1"
+	admitted(handler, attacker)
+	admitted(handler, attacker)
+	if admitted(handler, attacker) {
 		t.Fatal("attacker not exhausted before churn")
 	}
 
 	for i := range 500 {
-		throttle.admit("churn-" + strconv.Itoa(i))
+		admitted(handler, clientAddr(1000+i))
 	}
 
-	if _, _, ok := throttle.admit("attacker"); ok {
+	if admitted(handler, attacker) {
 		t.Fatal("exhausted client got a fresh burst after eviction churn")
-	}
-	if got := len(throttle.clients); got > limits.MaxClients {
-		t.Fatalf("tracked clients: got %d, want at most %d", got, limits.MaxClients)
 	}
 }

@@ -25,7 +25,14 @@ const maxAccessTokenLifetime = time.Hour
 
 const reasonRevoked authdomain.TokenRejectReason = "revoked"
 
-var jwksFetchTimeout = 10 * time.Second
+const defaultJWKSFetchTimeout = 10 * time.Second
+
+type jwksSchedule struct {
+	now             func() time.Time
+	fetchTimeout    time.Duration
+	refreshInterval time.Duration
+	refreshWindow   time.Duration
+}
 
 type SupabaseJWTVerifier struct {
 	cache    *jwk.Cache
@@ -40,6 +47,8 @@ type SupabaseJWTVerifier struct {
 	metrics ports.AuthMetrics
 
 	revoker ports.TokenRevoker
+
+	schedule jwksSchedule
 }
 
 type SupabaseJWTVerifierOption func(*SupabaseJWTVerifier)
@@ -60,57 +69,87 @@ func WithTokenRevoker(r ports.TokenRevoker) SupabaseJWTVerifierOption {
 	}
 }
 
-func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience string, opts ...SupabaseJWTVerifierOption) (*SupabaseJWTVerifier, error) {
-	return newSupabaseJWTVerifier(ctx, jwksURL, projectURL, audience, time.Now, opts...)
+func WithJWKSClock(now func() time.Time) SupabaseJWTVerifierOption {
+	return func(v *SupabaseJWTVerifier) {
+		v.schedule.now = now
+	}
 }
 
-func newSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience string, now func() time.Time, opts ...SupabaseJWTVerifierOption) (*SupabaseJWTVerifier, error) {
+func WithJWKSFetchTimeout(timeout time.Duration) SupabaseJWTVerifierOption {
+	return func(v *SupabaseJWTVerifier) {
+		v.schedule.fetchTimeout = timeout
+	}
+}
+
+func WithJWKSBackgroundRefresh(interval, window time.Duration) SupabaseJWTVerifierOption {
+	return func(v *SupabaseJWTVerifier) {
+		v.schedule.refreshInterval, v.schedule.refreshWindow = interval, window
+	}
+}
+
+func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience string, opts ...SupabaseJWTVerifierOption) (*SupabaseJWTVerifier, error) {
 	if err := requireSecureJWKSURL(jwksURL); err != nil {
 		return nil, err
 	}
+	v := newSupabaseJWTVerifier(jwksURL, projectURL, audience, opts)
+	if err := v.registerJWKS(ctx); err != nil {
+		return nil, err
+	}
+	v.primeJWKS(ctx)
+	return v, nil
+}
 
+func newSupabaseJWTVerifier(jwksURL, projectURL, audience string, opts []SupabaseJWTVerifierOption) *SupabaseJWTVerifier {
 	v := &SupabaseJWTVerifier{
 		jwksURL:  jwksURL,
 		issuer:   strings.TrimRight(projectURL, "/") + supabaseAuthPathSuffix,
 		audience: audience,
 		metrics:  ports.NoopAuthMetrics(),
 		revoker:  ports.NoopTokenRevoker(),
+		schedule: jwksSchedule{
+			now:             time.Now,
+			fetchTimeout:    defaultJWKSFetchTimeout,
+			refreshInterval: defaultJWKSRefreshInterval,
+			refreshWindow:   defaultJWKSRefreshWindow,
+		},
 	}
 	for _, opt := range opts {
 		opt(v)
 	}
-	v.refresher = newJWKSRefresher(v.forceRefresh)
-	v.refresher.now = now
+	v.refresher = newJWKSRefresher(v.forceRefresh, v.schedule.now)
+	return v
+}
 
+func (v *SupabaseJWTVerifier) registerJWKS(ctx context.Context) error {
 	cache := jwk.NewCache(ctx,
-		jwk.WithRefreshWindow(jwksRefreshWindow),
+		jwk.WithRefreshWindow(v.schedule.refreshWindow),
 		jwk.WithErrSink(jwksErrSink(v.onBackgroundRefreshError)),
 	)
-
 	httpClient := &http.Client{
-		Timeout:       jwksFetchTimeout,
+		Timeout:       v.schedule.fetchTimeout,
 		CheckRedirect: checkJWKSRedirect,
 		Transport:     cappedJWKSBodyTransport{base: http.DefaultTransport},
 	}
-	if err := cache.Register(jwksURL,
+	if err := cache.Register(v.jwksURL,
 		jwk.WithHTTPClient(httpClient),
-		jwk.WithRefreshInterval(jwksBackgroundRefreshInterval),
+		jwk.WithRefreshInterval(v.schedule.refreshInterval),
 		jwk.WithPostFetcher(jwk.PostFetchFunc(v.onKeySetFetched)),
 	); err != nil {
-		return nil, fmt.Errorf("register JWKS URL: %w", err)
+		return fmt.Errorf("register JWKS URL: %w", err)
 	}
 	v.cache = cache
+	return nil
+}
 
-	refreshCtx, cancel := context.WithTimeout(ctx, jwksFetchTimeout)
+func (v *SupabaseJWTVerifier) primeJWKS(ctx context.Context) {
+	refreshCtx, cancel := context.WithTimeout(ctx, v.schedule.fetchTimeout)
 	defer cancel()
-	if _, err := cache.Refresh(refreshCtx, jwksURL); err != nil {
+	if _, err := v.cache.Refresh(refreshCtx, v.jwksURL); err != nil {
 		v.metrics.JWKSFetchFailed()
 		slog.WarnContext(ctx, "initial JWKS fetch failed, will retry on first request", "error", err)
-	} else {
-		v.primed.Store(true)
+		return
 	}
-
-	return v, nil
+	v.primed.Store(true)
 }
 
 type jwksErrSink func(error)

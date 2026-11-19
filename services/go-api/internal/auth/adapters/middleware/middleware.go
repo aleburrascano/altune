@@ -14,17 +14,26 @@ import (
 )
 
 func Middleware(verifier ports.TokenVerifier, opts ...MiddlewareOption) func(http.Handler) http.Handler {
-	cfg := middlewareConfig{metrics: ports.NoopAuthMetrics()}
+	cfg := middlewareConfig{metrics: ports.NoopAuthMetrics(), limits: DefaultFailureLimits, now: time.Now}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	return middleware(verifier, newFailureThrottle(DefaultFailureLimits, time.Now), cfg.metrics)
+	return middleware(verifier, newFailureThrottle(cfg.limits, cfg.now), cfg.metrics)
 }
 
 type MiddlewareOption func(*middlewareConfig)
 
 type middlewareConfig struct {
 	metrics ports.AuthMetrics
+	limits  FailureLimits
+	now     func() time.Time
+}
+
+func WithFailureLimits(limits FailureLimits, now func() time.Time) MiddlewareOption {
+	return func(c *middlewareConfig) {
+		c.limits = limits
+		c.now = now
+	}
 }
 
 func WithMetrics(m ports.AuthMetrics) MiddlewareOption {
