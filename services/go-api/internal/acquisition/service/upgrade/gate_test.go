@@ -15,16 +15,14 @@ func TestGate_AdmitFetched(t *testing.T) {
 		gate    acquisition.UpgradeGate
 		grade   acquisition.Grade
 		fetched acquisition.SourceFormat
-		dryRun  bool
 		wantErr error
 	}{
-		{"a muxed file at A takes a same-grade audio-only stream", acquisition.UpgradeGate{Current: acquisition.GradeA, Stored: muxed, FloorKbps: floor}, acquisition.GradeA, audioOnly, false, nil},
-		{"a muxed file at A refuses a lower-grade audio-only stream", acquisition.UpgradeGate{Current: acquisition.GradeA, Stored: muxed, FloorKbps: floor}, acquisition.GradeB, audioOnly, false, acquisition.ErrNotAnUpgrade},
-		{"a muxed file at A refuses a same-grade muxed stream", acquisition.UpgradeGate{Current: acquisition.GradeA, Stored: muxed, FloorKbps: floor}, acquisition.GradeA, muxed, false, acquisition.ErrNotAnUpgrade},
-		{"a muxed file at A refuses an audio-only stream under the floor", acquisition.UpgradeGate{Current: acquisition.GradeA, Stored: muxed, FloorKbps: floor}, acquisition.GradeA, acquisition.SourceFormat{ID: "139", Kbps: 48}, false, acquisition.ErrNotAnUpgrade},
-		{"an audio-only file at A takes no same-grade stream", acquisition.UpgradeGate{Current: acquisition.GradeA}, acquisition.GradeA, audioOnly, false, acquisition.ErrNotAnUpgrade},
-		{"a muxed file at B still takes a higher grade", acquisition.UpgradeGate{Current: acquisition.GradeB, Stored: muxed, FloorKbps: floor}, acquisition.GradeA, muxed, false, nil},
-		{"a dry run reports the swap without making it", acquisition.UpgradeGate{Current: acquisition.GradeA, Stored: muxed, FloorKbps: floor, DryRun: true}, acquisition.GradeA, audioOnly, true, acquisition.ErrWouldUpgrade},
+		{"a muxed file at A takes a same-grade audio-only stream", acquisition.UpgradeGate{Current: acquisition.GradeA, Stored: muxed, FloorKbps: floor}, acquisition.GradeA, audioOnly, nil},
+		{"a muxed file at A refuses a lower-grade audio-only stream", acquisition.UpgradeGate{Current: acquisition.GradeA, Stored: muxed, FloorKbps: floor}, acquisition.GradeB, audioOnly, acquisition.ErrNotAnUpgrade},
+		{"a muxed file at A refuses a same-grade muxed stream", acquisition.UpgradeGate{Current: acquisition.GradeA, Stored: muxed, FloorKbps: floor}, acquisition.GradeA, muxed, acquisition.ErrNotAnUpgrade},
+		{"a muxed file at A refuses an audio-only stream under the floor", acquisition.UpgradeGate{Current: acquisition.GradeA, Stored: muxed, FloorKbps: floor}, acquisition.GradeA, acquisition.SourceFormat{ID: "139", Kbps: 48}, acquisition.ErrNotAnUpgrade},
+		{"an audio-only file at A takes no same-grade stream", acquisition.UpgradeGate{Current: acquisition.GradeA}, acquisition.GradeA, audioOnly, acquisition.ErrNotAnUpgrade},
+		{"a muxed file at B still takes a higher grade", acquisition.UpgradeGate{Current: acquisition.GradeB, Stored: muxed, FloorKbps: floor}, acquisition.GradeA, muxed, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -46,7 +44,6 @@ func TestGate_AdmitFetchedByCatalogLength(t *testing.T) {
 		wantErr error
 	}{
 		{"a file fitting the catalog replaces a missing stored edit", acquisition.UpgradeGate{Current: acquisition.GradeB, CatalogSeconds: 285, StoredSeconds: 231}, acquisition.GradeB, 285, nil},
-		{"a dry run reports it", acquisition.UpgradeGate{Current: acquisition.GradeB, CatalogSeconds: 285, StoredSeconds: 231, DryRun: true}, acquisition.GradeB, 285, acquisition.ErrWouldUpgrade},
 		{"a fitting stored file keeps the tie, fetched fitting", acquisition.UpgradeGate{Current: acquisition.GradeB, CatalogSeconds: 285, StoredSeconds: 284}, acquisition.GradeB, 285, acquisition.ErrNotAnUpgrade},
 		{"a fitting stored file keeps the tie, fetched missing", acquisition.UpgradeGate{Current: acquisition.GradeB, CatalogSeconds: 285, StoredSeconds: 284}, acquisition.GradeB, 231, acquisition.ErrNotAnUpgrade},
 		{"a fetched file that also misses is refused", acquisition.UpgradeGate{Current: acquisition.GradeB, CatalogSeconds: 285, StoredSeconds: 231}, acquisition.GradeB, 231, acquisition.ErrNotAnUpgrade},
@@ -150,7 +147,6 @@ func TestGate_AdmitFetchedLengthRescueAlongsideTheLowBitrateRescue(t *testing.T)
 		{"a muxed stored edit takes a same-grade muxed file that fits the catalog", acquisition.UpgradeGate{Current: acquisition.GradeA, Stored: muxed, FloorKbps: floor, CatalogSeconds: 285, StoredSeconds: 231}, muxed, 285, nil},
 		{"a muxed stored file still takes a better stream that misses the catalog", acquisition.UpgradeGate{Current: acquisition.GradeA, Stored: muxed, FloorKbps: floor, CatalogSeconds: 285, StoredSeconds: 284}, audioOnly, 231, nil},
 		{"a muxed fitting stored file refuses a same-grade muxed file", acquisition.UpgradeGate{Current: acquisition.GradeA, Stored: muxed, FloorKbps: floor, CatalogSeconds: 285, StoredSeconds: 284}, muxed, 285, acquisition.ErrNotAnUpgrade},
-		{"a dry run with both rescues holding reports the swap", acquisition.UpgradeGate{Current: acquisition.GradeA, Stored: muxed, FloorKbps: floor, CatalogSeconds: 285, StoredSeconds: 231, DryRun: true}, audioOnly, 285, acquisition.ErrWouldUpgrade},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

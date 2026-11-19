@@ -466,7 +466,7 @@ rather than admitting it from per-process state.
 
 ### The upgrade lane
 
-Off by default (`ACQUISITION_UPGRADE_ENABLED`). A leader-only ticker (`acquisition upgrade`,
+It runs whenever the app has a database. A leader-only ticker (`acquisition upgrade`,
 one tick every `1h / ACQUISITION_UPGRADE_PER_HOUR`) asks `ports.UpgradeStore.Candidates` for
 one track: ready, from a source (`audio_source_url` set, so a user upload is never picked),
 graded below A (a missing grade counts as D), not queued, not tried in the last 24h, and not
@@ -500,7 +500,7 @@ still the file checked. A grade A result ends the job with no download; any othe
 through to the re-acquire below with the new grade as the gate. A user upload (no
 `audio_source_url`) is checked once and never replaced: a hard match grades it `A_user` (above
 A, never a candidate), a wrong version or song sets `user_upload_mismatch`, no answer changes
-nothing. A dry run logs `acquisition.upgrade_in_place` and records nothing.
+nothing.
 
 `ExecuteUpgrade` then runs the replace flow (`replaceLoaded`) with a `ReplaceGate` holding the
 stored grade. `UpdateTrackStep` asks the gate before it commits: the new file's grade must beat
@@ -511,9 +511,8 @@ is never touched. A kept file counts as a try and adds the tried source to
 `best_available_generation` and `best_available_reason` into the evidence; the track is picked
 again only when `PipelineGeneration` is bumped. A failure that says nothing about the sources
 (storage, an outage, cancellation) counts nothing. A successful swap writes fresh evidence, so
-all of this state resets. `ACQUISITION_UPGRADE_DRY_RUN` runs the whole pipeline, swaps nothing,
-rejects nothing, counts nothing, and logs `acquisition.upgrade_outcome` with `from`, `to` and
-`outcome` (`would_upgrade`, `kept_current`, `no_better_source`).
+all of this state resets. Every run logs `acquisition.upgrade_outcome` with `from`, `to` and
+`outcome` (`upgraded`, `kept_current`, `no_better_source`, `failed`).
 
 ---
 

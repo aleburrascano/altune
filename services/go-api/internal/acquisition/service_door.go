@@ -12,6 +12,7 @@ type (
 )
 
 var (
+	AudioVerdictOf                    = service.AudioVerdictOf
 	BuildLegacyAudioRef               = service.BuildLegacyAudioRef
 	BuildLegacyAudioRefUncapped       = service.BuildLegacyAudioRefUncapped
 	FingerprintOf                     = service.FingerprintOf

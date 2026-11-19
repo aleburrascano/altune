@@ -112,10 +112,6 @@ func (r *Runner) checkInPlace(ctx context.Context, track *ports.TrackSnapshot, s
 const maxInPlaceFailures = 3
 
 func (r *Runner) failedCheck(ctx context.Context, track *ports.TrackSnapshot, stored inPlaceEvidence, checkErr error) (inPlaceOutcome, error) {
-	if r.cfg.DryRun {
-		r.noteUnchecked(ctx, track.ID)
-		return inPlaceOutcome{}, fmt.Errorf("check track %s in place: %w", track.ID, checkErr)
-	}
 	failures, err := r.inPlace.recorder.NoteInPlaceFailure(ctx, track.ID)
 	if err != nil {
 		slog.ErrorContext(ctx, "acquisition.upgrade_in_place_failure_unrecorded",
@@ -134,11 +130,8 @@ func (r *Runner) settleFinding(ctx context.Context, track *ports.TrackSnapshot, 
 	slog.InfoContext(ctx, "acquisition.upgrade_in_place",
 		"track_id", track.ID.String(), "from", string(stored.Grade), "to", record.Grade,
 		"verdict", finding.Verdict, "basis", finding.Basis,
-		"user_upload", isUserUpload(track), "user_upload_mismatch", record.UserUploadMismatch,
-		"dry_run", r.cfg.DryRun)
-	if r.cfg.DryRun {
-		r.noteUnchecked(ctx, track.ID)
-	} else if err := r.recordInPlace(ctx, track, record); err != nil {
+		"user_upload", isUserUpload(track), "user_upload_mismatch", record.UserUploadMismatch)
+	if err := r.recordInPlace(ctx, track, record); err != nil {
 		return inPlaceOutcome{}, err
 	}
 	after := gradeAfter(stored.Grade, record)
@@ -192,11 +185,4 @@ func (r *Runner) recordInPlace(ctx context.Context, track *ports.TrackSnapshot, 
 		slog.InfoContext(ctx, "acquisition.upgrade_in_place_file_changed", "track_id", track.ID.String())
 	}
 	return nil
-}
-
-func (r *Runner) noteUnchecked(ctx context.Context, trackID shared.TrackId) {
-	if _, err := r.store.NoteAttempt(ctx, trackID, ports.UpgradeAttempt{}); err != nil {
-		slog.ErrorContext(ctx, "acquisition.upgrade_attempt_unrecorded",
-			"track_id", trackID.String(), "error", redact.LogError(err))
-	}
 }

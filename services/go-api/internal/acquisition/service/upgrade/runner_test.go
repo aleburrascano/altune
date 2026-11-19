@@ -307,21 +307,6 @@ func TestRunner_GivesUpAfterTheMaximumTriesWithNothingBetter(t *testing.T) {
 	}
 }
 
-func TestRunner_ADryRunReportsTheOutcomeWithoutSwappingOrCounting(t *testing.T) {
-	w := seed(t, acquisition.GradeF)
-
-	if err := w.runner(acquisition.UpgradeConfig{MaxTries: 1, DryRun: true}).ExecuteUpgrade(context.Background(), w.userId, w.trackId); !errors.Is(err, acquisition.ErrUpgradeKept) {
-		t.Fatalf("ExecuteUpgrade: %v", err)
-	}
-
-	if row := w.committed(); *row.AudioRef != originalRef || len(w.audio.objects) != 1 {
-		t.Errorf("audio_ref = %v, objects = %v, want a dry run to leave the old file alone", row.AudioRef, w.audio.objects)
-	}
-	if fmt.Sprint(w.upgrades.attempts) != fmt.Sprint([]acquisition.UpgradeAttempt{{}}) || len(w.upgrades.gaveUp) != 0 {
-		t.Errorf("attempts = %v, give-ups = %v, want one uncounted attempt and no give-up", w.upgrades.attempts, w.upgrades.gaveUp)
-	}
-}
-
 func TestRunner_ASwapThatFailsToCommitKeepsTheOldFileAndCountsNoTry(t *testing.T) {
 	w := seed(t, acquisition.GradeF)
 	w.tracks.updateErr = errors.New("transient db error")

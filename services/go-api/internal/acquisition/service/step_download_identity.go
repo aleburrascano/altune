@@ -188,7 +188,7 @@ func sourceOf(ac *AcquisitionContext, candidate ports.AudioCandidate) judgedSour
 func (s *DownloadStep) classifyMatch(ctx context.Context, ac *AcquisitionContext, match ports.RecordingMatch, probed float64, source judgedSource) AudioVerdict {
 	input := judgeInput(ac, match.Results, probed, source)
 	input.Audio.RecordingFacts = s.versionFacts(ctx, input)
-	return audioVerdictOf(audiojudge.Judge(input, s.cuts), match.Results)
+	return AudioVerdictOf(audiojudge.Judge(input, s.cuts), match.Results)
 }
 
 func (s *DownloadStep) judgeUnfingerprinted(ac *AcquisitionContext, probed float64, source judgedSource) audiojudge.Verdict {
