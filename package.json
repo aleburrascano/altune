@@ -19,6 +19,6 @@
   },
   "packageManager": "pnpm@12.21.0+sha512.66fd8278ee28935ce951792d34367ff3af5c432a2756445823029533835b8da529bbe0be5130afd56ed0713fb8789e47bad82d93bd5ae2fe54b15562d6276ef0",
   "optionalDependencies": {
-    "module-spec": "git+https://altune-git.duckdns.org/aleburrascano/module-spec.git"
+    "module-spec": "git+https://altune-git.duckdns.org/aleburrascano/module-spec.git#semver:^0.5.0"
   }
 }
