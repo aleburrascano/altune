@@ -8,11 +8,14 @@ type (
 	InMemoryFeaturedResolver   = memory.FeaturedResolver
 	InMemoryOrphanedAudioQueue = memory.OrphanedAudioQueue
 	InMemoryPlaylistRepo       = memory.PlaylistRepo
+	InMemoryScheduler          = memory.Scheduler
+	InMemoryStuckScheduler     = memory.StuckScheduler
 	InMemoryTrackRepo          = memory.TrackRepo
 )
 
 var (
 	AssertAttrs                   = memory.AssertAttrs
+	AssertScheduleDeadline        = memory.AssertScheduleDeadline
 	CaptureAuditLogs              = memory.CaptureAuditLogs
 	FixtureOtherUserId            = memory.OtherUserId
 	FixtureUserId                 = memory.UserId

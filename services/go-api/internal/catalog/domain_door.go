@@ -24,9 +24,12 @@ var (
 	ErrAudioTemporarilyUnavailable = domain.ErrAudioTemporarilyUnavailable
 )
 
+type AcquisitionStatus = domain.AcquisitionStatus
+
 const (
-	AcquisitionFailed = domain.AcquisitionFailed
-	AcquisitionReady  = domain.AcquisitionReady
+	AcquisitionFailed  = domain.AcquisitionFailed
+	AcquisitionPending = domain.AcquisitionPending
+	AcquisitionReady   = domain.AcquisitionReady
 )
 
 type (

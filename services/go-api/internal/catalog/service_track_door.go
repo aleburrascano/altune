@@ -3,6 +3,7 @@ package catalog
 import track "altune/go-api/internal/catalog/service/track"
 
 type (
+	AddTrackInput         = track.AddTrackInput
 	AddTrackService       = track.AddTrackService
 	DeleteTrackService    = track.DeleteTrackService
 	GetTrackStatusService = track.GetTrackStatusService
