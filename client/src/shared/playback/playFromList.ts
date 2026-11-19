@@ -1,5 +1,5 @@
 import type { TrackResponse } from '@shared/catalog';
-import { canPlay } from '@shared/playback/canPlay';
+import { canPlay } from '@shared/playback/core/canPlay';
 import { toPlaybackTrack, type PlaybackTrack } from '@shared/playback/playbackTrack';
 
 export function buildPlayableQueue(

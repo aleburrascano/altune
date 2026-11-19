@@ -1,4 +1,4 @@
-export { canPlay } from '@shared/playback/canPlay';
+export { canPlay } from '@shared/playback/core/canPlay';
 export { isCurrentlyPlaying } from '@shared/playback/playbackContextValue';
 export type {
   PlaybackContextValue,
