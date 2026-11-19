@@ -10,6 +10,7 @@ type (
 
 var (
 	CleanSearchKeys           = domain.CleanSearchKeys
+	KnownCatalogProviders     = domain.KnownCatalogProviders
 	NewTrack                  = domain.NewTrack
 	NewTrackId                = domain.NewTrackId
 	NormalizeCatalogMBID      = domain.NormalizeCatalogMBID
