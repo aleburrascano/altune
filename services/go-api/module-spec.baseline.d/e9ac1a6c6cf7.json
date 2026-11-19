@@ -1,0 +1,16 @@
+{
+  "removed": [
+    "T1 internal/catalog/internal/adapters/persistence/playlist_repo_contract_test.go imports domain/playlist.go, behind catalog's door",
+    "T1 internal/catalog/internal/adapters/persistence/playlist_repo_contract_test.go imports domain/track.go, behind catalog's door",
+    "T1 internal/catalog/internal/adapters/persistence/playlist_repo_contract_test.go is in package persistence, so it sees inside the module: use package persistence_test and import the door",
+    "T1 internal/catalog/internal/adapters/persistence/playlist_repo_test.go imports domain/coded_error.go, behind catalog's door",
+    "T1 internal/catalog/internal/adapters/persistence/playlist_repo_test.go imports domain/playlist.go, behind catalog's door",
+    "T1 internal/catalog/internal/adapters/persistence/playlist_repo_test.go imports domain/track.go, behind catalog's door",
+    "T1 internal/catalog/internal/adapters/persistence/playlist_repo_test.go imports internal/core/playlist/playlist_membership.go, behind catalog's door",
+    "T1 internal/catalog/internal/adapters/persistence/playlist_repo_test.go imports internal/core/ports/db_errors.go, behind catalog's door",
+    "T1 internal/catalog/internal/adapters/persistence/playlist_repo_test.go imports internal/core/ports/playlist_repo.go, behind catalog's door",
+    "T1 internal/catalog/internal/adapters/persistence/playlist_repo_test.go is in package persistence, so it sees inside the module: use package persistence_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}

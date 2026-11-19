@@ -21,6 +21,7 @@ type (
 var (
 	ErrDBTransient                  = ports.ErrDBTransient
 	ErrPlaylistChangedDuringReorder = ports.ErrPlaylistChangedDuringReorder
+	ErrPlaylistNotOwned             = ports.ErrPlaylistNotOwned
 	ErrTrackMissing                 = ports.ErrTrackMissing
 	ErrTrackVersionConflict         = ports.ErrTrackVersionConflict
 )

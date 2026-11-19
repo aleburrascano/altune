@@ -6,11 +6,14 @@ import (
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func seedLibraryTrack(t *testing.T, repo *PgxCatalogTrackRepository, userId shared.UserId, spec libraryTrackSpec) *domain.Track {
@@ -609,4 +612,22 @@ func TestPgxLibraryRepos_TransientFailuresAreClassified(t *testing.T) {
 			}
 		})
 	}
+}
+
+type deadlinePool struct{}
+
+var errPoolDeadline = fmt.Errorf("pool call: %w", context.DeadlineExceeded)
+
+func (deadlinePool) Begin(context.Context) (pgx.Tx, error) { return nil, errPoolDeadline }
+
+func (deadlinePool) Query(context.Context, string, ...any) (pgx.Rows, error) {
+	return nil, errPoolDeadline
+}
+
+func (deadlinePool) QueryRow(context.Context, string, ...any) pgx.Row {
+	return errRow{err: errPoolDeadline}
+}
+
+func (deadlinePool) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, errPoolDeadline
 }
