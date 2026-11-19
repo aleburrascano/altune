@@ -87,7 +87,12 @@ func WithJWKSFetchTimeout(timeout time.Duration) SupabaseJWTVerifierOption {
 
 func WithJWKSBackgroundRefresh(interval, window time.Duration) SupabaseJWTVerifierOption {
 	return func(v *SupabaseJWTVerifier) {
-		v.schedule.refreshInterval, v.schedule.refreshWindow = interval, window
+		if interval > 0 {
+			v.schedule.refreshInterval = interval
+		}
+		if window > 0 {
+			v.schedule.refreshWindow = window
+		}
 	}
 }
 

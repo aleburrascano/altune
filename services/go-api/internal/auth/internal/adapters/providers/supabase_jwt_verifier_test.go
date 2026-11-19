@@ -183,27 +183,39 @@ func waitFor(t *testing.T, bound time.Duration, what string, cond func() bool) {
 }
 
 type rotatingJWKSServer struct {
-	server *httptest.Server
-	keySet atomic.Pointer[jwk.Set]
-	hits   atomic.Int64
-	down   atomic.Bool
+	server  *httptest.Server
+	keySet  atomic.Pointer[jwk.Set]
+	hits    atomic.Int64
+	down    atomic.Bool
+	stall   atomic.Bool
+	release chan struct{}
 }
 
 func newRotatingJWKSServer(t *testing.T, pub *rsa.PublicKey, kid string) *rotatingJWKSServer {
 	t.Helper()
-	s := &rotatingJWKSServer{}
+	s := &rotatingJWKSServer{release: make(chan struct{})}
 	s.rotate(t, pub, kid)
-	s.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		s.hits.Add(1)
-		if s.down.Load() {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(*s.keySet.Load())
-	}))
+	s.server = httptest.NewServer(http.HandlerFunc(s.serve))
 	t.Cleanup(s.server.Close)
+	t.Cleanup(func() { close(s.release) })
 	return s
+}
+
+func (s *rotatingJWKSServer) serve(w http.ResponseWriter, r *http.Request) {
+	s.hits.Add(1)
+	if s.stall.Load() {
+		select {
+		case <-r.Context().Done():
+		case <-s.release:
+		}
+		return
+	}
+	if s.down.Load() {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(*s.keySet.Load())
 }
 
 func (s *rotatingJWKSServer) rotate(t *testing.T, pub *rsa.PublicKey, kid string) {
@@ -911,9 +923,13 @@ func TestSupabaseJWTVerifier_LifetimeBoundIsOneHourPlusSkew(t *testing.T) {
 
 func TestSupabaseJWTVerifier_NonPositiveOrNilOptionsKeepTheDefaults(t *testing.T) {
 	cases := map[string]auth.SupabaseJWTVerifierOption{
-		"zero fetch timeout":     auth.WithJWKSFetchTimeout(0),
-		"negative fetch timeout": auth.WithJWKSFetchTimeout(-time.Second),
-		"nil clock":              auth.WithJWKSClock(nil),
+		"zero fetch timeout":        auth.WithJWKSFetchTimeout(0),
+		"negative fetch timeout":    auth.WithJWKSFetchTimeout(-time.Second),
+		"nil clock":                 auth.WithJWKSClock(nil),
+		"zero refresh schedule":     auth.WithJWKSBackgroundRefresh(0, 0),
+		"negative refresh schedule": auth.WithJWKSBackgroundRefresh(-time.Second, -time.Second),
+		"zero refresh window":       auth.WithJWKSBackgroundRefresh(90*time.Second, 0),
+		"negative refresh window":   auth.WithJWKSBackgroundRefresh(90*time.Second, -time.Second),
 	}
 	for name, opt := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -932,6 +948,26 @@ func TestSupabaseJWTVerifier_NonPositiveOrNilOptionsKeepTheDefaults(t *testing.T
 			}
 		})
 	}
+}
+
+func TestSupabaseJWTVerifier_NonPositiveRefreshIntervalKeepsTheFifteenMinuteDefault(t *testing.T) {
+	f := newTestJWTFixture(t)
+	newVerifier(t, f.jwksServer.URL, auth.WithJWKSBackgroundRefresh(0, 15*time.Minute))
+	for _, interval := range []time.Duration{0, -time.Second} {
+		_, err := auth.NewSupabaseJWTVerifier(t.Context(), f.jwksServer.URL, testProjectURL, testAudience,
+			auth.WithJWKSBackgroundRefresh(interval, 15*time.Minute+time.Second))
+		assertErrorSays(t, err, "refresh interval (15m0s)")
+	}
+}
+
+func TestSupabaseJWTVerifier_StalledBackgroundRefreshFailsWithinTheFetchTimeout(t *testing.T) {
+	f, jwks := newRotatingFixture(t)
+	metrics := &countingAuthMetrics{}
+	newVerifier(t, f.jwksServer.URL, auth.WithJWKSMetrics(metrics), auth.WithJWKSFetchTimeout(200*time.Millisecond), fastBackgroundRefresh)
+
+	jwks.stall.Store(true)
+
+	waitFor(t, 5*time.Second, "a stalled background refresh to time out", func() bool { return metrics.jwksFailures.Load() >= 1 })
 }
 
 func warnRecords(t *testing.T, buf *bytes.Buffer) []map[string]any {
