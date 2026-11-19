@@ -80,7 +80,6 @@
     "@babel/core": "^7.24.0",
     "@bacons/apple-targets": "^5.0.0",
     "@faker-js/faker": "9.9.0",
-    "@playwright/test": "^1.63.0",
     "@react-native/jest-preset": "^0.86.3",
     "@testing-library/react-native": "^13.3.3",
     "@types/jest": "^29.5.14",

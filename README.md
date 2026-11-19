@@ -30,7 +30,7 @@ cd client && npm start
 ├── services/overseer/   # read-only ops dashboard over go-api's /observe/*, shipped with go-api
 ├── services/supabase/   # Supabase auth config per tier and the script that checks it for drift
 ├── docs/                # durable docs: conventions, features, providers, diagrams, glossary (see docs/README.md)
-├── scripts/             # repo tooling: precheck, module-spec over the code roots, e2e stack, AltStore source update
+├── scripts/             # repo tooling: precheck, module-spec over the code roots, AltStore source update
 ├── scripts/ci/          # every script the CI workflows run
 ├── .gitea/workflows/    # all CI and deploys, on the self-hosted Gitea
 └── .github/workflows/   # the iOS release only (needs a macOS runner); GitHub is otherwise a read mirror of main

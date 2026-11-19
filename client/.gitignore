@@ -25,6 +25,4 @@ yarn-error.*
 
 doctor-report.json
 
-e2e/test-results/
-playwright-report/
 dist-ota/
