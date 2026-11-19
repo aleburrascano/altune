@@ -3203,3 +3203,14 @@ func TestRerecording_ASecondPassThatRunsOutOfTimeFailsAsATimeout(t *testing.T) {
 		t.Errorf("track = %q on %v, want the stored file and labels kept", row.Title, row.AudioRef)
 	}
 }
+
+func TestMergeSourceKeys_KeepsTheFirstOfEachKeyAndDropsEmpty(t *testing.T) {
+	got := mergeSourceKeys([]string{sourceKey("https://www.youtube.com/watch?v=dQw4w9WgXcQ"), ""},
+		sourceKey("https://soundcloud.com/a/b"), sourceKey("https://music.youtube.com/watch?v=dQw4w9WgXcQ"), "",
+		sourceKey("https://m.soundcloud.com/a/b"))
+
+	want := []string{"youtube:dQw4w9WgXcQ", "soundcloud.com/a/b"}
+	if !slices.Equal(got, want) {
+		t.Errorf("merged keys = %v, want %v", got, want)
+	}
+}

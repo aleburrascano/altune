@@ -713,3 +713,16 @@ func (s *AcquireTrackAudioService) identifyStored(ctx context.Context, audioRef 
 	}
 	return s.identifier.Identify(ctx, path, durationHint)
 }
+
+func mergeSourceKeys(existing []string, add ...string) []string {
+	merged := make([]string, 0, len(existing)+len(add))
+	seen := make(map[string]bool, len(existing)+len(add))
+	for _, key := range append(append([]string{}, existing...), add...) {
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		merged = append(merged, key)
+	}
+	return merged
+}
