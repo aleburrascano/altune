@@ -9,7 +9,6 @@ import {
 } from '@shared/apiClient/__tests__/sessionLookup';
 import { ContractError, describeError, isNetworkError } from '@shared/failure';
 import { runSignOutCleanups } from '@shared/session';
-import { useAnalyticsPreference } from '@shared/device';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -1140,11 +1139,6 @@ describe('telemetry headers', () => {
   beforeEach(() => {
     withSession();
     __http.reply('GET /v1/library/tracks', { status: 200, json: [] });
-    useAnalyticsPreference.getState().setShareAnalytics(true);
-  });
-
-  afterEach(() => {
-    useAnalyticsPreference.getState().setShareAnalytics(true);
   });
 
   it('sends the platform and a dev-prefixed app version', async () => {
@@ -1155,18 +1149,10 @@ describe('telemetry headers', () => {
     expect(headers['X-Altune-App-Version']).toMatch(DEV_VERSION_PATTERN);
   });
 
-  it('omits the analytics header by default', async () => {
+  it('never sends an analytics opt-out header', async () => {
     await apiFetch('/v1/library/tracks');
 
     expect(__http.last().headers).not.toHaveProperty('X-Altune-Analytics');
-  });
-
-  it('sends X-Altune-Analytics: off once the user opts out', async () => {
-    useAnalyticsPreference.getState().setShareAnalytics(false);
-
-    await apiFetch('/v1/library/tracks');
-
-    expect(__http.last().headers['X-Altune-Analytics']).toBe('off');
   });
 });
 

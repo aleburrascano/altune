@@ -5,7 +5,6 @@ export {
 } from '@features/settings/view/SettingsPortProvider';
 export { httpSettingsPort } from '@features/settings/adapters/http/httpSettingsPort';
 export type { SettingsPort } from '@features/settings/ports/settingsPort';
-export { AnalyticsCard } from '@features/settings/view/AnalyticsCard';
 export { AppearanceCard } from '@features/settings/view/AppearanceCard';
 export {
   backfillActionLabel,

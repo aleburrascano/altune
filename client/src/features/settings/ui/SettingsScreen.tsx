@@ -9,7 +9,6 @@ import { offlineDownloadsSupported } from '@shared/offline';
 import { useAccountEmail } from '@features/settings/shell/useAccountEmail';
 import { useSettingsClearSearchHistory } from '@features/settings/view/useSettingsClearSearchHistory';
 import { useDownloadStats, useRemoveDownloads } from '@features/settings/view/useDownloads';
-import { AnalyticsCard } from '@features/settings/view/AnalyticsCard';
 import { AppearanceCard } from '@features/settings/view/AppearanceCard';
 import { DangerZoneCard } from '@features/settings/view/DangerZoneCard';
 import { LibraryCard } from '@features/settings/view/LibraryCard';
@@ -44,8 +43,6 @@ export function SettingsScreen(): ReactElement {
         </SettingsCard>
 
         <AppearanceCard />
-
-        <AnalyticsCard />
 
         {offlineDownloadsSupported && <OfflineDownloadsCard stats={stats} />}
 
