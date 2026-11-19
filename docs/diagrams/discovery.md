@@ -12,7 +12,7 @@ sequenceDiagram
     participant H as go-api handler
     participant S as Search service
     participant R as Redis
-    participant P as 8 search providers<br/>Deezer · Apple · MusicBrainz · Last.fm<br/>SoundCloud · YT Music · Amazon · Spotify
+    participant P as 5 search providers<br/>Deezer · Apple<br/>SoundCloud · YT Music · Spotify
     participant DB as Postgres
 
     U->>App: type query
@@ -61,6 +61,6 @@ sequenceDiagram
     par detail fetches from the client
         App->>H: GET /enrichment (MusicBrainz)
         App->>H: artist content with every id the card knows, SoundCloud-only releases dropped when a catalog knows the artist / album tracks (fan-out, 10s)
-        App->>H: Last.fm / Deezer enrichment · related tracks (SoundCloud)
+        App->>H: Deezer enrichment · related tracks (SoundCloud)
     end
 ```

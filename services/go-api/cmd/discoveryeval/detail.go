@@ -28,9 +28,10 @@ func runDetail(ctx context.Context, cfg *config.Config, opts options) error {
 		return fmt.Errorf("parse detail goldens: %w", err)
 	}
 
-	svc := app.BuildArtistContentService(cfg, nil, seedStore(goldens))
-	adapter := &detailServiceAdapter{svc: svc}
-
+	adapter, err := seededDetailAdapter(ctx, cfg, goldens)
+	if err != nil {
+		return err
+	}
 	once := func() (discovery.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "detail-eval over %d golden artists (live providers)...\n", len(goldens))
 		report := discovery.RunDetailEval(ctx, goldens, adapter)
@@ -41,6 +42,14 @@ func runDetail(ctx context.Context, cfg *config.Config, opts options) error {
 	}
 	human := func(r discovery.HarnessReport) string { return renderDetail(r.(discovery.DetailReport)) }
 	return runHarness("detail", once, human, opts)
+}
+
+func seededDetailAdapter(ctx context.Context, cfg *config.Config, goldens []discovery.DetailGolden) (*detailServiceAdapter, error) {
+	disc, err := app.NewEvalDiscovery(ctx, cfg, app.EvalHandles{IdentityStore: seedStore(goldens)})
+	if err != nil {
+		return nil, err
+	}
+	return &detailServiceAdapter{svc: disc.EvalArtistContent()}, nil
 }
 
 var _ discovery.IdentityStore = (*seededIdentityStore)(nil)
@@ -189,9 +198,16 @@ type detailLiveReport struct {
 }
 
 func runDetailLive(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
-	searcher, drain := buildEvalSearcher(ctx, cfg, pool, redisClient)
+	searcher, drain, err := buildEvalSearcher(ctx, cfg, pool, redisClient)
+	if err != nil {
+		return err
+	}
 	defer drain()
-	content := app.BuildArtistContentService(cfg, nil, &seededIdentityStore{})
+	contentDisc, err := app.NewEvalDiscovery(ctx, cfg, app.EvalHandles{IdentityStore: &seededIdentityStore{}})
+	if err != nil {
+		return err
+	}
+	content := contentDisc.EvalArtistContent()
 
 	artists, err := parseLiveArtists(detailLiveArtists)
 	if err != nil {

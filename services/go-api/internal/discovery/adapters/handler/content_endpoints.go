@@ -99,7 +99,7 @@ func withProvider(
 		httputil.BadRequestCode(w, requestCodeInvalidProvider, "unknown provider")
 		return
 	}
-	externalID, ok := externalIDParam(w, r, pn)
+	externalID, ok := externalIDParam(w, r)
 	if !ok {
 		return
 	}

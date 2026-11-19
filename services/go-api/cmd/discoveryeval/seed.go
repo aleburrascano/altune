@@ -1,8 +1,8 @@
 package main
 
 import (
-	"altune/go-api/internal/app"
 	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/shared/config"
 	"context"
 	"fmt"
 	"os"
@@ -13,8 +13,11 @@ import (
 
 const seedBatchSize = 500
 
-func runCorrectionSeed(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
-	vocab := app.BuildVocabularyStore(redisClient)
+func runCorrectionSeed(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
+	vocab, err := evalVocabulary(ctx, cfg, redisClient)
+	if err != nil {
+		return err
+	}
 	if vocab == nil {
 		return fmt.Errorf("correction-seed needs a vocabulary store (set REDIS_URL)")
 	}

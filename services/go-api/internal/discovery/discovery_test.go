@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/sharedtest"
 	"bytes"
 	"context"
+	"errors"
 	"expvar"
 	"io"
 	"log/slog"
@@ -45,14 +46,9 @@ func TestSearch_AsksTheProvidersInTableOrder(t *testing.T) {
 		providers func() discovery.ProviderSettings
 		want      []string
 	}{
-		{"every provider on, no allowlist", everyProviderOn, []string{"deezer", "applemusic", "musicbrainz", "lastfm", "soundcloud", "youtube", "amazonmusic", "spotify"}},
-		{"prod-like with the default allowlist", prodLikeProviders, []string{"deezer", "applemusic", "soundcloud", "youtube", "spotify"}},
-		{"every switch off", everyProviderOff, []string{"deezer"}},
-		{"an allowlist keeps table order, not list order", func() discovery.ProviderSettings {
-			providers := everyProviderOn()
-			providers.SearchAllowlist = []string{"deezer", "spotify", "youtube"}
-			return providers
-		}, []string{"deezer", "youtube", "spotify"}},
+		{"every key set", everyProviderOn, []string{"deezer", "applemusic", "soundcloud", "youtube", "spotify"}},
+		{"prod-like", prodLikeProviders, []string{"deezer", "applemusic", "soundcloud", "youtube", "spotify"}},
+		{"every key missing", everyProviderOff, []string{"deezer", "applemusic", "soundcloud", "youtube", "spotify"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -71,8 +67,6 @@ func TestSearch_SoundCloudFallsBackToYtDlpWhenItsAPIFails(t *testing.T) {
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	providers := everyProviderOff()
-	providers.SoundCloudEnabled = true
-	providers.SearchAllowlist = []string{"soundcloud"}
 	disc := newHarness(t, providers).start()
 
 	query := &discovery.SearchQuery{Raw: "probe song", Kinds: map[discovery.ResultKind]bool{discovery.ResultKindTrack: true}}
@@ -97,7 +91,7 @@ func TestProviderCalls_UseTheProviderTimeoutAndChartsTheChartTimeout(t *testing.
 		charts = append(charts, chart.Name().String())
 		_, _ = chart.FetchCharts(context.Background(), 1)
 	}
-	assertLines(t, charts, []string{"deezer", "lastfm"})
+	assertLines(t, charts, []string{"deezer"})
 	for host, timeout := range h.transport.timeoutsByHost() {
 		if timeout != 15*time.Second {
 			t.Errorf("chart call to %s timed out at %v, want the 15s chart timeout", host, timeout)
@@ -105,7 +99,7 @@ func TestProviderCalls_UseTheProviderTimeoutAndChartsTheChartTimeout(t *testing.
 	}
 }
 
-func TestCharts_WithoutALastFMKeyOnlyDeezerCharts(t *testing.T) {
+func TestCharts_AreDeezerAloneEvenWithEveryKeyMissing(t *testing.T) {
 	disc := newHarness(t, everyProviderOff()).start()
 
 	if len(disc.Charts) != 1 || disc.Charts[0].Name() != discovery.ProviderDeezer {
@@ -149,10 +143,8 @@ func TestContent_EachSwitchedOnProviderServesItsJobs(t *testing.T) {
 		{"/albums/itunes/1/tracks", "itunes.apple.com"},
 		{"/albums/spotify/1/tracks", "open.spotify.com"},
 		{"/albums/soundcloud/1/tracks", "soundcloud.com"},
-		{"/artists/lastfm/1/content", "ws.audioscrobbler.com"},
 		{"/artists/spotify/1/content", "open.spotify.com"},
 		{"/tracks/soundcloud/1/related", "soundcloud.com"},
-		{"/enrichment/lastfm?kind=artist&title=Probe+Artist", "ws.audioscrobbler.com"},
 		{"/enrichment/deezer?kind=track&title=Probe+Song&subtitle=Probe+Artist", "api.deezer.com"},
 		{"/lyrics?title=Probe+Song&subtitle=Probe+Artist", "api.deezer.com"},
 	}
@@ -167,20 +159,12 @@ func TestContent_EachSwitchedOnProviderServesItsJobs(t *testing.T) {
 	}
 }
 
-func TestContent_ASwitchedOffProviderIsNeverAsked(t *testing.T) {
-	targets := []string{
-		"/albums/applemusic/1/tracks", "/albums/spotify/1/tracks", "/albums/soundcloud/1/tracks",
-		"/artists/lastfm/1/content", "/tracks/soundcloud/1/related",
-		"/enrichment/lastfm?kind=artist&title=Probe+Artist", "/enrichment?kind=artist&title=Probe+Artist",
-	}
-	for _, target := range targets {
-		t.Run(target, func(t *testing.T) {
-			off := newHarness(t, everyProviderOff())
-			serve(off.start(), target)
-			if hosts := off.transport.hosts(); len(hosts) != 0 {
-				t.Errorf("%s reached %v with every switch off", target, hosts)
-			}
-		})
+func TestEnrichment_WithoutAMusicBrainzUserAgentAsksNoProvider(t *testing.T) {
+	off := newHarness(t, everyProviderOff())
+
+	serve(off.start(), "/enrichment?kind=artist&title=Probe+Artist")
+	if hosts := off.transport.hosts(); len(hosts) != 0 {
+		t.Errorf("enrichment reached %v without a MusicBrainz user agent", hosts)
 	}
 }
 
@@ -312,7 +296,7 @@ func TestSearch_WithoutADatabaseOrRedisStillAnswers(t *testing.T) {
 	}
 }
 
-func TestSearch_WithRedisARepeatedSearchAsksNoProviderAgain(t *testing.T) {
+func TestSearch_WithRedisARepeatedSearchDoesNotAskAProviderThatAnswered(t *testing.T) {
 	h := newHarness(t, everyProviderOff())
 	h.deps.Redis = goredis.NewClient(&goredis.Options{Addr: miniredis.RunT(t).Addr()})
 	disc := h.start()
@@ -323,8 +307,10 @@ func TestSearch_WithRedisARepeatedSearchAsksNoProviderAgain(t *testing.T) {
 	if code := searchPage(disc); code != http.StatusOK {
 		t.Fatalf("repeated search answered %d, want 200", code)
 	}
-	if again := h.transport.recorded()[asked:]; len(again) != 0 {
-		t.Errorf("a repeated search asked providers again: %v", again)
+	for _, call := range h.transport.recorded()[asked:] {
+		if call.host == "api.deezer.com" && call.path == "/search/album" && call.query == "probe album" {
+			t.Errorf("a repeated search asked Deezer again although its answer was cached: %v", call)
+		}
 	}
 }
 
@@ -357,13 +343,11 @@ func TestNew_LogsOneLinePerProviderForAProdLikeConfig(t *testing.T) {
 	assertLines(t, h.logLines("discovery.provider"), []string{
 		`level=INFO msg=discovery.provider name=deezer on=true jobs=search,artist,album,artwork,charts,details,featured,lyrics,similar`,
 		`level=INFO msg=discovery.provider name=applemusic on=true jobs=search,artist,album`,
-		`level=INFO msg=discovery.provider name=musicbrainz on=true jobs=artist,enrichment,featured,recordings search=false reason="not in DISCOVERY_SEARCH_PROVIDERS"`,
-		`level=INFO msg=discovery.provider name=lastfm on=true jobs=artist,charts,details search=false reason="not in DISCOVERY_SEARCH_PROVIDERS"`,
-		`level=INFO msg=discovery.provider name=soundcloud on=true jobs=search,artist,album,related,artwork`,
-		`level=INFO msg=discovery.provider name=youtube on=true jobs=search,artwork`,
-		`level=INFO msg=discovery.provider name=amazonmusic on=false reason="not in DISCOVERY_SEARCH_PROVIDERS"`,
+		`level=INFO msg=discovery.provider name=musicbrainz on=true jobs=artist,consensus,enrichment,featured,recordings`,
+		`level=INFO msg=discovery.provider name=soundcloud on=true jobs=search,artist,album,related,artwork,consensus`,
+		`level=INFO msg=discovery.provider name=youtube on=true jobs=search,artwork,consensus`,
 		`level=INFO msg=discovery.provider name=spotify on=true jobs=search,artist,album,artwork`,
-		`level=INFO msg=discovery.provider name=itunes on=true jobs=album,artwork`,
+		`level=INFO msg=discovery.provider name=itunes on=true jobs=album,artwork,consensus`,
 		`level=INFO msg=discovery.provider name=coverartarchive on=true jobs=artwork`,
 		`level=INFO msg=discovery.provider name=discogs on=false reason="DISCOGS_TOKEN is empty"`,
 		`level=INFO msg=discovery.provider name=fanarttv on=true jobs=artwork`,
@@ -373,20 +357,18 @@ func TestNew_LogsOneLinePerProviderForAProdLikeConfig(t *testing.T) {
 	})
 }
 
-func TestNew_LogsWhyEachProviderIsOff(t *testing.T) {
+func TestNew_LogsWhichKeyEachKeyedProviderIsMissing(t *testing.T) {
 	h := newHarness(t, everyProviderOff())
 	h.start()
 
 	assertLines(t, h.logLines("discovery.provider"), []string{
 		`level=INFO msg=discovery.provider name=deezer on=true jobs=search,artist,album,artwork,charts,details,featured,lyrics,similar`,
-		`level=INFO msg=discovery.provider name=applemusic on=false reason="APPLEMUSIC_ENABLED is false"`,
+		`level=INFO msg=discovery.provider name=applemusic on=true jobs=search,artist,album`,
 		`level=INFO msg=discovery.provider name=musicbrainz on=false reason="MUSICBRAINZ_USER_AGENT is empty"`,
-		`level=INFO msg=discovery.provider name=lastfm on=false reason="LASTFM_API_KEY is empty"`,
-		`level=INFO msg=discovery.provider name=soundcloud on=false reason="SOUNDCLOUD_ENABLED is false"`,
-		`level=INFO msg=discovery.provider name=youtube on=false reason="YTMUSIC_ENABLED is false"`,
-		`level=INFO msg=discovery.provider name=amazonmusic on=false reason="AMAZONMUSIC_ENABLED is false"`,
-		`level=INFO msg=discovery.provider name=spotify on=false reason="SPOTIFY_ENABLED is false"`,
-		`level=INFO msg=discovery.provider name=itunes on=true jobs=album,artwork`,
+		`level=INFO msg=discovery.provider name=soundcloud on=true jobs=search,artist,album,related,artwork,consensus`,
+		`level=INFO msg=discovery.provider name=youtube on=true jobs=search,artwork,consensus`,
+		`level=INFO msg=discovery.provider name=spotify on=true jobs=search,artist,album,artwork`,
+		`level=INFO msg=discovery.provider name=itunes on=true jobs=album,artwork,consensus`,
 		`level=INFO msg=discovery.provider name=coverartarchive on=true jobs=artwork`,
 		`level=INFO msg=discovery.provider name=discogs on=false reason="DISCOGS_TOKEN is empty"`,
 		`level=INFO msg=discovery.provider name=fanarttv on=false reason="FANARTTV_API_KEY is empty"`,
@@ -396,19 +378,12 @@ func TestNew_LogsWhyEachProviderIsOff(t *testing.T) {
 	})
 }
 
-func TestNew_WithNoAllowlistEverySearcherSearches(t *testing.T) {
+func TestNew_WithEveryKeySetDiscogsServesArtworkAndConsensus(t *testing.T) {
 	h := newHarness(t, everyProviderOn())
 	h.start()
 
-	lines := h.logLines("discovery.provider")
-	for _, name := range []string{"deezer", "applemusic", "musicbrainz", "lastfm", "soundcloud", "youtube", "amazonmusic", "spotify"} {
-		line := lineNaming(lines, name)
-		if !strings.Contains(line, "on=true jobs=search") || strings.Contains(line, "search=false") {
-			t.Errorf("%s does not search with an empty allowlist: %q", name, line)
-		}
-	}
-	if line := lineNaming(lines, "discogs"); line != `level=INFO msg=discovery.provider name=discogs on=true jobs=artwork` {
-		t.Errorf("discogs line = %q, want it on for artwork once DISCOGS_TOKEN is set", line)
+	if line := lineNaming(h.logLines("discovery.provider"), "discogs"); line != `level=INFO msg=discovery.provider name=discogs on=true jobs=artwork,consensus` {
+		t.Errorf("discogs line = %q, want it on for artwork and consensus once DISCOGS_TOKEN is set", line)
 	}
 }
 
@@ -578,7 +553,6 @@ func providerCacheTTLs(t *testing.T, providers discovery.ProviderSettings, targe
 	redis := miniredis.RunT(t)
 	h.deps.Redis = goredis.NewClient(&goredis.Options{Addr: redis.Addr()})
 	h.deps.Search.ProviderCacheTTL = 7 * time.Minute
-	h.deps.Search.MusicBrainzCacheTTL = 11 * time.Minute
 	disc := h.start()
 	serve(disc, target)
 	disc.Search.WaitForBackground()
@@ -592,29 +566,24 @@ func providerCacheTTLs(t *testing.T, providers discovery.ProviderSettings, targe
 }
 
 func TestSearchSettings_ProviderResultsAreCachedForTheConfiguredTTL(t *testing.T) {
-	deezerOnly := providerCacheTTLs(t, everyProviderOff(), "/search?q=probe+album&kinds=album&save_history=false")
-	if len(deezerOnly) == 0 || slices.ContainsFunc(deezerOnly, func(ttl time.Duration) bool { return ttl != 7*time.Minute }) {
-		t.Errorf("Deezer's cached results live %v, want the 7m provider TTL", deezerOnly)
-	}
-	withMusicBrainz := everyProviderOff()
-	withMusicBrainz.MusicBrainzUserAgent = "altune-test/1.0"
-	musicBrainzOnly := providerCacheTTLs(t, withMusicBrainz, "/search?q=probe+artist&kinds=artist&save_history=false")
-	if len(musicBrainzOnly) == 0 || slices.ContainsFunc(musicBrainzOnly, func(ttl time.Duration) bool { return ttl != 11*time.Minute }) {
-		t.Errorf("MusicBrainz's cached results live %v, want the 11m MusicBrainz TTL", musicBrainzOnly)
+	ttls := providerCacheTTLs(t, everyProviderOn(), "/search?q=probe+album&kinds=album&save_history=false")
+	if len(ttls) == 0 || slices.ContainsFunc(ttls, func(ttl time.Duration) bool { return ttl != 7*time.Minute }) {
+		t.Errorf("cached provider answers live %v, want the 7m provider TTL for every provider", ttls)
 	}
 }
 
-func TestSearch_AnAllowlistEntryNamingNoSearcherIsWarnedAbout(t *testing.T) {
-	providers := prodLikeProviders()
-	providers.SpotifyEnabled = false
-	providers.SearchAllowlist = []string{"deezer", "deezr", "itunes", "spotify"}
-	h := newHarness(t, providers)
-	h.start()
+func TestSearch_NeverAsksMusicBrainzEvenWithItsUserAgentSet(t *testing.T) {
+	h := newHarness(t, everyProviderOn())
+	disc := h.start()
+	query := &discovery.SearchQuery{Raw: "probe song", Kinds: discovery.AllKinds()}
 
-	assertLines(t, h.logLines("discovery.search_allowlist_unknown"), []string{
-		`level=WARN msg=discovery.search_allowlist_unknown entry=deezr reason="names no search provider"`,
-		`level=WARN msg=discovery.search_allowlist_unknown entry=itunes reason="names no search provider"`,
-	})
+	_, statuses := disc.Search.InspectSearchWithStatuses(context.Background(), query)
+	disc.Search.WaitForBackground()
+	for _, status := range statuses {
+		if status.Provider == discovery.ProviderMusicBrainz {
+			t.Errorf("search reported MusicBrainz as a searcher: %+v", status)
+		}
+	}
 }
 
 func TestSearch_ActivityHearsOfEachStoredSearch(t *testing.T) {
@@ -637,7 +606,6 @@ var hostOwners = map[string]string{
 	"music.apple.com":         "applemusic",
 	"amp-api.music.apple.com": "applemusic",
 	"musicbrainz.org":         "musicbrainz",
-	"ws.audioscrobbler.com":   "lastfm",
 	"soundcloud.com":          "soundcloud",
 	"api-v2.soundcloud.com":   "soundcloud",
 	"music.youtube.com":       "youtube",
@@ -696,6 +664,13 @@ var jobProbes = map[string]func(t *testing.T, provider string) []string{
 		disc := h.start()
 		serve(disc, "/enrichment?kind=artist&title=Probe+Artist")
 		serve(disc, "/enrichment?kind=album&title=Probe+Album&subtitle=Probe+Artist")
+		return h.transport.owners()
+	},
+	"consensus": func(t *testing.T, _ string) []string {
+		h := newHarness(t, everyProviderOn())
+		for _, source := range h.start().Consensus {
+			_, _ = source.Fetcher(context.Background(), "Probe Artist")
+		}
 		return h.transport.owners()
 	},
 	"charts": func(t *testing.T, _ string) []string {
@@ -766,8 +741,8 @@ func logField(line, key string) string {
 
 func TestEveryJobAProviderLogsIsWiredToThatProvider(t *testing.T) {
 	logged := loggedJobs(t)
-	if len(logged) != 15 {
-		t.Fatalf("logged jobs for %d providers, want all 15 on: %v", len(logged), logged)
+	if len(logged) != 13 {
+		t.Fatalf("logged jobs for %d providers, want all 13 on: %v", len(logged), logged)
 	}
 	for provider, jobs := range logged {
 		for _, job := range jobs {
@@ -842,6 +817,7 @@ type providerCall struct {
 	method  string
 	host    string
 	path    string
+	query   string
 	timeout time.Duration
 }
 
@@ -887,7 +863,7 @@ func (rt *recordingTransport) record(req *http.Request) {
 	}
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
-	rt.calls = append(rt.calls, providerCall{method: req.Method, host: req.URL.Host, path: req.URL.Path, timeout: timeout})
+	rt.calls = append(rt.calls, providerCall{method: req.Method, host: req.URL.Host, path: req.URL.Path, query: req.URL.Query().Get("q"), timeout: timeout})
 }
 
 func (rt *recordingTransport) recorded() []providerCall {
@@ -912,32 +888,20 @@ func (rt *recordingTransport) timeoutsByHost() map[string]time.Duration {
 	return timeouts
 }
 
-func defaultSearchAllowlist() []string {
-	return []string{"deezer", "applemusic", "spotify", "youtube", "soundcloud"}
-}
-
 func prodLikeProviders() discovery.ProviderSettings {
 	return discovery.ProviderSettings{
 		MusicBrainzUserAgent: "altune-test/1.0",
-		LastFMAPIKey:         "lastfm-key",
 		FanartTVAPIKey:       "fanart-key",
 		GeniusAccessToken:    "genius-token",
 		TheAudioDBAPIKey:     "theaudiodb-key",
 		GoogleSheetsAPIKey:   "sheets-key",
 		TrackerHubSheetID:    "hub",
-		AppleMusicEnabled:    true,
-		SpotifyEnabled:       true,
-		SoundCloudEnabled:    true,
-		AmazonMusicEnabled:   true,
-		YouTubeMusicEnabled:  true,
-		SearchAllowlist:      defaultSearchAllowlist(),
 	}
 }
 
 func everyProviderOn() discovery.ProviderSettings {
 	providers := prodLikeProviders()
 	providers.DiscogsToken = "discogs-token"
-	providers.SearchAllowlist = nil
 	return providers
 }
 
@@ -1020,4 +984,176 @@ func integrationPool(t *testing.T) *pgxpool.Pool {
 	}
 	t.Cleanup(pool.Close)
 	return pool
+}
+
+func (h *harness) optionsLoggedAs(message string) []string {
+	h.t.Helper()
+	lines := h.logLines(message)
+	if len(lines) != 1 {
+		h.t.Fatalf("%s lines = %v, want exactly one", message, lines)
+	}
+	return strings.Split(logField(lines[0], "options"), ",")
+}
+
+func everySearchSettingOn(h *harness) {
+	h.deps.Pool = unreachablePool(h.t)
+	h.deps.Redis = goredis.NewClient(&goredis.Options{Addr: miniredis.RunT(h.t).Addr()})
+	h.deps.Activity = &activityRecorder{}
+	h.deps.Search.TailDemotion = true
+	h.deps.Search.CrossKindProminence = true
+	h.deps.Search.Exploration = true
+	h.deps.Search.IdentityVerifyOnPersist = true
+	h.deps.Search.BehavioralRanking = true
+}
+
+func TestEvalSearch_IsTheServingSearchWithoutAnythingThatRecords(t *testing.T) {
+	h := newHarness(t, prodLikeProviders())
+	everySearchSettingOn(h)
+	h.start().EvalSearch()
+
+	recording := []string{"event_store", "behavioral_ranking", "activity"}
+	want := slices.DeleteFunc(h.searchOptions(), func(option string) bool { return slices.Contains(recording, option) })
+	assertLines(t, h.optionsLoggedAs("discovery.eval_search"), want)
+}
+
+func TestRankingOnlySearch_RanksWithoutDeadlineArtworkResultCachesOrRecording(t *testing.T) {
+	h := newHarness(t, prodLikeProviders())
+	everySearchSettingOn(h)
+	h.start().RankingOnlySearch()
+
+	assertLines(t, h.optionsLoggedAs("discovery.ranking_only_search"), []string{
+		"history", "tail_demotion", "cross_kind_prominence", "artwork_cache", "identity_bridge", "mbid_index", "vocabulary",
+	})
+}
+
+func TestRankingOnlySearch_WithoutRedisKeepsOnlyTheHistory(t *testing.T) {
+	h := newHarness(t, prodLikeProviders())
+	h.start().RankingOnlySearch()
+
+	assertLines(t, h.optionsLoggedAs("discovery.ranking_only_search"), []string{"history"})
+}
+
+func TestRankingOnlySearch_AsksTheSameSearchersAsTheServingSearch(t *testing.T) {
+	h := newHarness(t, everyProviderOn())
+	disc := h.start()
+	query := &discovery.SearchQuery{Raw: "probe song", Kinds: map[discovery.ResultKind]bool{discovery.ResultKindAlbum: true}}
+
+	_, statuses := disc.RankingOnlySearch().InspectSearchWithStatuses(context.Background(), query)
+	var asked []string
+	for _, status := range statuses {
+		asked = append(asked, status.Provider.String())
+	}
+	assertLines(t, asked, searchOrder(t, disc))
+}
+
+func TestIdentityStore_AGivenStoreServesSearchWithoutAPool(t *testing.T) {
+	h := newHarness(t, prodLikeProviders())
+	h.deps.IdentityStore = &discovery.FakeIdentityStore{}
+	h.start()
+
+	options := h.searchOptions()
+	if !slices.Contains(options, "identity_store") || slices.Contains(options, "favorites") {
+		t.Errorf("options = %v, want the given identity store and no favorites without a pool", options)
+	}
+}
+
+func bridgedToSpotify() *discovery.FakeIdentityStore {
+	return &discovery.FakeIdentityStore{Mbid: probeArtistMBID, Xref: map[discovery.ProviderKey]string{"spotify": "4"}}
+}
+
+func TestEvalArtistContent_FansOutToTheIdsInTheGivenIdentityStore(t *testing.T) {
+	h := newHarness(t, everyProviderOff())
+	h.deps.IdentityStore = bridgedToSpotify()
+
+	_, _ = h.start().EvalArtistContent().GetTopTracks(context.Background(), discovery.ProviderDeezer, "1", nil, 10)
+	if owners := h.transport.owners(); !slices.Contains(owners, "spotify") {
+		t.Errorf("eval artist content reached %v, want Spotify through the bridged id", owners)
+	}
+}
+
+type unreachableTransport struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (rt *unreachableTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.calls++
+	return nil, errors.New("provider unreachable")
+}
+
+func TestEvalArtistContent_NeverStopsAskingAFailingProvider(t *testing.T) {
+	h := newHarness(t, everyProviderOff())
+	unreachable := &unreachableTransport{}
+	h.deps.Transport = unreachable
+	content := h.start().EvalArtistContent()
+
+	for range 7 {
+		_, _ = content.GetAlbums(context.Background(), discovery.ProviderDeezer, "1", nil, 10)
+	}
+	if unreachable.calls < 7 {
+		t.Errorf("Deezer was asked %d times over 7 album lookups, want every lookup to reach it", unreachable.calls)
+	}
+}
+
+func consensusNames(disc *discovery.Discovery) []string {
+	var names []string
+	for _, source := range disc.Consensus {
+		names = append(names, source.Name+"="+source.Provider.String())
+	}
+	return names
+}
+
+func TestConsensus_AsksEveryCatalogInOrderAndOnlyThoseWithTheirKey(t *testing.T) {
+	assertLines(t, consensusNames(newHarness(t, everyProviderOn()).start()), []string{
+		"musicbrainz=musicbrainz", "discogs=discogs", "itunes=itunes", "ytmusic=youtube", "soundcloud=soundcloud",
+	})
+	assertLines(t, consensusNames(newHarness(t, everyProviderOff()).start()), []string{
+		"itunes=itunes", "ytmusic=youtube", "soundcloud=soundcloud",
+	})
+}
+
+type discogsCatalog struct{}
+
+func (discogsCatalog) RoundTrip(req *http.Request) (*http.Response, error) {
+	status, body := http.StatusNotFound, `{}`
+	switch {
+	case req.URL.Path == "/database/search" && req.URL.Query().Get("q") == "Probe Artist":
+		status, body = http.StatusOK, `{"results":[{"id":7,"title":"Probe Artist","type":"artist"}]}`
+	case req.URL.Path == "/database/search":
+		status, body = http.StatusOK, `{"results":[]}`
+	case req.URL.Path == "/artists/7":
+		status, body = http.StatusOK, `{"id":7,"name":"Probe Artist"}`
+	case req.URL.Path == "/artists/7/releases":
+		status, body = http.StatusOK, `{"releases":[{"id":1,"title":"Probe Album","year":2020,"type":"master"}]}`
+	}
+	return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body)), Request: req}, nil
+}
+
+func discogsConsensus(t *testing.T) discovery.ConsensusProvider {
+	t.Helper()
+	h := newHarness(t, everyProviderOn())
+	h.deps.Transport = discogsCatalog{}
+	for _, source := range h.start().Consensus {
+		if source.Name == "discogs" {
+			return source
+		}
+	}
+	t.Fatal("no discogs consensus source with every key set")
+	return discovery.ConsensusProvider{}
+}
+
+func TestConsensus_DiscogsListsTheReleasesOfTheArtistItResolves(t *testing.T) {
+	albums, err := discogsConsensus(t).Fetcher(context.Background(), "Probe Artist")
+	if err != nil || len(albums) != 1 || albums[0].Title != "Probe Album" || albums[0].Kind != discovery.ResultKindAlbum {
+		t.Errorf("discogs consensus = %+v, %v, want the resolved artist's one album", albums, err)
+	}
+}
+
+func TestConsensus_DiscogsAnswersNothingForAnArtistItCannotResolve(t *testing.T) {
+	albums, err := discogsConsensus(t).Fetcher(context.Background(), "Nobody Here")
+	if err != nil || len(albums) != 0 {
+		t.Errorf("discogs consensus = %+v, %v, want no albums and no error", albums, err)
+	}
 }

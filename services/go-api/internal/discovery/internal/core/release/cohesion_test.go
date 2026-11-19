@@ -48,7 +48,7 @@ func TestFilterCohesive_keepsCoreProviderExclusiveDropsIsland(t *testing.T) {
 		cohesionRelease("Shared A", domain.ProviderDeezer, domain.ProviderSoundCloud),
 		cohesionRelease("Shared B", domain.ProviderDeezer, domain.ProviderSoundCloud),
 		cohesionRelease("SC Exclusive", domain.ProviderSoundCloud),
-		cohesionRelease("Island", domain.ProviderLastFM),
+		cohesionRelease("Island", domain.ProviderTheAudioDB),
 	}
 	got := FilterCohesive(releases)
 	if !hasTitle(got, "SC Exclusive") {
@@ -63,8 +63,8 @@ func TestFilterCohesive_equalComponentsTieBreakDeterministic(t *testing.T) {
 	releases := []MergedRelease{
 		cohesionRelease("A1", domain.ProviderDeezer, domain.ProviderITunes),
 		cohesionRelease("A2", domain.ProviderDeezer, domain.ProviderITunes),
-		cohesionRelease("B1", domain.ProviderSoundCloud, domain.ProviderLastFM),
-		cohesionRelease("B2", domain.ProviderSoundCloud, domain.ProviderLastFM),
+		cohesionRelease("B1", domain.ProviderSoundCloud, domain.ProviderTheAudioDB),
+		cohesionRelease("B2", domain.ProviderSoundCloud, domain.ProviderTheAudioDB),
 	}
 	for i := 0; i < 25; i++ {
 		got := FilterCohesive(releases)

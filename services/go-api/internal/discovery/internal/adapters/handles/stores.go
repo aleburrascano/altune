@@ -20,6 +20,7 @@ type Stores struct {
 	Events     *persistence.PgxEventStore
 	History    *persistence.PgxSearchHistoryRepository
 	Vocabulary ports.VocabularyStore
+	Identities ports.IdentityStore
 }
 
 func NewStores(d Deps) Stores {
@@ -30,7 +31,18 @@ func NewStores(d Deps) Stores {
 		Events:     persistence.NewPgxEventStore(d.Pool),
 		History:    persistence.NewPgxSearchHistoryRepository(d.Pool),
 		Vocabulary: newVocabularyStore(d.Redis, d.CacheOps),
+		Identities: identityStore(d),
 	}
+}
+
+func identityStore(d Deps) ports.IdentityStore {
+	if d.IdentityStore != nil {
+		return d.IdentityStore
+	}
+	if d.Pool == nil {
+		return nil
+	}
+	return cache.NewRedisIdentityStore(persistence.NewPgxIdentityStore(d.Pool), d.Redis, cacheOption(d.CacheOps))
 }
 
 func newVocabularyStore(redis *goredis.Client, cacheOps *expvar.Map) ports.VocabularyStore {
@@ -46,11 +58,11 @@ func newVocabularyStore(redis *goredis.Client, cacheOps *expvar.Map) ports.Vocab
 }
 
 func (s Stores) CacheOption() cache.Option {
-	return cache.WithSignal(cache.NewSignal(s.CacheOps, time.Now))
+	return cacheOption(s.CacheOps)
 }
 
-func (s Stores) IdentityStore() *cache.RedisIdentityStore {
-	return cache.NewRedisIdentityStore(persistence.NewPgxIdentityStore(s.Pool), s.Redis, s.CacheOption())
+func cacheOption(cacheOps *expvar.Map) cache.Option {
+	return cache.WithSignal(cache.NewSignal(cacheOps, time.Now))
 }
 
 func (s Stores) TrackerIndex() *cache.RedisTrackerIndexCache {

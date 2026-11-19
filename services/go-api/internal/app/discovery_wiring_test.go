@@ -22,7 +22,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+	goredis "github.com/redis/go-redis/v9"
 )
 
 type countingProviderRT struct {
@@ -87,128 +90,6 @@ func TestRequestPathProviderCallsAreCountedOnce(t *testing.T) {
 				t.Errorf("provider counters moved by %d over %d provider calls, want one count per call", counted, rt.roundTrips())
 			}
 		})
-	}
-}
-
-type enrichRealChainFakeEnricher struct {
-	enrichment discovery.MBEnrichment
-}
-
-func (f *enrichRealChainFakeEnricher) ResolveMBID(_ context.Context, _ discovery.ResultKind, _, _ string) (string, error) {
-	return "", nil
-}
-
-func (f *enrichRealChainFakeEnricher) Lookup(_ context.Context, _ discovery.ResultKind, _ string) (discovery.MBEnrichment, error) {
-	return f.enrichment, nil
-}
-
-type enrichRealChainMemCache struct {
-	pos map[string]discovery.MBEnrichment
-	neg map[string]bool
-}
-
-func newEnrichRealChainMemCache() *enrichRealChainMemCache {
-	return &enrichRealChainMemCache{pos: map[string]discovery.MBEnrichment{}, neg: map[string]bool{}}
-}
-
-func (c *enrichRealChainMemCache) Get(_ context.Context, kind discovery.ResultKind, mbid string) (discovery.MBEnrichment, bool, error) {
-	e, ok := c.pos[kind.String()+"|"+mbid]
-	return e, ok, nil
-}
-
-func (c *enrichRealChainMemCache) Set(_ context.Context, kind discovery.ResultKind, mbid string, e discovery.MBEnrichment) error {
-	c.pos[kind.String()+"|"+mbid] = e
-	return nil
-}
-
-func (c *enrichRealChainMemCache) GetNegative(_ context.Context, kind discovery.ResultKind, nameKey string) (bool, error) {
-	return c.neg[kind.String()+"|"+nameKey], nil
-}
-
-func (c *enrichRealChainMemCache) SetNegative(_ context.Context, kind discovery.ResultKind, nameKey string) error {
-	c.neg[kind.String()+"|"+nameKey] = true
-	return nil
-}
-
-func enrichRealChainSampleEnrichment() discovery.MBEnrichment {
-	e := discovery.EmptyEnrichment()
-	e.MBID = "mbid-1"
-	e.Genres = []string{"hip hop"}
-	e.Year = 2017
-	return e
-}
-
-type enrichTestHostRewriteTransport struct {
-	targetURL string
-}
-
-func (t *enrichTestHostRewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req = req.Clone(req.Context())
-	req.URL.Scheme = "http"
-	req.URL.Host = strings.TrimPrefix(t.targetURL, "http://")
-	return http.DefaultTransport.RoundTrip(req)
-}
-
-func rewrittenClient(targetURL string) *http.Client {
-	return &http.Client{Transport: &enrichTestHostRewriteTransport{targetURL: targetURL}}
-}
-
-func TestEnrichmentService_CallerSuppliedMBID_RealChainReachesCoverArtArchive(t *testing.T) {
-	caaServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodHead {
-			t.Errorf("method = %q, want HEAD", r.Method)
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer caaServer.Close()
-
-	caa := discovery.NewCoverArtArchiveResolver(rewrittenClient(caaServer.URL))
-	chain := discovery.NewChainedArtworkResolver(caa, discovery.NewCoverArtArchiveIdentityResolver(caa))
-
-	enr := &enrichRealChainFakeEnricher{enrichment: enrichRealChainSampleEnrichment()}
-	svc := discovery.NewEnrichmentService(enr, chain, newEnrichRealChainMemCache())
-
-	got, err := svc.Execute(context.Background(), discovery.ResultKindAlbum,
-		"Some Other Album", "Other Artist", "mbid-1")
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	want := "https://coverartarchive.org/release-group/mbid-1/front-1200"
-	if got.ArtworkURL != want {
-		t.Errorf("artwork_url = %q, want the real chain's mbid-native CoverArtArchive answer %q — "+
-			"the caller-supplied-mbid path must still reach a title-blind provider instead of a "+
-			"verified-empty miss that would poison the shared cache with a blank cover", got.ArtworkURL, want)
-	}
-}
-
-func TestEnrichmentService_CallerSuppliedMBID_RealChainForwardsBridgedExternalIDs(t *testing.T) {
-	discogsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/artists/38" {
-			t.Errorf("path = %q, want the exact bridged discogs id, no name search", r.URL.Path)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id": 38, "images": [{"type": "primary", "uri": "https://img/real-cover.jpg"}]}`))
-	}))
-	defer discogsServer.Close()
-
-	discogsAdapter := discovery.NewDiscogsAdapter(rewrittenClient(discogsServer.URL), "test-token", "altune-test/1.0")
-	chain := discovery.NewChainedArtworkResolver(discogsAdapter)
-
-	e := discovery.EmptyEnrichment()
-	e.MBID = "mbid-artist-1"
-	e.ExternalIDs = map[discovery.ProviderKey]string{"discogs": "38"}
-	enr := &enrichRealChainFakeEnricher{enrichment: e}
-	svc := discovery.NewEnrichmentService(enr, chain, newEnrichRealChainMemCache())
-
-	got, err := svc.Execute(context.Background(), discovery.ResultKindArtist,
-		"Some Other Artist Name", "", "mbid-artist-1")
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if got.ArtworkURL != "https://img/real-cover.jpg" {
-		t.Errorf("artwork_url = %q, want the bridged Discogs id's real cover — "+
-			"the caller-supplied-mbid path must forward the MB-known ExternalIDs, not resolve on mbid alone",
-			got.ArtworkURL)
 	}
 }
 
@@ -309,18 +190,15 @@ func TestUnreleasedRefresh_RegistrationLogsAThirtyMinuteInterval(t *testing.T) {
 func distinctDiscoveryConfig() *config.Config {
 	return &config.Config{
 		MusicBrainzUserAgent:              "mb-agent",
-		LastFMAPIKey:                      "lastfm-key",
 		DiscogsToken:                      "discogs-token",
 		FanartTVAPIKey:                    "fanart-key",
 		GeniusAccessToken:                 "genius-token",
 		TheAudioDBAPIKey:                  "theaudiodb-key",
 		GoogleSheetsAPIKey:                "sheets-key",
 		TrackerHubSheetID:                 "hub-sheet",
-		DiscoverySearchProviders:          []string{"deezer", "spotify"},
 		DiscoverySearchDeadline:           1 * time.Second,
 		ExplorationRate:                   0.25,
 		DiscoveryProviderCacheTTL:         2 * time.Minute,
-		DiscoveryMusicBrainzCacheTTL:      3 * time.Minute,
 		GeniusUnreleasedMaxPages:          4,
 		GeniusUnreleasedMaxDetails:        5,
 		GeniusUnreleasedDetailConcurrency: 6,
@@ -337,23 +215,20 @@ func TestDiscoveryDeps_CopiesEachConfigValueIntoItsOwnField(t *testing.T) {
 
 	wantProviders := discovery.ProviderSettings{
 		MusicBrainzUserAgent: "mb-agent",
-		LastFMAPIKey:         "lastfm-key",
 		DiscogsToken:         "discogs-token",
 		FanartTVAPIKey:       "fanart-key",
 		GeniusAccessToken:    "genius-token",
 		TheAudioDBAPIKey:     "theaudiodb-key",
 		GoogleSheetsAPIKey:   "sheets-key",
 		TrackerHubSheetID:    "hub-sheet",
-		SearchAllowlist:      []string{"deezer", "spotify"},
 	}
 	if !reflect.DeepEqual(deps.Providers, wantProviders) {
 		t.Errorf("providers =\n  %+v\nwant\n  %+v", deps.Providers, wantProviders)
 	}
 	wantSearch := discovery.SearchSettings{
-		Deadline:            1 * time.Second,
-		ExplorationRate:     0.25,
-		ProviderCacheTTL:    2 * time.Minute,
-		MusicBrainzCacheTTL: 3 * time.Minute,
+		Deadline:         1 * time.Second,
+		ExplorationRate:  0.25,
+		ProviderCacheTTL: 2 * time.Minute,
 	}
 	if deps.Search != wantSearch {
 		t.Errorf("search =\n  %+v\nwant\n  %+v", deps.Search, wantSearch)
@@ -375,11 +250,6 @@ func TestDiscoveryDeps_EachConfigSwitchTurnsOnOnlyItsOwnSetting(t *testing.T) {
 		wantSearch     discovery.SearchSettings
 		wantUnreleased discovery.UnreleasedSettings
 	}{
-		{"AppleMusicEnabled", func(c *config.Config) { c.AppleMusicEnabled = true }, discovery.ProviderSettings{AppleMusicEnabled: true}, discovery.SearchSettings{}, discovery.UnreleasedSettings{}},
-		{"SpotifyEnabled", func(c *config.Config) { c.SpotifyEnabled = true }, discovery.ProviderSettings{SpotifyEnabled: true}, discovery.SearchSettings{}, discovery.UnreleasedSettings{}},
-		{"SoundCloudEnabled", func(c *config.Config) { c.SoundCloudEnabled = true }, discovery.ProviderSettings{SoundCloudEnabled: true}, discovery.SearchSettings{}, discovery.UnreleasedSettings{}},
-		{"AmazonMusicEnabled", func(c *config.Config) { c.AmazonMusicEnabled = true }, discovery.ProviderSettings{AmazonMusicEnabled: true}, discovery.SearchSettings{}, discovery.UnreleasedSettings{}},
-		{"YtMusicEnabled", func(c *config.Config) { c.YtMusicEnabled = true }, discovery.ProviderSettings{YouTubeMusicEnabled: true}, discovery.SearchSettings{}, discovery.UnreleasedSettings{}},
 		{"TailDemotionEnabled", func(c *config.Config) { c.TailDemotionEnabled = true }, discovery.ProviderSettings{}, discovery.SearchSettings{TailDemotion: true}, discovery.UnreleasedSettings{}},
 		{"CrossKindProminenceEnabled", func(c *config.Config) { c.CrossKindProminenceEnabled = true }, discovery.ProviderSettings{}, discovery.SearchSettings{CrossKindProminence: true}, discovery.UnreleasedSettings{}},
 		{"ExplorationEnabled", func(c *config.Config) { c.ExplorationEnabled = true }, discovery.ProviderSettings{}, discovery.SearchSettings{Exploration: true}, discovery.UnreleasedSettings{}},
@@ -424,4 +294,78 @@ type stubTransport struct{}
 
 func (*stubTransport) RoundTrip(*http.Request) (*http.Response, error) {
 	return nil, errors.New("stub transport")
+}
+
+type hostRecordingTransport struct {
+	mu    sync.Mutex
+	hosts []string
+}
+
+func (rt *hostRecordingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.hosts = append(rt.hosts, req.URL.Host)
+	return nil, errors.New("recorded only")
+}
+
+func (rt *hostRecordingTransport) asked() []string {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	return slices.Clone(rt.hosts)
+}
+
+func TestNewEvalDiscovery_CallsProvidersThroughTheGivenTransportAndIdentityStore(t *testing.T) {
+	transport := &hostRecordingTransport{}
+	store := &discovery.FakeIdentityStore{Mbid: "mbid-1", Xref: map[discovery.ProviderKey]string{"spotify": "4"}}
+
+	disc, err := NewEvalDiscovery(t.Context(), &config.Config{}, EvalHandles{Transport: transport, IdentityStore: store})
+	if err != nil {
+		t.Fatalf("NewEvalDiscovery: %v", err)
+	}
+	_, _ = disc.EvalArtistContent().GetTopTracks(t.Context(), discovery.ProviderDeezer, "1", nil, 10)
+	if !slices.Contains(transport.asked(), "api.deezer.com") || !slices.Contains(transport.asked(), "open.spotify.com") {
+		t.Errorf("asked %v, want Deezer and the Spotify id bridged by the given identity store", transport.asked())
+	}
+}
+
+func TestNewEvalDiscovery_MapsTheConfigIntoTheProviderTable(t *testing.T) {
+	disc, err := NewEvalDiscovery(t.Context(), &config.Config{MusicBrainzUserAgent: "altune-test"}, EvalHandles{Transport: &stubTransport{}})
+	if err != nil {
+		t.Fatalf("NewEvalDiscovery: %v", err)
+	}
+	var consensus []string
+	for _, source := range disc.Consensus {
+		consensus = append(consensus, source.Name)
+	}
+	if !slices.Contains(consensus, "musicbrainz") {
+		t.Errorf("consensus = %v, want MusicBrainz once its user agent is configured", consensus)
+	}
+}
+
+func TestNewEvalDiscovery_SearchesWithTheGivenPoolAndRedis(t *testing.T) {
+	var logs bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	pool := unreachableEvalPool(t)
+	redisClient := goredis.NewClient(&goredis.Options{Addr: miniredis.RunT(t).Addr()})
+
+	disc, err := NewEvalDiscovery(t.Context(), &config.Config{}, EvalHandles{Pool: pool, Redis: redisClient, Transport: &stubTransport{}})
+	if err != nil {
+		t.Fatalf("NewEvalDiscovery: %v", err)
+	}
+	disc.EvalSearch()
+	if !strings.Contains(logs.String(), "favorites") || disc.Vocabulary == nil {
+		t.Errorf("eval discovery ignored the given pool or redis; logs:\n%s", logs.String())
+	}
+}
+
+func unreachableEvalPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	pool, err := pgxpool.New(context.Background(), "postgres://u:p@127.0.0.1:1/altune")
+	if err != nil {
+		t.Fatalf("pool: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	return pool
 }

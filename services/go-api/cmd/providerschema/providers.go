@@ -27,14 +27,12 @@ type rawField struct {
 }
 
 var providers = map[string]provider{
-	"amazonmusic": amazonMusicProvider(),
 	"applemusic":  appleMusicProvider(),
 	"deezer":      deezerProvider(),
 	"discogs":     discogsProvider(),
 	"fanarttv":    fanartTVProvider(),
 	"genius":      geniusProvider(),
 	"itunes":      itunesProvider(),
-	"lastfm":      lastfmProvider(),
 	"musicbrainz": musicBrainzProvider(),
 	"soundcloud":  soundCloudProvider(),
 	"spotify":     spotifyProvider(),

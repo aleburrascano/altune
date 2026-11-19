@@ -7,50 +7,67 @@ import (
 	"context"
 	"expvar"
 	"log/slog"
+	"net/http"
 	"os"
+	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	goredis "github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
 )
 
+type EvalHandles struct {
+	Pool          *pgxpool.Pool
+	Redis         *goredis.Client
+	Transport     http.RoundTripper
+	IdentityStore discovery.IdentityStore
+}
+
+func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*discovery.Discovery, error) {
+	deps := configuredDiscoveryDeps(ctx, cfg, newClientFactory(h.Transport))
+	deps.Background = &sync.WaitGroup{}
+	deps.Pool = h.Pool
+	deps.Redis = h.Redis
+	deps.IdentityStore = h.IdentityStore
+	return discovery.New(deps)
+}
+
 func (a *App) discoveryDeps(ctx context.Context, cf clientFactory) discovery.Deps {
-	deps := discovery.Deps{
-		Lifecycle:       ctx,
-		Background:      &a.wg,
-		Logger:          slog.Default(),
-		Transport:       cf.roundTripper(),
-		ProviderTimeout: discoveryHTTPTimeout,
-		ChartTimeout:    chartHTTPTimeout,
-		Pool:            a.pool,
-		Redis:           a.redisClient,
-		CacheOps:        cacheOps(),
-		ClientEvents:    a.discoveryClientEvents(),
-		Providers:       discoveryProviderSettings(a.cfg),
-		Search:          discoverySearchSettings(a.cfg),
-		Unreleased:      discovery.UnreleasedSettings{ServeFromCache: a.cfg.UnreleasedSource == "cache", Tuning: a.unreleasedConfig()},
-	}
+	deps := configuredDiscoveryDeps(ctx, a.cfg, cf)
+	deps.Background = &a.wg
+	deps.Pool = a.pool
+	deps.Redis = a.redisClient
+	deps.ClientEvents = a.discoveryClientEvents()
 	if a.eventTap != nil {
 		deps.Activity = a.eventTap
 	}
 	return deps
 }
 
+func configuredDiscoveryDeps(ctx context.Context, cfg *config.Config, cf clientFactory) discovery.Deps {
+	return discovery.Deps{
+		Lifecycle:       ctx,
+		Logger:          slog.Default(),
+		Transport:       cf.roundTripper(),
+		ProviderTimeout: discoveryHTTPTimeout,
+		ChartTimeout:    chartHTTPTimeout,
+		CacheOps:        cacheOps(),
+		Providers:       discoveryProviderSettings(cfg),
+		Search:          discoverySearchSettings(cfg),
+		Unreleased:      discovery.UnreleasedSettings{ServeFromCache: cfg.UnreleasedSource == "cache", Tuning: unreleasedConfig(cfg)},
+	}
+}
+
 func discoveryProviderSettings(cfg *config.Config) discovery.ProviderSettings {
 	return discovery.ProviderSettings{
 		MusicBrainzUserAgent: cfg.MusicBrainzUserAgent,
-		LastFMAPIKey:         cfg.LastFMAPIKey,
 		DiscogsToken:         cfg.DiscogsToken,
 		FanartTVAPIKey:       cfg.FanartTVAPIKey,
 		GeniusAccessToken:    cfg.GeniusAccessToken,
 		TheAudioDBAPIKey:     cfg.TheAudioDBAPIKey,
 		GoogleSheetsAPIKey:   cfg.GoogleSheetsAPIKey,
 		TrackerHubSheetID:    cfg.TrackerHubSheetID,
-		AppleMusicEnabled:    cfg.AppleMusicEnabled,
-		SpotifyEnabled:       cfg.SpotifyEnabled,
-		SoundCloudEnabled:    cfg.SoundCloudEnabled,
-		AmazonMusicEnabled:   cfg.AmazonMusicEnabled,
-		YouTubeMusicEnabled:  cfg.YtMusicEnabled,
-		SearchAllowlist:      cfg.DiscoverySearchProviders,
 	}
 }
 
@@ -64,19 +81,18 @@ func discoverySearchSettings(cfg *config.Config) discovery.SearchSettings {
 		IdentityVerifyOnPersist: cfg.IdentityVerifyOnPersist,
 		BehavioralRanking:       cfg.BehavioralRankingEnabled,
 		ProviderCacheTTL:        cfg.DiscoveryProviderCacheTTL,
-		MusicBrainzCacheTTL:     cfg.DiscoveryMusicBrainzCacheTTL,
 	}
 }
 
-func (a *App) unreleasedConfig() discovery.UnreleasedConfig {
+func unreleasedConfig(cfg *config.Config) discovery.UnreleasedConfig {
 	return discovery.UnreleasedConfig{
-		MaxPages:          a.cfg.GeniusUnreleasedMaxPages,
-		MaxDetails:        a.cfg.GeniusUnreleasedMaxDetails,
-		DetailConcurrency: a.cfg.GeniusUnreleasedDetailConcurrency,
-		TTL:               a.cfg.GeniusUnreleasedTTL,
-		EmptyTTL:          a.cfg.GeniusUnreleasedEmptyTTL,
-		Wait:              a.cfg.GeniusUnreleasedWait,
-		JobTimeout:        a.cfg.GeniusUnreleasedJobTimeout,
+		MaxPages:          cfg.GeniusUnreleasedMaxPages,
+		MaxDetails:        cfg.GeniusUnreleasedMaxDetails,
+		DetailConcurrency: cfg.GeniusUnreleasedDetailConcurrency,
+		TTL:               cfg.GeniusUnreleasedTTL,
+		EmptyTTL:          cfg.GeniusUnreleasedEmptyTTL,
+		Wait:              cfg.GeniusUnreleasedWait,
+		JobTimeout:        cfg.GeniusUnreleasedJobTimeout,
 	}
 }
 
@@ -111,12 +127,4 @@ func cacheOps() *expvar.Map {
 		ops = expvar.NewMap(cacheOpsVarName)
 	}
 	return ops
-}
-
-func cacheSignal() *discovery.CacheSignal {
-	return discovery.NewCacheSignal(cacheOps(), time.Now)
-}
-
-func cacheSignalOption() discovery.CacheOption {
-	return discovery.WithCacheSignal(cacheSignal())
 }

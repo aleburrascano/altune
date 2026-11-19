@@ -36,19 +36,27 @@ type Discovery struct {
 	FeaturedArtists   *content.FeaturedArtistResolver
 	Recordings        RecordingAuthority
 	Charts            []ports.ChartProvider
+	Consensus         []providercall.ConsensusProvider
 	Vocabulary        ports.VocabularyStore
 	UnreleasedRefresh *unreleased.Service
 	Events            EventRetention
+	wiring            wiring
+}
+
+type wiring struct {
+	deps    handles.Deps
+	table   *providerTable
+	stores  handles.Stores
+	artwork ports.TaggingArtworkResolver
 }
 
 func New(d handles.Deps) (*Discovery, error) {
 	if err := d.MissingHandles(); err != nil {
 		return nil, err
 	}
-	s := handles.NewStores(d)
-	t := newProviderTable(d.Providers, handles.NewClients(d), s)
-	t.log(d.Lifecycle, d.Logger)
-	services := newHandlerServices(d, t, s)
+	w := newWiring(d)
+	t, s := w.table, w.stores
+	services := newHandlerServices(w)
 	unreleasedServices := newUnreleasedServices(d, t, s, services.Artist)
 	return &Discovery{
 		Handler:           newHandler(d, t, s, services, unreleasedServices.lookup),
@@ -56,26 +64,47 @@ func New(d handles.Deps) (*Discovery, error) {
 		FeaturedArtists:   newFeaturedArtists(t),
 		Recordings:        t.named(rowMusicBrainz).recordings,
 		Charts:            t.chartProviders(),
+		Consensus:         t.consensusProviders(),
 		Vocabulary:        s.Vocabulary,
 		UnreleasedRefresh: unreleasedServices.refresh,
 		Events:            s.Events,
+		wiring:            w,
 	}, nil
 }
 
-func newHandlerServices(d handles.Deps, t *providerTable, s handles.Stores) handler.DiscoveryServices {
+func newWiring(d handles.Deps) wiring {
+	s := handles.NewStores(d)
+	t := newProviderTable(d.Providers, handles.NewClients(d), s)
+	t.log(d.Lifecycle, d.Logger)
+	return wiring{deps: d, table: t, stores: s, artwork: t.artworkChain()}
+}
+
+func (d *Discovery) EvalSearch() *search.Service {
+	return newEvalSearchService(d.wiring)
+}
+
+func (d *Discovery) RankingOnlySearch() *search.Service {
+	return newRankingOnlySearchService(d.wiring)
+}
+
+func (d *Discovery) EvalArtistContent() *content.GetArtistContentService {
+	return newEvalArtistService(d.wiring.table, d.wiring.stores)
+}
+
+func newHandlerServices(w wiring) handler.DiscoveryServices {
 	breaker := providercall.NewCircuitBreaker()
-	artwork := t.artworkChain()
+	t, s := w.table, w.stores
 	return handler.DiscoveryServices{
-		Search:        newSearchService(d, t, s, artwork, breaker),
+		Search:        newSearchService(w, breaker),
 		History:       history.NewListSearchHistoryService(s.History),
 		RecordHistory: history.NewRecordSearchHistoryService(s.History),
 		ClearHistory:  history.NewClearSearchHistoryService(s.History),
 		Album:         newAlbumService(t, breaker),
 		Artist:        newArtistService(t, s, breaker),
 		Related:       newRelatedService(t, breaker),
-		Enrich:        newEnrichmentService(t, s, artwork),
+		Enrich:        newEnrichmentService(t, s, w.artwork),
 		Suggest:       vocabulary.NewSuggestService(s.Vocabulary),
-		Event:         newEventService(d.Activity, s),
+		Event:         newEventService(w.deps.Activity, s),
 		Favorites:     favorites.NewFavoritesService(persistence.NewPgxFavoritesRepository(s.Pool)),
 	}
 }

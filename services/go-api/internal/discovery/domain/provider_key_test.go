@@ -10,12 +10,10 @@ func TestProviderKey_PersistedStrings(t *testing.T) {
 		{ProviderKeyDeezer, "deezer"},
 		{ProviderKeyMusicBrainz, "musicbrainz"},
 		{ProviderKeySoundCloud, "soundcloud"},
-		{ProviderKeyLastFM, "lastfm"},
 		{ProviderKeyITunes, "itunes"},
 		{ProviderKeyTheAudioDB, "theaudiodb"},
 		{ProviderKeyDiscogs, "discogs"},
 		{ProviderKeyYouTube, "youtube"},
-		{ProviderKeyAmazonMusic, "amazonmusic"},
 		{ProviderKeyAppleMusic, "applemusic"},
 		{ProviderKeySpotify, "spotify"},
 		{ProviderKeyWikidata, "wikidata"},
@@ -46,8 +44,27 @@ func TestParseProviderKey_RejectsUnknown(t *testing.T) {
 	}
 }
 
+var liveProviders = []ProviderName{
+	ProviderDeezer, ProviderMusicBrainz, ProviderSoundCloud, ProviderITunes, ProviderTheAudioDB,
+	ProviderDiscogs, ProviderYouTube, ProviderAppleMusic, ProviderSpotify,
+}
+
+func TestProviderName_RetiredSlotsKeepTheirNumbersAndDecodeAsUnknown(t *testing.T) {
+	wantNumbers := map[ProviderName]int{ProviderSoundCloud: 3, ProviderITunes: 5, ProviderYouTube: 8, ProviderAppleMusic: 10, ProviderSpotify: 11}
+	for p, n := range wantNumbers {
+		if int(p) != n {
+			t.Errorf("%v = %d, want %d so cached results keep their provider", p, int(p), n)
+		}
+	}
+	for _, retired := range []ProviderName{4, 9} {
+		if retired.String() != "unknown" {
+			t.Errorf("retired provider %d = %q, want unknown", int(retired), retired.String())
+		}
+	}
+}
+
 func TestProviderName_KeyRoundTrips(t *testing.T) {
-	for p := ProviderDeezer; p <= ProviderSpotify; p++ {
+	for _, p := range liveProviders {
 		k := p.Key()
 		if k.String() != p.String() {
 			t.Errorf("%v.Key() = %q, want %q", p, k, p.String())
@@ -74,7 +91,7 @@ func TestProviderKey_ProviderName_NonProviderKeys(t *testing.T) {
 }
 
 func TestProviderName_EveryNameRoundTripsToKnownKey(t *testing.T) {
-	for p := ProviderDeezer; p <= ProviderSpotify; p++ {
+	for _, p := range liveProviders {
 		got, err := ParseProviderName(p.String())
 		if err != nil || got != p {
 			t.Errorf("ParseProviderName(%q) = (%v, %v), want %v", p.String(), got, err, p)

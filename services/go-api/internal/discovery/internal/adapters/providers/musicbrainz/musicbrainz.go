@@ -40,27 +40,9 @@ func NewMusicBrainzAdapter(client *http.Client, userAgent string) *MusicBrainzAd
 
 func (a *MusicBrainzAdapter) Name() domain.ProviderName { return domain.ProviderMusicBrainz }
 
-func (a *MusicBrainzAdapter) SupportedKinds() map[domain.ResultKind]bool {
-	return providersearch.AllSearchKinds()
-}
-
-func (a *MusicBrainzAdapter) SearchTimeout() time.Duration {
-	return 5 * time.Second
-}
-
-func (a *MusicBrainzAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
-	return providersearch.SearchAcrossKinds(ctx, a.Name().String(), query, kinds, a.SupportedKinds(),
-		func(ctx context.Context, kind domain.ResultKind) ([]domain.SearchResult, error) {
-			return a.searchKind(ctx, providersearch.MbLuceneEscape(query), kind)
-		})
-}
-
 func (a *MusicBrainzAdapter) SearchStructured(ctx context.Context, artist, track string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
 	var results []domain.SearchResult
 	for kind := range kinds {
-		if !a.SupportedKinds()[kind] {
-			continue
-		}
 		q := mbStructuredQuery(artist, track, kind)
 		items, err := a.searchKind(ctx, q, kind)
 		if err != nil {

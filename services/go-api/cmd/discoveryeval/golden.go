@@ -27,7 +27,10 @@ func runGolden(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redi
 	if err != nil {
 		return err
 	}
-	searcher, drain := buildEvalSearcher(ctx, cfg, pool, redisClient)
+	searcher, drain, err := buildEvalSearcher(ctx, cfg, pool, redisClient)
+	if err != nil {
+		return err
+	}
 	return runGoldenWith(ctx, cases, searcher, drain, opts)
 }
 

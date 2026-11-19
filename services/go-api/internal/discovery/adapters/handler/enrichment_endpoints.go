@@ -209,15 +209,9 @@ func serveNamedEnrichment[E, D any](
 }
 
 func (h *DiscoveryHandler) handleLastFmEnrichment(w http.ResponseWriter, r *http.Request) {
-	svc := h.enrichers.LastFm
-	var exec func(context.Context, domain.ResultKind, string, string) (domain.LastFmEnrichment, error)
-	if svc != nil {
-		exec = svc.Execute
+	if _, _, _, ok := namedEnrichmentParams(w, r); ok {
+		httputil.WriteJSON(w, http.StatusOK, LastFmEnrichmentResponseDTO{Tags: []string{}, Similar: []string{}})
 	}
-	serveNamedEnrichment(w, r, svc != nil, exec,
-		domain.EmptyLastFmEnrichment(), lastfmEnrichmentToDTO,
-		func(d *LastFmEnrichmentResponseDTO, v bool) { d.Degraded = v },
-		"lastfm enrichment failed")
 }
 
 type LastFmEnrichmentResponseDTO struct {
@@ -231,20 +225,6 @@ type LastFmEnrichmentResponseDTO struct {
 	Album      string   `json:"album"`
 	HasContent bool     `json:"has_content"`
 	Degraded   bool     `json:"degraded"`
-}
-
-func lastfmEnrichmentToDTO(e domain.LastFmEnrichment) LastFmEnrichmentResponseDTO {
-	return LastFmEnrichmentResponseDTO{
-		MBID:       e.MBID,
-		Listeners:  e.Listeners,
-		Playcount:  e.Playcount,
-		Tags:       nonNilStrings(e.Tags),
-		Bio:        e.Bio,
-		Similar:    nonNilStrings(e.Similar),
-		Duration:   e.Duration,
-		Album:      e.Album,
-		HasContent: e.HasRenderableContent(),
-	}
 }
 
 func (h *DiscoveryHandler) handleDeezerEnrichment(w http.ResponseWriter, r *http.Request) {

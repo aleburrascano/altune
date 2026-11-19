@@ -273,7 +273,7 @@ func TestMerge_ParentheticalVariantsCollapse(t *testing.T) {
 }
 
 func TestMerge_DashAndParenVariantsStaySeparate(t *testing.T) {
-	a := discoverytest.Track("Big Poppa - 2005 Remaster", "The Notorious B.I.G.", domain.ProviderLastFM, nil)
+	a := discoverytest.Track("Big Poppa - 2005 Remaster", "The Notorious B.I.G.", domain.ProviderTheAudioDB, nil)
 	b := discoverytest.Track("Big Poppa (2007 Remaster)", "The Notorious B.I.G.", domain.ProviderDeezer, nil)
 	entities := Merge([][]domain.SearchResult{{a}, {b}})
 	if len(entities) != 2 {
@@ -339,10 +339,10 @@ func TestMerge_Artists(t *testing.T) {
 
 func TestAmbiguousArtistNames_OnlyMusicBrainzMBIDsCount(t *testing.T) {
 	mb := discoverytest.WithMBID(discoverytest.Res(domain.ResultKindArtist, "Queen", "", domain.ProviderMusicBrainz, nil), "mbid-current")
-	lastfm := discoverytest.WithMBID(discoverytest.Res(domain.ResultKindArtist, "Queen", "", domain.ProviderLastFM, nil), "mbid-stale")
+	stale := discoverytest.WithMBID(discoverytest.Res(domain.ResultKindArtist, "Queen", "", domain.ProviderTheAudioDB, nil), "mbid-stale")
 
-	if got := ambiguousArtistNamesFlat([]domain.SearchResult{mb, lastfm}); got["queen"] {
-		t.Error("MB + stale Last.fm mbid marked the name ambiguous — only MusicBrainz MBIDs may count")
+	if got := ambiguousArtistNamesFlat([]domain.SearchResult{mb, stale}); got["queen"] {
+		t.Error("MB + a stale non-MusicBrainz mbid marked the name ambiguous — only MusicBrainz MBIDs may count")
 	}
 
 	mb2 := discoverytest.WithMBID(discoverytest.Res(domain.ResultKindArtist, "Queen", "", domain.ProviderMusicBrainz, nil), "mbid-second")
@@ -395,7 +395,7 @@ func TestMerge_EmptyNormalizedTitleNeverNameMerges(t *testing.T) {
 func TestMergeInto_KeepsStrongestResolutionTier(t *testing.T) {
 	a := discoverytest.WithISRC(discoverytest.Track("HUMBLE.", "Kendrick Lamar", domain.ProviderDeezer, nil), "USUM71703089")
 	b := discoverytest.WithISRC(discoverytest.Track("Humble", "Kendrick Lamar", domain.ProviderITunes, nil), "USUM71703089")
-	c := discoverytest.Track("Humble", "Kendrick Lamar", domain.ProviderLastFM, nil)
+	c := discoverytest.Track("Humble", "Kendrick Lamar", domain.ProviderTheAudioDB, nil)
 
 	entities := Merge([][]domain.SearchResult{{a}, {b}, {c}})
 	if len(entities) != 1 {
@@ -768,7 +768,7 @@ func TestMerge_ArtistNameTierCarriesMBIDAcrossAParenthetical(t *testing.T) {
 func TestMerge_TitleTierKeepsProvenIdentityOverALaterMoreCompleteCandidate(t *testing.T) {
 	deezer := discoverytest.WithISRC(discoverytest.Track("Song Title", "Some Artist", domain.ProviderDeezer, nil), "ISRC-PROVEN")
 	mb := discoverytest.WithMBID(discoverytest.WithISRC(discoverytest.Track("Song Title", "Some Artist", domain.ProviderMusicBrainz, nil), "ISRC-PROVEN"), "mbid-proven")
-	extended := discoverytest.Track("Song Title (Extended)", "Some Artist", domain.ProviderLastFM, nil)
+	extended := discoverytest.Track("Song Title (Extended)", "Some Artist", domain.ProviderTheAudioDB, nil)
 	extended.Album = "Some Album"
 	extended.ImageURL = "https://x/art.jpg"
 	extended.UPC = "000000000000"

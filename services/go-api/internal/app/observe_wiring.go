@@ -33,7 +33,7 @@ func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVe
 func (a *App) startObserveSources(ctx context.Context, tap *observe.EventTap) {
 	a.eventFeed = observe.NewEventFeed()
 	a.eventFeed.Start(ctx, tap)
-	a.evalMeter = observe.NewEvalMeter(a.cfg.EvalMeterEnabled, 0, a.evalMeterRunner(ctx)).
+	a.evalMeter = observe.NewEvalMeter(a.cfg.EvalMeterEnabled, 0, a.evalMeterRunner()).
 		WithLeadership(a.leaderContext)
 	a.whenLeaderUnlessDisabled(jobEvalMeter, a.evalMeter.Start)
 }
@@ -111,8 +111,8 @@ func (a *App) tapStats() eventTapStats {
 	return tapStats
 }
 
-func (a *App) evalMeterRunner(ctx context.Context) observe.EvalMeterRunner {
-	return wrapEvalRunner(a.buildEvalRunner(ctx))
+func (a *App) evalMeterRunner() observe.EvalMeterRunner {
+	return wrapEvalRunner(a.buildEvalRunner())
 }
 
 func wrapEvalRunner(run EvalRunner) observe.EvalMeterRunner {

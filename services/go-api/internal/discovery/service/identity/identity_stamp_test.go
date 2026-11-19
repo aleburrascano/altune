@@ -54,7 +54,7 @@ func TestStampIdentities_AlbumWithOnlyAReleaseMBIDIsNotLookedUpAsAReleaseGroup(t
 		"release-uuid": {"deezer": "555"},
 	}}
 	s := NewIdentityStamper(fb, nil, nil, &runloop.Tracker{})
-	album := discoverytest.Res(domain.ResultKindAlbum, "Pinkerton", "Weezer", domain.ProviderLastFM, nil)
+	album := discoverytest.Res(domain.ResultKindAlbum, "Pinkerton", "Weezer", domain.ProviderTheAudioDB, nil)
 	album.ReleaseMBID = "release-uuid"
 	groups := [][]domain.SearchResult{{album}}
 

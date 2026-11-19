@@ -9,14 +9,12 @@ type (
 	BehavioralLabel          = ports.BehavioralLabel
 	BehavioralLabelStore     = ports.BehavioralLabelStore
 	BehavioralSignal         = ports.BehavioralSignal
-	BehavioralSignalStore    = ports.BehavioralSignalStore
 	ChartProvider            = ports.ChartProvider
 	DeletedIdentityEraser    = ports.DeletedIdentityEraser
 	DiscographyCase          = ports.DiscographyCase
 	DiscographyGroupBy       = ports.DiscographyGroupBy
 	DiscographyQualityReader = ports.DiscographyQualityReader
 	DiscographySuspectRate   = ports.DiscographySuspectRate
-	EventStore               = ports.EventStore
 	GeniusSongCatalog        = ports.GeniusSongCatalog
 	ISRCRecording            = ports.ISRCRecording
 	IdentityStore            = ports.IdentityStore
@@ -27,8 +25,6 @@ type (
 	QueryCount               = ports.QueryCount
 	RelatedTracksProvider    = ports.RelatedTracksProvider
 	SearchProvider           = ports.SearchProvider
-	SearchTimeouter          = ports.SearchTimeouter
-	TaggingArtworkResolver   = ports.TaggingArtworkResolver
 	UnreleasedCache          = ports.UnreleasedCache
 	UnreleasedDueArtist      = ports.UnreleasedDueArtist
 	UnreleasedStore          = ports.UnreleasedStore

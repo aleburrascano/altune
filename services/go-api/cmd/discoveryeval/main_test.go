@@ -1,10 +1,14 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/config"
 	"bytes"
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/alicebob/miniredis/v2"
+	goredis "github.com/redis/go-redis/v9"
 )
 
 func reportModeRequiredEnv(t *testing.T) {
@@ -73,5 +77,17 @@ func TestClampSinceDays_WithinWindowIsUntouchedAndSilent(t *testing.T) {
 	}
 	if notice.Len() != 0 {
 		t.Errorf("a within-window value must not print a notice, got:\n%s", notice.String())
+	}
+}
+
+func TestEvalVocabulary_IsKeptInTheGivenRedisAndAbsentWithoutIt(t *testing.T) {
+	redisClient := goredis.NewClient(&goredis.Options{Addr: miniredis.RunT(t).Addr()})
+
+	vocab, err := evalVocabulary(t.Context(), &config.Config{}, redisClient)
+	if err != nil || vocab == nil {
+		t.Errorf("vocabulary = %v, %v with redis, want a store", vocab, err)
+	}
+	if vocab, err := evalVocabulary(t.Context(), &config.Config{}, nil); err != nil || vocab != nil {
+		t.Errorf("vocabulary = %v, %v without redis, want none so the mode can say REDIS_URL is needed", vocab, err)
 	}
 }
