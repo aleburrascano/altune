@@ -53,3 +53,10 @@ var (
 )
 
 type DownloadLimiter = service.DownloadLimiter
+
+const (
+	VerdictContradicted = service.VerdictContradicted
+	VerdictHard         = service.VerdictHard
+)
+
+var ErrInPlaceUnavailable = service.ErrInPlaceUnavailable
