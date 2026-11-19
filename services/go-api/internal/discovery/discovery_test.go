@@ -1147,3 +1147,58 @@ func TestConsensus_DiscogsAnswersNothingForAnArtistItCannotResolve(t *testing.T)
 		t.Errorf("discogs consensus = %+v, %v, want no albums and no error", albums, err)
 	}
 }
+
+func sourced(kind discovery.ResultKind, title, credit string, provider discovery.ProviderName, id string) discovery.SearchResult {
+	return discovery.SearchResult{
+		Kind: kind, Title: title, Subtitle: credit,
+		Sources: []discovery.SourceRef{{Provider: provider, ExternalID: id}},
+	}
+}
+
+func merged(groups ...[]discovery.SearchResult) []discovery.SearchResult {
+	var out []discovery.SearchResult
+	for _, entity := range discovery.RankMerge(groups) {
+		out = append(out, entity.Result)
+	}
+	return out
+}
+
+func TestMerge_AlbumsWithoutAUPCNeverMergeAtTheUPCTier(t *testing.T) {
+	queen := sourced(discovery.ResultKindAlbum, "Greatest Hits", "Queen", discovery.ProviderDeezer, "1")
+	abba := sourced(discovery.ResultKindAlbum, "Greatest Hits", "ABBA", discovery.ProviderSpotify, "2")
+
+	if got := merged([]discovery.SearchResult{queen}, []discovery.SearchResult{abba}); len(got) != 2 {
+		t.Fatalf("got %d albums, want Queen's and ABBA's kept apart when neither has a UPC", len(got))
+	}
+}
+
+func TestMerge_TwoIDsFromOneProviderAreTwoArtists(t *testing.T) {
+	first := sourced(discovery.ResultKindArtist, "Che", "", discovery.ProviderDeezer, "1")
+	second := sourced(discovery.ResultKindArtist, "Che", "", discovery.ProviderDeezer, "2")
+
+	if got := merged([]discovery.SearchResult{first}, []discovery.SearchResult{second}); len(got) != 2 {
+		t.Fatalf("got %d artists, want two: Deezer names them with two ids", len(got))
+	}
+}
+
+func TestMerge_ATitleWithNoLettersCannotProveTwoTakesAreOneVersion(t *testing.T) {
+	complete := sourced(discovery.ResultKindTrack, "÷", "Ed Sheeran", discovery.ProviderDeezer, "1")
+	complete.Album, complete.ImageURL, complete.Duration = "÷", "https://x/art.jpg", 200
+	coded := sourced(discovery.ResultKindTrack, "÷", "Ed Sheeran", discovery.ProviderSpotify, "2")
+	coded.ISRC, coded.Duration = "GBAHS1700001", 200
+
+	got := merged([]discovery.SearchResult{complete}, []discovery.SearchResult{coded})
+
+	if len(got) != 1 || got[0].ISRC != "" {
+		t.Fatalf("got %d results, ISRC %q, want one merged track that does not take an ISRC it cannot prove is its own", len(got), got[0].ISRC)
+	}
+}
+
+func TestCollapseArtistDuplicates_FoldsCardsWhoseNamesDifferOnlyInCaseAndAccents(t *testing.T) {
+	accented := sourced(discovery.ResultKindArtist, "Beyoncé", "", discovery.ProviderDeezer, "1")
+	plain := sourced(discovery.ResultKindArtist, "BEYONCE", "", discovery.ProviderSpotify, "2")
+
+	if got := discovery.RankCollapseArtistDuplicates([]discovery.SearchResult{accented, plain}); len(got) != 1 {
+		t.Fatalf("got %d artist cards, want one", len(got))
+	}
+}

@@ -2,8 +2,11 @@ package cache
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
+	"strings"
 	"testing"
 )
 
@@ -71,5 +74,23 @@ func TestIdentityKey_ByteIdenticalAcrossProviderKey(t *testing.T) {
 		if got := identityKey(tt.kind, tt.provider, tt.externalID); got != tt.want {
 			t.Errorf("identityKey(%v, %q, %q) = %q, want %q", tt.kind, tt.provider, tt.externalID, got, tt.want)
 		}
+	}
+}
+
+func TestRedisIdentityStore_Lookup_AFailedBackfillIsLoggedAndStillAnswers(t *testing.T) {
+	var logs bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	inner := &recordingIdentityStore{mbid: "mbid-1", xref: map[domain.ProviderKey]string{"deezer": "9"}, found: true}
+	store := NewRedisIdentityStore(inner, unreachableRedisClient(t))
+
+	mbid, _, ok := store.LookupByProviderID(context.Background(), domain.ResultKindArtist, "deezer", "9")
+
+	if !ok || mbid != "mbid-1" {
+		t.Fatalf("lookup = (%q, %v), want the durable answer although Redis is down", mbid, ok)
+	}
+	if !strings.Contains(logs.String(), "identity.cache_backfill_failed") {
+		t.Errorf("failed backfill not logged: %q", logs.String())
 	}
 }

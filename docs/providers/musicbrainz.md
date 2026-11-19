@@ -173,12 +173,11 @@ fixtures from the live probe.
 
 Remaining:
 
-1. **Identity-based merge (cap. 4 merge-use). — ✅ DONE (ADR-0011 Accepted, eval 2026-06-22).** The
-   `external_ids` feed `Merge` via the `IdentityBridge` (cache-only, additive, `bridge` tier). Top-3
-   eval 99.4% — no regression.
-2. **Search-path enrichment (cap. 5 list-wide). — ✅ DONE (merged cards + `MBIDIndex` warm).**
-   Merged Deezer+MB cards get HD CAA art via the existing `enrich()`; the cache-only `MBIDIndex`
-   attaches an MBID to unmerged non-MB results. Covered by the same eval pass. Deferred: the
+1. **Identity-based merge (cap. 4 merge-use). — removed.** It fed `external_ids` into `Merge` through
+   the `IdentityBridge` and a `bridge` tier, but only MusicBrainz search results were stamped, and
+   MusicBrainz no longer searches, so the stamper, the port and the tier were deleted (see §4 above).
+2. **Search-path enrichment (cap. 5 list-wide). — ✅ DONE (`MBIDIndex` warm).**
+   The cache-only `MBIDIndex` attaches an MBID to search results for HD CAA art. Covered by the same eval pass. Deferred: the
    background MBID-warm worker for cold entities (`b`).
 3. **Fanart.tv (cap. 6). — ✅ DONE.** Live-probed with `FANARTTV_API_KEY`; fixed the album
    endpoint/nesting bug; tests now encode the real shape. Display-only, no eval gate.

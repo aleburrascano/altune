@@ -217,7 +217,7 @@ func mergeInto(canonical, other domain.SearchResult, matchTier domain.EntityReso
 		Extras:         mergeExtras(canonical, other),
 		ResolutionTier: domain.StampResolutionTier(tier),
 	}
-	carryIdentity(&merged, canonical, other, matchTier)
+	carryIdentity(&merged, canonical, other)
 	merged.Explicit = mergedExplicit(canonical.Explicit, other.Explicit)
 	alignExplicitWithISRC(&merged, canonical, other)
 	carryFields(&merged, canonical, other)
@@ -243,10 +243,9 @@ func orderByCompleteness(canonical, other domain.SearchResult) (domain.SearchRes
 	return canonical, other
 }
 
-func carryIdentity(merged *domain.SearchResult, canonical, other domain.SearchResult, matchTier domain.EntityResolutionTier) {
+func carryIdentity(merged *domain.SearchResult, canonical, other domain.SearchResult) {
 	proven, hasProven := provenIdentity(canonical, other)
-	titleTierMerge := matchTier == domain.EntityResolutionNone && canonical.Kind != domain.ResultKindArtist
-	identityAgrees := !titleTierMerge || sameVersionIdentity(canonical, other)
+	identityAgrees := sameVersionIdentity(canonical, other)
 	merged.ISRC = identityCarriedField(canonical.ISRC, other.ISRC, identityAgrees)
 	if !identityAgrees && hasProven {
 		merged.ISRC = proven.ISRC

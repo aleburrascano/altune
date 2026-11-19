@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/core/ports"
 	"context"
+	"log/slog"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -45,10 +46,17 @@ func (s *RedisIdentityStore) LookupByProviderID(
 	if !ok {
 		return "", nil, false
 	}
-	if !s.disabled() {
-		_ = s.setJSON(ctx, key, identityEntry{MBID: mbid, Xref: xref}, identityTTL)
-	}
+	s.backfill(ctx, key, identityEntry{MBID: mbid, Xref: xref})
 	return mbid, xref, true
+}
+
+func (s *RedisIdentityStore) backfill(ctx context.Context, key string, entry identityEntry) {
+	if s.disabled() {
+		return
+	}
+	if err := s.setJSON(ctx, key, entry, identityTTL); err != nil {
+		slog.DebugContext(ctx, "identity.cache_backfill_failed", "error", err)
+	}
 }
 
 func identityKey(kind domain.ResultKind, provider domain.ProviderKey, externalID string) string {

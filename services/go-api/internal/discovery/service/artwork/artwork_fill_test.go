@@ -41,20 +41,12 @@ type countingIdentityStore struct {
 	singleCalls int
 }
 
-func (s *countingIdentityStore) PersistBridges(context.Context, domain.ResultKind, string, map[domain.ProviderKey]string) error {
-	return nil
-}
-
 func (s *countingIdentityStore) LookupByProviderID(_ context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (string, map[domain.ProviderKey]string, bool) {
 	s.mu.Lock()
 	s.singleCalls++
 	s.mu.Unlock()
 	hit, ok := knownIdentity(ports.IdentityRef{Kind: kind, Provider: provider, ExternalID: externalID})
 	return hit.MBID, hit.Xref, ok
-}
-
-func (s *countingIdentityStore) Invalidate(context.Context, domain.ResultKind, domain.ProviderKey, string) error {
-	return nil
 }
 
 func knownIdentity(ref ports.IdentityRef) (ports.IdentityHit, bool) {
@@ -167,17 +159,9 @@ type scriptedIdentityStore struct {
 	ok   bool
 }
 
-func (s *scriptedIdentityStore) PersistBridges(context.Context, domain.ResultKind, string, map[domain.ProviderKey]string) error {
-	return nil
-}
-
 func (s *scriptedIdentityStore) LookupByProviderID(_ context.Context, _ domain.ResultKind, provider domain.ProviderKey, externalID string) (string, map[domain.ProviderKey]string, bool) {
 	s.log.add("durable:" + provider.String() + "/" + externalID)
 	return s.mbid, s.xref, s.ok
-}
-
-func (s *scriptedIdentityStore) Invalidate(context.Context, domain.ResultKind, domain.ProviderKey, string) error {
-	return nil
 }
 
 type scriptedMBIDIndex struct {
