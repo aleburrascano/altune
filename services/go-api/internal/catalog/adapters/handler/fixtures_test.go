@@ -2,10 +2,8 @@ package handler
 
 import (
 	"altune/go-api/internal/catalog/catalogtest"
-	audioservice "altune/go-api/internal/catalog/internal/core/audio"
 	featuredservice "altune/go-api/internal/catalog/internal/core/featured"
 	playlistservice "altune/go-api/internal/catalog/internal/core/playlist"
-	"altune/go-api/internal/catalog/internal/core/ports"
 	trackservice "altune/go-api/internal/catalog/service/track"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/requestuser"
@@ -16,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -31,6 +30,30 @@ var (
 )
 
 func asTestUser(string) (shared.UserId, bool) { return testUserId, true }
+
+func bearerAsUser(token string) (shared.UserId, bool) {
+	id, err := uuid.Parse(token)
+	return shared.NewUserId(id), err == nil
+}
+
+type audioFakeClock struct {
+	mu sync.Mutex
+	t  time.Time
+}
+
+func newAudioFakeClock() *audioFakeClock { return &audioFakeClock{t: time.Unix(1_700_000_000, 0)} }
+
+func (c *audioFakeClock) now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.t
+}
+
+func (c *audioFakeClock) advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.t = c.t.Add(d)
+}
 
 func bearerUser(userFor func(token string) (shared.UserId, bool)) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -86,12 +109,6 @@ func makeTrack(userId shared.UserId, title, artist, album string) *catdomain.Tra
 	return t
 }
 
-func makeReadyTrack(userId shared.UserId, title, artist, album, audioRef string) *catdomain.Track {
-	t := makeTrack(userId, title, artist, album)
-	_ = t.MarkReady(audioRef)
-	return t
-}
-
 func makePlaylist(userId shared.UserId, name string) *catdomain.Playlist {
 	p, _ := catdomain.NewPlaylist(userId, name, time.Now())
 	return p
@@ -127,19 +144,6 @@ func buildPlaylistHandler(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.
 	r := chi.NewRouter()
 	r.Use(bearerUser(asTestUser))
 	r.Mount("/playlists", h.Routes())
-	return h, r
-}
-
-func buildStreamHandler(trackRepo *catalogtest.TrackRepo, audioStore *catalogtest.AudioStore, scheduler *catalogtest.Scheduler) (*StreamHandler, chi.Router) {
-	var sched ports.AcquisitionScheduler
-	if scheduler != nil {
-		sched = scheduler
-	}
-	streamSvc := audioservice.NewStreamTrackService(trackRepo, audioStore, audioservice.WithStreamScheduler(sched))
-	h := NewStreamHandler(streamSvc)
-	r := chi.NewRouter()
-	r.Use(bearerUser(asTestUser))
-	r.Get("/tracks/{trackId}/stream", h.HandleStreamAudio)
 	return h, r
 }
 
@@ -204,10 +208,16 @@ func newWriteRig(trackOpts []func(*TrackHandler), playlistOpts []func(*PlaylistH
 	return &writeRig{router: r, tracks: tracks, playlists: playlists}
 }
 
-func newThrottledWriteRig(limit AudioRateLimit, now func() time.Time) *writeRig {
+const (
+	trackWriteBurst    = 200
+	trackWriteEvery    = 500 * time.Millisecond
+	playlistWriteBurst = 60
+)
+
+func newThrottledWriteRig(now func() time.Time) *writeRig {
 	return newWriteRig(
-		[]func(*TrackHandler){WithTrackWriteRateLimit(limit), withTrackWriteClock(now)},
-		[]func(*PlaylistHandler){WithPlaylistWriteRateLimit(limit), withPlaylistWriteClock(now)},
+		[]func(*TrackHandler){WithTrackWriteLimiterClock(now)},
+		[]func(*PlaylistHandler){WithPlaylistWriteLimiterClock(now)},
 	)
 }
 

@@ -21,7 +21,6 @@ type TrackHandler struct {
 	deleteTrack    *trackservice.DeleteTrackService
 	setTrackNumber *trackservice.SetTrackNumberService
 	featuredArtist *FeaturedArtistHandler
-	writeLimit     AudioRateLimit
 	now            func() time.Time
 	writeLimiter   rateLimitMiddleware
 }
@@ -42,22 +41,21 @@ func NewTrackHandler(
 		deleteTrack:    deleteTrack,
 		setTrackNumber: setTrackNumber,
 		featuredArtist: featuredArtist,
-		writeLimit:     DefaultTrackWriteRateLimit,
 		now:            time.Now,
 	}
 	for _, opt := range opts {
 		opt(h)
 	}
-	h.writeLimiter = newWriteRateLimiter(h.writeLimit, h.now)
+	h.writeLimiter = newWriteRateLimiter(trackWriteRateLimit, h.now)
 	return h
 }
 
-func WithTrackWriteRateLimit(limit AudioRateLimit) func(*TrackHandler) {
-	return func(h *TrackHandler) { h.writeLimit = limit }
-}
-
-func withTrackWriteClock(now func() time.Time) func(*TrackHandler) {
-	return func(h *TrackHandler) { h.now = now }
+func WithTrackWriteLimiterClock(now func() time.Time) func(*TrackHandler) {
+	return func(h *TrackHandler) {
+		if now != nil {
+			h.now = now
+		}
+	}
 }
 
 func (h *TrackHandler) Routes() chi.Router {

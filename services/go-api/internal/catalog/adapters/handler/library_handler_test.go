@@ -13,7 +13,7 @@ import (
 func libraryRoutes(repo *catalog.InMemoryTrackRepo) chi.Router {
 	library := catalog.NewLibraryHandler(catalog.NewLibraryLensService(repo))
 	router := chi.NewRouter()
-	router.Use(asCaller)
+	router.Use(asBearer)
 	router.Mount("/library", library.Routes())
 	return router
 }

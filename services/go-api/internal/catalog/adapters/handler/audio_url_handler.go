@@ -17,26 +17,25 @@ const maxAudioURLBatch = 200
 type AudioURLHandler struct {
 	svc             *audioservice.AudioURLService
 	prefetchEnabled bool
-	rateLimit       AudioRateLimit
 	now             func() time.Time
 	limiter         rateLimitMiddleware
 }
 
 func NewAudioURLHandler(svc *audioservice.AudioURLService, opts ...func(*AudioURLHandler)) *AudioURLHandler {
-	h := &AudioURLHandler{svc: svc, prefetchEnabled: true, rateLimit: DefaultAudioURLRateLimit, now: time.Now}
+	h := &AudioURLHandler{svc: svc, prefetchEnabled: true, now: time.Now}
 	for _, opt := range opts {
 		opt(h)
 	}
-	h.limiter = newAudioRateLimiter(h.rateLimit, h.now)
+	h.limiter = newAudioRateLimiter(audioURLRateLimit, h.now)
 	return h
 }
 
-func WithAudioURLRateLimit(limit AudioRateLimit) func(*AudioURLHandler) {
-	return func(h *AudioURLHandler) { h.rateLimit = limit }
-}
-
-func withAudioURLClock(now func() time.Time) func(*AudioURLHandler) {
-	return func(h *AudioURLHandler) { h.now = now }
+func WithAudioURLLimiterClock(now func() time.Time) func(*AudioURLHandler) {
+	return func(h *AudioURLHandler) {
+		if now != nil {
+			h.now = now
+		}
+	}
 }
 
 func WithPrefetchEnabled(enabled bool) func(*AudioURLHandler) {

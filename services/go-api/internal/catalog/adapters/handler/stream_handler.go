@@ -21,26 +21,33 @@ const audioWriteIdleTimeout = 30 * time.Second
 type StreamHandler struct {
 	svc              *audioservice.StreamTrackService
 	writeIdleTimeout time.Duration
-	rateLimit        AudioRateLimit
 	now              func() time.Time
 	limiter          rateLimitMiddleware
 }
 
 func NewStreamHandler(svc *audioservice.StreamTrackService, opts ...func(*StreamHandler)) *StreamHandler {
-	h := &StreamHandler{svc: svc, writeIdleTimeout: audioWriteIdleTimeout, rateLimit: DefaultStreamRateLimit, now: time.Now}
+	h := &StreamHandler{svc: svc, writeIdleTimeout: audioWriteIdleTimeout, now: time.Now}
 	for _, opt := range opts {
 		opt(h)
 	}
-	h.limiter = newAudioRateLimiter(h.rateLimit, h.now)
+	h.limiter = newAudioRateLimiter(streamRateLimit, h.now)
 	return h
 }
 
-func WithStreamRateLimit(limit AudioRateLimit) func(*StreamHandler) {
-	return func(h *StreamHandler) { h.rateLimit = limit }
+func WithStreamLimiterClock(now func() time.Time) func(*StreamHandler) {
+	return func(h *StreamHandler) {
+		if now != nil {
+			h.now = now
+		}
+	}
 }
 
-func withStreamClock(now func() time.Time) func(*StreamHandler) {
-	return func(h *StreamHandler) { h.now = now }
+func WithStreamWriteIdleTimeout(idle time.Duration) func(*StreamHandler) {
+	return func(h *StreamHandler) {
+		if idle > 0 {
+			h.writeIdleTimeout = idle
+		}
+	}
 }
 
 func (h *StreamHandler) Routes(r chi.Router) {
