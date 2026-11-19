@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func findRequest() acquisition.FindRequest {
@@ -341,5 +342,37 @@ func TestMarkUnplayable_RemembersTheLatest500InspectionsAndForgetsTheOldest(t *t
 	mark(soundCloudTracks(0, 0))
 	if got := len(inspectedURLs(t, calls)); got != 502 {
 		t.Fatalf("inspections = %d, want 502: the oldest was forgotten past the bound", got)
+	}
+}
+
+func TestMarkUnplayable_ReinspectsAURLOnceItsDayIsUp(t *testing.T) {
+	calls := installYtDlp(t, inspectedAs(`{"duration":240}`))
+	inspectedAt := time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)
+	now := inspectedAt
+	s := acquisition.NewYtDlpAudioSearcher("", "", "").WithInspectionClock(func() time.Time { return now })
+	inspectionsAt := func(at time.Time) int {
+		now = at
+		s.MarkUnplayable(context.Background(), soundCloudTracks(0, 0))
+		return len(inspectedURLs(t, calls))
+	}
+
+	inspectionsAt(inspectedAt)
+	if got := inspectionsAt(inspectedAt.Add(24*time.Hour - time.Nanosecond)); got != 1 {
+		t.Fatalf("inspections = %d, want the first still served just before 24h", got)
+	}
+	if got := inspectionsAt(inspectedAt.Add(24 * time.Hour)); got != 2 {
+		t.Fatalf("inspections = %d, want a fresh inspection once 24h have passed", got)
+	}
+}
+
+func TestMarkUnplayable_ANilInspectionClockKeepsTheRealOne(t *testing.T) {
+	calls := installYtDlp(t, inspectedAs(`{"duration":240}`))
+	s := acquisition.NewYtDlpAudioSearcher("", "", "").WithInspectionClock(nil)
+
+	s.MarkUnplayable(context.Background(), soundCloudTracks(0, 0))
+	s.MarkUnplayable(context.Background(), soundCloudTracks(0, 0))
+
+	if got := len(inspectedURLs(t, calls)); got != 1 {
+		t.Fatalf("inspections = %d, want the second served from the cache", got)
 	}
 }

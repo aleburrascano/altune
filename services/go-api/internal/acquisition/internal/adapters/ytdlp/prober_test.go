@@ -175,3 +175,16 @@ func TestFfprobeProber_ValidateDecodable_LeavesAShortDiagnosticAndCapsLongASCII(
 		t.Fatalf("short changed: %q", got)
 	}
 }
+
+func TestFfprobeProber_ValidateDecodable_ANonPositiveTimeoutKeepsTheDefault(t *testing.T) {
+	rec := &gateRecorder{}
+	p := acquisition.NewFfprobeProber(fakeFfmpegDir(t, "#!/bin/sh\nexit 0\n"),
+		acquisition.WithDecodeTimeout(0), acquisition.WithSkipRecorder(rec))
+
+	if err := p.ValidateDecodable(context.Background(), decodedFile); err != nil {
+		t.Fatalf("ValidateDecodable() = %v, want nil", err)
+	}
+	if len(rec.gates) != 0 {
+		t.Errorf("recorded gates = %v, want none: a zero timeout must leave the default in place, not skip the decode", rec.gates)
+	}
+}

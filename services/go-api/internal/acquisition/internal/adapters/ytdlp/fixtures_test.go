@@ -165,3 +165,45 @@ func stubDownload(outDir string) string {
 	file := filepath.Join(outDir, "stub.m4a")
 	return "head -c 20480 /dev/zero > '" + file + "'\necho 'altune-output-path:" + file + "'"
 }
+
+const liveJarContents = "# live cookie jar"
+
+type cookieCapture struct {
+	calls       string
+	pathFile    string
+	contentFile string
+}
+
+func captureCookieJar(t *testing.T, output string) cookieCapture {
+	t.Helper()
+	dir := t.TempDir()
+	capture := cookieCapture{pathFile: filepath.Join(dir, "cookie-path"), contentFile: filepath.Join(dir, "cookie-content")}
+	capture.calls = installYtDlp(t, "prev=\"\"\n"+
+		"for arg in \"$@\"; do\n"+
+		"  if [ \"$prev\" = \"--cookies\" ]; then\n"+
+		"    printf '%s' \"$arg\" > '"+capture.pathFile+"'\n"+
+		"    cp \"$arg\" '"+capture.contentFile+"'\n"+
+		"  fi\n"+
+		"  prev=\"$arg\"\n"+
+		"done\n"+
+		output)
+	return capture
+}
+
+func (c cookieCapture) assertTempCopyUsedAndRemoved(t *testing.T, liveJar string) {
+	t.Helper()
+	usedPath, err := os.ReadFile(c.pathFile)
+	if err != nil {
+		t.Fatalf("yt-dlp never received a --cookies flag: %v", err)
+	}
+	if string(usedPath) == liveJar {
+		t.Fatalf("yt-dlp used the live cookie file %q, want a temp copy", liveJar)
+	}
+	content, err := os.ReadFile(c.contentFile)
+	if err != nil || string(content) != liveJarContents {
+		t.Fatalf("temp cookie copy content = %q, err %v, want the live jar's contents", content, err)
+	}
+	if _, err := os.Stat(string(usedPath)); !os.IsNotExist(err) {
+		t.Fatalf("temp cookie copy %q still exists after the call returned, want it removed", usedPath)
+	}
+}

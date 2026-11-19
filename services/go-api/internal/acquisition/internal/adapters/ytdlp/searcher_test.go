@@ -21,8 +21,11 @@ const (
 )
 
 func TestYtDlpAudioSearcher_Search(t *testing.T) {
+	if os.Getenv("YTDLP_LIVE") != "1" {
+		t.Skip("set YTDLP_LIVE=1 to search YouTube and SoundCloud with the real yt-dlp")
+	}
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
-		t.Skip("yt-dlp not installed, skipping integration test")
+		t.Fatalf("YTDLP_LIVE=1 but yt-dlp is not on PATH: %v", err)
 	}
 
 	searcher := acquisition.NewYtDlpAudioSearcher("", "", "")
@@ -370,8 +373,6 @@ func TestDownload_FallsBackToACombinedFormatWhenNoAudioOnlyStreamExists(t *testi
 		t.Errorf("-f %q, want a combined-format fallback after the audio-only streams", got)
 	}
 }
-
-const liveJarContents = "# live cookie jar"
 
 func jarWritingYtDlp(t *testing.T, outDir string) {
 	t.Helper()
@@ -864,4 +865,47 @@ func TestDownloadPreview_ErrorsWhenNoPathIsPrinted(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "no output path printed by yt-dlp") {
 		t.Fatalf("DownloadPreview error = %v, want no output path printed by yt-dlp", err)
 	}
+}
+
+func TestDownload_ANonPositiveTimeoutKeepsTheDefault(t *testing.T) {
+	outDir := t.TempDir()
+	installYtDlp(t, stubDownload(outDir))
+	s := acquisition.NewYtDlpAudioSearcher("", "", "").WithDownloadTimeout(0)
+
+	if _, err := s.Download(context.Background(), youTubeWatchURL, outDir); err != nil {
+		t.Fatalf("Download error = %v, want nil: a zero timeout must leave the default in place", err)
+	}
+}
+
+func TestDownload_UsesATempCopyOfTheCookieJarAndCleansItUp(t *testing.T) {
+	outDir := t.TempDir()
+	jar := cookieJar(t, "cookies.txt", liveJarContents)
+	capture := captureCookieJar(t, stubDownload(outDir))
+
+	if _, err := acquisition.NewYtDlpAudioSearcher("", jar, "").Download(context.Background(), youTubeWatchURL, outDir); err != nil {
+		t.Fatalf("Download error = %v, want nil", err)
+	}
+
+	capture.assertTempCopyUsedAndRemoved(t, jar)
+}
+
+func TestMarkUnplayable_InspectionUsesATempCopyOfTheCookieJarAndCleansItUp(t *testing.T) {
+	jar := cookieJar(t, "cookies.txt", liveJarContents)
+	capture := captureCookieJar(t, "echo '{\"duration\":240}'")
+
+	acquisition.NewYtDlpAudioSearcher("", jar, "").MarkUnplayable(context.Background(),
+		[]acquisition.AudioCandidate{{URL: soundCloudTrackURL, Duration: 240}})
+
+	capture.assertTempCopyUsedAndRemoved(t, jar)
+}
+
+func TestSearch_UsesATempCopyOfTheCookieJarAndCleansItUp(t *testing.T) {
+	jar := cookieJar(t, "cookies.txt", liveJarContents)
+	capture := captureCookieJar(t, "")
+
+	if _, err := acquisition.NewYtDlpAudioSearcher("", jar, "").SearchQueries(context.Background(), []string{"q"}); err != nil {
+		t.Fatalf("SearchQueries error = %v, want nil", err)
+	}
+
+	capture.assertTempCopyUsedAndRemoved(t, jar)
 }

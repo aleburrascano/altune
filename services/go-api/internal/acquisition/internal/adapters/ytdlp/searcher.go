@@ -36,11 +36,11 @@ const aacEncodeKbps = 128
 
 const maxDownloadedFileBytes = 200 * 1024 * 1024
 
-type searchRunner func(ctx context.Context, searchSpec string) ([]ports.AudioCandidate, error)
-
 var searchEngines = []string{"ytsearch5:", "scsearch5:"}
 
 const maxConcurrentSearches = 4
+
+const ytDlpBinary = "yt-dlp"
 
 type YtDlpAudioSearcher struct {
 	ffmpegLocation   string
@@ -48,9 +48,6 @@ type YtDlpAudioSearcher struct {
 	jsRuntime        string
 	remoteComponents string
 	potURL           string
-	binary           string
-	runSearch        searchRunner
-	inspect          inspectRunner
 	inspections      *inspectionCache
 	searchTimeout    time.Duration
 	downloadTimeout  time.Duration
@@ -71,31 +68,38 @@ func (s *YtDlpAudioSearcher) WithPOTokenURL(url string) *YtDlpAudioSearcher {
 }
 
 func (s *YtDlpAudioSearcher) WithDownloadTimeout(timeout time.Duration) *YtDlpAudioSearcher {
-	s.downloadTimeout = timeout
+	if timeout > 0 {
+		s.downloadTimeout = timeout
+	}
 	return s
 }
 
 func (s *YtDlpAudioSearcher) WithCanaryTimeout(timeout time.Duration) *YtDlpAudioSearcher {
-	s.canaryTimeout = timeout
+	if timeout > 0 {
+		s.canaryTimeout = timeout
+	}
+	return s
+}
+
+func (s *YtDlpAudioSearcher) WithInspectionClock(now func() time.Time) *YtDlpAudioSearcher {
+	if now != nil {
+		s.inspections.now = now
+	}
 	return s
 }
 
 func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string) *YtDlpAudioSearcher {
-	s := &YtDlpAudioSearcher{
+	return &YtDlpAudioSearcher{
 		ffmpegLocation:   ffmpegLocation,
 		cookieFile:       cookieFile,
 		jsRuntime:        jsRuntime,
 		remoteComponents: defaultRemoteComponents,
-		binary:           "yt-dlp",
 		searchTimeout:    searchTimeout,
 		downloadTimeout:  downloadTimeout,
 		previewTimeout:   previewTimeout,
 		canaryTimeout:    canaryTimeout,
 		inspections:      newInspectionCache(),
 	}
-	s.runSearch = s.runYtDlpSearch
-	s.inspect = s.runYtDlpInspect
-	return s
 }
 
 const maxEmbeddedStderrBytes = 2048
@@ -115,7 +119,7 @@ func embeddedStderr(stderr string) string {
 }
 
 func (s *YtDlpAudioSearcher) Available() bool {
-	return binpath.Runnable(s.binary)
+	return binpath.Runnable(ytDlpBinary)
 }
 
 func (s *YtDlpAudioSearcher) classifiedFailure(err error, stderr string, timedOut bool) error {
@@ -142,7 +146,7 @@ func (s *YtDlpAudioSearcher) runSearchPairs(ctx context.Context, queries []strin
 		for ei, engine := range searchEngines {
 			spec := engine + query
 			g.Go(func() error {
-				candidates, err := s.runSearch(ctx, spec)
+				candidates, err := s.runYtDlpSearch(ctx, spec)
 				outcomes[qi][ei] = pairOutcome{candidates: candidates, err: err}
 				return nil
 			})
@@ -323,7 +327,7 @@ func (s *YtDlpAudioSearcher) fetchAudio(
 
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	stdout, stderr, err := execcmd.Run(runCtx, s.binary, args...)
+	stdout, stderr, err := execcmd.Run(runCtx, ytDlpBinary, args...)
 	if err != nil {
 		return ports.FetchedAudio{}, s.classifiedFailure(fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, embeddedStderr(stderr)), stderr, ports.RunTimedOut(ctx, runCtx))
 	}
