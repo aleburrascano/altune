@@ -138,8 +138,9 @@ func TestApplyDisabledJobs_DisabledRankingRefreshNeverRefreshes(t *testing.T) {
 func TestApplyStartupSwitches_ObserveLoopsAreNotSwitchable(t *testing.T) {
 	for _, name := range []jobName{jobAlertMonitor, jobEvalMeter} {
 		a := &App{cfg: &config.Config{DisabledJobs: []string{string(name)}}}
-		if err := a.applyStartupSwitches(t.Context()); err == nil {
-			t.Errorf("DISABLED_JOBS=%q accepted, want the unknown-job startup error", name)
+		err := a.applyStartupSwitches(t.Context())
+		if err == nil || !strings.Contains(err.Error(), "unknown job") {
+			t.Errorf("DISABLED_JOBS=%q gave %v, want the unknown-job startup error", name, err)
 		}
 	}
 }

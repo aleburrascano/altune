@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/observe"
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/database"
 	"bytes"
 	"context"
 	"errors"
@@ -12,7 +13,9 @@ import (
 	"log/slog"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -244,6 +247,31 @@ func TestStartAlertMonitor_RegistersToStartWhenLeader(t *testing.T) {
 	if !registered {
 		t.Error("the alert monitor is not registered to start when leader")
 	}
+}
+
+func TestStartAlertMonitor_PassesEvaluateItsConditions(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var probes atomic.Int64
+		a := &App{cfg: &config.Config{}}
+		a.dbHealth = func(context.Context) database.HealthStatus {
+			probes.Add(1)
+			return database.HealthStatus{OK: true}
+		}
+		ctx, cancel := context.WithCancel(t.Context())
+		a.startAlertMonitor(ctx)
+		for _, job := range a.backgroundStarts {
+			job.start(ctx)
+		}
+
+		time.Sleep(31 * time.Second)
+		synctest.Wait()
+
+		if probes.Load() == 0 {
+			t.Error("a monitor pass ran without probing the database: the dependency condition never reached the monitor")
+		}
+		cancel()
+		a.alertMonitor.Shutdown(context.Background())
+	})
 }
 
 func TestAlertConditions_AlwaysWatchCoverage(t *testing.T) {
