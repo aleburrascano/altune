@@ -121,7 +121,9 @@ func TestFavoritesRateLimit_WritesShareOneBudgetThenReject(t *testing.T) {
 }
 
 func TestFavoritesRateLimit_DefaultBudgetThenRejects(t *testing.T) {
-	router := buildFavoritesLimitedRouter(discovery.DefaultDiscoveryRateLimits)
+	router := buildFrozenDefaultLimitsRouter(discovery.DiscoveryServices{
+		Favorites: discovery.NewFavoritesService(erroringFavoritesRepo{}),
+	})
 	const body = `{"kind":"album","title":"DAMN.","subtitle":"Kendrick Lamar"}`
 
 	for i := range discovery.DefaultDiscoveryRateLimits.Favorites.Max {

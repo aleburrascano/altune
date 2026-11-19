@@ -14,8 +14,24 @@ import (
 	"github.com/google/uuid"
 )
 
+func buildFrozenDefaultLimitsRouter(services discovery.DiscoveryServices, middlewares ...func(http.Handler) http.Handler) chi.Router {
+	frozen := time.Unix(1_700_000_000, 0)
+	h := discovery.NewDiscoveryHandler(services).
+		WithRateLimitsAt(discovery.DefaultDiscoveryRateLimits, func() time.Time { return frozen })
+	r := chi.NewRouter()
+	r.Use(discAsTestUser)
+	r.Use(middlewares...)
+	r.Mount("/discovery", h.Routes())
+	return r
+}
+
+func deezerSearchServices() discovery.DiscoveryServices {
+	providers := []discovery.SearchProvider{&fakeSearchProvider{name: discovery.ProviderDeezer}}
+	return discovery.DiscoveryServices{Search: discovery.NewSearchService(providers, discovery.NewCircuitBreaker())}
+}
+
 func TestSearchRateLimit_RapidSearchesAreThrottled(t *testing.T) {
-	router := buildDiscoveryRouter(&fakeSearchProvider{name: discovery.ProviderDeezer}, nil, nil, nil)
+	router := buildFrozenDefaultLimitsRouter(deezerSearchServices())
 
 	throttled := 0
 	for range 200 {
@@ -24,8 +40,8 @@ func TestSearchRateLimit_RapidSearchesAreThrottled(t *testing.T) {
 			throttled++
 		}
 	}
-	if throttled == 0 {
-		t.Fatal("200 rapid /search requests from one user: none throttled")
+	if want := 200 - discovery.DefaultDiscoveryRateLimits.Search.Max; throttled != want {
+		t.Fatalf("200 rapid /search requests from one user: %d throttled, want %d", throttled, want)
 	}
 }
 
@@ -38,13 +54,13 @@ func TestSearchRateLimit_DefaultBudgetsThenRejects(t *testing.T) {
 	}{
 		{
 			name:   "search",
-			router: buildDiscoveryRouter(&fakeSearchProvider{name: discovery.ProviderDeezer}, nil, nil, nil),
+			router: buildFrozenDefaultLimitsRouter(deezerSearchServices()),
 			path:   "/discovery/search?q=radiohead&save_history=false",
 			max:    discovery.DefaultDiscoveryRateLimits.Search.Max,
 		},
 		{
 			name:   "suggest",
-			router: buildSuggestRouter(&fakeVocabStore{}),
+			router: buildFrozenDefaultLimitsRouter(discovery.DiscoveryServices{Suggest: discovery.NewSuggestService(&fakeVocabStore{})}),
 			path:   "/discovery/suggest?q=radio",
 			max:    discovery.DefaultDiscoveryRateLimits.Suggest.Max,
 		},
@@ -65,18 +81,20 @@ func TestSearchRateLimit_DefaultBudgetsThenRejects(t *testing.T) {
 }
 
 func TestContentRateLimit_RapidLyricsRequestsAreThrottled(t *testing.T) {
-	router := buildDiscoveryRouter(nil, nil, nil, nil)
+	router := buildFrozenDefaultLimitsRouter(discovery.DiscoveryServices{})
 
 	var throttled *httptest.ResponseRecorder
+	count := 0
 	for range 200 {
 		rec := discServe(t, router, http.MethodGet, "/discovery/lyrics?title=paranoid+android", nil)
 		if rec.Code == http.StatusTooManyRequests {
 			throttled = rec
+			count++
 		}
 	}
 
-	if throttled == nil {
-		t.Fatal("200 rapid /lyrics requests from one user: none throttled")
+	if want := 200 - discovery.DefaultDiscoveryRateLimits.Content.Max; count != want {
+		t.Fatalf("200 rapid /lyrics requests from one user: %d throttled, want %d", count, want)
 	}
 	assertRateLimited(t, throttled)
 }
@@ -96,7 +114,10 @@ func TestContentRateLimit_OneBudgetSpansEveryContentRoute(t *testing.T) {
 }
 
 func TestEventRateLimit_DefaultBudgetThenRejects(t *testing.T) {
-	router := buildEventRouter(&recordingEventStore{})
+	router := buildFrozenDefaultLimitsRouter(
+		discovery.DiscoveryServices{Event: discovery.NewRecordEventService(&recordingEventStore{})},
+		httputil.MaxBodySize(1<<20),
+	)
 	body := discJsonBody(t, map[string]any{"type": "play"}).String()
 
 	for i := range discovery.DefaultDiscoveryRateLimits.Events.Max {
