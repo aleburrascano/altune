@@ -1,13 +1,13 @@
-package eval
+package eval_test
 
-import "altune/go-api/internal/discovery/domain"
+import "altune/go-api/internal/discovery"
 
-func res(kind domain.ResultKind, title, subtitle string, provider domain.ProviderName, extras map[string]any) domain.SearchResult {
-	return domain.SearchResult{
+func res(kind discovery.ResultKind, title, subtitle string, provider discovery.ProviderName, extras map[string]any) discovery.SearchResult {
+	return discovery.SearchResult{
 		Kind:     kind,
 		Title:    title,
 		Subtitle: subtitle,
-		Sources: []domain.SourceRef{
+		Sources: []discovery.SourceRef{
 			{Provider: provider, ExternalID: title + ":" + provider.String(), URL: "https://x/" + title},
 		},
 		Popularity: popFromExtras(extras),
@@ -27,6 +27,6 @@ func popFromExtras(extras map[string]any) float64 {
 	return 0
 }
 
-func track(title, artist string, provider domain.ProviderName, extras map[string]any) domain.SearchResult {
-	return res(domain.ResultKindTrack, title, artist, provider, extras)
+func track(title, artist string, provider discovery.ProviderName, extras map[string]any) discovery.SearchResult {
+	return res(discovery.ResultKindTrack, title, artist, provider, extras)
 }

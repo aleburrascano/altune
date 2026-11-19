@@ -1,31 +1,31 @@
-package eval
+package eval_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"context"
 	"testing"
 )
 
 type fakeVariantSearcher struct {
-	with    map[string][]domain.SearchResult
-	without map[string][]domain.SearchResult
+	with    map[string][]discovery.SearchResult
+	without map[string][]discovery.SearchResult
 }
 
-func (f *fakeVariantSearcher) SearchVariants(_ context.Context, q string) ([]domain.SearchResult, []domain.SearchResult) {
+func (f *fakeVariantSearcher) SearchVariants(_ context.Context, q string) ([]discovery.SearchResult, []discovery.SearchResult) {
 	return f.with[q], f.without[q]
 }
 
 func TestRunDiversityEvalMode_costWhenReshapeDemotesTarget(t *testing.T) {
-	entity := LibraryEntity{Title: "Humble", Artist: "Kendrick"}
+	entity := discovery.LibraryEntity{Title: "Humble", Artist: "Kendrick"}
 	q := "Kendrick Humble"
 
-	other := track("Other", "Kendrick", domain.ProviderDeezer, nil)
-	target := track("Humble", "Kendrick", domain.ProviderDeezer, nil)
+	other := track("Other", "Kendrick", discovery.ProviderDeezer, nil)
+	target := track("Humble", "Kendrick", discovery.ProviderDeezer, nil)
 	fake := &fakeVariantSearcher{
-		without: map[string][]domain.SearchResult{q: {target, other}},
-		with:    map[string][]domain.SearchResult{q: {other, other, target}},
+		without: map[string][]discovery.SearchResult{q: {target, other}},
+		with:    map[string][]discovery.SearchResult{q: {other, other, target}},
 	}
-	r := RunDiversityEvalMode(context.Background(), []LibraryEntity{entity}, fake, 1, 2, QueryExact, nil)
+	r := discovery.RunDiversityEvalMode(context.Background(), []discovery.LibraryEntity{entity}, fake, 1, 2, discovery.QueryExact, nil)
 
 	if r.LostToReshape != 1 {
 		t.Fatalf("expected 1 lost to reshape, got %d", r.LostToReshape)
@@ -39,14 +39,14 @@ func TestRunDiversityEvalMode_costWhenReshapeDemotesTarget(t *testing.T) {
 }
 
 func TestRunDiversityEvalMode_noCostWhenTargetSurvives(t *testing.T) {
-	entity := LibraryEntity{Title: "Humble", Artist: "Kendrick"}
+	entity := discovery.LibraryEntity{Title: "Humble", Artist: "Kendrick"}
 	q := "Kendrick Humble"
-	target := track("Humble", "Kendrick", domain.ProviderDeezer, nil)
+	target := track("Humble", "Kendrick", discovery.ProviderDeezer, nil)
 	fake := &fakeVariantSearcher{
-		without: map[string][]domain.SearchResult{q: {target}},
-		with:    map[string][]domain.SearchResult{q: {target}},
+		without: map[string][]discovery.SearchResult{q: {target}},
+		with:    map[string][]discovery.SearchResult{q: {target}},
 	}
-	r := RunDiversityEvalMode(context.Background(), []LibraryEntity{entity}, fake, 1, 3, QueryExact, nil)
+	r := discovery.RunDiversityEvalMode(context.Background(), []discovery.LibraryEntity{entity}, fake, 1, 3, discovery.QueryExact, nil)
 	if r.Evaluated != 1 {
 		t.Fatalf("Evaluated = %d, want 1", r.Evaluated)
 	}
@@ -55,21 +55,27 @@ func TestRunDiversityEvalMode_noCostWhenTargetSurvives(t *testing.T) {
 	}
 }
 
-func TestTopKConcentration(t *testing.T) {
-	same := []domain.SearchResult{
-		track("A", "Drake", domain.ProviderDeezer, nil),
-		track("B", "Drake", domain.ProviderDeezer, nil),
-		track("C", "Drake", domain.ProviderDeezer, nil),
+func TestRunDiversityEvalMode_ConcentrationIsTheSumOfSquaredArtistSharesInTheTopK(t *testing.T) {
+	entity := discovery.LibraryEntity{Title: "A", Artist: "Drake"}
+	fake := &fakeVariantSearcher{
+		with: map[string][]discovery.SearchResult{"Drake A": {
+			track("A", "Drake", discovery.ProviderDeezer, nil),
+			track("B", "Drake", discovery.ProviderDeezer, nil),
+			track("C", "Drake", discovery.ProviderDeezer, nil),
+		}},
+		without: map[string][]discovery.SearchResult{"Drake A": {
+			track("A", "Drake", discovery.ProviderDeezer, nil),
+			track("B", "Adele", discovery.ProviderDeezer, nil),
+			track("C", "Queen", discovery.ProviderDeezer, nil),
+		}},
 	}
-	if h := topKConcentration(same, 3); h != 1.0 {
-		t.Errorf("all-one-artist concentration = %v, want 1.0", h)
+
+	r := discovery.RunDiversityEvalMode(context.Background(), []discovery.LibraryEntity{entity}, fake, 1, 3, discovery.QueryExact, nil)
+
+	if r.ConcentrationWith != 1.0 {
+		t.Errorf("all-one-artist concentration = %v, want 1.0", r.ConcentrationWith)
 	}
-	diverse := []domain.SearchResult{
-		track("A", "Drake", domain.ProviderDeezer, nil),
-		track("B", "Adele", domain.ProviderDeezer, nil),
-		track("C", "Queen", domain.ProviderDeezer, nil),
-	}
-	if h := topKConcentration(diverse, 3); h < 0.33 || h > 0.34 {
+	if h := r.ConcentrationWithout; h < 0.33 || h > 0.34 {
 		t.Errorf("three-artist concentration = %v, want ~0.333", h)
 	}
 }

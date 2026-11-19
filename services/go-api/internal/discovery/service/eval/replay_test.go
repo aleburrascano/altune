@@ -1,7 +1,7 @@
-package eval
+package eval_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"context"
 	"errors"
 	"math"
@@ -9,18 +9,18 @@ import (
 )
 
 func TestReplayCorpus_ScoresPositivesAndNegativeLeak(t *testing.T) {
-	corpus := BehavioralCorpus{Entries: []BehavioralCorpusEntry{
+	corpus := discovery.BehavioralCorpus{Entries: []discovery.BehavioralCorpusEntry{
 		{Query: "adele hello", ResultSignature: "good", Polarity: 1},
 		{Query: "drake", ResultSignature: "missing", Polarity: 1},
 		{Query: "wrong", ResultSignature: "bad", Polarity: -1},
 	}}
-	ranking := CandidateRanking{
+	ranking := discovery.CandidateRanking{
 		"adele hello": {"good", "x", "y"},
 		"drake":       {"a", "b"},
 		"wrong":       {"z", "bad"},
 	}
 
-	score := ReplayCorpus(corpus, ranking, 3)
+	score := discovery.ReplayCorpus(corpus, ranking, 3)
 
 	if score.Positives != 2 || score.Found != 1 {
 		t.Errorf("positives=%d found=%d, want 2/1", score.Positives, score.Found)
@@ -34,11 +34,11 @@ func TestReplayCorpus_ScoresPositivesAndNegativeLeak(t *testing.T) {
 }
 
 func TestReplayCorpus_NegativeBelowTopKDoesNotLeak(t *testing.T) {
-	corpus := BehavioralCorpus{Entries: []BehavioralCorpusEntry{
+	corpus := discovery.BehavioralCorpus{Entries: []discovery.BehavioralCorpusEntry{
 		{Query: "q", ResultSignature: "bad", Polarity: -1},
 	}}
-	ranking := CandidateRanking{"q": {"a", "b", "c", "bad"}}
-	score := ReplayCorpus(corpus, ranking, 3)
+	ranking := discovery.CandidateRanking{"q": {"a", "b", "c", "bad"}}
+	score := discovery.ReplayCorpus(corpus, ranking, 3)
 	if score.NegativeLeakK != 0 {
 		t.Errorf("negative at rank 3 must not leak into top-3, got %d", score.NegativeLeakK)
 	}
@@ -46,17 +46,17 @@ func TestReplayCorpus_NegativeBelowTopKDoesNotLeak(t *testing.T) {
 
 type failingReplaySearcher struct{}
 
-func (failingReplaySearcher) Search(context.Context, string) ([]domain.SearchResult, error) {
+func (failingReplaySearcher) Search(context.Context, string) ([]discovery.SearchResult, error) {
 	return nil, errors.New("provider down")
 }
 
 func TestBuildRankingCountingFailures_CountsFailedQueries(t *testing.T) {
-	corpus := BehavioralCorpus{Entries: []BehavioralCorpusEntry{
+	corpus := discovery.BehavioralCorpus{Entries: []discovery.BehavioralCorpusEntry{
 		{Query: "a", ResultSignature: "x", Polarity: 1},
 		{Query: "a", ResultSignature: "y", Polarity: -1},
 		{Query: "b", ResultSignature: "z", Polarity: 1},
 	}}
-	ranking, failed := BuildRankingCountingFailures(context.Background(), corpus, failingReplaySearcher{})
+	ranking, failed := discovery.BuildRankingCountingFailures(context.Background(), corpus, failingReplaySearcher{})
 	if failed != 2 {
 		t.Fatalf("failed = %d, want 2 distinct queries", failed)
 	}
@@ -66,11 +66,11 @@ func TestBuildRankingCountingFailures_CountsFailedQueries(t *testing.T) {
 }
 
 type fakeReplaySearcher struct {
-	byQuery map[string][]domain.SearchResult
+	byQuery map[string][]discovery.SearchResult
 	calls   map[string]int
 }
 
-func (f *fakeReplaySearcher) Search(_ context.Context, query string) ([]domain.SearchResult, error) {
+func (f *fakeReplaySearcher) Search(_ context.Context, query string) ([]discovery.SearchResult, error) {
 	f.calls[query]++
 	return f.byQuery[query], nil
 }
@@ -78,19 +78,19 @@ func (f *fakeReplaySearcher) Search(_ context.Context, query string) ([]domain.S
 func TestBuildRanking_OrdersBySearchResultAndDedupesQueries(t *testing.T) {
 	searcher := &fakeReplaySearcher{
 		calls: map[string]int{},
-		byQuery: map[string][]domain.SearchResult{
+		byQuery: map[string][]discovery.SearchResult{
 			"adele hello": {
-				{Kind: domain.ResultKindTrack, Title: "Hello", Subtitle: "Adele"},
-				{Kind: domain.ResultKindTrack, Title: "Hello Again", Subtitle: "Someone Else"},
+				{Kind: discovery.ResultKindTrack, Title: "Hello", Subtitle: "Adele"},
+				{Kind: discovery.ResultKindTrack, Title: "Hello Again", Subtitle: "Someone Else"},
 			},
 		},
 	}
-	corpus := BehavioralCorpus{Entries: []BehavioralCorpusEntry{
-		{Query: "adele hello", ResultSignature: domain.ResultSignature(domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Hello", Subtitle: "Adele"}), Polarity: 1},
+	corpus := discovery.BehavioralCorpus{Entries: []discovery.BehavioralCorpusEntry{
+		{Query: "adele hello", ResultSignature: discovery.ResultSignature(discovery.SearchResult{Kind: discovery.ResultKindTrack, Title: "Hello", Subtitle: "Adele"}), Polarity: 1},
 		{Query: "adele hello", ResultSignature: "irrelevant-second-entry-same-query", Polarity: -1},
 	}}
 
-	ranking, _ := BuildRankingCountingFailures(context.Background(), corpus, searcher)
+	ranking, _ := discovery.BuildRankingCountingFailures(context.Background(), corpus, searcher)
 
 	if searcher.calls["adele hello"] != 1 {
 		t.Fatalf("expected the query to be searched once despite two corpus entries, got %d calls", searcher.calls["adele hello"])
@@ -99,7 +99,7 @@ func TestBuildRanking_OrdersBySearchResultAndDedupesQueries(t *testing.T) {
 	if !ok || len(order) != 2 {
 		t.Fatalf("expected a 2-entry ranking for %q, got %v", "adele hello", order)
 	}
-	if order[0] != domain.ResultSignature(domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Hello", Subtitle: "Adele"}) {
+	if order[0] != discovery.ResultSignature(discovery.SearchResult{Kind: discovery.ResultKindTrack, Title: "Hello", Subtitle: "Adele"}) {
 		t.Errorf("ranking[0] = %q, want the top search result's signature", order[0])
 	}
 }
@@ -107,17 +107,17 @@ func TestBuildRanking_OrdersBySearchResultAndDedupesQueries(t *testing.T) {
 func TestReplayCorpus_EndToEndAgainstBuiltRanking(t *testing.T) {
 	searcher := &fakeReplaySearcher{
 		calls: map[string]int{},
-		byQuery: map[string][]domain.SearchResult{
-			"adele hello": {{Kind: domain.ResultKindTrack, Title: "Hello", Subtitle: "Adele"}},
+		byQuery: map[string][]discovery.SearchResult{
+			"adele hello": {{Kind: discovery.ResultKindTrack, Title: "Hello", Subtitle: "Adele"}},
 		},
 	}
-	goodSig := domain.ResultSignature(domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Hello", Subtitle: "Adele"})
-	corpus := BehavioralCorpus{Entries: []BehavioralCorpusEntry{
+	goodSig := discovery.ResultSignature(discovery.SearchResult{Kind: discovery.ResultKindTrack, Title: "Hello", Subtitle: "Adele"})
+	corpus := discovery.BehavioralCorpus{Entries: []discovery.BehavioralCorpusEntry{
 		{Query: "adele hello", ResultSignature: goodSig, Polarity: 1},
 	}}
 
-	ranking, _ := BuildRankingCountingFailures(context.Background(), corpus, searcher)
-	score := ReplayCorpus(corpus, ranking, 3)
+	ranking, _ := discovery.BuildRankingCountingFailures(context.Background(), corpus, searcher)
+	score := discovery.ReplayCorpus(corpus, ranking, 3)
 
 	if score.Positives != 1 || score.Found != 1 {
 		t.Fatalf("positives=%d found=%d, want 1/1", score.Positives, score.Found)
@@ -128,29 +128,29 @@ func TestReplayCorpus_EndToEndAgainstBuiltRanking(t *testing.T) {
 }
 
 type stampedSigSearcher struct {
-	results []domain.SearchResult
+	results []discovery.SearchResult
 }
 
-func (f stampedSigSearcher) Search(context.Context, string) ([]domain.SearchResult, error) {
+func (f stampedSigSearcher) Search(context.Context, string) ([]discovery.SearchResult, error) {
 	return f.results, nil
 }
 
 func TestBuildRanking_PrefersStampedSignatureOverDerived(t *testing.T) {
-	result := domain.SearchResult{
-		Kind:      domain.ResultKindTrack,
+	result := discovery.SearchResult{
+		Kind:      discovery.ResultKindTrack,
 		Title:     "Hello",
 		Subtitle:  "",
 		Signature: "stamped-adele-hello",
 	}
-	searcher := stampedSigSearcher{results: []domain.SearchResult{result}}
-	corpus := BehavioralCorpus{Entries: []BehavioralCorpusEntry{
+	searcher := stampedSigSearcher{results: []discovery.SearchResult{result}}
+	corpus := discovery.BehavioralCorpus{Entries: []discovery.BehavioralCorpusEntry{
 		{Query: "adele hello", ResultSignature: "stamped-adele-hello", Polarity: 1},
 	}}
 
-	ranking, _ := BuildRankingCountingFailures(context.Background(), corpus, searcher)
-	score := ReplayCorpus(corpus, ranking, 3)
+	ranking, _ := discovery.BuildRankingCountingFailures(context.Background(), corpus, searcher)
+	score := discovery.ReplayCorpus(corpus, ranking, 3)
 
-	if derived := domain.ResultSignature(result); derived == result.Signature {
+	if derived := discovery.ResultSignature(result); derived == result.Signature {
 		t.Fatalf("test setup invalid: derived signature %q must differ from stamped %q", derived, result.Signature)
 	}
 	if score.Positives != 1 || score.Found != 1 {

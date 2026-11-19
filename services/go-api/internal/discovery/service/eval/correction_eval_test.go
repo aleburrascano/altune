@@ -1,8 +1,7 @@
-package eval
+package eval_test
 
 import (
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service/vocabulary"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"errors"
@@ -14,35 +13,35 @@ type vocabCorrector struct {
 	corruptOnValid bool
 }
 
-func (f *vocabCorrector) nearest(query string) *vocabulary.CorrectionResult {
+func (f *vocabCorrector) nearest(query string) *discovery.CorrectionResult {
 	q := textnorm.NormalizeForMatch(query)
 	for _, term := range f.vocab {
 		tn := textnorm.NormalizeForMatch(term)
 		if tn == q {
 			if f.corruptOnValid {
-				return &vocabulary.CorrectionResult{Corrected: term + " x", Confidence: 0.5}
+				return &discovery.CorrectionResult{Corrected: term + " x", Confidence: 0.5}
 			}
 			return nil
 		}
 		if textnorm.LevenshteinDistance(q, tn) == 1 {
-			return &vocabulary.CorrectionResult{Corrected: term, Confidence: 0.9}
+			return &discovery.CorrectionResult{Corrected: term, Confidence: 0.9}
 		}
 	}
 	return nil
 }
 
-func (f *vocabCorrector) Correct(_ context.Context, q string) *vocabulary.CorrectionResult {
+func (f *vocabCorrector) Correct(_ context.Context, q string) *discovery.CorrectionResult {
 	return f.nearest(q)
 }
 
-func (f *vocabCorrector) CorrectAggressive(_ context.Context, q string) *vocabulary.CorrectionResult {
+func (f *vocabCorrector) CorrectAggressive(_ context.Context, q string) *discovery.CorrectionResult {
 	return f.nearest(q)
 }
 
 func TestRunCorrectionEval_recallAndPrecision(t *testing.T) {
 	terms := []string{"kendrick", "humble", "scorpion"}
 	c := &vocabCorrector{vocab: terms}
-	r := RunCorrectionEval(context.Background(), terms, c, 3)
+	r := discovery.RunCorrectionEval(context.Background(), terms, c, 3)
 
 	if r.Terms != 3 {
 		t.Fatalf("expected 3 terms, got %d", r.Terms)
@@ -61,7 +60,7 @@ func TestRunCorrectionEval_recallAndPrecision(t *testing.T) {
 func TestRunCorrectionEval_detectsCorruption(t *testing.T) {
 	terms := []string{"bohemian rhapsody"}
 	c := &vocabCorrector{vocab: terms, corruptOnValid: true}
-	r := RunCorrectionEval(context.Background(), terms, c, 2)
+	r := discovery.RunCorrectionEval(context.Background(), terms, c, 2)
 
 	if r.Corrupted != 1 {
 		t.Errorf("expected 1 corruption, got %d", r.Corrupted)
@@ -74,9 +73,19 @@ func TestRunCorrectionEval_detectsCorruption(t *testing.T) {
 	}
 }
 
-func TestSyntheticTypos_deterministicAndDistance1(t *testing.T) {
-	a := syntheticTypos("kendrick", 3)
-	b := syntheticTypos("kendrick", 3)
+func typosOf(t *testing.T, term string, k int) []string {
+	t.Helper()
+	r := discovery.RunCorrectionEval(context.Background(), []string{term}, &vocabCorrector{}, k)
+	typos := make([]string, 0, len(r.RecallMisses))
+	for _, miss := range r.RecallMisses {
+		typos = append(typos, miss.Query)
+	}
+	return typos
+}
+
+func TestRunCorrectionEval_TyposAreDeterministicAndOneEditAway(t *testing.T) {
+	a := typosOf(t, "kendrick", 3)
+	b := typosOf(t, "kendrick", 3)
 	if len(a) == 0 {
 		t.Fatal("expected typos for a normal term")
 	}
@@ -94,45 +103,42 @@ func TestSyntheticTypos_deterministicAndDistance1(t *testing.T) {
 			t.Errorf("typo %q is distance %d, want 1", a[i], d)
 		}
 	}
-	if got := syntheticTypos("a", 3); got != nil {
+	if got := typosOf(t, "a", 3); len(got) != 0 {
 		t.Errorf("expected no typos for single-letter term, got %v", got)
 	}
 }
 
 type recordedVocab struct {
-	entries []domain.VocabularyEntry
+	entries []discovery.VocabularyEntry
 	err     error
 }
 
-func (v recordedVocab) FindClosest(context.Context, string, int) ([]domain.VocabularyEntry, error) {
+func (v recordedVocab) FindClosest(context.Context, string, int) ([]discovery.VocabularyEntry, error) {
 	return v.entries, v.err
 }
 
 func TestIsRecognizedTerm(t *testing.T) {
-	known := recordedVocab{entries: []domain.VocabularyEntry{{TermNorm: "kendrick"}}}
-	if !IsRecognizedTerm(context.Background(), known, "Kendrick") {
+	known := recordedVocab{entries: []discovery.VocabularyEntry{{TermNorm: "kendrick"}}}
+	if !discovery.IsRecognizedTerm(context.Background(), known, "Kendrick") {
 		t.Error("exact (normalized) vocab hit must be recognized")
 	}
-	if IsRecognizedTerm(context.Background(), known, "drake") {
+	if discovery.IsRecognizedTerm(context.Background(), known, "drake") {
 		t.Error("a term the store does not hold exactly must not be recognized")
 	}
-	if IsRecognizedTerm(context.Background(), known, "†††") {
+	if discovery.IsRecognizedTerm(context.Background(), known, "†††") {
 		t.Error("a symbol-only term normalizes to empty and must not be recognized")
 	}
 	broken := recordedVocab{err: errors.New("redis down")}
-	if IsRecognizedTerm(context.Background(), broken, "kendrick") {
+	if discovery.IsRecognizedTerm(context.Background(), broken, "kendrick") {
 		t.Error("a store error must fail closed (not recognized)")
 	}
 }
 
-func TestNeighborRune(t *testing.T) {
-	if neighborRune('a') != 's' {
-		t.Errorf("neighborRune('a') = %q, want 's' (QWERTY-adjacent)", neighborRune('a'))
-	}
-	if neighborRune('z') != 'x' {
-		t.Errorf("neighborRune('z') = %q, want 'x'", neighborRune('z'))
-	}
-	if neighborRune('7') != 'a' {
-		t.Errorf("neighborRune('7') = %q, want 'a'", neighborRune('7'))
+func TestRunCorrectionEval_ADoubledLettersFirstTypoSwapsItsFirstLetterForAKeyboardNeighbour(t *testing.T) {
+	cases := map[string]string{"aa": "sa", "zz": "xz", "77": "a7"}
+	for term, want := range cases {
+		if got := typosOf(t, term, 1); len(got) != 1 || got[0] != want {
+			t.Errorf("typos of %q = %q, want [%q]", term, got, want)
+		}
 	}
 }
