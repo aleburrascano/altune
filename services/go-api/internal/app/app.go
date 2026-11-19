@@ -115,15 +115,13 @@ func (a *App) Run(ctx context.Context) error {
 }
 
 func (a *App) setup(ctx context.Context) error {
-	verifier, testAuth, err := a.connectInfra(ctx)
+	verifier, err := a.connectInfra(ctx)
 	if err != nil {
 		return err
 	}
 
 	a.eventBus = events.NewInProcessBus()
 	a.eventTap = observe.NewEventTap(a.eventBus)
-
-	warnIgnoredStartupOptIns(ctx, a.cfg)
 
 	if err := a.applyDisabledJobs(ctx); err != nil {
 		return fmt.Errorf("startup switches: %w", err)
@@ -147,9 +145,6 @@ func (a *App) setup(ctx context.Context) error {
 	disc.Handler.WithOwnershipEnrichment(newOwnershipEnrichment(cat))
 
 	r := a.mountRoutes(verifier, cat, playback.handler, disc.Handler)
-	if testAuth != nil {
-		mountTestLogin(ctx, r, testAuth)
-	}
 	a.startAlertMonitor(ctx)
 	a.wireObserve(ctx, r, verifier, a.eventTap)
 	a.startCatalogJobs(ctx, cat, playback)
@@ -174,22 +169,17 @@ func (a *App) connectDatastores(ctx context.Context) error {
 	return nil
 }
 
-func (a *App) connectInfra(ctx context.Context) (auth.TokenVerifier, *auth.TestAuth, error) {
+func (a *App) connectInfra(ctx context.Context) (auth.TokenVerifier, error) {
 	if err := a.connectDatastores(ctx); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	supaVerifier, err := newAuthVerifier(ctx, a.cfg)
 	if err != nil {
-		return nil, nil, fmt.Errorf("auth: %w", err)
+		return nil, fmt.Errorf("auth: %w", err)
 	}
 	a.authVerifier = supaVerifier
-
-	testAuth, verifier, err := buildTestAuthVerifier(a.cfg, supaVerifier)
-	if err != nil {
-		return nil, nil, fmt.Errorf("test auth: %w", err)
-	}
-	return verifier, testAuth, nil
+	return supaVerifier, nil
 }
 
 func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback playbackWiring) {
