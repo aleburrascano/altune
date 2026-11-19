@@ -13,3 +13,5 @@ var (
 	WithPlaylistLifecycleEvents  = playlist.WithPlaylistLifecycleEvents
 	WithPlaylistMembershipEvents = playlist.WithPlaylistMembershipEvents
 )
+
+var ErrTooManyPlaylists = playlist.ErrTooManyPlaylists

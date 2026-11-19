@@ -1,0 +1,23 @@
+{
+  "removed": [
+    "T1 internal/catalog/internal/core/playlist/playlist_lifecycle_test.go imports catalogtest/fixtures.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/playlist/playlist_lifecycle_test.go imports catalogtest/playlist_publisher.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/playlist/playlist_lifecycle_test.go imports catalogtest/playlist_repo_fake.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/playlist/playlist_lifecycle_test.go imports domain/coded_error.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/playlist/playlist_lifecycle_test.go imports domain/playlist.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/playlist/playlist_lifecycle_test.go imports domain/track.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/playlist/playlist_lifecycle_test.go is in package playlist, so it sees inside the module: use package playlist_test and import the door",
+    "T1 internal/catalog/internal/core/playlist/playlist_membership_test.go imports catalogtest/audit_capture.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/playlist/playlist_membership_test.go imports catalogtest/fixtures.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/playlist/playlist_membership_test.go imports catalogtest/playlist_publisher.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/playlist/playlist_membership_test.go imports catalogtest/playlist_repo_fake.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/playlist/playlist_membership_test.go imports catalogtest/track_repo_fake.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/playlist/playlist_membership_test.go imports domain/coded_error.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/playlist/playlist_membership_test.go imports domain/playlist.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/playlist/playlist_membership_test.go imports domain/track.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/playlist/playlist_membership_test.go imports internal/core/ports/playlist_repo.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/playlist/playlist_membership_test.go is in package playlist, so it sees inside the module: use package playlist_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}
