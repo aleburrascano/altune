@@ -32,10 +32,27 @@ type Deps struct {
 type Handler struct {
 	deps         Deps
 	probeTimeout time.Duration
+	streams      StreamBounds
 }
 
 func NewObserveHandler(d Deps) *Handler {
-	return &Handler{deps: d, probeTimeout: defaultProbeTimeout}
+	return &Handler{deps: d, probeTimeout: defaultProbeTimeout, streams: DefaultStreamBounds()}
+}
+
+func (h *Handler) WithStreamBounds(bounds StreamBounds) *Handler {
+	h.streams = StreamBounds{
+		WriteIdle:   positiveOr(bounds.WriteIdle, h.streams.WriteIdle),
+		Heartbeat:   positiveOr(bounds.Heartbeat, h.streams.Heartbeat),
+		MaxLifetime: positiveOr(bounds.MaxLifetime, h.streams.MaxLifetime),
+	}
+	return h
+}
+
+func positiveOr(d, fallback time.Duration) time.Duration {
+	if d > 0 {
+		return d
+	}
+	return fallback
 }
 
 func (h *Handler) Register(r chi.Router) {

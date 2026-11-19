@@ -8,6 +8,8 @@ type (
 )
 
 var (
-	NewEventTap  = eventtap.New
-	NewEventFeed = eventtap.NewFeed
+	ErrFeedStopped        = eventtap.ErrFeedStopped
+	ErrTooManySubscribers = eventtap.ErrTooManySubscribers
+	NewEventTap           = eventtap.New
+	NewEventFeed          = eventtap.NewFeed
 )

@@ -1,12 +1,16 @@
-package discoverybridge
+package discoverybridge_test
 
 import (
 	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/observe"
 	"context"
-	"errors"
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type stubQualityReader struct {
@@ -23,58 +27,47 @@ func (s stubQualityReader) SuspectRate(context.Context, time.Time) (discovery.Di
 	return discovery.DiscographySuspectRate{Rate: 0.5}, s.suspectErr
 }
 
-func query(r stubQualityReader) ([]DiscographyCaseDTO, error) {
-	cases, _, _, err := QueryDiscographyQuality(context.Background(), r, time.Now(), ParseDiscographyGroupBy(""), 10)
-	return cases, err
+func query(r stubQualityReader) *httptest.ResponseRecorder {
+	router := chi.NewRouter()
+	observe.NewObserveHandler(observe.Deps{Discography: r}).Register(router)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/quality/discography", nil))
+	return rec
 }
 
-func errorCode(err error) string {
-	var coded interface{ ErrorCode() string }
-	if !errors.As(err, &coded) {
-		return ""
+func decodeBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]json.RawMessage {
+	t.Helper()
+	var body map[string]json.RawMessage
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode %s: %v", rec.Body.String(), err)
 	}
-	return coded.ErrorCode()
+	return body
 }
 
-func errorStatus(err error) int {
-	var coded interface{ HTTPStatus() int }
-	if !errors.As(err, &coded) {
-		return 0
-	}
-	return coded.HTTPStatus()
-}
-
-func TestQueryDeadlineExceededMapsToTimeout(t *testing.T) {
+func TestQuery_DeadlineExceededMapsToTimeout(t *testing.T) {
 	for name, r := range map[string]stubQualityReader{
 		"cases":   {casesErr: context.DeadlineExceeded},
 		"suspect": {suspectErr: context.DeadlineExceeded},
 	} {
-		if _, err := query(r); errorCode(err) != "observe.discography_quality_timeout" || errorStatus(err) != http.StatusGatewayTimeout {
-			t.Errorf("%s: err = %v", name, err)
+		rec := query(r)
+		if code := string(decodeBody(t, rec)["code"]); rec.Code != http.StatusGatewayTimeout || code != `"observe.discography_quality_timeout"` {
+			t.Errorf("%s: status %d body %s, want 504 observe.discography_quality_timeout", name, rec.Code, rec.Body.String())
 		}
 	}
 }
 
-func TestQueryOtherErrorsPassThrough(t *testing.T) {
-	_, err := query(stubQualityReader{casesErr: context.Canceled})
-	if !errors.Is(err, context.Canceled) || errorCode(err) != "" {
-		t.Fatalf("err = %v", err)
+func TestQuery_OtherErrorsPassThrough(t *testing.T) {
+	rec := query(stubQualityReader{casesErr: context.Canceled})
+
+	if code := string(decodeBody(t, rec)["code"]); rec.Code != http.StatusInternalServerError || code != `"internal"` {
+		t.Fatalf("status %d body %s, want the unmapped error answered as 500 internal", rec.Code, rec.Body.String())
 	}
 }
 
-func TestQueryZeroCasesGivesNonNilSlice(t *testing.T) {
-	cases, err := query(stubQualityReader{})
-	if err != nil || cases == nil || len(cases) != 0 {
-		t.Fatalf("cases = %#v, err = %v", cases, err)
-	}
-}
+func TestQuery_ZeroCasesGivesAnEmptyList(t *testing.T) {
+	rec := query(stubQualityReader{})
 
-func TestQueryNilProviderCountsBecomesEmptyMap(t *testing.T) {
-	cases, err := query(stubQualityReader{cases: []discovery.DiscographyCase{{ArtistRef: "a"}}})
-	if err != nil || len(cases) != 1 {
-		t.Fatalf("cases = %#v, err = %v", cases, err)
-	}
-	if cases[0].ProviderCounts == nil || len(cases[0].ProviderCounts) != 0 {
-		t.Fatalf("ProviderCounts = %#v", cases[0].ProviderCounts)
+	if cases := string(decodeBody(t, rec)["cases"]); rec.Code != http.StatusOK || cases != "[]" {
+		t.Fatalf("status %d cases %s, want 200 with an empty list, never null", rec.Code, cases)
 	}
 }

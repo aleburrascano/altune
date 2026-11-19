@@ -1,7 +1,7 @@
-package handler
+package handler_test
 
 import (
-	"altune/go-api/internal/observe/internal/shell/eventtap"
+	"altune/go-api/internal/observe"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/httputiltest"
@@ -27,14 +27,18 @@ import (
 	"github.com/google/uuid"
 )
 
-const streamWait = 5 * time.Second
+const (
+	streamWait       = 5 * time.Second
+	eventFeedCeiling = 16
+	keepaliveFrame   = ": keepalive\n\n"
+)
 
 var observeStreamPaths = []string{"/events/stream", "/logs/stream"}
 
 type streamFixture struct {
-	tap  *eventtap.Tap
+	tap  *observe.EventTap
 	ring *logging.RingBuffer
-	deps Deps
+	deps observe.Deps
 }
 
 func newStreamFixture(t *testing.T) streamFixture {
@@ -42,22 +46,36 @@ func newStreamFixture(t *testing.T) streamFixture {
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	ring := logging.Setup("error", false)
-	tap := eventtap.New(events.NewInProcessBus())
-	feed := eventtap.NewFeed()
+	tap := observe.NewEventTap(events.NewInProcessBus())
+	feed := observe.NewEventFeed()
 	ctx, stopFeed := context.WithCancel(context.Background())
 	feed.Start(ctx, tap)
 	t.Cleanup(func() {
 		stopFeed()
 		feed.Shutdown(context.Background())
 	})
-	return streamFixture{tap: tap, ring: ring, deps: Deps{Events: feed, Logs: ring}}
+	return streamFixture{tap: tap, ring: ring, deps: observe.Deps{Events: feed, Logs: ring}}
 }
 
-func streamRouter(deps Deps, middlewares ...func(http.Handler) http.Handler) *chi.Mux {
+func streamRouter(deps observe.Deps, middlewares ...func(http.Handler) http.Handler) *chi.Mux {
+	return routerFor(observe.NewObserveHandler(deps), middlewares...)
+}
+
+func boundedRouter(deps observe.Deps, bounds observe.StreamBounds, middlewares ...func(http.Handler) http.Handler) *chi.Mux {
+	return routerFor(observe.NewObserveHandler(deps).WithStreamBounds(bounds), middlewares...)
+}
+
+func routerFor(h *observe.Handler, middlewares ...func(http.Handler) http.Handler) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middlewares...)
-	NewObserveHandler(deps).Register(r)
+	h.Register(r)
 	return r
+}
+
+func shortBounds(change func(*observe.StreamBounds)) observe.StreamBounds {
+	bounds := observe.DefaultStreamBounds()
+	change(&bounds)
+	return bounds
 }
 
 type sseConn struct {
@@ -161,7 +179,7 @@ func assertCode(t *testing.T, rec *httptest.ResponseRecorder, wantStatus int, wa
 	}
 }
 
-func serveOnce(deps Deps, path string) *httptest.ResponseRecorder {
+func serveOnce(deps observe.Deps, path string) *httptest.ResponseRecorder {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	rec := httptest.NewRecorder()
@@ -257,14 +275,14 @@ func TestStreamLogs_FrameIsTheRedactedRecordWithItsCorrID(t *testing.T) {
 func TestStreamEvents_AbsentOrIdleFeedIsUnavailable(t *testing.T) {
 	cases := []struct {
 		name string
-		feed *eventtap.Feed
+		feed *observe.EventFeed
 	}{
 		{"no feed wired", nil},
-		{"feed never started", eventtap.NewFeed()},
+		{"feed never started", observe.NewEventFeed()},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			rec := serveOnce(Deps{Events: tc.feed}, "/events/stream")
+			rec := serveOnce(observe.Deps{Events: tc.feed}, "/events/stream")
 
 			assertCode(t, rec, http.StatusServiceUnavailable, "observe.event_feed_unavailable")
 		})
@@ -272,7 +290,7 @@ func TestStreamEvents_AbsentOrIdleFeedIsUnavailable(t *testing.T) {
 }
 
 func TestStreamLogs_AbsentRingIsUnavailable(t *testing.T) {
-	rec := serveOnce(Deps{}, "/logs/stream")
+	rec := serveOnce(observe.Deps{}, "/logs/stream")
 
 	assertCode(t, rec, http.StatusServiceUnavailable, "observe.stream_unavailable")
 	if !strings.Contains(rec.Body.String(), `"detail":"logs stream unavailable"`) {
@@ -288,7 +306,7 @@ func TestStreams_SendEventStreamNoCacheAndNosniffHeaders(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
 
-			streamRouter(fx.deps, NoStoreAndNosniff).ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, path, nil))
+			streamRouter(fx.deps, observe.NoStoreAndNosniff).ServeHTTP(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, path, nil))
 
 			want := map[string]string{"Content-Type": "text/event-stream", "Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"}
 			for header, value := range want {
@@ -333,20 +351,25 @@ func TestStreams_AuditNamesAnUnknownActorWhenNoSubjectReachedIt(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
 
-	serveOnce(Deps{}, "/logs/stream")
+	serveOnce(observe.Deps{}, "/logs/stream")
 
 	if !strings.Contains(logs.String(), `"actor":"unknown"`) {
 		t.Errorf("audit line %s does not name the actor unknown", logs.String())
 	}
 }
 
-func serveStream(t *testing.T, deps Deps, req *http.Request) <-chan struct{} {
+func serveStream(t *testing.T, deps observe.Deps, req *http.Request) <-chan struct{} {
+	t.Helper()
+	return serveStreamOn(t, streamRouter(deps), req)
+}
+
+func serveStreamOn(t *testing.T, router http.Handler, req *http.Request) <-chan struct{} {
 	t.Helper()
 	ctx, endRequest := context.WithCancel(req.Context())
 	returned := make(chan struct{})
 	go func() {
 		defer close(returned)
-		streamRouter(deps).ServeHTTP(httptest.NewRecorder(), req.WithContext(ctx))
+		router.ServeHTTP(httptest.NewRecorder(), req.WithContext(ctx))
 	}()
 	t.Cleanup(func() {
 		endRequest()
@@ -374,13 +397,11 @@ func assertStillOpen(t *testing.T, returned <-chan struct{}, why string) {
 }
 
 func TestStreams_EndAtMaxLifetime(t *testing.T) {
-	prev := streamMaxLifetime
-	streamMaxLifetime = 50 * time.Millisecond
-	t.Cleanup(func() { streamMaxLifetime = prev })
 	fx := newStreamFixture(t)
+	router := boundedRouter(fx.deps, shortBounds(func(b *observe.StreamBounds) { b.MaxLifetime = 50 * time.Millisecond }))
 	for _, path := range observeStreamPaths {
 		t.Run(path, func(t *testing.T) {
-			returned := serveStream(t, fx.deps, httptest.NewRequest(http.MethodGet, path, nil))
+			returned := serveStreamOn(t, router, httptest.NewRequest(http.MethodGet, path, nil))
 
 			assertEndsWithin(t, returned, 2*time.Second, "stream outlived its max lifetime")
 		})
@@ -388,14 +409,15 @@ func TestStreams_EndAtMaxLifetime(t *testing.T) {
 }
 
 func TestStreams_DefaultBoundsMatchTheAdminStreams(t *testing.T) {
+	defaults := observe.DefaultStreamBounds()
 	bounds := []struct {
 		name string
 		got  time.Duration
 		want time.Duration
 	}{
-		{"max lifetime", streamMaxLifetime, 15 * time.Minute},
-		{"write idle", streamWriteIdle, 10 * time.Second},
-		{"heartbeat", streamHeartbeat, 25 * time.Second},
+		{"max lifetime", defaults.MaxLifetime, 15 * time.Minute},
+		{"write idle", defaults.WriteIdle, 10 * time.Second},
+		{"heartbeat", defaults.Heartbeat, 25 * time.Second},
 	}
 	for _, bound := range bounds {
 		if bound.got != bound.want {
@@ -487,7 +509,7 @@ func fillSubscriberSlots(t *testing.T, fx streamFixture, path string) {
 		limit     int
 		subscribe func() (func(), error)
 	}{
-		"/events/stream": {eventtap.MaxSubscribers, func() (func(), error) {
+		"/events/stream": {eventFeedCeiling, func() (func(), error) {
 			_, cancel, err := fx.deps.Events.Subscribe()
 			return cancel, err
 		}},
@@ -519,31 +541,36 @@ func TestStreams_SubscriberPastTheCeilingGets429(t *testing.T) {
 	}
 }
 
+func TestStreams_SubscribeFailureOtherThanTheCeilingIs503(t *testing.T) {
+	tap := observe.NewEventTap(events.NewInProcessBus())
+	feed := observe.NewEventFeed()
+	feed.Start(context.Background(), tap)
+	feed.Shutdown(context.Background())
+	feed.Start(context.Background(), tap)
+	t.Cleanup(func() { feed.Shutdown(context.Background()) })
+
+	rec := serveOnce(observe.Deps{Events: feed}, "/events/stream")
+
+	assertCode(t, rec, http.StatusServiceUnavailable, "observe.stream_unavailable")
+}
+
 func TestStreams_SixteenthSubscriberIsStillAdmitted(t *testing.T) {
 	fx := newStreamFixture(t)
 	srv := httptest.NewServer(streamRouter(fx.deps))
 	t.Cleanup(srv.Close)
 	for _, path := range observeStreamPaths {
 		t.Run(path, func(t *testing.T) {
-			for i := 0; i < eventtap.MaxSubscribers-1; i++ {
+			for i := 0; i < eventFeedCeiling-1; i++ {
 				openStream(t, srv, path)
 			}
 
 			status, _, body := dialStream(t, srv, path)
 
 			if status != http.StatusOK {
-				t.Fatalf("subscriber %d: status %d, want 200 (body %s)", eventtap.MaxSubscribers, status, body)
+				t.Fatalf("subscriber %d: status %d, want 200 (body %s)", eventFeedCeiling, status, body)
 			}
 		})
 	}
-}
-
-func TestStreams_SubscribeFailureOtherThanTheCeilingIs503(t *testing.T) {
-	rec := httptest.NewRecorder()
-
-	rejectSubscription(rec, httptest.NewRequest(http.MethodGet, "/logs/stream", nil), "logs", errors.New("ring closed"), logging.ErrTooManySubscribers)
-
-	assertCode(t, rec, http.StatusServiceUnavailable, "observe.stream_unavailable")
 }
 
 type unflushableWriter struct {
@@ -557,49 +584,64 @@ func (w *unflushableWriter) WriteHeader(status int)      { w.status = status }
 func (w *unflushableWriter) Write(b []byte) (int, error) { return w.body.Write(b) }
 
 func TestStreams_UnflushableWriterIsRefusedWithACodedError(t *testing.T) {
-	w := &unflushableWriter{header: make(http.Header)}
+	fx := newStreamFixture(t)
+	for _, path := range observeStreamPaths {
+		t.Run(path, func(t *testing.T) {
+			w := &unflushableWriter{header: make(http.Header)}
 
-	streamSSE(w, httptest.NewRequest(http.MethodGet, "/events/stream", nil), make(chan eventtap.TapEvent))
+			streamRouter(fx.deps).ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
 
-	if w.status != http.StatusInternalServerError || !strings.Contains(w.body.String(), `"code":"observe.streaming_unsupported"`) {
-		t.Errorf("status %d body %s, want 500 observe.streaming_unsupported", w.status, w.body.String())
+			if w.status != http.StatusInternalServerError || !strings.Contains(w.body.String(), `"code":"observe.streaming_unsupported"`) {
+				t.Errorf("status %d body %s, want 500 observe.streaming_unsupported", w.status, w.body.String())
+			}
+		})
 	}
 }
 
-type failingWriter struct{ header http.Header }
+type failingWriter struct {
+	header   http.Header
+	accepted chan struct{}
+	writes   int
+}
 
 func (w *failingWriter) Header() http.Header { return w.header }
 func (w *failingWriter) WriteHeader(int)     {}
 func (w *failingWriter) Flush()              {}
-func (*failingWriter) Write([]byte) (int, error) {
+func (w *failingWriter) Write(b []byte) (int, error) {
+	w.writes++
+	if w.writes == 1 {
+		close(w.accepted)
+		return len(b), nil
+	}
 	return 0, errors.New("connection reset")
 }
 
 func TestStreams_EndOnAWriteFailure(t *testing.T) {
-	ch := make(chan eventtap.TapEvent, 1)
-	ch <- eventtap.TapEvent{Type: "any"}
+	fx := newStreamFixture(t)
+	w := &failingWriter{header: make(http.Header), accepted: make(chan struct{})}
 	returned := make(chan struct{})
-
 	go func() {
 		defer close(returned)
-		streamSSE(&failingWriter{header: make(http.Header)}, httptest.NewRequest(http.MethodGet, "/events/stream", nil), (<-chan eventtap.TapEvent)(ch))
+		streamRouter(fx.deps).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/events/stream", nil))
 	}()
+	<-w.accepted
+
+	fx.tap.Publish(context.Background(), shared.NewUserId(uuid.New()), "after-reset", nil)
 
 	assertEndsWithin(t, returned, 2*time.Second, "stream held its slot after every write failed")
 }
 
-func withStreamBounds(t *testing.T, idle, heartbeat time.Duration) {
-	t.Helper()
-	prevIdle, prevHeartbeat := streamWriteIdle, streamHeartbeat
-	streamWriteIdle, streamHeartbeat = idle, heartbeat
-	t.Cleanup(func() { streamWriteIdle, streamHeartbeat = prevIdle, prevHeartbeat })
+func idleBounds(idle, heartbeat time.Duration) observe.StreamBounds {
+	return shortBounds(func(b *observe.StreamBounds) {
+		b.WriteIdle = idle
+		b.Heartbeat = heartbeat
+	})
 }
 
 func TestStreams_IdleStreamEmitsKeepalives(t *testing.T) {
 	const heartbeat = 150 * time.Millisecond
-	withStreamBounds(t, 10*time.Second, heartbeat)
 	fx := newStreamFixture(t)
-	srv := httptest.NewServer(streamRouter(fx.deps))
+	srv := httptest.NewServer(boundedRouter(fx.deps, idleBounds(10*time.Second, heartbeat)))
 	t.Cleanup(srv.Close)
 	conn := openStream(t, srv, "/events/stream")
 
@@ -614,6 +656,21 @@ func TestStreams_IdleStreamEmitsKeepalives(t *testing.T) {
 			t.Fatalf("saw %d keepalives in %s, want the opening one plus 2", seen, 6*heartbeat)
 		}
 	}
+}
+
+func TestStreams_NonPositiveBoundsKeepTheDefaults(t *testing.T) {
+	fx := newStreamFixture(t)
+	bounds := observe.StreamBounds{WriteIdle: -time.Second, Heartbeat: 0, MaxLifetime: -time.Second}
+	srv := httptest.NewServer(boundedRouter(fx.deps, bounds))
+	t.Cleanup(srv.Close)
+	conn := openStream(t, srv, "/events/stream")
+
+	marker := "bounded-" + uuid.NewString()
+	fx.tap.Publish(context.Background(), shared.NewUserId(uuid.New()), events.EventType(marker), nil)
+
+	conn.awaitData(t, marker)
+	returned := serveStreamOn(t, boundedRouter(fx.deps, bounds), httptest.NewRequest(http.MethodGet, "/events/stream", nil))
+	assertStillOpen(t, returned, "a non-positive MaxLifetime ended the stream instead of keeping the default")
 }
 
 func TestStreams_OutliveTheRouteWriteDeadline(t *testing.T) {
@@ -650,10 +707,10 @@ func openStalledStream(t *testing.T, srv *httptest.Server) {
 	}
 }
 
-func stallClients(tap *eventtap.Tap) {
+func stallClients(tap *observe.EventTap) {
 	user := shared.NewUserId(uuid.New())
 	payload := map[string]any{"track_id": strings.Repeat("x", 16<<10)}
-	for i := 0; i < 4*eventtap.MaxSubscribers; i++ {
+	for i := 0; i < 4*eventFeedCeiling; i++ {
 		tap.Publish(context.Background(), user, "stall.filler", payload)
 	}
 }
@@ -681,10 +738,9 @@ func slotReleasedWithin(t *testing.T, srv *httptest.Server, limit time.Duration)
 
 func TestStreams_StalledClientReleasesItsSlotAtTheWriteDeadline(t *testing.T) {
 	const idle = 200 * time.Millisecond
-	withStreamBounds(t, idle, 5*idle)
 	fx := newStreamFixture(t)
-	srv := httputiltest.NewServer(t, streamRouter(fx.deps, httputil.RequestLogger))
-	for i := 0; i < eventtap.MaxSubscribers; i++ {
+	srv := httputiltest.NewServer(t, boundedRouter(fx.deps, idleBounds(idle, 5*idle), httputil.RequestLogger))
+	for i := 0; i < eventFeedCeiling; i++ {
 		openStalledStream(t, srv)
 	}
 	if status := probeStream(t, srv); status != http.StatusTooManyRequests {
@@ -698,10 +754,10 @@ func TestStreams_StalledClientReleasesItsSlotAtTheWriteDeadline(t *testing.T) {
 	}
 }
 
-func stoppableEventsDeps(t *testing.T) (Deps, *eventtap.Tap, func()) {
+func stoppableEventsDeps(t *testing.T) (observe.Deps, *observe.EventTap, func()) {
 	t.Helper()
-	tap := eventtap.New(events.NewInProcessBus())
-	feed := eventtap.NewFeed()
+	tap := observe.NewEventTap(events.NewInProcessBus())
+	feed := observe.NewEventFeed()
 	ctx, cancel := context.WithCancel(context.Background())
 	feed.Start(ctx, tap)
 	stop := func() {
@@ -709,7 +765,7 @@ func stoppableEventsDeps(t *testing.T) (Deps, *eventtap.Tap, func()) {
 		feed.Shutdown(context.Background())
 	}
 	t.Cleanup(stop)
-	return Deps{Events: feed}, tap, stop
+	return observe.Deps{Events: feed}, tap, stop
 }
 
 func TestStreamEvents_EndsWhenTheFeedStopsWhileIdle(t *testing.T) {
@@ -761,8 +817,8 @@ func TestStreamEvents_OpenedAfterTheFeedStoppedDoesNotHang(t *testing.T) {
 
 func TestStreamEvents_EveryOpenStreamEndsWhenTheFeedStops(t *testing.T) {
 	deps, _, stopFeed := stoppableEventsDeps(t)
-	streams := make([]<-chan struct{}, 0, eventtap.MaxSubscribers)
-	for i := 0; i < eventtap.MaxSubscribers; i++ {
+	streams := make([]<-chan struct{}, 0, eventFeedCeiling)
+	for i := 0; i < eventFeedCeiling; i++ {
 		streams = append(streams, serveStream(t, deps, httptest.NewRequest(http.MethodGet, "/events/stream", nil)))
 	}
 	assertStillOpen(t, streams[0], "events stream ended before the feed stopped")
