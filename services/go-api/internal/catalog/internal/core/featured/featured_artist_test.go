@@ -739,3 +739,48 @@ func TestBackfill_ANilClockKeepsTheWallClock(t *testing.T) {
 		t.Fatalf("an immediate rerun = %v, want ErrBackfillCoolingDown on the wall clock", err)
 	}
 }
+
+type canceledDuringWriteRepo struct {
+	*catalog.InMemoryTrackRepo
+	cancelRun context.CancelFunc
+}
+
+func (r *canceledDuringWriteRepo) ReplaceFeaturedArtists(ctx context.Context, id catalog.TrackId, userId shared.UserId, feats []catalog.FeaturedArtist) error {
+	r.cancelRun()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return r.InMemoryTrackRepo.ReplaceFeaturedArtists(ctx, id, userId, feats)
+}
+
+func TestBackfill_ARunCanceledDuringAWriteStillLandsThatWrite(t *testing.T) {
+	userId := catalog.FixtureUserId()
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	first := newTrackFeat(t, userId, "Track 1")
+	second := newTrackFeat(t, userId, "Track 2")
+	repo := &orderedTrackRepo{InMemoryTrackRepo: catalog.NewInMemoryTrackRepo(), order: []*catalog.Track{first, second}}
+	repo.Seed(first)
+	repo.Seed(second)
+	writes := &canceledDuringWriteRepo{InMemoryTrackRepo: repo.InMemoryTrackRepo, cancelRun: cancel}
+	resolver := catalog.InMemoryFeaturedResolver{ByTitle: map[string][]catalog.FeaturedArtist{
+		"Track 1": {catalog.NewFeaturedArtistIdentityOnly("Guest 1", "m1", 0)},
+		"Track 2": {catalog.NewFeaturedArtistIdentityOnly("Guest 2", "m2", 0)},
+	}}
+	svc := catalog.NewBackfillFeaturedService(repo, writes, resolver)
+
+	res, err := svc.Execute(runCtx, userId, 0)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context.Canceled once the run notices", err)
+	}
+	if res == nil || res.Updated != 1 || res.Failed != 0 || res.NextOffset != 1 {
+		t.Fatalf("result = %+v, want the write in flight counted as updated and the run stopped after it", res)
+	}
+	if len(first.FeaturedArtists) != 1 || first.FeaturedArtists[0].Name != "Guest 1" {
+		t.Fatalf("first track featured = %+v, want the write that was in flight at cancel to have landed", first.FeaturedArtists)
+	}
+	if len(second.FeaturedArtists) != 0 {
+		t.Fatalf("second track featured = %+v, want nothing written after the cancel", second.FeaturedArtists)
+	}
+}
