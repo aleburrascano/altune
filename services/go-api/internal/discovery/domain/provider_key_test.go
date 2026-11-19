@@ -50,7 +50,13 @@ var liveProviders = []ProviderName{
 }
 
 func TestProviderName_RetiredSlotsKeepTheirNumbersAndDecodeAsUnknown(t *testing.T) {
-	wantNumbers := map[ProviderName]int{ProviderSoundCloud: 3, ProviderITunes: 5, ProviderYouTube: 8, ProviderAppleMusic: 10, ProviderSpotify: 11}
+	wantNumbers := map[ProviderName]int{
+		ProviderUnknown: 0, ProviderDeezer: 1, ProviderMusicBrainz: 2, ProviderSoundCloud: 3, ProviderITunes: 5,
+		ProviderTheAudioDB: 6, ProviderDiscogs: 7, ProviderYouTube: 8, ProviderAppleMusic: 10, ProviderSpotify: 11,
+	}
+	if len(wantNumbers) != len(liveProviders)+1 {
+		t.Fatalf("pinned %d providers, want every live provider and unknown (%d)", len(wantNumbers), len(liveProviders)+1)
+	}
 	for p, n := range wantNumbers {
 		if int(p) != n {
 			t.Errorf("%v = %d, want %d so cached results keep their provider", p, int(p), n)

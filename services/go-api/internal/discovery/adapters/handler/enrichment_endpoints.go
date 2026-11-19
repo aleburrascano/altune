@@ -210,11 +210,11 @@ func serveNamedEnrichment[E, D any](
 
 func (h *DiscoveryHandler) handleLastFmEnrichment(w http.ResponseWriter, r *http.Request) {
 	if _, _, _, ok := namedEnrichmentParams(w, r); ok {
-		httputil.WriteJSON(w, http.StatusOK, LastFmEnrichmentResponseDTO{Tags: []string{}, Similar: []string{}})
+		httputil.WriteJSON(w, http.StatusOK, lastFmEnrichmentResponseDTO{Tags: []string{}, Similar: []string{}})
 	}
 }
 
-type LastFmEnrichmentResponseDTO struct {
+type lastFmEnrichmentResponseDTO struct {
 	MBID       string   `json:"mbid"`
 	Listeners  int64    `json:"listeners"`
 	Playcount  int64    `json:"playcount"`
