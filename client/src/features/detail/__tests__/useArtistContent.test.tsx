@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import type { ArtistContentResponse } from '@shared/apiClient';
 import type { DiscoverySource } from '@shared/catalog';
@@ -230,7 +230,6 @@ describe('aborting on unmount', () => {
 
 describe('useArtistContent reopened against the 30-minute content cache window', () => {
   const CACHED_ARTIST_PATH = 'GET /v1/discovery/artists/spotify/artist-cache/content';
-  const { act } = require('@testing-library/react-native');
   const okList = { items: [], provider_name: 'spotify', status: 'ok' };
 
   it.each([
@@ -416,8 +415,6 @@ describe('useArtistContent albums', () => {
 });
 
 describe('useArtistContent with no source to ask', () => {
-  const { act } = require('@testing-library/react-native');
-
   it('sends nothing and reports no failure', async () => {
     const queryClient = createTestQueryClient();
 
@@ -459,7 +456,6 @@ describe('useArtistContent caches per artist', () => {
 });
 
 describe('useArtistContent under caller control', () => {
-  const { act } = require('@testing-library/react-native');
   const spotifyArtist = [{ provider: 'spotify', external_id: 'artist-1', url: '' }];
   const servedPage = { status: 200, json: { top_tracks: servedList, albums: servedList } };
 
@@ -476,6 +472,7 @@ describe('useArtistContent under caller control', () => {
   });
 
   it('asks the server again when the caller retries', async () => {
+    const requestsAfterRetry = 2;
     __http.reply(ARTIST_CONTENT_PATH, servedPage);
     const { result } = renderHook(() => useArtistContent({ sources: spotifyArtist }), {
       wrapper: createWrapper(createTestQueryClient()),
@@ -484,6 +481,6 @@ describe('useArtistContent under caller control', () => {
 
     act(() => result.current.refetch());
 
-    await waitFor(() => expect(__http.countFor(ARTIST_CONTENT_PATH)).toBe(2));
+    await waitFor(() => expect(__http.countFor(ARTIST_CONTENT_PATH)).toBe(requestsAfterRetry));
   });
 });

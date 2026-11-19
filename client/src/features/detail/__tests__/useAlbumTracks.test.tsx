@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { useAlbumTracks } from '@features/detail';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
@@ -152,7 +152,6 @@ describe('useAlbumTracks surfaces transient provider failures as errors', () => 
 
 describe('useAlbumTracks reopened against the 30-minute content cache window', () => {
   const CACHED_ALBUM_PATH = 'GET /v1/discovery/albums/spotify/album-cache/tracks';
-  const { act } = require('@testing-library/react-native');
 
   it.each([
     ['serves the cached tracklist without a request 1 ms before 30 minutes', 1_799_999, 1],
@@ -181,9 +180,8 @@ describe('useAlbumTracks reopened against the 30-minute content cache window', (
 });
 
 describe('useAlbumTracks refetch', () => {
-  const { act } = require('@testing-library/react-native');
-
   it('asks the server again when the caller retries', async () => {
+    const requestsAfterRetry = 2;
     __http.reply(ALBUM_TRACKS_PATH, { status: 200, json: emptyContent });
     const { result } = renderHook(
       () => useAlbumTracks({ provider: 'spotify', externalId: 'album-1' }),
@@ -193,6 +191,6 @@ describe('useAlbumTracks refetch', () => {
 
     act(() => result.current.refetch());
 
-    await waitFor(() => expect(__http.countFor(ALBUM_TRACKS_PATH)).toBe(2));
+    await waitFor(() => expect(__http.countFor(ALBUM_TRACKS_PATH)).toBe(requestsAfterRetry));
   });
 });
