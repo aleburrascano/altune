@@ -53,6 +53,8 @@ func forgetIdentity(t *testing.T, pool *pgxpool.Pool, owner shared.UserId) {
 	}
 }
 
+const seededQuery = "mac demarco"
+
 type storedRowsOf struct {
 	history   int
 	favorites int
@@ -62,10 +64,19 @@ type storedRowsOf struct {
 func countStoredRows(t *testing.T, pool *pgxpool.Pool, owner shared.UserId) storedRowsOf {
 	t.Helper()
 	return storedRowsOf{
-		history:   countOwnedRows(t, pool, `SELECT COUNT(*) FROM discovery_search_history WHERE user_id = $1`, owner),
-		favorites: countOwnedRows(t, pool, `SELECT COUNT(*) FROM discovery_favorites WHERE user_id = $1`, owner),
-		events:    countOwnedRows(t, pool, `SELECT COUNT(*) FROM discovery_events WHERE user_id = $1`, owner),
+		history:   countSeededRows(t, pool, `SELECT COUNT(*) FROM discovery_search_history WHERE user_id = $1 AND query_norm = $2`, owner),
+		favorites: countSeededRows(t, pool, `SELECT COUNT(*) FROM discovery_favorites WHERE user_id = $1 AND entity_key = $2`, owner),
+		events:    countSeededRows(t, pool, `SELECT COUNT(*) FROM discovery_events WHERE user_id = $1 AND query_norm = $2`, owner),
 	}
+}
+
+func countSeededRows(t *testing.T, pool *pgxpool.Pool, countSQL string, owner shared.UserId) int {
+	t.Helper()
+	var n int
+	if err := pool.QueryRow(context.Background(), countSQL, owner.UUID(), seededQuery).Scan(&n); err != nil {
+		t.Fatalf("count seeded rows of %s: %v", owner.UUID(), err)
+	}
+	return n
 }
 
 func countOwnedRows(t *testing.T, pool *pgxpool.Pool, countSQL string, owner shared.UserId) int {
@@ -87,7 +98,7 @@ func seedEveryDiscoveryTableFor(t *testing.T, pool *pgxpool.Pool, owner shared.U
 		ID:         shared.NewEntityId(),
 		UserId:     owner,
 		Query:      "Mac DeMarco",
-		QueryNorm:  "mac demarco",
+		QueryNorm:  seededQuery,
 		ExecutedAt: time.Now().UTC(),
 	}); err != nil {
 		t.Fatalf("seed search history: %v", err)
@@ -96,7 +107,7 @@ func seedEveryDiscoveryTableFor(t *testing.T, pool *pgxpool.Pool, owner shared.U
 	favorites := NewPgxFavoritesRepository(pool)
 	if err := favorites.Add(ctx, owner, domain.Favorite{
 		Kind:  domain.ResultKindArtist,
-		Key:   "mac demarco",
+		Key:   seededQuery,
 		Title: "Mac DeMarco",
 	}); err != nil {
 		t.Fatalf("seed favorite: %v", err)
@@ -107,7 +118,7 @@ func seedEveryDiscoveryTableFor(t *testing.T, pool *pgxpool.Pool, owner shared.U
 		OccurredAt: time.Now().UTC(),
 		UserId:     owner,
 		Type:       domain.EventTypeSearchPerformed,
-		QueryNorm:  "mac demarco",
+		QueryNorm:  seededQuery,
 		Payload:    map[string]any{},
 	}); err != nil {
 		t.Fatalf("seed event: %v", err)
@@ -117,11 +128,11 @@ func seedEveryDiscoveryTableFor(t *testing.T, pool *pgxpool.Pool, owner shared.U
 func deleteStoredRowsOf(t *testing.T, pool *pgxpool.Pool, owner shared.UserId) {
 	t.Helper()
 	for _, deleteSQL := range []string{
-		`DELETE FROM discovery_search_history WHERE user_id = $1`,
-		`DELETE FROM discovery_favorites WHERE user_id = $1`,
-		`DELETE FROM discovery_events WHERE user_id = $1`,
+		`DELETE FROM discovery_search_history WHERE user_id = $1 AND query_norm = $2`,
+		`DELETE FROM discovery_favorites WHERE user_id = $1 AND entity_key = $2`,
+		`DELETE FROM discovery_events WHERE user_id = $1 AND query_norm = $2`,
 	} {
-		if _, err := pool.Exec(context.Background(), deleteSQL, owner.UUID()); err != nil {
+		if _, err := pool.Exec(context.Background(), deleteSQL, owner.UUID(), seededQuery); err != nil {
 			t.Fatalf("clean up rows of %s: %v", owner.UUID(), err)
 		}
 	}

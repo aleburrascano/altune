@@ -11,29 +11,6 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-func (a *App) buildDetailEnrichers(cf clientFactory) discovery.DetailEnrichers {
-	var enrichers discovery.DetailEnrichers
-
-	if lfmEnricher := buildLastFMAdapter(a.cfg, cf.discovery()); lfmEnricher != nil {
-		enrichers.LastFm = discovery.NewLastFmEnrichmentService(
-			lfmEnricher,
-			discovery.NewRedisLastFmEnrichmentCache(a.redisClient, cacheSignalOption()),
-		)
-	}
-
-	enrichers.Deezer = discovery.NewDeezerEnrichmentService(
-		discovery.NewDeezerAdapter(cf.discovery()),
-		discovery.NewRedisDeezerEnrichmentCache(a.redisClient, cacheSignalOption()),
-	)
-
-	enrichers.Lyrics = discovery.NewLyricsService(
-		discovery.NewDeezerLyricsAdapter(cf.discovery()),
-		discovery.NewRedisDeezerLyricsCache(a.redisClient, cacheSignalOption()),
-	)
-
-	return enrichers
-}
-
 type consensusAdder func(key discovery.ProviderKey, provider discovery.ProviderName, fetcher func(context.Context, string) ([]discovery.SearchResult, error))
 
 func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []discovery.ConsensusProvider {

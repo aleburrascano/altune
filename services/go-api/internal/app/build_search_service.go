@@ -20,22 +20,8 @@ func BuildSearchService(
 	redisClient *goredis.Client,
 	eventStore discovery.EventStore,
 ) *discovery.SearchService {
-	return BuildSearchServiceWithTransport(ctx, cfg, pool, redisClient, eventStore, nil, nil)
-}
-
-func BuildSearchServiceWithTransport(
-	ctx context.Context,
-	cfg *config.Config,
-	pool *pgxpool.Pool,
-	redisClient *goredis.Client,
-	eventStore discovery.EventStore,
-	transport http.RoundTripper,
-	vocabStore discovery.VocabularyStore,
-	extra ...discovery.SearchOption,
-) *discovery.SearchService {
-	w := newSearchWiring(ctx, cfg, transport)
-	opts := contentServiceOptions(w, cfg, pool, redisClient, eventStore, vocabStore)
-	return w.service(append(opts, extra...))
+	w := newSearchWiring(ctx, cfg, nil)
+	return w.service(contentServiceOptions(w, cfg, pool, redisClient, eventStore))
 }
 
 func BuildRankingOnlySearchService(
@@ -77,14 +63,13 @@ func contentServiceOptions(
 	pool *pgxpool.Pool,
 	redisClient *goredis.Client,
 	eventStore discovery.EventStore,
-	vocabStore discovery.VocabularyStore,
 ) []discovery.SearchOption {
 	opts := baseSearchOptions(cfg, pool)
 	opts = append(opts, explorationSearchOptions(cfg)...)
 	opts = append(opts, discovery.WithSearchDeadline(cfg.DiscoverySearchDeadline))
 	opts = append(opts, contentSearchOptions(w.cf, cfg, pool, redisClient, w.sharedMB, w.breaker)...)
 	opts = append(opts, resultCacheSearchOptions(cfg, redisClient)...)
-	return append(opts, sharedSearchOptions(w, cfg, redisClient, eventStore, vocabStore)...)
+	return append(opts, sharedSearchOptions(cfg, redisClient, eventStore)...)
 }
 
 func rankingOnlyServiceOptions(
@@ -94,18 +79,16 @@ func rankingOnlyServiceOptions(
 	redisClient *goredis.Client,
 ) []discovery.SearchOption {
 	opts := baseSearchOptions(cfg, pool)
-	return append(opts, sharedSearchOptions(w, cfg, redisClient, nil, nil)...)
+	return append(opts, sharedSearchOptions(cfg, redisClient, nil)...)
 }
 
 func sharedSearchOptions(
-	w searchWiring,
 	cfg *config.Config,
 	redisClient *goredis.Client,
 	eventStore discovery.EventStore,
-	vocabStore discovery.VocabularyStore,
 ) []discovery.SearchOption {
 	opts := cacheSearchOptions(redisClient)
-	opts = append(opts, vocabularySearchOptions(redisClient, vocabStore)...)
+	opts = append(opts, vocabularySearchOptions(redisClient)...)
 	opts = append(opts, eventSearchOptions(cfg, eventStore)...)
 	return opts
 }
@@ -206,11 +189,8 @@ func cacheSearchOptions(redisClient *goredis.Client) []discovery.SearchOption {
 	}
 }
 
-func vocabularySearchOptions(redisClient *goredis.Client, vocabStore discovery.VocabularyStore) []discovery.SearchOption {
-	vs := vocabStore
-	if vs == nil {
-		vs = BuildVocabularyStore(redisClient)
-	}
+func vocabularySearchOptions(redisClient *goredis.Client) []discovery.SearchOption {
+	vs := BuildVocabularyStore(redisClient)
 	if vs == nil {
 		return nil
 	}

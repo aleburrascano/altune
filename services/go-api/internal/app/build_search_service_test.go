@@ -39,7 +39,7 @@ func TestSearchServiceOptionSets(t *testing.T) {
 	}{
 		{
 			name: "content with redis",
-			opts: contentServiceOptions(w, cfg, pool, redisClient, eventStore, nil),
+			opts: contentServiceOptions(w, cfg, pool, redisClient, eventStore),
 			want: []string{
 				"WithHistoryRepository", "WithTailDemotion", "WithCrossKindProminence", "WithExploration",
 				"WithSearchDeadline", "WithArtworkResolver", "WithFindRelatedService", "WithFavorites", "WithIdentityStore",
@@ -50,7 +50,7 @@ func TestSearchServiceOptionSets(t *testing.T) {
 		},
 		{
 			name: "content without redis",
-			opts: contentServiceOptions(w, cfg, pool, nil, eventStore, nil),
+			opts: contentServiceOptions(w, cfg, pool, nil, eventStore),
 			want: []string{
 				"WithHistoryRepository", "WithTailDemotion", "WithCrossKindProminence", "WithExploration",
 				"WithSearchDeadline", "WithArtworkResolver", "WithFindRelatedService", "WithFavorites", "WithIdentityStore",

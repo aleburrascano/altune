@@ -9,5 +9,4 @@ var (
 	NewEnrichmentService       = enrich.NewEnrichmentService
 	NewLastFmEnrichmentService = enrich.NewLastFmEnrichmentService
 	NewLyricsService           = enrich.NewLyricsService
-	WithMBIDMemo               = enrich.WithMBIDMemo
 )

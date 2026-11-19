@@ -7,7 +7,6 @@ import (
 	"altune/go-api/internal/shared/httptrace"
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -68,19 +67,6 @@ func TestProviderTransport_ReplaysStickyAndErrorsOnMiss(t *testing.T) {
 		_ = resp.Body.Close()
 		t.Fatal("unmatched request must error")
 	}
-}
-
-const stubbedChartTerm = "stubbed chart term"
-
-type cannedChartsRT struct{}
-
-func (cannedChartsRT) RoundTrip(_ *http.Request) (*http.Response, error) {
-	body := `{"data":[{"title":"` + stubbedChartTerm + `","name":"` + stubbedChartTerm + `"}]}`
-	return &http.Response{
-		StatusCode: http.StatusOK,
-		Header:     http.Header{"Content-Type": []string{"application/json"}},
-		Body:       io.NopCloser(strings.NewReader(body)),
-	}, nil
 }
 
 func TestNilTransportResolvesToOneSharedLiveTransport(t *testing.T) {
@@ -160,28 +146,6 @@ func TestDiscoveryClientRefusesARedirectToTheMetadataAddress(t *testing.T) {
 	}
 	if !errors.Is(err, egress.ErrNonPublicAddr) {
 		t.Errorf("error = %v, want the non-public address refusal", err)
-	}
-}
-
-func TestChartProvidersFetchOverTheGivenFactorysTransport(t *testing.T) {
-	a := &App{cfg: &config.Config{}}
-
-	charts := a.buildChartProviders(newClientFactory(cannedChartsRT{}))
-
-	if len(charts) != 1 {
-		t.Fatalf("chart providers = %d, want 1 (Deezer; Last.fm unconfigured)", len(charts))
-	}
-	entries, err := charts[0].FetchCharts(context.Background(), 1)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(entries) == 0 {
-		t.Fatal("chart provider returned nothing, so it never read the factory's transport")
-	}
-	for _, e := range entries {
-		if e.Term != stubbedChartTerm {
-			t.Errorf("chart term = %q, want the stub transport's %q", e.Term, stubbedChartTerm)
-		}
 	}
 }
 

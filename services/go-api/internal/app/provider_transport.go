@@ -106,10 +106,6 @@ func (f clientFactory) discovery() *http.Client {
 	return &http.Client{Timeout: discoveryHTTPTimeout, Transport: f.transport}
 }
 
-func (f clientFactory) chart() *http.Client {
-	return &http.Client{Timeout: chartHTTPTimeout, Transport: f.transport}
-}
-
 func (f clientFactory) roundTripper() http.RoundTripper {
 	return f.transport
 }

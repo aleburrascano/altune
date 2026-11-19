@@ -173,12 +173,8 @@ func (a *App) startAcquisitionPrune(ctx context.Context, outcomes, rejections ac
 	}, "interval", acquisitionPruneInterval.String())
 }
 
-func (a *App) startVocabularyRefresh(ctx context.Context, cf clientFactory, vocabStore discovery.VocabularyStore) {
-	if vocabStore == nil {
-		return
-	}
-	charts := a.buildChartProviders(cf)
-	if len(charts) == 0 {
+func (a *App) startVocabularyRefresh(vocabStore discovery.VocabularyStore, charts []discovery.ChartProvider) {
+	if vocabStore == nil || len(charts) == 0 {
 		return
 	}
 	const vocabRefreshInterval = 6 * time.Hour
@@ -195,8 +191,8 @@ const (
 	unreleasedRefreshPerRun   = 2
 )
 
-func (a *App) startUnreleasedRefresh(svc *discovery.UnreleasedService, store discovery.UnreleasedStore) {
-	if store == nil {
+func (a *App) startUnreleasedRefresh(svc *discovery.UnreleasedService) {
+	if svc == nil {
 		return
 	}
 	a.startSimpleJob(jobUnreleasedRefresh, unreleasedRefreshInterval, unreleasedRefreshRun(svc), "interval", unreleasedRefreshInterval.String())
@@ -206,14 +202,4 @@ func unreleasedRefreshRun(svc *discovery.UnreleasedService) func(context.Context
 	return func(ctx context.Context) error {
 		return svc.RefreshDue(ctx, time.Now().UTC(), unreleasedRefreshPerRun)
 	}
-}
-
-func (a *App) buildChartProviders(cf clientFactory) []discovery.ChartProvider {
-	var charts []discovery.ChartProvider
-	deezerClient := cf.chart()
-	charts = append(charts, discovery.NewDeezerAdapter(deezerClient))
-	if lfm := buildLastFMAdapter(a.cfg, cf.chart()); lfm != nil {
-		charts = append(charts, lfm)
-	}
-	return charts
 }
