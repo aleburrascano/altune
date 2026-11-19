@@ -10,4 +10,12 @@ type (
 var (
 	NewBackfillFeaturedService = featured.NewBackfillFeaturedService
 	NewListFeaturingService    = featured.NewListFeaturingService
+	WithBackfillClock          = featured.WithBackfillClock
+	WithBackfillItemTimeout    = featured.WithBackfillItemTimeout
+	WithBackfillTimeBudget     = featured.WithBackfillTimeBudget
+)
+
+var (
+	ErrBackfillCoolingDown = featured.ErrBackfillCoolingDown
+	ErrBackfillInProgress  = featured.ErrBackfillInProgress
 )

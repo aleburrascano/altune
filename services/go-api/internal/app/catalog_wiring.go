@@ -267,7 +267,7 @@ func (a *App) wireCatalogServices(
 		setTrackNumberSvc:     catalog.NewSetTrackNumberService(catalogTrackRepo),
 		playlistLifecycleSvc:  catalog.NewPlaylistLifecycleService(playlistRepo, catalog.WithPlaylistLifecycleEvents(tap)),
 		playlistMembershipSvc: catalog.NewPlaylistMembershipService(playlistRepo, catalogTrackRepo, catalog.WithPlaylistMembershipEvents(tap)),
-		backfillFeaturedSvc:   catalog.NewBackfillFeaturedService(catalogTrackRepo, catalogTrackRepo, featuredBridge),
+		backfillFeaturedSvc:   catalog.NewBackfillFeaturedService(catalogTrackRepo, catalogTrackRepo, featuredBridge, catalog.WithBackfillClock(time.Now)),
 		listFeaturingSvc:      catalog.NewListFeaturingService(catalogTrackRepo),
 		getTrackStatusSvc:     catalog.NewGetTrackStatusService(catalogTrackRepo),
 		streamTrackSvc:        catalog.NewStreamTrackService(catalogTrackRepo, audio.audioStore, catalog.WithStreamScheduler(audio.scheduler), catalog.WithStreamMetrics(audioStoreMetrics), catalog.WithStreamRecoverySwitch(a.jobSwitch(jobStreamRecovery))),

@@ -24,7 +24,27 @@ type BackfillFeaturedService struct {
 type BackfillOption func(*BackfillFeaturedService)
 
 func WithBackfillTimeBudget(budget time.Duration) BackfillOption {
-	return func(s *BackfillFeaturedService) { s.timeBudget = budget }
+	return func(s *BackfillFeaturedService) {
+		if budget > 0 {
+			s.timeBudget = budget
+		}
+	}
+}
+
+func WithBackfillItemTimeout(timeout time.Duration) BackfillOption {
+	return func(s *BackfillFeaturedService) {
+		if timeout > 0 {
+			s.itemTimeout = timeout
+		}
+	}
+}
+
+func WithBackfillClock(now func() time.Time) BackfillOption {
+	return func(s *BackfillFeaturedService) {
+		if now != nil {
+			s.admission.now = now
+		}
+	}
 }
 
 func NewBackfillFeaturedService(
