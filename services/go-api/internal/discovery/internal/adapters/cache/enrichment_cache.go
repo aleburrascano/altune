@@ -10,10 +10,7 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-var (
-	_ ports.IdentityBridge = (*RedisEnrichmentCache)(nil)
-	_ ports.MBIDIndex      = (*RedisEnrichmentCache)(nil)
-)
+var _ ports.MBIDIndex = (*RedisEnrichmentCache)(nil)
 
 const (
 	enrichmentPositiveTTL = 14 * 24 * time.Hour
@@ -58,17 +55,6 @@ func (c *RedisEnrichmentCache) SetNegative(ctx context.Context, kind domain.Resu
 		return nil
 	}
 	return c.client.Set(ctx, enrichmentNegKey(kind, nameKey), redisNegSentinel, enrichmentNegativeTTL).Err()
-}
-
-func (c *RedisEnrichmentCache) ExternalIDs(ctx context.Context, kind domain.ResultKind, mbid string) (map[domain.ProviderKey]string, bool) {
-	if c.disabled() || mbid == "" {
-		return nil, false
-	}
-	e, found, _ := c.Get(ctx, kind, mbid)
-	if !found || len(e.ExternalIDs) == 0 {
-		return nil, false
-	}
-	return e.ExternalIDs, true
 }
 
 func (c *RedisEnrichmentCache) LookupMBID(ctx context.Context, kind domain.ResultKind, nameKey string) (string, bool) {

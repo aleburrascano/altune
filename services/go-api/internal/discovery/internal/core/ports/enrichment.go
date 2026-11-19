@@ -18,10 +18,6 @@ type EnrichmentCache interface {
 	SetNegative(ctx context.Context, kind domain.ResultKind, nameKey string) error
 }
 
-type IdentityBridge interface {
-	ExternalIDs(ctx context.Context, kind domain.ResultKind, mbid string) (map[domain.ProviderKey]string, bool)
-}
-
 type NameKeyedCache[T any] interface {
 	Get(ctx context.Context, nameKey string) (T, bool, error)
 	Set(ctx context.Context, nameKey string, v T) error

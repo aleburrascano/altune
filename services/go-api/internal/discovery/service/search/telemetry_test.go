@@ -52,7 +52,7 @@ func TestService_SearchTelemetryCarriesStageTimes(t *testing.T) {
 
 	payload := store.Snapshot()[0].Payload
 	ms := map[string]int64{}
-	for _, key := range []string{"fanout_ms", "identity_ms", "rank_ms", "artwork_ms", "favorites_ms", "related_ms", "total_ms"} {
+	for _, key := range []string{"fanout_ms", "rank_ms", "artwork_ms", "favorites_ms", "related_ms", "total_ms"} {
 		v, ok := payload[key].(int64)
 		if !ok {
 			t.Fatalf("payload[%q] = %#v, want milliseconds", key, payload[key])

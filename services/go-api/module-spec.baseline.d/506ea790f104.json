@@ -1,0 +1,27 @@
+{
+  "removed": [
+    "C12 internal/discovery/discoverytest/identity_stamp_helpers.go discoverytest/identity_stamp_helpers.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "C12 internal/discovery/service/identity/identity_stamp.go service/identity/identity_stamp.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "C12 internal/discovery/service/identity/identity_verify.go service/identity/identity_verify.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
+    "T1 internal/discovery/internal/adapters/persistence/entity_identity_repo_test.go imports domain/provider_key.go, behind discovery's door",
+    "T1 internal/discovery/service/identity/identity_stamp_test.go imports discoverytest/identity_stamp_helpers.go, behind discovery's door",
+    "T1 internal/discovery/service/identity/identity_stamp_test.go imports discoverytest/merge_helpers.go, behind discovery's door",
+    "T1 internal/discovery/service/identity/identity_stamp_test.go imports domain/enums.go, behind discovery's door",
+    "T1 internal/discovery/service/identity/identity_stamp_test.go imports domain/provider_key.go, behind discovery's door",
+    "T1 internal/discovery/service/identity/identity_stamp_test.go imports domain/search_result.go, behind discovery's door",
+    "T1 internal/discovery/service/identity/identity_stamp_test.go is in package identity, so it sees inside the module: use package identity_test and import the door",
+    "T1 internal/discovery/service/identity/identity_verify_test.go imports discoverytest/content_providers.go, behind discovery's door",
+    "T1 internal/discovery/service/identity/identity_verify_test.go imports discoverytest/identity_stamp_helpers.go, behind discovery's door",
+    "T1 internal/discovery/service/identity/identity_verify_test.go imports discoverytest/merge_helpers.go, behind discovery's door",
+    "T1 internal/discovery/service/identity/identity_verify_test.go imports domain/enums.go, behind discovery's door",
+    "T1 internal/discovery/service/identity/identity_verify_test.go imports domain/provider_key.go, behind discovery's door",
+    "T1 internal/discovery/service/identity/identity_verify_test.go imports domain/search_result.go, behind discovery's door",
+    "T1 internal/discovery/service/identity/identity_verify_test.go imports internal/core/ports/search.go, behind discovery's door",
+    "T1 internal/discovery/service/identity/identity_verify_test.go is in package identity, so it sees inside the module: use package identity_test and import the door",
+    "T1 internal/discovery/service/rank/diversity_test.go imports discoverytest/identity_stamp_helpers.go, behind discovery's door",
+    "T1 internal/discovery/service/rank/merge_test.go imports discoverytest/identity_stamp_helpers.go, behind discovery's door",
+    "T1 internal/discovery/service/rank/merge_test.go imports domain/provider_key.go, behind discovery's door"
+  ],
+  "added": [],
+  "clones": 0
+}

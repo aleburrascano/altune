@@ -468,7 +468,6 @@ func TestSearchSettings_EachSwitchAddsItsOptionOnlyWhenOn(t *testing.T) {
 		{"TailDemotion", func(h *harness) { h.deps.Search.TailDemotion = true }, "tail_demotion"},
 		{"CrossKindProminence", func(h *harness) { h.deps.Search.CrossKindProminence = true }, "cross_kind_prominence"},
 		{"Exploration", func(h *harness) { h.deps.Search.Exploration = true }, "exploration"},
-		{"IdentityVerifyOnPersist", func(h *harness) { h.deps.Search.IdentityVerifyOnPersist = true }, "identity_verifier"},
 		{"BehavioralRanking", func(h *harness) { h.deps.Search.BehavioralRanking = true }, "behavioral_ranking"},
 		{"Activity", func(h *harness) { h.deps.Activity = &activityRecorder{} }, "activity"},
 		{"Pool", func(h *harness) { h.deps.Pool = unreachablePool(h.t) }, "favorites"},
@@ -490,16 +489,6 @@ func TestSearchSettings_EachSwitchAddsItsOptionOnlyWhenOn(t *testing.T) {
 				t.Errorf("%s on, yet search was not given %q; options %v", tt.setting, tt.option, on.searchOptions())
 			}
 		})
-	}
-}
-
-func TestSearchSettings_IdentityVerifierNeedsMusicBrainz(t *testing.T) {
-	h := newHarness(t, everyProviderOff())
-	h.deps.Search.IdentityVerifyOnPersist = true
-	h.start()
-
-	if slices.Contains(h.searchOptions(), "identity_verifier") {
-		t.Error("an identity verifier was wired without a MusicBrainz anchor")
 	}
 }
 
@@ -773,12 +762,14 @@ func storedIdentityHarness(t *testing.T, providers discovery.ProviderSettings) *
 	t.Helper()
 	pool := integrationPool(t)
 	ctx := context.Background()
-	store := discovery.NewPgxIdentityStore(pool)
-	xref := map[discovery.ProviderKey]string{"deezer": "1"}
-	if err := store.PersistBridges(ctx, discovery.ResultKindArtist, probeArtistMBID, xref); err != nil {
+	forget := func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM entity_identity WHERE provider = 'deezer' AND external_id = '1' AND kind = 'artist'`)
+	}
+	forget()
+	if _, err := pool.Exec(ctx, `INSERT INTO entity_identity (provider, external_id, kind, mbid, xref) VALUES ('deezer', '1', 'artist', $1, '{"deezer":"1"}')`, probeArtistMBID); err != nil {
 		t.Fatalf("seed identity: %v", err)
 	}
-	t.Cleanup(func() { _ = store.Invalidate(context.Background(), discovery.ResultKindArtist, "deezer", "1") })
+	t.Cleanup(forget)
 	h := newHarness(t, providers)
 	h.deps.Pool = pool
 	return h
@@ -1002,7 +993,6 @@ func everySearchSettingOn(h *harness) {
 	h.deps.Search.TailDemotion = true
 	h.deps.Search.CrossKindProminence = true
 	h.deps.Search.Exploration = true
-	h.deps.Search.IdentityVerifyOnPersist = true
 	h.deps.Search.BehavioralRanking = true
 }
 
@@ -1022,7 +1012,7 @@ func TestRankingOnlySearch_RanksWithoutDeadlineArtworkResultCachesOrRecording(t 
 	h.start().RankingOnlySearch()
 
 	assertLines(t, h.optionsLoggedAs("discovery.ranking_only_search"), []string{
-		"history", "tail_demotion", "cross_kind_prominence", "artwork_cache", "identity_bridge", "mbid_index", "vocabulary",
+		"history", "tail_demotion", "cross_kind_prominence", "artwork_cache", "mbid_index", "vocabulary",
 	})
 }
 
@@ -1155,5 +1145,87 @@ func TestConsensus_DiscogsAnswersNothingForAnArtistItCannotResolve(t *testing.T)
 	albums, err := discogsConsensus(t).Fetcher(context.Background(), "Nobody Here")
 	if err != nil || len(albums) != 0 {
 		t.Errorf("discogs consensus = %+v, %v, want no albums and no error", albums, err)
+	}
+}
+
+func sourced(kind discovery.ResultKind, title, credit string, provider discovery.ProviderName, id string) discovery.SearchResult {
+	return discovery.SearchResult{
+		Kind: kind, Title: title, Subtitle: credit,
+		Sources: []discovery.SourceRef{{Provider: provider, ExternalID: id}},
+	}
+}
+
+func merged(groups ...[]discovery.SearchResult) []discovery.SearchResult {
+	var out []discovery.SearchResult
+	for _, entity := range discovery.RankMerge(groups) {
+		out = append(out, entity.Result)
+	}
+	return out
+}
+
+func TestMerge_AlbumsWithoutAUPCNeverMergeAtTheUPCTier(t *testing.T) {
+	queen := sourced(discovery.ResultKindAlbum, "Greatest Hits", "Queen", discovery.ProviderDeezer, "1")
+	abba := sourced(discovery.ResultKindAlbum, "Greatest Hits", "ABBA", discovery.ProviderSpotify, "2")
+
+	if got := merged([]discovery.SearchResult{queen}, []discovery.SearchResult{abba}); len(got) != 2 {
+		t.Fatalf("got %d albums, want Queen's and ABBA's kept apart when neither has a UPC", len(got))
+	}
+}
+
+func TestMerge_ASecondSameNameArtistFromOneProviderJoinsNoOtherCard(t *testing.T) {
+	famous := sourced(discovery.ResultKindArtist, "Che", "", discovery.ProviderDeezer, "1")
+	famous.FanCount = 100
+	lesser := sourced(discovery.ResultKindArtist, "Che", "", discovery.ProviderDeezer, "2")
+	lesser.FanCount = 50
+	spotify := sourced(discovery.ResultKindArtist, "Che", "", discovery.ProviderSpotify, "s1")
+
+	got := merged([]discovery.SearchResult{famous, lesser}, []discovery.SearchResult{spotify})
+
+	if len(got) != 2 || len(got[0].Sources) != 2 || len(got[1].Sources) != 1 {
+		t.Fatalf("got %+v, want the famous Che joined by Spotify and the lesser Che alone", got)
+	}
+	if got[1].Sources[0].ExternalID != "2" {
+		t.Errorf("lone card = %+v, want Deezer's lesser Che", got[1].Sources)
+	}
+}
+
+func TestMerge_OfTwoSameNameArtistsWithEqualFansTheFirstListedWins(t *testing.T) {
+	first := sourced(discovery.ResultKindArtist, "Che", "", discovery.ProviderDeezer, "1")
+	second := sourced(discovery.ResultKindArtist, "Che", "", discovery.ProviderDeezer, "2")
+	first.FanCount, second.FanCount = 50, 50
+	spotify := sourced(discovery.ResultKindArtist, "Che", "", discovery.ProviderSpotify, "s1")
+
+	got := merged([]discovery.SearchResult{first, second}, []discovery.SearchResult{spotify})
+
+	if len(got) != 2 || len(got[0].Sources) != 2 || len(got[1].Sources) != 1 {
+		t.Fatalf("got %+v, want the first Che joined by Spotify and the second Che alone", got)
+	}
+	if got[0].Sources[0].ExternalID != "1" || got[1].Sources[0].ExternalID != "2" {
+		t.Errorf("joined card = %+v, lone card = %+v, want Spotify on the first Che and the second Che alone", got[0].Sources, got[1].Sources)
+	}
+}
+
+func TestMerge_ATitleWithNoLettersCannotProveTwoTakesAreOneVersion(t *testing.T) {
+	complete := sourced(discovery.ResultKindTrack, "÷", "Ed Sheeran", discovery.ProviderDeezer, "1")
+	complete.Album, complete.ImageURL, complete.Duration = "÷", "https://x/art.jpg", 200
+	coded := sourced(discovery.ResultKindTrack, "÷", "Ed Sheeran", discovery.ProviderSpotify, "2")
+	coded.ISRC, coded.Duration = "GBAHS1700001", 200
+
+	got := merged([]discovery.SearchResult{complete}, []discovery.SearchResult{coded})
+
+	if len(got) != 1 {
+		t.Fatalf("got %d results, want the two takes merged into one track", len(got))
+	}
+	if got[0].ISRC != "" {
+		t.Errorf("ISRC = %q, want none: the merged track cannot prove the ISRC is its own", got[0].ISRC)
+	}
+}
+
+func TestCollapseArtistDuplicates_FoldsCardsWhoseNamesDifferOnlyInCaseAndAccents(t *testing.T) {
+	accented := sourced(discovery.ResultKindArtist, "Beyoncé", "", discovery.ProviderDeezer, "1")
+	plain := sourced(discovery.ResultKindArtist, "BEYONCE", "", discovery.ProviderSpotify, "2")
+
+	if got := discovery.RankCollapseArtistDuplicates([]discovery.SearchResult{accented, plain}); len(got) != 1 {
+		t.Fatalf("got %d artist cards, want one", len(got))
 	}
 }

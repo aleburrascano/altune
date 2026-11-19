@@ -19,17 +19,20 @@ Two request flows share providers and the `Merge` core but are **not** the same
 pipeline:
 
 - **Search** — the user types a string. Providers are queried *by name*; identity
-  is resolved *after the fact* by `Merge` + the MusicBrainz cross-provider bridge.
+  is resolved *after the fact* by `Merge`, on ISRC, UPC and canonical name.
   Output: a ranked list of entities, each carrying its merged provider sources.
 - **Detail** — the user opens one known entity. Providers are queried *by that
   entity's own id per provider* (never a name), and the results are best-of merged
   into a discography / top-tracks / tracklist. Contamination-proof *by
   construction* — as long as the identity feeding it is clean.
 
-The load-bearing seam between them: **search writes the durable identity bridge
-that detail later reads.** A search that includes MusicBrainz learns
-`(provider, id) → MBID + cross-provider ids` and persists it; a later detail-open
-resolves the full cross-provider identity from that store without re-querying MB.
+The seam between them is the durable identity store, `entity_identity`, which maps
+`(provider, id) → MBID + cross-provider ids`. **It is now read-only:** its only
+writer was the search-time identity stamper, which fed on MusicBrainz search
+results; MusicBrainz left the search fan-out (its 1 req/s limit could not answer
+inside the 1.5s deadline), so nothing has written the table since, and the stamper
+is gone. Detail-open (`resolveArtistIdentity`) and search's artwork filler still
+read the rows it already holds.
 
 ```mermaid
 flowchart LR
@@ -37,8 +40,7 @@ flowchart LR
         direction TB
         Q["query string"] --> CL["clean + normalize"]
         CL --> FO["fan-out by NAME<br/>concurrent · breakered"]
-        FO --> ST["stamp identities<br/>attach MB cross-provider ids"]
-        ST --> MG["Merge → Rank → Reshape"]
+        FO --> MG["Merge → Rank → Reshape"]
         MG --> SR["ranked results<br/>each carries Sources"]
     end
     subgraph DETAIL["DETAIL · user opens one entity"]
@@ -48,8 +50,7 @@ flowchart LR
         FID --> V2["verify → best-of merge → keep → bucket"]
         V2 --> DR["discography · top-tracks"]
     end
-    ST -. "write bridge · (provider,id) → MBID+xref" .-> IDS[("IdentityStore<br/>Postgres + Redis 30d")]
-    IDS -. "read at detail time" .-> RID
+    IDS[("IdentityStore · read-only<br/>Postgres + Redis 30d")] -. "read at detail time" .-> RID
 ```
 
 ---
@@ -60,10 +61,9 @@ These are the invariants everything else serves. A change that violates one of
 these is almost always a regression waiting to happen.
 
 1. **Merge by identity, never by bare name.** Same-name entities collide
-   otherwise. Identity is a stable id (ISRC, MBID, or a cross-provider bridge),
-   never a display string. Where a name match is unavoidable (two providers with
-   only a title in common), it is the *weakest* tier and is refused outright for
-   artist names MusicBrainz reports as ambiguous.
+   otherwise. Identity is a stable id (ISRC, or UPC for albums), never a display
+   string. Where a name match is unavoidable (two providers with only a title in
+   common), it is the *weakest* tier.
 
 2. **No tuned magic constants; parameters come from the data.** Relevance weight
    is IDF computed over the live candidate set, not a hand-picked boost.
@@ -137,14 +137,15 @@ field groups encode the philosophy:
 | Group | Fields | Why typed |
 |---|---|---|
 | Display | `Kind`, `Title`, `Subtitle`, `ImageURL`, `ArtworkSource` | rendered; `ArtworkSource` records *where* the image resolved for coverage telemetry |
-| Identity | `ISRC`, `UPC` (album barcode), `MBID`, `Xref` (provider→id bridge) | `Merge`'s tiers branch on them — compile-checked |
+| Identity | `ISRC`, `UPC` (album barcode), `MBID`, `Xref` (provider→id bridge) | `Merge`'s tiers branch on `ISRC` and `UPC`; search never sets `MBID`, and the artwork filler fills `Xref` from the identity store after merge |
 | Ranking | `Popularity` (**inert**, see §11), `FanCount`, `ProviderRank` | `Rank`'s tiebreaks read them directly |
 | Metadata | `Year`, `ReleaseDate`, `TrackCount`, `Album`, `Duration`, `DeezerAlbumID` | consensus / discography ordering / relevance-tail read them |
 | Provenance | `Sources []SourceRef` (provider + external id + url), `Confidence` | union of contributing providers; `Confidence` is display-only |
 | Escape hatch | `Extras map[string]any` | display/telemetry metadata **only** — nothing structural branches on it |
 
 Supporting types: `ResultKind` (track/album/artist), `EntityResolutionTier`
-(ISRC → MBID → bridge → none — the strength of *why* two results merged),
+(ISRC → UPC → none — the strength of *why* two results merged; the retired
+MBID and bridge values stay in the enum so stamped results still decode),
 `Confidence` (High/Medium/Low), `ProviderName`/`ProviderStatus` enums,
 `SearchQuery` (validated input), `Entity` (a merged result plus per-provider
 `BestRank`, the RRF input), `ProviderSearchResponse` (per-provider wire status),
@@ -172,8 +173,7 @@ flowchart TD
     SID --> CACHE{"result cache hit?<br/>app-wide · 45s"}
     CACHE -->|hit| RET["return cached list"]
     CACHE -->|miss| FAN["fanOut · every provider concurrently<br/>1500ms timeout · breaker · fixed slots"]
-    FAN --> STAMP["stampIdentities<br/>set Xref on MB results"]
-    STAMP --> MERGE["Merge · identity tiers + ambiguous-name gate"]
+    FAN --> MERGE["Merge · identity tiers"]
     MERGE --> RANK["Rank · IDF relevance + rankLess order"]
     RANK --> RESHAPE["Reshape · diversity + collapse"]
     RESHAPE --> DIS["applyArtistDisambiguation"]
@@ -182,8 +182,6 @@ flowchart TD
     ZERO -->|yes| CORR["tryCorrection · re-run on corrected query"]
     ZERO -->|no| OUT["ranked results + provider statuses"]
     CORR --> OUT
-    STAMP -. "background · off request path" .-> VOP["verify-on-persist<br/>drop mis-bridged edges"]
-    VOP -. write .-> IDS[("IdentityStore")]
 ```
 
 `Service` (`service/search.go`) is the orchestrator, and *only* that:
@@ -221,32 +219,21 @@ persistence (`RecordSearchHistoryService`, `record_history.go`), event telemetry
    `perProvider [][]SearchResult` plus per-provider statuses for the wire.
 6. **Merge / rank / enrich** (`mergeRankEnrich`) — the decision core, below.
 7. **Zero-result correction** — if the merged list is empty, `tryCorrection`
-   re-runs the whole pipeline on a corrected query (§4.4).
+   re-runs the whole pipeline on a corrected query (§4.3).
 
 After merge/rank the orchestrator delegates the remaining post-processing to the
 collaborators above — favorites lift, related aggregation, pagination, the
 exploration coin-flip, then (first page only) history persistence, telemetry
 emit and vocabulary ingest.
 
-Background work (identity-bridge persistence, telemetry, vocabulary ingest, the
+Background work (telemetry, vocabulary ingest, artwork resolution, the
 behavioral-score refresh loop) runs through one `backgroundRunner`
 (`background.go`): `launch` detaches from request cancellation, tracks on a
 `WaitGroup` (`WaitForBackground` drains it for shutdown/tests), and recovers+logs
 panics so async work can't crash the process. Each background-emitting
 collaborator depends on this one primitive rather than on `Service`.
 
-### 4.1 Identity stamping (pre-merge)
-
-`stampIdentities` reads the `IdentityBridge` (cache-only) and sets `SearchResult.Xref`
-on MusicBrainz-sourced results, so `Merge` can resolve identity across providers
-by *stated* id, not just name. Each learned bridge is then persisted off the
-request path. When verify-on-persist is enabled, an `IdentityVerifier` first drops
-any streaming edge (Deezer/Spotify/Apple) whose catalogue doesn't overlap the
-artist's MusicBrainz release-groups — a mis-bridged same-name artist from a wrong
-MB url-relation (§6). It filters only the *persisted* copy, never the in-flight
-`Xref`, so merge and ranking are unchanged.
-
-### 4.2 Merge (entity resolution)
+### 4.1 Merge (entity resolution)
 
 `Merge` (`service/merge.go`) collapses per-provider groups into deduped `Entity`
 values. `sameEntity` decides identity strictly by tier, strongest first:
@@ -257,14 +244,8 @@ flowchart TD
     ISRC -->|yes| MI["MERGE · tier ISRC"]
     ISRC -->|no| UPC{"albums · same UPC?"}
     UPC -->|yes| MU["MERGE · tier UPC"]
-    UPC -->|"no · positive-only, never blocks"| MBID{"MBID?"}
-    MBID -->|same| MM["MERGE · tier MBID"]
-    MBID -->|mismatched| HN["NOT the same · hard stop"]
-    MBID -->|"neither has one"| BR{"Xref bridge match?"}
-    BR -->|yes| MB2["MERGE · tier bridge"]
-    BR -->|no| NM{"canonical name / title match?"}
-    NM -->|"artist name flagged ambiguous by MB"| RF["REFUSE bare-name merge<br/>keep separate cards"]
-    NM -->|"yes · non-ambiguous"| MN["MERGE · tier none"]
+    UPC -->|"no · positive-only, never blocks"| NM{"canonical name / title match?"}
+    NM -->|yes| MN["MERGE · tier none"]
     NM -->|no| SE["separate entities"]
 ```
 
@@ -272,36 +253,29 @@ Strongest tier first:
 
 ```
 ISRC exact  →  UPC exact (albums only; a mismatch is NOT disproof — editions
-               differ — so unlike MBID it never blocks)
-            →  shared MBID (a MISMATCHED MBID is a hard "not the same")
-            →  cross-provider bridge (a stamped Xref present on ≥1 side)
+               differ — so it never blocks)
             →  bare canonical name (artists) / exact canonical title+subtitle (tracks, albums)
 ```
 
 The UPC tier follows the Popularity pattern — machinery live and tested while the
 producer set grows: Apple Music search albums are the one search-fan-out producer
 today (SoundCloud `publisher_metadata.upc_or_ean` and Deezer `/album/{id}` are
-candidates). No search provider sends an `mbid` today: MusicBrainz is kept out
-of the search fan-out (its 1 req/s limit cannot answer an all-kinds search inside
-the 1.5s deadline), so the MBID tier stays idle until a searcher carries one and
-the tiers below it do the matching.
+candidates).
+
+Merge has no MBID or bridge tier. No searcher returns an MBID or an `Xref`
+(MusicBrainz is kept out of the search fan-out: its 1 req/s limit cannot answer
+an all-kinds search inside the 1.5s deadline), so those tiers never fired and were
+removed together with the stamper that set `Xref`, and with the
+ambiguous-artist-name gate that counted MusicBrainz MBIDs.
 
 There is deliberately **no fuzzy threshold and no version-marker vocabulary** —
 canonical normalization is the one structural definition of "same title."
-
-The **ambiguous-artist merge gate** is the key correctness layer:
-`ambiguousArtistNames` flags any normalized artist name for which MusicBrainz
-surfaced ≥2 distinct MBIDs (the "Che" set). For those names `Merge` *refuses* a
-bare-name merge (identifier/bridge tiers still merge freely), keeping distinct
-humans on separate cards. The same flat-slice core (`ambiguousArtistNamesFlat`) is
-reused by `CollapseArtistDuplicates` in reshaping, so both phases agree on exactly
-one ambiguous-name set.
 
 `mergeInto` folds the loser into the more-complete (`completenessOf`) canonical
 result: unions `Sources`, takes max popularity, coalesces typed metadata
 (canonical wins when set, else the other side fills), and stamps `Confidence`.
 
-### 4.3 Rank
+### 4.2 Rank
 
 `Rank`/`rankWith` (`service/rank.go`) orders merged entities by continuous,
 parameter-free relevance. Two passes, both in the shared `rankScored` core:
@@ -323,7 +297,7 @@ still beats a superset.
 
 Two eval-gated experimental rungs, both default-off:
 - **Tail-noise demotion** (`isLowConfidenceTail`) — flags single-source
-  SoundCloud results with no ISRC/MBID/album as low-confidence tail,
+  SoundCloud results with no ISRC/album as low-confidence tail,
   sorting them below every corroborated result.
 - **Cross-kind prominence** (`prominenceOf`) — log-compressed Deezer fan-count /
   track rank, breaking relevance ties *only between different kinds* (a famous
@@ -337,9 +311,9 @@ the offline eval and the operator re-run compose the *same* flag-gated stages.
 **Reshaping** (`diversity.go`) is explicit *product policy*, exempt from the
 zero-constants doctrine and validated by its own eval mode: `EnforceDiversity`
 (cap 3 per artist within the top 10) and `CollapseArtistDuplicates` (fold same-name
-artist duplicates, keyed by MBID when the name is ambiguous).
+artist duplicates by canonical name).
 
-### 4.4 Correction, vocabulary, suggest
+### 4.3 Correction, vocabulary, suggest
 
 - `CorrectionService` (`correction.go`) is a "did you mean" engine driven entirely
   by the learned `VocabularyStore` (no word banks). `CorrectAggressive`
@@ -467,12 +441,7 @@ a by-name consensus fetch). The durable fix is to acquire every provider's id at
 
 ```mermaid
 flowchart TD
-    MBREL["MusicBrainz url-relations<br/>third-party · sometimes WRONG"] --> BRIDGE["cross-provider bridge<br/>(provider,id) → MBID + xref"]
-    BRIDGE --> G1{"GUARD 1 · verify-on-persist<br/>edge overlaps MB release-groups?"}
-    G1 -->|"no · drop edge"| STORE[("IdentityStore<br/>Postgres + Redis 30d")]
-    G1 -->|yes| STORE
-    G1 -. "fail-open on MB error" .-> STORE
-    STORE --> DET["detail fan-out by id"]
+    STORE[("IdentityStore · read-only<br/>Postgres + Redis 30d")] --> DET["detail fan-out by id"]
     DET --> G2["GUARD 2 · MB anchor · albums<br/>drop low-overlap provider groups"]
     DET --> G3["GUARD 3 · cohesion · top-tracks<br/>drop single-source islands"]
     G2 --> CLEAN["clean discography / top-tracks"]
@@ -484,32 +453,29 @@ flowchart TD
 Identity is what both pipelines stand on. One structure carries it.
 
 - **Durable:** the `entity_identity` table via `ports.IdentityStore` — maps
-  `(provider, external_id, kind) → (mbid, xref)`. `PgxIdentityStore` is the source
-  of truth (`PersistBridges` upserts one row per bridged provider id when MB answers
-  a search; `LookupByProviderID` reads it back). `RedisIdentityStore` fronts it with
-  a 30-day read/write-through cache, degrading transparently to Postgres on a miss
-  or when Redis is absent. This is what lets a later MB-*absent* search — or any
-  detail-open — resolve a provider-only result's identity deterministically instead
-  of guessing by name.
+  `(provider, external_id, kind) → (mbid, xref)`. It is a **frozen table**: the
+  port only reads (`LookupByProviderID`, plus the batched `LookupByProviderIDs`),
+  and nothing writes it since the search-time stamper went with MusicBrainz search.
+  `PgxIdentityStore` reads Postgres; `RedisIdentityStore` fronts it with a 30-day
+  read-through cache, degrading transparently to Postgres on a miss or when Redis
+  is absent. Detail-open and search's artwork filler read the rows it still holds.
+  Whether to drop the table is a separate decision.
 
-**The fracture problem.** The bridge is only as correct as MusicBrainz's
+**The fracture problem.** The stored bridges are only as correct as MusicBrainz's
 url-relations, which are third-party data we don't control. A *wrong* url-relation
 fuses two same-name artists (e.g. a rapper's MBID url-related to a different Che's
 Deezer id). The stored identity then legitimately id-verifies releases of *two
 humans*. Per-release keep rules can't separate them — the fracture is a property of
 the *provider set*, not any single release.
 
-Three layers defend against this, in order of preference:
+Two read-time layers defend against this:
 
-1. **Verify-on-persist (upstream, permanent):** before a learned bridge is stored,
-   each streaming edge is checked against the artist's MB release-groups and a
-   mis-bridged one is dropped, so a fractured identity is ideally never stored.
-2. **MB anchor (detail-time, albums):** `FilterGroupsByMBAnchor` re-checks overlap
-   at read time (§5.2) — belt-and-suspenders for a verify-on-persist fail-open.
-3. **Cohesion (detail-time, top-tracks):** `FilterCohesive` drops single-source
+1. **MB anchor (detail-time, albums):** `FilterGroupsByMBAnchor` checks each
+   provider group's overlap with the artist's MB release-groups (§5.2).
+2. **Cohesion (detail-time, top-tracks):** `FilterCohesive` drops single-source
    islands where the album anchor doesn't reach.
 
-All three are **fail-open** — they never empty a discography on a transient MB
+Both are **fail-open** — they never empty a discography on a transient MB
 failure. That is a deliberate safety choice with a cost (§15).
 
 **Artwork** consumes the same identity. `ChainedArtworkResolver` tries
@@ -603,8 +569,7 @@ Per-provider notes worth carrying:
   name-keyed enrichers (Deezer, Discogs, Lyrics) cache positive and
   negative under the same `NameKeyedCache[T]` key. MusicBrainz is the one
   exception in *key shape only*, not in home: its positive entry is keyed by the
-  resolved **MBID** (an identity that doubles as the `IdentityBridge`/`MBIDIndex`
-  source, §9), its negative memo is keyed by **name**, and it additionally merges
+  resolved **MBID** (an identity that doubles as the `MBIDIndex` source, §9), its negative memo is keyed by **name**, and it additionally merges
   artwork and fires the `MBIDIndex.RememberMBID` side effect on a successful
   resolve. It still rides `CachedLookup` for the name-keyed negative memo and the
   degrade path via a thin `mbResolutionMemo` adapter whose positive `Get`/`Set`
@@ -631,9 +596,9 @@ per-user** by design.
 | Cache | Key | TTLs | Notes |
 |---|---|---|---|
 | Result | query+kinds | 45s | short, to smooth provider drop-out without hiding a shipped change |
-| Enrichment | (kind, mbid) | 14d / 24h neg | doubles as `IdentityBridge.ExternalIDs` and `MBIDIndex` off the same entry |
+| Enrichment | (kind, mbid) | 14d / 24h neg | doubles as the `MBIDIndex` off the same entry |
 | Artwork | (kind, title, subtitle, mbid) | 14d identity / 48h name / 6–24h neg per kind | overwrite guard: a lower-confidence write can't clobber a higher one |
-| Identity store | (provider, id, kind) | 30d | read/write-through front over Postgres |
+| Identity store | (provider, id, kind) | 30d | read-through front over the frozen Postgres table |
 | Consensus | artist name | 6h | truncated results never cached |
 | Name-keyed enrichment | name | per provider | Deezer/Discogs/lyrics |
 | Vocabulary | learned terms | — | Redis-backed term-frequency store |
@@ -751,7 +716,7 @@ A change should preserve all of these; if it can't, that's the discussion:
 
 - Imports point inward; adapters chosen only in the composition root.
 - Anything merge/rank/consensus branches on is a **typed field**, not `Extras`.
-- Identity is an id, never a bare name; ambiguous artist names never bare-merge.
+- Identity is an id where one exists; a bare-name merge is only ever the weakest tier.
 - No tuned relevance constants; no hardcoded correction word banks.
 - Rank-affecting changes clear the offline eval gate (position, same-sample A/B).
 - Nil Redis / MB / a dead provider degrades a feature, never fails a request.
@@ -782,9 +747,8 @@ current state → tension → candidate direction.
 
 3. **Identity fracture from third-party error.** The read-time guards (MB anchor,
    cohesion) are **fail-open** — a transient MB failure or a missing MBID keeps
-   *everything*, so a fractured identity leaks when the anchor can't run. The
-   permanent fix (verify-on-persist) is itself a guard, not a guarantee (it too
-   fail-opens). Open questions: should the guards be fail-*closed* for high-ambiguity
+   *everything*, so a fractured identity leaks when the anchor can't run. Open
+   questions: should the guards be fail-*closed* for high-ambiguity
    names? Is there a corroboration signal beyond MB release-group overlap (the
    title/ISRC options were ruled out — titles collide for namesakes, Deezer artist
    endpoints don't expose ISRC)?
@@ -861,12 +825,11 @@ flowchart TD
     NORM --> CONS["Consensus"]
     NORM --> CORR["Correction"]
     NORM --> SIG["ResultSignature<br/>behavioral join key"]
-    TYPED["typed SearchResult fields<br/>ISRC · MBID · Xref · Popularity · Year …"] --> MERGE
+    TYPED["typed SearchResult fields<br/>ISRC · UPC · Popularity · Year …"] --> MERGE
     TYPED --> RANK["Rank"]
     TYPED --> CONS
     TYPED --> DET["Detail V2"]
-    IDENT["IdentityStore + bridge"] --> MERGE
-    IDENT --> DET
+    IDENT["IdentityStore · read-only"] --> DET
     IDENT --> ART["Artwork chain"]
     PROV["provider adapters<br/>field extraction"] --> MERGE
     PROV --> DET
@@ -891,7 +854,7 @@ The blast radius, per change:
 | `Merge` / `sameEntity` tiers | Rank input set, diversity, detail fallback | eval, merge | same-name artists collide (under-merge) or fragment (over-merge) |
 | `rankLess` / relevance | top-3 positions everywhere | eval + artist-intent (same-sample A/B) | a niche owned track buried under the famous same-name one |
 | diversity / collapse caps | top-window composition | diversity | duplicate cards, or distinct artists over-collapsed |
-| identity bridge / verify-on-persist | detail fan-out contents, artwork, search merge (via `Xref`) | detail, eval | fractured identity → cross-artist contamination |
+| identity store reads | detail fan-out contents, artwork | detail, eval | fractured identity → cross-artist contamination |
 | MB-anchor / cohesion thresholds | detail contamination vs recall | detail | too loose = leak; too tight = real releases dropped |
 | a provider's field extraction | Merge best-of completeness, bucketing | detail *(only if it touches identity keys)* | blank year/tracks; wrong single/EP/album bucket |
 | cache TTL / keying | freshness vs stability; the artwork overwrite guard | — | stale identity; a weak artwork guess clobbers a proven one |

@@ -23,9 +23,6 @@ func TestRedisEnrichmentCache_NilClientNoOp(t *testing.T) {
 	if err := c.SetNegative(ctx, domain.ResultKindAlbum, "name"); err != nil {
 		t.Errorf("nil-client SetNegative must no-op, got %v", err)
 	}
-	if ids, ok := c.ExternalIDs(ctx, domain.ResultKindArtist, "mbid"); ok || ids != nil {
-		t.Errorf("nil-client ExternalIDs must report (nil,false), got %v/%v", ids, ok)
-	}
 	if m, ok := c.LookupMBID(ctx, domain.ResultKindAlbum, "name"); ok || m != "" {
 		t.Errorf("nil-client LookupMBID must report (\"\",false), got %q/%v", m, ok)
 	}
@@ -91,28 +88,8 @@ func TestRedisEnrichmentCache_PositiveRoundTrip(t *testing.T) {
 		t.Error("album entry served for artist kind, want kind-namespaced miss")
 	}
 
-	ids, ok := cache.ExternalIDs(ctx, domain.ResultKindAlbum, mbid)
-	if !ok || ids["deezer"] != "111" || ids["discogs"] != "222" {
-		t.Errorf("ExternalIDs = (%v,%v), want the cached bridge ids", ids, ok)
-	}
-}
-
-func TestRedisEnrichmentCache_ExternalIDs_EmptyIsMiss(t *testing.T) {
-	client := testRedisClient(t)
-	cache := NewRedisEnrichmentCache(client)
-	ctx := context.Background()
-
-	mbid := fmt.Sprintf("qa-mbid-noids-%s", t.Name())
-	cleanKeys(t, client, enrichmentKey(domain.ResultKindArtist, mbid))
-
-	if err := cache.Set(ctx, domain.ResultKindArtist, mbid, domain.MBEnrichment{MBID: mbid}); err != nil {
-		t.Fatalf("Set: %v", err)
-	}
-	if ids, ok := cache.ExternalIDs(ctx, domain.ResultKindArtist, mbid); ok || ids != nil {
-		t.Errorf("ExternalIDs on id-less enrichment = (%v,%v), want (nil,false)", ids, ok)
-	}
-	if _, ok := cache.ExternalIDs(ctx, domain.ResultKindArtist, "qa-never-cached"); ok {
-		t.Error("ExternalIDs on never-cached mbid, want miss")
+	if got.ExternalIDs["deezer"] != "111" || got.ExternalIDs["discogs"] != "222" {
+		t.Errorf("external ids = %v, want the cached bridge ids", got.ExternalIDs)
 	}
 }
 

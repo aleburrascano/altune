@@ -40,25 +40,8 @@ func findByTitle(t *testing.T, entities []Entity, title string) Entity {
 	return Entity{}
 }
 
-func TestMerge_AmbiguousArtistNameKeepsIdentitiesSeparate(t *testing.T) {
-	mb1 := discoverytest.WithMBID(discoverytest.Res(domain.ResultKindArtist, "Che", "", domain.ProviderMusicBrainz, nil), "mbid-1")
-	mb2 := discoverytest.WithMBID(discoverytest.Res(domain.ResultKindArtist, "Che", "", domain.ProviderMusicBrainz, nil), "mbid-2")
-	itunes := discoverytest.Res(domain.ResultKindArtist, "Che", "", domain.ProviderITunes, nil)
-
-	entities := Merge([][]domain.SearchResult{{mb1, mb2}, {itunes}})
-
-	if len(entities) != 3 {
-		t.Fatalf("got %d entities, want 3 (two MB identities + unmerged iTunes)", len(entities))
-	}
-	for _, e := range entities {
-		if got := len(e.Result.Sources); got != 1 {
-			t.Errorf("entity %q has %d sources, want 1 (no cross-identity union)", e.Result.Title, got)
-		}
-	}
-}
-
 func TestMerge_UnambiguousArtistNameStillNameMerges(t *testing.T) {
-	mb := discoverytest.WithMBID(discoverytest.Res(domain.ResultKindArtist, "Drake", "", domain.ProviderMusicBrainz, nil), "mbid-drake")
+	mb := discoverytest.Res(domain.ResultKindArtist, "Drake", "", domain.ProviderDeezer, nil)
 	itunes := discoverytest.Res(domain.ResultKindArtist, "Drake", "", domain.ProviderITunes, nil)
 
 	entities := Merge([][]domain.SearchResult{{mb}, {itunes}})
@@ -68,43 +51,6 @@ func TestMerge_UnambiguousArtistNameStillNameMerges(t *testing.T) {
 	}
 	if got := len(entities[0].Result.Sources); got != 2 {
 		t.Errorf("merged entity has %d sources, want 2", got)
-	}
-}
-
-func TestMerge_ITunesBridgesIntoMBIdentityDespiteAmbiguousName(t *testing.T) {
-	mb := domain.SearchResult{
-		Kind:       domain.ResultKindArtist,
-		Title:      "Che",
-		Sources:    []domain.SourceRef{{Provider: domain.ProviderMusicBrainz, ExternalID: "mbid-che-1", URL: "https://mb/1"}},
-		ArtistMBID: "mbid-che-1",
-		Xref:       map[domain.ProviderKey]string{"itunes": "5468295"},
-	}
-	mb2 := domain.SearchResult{
-		Kind:       domain.ResultKindArtist,
-		Title:      "Che",
-		Sources:    []domain.SourceRef{{Provider: domain.ProviderMusicBrainz, ExternalID: "mbid-che-2", URL: "https://mb/2"}},
-		ArtistMBID: "mbid-che-2",
-	}
-	itunes := domain.SearchResult{
-		Kind:    domain.ResultKindArtist,
-		Title:   "Che",
-		Sources: []domain.SourceRef{{Provider: domain.ProviderITunes, ExternalID: "5468295", URL: "https://itunes/x"}},
-	}
-
-	entities := Merge([][]domain.SearchResult{{mb, mb2}, {itunes}})
-
-	if len(entities) != 2 {
-		t.Fatalf("got %d entities, want 2 (iTunes bridged into MB#1; MB#2 stays separate)", len(entities))
-	}
-	bridged := findByTitle(t, entities, "Che")
-	hasITunes := false
-	for _, s := range bridged.Result.Sources {
-		if s.Provider == domain.ProviderITunes {
-			hasITunes = true
-		}
-	}
-	if !hasITunes {
-		t.Error("iTunes source should have bridged into the MB identity via xref[itunes]")
 	}
 }
 
@@ -127,14 +73,6 @@ func TestMerge_IdentifierMatch(t *testing.T) {
 		}
 	})
 
-	t.Run("distinct mbid stays separate", func(t *testing.T) {
-		a := discoverytest.WithMBID(discoverytest.Track("Intro", "Artist A", domain.ProviderMusicBrainz, nil), "mbid-1")
-		b := discoverytest.WithMBID(discoverytest.Track("Intro", "Artist A", domain.ProviderMusicBrainz, nil), "mbid-2")
-		entities := Merge([][]domain.SearchResult{{a, b}})
-		if len(entities) != 2 {
-			t.Fatalf("got %d entities, want 2 (distinct MBIDs)", len(entities))
-		}
-	})
 }
 
 func TestMerge_AlbumUPCTier(t *testing.T) {
@@ -196,55 +134,6 @@ func TestMergeInto_CoalescesTypedContentFields(t *testing.T) {
 		t.Errorf("typed content fields dropped on merge: album=%q duration=%d deezerAlbumID=%q",
 			r.Album, r.Duration, r.DeezerAlbumID)
 	}
-}
-
-func TestMerge_IdentityBridge(t *testing.T) {
-	mb := domain.SearchResult{
-		Kind:       domain.ResultKindArtist,
-		Title:      "Ye",
-		Sources:    []domain.SourceRef{{Provider: domain.ProviderMusicBrainz, ExternalID: "mbid-ye"}},
-		ArtistMBID: "mbid-ye",
-		Xref:       map[domain.ProviderKey]string{"deezer": "230"},
-	}
-	dz := domain.SearchResult{
-		Kind:    domain.ResultKindArtist,
-		Title:   "Kanye West",
-		Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "230"}},
-	}
-
-	t.Run("stated cross-provider id merges differing titles", func(t *testing.T) {
-		entities := Merge([][]domain.SearchResult{{mb}, {dz}})
-		if len(entities) != 1 {
-			t.Fatalf("got %d entities, want 1 (bridged identity merge)", len(entities))
-		}
-		if tier := entities[0].Result.ResolutionTier.Tier.String(); tier != "bridge" {
-			t.Errorf("resolution_tier = %v, want bridge", tier)
-		}
-		if entities[0].Result.Confidence != domain.ConfidenceHigh {
-			t.Errorf("confidence = %v, want high (identity-grade)", entities[0].Result.Confidence)
-		}
-		if got := len(entities[0].Result.Sources); got != 2 {
-			t.Errorf("sources = %d, want 2 (unioned)", got)
-		}
-	})
-
-	t.Run("without the stated id they stay separate", func(t *testing.T) {
-		bare := mb
-		bare.Xref = nil
-		entities := Merge([][]domain.SearchResult{{bare}, {dz}})
-		if len(entities) != 2 {
-			t.Fatalf("got %d entities, want 2 — no stated id, differing titles must not merge", len(entities))
-		}
-	})
-
-	t.Run("a non-matching stated id does not merge", func(t *testing.T) {
-		wrong := mb
-		wrong.Xref = map[domain.ProviderKey]string{"deezer": "999"}
-		entities := Merge([][]domain.SearchResult{{wrong}, {dz}})
-		if len(entities) != 2 {
-			t.Fatalf("got %d entities, want 2 — a mismatched stated id must not merge", len(entities))
-		}
-	})
 }
 
 func TestMerge_SequelStaysSeparate(t *testing.T) {
@@ -337,41 +226,6 @@ func TestMerge_Artists(t *testing.T) {
 	})
 }
 
-func TestAmbiguousArtistNames_OnlyMusicBrainzMBIDsCount(t *testing.T) {
-	mb := discoverytest.WithMBID(discoverytest.Res(domain.ResultKindArtist, "Queen", "", domain.ProviderMusicBrainz, nil), "mbid-current")
-	stale := discoverytest.WithMBID(discoverytest.Res(domain.ResultKindArtist, "Queen", "", domain.ProviderTheAudioDB, nil), "mbid-stale")
-
-	if got := ambiguousArtistNamesFlat([]domain.SearchResult{mb, stale}); got["queen"] {
-		t.Error("MB + a stale non-MusicBrainz mbid marked the name ambiguous — only MusicBrainz MBIDs may count")
-	}
-
-	mb2 := discoverytest.WithMBID(discoverytest.Res(domain.ResultKindArtist, "Queen", "", domain.ProviderMusicBrainz, nil), "mbid-second")
-	if got := ambiguousArtistNamesFlat([]domain.SearchResult{mb, mb2}); !got["queen"] {
-		t.Error("two genuine MB identities with distinct MBIDs must still mark the name ambiguous")
-	}
-}
-
-func TestMerge_UPCTierRefusesConflictingMBIDs(t *testing.T) {
-	mkAlbum := func(title, mbid string, provider domain.ProviderName) domain.SearchResult {
-		r := discoverytest.WithMBID(discoverytest.Res(domain.ResultKindAlbum, title, "Kendrick Lamar", provider, nil), mbid)
-		r.UPC = "00602557618280"
-		return r
-	}
-	a := mkAlbum("DAMN.", "mbid-1", domain.ProviderAppleMusic)
-	b := mkAlbum("DAMN. (Deluxe)", "mbid-2", domain.ProviderDeezer)
-	c := discoverytest.WithMBID(discoverytest.Res(domain.ResultKindAlbum, "DAMN. (Deluxe Edition)", "Kendrick Lamar", domain.ProviderMusicBrainz, nil), "mbid-2")
-
-	for name, order := range map[string][]domain.SearchResult{
-		"a_b_c": {a, b, c},
-		"c_b_a": {c, b, a},
-	} {
-		entities := Merge([][]domain.SearchResult{order})
-		if len(entities) != 2 {
-			t.Errorf("order %s: got %d entities, want 2 (conflicting MBIDs must not UPC-merge)", name, len(entities))
-		}
-	}
-}
-
 func TestMerge_EmptyNormalizedTitleNeverNameMerges(t *testing.T) {
 	t.Run("fully-bracketed track titles stay separate", func(t *testing.T) {
 		a := discoverytest.Track("(Intro)", "Same Artist", domain.ProviderDeezer, nil)
@@ -410,121 +264,47 @@ func TestMergeInto_KeepsStrongestResolutionTier(t *testing.T) {
 	}
 }
 
-func TestMergeInto_TitleTierNeverImportsARemixMBIDOntoTheOriginal(t *testing.T) {
-	original := discoverytest.WithISRC(discoverytest.Track("Drinking in L.A.", "Bran Van 3000", domain.ProviderDeezer, nil), "CAA509814003")
-	original.Duration = 236
-	remix := discoverytest.WithMBID(discoverytest.Track("Drinking in L.A. (Who Mix?)", "Bran Van 3000", domain.ProviderMusicBrainz, nil), "d3dc2825")
-	remix.Duration = 307
-
-	entities := Merge([][]domain.SearchResult{{original}, {remix}})
-	if len(entities) != 1 {
-		t.Fatalf("got %d entities, want 1 (title tier still merges)", len(entities))
-	}
-	r := entities[0].Result
-	if r.IdentityMBID() == "d3dc2825" {
-		t.Errorf("MBID = %v, want anything but the remix's MBID", r.IdentityMBID())
-	}
-	if r.ISRC != "CAA509814003" {
-		t.Errorf("ISRC = %v, want the original's CAA509814003 preserved", r.ISRC)
-	}
+func moreCompleteTrack(title string, duration int) domain.SearchResult {
+	r := withAlbum(discoverytest.Track(title, "Some Artist", domain.ProviderDeezer, nil), "Some Album")
+	r.ImageURL = "https://x/art.jpg"
+	r.Duration = duration
+	return r
 }
 
-func TestMergeInto_TitleTierCarriesMBIDAndISRCWhenTitlesAgreeUnderIdentity(t *testing.T) {
-	a := discoverytest.WithISRC(discoverytest.Track("HUMBLE.", "Kendrick Lamar", domain.ProviderDeezer, nil), "USUM71703089")
-	a.Duration = 177
-	b := discoverytest.WithMBID(discoverytest.Track("Humble", "Kendrick Lamar", domain.ProviderMusicBrainz, nil), "mbid-humble")
-	b.Duration = 177
+func TestMergeInto_TitleTierCarriesTheOtherSidesISRCOnlyWhenItIsTheSameVersion(t *testing.T) {
+	tests := []struct {
+		name          string
+		title, other  string
+		dur, otherDur int
+		wantISRCCarry bool
+	}{
+		{"titles agree under identity", "HUMBLE.", "Humble", 177, 177, true},
+		{"one side has no known duration", "Song Title", "Song Title", 0, 200, true},
+		{"6s on 200s is exactly 3%", "Song Title", "Song Title", 200, 206, true},
+		{"5s sits exactly on the floor", "Song Title", "Song Title", 100, 105, true},
+		{"8s on 200s exceeds 3%", "Song Title", "Song Title", 200, 208, false},
+		{"6s on 100s exceeds the 5s floor", "Song Title", "Song Title", 100, 106, false},
+		{"a qualifier differs at the same duration", "Fix You", "Fix You (Live)", 295, 295, false},
+		{"a remix is a different version", "Drinking in L.A.", "Drinking in L.A. (Who Mix?)", 236, 307, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			other := discoverytest.WithISRC(discoverytest.Track(tt.other, "Some Artist", domain.ProviderSpotify, nil), "ISRC-OTHER")
+			other.Duration = tt.otherDur
 
-	entities := Merge([][]domain.SearchResult{{a}, {b}})
-	if len(entities) != 1 {
-		t.Fatalf("got %d entities, want 1", len(entities))
-	}
-	r := entities[0].Result
-	if r.ISRC != "USUM71703089" {
-		t.Errorf("ISRC = %v, want USUM71703089 carried across", r.ISRC)
-	}
-	if r.IdentityMBID() != "mbid-humble" {
-		t.Errorf("MBID = %v, want mbid-humble carried across", r.IdentityMBID())
+			entities := Merge([][]domain.SearchResult{{moreCompleteTrack(tt.title, tt.dur)}, {other}})
+
+			if len(entities) != 1 {
+				t.Fatalf("got %d entities, want 1 (title tier still merges)", len(entities))
+			}
+			if carried := entities[0].Result.ISRC == "ISRC-OTHER"; carried != tt.wantISRCCarry {
+				t.Errorf("ISRC = %q, want carried = %v", entities[0].Result.ISRC, tt.wantISRCCarry)
+			}
+		})
 	}
 }
-
-func TestMergeInto_TitleTierCarriesWhenOneSideHasNoKnownDuration(t *testing.T) {
-	a := discoverytest.WithISRC(discoverytest.Track("Song Title", "Some Artist", domain.ProviderDeezer, nil), "ISRC-UNKNOWN-DUR")
-	b := discoverytest.WithMBID(discoverytest.Track("Song Title", "Some Artist", domain.ProviderMusicBrainz, nil), "MBID-UNKNOWN-DUR")
-	b.Duration = 200
-
-	entities := Merge([][]domain.SearchResult{{a}, {b}})
-	if len(entities) != 1 {
-		t.Fatalf("got %d entities, want 1", len(entities))
-	}
-	r := entities[0].Result
-	if r.ISRC != "ISRC-UNKNOWN-DUR" {
-		t.Errorf("ISRC = %v, want ISRC-UNKNOWN-DUR carried (a side has no known duration to disagree)", r.ISRC)
-	}
-	if r.IdentityMBID() != "MBID-UNKNOWN-DUR" {
-		t.Errorf("MBID = %v, want MBID-UNKNOWN-DUR carried (a side has no known duration to disagree)", r.IdentityMBID())
-	}
-}
-
-func TestMergeInto_TitleTierCarriesAtThreePercentDurationBoundary(t *testing.T) {
-	a := discoverytest.WithISRC(discoverytest.Track("Song Title", "Some Artist", domain.ProviderDeezer, nil), "ISRC-AT-BOUNDARY")
-	a.Duration = 200
-	b := discoverytest.WithMBID(discoverytest.Track("Song Title", "Some Artist", domain.ProviderMusicBrainz, nil), "MBID-AT-BOUNDARY")
-	b.Duration = 206
-
-	entities := Merge([][]domain.SearchResult{{a}, {b}})
-	if len(entities) != 1 {
-		t.Fatalf("got %d entities, want 1", len(entities))
-	}
-	r := entities[0].Result
-	if r.ISRC != "ISRC-AT-BOUNDARY" {
-		t.Errorf("ISRC = %v, want ISRC-AT-BOUNDARY carried (6s on 200s is exactly 3%%, still within tolerance)", r.ISRC)
-	}
-	if r.IdentityMBID() != "MBID-AT-BOUNDARY" {
-		t.Errorf("MBID = %v, want MBID-AT-BOUNDARY carried (6s on 200s is exactly 3%%, still within tolerance)", r.IdentityMBID())
-	}
-}
-
-func TestMergeInto_TitleTierCarriesAtFiveSecondFloorBoundary(t *testing.T) {
-	a := discoverytest.WithISRC(discoverytest.Track("Song Title", "Some Artist", domain.ProviderDeezer, nil), "ISRC-AT-FLOOR")
-	a.Duration = 100
-	b := discoverytest.WithMBID(discoverytest.Track("Song Title", "Some Artist", domain.ProviderMusicBrainz, nil), "MBID-AT-FLOOR")
-	b.Duration = 105
-
-	entities := Merge([][]domain.SearchResult{{a}, {b}})
-	if len(entities) != 1 {
-		t.Fatalf("got %d entities, want 1", len(entities))
-	}
-	r := entities[0].Result
-	if r.ISRC != "ISRC-AT-FLOOR" {
-		t.Errorf("ISRC = %v, want ISRC-AT-FLOOR carried (5s diff sits exactly on the 5s floor, still within tolerance)", r.ISRC)
-	}
-	if r.IdentityMBID() != "MBID-AT-FLOOR" {
-		t.Errorf("MBID = %v, want MBID-AT-FLOOR carried (5s diff sits exactly on the 5s floor, still within tolerance)", r.IdentityMBID())
-	}
-}
-
-func TestMergeInto_TitleTierDoesNotCarryBeyondThreePercentDurationTolerance(t *testing.T) {
-	a := discoverytest.WithISRC(discoverytest.Track("Song Title", "Some Artist", domain.ProviderDeezer, nil), "ISRC-OVER-TOLERANCE")
-	a.Duration = 200
-	b := discoverytest.WithMBID(discoverytest.Track("Song Title", "Some Artist", domain.ProviderMusicBrainz, nil), "MBID-OVER-TOLERANCE")
-	b.Duration = 208
-
-	entities := Merge([][]domain.SearchResult{{a}, {b}})
-	if len(entities) != 1 {
-		t.Fatalf("got %d entities, want 1 (title tier still merges)", len(entities))
-	}
-	r := entities[0].Result
-	if r.IdentityMBID() == "MBID-OVER-TOLERANCE" {
-		t.Errorf("MBID = %v, want it not carried (8s on 200s exceeds the 3%% tolerance)", r.IdentityMBID())
-	}
-	if r.ISRC != "ISRC-OVER-TOLERANCE" {
-		t.Errorf("ISRC = %v, want ISRC-OVER-TOLERANCE preserved from the canonical side", r.ISRC)
-	}
-}
-
 func TestMergeInto_NameMatchNeverPastesLookalikeArtworkOverIdentity(t *testing.T) {
-	identity := discoverytest.WithMBID(discoverytest.Track("No Idea", "Don Toliver", domain.ProviderMusicBrainz, nil), "mbid-dontoliver")
+	identity := discoverytest.WithISRC(discoverytest.Track("No Idea", "Don Toliver", domain.ProviderSpotify, nil), "ISRC-DONTOLIVER")
 	lookalike := discoverytest.Track("No Idea", "Don Toliver", domain.ProviderDeezer, nil)
 	lookalike.ImageURL = "https://wrong/lookalike.jpg"
 	lookalike.ArtworkSource = "deezer"
@@ -542,8 +322,8 @@ func TestMergeInto_NameMatchNeverPastesLookalikeArtworkOverIdentity(t *testing.T
 		if got.ImageURL != "" {
 			t.Errorf("%s: ImageURL = %q, want empty placeholder (never the look-alike cover)", name, got.ImageURL)
 		}
-		if got.IdentityMBID() != "mbid-dontoliver" {
-			t.Errorf("%s: MBID = %q, want the identity preserved", name, got.IdentityMBID())
+		if got.ISRC != "ISRC-DONTOLIVER" {
+			t.Errorf("%s: ISRC = %q, want the identity preserved", name, got.ISRC)
 		}
 	}
 }
@@ -585,189 +365,22 @@ func TestMerge_BestRankTracksMinAcrossProviders(t *testing.T) {
 	}
 }
 
-func TestMerge_BridgeTierMergesCrossProvider(t *testing.T) {
-	mb := discoverytest.WithMBID(discoverytest.Res(domain.ResultKindTrack, "Bridge Recording One", "Artist X", domain.ProviderMusicBrainz, nil), "mbid-1")
-	mb.Xref = map[domain.ProviderKey]string{"deezer": "555"}
-	dz := domain.SearchResult{
-		Kind:     domain.ResultKindTrack,
-		Title:    "Totally Different Title",
-		Subtitle: "Artist X",
-		Sources:  []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "555", URL: "https://deezer/555"}},
-		Extras:   map[string]any{},
-	}
-
-	entities := Merge([][]domain.SearchResult{{mb}, {dz}})
-
-	if len(entities) != 1 {
-		t.Fatalf("bridge merge failed: got %d entities, want 1 (bridge did not fire)", len(entities))
-	}
-	if tier := entities[0].Result.ResolutionTier.Tier.String(); tier != domain.EntityResolutionBridge.String() {
-		t.Fatalf("resolution tier = %v, want %q", tier, domain.EntityResolutionBridge.String())
-	}
-	if entities[0].Result.Confidence != domain.ConfidenceHigh {
-		t.Fatalf("bridge merge should be high confidence, got %v", entities[0].Result.Confidence)
-	}
-}
-
-func TestMerge_NoBridgeWithoutXref(t *testing.T) {
-	a := discoverytest.WithMBID(discoverytest.Res(domain.ResultKindTrack, "Distinct One", "Artist X", domain.ProviderMusicBrainz, nil), "mbid-1")
-	b := domain.SearchResult{
-		Kind:     domain.ResultKindTrack,
-		Title:    "Distinct Two",
-		Subtitle: "Artist X",
-		Sources:  []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "555", URL: "https://deezer/555"}},
-		Extras:   map[string]any{},
-	}
-	entities := Merge([][]domain.SearchResult{{a}, {b}})
-	if len(entities) != 2 {
-		t.Fatalf("without an xref these distinct-title results must not merge: got %d entities, want 2", len(entities))
-	}
-}
-
-func TestMerge_TitleTierNeverPairsTheOriginalISRCWithTheRemixMBIDInEitherOrder(t *testing.T) {
-	original := discoverytest.WithISRC(discoverytest.Track("Drinking in L.A.", "Bran Van 3000", domain.ProviderDeezer, nil), "CAA509814003")
-	original.Duration = 236
-	remix := discoverytest.WithMBID(discoverytest.Track("Drinking in L.A. (Who Mix?)", "Bran Van 3000", domain.ProviderMusicBrainz, nil), "d3dc2825")
+func TestMerge_TitleTierCarriesTheAlbumISRCPastARejectedRemix(t *testing.T) {
+	deezer := moreCompleteTrack("Drinking in L.A.", 236)
+	remix := discoverytest.WithISRC(discoverytest.Track("Drinking in L.A. (Who Mix?)", "Some Artist", domain.ProviderSpotify, nil), "ISRC-REMIX")
 	remix.Duration = 307
-
-	orders := map[string][][]domain.SearchResult{
-		"original_first": {{original}, {remix}},
-		"remix_first":    {{remix}, {original}},
-	}
-	for name, order := range orders {
-		entities := Merge(order)
-		if len(entities) != 1 {
-			t.Fatalf("%s: got %d entities, want 1 (title tier still merges)", name, len(entities))
-		}
-		r := entities[0].Result
-		if r.IdentityMBID() == "d3dc2825" && r.ISRC == "CAA509814003" {
-			t.Errorf("%s: merged entity pairs the original's ISRC CAA509814003 with the remix's MBID d3dc2825", name)
-		}
-		if got := len(r.Sources); got != 2 {
-			t.Errorf("%s: sources = %d, want 2 (both providers still union into one row)", name, got)
-		}
-	}
-}
-
-func TestMerge_TitleTierNeverPairsTheOriginalMBIDWithARemixISRCInEitherOrder(t *testing.T) {
-	original := discoverytest.WithMBID(discoverytest.Track("Song Title", "Some Artist", domain.ProviderMusicBrainz, nil), "mbid-original")
-	original.Duration = 200
-	remix := discoverytest.WithISRC(discoverytest.Track("Song Title (Club Remix)", "Some Artist", domain.ProviderDeezer, nil), "ISRC-REMIX")
-	remix.Duration = 320
-
-	orders := map[string][][]domain.SearchResult{
-		"original_first": {{original}, {remix}},
-		"remix_first":    {{remix}, {original}},
-	}
-	for name, order := range orders {
-		entities := Merge(order)
-		if len(entities) != 1 {
-			t.Fatalf("%s: got %d entities, want 1 (title tier still merges)", name, len(entities))
-		}
-		r := entities[0].Result
-		if r.IdentityMBID() == "mbid-original" && r.ISRC == "ISRC-REMIX" {
-			t.Errorf("%s: merged entity pairs the original's MBID with the remix's ISRC", name)
-		}
-	}
-}
-
-func TestMerge_TitleTierDoesNotCarryMBIDAcrossAQualifierEvenWhenDurationsMatch(t *testing.T) {
-	studio := discoverytest.WithISRC(discoverytest.Track("Fix You", "Coldplay", domain.ProviderDeezer, nil), "GBAYE0500000")
-	studio.Duration = 295
-	live := discoverytest.WithMBID(discoverytest.Track("Fix You (Live)", "Coldplay", domain.ProviderMusicBrainz, nil), "mbid-live")
-	live.Duration = 295
-
-	entities := Merge([][]domain.SearchResult{{studio}, {live}})
-	if len(entities) != 1 {
-		t.Fatalf("got %d entities, want 1 (title tier still merges)", len(entities))
-	}
-	r := entities[0].Result
-	if r.IdentityMBID() == "mbid-live" {
-		t.Errorf("MBID = %q, want the live recording's MBID not carried (titles differ under identity normalisation)", r.IdentityMBID())
-	}
-	if r.ISRC != "GBAYE0500000" {
-		t.Errorf("ISRC = %q, want GBAYE0500000 kept", r.ISRC)
-	}
-}
-
-func TestMerge_TitleTierDoesNotCarryJustAboveTheFiveSecondFloor(t *testing.T) {
-	a := discoverytest.WithISRC(discoverytest.Track("Song Title", "Some Artist", domain.ProviderDeezer, nil), "ISRC-ABOVE-FLOOR")
-	a.Duration = 100
-	b := discoverytest.WithMBID(discoverytest.Track("Song Title", "Some Artist", domain.ProviderMusicBrainz, nil), "MBID-ABOVE-FLOOR")
-	b.Duration = 106
-
-	entities := Merge([][]domain.SearchResult{{a}, {b}})
-	if len(entities) != 1 {
-		t.Fatalf("got %d entities, want 1 (title tier still merges)", len(entities))
-	}
-	r := entities[0].Result
-	if r.IdentityMBID() == "MBID-ABOVE-FLOOR" {
-		t.Errorf("MBID = %q, want it not carried (6s on 100s exceeds max(5s, 3s))", r.IdentityMBID())
-	}
-	if r.ISRC != "ISRC-ABOVE-FLOOR" {
-		t.Errorf("ISRC = %q, want ISRC-ABOVE-FLOOR kept from the canonical side", r.ISRC)
-	}
-}
-
-func TestMerge_TitleTierCarriesTheAlbumMBIDPastARejectedRemix(t *testing.T) {
-	deezer := discoverytest.WithISRC(discoverytest.Track("Drinking in L.A.", "Bran Van 3000", domain.ProviderDeezer, nil), "CAA509814003")
-	deezer.Duration = 236
-	remix := discoverytest.WithMBID(discoverytest.Track("Drinking in L.A. (Who Mix?)", "Bran Van 3000", domain.ProviderMusicBrainz, nil), "d3dc2825")
-	remix.Duration = 307
-	album := discoverytest.WithMBID(discoverytest.Track("Drinking in L.A.", "Bran Van 3000", domain.ProviderMusicBrainz, nil), "5d6efd30")
+	album := discoverytest.WithISRC(discoverytest.Track("Drinking in L.A.", "Some Artist", domain.ProviderSpotify, nil), "ISRC-ALBUM")
 	album.Duration = 236
 
 	entities := Merge([][]domain.SearchResult{{deezer}, {remix, album}})
-	var got Entity
-	for _, e := range entities {
-		if e.Result.ISRC == "CAA509814003" {
-			got = e
-		}
-	}
-	if got.Result.ISRC == "" {
-		t.Fatalf("no entity carries ISRC CAA509814003 among %d entities", len(entities))
-	}
-	if got.Result.IdentityMBID() != "5d6efd30" {
-		t.Errorf("MBID = %q, want 5d6efd30 (the album recording's MBID, never the remix's d3dc2825)", got.Result.IdentityMBID())
+
+	if len(entities) != 1 || entities[0].Result.ISRC != "ISRC-ALBUM" {
+		t.Fatalf("entities = %d, ISRC = %q, want one entity carrying the album recording's ISRC, never the remix's", len(entities), entities[0].Result.ISRC)
 	}
 }
-
-func TestMerge_ISRCTierStillCarriesMBIDAcrossDifferentTitlesAndDurations(t *testing.T) {
-	a := discoverytest.WithISRC(discoverytest.Track("Song Title", "Some Artist", domain.ProviderDeezer, nil), "ISRC-SHARED")
-	a.Duration = 200
-	b := discoverytest.WithMBID(discoverytest.WithISRC(discoverytest.Track("Song Title (2011 Remaster)", "Some Artist", domain.ProviderMusicBrainz, nil), "ISRC-SHARED"), "mbid-shared")
-	b.Duration = 260
-
-	entities := Merge([][]domain.SearchResult{{a}, {b}})
-	if len(entities) != 1 {
-		t.Fatalf("got %d entities, want 1 (same ISRC)", len(entities))
-	}
-	r := entities[0].Result
-	if tier := r.ResolutionTier.Tier.String(); tier != "isrc" {
-		t.Errorf("resolution_tier = %v, want isrc", tier)
-	}
-	if r.IdentityMBID() != "mbid-shared" {
-		t.Errorf("MBID = %q, want mbid-shared carried (stronger tiers are unchanged)", r.IdentityMBID())
-	}
-}
-
-func TestMerge_ArtistNameTierCarriesMBIDAcrossAParenthetical(t *testing.T) {
-	poison := discoverytest.Res(domain.ResultKindArtist, "Poison", "", domain.ProviderDeezer, nil)
-	poisonBand := discoverytest.WithMBID(discoverytest.Res(domain.ResultKindArtist, "Poison (Band)", "", domain.ProviderMusicBrainz, nil), "mbid-poison")
-
-	entities := Merge([][]domain.SearchResult{{poison}, {poisonBand}})
-	if len(entities) != 1 {
-		t.Fatalf("got %d entities, want 1 (artist name tier still merges)", len(entities))
-	}
-	r := entities[0].Result
-	if r.IdentityMBID() != "mbid-poison" {
-		t.Errorf("MBID = %q, want mbid-poison (the identity-agreement gate must not apply to the artist branch)", r.IdentityMBID())
-	}
-}
-
 func TestMerge_TitleTierKeepsProvenIdentityOverALaterMoreCompleteCandidate(t *testing.T) {
 	deezer := discoverytest.WithISRC(discoverytest.Track("Song Title", "Some Artist", domain.ProviderDeezer, nil), "ISRC-PROVEN")
-	mb := discoverytest.WithMBID(discoverytest.WithISRC(discoverytest.Track("Song Title", "Some Artist", domain.ProviderMusicBrainz, nil), "ISRC-PROVEN"), "mbid-proven")
+	mb := discoverytest.WithISRC(discoverytest.Track("Song Title", "Some Artist", domain.ProviderSpotify, nil), "ISRC-PROVEN")
 	extended := discoverytest.Track("Song Title (Extended)", "Some Artist", domain.ProviderTheAudioDB, nil)
 	extended.Album = "Some Album"
 	extended.ImageURL = "https://x/art.jpg"
@@ -781,9 +394,6 @@ func TestMerge_TitleTierKeepsProvenIdentityOverALaterMoreCompleteCandidate(t *te
 	r := entities[0].Result
 	if r.ISRC != "ISRC-PROVEN" {
 		t.Errorf("ISRC = %q, want ISRC-PROVEN kept (the proven side, not the merely more complete candidate)", r.ISRC)
-	}
-	if r.IdentityMBID() != "mbid-proven" {
-		t.Errorf("MBID = %q, want mbid-proven kept (the proven side, not the merely more complete candidate)", r.IdentityMBID())
 	}
 }
 

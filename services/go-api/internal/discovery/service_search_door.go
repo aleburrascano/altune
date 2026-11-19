@@ -20,7 +20,6 @@ var (
 	WithFindRelatedService  = search.WithFindRelatedService
 	WithHeldSlateCache      = search.WithHeldSlateCache
 	WithHistoryRepository   = search.WithHistoryRepository
-	WithIdentityBridge      = search.WithIdentityBridge
 	WithIdentityStore       = search.WithIdentityStore
 	WithMBIDIndex           = search.WithMBIDIndex
 	WithProviderResultCache = search.WithProviderResultCache

@@ -252,10 +252,7 @@ func isLowConfidenceTail(r domain.SearchResult) bool {
 	if !provs[domain.ProviderSoundCloud] {
 		return false
 	}
-	hasIdentity := r.ISRC != "" ||
-		r.HasEntityMBID() ||
-		r.Album != ""
-	return !hasIdentity
+	return r.ISRC == "" && r.Album == ""
 }
 
 func TailNoiseInTopK(results []domain.SearchResult, k int) int {

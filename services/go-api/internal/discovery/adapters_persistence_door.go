@@ -5,7 +5,6 @@ import persistence "altune/go-api/internal/discovery/internal/adapters/persisten
 var (
 	NewPgxEventStore              = persistence.NewPgxEventStore
 	NewPgxFavoritesRepository     = persistence.NewPgxFavoritesRepository
-	NewPgxIdentityStore           = persistence.NewPgxIdentityStore
 	NewPgxSearchHistoryRepository = persistence.NewPgxSearchHistoryRepository
 )
 

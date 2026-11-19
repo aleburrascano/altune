@@ -20,11 +20,10 @@ func TestPercentile(t *testing.T) {
 	}
 }
 
-func TestRunHealthEval_fillAndBridge(t *testing.T) {
+func TestRunHealthEval_fill(t *testing.T) {
 	entities := []LibraryEntity{{Title: "Humble", Artist: "Kendrick"}}
 	withArt := track("Humble", "Kendrick", domain.ProviderDeezer, nil)
 	withArt.ImageURL = "https://art/1.jpg"
-	withArt.ResolutionTier = domain.StampResolutionTier(domain.EntityResolutionBridge)
 	noArt := track("Other", "Kendrick", domain.ProviderITunes, nil)
 
 	fake := &fakeSearcher{byQuery: map[string][]domain.SearchResult{
@@ -38,10 +37,7 @@ func TestRunHealthEval_fillAndBridge(t *testing.T) {
 	if r.WithArtwork != 1 || r.FillRate != 0.5 {
 		t.Errorf("fill: with_artwork=%d rate=%v, want 1 / 0.5", r.WithArtwork, r.FillRate)
 	}
-	if r.BridgedMerges != 1 || r.BridgeHitRate != 0.5 {
-		t.Errorf("bridge: bridged=%d rate=%v, want 1 / 0.5", r.BridgedMerges, r.BridgeHitRate)
-	}
-	if len(r.HealthMetrics()) != 4 {
-		t.Errorf("expected 4 health metrics, got %d", len(r.HealthMetrics()))
+	if len(r.HealthMetrics()) != 3 {
+		t.Errorf("expected 3 health metrics, got %d", len(r.HealthMetrics()))
 	}
 }

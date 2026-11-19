@@ -57,19 +57,32 @@ const (
 	ukNirvana = "9282c8b4-ca0b-4c6b-b7e3-4f7762dfc4d6"
 )
 
-func TestArtistCardWithMBID_PicksTheCardOfThatArtistNotTheFirstSameNameCard(t *testing.T) {
-	results := []discovery.SearchResult{
-		{Kind: discovery.ResultKindArtist, Title: "Nirvana", ArtistMBID: ukNirvana, Sources: []discovery.SourceRef{{Provider: discovery.ProviderDeezer, ExternalID: "uk"}}},
-		{Kind: discovery.ResultKindArtist, Title: "Nirvana", ArtistMBID: usNirvana, Sources: []discovery.SourceRef{{Provider: discovery.ProviderDeezer, ExternalID: "us"}}},
-	}
+type seedAlbums map[string][]discovery.SearchResult
 
-	card, ok := artistCardWithMBID(results, usNirvana)
+func (a seedAlbums) GetAlbums(_ context.Context, provider discovery.ProviderName, externalID string, _ map[discovery.ProviderName]string, _ int) (*discovery.ContentFetchResponse, error) {
+	return &discovery.ContentFetchResponse{Items: a[provider.String()+":"+externalID]}, nil
+}
 
-	if !ok || card.Sources[0].ExternalID != "us" {
-		t.Fatalf("card = %+v, ok = %v, want the US band's card", card, ok)
+func TestDetailLiveRows_FindsEachArtistCardByNameAndListsItsAlbums(t *testing.T) {
+	searcher := queryMapSearcher{
+		"Nirvana": {
+			{Kind: discovery.ResultKindTrack, Title: "Nirvana", Sources: []discovery.SourceRef{{Provider: discovery.ProviderDeezer, ExternalID: "t1"}}},
+			{Kind: discovery.ResultKindArtist, Title: "Nirvana", Sources: []discovery.SourceRef{{Provider: discovery.ProviderDeezer, ExternalID: "415"}}},
+		},
 	}
-	if _, found := artistCardWithMBID(results[:1], usNirvana); found {
-		t.Error("a same-name card of another artist must not stand in for the pinned one")
+	albums := seedAlbums{"deezer:415": {sourced(discovery.ProviderDeezer, discovery.ProviderSpotify)}}
+	artists := []liveArtist{{mbid: usNirvana, name: "Nirvana"}, {mbid: ukNirvana, name: "Nirvana (UK)"}}
+
+	rows, missing, err := detailLiveRows(context.Background(), searcher, albums, artists)
+
+	if err != nil || len(rows) != 1 || rows[0].Items != 1 || rows[0].Confirmed != 1 {
+		t.Fatalf("rows = %+v, err = %v, want Nirvana's one confirmed album", rows, err)
+	}
+	if len(rows[0].CardIDs) != 1 || rows[0].CardIDs[0] != "deezer:415" {
+		t.Errorf("card ids = %v, want the artist card, not the same-titled track", rows[0].CardIDs)
+	}
+	if len(missing) != 1 || !strings.Contains(missing[0], "Nirvana (UK)") {
+		t.Errorf("missing = %v, want the artist no card is named after", missing)
 	}
 }
 
