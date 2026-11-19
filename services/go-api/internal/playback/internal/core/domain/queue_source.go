@@ -122,7 +122,7 @@ func validatedFallback(fallback string) (string, error) {
 
 const (
 	upperHex   = "0123456789ABCDEF"
-	lowerHex   = "0123456789abcdef"
+	hexDigits  = upperHex + "abcdef"
 	unreserved = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~"
 )
 
@@ -171,8 +171,9 @@ func escapedByte(value string, i int) (byte, bool) {
 }
 
 func hexDigit(c byte) int {
-	if d := strings.IndexByte(upperHex, c); d >= 0 {
-		return d
+	d := strings.IndexByte(hexDigits, c)
+	if d >= len(upperHex) {
+		return d - 6
 	}
-	return strings.IndexByte(lowerHex, c)
+	return d
 }
