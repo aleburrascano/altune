@@ -3,7 +3,6 @@ package service_test
 import (
 	"altune/go-api/internal/acquisition"
 	"context"
-	"math"
 	"testing"
 )
 
@@ -100,7 +99,7 @@ func TestScoreConfidence(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := acquisition.ScoreConfidence(tt.e, tt.track); math.Abs(got-tt.want) > 1e-9 {
+			if got := acquisition.ScoreConfidence(tt.e, tt.track); got != tt.want {
 				t.Errorf("ScoreConfidence = %v, want %v", got, tt.want)
 			}
 		})
@@ -150,3 +149,15 @@ func TestConfidence_ACreditedPinnedVideoClearsTheFloor(t *testing.T) {
 }
 
 func secs(v float64) *float64 { return &v }
+
+func TestScoreConfidence_AnUnknownVerdictScoresFromZeroToEightTenths(t *testing.T) {
+	lowest := acquisition.ConfidenceEvidence{Channel: channelOther, DurationDeltaSeconds: secs(90), Qualifiers: []string{"edit"}}
+	highest := acquisition.ConfidenceEvidence{Channel: channelTopic, Resolved: true, DurationDeltaSeconds: secs(0)}
+
+	if got := acquisition.ScoreConfidence(lowest, 204); got != 0 {
+		t.Errorf("lowest unknown score = %v, want 0: a constant change that drops it below 0 needs the zero clamp back", got)
+	}
+	if got := acquisition.ScoreConfidence(highest, 204); got != 0.8 {
+		t.Errorf("highest unknown score = %v, want 0.8: a constant change that lifts it past the unknown cap needs the cap back", got)
+	}
+}
