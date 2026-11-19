@@ -8,8 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
-	"slices"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -26,59 +24,6 @@ type PgxIdentityStore struct {
 
 func NewPgxIdentityStore(pool *pgxpool.Pool) *PgxIdentityStore {
 	return &PgxIdentityStore{pool: pool}
-}
-
-func (s *PgxIdentityStore) PersistBridges(
-	ctx context.Context,
-	kind domain.ResultKind,
-	mbid string,
-	xref map[domain.ProviderKey]string,
-) error {
-	if mbid == "" || len(xref) == 0 {
-		return nil
-	}
-	blob, err := json.Marshal(xref)
-	if err != nil {
-		return fmt.Errorf("marshal xref: %w", err)
-	}
-
-	batch := bridgeBatch(kind, mbid, xref, blob)
-	if batch.Len() == 0 {
-		return nil
-	}
-
-	br := s.pool.SendBatch(ctx, batch)
-	for range batch.Len() {
-		if _, err := br.Exec(); err != nil {
-			return errors.Join(fmt.Errorf("persist identity bridge: %w", err), br.Close())
-		}
-	}
-	if err := br.Close(); err != nil {
-		return fmt.Errorf("close identity bridge batch: %w", err)
-	}
-	return nil
-}
-
-func bridgeBatch(kind domain.ResultKind, mbid string, xref map[domain.ProviderKey]string, blob []byte) *pgx.Batch {
-	batch := &pgx.Batch{}
-	for _, provider := range slices.Sorted(maps.Keys(xref)) {
-		externalID := xref[provider]
-		if provider == "" || externalID == "" {
-			continue
-		}
-		batch.Queue(
-			`INSERT INTO entity_identity (provider, external_id, kind, mbid, xref)
-			 VALUES ($1, $2, $3, $4, $5)
-			 ON CONFLICT (provider, external_id, kind)
-			 DO UPDATE SET mbid = EXCLUDED.mbid,
-				xref = CASE WHEN entity_identity.mbid = EXCLUDED.mbid
-					THEN entity_identity.xref || EXCLUDED.xref
-					ELSE EXCLUDED.xref END,
-				resolved_at = now()`,
-			provider, externalID, kind.String(), mbid, blob,
-		)
-	}
-	return batch
 }
 
 func (s *PgxIdentityStore) LookupByProviderID(
@@ -186,23 +131,4 @@ func decodeXref(ctx context.Context, mbid string, blob []byte) map[domain.Provid
 		return map[domain.ProviderKey]string{}
 	}
 	return xref
-}
-
-func (s *PgxIdentityStore) Invalidate(
-	ctx context.Context,
-	kind domain.ResultKind,
-	provider domain.ProviderKey, externalID string,
-) error {
-	if provider == "" || externalID == "" {
-		return nil
-	}
-	_, err := s.pool.Exec(ctx,
-		`DELETE FROM entity_identity
-		 WHERE provider = $1 AND external_id = $2 AND kind = $3`,
-		provider.String(), externalID, kind.String(),
-	)
-	if err != nil {
-		return fmt.Errorf("invalidate identity: %w", err)
-	}
-	return nil
 }

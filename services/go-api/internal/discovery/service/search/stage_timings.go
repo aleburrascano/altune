@@ -4,7 +4,6 @@ import "time"
 
 type stageTimings struct {
 	fanOut    time.Duration
-	identity  time.Duration
 	rank      time.Duration
 	artwork   time.Duration
 	favorites time.Duration
@@ -19,7 +18,6 @@ func timeStage(into *time.Duration) func() {
 func (t stageTimings) logAttrs(total time.Duration) []any {
 	return []any{
 		"fanout_ms", t.fanOut.Milliseconds(),
-		"identity_ms", t.identity.Milliseconds(),
 		"rank_ms", t.rank.Milliseconds(),
 		"artwork_ms", t.artwork.Milliseconds(),
 		"favorites_ms", t.favorites.Milliseconds(),

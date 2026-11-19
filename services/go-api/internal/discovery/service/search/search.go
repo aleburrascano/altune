@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/discovery/internal/core/history"
 	"altune/go-api/internal/discovery/internal/core/ports"
 	"altune/go-api/internal/discovery/service/artwork"
-	"altune/go-api/internal/discovery/service/identity"
 	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/discovery/service/rank"
 	"altune/go-api/internal/discovery/service/related"
@@ -28,7 +27,6 @@ type Service struct {
 	providerCache  ports.ProviderResultCache
 	deadline       time.Duration
 
-	identity       *identity.IdentityStamper
 	artwork        *artwork.ArtworkFiller
 	ranking        *rank.RankingExperiments
 	favorites      *favorites.FavoritesLifter
@@ -71,12 +69,10 @@ type serviceConfig struct {
 	heldSlateCache ports.HeldSlateCache
 	favoritesRepo  ports.FavoritesRepository
 
-	artworkResolver  ports.TaggingArtworkResolver
-	artworkCache     ports.ArtworkCache
-	identityBridge   ports.IdentityBridge
-	mbidIndex        ports.MBIDIndex
-	identityStore    ports.IdentityStore
-	identityVerifier *identity.IdentityVerifier
+	artworkResolver ports.TaggingArtworkResolver
+	artworkCache    ports.ArtworkCache
+	mbidIndex       ports.MBIDIndex
+	identityStore   ports.IdentityStore
 
 	findRelatedSvc *related.FindRelatedService
 
@@ -111,20 +107,12 @@ func WithArtworkCache(ac ports.ArtworkCache) Option {
 	return func(c *serviceConfig) { c.artworkCache = ac }
 }
 
-func WithIdentityBridge(b ports.IdentityBridge) Option {
-	return func(c *serviceConfig) { c.identityBridge = b }
-}
-
 func WithMBIDIndex(idx ports.MBIDIndex) Option {
 	return func(c *serviceConfig) { c.mbidIndex = idx }
 }
 
 func WithIdentityStore(store ports.IdentityStore) Option {
 	return func(c *serviceConfig) { c.identityStore = store }
-}
-
-func WithIdentityVerifier(v *identity.IdentityVerifier) Option {
-	return func(c *serviceConfig) { c.identityVerifier = v }
 }
 
 func WithFindRelatedService(r *related.FindRelatedService) Option {
@@ -208,7 +196,6 @@ func assembleService(providers []ports.SearchProvider, circuitBreaker *providerc
 		circuitBreaker: circuitBreaker,
 		providerCache:  cfg.providerCache,
 		deadline:       cfg.searchDeadline,
-		identity:       identity.NewIdentityStamper(cfg.identityBridge, cfg.identityStore, cfg.identityVerifier, bg),
 		artwork:        artwork.NewArtworkFiller(cfg.artworkResolver, cfg.artworkCache, cfg.identityStore, cfg.mbidIndex),
 		ranking:        rank.NewRankingExperiments(cfg.ranking, bg),
 		favorites:      favorites.NewFavoritesLifter(cfg.favoritesRepo),
@@ -455,10 +442,6 @@ func (s *Service) mergeRankEnrich(
 	queryNorm string,
 	stages *stageTimings,
 ) []domain.SearchResult {
-	identityDone := timeStage(&stages.identity)
-	s.identity.Stamp(ctx, perProvider)
-	identityDone()
-
 	rankDone := timeStage(&stages.rank)
 	ranked := rank.RankPipelineWith(perProvider, queryNorm, s.ranking.RankOptions())
 
@@ -480,7 +463,6 @@ func (s *Service) RankVariantsForEval(
 	searchQuery := domain.SearchText(query.Raw)
 	queryNorm := textnorm.NormalizeForMatch(searchQuery)
 	perProvider, _ := s.fanOutLive(ctx, searchQuery, query.Kinds)
-	s.identity.Stamp(ctx, perProvider)
 	return rank.RankPipeline(perProvider, queryNorm), rank.RankPipelineNoReshape(perProvider, queryNorm)
 }
 

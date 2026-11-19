@@ -14,9 +14,7 @@ type MBIDIndex interface {
 }
 
 type IdentityStore interface {
-	PersistBridges(ctx context.Context, kind domain.ResultKind, mbid string, xref map[domain.ProviderKey]string) error
 	LookupByProviderID(ctx context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (mbid string, xref map[domain.ProviderKey]string, ok bool)
-	Invalidate(ctx context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) error
 }
 
 type IdentityRef struct {

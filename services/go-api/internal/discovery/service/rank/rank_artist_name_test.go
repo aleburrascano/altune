@@ -6,10 +6,9 @@ import (
 	"testing"
 )
 
-func mbidArtist(name string) domain.SearchResult {
-	r := discoverytest.Res(domain.ResultKindArtist, name, "", domain.ProviderDeezer, nil)
-	r.ArtistMBID = "9ddce51c-2b75-4b3e-ac8c-1db09e7c89c6"
-	return r
+func threeProviderArtist(name string) domain.SearchResult {
+	card := discoverytest.Res(domain.ResultKindArtist, name, "", domain.ProviderDeezer, nil)
+	return multiSource(multiSource(card, domain.ProviderSpotify), domain.ProviderAppleMusic)
 }
 
 func sameTitleTracks(title string, popularity float64) []Entity {
@@ -20,19 +19,8 @@ func sameTitleTracks(title string, popularity float64) []Entity {
 	return out
 }
 
-func TestRank_ArtistCardWithMBIDOutranksSameTitleTracksOfOtherArtists(t *testing.T) {
-	entities := append(sameTitleTracks("Boston", 900), ent(mbidArtist("Boston")))
-
-	got := Rank(entities, "boston")
-
-	if got[0].Kind != domain.ResultKindArtist {
-		t.Fatalf("want the Boston artist card first, got %v", discoverytest.Titles(got))
-	}
-}
-
 func TestRank_ArtistCardOnThreeProvidersOutranksSameTitleTracks(t *testing.T) {
-	card := multiSource(multiSource(discoverytest.Res(domain.ResultKindArtist, "Boston", "", domain.ProviderDeezer, nil), domain.ProviderSpotify), domain.ProviderMusicBrainz)
-	entities := append(sameTitleTracks("Boston", 900), ent(card))
+	entities := append(sameTitleTracks("Boston", 900), ent(threeProviderArtist("Boston")))
 
 	got := Rank(entities, "boston")
 
@@ -41,19 +29,19 @@ func TestRank_ArtistCardOnThreeProvidersOutranksSameTitleTracks(t *testing.T) {
 	}
 }
 
-func TestRank_ArtistCardWithoutMBIDOrManyProvidersStaysBelowPopularTracks(t *testing.T) {
+func TestRank_ArtistCardOnTwoProvidersStaysBelowPopularTracks(t *testing.T) {
 	weak := multiSource(discoverytest.Res(domain.ResultKindArtist, "Boston", "", domain.ProviderDeezer, nil), domain.ProviderSpotify)
 	entities := append(sameTitleTracks("Boston", 900), ent(weak))
 
 	got := Rank(entities, "boston")
 
 	if got[0].Kind != domain.ResultKindTrack {
-		t.Fatalf("a two-provider card without an MBID must not be lifted, got %v", discoverytest.Titles(got))
+		t.Fatalf("a two-provider card must not be lifted, got %v", discoverytest.Titles(got))
 	}
 }
 
 func TestRank_ArtistCardWithDifferentNameIsNotLifted(t *testing.T) {
-	entities := append(sameTitleTracks("Boston", 900), ent(mbidArtist("Boston Manor")))
+	entities := append(sameTitleTracks("Boston", 900), ent(threeProviderArtist("Boston Manor")))
 
 	got := Rank(entities, "boston")
 

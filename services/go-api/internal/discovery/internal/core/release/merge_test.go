@@ -270,6 +270,19 @@ func TestMergeReleases_differentUPCsStayApart(t *testing.T) {
 	}
 }
 
+func TestMergeReleases_sameTitleWithDifferentIDsFromOneProviderStaysApart(t *testing.T) {
+	groups := []ReleaseGroup{
+		idGroup(
+			albumVariant(domain.ProviderDeezer, "d1", "Weezer"),
+			albumVariant(domain.ProviderDeezer, "d2", "Weezer"),
+		),
+	}
+
+	if n := len(MergeReleases(groups)); n != 2 {
+		t.Errorf("merged %d releases, want 2 (one provider, two ids)", n)
+	}
+}
+
 func TestMergeReleases_yearFollowsTheMergedDate(t *testing.T) {
 	groups := []ReleaseGroup{
 		idGroup(albumVariant(domain.ProviderSpotify, "sp", "Pinkerton", withYear(2011))),

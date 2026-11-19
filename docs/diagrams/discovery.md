@@ -34,9 +34,7 @@ sequenceDiagram
             S->>P: search (1.5–5s timeout, circuit breaker per provider)
             P-->>S: results + status ok / timeout / error / circuit_open
         end
-        S->>R: read cross-provider ids (enrichment cache)
-        S-)DB: persist newly learned identity bridges (async)
-        S->>S: merge: ISRC › UPC › MBID › bridge › name
+        S->>S: merge: ISRC › UPC › name
         S->>S: rank: top pick › picked artist's own › relevance › prominence › behavioral › popularity › RRF
         S->>P: disambiguate artists (MusicBrainz, 2s)
         S->>S: fill artwork: top 50, 4s, chain of 10 sources (Cover Art Archive first)

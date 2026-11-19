@@ -102,13 +102,12 @@ The single highest-value addition. One lookup per resolved entity yields:
 Discogs, Last.fm, AllMusic, Genius, Wikidata (`Q130798`), official homepage, IMDb, RateYourMusic,
 BBC** (all verified). **Built (`musicbrainz-enrichment`):** the lookup parses `relations[]` into bare
 ids (`external_ids{deezer,spotify,discogs,wikidata}` on `MBEnrichment`), returned on the detail
-enrichment endpoint — available to the client now and the seed for the merge bridge. **Merge-use
-built (ADR-0011):** an `IdentityBridge` port (the enrichment cache's `ExternalIDs` read side) feeds
-those ids into `Merge` via a pre-merge `stampIdentities` pass, so a result merges by stated identity
-(new `EntityResolutionBridge` tier) instead of name similarity — additive, cache-only, no hot-path MB
-call. **Eval passed (2026-06-22):** top-3 99.4% (1782/1792), the highest recorded — no regression →
-ADR-0011 Accepted. Still open: the full background-warm of the bridge (graduation path) and the
-keep-apart override (un-merging same-name different entities) — separate increments.
+enrichment endpoint — available to the client now. **Merge-use removed:** ADR-0011 fed these ids
+into `Merge` through a pre-merge `stampIdentities` pass and an `EntityResolutionBridge` tier, but the
+stamp only fired on MusicBrainz search results, and MusicBrainz is no longer a searcher (its
+1 req/s limit cannot answer inside the 1.5s search deadline). With nothing to stamp, the stamper,
+the `IdentityBridge` port and the bridge tier were deleted; the `entity_identity` rows the stamper
+wrote are still read by artist detail and search artwork, and nothing writes new ones.
 
 ### 5. Cover Art Archive — HD MBID-keyed album art — ✅ BUILT on detail-open (`musicbrainz-enrichment`, 2026-06-22)
 `coverartarchive.org/release-group/{mbid}` → front cover at **250/500/1200px** (verified 200 + real
@@ -174,12 +173,11 @@ fixtures from the live probe.
 
 Remaining:
 
-1. **Identity-based merge (cap. 4 merge-use). — ✅ DONE (ADR-0011 Accepted, eval 2026-06-22).** The
-   `external_ids` feed `Merge` via the `IdentityBridge` (cache-only, additive, `bridge` tier). Top-3
-   eval 99.4% — no regression.
-2. **Search-path enrichment (cap. 5 list-wide). — ✅ DONE (merged cards + `MBIDIndex` warm).**
-   Merged Deezer+MB cards get HD CAA art via the existing `enrich()`; the cache-only `MBIDIndex`
-   attaches an MBID to unmerged non-MB results. Covered by the same eval pass. Deferred: the
+1. **Identity-based merge (cap. 4 merge-use). — removed.** It fed `external_ids` into `Merge` through
+   the `IdentityBridge` and a `bridge` tier, but only MusicBrainz search results were stamped, and
+   MusicBrainz no longer searches, so the stamper, the port and the tier were deleted (see §4 above).
+2. **Search-path enrichment (cap. 5 list-wide). — ✅ DONE (`MBIDIndex` warm).**
+   The cache-only `MBIDIndex` attaches an MBID to search results for HD CAA art. Covered by the same eval pass. Deferred: the
    background MBID-warm worker for cold entities (`b`).
 3. **Fanart.tv (cap. 6). — ✅ DONE.** Live-probed with `FANARTTV_API_KEY`; fixed the album
    endpoint/nesting bug; tests now encode the real shape. Display-only, no eval gate.

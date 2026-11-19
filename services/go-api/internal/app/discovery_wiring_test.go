@@ -253,7 +253,6 @@ func TestDiscoveryDeps_EachConfigSwitchTurnsOnOnlyItsOwnSetting(t *testing.T) {
 		{"TailDemotionEnabled", func(c *config.Config) { c.TailDemotionEnabled = true }, discovery.ProviderSettings{}, discovery.SearchSettings{TailDemotion: true}, discovery.UnreleasedSettings{}},
 		{"CrossKindProminenceEnabled", func(c *config.Config) { c.CrossKindProminenceEnabled = true }, discovery.ProviderSettings{}, discovery.SearchSettings{CrossKindProminence: true}, discovery.UnreleasedSettings{}},
 		{"ExplorationEnabled", func(c *config.Config) { c.ExplorationEnabled = true }, discovery.ProviderSettings{}, discovery.SearchSettings{Exploration: true}, discovery.UnreleasedSettings{}},
-		{"IdentityVerifyOnPersist", func(c *config.Config) { c.IdentityVerifyOnPersist = true }, discovery.ProviderSettings{}, discovery.SearchSettings{IdentityVerifyOnPersist: true}, discovery.UnreleasedSettings{}},
 		{"BehavioralRankingEnabled", func(c *config.Config) { c.BehavioralRankingEnabled = true }, discovery.ProviderSettings{}, discovery.SearchSettings{BehavioralRanking: true}, discovery.UnreleasedSettings{}},
 		{"UnreleasedSource=cache", func(c *config.Config) { c.UnreleasedSource = "cache" }, discovery.ProviderSettings{}, discovery.SearchSettings{}, discovery.UnreleasedSettings{ServeFromCache: true}},
 	}

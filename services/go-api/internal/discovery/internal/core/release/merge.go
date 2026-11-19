@@ -73,7 +73,7 @@ func compatibleRelease(candidates []*MergedRelease, variant domain.SearchResult)
 func conflictingIdentity(a, b domain.SearchResult) bool {
 	return differ(a.RecordingMBID, b.RecordingMBID) || differ(a.ReleaseMBID, b.ReleaseMBID) ||
 		differ(a.ReleaseGroupMBID, b.ReleaseGroupMBID) || differ(a.ArtistMBID, b.ArtistMBID) || differ(a.UPC, b.UPC) ||
-		ClaimsAnotherID(a, b) || albumVersusSingle(a.RecordType, b.RecordType)
+		claimsAnotherID(a, b) || albumVersusSingle(a.RecordType, b.RecordType)
 }
 
 func albumVersusSingle(a, b domain.RecordType) bool {
@@ -82,7 +82,7 @@ func albumVersusSingle(a, b domain.RecordType) bool {
 		pa == domain.RecordTypeSingle && pb == domain.RecordTypeAlbum
 }
 
-func ClaimsAnotherID(e, c domain.SearchResult) bool {
+func claimsAnotherID(e, c domain.SearchResult) bool {
 	for _, cs := range c.Sources {
 		sameProvider, sameID := false, false
 		for _, es := range e.Sources {

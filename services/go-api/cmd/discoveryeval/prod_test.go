@@ -6,7 +6,7 @@ import (
 
 func timedSearch(query string, totalMs float64, cached bool, top ...map[string]any) searchEvent {
 	payload := map[string]any{
-		"fanout_ms": totalMs / 2, "identity_ms": 1.0, "rank_ms": 1.0, "artwork_ms": 1.0,
+		"fanout_ms": totalMs / 2, "rank_ms": 1.0, "artwork_ms": 1.0,
 		"favorites_ms": 0.0, "related_ms": 0.0, "total_ms": totalMs,
 		"cached": cached, "partial": false,
 	}

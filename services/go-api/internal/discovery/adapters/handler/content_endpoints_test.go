@@ -163,16 +163,8 @@ type stubIdentityStore struct {
 	xref map[discovery.ProviderKey]string
 }
 
-func (s stubIdentityStore) PersistBridges(context.Context, discovery.ResultKind, string, map[discovery.ProviderKey]string) error {
-	return nil
-}
-
 func (s stubIdentityStore) LookupByProviderID(context.Context, discovery.ResultKind, discovery.ProviderKey, string) (string, map[discovery.ProviderKey]string, bool) {
 	return "mbid-artist", s.xref, true
-}
-
-func (s stubIdentityStore) Invalidate(context.Context, discovery.ResultKind, discovery.ProviderKey, string) error {
-	return nil
 }
 
 type partialContentProvider struct {

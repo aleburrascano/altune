@@ -70,8 +70,8 @@ YouTube Music has five surface entities; the catch is **video ≈ track**:
 | `artist` (`ArtistItem`: `browseId` = `UC…` (a YouTube **channel** id), `artist`, `shuffleId`, `radioId`, `thumbnails[]`) | `artist` | `browseId` keys `browse`; `radioId` seeds song radio |
 | `playlist` (`PlaylistItem`: `browseId`, `title`, `author`, `itemCount`) | (future playlist surface) | not a `ResultKind` today |
 
-Identity is YouTube's own ids (`videoId`, channel `UC…`, `MPREb_…`) — **no ISRC, no MBID**, so it
-contributes nothing to the cross-provider identity bridge (it only takes name searches in).
+Identity is YouTube's own ids (`videoId`, channel `UC…`, `MPREb_…`) — **no ISRC, no MBID**, so
+search can only merge it by name.
 
 **Thumbnails are URL-resizable** (the iTunes-style win): album/track art on `yt3.googleusercontent.com`,
 artist art on `lh3.googleusercontent.com`, both ending `=w{N}-h{N}[-p]-l90-rj`. Rewriting the

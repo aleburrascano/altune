@@ -71,14 +71,6 @@ func seedStore(goldens []discovery.DetailGolden) *seededIdentityStore {
 	return s
 }
 
-func (s *seededIdentityStore) PersistBridges(context.Context, discovery.ResultKind, string, map[discovery.ProviderKey]string) error {
-	return nil
-}
-
-func (s *seededIdentityStore) Invalidate(context.Context, discovery.ResultKind, discovery.ProviderKey, string) error {
-	return nil
-}
-
 func (s *seededIdentityStore) LookupByProviderID(_ context.Context, kind discovery.ResultKind, provider discovery.ProviderKey, externalID string) (string, map[discovery.ProviderKey]string, bool) {
 	if kind != discovery.ResultKindArtist {
 		return "", nil, false
@@ -197,6 +189,10 @@ type detailLiveReport struct {
 	MaxMs          int64           `json:"max_ms"`
 }
 
+type albumLister interface {
+	GetAlbums(ctx context.Context, provider discovery.ProviderName, externalID string, known map[discovery.ProviderName]string, limit int) (*discovery.ContentFetchResponse, error)
+}
+
 func runDetailLive(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
 	searcher, drain, err := buildEvalSearcher(ctx, cfg, pool, redisClient)
 	if err != nil {
@@ -207,39 +203,55 @@ func runDetailLive(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, 
 	if err != nil {
 		return err
 	}
-	content := contentDisc.EvalArtistContent()
-
 	artists, err := parseLiveArtists(detailLiveArtists)
 	if err != nil {
 		return err
 	}
+	rows, missingCards, err := detailLiveRows(ctx, searcher, contentDisc.EvalArtistContent(), artists)
+	if err != nil {
+		return err
+	}
+	return reportDetailLive(summarizeDetailLive(rows), missingCards, opts)
+}
+
+func detailLiveRows(ctx context.Context, searcher discovery.Searcher, content albumLister, artists []liveArtist) ([]detailLiveRow, []string, error) {
 	var rows []detailLiveRow
 	var missingCards []string
 	for _, artist := range artists {
-		name := artist.name
-		results, err := searcher.Search(ctx, name)
+		results, err := searcher.Search(ctx, artist.name)
 		if err != nil {
-			return fmt.Errorf("search %q: %w", name, err)
+			return nil, nil, fmt.Errorf("search %q: %w", artist.name, err)
 		}
-		card, ok := artistCardWithMBID(results, artist.mbid)
+		card, ok := artistCardNamed(results, artist.name)
 		if !ok {
-			missingCards = append(missingCards, fmt.Sprintf("%s (%s)", name, artist.mbid))
+			missingCards = append(missingCards, fmt.Sprintf("%s (%s)", artist.name, artist.mbid))
 			continue
 		}
-		seed, known := card.Sources[0], cardKnownIDs(card)
-		start := time.Now()
-		albums, err := content.GetAlbums(ctx, seed.Provider, seed.ExternalID, known, 100)
+		row, err := detailLiveRowFor(ctx, content, artist.name, card)
 		if err != nil {
-			return fmt.Errorf("albums %q: %w", name, err)
-		}
-		row := scoreDetailLive(name, albums.Items)
-		row.AlbumsMs = time.Since(start).Milliseconds()
-		for p, id := range known {
-			row.CardIDs = append(row.CardIDs, p.String()+":"+id)
+			return nil, nil, err
 		}
 		rows = append(rows, row)
 	}
-	report := summarizeDetailLive(rows)
+	return rows, missingCards, nil
+}
+
+func detailLiveRowFor(ctx context.Context, content albumLister, name string, card discovery.SearchResult) (detailLiveRow, error) {
+	seed, known := card.Sources[0], cardKnownIDs(card)
+	start := time.Now()
+	albums, err := content.GetAlbums(ctx, seed.Provider, seed.ExternalID, known, 100)
+	if err != nil {
+		return detailLiveRow{}, fmt.Errorf("albums %q: %w", name, err)
+	}
+	row := scoreDetailLive(name, albums.Items)
+	row.AlbumsMs = time.Since(start).Milliseconds()
+	for p, id := range known {
+		row.CardIDs = append(row.CardIDs, p.String()+":"+id)
+	}
+	return row, nil
+}
+
+func reportDetailLive(report detailLiveReport, missingCards []string, opts options) error {
 	fmt.Print(renderDetailLive(report))
 	if opts.jsonPath != "" {
 		b, _ := json.MarshalIndent(report, "", "  ")
@@ -248,18 +260,9 @@ func runDetailLive(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, 
 		}
 	}
 	if len(missingCards) > 0 {
-		return fmt.Errorf("detail-live: no artist card carries the expected MBID for %s", strings.Join(missingCards, ", "))
+		return fmt.Errorf("detail-live: no artist card named %s", strings.Join(missingCards, ", "))
 	}
 	return nil
-}
-
-func artistCardWithMBID(results []discovery.SearchResult, mbid string) (discovery.SearchResult, bool) {
-	for _, r := range results {
-		if r.Kind == discovery.ResultKindArtist && len(r.Sources) > 0 && strings.EqualFold(r.ArtistMBID, mbid) {
-			return r, true
-		}
-	}
-	return discovery.SearchResult{}, false
 }
 
 func artistCardNamed(results []discovery.SearchResult, name string) (discovery.SearchResult, bool) {

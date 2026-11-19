@@ -959,21 +959,26 @@ func TestService_Search_CancelledCallerDoesNotFailSharedFanOut(t *testing.T) {
 	}
 }
 
-type panickingBridge struct{}
+type panickingIdentityStore struct{}
 
-func (panickingBridge) ExternalIDs(context.Context, discovery.ResultKind, string) (map[discovery.ProviderKey]string, bool) {
-	panic("bridge bug")
+func (panickingIdentityStore) LookupByProviderID(context.Context, discovery.ResultKind, discovery.ProviderKey, string) (string, map[discovery.ProviderKey]string, bool) {
+	panic("identity store bug")
+}
+
+func (panickingIdentityStore) LookupByProviderIDs(context.Context, []discovery.IdentityRef) map[discovery.IdentityRef]discovery.IdentityHit {
+	panic("identity store bug")
 }
 
 func TestService_PanicBelowResolveColdDegradesToPartial(t *testing.T) {
 	p := &discovery.FakeProvider{
 		Provider: discovery.ProviderDeezer,
-		Results:  []discovery.SearchResult{discovery.WithMBID(discovery.DeezerTrack("Humble", "Kendrick Lamar", 80), "mbid-1")},
+		Results:  []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)},
 		Delay:    150 * time.Millisecond,
 	}
 	cache := discovery.NewFakeResultCache()
 	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(),
-		discovery.WithIdentityBridge(panickingBridge{}), discovery.WithResultCache(cache))
+		discovery.WithArtworkResolver(&discovery.FakeArtworkResolver{}), discovery.WithIdentityStore(panickingIdentityStore{}),
+		discovery.WithResultCache(cache))
 
 	const callers = 2
 	outs := make([]*discovery.SearchOutput, callers)
@@ -1111,7 +1116,7 @@ func TestService_Search_LogsHowLongEachStageTook(t *testing.T) {
 	if err := json.Unmarshal([]byte(discovery.LoggedEvent(t, buf, "search.v2.complete")), &complete); err != nil {
 		t.Fatal(err)
 	}
-	for _, stage := range []string{"fanout_ms", "identity_ms", "rank_ms", "artwork_ms", "favorites_ms", "related_ms", "total_ms"} {
+	for _, stage := range []string{"fanout_ms", "rank_ms", "artwork_ms", "favorites_ms", "related_ms", "total_ms"} {
 		if _, ok := complete[stage].(float64); !ok {
 			t.Errorf("search.v2.complete has no %s: %v", stage, complete)
 		}

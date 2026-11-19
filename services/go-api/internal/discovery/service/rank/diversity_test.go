@@ -81,20 +81,6 @@ func TestCollapseArtistDuplicates(t *testing.T) {
 		}
 	})
 
-	t.Run("ambiguous MBID-less artists sharing an external id stay apart by provider", func(t *testing.T) {
-		results := []domain.SearchResult{
-			discoverytest.WithMBID(discoverytest.ArtistResult(domain.ProviderMusicBrainz, "mb-1", "Che", nil), "mbid-1"),
-			discoverytest.WithMBID(discoverytest.ArtistResult(domain.ProviderMusicBrainz, "mb-2", "Che", nil), "mbid-2"),
-			discoverytest.ArtistResult(domain.ProviderDeezer, "1", "Che", nil),
-			discoverytest.ArtistResult(domain.ProviderITunes, "1", "Che", nil),
-			discoverytest.ArtistResult(domain.ProviderDeezer, "1", "Che", nil),
-		}
-		got := CollapseArtistDuplicates(results)
-		if len(got) != 4 {
-			t.Errorf("expected 4 cards (2 MBIDs, deezer:1, itunes:1), got %d", len(got))
-		}
-	})
-
 	t.Run("no grouping when names differ", func(t *testing.T) {
 		results := []domain.SearchResult{
 			discoverytest.ArtistResult(domain.ProviderDeezer, "1", "Drake", map[string]any{"popularity": float64(90)}),
@@ -106,26 +92,6 @@ func TestCollapseArtistDuplicates(t *testing.T) {
 		}
 		if _, ok := got[0].Extras["collapsed_artists"]; ok {
 			t.Error("unexpected collapsed_artists on unique-name artist")
-		}
-	})
-
-	t.Run("ambiguous name keeps MBID-less entities as separate cards", func(t *testing.T) {
-		mb1 := discoverytest.WithMBID(discoverytest.ArtistResult(domain.ProviderMusicBrainz, "mb-1", "Che", nil), "mbid-1")
-		mb2 := discoverytest.WithMBID(discoverytest.ArtistResult(domain.ProviderMusicBrainz, "mb-2", "Che", nil), "mbid-2")
-		results := []domain.SearchResult{
-			mb1,
-			mb2,
-			discoverytest.ArtistResult(domain.ProviderDeezer, "dz-1", "Che", nil),
-			discoverytest.ArtistResult(domain.ProviderITunes, "it-1", "Che", nil),
-		}
-		got := CollapseArtistDuplicates(results)
-		if len(got) != 4 {
-			t.Fatalf("expected all 4 ambiguous-name identities kept as separate cards, got %d", len(got))
-		}
-		for _, r := range got {
-			if _, ok := r.Extras["collapsed_artists"]; ok {
-				t.Errorf("unexpected collapsed_artists under ambiguous name (MBID=%q)", r.EntityMBID())
-			}
 		}
 	})
 
