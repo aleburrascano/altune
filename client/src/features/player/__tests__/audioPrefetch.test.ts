@@ -3,7 +3,6 @@ import { posix } from 'path';
 import { act, waitFor } from '@testing-library/react-native';
 import TrackPlayer from 'react-native-track-player';
 
-import { fetchAudioUrls } from '@shared/apiClient';
 import { asTrackId, parseTrackId, type TrackId } from '@shared/catalog';
 import { useQueueStore, trackKey, type PlaybackTrack } from '@shared/playback';
 import {
@@ -785,87 +784,6 @@ describe('cache path containment', () => {
   });
 });
 
-describe('remote kill switch', () => {
-  const { __http } = require('@testing/doubles/fetch.js');
-  const { __fs } = FileSystem as unknown as { __fs: { allFiles(): Record<string, string> } };
-
-  function replyAudioUrls(prefetchEnabled?: boolean): void {
-    __http.reply('POST /v1/audio-urls', {
-      json: {
-        urls: [{ track_id: 'trk-2', url: 'https://cdn.example/a.mp3', version: 'v1' }],
-        ...(prefetchEnabled === undefined ? {} : { prefetch_enabled: prefetchEnabled }),
-      },
-    });
-  }
-
-  async function serverSays(prefetchEnabled: boolean | undefined): Promise<void> {
-    replyAudioUrls(prefetchEnabled);
-    await fetchAudioUrls(['trk-1']);
-    __http.reset();
-  }
-
-  beforeEach(async () => {
-    await serverSays(true);
-    useQueueStore.getState().clearQueue();
-    useQueueStore
-      .getState()
-      .loadQueue([libraryTrackWithId('trk-1'), libraryTrackWithId('trk-2')], 0, null);
-  });
-
-  afterEach(async () => {
-    __http.reset();
-    await serverSays(true);
-  });
-
-  describe('prefetchNext — remote kill switch', () => {
-    it('prefetches the next track while the switch is on (the default)', async () => {
-      replyAudioUrls(true);
-
-      await prefetchNext(0);
-
-      expect(Object.keys(__fs.allFiles())).toHaveLength(1);
-    });
-
-    it('treats a server that does not send the flag as enabled', async () => {
-      await serverSays(undefined);
-      replyAudioUrls();
-
-      await prefetchNext(0);
-
-      expect(Object.keys(__fs.allFiles())).toHaveLength(1);
-    });
-
-    it('is a no-op once the server has turned prefetching off: no request, no download', async () => {
-      await serverSays(false);
-      replyAudioUrls(false);
-
-      await prefetchNext(0);
-
-      expect(__http.countFor('POST /v1/audio-urls')).toBe(0);
-      expect(Object.keys(__fs.allFiles())).toEqual([]);
-    });
-
-    it('downloads nothing when its own resolve reports the switch turned off', async () => {
-      replyAudioUrls(false);
-
-      await prefetchNext(0);
-
-      expect(Object.keys(__fs.allFiles())).toEqual([]);
-    });
-
-    it('resumes prefetching when the server turns the switch back on', async () => {
-      await serverSays(false);
-      await prefetchNext(0);
-      await serverSays(true);
-      replyAudioUrls(true);
-
-      await prefetchNext(0);
-
-      expect(Object.keys(__fs.allFiles())).toHaveLength(1);
-    });
-  });
-});
-
 describe('a download left unfinished by a killed app', () => {
   interface DownloadOptions {
     signal?: AbortSignal;
@@ -1095,25 +1013,6 @@ describe('playback port wiring', () => {
       expect(__fs.allFiles()).toEqual({});
       expect(player.add).not.toHaveBeenCalled();
       expect(wasSwappedToLocal(asTrackId('p1'))).toBe(false);
-    });
-
-    it('stops prefetching on the second call once the prefetch flag turns off', async () => {
-      let enabled = true;
-      installMemoryPort(
-        { audioUrls: cdnAudioUrls(['p1', 'p2']) },
-        { isAudioPrefetchEnabled: () => enabled },
-      );
-      queueOf(['p0', 'p1', 'p2']);
-
-      await prefetchNext(0);
-      const cachedAfterFirst = Object.keys(__fs.allFiles());
-      enabled = false;
-      useQueueStore.getState().skipToIndex(1);
-      await prefetchNext(1);
-
-      expect(cachedAfterFirst).toHaveLength(1);
-      expect(Object.keys(__fs.allFiles())).toEqual(cachedAfterFirst);
-      expect(wasSwappedToLocal(asTrackId('p2'))).toBe(false);
     });
   });
 });

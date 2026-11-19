@@ -1,5 +1,4 @@
 import { signInTestUser } from '@testing/signInTestUser';
-import { applyKillSwitches } from '@shared/killSwitch';
 
 import { recordFailureShown, recordUserAction } from '@shared/telemetry';
 
@@ -18,7 +17,6 @@ async function settle(): Promise<void> {
 
 beforeEach(async () => {
   await signInTestUser();
-  applyKillSwitches({ telemetry_enabled: true });
 });
 
 describe('recordUserAction()', () => {
@@ -75,15 +73,6 @@ describe('recordUserAction()', () => {
     process.off('unhandledRejection', onUnhandled);
     expect(unhandled).toEqual([]);
   });
-
-  it('sends nothing while the telemetryFlush kill switch is off', async () => {
-    applyKillSwitches({ telemetry_enabled: false });
-
-    recordUserAction({ action: 'library.retry', outcome: 'tapped' });
-    await settle();
-
-    expect(__http.requests.length).toBe(0);
-  });
 });
 
 describe('recordFailureShown()', () => {
@@ -131,15 +120,6 @@ describe('recordFailureShown()', () => {
 
     process.off('unhandledRejection', onUnhandled);
     expect(unhandled).toEqual([]);
-  });
-
-  it('sends nothing while the telemetryFlush kill switch is off', async () => {
-    applyKillSwitches({ telemetry_enabled: false });
-
-    recordFailureShown({ surface: 'banner.track_status', message: 'boom' });
-    await settle();
-
-    expect(__http.requests.length).toBe(0);
   });
 });
 
@@ -376,49 +356,5 @@ describe('user telemetry: errors are swallowed (fire-and-forget, never throws)',
     unhandled.stop();
     expect(unhandled.reasons).toEqual([]);
     expect(__http.requests.length).toBe(2);
-  });
-
-  it('leaves no unhandled rejection when the telemetryFlush kill switch gates the send', async () => {
-    applyKillSwitches({ telemetry_enabled: false });
-    const unhandled = collectUnhandled();
-
-    recordUserAction({ action: 'library.retry', outcome: 'tapped' });
-    recordFailureShown({ surface: 'banner.track_status', message: 'boom' });
-    await flushMacrotasks();
-
-    unhandled.stop();
-    expect(unhandled.reasons).toEqual([]);
-    expect(__http.requests.length).toBe(0);
-  });
-});
-
-describe('user telemetry: telemetryFlush kill switch', () => {
-  it('sends nothing for a failed action with a long error while the switch is off', async () => {
-    applyKillSwitches({ telemetry_enabled: false });
-
-    recordUserAction({
-      action: 'detail.save',
-      outcome: 'failed',
-      status: 500,
-      error: 'x'.repeat(1000),
-    });
-    await settle();
-    await new Promise((resolve) => setImmediate(resolve));
-
-    expect(__http.requests.length).toBe(0);
-  });
-
-  it('starts sending again once the switch is turned back on', async () => {
-    __http.reply('POST /v1/discovery/events', { status: 202 });
-    applyKillSwitches({ telemetry_enabled: false });
-    recordFailureShown({ surface: 'banner.track_status', message: 'while off' });
-    await settle();
-
-    applyKillSwitches({ telemetry_enabled: true });
-    recordFailureShown({ surface: 'banner.track_status', message: 'while on' });
-    await settle();
-
-    expect(__http.requests.length).toBe(1);
-    expect(sentBody().payload.message).toBe('while on');
   });
 });

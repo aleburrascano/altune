@@ -1,10 +1,7 @@
 import { asyncView, type AsyncView, countLabel } from '@shared/ui';
 import type { DiscoverySearchResponse } from '@shared/catalog';
 
-export type DiscoverView =
-  'loading' | 'empty-no-query' | 'results' | 'zero-results' | 'full-error' | 'unavailable';
-
-export const SEARCH_UNAVAILABLE_TITLE = 'Search is temporarily unavailable';
+export type DiscoverView = 'loading' | 'empty-no-query' | 'results' | 'zero-results' | 'full-error';
 
 export type SearchCorrection = {
   corrected: string;
@@ -16,7 +13,6 @@ export type DiscoverHookState = {
   isLoading: boolean;
   data: DiscoverySearchResponse | undefined;
   error: Error | null;
-  isUnavailable: boolean;
 };
 
 const DISCOVER_VIEW_FOR_ASYNC_VIEW: Record<AsyncView, DiscoverView> = {
@@ -35,7 +31,6 @@ function asyncViewForState(state: DiscoverHookState): AsyncView {
 }
 
 export function viewForState(state: DiscoverHookState): DiscoverView {
-  if (state.isUnavailable) return 'unavailable';
   if (!state.query.trim()) return 'empty-no-query';
   return DISCOVER_VIEW_FOR_ASYNC_VIEW[asyncViewForState(state)];
 }
@@ -46,7 +41,6 @@ const ASYNC_VIEW_FOR_DISCOVER_VIEW: Record<DiscoverView, AsyncView> = {
   'empty-no-query': 'empty',
   results: 'ready',
   'zero-results': 'ready',
-  unavailable: 'ready',
 };
 
 export function asyncViewForDiscoverView(view: DiscoverView): AsyncView {
@@ -80,7 +74,6 @@ export function searchAnnouncement(
   resultCount: number,
   resultsIncomplete = false,
 ): string {
-  if (view === 'unavailable') return SEARCH_UNAVAILABLE_TITLE;
   if (view === 'full-error') return 'Search failed';
   const suffix = resultsIncomplete ? INCOMPLETE_SUFFIX : '';
   return resultsAnnouncement(view, resultCount, suffix);

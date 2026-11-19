@@ -32,18 +32,11 @@ function hookState(overrides: Partial<DiscoverHookState> = {}): DiscoverHookStat
     isLoading: false,
     data: undefined,
     error: null,
-    isUnavailable: false,
     ...overrides,
   };
 }
 
-describe('viewForState maps hook state to the six-state union', () => {
-  it('returns unavailable ahead of every other state when discovery is switched off', () => {
-    const view = viewForState(hookState({ isUnavailable: true, isLoading: true }));
-
-    expect(view).toBe('unavailable');
-  });
-
+describe('viewForState maps hook state to the five-state union', () => {
   it('returns empty-no-query when the query is blank, even while loading', () => {
     const view = viewForState(hookState({ query: '', isLoading: true }));
 
@@ -207,7 +200,6 @@ describe('asyncViewForDiscoverView', () => {
     ['empty-no-query', 'empty'],
     ['results', 'ready'],
     ['zero-results', 'ready'],
-    ['unavailable', 'ready'],
   ];
 
   it.each(cases)('maps %s to %s', (view, expected) => {

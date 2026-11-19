@@ -10,5 +10,4 @@ export {
   isRetryable,
   isServerFaultStatus,
   isSessionFetchFailure,
-  isTelemetryGated,
 } from '@shared/failure/core/errors';

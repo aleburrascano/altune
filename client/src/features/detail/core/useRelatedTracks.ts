@@ -10,10 +10,7 @@ import {
 import { fetchTallyingOutcome } from '@features/detail/core/detailHealth';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
-import {
-  useDetailFetchEnabled,
-  useContentFetchRetry,
-} from '@features/detail/core/useDetailFetchGate';
+import { useContentFetchRetry } from '@features/detail/core/useContentFetchRetry';
 
 type UseRelatedTracksParams = {
   sources: DiscoverySource[];
@@ -36,15 +33,14 @@ function fetchRelated(
   );
 }
 
-function useRelatedTracksQuery(scSource: DiscoverySource | null, isFetchEnabled: boolean) {
+function useRelatedTracksQuery(scSource: DiscoverySource | null) {
   const port = useDetailPort();
-  const retry = useContentFetchRetry();
   return useQuery({
     queryKey: detailKeys.relatedTracks(scSource?.external_id ?? ''),
     queryFn: ({ signal }) => fetchRelated(port, scSource, signal),
-    enabled: isFetchEnabled && scSource !== null,
+    enabled: scSource !== null,
     staleTime: DETAIL_CONTENT_STALE_MS,
-    retry,
+    retry: useContentFetchRetry(),
   });
 }
 
@@ -66,6 +62,5 @@ function relatedTracksResult(query: RelatedTracksQuery): UseRelatedTracksReturn 
 
 export function useRelatedTracks({ sources }: UseRelatedTracksParams): UseRelatedTracksReturn {
   const scSource = sources.find((s) => s.provider === 'soundcloud') ?? null;
-  const isFetchEnabled = useDetailFetchEnabled();
-  return relatedTracksResult(useRelatedTracksQuery(scSource, isFetchEnabled));
+  return relatedTracksResult(useRelatedTracksQuery(scSource));
 }

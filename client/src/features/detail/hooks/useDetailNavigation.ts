@@ -13,7 +13,6 @@ import { resolveEntityQuery } from '@features/detail/core/resolveEntityQuery';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
 import { useProvidedNavigator } from '@features/detail/view/DetailNavigatorProvider';
-import { useDetailFetchEnabled } from '@features/detail/core/useDetailFetchGate';
 
 function useDetailNavigator(): Navigator {
   const appNavigator = useNavigator();
@@ -52,7 +51,6 @@ type Task = () => Promise<Outcome>;
 type OnPicked = (picked: DiscoveryResult) => void;
 type Gate = {
   busy: MutableRefObject<boolean>;
-  enabled: boolean;
   setView: (view: View) => void;
 };
 
@@ -100,7 +98,6 @@ async function lookup(port: DetailPort, fetch: Fetch, search: Search): Promise<O
 
 async function runSearch(gate: Gate, task: Task, onPicked: OnPicked): Promise<void> {
   if (gate.busy.current) return;
-  if (!gate.enabled) return gate.setView({ ...IDLE, error: 'Search is temporarily unavailable' });
   gate.busy.current = true;
   gate.setView(SEARCHING);
   const outcome = await task();
@@ -114,11 +111,10 @@ async function runSearch(gate: Gate, task: Task, onPicked: OnPicked): Promise<vo
 
 function useSearchSession(): [View, (task: Task, onPicked: OnPicked) => Promise<void>] {
   const [view, setView] = useState<View>(IDLE);
-  const enabled = useDetailFetchEnabled();
   const busy = useRef(false);
   const run = useCallback(
-    (task: Task, onPicked: OnPicked) => runSearch({ busy, enabled, setView }, task, onPicked),
-    [enabled],
+    (task: Task, onPicked: OnPicked) => runSearch({ busy, setView }, task, onPicked),
+    [],
   );
   return [view, run];
 }

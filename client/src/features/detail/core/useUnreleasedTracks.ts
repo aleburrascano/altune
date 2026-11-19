@@ -23,7 +23,6 @@ import { trackExtras } from '@features/detail/core/trackExtras';
 import { isAcquirable, unreleasedAsResult } from '@features/detail/core/unreleasedTrack';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
-import { useDetailFetchEnabled } from '@features/detail/core/useDetailFetchGate';
 import { useResolvedOwnedTrack } from '@features/detail/core/useOwnedTrack';
 import { useTrackSave } from '@features/detail/view/useSaveTrack';
 
@@ -48,15 +47,19 @@ function fetchUnreleased(port: DetailPort, artist: DiscoveryResult, signal: Abor
   return port.getUnreleasedTracks(seed!.provider, seed!.external_id, request, signal);
 }
 
-function unreleasedQueryOptions(artist: DiscoveryResult, port: DetailPort, isEnabled: boolean) {
+const UNRELEASED_POLLING = {
+  staleTime: DETAIL_CONTENT_STALE_MS,
+  retry: false,
+  refetchInterval: pendingPollInterval,
+  notifyOnChangeProps: REFRESH_ON_EVERY_POLL,
+};
+
+function unreleasedQueryOptions(artist: DiscoveryResult, port: DetailPort) {
   return {
     queryKey: detailKeys.unreleasedTracks(sourceIdList(artist.sources)),
     queryFn: ({ signal }: QueryFunctionContext) => fetchUnreleased(port, artist, signal),
-    enabled: isEnabled && artist.sources.length > 0,
-    staleTime: DETAIL_CONTENT_STALE_MS,
-    retry: false,
-    refetchInterval: pendingPollInterval,
-    notifyOnChangeProps: REFRESH_ON_EVERY_POLL,
+    enabled: artist.sources.length > 0,
+    ...UNRELEASED_POLLING,
   };
 }
 
@@ -96,7 +99,7 @@ function useFailure(options: UnreleasedOptions, isError: boolean): FailureState 
 
 export function useUnreleasedTracks(artist: DiscoveryResult): UnreleasedTracksState {
   const port = useDetailPort();
-  const options = unreleasedQueryOptions(artist, port, useDetailFetchEnabled());
+  const options = unreleasedQueryOptions(artist, port);
   const { data: unreleased, isLoading, isError } = useQuery(options);
   const isComputing = isStillComputing(unreleased, useUpdateCount(options));
   const failure = useFailure(options, isError);

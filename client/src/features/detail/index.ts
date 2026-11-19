@@ -39,11 +39,9 @@ export { RelatedTracksSection } from '@features/detail/view/RelatedTracksSection
 export { gridCellWidthFor } from '@features/detail/view/detailStyles';
 export {
   albumYear,
-  compactCount,
   formatRuntime,
   trackSubtitleWithFeaturing,
 } from '@features/detail/core/formatters';
-export { LastFmEnrichmentSection } from '@features/detail/view/LastFmEnrichmentSection';
 export { DetailNavigatorProvider } from '@features/detail/view/DetailNavigatorProvider';
 export {
   detailRouteFor,
@@ -87,7 +85,6 @@ export { useAlbumDetailState } from '@features/detail/view/useAlbumDetailState';
 export { useAlbumSaveAll } from '@features/detail/view/useAlbumSaveAll';
 export { useRelatedTracks } from '@features/detail/core/useRelatedTracks';
 export { useAlbumDiscovery, useArtistDiscovery } from '@features/detail/view/useEntityDiscovery';
-export type { EnrichmentProvider } from '@features/detail/core/detailHealth';
 export { useResolveMissingSources } from '@features/detail/view/useResolveMissingSources';
 export { useDiscographyFilter } from '@features/detail/view/useDiscographyFilter';
 export {

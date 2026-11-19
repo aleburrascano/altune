@@ -16,7 +16,7 @@ flowchart TD
         meta["Metadata providers<br/>Deezer · MusicBrainz · Spotify · Apple Music<br/>SoundCloud · YT Music · artwork sources"]
         sources["Audio sources<br/>YouTube / YT Music / SoundCloud via yt-dlp"]
         acoustid["AcoustID<br/>fingerprint → recording"]
-        github["GitHub<br/>Actions CI/CD · Releases · kill switches"]
+        github["GitHub<br/>Actions CI/CD · Releases"]
         gitea["Gitea · altune-git<br/>CI"]
         altstore["AltStore<br/>iOS sideload channel"]
         ociusage["OCI Usage API<br/>infra spend"]
@@ -28,7 +28,6 @@ flowchart TD
     altune -->|search · enrich · artwork| meta
     altune -->|download audio| sources
     altune -->|verify identity| acoustid
-    altune -->|read kill switches| github
     github -->|deploy over SSH| altune
     altune -->|alerts logged, read on demand| operator
     altstore -->|installs app| listener
@@ -69,13 +68,11 @@ flowchart TD
     providers["Metadata providers + AcoustID"]
     sources["Audio sources"]
     extras["OCI Usage API"]
-    ks["kill-switches.json<br/>raw.githubusercontent.com"]
 
     listener --> mobile
     mobile -->|HTTPS /v1/* + JWT · SSE /v1/events| caddy
     mobile -->|presigned GET, Range| bucket
     mobile -->|sign in · refresh| auth
-    mobile -->|poll every 5 min| ks
     operator -->|/overseer| caddy
     caddy --> api
     caddy -->|/overseer| overseer
@@ -98,7 +95,7 @@ flowchart TD
     class mobile,caddy,api,overseer,tools container
     class redis,sqlite,pg,bucket store
     class listener,operator person
-    class auth,providers,sources,extras,ks external
+    class auth,providers,sources,extras external
 ```
 
 ## Components

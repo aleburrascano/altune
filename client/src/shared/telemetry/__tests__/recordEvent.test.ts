@@ -3,25 +3,8 @@ import * as SecureStore from 'expo-secure-store';
 
 import { signInTestUser } from '@testing/signInTestUser';
 
-import {
-  recordEvent,
-  type DiscoveryEvent,
-  getSessionId,
-  _resetOutboxForTest,
-  enqueueCritical,
-  flushOutbox,
-  loadPersistedOutbox,
-  setOutboxFileStore,
-} from '@shared/telemetry';
-import { createMemoryFileStore } from '@testing/fakes/files/inMemoryFileStore';
-import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
-import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+import { recordEvent, type DiscoveryEvent, getSessionId } from '@shared/telemetry';
 const { __http } = require('@testing/doubles/fetch.js');
-
-const TELEMETRY_GATED = {
-  name: 'TelemetryGatedError',
-  message: 'telemetry flush disabled by kill switch',
-};
 
 jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
@@ -188,75 +171,5 @@ describe('recordEvent(): failure injection — the one I/O call site, apiFetch',
 
     await expect(recordEvent({ type: 'play' })).rejects.toBeInstanceOf(ApiError);
     expect(__http.requests.length).toBe(0);
-  });
-});
-
-describe('remote kill switch', () => {
-  function queuedIds(): (string | undefined)[] {
-    return loadPersistedOutbox().map((e) => e.search_id);
-  }
-
-  async function settle(): Promise<void> {
-    for (let i = 0; i < 20; i += 1) await Promise.resolve();
-  }
-
-  beforeEach(() => {
-    setKillSwitchFileStore(createMemoryFileStore());
-    setOutboxFileStore(createMemoryFileStore());
-    _resetOutboxForTest();
-    recordLogs();
-  });
-
-  afterEach(() => {
-    _resetOutboxForTest();
-    setOutboxFileStore();
-    setKillSwitchFileStore();
-    jest.restoreAllMocks();
-  });
-
-  describe('recordEvent() — remote telemetry kill switch', () => {
-    it('sends nothing while the switch is off', async () => {
-      applyKillSwitches({ telemetry_enabled: false });
-
-      await expect(recordEvent({ type: 'results_shown' })).rejects.toMatchObject(TELEMETRY_GATED);
-
-      expect(__http.requests.length).toBe(0);
-    });
-
-    it('rejects with the gated error while the switch is off, without sending', async () => {
-      applyKillSwitches({ telemetry_enabled: false });
-
-      await expect(recordEvent({ type: 'result_clicked' })).rejects.toMatchObject(TELEMETRY_GATED);
-    });
-
-    it('sends again once the switch is turned back on', async () => {
-      __http.reply('POST /v1/discovery/events', { status: 202 });
-      applyKillSwitches({ telemetry_enabled: false });
-
-      await expect(recordEvent({ type: 'play' })).rejects.toMatchObject(TELEMETRY_GATED);
-      expect(__http.requests.length).toBe(0);
-
-      applyKillSwitches({ telemetry_enabled: true });
-      await recordEvent({ type: 'play' });
-
-      expect(__http.requests.length).toBe(1);
-    });
-
-    it('leaves an outbox entry queued while the switch is off and flushes it once re-enabled', async () => {
-      applyKillSwitches({ telemetry_enabled: false });
-
-      await enqueueCritical({ type: 'library_add', search_id: 'a' });
-      await flushOutbox();
-
-      expect(__http.requests.length).toBe(0);
-      expect(queuedIds()).toEqual(['a']);
-
-      __http.reply('POST /v1/discovery/events', { status: 202 });
-      applyKillSwitches({ telemetry_enabled: true });
-      await settle();
-
-      expect(__http.requests.length).toBe(1);
-      expect(queuedIds()).toEqual([]);
-    });
   });
 });

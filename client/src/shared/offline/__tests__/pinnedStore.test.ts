@@ -9,7 +9,6 @@ import {
   createMemoryFileStore,
   type MemoryFileStore,
 } from '@testing/fakes/files/inMemoryFileStore';
-import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
 import { notifyIdentityChange, runSignOutCleanups } from '@shared/session';
 import {
   setPinnedFileStore,
@@ -3208,118 +3207,6 @@ describe('work stays bounded on a large pinned library', () => {
       expect(result).toEqual({ requested: BATCH_SIZE, failed: 0 });
       await settle();
       expect(counts.audioLists).toBeLessThanOrEqual(3);
-    });
-  });
-});
-
-describe('the remote kill switch stops pinned downloads', () => {
-  function resolved(trackId: string): ResolvedAudioUrl {
-    return { trackId, url: `https://cdn.example.com/audio/${trackId}.mp3`, version: 'v1' };
-  }
-
-  async function flush(rounds = 30): Promise<void> {
-    for (let i = 0; i < rounds; i += 1) await Promise.resolve();
-  }
-
-  function statuses(): Record<string, string> {
-    const out: Record<string, string> = {};
-    for (const [id, entry] of Object.entries(usePinnedStore.getState().entries))
-      out[id] = entry.status;
-    return out;
-  }
-
-  beforeEach(() => {
-    setKillSwitchFileStore(createMemoryFileStore());
-    usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
-    serveAudioUrls((ids) => ids.map((id) => resolved(id)));
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    setKillSwitchFileStore();
-    jest.restoreAllMocks();
-  });
-
-  describe('pinned downloads — remote kill switch', () => {
-    it('downloads nothing while the switch is off and leaves the tracks queued', async () => {
-      applyKillSwitches({ offline_downloads_enabled: false });
-
-      await act(async () => {
-        usePinnedStore.getState().pin(asTrackId('A'));
-        void usePinnedStore.getState().pinMany([asTrackId('B')]);
-        await flush();
-      });
-
-      expect(audioUrlRequests).toEqual([]);
-      expect(statuses()).toEqual({ A: 'queued', B: 'queued' });
-      expect(usePinnedStore.getState().queue).toEqual(['A', 'B']);
-      expect(usePinnedStore.getState().isWorking).toBe(false);
-    });
-
-    it('does not resume queued tracks on reconcile while the switch is off', async () => {
-      applyKillSwitches({ offline_downloads_enabled: false });
-      usePinnedStore.setState({ entries: { A: { trackId: asTrackId('A'), status: 'queued' } } });
-
-      await act(async () => {
-        usePinnedStore.getState().reconcile();
-        await flush();
-      });
-
-      expect(audioUrlRequests).toEqual([]);
-      expect(statuses()).toEqual({ A: 'queued' });
-    });
-
-    it('stops the drain before the next track when the switch is turned off mid-batch', async () => {
-      let releaseFirst!: () => void;
-      serveAudioUrlsOnce(
-        (ids) =>
-          new Promise((resolve) => {
-            releaseFirst = () => resolve(ids.map(resolved));
-          }),
-      );
-
-      await act(async () => {
-        void usePinnedStore.getState().pinMany([asTrackId('A'), asTrackId('B'), asTrackId('C')]);
-        await flush();
-      });
-      expect(audioUrlRequests).toHaveLength(1);
-
-      await act(async () => {
-        applyKillSwitches({ offline_downloads_enabled: false });
-        releaseFirst();
-        await flush();
-      });
-
-      expect(audioUrlRequests).toHaveLength(1);
-      expect(statuses()).toEqual({ A: 'ready', B: 'queued', C: 'queued' });
-      expect(usePinnedStore.getState().queue).toEqual(['B', 'C']);
-    });
-
-    it('resumes the held-back queue when the switch is turned back on', async () => {
-      applyKillSwitches({ offline_downloads_enabled: false });
-      let batch!: Promise<unknown>;
-      await act(async () => {
-        batch = usePinnedStore.getState().pinMany([asTrackId('A'), asTrackId('B')]);
-        await flush();
-      });
-
-      await act(async () => {
-        applyKillSwitches({ offline_downloads_enabled: true });
-        await flush(60);
-      });
-
-      await expect(batch).resolves.toEqual({ requested: 2, failed: 0 });
-      expect(audioUrlRequests).toEqual([['A'], ['B']]);
-      expect(statuses()).toEqual({ A: 'ready', B: 'ready' });
-    });
-
-    it('has nothing to resume when the switch comes back on with an empty queue', () => {
-      applyKillSwitches({ offline_downloads_enabled: false });
-
-      applyKillSwitches({ offline_downloads_enabled: true });
-
-      expect(audioUrlRequests).toEqual([]);
-      expect(usePinnedStore.getState().isWorking).toBe(false);
     });
   });
 });

@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { parseTrackId, type TrackId } from '@shared/catalog';
 import { onIdentityChange, onSignOut } from '@shared/session';
-import { onKillSwitchChange } from '@shared/killSwitch';
 
 import { offlineDownloadsSupported } from '@shared/offline/core/offlineSupport';
 import type { OfflinePort } from '@shared/offline/ports/offlinePort';
@@ -307,13 +306,6 @@ onSignOut(() => {
   usePinnedStore.getState().unpinAll();
   previousUserSurvivors = new Set();
   usePinnedStore.setState({ lastUnpinAll: undefined });
-});
-
-onKillSwitchChange((loop, enabled) => {
-  if (loop !== 'offlineDownloads' || !enabled) return;
-  if (usePinnedStore.getState().queue.length > 0) {
-    runDownloadQueueIfSupported(usePinnedStore.setState, usePinnedStore.getState);
-  }
 });
 
 function unpinPreviousOwnersDownloads(): 'survivors' | 'cleared' {

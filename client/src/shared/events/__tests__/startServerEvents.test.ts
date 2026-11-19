@@ -7,8 +7,6 @@ import {
   type ServerEventsClientFactory,
 } from '@shared/events';
 import { runSignOutCleanups } from '@shared/session';
-import { createMemoryFileStore } from '@testing/fakes/files/inMemoryFileStore';
-import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch';
 import { playlistKeys } from '@shared/query';
 
 const EVENTS_ENDPOINT = /\/v1\/events$/;
@@ -98,14 +96,9 @@ function stop(started: Started): void {
   running = null;
 }
 
-beforeEach(() => {
-  setKillSwitchFileStore(createMemoryFileStore());
-});
-
 afterEach(() => {
   running?.();
   running = null;
-  setKillSwitchFileStore();
 });
 
 describe('startServerEvents', () => {
@@ -241,64 +234,5 @@ describe('startServerEvents', () => {
 
       await expect(client(0).getToken()).resolves.toBeNull();
     });
-  });
-});
-
-describe('remote kill switch', () => {
-  function switchServerEvents(enabled: boolean): void {
-    applyKillSwitches({ sse_enabled: enabled });
-  }
-
-  it('does not connect at start while the switch is off', () => {
-    switchServerEvents(false);
-
-    const { client } = start();
-
-    expect(client(0).connect).not.toHaveBeenCalled();
-  });
-
-  it('does not reconnect on a return to the foreground while the switch is off', () => {
-    switchServerEvents(false);
-    const { client, foreground } = start();
-
-    foreground.emit('background');
-    foreground.emit('active');
-
-    expect(client(0).connect).not.toHaveBeenCalled();
-  });
-
-  it('drops a live connection when the switch is turned off, and reconnects when it is turned back on', () => {
-    const { client } = start();
-    expect(client(0).connect).toHaveBeenCalledTimes(1);
-
-    switchServerEvents(false);
-    expect(client(0).disconnect).toHaveBeenCalledTimes(1);
-
-    switchServerEvents(true);
-    expect(client(0).connect).toHaveBeenCalledTimes(TWICE);
-  });
-
-  it('waits for the foreground to reconnect when the switch comes back on in the background', () => {
-    switchServerEvents(false);
-    const { client, foreground } = start();
-    foreground.emit('background');
-
-    switchServerEvents(true);
-    expect(client(0).connect).not.toHaveBeenCalled();
-
-    foreground.emit('active');
-    expect(client(0).connect).toHaveBeenCalledTimes(1);
-  });
-
-  it('ignores the other loops’ switches and stops listening once stopped', () => {
-    const started = start();
-
-    applyKillSwitches({ telemetry_enabled: false, offline_downloads_enabled: false });
-    expect(started.client(0).disconnect).not.toHaveBeenCalled();
-
-    stop(started);
-    switchServerEvents(false);
-    switchServerEvents(true);
-    expect(started.client(0).connect).toHaveBeenCalledTimes(1);
   });
 });

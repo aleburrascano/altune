@@ -94,10 +94,6 @@ const SIGNAL_TAKING: [string, (port: DetailPort, signal: AbortSignal) => Promise
   ['searchDiscovery', (port, signal) => port.searchDiscovery({ q: 'x' }, signal)],
   ['getEnrichment', (port, signal) => port.getEnrichment({ kind: 'album', title: 'x', signal })],
   [
-    'getLastFmEnrichment',
-    (port, signal) => port.getLastFmEnrichment({ kind: 'album', title: 'x', signal }),
-  ],
-  [
     'getDeezerEnrichment',
     (port, signal) => port.getDeezerEnrichment({ kind: 'album', title: 'x', signal }),
   ],

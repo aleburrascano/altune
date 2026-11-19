@@ -2,7 +2,6 @@ import { Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { signInTestUser } from '@testing/signInTestUser';
-import { applyKillSwitches } from '@shared/killSwitch';
 import { Button, Chip, IconButton } from '@shared/ui';
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -30,7 +29,6 @@ function Icon() {
 
 beforeEach(async () => {
   await signInTestUser();
-  applyKillSwitches({ telemetry_enabled: true });
   __http.reply('POST /v1/discovery/events', { status: 202 });
 });
 

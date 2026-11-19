@@ -6,7 +6,6 @@ import {
   isRetryable,
   isSessionFetchFailure,
   isNetworkError,
-  isTelemetryGated,
 } from '@shared/failure';
 
 describe('isRetryable — consumed by the QueryClient predicate (retry: (n, error) => isRetryable(error) && n < 5)', () => {
@@ -95,19 +94,6 @@ describe('isSessionFetchFailure', () => {
     [{ name: 'AuthRetryableFetchError' }, true],
   ])('%p -> %s', (value, expected) => {
     expect(isSessionFetchFailure(value)).toBe(expected);
-  });
-});
-
-describe('isTelemetryGated', () => {
-  it.each<[unknown, boolean]>([
-    [null, false],
-    [undefined, false],
-    ['TelemetryGatedError', false],
-    [{}, false],
-    [{ name: 'Error' }, false],
-    [{ name: 'TelemetryGatedError' }, true],
-  ])('%p -> %s', (value, expected) => {
-    expect(isTelemetryGated(value)).toBe(expected);
   });
 });
 

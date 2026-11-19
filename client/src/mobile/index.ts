@@ -8,7 +8,6 @@ export { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
 export { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
 export { TabsTitle } from '@/mobile/frame/platformExtras';
 export { StagingBanner } from '@/mobile/frame/StagingBanner';
-export { startKillSwitchPolling } from '@/mobile/killSwitchPoll';
 export { nativeFileStore } from '@/mobile/adapters/nativeFileStore';
 export { openWebFileStore } from '@/mobile/adapters/web/webFileStore';
 export type { FeaturePortSet } from '@/mobile/wiring/httpFeaturePorts';

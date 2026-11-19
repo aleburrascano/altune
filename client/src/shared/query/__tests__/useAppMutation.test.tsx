@@ -261,20 +261,6 @@ describe('appMutationCache() and appQueryCache()', () => {
     expect(await clientErrors()).toEqual([]);
   });
 
-  it('skips a telemetry-gated failure', async () => {
-    const gated = Object.assign(new Error('gated'), { name: 'TelemetryGatedError' });
-    const { result } = render(newClient(), () =>
-      useAppMutation({
-        action: 'demo.gated',
-        mutationFn: async (_: void) => {
-          throw gated;
-        },
-      }),
-    );
-    await settle(() => result.current.mutateAsync());
-    expect(await clientErrors()).toEqual([]);
-  });
-
   it('skips a SessionEndedError from guardedMutationOptions', async () => {
     const { result } = render(newClient(), () =>
       useAppMutation({

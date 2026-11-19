@@ -3,7 +3,6 @@ import type {
   ContentFetchResponse,
   DeezerEnrichmentResponse,
   EnrichmentResponse,
-  LastFmEnrichmentResponse,
   AlbumGroup,
 } from '@shared/apiClient';
 import type {
@@ -21,7 +20,6 @@ export interface MemoryDetailSeed {
   albums?: AlbumGroup[];
   discovery?: DiscoveryResult[];
   enrichment?: Record<string, EnrichmentResponse>;
-  lastFm?: Record<string, LastFmEnrichmentResponse>;
   deezer?: Record<string, DeezerEnrichmentResponse>;
   albumTracks?: Record<string, ContentFetchResponse>;
   relatedTracksByExternalId?: Record<string, ContentFetchResponse>;
@@ -72,20 +70,6 @@ function emptyEnrichment(): EnrichmentResponse {
     secondary_types: [],
     external_ids: {},
     artwork_url: '',
-  };
-}
-
-function emptyLastFm(): LastFmEnrichmentResponse {
-  return {
-    has_content: false,
-    mbid: '',
-    listeners: 0,
-    playcount: 0,
-    tags: [],
-    bio: '',
-    similar: [],
-    duration: 0,
-    album: '',
   };
 }
 
@@ -175,7 +159,6 @@ export function createMemoryDetailPort(seed: MemoryDetailSeed = {}): RecordingDe
   const albums = [...(seed.albums ?? [])];
   const discovery = [...(seed.discovery ?? [])];
   const enrichment = { ...seed.enrichment };
-  const lastFm = { ...seed.lastFm };
   const deezer = { ...seed.deezer };
   const albumTracks = { ...seed.albumTracks };
   const relatedTracks = { ...seed.relatedTracksByExternalId };
@@ -188,8 +171,6 @@ export function createMemoryDetailPort(seed: MemoryDetailSeed = {}): RecordingDe
       resolveOnLaterTick(signal, () => discoveryPage(discovery, params)),
     getEnrichment: ({ title = '', signal }) =>
       resolveOnLaterTick(signal, () => enrichment[title] ?? emptyEnrichment()),
-    getLastFmEnrichment: ({ title, signal }) =>
-      resolveOnLaterTick(signal, () => lastFm[title] ?? emptyLastFm()),
     getDeezerEnrichment: ({ title, signal }) =>
       resolveOnLaterTick(signal, () => deezer[title] ?? emptyDeezer()),
     getAlbumTracks: ({ albumTitle = '', signal }) =>

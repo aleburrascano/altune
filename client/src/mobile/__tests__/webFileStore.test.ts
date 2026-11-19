@@ -93,11 +93,11 @@ describe('a webFileStore over localStorage', () => {
   it('keys every write under the altune:file: prefix so it never collides with unrelated storage', () => {
     const storage = fakeLocalStorage();
     const store = webFileStoreOver(storage);
-    const dir = store.openDirectory('kill-switch');
+    const dir = store.openDirectory('preferences');
     dir.create();
-    dir.openFile('switches.json').write('{}');
+    dir.openFile('theme.json').write('{}');
 
-    expect(storage.getItem('altune:file:kill-switch/switches.json')).toBe('{}');
+    expect(storage.getItem('altune:file:preferences/theme.json')).toBe('{}');
   });
 
   it('persists a write made through one store into a second store over the same storage', () => {

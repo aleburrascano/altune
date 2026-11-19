@@ -4,7 +4,6 @@ import {
   getArtistContent,
   getDeezerEnrichment,
   getEnrichment,
-  getLastFmEnrichment,
   getRelatedTracks,
   getUnreleasedTracks,
   getLibraryAlbums,
@@ -17,7 +16,6 @@ import type { DetailPort } from '@features/detail/ports/detailPort';
 export const httpDetailPort: DetailPort = {
   searchDiscovery: (...args) => searchDiscovery(...args),
   getEnrichment: (...args) => getEnrichment(...args),
-  getLastFmEnrichment: (...args) => getLastFmEnrichment(...args),
   getDeezerEnrichment: (...args) => getDeezerEnrichment(...args),
   getAlbumTracks: (...args) => getAlbumTracks(...args),
   getRelatedTracks: (...args) => getRelatedTracks(...args),

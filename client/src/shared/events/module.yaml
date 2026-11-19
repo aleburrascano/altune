@@ -1,3 +1,3 @@
 role: shared
 owns: how server-sent events reach the app and patch the cached data
-depends_on: [acquisition, apiClient, apiConfig, auth, catalog, failure, files, killSwitch, offline, query, session, telemetry]
+depends_on: [acquisition, apiClient, apiConfig, auth, catalog, failure, files, offline, query, session, telemetry]

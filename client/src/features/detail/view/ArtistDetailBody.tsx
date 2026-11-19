@@ -5,7 +5,6 @@ import { Play } from 'lucide-react-native';
 
 import { Text } from '@shared/ui';
 
-import type { LastFmEnrichmentResponse } from '@shared/apiClient';
 import type { DiscoveryResult } from '@shared/catalog';
 import {
   useArtistDetailState,
@@ -13,7 +12,6 @@ import {
 } from '@features/detail/view/useArtistDetailState';
 import type { DetailRoute } from '@features/detail/domain/detailNavigation';
 
-import { compactCount } from '@features/detail/core/formatters';
 import { DetailFacts } from '@features/detail/view/DetailFacts';
 import { buildArtistFacts } from '@features/detail/core/buildDetailFacts';
 import { AsyncListSection, Section } from '@features/detail/view/Section';
@@ -24,21 +22,17 @@ import { DetailActions } from '@features/detail/view/DetailActions';
 import { DetailScaffold, type DetailChrome } from '@features/detail/view/DetailScaffold';
 import { DiscographySections } from '@features/detail/view/DiscographySections';
 import { ArtistUnreleased } from '@features/detail/view/unreleased/ArtistUnreleased';
-import { LastFmEnrichmentSection } from '@features/detail/view/LastFmEnrichmentSection';
 
 type ArtistDetailBodyProps = {
   chrome: DetailChrome;
   result: DiscoveryResult;
   detailRoute: DetailRoute;
-  lastfm?: LastFmEnrichmentResponse | null | undefined;
-  lastfmError?: boolean | undefined;
 };
 
-function artistFactsFor(artist: ArtistDetailState, lastfm?: LastFmEnrichmentResponse | null) {
+function artistFactsFor(artist: ArtistDetailState) {
   const releases = artist.hasSources ? artist.apiAlbums.length : artist.libraryAlbums.length;
   const inLibrary = artist.owned.playable.length + artist.owned.acquiringCount;
-  const listeners = lastfm != null && lastfm.listeners > 0 ? compactCount(lastfm.listeners) : null;
-  return buildArtistFacts({ releases, inLibrary, listeners });
+  return buildArtistFacts({ releases, inLibrary });
 }
 
 function artistPrimaryAction(artist: ArtistDetailState) {
@@ -52,9 +46,9 @@ function artistPrimaryAction(artist: ArtistDetailState) {
   };
 }
 
-function scaffoldContentProps(artist: ArtistDetailState, lastfm?: LastFmEnrichmentResponse | null) {
+function scaffoldContentProps(artist: ArtistDetailState) {
   return {
-    facts: <DetailFacts facts={artistFactsFor(artist, lastfm)} testID="detail-artist-facts" />,
+    facts: <DetailFacts facts={artistFactsFor(artist)} testID="detail-artist-facts" />,
     actions: <DetailActions primary={artistPrimaryAction(artist)} />,
   };
 }
@@ -120,30 +114,6 @@ function ArtistDiscography({ artist }: { artist: ArtistDetailState }): ReactElem
   );
 }
 
-type AboutArtistProps = {
-  lastfm: LastFmEnrichmentResponse | null | undefined;
-  lastfmError: boolean;
-};
-
-type AboutArtistWithLastfmProps = AboutArtistProps & { lastfm: LastFmEnrichmentResponse };
-
-function AboutArtistWithLastfm(props: AboutArtistWithLastfmProps): ReactElement {
-  return (
-    <View testID="detail-artist-about">
-      <Section label="About">
-        <LastFmEnrichmentSection enrichment={props.lastfm} isError={props.lastfmError} />
-      </Section>
-    </View>
-  );
-}
-
-function AboutArtist(props: AboutArtistProps): ReactElement {
-  if (props.lastfm == null) {
-    return <LastFmEnrichmentSection enrichment={null} isError={props.lastfmError} />;
-  }
-  return <AboutArtistWithLastfm {...props} lastfm={props.lastfm} />;
-}
-
 function IncompleteLibraryNotice({ artist }: { artist: ArtistDetailState }): ReactElement | null {
   if (artist.hasSources || artist.libraryTracksComplete) return null;
   return (
@@ -161,7 +131,6 @@ function ArtistDetailContentBody(props: ArtistDetailBodyProps & { artist: Artist
       <LibraryAlbums artist={props.artist} />
       <ArtistDiscography artist={props.artist} />
       <ArtistUnreleased artist={props.result} detailRoute={props.detailRoute} />
-      <AboutArtist lastfm={props.lastfm} lastfmError={props.lastfmError ?? false} />
     </>
   );
 }
@@ -179,7 +148,7 @@ function ArtistDetailContent(
 export function ArtistDetailBody(props: ArtistDetailBodyProps): ReactElement {
   const artist = useArtistDetailState(props.result, props.detailRoute);
   return (
-    <DetailScaffold {...props.chrome} {...scaffoldContentProps(artist, props.lastfm)}>
+    <DetailScaffold {...props.chrome} {...scaffoldContentProps(artist)}>
       <ArtistDetailContent {...props} artist={artist} />
     </DetailScaffold>
   );

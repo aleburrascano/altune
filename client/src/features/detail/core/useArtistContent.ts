@@ -16,11 +16,7 @@ import {
 import { recordContentFetchOutcome } from '@features/detail/core/detailHealth';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
-import {
-  useDetailFetchEnabled,
-  useGatedRefetch,
-  useContentFetchRetry,
-} from '@features/detail/core/useDetailFetchGate';
+import { useContentFetchRetry } from '@features/detail/core/useContentFetchRetry';
 
 type ContentFetchContext = {
   provider: string;
@@ -136,7 +132,6 @@ export function useArtistContent({
   const source = sources[0] ?? null;
   const port = useDetailPort();
   const retry = useContentFetchRetry();
-  const isFetchEnabled = useDetailFetchEnabled();
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: detailKeys.artistContent(
@@ -145,12 +140,10 @@ export function useArtistContent({
       sourceIdList(sources),
     ),
     queryFn: ({ signal }) => loadArtistContent(port, [source!, ...sources.slice(1)], signal),
-    enabled: enabled && isFetchEnabled && source !== null,
+    enabled: enabled && source !== null,
     staleTime: DETAIL_CONTENT_STALE_MS,
     retry,
   });
-
-  const refetchBoth = useGatedRefetch(refetch);
 
   const tracksFailure = contentFailure(isError, error, data?.top_tracks);
   const albumsFailure = contentFailure(isError, error, data?.albums);
@@ -162,6 +155,6 @@ export function useArtistContent({
     isErrorAlbums: albumsFailure !== null,
     tracksFailure,
     albumsFailure,
-    refetch: refetchBoth,
+    refetch: () => void refetch(),
   };
 }

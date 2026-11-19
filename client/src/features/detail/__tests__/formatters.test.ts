@@ -1,10 +1,5 @@
 import type { DiscoveryResult } from '@shared/catalog';
-import {
-  albumYear,
-  compactCount,
-  formatRuntime,
-  trackSubtitleWithFeaturing,
-} from '@features/detail';
+import { albumYear, formatRuntime, trackSubtitleWithFeaturing } from '@features/detail';
 
 function album(extras: Record<string, unknown>): DiscoveryResult {
   return {
@@ -17,28 +12,6 @@ function album(extras: Record<string, unknown>): DiscoveryResult {
     extras,
   };
 }
-
-describe('compactCount', () => {
-  it('leaves counts below one thousand unformatted', () => {
-    expect(compactCount(999)).toBe('999');
-  });
-
-  it('formats exactly one thousand as 1.0K', () => {
-    expect(compactCount(1_000)).toBe('1.0K');
-  });
-
-  it('formats exactly one million as 1.0M', () => {
-    expect(compactCount(1_000_000)).toBe('1.0M');
-  });
-
-  it('formats exactly one billion as 1.0B', () => {
-    expect(compactCount(1_000_000_000)).toBe('1.0B');
-  });
-
-  it('rounds within a magnitude to one decimal', () => {
-    expect(compactCount(1_500)).toBe('1.5K');
-  });
-});
 
 describe('formatRuntime', () => {
   it('returns null at and below zero seconds', () => {

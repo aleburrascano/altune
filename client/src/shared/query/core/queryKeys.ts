@@ -35,7 +35,6 @@ export function isSearchKeyFor(queryKey: readonly unknown[], query: string): boo
 const ENRICHMENT_ROOTS = {
   musicbrainz: 'enrichment',
   deezer: 'deezer-enrichment',
-  lastfm: 'lastfm-enrichment',
 } as const;
 
 export const detailKeys = {

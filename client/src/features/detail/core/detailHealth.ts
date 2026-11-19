@@ -4,7 +4,7 @@ import { createHealthTally } from '@shared/telemetry';
 import type { DiscoveryProviderStatus } from '@shared/catalog';
 import { hasDegradedStatus } from '@features/detail/core/contentStatus';
 
-export type EnrichmentProvider = 'musicbrainz' | 'deezer' | 'lastfm';
+export type EnrichmentProvider = 'musicbrainz' | 'deezer';
 
 export type ContentFetch = 'album_tracks' | 'artist_content' | 'related_tracks';
 
@@ -13,8 +13,6 @@ const HEALTH_KEYS = [
   'enrichment_musicbrainz_failed',
   'enrichment_deezer_ok',
   'enrichment_deezer_failed',
-  'enrichment_lastfm_ok',
-  'enrichment_lastfm_failed',
   'content_album_tracks_ok',
   'content_album_tracks_failed',
   'content_artist_content_ok',

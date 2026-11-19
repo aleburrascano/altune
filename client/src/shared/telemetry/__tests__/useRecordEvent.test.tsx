@@ -5,7 +5,6 @@ import { renderHook, act, waitFor } from '@testing-library/react-native';
 import { useRecordEvent } from '@shared/telemetry';
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { applyKillSwitches } from '@shared/killSwitch';
 import type { DiscoveryEvent } from '@shared/telemetry';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 
@@ -28,7 +27,6 @@ function trackingWarnings(): unknown[][] {
 
 beforeEach(async () => {
   await signInTestUser();
-  applyKillSwitches({ telemetry_enabled: true });
   logs = recordLogs();
 });
 
@@ -64,21 +62,5 @@ describe('useRecordEvent(): best-effort discovery event tracking', () => {
     expect(trackingWarnings()).toEqual([
       [TRACKING_FAILED, expect.objectContaining({ status: 500 })],
     ]);
-  });
-});
-
-describe('useRecordEvent(): kill switch off', () => {
-  it('settles quietly when the event is gated, without the failed-tracking warning or a request', async () => {
-    applyKillSwitches({ telemetry_enabled: false });
-    const { result } = renderHook(() => useRecordEvent(), { wrapper });
-
-    act(() => {
-      result.current.mutate({ type: 'play', search_id: 'search-1' });
-    });
-
-    await waitFor(() => expect(result.current.isError).toBe(true));
-
-    expect(trackingWarnings()).toEqual([]);
-    expect(__http.requests.length).toBe(0);
   });
 });

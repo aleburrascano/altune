@@ -149,18 +149,6 @@ export async function getEnrichment(params: {
   );
 }
 
-export type LastFmEnrichmentResponse = {
-  has_content: boolean;
-  mbid: string;
-  listeners: number;
-  playcount: number;
-  tags: string[];
-  bio: string;
-  similar: string[];
-  duration: number;
-  album: string;
-};
-
 function kindTitleQs(
   kind: DiscoveryKind,
   title: string,
@@ -169,41 +157,6 @@ function kindTitleQs(
   const qs = new URLSearchParams({ kind, title });
   if (subtitle) qs.set('subtitle', subtitle);
   return qs;
-}
-
-function parseLastFmEnrichmentResponse(
-  value: unknown,
-  at = 'LastFmEnrichmentResponse',
-): LastFmEnrichmentResponse {
-  const r = asRecord(value, at);
-  return {
-    has_content: asBoolean(r.has_content, `${at}.has_content`),
-    mbid: asString(r.mbid, `${at}.mbid`),
-    listeners: asNumber(r.listeners, `${at}.listeners`),
-    playcount: asNumber(r.playcount, `${at}.playcount`),
-    tags: parseStringArray(r.tags, `${at}.tags`),
-    bio: asString(r.bio, `${at}.bio`),
-    similar: parseStringArray(r.similar, `${at}.similar`),
-    duration: asNumber(r.duration, `${at}.duration`),
-    album: asString(r.album, `${at}.album`),
-  };
-}
-
-export async function getLastFmEnrichment(params: {
-  kind: DiscoveryKind;
-  title: string;
-  subtitle?: string | null | undefined;
-  signal?: AbortSignal | undefined;
-}): Promise<LastFmEnrichmentResponse> {
-  return parseLastFmEnrichmentResponse(
-    await apiFetch(
-      withQuery(
-        '/v1/discovery/enrichment/lastfm',
-        kindTitleQs(params.kind, params.title, params.subtitle),
-      ),
-      signalInit(params.signal),
-    ),
-  );
 }
 
 export type DeezerEnrichmentResponse = {

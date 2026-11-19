@@ -6,7 +6,6 @@ import { normalizeForCompare } from '@features/detail/core/normalizeForCompare';
 import { realPhotoUrl } from '@features/detail/core/artistPhoto';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
-import { useDetailFetchEnabled } from '@features/detail/core/useDetailFetchGate';
 
 type ResolveTarget = Pick<DiscoveryResult, 'kind' | 'title' | 'subtitle'>;
 
@@ -32,11 +31,10 @@ function useLoggedResolveFailure(entity: DiscoveryResult, error: Error | null): 
 
 function useResolveSearch(entity: DiscoveryResult, enabled: boolean) {
   const port = useDetailPort();
-  const fetchEnabled = useDetailFetchEnabled();
   const searchTerm = entity.subtitle ? `${entity.title} ${entity.subtitle}` : entity.title;
   return useQuery({
     ...resolveEntityQuery(entity.kind, searchTerm, 5, port),
-    enabled: enabled && fetchEnabled,
+    enabled,
   });
 }
 

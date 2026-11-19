@@ -1,5 +1,4 @@
 import { apiBase } from '@shared/apiConfig';
-import { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch';
 import { onSignOut } from '@shared/session';
 
 import type { EventCache } from '@shared/events/core/eventCache';
@@ -53,18 +52,12 @@ class ServerEventStream {
     this.client = openClient(deps);
   }
 
-  connectIfEnabled(): void {
-    if (isLoopEnabled('serverEvents')) void this.client.connect();
+  connect(): void {
+    void this.client.connect();
   }
 
   followForeground(state: string): void {
-    if (state === 'active') this.connectIfEnabled();
-    else this.client.disconnect();
-  }
-
-  followKillSwitch(loop: string, enabled: boolean): void {
-    if (loop !== 'serverEvents') return;
-    if (enabled) this.connectInForeground();
+    if (state === 'active') this.connect();
     else this.client.disconnect();
   }
 
@@ -79,21 +72,20 @@ class ServerEventStream {
   }
 
   private connectInForeground(): void {
-    if (this.deps.foreground.isActive()) this.connectIfEnabled();
+    if (this.deps.foreground.isActive()) this.connect();
   }
 }
 
 function follow(stream: ServerEventStream, foreground: AppForeground): (() => void)[] {
   return [
     foreground.subscribe((state) => stream.followForeground(state)),
-    onKillSwitchChange((loop, enabled) => stream.followKillSwitch(loop, enabled)),
     onSignOut(() => stream.reopen()),
   ];
 }
 
 export function startServerEvents(deps: ServerEventsDeps): () => void {
   const stream = new ServerEventStream(deps);
-  stream.connectIfEnabled();
+  stream.connect();
   const unsubscribes = follow(stream, deps.foreground);
   return () => {
     for (const unsubscribe of unsubscribes) unsubscribe();

@@ -61,7 +61,6 @@ function DetailContent({ handoff }: { handoff: DetailHandoff }): ReactElement {
     artworkUrl,
     secondary: secondaryLine({
       isArtist,
-      genreTags: enrichments.lastfm?.tags,
       artist: entity.subtitle,
       albumCollaborators,
       lateralNav,
@@ -87,15 +86,7 @@ function DetailContent({ handoff }: { handoff: DetailHandoff }): ReactElement {
   }
 
   if (entity.kind === 'artist') {
-    return (
-      <ArtistDetailBody
-        chrome={chrome}
-        result={entity}
-        detailRoute={detailRoute}
-        lastfm={enrichments.lastfm}
-        lastfmError={enrichments.errors.lastfm}
-      />
-    );
+    return <ArtistDetailBody chrome={chrome} result={entity} detailRoute={detailRoute} />;
   }
 
   return (

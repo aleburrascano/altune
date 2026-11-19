@@ -85,12 +85,7 @@ flowchart LR
     source --> altstore(["AltStore on the phone<br/>installs / updates the app"])
     release --> altstore
 
-    subgraph remote [Remote levers · no release needed]
-        ks["kill-switches.json on main<br/>sse · telemetry · offline_downloads<br/>detail_enrichment · discovery"]
-    end
-
-    ks -->|raw.githubusercontent.com<br/>polled every 5 min + on foreground| app(["Installed app"])
-    altstore --> app
+    altstore --> app(["Installed app"])
 
     subgraph ota [Over-the-air update · release-ota.yml, manual]
         export["expo export ios<br/>sign the manifest with the key on the runner host"] --> otaship["ota-release.sh on the VM<br/>~/altune-web/updates/prod"]

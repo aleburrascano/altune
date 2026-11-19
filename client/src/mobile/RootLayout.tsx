@@ -36,7 +36,6 @@ import {
   useThemePreference,
 } from '@shared/ui';
 import { AppChrome } from '@/mobile/frame/AppChrome';
-import { startKillSwitchPolling } from '@/mobile/killSwitchPoll';
 import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
 import { httpFeaturePorts, httpOfflinePort } from '@/mobile/wiring/httpFeaturePorts';
 import { PlaybackShortcuts, SystemNavigationBar } from '@/mobile/frame/platformExtras';
@@ -77,8 +76,6 @@ function playerScreenOptions(isWideWeb: boolean) {
 export default function RootLayout() {
   const isWideWeb = useWideWebLayout();
   const [queryClient] = useState(createQueryClient);
-
-  useEffect(() => startKillSwitchPolling(), []);
 
   const scheme = useThemePreference((s) => s.scheme);
   const activeTheme = themes[scheme];

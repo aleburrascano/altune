@@ -12,7 +12,6 @@ export interface MemoryPlaybackSeed {
   tracks?: TrackResponse[];
   lyrics?: Record<string, LyricsResponse>;
   queueState?: QueueStateResponse;
-  prefetchEnabled?: boolean;
 }
 
 function notFound(what: string): ApiError {
@@ -23,9 +22,7 @@ export function createMemoryPlaybackPort(seed: MemoryPlaybackSeed = {}): Playbac
   const audioUrls = seed.audioUrls ?? {};
   const tracks = [...(seed.tracks ?? [])];
   const lyrics = seed.lyrics ?? {};
-  const serverPrefetch = seed.prefetchEnabled ?? true;
   let queueState = seed.queueState;
-  let prefetchEnabled = true;
 
   return {
     audioStreamUrl: (trackId) => `${MEMORY_API_BASE}/v1/tracks/${trackId}/audio`,
@@ -34,11 +31,9 @@ export function createMemoryPlaybackPort(seed: MemoryPlaybackSeed = {}): Playbac
       await Promise.resolve();
       if (audioUrls[trackId] === undefined) throw notFound(`track ${trackId}`);
     },
-    isAudioPrefetchEnabled: () => prefetchEnabled,
     fetchAudioUrls: async (trackIds) => {
       if (trackIds.length === 0) return [];
       await Promise.resolve();
-      prefetchEnabled = serverPrefetch;
       return trackIds.flatMap((trackId): ResolvedAudioUrl[] => {
         const found = audioUrls[trackId];
         return found === undefined ? [] : [{ trackId, ...found }];

@@ -1,10 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
-import type {
-  DeezerEnrichmentResponse,
-  EnrichmentResponse,
-  LastFmEnrichmentResponse,
-} from '@shared/apiClient';
+import type { DeezerEnrichmentResponse, EnrichmentResponse } from '@shared/apiClient';
 import type { DiscoveryKind, DiscoveryResult } from '@shared/catalog';
 import { detailKeys } from '@shared/query';
 import { isAbort } from '@shared/failure';
@@ -14,7 +10,6 @@ import {
 } from '@features/detail/core/detailHealth';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
-import { useDetailFetchEnabled } from '@features/detail/core/useDetailFetchGate';
 import { trackExtras } from '@features/detail/core/trackExtras';
 
 const ONE_DAY_MS = 86_400_000;
@@ -112,16 +107,16 @@ function enrichmentQueryFn<T>({ config, port, params }: EnrichmentRequest<T>) {
     );
 }
 
-function enrichmentQueryOptions<T>(request: EnrichmentRequest<T>, isFetchEnabled: boolean) {
+function enrichmentQueryKey<T>(config: EnrichmentHookConfig<T>, params: EnrichmentParams) {
+  return detailKeys.enrichment(config.provider, params.kind, enrichmentCacheKey(config, params));
+}
+
+function enrichmentQueryOptions<T>(request: EnrichmentRequest<T>) {
   const { config, params } = request;
   return {
-    queryKey: detailKeys.enrichment(
-      config.provider,
-      params.kind,
-      enrichmentCacheKey(config, params),
-    ),
+    queryKey: enrichmentQueryKey(config, params),
     queryFn: enrichmentQueryFn(request),
-    enabled: (params.enabled ?? true) && isFetchEnabled && hasLookupKey(config, params),
+    enabled: (params.enabled ?? true) && hasLookupKey(config, params),
     staleTime: ENRICHMENT_STALE_TIME,
   };
 }
@@ -131,8 +126,7 @@ function useProviderEnrichment<T extends HasContent>(
   params: EnrichmentParams,
 ): EnrichmentReturn<T> {
   const port = useDetailPort();
-  const isFetchEnabled = useDetailFetchEnabled();
-  const options = enrichmentQueryOptions({ config, port, params }, isFetchEnabled);
+  const options = enrichmentQueryOptions({ config, port, params });
   const { data: fetched, isError } = useQuery<T>(options);
   return { enrichment: visibleEnrichment(fetched), isError };
 }
@@ -163,25 +157,11 @@ function useDeezerEnrichment(params: EnrichmentParams) {
   return useProviderEnrichment(DEEZER_CONFIG, params);
 }
 
-type LastFmEnrichment = Awaited<ReturnType<DetailPort['getLastFmEnrichment']>>;
-
-const LASTFM_CONFIG: EnrichmentHookConfig<LastFmEnrichment> = {
-  provider: 'lastfm',
-  fetch: (port, { kind, title, subtitle, signal }) =>
-    port.getLastFmEnrichment({ kind, title, subtitle, signal }),
-  mbidAware: false,
-};
-
-function useLastFmEnrichment(params: EnrichmentParams) {
-  return useProviderEnrichment(LASTFM_CONFIG, params);
-}
-
 export type EnrichmentErrors = Record<EnrichmentProvider, boolean>;
 
 export type DetailEnrichments = {
   musicbrainz: EnrichmentResponse | null;
   deezer: DeezerEnrichmentResponse | null;
-  lastfm: LastFmEnrichmentResponse | null;
   errors: EnrichmentErrors;
 };
 
@@ -189,17 +169,14 @@ export function useDetailEnrichments(result: DiscoveryResult): DetailEnrichments
   const { kind, title, subtitle } = result;
   const isTrack = kind === 'track';
   const isAlbum = kind === 'album';
-  const isArtist = kind === 'artist';
   const mbid = trackExtras(result.extras).mbid ?? undefined;
 
   const mb = useEnrichment({ kind, title, subtitle, mbid, enabled: isTrack || isAlbum });
   const dz = useDeezerEnrichment({ kind, title, subtitle, enabled: isTrack || isAlbum });
-  const lf = useLastFmEnrichment({ kind, title, subtitle, enabled: isArtist });
 
   return {
     musicbrainz: mb.enrichment,
     deezer: dz.enrichment,
-    lastfm: lf.enrichment,
-    errors: { musicbrainz: mb.isError, deezer: dz.isError, lastfm: lf.isError },
+    errors: { musicbrainz: mb.isError, deezer: dz.isError },
   };
 }

@@ -129,7 +129,6 @@ export function useDiscoverLogic(): DiscoverLogic {
     isLoading: isSearching,
     isRefreshing,
     error: searchError,
-    isUnavailable,
     refetch,
     fetchNextPage,
     hasNextPage,
@@ -158,7 +157,6 @@ export function useDiscoverLogic(): DiscoverLogic {
     isLoading: isSearching,
     data: searchData,
     error: searchError,
-    isUnavailable,
   };
   const resultsIncomplete = resultsIncompleteForState(hookState);
   const correction = correctionForResponse(searchData);
