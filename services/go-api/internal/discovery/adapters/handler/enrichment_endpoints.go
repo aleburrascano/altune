@@ -208,25 +208,6 @@ func serveNamedEnrichment[E, D any](
 		logMsg, "kind", kind.String(), "title", title)
 }
 
-func (h *DiscoveryHandler) handleLastFmEnrichment(w http.ResponseWriter, r *http.Request) {
-	if _, _, _, ok := namedEnrichmentParams(w, r); ok {
-		httputil.WriteJSON(w, http.StatusOK, lastFmEnrichmentResponseDTO{Tags: []string{}, Similar: []string{}})
-	}
-}
-
-type lastFmEnrichmentResponseDTO struct {
-	MBID       string   `json:"mbid"`
-	Listeners  int64    `json:"listeners"`
-	Playcount  int64    `json:"playcount"`
-	Tags       []string `json:"tags"`
-	Bio        string   `json:"bio"`
-	Similar    []string `json:"similar"`
-	Duration   int      `json:"duration"`
-	Album      string   `json:"album"`
-	HasContent bool     `json:"has_content"`
-	Degraded   bool     `json:"degraded"`
-}
-
 func (h *DiscoveryHandler) handleDeezerEnrichment(w http.ResponseWriter, r *http.Request) {
 	svc := h.enrichers.Deezer
 	var exec func(context.Context, domain.ResultKind, string, string) (domain.DeezerEnrichment, error)

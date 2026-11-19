@@ -1,0 +1,16 @@
+{
+  "removed": [
+    "T1 internal/discovery/adapters/handler/content_endpoints_test.go imports discoverytest/content_providers.go, behind discovery's door",
+    "T1 internal/discovery/adapters/handler/discovery_handler_test.go imports discoverytest/content_providers.go, behind discovery's door",
+    "T1 internal/discovery/adapters/handler/enrichment_endpoints_test.go imports discoverytest/enrichers.go, behind discovery's door",
+    "T1 internal/discovery/adapters/handler/ownership_stamp_golden_test.go imports discoverytest/content_providers.go, behind discovery's door",
+    "T1 internal/discovery/adapters/handler/request_params_test.go imports discoverytest/content_providers.go, behind discovery's door",
+    "T1 internal/discovery/adapters/handler/search_endpoints_test.go imports discoverytest/content_providers.go, behind discovery's door",
+    "T1 internal/discovery/adapters/handler/search_endpoints_test.go imports discoverytest/unreleased_helpers.go, behind discovery's door",
+    "T1 internal/discovery/adapters/handler/unreleased_endpoints_test.go imports discoverytest/unreleased_helpers.go, behind discovery's door",
+    "T1 internal/discovery/discoverytest/content_providers_test.go imports discoverytest/artwork_resolver.go, behind discovery's door",
+    "T1 internal/discovery/discoverytest/content_providers_test.go imports discoverytest/content_providers.go, behind discovery's door"
+  ],
+  "added": [],
+  "clones": 0
+}

@@ -2,7 +2,6 @@ package handler_test
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/shared/httputil"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/requestuser"
@@ -446,13 +445,13 @@ func TestHandleAlbumTracks(t *testing.T) {
 	tests := []struct {
 		name       string
 		path       string
-		albumProv  *discoverytest.AlbumContentProvider
+		albumProv  *discovery.FakeAlbumContentProvider
 		wantStatus int
 	}{
 		{
 			name: "valid request returns OK with items",
 			path: "/discovery/albums/deezer/12345/tracks",
-			albumProv: &discoverytest.AlbumContentProvider{
+			albumProv: &discovery.FakeAlbumContentProvider{
 				Results: []discovery.SearchResult{
 					{
 						Kind:       discovery.ResultKindTrack,
@@ -469,7 +468,7 @@ func TestHandleAlbumTracks(t *testing.T) {
 		{
 			name:       "unknown provider returns 400",
 			path:       "/discovery/albums/unknown_provider/12345/tracks",
-			albumProv:  &discoverytest.AlbumContentProvider{Results: []discovery.SearchResult{}},
+			albumProv:  &discovery.FakeAlbumContentProvider{Results: []discovery.SearchResult{}},
 			wantStatus: http.StatusBadRequest,
 		},
 	}
@@ -501,13 +500,13 @@ func TestHandleArtistTopTracks(t *testing.T) {
 	tests := []struct {
 		name       string
 		path       string
-		artistProv *discoverytest.ArtistContentProvider
+		artistProv *discovery.FakeArtistContentProvider
 		wantStatus int
 	}{
 		{
 			name: "valid request returns OK",
 			path: "/discovery/artists/deezer/789/top-tracks",
-			artistProv: &discoverytest.ArtistContentProvider{
+			artistProv: &discovery.FakeArtistContentProvider{
 				TopTracks: []discovery.SearchResult{
 					{
 						Kind:       discovery.ResultKindTrack,
@@ -524,7 +523,7 @@ func TestHandleArtistTopTracks(t *testing.T) {
 		{
 			name:       "unknown provider returns 400",
 			path:       "/discovery/artists/unknown/789/top-tracks",
-			artistProv: &discoverytest.ArtistContentProvider{},
+			artistProv: &discovery.FakeArtistContentProvider{},
 			wantStatus: http.StatusBadRequest,
 		},
 	}
@@ -548,13 +547,13 @@ func TestHandleArtistAlbums(t *testing.T) {
 	tests := []struct {
 		name       string
 		path       string
-		artistProv *discoverytest.ArtistContentProvider
+		artistProv *discovery.FakeArtistContentProvider
 		wantStatus int
 	}{
 		{
 			name: "valid request returns OK",
 			path: "/discovery/artists/deezer/789/albums",
-			artistProv: &discoverytest.ArtistContentProvider{
+			artistProv: &discovery.FakeArtistContentProvider{
 				Albums: []discovery.SearchResult{
 					{
 						Kind:       discovery.ResultKindAlbum,
@@ -571,7 +570,7 @@ func TestHandleArtistAlbums(t *testing.T) {
 		{
 			name:       "unknown provider returns 400",
 			path:       "/discovery/artists/unknown/789/albums",
-			artistProv: &discoverytest.ArtistContentProvider{},
+			artistProv: &discovery.FakeArtistContentProvider{},
 			wantStatus: http.StatusBadRequest,
 		},
 	}

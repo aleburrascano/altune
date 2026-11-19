@@ -2,7 +2,6 @@ package handler_test
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/shared/httputil"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
@@ -1160,7 +1159,7 @@ func TestHandleSearch_QueryNorm_MatchesServiceCanonicalValue(t *testing.T) {
 func validationRouter(t *testing.T) chi.Router {
 	t.Helper()
 	albumProviders := map[discovery.ProviderName]discovery.AlbumContentProvider{
-		discovery.ProviderDeezer: &discoverytest.AlbumContentProvider{Results: seedTracks(3)},
+		discovery.ProviderDeezer: &discovery.FakeAlbumContentProvider{Results: seedTracks(3)},
 	}
 	return buildDiscoveryRouter(
 		&fakeSearchProvider{name: discovery.ProviderDeezer}, &fakeSearchHistoryRepo{}, albumProviders, nil)
@@ -1753,7 +1752,7 @@ type recordedArtist struct {
 }
 
 type recordingUnreleasedStore struct {
-	*discoverytest.UnreleasedStore
+	*discovery.FakeUnreleasedStore
 	mu      sync.Mutex
 	artists []recordedArtist
 }
@@ -1762,7 +1761,7 @@ func (s *recordingUnreleasedStore) Record(ctx context.Context, key discovery.Unr
 	s.mu.Lock()
 	s.artists = append(s.artists, recordedArtist{key: key, name: name, known: known})
 	s.mu.Unlock()
-	return s.UnreleasedStore.Record(ctx, key, name, known)
+	return s.FakeUnreleasedStore.Record(ctx, key, name, known)
 }
 
 func searchArtist(name, id string) discovery.SearchResult {
@@ -1775,7 +1774,7 @@ func searchArtist(name, id string) discovery.SearchResult {
 func searchAsWarmUp(t *testing.T, store discovery.UnreleasedStore, results []discovery.SearchResult) *httptest.ResponseRecorder {
 	t.Helper()
 	var jobs sync.WaitGroup
-	svc := discovery.NewUnreleasedService(nil, &discoverytest.ArtistCatalogTitles{}, nil, discovery.UnreleasedConfig{},
+	svc := discovery.NewUnreleasedService(nil, &discovery.ArtistCatalogTitles{}, nil, discovery.UnreleasedConfig{},
 		discovery.WithUnreleasedStore(store), discovery.WithUnreleasedLifecycle(context.Background(), &jobs))
 	p := &fakeSearchProvider{name: discovery.ProviderDeezer, results: results}
 	searchSvc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker())
@@ -1789,7 +1788,7 @@ func searchAsWarmUp(t *testing.T, store discovery.UnreleasedStore, results []dis
 }
 
 func TestSearchWarmsUnreleased_TopThreeArtistsAreRecorded(t *testing.T) {
-	store := &recordingUnreleasedStore{UnreleasedStore: &discoverytest.UnreleasedStore{}}
+	store := &recordingUnreleasedStore{FakeUnreleasedStore: &discovery.FakeUnreleasedStore{}}
 	results := []discovery.SearchResult{
 		searchArtist("One", "1"), searchArtist("Two", "2"), searchArtist("Three", "3"), searchArtist("Four", "4"),
 	}
@@ -1809,8 +1808,8 @@ func TestSearchWarmsUnreleased_TopThreeArtistsAreRecorded(t *testing.T) {
 
 func TestSearchWarmsUnreleased_FailingStoreLeavesTheResponseUnchanged(t *testing.T) {
 	results := []discovery.SearchResult{searchArtist("One", "1")}
-	healthy := searchAsWarmUp(t, &discoverytest.UnreleasedStore{}, results)
-	failing := searchAsWarmUp(t, &discoverytest.UnreleasedStore{RecordErr: errors.New("db down")}, results)
+	healthy := searchAsWarmUp(t, &discovery.FakeUnreleasedStore{}, results)
+	failing := searchAsWarmUp(t, &discovery.FakeUnreleasedStore{RecordErr: errors.New("db down")}, results)
 
 	discAssertStatus(t, failing, http.StatusOK)
 	var a, b discovery.DiscoverySearchResponse
