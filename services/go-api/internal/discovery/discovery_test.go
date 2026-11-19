@@ -1189,6 +1189,22 @@ func TestMerge_ASecondSameNameArtistFromOneProviderJoinsNoOtherCard(t *testing.T
 	}
 }
 
+func TestMerge_OfTwoSameNameArtistsWithEqualFansTheFirstListedWins(t *testing.T) {
+	first := sourced(discovery.ResultKindArtist, "Che", "", discovery.ProviderDeezer, "1")
+	second := sourced(discovery.ResultKindArtist, "Che", "", discovery.ProviderDeezer, "2")
+	first.FanCount, second.FanCount = 50, 50
+	spotify := sourced(discovery.ResultKindArtist, "Che", "", discovery.ProviderSpotify, "s1")
+
+	got := merged([]discovery.SearchResult{first, second}, []discovery.SearchResult{spotify})
+
+	if len(got) != 2 || len(got[0].Sources) != 2 || len(got[1].Sources) != 1 {
+		t.Fatalf("got %+v, want the first Che joined by Spotify and the second Che alone", got)
+	}
+	if got[0].Sources[0].ExternalID != "1" || got[1].Sources[0].ExternalID != "2" {
+		t.Errorf("joined card = %+v, lone card = %+v, want Spotify on the first Che and the second Che alone", got[0].Sources, got[1].Sources)
+	}
+}
+
 func TestMerge_ATitleWithNoLettersCannotProveTwoTakesAreOneVersion(t *testing.T) {
 	complete := sourced(discovery.ResultKindTrack, "÷", "Ed Sheeran", discovery.ProviderDeezer, "1")
 	complete.Album, complete.ImageURL, complete.Duration = "÷", "https://x/art.jpg", 200
