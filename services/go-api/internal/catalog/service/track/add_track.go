@@ -19,8 +19,6 @@ const MaxFeaturedArtistsPerTrack = 100
 
 const MaxTracksPerUser = 50_000
 
-var maxTracksPerUser = MaxTracksPerUser
-
 var ErrLibraryFull = &domain.CodedError{
 	Msg:    "library is full",
 	Status: 400,
@@ -154,12 +152,12 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 }
 
 func (s *AddTrackService) requireLibrarySpace(ctx context.Context, userId shared.UserId) error {
-	held, err := s.trackRepo.CountForUser(ctx, userId, maxTracksPerUser)
+	held, err := s.trackRepo.CountForUser(ctx, userId, MaxTracksPerUser)
 	if err != nil {
 		return domain.WrapRepoError(ctx, "count tracks", err)
 	}
-	if held >= maxTracksPerUser {
-		slog.WarnContext(ctx, "catalog.library_full", "user_id", userId.String(), "cap", maxTracksPerUser)
+	if held >= MaxTracksPerUser {
+		slog.WarnContext(ctx, "catalog.library_full", "user_id", userId.String(), "cap", MaxTracksPerUser)
 		return ErrLibraryFull
 	}
 	return nil

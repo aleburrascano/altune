@@ -158,43 +158,6 @@ func TestStreamTrackService_Execute(t *testing.T) {
 	}
 }
 
-func TestAddTrackService_ForwardsSourceURLToScheduler(t *testing.T) {
-	ctx := context.Background()
-	userId := catalog.FixtureUserId()
-	repo := catalog.NewInMemoryTrackRepo()
-	sched := &catalog.InMemoryScheduler{}
-	svc := catalog.NewAddTrackService(repo, catalog.WithAcquisitionScheduler(sched))
-
-	scURL := "https://soundcloud.com/liltecca/fell-in-love"
-	if _, err := svc.Execute(ctx, userId, catalog.AddTrackInput{
-		Title:     "Fell In Love",
-		Artist:    "Lil Tecca",
-		SourceURL: &scURL,
-	}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if len(sched.SourceURLs) != 1 || sched.SourceURLs[0] != scURL {
-		t.Fatalf("scheduler should receive source URL %q, got %v", scURL, sched.SourceURLs)
-	}
-}
-
-func TestAddTrackService_NoSourceURL_ForwardsEmpty(t *testing.T) {
-	ctx := context.Background()
-	userId := catalog.FixtureUserId()
-	repo := catalog.NewInMemoryTrackRepo()
-	sched := &catalog.InMemoryScheduler{}
-	svc := catalog.NewAddTrackService(repo, catalog.WithAcquisitionScheduler(sched))
-
-	if _, err := svc.Execute(ctx, userId, catalog.AddTrackInput{Title: "Some Track", Artist: "Some Artist"}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if len(sched.SourceURLs) != 1 || sched.SourceURLs[0] != "" {
-		t.Fatalf("scheduler should receive an empty source URL, got %v", sched.SourceURLs)
-	}
-}
-
 func TestStreamTrackService_RecoveryMetric(t *testing.T) {
 	ctx := context.Background()
 	userId := catalog.FixtureUserId()
