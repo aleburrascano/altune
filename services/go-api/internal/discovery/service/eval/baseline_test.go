@@ -220,3 +220,16 @@ func TestGateResult_FailedCoversBothWaysToFail(t *testing.T) {
 		})
 	}
 }
+
+func TestBaselines_Gate_AValueExactlyOneToleranceOutsideTheThresholdStillPasses(t *testing.T) {
+	b := discovery.Baselines{
+		"recall":         {Metric: "recall", Value: 0.5, HigherIsBetter: true},
+		"diversity_cost": {Metric: "diversity_cost", Value: 0.5, HigherIsBetter: false},
+	}
+	if g := b.Gate("recall", 0.5-1e-9); g.Regressed {
+		t.Errorf("higher-is-better: %v sits exactly one tolerance below threshold %v, got REGRESSED", g.Current, g.Threshold)
+	}
+	if g := b.Gate("diversity_cost", 0.5+1e-9); g.Regressed {
+		t.Errorf("lower-is-better: %v sits exactly one tolerance above threshold %v, got REGRESSED", g.Current, g.Threshold)
+	}
+}

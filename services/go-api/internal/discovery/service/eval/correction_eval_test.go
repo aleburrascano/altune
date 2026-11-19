@@ -142,3 +142,12 @@ func TestRunCorrectionEval_ADoubledLettersFirstTypoSwapsItsFirstLetterForAKeyboa
 		}
 	}
 }
+
+func TestRunCorrectionEval_TestsTheRequestedTyposPerTermAndAtLeastOne(t *testing.T) {
+	for _, tc := range []struct{ k, want int }{{-2, 1}, {0, 1}, {1, 1}, {3, 3}} {
+		r := discovery.RunCorrectionEval(context.Background(), []string{"kendrick"}, &vocabCorrector{}, tc.k)
+		if r.TyposTested != tc.want {
+			t.Errorf("typosPerTerm %d: tested %d typos, want %d", tc.k, r.TyposTested, tc.want)
+		}
+	}
+}
