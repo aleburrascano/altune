@@ -1,6 +1,7 @@
-package handler
+package handler_test
 
 import (
+	"altune/go-api/internal/observe"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -11,12 +12,12 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func everyDependencyDown(context.Context) DependencyHealth {
-	return DependencyHealth{
-		DB:    DepDown,
-		Redis: DepDown,
-		Auth:  DepDown,
-		Detail: DependencyDetail{
+func everyDependencyDown(context.Context) observe.DependencyHealth {
+	return observe.DependencyHealth{
+		DB:    observe.DepDown,
+		Redis: observe.DepDown,
+		Auth:  observe.DepDown,
+		Detail: observe.DependencyDetail{
 			DBError:    "db refused",
 			RedisError: "redis refused",
 			AuthError:  "jwks refused",
@@ -25,10 +26,10 @@ func everyDependencyDown(context.Context) DependencyHealth {
 	}
 }
 
-func serveObserveHealth(t *testing.T, probe HealthProbe) *httptest.ResponseRecorder {
+func serveObserveHealth(t *testing.T, probe func(context.Context) observe.DependencyHealth) *httptest.ResponseRecorder {
 	t.Helper()
 	r := chi.NewRouter()
-	NewObserveHandler(Deps{Health: probe}).Register(r)
+	observe.NewObserveHandler(observe.Deps{Health: probe}).Register(r)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
 	return rec

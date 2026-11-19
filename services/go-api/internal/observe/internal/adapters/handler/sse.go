@@ -14,11 +14,15 @@ import (
 	"time"
 )
 
-var (
-	streamWriteIdle   = 10 * time.Second
-	streamHeartbeat   = 25 * time.Second
-	streamMaxLifetime = 15 * time.Minute
-)
+type StreamBounds struct {
+	WriteIdle   time.Duration
+	Heartbeat   time.Duration
+	MaxLifetime time.Duration
+}
+
+func DefaultStreamBounds() StreamBounds {
+	return StreamBounds{WriteIdle: 10 * time.Second, Heartbeat: 25 * time.Second, MaxLifetime: 15 * time.Minute}
+}
 
 const keepaliveFrame = ": keepalive\n\n"
 
@@ -31,23 +35,23 @@ func rejectSubscription(w http.ResponseWriter, r *http.Request, stream string, e
 	httputil.HandleServiceError(w, r, codederr.ErrStreamSubscriberLimit)
 }
 
-func streamSSE[T any](w http.ResponseWriter, r *http.Request, ch <-chan T) {
+func streamSSE[T any](w http.ResponseWriter, r *http.Request, ch <-chan T, bounds StreamBounds) {
 	if _, canFlush := w.(http.Flusher); !canFlush {
 		httputil.HandleServiceError(w, r, codederr.ErrStreamingUnsupported)
 		return
 	}
-	w = httputil.ExtendWriteDeadlineOnWrite(w, streamWriteIdle)
+	w = httputil.ExtendWriteDeadlineOnWrite(w, bounds.WriteIdle)
 	rc := http.NewResponseController(w)
 	setStreamHeaders(w)
 	w.WriteHeader(http.StatusOK)
 	if err := writeFrame(w, rc, keepaliveFrame); err != nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), streamMaxLifetime)
+	ctx, cancel := context.WithTimeout(r.Context(), bounds.MaxLifetime)
 	defer cancel()
 	ctx, untilExpiry := requestuser.UntilTokenExpiry(ctx)
 	defer untilExpiry()
-	streamFrames(r.WithContext(ctx), w, rc, ch)
+	streamFrames(r.WithContext(ctx), w, rc, ch, bounds.Heartbeat)
 }
 
 func (h *Handler) untilShutdown(parent context.Context) (context.Context, context.CancelFunc) {
@@ -69,8 +73,8 @@ func setStreamHeaders(w http.ResponseWriter) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 }
 
-func streamFrames[T any](r *http.Request, w http.ResponseWriter, rc *http.ResponseController, ch <-chan T) {
-	heartbeat := time.NewTicker(streamHeartbeat)
+func streamFrames[T any](r *http.Request, w http.ResponseWriter, rc *http.ResponseController, ch <-chan T, every time.Duration) {
+	heartbeat := time.NewTicker(every)
 	defer heartbeat.Stop()
 	for {
 		select {

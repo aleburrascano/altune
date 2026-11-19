@@ -29,12 +29,6 @@ type NameKeyedCache[T any] interface {
 	SetNegative(ctx context.Context, nameKey string) error
 }
 
-type LastFmEnricher interface {
-	Lookup(ctx context.Context, kind domain.ResultKind, artistName, entityTitle string) (domain.LastFmEnrichment, error)
-}
-
-type LastFmEnrichmentCache = NameKeyedCache[domain.LastFmEnrichment]
-
 type DeezerEnricher interface {
 	ResolveID(ctx context.Context, kind domain.ResultKind, artist, title string) (string, error)
 	Lookup(ctx context.Context, kind domain.ResultKind, id string) (domain.DeezerEnrichment, error)

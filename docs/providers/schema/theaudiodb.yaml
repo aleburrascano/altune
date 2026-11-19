@@ -132,7 +132,7 @@ entities:
         type: string
         seen: [live]
         read: false
-        unused: English biography; altune shows the Last.fm biography
+        unused: English biography; altune shows no artist biography
       - path: artists[].strBiographyCN
         type: "null"
         seen: [live]
@@ -232,7 +232,7 @@ entities:
         type: string
         seen: [live]
         read: false
-        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes tags from Last.fm
+        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes genres from MusicBrainz and Deezer
       - path: artists[].strISNIcode
         type: "null"
         seen: [live]
@@ -257,7 +257,7 @@ entities:
         type: string
         seen: [live]
         read: false
-        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes tags from Last.fm
+        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes genres from MusicBrainz and Deezer
       - path: artists[].strMusicBrainzID
         type: string
         seen: [live]
@@ -267,7 +267,7 @@ entities:
         type: string
         seen: [live]
         read: false
-        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes tags from Last.fm
+        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes genres from MusicBrainz and Deezer
       - path: artists[].strTwitter
         type: null|string
         seen: [live]
@@ -424,7 +424,7 @@ entities:
         type: null|string
         seen: [live]
         read: false
-        unused: English album description; altune shows the Last.fm wiki summary
+        unused: English album description; altune shows no album description
       - path: album[].strDescriptionCN
         type: "null"
         seen: [live]
@@ -509,7 +509,7 @@ entities:
         type: null|string
         seen: [live]
         read: false
-        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes tags from Last.fm
+        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes genres from MusicBrainz and Deezer
       - path: album[].strItunesID
         type: "null"
         seen: [live]
@@ -539,7 +539,7 @@ entities:
         type: null|string
         seen: [live]
         read: false
-        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes tags from Last.fm
+        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes genres from MusicBrainz and Deezer
       - path: album[].strMusicBrainzArtistID
         type: string
         seen: [live]
@@ -584,7 +584,7 @@ entities:
         type: null|string
         seen: [live]
         read: false
-        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes tags from Last.fm
+        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes genres from MusicBrainz and Deezer
       - path: album[].strTheme
         type: null|string
         seen: [live]
@@ -736,7 +736,7 @@ entities:
         type: string
         seen: [live]
         read: false
-        unused: English biography; altune shows the Last.fm biography
+        unused: English biography; altune shows no artist biography
       - path: artists[].strBiographyCN
         type: "null"
         seen: [live]
@@ -836,7 +836,7 @@ entities:
         type: string
         seen: [live]
         read: false
-        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes tags from Last.fm
+        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes genres from MusicBrainz and Deezer
       - path: artists[].strISNIcode
         type: "null"
         seen: [live]
@@ -861,7 +861,7 @@ entities:
         type: string
         seen: [live]
         read: false
-        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes tags from Last.fm
+        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes genres from MusicBrainz and Deezer
       - path: artists[].strMusicBrainzID
         type: string
         seen: [live]
@@ -871,7 +871,7 @@ entities:
         type: string
         seen: [live]
         read: false
-        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes tags from Last.fm
+        unused: free-text descriptors (genre, style, mood) curated by TheAudioDB; altune takes genres from MusicBrainz and Deezer
       - path: artists[].strTwitter
         type: null|string
         seen: [live]

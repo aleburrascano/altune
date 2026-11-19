@@ -22,7 +22,7 @@ function run(command, args, what, cwd) {
 const given = resolve(process.argv[2] ?? join(scripts, '..'))
 if (!existsSync(given) || !statSync(given).isDirectory()) fail(`${given} is not a folder`, 2)
 const root = run('git', ['rev-parse', '--show-toplevel'], `git rev-parse in ${given}`, given).trim()
-if (!existsSync(kit)) fail('the module-spec kit is not installed. Run pnpm install at the repo root (it fetches the private kit from gitea, so it needs a gitea login).', 3)
+if (!existsSync(kit)) fail('the module-spec kit is not installed. Run pnpm install at the repo root (it fetches the kit from gitea).', 3)
 
 const roots = run('bash', [join(scripts, 'module-spec.sh'), 'roots'], 'scripts/module-spec.sh roots', root).split('\n').filter(Boolean)
 const out = []

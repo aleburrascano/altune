@@ -52,8 +52,6 @@ func TestContentRejections_ExternalIDAddressingAnotherPath(t *testing.T) {
 		{"top tracks addressed by an escaped parent segment", "/discovery/artists/deezer/%2e%2e/top-tracks"},
 		{"an id carrying a path separator", "/discovery/artists/deezer/a%2Fb/albums"},
 		{"an id past the length cap", "/discovery/artists/deezer/" + strings.Repeat("7", 300) + "/albums"},
-		{"a last.fm ref addressed by the parent segment", "/discovery/artists/lastfm/../albums"},
-		{"a last.fm ref past the length cap", "/discovery/artists/lastfm/" + strings.Repeat("N", 201) + "/albums"},
 	}
 	for _, c := range cases {
 		t.Run(c.cause, func(t *testing.T) {
@@ -78,7 +76,7 @@ func TestEnrichmentRejections_MalformedMBIDAndOversizedNames(t *testing.T) {
 		{"an album-tracks mbid addressing the parent segment", "/discovery/albums/deezer/123/tracks?mbid=.."},
 		{"an oversized enrichment title", "/discovery/enrichment?kind=artist&title=" + oversizedParam},
 		{"an oversized enrichment subtitle", "/discovery/enrichment?kind=album&title=x&subtitle=" + oversizedParam},
-		{"an oversized last.fm title", "/discovery/enrichment/lastfm?kind=artist&title=" + oversizedParam},
+		{"an oversized title on the retired last.fm lookup", "/discovery/enrichment/lastfm?kind=artist&title=" + oversizedParam},
 		{"an oversized deezer title", "/discovery/enrichment/deezer?kind=album&title=" + oversizedParam},
 		{"an oversized lyrics title", "/discovery/lyrics?title=" + oversizedParam},
 		{"an oversized album-tracks title", "/discovery/albums/deezer/123/tracks?title=" + oversizedParam},
@@ -130,11 +128,8 @@ var realProviderIDs = []struct {
 	{"musicbrainz uuid", discovery.ProviderMusicBrainz, radioheadMBID},
 	{"youtube channel id", discovery.ProviderYouTube, "UCmMUZbaYdNH0bEd1PAlAqsA"},
 	{"youtube browse id", discovery.ProviderYouTube, "MPREb_4pL8gzRtw1p"},
-	{"amazon music asin", discovery.ProviderAmazonMusic, "B00W0FHN1U"},
 	{"theaudiodb artist id", discovery.ProviderTheAudioDB, "111239"},
 	{"discogs artist id", discovery.ProviderDiscogs, "3840"},
-	{"last.fm name ref", discovery.ProviderLastFM, "Sigur Rós"},
-	{"last.fm url segment ref", discovery.ProviderLastFM, "Sigur+R%C3%B3s"},
 }
 
 func allProvidersArtistRouter(t *testing.T) chi.Router {

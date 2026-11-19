@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,7 +82,10 @@ func recordCorpus(
 	progress func(done, total int),
 ) (discovery.HarnessReport, error) {
 	rec := httptrace.NewRecorder(egress.NewLiveTransport())
-	svc := app.BuildRankingOnlySearchService(ctx, cfg, pool, nil, rec)
+	svc, err := rankingOnlySearchService(ctx, cfg, pool, rec)
+	if err != nil {
+		return nil, err
+	}
 	searcher := searchAdapter{svc: svc}
 
 	report := discovery.RunLibraryEvalMode(ctx, ents, searcher, concurrency, topK, mode, progress)
@@ -105,7 +109,10 @@ func recordArtistCorpus(
 	progress func(done, total int),
 ) (discovery.HarnessReport, error) {
 	rec := httptrace.NewRecorder(egress.NewLiveTransport())
-	svc := app.BuildRankingOnlySearchService(ctx, cfg, pool, nil, rec)
+	svc, err := rankingOnlySearchService(ctx, cfg, pool, rec)
+	if err != nil {
+		return nil, err
+	}
 	searcher := searchAdapter{svc: svc}
 
 	report := discovery.RunArtistIntentEval(ctx, artists, searcher, concurrency, topK, corpus, progress)
@@ -123,7 +130,17 @@ func buildReplaySearcher(ctx context.Context, cfg *config.Config, pool *pgxpool.
 	if err != nil {
 		return searchAdapter{}, err
 	}
-	replayer := httptrace.NewReplayer(exchanges)
-	svc := app.BuildRankingOnlySearchService(ctx, cfg, pool, nil, replayer)
+	svc, err := rankingOnlySearchService(ctx, cfg, pool, httptrace.NewReplayer(exchanges))
+	if err != nil {
+		return searchAdapter{}, err
+	}
 	return searchAdapter{svc: svc}, nil
+}
+
+func rankingOnlySearchService(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, transport http.RoundTripper) (*discovery.SearchService, error) {
+	disc, err := app.NewEvalDiscovery(ctx, cfg, app.EvalHandles{Pool: pool, Transport: transport})
+	if err != nil {
+		return nil, err
+	}
+	return disc.RankingOnlySearch(), nil
 }

@@ -108,12 +108,12 @@ const (
 	ProviderDeezer
 	ProviderMusicBrainz
 	ProviderSoundCloud
-	ProviderLastFM
+	_
 	ProviderITunes
 	ProviderTheAudioDB
 	ProviderDiscogs
 	ProviderYouTube
-	ProviderAmazonMusic
+	_
 	ProviderAppleMusic
 	ProviderSpotify
 )
@@ -125,7 +125,7 @@ func IsCanonicalContentProvider(p ProviderName) bool {
 }
 
 func (p ProviderName) String() string {
-	if p <= ProviderUnknown || int(p) >= len(providerKeys) {
+	if p <= ProviderUnknown || int(p) >= len(providerKeys) || providerKeys[p] == "" {
 		return string(providerKeys[ProviderUnknown])
 	}
 	return string(providerKeys[p])

@@ -1,7 +1,6 @@
 package compose
 
 import (
-	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/adapters/cache"
 	"altune/go-api/internal/discovery/internal/adapters/handles"
 	"altune/go-api/internal/discovery/internal/adapters/persistence"
@@ -12,7 +11,6 @@ import (
 	"altune/go-api/internal/discovery/service/related"
 	"altune/go-api/internal/discovery/service/search"
 	"strings"
-	"time"
 )
 
 type searchOption struct {
@@ -20,17 +18,40 @@ type searchOption struct {
 	option search.Option
 }
 
-func newSearchService(d handles.Deps, t *providerTable, s handles.Stores, artwork ports.TaggingArtworkResolver, breaker *providercall.CircuitBreaker) *search.Service {
-	named := rankingOptions(d.Search, s)
-	named = append(named, artworkAndRelatedOptions(t, s, artwork, breaker)...)
-	named = append(named, identityOptions(d.Search, t, s)...)
-	named = append(named, resultCacheOptions(d.Search, s)...)
-	named = append(named, enrichmentCacheOptions(s)...)
-	named = append(named, vocabularyOptions(s)...)
-	named = append(named, eventOptions(d.Search, s)...)
-	named = append(named, activityOptions(d.Activity)...)
-	d.Logger.InfoContext(d.Lifecycle, "discovery.search", "options", searchOptionNames(named))
-	return search.NewService(t.searchProviders(), breaker, searchOptions(named)...)
+func newSearchService(w wiring, breaker *providercall.CircuitBreaker) *search.Service {
+	named := append(unrecordedOptions(w, breaker), recordingOptions(w.deps, w.stores)...)
+	return w.namedSearchService("discovery.search", named, breaker)
+}
+
+func newEvalSearchService(w wiring) *search.Service {
+	breaker := providercall.NewCircuitBreaker()
+	return w.namedSearchService("discovery.eval_search", unrecordedOptions(w, breaker), breaker)
+}
+
+func newRankingOnlySearchService(w wiring) *search.Service {
+	named := rankingOptions(w.deps.Search, w.stores)
+	named = append(named, enrichmentCacheOptions(w.stores)...)
+	named = append(named, vocabularyOptions(w.stores)...)
+	return w.namedSearchService("discovery.ranking_only_search", named, providercall.NewCircuitBreaker())
+}
+
+func (w wiring) namedSearchService(message string, named []searchOption, breaker *providercall.CircuitBreaker) *search.Service {
+	w.deps.Logger.InfoContext(w.deps.Lifecycle, message, "options", searchOptionNames(named))
+	return search.NewService(w.table.searchProviders(), breaker, searchOptions(named)...)
+}
+
+func unrecordedOptions(w wiring, breaker *providercall.CircuitBreaker) []searchOption {
+	named := rankingOptions(w.deps.Search, w.stores)
+	named = append(named, explorationAndDeadlineOptions(w.deps.Search)...)
+	named = append(named, artworkAndRelatedOptions(w.table, w.stores, w.artwork, breaker)...)
+	named = append(named, identityOptions(w.deps.Search, w.table, w.stores)...)
+	named = append(named, resultCacheOptions(w.deps.Search, w.stores)...)
+	named = append(named, enrichmentCacheOptions(w.stores)...)
+	return append(named, vocabularyOptions(w.stores)...)
+}
+
+func recordingOptions(d handles.Deps, s handles.Stores) []searchOption {
+	return append(eventOptions(d.Search, s), activityOptions(d.Activity)...)
 }
 
 func searchOptionNames(named []searchOption) string {
@@ -57,6 +78,11 @@ func rankingOptions(settings handles.SearchSettings, s handles.Stores) []searchO
 	if settings.CrossKindProminence {
 		named = append(named, searchOption{"cross_kind_prominence", search.WithCrossKindProminence()})
 	}
+	return named
+}
+
+func explorationAndDeadlineOptions(settings handles.SearchSettings) []searchOption {
+	var named []searchOption
 	if settings.Exploration {
 		named = append(named, searchOption{"exploration", search.WithExploration(settings.ExplorationRate)})
 	}
@@ -78,10 +104,10 @@ func artworkAndRelatedOptions(t *providerTable, s handles.Stores, artwork ports.
 func identityOptions(settings handles.SearchSettings, t *providerTable, s handles.Stores) []searchOption {
 	var named []searchOption
 	if s.Pool != nil {
-		named = append(named,
-			searchOption{"favorites", search.WithFavorites(persistence.NewPgxFavoritesRepository(s.Pool))},
-			searchOption{"identity_store", search.WithIdentityStore(s.IdentityStore())},
-		)
+		named = append(named, searchOption{"favorites", search.WithFavorites(persistence.NewPgxFavoritesRepository(s.Pool))})
+	}
+	if s.Identities != nil {
+		named = append(named, searchOption{"identity_store", search.WithIdentityStore(s.Identities)})
 	}
 	anchor := t.named(rowMusicBrainz).artistAnchor
 	if settings.IdentityVerifyOnPersist && anchor != nil {
@@ -95,13 +121,9 @@ func resultCacheOptions(settings handles.SearchSettings, s handles.Stores) []sea
 	if s.Redis == nil {
 		return nil
 	}
-	ttls := cache.ProviderCacheTTLs{
-		Default:  settings.ProviderCacheTTL,
-		Provider: map[domain.ProviderName]time.Duration{domain.ProviderMusicBrainz: settings.MusicBrainzCacheTTL},
-	}
 	return []searchOption{
 		{"result_cache", search.WithResultCache(cache.NewRedisResultCache(s.Redis, s.CacheOption()))},
-		{"provider_result_cache", search.WithProviderResultCache(cache.NewRedisProviderResultCache(s.Redis, ttls, s.CacheOption()))},
+		{"provider_result_cache", search.WithProviderResultCache(cache.NewRedisProviderResultCache(s.Redis, settings.ProviderCacheTTL, s.CacheOption()))},
 		{"held_slate_cache", search.WithHeldSlateCache(cache.NewRedisHeldSlateCache(s.Redis, s.CacheOption()))},
 	}
 }

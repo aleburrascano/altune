@@ -27,18 +27,10 @@ var (
 
 const (
 	EventTypeSearchPerformed = domain.EventTypeSearchPerformed
-	ProviderAmazonMusic      = domain.ProviderAmazonMusic
 	ProviderAppleMusic       = domain.ProviderAppleMusic
 	ProviderDeezer           = domain.ProviderDeezer
 	ProviderDiscogs          = domain.ProviderDiscogs
 	ProviderITunes           = domain.ProviderITunes
-	ProviderKeyDiscogs       = domain.ProviderKeyDiscogs
-	ProviderKeyITunes        = domain.ProviderKeyITunes
-	ProviderKeyLastFM        = domain.ProviderKeyLastFM
-	ProviderKeyMusicBrainz   = domain.ProviderKeyMusicBrainz
-	ProviderKeySoundCloud    = domain.ProviderKeySoundCloud
-	ProviderKeyYTMusic       = domain.ProviderKeyYTMusic
-	ProviderLastFM           = domain.ProviderLastFM
 	ProviderMusicBrainz      = domain.ProviderMusicBrainz
 	ProviderSoundCloud       = domain.ProviderSoundCloud
 	ProviderSpotify          = domain.ProviderSpotify

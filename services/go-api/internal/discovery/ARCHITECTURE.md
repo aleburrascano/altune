@@ -151,7 +151,7 @@ Supporting types: `ResultKind` (track/album/artist), `EntityResolutionTier`
 `RelatedGroup`, `CollapsedArtistSummary` (same-name artists folded into a card).
 
 Enrichment value objects (`MBEnrichment`, `DeezerEnrichment`, `DeezerLyrics`,
-`DiscogsEnrichment`, `LastFmEnrichment`) are immutable, non-persisted read
+`DiscogsEnrichment`) are immutable, non-persisted read
 surfaces, each with an `IsZero()`/empty-constructor pair so the wire never emits
 `null`.
 
@@ -281,8 +281,10 @@ ISRC exact  →  UPC exact (albums only; a mismatch is NOT disproof — editions
 The UPC tier follows the Popularity pattern — machinery live and tested while the
 producer set grows: Apple Music search albums are the one search-fan-out producer
 today (SoundCloud `publisher_metadata.upc_or_ean` and Deezer `/album/{id}` are
-candidates). Last.fm search results carry their MusicBrainz `mbid` on all three
-kinds (decoded 2026-07-23), feeding the MBID tier from a second provider.
+candidates). No search provider sends an `mbid` today: MusicBrainz is kept out
+of the search fan-out (its 1 req/s limit cannot answer an all-kinds search inside
+the 1.5s deadline), so the MBID tier stays idle until a searcher carries one and
+the tiers below it do the matching.
 
 There is deliberately **no fuzzy threshold and no version-marker vocabulary** —
 canonical normalization is the one structural definition of "same title."
@@ -321,7 +323,7 @@ still beats a superset.
 
 Two eval-gated experimental rungs, both default-off:
 - **Tail-noise demotion** (`isLowConfidenceTail`) — flags single-source
-  SoundCloud/Last.fm results with no ISRC/MBID/album as low-confidence tail,
+  SoundCloud results with no ISRC/MBID/album as low-confidence tail,
   sorting them below every corroborated result.
 - **Cross-kind prominence** (`prominenceOf`) — log-compressed Deezer fan-count /
   track rank, breaking relevance ties *only between different kinds* (a famous
@@ -397,8 +399,7 @@ result is never narrower than the input even when no cross-provider bridge exist
 still runs on the seed alone, id-verified).
 
 `providerContentID` maps the identity to the id each provider is queried by,
-encoding the two API-imposed exceptions in one place: **Last.fm** keys artist
-content on the **MBID** (its "id" is an ambiguous name), and **Apple Music**
+encoding the one API-imposed exception in one place: **Apple Music**
 reuses the shared **iTunes** id (the bridge only emits the `itunes` key).
 `fanOutByIdentity` runs every provider that has a resolved id concurrently, each by
 its own id.
@@ -531,10 +532,10 @@ can. The capability seams (all in `ports/`):
 | `ArtistContentProvider` | detail discography + top-tracks by id |
 | `AlbumContentProvider` | album tracklists |
 | `ArtworkResolver` + `IdentityArtworkResolver` + `SourcedArtworkResolver` + `TaggingArtworkResolver` | the artwork chain (chain-member vs service-facing) |
-| `MetadataEnricher` / `DiscogsEnricher` / `LastFmEnricher` / `DeezerEnricher` / `LyricsProvider` | detail-open enrichment |
+| `MetadataEnricher` / `DiscogsEnricher` / `DeezerEnricher` / `LyricsProvider` | detail-open enrichment |
 | `MBDiscographyAnchor` | the MB release-group set for the detail verifier |
 | `RelatedTracksProvider` | "related tracks" (SoundCloud) |
-| `ChartProvider` | Last.fm charts |
+| `ChartProvider` | Deezer charts |
 | `ArtistIdentityResolver` / `RelationshipQuerier` | MB identity + consensus |
 
 Provider participation and *how each is keyed* (by id = identity-safe; by name =
@@ -547,10 +548,8 @@ contamination-prone):
 | iTunes | — | — | ✅ name | ✅ name |
 | Spotify | ✅ | ✅ id | — | ✅ artist img (id) |
 | SoundCloud | ✅ | ⚠️ name-resolved id | ✅ name | ✅ name (last) |
-| Last.fm | ✅ | ✅ (MBID; albums need a name, skipped) | ✅ name | — |
-| MusicBrainz | ✅ | spine / anchor | ✅ name + authority | ✅ CAA (id) |
+| MusicBrainz | ❌ 1 req/s | spine / anchor | ✅ name + authority | ✅ CAA (id) |
 | YouTube Music | ✅ | ❌ not wired | ✅ name | ✅ artist img (id) |
-| Amazon Music | ✅ | ❌ not wired | — | — |
 | Discogs | — | — | ✅ name | ✅ (id) |
 | TheAudioDB (`adapters/providers/theaudiodb`) | — | — | — | ✅ (id) |
 | Fanart.tv | — | — | — | ✅ (MBID) |
@@ -574,8 +573,6 @@ Per-provider notes worth carrying:
   url-relates a SoundCloud id, so it is the **only** content-fan-out provider
   reached by *name* — the single remaining contamination vector in an id-only path
   (§15).
-- **Amazon Music** rides its internal web-player backend (same self-hosted personal
-  use posture as SoundCloud).
 - **MusicBrainz** is the identity/consensus authority *and* the detail verifier's
   anchor. Its authority is load-bearing against the noisy credited-on graphs of
   other providers — it is not to be demoted to "just another source."
@@ -591,7 +588,7 @@ Per-provider notes worth carrying:
   (§5.2).
 
 - **Enrichment** (`internal/core/enrich/`) is detail-open only, never on
-  the ranking path. Five parallel services (MusicBrainz, Deezer, Discogs, Last.fm,
+  the ranking path. Four parallel services (MusicBrainz, Deezer, Discogs,
   Lyrics) share one shape: resolve id from name → look up payload → cache → degrade
   to an empty value + nil error on any failure. The generic `CachedLookup[T]`
   encodes the caching rule (positive→return, negative→empty, transient error→don't
@@ -602,8 +599,8 @@ Per-provider notes worth carrying:
   **Placement rule — where an enricher lives:** every enricher lives in
   `internal/core/enrich/` and routes its positive/negative/degrade caching through the
   generic `CachedLookup[T]`; none hand-roll that logic in the parent `service/`
-  package. An enricher's *cache key shape* does not change its home. The four
-  name-keyed enrichers (Deezer, Last.fm, Discogs, Lyrics) cache positive and
+  package. An enricher's *cache key shape* does not change its home. The three
+  name-keyed enrichers (Deezer, Discogs, Lyrics) cache positive and
   negative under the same `NameKeyedCache[T]` key. MusicBrainz is the one
   exception in *key shape only*, not in home: its positive entry is keyed by the
   resolved **MBID** (an identity that doubles as the `IdentityBridge`/`MBIDIndex`
@@ -638,7 +635,7 @@ per-user** by design.
 | Artwork | (kind, title, subtitle, mbid) | 14d identity / 48h name / 6–24h neg per kind | overwrite guard: a lower-confidence write can't clobber a higher one |
 | Identity store | (provider, id, kind) | 30d | read/write-through front over Postgres |
 | Consensus | artist name | 6h | truncated results never cached |
-| Name-keyed enrichment | name | per provider | Deezer/Last.fm/Discogs/lyrics |
+| Name-keyed enrichment | name | per provider | Deezer/Discogs/lyrics |
 | Vocabulary | learned terms | — | Redis-backed term-frequency store |
 
 Consequence to keep in mind: a shipped ranking change is visible within ~45s, but
@@ -660,7 +657,7 @@ GET  /v1/discovery/artists/{provider}/{externalId}/top-tracks?name=&limit=
 GET  /v1/discovery/artists/{provider}/{externalId}/unreleased?name=&ids=   (each item carries Genius's SoundCloud/YouTube `audio_links`, normalised to https; items also merge the fan trackers' full leaks from `providers/trackers` (TrackerHub index cached 24h, artist sheet read on demand), carrying `quality`, `tracker_key` and `pixeldrain` links, with `genius_id`/`genius_url` null on tracker-only items; Genius is optional and the service is built when either Genius or the Sheets key is set)
 GET  /v1/discovery/albums/{provider}/{externalId}/tracks?title=&artist=&limit=
 GET  /v1/discovery/tracks/{provider}/{externalId}/related?limit=
-GET  /v1/discovery/enrichment[/lastfm|/deezer|/discogs|/discogs/artist]?kind=&title=&subtitle=&mbid=
+GET  /v1/discovery/enrichment[/lastfm|/deezer|/discogs|/discogs/artist]?kind=&title=&subtitle=&mbid=   (`/lastfm` is retired: it validates its params and always answers the empty DTO, kept until the client stops calling it)
 GET  /v1/discovery/lyrics
 POST /v1/discovery/events
 ```
@@ -818,13 +815,13 @@ current state → tension → candidate direction.
    provider labels. Artwork: Apple search art now requests 1000px (was 500);
    SoundCloud still caps at 500 where 1080/original exist.
 
-7. **Providers absent from the content fan-out.** YouTube Music and Amazon Music are
-   in search (and YT in consensus) but not the detail fan-out. YTM's content
+7. **Providers absent from the content fan-out.** YouTube Music is
+   in search and consensus but not the detail fan-out. YTM's content
    methods are **by-name** (a filtered search — its `GetArtistTopTracks` was
    deleted as dead 2026-07-23; `GetArtistAlbums` survives for the by-name
    consensus union only), so joining the id fan-out requires a genuinely
    id-keyed fetch (the album `browse` endpoint) plus a bridgeable id; otherwise
-   they inherit SoundCloud's name-resolve problem.
+   it inherits SoundCloud's name-resolve problem.
 
 8. **The client's multi-seed union.** The backend is now authoritative and complete,
    but the mobile client still fans out to several seed providers and merges them

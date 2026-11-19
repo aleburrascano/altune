@@ -92,7 +92,7 @@ func TestFanOut_OpenBreakerSkipsProviderEntirely(t *testing.T) {
 func TestFanOut_ManyProvidersDeterministicSlotOrder(t *testing.T) {
 	names := []discovery.ProviderName{
 		discovery.ProviderDeezer, discovery.ProviderITunes, discovery.ProviderMusicBrainz,
-		discovery.ProviderSoundCloud, discovery.ProviderLastFM, discovery.ProviderSpotify,
+		discovery.ProviderSoundCloud, discovery.ProviderTheAudioDB, discovery.ProviderSpotify,
 		discovery.ProviderAppleMusic, discovery.ProviderYouTube,
 	}
 	providers := make([]discovery.SearchProvider, len(names))

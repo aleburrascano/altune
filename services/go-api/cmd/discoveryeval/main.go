@@ -144,13 +144,13 @@ func run(opts options) error {
 	case "merge":
 		return runMerge(ctx, cfg, pool, redisClient, opts)
 	case "correction":
-		return runCorrection(ctx, pool, redisClient, opts)
+		return runCorrection(ctx, cfg, pool, redisClient, opts)
 	case "diversity":
 		return runDiversity(ctx, cfg, pool, redisClient, opts)
 	case "health":
 		return runHealth(ctx, cfg, pool, redisClient, opts)
 	case "signal-a":
-		return runSignalA(ctx, pool, redisClient, opts)
+		return runSignalA(ctx, cfg, pool, redisClient, opts)
 	case "signal-b":
 		return runSignalB(ctx, cfg, pool, opts)
 	case "artwork":
@@ -164,7 +164,7 @@ func run(opts options) error {
 	case "corpus-snapshot":
 		return runCorpusSnapshot(ctx, pool, opts)
 	case "correction-seed":
-		return runCorrectionSeed(ctx, pool, redisClient, opts)
+		return runCorrectionSeed(ctx, cfg, pool, redisClient, opts)
 	case "replay":
 		return runReplay(ctx, cfg, pool, redisClient, opts)
 	case "prod":
@@ -187,7 +187,10 @@ func runHealth(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redi
 	}
 
 	fmt.Fprintf(os.Stderr, "health pass over %d entities (concurrency=%d)...\n", len(entities), opts.concurrency)
-	searcher, drain := buildEvalSearcher(ctx, cfg, pool, redisClient)
+	searcher, drain, err := buildEvalSearcher(ctx, cfg, pool, redisClient)
+	if err != nil {
+		return err
+	}
 	report := discovery.RunHealthEval(ctx, entities, searcher, opts.concurrency, progress)
 	drain()
 
@@ -232,7 +235,10 @@ func runDiversity(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	corpusEnts, mode := corpusEntities(entities, opts.corpus)
 	once := func() (discovery.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "diversity differential over %d entities (corpus=%s, concurrency=%d, top-%d)...\n", len(corpusEnts), opts.corpus, opts.concurrency, opts.topK)
-		svc := app.BuildSearchService(ctx, cfg, pool, redisClient, nil)
+		svc, err := evalSearchService(ctx, cfg, pool, redisClient)
+		if err != nil {
+			return nil, err
+		}
 		report, err := measureDiversity(ctx, corpusEnts, variantSearchAdapter{svc: svc}, opts.concurrency, opts.topK, mode, progress)
 		svc.WaitForBackground()
 		if err != nil {
@@ -293,8 +299,11 @@ func (a variantSearchAdapter) SearchVariants(ctx context.Context, query string) 
 	return a.svc.RankVariantsForEval(ctx, q)
 }
 
-func runCorrection(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
-	vocab := app.BuildVocabularyStore(redisClient)
+func runCorrection(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
+	vocab, err := evalVocabulary(ctx, cfg, redisClient)
+	if err != nil {
+		return err
+	}
 	if vocab == nil {
 		return fmt.Errorf("correction mode needs a vocabulary store (set REDIS_URL)")
 	}
@@ -344,7 +353,10 @@ func runMerge(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redis
 
 	once := func() (discovery.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "merge-eval over %d unique entities (concurrency=%d)...\n", len(entities), opts.concurrency)
-		searcher, drain := buildEvalSearcher(ctx, cfg, pool, redisClient)
+		searcher, drain, err := buildEvalSearcher(ctx, cfg, pool, redisClient)
+		if err != nil {
+			return nil, err
+		}
 		report, err := measureMerge(ctx, entities, searcher, opts.concurrency, progress)
 		drain()
 		if err != nil {
@@ -377,7 +389,10 @@ func runEval(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisC
 
 	once := func() (discovery.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "evaluating %d entities (corpus=%s, concurrency=%d, top-%d)...\n", len(corpusEnts), opts.corpus, opts.concurrency, opts.topK)
-		searcher, drain := buildEvalSearcher(ctx, cfg, pool, redisClient)
+		searcher, drain, err := buildEvalSearcher(ctx, cfg, pool, redisClient)
+		if err != nil {
+			return nil, err
+		}
 		report := discovery.RunLibraryEvalMode(ctx, corpusEnts, searcher, opts.concurrency, opts.topK, mode, progress)
 		drain()
 		return report, nil
@@ -425,13 +440,35 @@ func runEvalFixtures(
 	return runHarness("eval", once, human, opts)
 }
 
-func buildEvalSearcher(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client) (discovery.Searcher, func()) {
-	svc := app.BuildSearchService(ctx, cfg, pool, redisClient, nil)
-	return searchAdapter{svc: svc}, svc.WaitForBackground
+func buildEvalSearcher(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client) (discovery.Searcher, func(), error) {
+	svc, err := evalSearchService(ctx, cfg, pool, redisClient)
+	if err != nil {
+		return nil, nil, err
+	}
+	return searchAdapter{svc: svc}, svc.WaitForBackground, nil
+}
+
+func evalSearchService(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client) (*discovery.SearchService, error) {
+	disc, err := app.NewEvalDiscovery(ctx, cfg, app.EvalHandles{Pool: pool, Redis: redisClient})
+	if err != nil {
+		return nil, err
+	}
+	return disc.EvalSearch(), nil
+}
+
+func evalVocabulary(ctx context.Context, cfg *config.Config, redisClient *goredis.Client) (discovery.VocabularyStore, error) {
+	disc, err := app.NewEvalDiscovery(ctx, cfg, app.EvalHandles{Redis: redisClient})
+	if err != nil {
+		return nil, err
+	}
+	return disc.Vocabulary, nil
 }
 
 func runQuery(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
-	searcher, drain := buildEvalSearcher(ctx, cfg, pool, redisClient)
+	searcher, drain, err := buildEvalSearcher(ctx, cfg, pool, redisClient)
+	if err != nil {
+		return err
+	}
 	results, err := searcher.Search(ctx, opts.query)
 	drain()
 	if err != nil {
@@ -541,7 +578,10 @@ func runArtistIntent(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool
 
 	once := func() (discovery.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "artist-intent over %d distinct artists (corpus=%s, concurrency=%d, top-%d)...\n", len(artists), opts.corpus, opts.concurrency, opts.topK)
-		searcher, drain := buildEvalSearcher(ctx, cfg, pool, redisClient)
+		searcher, drain, err := buildEvalSearcher(ctx, cfg, pool, redisClient)
+		if err != nil {
+			return nil, err
+		}
 		report := discovery.RunArtistIntentEval(ctx, artists, searcher, opts.concurrency, opts.topK, corpusLabel, progress)
 		drain()
 		return report, nil
@@ -589,11 +629,15 @@ func runCorpusBuild(ctx context.Context, pool *pgxpool.Pool, opts options) error
 	return nil
 }
 
-func runSignalA(ctx context.Context, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
+func runSignalA(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client, opts options) error {
 	eventStore := discovery.NewPgxEventStore(pool)
+	vocab, err := evalVocabulary(ctx, cfg, redisClient)
+	if err != nil {
+		return err
+	}
 
 	var svc *discovery.CoverageSignalAService
-	if vocab := app.BuildVocabularyStore(redisClient); vocab != nil {
+	if vocab != nil {
 		svc = discovery.NewCoverageSignalAService(eventStore, discovery.NewCorrectionService(vocab))
 	} else {
 		svc = discovery.NewCoverageSignalAService(eventStore, nil)
@@ -618,8 +662,11 @@ func runSignalB(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, opt
 	if err != nil {
 		return fmt.Errorf("load artists: %w", err)
 	}
-	svc := discovery.NewCoverageSignalBService(app.BuildConsensusProviders(cfg, nil))
-
+	consensus, err := consensusProviders(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	svc := discovery.NewCoverageSignalBService(consensus)
 	once := func() (discovery.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "scanning %d distinct artists across providers (concurrency=%d)...\n", len(artists), opts.concurrency)
 		report, err := svc.Execute(ctx, artists, opts.concurrency)
@@ -628,8 +675,14 @@ func runSignalB(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, opt
 		}
 		return report, requireMeasured("signal-b", report.ArtistsScanned, 0)
 	}
-	human := func(r discovery.HarnessReport) string {
-		return renderSignalB(r.(*discovery.CoverageReportB))
-	}
+	human := func(r discovery.HarnessReport) string { return renderSignalB(r.(*discovery.CoverageReportB)) }
 	return runHarness("signal-b", once, human, opts)
+}
+
+func consensusProviders(ctx context.Context, cfg *config.Config) ([]discovery.ConsensusProvider, error) {
+	disc, err := app.NewEvalDiscovery(ctx, cfg, app.EvalHandles{})
+	if err != nil {
+		return nil, err
+	}
+	return disc.Consensus, nil
 }

@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/adapters/handles"
 	"altune/go-api/internal/discovery/internal/core/ports"
+	"altune/go-api/internal/discovery/service/providercall"
 	"context"
 	"slices"
 )
@@ -14,10 +15,8 @@ const (
 	rowDeezer          rowName = "deezer"
 	rowAppleMusic      rowName = "applemusic"
 	rowMusicBrainz     rowName = "musicbrainz"
-	rowLastFM          rowName = "lastfm"
 	rowSoundCloud      rowName = "soundcloud"
 	rowYouTube         rowName = "youtube"
-	rowAmazonMusic     rowName = "amazonmusic"
 	rowSpotify         rowName = "spotify"
 	rowITunes          rowName = "itunes"
 	rowCoverArtArchive rowName = "coverartarchive"
@@ -37,6 +36,7 @@ const (
 	jobRelated    job = "related"
 	jobArtwork    job = "artwork"
 	jobCharts     job = "charts"
+	jobConsensus  job = "consensus"
 	jobDetails    job = "details"
 	jobEnrichment job = "enrichment"
 	jobFeatured   job = "featured"
@@ -45,8 +45,6 @@ const (
 	jobUnreleased job = "unreleased"
 	jobRecordings job = "recordings"
 )
-
-const notInSearchAllowlist = "not in DISCOVERY_SEARCH_PROVIDERS"
 
 type trackFeaturedLookup interface {
 	ResolveID(ctx context.Context, kind domain.ResultKind, artist, title string) (string, error)
@@ -66,7 +64,6 @@ type provider struct {
 	name            rowName
 	id              domain.ProviderName
 	offReason       string
-	searchOffReason string
 	search          ports.SearchProvider
 	artist          ports.ArtistContentProvider
 	artistAnchor    ports.MBDiscographyAnchor
@@ -75,8 +72,8 @@ type provider struct {
 	related         ports.RelatedTracksProvider
 	artwork         []ports.ArtworkResolver
 	charts          ports.ChartProvider
+	consensus       providercall.ConsensusProvider
 	deezerDetails   ports.DeezerEnricher
-	lastFMDetails   ports.LastFmEnricher
 	enrichment      ports.MetadataEnricher
 	trackFeatured   trackFeaturedLookup
 	featuredSearch  featuredSearcher
@@ -88,20 +85,17 @@ type provider struct {
 }
 
 type providerTable struct {
-	providers          []provider
-	unknownAllowlisted []string
+	providers []provider
 }
 
 func newProviderTable(s handles.ProviderSettings, c handles.Clients, st handles.Stores) *providerTable {
 	t := &providerTable{}
 	t.addDeezer(c)
-	t.addAppleMusic(s.AppleMusicEnabled, c)
+	t.addAppleMusic(c)
 	t.addMusicBrainz(s.MusicBrainzUserAgent, c)
-	t.addLastFM(s.LastFMAPIKey, c)
-	t.addSoundCloud(s.SoundCloudEnabled, c)
-	t.addYouTubeMusic(s.YouTubeMusicEnabled, c)
-	t.addAmazonMusic(s.AmazonMusicEnabled, c)
-	t.addSpotify(s.SpotifyEnabled, c)
+	t.addSoundCloud(c)
+	t.addYouTubeMusic(c)
+	t.addSpotify(c)
 	t.addITunes(c)
 	t.addCoverArtArchive(c)
 	t.addDiscogs(s.DiscogsToken, s.MusicBrainzUserAgent, c)
@@ -109,7 +103,6 @@ func newProviderTable(s handles.ProviderSettings, c handles.Clients, st handles.
 	t.addGenius(s.GeniusAccessToken, c)
 	t.addTheAudioDB(s.TheAudioDBAPIKey, c)
 	t.addTrackers(s.GoogleSheetsAPIKey, s.TrackerHubSheetID, c, st)
-	t.searchOnlyWith(s.SearchAllowlist)
 	return t
 }
 
@@ -130,42 +123,6 @@ func (t *providerTable) named(name rowName) provider {
 	return provider{}
 }
 
-func (t *providerTable) searchOnlyWith(allowlist []string) {
-	if len(allowlist) == 0 {
-		return
-	}
-	t.unknownAllowlisted = t.entriesNamingNoSearcher(allowlist)
-	for i := range t.providers {
-		t.providers[i].searchOnlyIfListed(allowlist)
-	}
-}
-
-func (t *providerTable) entriesNamingNoSearcher(allowlist []string) []string {
-	var unknown []string
-	for _, entry := range allowlist {
-		if !slices.ContainsFunc(t.providers, func(p provider) bool { return p.mayBeAllowlistedAs(entry) }) {
-			unknown = append(unknown, entry)
-		}
-	}
-	return unknown
-}
-
-func (p provider) mayBeAllowlistedAs(entry string) bool {
-	return string(p.name) == entry && (p.search != nil || p.offReason != "")
-}
-
-func (p *provider) searchOnlyIfListed(allowlist []string) {
-	if p.search == nil || slices.Contains(allowlist, p.search.Name().String()) {
-		return
-	}
-	p.search = nil
-	if len(p.jobs()) == 0 {
-		p.offReason = notInSearchAllowlist
-		return
-	}
-	p.searchOffReason = notInSearchAllowlist
-}
-
 type jobSlot struct {
 	job    job
 	filled bool
@@ -181,13 +138,13 @@ func (p provider) catalogSlots() []jobSlot {
 		{jobRelated, p.related != nil},
 		{jobArtwork, len(p.artwork) > 0},
 		{jobCharts, p.charts != nil},
+		{jobConsensus, p.consensus.Fetcher != nil},
 	}
 }
 
 func (p provider) detailSlots() []jobSlot {
 	return []jobSlot{
 		{jobDetails, p.deezerDetails != nil},
-		{jobDetails, p.lastFMDetails != nil},
 		{jobEnrichment, p.enrichment != nil},
 		{jobFeatured, p.trackFeatured != nil},
 		{jobFeatured, p.featuredSearch != nil},

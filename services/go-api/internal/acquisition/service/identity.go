@@ -44,7 +44,6 @@ func withCatalogPin(identity ports.RecordingIdentity, pin string) ports.Recordin
 		return identity
 	}
 	identity.MBID = pin
-	identity.MBIDs = []string{pin}
 	return identity
 }
 

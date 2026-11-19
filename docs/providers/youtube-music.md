@@ -16,8 +16,8 @@ YouTube Music is the **widest catalog** we reach — it indexes the official mai
 video/UGC long tail (live cuts, covers, remixes, leaks YT Music files as "videos") that even
 SoundCloud doesn't fully cover. That breadth already feeds search. But for *metadata maximization*
 specifically — against the already-maximized set (MusicBrainz = identity + genres + CAA/Fanart
-artwork; Discogs = credits + styles; Deezer = lyrics + bpm + popularity primary; Last.fm = listen
-popularity + relatedness + tags; iTunes = keyless hi-res album artwork) — most of what YouTube Music
+artwork; Discogs = credits + styles; Deezer = lyrics + bpm + popularity primary; iTunes = keyless hi-res
+album artwork) — most of what YouTube Music
 carries is **duplicative**. Its **one genuinely non-duplicative contribution is artist artwork**:
 
 - **It is the keyless, quota-free artist-image source.** iTunes — our highest-resolution keyless
@@ -29,8 +29,9 @@ carries is **duplicative**. Its **one genuinely non-duplicative contribution is 
   earned a build (§5.3).
 
 Everything else it offers is owned better elsewhere: **lyrics** → Deezer (synced + plain; YT Music is
-plain-only); **listen popularity** → Last.fm/Deezer; **relatedness** → Last.fm similar / SoundCloud
-related; **bio** → Discogs/Last.fm. See §5 for why each is deferred or skipped.
+plain-only); **listen popularity** → Deezer; **relatedness** → SoundCloud related; **bio** → nobody
+(altune shows no artist biography since Last.fm was removed). See §5 for why each is deferred or
+skipped.
 
 ## 2. Access model
 
@@ -121,15 +122,14 @@ and YT Music's ~2000px album master adds no ceiling above iTunes.
 ### 4. Song radio / watch-playlist relatedness — ⬜ DEFERRED (feature-spec)
 `ytmusic.GetWatchPlaylist(videoID)` (`next` with `playlistId: "RDAMVM"+videoId`) returns **50 related
 tracks** — a real mainstream relatedness graph (verified). But it is the *mainstream* counterpart to
-two surfaces we already have: SoundCloud's underground `RelatedTracksProvider` (built) and Last.fm
-`track.getSimilar` (deferred). The surface decision — a "Related on YouTube" rail vs a unified
+the one surface we already have: SoundCloud's underground `RelatedTracksProvider` (built). The surface decision — a "Related on YouTube" rail vs a unified
 related set across providers — is a `/feature-spec`, deliberately deferred exactly as the SoundCloud
-related-tracks and Last.fm similar-tracks rails were. The adapter method is then trivial (one lib call,
+related-tracks rail was. The adapter method is then trivial (one lib call,
 reuse `mapYTMusicTrack`).
 
 ### 5. Album enrichment (description + tracklist via `browse`) — ⬜ DEFERRED (duplicative)
 Album `browse` (`MPREb_…`) yields a Wikipedia-style `description` (microformat) and the full
-tracklist. Duplicative: descriptions are owned by Discogs/Last.fm/Deezer enrichment; tracklists by
+tracklist. Duplicative: descriptions are owned by Discogs/Deezer enrichment; tracklists by
 the Deezer/iTunes/MB content ports. Low value; defer unless a YT-exclusive album axis appears.
 
 ### 6. Lyrics (plain) — ❌ SKIPPED (Deezer owns it, superior)
@@ -139,8 +139,9 @@ text is strictly inferior — no sync, no credits. Do not wire.
 
 ### 7. Listen popularity + bio (monthly listeners / subscribers / Wikipedia bio) — ⬜ DEFERRED (duplicative)
 Artist `browse` carries `monthlyListenerCount` ("168M monthly audience"), `subscriberCount` ("20.2M
-subscribers"), and a CC-BY-SA Wikipedia `description`. Listen popularity is owned by Last.fm
-(`listeners`/`playcount`) and Deezer (`nb_fan`/`rank`, the ranking primary); bio by Discogs/Last.fm.
+subscribers"), and a CC-BY-SA Wikipedia `description`. Listen popularity is owned by Deezer
+(`nb_fan`/`rank`, the ranking primary); altune shows no artist biography since Last.fm was removed,
+so this `description` is the nearest candidate if a bio surface comes back.
 A YT-monthly-listeners signal *into rank* would be eval-gated and is unlikely to beat Deezer — defer.
 
 ### 8. Search suggestions / autocomplete — ⬜ DEFERRED (search-UX, not metadata)
@@ -167,7 +168,7 @@ needs a `/feature-spec` if a typeahead surface is ever wanted.
 - **ToS.** Reverse-engineered internal API, grey area — accepted for self-hosted use, named
   explicitly. Public-only reach.
 - **Not an album-artwork upgrade, not a popularity/lyrics/relatedness primary.** ~2000px album master
-  < iTunes 3000; lyrics plain-only < Deezer synced; popularity duplicates Last.fm/Deezer. Don't
+  < iTunes 3000; lyrics plain-only < Deezer synced; popularity duplicates Deezer. Don't
   re-task it — its unique value is **artist images** (§5.3).
 - **Caching (artwork follow-on).** Like iTunes, an artwork resolve costs a (rate-limited) search; a
   read-through name-keyed cache (long positive TTL — artist photos are static) is the natural
@@ -196,8 +197,8 @@ Caps 1–3 are built — the **non-duplicative** maximization (artist artwork) i
 deferred-by-design or skipped (§5), not a coverage gap:
 
 1. **Song radio relatedness (cap 4).** A "Related on YouTube" rail — needs a `/feature-spec` surface
-   decision (rail vs unified related set across SoundCloud/Last.fm/YouTube), then a thin
-   `GetWatchPlaylist` mapper. Deferred exactly like the SoundCloud/Last.fm related surfaces.
+   decision (rail vs unified related set across SoundCloud/YouTube), then a thin
+   `GetWatchPlaylist` mapper. Deferred exactly like the SoundCloud related surface.
 2. **Artwork cache (cap 3 follow-on).** Name-keyed read-through cache (long positive TTL) if
    YT-fallback artwork resolves become frequent — mirror `RedisEnrichmentCache`. Not blocking.
 3. **Public-key self-heal.** Add a player-JS key resolver (like SoundCloud's `client_id`) **only if**

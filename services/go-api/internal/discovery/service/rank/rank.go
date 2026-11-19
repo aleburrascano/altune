@@ -249,7 +249,7 @@ func isLowConfidenceTail(r domain.SearchResult) bool {
 	if len(provs) != 1 {
 		return false
 	}
-	if !provs[domain.ProviderSoundCloud] && !provs[domain.ProviderLastFM] {
+	if !provs[domain.ProviderSoundCloud] {
 		return false
 	}
 	hasIdentity := r.ISRC != "" ||

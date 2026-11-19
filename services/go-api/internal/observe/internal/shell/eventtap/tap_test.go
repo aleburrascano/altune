@@ -1,6 +1,7 @@
-package eventtap
+package eventtap_test
 
 import (
+	"altune/go-api/internal/observe"
 	"altune/go-api/internal/shared/events"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
@@ -10,8 +11,10 @@ import (
 	"github.com/google/uuid"
 )
 
+const tapBufferSize = 256
+
 func TestSubscribeAll_CapturesNeverSeenUser(t *testing.T) {
-	tp := New(events.NewInProcessBus())
+	tp := observe.NewEventTap(events.NewInProcessBus())
 	tap, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -35,7 +38,7 @@ func TestSubscribeAll_CapturesNeverSeenUser(t *testing.T) {
 }
 
 func TestPublish_StampsCorrelationIDFromContext(t *testing.T) {
-	tp := New(events.NewInProcessBus())
+	tp := observe.NewEventTap(events.NewInProcessBus())
 	tap, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -56,7 +59,7 @@ func TestPublish_StampsCorrelationIDFromContext(t *testing.T) {
 }
 
 func TestPublish_ContextWithoutCorrelationIDYieldsEmptyCorrID(t *testing.T) {
-	tp := New(events.NewInProcessBus())
+	tp := observe.NewEventTap(events.NewInProcessBus())
 	tap, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -76,7 +79,7 @@ func TestPublish_ContextWithoutCorrelationIDYieldsEmptyCorrID(t *testing.T) {
 }
 
 func TestSubscribeAll_SingleConsumer(t *testing.T) {
-	tp := New(events.NewInProcessBus())
+	tp := observe.NewEventTap(events.NewInProcessBus())
 	_, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("first SubscribeAll: %v", err)
@@ -89,7 +92,7 @@ func TestSubscribeAll_SingleConsumer(t *testing.T) {
 }
 
 func TestSubscribeAll_SlowConsumerDropsNotBlocks(t *testing.T) {
-	tp := New(events.NewInProcessBus())
+	tp := observe.NewEventTap(events.NewInProcessBus())
 	_, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -97,7 +100,7 @@ func TestSubscribeAll_SlowConsumerDropsNotBlocks(t *testing.T) {
 	defer cancel()
 
 	user := shared.NewUserId(uuid.New())
-	for i := 0; i < tapChanSize*3; i++ {
+	for i := 0; i < 3*tapBufferSize; i++ {
 		tp.Publish(context.Background(), user, "spam", nil)
 	}
 	if tp.Dropped() == 0 {
@@ -106,7 +109,7 @@ func TestSubscribeAll_SlowConsumerDropsNotBlocks(t *testing.T) {
 }
 
 func TestTap_ReleasedAfterCancel(t *testing.T) {
-	tp := New(events.NewInProcessBus())
+	tp := observe.NewEventTap(events.NewInProcessBus())
 	_, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -120,7 +123,7 @@ func TestTap_ReleasedAfterCancel(t *testing.T) {
 }
 
 func TestPublish_SubjectOmitsUserAuthoredText(t *testing.T) {
-	tp := New(events.NewInProcessBus())
+	tp := observe.NewEventTap(events.NewInProcessBus())
 	tap, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -137,7 +140,7 @@ func TestPublish_SubjectOmitsUserAuthoredText(t *testing.T) {
 
 func TestTap_EmitReachesSubscriberWithoutTouchingInnerPublisher(t *testing.T) {
 	bus := events.NewInProcessBus()
-	tp := New(bus)
+	tp := observe.NewEventTap(bus)
 	ch, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)

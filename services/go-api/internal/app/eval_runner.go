@@ -12,12 +12,18 @@ type EvalResult = discovery.SmokeResult
 
 type EvalRunner func(ctx context.Context) (EvalResult, error)
 
-func (a *App) buildEvalRunner(ctx context.Context) EvalRunner {
-	if !a.cfg.EvalMeterEnabled {
+func (a *App) keepSearches(disc *discovery.Discovery) {
+	a.searchSvc = disc.Search
+	if a.cfg.EvalMeterEnabled {
+		a.evalSearch = disc.RankingOnlySearch()
+	}
+}
+
+func (a *App) buildEvalRunner() EvalRunner {
+	evalSvc := a.evalSearch
+	if evalSvc == nil {
 		return nil
 	}
-	evalSvc := BuildRankingOnlySearchService(ctx, a.cfg, a.pool, a.redisClient, nil)
-
 	return func(ctx context.Context) (EvalResult, error) {
 		return discovery.RunSmokeEval(ctx, evalSvc, evalUserId())
 	}

@@ -27,8 +27,6 @@ type (
 	EnrichmentResponseDTO            = handler.EnrichmentResponseDTO
 	EventType                        = domain.EventType
 	FeaturedArtist                   = domain.FeaturedArtist
-	LastFmEnrichment                 = domain.LastFmEnrichment
-	LastFmEnrichmentResponseDTO      = handler.LastFmEnrichmentResponseDTO
 	LyricsResponseDTO                = handler.LyricsResponseDTO
 	OwnedTrack                       = ports.OwnedTrack
 	OwnershipReader                  = ports.OwnershipReader
@@ -84,7 +82,6 @@ var (
 	DefaultDiscoveryRateLimits        = handler.DefaultDiscoveryRateLimits
 	EmptyDeezerEnrichment             = domain.EmptyDeezerEnrichment
 	EmptyDeezerLyrics                 = domain.EmptyDeezerLyrics
-	EmptyLastFmEnrichment             = domain.EmptyLastFmEnrichment
 	ErrEnrichDegraded                 = enrich.ErrDegraded
 	ErrProviderRateLimitQueueTimeout  = ports.ErrProviderRateLimitQueueTimeout
 	ErrSoundCloudYtdlpBusy            = soundcloud.ErrYtdlpBusy

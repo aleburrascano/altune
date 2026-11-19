@@ -1,7 +1,7 @@
-package notifier
+package notifier_test
 
 import (
-	"altune/go-api/internal/observe/domain"
+	"altune/go-api/internal/observe"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -13,7 +13,7 @@ import (
 )
 
 func TestNopNotifier(t *testing.T) {
-	if err := (NopNotifier{}).Notify(context.Background(), domain.Alert{}); err != nil {
+	if err := (observe.NopNotifier{}).Notify(context.Background(), observe.Alert{}); err != nil {
 		t.Fatalf("NopNotifier.Notify returned %v, want nil", err)
 	}
 }
@@ -24,7 +24,7 @@ func TestNopNotifier_LogsFiringAlertAtError(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	if err := (NopNotifier{}).Notify(context.Background(), domain.Alert{Title: "dep down", Message: "state down"}); err != nil {
+	if err := (observe.NopNotifier{}).Notify(context.Background(), observe.Alert{Title: "dep down", Message: "state down"}); err != nil {
 		t.Fatalf("NopNotifier.Notify returned %v, want nil", err)
 	}
 
@@ -38,7 +38,11 @@ func TestNopNotifier_LogsFiringAlertAtError(t *testing.T) {
 }
 
 func TestWebhookNotifier_PostsAlertJSON(t *testing.T) {
-	var got webhookPayload
+	var got struct {
+		Title    string `json:"title"`
+		Message  string `json:"message"`
+		Severity int    `json:"severity"`
+	}
 	var method, contentType string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		method, contentType = r.Method, r.Header.Get("Content-Type")
@@ -46,14 +50,14 @@ func TestWebhookNotifier_PostsAlertJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := NewWebhookNotifier(srv.URL).Notify(context.Background(), domain.Alert{Title: "t", Message: "m", Severity: domain.SeveritySignal})
+	err := observe.NewWebhookNotifier(srv.URL).Notify(context.Background(), observe.Alert{Title: "t", Message: "m", Severity: observe.SeveritySignal})
 	if err != nil {
 		t.Fatalf("Notify = %v, want nil", err)
 	}
 	if method != http.MethodPost || contentType != "application/json" {
 		t.Errorf("method %q content-type %q", method, contentType)
 	}
-	if got.Title != "t" || got.Message != "m" || got.Severity != int(domain.SeveritySignal) {
+	if got.Title != "t" || got.Message != "m" || got.Severity != int(observe.SeveritySignal) {
 		t.Errorf("payload = %+v", got)
 	}
 }
@@ -64,7 +68,7 @@ func TestWebhookNotifier_ErrorsOnNon2xx(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if err := NewWebhookNotifier(srv.URL).Notify(context.Background(), domain.Alert{}); err == nil {
+	if err := observe.NewWebhookNotifier(srv.URL).Notify(context.Background(), observe.Alert{}); err == nil {
 		t.Fatal("Notify on 500 = nil, want error")
 	}
 }
@@ -74,7 +78,7 @@ func TestWebhookNotifier_ErrorsWhenUnreachable(t *testing.T) {
 	url := srv.URL
 	srv.Close()
 
-	if err := NewWebhookNotifier(url).Notify(context.Background(), domain.Alert{}); err == nil {
+	if err := observe.NewWebhookNotifier(url).Notify(context.Background(), observe.Alert{}); err == nil {
 		t.Fatal("Notify to a closed server = nil, want error")
 	}
 }
@@ -84,7 +88,7 @@ func TestWebhookNotifier_ErrorNeverContainsWebhookURL(t *testing.T) {
 	hookURL := srv.URL + "/hook/SECRET123"
 	srv.Close()
 
-	err := NewWebhookNotifier(hookURL).Notify(context.Background(), domain.Alert{})
+	err := observe.NewWebhookNotifier(hookURL).Notify(context.Background(), observe.Alert{})
 	if err == nil {
 		t.Fatal("Notify to a closed server = nil, want error")
 	}
@@ -94,7 +98,7 @@ func TestWebhookNotifier_ErrorNeverContainsWebhookURL(t *testing.T) {
 }
 
 func TestWebhookNotifier_BadURLErrorNeverContainsWebhookURL(t *testing.T) {
-	err := NewWebhookNotifier("http://host/hook/SECRET123\x7f").Notify(context.Background(), domain.Alert{})
+	err := observe.NewWebhookNotifier("http://host/hook/SECRET123\x7f").Notify(context.Background(), observe.Alert{})
 	if err == nil {
 		t.Fatal("Notify to a malformed URL = nil, want error")
 	}

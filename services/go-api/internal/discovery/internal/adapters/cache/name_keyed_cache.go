@@ -13,7 +13,6 @@ import (
 
 var (
 	_ ports.DeezerEnrichmentCache = (*RedisNameKeyedCache[domain.DeezerEnrichment])(nil)
-	_ ports.LastFmEnrichmentCache = (*RedisNameKeyedCache[domain.LastFmEnrichment])(nil)
 	_ ports.LyricsCache           = (*RedisNameKeyedCache[domain.DeezerLyrics])(nil)
 )
 
@@ -88,17 +87,6 @@ func NewRedisDeezerEnrichmentCache(client *goredis.Client, opts ...Option) *Redi
 		posTTL:    nameKeyedPositiveTTL,
 		negTTL:    nameKeyedNegativeTTL,
 		empty:     domain.EmptyDeezerEnrichment,
-	}
-}
-
-func NewRedisLastFmEnrichmentCache(client *goredis.Client, opts ...Option) *RedisNameKeyedCache[domain.LastFmEnrichment] {
-	return &RedisNameKeyedCache[domain.LastFmEnrichment]{
-		redisJSON: newRedisJSON(client, opts),
-		posPrefix: "discovery:lfmenrich:v2:",
-		negPrefix: "discovery:lfmenrich:neg:v2:",
-		posTTL:    nameKeyedPositiveTTL,
-		negTTL:    nameKeyedNegativeTTL,
-		empty:     domain.EmptyLastFmEnrichment,
 	}
 }
 

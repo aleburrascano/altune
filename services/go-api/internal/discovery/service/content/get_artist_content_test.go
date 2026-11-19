@@ -362,7 +362,7 @@ func TestIdentityFanOut_ProviderFailuresWarnOnceAtProductionLevel(t *testing.T) 
 	for name, fetch := range identityContentFetchers {
 		t.Run(name, func(t *testing.T) {
 			svc := identityFanOutWithErr(func(pn discovery.ProviderName) error {
-				if pn == discovery.ProviderLastFM || pn == discovery.ProviderSpotify {
+				if pn == discovery.ProviderTheAudioDB || pn == discovery.ProviderSpotify {
 					return leaky
 				}
 				return nil
@@ -383,9 +383,9 @@ func TestIdentityFanOut_ProviderFailuresWarnOnceAtProductionLevel(t *testing.T) 
 			}
 			failed, _ := rec["failed"].(map[string]any)
 			if len(failed) != 2 {
-				t.Fatalf("failed = %v, want exactly lastfm and spotify", rec["failed"])
+				t.Fatalf("failed = %v, want exactly theaudiodb and spotify", rec["failed"])
 			}
-			for _, pn := range []discovery.ProviderName{discovery.ProviderLastFM, discovery.ProviderSpotify} {
+			for _, pn := range []discovery.ProviderName{discovery.ProviderTheAudioDB, discovery.ProviderSpotify} {
 				entry, _ := failed[pn.String()].(map[string]any)
 				if entry["external_id"] != "id-"+pn.String() {
 					t.Errorf("%s external_id = %v, want %q", pn, entry["external_id"], "id-"+pn.String())
@@ -473,8 +473,8 @@ func identityFanOutWithErr(errFor func(discovery.ProviderName) error, opts ...di
 
 var everyContentProvider = []discovery.ProviderName{
 	discovery.ProviderDeezer, discovery.ProviderMusicBrainz, discovery.ProviderSoundCloud,
-	discovery.ProviderLastFM, discovery.ProviderITunes, discovery.ProviderTheAudioDB,
-	discovery.ProviderDiscogs, discovery.ProviderYouTube, discovery.ProviderAmazonMusic,
+	discovery.ProviderITunes, discovery.ProviderTheAudioDB,
+	discovery.ProviderDiscogs, discovery.ProviderYouTube,
 	discovery.ProviderAppleMusic, discovery.ProviderSpotify,
 }
 

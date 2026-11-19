@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
@@ -41,7 +40,7 @@ func knownIDsParam(r *http.Request) map[domain.ProviderName]string {
 		}
 		provider, id, found := strings.Cut(strings.TrimSpace(entry), ":")
 		pn, err := domain.ParseProviderName(provider)
-		if found && err == nil && isValidExternalID(pn, id) {
+		if found && err == nil && isValidExternalID(id) {
 			known[pn] = id
 		}
 	}
@@ -62,21 +61,18 @@ func isCanonicalUUID(s string) bool {
 	return err == nil && strings.EqualFold(parsed.String(), s)
 }
 
-func externalIDParam(w http.ResponseWriter, r *http.Request, provider domain.ProviderName) (string, bool) {
+func externalIDParam(w http.ResponseWriter, r *http.Request) (string, bool) {
 	externalID := chi.URLParam(r, "externalId")
-	if !isValidExternalID(provider, externalID) {
+	if !isValidExternalID(externalID) {
 		httputil.BadRequestCode(w, requestCodeInvalidParam, "externalId is not a valid identifier")
 		return "", false
 	}
 	return externalID, true
 }
 
-func isValidExternalID(provider domain.ProviderName, id string) bool {
+func isValidExternalID(id string) bool {
 	if id == "" || id == "." || id == ".." || len(id) > maxExternalIDBytes {
 		return false
-	}
-	if provider == domain.ProviderLastFM {
-		return isArtistRef(id)
 	}
 	return isOpaqueID(id)
 }
@@ -95,14 +91,6 @@ func isOpaqueIDChar(c rune) bool {
 		return true
 	}
 	return strings.ContainsRune("_:.-", c)
-}
-
-func isArtistRef(id string) bool {
-	if utf8.RuneCountInString(id) > maxTextParamRunes {
-		return false
-	}
-	hasControlChar := strings.IndexFunc(id, unicode.IsControl) >= 0
-	return !hasControlChar && !strings.ContainsAny(id, `/\`)
 }
 
 type limitOverflowPolicy int

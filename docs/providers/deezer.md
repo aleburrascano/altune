@@ -38,7 +38,7 @@ touches (lyrics — still to build), plus the detail surface now surfaced on det
   France", genre Electro). Complements Discogs's deeper catalog data.
 
 It complements, does not duplicate: MB = identity + curated genres + artwork; Discogs = deep credits +
-styles + label/catalog; Last.fm = listen popularity + relatedness + tags; **Deezer = lyrics + audio
+styles + label/catalog; **Deezer = lyrics + audio
 fields (bpm/gain) + the popularity primary + a light credit/liner surface.**
 
 **Not the artwork primary** — but a real fallback: `cover_xl`/`picture_xl` resolve to **1000×1000**
@@ -148,7 +148,7 @@ The single highest-value addition and the one axis no other provider gives us. A
 → `SynchronizedLyrics` → `text` (plain), `synchronizedLines[]` (LRC-style timed lines), `writers`,
 `copyright`. Surfaces as a lyrics view on track detail (and, with `synchronizedLines`, a karaoke/scrub
 sync during playback once that surface exists). **Detail-open only, off the ranking path** — mirrors the
-`musicbrainz-enrichment` / Discogs / Last.fm enricher pattern exactly. **Built:** a `DeezerLyrics`
+`musicbrainz-enrichment` / Discogs enricher pattern exactly. **Built:** a `DeezerLyrics`
 value object; a `LyricsProvider` port (`ResolveTrackID` via public-API search + `Lookup` via the pipe
 GraphQL); the `DeezerLyricsAdapter` with a self-healing anonymous-JWT resolver (cached, singleflight-
 deduped, `401` re-bootstrap — lighter than SoundCloud's `client_id`: one GET, no JS scraping); a
@@ -200,7 +200,7 @@ ranking path.
 ## 7. Current implementation state
 
 Built and on `main` (search + artwork + charts + content), thin projection only — and notably
-**unconditionally wired** (no `cfg.HasDeezer()` gate, unlike MB/Discogs/Last.fm; the public API needs
+**unconditionally wired** (no `cfg.HasDeezer()` gate, unlike MB/Discogs; the public API needs
 no key):
 
 - `services/go-api/internal/discovery/internal/adapters/providers/deezer/deezer.go` — `DeezerAdapter`: `Search` /
@@ -212,7 +212,7 @@ no key):
   `artistProviders`/content (line ~192), and the chart set (line ~453). No config gate.
 - Covered by httptest fixtures in `deezer_test.go`.
 
-Detail-open enrichment (caps 7–8), mirroring the Last.fm enricher. Paths are under
+Detail-open enrichment (caps 7–8), mirroring the Discogs enricher. Paths are under
 `services/go-api/internal/discovery/` unless noted:
 
 - `domain/enrichment.go`: the `DeezerEnrichment` value object (+ `Empty`/`IsZero`).
