@@ -1,7 +1,7 @@
-package ytdlp
+package ytdlp_test
 
 import (
-	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition"
 	"context"
 	"errors"
 	"os"
@@ -11,41 +11,37 @@ import (
 	"time"
 )
 
-func recordingCanaryBinary(t *testing.T, argvFile, cookiePathFile, cookieContentFile, duration string) string {
+func cookieJarCapturingYtDlp(t *testing.T, cookiePathFile, cookieContentFile, duration string) string {
 	t.Helper()
-	dir := t.TempDir()
-	binary := filepath.Join(dir, "recording-yt-dlp")
-	script := "#!/bin/sh\n" +
-		"printf '%s\\n' \"$@\" > " + argvFile + "\n" +
-		"prev=\"\"\n" +
-		"for arg in \"$@\"; do\n" +
-		"  if [ \"$prev\" = \"--cookies\" ]; then\n" +
-		"    printf '%s' \"$arg\" > " + cookiePathFile + "\n" +
-		"    cp \"$arg\" " + cookieContentFile + "\n" +
-		"  fi\n" +
-		"  prev=\"$arg\"\n" +
-		"done\n" +
-		"echo '" + duration + "'\n"
-	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
+	return installYtDlp(t, "prev=\"\"\n"+
+		"for arg in \"$@\"; do\n"+
+		"  if [ \"$prev\" = \"--cookies\" ]; then\n"+
+		"    printf '%s' \"$arg\" > '"+cookiePathFile+"'\n"+
+		"    cp \"$arg\" '"+cookieContentFile+"'\n"+
+		"  fi\n"+
+		"  prev=\"$arg\"\n"+
+		"done\n"+
+		"echo '"+duration+"'")
+}
+
+func cookieJar(t *testing.T, name, contents string) string {
+	t.Helper()
+	jar := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(jar, []byte(contents), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return binary
+	return jar
 }
 
 func TestCanary_UsesATempCopyOfTheCookieJarAndCleansItUp(t *testing.T) {
 	dir := t.TempDir()
-	realCookieFile := filepath.Join(dir, "cookies.txt")
-	if err := os.WriteFile(realCookieFile, []byte("# real cookie jar contents"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	argvFile := filepath.Join(dir, "argv")
+	realCookieFile := cookieJar(t, "cookies.txt", "# real cookie jar contents")
 	cookiePathFile := filepath.Join(dir, "cookie-path")
 	cookieContentFile := filepath.Join(dir, "cookie-content")
+	cookieJarCapturingYtDlp(t, cookiePathFile, cookieContentFile, "212")
+	s := acquisition.NewYtDlpAudioSearcher("", realCookieFile, "")
 
-	s := NewYtDlpAudioSearcher("", realCookieFile, "")
-	s.binary = recordingCanaryBinary(t, argvFile, cookiePathFile, cookieContentFile, "212")
-
-	if err := s.Canary(context.Background(), YouTubeCanary); err != nil {
+	if err := s.Canary(context.Background(), acquisition.YouTubeCanary); err != nil {
 		t.Fatalf("Canary() = %v, want nil", err)
 	}
 
@@ -69,25 +65,15 @@ func TestCanary_UsesATempCopyOfTheCookieJarAndCleansItUp(t *testing.T) {
 
 func TestCanary_CarriesTheSameAuthFlagsAsSearchAndDownload(t *testing.T) {
 	dir := t.TempDir()
-	cookieFile := filepath.Join(dir, "cookies.txt")
-	if err := os.WriteFile(cookieFile, []byte("jar"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	argvFile := filepath.Join(dir, "argv")
+	calls := cookieJarCapturingYtDlp(t, filepath.Join(dir, "cookie-path"), filepath.Join(dir, "cookie-content"), "212")
+	s := acquisition.NewYtDlpAudioSearcher("", cookieJar(t, "cookies.txt", "jar"), "deno")
 
-	s := NewYtDlpAudioSearcher("", cookieFile, "deno")
-	s.binary = recordingCanaryBinary(t, argvFile, filepath.Join(dir, "cookie-path"), filepath.Join(dir, "cookie-content"), "212")
-
-	if err := s.Canary(context.Background(), YouTubeCanary); err != nil {
+	if err := s.Canary(context.Background(), acquisition.YouTubeCanary); err != nil {
 		t.Fatalf("Canary() = %v, want nil", err)
 	}
 
-	raw, err := os.ReadFile(argvFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	argv := string(raw)
-	for _, want := range []string{"--simulate", "--print", "--js-runtimes", "deno", "--remote-components", "ejs:github", "--cookies", ytDlpURL(YouTubeCanary.URL)} {
+	argv := strings.Join(onlyCall(t, calls), "\n")
+	for _, want := range []string{"--simulate", "--print", "--js-runtimes", "deno", "--remote-components", "ejs:github", "--cookies", "https://music.youtube.com/watch?v=jNQXAC9IVRw"} {
 		if !strings.Contains(argv, want) {
 			t.Errorf("argv = %q, want it to contain %q", argv, want)
 		}
@@ -95,19 +81,17 @@ func TestCanary_CarriesTheSameAuthFlagsAsSearchAndDownload(t *testing.T) {
 }
 
 func TestCanary_OkWhenYtDlpReportsADuration(t *testing.T) {
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.binary = withYtDlpScript(t, "#!/bin/sh\necho '212'\n")
+	installYtDlp(t, "echo '212'")
 
-	if err := s.Canary(context.Background(), YouTubeCanary); err != nil {
+	if err := acquisition.NewYtDlpAudioSearcher("", "", "").Canary(context.Background(), acquisition.YouTubeCanary); err != nil {
 		t.Fatalf("Canary() = %v, want nil", err)
 	}
 }
 
 func TestCanary_SoundCloudExactPreviewDurationIsDark(t *testing.T) {
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.binary = withYtDlpScript(t, "#!/bin/sh\necho '30'\n")
+	installYtDlp(t, "echo '30'")
 
-	err := s.Canary(context.Background(), SoundCloudCanary)
+	err := acquisition.NewYtDlpAudioSearcher("", "", "").Canary(context.Background(), acquisition.SoundCloudCanary)
 	if err == nil {
 		t.Fatal("Canary() = nil, want an error for a Go+ preview duration")
 	}
@@ -117,27 +101,20 @@ func TestCanary_SoundCloudExactPreviewDurationIsDark(t *testing.T) {
 }
 
 func TestCanary_ThirtySecondsFromYouTubeIsNotAPreview(t *testing.T) {
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.binary = withYtDlpScript(t, "#!/bin/sh\necho '30'\n")
+	installYtDlp(t, "echo '30'")
 
-	if err := s.Canary(context.Background(), YouTubeCanary); err != nil {
+	if err := acquisition.NewYtDlpAudioSearcher("", "", "").Canary(context.Background(), acquisition.YouTubeCanary); err != nil {
 		t.Fatalf("Canary() = %v, want nil: a 30s YouTube video is not a SoundCloud preview", err)
 	}
 }
 
 func TestCanary_ErrorIsTheTrimmedRedactedFirstStderrLine(t *testing.T) {
-	dir := t.TempDir()
-	cookieFile := filepath.Join(dir, "cookies.txt")
-	if err := os.WriteFile(cookieFile, []byte("jar"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	s := NewYtDlpAudioSearcher("", cookieFile, "")
-	s.binary = withYtDlpScript(t, "#!/bin/sh\n"+
-		"echo \"ERROR: Sign in to confirm you're not a bot\" >&2\n"+
+	installYtDlp(t, "echo \"ERROR: Sign in to confirm you're not a bot\" >&2\n"+
 		"echo 'second line, should be dropped' >&2\n"+
-		"exit 1\n")
+		"exit 1")
+	s := acquisition.NewYtDlpAudioSearcher("", cookieJar(t, "cookies.txt", "jar"), "")
 
-	err := s.Canary(context.Background(), YouTubeCanary)
+	err := s.Canary(context.Background(), acquisition.YouTubeCanary)
 	if err == nil {
 		t.Fatal("Canary() = nil, want an error when yt-dlp exits non-zero")
 	}
@@ -150,29 +127,24 @@ func TestCanary_ErrorIsTheTrimmedRedactedFirstStderrLine(t *testing.T) {
 }
 
 func TestCanary_ErrorRedactsTheCookieJarPath(t *testing.T) {
-	dir := t.TempDir()
-	cookieFile := filepath.Join(dir, "very-secret-cookies.txt")
-	if err := os.WriteFile(cookieFile, []byte("jar"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	s := NewYtDlpAudioSearcher("", cookieFile, "")
-	s.binary = withYtDlpScript(t, "#!/bin/sh\n"+
-		"echo \"ERROR: unable to open --cookies $2\" >&2\nexit 1\n")
+	installYtDlp(t, "echo \"ERROR: unable to open --cookies $2\" >&2\nexit 1")
+	jar := cookieJar(t, "very-secret-cookies.txt", "jar")
+	s := acquisition.NewYtDlpAudioSearcher("", jar, "")
 
-	err := s.Canary(context.Background(), YouTubeCanary)
+	err := s.Canary(context.Background(), acquisition.YouTubeCanary)
 	if err == nil {
 		t.Fatal("Canary() = nil, want an error when yt-dlp exits non-zero")
 	}
-	if strings.Contains(err.Error(), dir) {
+	if strings.Contains(err.Error(), os.TempDir()) {
 		t.Errorf("Canary() = %q, leaked the cookie jar's temp path", err.Error())
 	}
 }
 
 func TestCanary_UnreadableCookieJarErrorRedactsItsPath(t *testing.T) {
 	jar := filepath.Join("/srv", "private-jar", "cookies.txt")
-	s := NewYtDlpAudioSearcher("", jar, "")
+	s := acquisition.NewYtDlpAudioSearcher("", jar, "")
 
-	err := s.Canary(context.Background(), YouTubeCanary)
+	err := s.Canary(context.Background(), acquisition.YouTubeCanary)
 	if err == nil {
 		t.Fatal("Canary() = nil, want an error when the cookie jar can't be read")
 	}
@@ -181,61 +153,50 @@ func TestCanary_UnreadableCookieJarErrorRedactsItsPath(t *testing.T) {
 	}
 }
 
-func TestNewYtDlpAudioSearcher_DefaultsCanaryTimeoutToSixtySeconds(t *testing.T) {
-	s := NewYtDlpAudioSearcher("", "", "")
-	if s.canaryTimeout != 60*time.Second {
-		t.Fatalf("canaryTimeout = %v, want 60s", s.canaryTimeout)
-	}
-}
-
 func TestCanary_TimesOutRatherThanHangingForever(t *testing.T) {
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.binary = filepath.Join(t.TempDir(), "yt-dlp")
-	if err := os.WriteFile(s.binary, []byte("#!/bin/sh\nexec sleep 30\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	s.canaryTimeout = 100 * time.Millisecond
+	installYtDlp(t, "exec sleep 30")
+	s := acquisition.NewYtDlpAudioSearcher("", "", "").WithCanaryTimeout(100 * time.Millisecond)
 
-	err := s.Canary(context.Background(), YouTubeCanary)
+	err := s.Canary(context.Background(), acquisition.YouTubeCanary)
 
-	if err == nil || !strings.Contains(err.Error(), "timed out") {
-		t.Fatalf("Canary() = %v, want a timed-out error for a probe that ran past its timeout", err)
+	if err == nil || err.Error() != "timed out after 100ms" {
+		t.Fatalf("Canary() = %v, want a timed-out error naming the timeout for a probe that ran past it", err)
 	}
 }
 
-func withYtDlpScript(t *testing.T, script string) string {
+func formatAsked(t *testing.T, calls string) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "yt-dlp")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
+	return flagValue(t, onlyCall(t, calls), "-f")
+}
+
+func downloadFormat(t *testing.T) string {
+	t.Helper()
+	outDir := t.TempDir()
+	calls := installYtDlp(t, stubDownload(outDir))
+	if _, err := acquisition.NewYtDlpAudioSearcher("", "", "").Download(context.Background(), youTubeWatchURL, outDir); err != nil {
+		t.Fatalf("Download() = %v, want nil", err)
 	}
-	return path
+	return formatAsked(t, calls)
+}
+
+func canaryFormat(t *testing.T, source acquisition.CanarySource) string {
+	t.Helper()
+	calls := installYtDlp(t, "echo '212'")
+	if err := acquisition.NewYtDlpAudioSearcher("", "", "").Canary(context.Background(), source); err != nil {
+		t.Fatalf("Canary(%s) = %v, want nil", source.Name, err)
+	}
+	return formatAsked(t, calls)
 }
 
 func TestCanary_SelectsFormatsTheSameWayDownloadDoes(t *testing.T) {
-	outDir := t.TempDir()
-	s := NewYtDlpAudioSearcher("", "", "")
-	var downloadArgs string
-	s.binary, downloadArgs = formatArgRecorder(t, outDir, "")
-	if _, err := s.Download(context.Background(), "https://youtube.com/watch?v=1", outDir); err != nil {
-		t.Fatalf("Download() = %v, want nil", err)
-	}
-
-	var canaryArgs string
-	s.binary, canaryArgs = formatArgRecorder(t, "", "212")
-	if err := s.Canary(context.Background(), YouTubeCanary); err != nil {
-		t.Fatalf("Canary() = %v, want nil", err)
-	}
-
-	if got, want := formatFlag(t, canaryArgs), formatFlag(t, downloadArgs); got != want {
+	if got, want := canaryFormat(t, acquisition.YouTubeCanary), downloadFormat(t); got != want {
 		t.Errorf("canary -f %q, want the download's selector %q so a format outage shows up as dark", got, want)
 	}
 }
 
-func videoOnlyYtDlp(t *testing.T) string {
+func videoOnlyYtDlp(t *testing.T) {
 	t.Helper()
-	return withYtDlpScript(t, "#!/bin/sh\n"+
-		"prev=\"\"\n"+
+	installYtDlp(t, "prev=\"\"\n"+
 		"for arg in \"$@\"; do\n"+
 		"  if [ \"$prev\" = \"-f\" ]; then\n"+
 		"    case \"$arg\" in\n"+
@@ -245,45 +206,51 @@ func videoOnlyYtDlp(t *testing.T) string {
 		"  fi\n"+
 		"  prev=\"$arg\"\n"+
 		"done\n"+
-		"echo '19'\n")
+		"echo '19'")
 }
 
 func TestCanary_YTMusicIsDarkWhenOnlyVideoFormatsAreOffered(t *testing.T) {
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.binary = videoOnlyYtDlp(t)
+	videoOnlyYtDlp(t)
 
-	if err := s.Canary(context.Background(), YTMusicCanary); err == nil {
+	if err := acquisition.NewYtDlpAudioSearcher("", "", "").Canary(context.Background(), acquisition.YTMusicCanary); err == nil {
 		t.Fatal("Canary(ytmusic) = nil, want dark when no audio-only format is offered")
 	}
 }
 
 func TestCanary_YouTubeStaysOkOnVideoFormatsBecauseDownloadsStillWork(t *testing.T) {
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.binary = videoOnlyYtDlp(t)
+	videoOnlyYtDlp(t)
 
-	if err := s.Canary(context.Background(), YouTubeCanary); err != nil {
+	if err := acquisition.NewYtDlpAudioSearcher("", "", "").Canary(context.Background(), acquisition.YouTubeCanary); err != nil {
 		t.Fatalf("Canary(youtube) = %v, want nil", err)
 	}
 }
 
 func TestCopyToTempFile_LivesInAReapableDirectoryRemovedByCleanup(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
 	source := filepath.Join(t.TempDir(), "cookies.txt")
 	if err := os.WriteFile(source, []byte("jar"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	path, cleanup, err := CopyToTempFile(source, "copy-*.txt")
+	path, cleanup, err := acquisition.CopyToTempFile(source, "copy-*.txt")
 	if err != nil {
 		t.Fatalf("CopyToTempFile() = %v, want nil", err)
 	}
-
 	dir := filepath.Dir(path)
-	if !strings.HasPrefix(filepath.Base(dir), ports.TempDirPrefix) {
-		t.Errorf("copy dir = %q, want a name starting with %q", filepath.Base(dir), ports.TempDirPrefix)
-	}
 	cleanup()
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Errorf("copy dir %q still exists after cleanup, Stat err = %v", dir, err)
+	}
+
+	abandoned, _, err := acquisition.CopyToTempFile(source, "copy-*.txt")
+	if err != nil {
+		t.Fatalf("CopyToTempFile() = %v, want nil", err)
+	}
+	if swept := acquisition.NewTempWorkspace().SweepAbandoned(time.Now().Add(time.Hour)); swept != 1 {
+		t.Errorf("swept %d dirs, want the abandoned copy's dir reaped", swept)
+	}
+	if _, err := os.Stat(filepath.Dir(abandoned)); !os.IsNotExist(err) {
+		t.Errorf("abandoned copy dir %q survived the sweep, Stat err = %v", filepath.Dir(abandoned), err)
 	}
 }
 
@@ -294,14 +261,15 @@ func TestCanary_SoundCloudPreviewUsesTheInspectionSlack(t *testing.T) {
 	}{
 		{"30.04", true},
 		{"29.98", true},
+		{"30.5", true},
+		{"30.6", false},
 		{"31", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.reported, func(t *testing.T) {
-			s := NewYtDlpAudioSearcher("", "", "")
-			s.binary = withYtDlpScript(t, "#!/bin/sh\necho '"+tc.reported+"'\n")
+			installYtDlp(t, "echo '"+tc.reported+"'")
 
-			err := s.Canary(context.Background(), SoundCloudCanary)
+			err := acquisition.NewYtDlpAudioSearcher("", "", "").Canary(context.Background(), acquisition.SoundCloudCanary)
 
 			if tc.wantDark && (err == nil || err.Error() != "preview only") {
 				t.Fatalf("Canary() = %v, want preview only for %s s", err, tc.reported)
@@ -314,12 +282,11 @@ func TestCanary_SoundCloudPreviewUsesTheInspectionSlack(t *testing.T) {
 }
 
 func TestCanary_ParentCancelIsNotATimeout(t *testing.T) {
-	s := NewYtDlpAudioSearcher("", "", "")
-	s.binary = withYtDlpScript(t, "#!/bin/sh\nexec sleep 30\n")
+	installYtDlp(t, "exec sleep 30")
 	ctx, cancel := context.WithCancel(context.Background())
 	time.AfterFunc(100*time.Millisecond, cancel)
 
-	err := s.Canary(ctx, SoundCloudCanary)
+	err := acquisition.NewYtDlpAudioSearcher("", "", "").Canary(ctx, acquisition.SoundCloudCanary)
 
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Canary() = %v, want context.Canceled", err)
@@ -330,17 +297,12 @@ func TestCanary_ParentCancelIsNotATimeout(t *testing.T) {
 }
 
 func TestCanary_YTMusicAsksForTheAudioOnlyPrefixOfTheDownloadSelector(t *testing.T) {
-	s := NewYtDlpAudioSearcher("", "", "")
-	var canaryArgs string
-	s.binary, canaryArgs = formatArgRecorder(t, "", "212")
-
-	if err := s.Canary(context.Background(), YTMusicCanary); err != nil {
-		t.Fatalf("Canary(ytmusic) = %v, want nil", err)
+	audioOnly, _, found := strings.Cut(downloadFormat(t), "/best[")
+	if !found {
+		t.Fatalf("download selector %q has no combined-format fallback to cut", downloadFormat(t))
 	}
 
-	got := formatFlag(t, canaryArgs)
-	audioOnly, _, _ := strings.Cut(audioFormatSelector, "/best[")
-	if got != audioOnly {
+	if got := canaryFormat(t, acquisition.YTMusicCanary); got != audioOnly {
 		t.Errorf("canary -f %q, want the download selector audio-only prefix %q", got, audioOnly)
 	}
 }

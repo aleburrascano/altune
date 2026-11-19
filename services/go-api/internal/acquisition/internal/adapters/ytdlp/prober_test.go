@@ -1,10 +1,9 @@
-package ytdlp
+package ytdlp_test
 
 import (
-	"bytes"
+	"altune/go-api/internal/acquisition"
 	"context"
 	"errors"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,32 +12,33 @@ import (
 	"unicode/utf8"
 )
 
-func fakeFfmpegProber(t *testing.T, script string, decodeTimeout time.Duration) *FfprobeProber {
+const decodedFile = "/tmp/altune-acquire-test/audio.opus"
+
+func fakeFfmpegDir(t *testing.T, script string) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "ffmpeg")
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "ffmpeg"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	p := NewFfprobeProber("")
-	p.ffmpeg = path
-	p.decodeTimeout = decodeTimeout
-	return p
+	return dir
 }
 
-func captureDefaultLogs(t *testing.T) *bytes.Buffer {
+func refusingFfmpegDir(t *testing.T, stderr string) string {
 	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
+	return fakeFfmpegDir(t, "#!/bin/sh\nprintf '%s\\n' '"+stderr+"' >&2\nexit 1\n")
+}
+
+func missingFfmpeg(t *testing.T) string {
+	t.Helper()
+	withoutAnyBinaries(t)
+	return t.TempDir()
 }
 
 func TestFfprobeProber_ValidateDecodable_AcceptsADecodeThatOutranItsDeadline(t *testing.T) {
-	logs := captureDefaultLogs(t)
-	p := fakeFfmpegProber(t, "#!/bin/sh\nsleep 30\n", 100*time.Millisecond)
+	logs := captureLogs(t)
+	p := acquisition.NewFfprobeProber(fakeFfmpegDir(t, "#!/bin/sh\nsleep 30\n"), acquisition.WithDecodeTimeout(100*time.Millisecond))
 
-	err := p.ValidateDecodable(context.Background(), "/tmp/altune-acquire-test/audio.opus")
+	err := p.ValidateDecodable(context.Background(), decodedFile)
 	if err != nil {
 		t.Fatalf("ValidateDecodable() = %v, want nil for a decode that timed out", err)
 	}
@@ -48,11 +48,10 @@ func TestFfprobeProber_ValidateDecodable_AcceptsADecodeThatOutranItsDeadline(t *
 }
 
 func TestFfprobeProber_ValidateDecodable_WarnsWhenTheDecoderCannotStart(t *testing.T) {
-	logs := captureDefaultLogs(t)
-	p := NewFfprobeProber("")
-	p.ffmpeg = filepath.Join(t.TempDir(), "ffmpeg-absent")
+	logs := captureLogs(t)
+	p := acquisition.NewFfprobeProber(missingFfmpeg(t))
 
-	err := p.ValidateDecodable(context.Background(), "/tmp/altune-acquire-test/audio.opus")
+	err := p.ValidateDecodable(context.Background(), decodedFile)
 	if err != nil {
 		t.Fatalf("ValidateDecodable() = %v, want nil when ffmpeg is missing", err)
 	}
@@ -62,17 +61,27 @@ func TestFfprobeProber_ValidateDecodable_WarnsWhenTheDecoderCannotStart(t *testi
 	}
 }
 
-func TestFfprobeProber_ValidateDecodable_MasksTheHostBinPathWhenTheDecoderCannotStart(t *testing.T) {
-	logs := captureDefaultLogs(t)
-	p := NewFfprobeProber("")
-	p.ffmpeg = "/opt/altune/vendor-bin/ffmpeg"
+func unrunnableFfmpegOutsideTheTempDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "ffmpeg"), []byte("not a program"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMPDIR", t.TempDir())
+	return dir
+}
 
-	err := p.ValidateDecodable(context.Background(), "/tmp/altune-acquire-test/audio.opus")
+func TestFfprobeProber_ValidateDecodable_MasksTheHostBinPathWhenTheDecoderCannotStart(t *testing.T) {
+	logs := captureLogs(t)
+	binDir := unrunnableFfmpegOutsideTheTempDir(t)
+	p := acquisition.NewFfprobeProber(binDir)
+
+	err := p.ValidateDecodable(context.Background(), decodedFile)
 	if err != nil {
-		t.Fatalf("ValidateDecodable() = %v, want nil when ffmpeg is missing", err)
+		t.Fatalf("ValidateDecodable() = %v, want nil when ffmpeg cannot start", err)
 	}
 	logged := logs.String()
-	if strings.Contains(logged, "/opt/altune/vendor-bin/ffmpeg") {
+	if strings.Contains(logged, binDir) {
 		t.Errorf("decoder-unavailable log leaked the host bin path, got logs:\n%s", logged)
 	}
 	if !strings.Contains(logged, "acquisition.decoder_unavailable_accepting") {
@@ -81,9 +90,9 @@ func TestFfprobeProber_ValidateDecodable_MasksTheHostBinPathWhenTheDecoderCannot
 }
 
 func TestFfprobeProber_ValidateDecodable_ReportsWhatTheDecoderRefused(t *testing.T) {
-	p := fakeFfmpegProber(t, "#!/bin/sh\necho 'Invalid data found when processing input' >&2\nexit 1\n", time.Minute)
+	p := acquisition.NewFfprobeProber(refusingFfmpegDir(t, "Invalid data found when processing input"))
 
-	err := p.ValidateDecodable(context.Background(), "/tmp/altune-acquire-test/audio.opus")
+	err := p.ValidateDecodable(context.Background(), decodedFile)
 
 	if err == nil {
 		t.Fatal("ValidateDecodable() = nil, want an error when the decoder rejects the file")
@@ -94,14 +103,11 @@ func TestFfprobeProber_ValidateDecodable_ReportsWhatTheDecoderRefused(t *testing
 }
 
 func TestFfprobeProber_ValidateDecodable_PropagatesACancelledCaller(t *testing.T) {
-	p := fakeFfmpegProber(t, "#!/bin/sh\nsleep 30\n", time.Minute)
+	p := acquisition.NewFfprobeProber(fakeFfmpegDir(t, "#!/bin/sh\nsleep 30\n"))
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		cancel()
-	}()
+	time.AfterFunc(50*time.Millisecond, cancel)
 
-	err := p.ValidateDecodable(ctx, "/tmp/altune-acquire-test/audio.opus")
+	err := p.ValidateDecodable(ctx, decodedFile)
 
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("ValidateDecodable() = %v, want the caller's cancellation", err)
@@ -114,10 +120,10 @@ func (r *gateRecorder) RecordVerifySkip(gate string) { r.gates = append(r.gates,
 
 func TestFfprobeProber_ValidateDecodable_RecordsADecodeTimeoutSkip(t *testing.T) {
 	rec := &gateRecorder{}
-	p := fakeFfmpegProber(t, "#!/bin/sh\nsleep 30\n", 100*time.Millisecond)
-	WithSkipRecorder(rec)(p)
+	p := acquisition.NewFfprobeProber(fakeFfmpegDir(t, "#!/bin/sh\nsleep 30\n"),
+		acquisition.WithDecodeTimeout(100*time.Millisecond), acquisition.WithSkipRecorder(rec))
 
-	if err := p.ValidateDecodable(context.Background(), "/tmp/altune-acquire-test/audio.opus"); err != nil {
+	if err := p.ValidateDecodable(context.Background(), decodedFile); err != nil {
 		t.Fatalf("ValidateDecodable() = %v, want nil", err)
 	}
 	if len(rec.gates) != 1 || rec.gates[0] != "decode_timeout" {
@@ -127,10 +133,9 @@ func TestFfprobeProber_ValidateDecodable_RecordsADecodeTimeoutSkip(t *testing.T)
 
 func TestFfprobeProber_ValidateDecodable_RecordsADecoderUnavailableSkip(t *testing.T) {
 	rec := &gateRecorder{}
-	p := NewFfprobeProber("", WithSkipRecorder(rec))
-	p.ffmpeg = filepath.Join(t.TempDir(), "ffmpeg-absent")
+	p := acquisition.NewFfprobeProber(missingFfmpeg(t), acquisition.WithSkipRecorder(rec))
 
-	if err := p.ValidateDecodable(context.Background(), "/tmp/altune-acquire-test/audio.opus"); err != nil {
+	if err := p.ValidateDecodable(context.Background(), decodedFile); err != nil {
 		t.Fatalf("ValidateDecodable() = %v, want nil", err)
 	}
 	if len(rec.gates) != 1 || rec.gates[0] != "decoder_unavailable" {
@@ -138,9 +143,21 @@ func TestFfprobeProber_ValidateDecodable_RecordsADecoderUnavailableSkip(t *testi
 	}
 }
 
-func TestFirstLineKeepsValidUTF8WhenRuneCrossesCap(t *testing.T) {
-	in := strings.Repeat("a", 199) + "é" + "tail"
-	got := firstLine(in)
+func decoderDiagnostic(t *testing.T, stderr string) string {
+	t.Helper()
+	err := acquisition.NewFfprobeProber(refusingFfmpegDir(t, stderr)).ValidateDecodable(context.Background(), decodedFile)
+	if err == nil {
+		t.Fatal("ValidateDecodable() = nil, want the decoder's refusal")
+	}
+	diagnostic, ok := strings.CutPrefix(err.Error(), "audio stream failed to decode: ")
+	if !ok {
+		t.Fatalf("ValidateDecodable() = %v, want the decode refusal", err)
+	}
+	return diagnostic
+}
+
+func TestFfprobeProber_ValidateDecodable_CapsTheDiagnosticOnARuneBoundary(t *testing.T) {
+	got := decoderDiagnostic(t, strings.Repeat("a", 199)+"é"+"tail")
 	if !utf8.ValidString(got) {
 		t.Fatalf("invalid UTF-8: %q", got)
 	}
@@ -149,12 +166,12 @@ func TestFirstLineKeepsValidUTF8WhenRuneCrossesCap(t *testing.T) {
 	}
 }
 
-func TestFirstLineLeavesShortAndASCIIUnchanged(t *testing.T) {
-	in := strings.Repeat("b", 250)
-	if got := firstLine(in); got != in[:200] {
+func TestFfprobeProber_ValidateDecodable_LeavesAShortDiagnosticAndCapsLongASCII(t *testing.T) {
+	long := strings.Repeat("b", 250)
+	if got := decoderDiagnostic(t, long); got != long[:200] {
 		t.Fatalf("ascii cap changed: len %d", len(got))
 	}
-	if got := firstLine("héllo"); got != "héllo" {
+	if got := decoderDiagnostic(t, "héllo\nsecond line"); got != "héllo" {
 		t.Fatalf("short changed: %q", got)
 	}
 }

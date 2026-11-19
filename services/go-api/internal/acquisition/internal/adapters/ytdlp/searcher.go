@@ -70,6 +70,16 @@ func (s *YtDlpAudioSearcher) WithPOTokenURL(url string) *YtDlpAudioSearcher {
 	return s
 }
 
+func (s *YtDlpAudioSearcher) WithDownloadTimeout(timeout time.Duration) *YtDlpAudioSearcher {
+	s.downloadTimeout = timeout
+	return s
+}
+
+func (s *YtDlpAudioSearcher) WithCanaryTimeout(timeout time.Duration) *YtDlpAudioSearcher {
+	s.canaryTimeout = timeout
+	return s
+}
+
 func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string) *YtDlpAudioSearcher {
 	s := &YtDlpAudioSearcher{
 		ffmpegLocation:   ffmpegLocation,
