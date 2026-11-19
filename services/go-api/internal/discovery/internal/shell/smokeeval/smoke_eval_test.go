@@ -204,8 +204,8 @@ func TestSmokeEval_EveryQueryErroringIsAFailedRunNotAZeroScore(t *testing.T) {
 
 	res, err := discovery.RunSmokeEval(context.Background(), svc, shared.SystemUserId())
 
-	if err == nil {
-		t.Fatal("every query erroring returned no error; the meter would report a zero score instead of an error state")
+	if err == nil || !strings.Contains(err.Error(), "every smoke-eval query errored") {
+		t.Fatalf("err = %v, want the every-query-errored failure so the meter reports an error state", err)
 	}
 	if res.Regressed {
 		t.Error("a run that scored no query must not claim a ranking regression")
