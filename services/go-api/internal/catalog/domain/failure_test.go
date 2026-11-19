@@ -1,20 +1,24 @@
-package domain
+package domain_test
 
-import "testing"
+import (
+	"altune/go-api/internal/catalog"
+	shared "altune/go-api/internal/shared/kernel"
+	"testing"
+)
 
 func TestFailureAliasesForwardToShared(t *testing.T) {
-	reason := JoinFailureReason(FailureNoConfidentMatch, "none")
-	if reason != "no_confident_match"+FailureDetailSeparator+"none" {
+	reason := catalog.JoinFailureReason(catalog.FailureNoConfidentMatch, "none")
+	if reason != "no_confident_match"+shared.FailureDetailSeparator+"none" {
 		t.Errorf("JoinFailureReason = %q", reason)
 	}
-	code, detail := SplitFailureReason(reason)
-	if code != FailureNoConfidentMatch || detail != "none" {
+	code, detail := catalog.SplitFailureReason(reason)
+	if code != catalog.FailureNoConfidentMatch || detail != "none" {
 		t.Errorf("SplitFailureReason = %q, %q", code, detail)
 	}
 	if !code.Known() {
 		t.Error("Known = false")
 	}
-	if got := FailureMessage(&reason); got != "Couldn't find this track" {
+	if got := catalog.FailureMessage(&reason); got != "Couldn't find this track" {
 		t.Errorf("FailureMessage = %q", got)
 	}
 }

@@ -16,19 +16,35 @@ type (
 )
 
 var (
-	ErrPlaylistFull           = domain.ErrPlaylistFull
-	ErrTrackAlreadyInPlaylist = domain.ErrTrackAlreadyInPlaylist
+	ErrIllegalAcquisitionTransition = domain.ErrIllegalAcquisitionTransition
+	ErrPlaylistFull                 = domain.ErrPlaylistFull
+	ErrTrackAlreadyInPlaylist       = domain.ErrTrackAlreadyInPlaylist
 )
 
 var (
 	CleanSearchKeys           = domain.CleanSearchKeys
+	FailureMessage            = domain.FailureMessage
+	JoinFailureReason         = domain.JoinFailureReason
 	KnownCatalogProviders     = domain.KnownCatalogProviders
+	NewFeaturedArtist         = domain.NewFeaturedArtist
+	NewPlaylist               = domain.NewPlaylist
 	NewTrack                  = domain.NewTrack
 	NewTrackId                = domain.NewTrackId
+	NewValidationError        = domain.NewValidationError
 	NormalizeCatalogMBID      = domain.NormalizeCatalogMBID
+	NormalizeCatalogSources   = domain.NormalizeCatalogSources
+	NormalizePage             = domain.NormalizePage
+	ParseAcquisitionStatus    = domain.ParseAcquisitionStatus
+	ParseLibrarySort          = domain.ParseLibrarySort
+	ParsePlaylistId           = domain.ParsePlaylistId
 	ParseTrackId              = domain.ParseTrackId
+	SplitFailureReason        = domain.SplitFailureReason
+	TotalDurationSeconds      = domain.TotalDurationSeconds
 	TrackDedupKey             = domain.TrackDedupKey
+	ValidateFeaturedArtist    = domain.ValidateFeaturedArtist
 	ValidateOptionalTrackText = domain.ValidateOptionalTrackText
+	ValidateSourceURL         = domain.ValidateSourceURL
+	WithSoundCloudURL         = domain.WithSoundCloudURL
 )
 
 var (
@@ -47,13 +63,23 @@ const (
 type (
 	AlbumGroup     = domain.AlbumGroup
 	CatalogSource  = domain.CatalogSource
+	CodedError     = domain.CodedError
+	FailureCode    = domain.FailureCode
 	FeaturedArtist = domain.FeaturedArtist
 	LibraryQuery   = domain.LibraryQuery
+	LibrarySort    = domain.LibrarySort
 )
 
 const (
-	MaxCatalogSources      = domain.MaxCatalogSources
-	MaxLibraryPageSize     = domain.MaxLibraryPageSize
-	MaxLibrarySearchLength = domain.MaxLibrarySearchLength
-	SortYear               = domain.SortYear
+	FailureAcquisitionInterrupted = domain.FailureAcquisitionInterrupted
+	FailureAcquisitionRefused     = domain.FailureAcquisitionRefused
+	FailureNoConfidentMatch       = domain.FailureNoConfidentMatch
+	MaxCatalogSources             = domain.MaxCatalogSources
+	MaxLibraryPageSize            = domain.MaxLibraryPageSize
+	MaxLibrarySearchLength        = domain.MaxLibrarySearchLength
+	ProvenanceVerified            = domain.ProvenanceVerified
+	RoleFeatured                  = domain.RoleFeatured
+	SortAlphabetical              = domain.SortAlphabetical
+	SortRecent                    = domain.SortRecent
+	SortYear                      = domain.SortYear
 )

@@ -1,8 +1,10 @@
-package storage
+package storage_test
 
 import (
-	"altune/go-api/internal/catalog/internal/core/ports"
+	"altune/go-api/internal/catalog"
+	"altune/go-api/internal/shared/config"
 	"context"
+	"log/slog"
 	"net/url"
 	"strconv"
 	"strings"
@@ -10,19 +12,30 @@ import (
 	"time"
 )
 
-func newOfflineObjectStore(t *testing.T) *ObjectStorageAudioStore {
+const maxPresignTTL = time.Hour
+
+func newObjectStore(t *testing.T, cfg *config.Config) catalog.AudioURLSigner {
 	t.Helper()
-	store, err := NewObjectStorageAudioStore(ObjectStorageConfig{
-		Endpoint:  "https://objectstorage.invalid",
-		AccessKey: "ak",
-		SecretKey: "sk",
-		Bucket:    "bucket",
-		Region:    "us-east-1",
-	})
+	store, err := catalog.FromConfig(cfg, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("create store: %v", err)
 	}
-	return store
+	signer, ok := store.(catalog.AudioURLSigner)
+	if !ok {
+		t.Fatalf("object storage store %T does not sign URLs", store)
+	}
+	return signer
+}
+
+func newOfflineObjectStore(t *testing.T) catalog.AudioURLSigner {
+	t.Helper()
+	return newObjectStore(t, &config.Config{
+		OCIS3Endpoint:  "https://objectstorage.invalid",
+		OCIS3AccessKey: "ak",
+		OCIS3SecretKey: "sk",
+		OCIS3Bucket:    "bucket",
+		OCIS3Region:    "us-east-1",
+	})
 }
 
 func presignedExpiry(t *testing.T, raw string) time.Duration {
@@ -48,9 +61,9 @@ func TestObjectStorageAudioStore_PresignGet_TTLCeiling(t *testing.T) {
 		want time.Duration
 	}{
 		{name: "within ceiling is honored", ttl: 10 * time.Minute, want: 10 * time.Minute},
-		{name: "at ceiling is honored", ttl: ports.MaxPresignTTL, want: ports.MaxPresignTTL},
-		{name: "above ceiling is clamped", ttl: 7 * 24 * time.Hour, want: ports.MaxPresignTTL},
-		{name: "beyond the s3 maximum is clamped, not rejected", ttl: 365 * 24 * time.Hour, want: ports.MaxPresignTTL},
+		{name: "at ceiling is honored", ttl: maxPresignTTL, want: maxPresignTTL},
+		{name: "above ceiling is clamped", ttl: 7 * 24 * time.Hour, want: maxPresignTTL},
+		{name: "beyond the s3 maximum is clamped, not rejected", ttl: 365 * 24 * time.Hour, want: maxPresignTTL},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -66,16 +79,13 @@ func TestObjectStorageAudioStore_PresignGet_TTLCeiling(t *testing.T) {
 }
 
 func TestNewObjectStorageAudioStore_BindsConfigFieldsByName(t *testing.T) {
-	store, err := NewObjectStorageAudioStore(ObjectStorageConfig{
-		Endpoint:  "http://objectstorage.invalid:9000/",
-		AccessKey: "test-access-key",
-		SecretKey: "test-secret-key",
-		Bucket:    "test-bucket",
-		Region:    "eu-test-1",
+	store := newObjectStore(t, &config.Config{
+		OCIS3Endpoint:  "http://objectstorage.invalid:9000/",
+		OCIS3AccessKey: "test-access-key",
+		OCIS3SecretKey: "test-secret-key",
+		OCIS3Bucket:    "test-bucket",
+		OCIS3Region:    "eu-test-1",
 	})
-	if err != nil {
-		t.Fatalf("create store: %v", err)
-	}
 	raw, err := store.PresignGet(context.Background(), "a/b.opus", time.Minute)
 	if err != nil {
 		t.Fatalf("presign: %v", err)

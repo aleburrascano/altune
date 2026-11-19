@@ -1,19 +1,22 @@
-package domain
+package domain_test
 
-import "testing"
+import (
+	"altune/go-api/internal/catalog"
+	"testing"
+)
 
 func TestNewFeaturedArtist(t *testing.T) {
 	t.Run("trims and defaults role", func(t *testing.T) {
-		fa, ok := NewFeaturedArtist("  SZA ", " mb-1 ", 42)
+		fa, ok := catalog.NewFeaturedArtist("  SZA ", " mb-1 ", 42)
 		if !ok {
 			t.Fatal("expected ok")
 		}
-		if fa.Name != "SZA" || fa.MBID != "mb-1" || fa.DeezerID != 42 || fa.Role != RoleFeatured {
+		if fa.Name != "SZA" || fa.MBID != "mb-1" || fa.DeezerID != 42 || fa.Role != catalog.RoleFeatured {
 			t.Errorf("got %+v", fa)
 		}
 	})
 	t.Run("empty name rejected", func(t *testing.T) {
-		if _, ok := NewFeaturedArtist("   ", "", 0); ok {
+		if _, ok := catalog.NewFeaturedArtist("   ", "", 0); ok {
 			t.Error("expected empty name to be rejected")
 		}
 	})
@@ -22,12 +25,12 @@ func TestNewFeaturedArtist(t *testing.T) {
 func TestFeaturedArtist_IdentityKey(t *testing.T) {
 	tests := []struct {
 		name string
-		fa   FeaturedArtist
+		fa   catalog.FeaturedArtist
 		want string
 	}{
-		{"mbid raw (matches generated col)", FeaturedArtist{Name: "X", MBID: "abc", DeezerID: 9}, "abc"},
-		{"deezer id", FeaturedArtist{Name: "X", DeezerID: 9}, "dz:9"},
-		{"name", FeaturedArtist{Name: "Kendrick  Lamar"}, "name:kendrick lamar"},
+		{"mbid raw (matches generated col)", catalog.FeaturedArtist{Name: "X", MBID: "abc", DeezerID: 9}, "abc"},
+		{"deezer id", catalog.FeaturedArtist{Name: "X", DeezerID: 9}, "dz:9"},
+		{"name", catalog.FeaturedArtist{Name: "Kendrick  Lamar"}, "name:kendrick lamar"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -46,7 +49,7 @@ func TestFeaturedArtist_IdentityKey_NFKC(t *testing.T) {
 	}
 	for _, p := range pairs {
 		t.Run(p.name, func(t *testing.T) {
-			a, b := FeaturedArtist{Name: p.a}, FeaturedArtist{Name: p.b}
+			a, b := catalog.FeaturedArtist{Name: p.a}, catalog.FeaturedArtist{Name: p.b}
 			if a.IdentityKey() != b.IdentityKey() {
 				t.Errorf("IdentityKey %q != %q", a.IdentityKey(), b.IdentityKey())
 			}
@@ -60,13 +63,13 @@ func TestFeaturedArtist_IdentityKey_NFKC(t *testing.T) {
 func TestFeaturedArtist_LegacyIdentityKey(t *testing.T) {
 	tests := []struct {
 		name string
-		fa   FeaturedArtist
+		fa   catalog.FeaturedArtist
 		want string
 	}{
-		{"mbid unchanged", FeaturedArtist{Name: "ﬁve", MBID: "abc"}, "abc"},
-		{"deezer unchanged", FeaturedArtist{Name: "ﬁve", DeezerID: 9}, "dz:9"},
-		{"ascii name equals current key", FeaturedArtist{Name: "Kendrick  Lamar"}, "name:kendrick lamar"},
-		{"compat name keeps pre-NFKC fold", FeaturedArtist{Name: "Beyoncé"}, "name:beyoncé"},
+		{"mbid unchanged", catalog.FeaturedArtist{Name: "ﬁve", MBID: "abc"}, "abc"},
+		{"deezer unchanged", catalog.FeaturedArtist{Name: "ﬁve", DeezerID: 9}, "dz:9"},
+		{"ascii name equals current key", catalog.FeaturedArtist{Name: "Kendrick  Lamar"}, "name:kendrick lamar"},
+		{"compat name keeps pre-NFKC fold", catalog.FeaturedArtist{Name: "Beyoncé"}, "name:beyoncé"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

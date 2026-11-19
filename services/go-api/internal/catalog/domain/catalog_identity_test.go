@@ -1,6 +1,7 @@
-package domain
+package domain_test
 
 import (
+	"altune/go-api/internal/catalog"
 	"reflect"
 	"strconv"
 	"strings"
@@ -26,7 +27,7 @@ func TestNormalizeCatalogMBID(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := NormalizeCatalogMBID(tt.raw)
+			got, err := catalog.NormalizeCatalogMBID(tt.raw)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -38,27 +39,27 @@ func TestNormalizeCatalogMBID(t *testing.T) {
 }
 
 func TestNormalizeCatalogSources_RejectsInvalid(t *testing.T) {
-	tooMany := make([]CatalogSource, MaxCatalogSources+1)
+	tooMany := make([]catalog.CatalogSource, catalog.MaxCatalogSources+1)
 	for i := range tooMany {
-		tooMany[i] = CatalogSource{Provider: "deezer", ExternalID: strings.Repeat("a", i+1)}
+		tooMany[i] = catalog.CatalogSource{Provider: "deezer", ExternalID: strings.Repeat("a", i+1)}
 	}
 	tests := []struct {
 		name    string
-		sources []CatalogSource
+		sources []catalog.CatalogSource
 		wantErr string
 	}{
-		{"unknown provider", []CatalogSource{{Provider: "napster", ExternalID: "1"}}, "provider"},
-		{"empty provider", []CatalogSource{{Provider: "", ExternalID: "1"}}, "provider"},
-		{"empty external id", []CatalogSource{{Provider: "deezer", ExternalID: ""}}, "external_id"},
-		{"NUL in external id", []CatalogSource{{Provider: "deezer", ExternalID: "a\x00b"}}, "NUL"},
-		{"external id over 200", []CatalogSource{{Provider: "deezer", ExternalID: strings.Repeat("x", 201)}}, "external_id"},
+		{"unknown provider", []catalog.CatalogSource{{Provider: "napster", ExternalID: "1"}}, "provider"},
+		{"empty provider", []catalog.CatalogSource{{Provider: "", ExternalID: "1"}}, "provider"},
+		{"empty external id", []catalog.CatalogSource{{Provider: "deezer", ExternalID: ""}}, "external_id"},
+		{"NUL in external id", []catalog.CatalogSource{{Provider: "deezer", ExternalID: "a\x00b"}}, "NUL"},
+		{"external id over 200", []catalog.CatalogSource{{Provider: "deezer", ExternalID: strings.Repeat("x", 201)}}, "external_id"},
 		{"too many sources", tooMany, "sources exceeds"},
-		{"pixeldrain id with a path", []CatalogSource{{Provider: "pixeldrain", ExternalID: "../x"}}, "pixeldrain id"},
-		{"pixeldrain id too short", []CatalogSource{{Provider: "pixeldrain", ExternalID: "ab"}}, "pixeldrain id"},
+		{"pixeldrain id with a path", []catalog.CatalogSource{{Provider: "pixeldrain", ExternalID: "../x"}}, "pixeldrain id"},
+		{"pixeldrain id too short", []catalog.CatalogSource{{Provider: "pixeldrain", ExternalID: "ab"}}, "pixeldrain id"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NormalizeCatalogSources(tt.sources)
+			_, err := catalog.NormalizeCatalogSources(tt.sources)
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("err = %v, want one containing %q", err, tt.wantErr)
 			}
@@ -67,13 +68,13 @@ func TestNormalizeCatalogSources_RejectsInvalid(t *testing.T) {
 }
 
 func TestNormalizeCatalogSources_AcceptsBoundaryAndDropsExactDuplicates(t *testing.T) {
-	in := []CatalogSource{
+	in := []catalog.CatalogSource{
 		{Provider: "deezer", ExternalID: strings.Repeat("x", 200)},
 		{Provider: "deezer", ExternalID: "1"},
 		{Provider: "spotify", ExternalID: "1"},
 		{Provider: "deezer", ExternalID: "1"},
 	}
-	got, err := NormalizeCatalogSources(in)
+	got, err := catalog.NormalizeCatalogSources(in)
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
@@ -84,10 +85,10 @@ func TestNormalizeCatalogSources_AcceptsBoundaryAndDropsExactDuplicates(t *testi
 }
 
 func TestTrack_SetCatalogIdentity_StoresNormalizedFacts(t *testing.T) {
-	track := &Track{}
+	track := &catalog.Track{}
 	mbid := strings.ToUpper(validMBID)
 	explicit := true
-	sources := []CatalogSource{{Provider: "itunes", ExternalID: "9"}, {Provider: "itunes", ExternalID: "9"}}
+	sources := []catalog.CatalogSource{{Provider: "itunes", ExternalID: "9"}, {Provider: "itunes", ExternalID: "9"}}
 
 	if err := track.SetCatalogIdentity(&mbid, &explicit, sources); err != nil {
 		t.Fatalf("err = %v", err)
@@ -105,7 +106,7 @@ func TestTrack_SetCatalogIdentity_StoresNormalizedFacts(t *testing.T) {
 
 func TestTrack_SetCatalogIdentity_RejectsBadMBID(t *testing.T) {
 	bad := "nope"
-	if err := (&Track{}).SetCatalogIdentity(&bad, nil, nil); err == nil {
+	if err := (&catalog.Track{}).SetCatalogIdentity(&bad, nil, nil); err == nil {
 		t.Fatal("want a validation error for a non-UUID mbid")
 	}
 }
@@ -114,24 +115,24 @@ func TestWithSoundCloudURL(t *testing.T) {
 	const pick = "https://soundcloud.com/artist/track"
 	tests := []struct {
 		name    string
-		sources []CatalogSource
+		sources []catalog.CatalogSource
 		url     string
-		want    []CatalogSource
+		want    []catalog.CatalogSource
 	}{
 		{
 			name:    "creates the entry when absent",
-			sources: []CatalogSource{{Provider: "deezer", ExternalID: "1"}},
+			sources: []catalog.CatalogSource{{Provider: "deezer", ExternalID: "1"}},
 			url:     pick,
-			want: []CatalogSource{
+			want: []catalog.CatalogSource{
 				{Provider: "deezer", ExternalID: "1"},
 				{Provider: "soundcloud", ExternalID: pick, URL: pick},
 			},
 		},
 		{
 			name:    "sets it on the existing entry",
-			sources: []CatalogSource{{Provider: "soundcloud", ExternalID: "123"}},
+			sources: []catalog.CatalogSource{{Provider: "soundcloud", ExternalID: "123"}},
 			url:     pick,
-			want:    []CatalogSource{{Provider: "soundcloud", ExternalID: "123", URL: pick}},
+			want:    []catalog.CatalogSource{{Provider: "soundcloud", ExternalID: "123", URL: pick}},
 		},
 		{
 			name:    "a full list is left unchanged",
@@ -142,14 +143,14 @@ func TestWithSoundCloudURL(t *testing.T) {
 		{
 			name: "a subdomain is soundcloud",
 			url:  "https://m.soundcloud.com/a/b",
-			want: []CatalogSource{{Provider: "soundcloud", ExternalID: "https://m.soundcloud.com/a/b", URL: "https://m.soundcloud.com/a/b"}},
+			want: []catalog.CatalogSource{{Provider: "soundcloud", ExternalID: "https://m.soundcloud.com/a/b", URL: "https://m.soundcloud.com/a/b"}},
 		},
 		{"another host is ignored", nil, "https://notsoundcloud.com/a/b", nil},
 		{"empty is ignored", nil, "", nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := WithSoundCloudURL(tt.sources, tt.url); !reflect.DeepEqual(got, tt.want) {
+			if got := catalog.WithSoundCloudURL(tt.sources, tt.url); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("got %+v, want %+v", got, tt.want)
 			}
 		})
@@ -157,39 +158,39 @@ func TestWithSoundCloudURL(t *testing.T) {
 }
 
 func TestNormalizeCatalogSources_KeepsTheURL(t *testing.T) {
-	in := []CatalogSource{{Provider: "soundcloud", ExternalID: "1", URL: "https://soundcloud.com/a/b"}}
-	got, err := NormalizeCatalogSources(in)
+	in := []catalog.CatalogSource{{Provider: "soundcloud", ExternalID: "1", URL: "https://soundcloud.com/a/b"}}
+	got, err := catalog.NormalizeCatalogSources(in)
 	if err != nil || !reflect.DeepEqual(got, in) {
 		t.Fatalf("got %+v, %v", got, err)
 	}
-	bad := []CatalogSource{{Provider: "soundcloud", ExternalID: "1", URL: "javascript:alert(1)"}}
-	if _, err := NormalizeCatalogSources(bad); err == nil {
+	bad := []catalog.CatalogSource{{Provider: "soundcloud", ExternalID: "1", URL: "javascript:alert(1)"}}
+	if _, err := catalog.NormalizeCatalogSources(bad); err == nil {
 		t.Fatal("want a non-http url rejected")
 	}
 }
 
-func fullCatalogSources() []CatalogSource {
-	out := make([]CatalogSource, MaxCatalogSources)
+func fullCatalogSources() []catalog.CatalogSource {
+	out := make([]catalog.CatalogSource, catalog.MaxCatalogSources)
 	for i := range out {
-		out[i] = CatalogSource{Provider: "deezer", ExternalID: strconv.Itoa(i + 1)}
+		out[i] = catalog.CatalogSource{Provider: "deezer", ExternalID: strconv.Itoa(i + 1)}
 	}
 	return out
 }
 
 func TestNormalizeCatalogSources_AcceptsAPixeldrainFileID(t *testing.T) {
-	got, err := NormalizeCatalogSources([]CatalogSource{{Provider: "pixeldrain", ExternalID: "ozSpSjn7"}})
+	got, err := catalog.NormalizeCatalogSources([]catalog.CatalogSource{{Provider: "pixeldrain", ExternalID: "ozSpSjn7"}})
 	if err != nil || len(got) != 1 || got[0].ExternalID != "ozSpSjn7" {
 		t.Fatalf("NormalizeCatalogSources = %+v, %v; want the pixeldrain pin kept", got, err)
 	}
 }
 
 func TestNormalizeCatalogSources_AcceptsEveryFileHostAndRejectsABadID(t *testing.T) {
-	for _, ok := range []CatalogSource{{Provider: "pillows", ExternalID: "84310b5d2c21df85e4570aec299d1ead"}} {
-		if _, err := NormalizeCatalogSources([]CatalogSource{ok}); err != nil {
+	for _, ok := range []catalog.CatalogSource{{Provider: "pillows", ExternalID: "84310b5d2c21df85e4570aec299d1ead"}} {
+		if _, err := catalog.NormalizeCatalogSources([]catalog.CatalogSource{ok}); err != nil {
 			t.Errorf("%s pin rejected: %v", ok.Provider, err)
 		}
 	}
-	if _, err := NormalizeCatalogSources([]CatalogSource{{Provider: "pillows", ExternalID: "../x"}}); err == nil {
+	if _, err := catalog.NormalizeCatalogSources([]catalog.CatalogSource{{Provider: "pillows", ExternalID: "../x"}}); err == nil {
 		t.Error("a malformed pillows id must be rejected")
 	}
 }

@@ -1,7 +1,7 @@
-package storage
+package storage_test
 
 import (
-	"altune/go-api/internal/catalog/internal/core/ports"
+	"altune/go-api/internal/catalog"
 	"context"
 	"testing"
 	"time"
@@ -25,7 +25,7 @@ func (f *scopedFakeStore) Store(_ context.Context, _ string, audioRef string) er
 	return nil
 }
 
-func (f *scopedFakeStore) Stream(_ context.Context, _ string) (ports.AudioStream, int64, error) {
+func (f *scopedFakeStore) Stream(_ context.Context, _ string) (catalog.AudioStream, int64, error) {
 	return nil, 0, nil
 }
 
@@ -53,17 +53,17 @@ func (f *scopedFakeListingStore) List(_ context.Context, prefix string) ([]strin
 
 type scopedFakeAgeListingStore struct {
 	*scopedFakeStore
-	ages []ports.ObjectAge
+	ages []catalog.ObjectAge
 }
 
-func (f *scopedFakeAgeListingStore) ListWithAge(_ context.Context, _ string) ([]ports.ObjectAge, error) {
+func (f *scopedFakeAgeListingStore) ListWithAge(_ context.Context, _ string) ([]catalog.ObjectAge, error) {
 	return f.ages, nil
 }
 
 func TestScopedAudioStore_DeleteOutsidePrefixIsNoop(t *testing.T) {
 	inner := newScopedFakeStore()
 	inner.stored["prod-user/a/b/c.mp3"] = true
-	store := NewScopedAudioStore(inner, "staging/")
+	store := catalog.NewScopedAudioStore(inner, "staging/")
 
 	if err := store.Delete(context.Background(), "prod-user/a/b/c.mp3"); err != nil {
 		t.Fatalf("expected delete outside prefix to no-op, got error: %v", err)
@@ -79,7 +79,7 @@ func TestScopedAudioStore_DeleteOutsidePrefixIsNoop(t *testing.T) {
 func TestScopedAudioStore_DeleteInsidePrefixPassesThrough(t *testing.T) {
 	inner := newScopedFakeStore()
 	inner.stored["staging/u/a/b/c.mp3"] = true
-	store := NewScopedAudioStore(inner, "staging/")
+	store := catalog.NewScopedAudioStore(inner, "staging/")
 
 	if err := store.Delete(context.Background(), "staging/u/a/b/c.mp3"); err != nil {
 		t.Fatalf("expected delete inside prefix to succeed, got error: %v", err)
@@ -91,7 +91,7 @@ func TestScopedAudioStore_DeleteInsidePrefixPassesThrough(t *testing.T) {
 
 func TestScopedAudioStore_StoreOutsidePrefixErrors(t *testing.T) {
 	inner := newScopedFakeStore()
-	store := NewScopedAudioStore(inner, "staging/")
+	store := catalog.NewScopedAudioStore(inner, "staging/")
 
 	err := store.Store(context.Background(), "/tmp/x.mp3", "prod-user/a/b/c.mp3")
 	if err == nil {
@@ -104,7 +104,7 @@ func TestScopedAudioStore_StoreOutsidePrefixErrors(t *testing.T) {
 
 func TestScopedAudioStore_StoreInsidePrefixPassesThrough(t *testing.T) {
 	inner := newScopedFakeStore()
-	store := NewScopedAudioStore(inner, "staging/")
+	store := catalog.NewScopedAudioStore(inner, "staging/")
 
 	if err := store.Store(context.Background(), "/tmp/x.mp3", "staging/u/a/b/c.mp3"); err != nil {
 		t.Fatalf("expected write inside the prefix to succeed, got error: %v", err)
@@ -116,11 +116,11 @@ func TestScopedAudioStore_StoreInsidePrefixPassesThrough(t *testing.T) {
 
 func TestScopedAudioStore_ForwardsPresignGet(t *testing.T) {
 	inner := &scopedFakeSigningStore{scopedFakeStore: newScopedFakeStore()}
-	store := NewScopedAudioStore(inner, "staging/")
+	store := catalog.NewScopedAudioStore(inner, "staging/")
 
-	signer, ok := store.(ports.AudioURLSigner)
+	signer, ok := store.(catalog.AudioURLSigner)
 	if !ok {
-		t.Fatal("expected the scoped store to still satisfy ports.AudioURLSigner")
+		t.Fatal("expected the scoped store to still satisfy catalog.AudioURLSigner")
 	}
 	url, err := signer.PresignGet(context.Background(), "staging/u/a/b/c.mp3", time.Minute)
 	if err != nil {
@@ -132,19 +132,19 @@ func TestScopedAudioStore_ForwardsPresignGet(t *testing.T) {
 }
 
 func TestScopedAudioStore_NoSignerWhenInnerDoesNotSign(t *testing.T) {
-	store := NewScopedAudioStore(newScopedFakeStore(), "staging/")
-	if _, ok := store.(ports.AudioURLSigner); ok {
+	store := catalog.NewScopedAudioStore(newScopedFakeStore(), "staging/")
+	if _, ok := store.(catalog.AudioURLSigner); ok {
 		t.Fatal("expected no AudioURLSigner when the wrapped store does not sign")
 	}
 }
 
 func TestScopedAudioStore_ForwardsList(t *testing.T) {
 	inner := &scopedFakeListingStore{scopedFakeStore: newScopedFakeStore()}
-	store := NewScopedAudioStore(inner, "staging/")
+	store := catalog.NewScopedAudioStore(inner, "staging/")
 
-	lister, ok := store.(ports.AudioLister)
+	lister, ok := store.(catalog.AudioLister)
 	if !ok {
-		t.Fatal("expected the scoped store to still satisfy ports.AudioLister")
+		t.Fatal("expected the scoped store to still satisfy catalog.AudioLister")
 	}
 	refs, err := lister.List(context.Background(), "staging/u/")
 	if err != nil {
@@ -156,8 +156,8 @@ func TestScopedAudioStore_ForwardsList(t *testing.T) {
 }
 
 func TestScopedAudioStore_NoAgeListerWhenInnerDoesNotListAge(t *testing.T) {
-	store := NewScopedAudioStore(newScopedFakeStore(), "staging/")
-	if _, ok := store.(ports.AudioAgeLister); ok {
+	store := catalog.NewScopedAudioStore(newScopedFakeStore(), "staging/")
+	if _, ok := store.(catalog.AudioAgeLister); ok {
 		t.Fatal("expected no AudioAgeLister when the wrapped store does not list with age")
 	}
 }
@@ -165,13 +165,13 @@ func TestScopedAudioStore_NoAgeListerWhenInnerDoesNotListAge(t *testing.T) {
 func TestScopedAudioStore_ForwardsListWithAge(t *testing.T) {
 	inner := &scopedFakeAgeListingStore{
 		scopedFakeStore: newScopedFakeStore(),
-		ages:            []ports.ObjectAge{{AudioRef: "staging/u/one.mp3", LastModified: time.Unix(0, 0)}},
+		ages:            []catalog.ObjectAge{{AudioRef: "staging/u/one.mp3", LastModified: time.Unix(0, 0)}},
 	}
-	store := NewScopedAudioStore(inner, "staging/")
+	store := catalog.NewScopedAudioStore(inner, "staging/")
 
-	lister, ok := store.(ports.AudioAgeLister)
+	lister, ok := store.(catalog.AudioAgeLister)
 	if !ok {
-		t.Fatal("expected sweep-staging-audio's store.(ports.AudioAgeLister) assertion to still find a lister through the decorator (#3092)")
+		t.Fatal("expected sweep-staging-audio's store.(catalog.AudioAgeLister) assertion to still find a lister through the decorator (#3092)")
 	}
 	objects, err := lister.ListWithAge(context.Background(), "staging/")
 	if err != nil {
@@ -184,11 +184,11 @@ func TestScopedAudioStore_ForwardsListWithAge(t *testing.T) {
 
 func TestScopedAudioStore_ListWithAgeOutsidePrefixErrors(t *testing.T) {
 	inner := &scopedFakeAgeListingStore{scopedFakeStore: newScopedFakeStore()}
-	store := NewScopedAudioStore(inner, "staging/")
+	store := catalog.NewScopedAudioStore(inner, "staging/")
 
-	lister, ok := store.(ports.AudioAgeLister)
+	lister, ok := store.(catalog.AudioAgeLister)
 	if !ok {
-		t.Fatal("expected the scoped store to satisfy ports.AudioAgeLister")
+		t.Fatal("expected the scoped store to satisfy catalog.AudioAgeLister")
 	}
 	if _, err := lister.ListWithAge(context.Background(), "prod-user/"); err == nil {
 		t.Fatal("expected an error listing outside the prefix")

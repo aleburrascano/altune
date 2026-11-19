@@ -1,6 +1,8 @@
-package domain
+package domain_test
 
 import (
+	"altune/go-api/internal/catalog"
+	shareddomain "altune/go-api/internal/shared/domain"
 	shared "altune/go-api/internal/shared/kernel"
 	"encoding/json"
 	"errors"
@@ -13,17 +15,19 @@ import (
 	"github.com/google/uuid"
 )
 
+const maxDurationSeconds = 7 * 24 * 60 * 60
+
 func TestParseAcquisitionStatus(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name    string
 		input   string
-		want    AcquisitionStatus
+		want    catalog.AcquisitionStatus
 		wantErr bool
 	}{
-		{name: "pending", input: "pending", want: AcquisitionPending},
-		{name: "ready", input: "ready", want: AcquisitionReady},
-		{name: "failed", input: "failed", want: AcquisitionFailed},
+		{name: "pending", input: "pending", want: catalog.AcquisitionPending},
+		{name: "ready", input: "ready", want: catalog.AcquisitionReady},
+		{name: "failed", input: "failed", want: catalog.AcquisitionFailed},
 		{name: "invalid value", input: "downloading", wantErr: true},
 		{name: "empty string", input: "", wantErr: true},
 	}
@@ -31,7 +35,7 @@ func TestParseAcquisitionStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := ParseAcquisitionStatus(tt.input)
+			got, err := catalog.ParseAcquisitionStatus(tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error for input %q, got nil", tt.input)
@@ -52,12 +56,12 @@ func TestAcquisitionStatus_String(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name   string
-		status AcquisitionStatus
+		status catalog.AcquisitionStatus
 		want   string
 	}{
-		{name: "pending", status: AcquisitionPending, want: "pending"},
-		{name: "ready", status: AcquisitionReady, want: "ready"},
-		{name: "failed", status: AcquisitionFailed, want: "failed"},
+		{name: "pending", status: catalog.AcquisitionPending, want: "pending"},
+		{name: "ready", status: catalog.AcquisitionReady, want: "ready"},
+		{name: "failed", status: catalog.AcquisitionFailed, want: "failed"},
 	}
 
 	for _, tt := range tests {
@@ -157,7 +161,7 @@ func TestNewTrack(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			track, err := NewTrack(userId, tt.title, tt.artist, tt.album)
+			track, err := catalog.NewTrack(userId, tt.title, tt.artist, tt.album)
 			if tt.wantErr != "" {
 				if err == nil {
 					t.Fatalf("expected error %q, got nil", tt.wantErr)
@@ -188,14 +192,14 @@ func TestNewTrack(t *testing.T) {
 			if track.Album != tt.wantAlbum {
 				t.Errorf("Album = %q, want %q", track.Album, tt.wantAlbum)
 			}
-			if track.AcquisitionStatus != AcquisitionPending {
+			if track.AcquisitionStatus != catalog.AcquisitionPending {
 				t.Errorf("AcquisitionStatus = %v, want AcquisitionPending", track.AcquisitionStatus)
 			}
 			if track.DedupKey == "" {
 				t.Error("expected non-empty DedupKey")
 			}
-			if track.DedupKey != computeDedupKey(tt.title, tt.artist, tt.wantAlbum) {
-				t.Errorf("DedupKey = %q, want %q", track.DedupKey, computeDedupKey(tt.title, tt.artist, tt.wantAlbum))
+			if track.DedupKey != catalog.TrackDedupKey(tt.title, tt.artist, tt.wantAlbum) {
+				t.Errorf("DedupKey = %q, want %q", track.DedupKey, catalog.TrackDedupKey(tt.title, tt.artist, tt.wantAlbum))
 			}
 			if track.AddedAt.IsZero() {
 				t.Error("expected non-zero AddedAt")
@@ -208,7 +212,7 @@ func TestNewTrack_AcceptsAlbumAtCap(t *testing.T) {
 	t.Parallel()
 	album := strings.Repeat("c", 300)
 
-	track, err := NewTrack(shared.NewUserId(uuid.New()), "Track Title", "Artist Name", album)
+	track, err := catalog.NewTrack(shared.NewUserId(uuid.New()), "Track Title", "Artist Name", album)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -221,7 +225,7 @@ func TestNewTrack_StoresTrimmedTitleAndArtist(t *testing.T) {
 	t.Parallel()
 	userId := shared.NewUserId(uuid.New())
 
-	track, err := NewTrack(userId, "  Track Title  ", "\tArtist Name\n", "Album Name")
+	track, err := catalog.NewTrack(userId, "  Track Title  ", "\tArtist Name\n", "Album Name")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -231,7 +235,7 @@ func TestNewTrack_StoresTrimmedTitleAndArtist(t *testing.T) {
 	if track.Artist != "Artist Name" {
 		t.Errorf("Artist = %q, want trimmed %q", track.Artist, "Artist Name")
 	}
-	if want := computeDedupKey("Track Title", "Artist Name", "Album Name"); track.DedupKey != want {
+	if want := catalog.TrackDedupKey("Track Title", "Artist Name", "Album Name"); track.DedupKey != want {
 		t.Errorf("DedupKey = %q, want %q", track.DedupKey, want)
 	}
 }
@@ -240,11 +244,11 @@ func TestNewTrack_CanonicalizesAlbumAndArtistForGrouping(t *testing.T) {
 	t.Parallel()
 	userId := shared.NewUserId(uuid.New())
 
-	clean, err := NewTrack(userId, "Halo", "Beyoncé", "I Am... Sasha Fierce")
+	clean, err := catalog.NewTrack(userId, "Halo", "Beyoncé", "I Am... Sasha Fierce")
 	if err != nil {
 		t.Fatalf("NewTrack(clean): %v", err)
 	}
-	variant, err := NewTrack(userId, "Other Song", "  Beyoncé  ", "  I Am...   Sasha Fierce  ")
+	variant, err := catalog.NewTrack(userId, "Other Song", "  Beyoncé  ", "  I Am...   Sasha Fierce  ")
 	if err != nil {
 		t.Fatalf("NewTrack(variant): %v", err)
 	}
@@ -263,7 +267,7 @@ func TestNewTrack_CanonicalizesAlbumAndArtistForGrouping(t *testing.T) {
 func TestSetAlbumArtist_Canonicalizes(t *testing.T) {
 	t.Parallel()
 	userId := shared.NewUserId(uuid.New())
-	track, err := NewTrack(userId, "Song", "Artist", "Album")
+	track, err := catalog.NewTrack(userId, "Song", "Artist", "Album")
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
@@ -317,7 +321,7 @@ func TestTrack_MarkReady(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if track.AcquisitionStatus != AcquisitionReady {
+			if track.AcquisitionStatus != catalog.AcquisitionReady {
 				t.Errorf("AcquisitionStatus = %v, want AcquisitionReady", track.AcquisitionStatus)
 			}
 			if track.AudioRef == nil || *track.AudioRef != tt.audioRef {
@@ -422,7 +426,7 @@ func TestTrack_MarkFailed(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if track.AcquisitionStatus != AcquisitionFailed {
+			if track.AcquisitionStatus != catalog.AcquisitionFailed {
 				t.Errorf("AcquisitionStatus = %v, want AcquisitionFailed", track.AcquisitionStatus)
 			}
 			if track.FailureReason == nil || *track.FailureReason != tt.reason {
@@ -447,7 +451,7 @@ func TestTrack_RevertToPending(t *testing.T) {
 		t.Fatalf("RevertToPending: %v", err)
 	}
 
-	if track.AcquisitionStatus != AcquisitionPending {
+	if track.AcquisitionStatus != catalog.AcquisitionPending {
 		t.Errorf("AcquisitionStatus = %v, want AcquisitionPending", track.AcquisitionStatus)
 	}
 	if track.AudioRef != nil {
@@ -475,7 +479,7 @@ func TestTrack_SetAcquisitionConfidence(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			track, err := NewTrack(shared.NewUserId(uuid.New()), "Song", "Artist", "Album")
+			track, err := catalog.NewTrack(shared.NewUserId(uuid.New()), "Song", "Artist", "Album")
 			if err != nil {
 				t.Fatalf("NewTrack: %v", err)
 			}
@@ -505,36 +509,36 @@ func TestTrack_IsStreamable(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		setup func(*Track)
+		setup func(*catalog.Track)
 		want  bool
 	}{
 		{
 			name: "ready with audioRef is streamable",
-			setup: func(tr *Track) {
-				tr.AcquisitionStatus = AcquisitionReady
+			setup: func(tr *catalog.Track) {
+				tr.AcquisitionStatus = catalog.AcquisitionReady
 				tr.AudioRef = &audioRef
 			},
 			want: true,
 		},
 		{
 			name: "ready without audioRef is not streamable",
-			setup: func(tr *Track) {
-				tr.AcquisitionStatus = AcquisitionReady
+			setup: func(tr *catalog.Track) {
+				tr.AcquisitionStatus = catalog.AcquisitionReady
 				tr.AudioRef = nil
 			},
 			want: false,
 		},
 		{
 			name: "pending is not streamable",
-			setup: func(tr *Track) {
-				tr.AcquisitionStatus = AcquisitionPending
+			setup: func(tr *catalog.Track) {
+				tr.AcquisitionStatus = catalog.AcquisitionPending
 			},
 			want: false,
 		},
 		{
 			name: "failed is not streamable",
-			setup: func(tr *Track) {
-				tr.AcquisitionStatus = AcquisitionFailed
+			setup: func(tr *catalog.Track) {
+				tr.AcquisitionStatus = catalog.AcquisitionFailed
 			},
 			want: false,
 		},
@@ -552,10 +556,10 @@ func TestTrack_IsStreamable(t *testing.T) {
 	}
 }
 
-func newTestTrack(t *testing.T) *Track {
+func newTestTrack(t *testing.T) *catalog.Track {
 	t.Helper()
 	userId := shared.NewUserId(uuid.New())
-	track, err := NewTrack(userId, "Test Title", "Test Artist", "Test Album")
+	track, err := catalog.NewTrack(userId, "Test Title", "Test Artist", "Test Album")
 	if err != nil {
 		t.Fatalf("newTestTrack: unexpected error: %v", err)
 	}
@@ -565,7 +569,7 @@ func newTestTrack(t *testing.T) *Track {
 func TestSetAlbum_KeepsTheDedupKeyInStep(t *testing.T) {
 	t.Parallel()
 	userId := shared.NewUserId(uuid.New())
-	track, err := NewTrack(userId, "Crook", "Raf Saperra", "Some Album")
+	track, err := catalog.NewTrack(userId, "Crook", "Raf Saperra", "Some Album")
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -575,21 +579,21 @@ func TestSetAlbum_KeepsTheDedupKeyInStep(t *testing.T) {
 	if track.Album != "Other Album" {
 		t.Errorf("Album = %q, want %q", track.Album, "Other Album")
 	}
-	if want := computeDedupKey("Crook", "Raf Saperra", "Other Album"); track.DedupKey != want {
+	if want := catalog.TrackDedupKey("Crook", "Raf Saperra", "Other Album"); track.DedupKey != want {
 		t.Errorf("DedupKey = %q, want %q", track.DedupKey, want)
 	}
 }
 
 func TestSetAlbum_BlankFallsBackToTheTitle(t *testing.T) {
 	t.Parallel()
-	track := &Track{Title: "Crook", Artist: "Raf Saperra", Album: ""}
+	track := &catalog.Track{Title: "Crook", Artist: "Raf Saperra", Album: ""}
 
 	track.SetAlbum("")
 
 	if track.Album != "Crook" {
 		t.Errorf("Album = %q, want the title", track.Album)
 	}
-	if want := computeDedupKey("Crook", "Raf Saperra", "Crook"); track.DedupKey != want {
+	if want := catalog.TrackDedupKey("Crook", "Raf Saperra", "Crook"); track.DedupKey != want {
 		t.Errorf("DedupKey = %q, want %q", track.DedupKey, want)
 	}
 }
@@ -602,9 +606,9 @@ func TestTrackTextLengthMessages(t *testing.T) {
 		err  error
 		want string
 	}{
-		{"optional album", ValidateOptionalTrackText(&overlong, "album"), "track album exceeds 300 characters"},
-		{"optional genre", ValidateOptionalTrackText(&overlong, "genre"), "track genre exceeds 300 characters"},
-		{"source url", ValidateSourceURL("https://example.com/" + overlong), "track source_url exceeds 300 characters"},
+		{"optional album", catalog.ValidateOptionalTrackText(&overlong, "album"), "track album exceeds 300 characters"},
+		{"optional genre", catalog.ValidateOptionalTrackText(&overlong, "genre"), "track genre exceeds 300 characters"},
+		{"source url", catalog.ValidateSourceURL("https://example.com/" + overlong), "track source_url exceeds 300 characters"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -620,7 +624,7 @@ func TestNulByteRefusedByEveryTextEntryPoint(t *testing.T) {
 	t.Parallel()
 	userId := shared.NewUserId(uuid.New())
 	newTrackErr := func(title, artist, album string) error {
-		_, err := NewTrack(userId, title, artist, album)
+		_, err := catalog.NewTrack(userId, title, artist, album)
 		return err
 	}
 	tests := []struct {
@@ -645,30 +649,30 @@ func TestNulByteRefusedByEveryTextEntryPoint(t *testing.T) {
 		},
 		{
 			"optional track text",
-			func(s string) error { return ValidateOptionalTrackText(&s, "genre") },
+			func(s string) error { return catalog.ValidateOptionalTrackText(&s, "genre") },
 			"track genre must not contain a NUL byte",
 		},
 		{
 			"playlist name",
 			func(s string) error {
-				_, err := NewPlaylist(userId, s, time.Unix(0, 0))
+				_, err := catalog.NewPlaylist(userId, s, time.Unix(0, 0))
 				return err
 			},
 			"playlist name must not contain a NUL byte",
 		},
 		{
 			"featured artist name",
-			func(s string) error { return ValidateFeaturedArtist(FeaturedArtist{Name: s}) },
+			func(s string) error { return catalog.ValidateFeaturedArtist(catalog.FeaturedArtist{Name: s}) },
 			"track featured_artists name must not contain a NUL byte",
 		},
 		{
 			"featured artist mbid",
-			func(s string) error { return ValidateFeaturedArtist(FeaturedArtist{MBID: s}) },
+			func(s string) error { return catalog.ValidateFeaturedArtist(catalog.FeaturedArtist{MBID: s}) },
 			"track featured_artists mbid must not contain a NUL byte",
 		},
 		{
 			"source url",
-			func(s string) error { return ValidateSourceURL("https://example.com/" + s) },
+			func(s string) error { return catalog.ValidateSourceURL("https://example.com/" + s) },
 			"track source_url is malformed",
 		},
 	}
@@ -679,9 +683,9 @@ func TestNulByteRefusedByEveryTextEntryPoint(t *testing.T) {
 			if err == nil || err.Error() != tt.want {
 				t.Fatalf("error for NUL input = %v, want %q", err, tt.want)
 			}
-			var invalid *ValidationError
+			var invalid *shareddomain.ValidationError
 			if !errors.As(err, &invalid) {
-				t.Fatalf("error %v is not a *ValidationError, so it answers 500 not 400", err)
+				t.Fatalf("error %v is not a *shareddomain.ValidationError, so it answers 500 not 400", err)
 			}
 			if got := invalid.HTTPStatus(); got != 400 {
 				t.Errorf("HTTPStatus() = %d, want 400", got)
@@ -700,11 +704,11 @@ func markerUserId(t *testing.T) shared.UserId {
 
 func TestNewTrack_SetsInFlightMarker(t *testing.T) {
 	t.Parallel()
-	track, err := NewTrack(markerUserId(t), "Title", "Artist", "Album")
+	track, err := catalog.NewTrack(markerUserId(t), "Title", "Artist", "Album")
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
-	if track.AcquisitionStatus != AcquisitionPending {
+	if track.AcquisitionStatus != catalog.AcquisitionPending {
 		t.Fatalf("status = %v, want pending", track.AcquisitionStatus)
 	}
 	if track.AcquisitionStartedAt == nil {
@@ -717,7 +721,7 @@ func TestNewTrack_SetsInFlightMarker(t *testing.T) {
 
 func TestTrack_MarkReady_ClearsInFlightMarker(t *testing.T) {
 	t.Parallel()
-	track, err := NewTrack(markerUserId(t), "Title", "Artist", "Album")
+	track, err := catalog.NewTrack(markerUserId(t), "Title", "Artist", "Album")
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
@@ -731,11 +735,11 @@ func TestTrack_MarkReady_ClearsInFlightMarker(t *testing.T) {
 
 func TestTrack_MarkFailed_ClearsInFlightMarker(t *testing.T) {
 	t.Parallel()
-	track, err := NewTrack(markerUserId(t), "Title", "Artist", "Album")
+	track, err := catalog.NewTrack(markerUserId(t), "Title", "Artist", "Album")
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
-	if err := track.MarkFailed(string(FailureAcquisitionInterrupted)); err != nil {
+	if err := track.MarkFailed(string(catalog.FailureAcquisitionInterrupted)); err != nil {
 		t.Fatalf("MarkFailed: %v", err)
 	}
 	if track.AcquisitionStartedAt != nil {
@@ -745,7 +749,7 @@ func TestTrack_MarkFailed_ClearsInFlightMarker(t *testing.T) {
 
 func TestTrack_RevertToPending_RefreshesInFlightMarker(t *testing.T) {
 	t.Parallel()
-	track, err := NewTrack(markerUserId(t), "Title", "Artist", "Album")
+	track, err := catalog.NewTrack(markerUserId(t), "Title", "Artist", "Album")
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
@@ -757,7 +761,7 @@ func TestTrack_RevertToPending_RefreshesInFlightMarker(t *testing.T) {
 		t.Fatalf("RevertToPending: %v", err)
 	}
 
-	if track.AcquisitionStatus != AcquisitionPending {
+	if track.AcquisitionStatus != catalog.AcquisitionPending {
 		t.Fatalf("status = %v, want pending", track.AcquisitionStatus)
 	}
 	if track.AcquisitionStartedAt == nil {
@@ -767,8 +771,8 @@ func TestTrack_RevertToPending_RefreshesInFlightMarker(t *testing.T) {
 
 func TestFailureMessage_AcquisitionInterrupted(t *testing.T) {
 	t.Parallel()
-	reason := string(FailureAcquisitionInterrupted)
-	if got := FailureMessage(&reason); got != "Acquisition was interrupted" {
+	reason := string(catalog.FailureAcquisitionInterrupted)
+	if got := catalog.FailureMessage(&reason); got != "Acquisition was interrupted" {
 		t.Errorf("FailureMessage = %q, want %q", got, "Acquisition was interrupted")
 	}
 }
@@ -776,11 +780,11 @@ func TestFailureMessage_AcquisitionInterrupted(t *testing.T) {
 func TestAcquisitionFailureCodes_KeepTheirStoredValues(t *testing.T) {
 	t.Parallel()
 	stored := []struct {
-		code FailureCode
+		code catalog.FailureCode
 		want string
 	}{
-		{FailureAcquisitionInterrupted, "acquisition_interrupted"},
-		{FailureAcquisitionRefused, "acquisition_refused"},
+		{catalog.FailureAcquisitionInterrupted, "acquisition_interrupted"},
+		{catalog.FailureAcquisitionRefused, "acquisition_refused"},
 	}
 	for _, s := range stored {
 		if string(s.code) != s.want {
@@ -796,16 +800,16 @@ func TestTrackSetDuration_RejectsUnstorableValues(t *testing.T) {
 		"-Inf":      math.Inf(-1),
 		"NaN":       math.NaN(),
 		"negative":  -1,
-		"above cap": MaxDurationSeconds + 1,
+		"above cap": maxDurationSeconds + 1,
 		"max float": math.MaxFloat64,
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			track := &Track{}
+			track := &catalog.Track{}
 
 			err := track.SetDuration(seconds)
 
-			var validation *ValidationError
+			var validation *shareddomain.ValidationError
 			if !errors.As(err, &validation) {
 				t.Fatalf("SetDuration(%v) error = %v, want a ValidationError", seconds, err)
 			}
@@ -818,44 +822,44 @@ func TestTrackSetDuration_RejectsUnstorableValues(t *testing.T) {
 
 func TestTrackSetDuration_StoresPositiveAndIgnoresZero(t *testing.T) {
 	t.Parallel()
-	track := &Track{}
+	track := &catalog.Track{}
 
 	if err := track.SetDuration(0); err != nil || track.DurationSeconds != nil {
 		t.Fatalf("SetDuration(0) = %v, duration %v; want nil error and unset", err, track.DurationSeconds)
 	}
-	if err := track.SetDuration(MaxDurationSeconds); err != nil {
+	if err := track.SetDuration(maxDurationSeconds); err != nil {
 		t.Fatalf("SetDuration(max) error = %v", err)
 	}
-	if track.DurationSeconds == nil || *track.DurationSeconds != MaxDurationSeconds {
-		t.Errorf("DurationSeconds = %v, want %d", track.DurationSeconds, MaxDurationSeconds)
+	if track.DurationSeconds == nil || *track.DurationSeconds != maxDurationSeconds {
+		t.Errorf("DurationSeconds = %v, want %d", track.DurationSeconds, maxDurationSeconds)
 	}
 }
 
 func TestTotalDurationSeconds_FiniteAtCap(t *testing.T) {
 	t.Parallel()
-	tracks := make([]*Track, 10000)
+	tracks := make([]*catalog.Track, 10000)
 	for i := range tracks {
-		tracks[i] = &Track{}
-		if err := tracks[i].SetDuration(MaxDurationSeconds); err != nil {
+		tracks[i] = &catalog.Track{}
+		if err := tracks[i].SetDuration(maxDurationSeconds); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	if total := TotalDurationSeconds(tracks); math.IsInf(total, 0) || math.IsNaN(total) {
+	if total := catalog.TotalDurationSeconds(tracks); math.IsInf(total, 0) || math.IsNaN(total) {
 		t.Errorf("TotalDurationSeconds = %v, want finite", total)
 	}
 }
 
 const transitionRef = "s3://bucket/track.opus"
 
-type trackState func(t *testing.T) *Track
+type trackState func(t *testing.T) *catalog.Track
 
-func pendingTrack(t *testing.T) *Track {
+func pendingTrack(t *testing.T) *catalog.Track {
 	t.Helper()
 	return newTestTrack(t)
 }
 
-func readyTrack(t *testing.T) *Track {
+func readyTrack(t *testing.T) *catalog.Track {
 	t.Helper()
 	track := newTestTrack(t)
 	if err := track.MarkReady(transitionRef); err != nil {
@@ -864,7 +868,7 @@ func readyTrack(t *testing.T) *Track {
 	return track
 }
 
-func failedTrack(t *testing.T) *Track {
+func failedTrack(t *testing.T) *catalog.Track {
 	t.Helper()
 	track := newTestTrack(t)
 	if err := track.MarkFailed("download_failed"); err != nil {
@@ -873,21 +877,21 @@ func failedTrack(t *testing.T) *Track {
 	return track
 }
 
-func readyWithoutAudioTrack(t *testing.T) *Track {
+func readyWithoutAudioTrack(t *testing.T) *catalog.Track {
 	t.Helper()
 	track := newTestTrack(t)
-	track.AcquisitionStatus = AcquisitionReady
+	track.AcquisitionStatus = catalog.AcquisitionReady
 	track.AcquisitionStartedAt = nil
 	return track
 }
 
-var transitions = map[string]func(*Track) error{
-	"MarkReady":        func(tr *Track) error { return tr.MarkReady("s3://bucket/other.opus") },
-	"MarkReadySameRef": func(tr *Track) error { return tr.MarkReady(transitionRef) },
-	"ReplaceAudio":     func(tr *Track) error { return tr.ReplaceAudio("s3://bucket/other.opus") },
-	"MarkFailed":       func(tr *Track) error { return tr.MarkFailed("audio file missing from storage") },
-	"FailAcquisition":  func(tr *Track) error { return tr.FailAcquisition("no_match_found") },
-	"RevertToPending":  func(tr *Track) error { return tr.RevertToPending() },
+var transitions = map[string]func(*catalog.Track) error{
+	"MarkReady":        func(tr *catalog.Track) error { return tr.MarkReady("s3://bucket/other.opus") },
+	"MarkReadySameRef": func(tr *catalog.Track) error { return tr.MarkReady(transitionRef) },
+	"ReplaceAudio":     func(tr *catalog.Track) error { return tr.ReplaceAudio("s3://bucket/other.opus") },
+	"MarkFailed":       func(tr *catalog.Track) error { return tr.MarkFailed("audio file missing from storage") },
+	"FailAcquisition":  func(tr *catalog.Track) error { return tr.FailAcquisition("no_match_found") },
+	"RevertToPending":  func(tr *catalog.Track) error { return tr.RevertToPending() },
 }
 
 func TestTrack_IllegalAcquisitionTransitionsAreRefusedAndLeaveTheTrackUnchanged(t *testing.T) {
@@ -913,7 +917,7 @@ func TestTrack_IllegalAcquisitionTransitionsAreRefusedAndLeaveTheTrackUnchanged(
 
 			err := transitions[tc.method](track)
 
-			if !errors.Is(err, ErrIllegalAcquisitionTransition) {
+			if !errors.Is(err, catalog.ErrIllegalAcquisitionTransition) {
 				t.Fatalf("%s error = %v, want ErrIllegalAcquisitionTransition", tc.method, err)
 			}
 			if !reflect.DeepEqual(*track, before) {
@@ -929,18 +933,18 @@ func TestTrack_LegalAcquisitionTransitionsSucceed(t *testing.T) {
 		name   string
 		from   trackState
 		method string
-		want   AcquisitionStatus
+		want   catalog.AcquisitionStatus
 	}{
-		{"MarkReady from pending (acquisition completed)", pendingTrack, "MarkReady", AcquisitionReady},
-		{"MarkReady from failed (late success, backfill)", failedTrack, "MarkReady", AcquisitionReady},
-		{"MarkReady on ready without audio (backfill repair)", readyWithoutAudioTrack, "MarkReady", AcquisitionReady},
-		{"MarkReady on ready under the same ref (duplicate completion rewrote it)", readyTrack, "MarkReadySameRef", AcquisitionReady},
-		{"ReplaceAudio on a ready track", readyTrack, "ReplaceAudio", AcquisitionReady},
-		{"MarkFailed from pending (refused schedule, stale sweep)", pendingTrack, "MarkFailed", AcquisitionFailed},
-		{"MarkFailed from ready (audio missing from storage)", readyTrack, "MarkFailed", AcquisitionFailed},
-		{"FailAcquisition from pending", pendingTrack, "FailAcquisition", AcquisitionFailed},
-		{"RevertToPending from ready (re-acquire)", readyTrack, "RevertToPending", AcquisitionPending},
-		{"RevertToPending from failed (retry)", failedTrack, "RevertToPending", AcquisitionPending},
+		{"MarkReady from pending (acquisition completed)", pendingTrack, "MarkReady", catalog.AcquisitionReady},
+		{"MarkReady from failed (late success, backfill)", failedTrack, "MarkReady", catalog.AcquisitionReady},
+		{"MarkReady on ready without audio (backfill repair)", readyWithoutAudioTrack, "MarkReady", catalog.AcquisitionReady},
+		{"MarkReady on ready under the same ref (duplicate completion rewrote it)", readyTrack, "MarkReadySameRef", catalog.AcquisitionReady},
+		{"ReplaceAudio on a ready track", readyTrack, "ReplaceAudio", catalog.AcquisitionReady},
+		{"MarkFailed from pending (refused schedule, stale sweep)", pendingTrack, "MarkFailed", catalog.AcquisitionFailed},
+		{"MarkFailed from ready (audio missing from storage)", readyTrack, "MarkFailed", catalog.AcquisitionFailed},
+		{"FailAcquisition from pending", pendingTrack, "FailAcquisition", catalog.AcquisitionFailed},
+		{"RevertToPending from ready (re-acquire)", readyTrack, "RevertToPending", catalog.AcquisitionPending},
+		{"RevertToPending from failed (retry)", failedTrack, "RevertToPending", catalog.AcquisitionPending},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -958,14 +962,14 @@ func TestTrack_LegalAcquisitionTransitionsSucceed(t *testing.T) {
 }
 
 func TestSetAcquisitionProvenance_RejectsUnknownValues(t *testing.T) {
-	track := &Track{}
+	track := &catalog.Track{}
 
 	track.SetAcquisitionProvenance("nonsense")
 	if track.AcquisitionProvenance != nil {
 		t.Errorf("an unknown provenance must not be written, got %q", *track.AcquisitionProvenance)
 	}
 
-	track.SetAcquisitionProvenance(ProvenanceVerified)
+	track.SetAcquisitionProvenance(catalog.ProvenanceVerified)
 	if track.AcquisitionProvenance == nil || *track.AcquisitionProvenance != "verified" {
 		t.Errorf("provenance = %v, want verified", track.AcquisitionProvenance)
 	}
@@ -973,9 +977,9 @@ func TestSetAcquisitionProvenance_RejectsUnknownValues(t *testing.T) {
 
 const reRecordingMBID = "25d68187-ee71-4f06-9e58-0b49d66bf8a8"
 
-func studioLabelledTrack(t *testing.T) *Track {
+func studioLabelledTrack(t *testing.T) *catalog.Track {
 	t.Helper()
-	track, err := NewTrack(shared.NewUserId(uuid.New()), "It's Only Love", "Bryan Adams", "Reckless")
+	track, err := catalog.NewTrack(shared.NewUserId(uuid.New()), "It's Only Love", "Bryan Adams", "Reckless")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1011,7 +1015,7 @@ func TestTrack_RelabelAsRecordingNamesTheStoredRecording(t *testing.T) {
 	if track.CatalogDurationSeconds == nil || *track.CatalogDurationSeconds != 194 {
 		t.Errorf("CatalogDurationSeconds = %v, want 194", track.CatalogDurationSeconds)
 	}
-	if want := computeDedupKey(track.Title, "Bryan Adams", track.Album); track.DedupKey != want {
+	if want := catalog.TrackDedupKey(track.Title, "Bryan Adams", track.Album); track.DedupKey != want {
 		t.Errorf("DedupKey = %q, want %q", track.DedupKey, want)
 	}
 	if !track.Relabelled() {
@@ -1082,7 +1086,7 @@ func TestTrack_ARelabelledTrackKeepsItsArtistAndDedupsLikeOneAddedUnderTheNewLab
 	if track.DedupKey == studioKey {
 		t.Error("DedupKey still names the studio recording after a relabel")
 	}
-	addedFresh, err := NewTrack(track.UserId, "It’s Only Love (classic version)", "Bryan Adams", "It’s Only Love")
+	addedFresh, err := catalog.NewTrack(track.UserId, "It’s Only Love (classic version)", "Bryan Adams", "It’s Only Love")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1095,7 +1099,7 @@ func TestTrack_RelabelAsRecordingRefusesBadAlbumTextAndChangesNothing(t *testing
 	t.Parallel()
 	tests := []struct{ name, album, isrc string }{
 		{name: "album with NUL", album: "a\x00b", isrc: "IETLH2500023"},
-		{name: "album past the text limit", album: strings.Repeat("a", MaxLibrarySearchLength+1), isrc: "IETLH2500023"},
+		{name: "album past the text limit", album: strings.Repeat("a", catalog.MaxLibrarySearchLength+1), isrc: "IETLH2500023"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1119,7 +1123,7 @@ func TestTrack_RelabelAsRecordingRefusesBadAlbumTextAndChangesNothing(t *testing
 func TestTrack_RelabelAsRecordingAcceptsAnAlbumAtTheTextLimit(t *testing.T) {
 	t.Parallel()
 	track := studioLabelledTrack(t)
-	album := strings.Repeat("a", MaxLibrarySearchLength)
+	album := strings.Repeat("a", catalog.MaxLibrarySearchLength)
 
 	if err := track.RelabelAsRecording(reRecordingMBID, "Title", album, 2025, "IETLH2500023", 194); err != nil {
 		t.Fatalf("album at the limit refused: %v", err)
