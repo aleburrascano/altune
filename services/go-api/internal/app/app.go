@@ -201,7 +201,7 @@ func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback 
 func (a *App) applyDisabledJobs(ctx context.Context) error {
 	for _, raw := range a.cfg.DisabledJobs {
 		name := jobName(raw)
-		if !isKnownJobName(name) {
+		if !isSwitchableJobName(name) {
 			return fmt.Errorf("DISABLED_JOBS: unknown job %q", raw)
 		}
 		if a.job(name).DisableIfEnabled() {

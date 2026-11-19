@@ -166,16 +166,25 @@ var allJobNameConsts = []jobName{
 	jobUnreleasedRefresh,
 }
 
-func TestKnownJobNames_PinnedToEveryConst(t *testing.T) {
-	if !reflect.DeepEqual(knownJobNames, allJobNameConsts) {
-		t.Fatalf("knownJobNames = %v, want %v", knownJobNames, allJobNameConsts)
-	}
+func TestSwitchableJobNames_EveryConstButTheAlwaysOnErasure(t *testing.T) {
+	want := make([]jobName, 0, len(allJobNameConsts))
 	for _, name := range allJobNameConsts {
-		if !isKnownJobName(name) {
-			t.Fatalf("job %q not known", name)
+		if name != jobDeletedIdentityErasure {
+			want = append(want, name)
 		}
 	}
-	if isKnownJobName("no such job") {
+	if !reflect.DeepEqual(switchableJobNames, want) {
+		t.Fatalf("switchableJobNames = %v, want %v", switchableJobNames, want)
+	}
+	for _, name := range want {
+		if !isSwitchableJobName(name) {
+			t.Fatalf("job %q not switchable", name)
+		}
+	}
+	if isSwitchableJobName(jobDeletedIdentityErasure) {
+		t.Fatal("the deleted identity erasure job reported switchable")
+	}
+	if isSwitchableJobName("no such job") {
 		t.Fatal("unregistered name reported known")
 	}
 }

@@ -72,7 +72,7 @@ func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 		t.Fatalf("NewQueueState: %v", err)
 	}
 	metrics := playback.NewExpvarPlaybackMetrics()
-	queue := newQueueHandler(newQueueService(t.Context(), &storedQueue{state: state}, cat.trackRepo, metrics, true), metrics, playback.DefaultQueueStateRateLimit)
+	queue := newQueueHandler(newQueueService(&storedQueue{state: state}, cat.trackRepo, metrics), metrics, playback.DefaultQueueStateRateLimit)
 
 	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
 		if token == operatorToken {
@@ -127,63 +127,6 @@ func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 	}
 }
 
-func TestPlaybackEnrichmentKillSwitch_ShedsCatalogLookupOnResume(t *testing.T) {
-	pool, err := pgxpool.New(context.Background(), blackHoleDatabase(t))
-	if err != nil {
-		t.Fatalf("pgxpool.New: %v", err)
-	}
-	t.Cleanup(pool.Close)
-
-	a := &App{cfg: &config.Config{MusicDir: t.TempDir(), NowPlayingEnrichmentEnabled: false}, sem: make(chan struct{}, 1), pool: pool}
-	cat, err := a.wireCatalog(t.Context(), nil, &discovery.Discovery{})
-	if err != nil {
-		t.Fatalf("wireCatalog: %v", err)
-	}
-	user := shared.NewUserId(uuid.New())
-	state, err := playback.NewQueueState(playback.QueueStateInput{
-		UserId: user, TrackIds: []string{uuid.NewString(), uuid.NewString()}, CurrentIdx: 1, RepeatMode: playback.RepeatOff,
-	})
-	if err != nil {
-		t.Fatalf("NewQueueState: %v", err)
-	}
-	metrics := playback.NewExpvarPlaybackMetrics()
-	queue := newQueueHandler(
-		newQueueService(t.Context(), &storedQueue{state: state}, cat.trackRepo, metrics, a.cfg.HasNowPlayingEnrichment()),
-		metrics, playback.DefaultQueueStateRateLimit)
-
-	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
-		if token == operatorToken {
-			return auth.VerifiedToken{UserID: user, ExpiresAt: time.Now().Add(time.Hour)}, nil
-		}
-		return auth.VerifiedToken{}, errors.New("bad token")
-	})
-	r := a.mountRoutes(verifier, cat, queue,
-		discovery.NewDiscoveryHandler(discovery.DiscoveryServices{}))
-
-	before := playback.ReadSnapshot()
-	start := time.Now()
-	code, body := callObserveAs(t, r, http.MethodGet, "/v1/playback/queue-state", operatorToken)
-	elapsed := time.Since(start)
-
-	if code != http.StatusOK {
-		t.Fatalf("resume with enrichment disabled: status %d, want 200; body %s", code, body)
-	}
-	if elapsed >= time.Second {
-		t.Errorf("resume took %s; a disabled lookup must not wait on the catalog deadline", elapsed)
-	}
-	if !bytes.Contains(body, []byte(`"current_index":1`)) {
-		t.Errorf("resume body does not carry the queue: %s", body)
-	}
-	if bytes.Contains(body, []byte(`current_track`)) {
-		t.Errorf("disabled enrichment must emit neither current_track nor current_track_unavailable: %s", body)
-	}
-	after := playback.ReadSnapshot()
-	if after.EnrichmentFailures != before.EnrichmentFailures || after.NowPlayingLookupTimeouts != before.NowPlayingLookupTimeouts {
-		t.Errorf("a disabled lookup must not run: enrichment failures %d->%d, timeouts %d->%d",
-			before.EnrichmentFailures, after.EnrichmentFailures, before.NowPlayingLookupTimeouts, after.NowPlayingLookupTimeouts)
-	}
-}
-
 func TestWirePlayback_SweepReapsErasedQueueStates(t *testing.T) {
 	pool, err := pgxpool.New(context.Background(), blackHoleDatabase(t))
 	if err != nil {
@@ -210,7 +153,7 @@ func TestQueueRateLimit_EnvThrottlesQueueStateAtConfiguredBurst(t *testing.T) {
 	}
 	user := shared.NewUserId(uuid.New())
 	metrics := playback.NewExpvarPlaybackMetrics()
-	queue := newQueueHandler(newQueueService(t.Context(), &storedQueue{}, nil, metrics, false), metrics, queueRateLimit(cfg))
+	queue := newQueueHandler(newQueueService(&storedQueue{}, nil, metrics), metrics, queueRateLimit(cfg))
 	routes := queue.Routes()
 
 	var codes []int

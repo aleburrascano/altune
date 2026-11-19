@@ -82,7 +82,7 @@ func (r *PgxQueueStateRepository) runOp(
 		if !errors.Is(err, context.DeadlineExceeded) {
 			r.metrics.QueueStateOpFailedTransient()
 		}
-		return fmt.Errorf("%w: %w", domain.ErrQueueStateUnavailable, err)
+		return fmt.Errorf("%w: %w", ports.ErrQueueStateUnavailable, err)
 	}
 	return err
 }
@@ -131,7 +131,7 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 	}
 	if tag.RowsAffected() == 0 {
 		r.metrics.QueueStateStaleWrite()
-		return domain.ErrStaleQueueWrite
+		return ports.ErrStaleQueueWrite
 	}
 	return nil
 }
@@ -179,10 +179,10 @@ func (r *PgxQueueStateRepository) UpdatePosition(ctx context.Context, position *
 		return nil
 	case matched:
 		r.metrics.QueueStateStaleWrite()
-		return domain.ErrStaleQueueWrite
+		return ports.ErrStaleQueueWrite
 	default:
 		r.metrics.QueueStateStaleWrite()
-		return domain.ErrQueuePositionMismatch
+		return ports.ErrQueuePositionMismatch
 	}
 }
 

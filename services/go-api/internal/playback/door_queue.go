@@ -9,7 +9,6 @@ import (
 type (
 	SaveQueueStateInput    = queue.SaveQueueStateInput
 	SaveQueuePositionInput = queue.SaveQueuePositionInput
-	QueueServiceOption     = queue.Option
 	QueueSource            = domain.QueueSource
 	RepeatMode             = domain.RepeatMode
 	NowPlayingTrack        = ports.NowPlayingTrack

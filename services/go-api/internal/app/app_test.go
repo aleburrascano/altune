@@ -135,8 +135,8 @@ func TestApplyDisabledJobs_DisabledRankingRefreshNeverRefreshes(t *testing.T) {
 	}
 }
 
-func TestApplyStartupSwitches_ObserveLoopsAreNotSwitchable(t *testing.T) {
-	for _, name := range []jobName{jobAlertMonitor, jobEvalMeter} {
+func TestApplyStartupSwitches_AlwaysOnJobsAreNotSwitchable(t *testing.T) {
+	for _, name := range []jobName{jobAlertMonitor, jobEvalMeter, jobDeletedIdentityErasure} {
 		a := &App{cfg: &config.Config{DisabledJobs: []string{string(name)}}}
 		err := a.applyStartupSwitches(t.Context())
 		if err == nil || !strings.Contains(err.Error(), "unknown job") {
