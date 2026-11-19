@@ -1,0 +1,25 @@
+{
+  "removed": [
+    "T1 internal/catalog/adapters/handler/audio_url_handler_test.go imports catalogtest/audio_store_fake.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/audio_url_handler_test.go imports catalogtest/track_repo_fake.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/audio_url_handler_test.go imports internal/core/audio/audio_url.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/audio_url_handler_test.go is in package handler, so it sees inside the module: use package handler_test and import the door",
+    "T1 internal/catalog/adapters/handler/fixtures_test.go imports internal/core/audio/stream_track.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/fixtures_test.go imports internal/core/ports/acquisition_scheduler.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/rate_limit_test.go imports catalogtest/audio_store_fake.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/rate_limit_test.go imports catalogtest/track_repo_fake.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/rate_limit_test.go imports domain/track.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/rate_limit_test.go imports internal/core/audio/audio_url.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/rate_limit_test.go imports internal/core/audio/stream_track.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/rate_limit_test.go imports internal/core/ports/audio_store.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/rate_limit_test.go is in package handler, so it sees inside the module: use package handler_test and import the door",
+    "T1 internal/catalog/adapters/handler/stream_handler_test.go imports catalogtest/audio_store_fake.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/stream_handler_test.go imports catalogtest/scheduler_fake.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/stream_handler_test.go imports catalogtest/track_repo_fake.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/stream_handler_test.go imports internal/core/audio/stream_track.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/stream_handler_test.go imports internal/core/ports/audio_store.go, behind catalog's door",
+    "T1 internal/catalog/adapters/handler/stream_handler_test.go is in package handler, so it sees inside the module: use package handler_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}

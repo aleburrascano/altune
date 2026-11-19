@@ -32,10 +32,14 @@ func NewAudioURLHandler(svc *audioservice.AudioURLService, opts ...func(*AudioUR
 }
 
 func WithAudioURLRateLimit(limit AudioRateLimit) func(*AudioURLHandler) {
-	return func(h *AudioURLHandler) { h.rateLimit = limit }
+	return func(h *AudioURLHandler) {
+		if limit.Every > 0 {
+			h.rateLimit = limit
+		}
+	}
 }
 
-func withAudioURLClock(now func() time.Time) func(*AudioURLHandler) {
+func WithAudioURLLimiterClock(now func() time.Time) func(*AudioURLHandler) {
 	return func(h *AudioURLHandler) { h.now = now }
 }
 

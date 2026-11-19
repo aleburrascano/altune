@@ -1,8 +1,7 @@
-package handler
+package handler_test
 
 import (
-	"altune/go-api/internal/catalog/catalogtest"
-	audioservice "altune/go-api/internal/catalog/internal/core/audio"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -10,7 +9,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -18,92 +16,87 @@ import (
 	"github.com/google/uuid"
 )
 
-func resolvePrefetchFlag(t *testing.T, opts ...func(*AudioURLHandler)) any {
-	t.Helper()
-	repo := catalogtest.NewTrackRepo()
-	track := makeReadyTrack(testUserId, "Track", "Artist", "Album", "audio/ok.opus")
-	repo.Seed(track)
-	svc := audioservice.NewAudioURLService(repo, catalogtest.NewAudioStore())
+const audioURLBatchCap = 200
 
+type resolveRequest struct {
+	TrackIDs []string `json:"track_ids"`
+}
+
+func audioURLRoutes(store catalog.AudioStore, opts ...func(*catalog.AudioURLHandler)) (*catalog.InMemoryTrackRepo, chi.Router) {
+	repo := catalog.NewInMemoryTrackRepo()
 	router := chi.NewRouter()
-	router.Use(bearerUser(asTestUser))
-	router.Post("/audio-urls", NewAudioURLHandler(svc, opts...).HandleResolve)
+	router.Use(asBearer)
+	catalog.NewAudioURLHandler(catalog.NewAudioURLService(repo, store), opts...).Routes(router)
+	return repo, router
+}
 
-	body := jsonBody(t, resolveAudioURLsRequest{TrackIDs: []string{track.ID.UUID().String()}})
-	req := httptest.NewRequest(http.MethodPost, "/audio-urls", body)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer fake-token")
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
+func resolveOneReadyTrack(t *testing.T, opts ...func(*catalog.AudioURLHandler)) map[string]any {
+	t.Helper()
+	repo, router := audioURLRoutes(catalog.NewInMemoryAudioStore(), opts...)
+	track := catalog.SeedReadyTrack(t, repo, catalog.FixtureUserId(), "Track", "Artist", "Album", "audio/ok.opus")
+
+	rec := postJSON(t, router, "/audio-urls", resolveRequest{TrackIDs: []string{track.ID.UUID().String()}})
 
 	assertStatus(t, rec, http.StatusOK)
 	var resp map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	return resp["prefetch_enabled"]
+	return resp
 }
 
 func TestAudioURLs_ReportPrefetchKillSwitch(t *testing.T) {
-	if got := resolvePrefetchFlag(t); got != true {
+	if got := resolveOneReadyTrack(t)["prefetch_enabled"]; got != true {
 		t.Errorf("default prefetch_enabled = %v, want true (preserve current behavior)", got)
 	}
-	if got := resolvePrefetchFlag(t, WithPrefetchEnabled(true)); got != true {
+	if got := resolveOneReadyTrack(t, catalog.WithPrefetchEnabled(true))["prefetch_enabled"]; got != true {
 		t.Errorf("enabled prefetch_enabled = %v, want true", got)
 	}
-	if got := resolvePrefetchFlag(t, WithPrefetchEnabled(false)); got != false {
+	if got := resolveOneReadyTrack(t, catalog.WithPrefetchEnabled(false))["prefetch_enabled"]; got != false {
 		t.Errorf("disabled prefetch_enabled = %v, want false so clients stop prefetching", got)
 	}
 }
 
-func audioURLRouter() chi.Router {
-	svc := audioservice.NewAudioURLService(catalogtest.NewTrackRepo(), catalogtest.NewAudioStore())
-	router := chi.NewRouter()
-	router.Use(bearerUser(asTestUser))
-	NewAudioURLHandler(svc).Routes(router)
-	return router
-}
-
-func TestAudioURLs_RejectsAnOversizedBatchWithItsOwnCode(t *testing.T) {
-	ids := make([]string, maxAudioURLBatch+1)
+func unknownTrackIDs(n int) []string {
+	ids := make([]string, n)
 	for i := range ids {
 		ids[i] = uuid.NewString()
 	}
+	return ids
+}
 
-	body := jsonBody(t, resolveAudioURLsRequest{TrackIDs: ids})
-	rec := serve(t, audioURLRouter(), http.MethodPost, "/audio-urls", body)
+func TestAudioURLs_TheBatchCapIsTwoHundred(t *testing.T) {
+	_, router := audioURLRoutes(catalog.NewInMemoryAudioStore())
 
-	assertStatus(t, rec, http.StatusBadRequest)
-	assertErrorCode(t, rec, "catalog.batch_too_large")
+	atCap := postJSON(t, router, "/audio-urls", resolveRequest{TrackIDs: unknownTrackIDs(audioURLBatchCap)})
+	assertStatus(t, atCap, http.StatusOK)
+
+	overCap := postJSON(t, router, "/audio-urls", resolveRequest{TrackIDs: unknownTrackIDs(audioURLBatchCap + 1)})
+	assertStatus(t, overCap, http.StatusBadRequest)
+	assertErrorCode(t, overCap, "catalog.batch_too_large")
 }
 
 func TestAudioURLs_RejectsAMalformedTrackIDWithItsOwnCode(t *testing.T) {
-	body := jsonBody(t, resolveAudioURLsRequest{TrackIDs: []string{"not-a-uuid"}})
-	rec := serve(t, audioURLRouter(), http.MethodPost, "/audio-urls", body)
+	_, router := audioURLRoutes(catalog.NewInMemoryAudioStore())
+
+	rec := postJSON(t, router, "/audio-urls", resolveRequest{TrackIDs: []string{"not-a-uuid"}})
 
 	assertStatus(t, rec, http.StatusBadRequest)
 	assertErrorCode(t, rec, "catalog.invalid_track_id")
 }
 
 func TestAudioURLs_ResponseIsNeverCached(t *testing.T) {
-	repo := catalogtest.NewTrackRepo()
-	track := makeReadyTrack(testUserId, "Track", "Artist", "Album", "audio/ok.opus")
-	repo.Seed(track)
-	svc := audioservice.NewAudioURLService(repo, catalogtest.NewAudioStore())
+	repo, router := audioURLRoutes(catalog.NewInMemoryAudioStore())
+	track := catalog.SeedReadyTrack(t, repo, catalog.FixtureUserId(), "Track", "Artist", "Album", "audio/ok.opus")
 
-	router := chi.NewRouter()
-	router.Use(bearerUser(asTestUser))
-	NewAudioURLHandler(svc).Routes(router)
-
-	body := jsonBody(t, resolveAudioURLsRequest{TrackIDs: []string{track.ID.UUID().String()}})
-	rec := serve(t, router, http.MethodPost, "/audio-urls", body)
+	rec := postJSON(t, router, "/audio-urls", resolveRequest{TrackIDs: []string{track.ID.UUID().String()}})
 
 	assertStatus(t, rec, http.StatusOK)
 	assertPrivateAudioHeaders(t, rec, "private, no-store")
 }
 
 type failingSigner struct {
-	*catalogtest.AudioStore
+	*catalog.InMemoryAudioStore
 }
 
 func (failingSigner) PresignGet(context.Context, string, time.Duration) (string, error) {
@@ -115,33 +108,24 @@ func TestCorrelationID_ReachesCatalogServiceLogs(t *testing.T) {
 	defer slog.SetDefault(prev)
 	ring := logging.Setup("info", false)
 
-	repo := catalogtest.NewTrackRepo()
-	track := makeReadyTrack(testUserId, "Track", "Artist", "Album", "audio/ok.opus")
-	repo.Seed(track)
-	svc := audioservice.NewAudioURLService(repo, failingSigner{catalogtest.NewAudioStore()})
-
+	repo := catalog.NewInMemoryTrackRepo()
+	track := catalog.SeedReadyTrack(t, repo, catalog.FixtureUserId(), "Track", "Artist", "Album", "audio/ok.opus")
 	router := chi.NewRouter()
 	router.Use(httputil.CorrelationID)
 	router.Use(httputil.RequestLogger)
-	router.Use(bearerUser(asTestUser))
-	router.Post("/audio-urls", NewAudioURLHandler(svc).HandleResolve)
+	router.Use(asBearer)
+	catalog.NewAudioURLHandler(catalog.NewAudioURLService(repo, failingSigner{catalog.NewInMemoryAudioStore()})).Routes(router)
 
 	const inbound = "trace-abc12345"
-	body := jsonBody(t, resolveAudioURLsRequest{TrackIDs: []string{track.ID.UUID().String()}})
-	req := httptest.NewRequest(http.MethodPost, "/audio-urls", body)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer fake-token")
+	req := jsonRequest(t, http.MethodPost, "/audio-urls", resolveRequest{TrackIDs: []string{track.ID.UUID().String()}})
 	req.Header.Set("X-Correlation-ID", inbound)
-	rec := httptest.NewRecorder()
-
-	router.ServeHTTP(rec, req)
+	rec := sendAs(router, req, catalog.FixtureUserId())
 
 	assertStatus(t, rec, http.StatusOK)
 	echoed := rec.Header().Get("X-Correlation-ID")
 	if echoed != inbound {
 		t.Fatalf("response header X-Correlation-ID = %q, want inbound %q", echoed, inbound)
 	}
-
 	sawCatalogLog := false
 	for _, r := range ring.Snapshot() {
 		if r.Message != "audio_url.presign_failed" {

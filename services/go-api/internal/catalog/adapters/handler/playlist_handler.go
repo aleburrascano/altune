@@ -35,10 +35,14 @@ func NewPlaylistHandler(lifecycle *playlistservice.PlaylistLifecycleService, mem
 }
 
 func WithPlaylistWriteRateLimit(limit AudioRateLimit) func(*PlaylistHandler) {
-	return func(h *PlaylistHandler) { h.writeLimit = limit }
+	return func(h *PlaylistHandler) {
+		if limit.Every > 0 {
+			h.writeLimit = limit
+		}
+	}
 }
 
-func withPlaylistWriteClock(now func() time.Time) func(*PlaylistHandler) {
+func WithPlaylistWriteLimiterClock(now func() time.Time) func(*PlaylistHandler) {
 	return func(h *PlaylistHandler) { h.now = now }
 }
 

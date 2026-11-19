@@ -36,11 +36,23 @@ func NewStreamHandler(svc *audioservice.StreamTrackService, opts ...func(*Stream
 }
 
 func WithStreamRateLimit(limit AudioRateLimit) func(*StreamHandler) {
-	return func(h *StreamHandler) { h.rateLimit = limit }
+	return func(h *StreamHandler) {
+		if limit.Every > 0 {
+			h.rateLimit = limit
+		}
+	}
 }
 
-func withStreamClock(now func() time.Time) func(*StreamHandler) {
+func WithStreamLimiterClock(now func() time.Time) func(*StreamHandler) {
 	return func(h *StreamHandler) { h.now = now }
+}
+
+func WithStreamWriteIdleTimeout(idle time.Duration) func(*StreamHandler) {
+	return func(h *StreamHandler) {
+		if idle > 0 {
+			h.writeIdleTimeout = idle
+		}
+	}
 }
 
 func (h *StreamHandler) Routes(r chi.Router) {

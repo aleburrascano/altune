@@ -1,12 +1,9 @@
-package handler
+package handler_test
 
 import (
-	"altune/go-api/internal/catalog/catalogtest"
-	audioservice "altune/go-api/internal/catalog/internal/core/audio"
-	"altune/go-api/internal/catalog/internal/core/ports"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/httputiltest"
-	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
 	"bytes"
 	"context"
@@ -23,19 +20,39 @@ import (
 	"github.com/google/uuid"
 )
 
+func streamOnlyRoute(repo *catalog.InMemoryTrackRepo, store catalog.AudioStore, opts ...func(*catalog.StreamTrackService)) chi.Router {
+	h := catalog.NewStreamHandler(catalog.NewStreamTrackService(repo, store, opts...))
+	router := chi.NewRouter()
+	router.Use(asBearer)
+	router.Get("/tracks/{trackId}/stream", h.HandleStreamAudio)
+	return router
+}
+
+func streamRoutes(store catalog.AudioStore, opts ...func(*catalog.StreamHandler)) (*catalog.InMemoryTrackRepo, chi.Router) {
+	repo := catalog.NewInMemoryTrackRepo()
+	router := chi.NewRouter()
+	router.Use(asBearer)
+	catalog.NewStreamHandler(catalog.NewStreamTrackService(repo, store), opts...).Routes(router)
+	return repo, router
+}
+
+func seedReady(t *testing.T, repo *catalog.InMemoryTrackRepo, title, audioRef string) *catalog.Track {
+	t.Helper()
+	return catalog.SeedReadyTrack(t, repo, catalog.FixtureUserId(), title, "Artist", "Album", audioRef)
+}
+
 func TestHandleStreamAudio(t *testing.T) {
 	tests := []struct {
 		name            string
-		setup           func(*catalogtest.TrackRepo, *catalogtest.AudioStore) string
+		setup           func(*testing.T, *catalog.InMemoryTrackRepo, *catalog.InMemoryAudioStore) string
 		wantStatus      int
 		wantContentType string
 		wantBodyLen     int
 	}{
 		{
 			name: "mp3 track serves audio/mpeg",
-			setup: func(repo *catalogtest.TrackRepo, store *catalogtest.AudioStore) string {
-				track := makeReadyTrack(testUserId, "Track", "Artist", "Album", "audio/123.mp3")
-				repo.Seed(track)
+			setup: func(t *testing.T, repo *catalog.InMemoryTrackRepo, store *catalog.InMemoryAudioStore) string {
+				track := seedReady(t, repo, "Track", "audio/123.mp3")
 				store.Seed("audio/123.mp3", []byte("fake-audio-data"))
 				return track.ID.UUID().String()
 			},
@@ -45,9 +62,8 @@ func TestHandleStreamAudio(t *testing.T) {
 		},
 		{
 			name: "m4a track serves audio/mp4",
-			setup: func(repo *catalogtest.TrackRepo, store *catalogtest.AudioStore) string {
-				track := makeReadyTrack(testUserId, "Track", "Artist", "Album", "audio/456.m4a")
-				repo.Seed(track)
+			setup: func(t *testing.T, repo *catalog.InMemoryTrackRepo, store *catalog.InMemoryAudioStore) string {
+				track := seedReady(t, repo, "Track", "audio/456.m4a")
 				store.Seed("audio/456.m4a", []byte("fake-audio-data"))
 				return track.ID.UUID().String()
 			},
@@ -57,9 +73,8 @@ func TestHandleStreamAudio(t *testing.T) {
 		},
 		{
 			name: "opus track serves audio/opus",
-			setup: func(repo *catalogtest.TrackRepo, store *catalogtest.AudioStore) string {
-				track := makeReadyTrack(testUserId, "Track", "Artist", "Album", "audio/789.opus")
-				repo.Seed(track)
+			setup: func(t *testing.T, repo *catalog.InMemoryTrackRepo, store *catalog.InMemoryAudioStore) string {
+				track := seedReady(t, repo, "Track", "audio/789.opus")
 				store.Seed("audio/789.opus", []byte("fake-audio-data"))
 				return track.ID.UUID().String()
 			},
@@ -69,32 +84,30 @@ func TestHandleStreamAudio(t *testing.T) {
 		},
 		{
 			name: "invalid track ID returns 400",
-			setup: func(repo *catalogtest.TrackRepo, store *catalogtest.AudioStore) string {
+			setup: func(t *testing.T, repo *catalog.InMemoryTrackRepo, store *catalog.InMemoryAudioStore) string {
 				return "not-a-uuid"
 			},
 			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name: "track not found returns 404",
-			setup: func(repo *catalogtest.TrackRepo, store *catalogtest.AudioStore) string {
+			setup: func(t *testing.T, repo *catalog.InMemoryTrackRepo, store *catalog.InMemoryAudioStore) string {
 				return uuid.New().String()
 			},
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name: "pending track (not streamable) returns 404",
-			setup: func(repo *catalogtest.TrackRepo, store *catalogtest.AudioStore) string {
-				track := makeTrack(testUserId, "Pending", "Artist", "Album")
-				repo.Seed(track)
+			setup: func(t *testing.T, repo *catalog.InMemoryTrackRepo, store *catalog.InMemoryAudioStore) string {
+				track := catalog.SeedTrack(t, repo, catalog.FixtureUserId(), "Pending", "Artist", "Album")
 				return track.ID.UUID().String()
 			},
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name: "ready track with missing audio file returns 404 and reconciles",
-			setup: func(repo *catalogtest.TrackRepo, store *catalogtest.AudioStore) string {
-				track := makeReadyTrack(testUserId, "Gone", "Artist", "Album", "audio/gone.opus")
-				repo.Seed(track)
+			setup: func(t *testing.T, repo *catalog.InMemoryTrackRepo, store *catalog.InMemoryAudioStore) string {
+				track := seedReady(t, repo, "Gone", "audio/gone.opus")
 				return track.ID.UUID().String()
 			},
 			wantStatus: http.StatusNotFound,
@@ -103,42 +116,35 @@ func TestHandleStreamAudio(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := catalogtest.NewTrackRepo()
-			store := catalogtest.NewAudioStore()
-			trackId := tt.setup(repo, store)
-			_, router := buildStreamHandler(repo, store, nil)
+			repo := catalog.NewInMemoryTrackRepo()
+			store := catalog.NewInMemoryAudioStore()
+			trackId := tt.setup(t, repo, store)
+			router := streamOnlyRoute(repo, store)
 
-			rec := serve(t, router, http.MethodGet, "/tracks/"+trackId+"/stream", nil)
+			rec := serve(router, http.MethodGet, "/tracks/"+trackId+"/stream")
 
 			assertStatus(t, rec, tt.wantStatus)
-
 			if tt.wantContentType != "" {
-				ct := rec.Header().Get("Content-Type")
-				if ct != tt.wantContentType {
+				if ct := rec.Header().Get("Content-Type"); ct != tt.wantContentType {
 					t.Errorf("Content-Type = %q, want %q", ct, tt.wantContentType)
 				}
 			}
-			if tt.wantBodyLen > 0 {
-				if rec.Body.Len() != tt.wantBodyLen {
-					t.Errorf("body length = %d, want %d", rec.Body.Len(), tt.wantBodyLen)
-				}
+			if tt.wantBodyLen > 0 && rec.Body.Len() != tt.wantBodyLen {
+				t.Errorf("body length = %d, want %d", rec.Body.Len(), tt.wantBodyLen)
 			}
 		})
 	}
 }
 
 func TestHandleStreamAudio_MissingAudio_SchedulesReacquisition(t *testing.T) {
-	repo := catalogtest.NewTrackRepo()
-	store := catalogtest.NewAudioStore()
-	sched := &catalogtest.Scheduler{}
-	track := makeReadyTrack(testUserId, "Gone", "Artist", "Album", "audio/gone.opus")
-	repo.Seed(track)
+	repo := catalog.NewInMemoryTrackRepo()
+	sched := &catalog.InMemoryScheduler{}
+	track := seedReady(t, repo, "Gone", "audio/gone.opus")
+	router := streamOnlyRoute(repo, catalog.NewInMemoryAudioStore(), catalog.WithStreamScheduler(sched))
 
-	_, router := buildStreamHandler(repo, store, sched)
-	rec := serve(t, router, http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/stream", nil)
+	rec := serve(router, http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/stream")
 
 	assertStatus(t, rec, http.StatusNotFound)
-
 	if len(sched.TrackIds) != 1 {
 		t.Fatalf("expected 1 scheduled reacquisition, got %d", len(sched.TrackIds))
 	}
@@ -148,29 +154,23 @@ func TestHandleStreamAudio_MissingAudio_SchedulesReacquisition(t *testing.T) {
 }
 
 func TestHandleStreamAudio_NoAuth(t *testing.T) {
-	repo := catalogtest.NewTrackRepo()
-	store := catalogtest.NewAudioStore()
-	_, router := buildStreamHandler(repo, store, nil)
+	router := streamOnlyRoute(catalog.NewInMemoryTrackRepo(), catalog.NewInMemoryAudioStore())
 
-	rec := serveNoAuth(t, router, http.MethodGet, "/tracks/"+uuid.New().String()+"/stream", nil)
+	rec := sendAnonymous(router, httptest.NewRequest(http.MethodGet, "/tracks/"+uuid.New().String()+"/stream", nil))
 
 	assertStatus(t, rec, http.StatusUnauthorized)
 }
 
 func TestHandleRecover(t *testing.T) {
-	repo := catalogtest.NewTrackRepo()
-	sched := &catalogtest.Scheduler{}
-	foreign := makeReadyTrack(shared.NewUserId(uuid.New()), "Theirs", "Artist", "Album", "audio/theirs.opus")
-	pending := makeTrack(testUserId, "Pending", "Artist", "Album")
-	gone := makeReadyTrack(testUserId, "Gone", "Artist", "Album", "audio/gone.opus")
-	repo.Seed(foreign)
-	repo.Seed(pending)
-	repo.Seed(gone)
-
-	h, _ := buildStreamHandler(repo, catalogtest.NewAudioStore(), sched)
+	repo := catalog.NewInMemoryTrackRepo()
+	sched := &catalog.InMemoryScheduler{}
+	foreign := catalog.SeedReadyTrack(t, repo, catalog.FixtureOtherUserId(), "Theirs", "Artist", "Album", "audio/theirs.opus")
+	pending := catalog.SeedTrack(t, repo, catalog.FixtureUserId(), "Pending", "Artist", "Album")
+	gone := seedReady(t, repo, "Gone", "audio/gone.opus")
 	router := chi.NewRouter()
-	router.Use(bearerUser(asTestUser))
-	h.Routes(router)
+	router.Use(asBearer)
+	svc := catalog.NewStreamTrackService(repo, catalog.NewInMemoryAudioStore(), catalog.WithStreamScheduler(sched))
+	catalog.NewStreamHandler(svc).Routes(router)
 
 	tests := []struct {
 		name       string
@@ -184,7 +184,7 @@ func TestHandleRecover(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := serve(t, router, http.MethodPost, "/tracks/"+tt.trackId+"/audio/recover", nil)
+			rec := serve(router, http.MethodPost, "/tracks/"+tt.trackId+"/audio/recover")
 			assertStatus(t, rec, tt.wantStatus)
 		})
 	}
@@ -193,46 +193,37 @@ func TestHandleRecover(t *testing.T) {
 	}
 }
 
-func mountStreamRoutes(store ports.AudioStore, opts ...func(*StreamHandler)) (*catalogtest.TrackRepo, chi.Router) {
-	repo := catalogtest.NewTrackRepo()
-	router := chi.NewRouter()
-	router.Use(bearerUser(asTestUser))
-	NewStreamHandler(audioservice.NewStreamTrackService(repo, store), opts...).Routes(router)
-	return repo, router
-}
-
 type probeCountingStore struct {
-	*catalogtest.AudioStore
+	*catalog.InMemoryAudioStore
 	probes int
 }
 
 func (s *probeCountingStore) Exists(ctx context.Context, audioRef string) (bool, error) {
 	s.probes++
-	return s.AudioStore.Exists(ctx, audioRef)
+	return s.InMemoryAudioStore.Exists(ctx, audioRef)
 }
 
 func TestHandleRecover_FloodFromOnePrincipalIsThrottled(t *testing.T) {
-	clock := newAudioFakeClock()
-	limit := AudioRateLimit{Every: 2 * time.Second, Burst: 3}
-	store := &probeCountingStore{AudioStore: catalogtest.NewAudioStore()}
-	repo, router := mountStreamRoutes(store, WithStreamRateLimit(limit), withStreamClock(clock.now))
-	track := makeReadyTrack(testUserId, "Track", "Artist", "Album", "audio/present.opus")
-	repo.Seed(track)
+	clock := newFakeClock()
+	limit := catalog.AudioRateLimit{Every: 2 * time.Second, Burst: 3}
+	store := &probeCountingStore{InMemoryAudioStore: catalog.NewInMemoryAudioStore()}
+	repo, router := streamRoutes(store, catalog.WithStreamRateLimit(limit), catalog.WithStreamLimiterClock(clock.now))
+	track := seedReady(t, repo, "Track", "audio/present.opus")
 	store.Seed("audio/present.opus", []byte("fake-audio-data"))
 	path := "/tracks/" + track.ID.UUID().String() + "/audio/recover"
 
 	for i := range limit.Burst {
-		if rec := serve(t, router, http.MethodPost, path, nil); rec.Code != http.StatusAccepted {
+		if rec := serve(router, http.MethodPost, path); rec.Code != http.StatusAccepted {
 			t.Fatalf("recover %d inside the burst must be accepted, got %d", i, rec.Code)
 		}
 	}
-	assertAudioThrottled(t, serve(t, router, http.MethodPost, path, nil), "2")
+	assertAudioThrottled(t, serve(router, http.MethodPost, path), "2")
 
 	if store.probes != limit.Burst {
 		t.Fatalf("a throttled recover must not probe storage: %d HEADs, want %d", store.probes, limit.Burst)
 	}
 	clock.advance(limit.Every)
-	if rec := serve(t, router, http.MethodPost, path, nil); rec.Code != http.StatusAccepted {
+	if rec := serve(router, http.MethodPost, path); rec.Code != http.StatusAccepted {
 		t.Fatalf("a refilled token must admit the next recover, got %d", rec.Code)
 	}
 }
@@ -240,12 +231,12 @@ func TestHandleRecover_FloodFromOnePrincipalIsThrottled(t *testing.T) {
 var errStorageReadFailed = errors.New("storage read failed")
 
 type truncatingAudioStore struct {
-	*catalogtest.AudioStore
+	*catalog.InMemoryAudioStore
 	failAfter int64
 }
 
-func (s *truncatingAudioStore) Stream(ctx context.Context, audioRef string) (ports.AudioStream, int64, error) {
-	stream, size, err := s.AudioStore.Stream(ctx, audioRef)
+func (s *truncatingAudioStore) Stream(ctx context.Context, audioRef string) (catalog.AudioStream, int64, error) {
+	stream, size, err := s.InMemoryAudioStore.Stream(ctx, audioRef)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -253,7 +244,7 @@ func (s *truncatingAudioStore) Stream(ctx context.Context, audioRef string) (por
 }
 
 type truncatingStream struct {
-	ports.AudioStream
+	catalog.AudioStream
 	failAfter int64
 	read      int64
 }
@@ -288,13 +279,12 @@ func TestHandleStreamAudio_MidBodyReadErrorIsLoggedAsTruncated(t *testing.T) {
 	ring := logging.Setup("info", false)
 
 	const deliverable = 4096
-	store := &truncatingAudioStore{AudioStore: catalogtest.NewAudioStore(), failAfter: deliverable}
-	repo, router := mountStreamRoutes(store)
-	track := makeReadyTrack(testUserId, "Half", "Artist", "Album", "audio/half.opus")
-	repo.Seed(track)
+	store := &truncatingAudioStore{InMemoryAudioStore: catalog.NewInMemoryAudioStore(), failAfter: deliverable}
+	repo, router := streamRoutes(store)
+	track := seedReady(t, repo, "Half", "audio/half.opus")
 	store.Seed("audio/half.opus", bytes.Repeat([]byte{0x5a}, 4*deliverable))
 
-	rec := serve(t, router, http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/audio", nil)
+	rec := serve(router, http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/audio")
 
 	if rec.Body.Len() != deliverable {
 		t.Fatalf("body = %d bytes, want the %d delivered before the read failed", rec.Body.Len(), deliverable)
@@ -317,13 +307,12 @@ func TestHandleStreamAudio_WholeBodyIsLoggedAsServed(t *testing.T) {
 	ring := logging.Setup("info", false)
 
 	audio := []byte("fake-audio-data")
-	store := catalogtest.NewAudioStore()
-	repo, router := mountStreamRoutes(store)
-	track := makeReadyTrack(testUserId, "Whole", "Artist", "Album", "audio/whole.opus")
-	repo.Seed(track)
+	store := catalog.NewInMemoryAudioStore()
+	repo, router := streamRoutes(store)
+	track := seedReady(t, repo, "Whole", "audio/whole.opus")
 	store.Seed("audio/whole.opus", audio)
 
-	serve(t, router, http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/audio", nil)
+	serve(router, http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/audio")
 
 	served := findLogRecord(t, ring, "stream.served")
 	if served.Attrs["outcome"] != "ok" {
@@ -342,17 +331,15 @@ func TestHandleStreamAudio_ClientAbortIsNotAServerError(t *testing.T) {
 	defer slog.SetDefault(prev)
 	ring := logging.Setup("info", false)
 
-	store := &truncatingAudioStore{AudioStore: catalogtest.NewAudioStore(), failAfter: 1024}
-	repo, router := mountStreamRoutes(store)
-	track := makeReadyTrack(testUserId, "Skipped", "Artist", "Album", "audio/skipped.opus")
-	repo.Seed(track)
+	store := &truncatingAudioStore{InMemoryAudioStore: catalog.NewInMemoryAudioStore(), failAfter: 1024}
+	repo, router := streamRoutes(store)
+	track := seedReady(t, repo, "Skipped", "audio/skipped.opus")
 	store.Seed("audio/skipped.opus", bytes.Repeat([]byte{0x5a}, 4096))
 
 	ctx, abort := context.WithCancel(context.Background())
 	req := httptest.NewRequest(http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/audio", nil).WithContext(ctx)
-	req.Header.Set("Authorization", "Bearer fake-token")
 	abort()
-	router.ServeHTTP(httptest.NewRecorder(), req)
+	sendAs(router, req, catalog.FixtureUserId())
 
 	served := findLogRecord(t, ring, "stream.served")
 	if served.Attrs["outcome"] != "aborted" {
@@ -364,19 +351,16 @@ func TestHandleStreamAudio_ClientAbortIsNotAServerError(t *testing.T) {
 }
 
 func TestHandleStreamAudio_FramesPrivateAudio(t *testing.T) {
-	store := catalogtest.NewAudioStore()
-	repo, router := mountStreamRoutes(store)
-	track := makeReadyTrack(testUserId, "Track", "Artist", "Album", "audio/framed.opus")
-	repo.Seed(track)
+	store := catalog.NewInMemoryAudioStore()
+	repo, router := streamRoutes(store)
+	track := seedReady(t, repo, "Track", "audio/framed.opus")
 	store.Seed("audio/framed.opus", bytes.Repeat([]byte{0x5a}, 4096))
 	path := "/tracks/" + track.ID.UUID().String() + "/audio"
 
-	whole := serve(t, router, http.MethodGet, path, nil)
-	ranged := httptest.NewRecorder()
+	whole := serve(router, http.MethodGet, path)
 	rangeReq := httptest.NewRequest(http.MethodGet, path, nil)
-	rangeReq.Header.Set("Authorization", "Bearer fake-token")
 	rangeReq.Header.Set("Range", "bytes=1024-2047")
-	router.ServeHTTP(ranged, rangeReq)
+	ranged := sendAs(router, rangeReq, catalog.FixtureUserId())
 
 	assertStatus(t, whole, http.StatusOK)
 	assertPrivateAudioHeaders(t, whole, "private")
@@ -389,41 +373,29 @@ func TestHandleStreamAudio_FramesPrivateAudio(t *testing.T) {
 	}
 }
 
-func assertPrivateAudioHeaders(t *testing.T, rec *httptest.ResponseRecorder, wantCacheControl string) {
-	t.Helper()
-	if got := rec.Header().Get("Cache-Control"); got != wantCacheControl {
-		t.Errorf("Cache-Control = %q, want %q", got, wantCacheControl)
-	}
-	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
-		t.Errorf("X-Content-Type-Options = %q, want nosniff", got)
-	}
-}
-
 const (
 	audioRouteDeadline = 150 * time.Millisecond
 	audioSize          = 2 << 20
 )
 
-func serveAudioBehindRouteDeadline(t *testing.T, idle time.Duration) (get func() *http.Response) {
+func serveAudioBehindRouteDeadline(t *testing.T, opts ...func(*catalog.StreamHandler)) (get func() *http.Response) {
 	t.Helper()
-	repo := catalogtest.NewTrackRepo()
-	store := catalogtest.NewAudioStore()
-	track := makeReadyTrack(testUserId, "Long", "Artist", "Album", "audio/long.opus")
-	repo.Seed(track)
+	repo := catalog.NewInMemoryTrackRepo()
+	store := catalog.NewInMemoryAudioStore()
+	track := seedReady(t, repo, "Long", "audio/long.opus")
 	store.Seed("audio/long.opus", bytes.Repeat([]byte{0xAB}, audioSize))
 
-	h := NewStreamHandler(audioservice.NewStreamTrackService(repo, store))
-	h.writeIdleTimeout = idle
 	r := chi.NewRouter()
 	r.Use(httputil.WriteDeadline(audioRouteDeadline))
 	r.Use(httputil.RequestLogger)
-	r.Use(bearerUser(asTestUser))
-	h.Routes(r)
+	r.Use(asBearer)
+	catalog.NewStreamHandler(catalog.NewStreamTrackService(repo, store), opts...).Routes(r)
 	srv := httputiltest.NewServer(t, r)
 
 	path := "/tracks/" + track.ID.UUID().String() + "/audio"
+	auth := http.Header{"Authorization": {"Bearer " + catalog.FixtureUserId().String()}}
 	return func() *http.Response {
-		conn, br := httputiltest.Get(t, srv, path, http.Header{"Authorization": {"Bearer fake-token"}})
+		conn, br := httputiltest.Get(t, srv, path, auth)
 		resp := httputiltest.ReadResponse(t, conn, br)
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -433,7 +405,7 @@ func serveAudioBehindRouteDeadline(t *testing.T, idle time.Duration) (get func()
 }
 
 func TestHandleStreamAudio_SlowNetworkIsNotCutOffByRouteDeadline(t *testing.T) {
-	get := serveAudioBehindRouteDeadline(t, time.Second)
+	get := serveAudioBehindRouteDeadline(t, catalog.WithStreamWriteIdleTimeout(time.Second))
 	resp := get()
 	defer func() { _ = resp.Body.Close() }()
 
@@ -459,7 +431,7 @@ func TestHandleStreamAudio_SlowNetworkIsNotCutOffByRouteDeadline(t *testing.T) {
 
 func TestHandleStreamAudio_StalledClientIsCutOff(t *testing.T) {
 	const idle = 150 * time.Millisecond
-	get := serveAudioBehindRouteDeadline(t, idle)
+	get := serveAudioBehindRouteDeadline(t, catalog.WithStreamWriteIdleTimeout(idle))
 	resp := get()
 	defer func() { _ = resp.Body.Close() }()
 
@@ -467,5 +439,20 @@ func TestHandleStreamAudio_StalledClientIsCutOff(t *testing.T) {
 	body, err := io.ReadAll(resp.Body)
 	if err == nil && len(body) == audioSize {
 		t.Fatalf("stalled client still received the whole %d-byte body: no idle write deadline", audioSize)
+	}
+}
+
+func TestHandleStreamAudio_ANonPositiveIdleTimeoutKeepsTheDefault(t *testing.T) {
+	for _, idle := range []time.Duration{0, -time.Second} {
+		t.Run(idle.String(), func(t *testing.T) {
+			get := serveAudioBehindRouteDeadline(t, catalog.WithStreamWriteIdleTimeout(idle))
+			resp := get()
+			defer func() { _ = resp.Body.Close() }()
+
+			body, err := io.ReadAll(resp.Body)
+			if err != nil || len(body) != audioSize {
+				t.Fatalf("received %d of %d bytes (err %v): the idle timeout was taken instead of ignored", len(body), audioSize, err)
+			}
+		})
 	}
 }

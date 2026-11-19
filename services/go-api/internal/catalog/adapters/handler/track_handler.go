@@ -53,10 +53,14 @@ func NewTrackHandler(
 }
 
 func WithTrackWriteRateLimit(limit AudioRateLimit) func(*TrackHandler) {
-	return func(h *TrackHandler) { h.writeLimit = limit }
+	return func(h *TrackHandler) {
+		if limit.Every > 0 {
+			h.writeLimit = limit
+		}
+	}
 }
 
-func withTrackWriteClock(now func() time.Time) func(*TrackHandler) {
+func WithTrackWriteLimiterClock(now func() time.Time) func(*TrackHandler) {
 	return func(h *TrackHandler) { h.now = now }
 }
 
