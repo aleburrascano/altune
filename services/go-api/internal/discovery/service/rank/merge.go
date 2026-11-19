@@ -117,8 +117,7 @@ func artistNameRulesOf(perProvider [][]domain.SearchResult) artistNameRules {
 }
 
 func (n artistNameRules) blockNameJoin(e, c keyedResult) bool {
-	return n.lesser[artistSourceKey(c.result)] || n.lesser[artistSourceKey(e.result)] ||
-		release.ClaimsAnotherID(e.result, c.result)
+	return n.lesser[artistSourceKey(c.result)] || n.lesser[artistSourceKey(e.result)]
 }
 
 func lesserSameNameArtists(perProvider [][]domain.SearchResult) map[string]bool {

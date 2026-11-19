@@ -1172,12 +1172,20 @@ func TestMerge_AlbumsWithoutAUPCNeverMergeAtTheUPCTier(t *testing.T) {
 	}
 }
 
-func TestMerge_TwoIDsFromOneProviderAreTwoArtists(t *testing.T) {
-	first := sourced(discovery.ResultKindArtist, "Che", "", discovery.ProviderDeezer, "1")
-	second := sourced(discovery.ResultKindArtist, "Che", "", discovery.ProviderDeezer, "2")
+func TestMerge_ASecondSameNameArtistFromOneProviderJoinsNoOtherCard(t *testing.T) {
+	famous := sourced(discovery.ResultKindArtist, "Che", "", discovery.ProviderDeezer, "1")
+	famous.FanCount = 100
+	lesser := sourced(discovery.ResultKindArtist, "Che", "", discovery.ProviderDeezer, "2")
+	lesser.FanCount = 50
+	spotify := sourced(discovery.ResultKindArtist, "Che", "", discovery.ProviderSpotify, "s1")
 
-	if got := merged([]discovery.SearchResult{first}, []discovery.SearchResult{second}); len(got) != 2 {
-		t.Fatalf("got %d artists, want two: Deezer names them with two ids", len(got))
+	got := merged([]discovery.SearchResult{famous, lesser}, []discovery.SearchResult{spotify})
+
+	if len(got) != 2 || len(got[0].Sources) != 2 || len(got[1].Sources) != 1 {
+		t.Fatalf("got %+v, want the famous Che joined by Spotify and the lesser Che alone", got)
+	}
+	if got[1].Sources[0].ExternalID != "2" {
+		t.Errorf("lone card = %+v, want Deezer's lesser Che", got[1].Sources)
 	}
 }
 
@@ -1189,8 +1197,11 @@ func TestMerge_ATitleWithNoLettersCannotProveTwoTakesAreOneVersion(t *testing.T)
 
 	got := merged([]discovery.SearchResult{complete}, []discovery.SearchResult{coded})
 
-	if len(got) != 1 || got[0].ISRC != "" {
-		t.Fatalf("got %d results, ISRC %q, want one merged track that does not take an ISRC it cannot prove is its own", len(got), got[0].ISRC)
+	if len(got) != 1 {
+		t.Fatalf("got %d results, want the two takes merged into one track", len(got))
+	}
+	if got[0].ISRC != "" {
+		t.Errorf("ISRC = %q, want none: the merged track cannot prove the ISRC is its own", got[0].ISRC)
 	}
 }
 
