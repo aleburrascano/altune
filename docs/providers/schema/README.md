@@ -68,8 +68,8 @@ provider gives a byte-identical file. A diff means the provider changed what it 
 
 | Needs | Providers |
 |---|---|
-| nothing | applemusic, amazonmusic, deezer, itunes, musicbrainz, spotify, ytmusic |
-| a key from `-env` | lastfm (`LASTFM_API_KEY`), discogs (`DISCOGS_TOKEN`), genius (`GENIUS_ACCESS_TOKEN`), fanarttv (`FANARTTV_API_KEY`), trackers (`GOOGLE_SHEETS_API_KEY`) |
+| nothing | applemusic, deezer, itunes, musicbrainz, spotify, ytmusic |
+| a key from `-env` | discogs (`DISCOGS_TOKEN`), genius (`GENIUS_ACCESS_TOKEN`), fanarttv (`FANARTTV_API_KEY`), trackers (`GOOGLE_SHEETS_API_KEY`) |
 | `yt-dlp` on `PATH` | soundcloud |
 
 TheAudioDB uses `THEAUDIODB_API_KEY` when it is set, and its public test key `123` otherwise.

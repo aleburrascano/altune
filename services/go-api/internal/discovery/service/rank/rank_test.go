@@ -122,9 +122,9 @@ func TestIsLowConfidenceTail(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "single-source lastfm, no identity → demoted",
-			r:    discoverytest.Track("Intro", "che rest in bass", domain.ProviderLastFM, nil),
-			want: true,
+			name: "single-source spotify, no identity → never demoted",
+			r:    discoverytest.Track("Intro", "che rest in bass", domain.ProviderSpotify, nil),
+			want: false,
 		},
 		{
 			name: "single-source soundcloud but carries album → rescued",
@@ -147,8 +147,8 @@ func TestIsLowConfidenceTail(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "multi-source soundcloud+lastfm (corroborated) → never demoted",
-			r:    multiSource(discoverytest.Track("BA$$", "che", domain.ProviderSoundCloud, nil), domain.ProviderLastFM),
+			name: "multi-source soundcloud+deezer (corroborated) → never demoted",
+			r:    multiSource(discoverytest.Track("BA$$", "che", domain.ProviderSoundCloud, nil), domain.ProviderDeezer),
 			want: false,
 		},
 	}

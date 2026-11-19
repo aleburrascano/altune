@@ -13,6 +13,8 @@ import (
 	"io"
 	"os"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
@@ -52,9 +54,20 @@ func runJourneyCheckWithConfig(cfg *config.Config) error {
 	}
 	defer removeCookieJar()
 
-	searcher := app.BuildRankingOnlySearchService(ctx, cfg, pool, nil, nil)
+	searcher, err := rankingOnlySearcher(ctx, cfg, pool)
+	if err != nil {
+		return journeyStepFailed("search", err)
+	}
 	downloader := acquisition.NewYtDlpAudioSearcher(cfg.FFmpegLocation, cookieJar, cfg.YtDLPJSRuntime).WithPOTokenURL(cfg.YtDLPPOTokenURL)
 	return runJourneyCheck(ctx, searcher, downloader, os.Stdout)
+}
+
+func rankingOnlySearcher(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (journeySearcher, error) {
+	disc, err := app.NewEvalDiscovery(ctx, cfg, app.EvalHandles{Pool: pool})
+	if err != nil {
+		return nil, err
+	}
+	return disc.RankingOnlySearch(), nil
 }
 
 func throwawayCookieJar(livePath string) (path string, remove func(), err error) {

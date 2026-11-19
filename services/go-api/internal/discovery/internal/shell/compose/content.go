@@ -22,15 +22,19 @@ func newRelatedService(t *providerTable, breaker *providercall.CircuitBreaker) *
 }
 
 func newArtistService(t *providerTable, s handles.Stores, breaker *providercall.CircuitBreaker) *content.GetArtistContentService {
-	opts := []content.ArtistContentOption{
+	return content.NewGetArtistContentService(t.artistProviders(),
 		content.WithContentCircuitBreaker(breaker),
 		content.WithContentEventStore(s.Events),
 		content.WithMBAnchor(t.named(rowMusicBrainz).artistAnchor),
-	}
-	if s.Pool != nil {
-		opts = append(opts, content.WithContentIdentityStore(s.IdentityStore()))
-	}
-	return content.NewGetArtistContentService(t.artistProviders(), opts...)
+		content.WithContentIdentityStore(s.Identities),
+	)
+}
+
+func newEvalArtistService(t *providerTable, s handles.Stores) *content.GetArtistContentService {
+	return content.NewGetArtistContentService(t.artistProviders(),
+		content.WithMBAnchor(t.named(rowMusicBrainz).artistAnchor),
+		content.WithContentIdentityStore(s.Identities),
+	)
 }
 
 func newFeaturedArtists(t *providerTable) *content.FeaturedArtistResolver {

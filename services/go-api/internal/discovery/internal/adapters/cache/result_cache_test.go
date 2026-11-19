@@ -167,12 +167,9 @@ func TestRedisResultCache_NilClient_NoOps(t *testing.T) {
 	}
 }
 
-func TestRedisProviderResultCache_PerProviderAnswersAndTTLs(t *testing.T) {
+func TestRedisProviderResultCache_PerProviderAnswersShareOneTTL(t *testing.T) {
 	client := testRedisClient(t)
-	cache := NewRedisProviderResultCache(client, ProviderCacheTTLs{
-		Default:  10 * time.Minute,
-		Provider: map[domain.ProviderName]time.Duration{domain.ProviderMusicBrainz: 6 * time.Hour},
-	})
+	cache := NewRedisProviderResultCache(client, 10*time.Minute)
 	ctx := context.Background()
 	key := fmt.Sprintf("humble|%s", t.Name())
 	cleanKeys(t, client,
@@ -194,16 +191,15 @@ func TestRedisProviderResultCache_PerProviderAnswersAndTTLs(t *testing.T) {
 		t.Fatal("another provider must not see deezer's answer")
 	}
 
-	if ttl := client.TTL(ctx, cache.redisKey(domain.ProviderDeezer, key)).Val(); ttl <= 9*time.Minute || ttl > 10*time.Minute {
-		t.Errorf("deezer TTL = %v, want the 10m default", ttl)
-	}
-	if ttl := client.TTL(ctx, cache.redisKey(domain.ProviderMusicBrainz, key)).Val(); ttl <= 5*time.Hour || ttl > 6*time.Hour {
-		t.Errorf("musicbrainz TTL = %v, want its 6h override", ttl)
+	for _, provider := range []domain.ProviderName{domain.ProviderDeezer, domain.ProviderMusicBrainz} {
+		if ttl := client.TTL(ctx, cache.redisKey(provider, key)).Val(); ttl <= 9*time.Minute || ttl > 10*time.Minute {
+			t.Errorf("%s TTL = %v, want the 10m TTL", provider, ttl)
+		}
 	}
 }
 
 func TestRedisProviderResultCache_UnreachableRedisIsAMiss(t *testing.T) {
-	cache := NewRedisProviderResultCache(unreachableRedisClient(t), ProviderCacheTTLs{Default: time.Minute})
+	cache := NewRedisProviderResultCache(unreachableRedisClient(t), time.Minute)
 	ctx := context.Background()
 
 	cache.Set(ctx, domain.ProviderDeezer, "humble", []domain.SearchResult{{Title: "Humble"}})

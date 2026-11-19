@@ -204,8 +204,8 @@ func (p partialContentProvider) GetArtistAlbums(_ context.Context, _ discovery.P
 func identityContentRouter(down map[discovery.ProviderName]bool) chi.Router {
 	all := []discovery.ProviderName{
 		discovery.ProviderDeezer, discovery.ProviderMusicBrainz, discovery.ProviderSoundCloud,
-		discovery.ProviderLastFM, discovery.ProviderITunes, discovery.ProviderTheAudioDB,
-		discovery.ProviderDiscogs, discovery.ProviderYouTube, discovery.ProviderAmazonMusic,
+		discovery.ProviderITunes, discovery.ProviderTheAudioDB,
+		discovery.ProviderDiscogs, discovery.ProviderYouTube,
 		discovery.ProviderAppleMusic, discovery.ProviderSpotify,
 	}
 	providers := make(map[discovery.ProviderName]discovery.ArtistContentProvider, len(all))
@@ -226,8 +226,8 @@ func identityContentRouter(down map[discovery.ProviderName]bool) chi.Router {
 func allButDeezerDown() map[discovery.ProviderName]bool {
 	return map[discovery.ProviderName]bool{
 		discovery.ProviderMusicBrainz: true, discovery.ProviderSoundCloud: true,
-		discovery.ProviderLastFM: true, discovery.ProviderITunes: true, discovery.ProviderTheAudioDB: true,
-		discovery.ProviderDiscogs: true, discovery.ProviderYouTube: true, discovery.ProviderAmazonMusic: true,
+		discovery.ProviderITunes: true, discovery.ProviderTheAudioDB: true,
+		discovery.ProviderDiscogs: true, discovery.ProviderYouTube: true,
 		discovery.ProviderAppleMusic: true, discovery.ProviderSpotify: true,
 	}
 }

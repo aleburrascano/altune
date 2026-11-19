@@ -73,7 +73,7 @@ func TestVocabularyRefresh_NormalizesTerms(t *testing.T) {
 func TestVocabularyRefresh_OneProviderFails(t *testing.T) {
 	store := &discovery.FakeVocabularyStore{}
 	charts := []fakeChartProvider{
-		{name: discovery.ProviderLastFM, err: errors.New("network timeout")},
+		{name: discovery.ProviderTheAudioDB, err: errors.New("network timeout")},
 		{name: discovery.ProviderDeezer, entries: []discovery.VocabularyEntry{
 			{Term: "Bad Bunny", Kind: "artist", Popularity: 800},
 		}},
@@ -94,7 +94,7 @@ func TestVocabularyRefresh_AllProvidersFail(t *testing.T) {
 	store := &discovery.FakeVocabularyStore{}
 	charts := []fakeChartProvider{
 		{name: discovery.ProviderDeezer, err: errors.New("error 1")},
-		{name: discovery.ProviderLastFM, err: errors.New("error 2")},
+		{name: discovery.ProviderTheAudioDB, err: errors.New("error 2")},
 	}
 	svc := newTestRefreshService(charts, store)
 
@@ -102,7 +102,7 @@ func TestVocabularyRefresh_AllProvidersFail(t *testing.T) {
 	if err == nil {
 		t.Fatal("RunOnce = nil, want a failure naming the providers that broke")
 	}
-	for _, provider := range []discovery.ProviderName{discovery.ProviderDeezer, discovery.ProviderLastFM} {
+	for _, provider := range []discovery.ProviderName{discovery.ProviderDeezer, discovery.ProviderTheAudioDB} {
 		if !strings.Contains(err.Error(), provider.String()) {
 			t.Errorf("error %q does not name provider %q", err, provider)
 		}
@@ -121,7 +121,7 @@ func TestVocabularyRefresh_ChartFailureWarnsWithTheProviderThatFailed(t *testing
 	}
 	charts := []fakeChartProvider{
 		{name: discovery.ProviderDeezer, entries: []discovery.VocabularyEntry{{Term: "Drake", Kind: "artist"}}},
-		{name: discovery.ProviderLastFM, err: leaky},
+		{name: discovery.ProviderTheAudioDB, err: leaky},
 	}
 	svc := newTestRefreshService(charts, &discovery.FakeVocabularyStore{})
 	buf := discovery.CaptureProductionLogs(t)
@@ -134,8 +134,8 @@ func TestVocabularyRefresh_ChartFailureWarnsWithTheProviderThatFailed(t *testing
 	if len(recs) != 1 {
 		t.Fatalf("got %d chart failure records at Info level, want 1:\n%s", len(recs), buf)
 	}
-	if recs[0]["provider"] != discovery.ProviderLastFM.String() {
-		t.Errorf("provider = %v, want %q", recs[0]["provider"], discovery.ProviderLastFM)
+	if recs[0]["provider"] != discovery.ProviderTheAudioDB.String() {
+		t.Errorf("provider = %v, want %q", recs[0]["provider"], discovery.ProviderTheAudioDB)
 	}
 	if errText, _ := recs[0]["error"].(string); !strings.Contains(errText, "connection refused") {
 		t.Errorf("error = %q, want the provider's failure", errText)

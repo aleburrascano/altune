@@ -50,7 +50,7 @@ func TestRedisNameKeyedCache_PositiveRoundTrip(t *testing.T) {
 
 func TestRedisNameKeyedCache_NegativePath(t *testing.T) {
 	client := testRedisClient(t)
-	cache := NewRedisLastFmEnrichmentCache(client)
+	cache := NewRedisDeezerLyricsCache(client)
 	ctx := context.Background()
 
 	nameKey := fmt.Sprintf("qa-nkneg|%s", t.Name())
@@ -73,20 +73,20 @@ func TestRedisNameKeyedCache_NegativePath(t *testing.T) {
 func TestRedisNameKeyedCache_CrossProviderIsolation(t *testing.T) {
 	client := testRedisClient(t)
 	deezer := NewRedisDeezerEnrichmentCache(client)
-	lastfm := NewRedisLastFmEnrichmentCache(client)
+	lyrics := NewRedisDeezerLyricsCache(client)
 	ctx := context.Background()
 
 	nameKey := fmt.Sprintf("qa-nkiso|%s", t.Name())
 	cleanKeys(t, client,
 		hashKey(deezer.posPrefix, nameKey),
-		hashKey(lastfm.posPrefix, nameKey),
+		hashKey(lyrics.posPrefix, nameKey),
 	)
 
 	if err := deezer.Set(ctx, nameKey, domain.DeezerEnrichment{Label: "only deezer"}); err != nil {
 		t.Fatalf("deezer Set: %v", err)
 	}
-	if _, hit, _ := lastfm.Get(ctx, nameKey); hit {
-		t.Error("Deezer write served through the Last.fm cache — provider namespaces collided")
+	if _, hit, _ := lyrics.Get(ctx, nameKey); hit {
+		t.Error("Deezer enrichment write served through the lyrics cache — namespaces collided")
 	}
 }
 
@@ -111,7 +111,6 @@ func TestRedisNameKeyedCache_NilClient_NoOps(t *testing.T) {
 func TestNameKeyedCacheConstructors_DistinctPrefixes(t *testing.T) {
 	prefixes := map[string][2]string{
 		"deezer": {NewRedisDeezerEnrichmentCache(nil).posPrefix, NewRedisDeezerEnrichmentCache(nil).negPrefix},
-		"lastfm": {NewRedisLastFmEnrichmentCache(nil).posPrefix, NewRedisLastFmEnrichmentCache(nil).negPrefix},
 		"lyrics": {NewRedisDeezerLyricsCache(nil).posPrefix, NewRedisDeezerLyricsCache(nil).negPrefix},
 	}
 	seen := map[string]string{}

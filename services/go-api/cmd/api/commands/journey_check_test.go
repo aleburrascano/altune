@@ -3,6 +3,7 @@ package commands
 import (
 	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/shared/config"
 	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"context"
@@ -267,5 +268,15 @@ func TestRunJourneyCheckPassesAOneByteDownload(t *testing.T) {
 
 	if err != nil || out.String() != "journey-check: search ok (1 results)\njourney-check: download ok (1 bytes)\n" {
 		t.Errorf("runJourneyCheck = %v, output %q; want pass with 1 result and 1 byte", err, out.String())
+	}
+}
+
+func TestRankingOnlySearcherComesFromTheDiscoveryTable(t *testing.T) {
+	searcher, err := rankingOnlySearcher(t.Context(), &config.Config{}, nil)
+	if err != nil {
+		t.Fatalf("rankingOnlySearcher: %v", err)
+	}
+	if _, ok := searcher.(*discovery.SearchService); !ok {
+		t.Errorf("searcher = %T, want the table's ranking-only search service", searcher)
 	}
 }

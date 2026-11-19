@@ -6,7 +6,6 @@ var (
 	NewPgxEventStore              = persistence.NewPgxEventStore
 	NewPgxFavoritesRepository     = persistence.NewPgxFavoritesRepository
 	NewPgxIdentityStore           = persistence.NewPgxIdentityStore
-	NewPgxRelationshipQuerier     = persistence.NewPgxRelationshipQuerier
 	NewPgxSearchHistoryRepository = persistence.NewPgxSearchHistoryRepository
 )
 

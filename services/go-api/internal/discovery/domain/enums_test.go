@@ -129,12 +129,10 @@ func TestProviderName_String(t *testing.T) {
 		{ProviderDeezer, "deezer"},
 		{ProviderMusicBrainz, "musicbrainz"},
 		{ProviderSoundCloud, "soundcloud"},
-		{ProviderLastFM, "lastfm"},
 		{ProviderITunes, "itunes"},
 		{ProviderTheAudioDB, "theaudiodb"},
 		{ProviderDiscogs, "discogs"},
 		{ProviderYouTube, "youtube"},
-		{ProviderAmazonMusic, "amazonmusic"},
 		{ProviderAppleMusic, "applemusic"},
 		{ProviderSpotify, "spotify"},
 		{ProviderName(999), "unknown"},
@@ -160,12 +158,10 @@ func TestParseProviderName(t *testing.T) {
 		{name: "deezer", input: "deezer", want: ProviderDeezer},
 		{name: "musicbrainz", input: "musicbrainz", want: ProviderMusicBrainz},
 		{name: "soundcloud", input: "soundcloud", want: ProviderSoundCloud},
-		{name: "lastfm", input: "lastfm", want: ProviderLastFM},
 		{name: "itunes", input: "itunes", want: ProviderITunes},
 		{name: "theaudiodb", input: "theaudiodb", want: ProviderTheAudioDB},
 		{name: "discogs", input: "discogs", want: ProviderDiscogs},
 		{name: "youtube", input: "youtube", want: ProviderYouTube},
-		{name: "amazonmusic", input: "amazonmusic", want: ProviderAmazonMusic},
 		{name: "applemusic", input: "applemusic", want: ProviderAppleMusic},
 		{name: "spotify", input: "spotify", want: ProviderSpotify},
 		{name: "invalid", input: "napster", wantErr: true},
@@ -233,7 +229,7 @@ func TestParseResultKind_RoundTrip(t *testing.T) {
 func TestParseProviderName_RoundTrip(t *testing.T) {
 	providers := []ProviderName{
 		ProviderDeezer, ProviderMusicBrainz, ProviderSoundCloud,
-		ProviderLastFM, ProviderITunes, ProviderTheAudioDB,
+		ProviderITunes, ProviderTheAudioDB,
 		ProviderDiscogs, ProviderYouTube,
 	}
 	for _, p := range providers {

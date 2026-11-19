@@ -7,6 +7,5 @@ type EnrichmentService = enrich.EnrichmentService
 var (
 	NewDeezerEnrichmentService = enrich.NewDeezerEnrichmentService
 	NewEnrichmentService       = enrich.NewEnrichmentService
-	NewLastFmEnrichmentService = enrich.NewLastFmEnrichmentService
 	NewLyricsService           = enrich.NewLyricsService
 )

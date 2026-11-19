@@ -55,25 +55,13 @@ func (c *RedisResultCache) Set(ctx context.Context, key string, results []domain
 
 const providerResultPrefix = "discovery:provider:v1:"
 
-type ProviderCacheTTLs struct {
-	Default  time.Duration
-	Provider map[domain.ProviderName]time.Duration
-}
-
-func (t ProviderCacheTTLs) of(provider domain.ProviderName) time.Duration {
-	if ttl, ok := t.Provider[provider]; ok {
-		return ttl
-	}
-	return t.Default
-}
-
 type RedisProviderResultCache struct {
 	redisJSON
-	ttls ProviderCacheTTLs
+	ttl time.Duration
 }
 
-func NewRedisProviderResultCache(client *goredis.Client, ttls ProviderCacheTTLs, opts ...Option) *RedisProviderResultCache {
-	return &RedisProviderResultCache{redisJSON: newRedisJSON(client, opts), ttls: ttls}
+func NewRedisProviderResultCache(client *goredis.Client, ttl time.Duration, opts ...Option) *RedisProviderResultCache {
+	return &RedisProviderResultCache{redisJSON: newRedisJSON(client, opts), ttl: ttl}
 }
 
 func (c *RedisProviderResultCache) Get(ctx context.Context, provider domain.ProviderName, key string) ([]domain.SearchResult, bool) {
@@ -90,7 +78,7 @@ func (c *RedisProviderResultCache) Set(ctx context.Context, provider domain.Prov
 	if results == nil {
 		results = []domain.SearchResult{}
 	}
-	_ = c.setJSON(ctx, c.redisKey(provider, key), results, c.ttls.of(provider))
+	_ = c.setJSON(ctx, c.redisKey(provider, key), results, c.ttl)
 }
 
 func (c *RedisProviderResultCache) redisKey(provider domain.ProviderName, key string) string {

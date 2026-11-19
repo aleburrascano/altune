@@ -43,6 +43,7 @@ type App struct {
 	scheduler       *acquisition.BackgroundAcquisitionScheduler
 	vocabRefresh    *discovery.VocabularyRefreshService
 	searchSvc       *discovery.SearchService
+	evalSearch      *discovery.SearchService
 	eventBus        *events.InProcessBus
 	eventTap        *observe.EventTap
 	alertMonitor    *observe.AlertMonitor
@@ -134,7 +135,7 @@ func (a *App) setup(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("discovery: %w", err)
 	}
-	a.searchSvc = disc.Search
+	a.keepSearches(disc)
 	a.startDiscoveryBackgroundJobs(ctx, disc)
 	cat, err := a.wireCatalog(ctx, a.eventTap, disc)
 	if err != nil {

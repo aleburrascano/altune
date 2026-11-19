@@ -158,7 +158,7 @@ func TestMergeReleases_singleProviderReleaseSurvivesIntact(t *testing.T) {
 
 func TestMergeReleases_coverAndYearCombine(t *testing.T) {
 	groups := []ReleaseGroup{
-		idGroup(albumVariant(domain.ProviderLastFM, "l1", "Closed Captions", withCover("cover-lfm"))),
+		idGroup(albumVariant(domain.ProviderTheAudioDB, "l1", "Closed Captions", withCover("cover-other"))),
 		idGroup(albumVariant(domain.ProviderDeezer, "d9", "closed captions", withDate("2023-07-21"))),
 	}
 
@@ -167,8 +167,8 @@ func TestMergeReleases_coverAndYearCombine(t *testing.T) {
 		t.Fatalf("clusters = %d, want 1 (case-insensitive title match)", len(merged))
 	}
 	got := merged[0]
-	if got.Result.ImageURL != "cover-lfm" {
-		t.Errorf("ImageURL = %q, want cover-lfm", got.Result.ImageURL)
+	if got.Result.ImageURL != "cover-other" {
+		t.Errorf("ImageURL = %q, want cover-other", got.Result.ImageURL)
 	}
 	if got.Result.ReleaseDate != "2023-07-21" {
 		t.Errorf("ReleaseDate = %q, want 2023-07-21", got.Result.ReleaseDate)
@@ -374,7 +374,7 @@ func TestNormalizeRecordType(t *testing.T) {
 
 func keepCase(providers int, idVerified, strongID bool) MergedRelease {
 	ps := map[domain.ProviderName]bool{}
-	names := []domain.ProviderName{domain.ProviderDeezer, domain.ProviderLastFM, domain.ProviderITunes}
+	names := []domain.ProviderName{domain.ProviderDeezer, domain.ProviderTheAudioDB, domain.ProviderITunes}
 	for i := 0; i < providers && i < len(names); i++ {
 		ps[names[i]] = true
 	}
@@ -403,7 +403,7 @@ func TestKeepRelease(t *testing.T) {
 func TestFilterKept_dropsOnlyTheNamesake(t *testing.T) {
 	releases := []MergedRelease{
 		{Result: domain.SearchResult{Title: "Empty Clip"}, IDVerified: true, Providers: map[domain.ProviderName]bool{domain.ProviderDeezer: true}},
-		{Result: domain.SearchResult{Title: "Wrong Che Single"}, Providers: map[domain.ProviderName]bool{domain.ProviderLastFM: true}},
+		{Result: domain.SearchResult{Title: "Wrong Che Single"}, Providers: map[domain.ProviderName]bool{domain.ProviderTheAudioDB: true}},
 		{Result: domain.SearchResult{Title: "REST IN BASS: ENCORE"}, IDVerified: true, Providers: map[domain.ProviderName]bool{domain.ProviderDeezer: true}},
 	}
 	kept := FilterKept(releases)
@@ -446,7 +446,7 @@ func TestMergeReleases_releaseAndReleaseGroupMBIDsAreNotCompared(t *testing.T) {
 	}
 	groups := []ReleaseGroup{
 		idGroup(albumVariant(domain.ProviderMusicBrainz, "mb", "Pinkerton", withReleaseGroup("rg-uuid"))),
-		idGroup(albumVariant(domain.ProviderLastFM, "lf", "Pinkerton", withRelease("release-uuid"))),
+		idGroup(albumVariant(domain.ProviderTheAudioDB, "lf", "Pinkerton", withRelease("release-uuid"))),
 	}
 
 	merged := MergeReleases(groups)

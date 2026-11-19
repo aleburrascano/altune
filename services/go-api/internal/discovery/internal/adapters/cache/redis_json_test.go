@@ -38,7 +38,7 @@ func TestCaches_UnreachableRedis_ReadsDegrade(t *testing.T) {
 	})
 
 	t.Run("name-keyed Get and GetNegative are clean misses", func(t *testing.T) {
-		c := NewRedisLastFmEnrichmentCache(client)
+		c := NewRedisDeezerLyricsCache(client)
 		if _, hit, err := c.Get(ctx, "name"); hit || err != nil {
 			t.Errorf("Get = (hit=%v, err=%v), want clean miss", hit, err)
 		}

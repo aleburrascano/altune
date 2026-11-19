@@ -22,7 +22,6 @@ var (
 	WithHistoryRepository   = search.WithHistoryRepository
 	WithIdentityBridge      = search.WithIdentityBridge
 	WithIdentityStore       = search.WithIdentityStore
-	WithIdentityVerifier    = search.WithIdentityVerifier
 	WithMBIDIndex           = search.WithMBIDIndex
 	WithProviderResultCache = search.WithProviderResultCache
 	WithResultCache         = search.WithResultCache

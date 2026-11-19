@@ -92,16 +92,6 @@ func (f *scriptedMBEnricher) Lookup(context.Context, discovery.ResultKind, strin
 	return sampleAlbumEnrichment(), nil
 }
 
-type scriptedLastFmEnricher struct {
-	err   error
-	calls int
-}
-
-func (f *scriptedLastFmEnricher) Lookup(context.Context, discovery.ResultKind, string, string) (discovery.LastFmEnrichment, error) {
-	f.calls++
-	return discovery.EmptyLastFmEnrichment(), f.err
-}
-
 type scriptedDeezerEnricher struct {
 	id         string
 	resolveErr error
@@ -149,11 +139,6 @@ func mbRouter(f *scriptedMBEnricher) (chi.Router, *int) {
 	return buildEnrichmentRouter(svc), &f.calls
 }
 
-func lastfmRouter(f *scriptedLastFmEnricher) (chi.Router, *int) {
-	svc := discovery.NewLastFmEnrichmentService(f, newMemNameCache[discovery.LastFmEnrichment]())
-	return buildEnrichersRouter(discovery.DetailEnrichers{LastFm: svc}), &f.calls
-}
-
 func deezerRouter(f *scriptedDeezerEnricher) (chi.Router, *int) {
 	svc := discovery.NewDeezerEnrichmentService(f, newMemNameCache[discovery.DeezerEnrichment]())
 	return buildEnrichersRouter(discovery.DetailEnrichers{Deezer: svc}), &f.calls
@@ -168,7 +153,6 @@ func TestEnrichmentEndpoints_TransientFailureIsDistinguishableFromNoData(t *test
 	const (
 		mbPath     = "/discovery/enrichment?kind=album&title=DAMN.&subtitle=Kendrick+Lamar"
 		mbidPath   = "/discovery/enrichment?kind=album&title=DAMN.&mbid=1b022e01-4da6-387b-8658-8678046e4cef"
-		lastfmPath = "/discovery/enrichment/lastfm?kind=artist&title=Nas"
 		deezerPath = "/discovery/enrichment/deezer?kind=album&title=Illmatic&subtitle=Nas"
 		lyricsPath = "/discovery/lyrics?title=N.Y.+State+of+Mind&subtitle=Nas"
 	)
@@ -194,16 +178,6 @@ func TestEnrichmentEndpoints_TransientFailureIsDistinguishableFromNoData(t *test
 			name:  "musicbrainz unresolved name is genuine empty and negative-cached",
 			build: func() (chi.Router, *int) { return mbRouter(&scriptedMBEnricher{}) },
 			path:  mbPath, wantDegraded: false, wantSecondCalls: 1,
-		},
-		{
-			name:  "lastfm lookup error is degraded and retried",
-			build: func() (chi.Router, *int) { return lastfmRouter(&scriptedLastFmEnricher{err: errProviderDown}) },
-			path:  lastfmPath, wantDegraded: true, wantSecondCalls: 2,
-		},
-		{
-			name:  "lastfm zero result is genuine empty and negative-cached",
-			build: func() (chi.Router, *int) { return lastfmRouter(&scriptedLastFmEnricher{}) },
-			path:  lastfmPath, wantDegraded: false, wantSecondCalls: 1,
 		},
 		{
 			name:  "deezer resolve error is degraded and retried",
@@ -297,32 +271,7 @@ func TestHandleLastFmEnrichment(t *testing.T) {
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})
 
-	t.Run("wired service maps the DTO", func(t *testing.T) {
-		e := discovery.EmptyLastFmEnrichment()
-		e.MBID = "lfm-mbid"
-		e.Listeners = 5_000_000
-		e.Playcount = 90_000_000
-		e.Tags = []string{"hip hop", "rap"}
-		e.Bio = "Queensbridge legend."
-		e.Similar = []string{"AZ", "Mobb Deep"}
-
-		svc := discovery.NewLastFmEnrichmentService(&discoverytest.LastFmEnricher{Enrichment: e}, nil)
-		router := buildEnrichersRouter(discovery.DetailEnrichers{LastFm: svc})
-
-		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/lastfm?kind=artist&title=Nas", nil)
-		discAssertStatus(t, rec, http.StatusOK)
-
-		var resp discovery.LastFmEnrichmentResponseDTO
-		discDecodeJSON(t, rec, &resp)
-		if resp.MBID != "lfm-mbid" || resp.Listeners != 5_000_000 || resp.Playcount != 90_000_000 {
-			t.Errorf("scalar fields: %+v", resp)
-		}
-		if len(resp.Tags) != 2 || len(resp.Similar) != 2 {
-			t.Errorf("tags = %v, similar = %v", resp.Tags, resp.Similar)
-		}
-	})
-
-	t.Run("nil enricher returns 200 empty DTO with non-null collections", func(t *testing.T) {
+	t.Run("a valid lookup answers the retired empty DTO with non-null collections", func(t *testing.T) {
 		router := buildEnrichersRouter(discovery.DetailEnrichers{})
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/lastfm?kind=artist&title=X", nil)
 		discAssertStatus(t, rec, http.StatusOK)
@@ -333,6 +282,9 @@ func TestHandleLastFmEnrichment(t *testing.T) {
 			if string(raw[key]) == "null" {
 				t.Errorf("%s must be [] when empty, got null", key)
 			}
+		}
+		if string(raw["has_content"]) != "false" || string(raw["degraded"]) != "false" {
+			t.Errorf("retired lookup = %s, want no content and not degraded", rec.Body.String())
 		}
 	})
 }
@@ -363,33 +315,6 @@ func TestHandleDeezerEnrichment(t *testing.T) {
 		discDecodeJSON(t, rec, &resp)
 		if resp.BPM != 0 {
 			t.Errorf("BPM = %d, want 0 (artist kind never reaches the enricher)", resp.BPM)
-		}
-	})
-
-	t.Run("wired service maps the DTO", func(t *testing.T) {
-		e := discovery.EmptyDeezerEnrichment()
-		e.BPM = 92
-		e.Gain = -7.3
-		e.Explicit = true
-		e.Label = "Columbia"
-		e.Genres = []string{"Rap/Hip Hop"}
-		e.UPC = "074645368429"
-		e.RecordType = "album"
-
-		svc := discovery.NewDeezerEnrichmentService(&discoverytest.DeezerEnricher{ResolvedID: "dz-1", Enrichment: e}, nil)
-		router := buildEnrichersRouter(discovery.DetailEnrichers{Deezer: svc})
-
-		rec := discServe(t, router, http.MethodGet,
-			"/discovery/enrichment/deezer?kind=album&title=Illmatic&subtitle=Nas", nil)
-		discAssertStatus(t, rec, http.StatusOK)
-
-		var resp discovery.DeezerEnrichmentResponseDTO
-		discDecodeJSON(t, rec, &resp)
-		if resp.BPM != 92 || resp.Gain != -7.3 || !resp.Explicit {
-			t.Errorf("audio fields: %+v", resp)
-		}
-		if resp.Label != "Columbia" || resp.UPC != "074645368429" || resp.RecordType != "album" {
-			t.Errorf("liner fields: %+v", resp)
 		}
 	})
 
@@ -468,7 +393,6 @@ func (bareMBEnricher) Lookup(context.Context, discovery.ResultKind, string) (dis
 }
 
 func TestEnrichmentEndpoints_NilCollectionsServeAsEmpty(t *testing.T) {
-	lastfm := discovery.LastFmEnrichment{MBID: "lfm-mbid", Listeners: 7, Bio: "Queensbridge."}
 	cases := []struct {
 		name   string
 		router chi.Router
@@ -480,14 +404,6 @@ func TestEnrichmentEndpoints_NilCollectionsServeAsEmpty(t *testing.T) {
 			router: buildEnrichmentRouter(discovery.NewEnrichmentService(bareMBEnricher{}, nil, nil)),
 			path:   "/discovery/enrichment?kind=album&title=Illmatic",
 			want:   map[string]string{"genres": "[]", "secondary_types": "[]", "external_ids": "{}"},
-		},
-		{
-			name: "lastfm",
-			router: buildEnrichersRouter(discovery.DetailEnrichers{
-				LastFm: discovery.NewLastFmEnrichmentService(&discoverytest.LastFmEnricher{Enrichment: lastfm}, nil),
-			}),
-			path: "/discovery/enrichment/lastfm?kind=artist&title=Nas",
-			want: map[string]string{"tags": "[]", "similar": "[]"},
 		},
 	}
 	for _, tc := range cases {
@@ -507,14 +423,12 @@ func TestEnrichmentEndpoints_NilCollectionsServeAsEmpty(t *testing.T) {
 
 func TestEnrichmentEndpoints_TypedProviderErrorStaysDegraded(t *testing.T) {
 	upstream := statusCodedError{status: http.StatusNotFound, code: "upstream"}
-	svc := discovery.NewLastFmEnrichmentService(&scriptedLastFmEnricher{err: upstream},
-		newMemNameCache[discovery.LastFmEnrichment]())
-	router := buildEnrichersRouter(discovery.DetailEnrichers{LastFm: svc})
+	router, _ := deezerRouter(&scriptedDeezerEnricher{resolveErr: upstream})
 
-	rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/lastfm?kind=artist&title=Nas", nil)
+	rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/deezer?kind=album&title=Illmatic&subtitle=Nas", nil)
 
 	discAssertStatus(t, rec, http.StatusOK)
-	var resp discovery.LastFmEnrichmentResponseDTO
+	var resp discovery.DeezerEnrichmentResponseDTO
 	discDecodeJSON(t, rec, &resp)
 	if !resp.Degraded {
 		t.Errorf("degraded = false, want true")
@@ -553,15 +467,6 @@ type namedEnrichmentCase struct {
 
 func namedEnrichmentCases() []namedEnrichmentCase {
 	return []namedEnrichmentCase{
-		{
-			name: "lastfm",
-			path: "/discovery/enrichment/lastfm",
-			router: func(err error) chi.Router {
-				r, _ := lastfmRouter(&scriptedLastFmEnricher{err: err})
-				return r
-			},
-			emptyFields: []string{"tags", "similar"},
-		},
 		{
 			name: "deezer",
 			path: "/discovery/enrichment/deezer",

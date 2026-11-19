@@ -1,7 +1,12 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/httptrace"
+	"io"
+	"net/http"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -59,5 +64,59 @@ func TestDedupExchanges_DistinctBodiesKept(t *testing.T) {
 func TestLoadAllFixtures_MissingDirErrors(t *testing.T) {
 	if _, err := loadAllFixtures(t.TempDir() + "/does-not-exist"); err == nil {
 		t.Error("expected an error loading a missing fixtures dir")
+	}
+}
+
+type deezerOnlyTransport struct{}
+
+func (deezerOnlyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	status, body := http.StatusNotFound, `{}`
+	if req.URL.Host == "api.deezer.com" && req.URL.Path == "/search/track" {
+		status, body = http.StatusOK, `{"data":[{"id":1,"title":"Probe Song","artist":{"id":2,"name":"Probe Artist"},"album":{"id":3,"title":"Probe Album"}}]}`
+	}
+	return &http.Response{
+		StatusCode: status,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Request:    req,
+	}, nil
+}
+
+func titles(t *testing.T, searcher searchAdapter) []string {
+	t.Helper()
+	results, err := searcher.Search(t.Context(), "probe song")
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	var out []string
+	for _, r := range results {
+		out = append(out, r.Title)
+	}
+	return out
+}
+
+func TestFixtures_ARecordedSearchReplaysTheSameAnswersOffline(t *testing.T) {
+	cfg := &config.Config{}
+	rec := httptrace.NewRecorder(deezerOnlyTransport{})
+	live, err := rankingOnlySearchService(t.Context(), cfg, nil, rec)
+	if err != nil {
+		t.Fatalf("ranking-only search: %v", err)
+	}
+	recorded := titles(t, searchAdapter{svc: live})
+	live.WaitForBackground()
+	if !slices.Contains(recorded, "Probe Song") {
+		t.Fatalf("recorded search answered %v, want the Deezer track through the recorder", recorded)
+	}
+	dir := t.TempDir()
+	if err := saveExchanges(dir, "corpus", dedupExchanges(rec.Exchanges())); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	replayed, err := buildReplaySearcher(t.Context(), cfg, nil, dir)
+	if err != nil {
+		t.Fatalf("replay searcher: %v", err)
+	}
+	if got := titles(t, replayed); !slices.Equal(got, recorded) {
+		t.Errorf("replayed search answered %v, want the recorded %v", got, recorded)
 	}
 }

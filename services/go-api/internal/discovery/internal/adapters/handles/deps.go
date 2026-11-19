@@ -29,6 +29,7 @@ type Deps struct {
 	CacheOps        *expvar.Map
 	Activity        ports.ActivityFeed
 	ClientEvents    *telemetry.ClientEvents
+	IdentityStore   ports.IdentityStore
 	Providers       ProviderSettings
 	Search          SearchSettings
 	Unreleased      UnreleasedSettings
@@ -36,19 +37,12 @@ type Deps struct {
 
 type ProviderSettings struct {
 	MusicBrainzUserAgent string
-	LastFMAPIKey         string
 	DiscogsToken         string
 	FanartTVAPIKey       string
 	GeniusAccessToken    string
 	TheAudioDBAPIKey     string
 	GoogleSheetsAPIKey   string
 	TrackerHubSheetID    string
-	AppleMusicEnabled    bool
-	SpotifyEnabled       bool
-	SoundCloudEnabled    bool
-	AmazonMusicEnabled   bool
-	YouTubeMusicEnabled  bool
-	SearchAllowlist      []string
 }
 
 type SearchSettings struct {
@@ -60,7 +54,6 @@ type SearchSettings struct {
 	IdentityVerifyOnPersist bool
 	BehavioralRanking       bool
 	ProviderCacheTTL        time.Duration
-	MusicBrainzCacheTTL     time.Duration
 }
 
 type UnreleasedSettings struct {

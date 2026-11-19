@@ -32,7 +32,7 @@ func topTrackLookups(t *testing.T, store discovery.IdentityStore, known map[disc
 	var mu sync.Mutex
 	asked := map[discovery.ProviderName][]string{}
 	providers := map[discovery.ProviderName]discovery.ArtistContentProvider{}
-	for _, name := range []discovery.ProviderName{discovery.ProviderDeezer, discovery.ProviderSpotify, discovery.ProviderAppleMusic, discovery.ProviderLastFM} {
+	for _, name := range []discovery.ProviderName{discovery.ProviderDeezer, discovery.ProviderSpotify, discovery.ProviderAppleMusic} {
 		providers[name] = artistContentFuncs{topTracks: func(_ context.Context, provider discovery.ProviderName, id string) ([]discovery.SearchResult, error) {
 			mu.Lock()
 			defer mu.Unlock()
@@ -78,7 +78,6 @@ func TestGetTopTracks_BridgedArtistFansOutToEveryBridgedIdPlusTheSeed(t *testing
 		discovery.ProviderDeezer:     "deezer-che",
 		discovery.ProviderSpotify:    "spot-che",
 		discovery.ProviderAppleMusic: "apple-che",
-		discovery.ProviderLastFM:     "mbid-che",
 	})
 }
 
@@ -88,7 +87,7 @@ func TestGetTopTracks_StoreMissAsksOnlyTheSeedProvider(t *testing.T) {
 	})
 }
 
-func TestGetTopTracks_AppleMusicSharesTheITunesIdAndLastFMUsesTheMBID(t *testing.T) {
+func TestGetTopTracks_AppleMusicSharesTheITunesId(t *testing.T) {
 	store := &discovery.FakeIdentityStore{
 		Mbid: "mbid-x",
 		Xref: map[discovery.ProviderKey]string{"itunes": "it1"},
@@ -97,7 +96,6 @@ func TestGetTopTracks_AppleMusicSharesTheITunesIdAndLastFMUsesTheMBID(t *testing
 	assertAsked(t, topTrackLookups(t, store, nil), map[discovery.ProviderName]string{
 		discovery.ProviderDeezer:     "deezer-che",
 		discovery.ProviderAppleMusic: "it1",
-		discovery.ProviderLastFM:     "mbid-x",
 	})
 }
 

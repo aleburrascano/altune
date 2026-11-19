@@ -61,7 +61,7 @@ func (c *Config) validateUnreleasedSource() error {
 	return nil
 }
 
-var DiscoverySearchProviderNames = []string{
+var discoverySearchProviderNames = []string{
 	"deezer", "applemusic", "musicbrainz", "lastfm", "soundcloud", "youtube", "amazonmusic", "spotify",
 }
 
@@ -82,9 +82,9 @@ func (c *Config) validateDiscoverySearch() error {
 
 func (c *Config) validateDiscoverySearchProviders() error {
 	for _, name := range c.DiscoverySearchProviders {
-		if !slices.Contains(DiscoverySearchProviderNames, name) {
+		if !slices.Contains(discoverySearchProviderNames, name) {
 			return fmt.Errorf("DISCOVERY_SEARCH_PROVIDERS: unknown provider %q (known: %s)",
-				name, strings.Join(DiscoverySearchProviderNames, ", "))
+				name, strings.Join(discoverySearchProviderNames, ", "))
 		}
 	}
 	return nil

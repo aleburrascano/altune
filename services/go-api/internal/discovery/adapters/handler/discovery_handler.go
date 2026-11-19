@@ -48,7 +48,6 @@ type DiscoveryHandler struct {
 }
 
 type DetailEnrichers struct {
-	LastFm *enrich.LastFmEnrichmentService
 	Deezer *enrich.DeezerEnrichmentService
 	Lyrics *enrich.LyricsService
 }

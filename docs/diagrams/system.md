@@ -13,7 +13,7 @@ flowchart TD
 
     subgraph ext [External systems]
         supa["Supabase<br/>Auth + hosted Postgres"]
-        meta["Metadata providers<br/>Deezer · MusicBrainz · Last.fm · Spotify · Apple Music<br/>SoundCloud · YT Music · Amazon · artwork sources"]
+        meta["Metadata providers<br/>Deezer · MusicBrainz · Spotify · Apple Music<br/>SoundCloud · YT Music · artwork sources"]
         sources["Audio sources<br/>YouTube / YT Music / SoundCloud via yt-dlp"]
         acoustid["AcoustID<br/>fingerprint → recording"]
         github["GitHub<br/>Actions CI/CD · Releases · kill switches"]

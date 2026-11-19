@@ -3,7 +3,6 @@ package compose
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/adapters/handles"
-	"altune/go-api/internal/discovery/internal/adapters/providers/amazonmusic"
 	"altune/go-api/internal/discovery/internal/adapters/providers/applemusic"
 	"altune/go-api/internal/discovery/internal/adapters/providers/coverartarchive"
 	"altune/go-api/internal/discovery/internal/adapters/providers/deezer"
@@ -11,7 +10,6 @@ import (
 	"altune/go-api/internal/discovery/internal/adapters/providers/fanarttv"
 	"altune/go-api/internal/discovery/internal/adapters/providers/genius"
 	"altune/go-api/internal/discovery/internal/adapters/providers/itunes"
-	"altune/go-api/internal/discovery/internal/adapters/providers/lastfm"
 	"altune/go-api/internal/discovery/internal/adapters/providers/musicbrainz"
 	"altune/go-api/internal/discovery/internal/adapters/providers/soundcloud"
 	"altune/go-api/internal/discovery/internal/adapters/providers/spotify"
@@ -39,11 +37,7 @@ func (t *providerTable) addDeezer(c handles.Clients) {
 	})
 }
 
-func (t *providerTable) addAppleMusic(enabled bool, c handles.Clients) {
-	if !enabled {
-		t.add(switchedOff(rowAppleMusic, "APPLEMUSIC_ENABLED is false"))
-		return
-	}
+func (t *providerTable) addAppleMusic(c handles.Clients) {
 	adapter := applemusic.NewAppleMusicAdapter(c.ProviderCalls)
 	t.add(provider{name: rowAppleMusic, id: domain.ProviderAppleMusic, search: adapter, artist: adapter, album: adapter})
 }
@@ -57,73 +51,40 @@ func (t *providerTable) addMusicBrainz(userAgent string, c handles.Clients) {
 	t.add(provider{
 		name:           rowMusicBrainz,
 		id:             domain.ProviderMusicBrainz,
-		search:         adapter,
 		artistAnchor:   adapter,
 		enrichment:     adapter,
 		featuredSearch: adapter,
 		recordings:     adapter,
+		consensus:      newConsensus(domain.ProviderKeyMusicBrainz, domain.ProviderMusicBrainz, adapter.ListArtistDiscography),
 	})
 }
 
-func (t *providerTable) addLastFM(apiKey string, c handles.Clients) {
-	if apiKey == "" {
-		t.add(switchedOff(rowLastFM, "LASTFM_API_KEY is empty"))
-		return
-	}
-	adapter := lastfm.NewLastFmAdapter(c.ProviderCalls, apiKey)
-	t.add(provider{
-		name:          rowLastFM,
-		id:            domain.ProviderLastFM,
-		search:        adapter,
-		artist:        adapter,
-		charts:        lastfm.NewLastFmAdapter(c.ChartCalls, apiKey),
-		lastFMDetails: adapter,
-	})
-}
-
-func (t *providerTable) addSoundCloud(enabled bool, c handles.Clients) {
-	if !enabled {
-		t.add(switchedOff(rowSoundCloud, "SOUNDCLOUD_ENABLED is false"))
-		return
-	}
+func (t *providerTable) addSoundCloud(c handles.Clients) {
 	adapter := soundcloud.NewSoundCloudAPIAdapter(c.ProviderCalls, nil)
 	t.add(provider{
-		name:    rowSoundCloud,
-		id:      domain.ProviderSoundCloud,
-		search:  soundcloud.NewSoundCloudAPIAdapter(c.ProviderCalls, soundcloud.NewSoundCloudAdapter()),
-		artist:  adapter,
-		album:   adapter,
-		related: adapter,
-		artwork: []ports.ArtworkResolver{adapter},
+		name:      rowSoundCloud,
+		id:        domain.ProviderSoundCloud,
+		search:    soundcloud.NewSoundCloudAPIAdapter(c.ProviderCalls, soundcloud.NewSoundCloudAdapter()),
+		artist:    adapter,
+		album:     adapter,
+		related:   adapter,
+		artwork:   []ports.ArtworkResolver{adapter},
+		consensus: albumSearchConsensus(domain.ProviderKeySoundCloud, domain.ProviderSoundCloud, adapter),
 	})
 }
 
-func (t *providerTable) addYouTubeMusic(enabled bool, c handles.Clients) {
-	if !enabled {
-		t.add(switchedOff(rowYouTube, "YTMUSIC_ENABLED is false"))
-		return
-	}
+func (t *providerTable) addYouTubeMusic(c handles.Clients) {
+	adapter := ytmusic.NewYouTubeMusicAdapter(c.Transport)
 	t.add(provider{
-		name:    rowYouTube,
-		id:      domain.ProviderYouTube,
-		search:  ytmusic.NewYouTubeMusicAdapter(c.Transport),
-		artwork: []ports.ArtworkResolver{ytmusic.NewYouTubeMusicArtworkResolver(c.Transport)},
+		name:      rowYouTube,
+		id:        domain.ProviderYouTube,
+		search:    adapter,
+		artwork:   []ports.ArtworkResolver{ytmusic.NewYouTubeMusicArtworkResolver(c.Transport)},
+		consensus: artistAlbumsConsensus(domain.ProviderKeyYTMusic, domain.ProviderYouTube, adapter),
 	})
 }
 
-func (t *providerTable) addAmazonMusic(enabled bool, c handles.Clients) {
-	if !enabled {
-		t.add(switchedOff(rowAmazonMusic, "AMAZONMUSIC_ENABLED is false"))
-		return
-	}
-	t.add(provider{name: rowAmazonMusic, id: domain.ProviderAmazonMusic, search: amazonmusic.NewAmazonMusicAdapter(c.ProviderCalls)})
-}
-
-func (t *providerTable) addSpotify(enabled bool, c handles.Clients) {
-	if !enabled {
-		t.add(switchedOff(rowSpotify, "SPOTIFY_ENABLED is false"))
-		return
-	}
+func (t *providerTable) addSpotify(c handles.Clients) {
 	adapter := spotify.NewSpotifyAdapter(c.ProviderCalls)
 	t.add(provider{
 		name:    rowSpotify,
@@ -137,7 +98,13 @@ func (t *providerTable) addSpotify(enabled bool, c handles.Clients) {
 
 func (t *providerTable) addITunes(c handles.Clients) {
 	adapter := itunes.NewITunesAdapter(c.ProviderCalls)
-	t.add(provider{name: rowITunes, id: domain.ProviderITunes, album: adapter, artwork: []ports.ArtworkResolver{adapter}})
+	t.add(provider{
+		name:      rowITunes,
+		id:        domain.ProviderITunes,
+		album:     adapter,
+		artwork:   []ports.ArtworkResolver{adapter},
+		consensus: albumSearchConsensus(domain.ProviderKeyITunes, domain.ProviderITunes, adapter),
+	})
 }
 
 func (t *providerTable) addCoverArtArchive(c handles.Clients) {
@@ -152,7 +119,12 @@ func (t *providerTable) addDiscogs(token, userAgent string, c handles.Clients) {
 		return
 	}
 	adapter := discogs.NewDiscogsAdapter(c.ProviderCalls, token, userAgent)
-	t.add(provider{name: rowDiscogs, id: domain.ProviderDiscogs, artwork: []ports.ArtworkResolver{adapter}})
+	t.add(provider{
+		name:      rowDiscogs,
+		id:        domain.ProviderDiscogs,
+		artwork:   []ports.ArtworkResolver{adapter},
+		consensus: newConsensus(domain.ProviderKeyDiscogs, domain.ProviderDiscogs, discogsReleases(adapter)),
+	})
 }
 
 func (t *providerTable) addFanartTV(apiKey string, c handles.Clients) {

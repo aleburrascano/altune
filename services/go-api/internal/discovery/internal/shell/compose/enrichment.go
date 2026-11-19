@@ -19,12 +19,8 @@ func newEnrichmentService(t *providerTable, s handles.Stores, artwork ports.Tagg
 
 func newDetailEnrichers(t *providerTable, s handles.Stores) handler.DetailEnrichers {
 	deezer := t.named(rowDeezer)
-	enrichers := handler.DetailEnrichers{
+	return handler.DetailEnrichers{
 		Deezer: enrich.NewDeezerEnrichmentService(deezer.deezerDetails, cache.NewRedisDeezerEnrichmentCache(s.Redis, s.CacheOption())),
 		Lyrics: enrich.NewLyricsService(deezer.lyrics, cache.NewRedisDeezerLyricsCache(s.Redis, s.CacheOption())),
 	}
-	if lastFM := t.named(rowLastFM).lastFMDetails; lastFM != nil {
-		enrichers.LastFm = enrich.NewLastFmEnrichmentService(lastFM, cache.NewRedisLastFmEnrichmentCache(s.Redis, s.CacheOption()))
-	}
-	return enrichers
 }

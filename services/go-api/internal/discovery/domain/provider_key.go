@@ -8,12 +8,10 @@ const (
 	ProviderKeyDeezer          ProviderKey = "deezer"
 	ProviderKeyMusicBrainz     ProviderKey = "musicbrainz"
 	ProviderKeySoundCloud      ProviderKey = "soundcloud"
-	ProviderKeyLastFM          ProviderKey = "lastfm"
 	ProviderKeyITunes          ProviderKey = "itunes"
 	ProviderKeyTheAudioDB      ProviderKey = "theaudiodb"
 	ProviderKeyDiscogs         ProviderKey = "discogs"
 	ProviderKeyYouTube         ProviderKey = "youtube"
-	ProviderKeyAmazonMusic     ProviderKey = "amazonmusic"
 	ProviderKeyAppleMusic      ProviderKey = "applemusic"
 	ProviderKeySpotify         ProviderKey = "spotify"
 	ProviderKeyWikidata        ProviderKey = "wikidata"
@@ -28,12 +26,10 @@ var providerKeys = [...]ProviderKey{
 	ProviderDeezer:      ProviderKeyDeezer,
 	ProviderMusicBrainz: ProviderKeyMusicBrainz,
 	ProviderSoundCloud:  ProviderKeySoundCloud,
-	ProviderLastFM:      ProviderKeyLastFM,
 	ProviderITunes:      ProviderKeyITunes,
 	ProviderTheAudioDB:  ProviderKeyTheAudioDB,
 	ProviderDiscogs:     ProviderKeyDiscogs,
 	ProviderYouTube:     ProviderKeyYouTube,
-	ProviderAmazonMusic: ProviderKeyAmazonMusic,
 	ProviderAppleMusic:  ProviderKeyAppleMusic,
 	ProviderSpotify:     ProviderKeySpotify,
 }
@@ -41,7 +37,9 @@ var providerKeys = [...]ProviderKey{
 var providerNamesByKey = func() map[ProviderKey]ProviderName {
 	m := make(map[ProviderKey]ProviderName, len(providerKeys))
 	for p := ProviderUnknown + 1; int(p) < len(providerKeys); p++ {
-		m[providerKeys[p]] = p
+		if providerKeys[p] != "" {
+			m[providerKeys[p]] = p
+		}
 	}
 	return m
 }()

@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
 	"net/http/httptest"
 	"testing"
-	"time"
 )
 
 func TestProviderContracts(t *testing.T) {
@@ -14,7 +13,7 @@ func TestProviderContracts(t *testing.T) {
 			Name:   "musicbrainz recording",
 			Golden: "contract_musicbrainz_recording.json",
 			Search: func(t *testing.T, srv *httptest.Server) ([]discovery.SearchResult, error) {
-				return discovery.NewMusicBrainzAdapter(providertest.NewClient(srv.URL), "altune-test/1.0").Search(t.Context(), "paranoid android", providertest.TrackKinds())
+				return discovery.NewMusicBrainzAdapter(providertest.NewClient(srv.URL), "altune-test/1.0").SearchStructured(t.Context(), "radiohead", "paranoid android", providertest.TrackKinds())
 			},
 			Required: func(t *testing.T, r discovery.SearchResult) {
 				if r.ISRC == "" {
@@ -29,7 +28,7 @@ func TestProviderContracts(t *testing.T) {
 			Name:   "musicbrainz artist",
 			Golden: "contract_musicbrainz_artist.json",
 			Search: func(t *testing.T, srv *httptest.Server) ([]discovery.SearchResult, error) {
-				return discovery.NewMusicBrainzAdapter(providertest.NewClient(srv.URL), "altune-test/1.0").Search(t.Context(), "radiohead", providertest.ArtistKinds())
+				return discovery.NewMusicBrainzAdapter(providertest.NewClient(srv.URL), "altune-test/1.0").SearchStructured(t.Context(), "radiohead", "", providertest.ArtistKinds())
 			},
 			Required: func(t *testing.T, r discovery.SearchResult) {
 				if r.ArtistMBID == "" {
@@ -49,31 +48,6 @@ func TestAdapterNames(t *testing.T) {
 	for _, tt := range tests {
 		if tt.got != tt.want {
 			t.Errorf("Name() = %v, want %v", tt.got, tt.want)
-		}
-	}
-}
-
-func TestAdapterSearchTimeouts(t *testing.T) {
-	tests := []struct {
-		name string
-		got  time.Duration
-		want time.Duration
-	}{
-		{"musicbrainz", (&discovery.MusicBrainzAdapter{}).SearchTimeout(), 5 * time.Second},
-	}
-	for _, tt := range tests {
-		if tt.got != tt.want {
-			t.Errorf("%s SearchTimeout = %v, want %v", tt.name, tt.got, tt.want)
-		}
-	}
-}
-
-func TestAdapterSupportedKinds_allThree(t *testing.T) {
-	for name, kinds := range map[string]map[discovery.ResultKind]bool{
-		"musicbrainz": (&discovery.MusicBrainzAdapter{}).SupportedKinds(),
-	} {
-		if !kinds[discovery.ResultKindTrack] || !kinds[discovery.ResultKindAlbum] || !kinds[discovery.ResultKindArtist] {
-			t.Errorf("%s SupportedKinds = %v, want track+album+artist", name, kinds)
 		}
 	}
 }
