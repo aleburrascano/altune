@@ -1,0 +1,16 @@
+{
+  "removed": [
+    "T1 internal/catalog/internal/core/audio/stream_track_test.go imports catalogtest/audio_store_fake.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/audio/stream_track_test.go imports catalogtest/fixtures.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/audio/stream_track_test.go imports catalogtest/metrics_fake.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/audio/stream_track_test.go imports catalogtest/scheduler_fake.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/audio/stream_track_test.go imports catalogtest/stuck_scheduler.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/audio/stream_track_test.go imports catalogtest/track_repo_fake.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/audio/stream_track_test.go imports domain/coded_error.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/audio/stream_track_test.go imports domain/track.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/audio/stream_track_test.go imports service/track/add_track.go, behind catalog's door",
+    "T1 internal/catalog/internal/core/audio/stream_track_test.go is in package audio, so it sees inside the module: use package audio_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}

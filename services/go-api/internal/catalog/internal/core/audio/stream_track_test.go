@@ -1,9 +1,7 @@
-package audio
+package audio_test
 
 import (
-	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/catalog/domain"
-	trackservice "altune/go-api/internal/catalog/service/track"
+	"altune/go-api/internal/catalog"
 	"context"
 	"errors"
 	"strings"
@@ -11,99 +9,101 @@ import (
 	"time"
 )
 
+const addTrackScheduleBound = 5 * time.Second
+
 func TestStreamTrackService_Execute(t *testing.T) {
 	ctx := context.Background()
-	userId := catalogtest.UserId()
+	userId := catalog.FixtureUserId()
 	errRepo := errors.New("db error")
 
 	tests := []struct {
 		name          string
-		setup         func(*catalogtest.TrackRepo, *catalogtest.AudioStore) domain.TrackId
+		setup         func(*catalog.InMemoryTrackRepo, *catalog.InMemoryAudioStore) catalog.TrackId
 		wantErr       error
 		wantOutput    bool
-		wantStatus    *domain.AcquisitionStatus
+		wantStatus    *catalog.AcquisitionStatus
 		wantScheduled bool
 	}{
 		{
 			name: "ready track with present audio streams",
-			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
-				track := catalogtest.SeedReadyTrack(t, trRepo, userId, "Track", "Artist", "Album", "audio/ok.opus")
+			setup: func(trRepo *catalog.InMemoryTrackRepo, store *catalog.InMemoryAudioStore) catalog.TrackId {
+				track := catalog.SeedReadyTrack(t, trRepo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 				store.Seed("audio/ok.opus", []byte("data"))
 				return track.ID
 			},
 			wantOutput:    true,
-			wantStatus:    ptrStatus(domain.AcquisitionReady),
+			wantStatus:    ptrStatus(catalog.AcquisitionReady),
 			wantScheduled: false,
 		},
 		{
 			name: "ready track with missing file is marked failed and reacquired",
-			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
-				track := catalogtest.SeedReadyTrack(t, trRepo, userId, "Track", "Artist", "Album", "audio/gone.opus")
+			setup: func(trRepo *catalog.InMemoryTrackRepo, store *catalog.InMemoryAudioStore) catalog.TrackId {
+				track := catalog.SeedReadyTrack(t, trRepo, userId, "Track", "Artist", "Album", "audio/gone.opus")
 				store.ErrOnStream = errors.New("not found")
 				return track.ID
 			},
-			wantErr:       domain.ErrAudioNotAvailable,
-			wantStatus:    ptrStatus(domain.AcquisitionFailed),
+			wantErr:       catalog.ErrAudioNotAvailable,
+			wantStatus:    ptrStatus(catalog.AcquisitionFailed),
 			wantScheduled: true,
 		},
 		{
 			name: "missing file whose failed-status persist fails is not reacquired",
-			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
-				track := catalogtest.SeedReadyTrack(t, trRepo, userId, "Track", "Artist", "Album", "audio/gone.opus")
+			setup: func(trRepo *catalog.InMemoryTrackRepo, store *catalog.InMemoryAudioStore) catalog.TrackId {
+				track := catalog.SeedReadyTrack(t, trRepo, userId, "Track", "Artist", "Album", "audio/gone.opus")
 				store.ErrOnStream = errors.New("not found")
 				trRepo.ErrOnUpdate = errors.New("db down")
 				return track.ID
 			},
-			wantErr:       domain.ErrAudioNotAvailable,
+			wantErr:       catalog.ErrAudioNotAvailable,
 			wantScheduled: false,
 		},
 		{
 			name: "transient stream error over present file is retryable, not missing",
-			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
-				track := catalogtest.SeedReadyTrack(t, trRepo, userId, "Track", "Artist", "Album", "audio/here.opus")
+			setup: func(trRepo *catalog.InMemoryTrackRepo, store *catalog.InMemoryAudioStore) catalog.TrackId {
+				track := catalog.SeedReadyTrack(t, trRepo, userId, "Track", "Artist", "Album", "audio/here.opus")
 				store.Seed("audio/here.opus", []byte("data"))
 				store.ErrOnStream = errors.New("transient")
 				return track.ID
 			},
-			wantErr:       domain.ErrAudioTemporarilyUnavailable,
-			wantStatus:    ptrStatus(domain.AcquisitionReady),
+			wantErr:       catalog.ErrAudioTemporarilyUnavailable,
+			wantStatus:    ptrStatus(catalog.AcquisitionReady),
 			wantScheduled: false,
 		},
 		{
 			name: "exists check error is retryable and does not mark failed",
-			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
-				track := catalogtest.SeedReadyTrack(t, trRepo, userId, "Track", "Artist", "Album", "audio/err.opus")
+			setup: func(trRepo *catalog.InMemoryTrackRepo, store *catalog.InMemoryAudioStore) catalog.TrackId {
+				track := catalog.SeedReadyTrack(t, trRepo, userId, "Track", "Artist", "Album", "audio/err.opus")
 				store.ErrOnStream = errors.New("stream fail")
 				store.ErrOnExists = errors.New("s3 down")
 				return track.ID
 			},
-			wantErr:       domain.ErrAudioTemporarilyUnavailable,
-			wantStatus:    ptrStatus(domain.AcquisitionReady),
+			wantErr:       catalog.ErrAudioTemporarilyUnavailable,
+			wantStatus:    ptrStatus(catalog.AcquisitionReady),
 			wantScheduled: false,
 		},
 		{
 			name: "pending track is not streamable",
-			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
-				track := catalogtest.SeedTrack(t, trRepo, userId, "Track", "Artist", "Album")
+			setup: func(trRepo *catalog.InMemoryTrackRepo, store *catalog.InMemoryAudioStore) catalog.TrackId {
+				track := catalog.SeedTrack(t, trRepo, userId, "Track", "Artist", "Album")
 				return track.ID
 			},
-			wantErr:       domain.ErrAudioNotAvailable,
-			wantStatus:    ptrStatus(domain.AcquisitionPending),
+			wantErr:       catalog.ErrAudioNotAvailable,
+			wantStatus:    ptrStatus(catalog.AcquisitionPending),
 			wantScheduled: false,
 		},
 		{
 			name: "track not found",
-			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
-				return domain.NewTrackId()
+			setup: func(trRepo *catalog.InMemoryTrackRepo, store *catalog.InMemoryAudioStore) catalog.TrackId {
+				return catalog.NewTrackId()
 			},
-			wantErr:       domain.ErrTrackNotFound,
+			wantErr:       catalog.ErrTrackNotFound,
 			wantScheduled: false,
 		},
 		{
 			name: "repo GetByID error propagates",
-			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
+			setup: func(trRepo *catalog.InMemoryTrackRepo, store *catalog.InMemoryAudioStore) catalog.TrackId {
 				trRepo.ErrOnGetBy = errRepo
-				return domain.NewTrackId()
+				return catalog.NewTrackId()
 			},
 			wantErr:       errRepo,
 			wantScheduled: false,
@@ -112,11 +112,11 @@ func TestStreamTrackService_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			trRepo := catalogtest.NewTrackRepo()
-			store := catalogtest.NewAudioStore()
-			sched := &catalogtest.Scheduler{}
+			trRepo := catalog.NewInMemoryTrackRepo()
+			store := catalog.NewInMemoryAudioStore()
+			sched := &catalog.InMemoryScheduler{}
 			trackId := tt.setup(trRepo, store)
-			svc := NewStreamTrackService(trRepo, store, WithStreamScheduler(sched))
+			svc := catalog.NewStreamTrackService(trRepo, store, catalog.WithStreamScheduler(sched))
 
 			out, err := svc.Execute(ctx, userId, trackId)
 
@@ -160,13 +160,13 @@ func TestStreamTrackService_Execute(t *testing.T) {
 
 func TestAddTrackService_ForwardsSourceURLToScheduler(t *testing.T) {
 	ctx := context.Background()
-	userId := catalogtest.UserId()
-	repo := catalogtest.NewTrackRepo()
-	sched := &catalogtest.Scheduler{}
-	svc := trackservice.NewAddTrackService(repo, trackservice.WithAcquisitionScheduler(sched))
+	userId := catalog.FixtureUserId()
+	repo := catalog.NewInMemoryTrackRepo()
+	sched := &catalog.InMemoryScheduler{}
+	svc := catalog.NewAddTrackService(repo, catalog.WithAcquisitionScheduler(sched))
 
 	scURL := "https://soundcloud.com/liltecca/fell-in-love"
-	if _, err := svc.Execute(ctx, userId, trackservice.AddTrackInput{
+	if _, err := svc.Execute(ctx, userId, catalog.AddTrackInput{
 		Title:     "Fell In Love",
 		Artist:    "Lil Tecca",
 		SourceURL: &scURL,
@@ -181,12 +181,12 @@ func TestAddTrackService_ForwardsSourceURLToScheduler(t *testing.T) {
 
 func TestAddTrackService_NoSourceURL_ForwardsEmpty(t *testing.T) {
 	ctx := context.Background()
-	userId := catalogtest.UserId()
-	repo := catalogtest.NewTrackRepo()
-	sched := &catalogtest.Scheduler{}
-	svc := trackservice.NewAddTrackService(repo, trackservice.WithAcquisitionScheduler(sched))
+	userId := catalog.FixtureUserId()
+	repo := catalog.NewInMemoryTrackRepo()
+	sched := &catalog.InMemoryScheduler{}
+	svc := catalog.NewAddTrackService(repo, catalog.WithAcquisitionScheduler(sched))
 
-	if _, err := svc.Execute(ctx, userId, trackservice.AddTrackInput{Title: "Some Track", Artist: "Some Artist"}); err != nil {
+	if _, err := svc.Execute(ctx, userId, catalog.AddTrackInput{Title: "Some Track", Artist: "Some Artist"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -197,17 +197,17 @@ func TestAddTrackService_NoSourceURL_ForwardsEmpty(t *testing.T) {
 
 func TestStreamTrackService_RecoveryMetric(t *testing.T) {
 	ctx := context.Background()
-	userId := catalogtest.UserId()
+	userId := catalog.FixtureUserId()
 
-	repo := catalogtest.NewTrackRepo()
-	track := catalogtest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
-	store := catalogtest.NewAudioStore()
+	repo := catalog.NewInMemoryTrackRepo()
+	track := catalog.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
+	store := catalog.NewInMemoryAudioStore()
 	store.ErrOnStream = errors.New("not found")
-	sched := &catalogtest.Scheduler{}
-	metrics := &catalogtest.Metrics{}
-	svc := NewStreamTrackService(repo, store, WithStreamScheduler(sched), WithStreamMetrics(metrics))
+	sched := &catalog.InMemoryScheduler{}
+	metrics := &catalog.InMemoryAudioStoreMetrics{}
+	svc := catalog.NewStreamTrackService(repo, store, catalog.WithStreamScheduler(sched), catalog.WithStreamMetrics(metrics))
 
-	if _, err := svc.Execute(ctx, userId, track.ID); !errors.Is(err, domain.ErrAudioNotAvailable) {
+	if _, err := svc.Execute(ctx, userId, track.ID); !errors.Is(err, catalog.ErrAudioNotAvailable) {
 		t.Fatalf("error = %v, want ErrAudioNotAvailable", err)
 	}
 	if metrics.StreamRecoveries != 1 {
@@ -217,14 +217,14 @@ func TestStreamTrackService_RecoveryMetric(t *testing.T) {
 
 func TestStreamTrackService_NoRecoveryMetricOnHealthyStream(t *testing.T) {
 	ctx := context.Background()
-	userId := catalogtest.UserId()
+	userId := catalog.FixtureUserId()
 
-	repo := catalogtest.NewTrackRepo()
-	track := catalogtest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
-	store := catalogtest.NewAudioStore()
+	repo := catalog.NewInMemoryTrackRepo()
+	track := catalog.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
+	store := catalog.NewInMemoryAudioStore()
 	store.Seed("audio/ok.opus", []byte("data"))
-	metrics := &catalogtest.Metrics{}
-	svc := NewStreamTrackService(repo, store, WithStreamMetrics(metrics))
+	metrics := &catalog.InMemoryAudioStoreMetrics{}
+	svc := catalog.NewStreamTrackService(repo, store, catalog.WithStreamMetrics(metrics))
 
 	if _, err := svc.Execute(ctx, userId, track.ID); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -236,20 +236,20 @@ func TestStreamTrackService_NoRecoveryMetricOnHealthyStream(t *testing.T) {
 
 func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 	ctx := context.Background()
-	userId := catalogtest.UserId()
+	userId := catalog.FixtureUserId()
 
 	t.Run("missing file marks failed and schedules", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
-		store := catalogtest.NewAudioStore()
-		sched := &catalogtest.Scheduler{}
-		track := catalogtest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
-		svc := NewStreamTrackService(repo, store, WithStreamScheduler(sched))
+		repo := catalog.NewInMemoryTrackRepo()
+		store := catalog.NewInMemoryAudioStore()
+		sched := &catalog.InMemoryScheduler{}
+		track := catalog.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
+		svc := catalog.NewStreamTrackService(repo, store, catalog.WithStreamScheduler(sched))
 
 		if err := svc.RecoverIfMissing(ctx, userId, track.ID); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		got, _ := repo.GetByID(ctx, track.ID, userId)
-		if got.AcquisitionStatus != domain.AcquisitionFailed {
+		if got.AcquisitionStatus != catalog.AcquisitionFailed {
 			t.Errorf("status = %v, want failed", got.AcquisitionStatus)
 		}
 		if len(sched.TrackIds) != 1 {
@@ -258,18 +258,18 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 	})
 
 	t.Run("present file is a no-op", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
-		store := catalogtest.NewAudioStore()
+		repo := catalog.NewInMemoryTrackRepo()
+		store := catalog.NewInMemoryAudioStore()
 		store.Seed("audio/here.opus", []byte("data"))
-		sched := &catalogtest.Scheduler{}
-		track := catalogtest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/here.opus")
-		svc := NewStreamTrackService(repo, store, WithStreamScheduler(sched))
+		sched := &catalog.InMemoryScheduler{}
+		track := catalog.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/here.opus")
+		svc := catalog.NewStreamTrackService(repo, store, catalog.WithStreamScheduler(sched))
 
 		if err := svc.RecoverIfMissing(ctx, userId, track.ID); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		got, _ := repo.GetByID(ctx, track.ID, userId)
-		if got.AcquisitionStatus != domain.AcquisitionReady {
+		if got.AcquisitionStatus != catalog.AcquisitionReady {
 			t.Errorf("status = %v, want ready (unchanged)", got.AcquisitionStatus)
 		}
 		if len(sched.TrackIds) != 0 {
@@ -278,15 +278,15 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 	})
 
 	t.Run("missing or foreign track is not found", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
-		store := catalogtest.NewAudioStore()
-		sched := &catalogtest.Scheduler{}
-		other := catalogtest.OtherUserId()
-		foreign := catalogtest.SeedReadyTrack(t, repo, other, "Theirs", "Artist", "Album", "audio/theirs.opus")
-		svc := NewStreamTrackService(repo, store, WithStreamScheduler(sched))
+		repo := catalog.NewInMemoryTrackRepo()
+		store := catalog.NewInMemoryAudioStore()
+		sched := &catalog.InMemoryScheduler{}
+		other := catalog.FixtureOtherUserId()
+		foreign := catalog.SeedReadyTrack(t, repo, other, "Theirs", "Artist", "Album", "audio/theirs.opus")
+		svc := catalog.NewStreamTrackService(repo, store, catalog.WithStreamScheduler(sched))
 
-		for _, id := range []domain.TrackId{domain.NewTrackId(), foreign.ID} {
-			if err := svc.RecoverIfMissing(ctx, userId, id); !errors.Is(err, domain.ErrTrackNotFound) {
+		for _, id := range []catalog.TrackId{catalog.NewTrackId(), foreign.ID} {
+			if err := svc.RecoverIfMissing(ctx, userId, id); !errors.Is(err, catalog.ErrTrackNotFound) {
 				t.Fatalf("error = %v, want ErrTrackNotFound", err)
 			}
 		}
@@ -296,11 +296,11 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 	})
 
 	t.Run("non-streamable track is a no-op", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
-		store := catalogtest.NewAudioStore()
-		sched := &catalogtest.Scheduler{}
-		track := catalogtest.SeedTrack(t, repo, userId, "Pending", "Artist", "Album")
-		svc := NewStreamTrackService(repo, store, WithStreamScheduler(sched))
+		repo := catalog.NewInMemoryTrackRepo()
+		store := catalog.NewInMemoryAudioStore()
+		sched := &catalog.InMemoryScheduler{}
+		track := catalog.SeedTrack(t, repo, userId, "Pending", "Artist", "Album")
+		svc := catalog.NewStreamTrackService(repo, store, catalog.WithStreamScheduler(sched))
 
 		if err := svc.RecoverIfMissing(ctx, userId, track.ID); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -311,12 +311,12 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 	})
 
 	t.Run("exists-check error propagates", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
-		store := catalogtest.NewAudioStore()
+		repo := catalog.NewInMemoryTrackRepo()
+		store := catalog.NewInMemoryAudioStore()
 		store.ErrOnExists = errors.New("storage down")
-		sched := &catalogtest.Scheduler{}
-		track := catalogtest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/err.opus")
-		svc := NewStreamTrackService(repo, store, WithStreamScheduler(sched))
+		sched := &catalog.InMemoryScheduler{}
+		track := catalog.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/err.opus")
+		svc := catalog.NewStreamTrackService(repo, store, catalog.WithStreamScheduler(sched))
 
 		if err := svc.RecoverIfMissing(ctx, userId, track.ID); err == nil {
 			t.Fatal("expected an error")
@@ -327,13 +327,13 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 	})
 
 	t.Run("persist failure is returned and does not schedule", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
-		store := catalogtest.NewAudioStore()
-		sched := &catalogtest.Scheduler{}
-		track := catalogtest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
+		repo := catalog.NewInMemoryTrackRepo()
+		store := catalog.NewInMemoryAudioStore()
+		sched := &catalog.InMemoryScheduler{}
+		track := catalog.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
 		errUpdate := errors.New("db down")
 		repo.ErrOnUpdate = errUpdate
-		svc := NewStreamTrackService(repo, store, WithStreamScheduler(sched))
+		svc := catalog.NewStreamTrackService(repo, store, catalog.WithStreamScheduler(sched))
 
 		err := svc.RecoverIfMissing(ctx, userId, track.ID)
 		if !errors.Is(err, errUpdate) {
@@ -345,17 +345,17 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 	})
 
 	t.Run("scheduler refusal is logged, not returned", func(t *testing.T) {
-		repo := catalogtest.NewTrackRepo()
-		store := catalogtest.NewAudioStore()
-		sched := &catalogtest.Scheduler{Err: errors.New("queue full")}
-		track := catalogtest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
-		svc := NewStreamTrackService(repo, store, WithStreamScheduler(sched))
+		repo := catalog.NewInMemoryTrackRepo()
+		store := catalog.NewInMemoryAudioStore()
+		sched := &catalog.InMemoryScheduler{Err: errors.New("queue full")}
+		track := catalog.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
+		svc := catalog.NewStreamTrackService(repo, store, catalog.WithStreamScheduler(sched))
 
 		if err := svc.RecoverIfMissing(ctx, userId, track.ID); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		got, _ := repo.GetByID(ctx, track.ID, userId)
-		if got.AcquisitionStatus != domain.AcquisitionFailed {
+		if got.AcquisitionStatus != catalog.AcquisitionFailed {
 			t.Errorf("status = %v, want failed", got.AcquisitionStatus)
 		}
 		if len(sched.TrackIds) != 1 {
@@ -365,19 +365,19 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 }
 
 func TestStreamTrackService_ReacquireBoundedByTimeout(t *testing.T) {
-	userId := catalogtest.UserId()
-	repo := catalogtest.NewTrackRepo()
-	sched := &catalogtest.StuckScheduler{}
-	track := catalogtest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
-	svc := NewStreamTrackService(repo, catalogtest.NewAudioStore(), WithStreamScheduler(sched))
+	userId := catalog.FixtureUserId()
+	repo := catalog.NewInMemoryTrackRepo()
+	sched := &catalog.InMemoryStuckScheduler{}
+	track := catalog.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
+	svc := catalog.NewStreamTrackService(repo, catalog.NewInMemoryAudioStore(), catalog.WithStreamScheduler(sched))
 
 	start := time.Now()
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() { time.Sleep(20 * time.Millisecond); cancel() }()
 	_ = svc.RecoverIfMissing(ctx, userId, track.ID)
-	catalogtest.AssertScheduleDeadline(t, sched, start, trackservice.ScheduleTimeout)
+	catalog.AssertScheduleDeadline(t, sched, start, addTrackScheduleBound)
 }
 
-func ptrStatus(s domain.AcquisitionStatus) *domain.AcquisitionStatus {
+func ptrStatus(s catalog.AcquisitionStatus) *catalog.AcquisitionStatus {
 	return &s
 }
