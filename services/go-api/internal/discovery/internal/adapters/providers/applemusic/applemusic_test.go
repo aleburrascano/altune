@@ -54,7 +54,11 @@ func newTestAppleMusicAdapter(t *testing.T, api http.HandlerFunc) *discovery.App
 }
 
 func appleMusicJWT(exp int64, sig string) string {
-	claims := fmt.Sprintf(`{"iss":"AMPWebPlay","exp":%d}`, exp)
+	return appleMusicJWTFrom("AMPWebPlay", exp, sig)
+}
+
+func appleMusicJWTFrom(iss string, exp int64, sig string) string {
+	claims := fmt.Sprintf(`{"iss":%q,"exp":%d}`, iss, exp)
 	return "eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9." + base64.RawURLEncoding.EncodeToString([]byte(claims)) + "." + sig
 }
 
@@ -267,6 +271,23 @@ func TestAppleMusicAdapter_expiredTokenIsReScraped(t *testing.T) {
 	searchTwice(t, site.adapter)
 	if site.scrapes.Load() != 2 {
 		t.Errorf("page scraped %d times, want 2 (an expired token is never reused)", site.scrapes.Load())
+	}
+}
+
+func TestAppleMusicAdapter_skipsABundleJWTFromAnotherIssuer(t *testing.T) {
+	otherIssuer := appleMusicJWTFrom("SomeOtherIssuer", 9999999999, "other")
+	var got string
+	api := func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte(`{"results":{}}`))
+	}
+	site := newAppleMusicSite(t, api, otherIssuer+`"; var dev = "`+appleMusicFixtureJWT)
+
+	if _, err := site.adapter.Search(t.Context(), "x", providertest.AllKinds()); err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if got != "Bearer "+appleMusicFixtureJWT {
+		t.Errorf("Authorization = %q, want the AMPWebPlay token that follows the other issuer's", got)
 	}
 }
 
