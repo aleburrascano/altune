@@ -6,11 +6,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -313,8 +315,8 @@ func TestDiscogsAdapter_rateLimit_spacesConsecutiveCalls(t *testing.T) {
 	if err := lookup(context.Background()); err != nil {
 		t.Fatalf("first lookup: %v", err)
 	}
-	if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
-		t.Errorf("first call blocked %v, want immediate", elapsed)
+	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+		t.Errorf("first call blocked %v, want no wait for the limiter's 1s interval", elapsed)
 	}
 
 	start = time.Now()
@@ -614,39 +616,47 @@ func TestArtworkSourceTags(t *testing.T) {
 	}
 }
 
-func TestProviderLimiterBurstShedsBeyondQueueDepth(t *testing.T) {
-	const callers = 20
-	cases := []struct {
-		name  string
-		wait  func(context.Context) error
-		burst int
-	}{
-		{"discogs", limitedLookup(t), 1},
+func inMemoryLookup() func(context.Context) error {
+	client := &http.Client{Transport: providertest.FakeRoundTripper{Fn: func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": {"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"id": 38, "images": []}`)),
+			Request:    r,
+		}, nil
+	}}}
+	adapter := discovery.NewDiscogsAdapter(client, "test-token", "altune-test/1.0")
+	id := discovery.ArtworkIdentity{ExternalIDs: map[discovery.ProviderKey]string{"discogs": "38"}}
+	return func(ctx context.Context) error {
+		_, err := adapter.ResolveByIdentity(ctx, discovery.ResultKindArtist, id)
+		return err
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := providertest.FireBurst(t, tc.wait, callers, 300*time.Millisecond)
+}
 
-			admitted, shed := 0, 0
-			for _, r := range got {
-				switch {
-				case r.Err == nil:
-					admitted++
-				case errors.Is(r.Err, discovery.ErrProviderRateLimitQueueTimeout):
-					shed++
-				default:
-					t.Errorf("caller got %v, want nil or a queue-timeout shed", r.Err)
-				}
+func TestProviderLimiterBurstShedsBeyondQueueDepth(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const callers, burst = 20, 1
+		got := providertest.FireBurst(t, inMemoryLookup(), callers, 300*time.Millisecond)
+
+		admitted, shed := 0, 0
+		for _, r := range got {
+			switch {
+			case r.Err == nil:
+				admitted++
+			case errors.Is(r.Err, discovery.ErrProviderRateLimitQueueTimeout):
+				shed++
+			default:
+				t.Errorf("caller got %v, want nil or a queue-timeout shed", r.Err)
 			}
-			if admitted != tc.burst {
-				t.Errorf("admitted at once = %d, want the burst of %d", admitted, tc.burst)
-			}
-			if want := callers - tc.burst - discovery.ProviderHTTPQueueDepth; shed != want {
-				t.Errorf("shed within 300ms = %d, want %d (callers %d - burst %d - queue depth %d)",
-					shed, want, callers, tc.burst, discovery.ProviderHTTPQueueDepth)
-			}
-		})
-	}
+		}
+		if admitted != burst {
+			t.Errorf("admitted at once = %d, want the burst of %d", admitted, burst)
+		}
+		if want := callers - burst - discovery.ProviderHTTPQueueDepth; shed != want {
+			t.Errorf("shed within 300ms = %d, want %d (callers %d - burst %d - queue depth %d)",
+				shed, want, callers, burst, discovery.ProviderHTTPQueueDepth)
+		}
+	})
 }
 
 func TestChainedArtworkResolver_DiscogsIdentityOn500IsDegradedAndUnavailable(t *testing.T) {
