@@ -1,0 +1,21 @@
+{
+  "removed": [
+    "T1 internal/discovery/internal/adapters/providers/soundcloud/contract_test.go imports domain/provider_key.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/soundcloud/contract_test.go imports domain/search_result.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/soundcloud/contract_test.go is in package soundcloud, so it sees inside the module: use package soundcloud_test and import the door",
+    "T1 internal/discovery/internal/adapters/providers/soundcloud/soundcloud_search_test.go imports domain/enums.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/soundcloud/soundcloud_search_test.go imports domain/partial_result_error.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/soundcloud/soundcloud_search_test.go imports domain/search_result.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/soundcloud/soundcloud_search_test.go imports internal/adapters/providers/providersearch/search_kinds.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/soundcloud/soundcloud_search_test.go is in package soundcloud, so it sees inside the module: use package soundcloud_test and import the door",
+    "T1 internal/discovery/internal/adapters/providers/soundcloud/soundcloud_test.go imports discoverytest/artwork_resolver.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/soundcloud/soundcloud_test.go imports domain/enums.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/soundcloud/soundcloud_test.go imports domain/search_result.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/soundcloud/soundcloud_test.go imports internal/adapters/providers/artworkchain/artwork_chain.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/soundcloud/soundcloud_test.go imports internal/adapters/providers/theaudiodb/theaudiodb.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/soundcloud/soundcloud_test.go imports internal/core/ports/artwork.go, behind discovery's door",
+    "T1 internal/discovery/internal/adapters/providers/soundcloud/soundcloud_test.go is in package soundcloud, so it sees inside the module: use package soundcloud_test and import the door"
+  ],
+  "added": [],
+  "clones": 0
+}
