@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -464,26 +465,40 @@ func TestDeleteForUser_ErasedRowEqualsEmptyQueueState(t *testing.T) {
 	}
 }
 
-const maxUnchangedListWALBytes = 16 << 10
-
-func walInsertLSN(t *testing.T, ctx context.Context, q playback.QueueStateDB) string {
+func rolledBackTx(t *testing.T, ctx context.Context, pool *pgxpool.Pool) pgx.Tx {
 	t.Helper()
-	var lsn string
-	if err := q.QueryRow(ctx, `SELECT pg_current_wal_insert_lsn()::text`).Scan(&lsn); err != nil {
-		t.Fatalf("read WAL position: %v", err)
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
 	}
-	return lsn
+	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	return tx
 }
 
-func walBytesSince(t *testing.T, ctx context.Context, q playback.QueueStateDB, lsn string) int64 {
+func trackListChunkWrites(t *testing.T, ctx context.Context, tx pgx.Tx) int64 {
 	t.Helper()
 	var n int64
-	if err := q.QueryRow(ctx,
-		`SELECT pg_wal_lsn_diff(pg_current_wal_insert_lsn(), $1::pg_lsn)::bigint`, lsn,
+	if err := tx.QueryRow(ctx,
+		`SELECT s.n_tup_ins + s.n_tup_upd + s.n_tup_del
+		 FROM pg_class c JOIN pg_stat_xact_all_tables s ON s.relid = c.reltoastrelid
+		 WHERE c.oid = 'playback_queue_state'::regclass`,
 	).Scan(&n); err != nil {
-		t.Fatalf("measure WAL: %v", err)
+		t.Fatalf("read this transaction's track-list TOAST writes: %v", err)
 	}
 	return n
+}
+
+func storedQueueChunks(t *testing.T, ctx context.Context, tx pgx.Tx, repo *playback.PgxQueueStateRepository, state *playback.QueueState) int64 {
+	t.Helper()
+	before := trackListChunkWrites(t, ctx, tx)
+	if err := repo.Upsert(ctx, state); err != nil {
+		t.Fatalf("Upsert(initial): %v", err)
+	}
+	stored := trackListChunkWrites(t, ctx, tx) - before
+	if stored == 0 {
+		t.Fatalf("storing a %d-track queue wrote no TOAST chunks; the lists are not stored out of line, so a rewrite could not be seen", len(state.TrackIds))
+	}
+	return stored
 }
 
 func maxLengthQueue(t *testing.T, userId shared.UserId, trackIds []string, positionMs int64) *playback.QueueState {
@@ -524,25 +539,21 @@ func cleanupUser(t *testing.T, q playback.QueueStateDB, userId shared.UserId) {
 
 func TestUpsert_UnchangedTrackListsAreNotRewritten(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
-	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
+	tx := rolledBackTx(t, ctx, testPool(t))
+	repo := playback.NewPgxQueueStateRepository(tx)
 	userId := shared.NewUserId(uuid.New())
-	cleanupUser(t, pool, userId)
 	trackIds := uuidTrackIds(maxQueueLength)
+	stored := storedQueueChunks(t, ctx, tx, repo, maxLengthQueue(t, userId, trackIds, 1000))
 
-	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, trackIds, 1000)); err != nil {
-		t.Fatalf("Upsert(initial): %v", err)
-	}
-
-	lsn := walInsertLSN(t, ctx, pool)
+	before := trackListChunkWrites(t, ctx, tx)
 	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, trackIds, 16000)); err != nil {
 		t.Fatalf("Upsert(position moved): %v", err)
 	}
-	wal := walBytesSince(t, ctx, pool, lsn)
-	t.Logf("full-state save, unchanged %d-track lists: %d WAL bytes", maxQueueLength, wal)
-	if wal > maxUnchangedListWALBytes {
-		t.Fatalf("a save whose track lists did not change wrote %d WAL bytes, want <= %d; the unchanged arrays were rewritten", wal, maxUnchangedListWALBytes)
+	rewritten := trackListChunkWrites(t, ctx, tx) - before
+	t.Logf("full-state save, unchanged %d-track lists stored in %d TOAST chunks: %d chunks written", maxQueueLength, stored, rewritten)
+	if rewritten != 0 {
+		t.Fatalf("a save whose track lists did not change wrote %d of their TOAST chunks, want 0; the unchanged arrays were rewritten", rewritten)
 	}
 
 	got, err := repo.GetForUser(ctx, userId)
@@ -594,25 +605,21 @@ func positionAt(t *testing.T, userId shared.UserId, idx int, trackId string, pos
 
 func TestUpdatePosition_WritesOnlyThePosition(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
-	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
+	tx := rolledBackTx(t, ctx, testPool(t))
+	repo := playback.NewPgxQueueStateRepository(tx)
 	userId := shared.NewUserId(uuid.New())
-	cleanupUser(t, pool, userId)
 	trackIds := uuidTrackIds(maxQueueLength)
+	stored := storedQueueChunks(t, ctx, tx, repo, maxLengthQueue(t, userId, trackIds, 1000))
 
-	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, trackIds, 1000)); err != nil {
-		t.Fatalf("Upsert(initial): %v", err)
-	}
-
-	lsn := walInsertLSN(t, ctx, pool)
+	before := trackListChunkWrites(t, ctx, tx)
 	if err := repo.UpdatePosition(ctx, positionAt(t, userId, 9999, trackIds[9999], 16000, 0)); err != nil {
 		t.Fatalf("UpdatePosition: %v", err)
 	}
-	wal := walBytesSince(t, ctx, pool, lsn)
-	t.Logf("position-only save, %d-track queue: %d WAL bytes", maxQueueLength, wal)
-	if wal > maxUnchangedListWALBytes {
-		t.Fatalf("a position-only save wrote %d WAL bytes, want <= %d", wal, maxUnchangedListWALBytes)
+	rewritten := trackListChunkWrites(t, ctx, tx) - before
+	t.Logf("position-only save, %d-track queue stored in %d TOAST chunks: %d chunks written", maxQueueLength, stored, rewritten)
+	if rewritten != 0 {
+		t.Fatalf("a position-only save wrote %d track-list TOAST chunks, want 0; the list was rewritten", rewritten)
 	}
 
 	got, err := repo.GetForUser(ctx, userId)
