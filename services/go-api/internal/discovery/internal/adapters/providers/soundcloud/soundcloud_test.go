@@ -1,70 +1,103 @@
-package soundcloud
+package soundcloud_test
 
 import (
-	"altune/go-api/internal/discovery/discoverytest"
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/internal/adapters/providers/artworkchain"
+	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
-	"altune/go-api/internal/discovery/internal/adapters/providers/theaudiodb"
-	"altune/go-api/internal/discovery/internal/core/ports"
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
-func newTestSoundCloudAPI(srv *httptest.Server, fallback searchFallback) *SoundCloudAPIAdapter {
-	a := NewSoundCloudAPIAdapter(srv.Client(), fallback)
-	a.baseURL = srv.URL
-	a.resolver.Cached = "seededclientid0000000000000000000"
-	return a
+const (
+	scAPIOrigin       = "https://api-v2.soundcloud.com"
+	scFixtureClientID = "seededclientid000000000000000000"
+	scFixtureHome     = `<script src="https://a-v2.sndcdn.com/assets/app-1.js"></script>`
+)
+
+type searchFallback interface {
+	Search(ctx context.Context, query string, kinds map[discovery.ResultKind]bool) ([]discovery.SearchResult, error)
 }
 
-func scContentServer(t *testing.T) *httptest.Server {
+func soundCloudSite(api http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			_, _ = w.Write([]byte(scFixtureHome))
+		case "/assets/app-1.js":
+			_, _ = w.Write([]byte(`client_id:"` + scFixtureClientID + `"`))
+		default:
+			api(w, r)
+		}
+	}
+}
+
+func newSoundCloudAdapter(t *testing.T, site http.HandlerFunc, fallback searchFallback) *discovery.SoundCloudAPIAdapter {
 	t.Helper()
-	const albumsJSON = `{"collection":[
-		{"id":10,"kind":"playlist","title":"Empty Clip","set_type":"ep","track_count":2,"user":{"username":"Che"},"tracks":[{"id":1},{"id":2}]}
-	]}`
+	srv := httptest.NewServer(site)
+	t.Cleanup(srv.Close)
+	return discovery.NewSoundCloudAPIAdapter(providertest.NewClient(srv.URL), fallback)
+}
+
+func scHomeDown(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusInternalServerError)
+}
+
+func newTestSoundCloudAPI(t *testing.T, api http.HandlerFunc, fallback searchFallback) *discovery.SoundCloudAPIAdapter {
+	t.Helper()
+	return newSoundCloudAdapter(t, soundCloudSite(api), fallback)
+}
+
+const scEmptyClipAlbumsJSON = `{"collection":[
+	{"id":10,"kind":"playlist","title":"Empty Clip","set_type":"ep","track_count":2,"user":{"username":"Che"},"tracks":[{"id":1},{"id":2}]}
+]}`
+
+func scContentAPI(t *testing.T) http.HandlerFunc {
+	t.Helper()
 	const tracksJSON = `{"collection":[
 		{"id":99,"kind":"track","title":"14 HAHAHA LOL","user":{"username":"Che"},"display_date":"2026-07-20T00:00:00Z"},
 		{"id":1,"kind":"track","title":"Los Santos","user":{"username":"Che"}},
 		{"id":2,"kind":"track","title":"Og Ginobili","user":{"username":"Che"}}
 	]}`
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return scSinglesAPI(t, scEmptyClipAlbumsJSON, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(tracksJSON))
+	})
+}
+
+func scSinglesAPI(t *testing.T, albumsJSON string, tracks http.HandlerFunc) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/albums"):
 			_, _ = w.Write([]byte(albumsJSON))
 		case strings.HasSuffix(r.URL.Path, "/tracks"):
-			_, _ = w.Write([]byte(tracksJSON))
+			tracks(w, r)
 		case strings.HasSuffix(r.URL.Path, "/resolve"):
 			_, _ = w.Write([]byte(`{"id":909010162,"kind":"user","username":"Che","permalink_url":"https://soundcloud.com/che"}`))
 		default:
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
-	}))
+	}
 }
 
 func TestSoundCloud_GetArtistAlbums_playlistsPlusStandaloneSingles(t *testing.T) {
-	srv := scContentServer(t)
-	defer srv.Close()
-	a := newTestSoundCloudAPI(srv, nil)
+	a := newTestSoundCloudAPI(t, scContentAPI(t), nil)
 
-	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "909010162")
+	albums, err := a.GetArtistAlbums(t.Context(), discovery.ProviderSoundCloud, "909010162")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)
 	}
 	if len(albums) != 2 {
 		t.Fatalf("got %d items, want 2 (1 EP + 1 standalone single): %+v", len(albums), albums)
 	}
-	var ep, single domain.SearchResult
+	var ep, single discovery.SearchResult
 	for _, r := range albums {
 		if r.RecordType == "single" {
 			single = r
@@ -75,7 +108,7 @@ func TestSoundCloud_GetArtistAlbums_playlistsPlusStandaloneSingles(t *testing.T)
 	if ep.Title != "Empty Clip" || ep.RecordType != "ep" {
 		t.Errorf("EP = %+v", ep)
 	}
-	if single.Title != "14 HAHAHA LOL" || single.Kind != domain.ResultKindAlbum || single.TrackCount != 1 {
+	if single.Title != "14 HAHAHA LOL" || single.Kind != discovery.ResultKindAlbum || single.TrackCount != 1 {
 		t.Errorf("single = %+v", single)
 	}
 	for _, r := range albums {
@@ -86,25 +119,11 @@ func TestSoundCloud_GetArtistAlbums_playlistsPlusStandaloneSingles(t *testing.T)
 }
 
 func TestSoundCloud_GetArtistAlbums_standaloneSinglesFailureStillReturnsPlaylistAlbums(t *testing.T) {
-	const albumsJSON = `{"collection":[
-		{"id":10,"kind":"playlist","title":"Empty Clip","set_type":"ep","track_count":2,"user":{"username":"Che"},"tracks":[{"id":1},{"id":2}]}
-	]}`
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.HasSuffix(r.URL.Path, "/albums"):
-			_, _ = w.Write([]byte(albumsJSON))
-		case strings.HasSuffix(r.URL.Path, "/tracks"):
-			w.WriteHeader(http.StatusInternalServerError)
-		case strings.HasSuffix(r.URL.Path, "/resolve"):
-			_, _ = w.Write([]byte(`{"id":909010162,"kind":"user","username":"Che","permalink_url":"https://soundcloud.com/che"}`))
-		default:
-			t.Errorf("unexpected path %q", r.URL.Path)
-		}
-	}))
-	defer srv.Close()
-	a := newTestSoundCloudAPI(srv, nil)
+	a := newTestSoundCloudAPI(t, scSinglesAPI(t, scEmptyClipAlbumsJSON, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}), nil)
 
-	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "909010162")
+	albums, err := a.GetArtistAlbums(t.Context(), discovery.ProviderSoundCloud, "909010162")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)
 	}
@@ -114,7 +133,7 @@ func TestSoundCloud_GetArtistAlbums_standaloneSinglesFailureStillReturnsPlaylist
 }
 
 func TestSoundCloud_GetAlbumTracks_playlistAndSingle(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/playlists/500"):
 			_, _ = w.Write([]byte(`{"tracks":[
@@ -128,11 +147,10 @@ func TestSoundCloud_GetAlbumTracks_playlistAndSingle(t *testing.T) {
 		default:
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
-	}))
-	defer srv.Close()
-	a := newTestSoundCloudAPI(srv, nil)
+	})
+	a := newTestSoundCloudAPI(t, api, nil)
 
-	ep, err := a.GetAlbumTracks(t.Context(), domain.ProviderSoundCloud, "500")
+	ep, err := a.GetAlbumTracks(t.Context(), discovery.ProviderSoundCloud, "500")
 	if err != nil {
 		t.Fatalf("GetAlbumTracks(playlist): %v", err)
 	}
@@ -140,7 +158,7 @@ func TestSoundCloud_GetAlbumTracks_playlistAndSingle(t *testing.T) {
 		t.Fatalf("playlist tracks = %+v, want [Track A, Track B]", ep)
 	}
 
-	single, err := a.GetAlbumTracks(t.Context(), domain.ProviderSoundCloud, "99")
+	single, err := a.GetAlbumTracks(t.Context(), discovery.ProviderSoundCloud, "99")
 	if err != nil {
 		t.Fatalf("GetAlbumTracks(single): %v", err)
 	}
@@ -151,18 +169,15 @@ func TestSoundCloud_GetAlbumTracks_playlistAndSingle(t *testing.T) {
 
 func TestSoundCloud_GetArtistAlbums_resolvesBridgeHandle(t *testing.T) {
 	var resolvedHandle bool
-	srv := scContentServer(t)
-	defer srv.Close()
-	inner := srv.Config.Handler
-	srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	inner := scContentAPI(t)
+	a := newTestSoundCloudAPI(t, func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/resolve") {
 			resolvedHandle = true
 		}
-		inner.ServeHTTP(w, r)
-	})
-	a := newTestSoundCloudAPI(srv, nil)
+		inner(w, r)
+	}, nil)
 
-	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "che")
+	albums, err := a.GetArtistAlbums(t.Context(), discovery.ProviderSoundCloud, "che")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums(handle): %v", err)
 	}
@@ -175,30 +190,30 @@ func TestSoundCloud_GetArtistAlbums_resolvesBridgeHandle(t *testing.T) {
 }
 
 func TestSoundCloudAPIAdapter_Name(t *testing.T) {
-	a := NewSoundCloudAPIAdapter(http.DefaultClient, nil)
-	if got := a.Name(); got != domain.ProviderSoundCloud {
-		t.Errorf("Name() = %v, want %v", got, domain.ProviderSoundCloud)
+	a := discovery.NewSoundCloudAPIAdapter(http.DefaultClient, nil)
+	if got := a.Name(); got != discovery.ProviderSoundCloud {
+		t.Errorf("Name() = %v, want %v", got, discovery.ProviderSoundCloud)
 	}
 }
 
 func TestSoundCloudAPIAdapter_SupportedKinds(t *testing.T) {
-	a := NewSoundCloudAPIAdapter(http.DefaultClient, nil)
+	a := discovery.NewSoundCloudAPIAdapter(http.DefaultClient, nil)
 	kinds := a.SupportedKinds()
-	if !kinds[domain.ResultKindTrack] || !kinds[domain.ResultKindAlbum] || !kinds[domain.ResultKindArtist] {
+	if !kinds[discovery.ResultKindTrack] || !kinds[discovery.ResultKindAlbum] || !kinds[discovery.ResultKindArtist] {
 		t.Errorf("expected track+album+artist supported, got %+v", kinds)
 	}
 }
 
 func TestSoundCloudAPIAdapter_SearchTimeout(t *testing.T) {
-	a := NewSoundCloudAPIAdapter(http.DefaultClient, nil)
-	if got := a.SearchTimeout(); got != scSearchTimeout {
-		t.Errorf("SearchTimeout() = %v, want %v", got, scSearchTimeout)
+	a := discovery.NewSoundCloudAPIAdapter(http.DefaultClient, nil)
+	if got := a.SearchTimeout(); got != 3*time.Second {
+		t.Errorf("SearchTimeout() = %v, want 3s", got)
 	}
 }
 
 func TestSoundCloudAPIAdapter_Search_NoKindsRequested(t *testing.T) {
-	a := NewSoundCloudAPIAdapter(http.DefaultClient, nil)
-	results, err := a.Search(context.Background(), "q", map[domain.ResultKind]bool{})
+	a := discovery.NewSoundCloudAPIAdapter(http.DefaultClient, nil)
+	results, err := a.Search(context.Background(), "q", map[discovery.ResultKind]bool{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -208,7 +223,7 @@ func TestSoundCloudAPIAdapter_Search_NoKindsRequested(t *testing.T) {
 }
 
 func TestSoundCloudAPIAdapter_Search_AlbumsAndArtists(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/search/albums"):
@@ -228,29 +243,28 @@ func TestSoundCloudAPIAdapter_Search_AlbumsAndArtists(t *testing.T) {
 		default:
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
-	}))
-	defer srv.Close()
+	})
 
-	a := newTestSoundCloudAPI(srv, nil)
-	results, err := a.Search(context.Background(), "Ken Carson", map[domain.ResultKind]bool{
-		domain.ResultKindTrack:  true,
-		domain.ResultKindAlbum:  true,
-		domain.ResultKindArtist: true,
+	a := newTestSoundCloudAPI(t, api, nil)
+	results, err := a.Search(context.Background(), "Ken Carson", map[discovery.ResultKind]bool{
+		discovery.ResultKindTrack:  true,
+		discovery.ResultKindAlbum:  true,
+		discovery.ResultKindArtist: true,
 	})
 	if err != nil {
 		t.Fatalf("Search error: %v", err)
 	}
 
 	var nTrack, nAlbum, nArtist int
-	var album, artist domain.SearchResult
+	var album, artist discovery.SearchResult
 	for _, r := range results {
 		switch r.Kind {
-		case domain.ResultKindTrack:
+		case discovery.ResultKindTrack:
 			nTrack++
-		case domain.ResultKindAlbum:
+		case discovery.ResultKindAlbum:
 			nAlbum++
 			album = r
-		case domain.ResultKindArtist:
+		case discovery.ResultKindArtist:
 			nArtist++
 			artist = r
 		}
@@ -267,7 +281,7 @@ func TestSoundCloudAPIAdapter_Search_AlbumsAndArtists(t *testing.T) {
 	if album.ImageURL != "https://i1.sndcdn.com/artworks-x-t500x500.jpg" {
 		t.Errorf("album artwork not upgraded: %q", album.ImageURL)
 	}
-	if artist.Title != "Ken Carson" || artist.Kind != domain.ResultKindArtist {
+	if artist.Title != "Ken Carson" || artist.Kind != discovery.ResultKindArtist {
 		t.Errorf("artist mapped wrong: %+v", artist)
 	}
 	if artist.ImageURL != "https://i1.sndcdn.com/avatars-y-t500x500.jpg" {
@@ -276,7 +290,7 @@ func TestSoundCloudAPIAdapter_Search_AlbumsAndArtists(t *testing.T) {
 }
 
 func TestSoundCloudAPIAdapter_Search_MapsRichMetadata(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/search/tracks") && r.URL.Path != "/search/tracks" {
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
@@ -304,10 +318,9 @@ func TestSoundCloudAPIAdapter_Search_MapsRichMetadata(t *testing.T) {
 			],
 			"next_href": ""
 		}`))
-	}))
-	defer srv.Close()
+	})
 
-	a := newTestSoundCloudAPI(srv, nil)
+	a := newTestSoundCloudAPI(t, api, nil)
 	results, err := a.Search(context.Background(), "Ken Carson Olympics", providertest.TrackKinds())
 	if err != nil {
 		t.Fatalf("Search error: %v", err)
@@ -317,7 +330,7 @@ func TestSoundCloudAPIAdapter_Search_MapsRichMetadata(t *testing.T) {
 	}
 
 	r := results[0]
-	if r.Kind != domain.ResultKindTrack {
+	if r.Kind != discovery.ResultKindTrack {
 		t.Errorf("kind = %v, want track", r.Kind)
 	}
 	if r.Title != "Olympics" {
@@ -329,7 +342,7 @@ func TestSoundCloudAPIAdapter_Search_MapsRichMetadata(t *testing.T) {
 	if r.ImageURL != "https://i1.sndcdn.com/artworks-abc-t500x500.jpg" {
 		t.Errorf("artwork not upgraded to 500px: %q", r.ImageURL)
 	}
-	if len(r.Sources) != 1 || r.Sources[0].Provider != domain.ProviderSoundCloud {
+	if len(r.Sources) != 1 || r.Sources[0].Provider != discovery.ProviderSoundCloud {
 		t.Fatalf("source not soundcloud: %+v", r.Sources)
 	}
 	if r.Sources[0].ExternalID != "12345" {
@@ -351,7 +364,7 @@ func TestSoundCloudAPIAdapter_Search_MapsRichMetadata(t *testing.T) {
 
 func TestSoundCloudAPIAdapter_Search_Paginates(t *testing.T) {
 	var calls int
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Query().Get("offset") == "20" {
@@ -366,12 +379,11 @@ func TestSoundCloudAPIAdapter_Search_Paginates(t *testing.T) {
 			}
 			b.WriteString(`{"id":1,"kind":"track","title":"A","user":{"username":"u"}}`)
 		}
-		b.WriteString(`],"next_href":"` + srv0URL(r) + `/search/tracks?q=x&offset=20"}`)
+		b.WriteString(`],"next_href":"` + scAPIOrigin + `/search/tracks?q=x&offset=20"}`)
 		_, _ = w.Write([]byte(b.String()))
-	}))
-	defer srv.Close()
+	})
 
-	a := newTestSoundCloudAPI(srv, nil)
+	a := newTestSoundCloudAPI(t, api, nil)
 	results, err := a.Search(context.Background(), "x", providertest.TrackKinds())
 	if err != nil {
 		t.Fatalf("Search error: %v", err)
@@ -384,24 +396,17 @@ func TestSoundCloudAPIAdapter_Search_Paginates(t *testing.T) {
 	}
 }
 
-func srv0URL(r *http.Request) string {
-	scheme := "http"
-	return scheme + "://" + r.Host
-}
-
 func TestSoundCloudAPIAdapter_Search_RejectsForeignHostNextHref(t *testing.T) {
 	var foreignHits int
 	var leakedClientID string
-	foreign := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		foreignHits++
-		leakedClientID = r.URL.Query().Get("client_id")
+	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"collection":[{"id":2,"kind":"track","title":"LEAK","user":{"username":"u"}}],"next_href":""}`))
-	}))
-	defer foreign.Close()
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		if r.Host == "foreign.example" {
+			foreignHits++
+			leakedClientID = r.URL.Query().Get("client_id")
+			_, _ = w.Write([]byte(`{"collection":[{"id":2,"kind":"track","title":"LEAK","user":{"username":"u"}}],"next_href":""}`))
+			return
+		}
 		var b strings.Builder
 		b.WriteString(`{"collection":[`)
 		for i := 0; i < 20; i++ {
@@ -410,12 +415,11 @@ func TestSoundCloudAPIAdapter_Search_RejectsForeignHostNextHref(t *testing.T) {
 			}
 			b.WriteString(`{"id":1,"kind":"track","title":"A","user":{"username":"u"}}`)
 		}
-		b.WriteString(`],"next_href":"` + foreign.URL + `/search/tracks?q=x&offset=20"}`)
+		b.WriteString(`],"next_href":"https://foreign.example/search/tracks?q=x&offset=20"}`)
 		_, _ = w.Write([]byte(b.String()))
-	}))
-	defer srv.Close()
+	})
 
-	a := newTestSoundCloudAPI(srv, nil)
+	a := newTestSoundCloudAPI(t, api, nil)
 	results, err := a.Search(context.Background(), "x", providertest.TrackKinds())
 	if err != nil {
 		t.Fatalf("Search error: %v", err)
@@ -429,35 +433,35 @@ func TestSoundCloudAPIAdapter_Search_RejectsForeignHostNextHref(t *testing.T) {
 }
 
 func TestSoundCloudAPIAdapter_AuthFailure_ReResolvesClientID(t *testing.T) {
-	var searchCalls int
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		searchCalls++
-		if searchCalls == 1 {
+	const refreshedClientID = "abcdefghijklmnopqrstuvwxyz012345"
+	var searchCalls, bundleFetches int
+	a := newSoundCloudAdapter(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/":
+			_, _ = w.Write([]byte(scFixtureHome))
+		case strings.HasPrefix(r.URL.Path, "/assets/"):
+			bundleFetches++
+			id := scFixtureClientID
+			if bundleFetches > 1 {
+				id = refreshedClientID
+			}
+			_, _ = w.Write([]byte(`x=1,client_id:"` + id + `",y=2`))
+		case r.URL.Query().Get("client_id") != refreshedClientID:
+			searchCalls++
 			w.WriteHeader(http.StatusUnauthorized)
-			return
+		default:
+			searchCalls++
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"collection":[{"id":9,"kind":"track","title":"OK","user":{"username":"u"}}],"next_href":""}`))
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"collection":[{"id":9,"kind":"track","title":"OK","user":{"username":"u"}}],"next_href":""}`))
-	}))
-	defer srv.Close()
-
-	a := newTestSoundCloudAPI(srv, nil)
-	bundle := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`x=1,client_id:"abcdefghijklmnopqrstuvwxyz012345",y=2`))
-	}))
-	defer bundle.Close()
-	home := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`<script src="` + bundle.URL + `/assets/2-abcdef.js"></script>`))
-	}))
-	defer home.Close()
-	a.resolver.siteURL = home.URL
+	}, nil)
 
 	results, err := a.Search(context.Background(), "q", providertest.TrackKinds())
 	if err != nil {
 		t.Fatalf("Search error: %v", err)
 	}
-	if searchCalls != 2 {
-		t.Errorf("expected a retry after 401, got %d search calls", searchCalls)
+	if searchCalls != 2 || bundleFetches != 2 {
+		t.Errorf("search calls = %d, bundle fetches = %d; want a re-scrape and one retry after the 401 (2, 2)", searchCalls, bundleFetches)
 	}
 	if len(results) != 1 || results[0].Title != "OK" {
 		t.Fatalf("expected retried success, got %+v", results)
@@ -465,16 +469,10 @@ func TestSoundCloudAPIAdapter_AuthFailure_ReResolvesClientID(t *testing.T) {
 }
 
 func TestSoundCloudAPIAdapter_FallsBackOnResolveFailure(t *testing.T) {
-	home := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer home.Close()
-
-	fb := &recordingFallback{results: []domain.SearchResult{
-		{Kind: domain.ResultKindTrack, Title: "from yt-dlp"},
+	fb := &recordingFallback{results: []discovery.SearchResult{
+		{Kind: discovery.ResultKindTrack, Title: "from yt-dlp"},
 	}}
-	a := NewSoundCloudAPIAdapter(http.DefaultClient, fb)
-	a.resolver.siteURL = home.URL
+	a := newSoundCloudAdapter(t, scHomeDown, fb)
 
 	results, err := a.Search(context.Background(), "q", providertest.TrackKinds())
 	if err != nil {
@@ -489,13 +487,7 @@ func TestSoundCloudAPIAdapter_FallsBackOnResolveFailure(t *testing.T) {
 }
 
 func TestSoundCloudAPIAdapter_NoFallback_ReturnsError(t *testing.T) {
-	home := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer home.Close()
-
-	a := NewSoundCloudAPIAdapter(http.DefaultClient, nil)
-	a.resolver.siteURL = home.URL
+	a := newSoundCloudAdapter(t, scHomeDown, nil)
 
 	_, err := a.Search(context.Background(), "q", providertest.TrackKinds())
 	if err == nil {
@@ -504,7 +496,7 @@ func TestSoundCloudAPIAdapter_NoFallback_ReturnsError(t *testing.T) {
 }
 
 func TestSoundCloudAPIAdapter_ResolveArtwork(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/search/users"):
@@ -516,11 +508,10 @@ func TestSoundCloudAPIAdapter_ResolveArtwork(t *testing.T) {
 		default:
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
-	}))
-	defer srv.Close()
-	a := newTestSoundCloudAPI(srv, nil)
+	})
+	a := newTestSoundCloudAPI(t, api, nil)
 
-	got, err := a.Resolve(context.Background(), domain.ResultKindArtist, "Underground Artist", "", "")
+	got, err := a.Resolve(context.Background(), discovery.ResultKindArtist, "Underground Artist", "", "")
 	if err != nil {
 		t.Fatalf("Resolve(artist) error: %v", err)
 	}
@@ -528,7 +519,7 @@ func TestSoundCloudAPIAdapter_ResolveArtwork(t *testing.T) {
 		t.Errorf("artist artwork = %q", got)
 	}
 
-	got, err = a.Resolve(context.Background(), domain.ResultKindTrack, "Leak", "Some Artist", "")
+	got, err = a.Resolve(context.Background(), discovery.ResultKindTrack, "Leak", "Some Artist", "")
 	if err != nil {
 		t.Fatalf("Resolve(track) error: %v", err)
 	}
@@ -538,7 +529,7 @@ func TestSoundCloudAPIAdapter_ResolveArtwork(t *testing.T) {
 }
 
 func TestSoundCloudAPIAdapter_ResolveArtwork_RejectsUnrelatedUpload(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/search/tracks"):
@@ -551,11 +542,10 @@ func TestSoundCloudAPIAdapter_ResolveArtwork_RejectsUnrelatedUpload(t *testing.T
 		default:
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
-	}))
-	defer srv.Close()
-	a := newTestSoundCloudAPI(srv, nil)
+	})
+	a := newTestSoundCloudAPI(t, api, nil)
 
-	got, err := a.Resolve(context.Background(), domain.ResultKindTrack, "No Idea", "Don Toliver", "")
+	got, err := a.Resolve(context.Background(), discovery.ResultKindTrack, "No Idea", "Don Toliver", "")
 	if err != nil {
 		t.Fatalf("Resolve(track) error: %v", err)
 	}
@@ -563,7 +553,7 @@ func TestSoundCloudAPIAdapter_ResolveArtwork_RejectsUnrelatedUpload(t *testing.T
 		t.Errorf("unrelated upload accepted as track artwork: %q", got)
 	}
 
-	got, err = a.Resolve(context.Background(), domain.ResultKindArtist, "Don Toliver", "", "")
+	got, err = a.Resolve(context.Background(), discovery.ResultKindArtist, "Don Toliver", "", "")
 	if err != nil {
 		t.Fatalf("Resolve(artist) error: %v", err)
 	}
@@ -573,16 +563,15 @@ func TestSoundCloudAPIAdapter_ResolveArtwork_RejectsUnrelatedUpload(t *testing.T
 }
 
 func TestSoundCloudAPIAdapter_ResolveArtwork_AcceptsUploaderCreditedInTitle(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	api := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"collection":[{"id":5,"kind":"track","title":"Don Toliver - No Idea",
 			"artwork_url":"https://i1.sndcdn.com/artworks-b-large.jpg","user":{"username":"leakvault"}}],
 			"next_href":""}`))
-	}))
-	defer srv.Close()
-	a := newTestSoundCloudAPI(srv, nil)
+	})
+	a := newTestSoundCloudAPI(t, api, nil)
 
-	got, err := a.Resolve(context.Background(), domain.ResultKindTrack, "No Idea", "Don Toliver", "")
+	got, err := a.Resolve(context.Background(), discovery.ResultKindTrack, "No Idea", "Don Toliver", "")
 	if err != nil {
 		t.Fatalf("Resolve(track) error: %v", err)
 	}
@@ -592,29 +581,27 @@ func TestSoundCloudAPIAdapter_ResolveArtwork_AcceptsUploaderCreditedInTitle(t *t
 }
 
 func TestSoundCloudAPIAdapter_ResolveArtwork_MissReturnsEmpty(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	api := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"collection":[],"next_href":""}`))
-	}))
-	defer srv.Close()
-	a := newTestSoundCloudAPI(srv, nil)
+	})
+	a := newTestSoundCloudAPI(t, api, nil)
 
-	got, err := a.Resolve(context.Background(), domain.ResultKindTrack, "Nothing Here", "", "")
+	got, err := a.Resolve(context.Background(), discovery.ResultKindTrack, "Nothing Here", "", "")
 	if err != nil || got != "" {
 		t.Fatalf("expected empty+nil on miss, got %q / %v", got, err)
 	}
 }
 
 func TestSoundCloudAPIAdapter_Resolve_SearchErrorIsUnavailable(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	api := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer srv.Close()
-	a := newTestSoundCloudAPI(srv, nil)
+	})
+	a := newTestSoundCloudAPI(t, api, nil)
 
-	got, err := a.Resolve(context.Background(), domain.ResultKindTrack, "Nothing Here", "", "")
-	if !errors.Is(err, ports.ErrArtworkUnavailable) {
-		t.Fatalf("Resolve on search failure = %v, want ports.ErrArtworkUnavailable", err)
+	got, err := a.Resolve(context.Background(), discovery.ResultKindTrack, "Nothing Here", "", "")
+	if !errors.Is(err, discovery.ErrArtworkUnavailable) {
+		t.Fatalf("Resolve on search failure = %v, want discovery.ErrArtworkUnavailable", err)
 	}
 	if got != "" {
 		t.Errorf("got = %q, want empty on search failure", got)
@@ -622,7 +609,7 @@ func TestSoundCloudAPIAdapter_Resolve_SearchErrorIsUnavailable(t *testing.T) {
 }
 
 func TestSoundCloudAPIAdapter_ArtistContent(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/users/659062284/toptracks":
@@ -639,23 +626,22 @@ func TestSoundCloudAPIAdapter_ArtistContent(t *testing.T) {
 		default:
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
-	}))
-	defer srv.Close()
-	a := newTestSoundCloudAPI(srv, nil)
+	})
+	a := newTestSoundCloudAPI(t, api, nil)
 
-	tracks, err := a.GetArtistTopTracks(context.Background(), domain.ProviderSoundCloud, "659062284")
+	tracks, err := a.GetArtistTopTracks(context.Background(), discovery.ProviderSoundCloud, "659062284")
 	if err != nil {
 		t.Fatalf("GetArtistTopTracks error: %v", err)
 	}
-	if len(tracks) != 2 || tracks[0].Title != "Yale" || tracks[0].Kind != domain.ResultKindTrack {
+	if len(tracks) != 2 || tracks[0].Title != "Yale" || tracks[0].Kind != discovery.ResultKindTrack {
 		t.Fatalf("unexpected top tracks: %+v", tracks)
 	}
 
-	albums, err := a.GetArtistAlbums(context.Background(), domain.ProviderSoundCloud, "659062284")
+	albums, err := a.GetArtistAlbums(context.Background(), discovery.ProviderSoundCloud, "659062284")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums error: %v", err)
 	}
-	if len(albums) != 1 || albums[0].Title != "More Chaos" || albums[0].Kind != domain.ResultKindAlbum {
+	if len(albums) != 1 || albums[0].Title != "More Chaos" || albums[0].Kind != discovery.ResultKindAlbum {
 		t.Fatalf("unexpected albums: %+v", albums)
 	}
 	if albums[0].RecordType != "album" {
@@ -663,50 +649,38 @@ func TestSoundCloudAPIAdapter_ArtistContent(t *testing.T) {
 	}
 }
 
-func TestClientIDResolver_ScrapesAndCaches(t *testing.T) {
-	var homeCalls, bundleCalls int
-	bundle := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		bundleCalls++
-		_, _ = w.Write([]byte(`window.__sc={a:1},client_id:"resolvedclientid0000000000000000",b:2`))
-	}))
-	defer bundle.Close()
-	home := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		homeCalls++
-		_, _ = w.Write([]byte(
-			`<script crossorigin src="` + bundle.URL + `/assets/0-aaa.js"></script>` +
-				`<script crossorigin src="` + bundle.URL + `/assets/9-zzz.js"></script>`,
-		))
-	}))
-	defer home.Close()
+func TestSoundCloudAPIAdapter_ScrapesTheClientIDOnceAndReusesIt(t *testing.T) {
+	const resolved = "resolvedclientid0000000000000000"
+	var homeCalls int
+	var sent []string
+	a := newSoundCloudAdapter(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/":
+			homeCalls++
+			_, _ = w.Write([]byte(`<script crossorigin src="https://a-v2.sndcdn.com/assets/0-aaa.js"></script>` +
+				`<script crossorigin src="https://a-v2.sndcdn.com/assets/9-zzz.js"></script>`))
+		case strings.HasPrefix(r.URL.Path, "/assets/"):
+			_, _ = w.Write([]byte(`window.__sc={a:1},client_id:"` + resolved + `",b:2`))
+		default:
+			sent = append(sent, r.URL.Query().Get("client_id"))
+			_, _ = w.Write([]byte(`{"collection":[],"next_href":""}`))
+		}
+	}, nil)
 
-	r := newClientIDResolver(home.Client())
-	r.siteURL = home.URL
-
-	id, err := r.Get(context.Background())
-	if err != nil {
-		t.Fatalf("get error: %v", err)
-	}
-	if id != "resolvedclientid0000000000000000" {
-		t.Errorf("client_id = %q", id)
-	}
-
-	if _, err := r.Get(context.Background()); err != nil {
-		t.Fatalf("cached get error: %v", err)
+	for range 2 {
+		if _, err := a.Search(context.Background(), "q", providertest.TrackKinds()); err != nil {
+			t.Fatalf("Search: %v", err)
+		}
 	}
 	if homeCalls != 1 {
-		t.Errorf("expected homepage scraped once, got %d", homeCalls)
+		t.Errorf("homepage scraped %d times, want once", homeCalls)
 	}
-
-	r.Invalidate(id)
-	if _, err := r.Get(context.Background()); err != nil {
-		t.Fatalf("post-invalidate get error: %v", err)
-	}
-	if homeCalls != 2 {
-		t.Errorf("expected re-scrape after invalidate, got %d homepage hits", homeCalls)
+	if len(sent) != 2 || sent[0] != resolved || sent[1] != resolved {
+		t.Errorf("client_id sent = %v, want the scraped id on both searches", sent)
 	}
 }
 
-func TestUpgradeArtworkResolution(t *testing.T) {
+func TestSoundCloudAPIAdapter_Search_UpgradesArtworkToTheLargestSize(t *testing.T) {
 	tests := []struct {
 		name string
 		in   string
@@ -718,8 +692,15 @@ func TestUpgradeArtworkResolution(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := upgradeArtworkResolution(tt.in); got != tt.want {
-				t.Errorf("got %q, want %q", got, tt.want)
+			a := newTestSoundCloudAPI(t, func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = fmt.Fprintf(w, `{"collection":[{"id":1,"kind":"track","title":"T","artwork_url":%q,"user":{"username":"u"}}],"next_href":""}`, tt.in)
+			}, nil)
+			results, err := a.Search(context.Background(), "q", providertest.TrackKinds())
+			if err != nil || len(results) != 1 {
+				t.Fatalf("Search = (%d results, %v), want 1 track", len(results), err)
+			}
+			if results[0].ImageURL != tt.want {
+				t.Errorf("ImageURL = %q, want %q", results[0].ImageURL, tt.want)
 			}
 		})
 	}
@@ -727,17 +708,17 @@ func TestUpgradeArtworkResolution(t *testing.T) {
 
 type recordingFallback struct {
 	called  bool
-	results []domain.SearchResult
+	results []discovery.SearchResult
 }
 
-func (f *recordingFallback) Search(_ context.Context, _ string, _ map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
+func (f *recordingFallback) Search(_ context.Context, _ string, _ map[discovery.ResultKind]bool) ([]discovery.SearchResult, error) {
 	f.called = true
 	return f.results, nil
 }
 
 func TestSoundCloud_GetAlbumTracks_transientPlaylistErrorPropagates(t *testing.T) {
 	var trackFetches atomic.Int64
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/playlists/500"):
 			w.WriteHeader(http.StatusInternalServerError)
@@ -747,11 +728,10 @@ func TestSoundCloud_GetAlbumTracks_transientPlaylistErrorPropagates(t *testing.T
 		default:
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
-	}))
-	defer srv.Close()
-	a := newTestSoundCloudAPI(srv, nil)
+	})
+	a := newTestSoundCloudAPI(t, api, nil)
 
-	tracks, err := a.GetAlbumTracks(t.Context(), domain.ProviderSoundCloud, "500")
+	tracks, err := a.GetAlbumTracks(t.Context(), discovery.ProviderSoundCloud, "500")
 	if err == nil {
 		t.Fatalf("expected an error on a 500 playlist fetch, got tracks: %+v", tracks)
 	}
@@ -760,26 +740,23 @@ func TestSoundCloud_GetAlbumTracks_transientPlaylistErrorPropagates(t *testing.T
 	}
 }
 
-func TestSoundCloud_doSearch_capsEmptyPageWalk(t *testing.T) {
+func TestSoundCloudAPIAdapter_Search_capsEmptyPageWalk(t *testing.T) {
+	const maxPages = 5
 	var requests atomic.Int64
-	var srvURL string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	a := newTestSoundCloudAPI(t, func(w http.ResponseWriter, _ *http.Request) {
 		requests.Add(1)
-		_, _ = w.Write([]byte(`{"collection":[],"next_href":"` + srvURL + `/search/tracks?offset=next"}`))
-	}))
-	defer srv.Close()
-	srvURL = srv.URL
-	a := newTestSoundCloudAPI(srv, nil)
+		_, _ = w.Write([]byte(`{"collection":[],"next_href":"` + scAPIOrigin + `/search/tracks?offset=next"}`))
+	}, nil)
 
-	results, _, err := a.doSearch(context.Background(), "clientid", "query")
+	results, err := a.Search(context.Background(), "query", providertest.TrackKinds())
 	if err != nil {
-		t.Fatalf("doSearch: %v", err)
+		t.Fatalf("Search: %v", err)
 	}
 	if len(results) != 0 {
 		t.Errorf("results = %d, want 0", len(results))
 	}
-	if got := requests.Load(); got != scMaxSearchPages {
-		t.Errorf("requests = %d, want %d (page cap must stop the empty-page spin)", got, scMaxSearchPages)
+	if got := requests.Load(); got != maxPages {
+		t.Errorf("requests = %d, want %d (page cap must stop the empty-page spin)", got, maxPages)
 	}
 }
 
@@ -789,90 +766,55 @@ type ignoreDoneContext struct {
 
 func (ignoreDoneContext) Done() <-chan struct{} { return nil }
 
-type cancelAfterResponseTransport struct {
-	inner  http.RoundTripper
-	cancel context.CancelFunc
-	calls  atomic.Int64
-}
-
-func (t *cancelAfterResponseTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	resp, err := t.inner.RoundTrip(req)
-	if err != nil {
-		return resp, err
-	}
-	body, readErr := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	resp.Body = io.NopCloser(bytes.NewReader(body))
-	if readErr == nil && t.calls.Add(1) == 1 {
-		t.cancel()
-	}
-	return resp, nil
-}
-
-func TestSoundCloud_doSearch_cancelledAfterFirstPageReturnsPartialSuccess(t *testing.T) {
-	var srvURL string
-	var cancel context.CancelFunc
+func TestSoundCloudAPIAdapter_Search_cancelledAfterFirstPageReturnsPartialSuccess(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	var requests atomic.Int64
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	a := newTestSoundCloudAPI(t, func(w http.ResponseWriter, _ *http.Request) {
 		if requests.Add(1) == 1 {
-			_, _ = w.Write([]byte(`{"collection":[{"id":1,"kind":"track","title":"Page One","user":{"username":"Che"}}],"next_href":"` + srvURL + `/search/tracks?offset=next"}`))
-			time.Sleep(50 * time.Millisecond)
+			_, _ = w.Write([]byte(`{"collection":[{"id":1,"kind":"track","title":"Page One","user":{"username":"Che"}}],"next_href":"` + scAPIOrigin + `/search/tracks?offset=next"}`))
 			cancel()
 			return
 		}
 		t.Error("no request expected after the context is cancelled")
-	}))
-	defer srv.Close()
-	srvURL = srv.URL
-	a := newTestSoundCloudAPI(srv, nil)
+	}, nil)
 
-	ctx, cancelFn := context.WithCancel(context.Background())
-	cancel = cancelFn
-	defer cancelFn()
-	a.client = &http.Client{Transport: &cancelAfterResponseTransport{inner: srv.Client().Transport, cancel: cancelFn}}
-
-	ctx = ignoreDoneContext{ctx}
-	results, status, err := a.doSearch(ctx, "clientid", "query")
+	results, err := a.Search(ignoreDoneContext{ctx}, "query", providertest.TrackKinds())
 	if err != nil {
-		t.Fatalf("doSearch: %v", err)
-	}
-	if status != http.StatusOK {
-		t.Errorf("status = %d, want 200", status)
+		t.Fatalf("Search: %v", err)
 	}
 	if len(results) != 1 {
 		t.Errorf("results = %d, want 1 (the page gathered before cancellation)", len(results))
 	}
 }
 
-func TestSoundCloud_doSearch_capsAtMaxResults(t *testing.T) {
+func TestSoundCloudAPIAdapter_Search_capsAtMaxResults(t *testing.T) {
+	const pageSize, maxResults = 20, 40
 	var pages int
-	var srv *httptest.Server
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	a := newTestSoundCloudAPI(t, func(w http.ResponseWriter, _ *http.Request) {
 		pages++
-		items := make([]string, scSearchLimit)
+		items := make([]string, pageSize)
 		for i := range items {
 			items[i] = fmt.Sprintf(`{"id": %d, "kind": "track", "title": "T%d", "user": {"username": "U"}}`,
 				pages*1000+i, i)
 		}
 		_, _ = w.Write([]byte(`{"collection":[` + strings.Join(items, ",") + `],"next_href":"` +
-			srv.URL + `/search/tracks?offset=next"}`))
-	}))
-	defer srv.Close()
+			scAPIOrigin + `/search/tracks?offset=next"}`))
+	}, nil)
 
-	a := newTestSoundCloudAPI(srv, nil)
 	results, err := a.Search(context.Background(), "prolific", providertest.TrackKinds())
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
-	if len(results) != scMaxResults {
-		t.Errorf("results = %d, want the %d cap", len(results), scMaxResults)
+	if len(results) != maxResults {
+		t.Errorf("results = %d, want the %d cap", len(results), maxResults)
 	}
-	if pages != scMaxResults/scSearchLimit {
-		t.Errorf("pages fetched = %d, want %d (stop as soon as the cap is reached)", pages, scMaxResults/scSearchLimit)
+	if pages != maxResults/pageSize {
+		t.Errorf("pages fetched = %d, want %d (stop as soon as the cap is reached)", pages, maxResults/pageSize)
 	}
 }
 
-func TestSCBestReleaseDate(t *testing.T) {
+func TestSoundCloud_GetArtistAlbums_singleReleaseDatePrefersReleaseThenDisplayThenCreated(t *testing.T) {
 	tests := []struct {
 		name                            string
 		release, display, created, want string
@@ -884,26 +826,43 @@ func TestSCBestReleaseDate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := scBestReleaseDate(tt.release, tt.display, tt.created); got != tt.want {
-				t.Errorf("scBestReleaseDate = %q, want %q", got, tt.want)
+			tracks := fmt.Sprintf(`{"collection":[{"id":99,"kind":"track","title":"Single","user":{"username":"Che"},`+
+				`"release_date":%q,"display_date":%q,"created_at":%q}]}`, tt.release, tt.display, tt.created)
+			a := newTestSoundCloudAPI(t, scSinglesAPI(t, `{"collection":[]}`, func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(tracks))
+			}), nil)
+
+			albums, err := a.GetArtistAlbums(t.Context(), discovery.ProviderSoundCloud, "909010162")
+			if err != nil || len(albums) != 1 {
+				t.Fatalf("GetArtistAlbums = (%+v, %v), want the one standalone single", albums, err)
+			}
+			if albums[0].ReleaseDate != tt.want {
+				t.Errorf("ReleaseDate = %q, want %q", albums[0].ReleaseDate, tt.want)
 			}
 		})
 	}
 }
 
-func TestMapSoundCloudStandaloneSingle(t *testing.T) {
-	r, ok := mapSoundCloudStandaloneSingle(scAPITrack{
-		ID: 99, Kind: "track", Title: "14 HAHAHA LOL",
-		Genre:       "rage",
-		DisplayDate: "2026-07-20T00:00:00Z",
-		User: struct {
-			Username string `json:"username"`
-		}{Username: "Che"},
-	})
-	if !ok {
-		t.Fatal("expected a mapped single")
+func TestSoundCloud_GetArtistAlbums_mapsAStandaloneSingleAndSkipsUnusableTracks(t *testing.T) {
+	const tracksJSON = `{"collection":[
+		{"id":99,"kind":"track","title":"14 HAHAHA LOL","genre":"rage","display_date":"2026-07-20T00:00:00Z","user":{"username":"Che"}},
+		{"id":1,"kind":"playlist","title":"X"},
+		{"id":2,"kind":"track","title":"  "},
+		{"kind":"track","title":"No ID"}
+	]}`
+	a := newTestSoundCloudAPI(t, scSinglesAPI(t, `{"collection":[]}`, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(tracksJSON))
+	}), nil)
+
+	albums, err := a.GetArtistAlbums(t.Context(), discovery.ProviderSoundCloud, "909010162")
+	if err != nil {
+		t.Fatalf("GetArtistAlbums: %v", err)
 	}
-	if r.Kind != domain.ResultKindAlbum || r.RecordType != "single" || r.TrackCount != 1 {
+	if len(albums) != 1 {
+		t.Fatalf("albums = %+v, want only the usable single (a non-track kind, a blank title and a zero id are skipped)", albums)
+	}
+	r := albums[0]
+	if r.Kind != discovery.ResultKindAlbum || r.RecordType != "single" || r.TrackCount != 1 {
 		t.Errorf("result = %+v, want an album-kind single with one track", r)
 	}
 	if r.ReleaseDate != "2026-07-20T00:00:00Z" {
@@ -912,20 +871,10 @@ func TestMapSoundCloudStandaloneSingle(t *testing.T) {
 	if r.Extras["genre"] != "rage" {
 		t.Errorf("genre = %v", r.Extras["genre"])
 	}
-
-	if _, ok := mapSoundCloudStandaloneSingle(scAPITrack{ID: 1, Kind: "playlist", Title: "X"}); ok {
-		t.Error("non-track kind must be rejected")
-	}
-	if _, ok := mapSoundCloudStandaloneSingle(scAPITrack{ID: 1, Kind: "track", Title: "  "}); ok {
-		t.Error("blank title must be rejected")
-	}
-	if _, ok := mapSoundCloudStandaloneSingle(scAPITrack{Kind: "track", Title: "No ID"}); ok {
-		t.Error("zero id must be rejected")
-	}
 }
 
 func TestSoundCloudAPIAdapter_GetRelatedTracks_MapsCollection(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/tracks/12345/related" {
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
@@ -940,11 +889,10 @@ func TestSoundCloudAPIAdapter_GetRelatedTracks_MapsCollection(t *testing.T) {
 			{"id":0,"title":"skip — no id"},
 			{"id":7,"kind":"playlist","title":"skip — not a track"}
 		]}`))
-	}))
-	defer srv.Close()
+	})
 
-	a := newTestSoundCloudAPI(srv, nil)
-	results, err := a.GetRelatedTracks(context.Background(), domain.ProviderSoundCloud, "12345")
+	a := newTestSoundCloudAPI(t, api, nil)
+	results, err := a.GetRelatedTracks(context.Background(), discovery.ProviderSoundCloud, "12345")
 	if err != nil {
 		t.Fatalf("GetRelatedTracks error: %v", err)
 	}
@@ -953,14 +901,14 @@ func TestSoundCloudAPIAdapter_GetRelatedTracks_MapsCollection(t *testing.T) {
 	}
 
 	first := results[0]
-	if first.Kind != domain.ResultKindTrack {
+	if first.Kind != discovery.ResultKindTrack {
 		t.Errorf("kind = %v, want track", first.Kind)
 	}
 	if first.Title != "Fell In Love" || first.Subtitle != "Lil Tecca" {
 		t.Errorf("first mapped wrong: %+v", first)
 	}
 	if len(first.Sources) != 1 ||
-		first.Sources[0].Provider != domain.ProviderSoundCloud ||
+		first.Sources[0].Provider != discovery.ProviderSoundCloud ||
 		first.Sources[0].ExternalID != "555" {
 		t.Errorf("source not soundcloud/555: %+v", first.Sources)
 	}
@@ -973,14 +921,13 @@ func TestSoundCloudAPIAdapter_GetRelatedTracks_MapsCollection(t *testing.T) {
 }
 
 func TestSoundCloudAPIAdapter_GetRelatedTracks_Empty(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	api := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"collection":[]}`))
-	}))
-	defer srv.Close()
+	})
 
-	a := newTestSoundCloudAPI(srv, nil)
-	results, err := a.GetRelatedTracks(context.Background(), domain.ProviderSoundCloud, "999")
+	a := newTestSoundCloudAPI(t, api, nil)
+	results, err := a.GetRelatedTracks(context.Background(), discovery.ProviderSoundCloud, "999")
 	if err != nil {
 		t.Fatalf("GetRelatedTracks error: %v", err)
 	}
@@ -989,34 +936,13 @@ func TestSoundCloudAPIAdapter_GetRelatedTracks_Empty(t *testing.T) {
 	}
 }
 
-func scSinglesFailingServer(t *testing.T, tracks http.HandlerFunc) *httptest.Server {
-	t.Helper()
-	const albumsJSON = `{"collection":[
-		{"id":10,"kind":"playlist","title":"Empty Clip","set_type":"ep","track_count":2,"user":{"username":"Che"},"tracks":[{"id":1},{"id":2}]}
-	]}`
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.HasSuffix(r.URL.Path, "/albums"):
-			_, _ = w.Write([]byte(albumsJSON))
-		case strings.HasSuffix(r.URL.Path, "/tracks"):
-			tracks(w, r)
-		case strings.HasSuffix(r.URL.Path, "/resolve"):
-			_, _ = w.Write([]byte(`{"id":909010162,"kind":"user","username":"Che","permalink_url":"https://soundcloud.com/che"}`))
-		default:
-			t.Errorf("unexpected path %q", r.URL.Path)
-		}
-	}))
-}
-
 func TestSoundCloud_GetArtistAlbums_singlesFailureLogsAWarningNamingTheUser(t *testing.T) {
 	buf := providertest.CaptureDefaultLog(t)
-	srv := scSinglesFailingServer(t, func(w http.ResponseWriter, _ *http.Request) {
+	a := newTestSoundCloudAPI(t, scSinglesAPI(t, scEmptyClipAlbumsJSON, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-	})
-	defer srv.Close()
-	a := newTestSoundCloudAPI(srv, nil)
+	}), nil)
 
-	if _, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "909010162"); err != nil {
+	if _, err := a.GetArtistAlbums(t.Context(), discovery.ProviderSoundCloud, "909010162"); err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)
 	}
 
@@ -1041,13 +967,11 @@ func TestSoundCloud_GetArtistAlbums_singlesFailureLogsAWarningNamingTheUser(t *t
 }
 
 func TestSoundCloud_GetArtistAlbums_malformedSinglesBodyStillReturnsPlaylistAlbums(t *testing.T) {
-	srv := scSinglesFailingServer(t, func(w http.ResponseWriter, _ *http.Request) {
+	a := newTestSoundCloudAPI(t, scSinglesAPI(t, scEmptyClipAlbumsJSON, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"collection":[{"id":`))
-	})
-	defer srv.Close()
-	a := newTestSoundCloudAPI(srv, nil)
+	}), nil)
 
-	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "909010162")
+	albums, err := a.GetArtistAlbums(t.Context(), discovery.ProviderSoundCloud, "909010162")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)
 	}
@@ -1057,7 +981,7 @@ func TestSoundCloud_GetArtistAlbums_malformedSinglesBodyStillReturnsPlaylistAlbu
 }
 
 func TestSoundCloud_GetArtistAlbums_playlistsFailureIsStillAnError(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/albums"):
 			w.WriteHeader(http.StatusInternalServerError)
@@ -1068,11 +992,10 @@ func TestSoundCloud_GetArtistAlbums_playlistsFailureIsStillAnError(t *testing.T)
 		default:
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}
-	}))
-	defer srv.Close()
-	a := newTestSoundCloudAPI(srv, nil)
+	})
+	a := newTestSoundCloudAPI(t, api, nil)
 
-	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "909010162")
+	albums, err := a.GetArtistAlbums(t.Context(), discovery.ProviderSoundCloud, "909010162")
 	if err == nil {
 		t.Fatalf("GetArtistAlbums with playlists answering 500 = (%+v, nil), want an error", albums)
 	}
@@ -1081,12 +1004,10 @@ func TestSoundCloud_GetArtistAlbums_playlistsFailureIsStillAnError(t *testing.T)
 func TestSoundCloudAPIAdapter_Resolve_ProviderFailureIsUnavailable(t *testing.T) {
 	for name, handler := range providertest.ArtworkFailureHandlers() {
 		t.Run(name, func(t *testing.T) {
-			srv := httptest.NewServer(handler)
-			defer srv.Close()
-			a := newTestSoundCloudAPI(srv, nil)
+			a := newTestSoundCloudAPI(t, handler, nil)
 
-			url, err := a.Resolve(context.Background(), domain.ResultKindTrack, "Creep", "Radiohead", "")
-			if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+			url, err := a.Resolve(context.Background(), discovery.ResultKindTrack, "Creep", "Radiohead", "")
+			if url != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) {
 				t.Fatalf("Resolve on %s = (%q, %v), want (\"\", ErrArtworkUnavailable)", name, url, err)
 			}
 			if !strings.Contains(err.Error(), "soundcloud") {
@@ -1099,11 +1020,9 @@ func TestSoundCloudAPIAdapter_Resolve_ProviderFailureIsUnavailable(t *testing.T)
 func TestSoundCloudAPIAdapter_Resolve_VerifiedMissIsEmptyWithoutError(t *testing.T) {
 	for name, handler := range providertest.ArtworkVerifiedMissHandlers() {
 		t.Run(name, func(t *testing.T) {
-			srv := httptest.NewServer(handler)
-			defer srv.Close()
-			a := newTestSoundCloudAPI(srv, nil)
+			a := newTestSoundCloudAPI(t, handler, nil)
 
-			url, err := a.Resolve(context.Background(), domain.ResultKindTrack, "Creep", "Radiohead", "")
+			url, err := a.Resolve(context.Background(), discovery.ResultKindTrack, "Creep", "Radiohead", "")
 			if url != "" || err != nil {
 				t.Errorf("Resolve on %s = (%q, %v), want (\"\", nil)", name, url, err)
 			}
@@ -1113,133 +1032,163 @@ func TestSoundCloudAPIAdapter_Resolve_VerifiedMissIsEmptyWithoutError(t *testing
 
 func TestSoundCloudAPIAdapter_Resolve_CancelledMidRequestIsUnavailable(t *testing.T) {
 	srv, ctx := providertest.CancelMidRequestServer(t)
-	a := newTestSoundCloudAPI(srv, nil)
+	a := newTestSoundCloudAPI(t, srv.Config.Handler.ServeHTTP, nil)
 
-	url, err := a.Resolve(ctx, domain.ResultKindTrack, "Creep", "Radiohead", "")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+	url, err := a.Resolve(ctx, discovery.ResultKindTrack, "Creep", "Radiohead", "")
+	if url != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
 		t.Errorf("Resolve cancelled mid-request = (%q, %v), want ErrArtworkUnavailable wrapping context.Canceled", url, err)
 	}
 }
 
 func TestSoundCloudAPIAdapter_Resolve_AlreadyCancelledContextIsUnavailableNotAMiss(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	api := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"collection":[],"next_href":""}`))
-	}))
-	defer srv.Close()
-	a := newTestSoundCloudAPI(srv, nil)
+	})
+	a := newTestSoundCloudAPI(t, api, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	url, err := a.Resolve(ctx, domain.ResultKindTrack, "Creep", "Radiohead", "")
-	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+	url, err := a.Resolve(ctx, discovery.ResultKindTrack, "Creep", "Radiohead", "")
+	if url != "" || !errors.Is(err, discovery.ErrArtworkUnavailable) {
 		t.Errorf("Resolve with a cancelled context = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
 
-func TestClientIDResolver_singleflightCollapsesConcurrentGets(t *testing.T) {
-	var homeHits atomic.Int32
-	var srv *httptest.Server
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, ".js") {
-			_, _ = w.Write([]byte(`client_id:"abcdefabcdefabcdefabcdefabcdef12"`))
-			return
-		}
-		homeHits.Add(1)
-		time.Sleep(50 * time.Millisecond)
-		_, _ = w.Write([]byte(`<script src="` + srv.URL + `/assets/app-1.js"></script>`))
-	}))
-	defer srv.Close()
+func inMemorySoundCloudAdapter(site http.HandlerFunc) *discovery.SoundCloudAPIAdapter {
+	client := &http.Client{Transport: providertest.FakeRoundTripper{Fn: func(r *http.Request) (*http.Response, error) {
+		rec := httptest.NewRecorder()
+		site(rec, r)
+		res := rec.Result()
+		res.Request = r
+		return res, nil
+	}}}
+	return discovery.NewSoundCloudAPIAdapter(client, nil)
+}
 
-	r := newClientIDResolver(srv.Client())
-	r.siteURL = srv.URL
-
-	const callers = 8
-	var wg sync.WaitGroup
-	ids := make([]string, callers)
-	for i := 0; i < callers; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			id, err := r.Get(context.Background())
-			if err != nil {
-				t.Errorf("get: %v", err)
-				return
+func TestSoundCloudAPIAdapter_ConcurrentSearchesShareOneScrape(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const scraped = "abcdefabcdefabcdefabcdefabcdef12"
+		var homeHits, wrongID atomic.Int32
+		release := make(chan struct{})
+		a := inMemorySoundCloudAdapter(func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case strings.HasSuffix(r.URL.Path, ".js"):
+				_, _ = w.Write([]byte(`client_id:"` + scraped + `"`))
+			case r.URL.Path == "/":
+				homeHits.Add(1)
+				<-release
+				_, _ = w.Write([]byte(scFixtureHome))
+			default:
+				if r.URL.Query().Get("client_id") != scraped {
+					wrongID.Add(1)
+				}
+				_, _ = w.Write([]byte(`{"collection":[],"next_href":""}`))
 			}
-			ids[i] = id
-		}(i)
-	}
-	wg.Wait()
+		})
 
-	if got := homeHits.Load(); got != 1 {
-		t.Errorf("homepage scraped %d times for %d concurrent callers, want 1 (singleflight)", got, callers)
-	}
-	for _, id := range ids {
-		if id != "abcdefabcdefabcdefabcdefabcdef12" {
-			t.Fatalf("id = %q, want the scraped client_id shared by all waiters", id)
+		const callers = 8
+		var wg sync.WaitGroup
+		for range callers {
+			wg.Go(func() {
+				if _, err := a.Search(context.Background(), "q", providertest.TrackKinds()); err != nil {
+					t.Errorf("Search: %v", err)
+				}
+			})
 		}
-	}
+		synctest.Wait()
+		scrapesInFlight := homeHits.Load()
+		close(release)
+		wg.Wait()
+
+		if scrapesInFlight != 1 {
+			t.Errorf("homepage scraped %d times while %d searches waited on it, want 1 (singleflight)", scrapesInFlight, callers)
+		}
+		if got := homeHits.Load(); got != 1 {
+			t.Errorf("homepage scraped %d times for %d concurrent searches, want 1", got, callers)
+		}
+		if got := wrongID.Load(); got != 0 {
+			t.Errorf("%d searches sent a client_id other than the scraped one", got)
+		}
+	})
 }
 
-func TestClientIDResolver_concurrentStaleInvalidateNoops(t *testing.T) {
-	r := newClientIDResolver(nil)
-	r.Cached = "fresh"
+func TestSoundCloudAPIAdapter_LateAuthFailureOnTheOldClientIDKeepsTheRefreshedOne(t *testing.T) {
+	const refreshed = "abcdefghijklmnopqrstuvwxyz012345"
+	var bundleFetches, staleRequests atomic.Int32
+	secondStale, refreshedServed := make(chan struct{}), make(chan struct{})
+	var served sync.Once
+	a := newSoundCloudAdapter(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/":
+			_, _ = w.Write([]byte(scFixtureHome))
+		case strings.HasPrefix(r.URL.Path, "/assets/"):
+			id := scFixtureClientID
+			if bundleFetches.Add(1) > 1 {
+				id = refreshed
+			}
+			_, _ = w.Write([]byte(`client_id:"` + id + `"`))
+		case r.URL.Query().Get("client_id") == refreshed:
+			_, _ = w.Write([]byte(`{"collection":[],"next_href":""}`))
+			served.Do(func() { close(refreshedServed) })
+		default:
+			holdStaleRequest(t, staleRequests.Add(1), secondStale, refreshedServed)
+			w.WriteHeader(http.StatusUnauthorized)
+		}
+	}, nil)
 
 	var wg sync.WaitGroup
-	for i := 0; i < 16; i++ {
+	for range 2 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r.Invalidate("stale")
-		}()
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			r.Mu.Lock()
-			_ = r.Cached
-			r.Mu.Unlock()
+			if _, err := a.Search(context.Background(), "q", providertest.TrackKinds()); err != nil {
+				t.Errorf("Search: %v", err)
+			}
 		}()
 	}
 	wg.Wait()
 
-	if r.Cached != "fresh" {
-		t.Fatal("a stale invalidate wiped the fresh client_id under concurrency")
-	}
-	r.Invalidate("fresh")
-	if r.Cached != "" {
-		t.Fatal("invalidate with the failed client_id did not clear the cache")
+	if got := bundleFetches.Load(); got != 2 {
+		t.Errorf("bundle fetched %d times, want 2: the late 401 on the old client_id must not drop the refreshed one", got)
 	}
 }
 
-func TestClientIDResolver_staleInvalidateNoops(t *testing.T) {
-	r := newClientIDResolver(nil)
-	r.Cached = "fresh"
-	r.Invalidate("stale")
-	if r.Cached != "fresh" {
-		t.Fatal("stale invalidate wiped the fresh client_id")
+func holdStaleRequest(t *testing.T, n int32, secondStale, refreshedServed chan struct{}) {
+	t.Helper()
+	switch n {
+	case 1:
+		awaitRelease(t, secondStale, "the first stale request waits for the second")
+	case 2:
+		close(secondStale)
+		awaitRelease(t, refreshedServed, "the second stale request waits for the refreshed id to be served")
 	}
-	r.Invalidate("fresh")
-	if r.Cached != "" {
-		t.Fatal("invalidate with the failed client_id did not clear the cache")
+}
+
+func awaitRelease(t *testing.T, ch <-chan struct{}, what string) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(5 * time.Second):
+		t.Errorf("never released: %s", what)
 	}
 }
 
 func TestChainedArtworkResolver_NextProviderStillReturnsArtworkAfterAProviderFails(t *testing.T) {
-	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	failing := func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Retry-After", "1")
 		w.WriteHeader(http.StatusTooManyRequests)
-	}))
-	defer failing.Close()
+	}
 	healthy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"artists":[{"idArtist":"1","strArtist":"sombr","strArtistThumb":"https://img.example/sombr.jpg"}]}`))
 	}))
 	defer healthy.Close()
 
-	for name, broken := range map[string]ports.ArtworkResolver{"soundcloud": newTestSoundCloudAPI(failing, nil)} {
+	for name, broken := range map[string]discovery.ArtworkResolver{"soundcloud": newTestSoundCloudAPI(t, failing, nil)} {
 		t.Run(name, func(t *testing.T) {
-			chain := artworkchain.NewChainedArtworkResolver(broken, theaudiodb.New(providertest.NewClient(healthy.URL), theaudiodb.WithAPIKey("k")))
-			url, source, err := chain.ResolveTagged(context.Background(), domain.ResultKindArtist, "sombr", "", "")
+			chain := discovery.NewChainedArtworkResolver(broken, discovery.NewTheAudioDBAdapter(providertest.NewClient(healthy.URL), discovery.WithTheAudioDBAPIKey("k")))
+			url, source, err := chain.ResolveTagged(context.Background(), discovery.ResultKindArtist, "sombr", "", "")
 			if err != nil {
 				t.Fatalf("ResolveTagged after %s fails = (%q, %q, %v), want no error", name, url, source, err)
 			}
@@ -1251,19 +1200,18 @@ func TestChainedArtworkResolver_NextProviderStillReturnsArtworkAfterAProviderFai
 }
 
 func TestChainedArtworkResolver_MissAfterAProviderFailsIsDegradedAndUnavailable(t *testing.T) {
-	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	failing := func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
-	}))
-	defer failing.Close()
+	}
 
-	for name, broken := range map[string]ports.ArtworkResolver{"soundcloud": newTestSoundCloudAPI(failing, nil)} {
+	for name, broken := range map[string]discovery.ArtworkResolver{"soundcloud": newTestSoundCloudAPI(t, failing, nil)} {
 		t.Run(name, func(t *testing.T) {
-			chain := artworkchain.NewChainedArtworkResolver(broken, &discoverytest.ArtworkResolver{})
-			url, _, err := chain.ResolveTagged(context.Background(), domain.ResultKindArtist, "sombr", "", "")
-			if url != "" || !errors.Is(err, ports.ErrArtworkDegraded) || !errors.Is(err, ports.ErrArtworkUnavailable) {
+			chain := discovery.NewChainedArtworkResolver(broken, &discovery.FakeArtworkResolver{})
+			url, _, err := chain.ResolveTagged(context.Background(), discovery.ResultKindArtist, "sombr", "", "")
+			if url != "" || !errors.Is(err, discovery.ErrArtworkDegraded) || !errors.Is(err, discovery.ErrArtworkUnavailable) {
 				t.Errorf("ResolveTagged after %s fails then a miss = (%q, %v), want ErrArtworkDegraded and ErrArtworkUnavailable", name, url, err)
 			}
-			if !ports.IsUnverifiedArtworkMiss(url, err) {
+			if !discovery.IsUnverifiedArtworkMiss(url, err) {
 				t.Error("IsUnverifiedArtworkMiss = false, want true so the miss is not negative-cached")
 			}
 		})
