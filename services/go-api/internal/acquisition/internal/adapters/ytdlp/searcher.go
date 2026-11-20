@@ -45,6 +45,7 @@ const ytDlpBinary = "yt-dlp"
 type YtDlpAudioSearcher struct {
 	ffmpegLocation   string
 	cookieFile       string
+	environment      string
 	jsRuntime        string
 	remoteComponents string
 	potURL           string
@@ -64,6 +65,11 @@ func (s *YtDlpAudioSearcher) WithRemoteComponents(spec string) *YtDlpAudioSearch
 
 func (s *YtDlpAudioSearcher) WithPOTokenURL(url string) *YtDlpAudioSearcher {
 	s.potURL = url
+	return s
+}
+
+func (s *YtDlpAudioSearcher) WithEnvironment(name string) *YtDlpAudioSearcher {
+	s.environment = name
 	return s
 }
 
@@ -224,14 +230,15 @@ func (s *YtDlpAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec stri
 		"--",
 		searchSpec,
 	}
-	cookieFile, cleanup, err := s.cookieJarCopy("acquisition-search-cookies-*.txt")
+	cookies, err := s.leaseCookieJar("search")
 	if err != nil {
 		return nil, fmt.Errorf("yt-dlp search: copy cookie jar: %w", err)
 	}
-	defer cleanup()
-	args = s.authFlags(args, cookieFile)
+	defer cookies.cleanup()
+	args = s.authFlags(args, cookies.path)
 
 	lines, stderr, err := sharedytdlp.DumpJSON(searchCtx, args)
+	cookies.settle(ctx, err, stderr)
 	if err != nil {
 		return nil, s.classifiedFailure(fmt.Errorf("yt-dlp search: %w (stderr: %s)", err, embeddedStderr(stderr)), stderr, ports.RunTimedOut(ctx, searchCtx))
 	}
@@ -261,12 +268,12 @@ func candidatesFromEntryLines(lines [][]byte) (candidates []ports.AudioCandidate
 }
 
 func (s *YtDlpAudioSearcher) Download(ctx context.Context, url, outDir string) (ports.FetchedAudio, error) {
-	return s.fetchAudio(ctx, url, outDir, nil, s.downloadTimeout)
+	return s.fetchAudio(ctx, "download", url, outDir, nil, s.downloadTimeout)
 }
 
 func (s *YtDlpAudioSearcher) DownloadPreview(ctx context.Context, url string, outDir string, seconds int) (string, error) {
 	section := []string{"--download-sections", fmt.Sprintf("*0-%d", seconds)}
-	fetched, err := s.fetchAudio(ctx, url, outDir, section, s.previewTimeout)
+	fetched, err := s.fetchAudio(ctx, "preview", url, outDir, section, s.previewTimeout)
 	return fetched.Path, err
 }
 
@@ -296,7 +303,7 @@ func parseSourceFormat(stdout string) ports.SourceFormat {
 
 func (s *YtDlpAudioSearcher) fetchAudio(
 	ctx context.Context,
-	url, outDir string,
+	run, url, outDir string,
 	sectionArgs []string,
 	timeout time.Duration,
 ) (ports.FetchedAudio, error) {
@@ -318,16 +325,17 @@ func (s *YtDlpAudioSearcher) fetchAudio(
 	if s.ffmpegLocation != "" {
 		args = append([]string{"--ffmpeg-location", s.ffmpegLocation}, args...)
 	}
-	cookieFile, cleanup, err := s.cookieJarCopy("acquisition-download-cookies-*.txt")
+	cookies, err := s.leaseCookieJar(run)
 	if err != nil {
 		return ports.FetchedAudio{}, fmt.Errorf("yt-dlp download: copy cookie jar: %w", err)
 	}
-	defer cleanup()
-	args = s.authFlags(args, cookieFile)
+	defer cookies.cleanup()
+	args = s.authFlags(args, cookies.path)
 
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	stdout, stderr, err := execcmd.Run(runCtx, ytDlpBinary, args...)
+	cookies.settle(ctx, err, stderr)
 	if err != nil {
 		return ports.FetchedAudio{}, s.classifiedFailure(fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, embeddedStderr(stderr)), stderr, ports.RunTimedOut(ctx, runCtx))
 	}

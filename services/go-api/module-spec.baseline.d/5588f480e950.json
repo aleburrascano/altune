@@ -1,0 +1,7 @@
+{
+  "removed": [
+    "T1 internal/acquisition/internal/adapters/eval/run_test.go imports internal/adapters/ytdlp/searcher.go, behind acquisition's door"
+  ],
+  "added": [],
+  "clones": 0
+}

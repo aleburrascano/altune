@@ -7,6 +7,7 @@ import (
 	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -198,45 +199,6 @@ func TestRunJourneyCheckRedactsCookiePathsInTheFailure(t *testing.T) {
 	}
 }
 
-func TestThrowawayCookieJarCopiesTheLiveJarAndRemovesTheCopy(t *testing.T) {
-	livePath := filepath.Join(t.TempDir(), "cookies.txt")
-	if err := os.WriteFile(livePath, []byte("# Netscape HTTP Cookie File\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	path, remove, err := throwawayCookieJar(livePath)
-	if err != nil {
-		t.Fatalf("throwawayCookieJar(%q) error = %v", livePath, err)
-	}
-	copied, readErr := os.ReadFile(path)
-	remove()
-
-	if path == livePath || readErr != nil || string(copied) != "# Netscape HTTP Cookie File\n" {
-		t.Errorf("throwawayCookieJar(%q) = %q holding %q (read err %v), want a distinct copy of the live jar", livePath, path, copied, readErr)
-	}
-	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("copy %q still present after remove: stat err = %v", path, err)
-	}
-}
-
-func TestThrowawayCookieJarRunsWithoutCookiesWhenNoJarIsConfigured(t *testing.T) {
-	path, remove, err := throwawayCookieJar("")
-	remove()
-
-	if path != "" || err != nil {
-		t.Errorf("throwawayCookieJar(\"\") = %q, %v, want \"\", nil", path, err)
-	}
-}
-
-func TestThrowawayCookieJarFailsWhenTheLiveJarIsMissing(t *testing.T) {
-	_, remove, err := throwawayCookieJar(filepath.Join(t.TempDir(), "absent.txt"))
-	remove()
-
-	if !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("throwawayCookieJar(absent) error = %v, want not-exist", err)
-	}
-}
-
 func TestRunJourneyCheckRedactsSecretsInASearchFailure(t *testing.T) {
 	searcher := &fakeJourneySearcher{err: errors.New("GET https://api.example/search?q=x&access_token=sk_live_abc123: 401")}
 
@@ -278,5 +240,39 @@ func TestRankingOnlySearcherComesFromTheDiscoveryTable(t *testing.T) {
 	}
 	if _, ok := searcher.(*discovery.SearchService); !ok {
 		t.Errorf("searcher = %T, want the table's ranking-only search service", searcher)
+	}
+}
+
+func TestJourneyCheckDownloadsWithTheLiveJarAndRecordsItsBotCheckUnderTheConfiguredEnvironment(t *testing.T) {
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "yt-dlp"), []byte("#!/bin/sh\necho \"ERROR: [youtube] x: Sign in to confirm you're not a bot.\" >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	jar := filepath.Join(t.TempDir(), "cookies.txt")
+	if err := os.WriteFile(jar, []byte("# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t1999999999\tLOGIN_INFO\tl\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := journeyDownloaderFor(&config.Config{YtDLPCookieFile: jar, Env: "production"}).Download(context.Background(), "https://youtube.com/watch?v=1", t.TempDir())
+
+	if err == nil {
+		t.Fatal("Download() = nil, want the bot check's failure")
+	}
+	raw, readErr := os.ReadFile(jar + ".session.json")
+	if readErr != nil {
+		t.Fatalf("session file next to the live jar: %v", readErr)
+	}
+	var session struct {
+		FirstSignInFailure *struct {
+			Environment string `json:"environment"`
+			Run         string `json:"run"`
+		} `json:"first_signin_failure"`
+	}
+	if err := json.Unmarshal(raw, &session); err != nil {
+		t.Fatalf("session file %q: %v", raw, err)
+	}
+	if f := session.FirstSignInFailure; f == nil || f.Environment != "production" || f.Run != "download" {
+		t.Errorf("first sign-in failure = %+v, want the download's, recorded under environment production", f)
 	}
 }

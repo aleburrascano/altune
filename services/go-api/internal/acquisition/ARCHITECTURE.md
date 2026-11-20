@@ -219,6 +219,7 @@ adapters/
     acquisition_handler.go RetryHandler (POST /tracks/{id}/retry), ReacquireHandler (POST /tracks/{id}/reacquire) and acquisitionCommand, the admit-then-schedule body both serve
   ytdlp/
     searcher.go          YtDlpAudioSearcher — the ytsearch5:/scsearch5: fan-out and Download
+    cookie_jar.go        the live cookie jar: every yt-dlp run gets a copy; a run that exits 0 hands back its renewed cookies, which replace the jar (under jar_lock_*.go's non-blocking file lock, retried for at most 3s or until the run's context ends; by rename; only if the jar is still the one the run copied and the renewal kept every YouTube session cookie it had, else acquisition.cookie_renewal_refused names the missing ones); the first bot check per dropped-in jar is recorded in <jar>.session.json with its age and environment, then logged as acquisition.cookie_session_first_signin_failure
     prober.go            FfprobeProber — ProbeDuration, ValidateDecodable, Available
     source.go            Source ("ytdlp") — the text-search AudioSource over the searcher
   ytmusic/

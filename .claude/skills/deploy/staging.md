@@ -16,7 +16,7 @@ Keep these `.env.staging` keys pointed away from prod, so staging never writes t
 - `OCI_S3_*` with `AUDIO_KEY_PREFIX=staging/`: a key whose IAM policy only allows writes under `staging/` in prod's bucket (policy `altune-staging-s3-prefix`).
 - `MUSICBRAINZ_USER_AGENT`: a real staging contact.
 
-`compose.staging.yml` mounts the shared cookie jar read-only. After an env change, recreate the containers it feeds:
+`compose.staging.yml` mounts prod's cookie folder (`~/altune/cookies`) read-write: staging renews the same jar prod uses and can record the jar's first bot check in `cookies.txt.session.json`. After an env change, recreate the containers it feeds:
 
 ```bash
 docker compose -f deploy/compose.staging.yml up -d --force-recreate

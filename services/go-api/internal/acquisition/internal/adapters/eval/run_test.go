@@ -2,13 +2,11 @@ package eval
 
 import (
 	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
-	"altune/go-api/internal/acquisition/internal/adapters/ytdlp"
 	"altune/go-api/internal/acquisition/internal/adapters/ytmsearch"
 	"altune/go-api/internal/acquisition/internal/adapters/ytmusic"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/service"
 	"context"
-	"encoding/json"
 	"io"
 	"log/slog"
 	"os"
@@ -1412,19 +1410,19 @@ func TestRun_ObservedCandidatesGoThroughTheAdapters(t *testing.T) {
 	})
 
 	t.Run("ytdlp entry", func(t *testing.T) {
-		line := `{"title":"Halo","duration":201.5,"webpage_url":"https://soundcloud.com/nova/halo","view_count":7}`
-		var entry ytdlp.Entry
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
-			t.Fatal(err)
-		}
+		line := `{"title":"Halo","duration":201.5,"webpage_url":"https://soundcloud.com/nova/halo","channel":"Nova","categories":["Music"],"view_count":7}`
 
 		got := loadedCandidate(t, `{"observed":{"ytdlp_entry":`+line+`}}`).audioCandidate()
 
-		if want := ytdlp.CandidateFromEntry(entry); !reflect.DeepEqual(got, want) {
-			t.Errorf("golden candidate = %+v, want what ytdlp emits: %+v", got, want)
+		want := ports.AudioCandidate{
+			Title: "Halo", Duration: 201.5, URL: "https://soundcloud.com/nova/halo",
+			Channel: "Nova", Categories: []string{"Music"}, ViewCount: 7, Kind: ports.KindUpload,
 		}
-		if got.Kind != ports.KindUpload || got.IsResolved() {
-			t.Errorf("golden candidate kind %q resolved %v, want an unresolved upload", got.Kind, got.IsResolved())
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("golden candidate = %+v, want every yt-dlp entry field carried over as an unresolved upload: %+v", got, want)
+		}
+		if got.IsResolved() {
+			t.Errorf("golden candidate resolved, want an unresolved upload")
 		}
 	})
 }

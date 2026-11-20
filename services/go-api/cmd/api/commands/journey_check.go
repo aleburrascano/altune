@@ -48,18 +48,17 @@ func runJourneyCheckWithConfig(cfg *config.Config) error {
 	}
 	defer pool.Close()
 
-	cookieJar, removeCookieJar, err := throwawayCookieJar(cfg.YtDLPCookieFile)
-	if err != nil {
-		return journeyStepFailed("download", err)
-	}
-	defer removeCookieJar()
-
 	searcher, err := rankingOnlySearcher(ctx, cfg, pool)
 	if err != nil {
 		return journeyStepFailed("search", err)
 	}
-	downloader := acquisition.NewYtDlpAudioSearcher(cfg.FFmpegLocation, cookieJar, cfg.YtDLPJSRuntime).WithPOTokenURL(cfg.YtDLPPOTokenURL)
-	return runJourneyCheck(ctx, searcher, downloader, os.Stdout)
+	return runJourneyCheck(ctx, searcher, journeyDownloaderFor(cfg), os.Stdout)
+}
+
+func journeyDownloaderFor(cfg *config.Config) *acquisition.YtDlpAudioSearcher {
+	return acquisition.NewYtDlpAudioSearcher(cfg.FFmpegLocation, cfg.YtDLPCookieFile, cfg.YtDLPJSRuntime).
+		WithPOTokenURL(cfg.YtDLPPOTokenURL).
+		WithEnvironment(cfg.Env)
 }
 
 func rankingOnlySearcher(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (journeySearcher, error) {
@@ -68,13 +67,6 @@ func rankingOnlySearcher(ctx context.Context, cfg *config.Config, pool *pgxpool.
 		return nil, err
 	}
 	return disc.RankingOnlySearch(), nil
-}
-
-func throwawayCookieJar(livePath string) (path string, remove func(), err error) {
-	if livePath == "" {
-		return "", func() {}, nil
-	}
-	return acquisition.CopyToTempFile(livePath, "journey-check-cookies-*.txt")
 }
 
 func runJourneyCheck(ctx context.Context, searcher journeySearcher, downloader journeyDownloader, out io.Writer) error {

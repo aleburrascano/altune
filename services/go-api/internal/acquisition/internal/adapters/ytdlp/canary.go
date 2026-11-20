@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -41,28 +40,29 @@ var (
 )
 
 func (s *YtDlpAudioSearcher) Canary(ctx context.Context, source CanarySource) error {
-	cookieFile, cleanup, err := s.cookieJarCopy("acquisition-canary-cookies-*.txt")
+	cookies, err := s.leaseCookieJar("canary")
 	if err != nil {
 		return errors.New(redact.LogText(err.Error()))
 	}
-	defer cleanup()
+	defer cookies.cleanup()
 
 	canaryCtx, cancel := context.WithTimeout(ctx, s.canaryTimeout)
 	defer cancel()
 
-	return s.runCanaryProbe(ctx, canaryCtx, source, cookieFile)
+	return s.runCanaryProbe(ctx, canaryCtx, source, cookies)
 }
 
-func (s *YtDlpAudioSearcher) runCanaryProbe(parent, ctx context.Context, source CanarySource, cookieFile string) error {
+func (s *YtDlpAudioSearcher) runCanaryProbe(parent, ctx context.Context, source CanarySource, cookies cookieLease) error {
 	format := source.Format
 	if format == "" {
 		format = audioFormatSelector
 	}
 	args := s.authFlags([]string{
 		"--no-warnings", "--simulate", "-f", format, "--print", "%(duration)s", "--", ytDlpURL(source.URL),
-	}, cookieFile)
+	}, cookies.path)
 
 	stdout, stderr, err := execcmd.Run(ctx, ytDlpBinary, args...)
+	cookies.settle(parent, err, stderr)
 	if stopped := s.canaryStopped(parent, ctx); stopped != nil {
 		return stopped
 	}
@@ -87,20 +87,7 @@ func isSoundCloudPreviewDuration(stdout string) bool {
 	return err == nil && isSoundCloudPreviewLength(duration)
 }
 
-func (s *YtDlpAudioSearcher) cookieJarCopy(pattern string) (path string, cleanup func(), err error) {
-	if s.cookieFile == "" {
-		return "", func() {}, nil
-	}
-	return CopyToTempFile(s.cookieFile, pattern)
-}
-
-func CopyToTempFile(sourcePath, pattern string) (path string, cleanup func(), err error) {
-	source, err := os.Open(sourcePath)
-	if err != nil {
-		return "", func() {}, err
-	}
-	defer func() { _ = source.Close() }()
-
+func writeTempCopy(contents []byte, pattern string) (path string, cleanup func(), err error) {
 	dir, err := os.MkdirTemp("", cookieCopyDirPattern)
 	if err != nil {
 		return "", func() {}, err
@@ -108,13 +95,11 @@ func CopyToTempFile(sourcePath, pattern string) (path string, cleanup func(), er
 	removeDir := func() { _ = os.RemoveAll(dir) }
 
 	dst, err := os.CreateTemp(dir, pattern)
-	if err != nil {
-		removeDir()
-		return "", func() {}, err
+	if err == nil {
+		_, err = dst.Write(contents)
+		err = errors.Join(err, dst.Close())
 	}
-	defer func() { _ = dst.Close() }()
-
-	if _, err := io.Copy(dst, source); err != nil {
+	if err != nil {
 		removeDir()
 		return "", func() {}, err
 	}

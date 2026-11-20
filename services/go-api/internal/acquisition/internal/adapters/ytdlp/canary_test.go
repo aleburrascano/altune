@@ -192,35 +192,6 @@ func TestCanary_YouTubeStaysOkOnVideoFormatsBecauseDownloadsStillWork(t *testing
 	}
 }
 
-func TestCopyToTempFile_LivesInAReapableDirectoryRemovedByCleanup(t *testing.T) {
-	t.Setenv("TMPDIR", t.TempDir())
-	source := filepath.Join(t.TempDir(), "cookies.txt")
-	if err := os.WriteFile(source, []byte("jar"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	path, cleanup, err := acquisition.CopyToTempFile(source, "copy-*.txt")
-	if err != nil {
-		t.Fatalf("CopyToTempFile() = %v, want nil", err)
-	}
-	dir := filepath.Dir(path)
-	cleanup()
-	if _, err := os.Stat(dir); !os.IsNotExist(err) {
-		t.Errorf("copy dir %q still exists after cleanup, Stat err = %v", dir, err)
-	}
-
-	abandoned, _, err := acquisition.CopyToTempFile(source, "copy-*.txt")
-	if err != nil {
-		t.Fatalf("CopyToTempFile() = %v, want nil", err)
-	}
-	if swept := acquisition.NewTempWorkspace().SweepAbandoned(time.Now().Add(time.Hour)); swept != 1 {
-		t.Errorf("swept %d dirs, want the abandoned copy's dir reaped", swept)
-	}
-	if _, err := os.Stat(filepath.Dir(abandoned)); !os.IsNotExist(err) {
-		t.Errorf("abandoned copy dir %q survived the sweep, Stat err = %v", filepath.Dir(abandoned), err)
-	}
-}
-
 func TestCanary_SoundCloudPreviewUsesTheInspectionSlack(t *testing.T) {
 	cases := []struct {
 		reported string
