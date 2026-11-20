@@ -1706,7 +1706,7 @@ func serveClientEvent(t *testing.T, router chi.Router, analytics string) *httpte
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer fake-token")
 	if analytics != "" {
-		req.Header.Set(telemetry.AnalyticsHeader, analytics)
+		req.Header.Set("X-Altune-Analytics", analytics)
 	}
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -1722,12 +1722,12 @@ func TestHandleRecordEvent_ClientEventEmittedOnce(t *testing.T) {
 	}
 }
 
-func TestHandleRecordEvent_ClientEventHonoursOptOut(t *testing.T) {
+func TestHandleRecordEvent_AnOldBuildThatSendsAnalyticsOffIsStillRecorded(t *testing.T) {
 	logger := &recordingLogger{}
-	rec := serveClientEvent(t, buildClientEventRouter(logger), telemetry.AnalyticsOff)
+	rec := serveClientEvent(t, buildClientEventRouter(logger), "off")
 	discAssertStatus(t, rec, http.StatusNoContent)
-	if len(logger.records) != 0 {
-		t.Fatalf("records = %d, want 0", len(logger.records))
+	if len(logger.records) != 1 {
+		t.Fatalf("records = %d, want 1: the server no longer honours an analytics opt-out", len(logger.records))
 	}
 }
 

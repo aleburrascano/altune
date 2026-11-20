@@ -423,6 +423,22 @@ func TestRouter_CORSPreflightAllowsIdempotencyKeyOnlyForAllowedOrigin(t *testing
 	}
 }
 
+func TestRouter_CORSPreflightRefusesTheRetiredAnalyticsHeader(t *testing.T) {
+	const allowed = "http://127.0.0.1:8081"
+	a := &App{cfg: &config.Config{Env: "test", CORSOrigins: []string{allowed}}}
+	r := a.newRouter(apiWriteTimeout)
+	r.Post("/v1/discovery/events", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	req := httptest.NewRequest(http.MethodOptions, "/v1/discovery/events", nil)
+	req.Header.Set("Origin", allowed)
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	req.Header.Set("Access-Control-Request-Headers", "authorization,x-altune-analytics")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if got := rec.Header().Get("Access-Control-Allow-Headers"); got != "" {
+		t.Errorf("the retired analytics opt-out header got Allow-Headers %q, want none", got)
+	}
+}
+
 func readUntil(t *testing.T, r *bufio.Reader, match func(string) bool) string {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)

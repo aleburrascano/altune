@@ -1,15 +1,14 @@
 package discoverytest_test
 
 import (
-	"altune/go-api/internal/discovery/discoverytest"
-	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery"
 	"context"
 	"errors"
 	"testing"
 )
 
 func TestLyricsProvider_EmptyLyricsIsNilErrorNotAnError(t *testing.T) {
-	f := &discoverytest.LyricsProvider{Lyrics: domain.EmptyDeezerLyrics()}
+	f := &discovery.FakeLyricsProvider{Lyrics: discovery.EmptyDeezerLyrics()}
 
 	got, err := f.Lookup(context.Background(), "1")
 
@@ -20,7 +19,7 @@ func TestLyricsProvider_EmptyLyricsIsNilErrorNotAnError(t *testing.T) {
 
 func TestLyricsProvider_LookupErrorReturnsEmptyLyrics(t *testing.T) {
 	boom := errors.New("boom")
-	f := &discoverytest.LyricsProvider{Lyrics: domain.DeezerLyrics{Plain: "x"}, LookupErr: boom}
+	f := &discovery.FakeLyricsProvider{Lyrics: discovery.DeezerLyrics{Plain: "x"}, LookupErr: boom}
 
 	got, err := f.Lookup(context.Background(), "1")
 
@@ -30,9 +29,9 @@ func TestLyricsProvider_LookupErrorReturnsEmptyLyrics(t *testing.T) {
 }
 
 func TestDeezerEnricher_ResolveRecordsArgumentsAndReturnsResolvedID(t *testing.T) {
-	f := &discoverytest.DeezerEnricher{ResolvedID: "42"}
+	f := &discovery.FakeDeezerEnricher{ResolvedID: "42"}
 
-	id, err := f.ResolveID(context.Background(), domain.ResultKindTrack, "a", "t")
+	id, err := f.ResolveID(context.Background(), discovery.ResultKindTrack, "a", "t")
 
 	if err != nil || id != "42" || f.Resolves != 1 || f.LastArtist != "a" || f.LastTitle != "t" {
 		t.Fatalf("got (%q, %v), resolves=%d last=(%q,%q)", id, err, f.Resolves, f.LastArtist, f.LastTitle)
@@ -41,9 +40,9 @@ func TestDeezerEnricher_ResolveRecordsArgumentsAndReturnsResolvedID(t *testing.T
 
 func TestDeezerEnricher_ResolveErrorReturnsEmptyID(t *testing.T) {
 	boom := errors.New("boom")
-	f := &discoverytest.DeezerEnricher{ResolvedID: "42", ResolveErr: boom}
+	f := &discovery.FakeDeezerEnricher{ResolvedID: "42", ResolveErr: boom}
 
-	id, err := f.ResolveID(context.Background(), domain.ResultKindTrack, "a", "t")
+	id, err := f.ResolveID(context.Background(), discovery.ResultKindTrack, "a", "t")
 
 	if id != "" || !errors.Is(err, boom) {
 		t.Fatalf("got (%q, %v), want (\"\", boom)", id, err)

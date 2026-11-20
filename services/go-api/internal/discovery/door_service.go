@@ -19,6 +19,7 @@ type (
 	FakeArtistContentProvider   = memory.ArtistContentProvider
 	FakeArtworkCache            = memory.FakeArtworkCache
 	FakeArtworkResolver         = memory.ArtworkResolver
+	FakeDeezerEnricher          = memory.DeezerEnricher
 	FakeEventStore              = memory.FakeEventStore
 	FakeFavoritesRepo           = memory.FakeFavoritesRepo
 	FakeGeniusSongCatalog       = memory.GeniusSongCatalog
@@ -26,6 +27,7 @@ type (
 	FakeHistoryReader           = memory.FakeHistoryReader
 	FakeHistoryWriter           = memory.FakeHistoryWriter
 	FakeIdentityStore           = memory.FakeIdentityStore
+	FakeLyricsProvider          = memory.LyricsProvider
 	FakeProvider                = memory.FakeProvider
 	FakeRelatedProvider         = memory.FakeRelatedProvider
 	FakeResultCache             = memory.FakeResultCache

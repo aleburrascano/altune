@@ -111,7 +111,7 @@ func (a *App) newRouter(writeTimeout time.Duration) *chi.Mux {
 	r.Use(httputil.RequestLogger)
 	r.Use(httputil.Recoverer)
 	r.Use(httputil.MaxBodySize(1 << 20))
-	corsHeaders := []string{"Accept", "Authorization", "Content-Type", "Idempotency-Key", telemetry.AppVersionHeader, telemetry.PlatformHeader, telemetry.AnalyticsHeader}
+	corsHeaders := []string{"Accept", "Authorization", "Content-Type", "Idempotency-Key", telemetry.AppVersionHeader, telemetry.PlatformHeader}
 	if a.cfg.IsDevelopment() {
 		corsHeaders = append(corsHeaders, "ngrok-skip-browser-warning")
 	}
