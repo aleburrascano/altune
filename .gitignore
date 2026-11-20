@@ -48,6 +48,8 @@ build/
 !.env.*.example
 *.pem
 *.key
+/cookies.txt
+/cookies/
 
 .superpowers/
 .fallow/

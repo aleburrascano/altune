@@ -13,7 +13,7 @@ Evidence first, code second. An acquisition complaint is almost always one of th
 bash scripts/acq-debug.sh tools
 ```
 
-Each canary shows `OK`, `PREVIEW ONLY` or `FAIL <yt-dlp error>`. A YouTube `FAIL` saying "Sign in to confirm you're not a bot" or "The page needs to be reloaded" means the cookie jar (`cookies.txt` at the root of the VM's repo checkout) has gone stale, or the pinned yt-dlp (`services/go-api/deploy/Dockerfile`) is too old. Both need the user: cookies come from their browser, and a bump ships through the deploy pipeline.
+Each canary shows `OK`, `PREVIEW ONLY` or `FAIL <yt-dlp error>`. A YouTube `FAIL` saying "Sign in to confirm you're not a bot" or "The page needs to be reloaded" means the cookie jar (`cookies/cookies.txt` under the VM's repo checkout, which go-api renews after each successful yt-dlp run) has gone stale, or the pinned yt-dlp (`services/go-api/deploy/Dockerfile`) is too old. Both need the user: cookies come from their browser, and a bump ships through the deploy pipeline. The first bot check each dropped-in jar hits logs `acquisition.cookie_session_first_signin_failure` with `session_age_hours` (since the jar was dropped in), `installed_at`, `write_backs` and `run`.
 
 Done when: you know which sources can deliver today.
 

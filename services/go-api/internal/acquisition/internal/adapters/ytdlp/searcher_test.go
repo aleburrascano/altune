@@ -394,15 +394,18 @@ func readOnlyLiveJar(t *testing.T) string {
 	return jar
 }
 
-func assertLiveJarUntouched(t *testing.T, jar string) {
+func assertLiveJarRenewedAndStillReadOnly(t *testing.T, jar string) {
 	t.Helper()
 	got, err := os.ReadFile(jar)
-	if err != nil || string(got) != liveJarContents {
-		t.Fatalf("live cookie jar = %q, err %v, want it untouched", got, err)
+	if err != nil || string(got) != "# saved by yt-dlp\n" {
+		t.Fatalf("live cookie jar = %q, err %v, want the cookies yt-dlp saved", got, err)
+	}
+	if info, err := os.Stat(jar); err != nil || info.Mode().Perm() != 0o444 {
+		t.Fatalf("live cookie jar stat = %v, %v, want it still read-only", info, err)
 	}
 }
 
-func TestYtDlpAudioSearcher_Search_WorksAgainstAReadOnlyCookieJar(t *testing.T) {
+func TestYtDlpAudioSearcher_Search_WorksAgainstAReadOnlyCookieJarAndRenewsIt(t *testing.T) {
 	jarWritingYtDlp(t, t.TempDir())
 	jar := readOnlyLiveJar(t)
 
@@ -413,10 +416,10 @@ func TestYtDlpAudioSearcher_Search_WorksAgainstAReadOnlyCookieJar(t *testing.T) 
 	if len(got) != 1 {
 		t.Fatalf("search returned %d candidates, want 1", len(got))
 	}
-	assertLiveJarUntouched(t, jar)
+	assertLiveJarRenewedAndStillReadOnly(t, jar)
 }
 
-func TestYtDlpAudioSearcher_Download_WorksAgainstAReadOnlyCookieJar(t *testing.T) {
+func TestYtDlpAudioSearcher_Download_WorksAgainstAReadOnlyCookieJarAndRenewsIt(t *testing.T) {
 	outDir := t.TempDir()
 	jarWritingYtDlp(t, outDir)
 	jar := readOnlyLiveJar(t)
@@ -425,7 +428,7 @@ func TestYtDlpAudioSearcher_Download_WorksAgainstAReadOnlyCookieJar(t *testing.T
 	if _, err := s.Download(context.Background(), "https://www.youtube.com/watch?v=aaaaaaaaaaa", outDir); err != nil {
 		t.Fatalf("download error: %v", err)
 	}
-	assertLiveJarUntouched(t, jar)
+	assertLiveJarRenewedAndStillReadOnly(t, jar)
 }
 
 func TestYtDlpAudioSearcher_SearchQueries_MergesEveryQueryAndEngine(t *testing.T) {

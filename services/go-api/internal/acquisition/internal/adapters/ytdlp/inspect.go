@@ -195,14 +195,15 @@ func (s *YtDlpAudioSearcher) runYtDlpInspect(ctx context.Context, trackURL strin
 	inspectCtx, cancel := context.WithTimeout(ctx, inspectTimeout)
 	defer cancel()
 
-	cookieFile, cleanup, err := s.cookieJarCopy("acquisition-inspect-cookies-*.txt")
+	cookies, err := s.leaseCookieJar("inspect")
 	if err != nil {
 		return inspection{}, fmt.Errorf("yt-dlp inspect: copy cookie jar: %w", err)
 	}
-	defer cleanup()
+	defer cookies.cleanup()
 
-	args := s.authFlags([]string{"-J", "--no-download", "--no-warnings", "--", trackURL}, cookieFile)
+	args := s.authFlags([]string{"-J", "--no-download", "--no-warnings", "--", trackURL}, cookies.path)
 	stdout, stderr, err := execcmd.Run(inspectCtx, ytDlpBinary, args...)
+	cookies.settle(ctx, err, stderr)
 	if err != nil {
 		return inspection{}, fmt.Errorf("yt-dlp inspect: %w (stderr: %s)", err, embeddedStderr(stderr))
 	}

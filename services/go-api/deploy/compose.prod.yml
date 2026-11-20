@@ -12,8 +12,13 @@ x-go-api: &go-api
     - ../.env.production
   environment:
     - YTDLP_POT_URL=http://altune-pot:4416
+    - YTDLP_COOKIE_FILE=/data/cookies/cookies.txt
   volumes:
-    - ../../../cookies.txt:/data/cookies.txt
+    - type: bind
+      source: ../../../cookies
+      target: /data/cookies
+      bind:
+        create_host_path: false
   tmpfs:
     - /tmp:size=1G
   depends_on:
