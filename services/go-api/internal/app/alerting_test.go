@@ -204,7 +204,7 @@ func TestYouTubeCookiesCondition(t *testing.T) {
 	since := time.Date(2026, 11, 20, 9, 30, 0, 0, time.FixedZone("EST", -5*3600))
 
 	t.Run("a signed-out jar pages with the moment and the drop-in command", func(t *testing.T) {
-		cond := buildYouTubeCookiesCondition(func() (time.Time, bool) { return since, true })
+		cond := buildYouTubeCookiesCondition(func(context.Context) (time.Time, bool) { return since, true })
 		if cond.Key != "youtube_cookies_signed_out" {
 			t.Fatalf("key = %q, want youtube_cookies_signed_out", cond.Key)
 		}
@@ -221,7 +221,7 @@ func TestYouTubeCookiesCondition(t *testing.T) {
 	})
 
 	t.Run("a signed-in jar does not fire", func(t *testing.T) {
-		cond := buildYouTubeCookiesCondition(func() (time.Time, bool) { return time.Time{}, false })
+		cond := buildYouTubeCookiesCondition(func(context.Context) (time.Time, bool) { return time.Time{}, false })
 		if alert := cond.Eval(context.Background()); alert != nil {
 			t.Fatalf("alert = %+v, want nil", alert)
 		}

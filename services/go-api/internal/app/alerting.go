@@ -58,11 +58,11 @@ func buildDependencyCondition(health func(context.Context) observe.DependencyHea
 
 const cookieDropInCommand = "cd ~/altune/services/go-api && bash deploy/cookie-jar-dir.sh <export>"
 
-func buildYouTubeCookiesCondition(signedOutSince func() (time.Time, bool)) observe.Condition {
+func buildYouTubeCookiesCondition(signedOutSince func(context.Context) (time.Time, bool)) observe.Condition {
 	return observe.Condition{
 		Key: "youtube_cookies_signed_out",
-		Eval: func(context.Context) *observe.Alert {
-			since, signedOut := signedOutSince()
+		Eval: func(ctx context.Context) *observe.Alert {
+			since, signedOut := signedOutSince(ctx)
 			if !signedOut {
 				return nil
 			}

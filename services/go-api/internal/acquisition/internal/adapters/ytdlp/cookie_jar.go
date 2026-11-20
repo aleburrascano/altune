@@ -78,16 +78,16 @@ type signInFailure struct {
 	Environment     string    `json:"environment"`
 }
 
-func (s *YtDlpAudioSearcher) SignedOutSince() (time.Time, bool) {
+func (s *YtDlpAudioSearcher) SignedOutSince(ctx context.Context) (time.Time, bool) {
 	if s.cookieFile == "" {
 		return time.Time{}, false
 	}
-	current, err := readJarFile(s.cookieFile)
-	if err != nil {
-		return time.Time{}, false
-	}
-	since := loadSession(s.cookieFile).following(current).SignedOutSince
-	if since == nil {
+	var since *time.Time
+	err := cookieLease{live: s.cookieFile}.locked(ctx, func(current jarFile) error {
+		since = loadSession(s.cookieFile).following(current).SignedOutSince
+		return nil
+	})
+	if err != nil || since == nil {
 		return time.Time{}, false
 	}
 	return *since, true
@@ -166,9 +166,8 @@ func (l cookieLease) markSignedIn(ctx context.Context) error {
 	if !l.youtube || loadSession(l.live).SignedOutSince == nil {
 		return nil
 	}
-	return l.locked(ctx, func(current jarFile) error {
-		session := loadSession(l.live).following(current)
-		if !session.InstalledAt.Equal(l.installedAt) || session.SignedOutSince == nil {
+	return l.underSessionLock(ctx, func(session jarSession) error {
+		if session.SignedOutSince == nil {
 			return nil
 		}
 		session.SignedOutSince = nil
@@ -177,7 +176,7 @@ func (l cookieLease) markSignedIn(ctx context.Context) error {
 }
 
 func (l cookieLease) recordSignInFailure(ctx context.Context) error {
-	return l.underLock(ctx, func(_ jarFile, session jarSession) error {
+	return l.underSessionLock(ctx, func(session jarSession) error {
 		first := session.FirstSignInFailure == nil
 		if !first && session.SignedOutSince != nil {
 			return nil
@@ -225,6 +224,16 @@ func (l cookieLease) underLock(ctx context.Context, update func(jarFile, jarSess
 			return nil
 		}
 		return update(current, loadSession(l.live).following(current))
+	})
+}
+
+func (l cookieLease) underSessionLock(ctx context.Context, update func(jarSession) error) error {
+	return l.locked(ctx, func(current jarFile) error {
+		session := loadSession(l.live).following(current)
+		if !session.InstalledAt.Equal(l.installedAt) {
+			return nil
+		}
+		return update(session)
 	})
 }
 

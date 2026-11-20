@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/acquisition"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -636,7 +637,7 @@ func TestCookieJar_TheCopyYtDlpGetsLivesWhereTheTempSweeperReapsIt(t *testing.T)
 }
 
 func signedOutSince(jar string) (time.Time, bool) {
-	return acquisition.NewYtDlpAudioSearcher("", jar, "").SignedOutSince()
+	return acquisition.NewYtDlpAudioSearcher("", jar, "").SignedOutSince(context.Background())
 }
 
 func signedOutJar(t *testing.T) (jar string, since time.Time) {
@@ -698,6 +699,9 @@ var youTubeRunKinds = []runKind{
 	}},
 	{"youtube download", func(t *testing.T, s *acquisition.YtDlpAudioSearcher) {
 		_, _ = s.Download(context.Background(), youTubeWatchURL, t.TempDir())
+	}},
+	{"mixed-case host download", func(t *testing.T, s *acquisition.YtDlpAudioSearcher) {
+		_, _ = s.Download(context.Background(), "https://WWW.YouTube.com/watch?v=jNQXAC9IVRw", t.TempDir())
 	}},
 	{"youtu.be download", func(t *testing.T, s *acquisition.YtDlpAudioSearcher) {
 		_, _ = s.Download(context.Background(), "https://youtu.be/jNQXAC9IVRw", t.TempDir())
@@ -782,5 +786,58 @@ func TestCookieJar_WithNoJarToReadNothingIsSignedOut(t *testing.T) {
 				t.Errorf("signed out since %v, want signed in", since)
 			}
 		})
+	}
+}
+
+func ytDlpOverwritingTheSession(t *testing.T, live, jar string, session map[string]any, after string) {
+	t.Helper()
+	raw, err := json.Marshal(session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	jarSource, sessionSource := filepath.Join(dir, "jar.txt"), filepath.Join(dir, "session.json")
+	if err := os.WriteFile(jarSource, []byte(jar), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sessionSource, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	installYtDlp(t, "cp '"+jarSource+"' '"+live+"'\ncp '"+sessionSource+"' '"+live+".session.json'\n"+after)
+}
+
+func jarDigest(jar string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(jar)))
+}
+
+func TestCookieJar_ASuccessOnAJarThatWasReplacedLeavesTheNewJarSignedOut(t *testing.T) {
+	jar, _ := signedOutJar(t)
+	newJarSignedOut := time.Date(2026, 11, 20, 14, 30, 0, 0, time.UTC)
+	ytDlpOverwritingTheSession(t, jar, signedInJar("human"), map[string]any{
+		"jar_sha256":       jarDigest(signedInJar("human")),
+		"installed_at":     newJarSignedOut.Add(-time.Hour),
+		"signed_out_since": newJarSignedOut,
+	}, "exit 0")
+
+	_ = canaryWith(jar)
+
+	if since, signedOut := signedOutSince(jar); !signedOut || !since.Equal(newJarSignedOut) {
+		t.Errorf("signed out since %v (%v) after the old jar's run succeeded, want the new jar still signed out since %v", since, signedOut, newJarSignedOut)
+	}
+}
+
+func TestCookieJar_ABotCheckWhileAnotherRunKeptRenewedCookiesStillSignsTheJarOut(t *testing.T) {
+	installed := time.Now().Add(-50 * time.Hour).Truncate(time.Second).UTC()
+	jar := liveJarAt(t, signedInJar("old"), 0o644, installed)
+	ytDlpOverwritingTheSession(t, jar, signedInJar("renewed"), map[string]any{
+		"jar_sha256":   jarDigest(signedInJar("renewed")),
+		"installed_at": installed,
+		"write_backs":  1,
+	}, "echo \""+botCheck+"\" >&2\nexit 1")
+
+	_ = canaryWith(jar)
+
+	if since, signedOut := signedOutSince(jar); !signedOut {
+		t.Errorf("signed in after a bot check while another run kept renewed cookies, want signed out (since %v)", since)
 	}
 }
