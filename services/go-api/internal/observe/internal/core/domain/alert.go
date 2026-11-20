@@ -1,6 +1,9 @@
 package domain
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 type Severity int
 
@@ -9,6 +12,18 @@ const (
 	SeverityLog
 	SeveritySignal
 )
+
+func (s Severity) String() string {
+	switch s {
+	case SeverityFix:
+		return "fix"
+	case SeverityLog:
+		return "log"
+	case SeveritySignal:
+		return "signal"
+	}
+	return fmt.Sprintf("unknown (%d)", int(s))
+}
 
 type Alert struct {
 	Title    string

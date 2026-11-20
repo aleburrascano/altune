@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -299,7 +301,7 @@ func TestAlertConditions_AlwaysWatchCoverage(t *testing.T) {
 	}
 }
 
-func TestStartAlertMonitor_NotifierFollowsWebhookConfig(t *testing.T) {
+func TestStartAlertMonitor_NotifierFollowsAlertConfig(t *testing.T) {
 	t.Run("webhook url set builds a real notifier", func(t *testing.T) {
 		a := &App{cfg: &config.Config{AlertWebhookURL: "http://127.0.0.1:1/alerts"}}
 		a.startAlertMonitor(context.Background())
@@ -308,7 +310,38 @@ func TestStartAlertMonitor_NotifierFollowsWebhookConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("webhook url unset warns once that alerts are log-only", func(t *testing.T) {
+	t.Run("webhook url set sends alerts to that webhook", func(t *testing.T) {
+		var posts atomic.Int32
+		hook := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { posts.Add(1) }))
+		defer hook.Close()
+
+		a := &App{cfg: &config.Config{AlertWebhookURL: hook.URL}}
+		if err := a.alertNotifier(context.Background()).Notify(context.Background(), observe.Alert{Title: "t"}); err != nil {
+			t.Fatalf("Notify = %v, want nil", err)
+		}
+		if posts.Load() != 1 {
+			t.Fatalf("webhook got %d posts, want 1", posts.Load())
+		}
+	})
+
+	t.Run("email settings build a real notifier without the log-only warning", func(t *testing.T) {
+		var buf bytes.Buffer
+		prev := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+		t.Cleanup(func() { slog.SetDefault(prev) })
+
+		a := &App{cfg: &config.Config{ResendAPIKey: "re_TESTKEY_never_in_output", AlertEmailTo: "ops@example.com"}}
+		a.startAlertMonitor(context.Background())
+
+		if a.alertMonitor.Status().NopNotifier {
+			t.Fatal("monitor kept NopNotifier although RESEND_API_KEY and ALERT_EMAIL_TO are set")
+		}
+		if strings.Contains(buf.String(), "log-only") || strings.Contains(buf.String(), "TESTKEY") {
+			t.Fatalf("startup log warns log-only or carries the key: %s", buf.String())
+		}
+	})
+
+	t.Run("no alert channel warns once that alerts are log-only", func(t *testing.T) {
 		var buf bytes.Buffer
 		prev := slog.Default()
 		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
@@ -318,7 +351,7 @@ func TestStartAlertMonitor_NotifierFollowsWebhookConfig(t *testing.T) {
 		a.startAlertMonitor(context.Background())
 
 		if !a.alertMonitor.Status().NopNotifier {
-			t.Fatal("monitor has a real notifier without ALERT_WEBHOOK_URL")
+			t.Fatal("monitor has a real notifier without any alert channel")
 		}
 		if n := strings.Count(buf.String(), "alerts are log-only"); n != 1 {
 			t.Fatalf("log-only warnings = %d, want 1; log: %s", n, buf.String())
