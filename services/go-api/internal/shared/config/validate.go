@@ -1,12 +1,12 @@
 package config
 
 import (
+	"altune/go-api/internal/shared/config/internal/adapters/fsprobe"
 	"altune/go-api/internal/shared/redis"
 	"errors"
 	"fmt"
 	"net"
 	"net/url"
-	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -95,7 +95,7 @@ func (c *Config) validateBehavioralCorpusPath() error {
 		return nil
 	}
 	dir := filepath.Dir(c.BehavioralCorpusPath)
-	info, err := os.Stat(dir)
+	info, err := fsprobe.Stat(dir)
 	if err != nil {
 		return fmt.Errorf("BEHAVIORAL_CORPUS_PATH parent directory is unusable: %w", err)
 	}
@@ -106,24 +106,45 @@ func (c *Config) validateBehavioralCorpusPath() error {
 }
 
 func probeWritableDir(dir string) error {
-	f, err := os.CreateTemp(dir, ".altune-write-probe-*")
+	cleanup, err := fsprobe.TempFile(dir, ".altune-write-probe-*")
 	if err != nil {
 		return fmt.Errorf("BEHAVIORAL_CORPUS_PATH parent %q is not writable (read-only mount or missing permission): %w", dir, err)
 	}
-	name := f.Name()
-	closeErr := f.Close()
-	removeErr := os.Remove(name)
-	return errors.Join(closeErr, removeErr)
+	return cleanup()
 }
 
 func (c *Config) validateAlerting() error {
 	if c.AlertZeroResultThreshold < 0 {
 		return fmt.Errorf("ALERT_ZERO_RESULT_THRESHOLD must be >= 0, got %d", c.AlertZeroResultThreshold)
 	}
+	if err := c.validateAlertEmail(); err != nil {
+		return err
+	}
 	if c.AlertWebhookURL == "" {
 		return nil
 	}
+	if c.HasAlertEmail() {
+		return errors.New("ALERT_WEBHOOK_URL and RESEND_API_KEY with ALERT_EMAIL_TO are both set: alerts go to one channel, so unset one")
+	}
 	return validateSecureURL("ALERT_WEBHOOK_URL", c.AlertWebhookURL)
+}
+
+var alertEmailPattern = regexp.MustCompile(`^[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+$`)
+
+func (c *Config) validateAlertEmail() error {
+	if c.ResendAPIKey != "" && c.AlertEmailTo == "" {
+		return errors.New("ALERT_EMAIL_TO must be set when RESEND_API_KEY is set")
+	}
+	if c.AlertEmailTo == "" {
+		return nil
+	}
+	if c.ResendAPIKey == "" {
+		return errors.New("RESEND_API_KEY must be set when ALERT_EMAIL_TO is set")
+	}
+	if !alertEmailPattern.MatchString(c.AlertEmailTo) {
+		return fmt.Errorf("ALERT_EMAIL_TO must be one email address, got %q", c.AlertEmailTo)
+	}
+	return nil
 }
 
 func (c *Config) validateTransportSecurity() error {
@@ -322,11 +343,10 @@ func (c *Config) validateCookieFile() error {
 	if c.YtDLPCookieFile == "" {
 		return nil
 	}
-	f, err := os.Open(c.YtDLPCookieFile)
-	if err != nil {
+	if err := fsprobe.Readable(c.YtDLPCookieFile); err != nil {
 		return fmt.Errorf("YTDLP_COOKIE_FILE is not readable: %w", err)
 	}
-	return f.Close()
+	return nil
 }
 
 var allowedJSRuntimes = map[string]bool{"node": true, "deno": true}

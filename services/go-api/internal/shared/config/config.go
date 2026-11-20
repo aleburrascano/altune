@@ -129,6 +129,8 @@ type Config struct {
 	AcquisitionConfidenceFloor float64 `env:"ACQUISITION_CONFIDENCE_FLOOR" envDefault:"0.5"`
 	AlertZeroResultThreshold   int     `env:"ALERT_ZERO_RESULT_THRESHOLD" envDefault:"0"`
 	AlertWebhookURL            string  `env:"ALERT_WEBHOOK_URL"`
+	ResendAPIKey               string  `env:"RESEND_API_KEY"`
+	AlertEmailTo               string  `env:"ALERT_EMAIL_TO"`
 	IdentityVerifyOnPersist    bool    `env:"IDENTITY_VERIFY_ON_PERSIST" envDefault:"false"`
 
 	DiscoverySearchProviders     []string      `env:"DISCOVERY_SEARCH_PROVIDERS" envSeparator:"," envDefault:"deezer,applemusic,spotify,youtube,soundcloud"`
@@ -168,6 +170,8 @@ func (c *Config) normalize() {
 	}
 	c.SupabaseJWTAud = strings.TrimSpace(c.SupabaseJWTAud)
 	c.AlertWebhookURL = strings.TrimSpace(c.AlertWebhookURL)
+	c.ResendAPIKey = strings.TrimSpace(c.ResendAPIKey)
+	c.AlertEmailTo = strings.TrimSpace(c.AlertEmailTo)
 	for i, origin := range c.CORSOrigins {
 		c.CORSOrigins[i] = strings.TrimSpace(origin)
 	}
@@ -211,6 +215,7 @@ func (c Config) LogValue() slog.Value {
 		slog.Bool("has_amazonmusic", c.HasAmazonMusic()),
 		slog.Bool("has_ytmusic", c.HasYouTubeMusic()),
 		slog.Bool("has_now_playing_enrichment", c.HasNowPlayingEnrichment()),
+		slog.Bool("has_alert_email", c.HasAlertEmail()),
 		slog.String("audio_key_prefix", c.AudioKeyPrefix),
 	)
 }
