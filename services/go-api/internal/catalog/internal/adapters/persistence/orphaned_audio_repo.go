@@ -90,7 +90,7 @@ func (r *PgxOrphanedAudioRepository) AudioUsage(ctx context.Context, audioRef st
 		audioRef, owner.UUID(), domain.AcquisitionPending.String(),
 	).Scan(&referenced, &acquiring)
 	if err != nil {
-		return ports.AudioReferenced, fmt.Errorf("check audio usage: %w", err)
+		return ports.AudioReferenced, fmt.Errorf("check audio usage: %w", classifyDBError(err))
 	}
 	switch {
 	case referenced:
@@ -137,5 +137,5 @@ func orphanQueueErr(op string, err error) error {
 	if errors.As(err, &pgErr) && pgErr.Code == undefinedTableCode {
 		return fmt.Errorf("%s: %w: %w", op, ports.ErrOrphanedAudioQueueUnavailable, err)
 	}
-	return fmt.Errorf("%s: %w", op, err)
+	return fmt.Errorf("%s: %w", op, classifyDBError(err))
 }

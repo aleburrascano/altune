@@ -45,24 +45,46 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
+	stored, created, err := r.addInTx(ctx, track)
+	return stored, created, classifyDBError(err)
+}
+
+func (r *PgxTrackRepository) addInTx(ctx context.Context, track *domain.Track) (*domain.Track, bool, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, false, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
+	err = insertTrack(ctx, tx, track)
+	if errors.Is(err, pgx.ErrNoRows) {
+		_ = tx.Rollback(ctx)
+		existing, err := r.resolveConflictingTrack(ctx, track)
+		return existing, false, err
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	if err := writeFeaturedAndCommit(ctx, tx, track); err != nil {
+		return nil, false, err
+	}
+	return track, true, nil
+}
+
+const insertTrackSQL = `INSERT INTO tracks (
+		id, user_id, title, artist, album, duration_seconds,
+		added_at, artwork_url, acquisition_status, dedup_key,
+		year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url,
+		rejected_source_keys, audio_version, acquisition_started_at, idempotency_key,
+		acquisition_confidence, acquisition_evidence, catalog_duration_seconds, catalog_mbid, catalog_explicit, catalog_sources, acquisition_available_at
+	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,
+		CASE WHEN $9::text = 'pending' THEN now() END)
+	ON CONFLICT DO NOTHING
+	RETURNING id`
+
+func insertTrack(ctx context.Context, tx pgx.Tx, track *domain.Track) error {
 	var returnedID uuid.UUID
-	err = tx.QueryRow(ctx,
-		`INSERT INTO tracks (
-			id, user_id, title, artist, album, duration_seconds,
-			added_at, artwork_url, acquisition_status, dedup_key,
-			year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url,
-			rejected_source_keys, audio_version, acquisition_started_at, idempotency_key,
-			acquisition_confidence, acquisition_evidence, catalog_duration_seconds, catalog_mbid, catalog_explicit, catalog_sources, acquisition_available_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,
-			CASE WHEN $9::text = 'pending' THEN now() END)
-		ON CONFLICT DO NOTHING
-		RETURNING id`,
+	return tx.QueryRow(ctx, insertTrackSQL,
 		track.ID.UUID(), track.UserId.UUID(),
 		track.Title, track.Artist, track.Album, track.DurationSeconds,
 		track.AddedAt, track.ArtworkURL, track.AcquisitionStatus.String(), track.DedupKey,
@@ -72,26 +94,13 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 		track.ConfidenceScore, track.EvidenceJSON, track.CatalogDurationSeconds,
 		track.CatalogMBID, track.CatalogExplicit, catalogSourcesJSON(track.CatalogSources),
 	).Scan(&returnedID)
+}
 
-	if errors.Is(err, pgx.ErrNoRows) {
-		_ = tx.Rollback(ctx)
-		existing, lookupErr := r.resolveConflictingTrack(ctx, track)
-		if lookupErr != nil {
-			return nil, false, lookupErr
-		}
-		return existing, false, nil
-	}
-	if err != nil {
-		return nil, false, err
-	}
-
+func writeFeaturedAndCommit(ctx context.Context, tx pgx.Tx, track *domain.Track) error {
 	if err := writeTrackFeatured(ctx, tx, track.UserId.UUID(), track.ID.UUID(), track.FeaturedArtists); err != nil {
-		return nil, false, err
+		return err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return nil, false, err
-	}
-	return track, true, nil
+	return tx.Commit(ctx)
 }
 
 func (r *PgxTrackRepository) GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {
@@ -141,13 +150,17 @@ func (r *PgxTrackRepository) ListForUser(ctx context.Context, userId shared.User
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
-	rows, err := r.pool.Query(ctx,
-		`SELECT `+trackColumns+`
-		FROM tracks WHERE user_id = $1
-		ORDER BY added_at DESC, id DESC
-		LIMIT $2 OFFSET $3`,
-		userId.UUID(), limit, offset,
-	)
+	tracks, total, err := r.listForUser(ctx, userId, limit, offset)
+	return tracks, total, classifyDBError(err)
+}
+
+const listTracksForUserSQL = `SELECT ` + trackColumns + `
+	FROM tracks WHERE user_id = $1
+	ORDER BY added_at DESC, id DESC
+	LIMIT $2 OFFSET $3`
+
+func (r *PgxTrackRepository) listForUser(ctx context.Context, userId shared.UserId, limit, offset int) ([]*domain.Track, int, error) {
+	rows, err := r.pool.Query(ctx, listTracksForUserSQL, userId.UUID(), limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -171,18 +184,19 @@ func (r *PgxTrackRepository) ListByIDs(ctx context.Context, userId shared.UserId
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	uuids := make([]uuid.UUID, len(ids))
-	for i, id := range ids {
-		uuids[i] = id.UUID()
-	}
 
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
+	tracks, err := r.listByIDs(ctx, userId, trackIdUUIDs(ids))
+	return tracks, classifyDBError(err)
+}
+
+func (r *PgxTrackRepository) listByIDs(ctx context.Context, userId shared.UserId, ids []uuid.UUID) ([]*domain.Track, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT `+trackColumns+`
 		FROM tracks WHERE user_id = $1 AND id = ANY($2)`,
-		userId.UUID(), uuids,
+		userId.UUID(), ids,
 	)
 	if err != nil {
 		return nil, err
@@ -271,7 +285,7 @@ func (r *PgxTrackRepository) SetTrackNumber(ctx context.Context, id domain.Track
 		id.UUID(), userId.UUID(), trackNumber,
 	)
 	if err != nil {
-		return false, fmt.Errorf("set track number for %s: %w", id.String(), err)
+		return false, classifyDBError(fmt.Errorf("set track number for %s: %w", id.String(), err))
 	}
 	return tag.RowsAffected() > 0, nil
 }
@@ -280,11 +294,16 @@ func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, user
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
+	deleted, audioRef, err = r.deleteInTx(ctx, id, userId)
+	return deleted, audioRef, classifyDBError(err)
+}
+
+func (r *PgxTrackRepository) deleteInTx(ctx context.Context, id domain.TrackId, userId shared.UserId) (bool, *string, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return false, nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	deleted, ref, err := deleteTrackRow(ctx, tx, id, userId)
 	if err != nil {
@@ -293,11 +312,10 @@ func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, user
 	if !deleted {
 		return false, nil, nil
 	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return false, nil, err
 	}
-	return deleted, ref, nil
+	return true, ref, nil
 }
 
 func deleteTrackRow(ctx context.Context, tx pgx.Tx, id domain.TrackId, userId shared.UserId) (bool, *string, error) {
@@ -340,6 +358,11 @@ func (r *PgxTrackRepository) getTrackByUniqueKey(ctx context.Context, userId sha
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
+	track, err := r.findTrackByUniqueKey(ctx, userId, column, value)
+	return track, classifyDBError(err)
+}
+
+func (r *PgxTrackRepository) findTrackByUniqueKey(ctx context.Context, userId shared.UserId, column, value string) (*domain.Track, error) {
 	row := r.pool.QueryRow(ctx,
 		`SELECT `+trackColumns+`
 		FROM tracks WHERE user_id = $1 AND `+column+` = $2`,
@@ -370,7 +393,7 @@ func (r *PgxTrackRepository) ListOwnedTrackRefs(
 	for len(refs) < maxOwnedTrackRefs {
 		page, err := r.listOwnedTrackRefsPage(ctx, userId, after)
 		if err != nil {
-			return nil, err
+			return nil, classifyDBError(err)
 		}
 		refs = append(refs, page...)
 		if len(page) < ownedTrackRefsPageSize {

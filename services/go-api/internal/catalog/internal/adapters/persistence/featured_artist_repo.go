@@ -146,14 +146,31 @@ func (r *PgxFeaturedArtistRepository) ReplaceFeaturedArtists(
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
+	return classifyDBError(r.replaceInTx(ctx, id, userId, feats))
+}
+
+func (r *PgxFeaturedArtistRepository) replaceInTx(ctx context.Context, id domain.TrackId, userId shared.UserId, feats []domain.FeaturedArtist) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
+	if err := requireOwnedTrack(ctx, tx, id, userId); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM track_featured_artists WHERE track_id = $1`, id.UUID()); err != nil {
+		return fmt.Errorf("clear featured artists: %w", err)
+	}
+	if err := writeTrackFeatured(ctx, tx, userId.UUID(), id.UUID(), feats); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func requireOwnedTrack(ctx context.Context, tx pgx.Tx, id domain.TrackId, userId shared.UserId) error {
 	var owned bool
-	err = tx.QueryRow(ctx,
+	err := tx.QueryRow(ctx,
 		`SELECT EXISTS (SELECT 1 FROM tracks WHERE id = $1 AND user_id = $2)`,
 		id.UUID(), userId.UUID(),
 	).Scan(&owned)
@@ -163,14 +180,7 @@ func (r *PgxFeaturedArtistRepository) ReplaceFeaturedArtists(
 	if !owned {
 		return fmt.Errorf("track %s not found for user", id.String())
 	}
-
-	if _, err := tx.Exec(ctx, `DELETE FROM track_featured_artists WHERE track_id = $1`, id.UUID()); err != nil {
-		return fmt.Errorf("clear featured artists: %w", err)
-	}
-	if err := writeTrackFeatured(ctx, tx, userId.UUID(), id.UUID(), feats); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
+	return nil
 }
 
 const featuringResultCap = domain.MaxLibraryPageSize

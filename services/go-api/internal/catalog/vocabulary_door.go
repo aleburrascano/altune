@@ -15,7 +15,11 @@ type (
 	ReconcileOrphanedAudioService = audio.ReconcileOrphanedAudioService
 )
 
-const AudioReferenced = ports.AudioReferenced
+const (
+	AudioOwnerAcquiring = ports.AudioOwnerAcquiring
+	AudioReferenced     = ports.AudioReferenced
+	AudioUnused         = ports.AudioUnused
+)
 
 var (
 	ErrAudioOrphaned                 = domain.ErrAudioOrphaned

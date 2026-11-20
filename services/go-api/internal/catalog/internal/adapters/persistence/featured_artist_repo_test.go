@@ -49,6 +49,37 @@ func TestPgxTrackRepo_FeaturedArtistsRoundTrip(t *testing.T) {
 	}
 }
 
+func TestPgxFeaturedArtistRepo_ReplaceFeaturedArtists_RefusesAnotherUsersTrackAndLeavesItsArtists(t *testing.T) {
+	pool := testPool(t)
+	repo := catalog.NewPgxCatalogTrackRepository(pool)
+	ctx := context.Background()
+	owner, intruder := shared.NewUserId(uuid.New()), shared.NewUserId(uuid.New())
+	cleanupFeaturedArtists(t, pool, owner)
+	cleanupFeaturedArtists(t, pool, intruder)
+	track := newTestTrackForDB(t, owner)
+	track.FeaturedArtists = []catalog.FeaturedArtist{{Name: "Guest", Role: catalog.RoleFeatured}}
+	cleanupTrack(t, pool, track.ID, owner)
+	if _, _, err := repo.Add(ctx, track); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+
+	err := repo.ReplaceFeaturedArtists(ctx, track.ID, intruder, []catalog.FeaturedArtist{{Name: "Intruder", Role: catalog.RoleFeatured}})
+
+	if err == nil {
+		t.Fatal("ReplaceFeaturedArtists() on another user's track succeeded, want an error")
+	}
+	got, err := repo.GetByDedupKey(ctx, owner, track.DedupKey)
+	if err != nil {
+		t.Fatalf("GetByDedupKey() error = %v", err)
+	}
+	if len(got.FeaturedArtists) != 1 || got.FeaturedArtists[0].Name != "Guest" {
+		t.Errorf("owner's featured artists = %+v, want only Guest", got.FeaturedArtists)
+	}
+	if n := featuredRowCount(t, pool, intruder); n != 0 {
+		t.Errorf("intruder's featured_artists rows = %d, want 0", n)
+	}
+}
+
 func addTrackForFeaturing(t *testing.T, pool *pgxpool.Pool, userId shared.UserId) *catalog.Track {
 	t.Helper()
 	track := newTestTrackForDB(t, userId)

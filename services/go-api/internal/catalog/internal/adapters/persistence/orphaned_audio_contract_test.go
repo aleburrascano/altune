@@ -1,9 +1,8 @@
-package persistence
+package persistence_test
 
 import (
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/internal/adapters/contract"
-	"altune/go-api/internal/catalog/internal/core/ports"
 	"context"
 	"testing"
 
@@ -11,26 +10,26 @@ import (
 )
 
 type cleaningOrphanQueue struct {
-	*PgxOrphanedAudioRepository
+	*catalog.PgxOrphanedAudioRepository
 	t    *testing.T
 	pool *pgxpool.Pool
 }
 
-func (q *cleaningOrphanQueue) RecordOrphanedAudio(ctx context.Context, orphan ports.OrphanedAudio) error {
+func (q *cleaningOrphanQueue) RecordOrphanedAudio(ctx context.Context, orphan catalog.OrphanedAudio) error {
 	cleanupOrphan(q.t, q.pool, orphan.AudioRef)
 	return q.PgxOrphanedAudioRepository.RecordOrphanedAudio(ctx, orphan)
 }
 
 func TestPgxOrphanedAudioRepo_Contract(t *testing.T) {
 	pool := testPool(t)
-	contract.OrphanedAudioQueueContract(t, func(t *testing.T) (ports.OrphanedAudioQueue, func(*domain.Track)) {
-		seed := func(track *domain.Track) {
+	contract.OrphanedAudioQueueContract(t, func(t *testing.T) (catalog.OrphanedAudioQueue, func(*catalog.Track)) {
+		seed := func(track *catalog.Track) {
 			t.Helper()
 			cleanupTrack(t, pool, track.ID, track.UserId)
-			if _, _, err := NewPgxTrackRepository(pool).Add(context.Background(), track); err != nil {
+			if _, _, err := catalog.NewPgxTrackRepository(pool).Add(context.Background(), track); err != nil {
 				t.Fatalf("Add: %v", err)
 			}
 		}
-		return &cleaningOrphanQueue{PgxOrphanedAudioRepository: NewPgxOrphanedAudioRepository(pool), t: t, pool: pool}, seed
+		return &cleaningOrphanQueue{PgxOrphanedAudioRepository: catalog.NewPgxOrphanedAudioRepository(pool), t: t, pool: pool}, seed
 	})
 }
