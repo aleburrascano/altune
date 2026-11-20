@@ -21,7 +21,10 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 
 func (a *App) alertConditions(events coverageEvents) []observe.Condition {
 	gap, queryFailing := buildCoverageConditions(events)
-	conditions := []observe.Condition{buildDependencyCondition(a.dependencyHealth), gap, queryFailing}
+	conditions := []observe.Condition{
+		buildDependencyCondition(a.dependencyHealth), gap, queryFailing,
+		buildYouTubeCookiesCondition(a.newYtDlpSearcher().SignedOutSince),
+	}
 	return append(conditions, a.jobConditions(alertableJobs)...)
 }
 
@@ -47,6 +50,27 @@ func buildDependencyCondition(health func(context.Context) observe.DependencyHea
 			return &observe.Alert{
 				Title:    "altune dependency down",
 				Message:  dependencyDownMessage(h),
+				Severity: observe.SeveritySignal,
+			}
+		},
+	}
+}
+
+const cookieDropInCommand = "cd ~/altune/services/go-api && bash deploy/cookie-jar-dir.sh <export>"
+
+func buildYouTubeCookiesCondition(signedOutSince func(context.Context) (time.Time, bool)) observe.Condition {
+	return observe.Condition{
+		Key: "youtube_cookies_signed_out",
+		Eval: func(ctx context.Context) *observe.Alert {
+			since, signedOut := signedOutSince(ctx)
+			if !signedOut {
+				return nil
+			}
+			return &observe.Alert{
+				Title: "altune YouTube cookies expired",
+				Message: fmt.Sprintf("YouTube has asked yt-dlp to sign in since %s, so YouTube downloads fail. "+
+					"Export cookies.txt from a browser signed in to YouTube, copy it to the VM and run: %s",
+					since.UTC().Format(time.RFC3339), cookieDropInCommand),
 				Severity: observe.SeveritySignal,
 			}
 		},

@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"math"
+	"net/url"
 	"os"
 	"slices"
 	"strings"
@@ -33,6 +34,12 @@ const (
 	renewalRefusedLog     = "acquisition.cookie_renewal_refused"
 )
 
+const youTubeSearchPrefix = "ytsearch"
+
+var youTubeTargetHosts = map[string]bool{
+	"youtube.com": true, "www.youtube.com": true, "m.youtube.com": true, "music.youtube.com": true, "youtu.be": true,
+}
+
 var sessionCookies = []string{
 	"LOGIN_INFO", "SID", "HSID", "SSID", "APISID", "SAPISID",
 	"__Secure-1PAPISID", "__Secure-3PAPISID", "__Secure-1PSID", "__Secure-3PSID", "__Secure-1PSIDTS",
@@ -42,6 +49,8 @@ type cookieLease struct {
 	live        string
 	run         string
 	environment string
+	youtube     bool
+	installedAt time.Time
 	path        string
 	snapshot    []byte
 	cleanup     func()
@@ -58,6 +67,7 @@ type jarSession struct {
 	InstalledAt        time.Time      `json:"installed_at"`
 	WriteBacks         int            `json:"write_backs"`
 	FirstSignInFailure *signInFailure `json:"first_signin_failure"`
+	SignedOutSince     *time.Time     `json:"signed_out_since"`
 }
 
 type signInFailure struct {
@@ -68,19 +78,46 @@ type signInFailure struct {
 	Environment     string    `json:"environment"`
 }
 
-func (s *YtDlpAudioSearcher) leaseCookieJar(run string) (cookieLease, error) {
+func (s *YtDlpAudioSearcher) SignedOutSince(ctx context.Context) (time.Time, bool) {
+	if s.cookieFile == "" {
+		return time.Time{}, false
+	}
+	var since *time.Time
+	err := cookieLease{live: s.cookieFile}.locked(ctx, func(current jarFile) error {
+		since = loadSession(s.cookieFile).following(current).SignedOutSince
+		return nil
+	})
+	if err != nil || since == nil {
+		return time.Time{}, false
+	}
+	return *since, true
+}
+
+func (s *YtDlpAudioSearcher) leaseCookieJar(run, target string) (cookieLease, error) {
 	if s.cookieFile == "" {
 		return cookieLease{cleanup: func() {}}, nil
 	}
-	snapshot, err := os.ReadFile(s.cookieFile)
+	live, err := readJarFile(s.cookieFile)
 	if err != nil {
 		return cookieLease{}, err
 	}
-	path, cleanup, err := writeTempCopy(snapshot, "acquisition-"+run+"-cookies-*.txt")
+	path, cleanup, err := writeTempCopy(live.contents, "acquisition-"+run+"-cookies-*.txt")
 	if err != nil {
 		return cookieLease{}, err
 	}
-	return cookieLease{live: s.cookieFile, run: run, environment: s.environment, path: path, snapshot: snapshot, cleanup: cleanup}, nil
+	return cookieLease{
+		live: s.cookieFile, run: run, environment: s.environment,
+		youtube: isYouTubeTarget(target), installedAt: loadSession(s.cookieFile).following(live).InstalledAt,
+		path: path, snapshot: live.contents, cleanup: cleanup,
+	}, nil
+}
+
+func isYouTubeTarget(target string) bool {
+	if strings.HasPrefix(target, youTubeSearchPrefix) {
+		return true
+	}
+	u, err := url.Parse(target)
+	return err == nil && youTubeTargetHosts[strings.ToLower(u.Hostname())]
 }
 
 func (l cookieLease) settle(ctx context.Context, runErr error, stderr string) {
@@ -90,7 +127,7 @@ func (l cookieLease) settle(ctx context.Context, runErr error, stderr string) {
 	var err error
 	switch {
 	case runErr == nil:
-		err = l.keepRenewedCookies(ctx)
+		err = errors.Join(l.keepRenewedCookies(ctx), l.markSignedIn(ctx))
 	case asksToSignIn(stderr):
 		err = l.recordSignInFailure(ctx)
 	}
@@ -125,16 +162,38 @@ func (l cookieLease) keepRenewedCookies(ctx context.Context) error {
 	})
 }
 
-func (l cookieLease) recordSignInFailure(ctx context.Context) error {
-	return l.underLock(ctx, func(_ jarFile, session jarSession) error {
-		if session.FirstSignInFailure != nil {
+func (l cookieLease) markSignedIn(ctx context.Context) error {
+	if !l.youtube || loadSession(l.live).SignedOutSince == nil {
+		return nil
+	}
+	return l.underSessionLock(ctx, func(session jarSession) error {
+		if session.SignedOutSince == nil {
 			return nil
 		}
-		session.FirstSignInFailure = l.signInFailure(session, time.Now())
+		session.SignedOutSince = nil
+		return session.save(l.live)
+	})
+}
+
+func (l cookieLease) recordSignInFailure(ctx context.Context) error {
+	return l.underSessionLock(ctx, func(session jarSession) error {
+		first := session.FirstSignInFailure == nil
+		if !first && session.SignedOutSince != nil {
+			return nil
+		}
+		now := time.Now()
+		if first {
+			session.FirstSignInFailure = l.signInFailure(session, now)
+		}
+		if session.SignedOutSince == nil {
+			session.SignedOutSince = &now
+		}
 		if err := session.save(l.live); err != nil {
 			return err
 		}
-		logFirstSignInFailure(ctx, session)
+		if first {
+			logFirstSignInFailure(ctx, session)
+		}
 		return nil
 	})
 }
@@ -160,16 +219,35 @@ func logFirstSignInFailure(ctx context.Context, session jarSession) {
 }
 
 func (l cookieLease) underLock(ctx context.Context, update func(jarFile, jarSession) error) error {
+	return l.locked(ctx, func(current jarFile) error {
+		if !bytes.Equal(current.contents, l.snapshot) {
+			return nil
+		}
+		return update(current, loadSession(l.live).following(current))
+	})
+}
+
+func (l cookieLease) underSessionLock(ctx context.Context, update func(jarSession) error) error {
+	return l.locked(ctx, func(current jarFile) error {
+		session := loadSession(l.live).following(current)
+		if !session.InstalledAt.Equal(l.installedAt) {
+			return nil
+		}
+		return update(session)
+	})
+}
+
+func (l cookieLease) locked(ctx context.Context, update func(jarFile) error) error {
 	unlock, err := lockJar(ctx, l.live+cookieJarLockSuffix)
 	if err != nil {
 		return err
 	}
 	defer unlock()
 	current, err := readJarFile(l.live)
-	if err != nil || !bytes.Equal(current.contents, l.snapshot) {
+	if err != nil {
 		return err
 	}
-	return update(current, loadSession(l.live).following(current))
+	return update(current)
 }
 
 func readJarFile(path string) (jarFile, error) {

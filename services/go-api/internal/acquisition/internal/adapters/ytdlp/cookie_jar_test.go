@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/acquisition"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -632,5 +633,211 @@ func TestCookieJar_TheCopyYtDlpGetsLivesWhereTheTempSweeperReapsIt(t *testing.T)
 	}
 	if _, statErr := os.Stat(filepath.Dir(string(copyPath))); swept != 1 || !os.IsNotExist(statErr) {
 		t.Errorf("swept %d dirs, copy dir stat err %v, want the copy's dir reaped as abandoned", swept, statErr)
+	}
+}
+
+func signedOutSince(jar string) (time.Time, bool) {
+	return acquisition.NewYtDlpAudioSearcher("", jar, "").SignedOutSince(context.Background())
+}
+
+func signedOutJar(t *testing.T) (jar string, since time.Time) {
+	t.Helper()
+	jar = liveJar(t, signedInJar("old"))
+	ytDlpFailing(t, botCheck)
+	_ = canaryWith(jar)
+	since, signedOut := signedOutSince(jar)
+	if !signedOut {
+		t.Fatal("a bot check did not mark the jar signed out")
+	}
+	return jar, since
+}
+
+func TestCookieJar_EveryKindOfRunThatHitsTheBotCheckMarksTheJarSignedOutFromThatMoment(t *testing.T) {
+	for _, kind := range everyRunKind {
+		t.Run(kind.name, func(t *testing.T) {
+			jar := liveJar(t, signedInJar("old"))
+			ytDlpFailing(t, botCheck)
+			before := time.Now()
+
+			kind.run(t, acquisition.NewYtDlpAudioSearcher("", jar, ""))
+
+			since, signedOut := signedOutSince(jar)
+			if !signedOut || since.Before(before) || since.After(time.Now()) {
+				t.Errorf("signed out since %v (%v) after a bot-checked %s, want signed out from a moment after %v", since, signedOut, kind.name, before)
+			}
+		})
+	}
+}
+
+func TestCookieJar_OtherFailuresDoNotMarkTheJarSignedOut(t *testing.T) {
+	jar := liveJar(t, signedInJar("old"))
+	ytDlpFailing(t, "ERROR: [youtube] jNQXAC9IVRw: Video unavailable")
+
+	_ = canaryWith(jar)
+
+	if since, signedOut := signedOutSince(jar); signedOut {
+		t.Errorf("signed out since %v after an unavailable video, want signed in", since)
+	}
+}
+
+func TestCookieJar_LaterBotChecksKeepTheMomentTheJarWasFirstSignedOut(t *testing.T) {
+	jar, first := signedOutJar(t)
+
+	_ = canaryIn("production", jar)
+
+	if since, signedOut := signedOutSince(jar); !signedOut || !since.Equal(first) {
+		t.Errorf("signed out since %v (%v) after a second bot check, want the first one's %v", since, signedOut, first)
+	}
+}
+
+var youTubeRunKinds = []runKind{
+	{"youtube canary", func(t *testing.T, s *acquisition.YtDlpAudioSearcher) {
+		_ = s.Canary(context.Background(), acquisition.YouTubeCanary)
+	}},
+	{"ytmusic canary", func(t *testing.T, s *acquisition.YtDlpAudioSearcher) {
+		_ = s.Canary(context.Background(), acquisition.YTMusicCanary)
+	}},
+	{"youtube download", func(t *testing.T, s *acquisition.YtDlpAudioSearcher) {
+		_, _ = s.Download(context.Background(), youTubeWatchURL, t.TempDir())
+	}},
+	{"mixed-case host download", func(t *testing.T, s *acquisition.YtDlpAudioSearcher) {
+		_, _ = s.Download(context.Background(), "https://WWW.YouTube.com/watch?v=jNQXAC9IVRw", t.TempDir())
+	}},
+	{"youtu.be download", func(t *testing.T, s *acquisition.YtDlpAudioSearcher) {
+		_, _ = s.Download(context.Background(), "https://youtu.be/jNQXAC9IVRw", t.TempDir())
+	}},
+	{"search", func(t *testing.T, s *acquisition.YtDlpAudioSearcher) {
+		_, _ = s.SearchQueries(context.Background(), []string{"artist song"})
+	}},
+}
+
+func TestCookieJar_AYouTubeRunThatSucceedsSignsTheJarBackIn(t *testing.T) {
+	for _, kind := range youTubeRunKinds {
+		for name, succeed := range map[string]func(t *testing.T){
+			"cookies unchanged": func(t *testing.T) { installYtDlp(t, "exit 0") },
+			"cookies renewed":   func(t *testing.T) { ytDlpRenewing(t, signedInJar("new"), "exit 0") },
+		} {
+			t.Run(kind.name+"/"+name, func(t *testing.T) {
+				jar, _ := signedOutJar(t)
+				succeed(t)
+
+				kind.run(t, acquisition.NewYtDlpAudioSearcher("", jar, ""))
+
+				if since, signedOut := signedOutSince(jar); signedOut {
+					t.Errorf("still signed out since %v after a %s that succeeded", since, kind.name)
+				}
+			})
+		}
+	}
+}
+
+func TestCookieJar_ARunThatSucceedsOffYouTubeLeavesTheJarSignedOut(t *testing.T) {
+	for _, kind := range []runKind{
+		{"soundcloud canary", func(t *testing.T, s *acquisition.YtDlpAudioSearcher) {
+			_ = s.Canary(context.Background(), acquisition.SoundCloudCanary)
+		}},
+		{"soundcloud download", func(t *testing.T, s *acquisition.YtDlpAudioSearcher) {
+			_, _ = s.Download(context.Background(), "https://soundcloud.com/artist/track", t.TempDir())
+		}},
+		{"soundcloud inspect", func(t *testing.T, s *acquisition.YtDlpAudioSearcher) {
+			s.MarkUnplayable(context.Background(), []acquisition.AudioCandidate{{URL: "https://soundcloud.com/artist/track"}})
+		}},
+		{"lookalike host", func(t *testing.T, s *acquisition.YtDlpAudioSearcher) {
+			_, _ = s.Download(context.Background(), "https://notyoutube.com/watch?v=jNQXAC9IVRw", t.TempDir())
+		}},
+	} {
+		for name, succeed := range map[string]func(t *testing.T){
+			"cookies unchanged": func(t *testing.T) { installYtDlp(t, "exit 0") },
+			"cookies renewed":   func(t *testing.T) { ytDlpRenewing(t, signedInJar("new"), "exit 0") },
+		} {
+			t.Run(kind.name+"/"+name, func(t *testing.T) {
+				jar, first := signedOutJar(t)
+				succeed(t)
+
+				kind.run(t, acquisition.NewYtDlpAudioSearcher("", jar, ""))
+
+				if since, signedOut := signedOutSince(jar); !signedOut || !since.Equal(first) {
+					t.Errorf("signed out since %v (%v) after a %s, want still signed out since %v", since, signedOut, kind.name, first)
+				}
+			})
+		}
+	}
+}
+
+func TestCookieJar_AJarDroppedInAfterASignOutIsSignedIn(t *testing.T) {
+	jar, _ := signedOutJar(t)
+
+	if err := os.WriteFile(jar, []byte(signedInJar("human")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if since, signedOut := signedOutSince(jar); signedOut {
+		t.Errorf("signed out since %v right after a new jar was dropped in, want signed in", since)
+	}
+}
+
+func TestCookieJar_WithNoJarToReadNothingIsSignedOut(t *testing.T) {
+	for name, jar := range map[string]string{
+		"no jar configured": "",
+		"jar missing":       filepath.Join(t.TempDir(), "cookies.txt"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if since, signedOut := signedOutSince(jar); signedOut {
+				t.Errorf("signed out since %v, want signed in", since)
+			}
+		})
+	}
+}
+
+func ytDlpOverwritingTheSession(t *testing.T, live, jar string, session map[string]any, after string) {
+	t.Helper()
+	raw, err := json.Marshal(session)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	jarSource, sessionSource := filepath.Join(dir, "jar.txt"), filepath.Join(dir, "session.json")
+	if err := os.WriteFile(jarSource, []byte(jar), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sessionSource, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	installYtDlp(t, "cp '"+jarSource+"' '"+live+"'\ncp '"+sessionSource+"' '"+live+".session.json'\n"+after)
+}
+
+func jarDigest(jar string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(jar)))
+}
+
+func TestCookieJar_ASuccessOnAJarThatWasReplacedLeavesTheNewJarSignedOut(t *testing.T) {
+	jar, _ := signedOutJar(t)
+	newJarSignedOut := time.Date(2026, 11, 20, 14, 30, 0, 0, time.UTC)
+	ytDlpOverwritingTheSession(t, jar, signedInJar("human"), map[string]any{
+		"jar_sha256":       jarDigest(signedInJar("human")),
+		"installed_at":     newJarSignedOut.Add(-time.Hour),
+		"signed_out_since": newJarSignedOut,
+	}, "exit 0")
+
+	_ = canaryWith(jar)
+
+	if since, signedOut := signedOutSince(jar); !signedOut || !since.Equal(newJarSignedOut) {
+		t.Errorf("signed out since %v (%v) after the old jar's run succeeded, want the new jar still signed out since %v", since, signedOut, newJarSignedOut)
+	}
+}
+
+func TestCookieJar_ABotCheckWhileAnotherRunKeptRenewedCookiesStillSignsTheJarOut(t *testing.T) {
+	installed := time.Now().Add(-50 * time.Hour).Truncate(time.Second).UTC()
+	jar := liveJarAt(t, signedInJar("old"), 0o644, installed)
+	ytDlpOverwritingTheSession(t, jar, signedInJar("renewed"), map[string]any{
+		"jar_sha256":   jarDigest(signedInJar("renewed")),
+		"installed_at": installed,
+		"write_backs":  1,
+	}, "echo \""+botCheck+"\" >&2\nexit 1")
+
+	_ = canaryWith(jar)
+
+	if since, signedOut := signedOutSince(jar); !signedOut {
+		t.Errorf("signed in after a bot check while another run kept renewed cookies, want signed out (since %v)", since)
 	}
 }
