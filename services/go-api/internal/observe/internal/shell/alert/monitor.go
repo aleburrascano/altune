@@ -1,7 +1,7 @@
 package alert
 
 import (
-	"altune/go-api/internal/observe/domain"
+	"altune/go-api/internal/observe/internal/core/domain"
 	"altune/go-api/internal/observe/internal/core/ports"
 	"altune/go-api/internal/shared/runloop"
 	"context"
@@ -29,6 +29,7 @@ type Monitor struct {
 	seenResumes uint64
 
 	firing map[string]bool
+	pages  map[string]domain.Alert
 
 	lastPass       atomic.Int64
 	notifyFailures atomic.Int64
@@ -92,6 +93,7 @@ func NewMonitor(notifier ports.AlertNotifier, interval time.Duration, conditions
 		logger:      slog.Default(),
 		leadership:  runloop.EveryPassLeads,
 		firing:      make(map[string]bool),
+		pages:       make(map[string]domain.Alert),
 	}
 }
 
@@ -127,7 +129,7 @@ func (m *Monitor) tick(ctx context.Context) {
 	}
 	termCtx, release, ok := m.leadership(ctx)
 	if !ok {
-		clear(m.firing)
+		m.forgetIncidents()
 		return
 	}
 	defer release()
@@ -146,7 +148,12 @@ func (m *Monitor) rearmAfterResume() {
 		return
 	}
 	m.seenResumes = resumes
+	m.forgetIncidents()
+}
+
+func (m *Monitor) forgetIncidents() {
 	clear(m.firing)
+	clear(m.pages)
 }
 
 func (m *Monitor) isPassAbandoned(ctx context.Context) bool {
@@ -178,6 +185,7 @@ func (m *Monitor) settleCondition(ctx context.Context, c domain.Condition) {
 }
 
 func (m *Monitor) recordRecovery(ctx context.Context, key string) {
+	delete(m.pages, key)
 	if !m.firing[key] {
 		return
 	}
@@ -194,7 +202,7 @@ func (m *Monitor) raise(ctx context.Context, key string, fired domain.Alert) {
 	if m.isPassAbandoned(ctx) {
 		return
 	}
-	if err := m.notifier.Notify(ctx, fired); err != nil {
+	if err := m.notifier.Notify(ctx, m.pageFor(key, fired)); err != nil {
 		m.notifyFailures.Add(1)
 		m.notifyErrorAt.Store(time.Now().UnixNano())
 		m.logger.ErrorContext(ctx, "alert.notify_failed", "key", key, "error", err)
@@ -206,6 +214,15 @@ func (m *Monitor) raise(ctx context.Context, key string, fired domain.Alert) {
 	}
 	m.logger.InfoContext(ctx, "alert.fired", "key", key, "severity", int(fired.Severity), "notifier", m.notifierKind())
 	m.firing[key] = true
+}
+
+func (m *Monitor) pageFor(key string, fired domain.Alert) domain.Alert {
+	if page, ok := m.pages[key]; ok {
+		return page
+	}
+	fired.Key, fired.FiredAt = key, time.Now()
+	m.pages[key] = fired
+	return fired
 }
 
 func (m *Monitor) runCondition(ctx context.Context, c domain.Condition) (fired *domain.Alert, known bool) {

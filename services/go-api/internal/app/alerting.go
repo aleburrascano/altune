@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 )
 
@@ -25,11 +26,14 @@ func (a *App) alertConditions(events coverageEvents) []observe.Condition {
 }
 
 func (a *App) alertNotifier(ctx context.Context) observe.AlertNotifier {
-	if a.cfg.AlertWebhookURL == "" {
-		slog.WarnContext(ctx, "alerts are log-only: ALERT_WEBHOOK_URL is not set")
-		return observe.NopNotifier{}
+	if a.cfg.HasAlertEmail() {
+		return observe.NewEmailNotifier(a.cfg.ResendAPIKey, a.cfg.AlertEmailTo, http.DefaultTransport)
 	}
-	return observe.NewWebhookNotifier(a.cfg.AlertWebhookURL)
+	if a.cfg.AlertWebhookURL != "" {
+		return observe.NewWebhookNotifier(a.cfg.AlertWebhookURL)
+	}
+	slog.WarnContext(ctx, "alerts are log-only: neither ALERT_WEBHOOK_URL nor RESEND_API_KEY with ALERT_EMAIL_TO is set")
+	return observe.NopNotifier{}
 }
 
 func buildDependencyCondition(health func(context.Context) observe.DependencyHealth) observe.Condition {

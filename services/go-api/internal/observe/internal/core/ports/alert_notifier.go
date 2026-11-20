@@ -1,7 +1,7 @@
 package ports
 
 import (
-	"altune/go-api/internal/observe/domain"
+	"altune/go-api/internal/observe/internal/core/domain"
 	"context"
 )
 
