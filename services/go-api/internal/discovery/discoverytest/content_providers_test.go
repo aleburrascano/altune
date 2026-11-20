@@ -2,7 +2,6 @@ package discoverytest_test
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/discoverytest"
 	"context"
 	"errors"
 	"sync"
@@ -10,7 +9,7 @@ import (
 )
 
 func TestAlbumContentProvider_ZeroValueReturnsNothing(t *testing.T) {
-	got, err := (&discoverytest.AlbumContentProvider{}).GetAlbumTracks(context.Background(), discovery.ProviderDeezer, "1")
+	got, err := (&discovery.FakeAlbumContentProvider{}).GetAlbumTracks(context.Background(), discovery.ProviderDeezer, "1")
 
 	if got != nil || err != nil {
 		t.Fatalf("got (%v, %v), want (nil, nil)", got, err)
@@ -19,7 +18,7 @@ func TestAlbumContentProvider_ZeroValueReturnsNothing(t *testing.T) {
 
 func TestAlbumContentProvider_ReturnsCannedResults(t *testing.T) {
 	want := []discovery.SearchResult{{Title: "a"}}
-	p := &discoverytest.AlbumContentProvider{Results: want}
+	p := &discovery.FakeAlbumContentProvider{Results: want}
 
 	got, err := p.GetAlbumTracks(context.Background(), discovery.ProviderDeezer, "1")
 
@@ -29,7 +28,7 @@ func TestAlbumContentProvider_ReturnsCannedResults(t *testing.T) {
 }
 
 func TestAlbumContentProvider_FuncOverrideWinsOverCannedResults(t *testing.T) {
-	p := &discoverytest.AlbumContentProvider{
+	p := &discovery.FakeAlbumContentProvider{
 		Results: []discovery.SearchResult{{Title: "canned"}},
 		GetAlbumTracksFn: func(context.Context, discovery.ProviderName, string) ([]discovery.SearchResult, error) {
 			return []discovery.SearchResult{{Title: "override"}}, nil
@@ -45,7 +44,7 @@ func TestAlbumContentProvider_FuncOverrideWinsOverCannedResults(t *testing.T) {
 
 func TestAlbumContentProvider_ErrorSetBetweenCallsFailsOnlyTheSecond(t *testing.T) {
 	boom := errors.New("boom")
-	p := &discoverytest.AlbumContentProvider{Results: []discovery.SearchResult{{Title: "a"}}}
+	p := &discovery.FakeAlbumContentProvider{Results: []discovery.SearchResult{{Title: "a"}}}
 
 	_, first := p.GetAlbumTracks(context.Background(), discovery.ProviderDeezer, "1")
 	p.Err = boom
@@ -57,7 +56,7 @@ func TestAlbumContentProvider_ErrorSetBetweenCallsFailsOnlyTheSecond(t *testing.
 }
 
 func TestArtworkResolver_CountsConcurrentCallsExactly(t *testing.T) {
-	r := &discoverytest.ArtworkResolver{URL: "u"}
+	r := &discovery.FakeArtworkResolver{URL: "u"}
 	if r.Calls() != 0 {
 		t.Fatalf("calls before use = %d, want 0", r.Calls())
 	}

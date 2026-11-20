@@ -2,7 +2,6 @@ package handler_test
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/discoverytest"
 	"context"
 	"encoding/json"
 	"errors"
@@ -47,7 +46,7 @@ func TestHandleAlbumTracks_LimitClamping(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			albumProviders := map[discovery.ProviderName]discovery.AlbumContentProvider{
-				discovery.ProviderDeezer: &discoverytest.AlbumContentProvider{Results: seedTracks(3)},
+				discovery.ProviderDeezer: &discovery.FakeAlbumContentProvider{Results: seedTracks(3)},
 			}
 			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, albumProviders, nil)
 
@@ -76,7 +75,7 @@ func TestHandleArtistTopTracks_LimitClamping(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			artistProviders := map[discovery.ProviderName]discovery.ArtistContentProvider{
-				discovery.ProviderDeezer: &discoverytest.ArtistContentProvider{TopTracks: seedTracks(7)},
+				discovery.ProviderDeezer: &discovery.FakeArtistContentProvider{TopTracks: seedTracks(7)},
 			}
 			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
 
@@ -94,7 +93,7 @@ func TestHandleArtistTopTracks_LimitClamping(t *testing.T) {
 
 func TestContentEndpoints_ExternalIDTooLongReturns400(t *testing.T) {
 	albumProviders := map[discovery.ProviderName]discovery.AlbumContentProvider{
-		discovery.ProviderDeezer: &discoverytest.AlbumContentProvider{},
+		discovery.ProviderDeezer: &discovery.FakeAlbumContentProvider{},
 	}
 	router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, albumProviders, nil)
 
@@ -298,18 +297,18 @@ func TestHandleArtistContent_PanickingProviderReturns500(t *testing.T) {
 }
 
 type countingArtistContentProvider struct {
-	discoverytest.ArtistContentProvider
+	discovery.FakeArtistContentProvider
 	calls int
 }
 
 func (p *countingArtistContentProvider) GetArtistTopTracks(ctx context.Context, name discovery.ProviderName, id string) ([]discovery.SearchResult, error) {
 	p.calls++
-	return p.ArtistContentProvider.GetArtistTopTracks(ctx, name, id)
+	return p.FakeArtistContentProvider.GetArtistTopTracks(ctx, name, id)
 }
 
 func (p *countingArtistContentProvider) GetArtistAlbums(ctx context.Context, name discovery.ProviderName, id string) ([]discovery.SearchResult, error) {
 	p.calls++
-	return p.ArtistContentProvider.GetArtistAlbums(ctx, name, id)
+	return p.FakeArtistContentProvider.GetArtistAlbums(ctx, name, id)
 }
 
 func unauthenticatedDiscoveryRouter(h *discovery.DiscoveryHandler) chi.Router {
@@ -352,14 +351,14 @@ func TestContentRoutes_NoIdentityIs401(t *testing.T) {
 func TestArtistContentEndpoints_AskTheProvidersTheSearchCardKnows(t *testing.T) {
 	var mu sync.Mutex
 	asked := map[string]bool{}
-	recording := func(pn discovery.ProviderName) *discoverytest.ArtistContentProvider {
+	recording := func(pn discovery.ProviderName) *discovery.FakeArtistContentProvider {
 		record := func(_ context.Context, _ discovery.ProviderName, id string) ([]discovery.SearchResult, error) {
 			mu.Lock()
 			asked[pn.String()+":"+id] = true
 			mu.Unlock()
 			return seedTracks(1), nil
 		}
-		return &discoverytest.ArtistContentProvider{GetAlbumsFn: record, GetTopTracksFn: record}
+		return &discovery.FakeArtistContentProvider{GetAlbumsFn: record, GetTopTracksFn: record}
 	}
 	svc := discovery.NewGetArtistContentService(map[discovery.ProviderName]discovery.ArtistContentProvider{
 		discovery.ProviderDeezer:  recording(discovery.ProviderDeezer),
@@ -382,7 +381,7 @@ func TestArtistContentEndpoints_AskTheProvidersTheSearchCardKnows(t *testing.T) 
 
 func TestArtistContentEndpoints_IgnoreTheArtistName(t *testing.T) {
 	svc := discovery.NewGetArtistContentService(map[discovery.ProviderName]discovery.ArtistContentProvider{
-		discovery.ProviderDeezer: &discoverytest.ArtistContentProvider{Albums: seedTracks(1), TopTracks: seedTracks(1)},
+		discovery.ProviderDeezer: &discovery.FakeArtistContentProvider{Albums: seedTracks(1), TopTracks: seedTracks(1)},
 	})
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
@@ -397,8 +396,8 @@ func TestArtistContentEndpoints_IgnoreTheArtistName(t *testing.T) {
 
 func TestAlbumTracks_ServesLongAlbumsWholeAndPassesTheCardIDs(t *testing.T) {
 	var gotSpotifyID string
-	deezer := &discoverytest.AlbumContentProvider{Results: seedTracks(120)}
-	spotify := &discoverytest.AlbumContentProvider{GetAlbumTracksFn: func(_ context.Context, _ discovery.ProviderName, id string) ([]discovery.SearchResult, error) {
+	deezer := &discovery.FakeAlbumContentProvider{Results: seedTracks(120)}
+	spotify := &discovery.FakeAlbumContentProvider{GetAlbumTracksFn: func(_ context.Context, _ discovery.ProviderName, id string) ([]discovery.SearchResult, error) {
 		gotSpotifyID = id
 		return nil, nil
 	}}
@@ -443,7 +442,7 @@ func TestHandleArtistAlbums_LimitClamping(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			svc := discovery.NewGetArtistContentService(map[discovery.ProviderName]discovery.ArtistContentProvider{
-				discovery.ProviderDeezer: &discoverytest.ArtistContentProvider{Albums: numberedAlbums(120)},
+				discovery.ProviderDeezer: &discovery.FakeArtistContentProvider{Albums: numberedAlbums(120)},
 			})
 			router := chi.NewRouter()
 			router.Use(discAsTestUser)

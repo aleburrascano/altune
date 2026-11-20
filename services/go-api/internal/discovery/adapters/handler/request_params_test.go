@@ -2,7 +2,6 @@ package handler_test
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/discoverytest"
 	"net/http"
 	"net/url"
 	"strings"
@@ -18,10 +17,10 @@ const radioheadMBID = "a74b1b7f-71a5-4011-9441-d0b5e4122711"
 func paramValidationRouter(t *testing.T) chi.Router {
 	t.Helper()
 	albumProviders := map[discovery.ProviderName]discovery.AlbumContentProvider{
-		discovery.ProviderDeezer: &discoverytest.AlbumContentProvider{Results: seedTracks(3)},
+		discovery.ProviderDeezer: &discovery.FakeAlbumContentProvider{Results: seedTracks(3)},
 	}
 	artistProviders := map[discovery.ProviderName]discovery.ArtistContentProvider{
-		discovery.ProviderDeezer: &discoverytest.ArtistContentProvider{Albums: seedTracks(3)},
+		discovery.ProviderDeezer: &discovery.FakeArtistContentProvider{Albums: seedTracks(3)},
 	}
 	historyRepo := &fakeSearchHistoryRepo{}
 	h := discovery.NewDiscoveryHandler(discovery.DiscoveryServices{
@@ -76,7 +75,6 @@ func TestEnrichmentRejections_MalformedMBIDAndOversizedNames(t *testing.T) {
 		{"an album-tracks mbid addressing the parent segment", "/discovery/albums/deezer/123/tracks?mbid=.."},
 		{"an oversized enrichment title", "/discovery/enrichment?kind=artist&title=" + oversizedParam},
 		{"an oversized enrichment subtitle", "/discovery/enrichment?kind=album&title=x&subtitle=" + oversizedParam},
-		{"an oversized title on the retired last.fm lookup", "/discovery/enrichment/lastfm?kind=artist&title=" + oversizedParam},
 		{"an oversized deezer title", "/discovery/enrichment/deezer?kind=album&title=" + oversizedParam},
 		{"an oversized lyrics title", "/discovery/lyrics?title=" + oversizedParam},
 		{"an oversized album-tracks title", "/discovery/albums/deezer/123/tracks?title=" + oversizedParam},
@@ -136,7 +134,7 @@ func allProvidersArtistRouter(t *testing.T) chi.Router {
 	t.Helper()
 	artistProviders := make(map[discovery.ProviderName]discovery.ArtistContentProvider, len(realProviderIDs))
 	for _, c := range realProviderIDs {
-		artistProviders[c.provider] = &discoverytest.ArtistContentProvider{Albums: seedTracks(1)}
+		artistProviders[c.provider] = &discovery.FakeArtistContentProvider{Albums: seedTracks(1)}
 	}
 	return buildDiscoveryRouter(
 		&fakeSearchProvider{name: discovery.ProviderDeezer}, &fakeSearchHistoryRepo{}, nil, artistProviders)

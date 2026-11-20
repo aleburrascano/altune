@@ -2,7 +2,6 @@ package handler_test
 
 import (
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/shared/httputil"
 	"context"
 	"encoding/json"
@@ -94,6 +93,7 @@ func (f *scriptedMBEnricher) Lookup(context.Context, discovery.ResultKind, strin
 
 type scriptedDeezerEnricher struct {
 	id         string
+	found      *discovery.DeezerEnrichment
 	resolveErr error
 	lookupErr  error
 	calls      int
@@ -106,11 +106,15 @@ func (f *scriptedDeezerEnricher) ResolveID(context.Context, discovery.ResultKind
 
 func (f *scriptedDeezerEnricher) Lookup(context.Context, discovery.ResultKind, string) (discovery.DeezerEnrichment, error) {
 	f.calls++
+	if f.found != nil {
+		return *f.found, f.lookupErr
+	}
 	return discovery.EmptyDeezerEnrichment(), f.lookupErr
 }
 
 type scriptedLyricsProvider struct {
 	id         string
+	found      *discovery.DeezerLyrics
 	resolveErr error
 	lookupErr  error
 	calls      int
@@ -123,6 +127,9 @@ func (f *scriptedLyricsProvider) ResolveTrackID(context.Context, string, string)
 
 func (f *scriptedLyricsProvider) Lookup(context.Context, string) (discovery.DeezerLyrics, error) {
 	f.calls++
+	if f.found != nil {
+		return *f.found, f.lookupErr
+	}
 	return discovery.EmptyDeezerLyrics(), f.lookupErr
 }
 
@@ -246,49 +253,6 @@ func buildEnrichersRouter(e discovery.DetailEnrichers) chi.Router {
 	return r
 }
 
-func TestHandleLastFmEnrichment(t *testing.T) {
-	t.Run("missing kind returns 400", func(t *testing.T) {
-		router := buildEnrichersRouter(discovery.DetailEnrichers{})
-		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/lastfm?title=Nas", nil)
-		discAssertStatus(t, rec, http.StatusBadRequest)
-	})
-
-	t.Run("whitespace-only kind returns 400", func(t *testing.T) {
-		router := buildEnrichersRouter(discovery.DetailEnrichers{})
-		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/lastfm?kind=%20&title=Nas", nil)
-		discAssertStatus(t, rec, http.StatusBadRequest)
-	})
-
-	t.Run("invalid kind returns 400", func(t *testing.T) {
-		router := buildEnrichersRouter(discovery.DetailEnrichers{})
-		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/lastfm?kind=mixtape&title=Nas", nil)
-		discAssertStatus(t, rec, http.StatusBadRequest)
-	})
-
-	t.Run("missing title returns 400", func(t *testing.T) {
-		router := buildEnrichersRouter(discovery.DetailEnrichers{})
-		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/lastfm?kind=artist", nil)
-		discAssertStatus(t, rec, http.StatusBadRequest)
-	})
-
-	t.Run("a valid lookup answers the retired empty DTO with non-null collections", func(t *testing.T) {
-		router := buildEnrichersRouter(discovery.DetailEnrichers{})
-		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/lastfm?kind=artist&title=X", nil)
-		discAssertStatus(t, rec, http.StatusOK)
-
-		var raw map[string]json.RawMessage
-		discDecodeJSON(t, rec, &raw)
-		for _, key := range []string{"tags", "similar"} {
-			if string(raw[key]) == "null" {
-				t.Errorf("%s must be [] when empty, got null", key)
-			}
-		}
-		if string(raw["has_content"]) != "false" || string(raw["degraded"]) != "false" {
-			t.Errorf("retired lookup = %s, want no content and not degraded", rec.Body.String())
-		}
-	})
-}
-
 func TestHandleDeezerEnrichment(t *testing.T) {
 	t.Run("missing kind returns 400", func(t *testing.T) {
 		router := buildEnrichersRouter(discovery.DetailEnrichers{})
@@ -305,7 +269,7 @@ func TestHandleDeezerEnrichment(t *testing.T) {
 	t.Run("artist kind returns 200 empty (only track and album enrich)", func(t *testing.T) {
 		e := discovery.EmptyDeezerEnrichment()
 		e.BPM = 90
-		svc := discovery.NewDeezerEnrichmentService(&discoverytest.DeezerEnricher{ResolvedID: "dz-1", Enrichment: e}, nil)
+		svc := discovery.NewDeezerEnrichmentService(&scriptedDeezerEnricher{id: "dz-1", found: &e}, nil)
 		router := buildEnrichersRouter(discovery.DetailEnrichers{Deezer: svc})
 
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/deezer?kind=artist&title=Nas", nil)
@@ -347,7 +311,7 @@ func TestHandleLyrics(t *testing.T) {
 		l.Writers = []string{"Nasir Jones"}
 		l.Copyright = "© 1994 Columbia"
 
-		svc := discovery.NewLyricsService(&discoverytest.LyricsProvider{ResolvedID: "t-1", Lyrics: l}, nil)
+		svc := discovery.NewLyricsService(&scriptedLyricsProvider{id: "t-1", found: &l}, nil)
 		router := buildEnrichersRouter(discovery.DetailEnrichers{Lyrics: svc})
 
 		rec := discServe(t, router, http.MethodGet,
@@ -438,7 +402,6 @@ func TestEnrichmentEndpoints_TypedProviderErrorStaysDegraded(t *testing.T) {
 func TestEnrichmentRoutes_NoIdentityIs401(t *testing.T) {
 	paths := []string{
 		"/discovery/enrichment?kind=track&title=X",
-		"/discovery/enrichment/lastfm?kind=track&title=X",
 		"/discovery/enrichment/deezer?kind=track&title=X",
 		"/discovery/lyrics?title=X&artist=Y",
 	}
@@ -497,6 +460,11 @@ func TestNamedEnrichmentEndpoints_SharedContract(t *testing.T) {
 		t.Run(tc.name+" invalid kind is 400", func(t *testing.T) {
 			rec := discServe(t, tc.router(nil), http.MethodGet, tc.path+"?kind=albumx&title=Nas", nil)
 			assertErrorCode(t, rec, http.StatusBadRequest, "discovery.invalid_kind")
+		})
+
+		t.Run(tc.name+" whitespace-only kind is a missing kind", func(t *testing.T) {
+			rec := discServe(t, tc.router(nil), http.MethodGet, tc.path+"?kind=%20&title=Nas", nil)
+			assertErrorCode(t, rec, http.StatusBadRequest, "discovery.invalid_param")
 		})
 
 		t.Run(tc.name+" nil enricher is 200 with the empty DTO", func(t *testing.T) {

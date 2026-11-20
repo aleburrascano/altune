@@ -138,7 +138,6 @@ func (h *DiscoveryHandler) contentRoutes(r chi.Router) {
 	r.Get("/unreleased/search", h.handleUnreleasedSearch)
 	r.Get("/tracks/{provider}/{externalId}/related", h.handleRelatedTracks)
 	r.Get("/enrichment", h.handleEnrichment)
-	r.Get("/enrichment/lastfm", h.handleLastFmEnrichment)
 	r.Get("/enrichment/deezer", h.handleDeezerEnrichment)
 	r.Get("/lyrics", h.handleLyrics)
 }
