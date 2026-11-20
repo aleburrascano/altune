@@ -4,15 +4,20 @@ import (
 	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestHandleListTracks(t *testing.T) {
@@ -682,5 +687,110 @@ func TestHandleListTracks_FiltersByTheSearchTerm(t *testing.T) {
 	decodeJSON(t, rec, &body)
 	if body.Total != 1 || len(body.Items) != 1 || body.Items[0].Title != "Enter Sandman" {
 		t.Fatalf("search returned total %d, items %+v; want only Enter Sandman", body.Total, body.Items)
+	}
+}
+
+func TestTrackRoutes_ARefusedCatalogDatabaseAnswersTemporarilyUnavailable(t *testing.T) {
+	router := pgxTrackRoutes(refusedPool(t))
+	trackPath := "/tracks/" + uuid.NewString()
+
+	t.Run("list tracks", func(t *testing.T) {
+		rec := request(t, router, http.MethodGet, "/tracks/", nil)
+
+		assertCatalogTemporarilyUnavailable(t, rec)
+	})
+	t.Run("delete a track", func(t *testing.T) {
+		rec := request(t, router, http.MethodDelete, trackPath, nil)
+
+		assertCatalogTemporarilyUnavailable(t, rec)
+	})
+	t.Run("set a track number", func(t *testing.T) {
+		rec := request(t, router, http.MethodPatch, trackPath+"/track-number", jsonBody(t, catalog.SetTrackNumberRequest{TrackNumber: 3}))
+
+		assertCatalogTemporarilyUnavailable(t, rec)
+	})
+}
+
+func TestHandleCreateTrack_AnInsertStalledBehindAnotherWriterAnswersTemporarilyUnavailable(t *testing.T) {
+	pool := testPool(t)
+	user := shared.NewUserId(uuid.New())
+	holdUncommittedTrack(t, pool, user, "Held Title", "Held Artist", "Held Album")
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	body := jsonBody(t, map[string]string{"title": "Held Title", "artist": "Held Artist", "album": "Held Album"})
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/tracks/", body)
+	req.Header.Set("Content-Type", "application/json")
+
+	rec := sendAs(pgxTrackRoutes(pool), req, user)
+
+	assertCatalogTemporarilyUnavailable(t, rec)
+}
+
+func holdUncommittedTrack(t *testing.T, pool *pgxpool.Pool, user shared.UserId, title, artist, album string) {
+	t.Helper()
+	track, err := catalog.NewTrack(user, title, artist, album)
+	if err != nil {
+		t.Fatalf("NewTrack: %v", err)
+	}
+	tx, err := pool.Begin(context.Background())
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	if _, err := tx.Exec(context.Background(),
+		`INSERT INTO tracks (id, user_id, title, artist, dedup_key, acquisition_status) VALUES ($1, $2, $3, $4, $5, 'pending')`,
+		track.ID.UUID(), user.UUID(), title, artist, track.DedupKey,
+	); err != nil {
+		t.Fatalf("hold track: %v", err)
+	}
+}
+
+func TestCatalogRoutes_OnlyATransientRepositoryErrorAnswersTemporarilyUnavailable(t *testing.T) {
+	trackPath := "/tracks/" + uuid.NewString()
+	routes := []struct {
+		name, method, path, op string
+		body                   any
+	}{
+		{"list tracks", http.MethodGet, "/tracks/", "list tracks", nil},
+		{"add a track", http.MethodPost, "/tracks/", "add track", map[string]string{"title": "Title", "artist": "Artist", "album": "Album"}},
+		{"delete a track", http.MethodDelete, trackPath, "delete track", nil},
+		{"set a track number", http.MethodPatch, trackPath + "/track-number", "set track number", catalog.SetTrackNumberRequest{TrackNumber: 3}},
+		{"resolve audio urls", http.MethodPost, "/audio-urls", "resolve audio urls", resolveRequest{TrackIDs: []string{uuid.NewString()}}},
+	}
+	failures := []struct {
+		name      string
+		err       error
+		status    int
+		code      string
+		transient bool
+	}{
+		{"a plain repository error answers 500", errors.New("duplicate key value violates unique constraint"), http.StatusInternalServerError, "internal", false},
+		{"a transient repository error answers 503 and is logged", fmt.Errorf("query: %w", catalog.ErrDBTransient), http.StatusServiceUnavailable, "catalog.temporarily_unavailable", true},
+	}
+	for _, failure := range failures {
+		router := failingRepoRoutes(failure.err)
+		for _, route := range routes {
+			t.Run(route.name+"/"+failure.name, func(t *testing.T) {
+				var body io.Reader
+				if route.body != nil {
+					body = jsonBody(t, route.body)
+				}
+				logs := catalog.CaptureAuditLogs(t)
+
+				rec := request(t, router, route.method, route.path, body)
+
+				assertStatus(t, rec, failure.status)
+				assertErrorCode(t, rec, failure.code)
+				if failure.transient {
+					entry := logs.Find(t, "catalog.db_transient")
+					if op := entry.Attrs["op"]; op != route.op {
+						t.Errorf("catalog.db_transient op = %q, want %q", op, route.op)
+					}
+					if cause := entry.Attrs["error"]; !strings.Contains(cause, failure.err.Error()) {
+						t.Errorf("catalog.db_transient error = %q, want the repository error %q", cause, failure.err)
+					}
+				}
+			})
+		}
 	}
 }

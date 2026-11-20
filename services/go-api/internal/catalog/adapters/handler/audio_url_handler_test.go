@@ -142,3 +142,15 @@ func TestCorrelationID_ReachesCatalogServiceLogs(t *testing.T) {
 		t.Fatal("expected catalog's own audio_url.presign_failed log line, so the corr_id assertion is meaningful")
 	}
 }
+
+func TestAudioURLs_ARefusedCatalogDatabaseAnswersTemporarilyUnavailable(t *testing.T) {
+	router := chi.NewRouter()
+	router.Use(asBearer)
+	repo := catalog.NewPgxTrackRepository(refusedPool(t))
+	signer := &countingAudioStore{InMemoryAudioStore: catalog.NewInMemoryAudioStore()}
+	catalog.NewAudioURLHandler(catalog.NewAudioURLService(repo, signer)).Routes(router)
+
+	rec := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{uuid.NewString()}}))
+
+	assertCatalogTemporarilyUnavailable(t, rec)
+}

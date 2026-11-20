@@ -20,6 +20,7 @@ catalog/
 │   ├── library_lens.go          library lens (filtered views of the library)
 │   ├── dedup.go                 duplicate-track detection key
 │   ├── source_url.go            validated source URL value
+│   ├── repo_error.go            ErrDBTransient and WrapRepoError, the 503 mapping
 │   └── coded_error.go           CodedError and the domain sentinels
 ├── ports/                       interfaces the services depend on
 │   ├── track_repo.go            track persistence
@@ -55,6 +56,60 @@ catalog/
 └── catalogtest/                 in-memory fakes for catalog ports
 
 ```
+
+## Database outages: 503 `catalog.temporarily_unavailable`
+
+When the catalog database refuses, drops or stalls a call, the routes below answer
+503 with code `catalog.temporarily_unavailable` and detail `catalog temporarily
+unavailable`. Every other database error answers 500 `internal`, so a client can
+tell an outage from a bug.
+
+- **What is transient.** The Postgres repositories (`internal/adapters/persistence/pool.go`)
+  name an error `ErrDBTransient` when the connection is refused, reset or dropped,
+  when a call runs past its deadline (each call gets 5s, `dbCallTimeout`, and a
+  caller's own deadline counts too), or when Postgres answers with a SQLSTATE that
+  `database.IsTransientSQLState` lists. A caller's cancel is not transient, and
+  neither is any other error, such as a constraint violation.
+- **One mapping.** A service passes a repository error through
+  `domain.WrapRepoError(ctx, op, err)`. A transient error becomes
+  `ErrCatalogTemporarilyUnavailable` and logs `catalog.db_transient` at WARN with
+  `op` and the repository error, the one place that error is recorded. The
+  returned error carries only `op` and the sentinel, so nothing behind the 503
+  can change the response.
+  Any other error keeps its chain and adds no status. A plain error answers 500
+  through `httputil.HandleServiceError`, and a repository error that carries a
+  status keeps it: a reorder that loses a race to another edit answers 400
+  (`ErrPlaylistChangedDuringReorder`).
+- **Routes that answer it:**
+  - `GET /tracks`, `POST /tracks` (the library-size count and the insert),
+    `GET /tracks/{trackId}/status`, `PATCH /tracks/{trackId}/track-number`,
+    `DELETE /tracks/{trackId}` and `GET /tracks/featuring`;
+  - `POST /audio-urls`, `GET /tracks/{trackId}/audio` and
+    `POST /tracks/{trackId}/audio/recover`;
+  - `GET /library/albums` and `GET /library/artists`;
+  - every `/playlists` route.
+- **Still 500 during an outage.** These wrap the error with `fmt.Errorf`:
+  - `POST /tracks/featured-backfill`, at its first database call, `ListForUser`
+    in `internal/core/featured/featured_artist.go`. A failing repository stub
+    reaches it;
+  - the ownership lookup that `PATCH /tracks/{trackId}/track-number` runs when no
+    row was updated, and the write that marks a track's audio missing in
+    `POST /tracks/{trackId}/audio/recover`. Each is the second database call of
+    its request, so only a fault between two calls reaches it.
+- **No `Retry-After`.** `httputil` sets the header only for an error that carries a
+  retry time, as the rate limiters' errors do. A database outage has no honest
+  retry time: it can last a second or an hour, and a made-up value would tell
+  clients to retry on a schedule the server never promised.
+- **Tests.** `TestCatalogRoutes_OnlyATransientRepositoryErrorAnswersTemporarilyUnavailable`
+  pins 500 and 503, and the `catalog.db_transient` line with its `op` and the
+  repository error, on the list, add, delete, track-number and audio-URL routes.
+  The service tests
+  `TestHotPaths_ClassifyTransientDBFailures` and
+  `TestPlaylistAndLibraryPaths_ClassifyTransientDBFailures` pin both on stream,
+  recover and status; playlist list, get, rename, add track and reorder; the two
+  library lenses; and featuring.
+  `TestPlaylistMembershipService_Reorder_RefusesAPlanInvalidatedAfterTheRead`
+  pins the 400 that passes through.
 
 ## Data retention & deletion
 

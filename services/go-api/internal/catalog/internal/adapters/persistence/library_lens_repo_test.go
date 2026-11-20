@@ -1,26 +1,19 @@
-package persistence
+package persistence_test
 
 import (
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/internal/core/ports"
+	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
-	"errors"
-	"fmt"
-	"os"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func seedLibraryTrack(t *testing.T, repo *PgxCatalogTrackRepository, userId shared.UserId, spec libraryTrackSpec) *domain.Track {
+func seedLibraryTrack(t *testing.T, repo *catalog.PgxCatalogTrackRepository, userId shared.UserId, spec libraryTrackSpec) *catalog.Track {
 	t.Helper()
-	track, err := domain.NewTrack(userId, spec.title, spec.artist, spec.album)
+	track, err := catalog.NewTrack(userId, spec.title, spec.artist, spec.album)
 	if err != nil {
 		t.Fatalf("NewTrack(%q): %v", spec.title, err)
 	}
@@ -46,9 +39,11 @@ type libraryTrackSpec struct {
 	addedAt     time.Time
 }
 
-func intPtr(v int) *int       { return &v }
+func intPtr(v int) *int { return &v }
+
 func strPtr(v string) *string { return &v }
-func titlesOf(ts []*domain.Track) []string {
+
+func titlesOf(ts []*catalog.Track) []string {
 	out := make([]string, len(ts))
 	for i, tr := range ts {
 		out[i] = tr.Title
@@ -56,7 +51,7 @@ func titlesOf(ts []*domain.Track) []string {
 	return out
 }
 
-func assertOrder(t *testing.T, sort domain.LibrarySort, got, want []string) {
+func assertOrder(t *testing.T, sort catalog.LibrarySort, got, want []string) {
 	t.Helper()
 	if len(got) != len(want) {
 		t.Fatalf("sort=%s len = %d %v, want %d %v", sort, len(got), got, len(want), want)
@@ -70,7 +65,7 @@ func assertOrder(t *testing.T, sort domain.LibrarySort, got, want []string) {
 
 func TestPgxTrackRepo_ListFilteredForUser_SortOrder(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxCatalogTrackRepository(pool)
+	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -93,15 +88,15 @@ func TestPgxTrackRepo_ListFilteredForUser_SortOrder(t *testing.T) {
 	})
 
 	cases := []struct {
-		sort domain.LibrarySort
+		sort catalog.LibrarySort
 		want []string
 	}{
-		{domain.SortAlphabetical, []string{"Alpha", "bravo", "Charlie"}},
-		{domain.SortRecent, []string{"Charlie", "bravo", "Alpha"}},
-		{domain.SortYear, []string{"bravo", "Alpha", "Charlie"}},
+		{catalog.SortAlphabetical, []string{"Alpha", "bravo", "Charlie"}},
+		{catalog.SortRecent, []string{"Charlie", "bravo", "Alpha"}},
+		{catalog.SortYear, []string{"bravo", "Alpha", "Charlie"}},
 	}
 	for _, c := range cases {
-		got, total, err := repo.ListFilteredForUser(ctx, userId, domain.LibraryQuery{Sort: c.sort, Limit: 100})
+		got, total, err := repo.ListFilteredForUser(ctx, userId, catalog.LibraryQuery{Sort: c.sort, Limit: 100})
 		if err != nil {
 			t.Fatalf("ListFilteredForUser(sort=%s): %v", c.sort, err)
 		}
@@ -114,7 +109,7 @@ func TestPgxTrackRepo_ListFilteredForUser_SortOrder(t *testing.T) {
 
 func TestPgxTrackRepo_ListFilteredForUser_IlikeMatching(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxCatalogTrackRepository(pool)
+	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -148,8 +143,8 @@ func TestPgxTrackRepo_ListFilteredForUser_IlikeMatching(t *testing.T) {
 		{"no match", "nonexistent", []string{}},
 	}
 	for _, c := range cases {
-		got, total, err := repo.ListFilteredForUser(ctx, userId, domain.LibraryQuery{
-			Search: c.search, Sort: domain.SortRecent, Limit: 100,
+		got, total, err := repo.ListFilteredForUser(ctx, userId, catalog.LibraryQuery{
+			Search: c.search, Sort: catalog.SortRecent, Limit: 100,
 		})
 		if err != nil {
 			t.Fatalf("%s: ListFilteredForUser: %v", c.name, err)
@@ -169,7 +164,7 @@ func TestPgxTrackRepo_ListFilteredForUser_IlikeMatching(t *testing.T) {
 	}
 }
 
-func albumsOf(gs []domain.AlbumGroup) []string {
+func albumsOf(gs []catalog.AlbumGroup) []string {
 	out := make([]string, len(gs))
 	for i, g := range gs {
 		out[i] = g.Album
@@ -179,7 +174,7 @@ func albumsOf(gs []domain.AlbumGroup) []string {
 
 func TestPgxTrackRepo_ListAlbumsForUser_SortOrder(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxCatalogTrackRepository(pool)
+	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -202,15 +197,15 @@ func TestPgxTrackRepo_ListAlbumsForUser_SortOrder(t *testing.T) {
 	})
 
 	cases := []struct {
-		sort domain.LibrarySort
+		sort catalog.LibrarySort
 		want []string
 	}{
-		{domain.SortAlphabetical, []string{"Avenue", "Melody", "Zephyr"}},
-		{domain.SortYear, []string{"Zephyr", "Avenue", "Melody"}},
-		{domain.SortRecent, []string{"Zephyr", "Melody", "Avenue"}},
+		{catalog.SortAlphabetical, []string{"Avenue", "Melody", "Zephyr"}},
+		{catalog.SortYear, []string{"Zephyr", "Avenue", "Melody"}},
+		{catalog.SortRecent, []string{"Zephyr", "Melody", "Avenue"}},
 	}
 	for _, c := range cases {
-		got, err := repo.ListAlbumsForUser(ctx, userId, domain.LibraryQuery{Sort: c.sort})
+		got, err := repo.ListAlbumsForUser(ctx, userId, catalog.LibraryQuery{Sort: c.sort})
 		if err != nil {
 			t.Fatalf("ListAlbumsForUser(sort=%s): %v", c.sort, err)
 		}
@@ -220,7 +215,7 @@ func TestPgxTrackRepo_ListAlbumsForUser_SortOrder(t *testing.T) {
 
 func TestPgxTrackRepo_ListAlbumsForUser_RespectsLimit(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxCatalogTrackRepository(pool)
+	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -239,7 +234,7 @@ func TestPgxTrackRepo_ListAlbumsForUser_RespectsLimit(t *testing.T) {
 		title: "l3", artist: "Cal", album: "Album Three", addedAt: base.Add(-1 * time.Hour),
 	})
 
-	got, err := repo.ListAlbumsForUser(ctx, userId, domain.LibraryQuery{Sort: domain.SortRecent, Limit: 1})
+	got, err := repo.ListAlbumsForUser(ctx, userId, catalog.LibraryQuery{Sort: catalog.SortRecent, Limit: 1})
 	if err != nil {
 		t.Fatalf("ListAlbumsForUser(Limit:1): %v", err)
 	}
@@ -250,7 +245,7 @@ func TestPgxTrackRepo_ListAlbumsForUser_RespectsLimit(t *testing.T) {
 		t.Errorf("Limit:1 sort=recent = %q, want Album Three", got[0].Album)
 	}
 
-	page2, err := repo.ListAlbumsForUser(ctx, userId, domain.LibraryQuery{Sort: domain.SortRecent, Limit: 1, Offset: 1})
+	page2, err := repo.ListAlbumsForUser(ctx, userId, catalog.LibraryQuery{Sort: catalog.SortRecent, Limit: 1, Offset: 1})
 	if err != nil {
 		t.Fatalf("ListAlbumsForUser(Limit:1,Offset:1): %v", err)
 	}
@@ -261,7 +256,7 @@ func TestPgxTrackRepo_ListAlbumsForUser_RespectsLimit(t *testing.T) {
 
 func TestPgxTrackRepo_ListArtistsForUser_RespectsLimit(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxCatalogTrackRepository(pool)
+	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -280,7 +275,7 @@ func TestPgxTrackRepo_ListArtistsForUser_RespectsLimit(t *testing.T) {
 		title: "r3", artist: "Cal", album: "a3", addedAt: base.Add(-1 * time.Hour),
 	})
 
-	got, err := repo.ListArtistsForUser(ctx, userId, domain.LibraryQuery{Sort: domain.SortRecent, Limit: 1})
+	got, err := repo.ListArtistsForUser(ctx, userId, catalog.LibraryQuery{Sort: catalog.SortRecent, Limit: 1})
 	if err != nil {
 		t.Fatalf("ListArtistsForUser(Limit:1): %v", err)
 	}
@@ -291,7 +286,7 @@ func TestPgxTrackRepo_ListArtistsForUser_RespectsLimit(t *testing.T) {
 
 func TestPgxTrackRepo_ListAlbumsForUser_IlikeMatching(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxCatalogTrackRepository(pool)
+	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -309,7 +304,7 @@ func TestPgxTrackRepo_ListAlbumsForUser_IlikeMatching(t *testing.T) {
 		albumArtist: strPtr("Various Composers"), addedAt: base.Add(-1 * time.Hour),
 	})
 
-	byArtist, err := repo.ListAlbumsForUser(ctx, userId, domain.LibraryQuery{Search: "solo"})
+	byArtist, err := repo.ListAlbumsForUser(ctx, userId, catalog.LibraryQuery{Search: "solo"})
 	if err != nil {
 		t.Fatalf("ListAlbumsForUser(artist search): %v", err)
 	}
@@ -317,7 +312,7 @@ func TestPgxTrackRepo_ListAlbumsForUser_IlikeMatching(t *testing.T) {
 		t.Fatalf("artist search got %v, want [Blue Skies]", albumsOf(byArtist))
 	}
 
-	byAlbumArtist, err := repo.ListAlbumsForUser(ctx, userId, domain.LibraryQuery{Search: "composers"})
+	byAlbumArtist, err := repo.ListAlbumsForUser(ctx, userId, catalog.LibraryQuery{Search: "composers"})
 	if err != nil {
 		t.Fatalf("ListAlbumsForUser(album_artist search): %v", err)
 	}
@@ -325,7 +320,7 @@ func TestPgxTrackRepo_ListAlbumsForUser_IlikeMatching(t *testing.T) {
 		t.Fatalf("album_artist search got %v, want [Compiled]", albumsOf(byAlbumArtist))
 	}
 
-	byAlbum, err := repo.ListAlbumsForUser(ctx, userId, domain.LibraryQuery{Search: "BLUE"})
+	byAlbum, err := repo.ListAlbumsForUser(ctx, userId, catalog.LibraryQuery{Search: "BLUE"})
 	if err != nil {
 		t.Fatalf("ListAlbumsForUser(album search): %v", err)
 	}
@@ -336,7 +331,7 @@ func TestPgxTrackRepo_ListAlbumsForUser_IlikeMatching(t *testing.T) {
 
 func TestPgxTrackRepo_LibraryGrouping_CoalescesCanonicalVariants(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxCatalogTrackRepository(pool)
+	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -354,7 +349,7 @@ func TestPgxTrackRepo_LibraryGrouping_CoalescesCanonicalVariants(t *testing.T) {
 		addedAt: base.Add(-1 * time.Hour),
 	})
 
-	albums, err := repo.ListAlbumsForUser(ctx, userId, domain.LibraryQuery{Sort: domain.SortRecent})
+	albums, err := repo.ListAlbumsForUser(ctx, userId, catalog.LibraryQuery{Sort: catalog.SortRecent})
 	if err != nil {
 		t.Fatalf("ListAlbumsForUser: %v", err)
 	}
@@ -365,7 +360,7 @@ func TestPgxTrackRepo_LibraryGrouping_CoalescesCanonicalVariants(t *testing.T) {
 		t.Errorf("album track_count = %d, want 2", albums[0].TrackCount)
 	}
 
-	artists, err := repo.ListArtistsForUser(ctx, userId, domain.LibraryQuery{Sort: domain.SortRecent})
+	artists, err := repo.ListArtistsForUser(ctx, userId, catalog.LibraryQuery{Sort: catalog.SortRecent})
 	if err != nil {
 		t.Fatalf("ListArtistsForUser: %v", err)
 	}
@@ -377,7 +372,7 @@ func TestPgxTrackRepo_LibraryGrouping_CoalescesCanonicalVariants(t *testing.T) {
 	}
 }
 
-func artistsOf(gs []domain.ArtistGroup) []string {
+func artistsOf(gs []catalog.ArtistGroup) []string {
 	out := make([]string, len(gs))
 	for i, g := range gs {
 		out[i] = g.Artist
@@ -387,7 +382,7 @@ func artistsOf(gs []domain.ArtistGroup) []string {
 
 func TestPgxTrackRepo_ListArtistsForUser_SortOrder(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxCatalogTrackRepository(pool)
+	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -410,14 +405,14 @@ func TestPgxTrackRepo_ListArtistsForUser_SortOrder(t *testing.T) {
 	})
 
 	cases := []struct {
-		sort domain.LibrarySort
+		sort catalog.LibrarySort
 		want []string
 	}{
-		{domain.SortAlphabetical, []string{"Alpha Artist", "Mid Artist", "Zeta Artist"}},
-		{domain.SortRecent, []string{"Zeta Artist", "Mid Artist", "Alpha Artist"}},
+		{catalog.SortAlphabetical, []string{"Alpha Artist", "Mid Artist", "Zeta Artist"}},
+		{catalog.SortRecent, []string{"Zeta Artist", "Mid Artist", "Alpha Artist"}},
 	}
 	for _, c := range cases {
-		got, err := repo.ListArtistsForUser(ctx, userId, domain.LibraryQuery{Sort: c.sort})
+		got, err := repo.ListArtistsForUser(ctx, userId, catalog.LibraryQuery{Sort: c.sort})
 		if err != nil {
 			t.Fatalf("ListArtistsForUser(sort=%s): %v", c.sort, err)
 		}
@@ -427,7 +422,7 @@ func TestPgxTrackRepo_ListArtistsForUser_SortOrder(t *testing.T) {
 
 func TestPgxTrackRepo_ListArtistsForUser_IlikeMatching(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxCatalogTrackRepository(pool)
+	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -445,7 +440,7 @@ func TestPgxTrackRepo_ListArtistsForUser_IlikeMatching(t *testing.T) {
 		addedAt: base.Add(-1 * time.Hour),
 	})
 
-	got, err := repo.ListArtistsForUser(ctx, userId, domain.LibraryQuery{Search: "beatles"})
+	got, err := repo.ListArtistsForUser(ctx, userId, catalog.LibraryQuery{Search: "beatles"})
 	if err != nil {
 		t.Fatalf("ListArtistsForUser(search): %v", err)
 	}
@@ -456,7 +451,7 @@ func TestPgxTrackRepo_ListArtistsForUser_IlikeMatching(t *testing.T) {
 
 func TestPgxTrackRepo_ListFilteredForUser_TotalIsExactOnEveryPage(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxCatalogTrackRepository(pool)
+	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	t.Cleanup(func() {
@@ -488,8 +483,8 @@ func TestPgxTrackRepo_ListFilteredForUser_TotalIsExactOnEveryPage(t *testing.T) 
 		{"search no match", "nothing", 2, 0, 0, 0},
 	}
 	for _, c := range cases {
-		got, total, err := repo.ListFilteredForUser(ctx, userId, domain.LibraryQuery{
-			Search: c.search, Sort: domain.SortRecent, Limit: c.limit, Offset: c.offset,
+		got, total, err := repo.ListFilteredForUser(ctx, userId, catalog.LibraryQuery{
+			Search: c.search, Sort: catalog.SortRecent, Limit: c.limit, Offset: c.offset,
 		})
 		if err != nil {
 			t.Fatalf("%s: ListFilteredForUser: %v", c.name, err)
@@ -515,7 +510,7 @@ func tiedArtistNames() []string {
 
 func TestPgxTrackRepo_ListAlbumsForUser_PagesCoverEveryTiedGroupOnce(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxCatalogTrackRepository(pool)
+	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -531,10 +526,10 @@ func TestPgxTrackRepo_ListAlbumsForUser_PagesCoverEveryTiedGroupOnce(t *testing.
 		})
 	}
 
-	for _, sort := range []domain.LibrarySort{domain.SortAlphabetical, domain.SortYear, domain.SortRecent} {
+	for _, sort := range []catalog.LibrarySort{catalog.SortAlphabetical, catalog.SortYear, catalog.SortRecent} {
 		seen := map[string]int{}
 		for offset := 0; offset < tiedGroupCount; offset += tiedPageSize {
-			page, err := repo.ListAlbumsForUser(ctx, userId, domain.LibraryQuery{Sort: sort, Limit: tiedPageSize, Offset: offset})
+			page, err := repo.ListAlbumsForUser(ctx, userId, catalog.LibraryQuery{Sort: sort, Limit: tiedPageSize, Offset: offset})
 			if err != nil {
 				t.Fatalf("ListAlbumsForUser(sort=%s, offset=%d): %v", sort, offset, err)
 			}
@@ -555,7 +550,7 @@ func TestPgxTrackRepo_ListAlbumsForUser_PagesCoverEveryTiedGroupOnce(t *testing.
 
 func TestPgxTrackRepo_ListArtistsForUser_PagesCoverEveryTiedGroupOnce(t *testing.T) {
 	pool := testPool(t)
-	repo := NewPgxCatalogTrackRepository(pool)
+	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -572,7 +567,7 @@ func TestPgxTrackRepo_ListArtistsForUser_PagesCoverEveryTiedGroupOnce(t *testing
 
 	seen := map[string]int{}
 	for offset := 0; offset < tiedGroupCount; offset += tiedPageSize {
-		page, err := repo.ListArtistsForUser(ctx, userId, domain.LibraryQuery{Sort: domain.SortRecent, Limit: tiedPageSize, Offset: offset})
+		page, err := repo.ListArtistsForUser(ctx, userId, catalog.LibraryQuery{Sort: catalog.SortRecent, Limit: tiedPageSize, Offset: offset})
 		if err != nil {
 			t.Fatalf("ListArtistsForUser(offset=%d): %v", offset, err)
 		}
@@ -590,64 +585,27 @@ func TestPgxTrackRepo_ListArtistsForUser_PagesCoverEveryTiedGroupOnce(t *testing
 	}
 }
 
-func TestPgxLibraryRepos_TransientFailuresAreClassified(t *testing.T) {
-	lens := &PgxLibraryLensRepository{pool: deadlinePool{}}
-	featured := &PgxFeaturedArtistRepository{pool: deadlinePool{}}
+func TestPgxTrackRepo_ListAlbumsForUser_GroupsACompilationByItsAlbumArtist(t *testing.T) {
+	pool := testPool(t)
+	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	userId := shared.NewUserId(uuid.New())
-	ctx := context.Background()
-	query := domain.LibraryQuery{Limit: 10}
-	fa := domain.NewFeaturedArtistIdentityOnly("SZA", "", 0)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE user_id = $1`, userId.UUID())
+	})
 
-	cases := []struct {
-		name string
-		call func() error
-	}{
-		{"album list", func() error { _, err := lens.ListAlbumsForUser(ctx, userId, query); return err }},
-		{"artist list", func() error { _, err := lens.ListArtistsForUser(ctx, userId, query); return err }},
-		{"filtered tracks", func() error { _, _, err := lens.ListFilteredForUser(ctx, userId, query); return err }},
-		{"tracks featuring", func() error { _, err := featured.ListTracksFeaturing(ctx, userId, fa); return err }},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if err := tc.call(); !errors.Is(err, ports.ErrDBTransient) {
-				t.Fatalf("err = %v, want ports.ErrDBTransient", err)
-			}
+	base := time.Now().UTC().Truncate(time.Second)
+	for i, artist := range []string{"Adele", "Drake"} {
+		seedLibraryTrack(t, repo, userId, libraryTrackSpec{
+			title: "c" + strconv.Itoa(i), artist: artist, album: "Now 100",
+			albumArtist: strPtr("Various Artists"), addedAt: base.Add(time.Duration(-i) * time.Minute),
 		})
 	}
-}
 
-type deadlinePool struct{}
-
-var errPoolDeadline = fmt.Errorf("pool call: %w", context.DeadlineExceeded)
-
-func (deadlinePool) Begin(context.Context) (pgx.Tx, error) { return nil, errPoolDeadline }
-
-func (deadlinePool) Query(context.Context, string, ...any) (pgx.Rows, error) {
-	return nil, errPoolDeadline
-}
-
-func (deadlinePool) QueryRow(context.Context, string, ...any) pgx.Row {
-	return errRow{err: errPoolDeadline}
-}
-
-func (deadlinePool) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
-	return pgconn.CommandTag{}, errPoolDeadline
-}
-
-type errRow struct{ err error }
-
-func (r errRow) Scan(_ ...any) error { return r.err }
-
-func testPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
-	pool, err := pgxpool.New(context.Background(), dbURL)
+	albums, err := repo.ListAlbumsForUser(context.Background(), userId, catalog.LibraryQuery{Sort: catalog.SortRecent})
 	if err != nil {
-		t.Fatalf("failed to connect: %v", err)
+		t.Fatalf("ListAlbumsForUser: %v", err)
 	}
-	t.Cleanup(func() { pool.Close() })
-	return pool
+	if len(albums) != 1 || albums[0].TrackCount != 2 || albums[0].Artist != "Various Artists" {
+		t.Fatalf("albums = %+v, want one Now 100 group of 2 tracks by Various Artists", albums)
+	}
 }

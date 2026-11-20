@@ -30,7 +30,7 @@ func (s *SetTrackNumberService) Execute(
 	}
 	updated, err = s.trackRepo.SetTrackNumber(ctx, trackId, userId, trackNumber)
 	if err != nil {
-		return false, fmt.Errorf("set track number: %w", err)
+		return false, domain.WrapRepoError(ctx, "set track number", err)
 	}
 	if updated {
 		return true, nil

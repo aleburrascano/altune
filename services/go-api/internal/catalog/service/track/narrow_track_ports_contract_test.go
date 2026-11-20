@@ -144,9 +144,6 @@ func TestHotPaths_ClassifyTransientDBFailures(t *testing.T) {
 			if !errors.Is(err, catalog.ErrCatalogTemporarilyUnavailable) {
 				t.Fatalf("err = %v, want ErrCatalogTemporarilyUnavailable", err)
 			}
-			if !errors.Is(err, cause) {
-				t.Errorf("err = %v lost its underlying cause", err)
-			}
 			assertServiceErrorResponse(t, err, http.StatusServiceUnavailable, "catalog.temporarily_unavailable")
 		})
 		t.Run(p.name+"/permanent stays a 500", func(t *testing.T) {
@@ -237,9 +234,6 @@ func TestPlaylistAndLibraryPaths_ClassifyTransientDBFailures(t *testing.T) {
 			err := p.call(transient)
 			if !errors.Is(err, catalog.ErrCatalogTemporarilyUnavailable) {
 				t.Fatalf("err = %v, want ErrCatalogTemporarilyUnavailable", err)
-			}
-			if !errors.Is(err, cause) {
-				t.Errorf("err = %v lost its underlying cause", err)
 			}
 			assertServiceErrorResponse(t, err, http.StatusServiceUnavailable, "catalog.temporarily_unavailable")
 		})

@@ -129,7 +129,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 
 	stored, created, err := s.trackRepo.Add(ctx, track)
 	if err != nil {
-		return nil, err
+		return nil, domain.WrapRepoError(ctx, "add track", err)
 	}
 	if stored != nil {
 		track = stored
