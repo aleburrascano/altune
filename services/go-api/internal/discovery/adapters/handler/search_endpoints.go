@@ -281,7 +281,7 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *DiscoveryHandler) emitClientEvent(r *http.Request, eventType domain.EventType, userId shared.UserId, req DiscoveryEventRequest) {
-	if h.clientEvents == nil || !telemetry.AnalyticsAllowed(r) {
+	if h.clientEvents == nil {
 		return
 	}
 	h.clientEvents.Emit(r.Context(), telemetry.ClientEvent{
