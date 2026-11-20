@@ -83,7 +83,7 @@ go-api and staging bind-mount the folder `~/altune/cookies`, not a file, so yt-d
 bash deploy/cookie-jar-dir.sh
 ```
 
-It moves an old `~/altune/cookies.txt` into the folder, sets the folder to 2770 and the jar to 0660, and checks with the go-api image already on the VM (`--pull never`) that go-api's user can read the jar and replace files in the folder. It never prints the jar.
+It moves an old `~/altune/cookies.txt` into the folder. The VM user (uid 1001) is not in go-api's group (gid 1000), so it hands the folder over as root in a go-api image already on the VM (`--pull never --network none -u 0`, no sudo): the folder becomes yours with go-api's group at 2770, so setgid keeps every file go-api writes in that group, and the jar becomes 0660. It then checks as go-api's own user that it can read the jar and replace files in the folder. With no go-api image on the VM it fails rather than pull one. It never prints the jar. `bash deploy/cookie-jar-dir.sh <export>` also drops in a new jar; the acquisition-debug skill says why that is the only way to do it.
 
 ## VM tools
 
