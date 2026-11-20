@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -179,9 +180,10 @@ func TestCookieJar_AFailedRunLeavesTheLiveJarAsItWas(t *testing.T) {
 	}
 }
 
-func TestCookieJar_ARenewalThatDropsAnySessionCookieIsNotKept(t *testing.T) {
+func TestCookieJar_ARenewalThatDropsAnySessionCookieIsNotKeptAndSaysWhichOne(t *testing.T) {
 	for _, dropped := range sessionCookieNames {
 		t.Run(dropped, func(t *testing.T) {
+			logs := captureLogs(t)
 			jar := liveJar(t, signedInJar("old"))
 			ytDlpRenewing(t, jarWith(".youtube.com", "new", append(sessionCookiesWithout(dropped), "SIDCC")...), "exit 0")
 
@@ -190,11 +192,34 @@ func TestCookieJar_ARenewalThatDropsAnySessionCookieIsNotKept(t *testing.T) {
 			if got := jarContents(t, jar); got != signedInJar("old") {
 				t.Errorf("live jar = %q, want the signed-in jar kept over a renewal without %s", got, dropped)
 			}
+			assertOneRefusal(t, logs, dropped)
 		})
 	}
 }
 
-func TestCookieJar_OnlyYouTubeCookiesKeepTheSession(t *testing.T) {
+func TestCookieJar_ARenewalThatSignsOutNamesEveryMissingSessionCookie(t *testing.T) {
+	logs := captureLogs(t)
+	jar := liveJar(t, signedInJar("old"))
+	ytDlpRenewing(t, jarWith(".youtube.com", "new", "SIDCC"), "exit 0")
+
+	_ = canaryWith(jar)
+
+	assertOneRefusal(t, logs, sessionCookieNames...)
+}
+
+func assertOneRefusal(t *testing.T, logs *bytes.Buffer, missing ...string) {
+	t.Helper()
+	records := logRecords(t, logs, "acquisition.cookie_renewal_refused")
+	if len(records) != 1 {
+		t.Fatalf("renewal refusals = %v, want exactly one", records)
+	}
+	got, want := fmt.Sprint(records[0]["missing_cookies"]), fmt.Sprint(missing)
+	if got != want || records[0]["level"] != "INFO" || records[0]["run"] != "canary" {
+		t.Errorf("refusal = %v, want INFO for run canary with missing_cookies %s", records[0], want)
+	}
+}
+
+func TestCookieJar_ASessionCookieOnAnotherHostDoesNotCount(t *testing.T) {
 	withoutLoginInfo := jarWith(".youtube.com", "new", sessionCookiesWithout("LOGIN_INFO")...)
 	cases := map[string]string{
 		"login info moved to google":   withoutLoginInfo + jarWith(".google.com", "new", "LOGIN_INFO"),
@@ -204,6 +229,7 @@ func TestCookieJar_OnlyYouTubeCookiesKeepTheSession(t *testing.T) {
 	for name, renewed := range cases {
 		t.Run(name, func(t *testing.T) {
 			jar := liveJar(t, signedInJar("old"))
+			logs := captureLogs(t)
 			ytDlpRenewing(t, renewed, "exit 0")
 
 			_ = canaryWith(jar)
@@ -211,6 +237,7 @@ func TestCookieJar_OnlyYouTubeCookiesKeepTheSession(t *testing.T) {
 			if got := jarContents(t, jar); got != signedInJar("old") {
 				t.Errorf("live jar = %q, want the signed-in jar kept", got)
 			}
+			assertOneRefusal(t, logs, "LOGIN_INFO")
 		})
 	}
 }
@@ -224,6 +251,7 @@ func TestCookieJar_EveryFormOfAYouTubeCookieKeepsTheSession(t *testing.T) {
 	}
 	for name, renewed := range cases {
 		t.Run(name, func(t *testing.T) {
+			logs := captureLogs(t)
 			jar := liveJar(t, signedInJar("old"))
 			ytDlpRenewing(t, renewed, "exit 0")
 
@@ -231,6 +259,9 @@ func TestCookieJar_EveryFormOfAYouTubeCookieKeepsTheSession(t *testing.T) {
 
 			if got := jarContents(t, jar); got != renewed {
 				t.Errorf("live jar = %q, want the renewal %q that kept every session cookie", got, renewed)
+			}
+			if refused := logRecords(t, logs, "acquisition.cookie_renewal_refused"); len(refused) != 0 {
+				t.Errorf("renewal refusals = %v, want none for a renewal that kept every session cookie", refused)
 			}
 		})
 	}
@@ -346,13 +377,18 @@ func TestCookieJar_WithNoJarConfiguredNothingIsCopiedOrKept(t *testing.T) {
 
 func firstSignInFailures(t *testing.T, logs *bytes.Buffer) []map[string]any {
 	t.Helper()
+	return logRecords(t, logs, "acquisition.cookie_session_first_signin_failure")
+}
+
+func logRecords(t *testing.T, logs *bytes.Buffer, msg string) []map[string]any {
+	t.Helper()
 	var records []map[string]any
 	for line := range strings.Lines(logs.String()) {
 		var record map[string]any
 		if err := json.Unmarshal([]byte(line), &record); err != nil {
 			t.Fatalf("log line %q is not JSON: %v", line, err)
 		}
-		if record["msg"] == "acquisition.cookie_session_first_signin_failure" {
+		if record["msg"] == msg {
 			records = append(records, record)
 		}
 	}
@@ -546,17 +582,30 @@ func TestCookieJar_ABotCheckOnAJarReplacedMidRunIsNotChargedToTheNewJar(t *testi
 	assertOneFirstFailure(t, firstSignInFailures(t, logs), 3, dropped, 0)
 }
 
-func waitForFile(t *testing.T, path string, done <-chan error) {
+const waitLimit = 5 * time.Second
+
+func waitFor(t *testing.T, what string, done <-chan error, ready func() bool) {
 	t.Helper()
-	for {
-		if _, err := os.Stat(path); err == nil {
-			return
-		}
+	deadline := time.After(waitLimit)
+	for !ready() {
 		select {
 		case err := <-done:
-			t.Fatalf("the run returned %v before %s appeared", err, path)
+			t.Fatalf("the run returned %v before %s", err, what)
+		case <-deadline:
+			t.Fatalf("still waiting after %v for %s", waitLimit, what)
 		case <-time.After(time.Millisecond):
 		}
+	}
+}
+
+func returnedWithin(t *testing.T, limit time.Duration, what string, done <-chan error) error {
+	t.Helper()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(limit):
+		t.Fatalf("%s did not return within %v", what, limit)
+		return nil
 	}
 }
 
@@ -570,12 +619,12 @@ func TestCookieJar_TheCopyYtDlpGetsLivesWhereTheTempSweeperReapsIt(t *testing.T)
 	done := make(chan error, 1)
 
 	go func() { done <- canaryWith(jar) }()
-	waitForFile(t, started, done)
+	waitFor(t, "yt-dlp to start", done, func() bool { _, err := os.Stat(started); return err == nil })
 	swept := acquisition.NewTempWorkspace().SweepAbandoned(time.Now().Add(time.Hour))
 	if err := os.WriteFile(proceed, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	<-done
+	_ = returnedWithin(t, waitLimit, "Canary()", done)
 
 	copyPath, err := os.ReadFile(used)
 	if err != nil {

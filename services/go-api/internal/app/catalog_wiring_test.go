@@ -830,3 +830,35 @@ func TestCatalogWiring_StoredAudioReaderReportsAMissingStoredFile(t *testing.T) 
 		t.Fatal("CopyStored of a ref that is not stored: want error, got nil")
 	}
 }
+
+func TestYtDlpSearcherRecordsAJarsFirstBotCheckUnderTheConfiguredEnvironment(t *testing.T) {
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "yt-dlp"), []byte("#!/bin/sh\necho \"ERROR: [youtube] x: Sign in to confirm you're not a bot.\" >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	jar := filepath.Join(t.TempDir(), "cookies.txt")
+	if err := os.WriteFile(jar, []byte("# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t1999999999\tLOGIN_INFO\tl\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a := &App{cfg: &config.Config{YtDLPCookieFile: jar, Env: "staging"}}
+
+	_ = a.newYtDlpSearcher().Canary(context.Background(), acquisition.YouTubeCanary)
+
+	raw, err := os.ReadFile(jar + ".session.json")
+	if err != nil {
+		t.Fatalf("session file next to the configured jar: %v", err)
+	}
+	var session struct {
+		FirstSignInFailure *struct {
+			Environment string `json:"environment"`
+			Run         string `json:"run"`
+		} `json:"first_signin_failure"`
+	}
+	if err := json.Unmarshal(raw, &session); err != nil {
+		t.Fatalf("session file %q: %v", raw, err)
+	}
+	if f := session.FirstSignInFailure; f == nil || f.Environment != "staging" || f.Run != "canary" {
+		t.Errorf("first sign-in failure = %+v, want the canary's, recorded under environment staging", f)
+	}
+}

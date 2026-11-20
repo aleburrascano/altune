@@ -80,10 +80,10 @@ Set in the tier's env file, then release the running sha again so go-api picks i
 go-api and staging bind-mount the folder `~/altune/cookies`, not a file, so yt-dlp's renewed cookies can replace `cookies.txt` in place. The mount has `create_host_path: false`, so a missing folder fails `compose up` and the deploy script stops there under `set -e`. Run this once on the VM before the first deploy that mounts it, and again if the folder's modes drift:
 
 ```bash
-bash deploy/cookie-jar-dir.sh
+cd ~/altune/services/go-api && bash deploy/cookie-jar-dir.sh
 ```
 
-It moves an old `~/altune/cookies.txt` into the folder. The VM user (uid 1001) is not in go-api's group (gid 1000), so it hands the folder over as root in a go-api image already on the VM (`--pull never --network none -u 0`, no sudo): the folder becomes yours with go-api's group at 2770, so setgid keeps every file go-api writes in that group, and the jar becomes 0660. It then checks as go-api's own user that it can read the jar and replace files in the folder. With no go-api image on the VM it fails rather than pull one. It never prints the jar. `bash deploy/cookie-jar-dir.sh <export>` also drops in a new jar; the acquisition-debug skill says why that is the only way to do it.
+It moves an old `~/altune/cookies.txt` into the folder. The VM user (uid 1001) is not in go-api's group (gid 1000), so it hands the folder over as root in a go-api image already on the VM (`--pull never --network none -u 0`, no sudo): the folder becomes yours with go-api's group at 2770, so setgid keeps every file go-api writes in that group, and the jar becomes 0660. It then checks as go-api's own user that it can read the jar and replace files in the folder. With no go-api image on the VM it fails rather than pull one. It never prints the jar. Every check runs before anything is touched. `bash deploy/cookie-jar-dir.sh <export>` also drops in a new jar and `--rollback` undoes it; the acquisition-debug skill says how, and why that is the only way to do it.
 
 ## VM tools
 

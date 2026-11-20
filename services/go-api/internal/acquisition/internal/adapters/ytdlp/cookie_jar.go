@@ -28,7 +28,10 @@ const (
 	lockWaitLimit          = 3 * time.Second
 )
 
-const firstSignInFailureLog = "acquisition.cookie_session_first_signin_failure"
+const (
+	firstSignInFailureLog = "acquisition.cookie_session_first_signin_failure"
+	renewalRefusedLog     = "acquisition.cookie_renewal_refused"
+)
 
 var sessionCookies = []string{
 	"LOGIN_INFO", "SID", "HSID", "SSID", "APISID", "SAPISID",
@@ -105,7 +108,11 @@ func (l cookieLease) keepRenewedCookies(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if bytes.Equal(renewed, l.snapshot) || dropsSessionCookie(l.snapshot, renewed) {
+	if bytes.Equal(renewed, l.snapshot) {
+		return nil
+	}
+	if dropped := droppedSessionCookies(l.snapshot, renewed); len(dropped) > 0 {
+		slog.InfoContext(ctx, renewalRefusedLog, "run", l.run, "missing_cookies", dropped)
 		return nil
 	}
 	return l.underLock(ctx, func(current jarFile, session jarSession) error {
@@ -237,9 +244,9 @@ func lockJar(ctx context.Context, path string) (unlock func(), err error) {
 	}
 }
 
-func dropsSessionCookie(snapshot, renewed []byte) bool {
+func droppedSessionCookies(snapshot, renewed []byte) []string {
 	had, kept := youtubeCookieNames(snapshot), youtubeCookieNames(renewed)
-	return slices.ContainsFunc(sessionCookies, func(name string) bool { return had[name] && !kept[name] })
+	return slices.DeleteFunc(slices.Clone(sessionCookies), func(name string) bool { return !had[name] || kept[name] })
 }
 
 func youtubeCookieNames(jar []byte) map[string]bool {

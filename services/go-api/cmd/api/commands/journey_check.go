@@ -52,10 +52,13 @@ func runJourneyCheckWithConfig(cfg *config.Config) error {
 	if err != nil {
 		return journeyStepFailed("search", err)
 	}
-	downloader := acquisition.NewYtDlpAudioSearcher(cfg.FFmpegLocation, cfg.YtDLPCookieFile, cfg.YtDLPJSRuntime).
+	return runJourneyCheck(ctx, searcher, journeyDownloaderFor(cfg), os.Stdout)
+}
+
+func journeyDownloaderFor(cfg *config.Config) *acquisition.YtDlpAudioSearcher {
+	return acquisition.NewYtDlpAudioSearcher(cfg.FFmpegLocation, cfg.YtDLPCookieFile, cfg.YtDLPJSRuntime).
 		WithPOTokenURL(cfg.YtDLPPOTokenURL).
 		WithEnvironment(cfg.Env)
-	return runJourneyCheck(ctx, searcher, downloader, os.Stdout)
 }
 
 func rankingOnlySearcher(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (journeySearcher, error) {

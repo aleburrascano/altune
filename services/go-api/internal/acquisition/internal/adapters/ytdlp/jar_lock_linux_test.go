@@ -69,18 +69,12 @@ func TestCookieJar_AWriteBackRetriesUntilAnotherProcessReleasesTheJarLock(t *tes
 
 	go func() { done <- canaryWith(jar) }()
 
-	for opens.seen(t) < 2 {
-		select {
-		case err := <-done:
-			t.Fatalf("Canary() returned %v while another process held the jar lock, want it to keep trying", err)
-		case <-time.After(time.Millisecond):
-		}
-	}
+	waitFor(t, "a second try at the jar lock another process holds", done, func() bool { return opens.seen(t) >= 2 })
 	if got := jarContents(t, jar); got != signedInJar("old") {
 		t.Fatalf("live jar = %q while another process held the lock, want it untouched", got)
 	}
 	release()
-	if err := <-done; err != nil {
+	if err := returnedWithin(t, waitLimit, "Canary() after the jar lock was released", done); err != nil {
 		t.Fatalf("Canary() = %v, want nil", err)
 	}
 	if got := jarContents(t, jar); got != signedInJar("new") {
@@ -103,22 +97,11 @@ func TestCookieJar_AWriteBackGivesUpAndWarnsWhenTheRunEndsWhileTheJarIsLocked(t 
 		_, err := acquisition.NewYtDlpAudioSearcher("", jar, "").Download(ctx, youTubeWatchURL, outDir)
 		done <- err
 	}()
-	for opens.seen(t) < 2 {
-		select {
-		case err := <-done:
-			t.Fatalf("Download() returned %v while another process held the jar lock, want it to keep trying", err)
-		case <-time.After(time.Millisecond):
-		}
-	}
+	waitFor(t, "a try at the jar lock another process holds", done, func() bool { return opens.seen(t) >= 1 })
 	cancel()
 
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Errorf("Download() = %v, want the finished download returned", err)
-		}
-	case <-time.After(30 * time.Second):
-		t.Fatal("Download() still waiting for the jar lock 30s after its context ended, want it to give up")
+	if err := returnedWithin(t, time.Second, "Download() after its context was canceled", done); err != nil {
+		t.Errorf("Download() = %v, want the finished download returned", err)
 	}
 	if got := jarContents(t, jar); got != signedInJar("old") {
 		t.Errorf("live jar = %q, want it untouched while another process held the lock", got)
@@ -141,13 +124,8 @@ func TestCookieJar_AWriteBackForACallerWithNoDeadlineGivesUpOnALockThatIsNeverRe
 		done <- err
 	}()
 
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Errorf("Download() = %v, want the finished download returned", err)
-		}
-	case <-time.After(30 * time.Second):
-		t.Fatal("Download() with no deadline still waiting for the jar lock after 30s, want it to give up")
+	if err := returnedWithin(t, 2*waitLimit, "Download() with no deadline", done); err != nil {
+		t.Errorf("Download() = %v, want the finished download returned", err)
 	}
 	if got := jarContents(t, jar); got != signedInJar("old") {
 		t.Errorf("live jar = %q, want it untouched while another process held the lock", got)
