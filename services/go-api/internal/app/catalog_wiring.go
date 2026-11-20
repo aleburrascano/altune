@@ -355,7 +355,8 @@ func (a *App) budgetedYTMSearchClient(ctx context.Context) *acquisition.YtmSearc
 func (a *App) newYtDlpSearcher() *acquisition.YtDlpAudioSearcher {
 	return acquisition.NewYtDlpAudioSearcher(a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime).
 		WithRemoteComponents(a.cfg.YtDLPRemoteComponents).
-		WithPOTokenURL(a.cfg.YtDLPPOTokenURL)
+		WithPOTokenURL(a.cfg.YtDLPPOTokenURL).
+		WithEnvironment(a.cfg.Env)
 }
 
 func (a *App) audioSourcesFor(ctx context.Context, searcher *acquisition.YtDlpAudioSearcher) sourceTiers {

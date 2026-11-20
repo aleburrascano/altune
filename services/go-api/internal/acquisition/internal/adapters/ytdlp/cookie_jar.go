@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -23,18 +24,24 @@ const (
 	cookieJarSessionSuffix = ".session.json"
 	replacementSuffix      = ".next"
 	sessionFileMode        = 0o644
+	lockRetryInterval      = 25 * time.Millisecond
+	lockWaitLimit          = 3 * time.Second
 )
 
 const firstSignInFailureLog = "acquisition.cookie_session_first_signin_failure"
 
-var sapisidCookies = []string{"SAPISID", "__Secure-1PAPISID", "__Secure-3PAPISID"}
+var sessionCookies = []string{
+	"LOGIN_INFO", "SID", "HSID", "SSID", "APISID", "SAPISID",
+	"__Secure-1PAPISID", "__Secure-3PAPISID", "__Secure-1PSID", "__Secure-3PSID", "__Secure-1PSIDTS",
+}
 
 type cookieLease struct {
-	live     string
-	run      string
-	path     string
-	snapshot []byte
-	cleanup  func()
+	live        string
+	run         string
+	environment string
+	path        string
+	snapshot    []byte
+	cleanup     func()
 }
 
 type jarFile struct {
@@ -44,10 +51,18 @@ type jarFile struct {
 }
 
 type jarSession struct {
-	JarSHA256           string    `json:"jar_sha256"`
-	InstalledAt         time.Time `json:"installed_at"`
-	WriteBacks          int       `json:"write_backs"`
-	SignInFailureLogged bool      `json:"signin_failure_logged"`
+	JarSHA256          string         `json:"jar_sha256"`
+	InstalledAt        time.Time      `json:"installed_at"`
+	WriteBacks         int            `json:"write_backs"`
+	FirstSignInFailure *signInFailure `json:"first_signin_failure"`
+}
+
+type signInFailure struct {
+	At              time.Time `json:"at"`
+	SessionAgeHours float64   `json:"session_age_hours"`
+	Run             string    `json:"run"`
+	WriteBacks      int       `json:"write_backs"`
+	Environment     string    `json:"environment"`
 }
 
 func (s *YtDlpAudioSearcher) leaseCookieJar(run string) (cookieLease, error) {
@@ -62,7 +77,7 @@ func (s *YtDlpAudioSearcher) leaseCookieJar(run string) (cookieLease, error) {
 	if err != nil {
 		return cookieLease{}, err
 	}
-	return cookieLease{live: s.cookieFile, run: run, path: path, snapshot: snapshot, cleanup: cleanup}, nil
+	return cookieLease{live: s.cookieFile, run: run, environment: s.environment, path: path, snapshot: snapshot, cleanup: cleanup}, nil
 }
 
 func (l cookieLease) settle(ctx context.Context, runErr error, stderr string) {
@@ -72,7 +87,7 @@ func (l cookieLease) settle(ctx context.Context, runErr error, stderr string) {
 	var err error
 	switch {
 	case runErr == nil:
-		err = l.keepRenewedCookies()
+		err = l.keepRenewedCookies(ctx)
 	case asksToSignIn(stderr):
 		err = l.recordSignInFailure(ctx)
 	}
@@ -85,15 +100,15 @@ func asksToSignIn(stderr string) bool {
 	return strings.Contains(stderr, "not a bot")
 }
 
-func (l cookieLease) keepRenewedCookies() error {
+func (l cookieLease) keepRenewedCookies(ctx context.Context) error {
 	renewed, err := os.ReadFile(l.path)
 	if err != nil {
 		return err
 	}
-	if bytes.Equal(renewed, l.snapshot) || signedIn(l.snapshot) && !signedIn(renewed) {
+	if bytes.Equal(renewed, l.snapshot) || dropsSessionCookie(l.snapshot, renewed) {
 		return nil
 	}
-	return l.underLock(func(current jarFile, session jarSession) error {
+	return l.underLock(ctx, func(current jarFile, session jarSession) error {
 		if err := replaceFile(l.live, renewed, current.mode); err != nil {
 			return err
 		}
@@ -104,22 +119,41 @@ func (l cookieLease) keepRenewedCookies() error {
 }
 
 func (l cookieLease) recordSignInFailure(ctx context.Context) error {
-	return l.underLock(func(_ jarFile, session jarSession) error {
-		if session.SignInFailureLogged {
+	return l.underLock(ctx, func(_ jarFile, session jarSession) error {
+		if session.FirstSignInFailure != nil {
 			return nil
 		}
-		slog.WarnContext(ctx, firstSignInFailureLog,
-			"run", l.run,
-			"session_age_hours", math.Round(time.Since(session.InstalledAt).Hours()*10)/10,
-			"installed_at", session.InstalledAt.Format(time.RFC3339),
-			"write_backs", session.WriteBacks)
-		session.SignInFailureLogged = true
-		return session.save(l.live)
+		session.FirstSignInFailure = l.signInFailure(session, time.Now())
+		if err := session.save(l.live); err != nil {
+			return err
+		}
+		logFirstSignInFailure(ctx, session)
+		return nil
 	})
 }
 
-func (l cookieLease) underLock(update func(jarFile, jarSession) error) error {
-	unlock, err := lockJar(l.live + cookieJarLockSuffix)
+func (l cookieLease) signInFailure(session jarSession, now time.Time) *signInFailure {
+	return &signInFailure{
+		At:              now,
+		SessionAgeHours: math.Round(now.Sub(session.InstalledAt).Hours()*10) / 10,
+		Run:             l.run,
+		WriteBacks:      session.WriteBacks,
+		Environment:     l.environment,
+	}
+}
+
+func logFirstSignInFailure(ctx context.Context, session jarSession) {
+	failure := session.FirstSignInFailure
+	slog.WarnContext(ctx, firstSignInFailureLog,
+		"run", failure.Run,
+		"environment", failure.Environment,
+		"session_age_hours", failure.SessionAgeHours,
+		"installed_at", session.InstalledAt.Format(time.RFC3339),
+		"write_backs", failure.WriteBacks)
+}
+
+func (l cookieLease) underLock(ctx context.Context, update func(jarFile, jarSession) error) error {
+	unlock, err := lockJar(ctx, l.live+cookieJarLockSuffix)
 	if err != nil {
 		return err
 	}
@@ -187,9 +221,25 @@ func replaceFile(path string, contents []byte, mode fs.FileMode) error {
 	return os.Rename(next, path)
 }
 
-func signedIn(jar []byte) bool {
-	names := youtubeCookieNames(jar)
-	return names["LOGIN_INFO"] && slices.ContainsFunc(sapisidCookies, func(name string) bool { return names[name] })
+func lockJar(ctx context.Context, path string) (unlock func(), err error) {
+	ctx, cancel := context.WithTimeout(ctx, lockWaitLimit)
+	defer cancel()
+	for {
+		unlock, err := tryLockJar(path)
+		if !errors.Is(err, errJarBusy) {
+			return unlock, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("gave up waiting for the cookie jar lock: %w", ctx.Err())
+		case <-time.After(lockRetryInterval):
+		}
+	}
+}
+
+func dropsSessionCookie(snapshot, renewed []byte) bool {
+	had, kept := youtubeCookieNames(snapshot), youtubeCookieNames(renewed)
+	return slices.ContainsFunc(sessionCookies, func(name string) bool { return had[name] && !kept[name] })
 }
 
 func youtubeCookieNames(jar []byte) map[string]bool {

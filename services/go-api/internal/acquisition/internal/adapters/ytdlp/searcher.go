@@ -45,6 +45,7 @@ const ytDlpBinary = "yt-dlp"
 type YtDlpAudioSearcher struct {
 	ffmpegLocation   string
 	cookieFile       string
+	environment      string
 	jsRuntime        string
 	remoteComponents string
 	potURL           string
@@ -64,6 +65,11 @@ func (s *YtDlpAudioSearcher) WithRemoteComponents(spec string) *YtDlpAudioSearch
 
 func (s *YtDlpAudioSearcher) WithPOTokenURL(url string) *YtDlpAudioSearcher {
 	s.potURL = url
+	return s
+}
+
+func (s *YtDlpAudioSearcher) WithEnvironment(name string) *YtDlpAudioSearcher {
+	s.environment = name
 	return s
 }
 

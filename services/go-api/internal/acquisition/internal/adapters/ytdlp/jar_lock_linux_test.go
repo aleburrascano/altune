@@ -1,15 +1,18 @@
 package ytdlp_test
 
 import (
+	"altune/go-api/internal/acquisition"
+	"context"
+	"encoding/binary"
+	"errors"
 	"os"
-	"strconv"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
 )
 
-func holdJarLock(t *testing.T, jar string) (lockInode uint64, release func()) {
+func holdJarLock(t *testing.T, jar string) (release func()) {
 	t.Helper()
 	f, err := os.OpenFile(jar+".lock", os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
@@ -18,42 +21,58 @@ func holdJarLock(t *testing.T, jar string) (lockInode uint64, release func()) {
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
 		t.Fatal(err)
 	}
-	var stat syscall.Stat_t
-	if err := syscall.Fstat(int(f.Fd()), &stat); err != nil {
-		t.Fatal(err)
-	}
-	return stat.Ino, func() { _ = f.Close() }
+	t.Cleanup(func() { _ = f.Close() })
+	return func() { _ = f.Close() }
 }
 
-func someoneWaitsForLock(t *testing.T, inode uint64) bool {
+type lockOpens struct {
+	fd    int
+	count int
+}
+
+func watchLockOpens(t *testing.T, jar string) *lockOpens {
 	t.Helper()
-	locks, err := os.ReadFile("/proc/locks")
+	fd, err := syscall.InotifyInit1(syscall.IN_NONBLOCK | syscall.IN_CLOEXEC)
 	if err != nil {
 		t.Fatal(err)
 	}
-	suffix := ":" + strconv.FormatUint(inode, 10)
-	for line := range strings.Lines(string(locks)) {
-		fields := strings.Fields(line)
-		if len(fields) > 6 && fields[1] == "->" && fields[2] == "FLOCK" && strings.HasSuffix(fields[6], suffix) {
-			return true
-		}
+	t.Cleanup(func() { _ = syscall.Close(fd) })
+	if _, err := syscall.InotifyAddWatch(fd, jar+".lock", syscall.IN_OPEN); err != nil {
+		t.Fatal(err)
 	}
-	return false
+	return &lockOpens{fd: fd}
 }
 
-func TestCookieJar_AWriteBackWaitsWhileAnotherProcessHoldsTheJarLock(t *testing.T) {
+func (w *lockOpens) seen(t *testing.T) int {
+	t.Helper()
+	buf := make([]byte, 4096)
+	n, err := syscall.Read(w.fd, buf)
+	if errors.Is(err, syscall.EAGAIN) {
+		return w.count
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	for offset := 0; offset+syscall.SizeofInotifyEvent <= n; {
+		w.count++
+		offset += syscall.SizeofInotifyEvent + int(binary.NativeEndian.Uint32(buf[offset+12:offset+16]))
+	}
+	return w.count
+}
+
+func TestCookieJar_AWriteBackRetriesUntilAnotherProcessReleasesTheJarLock(t *testing.T) {
 	jar := liveJar(t, signedInJar("old"))
 	ytDlpRenewing(t, signedInJar("new"), "echo 212")
-	inode, release := holdJarLock(t, jar)
+	release := holdJarLock(t, jar)
+	opens := watchLockOpens(t, jar)
 	done := make(chan error, 1)
 
 	go func() { done <- canaryWith(jar) }()
 
-	for !someoneWaitsForLock(t, inode) {
+	for opens.seen(t) < 2 {
 		select {
 		case err := <-done:
-			release()
-			t.Fatalf("Canary() returned %v while another process held the jar lock, want it to wait for the lock", err)
+			t.Fatalf("Canary() returned %v while another process held the jar lock, want it to keep trying", err)
 		case <-time.After(time.Millisecond):
 		}
 	}
@@ -66,5 +85,74 @@ func TestCookieJar_AWriteBackWaitsWhileAnotherProcessHoldsTheJarLock(t *testing.
 	}
 	if got := jarContents(t, jar); got != signedInJar("new") {
 		t.Errorf("live jar = %q after the lock was released, want the renewed cookies", got)
+	}
+}
+
+func TestCookieJar_AWriteBackGivesUpAndWarnsWhenTheRunEndsWhileTheJarIsLocked(t *testing.T) {
+	logs := captureLogs(t)
+	outDir := t.TempDir()
+	jar := liveJar(t, signedInJar("old"))
+	ytDlpRenewing(t, signedInJar("new"), stubDownload(outDir))
+	holdJarLock(t, jar)
+	opens := watchLockOpens(t, jar)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+
+	go func() {
+		_, err := acquisition.NewYtDlpAudioSearcher("", jar, "").Download(ctx, youTubeWatchURL, outDir)
+		done <- err
+	}()
+	for opens.seen(t) < 2 {
+		select {
+		case err := <-done:
+			t.Fatalf("Download() returned %v while another process held the jar lock, want it to keep trying", err)
+		case <-time.After(time.Millisecond):
+		}
+	}
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Download() = %v, want the finished download returned", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("Download() still waiting for the jar lock 30s after its context ended, want it to give up")
+	}
+	if got := jarContents(t, jar); got != signedInJar("old") {
+		t.Errorf("live jar = %q, want it untouched while another process held the lock", got)
+	}
+	if warned := loggedErrors(t, logs, "acquisition.cookie_jar_update_failed"); len(warned) != 1 || !strings.Contains(warned[0], "gave up waiting for the cookie jar lock: context canceled") {
+		t.Errorf("update failure warnings = %q, want one saying it gave up on the lock when the run was canceled", warned)
+	}
+}
+
+func TestCookieJar_AWriteBackForACallerWithNoDeadlineGivesUpOnALockThatIsNeverReleased(t *testing.T) {
+	logs := captureLogs(t)
+	outDir := t.TempDir()
+	jar := liveJar(t, signedInJar("old"))
+	ytDlpRenewing(t, signedInJar("new"), stubDownload(outDir))
+	holdJarLock(t, jar)
+	done := make(chan error, 1)
+
+	go func() {
+		_, err := acquisition.NewYtDlpAudioSearcher("", jar, "").Download(context.Background(), youTubeWatchURL, outDir)
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Download() = %v, want the finished download returned", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("Download() with no deadline still waiting for the jar lock after 30s, want it to give up")
+	}
+	if got := jarContents(t, jar); got != signedInJar("old") {
+		t.Errorf("live jar = %q, want it untouched while another process held the lock", got)
+	}
+	if warned := loggedErrors(t, logs, "acquisition.cookie_jar_update_failed"); len(warned) != 1 || !strings.Contains(warned[0], "gave up waiting for the cookie jar lock: context deadline exceeded") {
+		t.Errorf("update failure warnings = %q, want one saying it gave up on the lock at its own deadline", warned)
 	}
 }

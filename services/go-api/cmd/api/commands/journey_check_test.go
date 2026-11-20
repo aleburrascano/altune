@@ -198,45 +198,6 @@ func TestRunJourneyCheckRedactsCookiePathsInTheFailure(t *testing.T) {
 	}
 }
 
-func TestThrowawayCookieJarCopiesTheLiveJarAndRemovesTheCopy(t *testing.T) {
-	livePath := filepath.Join(t.TempDir(), "cookies.txt")
-	if err := os.WriteFile(livePath, []byte("# Netscape HTTP Cookie File\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	path, remove, err := throwawayCookieJar(livePath)
-	if err != nil {
-		t.Fatalf("throwawayCookieJar(%q) error = %v", livePath, err)
-	}
-	copied, readErr := os.ReadFile(path)
-	remove()
-
-	if path == livePath || readErr != nil || string(copied) != "# Netscape HTTP Cookie File\n" {
-		t.Errorf("throwawayCookieJar(%q) = %q holding %q (read err %v), want a distinct copy of the live jar", livePath, path, copied, readErr)
-	}
-	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("copy %q still present after remove: stat err = %v", path, err)
-	}
-}
-
-func TestThrowawayCookieJarRunsWithoutCookiesWhenNoJarIsConfigured(t *testing.T) {
-	path, remove, err := throwawayCookieJar("")
-	remove()
-
-	if path != "" || err != nil {
-		t.Errorf("throwawayCookieJar(\"\") = %q, %v, want \"\", nil", path, err)
-	}
-}
-
-func TestThrowawayCookieJarFailsWhenTheLiveJarIsMissing(t *testing.T) {
-	_, remove, err := throwawayCookieJar(filepath.Join(t.TempDir(), "absent.txt"))
-	remove()
-
-	if !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("throwawayCookieJar(absent) error = %v, want not-exist", err)
-	}
-}
-
 func TestRunJourneyCheckRedactsSecretsInASearchFailure(t *testing.T) {
 	searcher := &fakeJourneySearcher{err: errors.New("GET https://api.example/search?q=x&access_token=sk_live_abc123: 401")}
 

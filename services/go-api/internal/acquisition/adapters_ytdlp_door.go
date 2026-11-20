@@ -8,7 +8,6 @@ type (
 )
 
 var (
-	CopyToTempFile        = ytdlp.CopyToTempFile
 	NewFfprobeProber      = ytdlp.NewFfprobeProber
 	NewYtDlpSource        = ytdlp.NewSource
 	NewYtDlpAudioSearcher = ytdlp.NewYtDlpAudioSearcher

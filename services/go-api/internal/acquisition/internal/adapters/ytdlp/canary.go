@@ -87,14 +87,6 @@ func isSoundCloudPreviewDuration(stdout string) bool {
 	return err == nil && isSoundCloudPreviewLength(duration)
 }
 
-func CopyToTempFile(sourcePath, pattern string) (path string, cleanup func(), err error) {
-	contents, err := os.ReadFile(sourcePath)
-	if err != nil {
-		return "", func() {}, err
-	}
-	return writeTempCopy(contents, pattern)
-}
-
 func writeTempCopy(contents []byte, pattern string) (path string, cleanup func(), err error) {
 	dir, err := os.MkdirTemp("", cookieCopyDirPattern)
 	if err != nil {

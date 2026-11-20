@@ -75,6 +75,16 @@ Set in the tier's env file, then release the running sha again so go-api picks i
 - `ACQUISITION_PAUSED=true` pauses acquisition.
 - `DISABLED_JOBS=acquisition prune,stream recovery` turns jobs off. An unknown name fails startup.
 
+## Cookie jar folder
+
+go-api and staging bind-mount the folder `~/altune/cookies`, not a file, so yt-dlp's renewed cookies can replace `cookies.txt` in place. The mount has `create_host_path: false`, so a missing folder fails `compose up` and the deploy script stops there under `set -e`. Run this once on the VM before the first deploy that mounts it, and again if the folder's modes drift:
+
+```bash
+bash deploy/cookie-jar-dir.sh
+```
+
+It moves an old `~/altune/cookies.txt` into the folder, sets the folder to 2770 and the jar to 0660, and checks with the go-api image already on the VM (`--pull never`) that go-api's user can read the jar and replace files in the folder. It never prints the jar.
+
 ## VM tools
 
 - `supabase`: logged in, for staging Supabase project ops.

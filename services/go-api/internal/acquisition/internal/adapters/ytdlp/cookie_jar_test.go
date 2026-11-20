@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -25,8 +26,25 @@ func netscapeJar(cookies ...string) string {
 	return jar
 }
 
+var sessionCookieNames = []string{
+	"LOGIN_INFO", "SID", "HSID", "SSID", "APISID", "SAPISID",
+	"__Secure-1PAPISID", "__Secure-3PAPISID", "__Secure-1PSID", "__Secure-3PSID", "__Secure-1PSIDTS",
+}
+
+func jarWith(host, generation string, names ...string) string {
+	cookies := make([]string, 0, len(names))
+	for _, name := range names {
+		cookies = append(cookies, host+" "+name+"="+name+"-"+generation)
+	}
+	return netscapeJar(cookies...)
+}
+
 func signedInJar(generation string) string {
-	return netscapeJar(".youtube.com LOGIN_INFO=login-"+generation, ".youtube.com SAPISID=sapisid-"+generation, ".youtube.com SIDCC=sidcc-"+generation)
+	return jarWith(".youtube.com", generation, append(slices.Clone(sessionCookieNames), "SIDCC")...)
+}
+
+func sessionCookiesWithout(dropped string) []string {
+	return slices.DeleteFunc(slices.Clone(sessionCookieNames), func(name string) bool { return name == dropped })
 }
 
 func liveJarAt(t *testing.T, contents string, mode fs.FileMode, installed time.Time) string {
@@ -84,7 +102,11 @@ func ytDlpReplacingTheLiveJar(t *testing.T, live, replacement, after string) {
 }
 
 func canaryWith(jar string) error {
-	return acquisition.NewYtDlpAudioSearcher("", jar, "").Canary(context.Background(), acquisition.YouTubeCanary)
+	return canaryIn("", jar)
+}
+
+func canaryIn(environment, jar string) error {
+	return acquisition.NewYtDlpAudioSearcher("", jar, "").WithEnvironment(environment).Canary(context.Background(), acquisition.YouTubeCanary)
 }
 
 type runKind struct {
@@ -157,14 +179,27 @@ func TestCookieJar_AFailedRunLeavesTheLiveJarAsItWas(t *testing.T) {
 	}
 }
 
-func TestCookieJar_ARenewalThatSignsTheSessionOutIsNotKept(t *testing.T) {
+func TestCookieJar_ARenewalThatDropsAnySessionCookieIsNotKept(t *testing.T) {
+	for _, dropped := range sessionCookieNames {
+		t.Run(dropped, func(t *testing.T) {
+			jar := liveJar(t, signedInJar("old"))
+			ytDlpRenewing(t, jarWith(".youtube.com", "new", append(sessionCookiesWithout(dropped), "SIDCC")...), "exit 0")
+
+			_ = canaryWith(jar)
+
+			if got := jarContents(t, jar); got != signedInJar("old") {
+				t.Errorf("live jar = %q, want the signed-in jar kept over a renewal without %s", got, dropped)
+			}
+		})
+	}
+}
+
+func TestCookieJar_OnlyYouTubeCookiesKeepTheSession(t *testing.T) {
+	withoutLoginInfo := jarWith(".youtube.com", "new", sessionCookiesWithout("LOGIN_INFO")...)
 	cases := map[string]string{
-		"login info cleared":           netscapeJar(".youtube.com SAPISID=s", ".youtube.com SIDCC=new"),
-		"every sapisid cookie cleared": netscapeJar(".youtube.com LOGIN_INFO=l", ".youtube.com SIDCC=new"),
-		"login info only on google":    netscapeJar(".google.com LOGIN_INFO=l", ".youtube.com SAPISID=s"),
-		"sapisid only on google":       netscapeJar(".youtube.com LOGIN_INFO=l", ".google.com SAPISID=s"),
-		"lookalike youtube host":       netscapeJar(".notyoutube.com LOGIN_INFO=l", ".youtube.com SAPISID=s"),
-		"truncated cookie line":        netscapeJar(".youtube.com SAPISID=s") + ".youtube.com\tTRUE\t/\tTRUE\t1999999999\tLOGIN_INFO",
+		"login info moved to google":   withoutLoginInfo + jarWith(".google.com", "new", "LOGIN_INFO"),
+		"login info on a lookalike":    withoutLoginInfo + jarWith(".notyoutube.com", "new", "LOGIN_INFO"),
+		"login info line has no value": withoutLoginInfo + ".youtube.com\tTRUE\t/\tTRUE\t1999999999\tLOGIN_INFO",
 	}
 	for name, renewed := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -174,21 +209,18 @@ func TestCookieJar_ARenewalThatSignsTheSessionOutIsNotKept(t *testing.T) {
 			_ = canaryWith(jar)
 
 			if got := jarContents(t, jar); got != signedInJar("old") {
-				t.Errorf("live jar = %q, want the signed-in jar kept over a signed-out renewal", got)
+				t.Errorf("live jar = %q, want the signed-in jar kept", got)
 			}
 		})
 	}
 }
 
-func TestCookieJar_AnySignedInRenewalIsKept(t *testing.T) {
+func TestCookieJar_EveryFormOfAYouTubeCookieKeepsTheSession(t *testing.T) {
 	cases := map[string]string{
-		"SAPISID":              netscapeJar(".youtube.com LOGIN_INFO=l", ".youtube.com SAPISID=s"),
-		"__Secure-1PAPISID":    netscapeJar(".youtube.com LOGIN_INFO=l", ".youtube.com __Secure-1PAPISID=s"),
-		"__Secure-3PAPISID":    netscapeJar(".youtube.com LOGIN_INFO=l", ".youtube.com __Secure-3PAPISID=s"),
-		"www host":             netscapeJar("www.youtube.com LOGIN_INFO=l", "www.youtube.com SAPISID=s"),
-		"bare host":            netscapeJar("youtube.com LOGIN_INFO=l", "youtube.com SAPISID=s"),
-		"http-only login info": netscapeJar("#HttpOnly_.youtube.com LOGIN_INFO=l", ".youtube.com SAPISID=s"),
-		"windows line endings": strings.ReplaceAll(netscapeJar(".youtube.com LOGIN_INFO=l", ".youtube.com SAPISID=s"), "\n", "\r\n"),
+		"www host":             jarWith("www.youtube.com", "new", sessionCookieNames...),
+		"bare host":            jarWith("youtube.com", "new", sessionCookieNames...),
+		"http-only cookies":    jarWith("#HttpOnly_.youtube.com", "new", sessionCookieNames...),
+		"windows line endings": strings.ReplaceAll(signedInJar("new"), "\n", "\r\n"),
 	}
 	for name, renewed := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -198,7 +230,7 @@ func TestCookieJar_AnySignedInRenewalIsKept(t *testing.T) {
 			_ = canaryWith(jar)
 
 			if got := jarContents(t, jar); got != renewed {
-				t.Errorf("live jar = %q, want the signed-in renewal %q", got, renewed)
+				t.Errorf("live jar = %q, want the renewal %q that kept every session cookie", got, renewed)
 			}
 		})
 	}
@@ -218,13 +250,13 @@ func TestCookieJar_AnAnonymousJarIsRenewedToo(t *testing.T) {
 
 func TestCookieJar_AJarReplacedWhileYtDlpRanIsNotOverwritten(t *testing.T) {
 	jar := liveJar(t, signedInJar("old"))
-	ytDlpReplacingTheLiveJar(t, jar, signedInJar("human"), cookieArgLoop+"echo '"+signedInJar("new")+"' > \"$jar\"\necho 212")
+	ytDlpReplacingTheLiveJar(t, jar, signedInJar("hum"), cookieArgLoop+"printf '%s' '"+signedInJar("new")+"' > \"$jar\"\necho 212")
 
 	if err := canaryWith(jar); err != nil {
 		t.Fatalf("Canary() = %v, want nil", err)
 	}
 
-	if got := jarContents(t, jar); got != signedInJar("human") {
+	if got := jarContents(t, jar); got != signedInJar("hum") {
 		t.Errorf("live jar = %q, want the jar dropped in during the run kept", got)
 	}
 }
@@ -338,6 +370,86 @@ func assertOneFirstFailure(t *testing.T, records []map[string]any, ageHours floa
 	}
 }
 
+type recordedFailure struct {
+	At              time.Time `json:"at"`
+	SessionAgeHours float64   `json:"session_age_hours"`
+	Run             string    `json:"run"`
+	WriteBacks      int       `json:"write_backs"`
+	Environment     string    `json:"environment"`
+}
+
+func firstFailureOnRecord(t *testing.T, jar string) *recordedFailure {
+	t.Helper()
+	raw, err := os.ReadFile(jar + ".session.json")
+	if err != nil {
+		t.Fatalf("session file: %v", err)
+	}
+	var session struct {
+		FirstSignInFailure *recordedFailure `json:"first_signin_failure"`
+	}
+	if err := json.Unmarshal(raw, &session); err != nil {
+		t.Fatalf("session file %q is not JSON: %v", raw, err)
+	}
+	return session.FirstSignInFailure
+}
+
+func TestCookieJar_TheFirstSignInFailureIsLoggedAndKeptInTheSessionFileWithItsEnvironment(t *testing.T) {
+	logs := captureLogs(t)
+	installed := time.Now().Add(-50 * time.Hour)
+	jar := liveJarAt(t, signedInJar("old"), 0o644, installed)
+	ytDlpFailing(t, botCheck)
+	before := time.Now()
+
+	_ = canaryIn("production", jar)
+
+	after := time.Now()
+	records := firstSignInFailures(t, logs)
+	assertOneFirstFailure(t, records, 50, installed, 0)
+	if records[0]["environment"] != "production" || records[0]["run"] != "canary" {
+		t.Errorf("logged failure = %v, want environment production and run canary", records[0])
+	}
+	got := firstFailureOnRecord(t, jar)
+	if got == nil || got.SessionAgeHours != 50 || got.Run != "canary" || got.WriteBacks != 0 || got.Environment != "production" ||
+		got.At.Before(before) || got.At.After(after) {
+		t.Errorf("first failure on record = %+v, want 50h, canary, 0 write-backs, production, between %v and %v", got, before, after)
+	}
+}
+
+func TestCookieJar_AFailureStagingCaughtFirstStaysOnRecordWhenProductionHitsItToo(t *testing.T) {
+	logs := captureLogs(t)
+	jar := liveJarAt(t, signedInJar("old"), 0o644, time.Now().Add(-50*time.Hour))
+	ytDlpFailing(t, botCheck)
+
+	_ = canaryIn("staging", jar)
+	caught := firstFailureOnRecord(t, jar)
+	_ = canaryIn("production", jar)
+
+	if records := firstSignInFailures(t, logs); len(records) != 1 || records[0]["environment"] != "staging" {
+		t.Errorf("logged failures = %v, want only staging's", records)
+	}
+	if got := firstFailureOnRecord(t, jar); caught == nil || got == nil || *got != *caught || got.Environment != "staging" {
+		t.Errorf("first failure on record = %+v, want staging's %+v kept", got, caught)
+	}
+}
+
+func TestCookieJar_AFirstFailureIsLoggedOnlyOnceItIsOnRecord(t *testing.T) {
+	logs := captureLogs(t)
+	jar := liveJar(t, signedInJar("old"))
+	if err := os.MkdirAll(filepath.Join(jar+".session.json", "blocker"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ytDlpFailing(t, botCheck)
+
+	_ = canaryWith(jar)
+
+	if records := firstSignInFailures(t, logs); len(records) != 0 {
+		t.Errorf("first sign-in failure records = %v, want none while the session file cannot be written", records)
+	}
+	if warned := loggedErrors(t, logs, "acquisition.cookie_jar_update_failed"); len(warned) != 1 {
+		t.Errorf("update failure warnings = %q, want one", warned)
+	}
+}
+
 func TestCookieJar_TheFirstSignInFailureLogsTheSessionAgeSinceTheJarWasDroppedIn(t *testing.T) {
 	logs := captureLogs(t)
 	installed := time.Now().Add(-50 * time.Hour)
@@ -418,7 +530,7 @@ func TestCookieJar_OnlyTheBotCheckCountsAsASignInFailure(t *testing.T) {
 func TestCookieJar_ABotCheckOnAJarReplacedMidRunIsNotChargedToTheNewJar(t *testing.T) {
 	logs := captureLogs(t)
 	jar := liveJarAt(t, signedInJar("old"), 0o644, time.Now().Add(-50*time.Hour))
-	ytDlpReplacingTheLiveJar(t, jar, signedInJar("human"), "echo \""+botCheck+"\" >&2\nexit 1")
+	ytDlpReplacingTheLiveJar(t, jar, signedInJar("hum"), "echo \""+botCheck+"\" >&2\nexit 1")
 	_ = canaryWith(jar)
 	if records := firstSignInFailures(t, logs); len(records) != 0 {
 		t.Fatalf("first sign-in failure records = %v, want none: the run used the jar that was replaced", records)
@@ -432,4 +544,44 @@ func TestCookieJar_ABotCheckOnAJarReplacedMidRunIsNotChargedToTheNewJar(t *testi
 	_ = canaryWith(jar)
 
 	assertOneFirstFailure(t, firstSignInFailures(t, logs), 3, dropped, 0)
+}
+
+func waitForFile(t *testing.T, path string, done <-chan error) {
+	t.Helper()
+	for {
+		if _, err := os.Stat(path); err == nil {
+			return
+		}
+		select {
+		case err := <-done:
+			t.Fatalf("the run returned %v before %s appeared", err, path)
+		case <-time.After(time.Millisecond):
+		}
+	}
+}
+
+func TestCookieJar_TheCopyYtDlpGetsLivesWhereTheTempSweeperReapsIt(t *testing.T) {
+	t.Setenv("TMPDIR", t.TempDir())
+	jar := liveJar(t, signedInJar("old"))
+	signals := t.TempDir()
+	used, started, proceed := filepath.Join(signals, "used"), filepath.Join(signals, "started"), filepath.Join(signals, "proceed")
+	installYtDlp(t, cookieArgLoop+"printf '%s' \"$jar\" > '"+used+"'\n: > '"+started+"'\n"+
+		"while [ ! -f '"+proceed+"' ]; do sleep 0.01; done\necho 212")
+	done := make(chan error, 1)
+
+	go func() { done <- canaryWith(jar) }()
+	waitForFile(t, started, done)
+	swept := acquisition.NewTempWorkspace().SweepAbandoned(time.Now().Add(time.Hour))
+	if err := os.WriteFile(proceed, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	<-done
+
+	copyPath, err := os.ReadFile(used)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, statErr := os.Stat(filepath.Dir(string(copyPath))); swept != 1 || !os.IsNotExist(statErr) {
+		t.Errorf("swept %d dirs, copy dir stat err %v, want the copy's dir reaped as abandoned", swept, statErr)
+	}
 }
