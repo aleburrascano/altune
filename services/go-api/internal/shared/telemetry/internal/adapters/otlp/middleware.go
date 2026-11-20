@@ -14,8 +14,6 @@ import (
 const (
 	AppVersionHeader = "X-Altune-App-Version"
 	PlatformHeader   = "X-Altune-Platform"
-	AnalyticsHeader  = "X-Altune-Analytics"
-	AnalyticsOff     = "off"
 	maxHeaderValue   = 64
 	unmatchedRoute   = "unmatched"
 )
@@ -56,10 +54,6 @@ func describe(span trace.Span, r *http.Request, status int) {
 	if status >= http.StatusInternalServerError {
 		span.SetStatus(codes.Error, http.StatusText(status))
 	}
-}
-
-func AnalyticsAllowed(r *http.Request) bool {
-	return r.Header.Get(AnalyticsHeader) != AnalyticsOff
 }
 
 func routePattern(r *http.Request) string {

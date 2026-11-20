@@ -149,14 +149,3 @@ func TestMiddlewareSkipsTheRequestsItIsToldTo(t *testing.T) {
 		t.Fatalf("status %d, spans %d; want 200 and no span", rec.Code, len(recorder.Ended()))
 	}
 }
-
-func TestAnalyticsAllowedUnlessTheAppSaysOff(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/v1/discovery/events", nil)
-	if !telemetry.AnalyticsAllowed(req) {
-		t.Fatal("no header should allow analytics")
-	}
-	req.Header.Set(telemetry.AnalyticsHeader, telemetry.AnalyticsOff)
-	if telemetry.AnalyticsAllowed(req) {
-		t.Fatal("the off header should stop analytics")
-	}
-}
