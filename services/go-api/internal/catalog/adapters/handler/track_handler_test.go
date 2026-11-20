@@ -6,7 +6,9 @@ import (
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -740,5 +742,55 @@ func holdUncommittedTrack(t *testing.T, pool *pgxpool.Pool, user shared.UserId, 
 		track.ID.UUID(), user.UUID(), title, artist, track.DedupKey,
 	); err != nil {
 		t.Fatalf("hold track: %v", err)
+	}
+}
+
+func TestCatalogRoutes_OnlyATransientRepositoryErrorAnswersTemporarilyUnavailable(t *testing.T) {
+	trackPath := "/tracks/" + uuid.NewString()
+	routes := []struct {
+		name, method, path, op string
+		body                   any
+	}{
+		{"list tracks", http.MethodGet, "/tracks/", "list tracks", nil},
+		{"add a track", http.MethodPost, "/tracks/", "add track", map[string]string{"title": "Title", "artist": "Artist", "album": "Album"}},
+		{"delete a track", http.MethodDelete, trackPath, "delete track", nil},
+		{"set a track number", http.MethodPatch, trackPath + "/track-number", "set track number", catalog.SetTrackNumberRequest{TrackNumber: 3}},
+		{"resolve audio urls", http.MethodPost, "/audio-urls", "resolve audio urls", resolveRequest{TrackIDs: []string{uuid.NewString()}}},
+	}
+	failures := []struct {
+		name      string
+		err       error
+		status    int
+		code      string
+		transient bool
+	}{
+		{"a plain repository error answers 500", errors.New("duplicate key value violates unique constraint"), http.StatusInternalServerError, "internal", false},
+		{"a transient repository error answers 503 and is logged", fmt.Errorf("query: %w", catalog.ErrDBTransient), http.StatusServiceUnavailable, "catalog.temporarily_unavailable", true},
+	}
+	for _, failure := range failures {
+		router := failingRepoRoutes(failure.err)
+		for _, route := range routes {
+			t.Run(route.name+"/"+failure.name, func(t *testing.T) {
+				var body io.Reader
+				if route.body != nil {
+					body = jsonBody(t, route.body)
+				}
+				logs := catalog.CaptureAuditLogs(t)
+
+				rec := request(t, router, route.method, route.path, body)
+
+				assertStatus(t, rec, failure.status)
+				assertErrorCode(t, rec, failure.code)
+				if failure.transient {
+					entry := logs.Find(t, "catalog.db_transient")
+					if op := entry.Attrs["op"]; op != route.op {
+						t.Errorf("catalog.db_transient op = %q, want %q", op, route.op)
+					}
+					if cause := entry.Attrs["error"]; !strings.Contains(cause, failure.err.Error()) {
+						t.Errorf("catalog.db_transient error = %q, want the repository error %q", cause, failure.err)
+					}
+				}
+			})
+		}
 	}
 }

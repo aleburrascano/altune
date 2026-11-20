@@ -322,3 +322,48 @@ func assertCatalogTemporarilyUnavailable(t *testing.T, rec *httptest.ResponseRec
 	assertStatus(t, rec, http.StatusServiceUnavailable)
 	assertErrorCode(t, rec, "catalog.temporarily_unavailable")
 }
+
+type failingTrackRepo struct {
+	*catalog.InMemoryTrackRepo
+	err error
+}
+
+func (r *failingTrackRepo) Add(context.Context, *catalog.Track) (*catalog.Track, bool, error) {
+	return nil, false, r.err
+}
+
+func (r *failingTrackRepo) ListFilteredForUser(context.Context, shared.UserId, catalog.LibraryQuery) ([]*catalog.Track, int, error) {
+	return nil, 0, r.err
+}
+
+func (r *failingTrackRepo) ListByIDs(context.Context, shared.UserId, []catalog.TrackId) ([]*catalog.Track, error) {
+	return nil, r.err
+}
+
+func (r *failingTrackRepo) SetTrackNumber(context.Context, catalog.TrackId, shared.UserId, int) (bool, error) {
+	return false, r.err
+}
+
+func (r *failingTrackRepo) Delete(context.Context, catalog.TrackId, shared.UserId) (bool, *string, error) {
+	return false, nil, r.err
+}
+
+func failingRepoRoutes(err error) chi.Router {
+	repo := &failingTrackRepo{InMemoryTrackRepo: catalog.NewInMemoryTrackRepo(), err: err}
+	tracks := catalog.NewTrackHandler(
+		catalog.NewAddTrackService(repo),
+		catalog.NewListTracksService(repo),
+		catalog.NewGetTrackStatusService(repo),
+		catalog.NewDeleteTrackService(repo, catalog.NewInMemoryAudioStore()),
+		catalog.NewSetTrackNumberService(repo),
+		catalog.NewFeaturedArtistHandler(
+			catalog.NewBackfillFeaturedService(repo, repo, catalog.InMemoryFeaturedResolver{}),
+			catalog.NewListFeaturingService(repo),
+		),
+	)
+	router := newRouter()
+	router.Route("/tracks", func(r chi.Router) { r.Mount("/", tracks.Routes()) })
+	signer := &countingAudioStore{InMemoryAudioStore: catalog.NewInMemoryAudioStore()}
+	catalog.NewAudioURLHandler(catalog.NewAudioURLService(repo, signer)).Routes(router)
+	return router
+}
