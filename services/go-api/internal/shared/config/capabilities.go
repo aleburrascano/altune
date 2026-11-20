@@ -102,6 +102,10 @@ func (c *Config) HasYouTubeMusic() bool {
 	return c.YtMusicEnabled
 }
 
+func (c *Config) HasAlertEmail() bool {
+	return c.ResendAPIKey != "" && c.AlertEmailTo != ""
+}
+
 func (c *Config) HasNowPlayingEnrichment() bool {
 	return c.NowPlayingEnrichmentEnabled
 }

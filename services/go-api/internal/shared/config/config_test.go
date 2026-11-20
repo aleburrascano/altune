@@ -518,6 +518,7 @@ func setEnv(t *testing.T, vars map[string]string) {
 		"ACQUISITION_CONCURRENCY", "ACQUISITION_DRAIN_BUDGET_SECONDS",
 		"EXPLORATION_RATE",
 		"DB_POOL_MAX_CONNS", "PLAYBACK_QUEUE_RATE_EVERY", "PLAYBACK_QUEUE_RATE_BURST", "PLAYBACK_ERASURE_SCAN_TIMEOUT", "REDIS_POOL_SIZE", "YTDLP_JS_RUNTIME", "YTDLP_REMOTE_COMPONENTS",
+		"ALERT_WEBHOOK_URL", "RESEND_API_KEY", "ALERT_EMAIL_TO",
 	}
 	for _, k := range envKeys {
 		os.Unsetenv(k)
@@ -1297,6 +1298,103 @@ func TestLoad_AlertWebhookURLOptionalAndTrimmed(t *testing.T) {
 	}
 	if cfg.AlertWebhookURL != "https://hooks.example/alerts" {
 		t.Errorf("AlertWebhookURL = %q", cfg.AlertWebhookURL)
+	}
+}
+
+const testResendKey = "re_TESTKEY_never_in_output"
+
+func TestLoad_AlertEmailSettingsAreTrimmedAndTurnEmailOn(t *testing.T) {
+	setEnv(t, validConfigEnv(map[string]string{
+		"RESEND_API_KEY": "  " + testResendKey + " \n",
+		"ALERT_EMAIL_TO": " ops@example.com\t",
+	}))
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load = %v, want nil", err)
+	}
+	if cfg.ResendAPIKey != testResendKey || cfg.AlertEmailTo != "ops@example.com" {
+		t.Errorf("ResendAPIKey trimmed = %t, AlertEmailTo = %q", cfg.ResendAPIKey == testResendKey, cfg.AlertEmailTo)
+	}
+	if !cfg.HasAlertEmail() {
+		t.Error("HasAlertEmail = false with both RESEND_API_KEY and ALERT_EMAIL_TO set")
+	}
+}
+
+func TestLoad_AlertEmailIsOffWhenNeitherSettingIsSet(t *testing.T) {
+	setEnv(t, validConfigEnv(nil))
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load = %v, want nil", err)
+	}
+	if cfg.HasAlertEmail() {
+		t.Error("HasAlertEmail = true with neither setting set")
+	}
+}
+
+func TestLoad_AlertEmailSettingsRejectedWithoutLeakingTheKey(t *testing.T) {
+	tests := []struct {
+		name     string
+		env      map[string]string
+		wantName string
+	}{
+		{name: "key without recipient", env: map[string]string{"RESEND_API_KEY": testResendKey}, wantName: "ALERT_EMAIL_TO"},
+		{name: "recipient without key", env: map[string]string{"ALERT_EMAIL_TO": "ops@example.com"}, wantName: "RESEND_API_KEY"},
+		{name: "recipient is not an address", env: map[string]string{"RESEND_API_KEY": testResendKey, "ALERT_EMAIL_TO": "ops"}, wantName: "ALERT_EMAIL_TO"},
+		{name: "recipient has no domain dot", env: map[string]string{"RESEND_API_KEY": testResendKey, "ALERT_EMAIL_TO": "ops@localhost"}, wantName: "ALERT_EMAIL_TO"},
+		{name: "recipient lists two addresses", env: map[string]string{"RESEND_API_KEY": testResendKey, "ALERT_EMAIL_TO": "a@example.com,b@example.com"}, wantName: "ALERT_EMAIL_TO"},
+		{name: "recipient carries a display name", env: map[string]string{"RESEND_API_KEY": testResendKey, "ALERT_EMAIL_TO": "Ops <ops@example.com>"}, wantName: "ALERT_EMAIL_TO"},
+		{name: "recipient trails a comma and a name", env: map[string]string{"RESEND_API_KEY": testResendKey, "ALERT_EMAIL_TO": "ops@example.com,ops"}, wantName: "ALERT_EMAIL_TO"},
+		{name: "recipient trails a semicolon and a name", env: map[string]string{"RESEND_API_KEY": testResendKey, "ALERT_EMAIL_TO": "ops@example.com;ops"}, wantName: "ALERT_EMAIL_TO"},
+		{name: "recipient sits in angle brackets", env: map[string]string{"RESEND_API_KEY": testResendKey, "ALERT_EMAIL_TO": "<ops@example.com>"}, wantName: "ALERT_EMAIL_TO"},
+		{name: "recipient has a space inside", env: map[string]string{"RESEND_API_KEY": testResendKey, "ALERT_EMAIL_TO": "o ps@example.com"}, wantName: "ALERT_EMAIL_TO"},
+		{name: "email and webhook both set", env: map[string]string{"RESEND_API_KEY": testResendKey, "ALERT_EMAIL_TO": "ops@example.com", "ALERT_WEBHOOK_URL": "https://hooks.example.com/x"}, wantName: "ALERT_WEBHOOK_URL"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setEnv(t, validConfigEnv(tt.env))
+
+			_, err := config.Load()
+			if err == nil {
+				t.Fatal("Load = nil, want an error")
+			}
+			if !strings.Contains(err.Error(), tt.wantName) {
+				t.Errorf("error does not name %s: %v", tt.wantName, err)
+			}
+			if strings.Contains(err.Error(), "TESTKEY") {
+				t.Error("error carries the Resend API key")
+			}
+		})
+	}
+}
+
+func TestConfig_HasAlertEmailNeedsBothTheKeyAndTheRecipient(t *testing.T) {
+	cases := []struct {
+		cfg  config.Config
+		want bool
+	}{
+		{cfg: config.Config{ResendAPIKey: testResendKey, AlertEmailTo: "ops@example.com"}, want: true},
+		{cfg: config.Config{ResendAPIKey: testResendKey}, want: false},
+		{cfg: config.Config{AlertEmailTo: "ops@example.com"}, want: false},
+	}
+	for i, tc := range cases {
+		if got := tc.cfg.HasAlertEmail(); got != tc.want {
+			t.Errorf("case %d: HasAlertEmail = %v, want %v", i, got, tc.want)
+		}
+	}
+}
+
+func TestConfig_LogValueReportsAlertEmailWithoutTheKey(t *testing.T) {
+	cfg := config.Config{ResendAPIKey: testResendKey, AlertEmailTo: "ops@example.com"}
+
+	s := cfg.LogValue().String()
+
+	if !strings.Contains(s, "has_alert_email=true") {
+		t.Errorf("LogValue does not report has_alert_email=true: %s", s)
+	}
+	if strings.Contains(s, "TESTKEY") {
+		t.Error("LogValue carries the Resend API key")
 	}
 }
 
