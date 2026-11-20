@@ -230,7 +230,7 @@ func (s *YtDlpAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec stri
 		"--",
 		searchSpec,
 	}
-	cookies, err := s.leaseCookieJar("search")
+	cookies, err := s.leaseCookieJar("search", searchSpec)
 	if err != nil {
 		return nil, fmt.Errorf("yt-dlp search: copy cookie jar: %w", err)
 	}
@@ -325,7 +325,7 @@ func (s *YtDlpAudioSearcher) fetchAudio(
 	if s.ffmpegLocation != "" {
 		args = append([]string{"--ffmpeg-location", s.ffmpegLocation}, args...)
 	}
-	cookies, err := s.leaseCookieJar(run)
+	cookies, err := s.leaseCookieJar(run, url)
 	if err != nil {
 		return ports.FetchedAudio{}, fmt.Errorf("yt-dlp download: copy cookie jar: %w", err)
 	}

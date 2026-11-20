@@ -40,7 +40,7 @@ var (
 )
 
 func (s *YtDlpAudioSearcher) Canary(ctx context.Context, source CanarySource) error {
-	cookies, err := s.leaseCookieJar("canary")
+	cookies, err := s.leaseCookieJar("canary", source.URL)
 	if err != nil {
 		return errors.New(redact.LogText(err.Error()))
 	}

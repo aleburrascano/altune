@@ -195,7 +195,7 @@ func (s *YtDlpAudioSearcher) runYtDlpInspect(ctx context.Context, trackURL strin
 	inspectCtx, cancel := context.WithTimeout(ctx, inspectTimeout)
 	defer cancel()
 
-	cookies, err := s.leaseCookieJar("inspect")
+	cookies, err := s.leaseCookieJar("inspect", trackURL)
 	if err != nil {
 		return inspection{}, fmt.Errorf("yt-dlp inspect: copy cookie jar: %w", err)
 	}

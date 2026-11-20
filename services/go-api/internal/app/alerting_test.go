@@ -8,11 +8,14 @@ import (
 	"altune/go-api/internal/shared/database"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -197,6 +200,58 @@ func TestBuildDependencyCondition(t *testing.T) {
 	})
 }
 
+func TestYouTubeCookiesCondition(t *testing.T) {
+	since := time.Date(2026, 11, 20, 9, 30, 0, 0, time.FixedZone("EST", -5*3600))
+
+	t.Run("a signed-out jar pages with the moment and the drop-in command", func(t *testing.T) {
+		cond := buildYouTubeCookiesCondition(func() (time.Time, bool) { return since, true })
+		if cond.Key != "youtube_cookies_signed_out" {
+			t.Fatalf("key = %q, want youtube_cookies_signed_out", cond.Key)
+		}
+		alert := cond.Eval(context.Background())
+		if alert == nil {
+			t.Fatal("alert = nil, want it to fire")
+		}
+		want := "YouTube has asked yt-dlp to sign in since 2026-11-20T14:30:00Z, so YouTube downloads fail. " +
+			"Export cookies.txt from a browser signed in to YouTube, copy it to the VM and run: " +
+			"cd ~/altune/services/go-api && bash deploy/cookie-jar-dir.sh <export>"
+		if alert.Title != "altune YouTube cookies expired" || alert.Message != want || alert.Severity != observe.SeveritySignal {
+			t.Errorf("alert = %+v, want the cookies-expired signal with message %q", alert, want)
+		}
+	})
+
+	t.Run("a signed-in jar does not fire", func(t *testing.T) {
+		cond := buildYouTubeCookiesCondition(func() (time.Time, bool) { return time.Time{}, false })
+		if alert := cond.Eval(context.Background()); alert != nil {
+			t.Fatalf("alert = %+v, want nil", alert)
+		}
+	})
+}
+
+func TestAlertConditions_WatchTheConfiguredCookieJar(t *testing.T) {
+	jar := filepath.Join(t.TempDir(), "cookies.txt")
+	if err := os.WriteFile(jar, []byte("# Netscape HTTP Cookie File\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	since := time.Date(2026, 11, 20, 14, 30, 0, 0, time.UTC)
+	session := fmt.Sprintf(`{"jar_sha256":"%x","signed_out_since":"%s"}`, sha256.Sum256([]byte("# Netscape HTTP Cookie File\n")), since.Format(time.RFC3339))
+	if err := os.WriteFile(jar+".session.json", []byte(session), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a := &App{cfg: &config.Config{YtDLPCookieFile: jar}}
+
+	for _, c := range a.alertConditions(&fakeCoverageEvents{}) {
+		if c.Key != "youtube_cookies_signed_out" {
+			continue
+		}
+		if alert := c.Eval(context.Background()); alert == nil || !strings.Contains(alert.Message, "since 2026-11-20T14:30:00Z") {
+			t.Errorf("alert = %+v, want it to fire from the configured jar's session", alert)
+		}
+		return
+	}
+	t.Fatal("no youtube_cookies_signed_out condition")
+}
+
 func TestJobFailingCondition(t *testing.T) {
 	ctx := context.Background()
 	a := &App{}
@@ -284,7 +339,7 @@ func TestAlertConditions_AlwaysWatchCoverage(t *testing.T) {
 	for _, c := range conditions {
 		byKey[c.Key] = c
 	}
-	want := []string{"dependency_down", "coverage_zero_result", "coverage_query_failing"}
+	want := []string{"dependency_down", "coverage_zero_result", "coverage_query_failing", "youtube_cookies_signed_out"}
 	for _, name := range alertableJobs {
 		want = append(want, "job_failing:"+string(name))
 	}

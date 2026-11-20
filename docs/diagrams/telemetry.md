@@ -58,7 +58,7 @@ flowchart LR
         expvar[("expvar counters<br/>per module + provider calls")]
         bus["domain event bus<br/>library · playlist · acquisition"]
         health["GET /health<br/>DB · Redis · auth"]
-        alertmon["Alert monitor<br/>dependency_down · coverage"]
+        alertmon["Alert monitor<br/>dependency_down · coverage · youtube_cookies_signed_out"]
         observe["/observe/*<br/>Overseer, single principal"]
     end
 
