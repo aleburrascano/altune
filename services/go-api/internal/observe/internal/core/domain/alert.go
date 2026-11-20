@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"fmt"
+	"time"
 )
 
 type Severity int
@@ -29,6 +30,8 @@ type Alert struct {
 	Title    string
 	Message  string
 	Severity Severity
+	Key      string
+	FiredAt  time.Time
 }
 
 type Condition struct {

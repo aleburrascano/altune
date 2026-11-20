@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -539,5 +541,124 @@ func TestMonitor_LostLeadershipRepagesAnIncidentOnRegain(t *testing.T) {
 
 	if n.calls != 2 {
 		t.Fatalf("notify calls = %d, want 2 (fire, lose term, regain, still firing)", n.calls)
+	}
+}
+
+type pageLog struct {
+	pages    []observe.Alert
+	failures int
+}
+
+func (l *pageLog) Notify(_ context.Context, a observe.Alert) error {
+	l.pages = append(l.pages, a)
+	if len(l.pages) <= l.failures {
+		return errors.New("transient push failure")
+	}
+	return nil
+}
+
+func countingCond(key string, firing *bool) observe.Condition {
+	evals := 0
+	return observe.Condition{
+		Key: key,
+		Eval: func(context.Context) *observe.Alert {
+			if !*firing {
+				return nil
+			}
+			evals++
+			return &observe.Alert{Title: "t", Message: fmt.Sprintf("seen %d times", evals), Severity: observe.SeveritySignal}
+		},
+	}
+}
+
+func TestMonitor_RetriesOfOneFiringResendTheFirstPageWithItsKeyAndFiringTime(t *testing.T) {
+	firing := true
+	n := &pageLog{failures: 1}
+	_, p := steppedMonitor(t, n, countingCond("dep", &firing))
+
+	before := time.Now()
+	p.step(t)
+	after := time.Now()
+	p.step(t)
+
+	if len(n.pages) != 2 {
+		t.Fatalf("pages = %d, want 2 (a failed page is retried)", len(n.pages))
+	}
+	first := n.pages[0]
+	if first.Key != "dep" || first.Message != "seen 1 times" {
+		t.Errorf("first page = %+v, want key dep and the first evaluation's message", first)
+	}
+	if first.FiredAt.Before(before) || first.FiredAt.After(after) {
+		t.Errorf("FiredAt = %s, want the pass that first saw the firing (%s to %s)", first.FiredAt, before, after)
+	}
+	if !reflect.DeepEqual(n.pages[1], first) {
+		t.Errorf("retry = %+v, want the first page unchanged %+v", n.pages[1], first)
+	}
+}
+
+func TestMonitor_AFiringAfterADeliveredRecoveryIsANewPage(t *testing.T) {
+	firing := true
+	n := &pageLog{}
+	_, p := steppedMonitor(t, n, countingCond("dep", &firing))
+
+	p.step(t)
+	firing = false
+	p.step(t)
+	firing = true
+	p.step(t)
+
+	assertNewPage(t, n.pages)
+}
+
+func TestMonitor_AnUndeliveredFiringThatRecoversIsForgotten(t *testing.T) {
+	firing := true
+	n := &pageLog{failures: 1}
+	_, p := steppedMonitor(t, n, countingCond("dep", &firing))
+
+	p.step(t)
+	firing = false
+	p.step(t)
+	firing = true
+	p.step(t)
+
+	assertNewPage(t, n.pages)
+}
+
+func TestMonitor_LosingLeadershipForgetsAnUndeliveredPage(t *testing.T) {
+	firing := true
+	n := &pageLog{failures: 1}
+	_, p := steppedMonitor(t, n, countingCond("dep", &firing))
+
+	p.run(t, true)
+	p.run(t, false)
+	p.run(t, true)
+
+	assertNewPage(t, n.pages)
+}
+
+func TestMonitor_ResumeForgetsAnUndeliveredPage(t *testing.T) {
+	firing := true
+	n := &pageLog{failures: 1}
+	m, p := steppedMonitor(t, n, countingCond("dep", &firing))
+
+	p.step(t)
+	m.Pause()
+	p.settlePending()
+	m.Resume()
+	p.step(t)
+
+	assertNewPage(t, n.pages)
+}
+
+func assertNewPage(t *testing.T, pages []observe.Alert) {
+	t.Helper()
+	if len(pages) != 2 {
+		t.Fatalf("pages = %d, want 2", len(pages))
+	}
+	if !pages[1].FiredAt.After(pages[0].FiredAt) {
+		t.Errorf("second page FiredAt %s is not after the first %s, so it would share its idempotency key", pages[1].FiredAt, pages[0].FiredAt)
+	}
+	if pages[1].Message != "seen 2 times" {
+		t.Errorf("second page message = %q, want the new evaluation's %q", pages[1].Message, "seen 2 times")
 	}
 }

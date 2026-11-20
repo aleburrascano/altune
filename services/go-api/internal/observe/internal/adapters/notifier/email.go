@@ -4,8 +4,9 @@ import (
 	"altune/go-api/internal/observe/internal/core/domain"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -51,9 +52,6 @@ func (n *EmailNotifier) Notify(ctx context.Context, a domain.Alert) error {
 	if err != nil {
 		return fmt.Errorf("send alert email: %w", err)
 	}
-	if resp == nil {
-		return errors.New("send alert email: no response")
-	}
 	defer func() { _ = resp.Body.Close() }()
 	reply, _ := io.ReadAll(io.LimitReader(resp.Body, maxEmailReplyBytes))
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
@@ -78,7 +76,15 @@ func (n *EmailNotifier) buildRequest(ctx context.Context, a domain.Alert) (*http
 	}
 	req.Header.Set("Authorization", "Bearer "+n.apiKey)
 	req.Header.Set("Content-Type", "application/json")
+	if a.Key != "" && !a.FiredAt.IsZero() {
+		req.Header.Set("Idempotency-Key", idempotencyKey(a))
+	}
 	return req, nil
+}
+
+func idempotencyKey(a domain.Alert) string {
+	sum := sha256.Sum256([]byte(a.Key + a.FiredAt.UTC().Format(time.RFC3339Nano)))
+	return "altune-alert-" + hex.EncodeToString(sum[:])
 }
 
 func (n *EmailNotifier) rejection(status int, reply []byte) error {

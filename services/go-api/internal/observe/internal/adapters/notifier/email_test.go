@@ -248,6 +248,62 @@ func TestEmailNotifier_GivesUpOnAResendThatNeverAnswersAfterTenSeconds(t *testin
 	})
 }
 
+func TestEmailNotifier_RetriesOfOneFiringShareAnIdempotencyKeyAndANewFiringGetsANewOne(t *testing.T) {
+	stub := newResendStub(t, http.StatusOK, `{}`)
+	firedAt := time.Date(2026, 11, 20, 9, 30, 0, 0, time.UTC)
+	sends := []observe.Alert{
+		{Key: "dependency_down", FiredAt: firedAt, Message: "dependencies down: db"},
+		{Key: "dependency_down", FiredAt: firedAt, Message: "dependencies down: db"},
+		{Key: "dependency_down", FiredAt: firedAt.In(time.FixedZone("CET", 3600)), Message: "dependencies down: db"},
+		{Key: "dependency_down", FiredAt: firedAt.Add(time.Nanosecond), Message: "dependencies down: db"},
+		{Key: "coverage_zero_result", FiredAt: firedAt, Message: "dependencies down: db"},
+	}
+	for _, a := range sends {
+		if err := stub.notifier().Notify(context.Background(), a); err != nil {
+			t.Fatalf("Notify = %v, want nil", err)
+		}
+	}
+	keys := make([]string, len(stub.sent))
+	for i, sent := range stub.sent {
+		keys[i] = sent.header.Get("Idempotency-Key")
+	}
+
+	if keys[0] == "" || len(keys[0]) > 256 {
+		t.Fatalf("Idempotency-Key = %q, want a key of at most 256 characters", keys[0])
+	}
+	if keys[1] != keys[0] {
+		t.Errorf("a retry of one firing sent key %q, the first send %q", keys[1], keys[0])
+	}
+	if keys[2] != keys[0] {
+		t.Errorf("the same firing time in another zone sent key %q, want %q", keys[2], keys[0])
+	}
+	if keys[3] == keys[0] {
+		t.Error("a firing a nanosecond later reused the earlier firing's key")
+	}
+	if keys[4] == keys[0] {
+		t.Error("another condition firing at the same time reused the key")
+	}
+}
+
+func TestEmailNotifier_AnAlertThatNamesNoFiringSendsNoIdempotencyKey(t *testing.T) {
+	cases := map[string]observe.Alert{
+		"no condition key": {FiredAt: time.Date(2026, 11, 20, 9, 30, 0, 0, time.UTC)},
+		"no firing time":   {Key: "dependency_down"},
+	}
+	for name, a := range cases {
+		t.Run(name, func(t *testing.T) {
+			stub := newResendStub(t, http.StatusOK, `{}`)
+
+			if err := stub.notifier().Notify(context.Background(), a); err != nil {
+				t.Fatalf("Notify = %v, want nil", err)
+			}
+			if _, sent := stub.sent[0].header["Idempotency-Key"]; sent {
+				t.Error("sent an Idempotency-Key that every such alert would share, so Resend would drop the later ones")
+			}
+		})
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
