@@ -14,7 +14,7 @@ trap 'rm -rf "$work"' EXIT
 
 real_git=$(command -v git)
 mkdir "$work/bin"
-printf '#!/bin/sh\nif [ "$1" = diff ]; then shift; exec "%s" diff --relative="$GO_MUTATE_PACKAGE" "$@"; fi\nexec "%s" "$@"\n' "$real_git" "$real_git" >"$work/bin/git"
+printf '#!/bin/sh\nif [ "$1" = diff ]; then shift; exec "%s" diff --unified=0 --inter-hunk-context=0 --relative="$GO_MUTATE_PACKAGE" "$@"; fi\nexec "%s" "$@"\n' "$real_git" "$real_git" >"$work/bin/git"
 chmod +x "$work/bin/git"
 
 killed=0
