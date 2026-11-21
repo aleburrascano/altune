@@ -1,7 +1,8 @@
-package providerhttp
+package providerhttp_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/adapters/providers/providerhttp"
 	"errors"
 	"testing"
 )
@@ -9,7 +10,7 @@ import (
 func TestFetchPaged_laterPageFailureReturnsPartialResultError(t *testing.T) {
 	boom := errors.New("boom")
 	var loggedPage int
-	got, err := FetchPaged(3,
+	got, err := providerhttp.FetchPaged(3,
 		func(page int) ([]int, bool, error) {
 			if page == 2 {
 				return nil, false, boom
@@ -32,7 +33,7 @@ func TestFetchPaged_laterPageFailureReturnsPartialResultError(t *testing.T) {
 
 func TestFetchPaged_firstPageFailureIsAHardError(t *testing.T) {
 	boom := errors.New("boom")
-	got, err := FetchPaged(3,
+	got, err := providerhttp.FetchPaged(3,
 		func(int) ([]int, bool, error) { return nil, false, boom },
 		func(int, error) { t.Error("onPartial called for a page-0 failure") })
 	var partial *domain.PartialResultError
@@ -42,7 +43,7 @@ func TestFetchPaged_firstPageFailureIsAHardError(t *testing.T) {
 }
 
 func TestFetchPaged_completeFetchHasNoError(t *testing.T) {
-	got, err := FetchPaged(3,
+	got, err := providerhttp.FetchPaged(3,
 		func(page int) ([]int, bool, error) { return []int{page}, page < 1, nil },
 		func(int, error) {})
 	if err != nil || len(got) != 2 {
