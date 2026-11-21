@@ -1,7 +1,8 @@
-package rank
+package rank_test
 
 import (
 	"altune/go-api/internal/discovery/internal/core/ports"
+	"altune/go-api/internal/discovery/service/rank"
 	"context"
 	"errors"
 	"sync"
@@ -23,16 +24,16 @@ func TestSatisfactionConsumer_RefreshPublishesScores(t *testing.T) {
 		{ResultSignature: "track|hello|adele", Score: 3},
 		{ResultSignature: "track|noise|ugc", Score: -2},
 	}}
-	ranking := NewRankingExperiments(RankingConfig{BehavioralRanking: true, BehavioralConsumer: NewSatisfactionConsumer(store)}, nil)
+	ranking := rank.NewRankingExperiments(rank.RankingConfig{BehavioralRanking: true, BehavioralConsumer: rank.NewSatisfactionConsumer(store)}, nil)
 
-	if got := ranking.behavioralScoresSnapshot(); got != nil {
+	if got := ranking.RankOptions().Behavioral; got != nil {
 		t.Fatalf("snapshot should be nil before first refresh, got %v", got)
 	}
 	if err := ranking.RefreshBehavioralScores(context.Background()); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
 
-	scores := ranking.behavioralScoresSnapshot()
+	scores := ranking.RankOptions().Behavioral
 	if scores["track|hello|adele"] != 3 || scores["track|noise|ugc"] != -2 {
 		t.Errorf("published scores = %v, want hello=3 noise=-2", scores)
 	}
@@ -40,30 +41,10 @@ func TestSatisfactionConsumer_RefreshPublishesScores(t *testing.T) {
 
 func TestBehavioralRankingDisabled_SnapshotNil(t *testing.T) {
 	store := &fakeSignalStore{signals: []ports.BehavioralSignal{{ResultSignature: "x", Score: 9}}}
-	ranking := NewRankingExperiments(RankingConfig{}, nil)
-	ranking.BehavioralConsumer = NewSatisfactionConsumer(store)
-	if got := ranking.behavioralScoresSnapshot(); got != nil {
+	ranking := rank.NewRankingExperiments(rank.RankingConfig{}, nil)
+	ranking.BehavioralConsumer = rank.NewSatisfactionConsumer(store)
+	if got := ranking.RankOptions().Behavioral; got != nil {
 		t.Errorf("snapshot must be nil when behavioral ranking is off, got %v", got)
-	}
-}
-
-func TestBehavioralScore_BreaksTiesOnly(t *testing.T) {
-	a := scored{relevance: 1.0, behavioral: 2.0}
-	b := scored{relevance: 1.0, behavioral: -1.0}
-	if !rankLess(a, b) {
-		t.Error("equal relevance: higher behavioral score should sort first")
-	}
-
-	hiRel := scored{relevance: 2.0, behavioral: -5.0}
-	loRel := scored{relevance: 1.0, behavioral: 5.0}
-	if !rankLess(hiRel, loRel) {
-		t.Error("relevance must dominate behavioral; higher relevance sorts first")
-	}
-
-	z1 := scored{relevance: 1.0, pop: 5}
-	z2 := scored{relevance: 1.0, pop: 1}
-	if !rankLess(z1, z2) {
-		t.Error("with zero behavioral, ordering must fall through to popularity")
 	}
 }
 
@@ -94,7 +75,7 @@ func (f *mutableSignalStore) callCount() int {
 }
 
 func TestRefreshBehavioralScores_NoConsumerIsNoop(t *testing.T) {
-	ranking := NewRankingExperiments(RankingConfig{}, nil)
+	ranking := rank.NewRankingExperiments(rank.RankingConfig{}, nil)
 	if err := ranking.RefreshBehavioralScores(context.Background()); err != nil {
 		t.Fatalf("no-consumer refresh must be a nil no-op, got %v", err)
 	}
@@ -102,7 +83,7 @@ func TestRefreshBehavioralScores_NoConsumerIsNoop(t *testing.T) {
 
 func TestRefreshBehavioralScores_ErrorKeepsLastSnapshot(t *testing.T) {
 	store := &mutableSignalStore{signals: []ports.BehavioralSignal{{ResultSignature: "sig", Score: 2}}}
-	ranking := NewRankingExperiments(RankingConfig{BehavioralRanking: true, BehavioralConsumer: NewSatisfactionConsumer(store)}, nil)
+	ranking := rank.NewRankingExperiments(rank.RankingConfig{BehavioralRanking: true, BehavioralConsumer: rank.NewSatisfactionConsumer(store)}, nil)
 
 	if err := ranking.RefreshBehavioralScores(context.Background()); err != nil {
 		t.Fatal(err)
@@ -111,7 +92,7 @@ func TestRefreshBehavioralScores_ErrorKeepsLastSnapshot(t *testing.T) {
 	if err := ranking.RefreshBehavioralScores(context.Background()); err == nil {
 		t.Fatal("refresh must surface the consumer error to its caller")
 	}
-	if got := ranking.behavioralScoresSnapshot(); got["sig"] != 2 {
+	if got := ranking.RankOptions().Behavioral; got["sig"] != 2 {
 		t.Errorf("snapshot after failed refresh = %v, want the last good map kept", got)
 	}
 }

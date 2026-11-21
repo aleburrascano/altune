@@ -1,35 +1,42 @@
-package rank
+package rank_test
 
 import (
 	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service/rank"
 	"testing"
 )
 
+const (
+	mergeCapPerProvider    = 100
+	cappedMergeAllocBudget = 10000
+)
+
+func distinctTracks(n int) []domain.SearchResult {
+	tracks := make([]domain.SearchResult, n)
+	for i := range tracks {
+		tracks[i] = discoverytest.Track("title "+string(rune(0x4e00+i)), "artist "+string(rune(0x4e00+i)), domain.ProviderDeezer, nil)
+	}
+	return tracks
+}
+
 func TestMerge_CapsEachProviderGroupBeforeTheQuadraticScan(t *testing.T) {
-	huge := make([]domain.SearchResult, 10000)
-	for i := range huge {
-		huge[i] = discoverytest.Track("title "+string(rune(0x4e00+i)), "artist "+string(rune(0x4e00+i)), domain.ProviderDeezer, nil)
-	}
-	entities := Merge([][]domain.SearchResult{huge})
-	if len(entities) != maxMergeResultsPerProvider {
-		t.Fatalf("got %d entities, want %d", len(entities), maxMergeResultsPerProvider)
+	huge := distinctTracks(10000)
+	entities := rank.Merge([][]domain.SearchResult{huge})
+	if len(entities) != mergeCapPerProvider {
+		t.Fatalf("got %d entities, want %d", len(entities), mergeCapPerProvider)
 	}
 }
 
-func TestMerge_ScansOnlyTheCappedGroup(t *testing.T) {
-	huge := make([]domain.SearchResult, 10000)
-	for i := range huge {
-		huge[i] = discoverytest.Track("title "+string(rune(0x4e00+i)), "artist "+string(rune(0x4e00+i)), domain.ProviderDeezer, nil)
-	}
-	comparisons := 0
-	mergeObserving([][]domain.SearchResult{huge}, func() { comparisons++ })
-	if limit := maxMergeResultsPerProvider * maxMergeResultsPerProvider; comparisons > limit {
-		t.Fatalf("scan made %d comparisons, want at most %d (the cap must run before the scan)", comparisons, limit)
+func TestMerge_CapsEachProviderGroupBeforeMatchingAcrossIt(t *testing.T) {
+	huge := distinctTracks(10000)
+	allocs := testing.AllocsPerRun(3, func() { rank.Merge([][]domain.SearchResult{huge}) })
+	if allocs > cappedMergeAllocBudget {
+		t.Fatalf("merging %d results allocated %.0f times, want at most %d: only the first %d of a group may be matched", len(huge), allocs, cappedMergeAllocBudget, mergeCapPerProvider)
 	}
 }
 
-func findByTitle(t *testing.T, entities []Entity, title string) Entity {
+func findByTitle(t *testing.T, entities []rank.Entity, title string) rank.Entity {
 	t.Helper()
 	for _, e := range entities {
 		if e.Result.Title == title {
@@ -37,14 +44,14 @@ func findByTitle(t *testing.T, entities []Entity, title string) Entity {
 		}
 	}
 	t.Fatalf("no entity titled %q in %d entities", title, len(entities))
-	return Entity{}
+	return rank.Entity{}
 }
 
 func TestMerge_UnambiguousArtistNameStillNameMerges(t *testing.T) {
 	mb := discoverytest.Res(domain.ResultKindArtist, "Drake", "", domain.ProviderDeezer, nil)
 	itunes := discoverytest.Res(domain.ResultKindArtist, "Drake", "", domain.ProviderITunes, nil)
 
-	entities := Merge([][]domain.SearchResult{{mb}, {itunes}})
+	entities := rank.Merge([][]domain.SearchResult{{mb}, {itunes}})
 
 	if len(entities) != 1 {
 		t.Fatalf("got %d entities, want 1 (name merge preserved when unambiguous)", len(entities))
@@ -58,7 +65,7 @@ func TestMerge_IdentifierMatch(t *testing.T) {
 	t.Run("same isrc merges across providers", func(t *testing.T) {
 		a := discoverytest.WithISRC(discoverytest.Track("HUMBLE.", "Kendrick Lamar", domain.ProviderDeezer, nil), "USUM71703089")
 		b := discoverytest.WithISRC(discoverytest.Track("Humble", "Kendrick Lamar", domain.ProviderITunes, nil), "USUM71703089")
-		entities := Merge([][]domain.SearchResult{{a}, {b}})
+		entities := rank.Merge([][]domain.SearchResult{{a}, {b}})
 		if len(entities) != 1 {
 			t.Fatalf("got %d entities, want 1", len(entities))
 		}
@@ -72,7 +79,6 @@ func TestMerge_IdentifierMatch(t *testing.T) {
 			t.Errorf("confidence = %v, want high", entities[0].Result.Confidence)
 		}
 	})
-
 }
 
 func TestMerge_AlbumUPCTier(t *testing.T) {
@@ -81,7 +87,7 @@ func TestMerge_AlbumUPCTier(t *testing.T) {
 		a.UPC = "00602557618280"
 		b := discoverytest.Res(domain.ResultKindAlbum, "DAMN. (Deluxe)", "Kendrick Lamar", domain.ProviderDeezer, nil)
 		b.UPC = "00602557618280"
-		entities := Merge([][]domain.SearchResult{{a}, {b}})
+		entities := rank.Merge([][]domain.SearchResult{{a}, {b}})
 		if len(entities) != 1 {
 			t.Fatalf("got %d entities, want 1", len(entities))
 		}
@@ -101,7 +107,7 @@ func TestMerge_AlbumUPCTier(t *testing.T) {
 		a.UPC = "00602557618280"
 		b := discoverytest.Res(domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", domain.ProviderDeezer, nil)
 		b.UPC = "00602557618297"
-		entities := Merge([][]domain.SearchResult{{a}, {b}})
+		entities := rank.Merge([][]domain.SearchResult{{a}, {b}})
 		if len(entities) != 1 {
 			t.Fatalf("got %d entities, want 1 (upc mismatch must not block)", len(entities))
 		}
@@ -112,7 +118,7 @@ func TestMerge_AlbumUPCTier(t *testing.T) {
 		a.UPC = "00602557618280"
 		b := discoverytest.Track("Different Title", "Artist B", domain.ProviderITunes, nil)
 		b.UPC = "00602557618280"
-		entities := Merge([][]domain.SearchResult{{a}, {b}})
+		entities := rank.Merge([][]domain.SearchResult{{a}, {b}})
 		if len(entities) != 2 {
 			t.Fatalf("got %d entities, want 2 (upc tier is album-only)", len(entities))
 		}
@@ -125,7 +131,7 @@ func TestMergeInto_CoalescesTypedContentFields(t *testing.T) {
 	a.Duration = 177
 	a.DeezerAlbumID = "13114014"
 	b := discoverytest.Track("HUMBLE.", "Kendrick Lamar", domain.ProviderITunes, nil)
-	entities := Merge([][]domain.SearchResult{{a}, {b}})
+	entities := rank.Merge([][]domain.SearchResult{{a}, {b}})
 	if len(entities) != 1 {
 		t.Fatalf("got %d entities, want 1", len(entities))
 	}
@@ -139,7 +145,7 @@ func TestMergeInto_CoalescesTypedContentFields(t *testing.T) {
 func TestMerge_SequelStaysSeparate(t *testing.T) {
 	a := discoverytest.Track("Shotta Flow", "NLE Choppa", domain.ProviderDeezer, map[string]any{"popularity": 90.0})
 	b := discoverytest.Track("Shotta Flow 2", "NLE Choppa", domain.ProviderDeezer, map[string]any{"popularity": 40.0})
-	entities := Merge([][]domain.SearchResult{{a, b}})
+	entities := rank.Merge([][]domain.SearchResult{{a, b}})
 	if len(entities) != 2 {
 		t.Fatalf("got %d entities, want 2 — the sequel must not collapse into the original", len(entities))
 	}
@@ -154,7 +160,7 @@ func TestMerge_ParentheticalVariantsCollapse(t *testing.T) {
 	for _, tc := range cases {
 		a := discoverytest.Track(tc.a, "Some Artist", domain.ProviderDeezer, nil)
 		b := discoverytest.Track(tc.b, "Some Artist", domain.ProviderITunes, nil)
-		entities := Merge([][]domain.SearchResult{{a}, {b}})
+		entities := rank.Merge([][]domain.SearchResult{{a}, {b}})
 		if len(entities) != 1 {
 			t.Errorf("%q + %q: got %d entities, want 1 (parenthetical variant folds in)", tc.a, tc.b, len(entities))
 		}
@@ -164,7 +170,7 @@ func TestMerge_ParentheticalVariantsCollapse(t *testing.T) {
 func TestMerge_DashAndParenVariantsStaySeparate(t *testing.T) {
 	a := discoverytest.Track("Big Poppa - 2005 Remaster", "The Notorious B.I.G.", domain.ProviderTheAudioDB, nil)
 	b := discoverytest.Track("Big Poppa (2007 Remaster)", "The Notorious B.I.G.", domain.ProviderDeezer, nil)
-	entities := Merge([][]domain.SearchResult{{a}, {b}})
+	entities := rank.Merge([][]domain.SearchResult{{a}, {b}})
 	if len(entities) != 2 {
 		t.Fatalf("got %d entities, want 2 — the dash-form variant must stay distinct", len(entities))
 	}
@@ -173,7 +179,7 @@ func TestMerge_DashAndParenVariantsStaySeparate(t *testing.T) {
 func TestMerge_SameTitleAcrossProvidersMerges(t *testing.T) {
 	a := discoverytest.Track("HUMBLE.", "Kendrick Lamar", domain.ProviderDeezer, nil)
 	b := discoverytest.Track("Humble", "Kendrick Lamar", domain.ProviderITunes, nil)
-	entities := Merge([][]domain.SearchResult{{a}, {b}})
+	entities := rank.Merge([][]domain.SearchResult{{a}, {b}})
 	if len(entities) != 1 {
 		t.Fatalf("got %d entities, want 1 (same canonical title, different providers)", len(entities))
 	}
@@ -188,7 +194,7 @@ func TestMerge_SameTitleAcrossProvidersMerges(t *testing.T) {
 func TestMerge_TyposStaySeparate(t *testing.T) {
 	a := discoverytest.Track("Bohemian Rhapsody", "Queen", domain.ProviderDeezer, nil)
 	b := discoverytest.Track("Bohemian Rapsody", "Queen", domain.ProviderITunes, nil)
-	entities := Merge([][]domain.SearchResult{{a}, {b}})
+	entities := rank.Merge([][]domain.SearchResult{{a}, {b}})
 	if len(entities) != 2 {
 		t.Fatalf("got %d entities, want 2 (no fuzzy merge)", len(entities))
 	}
@@ -197,7 +203,7 @@ func TestMerge_TyposStaySeparate(t *testing.T) {
 func TestMerge_DifferentArtistStaysSeparate(t *testing.T) {
 	a := discoverytest.Track("Crazy", "Gnarls Barkley", domain.ProviderDeezer, nil)
 	b := discoverytest.Track("Crazy", "Patsy Cline", domain.ProviderITunes, nil)
-	entities := Merge([][]domain.SearchResult{{a}, {b}})
+	entities := rank.Merge([][]domain.SearchResult{{a}, {b}})
 	if len(entities) != 2 {
 		t.Fatalf("got %d entities, want 2 (same title, different artists)", len(entities))
 	}
@@ -207,7 +213,7 @@ func TestMerge_Artists(t *testing.T) {
 	t.Run("same-name artists merge and union sources", func(t *testing.T) {
 		a := discoverytest.Res(domain.ResultKindArtist, "Drake", "", domain.ProviderDeezer, nil)
 		b := discoverytest.Res(domain.ResultKindArtist, "Drake", "", domain.ProviderITunes, nil)
-		entities := Merge([][]domain.SearchResult{{a}, {b}})
+		entities := rank.Merge([][]domain.SearchResult{{a}, {b}})
 		if len(entities) != 1 {
 			t.Fatalf("got %d entities, want 1", len(entities))
 		}
@@ -219,7 +225,7 @@ func TestMerge_Artists(t *testing.T) {
 	t.Run("distinct names stay separate", func(t *testing.T) {
 		a := discoverytest.Res(domain.ResultKindArtist, "Blink-182", "", domain.ProviderDeezer, nil)
 		b := discoverytest.Res(domain.ResultKindArtist, "Blink", "", domain.ProviderITunes, nil)
-		entities := Merge([][]domain.SearchResult{{a}, {b}})
+		entities := rank.Merge([][]domain.SearchResult{{a}, {b}})
 		if len(entities) != 2 {
 			t.Fatalf("got %d entities, want 2 (Blink-182 != Blink)", len(entities))
 		}
@@ -230,7 +236,7 @@ func TestMerge_EmptyNormalizedTitleNeverNameMerges(t *testing.T) {
 	t.Run("fully-bracketed track titles stay separate", func(t *testing.T) {
 		a := discoverytest.Track("(Intro)", "Same Artist", domain.ProviderDeezer, nil)
 		b := discoverytest.Track("(Outro)", "Same Artist", domain.ProviderITunes, nil)
-		entities := Merge([][]domain.SearchResult{{a}, {b}})
+		entities := rank.Merge([][]domain.SearchResult{{a}, {b}})
 		if len(entities) != 2 {
 			t.Fatalf("got %d entities, want 2 (empty normalized titles must not merge)", len(entities))
 		}
@@ -239,7 +245,7 @@ func TestMerge_EmptyNormalizedTitleNeverNameMerges(t *testing.T) {
 	t.Run("symbol-only artist names stay separate", func(t *testing.T) {
 		a := discoverytest.Res(domain.ResultKindArtist, "!!!", "", domain.ProviderDeezer, nil)
 		b := discoverytest.Res(domain.ResultKindArtist, "†††", "", domain.ProviderITunes, nil)
-		entities := Merge([][]domain.SearchResult{{a}, {b}})
+		entities := rank.Merge([][]domain.SearchResult{{a}, {b}})
 		if len(entities) != 2 {
 			t.Fatalf("got %d entities, want 2 (empty normalized names must not merge)", len(entities))
 		}
@@ -251,7 +257,7 @@ func TestMergeInto_KeepsStrongestResolutionTier(t *testing.T) {
 	b := discoverytest.WithISRC(discoverytest.Track("Humble", "Kendrick Lamar", domain.ProviderITunes, nil), "USUM71703089")
 	c := discoverytest.Track("Humble", "Kendrick Lamar", domain.ProviderTheAudioDB, nil)
 
-	entities := Merge([][]domain.SearchResult{{a}, {b}, {c}})
+	entities := rank.Merge([][]domain.SearchResult{{a}, {b}, {c}})
 	if len(entities) != 1 {
 		t.Fatalf("got %d entities, want 1", len(entities))
 	}
@@ -292,7 +298,7 @@ func TestMergeInto_TitleTierCarriesTheOtherSidesISRCOnlyWhenItIsTheSameVersion(t
 			other := discoverytest.WithISRC(discoverytest.Track(tt.other, "Some Artist", domain.ProviderSpotify, nil), "ISRC-OTHER")
 			other.Duration = tt.otherDur
 
-			entities := Merge([][]domain.SearchResult{{moreCompleteTrack(tt.title, tt.dur)}, {other}})
+			entities := rank.Merge([][]domain.SearchResult{{moreCompleteTrack(tt.title, tt.dur)}, {other}})
 
 			if len(entities) != 1 {
 				t.Fatalf("got %d entities, want 1 (title tier still merges)", len(entities))
@@ -303,6 +309,7 @@ func TestMergeInto_TitleTierCarriesTheOtherSidesISRCOnlyWhenItIsTheSameVersion(t
 		})
 	}
 }
+
 func TestMergeInto_NameMatchNeverPastesLookalikeArtworkOverIdentity(t *testing.T) {
 	identity := discoverytest.WithISRC(discoverytest.Track("No Idea", "Don Toliver", domain.ProviderSpotify, nil), "ISRC-DONTOLIVER")
 	lookalike := discoverytest.Track("No Idea", "Don Toliver", domain.ProviderDeezer, nil)
@@ -314,7 +321,7 @@ func TestMergeInto_NameMatchNeverPastesLookalikeArtworkOverIdentity(t *testing.T
 		"lookalike_first": {{lookalike}, {identity}},
 	}
 	for name, order := range orders {
-		entities := Merge(order)
+		entities := rank.Merge(order)
 		if len(entities) != 1 {
 			t.Fatalf("%s: got %d entities, want 1 (same title+artist name-merge)", name, len(entities))
 		}
@@ -334,7 +341,7 @@ func TestMergeInto_StrongIDMergeAdoptsSiblingArtwork(t *testing.T) {
 	b.ImageURL = "https://cover/humble.jpg"
 	b.ArtworkSource = "deezer"
 
-	entities := Merge([][]domain.SearchResult{{a}, {b}})
+	entities := rank.Merge([][]domain.SearchResult{{a}, {b}})
 	if len(entities) != 1 {
 		t.Fatalf("got %d entities, want 1", len(entities))
 	}
@@ -355,7 +362,7 @@ func TestMerge_BestRankTracksMinAcrossProviders(t *testing.T) {
 	groupB := []domain.SearchResult{
 		discoverytest.Track("Target", "Kendrick Lamar", domain.ProviderITunes, map[string]any{"isrc": "ISRC1"}),
 	}
-	entities := Merge([][]domain.SearchResult{groupA, groupB})
+	entities := rank.Merge([][]domain.SearchResult{groupA, groupB})
 	e := findByTitle(t, entities, "Target")
 	if e.BestRank[domain.ProviderDeezer] != 2 {
 		t.Errorf("deezer best rank = %d, want 2", e.BestRank[domain.ProviderDeezer])
@@ -372,12 +379,13 @@ func TestMerge_TitleTierCarriesTheAlbumISRCPastARejectedRemix(t *testing.T) {
 	album := discoverytest.WithISRC(discoverytest.Track("Drinking in L.A.", "Some Artist", domain.ProviderSpotify, nil), "ISRC-ALBUM")
 	album.Duration = 236
 
-	entities := Merge([][]domain.SearchResult{{deezer}, {remix, album}})
+	entities := rank.Merge([][]domain.SearchResult{{deezer}, {remix, album}})
 
 	if len(entities) != 1 || entities[0].Result.ISRC != "ISRC-ALBUM" {
 		t.Fatalf("entities = %d, ISRC = %q, want one entity carrying the album recording's ISRC, never the remix's", len(entities), entities[0].Result.ISRC)
 	}
 }
+
 func TestMerge_TitleTierKeepsProvenIdentityOverALaterMoreCompleteCandidate(t *testing.T) {
 	deezer := discoverytest.WithISRC(discoverytest.Track("Song Title", "Some Artist", domain.ProviderDeezer, nil), "ISRC-PROVEN")
 	mb := discoverytest.WithISRC(discoverytest.Track("Song Title", "Some Artist", domain.ProviderSpotify, nil), "ISRC-PROVEN")
@@ -387,7 +395,7 @@ func TestMerge_TitleTierKeepsProvenIdentityOverALaterMoreCompleteCandidate(t *te
 	extended.UPC = "000000000000"
 	extended.Duration = 400
 
-	entities := Merge([][]domain.SearchResult{{deezer}, {mb}, {extended}})
+	entities := rank.Merge([][]domain.SearchResult{{deezer}, {mb}, {extended}})
 	if len(entities) != 1 {
 		t.Fatalf("got %d entities, want 1 (title tier still merges)", len(entities))
 	}
@@ -401,7 +409,7 @@ func TestMerge_DifferentISRCsKeepARemixApartFromTheOriginal(t *testing.T) {
 	original := discoverytest.WithISRC(discoverytest.Track("Song", "X", domain.ProviderDeezer, nil), "USUM71700001")
 	remix := discoverytest.WithISRC(discoverytest.Track("Song (Remix)", "X", domain.ProviderSpotify, nil), "USUM71700002")
 
-	entities := Merge([][]domain.SearchResult{{original}, {remix}})
+	entities := rank.Merge([][]domain.SearchResult{{original}, {remix}})
 
 	if len(entities) != 2 {
 		t.Fatalf("got %d entities, want the remix and the original kept apart", len(entities))
@@ -412,7 +420,7 @@ func TestMerge_DifferentISRCsStillMergeWhenTheVersionWordsAgree(t *testing.T) {
 	a := discoverytest.WithISRC(discoverytest.Track("Song", "X", domain.ProviderDeezer, nil), "USUM71700001")
 	b := discoverytest.WithISRC(discoverytest.Track("Song", "X", domain.ProviderSpotify, nil), "USUM71700002")
 
-	entities := Merge([][]domain.SearchResult{{a}, {b}})
+	entities := rank.Merge([][]domain.SearchResult{{a}, {b}})
 
 	if len(entities) != 1 {
 		t.Fatalf("got %d entities, want 1", len(entities))
@@ -426,7 +434,7 @@ func TestMerge_ExplicitAndCleanTwinsCarryTheISRCOfTheSameSource(t *testing.T) {
 	clean.Album = "Clean Album"
 
 	for _, order := range [][][]domain.SearchResult{{{explicit}, {clean}}, {{clean}, {explicit}}} {
-		entities := Merge(order)
+		entities := rank.Merge(order)
 		if len(entities) != 1 {
 			t.Fatalf("got %d entities, want the twins merged", len(entities))
 		}
@@ -441,7 +449,7 @@ func TestMerge_ISRCsDifferingOnlyInFormattingMatch(t *testing.T) {
 	soundcloud := discoverytest.WithISRC(discoverytest.Track("Song", "X", domain.ProviderSoundCloud, nil), "us-um7-17-03861")
 	deezer := discoverytest.WithISRC(discoverytest.Track("Song (Remix)", "Y", domain.ProviderDeezer, nil), "USUM71703861")
 
-	entities := Merge([][]domain.SearchResult{{soundcloud}, {deezer}})
+	entities := rank.Merge([][]domain.SearchResult{{soundcloud}, {deezer}})
 
 	if len(entities) != 1 {
 		t.Fatalf("got %d entities, want the dashed and canonical ISRC to match", len(entities))
@@ -490,7 +498,7 @@ func TestMerge_ExplicitTrueWinsThenFalse(t *testing.T) {
 				groups = [][]domain.SearchResult{{tt.second}, {tt.first}}
 			}
 			t.Run(tt.name, func(t *testing.T) {
-				entities := Merge(groups)
+				entities := rank.Merge(groups)
 				if len(entities) != 1 {
 					t.Fatalf("got %d entities, want the recorded pair merged", len(entities))
 				}
@@ -513,7 +521,7 @@ func artistWithID(name string, provider domain.ProviderName, id string, fans int
 	}
 }
 
-func entityWithSource(t *testing.T, entities []Entity, provider domain.ProviderName, id string) Entity {
+func entityWithSource(t *testing.T, entities []rank.Entity, provider domain.ProviderName, id string) rank.Entity {
 	t.Helper()
 	for _, e := range entities {
 		for _, s := range e.Result.Sources {
@@ -523,11 +531,11 @@ func entityWithSource(t *testing.T, entities []Entity, provider domain.ProviderN
 		}
 	}
 	t.Fatalf("no entity holds %s:%s", provider, id)
-	return Entity{}
+	return rank.Entity{}
 }
 
 func TestMerge_SameNameArtistsWithDifferentIDsFromOneProviderStayApart(t *testing.T) {
-	entities := Merge([][]domain.SearchResult{{
+	entities := rank.Merge([][]domain.SearchResult{{
 		artistWithID("Michael Jackson", domain.ProviderDeezer, "373427811", 211, "https://img/fan.jpg"),
 		artistWithID("Michael Jackson", domain.ProviderDeezer, "259", 13187101, "https://img/mj.jpg"),
 	}})
@@ -538,7 +546,7 @@ func TestMerge_SameNameArtistsWithDifferentIDsFromOneProviderStayApart(t *testin
 }
 
 func TestMerge_AnotherProviderJoinsTheMostPopularSameNameArtist(t *testing.T) {
-	entities := Merge([][]domain.SearchResult{
+	entities := rank.Merge([][]domain.SearchResult{
 		{
 			artistWithID("Michael Jackson", domain.ProviderDeezer, "373427811", 211, "https://img/fan.jpg"),
 			artistWithID("Michael Jackson", domain.ProviderDeezer, "259", 13187101, "https://img/mj.jpg"),
@@ -556,7 +564,7 @@ func TestMerge_AnotherProviderJoinsTheMostPopularSameNameArtist(t *testing.T) {
 }
 
 func TestMerge_KeepsTheLargestFanCount(t *testing.T) {
-	entities := Merge([][]domain.SearchResult{
+	entities := rank.Merge([][]domain.SearchResult{
 		{artistWithID("Drake", domain.ProviderAppleMusic, "271256", 5, "https://img/apple.jpg")},
 		{artistWithID("Drake", domain.ProviderDeezer, "246791", 24104376, "")},
 	})
@@ -574,7 +582,7 @@ func TestMerge_ReuploadsOfOneTrackOnOneProviderStillFold(t *testing.T) {
 	second := discoverytest.Res(domain.ResultKindTrack, "Smooth Criminal", "Michael Jackson", domain.ProviderSoundCloud, nil)
 	second.Sources[0].ExternalID = "another-upload"
 
-	if entities := Merge([][]domain.SearchResult{{first, second}}); len(entities) != 1 {
+	if entities := rank.Merge([][]domain.SearchResult{{first, second}}); len(entities) != 1 {
 		t.Fatalf("got %d entities, want 1: the same-provider rule is for artists only", len(entities))
 	}
 }
@@ -583,7 +591,7 @@ func TestMerge_TheMergedArtistKeepsSpotifysTopPick(t *testing.T) {
 	picked := artistWithID("Cochise", domain.ProviderSpotify, "sp1", 0, "https://img/sp.jpg")
 	picked.Extras = map[string]any{domain.ExtraTopPick: true}
 
-	entities := Merge([][]domain.SearchResult{
+	entities := rank.Merge([][]domain.SearchResult{
 		{artistWithID("Cochise", domain.ProviderDeezer, "dz1", 500000, "https://img/dz.jpg")},
 		{picked},
 	})
@@ -595,7 +603,7 @@ func TestMerge_TheMergedArtistKeepsSpotifysTopPick(t *testing.T) {
 }
 
 func TestMerge_ASongCreditedWithExtraNamesFoldsIntoTheLeadArtistsSong(t *testing.T) {
-	entities := Merge([][]domain.SearchResult{
+	entities := rank.Merge([][]domain.SearchResult{
 		{discoverytest.Track("Yacht Club (feat. Juice WRLD)", "Lil Yachty", domain.ProviderDeezer, nil)},
 		{discoverytest.Track("Yacht Club (feat. Juice WRLD)", "Lil Yachty, RD, Lil Boat", domain.ProviderSoundCloud, nil)},
 	})
@@ -606,7 +614,7 @@ func TestMerge_ASongCreditedWithExtraNamesFoldsIntoTheLeadArtistsSong(t *testing
 }
 
 func TestMerge_AnAlbumWithACoCreditFoldsIntoTheLeadArtistsAlbum(t *testing.T) {
-	entities := Merge([][]domain.SearchResult{
+	entities := rank.Merge([][]domain.SearchResult{
 		{discoverytest.Res(domain.ResultKindAlbum, "Her Loss", "Drake & 21 Savage", domain.ProviderAppleMusic, nil)},
 		{discoverytest.Res(domain.ResultKindAlbum, "Her Loss", "Drake", domain.ProviderSpotify, nil)},
 	})
@@ -617,7 +625,7 @@ func TestMerge_AnAlbumWithACoCreditFoldsIntoTheLeadArtistsAlbum(t *testing.T) {
 }
 
 func TestMerge_SameTitleByADifferentLeadArtistStaysApart(t *testing.T) {
-	entities := Merge([][]domain.SearchResult{
+	entities := rank.Merge([][]domain.SearchResult{
 		{discoverytest.Track("Cochise", "Audioslave", domain.ProviderDeezer, nil)},
 		{discoverytest.Track("Cochise", "Cochise, Audioslave", domain.ProviderSoundCloud, nil)},
 	})
@@ -635,7 +643,7 @@ func TestMerge_TheCatalogCreditBeatsASoundCloudAccountName(t *testing.T) {
 		{{discoverytest.Track("Yacht Club (feat. Juice WRLD)", "Lil Yachty", domain.ProviderDeezer, nil)}, {upload}},
 		{{upload}, {discoverytest.Track("Yacht Club (feat. Juice WRLD)", "Lil Yachty", domain.ProviderDeezer, nil)}},
 	} {
-		entities := Merge(order)
+		entities := rank.Merge(order)
 		if len(entities) != 1 {
 			t.Fatalf("got %d entities, want one Yacht Club", len(entities))
 		}
@@ -646,7 +654,7 @@ func TestMerge_TheCatalogCreditBeatsASoundCloudAccountName(t *testing.T) {
 }
 
 func TestMerge_SymbolOnlyArtistNamesStillMatch(t *testing.T) {
-	entities := Merge([][]domain.SearchResult{
+	entities := rank.Merge([][]domain.SearchResult{
 		{artistWithID("¥$", domain.ProviderDeezer, "dz", 900000, "https://img/dz.jpg")},
 		{artistWithID("¥$", domain.ProviderSpotify, "sp", 0, "https://img/sp.jpg")},
 	})
@@ -657,7 +665,7 @@ func TestMerge_SymbolOnlyArtistNamesStillMatch(t *testing.T) {
 }
 
 func TestMerge_DifferentSymbolOnlyNamesStayApart(t *testing.T) {
-	entities := Merge([][]domain.SearchResult{
+	entities := rank.Merge([][]domain.SearchResult{
 		{artistWithID("¥$", domain.ProviderDeezer, "dz", 900000, "")},
 		{artistWithID("$$$", domain.ProviderSpotify, "sp", 0, "")},
 	})
@@ -668,7 +676,7 @@ func TestMerge_DifferentSymbolOnlyNamesStayApart(t *testing.T) {
 }
 
 func TestMerge_AnotherProviderJoinsTheMostPopularSameNameArtistWhicheverComesFirst(t *testing.T) {
-	entities := Merge([][]domain.SearchResult{
+	entities := rank.Merge([][]domain.SearchResult{
 		{artistWithID("Michael Jackson", domain.ProviderSpotify, "3fMbdgg4jU18AjLCKBhRSm", 0, "https://img/sp.jpg")},
 		{
 			artistWithID("Michael Jackson", domain.ProviderDeezer, "373427811", 211, "https://img/fan.jpg"),
@@ -710,7 +718,7 @@ func TestMerge_ThreeProvidersExplicitIsTrueWhenAnySaysTrueInEveryOrder(t *testin
 	explicit := explicitProbeTrack(domain.ProviderSpotify, "s1", domain.BoolPtr(true))
 
 	for i, groups := range everyOrderOf3(clean, unknown, explicit) {
-		entities := Merge(groups)
+		entities := rank.Merge(groups)
 		if len(entities) != 1 {
 			t.Fatalf("order %d: got %d entities, want the three providers merged", i, len(entities))
 		}
@@ -726,7 +734,7 @@ func TestMerge_ThreeProvidersExplicitIsFalseWhenEveryKnownValueIsFalseInEveryOrd
 	unknown := explicitProbeTrack(domain.ProviderAppleMusic, "a1", nil)
 
 	for i, groups := range everyOrderOf3(clean, alsoClean, unknown) {
-		entities := Merge(groups)
+		entities := rank.Merge(groups)
 		if len(entities) != 1 {
 			t.Fatalf("order %d: got %d entities, want the three providers merged", i, len(entities))
 		}
@@ -742,7 +750,7 @@ func TestMerge_ThreeProvidersNoneKnowingLeavesExplicitUnknownInEveryOrder(t *tes
 	c := explicitProbeTrack(domain.ProviderAppleMusic, "a1", nil)
 
 	for i, groups := range everyOrderOf3(a, b, c) {
-		if got := Merge(groups)[0].Result.Explicit; got != nil {
+		if got := rank.Merge(groups)[0].Result.Explicit; got != nil {
 			t.Errorf("order %d: merged Explicit = %v, want nil when no provider knows", i, *got)
 		}
 	}
@@ -756,7 +764,7 @@ func TestMerge_CleanTwinWithAKnownFalseKeepsTheFlagOfItsOwnISRC(t *testing.T) {
 	clean.Explicit = domain.BoolPtr(false)
 
 	for i, order := range [][][]domain.SearchResult{{{explicit}, {clean}}, {{clean}, {explicit}}} {
-		entities := Merge(order)
+		entities := rank.Merge(order)
 		if len(entities) != 1 {
 			t.Fatalf("order %d: got %d entities, want the twins merged", i, len(entities))
 		}

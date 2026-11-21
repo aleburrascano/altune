@@ -174,7 +174,7 @@ flowchart TD
     CACHE -->|hit| RET["return cached list"]
     CACHE -->|miss| FAN["fanOut · every provider concurrently<br/>1500ms timeout · breaker · fixed slots"]
     FAN --> MERGE["Merge · identity tiers"]
-    MERGE --> RANK["Rank · IDF relevance + rankLess order"]
+    MERGE --> RANK["Rank · IDF relevance + rankorder.Less"]
     RANK --> RESHAPE["Reshape · diversity + collapse"]
     RESHAPE --> DIS["applyArtistDisambiguation"]
     DIS --> ARTF["fillArtwork · identity-first chain"]
@@ -280,13 +280,13 @@ result: unions `Sources`, takes max popularity, coalesces typed metadata
 `Rank`/`rankWith` (`service/rank.go`) orders merged entities by continuous,
 parameter-free relevance. Two passes, both in the shared `rankScored` core:
 
-- **Pass 1 — eligibility gates:** `sharesQueryWord` (drop results sharing no token
+- **Pass 1 — eligibility gates:** `relevance.SharesQueryWord` (drop results sharing no token
   with the query) and `hasBrowseableSource` (artist/album need a Deezer source;
   tracks always pass).
-- **Pass 2 — score + order (`rankLess`):**
-  `demotion flag → relevance → cross-kind prominence → behavioral → popularity → multi-source → RRF (k=60) → stable title tiebreak`.
+- **Pass 2 — score + order (`rankorder.Less`, `internal/core/rankorder`):**
+  `demotion flag → top pick → of the pick → relevance → names the picked artist → cross-kind prominence → behavioral → popularity → multi-source → RRF (k=60) → subtitle, then title tiebreak`.
 
-Relevance (`rank_relevance.go`, `idfWeightedCoverage`) is
+Relevance (`internal/core/relevance`, `Scorer.Score`) is
 `Σ IDF(qtoken)·bestFuzzyMatch(qtoken, title+subtitle) / Σ IDF(qtoken)`. IDF
 (`rarity = 1 − documentFrequency/N`) is computed over the eligible candidate set,
 so a repeated "artist" token in an "artist title" query weighs ~0 while a rare
@@ -852,7 +852,7 @@ The blast radius, per change:
 | `NormalizeForMatch` | Merge (name identity), Consensus clustering, Correction, **ResultSignature** | eval, merge, correction | behavioral scores silently stop joining (signature drift); over/under-merge |
 | a typed field or its provider producer | Merge tiers, Rank tiebreaks, Consensus, Detail best-of | eval, merge, detail | a provider stops populating it → silent rank/merge shift |
 | `Merge` / `sameEntity` tiers | Rank input set, diversity, detail fallback | eval, merge | same-name artists collide (under-merge) or fragment (over-merge) |
-| `rankLess` / relevance | top-3 positions everywhere | eval + artist-intent (same-sample A/B) | a niche owned track buried under the famous same-name one |
+| `rankorder.Less` / relevance | top-3 positions everywhere | eval + artist-intent (same-sample A/B) | a niche owned track buried under the famous same-name one |
 | diversity / collapse caps | top-window composition | diversity | duplicate cards, or distinct artists over-collapsed |
 | identity store reads | detail fan-out contents, artwork | detail, eval | fractured identity → cross-artist contamination |
 | MB-anchor / cohesion thresholds | detail contamination vs recall | detail | too loose = leak; too tight = real releases dropped |
@@ -863,7 +863,7 @@ The blast radius, per change:
 
 **Where correctness is concentrated.** The pure, no-I/O functions are where the
 hard logic lives and where it is safest to change: `Merge` (`merge.go`), the
-`rankPipeline` composition (`rank.go` / `rank_relevance.go`), and
+`rankPipeline` composition (`rank.go`, `internal/core/relevance`, `internal/core/rankorder`), and
 the detail cores `MergeReleases` / `FilterKept` / `NormalizeRecordType` /
 `FilterGroupsByMBAnchor` / `FilterCohesive` (`internal/core/release/*.go`). Each is exhaustively
 unit-testable with plain data and deletable in isolation. Every regression this

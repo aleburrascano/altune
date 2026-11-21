@@ -2,12 +2,13 @@ package rank
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/core/rankorder"
+	"altune/go-api/internal/discovery/internal/core/relevance"
 	"altune/go-api/internal/shared/textnorm"
 	"math"
 	"regexp"
 	"slices"
 	"sort"
-	"strings"
 )
 
 const rrfK = 60
@@ -15,17 +16,8 @@ const rrfK = 60
 type demoteFunc func(domain.SearchResult) bool
 
 type scored struct {
-	result      domain.SearchResult
-	relevance   float64
-	behavioral  float64
-	prominence  float64
-	pop         float64
-	rrf         float64
-	multi       bool
-	demoted     bool
-	topPick     bool
-	ofPick      bool
-	namedArtist bool
+	result domain.SearchResult
+	key    rankorder.Key
 }
 
 type rankConfig struct {
@@ -50,12 +42,12 @@ func rankWith(entities []Entity, queryNorm string, cfg rankConfig) []domain.Sear
 func rankScored(entities []Entity, queryNorm string, cfg rankConfig) []scored {
 	eligible := make([]Entity, 0, len(entities))
 	for _, e := range entities {
-		if sharesQueryWord(e.Result, queryNorm) && hasBrowseableSource(e.Result) {
+		if relevance.SharesQueryWord(e.Result, queryNorm) && hasBrowseableSource(e.Result) {
 			eligible = append(eligible, e)
 		}
 	}
 
-	rarity := queryTokenRarity(queryNorm, eligible)
+	scorer := relevance.NewScorer(queryNorm, resultsOf(eligible))
 	pickedArtist := pickedArtistName(eligible)
 
 	results := make([]scored, 0, len(eligible))
@@ -69,102 +61,32 @@ func rankScored(entities []Entity, queryNorm string, cfg rankConfig) []scored {
 		if cfg.prominence {
 			prominence = prominenceOf(r)
 		}
-		results = append(results, scored{
-			result:      r,
-			relevance:   idfWeightedCoverage(r, queryNorm, rarity),
-			behavioral:  cfg.behavioral[domain.ResultSignature(r)],
-			prominence:  prominence,
-			pop:         r.Popularity,
-			rrf:         rrfScore(e.BestRank),
-			multi:       len(providersOf(r)) > 1,
-			demoted:     demoted,
-			topPick:     domain.BoolExtra(r.Extras, domain.ExtraTopPick),
-			namedArtist: isStrongNamedArtist(r, queryNorm),
-			ofPick:      pickedArtist != "" && r.Kind != domain.ResultKindArtist && creditsArtist(r, pickedArtist),
-		})
+		results = append(results, scored{result: r, key: rankorder.Key{
+			Relevance:     scorer.Score(r),
+			Behavioral:    cfg.behavioral[domain.ResultSignature(r)],
+			Prominence:    prominence,
+			Popularity:    r.Popularity,
+			RRF:           rrfScore(e.BestRank),
+			MultiProvider: len(providersOf(r)) > 1,
+			Demoted:       demoted,
+			TopPick:       domain.BoolExtra(r.Extras, domain.ExtraTopPick),
+			NamedArtist:   isStrongNamedArtist(r, queryNorm),
+			OfPick:        pickedArtist != "" && r.Kind != domain.ResultKindArtist && creditsArtist(r, pickedArtist),
+			Subtitle:      r.Subtitle,
+			Title:         r.Title,
+		}})
 	}
 
-	sort.SliceStable(results, func(i, j int) bool { return rankLess(results[i], results[j]) })
+	sort.SliceStable(results, func(i, j int) bool { return rankorder.Less(results[i].key, results[j].key) })
 	return results
 }
 
-func rankLess(a, b scored) bool {
-	if a.demoted != b.demoted {
-		return !a.demoted
+func resultsOf(entities []Entity) []domain.SearchResult {
+	out := make([]domain.SearchResult, len(entities))
+	for i, e := range entities {
+		out[i] = e.Result
 	}
-	if a.topPick != b.topPick {
-		return a.topPick
-	}
-	if a.ofPick != b.ofPick {
-		return a.ofPick
-	}
-	if a.relevance != b.relevance {
-		return a.relevance > b.relevance
-	}
-	if a.namedArtist != b.namedArtist {
-		return a.namedArtist
-	}
-	if a.prominence != b.prominence {
-		return a.prominence > b.prominence
-	}
-	if a.behavioral != b.behavioral {
-		return a.behavioral > b.behavioral
-	}
-	if a.pop != b.pop {
-		return a.pop > b.pop
-	}
-	if a.multi != b.multi {
-		return a.multi
-	}
-	if a.rrf != b.rrf {
-		return a.rrf > b.rrf
-	}
-	if a.result.Subtitle != b.result.Subtitle {
-		return a.result.Subtitle < b.result.Subtitle
-	}
-	return a.result.Title < b.result.Title
-}
-
-func queryTokenRarity(q string, eligible []Entity) map[string]float64 {
-	qTokens := tokenSet(q)
-	rarity := make(map[string]float64, len(qTokens))
-	n := len(eligible)
-	if n == 0 {
-		for t := range qTokens {
-			rarity[t] = 1
-		}
-		return rarity
-	}
-	df := make(map[string]int, len(qTokens))
-	for _, e := range eligible {
-		hay := tokenSet(entityHaystack(e.Result))
-		for t := range qTokens {
-			if hay[t] {
-				df[t]++
-			}
-		}
-	}
-	for t := range qTokens {
-		rarity[t] = 1 - float64(df[t])/float64(n)
-	}
-	return rarity
-}
-
-func sharesQueryWord(r domain.SearchResult, queryNorm string) bool {
-	if queryNorm == "" {
-		return true
-	}
-	qTokens := tokenSet(queryNorm)
-	if len(qTokens) == 0 {
-		return true
-	}
-	hay := tokenSet(entityHaystack(r))
-	for w := range qTokens {
-		if hay[w] {
-			return true
-		}
-	}
-	return false
+	return out
 }
 
 func pickedArtistName(eligible []Entity) string {
@@ -228,20 +150,6 @@ func rrfScore(bestRank map[domain.ProviderName]int) float64 {
 		s += 1.0 / float64(rrfK+rank)
 	}
 	return s
-}
-
-func entityHaystack(r domain.SearchResult) string {
-	return textnorm.NormalizeForMatch(r.Subtitle + " " + r.Title)
-}
-
-func tokenSet(s string) map[string]bool {
-	m := make(map[string]bool)
-	for _, w := range strings.Fields(s) {
-		if len(w) >= 2 {
-			m[w] = true
-		}
-	}
-	return m
 }
 
 func isLowConfidenceTail(r domain.SearchResult) bool {
