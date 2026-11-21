@@ -17,6 +17,7 @@ import (
 	"altune/go-api/internal/discovery/internal/adapters/providers/trackers"
 	"altune/go-api/internal/discovery/internal/adapters/providers/ytmusic"
 	"altune/go-api/internal/discovery/internal/core/ports"
+	"time"
 )
 
 func (t *providerTable) addDeezer(c handles.Clients) {
@@ -85,7 +86,7 @@ func (t *providerTable) addYouTubeMusic(c handles.Clients) {
 }
 
 func (t *providerTable) addSpotify(c handles.Clients) {
-	adapter := spotify.NewSpotifyAdapter(c.ProviderCalls)
+	adapter := spotify.NewSpotifyAdapter(c.ProviderCalls, time.Now)
 	t.add(provider{
 		name:    rowSpotify,
 		id:      domain.ProviderSpotify,
