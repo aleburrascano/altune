@@ -31,7 +31,7 @@ func unscopedFromConfig(cfg *config.Config, logger *slog.Logger) (ports.AudioSto
 	}
 	if cfg.MusicDir != "" {
 		logger.Info("audio store: filesystem", "dir", cfg.MusicDir)
-		return NewFilesystemAudioStore(cfg.MusicDir), nil
+		return newFilesystemAudioStore(cfg.MusicDir, cfg.MusicDirTimeout), nil
 	}
 	return nil, missingAudioStoreError(nil)
 }

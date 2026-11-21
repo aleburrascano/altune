@@ -24,7 +24,14 @@ type FilesystemAudioStore struct {
 }
 
 func NewFilesystemAudioStore(baseDir string) *FilesystemAudioStore {
-	return &FilesystemAudioStore{baseDir: baseDir, opTimeout: storageOpTimeout}
+	return newFilesystemAudioStore(baseDir, storageOpTimeout)
+}
+
+func newFilesystemAudioStore(baseDir string, opTimeout time.Duration) *FilesystemAudioStore {
+	if opTimeout <= 0 {
+		opTimeout = storageOpTimeout
+	}
+	return &FilesystemAudioStore{baseDir: baseDir, opTimeout: opTimeout}
 }
 
 func (s *FilesystemAudioStore) Exists(ctx context.Context, audioRef string) (bool, error) {
