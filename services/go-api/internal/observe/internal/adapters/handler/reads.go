@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"altune/go-api/internal/observe/internal/adapters/acquisitionbridge"
 	"altune/go-api/internal/observe/service/evalmeter"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
@@ -17,7 +16,7 @@ func (h *Handler) registerReads(r chi.Router) {
 }
 
 func (h *Handler) serveAcquisition(w http.ResponseWriter, _ *http.Request) {
-	httputil.WriteJSON(w, http.StatusOK, acquisitionbridge.ReadAcquisitionStatus(h.deps.Acquisition))
+	httputil.WriteJSON(w, http.StatusOK, readAcquisitionStatus(h.deps.Acquisition))
 }
 
 func (h *Handler) serveEval(w http.ResponseWriter, _ *http.Request) {

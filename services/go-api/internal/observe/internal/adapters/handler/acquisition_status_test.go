@@ -1,7 +1,6 @@
-package acquisitionbridge_test
+package handler_test
 
 import (
-	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/observe"
 	"encoding/json"
 	"net/http"
@@ -13,10 +12,10 @@ import (
 
 type stubAcquisitionReader struct {
 	calls  int
-	status func(call int) acquisition.AcquisitionStatus
+	status func(call int) observe.AcquisitionStatus
 }
 
-func (s *stubAcquisitionReader) Status() acquisition.AcquisitionStatus {
+func (s *stubAcquisitionReader) Status() observe.AcquisitionStatus {
 	s.calls++
 	return s.status(s.calls)
 }
@@ -37,9 +36,9 @@ func serveAcquisition(t *testing.T, reader observe.AcquisitionReader) map[string
 	return body
 }
 
-func TestAcquisitionReader_OneJobGivesOneEntryAndAnEmptyRecentList(t *testing.T) {
-	r := &stubAcquisitionReader{status: func(int) acquisition.AcquisitionStatus {
-		return acquisition.AcquisitionStatus{ActiveJobs: []acquisition.JobRecord{{TrackID: "t1", State: "running"}}}
+func TestAcquisitionStatus_OneJobGivesOneEntryAndAnEmptyRecentList(t *testing.T) {
+	r := &stubAcquisitionReader{status: func(int) observe.AcquisitionStatus {
+		return observe.AcquisitionStatus{ActiveJobs: []observe.AcquisitionJob{{TrackID: "t1", State: "running"}}}
 	}}
 
 	body := serveAcquisition(t, r)
@@ -59,9 +58,9 @@ func TestAcquisitionReader_OneJobGivesOneEntryAndAnEmptyRecentList(t *testing.T)
 	}
 }
 
-func TestAcquisitionReader_EveryRequestReadsAFreshStatus(t *testing.T) {
-	r := &stubAcquisitionReader{status: func(call int) acquisition.AcquisitionStatus {
-		return acquisition.AcquisitionStatus{InFlight: call}
+func TestAcquisitionStatus_EveryRequestReadsAFreshStatus(t *testing.T) {
+	r := &stubAcquisitionReader{status: func(call int) observe.AcquisitionStatus {
+		return observe.AcquisitionStatus{InFlight: call}
 	}}
 
 	if got := string(serveAcquisition(t, r)["in_flight"]); got != "1" {
@@ -72,9 +71,9 @@ func TestAcquisitionReader_EveryRequestReadsAFreshStatus(t *testing.T) {
 	}
 }
 
-func TestAcquisitionReader_VerificationNamesOnlyLiveTools(t *testing.T) {
-	r := &stubAcquisitionReader{status: func(int) acquisition.AcquisitionStatus {
-		return acquisition.AcquisitionStatus{Verification: acquisition.AcquisitionVerification{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true}}
+func TestAcquisitionStatus_VerificationNamesOnlyLiveTools(t *testing.T) {
+	r := &stubAcquisitionReader{status: func(int) observe.AcquisitionStatus {
+		return observe.AcquisitionStatus{Tools: observe.AcquisitionTools{Ffprobe: true, Ffmpeg: true, Fpcalc: true, YtDlp: true}}
 	}}
 
 	raw := serveAcquisition(t, r)["verification"]

@@ -1,15 +1,15 @@
 package app
 
 import (
+	"altune/go-api/internal/app/observeacquisition"
+	"altune/go-api/internal/app/observediscovery"
+	"altune/go-api/internal/app/observemetrics"
 	"altune/go-api/internal/auth"
-	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe"
-	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/leader"
 	"altune/go-api/internal/shared/redis"
-	"altune/go-api/internal/shared/reqmetrics"
 	"context"
 
 	"github.com/go-chi/chi/v5"
@@ -24,7 +24,7 @@ func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVe
 		Eval:        a.evalMeter,
 		Acquisition: a.observeAcquisition(),
 		LiveMetrics: a.liveMetrics,
-		Discography: discovery.NewPgxEventStore(a.pool),
+		Discography: observediscovery.NewDiscographyQualityReader(discovery.NewPgxEventStore(a.pool)),
 		Shutdown:    a.lifecycleDone,
 	}
 	mountObserve(r, verifier, a.cfg.OverseerPrincipalID, observe.NewObserveHandler(deps))
@@ -51,17 +51,7 @@ func (a *App) observeAcquisition() observe.AcquisitionReader {
 	if a.scheduler == nil {
 		return nil
 	}
-	return a.scheduler
-}
-
-func liveMetricsSnapshot() observe.LiveMetrics {
-	return observe.LiveMetrics{
-		"auth":      auth.ReadSnapshot(),
-		"catalog":   catalog.ReadSnapshot(),
-		"playback":  playback.ReadSnapshot(),
-		"providers": discovery.ReadProviderMetricsSnapshot(),
-		"latency":   reqmetrics.ReadSnapshot(),
-	}
+	return observeacquisition.NewAcquisitionReader(a.scheduler)
 }
 
 type electionCounters interface{ Counters() leader.Counters }
@@ -76,7 +66,7 @@ type eventTapStats struct {
 }
 
 func (a *App) liveMetrics() observe.LiveMetrics {
-	m := liveMetricsSnapshot()
+	m := observemetrics.FeatureMetrics()
 	m["db_pool"] = database.ReadPoolStats(a.pool)
 	m["redis_pool"] = redis.ReadPoolStats(a.redisClient)
 	var counters leader.Counters

@@ -1,8 +1,6 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/acquisition"
-	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe"
 	"context"
 	"encoding/json"
@@ -16,21 +14,21 @@ import (
 )
 
 type fakeAcquisitionReader struct {
-	status acquisition.AcquisitionStatus
+	status observe.AcquisitionStatus
 }
 
-func (f fakeAcquisitionReader) Status() acquisition.AcquisitionStatus { return f.status }
+func (f fakeAcquisitionReader) Status() observe.AcquisitionStatus { return f.status }
 
 type fakeDiscographyReader struct {
 	gotSince    time.Time
-	gotGroupBy  discovery.DiscographyGroupBy
+	gotGroupBy  observe.DiscographyGroupBy
 	gotLimit    int
 	gotDeadline time.Time
-	cases       []discovery.DiscographyCase
-	suspect     discovery.DiscographySuspectRate
+	cases       []observe.DiscographyCase
+	suspect     observe.DiscographySuspectRate
 }
 
-func (f *fakeDiscographyReader) DiscographyQuality(ctx context.Context, since time.Time, groupBy discovery.DiscographyGroupBy, limit int) ([]discovery.DiscographyCase, error) {
+func (f *fakeDiscographyReader) DiscographyQuality(ctx context.Context, since time.Time, groupBy observe.DiscographyGroupBy, limit int) ([]observe.DiscographyCase, error) {
 	f.gotSince = since
 	f.gotGroupBy = groupBy
 	f.gotLimit = limit
@@ -40,7 +38,7 @@ func (f *fakeDiscographyReader) DiscographyQuality(ctx context.Context, since ti
 	return f.cases, nil
 }
 
-func (f *fakeDiscographyReader) SuspectRate(_ context.Context, _ time.Time) (discovery.DiscographySuspectRate, error) {
+func (f *fakeDiscographyReader) SuspectRate(_ context.Context, _ time.Time) (observe.DiscographySuspectRate, error) {
 	return f.suspect, nil
 }
 
@@ -150,15 +148,15 @@ func TestReadsEval_NilMeterAnswersDisabled(t *testing.T) {
 
 func TestReadsAcquisition_ServesTheReaderStatus(t *testing.T) {
 	scheduledAt := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
-	reader := fakeAcquisitionReader{status: acquisition.AcquisitionStatus{
-		InFlight:     2,
-		Succeeded:    10,
-		Failed:       3,
-		Rejected:     7,
-		QueueDepth:   5,
-		Workers:      16,
-		Verification: acquisition.AcquisitionVerification{Ffprobe: true, YtDlp: true},
-		ActiveJobs: []acquisition.JobRecord{{
+	reader := fakeAcquisitionReader{status: observe.AcquisitionStatus{
+		InFlight:      2,
+		Succeeded:     10,
+		Failed:        3,
+		Rejected:      7,
+		QueueDepth:    5,
+		QueueCapacity: 16,
+		Tools:         observe.AcquisitionTools{Ffprobe: true, YtDlp: true},
+		ActiveJobs: []observe.AcquisitionJob{{
 			TrackID:     "trk-1",
 			Title:       "Title One",
 			State:       "running",
@@ -184,7 +182,7 @@ func TestReadsAcquisition_ServesTheReaderStatus(t *testing.T) {
 }
 
 func TestReadsAcquisition_ServesOldestPendingAgeAndDepthKnown(t *testing.T) {
-	reader := fakeAcquisitionReader{status: acquisition.AcquisitionStatus{
+	reader := fakeAcquisitionReader{status: observe.AcquisitionStatus{
 		QueueDepth:       5,
 		OldestPendingAge: 90 * time.Second,
 		QueueDepthKnown:  true,
@@ -228,14 +226,14 @@ func TestReadsAcquisition_NilReaderAnswers200WithEmptyStatus(t *testing.T) {
 func TestReadsQuality_ServesTheWindowedCases(t *testing.T) {
 	seen := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
 	reader := &fakeDiscographyReader{
-		cases: []discovery.DiscographyCase{{
+		cases: []observe.DiscographyCase{{
 			ArtistRef:      "spotify:artist",
 			Releases:       4,
 			SingleProvider: 1,
 			ProviderCounts: map[string]int{"spotify": 4},
 			LastSeen:       seen,
 		}},
-		suspect: discovery.DiscographySuspectRate{Rate: 0.5, LastSample: seen},
+		suspect: observe.DiscographySuspectRate{Rate: 0.5, LastSample: seen},
 	}
 
 	rec := serveRead(t, observe.Deps{Discography: reader}, "/quality/discography?window_days=7&by=provider")
@@ -247,7 +245,7 @@ func TestReadsQuality_ServesTheWindowedCases(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got.WindowDays != 7 || got.GroupBy != string(discovery.GroupByProvider) {
+	if got.WindowDays != 7 || got.GroupBy != string(observe.GroupByProvider) {
 		t.Errorf("window_days/group_by = %d/%q, want 7/provider", got.WindowDays, got.GroupBy)
 	}
 	if len(got.Cases) != 1 || got.Cases[0].ArtistRef != "spotify:artist" {
@@ -287,7 +285,7 @@ func TestReadsQuality_QueryDeadlineIsFiveSeconds(t *testing.T) {
 }
 
 func TestReadsQuality_NilProviderCountsBecomesAnEmptyObject(t *testing.T) {
-	reader := &fakeDiscographyReader{cases: []discovery.DiscographyCase{{ArtistRef: "spotify:artist"}}}
+	reader := &fakeDiscographyReader{cases: []observe.DiscographyCase{{ArtistRef: "spotify:artist"}}}
 	rec := serveRead(t, observe.Deps{Discography: reader}, "/quality/discography")
 
 	if rec.Code != http.StatusOK {
@@ -369,11 +367,11 @@ func TestReadsRoutes_NoPostRoute(t *testing.T) {
 
 func TestReadsAcquisition_StripsCredentialsAndQueryFromSourceURL(t *testing.T) {
 	scheduledAt := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
-	job := acquisition.JobRecord{TrackID: "trk-1", State: "running", ScheduledAt: scheduledAt, SourceURL: "https://u:p@host.example/a/b?token=abc#f"}
-	malformed := acquisition.JobRecord{TrackID: "trk-2", State: "failed", ScheduledAt: scheduledAt, SourceURL: "http://[::1"}
-	reader := fakeAcquisitionReader{status: acquisition.AcquisitionStatus{
-		ActiveJobs: []acquisition.JobRecord{job},
-		Recent:     []acquisition.JobRecord{job, malformed},
+	job := observe.AcquisitionJob{TrackID: "trk-1", State: "running", ScheduledAt: scheduledAt, SourceURL: "https://u:p@host.example/a/b?token=abc#f"}
+	malformed := observe.AcquisitionJob{TrackID: "trk-2", State: "failed", ScheduledAt: scheduledAt, SourceURL: "http://[::1"}
+	reader := fakeAcquisitionReader{status: observe.AcquisitionStatus{
+		ActiveJobs: []observe.AcquisitionJob{job},
+		Recent:     []observe.AcquisitionJob{job, malformed},
 	}}
 
 	rec := serveRead(t, observe.Deps{Acquisition: reader}, "/acquisition")

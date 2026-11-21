@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/app/observemetrics"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/discovery"
@@ -22,6 +23,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -196,9 +198,18 @@ func TestObserveAcquisition_AbsentSchedulerIsANilReader(t *testing.T) {
 }
 
 func TestObserveAcquisition_WiredSchedulerIsTheReader(t *testing.T) {
-	scheduler := &acquisition.BackgroundAcquisitionScheduler{}
-	if reader := (&App{scheduler: scheduler}).observeAcquisition(); reader != scheduler {
-		t.Errorf("reader = %#v, want the app's scheduler", reader)
+	var wg sync.WaitGroup
+	const workers = 3
+	scheduler := acquisition.NewBackgroundAcquisitionScheduler(nil, &wg, make(chan struct{}, workers))
+	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
+
+	reader := (&App{scheduler: scheduler}).observeAcquisition()
+
+	if reader == nil {
+		t.Fatal("reader = nil, want one that reads the app's scheduler")
+	}
+	if got := reader.Status().QueueCapacity; got != workers {
+		t.Errorf("queue capacity = %d, want the app scheduler's %d workers", got, workers)
 	}
 }
 
@@ -259,7 +270,7 @@ type observedCounterWire struct {
 func readObservedCounterWire(t *testing.T) observedCounterWire {
 	t.Helper()
 	var out observedCounterWire
-	if err := json.Unmarshal(readObservedLiveMetrics(t, liveMetricsSnapshot), &out); err != nil {
+	if err := json.Unmarshal(readObservedLiveMetrics(t, observemetrics.FeatureMetrics), &out); err != nil {
 		t.Fatal(err)
 	}
 	return out
@@ -408,7 +419,7 @@ type observedProviderWire struct {
 
 func readObservedProviderWire(t *testing.T) (observedProviderWire, []byte) {
 	t.Helper()
-	raw := readObservedLiveMetrics(t, liveMetricsSnapshot)
+	raw := readObservedLiveMetrics(t, observemetrics.FeatureMetrics)
 	var out observedProviderWire
 	if err := json.Unmarshal(raw, &out); err != nil {
 		t.Fatal(err)

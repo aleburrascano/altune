@@ -1,0 +1,1 @@
+`contracttest` owns how a JSON contract fixture is compared with a live response and updated: the response must keep every key and JSON kind the fixture has, and `-update-contract` rewrites the fixture from the response. This package registers the `-update-contract` test flag, so a test binary that imports it must not declare that flag itself.
