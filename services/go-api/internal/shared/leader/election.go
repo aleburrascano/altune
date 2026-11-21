@@ -7,13 +7,9 @@ import (
 	"log/slog"
 	"sync"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
-	defaultInterval = 10 * time.Second
-
 	settleIntervals = 2.5
 
 	shutdownReleaseBudget = 5 * time.Second
@@ -23,11 +19,11 @@ const (
 
 var ErrLeadershipLost = errors.New("leader: leadership lost")
 
-type connector interface {
-	Acquire(ctx context.Context) (heldConn, error)
+type LockStore interface {
+	Acquire(ctx context.Context) (LockSession, error)
 }
 
-type heldConn interface {
+type LockSession interface {
 	TryAdvisoryLock(ctx context.Context, key int64) (bool, error)
 	Ping(ctx context.Context) error
 	AdvisoryUnlock(ctx context.Context, key int64) error
@@ -35,12 +31,12 @@ type heldConn interface {
 }
 
 type Election struct {
-	db       connector
+	db       LockStore
 	key      int64
 	interval time.Duration
 
 	mu        sync.RWMutex
-	conn      heldConn
+	conn      LockSession
 	heldSince time.Time
 	term      *term
 
@@ -53,19 +49,13 @@ type Election struct {
 	runloop.Background
 }
 
-func NewElection(pool *pgxpool.Pool, key int64) *Election {
+func NewElection(locks LockStore, key int64, interval time.Duration) *Election {
 	return &Election{
-		db:       pgxConnector{pool: pool},
+		db:       locks,
 		key:      key,
-		interval: defaultInterval,
+		interval: interval,
 		won:      make(chan struct{}),
 	}
-}
-
-func (e *Election) isLeader() bool {
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	return e.term != nil
 }
 
 func (e *Election) Counters() Counters {
@@ -145,7 +135,7 @@ func (e *Election) acquire(base context.Context) {
 	slog.InfoContext(ctx, "leader.lock_won", "key", e.key, "settle", e.settleWindow().String())
 }
 
-func (e *Election) lockedConn(ctx context.Context) (heldConn, bool) {
+func (e *Election) lockedConn(ctx context.Context) (LockSession, bool) {
 	conn, err := e.db.Acquire(ctx)
 	if err != nil {
 		e.acquireFailed(ctx, "pool_acquire", err)
@@ -169,7 +159,7 @@ func (e *Election) acquireFailed(ctx context.Context, stage string, err error) {
 	slog.WarnContext(ctx, "leader.acquire_failed", "key", e.key, "stage", stage, "err", err)
 }
 
-func (e *Election) hold(conn heldConn) {
+func (e *Election) hold(conn LockSession) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.conn = conn
@@ -227,7 +217,7 @@ func (e *Election) release(base context.Context) {
 	conn.Release()
 }
 
-func (e *Election) detach() heldConn {
+func (e *Election) detach() LockSession {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	conn := e.conn

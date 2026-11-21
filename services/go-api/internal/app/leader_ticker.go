@@ -7,7 +7,10 @@ import (
 	"time"
 )
 
-const backgroundLockKey int64 = 8_246_113_907_441_002
+const (
+	backgroundLockKey      int64 = 8_246_113_907_441_002
+	backgroundLockInterval       = 10 * time.Second
+)
 
 type backgroundJob struct {
 	name  jobName
@@ -19,7 +22,7 @@ func (a *App) whenLeader(name jobName, start func(context.Context)) {
 }
 
 func (a *App) startBackgroundWhenLeader(ctx context.Context) {
-	a.election = leader.NewElection(a.pool, backgroundLockKey)
+	a.election = leader.NewElection(leader.PoolLocks(a.pool), backgroundLockKey, backgroundLockInterval)
 	a.election.Start(ctx)
 	starts := make([]runloop.NamedStart, len(a.backgroundStarts))
 	for i, job := range a.backgroundStarts {

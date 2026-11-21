@@ -13,7 +13,7 @@ import (
 
 var errUnreachable = errors.New("database unreachable")
 
-var connectTimeout = 10 * time.Second
+const connectTimeout = 10 * time.Second
 
 const defaultMaxConns = 20
 

@@ -423,3 +423,54 @@ func TestRunTicker_RunsCanceledByLeadershipLossDoNotCountAsFailures(t *testing.T
 		t.Fatalf("leadership-lost runs counted as failures: %+v", h)
 	}
 }
+
+type lockWonRecords chan slog.Record
+
+func (c lockWonRecords) Enabled(context.Context, slog.Level) bool { return true }
+
+func (c lockWonRecords) Handle(_ context.Context, r slog.Record) error {
+	if r.Message == "leader.lock_won" {
+		select {
+		case c <- r:
+		default:
+		}
+	}
+	return nil
+}
+
+func (c lockWonRecords) WithAttrs([]slog.Attr) slog.Handler { return c }
+
+func (c lockWonRecords) WithGroup(string) slog.Handler { return c }
+
+func TestStartBackgroundWhenLeader_AnnouncesTwentyFiveSecondSettle(t *testing.T) {
+	pool := newAppTestPool(t)
+	won := make(lockWonRecords, 1)
+	prev := slog.Default()
+	slog.SetDefault(slog.New(won))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	a := &App{pool: pool}
+	a.startBackgroundWhenLeader(ctx)
+	t.Cleanup(func() {
+		cancel()
+		a.election.Shutdown(context.Background())
+		a.wg.Wait()
+	})
+
+	select {
+	case r := <-won:
+		settle := ""
+		r.Attrs(func(attr slog.Attr) bool {
+			if attr.Key == "settle" {
+				settle = attr.Value.String()
+			}
+			return true
+		})
+		if want := (25 * time.Second).String(); settle != want {
+			t.Fatalf("leader.lock_won settle = %q, want %q", settle, want)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the background election never won its lock")
+	}
+}
