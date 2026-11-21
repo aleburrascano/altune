@@ -1,4 +1,0 @@
-role: feature
-owns: "how search and browse results are found, merged and ranked across providers"
-depends_on: [catalog, database, domain, fanout, filehost, httputil, kernel, logging, phonetics, redact, requestuser, runloop, sharedtest, songfacts, telemetry, textnorm, versiontag, ytdlp, ytminnertube]
-owns_tables: [discovery_events, discovery_favorites, discovery_search_history, discovery_search_history_cleared, entity_identity, unreleased_artists, unreleased_songs]

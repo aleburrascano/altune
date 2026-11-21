@@ -1,8 +1,0 @@
-{
-  "removed": [
-    "C4 internal/shared/events/event_type.go exports Subscriber, which nothing outside events imports and no test of its own imports through the door",
-    "T1 internal/shared/events/event_type_test.go is in package events, so it sees inside the module: use package events_test and import the door"
-  ],
-  "added": [],
-  "clones": 0
-}

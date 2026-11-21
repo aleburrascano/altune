@@ -1,8 +1,0 @@
-{
-  "removed": [
-    "C4 internal/shared/database/database.go exports ErrUnreachable, which nothing outside database imports and no test of its own imports through the door",
-    "T1 internal/shared/database/transient_sql_state_test.go is in package database, so it sees inside the module: use package database_test and import the door"
-  ],
-  "added": [],
-  "clones": 0
-}

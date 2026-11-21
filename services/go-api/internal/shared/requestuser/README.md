@@ -1,0 +1,1 @@
+`requestuser` owns who a request comes from: its signed-in user, when their token expires, and its client address.

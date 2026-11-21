@@ -21,6 +21,8 @@ linters:
     - revive
     - sloglint
     - forbidigo
+    - depguard
+    - testpackage
 
   settings:
     cyclop:
@@ -33,11 +35,155 @@ linters:
     sloglint:
       context: scope
       no-mixed-args: false
+    testpackage:
+      skip-regexp: ^$
+    depguard:
+      rules:
+        feature-acquisition:
+          files: ["**/internal/acquisition/**"]
+          deny:
+            - pkg: altune/go-api/internal/app
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/auth
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/catalog
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/discovery
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/eventstream
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/observe
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/playback
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+        feature-auth:
+          files: ["**/internal/auth/**"]
+          deny:
+            - pkg: altune/go-api/internal/app
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/acquisition
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/catalog
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/discovery
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/eventstream
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/observe
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/playback
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+        feature-catalog:
+          files: ["**/internal/catalog/**"]
+          deny:
+            - pkg: altune/go-api/internal/app
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/acquisition
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/auth
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/discovery
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/eventstream
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/observe
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/playback
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+        feature-discovery:
+          files: ["**/internal/discovery/**"]
+          deny:
+            - pkg: altune/go-api/internal/app
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/acquisition
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/auth
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/catalog
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/eventstream
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/observe
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/playback
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+        feature-eventstream:
+          files: ["**/internal/eventstream/**"]
+          deny:
+            - pkg: altune/go-api/internal/app
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/acquisition
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/auth
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/catalog
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/discovery
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/observe
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/playback
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+        feature-observe:
+          files: ["**/internal/observe/**"]
+          deny:
+            - pkg: altune/go-api/internal/app
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/acquisition
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/auth
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/catalog
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/discovery
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/eventstream
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/playback
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+        feature-playback:
+          files: ["**/internal/playback/**"]
+          deny:
+            - pkg: altune/go-api/internal/app
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/acquisition
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/auth
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/catalog
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/discovery
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/eventstream
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/observe
+              desc: a feature never imports another feature, connect them in internal/app (read internal/README.md)
+        shared:
+          files: ["**/internal/shared/**"]
+          deny:
+            - pkg: altune/go-api/internal/acquisition
+              desc: a shared module never imports a feature or internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/auth
+              desc: a shared module never imports a feature or internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/catalog
+              desc: a shared module never imports a feature or internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/discovery
+              desc: a shared module never imports a feature or internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/eventstream
+              desc: a shared module never imports a feature or internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/observe
+              desc: a shared module never imports a feature or internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/playback
+              desc: a shared module never imports a feature or internal/app (read internal/README.md)
+            - pkg: altune/go-api/internal/app
+              desc: a shared module never imports a feature or internal/app (read internal/README.md)
     forbidigo:
       analyze-types: true
       forbid:
         - pattern: ^http\.Error$
           msg: write the error through httputil.HandleServiceError
+        - pattern: ^os\.(Getenv|LookupEnv|Environ)$
+          msg: read settings once in internal/shared/config and pass them in
     funlen:
       lines: 20
       statements: 20
@@ -74,6 +220,10 @@ linters:
       - path: internal/shared/httputil/
         linters:
           - forbidigo
+      - path: ^(internal/shared/(config|sharedtest)/|cmd/|scripts/)
+        linters:
+          - forbidigo
+        text: internal/shared/config
       - linters:
           - sloglint
         text: DiscardHandler

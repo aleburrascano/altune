@@ -14,7 +14,7 @@ vocabulary, kept current.
 
 And the diagrams: [`diagrams/`](diagrams/), one file per area, Mermaid drawn from
 the code. They are hand-kept, so a PR that changes a drawn flow updates its diagram.
-Module boundaries and cycles are checked by module-spec: `bash scripts/module-spec.sh check`.
+Module boundaries in `services/go-api` are checked by `golangci-lint` (see `services/go-api/internal/README.md`). In `client` and `services/overseer` they are checked by module-spec: `bash scripts/module-spec.sh check`.
 
 **What does NOT go here:** brainstorms, plans, specs, ideation, handoffs. That
 thinking belongs to a ticket — the Gitea issue is the spec. `docs/` holds only

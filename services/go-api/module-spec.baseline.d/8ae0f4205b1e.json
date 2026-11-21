@@ -1,9 +1,0 @@
-{
-  "removed": [
-    "T1 internal/shared/runloop/jobs_test.go is in package runloop, so it sees inside the module: use package runloop_test and import the door",
-    "T1 internal/shared/runloop/runloop_test.go is in package runloop, so it sees inside the module: use package runloop_test and import the door",
-    "T1 internal/shared/runloop/ticker_test.go is in package runloop, so it sees inside the module: use package runloop_test and import the door"
-  ],
-  "added": [],
-  "clones": 0
-}

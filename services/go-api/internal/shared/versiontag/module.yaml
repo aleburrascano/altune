@@ -1,3 +1,0 @@
-role: shared
-owns: "which version tags a track title carries"
-depends_on: [textnorm]

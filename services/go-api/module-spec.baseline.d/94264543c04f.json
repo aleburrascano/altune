@@ -1,8 +1,0 @@
-{
-  "removed": [
-    "C4 internal/shared/phonetics/metaphone.go exports DoubleMetaphone, which nothing outside phonetics imports and no test of its own imports through the door",
-    "T1 internal/shared/phonetics/metaphone_test.go is in package phonetics, so it sees inside the module: use package phonetics_test and import the door"
-  ],
-  "added": [],
-  "clones": 0
-}

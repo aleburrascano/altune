@@ -561,6 +561,20 @@ forbid_log "govulncheck"
 expect_log "vet altune/go-api/internal/discovery/adapters/x"
 forbid_log "vet ./..."
 
+CASE="without INTEGRATION=1 a go-api change skips the mutation step and names the job that runs it"
+new_repo
+add_go_fixture
+edit_go_file internal/discovery/adapters/x/x.go
+run_with_tools
+grep -qF "SKIP  go-api mutation (changed lines): integration tests cover lines here, so it needs INTEGRATION=1 and a database; the backend-tests CI job runs it" "$WORK/out.log" || fail "expected the mutation step to skip and name backend-tests"
+
+CASE="with INTEGRATION=1 a go-api change runs the mutation step"
+new_repo
+add_go_fixture
+edit_go_file internal/discovery/adapters/x/x.go
+INTEGRATION=1 run_with_tools
+grep -qE "^(ok|FAIL)  go-api mutation \(changed lines\)" "$WORK/out.log" || fail "expected the mutation step to run"
+
 CASE="a go-api change in a package the selection gate imports runs the gate and vets every importer"
 new_repo
 add_go_fixture

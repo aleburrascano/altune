@@ -1,3 +1,0 @@
-role: shared
-owns: "how HTTP requests are limited, logged, recovered and answered with errors"
-depends_on: [httputiltest, kernel, logging]

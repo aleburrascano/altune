@@ -1,7 +1,0 @@
-{
-  "removed": [
-    "T1 internal/shared/songfacts/songfacts_test.go is in package songfacts, so it sees inside the module: use package songfacts_test and import the door"
-  ],
-  "added": [],
-  "clones": 0
-}

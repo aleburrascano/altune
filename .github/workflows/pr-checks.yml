@@ -83,6 +83,10 @@ jobs:
       DATABASE_URL: postgres://altune:altune_dev@localhost:5432/altune?sslmode=disable
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: fetch main
+        run: git fetch origin main:refs/remotes/origin/main
       - uses: actions/setup-go@v5
         with:
           go-version-file: services/go-api/go.mod
@@ -107,6 +111,10 @@ jobs:
           INTEGRATION: "1"
         run: |
           go test -count=1 -v -run 'TestPgxSearchHistoryRepo' ./internal/discovery/internal/adapters/persistence/ | grep -E '^--- PASS: TestPgxSearchHistoryRepo'
+      - name: mutation on changed lines, with integration tests
+        env:
+          INTEGRATION: "1"
+        run: bash scripts/ci/go-mutate.sh origin/main services/go-api
 
   mobile-tests:
     needs: changes

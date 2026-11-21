@@ -544,7 +544,7 @@ A change should preserve all of these; if it can't, that's the discussion.
 - One search engine failing never fails the search.
 - Feature extraction reads the raw title; "with" is never a feature separator.
 - No raw error chain reaches the Track row or the wire — `failureReason` first.
-- The service never touches the filesystem itself: every temp dir is created (`Create`) and removed (`Remove`) through `ports.TempWorkspace`, injected by `WithAcquireTempWorkspace` / `WithStepTempWorkspace` / `CoreSteps` (adapter: `adapters/tempfs`). module-spec B3 flags `os` outside `adapters/`. The eval harness needs no exception: it lives in `adapters/eval/`.
+- The service never touches the filesystem itself: every temp dir is created (`Create`) and removed (`Remove`) through `ports.TempWorkspace`, injected by `WithAcquireTempWorkspace` / `WithStepTempWorkspace` / `CoreSteps` (adapter: `adapters/tempfs`). The eval harness needs no exception: it lives in `adapters/eval/`.
 - `CleanupTemp` removes `TempDir` (the workspace-created root), falling back to the parent of `TempPath` when only `TempPath` is set; never `TempPath` itself.
 - Manual retry stays admission-gated: failed-state only, one per track per 60s.
 - `complete` is the only call site that advances job counters.

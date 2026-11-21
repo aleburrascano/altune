@@ -1,3 +1,0 @@
-role: shared
-owns: "how logs are formatted, redacted and kept in a ring buffer"
-depends_on: [redact]
