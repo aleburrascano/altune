@@ -1,6 +1,7 @@
 package app
 
 import (
+	"altune/go-api/internal/app/health"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/eventstream"
@@ -69,7 +70,7 @@ func (a *App) mountRoutes(
 ) *chi.Mux {
 	r := a.newRouter(apiWriteTimeout)
 
-	r.Get("/health", a.handleHealth)
+	r.Method(http.MethodGet, "/health", health.NewEndpoint(a.dependencyHealth, buildCommit, time.Now))
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(v1ResponseHeaders)

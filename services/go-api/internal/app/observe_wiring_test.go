@@ -27,8 +27,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	goredis "github.com/redis/go-redis/v9"
 )
 
 const (
@@ -477,6 +479,35 @@ func TestDependencyHealth_UnconfiguredIsHealthy(t *testing.T) {
 	}
 	if !got.Healthy() {
 		t.Error("Healthy() = false for unconfigured dependencies, want true")
+	}
+}
+
+type stubAuthChecker struct {
+	err error
+}
+
+func (s stubAuthChecker) CheckHealth(context.Context) error { return s.err }
+
+func TestDependencyHealth_ProbesTheAppsDatabaseRedisAndAuth(t *testing.T) {
+	redisUp := miniredis.RunT(t)
+	healthyClient := goredis.NewClient(&goredis.Options{Addr: redisUp.Addr()})
+	t.Cleanup(func() { _ = healthyClient.Close() })
+	healthy := &App{dbPing: func(context.Context) error { return nil }, redisClient: healthyClient, authVerifier: stubAuthChecker{}}
+
+	if got := healthy.dependencyHealth(t.Context()); got.DB != observe.DepUp || got.Redis != observe.DepUp || got.Auth != observe.DepUp {
+		t.Errorf("healthy statuses = %q/%q/%q, want all ok", got.DB, got.Redis, got.Auth)
+	}
+
+	downClient := goredis.NewClient(&goredis.Options{Addr: "127.0.0.1:1", MaxRetries: -1})
+	t.Cleanup(func() { _ = downClient.Close() })
+	down := &App{dbPing: func(context.Context) error { return errors.New("db refused") }, redisClient: downClient, authVerifier: stubAuthChecker{err: errors.New("jwks stale")}}
+
+	got := down.dependencyHealth(t.Context())
+	if got.DB != observe.DepDown || got.Redis != observe.DepDown || got.Auth != observe.DepDown {
+		t.Errorf("down statuses = %q/%q/%q, want all down", got.DB, got.Redis, got.Auth)
+	}
+	if got.Detail.DBError != "db refused" || got.Detail.AuthError != "jwks stale" || got.Detail.RedisError == "" {
+		t.Errorf("detail = %+v, want each probe's own error", got.Detail)
 	}
 }
 

@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/observe"
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/database"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -310,9 +309,9 @@ func TestStartAlertMonitor_PassesEvaluateItsConditions(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var probes atomic.Int64
 		a := &App{cfg: &config.Config{}}
-		a.dbHealth = func(context.Context) database.HealthStatus {
+		a.dbPing = func(context.Context) error {
 			probes.Add(1)
-			return database.HealthStatus{OK: true}
+			return nil
 		}
 		ctx, cancel := context.WithCancel(t.Context())
 		a.startAlertMonitor(ctx)

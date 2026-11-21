@@ -32,28 +32,26 @@ import (
 const eventIDFloorFile = "altune-event-id-floor"
 
 type App struct {
-	cfg             *config.Config
-	pool            *pgxpool.Pool
-	dbHealth        dbHealthChecker
-	depProbeTimeout time.Duration
-	requestTimeout  time.Duration
-	healthCache     healthCache
-	redisClient     *goredis.Client
-	authVerifier    authHealthChecker
-	server          *http.Server
-	wg              sync.WaitGroup
-	sem             chan struct{}
-	scheduler       *acquisition.BackgroundAcquisitionScheduler
-	vocabRefresh    *discovery.VocabularyRefreshService
-	searchSvc       *discovery.SearchService
-	evalSearch      *discovery.SearchService
-	eventBus        *events.InProcessBus
-	eventTap        *observe.EventTap
-	alertMonitor    *observe.AlertMonitor
-	logRing         *logging.RingBuffer
-	eventFeed       *observe.EventFeed
-	evalMeter       *observe.EvalMeter
-	lifecycleDone   <-chan struct{}
+	cfg            *config.Config
+	pool           *pgxpool.Pool
+	dbPing         func(context.Context) error
+	requestTimeout time.Duration
+	redisClient    *goredis.Client
+	authVerifier   authHealthChecker
+	server         *http.Server
+	wg             sync.WaitGroup
+	sem            chan struct{}
+	scheduler      *acquisition.BackgroundAcquisitionScheduler
+	vocabRefresh   *discovery.VocabularyRefreshService
+	searchSvc      *discovery.SearchService
+	evalSearch     *discovery.SearchService
+	eventBus       *events.InProcessBus
+	eventTap       *observe.EventTap
+	alertMonitor   *observe.AlertMonitor
+	logRing        *logging.RingBuffer
+	eventFeed      *observe.EventFeed
+	evalMeter      *observe.EvalMeter
+	lifecycleDone  <-chan struct{}
 
 	election         electionController
 	backgroundStarts []backgroundJob
@@ -163,9 +161,7 @@ func (a *App) connectDatastores(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("database: %w", err)
 	}
-	a.dbHealth = func(ctx context.Context) database.HealthStatus {
-		return database.CheckHealth(ctx, a.pool)
-	}
+	a.dbPing = a.pool.Ping
 
 	a.lifecycleDone = ctx.Done()
 	a.redisClient = sharedRedis.NewClient(ctx, a.cfg.RedisURL, a.cfg.RedisPoolSize)

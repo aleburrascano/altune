@@ -20,7 +20,6 @@ const (
 )
 
 var wiringOnlyAllowlist = map[string]string{
-	"health.go":         "health checker holding a mutex",
 	"catalog_wiring.go": "lookupTracker holding an atomic counter",
 }
 
