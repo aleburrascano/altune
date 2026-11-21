@@ -1,6 +1,7 @@
-package connlimit
+package connlimit_test
 
 import (
+	"altune/go-api/internal/eventstream/internal/core/connlimit"
 	"altune/go-api/internal/eventstream/internal/core/domain"
 	"errors"
 	"sync"
@@ -11,7 +12,7 @@ import (
 )
 
 func TestConnLimiter(t *testing.T) {
-	l := New(2, 0)
+	l := connlimit.New(2, 0)
 	if err := l.Acquire("u"); err != nil {
 		t.Fatalf("first acquire should succeed: %v", err)
 	}
@@ -31,7 +32,7 @@ func TestConnLimiter(t *testing.T) {
 }
 
 func TestConnLimiter_GlobalCapAcrossUsers(t *testing.T) {
-	l := New(1, 2)
+	l := connlimit.New(1, 2)
 	if err := l.Acquire("a"); err != nil {
 		t.Fatalf("a: %v", err)
 	}
@@ -56,7 +57,7 @@ func TestConnLimiter_GlobalCapAcrossUsers(t *testing.T) {
 
 func TestConnLimiter_GlobalCapHoldsUnderConcurrency(t *testing.T) {
 	const limit, attempts = 5, 200
-	l := New(8, limit)
+	l := connlimit.New(8, limit)
 	var granted atomic.Int64
 	var wg sync.WaitGroup
 	for i := 0; i < attempts; i++ {
@@ -75,7 +76,7 @@ func TestConnLimiter_GlobalCapHoldsUnderConcurrency(t *testing.T) {
 }
 
 func TestConnLimiter_ReleaseOfUserWithNoSlotsLeavesTotalUnchanged(t *testing.T) {
-	l := New(2, 1)
+	l := connlimit.New(2, 1)
 	if err := l.Acquire("a"); err != nil {
 		t.Fatalf("a: %v", err)
 	}
@@ -85,13 +86,45 @@ func TestConnLimiter_ReleaseOfUserWithNoSlotsLeavesTotalUnchanged(t *testing.T) 
 	}
 }
 
-func TestConnLimiter_AcquireThenReleaseLeavesBothCountsZero(t *testing.T) {
-	l := New(1, 1)
+func TestConnLimiter_ReleasingTheLastSlotOfAUserGivesBackTheWholeBudget(t *testing.T) {
+	l := connlimit.New(2, 2)
 	if err := l.Acquire("a"); err != nil {
 		t.Fatalf("acquire: %v", err)
 	}
 	l.Release("a")
-	if l.total != 0 || len(l.count) != 0 {
-		t.Fatalf("total=%d count=%v, want both empty", l.total, l.count)
+
+	for i := range 2 {
+		if err := l.Acquire("a"); err != nil {
+			t.Fatalf("acquire %d after the user released everything: %v", i+1, err)
+		}
+	}
+	if err := l.Acquire("b"); !errors.Is(err, domain.ErrGlobalConnLimit) {
+		t.Fatalf("b = %v, want ErrGlobalConnLimit: the released slot was counted back exactly once", err)
+	}
+}
+
+func TestConnLimiter_ReleasingOneOfSeveralSlotsKeepsTheRestCounted(t *testing.T) {
+	l := connlimit.New(2, 0)
+	for range 2 {
+		if err := l.Acquire("a"); err != nil {
+			t.Fatalf("acquire: %v", err)
+		}
+	}
+	l.Release("a")
+
+	if err := l.Acquire("a"); err != nil {
+		t.Fatalf("acquire into the freed slot: %v", err)
+	}
+	if err := l.Acquire("a"); !errors.Is(err, domain.ErrUserConnLimit) {
+		t.Fatalf("acquire past the cap = %v, want ErrUserConnLimit: the slot still held was forgotten", err)
+	}
+}
+
+func TestConnLimiter_ZeroCapsAreUnlimited(t *testing.T) {
+	l := connlimit.New(0, 0)
+	for i := range 100 {
+		if err := l.Acquire("a"); err != nil {
+			t.Fatalf("acquire %d with no caps: %v", i+1, err)
+		}
 	}
 }
