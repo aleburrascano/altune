@@ -290,6 +290,17 @@ func TestDiscoveryDeps_PassesTheAppsOwnHandles(t *testing.T) {
 	}
 }
 
+func TestDiscoveryDeps_ClientEventsFollowTheTelemetryExportSetting(t *testing.T) {
+	transport := newClientFactory(&stubTransport{})
+	if deps := (&App{cfg: &config.Config{}}).discoveryDeps(t.Context(), transport); deps.ClientEvents != nil {
+		t.Error("an app with no OTLP endpoint handed discovery client events to export")
+	}
+	exporting := &App{cfg: &config.Config{OTLPEndpoint: "https://otlp.example.com"}}
+	if deps := exporting.discoveryDeps(t.Context(), transport); deps.ClientEvents == nil {
+		t.Error("an app with an OTLP endpoint handed discovery no client events")
+	}
+}
+
 type stubTransport struct{}
 
 func (*stubTransport) RoundTrip(*http.Request) (*http.Response, error) {

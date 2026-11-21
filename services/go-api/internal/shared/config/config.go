@@ -16,6 +16,7 @@ type Config struct {
 
 	Env              string `env:"ENV"`
 	TelemetryUserKey string `env:"TELEMETRY_USER_KEY"`
+	OTLPEndpoint     string `env:"OTEL_EXPORTER_OTLP_ENDPOINT"`
 	LogLevel         string `env:"LOG_LEVEL" envDefault:"INFO"`
 
 	TestAuthOptIn bool `env:"TEST_AUTH_ENABLED" envDefault:"false"`
@@ -217,6 +218,7 @@ func (c Config) LogValue() slog.Value {
 		slog.Bool("has_ytmusic", c.HasYouTubeMusic()),
 		slog.Bool("has_now_playing_enrichment", c.HasNowPlayingEnrichment()),
 		slog.Bool("has_alert_email", c.HasAlertEmail()),
+		slog.Bool("has_telemetry_export", c.HasTelemetryExport()),
 		slog.String("audio_key_prefix", c.AudioKeyPrefix),
 	)
 }

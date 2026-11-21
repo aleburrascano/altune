@@ -8,7 +8,6 @@ import (
 	"expvar"
 	"log/slog"
 	"net/http"
-	"os"
 	"sync"
 	"time"
 
@@ -96,7 +95,7 @@ func unreleasedConfig(cfg *config.Config) discovery.UnreleasedConfig {
 }
 
 func (a *App) discoveryClientEvents() *telemetry.ClientEvents {
-	if !telemetry.Enabled(os.Getenv) {
+	if !a.cfg.HasTelemetryExport() {
 		return nil
 	}
 	return telemetry.NewClientEvents(a.cfg.TelemetryUserKey, otel.GetLoggerProvider().Logger(telemetry.ScopeName))

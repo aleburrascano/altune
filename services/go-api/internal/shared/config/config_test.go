@@ -2,6 +2,7 @@ package config_test
 
 import (
 	"altune/go-api/internal/shared/config"
+	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -519,6 +520,7 @@ func setEnv(t *testing.T, vars map[string]string) {
 		"EXPLORATION_RATE",
 		"DB_POOL_MAX_CONNS", "PLAYBACK_QUEUE_RATE_EVERY", "PLAYBACK_QUEUE_RATE_BURST", "PLAYBACK_ERASURE_SCAN_TIMEOUT", "REDIS_POOL_SIZE", "YTDLP_JS_RUNTIME", "YTDLP_REMOTE_COMPONENTS",
 		"ALERT_WEBHOOK_URL", "RESEND_API_KEY", "ALERT_EMAIL_TO",
+		"OTEL_EXPORTER_OTLP_ENDPOINT",
 	}
 	for _, k := range envKeys {
 		os.Unsetenv(k)
@@ -778,6 +780,37 @@ func TestLoad_RedisURLErrorRedactsCredentials(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "s3cret") {
 		t.Fatalf("error leaks credentials: %v", err)
+	}
+}
+
+func TestLoad_OTLPEndpointTurnsOnTelemetryExport(t *testing.T) {
+	cases := []struct {
+		name     string
+		endpoint string
+		want     bool
+	}{
+		{name: "unset", endpoint: "", want: false},
+		{name: "set", endpoint: "https://otlp.example.com", want: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := feedbackBaseEnv()
+			if tc.endpoint != "" {
+				env["OTEL_EXPORTER_OTLP_ENDPOINT"] = tc.endpoint
+			}
+			setEnv(t, env)
+
+			cfg, err := config.Load()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cfg.OTLPEndpoint != tc.endpoint || cfg.HasTelemetryExport() != tc.want {
+				t.Fatalf("endpoint %q export %v, want %q and %v", cfg.OTLPEndpoint, cfg.HasTelemetryExport(), tc.endpoint, tc.want)
+			}
+			if got := cfg.LogValue().String(); !strings.Contains(got, fmt.Sprintf("has_telemetry_export=%v", tc.want)) {
+				t.Fatalf("LogValue = %s, want has_telemetry_export=%v", got, tc.want)
+			}
+		})
 	}
 }
 

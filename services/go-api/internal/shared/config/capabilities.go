@@ -109,3 +109,7 @@ func (c *Config) HasAlertEmail() bool {
 func (c *Config) HasNowPlayingEnrichment() bool {
 	return c.NowPlayingEnrichmentEnabled
 }
+
+func (c *Config) HasTelemetryExport() bool {
+	return c.OTLPEndpoint != ""
+}
