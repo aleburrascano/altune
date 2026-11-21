@@ -6,7 +6,7 @@ work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
 
 repo=$work/repo
 mod=$repo/svc
-mkdir -p "$mod/clamp" "$mod/senior"
+mkdir -p "$mod/clamp" "$mod/senior" "$mod/label"
 git init -qb main "$repo"
 commit() { git -C "$repo" add -A && git -C "$repo" -c user.email=t@example.com -c user.name=t commit -qm "$1"; }
 
@@ -35,6 +35,33 @@ func TestAdult(t *testing.T) {
 	}
 }
 GO
+cat >"$mod/label/label.go" <<'GO'
+package label
+
+func Label(n int) string {
+	prefix := "n"
+	if n > 100 {
+		return "big"
+	}
+	suffix := "!"
+	return prefix + suffix
+}
+GO
+cat >"$mod/label/label_test.go" <<'GO'
+package label_test
+
+import (
+	"testing"
+
+	"example.com/svc/label"
+)
+
+func TestLabel(t *testing.T) {
+	if got := label.Label(5); got != "n!" {
+		t.Fatalf("Label(5) = %q", got)
+	}
+}
+GO
 commit base
 base=$(git -C "$repo" rev-parse HEAD)
 
@@ -57,6 +84,20 @@ expect "a change to tests only has nothing to mutate" 0 '0 changed packages, kil
 sed -i 's/age >= 18/18 <= age/' "$mod/clamp/clamp.go"
 commit tested
 expect "a changed line the tests cover passes" 0 '1 changed packages, killed [1-9][0-9]*, survived 0'
+
+sed -i -e 's/prefix := "n"/prefix := "m"/' -e 's/suffix := "!"/suffix := "?"/' "$mod/label/label.go"
+sed -i 's/"n!"/"m?"/' "$mod/label/label_test.go"
+commit two-lines-apart
+expect "an unchanged line between two changed lines is not mutated" 0 '2 changed packages, killed [1-9][0-9]*, survived 0'
+
+sed -i 's/suffix := "?"/suffix := map[bool]string{true: "?", false: "!"}[n > 3]/' "$mod/label/label.go"
+commit later-line-mutable
+expect "the later of two changed lines in one hunk is mutated" 1 'svc/label/label.go:8:[0-9]+ LIVED CONDITIONALS_BOUNDARY'
+if grep -q 'svc/label/label.go:5:' <<<"$out"; then
+  echo "FAIL  the unchanged line between them stays unmutated:"; echo "$out" | sed 's/^/      /'; fail=1
+else
+  echo "ok    the unchanged line between them stays unmutated"
+fi
 
 cat >"$mod/senior/senior.go" <<'GO'
 package senior
