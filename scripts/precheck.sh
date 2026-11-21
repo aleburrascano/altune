@@ -148,7 +148,11 @@ if touches '^services/go-api/'; then
     check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
     mapfile -t pkgs < <(go_pkgs $m)
     [ ${#pkgs[@]} -gt 0 ] && test_check "go-api tests (changed packages)" $m "${heavy[@]}" go test -shuffle=on -count=1 "${pkgs[@]}"
-    [ ${#pkgs[@]} -gt 0 ] && need jq "go-api mutation" && test_check "go-api mutation (changed lines)" . "${heavy[@]}" bash scripts/ci/go-mutate.sh "$base" $m
+    if [ ${#pkgs[@]} -gt 0 ] && [ "${INTEGRATION:-}" != 1 ]; then
+      echo "SKIP  go-api mutation (changed lines): integration tests cover lines here, so it needs INTEGRATION=1 and a database; the backend-tests CI job runs it"
+    elif [ ${#pkgs[@]} -gt 0 ] && need jq "go-api mutation"; then
+      test_check "go-api mutation (changed lines)" . "${heavy[@]}" bash scripts/ci/go-mutate.sh "$base" $m
+    fi
     if [ $whole_module = 1 ] || grep -qE '(^| )[^ ]*/cmd/acquisitioneval( |$)' <<<"${affected[*]}"; then
       test_check "go-api acquisition selection gate" $m "${heavy[@]}" go run ./cmd/acquisitioneval -baseline ./cmd/acquisitioneval/baselines.json
     fi

@@ -6,7 +6,7 @@ work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
 
 repo=$work/repo
 mod=$repo/svc
-mkdir -p "$mod/clamp"
+mkdir -p "$mod/clamp" "$mod/senior"
 git init -qb main "$repo"
 commit() { git -C "$repo" add -A && git -C "$repo" -c user.email=t@example.com -c user.name=t commit -qm "$1"; }
 
@@ -50,9 +50,41 @@ expect() {
 
 out=$(bash "$script" 2>&1); [ $? = 2 ] && grep -q usage <<<"$out" && echo "ok    no arguments prints usage" || { echo "FAIL  no arguments"; fail=1; }
 
+sed -i 's/18: true/18: true, 40: true/' "$mod/clamp/clamp_test.go"
+commit tests-only
+expect "a change to tests only has nothing to mutate" 0 '0 changed packages, killed 0, survived 0'
+
 sed -i 's/age >= 18/18 <= age/' "$mod/clamp/clamp.go"
 commit tested
-expect "a changed line the tests cover passes" 0 'survived 0'
+expect "a changed line the tests cover passes" 0 '1 changed packages, killed [1-9][0-9]*, survived 0'
+
+cat >"$mod/senior/senior.go" <<'GO'
+package senior
+
+func Senior(age int) bool {
+	return age > 64
+}
+GO
+cat >"$mod/senior/senior_test.go" <<'GO'
+package senior_test
+
+import (
+	"testing"
+
+	"example.com/svc/senior"
+)
+
+func TestSenior(t *testing.T) {
+	for age, want := range map[int]bool{30: false, 70: true} {
+		if got := senior.Senior(age); got != want {
+			t.Fatalf("Senior(%d) = %v, want %v", age, got, want)
+		}
+	}
+}
+GO
+commit weak-test
+(cd "$repo" && bash "$script" "$base" svc >/dev/null 2>&1)
+expect "a mutant the tests miss fails, even with a warm test cache" 1 'svc/senior/senior.go:[0-9]+:[0-9]+ LIVED CONDITIONALS_BOUNDARY'
 
 cat >>"$mod/clamp/clamp.go" <<'GO'
 
@@ -68,6 +100,6 @@ expect "a changed line no test covers fails and names the line" 1 'svc/clamp/cla
 
 sed -i 's/17: false/17: true/' "$mod/clamp/clamp_test.go"
 commit broken
-expect "a failing test stops the run loudly" 1 'gremlins failed'
+expect "a failing test stops the run loudly" 1 'gremlins failed in svc/clamp'
 
 exit $fail
