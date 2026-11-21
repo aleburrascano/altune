@@ -3,6 +3,7 @@ package related
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/core/ports"
+	"altune/go-api/internal/discovery/internal/core/ttlmemo"
 	"altune/go-api/internal/discovery/service/providercall"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/runloop"
@@ -28,7 +29,7 @@ type FindRelatedService struct {
 	querier        ports.RelationshipQuerier
 	albumProvider  ports.AlbumContentProvider
 	artistProvider ports.ArtistContentProvider
-	memo           *relatedMemo
+	memo           *ttlmemo.Memo[relatedMemoKey, []domain.SearchResult]
 	breaker        *providercall.CircuitBreaker
 }
 
@@ -48,7 +49,7 @@ func NewFindRelatedService(
 		querier:        querier,
 		albumProvider:  albumProvider,
 		artistProvider: artistProvider,
-		memo:           newRelatedMemo(relatedMemoTTL, time.Now),
+		memo:           ttlmemo.New[relatedMemoKey, []domain.SearchResult](relatedMemoTTL, relatedMemoMaxEntries, time.Now),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -100,7 +101,7 @@ func (s *FindRelatedService) dispatchLibraryMatches(fan *relatedFanOut, userId s
 			slog.DebugContext(ctx, "related.library_lookup_failed", "error", err)
 			return nil, err
 		}
-		return s.memo.remember(lookup.memoKey(), matchesToSearchResults(matches)), nil
+		return s.memoize(lookup, matchesToSearchResults(matches)), nil
 	})
 }
 
@@ -126,7 +127,7 @@ func (s *FindRelatedService) dispatchAlbumTracks(fan *relatedFanOut, result doma
 		if err != nil {
 			return nil, err
 		}
-		return s.memo.remember(lookup.memoKey(), truncateRelated(tracks)), nil
+		return s.memoize(lookup, truncateRelated(tracks)), nil
 	})
 }
 
@@ -155,12 +156,17 @@ func (s *FindRelatedService) dispatchArtistAlbums(fan *relatedFanOut, result dom
 		if err != nil {
 			return nil, err
 		}
-		return s.memo.remember(lookup.memoKey(), truncateRelated(albums)), nil
+		return s.memoize(lookup, truncateRelated(albums)), nil
 	})
 }
 
+func (s *FindRelatedService) memoize(lookup relatedGroupLookup, items []domain.SearchResult) []domain.SearchResult {
+	s.memo.Put(lookup.memoKey(), items)
+	return items
+}
+
 func (s *FindRelatedService) serveMemoized(fan *relatedFanOut, lookup relatedGroupLookup) bool {
-	items, memoized := s.memo.items(lookup.memoKey())
+	items, memoized := s.memo.Get(lookup.memoKey())
 	if !memoized {
 		return false
 	}
@@ -263,59 +269,6 @@ type relatedMemoKey struct {
 	relationship domain.RelationshipKind
 	owner        shared.UserId
 	subject      string
-}
-
-type relatedMemoEntry struct {
-	items     []domain.SearchResult
-	expiresAt time.Time
-}
-
-type relatedMemo struct {
-	ttl     time.Duration
-	now     func() time.Time
-	mu      sync.Mutex
-	entries map[relatedMemoKey]relatedMemoEntry
-}
-
-func newRelatedMemo(ttl time.Duration, now func() time.Time) *relatedMemo {
-	return &relatedMemo{ttl: ttl, now: now, entries: map[relatedMemoKey]relatedMemoEntry{}}
-}
-
-func (m *relatedMemo) items(key relatedMemoKey) ([]domain.SearchResult, bool) {
-	if m == nil {
-		return nil, false
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	entry, memoized := m.entries[key]
-	if !memoized || m.now().After(entry.expiresAt) {
-		return nil, false
-	}
-	return entry.items, true
-}
-
-func (m *relatedMemo) remember(key relatedMemoKey, items []domain.SearchResult) []domain.SearchResult {
-	if m == nil {
-		return items
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if len(m.entries) >= relatedMemoMaxEntries {
-		m.dropExpired()
-	}
-	if len(m.entries) < relatedMemoMaxEntries {
-		m.entries[key] = relatedMemoEntry{items: items, expiresAt: m.now().Add(m.ttl)}
-	}
-	return items
-}
-
-func (m *relatedMemo) dropExpired() {
-	now := m.now()
-	for key, entry := range m.entries {
-		if now.After(entry.expiresAt) {
-			delete(m.entries, key)
-		}
-	}
 }
 
 func truncateRelated(items []domain.SearchResult) []domain.SearchResult {

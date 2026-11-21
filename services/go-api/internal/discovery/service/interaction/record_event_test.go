@@ -1,9 +1,10 @@
-package interaction
+package interaction_test
 
 import (
 	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/core/ports"
+	"altune/go-api/internal/discovery/service/interaction"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
@@ -14,6 +15,11 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	payloadByteCap = 8 << 10
+	payloadKeyCap  = 32
+)
+
 type failingEventStore struct{}
 
 func (failingEventStore) Append(context.Context, domain.InteractionEvent) error {
@@ -22,10 +28,10 @@ func (failingEventStore) Append(context.Context, domain.InteractionEvent) error 
 
 func TestRecordEventService_Execute_AppendsEvent(t *testing.T) {
 	store := &discoverytest.FakeEventStore{}
-	svc := NewRecordEventService(store)
+	svc := interaction.NewRecordEventService(store)
 	userId := shared.NewUserId(uuid.New())
 
-	err := svc.Execute(context.Background(), userId, RecordEventInput{
+	err := svc.Execute(context.Background(), userId, interaction.RecordEventInput{
 		Type:    domain.EventTypePlay,
 		Payload: map[string]any{"video_id": "abc"},
 	})
@@ -47,11 +53,11 @@ func TestRecordEventService_Execute_AppendsEvent(t *testing.T) {
 
 func TestRecordEventService_Execute_ThreadsSearchId(t *testing.T) {
 	store := &discoverytest.FakeEventStore{}
-	svc := NewRecordEventService(store)
+	svc := interaction.NewRecordEventService(store)
 	userId := shared.NewUserId(uuid.New())
 	searchId := uuid.New().String()
 
-	err := svc.Execute(context.Background(), userId, RecordEventInput{
+	err := svc.Execute(context.Background(), userId, interaction.RecordEventInput{
 		Type:     domain.EventTypeResultClicked,
 		SearchId: searchId,
 		Payload:  map[string]any{"position": 0},
@@ -71,9 +77,9 @@ func TestRecordEventService_Execute_ThreadsSearchId(t *testing.T) {
 
 func TestRecordEventService_Execute_RejectsUnknownType(t *testing.T) {
 	store := &discoverytest.FakeEventStore{}
-	svc := NewRecordEventService(store)
+	svc := interaction.NewRecordEventService(store)
 
-	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), interaction.RecordEventInput{
 		Type: domain.EventTypeUnknown,
 	})
 	if err == nil {
@@ -101,16 +107,16 @@ func assertRejected400(t *testing.T, store *discoverytest.FakeEventStore, err er
 func TestRecordEventService_Execute_RejectsServerReservedTypes(t *testing.T) {
 	for _, typ := range []domain.EventType{domain.EventTypeSearchPerformed} {
 		store := &discoverytest.FakeEventStore{}
-		svc := NewRecordEventService(store)
-		err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{Type: typ})
+		svc := interaction.NewRecordEventService(store)
+		err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), interaction.RecordEventInput{Type: typ})
 		assertRejected400(t, store, err)
 	}
 }
 
 func TestRecordEventService_Execute_AcceptsResultsShown(t *testing.T) {
 	store := &discoverytest.FakeEventStore{}
-	svc := NewRecordEventService(store)
-	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+	svc := interaction.NewRecordEventService(store)
+	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), interaction.RecordEventInput{
 		Type:    domain.EventTypeResultsShown,
 		Payload: map[string]any{"results": []any{}},
 	})
@@ -124,8 +130,8 @@ func TestRecordEventService_Execute_AcceptsResultsShown(t *testing.T) {
 
 func TestRecordEventService_Execute_RejectsNonNumericDwell(t *testing.T) {
 	store := &discoverytest.FakeEventStore{}
-	svc := NewRecordEventService(store)
-	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+	svc := interaction.NewRecordEventService(store)
+	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), interaction.RecordEventInput{
 		Type:    domain.EventTypeSkip,
 		Payload: map[string]any{"dwell_ms": "abc"},
 	})
@@ -134,8 +140,8 @@ func TestRecordEventService_Execute_RejectsNonNumericDwell(t *testing.T) {
 
 func TestRecordEventService_Execute_RejectsNonBooleanZeroResult(t *testing.T) {
 	store := &discoverytest.FakeEventStore{}
-	svc := NewRecordEventService(store)
-	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+	svc := interaction.NewRecordEventService(store)
+	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), interaction.RecordEventInput{
 		Type:    domain.EventTypePlay,
 		Payload: map[string]any{"zero_result": "false"},
 	})
@@ -145,8 +151,8 @@ func TestRecordEventService_Execute_RejectsNonBooleanZeroResult(t *testing.T) {
 func TestRecordEventService_Execute_RejectsNonStringSignatureAndSession(t *testing.T) {
 	for _, key := range []string{"result_signature", "session_id"} {
 		store := &discoverytest.FakeEventStore{}
-		svc := NewRecordEventService(store)
-		err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+		svc := interaction.NewRecordEventService(store)
+		err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), interaction.RecordEventInput{
 			Type:    domain.EventTypePlay,
 			Payload: map[string]any{key: 42.0},
 		})
@@ -156,8 +162,8 @@ func TestRecordEventService_Execute_RejectsNonStringSignatureAndSession(t *testi
 
 func TestRecordEventService_Execute_AcceptsWellTypedPayload(t *testing.T) {
 	store := &discoverytest.FakeEventStore{}
-	svc := NewRecordEventService(store)
-	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+	svc := interaction.NewRecordEventService(store)
+	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), interaction.RecordEventInput{
 		Type:    domain.EventTypeSkip,
 		Payload: map[string]any{"dwell_ms": 1500.0, "result_signature": "sig", "session_id": "s1"},
 	})
@@ -171,26 +177,44 @@ func TestRecordEventService_Execute_AcceptsWellTypedPayload(t *testing.T) {
 
 func TestRecordEventService_Execute_RejectsPayloadOverTheSizeCap(t *testing.T) {
 	store := &discoverytest.FakeEventStore{}
-	svc := NewRecordEventService(store)
-	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+	svc := interaction.NewRecordEventService(store)
+	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), interaction.RecordEventInput{
 		Type:    domain.EventTypePlay,
-		Payload: map[string]any{"junk": strings.Repeat("x", maxPayloadBytes+1)},
+		Payload: map[string]any{"junk": strings.Repeat("x", payloadByteCap+1)},
 	})
 	assertRejected400(t, store, err)
 }
 
 func TestRecordEventService_Execute_RejectsPayloadOverTheKeyCap(t *testing.T) {
 	store := &discoverytest.FakeEventStore{}
-	svc := NewRecordEventService(store)
-	payload := make(map[string]any, maxPayloadKeys+1)
-	for i := range maxPayloadKeys + 1 {
+	svc := interaction.NewRecordEventService(store)
+	payload := make(map[string]any, payloadKeyCap+1)
+	for i := range payloadKeyCap + 1 {
 		payload[fmt.Sprintf("k%d", i)] = 1.0
 	}
-	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), interaction.RecordEventInput{
 		Type:    domain.EventTypePlay,
 		Payload: payload,
 	})
 	assertRejected400(t, store, err)
+}
+
+func TestRecordEventService_Execute_AcceptsPayloadAtTheKeyCap(t *testing.T) {
+	store := &discoverytest.FakeEventStore{}
+	payload := make(map[string]any, payloadKeyCap)
+	for i := range payloadKeyCap {
+		payload[fmt.Sprintf("k%d", i)] = 1.0
+	}
+	err := interaction.NewRecordEventService(store).Execute(context.Background(), shared.NewUserId(uuid.New()), interaction.RecordEventInput{
+		Type:    domain.EventTypePlay,
+		Payload: payload,
+	})
+	if err != nil {
+		t.Fatalf("payload at the key cap rejected: %v", err)
+	}
+	if len(store.Recorded()) != 1 {
+		t.Fatalf("appended %d events, want 1", len(store.Recorded()))
+	}
 }
 
 func TestRecordEventService_Execute_RejectsNULOrInvalidUTF8InPayloadStrings(t *testing.T) {
@@ -203,7 +227,7 @@ func TestRecordEventService_Execute_RejectsNULOrInvalidUTF8InPayloadStrings(t *t
 	for name, payload := range cases {
 		t.Run(name, func(t *testing.T) {
 			store := &discoverytest.FakeEventStore{}
-			err := NewRecordEventService(store).Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+			err := interaction.NewRecordEventService(store).Execute(context.Background(), shared.NewUserId(uuid.New()), interaction.RecordEventInput{
 				Type:    domain.EventTypePlay,
 				Payload: payload,
 			})
@@ -214,10 +238,10 @@ func TestRecordEventService_Execute_RejectsNULOrInvalidUTF8InPayloadStrings(t *t
 
 func TestRecordEventService_Execute_AcceptsPayloadUnderTheSizeCap(t *testing.T) {
 	store := &discoverytest.FakeEventStore{}
-	svc := NewRecordEventService(store)
-	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+	svc := interaction.NewRecordEventService(store)
+	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), interaction.RecordEventInput{
 		Type:    domain.EventTypePlay,
-		Payload: map[string]any{"junk": strings.Repeat("x", maxPayloadBytes-100)},
+		Payload: map[string]any{"junk": strings.Repeat("x", payloadByteCap-100)},
 	})
 	if err != nil {
 		t.Fatalf("payload under the cap rejected: %v", err)
@@ -227,10 +251,37 @@ func TestRecordEventService_Execute_AcceptsPayloadUnderTheSizeCap(t *testing.T) 
 	}
 }
 
-func TestRecordEventService_Execute_WrapsStoreError(t *testing.T) {
-	svc := NewRecordEventService(failingEventStore{})
+func TestRecordEventService_Execute_SizeCapCountsTheSerializedPayloadBytes(t *testing.T) {
+	envelope := len(`{"junk":""}`)
+	for _, tc := range []struct {
+		name     string
+		bytes    int
+		accepted bool
+	}{
+		{"exactly at the cap", payloadByteCap, true},
+		{"one byte over the cap", payloadByteCap + 1, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &discoverytest.FakeEventStore{}
+			err := interaction.NewRecordEventService(store).Execute(context.Background(), shared.NewUserId(uuid.New()), interaction.RecordEventInput{
+				Type:    domain.EventTypePlay,
+				Payload: map[string]any{"junk": strings.Repeat("x", tc.bytes-envelope)},
+			})
+			if !tc.accepted {
+				assertRejected400(t, store, err)
+				return
+			}
+			if err != nil || len(store.Recorded()) != 1 {
+				t.Fatalf("payload of %d serialized bytes: err %v, appended %d, want accepted", tc.bytes, err, len(store.Recorded()))
+			}
+		})
+	}
+}
 
-	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+func TestRecordEventService_Execute_WrapsStoreError(t *testing.T) {
+	svc := interaction.NewRecordEventService(failingEventStore{})
+
+	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), interaction.RecordEventInput{
 		Type: domain.EventTypePlay,
 	})
 	if err == nil {
@@ -253,9 +304,9 @@ var _ ports.ActivityFeed = (*discoverytest.RecordingActivityFeed)(nil)
 func TestRecordEventService_EmitsActivityOnRecordedEvent(t *testing.T) {
 	store := &discoverytest.FakeEventStore{}
 	feed := &discoverytest.RecordingActivityFeed{}
-	svc := NewRecordEventService(store, WithRecordEventActivityFeed(feed))
+	svc := interaction.NewRecordEventService(store, interaction.WithRecordEventActivityFeed(feed))
 
-	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), interaction.RecordEventInput{
 		Type:    domain.EventTypeLibraryAdd,
 		EventId: uuid.New().String(),
 		Payload: map[string]any{"track_id": "abc"},
@@ -271,9 +322,9 @@ func TestRecordEventService_EmitsActivityOnRecordedEvent(t *testing.T) {
 
 func TestRecordEventService_SkipsActivityOnStoreFailure(t *testing.T) {
 	feed := &discoverytest.RecordingActivityFeed{}
-	svc := NewRecordEventService(failingEventStore{}, WithRecordEventActivityFeed(feed))
+	svc := interaction.NewRecordEventService(failingEventStore{}, interaction.WithRecordEventActivityFeed(feed))
 
-	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), interaction.RecordEventInput{
 		Type: domain.EventTypePlay,
 	})
 	if err == nil {
@@ -286,9 +337,9 @@ func TestRecordEventService_SkipsActivityOnStoreFailure(t *testing.T) {
 
 func TestRecordEvent_NonClientSubmittableRenders400(t *testing.T) {
 	store := &discoverytest.FakeEventStore{}
-	svc := NewRecordEventService(store)
+	svc := interaction.NewRecordEventService(store)
 
-	err := svc.Execute(context.Background(), discoverytest.NewUser(), RecordEventInput{
+	err := svc.Execute(context.Background(), discoverytest.NewUser(), interaction.RecordEventInput{
 		Type: domain.EventTypeSearchPerformed,
 	})
 	if err == nil {
@@ -310,9 +361,9 @@ func TestRecordEventService_Execute_RequiresEventIdForAcquisitionUiAndClientErro
 	for _, eventType := range []domain.EventType{domain.EventTypeAcquisitionUi, domain.EventTypeClientError} {
 		t.Run(eventType.String(), func(t *testing.T) {
 			store := &discoverytest.FakeEventStore{}
-			svc := NewRecordEventService(store)
+			svc := interaction.NewRecordEventService(store)
 
-			err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+			err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), interaction.RecordEventInput{
 				Type:    eventType,
 				Payload: map[string]any{},
 			})
@@ -323,7 +374,7 @@ func TestRecordEventService_Execute_RequiresEventIdForAcquisitionUiAndClientErro
 				t.Errorf("error = %q, want it to mention event_id", err.Error())
 			}
 
-			err = svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+			err = svc.Execute(context.Background(), shared.NewUserId(uuid.New()), interaction.RecordEventInput{
 				Type:    eventType,
 				EventId: uuid.New().String(),
 				Payload: map[string]any{},
