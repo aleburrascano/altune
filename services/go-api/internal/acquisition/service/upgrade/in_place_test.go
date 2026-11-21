@@ -2,6 +2,7 @@ package upgrade_test
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"encoding/json"
@@ -55,10 +56,7 @@ var (
 )
 
 func (w *world) storedEvidence(evidence string) {
-	key := rowKey(w.trackId, w.userId)
-	row := w.tracks.rows[key]
-	row.EvidenceJSON = json.RawMessage(evidence)
-	w.tracks.rows[key] = row
+	w.edit(func(track *acquisitiontest.LedgerTrack) { track.Evidence = json.RawMessage(evidence) })
 }
 
 func (w *world) checkedRunner(cfg acquisition.UpgradeConfig, checker acquisition.InPlaceChecker, recorder acquisition.InPlaceStore) *acquisition.UpgradeRunner {

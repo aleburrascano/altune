@@ -2,7 +2,6 @@ package upgrade_test
 
 import (
 	"altune/go-api/internal/acquisition"
-	"altune/go-api/internal/catalog/domain"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
@@ -35,7 +34,7 @@ func (r *recordingScheduler) ScheduleUpgrade(_ context.Context, _ shared.UserId,
 }
 
 func TestPlanner_SchedulesThePickedTrackForTheCurrentGeneration(t *testing.T) {
-	trackId := domain.NewTrackId()
+	trackId := shared.NewTrackId()
 	store := &pickingStore{picks: []acquisition.UpgradeCandidate{{TrackID: trackId, UserID: shared.NewUserId(uuid.New()), Grade: "F"}}}
 	scheduler := &recordingScheduler{}
 
@@ -84,14 +83,14 @@ func TestPlanner_ReportsAFailedPickOrSchedule(t *testing.T) {
 	}
 
 	scheduleErr := errors.New("paused")
-	picks := &pickingStore{picks: []acquisition.UpgradeCandidate{{TrackID: domain.NewTrackId()}}}
+	picks := &pickingStore{picks: []acquisition.UpgradeCandidate{{TrackID: shared.NewTrackId()}}}
 	if err := acquisition.NewUpgradePlanner(picks, &recordingScheduler{err: scheduleErr}, 1, time.Hour).PlanNext(context.Background()); !errors.Is(err, scheduleErr) {
 		t.Errorf("PlanNext with a failing schedule = %v, want the schedule error", err)
 	}
 }
 
 func TestPlanner_ASchedulerThatIsPausedIsNotAnError(t *testing.T) {
-	picks := &pickingStore{picks: []acquisition.UpgradeCandidate{{TrackID: domain.NewTrackId()}}}
+	picks := &pickingStore{picks: []acquisition.UpgradeCandidate{{TrackID: shared.NewTrackId()}}}
 	scheduler := &recordingScheduler{err: acquisition.ErrAcquisitionPaused}
 
 	if err := acquisition.NewUpgradePlanner(picks, scheduler, 1, time.Hour).PlanNext(context.Background()); err != nil {
@@ -109,7 +108,7 @@ func TestInterval_SpreadsTheHourlyBudgetEvenly(t *testing.T) {
 }
 
 func TestPlanner_ATrackWithAJobInFlightIsSkippedNotAFailure(t *testing.T) {
-	picks := &pickingStore{picks: []acquisition.UpgradeCandidate{{TrackID: domain.NewTrackId()}}}
+	picks := &pickingStore{picks: []acquisition.UpgradeCandidate{{TrackID: shared.NewTrackId()}}}
 	scheduler := &recordingScheduler{err: acquisition.ErrTrackJobInFlight}
 
 	if err := acquisition.NewUpgradePlanner(picks, scheduler, 1, time.Hour).PlanNext(context.Background()); err != nil {
