@@ -1,4 +1,4 @@
-package musicbrainz
+package memo
 
 import (
 	"container/list"
@@ -6,43 +6,37 @@ import (
 	"time"
 )
 
-const mbMemoTTL = 6 * time.Hour
-
-const mbMemoMaxEntries = 2048
-
-type mbMemo[V any] struct {
+type Memo[V any] struct {
 	mu        sync.Mutex
 	ttl       time.Duration
 	max       int
+	now       func() time.Time
 	m         map[string]*list.Element
 	order     *list.List
 	lastSweep time.Time
 }
 
-type mbMemoEntry[V any] struct {
+type entry[V any] struct {
 	key     string
 	val     V
 	expires time.Time
 }
 
-func newMBMemo[V any](ttl time.Duration) *mbMemo[V] {
-	return newMBMemoCap[V](ttl, mbMemoMaxEntries)
-}
-
-func newMBMemoCap[V any](ttl time.Duration, maxEntries int) *mbMemo[V] {
+func New[V any](ttl time.Duration, maxEntries int, now func() time.Time) *Memo[V] {
 	if maxEntries < 1 {
 		maxEntries = 1
 	}
-	return &mbMemo[V]{
+	return &Memo[V]{
 		ttl:       ttl,
 		max:       maxEntries,
+		now:       now,
 		m:         make(map[string]*list.Element),
 		order:     list.New(),
-		lastSweep: time.Now(),
+		lastSweep: now(),
 	}
 }
 
-func (c *mbMemo[V]) get(key string) (V, bool) {
+func (c *Memo[V]) Get(key string) (V, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	var zero V
@@ -50,8 +44,8 @@ func (c *mbMemo[V]) get(key string) (V, bool) {
 	if !ok {
 		return zero, false
 	}
-	e := el.Value.(*mbMemoEntry[V])
-	if time.Now().After(e.expires) {
+	e := el.Value.(*entry[V])
+	if c.now().After(e.expires) {
 		c.remove(el)
 		return zero, false
 	}
@@ -59,12 +53,12 @@ func (c *mbMemo[V]) get(key string) (V, bool) {
 	return e.val, true
 }
 
-func (c *mbMemo[V]) put(key string, v V) {
+func (c *Memo[V]) Put(key string, v V) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	now := time.Now()
+	now := c.now()
 	if el, ok := c.m[key]; ok {
-		e := el.Value.(*mbMemoEntry[V])
+		e := el.Value.(*entry[V])
 		e.val = v
 		e.expires = now.Add(c.ttl)
 		c.order.MoveToFront(el)
@@ -80,27 +74,21 @@ func (c *mbMemo[V]) put(key string, v V) {
 		}
 		c.remove(oldest)
 	}
-	c.m[key] = c.order.PushFront(&mbMemoEntry[V]{key: key, val: v, expires: now.Add(c.ttl)})
+	c.m[key] = c.order.PushFront(&entry[V]{key: key, val: v, expires: now.Add(c.ttl)})
 }
 
-func (c *mbMemo[V]) len() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return len(c.m)
-}
-
-func (c *mbMemo[V]) sweepExpired(now time.Time) {
+func (c *Memo[V]) sweepExpired(now time.Time) {
 	c.lastSweep = now
 	for el := c.order.Back(); el != nil; {
 		prev := el.Prev()
-		if now.After(el.Value.(*mbMemoEntry[V]).expires) {
+		if now.After(el.Value.(*entry[V]).expires) {
 			c.remove(el)
 		}
 		el = prev
 	}
 }
 
-func (c *mbMemo[V]) remove(el *list.Element) {
+func (c *Memo[V]) remove(el *list.Element) {
 	c.order.Remove(el)
-	delete(c.m, el.Value.(*mbMemoEntry[V]).key)
+	delete(c.m, el.Value.(*entry[V]).key)
 }

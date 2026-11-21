@@ -1,6 +1,7 @@
-package musicbrainz
+package musicbrainz_test
 
 import (
+	"altune/go-api/internal/discovery/internal/adapters/providers/musicbrainz"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
 	"context"
 	"errors"
@@ -10,7 +11,7 @@ import (
 	"time"
 )
 
-func TestMusicBrainzAdapter_fetchReleaseGroups_LeaderCancelDoesNotFailWaiters(t *testing.T) {
+func TestMusicBrainzAdapter_ReleaseGroupTitles_LeaderCancelDoesNotFailWaiters(t *testing.T) {
 	release := make(chan struct{})
 	started := make(chan struct{}, 8)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -25,24 +26,24 @@ func TestMusicBrainzAdapter_fetchReleaseGroups_LeaderCancelDoesNotFailWaiters(t 
 			mbReleaseGroupJSON("rg-1", "OK Computer", "Radiohead", "mbid-rh") + `]}`))
 	}))
 	defer server.Close()
-	adapter := NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
 
 	leaderCtx, cancelLeader := context.WithCancel(context.Background())
 	leaderErr := make(chan error, 1)
 	go func() {
-		_, err := adapter.fetchReleaseGroups(leaderCtx, "mbid-rh")
+		_, err := adapter.ReleaseGroupTitles(leaderCtx, "mbid-rh")
 		leaderErr <- err
 	}()
 	<-started
 
 	type result struct {
-		rgs []mbReleaseGroup
-		err error
+		titles []string
+		err    error
 	}
 	waiter := make(chan result, 1)
 	go func() {
-		rgs, err := adapter.fetchReleaseGroups(context.Background(), "mbid-rh")
-		waiter <- result{rgs, err}
+		titles, err := adapter.ReleaseGroupTitles(context.Background(), "mbid-rh")
+		waiter <- result{titles, err}
 	}()
 	time.Sleep(50 * time.Millisecond)
 
@@ -59,8 +60,8 @@ func TestMusicBrainzAdapter_fetchReleaseGroups_LeaderCancelDoesNotFailWaiters(t 
 	close(release)
 	select {
 	case res := <-waiter:
-		if res.err != nil || len(res.rgs) != 1 || res.rgs[0].Title != "OK Computer" {
-			t.Errorf("waiter = %v, %v; want the release groups despite leader cancel", res.rgs, res.err)
+		if res.err != nil || len(res.titles) != 1 || res.titles[0] != "OK Computer" {
+			t.Errorf("waiter = %v, %v; want the release groups despite leader cancel", res.titles, res.err)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("waiter never got a result")
@@ -79,7 +80,7 @@ func TestMusicBrainzAdapter_ReleaseGroupTitles(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
 	titles, err := adapter.ReleaseGroupTitles(context.Background(), "mbid-rh")
 	if err != nil {
 		t.Fatalf("ReleaseGroupTitles: %v", err)
@@ -101,7 +102,7 @@ func TestMusicBrainzAdapter_ReleaseGroupTitles_laterPageFailureIsNotACompleteAnc
 	}))
 	defer server.Close()
 
-	adapter := NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
 	titles, err := adapter.ReleaseGroupTitles(context.Background(), "mbid-rh")
 	if err == nil {
 		t.Fatalf("ReleaseGroupTitles = %v, nil; want an error so a truncated title set is not taken as the anchor", titles)
