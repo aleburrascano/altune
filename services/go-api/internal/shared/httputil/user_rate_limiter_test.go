@@ -1,11 +1,13 @@
-package httputil
+package httputil_test
 
 import (
+	"altune/go-api/internal/shared/httputil"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -21,49 +23,56 @@ func (c *limiterClock) now() time.Time { return c.t }
 
 func (c *limiterClock) advance(d time.Duration) { c.t = c.t.Add(d) }
 
-func TestUserRateLimiter_ReclaimingIdleBucketsDoesNotStallOtherCallers(t *testing.T) {
-	for _, idleBuckets := range []int{1_000, 250_000} {
-		t.Run(strconv.Itoa(idleBuckets), func(t *testing.T) {
-			clock := newLimiterClock()
-			l := NewUserRateLimiter(RateLimit{Every: time.Second, Burst: 2}, clock.now)
-			for i := range idleBuckets {
-				l.Allow(strconv.Itoa(i))
-			}
-			clock.advance(l.idleTTL())
+func allowedRun(l *httputil.UserRateLimiter, key string, requests int) []bool {
+	got := make([]bool, requests)
+	for i := range got {
+		got[i], _ = l.Allow(key)
+	}
+	return got
+}
 
-			l.Allow("caller")
+func TestUserRateLimiter_AdmitsTheBurstThenRefusesWithTheRefillWait(t *testing.T) {
+	l := httputil.NewUserRateLimiter(httputil.RateLimit{Every: 10 * time.Second, Burst: 2}, newLimiterClock().now)
 
-			if len(l.active) != 1 {
-				t.Fatalf("rotation must start a fresh active map, got %d entries", len(l.active))
-			}
-			if len(l.cooling) != idleBuckets {
-				t.Fatalf("rotation must hand the old map over untouched, cooling has %d of %d buckets", len(l.cooling), idleBuckets)
-			}
-		})
+	first, firstWait := l.Allow("user")
+	second, _ := l.Allow("user")
+	third, wait := l.Allow("user")
+
+	if !first || firstWait != 0 || !second || third {
+		t.Fatalf("burst of 2 admitted %v (wait %v), %v, %v, want true (0), true, false", first, firstWait, second, third)
+	}
+	if wait != 10*time.Second {
+		t.Fatalf("refused wait = %v, want the 10s refill of one token", wait)
 	}
 }
 
-func TestUserRateLimiter_EvictsRefilledBuckets(t *testing.T) {
+func TestUserRateLimiter_ARefusalSpendsNoToken(t *testing.T) {
 	clock := newLimiterClock()
-	limit := RateLimit{Every: time.Second, Burst: 2}
-	l := NewUserRateLimiter(limit, clock.now)
-
-	for range 1000 {
-		l.Allow(uuid.NewString())
-	}
-	for range 2 {
-		clock.advance(l.idleTTL())
-		l.Allow("fresh")
+	l := httputil.NewUserRateLimiter(httputil.RateLimit{Every: 10 * time.Second, Burst: 1}, clock.now)
+	l.Allow("user")
+	for range 5 {
+		l.Allow("user")
 	}
 
-	if got := len(l.active) + len(l.cooling); got != 1 {
-		t.Fatalf("idle refilled buckets must be reclaimed within two idle TTLs, %d remain", got)
+	clock.advance(10 * time.Second)
+
+	if allowed, wait := l.Allow("user"); !allowed {
+		t.Fatalf("after one refill period a refused caller got allowed=false wait=%v: refusals spent tokens", wait)
+	}
+}
+
+func TestUserRateLimiter_KeepsEachKeysBudgetApart(t *testing.T) {
+	l := httputil.NewUserRateLimiter(httputil.RateLimit{Every: time.Hour, Burst: 1}, newLimiterClock().now)
+	l.Allow("a")
+
+	if allowed, _ := l.Allow("b"); !allowed {
+		t.Fatal("a second key was refused by the first key's spent bucket")
 	}
 }
 
 func TestUserRateLimiter_KeepsBucketsThatAreStillSpent(t *testing.T) {
 	clock := newLimiterClock()
-	l := NewUserRateLimiter(RateLimit{Every: time.Minute, Burst: 1}, clock.now)
+	l := httputil.NewUserRateLimiter(httputil.RateLimit{Every: time.Minute, Burst: 1}, clock.now)
 
 	l.Allow("other")
 	clock.advance(50 * time.Second)
@@ -76,8 +85,24 @@ func TestUserRateLimiter_KeepsBucketsThatAreStillSpent(t *testing.T) {
 	}
 }
 
+func TestUserRateLimiter_ReclaimsNoBucketBeforeItCouldHaveRefilled(t *testing.T) {
+	clock := newLimiterClock()
+	l := httputil.NewUserRateLimiter(httputil.RateLimit{Every: time.Minute, Burst: 2}, clock.now)
+	allowedRun(l, "spender", 2)
+
+	for range 2 {
+		clock.advance(31 * time.Second)
+		l.Allow("other")
+	}
+	clock.advance(3 * time.Second)
+
+	if got := allowedRun(l, "spender", 2); !got[0] || got[1] {
+		t.Fatalf("65s after spending a burst of 2 at one token a minute, admitted %v, want [true false]", got)
+	}
+}
+
 func TestUserRateLimiter_ZeroBurstStillAdmitsOne(t *testing.T) {
-	l := NewUserRateLimiter(RateLimit{Every: time.Hour}, nil)
+	l := httputil.NewUserRateLimiter(httputil.RateLimit{Every: time.Hour}, nil)
 
 	if allowed, _ := l.Allow("user"); !allowed {
 		t.Fatal("a zero burst must be raised to one admitted request")
@@ -87,9 +112,87 @@ func TestUserRateLimiter_ZeroBurstStillAdmitsOne(t *testing.T) {
 	}
 }
 
+func TestUserRateLimiter_ANilClockReadsTheWallClock(t *testing.T) {
+	l := httputil.NewUserRateLimiter(httputil.RateLimit{Every: time.Hour, Burst: 1}, nil)
+	l.Allow("user")
+
+	_, wait := l.Allow("user")
+
+	if wait <= 59*time.Minute || wait > time.Hour {
+		t.Fatalf("wait = %v, want just under an hour measured on the wall clock", wait)
+	}
+}
+
+func heapInUse() uint64 {
+	runtime.GC()
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	return m.HeapAlloc
+}
+
+func TestUserRateLimiter_ReclaimsIdleBucketsWithinTwoIdlePeriods(t *testing.T) {
+	const idleBuckets = 100_000
+	limit := httputil.RateLimit{Every: time.Second, Burst: 2}
+	idlePeriod := limit.Every * time.Duration(limit.Burst)
+	clock := newLimiterClock()
+	l := httputil.NewUserRateLimiter(limit, clock.now)
+	l.Allow("fresh")
+	empty := heapInUse()
+	for range idleBuckets {
+		l.Allow(uuid.NewString())
+	}
+	held := heapInUse()
+
+	for range 2 {
+		clock.advance(idlePeriod)
+		l.Allow("fresh")
+	}
+	reclaimed := heapInUse()
+	runtime.KeepAlive(l)
+
+	grown := int64(held) - int64(empty)
+	if grown < 10<<20 {
+		t.Fatalf("%d idle buckets grew the heap by only %d bytes, the measurement cannot tell", idleBuckets, grown)
+	}
+	if left := int64(reclaimed) - int64(empty); left > grown/4 {
+		t.Fatalf("after two idle periods %d of %d bytes are still held, want the idle buckets reclaimed", left, grown)
+	}
+}
+
+func rotatingCallDuration(idleBuckets int) time.Duration {
+	limit := httputil.RateLimit{Every: time.Second, Burst: 2}
+	clock := newLimiterClock()
+	l := httputil.NewUserRateLimiter(limit, clock.now)
+	l.Allow("caller")
+	for i := range idleBuckets {
+		l.Allow(strconv.Itoa(i))
+	}
+	clock.advance(limit.Every * time.Duration(limit.Burst))
+	start := time.Now()
+	l.Allow("caller")
+	return time.Since(start)
+}
+
+func fastestRotatingCall(idleBuckets, trials int) time.Duration {
+	fastest := time.Duration(1<<63 - 1)
+	for range trials {
+		fastest = min(fastest, rotatingCallDuration(idleBuckets))
+	}
+	return fastest
+}
+
+func TestUserRateLimiter_ReclaimingIdleBucketsDoesNotStallTheCaller(t *testing.T) {
+	small := fastestRotatingCall(500, 3)
+	large := fastestRotatingCall(50_000, 3)
+
+	if large > 10*max(small, time.Microsecond) {
+		t.Fatalf("the call that reclaims 50k idle buckets took %v against %v for 500, want the reclaim not to scale with idle buckets", large, small)
+	}
+}
+
 func TestUserRateLimiter_MiddlewareRefusesWithRetryAfter(t *testing.T) {
 	clock := newLimiterClock()
-	l := NewUserRateLimiter(RateLimit{Every: 2 * time.Second, Burst: 1}, clock.now)
+	l := httputil.NewUserRateLimiter(httputil.RateLimit{Every: 2 * time.Second, Burst: 1}, clock.now)
 	refusals := 0
 	handler := l.Middleware(func(*http.Request) (string, bool) { return "user", true },
 		errors.New("refused"), func() { refusals++ })(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -104,6 +207,23 @@ func TestUserRateLimiter_MiddlewareRefusesWithRetryAfter(t *testing.T) {
 	if first.Code != http.StatusNoContent || second.Header().Get("Retry-After") != "2" || refusals != 1 {
 		t.Fatalf("first=%d retry-after=%q refusals=%d, want 204, 2, 1", first.Code, second.Header().Get("Retry-After"), refusals)
 	}
+	if second.Code == http.StatusNoContent {
+		t.Fatal("the refused request reached the handler")
+	}
+}
+
+func TestUserRateLimiter_MiddlewareRefusesWithoutARefusalHook(t *testing.T) {
+	l := httputil.NewUserRateLimiter(httputil.RateLimit{Every: time.Hour, Burst: 1}, newLimiterClock().now)
+	handler := l.Middleware(func(*http.Request) (string, bool) { return "user", true }, errors.New("refused"), nil)(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	refused := httptest.NewRecorder()
+	handler.ServeHTTP(refused, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if refused.Code == http.StatusNoContent || refused.Header().Get("Retry-After") != "3600" {
+		t.Fatalf("second request = %d retry-after %q, want refused with Retry-After 3600", refused.Code, refused.Header().Get("Retry-After"))
+	}
 }
 
 type limiterCtxKey struct{}
@@ -111,7 +231,7 @@ type limiterCtxKey struct{}
 func TestUserKey_ReadsTheUserFromTheRequestContext(t *testing.T) {
 	id := shared.NewUserId(uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
 	fromContext := func(ctx context.Context) (shared.UserId, bool) { return id, ctx.Value(limiterCtxKey{}) != nil }
-	key := UserKey(fromContext)
+	key := httputil.UserKey(fromContext)
 
 	signedIn := httptest.NewRequest(http.MethodGet, "/", nil)
 	signedIn = signedIn.WithContext(context.WithValue(signedIn.Context(), limiterCtxKey{}, true))
@@ -125,7 +245,7 @@ func TestUserKey_ReadsTheUserFromTheRequestContext(t *testing.T) {
 }
 
 func TestUserRateLimiter_MiddlewarePassesAnonymousRequests(t *testing.T) {
-	l := NewUserRateLimiter(RateLimit{Every: time.Hour, Burst: 1}, nil)
+	l := httputil.NewUserRateLimiter(httputil.RateLimit{Every: time.Hour, Burst: 1}, nil)
 	handler := l.Middleware(func(*http.Request) (string, bool) { return "", false }, errors.New("refused"), nil)(
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
 
