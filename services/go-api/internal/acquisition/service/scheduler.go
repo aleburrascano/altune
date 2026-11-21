@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/internal/adapters/memqueue"
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/service/upgrade"
@@ -107,7 +108,7 @@ func NewBackgroundAcquisitionScheduler(
 		opt(s)
 	}
 	if s.queue == nil {
-		s.queue = newMemJobQueueWithClock(s.wake, s.now)
+		s.queue = memqueue.New(s.wake, s.now)
 	}
 	if s.notifier != nil {
 		s.runnersWG.Add(1)
@@ -259,6 +260,13 @@ func (s *BackgroundAcquisitionScheduler) fanOutWakes() {
 		case <-s.stop:
 			return
 		}
+	}
+}
+
+func notifyWake(wake chan<- struct{}) {
+	select {
+	case wake <- struct{}{}:
+	default:
 	}
 }
 

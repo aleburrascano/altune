@@ -24,6 +24,8 @@ const (
 	CooldownRetry     = ports.CooldownRetry
 	JobKindAcquire    = ports.JobKindAcquire
 	JobKindReplace    = ports.JobKindReplace
+	JobRunning        = ports.JobRunning
+	JobSucceeded      = ports.JobSucceeded
 	TrackFailed       = ports.TrackFailed
 )
 

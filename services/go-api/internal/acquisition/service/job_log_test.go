@@ -1,55 +1,79 @@
-package service
+package service_test
 
 import (
-	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition"
+	kernel "altune/go-api/internal/shared/kernel"
+	"context"
+	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
+
+	"github.com/google/uuid"
 )
 
-type jobClock struct {
-	wall    time.Time
-	elapsed time.Duration
+const acquireTakes = 2 * time.Second
+
+type slowAcquirer struct{}
+
+func (slowAcquirer) Execute(context.Context, kernel.UserId, kernel.TrackId) error {
+	time.Sleep(acquireTakes)
+	return nil
 }
 
-func (c *jobClock) now() time.Time                { return c.wall }
-func (c *jobClock) since(time.Time) time.Duration { return c.elapsed }
+func (slowAcquirer) ExecuteReplace(context.Context, kernel.UserId, kernel.TrackId) error {
+	return nil
+}
 
-func TestJobLog_ElapsedImmuneToWallClockJump(t *testing.T) {
-	base := time.Unix(3_000_000, 0)
+func (slowAcquirer) RefuseQueued(context.Context, kernel.UserId, kernel.TrackId) {}
 
-	t.Run("complete after backward wall step", func(t *testing.T) {
-		clk := &jobClock{wall: base, elapsed: 0}
-		l := newJobLogWithClock(clk.now, clk.since)
-		l.register("trk-1", "https://src.example/one")
-
-		clk.wall = base.Add(-time.Minute)
-		clk.elapsed = 2 * time.Second
-
-		l.complete("trk-1", ports.JobSucceeded, "")
-
-		_, recent := l.snapshot()
-		if len(recent) != 1 {
-			t.Fatalf("recent = %d, want 1", len(recent))
+func TestStatus_ARunningJobReportsTheTimeSinceItWasScheduled(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var wg sync.WaitGroup
+		acquirer := &holdingAcquirer{release: make(chan struct{})}
+		scheduler := acquisition.NewBackgroundAcquisitionScheduler(acquirer, &wg, make(chan struct{}, 1))
+		defer scheduler.Shutdown(context.Background())
+		defer close(acquirer.release)
+		track := kernel.NewTrackId()
+		if err := scheduler.Schedule(context.Background(), kernel.NewUserId(uuid.New()), track, ""); err != nil {
+			t.Fatalf("Schedule = %v, want nil", err)
 		}
-		if got := recent[0].ElapsedMs; got != 2000 {
-			t.Fatalf("ElapsedMs = %d, want 2000 (backward wall step must not make elapsed negative/bogus)", got)
+		synctest.Wait()
+
+		time.Sleep(3 * time.Second)
+
+		active := scheduler.Status().ActiveJobs
+		if len(active) != 1 || active[0].TrackID != track.String() || active[0].State != acquisition.JobRunning {
+			t.Fatalf("ActiveJobs = %+v, want the running job of %s", active, track)
+		}
+		if got := active[0].ElapsedMs; got != 3000 {
+			t.Errorf("ElapsedMs = %d, want 3000: the time since the job was scheduled", got)
 		}
 	})
+}
 
-	t.Run("in-flight snapshot after backward wall step", func(t *testing.T) {
-		clk := &jobClock{wall: base, elapsed: 0}
-		l := newJobLogWithClock(clk.now, clk.since)
-		l.register("trk-2", "https://src.example/two")
-
-		clk.wall = base.Add(-time.Minute)
-		clk.elapsed = 3 * time.Second
-
-		jobs, _ := l.snapshot()
-		if len(jobs) != 1 {
-			t.Fatalf("jobs = %d, want 1", len(jobs))
+func TestStatus_AFinishedJobReportsHowLongItRan(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var wg sync.WaitGroup
+		scheduler := acquisition.NewBackgroundAcquisitionScheduler(slowAcquirer{}, &wg, make(chan struct{}, 1))
+		defer scheduler.Shutdown(context.Background())
+		track := kernel.NewTrackId()
+		if err := scheduler.Schedule(context.Background(), kernel.NewUserId(uuid.New()), track, ""); err != nil {
+			t.Fatalf("Schedule = %v, want nil", err)
 		}
-		if got := jobs[0].ElapsedMs; got != 3000 {
-			t.Fatalf("ElapsedMs = %d, want 3000 (in-flight elapsed must track monotonic, not wall)", got)
+
+		time.Sleep(acquireTakes)
+		synctest.Wait()
+
+		status := scheduler.Status()
+		if len(status.Recent) != 1 || status.Recent[0].TrackID != track.String() || status.Recent[0].State != acquisition.JobSucceeded {
+			t.Fatalf("Recent = %+v, want the succeeded job of %s", status.Recent, track)
+		}
+		if got := status.Recent[0].ElapsedMs; got != acquireTakes.Milliseconds() {
+			t.Errorf("ElapsedMs = %d, want %d: how long the acquire ran", got, acquireTakes.Milliseconds())
+		}
+		if status.Succeeded != 1 || len(status.ActiveJobs) != 0 {
+			t.Errorf("Succeeded = %d, ActiveJobs = %+v, want 1 and none", status.Succeeded, status.ActiveJobs)
 		}
 	})
 }

@@ -16,16 +16,10 @@ type jobLog struct {
 	recent    []ports.JobRecord
 	succeeded atomic.Uint64
 	failed    atomic.Uint64
-	now       func() time.Time
-	since     func(time.Time) time.Duration
 }
 
 func newJobLog() *jobLog {
-	return newJobLogWithClock(time.Now, time.Since)
-}
-
-func newJobLogWithClock(now func() time.Time, since func(time.Time) time.Duration) *jobLog {
-	return &jobLog{jobs: make(map[string]*ports.JobRecord), now: now, since: since}
+	return &jobLog{jobs: make(map[string]*ports.JobRecord)}
 }
 
 func (l *jobLog) register(trackID, sourceURL string) {
@@ -34,7 +28,7 @@ func (l *jobLog) register(trackID, sourceURL string) {
 		TrackID:     trackID,
 		SourceURL:   sourceURL,
 		State:       ports.JobQueued,
-		ScheduledAt: l.now(),
+		ScheduledAt: time.Now(),
 	}
 	l.mu.Unlock()
 }
@@ -71,12 +65,12 @@ func (l *jobLog) complete(trackID string, state ports.JobState, reason string) p
 	defer l.mu.Unlock()
 	j := l.jobs[trackID]
 	if j == nil {
-		j = &ports.JobRecord{TrackID: trackID, ScheduledAt: l.now()}
+		j = &ports.JobRecord{TrackID: trackID, ScheduledAt: time.Now()}
 	}
 	delete(l.jobs, trackID)
 	j.State = state
 	j.Reason = reason
-	j.ElapsedMs = l.since(j.ScheduledAt).Milliseconds()
+	j.ElapsedMs = time.Since(j.ScheduledAt).Milliseconds()
 	l.recent = append(l.recent, *j)
 	if len(l.recent) > recentJobCap {
 		l.recent = l.recent[len(l.recent)-recentJobCap:]
@@ -93,7 +87,7 @@ func (l *jobLog) snapshot() (jobs, recent []ports.JobRecord) {
 	jobs = make([]ports.JobRecord, 0, len(l.jobs))
 	for _, j := range l.jobs {
 		jr := *j
-		jr.ElapsedMs = l.since(j.ScheduledAt).Milliseconds()
+		jr.ElapsedMs = time.Since(j.ScheduledAt).Milliseconds()
 		jobs = append(jobs, jr)
 	}
 	recent = make([]ports.JobRecord, len(l.recent))

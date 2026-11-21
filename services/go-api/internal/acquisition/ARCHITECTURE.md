@@ -232,6 +232,8 @@ adapters/
     recording_resolver.go RecordingResolver — discovery's search service to a RecordingIdentity
   persistence/
     cooldown_store.go    PgxCooldownStore — the atomic reserve/release upsert on acquisition_cooldowns
+  memqueue/
+    queue.go             Queue — the in-memory ports.JobQueue the scheduler runs on when none is wired: leases, fences, delays, the fewest-live-leases claim order and the upgrade lane
 ```
 
 Ports are deliberately **narrow slices of larger capabilities**: `AudioWriter` is
