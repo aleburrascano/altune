@@ -7,8 +7,6 @@ import (
 	"log/slog"
 )
 
-var choose = judge.Choose
-
 type verdict string
 
 const (
@@ -29,7 +27,7 @@ func Log(ctx context.Context, target judge.Target, trackID string, kept *ports.A
 		keptURL = kept.URL
 	}
 	judgeURL, reason := "", "no candidate accepted"
-	if best, decision, found := choose(target, observed(candidates, keptURL, keptProbedSeconds)); found {
+	if best, decision, found := judge.Choose(target, observed(candidates, keptURL, keptProbedSeconds)); found {
 		judgeURL, reason = best.URL, decision.Reason
 	}
 	slog.InfoContext(ctx, "acquisition.judge_shadow",
