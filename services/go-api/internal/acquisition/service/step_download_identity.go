@@ -5,6 +5,7 @@ import (
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/internal/core/ranking"
 	"altune/go-api/internal/shared/redact"
 	"cmp"
 	"context"
@@ -182,7 +183,7 @@ type judgedSource struct {
 }
 
 func sourceOf(ac *AcquisitionContext, candidate ports.AudioCandidate) judgedSource {
-	return judgedSource{kind: SourceKindOf(candidate, uploaderClass(ac.Track.Artist, candidate)), title: candidate.Title}
+	return judgedSource{kind: SourceKindOf(candidate, ranking.UploaderOf(ac.Track.Artist, candidate)), title: candidate.Title}
 }
 
 func (s *DownloadStep) classifyMatch(ctx context.Context, ac *AcquisitionContext, match ports.RecordingMatch, probed float64, source judgedSource) AudioVerdict {

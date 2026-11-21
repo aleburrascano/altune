@@ -3,6 +3,7 @@ package service
 import (
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/internal/core/ranking"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"fmt"
@@ -17,11 +18,11 @@ const priorRejectionWindow = 30 * 24 * time.Hour
 type RejectionStage string
 
 const (
-	RejectionIdentity     RejectionStage = "identity"
-	RejectionQualifier    RejectionStage = "qualifier"
+	RejectionIdentity     RejectionStage = RejectionStage(ranking.StageIdentity)
+	RejectionQualifier    RejectionStage = RejectionStage(ranking.StageQualifier)
 	RejectionDownload     RejectionStage = "download"
-	RejectionDRM          RejectionStage = ports.UnplayableDRM
-	RejectionPreview      RejectionStage = ports.UnplayablePreview
+	RejectionDRM          RejectionStage = RejectionStage(ranking.StageDRM)
+	RejectionPreview      RejectionStage = RejectionStage(ranking.StagePreview)
 	RejectionDuration     RejectionStage = "duration"
 	RejectionUndecodable  RejectionStage = "undecodable"
 	RejectionFingerprint  RejectionStage = "fingerprint"
@@ -163,11 +164,4 @@ func (s *AcquireTrackAudioService) loadPriorRejections(ctx context.Context, ac *
 		return
 	}
 	ac.PriorRejections = prior
-}
-
-func unplayableStage(reason string) RejectionStage {
-	if reason == ports.UnplayablePreview {
-		return RejectionPreview
-	}
-	return RejectionDRM
 }

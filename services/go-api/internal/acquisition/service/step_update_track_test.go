@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/acquisition/internal/adapters/discoverybridge"
 	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/internal/core/ranking"
 	"altune/go-api/internal/acquisition/service/upgrade"
 	"altune/go-api/internal/catalog/domain"
 	shared "altune/go-api/internal/shared/kernel"
@@ -208,12 +209,12 @@ func TestUpdateTrackStep_Execute_StoresSourceKindGenerationAndGradePerKind(t *te
 		wantKind  grade.SourceKind
 		wantGrade grade.Grade
 	}{
-		{"art track proven by fingerprint", ports.KindArtTrack, channelTopic, VerdictHard, grade.ArtTrack, grade.A},
-		{"official video proven by fingerprint", ports.KindPinnedVideo, channelTopic, VerdictHard, grade.OfficialVideo, grade.A},
-		{"artist's own upload proven by fingerprint", ports.KindUpload, channelArtist, VerdictHard, grade.LabelUpload, grade.A},
-		{"fan upload proven by fingerprint", ports.KindUpload, channelOther, VerdictHard, grade.FanUpload, grade.B},
-		{"art track the fingerprint says is another version", ports.KindArtTrack, channelTopic, VerdictOtherVersion, grade.ArtTrack, grade.F},
-		{"fan upload with no fingerprint answer", ports.KindUpload, channelOther, VerdictUnknown, grade.FanUpload, grade.D},
+		{"art track proven by fingerprint", ports.KindArtTrack, ranking.ChannelTopic, VerdictHard, grade.ArtTrack, grade.A},
+		{"official video proven by fingerprint", ports.KindPinnedVideo, ranking.ChannelTopic, VerdictHard, grade.OfficialVideo, grade.A},
+		{"artist's own upload proven by fingerprint", ports.KindUpload, ranking.ChannelArtist, VerdictHard, grade.LabelUpload, grade.A},
+		{"fan upload proven by fingerprint", ports.KindUpload, ranking.ChannelOther, VerdictHard, grade.FanUpload, grade.B},
+		{"art track the fingerprint says is another version", ports.KindArtTrack, ranking.ChannelTopic, VerdictOtherVersion, grade.ArtTrack, grade.F},
+		{"fan upload with no fingerprint answer", ports.KindUpload, ranking.ChannelOther, VerdictUnknown, grade.FanUpload, grade.D},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -497,7 +498,7 @@ func TestUpdateTrackStep_Execute_AnUnprobedFetchedFileGetsNoLengthRescue(t *test
 		AudioRef: "u/a/b/new.opus",
 		Selected: &ports.AudioCandidate{Title: "Song", URL: drinkingSource, Kind: ports.KindUpload, Duration: 285},
 		Verdict:  AudioVerdict{Kind: VerdictHard},
-		Evidence: Evidence{Channel: channelOther},
+		Evidence: Evidence{Channel: ranking.ChannelOther},
 		Replace: ReplaceState{
 			PreservedRef: "u/a/b/old.opus",
 			Gate:         upgrade.Gate{Current: grade.B, CatalogSeconds: 285, StoredSeconds: 231},

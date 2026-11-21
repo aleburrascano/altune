@@ -377,85 +377,13 @@ func TestRunPipeline_StepPanic_RollsBackAndReturnsStepError(t *testing.T) {
 	}
 }
 
-func TestAcqStage_IdentityScore(t *testing.T) {
-	tests := []struct {
-		name      string
-		title     string
-		artist    string
-		candidate string
-		wantAbove float64
-		wantBelow float64
-	}{
-		{
-			name:      "exact artist+title match",
-			title:     "Blinding Lights",
-			artist:    "The Weeknd",
-			candidate: "The Weeknd - Blinding Lights",
-			wantAbove: 80,
-		},
-		{
-			name:      "title only match is penalized",
-			title:     "Die Hard",
-			artist:    "Dr. Dre",
-			candidate: "DIE HARD",
-			wantBelow: 65,
-		},
-		{
-			name:      "correct artist+title beats wrong artist",
-			title:     "Die Hard",
-			artist:    "Dr. Dre",
-			candidate: "Dr. Dre - Die Hard",
-			wantAbove: 80,
-		},
-		{
-			name:      "unrelated candidate scores very low",
-			title:     "HUMBLE.",
-			artist:    "Kendrick Lamar",
-			candidate: "Cooking Tutorial Episode 47",
-			wantBelow: 30,
-		},
+func selectBest(track TrackRef, candidates []ports.AudioCandidate) *ports.AudioCandidate {
+	ranked, _ := rankAndCollect(context.Background(), track, track.CatalogDuration, candidates)
+	if len(ranked) == 0 {
+		return nil
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			score := identityScore(tt.title, tt.artist, tt.candidate)
-			if tt.wantAbove > 0 && score < tt.wantAbove {
-				t.Errorf("identityScore = %.1f, want >= %.1f", score, tt.wantAbove)
-			}
-			if tt.wantBelow > 0 && score >= tt.wantBelow {
-				t.Errorf("identityScore = %.1f, want < %.1f", score, tt.wantBelow)
-			}
-			t.Logf("identityScore(%q, %q, %q) = %.1f", tt.title, tt.artist, tt.candidate, score)
-		})
-	}
-}
-
-func TestAcqStage_ArtistMatchesChannel(t *testing.T) {
-	tests := []struct {
-		artist  string
-		channel string
-		want    bool
-	}{
-		{"The Weeknd", "The Weeknd - Topic", true},
-		{"Kendrick Lamar", "Kendrick Lamar - Topic", true},
-		{"Dr. Dre", "Kendrick Lamar - Topic", false},
-		{"Post Malone", "Post Malone - Topic", true},
-		{"Post Malone", "Mac Miller - Topic", false},
-		{"The Weeknd", "TheWeekndVEVO", true},
-		{"Bad Bunny", "RandomUploader", false},
-		{"!!!", "Random - Topic", false},
-		{"???", "TheWeekndVEVO", false},
-		{"", "x", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.artist+"_"+tt.channel, func(t *testing.T) {
-			got := artistMatchesChannel(tt.artist, tt.channel)
-			if got != tt.want {
-				t.Errorf("artistMatchesChannel(%q, %q) = %v, want %v", tt.artist, tt.channel, got, tt.want)
-			}
-		})
-	}
+	best := ranked[0]
+	return &best
 }
 
 func TestAcqStage_SymbolOnlyArtistDoesNotRescueUnrelatedCandidate(t *testing.T) {
@@ -474,43 +402,6 @@ func TestAcqStage_SymbolOnlyArtistDoesNotRescueUnrelatedCandidate(t *testing.T) 
 	if len(rejected) != 1 || rejected[0].Stage != RejectionIdentity || rejected[0].URL != "yt:cooking" {
 		t.Fatalf("expected one identity rejection for yt:cooking, got %v", rejected)
 	}
-}
-
-func TestAcqStage_MetadataRank(t *testing.T) {
-	topic := ports.AudioCandidate{
-		Channel:    "Artist - Topic",
-		Categories: []string{"Music"},
-		Duration:   200,
-		ViewCount:  10_000_000,
-	}
-	vevo := ports.AudioCandidate{
-		Channel:    "ArtistVEVO",
-		Categories: []string{"Music"},
-		Duration:   203,
-		ViewCount:  500_000_000,
-	}
-	random := ports.AudioCandidate{
-		Channel:    "RandomUploader",
-		Categories: []string{"Entertainment"},
-		Duration:   600,
-		ViewCount:  1_000,
-	}
-
-	topicRank := metadataRank(topic, channelTopic, 200, 500_000_000)
-	vevoRank := metadataRank(vevo, channelOther, 200, 500_000_000)
-	randomRank := metadataRank(random, channelOther, 200, 500_000_000)
-
-	if topicRank < 0.5 {
-		t.Errorf("topic rank (%.3f) unexpectedly low", topicRank)
-	}
-	if vevoRank < 0.5 {
-		t.Errorf("vevo rank (%.3f) unexpectedly low", vevoRank)
-	}
-	if randomRank >= vevoRank {
-		t.Errorf("random (%.3f) should score lower than vevo (%.3f)", randomRank, vevoRank)
-	}
-
-	t.Logf("topic=%.3f, vevo=%.3f, random=%.3f", topicRank, vevoRank, randomRank)
 }
 
 func TestAcqStage_BuildAudioRef(t *testing.T) {
@@ -599,13 +490,6 @@ func TestAcqStage_FullSelectionTrace(t *testing.T) {
 			Categories: []string{"Education"},
 			ViewCount:  100_000,
 		},
-	}
-
-	for _, c := range candidates {
-		ident := identityScore(track.Title, track.Artist, c.Title)
-		artMatch := artistMatchesChannel(track.Artist, c.Channel)
-		t.Logf("Stage 2 — Identity: %q (ch: %q) → score=%.1f, artistMatch=%v, gate=%v",
-			c.Title, c.Channel, ident, artMatch, ident >= identityMin)
 	}
 
 	selected := selectBest(track, candidates)

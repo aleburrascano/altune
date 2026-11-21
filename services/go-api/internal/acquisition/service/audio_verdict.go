@@ -2,7 +2,6 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/internal/core/audiojudge"
-	"altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"math"
 )
@@ -54,14 +53,4 @@ func topScore(results []ports.AcoustIDResult) float64 {
 		}
 	}
 	return best
-}
-
-func artistNames(credit string) map[string]bool {
-	names := make(map[string]bool)
-	for _, part := range domain.SplitCredit(credit) {
-		if name := domain.CreditKey(part); name != "" {
-			names[name] = true
-		}
-	}
-	return names
 }

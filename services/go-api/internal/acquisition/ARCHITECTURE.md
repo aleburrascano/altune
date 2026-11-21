@@ -187,12 +187,11 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   acquire.go             Execute / ExecuteReplace orchestration + notification wiring
   reacquire.go           reacquirePolicy (reconcile, revertToPending)
   step_search.go         SEARCH — query variants through the registry to deduped candidates
-  step_select.go         SELECT — rankAndCollect to a ranked list plus the identity-gate rejections
+  step_select.go         SELECT — ranking.Rank to a ranked list, its refusals recorded as CandidateRejections
   step_download.go       DOWNLOAD — the ≤8 attempt walk and the duration / decode / fingerprint gates
   step_tag.go            TAG — delegates to the tagger, failure swallowed
   step_store.go          STORE — re-validate decode, Store, compensating delete
   step_update_track.go   UPDATE_TRACK — MarkReady + measured duration, or a replace's audio swap
-  matching.go            identityScore, metadataRank, featureMatch, qualifierDistance, the sorts, rankAndCollect
   duration.go            which window applies — durationWithinTolerance, lengthCorroborated, durationAcceptable (the windows are `domain.LengthTolerance`)
   registry.go            SourceRegistry — fans Find across sources into per-source slots, routes Fetch by candidate.Source
   rejection.go           RejectionStage, CandidateRejection, recordRejection, summarizeRejections
@@ -206,6 +205,7 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   job_log.go             jobLog: the recent ring, counters (records are ports.JobRecord)
   job_telemetry.go       the jobReporter context seam and its schedulerJobReporter
   internal/core/domain/admission_error.go admissionError and the admission sentinels (package domain)
+  internal/core/ranking/  Rank (the unplayable, re-recording, identity and veto refusals, the resolved, Topic and Other buckets and their orders, the candidate_evaluated log), UploaderOf, UnrequestedQualifiers — identityScore, metadataRank, featureMatch, qualifierDistance inside it
   audio_ref.go           BuildAudioRef (+ legacy variants), path-component helpers
   retry_admission.go     RetryAdmission, ReacquireAdmission, cooldownGate
 adapters/
@@ -757,7 +757,7 @@ flowchart TD
 |---|---|---|
 | `NormalizeForMatch` | **discovery's** merge tiers, consensus clustering, correction, and the behavioral join key — plus both acquisition matchers | fixing variant matching here silently shifts search ranking and de-joins stored behavioral scores |
 | `identityScore` / `identityMin` | which candidates survive the gate at all | raising the floor drops legitimate sparse-metadata tracks; lowering it admits covers |
-| the `rankAndCollect` sorts | which recording enters the library | a tiebreak that looks harmless reorders every equal-identity pair (§7.3) |
+| the `ranking.Rank` bucket orders | which recording enters the library | a tiebreak that looks harmless reorders every equal-identity pair (§7.3) |
 | `metadataRank` weights | non-Topic ordering only — Topic bucketing is upstream of it | tuning views/duration while the real problem is bucket membership |
 | `durationWithinTolerance` (window: `domain.LengthLoose`) | the only F1/F2 defense | tighter rejects legitimate intro/outro trims; looser admits remixes |
 | `lengthCorroborated` | which window every download is measured against | making it laxer silently re-tightens the gate around an unverified saved duration |
@@ -775,9 +775,8 @@ flowchart TD
 | port narrowing (`AudioWriter`, `TrackRepository`) | what acquisition is *able* to do | widening a port is how a context stops being a customer and starts being an owner |
 
 **Where correctness is concentrated.** The pure, I/O-free functions are where the
-hard logic lives and where change is safest: `matching.go` in its entirety
-(`identityScore`, `metadataRank`, `featureMatch`, `rankAndCollect`,
-`durationWithinTolerance`), `failureReason`, and `BuildAudioRef`. Each is
+hard logic lives and where change is safest: `internal/core/ranking` in its entirety
+(`identityScore`, `metadataRank`, `featureMatch`, `Rank`), `durationWithinTolerance`, `failureReason`, and `BuildAudioRef`. Each is
 exhaustively testable with plain data. Every gate that has ever failed a user lives
 in one of them — and, per §7.8, every one of them is currently tested only against
 data we wrote ourselves. Put new selection logic in a pure core, add a golden case
