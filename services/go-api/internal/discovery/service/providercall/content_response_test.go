@@ -1,8 +1,9 @@
-package providercall
+package providercall_test
 
 import (
 	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service/providercall"
 	"context"
 	"errors"
 	"fmt"
@@ -25,7 +26,7 @@ func TestFetchProviderResults_ClassifiesFailureStatus(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			results, degraded := FetchProviderResults(context.Background(), nil, domain.ProviderITunes, "id-1", "test.provider_failed",
+			results, degraded := providercall.FetchProviderResults(context.Background(), nil, domain.ProviderITunes, "id-1", "test.provider_failed",
 				func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 					return nil, tc.err
 				})
@@ -43,7 +44,7 @@ func TestFetchProviderResults_ClassifiesFailureStatus(t *testing.T) {
 }
 
 func TestOkContentResponse_nilResultsCoercedToEmptySlice(t *testing.T) {
-	resp := OkContentResponse(domain.ProviderDeezer, nil, 10)
+	resp := providercall.OkContentResponse(domain.ProviderDeezer, nil, 10)
 	if resp.Items == nil {
 		t.Fatal("Items = nil, want a non-nil empty slice")
 	}
