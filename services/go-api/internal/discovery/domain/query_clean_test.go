@@ -1,6 +1,9 @@
-package domain
+package domain_test
 
-import "testing"
+import (
+	"altune/go-api/internal/discovery/domain"
+	"testing"
+)
 
 func TestCleanQuery(t *testing.T) {
 	tests := []struct {
@@ -86,7 +89,7 @@ func TestCleanQuery(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := CleanQuery(tt.raw)
+			got := domain.CleanQuery(tt.raw)
 			if got != tt.want {
 				t.Errorf("CleanQuery(%q) = %q, want %q", tt.raw, got, tt.want)
 			}
@@ -110,7 +113,7 @@ func TestSearchText(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := SearchText(tt.raw); got != tt.want {
+			if got := domain.SearchText(tt.raw); got != tt.want {
 				t.Errorf("SearchText(%q) = %q, want %q", tt.raw, got, tt.want)
 			}
 		})
@@ -176,7 +179,7 @@ func TestCleanQueryTrailingFeat(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := CleanQuery(tt.raw)
+			got := domain.CleanQuery(tt.raw)
 			if got != tt.want {
 				t.Errorf("CleanQuery(%q) = %q, want %q", tt.raw, got, tt.want)
 			}

@@ -1,19 +1,22 @@
-package domain
+package domain_test
 
-import "testing"
+import (
+	"altune/go-api/internal/discovery/domain"
+	"testing"
+)
 
 func TestDedupAlbums(t *testing.T) {
-	album := func(title string, trackCount int) SearchResult {
-		return SearchResult{Kind: ResultKindAlbum, Title: title, TrackCount: trackCount}
+	album := func(title string, trackCount int) domain.SearchResult {
+		return domain.SearchResult{Kind: domain.ResultKindAlbum, Title: title, TrackCount: trackCount}
 	}
 
 	t.Run("collapses normalized-title duplicates keeping higher track_count", func(t *testing.T) {
-		in := []SearchResult{
+		in := []domain.SearchResult{
 			album("After Hours", 14),
 			album("After Hours (Deluxe)", 18),
 			album("Starboy", 18),
 		}
-		out := DedupAlbums(in)
+		out := domain.DedupAlbums(in)
 		if len(out) != 2 {
 			t.Fatalf("expected 2 albums, got %d: %v", len(out), albumTitles(out))
 		}
@@ -26,15 +29,15 @@ func TestDedupAlbums(t *testing.T) {
 	})
 
 	t.Run("keeps first when track_count not higher", func(t *testing.T) {
-		in := []SearchResult{album("Dawn FM", 20), album("Dawn FM (Alternate World)", 10)}
-		out := DedupAlbums(in)
+		in := []domain.SearchResult{album("Dawn FM", 20), album("Dawn FM (Alternate World)", 10)}
+		out := domain.DedupAlbums(in)
 		if len(out) != 1 || out[0].TrackCount != 20 {
 			t.Fatalf("expected single 20-track album, got %v", out)
 		}
 	})
 
 	t.Run("empty input yields empty output", func(t *testing.T) {
-		if out := DedupAlbums(nil); len(out) != 0 {
+		if out := domain.DedupAlbums(nil); len(out) != 0 {
 			t.Fatalf("expected empty, got %v", out)
 		}
 	})
@@ -43,17 +46,17 @@ func TestDedupAlbums(t *testing.T) {
 func TestAlbumReleaseSortKey(t *testing.T) {
 	cases := []struct {
 		name string
-		in   SearchResult
+		in   domain.SearchResult
 		want string
 	}{
-		{"prefers release_date", SearchResult{ReleaseDate: "2020-03-20", Year: 1999}, "2020-03-20"},
-		{"falls back to year", SearchResult{Year: 2015}, "2015"},
-		{"empty when neither", SearchResult{}, ""},
-		{"empty when year non-positive", SearchResult{Year: 0}, ""},
+		{"prefers release_date", domain.SearchResult{ReleaseDate: "2020-03-20", Year: 1999}, "2020-03-20"},
+		{"falls back to year", domain.SearchResult{Year: 2015}, "2015"},
+		{"empty when neither", domain.SearchResult{}, ""},
+		{"empty when year non-positive", domain.SearchResult{Year: 0}, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := AlbumReleaseSortKey(tc.in); got != tc.want {
+			if got := domain.AlbumReleaseSortKey(tc.in); got != tc.want {
 				t.Errorf("expected %q, got %q", tc.want, got)
 			}
 		})
@@ -61,18 +64,18 @@ func TestAlbumReleaseSortKey(t *testing.T) {
 }
 
 func TestSortAlbumsByReleaseDateDesc(t *testing.T) {
-	album := func(title, releaseDate string, year int) SearchResult {
-		return SearchResult{Title: title, ReleaseDate: releaseDate, Year: year}
+	album := func(title, releaseDate string, year int) domain.SearchResult {
+		return domain.SearchResult{Title: title, ReleaseDate: releaseDate, Year: year}
 	}
 
 	t.Run("sorts newest first, undated to the end", func(t *testing.T) {
-		in := []SearchResult{
+		in := []domain.SearchResult{
 			album("Older", "2016-09-09", 0),
 			album("NoDate", "", 0),
 			album("Newest", "2022-01-07", 0),
 			album("Middle", "2020-03-20", 0),
 		}
-		SortByReleaseDateDesc(in, AlbumReleaseSortKey)
+		domain.SortByReleaseDateDesc(in, domain.AlbumReleaseSortKey)
 		want := []string{"Newest", "Middle", "Older", "NoDate"}
 		if got := albumTitles(in); !equalStrings(got, want) {
 			t.Errorf("expected %v, got %v", want, got)
@@ -80,12 +83,12 @@ func TestSortAlbumsByReleaseDateDesc(t *testing.T) {
 	})
 
 	t.Run("stable for equal keys preserves input order", func(t *testing.T) {
-		in := []SearchResult{
+		in := []domain.SearchResult{
 			album("A", "2020-01-01", 0),
 			album("B", "2020-01-01", 0),
 			album("C", "2020-01-01", 0),
 		}
-		SortByReleaseDateDesc(in, AlbumReleaseSortKey)
+		domain.SortByReleaseDateDesc(in, domain.AlbumReleaseSortKey)
 		want := []string{"A", "B", "C"}
 		if got := albumTitles(in); !equalStrings(got, want) {
 			t.Errorf("expected stable %v, got %v", want, got)
@@ -94,16 +97,16 @@ func TestSortAlbumsByReleaseDateDesc(t *testing.T) {
 }
 
 func TestSortAlbumsByReleaseDateDesc_MixedPrecisionSameYear(t *testing.T) {
-	album := func(title, releaseDate string, year int) SearchResult {
-		return SearchResult{Title: title, ReleaseDate: releaseDate, Year: year}
+	album := func(title, releaseDate string, year int) domain.SearchResult {
+		return domain.SearchResult{Title: title, ReleaseDate: releaseDate, Year: year}
 	}
 
 	t.Run("bare year is not forced older than a same-year full date", func(t *testing.T) {
-		in := []SearchResult{
+		in := []domain.SearchResult{
 			album("YearOnly", "", 2020),
 			album("FullDate", "2020-01-01", 0),
 		}
-		SortByReleaseDateDesc(in, AlbumReleaseSortKey)
+		domain.SortByReleaseDateDesc(in, domain.AlbumReleaseSortKey)
 		want := []string{"YearOnly", "FullDate"}
 		if got := albumTitles(in); !equalStrings(got, want) {
 			t.Errorf("expected same-year tie to keep input order %v, got %v", want, got)
@@ -111,7 +114,7 @@ func TestSortAlbumsByReleaseDateDesc_MixedPrecisionSameYear(t *testing.T) {
 	})
 
 	t.Run("mixed precision within a year still orders across years", func(t *testing.T) {
-		in := []SearchResult{
+		in := []domain.SearchResult{
 			album("Old", "2018-06-01", 0),
 			album("YearOnly2020", "", 2020),
 			album("Late2020", "2020-11-01", 0),
@@ -120,7 +123,7 @@ func TestSortAlbumsByReleaseDateDesc_MixedPrecisionSameYear(t *testing.T) {
 			album("Dated2021", "2021-03-01", 0),
 			album("Undated", "", 0),
 		}
-		SortByReleaseDateDesc(in, AlbumReleaseSortKey)
+		domain.SortByReleaseDateDesc(in, domain.AlbumReleaseSortKey)
 		want := []string{"Newest", "Dated2021", "YearOnly2020", "Late2020", "Early2020", "Old", "Undated"}
 		if got := albumTitles(in); !equalStrings(got, want) {
 			t.Errorf("expected %v, got %v", want, got)
@@ -128,12 +131,12 @@ func TestSortAlbumsByReleaseDateDesc_MixedPrecisionSameYear(t *testing.T) {
 	})
 
 	t.Run("full dates in a year without bare years keep full precision", func(t *testing.T) {
-		in := []SearchResult{
+		in := []domain.SearchResult{
 			album("YearOnly2019", "", 2019),
 			album("Early2020", "2020-02-01", 0),
 			album("Late2020", "2020-11-01", 0),
 		}
-		SortByReleaseDateDesc(in, AlbumReleaseSortKey)
+		domain.SortByReleaseDateDesc(in, domain.AlbumReleaseSortKey)
 		want := []string{"Late2020", "Early2020", "YearOnly2019"}
 		if got := albumTitles(in); !equalStrings(got, want) {
 			t.Errorf("expected %v, got %v", want, got)
@@ -142,13 +145,13 @@ func TestSortAlbumsByReleaseDateDesc_MixedPrecisionSameYear(t *testing.T) {
 }
 
 func TestNormalizeAlbumYears(t *testing.T) {
-	in := []SearchResult{
+	in := []domain.SearchResult{
 		{Title: "fills from date", ReleaseDate: "2019-05-01"},
 		{Title: "keeps existing year", ReleaseDate: "2019-05-01", Year: 1999},
 		{Title: "short date untouched", ReleaseDate: "20"},
 		{Title: "no date untouched"},
 	}
-	NormalizeAlbumYears(in)
+	domain.NormalizeAlbumYears(in)
 	want := []int{2019, 1999, 0, 0}
 	for i, w := range want {
 		if in[i].Year != w {
@@ -157,20 +160,22 @@ func TestNormalizeAlbumYears(t *testing.T) {
 	}
 }
 
-func TestParseYear(t *testing.T) {
+func TestNormalizeReleaseYear_TakesOnlyAPositiveNumericLeadingYear(t *testing.T) {
 	cases := []struct {
-		in   string
-		want int
+		releaseDate string
+		want        int
 	}{
-		{"2020", 2020},
-		{"0", 0},
-		{"-5", 0},
+		{"2020-03-01", 2020},
+		{"0000-01-01", 0},
+		{"-005-01-01", 0},
 		{"", 0},
-		{"abcd", 0},
+		{"abcd-01-01", 0},
 	}
 	for _, tc := range cases {
-		if got := parseYear(tc.in); got != tc.want {
-			t.Errorf("parseYear(%q): expected %d, got %d", tc.in, tc.want, got)
+		r := domain.SearchResult{ReleaseDate: tc.releaseDate}
+		domain.NormalizeReleaseYear(&r)
+		if r.Year != tc.want {
+			t.Errorf("NormalizeReleaseYear(ReleaseDate %q): expected year %d, got %d", tc.releaseDate, tc.want, r.Year)
 		}
 	}
 }
@@ -197,14 +202,14 @@ func TestTitleSubtitleKey(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := TitleSubtitleKey(tt.title, tt.subtitle); got != tt.want {
+			if got := domain.TitleSubtitleKey(tt.title, tt.subtitle); got != tt.want {
 				t.Errorf("TitleSubtitleKey(%q, %q) = %q, want %q", tt.title, tt.subtitle, got, tt.want)
 			}
 		})
 	}
 }
 
-func albumTitles(items []SearchResult) []string {
+func albumTitles(items []domain.SearchResult) []string {
 	out := make([]string, 0, len(items))
 	for _, it := range items {
 		out = append(out, it.Title)

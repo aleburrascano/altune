@@ -1,6 +1,7 @@
-package domain
+package domain_test
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"strings"
 	"testing"
 )
@@ -9,34 +10,34 @@ func TestNewSearchQuery_Valid(t *testing.T) {
 	tests := []struct {
 		name  string
 		raw   string
-		kinds map[ResultKind]bool
+		kinds map[domain.ResultKind]bool
 		limit int
 	}{
 		{
 			name:  "typical query",
 			raw:   "radiohead",
-			kinds: map[ResultKind]bool{ResultKindTrack: true},
+			kinds: map[domain.ResultKind]bool{domain.ResultKindTrack: true},
 			limit: 25,
 		},
 		{
 			name:  "limit lower bound",
 			raw:   "query",
-			kinds: map[ResultKind]bool{ResultKindArtist: true},
+			kinds: map[domain.ResultKind]bool{domain.ResultKindArtist: true},
 			limit: 1,
 		},
 		{
 			name:  "limit upper bound",
 			raw:   "query",
-			kinds: map[ResultKind]bool{ResultKindAlbum: true},
+			kinds: map[domain.ResultKind]bool{domain.ResultKindAlbum: true},
 			limit: 50,
 		},
 		{
 			name: "multiple kinds",
 			raw:  "beatles",
-			kinds: map[ResultKind]bool{
-				ResultKindTrack:  true,
-				ResultKindAlbum:  true,
-				ResultKindArtist: true,
+			kinds: map[domain.ResultKind]bool{
+				domain.ResultKindTrack:  true,
+				domain.ResultKindAlbum:  true,
+				domain.ResultKindArtist: true,
 			},
 			limit: 10,
 		},
@@ -45,7 +46,7 @@ func TestNewSearchQuery_Valid(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			q, err := NewSearchQuery(tt.raw, tt.kinds, tt.limit)
+			q, err := domain.NewSearchQuery(tt.raw, tt.kinds, tt.limit)
 			if err != nil {
 				t.Fatalf("NewSearchQuery() unexpected error: %v", err)
 			}
@@ -63,12 +64,12 @@ func TestNewSearchQuery_Valid(t *testing.T) {
 }
 
 func TestNewSearchQuery_Errors(t *testing.T) {
-	validKinds := map[ResultKind]bool{ResultKindTrack: true}
+	validKinds := map[domain.ResultKind]bool{domain.ResultKindTrack: true}
 
 	tests := []struct {
 		name    string
 		raw     string
-		kinds   map[ResultKind]bool
+		kinds   map[domain.ResultKind]bool
 		limit   int
 		wantMsg string
 	}{
@@ -82,7 +83,7 @@ func TestNewSearchQuery_Errors(t *testing.T) {
 		{
 			name:    "empty kinds",
 			raw:     "query",
-			kinds:   map[ResultKind]bool{},
+			kinds:   map[domain.ResultKind]bool{},
 			limit:   10,
 			wantMsg: "kinds cannot be empty",
 		},
@@ -116,7 +117,7 @@ func TestNewSearchQuery_Errors(t *testing.T) {
 		},
 		{
 			name:    "raw longer than max length",
-			raw:     strings.Repeat("a", MaxSearchQueryRunes+1),
+			raw:     strings.Repeat("a", domain.MaxSearchQueryRunes+1),
 			kinds:   validKinds,
 			limit:   10,
 			wantMsg: "raw query must be at most 200 characters",
@@ -126,7 +127,7 @@ func TestNewSearchQuery_Errors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			q, err := NewSearchQuery(tt.raw, tt.kinds, tt.limit)
+			q, err := domain.NewSearchQuery(tt.raw, tt.kinds, tt.limit)
 			if err == nil {
 				t.Fatalf("NewSearchQuery() expected error containing %q, got nil (result: %+v)", tt.wantMsg, q)
 			}
@@ -138,35 +139,35 @@ func TestNewSearchQuery_Errors(t *testing.T) {
 }
 
 func TestNewSearchQuery_TokenCap(t *testing.T) {
-	kinds := map[ResultKind]bool{ResultKindTrack: true}
+	kinds := map[domain.ResultKind]bool{domain.ResultKindTrack: true}
 	words := func(n int) string { return strings.TrimSpace(strings.Repeat("a ", n)) }
 
-	if _, err := NewSearchQuery(words(MaxSearchQueryTokens), kinds, 10); err != nil {
+	if _, err := domain.NewSearchQuery(words(domain.MaxSearchQueryTokens), kinds, 10); err != nil {
 		t.Fatalf("query at the token cap rejected: %v", err)
 	}
-	if _, err := NewSearchQuery("Symphony No. 9 in D minor, Op. 125 Choral: IV. Presto", kinds, 10); err != nil {
+	if _, err := domain.NewSearchQuery("Symphony No. 9 in D minor, Op. 125 Choral: IV. Presto", kinds, 10); err != nil {
 		t.Fatalf("long real-world title rejected: %v", err)
 	}
-	over := words(MaxSearchQueryTokens + 1)
-	_, err := NewPagedSearchQuery(over, kinds, 10, 0)
+	over := words(domain.MaxSearchQueryTokens + 1)
+	_, err := domain.NewPagedSearchQuery(over, kinds, 10, 0)
 	if err == nil || err.Error() != "raw query must be at most 32 words" {
-		t.Fatalf("NewPagedSearchQuery(%d words) err = %v, want word-cap error", MaxSearchQueryTokens+1, err)
+		t.Fatalf("NewPagedSearchQuery(%d words) err = %v, want word-cap error", domain.MaxSearchQueryTokens+1, err)
 	}
 }
 
 func TestSearchQueryKinds_Key(t *testing.T) {
 	tests := []struct {
 		name  string
-		kinds map[ResultKind]bool
+		kinds map[domain.ResultKind]bool
 		want  string
 	}{
-		{"single track", map[ResultKind]bool{ResultKindTrack: true}, "track"},
-		{"sorted regardless of insertion", map[ResultKind]bool{ResultKindTrack: true, ResultKindArtist: true, ResultKindAlbum: true}, "album,artist,track"},
-		{"false-valued key still present", map[ResultKind]bool{ResultKindTrack: true, ResultKindAlbum: false}, "album,track"},
+		{"single track", map[domain.ResultKind]bool{domain.ResultKindTrack: true}, "track"},
+		{"sorted regardless of insertion", map[domain.ResultKind]bool{domain.ResultKindTrack: true, domain.ResultKindArtist: true, domain.ResultKindAlbum: true}, "album,artist,track"},
+		{"false-valued key still present", map[domain.ResultKind]bool{domain.ResultKindTrack: true, domain.ResultKindAlbum: false}, "album,track"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			q, err := NewSearchQuery("radiohead", tt.kinds, 10)
+			q, err := domain.NewSearchQuery("radiohead", tt.kinds, 10)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -178,8 +179,8 @@ func TestSearchQueryKinds_Key(t *testing.T) {
 }
 
 func TestAllKinds_HasEveryKind(t *testing.T) {
-	kinds := AllKinds()
-	for _, k := range []ResultKind{ResultKindTrack, ResultKindAlbum, ResultKindArtist} {
+	kinds := domain.AllKinds()
+	for _, k := range []domain.ResultKind{domain.ResultKindTrack, domain.ResultKindAlbum, domain.ResultKindArtist} {
 		if !kinds.Has(k) {
 			t.Errorf("AllKinds() missing %v", k)
 		}
@@ -190,19 +191,19 @@ func TestAllKinds_HasEveryKind(t *testing.T) {
 }
 
 func TestNewPagedSearchQueryRejectsOutOfRangeOffset(t *testing.T) {
-	kinds := map[ResultKind]bool{ResultKindTrack: true}
+	kinds := map[domain.ResultKind]bool{domain.ResultKindTrack: true}
 
-	if _, err := NewPagedSearchQuery("hello", kinds, 20, -1); err == nil {
+	if _, err := domain.NewPagedSearchQuery("hello", kinds, 20, -1); err == nil {
 		t.Fatal("negative offset accepted")
 	}
-	if _, err := NewPagedSearchQuery("hello", kinds, 20, MaxSearchOffset+1); err == nil {
+	if _, err := domain.NewPagedSearchQuery("hello", kinds, 20, domain.MaxSearchOffset+1); err == nil {
 		t.Fatal("offset past the cap accepted")
 	}
-	q, err := NewPagedSearchQuery("hello", kinds, 20, MaxSearchOffset)
+	q, err := domain.NewPagedSearchQuery("hello", kinds, 20, domain.MaxSearchOffset)
 	if err != nil {
 		t.Fatalf("offset at the cap rejected: %v", err)
 	}
-	if q.Offset != MaxSearchOffset {
-		t.Fatalf("offset = %d, want %d", q.Offset, MaxSearchOffset)
+	if q.Offset != domain.MaxSearchOffset {
+		t.Fatalf("offset = %d, want %d", q.Offset, domain.MaxSearchOffset)
 	}
 }

@@ -1,35 +1,38 @@
-package domain
+package domain_test
 
-import "testing"
+import (
+	"altune/go-api/internal/discovery/domain"
+	"testing"
+)
 
 func TestEventType_String(t *testing.T) {
 	tests := []struct {
-		et   EventType
+		et   domain.EventType
 		want string
 	}{
-		{EventTypeSearchPerformed, "search_performed"},
-		{EventTypeResultsShown, "results_shown"},
-		{EventTypeResultClicked, "result_clicked"},
-		{EventTypePlay, "play"},
-		{EventTypeSkip, "skip"},
-		{EventTypeCompleted, "completed"},
-		{EventTypeLibraryAdd, "library_add"},
-		{EventTypeWrongAlbum, "wrong_album"},
-		{EventTypeSearchFailed, "search_failed"},
-		{EventTypeSearchDegraded, "search_degraded"},
-		{EventTypePlaybackHealth, "playback_health"},
-		{EventTypeDetailHealth, "detail_health"},
-		{EventTypeAcquisitionUi, "acquisition_ui"},
-		{EventTypeClientError, "client_error"},
-		{EventTypeDiscographyObserved, "discography_observed"},
-		{EventTypeUnknown, "unknown"},
-		{EventType(999), "unknown"},
-		{EventTypeUserAction, "user_action"},
-		{EventTypeFailureShown, "failure_shown"},
-		{EventTypeSseReconnect, "sse_reconnect"},
-		{EventTypeOutboxFlushFailed, "outbox_flush_failed"},
-		{EventTypeDownloadFailed, "download_failed"},
-		{EventTypeAuthFailed, "auth_failed"},
+		{domain.EventTypeSearchPerformed, "search_performed"},
+		{domain.EventTypeResultsShown, "results_shown"},
+		{domain.EventTypeResultClicked, "result_clicked"},
+		{domain.EventTypePlay, "play"},
+		{domain.EventTypeSkip, "skip"},
+		{domain.EventTypeCompleted, "completed"},
+		{domain.EventTypeLibraryAdd, "library_add"},
+		{domain.EventTypeWrongAlbum, "wrong_album"},
+		{domain.EventTypeSearchFailed, "search_failed"},
+		{domain.EventTypeSearchDegraded, "search_degraded"},
+		{domain.EventTypePlaybackHealth, "playback_health"},
+		{domain.EventTypeDetailHealth, "detail_health"},
+		{domain.EventTypeAcquisitionUi, "acquisition_ui"},
+		{domain.EventTypeClientError, "client_error"},
+		{domain.EventTypeDiscographyObserved, "discography_observed"},
+		{domain.EventTypeUnknown, "unknown"},
+		{domain.EventType(999), "unknown"},
+		{domain.EventTypeUserAction, "user_action"},
+		{domain.EventTypeFailureShown, "failure_shown"},
+		{domain.EventTypeSseReconnect, "sse_reconnect"},
+		{domain.EventTypeOutboxFlushFailed, "outbox_flush_failed"},
+		{domain.EventTypeDownloadFailed, "download_failed"},
+		{domain.EventTypeAuthFailed, "auth_failed"},
 	}
 
 	for _, tt := range tests {
@@ -47,17 +50,17 @@ func TestPayloadKeysStayPinned(t *testing.T) {
 		key  string
 		want string
 	}{
-		{PayloadKeyZeroResult, "zero_result"},
-		{PayloadKeyTailNoiseTop5, "tail_noise_top5"},
-		{PayloadKeyResultSignature, "result_signature"},
-		{PayloadKeySessionId, "session_id"},
-		{PayloadKeyShownSignatures, "shown_signatures"},
-		{PayloadKeyDwellMs, "dwell_ms"},
-		{PayloadKeyArtistRef, "artist_ref"},
-		{PayloadKeyReleases, "releases"},
-		{PayloadKeySingleProvider, "single_provider"},
-		{PayloadKeySingleProviderNoId, "single_provider_no_id"},
-		{PayloadKeyProviderCounts, "provider_counts"},
+		{domain.PayloadKeyZeroResult, "zero_result"},
+		{domain.PayloadKeyTailNoiseTop5, "tail_noise_top5"},
+		{domain.PayloadKeyResultSignature, "result_signature"},
+		{domain.PayloadKeySessionId, "session_id"},
+		{domain.PayloadKeyShownSignatures, "shown_signatures"},
+		{domain.PayloadKeyDwellMs, "dwell_ms"},
+		{domain.PayloadKeyArtistRef, "artist_ref"},
+		{domain.PayloadKeyReleases, "releases"},
+		{domain.PayloadKeySingleProvider, "single_provider"},
+		{domain.PayloadKeySingleProviderNoId, "single_provider_no_id"},
+		{domain.PayloadKeyProviderCounts, "provider_counts"},
 	}
 
 	for _, tt := range tests {
@@ -73,38 +76,38 @@ func TestParseEventType(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
-		want  EventType
+		want  domain.EventType
 	}{
-		{name: "search_performed", input: "search_performed", want: EventTypeSearchPerformed},
-		{name: "results_shown", input: "results_shown", want: EventTypeResultsShown},
-		{name: "result_clicked", input: "result_clicked", want: EventTypeResultClicked},
-		{name: "play", input: "play", want: EventTypePlay},
-		{name: "skip", input: "skip", want: EventTypeSkip},
-		{name: "completed", input: "completed", want: EventTypeCompleted},
-		{name: "library_add", input: "library_add", want: EventTypeLibraryAdd},
-		{name: "wrong_album", input: "wrong_album", want: EventTypeWrongAlbum},
-		{name: "search_failed", input: "search_failed", want: EventTypeSearchFailed},
-		{name: "search_degraded", input: "search_degraded", want: EventTypeSearchDegraded},
-		{name: "playback_health", input: "playback_health", want: EventTypePlaybackHealth},
-		{name: "detail_health", input: "detail_health", want: EventTypeDetailHealth},
-		{name: "acquisition_ui", input: "acquisition_ui", want: EventTypeAcquisitionUi},
-		{name: "client_error", input: "client_error", want: EventTypeClientError},
-		{name: "user_action", input: "user_action", want: EventTypeUserAction},
-		{name: "failure_shown", input: "failure_shown", want: EventTypeFailureShown},
-		{name: "sse_reconnect", input: "sse_reconnect", want: EventTypeSseReconnect},
-		{name: "outbox_flush_failed", input: "outbox_flush_failed", want: EventTypeOutboxFlushFailed},
-		{name: "download_failed", input: "download_failed", want: EventTypeDownloadFailed},
-		{name: "discography_observed", input: "discography_observed", want: EventTypeDiscographyObserved},
-		{name: "invalid", input: "page_view", want: EventTypeUnknown},
-		{name: "empty", input: "", want: EventTypeUnknown},
-		{name: "uppercase rejected", input: "Play", want: EventTypeUnknown},
-		{name: "sentinel name rejected", input: "unknown", want: EventTypeUnknown},
+		{name: "search_performed", input: "search_performed", want: domain.EventTypeSearchPerformed},
+		{name: "results_shown", input: "results_shown", want: domain.EventTypeResultsShown},
+		{name: "result_clicked", input: "result_clicked", want: domain.EventTypeResultClicked},
+		{name: "play", input: "play", want: domain.EventTypePlay},
+		{name: "skip", input: "skip", want: domain.EventTypeSkip},
+		{name: "completed", input: "completed", want: domain.EventTypeCompleted},
+		{name: "library_add", input: "library_add", want: domain.EventTypeLibraryAdd},
+		{name: "wrong_album", input: "wrong_album", want: domain.EventTypeWrongAlbum},
+		{name: "search_failed", input: "search_failed", want: domain.EventTypeSearchFailed},
+		{name: "search_degraded", input: "search_degraded", want: domain.EventTypeSearchDegraded},
+		{name: "playback_health", input: "playback_health", want: domain.EventTypePlaybackHealth},
+		{name: "detail_health", input: "detail_health", want: domain.EventTypeDetailHealth},
+		{name: "acquisition_ui", input: "acquisition_ui", want: domain.EventTypeAcquisitionUi},
+		{name: "client_error", input: "client_error", want: domain.EventTypeClientError},
+		{name: "user_action", input: "user_action", want: domain.EventTypeUserAction},
+		{name: "failure_shown", input: "failure_shown", want: domain.EventTypeFailureShown},
+		{name: "sse_reconnect", input: "sse_reconnect", want: domain.EventTypeSseReconnect},
+		{name: "outbox_flush_failed", input: "outbox_flush_failed", want: domain.EventTypeOutboxFlushFailed},
+		{name: "download_failed", input: "download_failed", want: domain.EventTypeDownloadFailed},
+		{name: "discography_observed", input: "discography_observed", want: domain.EventTypeDiscographyObserved},
+		{name: "invalid", input: "page_view", want: domain.EventTypeUnknown},
+		{name: "empty", input: "", want: domain.EventTypeUnknown},
+		{name: "uppercase rejected", input: "Play", want: domain.EventTypeUnknown},
+		{name: "sentinel name rejected", input: "unknown", want: domain.EventTypeUnknown},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := ParseEventType(tt.input)
+			got := domain.ParseEventType(tt.input)
 			if got != tt.want {
 				t.Errorf("ParseEventType(%q) = %v, want %v", tt.input, got, tt.want)
 			}
@@ -113,19 +116,19 @@ func TestParseEventType(t *testing.T) {
 }
 
 func TestParseEventType_RoundTrip(t *testing.T) {
-	types := []EventType{
-		EventTypeSearchPerformed, EventTypeResultsShown, EventTypeResultClicked,
-		EventTypePlay, EventTypeSkip, EventTypeCompleted,
-		EventTypeLibraryAdd, EventTypeWrongAlbum, EventTypeSearchFailed,
-		EventTypeSearchDegraded, EventTypePlaybackHealth, EventTypeDetailHealth,
-		EventTypeAcquisitionUi, EventTypeClientError,
-		EventTypeUserAction, EventTypeFailureShown,
-		EventTypeSseReconnect, EventTypeOutboxFlushFailed, EventTypeDownloadFailed,
-		EventTypeDiscographyObserved, EventTypeScreenView, EventTypePlayStart,
+	types := []domain.EventType{
+		domain.EventTypeSearchPerformed, domain.EventTypeResultsShown, domain.EventTypeResultClicked,
+		domain.EventTypePlay, domain.EventTypeSkip, domain.EventTypeCompleted,
+		domain.EventTypeLibraryAdd, domain.EventTypeWrongAlbum, domain.EventTypeSearchFailed,
+		domain.EventTypeSearchDegraded, domain.EventTypePlaybackHealth, domain.EventTypeDetailHealth,
+		domain.EventTypeAcquisitionUi, domain.EventTypeClientError,
+		domain.EventTypeUserAction, domain.EventTypeFailureShown,
+		domain.EventTypeSseReconnect, domain.EventTypeOutboxFlushFailed, domain.EventTypeDownloadFailed,
+		domain.EventTypeDiscographyObserved, domain.EventTypeScreenView, domain.EventTypePlayStart,
 	}
 	for _, et := range types {
 		t.Run(et.String(), func(t *testing.T) {
-			parsed := ParseEventType(et.String())
+			parsed := domain.ParseEventType(et.String())
 			if parsed != et {
 				t.Errorf("round-trip: got %v, want %v", parsed, et)
 			}
@@ -135,34 +138,34 @@ func TestParseEventType_RoundTrip(t *testing.T) {
 
 func TestEventType_ClientSubmittable(t *testing.T) {
 	tests := []struct {
-		et   EventType
+		et   domain.EventType
 		want bool
 	}{
-		{EventTypeUnknown, false},
-		{EventTypeSearchPerformed, false},
-		{EventTypeResultsShown, true},
-		{EventTypeResultClicked, true},
-		{EventTypePlay, true},
-		{EventTypeSkip, true},
-		{EventTypeCompleted, true},
-		{EventTypeLibraryAdd, true},
-		{EventTypeWrongAlbum, true},
-		{EventTypeSearchFailed, true},
-		{EventTypeSearchDegraded, true},
-		{EventTypePlaybackHealth, true},
-		{EventTypeDetailHealth, true},
-		{EventTypeAcquisitionUi, true},
-		{EventTypeClientError, true},
-		{EventTypeUserAction, true},
-		{EventTypeFailureShown, true},
-		{EventTypeSseReconnect, true},
-		{EventTypeOutboxFlushFailed, true},
-		{EventTypeDownloadFailed, true},
-		{EventTypeDiscographyObserved, false},
-		{EventTypeAuthFailed, false},
-		{EventTypeScreenView, true},
-		{EventTypePlayStart, true},
-		{EventType(999), false},
+		{domain.EventTypeUnknown, false},
+		{domain.EventTypeSearchPerformed, false},
+		{domain.EventTypeResultsShown, true},
+		{domain.EventTypeResultClicked, true},
+		{domain.EventTypePlay, true},
+		{domain.EventTypeSkip, true},
+		{domain.EventTypeCompleted, true},
+		{domain.EventTypeLibraryAdd, true},
+		{domain.EventTypeWrongAlbum, true},
+		{domain.EventTypeSearchFailed, true},
+		{domain.EventTypeSearchDegraded, true},
+		{domain.EventTypePlaybackHealth, true},
+		{domain.EventTypeDetailHealth, true},
+		{domain.EventTypeAcquisitionUi, true},
+		{domain.EventTypeClientError, true},
+		{domain.EventTypeUserAction, true},
+		{domain.EventTypeFailureShown, true},
+		{domain.EventTypeSseReconnect, true},
+		{domain.EventTypeOutboxFlushFailed, true},
+		{domain.EventTypeDownloadFailed, true},
+		{domain.EventTypeDiscographyObserved, false},
+		{domain.EventTypeAuthFailed, false},
+		{domain.EventTypeScreenView, true},
+		{domain.EventTypePlayStart, true},
+		{domain.EventType(999), false},
 	}
 
 	for _, tt := range tests {

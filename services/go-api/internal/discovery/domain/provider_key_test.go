@@ -1,58 +1,83 @@
-package domain
+package domain_test
 
-import "testing"
+import (
+	"altune/go-api/internal/discovery/domain"
+	"testing"
+)
+
+var persistedProviderKeys = []struct {
+	key  domain.ProviderKey
+	want string
+}{
+	{domain.ProviderKeyDeezer, "deezer"},
+	{domain.ProviderKeyMusicBrainz, "musicbrainz"},
+	{domain.ProviderKeySoundCloud, "soundcloud"},
+	{domain.ProviderKeyITunes, "itunes"},
+	{domain.ProviderKeyTheAudioDB, "theaudiodb"},
+	{domain.ProviderKeyDiscogs, "discogs"},
+	{domain.ProviderKeyYouTube, "youtube"},
+	{domain.ProviderKeyAppleMusic, "applemusic"},
+	{domain.ProviderKeySpotify, "spotify"},
+	{domain.ProviderKeyWikidata, "wikidata"},
+	{domain.ProviderKeyCoverArtArchive, "coverartarchive"},
+	{domain.ProviderKeyFanart, "fanart"},
+	{domain.ProviderKeyGenius, "genius"},
+	{domain.ProviderKeyYTMusic, "ytmusic"},
+}
 
 func TestProviderKey_PersistedStrings(t *testing.T) {
-	tests := []struct {
-		key  ProviderKey
-		want string
-	}{
-		{ProviderKeyDeezer, "deezer"},
-		{ProviderKeyMusicBrainz, "musicbrainz"},
-		{ProviderKeySoundCloud, "soundcloud"},
-		{ProviderKeyITunes, "itunes"},
-		{ProviderKeyTheAudioDB, "theaudiodb"},
-		{ProviderKeyDiscogs, "discogs"},
-		{ProviderKeyYouTube, "youtube"},
-		{ProviderKeyAppleMusic, "applemusic"},
-		{ProviderKeySpotify, "spotify"},
-		{ProviderKeyWikidata, "wikidata"},
-		{ProviderKeyCoverArtArchive, "coverartarchive"},
-		{ProviderKeyFanart, "fanart"},
-		{ProviderKeyGenius, "genius"},
-		{ProviderKeyYTMusic, "ytmusic"},
-	}
-	if len(tests) != len(knownProviderKeys) {
-		t.Fatalf("pinned %d keys, vocabulary has %d", len(tests), len(knownProviderKeys))
-	}
-	for _, tt := range tests {
+	for _, tt := range persistedProviderKeys {
 		if got := tt.key.String(); got != tt.want {
 			t.Errorf("String() = %q, want %q", got, tt.want)
 		}
-		got, err := ParseProviderKey(tt.want)
+		got, err := domain.ParseProviderKey(tt.want)
 		if err != nil || got != tt.key {
 			t.Errorf("ParseProviderKey(%q) = (%q, %v), want %q", tt.want, got, err, tt.key)
 		}
 	}
 }
 
+const providerNameSweepLimit = 256
+
+func TestProviderKey_EveryLiveProviderIsPinned(t *testing.T) {
+	pinned := map[domain.ProviderKey]bool{}
+	for _, tt := range persistedProviderKeys {
+		pinned[tt.key] = true
+	}
+	live := map[domain.ProviderName]bool{}
+	for _, p := range liveProviders {
+		live[p] = true
+	}
+	for p := range domain.ProviderName(providerNameSweepLimit) {
+		if p.String() == "unknown" {
+			continue
+		}
+		if !pinned[p.Key()] {
+			t.Errorf("provider %d has key %q, which no test pins; add it to the persisted-string table", int(p), p.Key())
+		}
+		if !live[p] {
+			t.Errorf("provider %d (%v) is missing from liveProviders", int(p), p)
+		}
+	}
+}
+
 func TestParseProviderKey_RejectsUnknown(t *testing.T) {
 	for _, in := range []string{"", "napster", "Deezer", "caa"} {
-		if got, err := ParseProviderKey(in); err == nil {
+		if got, err := domain.ParseProviderKey(in); err == nil {
 			t.Errorf("ParseProviderKey(%q) = %q, want error", in, got)
 		}
 	}
 }
 
-var liveProviders = []ProviderName{
-	ProviderDeezer, ProviderMusicBrainz, ProviderSoundCloud, ProviderITunes, ProviderTheAudioDB,
-	ProviderDiscogs, ProviderYouTube, ProviderAppleMusic, ProviderSpotify,
+var liveProviders = []domain.ProviderName{
+	domain.ProviderDeezer, domain.ProviderMusicBrainz, domain.ProviderSoundCloud, domain.ProviderITunes, domain.ProviderTheAudioDB,
+	domain.ProviderDiscogs, domain.ProviderYouTube, domain.ProviderAppleMusic, domain.ProviderSpotify,
 }
 
 func TestProviderName_RetiredSlotsKeepTheirNumbersAndDecodeAsUnknown(t *testing.T) {
-	wantNumbers := map[ProviderName]int{
-		ProviderUnknown: 0, ProviderDeezer: 1, ProviderMusicBrainz: 2, ProviderSoundCloud: 3, ProviderITunes: 5,
-		ProviderTheAudioDB: 6, ProviderDiscogs: 7, ProviderYouTube: 8, ProviderAppleMusic: 10, ProviderSpotify: 11,
+	wantNumbers := map[domain.ProviderName]int{
+		domain.ProviderUnknown: 0, domain.ProviderDeezer: 1, domain.ProviderMusicBrainz: 2, domain.ProviderSoundCloud: 3, domain.ProviderITunes: 5,
+		domain.ProviderTheAudioDB: 6, domain.ProviderDiscogs: 7, domain.ProviderYouTube: 8, domain.ProviderAppleMusic: 10, domain.ProviderSpotify: 11,
 	}
 	if len(wantNumbers) != len(liveProviders)+1 {
 		t.Fatalf("pinned %d providers, want every live provider and unknown (%d)", len(wantNumbers), len(liveProviders)+1)
@@ -62,7 +87,7 @@ func TestProviderName_RetiredSlotsKeepTheirNumbersAndDecodeAsUnknown(t *testing.
 			t.Errorf("%v = %d, want %d so cached results keep their provider", p, int(p), n)
 		}
 	}
-	for _, retired := range []ProviderName{4, 9} {
+	for _, retired := range []domain.ProviderName{4, 9} {
 		if retired.String() != "unknown" {
 			t.Errorf("retired provider %d = %q, want unknown", int(retired), retired.String())
 		}
@@ -75,7 +100,7 @@ func TestProviderName_KeyRoundTrips(t *testing.T) {
 		if k.String() != p.String() {
 			t.Errorf("%v.Key() = %q, want %q", p, k, p.String())
 		}
-		if _, err := ParseProviderKey(k.String()); err != nil {
+		if _, err := domain.ParseProviderKey(k.String()); err != nil {
 			t.Errorf("%v.Key() = %q is not a known key", p, k)
 		}
 		got, ok := k.ProviderName()
@@ -83,13 +108,13 @@ func TestProviderName_KeyRoundTrips(t *testing.T) {
 			t.Errorf("%q.ProviderName() = (%v, %v), want %v", k, got, ok, p)
 		}
 	}
-	if ProviderUnknown.Key() != "unknown" {
-		t.Errorf("ProviderUnknown.Key() = %q, want unknown", ProviderUnknown.Key())
+	if domain.ProviderUnknown.Key() != "unknown" {
+		t.Errorf("ProviderUnknown.Key() = %q, want unknown", domain.ProviderUnknown.Key())
 	}
 }
 
 func TestProviderKey_ProviderName_NonProviderKeys(t *testing.T) {
-	for _, k := range []ProviderKey{ProviderKeyWikidata, ProviderKeyCoverArtArchive, ProviderKeyFanart, ProviderKeyGenius, ProviderKeyYTMusic, ""} {
+	for _, k := range []domain.ProviderKey{domain.ProviderKeyWikidata, domain.ProviderKeyCoverArtArchive, domain.ProviderKeyFanart, domain.ProviderKeyGenius, domain.ProviderKeyYTMusic, ""} {
 		if p, ok := k.ProviderName(); ok {
 			t.Errorf("%q.ProviderName() = %v, want not ok", k, p)
 		}
@@ -98,12 +123,12 @@ func TestProviderKey_ProviderName_NonProviderKeys(t *testing.T) {
 
 func TestProviderName_EveryNameRoundTripsToKnownKey(t *testing.T) {
 	for _, p := range liveProviders {
-		got, err := ParseProviderName(p.String())
+		got, err := domain.ParseProviderName(p.String())
 		if err != nil || got != p {
 			t.Errorf("ParseProviderName(%q) = (%v, %v), want %v", p.String(), got, err, p)
 		}
-		if _, ok := knownProviderKeys[p.Key()]; !ok {
-			t.Errorf("%v.Key() = %q not in knownProviderKeys", p, p.Key())
+		if _, err := domain.ParseProviderKey(p.Key().String()); err != nil {
+			t.Errorf("%v.Key() = %q is not a known provider key: %v", p, p.Key(), err)
 		}
 	}
 }

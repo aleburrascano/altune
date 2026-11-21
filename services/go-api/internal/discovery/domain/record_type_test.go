@@ -1,25 +1,28 @@
-package domain
+package domain_test
 
-import "testing"
+import (
+	"altune/go-api/internal/discovery/domain"
+	"testing"
+)
 
 func TestParseRecordType_keepsOnlyTheKnownTypesAndIsCaseSensitive(t *testing.T) {
 	tests := []struct {
 		name string
 		raw  string
-		want RecordType
+		want domain.RecordType
 	}{
-		{"album", "album", RecordTypeAlbum},
-		{"single", "single", RecordTypeSingle},
-		{"ep", "ep", RecordTypeEP},
-		{"compilation", "compilation", RecordTypeCompilation},
-		{"empty", "", RecordTypeUnknown},
-		{"unknown type", "compile", RecordTypeUnknown},
-		{"capitalised is not folded", "Album", RecordTypeUnknown},
-		{"padded is not trimmed", " ep", RecordTypeUnknown},
+		{"album", "album", domain.RecordTypeAlbum},
+		{"single", "single", domain.RecordTypeSingle},
+		{"ep", "ep", domain.RecordTypeEP},
+		{"compilation", "compilation", domain.RecordTypeCompilation},
+		{"empty", "", domain.RecordTypeUnknown},
+		{"unknown type", "compile", domain.RecordTypeUnknown},
+		{"capitalised is not folded", "Album", domain.RecordTypeUnknown},
+		{"padded is not trimmed", " ep", domain.RecordTypeUnknown},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := ParseRecordType(tt.raw); got != tt.want {
+			if got := domain.ParseRecordType(tt.raw); got != tt.want {
 				t.Errorf("ParseRecordType(%q) = %q, want %q", tt.raw, got, tt.want)
 			}
 		})
@@ -29,15 +32,15 @@ func TestParseRecordType_keepsOnlyTheKnownTypesAndIsCaseSensitive(t *testing.T) 
 func TestRecordType_RankPutsSpecificTypesAboveAlbumAndUnknownLast(t *testing.T) {
 	tests := []struct {
 		name string
-		rt   RecordType
+		rt   domain.RecordType
 		want int
 	}{
-		{"single", RecordTypeSingle, 2},
-		{"ep", RecordTypeEP, 2},
-		{"compilation", RecordTypeCompilation, 2},
-		{"album", RecordTypeAlbum, 1},
-		{"unknown", RecordTypeUnknown, 0},
-		{"unrecognised provider type", RecordType("compile"), 0},
+		{"single", domain.RecordTypeSingle, 2},
+		{"ep", domain.RecordTypeEP, 2},
+		{"compilation", domain.RecordTypeCompilation, 2},
+		{"album", domain.RecordTypeAlbum, 1},
+		{"unknown", domain.RecordTypeUnknown, 0},
+		{"unrecognised provider type", domain.RecordType("compile"), 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
