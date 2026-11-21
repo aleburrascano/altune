@@ -1,0 +1,1 @@
+`execcmd` owns how child processes start, time out and stop as a group.

@@ -1,9 +1,0 @@
-{
-  "removed": [
-    "T1 internal/discovery/discoverytest/enrichers_test.go imports discoverytest/enrichers.go, behind discovery's door",
-    "T1 internal/discovery/discoverytest/enrichers_test.go imports domain/enrichment.go, behind discovery's door",
-    "T1 internal/discovery/discoverytest/enrichers_test.go imports domain/enums.go, behind discovery's door"
-  ],
-  "added": [],
-  "clones": 0
-}

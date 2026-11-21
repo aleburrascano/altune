@@ -1,8 +1,0 @@
-{
-  "removed": [
-    "C4 internal/shared/releasepick/releasepick.go exports Earliest, which nothing outside releasepick imports and no test of its own imports through the door",
-    "T1 internal/shared/releasepick/releasepick_test.go is in package releasepick, so it sees inside the module: use package releasepick_test and import the door"
-  ],
-  "added": [],
-  "clones": 0
-}

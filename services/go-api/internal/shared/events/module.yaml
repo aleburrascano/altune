@@ -1,3 +1,0 @@
-role: shared
-owns: "the event bus and the event types it carries"
-depends_on: [kernel]

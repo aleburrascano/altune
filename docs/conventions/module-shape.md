@@ -1,10 +1,9 @@
 # Module shape
 
-module-spec owns the module shape of every code root. Each module is a folder with a `module.yaml`, and its door is `index.ts` in TypeScript or the `.go` files at its root in Go.
+`services/go-api` has left module-spec: its rules are in `services/go-api/internal/README.md`, and `golangci-lint` checks them. module-spec still owns the module shape of the other code roots. There each module is a folder with a `module.yaml`, and its door is `index.ts` in TypeScript or the `.go` files at its root in Go.
 
 | Root | Modules | Baseline |
 |---|---|---|
-| `services/go-api` | `internal/<feature>`, `internal/app`, `internal/shared/<module>` | `services/go-api/module-spec.baseline.json` + `.d/` |
 | `services/overseer` | `internal/<module>`, `internal/buckets/<bucket>` | `services/overseer/module-spec.baseline.json` + `.d/` |
 | `client` | `src/features/<feature>`, `src/shared/<module>`, `src/mobile` (the app) | `client/module-spec.baseline.json` + `.d/` |
 

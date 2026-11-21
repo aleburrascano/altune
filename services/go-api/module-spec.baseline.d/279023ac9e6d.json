@@ -1,8 +1,0 @@
-{
-  "removed": [
-    "C4 internal/shared/redis/redis.go exports PoolStats, which nothing outside redis imports and no test of its own imports through the door",
-    "T1 internal/shared/redis/redis_test.go is in package redis, so it sees inside the module: use package redis_test and import the door"
-  ],
-  "added": [],
-  "clones": 0
-}

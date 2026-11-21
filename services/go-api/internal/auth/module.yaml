@@ -1,3 +1,0 @@
-role: feature
-owns: "which bearer tokens are valid and which user each one names"
-depends_on: [httputil, kernel, requestuser]

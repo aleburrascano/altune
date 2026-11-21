@@ -1,0 +1,1 @@
+`filehost` owns which file-host links are valid and where they download from.

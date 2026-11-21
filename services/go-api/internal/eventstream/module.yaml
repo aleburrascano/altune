@@ -1,3 +1,0 @@
-role: feature
-owns: "how bus events reach each user's live event stream, with replay"
-depends_on: [events, httputil, kernel, logging, requestuser]

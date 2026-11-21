@@ -1,3 +1,0 @@
-role: shared
-owns: "how integration tests reach a real database"
-depends_on: [domain]

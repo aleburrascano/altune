@@ -148,6 +148,7 @@ if touches '^services/go-api/'; then
     check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
     mapfile -t pkgs < <(go_pkgs $m)
     [ ${#pkgs[@]} -gt 0 ] && test_check "go-api tests (changed packages)" $m "${heavy[@]}" go test -shuffle=on -count=1 "${pkgs[@]}"
+    [ ${#pkgs[@]} -gt 0 ] && need jq "go-api mutation" && test_check "go-api mutation (changed lines)" . "${heavy[@]}" bash scripts/ci/go-mutate.sh "$base" $m
     if [ $whole_module = 1 ] || grep -qE '(^| )[^ ]*/cmd/acquisitioneval( |$)' <<<"${affected[*]}"; then
       test_check "go-api acquisition selection gate" $m "${heavy[@]}" go run ./cmd/acquisitioneval -baseline ./cmd/acquisitioneval/baselines.json
     fi
@@ -197,7 +198,7 @@ if touches '^services/overseer/'; then
   if need go "overseer" && need golangci-lint "overseer lint"; then
     check "overseer build" $m "${heavy[@]}" go build ./...
     check "overseer vet" $m "${heavy[@]}" go vet ./...
-    check "overseer strict linters" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config "$root/services/go-api/.golangci.strict.yml" --disable=funlen,revive,sloglint,forbidigo --allow-serial-runners
+    check "overseer strict linters" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config "$root/services/go-api/.golangci.strict.yml" --disable=funlen,revive,sloglint,forbidigo,depguard,testpackage --allow-serial-runners
     check "overseer no comments (whole tree)" services/go-api go run ./scripts/lintcomments --all ../overseer
     test_check "overseer tests (race)" $m "${heavy[@]}" env CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...
     touches '^services/overseer/go\.(mod|sum)$' && need govulncheck "overseer govulncheck" && check "overseer govulncheck" $m "${heavy[@]}" govulncheck ./...

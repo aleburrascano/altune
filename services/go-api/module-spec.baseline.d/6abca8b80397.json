@@ -1,9 +1,0 @@
-{
-  "removed": [
-    "T1 internal/acquisition/internal/adapters/deezerpreview/alignment_test.go is in package deezerpreview, so it sees inside the module: use package deezerpreview_test and import the door",
-    "T1 internal/acquisition/internal/adapters/deezerpreview/matcher_test.go imports internal/core/ports/preview.go, behind acquisition's door",
-    "T1 internal/acquisition/internal/adapters/deezerpreview/matcher_test.go is in package deezerpreview, so it sees inside the module: use package deezerpreview_test and import the door"
-  ],
-  "added": [],
-  "clones": 0
-}

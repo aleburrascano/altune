@@ -1,3 +1,0 @@
-role: shared
-owns: "how outbound HTTP exchanges are recorded and replayed"
-depends_on: [redact]

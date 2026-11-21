@@ -1,2 +1,0 @@
-role: shared
-owns: "the identifiers and failure codes every context shares"

@@ -1,8 +1,0 @@
-{
-  "removed": [
-    "C12 internal/playback/domain/stale_write_error.go domain/stale_write_error.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module",
-    "C12 internal/playback/domain/unavailable_error.go domain/unavailable_error.go is in no part: it is not the door, and sits outside core/, shell/, view/, adapters/ and ports/ in a feature module"
-  ],
-  "added": [],
-  "clones": 0
-}

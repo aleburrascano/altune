@@ -1,7 +1,0 @@
-{
-  "removed": [
-    "B3 internal/shared/config/validate.go imports os"
-  ],
-  "added": [],
-  "clones": 0
-}

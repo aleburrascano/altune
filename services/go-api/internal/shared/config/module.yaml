@@ -1,3 +1,0 @@
-role: shared
-owns: "which settings the backend runs with and when they are valid"
-depends_on: [redis]
