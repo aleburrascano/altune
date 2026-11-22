@@ -1,7 +1,0 @@
-{
-  "removed": [
-    "T2 src/shared/device/__tests__/analyticsPreference.test.ts patches with jest.spyOn"
-  ],
-  "added": [],
-  "clones": 0
-}
