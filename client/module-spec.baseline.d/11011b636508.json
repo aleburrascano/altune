@@ -1,8 +1,0 @@
-{
-  "removed": [
-    "T2 src/shared/lifecycle/__tests__/appState.test.ts patches with jest.mock",
-    "T2 src/shared/lifecycle/__tests__/useAppState.test.ts patches with jest.spyOn"
-  ],
-  "added": [],
-  "clones": 0
-}

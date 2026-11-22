@@ -1,7 +1,0 @@
-{
-  "removed": [
-    "T2 src/shared/session/__tests__/signOutCleanup.test.ts patches with jest.spyOn"
-  ],
-  "added": [],
-  "clones": 0
-}

@@ -1,9 +1,0 @@
-{
-  "removed": [
-    "T2 src/features/detail/__tests__/ArtistUnreleased.test.tsx patches with jest.spyOn",
-    "T2 src/features/detail/__tests__/detailHealth.test.tsx patches with jest.mock",
-    "T2 src/features/detail/__tests__/detailHealth.test.tsx patches with jest.spyOn"
-  ],
-  "added": [],
-  "clones": 0
-}
