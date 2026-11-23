@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"sync"
 	"testing"
@@ -537,4 +538,70 @@ func TestHandleRetryAcquisition_NoAuth(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	retryAssertStatus(t, rec, http.StatusUnauthorized)
+}
+
+type ownedRoute struct {
+	name       string
+	path       string
+	actionable func(shared.UserId) acquisitiontest.LedgerTrack
+	mount      func(ledger *acquisitiontest.Ledger, cooldowns *memCooldownStore, as shared.UserId) (chi.Router, func() int)
+}
+
+func ownedRoutes() []ownedRoute {
+	return []ownedRoute{
+		{
+			name:       "retry",
+			path:       "/retry",
+			actionable: failedTrack,
+			mount: func(ledger *acquisitiontest.Ledger, cooldowns *memCooldownStore, as shared.UserId) (chi.Router, func() int) {
+				scheduler := &retryFakeScheduler{}
+				r := chi.NewRouter()
+				r.Use(signedInAs(as))
+				r.Post("/tracks/{trackId}/retry", acquisition.NewRetryHandler(ledger, scheduler, acquisition.NewRetryAdmission(cooldowns)).HandleRetryAcquisition)
+				return r, func() int { return len(scheduler.scheduled) }
+			},
+		},
+		{
+			name:       "reacquire",
+			path:       "/reacquire",
+			actionable: readyTrack,
+			mount: func(ledger *acquisitiontest.Ledger, cooldowns *memCooldownStore, as shared.UserId) (chi.Router, func() int) {
+				scheduler := &reacquireFakeScheduler{}
+				r := chi.NewRouter()
+				r.Use(signedInAs(as))
+				r.Post("/tracks/{trackId}/reacquire", acquisition.NewReacquireHandler(ledger, scheduler, acquisition.NewReacquireAdmission(cooldowns)).HandleReacquire)
+				return r, func() int { return len(scheduler.replaced) }
+			},
+		},
+	}
+}
+
+func TestHandlers_AnotherUsersTrackIsAnsweredExactlyLikeAMissingOne(t *testing.T) {
+	for _, route := range ownedRoutes() {
+		t.Run(route.name, func(t *testing.T) {
+			owner, intruder := shared.NewUserId(uuid.New()), shared.NewUserId(uuid.New())
+			track := route.actionable(owner)
+			ledger := acquisitiontest.NewLedger(track)
+			cooldowns := newMemCooldownStore()
+			asIntruder, intruderScheduled := route.mount(ledger, cooldowns, intruder)
+
+			missing := retryServe(t, asIntruder, http.MethodPost, "/tracks/"+uuid.New().String()+route.path)
+			theirs := retryServe(t, asIntruder, http.MethodPost, "/tracks/"+track.ID.UUID().String()+route.path)
+
+			retryAssertStatus(t, theirs, http.StatusNotFound)
+			if theirs.Body.String() != missing.Body.String() || !reflect.DeepEqual(theirs.Header(), missing.Header()) {
+				t.Errorf("another user's track answered %v %q, a missing track %v %q: the two must be indistinguishable",
+					theirs.Header(), theirs.Body.String(), missing.Header(), missing.Body.String())
+			}
+			if n := intruderScheduled(); n != 0 {
+				t.Errorf("another user's request scheduled %d jobs on the owner's track", n)
+			}
+
+			asOwner, ownerScheduled := route.mount(ledger, cooldowns, owner)
+			retryAssertStatus(t, retryServe(t, asOwner, http.MethodPost, "/tracks/"+track.ID.UUID().String()+route.path), http.StatusAccepted)
+			if n := ownerScheduled(); n != 1 {
+				t.Errorf("the owner's request scheduled %d jobs, want 1: another user's request must not use up the owner's cooldown", n)
+			}
+		})
+	}
 }
