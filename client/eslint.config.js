@@ -199,6 +199,7 @@ const localPlugin = {
     'top-level-function-declarations': require('./eslint/rules/top-level-function-declarations'),
     'no-raw-style-numbers': require('./eslint/rules/no-raw-style-numbers'),
     'no-test-code-in-app': require('./eslint/rules/no-test-code-in-app'),
+    'test-imports-through-doors': require('./eslint/rules/test-imports-through-doors'),
   },
 };
 
@@ -258,6 +259,161 @@ const noTestCodeInApp = {
   rules: { 'local/no-test-code-in-app': 'error' },
 };
 
+const READ_THE_RULES = 'Read client/src/README.md.';
+
+const PURE_PACKAGES = ['@tanstack/react-query', 'zustand'];
+
+const UI_PACKAGES = [
+  'react',
+  'react-dom',
+  'react-native',
+  'react-native-web',
+  'react-native-gesture-handler',
+  'react-native-reanimated',
+  'react-native-safe-area-context',
+  'react-native-screens',
+  'react-native-svg',
+  'react-native-worklets',
+  'expo-blur',
+  'expo-image',
+  'expo-linear-gradient',
+  'expo-status-bar',
+  'lucide-react-native',
+  '@expo-google-fonts/',
+];
+
+const PROJECT_IMPORTS = ['\\.', '@/', '@features/', '@shared/'];
+
+const IMAGE_IMPORTS = ['@assets/'];
+
+const importPattern = (name) => (name.endsWith('/') ? name : `${name}(?:/|$)`);
+
+const importsAnyOf = (names) => `^(?:${names.map(importPattern).join('|')})`;
+
+const importsNoneOf = (names) => `^(?!${names.map(importPattern).join('|')})`;
+
+const partFiles = (part) => [`src/{features,shared}/*/${part}/**/*.{ts,tsx}`];
+
+const uiFrameworkOnlyInView = {
+  regex: importsAnyOf(UI_PACKAGES),
+  message: `Only view/ imports the UI framework. ${READ_THE_RULES}`,
+};
+
+const plainPartsImportOnlyPurePackages = {
+  name: 'plainPartsImportOnlyPurePackages',
+  files: ['core', 'shell', 'ports'].flatMap(partFiles),
+  ignores: TEST_FILES,
+  rules: {
+    'no-restricted-imports': [
+      'error',
+      {
+        patterns: [
+          uiFrameworkOnlyInView,
+          {
+            regex: importsNoneOf([...PROJECT_IMPORTS, ...UI_PACKAGES, ...PURE_PACKAGES]),
+            message: `core/, shell/ and ports/ import no package but ${PURE_PACKAGES.join(' and ')}: I/O belongs in adapters/. ${READ_THE_RULES}`,
+          },
+        ],
+      },
+    ],
+  },
+};
+
+const viewImportsOnlyTheUiFramework = {
+  name: 'viewImportsOnlyTheUiFramework',
+  files: partFiles('view'),
+  ignores: TEST_FILES,
+  rules: {
+    'no-restricted-imports': [
+      'error',
+      {
+        patterns: [
+          {
+            regex: importsNoneOf([
+              ...PROJECT_IMPORTS,
+              ...IMAGE_IMPORTS,
+              ...UI_PACKAGES,
+              ...PURE_PACKAGES,
+            ]),
+            message: `view/ imports no package but the UI framework, ${PURE_PACKAGES.join(' and ')}: a package that does I/O belongs in adapters/. ${READ_THE_RULES}`,
+          },
+        ],
+      },
+    ],
+  },
+};
+
+const adaptersDrawNothing = {
+  name: 'adaptersDrawNothing',
+  files: partFiles('adapters'),
+  ignores: TEST_FILES,
+  rules: { 'no-restricted-imports': ['error', { patterns: [uiFrameworkOnlyInView] }] },
+};
+
+const JSX_ONLY_IN_VIEW = `Only view/ draws JSX. ${READ_THE_RULES}`;
+
+const jsxOnlyInView = {
+  name: 'jsxOnlyInView',
+  files: ['core', 'shell', 'ports', 'adapters'].flatMap(partFiles),
+  ignores: TEST_FILES,
+  rules: {
+    'no-restricted-syntax': [
+      'error',
+      ...abortApisTheHermesPolyfillLacks,
+      { selector: 'JSXElement', message: JSX_ONLY_IN_VIEW },
+      { selector: 'JSXFragment', message: JSX_ONLY_IN_VIEW },
+    ],
+  },
+};
+
+const testsImportThroughDoors = {
+  name: 'testsImportThroughDoors',
+  files: ['src/**/__tests__/**/*.{ts,tsx}'],
+  plugins: { local: localPlugin },
+  rules: { 'local/test-imports-through-doors': 'error' },
+};
+
+const PATCHES = [
+  ['jest', 'mock'],
+  ['jest', 'doMock'],
+  ['jest', 'spyOn'],
+  ['jest', 'unstable_mockModule'],
+  ['vi', 'mock'],
+  ['vi', 'doMock'],
+  ['vi', 'spyOn'],
+];
+
+const testsPassFakesInNeverPatch = {
+  name: 'testsPassFakesInNeverPatch',
+  files: ['**/__tests__/**/*.{ts,tsx,js}', 'jest/**/*.{ts,tsx,js}'],
+  rules: {
+    'no-restricted-properties': [
+      'error',
+      ...PATCHES.map(([object, property]) => ({
+        object,
+        property,
+        message: `Tests pass fakes in through the module's create*(deps) door and never patch what it imports. ${READ_THE_RULES}`,
+      })),
+    ],
+  },
+};
+
+const onlyTheCompositionRootReadsTheEnvironment = {
+  name: 'onlyTheCompositionRootReadsTheEnvironment',
+  files: ['src/**/*.{ts,tsx}'],
+  ignores: [...TEST_FILES, 'src/mobile/**'],
+  rules: {
+    'no-restricted-properties': [
+      'error',
+      {
+        object: 'process',
+        property: 'env',
+        message: `Only src/mobile, the composition root, reads process.env and passes the values down. ${READ_THE_RULES}`,
+      },
+    ],
+  },
+};
+
 const SRC_ONLY = 'src/**/*';
 
 const onlyWithinSrc = (block) => {
@@ -295,6 +451,13 @@ module.exports = [
   topLevelFunctionDeclarations,
   noRawStyleNumbers,
   noTestCodeInApp,
+  plainPartsImportOnlyPurePackages,
+  viewImportsOnlyTheUiFramework,
+  adaptersDrawNothing,
+  jsxOnlyInView,
+  testsImportThroughDoors,
+  testsPassFakesInNeverPatch,
+  onlyTheCompositionRootReadsTheEnvironment,
   {
     ignores: ['node_modules/**', '.expo/**', 'dist/**', 'web-build/**', 'coverage/**'],
   },

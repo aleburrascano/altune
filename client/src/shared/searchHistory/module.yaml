@@ -1,3 +1,0 @@
-role: shared
-owns: when the search history is cleared
-depends_on: [apiClient, catalog, query, session]

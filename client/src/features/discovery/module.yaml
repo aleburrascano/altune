@@ -1,3 +1,0 @@
-role: feature
-owns: how a search query becomes the results and suggestions the Discover screen shows
-depends_on: [apiClient, catalog, failure, navigation, playback, query, searchHistory, session, telemetry, ui]

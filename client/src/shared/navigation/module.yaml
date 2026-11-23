@@ -1,3 +1,0 @@
-role: shared
-owns: how a screen is reached and which tab a route belongs to
-depends_on: [catalog, session]

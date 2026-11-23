@@ -1,3 +1,0 @@
-role: shared
-owns: how a track's download progress and retry are tracked and shown
-depends_on: [apiClient, catalog, failure, log, query, session, telemetry, ui]

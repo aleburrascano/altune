@@ -1,0 +1,26 @@
+{
+  "$schema": "../node_modules/fallow/schema.json",
+  "extends": ["../.fallowrc.json"],
+  "boundaries": {
+    "zones": [
+      { "name": "featureDoors", "patterns": ["src/features/*/index.ts"] },
+      { "name": "sharedDoors", "patterns": ["src/shared/*/index.ts"] },
+      { "name": "mobileDoor", "patterns": ["src/mobile/index.ts"] },
+      { "name": "features", "patterns": ["src/features/**"], "autoDiscover": ["src/features"] },
+      { "name": "shared", "patterns": ["src/shared/**"], "autoDiscover": ["src/shared"] },
+      { "name": "mobile", "patterns": ["src/mobile/**"] },
+      { "name": "app", "patterns": ["src/app/**"] },
+      { "name": "nativeModules", "patterns": ["modules/**"] }
+    ],
+    "rules": [
+      { "from": "featureDoors", "allow": ["features"] },
+      { "from": "sharedDoors", "allow": ["shared"] },
+      { "from": "mobileDoor", "allow": ["mobile"] },
+      { "from": "features", "allow": ["sharedDoors", "nativeModules"] },
+      { "from": "shared", "allow": ["sharedDoors", "nativeModules"] },
+      { "from": "mobile", "allow": ["featureDoors", "sharedDoors", "nativeModules"] },
+      { "from": "app", "allow": ["featureDoors", "sharedDoors", "mobileDoor"] },
+      { "from": "nativeModules", "allow": [] }
+    ]
+  }
+}

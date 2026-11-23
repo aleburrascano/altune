@@ -1,3 +1,0 @@
-role: shared
-owns: how many async jobs run at once
-depends_on: [math]

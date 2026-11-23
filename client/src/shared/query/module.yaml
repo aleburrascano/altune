@@ -1,3 +1,0 @@
-role: shared
-owns: how server data is cached, keyed and retried
-depends_on: [catalog, failure, session, telemetry, timing, ui]

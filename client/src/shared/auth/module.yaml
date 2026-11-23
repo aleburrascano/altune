@@ -1,3 +1,0 @@
-role: shared
-owns: who is signed in, and how that session is stored, renewed and ended
-depends_on: [failure, log, offline, session, timing]

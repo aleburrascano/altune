@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "jest",
+  "jest": { "projectType": "custom", "configFile": "jest.mutate.config.js", "enableFindRelatedTests": true },
+  "coverageAnalysis": "perTest",
+  "disableTypeChecks": false,
+  "checkers": [],
+  "reporters": ["json"],
+  "cleanTempDir": "always",
+  "dryRunTimeoutMinutes": 15,
+  "logLevel": "warn"
+}

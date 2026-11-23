@@ -11,7 +11,7 @@
     "tsc": "tsc --noEmit",
     "lint": "eslint .",
     "test": "jest",
-    "fallow": "fallow dead-code --baseline baselines/fallow-baseline.json --fail-on-issues && node scripts/fallow-baseline-stale.mjs && fallow dupes --fail-on-issues",
+    "fallow": "fallow dead-code --baseline baselines/fallow-baseline.json --fail-on-issues && node scripts/fallow-baseline-stale.mjs",
     "react-doctor": "react-doctor --scope full --yes --no-score --blocking warning --verbose"
   },
   "prettier": {
@@ -81,6 +81,8 @@
     "@bacons/apple-targets": "^5.0.0",
     "@faker-js/faker": "9.9.0",
     "@react-native/jest-preset": "^0.86.3",
+    "@stryker-mutator/core": "10.1.1",
+    "@stryker-mutator/jest-runner": "10.1.1",
     "@testing-library/react-native": "^13.3.3",
     "@types/jest": "^29.5.14",
     "@types/react": "~19.2.4",

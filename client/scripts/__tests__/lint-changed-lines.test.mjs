@@ -1,23 +1,27 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
+import {
+  copyFileSync,
+  mkdtempSync,
+  mkdirSync,
+  readdirSync,
+  writeFileSync,
+  rmSync,
+  symlinkSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const script = join(dirname(fileURLToPath(import.meta.url)), '..', 'lint-changed-lines.mjs');
 const mobile = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const MOBILE_LINT_SETUP = [
   'eslint.config.js',
-  'eslint/rules/no-comments.js',
-  'eslint/rules/no-banned-noun.js',
-  'eslint/rules/one-alias-per-folder.js',
-  'eslint/rules/no-parent-relative-imports.js',
-  'eslint/rules/top-level-function-declarations.js',
-  'eslint/rules/no-raw-style-numbers.js',
-  'eslint/rules/no-test-code-in-app.js',
   'tsconfig.json',
+  ...readdirSync(join(mobile, 'eslint'), { recursive: true })
+    .filter((path) => path.endsWith('.js') && !path.split(sep).includes('__tests__'))
+    .map((path) => join('eslint', path)),
 ];
 
 function git(cwd, ...args) {

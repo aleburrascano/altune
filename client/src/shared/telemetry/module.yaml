@@ -1,3 +1,0 @@
-role: shared
-owns: which events and errors the app reports, and how they survive a lost connection
-depends_on: [apiClient, device, failure, files, id, lifecycle, log, session, timing]

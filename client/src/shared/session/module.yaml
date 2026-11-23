@@ -1,3 +1,0 @@
-role: shared
-owns: which sign-in session a write belongs to, and what sign-out clears
-depends_on: [auth, log, offline, telemetry]

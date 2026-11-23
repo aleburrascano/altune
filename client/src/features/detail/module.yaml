@@ -1,3 +1,0 @@
-role: feature
-owns: what the track, album and artist detail screens show and let the user do
-depends_on: [acquisition, apiClient, catalog, concurrency, events, failure, log, math, navigation, playback, playlists, query, session, telemetry, ui]

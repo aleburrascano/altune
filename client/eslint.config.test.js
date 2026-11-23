@@ -248,3 +248,157 @@ describe('mobile eslint config keeps raw style numbers out of StyleSheet.create'
     );
   });
 });
+
+describe('module rules point at client/src/README.md', () => {
+  const untyped = new ESLint({
+    cwd: __dirname,
+    overrideConfig: {
+      languageOptions: { parserOptions: { projectService: false } },
+      rules: Object.fromEntries(
+        [
+          'no-floating-promises',
+          'no-misused-promises',
+          'await-thenable',
+          'no-misused-spread',
+          'use-unknown-in-catch-callback-variable',
+          'no-unnecessary-type-assertion',
+        ].map((name) => [`@typescript-eslint/${name}`, 'off']),
+      ),
+    },
+  });
+
+  async function errors(ruleId, filePath, code) {
+    const [result] = await untyped.lintText(code, { filePath });
+    return result.messages.filter((m) => m.ruleId === ruleId && m.severity === 2);
+  }
+
+  const cases = [
+    [
+      'no-restricted-imports',
+      'src/shared/math/core/x.ts',
+      "import { useState } from 'react';\nexport const s = useState;\n",
+      1,
+    ],
+    [
+      'no-restricted-imports',
+      'src/shared/math/core/x.ts',
+      "import type { ReactNode } from 'react';\nexport type N = ReactNode;\n",
+      1,
+    ],
+    [
+      'no-restricted-imports',
+      'src/shared/math/core/x.ts',
+      "import { create } from 'zustand';\nimport { trackId } from '@shared/catalog';\nexport const c = [create, trackId];\n",
+      0,
+    ],
+    [
+      'no-restricted-imports',
+      'src/shared/math/core/x.ts',
+      "import { useQuery } from '@tanstack/react-query';\nexport const q = useQuery;\n",
+      0,
+    ],
+    [
+      'no-restricted-imports',
+      'src/features/player/shell/x.ts',
+      "import * as fs from 'expo-file-system';\nexport const f = fs;\n",
+      1,
+    ],
+    [
+      'no-restricted-imports',
+      'src/features/player/ports/x.ts',
+      "import { Platform } from 'react-native';\nexport const p = Platform;\n",
+      1,
+    ],
+    [
+      'no-restricted-imports',
+      'src/features/player/view/X.tsx',
+      "import { useRouter } from 'expo-router';\nexport const r = useRouter;\n",
+      1,
+    ],
+    [
+      'no-restricted-imports',
+      'src/features/player/view/X.tsx',
+      "import { View } from 'react-native';\nimport { Play } from 'lucide-react-native';\nimport art from '@assets/artwork-placeholder.png';\nexport const v = [View, Play, art];\n",
+      0,
+    ],
+    [
+      'no-restricted-imports',
+      'src/features/player/adapters/x.ts',
+      "import { AppState } from 'react-native';\nexport const a = AppState;\n",
+      1,
+    ],
+    [
+      'no-restricted-imports',
+      'src/features/player/adapters/x.ts',
+      "import * as fs from 'expo-file-system';\nexport const f = fs;\n",
+      0,
+    ],
+    [
+      'no-restricted-syntax',
+      'src/features/player/shell/X.tsx',
+      'export function X() {\n  return <></>;\n}\n',
+      1,
+    ],
+    [
+      'no-restricted-syntax',
+      'src/features/player/core/x.ts',
+      'export function f(s: AbortSignal) {\n  s.throwIfAborted();\n}\n',
+      1,
+    ],
+    [
+      'no-restricted-properties',
+      'src/features/player/__tests__/x.test.ts',
+      "jest.mock('expo-file-system');\n",
+      1,
+    ],
+    [
+      'no-restricted-properties',
+      'src/features/player/__tests__/x.test.ts',
+      "export const s = jest.spyOn(Math, 'random');\n",
+      1,
+    ],
+    [
+      'no-restricted-properties',
+      'src/features/player/__tests__/x.test.ts',
+      'export const f = jest.fn();\n',
+      0,
+    ],
+    ['no-restricted-properties', 'jest/x.ts', "jest.doMock('expo-crypto');\n", 1],
+    [
+      'no-restricted-properties',
+      'src/shared/device/core/x.ts',
+      'export const u = process.env.EXPO_PUBLIC_API_URL;\n',
+      1,
+    ],
+    [
+      'no-restricted-properties',
+      'src/mobile/x.ts',
+      'export const u = process.env.EXPO_PUBLIC_API_URL;\n',
+      0,
+    ],
+    [
+      'local/test-imports-through-doors',
+      'src/features/player/__tests__/x.test.ts',
+      "import { q } from '@features/player/core/queue';\nexport const a = q;\n",
+      1,
+    ],
+    [
+      'local/test-imports-through-doors',
+      'src/features/player/__tests__/x.test.ts',
+      "import { createPlayer } from '@features/player';\nexport const a = createPlayer;\n",
+      0,
+    ],
+  ];
+
+  for (const [ruleId, file, code, count] of cases) {
+    it(`${ruleId} reports ${count} in ${file} for ${JSON.stringify(code.split('\n')[0])}`, async () => {
+      const found = await errors(ruleId, file, code);
+      assert.strictEqual(found.length, count, JSON.stringify(found));
+      for (const { message } of found) {
+        if (ruleId !== 'no-restricted-syntax' || !message.startsWith('Hermes')) {
+          assert.match(message, /client\/src\/README\.md/);
+        }
+      }
+    });
+  }
+});

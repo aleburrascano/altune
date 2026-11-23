@@ -1,3 +1,0 @@
-role: shared
-owns: which platform, version and origin the app runs on
-depends_on: []

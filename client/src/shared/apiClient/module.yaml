@@ -1,3 +1,0 @@
-role: shared
-owns: how the app calls go-api over HTTP and decodes what it sends back
-depends_on: [apiConfig, auth, catalog, device, failure, id, log, session, timing]

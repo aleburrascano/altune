@@ -1,0 +1,1 @@
+`catalog` owns what a track, a playlist and a discovery result look like to the app, and which ids are valid.

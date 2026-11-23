@@ -262,9 +262,16 @@ if touches '^client/'; then
     check "mobile mechanical style (changed lines)" $m node scripts/lint-changed-lines.mjs "$base"
     check "mobile prettier (changed files)" $m node scripts/prettier-changed.mjs "$base"
     test_check "mobile script and rule tests" $m bash -c 'files=$(git ls-files "scripts/__tests__/*.test.mjs" "eslint/rules/__tests__/*.test.js"); [ -z "$files" ] || node --test $files'
+    touches '^client/eslint' && test_check "mobile eslint config tests" $m "${heavy[@]}" node --test eslint.config.test.js
     coverage_args=(); [ -n "$src" ] && mapfile -t coverage_args < <(thresholded_coverage_args "$src")
     [ -n "$src" ] && jest_check "mobile tests (related)" $m npx jest "${coverage_args[@]}" --ci --passWithNoTests --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$HOME/.cache/altune-ci/jest" --findRelatedTests $src
     check "mobile fallow" $m npm run --silent fallow
+    check "mobile boundaries and duplication (changed files)" $m "${heavy[@]}" node scripts/fallow-changed.mjs "$base"
+    if [ -n "$src" ] && [ "${CLIENT_MUTATE_RUNS_ELSEWHERE:-}" = 1 ]; then
+      echo "SKIP  mobile mutation (changed lines): the mobile-tests CI job runs it"
+    elif [ -n "$src" ] && need jq "mobile mutation"; then
+      test_check "mobile mutation (changed lines)" . "${heavy[@]}" bash scripts/ci/client-mutate.sh "$base"
+    fi
     check "mobile react-doctor" $m npm run --silent react-doctor
   elif [ -n "$(command -v npx)" ]; then
     echo "SKIP  mobile: no node_modules here or in $main_tree"; missing=1
