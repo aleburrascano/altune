@@ -76,14 +76,14 @@ func worseOrder(a, b ports.DiscographyCase) int {
 func worseThan(a, b ports.DiscographyCase) bool { return precedes(worseOrder(a, b)) }
 
 func contaminationBand(c ports.DiscographyCase) int {
-	switch r := contaminationRatio(c); {
-	case r >= 0.5:
+	r := contaminationRatio(c)
+	if r >= 0.5 {
 		return 0
-	case r >= 0.2:
-		return 1
-	default:
-		return 2
 	}
+	if r >= 0.2 {
+		return 1
+	}
+	return 2
 }
 
 func bandThenWorse(a, b ports.DiscographyCase) bool {

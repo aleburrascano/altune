@@ -300,6 +300,7 @@ func TestClearSearchHistory_AnInsertRacingAnOpenEraseLeavesNoSearchText(t *testi
 
 	gate := newCommitGate()
 	eraser := persistence.NewPgxSearchHistoryRepository(tracedPool(t, gate))
+	t.Cleanup(gate.open)
 	erased := make(chan error, 1)
 	go func() { erased <- eraser.EraseSearchTextForUser(ctx, owner) }()
 	select {
@@ -309,7 +310,6 @@ func TestClearSearchHistory_AnInsertRacingAnOpenEraseLeavesNoSearchText(t *testi
 	case <-time.After(10 * time.Second):
 		t.Fatal("erase never reached its commit")
 	}
-	defer gate.open()
 
 	written := make(chan error, 2)
 	go func() {

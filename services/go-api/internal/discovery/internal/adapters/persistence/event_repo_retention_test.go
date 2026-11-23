@@ -72,6 +72,18 @@ func deleteEventsOfType(t *testing.T, pool *pgxpool.Pool, eventType domain.Event
 	}
 }
 
+func TestRetentionPolicy_NamesEveryEventTypeButDiscographyObserved(t *testing.T) {
+	listed := map[domain.EventType]bool{}
+	for _, ret := range retentionPolicy {
+		listed[ret.eventType] = true
+	}
+	for et := domain.EventTypeUnknown + 1; et.String() != "unknown"; et++ {
+		if et != domain.EventTypeDiscographyObserved && !listed[et] {
+			t.Errorf("event type %s has no retention window in this test's policy table", et)
+		}
+	}
+}
+
 func TestPgxEventStore_PruneEvents_PerTypeWindow(t *testing.T) {
 	pool := testPool(t)
 	store := persistence.NewPgxEventStore(pool)

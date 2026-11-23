@@ -227,3 +227,10 @@ func TestRankByProvider_AZeroCountStillNamesItsProvider(t *testing.T) {
 		dc("c", 10, 3, "m", 3),
 	}, ports.GroupByProvider, "b", "c", "a")
 }
+
+func TestRankByArtist_ACaseWithoutReleasesCountsAsClean(t *testing.T) {
+	assertOrder(t, []ports.DiscographyCase{
+		dcNoID("no-releases", 0, 3, 3),
+		dc("some-contamination", 10, 1),
+	}, ports.GroupByArtist, "some-contamination", "no-releases")
+}
