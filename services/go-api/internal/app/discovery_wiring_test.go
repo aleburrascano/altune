@@ -1,14 +1,11 @@
-package app
+package app_test
 
 import (
+	"altune/go-api/internal/app"
 	"altune/go-api/internal/app/jobs"
-	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/observe"
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/events"
-	shared "altune/go-api/internal/shared/kernel"
-	"altune/go-api/internal/shared/runloop"
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -16,8 +13,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -26,8 +21,10 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 )
 
 type countingProviderRT struct {
@@ -61,256 +58,71 @@ func totalProviderCounts(s discovery.ProviderMetricsSnapshot) int64 {
 	return total
 }
 
-func TestRequestPathProviderCallsAreCountedOnce(t *testing.T) {
+func TestDiscovery_RequestPathProviderCallsAreCountedOnce(t *testing.T) {
 	routes := []struct {
 		name   string
 		target string
 	}{
-		{"album content", "/albums/deezer/1/tracks"},
-		{"lyrics", "/lyrics?title=song&subtitle=artist"},
-		{"enrichment", "/enrichment?kind=album&title=album"},
+		{"album content", "/v1/discovery/albums/deezer/1/tracks"},
+		{"lyrics", "/v1/discovery/lyrics?title=song&subtitle=artist"},
+		{"enrichment", "/v1/discovery/enrichment?kind=album&title=album"},
 	}
-
 	for _, route := range routes {
 		t.Run(route.name, func(t *testing.T) {
+			fixture := newJWKSFixture(t)
+			fixture.cfg.MusicBrainzUserAgent = "altune-test/1.0"
 			rt := &countingProviderRT{}
-			a := &App{cfg: &config.Config{MusicBrainzUserAgent: "altune-test/1.0"}}
-			disc, err := discovery.New(a.discoveryDeps(context.Background(), discovery.NewCountingTransport(rt)))
-			if err != nil {
-				t.Fatalf("wire discovery: %v", err)
-			}
-			before := discovery.ReadProviderMetricsSnapshot()
-			req := httptest.NewRequest(http.MethodGet, route.target, nil)
-			req = req.WithContext(auth.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
-			disc.Handler.Routes().ServeHTTP(httptest.NewRecorder(), req)
+			h := assembleWith(t, fixture.cfg, discovery.NewCountingTransport(rt)).assembly.Handler()
+			before, callsBefore := discovery.ReadProviderMetricsSnapshot(), rt.roundTrips()
+
+			code, body := getAs(t, h, route.target, signedToken(t, fixture.key, fixture.operator))
+
+			calls := rt.roundTrips() - callsBefore
 			counted := totalProviderCounts(discovery.ReadProviderMetricsSnapshot()) - totalProviderCounts(before)
-
-			if rt.roundTrips() == 0 {
-				t.Fatalf("%s made no provider call, so it proves nothing about the transport", route.target)
+			if calls == 0 {
+				t.Fatalf("%s made no provider call (status %d, body %s), so it proves nothing about the transport", route.target, code, body)
 			}
-			if counted != int64(rt.roundTrips()) {
-				t.Errorf("provider counters moved by %d over %d provider calls, want one count per call", counted, rt.roundTrips())
-			}
-		})
-	}
-}
-
-type failingBehavioralStore struct{ err error }
-
-func (s failingBehavioralStore) SatisfactionSignals(context.Context, time.Time) ([]discovery.BehavioralSignal, error) {
-	return nil, s.err
-}
-
-func TestBehavioralRankingRefresh_LogsOnFailure(t *testing.T) {
-	var buf bytes.Buffer
-	restore := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
-	defer slog.SetDefault(restore)
-
-	boom := errors.New("boom")
-	consumer := discovery.NewSatisfactionConsumer(failingBehavioralStore{err: boom})
-	searchSvc := discovery.NewSearchService(nil, nil, discovery.WithBehavioralRanking(consumer))
-
-	a := &App{cfg: &config.Config{BehavioralRankingEnabled: true}}
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(func() { cancel(); a.jobs.Background().Wait() })
-
-	a.startDiscoveryBackgroundJobs(ctx, &discovery.Discovery{Search: searchSvc})
-
-	h := waitForHealth(t, a, jobs.BehavioralRankingRefresh, func(h runloop.JobHealth) bool { return h.Failures >= 1 })
-
-	if h.LastFailure.IsZero() {
-		t.Error("a failed run must still update LastFailure through jc.record")
-	}
-
-	logged := buf.String()
-	wantFailed := `level=WARN msg="behavioral ranking refresh failed" error=boom` + "\n"
-	if !strings.Contains(logged, wantFailed) {
-		t.Errorf("failure line drifted: want %q in\n%s", wantFailed, logged)
-	}
-}
-
-func TestUnreleasedRefresh_AStoredUnreleasedServiceRegistersTheLeaderOnlyJob(t *testing.T) {
-	build := func(t *testing.T) *App {
-		a := &App{cfg: &config.Config{}}
-		a.startUnreleasedRefresh(&discovery.UnreleasedService{})
-		if got := registeredJobNames(a); !slices.Equal(got, []jobs.Name{jobs.UnreleasedRefresh}) {
-			t.Fatalf("registered jobs = %v, want [%s]", got, jobs.UnreleasedRefresh)
-		}
-		return a
-	}
-
-	assertLeaderOnly(t, jobs.UnreleasedRefresh, build)
-}
-
-func TestUnreleasedRefresh_NothingStoredStartsNoJob(t *testing.T) {
-	a := &App{cfg: &config.Config{}}
-	a.startUnreleasedRefresh(nil)
-	if got := registeredJobNames(a); len(got) != 0 {
-		t.Errorf("no stored unreleased service started jobs %v", got)
-	}
-}
-
-func TestUnreleasedRefresh_DisabledJobsAcceptsTheJobName(t *testing.T) {
-	a := &App{cfg: &config.Config{DisabledJobs: []string{string(jobs.UnreleasedRefresh)}}}
-	if err := a.applyStartupSwitches(t.Context()); err != nil {
-		t.Fatalf("applyStartupSwitches: %v", err)
-	}
-	if h := findJobHealth(t, a.jobs.Health(), "unreleased refresh"); h.Enabled {
-		t.Error("unreleased refresh enabled, want disabled via DISABLED_JOBS")
-	}
-}
-
-type limitRecordingStore struct {
-	discovery.FakeUnreleasedStore
-	limits []int
-}
-
-func (l *limitRecordingStore) Due(_ context.Context, _ time.Time, limit int) ([]discovery.UnreleasedDueArtist, error) {
-	l.limits = append(l.limits, limit)
-	return nil, nil
-}
-
-func TestUnreleasedRefresh_EachRunAsksTheStoreForAtMostTwoArtists(t *testing.T) {
-	store := &limitRecordingStore{}
-	svc := discovery.NewUnreleasedService(nil, nil, nil, discovery.UnreleasedConfig{}, discovery.WithUnreleasedStore(store))
-	if err := unreleasedRefreshRun(svc)(context.Background()); err != nil {
-		t.Fatalf("run: %v", err)
-	}
-	if !slices.Equal(store.limits, []int{2}) {
-		t.Errorf("Due limits = %v, want [2]", store.limits)
-	}
-}
-
-func TestUnreleasedRefresh_RegistrationLogsAThirtyMinuteInterval(t *testing.T) {
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	a := &App{cfg: &config.Config{}}
-	a.startUnreleasedRefresh(&discovery.UnreleasedService{})
-	if !strings.Contains(buf.String(), "interval=30m0s") {
-		t.Errorf("registration log lacks interval=30m0s: %s", buf.String())
-	}
-}
-
-func distinctDiscoveryConfig() *config.Config {
-	return &config.Config{
-		MusicBrainzUserAgent:              "mb-agent",
-		DiscogsToken:                      "discogs-token",
-		FanartTVAPIKey:                    "fanart-key",
-		GeniusAccessToken:                 "genius-token",
-		TheAudioDBAPIKey:                  "theaudiodb-key",
-		GoogleSheetsAPIKey:                "sheets-key",
-		TrackerHubSheetID:                 "hub-sheet",
-		DiscoverySearchDeadline:           1 * time.Second,
-		ExplorationRate:                   0.25,
-		DiscoveryProviderCacheTTL:         2 * time.Minute,
-		GeniusUnreleasedMaxPages:          4,
-		GeniusUnreleasedMaxDetails:        5,
-		GeniusUnreleasedDetailConcurrency: 6,
-		GeniusUnreleasedTTL:               7 * time.Hour,
-		GeniusUnreleasedEmptyTTL:          8 * time.Hour,
-		GeniusUnreleasedWait:              9 * time.Second,
-		GeniusUnreleasedJobTimeout:        10 * time.Second,
-	}
-}
-
-func TestDiscoveryDeps_CopiesEachConfigValueIntoItsOwnField(t *testing.T) {
-	a := &App{cfg: distinctDiscoveryConfig()}
-	deps := a.discoveryDeps(t.Context(), http.DefaultTransport)
-
-	wantProviders := discovery.ProviderSettings{
-		MusicBrainzUserAgent: "mb-agent",
-		DiscogsToken:         "discogs-token",
-		FanartTVAPIKey:       "fanart-key",
-		GeniusAccessToken:    "genius-token",
-		TheAudioDBAPIKey:     "theaudiodb-key",
-		GoogleSheetsAPIKey:   "sheets-key",
-		TrackerHubSheetID:    "hub-sheet",
-	}
-	if !reflect.DeepEqual(deps.Providers, wantProviders) {
-		t.Errorf("providers =\n  %+v\nwant\n  %+v", deps.Providers, wantProviders)
-	}
-	wantSearch := discovery.SearchSettings{
-		Deadline:         1 * time.Second,
-		ExplorationRate:  0.25,
-		ProviderCacheTTL: 2 * time.Minute,
-	}
-	if deps.Search != wantSearch {
-		t.Errorf("search =\n  %+v\nwant\n  %+v", deps.Search, wantSearch)
-	}
-	wantUnreleased := discovery.UnreleasedSettings{Tuning: discovery.UnreleasedConfig{
-		MaxPages: 4, MaxDetails: 5, DetailConcurrency: 6,
-		TTL: 7 * time.Hour, EmptyTTL: 8 * time.Hour, Wait: 9 * time.Second, JobTimeout: 10 * time.Second,
-	}}
-	if deps.Unreleased != wantUnreleased {
-		t.Errorf("unreleased =\n  %+v\nwant\n  %+v", deps.Unreleased, wantUnreleased)
-	}
-}
-
-func TestDiscoveryDeps_EachConfigSwitchTurnsOnOnlyItsOwnSetting(t *testing.T) {
-	tests := []struct {
-		name           string
-		turnOn         func(*config.Config)
-		wantProviders  discovery.ProviderSettings
-		wantSearch     discovery.SearchSettings
-		wantUnreleased discovery.UnreleasedSettings
-	}{
-		{"TailDemotionEnabled", func(c *config.Config) { c.TailDemotionEnabled = true }, discovery.ProviderSettings{}, discovery.SearchSettings{TailDemotion: true}, discovery.UnreleasedSettings{}},
-		{"CrossKindProminenceEnabled", func(c *config.Config) { c.CrossKindProminenceEnabled = true }, discovery.ProviderSettings{}, discovery.SearchSettings{CrossKindProminence: true}, discovery.UnreleasedSettings{}},
-		{"ExplorationEnabled", func(c *config.Config) { c.ExplorationEnabled = true }, discovery.ProviderSettings{}, discovery.SearchSettings{Exploration: true}, discovery.UnreleasedSettings{}},
-		{"BehavioralRankingEnabled", func(c *config.Config) { c.BehavioralRankingEnabled = true }, discovery.ProviderSettings{}, discovery.SearchSettings{BehavioralRanking: true}, discovery.UnreleasedSettings{}},
-		{"UnreleasedSource=cache", func(c *config.Config) { c.UnreleasedSource = "cache" }, discovery.ProviderSettings{}, discovery.SearchSettings{}, discovery.UnreleasedSettings{ServeFromCache: true}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := &config.Config{}
-			tt.turnOn(cfg)
-			deps := (&App{cfg: cfg}).discoveryDeps(t.Context(), http.DefaultTransport)
-			if !reflect.DeepEqual(deps.Providers, tt.wantProviders) || deps.Search != tt.wantSearch || deps.Unreleased != tt.wantUnreleased {
-				t.Errorf("deps =\n  %+v\n  %+v\n  %+v\nwant\n  %+v\n  %+v\n  %+v",
-					deps.Providers, deps.Search, deps.Unreleased, tt.wantProviders, tt.wantSearch, tt.wantUnreleased)
+			if counted != int64(calls) {
+				t.Errorf("provider counters moved by %d over %d provider calls, want one count per call", counted, calls)
 			}
 		})
 	}
 }
 
-func TestDiscoveryDeps_PassesTheAppsOwnHandles(t *testing.T) {
-	a := &App{cfg: &config.Config{}, eventTap: observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))}
-	ctx := t.Context()
-	transport := &stubTransport{}
-	deps := a.discoveryDeps(ctx, transport)
+func TestDiscovery_AFailedBehavioralRankingRefreshIsLoggedAndCounted(t *testing.T) {
+	cfg := jwksConfig(t)
+	cfg.BehavioralRankingEnabled = true
+	run := assembleLogging(t, cfg)
 
-	if deps.Lifecycle != ctx || deps.Background != a.jobs.Background() || deps.Transport != transport || deps.CacheOps != cacheOps() {
-		t.Error("deps do not carry the app's lifecycle, wait group, transport and cache counters")
+	deadline := time.Now().Add(3 * time.Second)
+	h := jobHealth(t, run.assembly, jobs.BehavioralRankingRefresh)
+	for h.Failures == 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+		h = jobHealth(t, run.assembly, jobs.BehavioralRankingRefresh)
 	}
-	if deps.ProviderTimeout != 10*time.Second || deps.ChartTimeout != 15*time.Second {
-		t.Errorf("timeouts = %v, %v, want 10s and 15s", deps.ProviderTimeout, deps.ChartTimeout)
+
+	if h.Failures == 0 || h.LastFailure.IsZero() {
+		t.Fatalf("ranking refresh health = %+v, want a counted failure with its time against an unreachable store", h)
 	}
-	if deps.Activity != a.eventTap {
-		t.Error("deps do not feed discovery's activity into the app's event tap")
-	}
-	if (&App{cfg: &config.Config{}}).discoveryDeps(ctx, transport).Activity != nil {
-		t.Error("an app without an event tap handed discovery a non-nil activity feed")
+	if want := `level=WARN msg="behavioral ranking refresh failed" error=`; !strings.Contains(run.logs.String(), want) {
+		t.Errorf("failure line drifted: want %q in\n%s", want, run.logs.String())
 	}
 }
 
-func TestDiscoveryDeps_ClientEventsFollowTheTelemetryExportSetting(t *testing.T) {
-	transport := &stubTransport{}
-	if deps := (&App{cfg: &config.Config{}}).discoveryDeps(t.Context(), transport); deps.ClientEvents != nil {
-		t.Error("an app with no OTLP endpoint handed discovery client events to export")
-	}
-	exporting := &App{cfg: &config.Config{OTLPEndpoint: "https://otlp.example.com"}}
-	if deps := exporting.discoveryDeps(t.Context(), transport); deps.ClientEvents == nil {
-		t.Error("an app with an OTLP endpoint handed discovery no client events")
+func TestUnreleasedRefresh_AGeniusTokenStartsItEveryThirtyMinutes(t *testing.T) {
+	cfg := jwksConfig(t)
+	cfg.GeniusAccessToken = "genius-token"
+
+	want := `level=INFO msg="unreleased refresh started" interval=30m0s` + "\n"
+	if logged := assembleLogging(t, cfg).logs.String(); !strings.Contains(logged, want) {
+		t.Errorf("want %q in\n%s", want, logged)
 	}
 }
 
-type stubTransport struct{}
-
-func (*stubTransport) RoundTrip(*http.Request) (*http.Response, error) {
-	return nil, errors.New("stub transport")
+func TestUnreleasedRefresh_NoUnreleasedSourceStartsNoRefresh(t *testing.T) {
+	if logged := assembleLogging(t, jwksConfig(t)).logs.String(); strings.Contains(logged, "unreleased refresh started") {
+		t.Errorf("the unreleased refresh started without Genius or the tracker sheets configured:\n%s", logged)
+	}
 }
 
 type hostRecordingTransport struct {
@@ -335,7 +147,7 @@ func TestNewEvalDiscovery_CallsProvidersThroughTheGivenTransportAndIdentityStore
 	transport := &hostRecordingTransport{}
 	store := &discovery.FakeIdentityStore{Mbid: "mbid-1", Xref: map[discovery.ProviderKey]string{"spotify": "4"}}
 
-	disc, err := NewEvalDiscovery(t.Context(), &config.Config{}, EvalHandles{Transport: transport, IdentityStore: store})
+	disc, err := app.NewEvalDiscovery(t.Context(), &config.Config{}, app.EvalHandles{Transport: transport, IdentityStore: store})
 	if err != nil {
 		t.Fatalf("NewEvalDiscovery: %v", err)
 	}
@@ -346,7 +158,7 @@ func TestNewEvalDiscovery_CallsProvidersThroughTheGivenTransportAndIdentityStore
 }
 
 func TestNewEvalDiscovery_MapsTheConfigIntoTheProviderTable(t *testing.T) {
-	disc, err := NewEvalDiscovery(t.Context(), &config.Config{MusicBrainzUserAgent: "altune-test"}, EvalHandles{Transport: &stubTransport{}})
+	disc, err := app.NewEvalDiscovery(t.Context(), &config.Config{MusicBrainzUserAgent: "altune-test"}, app.EvalHandles{Transport: refuseEgress{}})
 	if err != nil {
 		t.Fatalf("NewEvalDiscovery: %v", err)
 	}
@@ -364,10 +176,10 @@ func TestNewEvalDiscovery_SearchesWithTheGivenPoolAndRedis(t *testing.T) {
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
 	t.Cleanup(func() { slog.SetDefault(prev) })
-	pool := unreachableEvalPool(t)
+	pool := unreachablePool(t)
 	redisClient := goredis.NewClient(&goredis.Options{Addr: miniredis.RunT(t).Addr()})
 
-	disc, err := NewEvalDiscovery(t.Context(), &config.Config{}, EvalHandles{Pool: pool, Redis: redisClient, Transport: &stubTransport{}})
+	disc, err := app.NewEvalDiscovery(t.Context(), &config.Config{}, app.EvalHandles{Pool: pool, Redis: redisClient, Transport: refuseEgress{}})
 	if err != nil {
 		t.Fatalf("NewEvalDiscovery: %v", err)
 	}
@@ -377,12 +189,126 @@ func TestNewEvalDiscovery_SearchesWithTheGivenPoolAndRedis(t *testing.T) {
 	}
 }
 
-func unreachableEvalPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	pool, err := pgxpool.New(context.Background(), "postgres://u:p@127.0.0.1:1/altune")
-	if err != nil {
-		t.Fatalf("pool: %v", err)
+type recordedClientEvents struct {
+	mu      sync.Mutex
+	records []sdklog.Record
+}
+
+func (r *recordedClientEvents) OnEmit(_ context.Context, rec *sdklog.Record) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.records = append(r.records, rec.Clone())
+	return nil
+}
+
+func (r *recordedClientEvents) Enabled(context.Context, sdklog.EnabledParameters) bool { return true }
+func (r *recordedClientEvents) Shutdown(context.Context) error                         { return nil }
+func (r *recordedClientEvents) ForceFlush(context.Context) error                       { return nil }
+
+func (r *recordedClientEvents) exported(eventID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, rec := range r.records {
+		found := false
+		rec.WalkAttributes(func(kv attribute.KeyValue) bool {
+			found = kv.Key == "event.id" && kv.Value.AsString() == eventID
+			return !found
+		})
+		if found && rec.Body().AsString() == "client_event" {
+			return true
+		}
 	}
-	t.Cleanup(pool.Close)
-	return pool
+	return false
+}
+
+func recordClientEvents(t *testing.T) *recordedClientEvents {
+	t.Helper()
+	recorded := &recordedClientEvents{}
+	prev := otel.GetLoggerProvider()
+	otel.SetLoggerProvider(sdklog.NewLoggerProvider(sdklog.WithProcessor(recorded)))
+	t.Cleanup(func() { otel.SetLoggerProvider(prev) })
+	return recorded
+}
+
+func eventStreamLines(t *testing.T, srv *httptest.Server, token string) <-chan string {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/observe/events/stream", nil)
+	if err != nil {
+		t.Fatalf("stream request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("open the event stream: %v", err)
+	}
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("event stream = %d, want 200", resp.StatusCode)
+	}
+	lines := make(chan string)
+	go func() {
+		defer close(lines)
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			select {
+			case lines <- scanner.Text():
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	if first := <-lines; first != ": keepalive" {
+		t.Fatalf("first stream line %q, want the keepalive that follows subscribing", first)
+	}
+	return lines
+}
+
+func postScreenView(t *testing.T, srv *httptest.Server, token, eventID string) {
+	t.Helper()
+	body := `{"type":"screen_view","event_id":"` + eventID + `"}`
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/v1/discovery/events", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("event request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatalf("post the event: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("POST /v1/discovery/events = %d, want 204", resp.StatusCode)
+	}
+}
+
+func TestDiscovery_AStoredClientEventReachesTheObserveStreamAndTheTelemetryExport(t *testing.T) {
+	recorded := recordClientEvents(t)
+	f := newJWKSFixture(t)
+	f.cfg.OTLPEndpoint = "https://otlp.example.com"
+	srv := httptest.NewServer(assembledRouter(t, f.cfg, integrationPool(t)))
+	t.Cleanup(srv.Close)
+	token := signedToken(t, f.key, f.operator)
+	lines := eventStreamLines(t, srv, token)
+	eventID := uuid.NewString()
+
+	postScreenView(t, srv, token, eventID)
+
+	timeout := time.After(10 * time.Second)
+	for streamed := false; !streamed; {
+		select {
+		case line, open := <-lines:
+			if !open {
+				t.Fatal("the event stream closed before the stored event reached it")
+			}
+			streamed = strings.HasPrefix(line, "data: ") && strings.Contains(line, `"screen_view"`)
+		case <-timeout:
+			t.Fatal("the stored screen_view never reached /observe/events/stream: discovery's activity feed is not the assembly's event tap")
+		}
+	}
+	if !recorded.exported(eventID) {
+		t.Errorf("no client_event with event.id %s was exported, although an OTLP endpoint is configured", eventID)
+	}
 }

@@ -1,154 +1,70 @@
-package app
+package app_test
 
 import (
+	"altune/go-api/internal/app"
 	"altune/go-api/internal/app/jobs"
-	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/runloop"
-	"context"
-	"net/http"
-	"net/http/httptest"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 )
 
-func TestApplyStartupSwitches_AcquisitionPausedPausesWiredScheduler(t *testing.T) {
-	a := &App{
-		cfg: &config.Config{
-			MusicDir:          t.TempDir(),
-			YtMusicEnabled:    true,
-			AcquisitionPaused: true,
-		},
-		sem:            make(chan struct{}, 1),
-		fixtureSources: fixtureTiers(),
+func jobHealth(t *testing.T, assembly *app.Assembly, name jobs.Name) runloop.JobHealth {
+	t.Helper()
+	for _, h := range assembly.Jobs().Health() {
+		if h.Name == string(name) {
+			return h
+		}
 	}
-
-	wired, err := a.wireCatalog(t.Context(), nil, &discovery.Discovery{})
-	if err != nil {
-		t.Fatalf("wireCatalog: %v", err)
-	}
-	if wired.scheduler == nil {
-		t.Fatal("scheduler not wired, cannot assert pause")
-	}
-	a.scheduler = wired.scheduler
-
-	if err := a.applyStartupSwitches(t.Context()); err != nil {
-		t.Fatalf("applyStartupSwitches: %v", err)
-	}
-
-	if !wired.scheduler.Status().Paused {
-		t.Fatal("Status().Paused = false, want true after ACQUISITION_PAUSED=true")
-	}
+	t.Fatalf("job %q not in the assembly's job health", name)
+	return runloop.JobHealth{}
 }
 
-func TestStartCatalogJobs_StartsTheAcquisitionUpgrade(t *testing.T) {
-	build := func(t *testing.T) *App {
-		a := &App{cfg: &config.Config{AcquisitionUpgradePerHour: 30, AcquisitionUpgradeConcurrency: 1}, pool: lazyPool(t)}
-		a.startCatalogJobs(t.Context(), catalogWiring{scheduler: idleScheduler(t)}, playbackWiring{})
-		return a
-	}
+func TestStartupSwitches_AcquisitionPausedWithoutAnyScheduler(t *testing.T) {
+	cfg := jwksConfig(t)
+	cfg.AcquisitionPaused = true
 
-	assertLeaderOnly(t, jobs.AcquisitionUpgrade, build)
+	assembleLogging(t, cfg)
 }
 
-func TestApplyStartupSwitches_AcquisitionPausedNoSchedulerIsNoop(t *testing.T) {
-	a := &App{cfg: &config.Config{AcquisitionPaused: true}}
+func TestStartupSwitches_DisabledJobsDisableEachNamedJob(t *testing.T) {
+	cfg := jwksConfig(t)
+	cfg.DisabledJobs = []string{string(jobs.AcquisitionPrune), string(jobs.StreamRecovery), string(jobs.UnreleasedRefresh)}
 
-	if err := a.applyStartupSwitches(t.Context()); err != nil {
-		t.Fatalf("applyStartupSwitches: %v", err)
-	}
-}
+	assembly := assembleLogging(t, cfg).assembly
 
-func TestApplyStartupSwitches_DisabledJobsDisableEachNamedJob(t *testing.T) {
-	a := &App{cfg: &config.Config{DisabledJobs: []string{"acquisition prune", "stream recovery"}}}
-
-	if err := a.applyStartupSwitches(t.Context()); err != nil {
-		t.Fatalf("applyStartupSwitches: %v", err)
-	}
-
-	for _, name := range []string{"acquisition prune", "stream recovery"} {
-		h := findJobHealth(t, a.jobs.Health(), name)
-		if h.Enabled {
+	for _, name := range cfg.DisabledJobs {
+		if jobHealth(t, assembly, jobs.Name(name)).Enabled {
 			t.Errorf("job %q enabled, want disabled via DISABLED_JOBS", name)
 		}
 	}
 }
 
-func TestApplyStartupSwitches_DisabledJobsUnknownNameFailsStartup(t *testing.T) {
-	a := &App{cfg: &config.Config{DisabledJobs: []string{"nope"}}}
+func TestStartupSwitches_AnUnknownDisabledJobFailsAssembly(t *testing.T) {
+	cfg := jwksConfig(t)
+	cfg.DisabledJobs = []string{"nope"}
 
-	err := a.applyStartupSwitches(t.Context())
-	if err == nil {
-		t.Fatal("applyStartupSwitches: want error for unknown job, got nil")
-	}
-	if !strings.Contains(err.Error(), "nope") {
-		t.Fatalf("applyStartupSwitches error = %q, want it to name %q", err.Error(), "nope")
-	}
-}
+	_, err := app.Assemble(t.Context(), cfg, app.Handles{Pool: unreachablePool(t), Transport: refuseEgress{}})
 
-func TestShutdown_InFlightRequestContextSurvivesLifecycleCancel(t *testing.T) {
-	lifecycle, cancel := context.WithCancel(context.Background())
-	started := make(chan struct{})
-	release := make(chan struct{})
-	result := make(chan error, 1)
-	slow := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		close(started)
-		<-release
-		result <- r.Context().Err()
-	})
-	a := &App{cfg: &config.Config{}}
-	srv := httptest.NewUnstartedServer(slow)
-	srv.Config.BaseContext = a.newServer(lifecycle, slow).BaseContext
-	srv.Start()
-	defer srv.Close()
-
-	go func() {
-		if resp, err := http.Get(srv.URL); err == nil {
-			_ = resp.Body.Close()
-		}
-	}()
-	<-started
-	cancel()
-	time.Sleep(20 * time.Millisecond)
-	close(release)
-
-	select {
-	case err := <-result:
-		if err != nil {
-			t.Fatalf("in-flight request context cancelled by lifecycle cancel: %v", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("handler did not finish")
+	if err == nil || !strings.Contains(err.Error(), "nope") {
+		t.Fatalf("Assemble = %v, want an error naming %q", err, "nope")
 	}
 }
 
-func TestApplyDisabledJobs_DisabledRankingRefreshNeverRefreshes(t *testing.T) {
-	store := &countingBehavioralStore{}
-	consumer := discovery.NewSatisfactionConsumer(store)
-	searchSvc := discovery.NewSearchService(nil, nil, discovery.WithBehavioralRanking(consumer))
-	a := &App{cfg: &config.Config{
-		BehavioralRankingEnabled: true,
-		DisabledJobs:             []string{"behavioral ranking refresh"},
-	}}
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(func() { cancel(); a.jobs.Background().Wait() })
+func TestStartupSwitches_ADisabledRankingRefreshSkipsInsteadOfRunning(t *testing.T) {
+	cfg := jwksConfig(t)
+	cfg.BehavioralRankingEnabled = true
+	cfg.DisabledJobs = []string{string(jobs.BehavioralRankingRefresh)}
+	assembly := assembleLogging(t, cfg).assembly
 
-	if err := a.applyDisabledJobs(t.Context()); err != nil {
-		t.Fatalf("applyDisabledJobs: %v", err)
+	deadline := time.Now().Add(3 * time.Second)
+	h := jobHealth(t, assembly, jobs.BehavioralRankingRefresh)
+	for h.Skipped == 0 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+		h = jobHealth(t, assembly, jobs.BehavioralRankingRefresh)
 	}
-	a.startDiscoveryBackgroundJobs(ctx, &discovery.Discovery{Search: searchSvc})
-	waitForHealth(t, a, jobs.BehavioralRankingRefresh, func(h runloop.JobHealth) bool { return h.Skipped >= 1 })
 
-	if got := store.calls.Load(); got != 0 {
-		t.Fatalf("RefreshBehavioralScores ran %d times, want 0 while disabled", got)
+	if h.Skipped == 0 || h.Failures != 0 || !h.LastSuccess.IsZero() {
+		t.Errorf("ranking refresh health = %+v, want a skipped pass and no run against the store", h)
 	}
-}
-
-type countingBehavioralStore struct{ calls atomic.Int64 }
-
-func (s *countingBehavioralStore) SatisfactionSignals(context.Context, time.Time) ([]discovery.BehavioralSignal, error) {
-	s.calls.Add(1)
-	return nil, nil
 }

@@ -25,9 +25,10 @@ const (
 )
 
 type spec struct {
-	name       Name
-	alertable  bool
-	switchable bool
+	name          Name
+	alertable     bool
+	switchable    bool
+	everyInstance bool
 }
 
 var table = []spec{
@@ -35,7 +36,7 @@ var table = []spec{
 	{name: BehavioralCorpusRefresh, alertable: true, switchable: true},
 	{name: DiscographyEventPrune, alertable: true, switchable: true},
 	{name: VocabularyRefresh, alertable: true, switchable: true},
-	{name: BehavioralRankingRefresh, alertable: true, switchable: true},
+	{name: BehavioralRankingRefresh, alertable: true, switchable: true, everyInstance: true},
 	{name: DeletedIdentityErasure, alertable: true, switchable: false},
 	{name: AcquisitionSourceCanary, alertable: true, switchable: true},
 	{name: StreamRecovery, alertable: false, switchable: true},
@@ -54,6 +55,15 @@ func namesWhere(keep func(spec) bool) []Name {
 		}
 	}
 	return names
+}
+
+func runsOnEveryInstance(name Name) bool {
+	for _, s := range table {
+		if s.name == name {
+			return s.everyInstance
+		}
+	}
+	return false
 }
 
 func isSwitchable(name Name) bool {

@@ -38,6 +38,6 @@ func (a *App) startAcquisitionUpgrade(ctx context.Context, scheduler *acquisitio
 	planner := acquisition.NewUpgradePlanner(acquisition.NewPgxUpgradeStore(a.pool), scheduler, a.cfg.AcquisitionUpgradeConcurrency, a.cfg.AcquisitionUpgradeRetryAfter).CheckingUploads().
 		RescuingLowBitrate(a.cfg.AcquisitionLowBitrateFloorKbps)
 	interval := acquisition.UpgradeInterval(a.cfg.AcquisitionUpgradePerHour)
-	a.startLoggedJob(ctx, jobs.AcquisitionUpgrade, interval, planner.PlanNext,
+	a.jobs.StartTicker(ctx, jobs.AcquisitionUpgrade, interval, planner.PlanNext,
 		"interval", interval.String())
 }

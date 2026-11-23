@@ -4,6 +4,8 @@ import (
 	"altune/go-api/internal/shared/leader"
 	"altune/go-api/internal/shared/runloop"
 	"context"
+	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -58,6 +60,9 @@ func (r *Runner) WhenLeader(name Name, start func(context.Context)) {
 }
 
 func (r *Runner) Ticker(name Name, interval time.Duration, fn func(context.Context) error) {
+	if runsOnEveryInstance(name) {
+		panic(fmt.Sprintf("jobs: %q runs on every instance, so it registers with EveryInstance, not the leader-only Ticker", name))
+	}
 	r.Control(name)
 	r.WhenLeader(name, func(ctx context.Context) {
 		run := r.newRun(name, interval)
@@ -66,6 +71,9 @@ func (r *Runner) Ticker(name Name, interval time.Duration, fn func(context.Conte
 }
 
 func (r *Runner) EveryInstance(ctx context.Context, name Name, interval time.Duration, fn func(context.Context) error) {
+	if !runsOnEveryInstance(name) {
+		panic(fmt.Sprintf("jobs: %q is leader-only, so it registers with Ticker; only a job the table marks everyInstance may use EveryInstance", name))
+	}
 	run := r.newRun(name, interval)
 	runloop.Every(ctx, &r.wg, interval, func() { r.tick(ctx, run, fn) })
 }
@@ -121,4 +129,19 @@ func (r *Runner) tickAsLeader(ctx context.Context, run jobRun, fn func(context.C
 	}
 	defer release()
 	runloop.RunJob(leaderCtx, run.control, string(run.name), run.budget, fn)
+}
+
+func (r *Runner) StartTicker(ctx context.Context, name Name, interval time.Duration, run func(context.Context) error, startedAttrs ...any) {
+	r.Ticker(name, interval, run)
+	slog.InfoContext(ctx, string(name)+" started", startedAttrs...)
+}
+
+func WarnOnFailure(name Name, run func(context.Context) error) func(context.Context) error {
+	return func(ctx context.Context) error {
+		if err := run(ctx); err != nil {
+			slog.WarnContext(ctx, string(name)+" failed", "error", err)
+			return err
+		}
+		return nil
+	}
 }

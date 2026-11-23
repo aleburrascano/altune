@@ -1,32 +1,15 @@
 package app_test
 
 import (
-	"altune/go-api/internal/app"
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/shared/config"
-	"bytes"
-	"context"
-	"log/slog"
 	"strings"
 	"testing"
 )
 
 func assembledJobStarted(t *testing.T, cfg *config.Config, name jobs.Name) bool {
 	t.Helper()
-	var logs bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	ctx, cancel := context.WithCancel(t.Context())
-	assembly, err := app.Assemble(ctx, cfg, app.Handles{Pool: unreachablePool(t), Transport: refuseEgress{}})
-	if err != nil {
-		t.Fatalf("Assemble: %v", err)
-	}
-	t.Cleanup(func() {
-		cancel()
-		assembly.Shutdown()
-	})
-	return strings.Contains(logs.String(), `msg="`+string(name)+` started"`)
+	return strings.Contains(assembleLogging(t, cfg).logs.String(), `msg="`+string(name)+` started"`)
 }
 
 func TestSourceCanary_NoJobWhenEveryCanariedSourceIsDisabled(t *testing.T) {

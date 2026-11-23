@@ -14,9 +14,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net"
-	"net/http"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
@@ -95,21 +92,4 @@ func (a *App) applyStartupSwitches(ctx context.Context) error {
 		return err
 	}
 	return nil
-}
-
-const (
-	serverReadHeaderTimeout = 10 * time.Second
-	serverReadTimeout       = 30 * time.Second
-	serverIdleTimeout       = 120 * time.Second
-)
-
-func (a *App) newServer(ctx context.Context, handler http.Handler) *http.Server {
-	return &http.Server{
-		Addr:              fmt.Sprintf("%s:%d", a.cfg.Host, a.cfg.Port),
-		Handler:           handler,
-		BaseContext:       func(net.Listener) context.Context { return context.WithoutCancel(ctx) },
-		ReadHeaderTimeout: serverReadHeaderTimeout,
-		ReadTimeout:       serverReadTimeout,
-		IdleTimeout:       serverIdleTimeout,
-	}
 }
