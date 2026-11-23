@@ -12,6 +12,51 @@ mapfile -t packages < <(git diff --name-only --relative --merge-base "$base" -- 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
+declare -A replacement=(
+  ["ARITHMETIC_BASE +"]="-" ["ARITHMETIC_BASE -"]="+" ["ARITHMETIC_BASE *"]="/" ["ARITHMETIC_BASE /"]="*" ["ARITHMETIC_BASE %"]="*"
+  ["CONDITIONALS_BOUNDARY >="]=">" ["CONDITIONALS_BOUNDARY >"]=">=" ["CONDITIONALS_BOUNDARY <="]="<" ["CONDITIONALS_BOUNDARY <"]="<="
+  ["CONDITIONALS_NEGATION =="]="!=" ["CONDITIONALS_NEGATION !="]="==" ["CONDITIONALS_NEGATION >="]="<" ["CONDITIONALS_NEGATION >"]="<=" ["CONDITIONALS_NEGATION <="]=">" ["CONDITIONALS_NEGATION <"]=">="
+  ["INCREMENT_DECREMENT ++"]="--" ["INCREMENT_DECREMENT --"]="++"
+  ["INVERT_ASSIGNMENTS +="]="-=" ["INVERT_ASSIGNMENTS -="]="+=" ["INVERT_ASSIGNMENTS *="]="/=" ["INVERT_ASSIGNMENTS /="]="*=" ["INVERT_ASSIGNMENTS %="]="%="
+  ["INVERT_BITWISE &^"]="&" ["INVERT_BITWISE &"]="|" ["INVERT_BITWISE |"]="&" ["INVERT_BITWISE ^"]="&" ["INVERT_BITWISE <<"]=">>" ["INVERT_BITWISE >>"]="<<"
+  ["INVERT_BWASSIGN &^="]="&=" ["INVERT_BWASSIGN &="]="|=" ["INVERT_BWASSIGN |="]="&=" ["INVERT_BWASSIGN ^="]="&=" ["INVERT_BWASSIGN <<="]=">>=" ["INVERT_BWASSIGN >>="]="<<="
+  ["INVERT_LOGICAL &&"]="||" ["INVERT_LOGICAL ||"]="&&"
+  ["INVERT_LOOPCTRL break"]="continue" ["INVERT_LOOPCTRL continue"]="break"
+  ["INVERT_NEGATIVES -"]="+"
+)
+for operator in "+=" "-=" "*=" "/=" "%=" "&=" "|=" "^=" "&^=" "<<=" ">>="; do replacement["REMOVE_SELF_ASSIGNMENTS $operator"]="="; done
+
+mutant_source() {
+  local LC_ALL=C file=$1 line=$2 column=$3 type=$4 operator= candidate
+  local -a lines
+  mapfile -t lines <"$file"
+  local text=${lines[line - 1]}
+  local rest=${text:column - 1}
+  for candidate in continue break "&^=" "<<=" ">>=" "&^" "<<" ">>" "++" "--" "+=" "-=" "*=" "/=" "%=" "&=" "|=" "^=" "&&" "||" "==" "!=" ">=" "<=" "+" "-" "*" "/" "%" "&" "|" "^" ">" "<"; do
+    if [[ $rest == "$candidate"* && -n ${replacement["$type $candidate"]+set} ]]; then operator=$candidate; break; fi
+  done
+  [ -n "$operator" ] || return 1
+  lines[line - 1]=${text:0:column - 1}${replacement["$type $operator"]}${rest:${#operator}}
+  printf '%s\n' "${lines[@]}"
+}
+
+rerun_mutant() {
+  local file=$1 line=$2 column=$3 type=$4
+  if ! mutant_source "$file" "$line" "$column" "$type" >"$work/mutant.go"; then
+    echo "go-mutate: cannot rebuild the $type mutant at $dir/$file:$line:$column, so it cannot be checked" >&2
+    exit 1
+  fi
+  jq -n --arg original "$PWD/$file" --arg mutant "$work/mutant.go" '{Replace: {($original): $mutant}}' >"$work/overlay.json"
+  local package
+  package=./$(dirname "$file")
+  rerun_status=KILLED
+  if ! go test -c -o /dev/null -overlay "$work/overlay.json" "$package" >/dev/null 2>&1; then
+    rerun_status="NOT VIABLE"
+  elif go test -count=1 -overlay "$work/overlay.json" -timeout 10m "$package" >/dev/null 2>&1; then
+    rerun_status="NOT COVERED"
+  fi
+}
+
 real_git=$(command -v git)
 mkdir "$work/bin"
 printf '#!/bin/sh\nif [ "$1" = diff ]; then shift; exec "%s" diff --unified=0 --inter-hunk-context=0 --relative="$GO_MUTATE_PACKAGE" "$@"; fi\nexec "%s" "$@"\n' "$real_git" "$real_git" >"$work/bin/git"
@@ -35,7 +80,14 @@ for package in "${packages[@]}"; do
     exit 1
   fi
   killed=$((killed + $(jq '[.files[].mutations[] | select(.status == "KILLED" or .status == "TIMED OUT")] | length' "$report")))
-  mapfile -t -O "${#survivors[@]}" survivors < <(jq -r --arg prefix "$dir/$package/" '.files[] | .file_name as $f | .mutations[] | select(.status == "LIVED" or .status == "NOT COVERED") | "\($prefix)\($f):\(.line):\(.column) \(.status) \(.type)"' "$report")
+  mapfile -t -O "${#survivors[@]}" survivors < <(jq -r --arg prefix "$dir/$package/" '.files[] | .file_name as $f | .mutations[] | select(.status == "LIVED") | "\($prefix)\($f):\(.line):\(.column) \(.status) \(.type)"' "$report")
+  while read -r file line column type; do
+    rerun_mutant "$package/$file" "$line" "$column" "$type"
+    case $rerun_status in
+      KILLED) killed=$((killed + 1)) ;;
+      "NOT COVERED") survivors+=("$dir/$package/$file:$line:$column NOT COVERED $type") ;;
+    esac
+  done < <(jq -r '.files[] | .file_name as $f | .mutations[] | select(.status == "NOT COVERED") | "\($f) \(.line) \(.column) \(.type)"' "$report")
 done
 
 echo "go-mutate: $dir: ${#packages[@]} changed packages, killed $killed, survived ${#survivors[@]}"
