@@ -567,7 +567,7 @@ func validateRecordedSource(caseID string, src Source) error {
 		return nil
 	}
 	for _, cand := range src.Candidates {
-		if cand.Observed != nil || cand.setsEmittedFieldsBesidesURL() {
+		if cand.setsEmittedFieldsBesidesURL() {
 			return fmt.Errorf("case %q source %q records observations, so its adapter emits the candidates; candidate %q may carry only a url and download facts", caseID, src.Name, cand.URL)
 		}
 	}
