@@ -51,7 +51,7 @@ func TestReadOnly_RefusesWritesWhenSessionDefaultIsOff(t *testing.T) {
 	}
 }
 
-func readOnlyProbePool(t *testing.T) (context.Context, *pgxpool.Pool) {
+func probePool(t *testing.T) (context.Context, *pgxpool.Pool) {
 	t.Helper()
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
@@ -73,7 +73,7 @@ func readOnlyProbePool(t *testing.T) (context.Context, *pgxpool.Pool) {
 }
 
 func TestReadOnly_RefusesInsertAndWritingCTEOnAnExistingTable(t *testing.T) {
-	ctx, pool := readOnlyProbePool(t)
+	ctx, pool := probePool(t)
 	if _, err := pool.Exec(ctx, "CREATE TABLE IF NOT EXISTS readonly_probe_rows (id int)"); err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestReadOnly_RefusesInsertAndWritingCTEOnAnExistingTable(t *testing.T) {
 }
 
 func TestReadOnly_FnErrorReachesCallerAndRollsBackTheTransaction(t *testing.T) {
-	ctx, pool := readOnlyProbePool(t)
+	ctx, pool := probePool(t)
 	if _, err := pool.Exec(ctx, "CREATE TEMP TABLE readonly_probe_rollback (id int)"); err != nil {
 		t.Fatalf("create temp: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestReadOnly_FnErrorReachesCallerAndRollsBackTheTransaction(t *testing.T) {
 }
 
 func TestReadOnly_PanicInFnReachesCallerAndFreesTheConnection(t *testing.T) {
-	ctx, pool := readOnlyProbePool(t)
+	ctx, pool := probePool(t)
 
 	recovered := func() (r any) {
 		defer func() { r = recover() }()
@@ -150,7 +150,7 @@ func TestReadOnly_PanicInFnReachesCallerAndFreesTheConnection(t *testing.T) {
 }
 
 func TestReadOnly_CancelledContextNeverRunsFn(t *testing.T) {
-	ctx, pool := readOnlyProbePool(t)
+	ctx, pool := probePool(t)
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
 
@@ -168,7 +168,7 @@ func TestReadOnly_CancelledContextNeverRunsFn(t *testing.T) {
 }
 
 func TestReadOnly_DeadlineMidQueryReturnsAndFreesTheConnection(t *testing.T) {
-	ctx, pool := readOnlyProbePool(t)
+	ctx, pool := probePool(t)
 	short, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
 	defer cancel()
 
