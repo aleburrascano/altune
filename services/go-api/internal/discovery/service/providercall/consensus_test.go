@@ -1,13 +1,14 @@
-package providercall
+package providercall_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service/providercall"
 	"context"
 	"testing"
 )
 
-func consensusProvider(name string, albums ...string) ConsensusProvider {
-	return ConsensusProvider{
+func consensusProvider(name string, albums ...string) providercall.ConsensusProvider {
+	return providercall.ConsensusProvider{
 		Name: name,
 		Fetcher: func(_ context.Context, _ string) ([]domain.SearchResult, error) {
 			out := make([]domain.SearchResult, len(albums))
@@ -20,11 +21,11 @@ func consensusProvider(name string, albums ...string) ConsensusProvider {
 }
 
 func TestFanOutConsensus_CollectsEveryProvider(t *testing.T) {
-	providers := []ConsensusProvider{
+	providers := []providercall.ConsensusProvider{
 		consensusProvider("a", "A1"),
 		consensusProvider("b", "B1", "B2"),
 	}
-	out := FanOutConsensus(context.Background(), providers, func(ctx context.Context, p ConsensusProvider) int {
+	out := providercall.FanOutConsensus(context.Background(), providers, func(ctx context.Context, p providercall.ConsensusProvider) int {
 		albums, _ := p.Fetcher(ctx, "x")
 		return len(albums)
 	})
@@ -34,8 +35,8 @@ func TestFanOutConsensus_CollectsEveryProvider(t *testing.T) {
 }
 
 func TestFanOutConsensus_PanickingCollectIsContained(t *testing.T) {
-	providers := []ConsensusProvider{{Name: "boom"}, {Name: "ok"}}
-	out := FanOutConsensus(context.Background(), providers, func(_ context.Context, p ConsensusProvider) int {
+	providers := []providercall.ConsensusProvider{{Name: "boom"}, {Name: "ok"}}
+	out := providercall.FanOutConsensus(context.Background(), providers, func(_ context.Context, p providercall.ConsensusProvider) int {
 		if p.Name == "boom" {
 			panic("collect exploded")
 		}
