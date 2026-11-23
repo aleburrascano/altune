@@ -1,6 +1,7 @@
 package ytminnertube
 
 import (
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"errors"
 	"fmt"
@@ -146,7 +147,7 @@ func maxWaitMillis(ctx context.Context) int64 {
 }
 
 func (b *Budget) CoolDown(ctx context.Context) error {
-	commandCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), redisCommandDeadline)
+	commandCtx, cancel := runloop.Detach(ctx, redisCommandDeadline)
 	defer cancel()
 	return coolScript.Run(commandCtx, b.redis, []string{budgetKey}, b.settings.Cooldown.Milliseconds()).Err()
 }

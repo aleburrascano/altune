@@ -1,10 +1,12 @@
 package runloop
 
 import (
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"fmt"
 	"log/slog"
 	"runtime/debug"
+	"slices"
 )
 
 type PanicError struct {
@@ -14,14 +16,18 @@ type PanicError struct {
 }
 
 func (e *PanicError) Error() string {
-	return fmt.Sprintf("%s: panic: %v", e.Event, e.Value)
+	return fmt.Sprintf("%s: panic: %s", e.Event, e.loggable())
 }
 
-func Try(ctx context.Context, event string, fn func()) (err error) {
+func (e *PanicError) loggable() string {
+	return redact.LogText(fmt.Sprint(e.Value))
+}
+
+func Try(ctx context.Context, event string, fn func(), attrs ...any) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			panicked := newPanicError(event, r)
-			logPanic(ctx, panicked, nil)
+			logPanic(ctx, panicked, attrs)
 			err = panicked
 		}
 	}()
@@ -41,5 +47,5 @@ func newPanicError(event string, value any) *PanicError {
 
 func logPanic(ctx context.Context, panicked *PanicError, attrs []any) {
 	slog.ErrorContext(ctx, panicked.Event,
-		append(attrs, "panic", panicked.Value, "stack", string(panicked.Stack))...)
+		append(slices.Clip(attrs), "panic", panicked.loggable(), "stack", string(panicked.Stack))...)
 }

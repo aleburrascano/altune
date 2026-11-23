@@ -55,3 +55,28 @@ func TestTry_ReturnsNilAndLogsNothingWhenFnReturns(t *testing.T) {
 		t.Errorf("captured %d records, want none", got)
 	}
 }
+
+func TestTry_LogsTheCallersAttributes(t *testing.T) {
+	ring := captureDetachedLogs(t)
+
+	_ = runloop.Try(context.Background(), "test.try_attrs", func() { panic("boom") }, "provider", "deezer")
+
+	if got := onlyRecord(t, ring, "test.try_attrs").Attrs["provider"]; got != "deezer" {
+		t.Errorf("provider = %q, want deezer", got)
+	}
+}
+
+func TestTry_RedactsSecretsInThePanicValue(t *testing.T) {
+	ring := captureDetachedLogs(t)
+
+	err := runloop.Try(context.Background(), "test.try_redact", func() {
+		panic("GET https://api.example.test/v1?token=s3cr3t-value failed")
+	})
+
+	logged := onlyRecord(t, ring, "test.try_redact").Attrs["panic"]
+	for name, text := range map[string]string{"logged panic": logged, "Error()": err.Error()} {
+		if strings.Contains(text, "s3cr3t-value") || !strings.Contains(text, "REDACTED") {
+			t.Errorf("%s = %q, want the token masked", name, text)
+		}
+	}
+}
