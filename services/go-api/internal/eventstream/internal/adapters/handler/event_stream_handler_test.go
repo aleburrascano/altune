@@ -675,11 +675,11 @@ func TestSSEHandler_DefaultPerUserCapRejectsNinthStreamWithPlainText(t *testing.
 		t.Fatalf("ninth status = %d, want 429", resp.StatusCode)
 	}
 	body, _ := io.ReadAll(resp.Body)
-	if got := resp.Header.Get("Content-Type"); got != "text/plain; charset=utf-8" {
+	if got := resp.Header.Get("Content-Type"); got != "application/problem+json" {
 		t.Fatalf("content type = %q", got)
 	}
-	if string(body) != "too many event streams\n" {
-		t.Fatalf("body = %q", body)
+	if want := `{"type":"urn:altune:problem:eventstream.too_many_streams","title":"Too many event streams","status":429,"detail":"too many event streams","code":"eventstream.too_many_streams"}` + "\n"; string(body) != want {
+		t.Fatalf("body = %s, want %s", body, want)
 	}
 }
 
@@ -709,8 +709,8 @@ func TestSSEHandler_GlobalConnectionCapRejectsOverflowAcrossUsers(t *testing.T) 
 		t.Fatalf("overflow status = %d, want 429 past the global cap", status)
 	}
 	msg, _ := io.ReadAll(overflow)
-	if got := strings.TrimSpace(string(msg)); got != "too many event streams" {
-		t.Fatalf("overflow body = %q, want the per-user rejection message", got)
+	if !strings.Contains(string(msg), `"code":"eventstream.too_many_streams"`) {
+		t.Fatalf("overflow body = %q, want the same too-many-streams problem as the per-user cap", msg)
 	}
 
 	assertStreamsStillLive(t, bus, users, readers)
@@ -982,7 +982,7 @@ func TestSSEHandler_WriterWithoutFlushIsRejected(t *testing.T) {
 	}
 }
 
-func TestSSEHandler_WriterWithoutFlushGetsPlainTextBody(t *testing.T) {
+func TestSSEHandler_WriterWithoutFlushGetsAnInternalProblem(t *testing.T) {
 	h := handler.NewEventStreamHandler(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), 0)
 	uid := shared.NewUserId(uuid.New())
 	r := httptest.NewRequest(http.MethodGet, "/v1/events", nil)
@@ -995,11 +995,11 @@ func TestSSEHandler_WriterWithoutFlushGetsPlainTextBody(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", rec.Code)
 	}
-	if got := rec.Header().Get("Content-Type"); got != "text/plain; charset=utf-8" {
+	if got := rec.Header().Get("Content-Type"); got != "application/problem+json" {
 		t.Fatalf("content type = %q", got)
 	}
-	if got := rec.Body.String(); got != "streaming not supported\n" {
-		t.Fatalf("body = %q", got)
+	if want := `{"type":"urn:altune:problem:eventstream.streaming_unsupported","title":"Streaming unsupported","status":500,"detail":"streaming not supported","code":"eventstream.streaming_unsupported"}` + "\n"; rec.Body.String() != want {
+		t.Fatalf("body = %s, want %s", rec.Body.String(), want)
 	}
 }
 
