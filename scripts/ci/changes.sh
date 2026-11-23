@@ -10,6 +10,6 @@ flag() {
 }
 {
   flag backend '^(services/go-api/|scripts/uptime/|services/supabase/|\.github/workflows/pr-checks\.yml|scripts/ci/(changes|checkout|cleanup|node-deps|postgres)\.sh|scripts/ci/test-backend)'
-  flag mobile '^(client/|\.github/workflows/pr-checks\.yml|scripts/ci/(changes|checkout|cleanup|node-deps|postgres)\.sh|scripts/ci/test-mobile)'
+  flag mobile '^(client/|\.github/workflows/pr-checks\.yml|scripts/ci/(changes|checkout|cleanup|node-deps|postgres|client-mutate)\.sh|scripts/ci/test-mobile)'
   flag overseer '^(services/overseer/|\.github/workflows/pr-checks\.yml|scripts/ci/(changes|checkout|cleanup|node-deps|postgres)\.sh)'
 } | tee -a "${GITHUB_OUTPUT:-/dev/null}"

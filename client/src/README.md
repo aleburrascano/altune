@@ -1,0 +1,28 @@
+Each folder under `features/` and `shared/` is one module, and its folder says its role. The first line of a module's `README.md` says what it owns.
+
+- `features/<name>/` is a feature. It imports only shared modules, never another feature, so each one can change alone. When two features must work together, `mobile` connects them through a port the feature owns.
+- `shared/<name>/` is shared. Any module may import it, and it imports only other shared modules.
+- `mobile/` is the app. It builds every module, fills each port with its adapter, and draws the frame around every screen. Only it reads `process.env`, and it passes the values down.
+- `app/` holds the expo-router routes, because expo-router builds its URLs from this folder. `app` and `mobile` may import any module.
+
+Code reaches another module only through its door, `index.ts`. Inside a feature or shared module, every file but the door sits in one of five parts:
+
+- `core/`: the rules and their types, as plain functions. It imports only `core/` and `ports/`, and no package but `@tanstack/react-query` and `zustand`.
+- `ports/`: the interfaces `core/` or `shell/` need, which adapters fill. It imports only `core/` and `ports/`, and the same two packages.
+- `shell/`: connects the core to the ports and adapters. It imports `core/`, `ports/`, `adapters/` and `shell/`, and the same two packages.
+- `view/`: the screens, components and the hooks they use. It is the only part that imports the UI framework (`react`, `react-native`, the expo UI packages, `lucide-react-native`) or draws JSX. It imports `core/`, `ports/` and `view/`.
+- `adapters/`: the only part that does I/O: `fetch`, storage, native modules and every package that is neither pure nor UI. It imports `core/`, `ports/` and `adapters/`, and never the UI framework.
+
+Code for one platform is a platform file (`x.native.ts`, `x.web.ts`) beside the shared one in its part.
+
+Tests sit in a `__tests__/` folder. A test reaches its own module only through the door, other modules only through the doors its module may import, and helpers through `@testing/`. It hands the module its fakes through the module's `create*(deps)` door and never patches what the module imports: no `jest.mock`, `jest.doMock`, `jest.spyOn`, `jest.unstable_mockModule`, or their `vi.` forms. Each mutant Stryker makes on a changed line must fail one of the module's own tests.
+
+| Rule | Checked by |
+|---|---|
+| Module imports and doors | fallow, `client/fallow/modules.json` |
+| Part imports, every file in a part, no `fetch` outside adapters | fallow, `client/fallow/parts.json` |
+| No duplicated code | `fallow dupes` |
+| Packages and JSX per part, tests through doors, no patching, `process.env` | eslint, `client/eslint.config.js` |
+| Each changed line is tested | Stryker, `bash scripts/ci/client-mutate.sh <base>` |
+
+For now the fallow and eslint rules above check only the files a branch changes, because older code still breaks them: `bash client/scripts/fallow-changed.sh <base>` and eslint on the changed files. `bash scripts/precheck.sh` runs every check.

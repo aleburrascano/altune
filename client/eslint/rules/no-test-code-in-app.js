@@ -1,9 +1,6 @@
+const { importSourceVisitors, stringLiteralValue } = require('../importSources');
+
 const TEST_CODE_PATH = /(^|\/)__tests__(\/|$)|^@testing\//;
-
-const isRequireCall = (node) => node.callee.type === 'Identifier' && node.callee.name === 'require';
-
-const stringLiteralValue = (node) =>
-  node?.type === 'Literal' && typeof node.value === 'string' ? node.value : '';
 
 module.exports = {
   meta: {
@@ -21,14 +18,6 @@ module.exports = {
         context.report({ node: specifier, messageId: 'noTestCode', data: { path } });
       }
     };
-    return {
-      ImportDeclaration: (node) => check(node.source),
-      ExportNamedDeclaration: (node) => check(node.source),
-      ExportAllDeclaration: (node) => check(node.source),
-      ImportExpression: (node) => check(node.source),
-      CallExpression(node) {
-        if (isRequireCall(node)) check(node.arguments[0]);
-      },
-    };
+    return importSourceVisitors(check);
   },
 };

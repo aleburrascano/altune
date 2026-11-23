@@ -102,6 +102,10 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: fetch main
+        run: git fetch origin main:refs/remotes/origin/main
       - uses: actions/setup-node@v4
         with:
           node-version-file: client/.nvmrc
@@ -115,6 +119,8 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=3072
         run: npx jest --coverage --ci --maxWorkers=2 --workerIdleMemoryLimit=1GB --testTimeout=30000
+      - name: mutation on changed lines
+        run: bash scripts/ci/client-mutate.sh origin/main
 
   mobile-quality:
     needs: changes
@@ -186,6 +192,7 @@ jobs:
       - name: precheck
         env:
           MODULE_SPEC_RUNS_ELSEWHERE: "1"
+          CLIENT_MUTATE_RUNS_ELSEWHERE: "1"
         run: bash scripts/precheck.sh origin/main
 
   pr-checks:

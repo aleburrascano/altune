@@ -1,0 +1,1 @@
+`files` owns how a document is stored on the device so a crash never leaves it half written.

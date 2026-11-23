@@ -32,7 +32,7 @@ jobs:
           fetch() { git -C "$repo" fetch -q gitea "+refs/heads/main:refs/remotes/gitea/main" "$REF"; }
           fetch || { sleep 5; fetch; } || { sleep 5; fetch; }
           setup=$(git -C "$repo" show "$SHA:scripts/ci/step-worktree.sh")
-          . /dev/stdin gitea/main "$SHA" . client services/overseer/web <<<"$setup"
+          . /dev/stdin gitea/main "$SHA" . services/overseer/web <<<"$setup"
           bash scripts/ci/module-spec-main.sh check
 
   compact:

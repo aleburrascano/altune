@@ -28,7 +28,7 @@ jobs:
           fetch() { git -C "$repo" fetch -q gitea "+refs/heads/$BASE:refs/remotes/gitea/$BASE" "+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR"; }
           fetch || { sleep 5; fetch; } || { sleep 5; fetch; }
           setup=$(git -C "$repo" show "gitea/pr/$PR:scripts/ci/step-worktree.sh")
-          . /dev/stdin "gitea/$BASE" "gitea/pr/$PR" . client services/overseer/web <<<"$setup"
+          . /dev/stdin "gitea/$BASE" "gitea/pr/$PR" . services/overseer/web <<<"$setup"
           GITEA_URL="$SERVER_URL" GITEA_TOKEN="$PR_SHAPE_TOKEN" bash scripts/ci/pr-shape.sh "$PR"
           bash scripts/module-spec.sh check --since "gitea/$BASE"
           bash scripts/ci/kit-self-tests.sh "gitea/$BASE"

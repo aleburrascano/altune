@@ -1,3 +1,0 @@
-role: feature
-owns: what the user can change about the app and their account
-depends_on: [apiClient, apiConfig, auth, catalog, device, failure, offline, query, searchHistory, session, ui]

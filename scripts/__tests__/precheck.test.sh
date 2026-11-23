@@ -695,6 +695,12 @@ add_npm_stub
 run_script_with_stubs
 expect_log "npm run --silent react-doctor"
 expect_log "npm run --silent fallow"
+expect_out "mobile boundaries and duplication (changed files)"
+expect_out "mobile mutation (changed lines)"
+
+CASE="a CI job that runs client mutation itself skips it in precheck"
+CLIENT_MUTATE_RUNS_ELSEWHERE=1 run_script_with_stubs
+expect_out "SKIP  mobile mutation (changed lines): the mobile-tests CI job runs it"
 
 add_module_spec_root() {
     (

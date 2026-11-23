@@ -1,0 +1,40 @@
+{
+  "$schema": "../node_modules/fallow/schema.json",
+  "extends": ["../.fallowrc.json"],
+  "boundaries": {
+    "zones": [
+      { "name": "door", "patterns": ["src/features/*/index.ts", "src/shared/*/index.ts"] },
+      { "name": "core", "patterns": ["src/features/*/core/**", "src/shared/*/core/**"] },
+      { "name": "ports", "patterns": ["src/features/*/ports/**", "src/shared/*/ports/**"] },
+      { "name": "shell", "patterns": ["src/features/*/shell/**", "src/shared/*/shell/**"] },
+      { "name": "view", "patterns": ["src/features/*/view/**", "src/shared/*/view/**"] },
+      { "name": "adapters", "patterns": ["src/features/*/adapters/**", "src/shared/*/adapters/**"] },
+      { "name": "mobile", "patterns": ["src/mobile/**"] },
+      { "name": "app", "patterns": ["src/app/**"] },
+      { "name": "nativeModules", "patterns": ["modules/**"] }
+    ],
+    "rules": [
+      { "from": "door", "allow": ["core", "ports", "shell", "view", "adapters"] },
+      { "from": "core", "allow": ["door", "ports"] },
+      { "from": "ports", "allow": ["door", "core"] },
+      { "from": "shell", "allow": ["door", "core", "ports", "adapters"] },
+      { "from": "view", "allow": ["door", "core", "ports"] },
+      { "from": "adapters", "allow": ["door", "core", "ports", "nativeModules"] },
+      { "from": "mobile", "allow": ["door", "core", "ports", "shell", "view", "adapters", "nativeModules"] },
+      { "from": "app", "allow": ["door", "core", "ports", "shell", "view", "adapters", "mobile"] },
+      { "from": "nativeModules", "allow": [] }
+    ],
+    "coverage": {
+      "requireAllFiles": true,
+      "allowUnmatched": ["*.config.js", "doctor.config.ts", "eslint.config.test.js", "scripts/**", "eslint/**", "targets/**", "vendor/**"]
+    },
+    "calls": {
+      "forbidden": [
+        { "from": "core", "callee": "fetch" },
+        { "from": "ports", "callee": "fetch" },
+        { "from": "shell", "callee": "fetch" },
+        { "from": "view", "callee": "fetch" }
+      ]
+    }
+  }
+}

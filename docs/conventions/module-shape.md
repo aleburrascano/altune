@@ -1,13 +1,10 @@
 # Module shape
 
-`services/go-api` has left module-spec: its rules are in `services/go-api/internal/README.md`, and `golangci-lint` checks them. module-spec still owns the module shape of the other code roots. There each module is a folder with a `module.yaml`, and its door is `index.ts` in TypeScript or the `.go` files at its root in Go.
+`services/go-api` and `client` have left module-spec. The go-api rules are in `services/go-api/internal/README.md`, and `golangci-lint` checks them. The client rules are in `client/src/README.md`, and fallow, eslint and Stryker check them. module-spec still owns the module shape of `services/overseer`. There each module is a folder with a `module.yaml`, and its door is `index.ts` in TypeScript or the `.go` files at its root in Go.
 
 | Root | Modules | Baseline |
 |---|---|---|
 | `services/overseer` | `internal/<module>`, `internal/buckets/<bucket>` | `services/overseer/module-spec.baseline.json` + `.d/` |
-| `client` | `src/features/<feature>`, `src/shared/<module>`, `src/mobile` (the app) | `client/module-spec.baseline.json` + `.d/` |
-
-The expo-router routes in `client/src/app/` belong to no module, since expo-router builds URLs from that folder.
 
 Run `bash scripts/module-spec.sh check`. `scripts/precheck.sh` runs it on every commit, and its errors link to the rule that explains them. A branch that changes a module clears every baselined line of that module.
 

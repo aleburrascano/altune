@@ -1,3 +1,0 @@
-role: app
-owns: "how the client app is assembled at startup: which adapter fills each feature and shared port, and the frame around every screen"
-depends_on: [acquisition, apiClient, auth, catalog, detail, discovery, events, files, library, lifecycle, navigation, offline, playback, player, playlists, query, settings, signIn, telemetry, timing, ui]

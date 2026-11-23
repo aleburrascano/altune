@@ -1,3 +1,0 @@
-role: shared
-owns: how the app looks, from theme tokens to the shared screen primitives
-depends_on: [catalog, device, files, log, playback, telemetry]

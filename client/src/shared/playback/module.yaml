@@ -1,3 +1,0 @@
-role: shared
-owns: what the play queue holds and in which order it plays
-depends_on: [apiClient, catalog, math]

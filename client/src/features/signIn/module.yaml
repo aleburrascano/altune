@@ -1,3 +1,0 @@
-role: feature
-owns: how a person signs in, signs up, resets a password and returns from an email link
-depends_on: [apiConfig, auth, device, failure, navigation, session, telemetry, timing, ui]
