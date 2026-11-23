@@ -1,11 +1,14 @@
-package rank
+package rank_test
 
 import (
 	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service/rank"
 	"slices"
 	"testing"
 )
+
+const diversityWindow = 10
 
 func TestEnforceDiversity(t *testing.T) {
 	var results []domain.SearchResult
@@ -18,7 +21,7 @@ func TestEnforceDiversity(t *testing.T) {
 			"Other "+string(rune('A'+i)), "Other Artist "+string(rune('A'+i)), map[string]any{"popularity": int64(50)}))
 	}
 
-	diverse := EnforceDiversity(results)
+	diverse := rank.EnforceDiversity(results)
 
 	firstFourPos := []int{}
 	for i, r := range diverse {
@@ -57,7 +60,7 @@ func TestCollapseArtistDuplicates(t *testing.T) {
 				"popularity": float64(10),
 			}),
 		}
-		got := CollapseArtistDuplicates(results)
+		got := rank.CollapseArtistDuplicates(results)
 
 		if len(got) != 2 {
 			t.Fatalf("expected 2 results (1 artist + 1 track), got %d", len(got))
@@ -86,7 +89,7 @@ func TestCollapseArtistDuplicates(t *testing.T) {
 			discoverytest.ArtistResult(domain.ProviderDeezer, "1", "Drake", map[string]any{"popularity": float64(90)}),
 			discoverytest.ArtistResult(domain.ProviderDeezer, "2", "Aurora", map[string]any{"popularity": float64(70)}),
 		}
-		got := CollapseArtistDuplicates(results)
+		got := rank.CollapseArtistDuplicates(results)
 		if len(got) != 2 {
 			t.Errorf("expected 2 distinct artists preserved, got %d", len(got))
 		}
@@ -99,7 +102,7 @@ func TestCollapseArtistDuplicates(t *testing.T) {
 		results := []domain.SearchResult{
 			discoverytest.ArtistResult(domain.ProviderDeezer, "1", "Che", map[string]any{"popularity": float64(80)}),
 		}
-		got := CollapseArtistDuplicates(results)
+		got := rank.CollapseArtistDuplicates(results)
 		if len(got) != 1 {
 			t.Errorf("expected 1 result, got %d", len(got))
 		}
@@ -135,7 +138,7 @@ func TestDropCollabArtistCards(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := DropCollabArtistCards(append(append([]domain.SearchResult{}, tt.with...), tt.card))
+			got := rank.DropCollabArtistCards(append(append([]domain.SearchResult{}, tt.with...), tt.card))
 			kept := false
 			for _, r := range got {
 				kept = kept || r.Title == tt.card.Title
@@ -156,7 +159,7 @@ func TestDropCollabArtistCards_LeavesSongsWithCollabCreditsAlone(t *testing.T) {
 	yachty := withFans(discoverytest.ArtistResult(domain.ProviderDeezer, "1", "Lil Yachty", nil), 5_000_000)
 	song := discoverytest.TrackResult(domain.ProviderDeezer, "20", "POP IT", "DDG, Lil Yachty", nil)
 
-	if got := DropCollabArtistCards([]domain.SearchResult{yachty, song}); len(got) != 2 {
+	if got := rank.DropCollabArtistCards([]domain.SearchResult{yachty, song}); len(got) != 2 {
 		t.Fatalf("got %v, want the song kept", discoverytest.Titles(got))
 	}
 }
@@ -165,7 +168,7 @@ func TestReshape_DropsCollabArtistCards(t *testing.T) {
 	yachty := withFans(discoverytest.ArtistResult(domain.ProviderDeezer, "1", "Lil Yachty", nil), 5_000_000)
 	collab := discoverytest.ArtistResult(domain.ProviderDeezer, "10", "DDG, Lil Yachty", nil)
 
-	if got := Reshape([]domain.SearchResult{yachty, collab}); len(got) != 1 {
+	if got := rank.Reshape([]domain.SearchResult{yachty, collab}); len(got) != 1 {
 		t.Fatalf("got %v, want only Lil Yachty", discoverytest.Titles(got))
 	}
 }
@@ -175,7 +178,7 @@ func TestDropCollabArtistCards_KeepsArtistsAnotherProviderConfirms(t *testing.T)
 	band := withFans(discoverytest.ArtistResult(domain.ProviderDeezer, "2", "Earth, Wind & Fire", nil), 3_000_000)
 	band.Sources = append(band.Sources, domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: "sp"})
 
-	got := DropCollabArtistCards([]domain.SearchResult{fire, band})
+	got := rank.DropCollabArtistCards([]domain.SearchResult{fire, band})
 
 	if !slices.Equal(discoverytest.Titles(got), []string{"Fire", "Earth, Wind & Fire"}) {
 		t.Fatalf("got %v, want the band Spotify also lists kept", discoverytest.Titles(got))
@@ -187,7 +190,7 @@ func TestDropCollabArtistCards_KeepsTheTopPick(t *testing.T) {
 	picked := discoverytest.ArtistResult(domain.ProviderDeezer, "2", "Simon & Garfunkel", map[string]any{domain.ExtraTopPick: true})
 	simon := withFans(discoverytest.ArtistResult(domain.ProviderDeezer, "3", "Simon", nil), 9_000_000)
 
-	got := DropCollabArtistCards([]domain.SearchResult{yachty, simon, picked})
+	got := rank.DropCollabArtistCards([]domain.SearchResult{yachty, simon, picked})
 
 	if !slices.Contains(discoverytest.Titles(got), "Simon & Garfunkel") {
 		t.Fatalf("got %v, want the top pick kept", discoverytest.Titles(got))

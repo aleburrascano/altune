@@ -1,8 +1,9 @@
-package rank
+package rank_test
 
 import (
 	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service/rank"
 	"testing"
 )
 
@@ -11,8 +12,8 @@ func threeProviderArtist(name string) domain.SearchResult {
 	return multiSource(multiSource(card, domain.ProviderSpotify), domain.ProviderAppleMusic)
 }
 
-func sameTitleTracks(title string, popularity float64) []Entity {
-	var out []Entity
+func sameTitleTracks(title string, popularity float64) []rank.Entity {
+	var out []rank.Entity
 	for _, by := range []string{"Augustana", "Other Band", "Third Act"} {
 		out = append(out, ent(discoverytest.WithPop(discoverytest.Track(title, by, domain.ProviderDeezer, nil), popularity)))
 	}
@@ -22,7 +23,7 @@ func sameTitleTracks(title string, popularity float64) []Entity {
 func TestRank_ArtistCardOnThreeProvidersOutranksSameTitleTracks(t *testing.T) {
 	entities := append(sameTitleTracks("Boston", 900), ent(threeProviderArtist("Boston")))
 
-	got := Rank(entities, "boston")
+	got := rank.Rank(entities, "boston")
 
 	if got[0].Kind != domain.ResultKindArtist {
 		t.Fatalf("want the three-provider Boston artist card first, got %v", discoverytest.Titles(got))
@@ -33,7 +34,7 @@ func TestRank_ArtistCardOnTwoProvidersStaysBelowPopularTracks(t *testing.T) {
 	weak := multiSource(discoverytest.Res(domain.ResultKindArtist, "Boston", "", domain.ProviderDeezer, nil), domain.ProviderSpotify)
 	entities := append(sameTitleTracks("Boston", 900), ent(weak))
 
-	got := Rank(entities, "boston")
+	got := rank.Rank(entities, "boston")
 
 	if got[0].Kind != domain.ResultKindTrack {
 		t.Fatalf("a two-provider card must not be lifted, got %v", discoverytest.Titles(got))
@@ -43,7 +44,7 @@ func TestRank_ArtistCardOnTwoProvidersStaysBelowPopularTracks(t *testing.T) {
 func TestRank_ArtistCardWithDifferentNameIsNotLifted(t *testing.T) {
 	entities := append(sameTitleTracks("Boston", 900), ent(threeProviderArtist("Boston Manor")))
 
-	got := Rank(entities, "boston")
+	got := rank.Rank(entities, "boston")
 
 	if got[0].Kind != domain.ResultKindTrack {
 		t.Fatalf("only an exact-name artist is lifted, got %v", discoverytest.Titles(got))
