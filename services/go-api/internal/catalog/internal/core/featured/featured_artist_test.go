@@ -3,6 +3,7 @@ package featured_test
 import (
 	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
@@ -16,11 +17,12 @@ import (
 )
 
 const (
-	backfillPageSize    = 200
-	backfillMaxPages    = 50
-	backfillCooldown    = 5 * time.Minute
-	backfillItemTimeout = 10 * time.Second
-	backfillTimeBudget  = 45 * time.Second
+	backfillPageSize     = 200
+	backfillMaxPages     = 50
+	backfillCooldown     = 5 * time.Minute
+	backfillItemTimeout  = 10 * time.Second
+	backfillWriteTimeout = 5 * time.Second
+	backfillTimeBudget   = 45 * time.Second
 )
 
 type manualClock struct{ at time.Time }
@@ -782,5 +784,39 @@ func TestBackfill_ARunCanceledDuringAWriteStillLandsThatWrite(t *testing.T) {
 	}
 	if len(second.FeaturedArtists) != 0 {
 		t.Fatalf("second track featured = %+v, want nothing written after the cancel", second.FeaturedArtists)
+	}
+}
+
+type writeRecordingRepo struct {
+	*catalog.InMemoryTrackRepo
+	deadlines []time.Time
+	corrID    string
+}
+
+func (r *writeRecordingRepo) ReplaceFeaturedArtists(ctx context.Context, id catalog.TrackId, userId shared.UserId, feats []catalog.FeaturedArtist) error {
+	deadline, _ := ctx.Deadline()
+	r.deadlines = append(r.deadlines, deadline)
+	r.corrID = logging.CorrelationIDFromContext(ctx)
+	return r.InMemoryTrackRepo.ReplaceFeaturedArtists(ctx, id, userId, feats)
+}
+
+func TestBackfill_TheDetachedWriteHasItsOwnBudgetAndKeepsTheRunsCorrelationID(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	repo := catalog.NewInMemoryTrackRepo()
+	repo.Seed(newTrackFeat(t, userId, "Track 1"))
+	writes := &writeRecordingRepo{InMemoryTrackRepo: repo}
+	resolver := catalog.InMemoryFeaturedResolver{ByTitle: map[string][]catalog.FeaturedArtist{
+		"Track 1": {catalog.NewFeaturedArtistIdentityOnly("Guest 1", "m1", 0)},
+	}}
+	svc := catalog.NewBackfillFeaturedService(repo, writes, resolver)
+	ctx := logging.WithCorrelationID(context.Background(), "corr-backfill-9")
+
+	before := time.Now()
+	if _, err := svc.Execute(ctx, userId, 0); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	assertOneDeadline(t, "featured write", writes.deadlines, before, time.Now(), backfillWriteTimeout)
+	if writes.corrID != "corr-backfill-9" {
+		t.Errorf("corr id on the write = %q, want the run's", writes.corrID)
 	}
 }

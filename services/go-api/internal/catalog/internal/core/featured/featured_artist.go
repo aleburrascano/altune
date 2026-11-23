@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"errors"
 	"fmt"
@@ -76,11 +77,12 @@ type BackfillFeaturedResult struct {
 }
 
 const (
-	backfillPageSize    = 200
-	backfillMaxPages    = 50
-	backfillCooldown    = 5 * time.Minute
-	backfillItemTimeout = 10 * time.Second
-	backfillTimeBudget  = 45 * time.Second
+	backfillPageSize     = 200
+	backfillMaxPages     = 50
+	backfillCooldown     = 5 * time.Minute
+	backfillItemTimeout  = 10 * time.Second
+	backfillWriteTimeout = 5 * time.Second
+	backfillTimeBudget   = 45 * time.Second
 )
 
 var errBackfillBudgetSpent = errors.New("featured backfill time budget spent")
@@ -188,7 +190,7 @@ func (s *BackfillFeaturedService) backfillTrack(
 	if len(feats) == 0 {
 		return nil
 	}
-	if err := s.featuredRepo.ReplaceFeaturedArtists(context.WithoutCancel(ctx), t.ID, userId, feats); err != nil {
+	if err := s.persist(ctx, t.ID, userId, feats); err != nil {
 		res.Failed++
 		slog.WarnContext(ctx, "featured backfill persist failed",
 			"track_id", t.ID.String(), "error", err)
@@ -196,6 +198,12 @@ func (s *BackfillFeaturedService) backfillTrack(
 	}
 	res.Updated++
 	return nil
+}
+
+func (s *BackfillFeaturedService) persist(ctx context.Context, id domain.TrackId, userId shared.UserId, feats []domain.FeaturedArtist) error {
+	writeCtx, cancel := runloop.Detach(ctx, backfillWriteTimeout)
+	defer cancel()
+	return s.featuredRepo.ReplaceFeaturedArtists(writeCtx, id, userId, feats)
 }
 
 func (s *BackfillFeaturedService) resolve(ctx context.Context, t *domain.Track) ([]domain.FeaturedArtist, error) {
