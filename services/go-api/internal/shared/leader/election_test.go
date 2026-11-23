@@ -1,11 +1,13 @@
-package leader
+package leader_test
 
 import (
+	"altune/go-api/internal/shared/leader"
 	"bytes"
 	"context"
 	"errors"
 	"log/slog"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -15,6 +17,18 @@ import (
 )
 
 const testKey int64 = 8_246_113_907_441_099
+
+const (
+	fastInterval = 20 * time.Millisecond
+
+	databaseInterval = 100 * time.Millisecond
+
+	singleTick = time.Hour
+
+	shutdownLoopBudget = 2 * time.Second
+
+	predecessorDetectionIntervals = 2
+)
 
 func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
@@ -27,38 +41,186 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("failed to connect: %v", err)
 	}
 	t.Cleanup(func() { pool.Close() })
+	if err := pool.Ping(context.Background()); err != nil {
+		t.Fatalf("failed to open a first connection: %v", err)
+	}
 	return pool
 }
 
-func awaitLeader(t *testing.T, e *Election, within time.Duration) bool {
-	t.Helper()
-	deadline := time.Now().Add(within)
-	for time.Now().Before(deadline) {
-		if e.isLeader() {
-			return true
-		}
-		time.Sleep(10 * time.Millisecond)
+func awaitLeader(e *leader.Election, within time.Duration) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), within)
+	defer cancel()
+	return e.Await(ctx)
+}
+
+func isLeader(e *leader.Election) bool {
+	_, release, ok := e.LeaderContext(context.Background())
+	if ok {
+		release()
 	}
-	return false
+	return ok
+}
+
+func startElection(t *testing.T, locks leader.LockStore, interval time.Duration) *leader.Election {
+	t.Helper()
+	e := leader.NewElection(locks, testKey, interval)
+	e.Start(context.Background())
+	t.Cleanup(func() { e.Shutdown(context.Background()) })
+	return e
+}
+
+func fastElection(t *testing.T, pool *pgxpool.Pool, interval time.Duration) *leader.Election {
+	t.Helper()
+	return startElection(t, leader.PoolLocks(pool), interval)
+}
+
+type signal struct {
+	once sync.Once
+	ch   chan struct{}
+}
+
+func newSignal() *signal { return &signal{ch: make(chan struct{})} }
+
+func (s *signal) fire() { s.once.Do(func() { close(s.ch) }) }
+
+func (s *signal) wait(t *testing.T, within time.Duration, what string) {
+	t.Helper()
+	select {
+	case <-s.ch:
+	case <-time.After(within):
+		t.Fatalf("%s did not happen within %v", what, within)
+	}
+}
+
+type store struct {
+	session  leader.LockSession
+	err      error
+	acquired *signal
+}
+
+func storeOf(session leader.LockSession) *store {
+	return &store{session: session, acquired: newSignal()}
+}
+
+func (s *store) Acquire(context.Context) (leader.LockSession, error) {
+	defer s.acquired.fire()
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.session, nil
+}
+
+type session struct {
+	mu                   sync.Mutex
+	lockLost             bool
+	lockErr              error
+	pingErr              error
+	pingWaitsForDeadline bool
+	unlockCtxErr         error
+	unlockAttempted      bool
+	unlocked             bool
+	released             bool
+
+	locked     *signal
+	pinged     *signal
+	releasedAt *signal
+}
+
+func newSession() *session {
+	return &session{locked: newSignal(), pinged: newSignal(), releasedAt: newSignal()}
+}
+
+func (s *session) TryAdvisoryLock(context.Context, int64) (bool, error) {
+	defer s.locked.fire()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return !s.lockLost && s.lockErr == nil, s.lockErr
+}
+
+func (s *session) Ping(ctx context.Context) error {
+	s.pinged.fire()
+	s.mu.Lock()
+	waits, err := s.pingWaitsForDeadline, s.pingErr
+	s.mu.Unlock()
+	if waits {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	return err
+}
+
+func (s *session) AdvisoryUnlock(ctx context.Context, _ int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.unlockAttempted = true
+	if err := ctx.Err(); err != nil {
+		s.unlockCtxErr = err
+		return err
+	}
+	s.unlocked = true
+	return nil
+}
+
+func (s *session) Release() {
+	s.mu.Lock()
+	s.released = true
+	s.mu.Unlock()
+	s.releasedAt.fire()
+}
+
+func (s *session) fail(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pingErr = err
+	s.lockLost = true
+}
+
+func (s *session) hang() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pingWaitsForDeadline = true
+	s.lockLost = true
+}
+
+func (s *session) state() (unlockAttempted, unlocked, released bool, unlockCtxErr error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.unlockAttempted, s.unlocked, s.released, s.unlockCtxErr
+}
+
+func captureWarnings(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	return captureLogs(t, slog.LevelWarn)
+}
+
+func captureLogs(t *testing.T, level slog.Level) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	restore := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: level})))
+	t.Cleanup(func() { slog.SetDefault(restore) })
+	return &buf
+}
+
+func runOneTick(t *testing.T, s *store) *leader.Election {
+	t.Helper()
+	e := leader.NewElection(s, testKey, singleTick)
+	e.Start(context.Background())
+	s.acquired.wait(t, 2*time.Second, "the first lock attempt")
+	e.Shutdown(context.Background())
+	return e
 }
 
 func TestElection_OnlyOneInstanceWins(t *testing.T) {
 	pool := testPool(t)
-	ctx := context.Background()
 
-	first := fastElection(pool)
-	first.Start(ctx)
-	t.Cleanup(func() { first.Shutdown(ctx) })
-
-	if !awaitLeader(t, first, 2*time.Second) {
+	first := fastElection(t, pool, databaseInterval)
+	if !awaitLeader(first, 5*time.Second) {
 		t.Fatal("first election never acquired the lock")
 	}
 
-	second := fastElection(pool)
-	second.Start(ctx)
-	t.Cleanup(func() { second.Shutdown(ctx) })
-
-	if awaitLeader(t, second, 500*time.Millisecond) {
+	second := fastElection(t, pool, databaseInterval)
+	if awaitLeader(second, time.Second) {
 		t.Fatal("second election acquired a lock the first already holds")
 	}
 }
@@ -67,106 +229,55 @@ func TestElection_SuccessorTakesOverAfterShutdown(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 
-	outgoing := fastElection(pool)
+	outgoing := leader.NewElection(leader.PoolLocks(pool), testKey, databaseInterval)
 	outgoing.Start(ctx)
-	if !awaitLeader(t, outgoing, 2*time.Second) {
+	if !awaitLeader(outgoing, 5*time.Second) {
 		t.Fatal("outgoing election never acquired the lock")
 	}
 
-	incoming := fastElection(pool)
-	incoming.Start(ctx)
-	t.Cleanup(func() { incoming.Shutdown(ctx) })
-
-	if incoming.isLeader() {
+	incoming := fastElection(t, pool, databaseInterval)
+	if isLeader(incoming) {
 		t.Fatal("incoming election is leader while the outgoing one still holds the lock")
 	}
 
 	outgoing.Shutdown(ctx)
 
-	if !awaitLeader(t, incoming, 3*time.Second) {
+	if !awaitLeader(incoming, 5*time.Second) {
 		t.Fatal("incoming election never took over after the outgoing one released")
 	}
 }
 
 func TestElection_AwaitUnblocksOnAcquire(t *testing.T) {
-	pool := testPool(t)
-	ctx := context.Background()
+	e := fastElection(t, testPool(t), databaseInterval)
 
-	e := fastElection(pool)
-	e.Start(ctx)
-	t.Cleanup(func() { e.Shutdown(ctx) })
-
-	awaitCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-
-	if !e.Await(awaitCtx) {
+	if !awaitLeader(e, 5*time.Second) {
 		t.Fatal("Await did not unblock after the lock was acquired")
 	}
 }
 
 func TestElection_AwaitReturnsFalseWhenNeverLeader(t *testing.T) {
 	pool := testPool(t)
-	ctx := context.Background()
 
-	holder := fastElection(pool)
-	holder.Start(ctx)
-	t.Cleanup(func() { holder.Shutdown(ctx) })
-	if !awaitLeader(t, holder, 2*time.Second) {
+	holder := fastElection(t, pool, databaseInterval)
+	if !awaitLeader(holder, 5*time.Second) {
 		t.Fatal("holder never acquired the lock")
 	}
 
-	standby := fastElection(pool)
-	standby.Start(ctx)
-	t.Cleanup(func() { standby.Shutdown(ctx) })
-
-	awaitCtx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
-	defer cancel()
-
-	if standby.Await(awaitCtx) {
+	standby := fastElection(t, pool, databaseInterval)
+	if awaitLeader(standby, time.Second) {
 		t.Fatal("Await reported leadership the standby never held")
 	}
 }
 
 func TestElection_ShutdownWithoutStartIsSafe(t *testing.T) {
-	e := NewElection(nil, testKey)
+	e := leader.NewElection(&store{}, testKey, singleTick)
 	e.Shutdown(context.Background())
-}
-
-type errConnector struct{ err error }
-
-func (c errConnector) Acquire(context.Context) (heldConn, error) { return nil, c.err }
-
-type refusingConn struct {
-	lockErr  error
-	released bool
-}
-
-func (c *refusingConn) TryAdvisoryLock(context.Context, int64) (bool, error) {
-	return false, c.lockErr
-}
-
-func (c *refusingConn) Ping(context.Context) error                  { return nil }
-func (c *refusingConn) AdvisoryUnlock(context.Context, int64) error { return nil }
-func (c *refusingConn) Release()                                    { c.released = true }
-
-func captureWarnings(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	var buf bytes.Buffer
-	restore := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
-	t.Cleanup(func() { slog.SetDefault(restore) })
-	return &buf
-}
-
-func electionOver(db connector) *Election {
-	return &Election{db: db, key: testKey, interval: 20 * time.Millisecond, won: make(chan struct{})}
 }
 
 func TestElection_PoolFailureIsLoggedAndCounted(t *testing.T) {
 	logged := captureWarnings(t)
-	e := electionOver(errConnector{errors.New("pool exhausted")})
 
-	e.acquire(context.Background())
+	e := runOneTick(t, &store{err: errors.New("pool exhausted"), acquired: newSignal()})
 
 	if !strings.Contains(logged.String(), "leader.acquire_failed") {
 		t.Errorf("a failed pool acquire emitted no warning, got: %q", logged.String())
@@ -174,146 +285,123 @@ func TestElection_PoolFailureIsLoggedAndCounted(t *testing.T) {
 	if !strings.Contains(logged.String(), "pool exhausted") {
 		t.Errorf("the acquire warning did not carry the cause, got: %q", logged.String())
 	}
-	if c := e.Counters(); c.Attempts != 1 || c.Failures != 1 || c.Contended != 0 {
+	if c := e.Counters(); c.Attempts != 1 || c.Failures != 1 || c.Contended != 0 || c.Wins != 0 {
 		t.Errorf("counters = %+v, want one attempt counted as a failure, not as contention", c)
 	}
 }
 
 func TestElection_LockQueryFailureIsLoggedAndCounted(t *testing.T) {
 	logged := captureWarnings(t)
-	conn := &refusingConn{lockErr: errors.New("connection reset by peer")}
-	e := electionOver(fixedConnector{conn})
+	conn := newSession()
+	conn.lockErr = errors.New("connection reset by peer")
 
-	e.acquire(context.Background())
+	e := runOneTick(t, storeOf(conn))
 
 	if !strings.Contains(logged.String(), "leader.acquire_failed") {
 		t.Errorf("a failed lock query emitted no warning, got: %q", logged.String())
 	}
-	if c := e.Counters(); c.Failures != 1 || c.Contended != 0 {
+	if c := e.Counters(); c.Attempts != 1 || c.Failures != 1 || c.Contended != 0 || c.Wins != 0 {
 		t.Errorf("counters = %+v, want the failed lock query counted as a failure", c)
 	}
-	if !conn.released {
+	if _, _, released, _ := conn.state(); !released {
 		t.Error("the connection was not returned to the pool after the lock query failed")
 	}
 }
 
 func TestElection_LostRaceIsCountedWithoutWarning(t *testing.T) {
 	logged := captureWarnings(t)
-	conn := &refusingConn{}
-	e := electionOver(fixedConnector{conn})
+	conn := newSession()
+	conn.lockLost = true
 
-	e.acquire(context.Background())
+	e := runOneTick(t, storeOf(conn))
 
 	if logged.String() != "" {
 		t.Errorf("losing the race to another instance warned, got: %q", logged.String())
 	}
-	if c := e.Counters(); c.Contended != 1 || c.Failures != 0 {
+	if c := e.Counters(); c.Attempts != 1 || c.Contended != 1 || c.Failures != 0 || c.Wins != 0 {
 		t.Errorf("counters = %+v, want the lost race counted as contention, not as a failure", c)
 	}
-	if !conn.released {
+	if _, _, released, _ := conn.state(); !released {
 		t.Error("the connection was not returned to the pool after losing the race")
 	}
 }
 
+func TestElection_WinningTheLockIsCountedAndHeldUntilShutdown(t *testing.T) {
+	conn := newSession()
+
+	e := runOneTick(t, storeOf(conn))
+
+	if c := e.Counters(); c.Attempts != 1 || c.Wins != 1 || c.Contended != 0 || c.Failures != 0 {
+		t.Errorf("counters = %+v, want one attempt counted as a win", c)
+	}
+	if _, unlocked, released, _ := conn.state(); !unlocked || !released {
+		t.Error("shutdown did not unlock and return the connection it won")
+	}
+}
+
 func TestElection_CountsWinsAndTermEnds(t *testing.T) {
-	conn := &flakyConn{}
-	e := electionOver(fixedConnector{conn})
-	settleIntoLeadership(e)
-
-	conn.dead = true
-	e.tick(context.Background())
-
-	if c := e.Counters(); c.Wins != 1 || c.TermEnds != 1 {
-		t.Errorf("counters = %+v, want one win followed by one term end", c)
+	conn := newSession()
+	e := startElection(t, storeOf(conn), fastInterval)
+	if !awaitLeader(e, 5*time.Second) {
+		t.Fatal("election never settled into leadership")
 	}
-}
 
-type fakeConn struct {
-	pingBlocks      bool
-	unlockAttempted bool
-	unlockErr       error
-	unlocked        bool
-	released        bool
-}
+	conn.fail(errors.New("session terminated"))
+	conn.releasedAt.wait(t, 2*time.Second, "releasing the dead session")
+	e.Shutdown(context.Background())
 
-func (c *fakeConn) TryAdvisoryLock(context.Context, int64) (bool, error) { return true, nil }
-
-func (c *fakeConn) Ping(ctx context.Context) error {
-	if !c.pingBlocks {
-		return nil
-	}
-	<-ctx.Done()
-	return ctx.Err()
-}
-
-func (c *fakeConn) AdvisoryUnlock(ctx context.Context, _ int64) error {
-	c.unlockAttempted = true
-	if err := ctx.Err(); err != nil {
-		c.unlockErr = err
-		return err
-	}
-	c.unlocked = true
-	return nil
-}
-
-func (c *fakeConn) Release() { c.released = true }
-
-func leaderHolding(conn heldConn) *Election {
-	return &Election{
-		key:      testKey,
-		interval: 100 * time.Millisecond,
-		won:      make(chan struct{}),
-		conn:     conn,
+	if c := e.Counters(); c.Wins != 1 || c.TermEnds != 1 || c.HoldsLost != 1 {
+		t.Errorf("counters = %+v, want one win followed by one lost hold that ended the term", c)
 	}
 }
 
 func TestElection_ShutdownReleasesLockWithFreshDeadline(t *testing.T) {
-	fc := &fakeConn{}
-	e := leaderHolding(fc)
+	conn := newSession()
+	s := storeOf(conn)
+	e := leader.NewElection(s, testKey, singleTick)
+	e.Start(context.Background())
+	conn.locked.wait(t, 2*time.Second, "winning the lock")
 
 	expired, cancel := context.WithCancel(context.Background())
 	cancel()
 	e.Shutdown(expired)
 
-	if !fc.unlockAttempted {
+	attempted, unlocked, released, unlockErr := conn.state()
+	if !attempted {
 		t.Fatal("shutdown never attempted to release the advisory lock")
 	}
-	if fc.unlockErr != nil {
-		t.Fatalf("unlock ran on an already-expired context: %v", fc.unlockErr)
+	if unlockErr != nil {
+		t.Fatalf("unlock ran on an already-expired context: %v", unlockErr)
 	}
-	if !fc.unlocked {
+	if !unlocked {
 		t.Fatal("advisory lock not released before the connection returned to the pool")
 	}
-	if !fc.released {
+	if !released {
 		t.Fatal("connection was not returned to the pool")
 	}
 }
 
 func TestElection_VerifyDoesNotFreezeOnStuckPing(t *testing.T) {
-	fc := &fakeConn{pingBlocks: true}
-	e := leaderHolding(fc)
-
-	done := make(chan struct{})
-	go func() { defer close(done); e.verify(context.Background()) }()
-
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("verify never returned: a stuck Ping froze the single-goroutine loop")
+	conn := newSession()
+	e := startElection(t, storeOf(conn), fastInterval)
+	if !awaitLeader(e, 5*time.Second) {
+		t.Fatal("election never settled into leadership")
 	}
 
-	if e.isLeader() {
-		t.Fatal("verify kept leadership despite an unresponsive connection")
+	conn.hang()
+
+	conn.releasedAt.wait(t, 2*time.Second, "giving up on the unresponsive connection")
+	if isLeader(e) {
+		t.Fatal("the election kept leadership despite an unresponsive connection")
 	}
-	if !fc.released {
-		t.Fatal("the wedged connection was not released after leadership was lost")
+	if got := e.Counters().HoldsLost; got != 1 {
+		t.Fatalf("HoldsLost = %d, want 1", got)
 	}
 }
 
 type blockingPingConn struct {
-	pinging chan struct{}
+	pinging *signal
 	unblock chan struct{}
-	once    sync.Once
 
 	mu             sync.Mutex
 	midPing        bool
@@ -323,7 +411,7 @@ type blockingPingConn struct {
 }
 
 func newBlockingPingConn() *blockingPingConn {
-	return &blockingPingConn{pinging: make(chan struct{}), unblock: make(chan struct{})}
+	return &blockingPingConn{pinging: newSignal(), unblock: make(chan struct{})}
 }
 
 func (c *blockingPingConn) TryAdvisoryLock(context.Context, int64) (bool, error) { return true, nil }
@@ -331,7 +419,7 @@ func (c *blockingPingConn) TryAdvisoryLock(context.Context, int64) (bool, error)
 func (c *blockingPingConn) Ping(context.Context) error {
 	c.setMidPing(true)
 	defer c.setMidPing(false)
-	c.once.Do(func() { close(c.pinging) })
+	c.pinging.fire()
 	<-c.unblock
 	return nil
 }
@@ -368,11 +456,17 @@ func (c *blockingPingConn) releasedLock() bool {
 	return c.unlocked && c.released
 }
 
+func (c *blockingPingConn) touchedAtAll() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.unlocked || c.released
+}
+
 func TestElection_ShutdownReleasesOnlyAfterInFlightVerifyFinishes(t *testing.T) {
 	conn := newBlockingPingConn()
-	e := &Election{db: fixedConnector{conn}, key: testKey, interval: 20 * time.Millisecond, won: make(chan struct{})}
+	e := leader.NewElection(storeOf(conn), testKey, fastInterval)
 	e.Start(context.Background())
-	<-conn.pinging
+	conn.pinging.wait(t, 2*time.Second, "the first verify ping")
 
 	budget, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
@@ -403,49 +497,52 @@ func TestElection_ShutdownReleasesOnlyAfterInFlightVerifyFinishes(t *testing.T) 
 	}
 }
 
-type lateConnector struct {
-	conn      heldConn
-	acquiring chan struct{}
+type lateStore struct {
+	conn      leader.LockSession
+	acquiring *signal
 	unblock   chan struct{}
-	once      sync.Once
 }
 
-func (c *lateConnector) Acquire(context.Context) (heldConn, error) {
-	c.once.Do(func() { close(c.acquiring) })
-	<-c.unblock
-	return c.conn, nil
+func (s *lateStore) Acquire(context.Context) (leader.LockSession, error) {
+	s.acquiring.fire()
+	<-s.unblock
+	return s.conn, nil
 }
 
 func TestElection_ShutdownReleasesALockWonWhileItWasRunning(t *testing.T) {
-	conn := &fakeConn{}
-	db := &lateConnector{conn: conn, acquiring: make(chan struct{}), unblock: make(chan struct{})}
-	e := &Election{db: db, key: testKey, interval: 20 * time.Millisecond, won: make(chan struct{})}
+	conn := newSession()
+	db := &lateStore{conn: conn, acquiring: newSignal(), unblock: make(chan struct{})}
+	e := leader.NewElection(db, testKey, fastInterval)
 	e.Start(context.Background())
-	<-db.acquiring
+	db.acquiring.wait(t, 2*time.Second, "the first lock attempt")
 
 	budget, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
 	go func() { time.Sleep(100 * time.Millisecond); close(db.unblock) }()
 	e.Shutdown(budget)
 
-	if !conn.unlocked || !conn.released {
+	if _, unlocked, released, _ := conn.state(); !unlocked || !released {
 		t.Fatal("a lock won while shutdown was under way was left held, with no loop left to release it")
 	}
 }
 
 func TestElection_ShutdownKeepsTheLockWhenTheLoopNeverStops(t *testing.T) {
 	logged := captureWarnings(t)
-	conn := &fakeConn{}
-	e := leaderHolding(conn)
-	e.loopDone = make(chan struct{})
+	conn := newBlockingPingConn()
+	t.Cleanup(func() { close(conn.unblock) })
+	e := leader.NewElection(storeOf(conn), testKey, fastInterval)
+	e.Start(context.Background())
+	conn.pinging.wait(t, 2*time.Second, "the verify ping that wedges the loop")
 
+	budget, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
 	start := time.Now()
-	e.Shutdown(context.Background())
+	e.Shutdown(budget)
 
 	if waited := time.Since(start); waited < shutdownLoopBudget {
 		t.Fatalf("Shutdown gave up after %v, before the loop had its %v", waited, shutdownLoopBudget)
 	}
-	if conn.unlockAttempted || conn.released {
+	if conn.touchedAtAll() {
 		t.Fatal("shutdown released a connection the loop goroutine may still be using")
 	}
 	if !strings.Contains(logged.String(), "leader.release_skipped") {
@@ -453,114 +550,100 @@ func TestElection_ShutdownKeepsTheLockWhenTheLoopNeverStops(t *testing.T) {
 	}
 }
 
-func fastElection(pool *pgxpool.Pool) *Election {
-	e := NewElection(pool, testKey)
-	e.interval = 20 * time.Millisecond
-	return e
-}
-
-type flakyConn struct{ dead bool }
-
-func (c *flakyConn) TryAdvisoryLock(context.Context, int64) (bool, error) { return true, nil }
-
-func (c *flakyConn) Ping(context.Context) error {
-	if c.dead {
-		return errors.New("session terminated")
-	}
-	return nil
-}
-
-func (c *flakyConn) AdvisoryUnlock(context.Context, int64) error { return nil }
-func (c *flakyConn) Release()                                    {}
-
-type fixedConnector struct{ conn heldConn }
-
-func (f fixedConnector) Acquire(context.Context) (heldConn, error) { return f.conn, nil }
-
-const (
-	predecessorDetectionIntervals = 2
-
-	settledIntervals = 3
-)
-
-func TestElection_SettleWindowOutlastsPredecessorDetection(t *testing.T) {
-	e := &Election{key: testKey, interval: 20 * time.Millisecond}
-
-	detection := predecessorDetectionIntervals * e.interval
-	if e.settleWindow() <= detection {
-		t.Fatalf("settle window = %v, want longer than the predecessor's %v detection window", e.settleWindow(), detection)
-	}
-}
-
-func settleIntoLeadership(e *Election) {
-	e.tick(context.Background())
-	time.Sleep(settledIntervals * e.interval)
-	e.tick(context.Background())
-}
-
 func TestElection_WonLockSettlesBeforeLeadership(t *testing.T) {
-	e := &Election{db: fixedConnector{&flakyConn{}}, key: testKey, interval: 20 * time.Millisecond, won: make(chan struct{})}
+	const interval = 200 * time.Millisecond
+	conn := newSession()
+	e := startElection(t, storeOf(conn), interval)
+	conn.locked.wait(t, 2*time.Second, "winning the lock")
+	won := time.Now()
 
-	e.tick(context.Background())
-	if !e.holding() {
-		t.Fatal("election did not take the free lock")
-	}
-	if e.isLeader() {
-		t.Fatal("election claimed leadership inside the settle window")
-	}
 	if _, _, ok := e.LeaderContext(context.Background()); ok {
 		t.Fatal("LeaderContext issued inside the settle window")
 	}
-
-	e.tick(context.Background())
-	if e.isLeader() {
-		t.Fatal("a verify tick inside the settle window granted leadership")
+	if !awaitLeader(e, 5*time.Second) {
+		t.Fatal("election never settled into leadership after winning the lock")
 	}
 
-	time.Sleep(settledIntervals * e.interval)
-	e.tick(context.Background())
-	if !e.isLeader() {
-		t.Fatalf("election never settled into leadership %d intervals after winning the lock", settledIntervals)
+	if settled := time.Since(won); settled <= predecessorDetectionIntervals*interval {
+		t.Fatalf("leadership came %v after the lock, want longer than the predecessor's %v detection window", settled, predecessorDetectionIntervals*interval)
+	}
+	if !isLeader(e) {
+		t.Fatal("a settled leader was refused a LeaderContext")
+	}
+}
+
+var loggedSettle = regexp.MustCompile(`msg=leader\.lock_won .*settle=(\S+)`)
+
+func TestElection_SettleWindowOutlastsPredecessorDetection(t *testing.T) {
+	logged := captureLogs(t, slog.LevelInfo)
+	e := leader.NewElection(storeOf(newSession()), testKey, fastInterval)
+	e.Start(context.Background())
+	if !awaitLeader(e, 5*time.Second) {
+		t.Fatal("election never settled into leadership")
+	}
+	e.Shutdown(context.Background())
+
+	m := loggedSettle.FindStringSubmatch(logged.String())
+	if m == nil {
+		t.Fatalf("no leader.lock_won record with a settle window in %q", logged.String())
+	}
+	settle, err := time.ParseDuration(m[1])
+	if detection := predecessorDetectionIntervals * fastInterval; err != nil || settle <= detection {
+		t.Fatalf("settle window = %q (%v), want longer than the predecessor's %v detection window", m[1], err, detection)
 	}
 }
 
 func TestElection_SessionDeathCancelsInFlightLeaderContext(t *testing.T) {
-	fc := &flakyConn{}
-	e := &Election{db: fixedConnector{fc}, key: testKey, interval: time.Millisecond, won: make(chan struct{})}
-	settleIntoLeadership(e)
-
+	conn := newSession()
+	e := startElection(t, storeOf(conn), fastInterval)
+	if !awaitLeader(e, 5*time.Second) {
+		t.Fatal("election never settled into leadership")
+	}
 	jobCtx, release, ok := e.LeaderContext(context.Background())
 	if !ok {
 		t.Fatal("settled leader was refused a LeaderContext")
 	}
 	defer release()
 
-	fc.dead = true
-	e.tick(context.Background())
+	conn.fail(errors.New("session terminated"))
 
 	select {
 	case <-jobCtx.Done():
-	default:
+	case <-time.After(2 * time.Second):
 		t.Fatal("in-flight job context survived the loss of leadership")
 	}
-	if cause := context.Cause(jobCtx); !errors.Is(cause, ErrLeadershipLost) {
+	if cause := context.Cause(jobCtx); !errors.Is(cause, leader.ErrLeadershipLost) {
 		t.Fatalf("job context cause = %v, want ErrLeadershipLost", cause)
+	}
+	if _, _, ok := e.LeaderContext(context.Background()); ok {
+		t.Fatal("a LeaderContext was issued after the term ended")
 	}
 }
 
-func TestElection_ReleasedLeaderContextDoesNotLeak(t *testing.T) {
-	e := &Election{db: fixedConnector{&flakyConn{}}, key: testKey, interval: time.Millisecond, won: make(chan struct{})}
-	settleIntoLeadership(e)
+func TestElection_ReleasedLeaderContextEndsOnlyThatJob(t *testing.T) {
+	e := startElection(t, storeOf(newSession()), fastInterval)
+	if !awaitLeader(e, 5*time.Second) {
+		t.Fatal("election never settled into leadership")
+	}
 
 	jobCtx, release, ok := e.LeaderContext(context.Background())
 	if !ok {
 		t.Fatal("settled leader was refused a LeaderContext")
 	}
+	otherCtx, releaseOther, ok := e.LeaderContext(context.Background())
+	if !ok {
+		t.Fatal("settled leader was refused a second LeaderContext")
+	}
+	defer releaseOther()
 	release()
+
 	if !errors.Is(context.Cause(jobCtx), context.Canceled) {
 		t.Fatalf("released context cause = %v, want context.Canceled", context.Cause(jobCtx))
 	}
-	if !e.isLeader() {
+	if otherCtx.Err() != nil {
+		t.Fatalf("releasing one job context ended another: %v", context.Cause(otherCtx))
+	}
+	if !isLeader(e) {
 		t.Fatal("releasing one job context ended the whole term")
 	}
 }
@@ -572,11 +655,8 @@ func TestElection_SessionKilledMidJob_StaleWriteNotApplied(t *testing.T) {
 	mustExec(t, admin, "truncate leader_fencing_1016")
 	t.Cleanup(func() { _, _ = admin.Exec(ctx, "drop table if exists leader_fencing_1016") })
 
-	a := fastElection(testPool(t))
-	a.interval = 100 * time.Millisecond
-	a.Start(ctx)
-	t.Cleanup(func() { a.Shutdown(ctx) })
-	if !awaitLeader(t, a, 2*time.Second) {
+	a := fastElection(t, testPool(t), databaseInterval)
+	if !awaitLeader(a, 5*time.Second) {
 		t.Fatal("instance A never became leader")
 	}
 	staleCtx, releaseStale, ok := a.LeaderContext(ctx)
@@ -587,11 +667,8 @@ func TestElection_SessionKilledMidJob_StaleWriteNotApplied(t *testing.T) {
 
 	terminateLockHolder(t, admin)
 
-	b := fastElection(testPool(t))
-	b.interval = 100 * time.Millisecond
-	b.Start(ctx)
-	t.Cleanup(func() { b.Shutdown(ctx) })
-	if !awaitLeader(t, b, 3*time.Second) {
+	b := fastElection(t, testPool(t), databaseInterval)
+	if !awaitLeader(b, 5*time.Second) {
 		t.Fatal("instance B never took over after A's session died")
 	}
 	if staleCtx.Err() == nil {
@@ -660,28 +737,6 @@ func terminateLockHolder(t *testing.T, admin *pgxpool.Pool) {
 	t.Fatal("advisory lock still held after terminating its session")
 }
 
-type switchableConn struct {
-	mu      sync.Mutex
-	pingErr error
-}
-
-func (c *switchableConn) failPings(err error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.pingErr = err
-}
-
-func (c *switchableConn) TryAdvisoryLock(context.Context, int64) (bool, error) { return true, nil }
-
-func (c *switchableConn) Ping(context.Context) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.pingErr
-}
-
-func (c *switchableConn) AdvisoryUnlock(context.Context, int64) error { return nil }
-func (c *switchableConn) Release()                                    {}
-
 func TestElection_FailedPingIsLoggedWithCauseAndCounted(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -693,53 +748,46 @@ func TestElection_FailedPingIsLoggedWithCauseAndCounted(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			logged := captureWarnings(t)
-			conn := &switchableConn{}
-			e := electionOver(fixedConnector{conn})
+			conn := newSession()
+			e := leader.NewElection(storeOf(conn), testKey, fastInterval)
 			e.Start(context.Background())
-			t.Cleanup(func() { e.Shutdown(context.Background()) })
-			if tc.settled && !awaitLeader(t, e, 5*time.Second) {
+			conn.locked.wait(t, 2*time.Second, "winning the lock")
+			if tc.settled && !awaitLeader(e, 5*time.Second) {
 				t.Fatal("election never settled into leadership")
 			}
 
-			conn.failPings(errors.New("connection reset by peer"))
+			conn.fail(errors.New("connection reset by peer"))
+			conn.releasedAt.wait(t, 2*time.Second, "releasing the failed session")
+			e.Shutdown(context.Background())
 
-			deadline := time.Now().Add(5 * time.Second)
-			for e.Counters().HoldsLost == 0 && time.Now().Before(deadline) {
-				time.Sleep(time.Millisecond)
-			}
 			if got := e.Counters().HoldsLost; got != 1 {
 				t.Errorf("HoldsLost = %d, want 1", got)
 			}
-			if !strings.Contains(logged.String(), "connection reset by peer") {
+			if !strings.Contains(logged.String(), "leader.lost") || !strings.Contains(logged.String(), "connection reset by peer") {
 				t.Errorf("leader.lost warning did not carry the ping error, got: %q", logged.String())
 			}
 		})
 	}
 }
 
-type pingSignalConn struct {
-	fakeConn
-	pinging chan struct{}
-}
-
-func (c *pingSignalConn) Ping(ctx context.Context) error {
-	close(c.pinging)
-	return c.fakeConn.Ping(ctx)
-}
-
 func TestElection_ShutdownDuringVerifyReleasesLockWithoutLostWarning(t *testing.T) {
+	const interval = 500 * time.Millisecond
 	warnings := captureWarnings(t)
-	conn := &pingSignalConn{fakeConn: fakeConn{pingBlocks: true}, pinging: make(chan struct{})}
-	e := leaderHolding(conn)
+	conn := newSession()
+	conn.pingWaitsForDeadline = true
+	e := leader.NewElection(storeOf(conn), testKey, interval)
 	e.Start(context.Background())
-	<-conn.pinging
+	conn.pinged.wait(t, 2*time.Second, "the first verify ping")
 
 	e.Shutdown(context.Background())
 
-	if !conn.unlocked {
-		t.Fatalf("advisory lock not unlocked on a live context (unlock error: %v)", conn.unlockErr)
+	if _, unlocked, _, unlockErr := conn.state(); !unlocked {
+		t.Fatalf("advisory lock not unlocked on a live context (unlock error: %v)", unlockErr)
 	}
 	if strings.Contains(warnings.String(), "leader.lost") {
 		t.Fatalf("shutdown was logged as a lost lease: %s", warnings.String())
+	}
+	if got := e.Counters().HoldsLost; got != 0 {
+		t.Fatalf("HoldsLost = %d, want 0: shutting down is not losing the lease", got)
 	}
 }

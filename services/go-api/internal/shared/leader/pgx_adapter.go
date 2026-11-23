@@ -8,7 +8,9 @@ import (
 
 type pgxConnector struct{ pool *pgxpool.Pool }
 
-func (c pgxConnector) Acquire(ctx context.Context) (heldConn, error) {
+func PoolLocks(pool *pgxpool.Pool) LockStore { return pgxConnector{pool: pool} }
+
+func (c pgxConnector) Acquire(ctx context.Context) (LockSession, error) {
 	conn, err := c.pool.Acquire(ctx)
 	if err != nil {
 		return nil, err
