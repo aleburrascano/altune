@@ -143,3 +143,15 @@ func onlyRecord(t *testing.T, ring *logging.RingBuffer, msg string) logging.Capt
 	}
 	return found[0]
 }
+
+func TestGroupPanicLogCarriesTheTasksAttributes(t *testing.T) {
+	ring := captureLogs(t)
+	g := fanout.New("test.fanout_attrs_panic", 1)
+
+	g.Go(context.Background(), func() { panic("boom") }, "provider", "deezer")
+	_ = g.Wait()
+
+	if got := onlyRecord(t, ring, "test.fanout_attrs_panic").Attrs["provider"]; got != "deezer" {
+		t.Errorf("provider = %q, want the attribute the task was started with", got)
+	}
+}

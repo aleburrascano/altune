@@ -3,32 +3,20 @@ package runloop
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
-	"runtime/debug"
 	"sync"
 	"time"
 )
 
 const runBudgetFraction = 2
 
+const backgroundJobPanic = "background_job.panic"
+
 var ErrRunBudgetExceeded = errors.New("background job run exceeded its budget")
 
 type NamedStart struct {
 	Name  string
 	Start func(context.Context)
-}
-
-func Recover(name string, fn func()) (recovered any) {
-	defer func() {
-		if r := recover(); r != nil {
-			recovered = r
-			slog.ErrorContext(context.Background(), "background job panicked; recovered",
-				"job", name, "panic", r, "stack", string(debug.Stack()))
-		}
-	}()
-	fn()
-	return nil
 }
 
 func RunBudget(interval time.Duration) time.Duration {
@@ -39,8 +27,8 @@ func RunJob(parent context.Context, control *JobControl, name string, budget tim
 	jobCtx, cancel := context.WithTimeoutCause(parent, budget, ErrRunBudgetExceeded)
 	defer cancel()
 	var err error
-	if r := Recover(name, func() { err = fn(jobCtx) }); r != nil {
-		err = fmt.Errorf("panic: %v", r)
+	if panicked := Try(jobCtx, backgroundJobPanic, func() { err = fn(jobCtx) }, "job", name); panicked != nil {
+		err = panicked
 	}
 	overBudget := err != nil && errors.Is(context.Cause(jobCtx), ErrRunBudgetExceeded)
 	if overBudget {
@@ -81,7 +69,7 @@ func StartWhenLeader(ctx context.Context, wg *sync.WaitGroup, await func(context
 			return
 		}
 		for _, job := range starts {
-			Recover(job.Name, func() { job.Start(ctx) })
+			_ = Try(ctx, backgroundJobPanic, func() { job.Start(ctx) }, "job", job.Name)
 		}
 	}()
 }

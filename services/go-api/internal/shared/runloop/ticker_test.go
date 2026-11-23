@@ -1,6 +1,7 @@
 package runloop_test
 
 import (
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/runloop"
 	"context"
 	"errors"
@@ -164,4 +165,20 @@ func healthOf(t *testing.T, jobs *runloop.JobRegistry, name string) runloop.JobH
 	}
 	t.Fatalf("no health reported for job %q", name)
 	return runloop.JobHealth{}
+}
+
+func TestRunJob_PanicIsOneFailureLoggedWithTheJobAndItsContext(t *testing.T) {
+	ring := captureDetachedLogs(t)
+	var jc runloop.JobControl
+	ctx := logging.WithCorrelationID(context.Background(), "corr-job-5")
+
+	runloop.RunJob(ctx, &jc, "explode", time.Second, func(context.Context) error { panic("boom") })
+
+	if got := jc.ConsecutiveFailures(); got != 1 {
+		t.Errorf("ConsecutiveFailures = %d, want 1", got)
+	}
+	rec := onlyRecord(t, ring, "background_job.panic")
+	if rec.Attrs["job"] != "explode" || rec.Attrs["corr_id"] != "corr-job-5" {
+		t.Errorf("record attrs job=%q corr_id=%q, want the job name and the caller's corr_id", rec.Attrs["job"], rec.Attrs["corr_id"])
+	}
 }

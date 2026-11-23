@@ -18,8 +18,8 @@ func New(event string, limit int) *Group {
 	return g
 }
 
-func (g *Group) Go(ctx context.Context, fn func()) {
-	g.g.Go(func() error { return runloop.Try(ctx, g.event, fn) })
+func (g *Group) Go(ctx context.Context, fn func(), attrs ...any) {
+	g.g.Go(func() error { return runloop.Try(ctx, g.event, fn, attrs...) })
 }
 
 func (g *Group) Wait() error {
