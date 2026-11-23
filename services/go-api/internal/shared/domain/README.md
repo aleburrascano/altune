@@ -1,1 +1,1 @@
-`domain` owns the shape of a validation error every context reports.
+`domain` owns the error a feature hands back to a client: a `CodedError` carries a code from the one catalog in `codes.go`, and each code names its kind (not found, conflict, invalid…), never an HTTP status. Only the HTTP boundary in `shared/httputil` turns a kind into a status. Adding, renaming or removing a code is a change to the public API contract, so the catalog test lists every code. `ValidationError` is the older shape, kept until its last caller moves to `CodedError`.
