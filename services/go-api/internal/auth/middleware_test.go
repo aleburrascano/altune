@@ -386,6 +386,28 @@ func TestMiddleware_VerifierUnavailableCountsAsFailedAttempt(t *testing.T) {
 	}
 }
 
+func TestMiddleware_AnOutageStaysAnOutageWhenTheClientAlsoLeft(t *testing.T) {
+	metrics := &recordingMetrics{}
+	next, _ := noopHandler()
+	ctx, cancel := context.WithCancel(context.Background())
+	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+		cancel()
+		return auth.VerifiedToken{}, errors.New("fetch JWKS: dial tcp 10.0.0.9:443: connection refused")
+	})
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer t")
+	rec := httptest.NewRecorder()
+
+	auth.Middleware(verifier, auth.WithMetrics(metrics))(next).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("status %d, want 503: the verifier failed, the client leaving does not change that", rec.Code)
+	}
+	if metrics.unavailable != 1 {
+		t.Errorf("VerifierUnavailable calls %d, want 1: an outage is counted even when the client gave up", metrics.unavailable)
+	}
+}
+
 func TestMiddleware_ClientCancelledDuringVerifyIsNotAnOutage(t *testing.T) {
 	logs := captureJSONLog(t)
 	metrics := &recordingMetrics{}

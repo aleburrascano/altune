@@ -154,7 +154,7 @@ func (rej rejecter) rejectFailedVerification(w http.ResponseWriter, r *http.Requ
 		rej.rejectToken(w, r, invalidToken.Reason, "invalid token", err)
 		return
 	}
-	if !errors.Is(r.Context().Err(), context.Canceled) {
+	if !errors.Is(err, context.Canceled) || !errors.Is(r.Context().Err(), context.Canceled) {
 		rej.metrics.VerifierUnavailable()
 	}
 	httputil.HandleServiceError(w, r, fmt.Errorf("verify bearer token: %w: %w",
