@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/app/shutdown"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe"
@@ -100,17 +101,17 @@ func (a *App) Run(ctx context.Context) error {
 		slog.InfoContext(ctx, "shutting down")
 	}
 
-	a.drainServer(serverDrainTimeout)
+	shutdown.DrainServer(a.server, shutdown.ServerDrainTimeout)
 
 	slog.InfoContext(ctx, "waiting for background tasks")
 	outcomes := a.runShutdownSequence()
 
-	if unstopped := unfinishedShutdowns(outcomes); len(unstopped) > 0 {
+	if unstopped := shutdown.Unfinished(outcomes); len(unstopped) > 0 {
 		slog.WarnContext(ctx, "closing DB/Redis while components are still shutting down",
 			"components", strings.Join(unstopped, ", "))
 	}
 
-	a.cleanup(ctx, !leadershipRetained(outcomes))
+	a.cleanup(ctx, !shutdown.LeadershipRetained(outcomes))
 	slog.InfoContext(ctx, "shutdown complete")
 	return nil
 }
