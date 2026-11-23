@@ -172,7 +172,6 @@ func clearSystemNonDiscographyEvents(t *testing.T, pool *pgxpool.Pool) {
 
 func TestPgxEventStore_SuspectRate_EvalRunLeavesNoSystemEvents(t *testing.T) {
 	pool := testPool(t)
-	store := persistence.NewPgxEventStore(pool)
 	t.Run("eval run", TestPgxEventStore_SuspectRate_EvalRunDoesNotMoveIt)
 
 	var left int

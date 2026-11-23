@@ -113,7 +113,7 @@ func TestPgxSearchHistoryRepo_ListDistinctRecent_LimitBoundary(t *testing.T) {
 
 func newClearHistoryTestUser(t *testing.T, pool *pgxpool.Pool) shared.UserId {
 	t.Helper()
-	owner := newEventTestUser(t, persistence.NewPgxEventStore(pool))
+	owner := newEventTestUser(t, pool)
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(),
 			`DELETE FROM discovery_search_history WHERE user_id = $1`, owner.UUID())
