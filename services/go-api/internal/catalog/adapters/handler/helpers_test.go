@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -296,15 +295,6 @@ func refusedPool(t *testing.T) *pgxpool.Pool {
 	addr := ln.Addr().String()
 	_ = ln.Close()
 	return poolAt(t, "postgres://altune:secret@"+addr+"/altune?sslmode=disable")
-}
-
-func testPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
-	return poolAt(t, dbURL)
 }
 
 func poolAt(t *testing.T, dbURL string) *pgxpool.Pool {

@@ -3,6 +3,7 @@ package persistence
 import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/internal/core/ports"
+	"altune/go-api/internal/shared/database"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
@@ -26,7 +27,7 @@ var (
 )
 
 type PgxPlaylistRepository struct {
-	pool pgxPool
+	pool *pgxpool.Pool
 }
 
 func NewPgxPlaylistRepository(pool *pgxpool.Pool) *PgxPlaylistRepository {
@@ -71,38 +72,41 @@ func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.U
 	if err != nil {
 		return nil, classifyDBError(err)
 	}
-	defer rows.Close()
-
-	var result []domain.PlaylistWithSummary
-	for rows.Next() {
-		var (
-			id         uuid.UUID
-			uid        uuid.UUID
-			name       string
-			createdAt  time.Time
-			updatedAt  time.Time
-			trackCount int
-			artwork    []string
-		)
-		err := rows.Scan(&id, &uid, &name, &createdAt, &updatedAt, &trackCount, &artwork)
-		if err != nil {
-			return nil, classifyDBError(err)
-		}
-		result = append(result, domain.PlaylistWithSummary{
-			Playlist: &domain.Playlist{
-				ID:        domain.PlaylistIdFromUUID(id),
-				UserId:    shared.NewUserId(uid),
-				Name:      name,
-				CreatedAt: createdAt,
-				UpdatedAt: updatedAt,
-			},
-			Summary: domain.PlaylistSummary{
-				TrackCount:         trackCount,
-				PreviewArtworkURLs: artwork,
-			},
-		})
+	stored, err := pgx.CollectRows(rows, pgx.RowToStructByName[playlistSummaryRow])
+	if err != nil {
+		return nil, classifyDBError(err)
 	}
-	return result, classifyDBError(rows.Err())
+	summaries := make([]domain.PlaylistWithSummary, len(stored))
+	for i, row := range stored {
+		summaries[i] = row.withSummary()
+	}
+	return summaries, nil
+}
+
+type playlistSummaryRow struct {
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	Name           string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	TrackCount     int
+	PreviewArtwork []string
+}
+
+func (r playlistSummaryRow) withSummary() domain.PlaylistWithSummary {
+	return domain.PlaylistWithSummary{
+		Playlist: &domain.Playlist{
+			ID:        domain.PlaylistIdFromUUID(r.ID),
+			UserId:    shared.NewUserId(r.UserID),
+			Name:      r.Name,
+			CreatedAt: r.CreatedAt,
+			UpdatedAt: r.UpdatedAt,
+		},
+		Summary: domain.PlaylistSummary{
+			TrackCount:         r.TrackCount,
+			PreviewArtworkURLs: r.PreviewArtwork,
+		},
+	}
 }
 
 func (r *PgxPlaylistRepository) CountForUser(ctx context.Context, userId shared.UserId, atMost int) (int, error) {
@@ -178,8 +182,6 @@ func (r *PgxPlaylistRepository) GetWithTracks(ctx context.Context, id domain.Pla
 	if err != nil {
 		return playlist, nil, classifyDBError(err)
 	}
-	defer rows.Close()
-
 	tracks, err := collectTracks(rows)
 	if err != nil {
 		return playlist, nil, classifyDBError(err)
@@ -232,19 +234,12 @@ func (r *PgxPlaylistRepository) withOwnedPlaylistLock(ctx context.Context, playl
 }
 
 func (r *PgxPlaylistRepository) runOwnedPlaylistLock(ctx context.Context, playlistId domain.PlaylistId, userId shared.UserId, fn func(pgx.Tx) error) error {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	if err := lockOwnedPlaylist(ctx, tx, playlistId, userId); err != nil {
-		return err
-	}
-	if err := fn(tx); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
+	return database.InTx(ctx, r.pool, func(tx pgx.Tx) error {
+		if err := lockOwnedPlaylist(ctx, tx, playlistId, userId); err != nil {
+			return err
+		}
+		return fn(tx)
+	})
 }
 
 func lockOwnedPlaylist(ctx context.Context, tx pgx.Tx, playlistId domain.PlaylistId, userId shared.UserId) error {
@@ -287,24 +282,17 @@ func (r *PgxPlaylistRepository) GetTrackOrder(ctx context.Context, playlistId do
 	if err != nil {
 		return nil, false, classifyDBError(err)
 	}
-	defer rows.Close()
-
-	found := false
+	members, err := pgx.CollectRows(rows, pgx.RowTo[pgtype.UUID])
+	if err != nil {
+		return nil, false, classifyDBError(err)
+	}
 	ids := []domain.TrackId{}
-	for rows.Next() {
-		found = true
-		var id pgtype.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, false, classifyDBError(err)
-		}
+	for _, id := range members {
 		if id.Valid {
 			ids = append(ids, domain.TrackIdFromUUID(id.Bytes))
 		}
 	}
-	if err := rows.Err(); err != nil {
-		return nil, false, classifyDBError(err)
-	}
-	return ids, found, nil
+	return ids, len(members) > 0, nil
 }
 
 func (r *PgxPlaylistRepository) AddTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) error {
@@ -467,26 +455,23 @@ func deleteMemberships(ctx context.Context, tx pgx.Tx, playlistId domain.Playlis
 	if err != nil {
 		return nil, nil, err
 	}
-	defer rows.Close()
-
-	gone := make(map[uuid.UUID]bool)
-	var positions []int
-	for rows.Next() {
-		var (
-			id       uuid.UUID
-			position int
-		)
-		if err := rows.Scan(&id, &position); err != nil {
-			return nil, nil, err
-		}
-		gone[id] = true
-		positions = append(positions, position)
-	}
-	if err := rows.Err(); err != nil {
+	removed, err := pgx.CollectRows(rows, pgx.RowToStructByName[removedMembership])
+	if err != nil {
 		return nil, nil, err
+	}
+	gone := make(map[uuid.UUID]bool, len(removed))
+	positions := make([]int, len(removed))
+	for i, m := range removed {
+		gone[m.TrackID] = true
+		positions[i] = m.Position
 	}
 	sort.Ints(positions)
 	return gone, positions, nil
+}
+
+type removedMembership struct {
+	TrackID  uuid.UUID
+	Position int
 }
 
 func (r *PgxPlaylistRepository) ReorderTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error {
@@ -556,16 +541,11 @@ func trackIdUUIDs(ids []domain.TrackId) []uuid.UUID {
 }
 
 func collectUUIDSet(rows pgx.Rows) (map[uuid.UUID]bool, error) {
-	defer rows.Close()
-	set := make(map[uuid.UUID]bool)
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		set[id] = true
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return nil, err
 	}
-	return set, rows.Err()
+	return uuidSet(ids), nil
 }
 
 func inRequestOrder(requested []domain.TrackId, set map[uuid.UUID]bool) []domain.TrackId {

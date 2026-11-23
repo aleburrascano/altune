@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/internal/adapters/contract"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"testing"
 
@@ -26,7 +27,7 @@ func (r *cleaningPlaylistRepo) SeedTrack(t *testing.T, userId shared.UserId) cat
 }
 
 func TestPgxPlaylistRepo_Contract(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	contract.PlaylistRepositoryContract(t, func(t *testing.T) contract.PlaylistRepositoryUnderTest {
 		return &cleaningPlaylistRepo{PgxPlaylistRepository: catalog.NewPgxPlaylistRepository(pool), t: t, pool: pool}
 	})

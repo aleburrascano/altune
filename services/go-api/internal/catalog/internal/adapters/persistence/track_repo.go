@@ -3,6 +3,7 @@ package persistence
 import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/internal/core/ports"
+	"altune/go-api/internal/shared/database"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"encoding/json"
@@ -34,7 +35,7 @@ func prefixColumns(columns, prefix string) string {
 }
 
 type PgxTrackRepository struct {
-	pool pgxPool
+	pool *pgxpool.Pool
 }
 
 func NewPgxTrackRepository(pool *pgxpool.Pool) *PgxTrackRepository {
@@ -49,23 +50,20 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 	return stored, created, classifyDBError(err)
 }
 
-func (r *PgxTrackRepository) addInTx(ctx context.Context, track *domain.Track) (*domain.Track, bool, error) {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return nil, false, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
+var errTrackAlreadyStored = errors.New("a track with the same identity is already stored")
 
-	err = insertTrack(ctx, tx, track)
-	if errors.Is(err, pgx.ErrNoRows) {
-		_ = tx.Rollback(ctx)
+func (r *PgxTrackRepository) addInTx(ctx context.Context, track *domain.Track) (*domain.Track, bool, error) {
+	err := database.InTx(ctx, r.pool, func(tx pgx.Tx) error {
+		if err := insertTrack(ctx, tx, track); err != nil {
+			return err
+		}
+		return writeTrackFeatured(ctx, tx, track.UserId.UUID(), track.ID.UUID(), track.FeaturedArtists)
+	})
+	if errors.Is(err, errTrackAlreadyStored) {
 		existing, err := r.resolveConflictingTrack(ctx, track)
 		return existing, false, err
 	}
 	if err != nil {
-		return nil, false, err
-	}
-	if err := writeFeaturedAndCommit(ctx, tx, track); err != nil {
 		return nil, false, err
 	}
 	return track, true, nil
@@ -84,7 +82,7 @@ const insertTrackSQL = `INSERT INTO tracks (
 
 func insertTrack(ctx context.Context, tx pgx.Tx, track *domain.Track) error {
 	var returnedID uuid.UUID
-	return tx.QueryRow(ctx, insertTrackSQL,
+	err := tx.QueryRow(ctx, insertTrackSQL,
 		track.ID.UUID(), track.UserId.UUID(),
 		track.Title, track.Artist, track.Album, track.DurationSeconds,
 		track.AddedAt, track.ArtworkURL, track.AcquisitionStatus.String(), track.DedupKey,
@@ -94,13 +92,10 @@ func insertTrack(ctx context.Context, tx pgx.Tx, track *domain.Track) error {
 		track.ConfidenceScore, track.EvidenceJSON, track.CatalogDurationSeconds,
 		track.CatalogMBID, track.CatalogExplicit, catalogSourcesJSON(track.CatalogSources),
 	).Scan(&returnedID)
-}
-
-func writeFeaturedAndCommit(ctx context.Context, tx pgx.Tx, track *domain.Track) error {
-	if err := writeTrackFeatured(ctx, tx, track.UserId.UUID(), track.ID.UUID(), track.FeaturedArtists); err != nil {
-		return err
+	if errors.Is(err, pgx.ErrNoRows) {
+		return errTrackAlreadyStored
 	}
-	return tx.Commit(ctx)
+	return err
 }
 
 func (r *PgxTrackRepository) GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {
@@ -165,7 +160,6 @@ func (r *PgxTrackRepository) listForUser(ctx context.Context, userId shared.User
 		return nil, 0, err
 	}
 	tracks, err := collectTracks(rows)
-	rows.Close()
 	if err != nil {
 		return nil, 0, err
 	}
@@ -201,8 +195,6 @@ func (r *PgxTrackRepository) listByIDs(ctx context.Context, userId shared.UserId
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
 	return collectTracks(rows)
 }
 
@@ -294,33 +286,13 @@ func (r *PgxTrackRepository) Delete(ctx context.Context, id domain.TrackId, user
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
-	deleted, audioRef, err = r.deleteInTx(ctx, id, userId)
+	deleted, audioRef, err = r.deleteTrackRow(ctx, id, userId)
 	return deleted, audioRef, classifyDBError(err)
 }
 
-func (r *PgxTrackRepository) deleteInTx(ctx context.Context, id domain.TrackId, userId shared.UserId) (bool, *string, error) {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return false, nil, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	deleted, ref, err := deleteTrackRow(ctx, tx, id, userId)
-	if err != nil {
-		return false, nil, err
-	}
-	if !deleted {
-		return false, nil, nil
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return false, nil, err
-	}
-	return true, ref, nil
-}
-
-func deleteTrackRow(ctx context.Context, tx pgx.Tx, id domain.TrackId, userId shared.UserId) (bool, *string, error) {
+func (r *PgxTrackRepository) deleteTrackRow(ctx context.Context, id domain.TrackId, userId shared.UserId) (bool, *string, error) {
 	var ref *string
-	err := tx.QueryRow(ctx,
+	err := r.pool.QueryRow(ctx,
 		`DELETE FROM tracks WHERE id = $1 AND user_id = $2 RETURNING audio_ref`,
 		id.UUID(), userId.UUID(),
 	).Scan(&ref)
@@ -425,7 +397,6 @@ func (r *PgxTrackRepository) listOwnedTrackRefsPage(
 	if err != nil {
 		return nil, fmt.Errorf("list owned track refs: %w", err)
 	}
-	defer rows.Close()
 	return scanOwnedTrackRefs(rows)
 }
 
@@ -470,27 +441,26 @@ func (r *PgxTrackRepository) listReadyAudioTracksPage(
 	if err != nil {
 		return nil, classifyDBError(fmt.Errorf("list ready audio tracks: %w", err))
 	}
-	defer rows.Close()
-
 	return scanReadyAudioTracks(rows)
 }
 
 func scanReadyAudioTracks(rows pgx.Rows) ([]ports.ReadyAudioTrack, error) {
-	page := []ports.ReadyAudioTrack{}
-	for rows.Next() {
-		var id, userId uuid.UUID
-		var t ports.ReadyAudioTrack
-		if err := rows.Scan(&id, &userId, &t.Title, &t.Artist, &t.AudioRef); err != nil {
-			return nil, classifyDBError(fmt.Errorf("scan ready audio track: %w", err))
-		}
-		t.Id = domain.TrackIdFromUUID(id)
-		t.UserId = shared.NewUserId(userId)
-		page = append(page, t)
-	}
-	if err := rows.Err(); err != nil {
+	page, err := pgx.CollectRows(rows, scanReadyAudioTrack)
+	if err != nil {
 		return nil, classifyDBError(fmt.Errorf("list ready audio tracks: %w", err))
 	}
 	return page, nil
+}
+
+func scanReadyAudioTrack(row pgx.CollectableRow) (ports.ReadyAudioTrack, error) {
+	var id, userId uuid.UUID
+	var t ports.ReadyAudioTrack
+	if err := row.Scan(&id, &userId, &t.Title, &t.Artist, &t.AudioRef); err != nil {
+		return ports.ReadyAudioTrack{}, fmt.Errorf("scan ready audio track: %w", err)
+	}
+	t.Id = domain.TrackIdFromUUID(id)
+	t.UserId = shared.NewUserId(userId)
+	return t, nil
 }
 
 func (r *PgxTrackRepository) AudioRefsUnderPrefix(ctx context.Context, prefix string) (map[string]bool, error) {
@@ -504,35 +474,29 @@ func (r *PgxTrackRepository) AudioRefsUnderPrefix(ctx context.Context, prefix st
 	if err != nil {
 		return nil, classifyDBError(fmt.Errorf("list audio refs under prefix: %w", err))
 	}
-	defer rows.Close()
 	return scanAudioRefSet(rows)
 }
 
 func scanAudioRefSet(rows pgx.Rows) (map[string]bool, error) {
-	refs := map[string]bool{}
-	for rows.Next() {
-		var ref string
-		if err := rows.Scan(&ref); err != nil {
-			return nil, classifyDBError(fmt.Errorf("scan audio ref: %w", err))
-		}
-		refs[ref] = true
-	}
-	if err := rows.Err(); err != nil {
+	refs, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
 		return nil, classifyDBError(fmt.Errorf("list audio refs under prefix: %w", err))
 	}
-	return refs, nil
+	set := make(map[string]bool, len(refs))
+	for _, ref := range refs {
+		set[ref] = true
+	}
+	return set, nil
 }
 
 func scanOwnedTrackRefs(rows pgx.Rows) ([]domain.OwnedTrackRef, error) {
-	refs := []domain.OwnedTrackRef{}
-	for rows.Next() {
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.OwnedTrackRef, error) {
 		var ref domain.OwnedTrackRef
-		if err := rows.Scan(&ref.ID, &ref.Title, &ref.Artist, &ref.AcquisitionStatus, &ref.TrackNumber, &ref.ISRC, &ref.Album); err != nil {
-			return nil, fmt.Errorf("scan owned track ref: %w", err)
+		if err := row.Scan(&ref.ID, &ref.Title, &ref.Artist, &ref.AcquisitionStatus, &ref.TrackNumber, &ref.ISRC, &ref.Album); err != nil {
+			return domain.OwnedTrackRef{}, fmt.Errorf("scan owned track ref: %w", err)
 		}
-		refs = append(refs, ref)
-	}
-	return refs, rows.Err()
+		return ref, nil
+	})
 }
 
 type scanner interface {
@@ -654,23 +618,13 @@ func scanTrack(row pgx.Row) (*domain.Track, error) {
 	return track, err
 }
 
-func scanTrackFromRows(rows pgx.Rows) (*domain.Track, error) {
-	return scanTrackColumns(rows)
-}
-
 func collectTracks(rows pgx.Rows) ([]*domain.Track, error) {
-	var tracks []*domain.Track
-	for rows.Next() {
-		t, err := scanTrackFromRows(rows)
-		if err != nil {
-			return nil, err
-		}
-		tracks = append(tracks, t)
-	}
-	return tracks, rows.Err()
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (*domain.Track, error) {
+		return scanTrackColumns(row)
+	})
 }
 
-func pageTotal(ctx context.Context, pool pgxPool, limit, offset, got int, countSQL string, args ...any) (int, error) {
+func pageTotal(ctx context.Context, pool *pgxpool.Pool, limit, offset, got int, countSQL string, args ...any) (int, error) {
 	if limit > 0 && got < limit && (got > 0 || offset == 0) {
 		return offset + got, nil
 	}

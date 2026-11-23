@@ -3,6 +3,7 @@ package persistence_test
 import (
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/internal/adapters/contract"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"testing"
 
@@ -21,7 +22,7 @@ func (r *cleaningTrackRepo) Add(ctx context.Context, track *catalog.Track) (*cat
 }
 
 func TestPgxTrackRepo_Contract(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	contract.TrackRepositoryContract(t, func(t *testing.T) contract.TrackRepositoryUnderTest {
 		return &cleaningTrackRepo{PgxTrackRepository: catalog.NewPgxTrackRepository(pool), t: t, pool: pool}
 	})

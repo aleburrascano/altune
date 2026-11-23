@@ -6,21 +6,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"net"
 	"sync/atomic"
 	"time"
-
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 )
-
-type pgxPool interface {
-	Begin(ctx context.Context) (pgx.Tx, error)
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-}
 
 const dbCallTimeout = 5 * time.Second
 
@@ -44,26 +32,10 @@ func withDBTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
 }
 
 func classifyDBError(err error) error {
-	if errors.Is(err, ports.ErrDBTransient) || !isTransientDBError(err) {
+	if errors.Is(err, ports.ErrDBTransient) || !database.IsTransient(err) {
 		return err
 	}
 	return fmt.Errorf("%w: %w", ports.ErrDBTransient, err)
-}
-
-func isTransientDBError(err error) bool {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		return database.IsTransientSQLState(pgErr.Code)
-	}
-	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-		return true
-	}
-	var connectErr *pgconn.ConnectError
-	if errors.As(err, &connectErr) {
-		return true
-	}
-	var netErr net.Error
-	return errors.As(err, &netErr)
 }
 
 func recordIfDBCallTimedOut(dbCtx context.Context) {

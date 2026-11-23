@@ -64,11 +64,12 @@ unavailable`. Every other database error answers 500 `internal`, so a client can
 tell an outage from a bug.
 
 - **What is transient.** The Postgres repositories (`internal/adapters/persistence/pool.go`)
-  name an error `ErrDBTransient` when the connection is refused, reset or dropped,
-  when a call runs past its deadline (each call gets 5s, `dbCallTimeout`, and a
-  caller's own deadline counts too), or when Postgres answers with a SQLSTATE that
-  `database.IsTransientSQLState` lists. A caller's cancel is not transient, and
-  neither is any other error, such as a constraint violation.
+  name an error `ErrDBTransient` when `database.IsTransient` says the database is
+  unavailable: a connect fails, the connection is reset, dropped or already closed,
+  a call runs past its deadline (each call gets 5s, `dbCallTimeout`, and a caller's
+  own deadline counts too), or Postgres answers with a retryable SQLSTATE.
+  A caller's cancel is not transient, and neither is any other error, such as a
+  constraint violation.
 - **One mapping.** A service passes a repository error through
   `domain.WrapRepoError(ctx, op, err)`. A transient error becomes
   `ErrCatalogTemporarilyUnavailable` and logs `catalog.db_transient` at WARN with

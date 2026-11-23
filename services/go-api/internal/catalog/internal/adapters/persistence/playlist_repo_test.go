@@ -3,9 +3,9 @@ package persistence_test
 import (
 	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
-	"os"
 	"reflect"
 	"slices"
 	"sort"
@@ -20,7 +20,7 @@ import (
 )
 
 func TestPgxPlaylistRepo_CountForUser_CountsOwnedRowsAndStopsAtTheBound(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -49,7 +49,7 @@ func TestPgxPlaylistRepo_CountForUser_CountsOwnedRowsAndStopsAtTheBound(t *testi
 }
 
 func TestPgxPlaylistRepo_CreateAndGetByID(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -87,7 +87,7 @@ func TestPgxPlaylistRepo_CreateAndGetByID(t *testing.T) {
 }
 
 func TestPgxPlaylistRepo_ListForUser(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -119,7 +119,7 @@ func TestPgxPlaylistRepo_ListForUser(t *testing.T) {
 }
 
 func TestPgxPlaylistRepo_ListForUserPagesWithoutRepeatingARow(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -160,7 +160,7 @@ func TestPgxPlaylistRepo_ListForUserPagesWithoutRepeatingARow(t *testing.T) {
 }
 
 func TestPgxPlaylistRepo_Delete(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -198,7 +198,7 @@ func TestPgxPlaylistRepo_Delete(t *testing.T) {
 }
 
 func TestPgxPlaylistRepo_AddAndRemoveTrack(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	trackRepo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
@@ -261,7 +261,7 @@ func TestPgxPlaylistRepo_AddAndRemoveTrack(t *testing.T) {
 }
 
 func TestPgxPlaylistRepo_ReorderTracks(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	trackRepo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
@@ -315,7 +315,7 @@ func TestPgxPlaylistRepo_ReorderTracks(t *testing.T) {
 }
 
 func TestPgxPlaylistRepo_GetByID_NotFound(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -350,7 +350,7 @@ func seedFilledPlaylist(ctx context.Context, t *testing.T, pool *pgxpool.Pool, u
 }
 
 func TestPgxPlaylistRepo_GetWithTracks_BoundedByLimit(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -369,7 +369,7 @@ func TestPgxPlaylistRepo_GetWithTracks_BoundedByLimit(t *testing.T) {
 }
 
 func TestPgxPlaylistRepo_AddTrack_TakesTheLastSlotThenRefuses(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -390,7 +390,7 @@ func TestPgxPlaylistRepo_AddTrack_TakesTheLastSlotThenRefuses(t *testing.T) {
 }
 
 func TestPgxPlaylistRepo_AddTracks_RefusesTheWholeBatchPastTheCap(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -410,7 +410,7 @@ func TestPgxPlaylistRepo_AddTracks_RefusesTheWholeBatchPastTheCap(t *testing.T) 
 }
 
 func TestPgxPlaylistRepo_OverCapPlaylist_StaysReadableAndStopsGrowing(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -456,7 +456,7 @@ func TestPgxPlaylistRepo_OverCapPlaylist_StaysReadableAndStopsGrowing(t *testing
 }
 
 func TestPgxPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	trackRepo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
@@ -541,7 +541,7 @@ func TestPgxPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) {
 }
 
 func TestPgxPlaylistRepo_ConcurrentAddTrack_NoDuplicatePositions(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	trackRepo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
@@ -613,7 +613,7 @@ func TestPgxPlaylistRepo_ConcurrentAddTrack_NoDuplicatePositions(t *testing.T) {
 }
 
 func TestPgxPlaylistRepo_ConcurrentAddsRaceTheLastSlot_OneWins(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -690,7 +690,7 @@ func sameOrder(a []uuid.UUID, b []catalog.TrackId) bool {
 }
 
 func TestPgxPlaylistRepo_ReorderTracks_WaitsForPlaylistLock(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -739,7 +739,7 @@ func TestPgxPlaylistRepo_ReorderTracks_WaitsForPlaylistLock(t *testing.T) {
 }
 
 func TestPgxPlaylistRepo_ConcurrentReorderTracks_Serialize(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -830,7 +830,7 @@ func assertPositionsAreContiguous(ctx context.Context, t *testing.T, pool *pgxpo
 }
 
 func TestPgxPlaylistRepo_ReorderTracks_RefusesAPlanStaleFromARemoveAndAdd(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -851,7 +851,7 @@ func TestPgxPlaylistRepo_ReorderTracks_RefusesAPlanStaleFromARemoveAndAdd(t *tes
 }
 
 func TestPgxPlaylistRepo_ReorderTracks_RefusesAPlanStaleFromARemove(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -871,7 +871,7 @@ func TestPgxPlaylistRepo_ReorderTracks_RefusesAPlanStaleFromARemove(t *testing.T
 }
 
 func TestPgxPlaylistRepo_ReorderTracks_AcceptsAPlanForAnOverCapPlaylist(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -909,7 +909,7 @@ func addTrackToPlaylist(ctx context.Context, t *testing.T, pool *pgxpool.Pool, u
 }
 
 func TestPgxPlaylistRepo_AddsRefuseAVanishedTrack(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -955,7 +955,7 @@ func vanishedTrackId(ctx context.Context, t *testing.T, pool *pgxpool.Pool, user
 }
 
 func TestPgxPlaylistRepo_Update_RefusesAVanishedPlaylist(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -986,7 +986,7 @@ func TestPgxPlaylistRepo_Update_RefusesAVanishedPlaylist(t *testing.T) {
 }
 
 func TestPgxPlaylistRepo_Update_RefusesAnotherUsersPlaylist(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	owner := shared.NewUserId(uuid.New())
@@ -1070,10 +1070,7 @@ func (c *rowCounter) TraceBatchEnd(context.Context, *pgx.Conn, pgx.TraceBatchEnd
 
 func rowCountingPool(t *testing.T) (*pgxpool.Pool, *rowCounter) {
 	t.Helper()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
+	dbURL := sharedtest.DatabaseURL(t)
 	cfg, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
 		t.Fatalf("parse DATABASE_URL: %v", err)
@@ -1116,7 +1113,7 @@ func without(ids []catalog.TrackId, drop ...catalog.TrackId) []catalog.TrackId {
 }
 
 func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	countedPool, counter := rowCountingPool(t)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -1245,7 +1242,7 @@ func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *test
 }
 
 func TestPgxPlaylistRepo_ConcurrentDuplicateAddTrack_OneWins(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -1288,7 +1285,7 @@ func TestPgxPlaylistRepo_ConcurrentDuplicateAddTrack_OneWins(t *testing.T) {
 }
 
 func TestPgxPlaylistRepo_RemoveTracks_KeepsOrderAcrossGaps(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -1324,7 +1321,7 @@ func TestPgxPlaylistRepo_RemoveTracks_KeepsOrderAcrossGaps(t *testing.T) {
 }
 
 func TestPgxPlaylistRepo_MembershipReads_AreOwnerScoped(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
 	owner := shared.NewUserId(uuid.New())

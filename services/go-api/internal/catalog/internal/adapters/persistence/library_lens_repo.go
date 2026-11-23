@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type PgxLibraryLensRepository struct {
-	pool pgxPool
+	pool *pgxpool.Pool
 }
 
 func NewPgxLibraryLensRepository(pool *pgxpool.Pool) *PgxLibraryLensRepository {
@@ -102,19 +102,15 @@ func (r *PgxLibraryLensRepository) ListAlbumsForUser(
 	if err != nil {
 		return nil, fmt.Errorf("list library albums: %w", classifyDBError(err))
 	}
-	defer rows.Close()
-
-	albums := []domain.AlbumGroup{}
-	for rows.Next() {
+	albums, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.AlbumGroup, error) {
 		var g domain.AlbumGroup
-		var addedAt time.Time
-		if err := rows.Scan(&g.Key, &g.Album, &g.Artist, &g.ArtworkURL, &g.Year, &g.TrackCount, &addedAt); err != nil {
-			return nil, fmt.Errorf("scan library album: %w", classifyDBError(err))
-		}
-		g.MostRecentAddedAt = addedAt
-		albums = append(albums, g)
+		err := row.Scan(&g.Key, &g.Album, &g.Artist, &g.ArtworkURL, &g.Year, &g.TrackCount, &g.MostRecentAddedAt)
+		return g, err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan library albums: %w", classifyDBError(err))
 	}
-	return albums, classifyDBError(rows.Err())
+	return albums, nil
 }
 
 func (r *PgxLibraryLensRepository) ListArtistsForUser(
@@ -138,19 +134,15 @@ func (r *PgxLibraryLensRepository) ListArtistsForUser(
 	if err != nil {
 		return nil, fmt.Errorf("list library artists: %w", classifyDBError(err))
 	}
-	defer rows.Close()
-
-	artists := []domain.ArtistGroup{}
-	for rows.Next() {
+	artists, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.ArtistGroup, error) {
 		var g domain.ArtistGroup
-		var addedAt time.Time
-		if err := rows.Scan(&g.Key, &g.Artist, &g.ArtworkURL, &g.TrackCount, &addedAt); err != nil {
-			return nil, fmt.Errorf("scan library artist: %w", classifyDBError(err))
-		}
-		g.MostRecentAddedAt = addedAt
-		artists = append(artists, g)
+		err := row.Scan(&g.Key, &g.Artist, &g.ArtworkURL, &g.TrackCount, &g.MostRecentAddedAt)
+		return g, err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan library artists: %w", classifyDBError(err))
 	}
-	return artists, classifyDBError(rows.Err())
+	return artists, nil
 }
 
 func trackOrderBy(sort domain.LibrarySort) string {
@@ -192,7 +184,6 @@ func (r *PgxLibraryLensRepository) ListFilteredForUser(
 		return nil, 0, fmt.Errorf("list filtered tracks: %w", classifyDBError(err))
 	}
 	tracks, err := collectTracks(rows)
-	rows.Close()
 	if err != nil {
 		return nil, 0, classifyDBError(err)
 	}
