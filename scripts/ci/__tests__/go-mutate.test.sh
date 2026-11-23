@@ -139,6 +139,49 @@ GO
 commit untested
 expect "a changed line no test covers fails and names the line" 1 'svc/clamp/clamp.go:[0-9]+:[0-9]+ NOT COVERED'
 
+shared_base=$base
+base=$(git -C "$repo" rev-parse HEAD)
+mkdir -p "$mod/quota"
+cat >"$mod/quota/quota.go" <<'GO'
+package quota
+
+const limit = 6 * 3
+
+func Over(n int) bool {
+	return n > limit
+}
+GO
+cat >"$mod/quota/quota_test.go" <<'GO'
+package quota_test
+
+import (
+	"testing"
+
+	"example.com/svc/quota"
+)
+
+func TestOver(t *testing.T) {
+	for n, want := range map[int]bool{18: false, 19: true} {
+		if got := quota.Over(n); got != want {
+			t.Fatalf("Over(%d) = %v, want %v", n, got, want)
+		}
+	}
+}
+GO
+commit const-pinned
+expect "a const the tests pin counts as killed, though gremlins has no coverage for const lines" 0 'killed [1-9][0-9]*, survived 0'
+if [ -n "$(git -C "$repo" status --porcelain)" ]; then
+  echo "FAIL  the rerun leaves the source as it was:"; git -C "$repo" status --porcelain | sed 's/^/      /'; fail=1
+else
+  echo "ok    the rerun leaves the source as it was"
+fi
+
+sed -i 's/18: false, 19: true/1: false, 100: true/' "$mod/quota/quota_test.go"
+sed -i 's/6 \* 3/6 * 4/' "$mod/quota/quota.go"
+commit const-unpinned
+expect "a const no test pins fails and names the line" 1 'svc/quota/quota.go:3:[0-9]+ NOT COVERED ARITHMETIC_BASE'
+base=$shared_base
+
 sed -i 's/17: false/17: true/' "$mod/clamp/clamp_test.go"
 commit broken
 expect "a failing test stops the run loudly" 1 'gremlins failed in svc/clamp'
