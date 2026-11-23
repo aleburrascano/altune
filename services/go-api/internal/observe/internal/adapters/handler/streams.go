@@ -24,8 +24,8 @@ func auditStreamOpen(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		slog.InfoContext(r.Context(), "observe.read",
 			slog.String("actor", streamActor(r.Context())),
-			slog.String("method", r.Method),
-			slog.String("path", r.URL.Path),
+			slog.String(logging.KeyMethod, r.Method),
+			slog.String(logging.KeyPath, r.URL.Path),
 			logging.CorrelationAttr(r.Context()),
 		)
 		next.ServeHTTP(w, r)

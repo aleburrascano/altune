@@ -2,10 +2,13 @@ package handler_test
 
 import (
 	"altune/go-api/internal/observe"
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,6 +55,25 @@ func TestDiscographyQuality_DeadlineExceededMapsToTimeout(t *testing.T) {
 		if code := string(decodeBody(t, rec)["code"]); rec.Code != http.StatusGatewayTimeout || code != `"observe.discography_quality_timeout"` {
 			t.Errorf("%s: status %d body %s, want 504 observe.discography_quality_timeout", name, rec.Code, rec.Body.String())
 		}
+	}
+}
+
+func TestDiscographyQuality_ATimeoutLogsItsCauseButAnswersOnlyTheTimeout(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	rec := query(stubQualityReader{casesErr: context.DeadlineExceeded})
+
+	line := logs.String()
+	for _, want := range []string{`"code":"observe.discography_quality_timeout"`, "context deadline exceeded"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("failure log %s lacks %s", line, want)
+		}
+	}
+	if detail := string(decodeBody(t, rec)["detail"]); detail != `"discography quality query timed out"` {
+		t.Errorf("detail %s, want only the timeout, never its cause", detail)
 	}
 }
 
