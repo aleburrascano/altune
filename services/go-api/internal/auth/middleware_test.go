@@ -678,8 +678,8 @@ func requireExactResponse(t *testing.T, rec *httptest.ResponseRecorder, status i
 	if got := rec.Header().Get("WWW-Authenticate"); got != wwwAuthenticate {
 		t.Errorf("WWW-Authenticate: got %q, want %q", got, wwwAuthenticate)
 	}
-	if got := rec.Header().Get("Content-Type"); got != "application/json" {
-		t.Errorf("Content-Type: got %q, want %q", got, "application/json")
+	if got := rec.Header().Get("Content-Type"); got != "application/problem+json" {
+		t.Errorf("Content-Type: got %q, want %q", got, "application/problem+json")
 	}
 	if got := rec.Body.String(); got != body {
 		t.Errorf("body: got %q, want %q", got, body)
@@ -693,7 +693,7 @@ func TestMiddleware_MissingHeaderBodyIsPinned(t *testing.T) {
 
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 
-	requireExactResponse(t, rec, http.StatusUnauthorized, "Bearer", `{"detail":"missing authorization header","reason":"missing"}`+"\n")
+	requireExactResponse(t, rec, http.StatusUnauthorized, "Bearer", `{"type":"urn:altune:problem:auth.token_missing","title":"Authentication required","status":401,"detail":"missing authorization header","code":"auth.token_missing"}`+"\n")
 	if *called {
 		t.Error("next handler should not have been called")
 	}
@@ -752,7 +752,7 @@ func TestMiddleware_LookAlikeSchemesArePinnedAsMalformed(t *testing.T) {
 
 			auth.Middleware(verifier)(next).ServeHTTP(rec, req)
 
-			requireExactResponse(t, rec, http.StatusUnauthorized, "Bearer", `{"detail":"malformed authorization header","reason":"malformed"}`+"\n")
+			requireExactResponse(t, rec, http.StatusUnauthorized, "Bearer", `{"type":"urn:altune:problem:auth.token_malformed","title":"Malformed authorization header","status":401,"detail":"malformed authorization header","code":"auth.token_malformed"}`+"\n")
 			if verified || *called {
 				t.Errorf("verifier ran=%v next ran=%v, want neither", verified, *called)
 			}
@@ -784,7 +784,7 @@ func TestMiddleware_InvalidTokenBodyIsPinned(t *testing.T) {
 
 	rec := serveBearer(handler, "203.0.113.7:1", "expired-token")
 
-	requireExactResponse(t, rec, http.StatusUnauthorized, "Bearer", `{"detail":"invalid token","reason":"expired"}`+"\n")
+	requireExactResponse(t, rec, http.StatusUnauthorized, "Bearer", `{"type":"urn:altune:problem:auth.token_expired","title":"Token expired","status":401,"detail":"invalid token","code":"auth.token_expired"}`+"\n")
 	if *called {
 		t.Error("next handler should not have been called")
 	}
@@ -796,7 +796,7 @@ func TestMiddleware_VerifierUnavailableBodyIsPinned(t *testing.T) {
 
 	rec := serveBearer(handler, "203.0.113.7:1", "some-token")
 
-	requireExactResponse(t, rec, http.StatusServiceUnavailable, "", `{"detail":"authentication unavailable","code":"auth.unavailable"}`+"\n")
+	requireExactResponse(t, rec, http.StatusServiceUnavailable, "", `{"type":"urn:altune:problem:auth.unavailable","title":"Authentication unavailable","status":503,"detail":"authentication unavailable","code":"auth.unavailable"}`+"\n")
 	if *called {
 		t.Error("next handler should not have been called")
 	}
@@ -810,7 +810,7 @@ func TestMiddleware_ThrottledBodyIsPinned(t *testing.T) {
 
 	rec := serveBearer(handler, "203.0.113.7:1", "t")
 
-	requireExactResponse(t, rec, http.StatusTooManyRequests, "", `{"detail":"too many failed authentication attempts","code":"auth.throttled"}`+"\n")
+	requireExactResponse(t, rec, http.StatusTooManyRequests, "", `{"type":"urn:altune:problem:auth.throttled","title":"Too many failed authentication attempts","status":429,"detail":"too many failed authentication attempts","code":"auth.throttled"}`+"\n")
 	if got := rec.Header().Get("Retry-After"); got != "60" {
 		t.Errorf("Retry-After: got %q, want %q", got, "60")
 	}
@@ -834,7 +834,7 @@ func TestMiddleware_ThrottledRetryAfterIsNeverZero(t *testing.T) {
 	}
 }
 
-func TestMiddleware_ClientCancelledBodyCarriesUnavailableCode(t *testing.T) {
+func TestMiddleware_AClientThatLeftDuringVerificationGets499WithNoBody(t *testing.T) {
 	next, _ := noopHandler()
 	ctx, cancel := context.WithCancel(context.Background())
 	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
@@ -847,13 +847,21 @@ func TestMiddleware_ClientCancelledBodyCarriesUnavailableCode(t *testing.T) {
 
 	auth.Middleware(verifier)(next).ServeHTTP(rec, req)
 
-	requireExactResponse(t, rec, http.StatusServiceUnavailable, "", `{"detail":"authentication unavailable","code":"auth.unavailable"}`+"\n")
+	if rec.Code != 499 || rec.Body.Len() != 0 {
+		t.Errorf("answered %d with %q, want 499 and no body", rec.Code, rec.Body.String())
+	}
 }
 
 func TestMiddleware_EachRejectionReasonAnswersItsOwnCode(t *testing.T) {
 	rejections := []*auth.InvalidTokenError{
-		{Reason: "signature_invalid"}, {Reason: "expired"}, {Reason: "revoked"}, {Reason: "claim_missing_exp"},
-		{Reason: "claim_invalid_iss"}, {Reason: "claim_invalid_aud"}, {Reason: "claim_invalid_sub"}, {Reason: "claim_invalid_iat"},
+		{Reason: "signature_invalid"},
+		{Reason: "expired"},
+		{Reason: "revoked"},
+		{Reason: "claim_missing_exp"},
+		{Reason: "claim_invalid_iss"},
+		{Reason: "claim_invalid_aud"},
+		{Reason: "claim_invalid_sub"},
+		{Reason: "claim_invalid_iat"},
 	}
 	for _, rejection := range rejections {
 		reason := string(rejection.Reason)
