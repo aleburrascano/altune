@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/app/catalogdiscovery"
 	"altune/go-api/internal/app/discoverycatalog"
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/discovery"
@@ -79,11 +80,11 @@ func (a *App) wireCatalog(
 	return a.wireCatalogHandlers(audio, services), nil
 }
 
-func featuredBridge(disc *discovery.Discovery) *catalog.FeaturedResolver {
+func featuredBridge(disc *discovery.Discovery) catalog.FeaturedArtistResolver {
 	if disc.FeaturedArtists == nil {
 		return nil
 	}
-	return catalog.NewFeaturedResolver(disc.FeaturedArtists)
+	return catalog.NewFeaturedArtistResolver(catalogdiscovery.NewFeaturedArtistCredits(disc.FeaturedArtists))
 }
 
 func (a *App) wireAudioSources(
@@ -241,7 +242,7 @@ func (t *lookupTracker) Verified() bool { return t.succeeded.Load() }
 
 func (a *App) wireCatalogServices(
 	tap *observe.EventTap,
-	featuredBridge *catalog.FeaturedResolver,
+	featuredBridge catalog.FeaturedArtistResolver,
 	audio audioSourcesStaging,
 ) catalogServicesStaging {
 	catalogTrackRepo := catalog.NewPgxCatalogTrackRepository(a.pool)
