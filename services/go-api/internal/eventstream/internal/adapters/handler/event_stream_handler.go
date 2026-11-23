@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/eventstream/internal/core/connlimit"
 	"altune/go-api/internal/eventstream/internal/core/domain"
 	"altune/go-api/internal/eventstream/internal/core/ports"
+	shareddomain "altune/go-api/internal/shared/domain"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/httputil"
 	shared "altune/go-api/internal/shared/kernel"
@@ -88,7 +89,7 @@ func (h *EventStreamHandler) setup(
 		return nil, nil, nil, false
 	}
 	if _, ok := w.(http.Flusher); !ok {
-		httputil.WritePlainError(w, http.StatusInternalServerError, "streaming not supported")
+		httputil.HandleServiceError(w, r, shareddomain.NewError(shareddomain.CodeEventStreamUnsupported, "streaming not supported"))
 		return nil, nil, nil, false
 	}
 	if !h.acquireSlot(w, r, userId) {
@@ -139,7 +140,7 @@ func (h *EventStreamHandler) acquireSlot(w http.ResponseWriter, r *http.Request,
 		return true
 	}
 	slog.WarnContext(r.Context(), connLimitLogEvent(err), "user_id", userId.String())
-	httputil.WritePlainError(w, http.StatusTooManyRequests, "too many event streams")
+	httputil.HandleServiceError(w, r, shareddomain.NewError(shareddomain.CodeEventStreamTooManyStreams, "too many event streams"))
 	return false
 }
 
