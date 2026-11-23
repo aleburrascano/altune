@@ -67,7 +67,7 @@ type eventTapStats struct {
 }
 
 func (a *App) liveMetrics() observe.LiveMetrics {
-	m := observemetrics.FeatureMetrics()
+	m := observemetrics.FeatureMetrics(a.latency)
 	m["db_pool"] = database.ReadPoolStats(a.pool)
 	m["redis_pool"] = redis.ReadPoolStats(a.redisClient)
 	var counters leader.Counters

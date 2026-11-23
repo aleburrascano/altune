@@ -9,12 +9,12 @@ import (
 	"altune/go-api/internal/shared/reqmetrics"
 )
 
-func FeatureMetrics() observe.LiveMetrics {
+func FeatureMetrics(latency *reqmetrics.Registry) observe.LiveMetrics {
 	return observe.LiveMetrics{
 		"auth":      auth.ReadSnapshot(),
 		"catalog":   catalog.ReadSnapshot(),
 		"playback":  playback.ReadSnapshot(),
 		"providers": discovery.ReadProviderMetricsSnapshot(),
-		"latency":   reqmetrics.ReadSnapshot(),
+		"latency":   latency.Snapshot(),
 	}
 }

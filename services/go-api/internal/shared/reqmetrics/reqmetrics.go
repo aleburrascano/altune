@@ -1,23 +1,15 @@
 package reqmetrics
 
-import (
-	"altune/go-api/internal/shared/reqmetrics/internal/core/registry"
-	"time"
-)
+import "altune/go-api/internal/shared/reqmetrics/internal/core/registry"
 
 type (
+	Registry      = registry.Registry
 	Snapshot      = registry.Snapshot
 	RouteLatency  = registry.RouteLatency
 	BucketCount   = registry.BucketCount
 	StatusClasses = registry.StatusClasses
 )
 
-var defaultRegistry = registry.New()
-
-func Observe(route string, d time.Duration, status int) {
-	defaultRegistry.Observe(route, d, status)
-}
-
-func ReadSnapshot() Snapshot {
-	return defaultRegistry.Snapshot()
+func NewRegistry() *Registry {
+	return registry.New()
 }

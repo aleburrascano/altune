@@ -15,7 +15,7 @@ import (
 )
 
 func TestFeatureMetrics_NamesEveryFeaturesSnapshot(t *testing.T) {
-	got := observemetrics.FeatureMetrics()
+	got := observemetrics.FeatureMetrics(reqmetrics.NewRegistry())
 
 	for _, key := range []string{"auth", "catalog", "playback", "providers", "latency"} {
 		if got[key] == nil {
@@ -28,9 +28,10 @@ func TestFeatureMetrics_NamesEveryFeaturesSnapshot(t *testing.T) {
 }
 
 func TestContract_MetricsLiveMatchesFixture(t *testing.T) {
-	reqmetrics.Observe("/v1/tracks/{trackId}", 5*time.Millisecond, 200)
+	latency := reqmetrics.NewRegistry()
+	latency.Observe("/v1/tracks/{trackId}", 5*time.Millisecond, 200)
 	r := chi.NewRouter()
-	observe.NewObserveHandler(observe.Deps{LiveMetrics: observemetrics.FeatureMetrics}).Register(r)
+	observe.NewObserveHandler(observe.Deps{LiveMetrics: func() observe.LiveMetrics { return observemetrics.FeatureMetrics(latency) }}).Register(r)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics/live", nil))
