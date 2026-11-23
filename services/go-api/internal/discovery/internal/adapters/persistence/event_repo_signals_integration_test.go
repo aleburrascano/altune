@@ -1,7 +1,8 @@
-package persistence
+package persistence_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/adapters/persistence"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
@@ -10,26 +11,27 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func appendOrFatal(t *testing.T, store *PgxEventStore, ev domain.InteractionEvent) {
+func appendOrFatal(t *testing.T, store *persistence.PgxEventStore, ev domain.InteractionEvent) {
 	t.Helper()
 	if err := store.Append(context.Background(), ev); err != nil {
 		t.Fatalf("Append(%s): %v", ev.Type.String(), err)
 	}
 }
 
-func newEventTestUser(t *testing.T, store *PgxEventStore) shared.UserId {
+func newEventTestUser(t *testing.T, pool *pgxpool.Pool) shared.UserId {
 	t.Helper()
 	userId := shared.NewUserId(uuid.New())
 	t.Cleanup(func() {
-		_, _ = store.pool.Exec(context.Background(),
+		_, _ = pool.Exec(context.Background(),
 			`DELETE FROM discovery_events WHERE user_id = $1`, userId.UUID())
 	})
 	return userId
 }
 
-func showResults(t *testing.T, store *PgxEventStore, userId shared.UserId, occurredAt time.Time, sigs ...string) {
+func showResults(t *testing.T, store *persistence.PgxEventStore, userId shared.UserId, occurredAt time.Time, sigs ...string) {
 	t.Helper()
 	appendOrFatal(t, store, domain.InteractionEvent{
 		OccurredAt: occurredAt,
@@ -43,14 +45,14 @@ func showResults(t *testing.T, store *PgxEventStore, userId shared.UserId, occur
 func TestPgxEventStore_SatisfactionSignals_RequiresShownResult(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	store := NewPgxEventStore(pool)
+	store := persistence.NewPgxEventStore(pool)
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	attacker := newEventTestUser(t, store)
-	viewer := newEventTestUser(t, store)
-	stale := newEventTestUser(t, store)
-	honest := newEventTestUser(t, store)
+	attacker := newEventTestUser(t, pool)
+	viewer := newEventTestUser(t, pool)
+	stale := newEventTestUser(t, pool)
+	honest := newEventTestUser(t, pool)
 
 	suffix := uuid.New().String()[:8]
 	sigForged := "track|forged title " + suffix + "|forged artist"
@@ -70,6 +72,7 @@ func TestPgxEventStore_SatisfactionSignals_RequiresShownResult(t *testing.T) {
 		Payload: map[string]any{"result_signature": sigForged},
 	})
 
+	const shownResultWindow = 24 * time.Hour
 	showResults(t, store, stale, now.Add(-shownResultWindow-time.Hour), sigForged)
 	appendOrFatal(t, store, domain.InteractionEvent{
 		UserId: stale, Type: domain.EventTypePlay,
@@ -101,12 +104,12 @@ func TestPgxEventStore_SatisfactionSignals_RequiresShownResult(t *testing.T) {
 func TestPgxEventStore_SatisfactionSignals(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	store := NewPgxEventStore(pool)
+	store := persistence.NewPgxEventStore(pool)
 	ctx := context.Background()
 
-	userA := newEventTestUser(t, store)
-	userB := newEventTestUser(t, store)
-	userC := newEventTestUser(t, store)
+	userA := newEventTestUser(t, pool)
+	userB := newEventTestUser(t, pool)
+	userC := newEventTestUser(t, pool)
 
 	suffix := uuid.New().String()[:8]
 	sigCapped := "sig-cap-" + suffix
@@ -188,9 +191,9 @@ func TestPgxEventStore_SatisfactionSignals(t *testing.T) {
 func TestPgxEventStore_ZeroResultQueries(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	store := NewPgxEventStore(pool)
+	store := persistence.NewPgxEventStore(pool)
 	ctx := context.Background()
-	userId := newEventTestUser(t, store)
+	userId := newEventTestUser(t, pool)
 
 	suffix := uuid.New().String()[:8]
 	qHit := "qa zero hit " + suffix
@@ -231,9 +234,9 @@ func TestPgxEventStore_ZeroResultQueries(t *testing.T) {
 func TestPgxEventStore_ZeroResultTotal(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	store := NewPgxEventStore(pool)
+	store := persistence.NewPgxEventStore(pool)
 	ctx := context.Background()
-	userId := newEventTestUser(t, store)
+	userId := newEventTestUser(t, pool)
 
 	suffix := uuid.New().String()[:8]
 	since := time.Now().UTC().Add(-time.Minute)
@@ -277,9 +280,9 @@ func TestPgxEventStore_ZeroResultTotal(t *testing.T) {
 func TestPgxEventStore_NonZeroNoClickQueries(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	store := NewPgxEventStore(pool)
+	store := persistence.NewPgxEventStore(pool)
 	ctx := context.Background()
-	userId := newEventTestUser(t, store)
+	userId := newEventTestUser(t, pool)
 
 	suffix := uuid.New().String()[:8]
 	qNoClick := "qa noclick " + suffix
@@ -330,9 +333,9 @@ func TestPgxEventStore_NonZeroNoClickQueries(t *testing.T) {
 func TestPgxEventStore_BehavioralLabels(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	store := NewPgxEventStore(pool)
+	store := persistence.NewPgxEventStore(pool)
 	ctx := context.Background()
-	userId := newEventTestUser(t, store)
+	userId := newEventTestUser(t, pool)
 
 	suffix := uuid.New().String()[:8]
 	qPos := "qa label pos " + suffix
@@ -417,7 +420,7 @@ func TestPgxEventStore_BehavioralLabels(t *testing.T) {
 func TestPgxEventStore_AbandonedSearches(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	store := NewPgxEventStore(pool)
+	store := persistence.NewPgxEventStore(pool)
 	ctx := context.Background()
 
 	suffix := uuid.New().String()[:8]
@@ -430,22 +433,22 @@ func TestPgxEventStore_AbandonedSearches(t *testing.T) {
 		})
 	}
 
-	userA := newEventTestUser(t, store)
+	userA := newEventTestUser(t, pool)
 	qAband := "qa aband " + suffix
 	search(userA, qAband, "", base)
 	search(userA, "zz retry one "+suffix, "", base.Add(30*time.Second))
 
-	userB := newEventTestUser(t, store)
+	userB := newEventTestUser(t, pool)
 	q59 := "qa aband 59s " + suffix
 	search(userB, q59, "", base)
 	search(userB, "zz retry two "+suffix, "", base.Add(59*time.Second))
 
-	userC := newEventTestUser(t, store)
+	userC := newEventTestUser(t, pool)
 	q61 := "qa aband 61s " + suffix
 	search(userC, q61, "", base)
 	search(userC, "zz retry three "+suffix, "", base.Add(61*time.Second))
 
-	userD := newEventTestUser(t, store)
+	userD := newEventTestUser(t, pool)
 	qClicked := "qa aband clicked " + suffix
 	clickedSearchID := uuid.New().String()
 	search(userD, qClicked, clickedSearchID, base)
@@ -456,12 +459,12 @@ func TestPgxEventStore_AbandonedSearches(t *testing.T) {
 	})
 	search(userD, "zz retry four "+suffix, "", base.Add(30*time.Second))
 
-	userE, userF := newEventTestUser(t, store), newEventTestUser(t, store)
+	userE, userF := newEventTestUser(t, pool), newEventTestUser(t, pool)
 	qAlone := "qa aband alone " + suffix
 	search(userE, qAlone, "", base)
 	search(userF, "qa aband other user "+suffix, "", base.Add(10*time.Second))
 
-	userG := newEventTestUser(t, store)
+	userG := newEventTestUser(t, pool)
 	qTyping := "qa aband typ " + suffix[:4]
 	search(userG, qTyping, "", base)
 	search(userG, qTyping+suffix[4:], "", base.Add(2*time.Second))
@@ -498,7 +501,7 @@ func TestPgxEventStore_AbandonedSearches(t *testing.T) {
 func TestPgxEventStore_Append_EventIDDedupAndMalformedIDs(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	store := NewPgxEventStore(pool)
+	store := persistence.NewPgxEventStore(pool)
 	ctx := context.Background()
 
 	countRows := func(t *testing.T, userId shared.UserId) int {
@@ -513,7 +516,7 @@ func TestPgxEventStore_Append_EventIDDedupAndMalformedIDs(t *testing.T) {
 	}
 
 	t.Run("valid event_id dedups the retry", func(t *testing.T) {
-		userId := newEventTestUser(t, store)
+		userId := newEventTestUser(t, pool)
 		eventID := uuid.New().String()
 		ev := domain.InteractionEvent{
 			UserId: userId, Type: domain.EventTypeLibraryAdd, EventId: eventID,
@@ -527,8 +530,8 @@ func TestPgxEventStore_Append_EventIDDedupAndMalformedIDs(t *testing.T) {
 	})
 
 	t.Run("another user's identical event_id still inserts", func(t *testing.T) {
-		replayer := newEventTestUser(t, store)
-		victim := newEventTestUser(t, store)
+		replayer := newEventTestUser(t, pool)
+		victim := newEventTestUser(t, pool)
 		eventID := uuid.New().String()
 
 		appendOrFatal(t, store, domain.InteractionEvent{
@@ -546,7 +549,7 @@ func TestPgxEventStore_Append_EventIDDedupAndMalformedIDs(t *testing.T) {
 	})
 
 	t.Run("malformed event_id inserts without dedup", func(t *testing.T) {
-		userId := newEventTestUser(t, store)
+		userId := newEventTestUser(t, pool)
 		ev := domain.InteractionEvent{
 			UserId: userId, Type: domain.EventTypeLibraryAdd, EventId: "not-a-uuid",
 		}
@@ -568,7 +571,7 @@ func TestPgxEventStore_Append_EventIDDedupAndMalformedIDs(t *testing.T) {
 	})
 
 	t.Run("malformed search_id persists as NULL", func(t *testing.T) {
-		userId := newEventTestUser(t, store)
+		userId := newEventTestUser(t, pool)
 		appendOrFatal(t, store, domain.InteractionEvent{
 			UserId: userId, Type: domain.EventTypePlay, SearchId: "bogus-not-a-uuid",
 		})

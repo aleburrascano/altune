@@ -1,7 +1,8 @@
-package persistence
+package persistence_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/adapters/persistence"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
@@ -9,9 +10,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func performSearch(t *testing.T, store *PgxEventStore, userId shared.UserId, queryNorm, searchID string) {
+func performSearch(t *testing.T, store *persistence.PgxEventStore, userId shared.UserId, queryNorm, searchID string) {
 	t.Helper()
 	appendOrFatal(t, store, domain.InteractionEvent{
 		UserId: userId, Type: domain.EventTypeSearchPerformed,
@@ -20,10 +22,10 @@ func performSearch(t *testing.T, store *PgxEventStore, userId shared.UserId, que
 	})
 }
 
-func storedQueryNorm(t *testing.T, store *PgxEventStore, userId shared.UserId, eventID string) *string {
+func storedQueryNorm(t *testing.T, pool *pgxpool.Pool, userId shared.UserId, eventID string) *string {
 	t.Helper()
 	var queryNorm *string
-	if err := store.pool.QueryRow(context.Background(),
+	if err := pool.QueryRow(context.Background(),
 		`SELECT query_norm FROM discovery_events WHERE user_id = $1 AND event_id = $2`,
 		userId.UUID(), uuid.MustParse(eventID),
 	).Scan(&queryNorm); err != nil {
@@ -34,10 +36,11 @@ func storedQueryNorm(t *testing.T, store *PgxEventStore, userId shared.UserId, e
 
 func TestPgxEventStore_NonZeroNoClickQueries_IgnoresClientQueryNorm(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	store := NewPgxEventStore(testPool(t))
+	pool := testPool(t)
+	store := persistence.NewPgxEventStore(pool)
 	ctx := context.Background()
-	honest := newEventTestUser(t, store)
-	attacker := newEventTestUser(t, store)
+	honest := newEventTestUser(t, pool)
+	attacker := newEventTestUser(t, pool)
 
 	suffix := uuid.New().String()[:8]
 	qAnswered := "qn answered " + suffix
@@ -80,9 +83,10 @@ func TestPgxEventStore_NonZeroNoClickQueries_IgnoresClientQueryNorm(t *testing.T
 
 func TestPgxEventStore_Append_ResolvesClientQueryNormFromSearch(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	store := NewPgxEventStore(testPool(t))
-	owner := newEventTestUser(t, store)
-	other := newEventTestUser(t, store)
+	pool := testPool(t)
+	store := persistence.NewPgxEventStore(pool)
+	owner := newEventTestUser(t, pool)
+	other := newEventTestUser(t, pool)
 
 	suffix := uuid.New().String()[:8]
 	canonical := "qn canonical " + suffix
@@ -107,7 +111,7 @@ func TestPgxEventStore_Append_ResolvesClientQueryNormFromSearch(t *testing.T) {
 				UserId: tc.userId, Type: domain.EventTypePlay,
 				SearchId: tc.searchID, EventId: eventID, QueryNorm: "forged " + suffix,
 			})
-			got := storedQueryNorm(t, store, tc.userId, eventID)
+			got := storedQueryNorm(t, pool, tc.userId, eventID)
 			if (got == nil) != (tc.want == nil) || (got != nil && *got != *tc.want) {
 				t.Errorf("stored query_norm = %v, want %v", deref(got), deref(tc.want))
 			}

@@ -1,7 +1,8 @@
-package persistence
+package persistence_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/adapters/persistence"
 	"altune/go-api/internal/discovery/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/sharedtest"
@@ -93,7 +94,7 @@ func seedEveryDiscoveryTableFor(t *testing.T, pool *pgxpool.Pool, owner shared.U
 	ctx := context.Background()
 	t.Cleanup(func() { deleteStoredRowsOf(t, pool, owner) })
 
-	history := NewPgxSearchHistoryRepository(pool)
+	history := persistence.NewPgxSearchHistoryRepository(pool)
 	if err := history.Insert(ctx, &domain.SearchHistoryEntry{
 		ID:         shared.NewEntityId(),
 		UserId:     owner,
@@ -104,7 +105,7 @@ func seedEveryDiscoveryTableFor(t *testing.T, pool *pgxpool.Pool, owner shared.U
 		t.Fatalf("seed search history: %v", err)
 	}
 
-	favorites := NewPgxFavoritesRepository(pool)
+	favorites := persistence.NewPgxFavoritesRepository(pool)
 	if err := favorites.Add(ctx, owner, domain.Favorite{
 		Kind:  domain.ResultKindArtist,
 		Key:   seededQuery,
@@ -113,7 +114,7 @@ func seedEveryDiscoveryTableFor(t *testing.T, pool *pgxpool.Pool, owner shared.U
 		t.Fatalf("seed favorite: %v", err)
 	}
 
-	events := NewPgxEventStore(pool)
+	events := persistence.NewPgxEventStore(pool)
 	if err := events.Append(ctx, domain.InteractionEvent{
 		OccurredAt: time.Now().UTC(),
 		UserId:     owner,
@@ -140,9 +141,9 @@ func deleteStoredRowsOf(t *testing.T, pool *pgxpool.Pool, owner shared.UserId) {
 
 func deletedIdentityErasers(pool *pgxpool.Pool) []ports.DeletedIdentityEraser {
 	return []ports.DeletedIdentityEraser{
-		NewPgxSearchHistoryRepository(pool),
-		NewPgxFavoritesRepository(pool),
-		NewPgxEventStore(pool),
+		persistence.NewPgxSearchHistoryRepository(pool),
+		persistence.NewPgxFavoritesRepository(pool),
+		persistence.NewPgxEventStore(pool),
 	}
 }
 

@@ -1,7 +1,8 @@
-package persistence
+package persistence_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/adapters/persistence"
 	"altune/go-api/internal/discovery/internal/core/ports"
 	"context"
 	"testing"
@@ -11,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func newUnreleasedArtist(t *testing.T, pool *pgxpool.Pool, store *PgxUnreleasedStore) ports.UnreleasedArtistKey {
+func newUnreleasedArtist(t *testing.T, pool *pgxpool.Pool, store *persistence.PgxUnreleasedStore) ports.UnreleasedArtistKey {
 	t.Helper()
 	key := ports.UnreleasedArtistKey{Provider: domain.ProviderDeezer, ExternalID: "it-" + uuid.NewString()}
 	if err := store.Record(context.Background(), key, "Artist "+key.ExternalID, map[domain.ProviderName]string{domain.ProviderMusicBrainz: "mb"}); err != nil {
@@ -33,7 +34,7 @@ func unreleasedTitles(songs []domain.UnreleasedSong) []string {
 
 func TestUnreleasedStoreWrite(t *testing.T) {
 	pool := testPool(t)
-	store := NewPgxUnreleasedStore(pool)
+	store := persistence.NewPgxUnreleasedStore(pool)
 	ctx := context.Background()
 	key := newUnreleasedArtist(t, pool, store)
 
@@ -70,7 +71,7 @@ func TestUnreleasedStoreWrite(t *testing.T) {
 
 func TestUnreleasedStoreDue(t *testing.T) {
 	pool := testPool(t)
-	store := NewPgxUnreleasedStore(pool)
+	store := persistence.NewPgxUnreleasedStore(pool)
 	ctx := context.Background()
 	now := time.Now().UTC()
 
@@ -120,7 +121,7 @@ func TestUnreleasedStoreDue(t *testing.T) {
 
 func TestUnreleasedStoreBuildVersion(t *testing.T) {
 	pool := testPool(t)
-	store := NewPgxUnreleasedStore(pool)
+	store := persistence.NewPgxUnreleasedStore(pool)
 	ctx := context.Background()
 	key := newUnreleasedArtist(t, pool, store)
 
@@ -154,7 +155,7 @@ func unreleasedSearchKeys(t *testing.T, pool *pgxpool.Pool, key ports.Unreleased
 
 func TestUnreleasedSearch_RanksBySimilarityAndMatchesTyposAndAccents(t *testing.T) {
 	pool := testPool(t)
-	store := NewPgxUnreleasedStore(pool)
+	store := persistence.NewPgxUnreleasedStore(pool)
 	ctx := context.Background()
 	key := newUnreleasedArtist(t, pool, store)
 	songs := []domain.UnreleasedSong{

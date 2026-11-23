@@ -1,6 +1,7 @@
-package persistence
+package persistence_test
 
 import (
+	"altune/go-api/internal/discovery/internal/adapters/persistence"
 	"altune/go-api/internal/discovery/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
@@ -13,11 +14,16 @@ import (
 
 func seedTrackRow(t *testing.T, pool *pgxpool.Pool, userId uuid.UUID, title, artist, album string) {
 	t.Helper()
+	seedTrackRowWithAlbumArtist(t, pool, userId, title, artist, album, nil)
+}
+
+func seedTrackRowWithAlbumArtist(t *testing.T, pool *pgxpool.Pool, userId uuid.UUID, title, artist, album string, albumArtist *string) {
+	t.Helper()
 	id := uuid.New()
 	_, err := pool.Exec(context.Background(),
-		`INSERT INTO tracks (id, user_id, title, artist, album, added_at, acquisition_status, dedup_key)
-		 VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)`,
-		id, userId, title, artist, album, time.Now().UTC(), id.String(),
+		`INSERT INTO tracks (id, user_id, title, artist, album, album_artist, added_at, acquisition_status, dedup_key)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)`,
+		id, userId, title, artist, album, albumArtist, time.Now().UTC(), id.String(),
 	)
 	if err != nil {
 		t.Fatalf("seed track: %v", err)
@@ -37,7 +43,7 @@ func matchTitles(ms []ports.RelatedTrackMatch) map[string]bool {
 
 func TestPgxRelationshipQuerier_FindRelated(t *testing.T) {
 	pool := testPool(t)
-	q := NewPgxRelationshipQuerier(pool)
+	q := persistence.NewPgxRelationshipQuerier(pool)
 	ctx := context.Background()
 
 	userA := uuid.New()
@@ -84,7 +90,7 @@ func TestPgxRelationshipQuerier_FindRelated(t *testing.T) {
 
 func TestPgxRelationshipQuerier_FindRelatedByAlbumArtist(t *testing.T) {
 	pool := testPool(t)
-	q := NewPgxRelationshipQuerier(pool)
+	q := persistence.NewPgxRelationshipQuerier(pool)
 	ctx := context.Background()
 	user := uuid.New()
 	caller := shared.NewUserId(user)
@@ -103,14 +109,26 @@ func TestPgxRelationshipQuerier_FindRelatedByAlbumArtist(t *testing.T) {
 	}
 }
 
-func TestKeepArtistMatches(t *testing.T) {
-	candidates := []albumCandidate{
-		{match: ports.RelatedTrackMatch{Title: "Queen Song", Artist: "Queen"}},
-		{match: ports.RelatedTrackMatch{Title: "ABBA Song", Artist: "ABBA"}},
-		{match: ports.RelatedTrackMatch{Title: "Compilation Song", Artist: "Someone"}, albumArtist: "queen"},
-	}
+func TestPgxRelationshipQuerier_FindRelatedByAlbumArtist_CreditsTheAlbumArtistAndAnUnnamedArtistMatchesAll(t *testing.T) {
+	pool := testPool(t)
+	q := persistence.NewPgxRelationshipQuerier(pool)
+	ctx := context.Background()
+	user := uuid.New()
+	caller := shared.NewUserId(user)
+	album := "Mixed Album " + uuid.New().String()[:8]
+	queen := "queen"
+
+	seedTrackRow(t, pool, user, "Queen Song", "Queen", album)
+	seedTrackRow(t, pool, user, "ABBA Song", "ABBA", album)
+	seedTrackRowWithAlbumArtist(t, pool, user, "Compilation Song", "Someone", album, &queen)
+
 	titlesFor := func(artist string) map[string]bool {
-		return matchTitles(keepArtistMatches(candidates, artist, 10))
+		t.Helper()
+		got, err := q.FindRelatedByAlbumArtist(ctx, caller, album, artist, 10)
+		if err != nil {
+			t.Fatalf("FindRelatedByAlbumArtist(%q): %v", artist, err)
+		}
+		return matchTitles(got)
 	}
 
 	if got := titlesFor("Queen"); len(got) != 2 || !got["Queen Song"] || !got["Compilation Song"] {

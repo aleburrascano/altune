@@ -1,7 +1,8 @@
-package persistence
+package persistence_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/adapters/persistence"
 	"altune/go-api/internal/discovery/internal/core/ports"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
@@ -29,7 +30,7 @@ func TestPgxIdentityStore_RoundTrip(t *testing.T) {
 	}
 	defer pool.Close()
 
-	store := NewPgxIdentityStore(pool)
+	store := persistence.NewPgxIdentityStore(pool)
 	mbid := "0a68f3b5-79c2-4f81-a7bc-ebc977602e86"
 	xref := map[domain.ProviderKey]string{"deezer": "234701081", "discogs": "987654"}
 
@@ -73,31 +74,17 @@ func (c *queryCounter) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryE
 
 func queryCountingPool(t *testing.T) (*pgxpool.Pool, *queryCounter) {
 	t.Helper()
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		t.Skip("DATABASE_URL not set")
-	}
-	cfg, err := pgxpool.ParseConfig(dsn)
-	if err != nil {
-		t.Fatalf("parse DATABASE_URL: %v", err)
-	}
 	counter := &queryCounter{}
-	cfg.ConnConfig.Tracer = counter
-	pool, err := pgxpool.NewWithConfig(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	return pool, counter
+	return tracedPool(t, counter), counter
 }
 
 func TestPgxIdentityStore_LookupByProviderIDsIsOneQuery(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool, counter := queryCountingPool(t)
 	ctx := context.Background()
-	store := NewPgxIdentityStore(pool)
+	store := persistence.NewPgxIdentityStore(pool)
 	cleanup := func() {
-		_, _ = pool.Exec(ctx, `DELETE FROM entity_identity WHERE external_id LIKE $1`, batchTestIDPrefix+"%")
+		_, _ = pool.Exec(ctx, `DELETE FROM entity_identity WHERE external_id LIKE $1`, "%"+batchTestIDPrefix+"%")
 	}
 	cleanup()
 	t.Cleanup(cleanup)
@@ -148,7 +135,7 @@ func TestPgxIdentityStore_LookupByProviderIDsKeysOnKind(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool, _ := queryCountingPool(t)
 	ctx := context.Background()
-	store := NewPgxIdentityStore(pool)
+	store := persistence.NewPgxIdentityStore(pool)
 	id := batchTestIDPrefix + "kind"
 	cleanup := func() { _, _ = pool.Exec(ctx, `DELETE FROM entity_identity WHERE external_id = $1`, id) }
 	cleanup()
@@ -186,10 +173,35 @@ func TestPgxIdentityStore_LookupByProviderID_CorruptXrefWarnsAndKeepsHit(t *test
 	defer pool.Exec(ctx, `DELETE FROM entity_identity WHERE external_id = 'corrupt-xref-595'`)
 	logs := captureWarnings(t)
 
-	mbid, xref, ok := NewPgxIdentityStore(pool).LookupByProviderID(ctx, domain.ResultKindArtist, "deezer", "corrupt-xref-595")
+	mbid, xref, ok := persistence.NewPgxIdentityStore(pool).LookupByProviderID(ctx, domain.ResultKindArtist, "deezer", "corrupt-xref-595")
 
 	if !ok || mbid != "mbid-c" || len(xref) != 0 {
 		t.Errorf("got (%q, %v, %v), want hit mbid-c with empty xref", mbid, xref, ok)
+	}
+	if !strings.Contains(logs.String(), "identity.xref_corrupt") {
+		t.Errorf("corrupt xref not logged at Warn: %q", logs.String())
+	}
+}
+
+func TestPgxIdentityStore_LookupByProviderIDs_CorruptXrefWarnsAndKeepsHit(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	ctx := context.Background()
+	pool := testPool(t)
+	_, _ = pool.Exec(ctx, `DELETE FROM entity_identity WHERE external_id = 'corrupt-xref-batch'`)
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO entity_identity (provider, external_id, kind, mbid, xref) VALUES ('deezer', 'corrupt-xref-batch', 'artist', 'mbid-1', '["not","a","map"]')`); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM entity_identity WHERE external_id = 'corrupt-xref-batch'`)
+	})
+	logs := captureWarnings(t)
+	ref := ports.IdentityRef{Kind: domain.ResultKindArtist, Provider: "deezer", ExternalID: "corrupt-xref-batch"}
+
+	hits := persistence.NewPgxIdentityStore(pool).LookupByProviderIDs(ctx, []ports.IdentityRef{ref})
+
+	if hit, ok := hits[ref]; !ok || hit.MBID != "mbid-1" || len(hit.Xref) != 0 {
+		t.Errorf("hit = %+v ok=%v, want mbid-1 with empty xref", hit, ok)
 	}
 	if !strings.Contains(logs.String(), "identity.xref_corrupt") {
 		t.Errorf("corrupt xref not logged at Warn: %q", logs.String())

@@ -1,14 +1,47 @@
-package persistence
+package persistence_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/adapters/persistence"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func seedEvent(t *testing.T, store *PgxEventStore, at time.Time, eventType domain.EventType) {
+const writeOnlyEventRetention = 30 * 24 * time.Hour
+
+var retentionPolicy = []struct {
+	eventType domain.EventType
+	window    time.Duration
+}{
+	{domain.EventTypeSearchPerformed, persistence.AggregateEventRetention},
+	{domain.EventTypeResultClicked, persistence.AggregateEventRetention},
+	{domain.EventTypePlay, persistence.AggregateEventRetention},
+	{domain.EventTypeSkip, persistence.AggregateEventRetention},
+	{domain.EventTypeCompleted, persistence.AggregateEventRetention},
+	{domain.EventTypeLibraryAdd, persistence.AggregateEventRetention},
+	{domain.EventTypeWrongAlbum, persistence.AggregateEventRetention},
+	{domain.EventTypeResultsShown, writeOnlyEventRetention},
+	{domain.EventTypeSearchFailed, writeOnlyEventRetention},
+	{domain.EventTypeSearchDegraded, writeOnlyEventRetention},
+	{domain.EventTypePlaybackHealth, writeOnlyEventRetention},
+	{domain.EventTypeDetailHealth, writeOnlyEventRetention},
+	{domain.EventTypeAcquisitionUi, writeOnlyEventRetention},
+	{domain.EventTypeClientError, writeOnlyEventRetention},
+	{domain.EventTypeUserAction, writeOnlyEventRetention},
+	{domain.EventTypeFailureShown, writeOnlyEventRetention},
+	{domain.EventTypeSseReconnect, writeOnlyEventRetention},
+	{domain.EventTypeOutboxFlushFailed, writeOnlyEventRetention},
+	{domain.EventTypeDownloadFailed, writeOnlyEventRetention},
+	{domain.EventTypeAuthFailed, writeOnlyEventRetention},
+	{domain.EventTypeScreenView, writeOnlyEventRetention},
+	{domain.EventTypePlayStart, writeOnlyEventRetention},
+}
+
+func seedEvent(t *testing.T, store *persistence.PgxEventStore, at time.Time, eventType domain.EventType) {
 	t.Helper()
 	if err := store.Append(context.Background(), domain.InteractionEvent{
 		OccurredAt: at,
@@ -20,10 +53,10 @@ func seedEvent(t *testing.T, store *PgxEventStore, at time.Time, eventType domai
 	}
 }
 
-func countEventsOfType(t *testing.T, store *PgxEventStore, eventType domain.EventType) int {
+func countEventsOfType(t *testing.T, pool *pgxpool.Pool, eventType domain.EventType) int {
 	t.Helper()
 	var n int
-	if err := store.pool.QueryRow(context.Background(),
+	if err := pool.QueryRow(context.Background(),
 		`SELECT COUNT(*) FROM discovery_events WHERE event_type = $1`,
 		eventType.String()).Scan(&n); err != nil {
 		t.Fatalf("count %s: %v", eventType, err)
@@ -31,9 +64,9 @@ func countEventsOfType(t *testing.T, store *PgxEventStore, eventType domain.Even
 	return n
 }
 
-func deleteEventsOfType(t *testing.T, store *PgxEventStore, eventType domain.EventType) {
+func deleteEventsOfType(t *testing.T, pool *pgxpool.Pool, eventType domain.EventType) {
 	t.Helper()
-	if _, err := store.pool.Exec(context.Background(),
+	if _, err := pool.Exec(context.Background(),
 		`DELETE FROM discovery_events WHERE event_type = $1`, eventType.String()); err != nil {
 		t.Fatalf("clean %s: %v", eventType, err)
 	}
@@ -41,13 +74,13 @@ func deleteEventsOfType(t *testing.T, store *PgxEventStore, eventType domain.Eve
 
 func TestPgxEventStore_PruneEvents_PerTypeWindow(t *testing.T) {
 	pool := testPool(t)
-	store := NewPgxEventStore(pool)
+	store := persistence.NewPgxEventStore(pool)
 	now := time.Now().UTC()
 
-	for _, ret := range eventRetention {
+	for _, ret := range retentionPolicy {
 		t.Run(ret.eventType.String(), func(t *testing.T) {
-			deleteEventsOfType(t, store, ret.eventType)
-			t.Cleanup(func() { deleteEventsOfType(t, store, ret.eventType) })
+			deleteEventsOfType(t, pool, ret.eventType)
+			t.Cleanup(func() { deleteEventsOfType(t, pool, ret.eventType) })
 
 			seedEvent(t, store, now.Add(-1*time.Hour), ret.eventType)
 			seedEvent(t, store, now.Add(-ret.window), ret.eventType)
@@ -60,7 +93,7 @@ func TestPgxEventStore_PruneEvents_PerTypeWindow(t *testing.T) {
 			if pruned < 1 {
 				t.Fatalf("pruned = %d, want >= 1 (the row past %s's window)", pruned, ret.eventType)
 			}
-			if got := countEventsOfType(t, store, ret.eventType); got != 2 {
+			if got := countEventsOfType(t, pool, ret.eventType); got != 2 {
 				t.Fatalf("%s rows after prune = %d, want 2 (in-window + boundary survive, ancient evicted)",
 					ret.eventType, got)
 			}
@@ -70,25 +103,25 @@ func TestPgxEventStore_PruneEvents_PerTypeWindow(t *testing.T) {
 
 func TestPgxEventStore_PruneEvents_LeavesDiscographyObserved(t *testing.T) {
 	pool := testPool(t)
-	store := NewPgxEventStore(pool)
-	t.Cleanup(func() { deleteEventsOfType(t, store, domain.EventTypeDiscographyObserved) })
-	deleteEventsOfType(t, store, domain.EventTypeDiscographyObserved)
+	store := persistence.NewPgxEventStore(pool)
+	t.Cleanup(func() { deleteEventsOfType(t, pool, domain.EventTypeDiscographyObserved) })
+	deleteEventsOfType(t, pool, domain.EventTypeDiscographyObserved)
 
 	now := time.Now().UTC()
-	seedObservation(t, store, now.Add(-aggregateEventRetention-30*24*time.Hour), "spotify:kept", 10, 8,
+	seedObservation(t, store, now.Add(-persistence.AggregateEventRetention-30*24*time.Hour), "spotify:kept", 10, 8,
 		map[string]int{"spotify": 10})
 
 	if _, err := store.PruneEvents(context.Background(), now); err != nil {
 		t.Fatalf("PruneEvents: %v", err)
 	}
-	if got := countEventsOfType(t, store, domain.EventTypeDiscographyObserved); got != 1 {
+	if got := countEventsOfType(t, pool, domain.EventTypeDiscographyObserved); got != 1 {
 		t.Fatalf("discography_observed rows after PruneEvents = %d, want 1 (untouched)", got)
 	}
 }
 
 func TestPgxEventStore_PruneEvents_UserTelemetryFollowsHealthRetention(t *testing.T) {
 	pool := testPool(t)
-	store := NewPgxEventStore(pool)
+	store := persistence.NewPgxEventStore(pool)
 	now := time.Now().UTC()
 	types := []domain.EventType{
 		domain.EventTypePlaybackHealth, domain.EventTypeUserAction, domain.EventTypeFailureShown,
@@ -96,7 +129,7 @@ func TestPgxEventStore_PruneEvents_UserTelemetryFollowsHealthRetention(t *testin
 	}
 	clean := func() {
 		for _, et := range types {
-			deleteEventsOfType(t, store, et)
+			deleteEventsOfType(t, pool, et)
 		}
 	}
 	t.Cleanup(clean)
@@ -116,9 +149,9 @@ func TestPgxEventStore_PruneEvents_UserTelemetryFollowsHealthRetention(t *testin
 			if _, err := store.PruneEvents(context.Background(), now); err != nil {
 				t.Fatalf("PruneEvents: %v", err)
 			}
-			health := countEventsOfType(t, store, domain.EventTypePlaybackHealth)
+			health := countEventsOfType(t, pool, domain.EventTypePlaybackHealth)
 			for _, et := range types[1:] {
-				if got := countEventsOfType(t, store, et); got != health {
+				if got := countEventsOfType(t, pool, et); got != health {
 					t.Errorf("%s rows aged %s after prune = %d, want %d (same as playback_health)",
 						et, age, got, health)
 				}
@@ -135,7 +168,7 @@ func TestPgxEventStore_PruneEvents_UserTelemetryFollowsHealthRetention(t *testin
 			t.Fatalf("PruneEvents: %v", err)
 		}
 		for _, et := range types[1:] {
-			if got := countEventsOfType(t, store, et); got != 0 {
+			if got := countEventsOfType(t, pool, et); got != 0 {
 				t.Errorf("%s rows aged 800d after prune = %d, want 0", et, got)
 			}
 		}
