@@ -723,3 +723,18 @@ func TestStoreStep_ReplaceStagesItsOwnRefEvenWhenAnotherTrackServesTheCanonicalR
 		t.Errorf("writes = %v, want only %q", store.writes, want)
 	}
 }
+
+const testAttemptID = "11111111-1111-1111-1111-111111111111"
+
+type recordingOrphanQueue struct {
+	recorded []ports.OrphanedAudio
+	err      error
+}
+
+func (q *recordingOrphanQueue) RecordOrphanedAudio(_ context.Context, o ports.OrphanedAudio) error {
+	if q.err != nil {
+		return q.err
+	}
+	q.recorded = append(q.recorded, o)
+	return nil
+}

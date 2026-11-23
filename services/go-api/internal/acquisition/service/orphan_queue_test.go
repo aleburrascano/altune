@@ -1,24 +1,29 @@
-package service
+package service_test
 
 import (
-	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
+	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/acquisition/internal/core/ports"
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/acquisition/service"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
+	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
 )
 
 type recordingOrphanQueue struct {
+	mu       sync.Mutex
 	recorded []ports.OrphanedAudio
 	err      error
 }
 
 func (q *recordingOrphanQueue) RecordOrphanedAudio(_ context.Context, o ports.OrphanedAudio) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	if q.err != nil {
 		return q.err
 	}
@@ -26,26 +31,32 @@ func (q *recordingOrphanQueue) RecordOrphanedAudio(_ context.Context, o ports.Or
 	return nil
 }
 
+func (q *recordingOrphanQueue) entries() []ports.OrphanedAudio {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return append([]ports.OrphanedAudio(nil), q.recorded...)
+}
+
 func TestExecuteReplace_FailedOldAudioDeleteIsQueuedForTheSweep(t *testing.T) {
-	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
-	store.deleteErr = errors.New("object storage unavailable")
+	track := seedReadyTrack(t)
+	track.store.deleteErr = errors.New("object storage unavailable")
 	queue := &recordingOrphanQueue{}
 	grace := 24 * time.Hour
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store,
-		WithAcquireOrphanQueue(queue), WithSupersededAudioGrace(grace))
+	svc := track.service(service.WithAcquireOrphanQueue(queue), service.WithSupersededAudioGrace(grace))
 
 	before := time.Now()
-	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), track.userID, track.trackID); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
-	if len(queue.recorded) != 1 {
-		t.Fatalf("recorded = %+v, want exactly one orphan", queue.recorded)
+	recorded := queue.entries()
+	if len(recorded) != 1 {
+		t.Fatalf("recorded = %+v, want exactly one orphan", recorded)
 	}
-	got := queue.recorded[0]
+	got := recorded[0]
 	notBefore := got.NotBefore
 	got.NotBefore = time.Time{}
-	want := ports.OrphanedAudio{AudioRef: originalRef, UserId: userId, TrackId: trackId}
+	want := ports.OrphanedAudio{AudioRef: track.originalRef, UserId: track.userID, TrackId: track.trackID}
 	if got != want {
 		t.Errorf("recorded = %+v, want %+v", got, want)
 	}
@@ -55,114 +66,120 @@ func TestExecuteReplace_FailedOldAudioDeleteIsQueuedForTheSweep(t *testing.T) {
 }
 
 func TestExecuteReplace_SupersededAudioIsQueuedAfterTheGraceAndKept(t *testing.T) {
-	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
+	track := seedReadyTrack(t)
 	queue := &recordingOrphanQueue{}
 	grace := 168 * time.Hour
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store,
-		WithAcquireOrphanQueue(queue), WithSupersededAudioGrace(grace))
+	svc := track.service(service.WithAcquireOrphanQueue(queue), service.WithSupersededAudioGrace(grace))
 
 	before := time.Now()
-	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), track.userID, track.trackID); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
-	if len(queue.recorded) != 1 {
-		t.Fatalf("recorded = %+v, want exactly one orphan", queue.recorded)
+	recorded := queue.entries()
+	if len(recorded) != 1 {
+		t.Fatalf("recorded = %+v, want exactly one orphan", recorded)
 	}
-	got := queue.recorded[0]
-	if got.AudioRef != originalRef || got.UserId != userId || got.TrackId != trackId {
-		t.Errorf("recorded = %+v, want the superseded ref %s for user %s track %s", got, originalRef, userId, trackId)
+	got := recorded[0]
+	if got.AudioRef != track.originalRef || got.UserId != track.userID || got.TrackId != track.trackID {
+		t.Errorf("recorded = %+v, want the superseded ref %s for user %s track %s", got, track.originalRef, track.userID, track.trackID)
 	}
 	if got.NotBefore.Before(before.Add(grace)) || got.NotBefore.After(time.Now().Add(grace)) {
 		t.Errorf("not before = %s, want now plus %s", got.NotBefore, grace)
 	}
-	if _, kept := store.objects[originalRef]; !kept {
+	if !track.store.holds(track.originalRef) {
 		t.Error("the superseded object was deleted inside the grace window")
 	}
 }
 
 func TestExecuteReplace_QueueFailureDoesNotFailTheJob(t *testing.T) {
-	repo, store, userId, trackId, _ := seedReadyTrack(t)
-	store.deleteErr = errors.New("object storage unavailable")
+	track := seedReadyTrack(t)
+	track.store.deleteErr = errors.New("object storage unavailable")
 	queue := &recordingOrphanQueue{err: errors.New("queue down")}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store, WithAcquireOrphanQueue(queue))
+	svc := track.service(service.WithAcquireOrphanQueue(queue))
 
-	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), track.userID, track.trackID); err != nil {
 		t.Fatalf("ExecuteReplace: %v, want success despite the queue failing", err)
 	}
 }
 
 func TestExecuteReplace_NothingIsDeletedAtCommitAndExactlyOneEntryIsQueued(t *testing.T) {
-	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
+	track := seedReadyTrack(t)
 	queue := &recordingOrphanQueue{}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store,
-		WithAcquireOrphanQueue(queue), WithSupersededAudioGrace(time.Hour))
+	svc := track.service(service.WithAcquireOrphanQueue(queue), service.WithSupersededAudioGrace(time.Hour))
 
-	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
+	if err := svc.ExecuteReplace(context.Background(), track.userID, track.trackID); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
-	if _, kept := store.objects[originalRef]; !kept {
+	if !track.store.holds(track.originalRef) {
 		t.Error("the superseded object was deleted at commit, want it kept for the sweep")
 	}
-	if len(queue.recorded) != 1 || queue.recorded[0].AudioRef != originalRef {
-		t.Errorf("recorded = %+v, want exactly one entry for %s", queue.recorded, originalRef)
+	if recorded := queue.entries(); len(recorded) != 1 || recorded[0].AudioRef != track.originalRef {
+		t.Errorf("recorded = %+v, want exactly one entry for %s", recorded, track.originalRef)
 	}
 }
 
 func TestExecuteReplace_FailedRollbackDeleteIsQueuedForTheSweep(t *testing.T) {
-	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
-	repo.updateErr = errors.New("transient db error")
-	store.deleteErr = errors.New("object storage unavailable")
+	track := seedReadyTrack(t)
+	track.ledger.FailWrites(errors.New("transient db error"))
+	track.store.deleteErr = errors.New("object storage unavailable")
 	queue := &recordingOrphanQueue{}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store, WithAcquireOrphanQueue(queue))
+	svc := track.service(service.WithAcquireOrphanQueue(queue))
 
-	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err == nil {
+	if err := svc.ExecuteReplace(context.Background(), track.userID, track.trackID); err == nil {
 		t.Fatal("expected the replace to fail")
 	}
 
-	if len(queue.recorded) != 1 {
-		t.Fatalf("recorded = %+v, want exactly one orphan", queue.recorded)
+	recorded := queue.entries()
+	if len(recorded) != 1 {
+		t.Fatalf("recorded = %+v, want exactly one orphan", recorded)
 	}
-	got := queue.recorded[0]
-	if got.AudioRef == originalRef || got.AudioRef == "" || got.UserId != userId || got.TrackId != trackId {
-		t.Errorf("recorded = %+v, want the staged ref for user %s track %s", got, userId, trackId)
+	got := recorded[0]
+	if got.AudioRef == track.originalRef || got.AudioRef == "" || got.UserId != track.userID || got.TrackId != track.trackID {
+		t.Errorf("recorded = %+v, want the staged ref for user %s track %s", got, track.userID, track.trackID)
 	}
 }
 
 func TestStoreRollback_ExhaustedDeleteQueuesTheOrphan(t *testing.T) {
-	userId, trackId := shared.NewUserId(uuid.New()), domain.NewTrackId()
-	store := &flakyDeleteStore{stored: map[string]bool{"u/new.mp3": true}, deleteErr: errors.New("down"), failDeletes: 1 << 30}
-	queue := &recordingOrphanQueue{}
-	step := NewStoreStep(store, WithStoreOrphanQueue(queue, userId), WithStoreAudioRefGuard(trackRefIndex{}, trackId))
-	step.sleep = func(time.Duration) {}
+	synctest.Test(t, func(t *testing.T) {
+		userID, trackID := shared.NewUserId(uuid.New()), shared.NewTrackId()
+		store := &objectStore{objects: map[string]string{"u/new.mp3": "new bytes"}, deleteErr: errors.New("down")}
+		queue := &recordingOrphanQueue{}
+		step := service.NewStoreStep(store, service.WithStoreOrphanQueue(queue, userID),
+			service.WithStoreAudioRefGuard(acquisitiontest.NewLedger(), trackID))
 
-	if err := step.Rollback(context.Background(), &AcquisitionContext{AudioRef: "u/new.mp3"}); err == nil {
-		t.Fatal("want the delete failure surfaced")
-	}
+		if err := step.Rollback(context.Background(), &service.AcquisitionContext{AudioRef: "u/new.mp3"}); err == nil {
+			t.Fatal("want the delete failure surfaced")
+		}
 
-	want := ports.OrphanedAudio{AudioRef: "u/new.mp3", UserId: userId, TrackId: trackId}
-	if len(queue.recorded) != 1 || queue.recorded[0] != want {
-		t.Errorf("recorded = %+v, want exactly %+v", queue.recorded, want)
-	}
+		want := ports.OrphanedAudio{AudioRef: "u/new.mp3", UserId: userID, TrackId: trackID}
+		if recorded := queue.entries(); len(recorded) != 1 || recorded[0] != want {
+			t.Errorf("recorded = %+v, want exactly %+v", recorded, want)
+		}
+	})
 }
 
 func TestStoreRollback_SharedOrPreservedRefIsNeverQueued(t *testing.T) {
-	userId, own, other := shared.NewUserId(uuid.New()), domain.NewTrackId(), domain.NewTrackId()
-	refs := trackRefIndex{holders: map[string][]domain.TrackId{"u/shared.mp3": {other}}}
-	for name, ac := range map[string]*AcquisitionContext{
-		"shared":    {AudioRef: "u/shared.mp3"},
-		"preserved": {AudioRef: "u/kept.mp3", Replace: ReplaceState{PreservedRef: "u/kept.mp3"}},
-	} {
-		queue := &recordingOrphanQueue{}
-		store := &flakyDeleteStore{stored: map[string]bool{}, deleteErr: errors.New("down"), failDeletes: 1 << 30}
-		step := NewStoreStep(store, WithStoreOrphanQueue(queue, userId), WithStoreAudioRefGuard(refs, own))
-		step.sleep = func(time.Duration) {}
+	synctest.Test(t, func(t *testing.T) {
+		userID, own := shared.NewUserId(uuid.New()), shared.NewTrackId()
+		sharedRef := "u/shared.mp3"
+		refs := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
+			ID: shared.NewTrackId(), UserId: userID, Status: ports.TrackReady, AudioRef: &sharedRef,
+		}})
+		for name, ac := range map[string]*service.AcquisitionContext{
+			"shared":    {AudioRef: sharedRef},
+			"preserved": {AudioRef: "u/kept.mp3", Replace: service.ReplaceState{PreservedRef: "u/kept.mp3"}},
+		} {
+			queue := &recordingOrphanQueue{}
+			store := &objectStore{objects: map[string]string{}, deleteErr: errors.New("down")}
+			step := service.NewStoreStep(store, service.WithStoreOrphanQueue(queue, userID), service.WithStoreAudioRefGuard(refs, own))
 
-		if err := step.Rollback(context.Background(), ac); err != nil {
-			t.Fatalf("%s: Rollback: %v", name, err)
+			if err := step.Rollback(context.Background(), ac); err != nil {
+				t.Fatalf("%s: Rollback: %v", name, err)
+			}
+			if recorded := queue.entries(); len(recorded) != 0 {
+				t.Errorf("%s: recorded = %+v, want none", name, recorded)
+			}
 		}
-		if len(queue.recorded) != 0 {
-			t.Errorf("%s: recorded = %+v, want none", name, queue.recorded)
-		}
-	}
+	})
 }

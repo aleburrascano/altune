@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/internal/core/audioref"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/redact"
@@ -78,9 +79,9 @@ func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, _ after
 
 	audioRef := s.keyPrefix + BuildAudioRef(ac.Track, ac.TempPath)
 	if ac.Replace.PreservedRef != "" {
-		audioRef = stagedReplaceRef(audioRef, s.attemptID())
+		audioRef = audioref.StagedReplace(audioRef, s.attemptID())
 	} else if s.sharedWithAnotherTrack(ctx, audioRef) {
-		audioRef = trackScopedRef(audioRef, s.ownTrackID)
+		audioRef = audioref.TrackScoped(audioRef, s.ownTrackID)
 	}
 	ac.AudioRef = audioRef
 
