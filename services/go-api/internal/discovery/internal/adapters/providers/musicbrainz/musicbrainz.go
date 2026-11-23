@@ -19,11 +19,6 @@ import (
 
 const musicbrainzAPIBaseURL = "https://musicbrainz.org/ws/2"
 
-const (
-	mbMemoTTL        = 6 * time.Hour
-	mbMemoMaxEntries = 2048
-)
-
 type MusicBrainzAdapter struct {
 	client    *http.Client
 	userAgent string
@@ -39,9 +34,13 @@ func NewMusicBrainzAdapter(client *http.Client, userAgent string) *MusicBrainzAd
 		client:       client,
 		userAgent:    userAgent,
 		limiter:      providerhttp.NewMinIntervalLimiter(time.Second),
-		identityMemo: memo.New[*ports.ArtistIdentity](mbMemoTTL, mbMemoMaxEntries, time.Now),
-		releaseMemo:  memo.New[[]mbReleaseGroup](mbMemoTTL, mbMemoMaxEntries, time.Now),
+		identityMemo: newMBMemo[*ports.ArtistIdentity](),
+		releaseMemo:  newMBMemo[[]mbReleaseGroup](),
 	}
+}
+
+func newMBMemo[V any]() *memo.Memo[V] {
+	return memo.New[V](6*time.Hour, 2048, time.Now)
 }
 
 func (a *MusicBrainzAdapter) Name() domain.ProviderName { return domain.ProviderMusicBrainz }

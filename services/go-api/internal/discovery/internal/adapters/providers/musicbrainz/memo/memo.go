@@ -23,12 +23,9 @@ type entry[V any] struct {
 }
 
 func New[V any](ttl time.Duration, maxEntries int, now func() time.Time) *Memo[V] {
-	if maxEntries < 1 {
-		maxEntries = 1
-	}
 	return &Memo[V]{
 		ttl:       ttl,
-		max:       maxEntries,
+		max:       max(maxEntries, 1),
 		now:       now,
 		m:         make(map[string]*list.Element),
 		order:     list.New(),
