@@ -11,7 +11,7 @@
     "tsc": "tsc --noEmit",
     "lint": "eslint .",
     "test": "jest",
-    "fallow": "fallow dead-code --baseline baselines/fallow-baseline.json --fail-on-issues && node scripts/fallow-baseline-stale.mjs",
+    "fallow": "fallow dead-code --fail-on-issues",
     "react-doctor": "react-doctor --scope full --yes --no-score --blocking warning --verbose"
   },
   "prettier": {
