@@ -3,7 +3,6 @@ package observe
 import handler "altune/go-api/internal/observe/internal/adapters/handler"
 
 type (
-	AcquisitionReader = handler.AcquisitionReader
 	DepStatus         = handler.DepStatus
 	DependencyDetail  = handler.DependencyDetail
 	DependencyHealth  = handler.DependencyHealth

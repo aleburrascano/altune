@@ -1,23 +1,11 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/acquisition"
-	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe"
-	"altune/go-api/internal/shared/reqmetrics"
 	"context"
 	"testing"
 	"time"
 )
-
-func TestContract_MetricsLiveMatchesFixture(t *testing.T) {
-	reqmetrics.Observe("/v1/tracks/{trackId}", 5*time.Millisecond, 200)
-	deps := observe.Deps{LiveMetrics: func() observe.LiveMetrics {
-		return observe.LiveMetrics{"latency": reqmetrics.ReadSnapshot(), "providers": discovery.ReadProviderMetricsSnapshot()}
-	}}
-	rec := serveRead(t, deps, "/metrics/live")
-	assertMatchesFixture(t, "observe_metrics_live.json", rec.Body.Bytes())
-}
 
 func TestContract_EvalMatchesFixture(t *testing.T) {
 	runner := func(context.Context) (observe.EvalMeterResult, error) {
@@ -44,8 +32,8 @@ func TestContract_EvalMatchesFixture(t *testing.T) {
 }
 
 func TestContract_AcquisitionMatchesFixture(t *testing.T) {
-	reader := fakeAcquisitionReader{status: acquisition.AcquisitionStatus{
-		InFlight: 1, Succeeded: 2, Failed: 3, Rejected: 4, QueueDepth: 5, Workers: 6,
+	reader := fakeAcquisitionReader{status: observe.AcquisitionStatus{
+		InFlight: 1, Succeeded: 2, Failed: 3, Rejected: 4, QueueDepth: 5, QueueCapacity: 6,
 	}}
 	rec := serveRead(t, observe.Deps{Acquisition: reader}, "/acquisition")
 	assertMatchesFixture(t, "observe_acquisition.json", rec.Body.Bytes())
@@ -54,14 +42,14 @@ func TestContract_AcquisitionMatchesFixture(t *testing.T) {
 func TestContract_QualityMatchesFixture(t *testing.T) {
 	seen := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
 	reader := &fakeDiscographyReader{
-		cases: []discovery.DiscographyCase{{
+		cases: []observe.DiscographyCase{{
 			ArtistRef:      "spotify:artist",
 			Releases:       4,
 			SingleProvider: 1,
 			ProviderCounts: map[string]int{"spotify": 4},
 			LastSeen:       seen,
 		}},
-		suspect: discovery.DiscographySuspectRate{Rate: 0.5, LastSample: seen},
+		suspect: observe.DiscographySuspectRate{Rate: 0.5, LastSample: seen},
 	}
 	rec := serveRead(t, observe.Deps{Discography: reader}, "/quality/discography")
 	assertMatchesFixture(t, "observe_quality_discography.json", rec.Body.Bytes())

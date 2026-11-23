@@ -1,6 +1,7 @@
 package app
 
 import (
+	"altune/go-api/internal/app/observemetrics"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared/config"
 	shared "altune/go-api/internal/shared/kernel"
@@ -36,7 +37,7 @@ func TestMountObserve_AuthRejectionsAndOutagesReachLiveMetrics(t *testing.T) {
 		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
 	})
 	r := chi.NewRouter()
-	mountObserveLiveMetrics(r, verifier, operator, liveMetricsSnapshot)
+	mountObserveLiveMetrics(r, verifier, operator, observemetrics.FeatureMetrics)
 
 	before := auth.ReadSnapshot()
 	if code, _ := callObserveAs(t, r, http.MethodGet, "/observe/metrics/live", "forged"); code != http.StatusUnauthorized {

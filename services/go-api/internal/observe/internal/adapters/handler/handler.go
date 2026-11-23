@@ -1,8 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/observe/internal/adapters/acquisitionbridge"
-	"altune/go-api/internal/observe/internal/adapters/discoverybridge"
+	"altune/go-api/internal/observe/internal/core/ports"
 	"altune/go-api/internal/observe/internal/shell/eventtap"
 	"altune/go-api/internal/observe/service/evalmeter"
 	"altune/go-api/internal/shared/logging"
@@ -16,16 +15,14 @@ type LiveMetrics map[string]any
 
 type LiveMetricsSource func() LiveMetrics
 
-type AcquisitionReader = acquisitionbridge.AcquisitionReader
-
 type Deps struct {
 	Health      HealthProbe
 	Logs        *logging.RingBuffer
 	Events      *eventtap.Feed
 	Eval        *evalmeter.Meter
-	Acquisition AcquisitionReader
+	Acquisition ports.AcquisitionReader
 	LiveMetrics LiveMetricsSource
-	Discography discoverybridge.DiscographyQualityReader
+	Discography ports.DiscographyQualityReader
 	Shutdown    <-chan struct{}
 }
 

@@ -1,7 +1,6 @@
-package discoverybridge_test
+package handler_test
 
 import (
-	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe"
 	"context"
 	"encoding/json"
@@ -14,17 +13,17 @@ import (
 )
 
 type stubQualityReader struct {
-	cases      []discovery.DiscographyCase
+	cases      []observe.DiscographyCase
 	casesErr   error
 	suspectErr error
 }
 
-func (s stubQualityReader) DiscographyQuality(context.Context, time.Time, discovery.DiscographyGroupBy, int) ([]discovery.DiscographyCase, error) {
+func (s stubQualityReader) DiscographyQuality(context.Context, time.Time, observe.DiscographyGroupBy, int) ([]observe.DiscographyCase, error) {
 	return s.cases, s.casesErr
 }
 
-func (s stubQualityReader) SuspectRate(context.Context, time.Time) (discovery.DiscographySuspectRate, error) {
-	return discovery.DiscographySuspectRate{Rate: 0.5}, s.suspectErr
+func (s stubQualityReader) SuspectRate(context.Context, time.Time) (observe.DiscographySuspectRate, error) {
+	return observe.DiscographySuspectRate{Rate: 0.5}, s.suspectErr
 }
 
 func query(r stubQualityReader) *httptest.ResponseRecorder {
@@ -44,7 +43,7 @@ func decodeBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]json.Ra
 	return body
 }
 
-func TestQuery_DeadlineExceededMapsToTimeout(t *testing.T) {
+func TestDiscographyQuality_DeadlineExceededMapsToTimeout(t *testing.T) {
 	for name, r := range map[string]stubQualityReader{
 		"cases":   {casesErr: context.DeadlineExceeded},
 		"suspect": {suspectErr: context.DeadlineExceeded},
@@ -56,7 +55,7 @@ func TestQuery_DeadlineExceededMapsToTimeout(t *testing.T) {
 	}
 }
 
-func TestQuery_OtherErrorsPassThrough(t *testing.T) {
+func TestDiscographyQuality_OtherErrorsPassThrough(t *testing.T) {
 	rec := query(stubQualityReader{casesErr: context.Canceled})
 
 	if code := string(decodeBody(t, rec)["code"]); rec.Code != http.StatusInternalServerError || code != `"internal"` {
@@ -64,7 +63,7 @@ func TestQuery_OtherErrorsPassThrough(t *testing.T) {
 	}
 }
 
-func TestQuery_ZeroCasesGivesAnEmptyList(t *testing.T) {
+func TestDiscographyQuality_ZeroCasesGivesAnEmptyList(t *testing.T) {
 	rec := query(stubQualityReader{})
 
 	if cases := string(decodeBody(t, rec)["cases"]); rec.Code != http.StatusOK || cases != "[]" {

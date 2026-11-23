@@ -1,18 +1,14 @@
-package discoverybridge
+package handler
 
 import (
-	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe/internal/adapters/codederr"
+	"altune/go-api/internal/observe/internal/core/ports"
 	"context"
 	"errors"
 	"time"
 )
 
-type DiscographyQualityReader = discovery.DiscographyQualityReader
-
-type DiscographyGroupBy = discovery.DiscographyGroupBy
-
-type DiscographyCaseDTO struct {
+type discographyCaseDTO struct {
 	Artist             string         `json:"artist"`
 	ArtistRef          string         `json:"artist_ref"`
 	Releases           int            `json:"releases"`
@@ -22,20 +18,22 @@ type DiscographyCaseDTO struct {
 	LastSeen           time.Time      `json:"last_seen"`
 }
 
-func ParseDiscographyGroupBy(raw string) DiscographyGroupBy {
-	return discovery.ParseDiscographyGroupBy(raw)
+type discographyQualityResult struct {
+	cases       []discographyCaseDTO
+	suspectRate float64
+	lastSample  time.Time
 }
 
-func QueryDiscographyQuality(ctx context.Context, reader DiscographyQualityReader, since time.Time, groupBy DiscographyGroupBy, limit int) ([]DiscographyCaseDTO, float64, time.Time, error) {
+func queryDiscographyQuality(ctx context.Context, reader ports.DiscographyQualityReader, since time.Time, groupBy ports.DiscographyGroupBy, limit int) (discographyQualityResult, error) {
 	cases, err := reader.DiscographyQuality(ctx, since, groupBy, limit)
 	if err != nil {
-		return nil, 0, time.Time{}, mapQueryError(err)
+		return discographyQualityResult{}, mapQueryError(err)
 	}
 	suspect, err := reader.SuspectRate(ctx, since)
 	if err != nil {
-		return nil, 0, time.Time{}, mapQueryError(err)
+		return discographyQualityResult{}, mapQueryError(err)
 	}
-	return toDiscographyCaseDTOs(cases), suspect.Rate, suspect.LastSample.UTC(), nil
+	return discographyQualityResult{cases: toDiscographyCaseDTOs(cases), suspectRate: suspect.Rate, lastSample: suspect.LastSample.UTC()}, nil
 }
 
 func mapQueryError(err error) error {
@@ -45,14 +43,14 @@ func mapQueryError(err error) error {
 	return err
 }
 
-func toDiscographyCaseDTOs(cases []discovery.DiscographyCase) []DiscographyCaseDTO {
-	out := make([]DiscographyCaseDTO, 0, len(cases))
+func toDiscographyCaseDTOs(cases []ports.DiscographyCase) []discographyCaseDTO {
+	out := make([]discographyCaseDTO, 0, len(cases))
 	for _, c := range cases {
 		counts := c.ProviderCounts
 		if counts == nil {
 			counts = map[string]int{}
 		}
-		out = append(out, DiscographyCaseDTO{
+		out = append(out, discographyCaseDTO{
 			Artist:             c.ArtistRef,
 			ArtistRef:          c.ArtistRef,
 			Releases:           c.Releases,
