@@ -3,6 +3,7 @@ package persistence_test
 import (
 	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/sharedtest"
 	"bytes"
 	"context"
 	"slices"
@@ -15,7 +16,7 @@ import (
 )
 
 func TestPgxTrackRepo_FeaturedArtistsRoundTrip(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -50,7 +51,7 @@ func TestPgxTrackRepo_FeaturedArtistsRoundTrip(t *testing.T) {
 }
 
 func TestPgxFeaturedArtistRepo_ReplaceFeaturedArtists_RefusesAnotherUsersTrackAndLeavesItsArtists(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	owner, intruder := shared.NewUserId(uuid.New()), shared.NewUserId(uuid.New())
@@ -108,7 +109,7 @@ func cleanupFeaturedArtists(t *testing.T, pool *pgxpool.Pool, userId shared.User
 }
 
 func TestPgxFeaturedArtistRepo_UnicodeEquivalentNamesShareRow(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -138,7 +139,7 @@ func TestPgxFeaturedArtistRepo_UnicodeEquivalentNamesShareRow(t *testing.T) {
 }
 
 func TestPgxFeaturedArtistRepo_LegacyKeyRowStillMatches(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -210,7 +211,7 @@ func ascendingTrackIds(n int) []catalog.TrackId {
 
 func TestPgxFeaturedArtistRepo_ListTracksFeaturing_StopsAtTheLibraryPageCap(t *testing.T) {
 	ctx := context.Background()
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	userId := shared.NewUserId(uuid.New())
 	cleanupFeaturedArtists(t, pool, userId)
 	ids := ascendingTrackIds(catalog.MaxLibraryPageSize + 1)
@@ -255,7 +256,7 @@ func featuringIds(tracks []*catalog.Track) []catalog.TrackId {
 
 func TestPgxFeaturedArtistRepo_ListTracksFeaturing_LeavesOutAnotherUsersTracks(t *testing.T) {
 	ctx := context.Background()
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	owner, other := shared.NewUserId(uuid.New()), shared.NewUserId(uuid.New())
 	cleanupFeaturedArtists(t, pool, owner)
 	cleanupFeaturedArtists(t, pool, other)
@@ -274,7 +275,7 @@ func TestPgxFeaturedArtistRepo_ListTracksFeaturing_LeavesOutAnotherUsersTracks(t
 
 func TestPgxFeaturedArtistRepo_ListTracksFeaturing_NewestAddedComesFirst(t *testing.T) {
 	ctx := context.Background()
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	userId := shared.NewUserId(uuid.New())
 	cleanupFeaturedArtists(t, pool, userId)
 	fa := catalog.FeaturedArtist{Name: "Ordered Guest", MBID: "mb-ordered-guest-" + uuid.NewString(), Role: catalog.RoleFeatured}

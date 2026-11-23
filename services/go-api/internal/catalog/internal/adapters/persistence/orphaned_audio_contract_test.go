@@ -3,6 +3,7 @@ package persistence_test
 import (
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/internal/adapters/contract"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"testing"
 
@@ -21,7 +22,7 @@ func (q *cleaningOrphanQueue) RecordOrphanedAudio(ctx context.Context, orphan ca
 }
 
 func TestPgxOrphanedAudioRepo_Contract(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	contract.OrphanedAudioQueueContract(t, func(t *testing.T) (catalog.OrphanedAudioQueue, func(*catalog.Track)) {
 		seed := func(track *catalog.Track) {
 			t.Helper()

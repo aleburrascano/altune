@@ -3,9 +3,9 @@ package persistence_test
 import (
 	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
-	"os"
 	"strings"
 	"testing"
 
@@ -53,7 +53,7 @@ func findOrphan(t *testing.T, repo *catalog.PgxOrphanedAudioRepository, audioRef
 }
 
 func TestPgxOrphanedAudioRepo_RecordMarkResolve(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxOrphanedAudioRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -93,7 +93,7 @@ func TestPgxOrphanedAudioRepo_RecordMarkResolve(t *testing.T) {
 }
 
 func TestPgxOrphanedAudioRepo_ListPutsAttemptedLast(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxOrphanedAudioRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -121,7 +121,7 @@ func TestPgxOrphanedAudioRepo_ListPutsAttemptedLast(t *testing.T) {
 }
 
 func TestPgxOrphanedAudioRepo_AudioUsage(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxOrphanedAudioRepository(pool)
 	ctx := context.Background()
 
@@ -163,7 +163,7 @@ func TestPgxOrphanedAudioRepo_AudioUsage(t *testing.T) {
 }
 
 func TestPgxOrphanedAudioRepo_MissingTableIsUnavailable(t *testing.T) {
-	admin := testPool(t)
+	admin := sharedtest.Pool(t)
 	ctx := context.Background()
 	schema := "orphan_nomig_" + strings.ReplaceAll(uuid.NewString()[:8], "-", "")
 	if _, err := admin.Exec(ctx, `CREATE SCHEMA `+schema); err != nil {
@@ -171,7 +171,7 @@ func TestPgxOrphanedAudioRepo_MissingTableIsUnavailable(t *testing.T) {
 	}
 	t.Cleanup(func() { _, _ = admin.Exec(context.Background(), `DROP SCHEMA `+schema+` CASCADE`) })
 
-	cfg, err := pgxpool.ParseConfig(os.Getenv("DATABASE_URL"))
+	cfg, err := pgxpool.ParseConfig(sharedtest.DatabaseURL(t))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,10 +3,10 @@ package persistence_test
 import (
 	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -18,7 +18,7 @@ import (
 )
 
 func TestPgxTrackRepo_CountForUser_CountsOwnedRowsAndStopsAtTheBound(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -47,7 +47,7 @@ func TestPgxTrackRepo_CountForUser_CountsOwnedRowsAndStopsAtTheBound(t *testing.
 }
 
 func TestPgxTrackRepo_AddAndGetByID(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -95,7 +95,7 @@ func TestPgxTrackRepo_AddAndGetByID(t *testing.T) {
 }
 
 func TestPgxTrackRepo_Add_DedupConflict(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -128,7 +128,7 @@ func TestPgxTrackRepo_Add_DedupConflict(t *testing.T) {
 }
 
 func TestPgxTrackRepo_ListForUser(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -172,7 +172,7 @@ func TestPgxTrackRepo_ListForUser(t *testing.T) {
 }
 
 func TestPgxTrackRepo_Update(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -208,7 +208,7 @@ func TestPgxTrackRepo_Update(t *testing.T) {
 }
 
 func TestPgxTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -263,7 +263,7 @@ func TestPgxTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing.T) {
 }
 
 func TestPgxTrackRepo_Update_SameColumnCASMiss(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -318,7 +318,7 @@ func TestPgxTrackRepo_Update_SameColumnCASMiss(t *testing.T) {
 }
 
 func TestPgxTrackRepo_Update_DeletedRowIsNotAConflict(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -351,7 +351,7 @@ func TestPgxTrackRepo_Update_DeletedRowIsNotAConflict(t *testing.T) {
 }
 
 func TestPgxTrackRepo_Delete(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -389,7 +389,7 @@ func TestPgxTrackRepo_Delete(t *testing.T) {
 }
 
 func TestPgxTrackRepo_Delete_CrossTenantIDOR(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	trackRepo := catalog.NewPgxTrackRepository(pool)
 	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
@@ -468,7 +468,7 @@ func rawPlaylistPositions(t *testing.T, pool *pgxpool.Pool, playlistId catalog.P
 }
 
 func TestPgxTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	trackRepo := catalog.NewPgxTrackRepository(pool)
 	playlistRepo := catalog.NewPgxPlaylistRepository(pool)
 	ctx := context.Background()
@@ -541,7 +541,7 @@ func TestPgxTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
 }
 
 func TestPgxTrackRepo_GetByID_NotFound(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -556,7 +556,7 @@ func TestPgxTrackRepo_GetByID_NotFound(t *testing.T) {
 }
 
 func TestPgxTrackRepo_ListForUser_TotalPastTheEnd(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -587,7 +587,7 @@ func keyed(t *testing.T, userId shared.UserId, key string) *catalog.Track {
 }
 
 func TestPgxTrackRepo_ConcurrentAddSameKey(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -646,7 +646,7 @@ func TestPgxTrackRepo_ConcurrentAddSameKey(t *testing.T) {
 }
 
 func TestPgxTrackRepo_AddSameKeyAfterCommit(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -681,7 +681,7 @@ func TestPgxTrackRepo_AddSameKeyAfterCommit(t *testing.T) {
 }
 
 func TestPgxTrackRepo_Update_RoundTripsAcquisitionConfidenceAndEvidence(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -733,7 +733,7 @@ func countTracksForUser(ctx context.Context, t *testing.T, pool *pgxpool.Pool, u
 }
 
 func TestPgxTrackRepo_Add_PendingRowIsClaimableWithoutEnqueue(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -779,7 +779,7 @@ func setAudioRef(ctx context.Context, t *testing.T, pool *pgxpool.Pool, id catal
 }
 
 func TestPgxTrackRepo_ListReadyAudioTracks_ReturnsOnlyReadyTracksWithAudio(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -829,7 +829,7 @@ func TestPgxTrackRepo_ListReadyAudioTracks_ReturnsOnlyReadyTracksWithAudio(t *te
 }
 
 func TestPgxTrackRepo_AudioRefsUnderPrefix_MatchesLiteralPrefixOnly(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -865,7 +865,7 @@ func TestPgxTrackRepo_AudioRefsUnderPrefix_MatchesLiteralPrefixOnly(t *testing.T
 }
 
 func TestPgxTrackRepo_AudioRefsUnderPrefix_DropsRefsThatChangeAway(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -894,7 +894,7 @@ func TestPgxTrackRepo_AudioRefsUnderPrefix_DropsRefsThatChangeAway(t *testing.T)
 }
 
 func TestPgxTrackRepo_UpdateKeepsISRCCatalogLengthAndLengthFlag(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -939,7 +939,7 @@ func TestPgxTrackRepo_UpdateKeepsISRCCatalogLengthAndLengthFlag(t *testing.T) {
 }
 
 func TestPgxTrackRepo_RoundTripsTheCatalogIdentity(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -986,7 +986,7 @@ func TestPgxTrackRepo_RoundTripsTheCatalogIdentity(t *testing.T) {
 }
 
 func TestPgxTrackRepo_GetByIDCarriesTheAcquisitionLeaseGeneration(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -1025,7 +1025,7 @@ func TestPgxTrackRepo_GetByIDCarriesTheAcquisitionLeaseGeneration(t *testing.T) 
 }
 
 func TestPgxTrackRepo_UpdateOfARelabelledTrackPersistsTheSixLabelColumns(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -1089,7 +1089,7 @@ func addAndLoadForRelabel(ctx context.Context, t *testing.T, repo *catalog.PgxTr
 }
 
 func TestPgxTrackRepo_ARelabelOntoAnotherOfTheUsersTracksFailsAndLandsNothing(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -1128,7 +1128,7 @@ func TestPgxTrackRepo_ARelabelOntoAnotherOfTheUsersTracksFailsAndLandsNothing(t 
 }
 
 func TestPgxTrackRepo_AStaleRelabelWritesNoLabelColumns(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -1159,7 +1159,7 @@ func TestPgxTrackRepo_AStaleRelabelWritesNoLabelColumns(t *testing.T) {
 }
 
 func TestPgxTrackRepo_ARelabelThatClearsYearISRCAndLengthStoresNulls(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -1201,7 +1201,7 @@ func TestPgxTrackRepo_ARelabelThatClearsYearISRCAndLengthStoresNulls(t *testing.
 }
 
 func TestPgxTrackRepo_AReloadedRelabelledTrackDoesNotRewriteLabelsOnItsNextWrite(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -1257,10 +1257,7 @@ type queryTrace struct {
 
 func tracedPool(t *testing.T) (*pgxpool.Pool, *queryTrace) {
 	t.Helper()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
+	dbURL := sharedtest.DatabaseURL(t)
 	cfg, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
 		t.Fatalf("parse DATABASE_URL: %v", err)
@@ -1321,7 +1318,7 @@ const readyAudioPageSQL = "WHERE acquisition_status = 'ready' AND audio_ref IS N
 func TestPgxTrackRepo_TrackListsStopAtTheirCeilingInLibraryPages(t *testing.T) {
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
-	seedBulkTracks(ctx, t, testPool(t), userId, trackListCeiling+1)
+	seedBulkTracks(ctx, t, sharedtest.Pool(t), userId, trackListCeiling+1)
 	pool, trace := tracedPool(t)
 	repo := catalog.NewPgxTrackRepository(pool)
 
@@ -1372,7 +1369,7 @@ func deleteOneTrack(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userI
 
 func TestPgxTrackRepo_ListForUser_CountsOnlyWhenThePageCannotProveTheTotal(t *testing.T) {
 	ctx := context.Background()
-	plain := testPool(t)
+	plain := sharedtest.Pool(t)
 	cases := []struct {
 		name                  string
 		seeded, limit, offset int
@@ -1412,7 +1409,7 @@ func TestPgxTrackRepo_ListForUser_ReturnsTheCountsFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	userId := shared.NewUserId(uuid.New())
-	seedBulkTracks(ctx, t, testPool(t), userId, 60)
+	seedBulkTracks(ctx, t, sharedtest.Pool(t), userId, 60)
 	pool, trace := tracedPool(t)
 	trace.afterNextQuery(cancel)
 

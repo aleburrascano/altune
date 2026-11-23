@@ -4,27 +4,12 @@ import (
 	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-func testPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
-	pool, err := pgxpool.New(context.Background(), dbURL)
-	if err != nil {
-		t.Fatalf("failed to connect: %v", err)
-	}
-	t.Cleanup(func() { pool.Close() })
-	return pool
-}
 
 func newTestTrackForDB(t *testing.T, userId shared.UserId) *catalog.Track {
 	t.Helper()

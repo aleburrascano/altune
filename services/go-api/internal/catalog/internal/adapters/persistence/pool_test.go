@@ -3,6 +3,7 @@ package persistence_test
 import (
 	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
 	"fmt"
@@ -126,7 +127,7 @@ func TestPgxPlaylistRepo_AddTrack_ACancelInsideItsTransactionIsNotTransient(t *t
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	userId := shared.NewUserId(uuid.New())
-	playlistId := seedPlaylistForDB(ctx, t, testPool(t), userId)
+	playlistId := seedPlaylistForDB(ctx, t, sharedtest.Pool(t), userId)
 	pool, trace := tracedPool(t)
 	trace.afterNextQuery(cancel)
 
@@ -445,9 +446,6 @@ func TestPgxRepos_ABackendTerminatedInsideATransactionIsTransient(t *testing.T) 
 	pool := poolAt(t, fakePGAddr(t, terminateAfterBegin))
 	id, userId := catalog.NewTrackId(), shared.NewUserId(uuid.New())
 	calls := []repoCall{
-		{"PgxTrackRepository.Delete", func(ctx context.Context, p *pgxpool.Pool) error {
-			return errOf3(catalog.NewPgxTrackRepository(p).Delete(ctx, id, userId))
-		}},
 		{"PgxCatalogTrackRepository.ReplaceFeaturedArtists", func(ctx context.Context, p *pgxpool.Pool) error {
 			return catalog.NewPgxCatalogTrackRepository(p).ReplaceFeaturedArtists(ctx, id, userId, nil)
 		}},

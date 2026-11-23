@@ -3,6 +3,7 @@ package persistence_test
 import (
 	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"strconv"
 	"testing"
@@ -64,7 +65,7 @@ func assertOrder(t *testing.T, sort catalog.LibrarySort, got, want []string) {
 }
 
 func TestPgxTrackRepo_ListFilteredForUser_SortOrder(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -108,7 +109,7 @@ func TestPgxTrackRepo_ListFilteredForUser_SortOrder(t *testing.T) {
 }
 
 func TestPgxTrackRepo_ListFilteredForUser_IlikeMatching(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -173,7 +174,7 @@ func albumsOf(gs []catalog.AlbumGroup) []string {
 }
 
 func TestPgxTrackRepo_ListAlbumsForUser_SortOrder(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -214,7 +215,7 @@ func TestPgxTrackRepo_ListAlbumsForUser_SortOrder(t *testing.T) {
 }
 
 func TestPgxTrackRepo_ListAlbumsForUser_RespectsLimit(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -255,7 +256,7 @@ func TestPgxTrackRepo_ListAlbumsForUser_RespectsLimit(t *testing.T) {
 }
 
 func TestPgxTrackRepo_ListArtistsForUser_RespectsLimit(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -285,7 +286,7 @@ func TestPgxTrackRepo_ListArtistsForUser_RespectsLimit(t *testing.T) {
 }
 
 func TestPgxTrackRepo_ListAlbumsForUser_IlikeMatching(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -330,7 +331,7 @@ func TestPgxTrackRepo_ListAlbumsForUser_IlikeMatching(t *testing.T) {
 }
 
 func TestPgxTrackRepo_LibraryGrouping_CoalescesCanonicalVariants(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -381,7 +382,7 @@ func artistsOf(gs []catalog.ArtistGroup) []string {
 }
 
 func TestPgxTrackRepo_ListArtistsForUser_SortOrder(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -421,7 +422,7 @@ func TestPgxTrackRepo_ListArtistsForUser_SortOrder(t *testing.T) {
 }
 
 func TestPgxTrackRepo_ListArtistsForUser_IlikeMatching(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -450,7 +451,7 @@ func TestPgxTrackRepo_ListArtistsForUser_IlikeMatching(t *testing.T) {
 }
 
 func TestPgxTrackRepo_ListFilteredForUser_TotalIsExactOnEveryPage(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -509,7 +510,7 @@ func tiedArtistNames() []string {
 }
 
 func TestPgxTrackRepo_ListAlbumsForUser_PagesCoverEveryTiedGroupOnce(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -549,7 +550,7 @@ func TestPgxTrackRepo_ListAlbumsForUser_PagesCoverEveryTiedGroupOnce(t *testing.
 }
 
 func TestPgxTrackRepo_ListArtistsForUser_PagesCoverEveryTiedGroupOnce(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -586,7 +587,7 @@ func TestPgxTrackRepo_ListArtistsForUser_PagesCoverEveryTiedGroupOnce(t *testing
 }
 
 func TestPgxTrackRepo_ListAlbumsForUser_GroupsACompilationByItsAlbumArtist(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := catalog.NewPgxCatalogTrackRepository(pool)
 	userId := shared.NewUserId(uuid.New())
 	t.Cleanup(func() {

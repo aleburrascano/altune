@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,7 +18,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestHandleListTracks(t *testing.T) {
@@ -712,9 +712,9 @@ func TestTrackRoutes_ARefusedCatalogDatabaseAnswersTemporarilyUnavailable(t *tes
 }
 
 func TestHandleCreateTrack_AnInsertStalledBehindAnotherWriterAnswersTemporarilyUnavailable(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	user := shared.NewUserId(uuid.New())
-	holdUncommittedTrack(t, pool, user, "Held Title", "Held Artist", "Held Album")
+	holdUncommittedTrack(t, user, "Held Title", "Held Artist", "Held Album")
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	body := jsonBody(t, map[string]string{"title": "Held Title", "artist": "Held Artist", "album": "Held Album"})
@@ -726,18 +726,13 @@ func TestHandleCreateTrack_AnInsertStalledBehindAnotherWriterAnswersTemporarilyU
 	assertCatalogTemporarilyUnavailable(t, rec)
 }
 
-func holdUncommittedTrack(t *testing.T, pool *pgxpool.Pool, user shared.UserId, title, artist, album string) {
+func holdUncommittedTrack(t *testing.T, user shared.UserId, title, artist, album string) {
 	t.Helper()
 	track, err := catalog.NewTrack(user, title, artist, album)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
-	tx, err := pool.Begin(context.Background())
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
-	if _, err := tx.Exec(context.Background(),
+	if _, err := sharedtest.Tx(t).Exec(context.Background(),
 		`INSERT INTO tracks (id, user_id, title, artist, dedup_key, acquisition_status) VALUES ($1, $2, $3, $4, $5, 'pending')`,
 		track.ID.UUID(), user.UUID(), title, artist, track.DedupKey,
 	); err != nil {

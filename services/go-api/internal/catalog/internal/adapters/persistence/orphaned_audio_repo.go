@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -19,7 +20,7 @@ const undefinedTableCode = "42P01"
 var _ ports.OrphanedAudioQueue = (*PgxOrphanedAudioRepository)(nil)
 
 type PgxOrphanedAudioRepository struct {
-	pool pgxPool
+	pool *pgxpool.Pool
 }
 
 func NewPgxOrphanedAudioRepository(pool *pgxpool.Pool) *PgxOrphanedAudioRepository {
@@ -57,26 +58,25 @@ func (r *PgxOrphanedAudioRepository) ListOrphanedAudio(ctx context.Context, limi
 	if err != nil {
 		return nil, orphanQueueErr("list orphaned audio", err)
 	}
-	defer rows.Close()
-
-	var out []ports.OrphanedAudio
-	for rows.Next() {
-		var (
-			o       ports.OrphanedAudio
-			userID  uuid.UUID
-			trackID uuid.UUID
-		)
-		if err := rows.Scan(&o.AudioRef, &userID, &trackID, &o.RecordedAt, &o.Attempts); err != nil {
-			return nil, fmt.Errorf("scan orphaned audio: %w", err)
-		}
-		o.UserId = shared.NewUserId(userID)
-		o.TrackId = domain.TrackIdFromUUID(trackID)
-		out = append(out, o)
-	}
-	if err := rows.Err(); err != nil {
+	out, err := pgx.CollectRows(rows, scanOrphanedAudio)
+	if err != nil {
 		return nil, orphanQueueErr("list orphaned audio", err)
 	}
 	return out, nil
+}
+
+func scanOrphanedAudio(row pgx.CollectableRow) (ports.OrphanedAudio, error) {
+	var (
+		o       ports.OrphanedAudio
+		userID  uuid.UUID
+		trackID uuid.UUID
+	)
+	if err := row.Scan(&o.AudioRef, &userID, &trackID, &o.RecordedAt, &o.Attempts); err != nil {
+		return ports.OrphanedAudio{}, fmt.Errorf("scan orphaned audio: %w", err)
+	}
+	o.UserId = shared.NewUserId(userID)
+	o.TrackId = domain.TrackIdFromUUID(trackID)
+	return o, nil
 }
 
 func (r *PgxOrphanedAudioRepository) AudioUsage(ctx context.Context, audioRef string, owner shared.UserId) (ports.AudioUsage, error) {

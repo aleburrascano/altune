@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared/database"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
@@ -17,7 +18,7 @@ type querier interface {
 }
 
 type PgxFeaturedArtistRepository struct {
-	pool pgxPool
+	pool *pgxpool.Pool
 }
 
 func NewPgxFeaturedArtistRepository(pool *pgxpool.Pool) *PgxFeaturedArtistRepository {
@@ -101,7 +102,7 @@ func loadFeaturedForTracks(ctx context.Context, q querier, tracks []*domain.Trac
 	}
 
 	rows, err := q.Query(ctx,
-		`SELECT tfa.track_id, fa.name, fa.mbid, fa.deezer_id
+		`SELECT tfa.track_id, fa.name, COALESCE(fa.mbid, '') AS mbid, COALESCE(fa.deezer_id, 0) AS deezer_id
 		FROM track_featured_artists tfa
 		JOIN featured_artists fa ON fa.id = tfa.featured_artist_id
 		WHERE tfa.track_id = ANY($1)
@@ -111,30 +112,27 @@ func loadFeaturedForTracks(ctx context.Context, q querier, tracks []*domain.Trac
 	if err != nil {
 		return fmt.Errorf("load featured artists: %w", err)
 	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var trackID uuid.UUID
-		var name string
-		var mbid *string
-		var deezerID *int64
-		if err := rows.Scan(&trackID, &name, &mbid, &deezerID); err != nil {
-			return fmt.Errorf("scan featured artist: %w", err)
-		}
-		t := byID[trackID]
-		if t == nil {
-			continue
-		}
-		fa := domain.FeaturedArtist{Name: name, Role: domain.RoleFeatured}
-		if mbid != nil {
-			fa.MBID = *mbid
-		}
-		if deezerID != nil {
-			fa.DeezerID = *deezerID
-		}
-		t.FeaturedArtists = append(t.FeaturedArtists, fa)
+	links, err := pgx.CollectRows(rows, pgx.RowToStructByName[featuredArtistLink])
+	if err != nil {
+		return fmt.Errorf("scan featured artists: %w", err)
 	}
-	return rows.Err()
+	for _, link := range links {
+		if t := byID[link.TrackID]; t != nil {
+			t.FeaturedArtists = append(t.FeaturedArtists, link.featuredArtist())
+		}
+	}
+	return nil
+}
+
+type featuredArtistLink struct {
+	TrackID  uuid.UUID
+	Name     string
+	MBID     string
+	DeezerID int64
+}
+
+func (l featuredArtistLink) featuredArtist() domain.FeaturedArtist {
+	return domain.FeaturedArtist{Name: l.Name, Role: domain.RoleFeatured, MBID: l.MBID, DeezerID: l.DeezerID}
 }
 
 func (r *PgxFeaturedArtistRepository) ReplaceFeaturedArtists(
@@ -150,22 +148,15 @@ func (r *PgxFeaturedArtistRepository) ReplaceFeaturedArtists(
 }
 
 func (r *PgxFeaturedArtistRepository) replaceInTx(ctx context.Context, id domain.TrackId, userId shared.UserId, feats []domain.FeaturedArtist) error {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	if err := requireOwnedTrack(ctx, tx, id, userId); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(ctx, `DELETE FROM track_featured_artists WHERE track_id = $1`, id.UUID()); err != nil {
-		return fmt.Errorf("clear featured artists: %w", err)
-	}
-	if err := writeTrackFeatured(ctx, tx, userId.UUID(), id.UUID(), feats); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
+	return database.InTx(ctx, r.pool, func(tx pgx.Tx) error {
+		if err := requireOwnedTrack(ctx, tx, id, userId); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM track_featured_artists WHERE track_id = $1`, id.UUID()); err != nil {
+			return fmt.Errorf("clear featured artists: %w", err)
+		}
+		return writeTrackFeatured(ctx, tx, userId.UUID(), id.UUID(), feats)
+	})
 }
 
 func requireOwnedTrack(ctx context.Context, tx pgx.Tx, id domain.TrackId, userId shared.UserId) error {
@@ -211,8 +202,6 @@ func (r *PgxFeaturedArtistRepository) ListTracksFeaturing(
 	if err != nil {
 		return nil, fmt.Errorf("list tracks featuring: %w", classifyDBError(err))
 	}
-	defer rows.Close()
-
 	tracks, err := collectTracks(rows)
 	if err != nil {
 		return nil, classifyDBError(err)
