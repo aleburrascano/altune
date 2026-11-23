@@ -1,0 +1,1 @@
+`rejectionlog` owns what an acquisition run says about the candidates it rejected: the stage each was rejected at, the one-line summary that goes into the track's failure reason, and which rejections are remembered in `acquisition_rejections` for later runs.

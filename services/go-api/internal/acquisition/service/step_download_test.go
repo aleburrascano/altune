@@ -5,6 +5,7 @@ import (
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/internal/core/rejectionlog"
 	"altune/go-api/internal/catalog/domain"
 	"bytes"
 	"context"
@@ -285,8 +286,8 @@ func TestDownloadStep_ImplausibleSearchDuration_IsSkippedBeforeFetch(t *testing.
 	if len(ac.Rejections) != 1 {
 		t.Fatalf("rejections = %+v, want exactly one, for the mix", ac.Rejections)
 	}
-	if got := ac.Rejections[0]; got.URL != mix || got.Stage != RejectionDuration {
-		t.Errorf("rejection = %+v, want %q at stage %q", got, mix, RejectionDuration)
+	if got := ac.Rejections[0]; got.URL != mix || got.Stage != rejectionlog.Duration {
+		t.Errorf("rejection = %+v, want %q at stage %q", got, mix, rejectionlog.Duration)
 	}
 }
 
@@ -350,8 +351,8 @@ func TestDownloadStep_AResolvedCandidateFarFromTheTargetLength_IsSkippedBeforeFe
 	if len(ac.Rejections) != 1 {
 		t.Fatalf("rejections = %+v, want exactly one, for the resolved candidate", ac.Rejections)
 	}
-	if got := ac.Rejections[0]; got.URL != mix || got.Stage != RejectionDuration {
-		t.Errorf("rejection = %+v, want %q at stage %q", got, mix, RejectionDuration)
+	if got := ac.Rejections[0]; got.URL != mix || got.Stage != rejectionlog.Duration {
+		t.Errorf("rejection = %+v, want %q at stage %q", got, mix, rejectionlog.Duration)
 	}
 }
 
@@ -595,7 +596,7 @@ func TestDownloadStep_AProbedFileOffTheTargetLengthIsRejectedAfterDownload(t *te
 	if searcher.calls != 1 {
 		t.Errorf("fetched %d candidates, want 1: the byline is within tolerance of the target, so only the probed file can fail", searcher.calls)
 	}
-	if len(ac.Rejections) != 1 || ac.Rejections[0].Stage != RejectionDuration || ac.Rejections[0].Reason != "duration 283s vs expected 264s" {
+	if len(ac.Rejections) != 1 || ac.Rejections[0].Stage != rejectionlog.Duration || ac.Rejections[0].Reason != "duration 283s vs expected 264s" {
 		t.Errorf("rejections = %+v, want one duration rejection naming the 264 s target", ac.Rejections)
 	}
 }
@@ -674,7 +675,7 @@ func TestDownloadStep_DecodeCancelled_RecordsNoLastingRejection(t *testing.T) {
 	if err == nil || !errors.Is(err, context.Canceled) {
 		t.Fatalf("Execute error = %v, want one wrapping context.Canceled", err)
 	}
-	if recs := lastingRejectionRecords(ac); len(recs) != 0 {
+	if recs := rejectionlog.Lasting(ac.Rejections, ac.Track.ID, ac.rejectionBasis()); len(recs) != 0 {
 		t.Errorf("lasting rejection records = %+v, want none for a cancelled decode", recs)
 	}
 }
@@ -693,8 +694,8 @@ func TestDownloadStep_DecodeFailureWithLiveContext_RecordsUndecodable(t *testing
 	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err == nil {
 		t.Fatal("expected an error when the only candidate is undecodable")
 	}
-	recs := lastingRejectionRecords(ac)
-	if len(recs) != 1 || recs[0].Reason != string(RejectionUndecodable) {
+	recs := rejectionlog.Lasting(ac.Rejections, ac.Track.ID, ac.rejectionBasis())
+	if len(recs) != 1 || recs[0].Reason != string(rejectionlog.Undecodable) {
 		t.Errorf("lasting rejection records = %+v, want one undecodable", recs)
 	}
 }
@@ -1139,7 +1140,7 @@ func TestDownloadStep_SerialPath_LiveOnlyLinksRejectedThenCleanCandidateVerified
 	}
 	defer os.RemoveAll(filepath.Dir(ac.TempPath))
 
-	if len(ac.Rejections) != 1 || ac.Rejections[0].Stage != RejectionFingerprint || !strings.HasPrefix(ac.Rejections[0].Reason, "contradicted") {
+	if len(ac.Rejections) != 1 || ac.Rejections[0].Stage != rejectionlog.Fingerprint || !strings.HasPrefix(ac.Rejections[0].Reason, "contradicted") {
 		t.Errorf("rejections = %+v, want one fingerprint rejection as contradicted: the live link and the live title agree", ac.Rejections)
 	}
 	if ac.Provenance() != domain.ProvenanceVerified || ac.Verdict.Kind != VerdictHard {
@@ -2281,7 +2282,7 @@ func TestDownloadStep_AFingerprintNamingAnotherSongAndATitleWithOtherVersionTags
 
 	_, err := step.Execute(context.Background(), ac, afterSelect{})
 
-	if err == nil || len(ac.Rejections) != 1 || ac.Rejections[0].Stage != RejectionFingerprint || !strings.HasPrefix(ac.Rejections[0].Reason, "contradicted") {
+	if err == nil || len(ac.Rejections) != 1 || ac.Rejections[0].Stage != rejectionlog.Fingerprint || !strings.HasPrefix(ac.Rejections[0].Reason, "contradicted") {
 		t.Errorf("err = %v, rejections = %+v, want one fingerprint rejection: two sources agree the file is something else", err, ac.Rejections)
 	}
 }

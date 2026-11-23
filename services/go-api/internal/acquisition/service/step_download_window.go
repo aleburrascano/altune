@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/internal/core/rejectionlog"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"fmt"
@@ -132,7 +133,7 @@ func (s *DownloadStep) guardedWindowAttempt(ctx context.Context, ac *Acquisition
 			slog.ErrorContext(ctx, "download attempt panicked",
 				"track_id", ac.Track.ID, "panic", redact.LogText(fmt.Sprint(rec)), "stack", string(debug.Stack()))
 			result = attempt{candidate: candidate, rejection: &downloadRejection{
-				stage: RejectionDownload, reason: "download failed", err: fmt.Errorf("attempt panicked: %v", rec),
+				stage: rejectionlog.Download, reason: "download failed", err: fmt.Errorf("attempt panicked: %v", rec),
 			}}
 		}
 	}()
@@ -143,7 +144,7 @@ func (s *DownloadStep) runWindowAttempt(ctx context.Context, ac *AcquisitionCont
 	tmpDir, err := s.workspace.Create("*")
 	if err != nil {
 		return attempt{candidate: candidate, rejection: &downloadRejection{
-			stage: RejectionDownload, reason: "download failed", err: fmt.Errorf("create temp dir: %w", err),
+			stage: rejectionlog.Download, reason: "download failed", err: fmt.Errorf("create temp dir: %w", err),
 		}}
 	}
 	return s.runAttempt(ctx, ac, candidate, tmpDir)

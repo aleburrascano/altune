@@ -5,6 +5,7 @@ import (
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/internal/core/rejectionlog"
 	"altune/go-api/internal/acquisition/internal/core/tracklength"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -287,7 +288,7 @@ func (f *downloadFailures) sourceDead(candidate ports.AudioCandidate) bool {
 }
 
 func recordSourceDead(ac *AcquisitionContext, candidate ports.AudioCandidate) {
-	ac.recordRejection(candidate.URL, candidate.Title, candidate.Source, RejectionNotAttempted,
+	ac.recordRejection(candidate.URL, candidate.Title, candidate.Source, rejectionlog.NotAttempted,
 		"source reported itself unavailable earlier in this job")
 }
 
@@ -324,13 +325,13 @@ func (f *downloadFailures) result(ctx context.Context) error {
 
 func recordNotAttempted(ac *AcquisitionContext, untried []ports.AudioCandidate) {
 	for _, c := range untried {
-		ac.recordRejection(c.URL, c.Title, c.Source, RejectionNotAttempted,
+		ac.recordRejection(c.URL, c.Title, c.Source, rejectionlog.NotAttempted,
 			fmt.Sprintf("skipped after %d download attempts", maxDownloadAttempts))
 	}
 }
 
 func recordImplausibleDuration(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate) {
-	ac.recordUnmeasuredRejection(candidate.URL, candidate.Title, candidate.Source, RejectionDuration,
+	ac.recordUnmeasuredRejection(candidate.URL, candidate.Title, candidate.Source, rejectionlog.Duration,
 		fmt.Sprintf("search duration %.0fs vs expected %.0fs", candidate.Duration, ac.ExpectedLength()))
 	slog.InfoContext(ctx, "acquisition.candidate_skipped_duration",
 		"track_id", ac.Track.ID,
@@ -449,7 +450,7 @@ func judgeAttempt(ac *AcquisitionContext, candidate ports.AudioCandidate, filePa
 		if evidence.DurationDeltaSeconds != nil {
 			reason = fmt.Sprintf(rejectOtherVersionOffLengthFmt, *evidence.DurationDeltaSeconds)
 		}
-		result.rejection = &downloadRejection{stage: RejectionDuration, reason: reason}
+		result.rejection = &downloadRejection{stage: rejectionlog.Duration, reason: reason}
 		return result
 	}
 	result.status = attemptAccepted
@@ -467,7 +468,7 @@ func (s *DownloadStep) fetchFull(
 ) (ports.FetchedAudio, *downloadRejection) {
 	queued := time.Now()
 	if err := s.limiter.Acquire(ctx); err != nil {
-		return ports.FetchedAudio{}, &downloadRejection{stage: RejectionDownload, reason: "download failed", err: err}
+		return ports.FetchedAudio{}, &downloadRejection{stage: rejectionlog.Download, reason: "download failed", err: err}
 	}
 	defer s.limiter.Release()
 	timeStage(ctx, "download.queue", queued)
@@ -482,7 +483,7 @@ func (s *DownloadStep) fetchFull(
 		slog.WarnContext(ctx, "acquisition.candidate_download_failed",
 			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 			"error", redact.LogError(err))
-		return ports.FetchedAudio{}, &downloadRejection{stage: RejectionDownload, reason: "download failed", err: err}
+		return ports.FetchedAudio{}, &downloadRejection{stage: rejectionlog.Download, reason: "download failed", err: err}
 	}
 	return fetched, nil
 }
@@ -505,7 +506,7 @@ type verificationResult struct {
 }
 
 type downloadRejection struct {
-	stage  RejectionStage
+	stage  rejectionlog.Stage
 	reason string
 	err    error
 }
@@ -602,7 +603,7 @@ func durationRejection(
 		"authoritative", ac.lengths().Resolved() > 0,
 	)
 	return &downloadRejection{
-		stage:  RejectionDuration,
+		stage:  rejectionlog.Duration,
 		reason: fmt.Sprintf("duration %.0fs vs expected %.0fs", actual, held),
 		err: fmt.Errorf("candidate %q duration %.0fs != expected %.0fs",
 			candidate.URL, actual, held),
@@ -633,7 +634,7 @@ func decodeRejection(
 ) *downloadRejection {
 	if ctx.Err() != nil {
 		return &downloadRejection{
-			stage:  RejectionDownload,
+			stage:  rejectionlog.Download,
 			reason: "decode cancelled",
 			err:    withCancellation(ctx, fmt.Errorf("candidate %q decode cancelled: %w", candidate.URL, err)),
 		}
@@ -642,7 +643,7 @@ func decodeRejection(
 		"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 		"error", redact.LogError(err))
 	return &downloadRejection{
-		stage:  RejectionUndecodable,
+		stage:  rejectionlog.Undecodable,
 		reason: "audio failed to decode",
 		err:    fmt.Errorf("candidate %q undecodable: %w", candidate.URL, err),
 	}

@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/internal/core/ranking"
+	"altune/go-api/internal/acquisition/internal/core/rejectionlog"
 	"altune/go-api/internal/shared/redact"
 	"cmp"
 	"context"
@@ -316,7 +317,7 @@ func judgeUnknown(
 
 func fingerprintRejection(candidate ports.AudioCandidate, reason string) *downloadRejection {
 	return &downloadRejection{
-		stage:  RejectionFingerprint,
+		stage:  rejectionlog.Fingerprint,
 		reason: reason,
 		err:    fmt.Errorf("candidate %q rejected by fingerprint: %s", candidate.URL, reason),
 	}
@@ -327,7 +328,7 @@ func currentFileRejection(ctx context.Context, ac *AcquisitionContext, candidate
 		"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
 		"stored_acoustid", ac.Replace.StoredAcoustID)
 	return &downloadRejection{
-		stage:  RejectionCurrentFile,
+		stage:  rejectionlog.CurrentFile,
 		reason: "current file",
 		err:    fmt.Errorf("candidate %q is the file the track already has", candidate.URL),
 	}

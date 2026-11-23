@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/internal/core/rejectionlog"
 	"altune/go-api/internal/catalog/domain"
 	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
@@ -399,7 +400,7 @@ func TestAcqStage_SymbolOnlyArtistDoesNotRescueUnrelatedCandidate(t *testing.T) 
 	if len(ranked) != 0 {
 		t.Fatalf("unrelated candidate must stay gated for a symbol-only artist: ranked=%v", ranked)
 	}
-	if len(rejected) != 1 || rejected[0].Stage != RejectionIdentity || rejected[0].URL != "yt:cooking" {
+	if len(rejected) != 1 || rejected[0].Stage != rejectionlog.Identity || rejected[0].URL != "yt:cooking" {
 		t.Fatalf("expected one identity rejection for yt:cooking, got %v", rejected)
 	}
 }

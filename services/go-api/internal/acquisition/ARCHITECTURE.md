@@ -194,7 +194,7 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   step_update_track.go   UPDATE_TRACK — MarkReady + measured duration, or a replace's audio swap
   duration.go            AcquisitionContext.lengths and ExpectedLength: the saved, resolved and doubted lengths handed to internal/core/tracklength
   registry.go            SourceRegistry — fans Find across sources into per-source slots, routes Fetch by candidate.Source
-  rejection.go           RejectionStage, CandidateRejection, recordRejection, summarizeRejections
+  rejection.go           recordRejection, the run's rejection basis, and the acquisition_rejections reads and writes; the stages, the summary and which rejections last are internal/core/rejectionlog
   source_key.go          sourceKey — the normalized rejected_source_keys identity (acquire.go's mergeSourceKeys builds the exclusion list from it)
   failure_reason.go      failureReason, failureCode, isCancellation, withCancellation, reasonForStep
   temp_workspace.go      SweepStaleTempDirs — startup call into ports.TempWorkspace.SweepAbandoned (the reap itself lives in adapters/tempfs); CleanupTemp(ctx, ws, ac) removes TempDir through ports.TempWorkspace; also holds `defaultTempWorkspace`, nil in production and set by the service tests
@@ -749,8 +749,8 @@ flowchart TD
     SFOR --> YTM["ytmusic · identityKey"]
     SRC["source Name() strings"] --> STAMP["stampSource → AudioCandidate.Source"]
     STAMP --> FETCH["SourceRegistry.Fetch routing"]
-    STAMP --> RJ["CandidateRejection.Source + candidate logs"]
-    REJ["RejectionStage vocabulary"] --> SUMM["summarizeRejections"]
+    STAMP --> RJ["rejectionlog.Entry.Source + candidate logs"]
+    REJ["rejectionlog.Stage vocabulary"] --> SUMM["rejectionlog.Summary"]
     SUMM --> FRDET["failure_reason detail<br/>after FailureDetailSeparator"]
     KIND["ports.CooldownKind values"] --> PGCD["acquisition_cooldowns.kind<br/>CHECK · migration 019"]
     KIND --> ADM["RetryAdmission / ReacquireAdmission"]
@@ -768,9 +768,9 @@ flowchart TD
 | `DownloadStep.identify`'s tiers | whether a wrong recording can enter the library at all | widening rejection past "AcoustID links the audio to another version or song" makes the underground long tail unacquirable — the failure that forced the first rollback |
 | `sourceKey` | every stored `rejected_source_keys` value | changing the key shape orphans the memory and re-acquire silently toggles again |
 | a stage `Name()` string | `failureReason`'s vocabulary, the `progress` event payload the mobile client renders | rename compiles clean and breaks the client silently |
-| a source's `Name()` (`ytdlp`, `ytmusic`) | `stampSource` stamps it onto `AudioCandidate.Source`; `SourceRegistry.Fetch` routes the download by matching it back, and it labels every candidate log line and `CandidateRejection` | renaming one leaves `Fetch` with "no source named" for every candidate that source found — the search is paid for and then discarded wholesale |
+| a source's `Name()` (`ytdlp`, `ytmusic`) | `stampSource` stamps it onto `AudioCandidate.Source`; `SourceRegistry.Fetch` routes the download by matching it back, and it labels every candidate log line and `rejectionlog.Entry` | renaming one leaves `Fetch` with "no source named" for every candidate that source found — the search is paid for and then discarded wholesale |
 | a `ports.Provider*` identity key (`youtube`, `deezer`, `soundcloud`) | `discoverybridge.providerKey`'s mapping off discovery's `ProviderName`, `RecordingIdentity.SourceFor`, `ytmusic`'s `identityKey` | a key written by one side and not looked up by the other fails *silently*: `SourceFor` returns false and the resolved source simply never produces a candidate |
-| a `RejectionStage` constant | the per-stage counts in `summarizeRejections`, persisted into `failure_reason` after `domain.FailureDetailSeparator`, and every rejection log line | renaming one splits that stage's history — rows and dashboards group the old and new spelling as two different, half-populated stages |
+| a `rejectionlog.Stage` constant | the `reason` of every `acquisition_rejections` row, the per-stage counts in `rejectionlog.Summary`, persisted into `failure_reason` after `domain.FailureDetailSeparator`, and every rejection log line | renaming one splits that stage's history — rows and dashboards group the old and new spelling as two different, half-populated stages |
 | a `ports.CooldownKind` value (`retry`, `reacquire`) | the `acquisition_cooldowns.kind` CHECK constraint (migration 019), and both admissions | a kind the constraint doesn't list fails every reserve with a 500; renaming one abandons the windows already written and reopens the cooldown for every track |
 | `CoreSteps` | production *and* every reacquire CLI command | a step added for the service also runs in bulk repair, on the whole library |
 | `BuildAudioRef` / the sanitizer (`internal/core/audioref`) | the storage layout *and* `cmd/backfillaudio`'s key derivation | a layout change orphans every existing object and makes backfill unable to find them |

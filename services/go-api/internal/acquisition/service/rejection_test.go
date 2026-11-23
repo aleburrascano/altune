@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/internal/core/rejectionlog"
 	"altune/go-api/internal/catalog/domain"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
@@ -146,63 +147,6 @@ func TestRankAndCollect_DropsAndRecordsForeignLowIdentity(t *testing.T) {
 	}
 }
 
-func TestSummarizeRejections(t *testing.T) {
-	tests := []struct {
-		name string
-		in   []CandidateRejection
-		want string
-	}{
-		{"none", nil, ""},
-		{"one", []CandidateRejection{{Stage: "identity"}}, "all 1 candidate rejected (1 identity)"},
-		{
-			"grouped and sorted",
-			[]CandidateRejection{{Stage: "identity"}, {Stage: "duration"}, {Stage: "identity"}},
-			"all 3 candidates rejected (1 duration, 2 identity)",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := summarizeRejections(tt.in); got != tt.want {
-				t.Errorf("summarizeRejections = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestRejectionStage_LiteralsArePinned(t *testing.T) {
-	want := map[RejectionStage]string{
-		RejectionIdentity:     "identity",
-		RejectionQualifier:    "qualifier",
-		RejectionDownload:     "download",
-		RejectionDRM:          "drm",
-		RejectionPreview:      "preview",
-		RejectionDuration:     "duration",
-		RejectionUndecodable:  "undecodable",
-		RejectionFingerprint:  "fingerprint",
-		RejectionNotAttempted: "not_attempted",
-	}
-	if len(want) != 9 {
-		t.Fatalf("rejection stage constants collide: %v", want)
-	}
-	for stage, literal := range want {
-		if string(stage) != literal {
-			t.Errorf("RejectionStage %q, want %q", stage, literal)
-		}
-	}
-	rejections := []CandidateRejection{
-		{Stage: RejectionFingerprint},
-		{Stage: RejectionDownload},
-		{Stage: RejectionUndecodable},
-		{Stage: RejectionDuration},
-		{Stage: RejectionIdentity},
-		{Stage: RejectionDownload},
-	}
-	const summary = "all 6 candidates rejected (2 download, 1 duration, 1 fingerprint, 1 identity, 1 undecodable)"
-	if got := summarizeRejections(rejections); got != summary {
-		t.Errorf("summarizeRejections = %q, want %q", got, summary)
-	}
-}
-
 func TestExecute_PersistsRejectionSummaryInFailureReason(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	track, err := domain.NewTrack(userId, "I've Been in Love Before", "Cutting Crew", "Broadcast")
@@ -272,82 +216,24 @@ func TestExecute_AttemptCapReportsUntriedCandidatesApart(t *testing.T) {
 	}
 }
 
-func TestLastingRejectionRecords_KeepsFingerprintAndDropsTransientStages(t *testing.T) {
-	ac := &AcquisitionContext{Track: TrackRef{ID: "t1"}}
-	ac.recordRejection("https://youtube.com/watch?v=a", "", "yt", RejectionFingerprint, "other version")
-	ac.recordRejection("https://youtube.com/watch?v=b", "", "yt", RejectionDownload, "download failed")
-	ac.recordRejection("https://youtube.com/watch?v=c", "", "yt", RejectionNotAttempted, "skipped")
-
-	recs := lastingRejectionRecords(ac)
-
-	if len(recs) != 1 || recs[0].Reason != "fingerprint" || recs[0].TrackID != "t1" || recs[0].SourceKey != sourceKey("https://youtube.com/watch?v=a") {
-		t.Errorf("records = %+v, want only the fingerprint rejection", recs)
-	}
-}
-
-func TestLastingRejectionRecords_CarryTheRunsExpectedLengthAndReferenceMBID(t *testing.T) {
+func TestRejectionBasis_CarriesTheRunsExpectedLengthAndReferenceMBID(t *testing.T) {
 	ac := &AcquisitionContext{
 		Track:    TrackRef{ID: "t1", CatalogDuration: 322},
 		Identity: ports.RecordingIdentity{MBID: "mbid-1"},
 	}
-	ac.recordRejection("https://youtube.com/watch?v=a", "", "yt", RejectionDuration, "too short")
-
-	recs := lastingRejectionRecords(ac)
 
 	want := ports.RejectionBasis{ExpectedSeconds: 322, ReferenceMBID: "mbid-1"}
-	if len(recs) != 1 || recs[0].Basis != want {
-		t.Errorf("records = %+v, want one carrying basis %+v", recs, want)
+	if got := ac.rejectionBasis(); got != want {
+		t.Errorf("rejectionBasis = %+v, want %+v", got, want)
 	}
 }
 
-func TestLastingRejectionRecords_DropsAnUnmeasuredDuration(t *testing.T) {
+func TestRecordUnmeasuredRejection_IsKeptForTheSummary(t *testing.T) {
 	ac := &AcquisitionContext{Track: TrackRef{ID: "t1"}}
-	ac.recordUnmeasuredRejection("https://youtube.com/watch?v=a", "", "yt", RejectionDuration, "search duration 30s vs expected 200s")
-	ac.recordRejection("https://youtube.com/watch?v=b", "", "yt", RejectionDuration, "duration 30s vs expected 200s")
+	ac.recordUnmeasuredRejection("https://youtube.com/watch?v=a", "", "yt", rejectionlog.Duration, "search duration 30s vs expected 200s")
+	ac.recordRejection("https://youtube.com/watch?v=b", "", "yt", rejectionlog.Duration, "duration 30s vs expected 200s")
 
-	recs := lastingRejectionRecords(ac)
-
-	if len(recs) != 1 || recs[0].SourceKey != sourceKey("https://youtube.com/watch?v=b") {
-		t.Errorf("records = %+v, want only the measured duration rejection", recs)
-	}
-	if len(ac.Rejections) != 2 {
-		t.Errorf("run rejections = %d, want both kept for the summary", len(ac.Rejections))
-	}
-}
-
-func TestSummarizeRejections_UntriedAndDuplicatesAreNotCountedAsRejected(t *testing.T) {
-	tests := []struct {
-		name string
-		in   []CandidateRejection
-		want string
-	}{
-		{"same source in both tiers counts once, last real stage wins", []CandidateRejection{
-			{URL: "yt:a", Stage: RejectionIdentity},
-			{URL: "yt:a", Stage: RejectionDownload},
-		}, "all 1 candidate rejected (1 download)"},
-		{"untried reported apart", []CandidateRejection{
-			{URL: "yt:a", Stage: RejectionDownload},
-			{URL: "yt:b", Stage: RejectionDownload},
-			{URL: "yt:c", Stage: RejectionNotAttempted},
-			{URL: "yt:d", Stage: RejectionNotAttempted},
-			{URL: "yt:d", Stage: RejectionNotAttempted},
-		}, "all 2 candidates rejected (2 download), 2 not tried"},
-		{"skipped after being judged stays judged", []CandidateRejection{
-			{URL: "yt:a", Stage: RejectionIdentity},
-			{URL: "yt:a", Stage: RejectionNotAttempted},
-		}, "all 1 candidate rejected (1 identity)"},
-		{"only untried", []CandidateRejection{
-			{URL: "yt:a", Stage: RejectionNotAttempted},
-		}, "1 candidate not tried"},
-		{"url-less entries count on their own", []CandidateRejection{
-			{Stage: RejectionIdentity}, {Stage: RejectionIdentity},
-		}, "all 2 candidates rejected (2 identity)"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := summarizeRejections(tt.in); got != tt.want {
-				t.Errorf("summary = %q, want %q", got, tt.want)
-			}
-		})
+	if len(ac.Rejections) != 2 || !ac.Rejections[0].Unmeasured || ac.Rejections[1].Unmeasured {
+		t.Errorf("run rejections = %+v, want both kept and only the first unmeasured", ac.Rejections)
 	}
 }
