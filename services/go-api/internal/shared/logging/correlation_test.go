@@ -1,37 +1,19 @@
-package logging
+package logging_test
 
 import (
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
+	"strings"
 	"testing"
-	"time"
 )
-
-type countingHandler struct {
-	corrValues []string
-}
-
-func (*countingHandler) Enabled(context.Context, slog.Level) bool { return true }
-
-func (h *countingHandler) Handle(_ context.Context, r slog.Record) error {
-	r.Attrs(func(a slog.Attr) bool {
-		if a.Key == "corr_id" {
-			h.corrValues = append(h.corrValues, a.Value.String())
-		}
-		return true
-	})
-	return nil
-}
-
-func (h *countingHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
-func (h *countingHandler) WithGroup(string) slog.Handler      { return h }
 
 func TestCorrelationHandler_StampsEveryContextLog(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
-	ring := Setup("debug", false)
+	ring := logging.Setup("debug", false)
 
-	ctx := WithCorrelationID(context.Background(), "corr-xyz789")
+	ctx := logging.WithCorrelationID(context.Background(), "corr-xyz789")
 	slog.InfoContext(ctx, "deep.domain.event", "detail", "v")
 
 	found := false
@@ -52,7 +34,7 @@ func TestCorrelationHandler_StampsEveryContextLog(t *testing.T) {
 func TestCorrelationHandler_NoIDLeavesRecordUntagged(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
-	ring := Setup("debug", false)
+	ring := logging.Setup("debug", false)
 
 	slog.InfoContext(context.Background(), "no.correlation")
 
@@ -68,37 +50,51 @@ func TestCorrelationHandler_NoIDLeavesRecordUntagged(t *testing.T) {
 }
 
 func TestCorrelationHandler_DoesNotDuplicate(t *testing.T) {
-	base := &countingHandler{}
-	h := newCorrelationHandler(base)
-	ctx := WithCorrelationID(context.Background(), "from-ctx")
+	logger, _, out := setupLogger(t, "info", false)
+	ctx := logging.WithCorrelationID(context.Background(), "from-ctx")
 
-	rec := slog.NewRecord(time.Time{}, slog.LevelInfo, "msg", 0)
-	rec.AddAttrs(slog.String("corr_id", "explicit"))
-	if err := h.Handle(ctx, rec); err != nil {
-		t.Fatalf("handle: %v", err)
+	logger.InfoContext(ctx, "msg", "corr_id", "explicit")
+
+	line := out()
+	if got := strings.Count(line, `"corr_id"`); got != 1 || !strings.Contains(line, `"corr_id":"explicit"`) {
+		t.Errorf("written line has %d corr_id keys, want exactly one holding explicit: %s", got, line)
 	}
+}
 
-	if got := base.corrValues; len(got) != 1 || got[0] != "explicit" {
-		t.Errorf("corr_id attrs seen = %v, want exactly [explicit]", got)
+func TestCorrelationHandler_StampsLogsThroughDerivedLoggers(t *testing.T) {
+	logger, ring := newCaptureLogger(t)
+	ctx := logging.WithCorrelationID(context.Background(), "derived-corr")
+
+	logger.With("k", "v").InfoContext(ctx, "derived")
+
+	snap := ring.Snapshot()
+	if len(snap) != 1 || snap[0].Attrs["k"] != "v" || snap[0].Attrs["corr_id"] != "derived-corr" {
+		t.Fatalf("derived logger record = %+v, want k=v and the correlation id", snap)
 	}
 }
 
 func TestCorrelationAttr_CarriesContextID(t *testing.T) {
-	ctx := WithCorrelationID(context.Background(), "corr-abc123")
+	ctx := logging.WithCorrelationID(context.Background(), "corr-abc123")
 
-	got := CorrelationAttr(ctx)
+	got := logging.CorrelationAttr(ctx)
 
 	if got.Key != "corr_id" || got.Value.String() != "corr-abc123" {
 		t.Errorf("CorrelationAttr = %s=%q, want corr_id=%q", got.Key, got.Value.String(), "corr-abc123")
 	}
 }
 
+func TestCorrelationIDFromContext_EmptyWithoutAnID(t *testing.T) {
+	if got := logging.CorrelationIDFromContext(context.Background()); got != "" {
+		t.Errorf("CorrelationIDFromContext = %q, want empty", got)
+	}
+}
+
 func TestCorrelationAttr_KeepsEmptyIDOnTheRecord(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
-	ring := Setup("debug", false)
+	ring := logging.Setup("debug", false)
 
-	slog.InfoContext(context.Background(), "audit.no_request", CorrelationAttr(context.Background()))
+	slog.InfoContext(context.Background(), "audit.no_request", logging.CorrelationAttr(context.Background()))
 
 	for _, r := range ring.Snapshot() {
 		if r.Message != "audit.no_request" {

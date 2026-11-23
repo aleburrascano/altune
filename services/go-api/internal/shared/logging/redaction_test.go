@@ -1,6 +1,7 @@
-package logging
+package logging_test
 
 import (
+	"altune/go-api/internal/shared/logging"
 	"errors"
 	"fmt"
 	"io"
@@ -12,7 +13,7 @@ import (
 )
 
 func TestRingHandler_RedactsConfigSecretFields(t *testing.T) {
-	logger, ring := newCaptureLogger(t, 20)
+	logger, ring := newCaptureLogger(t)
 
 	const secret = "s3cr3t-value-should-never-surface"
 	secretKeys := []string{
@@ -50,7 +51,7 @@ func TestRingHandler_RedactsConfigSecretFields(t *testing.T) {
 }
 
 func TestRingHandler_RedactsCredentialURLInErrorAttr(t *testing.T) {
-	logger, ring := newCaptureLogger(t, 10)
+	logger, ring := newCaptureLogger(t)
 
 	const secret = "hunter2pw"
 	logger.Error("redis.dial.failed",
@@ -83,7 +84,7 @@ func TestSetup_dropsAuthorizationAndJWTAttrsFromRingAndStdout(t *testing.T) {
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	ring := Setup("info", false)
+	ring := logging.Setup("info", false)
 	slog.Info("outbound", "authorization", "Bearer abc123secret", "jwt", "eyJjwtvalue", "path", "/x")
 	w.Close()
 	out, _ := io.ReadAll(r)
@@ -101,7 +102,7 @@ func TestSetup_dropsAuthorizationAndJWTAttrsFromRingAndStdout(t *testing.T) {
 }
 
 func TestRedaction_KeepsNonSecretLookalikeKeys(t *testing.T) {
-	logger, ring := newCaptureLogger(t, 10)
+	logger, ring := newCaptureLogger(t)
 
 	logger.Info("work",
 		"dedup_key", "abc",
@@ -123,7 +124,7 @@ func TestRedaction_KeepsNonSecretLookalikeKeys(t *testing.T) {
 }
 
 func TestRedaction_MasksPathsInFailureTextOnly(t *testing.T) {
-	logger, ring := newCaptureLogger(t, 10)
+	logger, ring := newCaptureLogger(t)
 
 	logger.Error("acquire.failed",
 		"error", &fs.PathError{Op: "open", Path: "/srv/music/x.flac", Err: errors.New("nope")},
