@@ -2,21 +2,25 @@ package domain_test
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/shared/httputil"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
-type admissionRefusal interface {
-	error
-	HTTPStatus() int
-	ErrorCode() string
+func answer(err error) *httptest.ResponseRecorder {
+	rec := httptest.NewRecorder()
+	httputil.HandleServiceError(rec, httptest.NewRequest(http.MethodPost, "/acquisition/retry", nil), err)
+	return rec
 }
 
 func TestAdmissionSentinels(t *testing.T) {
 	cases := []struct {
 		name   string
-		err    admissionRefusal
+		err    error
 		status int
 		code   string
 		msg    string
@@ -30,14 +34,16 @@ func TestAdmissionSentinels(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := tc.err.HTTPStatus(); got != tc.status {
-				t.Errorf("HTTPStatus = %d, want %d", got, tc.status)
+			rec := answer(tc.err)
+			var body struct {
+				Detail string `json:"detail"`
+				Code   string `json:"code"`
 			}
-			if got := tc.err.ErrorCode(); got != tc.code {
-				t.Errorf("ErrorCode = %q, want %q", got, tc.code)
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode %s: %v", rec.Body.String(), err)
 			}
-			if got := tc.err.Error(); got != tc.msg {
-				t.Errorf("Error = %q, want %q", got, tc.msg)
+			if rec.Code != tc.status || body.Code != tc.code || body.Detail != tc.msg {
+				t.Errorf("answer = %d %q %q, want %d %q %q", rec.Code, body.Code, body.Detail, tc.status, tc.code, tc.msg)
 			}
 		})
 	}

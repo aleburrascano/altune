@@ -1,47 +1,18 @@
 package domain
 
-type admissionError struct {
-	msg    string
-	status int
-	code   string
-}
-
-func (e *admissionError) Error() string     { return e.msg }
-func (e *admissionError) HTTPStatus() int   { return e.status }
-func (e *admissionError) ErrorCode() string { return e.code }
+import shareddomain "altune/go-api/internal/shared/domain"
 
 var (
-	ErrRetryNotFailed = &admissionError{
-		msg:    "track is not in failed state",
-		status: 409,
-		code:   "acquisition.retry_not_failed",
-	}
-	ErrCooldownActive = &admissionError{
-		msg:    "cooldown active, try again later",
-		status: 429,
-		code:   "acquisition.cooldown_active",
-	}
-	ErrReacquireNotReady = &admissionError{
-		msg:    "track has no audio to replace",
-		status: 409,
-		code:   "acquisition.reacquire_not_ready",
-	}
+	ErrRetryNotFailed    = shareddomain.NewError(shareddomain.CodeAcquisitionRetryNotFailed, "track is not in failed state")
+	ErrCooldownActive    = shareddomain.NewError(shareddomain.CodeAcquisitionCooldownActive, "cooldown active, try again later")
+	ErrReacquireNotReady = shareddomain.NewError(shareddomain.CodeAcquisitionReacquireNotReady, "track has no audio to replace")
 )
 
-var ErrTrackJobInFlight = &admissionError{
-	msg:    "another acquisition for this track is already running, try again later",
-	status: 409,
-	code:   "acquisition.job_in_flight",
-}
+var ErrTrackJobInFlight = shareddomain.NewError(shareddomain.CodeAcquisitionJobInFlight,
+	"another acquisition for this track is already running, try again later")
 
-var ErrSchedulerShutdown = &admissionError{
-	msg:    "acquisition is shutting down, try again later",
-	status: 503,
-	code:   "acquisition.shutting_down",
-}
+var ErrSchedulerShutdown = shareddomain.NewError(shareddomain.CodeAcquisitionShuttingDown,
+	"acquisition is shutting down, try again later")
 
-var ErrAcquisitionPaused = &admissionError{
-	msg:    "acquisition is paused, try again later",
-	status: 503,
-	code:   "acquisition.paused",
-}
+var ErrAcquisitionPaused = shareddomain.NewError(shareddomain.CodeAcquisitionPaused,
+	"acquisition is paused, try again later")
