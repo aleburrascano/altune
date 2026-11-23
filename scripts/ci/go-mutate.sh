@@ -70,13 +70,19 @@ shift
     else if (name != "") printf "diff --git a/%s b/%s\nrename from %s\nrename to %s\n", name, name, name, name
     name = ""; body = ""; in_hunks = 0
   }
-  /^diff --git / { emit(); next }
   !in_hunks && /^\+\+\+ "/ { print "go-mutate: git quoted the path in \"" $0 "\", which this diff filter cannot read" > "/dev/stderr"; failed = 1; exit 1 }
   function claim(path) { if (index(path, package) == 1) name = substr(path, length(package) + 1) }
-  !in_hunks && /^\+\+\+ b\// { claim(substr($0, 7)); next }
+  function becomes(path) { name = ""; claim(path) }
+  function same_path_header(line,   rest, path) {
+    rest = substr(line, 12)
+    path = substr(rest, 3, (length(rest) - 5) / 2)
+    return rest == "a/" path " b/" path ? path : ""
+  }
+  /^diff --git / { emit(); claim(same_path_header($0)); next }
+  !in_hunks && /^\+\+\+ b\// { becomes(substr($0, 7)); next }
   !in_hunks && /^--- a\// { if (name == "") claim(substr($0, 7)); next }
-  !in_hunks && /^rename from / { claim(substr($0, 13)); next }
-  !in_hunks && /^rename to / { claim(substr($0, 11)); next }
+  !in_hunks && /^rename from / { if (name == "") claim(substr($0, 13)); next }
+  !in_hunks && /^rename to / { becomes(substr($0, 11)); next }
   /^@@ / { in_hunks = 1 }
   in_hunks && name != "" { body = body $0 "\n" }
   END { if (!failed) emit() }

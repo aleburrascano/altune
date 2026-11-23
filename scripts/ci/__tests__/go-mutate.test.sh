@@ -280,6 +280,10 @@ base=$(git -C "$repo" rev-parse HEAD)
 git -C "$repo" rm -q svc/window/internal/core/bounds/gone.go
 commit delete-only
 expect "a package whose only change is a deleted file mutates nothing" 0 'killed 0, survived 0'
+base=$(git -C "$repo" rev-parse HEAD)
+chmod +x "$mod/window/internal/core/bounds/keep.go"
+commit mode-only
+expect "a package whose only change is a file's mode mutates nothing" 0 'killed 0, survived 0'
 base=$shared_base
 
 sed -i 's/17: false/17: true/' "$mod/clamp/clamp_test.go"
