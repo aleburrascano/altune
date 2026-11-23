@@ -12,10 +12,12 @@ func Trigrams(norm string) []string {
 	if len(runes) == 0 {
 		return nil
 	}
-	n := max(len(runes)-trigramRunes+1, 1)
-	out := make([]string, 0, n)
-	for i := range n {
-		out = append(out, string(runes[i:min(i+trigramRunes, len(runes))]))
+	if len(runes) < trigramRunes {
+		return []string{norm}
+	}
+	out := make([]string, 0, len(runes))
+	for i := 0; i <= len(runes)-trigramRunes; i++ {
+		out = append(out, string(runes[i:i+trigramRunes]))
 	}
 	return out
 }

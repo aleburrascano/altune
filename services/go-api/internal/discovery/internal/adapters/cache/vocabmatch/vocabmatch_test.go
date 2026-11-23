@@ -20,6 +20,8 @@ func TestTrigrams(t *testing.T) {
 		{name: "a word slides one rune at a time", in: "megaman", want: []string{"meg", "ega", "gam", "ama", "man"}},
 		{name: "grams count runes, not bytes", in: "café", want: []string{"caf", "afé"}},
 		{name: "a short word of multibyte runes is one gram", in: "éé", want: []string{"éé"}},
+		{name: "a short word is kept exactly as given", in: "\xffa", want: []string{"\xffa"}},
+		{name: "a three-rune word is rebuilt from its runes", in: "\xffab", want: []string{"\uFFFDab"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
