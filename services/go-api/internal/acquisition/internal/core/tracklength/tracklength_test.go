@@ -3,6 +3,7 @@ package tracklength_test
 import (
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/internal/core/tracklength"
+	"math"
 	"testing"
 )
 
@@ -264,5 +265,29 @@ func TestPolicy_AResolvedCandidatesFileIsHeldToItsOwnLengthFirst(t *testing.T) {
 				t.Errorf("Judge(%v) for %+v = %v, %v, want %v, %v", tt.actual, tt.candidate, acceptable, held, tt.acceptable, tt.held)
 			}
 		})
+	}
+}
+
+func TestFileJudge_ANonFiniteFileLengthIsNeverAcceptable(t *testing.T) {
+	judges := []struct {
+		name      string
+		policy    tracklength.Policy
+		candidate ports.AudioCandidate
+	}{
+		{"held to a saved length", tracklength.New(200, 0, false), upload(0)},
+		{"held to a resolved length", tracklength.New(0, 200, false), upload(0)},
+		{"held to a corroborated length", tracklength.New(200, 200, false), upload(0)},
+		{"held to the candidate's own length", tracklength.New(0, 0, false), artTrack(200)},
+	}
+	for _, j := range judges {
+		judge, known := j.policy.FileJudge(j.candidate)
+		if !known {
+			t.Fatalf("%s: FileJudge gave no judge, want one", j.name)
+		}
+		for _, actual := range []float64{math.Inf(1), math.Inf(-1), math.NaN()} {
+			if acceptable, _ := judge.Judge(actual); acceptable {
+				t.Errorf("%s: Judge(%v) = acceptable, want refused: a probe that measured no finite length must never reach the stored length", j.name, actual)
+			}
+		}
 	}
 }
