@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/shared/httputil"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -108,7 +109,7 @@ func TestRecoverer_PanicAfterHeadersSentKeepsTheSentResponse(t *testing.T) {
 	}
 }
 
-func TestRequestLogger_OutsideRecovererLogsPanicAs500Error(t *testing.T) {
+func TestRequestLogger_OutsideRecovererLogsAPanicOnceAtError(t *testing.T) {
 	ring := captureLogs(t)
 	handler := httputil.RequestLogger(httputil.Recoverer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("boom")
@@ -117,8 +118,11 @@ func TestRequestLogger_OutsideRecovererLogsPanicAs500Error(t *testing.T) {
 	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/boom", nil))
 
 	complete := onlyRecord(t, ring, "request.complete")
-	if complete.Attrs["status"] != "500" || complete.Level != "ERROR" {
-		t.Errorf("request.complete = %s status=%s, want ERROR status=500", complete.Level, complete.Attrs["status"])
+	if complete.Attrs["status"] != "500" || complete.Level != "INFO" {
+		t.Errorf("request.complete = %s status=%s, want INFO status=500", complete.Level, complete.Attrs["status"])
+	}
+	if errs := recordsAtLevel(ring, slog.LevelError); len(errs) != 1 || errs[0].Message != "panic.recovered" {
+		t.Errorf("ERROR records = %+v, want only panic.recovered", errs)
 	}
 }
 
@@ -137,4 +141,20 @@ func TestRecoverer_PanicAfterFlushKeepsTheImplicit200(t *testing.T) {
 	if got := rec.Body.String(); got != "" {
 		t.Errorf("body = %q, want no error body appended to the stream", got)
 	}
+}
+
+func TestRecoverer_AnswersAResponseThatCannotBeEncodedWithAnInternalProblem(t *testing.T) {
+	ring := captureLogs(t)
+	handler := httputil.Recoverer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{"c": make(chan int)})
+	}))
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, requestWithCorrelationID("0badc0de"))
+
+	p := decodeProblem(t, rec)
+	if rec.Code != http.StatusInternalServerError || p.Code != "internal" || p.Instance != "0badc0de" {
+		t.Errorf("answered %d %+v, want a 500 internal problem with the correlation id", rec.Code, p)
+	}
+	onlyRecord(t, ring, "panic.recovered")
 }

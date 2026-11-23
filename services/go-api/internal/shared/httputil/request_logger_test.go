@@ -44,7 +44,7 @@ func TestRequestLogger_TracksStatusCode(t *testing.T) {
 func TestRequestLogger_RawQueryAbsentFromRing(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
-	ring := logging.Setup("error", false)
+	ring := logging.Setup("debug", false)
 
 	const secret = "queenssecretobsessionquery"
 	handler := httputil.RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -54,10 +54,10 @@ func TestRequestLogger_RawQueryAbsentFromRing(t *testing.T) {
 
 	handler.ServeHTTP(httptest.NewRecorder(), req)
 
-	sawRequestStart := false
+	sawRequestComplete := false
 	for _, rec := range ring.Snapshot() {
-		if rec.Message == "request.start" {
-			sawRequestStart = true
+		if rec.Message == "request.complete" {
+			sawRequestComplete = true
 		}
 		if strings.Contains(rec.Message, secret) {
 			t.Errorf("raw query leaked into ring message: %q", rec.Message)
@@ -68,8 +68,8 @@ func TestRequestLogger_RawQueryAbsentFromRing(t *testing.T) {
 			}
 		}
 	}
-	if !sawRequestStart {
-		t.Fatal("expected request.start to be captured, so the redaction assertion is meaningful")
+	if !sawRequestComplete {
+		t.Fatal("expected request.complete to be captured, so the redaction assertion is meaningful")
 	}
 }
 
@@ -118,11 +118,23 @@ func TestRequestLogger_LogsTheWrittenStatusAndEveryByte(t *testing.T) {
 	}
 }
 
-func TestRequestLogger_LevelFollowsTheStatusClass(t *testing.T) {
-	for status, want := range map[int]string{http.StatusNoContent: "INFO", http.StatusNotFound: "WARN", http.StatusBadGateway: "ERROR"} {
+func TestRequestLogger_LogsEveryOutcomeOnceAtInfoAndLeavesFaultsToTheBoundary(t *testing.T) {
+	for _, status := range []int{http.StatusNoContent, http.StatusNotFound, http.StatusBadGateway} {
 		rec := completedRequest(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) })
-		if rec["level"] != want {
-			t.Errorf("status %d logged at %v, want %s", status, rec["level"], want)
+		if rec["level"] != "INFO" || rec["status"] != float64(status) {
+			t.Errorf("status %d logged at %v with status %v, want INFO carrying the status", status, rec["level"], rec["status"])
 		}
+	}
+}
+
+func TestRequestLogger_WritesOneLinePerRequest(t *testing.T) {
+	ring := captureLogs(t)
+
+	httputil.RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/probe", nil))
+
+	if got := ring.Snapshot(); len(got) != 1 || got[0].Message != "request.complete" {
+		t.Errorf("records = %+v, want only request.complete", got)
 	}
 }

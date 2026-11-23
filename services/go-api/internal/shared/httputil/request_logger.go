@@ -1,6 +1,7 @@
 package httputil
 
 import (
+	"altune/go-api/internal/shared/logging"
 	"log/slog"
 	"net/http"
 	"time"
@@ -10,31 +11,15 @@ func RequestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		sw := newStatusWriter(w)
-
-		slog.InfoContext(r.Context(), "request.start",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"remote", r.RemoteAddr,
-		)
-
 		defer func() {
-			duration := time.Since(start)
-			level := slog.LevelInfo
-			if sw.status >= 500 {
-				level = slog.LevelError
-			} else if sw.status >= 400 {
-				level = slog.LevelWarn
-			}
-
-			slog.Log(r.Context(), level, "request.complete",
-				"method", r.Method,
-				"path", r.URL.Path,
-				"status", sw.status,
-				"duration", duration,
-				"bytes", sw.bytes,
+			slog.InfoContext(r.Context(), "request.complete",
+				logging.KeyMethod, r.Method,
+				logging.KeyPath, r.URL.Path,
+				logging.KeyStatus, sw.status,
+				logging.KeyDuration, time.Since(start),
+				logging.KeyBytes, sw.bytes,
 			)
 		}()
-
 		next.ServeHTTP(sw, r)
 	})
 }
