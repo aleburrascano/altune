@@ -149,6 +149,13 @@ func discAssertJSON(t *testing.T, rec *httptest.ResponseRecorder) {
 	}
 }
 
+func discAssertProblem(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	if ct := rec.Header().Get("Content-Type"); ct != "application/problem+json" {
+		t.Errorf("Content-Type = %q, want application/problem+json", ct)
+	}
+}
+
 func buildDiscoveryRouter(
 	searchProvider *fakeSearchProvider,
 	historyRepo *fakeSearchHistoryRepo,
@@ -398,9 +405,7 @@ func TestHandleSearchHistory(t *testing.T) {
 			rec := discServe(t, router, http.MethodGet, "/discovery/search-history?limit=10", nil)
 
 			discAssertStatus(t, rec, tt.wantStatus)
-			if tt.wantStatus == http.StatusOK {
-				discAssertJSON(t, rec)
-			}
+			discAssertJSON(t, rec)
 
 			var resp httputil.List[discovery.SearchHistoryItemDTO]
 			discDecodeJSON(t, rec, &resp)
@@ -487,6 +492,8 @@ func TestHandleAlbumTracks(t *testing.T) {
 			discAssertStatus(t, rec, tt.wantStatus)
 			if tt.wantStatus == http.StatusOK {
 				discAssertJSON(t, rec)
+			} else {
+				discAssertProblem(t, rec)
 			}
 
 			if tt.wantStatus == http.StatusOK {
@@ -544,6 +551,8 @@ func TestHandleArtistTopTracks(t *testing.T) {
 			discAssertStatus(t, rec, tt.wantStatus)
 			if tt.wantStatus == http.StatusOK {
 				discAssertJSON(t, rec)
+			} else {
+				discAssertProblem(t, rec)
 			}
 		})
 	}
@@ -593,6 +602,8 @@ func TestHandleArtistAlbums(t *testing.T) {
 			discAssertStatus(t, rec, tt.wantStatus)
 			if tt.wantStatus == http.StatusOK {
 				discAssertJSON(t, rec)
+			} else {
+				discAssertProblem(t, rec)
 			}
 		})
 	}
@@ -760,9 +771,7 @@ func (e statusCodedError) ErrorCode() string { return e.code }
 func assertErrorCode(t *testing.T, rec *httptest.ResponseRecorder, wantStatus int, wantCode string) {
 	t.Helper()
 	discAssertStatus(t, rec, wantStatus)
-	if ct := rec.Header().Get("Content-Type"); ct != "application/problem+json" {
-		t.Errorf("Content-Type = %q, want application/problem+json", ct)
-	}
+	discAssertProblem(t, rec)
 	var resp httputil.ErrorResponse
 	discDecodeJSON(t, rec, &resp)
 	if resp.Code != wantCode {

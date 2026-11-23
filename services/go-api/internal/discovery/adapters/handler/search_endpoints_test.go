@@ -1439,6 +1439,15 @@ func TestHandleClearSearchHistory_AuditsFailure(t *testing.T) {
 	if !ok {
 		t.Fatalf("no clear search history failed record; logs: %v", ring.Snapshot())
 	}
+	if r.Level != "WARN" {
+		t.Errorf("level = %q, want WARN: the audit record is not the failure's log", r.Level)
+	}
+	if cause, logged := r.Attrs["error"]; logged {
+		t.Errorf("audit record carries the cause %q, which belongs to the boundary's record", cause)
+	}
+	if failed, ok := findRecord(ring, "request.failed"); !ok || !strings.Contains(failed.Attrs["error"], "db unavailable") {
+		t.Errorf("want one request.failed record holding the cause; logs: %v", ring.Snapshot())
+	}
 	if r.Attrs["user_id"] != discTestUserId.String() {
 		t.Errorf("user_id = %q, want %q", r.Attrs["user_id"], discTestUserId.String())
 	}
