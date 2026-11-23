@@ -42,7 +42,11 @@ func (p *tracklistProvider) GetAlbumTracks(_ context.Context, _ discovery.Provid
 }
 
 func tracklistService(failing map[string]bool) *discovery.GetArtistContentService {
-	provider := &tracklistProvider{
+	return discovery.NewGetArtistContentService(map[discovery.ProviderName]discovery.ArtistContentProvider{discovery.ProviderDeezer: newTracklistProvider(failing)})
+}
+
+func newTracklistProvider(failing map[string]bool) *tracklistProvider {
+	return &tracklistProvider{
 		FakeArtistContentProvider: &discovery.FakeArtistContentProvider{
 			Albums: []discovery.SearchResult{
 				{Kind: discovery.ResultKindAlbum, Title: "Heaven or Hell", Sources: []discovery.SourceRef{{Provider: discovery.ProviderDeezer, ExternalID: "a1"}}},
@@ -55,7 +59,6 @@ func tracklistService(failing map[string]bool) *discovery.GetArtistContentServic
 		},
 		failing: failing,
 	}
-	return discovery.NewGetArtistContentService(map[discovery.ProviderName]discovery.ArtistContentProvider{discovery.ProviderDeezer: provider})
 }
 
 func TestGetArtistContentService_CatalogTitles_IncludesEveryAlbumTracklist(t *testing.T) {
@@ -72,6 +75,32 @@ func TestGetArtistContentService_CatalogTitles_IncludesEveryAlbumTracklist(t *te
 
 func TestGetArtistContentService_CatalogTitles_FailedTracklistIsPartialButKeepsTheRest(t *testing.T) {
 	titles, err := tracklistService(map[string]bool{"a1": true}).CatalogTitles(context.Background(), discovery.ProviderDeezer, "artist-1", nil)
+	if !errors.Is(err, discovery.ErrPartialCatalog) {
+		t.Fatalf("err = %v, want ErrPartialCatalog", err)
+	}
+	if !slices.Contains(titles, "Deep Cut Two") || slices.Contains(titles, "Deep Cut One") {
+		t.Errorf("titles = %v, want the second tracklist only", titles)
+	}
+}
+
+type panickingTracklistProvider struct {
+	*tracklistProvider
+	panicsOn string
+}
+
+func (p *panickingTracklistProvider) GetAlbumTracks(ctx context.Context, provider discovery.ProviderName, albumID string) ([]discovery.SearchResult, error) {
+	if albumID == p.panicsOn {
+		panic("tracklist parser exploded")
+	}
+	return p.tracklistProvider.GetAlbumTracks(ctx, provider, albumID)
+}
+
+func TestGetArtistContentService_CatalogTitles_PanickingTracklistIsPartialNotACrash(t *testing.T) {
+	provider := &panickingTracklistProvider{tracklistProvider: newTracklistProvider(nil), panicsOn: "a1"}
+	svc := discovery.NewGetArtistContentService(map[discovery.ProviderName]discovery.ArtistContentProvider{discovery.ProviderDeezer: provider})
+
+	titles, err := svc.CatalogTitles(context.Background(), discovery.ProviderDeezer, "artist-1", nil)
+
 	if !errors.Is(err, discovery.ErrPartialCatalog) {
 		t.Fatalf("err = %v, want ErrPartialCatalog", err)
 	}

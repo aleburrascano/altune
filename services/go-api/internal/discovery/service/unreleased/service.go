@@ -167,16 +167,17 @@ type lookedUpDetail struct {
 
 func (s *Service) lookUpDetails(ctx context.Context, songs []domain.UnreleasedSong) (details []lookedUpDetail, complete bool, err error) {
 	details = make([]lookedUpDetail, len(songs))
-	g := fanout.New(max(s.cfg.DetailConcurrency, 1))
+	g := fanout.New("unreleased.detail_lookup_panic", max(s.cfg.DetailConcurrency, 1))
 	looked := max(min(len(songs), s.cfg.MaxDetails), 0)
 	for i := range looked {
-		g.Go(func() { details[i] = s.lookUpDetail(ctx, songs[i]) })
+		g.Go(ctx, func() { details[i] = s.lookUpDetail(ctx, songs[i]) })
 	}
-	g.Wait()
+	panicked := g.Wait()
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return nil, false, ctxErr
 	}
-	return details, !slices.ContainsFunc(details[:looked], func(d lookedUpDetail) bool { return !d.found }), nil
+	complete = panicked == nil && !slices.ContainsFunc(details[:looked], func(d lookedUpDetail) bool { return !d.found })
+	return details, complete, nil
 }
 
 func (s *Service) lookUpDetail(ctx context.Context, song domain.UnreleasedSong) lookedUpDetail {

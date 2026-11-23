@@ -615,3 +615,26 @@ func TestService_Lookup_BuildVersionCurrentStoredArtistStartsNoRebuild(t *testin
 		t.Errorf("Lookup = (%+v, %v), searched %v, writes %v; want A and no rebuild", got, err, genius.SearchedFor, store.Writes())
 	}
 }
+
+type panickingDetailCatalog struct {
+	*discovery.FakeGeniusSongCatalog
+}
+
+func (panickingDetailCatalog) SongDetail(context.Context, int) (discovery.GeniusSongDetail, error) {
+	panic("genius parser exploded")
+}
+
+func TestService_List_PanickingDetailLookupIsAnIncompleteAnswerNotACrash(t *testing.T) {
+	genius := panickingDetailCatalog{&discovery.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}}
+	cache := newMemoryCache()
+	svc := discovery.NewUnreleasedService(genius, &discovery.ArtistCatalogTitles{}, cache, cachedConfig)
+
+	got, err := svc.List(context.Background(), discovery.ProviderDeezer, "1", "Artist", nil)
+
+	if err != nil || len(got) != 1 || got[0].HasMedia != nil {
+		t.Fatalf("List = (%v, %v), want the song kept with unknown has_media", got, err)
+	}
+	if ttl := cache.ttls["1|artist"]; ttl != shortTTL {
+		t.Errorf("ttl = %v, want the short ttl of an incomplete answer", ttl)
+	}
+}

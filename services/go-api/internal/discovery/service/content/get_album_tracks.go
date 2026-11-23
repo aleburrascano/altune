@@ -51,15 +51,15 @@ func (s *GetAlbumTracksService) enrichFeatured(ctx context.Context, results []do
 	if s.featured == nil {
 		return
 	}
-	g := fanout.New(albumFeaturedConcurrency)
+	g := fanout.New("album_tracks.featured_panic", albumFeaturedConcurrency)
 	for i := range results {
 		if !answered[i] && hasDeezerTrackID(results[i]) {
-			g.Go(func() {
+			g.Go(ctx, func() {
 				s.lookupFeatured(ctx, &results[i])
 			})
 		}
 	}
-	g.Wait()
+	_ = g.Wait()
 }
 
 func hasDeezerTrackID(r domain.SearchResult) bool {

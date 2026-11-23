@@ -79,13 +79,15 @@ func (t *tracklistTitles) markIncomplete() {
 
 func (s *GetArtistContentService) albumTracklistTitles(ctx context.Context, albums []domain.SearchResult) (titles []string, complete bool) {
 	collected := &tracklistTitles{complete: true}
-	g := fanout.New(catalogAlbumTracksConcurrency)
+	g := fanout.New("artist_content.tracklist_panic", catalogAlbumTracksConcurrency)
 	for _, album := range albums {
 		if source, lister, ok := s.tracklistSource(album); ok {
-			g.Go(func() { fetchTracklist(ctx, source, lister, collected) })
+			g.Go(ctx, func() { fetchTracklist(ctx, source, lister, collected) })
 		}
 	}
-	g.Wait()
+	if g.Wait() != nil {
+		collected.markIncomplete()
+	}
 	return collected.titles, collected.complete
 }
 

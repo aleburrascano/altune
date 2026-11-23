@@ -112,7 +112,7 @@ func RunLibraryEvalMode(ctx context.Context, entities []LibraryEntity, searcher 
 	}
 
 	results := make([]EvalResult, len(entities))
-	runParallel(entities, concurrency, progress, func(i int, entity LibraryEntity) {
+	runParallel(ctx, entities, concurrency, progress, func(i int, entity LibraryEntity) {
 		results[i] = evalOneQuery(ctx, mode.queryFor(entity), entity, searcher, k)
 	})
 
