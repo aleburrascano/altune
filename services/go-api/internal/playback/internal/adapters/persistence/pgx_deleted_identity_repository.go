@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/shared/database"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -43,7 +42,7 @@ const ownersWithoutIdentitySQL = `
 	  ORDER BY q.user_id
 	  LIMIT $2
 	)
-	SELECT p.user_id, u.id IS NULL
+	SELECT p.user_id, u.id IS NULL AS orphaned
 	FROM page p
 	LEFT JOIN LATERAL (SELECT a.id FROM auth.users a WHERE a.id = p.user_id) u ON true
 	WHERE EXISTS (SELECT 1 FROM auth.users)
@@ -57,28 +56,25 @@ func (r *PgxDeletedIdentityRepository) ListOwnersWithoutIdentity(ctx context.Con
 	if err != nil {
 		return ports.OwnerScanPage{}, database.WrapUnreadable(listOwnersWithoutIdentityOp, ports.ErrIdentityStoreUnavailable, err)
 	}
-	defer rows.Close()
-	return scanOwnerPage(rows, after, window)
+	owners, err := pgx.CollectRows(rows, pgx.RowToStructByName[queueStateOwner])
+	if err != nil {
+		return ports.OwnerScanPage{}, database.WrapUnreadable(listOwnersWithoutIdentityOp, ports.ErrIdentityStoreUnavailable, err)
+	}
+	return ownerPage(owners, after, window), nil
 }
 
-func scanOwnerPage(rows pgx.Rows, after shared.UserId, window int) (ports.OwnerScanPage, error) {
-	page := ports.OwnerScanPage{Next: after}
-	scanned := 0
-	for rows.Next() {
-		var owner uuid.UUID
-		var orphaned bool
-		if err := rows.Scan(&owner, &orphaned); err != nil {
-			return ports.OwnerScanPage{}, fmt.Errorf("scan queue state owner: %w", err)
-		}
-		scanned++
-		page.Next = shared.NewUserId(owner)
-		if orphaned {
+type queueStateOwner struct {
+	UserID   uuid.UUID
+	Orphaned bool
+}
+
+func ownerPage(owners []queueStateOwner, after shared.UserId, window int) ports.OwnerScanPage {
+	page := ports.OwnerScanPage{Next: after, Done: len(owners) < window}
+	for _, owner := range owners {
+		page.Next = shared.NewUserId(owner.UserID)
+		if owner.Orphaned {
 			page.Orphaned = append(page.Orphaned, page.Next)
 		}
 	}
-	if err := rows.Err(); err != nil {
-		return ports.OwnerScanPage{}, database.WrapUnreadable(listOwnersWithoutIdentityOp, ports.ErrIdentityStoreUnavailable, err)
-	}
-	page.Done = scanned < window
-	return page, nil
+	return page
 }

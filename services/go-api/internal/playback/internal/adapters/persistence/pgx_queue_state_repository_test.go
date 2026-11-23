@@ -11,10 +11,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -953,7 +956,9 @@ func TestQueueStateOp_TransientClassification(t *testing.T) {
 		err  error
 		want bool
 	}{
-		{"connection refused", &pgconn.ConnectError{}, true},
+		{"connection refused", &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED}, true},
+		{"connection dropped without a message", fmt.Errorf("read: %w", io.EOF), true},
+		{"statement on a closed connection", pgconn.ErrConnClosed, true},
 		{"admin shutdown", &pgconn.PgError{Code: "57P01"}, true},
 		{"constraint violation", &pgconn.PgError{Code: "23505"}, false},
 		{"client cancel", context.Canceled, false},

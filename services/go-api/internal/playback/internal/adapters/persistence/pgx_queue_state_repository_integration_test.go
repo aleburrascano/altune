@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
-	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -16,23 +15,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func testPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
-	pool, err := pgxpool.New(context.Background(), dbURL)
-	if err != nil {
-		t.Fatalf("failed to connect: %v", err)
-	}
-	t.Cleanup(func() { pool.Close() })
-	return pool
-}
-
 func singleConnPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	cfg, err := pgxpool.ParseConfig(os.Getenv("DATABASE_URL"))
+	cfg, err := pgxpool.ParseConfig(sharedtest.DatabaseURL(t))
 	if err != nil {
 		t.Fatalf("parse config: %v", err)
 	}
@@ -66,7 +51,7 @@ func stateAt(userId shared.UserId, positionMs int64, at time.Time) *playback.Que
 
 func TestDeleteForUser_ErasesPersistedRow(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -95,7 +80,7 @@ func TestDeleteForUser_ErasesPersistedRow(t *testing.T) {
 
 func TestDeleteForUser_MissingRowIsNotAnError(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := playback.NewPgxQueueStateRepository(pool)
 
 	if err := repo.DeleteForUser(context.Background(), shared.NewUserId(uuid.New())); err != nil {
@@ -105,7 +90,7 @@ func TestDeleteForUser_MissingRowIsNotAnError(t *testing.T) {
 
 func TestUpsert_OlderSnapshotDoesNotClobberNewer(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -137,7 +122,7 @@ func TestUpsert_OlderSnapshotDoesNotClobberNewer(t *testing.T) {
 
 func TestUpsert_NewerSnapshotStillApplies(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -166,7 +151,7 @@ func TestUpsert_NewerSnapshotStillApplies(t *testing.T) {
 
 func TestUpsert_FastInstanceClockDoesNotRejectLaterSave(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -193,7 +178,7 @@ func TestUpsert_FastInstanceClockDoesNotRejectLaterSave(t *testing.T) {
 
 func TestUpsert_SaveDelayedInPoolIsStillStale(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	wide := testPool(t)
+	wide := sharedtest.Pool(t)
 	narrow := singleConnPool(t)
 
 	ctx := context.Background()
@@ -230,7 +215,7 @@ func TestUpsert_SaveDelayedInPoolIsStillStale(t *testing.T) {
 
 func TestUpsert_SaveDelayedPastAnErasureDoesNotResurrectIt(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	wide := testPool(t)
+	wide := sharedtest.Pool(t)
 	narrow := singleConnPool(t)
 
 	ctx := context.Background()
@@ -270,7 +255,7 @@ func TestUpsert_SaveDelayedPastAnErasureDoesNotResurrectIt(t *testing.T) {
 
 func TestUpsert_SaveBlockedOnTheErasureLockDoesNotResurrectIt(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 	dropQueueStateOnCleanup(t, pool, userId)
@@ -311,7 +296,7 @@ func TestUpsert_SaveBlockedOnTheErasureLockDoesNotResurrectIt(t *testing.T) {
 
 func TestDeleteForUser_ReapsRowsErasedPastTheFenceWindow(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	ctx := context.Background()
 	longErased, erasingNow := shared.NewUserId(uuid.New()), shared.NewUserId(uuid.New())
 	dropQueueStateOnCleanup(t, pool, longErased)
@@ -342,7 +327,7 @@ func TestDeleteForUser_ReapsRowsErasedPastTheFenceWindow(t *testing.T) {
 
 func TestUpsert_SaveHandledAfterAnErasureStillApplies(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -372,7 +357,7 @@ func TestUpsert_SaveHandledAfterAnErasureStillApplies(t *testing.T) {
 
 func TestUpdatePosition_DelayedPastAnErasureDoesNotRecreateTheRow(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	wide := testPool(t)
+	wide := sharedtest.Pool(t)
 	narrow := singleConnPool(t)
 
 	ctx := context.Background()
@@ -420,7 +405,7 @@ func TestUpdatePosition_DelayedPastAnErasureDoesNotRecreateTheRow(t *testing.T) 
 
 func TestDeleteForUser_ErasedRowEqualsEmptyQueueState(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -463,16 +448,6 @@ func TestDeleteForUser_ErasedRowEqualsEmptyQueueState(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("erased row = %+v, want %+v", got, want)
 	}
-}
-
-func rolledBackTx(t *testing.T, ctx context.Context, pool *pgxpool.Pool) pgx.Tx {
-	t.Helper()
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
-	return tx
 }
 
 func trackListChunkWrites(t *testing.T, ctx context.Context, tx pgx.Tx) int64 {
@@ -540,7 +515,7 @@ func cleanupUser(t *testing.T, q playback.QueueStateDB, userId shared.UserId) {
 func TestUpsert_UnchangedTrackListsAreNotRewritten(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	ctx := context.Background()
-	tx := rolledBackTx(t, ctx, testPool(t))
+	tx := sharedtest.Tx(t)
 	repo := playback.NewPgxQueueStateRepository(tx)
 	userId := shared.NewUserId(uuid.New())
 	trackIds := uuidTrackIds(maxQueueLength)
@@ -568,7 +543,7 @@ func TestUpsert_UnchangedTrackListsAreNotRewritten(t *testing.T) {
 
 func TestUpsert_ChangedTrackListIsStillWritten(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -606,7 +581,7 @@ func positionAt(t *testing.T, userId shared.UserId, idx int, trackId string, pos
 func TestUpdatePosition_WritesOnlyThePosition(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	ctx := context.Background()
-	tx := rolledBackTx(t, ctx, testPool(t))
+	tx := sharedtest.Tx(t)
 	repo := playback.NewPgxQueueStateRepository(tx)
 	userId := shared.NewUserId(uuid.New())
 	trackIds := uuidTrackIds(maxQueueLength)
@@ -637,7 +612,7 @@ func TestUpdatePosition_WritesOnlyThePosition(t *testing.T) {
 
 func TestUpdatePosition_NeverOverwritesANewerFullQueue(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -663,7 +638,7 @@ func TestUpdatePosition_NeverOverwritesANewerFullQueue(t *testing.T) {
 
 func TestUpdatePosition_OrdersAgainstFullSavesBothWays(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -693,7 +668,7 @@ func TestUpdatePosition_OrdersAgainstFullSavesBothWays(t *testing.T) {
 
 func TestUpdatePosition_DoesNotLandOnADifferentQueue(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -765,7 +740,7 @@ func awaitBlockedQueueWriter(t *testing.T, ctx context.Context, q playback.Queue
 
 func TestUpdatePosition_QueueReplacedDuringItsLockWaitTellsTheClientToResync(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -793,7 +768,7 @@ func TestUpdatePosition_QueueReplacedDuringItsLockWaitTellsTheClientToResync(t *
 
 func TestUpdatePosition_AppliesOverAFullSaveItWaitedOut(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -826,7 +801,7 @@ func TestUpdatePosition_HandledBeforeTheFullSaveItWaitedOutStaysStale(t *testing
 		handledBeforeTheFullSave = 250 * time.Millisecond
 		lockHeldWhileItWaits     = time.Second
 	)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -856,7 +831,7 @@ func TestUpdatePosition_HandledBeforeTheFullSaveItWaitedOutStaysStale(t *testing
 
 func TestUpsert_SaveStampedWithinTheGraceAfterAnErasureIsRefused(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -884,7 +859,7 @@ func TestUpsert_SaveStampedWithinTheGraceAfterAnErasureIsRefused(t *testing.T) {
 
 func TestReapErasedStates_DropsOnlyTombstonesPastTheFenceWindow(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	ctx := context.Background()
 	old, recent := shared.NewUserId(uuid.New()), shared.NewUserId(uuid.New())
 	dropQueueStateOnCleanup(t, pool, old)
@@ -920,7 +895,7 @@ func TestReapErasedStates_DropsOnlyTombstonesPastTheFenceWindow(t *testing.T) {
 
 func TestUpdatePosition_MatchesALegacyNonCanonicalStoredId(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	repo := playback.NewPgxQueueStateRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
