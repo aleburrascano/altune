@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/internal/core/ranking"
 	"context"
 	"log/slog"
 	"math"
@@ -25,10 +26,6 @@ const (
 	looseDurationBonus  = 0.1
 	resolvedBonus       = 0.1
 	qualifierPenalty    = 0.2
-
-	channelTopic  = "topic"
-	channelArtist = "artist"
-	channelOther  = "other"
 )
 
 func ScoreConfidence(e Evidence, trackSeconds float64) float64 {
@@ -61,7 +58,7 @@ func unknownConfidence(e Evidence, trackSeconds float64) float64 {
 }
 
 func channelBonus(class string) float64 {
-	if class == channelTopic || class == channelArtist {
+	if class == ranking.ChannelTopic || class == ranking.ChannelArtist {
 		return trustedChannelBonus
 	}
 	return 0
@@ -83,7 +80,7 @@ func durationBonus(delta *float64, trackSeconds float64) float64 {
 }
 
 func (ac *AcquisitionContext) buildEvidence(candidate ports.AudioCandidate, verified verificationResult) Evidence {
-	_, qualifiers := UnrequestedQualifiers(ac.Track.Title, ac.Track.Artist, candidate.Title)
+	_, qualifiers := ranking.UnrequestedQualifiers(ac.Track.Title, ac.Track.Artist, candidate.Title)
 	var delta *float64
 	if d, known := ac.durationDelta(candidate, verified.probed); known {
 		delta = &d
@@ -92,7 +89,7 @@ func (ac *AcquisitionContext) buildEvidence(candidate ports.AudioCandidate, veri
 		Verdict:              string(verified.verdict.Kind),
 		AcoustIDScore:        verified.verdict.Score,
 		DurationDeltaSeconds: delta,
-		Channel:              uploaderClass(ac.Track.Artist, candidate),
+		Channel:              ranking.UploaderOf(ac.Track.Artist, candidate),
 		Qualifiers:           qualifiers,
 		Resolved:             candidate.IsResolved(),
 		SourceTitle:          candidate.Title,
@@ -158,11 +155,11 @@ func officialVideoKind(c ports.AudioCandidate) grade.SourceKind {
 }
 
 func UploaderSourceKind(trackArtist, channel string) grade.SourceKind {
-	return uploadSourceKind(uploaderClass(trackArtist, ports.AudioCandidate{Channel: channel, Kind: ports.KindUpload}))
+	return uploadSourceKind(ranking.UploaderOf(trackArtist, ports.AudioCandidate{Channel: channel, Kind: ports.KindUpload}))
 }
 
 func uploadSourceKind(channelClass string) grade.SourceKind {
-	if channelClass == channelTopic || channelClass == channelArtist {
+	if channelClass == ranking.ChannelTopic || channelClass == ranking.ChannelArtist {
 		return grade.LabelUpload
 	}
 	return grade.FanUpload

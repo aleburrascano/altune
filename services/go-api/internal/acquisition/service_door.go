@@ -25,7 +25,6 @@ var (
 	ScoreConfidence                   = service.ScoreConfidence
 	SourceKindOf                      = service.SourceKindOf
 	SweepStaleTempDirs                = service.SweepStaleTempDirs
-	UnrequestedQualifiers             = service.UnrequestedQualifiers
 	UploaderSourceKind                = service.UploaderSourceKind
 	WithAcquireConfidenceFloor        = service.WithAcquireConfidenceFloor
 	WithAcquireEvents                 = service.WithAcquireEvents

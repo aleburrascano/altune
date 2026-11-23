@@ -1,6 +1,8 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/internal/core/ranking"
 	"context"
 	"fmt"
 )
@@ -28,4 +30,20 @@ func (s *SelectStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afte
 
 func (s *SelectStep) Rollback(_ context.Context, _ *AcquisitionContext) error {
 	return nil
+}
+
+func rankAndCollect(ctx context.Context, track TrackRef, expectedLength float64, candidates []ports.AudioCandidate) ([]ports.AudioCandidate, []CandidateRejection) {
+	ranked, refused := ranking.Rank(ctx, ranking.Track{
+		ID:              track.ID,
+		Title:           track.Title,
+		Artist:          track.Artist,
+		ExpectedLength:  expectedLength,
+		CatalogExplicit: track.CatalogExplicit,
+	}, candidates)
+	var rejected []CandidateRejection
+	for _, r := range refused {
+		c := r.Candidate
+		rejected = append(rejected, CandidateRejection{URL: c.URL, Title: c.Title, Source: c.Source, Stage: RejectionStage(r.Stage), Reason: r.Reason})
+	}
+	return ranked, rejected
 }
