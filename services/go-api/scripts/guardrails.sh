@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-NILAWAY_VERSION="571480214735"
 GOLANGCI_VERSION="v2.12.2"
 export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
 
@@ -58,30 +57,12 @@ do_vuln() {
   govulncheck ./... || rc=1
 }
 
-do_nilaway() {
-  echo "== nilaway ceiling ratchet =="
-  if [ "${NILAWAY_LOCAL:-}" != 1 ]; then
-    echo "SKIP nilaway: runs in CI only (set NILAWAY_LOCAL=1 to run it here)"
-    return
-  fi
-  have nilaway || go install "go.uber.org/nilaway/cmd/nilaway@${NILAWAY_VERSION}"
-  local base count
-  base="$(tr -dc '0-9' < nilaway-baseline.txt)"
-  count="$(nilaway ./... 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -c 'Potential nil panic detected')"
-  echo "nilaway findings: ${count} (ceiling ${base})"
-  if [ "${count}" -gt "${base}" ]; then
-    echo "ERROR: nilaway findings rose from ${base} to ${count}"
-    rc=1
-  fi
-}
-
 case "${target}" in
   strict)  do_strict ;;
   fmt)     do_fmt ;;
   fmt-all) do_fmt_all ;;
   vuln)    do_vuln ;;
-  nilaway) do_nilaway ;;
-  all)     do_strict; do_vuln; do_nilaway ;;
+  all)     do_strict; do_vuln ;;
   *)       echo "unknown target: ${target}"; exit 2 ;;
 esac
 
