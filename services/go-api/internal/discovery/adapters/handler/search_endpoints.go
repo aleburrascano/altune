@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/discovery/internal/core/history"
 	"altune/go-api/internal/discovery/service/interaction"
 	"altune/go-api/internal/discovery/service/unreleased"
+	shareddomain "altune/go-api/internal/shared/domain"
 	"altune/go-api/internal/shared/httputil"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/requestuser"
@@ -16,13 +17,14 @@ import (
 	"time"
 )
 
+var requestCodeInvalidBody = shareddomain.CodeDiscoveryInvalidBody
+
 const (
 	requestCodeQRequired         = "discovery.q_required"
 	requestCodeInvalidKind       = "discovery.invalid_kind"
 	requestCodeInvalidProvider   = "discovery.invalid_provider"
 	requestCodeInvalidParam      = "discovery.invalid_param"
 	requestCodeInvalidEventType  = "discovery.invalid_event_type"
-	requestCodeInvalidBody       = "discovery.invalid_body"
 	searchCodeAllProvidersFailed = "discovery.all_providers_failed"
 )
 
