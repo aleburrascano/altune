@@ -606,3 +606,34 @@ func TestNewElection_WinsTheBackgroundLockAndAnnouncesATwentyFiveSecondSettle(t 
 		t.Fatal("the background election never won its lock")
 	}
 }
+
+type countedElection struct {
+	*fakeElection
+	counters leader.Counters
+}
+
+func (c countedElection) Counters() leader.Counters { return c.counters }
+
+func TestLeaderCounters_ReportTheElectionsOwnCounters(t *testing.T) {
+	var r jobs.Runner
+	if got := r.LeaderCounters(); got != (leader.Counters{}) {
+		t.Errorf("before leading, LeaderCounters = %+v, want zero", got)
+	}
+	want := leader.Counters{Attempts: 4, Wins: 3, Failures: 7}
+
+	lead(t, &r, countedElection{fakeElection: leading(), counters: want})
+
+	if got := r.LeaderCounters(); got != want {
+		t.Errorf("LeaderCounters = %+v, want the election's %+v", got, want)
+	}
+}
+
+func TestLeaderCounters_AnElectionThatKeepsNoCountersReportsZero(t *testing.T) {
+	var r jobs.Runner
+
+	lead(t, &r, leading())
+
+	if got := r.LeaderCounters(); got != (leader.Counters{}) {
+		t.Errorf("LeaderCounters = %+v, want zero", got)
+	}
+}

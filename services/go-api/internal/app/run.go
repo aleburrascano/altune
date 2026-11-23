@@ -27,14 +27,13 @@ func (a *App) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := serve(ctx, a.newServer(ctx, assembly.Handler())); err != nil {
-		return err
-	}
+	serveErr := serve(ctx, a.newServer(ctx, assembly.Handler()))
+	cancel()
 	slog.InfoContext(ctx, "waiting for background tasks")
 	outcomes := assembly.Shutdown()
 	shutdown.CloseDatastores(ctx, outcomes, shutdown.Datastores{Pool: pool, Redis: redisClient})
 	slog.InfoContext(ctx, "shutdown complete")
-	return nil
+	return serveErr
 }
 
 func serve(ctx context.Context, server *http.Server) error {

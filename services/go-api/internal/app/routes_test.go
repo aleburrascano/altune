@@ -1,20 +1,9 @@
-package app
+package app_test
 
 import (
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/eventstream"
-	"altune/go-api/internal/observe"
-	"altune/go-api/internal/playback"
+	"altune/go-api/internal/app"
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/events"
-	"altune/go-api/internal/shared/httputiltest"
-	shared "altune/go-api/internal/shared/kernel"
-	"altune/go-api/internal/shared/logging"
-	"bufio"
-	"bytes"
 	"context"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -22,167 +11,38 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func TestRouter_PanickingHandlerLogsRequestCompleteAs500Error(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	ring := logging.Setup("error", false)
-
-	a := &App{cfg: &config.Config{Env: "test"}}
-	r := a.newRouter(apiWriteTimeout)
-	r.Get("/v1/boom", func(http.ResponseWriter, *http.Request) {
-		panic("handler exploded")
-	})
-	rec := httptest.NewRecorder()
-
-	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/boom", nil))
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("response status = %d, want 500", rec.Code)
-	}
-	var completes []logging.CapturedRecord
-	for _, captured := range ring.Snapshot() {
-		if captured.Message == "request.complete" {
-			completes = append(completes, captured)
-		}
-	}
-	if len(completes) != 1 {
-		t.Fatalf("request.complete records = %d, want 1", len(completes))
-	}
-	if got := completes[0].Attrs["status"]; got != "500" {
-		t.Errorf("request.complete status = %s, want 500", got)
-	}
-	if got := completes[0].Level; got != slog.LevelError.String() {
-		t.Errorf("request.complete level = %s, want %s", got, slog.LevelError)
-	}
-}
-
-const routeWriteDeadline = 150 * time.Millisecond
-
-func newDeadlineRouter(uid shared.UserId, sse *eventstream.EventStreamHandler, bulkErrs chan<- error) *chi.Mux {
-	a := &App{cfg: &config.Config{Env: "test"}}
-	r := a.newRouter(routeWriteDeadline)
-	r.Get("/v1/bulk", func(w http.ResponseWriter, _ *http.Request) {
-		chunk := bytes.Repeat([]byte("x"), 16<<10)
-		giveUp := time.Now().Add(10 * time.Second)
-		for time.Now().Before(giveUp) {
-			if _, err := w.Write(chunk); err != nil {
-				bulkErrs <- err
-				return
-			}
-		}
-		bulkErrs <- nil
-	})
-	r.Handle("/v1/events", http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		sse.ServeHTTP(w, req.WithContext(auth.ContextWithUserID(req.Context(), uid)))
-	}))
-	return r
-}
-
-func TestRouter_WriteDeadlineCutsOffSlowReaderOnNonSSERoute(t *testing.T) {
-	bulkErrs := make(chan error, 1)
-	sse := eventstream.NewEventStreamHandler(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), 0)
-	srv := httputiltest.NewServer(t, newDeadlineRouter(shared.NewUserId(uuid.New()), sse, bulkErrs))
-
-	began := time.Now()
-	httputiltest.Get(t, srv, "/v1/bulk", nil)
-
-	select {
-	case err := <-bulkErrs:
-		if err == nil {
-			t.Fatal("bulk writes never failed: slow reader held the handler open")
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("bulk handler still blocked in Write after 3s: no write deadline on non-SSE route")
-	}
-	if elapsed := time.Since(began); elapsed < routeWriteDeadline {
-		t.Errorf("cut off after %s, before the %s deadline", elapsed, routeWriteDeadline)
-	}
-}
-
-func TestRouter_SSEStreamOutlivesRouteWriteDeadline(t *testing.T) {
-	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
-	uid := shared.NewUserId(uuid.New())
-	sse := eventstream.NewEventStreamHandler(bus, 0).WithHeartbeat(routeWriteDeadline / 3)
-	srv := httputiltest.NewServer(t, newDeadlineRouter(uid, sse, make(chan error, 1)))
-
-	conn, br := httputiltest.Get(t, srv, "/v1/events", nil)
-	resp := httputiltest.ReadResponse(t, conn, br)
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
-	body := bufio.NewReader(resp.Body)
-
-	time.Sleep(4 * routeWriteDeadline)
-	bus.Publish(context.Background(), uid, "late.event", map[string]any{"k": "v"})
-	readUntil(t, body, func(l string) bool { return strings.HasPrefix(l, "event: late.event") })
-}
-
-func TestRouter_SSEPerFrameDeadlineReachesConnection(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	slog.SetDefault(slog.New(slog.DiscardHandler))
-
-	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
-	uid := shared.NewUserId(uuid.New())
-	sse := eventstream.NewEventStreamHandler(bus, 0).WithWriteTimeout(routeWriteDeadline).WithHeartbeat(time.Hour)
-	done := make(chan struct{})
-	router := newDeadlineRouter(uid, sse, make(chan error, 1))
-	srv := httputiltest.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer close(done)
-		router.ServeHTTP(w, r)
-	}))
-
-	httputiltest.Get(t, srv, "/v1/events", nil)
-
-	payload := map[string]any{"pad": strings.Repeat("x", 16<<10)}
-	giveUp := time.After(5 * time.Second)
-	for {
-		select {
-		case <-done:
-			return
-		case <-giveUp:
-			t.Fatal("SSE handler still blocked on a stalled client after 5s: per-frame deadline not applied")
-		default:
-			bus.Publish(context.Background(), uid, "bulk", payload)
-			time.Sleep(5 * time.Millisecond)
-		}
-	}
-}
-
 func productionRouter(t *testing.T) *chi.Mux {
 	t.Helper()
-	return productionRouterFor(t, &config.Config{MusicDir: t.TempDir()})
+	return productionRouterFor(t, jwksConfig(t))
 }
 
 func productionRouterFor(t *testing.T, cfg *config.Config) *chi.Mux {
 	t.Helper()
-	pool, err := pgxpool.New(context.Background(), blackHoleDatabase(t))
+	return assembledRouter(t, cfg, unreachablePool(t))
+}
+
+func assembledRouter(t *testing.T, cfg *config.Config, pool *pgxpool.Pool) *chi.Mux {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	assembly, err := app.Assemble(ctx, cfg, app.Handles{Pool: pool, Transport: refuseEgress{}})
 	if err != nil {
-		t.Fatalf("pgxpool.New: %v", err)
+		t.Fatalf("Assemble: %v", err)
 	}
-	t.Cleanup(pool.Close)
-	a := &App{cfg: cfg, sem: make(chan struct{}, 1), pool: pool}
-	cat, err := a.wireCatalog(t.Context(), nil, &discovery.Discovery{})
-	if err != nil {
-		t.Fatalf("wireCatalog: %v", err)
-	}
-	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
-		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
+	t.Cleanup(func() {
+		cancel()
+		assembly.Shutdown()
 	})
-	r := a.mountRoutes(verifier, cat, playback.NewQueueHandler(nil),
-		discovery.NewDiscoveryHandler(discovery.DiscoveryServices{}))
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	a.wireObserve(ctx, r, verifier, observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))))
-	return r
+	mux, ok := assembly.Handler().(*chi.Mux)
+	if !ok {
+		t.Fatalf("Handler() is a %T, want the production *chi.Mux route table", assembly.Handler())
+	}
+	return mux
 }
 
 func TestRouter_MountsNoAdminRoute(t *testing.T) {
@@ -212,7 +72,9 @@ func TestRouter_MountsNoAdminRoute(t *testing.T) {
 }
 
 func TestRouter_MountsNoTestLoginInDevelopment(t *testing.T) {
-	r := productionRouterFor(t, &config.Config{Env: "development", MusicDir: t.TempDir()})
+	cfg := jwksConfig(t)
+	cfg.Env = "development"
+	r := productionRouterFor(t, cfg)
 
 	var observed int
 	err := chi.Walk(r, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
@@ -336,7 +198,7 @@ func TestCapabilityNotes_NameMountedRoutes(t *testing.T) {
 }
 
 func TestRouter_PublicAuthFailureRouteIsAnonymousAndLibraryStaysAuthed(t *testing.T) {
-	r := productionRouter(t)
+	r := assembledRouter(t, jwksConfig(t), integrationPool(t))
 
 	rec := httptest.NewRecorder()
 	body := strings.NewReader(`{"reason":"invalid_credentials","app_version":"1.2.3"}`)
@@ -352,111 +214,8 @@ func TestRouter_PublicAuthFailureRouteIsAnonymousAndLibraryStaysAuthed(t *testin
 	}
 }
 
-func TestRouter_RequestTimeoutReleasesBlockedV1HandlerButNotLongLivedRoutes(t *testing.T) {
-	const budget = 100 * time.Millisecond
-	a := &App{cfg: &config.Config{Env: "test"}, requestTimeout: budget}
-	r := a.newRouter(apiWriteTimeout)
-	blockUntilDone := func(w http.ResponseWriter, req *http.Request) {
-		select {
-		case <-req.Context().Done():
-			w.WriteHeader(http.StatusGatewayTimeout)
-		case <-time.After(3 * budget):
-			w.WriteHeader(http.StatusOK)
-		}
-	}
-	r.Get("/v1/blocked", blockUntilDone)
-	r.Get("/v1/events", blockUntilDone)
-	r.Get("/v1/tracks/{trackId}/audio", blockUntilDone)
-	r.Get("/health", blockUntilDone)
-
-	cases := []struct {
-		path string
-		want int
-	}{
-		{"/v1/blocked", http.StatusGatewayTimeout},
-		{"/v1/events", http.StatusOK},
-		{"/v1/tracks/abc/audio", http.StatusOK},
-		{"/health", http.StatusOK},
-	}
-	for _, tc := range cases {
-		t.Run(tc.path, func(t *testing.T) {
-			rec := httptest.NewRecorder()
-			r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.path, nil))
-			if rec.Code != tc.want {
-				t.Errorf("GET %s = %d, want %d", tc.path, rec.Code, tc.want)
-			}
-		})
-	}
-}
-
-func TestRouter_CORSPreflightAllowsIdempotencyKeyOnlyForAllowedOrigin(t *testing.T) {
-	const allowed = "http://127.0.0.1:8081"
-	a := &App{cfg: &config.Config{Env: "test", CORSOrigins: []string{allowed}}}
-	r := a.newRouter(apiWriteTimeout)
-	r.Post("/v1/tracks", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) })
-	preflight := func(origin, headers string) *httptest.ResponseRecorder {
-		req := httptest.NewRequest(http.MethodOptions, "/v1/tracks", nil)
-		req.Header.Set("Origin", origin)
-		req.Header.Set("Access-Control-Request-Method", "POST")
-		req.Header.Set("Access-Control-Request-Headers", headers)
-		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, req)
-		return rec
-	}
-
-	rec := preflight(allowed, "authorization,content-type,idempotency-key")
-	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != allowed {
-		t.Errorf("Allow-Origin = %q, want %q", got, allowed)
-	}
-	if got := rec.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(strings.ToLower(got), "idempotency-key") {
-		t.Errorf("Allow-Headers = %q, want it to contain Idempotency-Key", got)
-	}
-
-	rec = preflight("http://evil.example", "authorization,content-type,idempotency-key")
-	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
-		t.Errorf("look-alike origin got Allow-Origin %q, want none", got)
-	}
-
-	rec = preflight(allowed, "authorization,x-not-allowed")
-	if got := rec.Header().Get("Access-Control-Allow-Headers"); got != "" {
-		t.Errorf("disallowed header got Allow-Headers %q, want none", got)
-	}
-}
-
-func TestRouter_CORSPreflightRefusesTheRetiredAnalyticsHeader(t *testing.T) {
-	const allowed = "http://127.0.0.1:8081"
-	a := &App{cfg: &config.Config{Env: "test", CORSOrigins: []string{allowed}}}
-	r := a.newRouter(apiWriteTimeout)
-	r.Post("/v1/discovery/events", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
-	req := httptest.NewRequest(http.MethodOptions, "/v1/discovery/events", nil)
-	req.Header.Set("Origin", allowed)
-	req.Header.Set("Access-Control-Request-Method", "POST")
-	req.Header.Set("Access-Control-Request-Headers", "authorization,x-altune-analytics")
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
-	if got := rec.Header().Get("Access-Control-Allow-Headers"); got != "" {
-		t.Errorf("the retired analytics opt-out header got Allow-Headers %q, want none", got)
-	}
-}
-
-func readUntil(t *testing.T, r *bufio.Reader, match func(string) bool) string {
-	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		line, err := r.ReadString('\n')
-		if err != nil {
-			t.Fatalf("reading stream: %v", err)
-		}
-		if match(strings.TrimRight(line, "\n")) {
-			return line
-		}
-	}
-	t.Fatal("timed out waiting for expected line")
-	return ""
-}
-
 func TestRouter_V1ResponsesCarryNosniffAndNoStore(t *testing.T) {
-	r := productionRouter(t)
+	r := assembledRouter(t, jwksConfig(t), integrationPool(t))
 
 	for _, tc := range []struct {
 		name, method, path, body string
@@ -481,13 +240,31 @@ func TestRouter_V1ResponsesCarryNosniffAndNoStore(t *testing.T) {
 	}
 }
 
-func TestV1ResponseHeaders_HandlerCacheControlOverridesDefault(t *testing.T) {
-	h := v1ResponseHeaders(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Cache-Control", "private, no-store")
-	}))
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/discovery/search", nil))
-	if got := rec.Header().Get("Cache-Control"); got != "private, no-store" {
-		t.Errorf("Cache-Control = %q, want handler value private, no-store", got)
+func TestRoutes_OnlyAWiredSchedulerMountsRetryAndReacquire(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		ytMusic   bool
+		wantRoute bool
+	}{
+		{name: "no sources leaves acquisition unwired", ytMusic: false, wantRoute: false},
+		{name: "a source wires the scheduler and its retry routes", ytMusic: true, wantRoute: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newJWKSFixture(t)
+			f.cfg.YtMusicEnabled = tt.ytMusic
+			h := assembledHandler(t, f.cfg)
+			token := signedToken(t, f.key, f.operator)
+
+			for _, action := range []string{"retry", "reacquire"} {
+				req := httptest.NewRequest(http.MethodPost, "/v1/tracks/"+uuid.NewString()+"/"+action, nil)
+				req.RemoteAddr = "192.0.2.1:1234"
+				req.Header.Set("Authorization", "Bearer "+token)
+				rec := httptest.NewRecorder()
+				h.ServeHTTP(rec, req)
+				if mounted := rec.Code != http.StatusNotFound; mounted != tt.wantRoute {
+					t.Errorf("POST %s answered %d: mounted = %v, want %v", action, rec.Code, mounted, tt.wantRoute)
+				}
+			}
+		})
 	}
 }

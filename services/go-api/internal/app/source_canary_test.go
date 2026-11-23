@@ -1,46 +1,48 @@
-package app
+package app_test
 
 import (
-	"altune/go-api/internal/acquisition"
-	"altune/go-api/internal/app/canary"
+	"altune/go-api/internal/app"
 	"altune/go-api/internal/app/jobs"
+	"altune/go-api/internal/shared/config"
+	"bytes"
+	"context"
+	"log/slog"
+	"strings"
 	"testing"
 )
 
-func TestStartSourceCanary_DoesNotRegisterTheJobWhenEverySourceIsDisabled(t *testing.T) {
-	a := &App{}
-	a.startSourceCanary(canary.Probes{YtDlp: acquisition.NewYtDlpAudioSearcher("", "", ""), YtDlpAvailable: true, InnerTube: newYTMSearchClient()})
+func assembledJobStarted(t *testing.T, cfg *config.Config, name jobs.Name) bool {
+	t.Helper()
+	var logs bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	ctx, cancel := context.WithCancel(t.Context())
+	assembly, err := app.Assemble(ctx, cfg, app.Handles{Pool: unreachablePool(t), Transport: refuseEgress{}})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	t.Cleanup(func() {
+		cancel()
+		assembly.Shutdown()
+	})
+	return strings.Contains(logs.String(), `msg="`+string(name)+` started"`)
+}
 
-	if _, ok := a.jobs.SetEnabled(jobs.AcquisitionSourceCanary, false); ok {
-		t.Fatal("job was registered despite every canaried source being disabled")
+func TestSourceCanary_NoJobWhenEveryCanariedSourceIsDisabled(t *testing.T) {
+	cfg := jwksConfig(t)
+	cfg.YtMusicEnabled, cfg.YtDLPEnabled = false, false
+
+	if assembledJobStarted(t, cfg, jobs.AcquisitionSourceCanary) {
+		t.Fatal("the source canary job was registered although every canaried source is disabled")
 	}
 }
 
-func TestStartSourceCanary_DoesNotRegisterTheJobWhenNoProbeIsAvailable(t *testing.T) {
-	a := &App{}
-	a.startSourceCanary(canary.Probes{YtDlp: acquisition.NewYtDlpAudioSearcher("", "", ""), YtMusicEnabled: true, YtDlpEnabled: true})
+func TestSourceCanary_RegisteredWhenYouTubeMusicIsEnabled(t *testing.T) {
+	cfg := jwksConfig(t)
+	cfg.YtMusicEnabled = true
 
-	if _, ok := a.jobs.SetEnabled(jobs.AcquisitionSourceCanary, false); ok {
-		t.Fatal("job was registered despite yt-dlp being unavailable and no InnerTube client")
-	}
-}
-
-func TestStartSourceCanary_RegistersTheJobWhenYtDlpIsAvailable(t *testing.T) {
-	a := &App{}
-
-	a.startSourceCanary(canary.Probes{YtDlp: acquisition.NewYtDlpAudioSearcher("", "", ""), YtDlpAvailable: true, YtMusicEnabled: true, YtDlpEnabled: true})
-
-	if _, ok := a.jobs.SetEnabled(jobs.AcquisitionSourceCanary, true); !ok {
-		t.Fatal("job was not registered despite yt-dlp being reported available")
-	}
-}
-
-func TestStartSourceCanary_RegistersTheJobForInnerTubeWhenYtDlpIsUnavailable(t *testing.T) {
-	a := &App{}
-
-	a.startSourceCanary(canary.Probes{InnerTube: newYTMSearchClient(), YtMusicEnabled: true, YtDlpEnabled: true})
-
-	if _, ok := a.jobs.SetEnabled(jobs.AcquisitionSourceCanary, true); !ok {
-		t.Fatal("job was not registered despite the InnerTube probe being available")
+	if !assembledJobStarted(t, cfg, jobs.AcquisitionSourceCanary) {
+		t.Fatal("the source canary job was not registered although YouTube Music, and so its InnerTube probe, is enabled")
 	}
 }

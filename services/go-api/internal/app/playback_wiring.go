@@ -1,13 +1,11 @@
 package app
 
 import (
+	"altune/go-api/internal/app/playbackcatalog"
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/config"
-	shared "altune/go-api/internal/shared/kernel"
 	"context"
-	"errors"
-	"fmt"
 	"time"
 )
 
@@ -42,7 +40,7 @@ func newQueueService(
 	trackRepo *catalog.PgxTrackRepository,
 	metrics playbackMetricsSink,
 ) *playback.QueueService {
-	nowPlayingReader := playback.NewNowPlayingReader(catalogTrackSource{tracks: trackRepo},
+	nowPlayingReader := playback.NewNowPlayingReader(playbackcatalog.NewNowPlayingTracks(trackRepo),
 		playback.WithNowPlayingMetrics(metrics),
 		playback.WithNowPlayingLookupTimeout(nowPlayingLookupTimeout),
 		playback.WithNowPlayingClock(time.Now))
@@ -58,30 +56,4 @@ func newQueueHandler(queueSvc *playback.QueueService, metrics playbackMetricsSin
 
 func queueRateLimit(cfg *config.Config) playback.QueueStateRateLimit {
 	return playback.QueueStateRateLimit{Every: cfg.PlaybackQueueRateEvery, Burst: cfg.PlaybackQueueRateBurst}
-}
-
-type catalogTracks interface {
-	GetByID(ctx context.Context, id catalog.TrackId, userId shared.UserId) (*catalog.Track, error)
-}
-
-type catalogTrackSource struct {
-	tracks catalogTracks
-}
-
-func (s catalogTrackSource) NowPlayingTrack(ctx context.Context, userId shared.UserId, id shared.TrackId) (*playback.NowPlayingTrack, error) {
-	track, err := s.tracks.GetByID(ctx, id, userId)
-	if errors.Is(err, catalog.ErrDBTransient) {
-		return nil, fmt.Errorf("%w: %w", playback.ErrTrackSourceUnavailable, err)
-	}
-	if err != nil || track == nil {
-		return nil, err
-	}
-	return &playback.NowPlayingTrack{
-		Id:                track.ID.String(),
-		Title:             track.Title,
-		Artist:            track.Artist,
-		ArtworkURL:        track.ArtworkURL,
-		DurationSeconds:   track.DurationSeconds,
-		AcquisitionStatus: track.AcquisitionStatus.String(),
-	}, nil
 }

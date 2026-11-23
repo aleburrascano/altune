@@ -1,32 +1,16 @@
-package app
+package app_test
 
 import (
-	"altune/go-api/internal/acquisition"
-	"altune/go-api/internal/app/observemetrics"
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/catalog"
-	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/app"
 	"altune/go-api/internal/observe"
-	"altune/go-api/internal/playback"
-	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/events"
-	shared "altune/go-api/internal/shared/kernel"
-	"altune/go-api/internal/shared/leader"
-	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/reqmetrics"
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
-	"reflect"
 	"regexp"
-	"strconv"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/go-chi/chi/v5"
@@ -34,65 +18,28 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-const (
-	observePrincipalToken = "observe-principal"
-	observeStrangerToken  = "observe-stranger"
-	observeReadOnlyToken  = "observe-readonly"
-)
-
 var observeRouteParam = regexp.MustCompile(`\{[^}]*\}`)
 
-type observeSubjects struct {
-	principal shared.UserId
-	stranger  shared.UserId
-	readOnly  shared.UserId
+type observeFixture struct {
+	tree      *chi.Mux
+	principal string
+	stranger  string
 }
 
-func newObserveSubjects() observeSubjects {
-	return observeSubjects{
-		principal: shared.NewUserId(uuid.New()),
-		stranger:  shared.NewUserId(uuid.New()),
-		readOnly:  shared.NewUserId(uuid.New()),
+func newObserveFixture(t *testing.T, principalConfigured bool) observeFixture {
+	t.Helper()
+	f := newJWKSFixture(t)
+	if !principalConfigured {
+		f.cfg.OverseerPrincipalID = ""
+	}
+	return observeFixture{
+		tree:      productionRouterFor(t, f.cfg),
+		principal: signedToken(t, f.key, f.operator),
+		stranger:  signedToken(t, f.key, uuid.New()),
 	}
 }
 
-func (s observeSubjects) verifier() auth.TokenVerifier {
-	byToken := map[string]shared.UserId{
-		observePrincipalToken: s.principal,
-		observeStrangerToken:  s.stranger,
-		observeReadOnlyToken:  s.readOnly,
-	}
-	return auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
-		subject, known := byToken[token]
-		if !known {
-			return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
-		}
-		return auth.VerifiedToken{UserID: subject, ExpiresAt: time.Now().Add(time.Hour)}, nil
-	})
-}
-
-func observeTestDeps() observe.Deps {
-	shutdown := make(chan struct{})
-	close(shutdown)
-	return observe.Deps{
-		Health: func(context.Context) observe.DependencyHealth {
-			return observe.DependencyHealth{DB: observe.DepUp, Redis: observe.DepUp, Auth: observe.DepUp}
-		},
-		Logs:        logging.NewRingBuffer(8),
-		Events:      observe.NewEventFeed(),
-		Eval:        observe.NewEvalMeter(0, nil),
-		LiveMetrics: func() observe.LiveMetrics { return observe.LiveMetrics{} },
-		Shutdown:    shutdown,
-	}
-}
-
-func mountedObserveTree(subjects observeSubjects, cfg *config.Config) *chi.Mux {
-	r := chi.NewRouter()
-	mountObserve(r, subjects.verifier(), cfg.OverseerPrincipalID, observe.NewObserveHandler(observeTestDeps()))
-	return r
-}
-
-func callObserve(t *testing.T, srv http.Handler, method, path, token string) *httptest.ResponseRecorder {
+func callObserve(t *testing.T, h http.Handler, method, path, token string) *httptest.ResponseRecorder {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -101,7 +48,7 @@ func callObserve(t *testing.T, srv http.Handler, method, path, token string) *ht
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
+	h.ServeHTTP(rec, req)
 	return rec
 }
 
@@ -111,11 +58,13 @@ func observeRoutes(t *testing.T, tree *chi.Mux) []observeRoute {
 	t.Helper()
 	var routes []observeRoute
 	walk := func(method, pattern string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
-		routes = append(routes, observeRoute{method: method, path: observeRouteParam.ReplaceAllString(pattern, "x")})
+		if strings.HasPrefix(pattern, "/observe/") {
+			routes = append(routes, observeRoute{method: method, path: observeRouteParam.ReplaceAllString(pattern, "x")})
+		}
 		return nil
 	}
 	if err := chi.Walk(tree, walk); err != nil {
-		t.Fatalf("walk observe routes: %v", err)
+		t.Fatalf("walk routes: %v", err)
 	}
 	if len(routes) == 0 {
 		t.Fatal("walked no observe routes, so the assertions proved nothing")
@@ -131,22 +80,20 @@ func assertObserveStatus(t *testing.T, rec *httptest.ResponseRecorder, want int,
 }
 
 func TestObserveRoutes_EveryRouteHoldsTheGate(t *testing.T) {
-	subjects := newObserveSubjects()
-	tree := mountedObserveTree(subjects, &config.Config{OverseerPrincipalID: subjects.principal.String()})
+	f := newObserveFixture(t, true)
 
-	for _, route := range observeRoutes(t, tree) {
+	for _, route := range observeRoutes(t, f.tree) {
 		label := route.method + " " + route.path
-		assertObserveStatus(t, callObserve(t, tree, route.method, route.path, ""), http.StatusUnauthorized, label+" without a token")
-		assertObserveStatus(t, callObserve(t, tree, route.method, route.path, observeStrangerToken), http.StatusForbidden, label+" as another subject")
-		assertObserveStatus(t, callObserve(t, tree, http.MethodPost, route.path, observePrincipalToken), http.StatusMethodNotAllowed, "POST "+route.path+" as the principal")
+		assertObserveStatus(t, callObserve(t, f.tree, route.method, route.path, ""), http.StatusUnauthorized, label+" without a token")
+		assertObserveStatus(t, callObserve(t, f.tree, route.method, route.path, f.stranger), http.StatusForbidden, label+" as another subject")
+		assertObserveStatus(t, callObserve(t, f.tree, http.MethodPost, route.path, f.principal), http.StatusMethodNotAllowed, "POST "+route.path+" as the principal")
 	}
 }
 
 func TestObserveRoutes_EveryRouteOnlyRegistersGet(t *testing.T) {
-	subjects := newObserveSubjects()
-	tree := mountedObserveTree(subjects, &config.Config{OverseerPrincipalID: subjects.principal.String()})
+	f := newObserveFixture(t, true)
 
-	for _, route := range observeRoutes(t, tree) {
+	for _, route := range observeRoutes(t, f.tree) {
 		if route.method != http.MethodGet {
 			t.Errorf("%s %s: observe serves GET only", route.method, route.path)
 		}
@@ -154,14 +101,13 @@ func TestObserveRoutes_EveryRouteOnlyRegistersGet(t *testing.T) {
 }
 
 func TestObserveRoutes_EveryJSONRouteSendsNoStoreAndNosniff(t *testing.T) {
-	subjects := newObserveSubjects()
-	tree := mountedObserveTree(subjects, &config.Config{OverseerPrincipalID: subjects.principal.String()})
+	f := newObserveFixture(t, true)
 
-	for _, route := range observeRoutes(t, tree) {
+	for _, route := range observeRoutes(t, f.tree) {
 		if strings.HasSuffix(route.path, "/stream") {
 			continue
 		}
-		rec := callObserve(t, tree, route.method, route.path, observePrincipalToken)
+		rec := callObserve(t, f.tree, route.method, route.path, f.principal)
 		if rec.Code == http.StatusUnauthorized || rec.Code == http.StatusForbidden {
 			t.Errorf("%s %s as the principal: status %d, want the gate to admit it", route.method, route.path, rec.Code)
 		}
@@ -175,477 +121,162 @@ func TestObserveRoutes_EveryJSONRouteSendsNoStoreAndNosniff(t *testing.T) {
 }
 
 func TestObserveRoutes_DenialStillSendsNosniff(t *testing.T) {
-	subjects := newObserveSubjects()
-	tree := mountedObserveTree(subjects, &config.Config{OverseerPrincipalID: subjects.principal.String()})
+	f := newObserveFixture(t, true)
 
-	for _, route := range observeRoutes(t, tree) {
-		rec := callObserve(t, tree, route.method, route.path, observeStrangerToken)
+	for _, route := range observeRoutes(t, f.tree) {
+		rec := callObserve(t, f.tree, route.method, route.path, f.stranger)
 		if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
 			t.Errorf("%s %s denied: X-Content-Type-Options = %q, want nosniff", route.method, route.path, got)
 		}
 	}
 }
 
-func TestObservePrincipal_SetPrincipalAdmitsOnlyItself(t *testing.T) {
-	subjects := newObserveSubjects()
-	tree := mountedObserveTree(subjects, &config.Config{OverseerPrincipalID: subjects.principal.String()})
+func TestObserveRoutes_TheEventStreamServesThePrincipal(t *testing.T) {
+	f := newObserveFixture(t, true)
 
-	assertObserveStatus(t, callObserve(t, tree, http.MethodGet, "/observe/health", observePrincipalToken), http.StatusOK, "the overseer principal")
-	assertObserveStatus(t, callObserve(t, tree, http.MethodGet, "/observe/health", observeStrangerToken), http.StatusForbidden, "another subject")
+	assertObserveStatus(t, callObserve(t, f.tree, http.MethodGet, "/observe/events/stream", f.principal), http.StatusOK, "the event stream over the assembled feed")
 }
 
-func TestObserveAcquisition_AbsentSchedulerIsANilReader(t *testing.T) {
-	if reader := (&App{}).observeAcquisition(); reader != nil {
-		t.Errorf("reader = %#v, want a nil interface so the route reports it unavailable", reader)
+func TestObservePrincipal_TheConfiguredPrincipalIsAdmittedAndNoOneElse(t *testing.T) {
+	f := newObserveFixture(t, true)
+
+	assertObserveStatus(t, callObserve(t, f.tree, http.MethodGet, "/observe/metrics/live", f.principal), http.StatusOK, "the overseer principal")
+	assertObserveStatus(t, callObserve(t, f.tree, http.MethodGet, "/observe/metrics/live", f.stranger), http.StatusForbidden, "another subject")
+}
+
+func TestObservePrincipal_NoneConfiguredFailsClosed(t *testing.T) {
+	f := newObserveFixture(t, false)
+
+	for name, token := range map[string]string{"the would-be principal": f.principal, "another subject": f.stranger} {
+		assertObserveStatus(t, callObserve(t, f.tree, http.MethodGet, "/observe/metrics/live", token), http.StatusForbidden, name+" with no principal configured")
 	}
 }
 
-func TestObserveAcquisition_WiredSchedulerIsTheReader(t *testing.T) {
-	var wg sync.WaitGroup
-	const workers = 3
-	scheduler := acquisition.NewBackgroundAcquisitionScheduler(nil, &wg, make(chan struct{}, workers))
-	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
-
-	reader := (&App{scheduler: scheduler}).observeAcquisition()
-
-	if reader == nil {
-		t.Fatal("reader = nil, want one that reads the app's scheduler")
-	}
-	if got := reader.Status().QueueCapacity; got != workers {
-		t.Errorf("queue capacity = %d, want the app scheduler's %d workers", got, workers)
-	}
+type observedAcquisition struct {
+	Paused        bool `json:"paused"`
+	QueueCapacity int  `json:"queue_capacity"`
 }
 
-func TestObservePrincipal_BothUnsetFailsClosed(t *testing.T) {
-	subjects := newObserveSubjects()
-	tree := mountedObserveTree(subjects, &config.Config{})
-
-	for _, token := range []string{observePrincipalToken, observeStrangerToken, observeReadOnlyToken} {
-		assertObserveStatus(t, callObserve(t, tree, http.MethodGet, "/observe/health", token), http.StatusForbidden, token+" with no principal configured")
-	}
-}
-
-func callObserveAs(t *testing.T, srv http.Handler, method, path, token string) (int, []byte) {
+func readObservedAcquisition(t *testing.T, enableSource, paused bool) observedAcquisition {
 	t.Helper()
-	req := httptest.NewRequest(method, path, nil)
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
-	return rec.Code, rec.Body.Bytes()
-}
-
-func featureMetricsSource() observe.LiveMetricsSource {
-	latency := reqmetrics.NewRegistry()
-	return func() observe.LiveMetrics { return observemetrics.FeatureMetrics(latency) }
-}
-
-func mountObserveLiveMetrics(r chi.Router, verifier auth.TokenVerifier, principal shared.UserId, source observe.LiveMetricsSource) {
-	mountObserve(r, verifier, principal.String(), observe.NewObserveHandler(observe.Deps{LiveMetrics: source}))
-}
-
-func readObservedLiveMetrics(t *testing.T, source observe.LiveMetricsSource) []byte {
-	t.Helper()
-	subjects := newObserveSubjects()
-	r := chi.NewRouter()
-	mountObserveLiveMetrics(r, subjects.verifier(), subjects.principal, source)
-	code, body := callObserveAs(t, r, http.MethodGet, "/observe/metrics/live", observePrincipalToken)
+	f := newJWKSFixture(t)
+	f.cfg.YtMusicEnabled = enableSource
+	f.cfg.AcquisitionConcurrency = 3
+	f.cfg.AcquisitionPaused = paused
+	code, body := getAs(t, assembledHandler(t, f.cfg), "/observe/acquisition", signedToken(t, f.key, f.operator))
 	if code != http.StatusOK {
-		t.Fatalf("GET /observe/metrics/live as the principal: status %d, want 200; body %s", code, body)
+		t.Fatalf("GET /observe/acquisition = %d, want 200; body %s", code, body)
 	}
-	return body
+	var got observedAcquisition
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode %s: %v", body, err)
+	}
+	return got
 }
 
-type observedCounterWire struct {
-	Auth struct {
-		TokenRejections     int64            `json:"token_rejections_total"`
-		ByReason            map[string]int64 `json:"token_rejections_by_reason_total"`
-		VerifierUnavailable int64            `json:"verifier_unavailable_total"`
-		JWKSFetchFailures   int64            `json:"jwks_fetch_failures_total"`
-	} `json:"auth"`
-	Catalog struct {
-		PresignFailures int64 `json:"presign_failures_total"`
-	} `json:"catalog"`
-	Playback struct {
-		EnrichmentFailures       int64 `json:"now_playing_enrichment_failures_total"`
-		CorruptStoredState       int64 `json:"corrupt_stored_state_total"`
-		QueueStateOpTimeouts     int64 `json:"queue_state_op_timeouts_total"`
-		NowPlayingLookupTimeouts int64 `json:"now_playing_lookup_timeouts_total"`
-	} `json:"playback"`
+func TestObserveAcquisition_WithoutASourceThereIsNoSchedulerToRead(t *testing.T) {
+	if got := readObservedAcquisition(t, false, false); got.QueueCapacity != 0 {
+		t.Errorf("queue_capacity = %d without an acquisition source, want 0", got.QueueCapacity)
+	}
 }
 
-func readObservedCounterWire(t *testing.T) observedCounterWire {
+func TestObserveAcquisition_ReadsTheAssembledScheduler(t *testing.T) {
+	if got := readObservedAcquisition(t, true, false); got.QueueCapacity != 3 || got.Paused {
+		t.Errorf("acquisition = %+v, want the scheduler's 3 workers, running", got)
+	}
+}
+
+func TestObserveAcquisition_AcquisitionPausedStartsTheSchedulerPaused(t *testing.T) {
+	if got := readObservedAcquisition(t, true, true); !got.Paused {
+		t.Errorf("acquisition = %+v, want paused after ACQUISITION_PAUSED=true", got)
+	}
+}
+
+type observedHealth struct {
+	DB     observe.DepStatus `json:"db"`
+	Redis  observe.DepStatus `json:"redis"`
+	Auth   observe.DepStatus `json:"auth"`
+	Detail struct {
+		DBError    string `json:"db_error"`
+		RedisError string `json:"redis_error"`
+	} `json:"detail"`
+}
+
+func readObservedHealth(t *testing.T, handles app.Handles, wantCode int) observedHealth {
 	t.Helper()
-	var out observedCounterWire
-	if err := json.Unmarshal(readObservedLiveMetrics(t, (&App{latency: reqmetrics.NewRegistry()}).liveMetrics), &out); err != nil {
-		t.Fatal(err)
+	f := newJWKSFixture(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	handles.Transport = refuseEgress{}
+	assembly, err := app.Assemble(ctx, f.cfg, handles)
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
 	}
-	return out
-}
-
-func TestObserveLiveMetrics_CarriesAuthCatalogAndPlaybackFailureCounters(t *testing.T) {
-	before := readObservedCounterWire(t)
-
-	auth.NewExpvarAuthMetrics().TokenRejected("signature_invalid")
-	auth.NewExpvarAuthMetrics().VerifierUnavailable()
-	auth.NewExpvarAuthMetrics().JWKSFetchFailed()
-	catalog.NewExpvarAudioStoreMetrics().PresignFailed()
-	pb := playback.NewExpvarPlaybackMetrics()
-	pb.EnrichmentFailed()
-	pb.CorruptStoredState()
-	pb.QueueStateOpTimedOut()
-	pb.NowPlayingLookupTimedOut()
-
-	got := readObservedCounterWire(t)
-	for _, c := range []struct {
-		key       string
-		got, want int64
-	}{
-		{"auth.token_rejections_total", got.Auth.TokenRejections, before.Auth.TokenRejections + 1},
-		{"auth.token_rejections_by_reason_total[signature_invalid]", got.Auth.ByReason["signature_invalid"], before.Auth.ByReason["signature_invalid"] + 1},
-		{"auth.verifier_unavailable_total", got.Auth.VerifierUnavailable, before.Auth.VerifierUnavailable + 1},
-		{"auth.jwks_fetch_failures_total", got.Auth.JWKSFetchFailures, before.Auth.JWKSFetchFailures + 1},
-		{"catalog.presign_failures_total", got.Catalog.PresignFailures, before.Catalog.PresignFailures + 1},
-		{"playback.now_playing_enrichment_failures_total", got.Playback.EnrichmentFailures, before.Playback.EnrichmentFailures + 1},
-		{"playback.corrupt_stored_state_total", got.Playback.CorruptStoredState, before.Playback.CorruptStoredState + 1},
-		{"playback.queue_state_op_timeouts_total", got.Playback.QueueStateOpTimeouts, before.Playback.QueueStateOpTimeouts + 1},
-		{"playback.now_playing_lookup_timeouts_total", got.Playback.NowPlayingLookupTimeouts, before.Playback.NowPlayingLookupTimeouts + 1},
-	} {
-		if c.got != c.want {
-			t.Errorf("%s = %d, want %d", c.key, c.got, c.want)
-		}
-	}
-}
-
-type observedElection struct {
-	leaderElection
-	counters leader.Counters
-}
-
-func (c *observedElection) Counters() leader.Counters { return c.counters }
-
-func TestObserveLiveMetrics_CarriesSaturationKeys(t *testing.T) {
-	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
-	a := &App{eventBus: bus, latency: reqmetrics.NewRegistry()}
-	leadWith(t, a, &observedElection{counters: leader.Counters{Failures: 7}})
-	var out map[string]json.RawMessage
-	if err := json.Unmarshal(readObservedLiveMetrics(t, a.liveMetrics), &out); err != nil {
-		t.Fatal(err)
-	}
-	for _, key := range []string{"db_pool", "redis_pool", "leader", "event_bus", "latency", "auth", "catalog", "playback", "providers"} {
-		if _, ok := out[key]; !ok {
-			t.Errorf("live metrics missing key %q", key)
-		}
-	}
-	var l leader.Counters
-	if err := json.Unmarshal(out["leader"], &l); err != nil {
-		t.Fatal(err)
-	}
-	if l.Failures != 7 {
-		t.Errorf("leader failures = %d, want 7", l.Failures)
-	}
-}
-
-func TestObserveLiveMetrics_ReportsEventBusDrops(t *testing.T) {
-	a := &App{eventBus: events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), latency: reqmetrics.NewRegistry()}
-	user := shared.NewUserId(uuid.New())
-	_, unsubscribe := a.eventBus.Subscribe(user)
-	t.Cleanup(unsubscribe)
-	for i := 0; i < 10000 && a.eventBus.Dropped() == 0; i++ {
-		a.eventBus.Publish(context.Background(), user, "probe", nil)
-	}
-	if a.eventBus.Dropped() == 0 {
-		t.Fatal("precondition: an unread subscriber never overflowed, so the bus dropped nothing")
-	}
-	var out struct {
-		EventBus eventBusStats `json:"event_bus"`
-	}
-	if err := json.Unmarshal(readObservedLiveMetrics(t, a.liveMetrics), &out); err != nil {
-		t.Fatal(err)
-	}
-	if out.EventBus.Dropped != a.eventBus.Dropped() {
-		t.Errorf("event_bus.dropped_total = %d, want the bus's %d", out.EventBus.Dropped, a.eventBus.Dropped())
-	}
-}
-
-func TestObserveLiveMetrics_CarriesAlertMonitorHealthWhenBuilt(t *testing.T) {
-	a := &App{alertMonitor: observe.NewAlertMonitor(observe.NopNotifier{}, time.Second), latency: reqmetrics.NewRegistry()}
-	var out map[string]json.RawMessage
-	if err := json.Unmarshal(readObservedLiveMetrics(t, a.liveMetrics), &out); err != nil {
-		t.Fatal(err)
-	}
-	var monitor map[string]json.RawMessage
-	if err := json.Unmarshal(out["alert_monitor"], &monitor); err != nil {
-		t.Fatalf("alert_monitor missing or not an object: %v", err)
-	}
-	for _, key := range []string{"last_pass", "consecutive_failures", "contained_panics", "nop_notifier"} {
-		if _, ok := monitor[key]; !ok {
-			t.Errorf("alert_monitor missing key %q", key)
-		}
-	}
-	if string(monitor["nop_notifier"]) != "true" {
-		t.Errorf("nop_notifier = %s, want true", monitor["nop_notifier"])
-	}
-}
-
-func TestObserveLiveMetrics_OmitsAlertMonitorWhenNil(t *testing.T) {
-	a := &App{latency: reqmetrics.NewRegistry()}
-	var out map[string]json.RawMessage
-	if err := json.Unmarshal(readObservedLiveMetrics(t, a.liveMetrics), &out); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := out["alert_monitor"]; ok {
-		t.Error("alert_monitor present although no monitor was built")
-	}
-}
-
-type observedStatusTransport struct{ status int }
-
-func (s observedStatusTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	return &http.Response{StatusCode: s.status, Body: http.NoBody, Header: make(http.Header), Request: req}, nil
-}
-
-type observedProviderWire struct {
-	Providers map[string]struct {
-		OK    int64 `json:"ok"`
-		Quota int64 `json:"quota"`
-	} `json:"providers"`
-	Playback struct {
-		Open       bool  `json:"now_playing_enrichment_breaker_open"`
-		Rejections int64 `json:"now_playing_enrichment_breaker_rejections_total"`
-	} `json:"playback"`
-	Latency struct {
-		Routes map[string]struct {
-			Count  uint64            `json:"count"`
-			Status map[string]uint64 `json:"status"`
-		} `json:"routes"`
-	} `json:"latency"`
-}
-
-func readObservedProviderWire(t *testing.T, a *App) (observedProviderWire, []byte) {
-	t.Helper()
-	raw := readObservedLiveMetrics(t, a.liveMetrics)
-	var out observedProviderWire
-	if err := json.Unmarshal(raw, &out); err != nil {
-		t.Fatal(err)
-	}
-	return out, raw
-}
-
-func TestObserveLiveMetrics_CarriesProviderBreakerAndLatency(t *testing.T) {
-	a := New(&config.Config{}, nil)
-	before, _ := readObservedProviderWire(t, a)
-
-	const secret = "supersecretquery"
-	for url, status := range map[string]int{
-		"https://api.deezer.com/search?q=" + secret:     http.StatusOK,
-		"https://api.spotify.com/v1/search?q=" + secret: http.StatusTooManyRequests,
-	} {
-		resp, err := discovery.NewCountingTransport(observedStatusTransport{status}).RoundTrip(httptest.NewRequest(http.MethodGet, url, nil))
-		if err != nil {
-			t.Fatal(err)
-		}
-		_ = resp.Body.Close()
-	}
-	pb := playback.NewExpvarPlaybackMetrics()
-	pb.EnrichmentBreakerOpened()
-	pb.EnrichmentBreakerRejected()
-	defer pb.EnrichmentBreakerClosed()
-	const route = "/v1/observe-live-snapshot-probe/{status}"
-	router := a.newRouter(apiWriteTimeout)
-	router.Get(route, func(w http.ResponseWriter, r *http.Request) {
-		status, _ := strconv.Atoi(chi.URLParam(r, "status"))
-		w.WriteHeader(status)
+	t.Cleanup(func() {
+		cancel()
+		assembly.Shutdown()
 	})
-	for _, status := range []int{http.StatusOK, http.StatusNotFound, http.StatusBadGateway} {
-		router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/observe-live-snapshot-probe/"+strconv.Itoa(status), nil))
+	code, body := getAs(t, assembly.Handler(), "/observe/health", signedToken(t, f.key, f.operator))
+	if code != wantCode {
+		t.Fatalf("GET /observe/health = %d, want %d; body %s", code, wantCode, body)
 	}
+	var got observedHealth
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode %s: %v", body, err)
+	}
+	return got
+}
 
-	got, raw := readObservedProviderWire(t, a)
-	if got.Providers["deezer"].OK != before.Providers["deezer"].OK+1 {
-		t.Errorf("providers.deezer.ok = %d, want %d", got.Providers["deezer"].OK, before.Providers["deezer"].OK+1)
-	}
-	if got.Providers["spotify"].Quota != before.Providers["spotify"].Quota+1 {
-		t.Errorf("providers.spotify.quota = %d, want %d", got.Providers["spotify"].Quota, before.Providers["spotify"].Quota+1)
-	}
-	if !got.Playback.Open || got.Playback.Rejections != before.Playback.Rejections+1 {
-		t.Errorf("breaker open=%v rejections=%d, want open and %d", got.Playback.Open, got.Playback.Rejections, before.Playback.Rejections+1)
-	}
-	rl := got.Latency.Routes[route]
-	if rl.Count != 3 || rl.Status["2xx"] != 1 || rl.Status["4xx"] != 1 || rl.Status["5xx"] != 1 {
-		t.Errorf("latency.routes[%q] = %+v, want count 3 and one each of 2xx/4xx/5xx", route, rl)
-	}
-	if strings.Contains(string(raw), secret) {
-		t.Errorf("snapshot leaks query text %q", secret)
+func TestObserveHealth_ProbesTheAssembledDatabaseRedisAndAuth(t *testing.T) {
+	redisUp := goredis.NewClient(&goredis.Options{Addr: miniredis.RunT(t).Addr()})
+	t.Cleanup(func() { _ = redisUp.Close() })
+
+	got := readObservedHealth(t, app.Handles{Pool: integrationPool(t), Redis: redisUp}, http.StatusOK)
+
+	if got.DB != observe.DepUp || got.Redis != observe.DepUp || got.Auth != observe.DepUp {
+		t.Errorf("health = %+v, want db, redis and auth all ok", got)
 	}
 }
 
-func TestDependencyHealth_UnconfiguredIsHealthy(t *testing.T) {
-	got := (&App{}).dependencyHealth(context.Background())
+func TestObserveHealth_ReportsADownDatabaseAndRedisWithTheirOwnErrors(t *testing.T) {
+	redisDown := goredis.NewClient(&goredis.Options{Addr: "127.0.0.1:1", MaxRetries: -1})
+	t.Cleanup(func() { _ = redisDown.Close() })
 
-	if got.DB != observe.DepNotConfigured || got.Redis != observe.DepNotConfigured || got.Auth != observe.DepNotConfigured {
-		t.Errorf("statuses = %q/%q/%q, want all not_configured", got.DB, got.Redis, got.Auth)
+	got := readObservedHealth(t, app.Handles{Pool: unreachablePool(t), Redis: redisDown}, http.StatusServiceUnavailable)
+
+	if got.DB != observe.DepDown || got.Redis != observe.DepDown {
+		t.Errorf("health = %+v, want db and redis down", got)
 	}
-	if !got.Healthy() {
-		t.Error("Healthy() = false for unconfigured dependencies, want true")
-	}
-}
-
-type stubAuthChecker struct {
-	err error
-}
-
-func (s stubAuthChecker) CheckHealth(context.Context) error { return s.err }
-
-func TestDependencyHealth_ProbesTheAppsDatabaseRedisAndAuth(t *testing.T) {
-	redisUp := miniredis.RunT(t)
-	healthyClient := goredis.NewClient(&goredis.Options{Addr: redisUp.Addr()})
-	t.Cleanup(func() { _ = healthyClient.Close() })
-	healthy := &App{dbPing: func(context.Context) error { return nil }, redisClient: healthyClient, authVerifier: stubAuthChecker{}}
-
-	if got := healthy.dependencyHealth(t.Context()); got.DB != observe.DepUp || got.Redis != observe.DepUp || got.Auth != observe.DepUp {
-		t.Errorf("healthy statuses = %q/%q/%q, want all ok", got.DB, got.Redis, got.Auth)
-	}
-
-	downClient := goredis.NewClient(&goredis.Options{Addr: "127.0.0.1:1", MaxRetries: -1})
-	t.Cleanup(func() { _ = downClient.Close() })
-	down := &App{dbPing: func(context.Context) error { return errors.New("db refused") }, redisClient: downClient, authVerifier: stubAuthChecker{err: errors.New("jwks stale")}}
-
-	got := down.dependencyHealth(t.Context())
-	if got.DB != observe.DepDown || got.Redis != observe.DepDown || got.Auth != observe.DepDown {
-		t.Errorf("down statuses = %q/%q/%q, want all down", got.DB, got.Redis, got.Auth)
-	}
-	if got.Detail.DBError != "db refused" || got.Detail.AuthError != "jwks stale" || got.Detail.RedisError == "" {
+	if got.Detail.DBError == "" || got.Detail.RedisError == "" || got.Detail.DBError == got.Detail.RedisError {
 		t.Errorf("detail = %+v, want each probe's own error", got.Detail)
 	}
 }
 
-func TestEvalMeterRunner_NilBeforeDiscoveryIsKept(t *testing.T) {
-	if run := (&App{cfg: &config.Config{}}).evalMeterRunner(); run != nil {
-		t.Error("runner is non-nil with no ranking-only search kept, want nil so the meter treats it as unset")
+func TestObserveHealth_WithoutRedisItIsNotConfigured(t *testing.T) {
+	if got := readObservedHealth(t, app.Handles{Pool: unreachablePool(t)}, http.StatusServiceUnavailable); got.Redis != observe.DepNotConfigured {
+		t.Errorf("redis = %q without a Redis handle, want not_configured", got.Redis)
 	}
 }
 
-func TestWrapEvalRunner_ErrPassesThroughWithAZeroResult(t *testing.T) {
-	wantErr := errors.New("eval runner boom")
-	run := wrapEvalRunner(func(context.Context) (EvalResult, error) {
-		return EvalResult{}, wantErr
-	})
+func TestObserveLiveMetrics_CarriesTheLatencyTheAssembledRouterRecorded(t *testing.T) {
+	f := newJWKSFixture(t)
+	h := assembledHandler(t, f.cfg)
+	token := signedToken(t, f.key, f.operator)
 
-	res, err := run(context.Background())
+	if code, body := getAs(t, h, "/observe/health", token); code == http.StatusUnauthorized || code == http.StatusForbidden {
+		t.Fatalf("operator read of /observe/health = %d; body %s", code, body)
+	}
+	code, body := getAs(t, h, "/observe/metrics/live", token)
 
-	if !errors.Is(err, wantErr) {
-		t.Errorf("err = %v, want %v", err, wantErr)
+	if code != http.StatusOK {
+		t.Fatalf("operator read of /observe/metrics/live = %d, want 200; body %s", code, body)
 	}
-	if !reflect.DeepEqual(res, observe.EvalMeterResult{}) {
-		t.Errorf("result = %+v, want the zero Result", res)
+	var got struct {
+		Latency reqmetrics.Snapshot `json:"latency"`
 	}
-}
-
-func TestWireObserve_BuildsTheFeedAndMeterItServes(t *testing.T) {
-	subjects := newObserveSubjects()
-	a := &App{
-		cfg:        &config.Config{OverseerPrincipalID: subjects.principal.String()},
-		evalSearch: discovery.NewSearchService(nil, nil),
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode %s: %v", body, err)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	r := chi.NewRouter()
-
-	a.wireObserve(ctx, r, subjects.verifier(), observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))))
-
-	if a.eventFeed == nil || a.evalMeter == nil {
-		t.Fatalf("feed %v, meter %v: wireObserve must build both", a.eventFeed, a.evalMeter)
-	}
-	t.Cleanup(func() { a.evalMeter.Shutdown(context.Background()) })
-	election := &leaderElection{}
-	leadWith(t, a, election)
-	deadline := time.Now().Add(2 * time.Second)
-	for election.passes.Load() == 0 {
-		if time.Now().After(deadline) {
-			t.Fatal("the eval meter never asked for a leader pass: it is not started when leader")
-		}
-		time.Sleep(time.Millisecond)
-	}
-	assertObserveStatus(t, callObserve(t, r, http.MethodGet, "/observe/events/stream", observePrincipalToken), http.StatusOK, "event stream over the wired feed")
-}
-
-func TestMeterResult_CarriesEveryScorecardField(t *testing.T) {
-	res := EvalResult{
-		Score:     0.75,
-		Baseline:  0.9,
-		Regressed: true,
-		Errored:   2,
-		Queries: []EvalQueryResult{
-			{Query: "radiohead", Expect: "Radiohead", Passed: true, Position: 1},
-			{Query: "bjork", Expect: "Björk", Passed: false, Position: 7},
-		},
-	}
-
-	got := meterResult(res)
-
-	want := observe.EvalMeterResult{
-		Score:     0.75,
-		Baseline:  0.9,
-		Regressed: true,
-		Errored:   2,
-		Queries: []observe.EvalMeterQueryResult{
-			{Query: "radiohead", Expect: "Radiohead", Passed: true, Position: 1},
-			{Query: "bjork", Expect: "Björk", Passed: false, Position: 7},
-		},
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("meterResult = %+v, want %+v", got, want)
-	}
-}
-
-func TestObserveLiveMetrics_ReportsEventTapAndFeedDrops(t *testing.T) {
-	tap := observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
-	feed := observe.NewEventFeed()
-	ctx, stop := context.WithCancel(context.Background())
-	feed.Start(ctx, tap)
-	t.Cleanup(func() {
-		stop()
-		feed.Shutdown(context.Background())
-	})
-	_, cancel, err := feed.Subscribe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(cancel)
-	user := shared.NewUserId(uuid.New())
-	deadline := time.Now().Add(5 * time.Second)
-	for feed.Dropped() == 0 && time.Now().Before(deadline) {
-		tap.Publish(context.Background(), user, "flood", nil)
-	}
-	if feed.Dropped() == 0 {
-		t.Fatal("precondition: an unread subscriber never overflowed, so the feed dropped nothing")
-	}
-	a := &App{eventFeed: feed, eventTap: tap, latency: reqmetrics.NewRegistry()}
-	var out struct {
-		EventTap eventTapStats `json:"event_tap"`
-	}
-	if err := json.Unmarshal(readObservedLiveMetrics(t, a.liveMetrics), &out); err != nil {
-		t.Fatal(err)
-	}
-	if out.EventTap.FeedDropped == 0 {
-		t.Errorf("event_tap.feed_dropped_total = 0, want the feed's drops")
-	}
-	if out.EventTap.TapDropped != tap.Dropped() {
-		t.Errorf("event_tap.tap_dropped_total = %d, want the tap's %d", out.EventTap.TapDropped, tap.Dropped())
-	}
-}
-
-func TestKeepSearches_TheMeterRunsTheTablesRankingOnlySearch(t *testing.T) {
-	disc, err := NewEvalDiscovery(t.Context(), &config.Config{}, EvalHandles{Transport: &stubTransport{}})
-	if err != nil {
-		t.Fatalf("NewEvalDiscovery: %v", err)
-	}
-	a := &App{cfg: &config.Config{}}
-
-	a.keepSearches(disc)
-	if a.evalSearch == nil || a.evalMeterRunner() == nil {
-		t.Error("the eval meter has no ranking-only search to run")
+	if rl := got.Latency.Routes["/observe/health"]; rl.Count != 1 {
+		t.Errorf("latency.routes[/observe/health] = %+v, want the one request the assembled router served; routes %v", rl, got.Latency.Routes)
 	}
 }

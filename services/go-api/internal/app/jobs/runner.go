@@ -80,6 +80,13 @@ func (r *Runner) Election() Election {
 	return r.election
 }
 
+func (r *Runner) LeaderCounters() leader.Counters {
+	if e, ok := r.election.(interface{ Counters() leader.Counters }); ok {
+		return e.Counters()
+	}
+	return leader.Counters{}
+}
+
 func (r *Runner) LeaderContext(ctx context.Context) (context.Context, context.CancelFunc, bool) {
 	if r.election == nil {
 		return runloop.EveryPassLeads(ctx)

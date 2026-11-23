@@ -1,84 +1,49 @@
-package app
+package app_test
 
 import (
+	"altune/go-api/internal/app"
 	"altune/go-api/internal/auth"
+	"altune/go-api/internal/observe"
 	"altune/go-api/internal/shared/config"
-	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
-	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
-const operatorToken = "operator-token"
-
-func TestMountObserve_AuthRejectionsAndOutagesReachLiveMetrics(t *testing.T) {
-	operator := shared.NewUserId(uuid.New())
-	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
-		switch token {
-		case operatorToken:
-			return auth.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
-		case "jwks-down":
-			return auth.VerifiedToken{}, errors.New("fetch JWKS: connection refused")
-		}
-		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
-	})
-	r := chi.NewRouter()
-	mountObserveLiveMetrics(r, verifier, operator, featureMetricsSource())
-
-	before := auth.ReadSnapshot()
-	if code, _ := callObserveAs(t, r, http.MethodGet, "/observe/metrics/live", "forged"); code != http.StatusUnauthorized {
-		t.Fatalf("forged token: status %d, want 401", code)
-	}
-	if code, _ := callObserveAs(t, r, http.MethodGet, "/observe/metrics/live", "jwks-down"); code != http.StatusServiceUnavailable {
-		t.Fatalf("verifier down: status %d, want 503", code)
-	}
-
-	code, body := callObserveAs(t, r, http.MethodGet, "/observe/metrics/live", operatorToken)
-	if code != http.StatusOK {
-		t.Fatalf("operator metrics read: status %d, want 200; body %s", code, body)
-	}
-	var got struct {
-		Auth auth.MetricsSnapshot `json:"auth"`
-	}
-	if err := json.Unmarshal(body, &got); err != nil {
-		t.Fatalf("decode %s: %v", body, err)
-	}
-	if got.Auth.TokenRejections != before.TokenRejections+1 {
-		t.Errorf("auth.token_rejections_total %d, want %d", got.Auth.TokenRejections, before.TokenRejections+1)
-	}
-	reason := string(auth.ReasonSignatureInvalid)
-	if want := before.TokenRejectionsByReason[reason] + 1; got.Auth.TokenRejectionsByReason[reason] != want {
-		t.Errorf("auth.token_rejections_by_reason_total[%s] %d, want %d", reason, got.Auth.TokenRejectionsByReason[reason], want)
-	}
-	if got.Auth.VerifierUnavailable != before.VerifierUnavailable+1 {
-		t.Errorf("auth.verifier_unavailable_total %d, want %d", got.Auth.VerifierUnavailable, before.VerifierUnavailable+1)
-	}
-}
-
 type jwksFixture struct {
-	key *rsa.PrivateKey
-	cfg *config.Config
+	key      *rsa.PrivateKey
+	operator uuid.UUID
+	cfg      *config.Config
+	jwks     *httptest.Server
+	keysDown *atomic.Bool
 }
 
-func newJWKSFixture(t *testing.T) jwksFixture {
+func newRSAKey(t *testing.T) *rsa.PrivateKey {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
+	return key
+}
+
+func newJWKSFixture(t *testing.T) jwksFixture {
+	t.Helper()
+	key := newRSAKey(t)
 	pub, err := jwk.FromRaw(key.PublicKey)
 	if err != nil {
 		t.Fatalf("jwk from public key: %v", err)
@@ -87,16 +52,37 @@ func newJWKSFixture(t *testing.T) jwksFixture {
 	_ = pub.Set(jwk.AlgorithmKey, jwa.RS256)
 	set := jwk.NewSet()
 	_ = set.AddKey(pub)
+	keysDown := &atomic.Bool{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if keysDown.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(set)
 	}))
 	t.Cleanup(srv.Close)
-	cfg := &config.Config{SupabaseJWTJWKSURL: srv.URL, SupabaseProjectURL: "https://p.supabase.co", SupabaseJWTAud: "authenticated"}
-	return jwksFixture{key: key, cfg: cfg}
+	operator := uuid.New()
+	return jwksFixture{key: key, operator: operator, jwks: srv, keysDown: keysDown, cfg: &config.Config{
+		MusicDir:            t.TempDir(),
+		SupabaseJWTJWKSURL:  srv.URL,
+		SupabaseProjectURL:  "https://p.supabase.co",
+		SupabaseJWTAud:      "authenticated",
+		OverseerPrincipalID: operator.String(),
+	}}
 }
 
-func (f jwksFixture) signedToken(t *testing.T, userID uuid.UUID) string {
+func jwksConfig(t *testing.T) *config.Config {
+	t.Helper()
+	return newJWKSFixture(t).cfg
+}
+
+func signedToken(t *testing.T, key *rsa.PrivateKey, userID uuid.UUID) string {
+	t.Helper()
+	return signedTokenWithKeyID(t, key, "k1", userID)
+}
+
+func signedTokenWithKeyID(t *testing.T, key *rsa.PrivateKey, keyID string, userID uuid.UUID) string {
 	t.Helper()
 	tok := jwt.New()
 	_ = tok.Set("sub", userID.String())
@@ -104,11 +90,11 @@ func (f jwksFixture) signedToken(t *testing.T, userID uuid.UUID) string {
 	_ = tok.Set("aud", "authenticated")
 	_ = tok.Set("iat", time.Now().Add(-time.Minute))
 	_ = tok.Set("exp", time.Now().Add(30*time.Minute))
-	priv, err := jwk.FromRaw(f.key)
+	priv, err := jwk.FromRaw(key)
 	if err != nil {
 		t.Fatalf("jwk from private key: %v", err)
 	}
-	_ = priv.Set(jwk.KeyIDKey, "k1")
+	_ = priv.Set(jwk.KeyIDKey, keyID)
 	signed, err := jwt.Sign(tok, jwt.WithKey(jwa.RS256, priv))
 	if err != nil {
 		t.Fatalf("sign: %v", err)
@@ -116,54 +102,119 @@ func (f jwksFixture) signedToken(t *testing.T, userID uuid.UUID) string {
 	return string(signed)
 }
 
-func assertVerifiesAs(t *testing.T, verifier auth.TokenVerifier, token string, userID uuid.UUID) {
+func assembledHandler(t *testing.T, cfg *config.Config) http.Handler {
 	t.Helper()
-	verified, err := verifier.Verify(context.Background(), token)
+	ctx, cancel := context.WithCancel(t.Context())
+	assembly, err := app.Assemble(ctx, cfg, app.Handles{Pool: unreachablePool(t), Transport: refuseEgress{}})
 	if err != nil {
-		t.Fatalf("Verify: %v", err)
+		t.Fatalf("Assemble: %v", err)
 	}
-	if verified.UserID != shared.NewUserId(userID) {
-		t.Errorf("user id %v, want %v", verified.UserID, userID)
-	}
+	t.Cleanup(func() {
+		cancel()
+		assembly.Shutdown()
+	})
+	return assembly.Handler()
 }
 
-func TestNewAuthVerifier_NoRevokerConfiguredAcceptsValidToken(t *testing.T) {
-	f := newJWKSFixture(t)
-	verifier, err := newAuthVerifier(context.Background(), f.cfg)
-	if err != nil {
-		t.Fatalf("newAuthVerifier: %v", err)
-	}
-
-	userID := uuid.New()
-	assertVerifiesAs(t, verifier, f.signedToken(t, userID), userID)
+func getAs(t *testing.T, h http.Handler, path, token string) (int, []byte) {
+	t.Helper()
+	return getFrom(t, h, "192.0.2.1:1234", path, token)
 }
 
-func TestConnectAuth_RefusesAPlaintextJWKSURL(t *testing.T) {
-	a := &App{cfg: &config.Config{SupabaseJWTJWKSURL: "http://jwks.example.com/keys", SupabaseProjectURL: "https://p.supabase.co", SupabaseJWTAud: "authenticated"}}
+func getFrom(t *testing.T, h http.Handler, client, path, token string) (int, []byte) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.RemoteAddr = client
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	body, _ := io.ReadAll(rec.Body)
+	return rec.Code, body
+}
 
-	verifier, err := a.connectAuth(context.Background())
+func liveAuthMetrics(t *testing.T, h http.Handler, token string) auth.MetricsSnapshot {
+	t.Helper()
+	code, body := getAs(t, h, "/observe/metrics/live", token)
+	if code != http.StatusOK {
+		t.Fatalf("operator read of /observe/metrics/live = %d, want 200; body %s", code, body)
+	}
+	var got struct {
+		Auth auth.MetricsSnapshot `json:"auth"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode %s: %v", body, err)
+	}
+	return got.Auth
+}
+
+func TestAuth_APlaintextJWKSURLFailsAssembly(t *testing.T) {
+	cfg := jwksConfig(t)
+	cfg.SupabaseJWTJWKSURL = "http://jwks.example.com/keys"
+
+	_, err := app.Assemble(t.Context(), cfg, app.Handles{Pool: unreachablePool(t), Transport: refuseEgress{}})
+
 	if err == nil || !strings.HasPrefix(err.Error(), "auth: ") {
-		t.Fatalf("connectAuth error = %v, want the auth-wrapped refusal of a plaintext JWKS URL", err)
-	}
-	if verifier != nil || a.authVerifier != nil {
-		t.Fatalf("connectAuth kept verifier %v / app verifier %v after a failure, want neither", verifier, a.authVerifier)
+		t.Fatalf("Assemble error = %v, want the auth-wrapped refusal of a plaintext JWKS URL", err)
 	}
 }
 
-func TestConnectAuth_ServesAndKeepsTheSupabaseVerifier(t *testing.T) {
+func TestAuth_TheConfiguredVerifierAdmitsTheOperatorAndIsProbedForHealth(t *testing.T) {
 	f := newJWKSFixture(t)
-	a := &App{cfg: f.cfg}
+	h := assembledHandler(t, f.cfg)
 
-	verifier, err := a.connectAuth(context.Background())
-	if err != nil {
-		t.Fatalf("connectAuth: %v", err)
+	code, body := getAs(t, h, "/observe/health", signedToken(t, f.key, f.operator))
+
+	if code == http.StatusUnauthorized || code == http.StatusForbidden {
+		t.Fatalf("GET /observe/health with the operator's token = %d, want the operator admitted; body %s", code, body)
 	}
-	if verifier == nil {
-		t.Fatal("connectAuth returned a nil verifier")
+	var got struct {
+		Auth string `json:"auth"`
 	}
-	userID := uuid.New()
-	assertVerifiesAs(t, verifier, f.signedToken(t, userID), userID)
-	if any(a.authVerifier) != any(verifier) {
-		t.Fatalf("app keeps %v for health checks, want the verifier connectAuth served", a.authVerifier)
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode %s: %v", body, err)
+	}
+	if got.Auth != string(observe.DepUp) {
+		t.Errorf("auth dependency = %q, want %q: the verifier the routes use must also be probed for health", got.Auth, observe.DepUp)
+	}
+}
+
+func TestAuth_RejectionsAndAnUnreachableKeySetReachLiveMetrics(t *testing.T) {
+	f := newJWKSFixture(t)
+	f.keysDown.Store(true)
+	h := assembledHandler(t, f.cfg)
+	operator := signedToken(t, f.key, f.operator)
+	before := auth.ReadSnapshot()
+
+	const firstClient, forgingClient = "198.51.100.7:1234", "198.51.100.8:1234"
+	if code, body := getFrom(t, h, firstClient, "/observe/metrics/live", operator); code != http.StatusServiceUnavailable {
+		t.Fatalf("a token while the key set cannot be fetched: status %d, want 503; body %s", code, body)
+	}
+	unavailable := int64(1)
+	f.keysDown.Store(false)
+	for deadline := time.Now().Add(10 * time.Second); ; {
+		code, body := getFrom(t, h, fmt.Sprintf("203.0.113.%d:1234", unavailable), "/observe/metrics/live", operator)
+		if code == http.StatusOK {
+			break
+		}
+		if code != http.StatusServiceUnavailable || time.Now().After(deadline) {
+			t.Fatalf("the operator once the key set is back: status %d, want 200 within 10s; body %s", code, body)
+		}
+		unavailable++
+		time.Sleep(100 * time.Millisecond)
+	}
+	if code, _ := getFrom(t, h, forgingClient, "/observe/metrics/live", signedToken(t, newRSAKey(t), f.operator)); code != http.StatusUnauthorized {
+		t.Fatalf("token signed by another key: status %d, want 401", code)
+	}
+
+	after := liveAuthMetrics(t, h, operator)
+	if after.TokenRejections != before.TokenRejections+1 {
+		t.Errorf("auth.token_rejections_total %d, want %d", after.TokenRejections, before.TokenRejections+1)
+	}
+	reason := string(auth.ReasonSignatureInvalid)
+	if want := before.TokenRejectionsByReason[reason] + 1; after.TokenRejectionsByReason[reason] != want {
+		t.Errorf("auth.token_rejections_by_reason_total[%s] %d, want %d", reason, after.TokenRejectionsByReason[reason], want)
+	}
+	if after.VerifierUnavailable != before.VerifierUnavailable+unavailable {
+		t.Errorf("auth.verifier_unavailable_total %d, want %d, one per 503 served", after.VerifierUnavailable, before.VerifierUnavailable+unavailable)
 	}
 }

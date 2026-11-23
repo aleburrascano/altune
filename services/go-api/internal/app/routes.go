@@ -2,65 +2,21 @@ package app
 
 import (
 	"altune/go-api/internal/app/health"
+	"altune/go-api/internal/app/router"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/eventstream"
 	"altune/go-api/internal/playback"
-	"altune/go-api/internal/shared/httputil"
-	"altune/go-api/internal/shared/reqmetrics"
-	"altune/go-api/internal/shared/telemetry"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/cors"
 )
 
 const (
 	apiWriteTimeout   = 60 * time.Second
 	apiRequestTimeout = 50 * time.Second
 )
-
-func (a *App) requestBudget() time.Duration {
-	if a.requestTimeout > 0 {
-		return a.requestTimeout
-	}
-	return apiRequestTimeout
-}
-
-func untraced(r *http.Request) bool {
-	return r.URL.Path == "/health" || isLongLivedRoute(r)
-}
-
-func isLongLivedRoute(r *http.Request) bool {
-	path := r.URL.Path
-	return path == "/v1/events" ||
-		(r.Method == http.MethodGet && strings.HasPrefix(path, "/v1/tracks/") && strings.HasSuffix(path, "/audio"))
-}
-
-func v1RequestTimeout(d time.Duration) func(http.Handler) http.Handler {
-	bounded := httputil.RequestTimeout(d)
-	return func(next http.Handler) http.Handler {
-		withDeadline := bounded(next)
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !strings.HasPrefix(r.URL.Path, "/v1/") || isLongLivedRoute(r) {
-				next.ServeHTTP(w, r)
-				return
-			}
-			withDeadline.ServeHTTP(w, r)
-		})
-	}
-}
-
-func v1ResponseHeaders(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h := w.Header()
-		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("Cache-Control", "no-store")
-		next.ServeHTTP(w, r)
-	})
-}
 
 func (a *App) mountRoutes(
 	verifier auth.TokenVerifier,
@@ -73,7 +29,7 @@ func (a *App) mountRoutes(
 	r.Method(http.MethodGet, "/health", health.NewEndpoint(a.dependencyHealth, buildCommit, time.Now))
 
 	r.Route("/v1", func(r chi.Router) {
-		r.Use(v1ResponseHeaders)
+		r.Use(router.V1ResponseHeaders)
 		discoveryH.PublicRoutes(r, discovery.DefaultAuthFailureLimit)
 
 		r.Group(func(r chi.Router) {
@@ -102,28 +58,11 @@ func (a *App) mountRoutes(
 }
 
 func (a *App) newRouter(writeTimeout time.Duration) *chi.Mux {
-	r := chi.NewRouter()
-
-	r.Use(httputil.CorrelationID)
-	r.Use(telemetry.Middleware(untraced))
-	r.Use(reqmetrics.Middleware(a.latency.Observe))
-	r.Use(httputil.WriteDeadline(writeTimeout))
-	r.Use(v1RequestTimeout(a.requestBudget()))
-	r.Use(httputil.RequestLogger)
-	r.Use(httputil.Recoverer)
-	r.Use(httputil.MaxBodySize(1 << 20))
-	corsHeaders := []string{"Accept", "Authorization", "Content-Type", "Idempotency-Key", telemetry.AppVersionHeader, telemetry.PlatformHeader}
-	if a.cfg.IsDevelopment() {
-		corsHeaders = append(corsHeaders, "ngrok-skip-browser-warning")
-	}
-	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   a.cfg.CORSOrigins,
-		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   corsHeaders,
-		ExposedHeaders:   []string{"Content-Length"},
-		AllowCredentials: true,
-		MaxAge:           300,
-	}))
-
-	return r
+	return router.New(router.Settings{
+		WriteTimeout:   writeTimeout,
+		RequestTimeout: apiRequestTimeout,
+		CORSOrigins:    a.cfg.CORSOrigins,
+		Development:    a.cfg.IsDevelopment(),
+		Latency:        a.latency,
+	})
 }

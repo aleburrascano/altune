@@ -3,12 +3,8 @@ package app_test
 import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/app/shutdown"
-	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -18,8 +14,6 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/lestrrat-go/jwx/v2/jwa"
-	"github.com/lestrrat-go/jwx/v2/jwk"
 	goredis "github.com/redis/go-redis/v9"
 )
 
@@ -27,33 +21,6 @@ type refuseEgress struct{}
 
 func (refuseEgress) RoundTrip(*http.Request) (*http.Response, error) {
 	return nil, errors.New("test transport: provider egress refused")
-}
-
-func jwksConfig(t *testing.T) *config.Config {
-	t.Helper()
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("generate key: %v", err)
-	}
-	pub, err := jwk.FromRaw(key.PublicKey)
-	if err != nil {
-		t.Fatalf("jwk: %v", err)
-	}
-	_ = pub.Set(jwk.KeyIDKey, "k1")
-	_ = pub.Set(jwk.AlgorithmKey, jwa.RS256)
-	set := jwk.NewSet()
-	_ = set.AddKey(pub)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(set)
-	}))
-	t.Cleanup(srv.Close)
-	return &config.Config{
-		MusicDir:           t.TempDir(),
-		SupabaseJWTJWKSURL: srv.URL,
-		SupabaseProjectURL: "https://p.supabase.co",
-		SupabaseJWTAud:     "authenticated",
-	}
 }
 
 func integrationPool(t *testing.T) *pgxpool.Pool {
