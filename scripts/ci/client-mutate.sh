@@ -57,7 +57,7 @@ stryker_config() {
 run_inputs() {
   {
     git merge-base "$base" HEAD
-    git ls-files -- . ../scripts/ci/client-mutate.sh | git hash-object --stdin-paths
+    git ls-files --full-name -- . ../scripts/ci/client-mutate.sh | git -C "$(git rev-parse --show-toplevel)" hash-object --stdin-paths
   } | sha256sum | cut -d' ' -f1
 }
 
