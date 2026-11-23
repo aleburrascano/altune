@@ -87,7 +87,7 @@ func newDeadlineRouter(uid shared.UserId, sse *eventstream.EventStreamHandler, b
 
 func TestRouter_WriteDeadlineCutsOffSlowReaderOnNonSSERoute(t *testing.T) {
 	bulkErrs := make(chan error, 1)
-	sse := eventstream.NewEventStreamHandler(events.NewInProcessBus(), 0)
+	sse := eventstream.NewEventStreamHandler(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), 0)
 	srv := httputiltest.NewServer(t, newDeadlineRouter(shared.NewUserId(uuid.New()), sse, bulkErrs))
 
 	began := time.Now()
@@ -107,7 +107,7 @@ func TestRouter_WriteDeadlineCutsOffSlowReaderOnNonSSERoute(t *testing.T) {
 }
 
 func TestRouter_SSEStreamOutlivesRouteWriteDeadline(t *testing.T) {
-	bus := events.NewInProcessBus()
+	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 	sse := eventstream.NewEventStreamHandler(bus, 0).WithHeartbeat(routeWriteDeadline / 3)
 	srv := httputiltest.NewServer(t, newDeadlineRouter(uid, sse, make(chan error, 1)))
@@ -130,7 +130,7 @@ func TestRouter_SSEPerFrameDeadlineReachesConnection(t *testing.T) {
 	defer slog.SetDefault(prev)
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 
-	bus := events.NewInProcessBus()
+	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 	sse := eventstream.NewEventStreamHandler(bus, 0).WithWriteTimeout(routeWriteDeadline).WithHeartbeat(time.Hour)
 	done := make(chan struct{})
@@ -181,7 +181,7 @@ func productionRouterFor(t *testing.T, cfg *config.Config) *chi.Mux {
 		discovery.NewDiscoveryHandler(discovery.DiscoveryServices{}))
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	a.wireObserve(ctx, r, verifier, observe.NewEventTap(events.NewInProcessBus()))
+	a.wireObserve(ctx, r, verifier, observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))))
 	return r
 }
 

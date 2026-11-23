@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -270,7 +271,7 @@ func TestDiscoveryDeps_EachConfigSwitchTurnsOnOnlyItsOwnSetting(t *testing.T) {
 }
 
 func TestDiscoveryDeps_PassesTheAppsOwnHandles(t *testing.T) {
-	a := &App{cfg: &config.Config{}, eventTap: observe.NewEventTap(events.NewInProcessBus())}
+	a := &App{cfg: &config.Config{}, eventTap: observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))}
 	ctx := t.Context()
 	transport := &stubTransport{}
 	deps := a.discoveryDeps(ctx, newClientFactory(transport))

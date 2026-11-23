@@ -18,6 +18,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
@@ -306,7 +307,7 @@ type observedElection struct {
 func (c *observedElection) Counters() leader.Counters { return c.counters }
 
 func TestObserveLiveMetrics_CarriesSaturationKeys(t *testing.T) {
-	bus := events.NewInProcessBus()
+	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	a := &App{
 		election: &observedElection{counters: leader.Counters{Failures: 7}},
 		eventBus: bus,
@@ -330,7 +331,7 @@ func TestObserveLiveMetrics_CarriesSaturationKeys(t *testing.T) {
 }
 
 func TestObserveLiveMetrics_ReportsEventBusDrops(t *testing.T) {
-	a := &App{eventBus: events.NewInProcessBus()}
+	a := &App{eventBus: events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))}
 	user := shared.NewUserId(uuid.New())
 	_, unsubscribe := a.eventBus.Subscribe(user)
 	t.Cleanup(unsubscribe)
@@ -497,7 +498,7 @@ func TestWireObserve_BuildsTheFeedAndMeterItServes(t *testing.T) {
 	t.Cleanup(cancel)
 	r := chi.NewRouter()
 
-	a.wireObserve(ctx, r, subjects.verifier(), observe.NewEventTap(events.NewInProcessBus()))
+	a.wireObserve(ctx, r, subjects.verifier(), observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))))
 
 	if a.eventFeed == nil || a.evalMeter == nil {
 		t.Fatalf("feed %v, meter %v: wireObserve must build both", a.eventFeed, a.evalMeter)
@@ -542,7 +543,7 @@ func TestMeterResult_CarriesEveryScorecardField(t *testing.T) {
 }
 
 func TestObserveLiveMetrics_ReportsEventTapAndFeedDrops(t *testing.T) {
-	tap := observe.NewEventTap(events.NewInProcessBus())
+	tap := observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
 	feed := observe.NewEventFeed()
 	ctx, stop := context.WithCancel(context.Background())
 	feed.Start(ctx, tap)

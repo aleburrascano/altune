@@ -19,6 +19,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -46,7 +47,7 @@ func newStreamFixture(t *testing.T) streamFixture {
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	ring := logging.Setup("error", false)
-	tap := observe.NewEventTap(events.NewInProcessBus())
+	tap := observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
 	feed := observe.NewEventFeed()
 	ctx, stopFeed := context.WithCancel(context.Background())
 	feed.Start(ctx, tap)
@@ -542,7 +543,7 @@ func TestStreams_SubscriberPastTheCeilingGets429(t *testing.T) {
 }
 
 func TestStreams_SubscribeFailureOtherThanTheCeilingIs503(t *testing.T) {
-	tap := observe.NewEventTap(events.NewInProcessBus())
+	tap := observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
 	feed := observe.NewEventFeed()
 	feed.Start(context.Background(), tap)
 	feed.Shutdown(context.Background())
@@ -756,7 +757,7 @@ func TestStreams_StalledClientReleasesItsSlotAtTheWriteDeadline(t *testing.T) {
 
 func stoppableEventsDeps(t *testing.T) (observe.Deps, *observe.EventTap, func()) {
 	t.Helper()
-	tap := observe.NewEventTap(events.NewInProcessBus())
+	tap := observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
 	feed := observe.NewEventFeed()
 	ctx, cancel := context.WithCancel(context.Background())
 	feed.Start(ctx, tap)

@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -27,6 +28,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
 )
+
+const eventIDFloorFile = "altune-event-id-floor"
 
 type App struct {
 	cfg             *config.Config
@@ -120,7 +123,7 @@ func (a *App) setup(ctx context.Context) error {
 		return err
 	}
 
-	a.eventBus = events.NewInProcessBus()
+	a.eventBus = events.NewInProcessBus(time.Now, filepath.Join(os.TempDir(), eventIDFloorFile))
 	a.eventTap = observe.NewEventTap(a.eventBus)
 
 	if err := a.applyDisabledJobs(ctx); err != nil {

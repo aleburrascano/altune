@@ -1,18 +1,61 @@
-package events
+package events_test
 
 import (
+	"altune/go-api/internal/shared/events"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
+	"log/slog"
+	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 )
 
+const (
+	ringSize           = 100
+	subscriberChanSize = 16
+	userIdleTTL        = 30 * time.Minute
+)
+
+func testFloorPath(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(t.TempDir(), "altune-event-id-floor")
+}
+
+type testClock struct{ nanos atomic.Int64 }
+
+func newTestClock(at time.Time) *testClock {
+	c := &testClock{}
+	c.nanos.Store(at.UnixNano())
+	return c
+}
+
+func (c *testClock) now() time.Time { return time.Unix(0, c.nanos.Load()).UTC() }
+
+func (c *testClock) advance(d time.Duration) { c.nanos.Add(int64(d)) }
+
+func busAt(t *testing.T, clock *testClock) *events.InProcessBus {
+	t.Helper()
+	return events.NewInProcessBus(clock.now, testFloorPath(t))
+}
+
+func newUser() shared.UserId { return shared.NewUserId(uuid.New()) }
+
+func evictIdleUsers(bus *events.InProcessBus, clock *testClock) {
+	clock.advance(userIdleTTL + time.Minute)
+	bus.Publish(context.Background(), newUser(), "trigger", nil)
+}
+
+func isTracked(bus *events.InProcessBus, user shared.UserId) bool {
+	return bus.LatestID(user) != 0
+}
+
 func TestPublish_EpochSeedsEventIDs(t *testing.T) {
-	bus := NewInProcessBus()
-	user := shared.NewUserId(uuid.New())
+	bus := events.NewInProcessBus(time.Now, testFloorPath(t))
+	user := newUser()
 
 	ch, cancel := bus.Subscribe(user)
 	defer cancel()
@@ -23,41 +66,80 @@ func TestPublish_EpochSeedsEventIDs(t *testing.T) {
 	if evt.ID <= 1 {
 		t.Fatalf("first event id = %d, want an epoch-seeded id well above 1", evt.ID)
 	}
+	if evt.Type != "first" || evt.UserID != user || evt.Payload["k"] != "v" || evt.Timestamp.IsZero() {
+		t.Fatalf("event = %+v, want the published type, user, payload and a timestamp", evt)
+	}
+	if got := bus.HighestIssuedID(); got != evt.ID {
+		t.Fatalf("HighestIssuedID = %d, want the last issued id %d", got, evt.ID)
+	}
 }
 
 func TestEvictIdleUsers_ReclaimsIdleButKeepsActiveAndRecent(t *testing.T) {
-	current := time.Unix(0, 0).UTC()
-	bus := newBus(func() time.Time { return current }, testFloorPath(t))
+	clock := newTestClock(time.Unix(0, 0))
+	bus := busAt(t, clock)
 
-	idle := shared.NewUserId(uuid.New())
-	active := shared.NewUserId(uuid.New())
+	idle := newUser()
+	active := newUser()
 	bus.Publish(context.Background(), idle, "e", nil)
 	_, cancelActive := bus.Subscribe(active)
 	defer cancelActive()
 	bus.Publish(context.Background(), active, "e", nil)
 
-	current = current.Add(userIdleTTL + time.Minute)
+	clock.advance(userIdleTTL + time.Minute)
 
-	recent := shared.NewUserId(uuid.New())
+	recent := newUser()
 	bus.Publish(context.Background(), recent, "e", nil)
-	trigger := shared.NewUserId(uuid.New())
-	bus.Publish(context.Background(), trigger, "e", nil)
+	bus.Publish(context.Background(), newUser(), "e", nil)
 
-	if _, ok := bus.users.Load(idle.String()); ok {
+	if isTracked(bus, idle) {
 		t.Fatalf("idle subscriber-less user was not evicted")
 	}
-	if _, ok := bus.users.Load(active.String()); !ok {
+	if !isTracked(bus, active) {
 		t.Fatalf("active subscribed user was wrongly evicted")
 	}
-	if _, ok := bus.users.Load(recent.String()); !ok {
+	if !isTracked(bus, recent) {
 		t.Fatalf("recently active subscriber-less user was wrongly evicted")
 	}
 }
 
-func TestPublish_LaterProcessHasHigherIDs(t *testing.T) {
-	user := shared.NewUserId(uuid.New())
+func TestEvictIdleUsers_KeepsAUserIdleForExactlyTheTTL(t *testing.T) {
+	clock := newTestClock(time.Unix(0, 0))
+	bus := busAt(t, clock)
+	user := newUser()
+	bus.Publish(context.Background(), user, "e", nil)
 
-	bus1 := NewInProcessBus()
+	clock.advance(userIdleTTL)
+	bus.Publish(context.Background(), newUser(), "trigger", nil)
+
+	if !isTracked(bus, user) {
+		t.Fatalf("user idle for exactly %s was evicted, want eviction only past it", userIdleTTL)
+	}
+}
+
+func TestEvictIdleUsers_CancelledSubscriptionStartsTheIdleClock(t *testing.T) {
+	clock := newTestClock(time.Unix(0, 0))
+	bus := busAt(t, clock)
+	user := newUser()
+	_, cancel := bus.Subscribe(user)
+	bus.Publish(context.Background(), user, "e", nil)
+	clock.advance(userIdleTTL + time.Minute)
+	cancel()
+
+	bus.Publish(context.Background(), newUser(), "trigger", nil)
+	if !isTracked(bus, user) {
+		t.Fatal("user evicted right after its last subscriber left, want the idle TTL to start then")
+	}
+	evictIdleUsers(bus, clock)
+	if isTracked(bus, user) {
+		t.Fatal("user still tracked a full idle TTL after its last subscriber left")
+	}
+}
+
+func TestPublish_LaterProcessHasHigherIDs(t *testing.T) {
+	user := newUser()
+	floorPath := testFloorPath(t)
+
+	bus1 := events.NewInProcessBus(time.Now, floorPath)
 	ch1, cancel1 := bus1.Subscribe(user)
 	defer cancel1()
 	bus1.Publish(context.Background(), user, "e", nil)
@@ -65,7 +147,7 @@ func TestPublish_LaterProcessHasHigherIDs(t *testing.T) {
 
 	time.Sleep(time.Millisecond)
 
-	bus2 := NewInProcessBus()
+	bus2 := events.NewInProcessBus(time.Now, floorPath)
 	ch2, cancel2 := bus2.Subscribe(user)
 	defer cancel2()
 	bus2.Publish(context.Background(), user, "e", nil)
@@ -76,13 +158,13 @@ func TestPublish_LaterProcessHasHigherIDs(t *testing.T) {
 	}
 }
 
-func restartAt(at time.Time, floorPath string) *InProcessBus {
-	return newBus(func() time.Time { return at }, floorPath)
+func restartAt(at time.Time, floorPath string) *events.InProcessBus {
+	return events.NewInProcessBus(func() time.Time { return at }, floorPath)
 }
 
 func TestReplay_AfterBackwardClockJumpAcrossRestart_SeesNewEvents(t *testing.T) {
 	floorPath := testFloorPath(t)
-	user := shared.NewUserId(uuid.New())
+	user := newUser()
 	beforeRestart := time.Unix(1_700_000_000, 0).UTC()
 
 	old := restartAt(beforeRestart, floorPath)
@@ -100,7 +182,7 @@ func TestReplay_AfterBackwardClockJumpAcrossRestart_SeesNewEvents(t *testing.T) 
 
 func TestPublish_AcrossRepeatedBackwardClockJumps_NeverReissuesAnID(t *testing.T) {
 	floorPath := testFloorPath(t)
-	user := shared.NewUserId(uuid.New())
+	user := newUser()
 	clock := time.Unix(1_700_000_000, 0).UTC()
 
 	var highest uint64
@@ -117,9 +199,9 @@ func TestPublish_AcrossRepeatedBackwardClockJumps_NeverReissuesAnID(t *testing.T
 }
 
 func TestReplay_AfterIdleEvictionAndRecreate_ReturnsNewEvents(t *testing.T) {
-	current := time.Unix(0, 0).UTC()
-	bus := newBus(func() time.Time { return current }, testFloorPath(t))
-	user := shared.NewUserId(uuid.New())
+	clock := newTestClock(time.Unix(0, 0))
+	bus := busAt(t, clock)
+	user := newUser()
 
 	for i := 0; i < 5; i++ {
 		bus.Publish(context.Background(), user, "before", nil)
@@ -132,10 +214,12 @@ func TestReplay_AfterIdleEvictionAndRecreate_ReturnsNewEvents(t *testing.T) {
 		t.Fatalf("precondition: no pre-eviction events replayed")
 	}
 
-	current = current.Add(userIdleTTL + time.Minute)
-	bus.Publish(context.Background(), shared.NewUserId(uuid.New()), "trigger", nil)
-	if _, ok := bus.users.Load(user.String()); ok {
+	evictIdleUsers(bus, clock)
+	if isTracked(bus, user) {
 		t.Fatalf("precondition: idle user was not evicted")
+	}
+	if got := bus.Replay(user, 0); got != nil {
+		t.Fatalf("replay of an evicted user = %+v, want nothing", got)
 	}
 
 	bus.Publish(context.Background(), user, "after", nil)
@@ -149,34 +233,144 @@ func TestReplay_AfterIdleEvictionAndRecreate_ReturnsNewEvents(t *testing.T) {
 	}
 }
 
-type subscription struct {
-	ch     <-chan Event
-	cancel func()
+func TestReplay_ReturnsOnlyEventsAfterTheGivenID(t *testing.T) {
+	bus := busAt(t, newTestClock(time.Unix(1_700_000_000, 0)))
+	user := newUser()
+	for range 3 {
+		bus.Publish(context.Background(), user, "e", nil)
+	}
+	all := bus.Replay(user, 0)
+
+	got := bus.Replay(user, all[0].ID)
+
+	if len(got) != 2 || got[0].ID != all[1].ID || got[1].ID != all[2].ID {
+		t.Fatalf("replay after id %d = %+v, want the two later events", all[0].ID, got)
+	}
 }
 
-func subscribeDuringEviction(bus *InProcessBus, user shared.UserId, out chan subscription) func(string) {
-	return func(key string) {
-		if key != user.String() {
-			return
-		}
-		go func() {
-			ch, cancel := bus.Subscribe(user)
-			out <- subscription{ch, cancel}
-		}()
-		select {
-		case sub := <-out:
-			out <- sub
-		case <-time.After(50 * time.Millisecond):
+func TestReplay_FullRingKeepsTheNewestEventsInOrder(t *testing.T) {
+	bus := busAt(t, newTestClock(time.Unix(1_700_000_000, 0)))
+	user := newUser()
+	for range ringSize + 2 {
+		bus.Publish(context.Background(), user, "e", nil)
+	}
+
+	got := bus.Replay(user, 0)
+
+	if len(got) != ringSize {
+		t.Fatalf("replay returned %d events, want the ring's %d", len(got), ringSize)
+	}
+	for i := 1; i < len(got); i++ {
+		if got[i].ID != got[i-1].ID+1 {
+			t.Fatalf("replay ids %d then %d, want consecutive ids oldest first", got[i-1].ID, got[i].ID)
 		}
 	}
+	if got[len(got)-1].ID != bus.LatestID(user) {
+		t.Fatalf("replay ends at %d, want the latest id %d", got[len(got)-1].ID, bus.LatestID(user))
+	}
+}
+
+func TestReplay_UnknownUserReturnsNothing(t *testing.T) {
+	bus := busAt(t, newTestClock(time.Unix(1_700_000_000, 0)))
+	user := newUser()
+	_, cancel := bus.Subscribe(user)
+	defer cancel()
+
+	if got := bus.Replay(newUser(), 0); got != nil {
+		t.Fatalf("replay of an unknown user = %+v, want nothing", got)
+	}
+	if got := bus.Replay(user, 0); got != nil {
+		t.Fatalf("replay of a user with no events = %+v, want nothing", got)
+	}
+}
+
+type warnRecorder struct {
+	mu    sync.Mutex
+	warns []map[string]any
+}
+
+func (h *warnRecorder) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *warnRecorder) Handle(_ context.Context, r slog.Record) error {
+	if r.Level != slog.LevelWarn {
+		return nil
+	}
+	attrs := map[string]any{"msg": r.Message}
+	r.Attrs(func(a slog.Attr) bool {
+		attrs[a.Key] = a.Value.Any()
+		return true
+	})
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.warns = append(h.warns, attrs)
+	return nil
+}
+
+func (h *warnRecorder) WithAttrs([]slog.Attr) slog.Handler { return h }
+
+func (h *warnRecorder) WithGroup(string) slog.Handler { return h }
+
+func (h *warnRecorder) named(msg string) []map[string]any {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var out []map[string]any
+	for _, w := range h.warns {
+		if w["msg"] == msg {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+func captureWarnings(t *testing.T) *warnRecorder {
+	t.Helper()
+	rec := &warnRecorder{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(rec))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return rec
+}
+
+func TestReplay_WarnsWithTheLostCountOnlyWhenTheRingDroppedEventsTheClientNeeds(t *testing.T) {
+	bus := busAt(t, newTestClock(time.Unix(1_700_000_000, 0)))
+	user := newUser()
+	var first uint64
+	for i := range ringSize + 2 {
+		bus.Publish(context.Background(), user, "e", nil)
+		if i == 0 {
+			first = bus.LatestID(user)
+		}
+	}
+	warnings := captureWarnings(t)
+
+	bus.Replay(user, 0)
+	bus.Replay(user, first+1)
+	if got := warnings.named("events.replay_gap"); len(got) != 0 {
+		t.Fatalf("warnings = %v, want none for a fresh start or a client that missed nothing", got)
+	}
+
+	bus.Replay(user, first)
+
+	got := warnings.named("events.replay_gap")
+	if len(got) != 1 {
+		t.Fatalf("warnings = %v, want one replay gap", warnings.warns)
+	}
+	if got[0]["after_id"] != first || got[0]["oldest_retained_id"] != first+2 || got[0]["lost"] != uint64(1) {
+		t.Fatalf("gap warning = %v, want after_id=%d oldest_retained_id=%d lost=1", got[0], first, first+2)
+	}
+}
+
+type subscription struct {
+	ch     <-chan events.Event
+	cancel func()
 }
 
 func TestPublish_ConcurrentSameUserDeliversIDsInOrder(t *testing.T) {
 	const publishers = 4
 	const perPublisher = subscriberChanSize / publishers
 	const rounds = 300
-	bus := NewInProcessBus()
-	user := shared.NewUserId(uuid.New())
+	bus := events.NewInProcessBus(time.Now, testFloorPath(t))
+	user := newUser()
 	ch, cancel := bus.Subscribe(user)
 	defer cancel()
 
@@ -204,16 +398,91 @@ func TestPublish_ConcurrentSameUserDeliversIDsInOrder(t *testing.T) {
 	}
 }
 
-func TestEvictIdleUsers_ConcurrentSubscribeIsNotOrphaned(t *testing.T) {
-	current := time.Unix(0, 0).UTC()
-	bus := newBus(func() time.Time { return current }, testFloorPath(t))
-	idle := shared.NewUserId(uuid.New())
-	bus.Publish(context.Background(), idle, "e", nil)
-	current = current.Add(userIdleTTL + time.Minute)
+type clockGate struct {
+	entered chan struct{}
+	release chan struct{}
+	returns time.Time
+}
 
+type gatedClock struct {
+	mu   sync.Mutex
+	at   time.Time
+	gate *clockGate
+}
+
+func (c *gatedClock) now() time.Time {
+	c.mu.Lock()
+	gate, at := c.gate, c.at
+	c.gate = nil
+	c.mu.Unlock()
+	if gate == nil {
+		return at
+	}
+	close(gate.entered)
+	<-gate.release
+	return gate.returns
+}
+
+func (c *gatedClock) gateNextCall(returns time.Time, release chan struct{}) *clockGate {
+	gate := &clockGate{entered: make(chan struct{}), release: release, returns: returns}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.gate = gate
+	return gate
+}
+
+func (c *gatedClock) current() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.at
+}
+
+func (c *gatedClock) advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.at = c.at.Add(d)
+}
+
+func holdUserLockWithStaleActivity(bus *events.InProcessBus, clock *gatedClock, user shared.UserId, staleAt time.Time) chan struct{} {
+	release := make(chan struct{})
+	held := clock.gateNextCall(staleAt, release)
+	go bus.Publish(context.Background(), user, "held", nil)
+	<-held.entered
+	return release
+}
+
+func startEvictionQueuedOnUserLock(bus *events.InProcessBus, clock *gatedClock) chan struct{} {
+	done := make(chan struct{})
+	released := make(chan struct{})
+	close(released)
+	cutoffRead := clock.gateNextCall(clock.current(), released)
+	go func() {
+		defer close(done)
+		bus.Publish(context.Background(), newUser(), "trigger", nil)
+	}()
+	<-cutoffRead.entered
+	time.Sleep(50 * time.Millisecond)
+	return done
+}
+
+func TestEvictIdleUsers_SubscribeQueuedBehindTheEvictionIsNotOrphaned(t *testing.T) {
+	start := time.Unix(1_700_000_000, 0).UTC()
+	clock := &gatedClock{at: start}
+	bus := events.NewInProcessBus(clock.now, testFloorPath(t))
+	idle := newUser()
+	bus.Publish(context.Background(), idle, "before", nil)
+	clock.advance(userIdleTTL + time.Minute)
+
+	releaseUser := holdUserLockWithStaleActivity(bus, clock, idle, start)
+	evicted := startEvictionQueuedOnUserLock(bus, clock)
 	subscribed := make(chan subscription, 1)
-	bus.beforeEvictDelete = subscribeDuringEviction(bus, idle, subscribed)
-	bus.Publish(context.Background(), shared.NewUserId(uuid.New()), "trigger", nil)
+	go func() {
+		ch, cancel := bus.Subscribe(idle)
+		subscribed <- subscription{ch, cancel}
+	}()
+	time.Sleep(50 * time.Millisecond)
+	close(releaseUser)
+	<-evicted
 	sub := <-subscribed
 	defer sub.cancel()
 
@@ -225,13 +494,13 @@ func TestEvictIdleUsers_ConcurrentSubscribeIsNotOrphaned(t *testing.T) {
 			t.Fatalf("subscriber got event %q, want %q", evt.Type, "after")
 		}
 	case <-time.After(time.Second):
-		t.Fatalf("subscriber registered during eviction was orphaned: no event delivered")
+		t.Fatal("subscriber that queued behind the eviction was orphaned: the next event never reached it")
 	}
 }
 
 func TestLatestID_TracksLastPublishedIDEvenWhenSubscriberDropped(t *testing.T) {
-	bus := NewInProcessBus()
-	uid := shared.NewUserId(uuid.New())
+	bus := events.NewInProcessBus(time.Now, testFloorPath(t))
+	uid := newUser()
 	if got := bus.LatestID(uid); got != 0 {
 		t.Fatalf("LatestID for unknown user = %d, want 0", got)
 	}
@@ -244,18 +513,20 @@ func TestLatestID_TracksLastPublishedIDEvenWhenSubscriberDropped(t *testing.T) {
 	if want := replayed[len(replayed)-1].ID; bus.LatestID(uid) != want {
 		t.Fatalf("LatestID = %d, want %d", bus.LatestID(uid), want)
 	}
+	if got := bus.Dropped(); got != 4 {
+		t.Fatalf("Dropped = %d, want the 4 events past the subscriber's %d-slot buffer", got, subscriberChanSize)
+	}
 }
 
 func TestResumeGapped_AfterIdleEvictionWithNothingPublished_ReportsGap(t *testing.T) {
-	current := time.Unix(0, 0).UTC()
-	bus := newBus(func() time.Time { return current }, testFloorPath(t))
-	user := shared.NewUserId(uuid.New())
+	clock := newTestClock(time.Unix(0, 0))
+	bus := busAt(t, clock)
+	user := newUser()
 	bus.Publish(context.Background(), user, "before", nil)
 	lastSeenID := bus.Replay(user, 0)[0].ID
 
-	current = current.Add(userIdleTTL + time.Minute)
-	bus.Publish(context.Background(), shared.NewUserId(uuid.New()), "trigger", nil)
-	if _, ok := bus.users.Load(user.String()); ok {
+	evictIdleUsers(bus, clock)
+	if isTracked(bus, user) {
 		t.Fatalf("precondition: idle user was not evicted")
 	}
 
@@ -269,9 +540,30 @@ func TestResumeGapped_AfterIdleEvictionWithNothingPublished_ReportsGap(t *testin
 	}
 }
 
+func TestResumeGapped_ClientAtTheHighestIDWhenStateWasRecreated_ReportsNoGap(t *testing.T) {
+	clock := newTestClock(time.Unix(0, 0))
+	bus := busAt(t, clock)
+	user := newUser()
+	bus.Publish(context.Background(), user, "before", nil)
+	lastSeenID := bus.LatestID(user)
+	clock.advance(userIdleTTL + time.Minute)
+	_, cancelTrigger := bus.Subscribe(newUser())
+	defer cancelTrigger()
+	if isTracked(bus, user) {
+		t.Fatalf("precondition: idle user was not evicted")
+	}
+
+	_, cancel := bus.Subscribe(user)
+	defer cancel()
+
+	if bus.ResumeGapped(user, lastSeenID) {
+		t.Fatalf("ResumeGapped(after %d) = true, want false: no id was issued while the user's state was gone", lastSeenID)
+	}
+}
+
 func TestResumeGapped_AfterRestart_ReportsGap(t *testing.T) {
 	floorPath := testFloorPath(t)
-	user := shared.NewUserId(uuid.New())
+	user := newUser()
 	old := restartAt(time.Unix(1_700_000_000, 0).UTC(), floorPath)
 	old.Publish(context.Background(), user, "before", nil)
 	lastSeenID := old.Replay(user, 0)[0].ID
@@ -283,15 +575,15 @@ func TestResumeGapped_AfterRestart_ReportsGap(t *testing.T) {
 }
 
 func TestResumeGapped_CaughtUpOrFresh_ReportsNoGap(t *testing.T) {
-	bus := newBus(time.Now, testFloorPath(t))
-	user := shared.NewUserId(uuid.New())
+	bus := events.NewInProcessBus(time.Now, testFloorPath(t))
+	user := newUser()
 	bus.Publish(context.Background(), user, "e", nil)
 	lastSeenID := bus.Replay(user, 0)[0].ID
 
 	if bus.ResumeGapped(user, lastSeenID) {
 		t.Fatalf("ResumeGapped(after %d) = true for a caught-up client", lastSeenID)
 	}
-	if bus.ResumeGapped(shared.NewUserId(uuid.New()), 0) {
+	if bus.ResumeGapped(newUser(), 0) {
 		t.Fatalf("ResumeGapped(after 0) = true, want false: nothing was ever seen")
 	}
 }

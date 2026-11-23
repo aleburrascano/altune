@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -21,7 +22,7 @@ const (
 func startFeed(t *testing.T) (*observe.EventFeed, *observe.EventTap, context.CancelFunc) {
 	t.Helper()
 	f := observe.NewEventFeed()
-	tp := observe.NewEventTap(events.NewInProcessBus())
+	tp := observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
 	ctx, stop := context.WithCancel(context.Background())
 	f.Start(ctx, tp)
 	t.Cleanup(func() {
@@ -163,7 +164,7 @@ func TestFeed_AvailableOnlyWhileDraining(t *testing.T) {
 	})
 
 	t.Run("tap already has a subscriber", func(t *testing.T) {
-		tp := observe.NewEventTap(events.NewInProcessBus())
+		tp := observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
 		_, releaseTap, err := tp.SubscribeAll()
 		if err != nil {
 			t.Fatalf("occupy the tap: %v", err)

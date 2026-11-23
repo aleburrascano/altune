@@ -1,4 +1,4 @@
-package events
+package idfloor
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,28 +17,24 @@ const (
 	idReservation = uint64(time.Second)
 
 	maxFloorAhead = uint64(10 * 365 * 24 * time.Hour)
-
-	idFloorFileName = "altune-event-id-floor"
 )
 
-type idFloor struct {
+type Floor struct {
 	path     string
 	mu       sync.Mutex
 	reserved atomic.Uint64
 }
 
-func newIDFloor(path string) *idFloor { return &idFloor{path: path} }
+func New(path string) *Floor { return &Floor{path: path} }
 
-func defaultIDFloorPath() string { return filepath.Join(os.TempDir(), idFloorFileName) }
-
-func (f *idFloor) reserveAbove(want uint64) uint64 {
+func (f *Floor) ReserveAbove(want uint64) uint64 {
 	if want < f.reserved.Load() {
 		return want
 	}
 	return f.reserveBlockFrom(want)
 }
 
-func (f *idFloor) reserveBlockFrom(want uint64) uint64 {
+func (f *Floor) reserveBlockFrom(want uint64) uint64 {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if want < f.reserved.Load() {
@@ -52,7 +47,7 @@ func (f *idFloor) reserveBlockFrom(want uint64) uint64 {
 	return start
 }
 
-func (f *idFloor) trustedCeiling(want uint64) uint64 {
+func (f *Floor) trustedCeiling(want uint64) uint64 {
 	ceiling := f.readCeiling()
 	if !isImplausiblyAhead(ceiling, want) {
 		return ceiling
@@ -61,7 +56,7 @@ func (f *idFloor) trustedCeiling(want uint64) uint64 {
 	return 0
 }
 
-func (f *idFloor) readCeiling() uint64 {
+func (f *Floor) readCeiling() uint64 {
 	raw, err := os.ReadFile(f.path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return 0
@@ -82,13 +77,13 @@ func isImplausiblyAhead(ceiling, want uint64) bool {
 	return ceiling > want && ceiling-want > maxFloorAhead
 }
 
-func (f *idFloor) persistOrWarn(ceiling uint64) {
+func (f *Floor) persistOrWarn(ceiling uint64) {
 	if err := f.persist(ceiling); err != nil {
 		slog.WarnContext(context.Background(), "events.id_floor_unwritable", "path", f.path, "error", err)
 	}
 }
 
-func (f *idFloor) persist(ceiling uint64) error {
+func (f *Floor) persist(ceiling uint64) error {
 	tmp := f.path + ".tmp"
 	if err := os.WriteFile(tmp, []byte(strconv.FormatUint(ceiling, 10)), 0o600); err != nil {
 		return err
