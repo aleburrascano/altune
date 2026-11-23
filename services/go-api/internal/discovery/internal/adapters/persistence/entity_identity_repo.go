@@ -103,22 +103,27 @@ func (s *PgxIdentityStore) queryIdentityHits(
 }
 
 func scanIdentityHits(ctx context.Context, rows pgx.Rows, requested map[identityRow]ports.IdentityRef) (map[ports.IdentityRef]ports.IdentityHit, error) {
-	defer rows.Close()
+	stored, err := pgx.CollectRows(rows, pgx.RowToStructByName[storedIdentity])
+	if err != nil {
+		return nil, fmt.Errorf("scan identity: %w", err)
+	}
 	hits := make(map[ports.IdentityRef]ports.IdentityHit, len(requested))
-	for rows.Next() {
-		var row identityRow
-		var mbid string
-		var xrefBlob []byte
-		if err := rows.Scan(&row[0], &row[1], &row[2], &mbid, &xrefBlob); err != nil {
-			return nil, fmt.Errorf("scan identity: %w", err)
-		}
-		ref, ok := requested[row]
-		if !ok || mbid == "" {
+	for _, s := range stored {
+		ref, ok := requested[identityRow{s.Provider, s.ExternalID, s.Kind}]
+		if !ok || s.MBID == "" {
 			continue
 		}
-		hits[ref] = ports.IdentityHit{MBID: mbid, Xref: decodeXref(ctx, mbid, xrefBlob)}
+		hits[ref] = ports.IdentityHit{MBID: s.MBID, Xref: decodeXref(ctx, s.MBID, s.Xref)}
 	}
-	return hits, rows.Err()
+	return hits, nil
+}
+
+type storedIdentity struct {
+	Provider   string
+	ExternalID string
+	Kind       string
+	MBID       string
+	Xref       []byte
 }
 
 func decodeXref(ctx context.Context, mbid string, blob []byte) map[domain.ProviderKey]string {

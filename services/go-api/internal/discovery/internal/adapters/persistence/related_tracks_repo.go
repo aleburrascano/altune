@@ -44,10 +44,9 @@ func (r *PgxRelationshipQuerier) albumCandidates(ctx context.Context, userId sha
 	if err != nil {
 		return nil, fmt.Errorf("find related by album artist: %w", err)
 	}
-	defer rows.Close()
-	return collectRows(rows, func(rows pgx.Rows) (albumCandidate, error) {
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (albumCandidate, error) {
 		var c albumCandidate
-		err := rows.Scan(&c.match.Title, &c.match.Artist, &c.match.Album, &c.match.ArtworkURL, &c.albumArtist)
+		err := row.Scan(&c.match.Title, &c.match.Artist, &c.match.Album, &c.match.ArtworkURL, &c.albumArtist)
 		return c, err
 	})
 }

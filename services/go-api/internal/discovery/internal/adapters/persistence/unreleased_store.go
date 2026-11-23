@@ -3,6 +3,7 @@ package persistence
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/core/ports"
+	"altune/go-api/internal/shared/database"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -126,24 +127,16 @@ func (s *PgxUnreleasedStore) readSongs(ctx context.Context, key ports.Unreleased
 	if err != nil {
 		return nil, fmt.Errorf("read unreleased songs: %w", err)
 	}
-	defer rows.Close()
-	songs := []domain.UnreleasedSong{}
-	for rows.Next() {
-		song, err := scanSong(rows)
-		if err != nil {
-			return nil, err
-		}
-		songs = append(songs, song)
-	}
-	if err := rows.Err(); err != nil {
+	songs, err := pgx.CollectRows(rows, scanSong)
+	if err != nil {
 		return nil, fmt.Errorf("read unreleased songs: %w", err)
 	}
 	return songs, nil
 }
 
-func scanSong(rows pgx.Rows) (domain.UnreleasedSong, error) {
+func scanSong(row pgx.CollectableRow) (domain.UnreleasedSong, error) {
 	var raw []byte
-	if err := rows.Scan(&raw); err != nil {
+	if err := row.Scan(&raw); err != nil {
 		return domain.UnreleasedSong{}, fmt.Errorf("scan unreleased song: %w", err)
 	}
 	return decodeUnreleasedSong(raw)
@@ -159,25 +152,15 @@ func (s *PgxUnreleasedStore) Write(ctx context.Context, key ports.UnreleasedArti
 	if err != nil {
 		return err
 	}
-	tx, err := s.pool.Begin(ctx)
+	err = database.InTx(ctx, s.pool, func(tx pgx.Tx) error {
+		claimed, err := claimBuild(ctx, tx, key, len(songs), complete, startedAt, buildVersion)
+		if err != nil || !claimed {
+			return err
+		}
+		return replaceSongs(ctx, tx, key, songs, encoded)
+	})
 	if err != nil {
-		return fmt.Errorf("begin unreleased write: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	claimed, err := claimBuild(ctx, tx, key, len(songs), complete, startedAt, buildVersion)
-	if err != nil || !claimed {
-		return err
-	}
-	if err := replaceSongs(ctx, tx, key, songs, encoded); err != nil {
-		return err
-	}
-	return commitUnreleasedWrite(ctx, tx)
-}
-
-func commitUnreleasedWrite(ctx context.Context, tx pgx.Tx) error {
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit unreleased write: %w", err)
+		return fmt.Errorf("write unreleased artist %s/%s: %w", key.Provider, key.ExternalID, err)
 	}
 	return nil
 }
@@ -246,16 +229,8 @@ func (s *PgxUnreleasedStore) Search(ctx context.Context, query string, limit int
 	if err != nil {
 		return nil, fmt.Errorf("search unreleased songs: %w", err)
 	}
-	defer rows.Close()
-	var scored []scoredHit
-	for rows.Next() {
-		hit, err := scanHit(rows)
-		if err != nil {
-			return nil, err
-		}
-		scored = append(scored, hit)
-	}
-	if err := rows.Err(); err != nil {
+	scored, err := pgx.CollectRows(rows, scanHit)
+	if err != nil {
 		return nil, fmt.Errorf("search unreleased songs: %w", err)
 	}
 	return rankHits(scored), nil
@@ -277,11 +252,11 @@ func rankHits(scored []scoredHit) []ports.UnreleasedHit {
 	return hits
 }
 
-func scanHit(rows pgx.Rows) (scoredHit, error) {
+func scanHit(row pgx.CollectableRow) (scoredHit, error) {
 	var providerKey, externalID, name string
 	var raw []byte
 	var sim float32
-	if err := rows.Scan(&providerKey, &externalID, &name, &raw, &sim); err != nil {
+	if err := row.Scan(&providerKey, &externalID, &name, &raw, &sim); err != nil {
 		return scoredHit{}, fmt.Errorf("scan unreleased hit: %w", err)
 	}
 	provider, err := domain.ParseProviderName(providerKey)
@@ -327,25 +302,17 @@ func (s *PgxUnreleasedStore) Due(ctx context.Context, now time.Time, limit int) 
 	if err != nil {
 		return nil, fmt.Errorf("due unreleased artists: %w", err)
 	}
-	defer rows.Close()
-	var due []ports.UnreleasedDueArtist
-	for rows.Next() {
-		artist, err := scanDueArtist(rows)
-		if err != nil {
-			return nil, err
-		}
-		due = append(due, artist)
-	}
-	if err := rows.Err(); err != nil {
+	due, err := pgx.CollectRows(rows, scanDueArtist)
+	if err != nil {
 		return nil, fmt.Errorf("due unreleased artists: %w", err)
 	}
 	return due, nil
 }
 
-func scanDueArtist(rows pgx.Rows) (ports.UnreleasedDueArtist, error) {
+func scanDueArtist(row pgx.CollectableRow) (ports.UnreleasedDueArtist, error) {
 	var providerKey, externalID, name string
 	var knownRaw []byte
-	if err := rows.Scan(&providerKey, &externalID, &name, &knownRaw); err != nil {
+	if err := row.Scan(&providerKey, &externalID, &name, &knownRaw); err != nil {
 		return ports.UnreleasedDueArtist{}, fmt.Errorf("scan due unreleased artist: %w", err)
 	}
 	provider, err := domain.ParseProviderName(providerKey)

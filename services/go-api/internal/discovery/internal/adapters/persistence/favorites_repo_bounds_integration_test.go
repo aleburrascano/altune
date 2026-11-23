@@ -16,7 +16,7 @@ import (
 
 func favoritesRepoForUser(t *testing.T) (*pgxpool.Pool, *persistence.PgxFavoritesRepository, shared.UserId) {
 	t.Helper()
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	userId := shared.NewUserId(uuid.New())
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM discovery_favorites WHERE user_id = $1`, userId.UUID())
@@ -118,5 +118,25 @@ func TestPgxFavoritesRepo_ListForUserReadsAtMostTheCap(t *testing.T) {
 	}
 	if len(got) != ports.MaxFavoritesPerUser {
 		t.Fatalf("ListForUser returned %d rows, want %d", len(got), ports.MaxFavoritesPerUser)
+	}
+}
+
+func TestPgxFavoritesRepo_ListForUserSkipsAKindItDoesNotKnowAndKeepsNewestFirst(t *testing.T) {
+	pool, repo, userId := favoritesRepoForUser(t)
+	ctx := context.Background()
+	if got, err := repo.ListForUser(ctx, userId); err != nil || got == nil || len(got) != 0 {
+		t.Fatalf("ListForUser with no favorites = %#v, %v; want an empty, non-nil list", got, err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO discovery_favorites (user_id, kind, entity_key, title, created_at) VALUES
+		($1, 'album', 'a', 'A', now()),
+		($1, 'bogus', 'b', 'B', now() - interval '1 minute'),
+		($1, 'artist', 'c', 'C', now() - interval '2 minute')`, userId.UUID()); err != nil {
+		t.Fatalf("seed favorites: %v", err)
+	}
+
+	got, err := repo.ListForUser(ctx, userId)
+
+	if err != nil || len(got) != 2 || got[0].Key != "a" || got[0].Title != "A" || got[1].Key != "c" {
+		t.Fatalf("ListForUser = %#v, %v; want album a then artist c, without the unknown kind", got, err)
 	}
 }

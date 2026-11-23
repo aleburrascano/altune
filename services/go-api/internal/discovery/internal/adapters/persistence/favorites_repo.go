@@ -79,31 +79,39 @@ func (r *PgxFavoritesRepository) ListForUser(ctx context.Context, userId shared.
 	if err != nil {
 		return nil, fmt.Errorf("query favorites: %w", err)
 	}
-	defer rows.Close()
+	stored, err := pgx.CollectRows(rows, pgx.RowToStructByName[storedFavorite])
+	if err != nil {
+		return nil, fmt.Errorf("scan favorites: %w", err)
+	}
+	favorites := []domain.Favorite{}
+	for _, f := range stored {
+		if favorite, known := f.favorite(); known {
+			favorites = append(favorites, favorite)
+		}
+	}
+	return favorites, nil
+}
 
-	return collectRows(rows, func(rows pgx.Rows) (domain.Favorite, error) {
-		var (
-			kind      string
-			key       string
-			title     string
-			subtitle  string
-			imageURL  string
-			createdAt time.Time
-		)
-		if err := rows.Scan(&kind, &key, &title, &subtitle, &imageURL, &createdAt); err != nil {
-			return domain.Favorite{}, fmt.Errorf("scan favorite: %w", err)
-		}
-		parsed, err := domain.ParseResultKind(kind)
-		if err != nil {
-			return domain.Favorite{}, errSkipRow
-		}
-		return domain.Favorite{
-			Kind:      parsed,
-			Key:       key,
-			Title:     title,
-			Subtitle:  subtitle,
-			ImageURL:  imageURL,
-			CreatedAt: createdAt,
-		}, nil
-	})
+type storedFavorite struct {
+	Kind      string
+	EntityKey string
+	Title     string
+	Subtitle  string
+	ImageURL  string
+	CreatedAt time.Time
+}
+
+func (f storedFavorite) favorite() (domain.Favorite, bool) {
+	kind, err := domain.ParseResultKind(f.Kind)
+	if err != nil {
+		return domain.Favorite{}, false
+	}
+	return domain.Favorite{
+		Kind:      kind,
+		Key:       f.EntityKey,
+		Title:     f.Title,
+		Subtitle:  f.Subtitle,
+		ImageURL:  f.ImageURL,
+		CreatedAt: f.CreatedAt,
+	}, true
 }

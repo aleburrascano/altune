@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/discovery/internal/adapters/persistence"
 	"altune/go-api/internal/discovery/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"encoding/json"
 	"testing"
@@ -57,7 +58,7 @@ func discographyRefs(cases []ports.DiscographyCase) []string {
 }
 
 func TestPgxEventStore_DiscographyQuality_WorstFirstAndRegroup(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(),
@@ -104,7 +105,7 @@ func TestPgxEventStore_DiscographyQuality_WorstFirstAndRegroup(t *testing.T) {
 }
 
 func TestPgxEventStore_DiscographyQuality_IDAnchoredRanking(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(),
@@ -140,7 +141,7 @@ func clearDiscographyObserved(t *testing.T, pool *pgxpool.Pool) {
 }
 
 func TestPgxEventStore_SuspectRate_WindowedRealOpens(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	t.Cleanup(func() { clearDiscographyObserved(t, pool) })
 	clearDiscographyObserved(t, pool)
@@ -171,7 +172,7 @@ func clearSystemNonDiscographyEvents(t *testing.T, pool *pgxpool.Pool) {
 }
 
 func TestPgxEventStore_SuspectRate_EvalRunLeavesNoSystemEvents(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	t.Run("eval run", TestPgxEventStore_SuspectRate_EvalRunDoesNotMoveIt)
 
 	var left int
@@ -186,7 +187,7 @@ func TestPgxEventStore_SuspectRate_EvalRunLeavesNoSystemEvents(t *testing.T) {
 }
 
 func TestPgxEventStore_SuspectRate_EvalRunDoesNotMoveIt(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	t.Cleanup(func() { clearDiscographyObserved(t, pool) })
 	t.Cleanup(func() { clearSystemNonDiscographyEvents(t, pool) })
@@ -219,7 +220,7 @@ func TestPgxEventStore_SuspectRate_EvalRunDoesNotMoveIt(t *testing.T) {
 }
 
 func TestPgxEventStore_SuspectRate_EmptyWindowIsZero(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	t.Cleanup(func() { clearDiscographyObserved(t, pool) })
 	clearDiscographyObserved(t, pool)
@@ -280,7 +281,7 @@ func remainingDiscographyRefs(t *testing.T, pool *pgxpool.Pool) map[string]bool 
 }
 
 func TestPgxEventStore_PruneDiscographyObserved(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(),
@@ -329,7 +330,7 @@ func TestPgxEventStore_PruneDiscographyObserved(t *testing.T) {
 }
 
 func TestPgxEventStore_PruneDiscographyObserved_Idempotent(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(),

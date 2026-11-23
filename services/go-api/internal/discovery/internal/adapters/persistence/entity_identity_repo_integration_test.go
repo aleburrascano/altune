@@ -7,7 +7,6 @@ import (
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"encoding/json"
-	"os"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -18,17 +17,8 @@ import (
 )
 
 func TestPgxIdentityStore_RoundTrip(t *testing.T) {
-	sharedtest.RequireIntegration(t)
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		t.Skip("DATABASE_URL not set")
-	}
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, dsn)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	defer pool.Close()
+	pool := sharedtest.Pool(t)
 
 	store := persistence.NewPgxIdentityStore(pool)
 	mbid := "0a68f3b5-79c2-4f81-a7bc-ebc977602e86"
@@ -158,13 +148,8 @@ func TestPgxIdentityStore_LookupByProviderIDsKeysOnKind(t *testing.T) {
 const batchTestIDPrefix = "batch-1106-"
 
 func TestPgxIdentityStore_LookupByProviderID_CorruptXrefWarnsAndKeepsHit(t *testing.T) {
-	sharedtest.RequireIntegration(t)
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	defer pool.Close()
+	pool := sharedtest.Pool(t)
 	_, _ = pool.Exec(ctx, `DELETE FROM entity_identity WHERE external_id = 'corrupt-xref-595'`)
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO entity_identity (provider, external_id, kind, mbid, xref) VALUES ('deezer', 'corrupt-xref-595', 'artist', 'mbid-c', '[1]')`); err != nil {
@@ -186,7 +171,7 @@ func TestPgxIdentityStore_LookupByProviderID_CorruptXrefWarnsAndKeepsHit(t *test
 func TestPgxIdentityStore_LookupByProviderIDs_CorruptXrefWarnsAndKeepsHit(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	ctx := context.Background()
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	_, _ = pool.Exec(ctx, `DELETE FROM entity_identity WHERE external_id = 'corrupt-xref-batch'`)
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO entity_identity (provider, external_id, kind, mbid, xref) VALUES ('deezer', 'corrupt-xref-batch', 'artist', 'mbid-1', '["not","a","map"]')`); err != nil {

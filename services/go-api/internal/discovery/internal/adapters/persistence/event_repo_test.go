@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/adapters/persistence"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"encoding/json"
 	"testing"
@@ -12,7 +13,7 @@ import (
 )
 
 func TestPgxEventStore_AppendAndRead(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
@@ -66,7 +67,7 @@ func TestPgxEventStore_AppendAndRead(t *testing.T) {
 }
 
 func TestPgxEventStore_NilPayloadAndQuery(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())

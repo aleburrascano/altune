@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/adapters/persistence"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"testing"
 	"time"
@@ -85,7 +86,7 @@ func TestRetentionPolicy_NamesEveryEventTypeButDiscographyObserved(t *testing.T)
 }
 
 func TestPgxEventStore_PruneEvents_PerTypeWindow(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	now := time.Now().UTC()
 
@@ -114,7 +115,7 @@ func TestPgxEventStore_PruneEvents_PerTypeWindow(t *testing.T) {
 }
 
 func TestPgxEventStore_PruneEvents_LeavesDiscographyObserved(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	t.Cleanup(func() { deleteEventsOfType(t, pool, domain.EventTypeDiscographyObserved) })
 	deleteEventsOfType(t, pool, domain.EventTypeDiscographyObserved)
@@ -132,7 +133,7 @@ func TestPgxEventStore_PruneEvents_LeavesDiscographyObserved(t *testing.T) {
 }
 
 func TestPgxEventStore_PruneEvents_UserTelemetryFollowsHealthRetention(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	now := time.Now().UTC()
 	types := []domain.EventType{
