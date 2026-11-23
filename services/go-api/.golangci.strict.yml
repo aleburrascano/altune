@@ -184,6 +184,12 @@ linters:
           msg: write the error through httputil.HandleServiceError
         - pattern: ^os\.(Getenv|LookupEnv|Environ)$
           msg: read settings once in internal/shared/config and pass them in
+        - pattern: ^recover$
+          msg: recover a panic through runloop.Try or runloop.RecoverContext (internal/shared/runloop), the one panic guard
+        - pattern: ^sync\.WaitGroup$
+          msg: run a bounded fan-out through fanout.Group (internal/shared/fanout), fire-and-forget work through runloop.Tracker, and wait with a deadline through runloop.WaitWithin (internal/shared/runloop)
+        - pattern: ^context\.WithoutCancel$
+          msg: outlive a request through runloop.Detach(ctx, budget) (internal/shared/runloop), which keeps the request's values and sets its own deadline
     funlen:
       lines: 20
       statements: 20
@@ -220,6 +226,10 @@ linters:
       - path: internal/shared/httputil/
         linters:
           - forbidigo
+      - path: internal/shared/(runloop|fanout)/
+        linters:
+          - forbidigo
+        text: 'use of `(recover|sync\.WaitGroup|context\.WithoutCancel)` forbidden'
       - path: ^(internal/shared/(config|sharedtest)/|cmd/|scripts/)
         linters:
           - forbidigo
