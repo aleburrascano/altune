@@ -198,6 +198,94 @@ expect "a const mutant that does not compile counts as neither killed nor surviv
 
 base=$shared_base
 
+shared_base=$base
+mkdir -p "$mod/window"
+cat >"$mod/window/window.go" <<'GO'
+package window
+
+func Inside(x int) bool {
+	return x > 1
+}
+
+func Below(x int) bool {
+	return x < 9
+}
+GO
+cat >"$mod/window/window_test.go" <<'GO'
+package window_test
+
+import (
+	"testing"
+
+	"example.com/svc/window"
+)
+
+func TestWindow(t *testing.T) {
+	if !window.Inside(5) || !window.Below(5) {
+		t.Fatal("5 is inside and below")
+	}
+}
+GO
+commit weakly-tested-window
+base=$(git -C "$repo" rev-parse HEAD)
+mkdir -p "$mod/window/internal/core/bounds"
+git -C "$repo" mv svc/window/window.go svc/window/internal/core/bounds/bounds.go
+git -C "$repo" mv svc/window/window_test.go svc/window/internal/core/bounds/bounds_test.go
+sed -i 's/^package window$/package bounds/' "$mod/window/internal/core/bounds/bounds.go"
+sed -i -e 's/^package window_test$/package bounds_test/' -e 's#example.com/svc/window"#example.com/svc/window/internal/core/bounds"#' -e 's/window\./bounds./g' "$mod/window/internal/core/bounds/bounds_test.go"
+commit moved-unchanged
+expect "a file moved into a new package keeps its unchanged lines out of the mutation run" 0 'survived 0'
+sed -i 's/x < 9/x < 8/' "$mod/window/internal/core/bounds/bounds.go"
+commit moved-and-edited
+expect "a line edited in a moved file is still mutated" 1 'svc/window/internal/core/bounds/bounds.go:8:[0-9]+ LIVED CONDITIONALS_BOUNDARY'
+if grep -q 'bounds.go:4:' <<<"$out"; then
+  echo "FAIL  the unchanged line of the moved file stays unmutated:"; echo "$out" | sed 's/^/      /'; fail=1
+else
+  echo "ok    the unchanged line of the moved file stays unmutated"
+fi
+base=$(git -C "$repo" rev-parse HEAD)
+git -C "$repo" mv svc/window/internal/core/bounds/bounds.go svc/window/internal/core/bounds/limits.go
+commit renamed-within-package
+expect "a file renamed inside its package with no edits mutates nothing" 0 '1 changed packages, killed 0, survived 0'
+git -C "$repo" rm -q svc/window/internal/core/bounds/limits.go
+cat >"$mod/window/internal/core/bounds/keep.go" <<'GO'
+package bounds
+
+func Keep(x int) bool {
+	return x > 1
+}
+GO
+cat >"$mod/window/internal/core/bounds/bounds_test.go" <<'GO'
+package bounds_test
+
+import (
+	"testing"
+
+	"example.com/svc/window/internal/core/bounds"
+)
+
+func TestKeep(t *testing.T) {
+	if !bounds.Keep(5) {
+		t.Fatal("5 is kept")
+	}
+}
+GO
+commit keep-weak
+base=$(git -C "$repo" rev-parse HEAD)
+cat >"$mod/window/internal/core/bounds/gone.go" <<'GO'
+package bounds
+GO
+commit add-gone
+base=$(git -C "$repo" rev-parse HEAD)
+git -C "$repo" rm -q svc/window/internal/core/bounds/gone.go
+commit delete-only
+expect "a package whose only change is a deleted file mutates nothing" 0 'killed 0, survived 0'
+base=$(git -C "$repo" rev-parse HEAD)
+chmod +x "$mod/window/internal/core/bounds/keep.go"
+commit mode-only
+expect "a package whose only change is a file's mode mutates nothing" 0 'killed 0, survived 0'
+base=$shared_base
+
 sed -i 's/17: false/17: true/' "$mod/clamp/clamp_test.go"
 commit broken
 expect "a failing test stops the run loudly" 1 'gremlins failed in svc/clamp'
