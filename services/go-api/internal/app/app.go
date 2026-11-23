@@ -4,13 +4,10 @@ import (
 	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/app/canary"
 	"altune/go-api/internal/app/jobs"
-	"altune/go-api/internal/app/providerhttp"
-	"altune/go-api/internal/app/shutdown"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe"
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -18,13 +15,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"os"
-	"os/signal"
-	"path/filepath"
-	"syscall"
 	"time"
-
-	sharedRedis "altune/go-api/internal/shared/redis"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
@@ -39,7 +30,6 @@ type App struct {
 	requestTimeout time.Duration
 	redisClient    *goredis.Client
 	authVerifier   authHealthChecker
-	server         *http.Server
 	sem            chan struct{}
 	scheduler      *acquisition.BackgroundAcquisitionScheduler
 	vocabRefresh   *discovery.VocabularyRefreshService
@@ -64,99 +54,6 @@ func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
 		sem:     make(chan struct{}, cfg.AcquisitionConcurrency),
 		logRing: logRing,
 	}
-}
-
-func (a *App) Run(ctx context.Context) error {
-	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-	defer cancel()
-
-	if err := a.setup(ctx); err != nil {
-		return err
-	}
-
-	errCh := make(chan error, 1)
-	go func() {
-		addr := fmt.Sprintf("%s:%d", a.cfg.Host, a.cfg.Port)
-		slog.InfoContext(ctx, "server listening", "addr", addr)
-		if err := a.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			errCh <- err
-		}
-	}()
-
-	select {
-	case err := <-errCh:
-		return err
-	case <-ctx.Done():
-		slog.InfoContext(ctx, "shutting down")
-	}
-
-	shutdown.DrainServer(a.server, shutdown.ServerDrainTimeout)
-
-	slog.InfoContext(ctx, "waiting for background tasks")
-	outcomes := a.runShutdownSequence()
-	shutdown.CloseDatastores(ctx, outcomes, shutdown.Datastores{Pool: a.pool, Redis: a.redisClient})
-	slog.InfoContext(ctx, "shutdown complete")
-	return nil
-}
-
-func (a *App) setup(ctx context.Context) error {
-	verifier, err := a.connectInfra(ctx)
-	if err != nil {
-		return err
-	}
-
-	a.eventBus = events.NewInProcessBus(time.Now, filepath.Join(os.TempDir(), eventIDFloorFile))
-	a.eventTap = observe.NewEventTap(a.eventBus)
-
-	if err := a.applyDisabledJobs(ctx); err != nil {
-		return fmt.Errorf("startup switches: %w", err)
-	}
-
-	disc, err := discovery.New(a.discoveryDeps(ctx, providerhttp.Live()))
-	if err != nil {
-		return fmt.Errorf("discovery: %w", err)
-	}
-	a.keepSearches(disc)
-	a.startDiscoveryBackgroundJobs(ctx, disc)
-	cat, err := a.wireCatalog(ctx, a.eventTap, disc)
-	if err != nil {
-		return fmt.Errorf("catalog: %w", err)
-	}
-	a.scheduler = cat.scheduler
-	if err := a.applyStartupSwitches(ctx); err != nil {
-		return fmt.Errorf("startup switches: %w", err)
-	}
-	playback := a.wirePlayback(ctx, cat.trackRepo)
-	disc.Handler.WithOwnershipEnrichment(newOwnershipEnrichment(cat))
-
-	r := a.mountRoutes(verifier, cat, playback.handler, disc.Handler)
-	a.startAlertMonitor(ctx)
-	a.wireObserve(ctx, r, verifier, a.eventTap)
-	a.startCatalogJobs(ctx, cat, playback)
-	a.jobs.Lead(ctx, jobs.NewElection(a.pool))
-
-	a.server = a.newServer(ctx, r)
-	return nil
-}
-
-func (a *App) connectDatastores(ctx context.Context) error {
-	var err error
-	a.pool, err = database.NewPool(ctx, a.cfg.DatabaseURL, a.cfg.DBPoolMaxConns)
-	if err != nil {
-		return fmt.Errorf("database: %w", err)
-	}
-	a.dbPing = a.pool.Ping
-
-	a.lifecycleDone = ctx.Done()
-	a.redisClient = sharedRedis.NewClient(ctx, a.cfg.RedisURL, a.cfg.RedisPoolSize)
-	return nil
-}
-
-func (a *App) connectInfra(ctx context.Context) (auth.TokenVerifier, error) {
-	if err := a.connectDatastores(ctx); err != nil {
-		return nil, err
-	}
-	return a.connectAuth(ctx)
 }
 
 func (a *App) connectAuth(ctx context.Context) (auth.TokenVerifier, error) {
