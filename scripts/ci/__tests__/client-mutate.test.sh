@@ -96,9 +96,10 @@ TS
 commit base
 base=$(git -C "$repo" rev-parse HEAD)
 
+run_env=()
 expect() {
   local name=$1 want=$2 pattern=$3 rc
-  out=$(cd "$repo" && bash "$script" "$base" 2>&1); rc=$?
+  out=$(cd "$repo" && env "${run_env[@]}" bash "$script" "$base" 2>&1); rc=$?
   if [ "$rc" != "$want" ] || ! grep -qE "$pattern" <<<"$out"; then
     echo "FAIL  $name: exit $rc (want $want), output:"; echo "$out" | sed 's/^/      /'; fail=1
   else
@@ -187,6 +188,79 @@ commit untested-module
 expect "a changed file no test reaches names its module's test folder" 1 'no test in src/shared/lonely runs src/shared/lonely/core/alone.ts'
 git -C "$repo" rm -rq client/src/shared/lonely
 commit drop-untested-module
+base=$(git -C "$repo" rev-parse HEAD)
+
+incremental=$work/incremental
+run_env=(CLIENT_MUTATE_INCREMENTAL_DIR="$incremental")
+sed -i 's/18 <= age/age > 17/' "$client/src/shared/clamp/core/adult.ts"
+commit incremental-first-run
+expect "an incremental run with nothing kept tests every mutant" 0 'killed [1-9][0-9]*, survived 0, reused 0'
+expect "a run on the same client files reuses the kept results" 0 'killed [1-9][0-9]*, survived 0, reused [1-9][0-9]*'
+sed -i '1i const UNUSED_SETUP = 1;' "$client/src/shared/clamp/__tests__/adult.test.ts"
+commit incremental-test-setup-changed
+expect "a run after a test file's setup changed reuses nothing" 0 'killed [1-9][0-9]*, survived 0, reused 0'
+base=$(git -C "$repo" rev-parse HEAD)
+
+write src/shared/slow/index.ts <<'TS'
+export { grade } from './core/grade';
+TS
+{
+  echo 'export function grade(n: number): string {'
+  for i in $(seq 1 15); do echo "  if (n === $i) return 'g$i';"; done
+  echo "  return 'none';"
+  echo '}'
+} | write src/shared/slow/core/grade.ts
+write src/shared/slow/__tests__/grade.test.ts <<'TS'
+import { openSync } from 'node:fs';
+
+import { grade } from '@shared/slow';
+
+const BLOCK_MS = 600_000;
+
+type StrykerGlobal = { __stryker__?: { activeMutant?: string } };
+
+function firstMutantRun(): boolean {
+  try {
+    openSync(`${process.env.FIRST_MUTANT_MARKER}`, 'wx');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+test('grade', () => {
+  const underMutation = (globalThis as StrykerGlobal).__stryker__?.activeMutant !== undefined;
+  if (underMutation && !firstMutantRun()) {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, BLOCK_MS);
+  }
+  for (let n = 1; n <= 15; n += 1) expect(grade(n)).toBe(`g${n}`);
+  expect(grade(16)).toBe('none');
+});
+TS
+jq '. + { timeoutMS: 900000 }' "$client/stryker.config.json" >"$work/stryker.config.json"
+cp "$client/stryker.config.json" "$work/stryker.config.json.real"
+cp "$work/stryker.config.json" "$client/stryker.config.json"
+commit slow
+run_env=(CLIENT_MUTATE_INCREMENTAL_DIR="$incremental" CLIENT_MUTATE_TIME_LIMIT_SECONDS=120 FIRST_MUTANT_MARKER="$work/first-mutant")
+expect "a run past its time limit fails and says the finished mutants are kept" 1 'passed its 120s time limit on the native jest project, and the mutants it finished are kept in .*run it again without pushing'
+kept=$(jq '[.files[].mutants[] | select(.status != "RuntimeError")] | length' "$incremental/stryker-native.json" 2>&1)
+if [[ $kept =~ ^[1-9][0-9]*$ ]]; then
+  echo "ok    the mutants finished before the time limit are kept"
+else
+  echo "FAIL  the mutants finished before the time limit are kept: $kept"; fail=1
+fi
+crashed=$(jq '[.files[].mutants[] | select(.status == "RuntimeError")] | length' "$incremental/stryker-native.json" 2>&1)
+if [ "$crashed" = 0 ]; then
+  echo "ok    runs the time limit cut short are not kept as results"
+else
+  echo "FAIL  runs the time limit cut short are not kept as results: $crashed"; fail=1
+fi
+run_env=(CLIENT_MUTATE_TIME_LIMIT_SECONDS=soon)
+expect "a time limit that is not whole seconds is refused" 2 "CLIENT_MUTATE_TIME_LIMIT_SECONDS is 'soon'"
+run_env=()
+git -C "$repo" rm -rq client/src/shared/slow
+cp "$work/stryker.config.json.real" "$client/stryker.config.json"
+commit drop-slow
 base=$(git -C "$repo" rev-parse HEAD)
 
 sed -i 's/expect(adult(17)).toBe(false);/expect(adult(17)).toBe(true);/' "$client/src/shared/clamp/__tests__/adult.test.ts"

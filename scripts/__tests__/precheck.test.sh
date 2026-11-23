@@ -475,6 +475,24 @@ expect_rc 1
 expect_out "FAIL  repo script self-tests"
 [ -f "$WORK/selftest.log" ] || fail "worktree-deps.test.sh should have run"
 
+CASE="a change to Stryker's client config runs the client mutation self-test"
+new_repo
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p client scripts/ci/__tests__
+    printf 'exit 0\n' >scripts/worktree-deps.sh
+    printf 'echo ran >"%s/selftest.log"; exit 1\n' "$WORK" >scripts/ci/__tests__/client-mutate.test.sh
+    printf '{}\n' >client/stryker.config.json
+    git add -A
+    git commit -qm "client mutation self-test"
+    git update-ref refs/remotes/gitea/main HEAD
+    printf '{"logLevel":"info"}\n' >client/stryker.config.json
+    git commit -qam "stryker config change"
+)
+run_script
+expect_out "FAIL  repo script self-tests"
+[ -f "$WORK/selftest.log" ] || fail "client-mutate.test.sh should have run"
+
 CASE="repo script self-tests link the root deps before they run, as a fresh ci worktree has none"
 new_repo
 (
@@ -700,7 +718,7 @@ expect_out "mobile mutation (changed lines)"
 
 CASE="a CI job that runs client mutation itself skips it in precheck"
 CLIENT_MUTATE_RUNS_ELSEWHERE=1 run_script_with_stubs
-expect_out "SKIP  mobile mutation (changed lines): the mobile-tests CI job runs it"
+expect_out "SKIP  mobile mutation (changed lines): the mobile-mutation CI job runs it"
 
 add_module_spec_root() {
     (
