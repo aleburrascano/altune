@@ -1,29 +1,29 @@
-package service
+package memqueue
 
 import (
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
+	"cmp"
 	"context"
 	"fmt"
 	"sync"
 	"time"
 )
 
-type memJobQueue struct {
+type Queue struct {
 	mu           sync.Mutex
-	jobs         map[shared.TrackId]*memJob
+	jobs         map[shared.TrackId]*job
 	pendingUsers map[shared.TrackId]shared.UserId
 	wake         chan<- struct{}
 	now          func() time.Time
 }
 
-type memJob struct {
+type job struct {
 	userID      shared.UserId
 	kind        ports.JobKind
 	availableAt time.Time
 	leaseUntil  time.Time
-	attempts    int
 	fence       int
 	run         int
 	leased      bool
@@ -31,25 +31,21 @@ type memJob struct {
 }
 
 var (
-	_ ports.JobQueue         = (*memJobQueue)(nil)
-	_ ports.QueueDepthReader = (*memJobQueue)(nil)
-	_ ports.UpgradeJobQueue  = (*memJobQueue)(nil)
+	_ ports.JobQueue         = (*Queue)(nil)
+	_ ports.QueueDepthReader = (*Queue)(nil)
+	_ ports.UpgradeJobQueue  = (*Queue)(nil)
 )
 
-func newMemJobQueue(wake chan<- struct{}) *memJobQueue {
-	return newMemJobQueueWithClock(wake, time.Now)
-}
-
-func newMemJobQueueWithClock(wake chan<- struct{}, now func() time.Time) *memJobQueue {
-	return &memJobQueue{
-		jobs:         make(map[shared.TrackId]*memJob),
+func New(wake chan<- struct{}, now func() time.Time) *Queue {
+	return &Queue{
+		jobs:         make(map[shared.TrackId]*job),
 		pendingUsers: make(map[shared.TrackId]shared.UserId),
 		wake:         wake,
 		now:          now,
 	}
 }
 
-func (q *memJobQueue) rememberUser(trackID shared.TrackId, userID shared.UserId) {
+func (q *Queue) RememberUser(trackID shared.TrackId, userID shared.UserId) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if j, ok := q.jobs[trackID]; ok {
@@ -59,7 +55,7 @@ func (q *memJobQueue) rememberUser(trackID shared.TrackId, userID shared.UserId)
 	q.pendingUsers[trackID] = userID
 }
 
-func (q *memJobQueue) Enqueue(_ context.Context, trackID shared.TrackId, kind ports.JobKind, delay time.Duration) error {
+func (q *Queue) Enqueue(_ context.Context, trackID shared.TrackId, kind ports.JobKind, delay time.Duration) error {
 	q.mu.Lock()
 	if existing, queued := q.jobs[trackID]; queued && kind == ports.JobKindUpgrade && existing.kind != ports.JobKindUpgrade {
 		q.mu.Unlock()
@@ -70,25 +66,26 @@ func (q *memJobQueue) Enqueue(_ context.Context, trackID shared.TrackId, kind po
 	if held, err := q.enqueueLive(j, kind, availableAt); held {
 		return err
 	}
-	if j.leased {
-		j.fence++
-	}
-	j.kind = kind
-	j.availableAt = availableAt
-	j.leased = false
-	j.reenqueued = false
-	j.run = 0
+	j.requeue(kind, availableAt)
 	q.mu.Unlock()
 	notifyWake(q.wake)
 	return nil
 }
 
-func (q *memJobQueue) jobOrNew(trackID shared.TrackId) *memJob {
+func (j *job) requeue(kind ports.JobKind, availableAt time.Time) {
+	if j.leased {
+		j.fence++
+	}
+	j.kind, j.availableAt = kind, availableAt
+	j.leased, j.reenqueued, j.run = false, false, 0
+}
+
+func (q *Queue) jobOrNew(trackID shared.TrackId) *job {
 	j, ok := q.jobs[trackID]
 	if ok {
 		return j
 	}
-	j = &memJob{}
+	j = &job{}
 	if userID, pending := q.pendingUsers[trackID]; pending {
 		j.userID = userID
 		delete(q.pendingUsers, trackID)
@@ -97,7 +94,7 @@ func (q *memJobQueue) jobOrNew(trackID shared.TrackId) *memJob {
 	return j
 }
 
-func (q *memJobQueue) enqueueLive(j *memJob, kind ports.JobKind, availableAt time.Time) (held bool, err error) {
+func (q *Queue) enqueueLive(j *job, kind ports.JobKind, availableAt time.Time) (held bool, err error) {
 	if !j.leased || !q.now().Before(j.leaseUntil) {
 		return false, nil
 	}
@@ -117,13 +114,13 @@ func (q *memJobQueue) enqueueLive(j *memJob, kind ports.JobKind, availableAt tim
 	return true, nil
 }
 
-func (q *memJobQueue) Claim(_ context.Context, lease time.Duration) (ports.Job, error) {
+func (q *Queue) Claim(_ context.Context, lease time.Duration) (ports.Job, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	return q.claimMatching(lease, isUserJob)
 }
 
-func (q *memJobQueue) ClaimUpgrade(_ context.Context, lease time.Duration) (ports.Job, error) {
+func (q *Queue) ClaimUpgrade(_ context.Context, lease time.Duration) (ports.Job, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if _, userJob := q.findClaimable(q.now(), isUserJob); userJob != nil {
@@ -132,11 +129,11 @@ func (q *memJobQueue) ClaimUpgrade(_ context.Context, lease time.Duration) (port
 	return q.claimMatching(lease, isUpgradeJob)
 }
 
-func isUserJob(j *memJob) bool { return j.kind != ports.JobKindUpgrade }
+func isUserJob(j *job) bool { return j.kind != ports.JobKindUpgrade }
 
-func isUpgradeJob(j *memJob) bool { return j.kind == ports.JobKindUpgrade }
+func isUpgradeJob(j *job) bool { return j.kind == ports.JobKindUpgrade }
 
-func (q *memJobQueue) claimMatching(lease time.Duration, match func(*memJob) bool) (ports.Job, error) {
+func (q *Queue) claimMatching(lease time.Duration, match func(*job) bool) (ports.Job, error) {
 	now := q.now()
 	bestID, best := q.findClaimable(now, match)
 	if best == nil {
@@ -144,7 +141,6 @@ func (q *memJobQueue) claimMatching(lease time.Duration, match func(*memJob) boo
 	}
 	best.leased = true
 	best.leaseUntil = now.Add(lease)
-	best.attempts++
 	best.fence++
 	best.run++
 	best.reenqueued = false
@@ -154,7 +150,7 @@ func (q *memJobQueue) claimMatching(lease time.Duration, match func(*memJob) boo
 	}, nil
 }
 
-func (q *memJobQueue) PendingDepth(_ context.Context) (int, time.Duration, error) {
+func (q *Queue) PendingDepth(_ context.Context) (int, time.Duration, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	now := q.now()
@@ -175,9 +171,9 @@ func (q *memJobQueue) PendingDepth(_ context.Context) (int, time.Duration, error
 	return pending, now.Sub(oldest), nil
 }
 
-func (q *memJobQueue) findClaimable(now time.Time, match func(*memJob) bool) (shared.TrackId, *memJob) {
+func (q *Queue) findClaimable(now time.Time, match func(*job) bool) (shared.TrackId, *job) {
 	var bestID shared.TrackId
-	var best *memJob
+	var best *job
 	for id, j := range q.jobs {
 		if !match(j) {
 			continue
@@ -195,15 +191,12 @@ func (q *memJobQueue) findClaimable(now time.Time, match func(*memJob) bool) (sh
 	return bestID, best
 }
 
-func (q *memJobQueue) claimsBefore(now time.Time, candidate, best *memJob) bool {
-	candidateLive, bestLive := q.liveLeases(now, candidate.userID), q.liveLeases(now, best.userID)
-	if candidateLive != bestLive {
-		return candidateLive < bestLive
-	}
-	return candidate.availableAt.Before(best.availableAt)
+func (q *Queue) claimsBefore(now time.Time, candidate, best *job) bool {
+	byLiveLeases := cmp.Compare(q.liveLeases(now, candidate.userID), q.liveLeases(now, best.userID))
+	return cmp.Or(byLiveLeases, candidate.availableAt.Compare(best.availableAt)) == -1
 }
 
-func (q *memJobQueue) liveLeases(now time.Time, userID shared.UserId) int {
+func (q *Queue) liveLeases(now time.Time, userID shared.UserId) int {
 	live := 0
 	for _, j := range q.jobs {
 		if j.userID == userID && j.leased && now.Before(j.leaseUntil) {
@@ -213,7 +206,7 @@ func (q *memJobQueue) liveLeases(now time.Time, userID shared.UserId) int {
 	return live
 }
 
-func (q *memJobQueue) Heartbeat(_ context.Context, trackID shared.TrackId, fence ports.Fence, lease time.Duration) error {
+func (q *Queue) Heartbeat(_ context.Context, trackID shared.TrackId, fence ports.Fence, lease time.Duration) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	j, ok := q.jobs[trackID]
@@ -228,7 +221,7 @@ func (q *memJobQueue) Heartbeat(_ context.Context, trackID shared.TrackId, fence
 	return nil
 }
 
-func (q *memJobQueue) VerifyLease(_ context.Context, trackID shared.TrackId, fence ports.Fence) error {
+func (q *Queue) VerifyLease(_ context.Context, trackID shared.TrackId, fence ports.Fence) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	j, ok := q.jobs[trackID]
@@ -238,7 +231,7 @@ func (q *memJobQueue) VerifyLease(_ context.Context, trackID shared.TrackId, fen
 	return nil
 }
 
-func (q *memJobQueue) Release(_ context.Context, trackID shared.TrackId, fence ports.Fence, delay time.Duration) error {
+func (q *Queue) Release(_ context.Context, trackID shared.TrackId, fence ports.Fence, delay time.Duration) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	j, ok := q.jobs[trackID]
@@ -254,7 +247,7 @@ func (q *memJobQueue) Release(_ context.Context, trackID shared.TrackId, fence p
 	return nil
 }
 
-func (q *memJobQueue) Settle(_ context.Context, trackID shared.TrackId, fence ports.Fence) error {
+func (q *Queue) Settle(_ context.Context, trackID shared.TrackId, fence ports.Fence) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	j, ok := q.jobs[trackID]
@@ -274,9 +267,6 @@ func (q *memJobQueue) Settle(_ context.Context, trackID shared.TrackId, fence po
 }
 
 func notifyWake(wake chan<- struct{}) {
-	if wake == nil {
-		return
-	}
 	select {
 	case wake <- struct{}{}:
 	default:

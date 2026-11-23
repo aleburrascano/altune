@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
+	"altune/go-api/internal/acquisition/internal/adapters/memqueue"
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	acqports "altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/service/upgrade"
@@ -25,6 +26,10 @@ import (
 
 	"github.com/google/uuid"
 )
+
+type memJobQueue = memqueue.Queue
+
+func newMemJobQueue(wake chan<- struct{}) *memJobQueue { return memqueue.New(wake, time.Now) }
 
 type fakeTrackRepository struct {
 	tracks map[string]*domain.Track
@@ -375,7 +380,12 @@ func TestBackgroundScheduler_ScheduleRacingShutdown_NeverLosesAnAcceptedJob(t *t
 func scheduleWhileShuttingDown() (accepted []string, settled map[string]acqports.JobRecord, remaining map[string]struct{}) {
 	svc := newTestAcquireService(catalogbridge.NewTrackLedger(&countingRepo{}), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var jobs sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &jobs, make(chan struct{}, 4))
+	var queueAhead atomic.Int64
+	var queue *memJobQueue
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &jobs, make(chan struct{}, 4), func(s *BackgroundAcquisitionScheduler) {
+		queue = memqueue.New(s.wake, func() time.Time { return time.Now().Add(time.Duration(queueAhead.Load())) })
+		s.queue = queue
+	})
 	userId := shared.NewUserId(uuid.New())
 
 	var mu sync.Mutex
@@ -412,14 +422,8 @@ func scheduleWhileShuttingDown() (accepted []string, settled map[string]acqports
 	for _, job := range recent {
 		settled[job.TrackID] = job
 	}
-	remaining = make(map[string]struct{})
-	if mq, ok := scheduler.queue.(*memJobQueue); ok {
-		mq.mu.Lock()
-		for id := range mq.jobs {
-			remaining[id.String()] = struct{}{}
-		}
-		mq.mu.Unlock()
-	}
+	queueAhead.Store(int64(24 * time.Hour))
+	remaining = claimableTracks(queue)
 	return accepted, settled, remaining
 }
 
@@ -1238,7 +1242,7 @@ func replaceThroughTheScheduler(t *testing.T, kind acqports.JobKind, pub *record
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1),
 		WithPollInterval(5*time.Millisecond), WithSchedulerEvents(pub))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
-	scheduler.queue.(userRememberer).rememberUser(trackId, userId)
+	scheduler.queue.(userRememberer).RememberUser(trackId, userId)
 
 	if err := scheduler.queue.Enqueue(context.Background(), trackId, kind, 0); err != nil {
 		t.Fatalf("Enqueue: %v", err)
@@ -1362,6 +1366,17 @@ func newPendingTrack(t *testing.T, userId shared.UserId, repo *fakeTrackReposito
 	return track
 }
 
+func claimableTracks(q *memJobQueue) map[string]struct{} {
+	tracks := make(map[string]struct{})
+	for {
+		job, err := q.Claim(context.Background(), time.Minute)
+		if err != nil {
+			return tracks
+		}
+		tracks[job.TrackID.String()] = struct{}{}
+	}
+}
+
 func TestBackgroundScheduler_ShutdownCancellation_LeavesTheQueuedJobUnclaimed(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	base := newFakeTrackRepository()
@@ -1400,7 +1415,7 @@ func TestBackgroundScheduler_ShutdownCancellation_LeavesTheQueuedJobUnclaimed(t 
 	if !ok {
 		t.Fatal("scheduler queue is not a *memJobQueue")
 	}
-	if _, ok := mq.jobs[queued.ID]; !ok {
+	if _, ok := claimableTracks(mq)[queued.ID.String()]; !ok {
 		t.Error("queued job missing from the queue after shutdown, want still enqueued for the next worker")
 	}
 
@@ -2427,7 +2442,7 @@ func TestBackgroundScheduler_TransientFailure_ReleasesTheJobWithBackoffAndKeepsT
 	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore(), WithAcquireEvents(pub))
 	wake := make(chan struct{}, 1)
 	queue := &releaseRecordingQueue{memJobQueue: newMemJobQueue(wake), releases: make(chan releaseRecord, 1)}
-	queue.rememberUser(track.ID, userId)
+	queue.RememberUser(track.ID, userId)
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1),
 		WithJobQueue(queue), WithPollInterval(5*time.Millisecond))
@@ -2673,7 +2688,7 @@ func seededPendingQueue(t *testing.T) *claimSignalQueue {
 	t.Helper()
 	mem := newMemJobQueue(nil)
 	trackID := domain.NewTrackId()
-	mem.rememberUser(trackID, shared.NewUserId(uuid.New()))
+	mem.RememberUser(trackID, shared.NewUserId(uuid.New()))
 	if err := mem.Enqueue(context.Background(), trackID, acqports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("seed pending job: %v", err)
 	}
