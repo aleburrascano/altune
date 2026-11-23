@@ -59,7 +59,29 @@ rerun_mutant() {
 
 real_git=$(command -v git)
 mkdir "$work/bin"
-printf '#!/bin/sh\nif [ "$1" = diff ]; then shift; exec "%s" diff --unified=0 --inter-hunk-context=0 --relative="$GO_MUTATE_PACKAGE" "$@"; fi\nexec "%s" "$@"\n' "$real_git" "$real_git" >"$work/bin/git"
+cat >"$work/bin/git" <<'WRAPPER'
+#!/usr/bin/env bash
+set -euo pipefail
+[ "${1:-}" = diff ] || exec "$GO_MUTATE_REAL_GIT" "$@"
+shift
+"$GO_MUTATE_REAL_GIT" diff --find-renames --unified=0 --inter-hunk-context=0 --relative${GO_MUTATE_MODULE:+="$GO_MUTATE_MODULE"} "$@" -- . | awk -v package="$GO_MUTATE_PACKAGE" '
+  function emit() {
+    if (name != "" && body != "") printf "diff --git a/%s b/%s\n--- a/%s\n+++ b/%s\n%s", name, name, name, name, body
+    name = ""; body = ""; in_hunks = 0
+  }
+  /^diff --git / { emit(); next }
+  !in_hunks && /^\+\+\+ "/ { print "go-mutate: git quoted the path in \"" $0 "\", which this diff filter cannot read" > "/dev/stderr"; failed = 1; exit 1 }
+  !in_hunks && /^\+\+\+ / {
+    path = substr($0, 5)
+    sub(/^b\//, "", path)
+    if (index(path, package) == 1) name = substr(path, length(package) + 1)
+    next
+  }
+  /^@@ / { in_hunks = 1 }
+  in_hunks && name != "" { body = body $0 "\n" }
+  END { if (!failed) emit() }
+'
+WRAPPER
 chmod +x "$work/bin/git"
 
 killed=0
@@ -68,7 +90,7 @@ for package in "${packages[@]}"; do
   [ -d "$package" ] || continue
   report=$work/report.json
   rm -f "$report"
-  if ! out=$(env GOFLAGS="${GOFLAGS:+$GOFLAGS }-count=1" PATH="$work/bin:$PATH" GO_MUTATE_PACKAGE="$module_prefix$package/" go run "$gremlins" unleash --diff "$base" --output "$report" "./$package" 2>&1); then
+  if ! out=$(env GOFLAGS="${GOFLAGS:+$GOFLAGS }-count=1" PATH="$work/bin:$PATH" GO_MUTATE_REAL_GIT="$real_git" GO_MUTATE_MODULE="$module_prefix" GO_MUTATE_PACKAGE="$package/" go run "$gremlins" unleash --diff "$base" --output "$report" "./$package" 2>&1); then
     echo "$out" >&2
     echo "go-mutate: gremlins failed in $dir/$package (a failing test or build stops it)" >&2
     exit 1
