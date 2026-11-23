@@ -2,9 +2,9 @@ package database_test
 
 import (
 	"altune/go-api/internal/shared/database"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
-	"os"
 	"testing"
 	"time"
 
@@ -14,10 +14,7 @@ import (
 )
 
 func TestReadOnly_RefusesWritesWhenSessionDefaultIsOff(t *testing.T) {
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
+	dbURL := sharedtest.DatabaseURL(t)
 	ctx := context.Background()
 	cfg, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
@@ -53,10 +50,7 @@ func TestReadOnly_RefusesWritesWhenSessionDefaultIsOff(t *testing.T) {
 
 func probePool(t *testing.T) (context.Context, *pgxpool.Pool) {
 	t.Helper()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
+	dbURL := sharedtest.DatabaseURL(t)
 	ctx := context.Background()
 	cfg, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {

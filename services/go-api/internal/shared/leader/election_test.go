@@ -2,17 +2,18 @@ package leader_test
 
 import (
 	"altune/go-api/internal/shared/leader"
+	"altune/go-api/internal/shared/sharedtest"
 	"bytes"
 	"context"
 	"errors"
 	"log/slog"
-	"os"
 	"regexp"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -29,23 +30,6 @@ const (
 
 	predecessorDetectionIntervals = 2
 )
-
-func testPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
-	pool, err := pgxpool.New(context.Background(), dbURL)
-	if err != nil {
-		t.Fatalf("failed to connect: %v", err)
-	}
-	t.Cleanup(func() { pool.Close() })
-	if err := pool.Ping(context.Background()); err != nil {
-		t.Fatalf("failed to open a first connection: %v", err)
-	}
-	return pool
-}
 
 func awaitLeader(e *leader.Election, within time.Duration) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), within)
@@ -212,7 +196,7 @@ func runOneTick(t *testing.T, s *store) *leader.Election {
 }
 
 func TestElection_OnlyOneInstanceWins(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 
 	first := fastElection(t, pool, databaseInterval)
 	if !awaitLeader(first, 5*time.Second) {
@@ -226,7 +210,7 @@ func TestElection_OnlyOneInstanceWins(t *testing.T) {
 }
 
 func TestElection_SuccessorTakesOverAfterShutdown(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	ctx := context.Background()
 
 	outgoing := leader.NewElection(leader.PoolLocks(pool), testKey, databaseInterval)
@@ -248,7 +232,7 @@ func TestElection_SuccessorTakesOverAfterShutdown(t *testing.T) {
 }
 
 func TestElection_AwaitUnblocksOnAcquire(t *testing.T) {
-	e := fastElection(t, testPool(t), databaseInterval)
+	e := fastElection(t, sharedtest.Pool(t), databaseInterval)
 
 	if !awaitLeader(e, 5*time.Second) {
 		t.Fatal("Await did not unblock after the lock was acquired")
@@ -256,7 +240,7 @@ func TestElection_AwaitUnblocksOnAcquire(t *testing.T) {
 }
 
 func TestElection_AwaitReturnsFalseWhenNeverLeader(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 
 	holder := fastElection(t, pool, databaseInterval)
 	if !awaitLeader(holder, 5*time.Second) {
@@ -649,13 +633,13 @@ func TestElection_ReleasedLeaderContextEndsOnlyThatJob(t *testing.T) {
 }
 
 func TestElection_SessionKilledMidJob_StaleWriteNotApplied(t *testing.T) {
-	admin := testPool(t)
+	admin := sharedtest.Pool(t)
 	ctx := context.Background()
 	mustExec(t, admin, "create table if not exists leader_fencing_1016 (writer text not null)")
 	mustExec(t, admin, "truncate leader_fencing_1016")
 	t.Cleanup(func() { _, _ = admin.Exec(ctx, "drop table if exists leader_fencing_1016") })
 
-	a := fastElection(t, testPool(t), databaseInterval)
+	a := fastElection(t, sharedtest.Pool(t), databaseInterval)
 	if !awaitLeader(a, 5*time.Second) {
 		t.Fatal("instance A never became leader")
 	}
@@ -667,7 +651,7 @@ func TestElection_SessionKilledMidJob_StaleWriteNotApplied(t *testing.T) {
 
 	terminateLockHolder(t, admin)
 
-	b := fastElection(t, testPool(t), databaseInterval)
+	b := fastElection(t, sharedtest.Pool(t), databaseInterval)
 	if !awaitLeader(b, 5*time.Second) {
 		t.Fatal("instance B never took over after A's session died")
 	}
@@ -688,17 +672,13 @@ func TestElection_SessionKilledMidJob_StaleWriteNotApplied(t *testing.T) {
 		t.Fatal("stale leader's write was accepted after the new leader took over")
 	}
 
-	var writers []string
 	rows, err := admin.Query(ctx, "select writer from leader_fencing_1016 order by writer")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for rows.Next() {
-		var w string
-		if err := rows.Scan(&w); err != nil {
-			t.Fatal(err)
-		}
-		writers = append(writers, w)
+	writers, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		t.Fatal(err)
 	}
 	if len(writers) != 1 || writers[0] != "B" {
 		t.Fatalf("applied writes = %v, want only the new leader's [B]", writers)

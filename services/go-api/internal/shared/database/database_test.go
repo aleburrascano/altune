@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"altune/go-api/internal/shared/database"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
 	"fmt"
@@ -112,18 +113,9 @@ func TestNewPool_RefusesAnEmptyURLAndABadURL(t *testing.T) {
 	}
 }
 
-func integrationURL(t *testing.T) string {
-	t.Helper()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
-	return dbURL
-}
-
 func openPool(t *testing.T, maxConns int) *pgxpool.Pool {
 	t.Helper()
-	pool, err := database.NewPool(context.Background(), integrationURL(t), maxConns)
+	pool, err := database.NewPool(context.Background(), sharedtest.DatabaseURL(t), maxConns)
 	if err != nil {
 		t.Fatalf("NewPool: %v", err)
 	}
