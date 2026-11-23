@@ -205,7 +205,7 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   job_log.go             jobLog: the recent ring, counters (records are ports.JobRecord)
   job_telemetry.go       the jobReporter context seam and its schedulerJobReporter
   internal/core/domain/admission_error.go admissionError and the admission sentinels (package domain)
-  internal/core/tracklength/ Policy: the expected length, Corroborated, the pre-download Plausible gate, CanJudge and Judge for a downloaded file; which window applies (the windows are `domain.LengthTolerance`) stays inside it
+  internal/core/tracklength/ Policy: the expected length, Corroborated, the pre-download Plausible gate, and FileJudge, which exists only when a length is known and judges a downloaded file; which window applies (the windows are `domain.LengthTolerance`) stays inside it
   internal/core/ranking/  Rank (the unplayable, re-recording, identity and veto refusals, the resolved, Topic and Other buckets and their orders, the candidate_evaluated log), UploaderOf, UnrequestedQualifiers — identityScore, metadataRank, featureMatch, qualifierDistance inside it
   audio_ref.go           BuildAudioRef (+ legacy variants), thin wrappers that hand a TrackRef to internal/core/audioref
   retry_admission.go     RetryAdmission, ReacquireAdmission, cooldownGate

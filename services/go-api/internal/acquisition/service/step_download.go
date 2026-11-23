@@ -5,6 +5,7 @@ import (
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/internal/core/tracklength"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"fmt"
@@ -553,11 +554,12 @@ func (s *DownloadStep) verifyDuration(
 	if s.prober == nil {
 		return false, 0, nil
 	}
-	if !ac.lengths().CanJudge(candidate) {
+	judge, known := ac.lengths().FileJudge(candidate)
+	if !known {
 		s.recordSkip(ports.SkipNoDuration)
 		return false, 0, nil
 	}
-	return s.probeDuration(ctx, ac, candidate, filePath)
+	return s.probeDuration(ctx, ac, candidate, filePath, judge)
 }
 
 func (s *DownloadStep) probeDuration(
@@ -565,6 +567,7 @@ func (s *DownloadStep) probeDuration(
 	ac *AcquisitionContext,
 	candidate ports.AudioCandidate,
 	filePath string,
+	judge tracklength.FileJudge,
 ) (bool, float64, *downloadRejection) {
 	actual, err := s.prober.ProbeDuration(ctx, filePath)
 	switch {
@@ -577,7 +580,7 @@ func (s *DownloadStep) probeDuration(
 		s.recordSkip(ports.SkipProbeFailed)
 		return false, 0, nil
 	}
-	if acceptable, held := ac.lengths().Judge(candidate, actual); !acceptable {
+	if acceptable, held := judge.Judge(actual); !acceptable {
 		return false, 0, durationRejection(ctx, ac, candidate, actual, held)
 	}
 	return true, actual, nil

@@ -14,21 +14,26 @@ func artTrack(seconds float64) ports.AudioCandidate {
 	return ports.AudioCandidate{Duration: seconds, Kind: ports.KindArtTrack}
 }
 
-func fileAccepted(p tracklength.Policy, actual float64) bool {
-	acceptable, _ := p.Judge(upload(0), actual)
+func fileAccepted(t *testing.T, p tracklength.Policy, actual float64) bool {
+	t.Helper()
+	judge, known := p.FileJudge(upload(0))
+	if !known {
+		t.Fatalf("FileJudge gave no judge for %+v, want one: a length is known", p)
+	}
+	acceptable, _ := judge.Judge(actual)
 	return acceptable
 }
 
 func TestPolicy_ADisagreementFallsBackToTheLooseWindow(t *testing.T) {
 	p := tracklength.New(232, 276, false)
 
-	if !fileAccepted(p, 276) {
+	if !fileAccepted(t, p, 276) {
 		t.Error("the resolved album cut must be acceptable when the two lengths disagree")
 	}
-	if !fileAccepted(p, 232) {
+	if !fileAccepted(t, p, 232) {
 		t.Error("the saved single edit must stay acceptable too — neither claim is proven")
 	}
-	if fileAccepted(p, 600) {
+	if fileAccepted(t, p, 600) {
 		t.Error("a 10-minute upload is outside both windows and must still be rejected")
 	}
 }
@@ -36,10 +41,10 @@ func TestPolicy_ADisagreementFallsBackToTheLooseWindow(t *testing.T) {
 func TestPolicy_AgreementKeepsTheTightWindow(t *testing.T) {
 	p := tracklength.New(262, 263, false)
 
-	if !fileAccepted(p, 264) {
+	if !fileAccepted(t, p, 264) {
 		t.Error("ordinary encoding trim must pass a corroborated length")
 	}
-	if fileAccepted(p, 276) {
+	if fileAccepted(t, p, 276) {
 		t.Error("a 14s excess against a corroborated length is contamination and must be rejected")
 	}
 }
@@ -47,10 +52,10 @@ func TestPolicy_AgreementKeepsTheTightWindow(t *testing.T) {
 func TestPolicy_NoResolvedLengthKeepsTheLooseWindow(t *testing.T) {
 	p := tracklength.New(200, 0, false)
 
-	if !fileAccepted(p, 210) {
+	if !fileAccepted(t, p, 210) {
 		t.Error("without corroboration the 15s window applies")
 	}
-	if fileAccepted(p, 260) {
+	if fileAccepted(t, p, 260) {
 		t.Error("60s off is a different recording under any window")
 	}
 }
@@ -58,23 +63,20 @@ func TestPolicy_NoResolvedLengthKeepsTheLooseWindow(t *testing.T) {
 func TestPolicy_AResolvedLengthAloneKeepsTheLooseWindow(t *testing.T) {
 	p := tracklength.New(0, 200, false)
 
-	if !fileAccepted(p, 214) {
+	if !fileAccepted(t, p, 214) {
 		t.Error("with only a resolved length, a 14s difference is inside the loose window")
 	}
-	if fileAccepted(p, 216) {
+	if fileAccepted(t, p, 216) {
 		t.Error("with only a resolved length, a 16s difference is outside the loose window")
 	}
 }
 
 func TestPolicy_ANearSilentFileIsNeverCloseToAKnownLength(t *testing.T) {
-	if fileAccepted(tracklength.New(0, 200, false), 10) {
+	if fileAccepted(t, tracklength.New(0, 200, false), 10) {
 		t.Error("a 10s file must be rejected against a resolved 200s")
 	}
-	if fileAccepted(tracklength.New(200, 0, false), 10) {
+	if fileAccepted(t, tracklength.New(200, 0, false), 10) {
 		t.Error("a 10s file must be rejected against a saved 200s")
-	}
-	if fileAccepted(tracklength.New(0, 0, false), 10) {
-		t.Error("a 10s file must be rejected when no length is known")
 	}
 }
 
@@ -93,7 +95,7 @@ func TestPolicy_ASavedLengthAloneIsHeldToTheLooseWindow(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := fileAccepted(tracklength.New(tt.expected, 0, false), tt.actual); got != tt.want {
+			if got := fileAccepted(t, tracklength.New(tt.expected, 0, false), tt.actual); got != tt.want {
 				t.Errorf("a %vs file against a saved %vs: accepted = %v, want %v", tt.actual, tt.expected, got, tt.want)
 			}
 		})
@@ -124,15 +126,15 @@ func TestPolicy_CorroborationRequiresAgreement(t *testing.T) {
 
 func TestPolicy_TightensWhenCorroborated(t *testing.T) {
 	loose := tracklength.New(181, 0, false)
-	if !fileAccepted(loose, 193) {
+	if !fileAccepted(t, loose, 193) {
 		t.Error("without a corroborated length, a 12s excess is inside the loose tolerance")
 	}
 
 	tight := tracklength.New(181, 181, false)
-	if fileAccepted(tight, 193) {
+	if fileAccepted(t, tight, 193) {
 		t.Error("with a corroborated length, a 12s excess is contamination and must be rejected")
 	}
-	if !fileAccepted(tight, 184) {
+	if !fileAccepted(t, tight, 184) {
 		t.Error("a 3s difference is ordinary encoding trim and must still pass")
 	}
 }
@@ -170,7 +172,7 @@ func TestPolicy_ADoubtedResolvedLengthIsNoLength(t *testing.T) {
 func TestPolicy_ADoubtedResolvedLengthWidensNothing(t *testing.T) {
 	p := tracklength.New(139, 167, true)
 
-	if fileAccepted(p, 167) {
+	if fileAccepted(t, p, 167) {
 		t.Error("a 167s file matches only the doubted search pick and must be rejected")
 	}
 }
@@ -184,7 +186,7 @@ func TestPolicy_ADoubtedResolvedLengthDoesNotMoveThePreDownloadGate(t *testing.T
 	if p.Plausible(upload(167)) {
 		t.Error("the 167s upload must fail the pre-download gate against the catalog 139s")
 	}
-	if !fileAccepted(p, 140) || fileAccepted(p, 167) {
+	if !fileAccepted(t, p, 140) || fileAccepted(t, p, 167) {
 		t.Error("the file-length gate must accept 140s and reject 167s against the catalog 139s")
 	}
 }
@@ -212,7 +214,7 @@ func TestPolicy_ThePreDownloadGate(t *testing.T) {
 	}
 }
 
-func TestPolicy_AFileLengthCanBeJudgedOnlyAgainstAKnownLength(t *testing.T) {
+func TestPolicy_AFileLengthIsJudgedOnlyAgainstAKnownLength(t *testing.T) {
 	tests := []struct {
 		name      string
 		policy    tracklength.Policy
@@ -228,8 +230,8 @@ func TestPolicy_AFileLengthCanBeJudgedOnlyAgainstAKnownLength(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.policy.CanJudge(tt.candidate); got != tt.want {
-				t.Errorf("CanJudge(%+v) = %v, want %v", tt.candidate, got, tt.want)
+			if _, got := tt.policy.FileJudge(tt.candidate); got != tt.want {
+				t.Errorf("FileJudge(%+v) gave a judge = %v, want %v", tt.candidate, got, tt.want)
 			}
 		})
 	}
@@ -253,9 +255,13 @@ func TestPolicy_AResolvedCandidatesFileIsHeldToItsOwnLengthFirst(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			acceptable, held := tt.policy.Judge(tt.candidate, tt.actual)
+			judge, known := tt.policy.FileJudge(tt.candidate)
+			if !known {
+				t.Fatalf("FileJudge(%+v) gave no judge, want one", tt.candidate)
+			}
+			acceptable, held := judge.Judge(tt.actual)
 			if acceptable != tt.acceptable || held != tt.held {
-				t.Errorf("Judge(%+v, %v) = %v, %v, want %v, %v", tt.candidate, tt.actual, acceptable, held, tt.acceptable, tt.held)
+				t.Errorf("Judge(%v) for %+v = %v, %v, want %v, %v", tt.actual, tt.candidate, acceptable, held, tt.acceptable, tt.held)
 			}
 		})
 	}
