@@ -31,7 +31,7 @@ func TestDecodeJSON(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid body writes byte-identical 400", func(t *testing.T) {
+	t.Run("invalid body answers a 400 problem", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/x", strings.NewReader(`{bad`))
 
@@ -42,8 +42,8 @@ func TestDecodeJSON(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
 		}
-		if got := strings.TrimSpace(rec.Body.String()); got != `{"detail":"invalid request body","code":"request.invalid_body"}` {
-			t.Errorf("body: got %s, want %s", got, `{"detail":"invalid request body","code":"request.invalid_body"}`)
+		if p := decodeProblem(t, rec); p.Detail != "invalid request body" || p.Code != "request.invalid_body" || p.Status != http.StatusBadRequest {
+			t.Errorf("problem = %+v, want 400 request.invalid_body", p)
 		}
 	})
 }
@@ -86,8 +86,8 @@ func TestPathID(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
 		}
-		if got := strings.TrimSpace(rec.Body.String()); got != `{"detail":"invalid track ID","code":"request.invalid_id"}` {
-			t.Errorf("body: got %s, want %s", got, `{"detail":"invalid track ID","code":"request.invalid_id"}`)
+		if p := decodeProblem(t, rec); p.Detail != "invalid track ID" || p.Code != "request.invalid_id" || p.Status != http.StatusBadRequest {
+			t.Errorf("problem = %+v, want 400 request.invalid_id", p)
 		}
 	})
 }

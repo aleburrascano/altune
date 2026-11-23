@@ -46,10 +46,10 @@ func newRouter(s router.Settings) *chi.Mux {
 	return router.New(s)
 }
 
-func TestRouter_PanickingHandlerLogsRequestCompleteAs500Error(t *testing.T) {
+func TestRouter_PanickingHandlerLogsOneErrorAndRequestCompleteAt500(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
-	ring := logging.Setup("error", false)
+	ring := logging.Setup("info", false)
 
 	r := newRouter(router.Settings{})
 	r.Get("/v1/boom", func(http.ResponseWriter, *http.Request) {
@@ -74,8 +74,17 @@ func TestRouter_PanickingHandlerLogsRequestCompleteAs500Error(t *testing.T) {
 	if got := completes[0].Attrs["status"]; got != "500" {
 		t.Errorf("request.complete status = %s, want 500", got)
 	}
-	if got := completes[0].Level; got != slog.LevelError.String() {
-		t.Errorf("request.complete level = %s, want %s", got, slog.LevelError)
+	if got := completes[0].Level; got != slog.LevelInfo.String() {
+		t.Errorf("request.complete level = %s, want %s: the panic is the one ERROR line", got, slog.LevelInfo)
+	}
+	var errorLines []string
+	for _, captured := range ring.Snapshot() {
+		if captured.Level == slog.LevelError.String() {
+			errorLines = append(errorLines, captured.Message)
+		}
+	}
+	if len(errorLines) != 1 || errorLines[0] != "panic.recovered" {
+		t.Errorf("ERROR lines = %v, want only panic.recovered", errorLines)
 	}
 }
 

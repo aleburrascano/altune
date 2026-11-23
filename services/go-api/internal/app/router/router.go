@@ -38,15 +38,14 @@ func New(s Settings) *chi.Mux {
 }
 
 const (
-	correlationIDHeader = "X-Correlation-ID"
-	lastEventIDHeader   = "Last-Event-ID"
-	retryAfterHeader    = "Retry-After"
+	lastEventIDHeader = "Last-Event-ID"
+	retryAfterHeader  = "Retry-After"
 )
 
 func corsHandler(s Settings) func(http.Handler) http.Handler {
 	headers := []string{
 		"Accept", "Authorization", "Content-Type", "Idempotency-Key",
-		correlationIDHeader, lastEventIDHeader,
+		httputil.CorrelationIDHeader, lastEventIDHeader,
 		telemetry.AppVersionHeader, telemetry.PlatformHeader,
 	}
 	if s.Development {
@@ -56,7 +55,7 @@ func corsHandler(s Settings) func(http.Handler) http.Handler {
 		AllowedOrigins: s.CORSOrigins,
 		AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders: headers,
-		ExposedHeaders: []string{"Content-Length", correlationIDHeader, retryAfterHeader},
+		ExposedHeaders: []string{"Content-Length", httputil.CorrelationIDHeader, retryAfterHeader},
 		MaxAge:         300,
 	})
 }

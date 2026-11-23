@@ -98,17 +98,17 @@ func TestCorrelationID_AdoptsInboundHeader(t *testing.T) {
 	if got := rec.Header().Get("X-Correlation-ID"); got != inbound {
 		t.Errorf("response header = %q, want inbound %q", got, inbound)
 	}
-	sawStart := false
+	sawComplete := false
 	for _, r := range ring.Snapshot() {
-		if r.Message == "request.start" {
-			sawStart = true
+		if r.Message == "request.complete" {
+			sawComplete = true
 			if r.Attrs["corr_id"] != inbound {
 				t.Errorf("log corr_id = %q, want inbound %q", r.Attrs["corr_id"], inbound)
 			}
 		}
 	}
-	if !sawStart {
-		t.Fatal("expected request.start log line so the corr_id assertion is meaningful")
+	if !sawComplete {
+		t.Fatal("expected request.complete log line so the corr_id assertion is meaningful")
 	}
 }
 

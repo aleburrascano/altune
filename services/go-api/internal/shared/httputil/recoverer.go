@@ -1,6 +1,8 @@
 package httputil
 
 import (
+	"altune/go-api/internal/shared/domain"
+	"altune/go-api/internal/shared/logging"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -20,13 +22,13 @@ func Recoverer(next http.Handler) http.Handler {
 				panic(rec)
 			}
 			slog.ErrorContext(r.Context(), "panic.recovered",
-				"error", fmt.Sprint(rec),
-				"method", r.Method,
-				"path", r.URL.Path,
-				"stack", string(debug.Stack()),
+				logging.KeyError, fmt.Sprint(rec),
+				logging.KeyMethod, r.Method,
+				logging.KeyPath, r.URL.Path,
+				logging.KeyStack, string(debug.Stack()),
 			)
 			if !sw.hasWrittenHeader {
-				InternalError(sw)
+				writeProblem(sw, newProblem(r, domain.CodeInternal, internalServerErrorDetail))
 			}
 		}()
 		next.ServeHTTP(sw, r)

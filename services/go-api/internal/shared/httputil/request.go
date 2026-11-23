@@ -1,6 +1,7 @@
 package httputil
 
 import (
+	"altune/go-api/internal/shared/domain"
 	"encoding/json"
 	"errors"
 	"io"
@@ -11,23 +12,21 @@ import (
 
 var errTrailingData = errors.New("trailing data after JSON value")
 
-const codeInvalidID = "request.invalid_id"
-
 func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
-	return DecodeJSONWithCode(w, r, dst, "request.invalid_body")
+	return DecodeJSONWithCode(w, r, dst, domain.CodeRequestInvalid)
 }
 
-func DecodeJSONWithCode(w http.ResponseWriter, r *http.Request, dst any, invalidCode string) bool {
+func DecodeJSONWithCode(w http.ResponseWriter, r *http.Request, dst any, invalidCode domain.Code) bool {
 	err := decodeSingleValue(r, dst)
 	if err == nil {
 		return true
 	}
 	var tooLarge *http.MaxBytesError
 	if errors.As(err, &tooLarge) {
-		WriteJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Detail: "request body too large", Code: "request.too_large"})
+		HandleServiceError(w, r, domain.NewError(domain.CodeRequestTooLarge, "request body too large"))
 		return false
 	}
-	BadRequestCode(w, invalidCode, "invalid request body")
+	HandleServiceError(w, r, domain.NewError(invalidCode, "invalid request body"))
 	return false
 }
 
@@ -45,7 +44,7 @@ func decodeSingleValue(r *http.Request, dst any) error {
 func PathID[T any](w http.ResponseWriter, r *http.Request, name string, parse func(string) (T, error), invalidMsg string) (T, bool) {
 	value, err := parse(chi.URLParam(r, name))
 	if err != nil {
-		BadRequestCode(w, codeInvalidID, invalidMsg)
+		HandleServiceError(w, r, domain.NewError(domain.CodeRequestInvalidID, invalidMsg))
 		var zero T
 		return zero, false
 	}

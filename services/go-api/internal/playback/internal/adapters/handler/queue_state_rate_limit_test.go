@@ -223,7 +223,7 @@ func TestQueueStateRateLimit_RefusalWireFormat(t *testing.T) {
 	if got := rec.Header().Get("Retry-After"); got == "" {
 		t.Error("missing Retry-After header")
 	}
-	const want = `{"detail":"too many queue state requests, try again later","code":"playback.rate_limited"}`
+	const want = `{"type":"urn:altune:problem:playback.rate_limited","title":"Too Many Requests","status":429,"detail":"too many queue state requests, try again later","code":"playback.rate_limited"}`
 	if got := strings.TrimSpace(rec.Body.String()); got != want {
 		t.Errorf("body = %s, want %s", got, want)
 	}

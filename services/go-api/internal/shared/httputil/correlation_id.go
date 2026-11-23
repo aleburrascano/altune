@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	correlationHeader   = "X-Correlation-ID"
+	CorrelationIDHeader = "X-Correlation-ID"
 	maxCorrelationIDLen = 64
 )
 
@@ -19,13 +19,13 @@ func CorrelationID(next http.Handler) http.Handler {
 			id = uuid.New().String()[:8]
 		}
 		ctx := logging.WithCorrelationID(r.Context(), id)
-		w.Header().Set(correlationHeader, id)
+		w.Header().Set(CorrelationIDHeader, id)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
 func inboundCorrelationID(r *http.Request) string {
-	id := r.Header.Get(correlationHeader)
+	id := r.Header.Get(CorrelationIDHeader)
 	if id == "" || len(id) > maxCorrelationIDLen || !isWellFormedCorrelationID(id) {
 		return ""
 	}
