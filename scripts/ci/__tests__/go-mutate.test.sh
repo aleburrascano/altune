@@ -180,6 +180,22 @@ sed -i 's/18: false, 19: true/1: false, 100: true/' "$mod/quota/quota_test.go"
 sed -i 's/6 \* 3/6 * 4/' "$mod/quota/quota.go"
 commit const-unpinned
 expect "a const no test pins fails and names the line" 1 'svc/quota/quota.go:3:[0-9]+ NOT COVERED ARITHMETIC_BASE'
+cat >>"$mod/quota/quota.go" <<'GO'
+
+const Greeting = "hel" + "lo"
+GO
+cat >>"$mod/quota/quota_test.go" <<'GO'
+
+func TestGreeting(t *testing.T) {
+	if quota.Greeting != "hello" {
+		t.Fatal(quota.Greeting)
+	}
+}
+GO
+sed -i 's/1: false, 100: true/24: false, 25: true/' "$mod/quota/quota_test.go"
+commit const-not-viable
+expect "a const mutant that does not compile counts as neither killed nor survived" 0 'killed 3, survived 0'
+
 base=$shared_base
 
 sed -i 's/17: false/17: true/' "$mod/clamp/clamp_test.go"
