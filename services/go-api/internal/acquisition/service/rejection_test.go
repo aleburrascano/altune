@@ -1,89 +1,64 @@
-package service
+package service_test
 
 import (
-	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
+	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/acquisition/internal/adapters/tempfs"
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/internal/core/rejectionlog"
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/acquisition/service"
+	"altune/go-api/internal/acquisition/sourcekey"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
-
-	"github.com/google/uuid"
+	"time"
 )
 
-func TestExecuteReplace_SeedsExclusionsFromMemoryAndTheCurrentSource(t *testing.T) {
-	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := readyTrackWithSource(t, repo, userId, "u/a/b/c.mp3",
-		"https://music.youtube.com/watch?v=currentAAAA")
-	track.RejectAudioSource("youtube:previousAAA")
+type offeringSource struct {
+	found    []ports.AudioCandidate
+	fetchErr error
 
-	store := newFakeAudioStore()
-	store.stored["u/a/b/c.mp3"] = true
-
-	captured := &capturingSource{}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(captured), store)
-
-	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
-
-	if !captured.tried("https://www.youtube.com/watch?v=freshAAAAAA") {
-		t.Fatalf("the replace never reached an unexcluded candidate; tried %v", captured.fetched)
-	}
-	if captured.tried("https://www.youtube.com/watch?v=currentAAAA") {
-		t.Error("the currently stored source must be excluded under any URL spelling")
-	}
-	if captured.tried("https://www.youtube.com/watch?v=previousAAA") {
-		t.Error("a source rejected by an earlier replace must stay excluded — otherwise re-acquire toggles")
-	}
-}
-
-func TestUpdateTrackStep_PersistsTheRejectedSources(t *testing.T) {
-	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Sunglasses at Night", "Corey Hart", "First Offense")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	repo := newFakeTrackRepository()
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
-
-	ac := &AcquisitionContext{
-		AudioRef: "u/a/b/c.mp3",
-		Replace:  ReplaceState{ExcludeKeys: []string{"youtube:previousAAA", "youtube:currentAAAA"}},
-		Selected: &ports.AudioCandidate{URL: "https://youtube.com/watch?v=freshAAAAAA"},
-	}
-
-	if _, err := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID).Execute(context.Background(), ac, afterStore{}); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-
-	updated := repo.tracks[track.ID.String()+":"+userId.String()]
-	if len(updated.RejectedSourceKeys) != 2 {
-		t.Fatalf("rejected keys = %v, want both carried forward", updated.RejectedSourceKeys)
-	}
-	if updated.AudioSourceURL == nil || *updated.AudioSourceURL != "https://youtube.com/watch?v=freshAAAAAA" {
-		t.Errorf("audio source = %v, want the newly stored candidate", updated.AudioSourceURL)
-	}
-}
-
-type capturingSource struct {
+	mu      sync.Mutex
 	fetched []string
 }
 
-func (c *capturingSource) Name() acqdomain.SourceName { return "capturing" }
+func (s *offeringSource) Name() acqdomain.SourceName { return "offering" }
 
-func (c *capturingSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
-	offered := []string{
-		"https://www.youtube.com/watch?v=currentAAAA",
-		"https://www.youtube.com/watch?v=previousAAA",
-		"https://www.youtube.com/watch?v=freshAAAAAA",
+func (s *offeringSource) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
+	return s.found, nil
+}
+
+func (s *offeringSource) Fetch(_ context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+	s.mu.Lock()
+	s.fetched = append(s.fetched, candidate.URL)
+	s.mu.Unlock()
+	if s.fetchErr != nil {
+		return ports.FetchedAudio{}, s.fetchErr
 	}
-	out := make([]ports.AudioCandidate, 0, len(offered))
-	for _, url := range offered {
+	path := filepath.Join(outDir, "audio.mp3")
+	return ports.FetchedAudio{Path: path}, os.WriteFile(path, []byte("audio bytes"), 0o600)
+}
+
+func (s *offeringSource) fetches() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.fetched)
+}
+
+func (s *offeringSource) tried(url string) bool {
+	return slices.Contains(s.fetches(), url)
+}
+
+func blindingLightsAt(urls ...string) []ports.AudioCandidate {
+	out := make([]ports.AudioCandidate, 0, len(urls))
+	for _, url := range urls {
 		out = append(out, ports.AudioCandidate{
 			Title:      "Blinding Lights",
 			URL:        url,
@@ -91,149 +66,205 @@ func (c *capturingSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.
 			Categories: []string{"Music"},
 		})
 	}
-	return out, nil
+	return out
 }
 
-func (c *capturingSource) Fetch(_ context.Context, candidate ports.AudioCandidate, _ string) (ports.FetchedAudio, error) {
-	c.fetched = append(c.fetched, candidate.URL)
-	return fetchedAt("", errors.New("fetch disabled in this test"))
+func readyTrackRejecting(t *testing.T, sourceURL string, rejected ...string) servedTrack {
+	t.Helper()
+	served := seedReadyTrack(t)
+	track, _ := served.ledger.Track(served.trackID)
+	track.AudioSourceURL = &sourceURL
+	track.RejectedSourceKeys = rejected
+	served.ledger.Seed(track)
+	return served
 }
 
-func (c *capturingSource) tried(url string) bool {
-	for _, got := range c.fetched {
-		if got == url {
-			return true
+func pendingSongBy(artist, title string) acquisitiontest.LedgerTrack {
+	song := pendingSong()
+	song.Artist, song.Title = artist, title
+	return song
+}
+
+type rememberedRejections struct {
+	recorded []ports.CandidateRejectionRecord
+}
+
+func (r *rememberedRejections) Record(_ context.Context, recs []ports.CandidateRejectionRecord) error {
+	r.recorded = append(r.recorded, recs...)
+	return nil
+}
+
+func (r *rememberedRejections) Active(context.Context, string, time.Time) ([]ports.PriorRejection, error) {
+	return nil, nil
+}
+
+type lengthProber float64
+
+func (p lengthProber) ProbeDuration(context.Context, string) (float64, error) { return float64(p), nil }
+
+func (lengthProber) ValidateDecodable(context.Context, string) error { return nil }
+
+func TestExecuteReplace_SeedsExclusionsFromMemoryAndTheCurrentSource(t *testing.T) {
+	track := readyTrackRejecting(t, "https://music.youtube.com/watch?v=currentAAAA", "youtube:previousAAA")
+	source := &offeringSource{fetchErr: errors.New("fetch disabled in this test"), found: blindingLightsAt(
+		"https://www.youtube.com/watch?v=currentAAAA",
+		"https://www.youtube.com/watch?v=previousAAA",
+		"https://www.youtube.com/watch?v=freshAAAAAA",
+	)}
+	svc := service.NewAcquireTrackAudioService(track.ledger, service.NewSourceRegistry(source), track.store,
+		service.WithAcquireTempWorkspace(tempfs.New()))
+
+	_ = svc.ExecuteReplace(context.Background(), track.userID, track.trackID)
+
+	if !source.tried("https://www.youtube.com/watch?v=freshAAAAAA") {
+		t.Fatalf("the replace never reached an unexcluded candidate; tried %v", source.fetches())
+	}
+	if source.tried("https://www.youtube.com/watch?v=currentAAAA") {
+		t.Error("the currently stored source must be excluded under any URL spelling")
+	}
+	if source.tried("https://www.youtube.com/watch?v=previousAAA") {
+		t.Error("a source rejected by an earlier replace must stay excluded — otherwise re-acquire toggles")
+	}
+}
+
+func TestExecuteReplace_RemembersTheReplacedSourceBesideTheEarlierRejectedOnes(t *testing.T) {
+	track := readyTrackRejecting(t, "https://www.youtube.com/watch?v=currentAAAA", "youtube:previousAAA")
+
+	if err := track.service().ExecuteReplace(context.Background(), track.userID, track.trackID); err != nil {
+		t.Fatalf("ExecuteReplace: %v", err)
+	}
+
+	updated, _ := track.ledger.Track(track.trackID)
+	if want := []string{"youtube:previousAAA", "youtube:currentAAAA"}; !slices.Equal(updated.RejectedSourceKeys, want) {
+		t.Fatalf("rejected keys = %v, want %v: the earlier rejection kept and the replaced source added", updated.RejectedSourceKeys, want)
+	}
+	if updated.AudioSourceURL == nil || *updated.AudioSourceURL != "https://www.youtube.com/watch?v=freshAAAAAA" {
+		t.Errorf("audio source = %v, want the newly stored candidate", updated.AudioSourceURL)
+	}
+}
+
+func cuttingCrewRunOffered(t *testing.T, candidate ports.AudioCandidate) *service.AcquisitionContext {
+	t.Helper()
+	ac := &service.AcquisitionContext{Track: service.TrackRef{Title: "I've Been in Love Before", Artist: "Cutting Crew", CatalogDuration: 253}}
+	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{candidate}}
+	_ = runPipeline(context.Background(), service.NewSourceRegistry(source), ac)
+	return ac
+}
+
+func TestSelect_RescuesLowIdentityOnTheArtistChannel(t *testing.T) {
+	master := "https://www.youtube.com/watch?v=masterAAAAA"
+
+	ac := cuttingCrewRunOffered(t, ports.AudioCandidate{
+		Title:   "I've Been In Love Before HQ Stereo Remaster Full Length Version 1986 Special",
+		URL:     master,
+		Channel: "Cutting Crew - Topic",
+	})
+
+	if len(ac.Ranked) != 1 || ac.Ranked[0].URL != master {
+		t.Fatalf("artist-channel candidate was dropped by the identity gate: ranked=%v", ac.Ranked)
+	}
+	for _, r := range ac.Rejections {
+		if r.Stage != rejectionlog.Download {
+			t.Errorf("a rescued candidate must not be recorded as rejected by ranking, only by the refused fetch after it: %v", ac.Rejections)
 		}
 	}
-	return false
 }
 
-func TestRankAndCollect_RescuesLowIdentityOnTheArtistChannel(t *testing.T) {
-	track := TrackRef{Title: "I've Been in Love Before", Artist: "Cutting Crew", CatalogDuration: 253}
-	candidates := []ports.AudioCandidate{{
-		Title:   "I've Been In Love Before HQ Stereo Remaster Full Length Version 1986 Special",
-		URL:     "yt:master",
-		Channel: "Cutting Crew - Topic",
-	}}
+func TestSelect_DropsAndRecordsForeignLowIdentity(t *testing.T) {
+	cooking := "https://www.youtube.com/watch?v=cookingAAAA"
 
-	ranked, rejected := rankAndCollect(context.Background(), track, track.CatalogDuration, candidates)
-
-	if len(ranked) != 1 || ranked[0].URL != "yt:master" {
-		t.Fatalf("artist-channel candidate was dropped by the identity gate: ranked=%v", ranked)
-	}
-	if len(rejected) != 0 {
-		t.Errorf("a rescued candidate must not be recorded as rejected: %v", rejected)
-	}
-}
-
-func TestRankAndCollect_DropsAndRecordsForeignLowIdentity(t *testing.T) {
-	track := TrackRef{Title: "I've Been in Love Before", Artist: "Cutting Crew", CatalogDuration: 253}
-	candidates := []ports.AudioCandidate{{
+	ac := cuttingCrewRunOffered(t, ports.AudioCandidate{
 		Title:   "Completely Unrelated Cooking Show Full Episode Forty Seven Nonsense",
-		URL:     "yt:cooking",
+		URL:     cooking,
 		Channel: "CookingChannel",
-	}}
+	})
 
-	ranked, rejected := rankAndCollect(context.Background(), track, track.CatalogDuration, candidates)
-
-	if len(ranked) != 0 {
-		t.Fatalf("an unrelated candidate must stay gated: ranked=%v", ranked)
+	if len(ac.Ranked) != 0 {
+		t.Fatalf("an unrelated candidate must stay gated: ranked=%v", ac.Ranked)
 	}
-	if len(rejected) != 1 || rejected[0].Stage != "identity" || rejected[0].URL != "yt:cooking" {
-		t.Fatalf("expected one identity rejection for yt:cooking, got %v", rejected)
+	if len(ac.Rejections) != 1 || ac.Rejections[0].Stage != rejectionlog.Identity || ac.Rejections[0].URL != cooking {
+		t.Fatalf("expected one identity rejection for %s, got %v", cooking, ac.Rejections)
 	}
-	if !strings.Contains(rejected[0].Reason, "below threshold") {
-		t.Errorf("rejection reason should explain the identity gate: %q", rejected[0].Reason)
+	if !strings.Contains(ac.Rejections[0].Reason, "below threshold") {
+		t.Errorf("rejection reason should explain the identity gate: %q", ac.Rejections[0].Reason)
 	}
 }
 
 func TestExecute_PersistsRejectionSummaryInFailureReason(t *testing.T) {
-	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "I've Been in Love Before", "Cutting Crew", "Broadcast")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	repo := newFakeTrackRepository()
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
-
-	searcher := &fakeAudioSearcher{searchResults: []ports.AudioCandidate{{
+	song := pendingSongBy("Cutting Crew", "I've Been in Love Before")
+	ledger := acquisitiontest.NewLedger(song)
+	source := &answeringSource{name: "ytdlp", found: []ports.AudioCandidate{{
 		Title:   "Completely Unrelated Cooking Show Full Episode Forty Seven Nonsense",
-		URL:     "yt:cooking",
+		URL:     "https://www.youtube.com/watch?v=cookingAAAA",
 		Channel: "CookingChannel",
 	}}}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore())
 
-	_ = svc.Execute(context.Background(), userId, track.ID)
+	_ = acquireService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}).
+		Execute(context.Background(), song.UserId, song.ID)
 
-	updated := repo.tracks[track.ID.String()+":"+userId.String()]
-	if updated == nil {
-		t.Fatal("track missing after acquire")
-		return
+	if code := persistedCode(t, ledger, song.ID); code != shared.FailureNoMatchFound {
+		t.Fatalf("failure code = %q, want %q", code, shared.FailureNoMatchFound)
 	}
-	if updated.AcquisitionStatus != domain.AcquisitionFailed {
-		t.Fatalf("status = %v, want failed", updated.AcquisitionStatus)
-	}
-	reason := deref(updated.FailureReason)
-	if !strings.Contains(reason, "no_match_found") || !strings.Contains(reason, "1 identity") {
-		t.Errorf("failure reason should carry the per-candidate breakdown, got %q", reason)
+	if got, _ := ledger.Track(song.ID); !strings.Contains(got.FailureReason, "1 identity") {
+		t.Errorf("failure reason should carry the per-candidate breakdown, got %q", got.FailureReason)
 	}
 }
 
 func TestExecute_AttemptCapReportsUntriedCandidatesApart(t *testing.T) {
-	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "I've Been in Love Before", "Cutting Crew", "Broadcast")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	repo := newFakeTrackRepository()
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
-
-	const ranked = maxDownloadAttempts + 3
-	candidates := make([]ports.AudioCandidate, 0, ranked)
-	for i := range ranked {
-		candidates = append(candidates, ports.AudioCandidate{
+	const attemptCap, untried = 8, 3
+	song := pendingSongBy("Cutting Crew", "I've Been in Love Before")
+	ledger := acquisitiontest.NewLedger(song)
+	source := &offeringSource{fetchErr: errors.New("boom")}
+	for i := range attemptCap + untried {
+		source.found = append(source.found, ports.AudioCandidate{
 			Title:   "Cutting Crew - I've Been in Love Before",
-			URL:     fmt.Sprintf("yt:cutting-crew-%02d", i),
+			URL:     fmt.Sprintf("https://www.youtube.com/watch?v=cuttingcr%02d", i),
 			Channel: "Cutting Crew",
 		})
 	}
-	searcher := &fakeAudioSearcher{searchResults: candidates, downloadErr: errors.New("boom")}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore())
 
-	_ = svc.Execute(context.Background(), userId, track.ID)
+	_ = acquireService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}).
+		Execute(context.Background(), song.UserId, song.ID)
 
-	if len(searcher.downloadURLs) != maxDownloadAttempts {
-		t.Fatalf("download attempts = %d, want the cap %d", len(searcher.downloadURLs), maxDownloadAttempts)
+	if got := len(source.fetches()); got != attemptCap {
+		t.Fatalf("download attempts = %d, want the cap %d", got, attemptCap)
 	}
-	updated := repo.tracks[track.ID.String()+":"+userId.String()]
-	if updated == nil {
-		t.Fatal("track missing after acquire")
-		return
-	}
-	want := fmt.Sprintf("all %d candidates rejected (%d download), 3 not tried", maxDownloadAttempts, maxDownloadAttempts)
-	if reason := deref(updated.FailureReason); !strings.Contains(reason, want) {
-		t.Errorf("failure reason = %q, want it to contain %q", reason, want)
+	want := fmt.Sprintf("all %d candidates rejected (%d download), %d not tried", attemptCap, attemptCap, untried)
+	if got, _ := ledger.Track(song.ID); !strings.Contains(got.FailureReason, want) {
+		t.Errorf("failure reason = %q, want it to contain %q", got.FailureReason, want)
 	}
 }
 
-func TestRejectionBasis_CarriesTheRunsExpectedLengthAndReferenceMBID(t *testing.T) {
-	ac := &AcquisitionContext{
-		Track:    TrackRef{ID: "t1", CatalogDuration: 322},
-		Identity: ports.RecordingIdentity{MBID: "mbid-1"},
+func TestExecute_AnUnmeasuredLengthSkipCountsInTheSummaryButOnlyTheProbedRejectionIsRemembered(t *testing.T) {
+	const mbid = "11111111-2222-3333-4444-555555555555"
+	song := pendingSongBy("The Weeknd", "Blinding Lights")
+	catalogLength := 200.0
+	song.CatalogDurationSeconds = &catalogLength
+	ledger := acquisitiontest.NewLedger(song)
+	offered := blindingLightsAt("https://www.youtube.com/watch?v=shortshort1", "https://www.youtube.com/watch?v=probedAAAAA")
+	offered[0].Duration = 30
+	short, probed := offered[0].URL, offered[1].URL
+	source := &offeringSource{found: offered}
+	remembered := &rememberedRejections{}
+	svc := service.NewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}},
+		service.WithAcquireTempWorkspace(tempfs.New()), service.WithRejectionStore(remembered),
+		service.WithAudioProber(lengthProber(30)), service.WithRecordingResolver(resolvedTo(mbid)))
+
+	_ = svc.Execute(context.Background(), song.UserId, song.ID)
+
+	if source.tried(short) {
+		t.Fatalf("download attempts = %v, the search-length candidate must never be downloaded", source.fetches())
 	}
-
-	want := ports.RejectionBasis{ExpectedSeconds: 322, ReferenceMBID: "mbid-1"}
-	if got := ac.rejectionBasis(); got != want {
-		t.Errorf("rejectionBasis = %+v, want %+v", got, want)
+	if got, _ := ledger.Track(song.ID); !strings.Contains(got.FailureReason, "all 2 candidates rejected (2 duration)") {
+		t.Errorf("failure reason = %q, want both the unmeasured skip and the probed rejection counted", got.FailureReason)
 	}
-}
-
-func TestRecordUnmeasuredRejection_IsKeptForTheSummary(t *testing.T) {
-	ac := &AcquisitionContext{Track: TrackRef{ID: "t1"}}
-	ac.recordUnmeasuredRejection("https://youtube.com/watch?v=a", "", "yt", rejectionlog.Duration, "search duration 30s vs expected 200s")
-	ac.recordRejection("https://youtube.com/watch?v=b", "", "yt", rejectionlog.Duration, "duration 30s vs expected 200s")
-
-	if len(ac.Rejections) != 2 || !ac.Rejections[0].Unmeasured || ac.Rejections[1].Unmeasured {
-		t.Errorf("run rejections = %+v, want both kept and only the first unmeasured", ac.Rejections)
+	if len(remembered.recorded) != 1 {
+		t.Fatalf("remembered = %+v, want only the probed rejection of %q", remembered.recorded, probed)
+	}
+	got := remembered.recorded[0]
+	basis := ports.RejectionBasis{ExpectedSeconds: catalogLength, ReferenceMBID: mbid}
+	if got.TrackID != song.ID.String() || got.SourceKey != sourcekey.SourceKey(probed) || got.Reason != string(rejectionlog.Duration) || got.Basis != basis {
+		t.Errorf("remembered %+v, want track %s, source %q, reason %q and basis %+v",
+			got, song.ID, sourcekey.SourceKey(probed), rejectionlog.Duration, basis)
 	}
 }
