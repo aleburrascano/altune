@@ -51,8 +51,7 @@ catalog/
 │   ├── handler/                 HTTP handlers (tracks, playlists, library, stream, audio URL, featured artists) and their rate limits
 │   ├── persistence/             Postgres repositories and connection pool
 │   ├── storage/                 audio store: filesystem, object storage, scoped store
-│   ├── metrics/                 expvar metrics
-│   └── discoverybridge/         featured-artist resolver backed by discovery
+│   └── metrics/                 expvar metrics
 └── catalogtest/                 in-memory fakes for catalog ports
 
 ```

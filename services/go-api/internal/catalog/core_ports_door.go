@@ -26,4 +26,8 @@ var (
 	ErrTrackVersionConflict         = ports.ErrTrackVersionConflict
 )
 
-type FeaturedArtistResolver = ports.FeaturedArtistResolver
+type (
+	FeaturedArtistCredit       = ports.FeaturedArtistCredit
+	FeaturedArtistCreditSource = ports.FeaturedArtistCreditSource
+	FeaturedArtistResolver     = ports.FeaturedArtistResolver
+)

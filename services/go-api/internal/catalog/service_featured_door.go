@@ -9,6 +9,7 @@ type (
 
 var (
 	NewBackfillFeaturedService = featured.NewBackfillFeaturedService
+	NewFeaturedArtistResolver  = featured.NewFeaturedArtistResolver
 	NewListFeaturingService    = featured.NewListFeaturingService
 	WithBackfillClock          = featured.WithBackfillClock
 	WithBackfillItemTimeout    = featured.WithBackfillItemTimeout
