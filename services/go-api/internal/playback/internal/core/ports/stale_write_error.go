@@ -1,20 +1,9 @@
 package ports
 
-type StaleWriteError struct {
-	msg  string
-	code string
-}
+import shareddomain "altune/go-api/internal/shared/domain"
 
-func (e *StaleWriteError) Error() string     { return e.msg }
-func (e *StaleWriteError) HTTPStatus() int   { return 409 }
-func (e *StaleWriteError) ErrorCode() string { return e.code }
+var ErrStaleQueueWrite error = shareddomain.NewError(shareddomain.CodePlaybackStaleQueueWrite,
+	"queue state not saved: a newer snapshot is already stored")
 
-var ErrStaleQueueWrite error = &StaleWriteError{
-	msg:  "queue state not saved: a newer snapshot is already stored",
-	code: "playback.stale_queue_write",
-}
-
-var ErrQueuePositionMismatch error = &StaleWriteError{
-	msg:  "queue position not saved: the stored queue does not hold that track at that index",
-	code: "playback.queue_position_mismatch",
-}
+var ErrQueuePositionMismatch error = shareddomain.NewError(shareddomain.CodePlaybackQueuePositionMismatch,
+	"queue position not saved: the stored queue does not hold that track at that index")

@@ -139,10 +139,7 @@ func TestNewQueueState_BoundsQueueLength(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected over-limit queue to be rejected")
 			}
-			var validationErr *shareddomain.ValidationError
-			if !errors.As(err, &validationErr) {
-				t.Fatalf("error = %T, want *shareddomain.ValidationError", err)
-			}
+			validationCode(t, err)
 		})
 	}
 }
@@ -173,10 +170,7 @@ func TestNewQueueState_BoundsStringLength(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected oversized queue string to be rejected")
 			}
-			var validationErr *shareddomain.ValidationError
-			if !errors.As(err, &validationErr) {
-				t.Fatalf("error = %T, want *shareddomain.ValidationError", err)
-			}
+			validationCode(t, err)
 		})
 	}
 }
@@ -217,10 +211,7 @@ func TestNewQueueState_RejectsNulBytes(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected NUL byte in string element to be rejected")
 			}
-			var validationErr *shareddomain.ValidationError
-			if !errors.As(err, &validationErr) {
-				t.Fatalf("error = %T, want *shareddomain.ValidationError", err)
-			}
+			validationCode(t, err)
 		})
 	}
 }

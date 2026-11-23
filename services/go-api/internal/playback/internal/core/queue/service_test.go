@@ -270,8 +270,8 @@ func TestQueueService_Save_RejectsAMalformedSourceBeforeTheRepeatMode(t *testing
 
 	err := svc.Save(context.Background(), testUser(), playback.SaveQueueStateInput{RepeatMode: "sideways", LegacySourceId: "mixtape:7"})
 
-	var coded interface{ ErrorCode() string }
-	if !errors.As(err, &coded) || coded.ErrorCode() != "playback.unrecognized_source_id" {
+	var coded *shareddomain.CodedError
+	if !errors.As(err, &coded) || coded.Code() != shareddomain.CodePlaybackUnrecognizedSourceID {
 		t.Fatalf("Save = %v, want the source error to win over the repeat-mode error", err)
 	}
 	if len(repo.States) != 0 {
@@ -322,8 +322,8 @@ func TestQueueService_SavePosition_RejectsInvalidInputWithoutWriting(t *testing.
 		t.Run(tt.name, func(t *testing.T) {
 			svc := playback.NewQueueService(&panickingRepo{}, &fakeNowPlaying{})
 			err := svc.SavePosition(context.Background(), testUser(), tt.input)
-			var ve *shareddomain.ValidationError
-			if !errors.As(err, &ve) {
+			var coded *shareddomain.CodedError
+			if !errors.As(err, &coded) || coded.Code().Kind() != shareddomain.KindInvalid {
 				t.Fatalf("SavePosition(%+v) = %v, want a validation error", tt.input, err)
 			}
 		})

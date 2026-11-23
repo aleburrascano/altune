@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"altune/go-api/internal/playback"
+	shareddomain "altune/go-api/internal/shared/domain"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
@@ -60,23 +61,17 @@ func savePosition(in playback.SaveQueuePositionInput) (*playback.QueuePosition, 
 	return store.position, err
 }
 
-type codedValidationError interface {
-	error
-	HTTPStatus() int
-	ErrorCode() string
-}
-
 func validationCode(t *testing.T, err error) string {
 	t.Helper()
 	if err == nil {
 		t.Fatal("expected a validation error, got nil")
 	}
-	var coded codedValidationError
+	var coded *shareddomain.CodedError
 	if !errors.As(err, &coded) {
 		t.Fatalf("error = %T (%v), want a coded validation error", err, err)
 	}
-	if coded.HTTPStatus() != 400 {
-		t.Fatalf("HTTPStatus() = %d, want 400", coded.HTTPStatus())
+	if kind := coded.Code().Kind(); kind != shareddomain.KindInvalid {
+		t.Fatalf("kind = %s, want %s", kind, shareddomain.KindInvalid)
 	}
-	return coded.ErrorCode()
+	return coded.Code().String()
 }
