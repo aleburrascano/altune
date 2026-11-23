@@ -15,7 +15,7 @@ func makeFifo(t *testing.T, dir, ref string) string {
 	t.Helper()
 	path := filepath.Join(dir, ref)
 	if err := syscall.Mkfifo(path, 0o644); err != nil {
-		t.Skipf("mkfifo unsupported here: %v", err)
+		t.Fatalf("mkfifo failed on linux, which always supports it: %v", err)
 	}
 	return path
 }

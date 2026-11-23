@@ -4,11 +4,13 @@ import (
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/shared/config"
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestFromConfigScopesKeysWhenPrefixSet(t *testing.T) {
@@ -72,5 +74,41 @@ func TestFromConfigRejectsMisconfiguration(t *testing.T) {
 				t.Fatalf("want error naming %q, got %v", tt.want, err)
 			}
 		})
+	}
+}
+
+func TestFromConfig_MusicDirTimeoutCapsAStalledOpenWithoutACallerDeadline(t *testing.T) {
+	dir := t.TempDir()
+	store, err := catalog.FromConfig(&config.Config{MusicDir: dir, MusicDirTimeout: 100 * time.Millisecond}, slog.Default())
+	if err != nil {
+		t.Fatalf("FromConfig: %v", err)
+	}
+	makeStalledAudio(t, dir, "stalled.opus")
+
+	start := time.Now()
+	err = streamWithHangGuard(t, context.Background(), store, "stalled.opus")
+
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected MUSIC_DIR_TIMEOUT to cap the open with context.DeadlineExceeded, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Errorf("Stream returned after %s, want roughly the 100ms MUSIC_DIR_TIMEOUT", elapsed)
+	}
+}
+
+func TestFromConfig_AnUnsetMusicDirTimeoutKeepsTheDefaultCap(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "song.opus"), []byte("audio"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := catalog.FromConfig(&config.Config{MusicDir: dir}, slog.Default())
+	if err != nil {
+		t.Fatalf("FromConfig: %v", err)
+	}
+
+	exists, err := store.Exists(context.Background(), "song.opus")
+
+	if err != nil || !exists {
+		t.Fatalf("Exists = %v, %v; want true with no error under the default cap", exists, err)
 	}
 }

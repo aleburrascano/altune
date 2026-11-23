@@ -67,7 +67,8 @@ type Config struct {
 	OCIS3Bucket    string `env:"OCI_S3_BUCKET"`
 	OCIS3Region    string `env:"OCI_S3_REGION"`
 
-	MusicDir string `env:"MUSIC_DIR"`
+	MusicDir        string        `env:"MUSIC_DIR"`
+	MusicDirTimeout time.Duration `env:"MUSIC_DIR_TIMEOUT" envDefault:"30s"`
 
 	AudioKeyPrefix string `env:"AUDIO_KEY_PREFIX"`
 

@@ -514,7 +514,7 @@ func setEnv(t *testing.T, vars map[string]string) {
 		"MUSICBRAINZ_USER_AGENT", "LASTFM_API_KEY", "FANARTTV_API_KEY",
 		"GENIUS_ACCESS_TOKEN", "OCI_S3_ENDPOINT", "OCI_S3_ACCESS_KEY",
 		"OCI_S3_SECRET_KEY", "OCI_S3_BUCKET", "OCI_S3_REGION",
-		"MUSIC_DIR", "FFMPEG_LOCATION", "YTDLP_COOKIE_FILE",
+		"MUSIC_DIR", "MUSIC_DIR_TIMEOUT", "FFMPEG_LOCATION", "YTDLP_COOKIE_FILE",
 		"ACQUISITION_CONCURRENCY", "ACQUISITION_DRAIN_BUDGET_SECONDS",
 		"EXPLORATION_RATE",
 		"DB_POOL_MAX_CONNS", "PLAYBACK_QUEUE_RATE_EVERY", "PLAYBACK_QUEUE_RATE_BURST", "PLAYBACK_ERASURE_SCAN_TIMEOUT", "REDIS_POOL_SIZE", "YTDLP_JS_RUNTIME", "YTDLP_REMOTE_COMPONENTS",
@@ -1808,6 +1808,32 @@ func TestLoad_PlaybackQueueRateRejectsBadValues(t *testing.T) {
 				t.Fatal("expected Load to fail")
 			}
 		})
+	}
+}
+
+func TestLoad_MusicDirTimeout(t *testing.T) {
+	setEnv(t, validConfigEnv(nil))
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.MusicDirTimeout != 30*time.Second {
+		t.Errorf("default = %s, want 30s", cfg.MusicDirTimeout)
+	}
+
+	setEnv(t, validConfigEnv(map[string]string{"MUSIC_DIR_TIMEOUT": "5s"}))
+	if cfg, err = config.Load(); err != nil {
+		t.Fatalf("override: %v", err)
+	}
+	if cfg.MusicDirTimeout != 5*time.Second {
+		t.Errorf("override = %s, want 5s", cfg.MusicDirTimeout)
+	}
+
+	for _, bad := range []string{"0s", "-1s", "slow"} {
+		setEnv(t, validConfigEnv(map[string]string{"MUSIC_DIR_TIMEOUT": bad}))
+		if _, err := config.Load(); err == nil {
+			t.Errorf("MUSIC_DIR_TIMEOUT=%q loaded, want an error", bad)
+		}
 	}
 }
 

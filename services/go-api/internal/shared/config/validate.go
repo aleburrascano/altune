@@ -276,6 +276,9 @@ func (c *Config) validateTuning() error {
 	if c.PlaybackErasureScanTimeout <= 0 {
 		return fmt.Errorf("PLAYBACK_ERASURE_SCAN_TIMEOUT must be > 0, got %s", c.PlaybackErasureScanTimeout)
 	}
+	if c.MusicDirTimeout <= 0 {
+		return fmt.Errorf("MUSIC_DIR_TIMEOUT must be > 0, got %s", c.MusicDirTimeout)
+	}
 	if err := c.validateAudioSources(); err != nil {
 		return err
 	}
