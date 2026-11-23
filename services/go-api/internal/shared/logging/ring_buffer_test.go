@@ -1,7 +1,7 @@
-package logging
+package logging_test
 
 import (
-	"bytes"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"log/slog"
@@ -10,14 +10,12 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
 func TestRing_CapturesDebugBelowStdoutLevel(t *testing.T) {
-	ring := NewRingBuffer(10)
-	var stdout bytes.Buffer
-	inner := slog.NewJSONHandler(&stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
-	logger := slog.New(newRingHandler(inner, ring))
+	logger, ring, stdout := setupLogger(t, "info", false)
 
 	logger.Debug("provider.debug.line", "provider", "deezer")
 	logger.Info("request.complete", "status", 200)
@@ -27,7 +25,7 @@ func TestRing_CapturesDebugBelowStdoutLevel(t *testing.T) {
 		t.Fatalf("ring should retain both DEBUG and INFO, got %d", len(snap))
 	}
 
-	out := stdout.String()
+	out := stdout()
 	if strings.Contains(out, "provider.debug.line") {
 		t.Error("DEBUG must not reach stdout when stdout level is INFO")
 	}
@@ -63,7 +61,7 @@ func lastfmURLError(t *testing.T) error {
 	return err
 }
 
-func assertNoKey(t *testing.T, recs []CapturedRecord) {
+func assertNoKey(t *testing.T, recs []logging.CapturedRecord) {
 	t.Helper()
 	for _, rec := range recs {
 		if strings.Contains(rec.Message, leakedAPIKey) {
@@ -78,7 +76,7 @@ func assertNoKey(t *testing.T, recs []CapturedRecord) {
 }
 
 func TestRingHandler_RedactsSecretQueryParamInURLError(t *testing.T) {
-	logger, ring := newCaptureLogger(t, 10)
+	logger, ring := newCaptureLogger(t)
 	ch, cancel, subErr := ring.Subscribe()
 	if subErr != nil {
 		t.Fatalf("Subscribe: %v", subErr)
@@ -104,7 +102,7 @@ func TestRingHandler_RedactsSecretQueryParamInURLError(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		select {
 		case rec := <-ch:
-			assertNoKey(t, []CapturedRecord{rec})
+			assertNoKey(t, []logging.CapturedRecord{rec})
 		default:
 			t.Fatal("subscriber did not receive the record")
 		}
@@ -112,7 +110,7 @@ func TestRingHandler_RedactsSecretQueryParamInURLError(t *testing.T) {
 }
 
 func TestRingHandler_RedactsSecretsInGroupsAndWithAttrs(t *testing.T) {
-	logger, ring := newCaptureLogger(t, 10)
+	logger, ring := newCaptureLogger(t)
 
 	logger.With("lastfm_api_key", leakedAPIKey, "corr_id", "c1").
 		Info("call",
@@ -135,11 +133,9 @@ func TestRingHandler_RedactsSecretsInGroupsAndWithAttrs(t *testing.T) {
 	}
 }
 
-func newStreamCaptureLogger(t *testing.T, ring *RingBuffer) (*slog.Logger, func() string) {
+func newStreamCaptureLogger(t *testing.T) (*slog.Logger, *logging.RingBuffer, func() string) {
 	t.Helper()
-	var stream bytes.Buffer
-	inner := slog.NewJSONHandler(&stream, &slog.HandlerOptions{Level: slog.LevelDebug})
-	return slog.New(newRingHandler(inner, ring)), stream.String
+	return setupLogger(t, "debug", false)
 }
 
 func assertStreamHasNoKey(t *testing.T, stream string) {
@@ -150,7 +146,7 @@ func assertStreamHasNoKey(t *testing.T, stream string) {
 }
 
 func TestRingHandler_KeepsWithBoundSecretsOutOfTheStream(t *testing.T) {
-	logger, stream := newStreamCaptureLogger(t, NewRingBuffer(10))
+	logger, _, stream := newStreamCaptureLogger(t)
 
 	logger.With("lastfm_api_key", leakedAPIKey).
 		With("corr_id", "c1", slog.Group("provider", "access_key", leakedAPIKey, "name", "lastfm")).
@@ -164,7 +160,7 @@ func TestRingHandler_KeepsWithBoundSecretsOutOfTheStream(t *testing.T) {
 }
 
 func TestRingHandler_KeepsGroupNestedSecretsOutOfTheStream(t *testing.T) {
-	logger, stream := newStreamCaptureLogger(t, NewRingBuffer(10))
+	logger, _, stream := newStreamCaptureLogger(t)
 
 	logger.Info("call",
 		slog.Group("provider", "api_key", leakedAPIKey, "name", "lastfm"),
@@ -179,8 +175,7 @@ func TestRingHandler_KeepsGroupNestedSecretsOutOfTheStream(t *testing.T) {
 }
 
 func TestRingHandler_StillLogsWhenEveryBoundAttrIsRedacted(t *testing.T) {
-	ring := NewRingBuffer(10)
-	logger, stream := newStreamCaptureLogger(t, ring)
+	logger, ring, stream := newStreamCaptureLogger(t)
 
 	logger.With("api_key", leakedAPIKey).WithGroup("provider").
 		Info("call", "password", leakedAPIKey, "name", "lastfm")
@@ -197,7 +192,7 @@ func TestRingHandler_StillLogsWhenEveryBoundAttrIsRedacted(t *testing.T) {
 }
 
 func TestRingHandler_KeepsURLErrorSecretsOutOfTheStream(t *testing.T) {
-	logger, stream := newStreamCaptureLogger(t, NewRingBuffer(10))
+	logger, _, stream := newStreamCaptureLogger(t)
 	err := lastfmURLError(t)
 
 	logger.With("startup_url", "https://ws.audioscrobbler.com/2.0/?api_key="+leakedAPIKey).
@@ -230,7 +225,7 @@ func (v cleanThenLeakingValue) LogValue() slog.Value {
 }
 
 func TestRingHandler_ResolvesEachAttrOnce(t *testing.T) {
-	logger, stream := newStreamCaptureLogger(t, NewRingBuffer(10))
+	logger, _, stream := newStreamCaptureLogger(t)
 
 	logger.Info("call", "thing", cleanThenLeakingValue{resolves: new(int)})
 
@@ -238,29 +233,43 @@ func TestRingHandler_ResolvesEachAttrOnce(t *testing.T) {
 }
 
 func TestRingBuffer_EvictsRecordsPastRetention(t *testing.T) {
-	clock := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-	ring := newRingBufferWithClock(10, func() time.Time { return clock })
+	synctest.Test(t, func(t *testing.T) {
+		const retention = 30 * time.Minute
+		logger, ring := newCaptureLogger(t)
 
-	ring.append(CapturedRecord{Message: "old"})
-	clock = clock.Add(logRetentionWindow / 2)
-	ring.append(CapturedRecord{Message: "mid"})
-	clock = clock.Add(logRetentionWindow/2 + time.Minute)
+		logger.Info("old")
+		time.Sleep(retention / 2)
+		logger.Info("mid")
+		time.Sleep(retention/2 + time.Nanosecond)
 
-	snap := ring.Snapshot()
-	if len(snap) != 1 || snap[0].Message != "mid" {
-		t.Fatalf("snapshot = %+v, want only mid (old aged out)", snap)
-	}
+		snap := ring.Snapshot()
+		if len(snap) != 1 || snap[0].Message != "mid" {
+			t.Fatalf("snapshot = %+v, want only mid (old aged out one nanosecond past the window)", snap)
+		}
 
-	clock = clock.Add(logRetentionWindow)
-	if snap := ring.Snapshot(); len(snap) != 0 {
-		t.Fatalf("snapshot = %+v, want empty after every record aged out", snap)
-	}
+		time.Sleep(retention)
+		if snap := ring.Snapshot(); len(snap) != 0 {
+			t.Fatalf("snapshot = %+v, want empty after every record aged out", snap)
+		}
 
-	for _, m := range []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"} {
-		ring.append(CapturedRecord{Message: m})
-	}
-	snap = ring.Snapshot()
-	if len(snap) != 10 || snap[0].Message != "b" || snap[9].Message != "k" {
-		t.Fatalf("snapshot after refill = %+v, want 10 records b..k", snap)
-	}
+		logMessages(logger, ringCapacity+1)
+		snap = ring.Snapshot()
+		if len(snap) != ringCapacity || snap[0].Message != "m1" || snap[ringCapacity-1].Message != "m1000" {
+			t.Fatalf("snapshot after refill holds %d records from %q to %q, want %d records m1..m1000",
+				len(snap), snap[0].Message, snap[len(snap)-1].Message, ringCapacity)
+		}
+	})
+}
+
+func TestRingBuffer_KeepsARecordExactlyAtTheRetentionEdge(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		logger, ring := newCaptureLogger(t)
+
+		logger.Info("edge")
+		time.Sleep(30 * time.Minute)
+
+		if snap := ring.Snapshot(); len(snap) != 1 {
+			t.Fatalf("snapshot = %+v, want the record kept until it is older than 30m", snap)
+		}
+	})
 }
