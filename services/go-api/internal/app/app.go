@@ -42,8 +42,6 @@ type App struct {
 	lifecycleDone <-chan struct{}
 
 	jobs jobs.Runner
-
-	fixtureSources *sourceTiers
 }
 
 func New(cfg *config.Config, logRing *logging.RingBuffer) *App {

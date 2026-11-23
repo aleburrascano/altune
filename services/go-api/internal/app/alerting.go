@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/app/alerts"
+	"altune/go-api/internal/app/audioacquisition"
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe"
@@ -21,7 +22,7 @@ func (a *App) alertConditions(coverage alerts.CoverageEvents) []observe.Conditio
 	return alerts.Conditions(alerts.Sources{
 		DependencyHealth:      a.dependencyHealth,
 		Coverage:              coverage,
-		YouTubeSignedOutSince: a.newYtDlpSearcher().SignedOutSince,
+		YouTubeSignedOutSince: audioacquisition.YtDlpSearcher(a.cfg).SignedOutSince,
 		Jobs:                  &a.jobs,
 	})
 }

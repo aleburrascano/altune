@@ -1,20 +1,13 @@
-package app
+package app_test
 
 import (
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/config"
-	shared "altune/go-api/internal/shared/kernel"
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -22,83 +15,85 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type storedQueue struct {
-	mu    sync.Mutex
-	state *playback.QueueState
+func putQueueState(t *testing.T, h http.Handler, token string) int {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPut, "/v1/playback/queue-state",
+		strings.NewReader(`{"track_ids":[],"repeat_mode":"off","source_id":"library"}`))
+	req.RemoteAddr = "192.0.2.1:1234"
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec.Code
 }
 
-func (s *storedQueue) Upsert(_ context.Context, state *playback.QueueState) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.state = state
-	return nil
+func TestQueueRateLimit_TheConfiguredBurstThrottlesQueueState(t *testing.T) {
+	fixture := newJWKSFixture(t)
+	fixture.cfg.PlaybackQueueRateEvery, fixture.cfg.PlaybackQueueRateBurst = time.Hour, 2
+	h := assembleWith(t, fixture.cfg, refuseEgress{}).assembly.Handler()
+	token := signedToken(t, fixture.key, fixture.operator)
+
+	var codes []int
+	for range 3 {
+		codes = append(codes, putQueueState(t, h, token))
+	}
+
+	if codes[0] == http.StatusTooManyRequests || codes[1] == http.StatusTooManyRequests || codes[2] != http.StatusTooManyRequests {
+		t.Errorf("statuses = %v, want the third PUT throttled at burst 2", codes)
+	}
 }
 
-func (s *storedQueue) GetForUser(context.Context, shared.UserId) (*playback.QueueState, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.state, nil
+func TestQueueRateLimit_TheConfigDefaultsMatchPlaybacksOwnLimit(t *testing.T) {
+	t.Setenv("SUPABASE_PROJECT_URL", "https://example.supabase.co")
+	t.Setenv("SUPABASE_JWT_JWKS_URL", "https://example.supabase.co/auth/v1/.well-known/jwks.json")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+
+	got := playback.QueueStateRateLimit{Every: cfg.PlaybackQueueRateEvery, Burst: cfg.PlaybackQueueRateBurst}
+	if got != playback.DefaultQueueStateRateLimit {
+		t.Errorf("default limit = %+v, want %+v", got, playback.DefaultQueueStateRateLimit)
+	}
 }
 
-func (s *storedQueue) UpdatePosition(context.Context, *playback.QueuePosition) error { return nil }
+func TestQueueRateLimit_TheConfiguredIntervalRefillsTheBurst(t *testing.T) {
+	fixture := newJWKSFixture(t)
+	fixture.cfg.PlaybackQueueRateEvery, fixture.cfg.PlaybackQueueRateBurst = time.Second, 1
+	h := assembleWith(t, fixture.cfg, refuseEgress{}).assembly.Handler()
+	token := signedToken(t, fixture.key, fixture.operator)
 
-func (s *storedQueue) DeleteForUser(context.Context, shared.UserId) error { return nil }
+	first, throttled := putQueueState(t, h, token), putQueueState(t, h, token)
+	time.Sleep(1100 * time.Millisecond)
+	refilled := putQueueState(t, h, token)
 
-var _ playback.QueueStateRepository = (*storedQueue)(nil)
-
-func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
-	if testing.Short() {
-		t.Skip("waits out the 3s production now-playing lookup deadline")
+	if first == http.StatusTooManyRequests || throttled != http.StatusTooManyRequests || refilled == http.StatusTooManyRequests {
+		t.Errorf("statuses = [%d %d %d], want the second PUT throttled and the third admitted once the one-second interval refilled the burst", first, throttled, refilled)
 	}
-	pool, err := pgxpool.New(context.Background(), blackHoleDatabase(t))
-	if err != nil {
-		t.Fatalf("pgxpool.New: %v", err)
-	}
-	t.Cleanup(pool.Close)
+}
 
-	a := &App{cfg: &config.Config{MusicDir: t.TempDir()}, sem: make(chan struct{}, 1), pool: pool}
-	cat, err := a.wireCatalog(t.Context(), nil, &discovery.Discovery{})
-	if err != nil {
-		t.Fatalf("wireCatalog: %v", err)
-	}
-	operator := shared.NewUserId(uuid.New())
-	nowPlayingId := uuid.NewString()
-	state, err := playback.NewQueueState(playback.QueueStateInput{
-		UserId: operator, TrackIds: []string{uuid.NewString(), nowPlayingId}, CurrentIdx: 1, RepeatMode: playback.RepeatOff,
-	})
-	if err != nil {
-		t.Fatalf("NewQueueState: %v", err)
-	}
-	metrics := playback.NewExpvarPlaybackMetrics()
-	queue := newQueueHandler(newQueueService(&storedQueue{state: state}, cat.trackRepo, metrics), metrics, playback.DefaultQueueStateRateLimit)
+func TestPlayback_TheErasureSweepReapsErasedQueueStates(t *testing.T) {
+	run := assembleOn(t, jwksConfig(t), emptyDatabasePool(t), refuseEgress{})
 
-	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
-		if token == operatorToken {
-			return auth.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
+	deadline := time.Now().Add(time.Minute)
+	for {
+		for _, line := range strings.Split(run.logs.String(), "\n") {
+			if strings.Contains(line, `msg="deleted identity erasure failed"`) && strings.Contains(line, "reap erased queue states") {
+				return
+			}
 		}
-		return auth.VerifiedToken{}, errors.New("bad token")
-	})
-	r := a.mountRoutes(verifier, cat, queue,
-		discovery.NewDiscoveryHandler(discovery.DiscoveryServices{}))
-	mountObserveLiveMetrics(r, verifier, operator, featureMetricsSource())
-
-	var logs bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-
-	before := playback.ReadSnapshot()
-	code, body := callObserveAs(t, r, http.MethodGet, "/v1/playback/queue-state", operatorToken)
-	if code != http.StatusOK {
-		t.Fatalf("resume against a wedged catalog: status %d, want 200; body %s", code, body)
+		if time.Now().After(deadline) {
+			t.Fatalf("no erasure run tried to reap erased queue states within a minute of leading a database with no tables:\n%s", run.logs.String())
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
-	if !bytes.Contains(body, []byte(`"current_track_unavailable":true`)) {
-		t.Errorf("resume body does not flag the failed enrichment: %s", body)
-	}
+}
 
-	code, body = callObserveAs(t, r, http.MethodGet, "/observe/metrics/live", operatorToken)
+func livePlaybackMetrics(t *testing.T, h http.Handler, token string) playback.MetricsSnapshot {
+	t.Helper()
+	code, body := getAs(t, h, "/observe/metrics/live", token)
 	if code != http.StatusOK {
-		t.Fatalf("operator metrics read: status %d, want 200; body %s", code, body)
+		t.Fatalf("operator read of /observe/metrics/live = %d, want 200; body %s", code, body)
 	}
 	var got struct {
 		Playback playback.MetricsSnapshot `json:"playback"`
@@ -106,76 +101,56 @@ func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("decode %s: %v", body, err)
 	}
-	if got.Playback.EnrichmentFailures != before.EnrichmentFailures+1 {
-		t.Errorf("playback.now_playing_enrichment_failures_total %d, want %d; body %s",
-			got.Playback.EnrichmentFailures, before.EnrichmentFailures+1, body)
-	}
-	if got.Playback.NowPlayingLookupTimeouts != before.NowPlayingLookupTimeouts+1 {
-		t.Errorf("playback.now_playing_lookup_timeouts_total %d, want %d; body %s",
-			got.Playback.NowPlayingLookupTimeouts, before.NowPlayingLookupTimeouts+1, body)
-	}
+	return got.Playback
+}
 
-	out := logs.String()
-	if !strings.Contains(out, `"msg":"resume.current_track_enrichment_failed"`) ||
-		!strings.Contains(out, `"user_id":"`+operator.String()+`"`) {
-		t.Errorf("enrichment-failure log line missing or without user_id; logs %s", out)
+func holdTracksLocked(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	tx, err := pool.Begin(t.Context())
+	if err != nil {
+		t.Fatalf("begin: %v", err)
 	}
-	if strings.Contains(out, nowPlayingId) {
-		t.Errorf("logs leak the raw now-playing track id %s; logs %s", nowPlayingId, out)
+	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	if _, err := tx.Exec(t.Context(), "LOCK TABLE tracks IN ACCESS EXCLUSIVE MODE"); err != nil {
+		t.Fatalf("lock tracks: %v", err)
 	}
 }
 
-func TestWirePlayback_SweepReapsErasedQueueStates(t *testing.T) {
-	pool, err := pgxpool.New(context.Background(), blackHoleDatabase(t))
-	if err != nil {
-		t.Fatalf("pgxpool.New: %v", err)
+func TestPlayback_AWedgedCatalogFlagsTheResumeAndReachesOperatorLiveMetrics(t *testing.T) {
+	if testing.Short() {
+		t.Skip("waits out the 3s production now-playing lookup deadline")
 	}
-	pool.Close()
-	a := &App{cfg: &config.Config{MusicDir: t.TempDir()}, sem: make(chan struct{}, 1), pool: pool}
+	pool := migratedDatabasePool(t)
+	f := newJWKSFixture(t)
+	run := assembleOn(t, f.cfg, pool, refuseEgress{})
+	h := run.assembly.Handler()
+	token := signedToken(t, f.key, f.operator)
+	nowPlaying := uuid.NewString()
+	if _, err := pool.Exec(t.Context(), `INSERT INTO playback_queue_state (user_id, track_ids, current_idx) VALUES ($1, $2, 1)`,
+		f.operator, []string{uuid.NewString(), nowPlaying}); err != nil {
+		t.Fatalf("store the queue state: %v", err)
+	}
+	before := livePlaybackMetrics(t, h, token)
+	holdTracksLocked(t, pool)
 
-	_, err = a.wirePlayback(t.Context(), nil).forgetDeletedIdentities.Execute(context.Background())
+	code, body := getAs(t, h, "/v1/playback/queue-state", token)
 
-	if err == nil || !strings.Contains(err.Error(), "reap erased queue states") {
-		t.Fatalf("Execute error = %v, want it to carry the reap failure, proving the reaper is wired", err)
+	if code != http.StatusOK {
+		t.Fatalf("resume against a wedged catalog: status %d, want 200; body %s", code, body)
 	}
-}
-
-func TestQueueRateLimit_EnvThrottlesQueueStateAtConfiguredBurst(t *testing.T) {
-	t.Setenv("SUPABASE_PROJECT_URL", "https://example.supabase.co")
-	t.Setenv("SUPABASE_JWT_JWKS_URL", "https://example.supabase.co/auth/v1/.well-known/jwks.json")
-	t.Setenv("PLAYBACK_QUEUE_RATE_EVERY", "1h")
-	t.Setenv("PLAYBACK_QUEUE_RATE_BURST", "2")
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("config.Load: %v", err)
+	if !strings.Contains(string(body), `"current_track_unavailable":true`) {
+		t.Errorf("resume body does not flag the failed enrichment: %s", body)
 	}
-	user := shared.NewUserId(uuid.New())
-	metrics := playback.NewExpvarPlaybackMetrics()
-	queue := newQueueHandler(newQueueService(&storedQueue{}, nil, metrics), metrics, queueRateLimit(cfg))
-	routes := queue.Routes()
-
-	var codes []int
-	for range 3 {
-		req := httptest.NewRequest(http.MethodPut, "/queue-state",
-			strings.NewReader(`{"track_ids":[],"repeat_mode":"off","source_id":"library"}`))
-		req = req.WithContext(auth.ContextWithUserID(req.Context(), user))
-		rec := httptest.NewRecorder()
-		routes.ServeHTTP(rec, req)
-		codes = append(codes, rec.Code)
+	after := livePlaybackMetrics(t, h, token)
+	if after.EnrichmentFailures != before.EnrichmentFailures+1 || after.NowPlayingLookupTimeouts != before.NowPlayingLookupTimeouts+1 {
+		t.Errorf("live playback enrichment failures %d and lookup timeouts %d, want %d and %d",
+			after.EnrichmentFailures, after.NowPlayingLookupTimeouts, before.EnrichmentFailures+1, before.NowPlayingLookupTimeouts+1)
 	}
-	if codes[0] == http.StatusTooManyRequests || codes[1] == http.StatusTooManyRequests || codes[2] != http.StatusTooManyRequests {
-		t.Errorf("statuses = %v, want the third PUT throttled at burst 2", codes)
+	logged := run.logs.String()
+	if !strings.Contains(logged, "msg=resume.current_track_enrichment_failed") || !strings.Contains(logged, "user_id="+f.operator.String()) {
+		t.Errorf("enrichment-failure log line missing or without user_id; logs %s", logged)
 	}
-}
-
-func TestQueueRateLimit_DefaultsMatchCompileTimeLimit(t *testing.T) {
-	t.Setenv("SUPABASE_PROJECT_URL", "https://example.supabase.co")
-	t.Setenv("SUPABASE_JWT_JWKS_URL", "https://example.supabase.co/auth/v1/.well-known/jwks.json")
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("config.Load: %v", err)
-	}
-	if got := queueRateLimit(cfg); got != playback.DefaultQueueStateRateLimit {
-		t.Errorf("limit = %+v, want %+v", got, playback.DefaultQueueStateRateLimit)
+	if strings.Contains(logged, nowPlaying) {
+		t.Errorf("logs leak the raw now-playing track id %s; logs %s", nowPlaying, logged)
 	}
 }
