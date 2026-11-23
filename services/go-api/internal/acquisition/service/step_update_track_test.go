@@ -1,172 +1,267 @@
-package service
+package service_test
 
 import (
-	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
+	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/acquisition/internal/adapters/tempfs"
 	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/ports"
-	"altune/go-api/internal/acquisition/internal/core/ranking"
+	"altune/go-api/internal/acquisition/service"
+	"altune/go-api/internal/acquisition/service/upgrade"
+	"altune/go-api/internal/shared/events"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"encoding/json"
+	"errors"
+	"slices"
+	"strings"
+	"sync"
 	"testing"
-
-	"github.com/google/uuid"
 )
 
-func TestUpdateTrackStep_Execute_StoresVerdictScoreAndSourceTitleAsEvidence(t *testing.T) {
-	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := seedTrackInRepo(t, repo, userId, nil)
-	ac := &AcquisitionContext{
-		AudioRef: "user/artist/album/song.mp3",
-		Selected: &ports.AudioCandidate{Title: "Song (Official Audio)", URL: "https://example.com/v"},
-		Verdict:  AudioVerdict{Kind: VerdictHard, Score: 0.93},
-	}
-	ac.adopt(context.Background(), Evidence{Verdict: "hard", AcoustIDScore: 0.93, SourceTitle: "Song (Official Audio)"}, 0)
+func TestExecute_MarksTheTrackReadyOnTheFileItStored(t *testing.T) {
+	track := pendingBlindingLights()
+	ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
+	store := &objectStore{objects: map[string]string{}}
+	svc := service.NewAcquireTrackAudioService(ledger, service.NewSourceRegistry(freshAudioSource{}), store,
+		service.WithAcquireTempWorkspace(tempfs.New()))
 
-	if _, err := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID).Execute(context.Background(), ac, afterStore{}); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
+	err := svc.Execute(context.Background(), track.UserId, track.ID)
 
-	updated := storedTrack(t, repo, track)
-	var got Evidence
-	if err := json.Unmarshal(updated.AcquisitionEvidence(), &got); err != nil {
-		t.Fatalf("evidence not stored as JSON: %v (%q)", err, updated.AcquisitionEvidence())
+	requireReady(t, ledger, track.ID, err)
+	want := service.BuildAudioRef(service.TrackRef{
+		ID: track.ID.String(), UserID: track.UserId.String(), Title: track.Title, Artist: track.Artist, Album: track.Album,
+	}, "audio.mp3")
+	if got, _ := ledger.Track(track.ID); got.AudioRef == nil || *got.AudioRef != want {
+		t.Fatalf("audio ref = %v, want %q", got.AudioRef, want)
 	}
-	if got.Verdict != "hard" || got.AcoustIDScore != 0.93 || got.SourceTitle != "Song (Official Audio)" {
-		t.Errorf("evidence = %+v", got)
-	}
-	if updated.AcquisitionConfidence() != 0 {
-		t.Errorf("confidence = %v, want 0 until computed", updated.AcquisitionConfidence())
+	if !store.holds(want) {
+		t.Errorf("the store does not hold %q, the file the track now points at", want)
 	}
 }
 
-func TestUpdateTrackStep_Execute_StoresSourceKindGenerationAndGradePerKind(t *testing.T) {
+func TestExecuteReplace_SwapsTheServingFileForTheOneItStored(t *testing.T) {
+	served := seedReadyTrack(t)
+
+	if err := served.service().ExecuteReplace(context.Background(), served.userID, served.trackID); err != nil {
+		t.Fatalf("ExecuteReplace: %v", err)
+	}
+
+	got, _ := served.ledger.Track(served.trackID)
+	if got.Status != ports.TrackReady || got.AudioRef == nil || *got.AudioRef == served.originalRef {
+		t.Fatalf("track = %v on %v, want ready on a new file, not the original %q", got.Status, got.AudioRef, served.originalRef)
+	}
+	if !served.store.holds(*got.AudioRef) {
+		t.Errorf("the store does not hold %q, the file the track now serves", *got.AudioRef)
+	}
+}
+
+type vanishingLedger struct{ *acquisitiontest.Ledger }
+
+func (vanishingLedger) Complete(context.Context, shared.TrackId, shared.UserId, ports.Fence, ports.Completion) error {
+	return ports.ErrTrackNotFound
+}
+
+func TestExecute_ATrackGoneAtTheCommitFailsTheRunAsAcquisitionFailed(t *testing.T) {
+	track := pendingBlindingLights()
+	ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
+	svc := service.NewAcquireTrackAudioService(vanishingLedger{ledger}, service.NewSourceRegistry(freshAudioSource{}),
+		&objectStore{objects: map[string]string{}}, service.WithAcquireTempWorkspace(tempfs.New()))
+
+	err := svc.Execute(context.Background(), track.UserId, track.ID)
+
+	if err == nil || !strings.Contains(err.Error(), "track not found for update") {
+		t.Fatalf("Execute = %v, want the update step's track-not-found failure", err)
+	}
+	if code := persistedCode(t, ledger, track.ID); code != shared.FailureAcquisitionFailed {
+		t.Errorf("persisted failure code = %q, want %q: failure_reason is stored and shown to the client", code, shared.FailureAcquisitionFailed)
+	}
+}
+
+type progressRecorder struct {
+	mu     sync.Mutex
+	stages []string
+}
+
+func (p *progressRecorder) Publish(_ context.Context, _ shared.UserId, eventType events.EventType, payload map[string]any) {
+	if eventType != events.TypeTrackAcquisitionProgress {
+		return
+	}
+	stage, _ := payload["stage"].(string)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.stages = append(p.stages, stage)
+}
+
+func (p *progressRecorder) published() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.stages)
+}
+
+func TestScheduledRun_TellsTheClientWhenItReachesTheUpdateTrackStage(t *testing.T) {
+	track := acquisitiontest.LedgerTrack{TrackSnapshot: pendingBlindingLights()}
+	ledger := acquisitiontest.NewLedger(track)
+	svc := service.NewAcquireTrackAudioService(ledger, service.NewSourceRegistry(freshAudioSource{}),
+		&objectStore{objects: map[string]string{}}, service.WithAcquireTempWorkspace(tempfs.New()))
+	progress := &progressRecorder{}
+
+	outcome := scheduleOnce(t, svc, track, nil, service.WithSchedulerEvents(progress))
+
+	if !outcome.settled {
+		t.Fatalf("job outcome = %+v, want the run settled", outcome)
+	}
+	if stages := progress.published(); !slices.Contains(stages, "update_track") {
+		t.Errorf("progress stages = %v, want %q among them: the mobile client renders this name", stages, "update_track")
+	}
+}
+
+func TestReplaceGated_AnUnprobedFileGetsNoLengthRescue(t *testing.T) {
+	const recording = "mb-blinding"
+	served := seedReadyTrack(t)
+	source := &offeringSource{found: []ports.AudioCandidate{{
+		Title: "The Weeknd - Blinding Lights", URL: "https://www.youtube.com/watch?v=fanUploadAA",
+		Channel: "Some Fan", Kind: ports.KindUpload, Duration: 285, Categories: []string{"Music"},
+	}}}
+	svc := service.NewAcquireTrackAudioService(served.ledger, service.NewSourceRegistry(source), served.store,
+		service.WithAcquireTempWorkspace(tempfs.New()),
+		service.WithRecordingResolver(&resolver{identity: ports.RecordingIdentity{MBID: recording, MBIDs: []string{recording}}}),
+		service.WithAudioIdentifier(&identifier{match: ports.RecordingMatch{AcoustID: "ac-1", Results: []ports.AcoustIDResult{
+			{Score: 0.97, Recordings: []ports.LinkedRecording{{MBID: recording}}},
+		}}}))
+	snapshot, err := served.ledger.Get(context.Background(), served.trackID, served.userID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	gate := upgrade.Gate{Current: grade.B, CatalogSeconds: 285, StoredSeconds: 231}
+
+	_, err = svc.ReplaceGated(context.Background(), served.userID, snapshot, gate)
+
+	if !errors.Is(err, upgrade.ErrNotAnUpgrade) {
+		t.Fatalf("ReplaceGated = %v, want ErrNotAnUpgrade: the source's claimed 285 s was never measured", err)
+	}
+	if !source.tried("https://www.youtube.com/watch?v=fanUploadAA") {
+		t.Fatalf("the fan upload was never fetched, so the gate never judged it; tried %v", source.fetches())
+	}
+	if got, _ := served.ledger.Track(served.trackID); got.AudioRef == nil || *got.AudioRef != served.originalRef {
+		t.Errorf("audio ref = %v, want the original %q kept", got.AudioRef, served.originalRef)
+	}
+}
+
+const (
+	blindingLightsRecording = "mb-blinding-lights"
+	blindingLightsLength    = 200.0
+)
+
+func hardFingerprintOn(mbid string) *identifier {
+	return &identifier{match: ports.RecordingMatch{AcoustID: "ac-1", Results: []ports.AcoustIDResult{
+		{Score: 0.97, Recordings: []ports.LinkedRecording{{MBID: mbid}}},
+	}}}
+}
+
+type storedAcquisition struct {
+	track    acquisitiontest.LedgerTrack
+	evidence service.Evidence
+	keys     map[string]json.RawMessage
+}
+
+func acquireStoring(t *testing.T, candidate ports.AudioCandidate, opts ...func(*service.AcquireTrackAudioService)) storedAcquisition {
+	t.Helper()
+	track := pendingBlindingLights()
+	length := blindingLightsLength
+	track.CatalogDurationSeconds = &length
+	ledger, err := acquireWith(t, track, &offeringSource{found: []ports.AudioCandidate{candidate}}, opts...)
+	requireReady(t, ledger, track.ID, err)
+	got, _ := ledger.Track(track.ID)
+	stored := storedAcquisition{track: got}
+	if err := json.Unmarshal(got.Evidence, &stored.evidence); err != nil {
+		t.Fatalf("evidence not stored as JSON: %v (%q)", err, got.Evidence)
+	}
+	if err := json.Unmarshal(got.Evidence, &stored.keys); err != nil {
+		t.Fatalf("evidence not a JSON object: %v (%q)", err, got.Evidence)
+	}
+	return stored
+}
+
+func blindingLightsBy(channel string, kind ports.CandidateKind) ports.AudioCandidate {
+	return ports.AudioCandidate{
+		Title: "The Weeknd - Blinding Lights", URL: "https://www.youtube.com/watch?v=blindingAAA",
+		Channel: channel, Kind: kind, Categories: []string{"Music"},
+	}
+}
+
+func TestExecute_StoresTheVerdictScoreSourceTitleAndTheirConfidence(t *testing.T) {
+	candidate := blindingLightsBy("The Weeknd - Topic", ports.KindUpload)
+	candidate.Title = "The Weeknd - Blinding Lights (Official Audio)"
+
+	stored := acquireStoring(t, candidate,
+		service.WithRecordingResolver(resolvedTo(blindingLightsRecording)), service.WithAudioIdentifier(hardFingerprintOn(blindingLightsRecording)))
+
+	if e := stored.evidence; e.Verdict != "hard" || e.AcoustIDScore != 0.97 || e.SourceTitle != candidate.Title {
+		t.Errorf("evidence = %+v, want verdict hard, acoustid_score 0.97 and the source title %q", e, candidate.Title)
+	}
+	if want := service.ScoreConfidence(stored.evidence, blindingLightsLength); stored.track.Confidence != want {
+		t.Errorf("stored confidence = %v, want %v, the score of the stored evidence", stored.track.Confidence, want)
+	}
+}
+
+func TestExecute_StoresTheSourceKindGenerationAndGradePerKind(t *testing.T) {
 	cases := []struct {
-		name      string
-		kind      ports.CandidateKind
-		channel   string
-		verdict   VerdictKind
-		wantKind  grade.SourceKind
-		wantGrade grade.Grade
+		name       string
+		channel    string
+		kind       ports.CandidateKind
+		omv        bool
+		identifier *identifier
+		wantKind   grade.SourceKind
+		wantGrade  grade.Grade
 	}{
-		{"art track proven by fingerprint", ports.KindArtTrack, ranking.ChannelTopic, VerdictHard, grade.ArtTrack, grade.A},
-		{"official video proven by fingerprint", ports.KindPinnedVideo, ranking.ChannelTopic, VerdictHard, grade.OfficialVideo, grade.A},
-		{"artist's own upload proven by fingerprint", ports.KindUpload, ranking.ChannelArtist, VerdictHard, grade.LabelUpload, grade.A},
-		{"fan upload proven by fingerprint", ports.KindUpload, ranking.ChannelOther, VerdictHard, grade.FanUpload, grade.B},
-		{"art track the fingerprint says is another version", ports.KindArtTrack, ranking.ChannelTopic, VerdictOtherVersion, grade.ArtTrack, grade.F},
-		{"fan upload with no fingerprint answer", ports.KindUpload, ranking.ChannelOther, VerdictUnknown, grade.FanUpload, grade.D},
+		{"art track proven by fingerprint", "The Weeknd - Topic", ports.KindArtTrack, false, hardFingerprintOn(blindingLightsRecording), grade.ArtTrack, grade.A},
+		{"official video proven by fingerprint", "The Weeknd", ports.KindPinnedVideo, true, hardFingerprintOn(blindingLightsRecording), grade.OfficialVideo, grade.A},
+		{"pinned video never seen as official, proven by fingerprint", "The Weeknd", ports.KindPinnedVideo, false, hardFingerprintOn(blindingLightsRecording), grade.FanUpload, grade.B},
+		{"artist's own upload proven by fingerprint", "The Weeknd", ports.KindUpload, false, hardFingerprintOn(blindingLightsRecording), grade.LabelUpload, grade.A},
+		{"fan upload proven by fingerprint", "Some Fan", ports.KindUpload, false, hardFingerprintOn(blindingLightsRecording), grade.FanUpload, grade.B},
+		{"fan upload with no fingerprint answer", "Some Fan", ports.KindUpload, false, nil, grade.FanUpload, grade.D},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			userId := shared.NewUserId(uuid.New())
-			repo := newFakeTrackRepository()
-			track := seedTrackInRepo(t, repo, userId, nil)
-			ac := &AcquisitionContext{
-				AudioRef: drinkingAudio,
-				Selected: &ports.AudioCandidate{Title: "Song", URL: drinkingSource, Kind: tc.kind, ObservedOMV: tc.kind == ports.KindPinnedVideo},
-				Verdict:  AudioVerdict{Kind: tc.verdict},
-				Evidence: Evidence{Channel: tc.channel},
+			candidate := blindingLightsBy(tc.channel, tc.kind)
+			candidate.ObservedOMV = tc.omv
+			opts := []func(*service.AcquireTrackAudioService){service.WithRecordingResolver(resolvedTo(blindingLightsRecording))}
+			if tc.identifier != nil {
+				opts = append(opts, service.WithAudioIdentifier(tc.identifier))
 			}
 
-			if _, err := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID).Execute(context.Background(), ac, afterStore{}); err != nil {
-				t.Fatalf("Execute: %v", err)
-			}
+			e := acquireStoring(t, candidate, opts...).evidence
 
-			var got Evidence
-			if err := json.Unmarshal(storedTrack(t, repo, track).AcquisitionEvidence(), &got); err != nil {
-				t.Fatalf("evidence not stored as JSON: %v", err)
-			}
-			if got.SourceKind != tc.wantKind || got.Grade != tc.wantGrade || got.PipelineGeneration != grade.PipelineGeneration {
-				t.Errorf("source_kind=%q grade=%q generation=%d, want %q %q %d", got.SourceKind, got.Grade, got.PipelineGeneration, tc.wantKind, tc.wantGrade, grade.PipelineGeneration)
+			if e.SourceKind != tc.wantKind || e.Grade != tc.wantGrade || e.PipelineGeneration != grade.PipelineGeneration {
+				t.Errorf("source_kind=%q grade=%q generation=%d, want %q %q %d", e.SourceKind, e.Grade, e.PipelineGeneration, tc.wantKind, tc.wantGrade, grade.PipelineGeneration)
 			}
 		})
 	}
 }
 
-func TestUpdateTrackStep_Execute_ADoubtedReferenceNeverGradesA(t *testing.T) {
-	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := seedTrackInRepo(t, repo, userId, nil)
-	ac := &AcquisitionContext{
-		AudioRef: drinkingAudio,
-		Selected: &ports.AudioCandidate{Title: "Song", URL: drinkingSource, Kind: ports.KindArtTrack},
-		Verdict:  AudioVerdict{Kind: VerdictHard},
-		Identity: ports.RecordingIdentity{ReferenceDoubted: true},
-	}
+func TestExecute_ADoubtedReferenceNeverGradesA(t *testing.T) {
+	identity := ports.RecordingIdentity{MBID: blindingLightsRecording, MBIDs: []string{blindingLightsRecording}, ReferenceDoubted: true}
 
-	if _, err := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID).Execute(context.Background(), ac, afterStore{}); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
+	e := acquireStoring(t, blindingLightsBy("The Weeknd - Topic", ports.KindArtTrack),
+		service.WithRecordingResolver(&resolver{identity: identity}), service.WithAudioIdentifier(hardFingerprintOn(blindingLightsRecording))).evidence
 
-	var got Evidence
-	if err := json.Unmarshal(storedTrack(t, repo, track).AcquisitionEvidence(), &got); err != nil {
-		t.Fatalf("evidence not stored as JSON: %v", err)
-	}
-	if got.Grade != grade.B {
-		t.Errorf("grade = %q, want B", got.Grade)
+	if e.Grade != grade.B {
+		t.Errorf("grade = %q, want B: a fingerprint on a doubted reference never proves the recording", e.Grade)
 	}
 }
 
-func TestUpdateTrackStep_Execute_NoStoredCandidateLeavesEvidenceEmpty(t *testing.T) {
-	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := seedTrackInRepo(t, repo, userId, nil)
+func TestExecute_AnUncomparedLengthIsStoredAsNullInTheEvidence(t *testing.T) {
+	stored := acquireStoring(t, blindingLightsBy("The Weeknd - Topic", ports.KindUpload))
 
-	if _, err := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID).Execute(context.Background(), &AcquisitionContext{AudioRef: "a.mp3"}, afterStore{}); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if updated := storedTrack(t, repo, track); updated.AcquisitionEvidence() != nil {
-		t.Errorf("evidence = %s, want none", updated.AcquisitionEvidence())
+	if v, present := stored.keys["duration_delta_seconds"]; !present || string(v) != "null" {
+		t.Errorf("duration_delta_seconds = %s (present %v), want null: no prober measured the file", v, present)
 	}
 }
 
-const (
-	drinkingAudio  = "user/bran-van-3000/drinking-in-la.opus"
-	drinkingSource = "https://www.youtube.com/watch?v=-_5yNLsZ5Pk"
-)
+func TestExecute_StoredEvidenceHasNoUnsetISRCHit(t *testing.T) {
+	stored := acquireStoring(t, blindingLightsBy("The Weeknd - Topic", ports.KindUpload))
 
-func TestUpdateTrackStep_AnUncomparedLengthIsNullInTheEvidence(t *testing.T) {
-	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := seedTrackInRepo(t, repo, userId, nil)
-	ac := &AcquisitionContext{
-		AudioRef: "user/artist/album/song.mp3",
-		Selected: &ports.AudioCandidate{Title: "Song", URL: "https://example.com/v"},
-		Evidence: Evidence{Channel: "topic"},
-	}
-
-	if _, err := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID).Execute(context.Background(), ac, afterStore{}); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-
-	var stored map[string]any
-	if err := json.Unmarshal(storedTrack(t, repo, track).AcquisitionEvidence(), &stored); err != nil {
-		t.Fatalf("evidence not stored as JSON: %v", err)
-	}
-	if v, present := stored["duration_delta_seconds"]; !present || v != nil {
-		t.Errorf("duration_delta_seconds = %v (present %v), want null", v, present)
-	}
-}
-
-func TestUpdateTrackStep_EvidenceHasNoUnsetISRCHit(t *testing.T) {
-	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := seedTrackInRepo(t, repo, userId, nil)
-	ac := &AcquisitionContext{
-		AudioRef: drinkingAudio,
-		Selected: &ports.AudioCandidate{Title: "Song", URL: drinkingSource},
-	}
-
-	if _, err := NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID).Execute(context.Background(), ac, afterStore{}); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-
-	var keys map[string]json.RawMessage
-	if err := json.Unmarshal(storedTrack(t, repo, track).AcquisitionEvidence(), &keys); err != nil {
-		t.Fatalf("evidence not stored as JSON: %v", err)
-	}
-	if _, present := keys["isrc_set_hit"]; present {
-		t.Errorf("stored evidence carries isrc_set_hit: %v", keys)
+	if _, present := stored.keys["isrc_set_hit"]; present {
+		t.Errorf("stored evidence carries isrc_set_hit: %s", stored.track.Evidence)
 	}
 }
