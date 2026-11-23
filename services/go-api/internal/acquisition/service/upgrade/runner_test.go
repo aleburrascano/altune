@@ -2,7 +2,7 @@ package upgrade_test
 
 import (
 	"altune/go-api/internal/acquisition"
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/shared/events"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
@@ -44,40 +44,6 @@ func (s *audioStore) Store(_ context.Context, sourcePath string, audioRef string
 func (s *audioStore) Delete(_ context.Context, audioRef string) error {
 	delete(s.objects, audioRef)
 	return nil
-}
-
-type trackStore struct {
-	rows      map[string]domain.Track
-	updateErr error
-}
-
-func rowKey(id domain.TrackId, userId shared.UserId) string {
-	return id.String() + ":" + userId.String()
-}
-
-func (r *trackStore) GetByID(_ context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {
-	row, ok := r.rows[rowKey(id, userId)]
-	if !ok {
-		return nil, nil
-	}
-	return &row, nil
-}
-
-func (r *trackStore) Update(_ context.Context, track *domain.Track, _ int) error {
-	if r.updateErr != nil {
-		return r.updateErr
-	}
-	r.rows[rowKey(track.ID, track.UserId)] = *track
-	return nil
-}
-
-func (r *trackStore) AudioRefInUse(_ context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error) {
-	for _, row := range r.rows {
-		if row.ID != excludeTrackID && row.AudioRef != nil && *row.AudioRef == audioRef {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 type source struct {
@@ -141,62 +107,69 @@ func (p *publisher) Publish(context.Context, shared.UserId, events.EventType, ma
 }
 
 type world struct {
-	tracks   *trackStore
+	tracks   *acquisitiontest.Ledger
 	audio    *audioStore
 	source   *source
 	upgrades *upgradeStore
 	userId   shared.UserId
-	trackId  domain.TrackId
+	trackId  shared.TrackId
 }
 
 func seed(t *testing.T, stored acquisition.Grade) *world {
 	t.Helper()
-	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	if err := track.MarkReady(originalRef); err != nil {
-		t.Fatalf("mark ready: %v", err)
-	}
-	track.SetAudioSource(currentURL)
-	track.AdoptISRC("USUG11904206")
-	evidence := json.RawMessage(fmt.Sprintf(`{"grade":%q,"pipeline_generation":1}`, stored))
-	if err := track.SetAcquisitionConfidence(0.5, evidence); err != nil {
-		t.Fatalf("set evidence: %v", err)
+	ref, sourceURL, isrc := originalRef, currentURL, "USUG11904206"
+	track := acquisitiontest.LedgerTrack{
+		TrackSnapshot: acquisition.TrackSnapshot{
+			ID: shared.NewTrackId(), UserId: shared.NewUserId(uuid.New()),
+			Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours",
+			Status: acquisition.TrackReady, AudioRef: &ref, AudioSourceURL: &sourceURL, ISRC: &isrc,
+			Evidence: json.RawMessage(fmt.Sprintf(`{"grade":%q,"pipeline_generation":1}`, stored)),
+		},
+		Confidence: 0.5,
 	}
 	return &world{
-		tracks:   &trackStore{rows: map[string]domain.Track{rowKey(track.ID, userId): *track}},
+		tracks:   acquisitiontest.NewLedger(track),
 		audio:    &audioStore{objects: map[string]string{originalRef: "original bytes"}},
 		source:   &source{},
 		upgrades: &upgradeStore{},
-		userId:   userId,
+		userId:   track.UserId,
 		trackId:  track.ID,
 	}
 }
 
+func (w *world) edit(change func(*acquisitiontest.LedgerTrack)) {
+	track, _ := w.tracks.Track(w.trackId)
+	change(&track)
+	w.tracks.Seed(track)
+}
+
 func (w *world) asUserUpload() {
-	key := rowKey(w.trackId, w.userId)
-	row := w.tracks.rows[key]
-	row.AudioSourceURL = nil
-	w.tracks.rows[key] = row
+	w.edit(func(track *acquisitiontest.LedgerTrack) { track.AudioSourceURL = nil })
+}
+
+func (w *world) storedLengths(catalogSeconds, storedSeconds float64) {
+	w.edit(func(track *acquisitiontest.LedgerTrack) {
+		track.CatalogDurationSeconds, track.StoredDurationSeconds = &catalogSeconds, &storedSeconds
+	})
 }
 
 func (w *world) runner(cfg acquisition.UpgradeConfig, opts ...func(*acquisition.AcquireTrackAudioService)) *acquisition.UpgradeRunner {
-	ledger := acquisition.NewTrackLedger(w.tracks)
 	opts = append([]func(*acquisition.AcquireTrackAudioService){acquisition.WithAcquireTempWorkspace(acquisition.NewTempWorkspace())}, opts...)
-	svc := acquisition.NewAcquireTrackAudioService(ledger, acquisition.NewSourceRegistry(w.source), w.audio, opts...)
-	return acquisition.NewUpgradeRunner(ledger, svc, w.upgrades, cfg)
+	svc := acquisition.NewAcquireTrackAudioService(w.tracks, acquisition.NewSourceRegistry(w.source), w.audio, opts...)
+	return acquisition.NewUpgradeRunner(w.tracks, svc, w.upgrades, cfg)
 }
 
-func (w *world) committed() domain.Track { return w.tracks.rows[rowKey(w.trackId, w.userId)] }
+func (w *world) committed() acquisitiontest.LedgerTrack {
+	track, _ := w.tracks.Track(w.trackId)
+	return track
+}
 
 func (w *world) committedGrade(t *testing.T) acquisition.Grade {
 	t.Helper()
 	var stored struct {
 		Grade acquisition.Grade `json:"grade"`
 	}
-	if err := json.Unmarshal(w.committed().EvidenceJSON, &stored); err != nil {
+	if err := json.Unmarshal(w.committed().Evidence, &stored); err != nil {
 		t.Fatalf("committed evidence: %v", err)
 	}
 	return stored.Grade
@@ -309,7 +282,7 @@ func TestRunner_GivesUpAfterTheMaximumTriesWithNothingBetter(t *testing.T) {
 
 func TestRunner_ASwapThatFailsToCommitKeepsTheOldFileAndCountsNoTry(t *testing.T) {
 	w := seed(t, acquisition.GradeF)
-	w.tracks.updateErr = errors.New("transient db error")
+	w.tracks.FailWrites(errors.New("transient db error"))
 
 	err := w.runner(acquisition.UpgradeConfig{MaxTries: 1}).ExecuteUpgrade(context.Background(), w.userId, w.trackId)
 
@@ -319,8 +292,8 @@ func TestRunner_ASwapThatFailsToCommitKeepsTheOldFileAndCountsNoTry(t *testing.T
 	if w.audio.objects[originalRef] != "original bytes" || len(w.audio.objects) != 1 {
 		t.Errorf("objects = %v, want the original untouched and the staged file rolled back", w.audio.objects)
 	}
-	if row := w.committed(); row.AcquisitionStatus != domain.AcquisitionReady || *row.AudioRef != originalRef {
-		t.Errorf("track = %v %v, want it ready on the original ref", row.AcquisitionStatus, row.AudioRef)
+	if row := w.committed(); row.Status != acquisition.TrackReady || *row.AudioRef != originalRef {
+		t.Errorf("track = %v %v, want it ready on the original ref", row.Status, row.AudioRef)
 	}
 	if len(w.upgrades.gaveUp) != 0 || fmt.Sprint(w.upgrades.attempts) != fmt.Sprint([]acquisition.UpgradeAttempt{{}}) {
 		t.Errorf("attempts = %v, give-ups = %v, want an infrastructure failure to count for nothing", w.upgrades.attempts, w.upgrades.gaveUp)
@@ -342,7 +315,7 @@ func TestRunner_PublishesNothingToTheUser(t *testing.T) {
 
 func TestReplace_IsNotHeldToTheRatchet(t *testing.T) {
 	w := seed(t, acquisition.GradeB)
-	svc := acquisition.NewAcquireTrackAudioService(acquisition.NewTrackLedger(w.tracks), acquisition.NewSourceRegistry(w.source), w.audio,
+	svc := acquisition.NewAcquireTrackAudioService(w.tracks, acquisition.NewSourceRegistry(w.source), w.audio,
 		acquisition.WithAcquireTempWorkspace(acquisition.NewTempWorkspace()))
 
 	if err := svc.ExecuteReplace(context.Background(), w.userId, w.trackId); err != nil {
@@ -367,10 +340,9 @@ func (f *failingGiveUpStore) GiveUp(context.Context, shared.TrackId, int, string
 func TestRunner_AFailedGiveUpStillSettlesTheKeptFile(t *testing.T) {
 	w := seed(t, acquisition.GradeD)
 	store := &failingGiveUpStore{}
-	ledger := acquisition.NewTrackLedger(w.tracks)
-	svc := acquisition.NewAcquireTrackAudioService(ledger, acquisition.NewSourceRegistry(w.source), w.audio,
+	svc := acquisition.NewAcquireTrackAudioService(w.tracks, acquisition.NewSourceRegistry(w.source), w.audio,
 		acquisition.WithAcquireTempWorkspace(acquisition.NewTempWorkspace()))
-	runner := acquisition.NewUpgradeRunner(ledger, svc, store, acquisition.UpgradeConfig{MaxTries: 1})
+	runner := acquisition.NewUpgradeRunner(w.tracks, svc, store, acquisition.UpgradeConfig{MaxTries: 1})
 
 	err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId)
 
@@ -408,7 +380,7 @@ func TestRunner_ALowBitrateFileAtAIsNotSettled(t *testing.T) {
 			w := seed(t, acquisition.GradeA)
 			w.storedEvidence(fmt.Sprintf(tc.evidence, acquisition.PipelineGeneration))
 			replacer := &gateRecorder{}
-			runner := acquisition.NewUpgradeRunner(acquisition.NewTrackLedger(w.tracks), replacer, w.upgrades, acquisition.UpgradeConfig{MaxTries: 3, LowBitrateFloorKbps: 112})
+			runner := acquisition.NewUpgradeRunner(w.tracks, replacer, w.upgrades, acquisition.UpgradeConfig{MaxTries: 3, LowBitrateFloorKbps: 112})
 
 			if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
 				t.Fatalf("ExecuteUpgrade: %v", err)
@@ -429,17 +401,9 @@ func TestRunner_ALowBitrateFileAtAIsNotSettled(t *testing.T) {
 
 func TestRunner_TheGateCarriesTheCatalogAndStoredLengths(t *testing.T) {
 	w := seed(t, acquisition.GradeB)
-	key := rowKey(w.trackId, w.userId)
-	row := w.tracks.rows[key]
-	if err := row.SetCatalogDuration(285); err != nil {
-		t.Fatalf("set catalog duration: %v", err)
-	}
-	if err := row.SetDuration(231); err != nil {
-		t.Fatalf("set stored duration: %v", err)
-	}
-	w.tracks.rows[key] = row
+	w.storedLengths(285, 231)
 	replacer := &gateRecorder{}
-	runner := acquisition.NewUpgradeRunner(acquisition.NewTrackLedger(w.tracks), replacer, w.upgrades, acquisition.UpgradeConfig{MaxTries: 3})
+	runner := acquisition.NewUpgradeRunner(w.tracks, replacer, w.upgrades, acquisition.UpgradeConfig{MaxTries: 3})
 
 	if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
@@ -453,17 +417,9 @@ func TestRunner_TheGateCarriesTheCatalogAndStoredLengths(t *testing.T) {
 func TestRunner_ALowBitrateGateAlsoCarriesTheCatalogAndStoredLengths(t *testing.T) {
 	w := seed(t, acquisition.GradeA)
 	w.storedEvidence(fmt.Sprintf(`{"grade":"A","source_format_id":"18","source_kbps":96,"in_place_generation":%d}`, acquisition.PipelineGeneration))
-	key := rowKey(w.trackId, w.userId)
-	row := w.tracks.rows[key]
-	if err := row.SetCatalogDuration(195); err != nil {
-		t.Fatalf("set catalog duration: %v", err)
-	}
-	if err := row.SetDuration(292); err != nil {
-		t.Fatalf("set stored duration: %v", err)
-	}
-	w.tracks.rows[key] = row
+	w.storedLengths(195, 292)
 	replacer := &gateRecorder{}
-	runner := acquisition.NewUpgradeRunner(acquisition.NewTrackLedger(w.tracks), replacer, w.upgrades, acquisition.UpgradeConfig{MaxTries: 3, LowBitrateFloorKbps: 112})
+	runner := acquisition.NewUpgradeRunner(w.tracks, replacer, w.upgrades, acquisition.UpgradeConfig{MaxTries: 3, LowBitrateFloorKbps: 112})
 
 	if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
@@ -481,7 +437,7 @@ func TestRunner_ALowBitrateGateAlsoCarriesTheCatalogAndStoredLengths(t *testing.
 func TestRunner_ATrackWithNoKnownLengthsGetsAGateWithTheLengthRescueOff(t *testing.T) {
 	w := seed(t, acquisition.GradeB)
 	replacer := &gateRecorder{}
-	runner := acquisition.NewUpgradeRunner(acquisition.NewTrackLedger(w.tracks), replacer, w.upgrades, acquisition.UpgradeConfig{MaxTries: 3})
+	runner := acquisition.NewUpgradeRunner(w.tracks, replacer, w.upgrades, acquisition.UpgradeConfig{MaxTries: 3})
 
 	if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
