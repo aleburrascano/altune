@@ -1,4 +1,4 @@
-package reqmetrics
+package registry
 
 import (
 	"strconv"
@@ -27,9 +27,9 @@ type Snapshot struct {
 	Routes map[string]RouteLatency `json:"routes"`
 }
 
-func ReadSnapshot() Snapshot {
+func (reg *Registry) Snapshot() Snapshot {
 	routes := map[string]RouteLatency{}
-	defaultRegistry.routes.Range(func(key, value any) bool {
+	reg.routes.Range(func(key, value any) bool {
 		routes[key.(string)] = readRoute(value.(*routeHist))
 		return true
 	})

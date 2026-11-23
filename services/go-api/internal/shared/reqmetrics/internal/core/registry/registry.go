@@ -1,4 +1,4 @@
-package reqmetrics
+package registry
 
 import (
 	"sync"
@@ -61,19 +61,22 @@ func statusClassIndex(status int) int {
 	}
 }
 
-type registry struct {
+type Registry struct {
 	routes sync.Map
 	n      atomic.Int32
 }
 
-func newRegistry() *registry {
-	reg := &registry{}
+func New() *Registry {
+	reg := &Registry{}
 	reg.routes.Store(unmatchedRoute, &routeHist{})
 	reg.routes.Store(overflowRoute, &routeHist{})
 	return reg
 }
 
-func (reg *registry) observe(route string, d time.Duration, status int) {
+func (reg *Registry) Observe(route string, d time.Duration, status int) {
+	if route == "" {
+		route = unmatchedRoute
+	}
 	ms := d.Milliseconds()
 	if ms < 0 {
 		ms = 0
@@ -81,7 +84,7 @@ func (reg *registry) observe(route string, d time.Duration, status int) {
 	reg.hist(route).observe(ms, status)
 }
 
-func (reg *registry) hist(route string) *routeHist {
+func (reg *Registry) hist(route string) *routeHist {
 	if v, ok := reg.routes.Load(route); ok {
 		return v.(*routeHist)
 	}
@@ -95,16 +98,7 @@ func (reg *registry) hist(route string) *routeHist {
 	return h.(*routeHist)
 }
 
-func (reg *registry) mustLoad(route string) *routeHist {
+func (reg *Registry) mustLoad(route string) *routeHist {
 	v, _ := reg.routes.Load(route)
 	return v.(*routeHist)
-}
-
-var defaultRegistry = newRegistry()
-
-func Observe(route string, d time.Duration, status int) {
-	if route == "" {
-		route = unmatchedRoute
-	}
-	defaultRegistry.observe(route, d, status)
 }
