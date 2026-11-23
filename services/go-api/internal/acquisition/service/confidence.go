@@ -3,12 +3,12 @@ package service
 import (
 	"altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/grade"
+	"altune/go-api/internal/acquisition/internal/core/isrcproof"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/internal/core/ranking"
 	"context"
 	"log/slog"
 	"math"
-	"slices"
 )
 
 const (
@@ -126,7 +126,7 @@ type Evidence struct {
 	Qualifiers           []string         `json:"qualifiers"`
 	Resolved             bool             `json:"resolved"`
 	SourceTitle          string           `json:"source_title"`
-	ISRCSource           ISRCSource       `json:"isrc_source"`
+	ISRCSource           isrcproof.Source `json:"isrc_source"`
 	SourceKind           grade.SourceKind `json:"source_kind"`
 	PipelineGeneration   int              `json:"pipeline_generation"`
 	Grade                grade.Grade      `json:"grade"`
@@ -208,38 +208,12 @@ func (ac *AcquisitionContext) gradeFor(kind grade.SourceKind) grade.Grade {
 	return grade.Of(ac.gradedFingerprint(), ac.Provenance(), kind)
 }
 
-type ISRCSource string
-
-const (
-	ISRCFromCatalog         ISRCSource = "catalog"
-	ISRCFromPinnedRecording ISRCSource = "pinned_recording"
-	ISRCFromFingerprint     ISRCSource = "fingerprint"
-	ISRCUnproven            ISRCSource = "unproven"
-)
-
-func (ac *AcquisitionContext) provenISRC() (string, ISRCSource) {
-	switch {
-	case ac.Track.ISRC != "":
-		return ac.Track.ISRC, ISRCFromCatalog
-	case ac.Identity.ISRC == "":
-		return "", ISRCUnproven
-	case ac.identityIsCatalogPin():
-		return ac.Identity.ISRC, ISRCFromPinnedRecording
-	case ac.fingerprintProvesReference():
-		return ac.Identity.ISRC, ISRCFromFingerprint
-	}
-	return "", ISRCUnproven
-}
-
-func (ac *AcquisitionContext) identityIsCatalogPin() bool {
-	return ac.Track.CatalogMBID != "" && ac.Identity.MBID == ac.Track.CatalogMBID
-}
-
-func (ac *AcquisitionContext) fingerprintProvesReference() bool {
-	if ac.Verdict.Kind != VerdictHard || ac.Identity.ReferenceDoubted {
-		return false
-	}
-	return slices.ContainsFunc(ac.Verdict.Surviving, func(recording ports.LinkedRecording) bool {
-		return recording.MBID != "" && slices.Contains(ac.Identity.MBIDs, recording.MBID)
+func (ac *AcquisitionContext) provenISRC() (string, isrcproof.Source) {
+	return isrcproof.Prove(isrcproof.Facts{
+		CatalogISRC: ac.Track.ISRC,
+		CatalogMBID: ac.Track.CatalogMBID,
+		Identity:    ac.Identity,
+		HardVerdict: ac.Verdict.Kind == VerdictHard,
+		Surviving:   ac.Verdict.Surviving,
 	})
 }
