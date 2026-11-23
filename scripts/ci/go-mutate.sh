@@ -8,7 +8,7 @@ gremlins=github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0
 
 cd "$dir"
 module_prefix=$(git rev-parse --show-prefix)
-mapfile -t packages < <(git diff --name-only --relative --merge-base "$base" -- . | grep -E '\.go$' | grep -vE '_test\.go$' | xargs -r -n1 dirname | sort -u)
+mapfile -t packages < <(git -c core.quotePath=false diff --find-renames --name-only --relative --merge-base "$base" -- . | grep -E '\.go$' | grep -vE '_test\.go$' | xargs -r -n1 dirname | sort -u)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
@@ -64,19 +64,19 @@ cat >"$work/bin/git" <<'WRAPPER'
 set -euo pipefail
 [ "${1:-}" = diff ] || exec "$GO_MUTATE_REAL_GIT" "$@"
 shift
-"$GO_MUTATE_REAL_GIT" diff --find-renames --unified=0 --inter-hunk-context=0 --relative${GO_MUTATE_MODULE:+="$GO_MUTATE_MODULE"} "$@" -- . | awk -v package="$GO_MUTATE_PACKAGE" '
+"$GO_MUTATE_REAL_GIT" -c core.quotePath=false diff --find-renames --unified=0 --inter-hunk-context=0 --relative${GO_MUTATE_MODULE:+="$GO_MUTATE_MODULE"} "$@" -- . | awk -v package="$GO_MUTATE_PACKAGE" '
   function emit() {
     if (name != "" && body != "") printf "diff --git a/%s b/%s\n--- a/%s\n+++ b/%s\n%s", name, name, name, name, body
+    else if (name != "") printf "diff --git a/%s b/%s\nrename from %s\nrename to %s\n", name, name, name, name
     name = ""; body = ""; in_hunks = 0
   }
   /^diff --git / { emit(); next }
   !in_hunks && /^\+\+\+ "/ { print "go-mutate: git quoted the path in \"" $0 "\", which this diff filter cannot read" > "/dev/stderr"; failed = 1; exit 1 }
-  !in_hunks && /^\+\+\+ / {
-    path = substr($0, 5)
-    sub(/^b\//, "", path)
-    if (index(path, package) == 1) name = substr(path, length(package) + 1)
-    next
-  }
+  function claim(path) { if (index(path, package) == 1) name = substr(path, length(package) + 1) }
+  !in_hunks && /^\+\+\+ b\// { claim(substr($0, 7)); next }
+  !in_hunks && /^--- a\// { if (name == "") claim(substr($0, 7)); next }
+  !in_hunks && /^rename from / { claim(substr($0, 13)); next }
+  !in_hunks && /^rename to / { claim(substr($0, 11)); next }
   /^@@ / { in_hunks = 1 }
   in_hunks && name != "" { body = body $0 "\n" }
   END { if (!failed) emit() }
@@ -89,8 +89,10 @@ survivors=()
 for package in "${packages[@]}"; do
   [ -d "$package" ] || continue
   report=$work/report.json
+  package_prefix=$package/
+  [ "$package" != . ] || package_prefix=
   rm -f "$report"
-  if ! out=$(env GOFLAGS="${GOFLAGS:+$GOFLAGS }-count=1" PATH="$work/bin:$PATH" GO_MUTATE_REAL_GIT="$real_git" GO_MUTATE_MODULE="$module_prefix" GO_MUTATE_PACKAGE="$package/" go run "$gremlins" unleash --diff "$base" --output "$report" "./$package" 2>&1); then
+  if ! out=$(env GOFLAGS="${GOFLAGS:+$GOFLAGS }-count=1" PATH="$work/bin:$PATH" GO_MUTATE_REAL_GIT="$real_git" GO_MUTATE_MODULE="$module_prefix" GO_MUTATE_PACKAGE="$package_prefix" go run "$gremlins" unleash --diff "$base" --output "$report" "./$package" 2>&1); then
     echo "$out" >&2
     echo "go-mutate: gremlins failed in $dir/$package (a failing test or build stops it)" >&2
     exit 1

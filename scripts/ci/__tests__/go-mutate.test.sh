@@ -243,6 +243,43 @@ if grep -q 'bounds.go:4:' <<<"$out"; then
 else
   echo "ok    the unchanged line of the moved file stays unmutated"
 fi
+base=$(git -C "$repo" rev-parse HEAD)
+git -C "$repo" mv svc/window/internal/core/bounds/bounds.go svc/window/internal/core/bounds/limits.go
+commit renamed-within-package
+expect "a file renamed inside its package with no edits mutates nothing" 0 '1 changed packages, killed 0, survived 0'
+git -C "$repo" rm -q svc/window/internal/core/bounds/limits.go
+cat >"$mod/window/internal/core/bounds/keep.go" <<'GO'
+package bounds
+
+func Keep(x int) bool {
+	return x > 1
+}
+GO
+cat >"$mod/window/internal/core/bounds/bounds_test.go" <<'GO'
+package bounds_test
+
+import (
+	"testing"
+
+	"example.com/svc/window/internal/core/bounds"
+)
+
+func TestKeep(t *testing.T) {
+	if !bounds.Keep(5) {
+		t.Fatal("5 is kept")
+	}
+}
+GO
+commit keep-weak
+base=$(git -C "$repo" rev-parse HEAD)
+cat >"$mod/window/internal/core/bounds/gone.go" <<'GO'
+package bounds
+GO
+commit add-gone
+base=$(git -C "$repo" rev-parse HEAD)
+git -C "$repo" rm -q svc/window/internal/core/bounds/gone.go
+commit delete-only
+expect "a package whose only change is a deleted file mutates nothing" 0 'killed 0, survived 0'
 base=$shared_base
 
 sed -i 's/17: false/17: true/' "$mod/clamp/clamp_test.go"
