@@ -21,7 +21,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -95,13 +94,7 @@ func (a *App) Run(ctx context.Context) error {
 
 	slog.InfoContext(ctx, "waiting for background tasks")
 	outcomes := a.runShutdownSequence()
-
-	if unstopped := shutdown.Unfinished(outcomes); len(unstopped) > 0 {
-		slog.WarnContext(ctx, "closing DB/Redis while components are still shutting down",
-			"components", strings.Join(unstopped, ", "))
-	}
-
-	a.cleanup(ctx, !shutdown.LeadershipRetained(outcomes))
+	shutdown.CloseDatastores(ctx, outcomes, shutdown.Datastores{Pool: a.pool, Redis: a.redisClient})
 	slog.InfoContext(ctx, "shutdown complete")
 	return nil
 }
@@ -219,19 +212,5 @@ func (a *App) newServer(ctx context.Context, handler http.Handler) *http.Server 
 		ReadHeaderTimeout: serverReadHeaderTimeout,
 		ReadTimeout:       serverReadTimeout,
 		IdleTimeout:       serverIdleTimeout,
-	}
-}
-
-func (a *App) cleanup(ctx context.Context, closePool bool) {
-	if !closePool {
-		slog.ErrorContext(ctx, "leaving DB pool open so process exit releases the retained leader lock")
-	}
-	if closePool && a.pool != nil {
-		a.pool.Close()
-	}
-	if a.redisClient != nil {
-		if err := a.redisClient.Close(); err != nil {
-			slog.ErrorContext(ctx, "redis client close error", "error", err)
-		}
 	}
 }

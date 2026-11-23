@@ -147,7 +147,7 @@ func stopWithin(component string, timeout time.Duration, stop func(context.Conte
 	}
 }
 
-func Unfinished(outcomes []Outcome) []string {
+func unfinished(outcomes []Outcome) []string {
 	var names []string
 	for _, o := range outcomes {
 		if o.Status != Completed {
@@ -157,7 +157,7 @@ func Unfinished(outcomes []Outcome) []string {
 	return names
 }
 
-func LeadershipRetained(outcomes []Outcome) bool {
+func leadershipRetained(outcomes []Outcome) bool {
 	for _, o := range outcomes {
 		if o.Component == LeaderElection && o.Status == Skipped {
 			return true

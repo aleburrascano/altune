@@ -27,6 +27,17 @@ func captureLogs(t *testing.T, level slog.Level) *bytes.Buffer {
 	return &buf
 }
 
+func outcomeOf(t *testing.T, outcomes []shutdown.Outcome, component string) shutdown.Outcome {
+	t.Helper()
+	for _, o := range outcomes {
+		if o.Component == component {
+			return o
+		}
+	}
+	t.Fatalf("no outcome for %q in %+v", component, outcomes)
+	return shutdown.Outcome{}
+}
+
 func runOne(component string, timeout time.Duration, stop func(context.Context)) shutdown.Outcome {
 	return shutdown.Run([]shutdown.Step{{Component: component, Timeout: timeout, Stop: stop}})[0]
 }
@@ -153,21 +164,6 @@ func TestRun_AStopWithinItsBudgetLogsNothing(t *testing.T) {
 
 	if got := logged.String(); got != "" {
 		t.Errorf("logged %q for a clean stop, want nothing", got)
-	}
-}
-
-func TestUnfinished_NamesOnlyTheComponentsThatDidNotComplete(t *testing.T) {
-	got := shutdown.Unfinished([]shutdown.Outcome{
-		{Component: "alert monitor", Status: shutdown.Completed},
-		{Component: "acquisition scheduler", Status: shutdown.TimedOut},
-		{Component: "leader election", Status: shutdown.Skipped},
-	})
-
-	if want := "acquisition scheduler,leader election"; strings.Join(got, ",") != want {
-		t.Fatalf("unfinished = %v, want %s", got, want)
-	}
-	if got := shutdown.Unfinished([]shutdown.Outcome{{Component: "alert monitor", Status: shutdown.Completed}}); got != nil {
-		t.Errorf("unfinished with every component done = %v, want none", got)
 	}
 }
 
@@ -305,8 +301,8 @@ func TestRun_ABackgroundDrainTimeoutKeepsTheLeaderLock(t *testing.T) {
 	if n := election.stops.Load(); n != 0 {
 		t.Fatalf("election released %d time(s) although the background drain timed out", n)
 	}
-	if !shutdown.LeadershipRetained(outcomes) {
-		t.Error("outcomes do not report leadership as retained")
+	if got := outcomeOf(t, outcomes, shutdown.LeaderElection).Status; got != shutdown.Skipped {
+		t.Errorf("leader election outcome = %v, want skipped so the lock is retained", got)
 	}
 	if got := logged.String(); !strings.Contains(got, "level=ERROR") || !strings.Contains(got, "leadership intentionally NOT released") ||
 		!strings.Contains(got, `component="leader election"`) || !strings.Contains(got, `requires="background tasks"`) {
@@ -325,32 +321,13 @@ func TestRun_ACleanBackgroundDrainReleasesTheLeaderLock(t *testing.T) {
 	if n := election.stops.Load(); n != 1 {
 		t.Fatalf("election released %d time(s) after a clean drain, want 1", n)
 	}
-	if shutdown.LeadershipRetained(outcomes) {
-		t.Error("clean drain reported leadership as retained")
-	}
-}
-
-func TestLeadershipRetained_OnlyASkippedLeaderElectionRetainsIt(t *testing.T) {
-	cases := map[string]struct {
-		outcomes []shutdown.Outcome
-		want     bool
-	}{
-		"skipped election":     {[]shutdown.Outcome{{Component: "leader election", Status: shutdown.Skipped}}, true},
-		"timed out election":   {[]shutdown.Outcome{{Component: "leader election", Status: shutdown.TimedOut}}, false},
-		"another skipped step": {[]shutdown.Outcome{{Component: "background tasks", Status: shutdown.Skipped}}, false},
-		"no outcomes":          {nil, false},
-		"completed election":   {[]shutdown.Outcome{{Component: "leader election", Status: shutdown.Completed}}, false},
-	}
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			if got := shutdown.LeadershipRetained(tc.outcomes); got != tc.want {
-				t.Errorf("LeadershipRetained = %v, want %v", got, tc.want)
-			}
-		})
+	if got := outcomeOf(t, outcomes, shutdown.LeaderElection).Status; got != shutdown.Completed {
+		t.Errorf("leader election outcome = %v after a clean drain, want completed", got)
 	}
 }
 
 func TestDrainServer_AHungHandlerIsClosedAfterTheDeadline(t *testing.T) {
+	logged := captureLogs(t, slog.LevelDebug)
 	started := make(chan struct{})
 	cancelled := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -377,6 +354,9 @@ func TestDrainServer_AHungHandlerIsClosedAfterTheDeadline(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("in-flight handler was not cancelled at drain expiry")
 	}
+	if got := logged.String(); !strings.Contains(got, "server shutdown error") || strings.Contains(got, "server close error") {
+		t.Errorf("forced drain logged %q, want the shutdown error and no close error, since the close succeeded", got)
+	}
 }
 
 func TestDrainServer_AnIdleServerStopsWithoutBeingForced(t *testing.T) {
@@ -388,7 +368,8 @@ func TestDrainServer_AnIdleServerStopsWithoutBeingForced(t *testing.T) {
 	if got := logged.String(); got != "" {
 		t.Errorf("idle drain logged %q, want nothing", got)
 	}
-	if _, err := http.Get(srv.URL); err == nil {
+	if resp, err := http.Get(srv.URL); err == nil {
+		_ = resp.Body.Close()
 		t.Error("server still answers after the drain")
 	}
 }
