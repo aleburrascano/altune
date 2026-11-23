@@ -145,6 +145,9 @@ func TestSpotifyAdapter_GetAlbumTracks_namesEveryOtherArtistAsFeatured(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(tracks) != 2 {
+		t.Fatalf("got %d tracks, want 2", len(tracks))
+	}
 
 	feats := domain.FeaturedArtistsFromExtras(tracks[0].Extras)
 	if len(feats) != 1 || feats[0].Name != "21 Savage" || feats[0].Role != domain.RoleFeatured {

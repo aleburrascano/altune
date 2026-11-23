@@ -17,8 +17,8 @@ func TestNewClient_RewritesHostKeepsPath(t *testing.T) {
 	defer srv.Close()
 
 	resp, err := providertest.NewClient(srv.URL).Get("https://theaudiodb.com/x")
-	if err != nil {
-		t.Fatalf("Get: %v", err)
+	if err != nil || resp == nil {
+		t.Fatalf("Get: resp %v, err %v", resp, err)
 	}
 	resp.Body.Close()
 	if gotPath != "/x" {
