@@ -130,3 +130,22 @@ func TestMemo_AFullMemoSweepsAtMostOncePerTTL(t *testing.T) {
 	absent(t, m, "z")
 	present(t, m, "w", "W")
 }
+
+func TestMemo_ReadingAnExpiredEntryFreesItsSlot(t *testing.T) {
+	c := newClock()
+	m := memo.New[string](time.Hour, 2, c.now)
+	c.advance(10 * time.Minute)
+	m.Put("a", "A")
+	c.advance(50 * time.Minute)
+	m.Put("b", "B")
+	present(t, m, "a", "A")
+	m.Put("c", "C")
+	present(t, m, "a", "A")
+
+	c.advance(20 * time.Minute)
+	absent(t, m, "a")
+	m.Put("d", "D")
+
+	present(t, m, "c", "C")
+	present(t, m, "d", "D")
+}

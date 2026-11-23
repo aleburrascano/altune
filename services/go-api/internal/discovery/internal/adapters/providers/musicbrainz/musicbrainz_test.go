@@ -340,7 +340,7 @@ func structuredQuerySent(t *testing.T, artist, track string, kind domain.ResultK
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path, query = r.URL.Path, r.URL.Query().Get("query")
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{}`))
+		_, _ = w.Write([]byte(`{}`))
 	}))
 	defer server.Close()
 	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
@@ -472,7 +472,7 @@ func TestMusicBrainzAdapter_ResolveArtistIdentity_birthYearFromLifeSpanBegin(t *
 	for _, tt := range tests {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"artists": [{"id": "mbid-che", "name": "Che", "life-span": {"begin": "` + tt.begin + `"}}]}`))
+			_, _ = w.Write([]byte(`{"artists": [{"id": "mbid-che", "name": "Che", "life-span": {"begin": "` + tt.begin + `"}}]}`))
 		}))
 		adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
 		id, err := adapter.ResolveArtistIdentity(context.Background(), "Che")
@@ -637,7 +637,7 @@ func albumSearchResult(t *testing.T, releaseGroup string) domain.SearchResult {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"release-groups": [` + releaseGroup + `]}`))
+		_, _ = w.Write([]byte(`{"release-groups": [` + releaseGroup + `]}`))
 	}))
 	defer server.Close()
 	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
@@ -729,7 +729,7 @@ func resolveMBIDQuery(t *testing.T, kind domain.ResultKind, title, body string) 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rawQuery = r.URL.RawQuery
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(body))
+		_, _ = w.Write([]byte(body))
 	}))
 	defer server.Close()
 
@@ -830,7 +830,7 @@ func trackSearchResults(t *testing.T, recordings string) []domain.SearchResult {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"recordings": [` + recordings + `]}`))
+		_, _ = w.Write([]byte(`{"recordings": [` + recordings + `]}`))
 	}))
 	defer server.Close()
 	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
