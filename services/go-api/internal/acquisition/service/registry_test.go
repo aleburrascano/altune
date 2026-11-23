@@ -1,9 +1,11 @@
-package service
+package service_test
 
 import (
+	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/ports"
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/acquisition/service"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
 	"strings"
@@ -47,7 +49,7 @@ func resolvedCandidate(url string) ports.AudioCandidate {
 }
 
 func TestSourceRegistry_NewFiltersNilSources(t *testing.T) {
-	reg := NewSourceRegistry(nil, &stubSource{name: "a", found: []ports.AudioCandidate{candidate("u1")}}, nil)
+	reg := service.NewSourceRegistry(nil, &stubSource{name: "a", found: []ports.AudioCandidate{candidate("u1")}}, nil)
 	got, err := reg.Find(context.Background(), ports.FindRequest{})
 	if err != nil {
 		t.Fatalf("Find returned error: %v, want nil sources dropped", err)
@@ -58,9 +60,9 @@ func TestSourceRegistry_NewFiltersNilSources(t *testing.T) {
 }
 
 func TestSourceRegistry_FindNoSourcesConfigured(t *testing.T) {
-	reg := NewSourceRegistry()
+	reg := service.NewSourceRegistry()
 	_, err := reg.Find(context.Background(), ports.FindRequest{})
-	if !errors.Is(err, ErrNoAudioSources) {
+	if !errors.Is(err, service.ErrNoAudioSources) {
 		t.Fatalf("err = %v, want ErrNoAudioSources", err)
 	}
 }
@@ -68,7 +70,7 @@ func TestSourceRegistry_FindNoSourcesConfigured(t *testing.T) {
 func TestSourceRegistry_FindMergesStampsAndDedupesByURL(t *testing.T) {
 	a := &stubSource{name: "a", found: []ports.AudioCandidate{candidate("u1"), candidate("shared")}}
 	b := &stubSource{name: "b", found: []ports.AudioCandidate{candidate("shared"), candidate("u2"), candidate("")}}
-	reg := NewSourceRegistry(a, b)
+	reg := service.NewSourceRegistry(a, b)
 
 	got, err := reg.Find(context.Background(), ports.FindRequest{})
 	if err != nil {
@@ -92,7 +94,7 @@ func TestSourceRegistry_FindMergesStampsAndDedupesByURL(t *testing.T) {
 func TestSourceRegistry_FindSurvivesPanickingSource(t *testing.T) {
 	panicky := &stubSource{name: "panicky", panicValue: "boom"}
 	healthy := &stubSource{name: "healthy", found: []ports.AudioCandidate{candidate("u1")}}
-	reg := NewSourceRegistry(panicky, healthy)
+	reg := service.NewSourceRegistry(panicky, healthy)
 
 	got, err := reg.Find(context.Background(), ports.FindRequest{})
 	if err != nil {
@@ -106,7 +108,7 @@ func TestSourceRegistry_FindSurvivesPanickingSource(t *testing.T) {
 func TestSourceRegistry_FindReturnsPartialOnSingleFailure(t *testing.T) {
 	failing := &stubSource{name: "failing", findErr: errors.New("down")}
 	healthy := &stubSource{name: "healthy", found: []ports.AudioCandidate{candidate("u1")}}
-	reg := NewSourceRegistry(failing, healthy)
+	reg := service.NewSourceRegistry(failing, healthy)
 
 	got, err := reg.Find(context.Background(), ports.FindRequest{})
 	if err != nil {
@@ -120,7 +122,7 @@ func TestSourceRegistry_FindReturnsPartialOnSingleFailure(t *testing.T) {
 func TestSourceRegistry_FindFailsWhenEverySourceFails(t *testing.T) {
 	first := &stubSource{name: "first", findErr: errors.New("first down")}
 	second := &stubSource{name: "second", panicValue: "second boom"}
-	reg := NewSourceRegistry(first, second)
+	reg := service.NewSourceRegistry(first, second)
 
 	got, err := reg.Find(context.Background(), ports.FindRequest{})
 	if got != nil {
@@ -134,7 +136,7 @@ func TestSourceRegistry_FindFailsWhenEverySourceFails(t *testing.T) {
 	}
 }
 
-func TestMergeSlots_DedupesFailsAllAndKeepsFirstError(t *testing.T) {
+func TestSourceRegistry_Find_DedupesFailsAllAndKeepsFirstError(t *testing.T) {
 	sources := []ports.AudioSource{
 		&stubSource{name: "a"},
 		&stubSource{name: "b"},
@@ -147,9 +149,9 @@ func TestMergeSlots_DedupesFailsAllAndKeepsFirstError(t *testing.T) {
 	}
 	errs := []error{nil, errors.New("b failed"), nil}
 
-	got, err := mergeSlots(context.Background(), sources, slots, errs)
+	got, err := findAcross(context.Background(), sources, slots, errs)
 	if err != nil {
-		t.Fatalf("mergeSlots returned error with a surviving source: %v", err)
+		t.Fatalf("Find returned error with a surviving source: %v", err)
 	}
 	wantURLs := []string{"u1", "dup", "u2"}
 	if len(got) != len(wantURLs) {
@@ -162,54 +164,54 @@ func TestMergeSlots_DedupesFailsAllAndKeepsFirstError(t *testing.T) {
 	}
 
 	allErrs := []error{errors.New("a failed"), errors.New("b failed"), errors.New("c failed")}
-	_, err = mergeSlots(context.Background(), sources, [][]ports.AudioCandidate{nil, nil, nil}, allErrs)
+	_, err = findAcross(context.Background(), sources, [][]ports.AudioCandidate{nil, nil, nil}, allErrs)
 	if err == nil || !strings.Contains(err.Error(), "a failed") {
 		t.Fatalf("err = %v, want every-source-failed wrapping the first error", err)
 	}
 }
 
-func TestMergeSlots_CollapsesOneVideoSpelledByTwoSources(t *testing.T) {
+func TestSourceRegistry_Find_CollapsesOneVideoSpelledByTwoSources(t *testing.T) {
 	sources := []ports.AudioSource{&stubSource{name: "ytmusic"}, &stubSource{name: "ytdlp"}}
 	slots := [][]ports.AudioCandidate{
 		{candidate("https://music.youtube.com/watch?v=dQw4w9WgXcQ")},
 		{candidate("https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RDabc")},
 	}
 
-	got, err := mergeSlots(context.Background(), sources, slots, []error{nil, nil})
+	got, err := findAcross(context.Background(), sources, slots, []error{nil, nil})
 	if err != nil {
-		t.Fatalf("mergeSlots returned error: %v", err)
+		t.Fatalf("Find returned error: %v", err)
 	}
 	if len(got) != 1 {
 		t.Fatalf("got %d candidates %v, want 1 — one video must not spend two download attempts", len(got), got)
 	}
 }
 
-func TestMergeSlots_PrefersTheResolvedSpellingOfOneVideo(t *testing.T) {
+func TestSourceRegistry_Find_PrefersTheResolvedSpellingOfOneVideo(t *testing.T) {
 	sources := []ports.AudioSource{&stubSource{name: "ytdlp"}, &stubSource{name: "ytmusic"}}
 	slots := [][]ports.AudioCandidate{
 		{candidate("https://www.youtube.com/watch?v=dQw4w9WgXcQ")},
 		{resolvedCandidate("https://music.youtube.com/watch?v=dQw4w9WgXcQ")},
 	}
 
-	got, err := mergeSlots(context.Background(), sources, slots, []error{nil, nil})
+	got, err := findAcross(context.Background(), sources, slots, []error{nil, nil})
 	if err != nil {
-		t.Fatalf("mergeSlots returned error: %v", err)
+		t.Fatalf("Find returned error: %v", err)
 	}
 	if len(got) != 1 || !got[0].IsResolved() {
 		t.Fatalf("got %v, want the one resolved candidate — dedupe must not drop a resolution", got)
 	}
 }
 
-func TestMergeSlots_KeepsTheResolvedCandidateAheadOfALaterDuplicate(t *testing.T) {
+func TestSourceRegistry_Find_KeepsTheResolvedCandidateAheadOfALaterDuplicate(t *testing.T) {
 	sources := []ports.AudioSource{&stubSource{name: "ytmusic"}, &stubSource{name: "ytdlp"}}
 	slots := [][]ports.AudioCandidate{
 		{resolvedCandidate("https://music.youtube.com/watch?v=dQw4w9WgXcQ")},
 		{candidate("https://www.youtube.com/watch?v=dQw4w9WgXcQ")},
 	}
 
-	got, err := mergeSlots(context.Background(), sources, slots, []error{nil, nil})
+	got, err := findAcross(context.Background(), sources, slots, []error{nil, nil})
 	if err != nil {
-		t.Fatalf("mergeSlots returned error: %v", err)
+		t.Fatalf("Find returned error: %v", err)
 	}
 	if len(got) != 1 || !got[0].IsResolved() {
 		t.Fatalf("got %v, want the one resolved candidate — an unresolved duplicate must not displace it", got)
@@ -219,7 +221,7 @@ func TestMergeSlots_KeepsTheResolvedCandidateAheadOfALaterDuplicate(t *testing.T
 func TestSourceRegistry_FetchRoutesToOwningSource(t *testing.T) {
 	a := &stubSource{name: "a"}
 	b := &stubSource{name: "b", fetchPath: "/tmp/b.mp3"}
-	reg := NewSourceRegistry(a, b)
+	reg := service.NewSourceRegistry(a, b)
 
 	fetched, err := reg.Fetch(context.Background(), ports.AudioCandidate{URL: "u2", Source: "b"}, "/out")
 	if err != nil {
@@ -237,7 +239,7 @@ func TestSourceRegistry_FetchRoutesToOwningSource(t *testing.T) {
 }
 
 func TestSourceRegistry_FetchUnknownSource(t *testing.T) {
-	reg := NewSourceRegistry(&stubSource{name: "a"})
+	reg := service.NewSourceRegistry(&stubSource{name: "a"})
 
 	_, err := reg.Fetch(context.Background(), ports.AudioCandidate{URL: "u1", Source: "ghost"}, "/out")
 	if err == nil {
@@ -248,6 +250,41 @@ func TestSourceRegistry_FetchUnknownSource(t *testing.T) {
 	}
 }
 
+type previewingSource struct {
+	*stubSource
+}
+
+func (previewingSource) FetchPreview(context.Context, ports.AudioCandidate, string, int) (string, error) {
+	return "/tmp/preview.mp3", nil
+}
+
+func TestSourceRegistry_PreviewFetcherForRoutesToTheCandidatesSource(t *testing.T) {
+	plain := &stubSource{name: "plain"}
+	previewing := previewingSource{&stubSource{name: "previewing"}}
+	reg := service.NewSourceRegistry(plain, previewing)
+
+	tests := []struct {
+		name   string
+		source acqdomain.SourceName
+		want   bool
+	}{
+		{"a source that previews", "previewing", true},
+		{"a source that cannot preview", "plain", false},
+		{"no registered source", "ghost", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fetcher, ok := reg.PreviewFetcherFor(ports.AudioCandidate{URL: "u1", Source: tt.source})
+			if ok != tt.want {
+				t.Fatalf("PreviewFetcherFor(%q) ok = %v, want %v", tt.source, ok, tt.want)
+			}
+			if ok && fetcher != previewing {
+				t.Errorf("PreviewFetcherFor(%q) = %v, want the previewing source", tt.source, fetcher)
+			}
+		})
+	}
+}
+
 func throttledSource() *stubSource {
 	return &stubSource{
 		name:    "ytdlp",
@@ -255,29 +292,30 @@ func throttledSource() *stubSource {
 	}
 }
 
-func searchFailureCode(t *testing.T, reg *SourceRegistry) domain.FailureCode {
+func searchFailureCode(t *testing.T, reg *service.SourceRegistry) shared.FailureCode {
 	t.Helper()
-	_, err := NewSearchStep(reg).Execute(context.Background(), &AcquisitionContext{}, pipelineStart{})
-	if err == nil {
-		t.Fatal("search step succeeded, want a failure")
+	track := pendingSong()
+	ledger := acquisitiontest.NewLedger(track)
+	if err := acquireService(ledger, reg, &objectStore{objects: map[string]string{}}).Execute(context.Background(), track.UserId, track.ID); err == nil {
+		t.Fatal("Execute succeeded, want a search failure")
 	}
-	return failureCode(&StepError{Step: stepNameSearch, Err: err})
+	return persistedCode(t, ledger, track.ID)
 }
 
 func TestSourceRegistry_FindEmptyWithUnavailableSourceReportsUnavailable(t *testing.T) {
-	reg := NewSourceRegistry(throttledSource(), &stubSource{name: "ytmusic"})
+	reg := service.NewSourceRegistry(throttledSource(), &stubSource{name: "ytmusic"})
 
 	got, err := reg.Find(context.Background(), ports.FindRequest{})
 	if !acqdomain.IsSourceUnavailable(err) || len(got) != 0 {
 		t.Fatalf("Find = %v, %v; want empty and a source-unavailable error", got, err)
 	}
-	if code := searchFailureCode(t, reg); code != domain.FailureSourceUnavailable {
-		t.Fatalf("failure code = %s, want %s", code, domain.FailureSourceUnavailable)
+	if code := searchFailureCode(t, reg); code != shared.FailureSourceUnavailable {
+		t.Fatalf("failure code = %s, want %s", code, shared.FailureSourceUnavailable)
 	}
 }
 
 func TestSourceRegistry_FindPartialFailureWithCandidatesSucceeds(t *testing.T) {
-	reg := NewSourceRegistry(
+	reg := service.NewSourceRegistry(
 		throttledSource(),
 		&stubSource{name: "ytmusic", found: []ports.AudioCandidate{candidate("u1")}},
 	)
@@ -289,25 +327,28 @@ func TestSourceRegistry_FindPartialFailureWithCandidatesSucceeds(t *testing.T) {
 }
 
 func TestSourceRegistry_FindAllEmptyWithoutErrorIsNoMatch(t *testing.T) {
-	reg := NewSourceRegistry(&stubSource{name: "a"}, &stubSource{name: "b"})
+	reg := service.NewSourceRegistry(&stubSource{name: "a"}, &stubSource{name: "b"})
 
 	got, err := reg.Find(context.Background(), ports.FindRequest{})
 	if err != nil || len(got) != 0 {
 		t.Fatalf("Find = %v, %v; want empty and nil error", got, err)
 	}
-	if code := searchFailureCode(t, reg); code != domain.FailureNoMatchFound {
-		t.Fatalf("failure code = %s, want %s", code, domain.FailureNoMatchFound)
+	if code := searchFailureCode(t, reg); code != shared.FailureNoMatchFound {
+		t.Fatalf("failure code = %s, want %s", code, shared.FailureNoMatchFound)
 	}
 }
 
-func mergeSlots(
+func findAcross(
 	ctx context.Context,
 	sources []ports.AudioSource,
 	slots [][]ports.AudioCandidate,
 	errs []error,
 ) ([]ports.AudioCandidate, error) {
-	res, err := mergeSlotsReportingOutage(ctx, sources, slots, errs)
-	return res.Candidates, err
+	for i, source := range sources {
+		stub := source.(*stubSource)
+		stub.found, stub.findErr = slots[i], errs[i]
+	}
+	return service.NewSourceRegistry(sources...).Find(ctx, ports.FindRequest{})
 }
 
 func fetchedAt(path string, err error) (ports.FetchedAudio, error) {
@@ -317,7 +358,7 @@ func fetchedAt(path string, err error) (ports.FetchedAudio, error) {
 func TestSourceRegistry_AResolvedFirstTierHitSkipsTheFallback(t *testing.T) {
 	first := &stubSource{name: "ytmsearch", found: []ports.AudioCandidate{resolvedCandidate("https://music.youtube.com/watch?v=abc")}}
 	fallback := &stubSource{name: "ytdlp", found: []ports.AudioCandidate{candidate("u1")}}
-	reg := NewSourceRegistry(first).WithFallback(fallback)
+	reg := service.NewSourceRegistry(first).WithFallback(fallback)
 
 	got, err := reg.Find(context.Background(), ports.FindRequest{})
 	if err != nil {
@@ -339,7 +380,7 @@ func TestSourceRegistry_TheFallbackRunsWhenTheFirstTierHasNoResolvedHit(t *testi
 	} {
 		t.Run(name, func(t *testing.T) {
 			fallback := &stubSource{name: "ytdlp", found: []ports.AudioCandidate{candidate("u1")}}
-			reg := NewSourceRegistry(first).WithFallback(fallback)
+			reg := service.NewSourceRegistry(first).WithFallback(fallback)
 
 			got, err := reg.Find(context.Background(), ports.FindRequest{})
 			if err != nil {
@@ -357,7 +398,7 @@ func TestSourceRegistry_TheFallbackRunsWhenTheFirstTierHasNoResolvedHit(t *testi
 
 func TestSourceRegistry_FetchReachesFallbackSources(t *testing.T) {
 	fallback := &stubSource{name: "ytdlp", fetchPath: "/tmp/a.m4a"}
-	reg := NewSourceRegistry(&stubSource{name: "ytmsearch"}).WithFallback(fallback)
+	reg := service.NewSourceRegistry(&stubSource{name: "ytmsearch"}).WithFallback(fallback)
 
 	if _, err := reg.Fetch(context.Background(), ports.AudioCandidate{Source: "ytdlp", URL: "u1"}, t.TempDir()); err != nil {
 		t.Fatalf("Fetch returned error: %v", err)
@@ -383,7 +424,7 @@ func TestSourceRegistry_TheKindDecidesTheFallback(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			first := &stubSource{name: "ytmsearch", found: []ports.AudioCandidate{tc.hit}}
 			fallback := &stubSource{name: "ytdlp", found: []ports.AudioCandidate{candidate("u1")}}
-			reg := NewSourceRegistry(first).WithFallback(fallback)
+			reg := service.NewSourceRegistry(first).WithFallback(fallback)
 
 			if _, err := reg.Find(context.Background(), ports.FindRequest{}); err != nil {
 				t.Fatalf("Find returned error: %v", err)
@@ -410,7 +451,7 @@ func TestSourceRegistry_ReportsWhetherItSkippedTheFallback(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			reg := NewSourceRegistry(&stubSource{name: "first", found: tt.first})
+			reg := service.NewSourceRegistry(&stubSource{name: "first", found: tt.first})
 			if tt.withFallback {
 				reg.WithFallback(&stubSource{name: "fb", found: []ports.AudioCandidate{candidate("u2")}})
 			}
