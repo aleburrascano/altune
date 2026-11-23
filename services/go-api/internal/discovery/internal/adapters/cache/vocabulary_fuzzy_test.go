@@ -148,10 +148,10 @@ func TestVocabularyStore_Redis_OversizedFuzzyQueryIsOneRoundTripAndStillMatches(
 }
 
 type stubRedis struct {
-	mu         sync.Mutex
-	sets       map[string]map[string]bool
-	entries    map[string]string
-	calls      map[string]int
+	mu          sync.Mutex
+	sets        map[string]map[string]bool
+	entries     map[string]string
+	calls       map[string]int
 	roundTrips  int
 	mgetKeys    int
 	scanned     int

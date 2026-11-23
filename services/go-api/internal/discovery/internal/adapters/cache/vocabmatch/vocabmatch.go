@@ -12,12 +12,10 @@ func Trigrams(norm string) []string {
 	if len(runes) == 0 {
 		return nil
 	}
-	if len(runes) < trigramRunes {
-		return []string{norm}
-	}
-	out := make([]string, 0, len(runes)-trigramRunes+1)
-	for i := 0; i <= len(runes)-trigramRunes; i++ {
-		out = append(out, string(runes[i:i+trigramRunes]))
+	n := max(len(runes)-trigramRunes+1, 1)
+	out := make([]string, 0, n)
+	for i := range n {
+		out = append(out, string(runes[i:min(i+trigramRunes, len(runes))]))
 	}
 	return out
 }
@@ -87,9 +85,5 @@ func lengthSimilarity(a, b string) float64 {
 	if bigger == 0 {
 		return 0.0
 	}
-	diff := aLen - bLen
-	if diff < 0 {
-		diff = -diff
-	}
-	return 1.0 - float64(diff)/float64(bigger)
+	return 1.0 - float64(bigger-min(aLen, bLen))/float64(bigger)
 }
