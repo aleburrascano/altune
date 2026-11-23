@@ -18,7 +18,7 @@ func TestNewError_CarriesItsCodeAndDetail(t *testing.T) {
 		t.Errorf("Code() = %s, want catalog.track_not_found", err.Code())
 	}
 	if err.Code().Kind() != domain.KindNotFound {
-		t.Errorf("Kind = %d, want not found", err.Code().Kind())
+		t.Errorf("Kind = %s, want not_found", err.Code().Kind())
 	}
 	if err.RetryAfter() != 0 {
 		t.Errorf("RetryAfter = %s, want none", err.RetryAfter())
@@ -62,10 +62,48 @@ func TestWithRetryAfter_ReturnsARetryableCopyAndLeavesTheOriginal(t *testing.T) 
 	}
 }
 
-func TestCode_ZeroValueIsAnInternalError(t *testing.T) {
-	var unset domain.Code
+func TestNewError_WithTheZeroCodeIsAnInternalError(t *testing.T) {
+	err := domain.NewError(domain.Code{}, "")
 
-	if unset.Kind() != domain.KindInternal {
-		t.Errorf("zero Code kind = %d, want internal so an unset code never claims a client fault", unset.Kind())
+	if err.Code() != domain.CodeInternal || err.Error() != "Internal server error" {
+		t.Errorf("zero code gave %q %q, want internal so an unset code never claims a client fault", err.Code(), err.Error())
+	}
+}
+
+func TestCodedError_MatchesAnyErrorWithTheSameCode(t *testing.T) {
+	sentinel := domain.NewError(domain.CodeAcquisitionCooldownActive, "cooldown active, try again later")
+
+	if !errors.Is(sentinel.WithRetryAfter(time.Minute), sentinel) {
+		t.Error("a retryable copy is not the sentinel it came from")
+	}
+	if !errors.Is(fmt.Errorf("retry track 9: %w", domain.NewError(domain.CodeAcquisitionCooldownActive, "other words")), sentinel) {
+		t.Error("an error with the same code and other words is not the sentinel")
+	}
+	if errors.Is(domain.NewError(domain.CodeAcquisitionPaused, ""), sentinel) {
+		t.Error("an error with another code matched the sentinel")
+	}
+	if errors.Is(errors.New("cooldown active, try again later"), sentinel) {
+		t.Error("a plain error with the same text matched the sentinel")
+	}
+}
+
+func TestWithRetryAfter_NeverKeepsANegativeWait(t *testing.T) {
+	err := domain.NewError(domain.CodeDiscoveryRateLimited, "").WithRetryAfter(-time.Second)
+
+	if err.RetryAfter() != 0 {
+		t.Errorf("RetryAfter = %s, want 0", err.RetryAfter())
+	}
+}
+
+func TestKind_NamesItselfForLogsAndMessages(t *testing.T) {
+	for kind, want := range map[domain.Kind]string{
+		domain.KindInternal: "internal", domain.KindInvalid: "invalid", domain.KindUnauthenticated: "unauthenticated",
+		domain.KindForbidden: "forbidden", domain.KindNotFound: "not_found", domain.KindConflict: "conflict",
+		domain.KindTooLarge: "too_large", domain.KindRateLimited: "rate_limited", domain.KindUpstreamFailed: "upstream_failed",
+		domain.KindUnavailable: "unavailable", domain.KindTimeout: "timeout", domain.Kind(99): "kind(99)",
+	} {
+		if got := kind.String(); got != want {
+			t.Errorf("Kind(%d).String() = %q, want %q", int(kind), got, want)
+		}
 	}
 }

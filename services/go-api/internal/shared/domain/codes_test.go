@@ -74,6 +74,7 @@ func TestCatalog_ListsEveryCodeTheAPICanAnswerWith(t *testing.T) {
 		{"discovery.provider_timeout", domain.KindTimeout},
 		{"discovery.provider_rate_limited", domain.KindUnavailable},
 		{"discovery.provider_circuit_open", domain.KindUnavailable},
+		{"enrichment_unavailable", domain.KindUnavailable},
 		{"discovery.provider_error", domain.KindUpstreamFailed},
 		{"playback.rate_limited", domain.KindRateLimited},
 		{"playback.unavailable", domain.KindUnavailable},
@@ -104,7 +105,7 @@ func TestCatalog_ListsEveryCodeTheAPICanAnswerWith(t *testing.T) {
 	}
 	for i, w := range want {
 		if got[i].String() != w.name || got[i].Kind() != w.kind {
-			t.Errorf("catalog[%d] = %s (kind %d), want %s (kind %d)", i, got[i], got[i].Kind(), w.name, w.kind)
+			t.Errorf("catalog[%d] = %s (kind %s), want %s (kind %s)", i, got[i], got[i].Kind(), w.name, w.kind)
 		}
 		if got[i].Title() == "" {
 			t.Errorf("catalog[%d] %s has no title", i, got[i])

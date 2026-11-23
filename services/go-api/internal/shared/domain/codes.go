@@ -84,6 +84,7 @@ var (
 	CodeDiscoveryProviderTimeout     = code("discovery.provider_timeout", KindTimeout, "Provider timed out")
 	CodeDiscoveryProviderRateLimited = code("discovery.provider_rate_limited", KindUnavailable, "Provider rate limited")
 	CodeDiscoveryProviderCircuitOpen = code("discovery.provider_circuit_open", KindUnavailable, "Provider paused after repeated failures")
+	CodeEnrichmentUnavailable        = code("enrichment_unavailable", KindUnavailable, "Enrichment is not configured")
 	CodeDiscoveryProviderError       = code("discovery.provider_error", KindUpstreamFailed, "Provider failed")
 )
 
