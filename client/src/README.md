@@ -25,4 +25,4 @@ Tests sit in a `__tests__/` folder. A test reaches its own module only through t
 | Packages and JSX per part, tests through doors, no patching, `process.env` | eslint, `client/eslint.config.js` |
 | Each changed line is tested | Stryker, `bash scripts/ci/client-mutate.sh <base>` |
 
-For now the fallow and eslint rules above check only the files a branch changes, because older code still breaks them: `bash client/scripts/fallow-changed.sh <base>` and eslint on the changed files. `bash scripts/precheck.sh` runs every check.
+For now the fallow and eslint rules above check only the files a branch changes, because older code still breaks them: `node client/scripts/fallow-changed.mjs <base>` and eslint on the changed files. `bash scripts/precheck.sh` runs every check.

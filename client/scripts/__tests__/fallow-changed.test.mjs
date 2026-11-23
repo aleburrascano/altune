@@ -13,7 +13,7 @@ const COPIED = [
   '.fallowrc.json',
   'fallow/modules.json',
   'fallow/parts.json',
-  'scripts/fallow-changed.sh',
+  'scripts/fallow-changed.mjs',
 ];
 
 const BASE = {
@@ -21,7 +21,8 @@ const BASE = {
   'src/shared/math/core/clamp.ts':
     'export function clamp(n: number, low: number, high: number): number {\n  return Math.min(Math.max(n, low), high);\n}\n',
   'src/shared/words/index.ts': "export { shout } from './core/shout';\n",
-  'src/shared/words/core/shout.ts': 'export function shout(s: string): string {\n  return s.toUpperCase();\n}\n',
+  'src/shared/words/core/shout.ts':
+    'export function shout(s: string): string {\n  return s.toUpperCase();\n}\n',
   'src/features/price/index.ts': "export { price } from './core/price';\n",
   'src/features/price/core/price.ts':
     "import { clamp } from '@shared/math';\n\nexport function price(cents: number): number {\n  return clamp(cents, 0, 100);\n}\n",
@@ -65,7 +66,7 @@ function repo(t, baseFiles = {}) {
 }
 
 function run(root, ...args) {
-  const r = spawnSync('bash', [join(root, 'scripts/fallow-changed.sh'), ...args], {
+  const r = spawnSync(process.execPath, [join(root, 'scripts/fallow-changed.mjs'), ...args], {
     cwd: root,
     encoding: 'utf8',
   });
@@ -143,8 +144,10 @@ describe('fallow-changed', () => {
     const r = changedRun(t, {
       'src/shared/words/core/rank.ts': body.replace('NAME', 'rank'),
       'src/shared/math/core/order.ts': body.replace('NAME', 'order'),
-      'src/shared/words/index.ts': "export { shout } from './core/shout';\nexport { rank } from './core/rank';\n",
-      'src/shared/math/index.ts': "export { clamp } from './core/clamp';\nexport { order } from './core/order';\n",
+      'src/shared/words/index.ts':
+        "export { shout } from './core/shout';\nexport { rank } from './core/rank';\n",
+      'src/shared/math/index.ts':
+        "export { clamp } from './core/clamp';\nexport { order } from './core/order';\n",
     });
     assert.equal(r.status, 1, r.output);
     assert.match(r.output, /core\/rank\.ts/);

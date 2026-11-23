@@ -266,7 +266,7 @@ if touches '^client/'; then
     coverage_args=(); [ -n "$src" ] && mapfile -t coverage_args < <(thresholded_coverage_args "$src")
     [ -n "$src" ] && jest_check "mobile tests (related)" $m npx jest "${coverage_args[@]}" --ci --passWithNoTests --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$HOME/.cache/altune-ci/jest" --findRelatedTests $src
     check "mobile fallow" $m npm run --silent fallow
-    check "mobile boundaries and duplication (changed files)" $m "${heavy[@]}" bash scripts/fallow-changed.sh "$base"
+    check "mobile boundaries and duplication (changed files)" $m "${heavy[@]}" node scripts/fallow-changed.mjs "$base"
     if [ -n "$src" ] && [ "${CLIENT_MUTATE_RUNS_ELSEWHERE:-}" = 1 ]; then
       echo "SKIP  mobile mutation (changed lines): the mobile-tests CI job runs it"
     elif [ -n "$src" ] && need jq "mobile mutation"; then
