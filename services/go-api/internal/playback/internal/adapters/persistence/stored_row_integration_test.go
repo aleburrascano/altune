@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
-	"os"
 	"slices"
 	"testing"
 	"time"
@@ -26,10 +25,7 @@ type storedQueueRow struct {
 func readStoredRow(t *testing.T, row storedQueueRow) (*playback.QueueState, error) {
 	t.Helper()
 	sharedtest.RequireIntegration(t)
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
+	dbURL := sharedtest.DatabaseURL(t)
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dbURL)
 	if err != nil {

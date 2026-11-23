@@ -3,6 +3,7 @@ package persistence
 import (
 	"altune/go-api/internal/playback/internal/core/domain"
 	"altune/go-api/internal/playback/internal/core/ports"
+	"altune/go-api/internal/shared/database"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"database/sql/driver"
@@ -78,7 +79,7 @@ func (r *PgxQueueStateRepository) runOp(
 		slog.ErrorContext(ctx, "playback.queue_state_op_failed",
 			"op", op, "user_id", userId.String(), "error", err)
 	}
-	if isTransientFault(err) {
+	if database.IsTransient(err) {
 		if !errors.Is(err, context.DeadlineExceeded) {
 			r.metrics.QueueStateOpFailedTransient()
 		}

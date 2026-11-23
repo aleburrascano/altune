@@ -14,11 +14,7 @@ import (
 func identityStoreTx(t *testing.T) pgx.Tx {
 	t.Helper()
 	ctx := context.Background()
-	tx, err := testPool(t).Begin(ctx)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	tx := sharedtest.Tx(t)
 
 	var existing *string
 	if err := tx.QueryRow(ctx, `SELECT to_regclass('auth.users')::text`).Scan(&existing); err != nil {
