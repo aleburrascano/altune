@@ -35,11 +35,11 @@ func (s *DownloadStep) executeWindowed(ctx context.Context, ac *AcquisitionConte
 		recordWindow(ac, window, windowIndex)
 		windowIndex++
 		results := s.runWindow(ctx, ac, window)
-		if mergeWindow(ctx, s.workspace, ac, results, &holds, &failures) {
-			return afterDownload{}, nil
+		if downloaded, won := mergeWindow(ctx, s.workspace, ac, results, &holds, &failures); won {
+			return downloaded, nil
 		}
 	}
-	return afterDownload{}, s.settle(ctx, ac, &holds, &failures)
+	return s.settle(ctx, ac, &holds, &failures)
 }
 
 func (s *DownloadStep) nextWindow(
@@ -150,7 +150,8 @@ func (s *DownloadStep) runWindowAttempt(ctx context.Context, ac *AcquisitionCont
 	return s.runAttempt(ctx, ac, candidate, tmpDir)
 }
 
-func mergeWindow(ctx context.Context, ws ports.TempWorkspace, ac *AcquisitionContext, results []attempt, holds *holdBook, failures *downloadFailures) bool {
+func mergeWindow(ctx context.Context, ws ports.TempWorkspace, ac *AcquisitionContext, results []attempt, holds *holdBook, failures *downloadFailures) (afterDownload, bool) {
+	var downloaded afterDownload
 	won := false
 	for _, result := range results {
 		if won && result.status != attemptRejected {
@@ -158,12 +159,12 @@ func mergeWindow(ctx context.Context, ws ports.TempWorkspace, ac *AcquisitionCon
 			continue
 		}
 		if result.status == attemptAccepted {
-			won = holds.resolveAccepted(ctx, ac, result)
+			downloaded, won = holds.resolveAccepted(ctx, ac, result)
 			continue
 		}
 		result.applyTo(ctx, ac)
 		failures.noteAttempt(result)
 		holds.offer(result)
 	}
-	return won
+	return downloaded, won
 }

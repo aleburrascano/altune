@@ -141,8 +141,8 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 		attempts++
 		result := s.runAttempt(ctx, ac, ac.Ranked[i], tmpDir)
 		if result.status == attemptAccepted {
-			if holds.resolveAccepted(ctx, ac, result) {
-				return afterDownload{}, nil
+			if downloaded, won := holds.resolveAccepted(ctx, ac, result); won {
+				return downloaded, nil
 			}
 			continue
 		}
@@ -151,27 +151,26 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 		failures.noteAttempt(result)
 	}
 
-	return afterDownload{}, s.settle(ctx, ac, &holds, &failures)
+	return s.settle(ctx, ac, &holds, &failures)
 }
 
-func (s *DownloadStep) settle(ctx context.Context, ac *AcquisitionContext, holds *holdBook, failures *downloadFailures) error {
+func (s *DownloadStep) settle(ctx context.Context, ac *AcquisitionContext, holds *holdBook, failures *downloadFailures) (afterDownload, error) {
 	if muxed := holds.takeMuxed(); muxed != nil {
-		muxed.applyTo(ctx, ac)
-		return nil
+		return muxed.keep(ctx, ac), nil
 	}
 	held := holds.take()
 	if held == nil {
-		return failures.noneAccepted(ctx)
+		return afterDownload{}, failures.noneAccepted(ctx)
 	}
 	if held.confidence < s.floor {
 		_ = holds.ws.Remove(held.tmpDir)
-		return fmt.Errorf("best candidate confidence %.2f is below the floor %.2f: %w",
+		return afterDownload{}, fmt.Errorf("best candidate confidence %.2f is below the floor %.2f: %w",
 			held.confidence, s.floor, ErrNoConfidentMatch)
 	}
 	held.status = attemptAccepted
-	held.applyTo(ctx, ac)
+	downloaded := held.keep(ctx, ac)
 	ac.BestEffort = true
-	return nil
+	return downloaded, nil
 }
 
 func (a attempt) muxed() bool { return a.format.ID == ports.MuxedFallbackFormatID }
@@ -198,30 +197,28 @@ func (h *holdBook) takeMuxed() *attempt {
 	return muxed
 }
 
-func (h *holdBook) resolveAccepted(ctx context.Context, ac *AcquisitionContext, result attempt) bool {
+func (h *holdBook) resolveAccepted(ctx context.Context, ac *AcquisitionContext, result attempt) (afterDownload, bool) {
 	switch {
 	case !result.muxed() && h.muxed == nil:
-		result.applyTo(ctx, ac)
-		return true
+		return result.keep(ctx, ac), true
 	case !result.muxed():
-		return h.chooseAgainstMuxed(ctx, ac, result)
+		return h.chooseAgainstMuxed(ctx, ac, result), true
 	case h.muxed == nil:
 		h.muxed = &result
 	default:
 		_ = h.ws.Remove(result.tmpDir)
 	}
-	return false
+	return afterDownload{}, false
 }
 
-func (h *holdBook) chooseAgainstMuxed(ctx context.Context, ac *AcquisitionContext, audioOnly attempt) bool {
+func (h *holdBook) chooseAgainstMuxed(ctx context.Context, ac *AcquisitionContext, audioOnly attempt) afterDownload {
 	muxed := h.takeMuxed()
 	winner, loser := *muxed, audioOnly
 	if !gradeOf(ctx, ac, *muxed).Beats(gradeOf(ctx, ac, audioOnly)) {
 		winner, loser = audioOnly, *muxed
 	}
 	_ = h.ws.Remove(loser.tmpDir)
-	winner.applyTo(ctx, ac)
-	return true
+	return winner.keep(ctx, ac)
 }
 
 func gradeOf(ctx context.Context, ac *AcquisitionContext, a attempt) grade.Grade {
@@ -387,6 +384,11 @@ func (a attempt) applyTo(ctx context.Context, ac *AcquisitionContext) {
 	ac.ProbedDuration = a.verified.probed
 	ac.Verdict = a.verified.verdict
 	ac.adopt(ctx, a.evidence, a.confidence)
+}
+
+func (a attempt) keep(ctx context.Context, ac *AcquisitionContext) afterDownload {
+	a.applyTo(ctx, ac)
+	return afterDownload{kept: a.candidate}
 }
 
 func (s *DownloadStep) runAttempt(

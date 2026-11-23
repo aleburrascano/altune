@@ -3,6 +3,7 @@ package service_test
 import (
 	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/acquisition/internal/adapters/tempfs"
+	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/service"
@@ -12,6 +13,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -263,5 +266,87 @@ func TestExecute_StoredEvidenceHasNoUnsetISRCHit(t *testing.T) {
 
 	if _, present := stored.keys["isrc_set_hit"]; present {
 		t.Errorf("stored evidence carries isrc_set_hit: %s", stored.track.Evidence)
+	}
+}
+
+type perURLSource struct {
+	found   []ports.AudioCandidate
+	formats map[string]ports.SourceFormat
+	broken  map[string]bool
+}
+
+func (perURLSource) Name() acqdomain.SourceName { return "per-url" }
+
+func (s perURLSource) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
+	return s.found, nil
+}
+
+func (s perURLSource) Fetch(_ context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+	if s.broken[candidate.URL] {
+		return ports.FetchedAudio{}, errors.New("fetch failed")
+	}
+	path := filepath.Join(outDir, "audio.mp3")
+	return ports.FetchedAudio{Path: path, Format: s.formats[candidate.URL]}, os.WriteFile(path, []byte("audio bytes"), 0o600)
+}
+
+func TestExecute_StoresTheSourceURLOfTheFileItKept(t *testing.T) {
+	const first, second = "https://www.youtube.com/watch?v=firstAAAAAA", "https://www.youtube.com/watch?v=secondAAAAA"
+	muxed := ports.SourceFormat{ID: ports.MuxedFallbackFormatID}
+	fingerprinted := service.WithAudioIdentifier(hardFingerprintOn(blindingLightsRecording))
+	cases := []struct {
+		name       string
+		firstTitle string
+		formats    map[string]ports.SourceFormat
+		broken     map[string]bool
+		opts       []func(*service.AcquireTrackAudioService)
+		want       string
+	}{
+		{
+			"a tagged, fingerprint-proven file beside one that failed to fetch", "", nil,
+			map[string]bool{first: true},
+			[]func(*service.AcquireTrackAudioService){fingerprinted, service.WithAudioTagger(&recordingTagger{})},
+			second,
+		},
+		{"an unproven file beside one that failed to fetch", "", nil, map[string]bool{first: true}, nil, second},
+		{
+			"a fingerprinted other version on length, held as best effort when nothing better came", "The Weeknd - Blinding Lights (Radio Edit)", nil,
+			map[string]bool{second: true},
+			[]func(*service.AcquireTrackAudioService){fingerprinted, service.WithAudioProber(lengthProber(blindingLightsLength))},
+			first,
+		},
+		{
+			"a muxed file when nothing better came", "",
+			map[string]ports.SourceFormat{first: muxed},
+			map[string]bool{second: true},
+			[]func(*service.AcquireTrackAudioService){fingerprinted},
+			first,
+		},
+		{
+			"an audio-only file chosen over a muxed one", "",
+			map[string]ports.SourceFormat{first: muxed},
+			nil,
+			[]func(*service.AcquireTrackAudioService){fingerprinted},
+			second,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			found := []ports.AudioCandidate{blindingLightsBy("The Weeknd - Topic", ports.KindArtTrack), blindingLightsBy("The Weeknd - Topic", ports.KindArtTrack)}
+			found[0].URL, found[1].URL = first, second
+			if tc.firstTitle != "" {
+				found[0].Title = tc.firstTitle
+			}
+			opts := append([]func(*service.AcquireTrackAudioService){service.WithRecordingResolver(resolvedTo(blindingLightsRecording))}, tc.opts...)
+			track := pendingBlindingLights()
+			length := blindingLightsLength
+			track.CatalogDurationSeconds = &length
+
+			ledger, err := acquireWith(t, track, perURLSource{found: found, formats: tc.formats, broken: tc.broken}, opts...)
+
+			requireReady(t, ledger, track.ID, err)
+			if got, _ := ledger.Track(track.ID); got.AudioSourceURL == nil || *got.AudioSourceURL != tc.want {
+				t.Errorf("stored source URL = %v, want %q, the file the run kept", got.AudioSourceURL, tc.want)
+			}
+		})
 	}
 }
