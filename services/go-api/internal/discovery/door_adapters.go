@@ -29,6 +29,7 @@ type (
 	FeaturedArtist                   = domain.FeaturedArtist
 	LyricsResponseDTO                = handler.LyricsResponseDTO
 	OwnedTrack                       = ports.OwnedTrack
+	OwnedTrackLister                 = ports.OwnedTrackLister
 	OwnershipReader                  = ports.OwnershipReader
 	PartialKindsError                = domain.PartialKindsError
 	PartialResultError               = domain.PartialResultError

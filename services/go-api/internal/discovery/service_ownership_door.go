@@ -7,4 +7,7 @@ type (
 	OwnershipEnrichmentService = ownership.OwnershipEnrichmentService
 )
 
-var NewOwnershipEnrichmentService = ownership.NewOwnershipEnrichmentService
+var (
+	NewOwnershipEnrichmentService = ownership.NewOwnershipEnrichmentService
+	NewOwnershipReader            = ownership.NewOwnershipReader
+)

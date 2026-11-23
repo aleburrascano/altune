@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/app/discoverycatalog"
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe"
@@ -387,7 +388,7 @@ const (
 
 func newOwnershipEnrichment(cat catalogWiring) *discovery.OwnershipEnrichmentService {
 	return discovery.NewOwnershipEnrichmentService(
-		discovery.NewOwnershipReader(cat.trackRepo),
-		discovery.NewTrackNumberWriter(cat.setTrackNumberSvc),
+		discovery.NewOwnershipReader(discoverycatalog.NewOwnedTracks(cat.trackRepo)),
+		discoverycatalog.NewTrackNumberFiller(cat.setTrackNumberSvc),
 	)
 }

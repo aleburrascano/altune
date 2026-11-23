@@ -22,3 +22,7 @@ type TrackNumberFiller interface {
 type OwnershipReader interface {
 	OwnedByTitleArtist(ctx context.Context, userId shared.UserId) (map[string]OwnedTrack, error)
 }
+
+type OwnedTrackLister interface {
+	ListOwnedTracks(ctx context.Context, userId shared.UserId) ([]OwnedTrack, error)
+}
