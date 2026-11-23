@@ -75,7 +75,7 @@ func TestRequestPathProviderCallsAreCountedOnce(t *testing.T) {
 		t.Run(route.name, func(t *testing.T) {
 			rt := &countingProviderRT{}
 			a := &App{cfg: &config.Config{MusicBrainzUserAgent: "altune-test/1.0"}}
-			disc, err := discovery.New(a.discoveryDeps(context.Background(), newClientFactory(countedProviderTransport(rt))))
+			disc, err := discovery.New(a.discoveryDeps(context.Background(), discovery.NewCountingTransport(rt)))
 			if err != nil {
 				t.Fatalf("wire discovery: %v", err)
 			}
@@ -218,7 +218,7 @@ func distinctDiscoveryConfig() *config.Config {
 
 func TestDiscoveryDeps_CopiesEachConfigValueIntoItsOwnField(t *testing.T) {
 	a := &App{cfg: distinctDiscoveryConfig()}
-	deps := a.discoveryDeps(t.Context(), newClientFactory(http.DefaultTransport))
+	deps := a.discoveryDeps(t.Context(), http.DefaultTransport)
 
 	wantProviders := discovery.ProviderSettings{
 		MusicBrainzUserAgent: "mb-agent",
@@ -267,7 +267,7 @@ func TestDiscoveryDeps_EachConfigSwitchTurnsOnOnlyItsOwnSetting(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &config.Config{}
 			tt.turnOn(cfg)
-			deps := (&App{cfg: cfg}).discoveryDeps(t.Context(), newClientFactory(http.DefaultTransport))
+			deps := (&App{cfg: cfg}).discoveryDeps(t.Context(), http.DefaultTransport)
 			if !reflect.DeepEqual(deps.Providers, tt.wantProviders) || deps.Search != tt.wantSearch || deps.Unreleased != tt.wantUnreleased {
 				t.Errorf("deps =\n  %+v\n  %+v\n  %+v\nwant\n  %+v\n  %+v\n  %+v",
 					deps.Providers, deps.Search, deps.Unreleased, tt.wantProviders, tt.wantSearch, tt.wantUnreleased)
@@ -280,7 +280,7 @@ func TestDiscoveryDeps_PassesTheAppsOwnHandles(t *testing.T) {
 	a := &App{cfg: &config.Config{}, eventTap: observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))}
 	ctx := t.Context()
 	transport := &stubTransport{}
-	deps := a.discoveryDeps(ctx, newClientFactory(transport))
+	deps := a.discoveryDeps(ctx, transport)
 
 	if deps.Lifecycle != ctx || deps.Background != a.jobs.Background() || deps.Transport != transport || deps.CacheOps != cacheOps() {
 		t.Error("deps do not carry the app's lifecycle, wait group, transport and cache counters")
@@ -291,13 +291,13 @@ func TestDiscoveryDeps_PassesTheAppsOwnHandles(t *testing.T) {
 	if deps.Activity != a.eventTap {
 		t.Error("deps do not feed discovery's activity into the app's event tap")
 	}
-	if (&App{cfg: &config.Config{}}).discoveryDeps(ctx, newClientFactory(transport)).Activity != nil {
+	if (&App{cfg: &config.Config{}}).discoveryDeps(ctx, transport).Activity != nil {
 		t.Error("an app without an event tap handed discovery a non-nil activity feed")
 	}
 }
 
 func TestDiscoveryDeps_ClientEventsFollowTheTelemetryExportSetting(t *testing.T) {
-	transport := newClientFactory(&stubTransport{})
+	transport := &stubTransport{}
 	if deps := (&App{cfg: &config.Config{}}).discoveryDeps(t.Context(), transport); deps.ClientEvents != nil {
 		t.Error("an app with no OTLP endpoint handed discovery client events to export")
 	}

@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/app/jobs"
+	"altune/go-api/internal/app/providerhttp"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/telemetry"
@@ -25,7 +26,11 @@ type EvalHandles struct {
 }
 
 func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*discovery.Discovery, error) {
-	deps := configuredDiscoveryDeps(ctx, cfg, newClientFactory(h.Transport))
+	transport := h.Transport
+	if transport == nil {
+		transport = providerhttp.Live()
+	}
+	deps := configuredDiscoveryDeps(ctx, cfg, transport)
 	deps.Background = &sync.WaitGroup{}
 	deps.Pool = h.Pool
 	deps.Redis = h.Redis
@@ -33,8 +38,8 @@ func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*
 	return discovery.New(deps)
 }
 
-func (a *App) discoveryDeps(ctx context.Context, cf clientFactory) discovery.Deps {
-	deps := configuredDiscoveryDeps(ctx, a.cfg, cf)
+func (a *App) discoveryDeps(ctx context.Context, transport http.RoundTripper) discovery.Deps {
+	deps := configuredDiscoveryDeps(ctx, a.cfg, transport)
 	deps.Background = a.jobs.Background()
 	deps.Pool = a.pool
 	deps.Redis = a.redisClient
@@ -45,13 +50,13 @@ func (a *App) discoveryDeps(ctx context.Context, cf clientFactory) discovery.Dep
 	return deps
 }
 
-func configuredDiscoveryDeps(ctx context.Context, cfg *config.Config, cf clientFactory) discovery.Deps {
+func configuredDiscoveryDeps(ctx context.Context, cfg *config.Config, transport http.RoundTripper) discovery.Deps {
 	return discovery.Deps{
 		Lifecycle:       ctx,
 		Logger:          slog.Default(),
-		Transport:       cf.roundTripper(),
-		ProviderTimeout: discoveryHTTPTimeout,
-		ChartTimeout:    chartHTTPTimeout,
+		Transport:       transport,
+		ProviderTimeout: 10 * time.Second,
+		ChartTimeout:    15 * time.Second,
 		CacheOps:        cacheOps(),
 		Providers:       discoveryProviderSettings(cfg),
 		Search:          discoverySearchSettings(cfg),

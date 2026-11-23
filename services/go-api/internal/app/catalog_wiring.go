@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/app/catalogdiscovery"
 	"altune/go-api/internal/app/discoverycatalog"
 	"altune/go-api/internal/app/jobs"
+	"altune/go-api/internal/app/providerhttp"
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe"
@@ -376,7 +377,7 @@ func (a *App) audioSourcesFor(ctx context.Context, searcher *acquisition.YtDlpAu
 		slog.InfoContext(ctx, "acquisition: yt-dlp source disabled via YTDLP_ENABLED")
 	}
 	if len(tiers.all()) > 0 {
-		tiers.first = append([]acquisition.AudioSource{acquisition.NewSource(searcher, acquisition.WithPageReader(acquisition.NewHTTPPageReader(sharedLiveTransport(), fileHostPageTimeout)))}, tiers.first...)
+		tiers.first = append([]acquisition.AudioSource{acquisition.NewSource(searcher, acquisition.WithPageReader(acquisition.NewHTTPPageReader(providerhttp.Live(), fileHostPageTimeout)))}, tiers.first...)
 	}
 	return tiers
 }

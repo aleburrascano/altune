@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/app/canary"
 	"altune/go-api/internal/app/jobs"
+	"altune/go-api/internal/app/providerhttp"
 	"altune/go-api/internal/app/shutdown"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery"
@@ -118,7 +119,7 @@ func (a *App) setup(ctx context.Context) error {
 		return fmt.Errorf("startup switches: %w", err)
 	}
 
-	disc, err := discovery.New(a.discoveryDeps(ctx, newClientFactory(nil)))
+	disc, err := discovery.New(a.discoveryDeps(ctx, providerhttp.Live()))
 	if err != nil {
 		return fmt.Errorf("discovery: %w", err)
 	}
