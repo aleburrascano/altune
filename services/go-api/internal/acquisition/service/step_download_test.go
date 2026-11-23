@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/acquisition/internal/adapters/discoverybridge"
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/grade"
+	"altune/go-api/internal/acquisition/internal/core/isrcproof"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/internal/core/rejectionlog"
 	"altune/go-api/internal/catalog/domain"
@@ -2685,7 +2686,8 @@ func TestResolvedIdentity_StandingInTheDarkCatalogLengthConflictReachesTheReader
 	if got := ac.gradedFingerprint(); got != grade.Matches {
 		t.Errorf("gradedFingerprint = %v, want Matches, not cut to Approximates", got)
 	}
-	if !ac.fingerprintProvesReference() {
-		t.Error("fingerprintProvesReference = false, want true for a surviving recording on the undoubted reference")
+	ac.Track.ISRC = ""
+	if got, source := ac.provenISRC(); got != isrc || source != isrcproof.Fingerprint {
+		t.Errorf("proven ISRC = (%q, %q), want (%q, fingerprint): with the catalog's own ISRC set aside, the surviving recording on the undoubted reference proves it", got, source, isrc)
 	}
 }

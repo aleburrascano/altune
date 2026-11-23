@@ -2,7 +2,14 @@ package service_test
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/acquisition/internal/adapters/discoverybridge"
+	"altune/go-api/internal/acquisition/internal/core/isrcproof"
+	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/service"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
+	"encoding/json"
 	"testing"
 )
 
@@ -162,5 +169,103 @@ func TestScoreConfidence_AnUnknownVerdictScoresFromZeroToTheUnknownCap(t *testin
 	}
 	if got := acquisition.ScoreConfidence(highest, 204); got != unknownCap {
 		t.Errorf("highest unknown score = %v, want the unknown cap %v that a weak soft match falls to: a constant change that splits them needs the cap back", got, unknownCap)
+	}
+}
+
+func storedISRCAndEvidence(t *testing.T, ledger *acquisitiontest.Ledger, id shared.TrackId) (string, service.Evidence) {
+	t.Helper()
+	got, _ := ledger.Track(id)
+	var evidence service.Evidence
+	if err := json.Unmarshal(got.Evidence, &evidence); err != nil {
+		t.Fatalf("evidence not stored as JSON: %v (%q)", err, got.Evidence)
+	}
+	if got.ISRC == nil {
+		return "", evidence
+	}
+	return *got.ISRC, evidence
+}
+
+func TestExecute_WritesBackOnlyAProvenISRCAndStoresWhereItCameFrom(t *testing.T) {
+	const resolvedISRC, recording, catalogLength = "USUG11904206", "blinding-lights-single", 200.0
+	catalogISRC, pin := "USUG11904999", recording
+	identity := ports.RecordingIdentity{ISRC: resolvedISRC, MBID: recording, MBIDs: []string{recording}}
+	doubtedIdentity := identity
+	doubtedIdentity.ReferenceDoubted = true
+	fingerprinted := func() *identifier {
+		return &identifier{match: ports.RecordingMatch{AcoustID: "ac-1", Results: []ports.AcoustIDResult{
+			{Score: 0.97, Recordings: []ports.LinkedRecording{{MBID: recording}}},
+		}}}
+	}
+	tests := []struct {
+		name        string
+		catalogISRC *string
+		catalogMBID *string
+		identity    ports.RecordingIdentity
+		identifier  *identifier
+		probed      float64
+		wantVerdict string
+		wantISRC    string
+		wantSource  isrcproof.Source
+	}{
+		{"the catalog's own ISRC is kept over a proven one", &catalogISRC, nil, identity, fingerprinted(), 0, "hard", catalogISRC, isrcproof.Catalog},
+		{"the pinned recording's ISRC", nil, &pin, identity, nil, 0, "", resolvedISRC, isrcproof.PinnedRecording},
+		{"a fingerprint-proven ISRC", nil, nil, identity, fingerprinted(), 0, "hard", resolvedISRC, isrcproof.Fingerprint},
+		{"a fingerprint the length demotes to soft proves nothing", nil, nil, identity, fingerprinted(), catalogLength + 10, "soft", "", isrcproof.Unproven},
+		{"a fingerprint on a doubted reference is only soft, so it proves nothing", nil, nil, doubtedIdentity, fingerprinted(), 0, "soft", "", isrcproof.Unproven},
+		{"an unproven resolver ISRC", nil, nil, identity, nil, 0, "", "", isrcproof.Unproven},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			track := pendingBlindingLights()
+			length := catalogLength
+			track.ISRC, track.CatalogMBID, track.CatalogDurationSeconds = tt.catalogISRC, tt.catalogMBID, &length
+			opts := []func(*service.AcquireTrackAudioService){service.WithRecordingResolver(&resolver{identity: tt.identity})}
+			if tt.identifier != nil {
+				opts = append(opts, service.WithAudioIdentifier(tt.identifier))
+			}
+			if tt.probed > 0 {
+				opts = append(opts, service.WithAudioProber(lengthProber(tt.probed)))
+			}
+
+			ledger, err := acquireWith(t, track, freshAudioSource{}, opts...)
+
+			requireReady(t, ledger, track.ID, err)
+			isrc, evidence := storedISRCAndEvidence(t, ledger, track.ID)
+			if evidence.Verdict != tt.wantVerdict {
+				t.Fatalf("verdict = %q, want %q: the row must reach the path it names", evidence.Verdict, tt.wantVerdict)
+			}
+			if isrc != tt.wantISRC || evidence.ISRCSource != tt.wantSource {
+				t.Errorf("stored ISRC %q with isrc_source %q, want %q with %q", isrc, evidence.ISRCSource, tt.wantISRC, tt.wantSource)
+			}
+		})
+	}
+}
+
+func TestExecute_DrinkingInLAWritesNoGuessedISRC(t *testing.T) {
+	const (
+		drinkingISRC  = "CAA509814003"
+		drinkingAlbum = "5d6efd30-23c6-4a9b-85af-706ea2df9022"
+		drinkingRemix = "d3dc2825-20c0-4a4f-a963-baa589049146"
+	)
+	recorded := discoverybridge.NewRecordedResolver(
+		[]discoverybridge.RecordedSearchHit{{Title: "Drinking in L.A.", Artist: "Bran Van 3000", ISRC: drinkingISRC, MBID: drinkingRemix, Duration: 236}},
+		[]discoverybridge.RecordedISRCRecording{{MBID: drinkingAlbum, Duration: 236}}, nil)
+	track := pendingBlindingLights()
+	catalogLength := 236.0
+	track.Title, track.Artist, track.Album, track.CatalogDurationSeconds = "Drinking in L.A.", "Bran Van 3000", "Glee", &catalogLength
+	source := &offeringSource{found: []ports.AudioCandidate{{
+		Title: "Drinking in L.A.", URL: "https://www.youtube.com/watch?v=-_5yNLsZ5Pk", Channel: "Bran Van 3000 - Topic", Categories: []string{"Music"},
+	}}}
+	var resolved ports.RecordingIdentity
+	observe := service.WithContextObserver(func(ac *service.AcquisitionContext) { resolved = ac.Identity })
+
+	ledger, err := acquireWith(t, track, source, service.WithRecordingResolver(recorded), observe)
+
+	requireReady(t, ledger, track.ID, err)
+	if resolved.ISRC != drinkingISRC {
+		t.Fatalf("resolver identity ISRC = %q, want the search hit's guess %q", resolved.ISRC, drinkingISRC)
+	}
+	if isrc, evidence := storedISRCAndEvidence(t, ledger, track.ID); isrc != "" || evidence.ISRCSource != isrcproof.Unproven {
+		t.Errorf("stored ISRC %q with isrc_source %q, want none with %q: the search hit's ISRC was never proven", isrc, evidence.ISRCSource, isrcproof.Unproven)
 	}
 }
