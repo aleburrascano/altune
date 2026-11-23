@@ -64,6 +64,11 @@ func (c *Memo[V]) Put(key string, v V) {
 		c.order.MoveToFront(el)
 		return
 	}
+	c.makeRoom(now)
+	c.m[key] = c.order.PushFront(&entry[V]{key: key, val: v, expires: now.Add(c.ttl)})
+}
+
+func (c *Memo[V]) makeRoom(now time.Time) {
 	if len(c.m) >= c.max && now.Sub(c.lastSweep) >= c.ttl {
 		c.sweepExpired(now)
 	}
@@ -74,7 +79,6 @@ func (c *Memo[V]) Put(key string, v V) {
 		}
 		c.remove(oldest)
 	}
-	c.m[key] = c.order.PushFront(&entry[V]{key: key, val: v, expires: now.Add(c.ttl)})
 }
 
 func (c *Memo[V]) sweepExpired(now time.Time) {
