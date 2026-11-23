@@ -23,6 +23,7 @@ var (
 var (
 	CodeAuthThrottled               = code("auth.throttled", KindRateLimited, "Too many failed authentication attempts")
 	CodeAuthUnavailable             = code("auth.unavailable", KindUnavailable, "Authentication unavailable")
+	CodeAuthTokenInvalid            = code("auth.token_invalid", KindUnauthenticated, "Invalid token")
 	CodeAuthTokenMissing            = code("auth.token_missing", KindUnauthenticated, "Authentication required")
 	CodeAuthTokenMalformed          = code("auth.token_malformed", KindUnauthenticated, "Malformed authorization header")
 	CodeAuthTokenSignatureInvalid   = code("auth.token_signature_invalid", KindUnauthenticated, "Invalid token signature")
