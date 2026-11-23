@@ -1,7 +1,6 @@
-package catalogbridge_test
+package ownership_test
 
 import (
-	catalogdomain "altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/discovery"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
@@ -13,11 +12,11 @@ import (
 )
 
 type fakeLister struct {
-	tracks []catalogdomain.OwnedTrackRef
+	tracks []discovery.OwnedTrack
 	err    error
 }
 
-func (f *fakeLister) ListOwnedTrackRefs(context.Context, shared.UserId) ([]catalogdomain.OwnedTrackRef, error) {
+func (f *fakeLister) ListOwnedTracks(context.Context, shared.UserId) ([]discovery.OwnedTrack, error) {
 	return f.tracks, f.err
 }
 
@@ -26,8 +25,8 @@ func testUser() shared.UserId {
 }
 
 func TestOwnedByTitleArtist_MatchesNormalizedTitleAndArtist(t *testing.T) {
-	reader := discovery.NewOwnershipReader(&fakeLister{tracks: []catalogdomain.OwnedTrackRef{
-		{ID: "track-1", Title: "Bohemian Rhapsody", Artist: "Queen", AcquisitionStatus: "ready"},
+	reader := discovery.NewOwnershipReader(&fakeLister{tracks: []discovery.OwnedTrack{
+		{TrackID: "track-1", Title: "Bohemian Rhapsody", Artist: "Queen", AcquisitionStatus: "ready"},
 	}})
 
 	owned, err := reader.OwnedByTitleArtist(context.Background(), testUser())
@@ -45,9 +44,9 @@ func TestOwnedByTitleArtist_MatchesNormalizedTitleAndArtist(t *testing.T) {
 }
 
 func TestOwnedByTitleArtist_FirstRefWinsOnDuplicateKey(t *testing.T) {
-	reader := discovery.NewOwnershipReader(&fakeLister{tracks: []catalogdomain.OwnedTrackRef{
-		{ID: "first", Title: "Alive", Artist: "Pearl Jam", AcquisitionStatus: "ready"},
-		{ID: "second", Title: "Alive", Artist: "Pearl Jam", AcquisitionStatus: "failed"},
+	reader := discovery.NewOwnershipReader(&fakeLister{tracks: []discovery.OwnedTrack{
+		{TrackID: "first", Title: "Alive", Artist: "Pearl Jam", AcquisitionStatus: "ready"},
+		{TrackID: "second", Title: "Alive", Artist: "Pearl Jam", AcquisitionStatus: "failed"},
 	}})
 
 	owned, _ := reader.OwnedByTitleArtist(context.Background(), testUser())
@@ -58,8 +57,8 @@ func TestOwnedByTitleArtist_FirstRefWinsOnDuplicateKey(t *testing.T) {
 }
 
 func TestOwnedByTitleArtist_LiveLibraryTrackIsNotKeyedAsTheStudioSong(t *testing.T) {
-	reader := discovery.NewOwnershipReader(&fakeLister{tracks: []catalogdomain.OwnedTrackRef{
-		{ID: "live", Title: "Song (Live)", Artist: "X"},
+	reader := discovery.NewOwnershipReader(&fakeLister{tracks: []discovery.OwnedTrack{
+		{TrackID: "live", Title: "Song (Live)", Artist: "X"},
 	}})
 
 	owned, err := reader.OwnedByTitleArtist(context.Background(), testUser())
@@ -75,17 +74,17 @@ func TestOwnedByTitleArtist_LiveLibraryTrackIsNotKeyedAsTheStudioSong(t *testing
 }
 
 func TestOwnedByTitleArtist_ISRCReachesTheTrackThatLostTheNameKey(t *testing.T) {
-	reader := discovery.NewOwnershipReader(&fakeLister{tracks: []catalogdomain.OwnedTrackRef{
-		{ID: "first", Title: "Alive", Artist: "Pearl Jam", ISRC: "USSM19100001"},
-		{ID: "second", Title: "Alive", Artist: "Pearl Jam", ISRC: "us-sm1-91-00002"},
+	reader := discovery.NewOwnershipReader(&fakeLister{tracks: []discovery.OwnedTrack{
+		{TrackID: "first", Title: "Alive", Artist: "Pearl Jam", ISRC: "USSM19100001"},
+		{TrackID: "second", Title: "Alive", Artist: "Pearl Jam", ISRC: "us-sm1-91-00002"},
 	}})
 
 	owned, err := reader.OwnedByTitleArtist(context.Background(), testUser())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got := owned[discovery.OwnershipISRCKey("USSM19100002")].TrackID; got != "second" {
-		t.Errorf("ISRC lookup TrackID = %q, want second", got)
+	if got := owned[discovery.OwnershipISRCKey("USSM19100002")]; got.TrackID != "second" || got.ISRC != "USSM19100002" {
+		t.Errorf("ISRC lookup = %+v, want second carrying the canonical ISRC USSM19100002", got)
 	}
 	if got := owned[discovery.OwnershipISRCKey("USSM19100001")].TrackID; got != "first" {
 		t.Errorf("ISRC lookup TrackID = %q, want first", got)
@@ -97,32 +96,6 @@ func TestOwnedByTitleArtist_PropagatesError(t *testing.T) {
 
 	if _, err := reader.OwnedByTitleArtist(context.Background(), testUser()); err == nil {
 		t.Fatal("expected an error")
-	}
-}
-
-type recordingSetter struct {
-	calls   int
-	lastNum int
-	lastId  string
-}
-
-func (r *recordingSetter) Execute(_ context.Context, _ shared.UserId, trackId catalogdomain.TrackId, n int) (bool, error) {
-	r.calls++
-	r.lastNum = n
-	r.lastId = trackId.String()
-	return true, nil
-}
-
-func TestFillTrackNumber_PassesIdAndPositionThrough(t *testing.T) {
-	setter := &recordingSetter{}
-	writer := discovery.NewTrackNumberWriter(setter)
-
-	id := uuid.New().String()
-	if err := writer.FillTrackNumber(context.Background(), testUser(), id, 7); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if setter.calls != 1 || setter.lastNum != 7 || setter.lastId != id {
-		t.Errorf("setter calls=%d lastNum=%d lastId=%q, want 1/7/%q", setter.calls, setter.lastNum, setter.lastId, id)
 	}
 }
 
@@ -138,10 +111,10 @@ func TestOwnedByTitleArtist_ZeroRefsGivesEmptyMap(t *testing.T) {
 	}
 }
 
-func TestOwnedByTitleArtist_OneRefMapsEveryField(t *testing.T) {
+func TestOwnedByTitleArtist_OneTrackKeepsEveryField(t *testing.T) {
 	num := 4
-	reader := discovery.NewOwnershipReader(&fakeLister{tracks: []catalogdomain.OwnedTrackRef{
-		{ID: "t-1", Title: "Black", Artist: "Pearl Jam", AcquisitionStatus: "ready", TrackNumber: &num},
+	reader := discovery.NewOwnershipReader(&fakeLister{tracks: []discovery.OwnedTrack{
+		{TrackID: "t-1", Title: "Black", Artist: "Pearl Jam", AcquisitionStatus: "ready", TrackNumber: &num},
 	}})
 
 	owned, err := reader.OwnedByTitleArtist(context.Background(), testUser())
@@ -154,14 +127,14 @@ func TestOwnedByTitleArtist_OneRefMapsEveryField(t *testing.T) {
 	got := owned[discovery.OwnershipKey("Black", "Pearl Jam")]
 	if got.TrackID != "t-1" || got.Title != "Black" || got.Artist != "Pearl Jam" ||
 		got.AcquisitionStatus != "ready" || got.TrackNumber != &num {
-		t.Errorf("got %+v, want all fields of the ref unchanged", got)
+		t.Errorf("got %+v, want every field of the track unchanged", got)
 	}
 }
 
 func TestOwnedByTitleArtist_SameTitleArtistDifferentCaseKeepsFirst(t *testing.T) {
-	reader := discovery.NewOwnershipReader(&fakeLister{tracks: []catalogdomain.OwnedTrackRef{
-		{ID: "first", Title: "Alive", Artist: "Pearl Jam"},
-		{ID: "second", Title: "ALIVE", Artist: "PEARL JAM"},
+	reader := discovery.NewOwnershipReader(&fakeLister{tracks: []discovery.OwnedTrack{
+		{TrackID: "first", Title: "Alive", Artist: "Pearl Jam"},
+		{TrackID: "second", Title: "ALIVE", Artist: "PEARL JAM"},
 	}})
 
 	owned, err := reader.OwnedByTitleArtist(context.Background(), testUser())
@@ -190,14 +163,14 @@ func TestOwnedByTitleArtist_WrapsListerError(t *testing.T) {
 }
 
 func TestOwnedByTitleArtist_SecondCallReturnsSecondMap(t *testing.T) {
-	lister := &fakeLister{tracks: []catalogdomain.OwnedTrackRef{{ID: "a", Title: "One", Artist: "X"}}}
+	lister := &fakeLister{tracks: []discovery.OwnedTrack{{TrackID: "a", Title: "One", Artist: "X"}}}
 	reader := discovery.NewOwnershipReader(lister)
 
 	first, err := reader.OwnedByTitleArtist(context.Background(), testUser())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	lister.tracks = []catalogdomain.OwnedTrackRef{{ID: "b", Title: "Two", Artist: "Y"}}
+	lister.tracks = []discovery.OwnedTrack{{TrackID: "b", Title: "Two", Artist: "Y"}}
 	second, err := reader.OwnedByTitleArtist(context.Background(), testUser())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -208,19 +181,5 @@ func TestOwnedByTitleArtist_SecondCallReturnsSecondMap(t *testing.T) {
 	}
 	if len(second) != 1 || second[discovery.OwnershipKey("Two", "Y")].TrackID != "b" {
 		t.Errorf("second = %v, want only b", second)
-	}
-}
-
-func TestFillTrackNumber_MalformedIdRefusedWithoutCallingSetter(t *testing.T) {
-	setter := &recordingSetter{}
-	writer := discovery.NewTrackNumberWriter(setter)
-
-	err := writer.FillTrackNumber(context.Background(), testUser(), "not-a-uuid", 3)
-
-	if err == nil || !strings.Contains(err.Error(), "parse track id") {
-		t.Fatalf("err = %v, want one containing %q", err, "parse track id")
-	}
-	if setter.calls != 0 {
-		t.Errorf("setter called %d times, want 0", setter.calls)
 	}
 }
