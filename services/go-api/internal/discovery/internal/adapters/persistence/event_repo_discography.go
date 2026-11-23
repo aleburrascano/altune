@@ -2,11 +2,11 @@ package persistence
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/adapters/persistence/discographyrank"
 	"altune/go-api/internal/discovery/internal/core/ports"
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -67,165 +67,7 @@ func (r *PgxEventStore) DiscographyQuality(ctx context.Context, since time.Time,
 	if err != nil {
 		return nil, err
 	}
-	return rankDiscographyCases(cases, groupBy), nil
-}
-
-func noIDSuspectRatio(c ports.DiscographyCase) float64 {
-	if c.Releases <= 0 {
-		return 0
-	}
-	noID := c.SingleProviderNoID
-	if noID < 0 {
-		noID = 0
-	}
-	return float64(noID) / float64(c.Releases)
-}
-
-func contaminationRatio(c ports.DiscographyCase) float64 {
-	if c.Releases <= 0 {
-		return 0
-	}
-	single := c.SingleProvider
-	if single < 0 {
-		single = 0
-	}
-	return float64(single) / float64(c.Releases)
-}
-
-func providerImbalance(c ports.DiscographyCase) int {
-	if len(c.ProviderCounts) < 2 {
-		return 0
-	}
-	first := true
-	minN, maxN := 0, 0
-	for _, n := range c.ProviderCounts {
-		if n < 0 {
-			n = 0
-		}
-		if first {
-			minN, maxN, first = n, n, false
-			continue
-		}
-		if n < minN {
-			minN = n
-		}
-		if n > maxN {
-			maxN = n
-		}
-	}
-	return maxN - minN
-}
-
-func dominantProvider(c ports.DiscographyCase) string {
-	best, bestN := "", -1
-	for p, n := range c.ProviderCounts {
-		if n > bestN || (n == bestN && p < best) {
-			best, bestN = p, n
-		}
-	}
-	return best
-}
-
-func caseWorseThan(a, b ports.DiscographyCase) bool {
-	if na, nb := noIDSuspectRatio(a), noIDSuspectRatio(b); na != nb {
-		return na > nb
-	}
-	ra, rb := contaminationRatio(a), contaminationRatio(b)
-	if ra != rb {
-		return ra > rb
-	}
-	ia, ib := providerImbalance(a), providerImbalance(b)
-	if ia != ib {
-		return ia > ib
-	}
-	if a.Releases != b.Releases {
-		return a.Releases > b.Releases
-	}
-	return a.ArtistRef < b.ArtistRef
-}
-
-func contaminationBand(c ports.DiscographyCase) int {
-	switch r := contaminationRatio(c); {
-	case r >= 0.5:
-		return 0
-	case r >= 0.2:
-		return 1
-	default:
-		return 2
-	}
-}
-
-func rankDiscographyCases(cases []ports.DiscographyCase, groupBy ports.DiscographyGroupBy) []ports.DiscographyCase {
-	switch groupBy {
-	case ports.GroupByProvider:
-		return clusterByProvider(cases)
-	case ports.GroupByContaminationBand:
-		sort.SliceStable(cases, func(i, j int) bool {
-			if bi, bj := contaminationBand(cases[i]), contaminationBand(cases[j]); bi != bj {
-				return bi < bj
-			}
-			return caseWorseThan(cases[i], cases[j])
-		})
-		return cases
-	default:
-		sort.SliceStable(cases, func(i, j int) bool { return caseWorseThan(cases[i], cases[j]) })
-		return cases
-	}
-}
-
-func clusterByProvider(cases []ports.DiscographyCase) []ports.DiscographyCase {
-	type cluster struct {
-		provider         string
-		single, releases int
-		members          []ports.DiscographyCase
-	}
-	byProvider := map[string]*cluster{}
-	order := []string{}
-	for _, c := range cases {
-		p := dominantProvider(c)
-		cl, ok := byProvider[p]
-		if !ok {
-			cl = &cluster{provider: p}
-			byProvider[p] = cl
-			order = append(order, p)
-		}
-		cl.members = append(cl.members, c)
-		if c.Releases > 0 {
-			cl.releases += c.Releases
-			if c.SingleProvider > 0 {
-				cl.single += c.SingleProvider
-			}
-		}
-	}
-	clusters := make([]*cluster, 0, len(order))
-	for _, p := range order {
-		clusters = append(clusters, byProvider[p])
-	}
-	sort.SliceStable(clusters, func(i, j int) bool {
-		ri := clusterRatio(clusters[i].single, clusters[i].releases)
-		rj := clusterRatio(clusters[j].single, clusters[j].releases)
-		if ri != rj {
-			return ri > rj
-		}
-		if clusters[i].releases != clusters[j].releases {
-			return clusters[i].releases > clusters[j].releases
-		}
-		return clusters[i].provider < clusters[j].provider
-	})
-	out := make([]ports.DiscographyCase, 0, len(cases))
-	for _, cl := range clusters {
-		members := cl.members
-		sort.SliceStable(members, func(i, j int) bool { return caseWorseThan(members[i], members[j]) })
-		out = append(out, members...)
-	}
-	return out
-}
-
-func clusterRatio(single, releases int) float64 {
-	if releases <= 0 {
-		return 0
-	}
-	return float64(single) / float64(releases)
+	return discographyrank.Rank(cases, groupBy), nil
 }
 
 var discographySuspectRateSQL = fmt.Sprintf(`SELECT

@@ -1,12 +1,18 @@
-package persistence
+package persistence_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/adapters/persistence"
+	"context"
 	"reflect"
 	"testing"
+	"time"
 )
 
-func TestUnreleasedSongCodec(t *testing.T) {
+func TestUnreleasedStore_SongsRoundTripEveryField(t *testing.T) {
+	pool := testPool(t)
+	store := persistence.NewPgxUnreleasedStore(pool)
+	ctx := context.Background()
 	hasMedia := true
 	cases := map[string]domain.UnreleasedSong{
 		"every field": {
@@ -27,32 +33,39 @@ func TestUnreleasedSongCodec(t *testing.T) {
 	}
 	for name, want := range cases {
 		t.Run(name, func(t *testing.T) {
-			raw, err := encodeUnreleasedSong(want)
-			if err != nil {
-				t.Fatalf("encode: %v", err)
+			key := newUnreleasedArtist(t, pool, store)
+			if err := store.Write(ctx, key, []domain.UnreleasedSong{want}, true, time.Now().UTC(), 1); err != nil {
+				t.Fatalf("Write: %v", err)
 			}
-			got, err := decodeUnreleasedSong(raw)
+			songs, _, _, _, err := store.Read(ctx, key)
 			if err != nil {
-				t.Fatalf("decode: %v", err)
+				t.Fatalf("Read: %v", err)
 			}
-			if !reflect.DeepEqual(got, want) {
-				t.Errorf("round trip = %+v, want %+v", got, want)
+			if len(songs) != 1 || !reflect.DeepEqual(songs[0], want) {
+				t.Errorf("round trip = %+v, want [%+v]", songs, want)
 			}
 		})
 	}
 }
 
-func TestKnownIDsCodec(t *testing.T) {
+func TestUnreleasedStore_DueReturnsTheRecordedKnownIDs(t *testing.T) {
+	pool := testPool(t)
+	store := persistence.NewPgxUnreleasedStore(pool)
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `UPDATE unreleased_artists SET last_requested_at = now() - interval '60 days'`); err != nil {
+		t.Fatalf("park existing artists: %v", err)
+	}
+	key := newUnreleasedArtist(t, pool, store)
 	want := map[domain.ProviderName]string{domain.ProviderDeezer: "d1", domain.ProviderMusicBrainz: "mb1"}
-	raw, err := encodeKnownIDs(want)
-	if err != nil {
-		t.Fatalf("encode: %v", err)
+	if err := store.Record(ctx, key, "Known IDs", want); err != nil {
+		t.Fatalf("Record: %v", err)
 	}
-	got, err := decodeKnownIDs(raw)
+
+	due, err := store.Due(ctx, time.Now().UTC(), 10)
 	if err != nil {
-		t.Fatalf("decode: %v", err)
+		t.Fatalf("Due: %v", err)
 	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("round trip = %v, want %v", got, want)
+	if len(due) != 1 || due[0].Key != key || !reflect.DeepEqual(due[0].KnownIDs, want) {
+		t.Errorf("Due = %+v, want only %v with known IDs %v", due, key, want)
 	}
 }

@@ -1,16 +1,19 @@
-package persistence
+package persistence_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/adapters/persistence"
 	"altune/go-api/internal/discovery/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"encoding/json"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func seedObservation(t *testing.T, store *PgxEventStore, at time.Time, artistRef string, releases, single int, counts map[string]int) {
+func seedObservation(t *testing.T, store *persistence.PgxEventStore, at time.Time, artistRef string, releases, single int, counts map[string]int) {
 	t.Helper()
 	if err := store.Append(context.Background(), domain.InteractionEvent{
 		OccurredAt: at,
@@ -27,7 +30,7 @@ func seedObservation(t *testing.T, store *PgxEventStore, at time.Time, artistRef
 	}
 }
 
-func seedObservationWithNoID(t *testing.T, store *PgxEventStore, at time.Time, artistRef string, releases, single, noID int, counts map[string]int) {
+func seedObservationWithNoID(t *testing.T, store *persistence.PgxEventStore, at time.Time, artistRef string, releases, single, noID int, counts map[string]int) {
 	t.Helper()
 	if err := store.Append(context.Background(), domain.InteractionEvent{
 		OccurredAt: at,
@@ -55,7 +58,7 @@ func discographyRefs(cases []ports.DiscographyCase) []string {
 
 func TestPgxEventStore_DiscographyQuality_WorstFirstAndRegroup(t *testing.T) {
 	pool := testPool(t)
-	store := NewPgxEventStore(pool)
+	store := persistence.NewPgxEventStore(pool)
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(),
 			`DELETE FROM discovery_events WHERE event_type = 'discography_observed'`)
@@ -102,7 +105,7 @@ func TestPgxEventStore_DiscographyQuality_WorstFirstAndRegroup(t *testing.T) {
 
 func TestPgxEventStore_DiscographyQuality_IDAnchoredRanking(t *testing.T) {
 	pool := testPool(t)
-	store := NewPgxEventStore(pool)
+	store := persistence.NewPgxEventStore(pool)
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(),
 			`DELETE FROM discovery_events WHERE event_type = 'discography_observed'`)
@@ -130,17 +133,17 @@ func TestPgxEventStore_DiscographyQuality_IDAnchoredRanking(t *testing.T) {
 	}
 }
 
-func clearDiscographyObserved(t *testing.T, store *PgxEventStore) {
+func clearDiscographyObserved(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	_, _ = store.pool.Exec(context.Background(),
+	_, _ = pool.Exec(context.Background(),
 		`DELETE FROM discovery_events WHERE event_type = 'discography_observed'`)
 }
 
 func TestPgxEventStore_SuspectRate_WindowedRealOpens(t *testing.T) {
 	pool := testPool(t)
-	store := NewPgxEventStore(pool)
-	t.Cleanup(func() { clearDiscographyObserved(t, store) })
-	clearDiscographyObserved(t, store)
+	store := persistence.NewPgxEventStore(pool)
+	t.Cleanup(func() { clearDiscographyObserved(t, pool) })
+	clearDiscographyObserved(t, pool)
 
 	now := time.Now().UTC()
 	newest := now.Add(-1 * time.Hour)
@@ -160,19 +163,19 @@ func TestPgxEventStore_SuspectRate_WindowedRealOpens(t *testing.T) {
 	}
 }
 
-func clearSystemNonDiscographyEvents(t *testing.T, store *PgxEventStore) {
+func clearSystemNonDiscographyEvents(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	_, _ = store.pool.Exec(context.Background(),
+	_, _ = pool.Exec(context.Background(),
 		`DELETE FROM discovery_events WHERE user_id = $1 AND event_type IN ('search_performed', 'play')`,
 		shared.SystemUserId())
 }
 
 func TestPgxEventStore_SuspectRate_EvalRunLeavesNoSystemEvents(t *testing.T) {
-	store := NewPgxEventStore(testPool(t))
+	pool := testPool(t)
 	t.Run("eval run", TestPgxEventStore_SuspectRate_EvalRunDoesNotMoveIt)
 
 	var left int
-	if err := store.pool.QueryRow(context.Background(),
+	if err := pool.QueryRow(context.Background(),
 		`SELECT count(*) FROM discovery_events WHERE user_id = $1 AND event_type IN ('search_performed', 'play')`,
 		shared.SystemUserId()).Scan(&left); err != nil {
 		t.Fatalf("count leftovers: %v", err)
@@ -184,10 +187,10 @@ func TestPgxEventStore_SuspectRate_EvalRunLeavesNoSystemEvents(t *testing.T) {
 
 func TestPgxEventStore_SuspectRate_EvalRunDoesNotMoveIt(t *testing.T) {
 	pool := testPool(t)
-	store := NewPgxEventStore(pool)
-	t.Cleanup(func() { clearDiscographyObserved(t, store) })
-	t.Cleanup(func() { clearSystemNonDiscographyEvents(t, store) })
-	clearDiscographyObserved(t, store)
+	store := persistence.NewPgxEventStore(pool)
+	t.Cleanup(func() { clearDiscographyObserved(t, pool) })
+	t.Cleanup(func() { clearSystemNonDiscographyEvents(t, pool) })
+	clearDiscographyObserved(t, pool)
 
 	now := time.Now().UTC()
 	since := now.AddDate(0, 0, -30)
@@ -217,9 +220,9 @@ func TestPgxEventStore_SuspectRate_EvalRunDoesNotMoveIt(t *testing.T) {
 
 func TestPgxEventStore_SuspectRate_EmptyWindowIsZero(t *testing.T) {
 	pool := testPool(t)
-	store := NewPgxEventStore(pool)
-	t.Cleanup(func() { clearDiscographyObserved(t, store) })
-	clearDiscographyObserved(t, store)
+	store := persistence.NewPgxEventStore(pool)
+	t.Cleanup(func() { clearDiscographyObserved(t, pool) })
+	clearDiscographyObserved(t, pool)
 
 	got, err := store.SuspectRate(context.Background(), time.Now().UTC().AddDate(0, 0, -30))
 	if err != nil {
@@ -233,7 +236,7 @@ func TestPgxEventStore_SuspectRate_EmptyWindowIsZero(t *testing.T) {
 	}
 }
 
-func seedNonDiscographyEvent(t *testing.T, store *PgxEventStore, at time.Time, eventType domain.EventType) {
+func seedNonDiscographyEvent(t *testing.T, store *persistence.PgxEventStore, at time.Time, eventType domain.EventType) {
 	t.Helper()
 	if err := store.Append(context.Background(), domain.InteractionEvent{
 		OccurredAt: at,
@@ -257,9 +260,9 @@ func sameOrder(a, b []string) bool {
 	return true
 }
 
-func remainingDiscographyRefs(t *testing.T, store *PgxEventStore) map[string]bool {
+func remainingDiscographyRefs(t *testing.T, pool *pgxpool.Pool) map[string]bool {
 	t.Helper()
-	rows, err := store.pool.Query(context.Background(),
+	rows, err := pool.Query(context.Background(),
 		`SELECT payload->>'artist_ref' FROM discovery_events WHERE event_type = 'discography_observed'`)
 	if err != nil {
 		t.Fatalf("list remaining rows: %v", err)
@@ -278,7 +281,7 @@ func remainingDiscographyRefs(t *testing.T, store *PgxEventStore) map[string]boo
 
 func TestPgxEventStore_PruneDiscographyObserved(t *testing.T) {
 	pool := testPool(t)
-	store := NewPgxEventStore(pool)
+	store := persistence.NewPgxEventStore(pool)
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(),
 			`DELETE FROM discovery_events WHERE event_type = 'discography_observed'`)
@@ -291,6 +294,7 @@ func TestPgxEventStore_PruneDiscographyObserved(t *testing.T) {
 
 	seedObservation(t, store, now.Add(-1*time.Hour), "spotify:fresh", 10, 8, counts)
 	seedObservation(t, store, now.AddDate(0, 0, -365), "spotify:midwindow", 10, 8, counts)
+	const discographyRetentionWindow = 400 * 24 * time.Hour
 	seedObservation(t, store, now.Add(-discographyRetentionWindow), "spotify:boundary", 10, 8, counts)
 	seedObservation(t, store, now.Add(-discographyRetentionWindow-24*time.Hour), "spotify:ancient", 10, 8, counts)
 
@@ -302,7 +306,7 @@ func TestPgxEventStore_PruneDiscographyObserved(t *testing.T) {
 		t.Fatalf("pruned = %d, want 1 (only the row past the retention window)", pruned)
 	}
 
-	remaining := remainingDiscographyRefs(t, store)
+	remaining := remainingDiscographyRefs(t, pool)
 	if remaining["spotify:ancient"] {
 		t.Fatalf("ancient row survived the prune: %v", remaining)
 	}
@@ -326,7 +330,7 @@ func TestPgxEventStore_PruneDiscographyObserved(t *testing.T) {
 
 func TestPgxEventStore_PruneDiscographyObserved_Idempotent(t *testing.T) {
 	pool := testPool(t)
-	store := NewPgxEventStore(pool)
+	store := persistence.NewPgxEventStore(pool)
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(),
 			`DELETE FROM discovery_events WHERE event_type = 'discography_observed'`)
@@ -348,7 +352,7 @@ func TestPgxEventStore_PruneDiscographyObserved_Idempotent(t *testing.T) {
 	if first != 0 || second != 0 {
 		t.Fatalf("prune removed in-window rows: first=%d second=%d, want 0 and 0", first, second)
 	}
-	if refs := remainingDiscographyRefs(t, store); !refs["spotify:fresh"] {
+	if refs := remainingDiscographyRefs(t, pool); !refs["spotify:fresh"] {
 		t.Fatalf("in-window row lost across repeated prunes: %v", refs)
 	}
 }

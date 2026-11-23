@@ -1,7 +1,8 @@
-package persistence
+package persistence_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/adapters/persistence"
 	"altune/go-api/internal/discovery/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/sharedtest"
@@ -13,14 +14,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func favoritesRepoForUser(t *testing.T) (*pgxpool.Pool, *PgxFavoritesRepository, shared.UserId) {
+func favoritesRepoForUser(t *testing.T) (*pgxpool.Pool, *persistence.PgxFavoritesRepository, shared.UserId) {
 	t.Helper()
 	pool := testPool(t)
 	userId := shared.NewUserId(uuid.New())
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM discovery_favorites WHERE user_id = $1`, userId.UUID())
 	})
-	return pool, NewPgxFavoritesRepository(pool), userId
+	return pool, persistence.NewPgxFavoritesRepository(pool), userId
 }
 
 func seedFavorites(t *testing.T, pool *pgxpool.Pool, userId shared.UserId, count int) {

@@ -1,12 +1,15 @@
-package persistence
+package persistence_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/adapters/persistence"
 	"altune/go-api/internal/discovery/internal/core/history"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,7 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func seedHistoryEntry(t *testing.T, repo *PgxSearchHistoryRepository, userId shared.UserId, query string, at time.Time) {
+func seedHistoryEntry(t *testing.T, repo *persistence.PgxSearchHistoryRepository, userId shared.UserId, query string, at time.Time) {
 	t.Helper()
 	entry := &domain.SearchHistoryEntry{
 		ID:         shared.NewEntityId(),
@@ -32,7 +35,7 @@ func seedHistoryEntry(t *testing.T, repo *PgxSearchHistoryRepository, userId sha
 func TestPgxSearchHistoryRepo_EraseSearchTextForUser(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxSearchHistoryRepository(pool)
+	repo := persistence.NewPgxSearchHistoryRepository(pool)
 	ctx := context.Background()
 	userA := shared.NewUserId(uuid.New())
 	userB := shared.NewUserId(uuid.New())
@@ -79,7 +82,7 @@ func TestPgxSearchHistoryRepo_EraseSearchTextForUser(t *testing.T) {
 func TestPgxSearchHistoryRepo_ListDistinctRecent_LimitBoundary(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxSearchHistoryRepository(pool)
+	repo := persistence.NewPgxSearchHistoryRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
@@ -110,7 +113,7 @@ func TestPgxSearchHistoryRepo_ListDistinctRecent_LimitBoundary(t *testing.T) {
 
 func newClearHistoryTestUser(t *testing.T, pool *pgxpool.Pool) shared.UserId {
 	t.Helper()
-	owner := newEventTestUser(t, NewPgxEventStore(pool))
+	owner := newEventTestUser(t, pool)
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(),
 			`DELETE FROM discovery_search_history WHERE user_id = $1`, owner.UUID())
@@ -120,14 +123,14 @@ func newClearHistoryTestUser(t *testing.T, pool *pgxpool.Pool) shared.UserId {
 
 func seedSearchTextOf(t *testing.T, pool *pgxpool.Pool, owner shared.UserId, queryNorm string) string {
 	t.Helper()
-	store := NewPgxEventStore(pool)
+	store := persistence.NewPgxEventStore(pool)
 	searchID := uuid.New().String()
 	performSearch(t, store, owner, queryNorm, searchID)
 	appendOrFatal(t, store, domain.InteractionEvent{
 		UserId: owner, Type: domain.EventTypeResultClicked, SearchId: searchID,
 		Payload: map[string]any{domain.PayloadKeyResultSignature: "sig " + queryNorm},
 	})
-	seedHistoryEntry(t, NewPgxSearchHistoryRepository(pool), owner, queryNorm, time.Now().UTC())
+	seedHistoryEntry(t, persistence.NewPgxSearchHistoryRepository(pool), owner, queryNorm, time.Now().UTC())
 	return searchID
 }
 
@@ -140,10 +143,7 @@ func storedSearchTextsOf(t *testing.T, pool *pgxpool.Pool, owner shared.UserId) 
 		t.Fatalf("read stored search text: %v", err)
 	}
 	defer rows.Close()
-	texts, err := collectRows(rows, func(rows pgx.Rows) (string, error) {
-		var text string
-		return text, rows.Scan(&text)
-	})
+	texts, err := pgx.CollectRows(rows, pgx.RowTo[string])
 	if err != nil {
 		t.Fatalf("scan stored search text: %v", err)
 	}
@@ -152,7 +152,7 @@ func storedSearchTextsOf(t *testing.T, pool *pgxpool.Pool, owner shared.UserId) 
 
 func clearSearchHistoryOf(t *testing.T, pool *pgxpool.Pool, owner shared.UserId) {
 	t.Helper()
-	svc := history.NewClearSearchHistoryService(NewPgxSearchHistoryRepository(pool))
+	svc := history.NewClearSearchHistoryService(persistence.NewPgxSearchHistoryRepository(pool))
 	if err := svc.Execute(context.Background(), owner); err != nil {
 		t.Fatalf("ClearSearchHistoryService.Execute: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestClearSearchHistory_ALateEventCannotRestoreTheErasedText(t *testing.T) {
 	searchID := seedSearchTextOf(t, pool, owner, queryNorm)
 	clearSearchHistoryOf(t, pool, owner)
 
-	appendOrFatal(t, NewPgxEventStore(pool), domain.InteractionEvent{
+	appendOrFatal(t, persistence.NewPgxEventStore(pool), domain.InteractionEvent{
 		UserId: owner, Type: domain.EventTypePlay, SearchId: searchID,
 		QueryNorm: queryNorm,
 		Payload:   map[string]any{domain.PayloadKeyResultSignature: "sig " + suffix},
@@ -212,7 +212,7 @@ func TestClearSearchHistory_ALateInsertOfASearchBegunBeforeTheClearLeavesNoRow(t
 	began := time.Now().UTC().Add(-time.Second)
 
 	clearSearchHistoryOf(t, pool, owner)
-	seedHistoryEntry(t, NewPgxSearchHistoryRepository(pool), owner, "late insert "+uuid.New().String()[:8], began)
+	seedHistoryEntry(t, persistence.NewPgxSearchHistoryRepository(pool), owner, "late insert "+uuid.New().String()[:8], began)
 
 	if got := countOwnedRows(t, pool,
 		`SELECT COUNT(*) FROM discovery_search_history WHERE user_id = $1`, owner); got != 0 {
@@ -227,7 +227,7 @@ func TestClearSearchHistory_ALateSearchPerformedEventKeepsNoSearchText(t *testin
 	began := time.Now().UTC().Add(-time.Second)
 
 	clearSearchHistoryOf(t, pool, owner)
-	appendOrFatal(t, NewPgxEventStore(pool), domain.InteractionEvent{
+	appendOrFatal(t, persistence.NewPgxEventStore(pool), domain.InteractionEvent{
 		UserId: owner, Type: domain.EventTypeSearchPerformed, OccurredAt: began,
 		QueryNorm: "late event " + uuid.New().String()[:8], SearchId: uuid.New().String(),
 		Payload: map[string]any{"zero_result": false},
@@ -248,9 +248,9 @@ func TestClearSearchHistory_ASearchBeginningAfterTheEraseStillRecords(t *testing
 		t.Fatalf("NewSearchQuery: %v", err)
 	}
 
-	history.NewRecordSearchHistoryService(NewPgxSearchHistoryRepository(pool)).
+	history.NewRecordSearchHistoryService(persistence.NewPgxSearchHistoryRepository(pool)).
 		Record(context.Background(), owner, query, "after erase", true, time.Now().UTC())
-	appendOrFatal(t, NewPgxEventStore(pool), domain.InteractionEvent{
+	appendOrFatal(t, persistence.NewPgxEventStore(pool), domain.InteractionEvent{
 		UserId: owner, Type: domain.EventTypeSearchPerformed, OccurredAt: time.Now().UTC(),
 		QueryNorm: "after erase", SearchId: uuid.New().String(),
 		Payload: map[string]any{"zero_result": false},
@@ -265,6 +265,31 @@ func TestClearSearchHistory_ASearchBeginningAfterTheEraseStillRecords(t *testing
 	}
 }
 
+type commitGate struct {
+	armed   atomic.Bool
+	reached chan struct{}
+	release chan struct{}
+	opened  sync.Once
+}
+
+func newCommitGate() *commitGate {
+	g := &commitGate{reached: make(chan struct{}), release: make(chan struct{})}
+	g.armed.Store(true)
+	return g
+}
+
+func (g *commitGate) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	if strings.EqualFold(strings.TrimSpace(data.SQL), "commit") && g.armed.CompareAndSwap(true, false) {
+		close(g.reached)
+		<-g.release
+	}
+	return ctx
+}
+
+func (g *commitGate) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
+
+func (g *commitGate) open() { g.opened.Do(func() { close(g.release) }) }
+
 func TestClearSearchHistory_AnInsertRacingAnOpenEraseLeavesNoSearchText(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
@@ -273,25 +298,27 @@ func TestClearSearchHistory_AnInsertRacingAnOpenEraseLeavesNoSearchText(t *testi
 	began := time.Now().UTC().Add(-time.Second)
 	suffix := uuid.New().String()[:8]
 
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		t.Fatalf("begin erase: %v", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	for _, eraseSQL := range eraseSearchTextOfUserSQL {
-		if _, err := tx.Exec(ctx, eraseSQL, owner.UUID()); err != nil {
-			t.Fatalf("erase step: %v", err)
-		}
+	gate := newCommitGate()
+	eraser := persistence.NewPgxSearchHistoryRepository(tracedPool(t, gate))
+	t.Cleanup(gate.open)
+	erased := make(chan error, 1)
+	go func() { erased <- eraser.EraseSearchTextForUser(ctx, owner) }()
+	select {
+	case <-gate.reached:
+	case err := <-erased:
+		t.Fatalf("erase finished (err %v) without reaching its commit", err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("erase never reached its commit")
 	}
 
 	written := make(chan error, 2)
 	go func() {
-		written <- NewPgxSearchHistoryRepository(pool).Insert(ctx, &domain.SearchHistoryEntry{
+		written <- persistence.NewPgxSearchHistoryRepository(pool).Insert(ctx, &domain.SearchHistoryEntry{
 			ID: shared.NewEntityId(), UserId: owner, Query: "racing " + suffix, QueryNorm: "racing " + suffix, ExecutedAt: began,
 		})
 	}()
 	go func() {
-		written <- NewPgxEventStore(pool).Append(ctx, domain.InteractionEvent{
+		written <- persistence.NewPgxEventStore(pool).Append(ctx, domain.InteractionEvent{
 			UserId: owner, Type: domain.EventTypeSearchPerformed, OccurredAt: began,
 			QueryNorm: "racing " + suffix, SearchId: uuid.New().String(),
 			Payload: map[string]any{"zero_result": false},
@@ -303,8 +330,9 @@ func TestClearSearchHistory_AnInsertRacingAnOpenEraseLeavesNoSearchText(t *testi
 		t.Fatalf("a write finished while the erase was still open (err %v), want it held until the erase commits", err)
 	case <-time.After(300 * time.Millisecond):
 	}
-	if err := tx.Commit(ctx); err != nil {
-		t.Fatalf("commit erase: %v", err)
+	gate.open()
+	if err := <-erased; err != nil {
+		t.Fatalf("erase: %v", err)
 	}
 	for range 2 {
 		if err := <-written; err != nil {
@@ -322,9 +350,10 @@ func TestClearSearchHistory_AnInsertRacingAnOpenEraseLeavesNoSearchText(t *testi
 }
 
 const (
-	resendWithinWindow = 10 * time.Second
-	pastTheWindow      = historyResendWindow + time.Second
-	concurrentResends  = 8
+	resendWithinWindow  = 10 * time.Second
+	historyResendWindow = time.Minute
+	pastTheWindow       = historyResendWindow + time.Second
+	concurrentResends   = 8
 )
 
 func newResendTestUser(t *testing.T, pool *pgxpool.Pool) shared.UserId {
@@ -351,7 +380,7 @@ func historyRowCountOf(t *testing.T, pool *pgxpool.Pool, owner shared.UserId) in
 func TestPgxSearchHistoryRepo_Insert_AResendWithinTheWindowInsertsOnce(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxSearchHistoryRepository(pool)
+	repo := persistence.NewPgxSearchHistoryRepository(pool)
 	owner := newResendTestUser(t, pool)
 	first := time.Now().UTC()
 
@@ -366,7 +395,7 @@ func TestPgxSearchHistoryRepo_Insert_AResendWithinTheWindowInsertsOnce(t *testin
 func TestPgxSearchHistoryRepo_Insert_TheSameQueryAfterTheWindowInsertsAgain(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxSearchHistoryRepository(pool)
+	repo := persistence.NewPgxSearchHistoryRepository(pool)
 	owner := newResendTestUser(t, pool)
 	first := time.Now().UTC().Add(-pastTheWindow)
 
@@ -381,7 +410,7 @@ func TestPgxSearchHistoryRepo_Insert_TheSameQueryAfterTheWindowInsertsAgain(t *t
 func TestPgxSearchHistoryRepo_Insert_ADifferentQueryWithinTheWindowInserts(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxSearchHistoryRepository(pool)
+	repo := persistence.NewPgxSearchHistoryRepository(pool)
 	owner := newResendTestUser(t, pool)
 	first := time.Now().UTC()
 
@@ -396,7 +425,7 @@ func TestPgxSearchHistoryRepo_Insert_ADifferentQueryWithinTheWindowInserts(t *te
 func TestPgxSearchHistoryRepo_Insert_ConcurrentResendsOfOneQueryLeaveOneRow(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
-	repo := NewPgxSearchHistoryRepository(pool)
+	repo := persistence.NewPgxSearchHistoryRepository(pool)
 	owner := newResendTestUser(t, pool)
 	at := time.Now().UTC()
 
