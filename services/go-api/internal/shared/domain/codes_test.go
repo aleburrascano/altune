@@ -96,7 +96,8 @@ func TestCatalog_ListsEveryCodeTheAPICanAnswerWith(t *testing.T) {
 		{"acquisition.reacquire_not_ready", domain.KindConflict},
 		{"acquisition.job_in_flight", domain.KindConflict},
 		{"acquisition.shutting_down", domain.KindUnavailable},
-		{"acquisition.paused", domain.KindUnavailable}}
+		{"acquisition.paused", domain.KindUnavailable},
+	}
 
 	got := domain.Catalog()
 
