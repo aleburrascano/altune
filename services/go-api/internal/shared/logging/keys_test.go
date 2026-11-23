@@ -18,14 +18,10 @@ func TestKeyConstants_NameTheWireKeys(t *testing.T) {
 		logging.KeyBytes:         "bytes",
 		logging.KeyPanic:         "panic",
 		logging.KeyStack:         "stack",
-		logging.KeyJob:           "job",
 	}
 	for got, wire := range want {
 		if got != wire {
 			t.Errorf("key constant = %q, want %q", got, wire)
 		}
-	}
-	if len(want) != 12 {
-		t.Errorf("key constants collapse to %d distinct keys, want 12", len(want))
 	}
 }

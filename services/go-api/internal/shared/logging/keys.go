@@ -12,5 +12,4 @@ const (
 	KeyBytes         = "bytes"
 	KeyPanic         = "panic"
 	KeyStack         = "stack"
-	KeyJob           = "job"
 )

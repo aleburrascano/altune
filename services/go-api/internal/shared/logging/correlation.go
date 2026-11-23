@@ -35,13 +35,16 @@ func (h *correlationHandler) Enabled(ctx context.Context, level slog.Level) bool
 }
 
 func (h *correlationHandler) Handle(ctx context.Context, r slog.Record) error {
+	var stamps []slog.Attr
 	if id := CorrelationIDFromContext(ctx); id != "" && !recordHasKey(r, KeyCorrelationID) {
-		r = r.Clone()
-		r.AddAttrs(slog.String(KeyCorrelationID, id))
+		stamps = append(stamps, slog.String(KeyCorrelationID, id))
 	}
 	if span := trace.SpanContextFromContext(ctx); span.HasTraceID() && !recordHasKey(r, KeyTraceID) {
+		stamps = append(stamps, slog.String(KeyTraceID, span.TraceID().String()))
+	}
+	if len(stamps) > 0 {
 		r = r.Clone()
-		r.AddAttrs(slog.String(KeyTraceID, span.TraceID().String()))
+		r.AddAttrs(stamps...)
 	}
 	return h.inner.Handle(ctx, r)
 }
