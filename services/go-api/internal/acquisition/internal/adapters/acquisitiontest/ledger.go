@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"strings"
 	"sync"
@@ -15,7 +16,10 @@ import (
 
 var ErrVersionConflict = errors.New("track version conflict")
 
-const maxRejectedSourceKeys = 25
+const (
+	maxRejectedSourceKeys = 25
+	maxStorableSeconds    = 7 * 24 * 60 * 60
+)
 
 type LedgerTrack struct {
 	ports.TrackSnapshot
@@ -174,7 +178,7 @@ func settleAudio(track *LedgerTrack, c ports.Completion) error {
 }
 
 func recordCompletion(track *LedgerTrack, c ports.Completion) {
-	if c.Duration > 0 {
+	if storableLength(c.Duration) {
 		duration := c.Duration
 		track.StoredDurationSeconds = &duration
 	}
@@ -189,6 +193,10 @@ func recordCompletion(track *LedgerTrack, c ports.Completion) {
 	if c.Evidence != nil && validConfidence(c.Confidence, c.Evidence) {
 		track.Confidence, track.Evidence = c.Confidence, slices.Clone(c.Evidence)
 	}
+}
+
+func storableLength(seconds float64) bool {
+	return seconds > 0 && !math.IsInf(seconds, 0) && seconds <= maxStorableSeconds
 }
 
 func withRejected(stored, rejected []string) []string {
