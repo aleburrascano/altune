@@ -2,8 +2,12 @@ package discographyrank
 
 import (
 	"altune/go-api/internal/discovery/internal/core/ports"
+	"cmp"
+	"maps"
 	"math"
+	"slices"
 	"sort"
+	"strings"
 )
 
 func Rank(cases []ports.DiscographyCase, groupBy ports.DiscographyGroupBy) []ports.DiscographyCase {
@@ -49,29 +53,27 @@ func providerImbalance(c ports.DiscographyCase) int {
 
 func dominantProvider(c ports.DiscographyCase) string {
 	best, bestN := "", -1
-	for p, n := range c.ProviderCounts {
-		if n > bestN || (n == bestN && p < best) {
+	for _, p := range slices.Sorted(maps.Keys(c.ProviderCounts)) {
+		if n := c.ProviderCounts[p]; n > bestN {
 			best, bestN = p, n
 		}
 	}
 	return best
 }
 
-func worseThan(a, b ports.DiscographyCase) bool {
-	if na, nb := noIDSuspectRatio(a), noIDSuspectRatio(b); na != nb {
-		return na > nb
-	}
-	if ra, rb := contaminationRatio(a), contaminationRatio(b); ra != rb {
-		return ra > rb
-	}
-	if ia, ib := providerImbalance(a), providerImbalance(b); ia != ib {
-		return ia > ib
-	}
-	if a.Releases != b.Releases {
-		return a.Releases > b.Releases
-	}
-	return a.ArtistRef < b.ArtistRef
+func precedes(order int) bool { return order < 0 }
+
+func worseOrder(a, b ports.DiscographyCase) int {
+	return cmp.Or(
+		cmp.Compare(noIDSuspectRatio(b), noIDSuspectRatio(a)),
+		cmp.Compare(contaminationRatio(b), contaminationRatio(a)),
+		cmp.Compare(providerImbalance(b), providerImbalance(a)),
+		cmp.Compare(b.Releases, a.Releases),
+		strings.Compare(a.ArtistRef, b.ArtistRef),
+	)
 }
+
+func worseThan(a, b ports.DiscographyCase) bool { return precedes(worseOrder(a, b)) }
 
 func contaminationBand(c ports.DiscographyCase) int {
 	switch r := contaminationRatio(c); {
@@ -85,10 +87,7 @@ func contaminationBand(c ports.DiscographyCase) int {
 }
 
 func bandThenWorse(a, b ports.DiscographyCase) bool {
-	if ba, bb := contaminationBand(a), contaminationBand(b); ba != bb {
-		return ba < bb
-	}
-	return worseThan(a, b)
+	return precedes(cmp.Or(cmp.Compare(contaminationBand(a), contaminationBand(b)), worseOrder(a, b)))
 }
 
 type cluster struct {
@@ -107,13 +106,11 @@ func (cl *cluster) add(c ports.DiscographyCase) {
 }
 
 func clusterWorseThan(a, b *cluster) bool {
-	if ra, rb := ratio(a.single, a.releases), ratio(b.single, b.releases); ra != rb {
-		return ra > rb
-	}
-	if a.releases != b.releases {
-		return a.releases > b.releases
-	}
-	return a.provider < b.provider
+	return precedes(cmp.Or(
+		cmp.Compare(ratio(b.single, b.releases), ratio(a.single, a.releases)),
+		cmp.Compare(b.releases, a.releases),
+		strings.Compare(a.provider, b.provider),
+	))
 }
 
 func groupByDominantProvider(cases []ports.DiscographyCase) []*cluster {

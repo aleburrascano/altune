@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/discovery/internal/core/ports"
 	"slices"
 	"testing"
+	"time"
 )
 
 func dc(ref string, releases, single int, pc ...any) ports.DiscographyCase {
@@ -150,4 +151,79 @@ func TestRankByArtist_TieBreaksOnProviderImbalance(t *testing.T) {
 			}
 		})
 	}
+}
+
+func assertOrder(t *testing.T, cases []ports.DiscographyCase, groupBy ports.DiscographyGroupBy, want ...string) {
+	t.Helper()
+	if got := refs(discographyrank.Rank(cases, groupBy)); !slices.Equal(got, want) {
+		t.Errorf("Rank(%s) order = %v, want %v", groupBy, got, want)
+	}
+}
+
+func TestRank_IdenticalCasesKeepTheirInputOrder(t *testing.T) {
+	first := time.Unix(1_700_000_000, 0)
+	for _, groupBy := range []ports.DiscographyGroupBy{ports.GroupByArtist, ports.GroupByContaminationBand, ports.GroupByProvider} {
+		t.Run(string(groupBy), func(t *testing.T) {
+			a, b := dc("same", 10, 4, "spotify", 4), dc("same", 10, 4, "spotify", 4)
+			a.LastSeen, b.LastSeen = first, first.Add(time.Hour)
+			got := discographyrank.Rank([]ports.DiscographyCase{a, b}, groupBy)
+			if len(got) != 2 || !got[0].LastSeen.Equal(first) {
+				t.Errorf("Rank reordered two identical cases: %+v", got)
+			}
+		})
+	}
+}
+
+func TestRankByContaminationBand_ThresholdsAreInclusive(t *testing.T) {
+	assertOrder(t, []ports.DiscographyCase{
+		dcNoID("d-tenth", 10, 1, 1),
+		dcNoID("c-fifth", 10, 2, 0),
+		dcNoID("b-two-fifths", 10, 4, 4),
+		dcNoID("a-half", 10, 5, 0),
+	}, ports.GroupByContaminationBand, "a-half", "b-two-fifths", "c-fifth", "d-tenth")
+}
+
+func TestRankByProvider_ClusterTiesBreakOnReleasesThenProvider(t *testing.T) {
+	t.Run("more releases first", func(t *testing.T) {
+		assertOrder(t, []ports.DiscographyCase{
+			dc("s", 10, 5, "spotify", 5),
+			dc("d", 20, 10, "deezer", 9),
+		}, ports.GroupByProvider, "d", "s")
+	})
+	t.Run("then provider name", func(t *testing.T) {
+		assertOrder(t, []ports.DiscographyCase{
+			dc("b", 10, 5, "bprov", 5),
+			dc("a", 10, 5, "aprov", 5),
+		}, ports.GroupByProvider, "a", "b")
+	})
+	t.Run("ratio before releases", func(t *testing.T) {
+		assertOrder(t, []ports.DiscographyCase{
+			dc("p", 20, 2, "pp", 2),
+			dc("q", 5, 2, "qq", 2),
+		}, ports.GroupByProvider, "q", "p")
+	})
+}
+
+func TestRankByProvider_AMemberWithoutReleasesAddsNothingToItsCluster(t *testing.T) {
+	assertOrder(t, []ports.DiscographyCase{
+		dc("p-zero", 0, 5, "pp", 1),
+		dc("p-real", 10, 1, "pp", 1),
+		dc("q", 5, 2, "qq", 1),
+	}, ports.GroupByProvider, "q", "p-real", "p-zero")
+}
+
+func TestRankByProvider_ATieForTheDominantProviderGoesToTheFirstName(t *testing.T) {
+	assertOrder(t, []ports.DiscographyCase{
+		dc("x", 10, 1, "zeta", 5, "alpha", 5),
+		dc("y", 10, 9, "alpha", 9),
+		dc("z", 10, 6, "zeta", 9),
+	}, ports.GroupByProvider, "z", "y", "x")
+}
+
+func TestRankByProvider_AZeroCountStillNamesItsProvider(t *testing.T) {
+	assertOrder(t, []ports.DiscographyCase{
+		dc("a", 10, 1),
+		dc("b", 10, 5, "x", 0),
+		dc("c", 10, 3, "m", 3),
+	}, ports.GroupByProvider, "b", "c", "a")
 }
