@@ -1,16 +1,18 @@
-package service
+package service_test
 
 import (
-	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
+	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/acquisition/internal/adapters/tempfs"
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/ports"
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/acquisition/service"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,14 +24,14 @@ func TestFailureReason(t *testing.T) {
 		err  error
 		want string
 	}{
-		{"search", &StepError{Step: "search", Err: errors.New("no candidates found")}, "no_match_found"},
-		{"select", &StepError{Step: "select", Err: errors.New("no candidates passed matching gates")}, "no_match_found"},
-		{"download", &StepError{Step: "download", Err: errors.New("yt-dlp download: exit 1 (stderr: /home/secret/cookies.txt)")}, "download_failed"},
-		{"store", &StepError{Step: "store", Err: errors.New("store audio: disk full")}, "storage_failed"},
+		{"search", &service.StepError{Step: "search", Err: errors.New("no candidates found")}, "no_match_found"},
+		{"select", &service.StepError{Step: "select", Err: errors.New("no candidates passed matching gates")}, "no_match_found"},
+		{"download", &service.StepError{Step: "download", Err: errors.New("yt-dlp download: exit 1 (stderr: /home/secret/cookies.txt)")}, "download_failed"},
+		{"store", &service.StepError{Step: "store", Err: errors.New("store audio: disk full")}, "storage_failed"},
 		{"cancelled (pipeline wrap)", fmt.Errorf("pipeline cancelled: %w", context.Canceled), "acquisition_cancelled"},
-		{"cancelled (deadline, wrapped in step)", &StepError{Step: "download", Err: fmt.Errorf("no candidate produced acceptable audio: %w", context.DeadlineExceeded)}, "acquisition_cancelled"},
-		{"unknown step", &StepError{Step: "update_track", Err: errors.New("persist track update: boom")}, "acquisition_failed"},
-		{"download throttled on every candidate", &StepError{Step: "download", Err: fmt.Errorf(
+		{"cancelled (deadline, wrapped in step)", &service.StepError{Step: "download", Err: fmt.Errorf("no candidate produced acceptable audio: %w", context.DeadlineExceeded)}, "acquisition_cancelled"},
+		{"unknown step", &service.StepError{Step: "update_track", Err: errors.New("persist track update: boom")}, "acquisition_failed"},
+		{"download throttled on every candidate", &service.StepError{Step: "download", Err: fmt.Errorf(
 			"no candidate produced acceptable audio: %w",
 			&acqdomain.SourceUnavailableError{Source: "ytdlp", Err: errors.New("yt-dlp download: exit status 1 (stderr: HTTP Error 429: Too Many Requests)")},
 		)}, "source_unavailable"},
@@ -37,9 +39,9 @@ func TestFailureReason(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := failureReason(tt.err)
+			got := service.FailureCodeOf(tt.err)
 			if got != tt.want {
-				t.Errorf("failureReason(%q) = %q, want %q", tt.err, got, tt.want)
+				t.Errorf("FailureCodeOf(%q) = %q, want %q", tt.err, got, tt.want)
 			}
 		})
 	}
@@ -47,28 +49,28 @@ func TestFailureReason(t *testing.T) {
 
 func TestStepName_IsTheOneItsFailureCodeIsKeyedOn(t *testing.T) {
 	tests := []struct {
-		step     named
+		step     interface{ Name() service.StepName }
 		wantName string
-		wantCode domain.FailureCode
+		wantCode shared.FailureCode
 	}{
-		{NewSearchStep(nil), "search", domain.FailureNoMatchFound},
-		{NewSelectStep(), "select", domain.FailureNoMatchFound},
-		{newTestDownloadStep(nil), "download", domain.FailureDownloadFailed},
-		{NewTagStep(nil), "tag", domain.FailureAcquisitionFailed},
-		{NewStoreStep(nil), "store", domain.FailureStorageFailed},
-		{NewUpdateTrackStep(nil, shared.UserId{}, domain.TrackId{}), "update_track", domain.FailureAcquisitionFailed},
+		{service.NewSearchStep(nil), "search", shared.FailureNoMatchFound},
+		{service.NewSelectStep(), "select", shared.FailureNoMatchFound},
+		{service.NewDownloadStep(nil), "download", shared.FailureDownloadFailed},
+		{service.NewTagStep(nil), "tag", shared.FailureAcquisitionFailed},
+		{service.NewStoreStep(nil), "store", shared.FailureStorageFailed},
+		{service.NewUpdateTrackStep(nil, shared.UserId{}, shared.TrackId{}), "update_track", shared.FailureAcquisitionFailed},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.wantName, func(t *testing.T) {
 			name := tt.step.Name()
-			code := failureCode(&StepError{Step: name, Err: errors.New("boom")})
+			code := service.FailureCodeOf(&service.StepError{Step: name, Err: errors.New("boom")})
 
 			if string(name) != tt.wantName {
 				t.Errorf("Name() = %q, want %q", name, tt.wantName)
 			}
-			if code != tt.wantCode {
-				t.Errorf("failureCode for step %q = %q, want %q", name, code, tt.wantCode)
+			if code != string(tt.wantCode) {
+				t.Errorf("failure code for step %q = %q, want %q", name, code, tt.wantCode)
 			}
 		})
 	}
@@ -76,16 +78,62 @@ func TestStepName_IsTheOneItsFailureCodeIsKeyedOn(t *testing.T) {
 
 func TestFailureReason_MessageTextAloneIsNotCancellation(t *testing.T) {
 	err := errors.New("pipeline cancelled: context canceled")
-	if got := failureReason(err); got == "acquisition_cancelled" {
-		t.Errorf("failureReason classified a plain string as cancellation via message text: %q", got)
+	if got := service.FailureCodeOf(err); got == "acquisition_cancelled" {
+		t.Errorf("FailureCodeOf classified a plain string as cancellation via message text: %q", got)
 	}
+}
+
+type answeringSource struct {
+	name     acqdomain.SourceName
+	found    []ports.AudioCandidate
+	findErr  error
+	fetchErr error
+	stall    bool
+}
+
+func (s *answeringSource) Name() acqdomain.SourceName { return s.name }
+
+func (s *answeringSource) Find(ctx context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
+	if s.stall {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	return s.found, s.findErr
+}
+
+func (s *answeringSource) Fetch(context.Context, ports.AudioCandidate, string) (ports.FetchedAudio, error) {
+	if s.fetchErr != nil {
+		return ports.FetchedAudio{}, s.fetchErr
+	}
+	return ports.FetchedAudio{}, errors.New("nothing to fetch")
+}
+
+func pendingSong() acquisitiontest.LedgerTrack {
+	return acquisitiontest.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
+		ID: shared.NewTrackId(), UserId: shared.NewUserId(uuid.New()),
+		Title: "Song", Artist: "Artist", Album: "Album", Status: ports.TrackPending,
+	}}
+}
+
+func acquireService(ledger *acquisitiontest.Ledger, registry *service.SourceRegistry, store ports.AudioWriter) *service.AcquireTrackAudioService {
+	return service.NewAcquireTrackAudioService(ledger, registry, store, service.WithAcquireTempWorkspace(tempfs.New()))
+}
+
+func persistedCode(t *testing.T, ledger *acquisitiontest.Ledger, id shared.TrackId) shared.FailureCode {
+	t.Helper()
+	got, ok := ledger.Track(id)
+	if !ok || got.Status != ports.TrackFailed {
+		t.Fatalf("track = %+v, want it failed", got)
+	}
+	code, _ := shared.SplitFailureReason(got.FailureReason)
+	return code
 }
 
 func TestExecute_SourceThatCouldNotAnswer_IsNotReportedAsNoMatch(t *testing.T) {
 	tests := []struct {
 		name      string
 		searchErr error
-		want      domain.FailureCode
+		want      shared.FailureCode
 	}{
 		{
 			name: "every source throttled",
@@ -93,44 +141,55 @@ func TestExecute_SourceThatCouldNotAnswer_IsNotReportedAsNoMatch(t *testing.T) {
 				Source: "ytdlp",
 				Err:    errors.New("yt-dlp search: exit status 1 (stderr: HTTP Error 429: Too Many Requests)"),
 			},
-			want: domain.FailureSourceUnavailable,
+			want: shared.FailureSourceUnavailable,
 		},
 		{
 			name:      "the source answered and had nothing",
 			searchErr: errors.New("yt-dlp search: 3 lines, 0 parsable"),
-			want:      domain.FailureNoMatchFound,
+			want:      shared.FailureNoMatchFound,
+		},
+		{
+			name: "the source found nothing",
+			want: shared.FailureNoMatchFound,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			userId := shared.NewUserId(uuid.New())
-			track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-			if err != nil {
-				t.Fatalf("new track: %v", err)
-			}
-			repo := newFakeTrackRepository()
-			repo.tracks[track.ID.String()+":"+userId.String()] = track
-			finder := &fakeAudioSearcher{searchErr: tt.searchErr}
-			svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(finder), newFakeAudioStore())
+			track := pendingSong()
+			ledger := acquisitiontest.NewLedger(track)
+			svc := acquireService(ledger, service.NewSourceRegistry(&answeringSource{name: "ytdlp", findErr: tt.searchErr}), &objectStore{objects: map[string]string{}})
 
-			_ = svc.Execute(context.Background(), userId, track.ID)
+			_ = svc.Execute(context.Background(), track.UserId, track.ID)
 
-			updated := repo.tracks[track.ID.String()+":"+userId.String()]
-			if updated == nil || updated.FailureReason == nil {
-				t.Fatalf("track was not failed: %+v", updated)
-			}
-			code, _ := domain.SplitFailureReason(*updated.FailureReason)
-			if code != tt.want {
+			if code := persistedCode(t, ledger, track.ID); code != tt.want {
 				t.Errorf("persisted failure code = %q, want %q", code, tt.want)
 			}
 		})
 	}
 }
 
+func TestExecute_AStoreThatFailsWithTheContextLiveKeepsTheStorageReason(t *testing.T) {
+	userID, trackID := shared.NewUserId(uuid.New()), shared.NewTrackId()
+	ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
+		ID: trackID, UserId: userID, Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours", Status: ports.TrackPending,
+	}})
+	store := &objectStore{objects: map[string]string{}, storeErr: errors.New("put object: connection reset")}
+	svc := acquireService(ledger, service.NewSourceRegistry(freshAudioSource{}), store)
+
+	err := svc.Execute(context.Background(), userID, trackID)
+
+	if got := service.FailureCodeOf(err); got != string(shared.FailureStorageFailed) {
+		t.Errorf("FailureCodeOf(%v) = %q, want %q", err, got, shared.FailureStorageFailed)
+	}
+	if code := persistedCode(t, ledger, trackID); code != shared.FailureStorageFailed {
+		t.Errorf("persisted failure code = %q, want %q", code, shared.FailureStorageFailed)
+	}
+}
+
 func TestFailureReason_DropsInternalDetails(t *testing.T) {
-	err := &StepError{Step: "download", Err: errors.New("yt-dlp download: exit 1 (stderr: /home/secret/cookies.txt)")}
-	if reason := failureReason(err); strings.Contains(reason, "cookies") || strings.Contains(reason, "/home") {
+	err := &service.StepError{Step: "download", Err: errors.New("yt-dlp download: exit 1 (stderr: /home/secret/cookies.txt)")}
+	if reason := service.FailureCodeOf(err); strings.Contains(reason, "cookies") || strings.Contains(reason, "/home") {
 		t.Errorf("failure reason leaked internal details: %q", reason)
 	}
 }
@@ -140,154 +199,207 @@ func TestFailureReason_EveryCodeIsKnownToCatalog(t *testing.T) {
 		errors.New("pipeline cancelled: context canceled"),
 		errors.New("unexpected"),
 	}
-	for _, step := range []StepName{"search", "select", "download", "tag", "store", "update_track", "unknown"} {
-		errs = append(errs, &StepError{Step: step, Err: errors.New("boom")})
+	for _, step := range []service.StepName{"search", "select", "download", "tag", "store", "update_track", "unknown"} {
+		errs = append(errs, &service.StepError{Step: step, Err: errors.New("boom")})
 	}
 	for _, err := range errs {
-		code := failureCode(err)
+		code := shared.FailureCode(service.FailureCodeOf(err))
 		if !code.Known() {
-			t.Errorf("failureReason(%q) = %q, not a catalog failure code", err, code)
+			t.Errorf("FailureCodeOf(%q) = %q, not a catalog failure code", err, code)
 		}
-		reason := domain.JoinFailureReason(code, "all 1 candidate rejected (1 identity)")
-		if got, want := domain.FailureMessage(&reason), domain.FailureMessage(new(string(code))); got != want {
+		reason := shared.JoinFailureReason(code, "all 1 candidate rejected (1 identity)")
+		if got, want := shared.FailureMessage(&reason), shared.FailureMessage(new(string(code))); got != want {
 			t.Errorf("summary suffix changed message for %q: %q, want %q", code, got, want)
 		}
 	}
 }
 
-func TestSearchAndStoreSteps_GenuineFailure_KeepsStepReason(t *testing.T) {
-	ctx := context.Background()
-
-	_, searchErr := NewSearchStep(&cancellingFinder{cancel: func() {}}).
-		Execute(ctx, &AcquisitionContext{Track: TrackRef{Title: "Song", Artist: "Artist"}}, pipelineStart{})
-	if got := failureReason(&StepError{Step: "search", Err: searchErr}); got != string(domain.FailureNoMatchFound) {
-		t.Errorf("search failureReason = %q, want %q", got, domain.FailureNoMatchFound)
-	}
-
-	ac := &AcquisitionContext{Track: TrackRef{UserID: "u1", Title: "Song", Artist: "Artist"}, TempPath: "/tmp/x/track.mp3"}
-	_, storeErr := NewStoreStep(&cancellingWriter{cancel: func() {}}).Execute(ctx, ac, afterTag{})
-	if got := failureReason(&StepError{Step: "store", Err: storeErr}); got != string(domain.FailureStorageFailed) {
-		t.Errorf("store failureReason = %q, want %q", got, domain.FailureStorageFailed)
-	}
-}
-
 func TestFailureReason_WrappedContextErrorIsCancellationForEveryStep(t *testing.T) {
-	for _, step := range []StepName{"search", "select", "download", "tag", "store", "update_track"} {
+	for _, step := range []service.StepName{"search", "select", "download", "tag", "store", "update_track"} {
 		for _, ctxErr := range []error{context.Canceled, context.DeadlineExceeded} {
-			err := &StepError{Step: step, Err: errors.Join(errors.New("adapter failed"), ctxErr)}
-			if got := failureReason(err); got != string(domain.FailureAcquisitionCancelled) {
-				t.Errorf("failureReason(%s, %v) = %q, want %q", step, ctxErr, got, domain.FailureAcquisitionCancelled)
+			err := &service.StepError{Step: step, Err: errors.Join(errors.New("adapter failed"), ctxErr)}
+			if got := service.FailureCodeOf(err); got != string(shared.FailureAcquisitionCancelled) {
+				t.Errorf("FailureCodeOf(%s, %v) = %q, want %q", step, ctxErr, got, shared.FailureAcquisitionCancelled)
 			}
 		}
 	}
 }
 
 func TestFailureReason_DownloadStepWrappingNoConfidentMatch(t *testing.T) {
-	err := &StepError{Step: stepNameDownload, Err: fmt.Errorf("select: %w", ErrNoConfidentMatch)}
+	err := &service.StepError{Step: "download", Err: fmt.Errorf("select: %w", service.ErrNoConfidentMatch)}
 
-	got := failureReason(err)
+	got := service.FailureCodeOf(err)
 
 	if got != "no_confident_match" {
-		t.Errorf("failureReason = %q, want no_confident_match", got)
+		t.Errorf("FailureCodeOf = %q, want no_confident_match", got)
 	}
-	if msg := domain.FailureMessage(&got); msg != "Couldn't find this track" {
+	if msg := shared.FailureMessage(&got); msg != "Couldn't find this track" {
 		t.Errorf("FailureMessage = %q, want %q", msg, "Couldn't find this track")
 	}
-	if !domain.FailureNoConfidentMatch.Known() {
+	if !shared.FailureNoConfidentMatch.Known() {
 		t.Error("FailureNoConfidentMatch is not Known()")
 	}
 }
 
-func TestExecute_AFirstTierOutageSurvivesAnEmptyFallback(t *testing.T) {
-	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	repo := newFakeTrackRepository()
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
-	blocked := &stubSource{
-		name:  "ytmsearch",
-		found: []ports.AudioCandidate{resolvedCandidate("https://music.youtube.com/watch?v=artTrackAAA")},
+func firstTierOutage() *service.SourceRegistry {
+	blocked := &answeringSource{
+		name: "ytmsearch",
+		found: []ports.AudioCandidate{{
+			Title: "Blinding Lights", URL: "https://music.youtube.com/watch?v=artTrackAAA", Kind: ports.KindArtTrack,
+		}},
 		fetchErr: &acqdomain.SourceUnavailableError{
 			Source: "ytmsearch",
 			Err:    errors.New("yt-dlp download: HTTP Error 429: Too Many Requests"),
 		},
 	}
-	registry := NewSourceRegistry(blocked).WithFallback(&stubSource{name: "ytdlp"})
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), registry, newFakeAudioStore())
+	return service.NewSourceRegistry(blocked).WithFallback(&answeringSource{name: "ytdlp"})
+}
 
-	execErr := svc.Execute(withJobAttempt(context.Background(), 1), userId, track.ID)
+func brokenSearchBesideEmptyResults() *service.SourceRegistry {
+	broken := &answeringSource{name: "ytdlp", findErr: errors.New("yt-dlp search: output parsed to nothing")}
+	return service.NewSourceRegistry(broken, &answeringSource{name: "ytmsearch"})
+}
 
-	if !errors.Is(execErr, ErrAcquisitionRetryable) {
-		t.Errorf("err = %v, want ErrAcquisitionRetryable: the first tier was down, not empty", execErr)
-	}
-	if got := FailureCodeOf(execErr); got != string(shared.FailureSourceUnavailable) {
-		t.Errorf("failure code = %q, want source_unavailable", got)
+func TestExecute_AFirstTierOutageSurvivesAnEmptyFallback(t *testing.T) {
+	track := pendingSong()
+	ledger := acquisitiontest.NewLedger(track)
+	svc := acquireService(ledger, firstTierOutage(), &objectStore{objects: map[string]string{}})
+
+	execErr := svc.Execute(context.Background(), track.UserId, track.ID)
+
+	if got := service.FailureCodeOf(execErr); got != string(shared.FailureSourceUnavailable) {
+		t.Errorf("failure code = %q, want source_unavailable: the first tier was down, not empty", got)
 	}
 }
 
 func TestExecute_ABrokenSearchBesideEmptyResultsIsNotNoMatch(t *testing.T) {
-	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	repo := newFakeTrackRepository()
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
-	broken := &stubSource{name: "ytdlp", findErr: errors.New("yt-dlp search: output parsed to nothing")}
-	registry := NewSourceRegistry(broken, &stubSource{name: "ytmsearch"})
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), registry, newFakeAudioStore())
+	track := pendingSong()
+	ledger := acquisitiontest.NewLedger(track)
+	svc := acquireService(ledger, brokenSearchBesideEmptyResults(), &objectStore{objects: map[string]string{}})
 
-	execErr := svc.Execute(withJobAttempt(context.Background(), 1), userId, track.ID)
+	execErr := svc.Execute(context.Background(), track.UserId, track.ID)
 
-	if got := FailureCodeOf(execErr); got != string(shared.FailureAcquisitionFailed) {
+	if got := service.FailureCodeOf(execErr); got != string(shared.FailureAcquisitionFailed) {
 		t.Errorf("failure code = %q, want acquisition_failed", got)
 	}
-	if errors.Is(execErr, ErrAcquisitionRetryable) {
-		t.Errorf("err = %v, a degraded search must not be retryable", execErr)
+	if code := persistedCode(t, ledger, track.ID); code != shared.FailureAcquisitionFailed {
+		t.Errorf("persisted failure code = %q, want acquisition_failed", code)
 	}
 }
 
+func TestScheduler_AFirstTierOutageOnAnEarlyRunIsReleasedForARetry(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		track := pendingSong()
+		ledger := acquisitiontest.NewLedger(track)
+		svc := acquireService(ledger, firstTierOutage(), &objectStore{objects: map[string]string{}})
+
+		outcome := runOneJob(t, svc, track)
+
+		if !outcome.released || outcome.delay != 30*time.Second {
+			t.Errorf("outcome = %+v, want the first run released for 30s: the first tier was down, not empty", outcome)
+		}
+		if got, _ := ledger.Track(track.ID); got.Status != ports.TrackPending {
+			t.Errorf("status = %v, want pending while the job waits for its retry", got.Status)
+		}
+	})
+}
+
+func TestScheduler_ABrokenSearchIsSettledWithoutARetry(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		track := pendingSong()
+		ledger := acquisitiontest.NewLedger(track)
+		svc := acquireService(ledger, brokenSearchBesideEmptyResults(), &objectStore{objects: map[string]string{}})
+
+		outcome := runOneJob(t, svc, track)
+
+		if outcome.released {
+			t.Errorf("outcome = %+v, want a degraded search settled, not retried", outcome)
+		}
+		if code := persistedCode(t, ledger, track.ID); code != shared.FailureAcquisitionFailed {
+			t.Errorf("persisted failure code = %q, want acquisition_failed", code)
+		}
+	})
+}
+
+func TestScheduler_AJobThatRunsOutItsOwnTimeIsRetried(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		track := pendingSong()
+		ledger := acquisitiontest.NewLedger(track)
+		stalled := service.NewSourceRegistry(&answeringSource{name: "ytdlp", stall: true})
+		svc := acquireService(ledger, stalled, &objectStore{objects: map[string]string{}})
+
+		outcome := runOneJob(t, svc, track)
+
+		if !outcome.released {
+			t.Errorf("outcome = %+v, want the job released: its own timeout is transient", outcome)
+		}
+		if got, _ := ledger.Track(track.ID); got.Status != ports.TrackPending {
+			t.Errorf("status = %v, want pending while the job waits for its retry", got.Status)
+		}
+	})
+}
+
+func TestFailureCode_OwnTimeoutIsReportedAsSourceUnavailable(t *testing.T) {
+	err := fmt.Errorf("%w: %w", service.ErrAcquisitionTimedOut, &service.StepError{Step: "download", Err: context.DeadlineExceeded})
+
+	if got := service.FailureCodeOf(err); got != "source_unavailable" {
+		t.Errorf("FailureCodeOf = %q, want source_unavailable", got)
+	}
+}
+
+type retryingAcquirer struct{}
+
+func (retryingAcquirer) Execute(context.Context, shared.UserId, shared.TrackId) error {
+	return service.ErrAcquisitionRetryable
+}
+
+func (retryingAcquirer) ExecuteReplace(context.Context, shared.UserId, shared.TrackId) error {
+	return service.ErrAcquisitionRetryable
+}
+
+func (retryingAcquirer) RefuseQueued(context.Context, shared.UserId, shared.TrackId) {}
+
+func backoffAfterRun(t *testing.T, run int) time.Duration {
+	t.Helper()
+	var delay time.Duration
+	synctest.Test(t, func(t *testing.T) {
+		outcome := runOneJobAs(t, retryingAcquirer{}, pendingSong(), run)
+		if !outcome.released {
+			t.Fatalf("run %d: outcome = %+v, want a retryable job released", run, outcome)
+		}
+		delay = outcome.delay
+	})
+	return delay
+}
+
 func TestRetryBackoff_IsClampedAtTheAttemptCap(t *testing.T) {
-	ceiling := retryBackoff(maxAcquisitionAttempts)
+	const ceiling = 8 * time.Minute
 	for run := 1; run <= 100; run++ {
-		got := retryBackoff(run)
+		got := backoffAfterRun(t, run)
 		if got <= 0 || got > ceiling {
-			t.Fatalf("retryBackoff(%d) = %v, want within (0, %v]", run, got, ceiling)
+			t.Fatalf("backoff after run %d = %v, want within (0, %v]", run, got, ceiling)
 		}
 	}
 	want := []time.Duration{30 * time.Second, 2 * time.Minute, 8 * time.Minute}
 	for i, w := range want {
-		if got := retryBackoff(i + 1); got != w {
-			t.Errorf("retryBackoff(%d) = %v, want %v", i+1, got, w)
+		if got := backoffAfterRun(t, i+1); got != w {
+			t.Errorf("backoff after run %d = %v, want %v", i+1, got, w)
 		}
 	}
 }
 
 func TestRetryBackoff_PastTheCapWaitsExactlyAsLongAsAtTheCap(t *testing.T) {
 	for _, run := range []int{4, 15, 16, 17, 33, 64, 65, 100, 1 << 20, int(^uint(0) >> 1)} {
-		if got := retryBackoff(run); got != 8*time.Minute {
-			t.Errorf("retryBackoff(%d) = %v, want 8m0s", run, got)
+		if got := backoffAfterRun(t, run); got != 8*time.Minute {
+			t.Errorf("backoff after run %d = %v, want 8m0s", run, got)
 		}
 	}
 }
 
 func TestRetryBackoff_ANonPositiveRunWaitsThePositiveFirstDelay(t *testing.T) {
 	for _, run := range []int{0, -1, -64, -int(^uint(0)>>1) - 1} {
-		if got := retryBackoff(run); got != 30*time.Second {
-			t.Errorf("retryBackoff(%d) = %v, want 30s", run, got)
+		if got := backoffAfterRun(t, run); got != 30*time.Second {
+			t.Errorf("backoff after run %d = %v, want 30s", run, got)
 		}
-	}
-}
-
-func TestFailureCode_OwnTimeoutIsTransient(t *testing.T) {
-	err := fmt.Errorf("%w: %w", ErrAcquisitionTimedOut, &StepError{Step: "download", Err: context.DeadlineExceeded})
-
-	if got := failureReason(err); got != "source_unavailable" {
-		t.Errorf("failureReason = %q, want source_unavailable", got)
-	}
-	if !isTransientFailure(err) {
-		t.Error("isTransientFailure = false, want true")
 	}
 }

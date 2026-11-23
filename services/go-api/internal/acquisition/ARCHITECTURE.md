@@ -206,7 +206,7 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   job_telemetry.go       the jobReporter context seam and its schedulerJobReporter
   internal/core/domain/admission_error.go admissionError and the admission sentinels (package domain)
   internal/core/ranking/  Rank (the unplayable, re-recording, identity and veto refusals, the resolved, Topic and Other buckets and their orders, the candidate_evaluated log), UploaderOf, UnrequestedQualifiers — identityScore, metadataRank, featureMatch, qualifierDistance inside it
-  audio_ref.go           BuildAudioRef (+ legacy variants), path-component helpers
+  audio_ref.go           BuildAudioRef (+ legacy variants), thin wrappers that hand a TrackRef to internal/core/audioref
   retry_admission.go     RetryAdmission, ReacquireAdmission, cooldownGate
 adapters/
   eval/                  the offline selection gate — real CoreSteps against committed goldens (§7.8)
@@ -738,7 +738,7 @@ flowchart TD
     NORM --> DSIG["discovery · ResultSignature"]
     CORE["CoreSteps"] --> PROD["AcquireTrackAudioService"]
     CORE --> CLI["cmd/api/commands · reacquire loop"]
-    REF["BuildAudioRef + sanitizePathComponent"] --> STORE["StoreStep"]
+    REF["internal/core/audioref · Build + the segment sanitizer"] --> STORE["StoreStep"]
     REF --> BFA["cmd/backfillaudio"]
     NAMES["stage Name() strings"] --> FR["failureReason"]
     NAMES --> EVP["track_acquisition_progress · stage payload"]
@@ -772,13 +772,13 @@ flowchart TD
 | a `RejectionStage` constant | the per-stage counts in `summarizeRejections`, persisted into `failure_reason` after `domain.FailureDetailSeparator`, and every rejection log line | renaming one splits that stage's history — rows and dashboards group the old and new spelling as two different, half-populated stages |
 | a `ports.CooldownKind` value (`retry`, `reacquire`) | the `acquisition_cooldowns.kind` CHECK constraint (migration 019), and both admissions | a kind the constraint doesn't list fails every reserve with a 500; renaming one abandons the windows already written and reopens the cooldown for every track |
 | `CoreSteps` | production *and* every reacquire CLI command | a step added for the service also runs in bulk repair, on the whole library |
-| `BuildAudioRef` / the sanitizer | the storage layout *and* `cmd/backfillaudio`'s key derivation | a layout change orphans every existing object and makes backfill unable to find them |
+| `BuildAudioRef` / the sanitizer (`internal/core/audioref`) | the storage layout *and* `cmd/backfillaudio`'s key derivation | a layout change orphans every existing object and makes backfill unable to find them |
 | `AudioCandidate` fields | the ytdlp adapter's extraction and every matcher | a field added but not populated reads as a zero score, not as an error |
 | port narrowing (`AudioWriter`, `TrackRepository`) | what acquisition is *able* to do | widening a port is how a context stops being a customer and starts being an owner |
 
 **Where correctness is concentrated.** The pure, I/O-free functions are where the
 hard logic lives and where change is safest: `internal/core/ranking` in its entirety
-(`identityScore`, `metadataRank`, `featureMatch`, `Rank`), `durationWithinTolerance`, `failureReason`, and `BuildAudioRef`. Each is
+(`identityScore`, `metadataRank`, `featureMatch`, `Rank`), `durationWithinTolerance`, `failureReason`, and `internal/core/audioref`. Each is
 exhaustively testable with plain data. Every gate that has ever failed a user lives
 in one of them — and, per §7.8, every one of them is currently tested only against
 data we wrote ourselves. Put new selection logic in a pure core, add a golden case

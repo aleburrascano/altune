@@ -364,7 +364,7 @@ const (
 
 func TestBackgroundScheduler_ScheduleRacingShutdown_NeverLosesAnAcceptedJob(t *testing.T) {
 	for attempt := 0; attempt < shutdownRaceAttempts; attempt++ {
-		accepted, settled, remaining := scheduleWhileShuttingDown()
+		accepted, settled, remaining := scheduleWhileShuttingDown(t)
 
 		for _, id := range accepted {
 			_, isSettled := settled[id]
@@ -377,15 +377,19 @@ func TestBackgroundScheduler_ScheduleRacingShutdown_NeverLosesAnAcceptedJob(t *t
 	}
 }
 
-func scheduleWhileShuttingDown() (accepted []string, settled map[string]acqports.JobRecord, remaining map[string]struct{}) {
+func scheduleWhileShuttingDown(t *testing.T) (accepted []string, settled map[string]acqports.JobRecord, remaining map[string]struct{}) {
+	t.Helper()
 	svc := newTestAcquireService(catalogbridge.NewTrackLedger(&countingRepo{}), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var jobs sync.WaitGroup
 	var queueAhead atomic.Int64
-	var queue *memJobQueue
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &jobs, make(chan struct{}, 4), func(s *BackgroundAcquisitionScheduler) {
-		queue = memqueue.New(s.wake, func() time.Time { return time.Now().Add(time.Duration(queueAhead.Load())) })
-		s.queue = queue
+		s.queue = memqueue.New(s.wake, func() time.Time { return time.Now().Add(time.Duration(queueAhead.Load())) })
 	})
+	queue, ok := scheduler.queue.(*memJobQueue)
+	if !ok || queue == nil {
+		t.Fatalf("scheduler queue = %T, want the in-memory queue the option built", scheduler.queue)
+		return nil, nil, nil
+	}
 	userId := shared.NewUserId(uuid.New())
 
 	var mu sync.Mutex

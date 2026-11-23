@@ -1,96 +1,108 @@
-package service
+package service_test
 
 import (
-	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/acquisition/internal/adapters/tempfs"
+	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
+	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/service"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
 )
 
-func TestReacquirePolicy_Reconcile(t *testing.T) {
+const reacquireRef = "user/artist/album/song.mp3"
+
+type reacquireSource struct{ finds atomic.Int32 }
+
+func (s *reacquireSource) Name() acqdomain.SourceName { return "reacquire" }
+
+func (s *reacquireSource) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
+	s.finds.Add(1)
+	return nil, nil
+}
+
+func (s *reacquireSource) Fetch(context.Context, ports.AudioCandidate, string) (ports.FetchedAudio, error) {
+	return ports.FetchedAudio{}, errors.New("nothing to fetch")
+}
+
+type reacquireStore struct {
+	stored    bool
+	existsErr error
+}
+
+func (s reacquireStore) Exists(_ context.Context, audioRef string) (bool, error) {
+	return s.stored && audioRef == reacquireRef, s.existsErr
+}
+
+func (reacquireStore) Store(context.Context, string, string) error { return nil }
+
+func (reacquireStore) Delete(context.Context, string) error { return nil }
+
+func TestExecute_ReconcilesTheTracksStatusBeforeItSearches(t *testing.T) {
 	t.Parallel()
-	const audioRef = "user/artist/album/song.mp3"
 	existsErr := errors.New("transient s3 hiccup")
-	updateErr := errors.New("db down")
+	writeErr := errors.New("db down")
+	ref := reacquireRef
+	noMatch := string(shared.FailureNoMatchFound)
 
 	tests := []struct {
 		name        string
-		status      domain.AcquisitionStatus
+		status      ports.TrackStatus
 		audioRef    *string
-		stored      bool
-		existsErr   error
-		updateErr   error
-		wantProceed bool
+		store       reacquireStore
+		writeErr    error
 		wantErrIs   error
-		wantStatus  domain.AcquisitionStatus
-		wantUpdated bool
+		wantSearch  bool
+		wantStatus  ports.TrackStatus
+		wantReason  string
+		wantVersion int
 	}{
-		{name: "ready exists check fails", status: domain.AcquisitionReady, audioRef: refPtr(audioRef), existsErr: existsErr, wantErrIs: existsErr, wantStatus: domain.AcquisitionReady},
-		{name: "ready file exists", status: domain.AcquisitionReady, audioRef: refPtr(audioRef), stored: true, wantStatus: domain.AcquisitionReady},
-		{name: "ready file missing", status: domain.AcquisitionReady, audioRef: refPtr(audioRef), wantProceed: true, wantStatus: domain.AcquisitionPending, wantUpdated: true},
-		{name: "ready without audio ref", status: domain.AcquisitionReady, wantProceed: true, wantStatus: domain.AcquisitionPending, wantUpdated: true},
-		{name: "ready file missing revert fails", status: domain.AcquisitionReady, audioRef: refPtr(audioRef), updateErr: updateErr, wantErrIs: updateErr, wantStatus: domain.AcquisitionPending},
-		{name: "failed retries", status: domain.AcquisitionFailed, wantProceed: true, wantStatus: domain.AcquisitionPending, wantUpdated: true},
-		{name: "failed revert fails", status: domain.AcquisitionFailed, updateErr: updateErr, wantErrIs: updateErr, wantStatus: domain.AcquisitionPending},
-		{name: "pending proceeds untouched", status: domain.AcquisitionPending, wantProceed: true, wantStatus: domain.AcquisitionPending},
+		{name: "ready exists check fails", status: ports.TrackReady, audioRef: &ref, store: reacquireStore{existsErr: existsErr}, wantErrIs: existsErr, wantStatus: ports.TrackReady},
+		{name: "ready file exists", status: ports.TrackReady, audioRef: &ref, store: reacquireStore{stored: true}, wantStatus: ports.TrackReady},
+		{name: "ready file missing", status: ports.TrackReady, audioRef: &ref, wantSearch: true, wantStatus: ports.TrackFailed, wantReason: noMatch, wantVersion: 2},
+		{name: "ready without audio ref", status: ports.TrackReady, wantSearch: true, wantStatus: ports.TrackFailed, wantReason: noMatch, wantVersion: 2},
+		{name: "ready file missing revert fails", status: ports.TrackReady, audioRef: &ref, writeErr: writeErr, wantErrIs: writeErr, wantStatus: ports.TrackReady},
+		{name: "failed retries", status: ports.TrackFailed, wantSearch: true, wantStatus: ports.TrackFailed, wantReason: noMatch, wantVersion: 2},
+		{name: "failed revert fails", status: ports.TrackFailed, writeErr: writeErr, wantErrIs: writeErr, wantStatus: ports.TrackFailed, wantReason: "download_failed"},
+		{name: "pending proceeds untouched", status: ports.TrackPending, wantSearch: true, wantStatus: ports.TrackFailed, wantReason: noMatch, wantVersion: 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			track, err := domain.NewTrack(shared.NewUserId(uuid.New()), "Song", "Artist", "Album")
-			if err != nil {
-				t.Fatalf("new track: %v", err)
+			track := acquisitiontest.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
+				ID: shared.NewTrackId(), UserId: shared.NewUserId(uuid.New()),
+				Title: "Song", Artist: "Artist", Album: "Album", Status: tt.status, AudioRef: tt.audioRef,
+			}}
+			if tt.status == ports.TrackFailed {
+				track.FailureReason = "download_failed"
 			}
-			track.AcquisitionStatus = tt.status
-			track.AudioRef = tt.audioRef
+			ledger := acquisitiontest.NewLedger(track)
+			ledger.FailWrites(tt.writeErr)
+			source := &reacquireSource{}
+			svc := service.NewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), tt.store,
+				service.WithAcquireTempWorkspace(tempfs.New()))
 
-			repo := &updateRecorder{fakeTrackRepository: newFakeTrackRepository(), err: tt.updateErr}
-			repo.tracks[track.ID.String()+":"+track.UserId.String()] = track
-			ledger := catalogbridge.NewTrackLedger(repo)
-			snapshot, err := ledger.Get(context.Background(), track.ID, track.UserId)
-			if err != nil || snapshot == nil {
-				t.Fatalf("snapshot: %v, %v", snapshot, err)
-			}
-			store := newFakeAudioStore()
-			store.err = tt.existsErr
-			if tt.stored {
-				store.stored[audioRef] = true
-			}
+			err := svc.Execute(context.Background(), track.UserId, track.ID)
 
-			proceed, err := reacquirePolicy{ledger: ledger, audioStore: store}.reconcile(context.Background(), snapshot)
-
-			if !errors.Is(err, tt.wantErrIs) || (tt.wantErrIs == nil && err != nil) {
-				t.Fatalf("err = %v, want %v", err, tt.wantErrIs)
+			if tt.wantErrIs != nil && !errors.Is(err, tt.wantErrIs) {
+				t.Fatalf("Execute = %v, want %v", err, tt.wantErrIs)
 			}
-			if proceed != tt.wantProceed {
-				t.Errorf("proceed = %v, want %v", proceed, tt.wantProceed)
+			if tt.wantErrIs == nil && !tt.wantSearch && err != nil {
+				t.Fatalf("Execute = %v, want a track with its file kept to settle quietly", err)
 			}
-			if track.AcquisitionStatus != tt.wantStatus {
-				t.Errorf("status = %v, want %v", track.AcquisitionStatus, tt.wantStatus)
+			if searched := source.finds.Load() > 0; searched != tt.wantSearch {
+				t.Errorf("searched = %v, want %v", searched, tt.wantSearch)
 			}
-			if got := repo.updates == 1; got != tt.wantUpdated {
-				t.Errorf("persisted = %v, want %v", got, tt.wantUpdated)
+			got, _ := ledger.Track(track.ID)
+			if got.Status != tt.wantStatus || got.FailureReason != tt.wantReason || got.Version != tt.wantVersion {
+				t.Errorf("track = status %v reason %q version %d, want status %v reason %q version %d",
+					got.Status, got.FailureReason, got.Version, tt.wantStatus, tt.wantReason, tt.wantVersion)
 			}
 		})
 	}
 }
-
-type updateRecorder struct {
-	*fakeTrackRepository
-	err     error
-	updates int
-}
-
-func (r *updateRecorder) Update(ctx context.Context, track *domain.Track, expectedVersion int) error {
-	if r.err != nil {
-		return r.err
-	}
-	r.updates++
-	return r.fakeTrackRepository.Update(ctx, track, expectedVersion)
-}
-
-func refPtr(s string) *string { return &s }
