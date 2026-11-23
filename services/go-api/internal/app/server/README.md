@@ -1,0 +1,1 @@
+`server` builds the HTTP server the API listens with: its read, header and idle timeouts, and a base context that outlives the lifecycle cancel so in-flight requests can finish while the server drains.

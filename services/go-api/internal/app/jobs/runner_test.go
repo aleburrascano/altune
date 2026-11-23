@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -635,5 +636,101 @@ func TestLeaderCounters_AnElectionThatKeepsNoCountersReportsZero(t *testing.T) {
 
 	if got := r.LeaderCounters(); got != (leader.Counters{}) {
 		t.Errorf("LeaderCounters = %+v, want zero", got)
+	}
+}
+
+func registrationPanic(register func()) (msg string) {
+	defer func() {
+		if r := recover(); r != nil {
+			msg = fmt.Sprint(r)
+		}
+	}()
+	register()
+	return ""
+}
+
+func TestTicker_RefusesAJobTheTableRunsOnEveryInstance(t *testing.T) {
+	var r jobs.Runner
+
+	msg := registrationPanic(func() {
+		r.Ticker(jobs.BehavioralRankingRefresh, time.Hour, func(context.Context) error { return nil })
+	})
+
+	if !strings.Contains(msg, string(jobs.BehavioralRankingRefresh)) {
+		t.Fatalf("Ticker(%q) panic = %q, want a refusal naming the job", jobs.BehavioralRankingRefresh, msg)
+	}
+}
+
+func TestEveryInstance_RefusesEveryLeaderOnlyJob(t *testing.T) {
+	leaderOnly := []jobs.Name{
+		jobs.OrphanedAudioReconcile, jobs.BehavioralCorpusRefresh, jobs.DiscographyEventPrune, jobs.VocabularyRefresh,
+		jobs.DeletedIdentityErasure, jobs.AcquisitionSourceCanary, jobs.StreamRecovery, jobs.AcquisitionPrune,
+		jobs.AcquisitionUpgrade, jobs.UnreleasedRefresh, jobs.EvalMeter, jobs.AlertMonitor,
+	}
+	for _, name := range leaderOnly {
+		t.Run(string(name), func(t *testing.T) {
+			var r jobs.Runner
+			ctx, cancel := context.WithCancel(context.Background())
+			defer func() {
+				cancel()
+				r.Background().Wait()
+			}()
+
+			msg := registrationPanic(func() {
+				r.EveryInstance(ctx, name, time.Hour, func(context.Context) error { return nil })
+			})
+
+			if !strings.Contains(msg, string(name)) {
+				t.Fatalf("EveryInstance(%q) panic = %q, want a refusal naming the leader-only job", name, msg)
+			}
+		})
+	}
+}
+
+func TestStartTicker_LogsThatTheJobStartedWithItsAttributes(t *testing.T) {
+	cases := []struct {
+		name  jobs.Name
+		attrs []any
+		want  string
+	}{
+		{jobs.OrphanedAudioReconcile, []any{"interval", "10m0s"}, `level=INFO msg="orphaned audio reconcile started" interval=10m0s` + "\n"},
+		{jobs.VocabularyRefresh, nil, `level=INFO msg="vocabulary refresh started"` + "\n"},
+	}
+	for _, tc := range cases {
+		t.Run(string(tc.name), func(t *testing.T) {
+			logs := captureLogs(t)
+			var r jobs.Runner
+
+			r.StartTicker(context.Background(), tc.name, time.Hour, func(context.Context) error { return nil }, tc.attrs...)
+
+			if !strings.Contains(logs.String(), tc.want) {
+				t.Errorf("want %q in\n%s", tc.want, logs.String())
+			}
+			findHealth(t, &r, string(tc.name))
+		})
+	}
+}
+
+func TestWarnOnFailure_LogsTheFailureAndReturnsIt(t *testing.T) {
+	logs := captureLogs(t)
+	boom := errors.New("boom")
+
+	err := jobs.WarnOnFailure(jobs.VocabularyRefresh, func(context.Context) error { return boom })(context.Background())
+
+	if !errors.Is(err, boom) {
+		t.Errorf("err = %v, want the run's failure so the runner counts it", err)
+	}
+	if want := `level=WARN msg="vocabulary refresh failed" error=boom` + "\n"; !strings.Contains(logs.String(), want) {
+		t.Errorf("want %q in\n%s", want, logs.String())
+	}
+}
+
+func TestWarnOnFailure_ASuccessLogsNothing(t *testing.T) {
+	logs := captureLogs(t)
+
+	err := jobs.WarnOnFailure(jobs.VocabularyRefresh, func(context.Context) error { return nil })(context.Background())
+
+	if err != nil || logs.Len() != 0 {
+		t.Errorf("err = %v, logs = %q, want nil and nothing logged", err, logs.String())
 	}
 }

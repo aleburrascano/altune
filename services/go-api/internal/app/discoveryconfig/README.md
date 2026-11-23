@@ -1,0 +1,1 @@
+`discoveryconfig` maps the service configuration onto the settings discovery is built with: provider keys, search tuning, the unreleased tuning, the provider and chart timeouts, the cache counters, and whether client events are exported. The app and the eval tooling both build discovery from it, then add their own handles.

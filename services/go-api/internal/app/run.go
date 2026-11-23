@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/app/providerhttp"
+	"altune/go-api/internal/app/server"
 	"altune/go-api/internal/app/shutdown"
 	"altune/go-api/internal/shared/database"
 	"context"
@@ -27,7 +28,7 @@ func (a *App) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	serveErr := serve(ctx, a.newServer(ctx, assembly.Handler()))
+	serveErr := serve(ctx, server.New(ctx, fmt.Sprintf("%s:%d", a.cfg.Host, a.cfg.Port), assembly.Handler()))
 	cancel()
 	slog.InfoContext(ctx, "waiting for background tasks")
 	outcomes := assembly.Shutdown()
