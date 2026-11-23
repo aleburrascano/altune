@@ -160,15 +160,32 @@ func assertOrder(t *testing.T, cases []ports.DiscographyCase, groupBy ports.Disc
 	}
 }
 
-func TestRank_IdenticalCasesKeepTheirInputOrder(t *testing.T) {
+func TestRank_TiedCasesKeepTheirInputOrder(t *testing.T) {
 	first := time.Unix(1_700_000_000, 0)
+	const n = 40
 	for _, groupBy := range []ports.DiscographyGroupBy{ports.GroupByArtist, ports.GroupByContaminationBand, ports.GroupByProvider} {
 		t.Run(string(groupBy), func(t *testing.T) {
-			a, b := dc("same", 10, 4, "spotify", 4), dc("same", 10, 4, "spotify", 4)
-			a.LastSeen, b.LastSeen = first, first.Add(time.Hour)
-			got := discographyrank.Rank([]ports.DiscographyCase{a, b}, groupBy)
-			if len(got) != 2 || !got[0].LastSeen.Equal(first) {
-				t.Errorf("Rank reordered two identical cases: %+v", got)
+			cases := make([]ports.DiscographyCase, n)
+			for i := range cases {
+				ref, single := "clean", 1
+				if i%2 == 0 {
+					ref, single = "dirty", 8
+				}
+				cases[i] = dc(ref, 10, single, "spotify", 10)
+				cases[i].LastSeen = first.Add(time.Duration(i) * time.Hour)
+			}
+			got := discographyrank.Rank(cases, groupBy)
+			if len(got) != n {
+				t.Fatalf("Rank returned %d cases, want %d", len(got), n)
+			}
+			for i := 1; i < n; i++ {
+				if got[i].ArtistRef == got[i-1].ArtistRef && !got[i].LastSeen.After(got[i-1].LastSeen) {
+					t.Fatalf("tied %q cases out of input order at position %d: %v before %v",
+						got[i].ArtistRef, i, got[i-1].LastSeen, got[i].LastSeen)
+				}
+			}
+			if got[0].ArtistRef != "dirty" || got[n-1].ArtistRef != "clean" {
+				t.Errorf("Rank put %q first and %q last, want dirty first and clean last", got[0].ArtistRef, got[n-1].ArtistRef)
 			}
 		})
 	}
