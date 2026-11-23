@@ -24,3 +24,5 @@ yarn-debug.*
 yarn-error.*
 
 dist-ota/
+
+.stryker-tmp*/

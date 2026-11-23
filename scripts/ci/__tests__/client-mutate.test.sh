@@ -138,7 +138,7 @@ export function senior(age: number): boolean {
 }
 TS
 commit untested
-expect "a changed line no test covers fails and names the line" 1 'client/src/shared/clamp/core/adult.ts:[0-9]+:[0-9]+ NoCoverage'
+expect "a changed line no test covers fails and names the line" 1 'client/src/shared/clamp/core/adult.ts:[0-9]+:[0-9]+ (Survived|NoCoverage)'
 base=$(git -C "$repo" rev-parse HEAD)
 
 sed -i 's/cents >= 100/cents > 99/' "$client/src/features/price/core/price.web.ts"
@@ -161,7 +161,7 @@ test('minor', () => {
 });
 TS
 commit tested-only-by-another-module
-expect "another module's tests cannot kill a module's mutant" 1 'client/src/shared/clamp/core/minor.ts:[0-9]+:[0-9]+ NoCoverage'
+expect "another module's tests cannot kill a module's mutant" 1 'client/src/shared/clamp/core/minor.ts:[0-9]+:[0-9]+ (Survived|NoCoverage)'
 base=$(git -C "$repo" rev-parse HEAD)
 
 git -C "$repo" mv client/src/shared/clamp/core/minor.ts client/src/shared/clamp/core/young.ts

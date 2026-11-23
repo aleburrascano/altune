@@ -8,7 +8,8 @@ cd "$(git rev-parse --show-toplevel)/client"
 stryker=node_modules/.bin/stryker
 [ -x "$stryker" ] || { echo "client-mutate: $PWD/$stryker is missing. Install the client's dependencies: bash scripts/worktree-deps.sh client" >&2; exit 3; }
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+sandbox_prefix=.stryker-tmp-$$
+trap 'rm -rf "$work" "$sandbox_prefix"-*' EXIT
 
 git -c core.quotePath=false diff --merge-base "$base" --find-renames --diff-filter=AMR --unified=0 --relative -- src | awk '
   !in_hunks && /^\+\+\+ "/ { print "client-mutate: git quoted the path in \"" $0 "\", which this diff filter cannot read" > "/dev/stderr"; failed = 1; exit 1 }
@@ -41,7 +42,7 @@ jest_project() {
 }
 
 stryker_config() {
-  jq --arg report "$work/$1.json" --arg sandbox "$work/$1-sandbox" '. + { jsonReporter: { fileName: $report }, tempDirName: $sandbox }' stryker.config.json >"$work/$1.config.json"
+  jq --arg report "$work/$1.json" --arg sandbox "$sandbox_prefix-$1" '. + { jsonReporter: { fileName: $report }, tempDirName: $sandbox }' stryker.config.json >"$work/$1.config.json"
 }
 
 changed_files=$(cut -d: -f1 "$work/ranges" | sort -u | grep -c . || true)
