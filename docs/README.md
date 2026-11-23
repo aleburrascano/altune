@@ -1,6 +1,7 @@
 # docs/
 
-Durable outcomes only. **If it's here, it's current.** History and pre-decision
+Durable outcomes only. **If it's here, it's current**, except the dated snapshots
+under `design-review/`, which say the commit they describe. History and pre-decision
 thinking do not live here — they live in git and in the Gitea issue they belong to.
 
 | Directory | What lands here |
@@ -8,6 +9,7 @@ thinking do not live here — they live in git and in the Gitea issue they belon
 | [`providers/`](providers/) | How each external provider integration works today |
 | [`conventions/`](conventions/) | House rules, each with the lint or check that enforces it |
 | [`features/`](features/) | In-flight feature plans. The `close` skill deletes a folder once its feature ships |
+| [`design-review/`](design-review/) | Dated design reviews: findings with evidence as of one commit, not kept current. Their open work lives in the Gitea issues each README links |
 
 Plus the glossary: [`ubiquitous-language.md`](ubiquitous-language.md) — the binding
 vocabulary, kept current.
