@@ -2,10 +2,8 @@ package domain_test
 
 import (
 	"altune/go-api/internal/playback"
-	shareddomain "altune/go-api/internal/shared/domain"
 	"altune/go-api/internal/shared/requestuser"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -117,10 +115,7 @@ func TestFormatQueueSource_UnknownKindIsValidationError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an unknown non-empty kind to be rejected, got nil error")
 	}
-	var ve *shareddomain.ValidationError
-	if !errors.As(err, &ve) {
-		t.Fatalf("expected *ValidationError, got %T: %v", err, err)
-	}
+	validationCode(t, err)
 }
 
 func TestFormatQueueSource_IdlessPlaylistStoresNoSourceInsteadOfFailing(t *testing.T) {
@@ -198,10 +193,7 @@ func TestFormatQueueSource_GarbageFallbackIsValidationError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected garbage legacy source_id to be rejected, got nil error")
 	}
-	var ve *shareddomain.ValidationError
-	if !errors.As(err, &ve) {
-		t.Fatalf("expected *ValidationError, got %T: %v", err, err)
-	}
+	validationCode(t, err)
 }
 
 func TestFormatQueueSource_EachRejectionHasItsOwnCode(t *testing.T) {
