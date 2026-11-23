@@ -50,7 +50,7 @@ rerun_mutant() {
   local package
   package=./$(dirname "$file")
   rerun_status=KILLED
-  if ! go test -count=1 -overlay "$work/overlay.json" -run '^$' "$package" >/dev/null 2>&1; then
+  if ! go test -c -o /dev/null -overlay "$work/overlay.json" "$package" >/dev/null 2>&1; then
     rerun_status="NOT VIABLE"
   elif go test -count=1 -overlay "$work/overlay.json" -timeout 10m "$package" >/dev/null 2>&1; then
     rerun_status="NOT COVERED"
