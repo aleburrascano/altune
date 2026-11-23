@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/app/observemetrics"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/discovery"
@@ -10,6 +11,7 @@ import (
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/events"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/reqmetrics"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	_ "embed"
@@ -20,12 +22,14 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -861,4 +865,26 @@ func TestYtDlpSearcherRecordsAJarsFirstBotCheckUnderTheConfiguredEnvironment(t *
 	if f := session.FirstSignInFailure; f == nil || f.Environment != "staging" || f.Run != "canary" {
 		t.Errorf("first sign-in failure = %+v, want the canary's, recorded under environment staging", f)
 	}
+}
+
+const operatorToken = "operator-token"
+
+func callObserveAs(t *testing.T, srv http.Handler, method, path, token string) (int, []byte) {
+	t.Helper()
+	req := httptest.NewRequest(method, path, nil)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	return rec.Code, rec.Body.Bytes()
+}
+
+func featureMetricsSource() observe.LiveMetricsSource {
+	latency := reqmetrics.NewRegistry()
+	return func() observe.LiveMetrics { return observemetrics.FeatureMetrics(latency) }
+}
+
+func mountObserveLiveMetrics(r chi.Router, verifier auth.TokenVerifier, principal shared.UserId, source observe.LiveMetricsSource) {
+	mountObserve(r, verifier, principal.String(), observe.NewObserveHandler(observe.Deps{LiveMetrics: source}))
 }

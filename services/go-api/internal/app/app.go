@@ -25,25 +25,24 @@ import (
 const eventIDFloorFile = "altune-event-id-floor"
 
 type App struct {
-	cfg            *config.Config
-	pool           *pgxpool.Pool
-	dbPing         func(context.Context) error
-	requestTimeout time.Duration
-	redisClient    *goredis.Client
-	authVerifier   authHealthChecker
-	sem            chan struct{}
-	scheduler      *acquisition.BackgroundAcquisitionScheduler
-	vocabRefresh   *discovery.VocabularyRefreshService
-	searchSvc      *discovery.SearchService
-	evalSearch     *discovery.SearchService
-	eventBus       *events.InProcessBus
-	eventTap       *observe.EventTap
-	alertMonitor   *observe.AlertMonitor
-	logRing        *logging.RingBuffer
-	latency        *reqmetrics.Registry
-	eventFeed      *observe.EventFeed
-	evalMeter      *observe.EvalMeter
-	lifecycleDone  <-chan struct{}
+	cfg           *config.Config
+	pool          *pgxpool.Pool
+	dbPing        func(context.Context) error
+	redisClient   *goredis.Client
+	authVerifier  authHealthChecker
+	sem           chan struct{}
+	scheduler     *acquisition.BackgroundAcquisitionScheduler
+	vocabRefresh  *discovery.VocabularyRefreshService
+	searchSvc     *discovery.SearchService
+	evalSearch    *discovery.SearchService
+	eventBus      *events.InProcessBus
+	eventTap      *observe.EventTap
+	alertMonitor  *observe.AlertMonitor
+	logRing       *logging.RingBuffer
+	latency       *reqmetrics.Registry
+	eventFeed     *observe.EventFeed
+	evalMeter     *observe.EvalMeter
+	lifecycleDone <-chan struct{}
 
 	jobs jobs.Runner
 

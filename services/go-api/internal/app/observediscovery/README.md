@@ -1,1 +1,1 @@
-`observediscovery` implements observe's discography quality reader from the discovery feature, translating types only.
+`observediscovery` implements observe's ports from the discovery feature, translating types only: the discography quality reader and the eval meter's runner.

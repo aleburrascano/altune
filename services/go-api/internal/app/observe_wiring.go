@@ -8,9 +8,6 @@ import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe"
-	"altune/go-api/internal/shared/database"
-	"altune/go-api/internal/shared/leader"
-	"altune/go-api/internal/shared/redis"
 	"context"
 
 	"github.com/go-chi/chi/v5"
@@ -55,85 +52,19 @@ func (a *App) observeAcquisition() observe.AcquisitionReader {
 	return observeacquisition.NewAcquisitionReader(a.scheduler)
 }
 
-type electionCounters interface{ Counters() leader.Counters }
-
-type eventBusStats struct {
-	Dropped uint64 `json:"dropped_total"`
-}
-
-type eventTapStats struct {
-	TapDropped  uint64 `json:"tap_dropped_total"`
-	FeedDropped uint64 `json:"feed_dropped_total"`
-}
-
 func (a *App) liveMetrics() observe.LiveMetrics {
-	m := observemetrics.FeatureMetrics(a.latency)
-	m["db_pool"] = database.ReadPoolStats(a.pool)
-	m["redis_pool"] = redis.ReadPoolStats(a.redisClient)
-	var counters leader.Counters
-	if e, ok := a.jobs.Election().(electionCounters); ok {
-		counters = e.Counters()
-	}
-	m["leader"] = counters
-	m["event_bus"] = a.busStats()
-	if a.alertMonitor != nil {
-		m["alert_monitor"] = a.alertMonitor.Status()
-	}
-	m["event_tap"] = a.tapStats()
-	return m
-}
-
-func (a *App) busStats() eventBusStats {
-	var bus eventBusStats
-	if a.eventBus != nil {
-		bus.Dropped = a.eventBus.Dropped()
-	}
-	return bus
-}
-
-func (a *App) tapStats() eventTapStats {
-	var tapStats eventTapStats
-	if a.eventTap != nil {
-		tapStats.TapDropped = a.eventTap.Dropped()
-	}
-	if a.eventFeed != nil {
-		tapStats.FeedDropped = a.eventFeed.Dropped()
-	}
-	return tapStats
+	return observemetrics.Live(observemetrics.Sources{
+		Latency:      a.latency,
+		Pool:         a.pool,
+		Redis:        a.redisClient,
+		Leader:       a.jobs.LeaderCounters(),
+		EventBus:     a.eventBus,
+		EventTap:     a.eventTap,
+		EventFeed:    a.eventFeed,
+		AlertMonitor: a.alertMonitor,
+	})
 }
 
 func (a *App) evalMeterRunner() observe.EvalMeterRunner {
-	return wrapEvalRunner(a.buildEvalRunner())
-}
-
-func wrapEvalRunner(run EvalRunner) observe.EvalMeterRunner {
-	if run == nil {
-		return nil
-	}
-	return func(ctx context.Context) (observe.EvalMeterResult, error) {
-		res, err := run(ctx)
-		if err != nil {
-			return observe.EvalMeterResult{}, err
-		}
-		return meterResult(res), nil
-	}
-}
-
-func meterResult(res EvalResult) observe.EvalMeterResult {
-	queries := make([]observe.EvalMeterQueryResult, len(res.Queries))
-	for i, q := range res.Queries {
-		queries[i] = observe.EvalMeterQueryResult{
-			Query:    q.Query,
-			Expect:   q.Expect,
-			Passed:   q.Passed,
-			Position: q.Position,
-		}
-	}
-	return observe.EvalMeterResult{
-		Score:     res.Score,
-		Baseline:  res.Baseline,
-		Regressed: res.Regressed,
-		Errored:   res.Errored,
-		Queries:   queries,
-	}
+	return observediscovery.NewEvalMeterRunner(a.buildEvalRunner())
 }
