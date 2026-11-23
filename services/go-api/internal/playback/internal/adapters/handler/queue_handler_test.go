@@ -378,7 +378,7 @@ func TestHandleSavePosition_InvalidBodyIsBadRequest(t *testing.T) {
 
 func TestHandleSavePosition_UnappliedSaveIsConflictWithItsCode(t *testing.T) {
 	for want, err := range map[string]error{
-		`{"type":"urn:altune:problem:playback.stale_queue_write","title":"Conflict","status":409,"detail":"queue state not saved: a newer snapshot is already stored","code":"playback.stale_queue_write"}`:                               fmt.Errorf("update: %w", playback.ErrStaleQueueWrite),
+		`{"type":"urn:altune:problem:playback.stale_queue_write","title":"Conflict","status":409,"detail":"queue state not saved: a newer snapshot is already stored","code":"playback.stale_queue_write"}`:                                     fmt.Errorf("update: %w", playback.ErrStaleQueueWrite),
 		`{"type":"urn:altune:problem:playback.queue_position_mismatch","title":"Conflict","status":409,"detail":"queue position not saved: the stored queue does not hold that track at that index","code":"playback.queue_position_mismatch"}`: fmt.Errorf("update: %w", playback.ErrQueuePositionMismatch),
 	} {
 		t.Run(want, func(t *testing.T) {
