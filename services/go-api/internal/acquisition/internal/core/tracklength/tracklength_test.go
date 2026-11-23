@@ -1,0 +1,262 @@
+package tracklength_test
+
+import (
+	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/internal/core/tracklength"
+	"testing"
+)
+
+func upload(seconds float64) ports.AudioCandidate {
+	return ports.AudioCandidate{Duration: seconds, Kind: ports.KindUpload}
+}
+
+func artTrack(seconds float64) ports.AudioCandidate {
+	return ports.AudioCandidate{Duration: seconds, Kind: ports.KindArtTrack}
+}
+
+func fileAccepted(p tracklength.Policy, actual float64) bool {
+	acceptable, _ := p.Judge(upload(0), actual)
+	return acceptable
+}
+
+func TestPolicy_ADisagreementFallsBackToTheLooseWindow(t *testing.T) {
+	p := tracklength.New(232, 276, false)
+
+	if !fileAccepted(p, 276) {
+		t.Error("the resolved album cut must be acceptable when the two lengths disagree")
+	}
+	if !fileAccepted(p, 232) {
+		t.Error("the saved single edit must stay acceptable too — neither claim is proven")
+	}
+	if fileAccepted(p, 600) {
+		t.Error("a 10-minute upload is outside both windows and must still be rejected")
+	}
+}
+
+func TestPolicy_AgreementKeepsTheTightWindow(t *testing.T) {
+	p := tracklength.New(262, 263, false)
+
+	if !fileAccepted(p, 264) {
+		t.Error("ordinary encoding trim must pass a corroborated length")
+	}
+	if fileAccepted(p, 276) {
+		t.Error("a 14s excess against a corroborated length is contamination and must be rejected")
+	}
+}
+
+func TestPolicy_NoResolvedLengthKeepsTheLooseWindow(t *testing.T) {
+	p := tracklength.New(200, 0, false)
+
+	if !fileAccepted(p, 210) {
+		t.Error("without corroboration the 15s window applies")
+	}
+	if fileAccepted(p, 260) {
+		t.Error("60s off is a different recording under any window")
+	}
+}
+
+func TestPolicy_AResolvedLengthAloneKeepsTheLooseWindow(t *testing.T) {
+	p := tracklength.New(0, 200, false)
+
+	if !fileAccepted(p, 214) {
+		t.Error("with only a resolved length, a 14s difference is inside the loose window")
+	}
+	if fileAccepted(p, 216) {
+		t.Error("with only a resolved length, a 16s difference is outside the loose window")
+	}
+}
+
+func TestPolicy_ANearSilentFileIsNeverCloseToAKnownLength(t *testing.T) {
+	if fileAccepted(tracklength.New(0, 200, false), 10) {
+		t.Error("a 10s file must be rejected against a resolved 200s")
+	}
+	if fileAccepted(tracklength.New(200, 0, false), 10) {
+		t.Error("a 10s file must be rejected against a saved 200s")
+	}
+	if fileAccepted(tracklength.New(0, 0, false), 10) {
+		t.Error("a 10s file must be rejected when no length is known")
+	}
+}
+
+func TestPolicy_ASavedLengthAloneIsHeldToTheLooseWindow(t *testing.T) {
+	tests := []struct {
+		name             string
+		expected, actual float64
+		want             bool
+	}{
+		{name: "exact", expected: 226, actual: 226, want: true},
+		{name: "few seconds off", expected: 226, actual: 231, want: true},
+		{name: "within fraction", expected: 300, actual: 318, want: true},
+		{name: "14-minute mix", expected: 226, actual: 840, want: false},
+		{name: "30s preview", expected: 226, actual: 30, want: false},
+		{name: "short track uses absolute slack", expected: 40, actual: 52, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := fileAccepted(tracklength.New(tt.expected, 0, false), tt.actual); got != tt.want {
+				t.Errorf("a %vs file against a saved %vs: accepted = %v, want %v", tt.actual, tt.expected, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPolicy_CorroborationRequiresAgreement(t *testing.T) {
+	tests := []struct {
+		name            string
+		saved, resolved float64
+		want            bool
+	}{
+		{"two conflicting claims are not corroboration", 232, 276, false},
+		{"two independent sources agreeing is exactly what corroboration means", 262, 263, true},
+		{"a single resolved length is one source, not corroboration", 0, 262, false},
+		{"a single saved length is one source, not corroboration", 262, 0, false},
+		{"a missing saved length never agrees with a tiny resolved one", 0, 3, false},
+		{"a missing resolved length never agrees with a tiny saved one", 3, 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tracklength.New(tt.saved, tt.resolved, false).Corroborated(); got != tt.want {
+				t.Errorf("Corroborated() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPolicy_TightensWhenCorroborated(t *testing.T) {
+	loose := tracklength.New(181, 0, false)
+	if !fileAccepted(loose, 193) {
+		t.Error("without a corroborated length, a 12s excess is inside the loose tolerance")
+	}
+
+	tight := tracklength.New(181, 181, false)
+	if fileAccepted(tight, 193) {
+		t.Error("with a corroborated length, a 12s excess is contamination and must be rejected")
+	}
+	if !fileAccepted(tight, 184) {
+		t.Error("a 3s difference is ordinary encoding trim and must still pass")
+	}
+}
+
+func TestPolicy_OneExpectedLengthForEveryReader(t *testing.T) {
+	tests := []struct {
+		name   string
+		policy tracklength.Policy
+		want   float64
+	}{
+		{"catalog length wins over a trusted resolved one", tracklength.New(139, 167, false), 139},
+		{"resolved length when no target length is saved", tracklength.New(0, 140, false), 140},
+		{"target length when the resolved one is doubted", tracklength.New(139, 167, true), 139},
+		{"target length when nothing was resolved", tracklength.New(139, 0, false), 139},
+		{"nothing when the only resolved length is doubted", tracklength.New(0, 167, true), 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.policy.Expected(); got != tt.want {
+				t.Errorf("Expected() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPolicy_ADoubtedResolvedLengthIsNoLength(t *testing.T) {
+	if got := tracklength.New(139, 167, true).Resolved(); got != 0 {
+		t.Errorf("Resolved() = %v, want 0 for a doubted reference", got)
+	}
+	if got := tracklength.New(139, 167, false).Resolved(); got != 167 {
+		t.Errorf("Resolved() = %v, want the trusted 167", got)
+	}
+}
+
+func TestPolicy_ADoubtedResolvedLengthWidensNothing(t *testing.T) {
+	p := tracklength.New(139, 167, true)
+
+	if fileAccepted(p, 167) {
+		t.Error("a 167s file matches only the doubted search pick and must be rejected")
+	}
+}
+
+func TestPolicy_ADoubtedResolvedLengthDoesNotMoveThePreDownloadGate(t *testing.T) {
+	p := tracklength.New(139, 167, true)
+
+	if !p.Plausible(upload(140)) {
+		t.Error("the 140s art track must pass the pre-download gate against the catalog 139s")
+	}
+	if p.Plausible(upload(167)) {
+		t.Error("the 167s upload must fail the pre-download gate against the catalog 139s")
+	}
+	if !fileAccepted(p, 140) || fileAccepted(p, 167) {
+		t.Error("the file-length gate must accept 140s and reject 167s against the catalog 139s")
+	}
+}
+
+func TestPolicy_ThePreDownloadGate(t *testing.T) {
+	tests := []struct {
+		name      string
+		policy    tracklength.Policy
+		candidate ports.AudioCandidate
+		want      bool
+	}{
+		{"a candidate that claims no length passes", tracklength.New(139, 0, false), upload(0), true},
+		{"an upload far from the saved length fails", tracklength.New(139, 0, false), upload(400), false},
+		{"an upload is not held to a resolved length alone", tracklength.New(0, 139, false), upload(400), true},
+		{"a resolved candidate is held to a resolved length alone", tracklength.New(0, 139, false), artTrack(400), false},
+		{"a resolved candidate near the resolved length passes", tracklength.New(0, 139, false), artTrack(141), true},
+		{"a resolved candidate passes when no length is known", tracklength.New(0, 0, false), artTrack(400), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.policy.Plausible(tt.candidate); got != tt.want {
+				t.Errorf("Plausible(%+v) = %v, want %v", tt.candidate, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPolicy_AFileLengthCanBeJudgedOnlyAgainstAKnownLength(t *testing.T) {
+	tests := []struct {
+		name      string
+		policy    tracklength.Policy
+		candidate ports.AudioCandidate
+		want      bool
+	}{
+		{"an upload with a saved length", tracklength.New(139, 0, false), upload(140), true},
+		{"an upload with only a resolved length", tracklength.New(0, 139, false), upload(140), true},
+		{"an upload with no known length", tracklength.New(0, 0, false), upload(140), false},
+		{"a resolved candidate carries its own length", tracklength.New(0, 0, false), artTrack(140), true},
+		{"a resolved candidate without a length and no known length", tracklength.New(0, 0, false), artTrack(0), false},
+		{"an upload with only a doubted resolved length", tracklength.New(0, 139, true), upload(140), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.policy.CanJudge(tt.candidate); got != tt.want {
+				t.Errorf("CanJudge(%+v) = %v, want %v", tt.candidate, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPolicy_AResolvedCandidatesFileIsHeldToItsOwnLengthFirst(t *testing.T) {
+	tests := []struct {
+		name       string
+		policy     tracklength.Policy
+		candidate  ports.AudioCandidate
+		actual     float64
+		acceptable bool
+		held       float64
+	}{
+		{"a file far from the candidate's own length", tracklength.New(0, 0, false), artTrack(200), 230, false, 200},
+		{"a file at the candidate's length with nothing else known", tracklength.New(0, 0, false), artTrack(200), 202, true, 0},
+		{"a file at the candidate's length but far from the saved length", tracklength.New(300, 0, false), artTrack(200), 202, false, 300},
+		{"a file at the candidate's length and the saved length", tracklength.New(205, 0, false), artTrack(200), 202, true, 205},
+		{"a resolved candidate that claims no length is held to the saved length", tracklength.New(205, 0, false), artTrack(0), 260, false, 205},
+		{"an upload is held to the saved length", tracklength.New(205, 0, false), upload(260), 260, false, 205},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			acceptable, held := tt.policy.Judge(tt.candidate, tt.actual)
+			if acceptable != tt.acceptable || held != tt.held {
+				t.Errorf("Judge(%+v, %v) = %v, %v, want %v, %v", tt.candidate, tt.actual, acceptable, held, tt.acceptable, tt.held)
+			}
+		})
+	}
+}

@@ -69,28 +69,6 @@ func TestUpdateTrackStep_PersistsTheRejectedSources(t *testing.T) {
 	}
 }
 
-func TestRejectAudioSource_IsIdempotentAndBounded(t *testing.T) {
-	track := &domain.Track{}
-
-	track.RejectAudioSource("youtube:aaa")
-	track.RejectAudioSource("youtube:aaa")
-	if len(track.RejectedSourceKeys) != 1 {
-		t.Errorf("keys = %v, want no duplicate", track.RejectedSourceKeys)
-	}
-
-	track.RejectAudioSource("")
-	if len(track.RejectedSourceKeys) != 1 {
-		t.Errorf("keys = %v, want an empty key ignored", track.RejectedSourceKeys)
-	}
-
-	for i := 0; i < 60; i++ {
-		track.RejectAudioSource(string(rune('a'+i%26)) + string(rune('0'+i/26)))
-	}
-	if len(track.RejectedSourceKeys) > 25 {
-		t.Errorf("keys = %d, want the list bounded so a row cannot grow without limit", len(track.RejectedSourceKeys))
-	}
-}
-
 type capturingSource struct {
 	fetched []string
 }

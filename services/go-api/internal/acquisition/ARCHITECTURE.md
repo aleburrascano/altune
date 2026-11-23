@@ -192,7 +192,7 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   step_tag.go            TAG — delegates to the tagger, failure swallowed
   step_store.go          STORE — re-validate decode, Store, compensating delete
   step_update_track.go   UPDATE_TRACK — MarkReady + measured duration, or a replace's audio swap
-  duration.go            which window applies — durationWithinTolerance, lengthCorroborated, durationAcceptable (the windows are `domain.LengthTolerance`)
+  duration.go            AcquisitionContext.lengths and ExpectedLength: the saved, resolved and doubted lengths handed to internal/core/tracklength
   registry.go            SourceRegistry — fans Find across sources into per-source slots, routes Fetch by candidate.Source
   rejection.go           RejectionStage, CandidateRejection, recordRejection, summarizeRejections
   source_key.go          sourceKey — the normalized rejected_source_keys identity (acquire.go's mergeSourceKeys builds the exclusion list from it)
@@ -205,6 +205,7 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   job_log.go             jobLog: the recent ring, counters (records are ports.JobRecord)
   job_telemetry.go       the jobReporter context seam and its schedulerJobReporter
   internal/core/domain/admission_error.go admissionError and the admission sentinels (package domain)
+  internal/core/tracklength/ Policy: the expected length, Corroborated, the pre-download Plausible gate, CanJudge and Judge for a downloaded file; which window applies (the windows are `domain.LengthTolerance`) stays inside it
   internal/core/ranking/  Rank (the unplayable, re-recording, identity and veto refusals, the resolved, Topic and Other buckets and their orders, the candidate_evaluated log), UploaderOf, UnrequestedQualifiers — identityScore, metadataRank, featureMatch, qualifierDistance inside it
   audio_ref.go           BuildAudioRef (+ legacy variants), thin wrappers that hand a TrackRef to internal/core/audioref
   retry_admission.go     RetryAdmission, ReacquireAdmission, cooldownGate
@@ -263,7 +264,7 @@ flowchart TD
     EVS --> S1["SEARCH · 4 query variants → dedupe by URL<br/>drop prior-rejected keys"]
     S1 --> S2["SELECT · qualifier veto → rank → ranked list"]
     S2 --> S3["DOWNLOAD · windowed walk, ≤8 attempts"]
-    S3 --> G0{"pre-download duration<br/>candidateDurationPlausible"}
+    S3 --> G0{"pre-download duration<br/>tracklength Plausible"}
     G0 -->|fail| S3
     G0 --> G1["preview fingerprint<br/>first 130s, sources that can"]
     G1 -->|"contradicted"| S3
@@ -351,7 +352,7 @@ caps concurrent downloads across all tracks. In a window the first accepted
 candidate cancels the lower-ranked ones, and results merge in rank order so the
 outcome equals the serial walk. Per candidate:
 
-1. `candidateDurationPlausible` skips, before any bytes move, a candidate whose
+1. `tracklength.Policy.Plausible` skips, before any bytes move, a candidate whose
    search-time duration is outside the expected window (stage `duration`, log
    `acquisition.candidate_skipped_duration`). Resolved and duration-less
    candidates pass.
@@ -693,7 +694,7 @@ claim.
 
 `maxDownloadAttempts = 8` still bounds downloads, but fewer candidates reach it.
 Veto qualifiers, `drm`/`preview` inspection and the pre-download duration check
-(`candidateDurationPlausible`) remove candidates without a download, and the preview
+(`tracklength.Policy.Plausible`) remove candidates without a download, and the preview
 fingerprint (first 130s) rejects a wrong recording for a fraction of a full fetch.
 Rejection memory (`acquisition_rejections`, 30 days) means a retry no longer spends
 its budget re-downloading last time's losers. Windows (`WithVerifyWidth`) pay the
@@ -761,8 +762,8 @@ flowchart TD
 | `identityScore` / `identityMin` | which candidates survive the gate at all | raising the floor drops legitimate sparse-metadata tracks; lowering it admits covers |
 | the `ranking.Rank` bucket orders | which recording enters the library | a tiebreak that looks harmless reorders every equal-identity pair (§7.3) |
 | `metadataRank` weights | non-Topic ordering only — Topic bucketing is upstream of it | tuning views/duration while the real problem is bucket membership |
-| `durationWithinTolerance` (window: `domain.LengthLoose`) | the only F1/F2 defense | tighter rejects legitimate intro/outro trims; looser admits remixes |
-| `lengthCorroborated` | which window every download is measured against | making it laxer silently re-tightens the gate around an unverified saved duration |
+| `tracklength`'s loose window (`domain.LengthLoose`) | the only F1/F2 defense | tighter rejects legitimate intro/outro trims; looser admits remixes |
+| `tracklength.Policy.Corroborated` | which window every download is measured against | making it laxer silently re-tightens the gate around an unverified saved duration |
 | `qualifierDistance` or its sort position | master-vs-variant on the same channel; label-vs-fan upload off it | promoting it above `metadataRank` outside the Topic bucket puts a lyrics re-upload ahead of the label's own master |
 | `DownloadStep.identify`'s tiers | whether a wrong recording can enter the library at all | widening rejection past "AcoustID links the audio to another version or song" makes the underground long tail unacquirable — the failure that forced the first rollback |
 | `sourceKey` | every stored `rejected_source_keys` value | changing the key shape orphans the memory and re-acquire silently toggles again |
@@ -778,7 +779,7 @@ flowchart TD
 
 **Where correctness is concentrated.** The pure, I/O-free functions are where the
 hard logic lives and where change is safest: `internal/core/ranking` in its entirety
-(`identityScore`, `metadataRank`, `featureMatch`, `Rank`), `durationWithinTolerance`, `failureReason`, and `internal/core/audioref`. Each is
+(`identityScore`, `metadataRank`, `featureMatch`, `Rank`), `internal/core/tracklength`, `failureReason`, and `internal/core/audioref`. Each is
 exhaustively testable with plain data. Every gate that has ever failed a user lives
 in one of them — and, per §7.8, every one of them is currently tested only against
 data we wrote ourselves. Put new selection logic in a pure core, add a golden case

@@ -553,15 +553,6 @@ func TestProvenance(t *testing.T) {
 	}
 }
 
-func TestProvenance_OneLengthSourceIsNotCorroborated(t *testing.T) {
-	ac := contextWithLengths(0, 181)
-	ac.DurationVerified = true
-
-	if got := ac.Provenance(); got != domain.ProvenanceBestEffort {
-		t.Errorf("Provenance() = %q, want best_effort - the MB length alone checked against itself proves nothing", got)
-	}
-}
-
 func handoverPipeline(t *testing.T, acquiring domain.TrackId, userId shared.UserId, queue *recordingOrphanQueue, updateTrack *mockStep) (Pipeline, *cancelSensitiveStore, *AcquisitionContext) {
 	t.Helper()
 	store := &cancelSensitiveStore{stored: map[string]bool{}}

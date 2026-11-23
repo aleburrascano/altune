@@ -212,7 +212,7 @@ func judgeIdentity(ac *AcquisitionContext) audiojudge.Identity {
 		MBID:           ac.Identity.MBID,
 		MergedMBIDs:    ac.Identity.MBIDs,
 		Doubted:        ac.Identity.ReferenceDoubted,
-		CatalogLengths: map[string]float64{"catalog": ac.Track.CatalogDuration, "recording": ac.resolvedLength()},
+		CatalogLengths: map[string]float64{"catalog": ac.Track.CatalogDuration, "recording": ac.lengths().Resolved()},
 		Title:          ac.Track.Title,
 		Artist:         ac.Track.Artist,
 	}
