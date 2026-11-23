@@ -1,107 +1,57 @@
-package service
+package service_test
 
 import (
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/service"
+	"altune/go-api/internal/acquisition/sourcekey"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
 	"testing"
 )
 
-func TestSelectStep_Execute(t *testing.T) {
-	step := NewSelectStep()
-	ac := &AcquisitionContext{
-		Track: TrackRef{
-			Title:           "Blinding Lights",
-			Artist:          "The Weeknd",
-			CatalogDuration: 200,
-		},
-		Candidates: []ports.AudioCandidate{
-			{
-				Title:      "Blinding Lights",
-				Channel:    "The Weeknd - Topic",
-				Duration:   200,
-				URL:        "https://youtube.com/watch?v=topic1",
-				Categories: []string{"Music"},
-				ViewCount:  10_000_000,
-			},
-		},
-	}
+const noCandidatePassed = "no candidates passed matching gates"
 
-	_, err := step.Execute(context.Background(), ac, afterSearch{})
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if ac.Selected == nil {
-		t.Fatal("expected ac.Selected to be populated, got nil")
-	}
-	if ac.Selected.URL != "https://youtube.com/watch?v=topic1" {
-		t.Errorf("Selected.URL = %q, want %q", ac.Selected.URL, "https://youtube.com/watch?v=topic1")
-	}
+func blindingLightsRef() service.TrackRef {
+	return service.TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", CatalogDuration: 200}
 }
 
-func TestSelectStep_Execute_NoCandidates(t *testing.T) {
-	step := NewSelectStep()
-	ac := &AcquisitionContext{
-		Track:      TrackRef{Title: "Song", Artist: "Artist", CatalogDuration: 200},
-		Candidates: []ports.AudioCandidate{},
-	}
+func TestSelectStep_Execute(t *testing.T) {
+	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{{
+		Title: "Blinding Lights", Channel: "The Weeknd - Topic", Duration: 200,
+		URL: "https://youtube.com/watch?v=topic1", Categories: []string{"Music"}, ViewCount: 10_000_000,
+	}}}
+	ac := &service.AcquisitionContext{Track: blindingLightsRef()}
 
-	_, err := step.Execute(context.Background(), ac, afterSearch{})
+	err := runPipeline(context.Background(), service.NewSourceRegistry(source), ac)
 
-	if err == nil {
-		t.Fatal("expected error for no candidates passing gates, got nil")
+	if step := failedStep(t, err).Step; step == "search" || step == "select" {
+		t.Fatalf("err = %v, want the pipeline past select", err)
 	}
-	if got := err.Error(); got != "no candidates passed matching gates" {
-		t.Errorf("error = %q, want %q", got, "no candidates passed matching gates")
+	if ac.Selected == nil || ac.Selected.URL != "https://youtube.com/watch?v=topic1" {
+		t.Errorf("Selected = %+v, want %q", ac.Selected, "https://youtube.com/watch?v=topic1")
 	}
 }
 
 func TestSelectStep_Execute_AllCandidatesBelowThreshold(t *testing.T) {
-	step := NewSelectStep()
-	ac := &AcquisitionContext{
-		Track: TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", CatalogDuration: 200},
-		Candidates: []ports.AudioCandidate{
-			{
-				Title:      "Cooking Tutorial Episode 47",
-				Channel:    "CookingChannel",
-				Duration:   200,
-				URL:        "https://youtube.com/watch?v=cook1",
-				Categories: []string{"Howto & Style"},
-				ViewCount:  50_000,
-			},
-		},
-	}
+	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{{
+		Title: "Cooking Tutorial Episode 47", Channel: "CookingChannel", Duration: 200,
+		URL: "https://youtube.com/watch?v=cook1", Categories: []string{"Howto & Style"}, ViewCount: 50_000,
+	}}}
 
-	_, err := step.Execute(context.Background(), ac, afterSearch{})
+	err := runPipeline(context.Background(), service.NewSourceRegistry(source), &service.AcquisitionContext{Track: blindingLightsRef()})
 
-	if err == nil {
-		t.Fatal("expected error when all candidates are below identity threshold, got nil")
+	step := failedStep(t, err)
+	if step.Step != "select" || step.Err.Error() != noCandidatePassed {
+		t.Errorf("err = %v, want select failing with %q", err, noCandidatePassed)
 	}
 }
 
 func TestSelectStep_Name(t *testing.T) {
-	step := NewSelectStep()
-	if got := step.Name(); got != "select" {
+	if got := service.NewSelectStep().Name(); got != "select" {
 		t.Errorf("Name() = %q, want %q", got, "select")
 	}
-}
-
-func searchOutageThenSelect(t *testing.T, down findOnlySource, healthy findOnlySource, replace ReplaceState) (context.Context, error) {
-	t.Helper()
-	ctx := withJobAttempt(context.Background(), 1)
-	ac := &AcquisitionContext{
-		Track:   TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", CatalogDuration: 200},
-		Replace: replace,
-	}
-	if _, err := NewSearchStep(NewSourceRegistry(down, healthy)).Execute(ctx, ac, pipelineStart{}); err != nil {
-		t.Fatalf("search: %v", err)
-	}
-	_, err := NewSelectStep().Execute(ctx, ac, afterSearch{})
-	if err == nil {
-		t.Fatal("expected a select error")
-	}
-	return ctx, err
 }
 
 var (
@@ -109,102 +59,68 @@ var (
 	matchingCandidate = ports.AudioCandidate{Title: "Blinding Lights", Channel: "The Weeknd - Topic", Duration: 200, URL: "https://example.com/match"}
 )
 
-func outageSource() findOnlySource {
-	return findOnlySource{name: "down", err: &acqdomain.SourceUnavailableError{Source: "down", Err: errors.New("429")}}
+func searchOutageThenSelect(t *testing.T, down, healthy *searchSource) error {
+	t.Helper()
+	err := runPipeline(context.Background(), service.NewSourceRegistry(down, healthy), &service.AcquisitionContext{Track: blindingLightsRef()})
+	if step := failedStep(t, err).Step; step != "select" {
+		t.Fatalf("err = %v, want a select error", err)
+	}
+	return err
 }
 
-func TestSelectStep_SearchOutageWithAllRejected_IsRetryable(t *testing.T) {
-	healthy := findOnlySource{name: "healthy", candidates: []ports.AudioCandidate{rejectedCandidate}}
+func healthyButRejected() *searchSource {
+	return &searchSource{name: "healthy", found: []ports.AudioCandidate{rejectedCandidate}}
+}
 
-	ctx, err := searchOutageThenSelect(t, outageSource(), healthy, ReplaceState{})
+func TestSelectStep_SearchOutageWithAllRejected_IsTransient(t *testing.T) {
+	err := searchOutageThenSelect(t, throttled(), healthyButRejected())
 
-	if !acqdomain.IsSourceUnavailable(err) || !willRetry(ctx, err) {
-		t.Fatalf("err = %v, want a retryable source-unavailable failure", err)
+	if !acqdomain.IsSourceUnavailable(err) || service.FailureCodeOf(err) != string(shared.FailureSourceUnavailable) {
+		t.Fatalf("err = %v, want a transient source-unavailable failure", err)
 	}
 }
 
 func TestSearchStep_OutageWithOnlyStoredFileMatch_IsSourceUnavailable(t *testing.T) {
-	healthy := findOnlySource{name: "healthy", candidates: []ports.AudioCandidate{matchingCandidate}}
-	ctx := withJobAttempt(context.Background(), 1)
-	ac := &AcquisitionContext{
-		Track:   TrackRef{Title: "Blinding Lights", Artist: "The Weeknd", CatalogDuration: 200},
-		Replace: ReplaceState{ExcludeKeys: []string{sourceKey(matchingCandidate.URL)}},
+	healthy := &searchSource{name: "healthy", found: []ports.AudioCandidate{matchingCandidate}}
+	ac := &service.AcquisitionContext{
+		Track:   blindingLightsRef(),
+		Replace: service.ReplaceState{ExcludeKeys: []string{sourcekey.SourceKey(matchingCandidate.URL)}},
 	}
 
-	_, err := NewSearchStep(NewSourceRegistry(outageSource(), healthy)).Execute(ctx, ac, pipelineStart{})
+	err := runPipeline(context.Background(), service.NewSourceRegistry(throttled(), healthy), ac)
 
-	if !acqdomain.IsSourceUnavailable(err) {
-		t.Fatalf("err = %v, want source-unavailable", err)
+	if failedStep(t, err).Step != "search" || !acqdomain.IsSourceUnavailable(err) {
+		t.Fatalf("err = %v, want search failing as source-unavailable", err)
 	}
 }
 
 func TestSelectStep_PlainSourceErrorWithAllRejected_StaysPermanent(t *testing.T) {
-	down := findOnlySource{name: "down", err: errors.New("exit 1")}
-	healthy := findOnlySource{name: "healthy", candidates: []ports.AudioCandidate{rejectedCandidate}}
+	err := searchOutageThenSelect(t, &searchSource{name: "down", err: errors.New("exit 1")}, healthyButRejected())
 
-	ctx, err := searchOutageThenSelect(t, down, healthy, ReplaceState{})
-
-	if acqdomain.IsSourceUnavailable(err) || willRetry(ctx, err) {
+	if acqdomain.IsSourceUnavailable(err) || service.FailureCodeOf(err) != string(shared.FailureNoMatchFound) {
 		t.Fatalf("err = %v, want a permanent failure", err)
 	}
 }
 
 func TestSelectStep_HealthyNoCandidates_StaysNoMatchFound(t *testing.T) {
-	healthy := findOnlySource{name: "healthy", candidates: []ports.AudioCandidate{rejectedCandidate}}
+	err := searchOutageThenSelect(t, &searchSource{name: "quiet"}, healthyButRejected())
 
-	ctx, err := searchOutageThenSelect(t, findOnlySource{name: "quiet"}, healthy, ReplaceState{})
-
-	if got := err.Error(); got != "no candidates passed matching gates" {
+	if got := failedStep(t, err).Err.Error(); got != noCandidatePassed {
 		t.Errorf("error = %q", got)
 	}
-	wrapped := &StepError{Step: stepNameSelect, Err: err}
-	if got := failureReason(wrapped); got != "no_match_found" || willRetry(ctx, wrapped) {
-		t.Errorf("failureReason = %q, want permanent no_match_found", got)
+	if got := service.FailureCodeOf(err); got != "no_match_found" || acqdomain.IsSourceUnavailable(err) {
+		t.Errorf("failure code = %q, want permanent no_match_found", got)
 	}
 }
 
-func TestSelectStep_OutageDoesNotLeakIntoNextAttempt(t *testing.T) {
-	healthy := findOnlySource{name: "healthy", candidates: []ports.AudioCandidate{rejectedCandidate}}
-	searchOutageThenSelect(t, outageSource(), healthy, ReplaceState{})
+func TestSelectStep_OutageDoesNotLeakIntoTheNextRun(t *testing.T) {
+	searchOutageThenSelect(t, throttled(), healthyButRejected())
 
-	ctx2 := withJobAttempt(context.Background(), 2)
-	_, err := searchOutageThenSelect(t, findOnlySource{name: "quiet"}, healthy, ReplaceState{})
+	err := searchOutageThenSelect(t, &searchSource{name: "quiet"}, healthyButRejected())
 
-	if acqdomain.IsSourceUnavailable(err) || willRetry(ctx2, err) {
-		t.Fatalf("err = %v, want a permanent failure on attempt 2", err)
+	if acqdomain.IsSourceUnavailable(err) {
+		t.Fatalf("err = %v, want a permanent failure on the next run", err)
 	}
-}
-
-func TestSelectStep_WrappedOutageOnFinalAttempt_DoesNotRetry(t *testing.T) {
-	healthy := findOnlySource{name: "healthy", candidates: []ports.AudioCandidate{rejectedCandidate}}
-	_, err := searchOutageThenSelect(t, outageSource(), healthy, ReplaceState{})
-
-	if willRetry(withJobAttempt(context.Background(), maxAcquisitionAttempts), err) {
-		t.Fatal("willRetry at the final attempt must be false")
-	}
-}
-
-const (
-	finesseRemixURL = "https://music.youtube.com/watch?v=remix"
-	finesseAlbumURL = "https://music.youtube.com/watch?v=album"
-)
-
-func finesseRemix() ports.AudioCandidate {
-	return ports.AudioCandidate{
-		Title: "Finesse (Remix)", URL: finesseRemixURL, Duration: 218,
-		Artists: []string{"Bruno Mars", "Cardi B"}, Album: "Finesse (Remix)", Kind: ports.KindArtTrack,
-	}
-}
-
-func finesseAlbumTrack() ports.AudioCandidate {
-	return ports.AudioCandidate{
-		Title: "Finesse", URL: finesseAlbumURL, Duration: 191,
-		Artists: []string{"Bruno Mars"}, Album: "24K Magic", Kind: ports.KindArtTrack,
-	}
-}
-
-func finesseTrack() TrackRef {
-	return TrackRef{ID: "track-1", Title: "Finesse", Artist: "Bruno Mars", Album: "24K Magic", CatalogDuration: 191}
 }
 
 func TestSearchStep_FirstTierHoldingOnlyTheStoredFileStillOpensTheFallbackTier(t *testing.T) {
@@ -212,16 +128,17 @@ func TestSearchStep_FirstTierHoldingOnlyTheStoredFileStillOpensTheFallbackTier(t
 		Title: "Phone (Interlude)", URL: "https://music.youtube.com/watch?v=TB0z2HVFxEE",
 		Duration: 112, Kind: ports.KindArtTrack, Artists: []string{"SLAYR"},
 	}
-	first := findOnlySource{name: "ytmsearch", candidates: []ports.AudioCandidate{storedArtTrack}}
-	registry := NewSourceRegistry(first).WithFallback(findOnlySource{name: "ytdlp"})
-	ac := &AcquisitionContext{
-		Track:   TrackRef{Title: "Phone (Interlude)", Artist: "SLAYR", CatalogDuration: 128},
-		Replace: ReplaceState{ExcludeKeys: []string{sourceKey(storedArtTrack.URL)}},
+	first := &searchSource{name: "ytmsearch", found: []ports.AudioCandidate{storedArtTrack}}
+	fallback := &searchSource{name: "ytdlp"}
+	ac := &service.AcquisitionContext{
+		Track:   service.TrackRef{Title: "Phone (Interlude)", Artist: "SLAYR", CatalogDuration: 128},
+		Replace: service.ReplaceState{ExcludeKeys: []string{sourcekey.SourceKey(storedArtTrack.URL)}},
 	}
 
-	_, err := NewSearchStep(registry).Execute(context.Background(), ac, pipelineStart{})
+	_ = runPipeline(context.Background(), service.NewSourceRegistry(first).WithFallback(fallback), ac)
 
-	if err == nil || !ac.FallbackSkipped {
-		t.Fatalf("err = %v, FallbackSkipped = %v, want a failed first tier that opens the fallback", err, ac.FallbackSkipped)
+	seen := fallback.seen()
+	if len(seen) != 1 || !seen[0].FallbackOnly {
+		t.Fatalf("fallback requests = %+v, want one fallback-only search after the first tier held only the stored file", seen)
 	}
 }

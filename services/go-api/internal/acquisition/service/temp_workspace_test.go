@@ -1,7 +1,8 @@
-package service
+package service_test
 
 import (
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/service"
 	"context"
 	"os"
 	"path/filepath"
@@ -9,6 +10,8 @@ import (
 	"testing"
 	"time"
 )
+
+const maxLiveTempAge = service.AcquireTimeout + 15*time.Minute
 
 type recordingWorkspace struct {
 	cutoffs []time.Time
@@ -26,7 +29,7 @@ func TestSweepStaleTempDirsSweepsOnceWithLiveJobCutoff(t *testing.T) {
 	fake := &recordingWorkspace{}
 
 	before := time.Now()
-	SweepStaleTempDirs(fake)
+	service.SweepStaleTempDirs(fake)
 	after := time.Now()
 
 	if len(fake.cutoffs) != 1 {
@@ -41,21 +44,21 @@ func TestSweepStaleTempDirsSweepsOnceWithLiveJobCutoff(t *testing.T) {
 func TestSweepStaleTempDirsCutoffSparesJobsStillInsideAcquireTimeout(t *testing.T) {
 	fake := &recordingWorkspace{}
 
-	SweepStaleTempDirs(fake)
+	service.SweepStaleTempDirs(fake)
 
 	if len(fake.cutoffs) != 1 {
 		t.Fatalf("SweepAbandoned calls = %d, want 1", len(fake.cutoffs))
 	}
-	if age := time.Since(fake.cutoffs[0]); age < AcquireTimeout {
-		t.Errorf("cutoff is %v in the past, want at least AcquireTimeout %v", age, AcquireTimeout)
+	if age := time.Since(fake.cutoffs[0]); age < service.AcquireTimeout {
+		t.Errorf("cutoff is %v in the past, want at least AcquireTimeout %v", age, service.AcquireTimeout)
 	}
 }
 
 func TestSweepStaleTempDirsRepeatedCallsNeverMoveCutoffBack(t *testing.T) {
 	fake := &recordingWorkspace{}
 
-	SweepStaleTempDirs(fake)
-	SweepStaleTempDirs(fake)
+	service.SweepStaleTempDirs(fake)
+	service.SweepStaleTempDirs(fake)
 
 	if len(fake.cutoffs) != 2 {
 		t.Fatalf("SweepAbandoned calls = %d, want 2", len(fake.cutoffs))
@@ -83,28 +86,11 @@ func (osWorkspace) Size(path string) (int64, error) {
 
 func (osWorkspace) SweepAbandoned(time.Time) int { return 0 }
 
-func newTestAcquireService(
-	ledger ports.TrackLedger,
-	sources *SourceRegistry,
-	audioStore ports.AudioWriter,
-	opts ...func(*AcquireTrackAudioService),
-) *AcquireTrackAudioService {
-	opts = append([]func(*AcquireTrackAudioService){WithAcquireTempWorkspace(osWorkspace{})}, opts...)
-	return NewAcquireTrackAudioService(ledger, sources, audioStore, opts...)
-}
-
-func newTestDownloadStep(fetcher candidateFetcher, opts ...func(*DownloadStep)) *DownloadStep {
-	opts = append([]func(*DownloadStep){WithStepTempWorkspace(osWorkspace{})}, opts...)
-	return NewDownloadStep(fetcher, opts...)
-}
-
 type callRecordingWorkspace struct {
 	inner ports.TempWorkspace
 
-	mu       sync.Mutex
-	patterns []string
-	created  []string
-	removed  []string
+	mu      sync.Mutex
+	removed []string
 }
 
 func newCallRecordingWorkspace() *callRecordingWorkspace {
@@ -112,14 +98,7 @@ func newCallRecordingWorkspace() *callRecordingWorkspace {
 }
 
 func (r *callRecordingWorkspace) Create(pattern string) (string, error) {
-	dir, err := r.inner.Create(pattern)
-	if err == nil {
-		r.mu.Lock()
-		r.patterns = append(r.patterns, pattern)
-		r.created = append(r.created, dir)
-		r.mu.Unlock()
-	}
-	return dir, err
+	return r.inner.Create(pattern)
 }
 
 func (r *callRecordingWorkspace) Remove(path string) error {
@@ -133,36 +112,10 @@ func (r *callRecordingWorkspace) SweepAbandoned(t time.Time) int { return r.inne
 
 func (r *callRecordingWorkspace) Size(path string) (int64, error) { return r.inner.Size(path) }
 
-func (r *callRecordingWorkspace) createdDirs() []string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return append([]string(nil), r.created...)
-}
-
 func (r *callRecordingWorkspace) removedPaths() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]string(nil), r.removed...)
-}
-
-func (r *callRecordingWorkspace) removedCount(path string) int {
-	n := 0
-	for _, p := range r.removedPaths() {
-		if p == path {
-			n++
-		}
-	}
-	return n
-}
-
-func (r *callRecordingWorkspace) liveDirs() []string {
-	var live []string
-	for _, dir := range r.createdDirs() {
-		if r.removedCount(dir) == 0 {
-			live = append(live, dir)
-		}
-	}
-	return live
 }
 
 func TestCleanupTemp_RemovesTempDirRootOfNestedLayout(t *testing.T) {
@@ -176,7 +129,7 @@ func TestCleanupTemp_RemovesTempDirRootOfNestedLayout(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	CleanupTemp(context.Background(), osWorkspace{}, &AcquisitionContext{TempPath: file, TempDir: root})
+	service.CleanupTemp(context.Background(), osWorkspace{}, &service.AcquisitionContext{TempPath: file, TempDir: root})
 
 	if _, err := os.Stat(root); !os.IsNotExist(err) {
 		t.Errorf("temp root %q should be removed entirely, stat err = %v", root, err)
@@ -194,7 +147,7 @@ func TestCleanupTemp_WithoutTempDirRemovesOnlyFileParent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	CleanupTemp(context.Background(), osWorkspace{}, &AcquisitionContext{TempPath: file})
+	service.CleanupTemp(context.Background(), osWorkspace{}, &service.AcquisitionContext{TempPath: file})
 
 	if _, err := os.Stat(file); !os.IsNotExist(err) {
 		t.Errorf("temp file %q should be removed, stat err = %v", file, err)
@@ -214,7 +167,7 @@ func TestCleanupTemp_WithoutTempDirRemovesOnlyTheFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	CleanupTemp(context.Background(), osWorkspace{}, &AcquisitionContext{TempPath: file})
+	service.CleanupTemp(context.Background(), osWorkspace{}, &service.AcquisitionContext{TempPath: file})
 
 	if _, err := os.Stat(file); !os.IsNotExist(err) {
 		t.Errorf("temp file should be removed, stat err = %v", err)
@@ -225,14 +178,14 @@ func TestCleanupTemp_WithoutTempDirRemovesOnlyTheFile(t *testing.T) {
 }
 
 func TestCleanupTemp_WithoutAWorkspaceRemovesNothingAndDoesNotPanic(t *testing.T) {
-	CleanupTemp(context.Background(), nil, &AcquisitionContext{TempPath: "/x/track.mp3", TempDir: "/x"})
+	service.CleanupTemp(context.Background(), nil, &service.AcquisitionContext{TempPath: "/x/track.mp3", TempDir: "/x"})
 }
 
 func TestCleanupTemp_EmptyTempPathRemovesNothing(t *testing.T) {
 	ws := newCallRecordingWorkspace()
 
-	CleanupTemp(context.Background(), ws, &AcquisitionContext{TempDir: t.TempDir()})
-	CleanupTemp(context.Background(), ws, &AcquisitionContext{})
+	service.CleanupTemp(context.Background(), ws, &service.AcquisitionContext{TempDir: t.TempDir()})
+	service.CleanupTemp(context.Background(), ws, &service.AcquisitionContext{})
 
 	if got := ws.removedPaths(); len(got) != 0 {
 		t.Errorf("Remove calls = %v, want 0", got)
@@ -244,7 +197,7 @@ func TestCleanupTemp_RemovesTempDirNotFileParent(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "altune-acquire-x")
 	file := filepath.Join(root, "Artist", "Album", "track.flac")
 
-	CleanupTemp(context.Background(), ws, &AcquisitionContext{TempPath: file, TempDir: root})
+	service.CleanupTemp(context.Background(), ws, &service.AcquisitionContext{TempPath: file, TempDir: root})
 
 	if got := ws.removedPaths(); len(got) != 1 || got[0] != root {
 		t.Errorf("removed = %v, want exactly [%s]", got, root)
@@ -255,7 +208,7 @@ func TestCleanupTemp_WithoutTempDirRemovesFileParent(t *testing.T) {
 	ws := newCallRecordingWorkspace()
 	file := filepath.Join(t.TempDir(), "sub", "track.mp3")
 
-	CleanupTemp(context.Background(), ws, &AcquisitionContext{TempPath: file})
+	service.CleanupTemp(context.Background(), ws, &service.AcquisitionContext{TempPath: file})
 
 	if got := ws.removedPaths(); len(got) != 1 || got[0] != file {
 		t.Errorf("removed = %v, want exactly [%s]", got, file)

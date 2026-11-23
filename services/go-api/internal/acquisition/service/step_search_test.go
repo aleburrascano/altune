@@ -1,24 +1,63 @@
-package service
+package service_test
 
 import (
+	"altune/go-api/internal/acquisition/internal/adapters/tempfs"
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/ports"
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/acquisition/service"
+	"altune/go-api/internal/acquisition/sourcekey"
+	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
-	"fmt"
 	"strings"
+	"sync"
 	"testing"
 )
 
-type cancellingFinder struct {
-	cancel func()
+type searchSource struct {
+	name   acqdomain.SourceName
+	found  []ports.AudioCandidate
 	err    error
+	onFind func()
+
+	mu       sync.Mutex
+	requests []ports.FindRequest
 }
 
-func (f *cancellingFinder) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
-	f.cancel()
-	return nil, f.err
+func (s *searchSource) Name() acqdomain.SourceName { return s.name }
+
+func (s *searchSource) Find(_ context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
+	s.mu.Lock()
+	s.requests = append(s.requests, req)
+	s.mu.Unlock()
+	if s.onFind != nil {
+		s.onFind()
+	}
+	return s.found, s.err
+}
+
+func (s *searchSource) Fetch(context.Context, ports.AudioCandidate, string) (ports.FetchedAudio, error) {
+	return ports.FetchedAudio{}, errors.New("fetch refused")
+}
+
+func (s *searchSource) seen() []ports.FindRequest {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]ports.FindRequest(nil), s.requests...)
+}
+
+func runPipeline(ctx context.Context, registry *service.SourceRegistry, ac *service.AcquisitionContext) error {
+	steps := service.CoreSteps(registry, nil, &objectStore{objects: map[string]string{}}, nil, nil, tempfs.New(), nil)
+	return service.RunPipeline(ctx, steps, ac)
+}
+
+func failedStep(t *testing.T, err error) *service.StepError {
+	t.Helper()
+	var stepErr *service.StepError
+	if !errors.As(err, &stepErr) {
+		t.Fatalf("err = %v, want a step error", err)
+	}
+	return stepErr
 }
 
 func TestSearchStep_CancelledMidSearch_ReportsCancellation(t *testing.T) {
@@ -33,196 +72,145 @@ func TestSearchStep_CancelledMidSearch_ReportsCancellation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			step := NewSearchStep(&cancellingFinder{cancel: cancel, err: tt.err})
+			source := &searchSource{name: "ytdlp", err: tt.err, onFind: cancel}
 
-			_, err := step.Execute(ctx, &AcquisitionContext{Track: TrackRef{Title: "Song", Artist: "Artist"}}, pipelineStart{})
-			if err == nil {
-				t.Fatal("expected an error from a cancelled search")
+			err := runPipeline(ctx, service.NewSourceRegistry(source), &service.AcquisitionContext{Track: service.TrackRef{Title: "Song", Artist: "Artist"}})
+
+			if failedStep(t, err).Step != "search" {
+				t.Errorf("failed step = %v, want search", err)
 			}
-			if got := failureReason(&StepError{Step: "search", Err: err}); got != string(domain.FailureAcquisitionCancelled) {
-				t.Errorf("failureReason = %q, want %q", got, domain.FailureAcquisitionCancelled)
+			if got := service.FailureCodeOf(err); got != string(shared.FailureAcquisitionCancelled) {
+				t.Errorf("FailureCodeOf = %q, want %q", got, shared.FailureAcquisitionCancelled)
 			}
 		})
 	}
 }
 
 func TestSearchStep_Execute(t *testing.T) {
-	searcher := &fakeAudioSearcher{
-		searchResults: []ports.AudioCandidate{
-			{
-				Title:      "Artist - Song Title",
-				Duration:   200,
-				URL:        "https://youtube.com/watch?v=abc",
-				Channel:    "Artist - Topic",
-				Categories: []string{"Music"},
-				ViewCount:  1_000_000,
-			},
-			{
-				Title:      "Artist - Song Title (Lyrics)",
-				Duration:   201,
-				URL:        "https://youtube.com/watch?v=def",
-				Channel:    "LyricsChannel",
-				Categories: []string{"Music"},
-				ViewCount:  500_000,
-			},
-		},
-	}
-	step := NewSearchStep(searcher)
-	ac := &AcquisitionContext{
-		Track: TrackRef{
-			Title:  "Song Title",
-			Artist: "Artist",
-		},
-	}
+	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{
+		{Title: "Artist - Song Title", Duration: 200, URL: "https://youtube.com/watch?v=abcAAAAAAAA", Channel: "Artist - Topic", Categories: []string{"Music"}, ViewCount: 1_000_000},
+		{Title: "Artist - Song Title (Lyrics)", Duration: 201, URL: "https://youtube.com/watch?v=defAAAAAAAA", Channel: "LyricsChannel", Categories: []string{"Music"}, ViewCount: 500_000},
+	}}
+	ac := &service.AcquisitionContext{Track: service.TrackRef{Title: "Song Title", Artist: "Artist"}}
 
-	_, err := step.Execute(context.Background(), ac, pipelineStart{})
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
+	_ = runPipeline(context.Background(), service.NewSourceRegistry(source), ac)
+
 	if len(ac.Candidates) != 2 {
 		t.Fatalf("expected 2 candidates, got %d", len(ac.Candidates))
 	}
-	if ac.Candidates[0].URL != "https://youtube.com/watch?v=abc" {
-		t.Errorf("candidate[0].URL = %q, want %q", ac.Candidates[0].URL, "https://youtube.com/watch?v=abc")
+	if ac.Candidates[0].URL != "https://youtube.com/watch?v=abcAAAAAAAA" {
+		t.Errorf("candidate[0].URL = %q, want %q", ac.Candidates[0].URL, "https://youtube.com/watch?v=abcAAAAAAAA")
 	}
-	if ac.Candidates[1].URL != "https://youtube.com/watch?v=def" {
-		t.Errorf("candidate[1].URL = %q, want %q", ac.Candidates[1].URL, "https://youtube.com/watch?v=def")
+	if ac.Candidates[1].URL != "https://youtube.com/watch?v=defAAAAAAAA" {
+		t.Errorf("candidate[1].URL = %q, want %q", ac.Candidates[1].URL, "https://youtube.com/watch?v=defAAAAAAAA")
 	}
 }
 
 func TestSearchStep_Execute_NoCandidates(t *testing.T) {
-	searcher := &fakeAudioSearcher{
-		searchResults: []ports.AudioCandidate{},
-	}
-	step := NewSearchStep(searcher)
-	ac := &AcquisitionContext{
-		Track: TrackRef{
-			Title:  "Nonexistent Song",
-			Artist: "Nobody",
-		},
-	}
+	ac := &service.AcquisitionContext{Track: service.TrackRef{Title: "Nonexistent Song", Artist: "Nobody"}}
 
-	_, err := step.Execute(context.Background(), ac, pipelineStart{})
+	err := runPipeline(context.Background(), service.NewSourceRegistry(&searchSource{name: "ytdlp", found: []ports.AudioCandidate{}}), ac)
 
-	if err == nil {
-		t.Fatal("expected error for no candidates, got nil")
-	}
-	if got := err.Error(); got != "no candidates found" {
-		t.Errorf("error = %q, want %q", got, "no candidates found")
+	step := failedStep(t, err)
+	if step.Step != "search" || step.Err.Error() != "no candidates found" {
+		t.Errorf("err = %v, want search failing with %q", err, "no candidates found")
 	}
 }
 
 func TestSearchStep_Execute_SearchError_NoCandidates(t *testing.T) {
-	searcher := &fakeAudioSearcher{
-		searchResults: nil,
-		searchErr:     fmt.Errorf("network timeout"),
-	}
-	step := NewSearchStep(searcher)
-	ac := &AcquisitionContext{
-		Track: TrackRef{
-			Title:  "Some Song",
-			Artist: "Some Artist",
-		},
-	}
+	ac := &service.AcquisitionContext{Track: service.TrackRef{Title: "Some Song", Artist: "Some Artist"}}
 
-	_, err := step.Execute(context.Background(), ac, pipelineStart{})
+	err := runPipeline(context.Background(), service.NewSourceRegistry(&searchSource{name: "ytdlp", err: errors.New("network timeout")}), ac)
 
-	if err == nil {
-		t.Fatal("expected error when all searches fail, got nil")
+	if failedStep(t, err).Step != "search" {
+		t.Fatalf("err = %v, want the search step to fail", err)
 	}
 	if !strings.Contains(err.Error(), "network timeout") {
 		t.Errorf("error = %q, want the underlying source failure preserved for the log", err)
 	}
-	if got := failureReason(&StepError{Step: "search", Err: err}); got != "no_match_found" {
+	if got := service.FailureCodeOf(err); got != "no_match_found" {
 		t.Errorf("client-facing reason = %q, want %q", got, "no_match_found")
 	}
 }
 
 func TestSearchStep_Execute_DeduplicatesByURL(t *testing.T) {
-	searcher := &fakeAudioSearcher{
-		searchResults: []ports.AudioCandidate{
-			{
-				Title:      "Artist - Song",
-				Duration:   200,
-				URL:        "https://youtube.com/watch?v=same",
-				Channel:    "ArtistVEVO",
-				Categories: []string{"Music"},
-			},
-		},
-	}
-	step := NewSearchStep(searcher)
-	ac := &AcquisitionContext{
-		Track: TrackRef{
-			Title:  "Song",
-			Artist: "Artist",
-			Album:  "Album",
-			ISRC:   "US1234567890",
-		},
-	}
+	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{
+		{Title: "Artist - Song", Duration: 200, URL: "https://youtube.com/watch?v=same", Channel: "ArtistVEVO", Categories: []string{"Music"}},
+	}}
+	ac := &service.AcquisitionContext{Track: service.TrackRef{Title: "Song", Artist: "Artist", Album: "Album", ISRC: "US1234567890"}}
 
-	_, err := step.Execute(context.Background(), ac, pipelineStart{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	_ = runPipeline(context.Background(), service.NewSourceRegistry(source), ac)
+
 	if len(ac.Candidates) != 1 {
 		t.Errorf("expected 1 deduplicated candidate, got %d", len(ac.Candidates))
 	}
 }
 
 func TestSearchStep_Name(t *testing.T) {
-	step := NewSearchStep(nil)
-	if got := step.Name(); got != "search" {
+	if got := service.NewSearchStep(nil).Name(); got != "search" {
 		t.Errorf("Name() = %q, want %q", got, "search")
 	}
 }
 
-func searchWithAllExcluded(t *testing.T, down findOnlySource) (context.Context, error) {
+func searchWithAllExcluded(t *testing.T, down *searchSource) error {
 	t.Helper()
 	const url = "https://example.com/a"
-	healthy := findOnlySource{name: "healthy", candidates: []ports.AudioCandidate{{URL: url}}}
-	ctx := withJobAttempt(context.Background(), 1)
-	ac := &AcquisitionContext{Replace: ReplaceState{ExcludeKeys: []string{sourceKey(url)}}}
-	_, err := NewSearchStep(NewSourceRegistry(down, healthy)).Execute(ctx, ac, pipelineStart{})
-	if err == nil {
-		t.Fatal("expected a search error")
+	healthy := &searchSource{name: "healthy", found: []ports.AudioCandidate{{URL: url}}}
+	ac := &service.AcquisitionContext{Replace: service.ReplaceState{ExcludeKeys: []string{sourcekey.SourceKey(url)}}}
+	err := runPipeline(context.Background(), service.NewSourceRegistry(down, healthy), ac)
+	if failedStep(t, err).Step != "search" {
+		t.Fatalf("err = %v, want the search step to fail", err)
 	}
-	return ctx, err
+	return err
 }
 
-func TestSearchStep_OutageWithAllExcluded_IsRetryable(t *testing.T) {
-	ctx, err := searchWithAllExcluded(t, outageSource())
+func throttled() *searchSource {
+	return &searchSource{name: "down", err: &acqdomain.SourceUnavailableError{Source: "down", Err: errors.New("429")}}
+}
 
-	if !acqdomain.IsSourceUnavailable(err) || !willRetry(ctx, err) {
-		t.Fatalf("err = %v, want a retryable source-unavailable failure", err)
+func TestSearchStep_OutageWithAllExcluded_IsTransient(t *testing.T) {
+	err := searchWithAllExcluded(t, throttled())
+
+	if !acqdomain.IsSourceUnavailable(err) || service.FailureCodeOf(err) != string(shared.FailureSourceUnavailable) {
+		t.Fatalf("err = %v, want a transient source-unavailable failure", err)
 	}
 }
 
 func TestSearchStep_PlainSourceErrorWithAllExcluded_StaysPermanent(t *testing.T) {
-	ctx, err := searchWithAllExcluded(t, findOnlySource{name: "down", err: errors.New("exit 1")})
+	err := searchWithAllExcluded(t, &searchSource{name: "down", err: errors.New("exit 1")})
 
-	if acqdomain.IsSourceUnavailable(err) || willRetry(ctx, err) {
-		t.Fatalf("err = %v, want a permanent failure", err)
+	if acqdomain.IsSourceUnavailable(err) || service.FailureCodeOf(err) != string(shared.FailureNoMatchFound) {
+		t.Fatalf("err = %v, want a permanent no-match failure", err)
 	}
 }
 
 func TestSearchStep_HealthyAllExcluded_StaysNoMatchFound(t *testing.T) {
-	ctx, err := searchWithAllExcluded(t, findOnlySource{name: "quiet"})
+	err := searchWithAllExcluded(t, &searchSource{name: "quiet"})
 
-	if got := err.Error(); got != "no candidates found" {
+	if got := failedStep(t, err).Err.Error(); got != "no candidates found" {
 		t.Errorf("error = %q", got)
 	}
-	wrapped := &StepError{Step: stepNameSearch, Err: err}
-	if got := failureReason(wrapped); got != "no_match_found" || willRetry(ctx, wrapped) {
-		t.Errorf("failureReason = %q, want permanent no_match_found", got)
+	if got := service.FailureCodeOf(err); got != "no_match_found" || acqdomain.IsSourceUnavailable(err) {
+		t.Errorf("failure code = %q, want permanent no_match_found", got)
 	}
 }
 
-func TestFindRequestFor_CarriesTheCatalogPins(t *testing.T) {
+func searchedWith(t *testing.T, ac *service.AcquisitionContext) ports.FindRequest {
+	t.Helper()
+	source := &searchSource{name: "ytdlp"}
+	_ = runPipeline(context.Background(), service.NewSourceRegistry(source), ac)
+	seen := source.seen()
+	if len(seen) == 0 {
+		t.Fatal("the source was never searched")
+	}
+	return seen[0]
+}
+
+func TestSearchStep_TheRequestCarriesTheCatalogPins(t *testing.T) {
 	explicit := false
 	sources := []ports.CatalogSource{{Provider: "ytmusic", ExternalID: "dQw4w9WgXcQ"}}
-	ac := &AcquisitionContext{Track: TrackRef{CatalogSources: sources, CatalogExplicit: &explicit}}
 
-	req := findRequestFor(ac)
+	req := searchedWith(t, &service.AcquisitionContext{Track: service.TrackRef{CatalogSources: sources, CatalogExplicit: &explicit}})
 
 	if len(req.CatalogSources) != 1 || req.CatalogSources[0] != sources[0] {
 		t.Errorf("CatalogSources = %v, want %v", req.CatalogSources, sources)
@@ -230,37 +218,38 @@ func TestFindRequestFor_CarriesTheCatalogPins(t *testing.T) {
 	if req.CatalogExplicit == nil || *req.CatalogExplicit {
 		t.Errorf("CatalogExplicit = %v, want false", req.CatalogExplicit)
 	}
-	if bare := findRequestFor(&AcquisitionContext{}); bare.CatalogSources != nil || bare.CatalogExplicit != nil {
+	if bare := searchedWith(t, &service.AcquisitionContext{}); bare.CatalogSources != nil || bare.CatalogExplicit != nil {
 		t.Errorf("unpinned track yields pins: %+v", bare)
 	}
 }
 
-func TestFindRequestFor_HintsTheSearchWithTheResolvedISRCWhenTheTrackHasNone(t *testing.T) {
-	guessed := &AcquisitionContext{Identity: ports.RecordingIdentity{ISRC: "CAA509814003"}}
-	owned := &AcquisitionContext{
-		Track:    TrackRef{ISRC: "USWB19901214"},
+func TestSearchStep_TheRequestHintsTheResolvedISRCWhenTheTrackHasNone(t *testing.T) {
+	guessed := &service.AcquisitionContext{Identity: ports.RecordingIdentity{ISRC: "CAA509814003"}}
+	owned := &service.AcquisitionContext{
+		Track:    service.TrackRef{ISRC: "USWB19901214"},
 		Identity: ports.RecordingIdentity{ISRC: "DEUM71724939"},
 	}
 
-	if got := findRequestFor(guessed).ISRC; got != "CAA509814003" {
+	if got := searchedWith(t, guessed).ISRC; got != "CAA509814003" {
 		t.Errorf("hint = %q, want the resolved ISRC", got)
 	}
-	if got := findRequestFor(owned).ISRC; got != "USWB19901214" {
+	if got := searchedWith(t, owned).ISRC; got != "USWB19901214" {
 		t.Errorf("hint = %q, want the track's own ISRC over the resolver's", got)
 	}
 }
 
 func TestSearchStep_AResolvedFallbackHitDoesNotMarkTheFallbackSkipped(t *testing.T) {
-	first := &stubSource{name: "first", found: []ports.AudioCandidate{candidate("u1")}}
-	fallback := &stubSource{name: "fallback", found: []ports.AudioCandidate{resolvedCandidate("u2")}}
-	step := NewSearchStep(NewSourceRegistry(first).WithFallback(fallback))
-	ac := &AcquisitionContext{Track: TrackRef{Title: "Song Title", Artist: "Artist"}}
+	first := &searchSource{name: "first", found: []ports.AudioCandidate{{Title: "Blinding Lights", URL: "u1"}}}
+	fallback := &searchSource{name: "fallback", found: []ports.AudioCandidate{{Title: "Blinding Lights", URL: "u2", Kind: ports.KindArtTrack}}}
+	ac := &service.AcquisitionContext{Track: service.TrackRef{Title: "Song Title", Artist: "Artist"}}
 
-	if _, err := step.Execute(context.Background(), ac, pipelineStart{}); err != nil {
-		t.Fatalf("Execute: %v", err)
+	err := runPipeline(context.Background(), service.NewSourceRegistry(first).WithFallback(fallback), ac)
+
+	if step := failedStep(t, err).Step; step == "search" {
+		t.Fatalf("failed step = %v, want the search to succeed and a later step to stop the run", err)
 	}
-	if fallback.finds != 1 {
-		t.Fatalf("fallback finds = %d, want 1: the fallback tier ran", fallback.finds)
+	if got := len(fallback.seen()); got != 1 {
+		t.Fatalf("fallback finds = %d, want 1: the fallback tier ran", got)
 	}
 	if ac.FallbackSkipped {
 		t.Error("FallbackSkipped = true, want false: the fallback ran, only its candidate is resolved")

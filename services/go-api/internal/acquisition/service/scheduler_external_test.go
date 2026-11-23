@@ -2,6 +2,8 @@ package service_test
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/acquisition/service"
 	kernel "altune/go-api/internal/shared/kernel"
 	"context"
 	"slices"
@@ -203,6 +205,23 @@ func TestScheduler_AnAddRunsAtOnceWhileUpgradeWorkersAreIdle(t *testing.T) {
 			if !acquirer.has(track) {
 				t.Fatalf("round %d: the add of %s did not run before the poll interval; an idle upgrade worker took its wake-up", round, track)
 			}
+		}
+	})
+}
+
+func TestScheduler_ASelectOutageOnTheFinalRunIsNotRetried(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		track := acquisitiontest.LedgerTrack{TrackSnapshot: pendingBlindingLights()}
+		ledger := acquisitiontest.NewLedger(track)
+		svc := acquireService(ledger, service.NewSourceRegistry(throttled(), healthyButRejected()), &objectStore{objects: map[string]string{}})
+
+		outcome := runOneJobAs(t, svc, track, 3)
+
+		if outcome.released {
+			t.Errorf("outcome = %+v, want the final run settled, not retried", outcome)
+		}
+		if code := persistedCode(t, ledger, track.ID); code != kernel.FailureSourceUnavailable {
+			t.Errorf("persisted failure code = %q, want source_unavailable", code)
 		}
 	})
 }

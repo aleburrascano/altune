@@ -3214,3 +3214,163 @@ func TestMergeSourceKeys_KeepsTheFirstOfEachKeyAndDropsEmpty(t *testing.T) {
 		t.Errorf("merged keys = %v, want %v", got, want)
 	}
 }
+
+type recordingTagger struct{ tags *ports.TrackTags }
+
+func (r *recordingTagger) Tag(_ context.Context, _ string, tags ports.TrackTags) error {
+	*r.tags = tags
+	return nil
+}
+
+type stubSource struct {
+	name     acqdomain.SourceName
+	found    []ports.AudioCandidate
+	fetchErr error
+	finds    int
+}
+
+func (s *stubSource) Name() acqdomain.SourceName { return s.name }
+
+func (s *stubSource) Find(_ context.Context, _ ports.FindRequest) ([]ports.AudioCandidate, error) {
+	s.finds++
+	return s.found, nil
+}
+
+func (s *stubSource) Fetch(_ context.Context, _ ports.AudioCandidate, _ string) (ports.FetchedAudio, error) {
+	return fetchedAt("", s.fetchErr)
+}
+
+func candidate(url string) ports.AudioCandidate {
+	return ports.AudioCandidate{Title: "Blinding Lights", URL: url}
+}
+
+func fetchedAt(path string, err error) (ports.FetchedAudio, error) {
+	return ports.FetchedAudio{Path: path}, err
+}
+
+type osWorkspace struct{}
+
+func (osWorkspace) Create(pattern string) (string, error) {
+	return os.MkdirTemp("", ports.TempDirPrefix+pattern)
+}
+
+func (osWorkspace) Remove(path string) error { return os.RemoveAll(path) }
+
+func (osWorkspace) Size(path string) (int64, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, err
+	}
+	return info.Size(), nil
+}
+
+func (osWorkspace) SweepAbandoned(time.Time) int { return 0 }
+
+func newTestAcquireService(
+	ledger ports.TrackLedger,
+	sources *SourceRegistry,
+	audioStore ports.AudioWriter,
+	opts ...func(*AcquireTrackAudioService),
+) *AcquireTrackAudioService {
+	opts = append([]func(*AcquireTrackAudioService){WithAcquireTempWorkspace(osWorkspace{})}, opts...)
+	return NewAcquireTrackAudioService(ledger, sources, audioStore, opts...)
+}
+
+func newTestDownloadStep(fetcher candidateFetcher, opts ...func(*DownloadStep)) *DownloadStep {
+	opts = append([]func(*DownloadStep){WithStepTempWorkspace(osWorkspace{})}, opts...)
+	return NewDownloadStep(fetcher, opts...)
+}
+
+type callRecordingWorkspace struct {
+	inner ports.TempWorkspace
+
+	mu       sync.Mutex
+	patterns []string
+	created  []string
+	removed  []string
+}
+
+func newCallRecordingWorkspace() *callRecordingWorkspace {
+	return &callRecordingWorkspace{inner: osWorkspace{}}
+}
+
+func (r *callRecordingWorkspace) Create(pattern string) (string, error) {
+	dir, err := r.inner.Create(pattern)
+	if err == nil {
+		r.mu.Lock()
+		r.patterns = append(r.patterns, pattern)
+		r.created = append(r.created, dir)
+		r.mu.Unlock()
+	}
+	return dir, err
+}
+
+func (r *callRecordingWorkspace) Remove(path string) error {
+	r.mu.Lock()
+	r.removed = append(r.removed, path)
+	r.mu.Unlock()
+	return r.inner.Remove(path)
+}
+
+func (r *callRecordingWorkspace) SweepAbandoned(t time.Time) int { return r.inner.SweepAbandoned(t) }
+
+func (r *callRecordingWorkspace) Size(path string) (int64, error) { return r.inner.Size(path) }
+
+func (r *callRecordingWorkspace) createdDirs() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.created...)
+}
+
+func (r *callRecordingWorkspace) removedPaths() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.removed...)
+}
+
+func (r *callRecordingWorkspace) removedCount(path string) int {
+	n := 0
+	for _, p := range r.removedPaths() {
+		if p == path {
+			n++
+		}
+	}
+	return n
+}
+
+func (r *callRecordingWorkspace) liveDirs() []string {
+	var live []string
+	for _, dir := range r.createdDirs() {
+		if r.removedCount(dir) == 0 {
+			live = append(live, dir)
+		}
+	}
+	return live
+}
+
+func outageSource() findOnlySource {
+	return findOnlySource{name: "down", err: &acqdomain.SourceUnavailableError{Source: "down", Err: errors.New("429")}}
+}
+
+const (
+	finesseRemixURL = "https://music.youtube.com/watch?v=remix"
+	finesseAlbumURL = "https://music.youtube.com/watch?v=album"
+)
+
+func finesseRemix() ports.AudioCandidate {
+	return ports.AudioCandidate{
+		Title: "Finesse (Remix)", URL: finesseRemixURL, Duration: 218,
+		Artists: []string{"Bruno Mars", "Cardi B"}, Album: "Finesse (Remix)", Kind: ports.KindArtTrack,
+	}
+}
+
+func finesseAlbumTrack() ports.AudioCandidate {
+	return ports.AudioCandidate{
+		Title: "Finesse", URL: finesseAlbumURL, Duration: 191,
+		Artists: []string{"Bruno Mars"}, Album: "24K Magic", Kind: ports.KindArtTrack,
+	}
+}
+
+func finesseTrack() TrackRef {
+	return TrackRef{ID: "track-1", Title: "Finesse", Artist: "Bruno Mars", Album: "24K Magic", CatalogDuration: 191}
+}
