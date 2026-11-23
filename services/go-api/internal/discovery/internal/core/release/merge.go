@@ -27,6 +27,7 @@ type MergedRelease struct {
 
 func MergeReleases(groups []ReleaseGroup) []MergedRelease {
 	byKey := make(map[string][]*MergedRelease)
+	coverOf := make(map[*MergedRelease]domain.SearchResult)
 	var order []*MergedRelease
 	for _, group := range groups {
 		for _, variant := range group.Releases {
@@ -39,8 +40,9 @@ func MergeReleases(groups []ReleaseGroup) []MergedRelease {
 				m = &MergedRelease{Result: variant, Providers: map[domain.ProviderName]bool{}}
 				byKey[key] = append(byKey[key], m)
 				order = append(order, m)
+				coverOf[m] = variant
 			} else {
-				m.Result = bestOfRelease(m.Result, variant)
+				coverOf[m] = absorbVariant(m, coverOf[m], variant)
 			}
 			for _, s := range variant.Sources {
 				m.Providers[s.Provider] = true
@@ -59,6 +61,13 @@ func MergeReleases(groups []ReleaseGroup) []MergedRelease {
 		out = append(out, *m)
 	}
 	return out
+}
+
+func absorbVariant(m *MergedRelease, cover, variant domain.SearchResult) domain.SearchResult {
+	m.Result = bestOfRelease(m.Result, variant)
+	cover = coverSupplier(cover, variant)
+	m.Result.ImageURL, m.Result.ArtworkSource = cover.ImageURL, cover.ArtworkSource
+	return cover
 }
 
 func compatibleRelease(candidates []*MergedRelease, variant domain.SearchResult) *MergedRelease {
@@ -145,7 +154,6 @@ func bestOfRelease(a, b domain.SearchResult) domain.SearchResult {
 	if a.Explicit == nil {
 		a.Explicit = b.Explicit
 	}
-	a.ImageURL, a.ArtworkSource = bestArtwork(a, b)
 	a.Sources = UnionSources(a.Sources, b.Sources)
 	a.RecordType = mergeReleaseRecordType(a.RecordType, b.RecordType)
 	if !a.ResolutionTier.Stamped {
@@ -161,11 +169,11 @@ func yearOfDate(releaseDate string, fallback int) int {
 	return FirstNonZero(dated.Year, fallback)
 }
 
-func bestArtwork(a, b domain.SearchResult) (url string, source domain.ProviderKey) {
-	if b.ArtworkConfidenceRank() > a.ArtworkConfidenceRank() {
-		return b.ImageURL, b.ArtworkSource
+func coverSupplier(current, variant domain.SearchResult) domain.SearchResult {
+	if variant.ArtworkConfidenceRank() > current.ArtworkConfidenceRank() || current.ImageURL == "" {
+		return variant
 	}
-	return domain.FirstNonEmptyArtwork(a, b)
+	return current
 }
 
 func bestReleaseDate(a, b string) string {
