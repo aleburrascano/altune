@@ -1,6 +1,7 @@
-package domain
+package domain_test
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"testing"
 )
 
@@ -8,13 +9,13 @@ func TestParseResultKind(t *testing.T) {
 	tests := []struct {
 		name    string
 		input   string
-		want    ResultKind
+		want    domain.ResultKind
 		wantErr bool
 	}{
-		{name: "artist", input: "artist", want: ResultKindArtist},
-		{name: "album", input: "album", want: ResultKindAlbum},
-		{name: "track", input: "track", want: ResultKindTrack},
-		{name: "playlist", input: "playlist", want: ResultKindPlaylist},
+		{name: "artist", input: "artist", want: domain.ResultKindArtist},
+		{name: "album", input: "album", want: domain.ResultKindAlbum},
+		{name: "track", input: "track", want: domain.ResultKindTrack},
+		{name: "playlist", input: "playlist", want: domain.ResultKindPlaylist},
 		{name: "invalid", input: "podcast", wantErr: true},
 		{name: "empty", input: "", wantErr: true},
 		{name: "uppercase rejected", input: "Artist", wantErr: true},
@@ -23,7 +24,7 @@ func TestParseResultKind(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := ParseResultKind(tt.input)
+			got, err := domain.ParseResultKind(tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("ParseResultKind(%q) expected error, got %v", tt.input, got)
@@ -42,15 +43,15 @@ func TestParseResultKind(t *testing.T) {
 
 func TestResultKind_String(t *testing.T) {
 	tests := []struct {
-		kind ResultKind
+		kind domain.ResultKind
 		want string
 	}{
-		{ResultKindUnknown, "unknown"},
-		{ResultKindArtist, "artist"},
-		{ResultKindAlbum, "album"},
-		{ResultKindTrack, "track"},
-		{ResultKindPlaylist, "playlist"},
-		{ResultKind(999), "unknown"},
+		{domain.ResultKindUnknown, "unknown"},
+		{domain.ResultKindArtist, "artist"},
+		{domain.ResultKindAlbum, "album"},
+		{domain.ResultKindTrack, "track"},
+		{domain.ResultKindPlaylist, "playlist"},
+		{domain.ResultKind(999), "unknown"},
 	}
 
 	for _, tt := range tests {
@@ -65,13 +66,13 @@ func TestResultKind_String(t *testing.T) {
 
 func TestConfidence_String(t *testing.T) {
 	tests := []struct {
-		conf Confidence
+		conf domain.Confidence
 		want string
 	}{
-		{ConfidenceHigh, "high"},
-		{ConfidenceMedium, "medium"},
-		{ConfidenceLow, "low"},
-		{Confidence(999), "unknown"},
+		{domain.ConfidenceHigh, "high"},
+		{domain.ConfidenceMedium, "medium"},
+		{domain.ConfidenceLow, "low"},
+		{domain.Confidence(999), "unknown"},
 	}
 
 	for _, tt := range tests {
@@ -86,15 +87,15 @@ func TestConfidence_String(t *testing.T) {
 
 func TestEntityResolutionTier_String(t *testing.T) {
 	tests := []struct {
-		tier EntityResolutionTier
+		tier domain.EntityResolutionTier
 		want string
 	}{
-		{EntityResolutionMBID, "mbid"},
-		{EntityResolutionISRC, "isrc"},
-		{EntityResolutionUPC, "upc"},
-		{EntityResolutionBridge, "bridge"},
-		{EntityResolutionNone, "none"},
-		{EntityResolutionTier(999), "unknown"},
+		{domain.EntityResolutionMBID, "mbid"},
+		{domain.EntityResolutionISRC, "isrc"},
+		{domain.EntityResolutionUPC, "upc"},
+		{domain.EntityResolutionBridge, "bridge"},
+		{domain.EntityResolutionNone, "none"},
+		{domain.EntityResolutionTier(999), "unknown"},
 	}
 
 	for _, tt := range tests {
@@ -109,12 +110,12 @@ func TestEntityResolutionTier_String(t *testing.T) {
 
 func TestIsCanonicalContentProvider(t *testing.T) {
 	t.Parallel()
-	if CanonicalContentProvider != ProviderDeezer {
-		t.Fatalf("CanonicalContentProvider = %v, want %v", CanonicalContentProvider, ProviderDeezer)
+	if domain.CanonicalContentProvider != domain.ProviderDeezer {
+		t.Fatalf("CanonicalContentProvider = %v, want %v", domain.CanonicalContentProvider, domain.ProviderDeezer)
 	}
-	for p := ProviderUnknown; p <= ProviderSpotify; p++ {
-		want := p == ProviderDeezer
-		if got := IsCanonicalContentProvider(p); got != want {
+	for p := domain.ProviderUnknown; p <= domain.ProviderSpotify; p++ {
+		want := p == domain.ProviderDeezer
+		if got := domain.IsCanonicalContentProvider(p); got != want {
 			t.Errorf("IsCanonicalContentProvider(%v) = %v, want %v", p, got, want)
 		}
 	}
@@ -122,20 +123,20 @@ func TestIsCanonicalContentProvider(t *testing.T) {
 
 func TestProviderName_String(t *testing.T) {
 	tests := []struct {
-		provider ProviderName
+		provider domain.ProviderName
 		want     string
 	}{
-		{ProviderUnknown, "unknown"},
-		{ProviderDeezer, "deezer"},
-		{ProviderMusicBrainz, "musicbrainz"},
-		{ProviderSoundCloud, "soundcloud"},
-		{ProviderITunes, "itunes"},
-		{ProviderTheAudioDB, "theaudiodb"},
-		{ProviderDiscogs, "discogs"},
-		{ProviderYouTube, "youtube"},
-		{ProviderAppleMusic, "applemusic"},
-		{ProviderSpotify, "spotify"},
-		{ProviderName(999), "unknown"},
+		{domain.ProviderUnknown, "unknown"},
+		{domain.ProviderDeezer, "deezer"},
+		{domain.ProviderMusicBrainz, "musicbrainz"},
+		{domain.ProviderSoundCloud, "soundcloud"},
+		{domain.ProviderITunes, "itunes"},
+		{domain.ProviderTheAudioDB, "theaudiodb"},
+		{domain.ProviderDiscogs, "discogs"},
+		{domain.ProviderYouTube, "youtube"},
+		{domain.ProviderAppleMusic, "applemusic"},
+		{domain.ProviderSpotify, "spotify"},
+		{domain.ProviderName(999), "unknown"},
 	}
 
 	for _, tt := range tests {
@@ -152,18 +153,18 @@ func TestParseProviderName(t *testing.T) {
 	tests := []struct {
 		name    string
 		input   string
-		want    ProviderName
+		want    domain.ProviderName
 		wantErr bool
 	}{
-		{name: "deezer", input: "deezer", want: ProviderDeezer},
-		{name: "musicbrainz", input: "musicbrainz", want: ProviderMusicBrainz},
-		{name: "soundcloud", input: "soundcloud", want: ProviderSoundCloud},
-		{name: "itunes", input: "itunes", want: ProviderITunes},
-		{name: "theaudiodb", input: "theaudiodb", want: ProviderTheAudioDB},
-		{name: "discogs", input: "discogs", want: ProviderDiscogs},
-		{name: "youtube", input: "youtube", want: ProviderYouTube},
-		{name: "applemusic", input: "applemusic", want: ProviderAppleMusic},
-		{name: "spotify", input: "spotify", want: ProviderSpotify},
+		{name: "deezer", input: "deezer", want: domain.ProviderDeezer},
+		{name: "musicbrainz", input: "musicbrainz", want: domain.ProviderMusicBrainz},
+		{name: "soundcloud", input: "soundcloud", want: domain.ProviderSoundCloud},
+		{name: "itunes", input: "itunes", want: domain.ProviderITunes},
+		{name: "theaudiodb", input: "theaudiodb", want: domain.ProviderTheAudioDB},
+		{name: "discogs", input: "discogs", want: domain.ProviderDiscogs},
+		{name: "youtube", input: "youtube", want: domain.ProviderYouTube},
+		{name: "applemusic", input: "applemusic", want: domain.ProviderAppleMusic},
+		{name: "spotify", input: "spotify", want: domain.ProviderSpotify},
 		{name: "invalid", input: "napster", wantErr: true},
 		{name: "empty", input: "", wantErr: true},
 	}
@@ -171,7 +172,7 @@ func TestParseProviderName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := ParseProviderName(tt.input)
+			got, err := domain.ParseProviderName(tt.input)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("ParseProviderName(%q) expected error, got %v", tt.input, got)
@@ -190,15 +191,15 @@ func TestParseProviderName(t *testing.T) {
 
 func TestProviderStatus_String(t *testing.T) {
 	tests := []struct {
-		status ProviderStatus
+		status domain.ProviderStatus
 		want   string
 	}{
-		{ProviderStatusOK, "ok"},
-		{ProviderStatusTimeout, "timeout"},
-		{ProviderStatusError, "error"},
-		{ProviderStatusRateLimited, "rate_limited"},
-		{ProviderStatusCircuitOpen, "circuit_open"},
-		{ProviderStatus(999), "unknown"},
+		{domain.ProviderStatusOK, "ok"},
+		{domain.ProviderStatusTimeout, "timeout"},
+		{domain.ProviderStatusError, "error"},
+		{domain.ProviderStatusRateLimited, "rate_limited"},
+		{domain.ProviderStatusCircuitOpen, "circuit_open"},
+		{domain.ProviderStatus(999), "unknown"},
 	}
 
 	for _, tt := range tests {
@@ -212,10 +213,10 @@ func TestProviderStatus_String(t *testing.T) {
 }
 
 func TestParseResultKind_RoundTrip(t *testing.T) {
-	kinds := []ResultKind{ResultKindArtist, ResultKindAlbum, ResultKindTrack, ResultKindPlaylist}
+	kinds := []domain.ResultKind{domain.ResultKindArtist, domain.ResultKindAlbum, domain.ResultKindTrack, domain.ResultKindPlaylist}
 	for _, k := range kinds {
 		t.Run(k.String(), func(t *testing.T) {
-			parsed, err := ParseResultKind(k.String())
+			parsed, err := domain.ParseResultKind(k.String())
 			if err != nil {
 				t.Fatalf("round-trip failed for %v: %v", k, err)
 			}
@@ -227,14 +228,14 @@ func TestParseResultKind_RoundTrip(t *testing.T) {
 }
 
 func TestParseProviderName_RoundTrip(t *testing.T) {
-	providers := []ProviderName{
-		ProviderDeezer, ProviderMusicBrainz, ProviderSoundCloud,
-		ProviderITunes, ProviderTheAudioDB,
-		ProviderDiscogs, ProviderYouTube,
+	providers := []domain.ProviderName{
+		domain.ProviderDeezer, domain.ProviderMusicBrainz, domain.ProviderSoundCloud,
+		domain.ProviderITunes, domain.ProviderTheAudioDB,
+		domain.ProviderDiscogs, domain.ProviderYouTube,
 	}
 	for _, p := range providers {
 		t.Run(p.String(), func(t *testing.T) {
-			parsed, err := ParseProviderName(p.String())
+			parsed, err := domain.ParseProviderName(p.String())
 			if err != nil {
 				t.Fatalf("round-trip failed for %v: %v", p, err)
 			}
@@ -246,12 +247,12 @@ func TestParseProviderName_RoundTrip(t *testing.T) {
 }
 
 func TestResolutionTierStamp_ZeroValueIsUnstamped(t *testing.T) {
-	var zero ResolutionTierStamp
-	if zero.Stamped || zero.Tier != EntityResolutionNone {
+	var zero domain.ResolutionTierStamp
+	if zero.Stamped || zero.Tier != domain.EntityResolutionNone {
 		t.Errorf("zero stamp = %+v, want unstamped at none", zero)
 	}
-	got := StampResolutionTier(EntityResolutionNone)
-	if !got.Stamped || got.Tier != EntityResolutionNone {
+	got := domain.StampResolutionTier(domain.EntityResolutionNone)
+	if !got.Stamped || got.Tier != domain.EntityResolutionNone {
 		t.Errorf("StampResolutionTier(none) = %+v, want stamped at none", got)
 	}
 }

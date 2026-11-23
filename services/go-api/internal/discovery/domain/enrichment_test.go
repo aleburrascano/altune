@@ -1,11 +1,12 @@
-package domain
+package domain_test
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"testing"
 )
 
 func TestEmptyEnrichment_NonNilCollections(t *testing.T) {
-	e := EmptyEnrichment()
+	e := domain.EmptyEnrichment()
 
 	if e.Genres == nil || e.SecondaryTypes == nil || e.ExternalIDs == nil {
 		t.Fatalf("EmptyEnrichment must have non-nil collections, got %#v", e)
@@ -21,14 +22,14 @@ func TestEmptyEnrichment_NonNilCollections(t *testing.T) {
 func TestMBEnrichment_IsZero(t *testing.T) {
 	tests := []struct {
 		name string
-		e    MBEnrichment
+		e    domain.MBEnrichment
 		want bool
 	}{
-		{"empty", EmptyEnrichment(), true},
-		{"mbid only", MBEnrichment{MBID: "abc", Genres: []string{}, SecondaryTypes: []string{}, ExternalIDs: map[ProviderKey]string{}}, false},
-		{"genres only", MBEnrichment{Genres: []string{"hip hop"}}, false},
-		{"artwork only", MBEnrichment{ArtworkURL: "https://x/y.jpg"}, false},
-		{"year only", MBEnrichment{Year: 2017}, false},
+		{"empty", domain.EmptyEnrichment(), true},
+		{"mbid only", domain.MBEnrichment{MBID: "abc", Genres: []string{}, SecondaryTypes: []string{}, ExternalIDs: map[domain.ProviderKey]string{}}, false},
+		{"genres only", domain.MBEnrichment{Genres: []string{"hip hop"}}, false},
+		{"artwork only", domain.MBEnrichment{ArtworkURL: "https://x/y.jpg"}, false},
+		{"year only", domain.MBEnrichment{Year: 2017}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -40,7 +41,7 @@ func TestMBEnrichment_IsZero(t *testing.T) {
 }
 
 func TestEmptyDeezerEnrichment_NonNilCollections(t *testing.T) {
-	e := EmptyDeezerEnrichment()
+	e := domain.EmptyDeezerEnrichment()
 
 	if e.Genres == nil {
 		t.Fatalf("EmptyDeezerEnrichment must have a non-nil Genres slice, got %#v", e)
@@ -56,19 +57,19 @@ func TestEmptyDeezerEnrichment_NonNilCollections(t *testing.T) {
 func TestDeezerEnrichment_IsZero(t *testing.T) {
 	tests := []struct {
 		name string
-		e    DeezerEnrichment
+		e    domain.DeezerEnrichment
 		want bool
 	}{
-		{"empty", EmptyDeezerEnrichment(), true},
-		{"zero value", DeezerEnrichment{}, true},
-		{"bpm only", DeezerEnrichment{BPM: 120}, false},
-		{"gain only", DeezerEnrichment{Gain: -7.4}, false},
-		{"explicit only", DeezerEnrichment{Explicit: true}, false},
-		{"label only", DeezerEnrichment{Label: "Top Dawg"}, false},
-		{"genres only", DeezerEnrichment{Genres: []string{"rap"}}, false},
-		{"upc only", DeezerEnrichment{UPC: "0602557798456"}, false},
-		{"record type only", DeezerEnrichment{RecordType: "ep"}, false},
-		{"featured excluded from IsZero", DeezerEnrichment{Featured: []FeaturedArtist{{Name: "SZA"}}}, true},
+		{"empty", domain.EmptyDeezerEnrichment(), true},
+		{"zero value", domain.DeezerEnrichment{}, true},
+		{"bpm only", domain.DeezerEnrichment{BPM: 120}, false},
+		{"gain only", domain.DeezerEnrichment{Gain: -7.4}, false},
+		{"explicit only", domain.DeezerEnrichment{Explicit: true}, false},
+		{"label only", domain.DeezerEnrichment{Label: "Top Dawg"}, false},
+		{"genres only", domain.DeezerEnrichment{Genres: []string{"rap"}}, false},
+		{"upc only", domain.DeezerEnrichment{UPC: "0602557798456"}, false},
+		{"record type only", domain.DeezerEnrichment{RecordType: "ep"}, false},
+		{"featured excluded from IsZero", domain.DeezerEnrichment{Featured: []domain.FeaturedArtist{{Name: "SZA"}}}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -80,7 +81,7 @@ func TestDeezerEnrichment_IsZero(t *testing.T) {
 }
 
 func TestEmptyDeezerLyrics_NonNilCollections(t *testing.T) {
-	l := EmptyDeezerLyrics()
+	l := domain.EmptyDeezerLyrics()
 
 	if l.SyncedLines == nil || l.Writers == nil {
 		t.Fatalf("EmptyDeezerLyrics must have non-nil collections, got %#v", l)
@@ -96,13 +97,13 @@ func TestEmptyDeezerLyrics_NonNilCollections(t *testing.T) {
 func TestDeezerLyrics_IsZero(t *testing.T) {
 	tests := []struct {
 		name string
-		l    DeezerLyrics
+		l    domain.DeezerLyrics
 		want bool
 	}{
-		{"empty", EmptyDeezerLyrics(), true},
-		{"plain only", DeezerLyrics{Plain: "line one"}, false},
-		{"synced only", DeezerLyrics{SyncedLines: []SyncedLyricLine{{Line: "line one"}}}, false},
-		{"credits only", DeezerLyrics{Writers: []string{"K. Duckworth"}, Copyright: "© 2017"}, true},
+		{"empty", domain.EmptyDeezerLyrics(), true},
+		{"plain only", domain.DeezerLyrics{Plain: "line one"}, false},
+		{"synced only", domain.DeezerLyrics{SyncedLines: []domain.SyncedLyricLine{{Line: "line one"}}}, false},
+		{"credits only", domain.DeezerLyrics{Writers: []string{"K. Duckworth"}, Copyright: "© 2017"}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

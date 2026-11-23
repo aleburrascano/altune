@@ -1,18 +1,19 @@
-package domain
+package domain_test
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"testing"
 )
 
 func TestFeaturedArtist_IdentityKey(t *testing.T) {
 	tests := []struct {
 		name string
-		fa   FeaturedArtist
+		fa   domain.FeaturedArtist
 		want string
 	}{
-		{"mbid wins", FeaturedArtist{Name: "X", MBID: "abc", DeezerID: 9}, "mb:abc"},
-		{"deezer id next", FeaturedArtist{Name: "X", DeezerID: 9}, "dz:9"},
-		{"name last", FeaturedArtist{Name: "  Kendrick  Lamar "}, "name:kendrick lamar"},
+		{"mbid wins", domain.FeaturedArtist{Name: "X", MBID: "abc", DeezerID: 9}, "mb:abc"},
+		{"deezer id next", domain.FeaturedArtist{Name: "X", DeezerID: 9}, "dz:9"},
+		{"name last", domain.FeaturedArtist{Name: "  Kendrick  Lamar "}, "name:kendrick lamar"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -24,8 +25,8 @@ func TestFeaturedArtist_IdentityKey(t *testing.T) {
 }
 
 func TestFeaturedArtist_ExtrasRoundTrip(t *testing.T) {
-	in := FeaturedArtist{Name: "SZA", MBID: "mb-1", DeezerID: 42, Role: RoleFeatured}
-	got := FeaturedArtistFromMap(in.ToExtrasMap())
+	in := domain.FeaturedArtist{Name: "SZA", MBID: "mb-1", DeezerID: 42, Role: domain.RoleFeatured}
+	got := domain.FeaturedArtistFromMap(in.ToExtrasMap())
 	if got != in {
 		t.Errorf("round trip = %+v, want %+v", got, in)
 	}
@@ -33,17 +34,17 @@ func TestFeaturedArtist_ExtrasRoundTrip(t *testing.T) {
 
 func TestFeaturedArtist_FromMap_JSONNumeric(t *testing.T) {
 	m := map[string]any{"name": "SZA", "deezer_id": float64(42)}
-	got := FeaturedArtistFromMap(m)
+	got := domain.FeaturedArtistFromMap(m)
 	if got.DeezerID != 42 {
 		t.Errorf("DeezerID = %d, want 42", got.DeezerID)
 	}
-	if got.Role != RoleFeatured {
-		t.Errorf("Role = %q, want %q (defaulted)", got.Role, RoleFeatured)
+	if got.Role != domain.RoleFeatured {
+		t.Errorf("Role = %q, want %q (defaulted)", got.Role, domain.RoleFeatured)
 	}
 }
 
 func TestFeaturedArtist_ToExtrasMap_OmitsEmptyIDs(t *testing.T) {
-	m := FeaturedArtist{Name: "X", Role: RoleFeatured}.ToExtrasMap()
+	m := domain.FeaturedArtist{Name: "X", Role: domain.RoleFeatured}.ToExtrasMap()
 	if _, ok := m["mbid"]; ok {
 		t.Error("empty mbid should be omitted")
 	}
@@ -53,17 +54,17 @@ func TestFeaturedArtist_ToExtrasMap_OmitsEmptyIDs(t *testing.T) {
 }
 
 func TestFeaturedArtistsToExtras_EmptyIsNil(t *testing.T) {
-	if got := FeaturedArtistsToExtras(nil); got != nil {
+	if got := domain.FeaturedArtistsToExtras(nil); got != nil {
 		t.Errorf("empty slice should map to nil, got %v", got)
 	}
 }
 
 func TestFeaturedArtistsToExtras_NonEmpty(t *testing.T) {
-	fs := []FeaturedArtist{
-		{Name: "SZA", MBID: "mb-1", Role: RoleFeatured},
-		{Name: "Rihanna", DeezerID: 564, Role: RoleFeatured},
+	fs := []domain.FeaturedArtist{
+		{Name: "SZA", MBID: "mb-1", Role: domain.RoleFeatured},
+		{Name: "Rihanna", DeezerID: 564, Role: domain.RoleFeatured},
 	}
-	got := FeaturedArtistsToExtras(fs)
+	got := domain.FeaturedArtistsToExtras(fs)
 	if len(got) != 2 {
 		t.Fatalf("len = %d, want 2", len(got))
 	}
@@ -76,13 +77,13 @@ func TestFeaturedArtistsToExtras_NonEmpty(t *testing.T) {
 }
 
 func TestFeaturedArtistsFromExtras(t *testing.T) {
-	fs := []FeaturedArtist{
-		{Name: "SZA", MBID: "mb-1", Role: RoleFeatured},
-		{Name: "Rihanna", DeezerID: 564, Role: RoleFeatured},
+	fs := []domain.FeaturedArtist{
+		{Name: "SZA", MBID: "mb-1", Role: domain.RoleFeatured},
+		{Name: "Rihanna", DeezerID: 564, Role: domain.RoleFeatured},
 	}
-	extras := map[string]any{"featured_artists": FeaturedArtistsToExtras(fs)}
+	extras := map[string]any{"featured_artists": domain.FeaturedArtistsToExtras(fs)}
 
-	got := FeaturedArtistsFromExtras(extras)
+	got := domain.FeaturedArtistsFromExtras(extras)
 	if len(got) != 2 {
 		t.Fatalf("len = %d, want 2", len(got))
 	}
@@ -103,7 +104,7 @@ func TestFeaturedArtistsFromExtras_AbsentOrWrongShape(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := FeaturedArtistsFromExtras(tt.extras); got != nil {
+			if got := domain.FeaturedArtistsFromExtras(tt.extras); got != nil {
 				t.Errorf("FeaturedArtistsFromExtras(%v) = %v, want nil", tt.extras, got)
 			}
 		})
@@ -121,7 +122,7 @@ func TestFeaturedArtist_FromMap_NumericVariants(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := FeaturedArtistFromMap(map[string]any{"name": "SZA", "deezer_id": tt.id})
+			got := domain.FeaturedArtistFromMap(map[string]any{"name": "SZA", "deezer_id": tt.id})
 			if got.DeezerID != 42 {
 				t.Errorf("DeezerID = %d, want 42", got.DeezerID)
 			}
@@ -130,12 +131,12 @@ func TestFeaturedArtist_FromMap_NumericVariants(t *testing.T) {
 }
 
 func TestFeaturedArtist_FromMap_NonStringFieldsIgnored(t *testing.T) {
-	got := FeaturedArtistFromMap(map[string]any{"name": 7, "mbid": true, "deezer_id": "42"})
+	got := domain.FeaturedArtistFromMap(map[string]any{"name": 7, "mbid": true, "deezer_id": "42"})
 	if got.Name != "" || got.MBID != "" || got.DeezerID != 0 {
 		t.Errorf("non-string/non-numeric values must be ignored, got %+v", got)
 	}
-	if got.Role != RoleFeatured {
-		t.Errorf("Role = %q, want defaulted %q", got.Role, RoleFeatured)
+	if got.Role != domain.RoleFeatured {
+		t.Errorf("Role = %q, want defaulted %q", got.Role, domain.RoleFeatured)
 	}
 }
 
@@ -160,7 +161,7 @@ func TestFeaturedFromText(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := FeaturedFromText(tt.title, tt.subtitle)
+			got := domain.FeaturedFromText(tt.title, tt.subtitle)
 
 			if len(got) != len(tt.wantNames) {
 				t.Fatalf("got %d credits (%+v), want %d", len(got), got, len(tt.wantNames))
@@ -169,8 +170,8 @@ func TestFeaturedFromText(t *testing.T) {
 				if got[i].Name != want {
 					t.Errorf("credit[%d] = %q, want %q", i, got[i].Name, want)
 				}
-				if got[i].Role != RoleFeatured {
-					t.Errorf("credit[%d].Role = %q, want %q", i, got[i].Role, RoleFeatured)
+				if got[i].Role != domain.RoleFeatured {
+					t.Errorf("credit[%d].Role = %q, want %q", i, got[i].Role, domain.RoleFeatured)
 				}
 			}
 		})

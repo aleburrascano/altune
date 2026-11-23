@@ -1,20 +1,21 @@
-package domain
+package domain_test
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"testing"
 )
 
 func TestNewProviderResult(t *testing.T) {
-	source := SourceRef{Provider: ProviderDeezer, ExternalID: "123", URL: "https://deezer.com/track/123"}
-	r := NewProviderResult(ResultKindTrack, "HUMBLE.", "Kendrick Lamar", "https://img/x.jpg", source, nil)
+	source := domain.SourceRef{Provider: domain.ProviderDeezer, ExternalID: "123", URL: "https://deezer.com/track/123"}
+	r := domain.NewProviderResult(domain.ResultKindTrack, "HUMBLE.", "Kendrick Lamar", "https://img/x.jpg", source, nil)
 
-	if r.Kind != ResultKindTrack {
-		t.Errorf("Kind = %v, want %v", r.Kind, ResultKindTrack)
+	if r.Kind != domain.ResultKindTrack {
+		t.Errorf("Kind = %v, want %v", r.Kind, domain.ResultKindTrack)
 	}
 	if r.Title != "HUMBLE." || r.Subtitle != "Kendrick Lamar" || r.ImageURL != "https://img/x.jpg" {
 		t.Errorf("fields not carried: %+v", r)
 	}
-	if r.Confidence != ConfidenceLow {
+	if r.Confidence != domain.ConfidenceLow {
 		t.Errorf("Confidence = %v, want ConfidenceLow (single-source default)", r.Confidence)
 	}
 	if len(r.Sources) != 1 || r.Sources[0] != source {
@@ -31,7 +32,7 @@ func TestNewProviderResult(t *testing.T) {
 
 func TestNewProviderResult_KeepsProvidedExtras(t *testing.T) {
 	extras := map[string]any{"preview_url": "https://cdn/p.mp3"}
-	r := NewProviderResult(ResultKindAlbum, "DAMN.", "Kendrick Lamar", "", SourceRef{Provider: ProviderITunes}, extras)
+	r := domain.NewProviderResult(domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", "", domain.SourceRef{Provider: domain.ProviderITunes}, extras)
 
 	if r.Extras["preview_url"] != "https://cdn/p.mp3" {
 		t.Errorf("provided extras must be kept, got %+v", r.Extras)
@@ -41,37 +42,37 @@ func TestNewProviderResult_KeepsProvidedExtras(t *testing.T) {
 func TestResultSignature(t *testing.T) {
 	tests := []struct {
 		name string
-		r    SearchResult
+		r    domain.SearchResult
 		want string
 	}{
 		{
 			name: "track with subtitle",
-			r:    SearchResult{Kind: ResultKindTrack, Title: "HUMBLE.", Subtitle: "Kendrick Lamar"},
+			r:    domain.SearchResult{Kind: domain.ResultKindTrack, Title: "HUMBLE.", Subtitle: "Kendrick Lamar"},
 			want: "track|humble|kendrick lamar",
 		},
 		{
 			name: "artist with empty subtitle keeps trailing separator",
-			r:    SearchResult{Kind: ResultKindArtist, Title: "Drake"},
+			r:    domain.SearchResult{Kind: domain.ResultKindArtist, Title: "Drake"},
 			want: "artist|drake|",
 		},
 		{
 			name: "unicode normalization strips diacritics",
-			r:    SearchResult{Kind: ResultKindTrack, Title: "Déjà Vu", Subtitle: "Beyoncé"},
+			r:    domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Déjà Vu", Subtitle: "Beyoncé"},
 			want: "track|deja vu|beyonce",
 		},
 		{
 			name: "bracketed feat segment dropped, ampersand expanded",
-			r:    SearchResult{Kind: ResultKindTrack, Title: "One Dance (feat. Wizkid & Kyla)", Subtitle: "Drake"},
+			r:    domain.SearchResult{Kind: domain.ResultKindTrack, Title: "One Dance (feat. Wizkid & Kyla)", Subtitle: "Drake"},
 			want: "track|one dance|drake",
 		},
 		{
 			name: "zero-value kind uses the unknown prefix",
-			r:    SearchResult{Title: "X"},
+			r:    domain.SearchResult{Title: "X"},
 			want: "unknown|x|",
 		},
 		{
 			name: "fully empty result",
-			r:    SearchResult{},
+			r:    domain.SearchResult{},
 			want: "unknown||",
 		},
 	}
@@ -79,7 +80,7 @@ func TestResultSignature(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := ResultSignature(tt.r)
+			got := domain.ResultSignature(tt.r)
 			if got != tt.want {
 				t.Errorf("ResultSignature() = %q, want %q", got, tt.want)
 			}
@@ -88,35 +89,35 @@ func TestResultSignature(t *testing.T) {
 }
 
 func TestResultSignature_KindDisambiguates(t *testing.T) {
-	album := SearchResult{Kind: ResultKindAlbum, Title: "DAMN.", Subtitle: "Kendrick Lamar"}
-	track := SearchResult{Kind: ResultKindTrack, Title: "DAMN.", Subtitle: "Kendrick Lamar"}
-	if ResultSignature(album) == ResultSignature(track) {
-		t.Errorf("album and track signatures must differ, both = %q", ResultSignature(album))
+	album := domain.SearchResult{Kind: domain.ResultKindAlbum, Title: "DAMN.", Subtitle: "Kendrick Lamar"}
+	track := domain.SearchResult{Kind: domain.ResultKindTrack, Title: "DAMN.", Subtitle: "Kendrick Lamar"}
+	if domain.ResultSignature(album) == domain.ResultSignature(track) {
+		t.Errorf("album and track signatures must differ, both = %q", domain.ResultSignature(album))
 	}
 }
 
 func TestResultSignature_CaseAndSpacingStable(t *testing.T) {
-	a := SearchResult{Kind: ResultKindTrack, Title: "Sicko  Mode", Subtitle: "TRAVIS SCOTT"}
-	b := SearchResult{Kind: ResultKindTrack, Title: "SICKO MODE", Subtitle: "Travis Scott"}
-	if ResultSignature(a) != ResultSignature(b) {
-		t.Errorf("signatures must match: %q vs %q", ResultSignature(a), ResultSignature(b))
+	a := domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Sicko  Mode", Subtitle: "TRAVIS SCOTT"}
+	b := domain.SearchResult{Kind: domain.ResultKindTrack, Title: "SICKO MODE", Subtitle: "Travis Scott"}
+	if domain.ResultSignature(a) != domain.ResultSignature(b) {
+		t.Errorf("signatures must match: %q vs %q", domain.ResultSignature(a), domain.ResultSignature(b))
 	}
 }
 
 func TestSignatureOf(t *testing.T) {
-	derived := SearchResult{Kind: ResultKindTrack, Title: "Hello", Subtitle: "Adele"}
+	derived := domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Hello", Subtitle: "Adele"}
 	stamped := derived
 	stamped.Signature = "stamped-wins"
-	if got := SignatureOf(stamped); got != "stamped-wins" {
+	if got := domain.SignatureOf(stamped); got != "stamped-wins" {
 		t.Errorf("SignatureOf(stamped) = %q, want the stamped value", got)
 	}
-	if got, want := SignatureOf(derived), ResultSignature(derived); got != want {
+	if got, want := domain.SignatureOf(derived), domain.ResultSignature(derived); got != want {
 		t.Errorf("SignatureOf(unstamped) = %q, want derived %q", got, want)
 	}
 }
 
 func TestNewProviderResult_BlanksUnsafeImageURL(t *testing.T) {
-	source := SourceRef{Provider: ProviderDeezer, ExternalID: "1"}
+	source := domain.SourceRef{Provider: domain.ProviderDeezer, ExternalID: "1"}
 	cases := map[string]string{
 		"http":       "http://img.example/a.jpg",
 		"javascript": "javascript:alert(1)",
@@ -126,7 +127,7 @@ func TestNewProviderResult_BlanksUnsafeImageURL(t *testing.T) {
 	}
 	for name, raw := range cases {
 		t.Run(name, func(t *testing.T) {
-			r := NewProviderResult(ResultKindTrack, "T", "S", raw, source, nil)
+			r := domain.NewProviderResult(domain.ResultKindTrack, "T", "S", raw, source, nil)
 			if r.ImageURL != "" {
 				t.Errorf("ImageURL = %q, want empty", r.ImageURL)
 			}
@@ -143,7 +144,7 @@ func TestSafeImageURL(t *testing.T) {
 	}
 	for _, raw := range allowed {
 		t.Run("allowed "+raw, func(t *testing.T) {
-			if got := SafeImageURL(raw); got != raw {
+			if got := domain.SafeImageURL(raw); got != raw {
 				t.Errorf("SafeImageURL(%q) = %q, want it unchanged", raw, got)
 			}
 		})
@@ -161,7 +162,7 @@ func TestSafeImageURL(t *testing.T) {
 	}
 	for name, raw := range refused {
 		t.Run("refused "+name, func(t *testing.T) {
-			if got := SafeImageURL(raw); got != "" {
+			if got := domain.SafeImageURL(raw); got != "" {
 				t.Errorf("SafeImageURL(%q) = %q, want empty", raw, got)
 			}
 		})
@@ -169,14 +170,14 @@ func TestSafeImageURL(t *testing.T) {
 }
 
 func TestNewProviderResult_KeepsHTTPSImageURLAndDoesNotLeakAcrossCalls(t *testing.T) {
-	source := SourceRef{Provider: ProviderDeezer, ExternalID: "1"}
+	source := domain.SourceRef{Provider: domain.ProviderDeezer, ExternalID: "1"}
 
-	valid := NewProviderResult(ResultKindTrack, "T", "S", "https://img.example/a.jpg", source, nil)
+	valid := domain.NewProviderResult(domain.ResultKindTrack, "T", "S", "https://img.example/a.jpg", source, nil)
 	if valid.ImageURL != "https://img.example/a.jpg" {
 		t.Errorf("ImageURL = %q, want the https URL unchanged", valid.ImageURL)
 	}
 
-	unsafe := NewProviderResult(ResultKindTrack, "T", "S", "http://img.example/a.jpg", source, nil)
+	unsafe := domain.NewProviderResult(domain.ResultKindTrack, "T", "S", "http://img.example/a.jpg", source, nil)
 	if unsafe.ImageURL != "" {
 		t.Errorf("ImageURL = %q, want empty after an earlier valid call", unsafe.ImageURL)
 	}
@@ -189,14 +190,14 @@ func TestPutTypedExtras_CarriesAKnownNotExplicit(t *testing.T) {
 		want     any
 		present  bool
 	}{
-		{"known not explicit", BoolPtr(false), false, true},
-		{"known explicit", BoolPtr(true), true, true},
+		{"known not explicit", domain.BoolPtr(false), false, true},
+		{"known explicit", domain.BoolPtr(true), true, true},
 		{"unknown", nil, nil, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			extras := map[string]any{}
-			PutTypedExtras(extras, SearchResult{Explicit: tt.explicit})
+			domain.PutTypedExtras(extras, domain.SearchResult{Explicit: tt.explicit})
 
 			got, present := extras["explicit"]
 			if present != tt.present || got != tt.want {

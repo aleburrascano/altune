@@ -1,24 +1,27 @@
-package domain
+package domain_test
 
-import "testing"
+import (
+	"altune/go-api/internal/discovery/domain"
+	"testing"
+)
 
 func TestRecordTypeVocabulary_ParseFoldsCaseAndPaddingAndMapsOnlyItsOwnWords(t *testing.T) {
-	vocabulary := RecordTypeVocabulary{
-		"album":  RecordTypeAlbum,
-		"single": RecordTypeSingle,
-		"ep":     RecordTypeEP,
+	vocabulary := domain.RecordTypeVocabulary{
+		"album":  domain.RecordTypeAlbum,
+		"single": domain.RecordTypeSingle,
+		"ep":     domain.RecordTypeEP,
 	}
 	tests := []struct {
 		name string
 		raw  string
-		want RecordType
+		want domain.RecordType
 	}{
-		{"exact", "album", RecordTypeAlbum},
-		{"upper", "SINGLE", RecordTypeSingle},
-		{"mixed case", "Ep", RecordTypeEP},
-		{"padded", "  album ", RecordTypeAlbum},
-		{"word outside this provider's vocabulary", "compilation", RecordTypeUnknown},
-		{"empty", "", RecordTypeUnknown},
+		{"exact", "album", domain.RecordTypeAlbum},
+		{"upper", "SINGLE", domain.RecordTypeSingle},
+		{"mixed case", "Ep", domain.RecordTypeEP},
+		{"padded", "  album ", domain.RecordTypeAlbum},
+		{"word outside this provider's vocabulary", "compilation", domain.RecordTypeUnknown},
+		{"empty", "", domain.RecordTypeUnknown},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -44,7 +47,7 @@ func TestValidISRC_ReturnsTheCanonicalFormOrEmpty(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := ValidISRC(tt.raw); got != tt.want {
+			if got := domain.ValidISRC(tt.raw); got != tt.want {
 				t.Errorf("ValidISRC(%q) = %q, want %q", tt.raw, got, tt.want)
 			}
 		})
@@ -52,18 +55,18 @@ func TestValidISRC_ReturnsTheCanonicalFormOrEmpty(t *testing.T) {
 }
 
 func TestPutTypedExtras_ProjectsTheTypedFieldsOntoTheirWireKeys(t *testing.T) {
-	r := SearchResult{
-		RecordType:    RecordTypeEP,
+	r := domain.SearchResult{
+		RecordType:    domain.RecordTypeEP,
 		ISRC:          "GBARL1600460",
 		UPC:           "724384960650",
 		Duration:      222,
-		TrackPosition: TrackPosition{Disc: 2, Track: 4},
-		Explicit:      BoolPtr(true),
-		ArtworkPath:   ArtworkPathIdentity,
+		TrackPosition: domain.TrackPosition{Disc: 2, Track: 4},
+		Explicit:      domain.BoolPtr(true),
+		ArtworkPath:   domain.ArtworkPathIdentity,
 	}
 
 	extras := map[string]any{}
-	PutTypedExtras(extras, r)
+	domain.PutTypedExtras(extras, r)
 
 	want := map[string]any{
 		"record_type":  "ep",
@@ -88,17 +91,17 @@ func TestPutTypedExtras_ProjectsTheTypedFieldsOntoTheirWireKeys(t *testing.T) {
 func TestArtworkConfidenceRank_ReadsTheTypedPath(t *testing.T) {
 	tests := []struct {
 		name string
-		path ArtworkPath
+		path domain.ArtworkPath
 		want int
 	}{
-		{"durable identity", ArtworkPathDurableIdentity, ArtworkRankIdentity},
-		{"identity", ArtworkPathIdentity, ArtworkRankIdentity},
-		{"name search", ArtworkPathName, ArtworkRankProvider},
+		{"durable identity", domain.ArtworkPathDurableIdentity, domain.ArtworkRankIdentity},
+		{"identity", domain.ArtworkPathIdentity, domain.ArtworkRankIdentity},
+		{"name search", domain.ArtworkPathName, domain.ArtworkRankProvider},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := SearchResult{ImageURL: "https://img/x.jpg", ArtworkPath: tt.path}
-			if tt.path == ArtworkPathName {
+			r := domain.SearchResult{ImageURL: "https://img/x.jpg", ArtworkPath: tt.path}
+			if tt.path == domain.ArtworkPathName {
 				r.ISRC = "GBARL1600460"
 			}
 			if got := r.ArtworkConfidenceRank(); got != tt.want {

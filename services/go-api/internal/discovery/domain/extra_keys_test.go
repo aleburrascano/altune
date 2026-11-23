@@ -1,6 +1,7 @@
-package domain
+package domain_test
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -20,14 +21,14 @@ func TestStringExtra(t *testing.T) {
 	}{
 		{"nil map", nil, ""},
 		{"missing key", map[string]any{"other": "x"}, ""},
-		{"string value", map[string]any{ExtraAlbum: "123"}, "123"},
-		{"empty string", map[string]any{ExtraAlbum: ""}, ""},
-		{"non-string value", map[string]any{ExtraAlbum: 123}, ""},
-		{"nil value", map[string]any{ExtraAlbum: nil}, ""},
+		{"string value", map[string]any{domain.ExtraAlbum: "123"}, "123"},
+		{"empty string", map[string]any{domain.ExtraAlbum: ""}, ""},
+		{"non-string value", map[string]any{domain.ExtraAlbum: 123}, ""},
+		{"nil value", map[string]any{domain.ExtraAlbum: nil}, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := StringExtra(c.extras, ExtraAlbum); got != c.want {
+			if got := domain.StringExtra(c.extras, domain.ExtraAlbum); got != c.want {
 				t.Fatalf("got %q, want %q", got, c.want)
 			}
 		})
@@ -96,19 +97,19 @@ func TestSearchResult_SharedMBIDFieldStaysRemoved(t *testing.T) {
 }
 
 func TestSearchResult_IdentityMBIDIsTheKindsOwnTypedField(t *testing.T) {
-	typed := SearchResult{RecordingMBID: "rec", ReleaseMBID: "rel", ReleaseGroupMBID: "rg", ArtistMBID: "art"}
+	typed := domain.SearchResult{RecordingMBID: "rec", ReleaseMBID: "rel", ReleaseGroupMBID: "rg", ArtistMBID: "art"}
 	cases := []struct {
 		name         string
-		kind         ResultKind
-		result       SearchResult
+		kind         domain.ResultKind
+		result       domain.SearchResult
 		wantIdentity string
 		wantEntity   string
 	}{
-		{"track is its recording", ResultKindTrack, typed, "rec", "rec"},
-		{"album is its release group, never its release", ResultKindAlbum, typed, "rg", "rg"},
-		{"artist is its artist", ResultKindArtist, typed, "art", "art"},
-		{"album with only a release has no identity but keeps the release for lookups", ResultKindAlbum, SearchResult{ReleaseMBID: "rel"}, "", "rel"},
-		{"track never borrows a release", ResultKindTrack, SearchResult{ReleaseMBID: "rel"}, "", ""},
+		{"track is its recording", domain.ResultKindTrack, typed, "rec", "rec"},
+		{"album is its release group, never its release", domain.ResultKindAlbum, typed, "rg", "rg"},
+		{"artist is its artist", domain.ResultKindArtist, typed, "art", "art"},
+		{"album with only a release has no identity but keeps the release for lookups", domain.ResultKindAlbum, domain.SearchResult{ReleaseMBID: "rel"}, "", "rel"},
+		{"track never borrows a release", domain.ResultKindTrack, domain.SearchResult{ReleaseMBID: "rel"}, "", ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
