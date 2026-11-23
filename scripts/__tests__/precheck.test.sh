@@ -676,30 +676,25 @@ forbid_log "govulncheck"
 run_with_tools
 expect_log "govulncheck ./..."
 
-add_react_doctor_stubs() {
-    (
-        cd "$WORK/repo" || exit 1
-        mkdir -p client/scripts scripts/ci client/src
-        printf 'import { appendFileSync } from "node:fs";\nappendFileSync(process.env.TOOLS_LOG, "changed-lines " + process.argv.slice(2).join(" ") + "\\n");\n' >client/scripts/react-doctor-changed-lines.mjs
-        printf 'echo whole-tree >>"$TOOLS_LOG"\n' >scripts/ci/test-mobile-react-doctor.sh
-    )
-    commit_as_base
+add_npm_stub() {
+    printf '#!/usr/bin/env bash\nprintf "npm %%s\\n" "$*" >>"%s/tools.log"\n' "$WORK" >"$WORK/bin/npm"
+    chmod +x "$WORK/bin/npm"
 }
 
-CASE="a client-only change runs only the changed-lines react-doctor, scanning for itself"
+CASE="a client change runs react-doctor and fallow over the whole client"
 new_repo
 add_mobile_stubs
-add_react_doctor_stubs
+add_npm_stub
 (
     cd "$WORK/repo" || exit 1
+    mkdir -p client/src
     printf 'export const x = 1;\n' >client/src/x.ts
     git add -A
     git commit -qm "client change"
 )
-TOOLS_LOG="$WORK/tools.log" run_script_with_stubs
-expect_log "changed-lines "
-forbid_log "whole-tree"
-forbid_log "doctor-report.json"
+run_script_with_stubs
+expect_log "npm run --silent react-doctor"
+expect_log "npm run --silent fallow"
 
 add_module_spec_root() {
     (

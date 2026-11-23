@@ -122,6 +122,7 @@ const resultSignatureIsASearchResultIdentityNotACryptoSignature = {
 };
 
 export default {
+  surfaces: { ciFailure: { includeTags: ['design'] } },
   rules: {
     'react-doctor/rn-no-raw-text': 'off',
     'react-doctor/rn-prefer-reanimated': 'off',
