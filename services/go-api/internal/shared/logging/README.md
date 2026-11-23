@@ -1,1 +1,1 @@
-`logging` owns how logs are formatted, redacted and kept in a ring buffer.
+`logging` owns how logs are formatted, keyed, redacted and kept in a ring buffer. Every log key a line carries is named in `keys.go`, and the correlation and trace ids are stamped on each line from its context.
