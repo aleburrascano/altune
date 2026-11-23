@@ -3,9 +3,9 @@ package logging
 import (
 	"context"
 	"log/slog"
-)
 
-const correlationAttrKey = "corr_id"
+	"go.opentelemetry.io/otel/trace"
+)
 
 type correlationIDKey struct{}
 
@@ -19,7 +19,7 @@ func CorrelationIDFromContext(ctx context.Context) string {
 }
 
 func CorrelationAttr(ctx context.Context) slog.Attr {
-	return slog.String(correlationAttrKey, CorrelationIDFromContext(ctx))
+	return slog.String(KeyCorrelationID, CorrelationIDFromContext(ctx))
 }
 
 type correlationHandler struct {
@@ -35,9 +35,13 @@ func (h *correlationHandler) Enabled(ctx context.Context, level slog.Level) bool
 }
 
 func (h *correlationHandler) Handle(ctx context.Context, r slog.Record) error {
-	if id := CorrelationIDFromContext(ctx); id != "" && !recordHasKey(r, correlationAttrKey) {
+	if id := CorrelationIDFromContext(ctx); id != "" && !recordHasKey(r, KeyCorrelationID) {
 		r = r.Clone()
-		r.AddAttrs(slog.String(correlationAttrKey, id))
+		r.AddAttrs(slog.String(KeyCorrelationID, id))
+	}
+	if span := trace.SpanContextFromContext(ctx); span.HasTraceID() && !recordHasKey(r, KeyTraceID) {
+		r = r.Clone()
+		r.AddAttrs(slog.String(KeyTraceID, span.TraceID().String()))
 	}
 	return h.inner.Handle(ctx, r)
 }

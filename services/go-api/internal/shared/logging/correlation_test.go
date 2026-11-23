@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 func TestCorrelationHandler_StampsEveryContextLog(t *testing.T) {
@@ -106,4 +108,68 @@ func TestCorrelationAttr_KeepsEmptyIDOnTheRecord(t *testing.T) {
 		return
 	}
 	t.Fatal("expected audit.no_request captured")
+}
+
+const sampleTraceID = "4bf92f3577b34da6a3ce929d0e0e4736"
+
+func contextInSpan(t *testing.T) context.Context {
+	t.Helper()
+	traceID, err := trace.TraceIDFromHex(sampleTraceID)
+	if err != nil {
+		t.Fatalf("trace id: %v", err)
+	}
+	spanID, err := trace.SpanIDFromHex("00f067aa0ba902b7")
+	if err != nil {
+		t.Fatalf("span id: %v", err)
+	}
+	span := trace.NewSpanContext(trace.SpanContextConfig{TraceID: traceID, SpanID: spanID, TraceFlags: trace.FlagsSampled})
+	return trace.ContextWithSpanContext(context.Background(), span)
+}
+
+func TestCorrelationHandler_StampsTheTraceIDOfTheSpanInContext(t *testing.T) {
+	logger, ring := newCaptureLogger(t)
+
+	logger.InfoContext(contextInSpan(t), "traced.event")
+
+	snap := ring.Snapshot()
+	if len(snap) != 1 || snap[0].Attrs["trace_id"] != sampleTraceID {
+		t.Fatalf("records = %+v, want one carrying trace_id %s", snap, sampleTraceID)
+	}
+}
+
+func TestCorrelationHandler_LeavesTraceIDOffOutsideASpan(t *testing.T) {
+	logger, ring := newCaptureLogger(t)
+
+	logger.InfoContext(context.Background(), "untraced.event")
+
+	snap := ring.Snapshot()
+	if len(snap) != 1 {
+		t.Fatalf("records = %+v, want one", snap)
+	}
+	if got, ok := snap[0].Attrs["trace_id"]; ok {
+		t.Errorf("trace_id = %q on a log outside any span, want none", got)
+	}
+}
+
+func TestCorrelationHandler_StampsTraceAndCorrelationIDsTogether(t *testing.T) {
+	logger, ring := newCaptureLogger(t)
+	ctx := logging.WithCorrelationID(contextInSpan(t), "corr-both")
+
+	logger.InfoContext(ctx, "both.ids")
+
+	snap := ring.Snapshot()
+	if len(snap) != 1 || snap[0].Attrs["trace_id"] != sampleTraceID || snap[0].Attrs["corr_id"] != "corr-both" {
+		t.Fatalf("records = %+v, want trace_id %s and corr_id corr-both", snap, sampleTraceID)
+	}
+}
+
+func TestCorrelationHandler_KeepsAnExplicitTraceID(t *testing.T) {
+	logger, _, out := setupLogger(t, "info", false)
+
+	logger.InfoContext(contextInSpan(t), "msg", "trace_id", "explicit")
+
+	line := out()
+	if got := strings.Count(line, `"trace_id"`); got != 1 || !strings.Contains(line, `"trace_id":"explicit"`) {
+		t.Errorf("written line has %d trace_id keys, want exactly one holding explicit: %s", got, line)
+	}
 }
