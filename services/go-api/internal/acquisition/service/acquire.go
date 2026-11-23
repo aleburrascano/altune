@@ -5,6 +5,7 @@ import (
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/internal/core/rejectionlog"
 	"altune/go-api/internal/acquisition/service/upgrade"
 	"altune/go-api/internal/shared/events"
 	shared "altune/go-api/internal/shared/kernel"
@@ -575,7 +576,7 @@ func (s *AcquireTrackAudioService) reportAcquireFailure(ctx context.Context, use
 }
 
 func rejectionAwareReason(ctx context.Context, trackId shared.TrackId, err error, ac *AcquisitionContext) string {
-	summary := summarizeRejections(ac.Rejections)
+	summary := rejectionlog.Summary(ac.Rejections)
 	if summary == "" {
 		return failureReason(err)
 	}

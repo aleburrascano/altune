@@ -987,7 +987,10 @@ func TestExecute_ASearchLengthRejectionIsNotRemembered(t *testing.T) {
 		t.Fatalf("download attempts = %v, the search-length candidate must never be downloaded", searcher.downloadURLs)
 	}
 	if len(store.recorded) != 1 || store.recorded[0].Reason != "duration" || store.recorded[0].SourceKey != sourceKey(downloaded.URL) {
-		t.Errorf("recorded = %+v, want only the probed duration rejection for %q", store.recorded, downloaded.URL)
+		t.Fatalf("recorded = %+v, want only the probed duration rejection for %q", store.recorded, downloaded.URL)
+	}
+	if got := store.recorded[0].TrackID; got != track.ID.String() {
+		t.Errorf("recorded track = %q, want the run's own track %q so the next run finds the row", got, track.ID.String())
 	}
 }
 

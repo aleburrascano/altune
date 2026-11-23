@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/acquisition/internal/core/judge"
 	"altune/go-api/internal/acquisition/internal/core/judgeshadow"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/internal/core/rejectionlog"
 	"altune/go-api/internal/acquisition/service/upgrade"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/redact"
@@ -258,7 +259,7 @@ type AcquisitionContext struct {
 	BestEffort        bool
 	SourceFormat      ports.SourceFormat
 
-	Rejections []CandidateRejection
+	Rejections []rejectionlog.Entry
 	Attempted  []AttemptedCandidate
 
 	Replace ReplaceState
