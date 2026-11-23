@@ -12,7 +12,7 @@
     "lint": "eslint .",
     "test": "jest",
     "fallow": "fallow dead-code --baseline baselines/fallow-baseline.json --fail-on-issues && node scripts/fallow-baseline-stale.mjs && fallow dupes --fail-on-issues",
-    "doctor:ci": "react-doctor --no-score --json --json-compact"
+    "react-doctor": "react-doctor --scope full --yes --no-score --blocking warning --verbose"
   },
   "prettier": {
     "printWidth": 100,

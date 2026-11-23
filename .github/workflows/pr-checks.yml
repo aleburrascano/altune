@@ -133,7 +133,7 @@ jobs:
         run: npm ci
       - name: react-doctor
         working-directory: client
-        run: bash ../scripts/ci/test-mobile-react-doctor.sh
+        run: npm run react-doctor
       - name: dead code and duplication (fallow)
         working-directory: client
         run: npm run fallow

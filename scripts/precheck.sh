@@ -265,7 +265,7 @@ if touches '^client/'; then
     coverage_args=(); [ -n "$src" ] && mapfile -t coverage_args < <(thresholded_coverage_args "$src")
     [ -n "$src" ] && jest_check "mobile tests (related)" $m npx jest "${coverage_args[@]}" --ci --passWithNoTests --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$HOME/.cache/altune-ci/jest" --findRelatedTests $src
     check "mobile fallow" $m npm run --silent fallow
-    check "mobile react-doctor (changed lines)" $m node scripts/react-doctor-changed-lines.mjs "$base"
+    check "mobile react-doctor" $m npm run --silent react-doctor
   elif [ -n "$(command -v npx)" ]; then
     echo "SKIP  mobile: no node_modules here or in $main_tree"; missing=1
   fi

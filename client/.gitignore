@@ -23,6 +23,4 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 
-doctor-report.json
-
 dist-ota/
