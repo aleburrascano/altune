@@ -1,11 +1,12 @@
 package handler
 
 import (
+	shareddomain "altune/go-api/internal/shared/domain"
 	"altune/go-api/internal/shared/httputil"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"regexp"
 	"time"
@@ -14,8 +15,7 @@ import (
 )
 
 const (
-	requestCodeAuthFailureInvalidBody = "auth_failure.invalid_body"
-	maxAuthFailureBodyBytes           = 512
+	maxAuthFailureBodyBytes = 512
 )
 
 var DefaultAuthFailureLimit = RequestLimit{Max: 10, Window: time.Minute}
@@ -65,7 +65,7 @@ func decodeAuthFailure(r *http.Request) (reason, appVersion string, ok bool) {
 func (h *DiscoveryHandler) handleAuthFailure(w http.ResponseWriter, r *http.Request) {
 	reason, appVersion, ok := decodeAuthFailure(r)
 	if !ok {
-		httputil.BadRequestCode(w, requestCodeAuthFailureInvalidBody, "invalid request body")
+		httputil.HandleServiceError(w, r, shareddomain.NewError(shareddomain.CodeAuthFailureInvalidBody, "invalid request body"))
 		return
 	}
 
@@ -75,8 +75,7 @@ func (h *DiscoveryHandler) handleAuthFailure(w http.ResponseWriter, r *http.Requ
 	}
 
 	if err := h.eventSvc.RecordAnonymousAuthFailure(r.Context(), reason, appVersion); err != nil {
-		slog.ErrorContext(r.Context(), "record anonymous auth failure failed", "reason", reason, "error", err)
-		httputil.HandleServiceError(w, r, err)
+		httputil.HandleServiceError(w, r, fmt.Errorf("record anonymous auth failure %q: %w", reason, err))
 		return
 	}
 

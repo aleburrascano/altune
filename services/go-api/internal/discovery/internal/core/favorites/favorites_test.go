@@ -2,11 +2,11 @@ package favorites_test
 
 import (
 	"altune/go-api/internal/discovery"
+	shareddomain "altune/go-api/internal/shared/domain"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"slices"
 	"strings"
 	"testing"
@@ -19,12 +19,6 @@ const (
 	everyResultOnOnePage     = 50
 	liftQuery                = "no idea"
 )
-
-type codedError interface {
-	error
-	HTTPStatus() int
-	ErrorCode() string
-}
 
 func noIdeaBy(artist string, popularity float64) discovery.SearchResult {
 	return discovery.DeezerTrack("No Idea", artist, popularity)
@@ -172,14 +166,14 @@ func TestFavoritesService_AddRejectsEmptyTitle(t *testing.T) {
 	}
 }
 
-func assertTypedError(t *testing.T, err error, wantStatus int, wantCode string) {
+func assertTypedError(t *testing.T, err error, wantKind shareddomain.Kind, wantCode string) {
 	t.Helper()
-	var typed codedError
+	var typed *shareddomain.CodedError
 	if !errors.As(err, &typed) {
-		t.Fatalf("err = %v, want a typed %d %s", err, wantStatus, wantCode)
+		t.Fatalf("err = %v, want a typed %s %s", err, wantKind, wantCode)
 	}
-	if typed.HTTPStatus() != wantStatus || typed.ErrorCode() != wantCode {
-		t.Fatalf("err = %d %s, want %d %s", typed.HTTPStatus(), typed.ErrorCode(), wantStatus, wantCode)
+	if typed.Code().Kind() != wantKind || typed.Code().String() != wantCode {
+		t.Fatalf("err = %s %s, want %s %s", typed.Code().Kind(), typed.Code(), wantKind, wantCode)
 	}
 }
 
@@ -188,7 +182,7 @@ func assertRejectedWithoutWriting(t *testing.T, fav discovery.Favorite) {
 	repo := &discovery.FakeFavoritesRepo{}
 	err := discovery.NewFavoritesService(repo).Add(context.Background(), shared.UserId{}, fav)
 
-	assertTypedError(t, err, http.StatusBadRequest, "discovery.invalid_favorite")
+	assertTypedError(t, err, shareddomain.KindInvalid, "discovery.invalid_favorite")
 	if len(repo.Added) != 0 {
 		t.Errorf("repo.Add called %d times for a rejected favorite", len(repo.Added))
 	}
@@ -284,5 +278,5 @@ func TestFavoritesAdd_OverThePerUserCapIsATypedConflict(t *testing.T) {
 	err := discovery.NewFavoritesService(repo).Add(context.Background(), shared.UserId{},
 		discovery.Favorite{Kind: discovery.ResultKindAlbum, Title: "DAMN.", Subtitle: "Kendrick Lamar"})
 
-	assertTypedError(t, err, http.StatusConflict, "discovery.favorites_full")
+	assertTypedError(t, err, shareddomain.KindConflict, "discovery.favorites_full")
 }

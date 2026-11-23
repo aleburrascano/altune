@@ -437,7 +437,7 @@ func TestHandleSuggest_StoreErrorDoesNotLogQueryText(t *testing.T) {
 
 	sawFailureLog := false
 	for _, r := range ring.Snapshot() {
-		if r.Message == "suggest failed" {
+		if r.Message == "request.failed" {
 			sawFailureLog = true
 		}
 		if strings.Contains(r.Message, secret) {
@@ -532,22 +532,17 @@ func TestHandleSearch_SaveHistoryFalseSkipsHistory(t *testing.T) {
 }
 
 func TestHandleSearch_AllProvidersFailedReturns503(t *testing.T) {
+	ring := captureLogs(t)
 	provider := &fakeSearchProvider{name: discovery.ProviderDeezer, err: context.DeadlineExceeded}
 	router := buildDiscoveryRouter(provider, &fakeSearchHistoryRepo{}, nil, nil)
 
-	rec := discServe(t, router, http.MethodGet, "/discovery/search?q=x", nil)
-	discAssertStatus(t, rec, http.StatusServiceUnavailable)
+	rec := discServe(t, router, http.MethodGet, "/discovery/search?q="+url.QueryEscape(secretSearchText), nil)
 
-	var resp discovery.DiscoverySearchResponse
-	discDecodeJSON(t, rec, &resp)
-	if len(resp.Providers) == 0 {
-		t.Fatal("expected provider statuses in the 503 envelope")
+	assertErrorCode(t, rec, http.StatusServiceUnavailable, "discovery.all_providers_failed")
+	if _, logged := findRecord(ring, "request.failed"); !logged {
+		t.Fatal("expected the all-failed search to be logged, so the redaction assertion is meaningful")
 	}
-	for _, p := range resp.Providers {
-		if p.Status == "ok" {
-			t.Errorf("provider %s reports ok in an all-failed scatter", p.Provider)
-		}
-	}
+	assertNoSearchText(t, ring)
 }
 
 func TestHandleSearchHistory_UTCTimestampFormat(t *testing.T) {
@@ -952,7 +947,9 @@ func TestSearch_OutcomeFollowsTheProviders(t *testing.T) {
 
 			rec := discServe(t, router, http.MethodGet, "/discovery/search?q=hello&save_history=false", nil)
 
-			var resp discovery.DiscoverySearchResponse
+			var resp struct {
+				Code string `json:"code"`
+			}
 			discDecodeJSON(t, rec, &resp)
 			if rec.Code != c.wantStatus || resp.Code != c.wantCode {
 				t.Errorf("search = %d %q, want %d %q", rec.Code, resp.Code, c.wantStatus, c.wantCode)
@@ -1222,22 +1219,17 @@ func TestSearch_AllProvidersFailedCarriesCode(t *testing.T) {
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/search?q=x", nil)
 
-	discAssertStatus(t, rec, http.StatusServiceUnavailable)
-	var resp discovery.DiscoverySearchResponse
-	discDecodeJSON(t, rec, &resp)
-	if resp.Code != "discovery.all_providers_failed" {
-		t.Errorf("code = %q, want %q", resp.Code, "discovery.all_providers_failed")
-	}
+	assertErrorCode(t, rec, http.StatusServiceUnavailable, "discovery.all_providers_failed")
 }
 
 func TestSearch_ServedScatterCarriesNoCode(t *testing.T) {
 	rec := discServe(t, validationRouter(t), http.MethodGet, "/discovery/search?q=x", nil)
 
 	discAssertStatus(t, rec, http.StatusOK)
-	var resp discovery.DiscoverySearchResponse
+	var resp map[string]any
 	discDecodeJSON(t, rec, &resp)
-	if resp.Code != "" {
-		t.Errorf("code = %q, want empty on a served search", resp.Code)
+	if code, has := resp["code"]; has {
+		t.Errorf("code = %v, want none on a served search", code)
 	}
 }
 

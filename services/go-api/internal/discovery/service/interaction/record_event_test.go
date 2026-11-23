@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/core/ports"
 	"altune/go-api/internal/discovery/service/interaction"
+	shareddomain "altune/go-api/internal/shared/domain"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
@@ -95,9 +96,9 @@ func assertRejected400(t *testing.T, store *discoverytest.FakeEventStore, err er
 	if err == nil {
 		t.Fatal("expected a validation error")
 	}
-	var coded *domain.CodedError
-	if !errors.As(err, &coded) || coded.HTTPStatus() != 400 {
-		t.Errorf("error should carry HTTP 400, got %v", err)
+	var coded *shareddomain.CodedError
+	if !errors.As(err, &coded) || coded.Code().Kind() != shareddomain.KindInvalid {
+		t.Errorf("error should be an invalid-input error, got %v", err)
 	}
 	if len(store.Recorded()) != 0 {
 		t.Error("nothing should be appended for a rejected event")
@@ -290,12 +291,12 @@ func TestRecordEventService_Execute_WrapsStoreError(t *testing.T) {
 }
 
 func TestInvalidEventLookAlikeIsNotCoded(t *testing.T) {
-	var coded *domain.CodedError
+	var coded *shareddomain.CodedError
 	if errors.As(errors.New("discovery.invalid_event"), &coded) {
-		t.Error("a plain error whose text is the code must not match *domain.CodedError")
+		t.Error("a plain error whose text is the code must not match *shareddomain.CodedError")
 	}
-	if !errors.As(domain.NewInvalidEventError("x"), &coded) || coded.ErrorCode() != "discovery.invalid_event" {
-		t.Errorf("NewInvalidEventError should match *domain.CodedError with code discovery.invalid_event, got %v", coded)
+	if !errors.As(domain.NewInvalidEventError("x"), &coded) || coded.Code().String() != "discovery.invalid_event" {
+		t.Errorf("NewInvalidEventError should match *shareddomain.CodedError with code discovery.invalid_event, got %v", coded)
 	}
 }
 
@@ -345,9 +346,9 @@ func TestRecordEvent_NonClientSubmittableRenders400(t *testing.T) {
 	if err == nil {
 		t.Fatal("want a validation error")
 	}
-	var coded *domain.CodedError
-	if !errors.As(err, &coded) || coded.HTTPStatus() != 400 {
-		t.Fatalf("error = %v, want an HTTP 400 StatusError", err)
+	var coded *shareddomain.CodedError
+	if !errors.As(err, &coded) || coded.Code().Kind() != shareddomain.KindInvalid {
+		t.Fatalf("error = %v, want an invalid-input error", err)
 	}
 	if !strings.Contains(err.Error(), "not client-submittable") {
 		t.Errorf("Error() = %q, want the not-client-submittable message", err.Error())

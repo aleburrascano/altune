@@ -7,7 +7,6 @@ import (
 	"altune/go-api/internal/discovery/service/unreleased"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/requestuser"
-	"log/slog"
 	"net/http"
 )
 
@@ -46,7 +45,6 @@ func (h *DiscoveryHandler) handleUnreleasedSearch(w http.ResponseWriter, r *http
 	if h.unreleasedSvc != nil {
 		found, err := h.unreleasedSvc.Search(r.Context(), query)
 		if err != nil {
-			slog.ErrorContext(r.Context(), "search unreleased failed", "error", err)
 			httputil.HandleServiceError(w, r, err)
 			return
 		}

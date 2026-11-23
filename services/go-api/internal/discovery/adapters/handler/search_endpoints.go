@@ -17,17 +17,6 @@ import (
 	"time"
 )
 
-var requestCodeInvalidBody = shareddomain.CodeDiscoveryInvalidBody
-
-const (
-	requestCodeQRequired         = "discovery.q_required"
-	requestCodeInvalidKind       = "discovery.invalid_kind"
-	requestCodeInvalidProvider   = "discovery.invalid_provider"
-	requestCodeInvalidParam      = "discovery.invalid_param"
-	requestCodeInvalidEventType  = "discovery.invalid_event_type"
-	searchCodeAllProvidersFailed = "discovery.all_providers_failed"
-)
-
 func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request) {
 	_, ok := requestuser.RequireUserID(w, r)
 	if !ok {
@@ -39,7 +28,7 @@ func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if q == "" {
-		httputil.BadRequestCode(w, requestCodeQRequired, "q parameter is required")
+		httputil.HandleServiceError(w, r, shareddomain.NewError(shareddomain.CodeDiscoveryQueryRequired, "q parameter is required"))
 		return
 	}
 
@@ -50,7 +39,6 @@ func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request)
 
 	entries, err := h.suggestSvc.Execute(r.Context(), q, limit)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "suggest failed", "error", err)
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
@@ -74,7 +62,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 
 	q := r.URL.Query().Get("q")
 	if strings.TrimSpace(q) == "" {
-		httputil.BadRequestCode(w, requestCodeQRequired, "q parameter is required")
+		httputil.HandleServiceError(w, r, shareddomain.NewError(shareddomain.CodeDiscoveryQueryRequired, "q parameter is required"))
 		return
 	}
 
@@ -90,7 +78,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 
 	kinds, err := parseKinds(r.URL.Query().Get("kinds"))
 	if err != nil {
-		httputil.BadRequestCode(w, requestCodeInvalidKind, err.Error())
+		httputil.HandleServiceError(w, r, shareddomain.NewError(shareddomain.CodeDiscoveryInvalidKind, err.Error()))
 		return
 	}
 
@@ -106,13 +94,12 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 
 	query, err := domain.NewPagedSearchQuery(q, kinds, limit, offset)
 	if err != nil {
-		httputil.BadRequestCode(w, requestCodeInvalidParam, err.Error())
+		httputil.HandleServiceError(w, r, invalidParam(err.Error()))
 		return
 	}
 
 	result, err := h.searchSvc.ExecutePage(r.Context(), userId, query, saveHistory, continues)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "search failed", "error", err)
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
@@ -121,9 +108,11 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 	topResult, sections := blendedSlateToDTOs(result.Slate)
 	h.ownership.StampOwnership(r.Context(), userId, ownershipTargets(results, topResult, sections))
 
-	status, code := searchOutcome(result.ProviderStatuses)
-	httputil.WriteJSON(w, status, DiscoverySearchResponse{
-		Code:           code,
+	if !anyProviderAnswered(result.ProviderStatuses) {
+		httputil.HandleServiceError(w, r, errAllProvidersFailed)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, DiscoverySearchResponse{
 		Query:          q,
 		QueryNorm:      result.QueryNorm,
 		SearchID:       result.SearchId,
@@ -181,7 +170,6 @@ func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Re
 
 	entries, err := h.historySvc.Execute(r.Context(), userId, limit)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "search history failed", "error", err)
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
@@ -208,11 +196,11 @@ func (h *DiscoveryHandler) handleRecordSearchHistory(w http.ResponseWriter, r *h
 	}
 
 	var req RecordSearchHistoryRequest
-	if !httputil.DecodeJSONWithCode(w, r, &req, requestCodeInvalidBody) {
+	if !httputil.DecodeJSONWithCode(w, r, &req, shareddomain.CodeDiscoveryInvalidBody) {
 		return
 	}
 	if err := h.recordHistory.RecordSubmitted(r.Context(), userId, req.Query); err != nil {
-		httputil.BadRequestCode(w, requestCodeInvalidParam, err.Error())
+		httputil.HandleServiceError(w, r, invalidParam(err.Error()))
 		return
 	}
 
@@ -226,11 +214,10 @@ func (h *DiscoveryHandler) handleClearSearchHistory(w http.ResponseWriter, r *ht
 	}
 
 	if err := h.clearHistorySvc.Execute(r.Context(), userId); err != nil {
-		slog.ErrorContext(r.Context(), "clear search history failed",
+		slog.WarnContext(r.Context(), "clear search history failed",
 			"action", history.ClearSearchHistoryAction,
-			"user_id", userId.String(),
-			"error", err)
-		httputil.HandleServiceError(w, r, err)
+			"user_id", userId.String())
+		httputil.HandleServiceError(w, r, fmt.Errorf("%s: %w", history.ClearSearchHistoryAction, err))
 		return
 	}
 
@@ -244,13 +231,13 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 	}
 
 	var req DiscoveryEventRequest
-	if !httputil.DecodeJSONWithCode(w, r, &req, requestCodeInvalidBody) {
+	if !httputil.DecodeJSONWithCode(w, r, &req, shareddomain.CodeDiscoveryInvalidBody) {
 		return
 	}
 
 	eventType := domain.ParseEventType(req.Type)
 	if eventType == domain.EventTypeUnknown {
-		httputil.BadRequestCode(w, requestCodeInvalidEventType, "invalid event type")
+		httputil.HandleServiceError(w, r, shareddomain.NewError(shareddomain.CodeDiscoveryInvalidEventType, "invalid event type"))
 		return
 	}
 
@@ -296,16 +283,18 @@ func (h *DiscoveryHandler) emitClientEvent(r *http.Request, eventType domain.Eve
 	})
 }
 
-func searchOutcome(statuses []domain.ProviderSearchResponse) (int, string) {
+var errAllProvidersFailed = shareddomain.NewError(shareddomain.CodeDiscoveryAllProvidersFailed, "")
+
+func anyProviderAnswered(statuses []domain.ProviderSearchResponse) bool {
 	if len(statuses) == 0 {
-		return http.StatusOK, ""
+		return true
 	}
 	for _, ps := range statuses {
 		if ps.Status == domain.ProviderStatusOK {
-			return http.StatusOK, ""
+			return true
 		}
 	}
-	return http.StatusServiceUnavailable, searchCodeAllProvidersFailed
+	return false
 }
 
 func parseContinuedSearchId(w http.ResponseWriter, r *http.Request) (shared.EntityId, bool) {
@@ -315,7 +304,7 @@ func parseContinuedSearchId(w http.ResponseWriter, r *http.Request) (shared.Enti
 	}
 	id, err := shared.ParseEntityId(raw)
 	if err != nil {
-		httputil.BadRequestCode(w, requestCodeInvalidParam, "search_id must be a uuid")
+		httputil.HandleServiceError(w, r, invalidParam("search_id must be a uuid"))
 		return shared.EntityId{}, false
 	}
 	return id, true

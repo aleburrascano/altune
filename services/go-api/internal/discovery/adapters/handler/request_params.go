@@ -2,6 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	shareddomain "altune/go-api/internal/shared/domain"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
 	"strconv"
@@ -12,6 +13,10 @@ import (
 	"github.com/google/uuid"
 )
 
+func invalidParam(detail string) error {
+	return shareddomain.NewError(shareddomain.CodeDiscoveryInvalidParam, detail)
+}
+
 const (
 	maxTextParamRunes  = 200
 	maxExternalIDBytes = 256
@@ -20,7 +25,7 @@ const (
 func textParam(w http.ResponseWriter, r *http.Request, param string) (string, bool) {
 	value := strings.TrimSpace(r.URL.Query().Get(param))
 	if utf8.RuneCountInString(value) > maxTextParamRunes {
-		httputil.BadRequestCode(w, requestCodeInvalidParam, param+" is too long")
+		httputil.HandleServiceError(w, r, invalidParam(param+" is too long"))
 		return "", false
 	}
 	return value, true
@@ -52,7 +57,7 @@ func mbidParam(w http.ResponseWriter, r *http.Request) (string, bool) {
 	if mbid == "" || isCanonicalUUID(mbid) {
 		return mbid, true
 	}
-	httputil.BadRequestCode(w, requestCodeInvalidParam, "mbid must be a UUID")
+	httputil.HandleServiceError(w, r, invalidParam("mbid must be a UUID"))
 	return "", false
 }
 
@@ -64,7 +69,7 @@ func isCanonicalUUID(s string) bool {
 func externalIDParam(w http.ResponseWriter, r *http.Request) (string, bool) {
 	externalID := chi.URLParam(r, "externalId")
 	if !isValidExternalID(externalID) {
-		httputil.BadRequestCode(w, requestCodeInvalidParam, "externalId is not a valid identifier")
+		httputil.HandleServiceError(w, r, invalidParam("externalId is not a valid identifier"))
 		return "", false
 	}
 	return externalID, true
@@ -107,7 +112,7 @@ func parseIntParam(w http.ResponseWriter, r *http.Request, param string, def int
 	}
 	value, err := strconv.Atoi(raw)
 	if err != nil {
-		httputil.BadRequestCode(w, requestCodeInvalidParam, param+" must be an integer")
+		httputil.HandleServiceError(w, r, invalidParam(param+" must be an integer"))
 		return 0, false
 	}
 	return value, true
