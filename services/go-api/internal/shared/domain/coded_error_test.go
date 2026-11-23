@@ -85,6 +85,9 @@ func TestCodedError_MatchesAnyErrorWithTheSameCode(t *testing.T) {
 	if errors.Is(errors.New("cooldown active, try again later"), sentinel) {
 		t.Error("a plain error with the same text matched the sentinel")
 	}
+	if errors.Is(sentinel, (*domain.CodedError)(nil)) {
+		t.Error("an error matched a nil target")
+	}
 }
 
 func TestWithRetryAfter_NeverKeepsANegativeWait(t *testing.T) {

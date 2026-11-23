@@ -76,7 +76,7 @@ func (e *CodedError) WithRetryAfter(wait time.Duration) *CodedError {
 
 func (e *CodedError) Is(target error) bool {
 	other, ok := target.(*CodedError)
-	return ok && other.code == e.code
+	return ok && other != nil && other.code == e.code
 }
 
 func (e *CodedError) Error() string             { return e.detail }
