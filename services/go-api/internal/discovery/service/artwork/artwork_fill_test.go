@@ -1,9 +1,11 @@
-package artwork
+package artwork_test
 
 import (
 	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/core/ports"
+	"altune/go-api/internal/discovery/service/artwork"
+	"altune/go-api/internal/shared/runloop"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"errors"
@@ -14,25 +16,38 @@ import (
 	"testing"
 )
 
+const (
+	slateLimit         = 50
+	placeholderArtHash = "d41d8cd98f00b204e9800998ecf8427e"
+)
+
+func fillAndSettle(f *artwork.ArtworkFiller, results ...domain.SearchResult) []domain.SearchResult {
+	bg := &runloop.Tracker{}
+	got := f.Fill(context.Background(), results, bg)
+	bg.Wait()
+	return got
+}
+
 func TestArtworkFiller_OutageLeavesTheCacheOpenForTheNextFill(t *testing.T) {
 	track := domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar"}
 	cache := &discoverytest.FakeArtworkCache{Store: map[string]string{}}
 	outage := &scriptedResolver{log: &stageLog{}, outage: errors.New("coverartarchive 503")}
 
-	duringOutage := NewArtworkFiller(outage, cache, nil, nil).fillOne(context.Background(), track)
+	fillAndSettle(artwork.NewArtworkFiller(outage, cache, nil, nil), track)
 
+	if want := []string{"resolve.name:"}; !reflect.DeepEqual(outage.log.calls, want) {
+		t.Fatalf("resolver calls during the outage = %q, want %q", outage.log.calls, want)
+	}
 	if cached, written := cache.Store[track.Title]; written {
 		t.Fatalf("the outage wrote a cache entry (%q); a negative entry blanks the art for hours", cached)
 	}
-	if path := duringOutage.ArtworkPath; path != domain.ArtworkPathDegraded {
-		t.Errorf("ArtworkPath = %q, want degraded (an outage must not report as a clean miss)", path)
-	}
 
 	recovered := &scriptedResolver{log: &stageLog{}, nameURL: "https://caa/cover.jpg"}
-	afterRecovery := NewArtworkFiller(recovered, cache, nil, nil).fillOne(context.Background(), track)
+	fillAndSettle(artwork.NewArtworkFiller(recovered, cache, nil, nil), track)
+	afterRecovery := fillAndSettle(artwork.NewArtworkFiller(recovered, cache, nil, nil), track)
 
-	if afterRecovery.ImageURL != "https://caa/cover.jpg" {
-		t.Errorf("ImageURL after recovery = %q, want the resolved cover", afterRecovery.ImageURL)
+	if afterRecovery[0].ImageURL != "https://caa/cover.jpg" || afterRecovery[0].ArtworkPath != domain.ArtworkPathCache {
+		t.Errorf("after recovery = (%q, %q), want the resolved cover served from the cache", afterRecovery[0].ImageURL, afterRecovery[0].ArtworkPath)
 	}
 }
 
@@ -78,7 +93,7 @@ func (s *batchingIdentityStore) LookupByProviderIDs(_ context.Context, refs []po
 }
 
 func fiftyArtlessResults() []domain.SearchResult {
-	results := make([]domain.SearchResult, artworkFillLimit)
+	results := make([]domain.SearchResult, slateLimit)
 	for i := range results {
 		id := strconv.Itoa(i)
 		results[i] = domain.NewProviderResult(domain.ResultKindTrack, "Song "+id, "Artist", "",
@@ -102,25 +117,25 @@ func assertDurableXrefApplied(t *testing.T, got []domain.SearchResult) {
 
 func TestArtworkFiller_BatchesDurableIdentityLookups(t *testing.T) {
 	store := &batchingIdentityStore{}
-	f := NewArtworkFiller(&discoverytest.ArtworkResolver{}, nil, store, nil)
+	f := artwork.NewArtworkFiller(&discoverytest.ArtworkResolver{}, nil, store, nil)
 
 	got := f.Fill(context.Background(), fiftyArtlessResults(), nil)
 
 	if store.batchCalls != 1 {
-		t.Errorf("batch lookups = %d, want 1 for a %d-result slate", store.batchCalls, artworkFillLimit)
+		t.Errorf("batch lookups = %d, want 1 for a %d-result slate", store.batchCalls, slateLimit)
 	}
 	if store.singleCalls != 0 {
 		t.Errorf("per-result lookups = %d, want 0 when the store batches", store.singleCalls)
 	}
-	if len(store.batchRefs) != artworkFillLimit {
-		t.Errorf("batched refs = %d, want %d", len(store.batchRefs), artworkFillLimit)
+	if len(store.batchRefs) != slateLimit {
+		t.Errorf("batched refs = %d, want %d", len(store.batchRefs), slateLimit)
 	}
 	assertDurableXrefApplied(t, got)
 }
 
 func TestArtworkFiller_BatchSkipsResultsThatNeedNoDurableLookup(t *testing.T) {
 	store := &batchingIdentityStore{}
-	f := NewArtworkFiller(&discoverytest.ArtworkResolver{}, nil, store, nil)
+	f := artwork.NewArtworkFiller(&discoverytest.ArtworkResolver{}, nil, store, nil)
 	results := fiftyArtlessResults()[:3]
 	results[0].ImageURL = "https://provider/art.jpg"
 	results[1].Xref = map[domain.ProviderKey]string{"spotify": "s1"}
@@ -138,12 +153,12 @@ func TestArtworkFiller_BatchSkipsResultsThatNeedNoDurableLookup(t *testing.T) {
 
 func TestArtworkFiller_FallsBackToPerResultLookupWithoutBatch(t *testing.T) {
 	store := &countingIdentityStore{}
-	f := NewArtworkFiller(&discoverytest.ArtworkResolver{}, nil, store, nil)
+	f := artwork.NewArtworkFiller(&discoverytest.ArtworkResolver{}, nil, store, nil)
 
 	got := f.Fill(context.Background(), fiftyArtlessResults(), nil)
 
-	if store.singleCalls != artworkFillLimit {
-		t.Errorf("per-result lookups = %d, want %d for a non-batching store", store.singleCalls, artworkFillLimit)
+	if store.singleCalls != slateLimit {
+		t.Errorf("per-result lookups = %d, want %d for a non-batching store", store.singleCalls, slateLimit)
 	}
 	assertDurableXrefApplied(t, got)
 }
@@ -192,8 +207,20 @@ func (c *scriptedArtworkCache) Get(_ context.Context, _ domain.ResultKind, _, _,
 }
 
 func (c *scriptedArtworkCache) Set(_ context.Context, _ domain.ResultKind, _, _, mbid, url string, source domain.ProviderKey, confidence ports.ArtworkConfidence) error {
-	c.log.add("cache.set:" + mbid + "|" + url + "|" + source.String() + "|" + artworkPathFor(url, confidence, false))
+	c.log.add("cache.set:" + mbid + "|" + url + "|" + source.String() + "|" + confidenceName(confidence))
 	return nil
+}
+
+func confidenceName(c ports.ArtworkConfidence) string {
+	switch c {
+	case ports.ArtworkConfidenceIdentity:
+		return "identity"
+	case ports.ArtworkConfidenceName:
+		return "name"
+	case ports.ArtworkConfidenceNone:
+		return "none"
+	}
+	return "unknown confidence " + strconv.Itoa(int(c))
 }
 
 type scriptedResolver struct {
@@ -232,7 +259,7 @@ func sortedXrefKeys(m map[domain.ProviderKey]string) []string {
 	return keys
 }
 
-func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
+func TestArtworkFiller_FillStageCascade(t *testing.T) {
 	deezerSrc := []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "42"}}
 	key := textnorm.NameKey("Humble", "Kendrick Lamar")
 
@@ -273,13 +300,11 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 		},
 		{
 			name:      "empty-art hash placeholder counts as missing",
-			in:        domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", ImageURL: "https://p/" + emptyArtHash + ".jpg", Sources: deezerSrc},
-			st:        stages{live: scriptedResolver{nameURL: "https://n.jpg"}},
-			noDurable: true, noIndex: true, noCache: true,
-			wantPath:   "name",
-			wantURL:    "https://n.jpg",
-			wantSource: "name-src",
-			wantCalls:  []string{"resolve.name:"},
+			in:        domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", ImageURL: "https://p/" + placeholderArtHash + ".jpg", Sources: deezerSrc},
+			st:        stages{cache: &scriptedArtworkCache{}, live: scriptedResolver{nameURL: "https://n.jpg"}},
+			noDurable: true, noIndex: true,
+			wantPath:  "pending",
+			wantCalls: []string{"cache.get:", "resolve.name:", "cache.set:|https://n.jpg|name-src|name"},
 		},
 		{
 			name: "durable hit supplies mbid and xref, skips index, cache hit wins",
@@ -296,7 +321,7 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 			wantCalls:  []string{"durable:deezer/42", "cache.get:dur"},
 		},
 		{
-			name: "result mbid beats durable mbid but durable still flags the path",
+			name: "result mbid beats durable mbid",
 			in:   domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", RecordingMBID: "own", Sources: deezerSrc},
 			st: stages{
 				durable: &scriptedIdentityStore{ok: true, mbid: "dur"},
@@ -304,13 +329,11 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 				cache:   &scriptedArtworkCache{},
 				live:    scriptedResolver{identityURL: "https://id.jpg"},
 			},
-			wantPath:   "durable-identity",
-			wantURL:    "https://id.jpg",
-			wantSource: "id-src",
-			wantCalls:  []string{"durable:deezer/42", "cache.get:own", "resolve.identity:own|", "cache.set:own|https://id.jpg|id-src|identity"},
+			wantPath:  "pending",
+			wantCalls: []string{"durable:deezer/42", "cache.get:own", "resolve.identity:own|", "cache.set:own|https://id.jpg|id-src|identity"},
 		},
 		{
-			name: "durable hit with empty mbid falls through to index and keeps no xref",
+			name: "durable hit with empty mbid falls through to index",
 			in:   domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", Sources: deezerSrc},
 			st: stages{
 				durable: &scriptedIdentityStore{ok: true},
@@ -318,10 +341,8 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 				cache:   &scriptedArtworkCache{},
 				live:    scriptedResolver{identityURL: "https://id.jpg"},
 			},
-			wantPath:   "durable-identity",
-			wantURL:    "https://id.jpg",
-			wantSource: "id-src",
-			wantCalls:  []string{"durable:deezer/42", "index:" + key, "cache.get:idx", "resolve.identity:idx|", "cache.set:idx|https://id.jpg|id-src|identity"},
+			wantPath:  "pending",
+			wantCalls: []string{"durable:deezer/42", "index:" + key, "cache.get:idx", "resolve.identity:idx|", "cache.set:idx|https://id.jpg|id-src|identity"},
 		},
 		{
 			name: "existing xref skips the durable store",
@@ -332,11 +353,9 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 				cache:   &scriptedArtworkCache{},
 				live:    scriptedResolver{identityURL: "https://id.jpg"},
 			},
-			wantPath:   "identity",
-			wantURL:    "https://id.jpg",
-			wantSource: "id-src",
-			wantXref:   map[domain.ProviderKey]string{"spotify": "s"},
-			wantCalls:  []string{"index:" + key, "cache.get:", "resolve.identity:|spotify", "cache.set:|https://id.jpg|id-src|identity"},
+			wantPath:  "pending",
+			wantXref:  map[domain.ProviderKey]string{"spotify": "s"},
+			wantCalls: []string{"index:" + key, "cache.get:", "resolve.identity:|spotify", "cache.set:|https://id.jpg|id-src|identity"},
 		},
 		{
 			name: "no sources skips the durable store",
@@ -344,13 +363,11 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 			st: stages{
 				durable: &scriptedIdentityStore{ok: true, mbid: "dur"},
 				index:   &scriptedMBIDIndex{ok: true, mbid: "idx"},
+				cache:   &scriptedArtworkCache{},
 				live:    scriptedResolver{nameURL: "https://n.jpg"},
 			},
-			noCache:    true,
-			wantPath:   "name",
-			wantURL:    "https://n.jpg",
-			wantSource: "name-src",
-			wantCalls:  []string{"index:" + key, "resolve.identity:idx|", "resolve.name:idx"},
+			wantPath:  "pending",
+			wantCalls: []string{"index:" + key, "cache.get:idx", "resolve.identity:idx|", "resolve.name:idx", "cache.set:idx|https://n.jpg|name-src|name"},
 		},
 		{
 			name: "durable miss then index miss leaves mbid empty",
@@ -361,10 +378,8 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 				cache:   &scriptedArtworkCache{},
 				live:    scriptedResolver{nameURL: "https://n.jpg"},
 			},
-			wantPath:   "name",
-			wantURL:    "https://n.jpg",
-			wantSource: "name-src",
-			wantCalls:  []string{"durable:deezer/42", "index:" + key, "cache.get:", "resolve.name:", "cache.set:|https://n.jpg|name-src|name"},
+			wantPath:  "pending",
+			wantCalls: []string{"durable:deezer/42", "index:" + key, "cache.get:", "resolve.name:", "cache.set:|https://n.jpg|name-src|name"},
 		},
 		{
 			name:      "cached miss settles a non-artist as none",
@@ -377,7 +392,7 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 		{
 			name:      "cached empty-art hash settles a non-artist as none",
 			in:        domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar"},
-			st:        stages{cache: &scriptedArtworkCache{found: true, url: "https://c/" + emptyArtHash, source: "caa"}, live: scriptedResolver{nameURL: "https://n.jpg"}},
+			st:        stages{cache: &scriptedArtworkCache{found: true, url: "https://c/" + placeholderArtHash, source: "caa"}, live: scriptedResolver{nameURL: "https://n.jpg"}},
 			noDurable: true, noIndex: true,
 			wantPath:  "none",
 			wantCalls: []string{"cache.get:"},
@@ -387,36 +402,40 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 			in:        domain.SearchResult{Kind: domain.ResultKindArtist, Title: "Kendrick Lamar"},
 			st:        stages{cache: &scriptedArtworkCache{found: true}, live: scriptedResolver{nameURL: "https://n.jpg"}},
 			noDurable: true, noIndex: true,
-			wantPath:   "name",
-			wantURL:    "https://n.jpg",
-			wantSource: "name-src",
-			wantCalls:  []string{"cache.get:", "resolve.name:", "cache.set:|https://n.jpg|name-src|name"},
+			wantPath:  "pending",
+			wantCalls: []string{"cache.get:", "resolve.name:", "cache.set:|https://n.jpg|name-src|name"},
 		},
 		{
-			name:      "live resolver miss stamps none and caches the miss",
+			name:      "live resolver miss caches the miss",
 			in:        domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", RecordingMBID: "own"},
 			st:        stages{cache: &scriptedArtworkCache{}},
 			noDurable: true, noIndex: true,
-			wantPath:  "none",
+			wantPath:  "pending",
 			wantCalls: []string{"cache.get:own", "resolve.identity:own|", "resolve.name:own", "cache.set:own|||none"},
 		},
 		{
-			name:      "a miss from failing resolvers is stamped degraded and never cached",
+			name:      "a miss from failing resolvers is never cached",
 			in:        domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", RecordingMBID: "own"},
 			st:        stages{cache: &scriptedArtworkCache{}, live: scriptedResolver{outage: errors.New("coverartarchive 503")}},
 			noDurable: true, noIndex: true,
-			wantPath:  "degraded",
+			wantPath:  "pending",
 			wantCalls: []string{"cache.get:own", "resolve.identity:own|", "resolve.name:own"},
 		},
 		{
 			name:      "identity miss falls back to name lookup",
 			in:        domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", RecordingMBID: "own"},
+			st:        stages{cache: &scriptedArtworkCache{}, live: scriptedResolver{nameURL: "https://n.jpg"}},
+			noDurable: true, noIndex: true,
+			wantPath:  "pending",
+			wantCalls: []string{"cache.get:own", "resolve.identity:own|", "resolve.name:own", "cache.set:own|https://n.jpg|name-src|name"},
+		},
+		{
+			name:      "without an artwork cache the live stage never runs",
+			in:        domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", RecordingMBID: "own"},
 			st:        stages{live: scriptedResolver{nameURL: "https://n.jpg"}},
 			noDurable: true, noIndex: true, noCache: true,
-			wantPath:   "name",
-			wantURL:    "https://n.jpg",
-			wantSource: "name-src",
-			wantCalls:  []string{"resolve.identity:own|", "resolve.name:own"},
+			wantPath:  "pending",
+			wantCalls: nil,
 		},
 	}
 
@@ -447,9 +466,9 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 			if tc.noCache {
 				cache = nil
 			}
-			f := NewArtworkFiller(&tc.st.live, cache, store, index)
+			f := artwork.NewArtworkFiller(&tc.st.live, cache, store, index)
 
-			got := f.fillOne(context.Background(), tc.in)
+			got := fillAndSettle(f, tc.in)[0]
 
 			if path := got.ArtworkPath; path != domain.ArtworkPath(tc.wantPath) {
 				t.Errorf("ArtworkPath = %q, want %q", path, tc.wantPath)
@@ -469,30 +488,6 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 			}
 			if !reflect.DeepEqual(log.calls, tc.wantCalls) {
 				t.Errorf("stage calls =\n  %q\nwant\n  %q", log.calls, tc.wantCalls)
-			}
-		})
-	}
-}
-
-func TestArtworkPathFor(t *testing.T) {
-	tests := []struct {
-		name        string
-		resolved    string
-		confidence  ports.ArtworkConfidence
-		fromDurable bool
-		want        string
-	}{
-		{"nothing resolved", "", ports.ArtworkConfidenceIdentity, true, "none"},
-		{"identity via durable store", "u", ports.ArtworkConfidenceIdentity, true, "durable-identity"},
-		{"identity from this fan-out", "u", ports.ArtworkConfidenceIdentity, false, "identity"},
-		{"provisional name search", "u", ports.ArtworkConfidenceName, false, "name"},
-		{"name confidence never masquerades as durable", "u", ports.ArtworkConfidenceName, true, "name"},
-		{"no confidence falls back to provider", "u", ports.ArtworkConfidenceNone, false, "provider"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := artworkPathFor(tt.resolved, tt.confidence, tt.fromDurable); got != tt.want {
-				t.Errorf("artworkPathFor(%q,%v,%v) = %q, want %q", tt.resolved, tt.confidence, tt.fromDurable, got, tt.want)
 			}
 		})
 	}
