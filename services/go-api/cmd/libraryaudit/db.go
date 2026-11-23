@@ -12,24 +12,11 @@ import (
 
 var errEmptyDatabaseURL = errors.New("AUDIT_DATABASE_URL is not set")
 
-func openReadOnlyPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
+func openPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	if databaseURL == "" {
 		return nil, errEmptyDatabaseURL
 	}
-	cfg, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		return nil, fmt.Errorf("parse database url: %w", err)
-	}
-	cfg.MaxConns = 2
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create pool: %w", err)
-	}
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("ping database: %w", err)
-	}
-	return pool, nil
+	return database.NewPool(ctx, databaseURL, 2)
 }
 
 const readyTracksQuery = `SELECT id, user_id, title, artist, COALESCE(album, ''), COALESCE(album_artist, ''),
@@ -48,17 +35,17 @@ func loadReadyTracks(ctx context.Context, pool *pgxpool.Pool, userID string, lim
 		if err != nil {
 			return fmt.Errorf("query ready tracks: %w", err)
 		}
-		defer rows.Close()
-		for rows.Next() {
+		tracks, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (libraryTrack, error) {
 			var t libraryTrack
-			if err := rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Artist, &t.Album, &t.AlbumArtist,
+			err := row.Scan(&t.ID, &t.UserID, &t.Title, &t.Artist, &t.Album, &t.AlbumArtist,
 				&t.ISRC, &t.ArtworkURL, &t.Year, &t.DurationSeconds, &t.Version,
-				&t.Genre, &t.TrackNumber, &t.CatalogDurationSeconds); err != nil {
-				return fmt.Errorf("scan ready track: %w", err)
-			}
-			tracks = append(tracks, t)
+				&t.Genre, &t.TrackNumber, &t.CatalogDurationSeconds)
+			return t, err
+		})
+		if err != nil {
+			return fmt.Errorf("scan ready track: %w", err)
 		}
-		return rows.Err()
+		return nil
 	})
 	if err != nil {
 		return nil, err

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/sharedtest"
 	"errors"
 	"io"
 	"os"
@@ -80,7 +81,7 @@ func TestRun_DryRunWritesNothingAndApplyStillCommitsThroughTheTool(t *testing.T)
 	}
 	env := func(key string) string {
 		if key == "RELENGTH_DATABASE_URL" {
-			return os.Getenv("DATABASE_URL")
+			return sharedtest.DatabaseURL(t)
 		}
 		return ""
 	}

@@ -20,13 +20,9 @@ type jobEnqueuer interface {
 }
 
 type store struct {
-	pool   *pgxpool.Pool
-	queue  jobEnqueuer
-	access pgx.TxAccessMode
-}
-
-func (s store) begin(ctx context.Context) (pgx.Tx, error) {
-	return s.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: s.access})
+	pool  *pgxpool.Pool
+	queue jobEnqueuer
+	runTx func(context.Context, *pgxpool.Pool, func(pgx.Tx) error) error
 }
 
 const selectTrackSQL = `SELECT t.isrc, t.version, t.acquisition_status, t.duration_seconds, t.catalog_duration_seconds,
@@ -56,25 +52,30 @@ const insertFixSQL = `INSERT INTO track_length_fixes (run_id, track_id, user_id,
 	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
 
 func (s store) apply(ctx context.Context, runID uuid.UUID, c change, write bool) (verdict, error) {
-	tx, err := s.begin(ctx)
-	if err != nil {
-		return verdictFailed, fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	got, row, err := lockAndDecide(ctx, tx, c, write)
+	got, err := s.decideAndWrite(ctx, runID, c, write)
 	if err != nil || got != verdictApplied || !write {
 		return got, err
-	}
-	if err := writeChange(ctx, tx, runID, c, row); err != nil {
-		return verdictFailed, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return verdictFailed, fmt.Errorf("commit: %w", err)
 	}
 	if c.Action == actionReacquire {
 		return s.enqueueReplace(ctx, runID, c)
 	}
 	return verdictApplied, nil
+}
+
+func (s store) decideAndWrite(ctx context.Context, runID uuid.UUID, c change, write bool) (verdict, error) {
+	got := verdictFailed
+	err := s.runTx(ctx, s.pool, func(tx pgx.Tx) error {
+		decided, row, err := lockAndDecide(ctx, tx, c, write)
+		got = decided
+		if err != nil || decided != verdictApplied || !write {
+			return err
+		}
+		return writeChange(ctx, tx, runID, c, row)
+	})
+	if err != nil {
+		return verdictFailed, err
+	}
+	return got, nil
 }
 
 func lockAndDecide(ctx context.Context, tx pgx.Tx, c change, lock bool) (verdict, trackRow, error) {
@@ -164,28 +165,28 @@ const loggedFixesSQL = `SELECT track_id::text, user_id::text, action, old_isrc, 
 	FROM track_length_fixes WHERE run_id = $1 AND ($2 = '' OR track_id::text = $2) AND undone_at IS NULL ORDER BY track_id`
 
 func (s store) loggedFixes(ctx context.Context, runID uuid.UUID, trackID string) ([]loggedFix, error) {
-	tx, err := s.begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	rows, err := tx.Query(ctx, loggedFixesSQL, runID, trackID)
-	if err != nil {
-		return nil, fmt.Errorf("query change log: %w", err)
-	}
-	defer rows.Close()
 	var fixes []loggedFix
-	for rows.Next() {
-		var f loggedFix
-		var rawAction string
-		if err := rows.Scan(&f.TrackID, &f.UserID, &rawAction, &f.OldISRC, &f.NewISRC, &f.OldDurationSeconds,
-			&f.OldCatalogSeconds, &f.OldMismatch, &f.NewCatalogSeconds, &f.AudioVersionAtApply); err != nil {
-			return nil, fmt.Errorf("scan change log: %w", err)
+	err := s.runTx(ctx, s.pool, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, loggedFixesSQL, runID, trackID)
+		if err != nil {
+			return fmt.Errorf("query change log: %w", err)
 		}
-		f.Action = action(rawAction)
-		fixes = append(fixes, f)
-	}
-	return fixes, rows.Err()
+		fixes, err = pgx.CollectRows(rows, scanLoggedFix)
+		if err != nil {
+			return fmt.Errorf("scan change log: %w", err)
+		}
+		return nil
+	})
+	return fixes, err
+}
+
+func scanLoggedFix(row pgx.CollectableRow) (loggedFix, error) {
+	var f loggedFix
+	var rawAction string
+	err := row.Scan(&f.TrackID, &f.UserID, &rawAction, &f.OldISRC, &f.NewISRC, &f.OldDurationSeconds,
+		&f.OldCatalogSeconds, &f.OldMismatch, &f.NewCatalogSeconds, &f.AudioVersionAtApply)
+	f.Action = action(rawAction)
+	return f, err
 }
 
 var errNothingToUndo = errors.New("nothing to undo")
@@ -218,22 +219,19 @@ const restoreReplaceSQL = `UPDATE tracks SET duration_seconds = $3, catalog_dura
 const stampUndoneSQL = `UPDATE track_length_fixes SET undone_at = now() WHERE run_id = $1 AND track_id = $2`
 
 func (s store) undoRow(ctx context.Context, runID uuid.UUID, f loggedFix) (undoVerdict, error) {
-	tx, err := s.begin(ctx)
+	verdict := undoFailed
+	err := s.runTx(ctx, s.pool, func(tx pgx.Tx) error {
+		checked, err := checkUndoable(ctx, tx, f)
+		verdict = checked
+		if err != nil || checked != undoRestored {
+			return err
+		}
+		return restoreAndStamp(ctx, tx, runID, f)
+	})
 	if err != nil {
-		return undoFailed, fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	verdict, err := checkUndoable(ctx, tx, f)
-	if verdict != undoRestored {
-		return verdict, err
-	}
-	if err := restoreAndStamp(ctx, tx, runID, f); err != nil {
 		return undoFailed, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return undoFailed, fmt.Errorf("commit: %w", err)
-	}
-	return undoRestored, nil
+	return verdict, nil
 }
 
 func checkUndoable(ctx context.Context, tx pgx.Tx, f loggedFix) (undoVerdict, error) {

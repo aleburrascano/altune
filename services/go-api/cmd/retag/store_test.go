@@ -1,9 +1,10 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/database"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
-	"os"
 	"testing"
 
 	"github.com/google/uuid"
@@ -13,17 +14,9 @@ import (
 )
 
 func TestTrackStore_ReadOnlyAccessRefusesAWriteOnAPlainPool(t *testing.T) {
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
-	pool, err := pgxpool.New(context.Background(), dbURL)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	s := trackStore{pool: pool, access: pgx.ReadOnly}
-	err = s.inTx(context.Background(), func(tx pgx.Tx) error {
+	pool := sharedtest.Pool(t)
+	s := trackStore{pool: pool, runTx: database.ReadOnly}
+	err := s.runTx(context.Background(), s.pool, func(tx pgx.Tx) error {
 		_, err := tx.Exec(context.Background(), "CREATE TABLE retag_readonly_probe (id int)")
 		return err
 	})
@@ -32,20 +25,6 @@ func TestTrackStore_ReadOnlyAccessRefusesAWriteOnAPlainPool(t *testing.T) {
 		_, _ = pool.Exec(context.Background(), "DROP TABLE IF EXISTS retag_readonly_probe")
 		t.Fatalf("got %v; want SQLSTATE 25006", err)
 	}
-}
-
-func probePool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
-	pool, err := pgxpool.New(context.Background(), dbURL)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	return pool
 }
 
 func seedReadyTrack(t *testing.T, pool *pgxpool.Pool, title string) (id, userID, ref string) {
@@ -72,10 +51,10 @@ func titleOf(t *testing.T, pool *pgxpool.Pool, id string) string {
 }
 
 func TestTrackStore_ReadOnlyAccessRefusesAnUpdateToARealTable(t *testing.T) {
-	pool := probePool(t)
+	pool := sharedtest.Pool(t)
 	id, _, _ := seedReadyTrack(t, pool, "Before")
-	s := trackStore{pool: pool, access: pgx.ReadOnly}
-	err := s.inTx(context.Background(), func(tx pgx.Tx) error {
+	s := trackStore{pool: pool, runTx: database.ReadOnly}
+	err := s.runTx(context.Background(), s.pool, func(tx pgx.Tx) error {
 		_, err := tx.Exec(context.Background(), "UPDATE tracks SET title = 'After' WHERE id = $1", id)
 		return err
 	})
@@ -89,10 +68,10 @@ func TestTrackStore_ReadOnlyAccessRefusesAnUpdateToARealTable(t *testing.T) {
 }
 
 func TestTrackStore_ReadWriteAccessCommitsTheWrite(t *testing.T) {
-	pool := probePool(t)
+	pool := sharedtest.Pool(t)
 	id, _, _ := seedReadyTrack(t, pool, "Before")
-	s := trackStore{pool: pool}
-	err := s.inTx(context.Background(), func(tx pgx.Tx) error {
+	s := trackStore{pool: pool, runTx: database.InTx}
+	err := s.runTx(context.Background(), s.pool, func(tx pgx.Tx) error {
 		_, err := tx.Exec(context.Background(), "UPDATE tracks SET title = 'After' WHERE id = $1", id)
 		return err
 	})
@@ -105,9 +84,9 @@ func TestTrackStore_ReadWriteAccessCommitsTheWrite(t *testing.T) {
 }
 
 func TestTrackStore_DryRunReadsStillWorkWhenReadOnly(t *testing.T) {
-	pool := probePool(t)
+	pool := sharedtest.Pool(t)
 	id, userID, ref := seedReadyTrack(t, pool, "Probe Song")
-	s := trackStore{pool: pool, access: pgx.ReadOnly}
+	s := trackStore{pool: pool, runTx: database.ReadOnly}
 	tracks, err := s.readyTracks(context.Background(), selection{})
 	if err != nil {
 		t.Fatalf("readyTracks on a read-only store: %v", err)

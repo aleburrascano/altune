@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/database"
 	"context"
 	"fmt"
 	"io"
@@ -72,26 +73,24 @@ const statusSQL = `SELECT DISTINCT ON (f.track_id) f.track_id::text, t.artist, t
 	ORDER BY f.track_id, f.applied_at DESC`
 
 func loadStatus(ctx context.Context, pool *pgxpool.Pool) ([]statusRow, error) {
-	tx, err := pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
-	if err != nil {
-		return nil, fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	rows, err := tx.Query(ctx, statusSQL)
-	if err != nil {
-		return nil, fmt.Errorf("query status: %w", err)
-	}
-	defer rows.Close()
 	var out []statusRow
-	for rows.Next() {
-		var r statusRow
-		if err := rows.Scan(&r.TrackID, &r.Artist, &r.Title, &r.InFlight, &r.AudioVersionAtApply, &r.AudioVersion,
-			&r.Mismatch, &r.OldFileSeconds, &r.FileSeconds, &r.CatalogSeconds, &r.PlannedCatalogSeconds); err != nil {
-			return nil, fmt.Errorf("scan status: %w", err)
+	err := database.ReadOnly(ctx, pool, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, statusSQL)
+		if err != nil {
+			return fmt.Errorf("query status: %w", err)
 		}
-		out = append(out, r)
-	}
-	return out, rows.Err()
+		out, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (statusRow, error) {
+			var r statusRow
+			err := row.Scan(&r.TrackID, &r.Artist, &r.Title, &r.InFlight, &r.AudioVersionAtApply, &r.AudioVersion,
+				&r.Mismatch, &r.OldFileSeconds, &r.FileSeconds, &r.CatalogSeconds, &r.PlannedCatalogSeconds)
+			return r, err
+		})
+		if err != nil {
+			return fmt.Errorf("scan status: %w", err)
+		}
+		return nil
+	})
+	return out, err
 }
 
 func writeStatus(out io.Writer, rows []statusRow) {

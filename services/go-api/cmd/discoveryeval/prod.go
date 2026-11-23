@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -62,18 +63,19 @@ func loadSearchEvents(ctx context.Context, pool *pgxpool.Pool, since time.Time) 
 	if err != nil {
 		return nil, fmt.Errorf("load search events: %w", err)
 	}
-	defer rows.Close()
-	var events []searchEvent
-	for rows.Next() {
+	events, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (searchEvent, error) {
 		var e searchEvent
 		var raw []byte
-		if err := rows.Scan(&e.QueryNorm, &raw); err != nil {
-			return nil, fmt.Errorf("scan search event: %w", err)
+		if err := row.Scan(&e.QueryNorm, &raw); err != nil {
+			return searchEvent{}, err
 		}
 		_ = json.Unmarshal(raw, &e.Payload)
-		events = append(events, e)
+		return e, nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan search events: %w", err)
 	}
-	return events, rows.Err()
+	return events, nil
 }
 
 func summarizeSearches(events []searchEvent, abandoned int) prodReport {

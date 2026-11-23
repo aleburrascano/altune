@@ -10,12 +10,8 @@ import (
 )
 
 type store struct {
-	pool   *pgxpool.Pool
-	access pgx.TxAccessMode
-}
-
-func (s store) begin(ctx context.Context) (pgx.Tx, error) {
-	return s.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: s.access})
+	pool  *pgxpool.Pool
+	runTx func(context.Context, *pgxpool.Pool, func(pgx.Tx) error) error
 }
 
 const ungradedTracksSQL = `SELECT id::text, user_id::text, artist, COALESCE(audio_source_url, ''), COALESCE(acquisition_provenance, ''),
@@ -41,25 +37,23 @@ func (s store) ungradedTracks(ctx context.Context, userID string, limit int) ([]
 		query += " LIMIT $2"
 		args = append(args, limit)
 	}
-	tx, err := s.begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	rows, err := tx.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("query tracks: %w", err)
-	}
-	defer rows.Close()
 	var tracks []trackRow
-	for rows.Next() {
-		var row trackRow
-		if err := rows.Scan(&row.ID, &row.UserID, &row.Artist, &row.SourceURL, &row.Provenance, &row.Verdict, &row.Version); err != nil {
-			return nil, fmt.Errorf("scan track: %w", err)
+	err := s.runTx(ctx, s.pool, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, args...)
+		if err != nil {
+			return fmt.Errorf("query tracks: %w", err)
 		}
-		tracks = append(tracks, row)
-	}
-	return tracks, rows.Err()
+		tracks, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (trackRow, error) {
+			var row trackRow
+			err := r.Scan(&row.ID, &row.UserID, &row.Artist, &row.SourceURL, &row.Provenance, &row.Verdict, &row.Version)
+			return row, err
+		})
+		if err != nil {
+			return fmt.Errorf("scan tracks: %w", err)
+		}
+		return nil
+	})
+	return tracks, err
 }
 
 func (s store) applyPatch(ctx context.Context, row trackRow, p patch) (bool, error) {
@@ -67,33 +61,33 @@ func (s store) applyPatch(ctx context.Context, row trackRow, p patch) (bool, err
 	if err != nil {
 		return false, fmt.Errorf("encode patch: %w", err)
 	}
-	tx, err := s.begin(ctx)
+	var patched bool
+	err = s.runTx(ctx, s.pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, applyPatchSQL, row.ID, row.UserID, row.Version, string(raw))
+		if err != nil {
+			return fmt.Errorf("update track: %w", err)
+		}
+		patched = tag.RowsAffected() == 1
+		return nil
+	})
 	if err != nil {
-		return false, fmt.Errorf("begin: %w", err)
+		return false, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	tag, err := tx.Exec(ctx, applyPatchSQL, row.ID, row.UserID, row.Version, string(raw))
-	if err != nil {
-		return false, fmt.Errorf("update track: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return false, fmt.Errorf("commit: %w", err)
-	}
-	return tag.RowsAffected() == 1, nil
+	return patched, nil
 }
 
 func (s store) undoRun(ctx context.Context, runID uuid.UUID) (int64, error) {
-	tx, err := s.begin(ctx)
+	var undone int64
+	err := s.runTx(ctx, s.pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, undoRunSQL, runID.String())
+		if err != nil {
+			return fmt.Errorf("undo run: %w", err)
+		}
+		undone = tag.RowsAffected()
+		return nil
+	})
 	if err != nil {
-		return 0, fmt.Errorf("begin: %w", err)
+		return 0, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	tag, err := tx.Exec(ctx, undoRunSQL, runID.String())
-	if err != nil {
-		return 0, fmt.Errorf("undo run: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return 0, fmt.Errorf("commit: %w", err)
-	}
-	return tag.RowsAffected(), nil
+	return undone, nil
 }

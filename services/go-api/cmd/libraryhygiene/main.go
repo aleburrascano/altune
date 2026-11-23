@@ -47,7 +47,7 @@ func main() {
 func run(opts options, env func(string) string, stdout, stderr io.Writer) error {
 	ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
 	defer cancel()
-	pool, err := openReadOnlyPool(ctx, env(databaseURLVarName))
+	pool, err := openPool(ctx, env(databaseURLVarName))
 	if err != nil {
 		return err
 	}

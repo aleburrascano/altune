@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -186,24 +187,25 @@ func loadCandidates(ctx context.Context, pool *pgxpool.Pool, opts options) ([]ca
 	if err != nil {
 		return nil, fmt.Errorf("query candidates: %w", err)
 	}
-	defer rows.Close()
+	return pgx.CollectRows(rows, scanCandidate)
+}
 
-	var out []candidate
-	for rows.Next() {
-		var c candidate
-		var id, userID string
-		if err := rows.Scan(&id, &userID, &c.title, &c.artist, &c.album, &c.storedRef); err != nil {
-			return nil, fmt.Errorf("scan candidate: %w", err)
-		}
-		if c.trackID, err = catalog.ParseTrackId(id); err != nil {
-			return nil, fmt.Errorf("parse track id %q: %w", id, err)
-		}
-		if c.userID, err = shared.ParseUserId(userID); err != nil {
-			return nil, fmt.Errorf("parse user id %q: %w", userID, err)
-		}
-		out = append(out, c)
+func scanCandidate(row pgx.CollectableRow) (candidate, error) {
+	var c candidate
+	var id, userID string
+	if err := row.Scan(&id, &userID, &c.title, &c.artist, &c.album, &c.storedRef); err != nil {
+		return candidate{}, fmt.Errorf("scan candidate: %w", err)
 	}
-	return out, rows.Err()
+	trackID, err := catalog.ParseTrackId(id)
+	if err != nil {
+		return candidate{}, fmt.Errorf("parse track id %q: %w", id, err)
+	}
+	ownerID, err := shared.ParseUserId(userID)
+	if err != nil {
+		return candidate{}, fmt.Errorf("parse user id %q: %w", userID, err)
+	}
+	c.trackID, c.userID = trackID, ownerID
+	return c, nil
 }
 
 func candidateRefs(c candidate) []string {

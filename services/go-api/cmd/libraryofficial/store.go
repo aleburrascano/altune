@@ -14,12 +14,8 @@ import (
 const provider = string(acquisition.ProviderYouTube)
 
 type store struct {
-	pool   *pgxpool.Pool
-	access pgx.TxAccessMode
-}
-
-func (s store) begin(ctx context.Context) (pgx.Tx, error) {
-	return s.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: s.access})
+	pool  *pgxpool.Pool
+	runTx func(context.Context, *pgxpool.Pool, func(pgx.Tx) error) error
 }
 
 type writeVerdict string
@@ -40,25 +36,23 @@ const targetsSQL = `SELECT t.id::text, t.user_id::text, t.artist, t.title, COALE
 	ORDER BY t.user_id, t.artist, t.title, t.id`
 
 func (s store) loadTargets(ctx context.Context, userID string) ([]target, error) {
-	tx, err := s.begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	rows, err := tx.Query(ctx, targetsSQL, userID, provider)
-	if err != nil {
-		return nil, fmt.Errorf("query bound tracks without an official pointer: %w", err)
-	}
-	defer rows.Close()
 	var targets []target
-	for rows.Next() {
-		var t target
-		if err := rows.Scan(&t.TrackID, &t.UserID, &t.Artist, &t.Title, &t.Album, &t.ISRC, &t.CatalogSeconds, &t.Version); err != nil {
-			return nil, fmt.Errorf("scan bound track: %w", err)
+	err := s.runTx(ctx, s.pool, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, targetsSQL, userID, provider)
+		if err != nil {
+			return fmt.Errorf("query bound tracks without an official pointer: %w", err)
 		}
-		targets = append(targets, t)
-	}
-	return targets, rows.Err()
+		targets, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (target, error) {
+			var t target
+			err := row.Scan(&t.TrackID, &t.UserID, &t.Artist, &t.Title, &t.Album, &t.ISRC, &t.CatalogSeconds, &t.Version)
+			return t, err
+		})
+		if err != nil {
+			return fmt.Errorf("scan bound tracks: %w", err)
+		}
+		return nil
+	})
+	return targets, err
 }
 
 const pointSQL = `WITH prior AS (
@@ -75,26 +69,26 @@ const logPointerSQL = `INSERT INTO track_metadata_changes (run_id, track_id, use
 	VALUES ($1, $2, $3, 'catalog_sources', $4, $5)`
 
 func (s store) point(ctx context.Context, runID uuid.UUID, t target, videoID string) (writeVerdict, error) {
-	tx, err := s.begin(ctx)
+	verdict := writeSkipped
+	err := s.runTx(ctx, s.pool, func(tx pgx.Tx) error {
+		var before, after string
+		err := tx.QueryRow(ctx, pointSQL, t.TrackID, t.Version, provider, videoID).Scan(&before, &after)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("point catalog_sources: %w", err)
+		}
+		if _, err := tx.Exec(ctx, logPointerSQL, runID, t.TrackID, t.UserID, before, after); err != nil {
+			return fmt.Errorf("log pointer: %w", err)
+		}
+		verdict = writeDone
+		return nil
+	})
 	if err != nil {
-		return writeSkipped, fmt.Errorf("begin: %w", err)
+		return writeSkipped, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	var before, after string
-	err = tx.QueryRow(ctx, pointSQL, t.TrackID, t.Version, provider, videoID).Scan(&before, &after)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return writeSkipped, nil
-	}
-	if err != nil {
-		return writeSkipped, fmt.Errorf("point catalog_sources: %w", err)
-	}
-	if _, err := tx.Exec(ctx, logPointerSQL, runID, t.TrackID, t.UserID, before, after); err != nil {
-		return writeSkipped, fmt.Errorf("log pointer: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return writeSkipped, fmt.Errorf("commit: %w", err)
-	}
-	return writeDone, nil
+	return verdict, nil
 }
 
 type undoTally struct {
@@ -117,20 +111,18 @@ const undoSQL = `WITH restored AS (
 	(SELECT count(*) FROM track_metadata_changes WHERE run_id = $1 AND field = 'catalog_sources' AND undone_at IS NULL) - (SELECT count(*) FROM restored)`
 
 func (s store) undo(ctx context.Context, runID uuid.UUID) (undoTally, error) {
-	tx, err := s.begin(ctx)
-	if err != nil {
-		return undoTally{}, fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
 	var tally undoTally
-	if err := tx.QueryRow(ctx, undoSQL, runID).Scan(&tally.Restored, &tally.Kept); err != nil {
-		return undoTally{}, fmt.Errorf("undo run: %w", err)
+	err := s.runTx(ctx, s.pool, func(tx pgx.Tx) error {
+		if err := tx.QueryRow(ctx, undoSQL, runID).Scan(&tally.Restored, &tally.Kept); err != nil {
+			return fmt.Errorf("undo run: %w", err)
+		}
+		if tally.Restored+tally.Kept == 0 {
+			return fmt.Errorf("%w for run_id %s", errNothingToUndo, runID)
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, errNothingToUndo) {
+		return undoTally{}, err
 	}
-	if tally.Restored+tally.Kept == 0 {
-		return tally, fmt.Errorf("%w for run_id %s", errNothingToUndo, runID)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return undoTally{}, fmt.Errorf("commit: %w", err)
-	}
-	return tally, nil
+	return tally, err
 }

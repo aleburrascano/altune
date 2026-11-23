@@ -2,6 +2,7 @@ package main
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/ytminnertube"
 	"context"
 	"errors"
@@ -12,7 +13,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -92,20 +92,7 @@ func openPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	if databaseURL == "" {
 		return nil, errEmptyDatabaseURL
 	}
-	cfg, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		return nil, fmt.Errorf("parse database url: %w", err)
-	}
-	cfg.MaxConns = 2
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create pool: %w", err)
-	}
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("ping database: %w", err)
-	}
-	return pool, nil
+	return database.NewPool(ctx, databaseURL, 2)
 }
 
 func main() {
@@ -134,12 +121,12 @@ func run(opts options, env func(string) string, out io.Writer) error {
 		return err
 	}
 	defer pool.Close()
-	access := pgx.ReadWrite
+	runTx := database.InTx
 	if !opts.apply && !opts.undo {
-		access = pgx.ReadOnly
+		runTx = database.ReadOnly
 	}
 	if opts.undo {
-		return runUndo(ctx, store{pool: pool, access: access}, opts.undoRunID, out)
+		return runUndo(ctx, store{pool: pool, runTx: runTx}, opts.undoRunID, out)
 	}
 	budgeted, budget, err := ytminnertube.ToolClient(ctx, env)
 	if err != nil {
@@ -147,5 +134,5 @@ func run(opts options, env func(string) string, out io.Writer) error {
 	}
 	_, _ = fmt.Fprintln(out, budget.Describe())
 	youtube := acquisition.NewYtmSearch(acquisition.YtmSearchConfig{HTTP: budgeted, MinInterval: interval, Timeout: lookupTimeout})
-	return runBackfill(ctx, store{pool: pool, access: access}, newSourceLookup(youtube, interval), opts, uuid.New(), out)
+	return runBackfill(ctx, store{pool: pool, runTx: runTx}, newSourceLookup(youtube, interval), opts, uuid.New(), out)
 }

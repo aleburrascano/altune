@@ -1,33 +1,24 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/database"
+	"altune/go-api/internal/shared/sharedtest"
 	"bytes"
 	"context"
 	"errors"
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func testStore(t *testing.T) store {
 	t.Helper()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
-	pool, err := pgxpool.New(context.Background(), dbURL)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	return store{pool: pool}
+	pool := sharedtest.Pool(t)
+	return store{pool: pool, runTx: database.InTx}
 }
 
 func seedBound(t *testing.T, s store, userID, sources string) target {
@@ -156,7 +147,7 @@ func TestUndo_AnUnknownRunHasNothingToUndo(t *testing.T) {
 func TestPoint_OnAReadOnlyStoreIsRefusedByTheDatabaseWhateverTheSessionDefault(t *testing.T) {
 	seeded := testStore(t)
 	track := seedBound(t, seeded, uuid.NewString(), `[]`)
-	dry := store{pool: seeded.pool, access: pgx.ReadOnly}
+	dry := store{pool: seeded.pool, runTx: database.ReadOnly}
 
 	verdict, err := dry.point(t.Context(), uuid.New(), track, "AbCdEfGhIj1")
 	var pgErr *pgconn.PgError
@@ -190,7 +181,7 @@ func readOnlyTrapURL(t *testing.T, s store) string {
 		}
 	}
 	t.Cleanup(func() { _, _ = s.pool.Exec(context.Background(), `DROP SCHEMA `+schema+` CASCADE`) })
-	u, err := url.Parse(os.Getenv("DATABASE_URL"))
+	u, err := url.Parse(sharedtest.DatabaseURL(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,7 +193,7 @@ func readOnlyTrapURL(t *testing.T, s store) string {
 
 func TestOpenPool_SetsNoReadOnlySessionDefault(t *testing.T) {
 	testStore(t)
-	pool, err := openPool(t.Context(), os.Getenv("DATABASE_URL"))
+	pool, err := openPool(t.Context(), sharedtest.DatabaseURL(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +239,7 @@ func TestRun_UndoStillRemovesTheRunsYouTubePointer(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := run(options{undo: true, undoRunID: runID}, envWithDatabase(t, os.Getenv("DATABASE_URL")), &out); err != nil {
+	if err := run(options{undo: true, undoRunID: runID}, envWithDatabase(t, sharedtest.DatabaseURL(t)), &out); err != nil {
 		t.Fatalf("undo: %v\n%s", err, out.String())
 	}
 	if got := sourcesOf(t, s, track.TrackID); strings.Contains(got, "youtube") || !strings.Contains(got, "soundcloud") {
@@ -263,7 +254,7 @@ func TestStore_UndoOnAReadOnlyStoreIsRefusedByTheDatabase(t *testing.T) {
 	if verdict, err := seeded.point(t.Context(), runID, track, "AbCdEfGhIj1"); err != nil || verdict != writeDone {
 		t.Fatalf("verdict %q, err %v", verdict, err)
 	}
-	dry := store{pool: seeded.pool, access: pgx.ReadOnly}
+	dry := store{pool: seeded.pool, runTx: database.ReadOnly}
 
 	_, err := dry.undo(t.Context(), runID)
 	var pgErr *pgconn.PgError

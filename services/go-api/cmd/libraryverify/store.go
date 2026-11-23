@@ -15,24 +15,11 @@ var (
 	errUnknownStatus    = errors.New("track_identity has an unknown status")
 )
 
-func openReadOnlyPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
+func openPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	if databaseURL == "" {
 		return nil, errEmptyDatabaseURL
 	}
-	cfg, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		return nil, fmt.Errorf("parse database url: %w", err)
-	}
-	cfg.MaxConns = 1
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create pool: %w", err)
-	}
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("ping database: %w", err)
-	}
-	return pool, nil
+	return database.NewPool(ctx, databaseURL, 1)
 }
 
 const readyTracksSQL = `SELECT t.id::text, t.user_id::text, t.artist, t.title, COALESCE(t.audio_ref, ''),
@@ -53,15 +40,8 @@ func loadReadyTracks(ctx context.Context, pool *pgxpool.Pool, userID string, lim
 		if err != nil {
 			return fmt.Errorf("query ready tracks: %w", err)
 		}
-		defer rows.Close()
-		for rows.Next() {
-			track, err := scanTrack(rows)
-			if err != nil {
-				return err
-			}
-			tracks = append(tracks, track)
-		}
-		return rows.Err()
+		tracks, err = pgx.CollectRows(rows, scanTrack)
+		return err
 	})
 	if err != nil {
 		return nil, err
@@ -69,11 +49,11 @@ func loadReadyTracks(ctx context.Context, pool *pgxpool.Pool, userID string, lim
 	return tracks, nil
 }
 
-func scanTrack(rows pgx.Rows) (libraryTrack, error) {
+func scanTrack(row pgx.CollectableRow) (libraryTrack, error) {
 	var track libraryTrack
 	var status string
 	identity := &track.Identity
-	if err := rows.Scan(&track.ID, &track.UserID, &track.Artist, &track.Title, &track.AudioRef,
+	if err := row.Scan(&track.ID, &track.UserID, &track.Artist, &track.Title, &track.AudioRef,
 		&status, &identity.ISRC, &identity.MBRecordingID, &identity.DeezerTrackID, &identity.AppleSongID, &identity.Reason); err != nil {
 		return libraryTrack{}, fmt.Errorf("scan ready track: %w", err)
 	}

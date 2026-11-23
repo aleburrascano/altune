@@ -82,7 +82,7 @@ func run(opts options, env func(string) string) error {
 	fmt.Fprintln(os.Stderr, usageNotice)
 	ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
 	defer cancel()
-	pool, err := openReadOnlyPool(ctx, env(databaseURLVarName))
+	pool, err := openPool(ctx, env(databaseURLVarName))
 	if err != nil {
 		return err
 	}

@@ -2,33 +2,24 @@ package main
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/shared/database"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
-	"os"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func testStore(t *testing.T) store {
 	t.Helper()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
-	pool, err := pgxpool.New(context.Background(), dbURL)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	return store{pool: pool, queue: acquisition.NewPgxJobQueue(pool)}
+	pool := sharedtest.Pool(t)
+	return store{pool: pool, queue: acquisition.NewPgxJobQueue(pool), runTx: database.InTx}
 }
 
 type seeded struct {
@@ -146,7 +137,7 @@ func TestStore_ReadOnlyAccessRefusesTheWriteOnAPlainPool(t *testing.T) {
 	rw := testStore(t)
 	row := seedReady(t, rw, "USALBUM", 226)
 	before := stateOf(t, rw, row)
-	s := store{pool: rw.pool, queue: rw.queue, access: pgx.ReadOnly}
+	s := store{pool: rw.pool, queue: rw.queue, runTx: database.ReadOnly}
 	got, err := s.apply(context.Background(), uuid.New(), changeFor(row, actionFixISRC, "USRADIO", 226, 225), true)
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) || pgErr.Code != "25006" || got != verdictFailed {
@@ -304,7 +295,7 @@ func TestStore_ReadOnlyAccessRefusesAReacquireAndQueuesNoJob(t *testing.T) {
 	rw := testStore(t)
 	row := seedReady(t, rw, "USALBUM", 226)
 	before := stateOf(t, rw, row)
-	s := store{pool: rw.pool, queue: rw.queue, access: pgx.ReadOnly}
+	s := store{pool: rw.pool, queue: rw.queue, runTx: database.ReadOnly}
 	got, err := s.apply(context.Background(), uuid.New(), changeFor(row, actionReacquire, "", 226, 379), true)
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) || pgErr.Code != "25006" || got == verdictApplied {
@@ -319,7 +310,7 @@ func TestStore_DryRunStillReportsWhatItWouldApplyWhenReadOnly(t *testing.T) {
 	rw := testStore(t)
 	row := seedReady(t, rw, "USALBUM", 226)
 	before := stateOf(t, rw, row)
-	s := store{pool: rw.pool, queue: rw.queue, access: pgx.ReadOnly}
+	s := store{pool: rw.pool, queue: rw.queue, runTx: database.ReadOnly}
 	for _, c := range []change{changeFor(row, actionReacquire, "", 226, 379), changeFor(row, actionFixISRC, "USRADIO", 226, 225)} {
 		got, err := s.apply(context.Background(), uuid.New(), c, false)
 		if err != nil || got != verdictApplied {
@@ -344,7 +335,7 @@ func TestStore_ReadOnlyAccessRefusesAnUndoAndKeepsTheFix(t *testing.T) {
 		t.Fatalf("apply: %s, %v", got, err)
 	}
 	applied := stateOf(t, rw, row)
-	s := store{pool: rw.pool, queue: rw.queue, access: pgx.ReadOnly}
+	s := store{pool: rw.pool, queue: rw.queue, runTx: database.ReadOnly}
 	results, err := s.undoRun(context.Background(), runID)
 	var pgErr *pgconn.PgError
 	refused := errors.As(err, &pgErr) && pgErr.Code == "25006"
