@@ -63,11 +63,11 @@ const mbMaxReleaseGroupPages = 5
 const mbReleaseGroupsFlightTimeout = 60 * time.Second
 
 func (a *MusicBrainzAdapter) fetchReleaseGroups(ctx context.Context, mbid string) ([]mbReleaseGroup, error) {
-	if rgs, ok := a.releaseMemo.get(mbid); ok {
+	if rgs, ok := a.releaseMemo.Get(mbid); ok {
 		return rgs, nil
 	}
 	ch := a.releaseSF.DoChan(mbid, func() (any, error) {
-		if rgs, ok := a.releaseMemo.get(mbid); ok {
+		if rgs, ok := a.releaseMemo.Get(mbid); ok {
 			return rgs, nil
 		}
 		fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mbReleaseGroupsFlightTimeout)
@@ -106,6 +106,6 @@ func (a *MusicBrainzAdapter) fetchReleaseGroupPages(ctx context.Context, mbid st
 	if err != nil {
 		return all, err
 	}
-	a.releaseMemo.put(mbid, all)
+	a.releaseMemo.Put(mbid, all)
 	return all, nil
 }

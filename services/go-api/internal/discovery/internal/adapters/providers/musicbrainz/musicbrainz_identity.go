@@ -12,7 +12,7 @@ import (
 
 func (a *MusicBrainzAdapter) ResolveArtistIdentity(ctx context.Context, name string) (*ports.ArtistIdentity, error) {
 	nameNorm := textnorm.NormalizeForMatch(name)
-	if id, ok := a.identityMemo.get(nameNorm); ok {
+	if id, ok := a.identityMemo.Get(nameNorm); ok {
 		return id, nil
 	}
 
@@ -53,7 +53,7 @@ func (a *MusicBrainzAdapter) ResolveArtistIdentity(ctx context.Context, name str
 		Area:           area,
 		ArtistType:     first.Type,
 	}
-	a.identityMemo.put(nameNorm, identity)
+	a.identityMemo.Put(nameNorm, identity)
 	return identity, nil
 }
 

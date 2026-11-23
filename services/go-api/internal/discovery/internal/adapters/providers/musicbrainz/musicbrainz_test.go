@@ -1,7 +1,8 @@
-package musicbrainz
+package musicbrainz_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/adapters/providers/musicbrainz"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
 	"altune/go-api/internal/discovery/internal/core/ports"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -43,7 +45,7 @@ func TestMusicBrainzAdapter_SearchStructured_Recordings(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
 	results, err := adapter.SearchStructured(context.Background(), "paranoid android", "", map[domain.ResultKind]bool{
 		domain.ResultKindTrack: true,
 	})
@@ -109,7 +111,7 @@ func TestMusicBrainzAdapter_SearchStructured_Artists(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
 	results, err := adapter.SearchStructured(context.Background(), "radiohead", "", map[domain.ResultKind]bool{
 		domain.ResultKindArtist: true,
 	})
@@ -164,7 +166,7 @@ func TestMusicBrainzAdapter_SearchStructured_ReleaseGroups(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
 	results, err := adapter.SearchStructured(context.Background(), "ok computer", "", map[domain.ResultKind]bool{
 		domain.ResultKindAlbum: true,
 	})
@@ -208,7 +210,7 @@ func TestMusicBrainzAdapter_SearchStructured_RecordingsRequestISRCs(t *testing.T
 	}))
 	defer server.Close()
 
-	adapter := NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
 
 	t.Run("recording search includes inc=isrcs", func(t *testing.T) {
 		receivedQuery = ""
@@ -231,7 +233,7 @@ func TestMusicBrainzAdapter_SearchStructured_RecordingsRequestISRCs(t *testing.T
 	})
 }
 
-func TestMusicBrainzAdapter_fetchReleaseGroups_paginates(t *testing.T) {
+func TestMusicBrainzAdapter_ReleaseGroupTitles_paginates(t *testing.T) {
 	var offsets []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/ws/2/release-group") {
@@ -257,76 +259,112 @@ func TestMusicBrainzAdapter_fetchReleaseGroups_paginates(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
-	rgs, err := adapter.fetchReleaseGroups(context.Background(), "mbid-che")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	titles, err := adapter.ReleaseGroupTitles(context.Background(), "mbid-che")
 	if err != nil {
-		t.Fatalf("fetchReleaseGroups: %v", err)
+		t.Fatalf("ReleaseGroupTitles: %v", err)
 	}
 	if len(offsets) != 2 || offsets[0] != "0" || offsets[1] != "100" {
 		t.Errorf("offset params: got %v, want [0 100]", offsets)
 	}
-	if len(rgs) != 3 {
-		t.Fatalf("expected 3 release-groups across pages, got %d", len(rgs))
-	}
-	for i, want := range []string{"First", "Second", "Third"} {
-		if rgs[i].Title != want {
-			t.Errorf("rg[%d]: got %q, want %q (pages appended in request order)", i, rgs[i].Title, want)
-		}
+	if want := []string{"First", "Second", "Third"}; !slices.Equal(titles, want) {
+		t.Errorf("titles = %v, want %v (pages appended in request order)", titles, want)
 	}
 }
 
-func TestMusicBrainzAdapter_rateLimit_reservesDistinctSlots(t *testing.T) {
-	a := NewMusicBrainzAdapter(http.DefaultClient, "test")
-	ctx, cancel := context.WithCancel(context.Background())
+func recordingArrivals(t *testing.T) (*httptest.Server, *[]time.Time) {
+	t.Helper()
+	var mu sync.Mutex
+	var arrivals []time.Time
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		arrivals = append(arrivals, time.Now())
+		mu.Unlock()
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(server.Close)
+	return server, &arrivals
+}
+
+func lookupRecording(a *musicbrainz.MusicBrainzAdapter) func(context.Context) error {
+	return func(ctx context.Context) error {
+		_, _, err := a.RecordingByMBID(ctx, "rec-1")
+		return err
+	}
+}
+
+func TestMusicBrainzAdapter_rateLimit_cancelledCallersStillReserveOneSecondSlots(t *testing.T) {
+	server, arrivals := recordingArrivals(t)
+	lookup := lookupRecording(musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "test"))
+	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
 
 	start := time.Now()
-	_ = a.limiter.Wait(ctx)
-	_ = a.limiter.Wait(ctx)
-	_ = a.limiter.Wait(ctx)
-
-	a.limiter.Mu.Lock()
-	last := a.limiter.LastReq
-	a.limiter.Mu.Unlock()
-
-	if got := last.Sub(start); got < 1900*time.Millisecond || got > 3*time.Second {
-		t.Errorf("lastReq advanced by %v, want ~2s (three callers spaced 1s apart)", got)
+	for range 2 {
+		if err := lookup(cancelled); !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancelled lookup err = %v, want context.Canceled", err)
+		}
 	}
 	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
 		t.Errorf("cancelled-ctx callers blocked %v, want prompt return", elapsed)
 	}
+	if err := lookup(context.Background()); err != nil {
+		t.Fatalf("live lookup: %v", err)
+	}
+	if len(*arrivals) != 1 {
+		t.Fatalf("server saw %d requests, want only the live one", len(*arrivals))
+	}
+	if got := (*arrivals)[0].Sub(start); got < 1900*time.Millisecond || got > 3*time.Second {
+		t.Errorf("live request reached MusicBrainz after %v, want ~2s (the two cancelled callers held the slots 1s apart)", got)
+	}
 }
 
 func TestMusicBrainzAdapter_rateLimit_ctxCancelAbortsWait(t *testing.T) {
-	a := NewMusicBrainzAdapter(http.DefaultClient, "test")
-	a.limiter.Mu.Lock()
-	a.limiter.LastReq = time.Now()
-	a.limiter.Mu.Unlock()
+	server, _ := recordingArrivals(t)
+	lookup := lookupRecording(musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "test"))
+	if err := lookup(context.Background()); err != nil {
+		t.Fatalf("first lookup: %v", err)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	start := time.Now()
-	_ = a.limiter.Wait(ctx)
+	_ = lookup(ctx)
 	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
 		t.Errorf("rateLimit blocked %v after ctx cancel, want prompt return", elapsed)
 	}
 }
 
-func TestMBStructuredQuery_perKind(t *testing.T) {
+func structuredQuerySent(t *testing.T, artist, track string, kind domain.ResultKind) (path, query string) {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path, query = r.URL.Path, r.URL.Query().Get("query")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	if _, err := adapter.SearchStructured(context.Background(), artist, track, map[domain.ResultKind]bool{kind: true}); err != nil {
+		t.Fatalf("SearchStructured: %v", err)
+	}
+	return path, query
+}
+
+func TestMusicBrainzAdapter_SearchStructured_queryPerKind(t *testing.T) {
 	tests := []struct {
-		name string
-		kind domain.ResultKind
-		want string
+		name, path, want string
+		kind             domain.ResultKind
 	}{
-		{"track", domain.ResultKindTrack, `artist:"Queen" AND recording:"Bohemian Rhapsody"`},
-		{"album", domain.ResultKindAlbum, `artist:"Queen" AND release:"Bohemian Rhapsody"`},
-		{"artist ignores track", domain.ResultKindArtist, "Queen"},
-		{"unknown falls back to concatenation", domain.ResultKindUnknown, "Queen Bohemian Rhapsody"},
+		{"track", "/ws/2/recording/", `artist:"Queen" AND recording:"Bohemian Rhapsody"`, domain.ResultKindTrack},
+		{"album", "/ws/2/release-group/", `artist:"Queen" AND release:"Bohemian Rhapsody"`, domain.ResultKindAlbum},
+		{"artist ignores track", "/ws/2/artist/", "Queen", domain.ResultKindArtist},
+		{"unknown falls back to concatenation", "/ws/2/recording/", "Queen Bohemian Rhapsody", domain.ResultKindUnknown},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := mbStructuredQuery("Queen", "Bohemian Rhapsody", tt.kind); got != tt.want {
-				t.Errorf("query = %q, want %q", got, tt.want)
+			path, query := structuredQuerySent(t, "Queen", "Bohemian Rhapsody", tt.kind)
+			if path != tt.path || query != tt.want {
+				t.Errorf("request = %s query %q, want %s query %q", path, query, tt.path, tt.want)
 			}
 		})
 	}
@@ -344,7 +382,7 @@ func TestMusicBrainzAdapter_SearchStructured_failedKindSkipped(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
 	results, err := adapter.SearchStructured(context.Background(), "Queen", "Söz", map[domain.ResultKind]bool{
 		domain.ResultKindTrack:  true,
 		domain.ResultKindArtist: true,
@@ -374,7 +412,7 @@ func TestMusicBrainzAdapter_ResolveArtistIdentity(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
 	id, err := adapter.ResolveArtistIdentity(context.Background(), "Che")
 	if err != nil {
 		t.Fatalf("ResolveArtistIdentity: %v", err)
@@ -408,7 +446,7 @@ func TestMusicBrainzAdapter_ResolveArtistIdentity_noExactMatchIsNil(t *testing.T
 	}))
 	defer server.Close()
 
-	adapter := NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
 	id, err := adapter.ResolveArtistIdentity(context.Background(), "Radiohead")
 	if err != nil {
 		t.Fatalf("ResolveArtistIdentity: %v", err)
@@ -418,20 +456,32 @@ func TestMusicBrainzAdapter_ResolveArtistIdentity_noExactMatchIsNil(t *testing.T
 	}
 }
 
-func TestParseBirthYear(t *testing.T) {
+func TestMusicBrainzAdapter_ResolveArtistIdentity_birthYearFromLifeSpanBegin(t *testing.T) {
 	tests := []struct {
-		in   string
-		want int
+		begin string
+		want  int
 	}{
 		{"1969-10-02", 1969},
 		{"2004", 2004},
 		{"", 0},
 		{"196", 0},
 		{"19x9-01", 0},
+		{"/969", 0},
+		{":969", 0},
 	}
 	for _, tt := range tests {
-		if got := parseBirthYear(tt.in); got != tt.want {
-			t.Errorf("parseBirthYear(%q) = %d, want %d", tt.in, got, tt.want)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"artists": [{"id": "mbid-che", "name": "Che", "life-span": {"begin": "` + tt.begin + `"}}]}`))
+		}))
+		adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+		id, err := adapter.ResolveArtistIdentity(context.Background(), "Che")
+		server.Close()
+		if err != nil || id == nil {
+			t.Fatalf("ResolveArtistIdentity(begin %q) = %v, %v; want an identity", tt.begin, id, err)
+		}
+		if id.BirthYear != tt.want {
+			t.Errorf("BirthYear for begin %q = %d, want %d", tt.begin, id.BirthYear, tt.want)
 		}
 	}
 }
@@ -456,7 +506,7 @@ func TestMusicBrainzAdapter_ListArtistDiscography(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
 	results, err := adapter.ListArtistDiscography(context.Background(), "Radiohead")
 	if err != nil {
 		t.Fatalf("ListArtistDiscography: %v", err)
@@ -483,7 +533,7 @@ func TestMusicBrainzAdapter_ListArtistDiscography_unknownArtistIsEmpty(t *testin
 	}))
 	defer server.Close()
 
-	adapter := NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
 	results, err := adapter.ListArtistDiscography(context.Background(), "Nobody")
 	if err != nil {
 		t.Fatalf("ListArtistDiscography: %v", err)
@@ -500,45 +550,49 @@ func TestMusicBrainzAdapter_ReleaseGroupTitles_emptyMBIDNoRequest(t *testing.T) 
 	}))
 	defer server.Close()
 
-	adapter := NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
 	titles, err := adapter.ReleaseGroupTitles(context.Background(), "")
 	if err != nil || titles != nil {
 		t.Errorf("ReleaseGroupTitles(\"\") = (%v, %v), want (nil, nil)", titles, err)
 	}
 }
 
-func TestMusicBrainz_FetchReleaseGroups_laterPageErrorKeepsEarlierPages(t *testing.T) {
+func TestMusicBrainzAdapter_ListArtistDiscography_laterPageErrorKeepsEarlierPagesAndIsNotMemoized(t *testing.T) {
+	var firstPages atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.URL.Path, "/ws/2/release-group") {
-			http.NotFound(w, r)
-			return
-		}
-		if r.URL.Query().Get("offset") != "0" {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/ws/2/artist"):
+			_, _ = w.Write([]byte(`{"artists": [{"id": "mbid-1", "name": "Che"}]}`))
+		case strings.HasPrefix(r.URL.Path, "/ws/2/release-group") && r.URL.Query().Get("offset") == "0":
+			firstPages.Add(1)
+			_, _ = w.Write([]byte(`{
+				"release-groups": [{"id": "rg-1", "title": "One", "primary-type": "Album"}],
+				"release-group-count": 150
+			}`))
+		default:
 			w.WriteHeader(http.StatusInternalServerError)
-			return
 		}
-		_, _ = w.Write([]byte(`{
-			"release-groups": [{"id": "rg-1", "title": "One", "primary-type": "Album"}],
-			"release-group-count": 150
-		}`))
 	}))
 	defer server.Close()
 
-	adapter := NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
-	rgs, err := adapter.fetchReleaseGroups(context.Background(), "mbid-1")
-	var partial *domain.PartialResultError
-	if !errors.As(err, &partial) || partial.Page != 1 {
-		t.Fatalf("expected a PartialResultError for page 1 alongside the earlier pages, got: %v", err)
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	for call := 1; call <= 2; call++ {
+		results, err := adapter.ListArtistDiscography(context.Background(), "Che")
+		var partial *domain.PartialResultError
+		if !errors.As(err, &partial) || partial.Page != 1 {
+			t.Fatalf("call %d: expected a PartialResultError for page 1 alongside the earlier pages, got: %v", call, err)
+		}
+		if len(results) != 1 || results[0].Title != "One" {
+			t.Fatalf("call %d: results = %+v, want the 1 page-1 release-group kept", call, results)
+		}
 	}
-	if len(rgs) != 1 || rgs[0].Title != "One" {
-		t.Fatalf("rgs = %+v, want the 1 page-1 release-group kept", rgs)
-	}
-	if _, ok := adapter.releaseMemo.get("mbid-1"); ok {
-		t.Error("partial release-group set was memoized; a truncated discography would be reused for hours")
+	if got := firstPages.Load(); got != 2 {
+		t.Errorf("first page fetched %d times, want 2 (a truncated discography must not be memoized and reused for hours)", got)
 	}
 }
 
-func TestMusicBrainz_FetchReleaseGroups_singleflightCollapsesConcurrentFetches(t *testing.T) {
+func TestMusicBrainzAdapter_ReleaseGroupTitles_singleflightCollapsesConcurrentFetches(t *testing.T) {
 	var requests atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/ws/2/release-group") {
@@ -553,15 +607,15 @@ func TestMusicBrainz_FetchReleaseGroups_singleflightCollapsesConcurrentFetches(t
 	}))
 	defer server.Close()
 
-	adapter := NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
 	var wg sync.WaitGroup
 	for range 2 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			rgs, err := adapter.fetchReleaseGroups(context.Background(), "mbid-1")
-			if err != nil || len(rgs) != 1 {
-				t.Errorf("fetchReleaseGroups = (%v, %v), want 1 release-group", rgs, err)
+			titles, err := adapter.ReleaseGroupTitles(context.Background(), "mbid-1")
+			if err != nil || len(titles) != 1 {
+				t.Errorf("ReleaseGroupTitles = (%v, %v), want 1 title", titles, err)
 			}
 		}()
 	}
@@ -571,22 +625,32 @@ func TestMusicBrainz_FetchReleaseGroups_singleflightCollapsesConcurrentFetches(t
 	}
 }
 
-func TestMBStructuredQuery_escapesEmbeddedQuotes(t *testing.T) {
-	got := mbStructuredQuery(`The "Best" Band`, `Hello`, domain.ResultKindTrack)
+func TestMusicBrainzAdapter_SearchStructured_escapesEmbeddedQuotes(t *testing.T) {
+	_, got := structuredQuerySent(t, `The "Best" Band`, `Hello`, domain.ResultKindTrack)
 	want := `artist:"The \"Best\" Band" AND recording:"Hello"`
 	if got != want {
 		t.Errorf("query = %q, want %q (embedded quotes backslash-escaped)", got, want)
 	}
 }
 
-func TestMapMBReleaseGroup_carriesFirstReleaseDate(t *testing.T) {
-	r := mapMBReleaseGroup(mbReleaseGroup{
-		ID:               "rg-1",
-		Title:            "Some EP",
-		PrimaryType:      "EP",
-		FirstReleaseDate: "2019-05-01",
-		ArtistCredit:     []mbArtistRef{{Name: "Che"}},
-	})
+func albumSearchResult(t *testing.T, releaseGroup string) domain.SearchResult {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"release-groups": [` + releaseGroup + `]}`))
+	}))
+	defer server.Close()
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	results, err := adapter.SearchStructured(context.Background(), "Che", "Some EP", providertest.AlbumKinds())
+	if err != nil || len(results) != 1 {
+		t.Fatalf("SearchStructured = %d results, %v; want 1 album", len(results), err)
+	}
+	return results[0]
+}
+
+func TestMusicBrainzAdapter_SearchStructured_albumCarriesFirstReleaseDate(t *testing.T) {
+	r := albumSearchResult(t, `{"id": "rg-1", "title": "Some EP", "primary-type": "EP",
+		"first-release-date": "2019-05-01", "artist-credit": [{"name": "Che"}]}`)
 	if r.ReleaseDate != "2019-05-01" {
 		t.Errorf("ReleaseDate = %q, want 2019-05-01 (MB first-release-date must map through)", r.ReleaseDate)
 	}
@@ -601,8 +665,8 @@ func TestMapMBReleaseGroup_carriesFirstReleaseDate(t *testing.T) {
 	}
 }
 
-func TestMapMBReleaseGroup_partialDate(t *testing.T) {
-	r := mapMBReleaseGroup(mbReleaseGroup{ID: "rg-2", Title: "Early", FirstReleaseDate: "2005"})
+func TestMusicBrainzAdapter_SearchStructured_albumKeepsAPartialDate(t *testing.T) {
+	r := albumSearchResult(t, `{"id": "rg-2", "title": "Early", "first-release-date": "2005"}`)
 	if r.ReleaseDate != "2005" {
 		t.Errorf("ReleaseDate = %q, want 2005", r.ReleaseDate)
 	}
@@ -617,7 +681,7 @@ func TestMusicBrainzAdapter_SearchStructured_escapesLuceneMetacharacters(t *test
 	}))
 	defer server.Close()
 
-	adapter := NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
 	_, err := adapter.SearchStructured(context.Background(), "*NSYNC", "", map[domain.ResultKind]bool{
 		domain.ResultKindArtist: true,
 	})
@@ -644,7 +708,7 @@ func TestMusicBrainzAdapter_ResolveArtistIdentity_escapesLuceneMetacharacters(t 
 	}))
 	defer server.Close()
 
-	adapter := NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
 	if _, err := adapter.ResolveArtistIdentity(context.Background(), "Sunn O)))"); err != nil {
 		t.Fatalf("ResolveArtistIdentity: %v", err)
 	}
@@ -659,92 +723,82 @@ func TestMusicBrainzAdapter_ResolveArtistIdentity_escapesLuceneMetacharacters(t 
 	}
 }
 
-func TestMusicBrainzAdapter_fetchRecordingMatches_escapesLuceneMetacharacters(t *testing.T) {
+func resolveMBIDQuery(t *testing.T, kind domain.ResultKind, title, body string) string {
+	t.Helper()
 	var rawQuery string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rawQuery = r.URL.RawQuery
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"recordings": []}`))
+		_, _ = w.Write([]byte(body))
 	}))
 	defer server.Close()
 
-	adapter := NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
-	if _, err := adapter.fetchRecordingMatches(context.Background(), `Track\`); err != nil {
-		t.Fatalf("fetchRecordingMatches: %v", err)
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	if _, err := adapter.ResolveMBID(context.Background(), kind, title, ""); err != nil {
+		t.Fatalf("ResolveMBID: %v", err)
 	}
-
 	q, err := url.QueryUnescape(strings.Split(rawQuery, "&")[0])
 	if err != nil {
 		t.Fatalf("QueryUnescape: %v", err)
 	}
-	q = strings.TrimPrefix(q, "query=")
-	if q != `Track\\` {
+	return strings.TrimPrefix(q, "query=")
+}
+
+func TestMusicBrainzAdapter_ResolveMBID_trackEscapesLuceneMetacharacters(t *testing.T) {
+	if q := resolveMBIDQuery(t, domain.ResultKindTrack, `Track\`, `{"recordings": []}`); q != `Track\\` {
 		t.Errorf("query sent to MusicBrainz = %q, want the trailing backslash escaped so the phrase terminates", q)
 	}
 }
 
-func TestMusicBrainzAdapter_fetchReleaseGroupMatches_escapesLuceneMetacharacters(t *testing.T) {
-	var rawQuery string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rawQuery = r.URL.RawQuery
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"release-groups": []}`))
-	}))
-	defer server.Close()
-
-	adapter := NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
-	if _, err := adapter.fetchReleaseGroupMatches(context.Background(), "genre:rock"); err != nil {
-		t.Fatalf("fetchReleaseGroupMatches: %v", err)
-	}
-
-	q, err := url.QueryUnescape(strings.Split(rawQuery, "&")[0])
-	if err != nil {
-		t.Fatalf("QueryUnescape: %v", err)
-	}
-	q = strings.TrimPrefix(q, "query=")
-	if q != `genre\:rock` {
+func TestMusicBrainzAdapter_ResolveMBID_albumEscapesLuceneMetacharacters(t *testing.T) {
+	if q := resolveMBIDQuery(t, domain.ResultKindAlbum, "genre:rock", `{"release-groups": []}`); q != `genre\:rock` {
 		t.Errorf("query sent to MusicBrainz = %q, want the field-colon backslash-escaped", q)
 	}
 }
 
-func TestMBStructuredQuery_escapesArtistOnlyAndDefaultBranches(t *testing.T) {
-	if got, want := mbStructuredQuery("*NSYNC", "Bye Bye Bye", domain.ResultKindArtist), `\*NSYNC`; got != want {
-		t.Errorf("artist branch = %q, want %q", got, want)
+func TestMusicBrainzAdapter_SearchStructured_escapesArtistOnlyAndDefaultBranches(t *testing.T) {
+	if _, got := structuredQuerySent(t, "*NSYNC", "Bye Bye Bye", domain.ResultKindArtist); got != `\*NSYNC` {
+		t.Errorf("artist branch = %q, want %q", got, `\*NSYNC`)
 	}
-	if got, want := mbStructuredQuery("Sunn O)))", "Bye Bye Bye", domain.ResultKindUnknown), `Sunn O\)\)\) Bye Bye Bye`; got != want {
-		t.Errorf("default branch = %q, want %q", got, want)
-	}
-}
-
-func TestMBStructuredQuery_escapesTrackAndAlbumBranches(t *testing.T) {
-	if got, want := mbStructuredQuery("*NSYNC", `Bye\`, domain.ResultKindTrack), `artist:"\*NSYNC" AND recording:"Bye\\"`; got != want {
-		t.Errorf("track branch = %q, want %q (leading * and trailing backslash backslash-escaped)", got, want)
-	}
-	if got, want := mbStructuredQuery("Sunn O)))", "Bye Bye Bye", domain.ResultKindAlbum), `artist:"Sunn O\)\)\)" AND release:"Bye Bye Bye"`; got != want {
-		t.Errorf("album branch = %q, want %q (unbalanced parens backslash-escaped)", got, want)
+	if _, got := structuredQuerySent(t, "Sunn O)))", "Bye Bye Bye", domain.ResultKindUnknown); got != `Sunn O\)\)\) Bye Bye Bye` {
+		t.Errorf("default branch = %q, want %q", got, `Sunn O\)\)\) Bye Bye Bye`)
 	}
 }
 
-func TestMinIntervalLimiterExpiredOnArrivalIsNotQueueTimeout(t *testing.T) {
-	l := providerhttp.NewMinIntervalLimiter(time.Millisecond)
+func TestMusicBrainzAdapter_SearchStructured_escapesTrackAndAlbumBranches(t *testing.T) {
+	if _, got := structuredQuerySent(t, "*NSYNC", `Bye\`, domain.ResultKindTrack); got != `artist:"\*NSYNC" AND recording:"Bye\\"` {
+		t.Errorf("track branch = %q, want leading * and trailing backslash backslash-escaped", got)
+	}
+	if _, got := structuredQuerySent(t, "Sunn O)))", "Bye Bye Bye", domain.ResultKindAlbum); got != `artist:"Sunn O\)\)\)" AND release:"Bye Bye Bye"` {
+		t.Errorf("album branch = %q, want unbalanced parens backslash-escaped", got)
+	}
+}
+
+func TestMusicBrainzAdapter_rateLimit_expiredOnArrivalIsNotQueueTimeout(t *testing.T) {
+	server, arrivals := recordingArrivals(t)
+	lookup := lookupRecording(musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "test"))
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
 	defer cancel()
 
-	err := l.Wait(ctx)
+	err := lookup(ctx)
 
 	if !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) {
 		t.Fatalf("want plain DeadlineExceeded, got %v", err)
+	}
+	if len(*arrivals) != 0 {
+		t.Errorf("server saw %d requests, want none for an expired caller", len(*arrivals))
 	}
 }
 
 func TestProviderLimiterBurstShedsBeyondQueueDepth(t *testing.T) {
 	const callers = 20
+	burstServer, _ := recordingArrivals(t)
 	cases := []struct {
 		name  string
 		wait  func(context.Context) error
 		burst int
 	}{
-		{"musicbrainz", NewMusicBrainzAdapter(http.DefaultClient, "ua").limiter.Wait, 1},
+		{"musicbrainz", lookupRecording(musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(burstServer.URL), "ua")), 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -772,13 +826,32 @@ func TestProviderLimiterBurstShedsBeyondQueueDepth(t *testing.T) {
 	}
 }
 
-func TestMapMBRecording_ALiveRecordingDoesNotPassAsTheStudioCut(t *testing.T) {
-	live := mbRecording{ID: "rec-1", Title: "Tom Sawyer", Disambiguation: "live, 2015‐06‐17 & 19: Air Canada Centre, Toronto, ON, Canada", LengthMs: 300000, ISRCs: []string{"CAA311502074"}}
-	if got := mapMBRecording(live); got.Title != "Tom Sawyer (live, 2015‐06‐17 & 19: Air Canada Centre, Toronto, ON, Canada)" {
-		t.Errorf("Title = %q, want the disambiguation shown", got.Title)
+func trackSearchResults(t *testing.T, recordings string) []domain.SearchResult {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"recordings": [` + recordings + `]}`))
+	}))
+	defer server.Close()
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	results, err := adapter.SearchStructured(context.Background(), "Rush", "Tom Sawyer", providertest.TrackKinds())
+	if err != nil {
+		t.Fatalf("SearchStructured: %v", err)
 	}
-	studio := mbRecording{ID: "rec-2", Title: "Tom Sawyer", LengthMs: 276000}
-	if got := mapMBRecording(studio); got.Title != "Tom Sawyer" {
-		t.Errorf("Title = %q, want the plain title", got.Title)
+	return results
+}
+
+func TestMusicBrainzAdapter_SearchStructured_aLiveRecordingDoesNotPassAsTheStudioCut(t *testing.T) {
+	results := trackSearchResults(t, `
+		{"id": "rec-1", "title": "Tom Sawyer", "disambiguation": "live, 2015‐06‐17 & 19: Air Canada Centre, Toronto, ON, Canada", "length": 300000, "isrcs": ["CAA311502074"]},
+		{"id": "rec-2", "title": "Tom Sawyer", "length": 276000}`)
+	if len(results) != 2 {
+		t.Fatalf("results = %d, want 2", len(results))
+	}
+	if got := results[0].Title; got != "Tom Sawyer (live, 2015‐06‐17 & 19: Air Canada Centre, Toronto, ON, Canada)" {
+		t.Errorf("Title = %q, want the disambiguation shown", got)
+	}
+	if got := results[1].Title; got != "Tom Sawyer" {
+		t.Errorf("Title = %q, want the plain title", got)
 	}
 }

@@ -2,6 +2,7 @@ package musicbrainz
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/adapters/providers/musicbrainz/memo"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providersearch"
 	"altune/go-api/internal/discovery/internal/core/ports"
@@ -23,8 +24,8 @@ type MusicBrainzAdapter struct {
 	userAgent string
 	limiter   *providerhttp.MinIntervalLimiter
 
-	identityMemo *mbMemo[*ports.ArtistIdentity]
-	releaseMemo  *mbMemo[[]mbReleaseGroup]
+	identityMemo *memo.Memo[*ports.ArtistIdentity]
+	releaseMemo  *memo.Memo[[]mbReleaseGroup]
 	releaseSF    singleflight.Group
 }
 
@@ -33,9 +34,13 @@ func NewMusicBrainzAdapter(client *http.Client, userAgent string) *MusicBrainzAd
 		client:       client,
 		userAgent:    userAgent,
 		limiter:      providerhttp.NewMinIntervalLimiter(time.Second),
-		identityMemo: newMBMemo[*ports.ArtistIdentity](mbMemoTTL),
-		releaseMemo:  newMBMemo[[]mbReleaseGroup](mbMemoTTL),
+		identityMemo: newMBMemo[*ports.ArtistIdentity](),
+		releaseMemo:  newMBMemo[[]mbReleaseGroup](),
 	}
+}
+
+func newMBMemo[V any]() *memo.Memo[V] {
+	return memo.New[V](6*time.Hour, 2048, time.Now)
 }
 
 func (a *MusicBrainzAdapter) Name() domain.ProviderName { return domain.ProviderMusicBrainz }
