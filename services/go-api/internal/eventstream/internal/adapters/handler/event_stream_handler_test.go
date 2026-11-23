@@ -646,7 +646,7 @@ func TestSSEHandler_ContextCancelStopsStream(t *testing.T) {
 	}
 }
 
-func TestSSEHandler_DefaultPerUserCapRejectsNinthStreamWithPlainText(t *testing.T) {
+func TestSSEHandler_DefaultPerUserCapRejectsNinthStreamWithAProblem(t *testing.T) {
 	uid := shared.NewUserId(uuid.New())
 	h := handler.NewEventStreamHandler(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), 0)
 	h.WithHeartbeat(time.Hour)
