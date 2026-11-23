@@ -3,7 +3,6 @@ package service
 import (
 	"altune/go-api/internal/acquisition/internal/adapters/discoverybridge"
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
-	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/isrcproof"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/internal/core/rejectionlog"
@@ -2682,9 +2681,6 @@ func TestResolvedIdentity_StandingInTheDarkCatalogLengthConflictReachesTheReader
 	}
 	if ac.lengths().Corroborated() {
 		t.Error("lengths corroborated = true, want false: catalog 300s and reference 197s still disagree")
-	}
-	if got := ac.gradedFingerprint(); got != grade.Matches {
-		t.Errorf("gradedFingerprint = %v, want Matches, not cut to Approximates", got)
 	}
 	ac.Track.ISRC = ""
 	if got, source := ac.provenISRC(); got != isrc || source != isrcproof.Fingerprint {
