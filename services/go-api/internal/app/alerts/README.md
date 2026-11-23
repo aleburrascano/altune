@@ -1,0 +1,1 @@
+`alerts` owns when the API server pages an operator: the conditions over dependency health, discovery coverage, the YouTube cookie jar and failing background jobs, and which notifier the alert config selects.
