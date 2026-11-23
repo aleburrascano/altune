@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/shared/runloop"
 	"context"
 	"log/slog"
-	"runtime/debug"
 	"sync/atomic"
 	"time"
 )
@@ -226,15 +225,11 @@ func (m *Monitor) pageFor(key string, fired domain.Alert) domain.Alert {
 }
 
 func (m *Monitor) runCondition(ctx context.Context, c domain.Condition) (fired *domain.Alert, known bool) {
-	defer func() {
-		if r := recover(); r != nil {
-			m.panics.Add(1)
-			fired, known = nil, false
-			m.logger.ErrorContext(ctx, "alert.condition_panic",
-				"key", c.Key, "panic", r, "stack", string(debug.Stack()))
-		}
-	}()
 	evalCtx, cancel := context.WithTimeout(ctx, m.evalTimeout)
 	defer cancel()
-	return c.Eval(evalCtx), true
+	if panicked := runloop.Try(ctx, "alert.condition_panic", func() { fired = c.Eval(evalCtx) }, "key", c.Key); panicked != nil {
+		m.panics.Add(1)
+		return nil, false
+	}
+	return fired, true
 }
