@@ -1,20 +1,20 @@
-package release
+package release_test
 
 import (
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/core/release"
+	"testing"
 )
 
-func cohesionRelease(title string, providers ...domain.ProviderName) MergedRelease {
+func cohesionRelease(title string, providers ...domain.ProviderName) release.MergedRelease {
 	ps := make(map[domain.ProviderName]bool, len(providers))
 	for _, p := range providers {
 		ps[p] = true
 	}
-	return MergedRelease{Result: domain.SearchResult{Title: title}, Providers: ps}
+	return release.MergedRelease{Result: domain.SearchResult{Title: title}, Providers: ps}
 }
 
-func hasTitle(rs []MergedRelease, title string) bool {
+func hasTitle(rs []release.MergedRelease, title string) bool {
 	for _, r := range rs {
 		if r.Result.Title == title {
 			return true
@@ -24,7 +24,7 @@ func hasTitle(rs []MergedRelease, title string) bool {
 }
 
 func TestFilterCohesive_dropsMisbridgedIsland(t *testing.T) {
-	releases := []MergedRelease{
+	releases := []release.MergedRelease{
 		cohesionRelease("REST IN BASS", domain.ProviderAppleMusic, domain.ProviderSoundCloud, domain.ProviderMusicBrainz),
 		cohesionRelease("Fully Loaded", domain.ProviderAppleMusic, domain.ProviderSoundCloud, domain.ProviderMusicBrainz),
 		cohesionRelease("Baddest", domain.ProviderDeezer, domain.ProviderITunes),
@@ -33,7 +33,7 @@ func TestFilterCohesive_dropsMisbridgedIsland(t *testing.T) {
 		cohesionRelease("Nafi", domain.ProviderDeezer),
 	}
 
-	got := FilterCohesive(releases)
+	got := release.FilterCohesive(releases)
 
 	if !hasTitle(got, "REST IN BASS") || !hasTitle(got, "Fully Loaded") {
 		t.Error("dropped a corroborated rapper release")
@@ -44,13 +44,13 @@ func TestFilterCohesive_dropsMisbridgedIsland(t *testing.T) {
 }
 
 func TestFilterCohesive_keepsCoreProviderExclusiveDropsIsland(t *testing.T) {
-	releases := []MergedRelease{
+	releases := []release.MergedRelease{
 		cohesionRelease("Shared A", domain.ProviderDeezer, domain.ProviderSoundCloud),
 		cohesionRelease("Shared B", domain.ProviderDeezer, domain.ProviderSoundCloud),
 		cohesionRelease("SC Exclusive", domain.ProviderSoundCloud),
 		cohesionRelease("Island", domain.ProviderTheAudioDB),
 	}
-	got := FilterCohesive(releases)
+	got := release.FilterCohesive(releases)
 	if !hasTitle(got, "SC Exclusive") {
 		t.Error("dropped a real SC-exclusive though SoundCloud is in the core component")
 	}
@@ -60,14 +60,14 @@ func TestFilterCohesive_keepsCoreProviderExclusiveDropsIsland(t *testing.T) {
 }
 
 func TestFilterCohesive_equalComponentsTieBreakDeterministic(t *testing.T) {
-	releases := []MergedRelease{
+	releases := []release.MergedRelease{
 		cohesionRelease("A1", domain.ProviderDeezer, domain.ProviderITunes),
 		cohesionRelease("A2", domain.ProviderDeezer, domain.ProviderITunes),
 		cohesionRelease("B1", domain.ProviderSoundCloud, domain.ProviderTheAudioDB),
 		cohesionRelease("B2", domain.ProviderSoundCloud, domain.ProviderTheAudioDB),
 	}
 	for i := 0; i < 25; i++ {
-		got := FilterCohesive(releases)
+		got := release.FilterCohesive(releases)
 		if !hasTitle(got, "A1") || !hasTitle(got, "A2") || hasTitle(got, "B1") || hasTitle(got, "B2") {
 			t.Fatalf("run %d: kept %+v, want the deezer/itunes component every run", i, got)
 		}
@@ -75,23 +75,23 @@ func TestFilterCohesive_equalComponentsTieBreakDeterministic(t *testing.T) {
 }
 
 func TestFilterCohesive_noCorroborationKeepsAll(t *testing.T) {
-	releases := []MergedRelease{
+	releases := []release.MergedRelease{
 		cohesionRelease("A", domain.ProviderDeezer),
 		cohesionRelease("B", domain.ProviderDeezer),
 		cohesionRelease("C", domain.ProviderDeezer),
 	}
-	if got := FilterCohesive(releases); len(got) != 3 {
+	if got := release.FilterCohesive(releases); len(got) != 3 {
 		t.Errorf("kept %d, want 3 (no corroboration signal → keep all)", len(got))
 	}
 }
 
 func TestFilterCohesive_singleSharedTitleDoesNotConnect(t *testing.T) {
-	releases := []MergedRelease{
+	releases := []release.MergedRelease{
 		cohesionRelease("Collision", domain.ProviderDeezer, domain.ProviderSoundCloud),
 		cohesionRelease("D only", domain.ProviderDeezer),
 		cohesionRelease("SC only", domain.ProviderSoundCloud),
 	}
-	if got := FilterCohesive(releases); len(got) != 3 {
+	if got := release.FilterCohesive(releases); len(got) != 3 {
 		t.Errorf("kept %d, want 3 (one shared title is below the ≥2 edge threshold → no fracture asserted)", len(got))
 	}
 }

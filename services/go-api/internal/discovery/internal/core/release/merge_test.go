@@ -1,7 +1,8 @@
-package release
+package release_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/core/release"
 	"testing"
 )
 
@@ -39,15 +40,11 @@ func withUPC(u string) func(*domain.SearchResult) {
 	return func(r *domain.SearchResult) { r.UPC = u }
 }
 
-func idGroup(rs ...domain.SearchResult) ReleaseGroup {
-	return ReleaseGroup{Releases: rs, IDVerified: true}
+func idGroup(rs ...domain.SearchResult) release.ReleaseGroup {
+	return release.ReleaseGroup{Releases: rs, IDVerified: true}
 }
 
-func nameGroup(rs ...domain.SearchResult) ReleaseGroup {
-	return ReleaseGroup{Releases: rs, IDVerified: false}
-}
-
-func findRelease(t *testing.T, releases []MergedRelease, title string) MergedRelease {
+func findRelease(t *testing.T, releases []release.MergedRelease, title string) release.MergedRelease {
 	t.Helper()
 	for _, m := range releases {
 		if m.Result.Title == title {
@@ -55,17 +52,17 @@ func findRelease(t *testing.T, releases []MergedRelease, title string) MergedRel
 		}
 	}
 	t.Fatalf("release %q not in merged output %+v", title, releases)
-	return MergedRelease{}
+	return release.MergedRelease{}
 }
 
 func TestMergeReleases_bestOfAcrossProviders(t *testing.T) {
-	groups := []ReleaseGroup{
+	groups := []release.ReleaseGroup{
 		idGroup(albumVariant(domain.ProviderDeezer, "d1", "Fully Loaded", withDate("2026-04-01"), withCover("cover-dz"), withType("ep"))),
 		idGroup(albumVariant(domain.ProviderAppleMusic, "a1", "Fully Loaded", withTracks(5), withType("album"))),
 		idGroup(albumVariant(domain.ProviderSoundCloud, "s1", "Fully Loaded", withTracks(5), withDate("2026-04-01T00:00:00Z"))),
 	}
 
-	got := findRelease(t, MergeReleases(groups), "Fully Loaded")
+	got := findRelease(t, release.MergeReleases(groups), "Fully Loaded")
 
 	if got.Result.ReleaseDate == "" {
 		t.Error("ReleaseDate dropped — the F2 bug (a dateless variant masked the date)")
@@ -88,7 +85,7 @@ func TestMergeReleases_bestOfAcrossProviders(t *testing.T) {
 }
 
 func TestMergeReleases_editionStaysItsOwnRelease(t *testing.T) {
-	groups := []ReleaseGroup{
+	groups := []release.ReleaseGroup{
 		idGroup(
 			albumVariant(domain.ProviderDeezer, "d-base", "2 Alivë"),
 			albumVariant(domain.ProviderDeezer, "d-pack", "2 Alivë (Geëk Pack)"),
@@ -99,7 +96,7 @@ func TestMergeReleases_editionStaysItsOwnRelease(t *testing.T) {
 		),
 	}
 
-	merged := MergeReleases(groups)
+	merged := release.MergeReleases(groups)
 
 	if len(merged) != 2 {
 		t.Fatalf("merged %d releases, want 2 (base and edition apart)", len(merged))
@@ -113,7 +110,7 @@ func TestMergeReleases_editionStaysItsOwnRelease(t *testing.T) {
 }
 
 func TestMergeReleases_versionQualifierSplitsButCreditDoesNot(t *testing.T) {
-	groups := []ReleaseGroup{
+	groups := []release.ReleaseGroup{
 		idGroup(
 			albumVariant(domain.ProviderDeezer, "d1", "MELTDOWN (feat. Drake)"),
 			albumVariant(domain.ProviderDeezer, "d2", "MELTDOWN (feat. Drake) (Instrumental)"),
@@ -126,7 +123,7 @@ func TestMergeReleases_versionQualifierSplitsButCreditDoesNot(t *testing.T) {
 		),
 	}
 
-	merged := MergeReleases(groups)
+	merged := release.MergeReleases(groups)
 
 	if len(merged) != 3 {
 		t.Fatalf("merged %d releases, want 3 (song, its instrumental, Iris Green)", len(merged))
@@ -139,11 +136,11 @@ func TestMergeReleases_versionQualifierSplitsButCreditDoesNot(t *testing.T) {
 }
 
 func TestMergeReleases_singleProviderReleaseSurvivesIntact(t *testing.T) {
-	groups := []ReleaseGroup{
+	groups := []release.ReleaseGroup{
 		idGroup(albumVariant(domain.ProviderDeezer, "enc", "REST IN BASS: ENCORE", withDate("2025-12-25"), withCover("c"), withType("album"))),
 	}
 
-	got := findRelease(t, MergeReleases(groups), "REST IN BASS: ENCORE")
+	got := findRelease(t, release.MergeReleases(groups), "REST IN BASS: ENCORE")
 
 	if got.Result.ReleaseDate != "2025-12-25" {
 		t.Errorf("ReleaseDate = %q, want 2025-12-25 (single-source release kept intact)", got.Result.ReleaseDate)
@@ -157,12 +154,12 @@ func TestMergeReleases_singleProviderReleaseSurvivesIntact(t *testing.T) {
 }
 
 func TestMergeReleases_coverAndYearCombine(t *testing.T) {
-	groups := []ReleaseGroup{
+	groups := []release.ReleaseGroup{
 		idGroup(albumVariant(domain.ProviderTheAudioDB, "l1", "Closed Captions", withCover("cover-other"))),
 		idGroup(albumVariant(domain.ProviderDeezer, "d9", "closed captions", withDate("2023-07-21"))),
 	}
 
-	merged := MergeReleases(groups)
+	merged := release.MergeReleases(groups)
 	if len(merged) != 1 {
 		t.Fatalf("clusters = %d, want 1 (case-insensitive title match)", len(merged))
 	}
@@ -179,12 +176,12 @@ func TestMergeReleases_adoptedArtworkKeepsItsSourceTag(t *testing.T) {
 	withArtworkSource := func(s domain.ProviderKey) func(*domain.SearchResult) {
 		return func(r *domain.SearchResult) { r.ArtworkSource = s }
 	}
-	groups := []ReleaseGroup{
+	groups := []release.ReleaseGroup{
 		idGroup(albumVariant(domain.ProviderDeezer, "d1", "Nafi", withArtworkSource("deezer-stale"))),
 		idGroup(albumVariant(domain.ProviderITunes, "i1", "Nafi", withCover("cover-it"), withArtworkSource("itunes"))),
 	}
 
-	got := findRelease(t, MergeReleases(groups), "Nafi")
+	got := findRelease(t, release.MergeReleases(groups), "Nafi")
 
 	if got.Result.ImageURL != "cover-it" {
 		t.Errorf("ImageURL = %q, want cover-it (adopted from iTunes)", got.Result.ImageURL)
@@ -195,10 +192,10 @@ func TestMergeReleases_adoptedArtworkKeepsItsSourceTag(t *testing.T) {
 }
 
 func TestMergeReleases_strongIDDetected(t *testing.T) {
-	groups := []ReleaseGroup{
+	groups := []release.ReleaseGroup{
 		idGroup(albumVariant(domain.ProviderAppleMusic, "a1", "Sayso Says", withUPC("00888880000"))),
 	}
-	if !findRelease(t, MergeReleases(groups), "Sayso Says").HasStrongID {
+	if !findRelease(t, release.MergeReleases(groups), "Sayso Says").HasStrongID {
 		t.Error("HasStrongID = false, want true (UPC present)")
 	}
 }
@@ -207,10 +204,10 @@ func TestMergeReleases_strongIDDetectedFromTypedUPC(t *testing.T) {
 	withTypedUPC := func(u string) func(*domain.SearchResult) {
 		return func(r *domain.SearchResult) { r.UPC = u }
 	}
-	groups := []ReleaseGroup{
+	groups := []release.ReleaseGroup{
 		idGroup(albumVariant(domain.ProviderAppleMusic, "a1", "Sayso Says", withTypedUPC("00888880000"))),
 	}
-	got := findRelease(t, MergeReleases(groups), "Sayso Says")
+	got := findRelease(t, release.MergeReleases(groups), "Sayso Says")
 	if !got.HasStrongID {
 		t.Error("HasStrongID = false, want true (typed UPC present)")
 	}
@@ -220,11 +217,11 @@ func TestMergeReleases_typedUPCFolds(t *testing.T) {
 	withTypedUPC := func(u string) func(*domain.SearchResult) {
 		return func(r *domain.SearchResult) { r.UPC = u }
 	}
-	groups := []ReleaseGroup{
+	groups := []release.ReleaseGroup{
 		idGroup(albumVariant(domain.ProviderDeezer, "d1", "Nafi")),
 		idGroup(albumVariant(domain.ProviderAppleMusic, "a1", "Nafi", withTypedUPC("00888880000"))),
 	}
-	if got := findRelease(t, MergeReleases(groups), "Nafi"); got.Result.UPC != "00888880000" {
+	if got := findRelease(t, release.MergeReleases(groups), "Nafi"); got.Result.UPC != "00888880000" {
 		t.Errorf("merged UPC = %q, want the Apple variant's typed UPC", got.Result.UPC)
 	}
 }
@@ -238,7 +235,7 @@ func withYear(y int) func(*domain.SearchResult) {
 }
 
 func TestMergeReleases_differentMBIDsStayApart(t *testing.T) {
-	groups := []ReleaseGroup{
+	groups := []release.ReleaseGroup{
 		idGroup(
 			albumVariant(domain.ProviderMusicBrainz, "mb-blue", "Weezer", withMBID("blue"), withDate("1994-05-10"), withCover("blue.jpg")),
 			albumVariant(domain.ProviderMusicBrainz, "mb-green", "Weezer", withMBID("green"), withDate("2001-05-15"), withCover("green.jpg")),
@@ -246,7 +243,7 @@ func TestMergeReleases_differentMBIDsStayApart(t *testing.T) {
 		idGroup(albumVariant(domain.ProviderSpotify, "sp-blue", "Weezer", withDate("1994"))),
 	}
 
-	merged := MergeReleases(groups)
+	merged := release.MergeReleases(groups)
 
 	if len(merged) != 2 {
 		t.Fatalf("merged %d releases, want 2 (Blue and Green apart)", len(merged))
@@ -260,106 +257,158 @@ func TestMergeReleases_differentMBIDsStayApart(t *testing.T) {
 }
 
 func TestMergeReleases_differentUPCsStayApart(t *testing.T) {
-	groups := []ReleaseGroup{
+	groups := []release.ReleaseGroup{
 		idGroup(albumVariant(domain.ProviderITunes, "i1", "Weezer", withUPC("111"))),
 		idGroup(albumVariant(domain.ProviderDeezer, "d1", "Weezer", withUPC("222"))),
 	}
 
-	if n := len(MergeReleases(groups)); n != 2 {
+	if n := len(release.MergeReleases(groups)); n != 2 {
 		t.Errorf("merged %d releases, want 2 (different UPCs)", n)
 	}
 }
 
 func TestMergeReleases_sameTitleWithDifferentIDsFromOneProviderStaysApart(t *testing.T) {
-	groups := []ReleaseGroup{
+	groups := []release.ReleaseGroup{
 		idGroup(
 			albumVariant(domain.ProviderDeezer, "d1", "Weezer"),
 			albumVariant(domain.ProviderDeezer, "d2", "Weezer"),
 		),
 	}
 
-	if n := len(MergeReleases(groups)); n != 2 {
+	if n := len(release.MergeReleases(groups)); n != 2 {
 		t.Errorf("merged %d releases, want 2 (one provider, two ids)", n)
 	}
 }
 
 func TestMergeReleases_yearFollowsTheMergedDate(t *testing.T) {
-	groups := []ReleaseGroup{
+	groups := []release.ReleaseGroup{
 		idGroup(albumVariant(domain.ProviderSpotify, "sp", "Pinkerton", withYear(2011))),
 		idGroup(albumVariant(domain.ProviderMusicBrainz, "mb", "Pinkerton", withDate("1996-09-24"))),
 	}
 
-	got := findRelease(t, MergeReleases(groups), "Pinkerton")
+	got := findRelease(t, release.MergeReleases(groups), "Pinkerton")
 
 	if got.Result.ReleaseDate != "1996-09-24" || got.Result.Year != 1996 {
 		t.Errorf("date %q year %d, want 1996-09-24 and 1996", got.Result.ReleaseDate, got.Result.Year)
 	}
 }
 
-func TestBestArtwork_prefersIdentityCoverOverPlainProviderCover(t *testing.T) {
-	a := albumVariant(domain.ProviderDeezer, "d1", "No Idea", withCover("https://deezer/plain.jpg"))
-	a.ArtworkSource = "deezer"
-	b := albumVariant(domain.ProviderMusicBrainz, "m1", "No Idea", withCover("https://caa/identity.jpg"))
-	b.ReleaseGroupMBID = "mbid-noidea"
-	b.ArtworkSource = "coverartarchive"
-
-	url, source := bestArtwork(a, b)
-	if url != "https://caa/identity.jpg" || source != "coverartarchive" {
-		t.Errorf("bestArtwork = (%q, %q), want the identity-pinned cover to win", url, source)
+func mergePair(t *testing.T, first, second domain.SearchResult) domain.SearchResult {
+	t.Helper()
+	merged := release.MergeReleases([]release.ReleaseGroup{idGroup(first), idGroup(second)})
+	if len(merged) != 1 {
+		t.Fatalf("MergeReleases kept %d releases, want the two variants merged into 1: %+v", len(merged), merged)
 	}
+	return merged[0].Result
+}
 
-	if url, source := bestArtwork(b, a); url != "https://caa/identity.jpg" || source != "coverartarchive" {
-		t.Errorf("bestArtwork(b, a) = (%q, %q), want the identity-pinned cover to win", url, source)
+func TestMergeReleases_prefersIdentityCoverOverPlainProviderCover(t *testing.T) {
+	plain := albumVariant(domain.ProviderDeezer, "d1", "No Idea", withCover("https://deezer/plain.jpg"))
+	plain.ArtworkSource = "deezer"
+	identity := albumVariant(domain.ProviderMusicBrainz, "m1", "No Idea", withCover("https://caa/identity.jpg"))
+	identity.ReleaseGroupMBID = "mbid-noidea"
+	identity.ArtworkSource = "coverartarchive"
+
+	if got := mergePair(t, plain, identity); got.ImageURL != "https://caa/identity.jpg" || got.ArtworkSource != "coverartarchive" {
+		t.Errorf("cover = (%q, %q), want the identity-pinned cover to win", got.ImageURL, got.ArtworkSource)
+	}
+	if got := mergePair(t, identity, plain); got.ImageURL != "https://caa/identity.jpg" || got.ArtworkSource != "coverartarchive" {
+		t.Errorf("cover with the identity variant first = (%q, %q), want the identity-pinned cover to win", got.ImageURL, got.ArtworkSource)
 	}
 }
 
-func TestBestArtwork_fallsBackToTheOnlyCoverForCoverage(t *testing.T) {
-	a := albumVariant(domain.ProviderMusicBrainz, "m1", "No Idea")
-	a.ReleaseGroupMBID = "mbid-noidea"
-	b := albumVariant(domain.ProviderDeezer, "d1", "No Idea", withCover("https://deezer/cover.jpg"))
-	b.ArtworkSource = "deezer"
+func TestMergeReleases_identityGainedFromALaterVariantDoesNotPromoteAnEarlierPlainCover(t *testing.T) {
+	plain := albumVariant(domain.ProviderDeezer, "d1", "No Idea", withCover("https://deezer/plain.jpg"))
+	plain.ArtworkSource = "deezer"
+	coverless := albumVariant(domain.ProviderMusicBrainz, "m1", "No Idea")
+	coverless.ReleaseGroupMBID = "mbid-noidea"
+	identity := albumVariant(domain.ProviderAppleMusic, "a1", "No Idea", withCover("https://caa/identity.jpg"))
+	identity.ReleaseGroupMBID = "mbid-noidea"
+	identity.ArtworkSource = "coverartarchive"
 
-	if url, source := bestArtwork(a, b); url != "https://deezer/cover.jpg" || source != "deezer" {
-		t.Errorf("bestArtwork = (%q, %q), want the only available cover for coverage", url, source)
+	merged := release.MergeReleases([]release.ReleaseGroup{idGroup(plain), idGroup(coverless), idGroup(identity)})
+
+	if len(merged) != 1 {
+		t.Fatalf("MergeReleases kept %d releases, want the three variants merged into 1: %+v", len(merged), merged)
+	}
+	if got := merged[0].Result; got.ImageURL != "https://caa/identity.jpg" || got.ArtworkSource != "coverartarchive" {
+		t.Errorf("cover = (%q, %q), want the identity-pinned cover, not the plain cover that only borrowed an MBID", got.ImageURL, got.ArtworkSource)
 	}
 }
 
-func TestBestReleaseDate_prefersPrecision(t *testing.T) {
-	if got := bestReleaseDate("2020", "2020-05-01"); got != "2020-05-01" {
-		t.Errorf("bestReleaseDate(year, full) = %q, want the full date", got)
-	}
-	if got := bestReleaseDate("2020-05-01", "2020"); got != "2020-05-01" {
-		t.Errorf("bestReleaseDate(full, year) = %q, want the full date", got)
+func TestMergeReleases_equallyRankedCoversKeepTheFirst(t *testing.T) {
+	first := albumVariant(domain.ProviderDeezer, "d1", "Blue", withCover("https://deezer/first.jpg"))
+	first.ArtworkSource = "deezer"
+	second := albumVariant(domain.ProviderAppleMusic, "a1", "Blue", withCover("https://apple/second.jpg"))
+	second.ArtworkSource = "applemusic"
+
+	if got := mergePair(t, first, second); got.ImageURL != "https://deezer/first.jpg" || got.ArtworkSource != "deezer" {
+		t.Errorf("cover = (%q, %q), want the first variant's equally ranked cover", got.ImageURL, got.ArtworkSource)
 	}
 }
 
-func TestBestOfRelease_typedRecordTypeAndTierFallBack(t *testing.T) {
-	a := albumVariant(domain.ProviderDeezer, "1", "Blue")
-	b := albumVariant(domain.ProviderYouTube, "2", "Blue", withType("Album"))
-	b.ResolutionTier = domain.StampResolutionTier(domain.EntityResolutionNone)
+func TestMergeReleases_fallsBackToTheOnlyCoverForCoverage(t *testing.T) {
+	coverless := albumVariant(domain.ProviderMusicBrainz, "m1", "No Idea")
+	coverless.ReleaseGroupMBID = "mbid-noidea"
+	covered := albumVariant(domain.ProviderDeezer, "d1", "No Idea", withCover("https://deezer/cover.jpg"))
+	covered.ArtworkSource = "deezer"
 
-	got := bestOfRelease(a, b)
+	if got := mergePair(t, coverless, covered); got.ImageURL != "https://deezer/cover.jpg" || got.ArtworkSource != "deezer" {
+		t.Errorf("cover = (%q, %q), want the only available cover for coverage", got.ImageURL, got.ArtworkSource)
+	}
+}
+
+func TestMergeReleases_coverlessVariantsCarryTheLaterSourceTag(t *testing.T) {
+	first := albumVariant(domain.ProviderMusicBrainz, "m1", "No Idea")
+	first.ReleaseGroupMBID = "mbid-noidea"
+	first.ArtworkSource = "coverartarchive"
+	second := albumVariant(domain.ProviderDeezer, "d1", "No Idea")
+	second.ArtworkSource = "deezer"
+
+	if got := mergePair(t, first, second); got.ImageURL != "" || got.ArtworkSource != "deezer" {
+		t.Errorf("cover = (%q, %q), want no cover tagged with the later variant's source", got.ImageURL, got.ArtworkSource)
+	}
+}
+
+func TestMergeReleases_releaseDatePrefersPrecision(t *testing.T) {
+	yearOnly := albumVariant(domain.ProviderDeezer, "d1", "Blue", withDate("2020"))
+	fullDate := albumVariant(domain.ProviderAppleMusic, "a1", "Blue", withDate("2020-05-01"))
+
+	if got := mergePair(t, yearOnly, fullDate).ReleaseDate; got != "2020-05-01" {
+		t.Errorf("ReleaseDate(year, full) = %q, want the full date", got)
+	}
+	if got := mergePair(t, fullDate, yearOnly).ReleaseDate; got != "2020-05-01" {
+		t.Errorf("ReleaseDate(full, year) = %q, want the full date", got)
+	}
+}
+
+func TestMergeReleases_typedRecordTypeAndTierFallBack(t *testing.T) {
+	untyped := albumVariant(domain.ProviderDeezer, "1", "Blue")
+	typed := albumVariant(domain.ProviderYouTube, "2", "Blue", withType("Album"))
+	typed.ResolutionTier = domain.StampResolutionTier(domain.EntityResolutionNone)
+
+	got := mergePair(t, untyped, typed)
 	if got.RecordType != "Album" {
 		t.Errorf("RecordType = %q, want the only present (unrecognised) type Album", got.RecordType)
 	}
-	if got.ResolutionTier != b.ResolutionTier {
-		t.Errorf("ResolutionTier = %+v, want b's stamp when a has none", got.ResolutionTier)
+	if got.ResolutionTier != typed.ResolutionTier {
+		t.Errorf("ResolutionTier = %+v, want the second variant's stamp when the first has none", got.ResolutionTier)
 	}
 
-	a.ResolutionTier = domain.StampResolutionTier(domain.EntityResolutionISRC)
-	if got := bestOfRelease(a, b); got.ResolutionTier != a.ResolutionTier {
-		t.Errorf("ResolutionTier = %+v, want a's stamp to win", got.ResolutionTier)
+	untyped.ResolutionTier = domain.StampResolutionTier(domain.EntityResolutionISRC)
+	if got := mergePair(t, untyped, typed); got.ResolutionTier != untyped.ResolutionTier {
+		t.Errorf("ResolutionTier = %+v, want the first variant's stamp to win", got.ResolutionTier)
 	}
 }
 
 func TestSourceKey_distinguishesIDPrefixes(t *testing.T) {
-	if SourceKey(domain.ProviderDeezer, "1") == SourceKey(domain.ProviderDeezer, "11") {
+	if release.SourceKey(domain.ProviderDeezer, "1") == release.SourceKey(domain.ProviderDeezer, "11") {
 		t.Error(`SourceKey("deezer","1") collides with SourceKey("deezer","11")`)
 	}
 }
 
-func release(title string, recordType domain.RecordType, trackCount int) MergedRelease {
-	return MergedRelease{Result: domain.SearchResult{Title: title, TrackCount: trackCount, RecordType: recordType, Extras: map[string]any{}}}
+func mergedRelease(title string, recordType domain.RecordType, trackCount int) release.MergedRelease {
+	return release.MergedRelease{Result: domain.SearchResult{Title: title, TrackCount: trackCount, RecordType: recordType, Extras: map[string]any{}}}
 }
 
 func TestNormalizeRecordType(t *testing.T) {
@@ -378,26 +427,26 @@ func TestNormalizeRecordType(t *testing.T) {
 		{"one-track unknown is a single", "", 1, "single"},
 	}
 	for _, tt := range tests {
-		got := NormalizeRecordType(release(tt.name, tt.recordType, tt.trackCount))
+		got := release.NormalizeRecordType(mergedRelease(tt.name, tt.recordType, tt.trackCount))
 		if got != tt.want {
 			t.Errorf("%s: NormalizeRecordType = %q, want %q", tt.name, got, tt.want)
 		}
 	}
 }
 
-func keepCase(providers int, idVerified, strongID bool) MergedRelease {
+func keepCase(providers int, idVerified, strongID bool) release.MergedRelease {
 	ps := map[domain.ProviderName]bool{}
 	names := []domain.ProviderName{domain.ProviderDeezer, domain.ProviderTheAudioDB, domain.ProviderITunes}
 	for i := 0; i < providers && i < len(names); i++ {
 		ps[names[i]] = true
 	}
-	return MergedRelease{Providers: ps, IDVerified: idVerified, HasStrongID: strongID}
+	return release.MergedRelease{Providers: ps, IDVerified: idVerified, HasStrongID: strongID}
 }
 
 func TestKeepRelease(t *testing.T) {
 	tests := []struct {
 		name string
-		m    MergedRelease
+		m    release.MergedRelease
 		want bool
 	}{
 		{"id-verified (ENCORE)", keepCase(1, true, false), true},
@@ -407,19 +456,19 @@ func TestKeepRelease(t *testing.T) {
 		{"id-verified + by-name enrichment", keepCase(2, true, true), true},
 	}
 	for _, tt := range tests {
-		if got := KeepRelease(tt.m); got != tt.want {
+		if got := release.KeepRelease(tt.m); got != tt.want {
 			t.Errorf("%s: KeepRelease = %v, want %v", tt.name, got, tt.want)
 		}
 	}
 }
 
 func TestFilterKept_dropsOnlyTheNamesake(t *testing.T) {
-	releases := []MergedRelease{
+	releases := []release.MergedRelease{
 		{Result: domain.SearchResult{Title: "Empty Clip"}, IDVerified: true, Providers: map[domain.ProviderName]bool{domain.ProviderDeezer: true}},
 		{Result: domain.SearchResult{Title: "Wrong Che Single"}, Providers: map[domain.ProviderName]bool{domain.ProviderTheAudioDB: true}},
 		{Result: domain.SearchResult{Title: "REST IN BASS: ENCORE"}, IDVerified: true, Providers: map[domain.ProviderName]bool{domain.ProviderDeezer: true}},
 	}
-	kept := FilterKept(releases)
+	kept := release.FilterKept(releases)
 	if len(kept) != 2 {
 		t.Fatalf("kept %d, want 2 (namesake dropped, both real releases kept)", len(kept))
 	}
@@ -431,7 +480,7 @@ func TestFilterKept_dropsOnlyTheNamesake(t *testing.T) {
 }
 
 func TestMergeReleases_albumAndSameTitledSingleStayApart(t *testing.T) {
-	got := MergeReleases([]ReleaseGroup{
+	got := release.MergeReleases([]release.ReleaseGroup{
 		idGroup(albumVariant(domain.ProviderDeezer, "d-album", "Lover", withType("album"), withTracks(18))),
 		idGroup(albumVariant(domain.ProviderDeezer, "d-single", "Lover", withType("single"), withTracks(1))),
 	})
@@ -441,7 +490,7 @@ func TestMergeReleases_albumAndSameTitledSingleStayApart(t *testing.T) {
 }
 
 func TestMergeReleases_sameAlbumAcrossProvidersStillMerges(t *testing.T) {
-	got := MergeReleases([]ReleaseGroup{
+	got := release.MergeReleases([]release.ReleaseGroup{
 		idGroup(albumVariant(domain.ProviderDeezer, "d1", "Lover", withType("album"))),
 		idGroup(albumVariant(domain.ProviderAppleMusic, "a1", "Lover", withType("album"))),
 	})
@@ -457,12 +506,12 @@ func TestMergeReleases_releaseAndReleaseGroupMBIDsAreNotCompared(t *testing.T) {
 	withRelease := func(id string) func(*domain.SearchResult) {
 		return func(r *domain.SearchResult) { r.ReleaseMBID = id }
 	}
-	groups := []ReleaseGroup{
+	groups := []release.ReleaseGroup{
 		idGroup(albumVariant(domain.ProviderMusicBrainz, "mb", "Pinkerton", withReleaseGroup("rg-uuid"))),
 		idGroup(albumVariant(domain.ProviderTheAudioDB, "lf", "Pinkerton", withRelease("release-uuid"))),
 	}
 
-	merged := MergeReleases(groups)
+	merged := release.MergeReleases(groups)
 
 	if len(merged) != 1 {
 		t.Fatalf("merged %d releases, want 1 (a release MBID must not be compared with a release-group MBID)", len(merged))
@@ -476,12 +525,12 @@ func TestMergeReleases_differentReleaseGroupMBIDsStillStayApart(t *testing.T) {
 	withReleaseGroup := func(id string) func(*domain.SearchResult) {
 		return func(r *domain.SearchResult) { r.ReleaseGroupMBID = id }
 	}
-	groups := []ReleaseGroup{
+	groups := []release.ReleaseGroup{
 		idGroup(albumVariant(domain.ProviderMusicBrainz, "mb-blue", "Weezer", withReleaseGroup("blue"))),
 		idGroup(albumVariant(domain.ProviderMusicBrainz, "mb-green", "Weezer", withReleaseGroup("green"))),
 	}
 
-	if n := len(MergeReleases(groups)); n != 2 {
+	if n := len(release.MergeReleases(groups)); n != 2 {
 		t.Errorf("merged %d releases, want 2 (different release groups)", n)
 	}
 }

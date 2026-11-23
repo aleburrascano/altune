@@ -1,13 +1,14 @@
-package release
+package release_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/core/release"
 	"altune/go-api/internal/shared/textnorm"
 	"fmt"
 	"testing"
 )
 
-func verifyGroup(provider domain.ProviderName, titles ...string) ReleaseGroup {
+func verifyGroup(provider domain.ProviderName, titles ...string) release.ReleaseGroup {
 	rs := make([]domain.SearchResult, len(titles))
 	for i, t := range titles {
 		rs[i] = domain.SearchResult{
@@ -16,7 +17,7 @@ func verifyGroup(provider domain.ProviderName, titles ...string) ReleaseGroup {
 			Sources: []domain.SourceRef{{Provider: provider, ExternalID: "x"}},
 		}
 	}
-	return ReleaseGroup{Releases: rs, IDVerified: true}
+	return release.ReleaseGroup{Releases: rs, IDVerified: true}
 }
 
 func numberedTitles(prefix string, n int) []string {
@@ -29,13 +30,13 @@ func numberedTitles(prefix string, n int) []string {
 
 func TestFilterGroupsByMBAnchor_dropsMisbridgedProvider(t *testing.T) {
 	rapperTitles := numberedTitles("rap", 35)
-	mb := NormalizeTitleSet(rapperTitles)
+	mb := release.NormalizeTitleSet(rapperTitles)
 
 	apple := verifyGroup(domain.ProviderAppleMusic, rapperTitles[:20]...)
 	soulTitles := append(numberedTitles("soul", 63), rapperTitles[0], rapperTitles[1], rapperTitles[2])
 	deezer := verifyGroup(domain.ProviderDeezer, soulTitles...)
 
-	got := FilterGroupsByMBAnchor(mb, []ReleaseGroup{apple, deezer})
+	got := release.FilterGroupsByMBAnchor(mb, []release.ReleaseGroup{apple, deezer})
 
 	if len(got) != 1 {
 		t.Fatalf("kept %d groups, want 1 (apple kept, mis-bridged soul deezer dropped)", len(got))
@@ -46,26 +47,26 @@ func TestFilterGroupsByMBAnchor_dropsMisbridgedProvider(t *testing.T) {
 }
 
 func TestFilterGroupsByMBAnchor_keepsSmallMatchingProvider(t *testing.T) {
-	mb := NormalizeTitleSet(numberedTitles("rap", 30))
+	mb := release.NormalizeTitleSet(numberedTitles("rap", 30))
 	sc := verifyGroup(domain.ProviderSoundCloud, "rap 0", "rap 1", "rap 2", "sc exclusive")
-	got := FilterGroupsByMBAnchor(mb, []ReleaseGroup{sc})
+	got := release.FilterGroupsByMBAnchor(mb, []release.ReleaseGroup{sc})
 	if len(got) != 1 {
 		t.Errorf("dropped a small provider whose catalogue matches MB: %d kept", len(got))
 	}
 }
 
 func TestFilterGroupsByMBAnchor_tooFewTitlesKept(t *testing.T) {
-	mb := NormalizeTitleSet(numberedTitles("rap", 30))
+	mb := release.NormalizeTitleSet(numberedTitles("rap", 30))
 	small := verifyGroup(domain.ProviderDeezer, "unknown a", "unknown b")
-	if got := FilterGroupsByMBAnchor(mb, []ReleaseGroup{small}); len(got) != 1 {
+	if got := release.FilterGroupsByMBAnchor(mb, []release.ReleaseGroup{small}); len(got) != 1 {
 		t.Errorf("dropped a group too small to judge (%d kept)", len(got))
 	}
 }
 
 func TestFilterGroupsByMBAnchor_weakAnchorKeepsAll(t *testing.T) {
-	mb := NormalizeTitleSet([]string{"a", "b"})
+	mb := release.NormalizeTitleSet([]string{"a", "b"})
 	deezer := verifyGroup(domain.ProviderDeezer, numberedTitles("soul", 50)...)
-	if got := FilterGroupsByMBAnchor(mb, []ReleaseGroup{deezer}); len(got) != 1 {
+	if got := release.FilterGroupsByMBAnchor(mb, []release.ReleaseGroup{deezer}); len(got) != 1 {
 		t.Errorf("dropped a group despite MB being too weak to anchor (%d kept)", len(got))
 	}
 }
@@ -73,74 +74,74 @@ func TestFilterGroupsByMBAnchor_weakAnchorKeepsAll(t *testing.T) {
 func TestFilterGroupsByMBAnchor_anchorCredibilityBoundary(t *testing.T) {
 	misfit := verifyGroup(domain.ProviderDeezer, "w", "x", "y", "z")
 
-	weak := NormalizeTitleSet(numberedTitles("rap", 4))
-	if got := FilterGroupsByMBAnchor(weak, []ReleaseGroup{misfit}); len(got) != 1 {
+	weak := release.NormalizeTitleSet(numberedTitles("rap", 4))
+	if got := release.FilterGroupsByMBAnchor(weak, []release.ReleaseGroup{misfit}); len(got) != 1 {
 		t.Errorf("4 MB titles: kept %d, want 1 (anchor below minimum verifies nothing)", len(got))
 	}
 
-	credible := NormalizeTitleSet(numberedTitles("rap", 5))
-	if got := FilterGroupsByMBAnchor(credible, []ReleaseGroup{misfit}); len(got) != 0 {
+	credible := release.NormalizeTitleSet(numberedTitles("rap", 5))
+	if got := release.FilterGroupsByMBAnchor(credible, []release.ReleaseGroup{misfit}); len(got) != 0 {
 		t.Errorf("5 MB titles: kept %d, want 0 (anchor exactly at minimum verifies)", len(got))
 	}
 }
 
 func TestGroupMatchesAnchor_providerSizeBoundary(t *testing.T) {
-	mb := NormalizeTitleSet(numberedTitles("rap", 10))
+	mb := release.NormalizeTitleSet(numberedTitles("rap", 10))
 	three := verifyGroup(domain.ProviderDeezer, "a", "b", "c")
-	if got := FilterGroupsByMBAnchor(mb, []ReleaseGroup{three}); len(got) != 1 {
+	if got := release.FilterGroupsByMBAnchor(mb, []release.ReleaseGroup{three}); len(got) != 1 {
 		t.Errorf("3 titles: kept %d, want 1 (too few to judge)", len(got))
 	}
 	four := verifyGroup(domain.ProviderDeezer, "a", "b", "c", "d")
-	if got := FilterGroupsByMBAnchor(mb, []ReleaseGroup{four}); len(got) != 0 {
+	if got := release.FilterGroupsByMBAnchor(mb, []release.ReleaseGroup{four}); len(got) != 0 {
 		t.Errorf("4 titles: kept %d, want 0 (exactly at the judging minimum)", len(got))
 	}
 }
 
 func TestGroupMatchesAnchor_overlapBoundary(t *testing.T) {
-	mb := NormalizeTitleSet(numberedTitles("rap", 40))
+	mb := release.NormalizeTitleSet(numberedTitles("rap", 40))
 	titles := append(numberedTitles("own", 16), "rap 0", "rap 1", "rap 2", "rap 3")
 	overlap4 := verifyGroup(domain.ProviderDeezer, titles...)
-	if got := FilterGroupsByMBAnchor(mb, []ReleaseGroup{overlap4}); len(got) != 1 {
+	if got := release.FilterGroupsByMBAnchor(mb, []release.ReleaseGroup{overlap4}); len(got) != 1 {
 		t.Errorf("overlap exactly 4: kept %d, want 1", len(got))
 	}
 	titles3 := append(numberedTitles("own", 17), "rap 0", "rap 1", "rap 2")
 	overlap3 := verifyGroup(domain.ProviderDeezer, titles3...)
-	if got := FilterGroupsByMBAnchor(mb, []ReleaseGroup{overlap3}); len(got) != 0 {
+	if got := release.FilterGroupsByMBAnchor(mb, []release.ReleaseGroup{overlap3}); len(got) != 0 {
 		t.Errorf("overlap 3 / ratio 0.15: kept %d, want 0", len(got))
 	}
 }
 
 func TestGroupMatchesAnchor_ratioExactlyAtQuarter(t *testing.T) {
-	mb := NormalizeTitleSet(numberedTitles("rap", 10))
+	mb := release.NormalizeTitleSet(numberedTitles("rap", 10))
 	titles := append(numberedTitles("own", 6), "rap 0", "rap 1")
 	quarter := verifyGroup(domain.ProviderDeezer, titles...)
-	if got := FilterGroupsByMBAnchor(mb, []ReleaseGroup{quarter}); len(got) != 1 {
+	if got := release.FilterGroupsByMBAnchor(mb, []release.ReleaseGroup{quarter}); len(got) != 1 {
 		t.Errorf("ratio exactly 0.25: kept %d, want 1 (inclusive boundary)", len(got))
 	}
 	titles9 := append(numberedTitles("own", 7), "rap 0", "rap 1")
 	below := verifyGroup(domain.ProviderDeezer, titles9...)
-	if got := FilterGroupsByMBAnchor(mb, []ReleaseGroup{below}); len(got) != 0 {
+	if got := release.FilterGroupsByMBAnchor(mb, []release.ReleaseGroup{below}); len(got) != 0 {
 		t.Errorf("ratio just below 0.25: kept %d, want 0", len(got))
 	}
 }
 
 func TestGroupMatchesAnchor_duplicateTitlesCountOnce(t *testing.T) {
-	mb := NormalizeTitleSet(numberedTitles("rap", 10))
+	mb := release.NormalizeTitleSet(numberedTitles("rap", 10))
 	dup := verifyGroup(domain.ProviderDeezer, "a", "a", "a", "a", "b", "c")
-	if got := FilterGroupsByMBAnchor(mb, []ReleaseGroup{dup}); len(got) != 1 {
+	if got := release.FilterGroupsByMBAnchor(mb, []release.ReleaseGroup{dup}); len(got) != 1 {
 		t.Errorf("duplicated titles: kept %d, want 1 (3 distinct titles — too few to judge)", len(got))
 	}
 }
 
 func TestMatchesAnchor_emptyTitleSetMatchesNothing(t *testing.T) {
 	g := verifyGroup(domain.ProviderDeezer, "a one", "b two", "c three", "d four")
-	if MatchesAnchor(g, NormalizeTitleSet(nil)) {
+	if release.MatchesAnchor(g, release.NormalizeTitleSet(nil)) {
 		t.Error("a group with enough titles matched an empty anchor set")
 	}
 }
 
 func TestMatchesAnchor_singleSharedTitle(t *testing.T) {
-	mb := NormalizeTitleSet([]string{"shared"})
+	mb := release.NormalizeTitleSet([]string{"shared"})
 	tests := []struct {
 		name   string
 		titles []string
@@ -151,7 +152,7 @@ func TestMatchesAnchor_singleSharedTitle(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := MatchesAnchor(verifyGroup(domain.ProviderDeezer, tt.titles...), mb); got != tt.want {
+			if got := release.MatchesAnchor(verifyGroup(domain.ProviderDeezer, tt.titles...), mb); got != tt.want {
 				t.Errorf("MatchesAnchor = %v, want %v", got, tt.want)
 			}
 		})
@@ -159,19 +160,19 @@ func TestMatchesAnchor_singleSharedTitle(t *testing.T) {
 }
 
 func TestMatchesAnchor_caseAndPunctuationStillMatch(t *testing.T) {
-	mb := NormalizeTitleSet([]string{"night drive", "blue hour", "high tide", "paper moon"})
+	mb := release.NormalizeTitleSet([]string{"night drive", "blue hour", "high tide", "paper moon"})
 	g := verifyGroup(domain.ProviderDeezer, "Night Drive!", "BLUE HOUR", "High-Tide", "Paper Moon?")
-	if !MatchesAnchor(g, mb) {
+	if !release.MatchesAnchor(g, mb) {
 		t.Error("titles differing only in case and punctuation did not match")
 	}
 }
 
 func TestFilterGroupsByMBAnchor_mixedPageKeepsOnlyOverlappingReleases(t *testing.T) {
 	rapper := numberedTitles("rap", 35)
-	mb := NormalizeTitleSet(rapper)
+	mb := release.NormalizeTitleSet(rapper)
 	mixed := append(numberedTitles("other che", 63), rapper[:4]...)
 
-	got := FilterGroupsByMBAnchor(mb, []ReleaseGroup{verifyGroup(domain.ProviderDeezer, mixed...)})
+	got := release.FilterGroupsByMBAnchor(mb, []release.ReleaseGroup{verifyGroup(domain.ProviderDeezer, mixed...)})
 
 	if len(got) != 1 {
 		t.Fatalf("kept %d groups, want 1", len(got))
@@ -188,17 +189,17 @@ func TestFilterGroupsByMBAnchor_mixedPageKeepsOnlyOverlappingReleases(t *testing
 
 func TestFilterGroupsByMBAnchor_highRatioGroupKeepsItsExtras(t *testing.T) {
 	rapper := numberedTitles("rap", 35)
-	mb := NormalizeTitleSet(rapper)
+	mb := release.NormalizeTitleSet(rapper)
 	group := append(numberedTitles("deezer only", 2), rapper[:6]...)
 
-	got := FilterGroupsByMBAnchor(mb, []ReleaseGroup{verifyGroup(domain.ProviderDeezer, group...)})
+	got := release.FilterGroupsByMBAnchor(mb, []release.ReleaseGroup{verifyGroup(domain.ProviderDeezer, group...)})
 
 	if len(got) != 1 || len(got[0].Releases) != 8 {
 		t.Fatalf("a group at or above the ratio must stay whole, got %d groups", len(got))
 	}
 }
 
-func trackGroup(provider domain.ProviderName, album string, titles ...string) ReleaseGroup {
+func trackGroup(provider domain.ProviderName, album string, titles ...string) release.ReleaseGroup {
 	g := verifyGroup(provider, titles...)
 	for i := range g.Releases {
 		g.Releases[i].Kind = domain.ResultKindTrack
@@ -209,11 +210,11 @@ func trackGroup(provider domain.ProviderName, album string, titles ...string) Re
 
 func TestFilterMixedPageTracks(t *testing.T) {
 	mbTitles := numberedTitles("che", 30)
-	mb := NormalizeTitleSet(mbTitles)
+	mb := release.NormalizeTitleSet(mbTitles)
 	mixedAlbums := append(numberedTitles("other", 20), mbTitles[:4]...)
 	cleanAlbums := mbTitles[:10]
 
-	titlesOf := func(gs []ReleaseGroup) []string {
+	titlesOf := func(gs []release.ReleaseGroup) []string {
 		out := []string{}
 		for _, g := range gs {
 			for _, r := range g.Releases {
@@ -225,8 +226,8 @@ func TestFilterMixedPageTracks(t *testing.T) {
 	tests := []struct {
 		name        string
 		deezerPage  []string
-		deezerTrack ReleaseGroup
-		apple       ReleaseGroup
+		deezerTrack release.ReleaseGroup
+		apple       release.ReleaseGroup
 		want        []string
 	}{
 		{"mixed page drops deezer-only tracks", mixedAlbums, trackGroup(domain.ProviderDeezer, "other 1", "wtf", "hugo"), trackGroup(domain.ProviderAppleMusic, "che 1"), []string{}},
@@ -236,8 +237,8 @@ func TestFilterMixedPageTracks(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			albums := []ReleaseGroup{verifyGroup(domain.ProviderDeezer, tc.deezerPage...)}
-			got := titlesOf(FilterMixedPageTracks(mb, albums, []ReleaseGroup{tc.deezerTrack, tc.apple}))
+			albums := []release.ReleaseGroup{verifyGroup(domain.ProviderDeezer, tc.deezerPage...)}
+			got := titlesOf(release.FilterMixedPageTracks(mb, albums, []release.ReleaseGroup{tc.deezerTrack, tc.apple}))
 			if fmt.Sprint(got) != fmt.Sprint(tc.want) {
 				t.Errorf("kept %v, want %v", got, tc.want)
 			}

@@ -1,8 +1,9 @@
-package enrich
+package enrich_test
 
 import (
 	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/core/enrich"
 	"context"
 	"errors"
 	"testing"
@@ -50,7 +51,7 @@ func sampleLyrics() domain.DeezerLyrics {
 
 func TestLyricsService_TranslatesNames(t *testing.T) {
 	provider := &discoverytest.LyricsProvider{ResolvedID: "3135556", Lyrics: sampleLyrics()}
-	svc := NewLyricsService(provider, newMemLyricsCache())
+	svc := enrich.NewLyricsService(provider, newMemLyricsCache())
 
 	_, err := svc.Execute(context.Background(), "Hello", "Adele")
 	if err != nil {
@@ -64,7 +65,7 @@ func TestLyricsService_TranslatesNames(t *testing.T) {
 func TestLyricsService_CacheHitShortCircuits(t *testing.T) {
 	provider := &discoverytest.LyricsProvider{ResolvedID: "3135556", Lyrics: sampleLyrics()}
 	cache := newMemLyricsCache()
-	svc := NewLyricsService(provider, cache)
+	svc := enrich.NewLyricsService(provider, cache)
 
 	_, _ = svc.Execute(context.Background(), "Hello", "Adele")
 	if provider.Lookups != 1 || cache.sets != 1 {
@@ -80,7 +81,7 @@ func TestLyricsService_CacheHitShortCircuits(t *testing.T) {
 func TestLyricsService_UnresolvedCachedNegative(t *testing.T) {
 	provider := &discoverytest.LyricsProvider{ResolvedID: ""}
 	cache := newMemLyricsCache()
-	svc := NewLyricsService(provider, cache)
+	svc := enrich.NewLyricsService(provider, cache)
 
 	l, err := svc.Execute(context.Background(), "Nonexistent", "Nobody")
 	if err != nil {
@@ -100,7 +101,7 @@ func TestLyricsService_UnresolvedCachedNegative(t *testing.T) {
 func TestLyricsService_NoLyricsCachedNegative(t *testing.T) {
 	provider := &discoverytest.LyricsProvider{ResolvedID: "1", Lyrics: domain.EmptyDeezerLyrics()}
 	cache := newMemLyricsCache()
-	svc := NewLyricsService(provider, cache)
+	svc := enrich.NewLyricsService(provider, cache)
 
 	l, err := svc.Execute(context.Background(), "Instrumental", "Someone")
 	if err != nil {
@@ -117,10 +118,10 @@ func TestLyricsService_NoLyricsCachedNegative(t *testing.T) {
 func TestLyricsService_LookupErrorDegradesWithoutPoisoning(t *testing.T) {
 	provider := &discoverytest.LyricsProvider{ResolvedID: "1", LookupErr: errors.New("pipe 500")}
 	cache := newMemLyricsCache()
-	svc := NewLyricsService(provider, cache)
+	svc := enrich.NewLyricsService(provider, cache)
 
 	l, err := svc.Execute(context.Background(), "Hello", "Adele")
-	if !errors.Is(err, ErrDegraded) {
+	if !errors.Is(err, enrich.ErrDegraded) {
 		t.Fatalf("a fetch error must surface as ErrDegraded (distinct from no data), got %v", err)
 	}
 	if !l.IsZero() {
@@ -132,7 +133,7 @@ func TestLyricsService_LookupErrorDegradesWithoutPoisoning(t *testing.T) {
 }
 
 func TestLyricsService_NilProvider(t *testing.T) {
-	svc := NewLyricsService(nil, nil)
+	svc := enrich.NewLyricsService(nil, nil)
 	l, err := svc.Execute(context.Background(), "Hello", "Adele")
 	if err != nil || !l.IsZero() {
 		t.Errorf("nil provider should return empty + nil, got %+v err=%v", l, err)
