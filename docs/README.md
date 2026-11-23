@@ -1,6 +1,7 @@
 # docs/
 
-Durable outcomes only. **If it's here, it's current.** History and pre-decision
+Durable outcomes only. **If it's here, it's current**, except the dated snapshots
+under `design-review/`, which say the commit they describe. History and pre-decision
 thinking do not live here — they live in git and in the Gitea issue they belong to.
 
 | Directory | What lands here |

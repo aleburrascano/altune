@@ -7,7 +7,7 @@
 - **Verdicts:** each concept got one verdict with file:line evidence: done right, scattered, done wrong, missing (needed) or not needed. [brief.md](brief.md) is the instruction every topic followed.
 - **Totals:** 380 rows. 172 of them are scattered, done wrong or missing, and need a change.
 
-This is a dated snapshot. Its line numbers are as of 7682acc25 and are not kept current. Each open finding is tracked in a Gitea issue (see [Tracker](#tracker)).
+This is a dated snapshot. Its line numbers are as of 7682acc25 (4cf08f4aa for errors, observability and principles) and are not kept current. Each open finding is tracked in a Gitea issue (see [Tracker](#tracker)).
 The inventories cite working files (`pages/`, `tools/`, `principles/`, `door_usage.sh`) that were scratch and are not kept here.
 
 ## Files
