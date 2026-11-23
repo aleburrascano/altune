@@ -47,7 +47,6 @@ func TestNewEvalMeterRunner_CarriesEveryScorecardField(t *testing.T) {
 	})
 
 	got, err := run(context.Background())
-
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}

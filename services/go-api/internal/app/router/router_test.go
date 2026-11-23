@@ -22,6 +22,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 const (
@@ -274,5 +277,36 @@ func TestV1ResponseHeaders_HandlerCacheControlOverridesDefault(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/discovery/search", nil))
 	if got := rec.Header().Get("Cache-Control"); got != "private, no-store" {
 		t.Errorf("Cache-Control = %q, want handler value private, no-store", got)
+	}
+}
+
+func TestRouter_HealthAndLongLivedRoutesAreNotTraced(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)))
+	t.Cleanup(func() { otel.SetTracerProvider(previous) })
+	r := router.New(router.Settings{WriteTimeout: time.Minute, RequestTimeout: time.Minute, Latency: reqmetrics.NewRegistry()})
+	ok := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }
+	r.Get("/health", ok)
+	r.Get("/v1/events", ok)
+	r.Get("/v1/tracks/{id}/audio", ok)
+	r.Post("/v1/tracks/{id}/audio", ok)
+	r.Get("/v1/library", ok)
+
+	for _, req := range []struct {
+		method, path string
+		traced       bool
+	}{
+		{http.MethodGet, "/health", false},
+		{http.MethodGet, "/v1/events", false},
+		{http.MethodGet, "/v1/tracks/1/audio", false},
+		{http.MethodPost, "/v1/tracks/1/audio", true},
+		{http.MethodGet, "/v1/library", true},
+	} {
+		before := len(recorder.Ended())
+		r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(req.method, req.path, nil))
+		if traced := len(recorder.Ended()) > before; traced != req.traced {
+			t.Errorf("%s %s traced = %v, want %v", req.method, req.path, traced, req.traced)
+		}
 	}
 }

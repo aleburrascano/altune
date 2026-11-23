@@ -33,20 +33,23 @@ func New(s Settings) *chi.Mux {
 	r.Use(httputil.RequestLogger)
 	r.Use(httputil.Recoverer)
 	r.Use(httputil.MaxBodySize(maxBodyBytes))
-	corsHeaders := []string{"Accept", "Authorization", "Content-Type", "Idempotency-Key", telemetry.AppVersionHeader, telemetry.PlatformHeader}
+	r.Use(corsHandler(s))
+	return r
+}
+
+func corsHandler(s Settings) func(http.Handler) http.Handler {
+	headers := []string{"Accept", "Authorization", "Content-Type", "Idempotency-Key", telemetry.AppVersionHeader, telemetry.PlatformHeader}
 	if s.Development {
-		corsHeaders = append(corsHeaders, "ngrok-skip-browser-warning")
+		headers = append(headers, "ngrok-skip-browser-warning")
 	}
-	r.Use(cors.Handler(cors.Options{
+	return cors.Handler(cors.Options{
 		AllowedOrigins:   s.CORSOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   corsHeaders,
+		AllowedHeaders:   headers,
 		ExposedHeaders:   []string{"Content-Length"},
 		AllowCredentials: true,
 		MaxAge:           300,
-	}))
-
-	return r
+	})
 }
 
 func V1ResponseHeaders(next http.Handler) http.Handler {
