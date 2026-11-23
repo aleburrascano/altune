@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/catalog/internal/core/ports"
 	"altune/go-api/internal/shared/events"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"errors"
 	"fmt"
@@ -110,7 +111,7 @@ func (s *DeleteTrackService) recordOrphan(ctx context.Context, userId shared.Use
 	if s.orphans == nil {
 		return false
 	}
-	recordCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), orphanRecordTimeout)
+	recordCtx, cancel := runloop.Detach(ctx, orphanRecordTimeout)
 	defer cancel()
 	err := s.orphans.RecordOrphanedAudio(recordCtx, ports.OrphanedAudio{AudioRef: audioRef, UserId: userId, TrackId: trackId})
 	if err == nil {
