@@ -1,0 +1,608 @@
+package jobs_test
+
+import (
+	"altune/go-api/internal/app/jobs"
+	"altune/go-api/internal/catalog"
+	"altune/go-api/internal/catalog/catalogtest"
+	"altune/go-api/internal/observe"
+	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/leader"
+	"altune/go-api/internal/shared/runloop"
+	"altune/go-api/internal/shared/sharedtest"
+	"bytes"
+	"context"
+	"errors"
+	"log/slog"
+	"os"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"testing/synctest"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+const leaderLoopTick = time.Millisecond
+
+type fakeElection struct {
+	mu      sync.Mutex
+	leader  bool
+	cancels []context.CancelCauseFunc
+}
+
+func (f *fakeElection) Start(context.Context) {}
+
+func (f *fakeElection) Await(context.Context) bool { return true }
+
+func (f *fakeElection) LeaderContext(parent context.Context) (context.Context, context.CancelFunc, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.leader {
+		return nil, nil, false
+	}
+	ctx, cancel := context.WithCancelCause(parent)
+	f.cancels = append(f.cancels, cancel)
+	return ctx, func() { cancel(context.Canceled) }, true
+}
+
+func (f *fakeElection) win() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.leader = true
+}
+
+func (f *fakeElection) lose() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.leader = false
+	for _, cancel := range f.cancels {
+		cancel(leader.ErrLeadershipLost)
+	}
+	f.cancels = nil
+}
+
+func (f *fakeElection) Shutdown(context.Context) { f.lose() }
+
+func leading() *fakeElection {
+	e := &fakeElection{}
+	e.win()
+	return e
+}
+
+func lead(t *testing.T, r *jobs.Runner, e jobs.Election) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		cancel()
+		r.Background().Wait()
+	})
+	r.Lead(ctx, e)
+}
+
+func captureLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	restore := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(restore) })
+	return &buf
+}
+
+func waitForAtLeast(t *testing.T, c *atomic.Int32, want int32) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if c.Load() >= want {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("counter never reached %d (got %d)", want, c.Load())
+}
+
+func findHealth(t *testing.T, r *jobs.Runner, name string) runloop.JobHealth {
+	t.Helper()
+	for _, h := range r.Health() {
+		if h.Name == name {
+			return h
+		}
+	}
+	t.Fatalf("job %q not found in health snapshot", name)
+	return runloop.JobHealth{}
+}
+
+func assertPassesFollowTheTerm(t *testing.T, e *fakeElection, passes *atomic.Int32) {
+	t.Helper()
+	waitForAtLeast(t, passes, 3)
+
+	e.lose()
+	time.Sleep(30 * leaderLoopTick)
+	stopped := passes.Load()
+
+	time.Sleep(60 * leaderLoopTick)
+	if extra := passes.Load() - stopped; extra > 1 {
+		t.Fatalf("job made %d more passes after the term ended, want none", extra)
+	}
+
+	e.win()
+	waitForAtLeast(t, passes, stopped+3)
+}
+
+func TestTicker_HealthRecordsSuccessAndFailure(t *testing.T) {
+	var r jobs.Runner
+	var calls atomic.Int32
+	r.Ticker("rollup", time.Millisecond, func(context.Context) error {
+		if calls.Add(1)%2 == 0 {
+			return errors.New("boom")
+		}
+		return nil
+	})
+	lead(t, &r, leading())
+
+	waitForAtLeast(t, &calls, 4)
+
+	h := findHealth(t, &r, "rollup")
+	if !h.Enabled || h.LastSuccess.IsZero() || h.Failures == 0 || h.LastFailure.IsZero() {
+		t.Errorf("health = %+v, want enabled with a last success, failures and a last failure", h)
+	}
+}
+
+func TestTicker_RegistersTheJobBeforeLeadership(t *testing.T) {
+	var r jobs.Runner
+	r.Ticker("rollup", time.Hour, func(context.Context) error { return nil })
+
+	findHealth(t, &r, "rollup")
+	if st, ok := r.SetEnabled("rollup", false); !ok || st.Name != "rollup" || st.Enabled {
+		t.Fatalf("SetEnabled on a registered but not-yet-leading job = %+v, %v; want rollup disabled", st, ok)
+	}
+}
+
+func TestSetEnabled_TheKillSwitchShowsInHealth(t *testing.T) {
+	var r jobs.Runner
+	r.Control("paused")
+
+	if _, ok := r.SetEnabled("paused", false); !ok {
+		t.Fatal("SetEnabled on a registered job reported unknown")
+	}
+	if findHealth(t, &r, "paused").Enabled {
+		t.Error("a disabled job must report Enabled=false in its health snapshot")
+	}
+}
+
+func TestSetEnabled_AnUnknownJobRegistersNothing(t *testing.T) {
+	var r jobs.Runner
+
+	if _, ok := r.SetEnabled("typo", false); ok {
+		t.Fatal("SetEnabled on an unregistered job reported ok")
+	}
+	if got := r.Health(); len(got) != 0 {
+		t.Fatalf("unknown job name registered a job: %+v", got)
+	}
+}
+
+func TestTicker_KillSwitchStopsAndResumesTheJob(t *testing.T) {
+	var r jobs.Runner
+	var runs atomic.Int32
+	r.Ticker("sweep", time.Millisecond, func(context.Context) error {
+		runs.Add(1)
+		return nil
+	})
+	lead(t, &r, leading())
+
+	waitForAtLeast(t, &runs, 3)
+
+	r.SetEnabled("sweep", false)
+	time.Sleep(30 * time.Millisecond)
+	baseline := runs.Load()
+	time.Sleep(60 * time.Millisecond)
+	if extra := runs.Load() - baseline; extra > 0 {
+		t.Fatalf("disabled job kept running: %d extra runs", extra)
+	}
+
+	r.SetEnabled("sweep", true)
+	waitForAtLeast(t, &runs, baseline+3)
+}
+
+func TestEveryInstance_RunsWithoutLeadershipAndHonoursItsKillSwitch(t *testing.T) {
+	var r jobs.Runner
+	lead(t, &r, &fakeElection{})
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	var runs atomic.Int32
+	r.EveryInstance(ctx, jobs.BehavioralRankingRefresh, time.Millisecond, func(context.Context) error {
+		runs.Add(1)
+		return nil
+	})
+
+	waitForAtLeast(t, &runs, 3)
+	if _, ok := r.SetEnabled(jobs.BehavioralRankingRefresh, false); !ok {
+		t.Fatal("SetEnabled must find the behavioral ranking refresh job")
+	}
+	time.Sleep(30 * time.Millisecond)
+	baseline := runs.Load()
+	time.Sleep(30 * time.Millisecond)
+	if extra := runs.Load() - baseline; extra > 0 {
+		t.Fatalf("disabled job kept running: %d extra runs", extra)
+	}
+}
+
+func TestTicker_RecoversFromAPanickingJob(t *testing.T) {
+	logged := captureLogs(t)
+	var r jobs.Runner
+	var calls atomic.Int32
+	ran := make(chan struct{}, 8)
+	r.Ticker("explode", time.Millisecond, func(context.Context) error {
+		n := calls.Add(1)
+		select {
+		case ran <- struct{}{}:
+		default:
+		}
+		if n == 1 {
+			panic("boom")
+		}
+		return nil
+	})
+	lead(t, &r, leading())
+
+	<-ran
+	<-ran
+
+	if got := logged.String(); !strings.Contains(got, "explode") || !strings.Contains(got, "boom") {
+		t.Errorf("panic log = %q, want it to name the job and the panic value", got)
+	}
+	if failures := findHealth(t, &r, "explode").Failures; failures == 0 {
+		t.Error("a recovered panic did not count toward the job's failure signal")
+	}
+}
+
+func TestTicker_AWedgedRunIsCanceledAndTheTickerRecovers(t *testing.T) {
+	var r jobs.Runner
+	var calls, successes atomic.Int32
+	wedgedErr := make(chan error, 1)
+	r.Ticker("wedged", 40*time.Millisecond, func(ctx context.Context) error {
+		if calls.Add(1) == 1 {
+			<-ctx.Done()
+			wedgedErr <- context.Cause(ctx)
+			return ctx.Err()
+		}
+		successes.Add(1)
+		return nil
+	})
+	lead(t, &r, leading())
+
+	waitForAtLeast(t, &successes, 1)
+
+	if cause := <-wedgedErr; !errors.Is(cause, runloop.ErrRunBudgetExceeded) {
+		t.Fatalf("wedged run canceled with cause %v, want runloop.ErrRunBudgetExceeded", cause)
+	}
+	if h := findHealth(t, &r, "wedged"); h.Failures < 1 || h.LastFailure.IsZero() || h.LastSuccess.IsZero() {
+		t.Fatalf("health = %+v, want the wedged run as a failure and a later success", h)
+	}
+}
+
+func TestWhenLeader_APanickingStartDoesNotStopTheNext(t *testing.T) {
+	logged := captureLogs(t)
+	var r jobs.Runner
+	survived := make(chan struct{})
+	r.WhenLeader("panicky", func(context.Context) { panic("on-acquire boom") })
+	r.WhenLeader("survivor", func(context.Context) { close(survived) })
+
+	lead(t, &r, leading())
+
+	select {
+	case <-survived:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a panic in one leader job prevented the next job from starting")
+	}
+	if got := logged.String(); !strings.Contains(got, "panicky") {
+		t.Errorf("panic log did not name the job, got: %q", got)
+	}
+}
+
+func TestLead_StartsTheElectionAndKeepsIt(t *testing.T) {
+	var r jobs.Runner
+	if r.Election() != nil {
+		t.Fatal("a runner that never led has an election")
+	}
+	e := leading()
+
+	lead(t, &r, e)
+
+	if r.Election() != e {
+		t.Fatalf("Election() = %v, want the election Lead was given", r.Election())
+	}
+}
+
+func TestLeaderContext_WithoutAnElectionEveryPassLeads(t *testing.T) {
+	var r jobs.Runner
+
+	ctx, release, ok := r.LeaderContext(context.Background())
+
+	if !ok || ctx == nil {
+		t.Fatal("a runner with no election refused the pass")
+	}
+	release()
+}
+
+func TestTicker_TheOldLeaderStopsAfterAHandoff(t *testing.T) {
+	oldE, newE := leading(), &fakeElection{}
+	var oldRunner, newRunner jobs.Runner
+	var oldRuns, newRuns atomic.Int32
+	oldRunner.Ticker("metrics rollup", leaderLoopTick, func(context.Context) error { oldRuns.Add(1); return nil })
+	newRunner.Ticker("metrics rollup", leaderLoopTick, func(context.Context) error { newRuns.Add(1); return nil })
+	lead(t, &oldRunner, oldE)
+
+	waitForAtLeast(t, &oldRuns, 3)
+
+	oldE.lose()
+	newE.win()
+	lead(t, &newRunner, newE)
+
+	time.Sleep(30 * leaderLoopTick)
+	baseline := oldRuns.Load()
+	time.Sleep(60 * leaderLoopTick)
+	if extra := oldRuns.Load() - baseline; extra > 1 {
+		t.Fatalf("old leader kept running the job after handoff: %d extra runs", extra)
+	}
+	waitForAtLeast(t, &newRuns, 3)
+}
+
+func TestTicker_AStaleLeadersWriteIsNotApplied(t *testing.T) {
+	oldE, newE := leading(), &fakeElection{}
+	var (
+		mu      sync.Mutex
+		applied []string
+	)
+	write := func(ctx context.Context, who string) error {
+		if ctx.Err() != nil {
+			return context.Cause(ctx)
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		applied = append(applied, who)
+		return nil
+	}
+
+	started := make(chan struct{})
+	proceed := make(chan struct{})
+	staleErr := make(chan error, 1)
+	var oldRunner, newRunner jobs.Runner
+	oldRunner.Ticker("metrics rollup", time.Hour, func(ctx context.Context) error {
+		close(started)
+		<-proceed
+		err := write(ctx, "old")
+		staleErr <- err
+		return err
+	})
+	lead(t, &oldRunner, oldE)
+	<-started
+
+	oldE.lose()
+	newE.win()
+	newDone := make(chan struct{})
+	newRunner.Ticker("metrics rollup", time.Hour, func(ctx context.Context) error {
+		defer close(newDone)
+		return write(ctx, "new")
+	})
+	lead(t, &newRunner, newE)
+	<-newDone
+
+	close(proceed)
+	if err := <-staleErr; !errors.Is(err, leader.ErrLeadershipLost) {
+		t.Fatalf("stale leader's write returned %v, want it refused with ErrLeadershipLost", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(applied) != 1 || applied[0] != "new" {
+		t.Fatalf("applied writes = %v, want only the new leader's [new]", applied)
+	}
+}
+
+func TestTicker_RunsCanceledByLeadershipLossDoNotCountAsFailures(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		e := leading()
+		var r jobs.Runner
+		started := make(chan struct{}, 1)
+		r.Ticker("interrupted", time.Hour, func(ctx context.Context) error {
+			started <- struct{}{}
+			<-ctx.Done()
+			return ctx.Err()
+		})
+		ctx, cancel := context.WithCancel(t.Context())
+		r.Lead(ctx, e)
+
+		for range 3 {
+			<-started
+			e.lose()
+			synctest.Wait()
+			e.win()
+			time.Sleep(time.Hour)
+		}
+		<-started
+		e.lose()
+		synctest.Wait()
+
+		h := findHealth(t, &r, "interrupted")
+		if h.Failures != 0 || r.Control("interrupted").ConsecutiveFailures() != 0 || !h.LastFailure.IsZero() {
+			t.Fatalf("leadership-lost runs counted as failures: %+v", h)
+		}
+		cancel()
+		r.Background().Wait()
+	})
+}
+
+func TestLeaderContext_TheAlertMonitorEvaluatesOnlyDuringItsTerm(t *testing.T) {
+	e := leading()
+	var r jobs.Runner
+	lead(t, &r, e)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var evaluations atomic.Int32
+	monitor := observe.NewAlertMonitor(observe.NopNotifier{}, leaderLoopTick, observe.Condition{
+		Key: "dependency_down",
+		Eval: func(context.Context) *observe.Alert {
+			evaluations.Add(1)
+			return nil
+		},
+	}).WithLeadership(r.LeaderContext)
+	monitor.Start(ctx)
+
+	assertPassesFollowTheTerm(t, e, &evaluations)
+}
+
+func TestLeaderContext_TheEvalMeterRunsOnlyDuringItsTerm(t *testing.T) {
+	e := leading()
+	var r jobs.Runner
+	lead(t, &r, e)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var runs atomic.Int32
+	meter := observe.NewEvalMeter(leaderLoopTick, func(context.Context) (observe.EvalMeterResult, error) {
+		runs.Add(1)
+		return observe.EvalMeterResult{}, nil
+	}).WithLeadership(r.LeaderContext)
+	meter.Start(ctx)
+
+	assertPassesFollowTheTerm(t, e, &runs)
+}
+
+func TestLeaderContext_LosingTheTermCutsOffAnEvalMidRun(t *testing.T) {
+	e := leading()
+	var r jobs.Runner
+	lead(t, &r, e)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	started := make(chan struct{})
+	stoppedBecause := make(chan error, 1)
+	meter := observe.NewEvalMeter(time.Hour, func(runCtx context.Context) (observe.EvalMeterResult, error) {
+		close(started)
+		<-runCtx.Done()
+		stoppedBecause <- context.Cause(runCtx)
+		return observe.EvalMeterResult{}, runCtx.Err()
+	}).WithLeadership(r.LeaderContext)
+	meter.Start(ctx)
+	<-started
+
+	e.lose()
+
+	select {
+	case err := <-stoppedBecause:
+		if !errors.Is(err, leader.ErrLeadershipLost) {
+			t.Fatalf("in-flight eval ended with %v, want it canceled with ErrLeadershipLost", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("in-flight eval was still running 2s after the term ended, want it canceled")
+	}
+}
+
+func TestSwitch_TheStreamRecoveryKillSwitchSuppressesReschedule(t *testing.T) {
+	ctx := context.Background()
+	var r jobs.Runner
+	user := shared.NewUserId(uuid.New())
+	repo := catalogtest.NewTrackRepo()
+	store := catalogtest.NewAudioStore()
+	store.ErrOnStream = errors.New("not found")
+	sched := &catalogtest.Scheduler{}
+	svc := catalog.NewStreamTrackService(repo, store,
+		catalog.WithStreamScheduler(sched),
+		catalog.WithStreamRecoverySwitch(r.Switch(jobs.StreamRecovery)))
+	track, err := catalog.NewTrack(user, "Track", "Artist", "Album")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.Seed(track)
+	if err := track.MarkReady("audio/gone.opus"); err != nil {
+		t.Fatal(err)
+	}
+
+	r.SetEnabled(jobs.StreamRecovery, false)
+
+	if _, err := svc.Execute(ctx, user, track.ID); !errors.Is(err, catalog.ErrAudioTemporarilyUnavailable) {
+		t.Fatalf("disabled recovery stream err = %v, want ErrAudioTemporarilyUnavailable", err)
+	}
+	if err := svc.RecoverIfMissing(ctx, user, track.ID); err != nil {
+		t.Fatalf("disabled RecoverIfMissing err = %v, want nil no-op", err)
+	}
+	if len(sched.TrackIds) != 0 {
+		t.Fatalf("disabled stream recovery scheduled %d re-acquisitions", len(sched.TrackIds))
+	}
+	if got, _ := repo.GetByID(ctx, track.ID, user); got == nil || got.AcquisitionStatus != catalog.AcquisitionReady {
+		t.Fatalf("disabled stream recovery changed the track: %+v", got)
+	}
+	if h := findHealth(t, &r, string(jobs.StreamRecovery)); h.Enabled || h.Skipped != 2 {
+		t.Fatalf("stream recovery health = %+v, want disabled with 2 skipped", h)
+	}
+
+	r.SetEnabled(jobs.StreamRecovery, true)
+
+	if _, err := svc.Execute(ctx, user, track.ID); !errors.Is(err, catalog.ErrAudioNotAvailable) {
+		t.Fatalf("re-enabled recovery stream err = %v, want ErrAudioNotAvailable", err)
+	}
+	if len(sched.TrackIds) != 1 {
+		t.Fatalf("re-enabled stream recovery scheduled %d re-acquisitions, want 1", len(sched.TrackIds))
+	}
+}
+
+type lockWonRecords chan slog.Record
+
+func (c lockWonRecords) Enabled(context.Context, slog.Level) bool { return true }
+
+func (c lockWonRecords) Handle(_ context.Context, r slog.Record) error {
+	if r.Message == "leader.lock_won" {
+		select {
+		case c <- r:
+		default:
+		}
+	}
+	return nil
+}
+
+func (c lockWonRecords) WithAttrs([]slog.Attr) slog.Handler { return c }
+
+func (c lockWonRecords) WithGroup(string) slog.Handler { return c }
+
+func TestNewElection_WinsTheBackgroundLockAndAnnouncesATwentyFiveSecondSettle(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	won := make(lockWonRecords, 1)
+	prev := slog.Default()
+	slog.SetDefault(slog.New(won))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	var r jobs.Runner
+	election := jobs.NewElection(pool)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		cancel()
+		election.Shutdown(context.Background())
+		r.Background().Wait()
+	})
+	r.Lead(ctx, election)
+
+	select {
+	case rec := <-won:
+		settle := ""
+		rec.Attrs(func(attr slog.Attr) bool {
+			if attr.Key == "settle" {
+				settle = attr.Value.String()
+			}
+			return true
+		})
+		if want := (25 * time.Second).String(); settle != want {
+			t.Fatalf("leader.lock_won settle = %q, want %q", settle, want)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the background election never won its lock")
+	}
+}

@@ -1,6 +1,8 @@
 package app
 
 import (
+	"altune/go-api/internal/app/jobs"
+	"altune/go-api/internal/app/providerhttp"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/telemetry"
@@ -8,7 +10,6 @@ import (
 	"expvar"
 	"log/slog"
 	"net/http"
-	"os"
 	"sync"
 	"time"
 
@@ -25,7 +26,11 @@ type EvalHandles struct {
 }
 
 func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*discovery.Discovery, error) {
-	deps := configuredDiscoveryDeps(ctx, cfg, newClientFactory(h.Transport))
+	transport := h.Transport
+	if transport == nil {
+		transport = providerhttp.Live()
+	}
+	deps := configuredDiscoveryDeps(ctx, cfg, transport)
 	deps.Background = &sync.WaitGroup{}
 	deps.Pool = h.Pool
 	deps.Redis = h.Redis
@@ -33,9 +38,9 @@ func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*
 	return discovery.New(deps)
 }
 
-func (a *App) discoveryDeps(ctx context.Context, cf clientFactory) discovery.Deps {
-	deps := configuredDiscoveryDeps(ctx, a.cfg, cf)
-	deps.Background = &a.wg
+func (a *App) discoveryDeps(ctx context.Context, transport http.RoundTripper) discovery.Deps {
+	deps := configuredDiscoveryDeps(ctx, a.cfg, transport)
+	deps.Background = a.jobs.Background()
 	deps.Pool = a.pool
 	deps.Redis = a.redisClient
 	deps.ClientEvents = a.discoveryClientEvents()
@@ -45,13 +50,13 @@ func (a *App) discoveryDeps(ctx context.Context, cf clientFactory) discovery.Dep
 	return deps
 }
 
-func configuredDiscoveryDeps(ctx context.Context, cfg *config.Config, cf clientFactory) discovery.Deps {
+func configuredDiscoveryDeps(ctx context.Context, cfg *config.Config, transport http.RoundTripper) discovery.Deps {
 	return discovery.Deps{
 		Lifecycle:       ctx,
 		Logger:          slog.Default(),
-		Transport:       cf.roundTripper(),
-		ProviderTimeout: discoveryHTTPTimeout,
-		ChartTimeout:    chartHTTPTimeout,
+		Transport:       transport,
+		ProviderTimeout: 10 * time.Second,
+		ChartTimeout:    15 * time.Second,
 		CacheOps:        cacheOps(),
 		Providers:       discoveryProviderSettings(cfg),
 		Search:          discoverySearchSettings(cfg),
@@ -96,7 +101,7 @@ func unreleasedConfig(cfg *config.Config) discovery.UnreleasedConfig {
 }
 
 func (a *App) discoveryClientEvents() *telemetry.ClientEvents {
-	if !telemetry.Enabled(os.Getenv) {
+	if !a.cfg.HasTelemetryExport() {
 		return nil
 	}
 	return telemetry.NewClientEvents(a.cfg.TelemetryUserKey, otel.GetLoggerProvider().Logger(telemetry.ScopeName))
@@ -105,9 +110,9 @@ func (a *App) discoveryClientEvents() *telemetry.ClientEvents {
 func (a *App) startDiscoveryBackgroundJobs(ctx context.Context, disc *discovery.Discovery) {
 	a.startUnreleasedRefresh(disc.UnreleasedRefresh)
 	if a.cfg.BehavioralRankingEnabled {
-		a.startEveryInstanceTicker(ctx, jobBehavioralRankingRefresh, 30*time.Minute, func(ctx context.Context) error {
+		a.jobs.EveryInstance(ctx, jobs.BehavioralRankingRefresh, 30*time.Minute, func(ctx context.Context) error {
 			if err := disc.Search.RefreshBehavioralScores(ctx); err != nil {
-				slog.WarnContext(ctx, string(jobBehavioralRankingRefresh)+" failed", "error", err)
+				slog.WarnContext(ctx, string(jobs.BehavioralRankingRefresh)+" failed", "error", err)
 				return err
 			}
 			return nil

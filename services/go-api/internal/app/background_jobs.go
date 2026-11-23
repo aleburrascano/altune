@@ -1,6 +1,7 @@
 package app
 
 import (
+	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/playback"
@@ -12,7 +13,7 @@ import (
 )
 
 func (a *App) startSimpleJob(
-	name jobName,
+	name jobs.Name,
 	interval time.Duration,
 	run func(context.Context) error,
 	startedAttrs ...any,
@@ -28,12 +29,12 @@ func (a *App) startSimpleJob(
 
 func (a *App) startLoggedJob(
 	ctx context.Context,
-	name jobName,
+	name jobs.Name,
 	interval time.Duration,
 	run func(context.Context) error,
 	startedAttrs ...any,
 ) {
-	a.startTicker(name, interval, run)
+	a.jobs.Ticker(name, interval, run)
 	slog.InfoContext(ctx, string(name)+" started", startedAttrs...)
 }
 
@@ -44,10 +45,10 @@ func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue catalog.Orp
 		return
 	}
 	svc := catalog.NewReconcileOrphanedAudioService(queue, audioStore,
-		catalog.WithReconcileSwitch(a.jobSwitch(jobOrphanedAudioReconcile)),
+		catalog.WithReconcileSwitch(a.jobs.Switch(jobs.OrphanedAudioReconcile)),
 		catalog.WithReconcileMetrics(catalog.NewExpvarAudioStoreMetrics()),
 	)
-	a.startSimpleJob(jobOrphanedAudioReconcile, orphanedAudioReconcileInterval, func(ctx context.Context) error {
+	a.startSimpleJob(jobs.OrphanedAudioReconcile, orphanedAudioReconcileInterval, func(ctx context.Context) error {
 		_, err := svc.Execute(ctx)
 		return err
 	}, "interval", orphanedAudioReconcileInterval.String())
@@ -57,7 +58,7 @@ const deletedIdentityErasureInterval = time.Hour
 
 func (a *App) startDeletedIdentityErasure(ctx context.Context, svc *playback.ErasureSweeper) {
 	discoveryErasers := a.discoveryDeletedIdentityErasers()
-	a.startSimpleJob(jobDeletedIdentityErasure, deletedIdentityErasureInterval, func(ctx context.Context) error {
+	a.startSimpleJob(jobs.DeletedIdentityErasure, deletedIdentityErasureInterval, func(ctx context.Context) error {
 		_, queueErr := svc.Execute(ctx)
 		return errors.Join(queueErr, eraseDiscoveryRowsOfDeletedIdentities(ctx, discoveryErasers))
 	}, "interval", deletedIdentityErasureInterval.String())
@@ -107,7 +108,7 @@ func (a *App) startCorpusRefresh(ctx context.Context, store discovery.Behavioral
 	}
 	builder := discovery.NewCorpusBuilder(store)
 	const lookback = 30 * 24 * time.Hour
-	a.startLoggedJob(ctx, jobBehavioralCorpusRefresh, 24*time.Hour, func(ctx context.Context) error {
+	a.startLoggedJob(ctx, jobs.BehavioralCorpusRefresh, 24*time.Hour, func(ctx context.Context) error {
 		since := time.Now().UTC().Add(-lookback)
 		if err := builder.Materialize(ctx, since, since.Format("2006-01-02"), a.cfg.BehavioralCorpusPath); err != nil {
 			slog.WarnContext(ctx, "behavioral corpus materialize failed", "error", err)
@@ -126,7 +127,7 @@ type discoveryEventRetentionPruner interface {
 }
 
 func (a *App) startDiscographyPrune(ctx context.Context, pruner discoveryEventRetentionPruner) {
-	a.startLoggedJob(ctx, jobDiscographyEventPrune, discographyPruneInterval, func(ctx context.Context) error {
+	a.startLoggedJob(ctx, jobs.DiscographyEventPrune, discographyPruneInterval, func(ctx context.Context) error {
 		now := time.Now().UTC()
 		discographyPruned, err := pruner.PruneDiscographyObserved(ctx, now)
 		if err != nil {
@@ -153,7 +154,7 @@ type acquisitionRetentionPruner interface {
 }
 
 func (a *App) startAcquisitionPrune(ctx context.Context, outcomes, rejections acquisitionRetentionPruner) {
-	a.startLoggedJob(ctx, jobAcquisitionPrune, acquisitionPruneInterval, func(ctx context.Context) error {
+	a.startLoggedJob(ctx, jobs.AcquisitionPrune, acquisitionPruneInterval, func(ctx context.Context) error {
 		now := time.Now().UTC()
 		outcomesPruned, err := outcomes.Prune(ctx, now)
 		if err != nil {
@@ -181,7 +182,7 @@ func (a *App) startVocabularyRefresh(vocabStore discovery.VocabularyStore, chart
 	a.vocabRefresh = discovery.NewVocabularyRefreshService(
 		charts, vocabStore, 50,
 	)
-	a.startSimpleJob(jobVocabularyRefresh, vocabRefreshInterval, func(ctx context.Context) error {
+	a.startSimpleJob(jobs.VocabularyRefresh, vocabRefreshInterval, func(ctx context.Context) error {
 		return a.vocabRefresh.RunOnce(ctx)
 	})
 }
@@ -195,7 +196,7 @@ func (a *App) startUnreleasedRefresh(svc *discovery.UnreleasedService) {
 	if svc == nil {
 		return
 	}
-	a.startSimpleJob(jobUnreleasedRefresh, unreleasedRefreshInterval, unreleasedRefreshRun(svc), "interval", unreleasedRefreshInterval.String())
+	a.startSimpleJob(jobs.UnreleasedRefresh, unreleasedRefreshInterval, unreleasedRefreshRun(svc), "interval", unreleasedRefreshInterval.String())
 }
 
 func unreleasedRefreshRun(svc *discovery.UnreleasedService) func(context.Context) error {

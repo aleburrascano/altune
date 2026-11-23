@@ -1,6 +1,7 @@
 package app
 
 import (
+	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/app/observeacquisition"
 	"altune/go-api/internal/app/observediscovery"
 	"altune/go-api/internal/app/observemetrics"
@@ -34,8 +35,8 @@ func (a *App) startObserveSources(ctx context.Context, tap *observe.EventTap) {
 	a.eventFeed = observe.NewEventFeed()
 	a.eventFeed.Start(ctx, tap)
 	a.evalMeter = observe.NewEvalMeter(0, a.evalMeterRunner()).
-		WithLeadership(a.leaderContext)
-	a.whenLeader(jobEvalMeter, a.evalMeter.Start)
+		WithLeadership(a.jobs.LeaderContext)
+	a.jobs.WhenLeader(jobs.EvalMeter, a.evalMeter.Start)
 }
 
 func mountObserve(r chi.Router, verifier auth.TokenVerifier, principalID string, h *observe.Handler) {
@@ -70,7 +71,7 @@ func (a *App) liveMetrics() observe.LiveMetrics {
 	m["db_pool"] = database.ReadPoolStats(a.pool)
 	m["redis_pool"] = redis.ReadPoolStats(a.redisClient)
 	var counters leader.Counters
-	if e, ok := a.election.(electionCounters); ok {
+	if e, ok := a.jobs.Election().(electionCounters); ok {
 		counters = e.Counters()
 	}
 	m["leader"] = counters

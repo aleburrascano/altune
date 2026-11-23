@@ -4,9 +4,12 @@ import (
 	"altune/go-api/internal/shared/egress"
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 )
 
@@ -96,5 +99,32 @@ func TestNewLiveTransport_WorksWithoutARetryRecorder(t *testing.T) {
 
 	if !errors.Is(err, egress.ErrNonPublicAddr) {
 		t.Fatalf("err = %v, want the non-public address refusal", err)
+	}
+}
+
+func allowLoopbackThenGuard(ctx context.Context, network, address string) (net.Conn, error) {
+	guarded := &net.Dialer{Control: func(network, address string, c syscall.RawConn) error {
+		if strings.HasPrefix(address, "127.0.0.1:") {
+			return nil
+		}
+		return egress.RefuseNonPublicDial(network, address, c)
+	}}
+	return guarded.DialContext(ctx, network, address)
+}
+
+func TestRefuseNonPublicDial_RefusesARedirectToTheMetadataAddress(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://169.254.169.254/latest/meta-data/", http.StatusFound)
+	}))
+	defer upstream.Close()
+	client := &http.Client{Transport: &http.Transport{DialContext: allowLoopbackThenGuard}}
+
+	resp, err := client.Get(upstream.URL)
+	if err == nil {
+		_ = resp.Body.Close()
+		t.Fatal("the redirect to the metadata address was followed")
+	}
+	if !errors.Is(err, egress.ErrNonPublicAddr) {
+		t.Errorf("error = %v, want the non-public address refusal", err)
 	}
 }

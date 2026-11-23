@@ -27,8 +27,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	goredis "github.com/redis/go-redis/v9"
 )
 
 const (
@@ -311,7 +313,7 @@ func TestObserveLiveMetrics_CarriesAuthCatalogAndPlaybackFailureCounters(t *test
 }
 
 type observedElection struct {
-	fakeElection
+	leaderElection
 	counters leader.Counters
 }
 
@@ -319,10 +321,8 @@ func (c *observedElection) Counters() leader.Counters { return c.counters }
 
 func TestObserveLiveMetrics_CarriesSaturationKeys(t *testing.T) {
 	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
-	a := &App{
-		election: &observedElection{counters: leader.Counters{Failures: 7}},
-		eventBus: bus,
-	}
+	a := &App{eventBus: bus}
+	leadWith(t, a, &observedElection{counters: leader.Counters{Failures: 7}})
 	var out map[string]json.RawMessage
 	if err := json.Unmarshal(readObservedLiveMetrics(t, a.liveMetrics), &out); err != nil {
 		t.Fatal(err)
@@ -480,6 +480,35 @@ func TestDependencyHealth_UnconfiguredIsHealthy(t *testing.T) {
 	}
 }
 
+type stubAuthChecker struct {
+	err error
+}
+
+func (s stubAuthChecker) CheckHealth(context.Context) error { return s.err }
+
+func TestDependencyHealth_ProbesTheAppsDatabaseRedisAndAuth(t *testing.T) {
+	redisUp := miniredis.RunT(t)
+	healthyClient := goredis.NewClient(&goredis.Options{Addr: redisUp.Addr()})
+	t.Cleanup(func() { _ = healthyClient.Close() })
+	healthy := &App{dbPing: func(context.Context) error { return nil }, redisClient: healthyClient, authVerifier: stubAuthChecker{}}
+
+	if got := healthy.dependencyHealth(t.Context()); got.DB != observe.DepUp || got.Redis != observe.DepUp || got.Auth != observe.DepUp {
+		t.Errorf("healthy statuses = %q/%q/%q, want all ok", got.DB, got.Redis, got.Auth)
+	}
+
+	downClient := goredis.NewClient(&goredis.Options{Addr: "127.0.0.1:1", MaxRetries: -1})
+	t.Cleanup(func() { _ = downClient.Close() })
+	down := &App{dbPing: func(context.Context) error { return errors.New("db refused") }, redisClient: downClient, authVerifier: stubAuthChecker{err: errors.New("jwks stale")}}
+
+	got := down.dependencyHealth(t.Context())
+	if got.DB != observe.DepDown || got.Redis != observe.DepDown || got.Auth != observe.DepDown {
+		t.Errorf("down statuses = %q/%q/%q, want all down", got.DB, got.Redis, got.Auth)
+	}
+	if got.Detail.DBError != "db refused" || got.Detail.AuthError != "jwks stale" || got.Detail.RedisError == "" {
+		t.Errorf("detail = %+v, want each probe's own error", got.Detail)
+	}
+}
+
 func TestEvalMeterRunner_NilBeforeDiscoveryIsKept(t *testing.T) {
 	if run := (&App{cfg: &config.Config{}}).evalMeterRunner(); run != nil {
 		t.Error("runner is non-nil with no ranking-only search kept, want nil so the meter treats it as unset")
@@ -504,7 +533,10 @@ func TestWrapEvalRunner_ErrPassesThroughWithAZeroResult(t *testing.T) {
 
 func TestWireObserve_BuildsTheFeedAndMeterItServes(t *testing.T) {
 	subjects := newObserveSubjects()
-	a := &App{cfg: &config.Config{OverseerPrincipalID: subjects.principal.String()}}
+	a := &App{
+		cfg:        &config.Config{OverseerPrincipalID: subjects.principal.String()},
+		evalSearch: discovery.NewSearchService(nil, nil),
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	r := chi.NewRouter()
@@ -514,12 +546,15 @@ func TestWireObserve_BuildsTheFeedAndMeterItServes(t *testing.T) {
 	if a.eventFeed == nil || a.evalMeter == nil {
 		t.Fatalf("feed %v, meter %v: wireObserve must build both", a.eventFeed, a.evalMeter)
 	}
-	registered := false
-	for _, job := range a.backgroundStarts {
-		registered = registered || job.name == jobEvalMeter
-	}
-	if !registered {
-		t.Error("the eval meter is not registered to start when leader")
+	t.Cleanup(func() { a.evalMeter.Shutdown(context.Background()) })
+	election := &leaderElection{}
+	leadWith(t, a, election)
+	deadline := time.Now().Add(2 * time.Second)
+	for election.passes.Load() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the eval meter never asked for a leader pass: it is not started when leader")
+		}
+		time.Sleep(time.Millisecond)
 	}
 	assertObserveStatus(t, callObserve(t, r, http.MethodGet, "/observe/events/stream", observePrincipalToken), http.StatusOK, "event stream over the wired feed")
 }

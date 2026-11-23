@@ -2,6 +2,10 @@ package app
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/app/canary"
+	"altune/go-api/internal/app/jobs"
+	"altune/go-api/internal/app/providerhttp"
+	"altune/go-api/internal/app/shutdown"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe"
@@ -9,7 +13,6 @@ import (
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/runloop"
 	"context"
 	"fmt"
 	"log/slog"
@@ -18,8 +21,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -32,42 +33,29 @@ import (
 const eventIDFloorFile = "altune-event-id-floor"
 
 type App struct {
-	cfg             *config.Config
-	pool            *pgxpool.Pool
-	dbHealth        dbHealthChecker
-	depProbeTimeout time.Duration
-	requestTimeout  time.Duration
-	healthCache     healthCache
-	redisClient     *goredis.Client
-	authVerifier    authHealthChecker
-	server          *http.Server
-	wg              sync.WaitGroup
-	sem             chan struct{}
-	scheduler       *acquisition.BackgroundAcquisitionScheduler
-	vocabRefresh    *discovery.VocabularyRefreshService
-	searchSvc       *discovery.SearchService
-	evalSearch      *discovery.SearchService
-	eventBus        *events.InProcessBus
-	eventTap        *observe.EventTap
-	alertMonitor    *observe.AlertMonitor
-	logRing         *logging.RingBuffer
-	eventFeed       *observe.EventFeed
-	evalMeter       *observe.EvalMeter
-	lifecycleDone   <-chan struct{}
+	cfg            *config.Config
+	pool           *pgxpool.Pool
+	dbPing         func(context.Context) error
+	requestTimeout time.Duration
+	redisClient    *goredis.Client
+	authVerifier   authHealthChecker
+	server         *http.Server
+	sem            chan struct{}
+	scheduler      *acquisition.BackgroundAcquisitionScheduler
+	vocabRefresh   *discovery.VocabularyRefreshService
+	searchSvc      *discovery.SearchService
+	evalSearch     *discovery.SearchService
+	eventBus       *events.InProcessBus
+	eventTap       *observe.EventTap
+	alertMonitor   *observe.AlertMonitor
+	logRing        *logging.RingBuffer
+	eventFeed      *observe.EventFeed
+	evalMeter      *observe.EvalMeter
+	lifecycleDone  <-chan struct{}
 
-	election         electionController
-	backgroundStarts []backgroundJob
-
-	jobs runloop.JobRegistry
+	jobs jobs.Runner
 
 	fixtureSources *sourceTiers
-}
-
-type electionController interface {
-	Start(context.Context)
-	Await(context.Context) bool
-	LeaderContext(parent context.Context) (ctx context.Context, release context.CancelFunc, ok bool)
-	Shutdown(context.Context)
 }
 
 func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
@@ -102,17 +90,11 @@ func (a *App) Run(ctx context.Context) error {
 		slog.InfoContext(ctx, "shutting down")
 	}
 
-	a.drainServer(serverDrainTimeout)
+	shutdown.DrainServer(a.server, shutdown.ServerDrainTimeout)
 
 	slog.InfoContext(ctx, "waiting for background tasks")
 	outcomes := a.runShutdownSequence()
-
-	if unstopped := unfinishedShutdowns(outcomes); len(unstopped) > 0 {
-		slog.WarnContext(ctx, "closing DB/Redis while components are still shutting down",
-			"components", strings.Join(unstopped, ", "))
-	}
-
-	a.cleanup(ctx, !leadershipRetained(outcomes))
+	shutdown.CloseDatastores(ctx, outcomes, shutdown.Datastores{Pool: a.pool, Redis: a.redisClient})
 	slog.InfoContext(ctx, "shutdown complete")
 	return nil
 }
@@ -130,7 +112,7 @@ func (a *App) setup(ctx context.Context) error {
 		return fmt.Errorf("startup switches: %w", err)
 	}
 
-	disc, err := discovery.New(a.discoveryDeps(ctx, newClientFactory(nil)))
+	disc, err := discovery.New(a.discoveryDeps(ctx, providerhttp.Live()))
 	if err != nil {
 		return fmt.Errorf("discovery: %w", err)
 	}
@@ -151,7 +133,7 @@ func (a *App) setup(ctx context.Context) error {
 	a.startAlertMonitor(ctx)
 	a.wireObserve(ctx, r, verifier, a.eventTap)
 	a.startCatalogJobs(ctx, cat, playback)
-	a.startBackgroundWhenLeader(ctx)
+	a.jobs.Lead(ctx, jobs.NewElection(a.pool))
 
 	a.server = a.newServer(ctx, r)
 	return nil
@@ -163,9 +145,7 @@ func (a *App) connectDatastores(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("database: %w", err)
 	}
-	a.dbHealth = func(ctx context.Context) database.HealthStatus {
-		return database.CheckHealth(ctx, a.pool)
-	}
+	a.dbPing = a.pool.Ping
 
 	a.lifecycleDone = ctx.Done()
 	a.redisClient = sharedRedis.NewClient(ctx, a.cfg.RedisURL, a.cfg.RedisPoolSize)
@@ -191,8 +171,10 @@ func (a *App) connectAuth(ctx context.Context) (auth.TokenVerifier, error) {
 func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback playbackWiring) {
 	a.startOrphanedAudioReconcile(ctx, cat.orphanedAudio, cat.audioStore)
 	a.startDeletedIdentityErasure(ctx, playback.forgetDeletedIdentities)
-	a.startSourceCanary(ctx, cat.ytDlpSearcher, cat.ytDlpAvailable, cat.ytmCanary,
-		sourceToggles{ytMusic: a.cfg.YtMusicEnabled, ytDlp: a.cfg.YtDLPEnabled})
+	a.startSourceCanary(canary.Probes{
+		YtDlp: cat.ytDlpSearcher, YtDlpAvailable: cat.ytDlpAvailable, InnerTube: cat.ytmCanary,
+		YtMusicEnabled: a.cfg.YtMusicEnabled, YtDlpEnabled: a.cfg.YtDLPEnabled,
+	})
 	if a.pool != nil {
 		a.startAcquisitionPrune(ctx,
 			acquisition.NewPgxOutcomeStore(a.pool),
@@ -202,16 +184,7 @@ func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback 
 }
 
 func (a *App) applyDisabledJobs(ctx context.Context) error {
-	for _, raw := range a.cfg.DisabledJobs {
-		name := jobName(raw)
-		if !isSwitchableJobName(name) {
-			return fmt.Errorf("DISABLED_JOBS: unknown job %q", raw)
-		}
-		if a.job(name).DisableIfEnabled() {
-			slog.InfoContext(ctx, "job disabled at startup", "job", raw)
-		}
-	}
-	return nil
+	return a.jobs.DisableAtStartup(ctx, a.cfg.DisabledJobs)
 }
 
 func (a *App) applyStartupSwitches(ctx context.Context) error {
@@ -239,19 +212,5 @@ func (a *App) newServer(ctx context.Context, handler http.Handler) *http.Server 
 		ReadHeaderTimeout: serverReadHeaderTimeout,
 		ReadTimeout:       serverReadTimeout,
 		IdleTimeout:       serverIdleTimeout,
-	}
-}
-
-func (a *App) cleanup(ctx context.Context, closePool bool) {
-	if !closePool {
-		slog.ErrorContext(ctx, "leaving DB pool open so process exit releases the retained leader lock")
-	}
-	if closePool && a.pool != nil {
-		a.pool.Close()
-	}
-	if a.redisClient != nil {
-		if err := a.redisClient.Close(); err != nil {
-			slog.ErrorContext(ctx, "redis client close error", "error", err)
-		}
 	}
 }

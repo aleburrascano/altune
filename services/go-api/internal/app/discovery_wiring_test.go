@@ -1,6 +1,7 @@
 package app
 
 import (
+	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe"
@@ -74,7 +75,7 @@ func TestRequestPathProviderCallsAreCountedOnce(t *testing.T) {
 		t.Run(route.name, func(t *testing.T) {
 			rt := &countingProviderRT{}
 			a := &App{cfg: &config.Config{MusicBrainzUserAgent: "altune-test/1.0"}}
-			disc, err := discovery.New(a.discoveryDeps(context.Background(), newClientFactory(countedProviderTransport(rt))))
+			disc, err := discovery.New(a.discoveryDeps(context.Background(), discovery.NewCountingTransport(rt)))
 			if err != nil {
 				t.Fatalf("wire discovery: %v", err)
 			}
@@ -112,11 +113,11 @@ func TestBehavioralRankingRefresh_LogsOnFailure(t *testing.T) {
 
 	a := &App{cfg: &config.Config{BehavioralRankingEnabled: true}}
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(func() { cancel(); a.wg.Wait() })
+	t.Cleanup(func() { cancel(); a.jobs.Background().Wait() })
 
 	a.startDiscoveryBackgroundJobs(ctx, &discovery.Discovery{Search: searchSvc})
 
-	h := waitForHealth(t, a, jobBehavioralRankingRefresh, func(h runloop.JobHealth) bool { return h.Failures >= 1 })
+	h := waitForHealth(t, a, jobs.BehavioralRankingRefresh, func(h runloop.JobHealth) bool { return h.Failures >= 1 })
 
 	if h.LastFailure.IsZero() {
 		t.Error("a failed run must still update LastFailure through jc.record")
@@ -130,27 +131,32 @@ func TestBehavioralRankingRefresh_LogsOnFailure(t *testing.T) {
 }
 
 func TestUnreleasedRefresh_AStoredUnreleasedServiceRegistersTheLeaderOnlyJob(t *testing.T) {
-	a := &App{cfg: &config.Config{}}
-	a.startUnreleasedRefresh(&discovery.UnreleasedService{})
-	if got := startedJobNames(a); !slices.Equal(got, []jobName{jobUnreleasedRefresh}) {
-		t.Errorf("leader-gated jobs = %v, want [%s]", got, jobUnreleasedRefresh)
+	build := func(t *testing.T) *App {
+		a := &App{cfg: &config.Config{}}
+		a.startUnreleasedRefresh(&discovery.UnreleasedService{})
+		if got := registeredJobNames(a); !slices.Equal(got, []jobs.Name{jobs.UnreleasedRefresh}) {
+			t.Fatalf("registered jobs = %v, want [%s]", got, jobs.UnreleasedRefresh)
+		}
+		return a
 	}
+
+	assertLeaderOnly(t, jobs.UnreleasedRefresh, build)
 }
 
 func TestUnreleasedRefresh_NothingStoredStartsNoJob(t *testing.T) {
 	a := &App{cfg: &config.Config{}}
 	a.startUnreleasedRefresh(nil)
-	if got := startedJobNames(a); len(got) != 0 {
+	if got := registeredJobNames(a); len(got) != 0 {
 		t.Errorf("no stored unreleased service started jobs %v", got)
 	}
 }
 
 func TestUnreleasedRefresh_DisabledJobsAcceptsTheJobName(t *testing.T) {
-	a := &App{cfg: &config.Config{DisabledJobs: []string{string(jobUnreleasedRefresh)}}}
+	a := &App{cfg: &config.Config{DisabledJobs: []string{string(jobs.UnreleasedRefresh)}}}
 	if err := a.applyStartupSwitches(t.Context()); err != nil {
 		t.Fatalf("applyStartupSwitches: %v", err)
 	}
-	if h := findJobHealth(t, a.JobHealth(), "unreleased refresh"); h.Enabled {
+	if h := findJobHealth(t, a.jobs.Health(), "unreleased refresh"); h.Enabled {
 		t.Error("unreleased refresh enabled, want disabled via DISABLED_JOBS")
 	}
 }
@@ -212,7 +218,7 @@ func distinctDiscoveryConfig() *config.Config {
 
 func TestDiscoveryDeps_CopiesEachConfigValueIntoItsOwnField(t *testing.T) {
 	a := &App{cfg: distinctDiscoveryConfig()}
-	deps := a.discoveryDeps(t.Context(), newClientFactory(http.DefaultTransport))
+	deps := a.discoveryDeps(t.Context(), http.DefaultTransport)
 
 	wantProviders := discovery.ProviderSettings{
 		MusicBrainzUserAgent: "mb-agent",
@@ -261,7 +267,7 @@ func TestDiscoveryDeps_EachConfigSwitchTurnsOnOnlyItsOwnSetting(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &config.Config{}
 			tt.turnOn(cfg)
-			deps := (&App{cfg: cfg}).discoveryDeps(t.Context(), newClientFactory(http.DefaultTransport))
+			deps := (&App{cfg: cfg}).discoveryDeps(t.Context(), http.DefaultTransport)
 			if !reflect.DeepEqual(deps.Providers, tt.wantProviders) || deps.Search != tt.wantSearch || deps.Unreleased != tt.wantUnreleased {
 				t.Errorf("deps =\n  %+v\n  %+v\n  %+v\nwant\n  %+v\n  %+v\n  %+v",
 					deps.Providers, deps.Search, deps.Unreleased, tt.wantProviders, tt.wantSearch, tt.wantUnreleased)
@@ -274,9 +280,9 @@ func TestDiscoveryDeps_PassesTheAppsOwnHandles(t *testing.T) {
 	a := &App{cfg: &config.Config{}, eventTap: observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))}
 	ctx := t.Context()
 	transport := &stubTransport{}
-	deps := a.discoveryDeps(ctx, newClientFactory(transport))
+	deps := a.discoveryDeps(ctx, transport)
 
-	if deps.Lifecycle != ctx || deps.Background != &a.wg || deps.Transport != transport || deps.CacheOps != cacheOps() {
+	if deps.Lifecycle != ctx || deps.Background != a.jobs.Background() || deps.Transport != transport || deps.CacheOps != cacheOps() {
 		t.Error("deps do not carry the app's lifecycle, wait group, transport and cache counters")
 	}
 	if deps.ProviderTimeout != 10*time.Second || deps.ChartTimeout != 15*time.Second {
@@ -285,8 +291,19 @@ func TestDiscoveryDeps_PassesTheAppsOwnHandles(t *testing.T) {
 	if deps.Activity != a.eventTap {
 		t.Error("deps do not feed discovery's activity into the app's event tap")
 	}
-	if (&App{cfg: &config.Config{}}).discoveryDeps(ctx, newClientFactory(transport)).Activity != nil {
+	if (&App{cfg: &config.Config{}}).discoveryDeps(ctx, transport).Activity != nil {
 		t.Error("an app without an event tap handed discovery a non-nil activity feed")
+	}
+}
+
+func TestDiscoveryDeps_ClientEventsFollowTheTelemetryExportSetting(t *testing.T) {
+	transport := &stubTransport{}
+	if deps := (&App{cfg: &config.Config{}}).discoveryDeps(t.Context(), transport); deps.ClientEvents != nil {
+		t.Error("an app with no OTLP endpoint handed discovery client events to export")
+	}
+	exporting := &App{cfg: &config.Config{OTLPEndpoint: "https://otlp.example.com"}}
+	if deps := exporting.discoveryDeps(t.Context(), transport); deps.ClientEvents == nil {
+		t.Error("an app with an OTLP endpoint handed discovery no client events")
 	}
 }
 

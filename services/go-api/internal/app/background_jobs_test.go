@@ -1,6 +1,7 @@
 package app
 
 import (
+	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/runloop"
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -129,7 +131,7 @@ func TestDeletedIdentitySweep_EveryEraserUnavailableIsAFailure(t *testing.T) {
 }
 
 type simpleJobLogCase struct {
-	name         jobName
+	name         jobs.Name
 	startedAttrs []any
 	wantStarted  string
 	wantFailed   string
@@ -138,19 +140,19 @@ type simpleJobLogCase struct {
 func TestStartSimpleJob_LogsTheOldTextForEveryMigratedJob(t *testing.T) {
 	cases := []simpleJobLogCase{
 		{
-			name:         jobOrphanedAudioReconcile,
+			name:         jobs.OrphanedAudioReconcile,
 			startedAttrs: []any{"interval", orphanedAudioReconcileInterval.String()},
 			wantStarted:  `level=INFO msg="orphaned audio reconcile started" interval=` + orphanedAudioReconcileInterval.String() + "\n",
 			wantFailed:   `level=WARN msg="orphaned audio reconcile failed" error=boom` + "\n",
 		},
 		{
-			name:         jobDeletedIdentityErasure,
+			name:         jobs.DeletedIdentityErasure,
 			startedAttrs: []any{"interval", deletedIdentityErasureInterval.String()},
 			wantStarted:  `level=INFO msg="deleted identity erasure started" interval=` + deletedIdentityErasureInterval.String() + "\n",
 			wantFailed:   `level=WARN msg="deleted identity erasure failed" error=boom` + "\n",
 		},
 		{
-			name:         jobVocabularyRefresh,
+			name:         jobs.VocabularyRefresh,
 			startedAttrs: nil,
 			wantStarted:  `level=INFO msg="vocabulary refresh started"` + "\n",
 			wantFailed:   `level=WARN msg="vocabulary refresh failed" error=boom` + "\n",
@@ -173,9 +175,9 @@ func TestStartSimpleJob_LogsTheOldTextForEveryMigratedJob(t *testing.T) {
 
 func TestStartSimpleJob_CountsAFailedRunAsAFailure(t *testing.T) {
 	a := &App{}
-	runFailingSimpleJobOn(t, a, simpleJobLogCase{name: jobOrphanedAudioReconcile})
+	runFailingSimpleJobOn(t, a, simpleJobLogCase{name: jobs.OrphanedAudioReconcile})
 
-	if failures := findJobHealth(t, a.JobHealth(), string(jobOrphanedAudioReconcile)).Failures; failures == 0 {
+	if failures := findJobHealth(t, a.jobs.Health(), string(jobs.OrphanedAudioReconcile)).Failures; failures == 0 {
 		t.Error("a failing simple job did not count toward its failure signal")
 	}
 }
@@ -214,6 +216,76 @@ func captureLogs(run func()) string {
 
 const jobRanDeadline = 2 * time.Second
 
+type leaderElection struct{ passes atomic.Int64 }
+
+func (*leaderElection) Start(context.Context) {}
+
+func (*leaderElection) Await(context.Context) bool { return true }
+
+func (e *leaderElection) LeaderContext(parent context.Context) (context.Context, context.CancelFunc, bool) {
+	e.passes.Add(1)
+	ctx, cancel := context.WithCancel(parent)
+	return ctx, cancel, true
+}
+
+func (*leaderElection) Shutdown(context.Context) {}
+
+type neverLeads struct{}
+
+func (neverLeads) Start(context.Context) {}
+
+func (neverLeads) Await(ctx context.Context) bool {
+	<-ctx.Done()
+	return false
+}
+
+func (neverLeads) LeaderContext(parent context.Context) (context.Context, context.CancelFunc, bool) {
+	return parent, func() {}, false
+}
+
+func (neverLeads) Shutdown(context.Context) {}
+
+const followerGrace = 50 * time.Millisecond
+
+func jobRan(h runloop.JobHealth) bool {
+	return h.Failures > 0 || h.Skipped > 0 || !h.LastSuccess.IsZero() || !h.LastFailure.IsZero()
+}
+
+func assertLeaderOnly(t *testing.T, name jobs.Name, build func(t *testing.T) *App) {
+	t.Helper()
+	follower := build(t)
+	leadWith(t, follower, neverLeads{})
+	time.Sleep(followerGrace)
+	if h := findJobHealth(t, follower.jobs.Health(), string(name)); jobRan(h) {
+		t.Errorf("job %q ran on an instance that is not the leader: %+v", name, h)
+	}
+
+	leader := build(t)
+	leadWith(t, leader, &leaderElection{})
+	waitForHealth(t, leader, name, jobRan)
+}
+
+func leadWith(t *testing.T, a *App, election jobs.Election) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		cancel()
+		a.jobs.Background().Wait()
+	})
+	a.jobs.Lead(ctx, election)
+}
+
+func findJobHealth(t fataler, snapshot []runloop.JobHealth, name string) runloop.JobHealth {
+	t.Helper()
+	for _, h := range snapshot {
+		if h.Name == name {
+			return h
+		}
+	}
+	t.Fatalf("job %q not found in health snapshot", name)
+	return runloop.JobHealth{}
+}
+
 type fataler interface {
 	Helper()
 	Fatalf(format string, args ...any)
@@ -224,12 +296,10 @@ func startAwaitStop(t *testing.T, a *App, ran chan struct{}, register func(conte
 	ctx, cancel := context.WithCancel(context.Background())
 	defer func() {
 		cancel()
-		a.wg.Wait()
+		a.jobs.Background().Wait()
 	}()
 	register(ctx)
-	for _, job := range a.backgroundStarts {
-		job.start(ctx)
-	}
+	a.jobs.Lead(ctx, &leaderElection{})
 	awaitJobRan(t, a, ran, jobRanDeadline)
 	awaitJobOutcomes(t, a, jobRanDeadline)
 }
@@ -237,14 +307,14 @@ func startAwaitStop(t *testing.T, a *App, ran chan struct{}, register func(conte
 func awaitJobOutcomes(t fataler, a *App, deadline time.Duration) {
 	t.Helper()
 	giveUp := time.Now().Add(deadline)
-	for _, job := range a.backgroundStarts {
+	for _, name := range registeredJobNames(a) {
 		for {
-			h := findJobHealth(t, a.JobHealth(), string(job.name))
+			h := findJobHealth(t, a.jobs.Health(), string(name))
 			if !h.LastSuccess.IsZero() || !h.LastFailure.IsZero() {
 				break
 			}
 			if time.Now().After(giveUp) {
-				t.Fatalf("job %q ran but recorded no outcome within %s", job.name, deadline)
+				t.Fatalf("job %q ran but recorded no outcome within %s", name, deadline)
 				return
 			}
 			time.Sleep(time.Millisecond)
@@ -257,11 +327,7 @@ func awaitJobRan(t fataler, a *App, ran chan struct{}, deadline time.Duration) {
 	select {
 	case <-ran:
 	case <-time.After(deadline):
-		names := make([]string, 0, len(a.backgroundStarts))
-		for _, job := range a.backgroundStarts {
-			names = append(names, string(job.name))
-		}
-		t.Fatalf("job %v never ran within %s", names, deadline)
+		t.Fatalf("job %v never ran within %s", registeredJobNames(a), deadline)
 	}
 }
 
@@ -275,31 +341,24 @@ func (r *recordingFataler) Fatalf(format string, args ...any) {
 
 func TestAwaitJobRan_FailsNamingTheJobWhenItsBodyNeverRuns(t *testing.T) {
 	a := &App{}
-	a.startSimpleJob(jobVocabularyRefresh, time.Hour, func(context.Context) error { return nil })
+	a.startSimpleJob(jobs.VocabularyRefresh, time.Hour, func(context.Context) error { return nil })
 	rec := &recordingFataler{}
 
 	logged := captureLogs(func() { awaitJobRan(rec, a, make(chan struct{}), 10*time.Millisecond) })
 
-	if len(rec.messages) != 1 || !strings.Contains(rec.messages[0], string(jobVocabularyRefresh)) {
-		t.Errorf("want one failure naming %q, got %v", jobVocabularyRefresh, rec.messages)
+	if len(rec.messages) != 1 || !strings.Contains(rec.messages[0], string(jobs.VocabularyRefresh)) {
+		t.Errorf("want one failure naming %q, got %v", jobs.VocabularyRefresh, rec.messages)
 	}
 	if logged != "" {
 		t.Errorf("unexpected log output %q", logged)
 	}
 }
 
-func flipNamedJob(t *testing.T, a *App, name jobName, action string) {
-	t.Helper()
-	if _, ok := a.SetJobEnabled(name, action == "enable"); !ok {
-		t.Fatalf("SetJobEnabled(%q, %s) reported unknown job", name, action)
-	}
-}
-
-func waitForHealth(t *testing.T, a *App, name jobName, cond func(runloop.JobHealth) bool) runloop.JobHealth {
+func waitForHealth(t *testing.T, a *App, name jobs.Name, cond func(runloop.JobHealth) bool) runloop.JobHealth {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
 	for {
-		h := findJobHealth(t, a.JobHealth(), string(name))
+		h := findJobHealth(t, a.jobs.Health(), string(name))
 		if cond(h) {
 			return h
 		}
@@ -353,7 +412,7 @@ func TestStartCorpusRefresh_LogsTheOldTextAndCountsAFailure(t *testing.T) {
 			t.Errorf("want %q in\n%s", want, logged)
 		}
 	}
-	if findJobHealth(t, a.JobHealth(), string(jobBehavioralCorpusRefresh)).Failures == 0 {
+	if findJobHealth(t, a.jobs.Health(), string(jobs.BehavioralCorpusRefresh)).Failures == 0 {
 		t.Error("a failing corpus refresh did not count toward its failure signal")
 	}
 }
@@ -400,7 +459,7 @@ func TestStartDiscographyPrune_LogsTheOldTextOnEachFailurePath(t *testing.T) {
 			if strings.Contains(logged, tc.notWant) {
 				t.Errorf("unexpected %q in\n%s", tc.notWant, logged)
 			}
-			if findJobHealth(t, a.JobHealth(), string(jobDiscographyEventPrune)).Failures == 0 {
+			if findJobHealth(t, a.jobs.Health(), string(jobs.DiscographyEventPrune)).Failures == 0 {
 				t.Error("a failing prune did not count toward its failure signal")
 			}
 		})
@@ -459,7 +518,7 @@ func TestStartAcquisitionPrune_FailingPruneCountsTowardItsFailureSignal(t *testi
 	if !strings.Contains(logged, want) {
 		t.Errorf("want %q in\n%s", want, logged)
 	}
-	if findJobHealth(t, a.JobHealth(), string(jobAcquisitionPrune)).Failures == 0 {
+	if findJobHealth(t, a.jobs.Health(), string(jobs.AcquisitionPrune)).Failures == 0 {
 		t.Error("a failing prune did not count toward its failure signal")
 	}
 }
