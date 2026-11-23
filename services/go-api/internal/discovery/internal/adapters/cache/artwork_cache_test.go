@@ -1,139 +1,40 @@
-package cache
+package cache_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/adapters/cache"
 	"altune/go-api/internal/discovery/internal/core/ports"
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"testing"
 	"time"
 )
 
-func TestNegativeTTL_PerKind(t *testing.T) {
-	tests := []struct {
-		name string
-		kind domain.ResultKind
-		want time.Duration
-	}{
-		{"track churns most, rechecks soonest", domain.ResultKindTrack, 6 * time.Hour},
-		{"album medium churn", domain.ResultKindAlbum, 12 * time.Hour},
-		{"artist most stable", domain.ResultKindArtist, 24 * time.Hour},
-		{"unknown kind defaults conservative", domain.ResultKind(0), 24 * time.Hour},
+const humbleArtworkKey = "discovery:artwork:v3:track:93e2a80d49992538aa72cde4bca801e2"
+
+func TestRedisArtworkCache_StoresTheEntryUnderTheV3KeyAsCompactJSON(t *testing.T) {
+	server, client := newRedis(t)
+	c := cache.NewRedisArtworkCache(client)
+
+	if err := c.Set(context.Background(), domain.ResultKindTrack, "Humble", "Kendrick Lamar", "mbid-1",
+		"https://x/a.jpg", domain.ProviderKeyDiscogs, ports.ArtworkConfidenceIdentity); err != nil {
+		t.Fatalf("Set: %v", err)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := negativeTTL(tt.kind); got != tt.want {
-				t.Errorf("negativeTTL(%v) = %v, want %v", tt.kind, got, tt.want)
-			}
-		})
+
+	if got := storedKeys(server); len(got) != 1 || got[0] != humbleArtworkKey {
+		t.Fatalf("stored keys = %v, want only %q", got, humbleArtworkKey)
 	}
-	for _, k := range []domain.ResultKind{domain.ResultKindTrack, domain.ResultKindAlbum, domain.ResultKindArtist} {
-		if negativeTTL(k) >= artworkPositiveTTL {
-			t.Errorf("negativeTTL(%v) must be shorter than positive TTL %v", k, artworkPositiveTTL)
-		}
+	raw, err := server.Get(humbleArtworkKey)
+	if err != nil {
+		t.Fatalf("read stored entry: %v", err)
+	}
+	if want := `{"u":"https://x/a.jpg","s":"discogs","c":2}`; raw != want {
+		t.Errorf("stored entry = %s, want %s", raw, want)
 	}
 }
 
-func TestRedisArtworkCache_NameThenIdentity_Upgrades(t *testing.T) {
-	client := testRedisClient(t)
-	cache := NewRedisArtworkCache(client)
-	ctx := context.Background()
-
-	kind := domain.ResultKindArtist
-	title := fmt.Sprintf("Upgrade Artist %s", t.Name())
-	key := artworkCacheKey(kind, title, "", "mbid-upgrade")
-	cleanKeys(t, client, key)
-
-	if err := cache.Set(ctx, kind, title, "", "mbid-upgrade",
-		"https://name/guess.jpg", "deezer", ports.ArtworkConfidenceName); err != nil {
-		t.Fatalf("name set: %v", err)
-	}
-	if err := cache.Set(ctx, kind, title, "", "mbid-upgrade",
-		"https://caa/proven.jpg", "caa", ports.ArtworkConfidenceIdentity); err != nil {
-		t.Fatalf("identity set: %v", err)
-	}
-
-	got, gotSource, hit, _ := cache.Get(ctx, kind, title, "", "mbid-upgrade")
-	if !hit || got != "https://caa/proven.jpg" || gotSource != "caa" {
-		t.Errorf("after upgrade Get = (%q,%q,%v), want the identity image from caa", got, gotSource, hit)
-	}
-}
-
-func TestRedisArtworkCache_NegativeThenName_Overwrites(t *testing.T) {
-	client := testRedisClient(t)
-	cache := NewRedisArtworkCache(client)
-	ctx := context.Background()
-
-	kind := domain.ResultKindTrack
-	title := fmt.Sprintf("Late Artwork %s", t.Name())
-	key := artworkCacheKey(kind, title, "artist", "")
-	cleanKeys(t, client, key)
-
-	if err := cache.Set(ctx, kind, title, "artist", "", "", "", ports.ArtworkConfidenceNone); err != nil {
-		t.Fatalf("negative set: %v", err)
-	}
-	if err := cache.Set(ctx, kind, title, "artist", "",
-		"https://late/img.jpg", "itunes", ports.ArtworkConfidenceName); err != nil {
-		t.Fatalf("name set: %v", err)
-	}
-	if got, _, _, _ := cache.Get(ctx, kind, title, "artist", ""); got != "https://late/img.jpg" {
-		t.Errorf("negative entry blocked the later image: got %q", got)
-	}
-}
-
-func TestRedisArtworkCache_MBIDKeySeparation(t *testing.T) {
-	client := testRedisClient(t)
-	cache := NewRedisArtworkCache(client)
-	ctx := context.Background()
-
-	kind := domain.ResultKindArtist
-	title := fmt.Sprintf("Same Name %s", t.Name())
-	keyNoMBID := artworkCacheKey(kind, title, "", "")
-	keyMBID := artworkCacheKey(kind, title, "", "mbid-che-1")
-	cleanKeys(t, client, keyNoMBID, keyMBID)
-
-	if err := cache.Set(ctx, kind, title, "", "",
-		"https://name/keyed.jpg", "deezer", ports.ArtworkConfidenceName); err != nil {
-		t.Fatalf("no-mbid set: %v", err)
-	}
-	if err := cache.Set(ctx, kind, title, "", "mbid-che-1",
-		"https://identity/keyed.jpg", "fanart", ports.ArtworkConfidenceIdentity); err != nil {
-		t.Fatalf("mbid set: %v", err)
-	}
-
-	if got, _, hit, _ := cache.Get(ctx, kind, title, "", ""); !hit || got != "https://name/keyed.jpg" {
-		t.Errorf("empty-mbid entry = (%q,%v), want the name-keyed image", got, hit)
-	}
-	if got, _, hit, _ := cache.Get(ctx, kind, title, "", "mbid-che-1"); !hit || got != "https://identity/keyed.jpg" {
-		t.Errorf("mbid entry = (%q,%v), want the identity-keyed image", got, hit)
-	}
-}
-
-func TestRedisArtworkCache_StoredTTLs(t *testing.T) {
-	client := testRedisClient(t)
-	cache := NewRedisArtworkCache(client)
-	ctx := context.Background()
-
-	ttlOf := func(t *testing.T, kind domain.ResultKind, title, mbid, url string, conf ports.ArtworkConfidence) time.Duration {
-		t.Helper()
-		key := artworkCacheKey(kind, title, "sub", mbid)
-		cleanKeys(t, client, key)
-		if err := cache.Set(ctx, kind, title, "sub", mbid, url, "src", conf); err != nil {
-			t.Fatalf("Set: %v", err)
-		}
-		ttl, err := client.TTL(ctx, key).Result()
-		if err != nil {
-			t.Fatalf("TTL: %v", err)
-		}
-		return ttl
-	}
-
-	within := func(got, want time.Duration) bool {
-		return got > want-time.Minute && got <= want
-	}
-
+func TestRedisArtworkCache_StoredTTLFollowsKindAndConfidence(t *testing.T) {
 	tests := []struct {
 		name string
 		kind domain.ResultKind
@@ -141,149 +42,244 @@ func TestRedisArtworkCache_StoredTTLs(t *testing.T) {
 		conf ports.ArtworkConfidence
 		want time.Duration
 	}{
-		{"negative track expires soonest", domain.ResultKindTrack, "", ports.ArtworkConfidenceNone, artworkNegativeTTLTrack},
-		{"negative album medium", domain.ResultKindAlbum, "", ports.ArtworkConfidenceNone, artworkNegativeTTLAlbum},
-		{"negative artist longest", domain.ResultKindArtist, "", ports.ArtworkConfidenceNone, artworkNegativeTTLArtist},
-		{"identity image near-permanent", domain.ResultKindArtist, "https://img/x.jpg", ports.ArtworkConfidenceIdentity, artworkPositiveTTL},
-		{"name image provisional", domain.ResultKindArtist, "https://img/y.jpg", ports.ArtworkConfidenceName, artworkProvisionalTTL},
+		{"a track without artwork rechecks soonest", domain.ResultKindTrack, "", ports.ArtworkConfidenceNone, 6 * time.Hour},
+		{"an album without artwork rechecks at medium pace", domain.ResultKindAlbum, "", ports.ArtworkConfidenceNone, 12 * time.Hour},
+		{"an artist without artwork rechecks slowest", domain.ResultKindArtist, "", ports.ArtworkConfidenceNone, 24 * time.Hour},
+		{"an unknown kind without artwork rechecks conservatively", domain.ResultKindUnknown, "", ports.ArtworkConfidenceNone, 24 * time.Hour},
+		{"an identity image is kept for two weeks", domain.ResultKindArtist, "https://img/x.jpg", ports.ArtworkConfidenceIdentity, 14 * 24 * time.Hour},
+		{"a name-matched image is provisional", domain.ResultKindArtist, "https://img/y.jpg", ports.ArtworkConfidenceName, 48 * time.Hour},
+		{"an unproven image is provisional", domain.ResultKindAlbum, "https://img/z.jpg", ports.ArtworkConfidenceNone, 48 * time.Hour},
 	}
-	for i, tt := range tests {
+	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			title := fmt.Sprintf("TTL %d %s", i, t.Name())
-			if got := ttlOf(t, tt.kind, title, "", tt.url, tt.conf); !within(got, tt.want) {
-				t.Errorf("stored TTL = %v, want ~%v", got, tt.want)
+			server, client := newRedis(t)
+			c := cache.NewRedisArtworkCache(client)
+			if err := c.Set(context.Background(), tt.kind, "Title", "Sub", "", tt.url, "src", tt.conf); err != nil {
+				t.Fatalf("Set: %v", err)
 			}
+			keys := storedKeys(server)
+			if len(keys) != 1 {
+				t.Fatalf("stored keys = %v, want one", keys)
+			}
+			assertStored(t, server, keys[0], tt.want)
 		})
 	}
 }
 
 func TestRedisArtworkCache_SetAndGet_CacheHit(t *testing.T) {
-	client := testRedisClient(t)
-	cache := NewRedisArtworkCache(client)
+	_, client := newRedis(t)
+	c := cache.NewRedisArtworkCache(client)
 	ctx := context.Background()
 
-	kind := domain.ResultKindAlbum
-	title := fmt.Sprintf("Test Album %s", t.Name())
-	subtitle := "Test Artist"
-	mbid := ""
 	url := "https://example.com/artwork.jpg"
-
-	key := artworkCacheKey(kind, title, subtitle, mbid)
-	cleanKeys(t, client, key)
-
-	err := cache.Set(ctx, kind, title, subtitle, mbid, url, "fanart", ports.ArtworkConfidenceIdentity)
-	if err != nil {
-		t.Fatalf("Set returned unexpected error: %v", err)
+	if err := c.Set(ctx, domain.ResultKindAlbum, "Test Album", "Test Artist", "", url, "fanart", ports.ArtworkConfidenceIdentity); err != nil {
+		t.Fatalf("Set: %v", err)
 	}
 
-	got, gotSource, hit, err := cache.Get(ctx, kind, title, subtitle, mbid)
-	if err != nil {
-		t.Fatalf("Get returned unexpected error: %v", err)
+	got, gotSource, hit, err := c.Get(ctx, domain.ResultKindAlbum, "Test Album", "Test Artist", "")
+	if err != nil || !hit {
+		t.Fatalf("Get = (hit=%v, err=%v), want hit", hit, err)
 	}
-	if !hit {
-		t.Fatal("expected cache hit, got miss")
+	if got != url || gotSource != "fanart" {
+		t.Errorf("Get = (%q,%q), want (%q,fanart)", got, gotSource, url)
 	}
-	if got != url {
-		t.Errorf("expected URL %q, got %q", url, got)
+}
+
+func TestRedisArtworkCache_KeyDependsOnKindTitleSubtitleAndMBID(t *testing.T) {
+	_, client := newRedis(t)
+	c := cache.NewRedisArtworkCache(client)
+	ctx := context.Background()
+
+	if err := c.Set(ctx, domain.ResultKindAlbum, "Title", "Sub", "mbid", "https://img/1.jpg", "src", ports.ArtworkConfidenceName); err != nil {
+		t.Fatalf("Set: %v", err)
 	}
-	if gotSource != "fanart" {
-		t.Errorf("expected source %q to round-trip, got %q", "fanart", gotSource)
+	for _, other := range []struct {
+		name                  string
+		kind                  domain.ResultKind
+		title, subtitle, mbid string
+	}{
+		{"kind", domain.ResultKindTrack, "Title", "Sub", "mbid"},
+		{"title", domain.ResultKindAlbum, "Other", "Sub", "mbid"},
+		{"subtitle", domain.ResultKindAlbum, "Title", "Other", "mbid"},
+		{"mbid", domain.ResultKindAlbum, "Title", "Sub", ""},
+	} {
+		if _, _, hit, _ := c.Get(ctx, other.kind, other.title, other.subtitle, other.mbid); hit {
+			t.Errorf("a different %s hit the entry", other.name)
+		}
 	}
 }
 
 func TestRedisArtworkCache_SetEmpty_NegativeCache(t *testing.T) {
-	client := testRedisClient(t)
-	cache := NewRedisArtworkCache(client)
+	_, client := newRedis(t)
+	c := cache.NewRedisArtworkCache(client)
 	ctx := context.Background()
 
-	kind := domain.ResultKindTrack
-	title := fmt.Sprintf("No Artwork %s", t.Name())
-	subtitle := "Unknown"
-	mbid := ""
-
-	key := artworkCacheKey(kind, title, subtitle, mbid)
-	cleanKeys(t, client, key)
-
-	err := cache.Set(ctx, kind, title, subtitle, mbid, "", "", ports.ArtworkConfidenceNone)
-	if err != nil {
-		t.Fatalf("Set returned unexpected error: %v", err)
+	if err := c.Set(ctx, domain.ResultKindTrack, "No Artwork", "Unknown", "", "", "", ports.ArtworkConfidenceNone); err != nil {
+		t.Fatalf("Set: %v", err)
 	}
 
-	got, _, hit, err := cache.Get(ctx, kind, title, subtitle, mbid)
-	if err != nil {
-		t.Fatalf("Get returned unexpected error: %v", err)
-	}
-	if !hit {
-		t.Fatal("expected cache hit for negative entry, got miss")
+	got, _, hit, err := c.Get(ctx, domain.ResultKindTrack, "No Artwork", "Unknown", "")
+	if err != nil || !hit {
+		t.Fatalf("Get = (hit=%v, err=%v), want a hit for the negative entry", hit, err)
 	}
 	if got != "" {
-		t.Errorf("expected empty URL for negative cache entry, got %q", got)
-	}
-}
-
-func TestRedisArtworkCache_IdentityNotOverwrittenByName(t *testing.T) {
-	client := testRedisClient(t)
-	cache := NewRedisArtworkCache(client)
-	ctx := context.Background()
-
-	kind := domain.ResultKindArtist
-	title := fmt.Sprintf("Guarded Artist %s", t.Name())
-	subtitle := ""
-	mbid := "mbid-guard"
-	key := artworkCacheKey(kind, title, subtitle, mbid)
-	cleanKeys(t, client, key)
-
-	identityURL := "https://caa/identity.jpg"
-	if err := cache.Set(ctx, kind, title, subtitle, mbid, identityURL, "discogs", ports.ArtworkConfidenceIdentity); err != nil {
-		t.Fatalf("seed identity: %v", err)
-	}
-
-	if err := cache.Set(ctx, kind, title, subtitle, mbid, "https://name/guess.jpg", "deezer", ports.ArtworkConfidenceName); err != nil {
-		t.Fatalf("name set: %v", err)
-	}
-	got, gotSource, hit, _ := cache.Get(ctx, kind, title, subtitle, mbid)
-	if !hit || got != identityURL || gotSource != "discogs" {
-		t.Errorf("identity image was overwritten: got (%q,%q), want (%q,discogs)", got, gotSource, identityURL)
-	}
-
-	if err := cache.Set(ctx, kind, title, subtitle, mbid, "", "", ports.ArtworkConfidenceNone); err != nil {
-		t.Fatalf("negative set: %v", err)
-	}
-	if got, _, _, _ := cache.Get(ctx, kind, title, subtitle, mbid); got != identityURL {
-		t.Errorf("identity image wiped by a later failure: got %q, want %q", got, identityURL)
-	}
-
-	newIdentityURL := "https://caa/identity-v2.jpg"
-	if err := cache.Set(ctx, kind, title, subtitle, mbid, newIdentityURL, "caa", ports.ArtworkConfidenceIdentity); err != nil {
-		t.Fatalf("identity refresh: %v", err)
-	}
-	if got, _, _, _ := cache.Get(ctx, kind, title, subtitle, mbid); got != newIdentityURL {
-		t.Errorf("equal-confidence refresh failed: got %q, want %q", got, newIdentityURL)
+		t.Errorf("negative entry URL = %q, want empty", got)
 	}
 }
 
 func TestRedisArtworkCache_Get_CacheMiss(t *testing.T) {
-	client := testRedisClient(t)
-	cache := NewRedisArtworkCache(client)
+	_, client := newRedis(t)
+	c := cache.NewRedisArtworkCache(client)
+
+	got, source, hit, err := c.Get(context.Background(), domain.ResultKindArtist, "Nonexistent", "nobody", "")
+	if err != nil || hit || got != "" || source != "" {
+		t.Errorf("Get = (%q,%q,%v,%v), want a clean miss", got, source, hit, err)
+	}
+}
+
+func TestRedisArtworkCache_NameThenIdentity_Upgrades(t *testing.T) {
+	_, client := newRedis(t)
+	c := cache.NewRedisArtworkCache(client)
 	ctx := context.Background()
-
 	kind := domain.ResultKindArtist
-	title := fmt.Sprintf("Nonexistent %s", t.Name())
 
-	got, _, hit, err := cache.Get(ctx, kind, title, "nobody", "")
-	if err != nil {
-		t.Fatalf("Get returned unexpected error: %v", err)
+	if err := c.Set(ctx, kind, "Upgrade Artist", "", "mbid-upgrade", "https://name/guess.jpg", "deezer", ports.ArtworkConfidenceName); err != nil {
+		t.Fatalf("name set: %v", err)
 	}
-	if hit {
-		t.Fatal("expected cache miss, got hit")
+	if err := c.Set(ctx, kind, "Upgrade Artist", "", "mbid-upgrade", "https://caa/proven.jpg", "caa", ports.ArtworkConfidenceIdentity); err != nil {
+		t.Fatalf("identity set: %v", err)
 	}
-	if got != "" {
-		t.Errorf("expected empty string on cache miss, got %q", got)
+
+	got, gotSource, hit, _ := c.Get(ctx, kind, "Upgrade Artist", "", "mbid-upgrade")
+	if !hit || got != "https://caa/proven.jpg" || gotSource != "caa" {
+		t.Errorf("after upgrade Get = (%q,%q,%v), want the identity image from caa", got, gotSource, hit)
+	}
+}
+
+func TestRedisArtworkCache_NegativeThenName_Overwrites(t *testing.T) {
+	_, client := newRedis(t)
+	c := cache.NewRedisArtworkCache(client)
+	ctx := context.Background()
+	kind := domain.ResultKindTrack
+
+	if err := c.Set(ctx, kind, "Late Artwork", "artist", "", "", "", ports.ArtworkConfidenceNone); err != nil {
+		t.Fatalf("negative set: %v", err)
+	}
+	if err := c.Set(ctx, kind, "Late Artwork", "artist", "", "https://late/img.jpg", "itunes", ports.ArtworkConfidenceName); err != nil {
+		t.Fatalf("name set: %v", err)
+	}
+	if got, _, _, _ := c.Get(ctx, kind, "Late Artwork", "artist", ""); got != "https://late/img.jpg" {
+		t.Errorf("negative entry blocked the later image: got %q", got)
+	}
+}
+
+func TestRedisArtworkCache_AnEntryWithoutAnImageNeverBlocksALowerConfidenceImage(t *testing.T) {
+	server, client := newRedis(t)
+	c := cache.NewRedisArtworkCache(client)
+	if err := server.Set(humbleArtworkKey, `{"u":"","s":"","c":2}`); err != nil {
+		t.Fatalf("seed entry: %v", err)
+	}
+
+	if err := c.Set(context.Background(), domain.ResultKindTrack, "Humble", "Kendrick Lamar", "mbid-1",
+		"https://name/guess.jpg", "deezer", ports.ArtworkConfidenceName); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if got, _, _, _ := c.Get(context.Background(), domain.ResultKindTrack, "Humble", "Kendrick Lamar", "mbid-1"); got != "https://name/guess.jpg" {
+		t.Errorf("an imageless entry blocked the image: got %q", got)
+	}
+}
+
+func TestRedisArtworkCache_ACorruptEntryIsOverwritten(t *testing.T) {
+	server, client := newRedis(t)
+	c := cache.NewRedisArtworkCache(client)
+	if err := server.Set(humbleArtworkKey, "{not json"); err != nil {
+		t.Fatalf("seed entry: %v", err)
+	}
+
+	if err := c.Set(context.Background(), domain.ResultKindTrack, "Humble", "Kendrick Lamar", "mbid-1",
+		"https://name/guess.jpg", "deezer", ports.ArtworkConfidenceNone); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if got, _, _, _ := c.Get(context.Background(), domain.ResultKindTrack, "Humble", "Kendrick Lamar", "mbid-1"); got != "https://name/guess.jpg" {
+		t.Errorf("a corrupt entry blocked the image: got %q", got)
+	}
+}
+
+func TestRedisArtworkCache_SetReturnsTheErrorWhenTheExistingEntryCannotBeRead(t *testing.T) {
+	server, client := newRedis(t)
+	c := cache.NewRedisArtworkCache(client)
+	if _, err := server.Lpush(humbleArtworkKey, "not a string"); err != nil {
+		t.Fatalf("seed wrong type: %v", err)
+	}
+
+	err := c.Set(context.Background(), domain.ResultKindTrack, "Humble", "Kendrick Lamar", "mbid-1",
+		"https://name/guess.jpg", "deezer", ports.ArtworkConfidenceIdentity)
+	if err == nil {
+		t.Fatal("Set overwrote an entry it could not read, want the read error")
+	}
+}
+
+func TestRedisArtworkCache_IdentityNotOverwrittenByName(t *testing.T) {
+	_, client := newRedis(t)
+	c := cache.NewRedisArtworkCache(client)
+	ctx := context.Background()
+	kind, title, mbid := domain.ResultKindArtist, "Guarded Artist", "mbid-guard"
+
+	identityURL := "https://caa/identity.jpg"
+	if err := c.Set(ctx, kind, title, "", mbid, identityURL, "discogs", ports.ArtworkConfidenceIdentity); err != nil {
+		t.Fatalf("seed identity: %v", err)
+	}
+	if err := c.Set(ctx, kind, title, "", mbid, "https://name/guess.jpg", "deezer", ports.ArtworkConfidenceName); err != nil {
+		t.Fatalf("name set: %v", err)
+	}
+	got, gotSource, hit, _ := c.Get(ctx, kind, title, "", mbid)
+	if !hit || got != identityURL || gotSource != "discogs" {
+		t.Errorf("identity image was overwritten: got (%q,%q), want (%q,discogs)", got, gotSource, identityURL)
+	}
+
+	if err := c.Set(ctx, kind, title, "", mbid, "", "", ports.ArtworkConfidenceNone); err != nil {
+		t.Fatalf("negative set: %v", err)
+	}
+	if got, _, _, _ := c.Get(ctx, kind, title, "", mbid); got != identityURL {
+		t.Errorf("identity image wiped by a later failure: got %q, want %q", got, identityURL)
+	}
+
+	newIdentityURL := "https://caa/identity-v2.jpg"
+	if err := c.Set(ctx, kind, title, "", mbid, newIdentityURL, "caa", ports.ArtworkConfidenceIdentity); err != nil {
+		t.Fatalf("identity refresh: %v", err)
+	}
+	if got, _, _, _ := c.Get(ctx, kind, title, "", mbid); got != newIdentityURL {
+		t.Errorf("equal-confidence refresh failed: got %q, want %q", got, newIdentityURL)
+	}
+}
+
+func TestRedisArtworkCache_ConcurrentIdentityAndNameKeepsIdentity(t *testing.T) {
+	_, client := newRedis(t)
+	c := cache.NewRedisArtworkCache(client)
+	ctx := context.Background()
+	kind, title, mbid := domain.ResultKindArtist, "Raced Artist", "mbid-race"
+
+	identityURL := "https://caa/identity.jpg"
+	var wg sync.WaitGroup
+	for i := range 40 {
+		wg.Go(func() {
+			if i%2 == 0 {
+				_ = c.Set(ctx, kind, title, "", mbid, identityURL, "discogs", ports.ArtworkConfidenceIdentity)
+				return
+			}
+			_ = c.Set(ctx, kind, title, "", mbid, fmt.Sprintf("https://name/%d.jpg", i), "deezer", ports.ArtworkConfidenceName)
+		})
+	}
+	wg.Wait()
+
+	got, source, hit, _ := c.Get(ctx, kind, title, "", mbid)
+	if !hit || got != identityURL || source != "discogs" {
+		t.Errorf("after racing sets got (%q,%q,%v), want identity entry (%q,discogs)", got, source, hit, identityURL)
 	}
 }
 
 func TestRedisArtworkCache_NilClient_NoOps(t *testing.T) {
-	c := NewRedisArtworkCache(nil)
+	c := cache.NewRedisArtworkCache(nil)
 	ctx := context.Background()
 
 	url, source, hit, err := c.Get(ctx, domain.ResultKindTrack, "t", "s", "")
@@ -292,51 +288,5 @@ func TestRedisArtworkCache_NilClient_NoOps(t *testing.T) {
 	}
 	if err := c.Set(ctx, domain.ResultKindTrack, "t", "s", "", "u", "src", ports.ArtworkConfidenceName); err != nil {
 		t.Errorf("nil-client Set must no-op, got %v", err)
-	}
-}
-
-func TestArtworkEntry_SourceSerializedAsBareString(t *testing.T) {
-	entry := artworkEntry{URL: "https://x/a.jpg", Source: domain.ProviderKeyDiscogs.String(), Confidence: 2}
-	b, err := json.Marshal(entry)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, want := string(b), `{"u":"https://x/a.jpg","s":"discogs","c":2}`; got != want {
-		t.Errorf("artworkEntry JSON = %s, want %s", got, want)
-	}
-	if got, want := artworkCacheKey(domain.ResultKindTrack, "Humble", "Kendrick Lamar", "mbid-1"), "discovery:artwork:v3:track:93e2a80d49992538aa72cde4bca801e2"; got != want {
-		t.Errorf("artworkCacheKey = %q, want %q", got, want)
-	}
-}
-
-func TestRedisArtworkCache_ConcurrentIdentityAndNameKeepsIdentity(t *testing.T) {
-	client := testRedisClient(t)
-	cache := NewRedisArtworkCache(client)
-	ctx := context.Background()
-
-	kind := domain.ResultKindArtist
-	title := fmt.Sprintf("Raced Artist %s", t.Name())
-	mbid := "mbid-race"
-	key := artworkCacheKey(kind, title, "", mbid)
-	cleanKeys(t, client, key)
-
-	identityURL := "https://caa/identity.jpg"
-	var wg sync.WaitGroup
-	for i := range 40 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if i%2 == 0 {
-				_ = cache.Set(ctx, kind, title, "", mbid, identityURL, "discogs", ports.ArtworkConfidenceIdentity)
-				return
-			}
-			_ = cache.Set(ctx, kind, title, "", mbid, fmt.Sprintf("https://name/%d.jpg", i), "deezer", ports.ArtworkConfidenceName)
-		}()
-	}
-	wg.Wait()
-
-	got, source, hit, _ := cache.Get(ctx, kind, title, "", mbid)
-	if !hit || got != identityURL || source != "discogs" {
-		t.Errorf("after racing sets got (%q,%q,%v), want identity entry (%q,discogs)", got, source, hit, identityURL)
 	}
 }

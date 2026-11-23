@@ -1,7 +1,8 @@
-package cache
+package cache_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/adapters/cache"
 	"context"
 	"net"
 	"strings"
@@ -35,7 +36,7 @@ func (r *pipelineRecorder) count() int {
 	return len(r.cmds)
 }
 
-func newRecordingVocabStore(t *testing.T) (*RedisVocabularyStore, *pipelineRecorder) {
+func newRecordingVocabStore(t *testing.T) (*cache.RedisVocabularyStore, *pipelineRecorder) {
 	t.Helper()
 	client := goredis.NewClient(&goredis.Options{
 		Addr: "127.0.0.1:1",
@@ -47,7 +48,7 @@ func newRecordingVocabStore(t *testing.T) (*RedisVocabularyStore, *pipelineRecor
 	t.Cleanup(func() { _ = client.Close() })
 	rec := &pipelineRecorder{}
 	client.AddHook(rec)
-	return NewVocabularyStore(client, lowercaseNorm), rec
+	return cache.NewVocabularyStore(client, lowercaseNorm), rec
 }
 
 func TestVocabularyStore_OversizedTerm_NotIndexed(t *testing.T) {

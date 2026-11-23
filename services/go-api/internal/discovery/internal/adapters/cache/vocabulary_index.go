@@ -2,6 +2,7 @@ package cache
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/adapters/cache/vocabmatch"
 	"context"
 	"encoding/json"
 	"errors"
@@ -75,7 +76,7 @@ func addEntryToPipeline(
 	} else {
 		pipe.Set(ctx, vocabEntryPfx+norm, entryJSON, vocabEntryTTL)
 	}
-	for _, tri := range trigrams(norm) {
+	for _, tri := range vocabmatch.Trigrams(norm) {
 		pipe.SAdd(ctx, vocabTriPrefix+tri, norm)
 	}
 	if metaphone != nil {
@@ -138,7 +139,7 @@ func (s *RedisVocabularyStore) trimTx(ctx context.Context, tx *goredis.Tx, maxEn
 func (s *RedisVocabularyStore) queueEvict(ctx context.Context, pipe goredis.Pipeliner, norm, member string) {
 	pipe.ZRem(ctx, vocabTermsKey, member)
 	pipe.ZRem(ctx, vocabLexKey, member)
-	for _, tri := range trigrams(norm) {
+	for _, tri := range vocabmatch.Trigrams(norm) {
 		pipe.SRem(ctx, vocabTriPrefix+tri, norm)
 	}
 	if s.metaphone != nil {

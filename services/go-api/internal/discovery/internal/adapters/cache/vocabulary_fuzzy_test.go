@@ -1,11 +1,10 @@
-package cache
+package cache_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/discovery/internal/adapters/cache"
 	"context"
 	"fmt"
-	"math"
 	"slices"
 	"sort"
 	"strconv"
@@ -17,112 +16,12 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-const scoreEpsilon = 1e-9
-
-func floatEq(a, b float64) bool { return math.Abs(a-b) < scoreEpsilon }
-
-func TestJaccardCoefficientExactValues(t *testing.T) {
-	cases := []struct {
-		name                   string
-		shared, totalA, totalB int
-		want                   float64
-	}{
-		{"half overlap", 2, 3, 3, 0.5},
-		{"no overlap", 0, 3, 3, 0.0},
-		{"full overlap", 3, 3, 3, 1.0},
-		{"empty union guards divide by zero", 0, 0, 0, 0.0},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			got := jaccardCoefficient(c.shared, c.totalA, c.totalB)
-			if !floatEq(got, c.want) {
-				t.Fatalf("jaccardCoefficient(%d,%d,%d) = %v, want %v", c.shared, c.totalA, c.totalB, got, c.want)
-			}
-		})
-	}
-}
-
-func TestMaxLevenshtein(t *testing.T) {
-	cases := []struct {
-		query string
-		want  int
-	}{
-		{"", 1},
-		{"abcd", 1},
-		{"abcde", 2},
-		{"abcdefgh", 2},
-		{"abcdefghi", 3},
-	}
-	for _, c := range cases {
-		if got := maxLevenshtein(c.query); got != c.want {
-			t.Errorf("maxLevenshtein(%q) = %d, want %d", c.query, got, c.want)
-		}
-	}
-}
-
-func TestLevenshteinSimilarity(t *testing.T) {
-	cases := []struct {
-		name string
-		a, b string
-		dist int
-		want float64
-	}{
-		{"identical", "cat", "cat", 0, 1.0},
-		{"one edit of three", "cat", "car", 1, 1.0 - 1.0/3.0},
-		{"both empty guards divide by zero", "", "", 0, 0.0},
-		{"kitten sitting", "kitten", "sitting", 3, 1.0 - 3.0/7.0},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			got := levenshteinSimilarity(c.a, c.b, c.dist)
-			if !floatEq(got, c.want) {
-				t.Fatalf("levenshteinSimilarity(%q,%q,%d) = %v, want %v", c.a, c.b, c.dist, got, c.want)
-			}
-		})
-	}
-}
-
-func TestLevenshteinSimilarityUsesActualDistance(t *testing.T) {
-	a, b := "kitten", "sitting"
-	dist := textnorm.LevenshteinDistance(a, b)
-	if dist != 3 {
-		t.Fatalf("LevenshteinDistance(%q,%q) = %d, want 3", a, b, dist)
-	}
-	want := 1.0 - 3.0/7.0
-	if got := levenshteinSimilarity(a, b, dist); !floatEq(got, want) {
-		t.Fatalf("levenshteinSimilarity with real distance = %v, want %v", got, want)
-	}
-}
-
-func TestPhoneticScore(t *testing.T) {
-	if got := phoneticScore(true); !floatEq(got, 1.0) {
-		t.Errorf("phoneticScore(true) = %v, want 1.0", got)
-	}
-	if got := phoneticScore(false); !floatEq(got, 0.0) {
-		t.Errorf("phoneticScore(false) = %v, want 0.0", got)
-	}
-}
-
-func TestLengthSimilarity(t *testing.T) {
-	cases := []struct {
-		name string
-		a, b string
-		want float64
-	}{
-		{"equal length", "cat", "dog", 1.0},
-		{"off by one", "cat", "cats", 0.75},
-		{"one empty", "", "abc", 0.0},
-		{"both empty guards divide by zero", "", "", 0.0},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			got := lengthSimilarity(c.a, c.b)
-			if !floatEq(got, c.want) {
-				t.Fatalf("lengthSimilarity(%q,%q) = %v, want %v", c.a, c.b, got, c.want)
-			}
-		})
-	}
-}
+const (
+	trigramLookupCap     = 64
+	trigramSetReadCap    = 512
+	phoneticCandidateCap = 64
+	fuzzyPrefilterCap    = 256
+)
 
 type commandCounter struct {
 	mu            sync.Mutex
@@ -166,7 +65,7 @@ func (c *commandCounter) ProcessPipelineHook(_ goredis.ProcessPipelineHook) gore
 
 func TestFindClosest_OversizedQueryIssuesBoundedPipelinedTrigramLookups(t *testing.T) {
 	client, counter := newCountingClient(t)
-	store := NewVocabularyStore(client, lowercaseNorm)
+	store := cache.NewVocabularyStore(client, lowercaseNorm)
 
 	hostile := strings.Repeat("qwertyuiopasdfghjklz", 500)
 	if _, err := store.FindClosest(context.Background(), hostile, 5); err != nil {
@@ -182,8 +81,8 @@ func TestFindClosest_OversizedQueryIssuesBoundedPipelinedTrigramLookups(t *testi
 	if counter.pipelines > 1 {
 		t.Errorf("pipelines = %d, want at most 1 for the trigram lookup", counter.pipelines)
 	}
-	if got := counter.pipelinedCmds["sscan"]; got == 0 || got > vocabTrigramLookupCap {
-		t.Errorf("pipelined SSCAN = %d, want 1..%d", got, vocabTrigramLookupCap)
+	if got := counter.pipelinedCmds["sscan"]; got == 0 || got > trigramLookupCap {
+		t.Errorf("pipelined SSCAN = %d, want 1..%d", got, trigramLookupCap)
 	}
 }
 
@@ -216,14 +115,13 @@ func (c *passthroughCounter) ProcessPipelineHook(next goredis.ProcessPipelineHoo
 }
 
 func TestVocabularyStore_Redis_OversizedFuzzyQueryIsOneRoundTripAndStillMatches(t *testing.T) {
-	client := testRedisClient(t)
+	_, client := newRedis(t)
 	counter := &passthroughCounter{}
 	client.AddHook(counter)
-	store := NewVocabularyStore(client, lowercaseNorm)
+	store := cache.NewVocabularyStore(client, lowercaseNorm)
 	ctx := context.Background()
 
 	term := "qaboundsmegaman"
-	vocabCleanKeys(t, term)
 	if err := store.Add(ctx, domain.VocabularyEntry{Term: "QABoundsMegaman", TermNorm: term, Kind: "track", Popularity: 1}); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -250,13 +148,14 @@ func TestVocabularyStore_Redis_OversizedFuzzyQueryIsOneRoundTripAndStillMatches(
 }
 
 type stubRedis struct {
-	mu         sync.Mutex
-	sets       map[string]map[string]bool
-	entries    map[string]string
-	calls      map[string]int
-	roundTrips int
-	mgetKeys   int
-	scanned    int
+	mu          sync.Mutex
+	sets        map[string]map[string]bool
+	entries     map[string]string
+	calls       map[string]int
+	roundTrips  int
+	mgetKeys    int
+	scanned     int
+	scannedKeys []string
 }
 
 func newStubRedisClient(t *testing.T) (*goredis.Client, *stubRedis) {
@@ -385,7 +284,7 @@ func firstThreeRunes(term string) string {
 	return string(runes[:3])
 }
 
-func seedSharedTrigramVocabulary(t *testing.T, store *RedisVocabularyStore, target string) {
+func seedSharedTrigramVocabulary(t *testing.T, store *cache.RedisVocabularyStore, target string) {
 	t.Helper()
 	entries := make([]domain.VocabularyEntry, 0, sharedTrigramVocabularySize+1)
 	entries = append(entries, vocabTrack(target))
@@ -410,7 +309,7 @@ func vocabTrack(norm string) domain.VocabularyEntry {
 
 func TestFindClosest_CommonTrigramLoadsBoundedCandidatesInThreeRoundTrips(t *testing.T) {
 	client, stub := newStubRedisClient(t)
-	store := NewVocabularyStore(client, lowercaseNorm, WithMetaphone(firstThreeRunes))
+	store := cache.NewVocabularyStore(client, lowercaseNorm, cache.WithMetaphone(firstThreeRunes))
 	const target = "themesong"
 	seedSharedTrigramVocabulary(t, store, target)
 	stub.reset()
@@ -428,7 +327,7 @@ func TestFindClosest_CommonTrigramLoadsBoundedCandidatesInThreeRoundTrips(t *tes
 	if stub.calls["get"] != 0 {
 		t.Errorf("per-candidate GET = %d, want 0: survivors load in one MGET", stub.calls["get"])
 	}
-	loadCap := vocabFuzzyPrefilterCap + vocabPhoneticCandidateCap
+	loadCap := fuzzyPrefilterCap + phoneticCandidateCap
 	if stub.mgetKeys > loadCap {
 		t.Errorf("entries loaded = %d of %d sharing the trigram, want at most %d",
 			stub.mgetKeys, sharedTrigramVocabularySize, loadCap)
@@ -441,13 +340,20 @@ func TestFindClosest_CommonTrigramLoadsBoundedCandidatesInThreeRoundTrips(t *tes
 	}
 }
 
-func TestTrigramLookupKeys_ShortQueryKeepsEveryTrigram(t *testing.T) {
-	got := trigramLookupKeys(trigrams("megaman"))
-	if len(got) != 5 {
-		t.Fatalf("lookup keys = %v, want all 5 trigrams of a short query", got)
+func TestFindClosest_ShortQueryLooksUpEveryTrigramInOrder(t *testing.T) {
+	client, stub := newStubRedisClient(t)
+	store := cache.NewVocabularyStore(client, lowercaseNorm)
+
+	if _, err := store.FindClosest(context.Background(), "megaman", 5); err != nil {
+		t.Fatalf("FindClosest: %v", err)
 	}
-	if got[0] != vocabTriPrefix+"meg" {
-		t.Errorf("first key = %q, want %q", got[0], vocabTriPrefix+"meg")
+
+	want := []string{
+		vocabTriPrefix + "meg", vocabTriPrefix + "ega", vocabTriPrefix + "gam",
+		vocabTriPrefix + "ama", vocabTriPrefix + "man",
+	}
+	if !slices.Equal(stub.scannedKeys, want) {
+		t.Errorf("scanned keys = %v, want every trigram of a short query in order %v", stub.scannedKeys, want)
 	}
 }
 
@@ -469,14 +375,14 @@ func (s *stubRedis) replyScan(cmd goredis.Cmder, args []any) {
 		next = 0
 	}
 	s.scanned += end - offset
+	s.scannedKeys = append(s.scannedKeys, redisArg(args[1]))
 	reply.SetVal(members[offset:end], next)
 }
 
 func TestFindClosest_HugeTrigramAndMetaphoneSetsAreReadUnderTheCap(t *testing.T) {
 	client, stub := newStubRedisClient(t)
-	store := NewVocabularyStore(client, lowercaseNorm)
-	store.metaphone = func(string) string { return "K" }
-	huge := 10 * vocabTrigramSetReadCap
+	store := cache.NewVocabularyStore(client, lowercaseNorm, cache.WithMetaphone(func(string) string { return "K" }))
+	huge := 10 * trigramSetReadCap
 	for i := 0; i < huge; i++ {
 		member := fmt.Sprintf("member%05d", i)
 		stub.sadd(vocabTriPrefix+"the", member)
@@ -487,7 +393,7 @@ func TestFindClosest_HugeTrigramAndMetaphoneSetsAreReadUnderTheCap(t *testing.T)
 		t.Fatalf("FindClosest: %v", err)
 	}
 
-	limit := vocabTrigramSetReadCap + vocabPhoneticCandidateCap
+	limit := trigramSetReadCap + phoneticCandidateCap
 	if stub.scanned > limit || stub.calls["smembers"] != 0 {
 		t.Errorf("members read = %d (smembers %d), want at most %d", stub.scanned, stub.calls["smembers"], limit)
 	}
