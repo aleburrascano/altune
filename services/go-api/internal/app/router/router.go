@@ -37,18 +37,27 @@ func New(s Settings) *chi.Mux {
 	return r
 }
 
+const (
+	correlationIDHeader = "X-Correlation-ID"
+	lastEventIDHeader   = "Last-Event-ID"
+	retryAfterHeader    = "Retry-After"
+)
+
 func corsHandler(s Settings) func(http.Handler) http.Handler {
-	headers := []string{"Accept", "Authorization", "Content-Type", "Idempotency-Key", telemetry.AppVersionHeader, telemetry.PlatformHeader}
+	headers := []string{
+		"Accept", "Authorization", "Content-Type", "Idempotency-Key",
+		correlationIDHeader, lastEventIDHeader,
+		telemetry.AppVersionHeader, telemetry.PlatformHeader,
+	}
 	if s.Development {
 		headers = append(headers, "ngrok-skip-browser-warning")
 	}
 	return cors.Handler(cors.Options{
-		AllowedOrigins:   s.CORSOrigins,
-		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   headers,
-		ExposedHeaders:   []string{"Content-Length"},
-		AllowCredentials: true,
-		MaxAge:           300,
+		AllowedOrigins: s.CORSOrigins,
+		AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders: headers,
+		ExposedHeaders: []string{"Content-Length", correlationIDHeader, retryAfterHeader},
+		MaxAge:         300,
 	})
 }
 

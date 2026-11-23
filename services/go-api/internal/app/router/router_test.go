@@ -239,6 +239,56 @@ func TestRouter_CORSPreflightAllowsIdempotencyKeyOnlyForAllowedOrigin(t *testing
 	}
 }
 
+func TestRouter_CORSPreflightAllowsTheCorrelationAndResumeHeadersWithoutCredentials(t *testing.T) {
+	const allowed = "http://127.0.0.1:8081"
+	r := newRouter(router.Settings{CORSOrigins: []string{allowed}})
+	r.Get("/v1/events", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	req := httptest.NewRequest(http.MethodOptions, "/v1/events", nil)
+	req.Header.Set("Origin", allowed)
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	req.Header.Set("Access-Control-Request-Headers", "authorization,x-correlation-id,last-event-id")
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	allowedHeaders := strings.ToLower(rec.Header().Get("Access-Control-Allow-Headers"))
+	for _, want := range []string{"x-correlation-id", "last-event-id"} {
+		if !strings.Contains(allowedHeaders, want) {
+			t.Errorf("Allow-Headers = %q, want it to contain %s", allowedHeaders, want)
+		}
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Credentials"); got != "" {
+		t.Errorf("Allow-Credentials = %q, want none: the API uses no cookies", got)
+	}
+}
+
+func TestRouter_CORSExposesTheCorrelationIDAndRetryAfterToTheAllowedOrigin(t *testing.T) {
+	const allowed = "http://127.0.0.1:8081"
+	r := newRouter(router.Settings{CORSOrigins: []string{allowed}})
+	r.Get("/v1/tracks", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Retry-After", "3")
+		w.WriteHeader(http.StatusTooManyRequests)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/tracks", nil)
+	req.Header.Set("Origin", allowed)
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	exposed := strings.ToLower(rec.Header().Get("Access-Control-Expose-Headers"))
+	for _, want := range []string{"x-correlation-id", "retry-after", "content-length"} {
+		if !strings.Contains(exposed, want) {
+			t.Errorf("Expose-Headers = %q, want it to contain %s", exposed, want)
+		}
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Credentials"); got != "" {
+		t.Errorf("Allow-Credentials = %q, want none: the API uses no cookies", got)
+	}
+	if rec.Header().Get("X-Correlation-ID") == "" {
+		t.Error("response carries no X-Correlation-ID for the client to read")
+	}
+}
+
 func TestRouter_CORSPreflightRefusesTheRetiredAnalyticsHeader(t *testing.T) {
 	const allowed = "http://127.0.0.1:8081"
 	r := newRouter(router.Settings{CORSOrigins: []string{allowed}})
