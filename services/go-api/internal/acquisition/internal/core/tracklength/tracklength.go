@@ -45,21 +45,31 @@ func (p Policy) Plausible(candidate ports.AudioCandidate) bool {
 	return p.saved <= 0 || p.accepts(candidate.Duration)
 }
 
-func (p Policy) CanJudge(candidate ports.AudioCandidate) bool {
-	if candidate.IsResolved() && candidate.Duration > 0 {
-		return true
-	}
-	return p.Expected() > 0
+type FileJudge struct {
+	policy    Policy
+	candidate ports.AudioCandidate
 }
 
-func (p Policy) Judge(candidate ports.AudioCandidate, actual float64) (acceptable bool, heldAgainst float64) {
-	if candidate.IsResolved() && candidate.Duration > 0 {
+func (p Policy) FileJudge(candidate ports.AudioCandidate) (FileJudge, bool) {
+	if !ownLength(candidate) && p.Expected() <= 0 {
+		return FileJudge{}, false
+	}
+	return FileJudge{policy: p, candidate: candidate}, true
+}
+
+func (j FileJudge) Judge(actual float64) (acceptable bool, heldAgainst float64) {
+	p, candidate := j.policy, j.candidate
+	if ownLength(candidate) {
 		if !domain.LengthAuthoritative.Agrees(candidate.Duration, actual) {
 			return false, candidate.Duration
 		}
 		return p.Expected() <= 0 || p.accepts(actual), p.Expected()
 	}
 	return p.accepts(actual), p.Expected()
+}
+
+func ownLength(candidate ports.AudioCandidate) bool {
+	return candidate.IsResolved() && candidate.Duration > 0
 }
 
 func (p Policy) accepts(actual float64) bool {
