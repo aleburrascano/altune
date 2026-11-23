@@ -135,7 +135,7 @@ func TestErrTokenExpired_LookAlikeIsNotTheSentinel(t *testing.T) {
 	}
 }
 
-const missingUserBody = `{"detail":"authentication required","reason":"missing"}` + "\n"
+const missingUserBody = `{"type":"urn:altune:problem:auth.token_missing","title":"Authentication required","status":401,"detail":"authentication required","code":"auth.token_missing"}` + "\n"
 
 func requireMissingUserResponse(t *testing.T, rec *httptest.ResponseRecorder) {
 	t.Helper()
@@ -145,8 +145,8 @@ func requireMissingUserResponse(t *testing.T, rec *httptest.ResponseRecorder) {
 	if got := rec.Header().Get("WWW-Authenticate"); got != "Bearer" {
 		t.Errorf("WWW-Authenticate: got %q, want %q", got, "Bearer")
 	}
-	if got := rec.Header().Get("Content-Type"); got != "application/json" {
-		t.Errorf("Content-Type: got %q, want %q", got, "application/json")
+	if got := rec.Header().Get("Content-Type"); got != "application/problem+json" {
+		t.Errorf("Content-Type: got %q, want %q", got, "application/problem+json")
 	}
 	if got := rec.Body.String(); got != missingUserBody {
 		t.Errorf("body: got %q, want %q", got, missingUserBody)

@@ -22,8 +22,6 @@ const supabaseAuthPathSuffix = "/auth/v1"
 
 const maxAccessTokenLifetime = time.Hour
 
-const reasonRevoked ports.TokenRejectReason = "revoked"
-
 const defaultJWKSFetchTimeout = 10 * time.Second
 
 type jwksSchedule struct {
@@ -223,7 +221,7 @@ func (v *SupabaseJWTVerifier) checkRevoked(ctx context.Context, userID shared.Us
 		return fmt.Errorf("check token revocation: %w", err)
 	}
 	if revoked {
-		return &ports.InvalidTokenError{Reason: reasonRevoked, Detail: "token revoked"}
+		return &ports.InvalidTokenError{Reason: ports.ReasonRevoked, Detail: "token revoked"}
 	}
 	return nil
 }
