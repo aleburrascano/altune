@@ -339,7 +339,7 @@ func (ac *AcquisitionContext) stillJudgedOnTheSameBasis(recorded *ports.Rejectio
 	if recorded.ExpectedSeconds <= 0 || current <= 0 {
 		return recorded.ExpectedSeconds <= 0 && current <= 0
 	}
-	return durationWithinAuthoritativeTolerance(recorded.ExpectedSeconds, current)
+	return acqdomain.LengthAuthoritative.Agrees(recorded.ExpectedSeconds, current)
 }
 
 func (ac *AcquisitionContext) Provenance() shared.AcquisitionProvenance {
@@ -348,7 +348,7 @@ func (ac *AcquisitionContext) Provenance() shared.AcquisitionProvenance {
 		return shared.ProvenanceBestEffort
 	case ac.IdentityVerified:
 		return shared.ProvenanceVerified
-	case ac.DurationVerified && ac.lengthCorroborated():
+	case ac.DurationVerified && ac.lengths().Corroborated():
 		return shared.ProvenanceCorroborated
 	default:
 		return shared.ProvenanceBestEffort

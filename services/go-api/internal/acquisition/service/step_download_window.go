@@ -57,7 +57,7 @@ func (s *DownloadStep) nextWindow(
 			recordSourceDead(ac, candidate)
 			continue
 		}
-		if !ac.candidateDurationPlausible(candidate) {
+		if !ac.lengths().Plausible(candidate) {
 			recordImplausibleDuration(ctx, ac, candidate)
 			continue
 		}

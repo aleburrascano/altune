@@ -121,7 +121,7 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 			recordSourceDead(ac, ac.Ranked[i])
 			continue
 		}
-		if !ac.candidateDurationPlausible(ac.Ranked[i]) {
+		if !ac.lengths().Plausible(ac.Ranked[i]) {
 			recordImplausibleDuration(ctx, ac, ac.Ranked[i])
 			continue
 		}
@@ -553,7 +553,7 @@ func (s *DownloadStep) verifyDuration(
 	if s.prober == nil {
 		return false, 0, nil
 	}
-	if expectedLength(ac, candidate) <= 0 {
+	if !ac.lengths().CanJudge(candidate) {
 		s.recordSkip(ports.SkipNoDuration)
 		return false, 0, nil
 	}
@@ -576,11 +576,11 @@ func (s *DownloadStep) probeDuration(
 			"error", redact.LogError(err))
 		s.recordSkip(ports.SkipProbeFailed)
 		return false, 0, nil
-	case !ac.fileLengthAcceptable(candidate, actual):
-		return false, 0, durationRejection(ctx, ac, candidate, actual)
-	default:
-		return true, actual, nil
 	}
+	if acceptable, held := ac.lengths().Judge(candidate, actual); !acceptable {
+		return false, 0, durationRejection(ctx, ac, candidate, actual, held)
+	}
+	return true, actual, nil
 }
 
 func durationRejection(
@@ -588,15 +588,15 @@ func durationRejection(
 	ac *AcquisitionContext,
 	candidate ports.AudioCandidate,
 	actual float64,
+	held float64,
 ) *downloadRejection {
-	held := lengthHeldAgainst(ac, candidate, actual)
 	slog.InfoContext(ctx, "acquisition.candidate_rejected_duration",
 		"track_id", ac.Track.ID,
 		"url", candidate.URL,
 		"source", candidate.Source,
 		"actual_duration", actual,
 		"expected_duration", held,
-		"authoritative", ac.resolvedLength() > 0,
+		"authoritative", ac.lengths().Resolved() > 0,
 	)
 	return &downloadRejection{
 		stage:  RejectionDuration,

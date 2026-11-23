@@ -1,7 +1,9 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/internal/adapters/discoverybridge"
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
+	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/catalog/domain"
 	"bytes"
@@ -463,28 +465,6 @@ func (p *queueProber) ValidateDecodable(_ context.Context, _ string) error {
 	return err
 }
 
-func TestDurationWithinTolerance(t *testing.T) {
-	tests := []struct {
-		name             string
-		expected, actual float64
-		want             bool
-	}{
-		{name: "exact", expected: 226, actual: 226, want: true},
-		{name: "few seconds off", expected: 226, actual: 231, want: true},
-		{name: "within fraction", expected: 300, actual: 318, want: true},
-		{name: "14-minute mix", expected: 226, actual: 840, want: false},
-		{name: "30s preview", expected: 226, actual: 30, want: false},
-		{name: "short track uses absolute slack", expected: 40, actual: 52, want: true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := durationWithinTolerance(tt.expected, tt.actual); got != tt.want {
-				t.Errorf("durationWithinTolerance(%v, %v) = %v, want %v", tt.expected, tt.actual, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestDownloadStep_SerialPath_ProbeQueueVerifiesAndFallsBack(t *testing.T) {
 	searcher := &fileWritingSearcher{writeFile: true}
 	prober := &queueProber{durations: []float64{840, 227}}
@@ -871,11 +851,22 @@ func TestCandidateLogs_StampTrackIDAndSource(t *testing.T) {
 			},
 		},
 		{
-			name: "duration rejection",
-			msg:  "acquisition.candidate_rejected_duration",
+			name:  "duration rejection",
+			msg:   "acquisition.candidate_rejected_duration",
+			attrs: map[string]any{"track_id": logTestTrackID, "source": logTestSource, "authoritative": false},
 			run: func(ctx context.Context, t *testing.T) {
 				runDownloadForLog(ctx, t, logTestDownloadContext(),
 					WithDownloadProber(scriptedProber{duration: 30}))
+			},
+		},
+		{
+			name:  "duration rejection against a resolved length",
+			msg:   "acquisition.candidate_rejected_duration",
+			attrs: map[string]any{"track_id": logTestTrackID, "source": logTestSource, "authoritative": true},
+			run: func(ctx context.Context, t *testing.T) {
+				ac := logTestDownloadContext()
+				ac.Identity = ports.RecordingIdentity{Duration: 200}
+				runDownloadForLog(ctx, t, ac, WithDownloadProber(scriptedProber{duration: 30}))
 			},
 		},
 		{
@@ -2637,5 +2628,63 @@ func TestDownloadStep_WhenEveryCandidateIsMuxedTheFirstAcceptedFileIsStored(t *t
 			t.Errorf("width %d: stored file missing: %v", width, err)
 		}
 		os.RemoveAll(filepath.Dir(ac.TempPath))
+	}
+}
+
+func TestDurationDelta_ReadsTheExpectedLengthNotTheDoubtedSearchPick(t *testing.T) {
+	ac := &AcquisitionContext{
+		Track:    TrackRef{CatalogDuration: 139},
+		Identity: ports.RecordingIdentity{Duration: 167, ReferenceDoubted: true},
+	}
+
+	if got, known := ac.durationDelta(ports.AudioCandidate{Duration: 140}, 140); !known || got != 1 {
+		t.Errorf("durationDelta = %v, %v, want 1 against the catalog 139s", got, known)
+	}
+}
+
+func TestDurationDelta_IsUnknownWithoutAProbeOrATarget(t *testing.T) {
+	claimed := ports.AudioCandidate{Duration: 140}
+	cases := map[string]struct {
+		ac     *AcquisitionContext
+		probed float64
+	}{
+		"not probed, the search claim is no measurement": {&AcquisitionContext{Track: TrackRef{CatalogDuration: 139}}, 0},
+		"no expected length":                             {&AcquisitionContext{}, 140},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got, known := tc.ac.durationDelta(claimed, tc.probed); known {
+				t.Errorf("durationDelta = %v, known; want unknown", got)
+			}
+		})
+	}
+}
+
+func TestResolvedIdentity_StandingInTheDarkCatalogLengthConflictReachesTheReaders(t *testing.T) {
+	const isrc, mbid = "USAAA2400001", "standing-in-the-dark-live"
+	resolver := discoverybridge.NewRecordedResolver(
+		[]discoverybridge.RecordedSearchHit{{Title: "Standing In The Dark (Live)", Artist: "Artist", ISRC: isrc, MBID: mbid, Duration: 197}},
+		[]discoverybridge.RecordedISRCRecording{{MBID: mbid, Duration: 197}}, nil)
+	ac := &AcquisitionContext{
+		Track:   TrackRef{Title: "Standing In The Dark (Live)", Artist: "Artist", ISRC: isrc, CatalogDuration: 300},
+		Verdict: AudioVerdict{Kind: VerdictHard, Surviving: []ports.LinkedRecording{{MBID: mbid}}},
+	}
+
+	ResolveIdentity(context.Background(), resolver, nil, ac)
+
+	if ac.Identity.ReferenceDoubted || ac.Identity.Duration != 197 {
+		t.Fatalf("identity = %+v, want the 197s reference undoubted", ac.Identity)
+	}
+	if got := ac.lengths().Resolved(); got != 197 {
+		t.Errorf("resolved length = %v, want 197", got)
+	}
+	if ac.lengths().Corroborated() {
+		t.Error("lengths corroborated = true, want false: catalog 300s and reference 197s still disagree")
+	}
+	if got := ac.gradedFingerprint(); got != grade.Matches {
+		t.Errorf("gradedFingerprint = %v, want Matches, not cut to Approximates", got)
+	}
+	if !ac.fingerprintProvesReference() {
+		t.Error("fingerprintProvesReference = false, want true for a surviving recording on the undoubted reference")
 	}
 }
