@@ -2,12 +2,11 @@ package handler_test
 
 import (
 	"altune/go-api/internal/acquisition"
-	catdomain "altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -20,10 +19,9 @@ import (
 )
 
 func TestHandleRetryAcquisition_CooldownSendsRetryAfter(t *testing.T) {
-	repo := newRetryFakeTrackRepo()
-	track := newTrackOrFatal(t, retryTestUserId)
-	_ = track.MarkFailed("download error")
-	repo.seed(track)
+	repo := acquisitiontest.NewLedger()
+	track := failedTrack(retryTestUserId)
+	repo.Seed(track)
 	router := buildRetryRouter(repo, &retryFakeScheduler{})
 	path := "/tracks/" + track.ID.UUID().String() + "/retry"
 
@@ -33,10 +31,9 @@ func TestHandleRetryAcquisition_CooldownSendsRetryAfter(t *testing.T) {
 }
 
 func TestHandleReacquire_CooldownSendsRetryAfter(t *testing.T) {
-	repo := newRetryFakeTrackRepo()
-	track := newTrackOrFatal(t, reacquireTestUserId)
-	_ = track.MarkReady("audio/ready.opus")
-	repo.seed(track)
+	repo := acquisitiontest.NewLedger()
+	track := readyTrack(reacquireTestUserId)
+	repo.Seed(track)
 	router := buildReacquireRouter(repo, &reacquireFakeScheduler{})
 	path := "/tracks/" + track.ID.UUID().String() + "/reacquire"
 
@@ -46,14 +43,13 @@ func TestHandleReacquire_CooldownSendsRetryAfter(t *testing.T) {
 }
 
 func TestHandleRetryAcquisition_CooldownRetryAfterIsTimeLeft(t *testing.T) {
-	repo := newRetryFakeTrackRepo()
-	track := newTrackOrFatal(t, retryTestUserId)
-	_ = track.MarkFailed("download error")
-	repo.seed(track)
+	repo := acquisitiontest.NewLedger()
+	track := failedTrack(retryTestUserId)
+	repo.Seed(track)
 	store := newMemCooldownStore()
 	clock := time.Now()
 	store.now = func() time.Time { return clock }
-	h := acquisition.NewRetryHandler(acquisition.NewTrackLedger(repo), &retryFakeScheduler{}, acquisition.NewRetryAdmission(store))
+	h := acquisition.NewRetryHandler(repo, &retryFakeScheduler{}, acquisition.NewRetryAdmission(store))
 	router := chi.NewRouter()
 	router.Use(signedInAs(retryTestUserId))
 	router.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
@@ -105,21 +101,11 @@ func retryAfterSeconds(t *testing.T, header string) int {
 	return secs
 }
 
-func newTrackOrFatal(t *testing.T, userId shared.UserId) *catdomain.Track {
-	t.Helper()
-	track, err := catdomain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	return track
-}
-
 func TestHandleRetryAcquisition_ShuttingDownSurfaces503AndKeepsCooldown(t *testing.T) {
-	repo := newRetryFakeTrackRepo()
+	repo := acquisitiontest.NewLedger()
 	scheduler := &retryFakeScheduler{err: acquisition.ErrSchedulerShutdown}
-	track := newTrackOrFatal(t, retryTestUserId)
-	_ = track.MarkFailed("download error")
-	repo.seed(track)
+	track := failedTrack(retryTestUserId)
+	repo.Seed(track)
 	router := buildRetryRouter(repo, scheduler)
 	path := "/tracks/" + track.ID.UUID().String() + "/retry"
 
@@ -134,11 +120,10 @@ func TestHandleRetryAcquisition_ShuttingDownSurfaces503AndKeepsCooldown(t *testi
 }
 
 func TestHandleReacquire_ShuttingDownSurfaces503AndKeepsCooldown(t *testing.T) {
-	repo := newRetryFakeTrackRepo()
+	repo := acquisitiontest.NewLedger()
 	scheduler := &reacquireFakeScheduler{err: acquisition.ErrSchedulerShutdown}
-	track := newTrackOrFatal(t, reacquireTestUserId)
-	_ = track.MarkReady("audio/ready.opus")
-	repo.seed(track)
+	track := readyTrack(reacquireTestUserId)
+	repo.Seed(track)
 	router := buildReacquireRouter(repo, scheduler)
 	path := "/tracks/" + track.ID.UUID().String() + "/reacquire"
 
@@ -175,11 +160,11 @@ func (admitAlways) Admit(_ context.Context, _ *acquisition.TrackSnapshot, schedu
 }
 
 func TestHandleRetryAcquisition_UsesTheInjectedAdmission(t *testing.T) {
-	repo := newRetryFakeTrackRepo()
-	track := newTrackOrFatal(t, retryTestUserId)
-	repo.seed(track)
+	repo := acquisitiontest.NewLedger()
+	track := pendingTrack(retryTestUserId)
+	repo.Seed(track)
 	scheduler := &retryFakeScheduler{}
-	h := acquisition.NewRetryHandler(acquisition.NewTrackLedger(repo), scheduler, admitAlways{})
+	h := acquisition.NewRetryHandler(repo, scheduler, admitAlways{})
 	router := chi.NewRouter()
 	router.Use(signedInAs(retryTestUserId))
 	router.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
@@ -193,11 +178,11 @@ func TestHandleRetryAcquisition_UsesTheInjectedAdmission(t *testing.T) {
 }
 
 func TestHandleReacquire_UsesTheInjectedAdmission(t *testing.T) {
-	repo := newRetryFakeTrackRepo()
-	track := newTrackOrFatal(t, reacquireTestUserId)
-	repo.seed(track)
+	repo := acquisitiontest.NewLedger()
+	track := pendingTrack(reacquireTestUserId)
+	repo.Seed(track)
 	scheduler := &reacquireFakeScheduler{}
-	h := acquisition.NewReacquireHandler(acquisition.NewTrackLedger(repo), scheduler, admitAlways{})
+	h := acquisition.NewReacquireHandler(repo, scheduler, admitAlways{})
 	router := chi.NewRouter()
 	router.Use(signedInAs(reacquireTestUserId))
 	router.Post("/tracks/{trackId}/reacquire", h.HandleReacquire)
@@ -220,7 +205,7 @@ func newMemCooldownStore() *memCooldownStore {
 	return &memCooldownStore{now: time.Now, lastAt: make(map[string]time.Time)}
 }
 
-func (s *memCooldownStore) Reserve(_ context.Context, trackID catdomain.TrackId, kind acquisition.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration, error) {
+func (s *memCooldownStore) Reserve(_ context.Context, trackID shared.TrackId, kind acquisition.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now, key := s.now(), string(kind)+"/"+trackID.String()
@@ -231,7 +216,7 @@ func (s *memCooldownStore) Reserve(_ context.Context, trackID catdomain.TrackId,
 	return now, true, 0, nil
 }
 
-func (s *memCooldownStore) Release(_ context.Context, trackID catdomain.TrackId, kind acquisition.CooldownKind, at time.Time) error {
+func (s *memCooldownStore) Release(_ context.Context, trackID shared.TrackId, kind acquisition.CooldownKind, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := string(kind) + "/" + trackID.String()
@@ -247,11 +232,11 @@ var (
 )
 
 type reacquireFakeScheduler struct {
-	replaced []catdomain.TrackId
+	replaced []shared.TrackId
 	err      error
 }
 
-func (s *reacquireFakeScheduler) ScheduleReplace(_ context.Context, _ shared.UserId, trackId catdomain.TrackId) error {
+func (s *reacquireFakeScheduler) ScheduleReplace(_ context.Context, _ shared.UserId, trackId shared.TrackId) error {
 	if s.err != nil {
 		return s.err
 	}
@@ -259,22 +244,8 @@ func (s *reacquireFakeScheduler) ScheduleReplace(_ context.Context, _ shared.Use
 	return nil
 }
 
-func makeReacquireTrack(userId shared.UserId, title, artist, album string) *catdomain.Track {
-	t, err := catdomain.NewTrack(userId, title, artist, album)
-	if err != nil {
-		panic(err)
-	}
-	return t
-}
-
-func makeStreamableReacquireTrack(userId shared.UserId, title, artist, album, audioRef string) *catdomain.Track {
-	t := makeReacquireTrack(userId, title, artist, album)
-	_ = t.MarkReady(audioRef)
-	return t
-}
-
-func buildReacquireRouter(trackRepo *retryFakeTrackRepo, scheduler *reacquireFakeScheduler) chi.Router {
-	h := acquisition.NewReacquireHandler(acquisition.NewTrackLedger(trackRepo), scheduler, acquisition.NewReacquireAdmission(newMemCooldownStore()))
+func buildReacquireRouter(trackRepo *acquisitiontest.Ledger, scheduler *reacquireFakeScheduler) chi.Router {
+	h := acquisition.NewReacquireHandler(trackRepo, scheduler, acquisition.NewReacquireAdmission(newMemCooldownStore()))
 	r := chi.NewRouter()
 	r.Use(signedInAs(reacquireTestUserId))
 	r.Post("/tracks/{trackId}/reacquire", h.HandleReacquire)
@@ -284,15 +255,15 @@ func buildReacquireRouter(trackRepo *retryFakeTrackRepo, scheduler *reacquireFak
 func TestHandleReacquire(t *testing.T) {
 	tests := []struct {
 		name         string
-		setup        func(*retryFakeTrackRepo) string
+		setup        func(*acquisitiontest.Ledger) string
 		wantStatus   int
 		wantReplaced bool
 	}{
 		{
 			name: "streamable track returns 202 and schedules replace",
-			setup: func(repo *retryFakeTrackRepo) string {
-				track := makeStreamableReacquireTrack(reacquireTestUserId, "Ready Song", "Artist", "Album", "audio/ready.opus")
-				repo.seed(track)
+			setup: func(repo *acquisitiontest.Ledger) string {
+				track := readyTrack(reacquireTestUserId)
+				repo.Seed(track)
 				return track.ID.UUID().String()
 			},
 			wantStatus:   http.StatusAccepted,
@@ -300,33 +271,32 @@ func TestHandleReacquire(t *testing.T) {
 		},
 		{
 			name: "pending track (no audio) returns 409",
-			setup: func(repo *retryFakeTrackRepo) string {
-				track := makeReacquireTrack(reacquireTestUserId, "Pending Song", "Artist", "Album")
-				repo.seed(track)
+			setup: func(repo *acquisitiontest.Ledger) string {
+				track := pendingTrack(reacquireTestUserId)
+				repo.Seed(track)
 				return track.ID.UUID().String()
 			},
 			wantStatus: http.StatusConflict,
 		},
 		{
 			name: "failed track (no audio) returns 409",
-			setup: func(repo *retryFakeTrackRepo) string {
-				track := makeReacquireTrack(reacquireTestUserId, "Failed Song", "Artist", "Album")
-				_ = track.MarkFailed("download error")
-				repo.seed(track)
+			setup: func(repo *acquisitiontest.Ledger) string {
+				track := failedTrack(reacquireTestUserId)
+				repo.Seed(track)
 				return track.ID.UUID().String()
 			},
 			wantStatus: http.StatusConflict,
 		},
 		{
 			name: "not found returns 404",
-			setup: func(repo *retryFakeTrackRepo) string {
+			setup: func(repo *acquisitiontest.Ledger) string {
 				return uuid.New().String()
 			},
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name: "invalid track ID returns 400",
-			setup: func(repo *retryFakeTrackRepo) string {
+			setup: func(repo *acquisitiontest.Ledger) string {
 				return "not-a-uuid"
 			},
 			wantStatus: http.StatusBadRequest,
@@ -335,7 +305,7 @@ func TestHandleReacquire(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := newRetryFakeTrackRepo()
+			repo := acquisitiontest.NewLedger()
 			scheduler := &reacquireFakeScheduler{}
 			trackId := tt.setup(repo)
 			router := buildReacquireRouter(repo, scheduler)
@@ -355,10 +325,10 @@ func TestHandleReacquire(t *testing.T) {
 }
 
 func TestHandleReacquire_Cooldown(t *testing.T) {
-	repo := newRetryFakeTrackRepo()
+	repo := acquisitiontest.NewLedger()
 	scheduler := &reacquireFakeScheduler{}
-	track := makeStreamableReacquireTrack(reacquireTestUserId, "Ready Song", "Artist", "Album", "audio/ready.opus")
-	repo.seed(track)
+	track := readyTrack(reacquireTestUserId)
+	repo.Seed(track)
 	router := buildReacquireRouter(repo, scheduler)
 	path := "/tracks/" + track.ID.UUID().String() + "/reacquire"
 
@@ -374,10 +344,10 @@ func TestHandleReacquire_Cooldown(t *testing.T) {
 }
 
 func TestHandleReacquire_CooldownUsesStandardErrorEnvelope(t *testing.T) {
-	repo := newRetryFakeTrackRepo()
+	repo := acquisitiontest.NewLedger()
 	scheduler := &reacquireFakeScheduler{}
-	track := makeStreamableReacquireTrack(reacquireTestUserId, "Ready Song", "Artist", "Album", "audio/ready.opus")
-	repo.seed(track)
+	track := readyTrack(reacquireTestUserId)
+	repo.Seed(track)
 	router := buildReacquireRouter(repo, scheduler)
 	path := "/tracks/" + track.ID.UUID().String() + "/reacquire"
 
@@ -402,7 +372,7 @@ func TestHandleReacquire_CooldownUsesStandardErrorEnvelope(t *testing.T) {
 }
 
 func TestHandleReacquire_NoAuth(t *testing.T) {
-	repo := newRetryFakeTrackRepo()
+	repo := acquisitiontest.NewLedger()
 	scheduler := &reacquireFakeScheduler{}
 	router := buildReacquireRouter(repo, scheduler)
 
@@ -429,73 +399,31 @@ func signedInAs(userID shared.UserId) func(http.Handler) http.Handler {
 	}
 }
 
-type retryFakeTrackRepo struct {
-	tracks map[string]*catdomain.Track
-	getErr error
+func pendingTrack(userId shared.UserId) acquisitiontest.LedgerTrack {
+	return acquisitiontest.LedgerTrack{TrackSnapshot: acquisition.TrackSnapshot{
+		ID: shared.NewTrackId(), UserId: userId, Title: "Song", Artist: "Artist", Album: "Album", Status: acquisition.TrackPending,
+	}}
 }
 
-func newRetryFakeTrackRepo() *retryFakeTrackRepo {
-	return &retryFakeTrackRepo{tracks: make(map[string]*catdomain.Track)}
+func failedTrack(userId shared.UserId) acquisitiontest.LedgerTrack {
+	track := pendingTrack(userId)
+	track.Status = acquisition.TrackFailed
+	return track
 }
 
-func (r *retryFakeTrackRepo) Add(_ context.Context, track *catdomain.Track) (bool, error) {
-	r.tracks[track.ID.String()] = track
-	return true, nil
-}
-
-func (r *retryFakeTrackRepo) GetByID(_ context.Context, id catdomain.TrackId, userId shared.UserId) (*catdomain.Track, error) {
-	if r.getErr != nil {
-		return nil, r.getErr
-	}
-	for _, t := range r.tracks {
-		if t.ID == id && t.UserId == userId {
-			return t, nil
-		}
-	}
-	return nil, nil
-}
-
-func (r *retryFakeTrackRepo) AudioRefInUse(_ context.Context, audioRef string, excludeTrackID catdomain.TrackId) (bool, error) {
-	for _, t := range r.tracks {
-		if t.ID != excludeTrackID && t.AudioRef != nil && *t.AudioRef == audioRef {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func (r *retryFakeTrackRepo) ListForUser(_ context.Context, _ shared.UserId, _, _ int) ([]*catdomain.Track, int, error) {
-	return nil, 0, nil
-}
-
-func (r *retryFakeTrackRepo) Update(_ context.Context, track *catdomain.Track, _ int) error {
-	r.tracks[track.ID.String()] = track
-	return nil
-}
-
-func (r *retryFakeTrackRepo) Delete(_ context.Context, id catdomain.TrackId, _ shared.UserId) (bool, error) {
-	key := id.String()
-	if _, ok := r.tracks[key]; ok {
-		delete(r.tracks, key)
-		return true, nil
-	}
-	return false, nil
-}
-
-func (r *retryFakeTrackRepo) GetByDedupKey(_ context.Context, _ shared.UserId, _ string) (*catdomain.Track, error) {
-	return nil, nil
-}
-
-func (r *retryFakeTrackRepo) seed(t *catdomain.Track) {
-	r.tracks[t.ID.String()] = t
+func readyTrack(userId shared.UserId) acquisitiontest.LedgerTrack {
+	track := pendingTrack(userId)
+	audioRef := "audio/ready.opus"
+	track.AudioRef, track.Status = &audioRef, acquisition.TrackReady
+	return track
 }
 
 type retryFakeScheduler struct {
-	scheduled []catdomain.TrackId
+	scheduled []shared.TrackId
 	err       error
 }
 
-func (s *retryFakeScheduler) Schedule(_ context.Context, _ shared.UserId, trackId catdomain.TrackId, _ string) error {
+func (s *retryFakeScheduler) Schedule(_ context.Context, _ shared.UserId, trackId shared.TrackId, _ string) error {
 	if s.err != nil {
 		return s.err
 	}
@@ -519,30 +447,8 @@ func retryAssertStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
 	}
 }
 
-var _ = io.NopCloser
-
-func makeRetryTrack(userId shared.UserId, title, artist, album string) *catdomain.Track {
-	t, err := catdomain.NewTrack(userId, title, artist, album)
-	if err != nil {
-		panic(err)
-	}
-	return t
-}
-
-func makeFailedTrack(userId shared.UserId, title, artist, album string) *catdomain.Track {
-	t := makeRetryTrack(userId, title, artist, album)
-	_ = t.MarkFailed("download error")
-	return t
-}
-
-func makeReadyRetryTrack(userId shared.UserId, title, artist, album, audioRef string) *catdomain.Track {
-	t := makeRetryTrack(userId, title, artist, album)
-	_ = t.MarkReady(audioRef)
-	return t
-}
-
-func buildRetryRouter(trackRepo *retryFakeTrackRepo, scheduler *retryFakeScheduler) chi.Router {
-	h := acquisition.NewRetryHandler(acquisition.NewTrackLedger(trackRepo), scheduler, acquisition.NewRetryAdmission(newMemCooldownStore()))
+func buildRetryRouter(trackRepo *acquisitiontest.Ledger, scheduler *retryFakeScheduler) chi.Router {
+	h := acquisition.NewRetryHandler(trackRepo, scheduler, acquisition.NewRetryAdmission(newMemCooldownStore()))
 	r := chi.NewRouter()
 	r.Use(signedInAs(retryTestUserId))
 	r.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
@@ -552,15 +458,15 @@ func buildRetryRouter(trackRepo *retryFakeTrackRepo, scheduler *retryFakeSchedul
 func TestHandleRetryAcquisition(t *testing.T) {
 	tests := []struct {
 		name          string
-		setup         func(*retryFakeTrackRepo) string
+		setup         func(*acquisitiontest.Ledger) string
 		wantStatus    int
 		wantScheduled bool
 	}{
 		{
 			name: "failed track returns 202 and schedules retry",
-			setup: func(repo *retryFakeTrackRepo) string {
-				track := makeFailedTrack(retryTestUserId, "Failed Song", "Artist", "Album")
-				repo.seed(track)
+			setup: func(repo *acquisitiontest.Ledger) string {
+				track := failedTrack(retryTestUserId)
+				repo.Seed(track)
 				return track.ID.UUID().String()
 			},
 			wantStatus:    http.StatusAccepted,
@@ -568,32 +474,32 @@ func TestHandleRetryAcquisition(t *testing.T) {
 		},
 		{
 			name: "not found returns 404",
-			setup: func(repo *retryFakeTrackRepo) string {
+			setup: func(repo *acquisitiontest.Ledger) string {
 				return uuid.New().String()
 			},
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name: "pending track (not failed) returns 409",
-			setup: func(repo *retryFakeTrackRepo) string {
-				track := makeRetryTrack(retryTestUserId, "Pending Song", "Artist", "Album")
-				repo.seed(track)
+			setup: func(repo *acquisitiontest.Ledger) string {
+				track := pendingTrack(retryTestUserId)
+				repo.Seed(track)
 				return track.ID.UUID().String()
 			},
 			wantStatus: http.StatusConflict,
 		},
 		{
 			name: "ready track (not failed) returns 409",
-			setup: func(repo *retryFakeTrackRepo) string {
-				track := makeReadyRetryTrack(retryTestUserId, "Ready Song", "Artist", "Album", "audio/ready.opus")
-				repo.seed(track)
+			setup: func(repo *acquisitiontest.Ledger) string {
+				track := readyTrack(retryTestUserId)
+				repo.Seed(track)
 				return track.ID.UUID().String()
 			},
 			wantStatus: http.StatusConflict,
 		},
 		{
 			name: "invalid track ID returns 400",
-			setup: func(repo *retryFakeTrackRepo) string {
+			setup: func(repo *acquisitiontest.Ledger) string {
 				return "not-a-uuid"
 			},
 			wantStatus: http.StatusBadRequest,
@@ -602,7 +508,7 @@ func TestHandleRetryAcquisition(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := newRetryFakeTrackRepo()
+			repo := acquisitiontest.NewLedger()
 			scheduler := &retryFakeScheduler{}
 			trackId := tt.setup(repo)
 			router := buildRetryRouter(repo, scheduler)
@@ -622,7 +528,7 @@ func TestHandleRetryAcquisition(t *testing.T) {
 }
 
 func TestHandleRetryAcquisition_NoAuth(t *testing.T) {
-	repo := newRetryFakeTrackRepo()
+	repo := acquisitiontest.NewLedger()
 	scheduler := &retryFakeScheduler{}
 	router := buildRetryRouter(repo, scheduler)
 
