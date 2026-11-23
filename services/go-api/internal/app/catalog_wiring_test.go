@@ -2,7 +2,6 @@ package app
 
 import (
 	"altune/go-api/internal/acquisition"
-	"altune/go-api/internal/app/observemetrics"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/discovery"
@@ -500,7 +499,7 @@ func TestCatalogDBTimeout_ReachesOperatorLiveMetrics(t *testing.T) {
 	r := a.mountRoutes(verifier, cat,
 		playback.NewQueueHandler(nil),
 		discovery.NewDiscoveryHandler(discovery.DiscoveryServices{}))
-	mountObserveLiveMetrics(r, verifier, operator, observemetrics.FeatureMetrics)
+	mountObserveLiveMetrics(r, verifier, operator, featureMetricsSource())
 
 	before := catalog.ReadSnapshot().DBCallTimeouts
 	start := time.Now()

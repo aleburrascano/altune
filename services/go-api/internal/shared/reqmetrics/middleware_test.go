@@ -88,7 +88,7 @@ func wrapResponseWriterOnly(next http.Handler) http.Handler {
 }
 
 func TestLatencyMiddleware_RecordingIntoTheRegistryAllocatesNothingBeyondWrappingTheWriter(t *testing.T) {
-	recording := routerWith(reqmetrics.Middleware(reqmetrics.Observe), http.StatusOK)
+	recording := routerWith(reqmetrics.Middleware(reqmetrics.NewRegistry().Observe), http.StatusOK)
 	wrappingOnly := routerWith(wrapResponseWriterOnly, http.StatusOK)
 	serveTrack(recording)
 
@@ -96,6 +96,6 @@ func TestLatencyMiddleware_RecordingIntoTheRegistryAllocatesNothingBeyondWrappin
 	withWrapOnly := testing.AllocsPerRun(200, func() { serveTrack(wrappingOnly) })
 
 	if withRegistry != withWrapOnly {
-		t.Fatalf("a request through the middleware recording into Observe = %v allocs, one that only wraps the writer = %v, want the same", withRegistry, withWrapOnly)
+		t.Fatalf("a request through the middleware recording into a registry = %v allocs, one that only wraps the writer = %v, want the same", withRegistry, withWrapOnly)
 	}
 }

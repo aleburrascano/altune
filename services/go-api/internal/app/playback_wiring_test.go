@@ -1,7 +1,6 @@
 package app
 
 import (
-	"altune/go-api/internal/app/observemetrics"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/discovery"
@@ -83,7 +82,7 @@ func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 	})
 	r := a.mountRoutes(verifier, cat, queue,
 		discovery.NewDiscoveryHandler(discovery.DiscoveryServices{}))
-	mountObserveLiveMetrics(r, verifier, operator, observemetrics.FeatureMetrics)
+	mountObserveLiveMetrics(r, verifier, operator, featureMetricsSource())
 
 	var logs bytes.Buffer
 	prev := slog.Default()

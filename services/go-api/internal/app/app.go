@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/reqmetrics"
 	"context"
 	"fmt"
 	"log/slog"
@@ -39,6 +40,7 @@ type App struct {
 	eventTap       *observe.EventTap
 	alertMonitor   *observe.AlertMonitor
 	logRing        *logging.RingBuffer
+	latency        *reqmetrics.Registry
 	eventFeed      *observe.EventFeed
 	evalMeter      *observe.EvalMeter
 	lifecycleDone  <-chan struct{}
@@ -53,6 +55,7 @@ func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
 		cfg:     cfg,
 		sem:     make(chan struct{}, cfg.AcquisitionConcurrency),
 		logRing: logRing,
+		latency: reqmetrics.NewRegistry(),
 	}
 }
 

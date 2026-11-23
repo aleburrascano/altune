@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -235,6 +236,11 @@ func callObserveAs(t *testing.T, srv http.Handler, method, path, token string) (
 	return rec.Code, rec.Body.Bytes()
 }
 
+func featureMetricsSource() observe.LiveMetricsSource {
+	latency := reqmetrics.NewRegistry()
+	return func() observe.LiveMetrics { return observemetrics.FeatureMetrics(latency) }
+}
+
 func mountObserveLiveMetrics(r chi.Router, verifier auth.TokenVerifier, principal shared.UserId, source observe.LiveMetricsSource) {
 	mountObserve(r, verifier, principal.String(), observe.NewObserveHandler(observe.Deps{LiveMetrics: source}))
 }
@@ -272,7 +278,7 @@ type observedCounterWire struct {
 func readObservedCounterWire(t *testing.T) observedCounterWire {
 	t.Helper()
 	var out observedCounterWire
-	if err := json.Unmarshal(readObservedLiveMetrics(t, observemetrics.FeatureMetrics), &out); err != nil {
+	if err := json.Unmarshal(readObservedLiveMetrics(t, (&App{latency: reqmetrics.NewRegistry()}).liveMetrics), &out); err != nil {
 		t.Fatal(err)
 	}
 	return out
@@ -321,7 +327,7 @@ func (c *observedElection) Counters() leader.Counters { return c.counters }
 
 func TestObserveLiveMetrics_CarriesSaturationKeys(t *testing.T) {
 	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
-	a := &App{eventBus: bus}
+	a := &App{eventBus: bus, latency: reqmetrics.NewRegistry()}
 	leadWith(t, a, &observedElection{counters: leader.Counters{Failures: 7}})
 	var out map[string]json.RawMessage
 	if err := json.Unmarshal(readObservedLiveMetrics(t, a.liveMetrics), &out); err != nil {
@@ -342,7 +348,7 @@ func TestObserveLiveMetrics_CarriesSaturationKeys(t *testing.T) {
 }
 
 func TestObserveLiveMetrics_ReportsEventBusDrops(t *testing.T) {
-	a := &App{eventBus: events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))}
+	a := &App{eventBus: events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), latency: reqmetrics.NewRegistry()}
 	user := shared.NewUserId(uuid.New())
 	_, unsubscribe := a.eventBus.Subscribe(user)
 	t.Cleanup(unsubscribe)
@@ -364,7 +370,7 @@ func TestObserveLiveMetrics_ReportsEventBusDrops(t *testing.T) {
 }
 
 func TestObserveLiveMetrics_CarriesAlertMonitorHealthWhenBuilt(t *testing.T) {
-	a := &App{alertMonitor: observe.NewAlertMonitor(observe.NopNotifier{}, time.Second)}
+	a := &App{alertMonitor: observe.NewAlertMonitor(observe.NopNotifier{}, time.Second), latency: reqmetrics.NewRegistry()}
 	var out map[string]json.RawMessage
 	if err := json.Unmarshal(readObservedLiveMetrics(t, a.liveMetrics), &out); err != nil {
 		t.Fatal(err)
@@ -384,7 +390,7 @@ func TestObserveLiveMetrics_CarriesAlertMonitorHealthWhenBuilt(t *testing.T) {
 }
 
 func TestObserveLiveMetrics_OmitsAlertMonitorWhenNil(t *testing.T) {
-	a := &App{}
+	a := &App{latency: reqmetrics.NewRegistry()}
 	var out map[string]json.RawMessage
 	if err := json.Unmarshal(readObservedLiveMetrics(t, a.liveMetrics), &out); err != nil {
 		t.Fatal(err)
@@ -417,9 +423,9 @@ type observedProviderWire struct {
 	} `json:"latency"`
 }
 
-func readObservedProviderWire(t *testing.T) (observedProviderWire, []byte) {
+func readObservedProviderWire(t *testing.T, a *App) (observedProviderWire, []byte) {
 	t.Helper()
-	raw := readObservedLiveMetrics(t, observemetrics.FeatureMetrics)
+	raw := readObservedLiveMetrics(t, a.liveMetrics)
 	var out observedProviderWire
 	if err := json.Unmarshal(raw, &out); err != nil {
 		t.Fatal(err)
@@ -428,7 +434,8 @@ func readObservedProviderWire(t *testing.T) (observedProviderWire, []byte) {
 }
 
 func TestObserveLiveMetrics_CarriesProviderBreakerAndLatency(t *testing.T) {
-	before, _ := readObservedProviderWire(t)
+	a := New(&config.Config{}, nil)
+	before, _ := readObservedProviderWire(t, a)
 
 	const secret = "supersecretquery"
 	for url, status := range map[string]int{
@@ -445,12 +452,17 @@ func TestObserveLiveMetrics_CarriesProviderBreakerAndLatency(t *testing.T) {
 	pb.EnrichmentBreakerOpened()
 	pb.EnrichmentBreakerRejected()
 	defer pb.EnrichmentBreakerClosed()
-	const route = "/v1/observe-live-snapshot-probe/{id}"
-	reqmetrics.Observe(route, 4*time.Millisecond, http.StatusOK)
-	reqmetrics.Observe(route, time.Millisecond, http.StatusNotFound)
-	reqmetrics.Observe(route, time.Millisecond, http.StatusBadGateway)
+	const route = "/v1/observe-live-snapshot-probe/{status}"
+	router := a.newRouter(apiWriteTimeout)
+	router.Get(route, func(w http.ResponseWriter, r *http.Request) {
+		status, _ := strconv.Atoi(chi.URLParam(r, "status"))
+		w.WriteHeader(status)
+	})
+	for _, status := range []int{http.StatusOK, http.StatusNotFound, http.StatusBadGateway} {
+		router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/observe-live-snapshot-probe/"+strconv.Itoa(status), nil))
+	}
 
-	got, raw := readObservedProviderWire(t)
+	got, raw := readObservedProviderWire(t, a)
 	if got.Providers["deezer"].OK != before.Providers["deezer"].OK+1 {
 		t.Errorf("providers.deezer.ok = %d, want %d", got.Providers["deezer"].OK, before.Providers["deezer"].OK+1)
 	}
@@ -610,7 +622,7 @@ func TestObserveLiveMetrics_ReportsEventTapAndFeedDrops(t *testing.T) {
 	if feed.Dropped() == 0 {
 		t.Fatal("precondition: an unread subscriber never overflowed, so the feed dropped nothing")
 	}
-	a := &App{eventFeed: feed, eventTap: tap}
+	a := &App{eventFeed: feed, eventTap: tap, latency: reqmetrics.NewRegistry()}
 	var out struct {
 		EventTap eventTapStats `json:"event_tap"`
 	}
