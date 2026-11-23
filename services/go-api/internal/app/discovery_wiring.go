@@ -1,6 +1,7 @@
 package app
 
 import (
+	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/telemetry"
@@ -34,7 +35,7 @@ func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*
 
 func (a *App) discoveryDeps(ctx context.Context, cf clientFactory) discovery.Deps {
 	deps := configuredDiscoveryDeps(ctx, a.cfg, cf)
-	deps.Background = &a.wg
+	deps.Background = a.jobs.Background()
 	deps.Pool = a.pool
 	deps.Redis = a.redisClient
 	deps.ClientEvents = a.discoveryClientEvents()
@@ -104,9 +105,9 @@ func (a *App) discoveryClientEvents() *telemetry.ClientEvents {
 func (a *App) startDiscoveryBackgroundJobs(ctx context.Context, disc *discovery.Discovery) {
 	a.startUnreleasedRefresh(disc.UnreleasedRefresh)
 	if a.cfg.BehavioralRankingEnabled {
-		a.startEveryInstanceTicker(ctx, jobBehavioralRankingRefresh, 30*time.Minute, func(ctx context.Context) error {
+		a.jobs.EveryInstance(ctx, jobs.BehavioralRankingRefresh, 30*time.Minute, func(ctx context.Context) error {
 			if err := disc.Search.RefreshBehavioralScores(ctx); err != nil {
-				slog.WarnContext(ctx, string(jobBehavioralRankingRefresh)+" failed", "error", err)
+				slog.WarnContext(ctx, string(jobs.BehavioralRankingRefresh)+" failed", "error", err)
 				return err
 			}
 			return nil

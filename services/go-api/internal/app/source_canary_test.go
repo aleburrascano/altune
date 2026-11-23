@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/app/jobs"
 	"bytes"
 	"context"
 	"errors"
@@ -120,7 +121,7 @@ func TestStartSourceCanary_DoesNotRegisterTheJobWhenEverySourceIsDisabled(t *tes
 	a := &App{}
 	a.startSourceCanary(context.Background(), acquisition.NewYtDlpAudioSearcher("", "", ""), true, newYTMSearchClient(), sourceToggles{})
 
-	if _, ok := a.SetJobEnabled(jobAcquisitionSourceCanary, false); ok {
+	if _, ok := a.jobs.SetEnabled(jobs.AcquisitionSourceCanary, false); ok {
 		t.Fatal("job was registered despite every canaried source being disabled")
 	}
 }
@@ -129,7 +130,7 @@ func TestStartSourceCanary_DoesNotRegisterTheJobWhenNoProbeIsAvailable(t *testin
 	a := &App{}
 	a.startSourceCanary(context.Background(), acquisition.NewYtDlpAudioSearcher("", "", ""), false, nil, sourceToggles{ytMusic: true, ytDlp: true})
 
-	if _, ok := a.SetJobEnabled(jobAcquisitionSourceCanary, false); ok {
+	if _, ok := a.jobs.SetEnabled(jobs.AcquisitionSourceCanary, false); ok {
 		t.Fatal("job was registered despite yt-dlp being unavailable and no InnerTube client")
 	}
 }
@@ -141,7 +142,7 @@ func TestStartSourceCanary_RegistersTheJobWhenYtDlpIsAvailable(t *testing.T) {
 
 	a.startSourceCanary(ctx, acquisition.NewYtDlpAudioSearcher("", "", ""), true, nil, sourceToggles{ytMusic: true, ytDlp: true})
 
-	if _, ok := a.SetJobEnabled(jobAcquisitionSourceCanary, true); !ok {
+	if _, ok := a.jobs.SetEnabled(jobs.AcquisitionSourceCanary, true); !ok {
 		t.Fatal("job was not registered despite yt-dlp being reported available")
 	}
 }
@@ -153,7 +154,7 @@ func TestStartSourceCanary_RegistersTheJobForInnerTubeWhenYtDlpIsUnavailable(t *
 
 	a.startSourceCanary(ctx, nil, false, newYTMSearchClient(), sourceToggles{ytMusic: true, ytDlp: true})
 
-	if _, ok := a.SetJobEnabled(jobAcquisitionSourceCanary, true); !ok {
+	if _, ok := a.jobs.SetEnabled(jobs.AcquisitionSourceCanary, true); !ok {
 		t.Fatal("job was not registered despite the InnerTube probe being available")
 	}
 }

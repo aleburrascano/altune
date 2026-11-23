@@ -1,6 +1,7 @@
 package app
 
 import (
+	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe"
 	"altune/go-api/internal/playback"
@@ -15,7 +16,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -254,8 +254,8 @@ func TestAlertConditions_WatchTheConfiguredCookieJar(t *testing.T) {
 func TestJobFailingCondition(t *testing.T) {
 	ctx := context.Background()
 	a := &App{}
-	name := jobDeletedIdentityErasure
-	jc := a.job(name)
+	name := jobs.DeletedIdentityErasure
+	jc := a.jobs.Control(name)
 	cond := buildJobCondition(name, jc)
 
 	if cond.Key != "job_failing:deleted identity erasure" {
@@ -278,30 +278,17 @@ func TestJobFailingCondition(t *testing.T) {
 		t.Fatalf("message = %q, want job name and no error text", got.Message)
 	}
 
-	if _, ok := a.SetJobEnabled(name, false); !ok {
+	if _, ok := a.jobs.SetEnabled(name, false); !ok {
 		t.Fatal("job not registered")
 	}
 	if got := cond.Eval(ctx); got != nil {
 		t.Fatalf("disabled job fired: %+v", got)
 	}
-	a.SetJobEnabled(name, true)
+	a.jobs.SetEnabled(name, true)
 
 	jc.Record(nil)
 	if got := cond.Eval(ctx); got != nil {
 		t.Fatalf("recovered job still firing: %+v", got)
-	}
-}
-
-func TestStartAlertMonitor_RegistersToStartWhenLeader(t *testing.T) {
-	a := &App{cfg: &config.Config{}}
-	a.startAlertMonitor(context.Background())
-
-	registered := false
-	for _, job := range a.backgroundStarts {
-		registered = registered || job.name == jobAlertMonitor
-	}
-	if !registered {
-		t.Error("the alert monitor is not registered to start when leader")
 	}
 }
 
@@ -315,9 +302,7 @@ func TestStartAlertMonitor_PassesEvaluateItsConditions(t *testing.T) {
 		}
 		ctx, cancel := context.WithCancel(t.Context())
 		a.startAlertMonitor(ctx)
-		for _, job := range a.backgroundStarts {
-			job.start(ctx)
-		}
+		a.jobs.Lead(ctx, &leaderElection{})
 
 		time.Sleep(31 * time.Second)
 		synctest.Wait()
@@ -327,6 +312,7 @@ func TestStartAlertMonitor_PassesEvaluateItsConditions(t *testing.T) {
 		}
 		cancel()
 		a.alertMonitor.Shutdown(context.Background())
+		a.jobs.Background().Wait()
 	})
 }
 
@@ -339,7 +325,7 @@ func TestAlertConditions_AlwaysWatchCoverage(t *testing.T) {
 		byKey[c.Key] = c
 	}
 	want := []string{"dependency_down", "coverage_zero_result", "coverage_query_failing", "youtube_cookies_signed_out"}
-	for _, name := range alertableJobs {
+	for _, name := range jobs.Alertable() {
 		want = append(want, "job_failing:"+string(name))
 	}
 	if len(conditions) != len(want) {
@@ -419,8 +405,8 @@ func TestStartAlertMonitor_NotifierFollowsAlertConfig(t *testing.T) {
 func TestJobFailingCondition_UnreadableIdentityStoreFiresAfterEscalation(t *testing.T) {
 	ctx := context.Background()
 	a := &App{}
-	name := jobDeletedIdentityErasure
-	jc := a.job(name)
+	name := jobs.DeletedIdentityErasure
+	jc := a.jobs.Control(name)
 	cond := buildJobCondition(name, jc)
 	sweepErr := fmt.Errorf("deleted identity sweep idle: %w", playback.ErrIdentityStoreUnavailable)
 
@@ -430,36 +416,5 @@ func TestJobFailingCondition_UnreadableIdentityStoreFiresAfterEscalation(t *test
 
 	if got := cond.Eval(ctx); got == nil {
 		t.Fatal("unreadable identity store for consecutive runs produced no alert")
-	}
-}
-
-func TestAlertableJobs_PinnedInOrder(t *testing.T) {
-	want := []jobName{
-		jobOrphanedAudioReconcile,
-		jobBehavioralCorpusRefresh,
-		jobDiscographyEventPrune,
-		jobVocabularyRefresh,
-		jobBehavioralRankingRefresh,
-		jobDeletedIdentityErasure,
-		jobAcquisitionSourceCanary,
-		jobAcquisitionPrune,
-		jobAcquisitionUpgrade,
-		jobUnreleasedRefresh,
-	}
-	if !reflect.DeepEqual(alertableJobs, want) {
-		t.Fatalf("alertableJobs = %v, want %v", alertableJobs, want)
-	}
-}
-
-func TestAlertableJobs_ExclusionsAreExplicit(t *testing.T) {
-	excluded := map[jobName]bool{jobStreamRecovery: true}
-	alertable := map[jobName]bool{}
-	for _, name := range alertableJobs {
-		alertable[name] = true
-	}
-	for _, name := range allJobNameConsts {
-		if alertable[name] == excluded[name] {
-			t.Fatalf("job %q alertable=%v excluded=%v: exactly one must hold", name, alertable[name], excluded[name])
-		}
 	}
 }

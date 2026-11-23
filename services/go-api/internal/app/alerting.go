@@ -1,6 +1,7 @@
 package app
 
 import (
+	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe"
 	"altune/go-api/internal/shared/runloop"
@@ -15,8 +16,8 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 	notifier := a.alertNotifier(ctx)
 	conditions := a.alertConditions(discovery.NewPgxEventStore(a.pool))
 	a.alertMonitor = observe.NewAlertMonitor(notifier, 30*time.Second, conditions...).
-		WithLeadership(a.leaderContext)
-	a.whenLeader(jobAlertMonitor, a.alertMonitor.Start)
+		WithLeadership(a.jobs.LeaderContext)
+	a.jobs.WhenLeader(jobs.AlertMonitor, a.alertMonitor.Start)
 }
 
 func (a *App) alertConditions(events coverageEvents) []observe.Condition {
@@ -25,7 +26,7 @@ func (a *App) alertConditions(events coverageEvents) []observe.Condition {
 		buildDependencyCondition(a.dependencyHealth), gap, queryFailing,
 		buildYouTubeCookiesCondition(a.newYtDlpSearcher().SignedOutSince),
 	}
-	return append(conditions, a.jobConditions(alertableJobs)...)
+	return append(conditions, a.jobConditions(jobs.Alertable())...)
 }
 
 func (a *App) alertNotifier(ctx context.Context) observe.AlertNotifier {
@@ -163,15 +164,15 @@ func (c *coverageCheck) evalQueryFailing(context.Context) *observe.Alert {
 
 const jobFailureEscalation = 3
 
-func (a *App) jobConditions(names []jobName) []observe.Condition {
+func (a *App) jobConditions(names []jobs.Name) []observe.Condition {
 	conditions := make([]observe.Condition, 0, len(names))
 	for _, name := range names {
-		conditions = append(conditions, buildJobCondition(name, a.job(name)))
+		conditions = append(conditions, buildJobCondition(name, a.jobs.Control(name)))
 	}
 	return conditions
 }
 
-func buildJobCondition(name jobName, jc *runloop.JobControl) observe.Condition {
+func buildJobCondition(name jobs.Name, jc *runloop.JobControl) observe.Condition {
 	return observe.Condition{
 		Key: "job_failing:" + string(name),
 		Eval: func(context.Context) *observe.Alert {

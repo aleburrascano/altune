@@ -11,8 +11,8 @@ func (a *App) shutdownComponents() shutdown.Components {
 		EventFeed:       shutdown.Stop(a.eventFeed),
 		EvalMeter:       shutdown.Stop(a.evalMeter),
 		Scheduler:       shutdown.Stop(a.scheduler),
-		Background:      func(context.Context) { a.wg.Wait() },
-		LeaderElection:  shutdown.Stop(a.election),
+		Background:      func(context.Context) { a.jobs.Background().Wait() },
+		LeaderElection:  shutdown.Stop(a.jobs.Election()),
 		DiscoverySearch: shutdown.Wait(a.searchSvc),
 	}
 }

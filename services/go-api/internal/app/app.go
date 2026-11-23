@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/app/shutdown"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery"
@@ -10,7 +11,6 @@ import (
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/runloop"
 	"context"
 	"fmt"
 	"log/slog"
@@ -20,7 +20,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -40,7 +39,6 @@ type App struct {
 	redisClient    *goredis.Client
 	authVerifier   authHealthChecker
 	server         *http.Server
-	wg             sync.WaitGroup
 	sem            chan struct{}
 	scheduler      *acquisition.BackgroundAcquisitionScheduler
 	vocabRefresh   *discovery.VocabularyRefreshService
@@ -54,19 +52,9 @@ type App struct {
 	evalMeter      *observe.EvalMeter
 	lifecycleDone  <-chan struct{}
 
-	election         electionController
-	backgroundStarts []backgroundJob
-
-	jobs runloop.JobRegistry
+	jobs jobs.Runner
 
 	fixtureSources *sourceTiers
-}
-
-type electionController interface {
-	Start(context.Context)
-	Await(context.Context) bool
-	LeaderContext(parent context.Context) (ctx context.Context, release context.CancelFunc, ok bool)
-	Shutdown(context.Context)
 }
 
 func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
@@ -150,7 +138,7 @@ func (a *App) setup(ctx context.Context) error {
 	a.startAlertMonitor(ctx)
 	a.wireObserve(ctx, r, verifier, a.eventTap)
 	a.startCatalogJobs(ctx, cat, playback)
-	a.startBackgroundWhenLeader(ctx)
+	a.jobs.Lead(ctx, jobs.NewElection(a.pool))
 
 	a.server = a.newServer(ctx, r)
 	return nil
@@ -199,16 +187,7 @@ func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback 
 }
 
 func (a *App) applyDisabledJobs(ctx context.Context) error {
-	for _, raw := range a.cfg.DisabledJobs {
-		name := jobName(raw)
-		if !isSwitchableJobName(name) {
-			return fmt.Errorf("DISABLED_JOBS: unknown job %q", raw)
-		}
-		if a.job(name).DisableIfEnabled() {
-			slog.InfoContext(ctx, "job disabled at startup", "job", raw)
-		}
-	}
-	return nil
+	return a.jobs.DisableAtStartup(ctx, a.cfg.DisabledJobs)
 }
 
 func (a *App) applyStartupSwitches(ctx context.Context) error {

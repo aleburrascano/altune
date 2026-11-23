@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"sync"
@@ -28,10 +29,11 @@ func idleScheduler(t *testing.T) *acquisition.BackgroundAcquisitionScheduler {
 	return scheduler
 }
 
-func startedJobNames(a *App) []jobName {
-	names := make([]jobName, 0, len(a.backgroundStarts))
-	for _, job := range a.backgroundStarts {
-		names = append(names, job.name)
+func registeredJobNames(a *App) []jobs.Name {
+	health := a.jobs.Health()
+	names := make([]jobs.Name, 0, len(health))
+	for _, h := range health {
+		names = append(names, jobs.Name(h.Name))
 	}
 	return names
 }
@@ -57,7 +59,7 @@ func TestStartAcquisitionUpgrade_StartsNothingWithoutADatabaseOrAScheduler(t *te
 
 			a.startAcquisitionUpgrade(context.Background(), scheduler)
 
-			if got := startedJobNames(a); len(got) != 0 {
+			if got := registeredJobNames(a); len(got) != 0 {
 				t.Errorf("started %v, want no upgrade job", got)
 			}
 		})
@@ -65,15 +67,17 @@ func TestStartAcquisitionUpgrade_StartsNothingWithoutADatabaseOrAScheduler(t *te
 }
 
 func TestStartAcquisitionUpgrade_StartsTheUpgradeJobWithADatabaseAndAScheduler(t *testing.T) {
-	a := &App{
-		cfg:  &config.Config{AcquisitionUpgradePerHour: 30, AcquisitionUpgradeConcurrency: 1},
-		pool: lazyPool(t),
+	build := func(t *testing.T) *App {
+		a := &App{
+			cfg:  &config.Config{AcquisitionUpgradePerHour: 30, AcquisitionUpgradeConcurrency: 1},
+			pool: lazyPool(t),
+		}
+		a.startAcquisitionUpgrade(context.Background(), idleScheduler(t))
+		if got := registeredJobNames(a); len(got) != 1 || got[0] != jobs.AcquisitionUpgrade {
+			t.Fatalf("registered %v, want [%s]", got, jobs.AcquisitionUpgrade)
+		}
+		return a
 	}
 
-	a.startAcquisitionUpgrade(context.Background(), idleScheduler(t))
-
-	got := startedJobNames(a)
-	if len(got) != 1 || got[0] != jobAcquisitionUpgrade {
-		t.Errorf("started %v, want [%s]", got, jobAcquisitionUpgrade)
-	}
+	assertLeaderOnly(t, jobs.AcquisitionUpgrade, build)
 }

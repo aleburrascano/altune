@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/app/jobs"
 	"context"
 	"fmt"
 	"log/slog"
@@ -21,7 +22,7 @@ func (a *App) startSourceCanary(ctx context.Context, searcher *acquisition.YtDlp
 	if len(canaries) == 0 {
 		return
 	}
-	a.startSimpleJob(jobAcquisitionSourceCanary, sourceCanaryInterval, func(ctx context.Context) error {
+	a.startSimpleJob(jobs.AcquisitionSourceCanary, sourceCanaryInterval, func(ctx context.Context) error {
 		return runSourceCanaries(ctx, canaries)
 	}, "interval", sourceCanaryInterval.String())
 }

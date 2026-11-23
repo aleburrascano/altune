@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/shared/binpath"
 	"context"
 	"net/http"
@@ -37,6 +38,6 @@ func (a *App) startAcquisitionUpgrade(ctx context.Context, scheduler *acquisitio
 	planner := acquisition.NewUpgradePlanner(acquisition.NewPgxUpgradeStore(a.pool), scheduler, a.cfg.AcquisitionUpgradeConcurrency, a.cfg.AcquisitionUpgradeRetryAfter).CheckingUploads().
 		RescuingLowBitrate(a.cfg.AcquisitionLowBitrateFloorKbps)
 	interval := acquisition.UpgradeInterval(a.cfg.AcquisitionUpgradePerHour)
-	a.startLoggedJob(ctx, jobAcquisitionUpgrade, interval, planner.PlanNext,
+	a.startLoggedJob(ctx, jobs.AcquisitionUpgrade, interval, planner.PlanNext,
 		"interval", interval.String())
 }

@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/app/catalogdiscovery"
 	"altune/go-api/internal/app/discoverycatalog"
+	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe"
@@ -196,7 +197,7 @@ func (a *App) buildAcquisitionScheduler(
 			acquisition.WithJobNotifier(acquisition.NewPgxJobNotifier(a.pool)),
 			acquisition.WithOutcomeRecorder(acquisition.NewPgxOutcomeStore(a.pool)))
 	}
-	return acquisition.NewBackgroundAcquisitionScheduler(acquireSvc, &a.wg, a.sem, schedulerOpts...)
+	return acquisition.NewBackgroundAcquisitionScheduler(acquireSvc, a.jobs.Background(), a.sem, schedulerOpts...)
 }
 
 type storedAudioReader struct {
@@ -268,7 +269,7 @@ func (a *App) wireCatalogServices(
 		backfillFeaturedSvc:   catalog.NewBackfillFeaturedService(catalogTrackRepo, catalogTrackRepo, featuredBridge, catalog.WithBackfillClock(time.Now)),
 		listFeaturingSvc:      catalog.NewListFeaturingService(catalogTrackRepo),
 		getTrackStatusSvc:     catalog.NewGetTrackStatusService(catalogTrackRepo),
-		streamTrackSvc:        catalog.NewStreamTrackService(catalogTrackRepo, audio.audioStore, catalog.WithStreamScheduler(audio.scheduler), catalog.WithStreamMetrics(audioStoreMetrics), catalog.WithStreamRecoverySwitch(a.jobSwitch(jobStreamRecovery))),
+		streamTrackSvc:        catalog.NewStreamTrackService(catalogTrackRepo, audio.audioStore, catalog.WithStreamScheduler(audio.scheduler), catalog.WithStreamMetrics(audioStoreMetrics), catalog.WithStreamRecoverySwitch(a.jobs.Switch(jobs.StreamRecovery))),
 		audioURLSvc: catalog.NewAudioURLService(catalogTrackRepo, audio.audioStore,
 			catalog.WithAudioURLMetrics(audioStoreMetrics), catalog.WithAudioURLClock(time.Now)),
 	}

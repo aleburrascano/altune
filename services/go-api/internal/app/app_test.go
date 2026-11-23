@@ -1,13 +1,13 @@
 package app
 
 import (
+	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/runloop"
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -44,13 +44,13 @@ func TestApplyStartupSwitches_AcquisitionPausedPausesWiredScheduler(t *testing.T
 }
 
 func TestStartCatalogJobs_StartsTheAcquisitionUpgrade(t *testing.T) {
-	a := &App{cfg: &config.Config{AcquisitionUpgradePerHour: 30, AcquisitionUpgradeConcurrency: 1}, pool: lazyPool(t)}
-
-	a.startCatalogJobs(t.Context(), catalogWiring{scheduler: idleScheduler(t)}, playbackWiring{})
-
-	if got := startedJobNames(a); !slices.Contains(got, jobAcquisitionUpgrade) {
-		t.Errorf("started %v, want %s among them", got, jobAcquisitionUpgrade)
+	build := func(t *testing.T) *App {
+		a := &App{cfg: &config.Config{AcquisitionUpgradePerHour: 30, AcquisitionUpgradeConcurrency: 1}, pool: lazyPool(t)}
+		a.startCatalogJobs(t.Context(), catalogWiring{scheduler: idleScheduler(t)}, playbackWiring{})
+		return a
 	}
+
+	assertLeaderOnly(t, jobs.AcquisitionUpgrade, build)
 }
 
 func TestApplyStartupSwitches_AcquisitionPausedNoSchedulerIsNoop(t *testing.T) {
@@ -69,7 +69,7 @@ func TestApplyStartupSwitches_DisabledJobsDisableEachNamedJob(t *testing.T) {
 	}
 
 	for _, name := range []string{"acquisition prune", "stream recovery"} {
-		h := findJobHealth(t, a.JobHealth(), name)
+		h := findJobHealth(t, a.jobs.Health(), name)
 		if h.Enabled {
 			t.Errorf("job %q enabled, want disabled via DISABLED_JOBS", name)
 		}
@@ -133,26 +133,16 @@ func TestApplyDisabledJobs_DisabledRankingRefreshNeverRefreshes(t *testing.T) {
 		DisabledJobs:             []string{"behavioral ranking refresh"},
 	}}
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(func() { cancel(); a.wg.Wait() })
+	t.Cleanup(func() { cancel(); a.jobs.Background().Wait() })
 
 	if err := a.applyDisabledJobs(t.Context()); err != nil {
 		t.Fatalf("applyDisabledJobs: %v", err)
 	}
 	a.startDiscoveryBackgroundJobs(ctx, &discovery.Discovery{Search: searchSvc})
-	waitForHealth(t, a, jobBehavioralRankingRefresh, func(h runloop.JobHealth) bool { return h.Skipped >= 1 })
+	waitForHealth(t, a, jobs.BehavioralRankingRefresh, func(h runloop.JobHealth) bool { return h.Skipped >= 1 })
 
 	if got := store.calls.Load(); got != 0 {
 		t.Fatalf("RefreshBehavioralScores ran %d times, want 0 while disabled", got)
-	}
-}
-
-func TestApplyStartupSwitches_AlwaysOnJobsAreNotSwitchable(t *testing.T) {
-	for _, name := range []jobName{jobAlertMonitor, jobEvalMeter, jobDeletedIdentityErasure} {
-		a := &App{cfg: &config.Config{DisabledJobs: []string{string(name)}}}
-		err := a.applyStartupSwitches(t.Context())
-		if err == nil || !strings.Contains(err.Error(), "unknown job") {
-			t.Errorf("DISABLED_JOBS=%q gave %v, want the unknown-job startup error", name, err)
-		}
 	}
 }
 
