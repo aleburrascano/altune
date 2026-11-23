@@ -1,9 +1,13 @@
 package reqmetrics_test
 
 import (
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/reqmetrics"
+	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -42,6 +46,33 @@ func TestLatencyMiddleware_RecordPanicDoesNotFailRequest(t *testing.T) {
 	}
 	if rec.Body.String() != "ok" {
 		t.Fatalf("body = %q, want %q", rec.Body.String(), "ok")
+	}
+}
+
+func TestLatencyMiddleware_RecordPanicIsLoggedOnceWithTheRequestID(t *testing.T) {
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	ring := logging.Setup("error", false)
+	panicRec := func(string, time.Duration, int) { panic("histogram exploded") }
+	req := httptest.NewRequest(http.MethodGet, "/v1/tracks/42", nil)
+	req = req.WithContext(logging.WithCorrelationID(context.Background(), "corr-reqm-3"))
+
+	routerRecordingWith(panicRec, http.StatusOK).ServeHTTP(httptest.NewRecorder(), req)
+
+	var found []logging.CapturedRecord
+	for _, r := range ring.Snapshot() {
+		if r.Message == "reqmetrics.record_panic" {
+			found = append(found, r)
+		}
+	}
+	if len(found) != 1 {
+		t.Fatalf("captured %d reqmetrics.record_panic records, want exactly 1: a metrics panic must not be silent", len(found))
+	}
+	if found[0].Level != slog.LevelError.String() || found[0].Attrs["corr_id"] != "corr-reqm-3" {
+		t.Errorf("record = level %s corr_id %q, want ERROR with the request's corr_id", found[0].Level, found[0].Attrs["corr_id"])
+	}
+	if !strings.Contains(found[0].Attrs["panic"], "histogram exploded") {
+		t.Errorf("panic = %q, want the recovered value", found[0].Attrs["panic"])
 	}
 }
 
