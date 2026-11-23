@@ -1,6 +1,7 @@
 package events
 
 import (
+	"altune/go-api/internal/shared/events/internal/core/idfloor"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"log/slog"
@@ -44,9 +45,7 @@ type InProcessBus struct {
 	highestIssuedID atomic.Uint64
 	dropped         atomic.Uint64
 	now             func() time.Time
-	idFloor         *idFloor
-
-	beforeEvictDelete func(key string)
+	idFloor         *idfloor.Floor
 }
 
 func (b *InProcessBus) Dropped() uint64 { return b.dropped.Load() }
@@ -55,14 +54,10 @@ func (b *InProcessBus) HighestIssuedID() uint64 { return b.highestIssuedID.Load(
 
 var _ Publisher = (*InProcessBus)(nil)
 
-func NewInProcessBus() *InProcessBus {
-	return newBus(time.Now, defaultIDFloorPath())
-}
-
-func newBus(now func() time.Time, idFloorPath string) *InProcessBus {
-	floor := newIDFloor(idFloorPath)
+func NewInProcessBus(now func() time.Time, idFloorPath string) *InProcessBus {
+	floor := idfloor.New(idFloorPath)
 	b := &InProcessBus{ringCap: defaultRingSize, now: now, idFloor: floor}
-	b.highestIssuedID.Store(floor.reserveAbove(uint64(now().UnixNano())))
+	b.highestIssuedID.Store(floor.ReserveAbove(uint64(now().UnixNano())))
 	return b
 }
 
@@ -87,12 +82,7 @@ func (b *InProcessBus) evictIdleUsers() {
 	cutoff := b.now().Add(-userIdleTTL)
 	b.users.Range(func(key, value any) bool {
 		us := value.(*userState)
-		us.evictIfReclaimable(cutoff, func() {
-			if b.beforeEvictDelete != nil {
-				b.beforeEvictDelete(key.(string))
-			}
-			b.users.CompareAndDelete(key, us)
-		})
+		us.evictIfReclaimable(cutoff, func() { b.users.CompareAndDelete(key, us) })
 		return true
 	})
 }
@@ -152,7 +142,7 @@ func (b *InProcessBus) recordIssuedID(id uint64) {
 			return
 		}
 		if b.highestIssuedID.CompareAndSwap(cur, id) {
-			b.idFloor.reserveAbove(id)
+			b.idFloor.ReserveAbove(id)
 			return
 		}
 	}

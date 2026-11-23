@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -72,7 +73,7 @@ func readLineBefore(t *testing.T, r *bufio.Reader, deadline <-chan time.Time) st
 }
 
 func TestSSEHandler_CaughtUpReconnectStreamsLiveEvents(t *testing.T) {
-	bus := events.NewInProcessBus()
+	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 	bus.Publish(context.Background(), uid, "seed", map[string]any{"k": "v"})
 
@@ -102,7 +103,7 @@ func TestSSEHandler_CaughtUpReconnectStreamsLiveEvents(t *testing.T) {
 }
 
 func TestSSEHandler_ReplayGapEmitsResync(t *testing.T) {
-	bus := events.NewInProcessBus()
+	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 	bus.Publish(context.Background(), uid, "seed", map[string]any{"k": "v"})
 
@@ -125,7 +126,7 @@ func TestSSEHandler_ReplayGapEmitsResync(t *testing.T) {
 }
 
 func TestSSEHandler_MarshalFailureEmitsResync(t *testing.T) {
-	bus := events.NewInProcessBus()
+	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 
 	srv := newTestSSEServer(t, bus, uid, 50*time.Millisecond)
@@ -144,7 +145,7 @@ func TestSSEHandler_MarshalFailureEmitsResync(t *testing.T) {
 }
 
 func TestSSEHandler_MalformedLastEventIDEmitsResync(t *testing.T) {
-	bus := events.NewInProcessBus()
+	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 	bus.Publish(context.Background(), uid, "seed", map[string]any{"k": "v"})
 
@@ -167,7 +168,7 @@ func TestSSEHandler_MalformedLastEventIDEmitsResync(t *testing.T) {
 }
 
 func TestSSEHandler_OutOfRangeLastEventIDResyncsAndStreamsLive(t *testing.T) {
-	bus := events.NewInProcessBus()
+	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 	issued, err := strconv.ParseUint(lastEventIDFor(t, bus, uid), 10, 64)
 	if err != nil {
@@ -196,7 +197,7 @@ func TestSSEHandler_OutOfRangeLastEventIDResyncsAndStreamsLive(t *testing.T) {
 }
 
 func TestSSEHandler_LastEventIDAtHighWaterMarkIsCaughtUp(t *testing.T) {
-	bus := events.NewInProcessBus()
+	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 	lastID := lastEventIDFor(t, bus, uid)
 
@@ -241,7 +242,7 @@ func TestSSEHandler_ConnectDisconnectLogsCarryCorrelationID(t *testing.T) {
 	ring := logging.Setup("debug", false)
 
 	const corrID = "corr-sse-1234"
-	bus := events.NewInProcessBus()
+	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 	h := handler.NewEventStreamHandler(bus, 0)
 	h.WithHeartbeat(50 * time.Millisecond)
@@ -297,7 +298,7 @@ func firstEventOf(t *testing.T, br *bufio.Reader, want string) string {
 }
 
 func TestSSEHandler_ResumeWithContiguousHistoryReplaysWithoutResync(t *testing.T) {
-	bus := events.NewInProcessBus()
+	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 	lastID := lastEventIDFor(t, bus, uid)
 	bus.Publish(context.Background(), uid, "missed", map[string]any{"k": "v"})
@@ -312,7 +313,7 @@ func TestSSEHandler_ResumeWithContiguousHistoryReplaysWithoutResync(t *testing.T
 const moreEventsThanTheBusRetains = 1000
 
 func TestSSEHandler_ResumeFromBeforeTheRetainedHistoryResyncs(t *testing.T) {
-	bus := events.NewInProcessBus()
+	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 	seed, err := strconv.ParseUint(lastEventIDFor(t, bus, uid), 10, 64)
 	if err != nil {
@@ -330,7 +331,7 @@ func TestSSEHandler_ResumeFromBeforeTheRetainedHistoryResyncs(t *testing.T) {
 }
 
 func TestSSEHandler_ConsecutiveLiveEventsArriveWithoutResync(t *testing.T) {
-	bus := events.NewInProcessBus()
+	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 	srv := newTestSSEServer(t, bus, uid, time.Hour)
 	resp, err := http.Get(srv.URL)
@@ -354,7 +355,7 @@ type busThatHasIssuedNothing struct{ *events.InProcessBus }
 func (busThatHasIssuedNothing) LatestID(shared.UserId) uint64 { return 0 }
 
 func TestSSEHandler_FirstLiveEventFromABusThatHadIssuedNothingIsNotAGap(t *testing.T) {
-	real := events.NewInProcessBus()
+	real := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 	h := handler.NewEventStreamHandler(busThatHasIssuedNothing{real}, 0).WithHeartbeat(time.Hour)
 	resp, err := http.Get(serveSSE(t, h, uid).URL)
@@ -420,7 +421,7 @@ func (b *busWithOverflowingSubscriber) Subscribe(userId shared.UserId) (<-chan e
 const burstBufferedByBus = 16
 
 func TestSSEHandler_DroppedLiveEventsEmitResyncBeforeNextEvent(t *testing.T) {
-	real := events.NewInProcessBus()
+	real := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 
 	overflowing := &busWithOverflowingSubscriber{InProcessBus: real, uid: uid, burst: burstBufferedByBus + 4}
@@ -465,7 +466,7 @@ func serveSSE(t *testing.T, h *handler.EventStreamHandler, uid shared.UserId) *h
 }
 
 func TestSSEHandler_EventInReplaySubscribeGapIsDelivered(t *testing.T) {
-	real := events.NewInProcessBus()
+	real := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 	lastID := lastEventIDFor(t, real, uid)
 
@@ -490,7 +491,7 @@ func TestSSEHandler_EventInReplaySubscribeGapIsDelivered(t *testing.T) {
 }
 
 func TestSSEHandler_ReplayLiveOverlapDedupesByID(t *testing.T) {
-	real := events.NewInProcessBus()
+	real := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 	lastID := lastEventIDFor(t, real, uid)
 
@@ -529,7 +530,7 @@ func TestSSEHandler_ReplayLiveOverlapDedupesByID(t *testing.T) {
 }
 
 func TestSSEHandler_EmitsHeartbeat(t *testing.T) {
-	bus := events.NewInProcessBus()
+	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 
 	srv := newTestSSEServer(t, bus, uid, 30*time.Millisecond)
@@ -596,7 +597,7 @@ func (w *blockingFlushWriter) FlushError() error {
 }
 
 func TestSSEHandler_WriteDeadlineUnblocksStalledClient(t *testing.T) {
-	bus := events.NewInProcessBus()
+	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 	h := handler.NewEventStreamHandler(bus, 0)
 	h.WithWriteTimeout(150 * time.Millisecond)
@@ -620,7 +621,7 @@ func TestSSEHandler_WriteDeadlineUnblocksStalledClient(t *testing.T) {
 }
 
 func TestSSEHandler_ContextCancelStopsStream(t *testing.T) {
-	bus := events.NewInProcessBus()
+	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 	h := handler.NewEventStreamHandler(bus, 0)
 	h.WithHeartbeat(time.Hour)
@@ -647,7 +648,7 @@ func TestSSEHandler_ContextCancelStopsStream(t *testing.T) {
 
 func TestSSEHandler_DefaultPerUserCapRejectsNinthStreamWithPlainText(t *testing.T) {
 	uid := shared.NewUserId(uuid.New())
-	h := handler.NewEventStreamHandler(events.NewInProcessBus(), 0)
+	h := handler.NewEventStreamHandler(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), 0)
 	h.WithHeartbeat(time.Hour)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.ServeHTTP(w, r.WithContext(requestuser.ContextWithUserID(r.Context(), uid)))
@@ -684,7 +685,7 @@ func TestSSEHandler_DefaultPerUserCapRejectsNinthStreamWithPlainText(t *testing.
 
 func TestSSEHandler_GlobalConnectionCapRejectsOverflowAcrossUsers(t *testing.T) {
 	const globalCap = 3
-	bus := events.NewInProcessBus()
+	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	h := handler.NewEventStreamHandler(bus, globalCap)
 	h.WithHeartbeat(time.Hour)
 	srv := newMultiUserSSEServer(t, h)
@@ -797,7 +798,7 @@ func readToEOF(t *testing.T, body io.Reader, within time.Duration) error {
 }
 
 func TestSSEHandler_StreamEndsAtTokenExpiry(t *testing.T) {
-	bus := events.NewInProcessBus()
+	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 	h := handler.NewEventStreamHandler(bus, 0)
 	h.WithHeartbeat(20 * time.Millisecond)
@@ -817,7 +818,7 @@ func TestSSEHandler_StreamEndsAtTokenExpiry(t *testing.T) {
 }
 
 func TestSSEHandler_StreamEndingAtTokenExpiryFreesItsSlot(t *testing.T) {
-	bus := events.NewInProcessBus()
+	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 	h := handler.NewEventStreamHandler(bus, 1)
 	srv := serveSSEWithTokenExpiry(t, h, uid, time.Now().Add(200*time.Millisecond))
@@ -844,7 +845,7 @@ func TestSSEHandler_StreamEndingAtTokenExpiryFreesItsSlot(t *testing.T) {
 func TestShutdown_SSEStreamEndsOnShutdownSignal(t *testing.T) {
 	uid := shared.NewUserId(uuid.New())
 	done := make(chan struct{})
-	h := handler.NewEventStreamHandler(events.NewInProcessBus(), 0).WithShutdown(done)
+	h := handler.NewEventStreamHandler(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), 0).WithShutdown(done)
 	h.WithHeartbeat(time.Hour)
 	r := httptest.NewRequest(http.MethodGet, "/v1/events", nil).
 		WithContext(requestuser.ContextWithUserID(context.Background(), uid))
@@ -865,7 +866,7 @@ func TestShutdown_SSEStreamEndsOnShutdownSignal(t *testing.T) {
 }
 
 func TestSSEHandler_DroppedTailEventResyncsAtNextHeartbeat(t *testing.T) {
-	real := events.NewInProcessBus()
+	real := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 
 	overflowing := &busWithOverflowingSubscriber{InProcessBus: real, uid: uid, burst: burstBufferedByBus + 4}
@@ -884,7 +885,7 @@ func TestSSEHandler_DroppedTailEventResyncsAtNextHeartbeat(t *testing.T) {
 }
 
 func TestSSEHandler_CaughtUpClientGetsNoResyncAtHeartbeat(t *testing.T) {
-	real := events.NewInProcessBus()
+	real := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 	srv := newTestSSEServer(t, real, uid, 20*time.Millisecond)
 
@@ -910,7 +911,7 @@ func TestSSEHandler_CaughtUpClientGetsNoResyncAtHeartbeat(t *testing.T) {
 }
 
 func TestSSEHandler_FreshConnectWithHistoryGetsNoResyncAtHeartbeat(t *testing.T) {
-	real := events.NewInProcessBus()
+	real := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := shared.NewUserId(uuid.New())
 	for i := 0; i < 5; i++ {
 		real.Publish(context.Background(), uid, "old", map[string]any{"i": i})
@@ -937,7 +938,7 @@ func TestSSEHandler_FreshConnectWithHistoryGetsNoResyncAtHeartbeat(t *testing.T)
 }
 
 func TestSSEHandler_RequestWithoutUserIsRejected(t *testing.T) {
-	h := handler.NewEventStreamHandler(events.NewInProcessBus(), 0)
+	h := handler.NewEventStreamHandler(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), 0)
 	rec := httptest.NewRecorder()
 
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/events", nil))
@@ -960,7 +961,7 @@ func (w *nonFlushingWriter) Write(b []byte) (int, error) { return len(b), nil }
 func (w *nonFlushingWriter) WriteHeader(status int)      { w.status = status }
 
 func TestSSEHandler_WriterWithoutFlushIsRejected(t *testing.T) {
-	h := handler.NewEventStreamHandler(events.NewInProcessBus(), 1).WithHeartbeat(time.Hour)
+	h := handler.NewEventStreamHandler(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), 1).WithHeartbeat(time.Hour)
 	w := &nonFlushingWriter{header: http.Header{}}
 	uid := shared.NewUserId(uuid.New())
 	r := httptest.NewRequest(http.MethodGet, "/v1/events", nil)
@@ -982,7 +983,7 @@ func TestSSEHandler_WriterWithoutFlushIsRejected(t *testing.T) {
 }
 
 func TestSSEHandler_WriterWithoutFlushGetsPlainTextBody(t *testing.T) {
-	h := handler.NewEventStreamHandler(events.NewInProcessBus(), 0)
+	h := handler.NewEventStreamHandler(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), 0)
 	uid := shared.NewUserId(uuid.New())
 	r := httptest.NewRequest(http.MethodGet, "/v1/events", nil)
 	r = r.WithContext(requestuser.ContextWithUserID(r.Context(), uid))
@@ -1009,10 +1010,11 @@ func (w *bodyCapturingWriter) Write(b []byte) (int, error) { return w.rec.Write(
 func (w *bodyCapturingWriter) WriteHeader(status int)      { w.rec.WriteHeader(status) }
 
 func TestSSEHandler_ResumeAfterUserStateLostResyncsWithNothingPublished(t *testing.T) {
-	bus := events.NewInProcessBus()
+	floorPath := filepath.Join(t.TempDir(), "event-id-floor")
+	bus := events.NewInProcessBus(time.Now, floorPath)
 	uid := shared.NewUserId(uuid.New())
 	lastID := lastEventIDFor(t, bus, uid)
-	restarted := events.NewInProcessBus()
+	restarted := events.NewInProcessBus(time.Now, floorPath)
 
 	srv := newTestSSEServer(t, restarted, uid, time.Hour)
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)

@@ -6,7 +6,9 @@ import (
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
 	"context"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -14,7 +16,7 @@ import (
 const tapBufferSize = 256
 
 func TestSubscribeAll_CapturesNeverSeenUser(t *testing.T) {
-	tp := observe.NewEventTap(events.NewInProcessBus())
+	tp := observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
 	tap, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -38,7 +40,7 @@ func TestSubscribeAll_CapturesNeverSeenUser(t *testing.T) {
 }
 
 func TestPublish_StampsCorrelationIDFromContext(t *testing.T) {
-	tp := observe.NewEventTap(events.NewInProcessBus())
+	tp := observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
 	tap, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -59,7 +61,7 @@ func TestPublish_StampsCorrelationIDFromContext(t *testing.T) {
 }
 
 func TestPublish_ContextWithoutCorrelationIDYieldsEmptyCorrID(t *testing.T) {
-	tp := observe.NewEventTap(events.NewInProcessBus())
+	tp := observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
 	tap, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -79,7 +81,7 @@ func TestPublish_ContextWithoutCorrelationIDYieldsEmptyCorrID(t *testing.T) {
 }
 
 func TestSubscribeAll_SingleConsumer(t *testing.T) {
-	tp := observe.NewEventTap(events.NewInProcessBus())
+	tp := observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
 	_, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("first SubscribeAll: %v", err)
@@ -92,7 +94,7 @@ func TestSubscribeAll_SingleConsumer(t *testing.T) {
 }
 
 func TestSubscribeAll_SlowConsumerDropsNotBlocks(t *testing.T) {
-	tp := observe.NewEventTap(events.NewInProcessBus())
+	tp := observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
 	_, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -109,7 +111,7 @@ func TestSubscribeAll_SlowConsumerDropsNotBlocks(t *testing.T) {
 }
 
 func TestTap_ReleasedAfterCancel(t *testing.T) {
-	tp := observe.NewEventTap(events.NewInProcessBus())
+	tp := observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
 	_, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -123,7 +125,7 @@ func TestTap_ReleasedAfterCancel(t *testing.T) {
 }
 
 func TestPublish_SubjectOmitsUserAuthoredText(t *testing.T) {
-	tp := observe.NewEventTap(events.NewInProcessBus())
+	tp := observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
 	tap, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -139,7 +141,7 @@ func TestPublish_SubjectOmitsUserAuthoredText(t *testing.T) {
 }
 
 func TestTap_EmitReachesSubscriberWithoutTouchingInnerPublisher(t *testing.T) {
-	bus := events.NewInProcessBus()
+	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	tp := observe.NewEventTap(bus)
 	ch, cancel, err := tp.SubscribeAll()
 	if err != nil {

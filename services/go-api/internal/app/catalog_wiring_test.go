@@ -570,7 +570,7 @@ func TestWireCatalogScheduler_RecordsOutcomeThroughThePostgresStore(t *testing.T
 		pool:           pool,
 		fixtureSources: fixtureTiers(),
 	}
-	tap := observe.NewEventTap(events.NewInProcessBus())
+	tap := observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
 	wired, err := a.wireCatalog(t.Context(), tap, &discovery.Discovery{})
 	if err != nil {
 		t.Fatalf("wireCatalog: %v", err)
@@ -668,7 +668,7 @@ func TestBuildAcquisitionScheduler_AnUpgradeWorkerClaimsAndSettlesAnEnqueuedUpgr
 	}
 	ledger := acquisition.NewTrackLedger(catalog.NewPgxTrackRepository(pool))
 	sources := sourceTiers{first: []acquisition.AudioSource{sourceWithNothing{}}}
-	scheduler := a.buildAcquisitionScheduler(t.Context(), observe.NewEventTap(events.NewInProcessBus()),
+	scheduler := a.buildAcquisitionScheduler(t.Context(), observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))),
 		&discovery.Discovery{}, ledger, audioStore, sources, acquisition.AcquisitionVerification{})
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
