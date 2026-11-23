@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -308,5 +309,24 @@ func TestRouter_HealthAndLongLivedRoutesAreNotTraced(t *testing.T) {
 		if traced := len(recorder.Ended()) > before; traced != req.traced {
 			t.Errorf("%s %s traced = %v, want %v", req.method, req.path, traced, req.traced)
 		}
+	}
+}
+
+func TestRouter_RecordsEachRequestsLatencyByRouteAndStatusClass(t *testing.T) {
+	latency := reqmetrics.NewRegistry()
+	r := router.New(router.Settings{WriteTimeout: time.Minute, RequestTimeout: time.Minute, Latency: latency})
+	const route = "/v1/latency-probe/{status}"
+	r.Get(route, func(w http.ResponseWriter, req *http.Request) {
+		status, _ := strconv.Atoi(chi.URLParam(req, "status"))
+		w.WriteHeader(status)
+	})
+
+	for _, status := range []int{http.StatusOK, http.StatusNotFound, http.StatusBadGateway} {
+		r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/latency-probe/"+strconv.Itoa(status), nil))
+	}
+
+	rl := latency.Snapshot().Routes[route]
+	if rl.Count != 3 || rl.Status.Count2xx != 1 || rl.Status.Count4xx != 1 || rl.Status.Count5xx != 1 {
+		t.Errorf("latency.routes[%q] = %+v, want count 3 and one each of 2xx/4xx/5xx", route, rl)
 	}
 }

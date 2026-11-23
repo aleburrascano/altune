@@ -3,6 +3,7 @@ package app_test
 import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/observe"
+	"altune/go-api/internal/shared/reqmetrics"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -253,5 +254,29 @@ func TestObserveHealth_ReportsADownDatabaseAndRedisWithTheirOwnErrors(t *testing
 func TestObserveHealth_WithoutRedisItIsNotConfigured(t *testing.T) {
 	if got := readObservedHealth(t, app.Handles{Pool: unreachablePool(t)}, http.StatusServiceUnavailable); got.Redis != observe.DepNotConfigured {
 		t.Errorf("redis = %q without a Redis handle, want not_configured", got.Redis)
+	}
+}
+
+func TestObserveLiveMetrics_CarriesTheLatencyTheAssembledRouterRecorded(t *testing.T) {
+	f := newJWKSFixture(t)
+	h := assembledHandler(t, f.cfg)
+	token := signedToken(t, f.key, f.operator)
+
+	if code, body := getAs(t, h, "/observe/health", token); code == http.StatusUnauthorized || code == http.StatusForbidden {
+		t.Fatalf("operator read of /observe/health = %d; body %s", code, body)
+	}
+	code, body := getAs(t, h, "/observe/metrics/live", token)
+
+	if code != http.StatusOK {
+		t.Fatalf("operator read of /observe/metrics/live = %d, want 200; body %s", code, body)
+	}
+	var got struct {
+		Latency reqmetrics.Snapshot `json:"latency"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode %s: %v", body, err)
+	}
+	if rl := got.Latency.Routes["/observe/health"]; rl.Count != 1 {
+		t.Errorf("latency.routes[/observe/health] = %+v, want the one request the assembled router served; routes %v", rl, got.Latency.Routes)
 	}
 }

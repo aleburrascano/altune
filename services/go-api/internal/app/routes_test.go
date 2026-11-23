@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -234,6 +235,35 @@ func TestRouter_V1ResponsesCarryNosniffAndNoStore(t *testing.T) {
 			}
 			if got := rec.Header().Get("Cache-Control"); got != "no-store" {
 				t.Errorf("Cache-Control = %q, want no-store", got)
+			}
+		})
+	}
+}
+
+func TestRoutes_OnlyAWiredSchedulerMountsRetryAndReacquire(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		ytMusic   bool
+		wantRoute bool
+	}{
+		{name: "no sources leaves acquisition unwired", ytMusic: false, wantRoute: false},
+		{name: "a source wires the scheduler and its retry routes", ytMusic: true, wantRoute: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newJWKSFixture(t)
+			f.cfg.YtMusicEnabled = tt.ytMusic
+			h := assembledHandler(t, f.cfg)
+			token := signedToken(t, f.key, f.operator)
+
+			for _, action := range []string{"retry", "reacquire"} {
+				req := httptest.NewRequest(http.MethodPost, "/v1/tracks/"+uuid.NewString()+"/"+action, nil)
+				req.RemoteAddr = "192.0.2.1:1234"
+				req.Header.Set("Authorization", "Bearer "+token)
+				rec := httptest.NewRecorder()
+				h.ServeHTTP(rec, req)
+				if mounted := rec.Code != http.StatusNotFound; mounted != tt.wantRoute {
+					t.Errorf("POST %s answered %d: mounted = %v, want %v", action, rec.Code, mounted, tt.wantRoute)
+				}
 			}
 		})
 	}

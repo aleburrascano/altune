@@ -19,9 +19,6 @@ func (a *App) keepSearches(disc *discovery.Discovery) {
 
 func (a *App) buildEvalRunner() EvalRunner {
 	evalSvc := a.evalSearch
-	if evalSvc == nil {
-		return nil
-	}
 	return func(ctx context.Context) (EvalResult, error) {
 		return discovery.RunSmokeEval(ctx, evalSvc, evalUserId())
 	}
