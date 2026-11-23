@@ -1,8 +1,7 @@
-package spotify
+package spotify_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
 	"encoding/json"
 	"errors"
 	"io"
@@ -13,19 +12,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
-
-func newContentSpotifyAdapter(srv *httptest.Server) *SpotifyAdapter {
-	a := NewSpotifyAdapter(srv.Client())
-	a.pathfinderURL = srv.URL
-	a.resolver.Cached = &spotifySession{
-		accessToken:  "test-access-token",
-		accessExpiry: providertest.FarFuture,
-		clientToken:  "test-client-token",
-		clientExpiry: providertest.FarFuture,
-	}
-	return a
-}
 
 func operationNameOf(t *testing.T, r *http.Request) string {
 	t.Helper()
@@ -60,7 +48,7 @@ func TestSpotifyAdapter_GetArtistAlbums(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	a := newContentSpotifyAdapter(srv)
+	a := newTestSpotifyAdapter(t, srv)
 	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSpotify, "artist-1")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums error = %v", err)
@@ -94,7 +82,7 @@ func TestSpotifyAdapter_GetArtistTopTracks(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	a := newContentSpotifyAdapter(srv)
+	a := newTestSpotifyAdapter(t, srv)
 	tracks, err := a.GetArtistTopTracks(t.Context(), domain.ProviderSpotify, "artist-1")
 	if err != nil {
 		t.Fatalf("GetArtistTopTracks error = %v", err)
@@ -124,7 +112,7 @@ func TestSpotifyAdapter_GetAlbumTracks(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	a := newContentSpotifyAdapter(srv)
+	a := newTestSpotifyAdapter(t, srv)
 	tracks, err := a.GetAlbumTracks(t.Context(), domain.ProviderSpotify, "album-1")
 	if err != nil {
 		t.Fatalf("GetAlbumTracks error = %v", err)
@@ -153,9 +141,12 @@ func TestSpotifyAdapter_GetAlbumTracks_namesEveryOtherArtistAsFeatured(t *testin
 	}))
 	defer srv.Close()
 
-	tracks, err := newContentSpotifyAdapter(srv).GetAlbumTracks(t.Context(), domain.ProviderSpotify, "album-1")
+	tracks, err := newTestSpotifyAdapter(t, srv).GetAlbumTracks(t.Context(), domain.ProviderSpotify, "album-1")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(tracks) != 2 {
+		t.Fatalf("got %d tracks, want 2", len(tracks))
 	}
 
 	feats := domain.FeaturedArtistsFromExtras(tracks[0].Extras)
@@ -173,28 +164,27 @@ func TestSpotifyAdapter_Content_surfacesGraphQLError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	a := newContentSpotifyAdapter(srv)
+	a := newTestSpotifyAdapter(t, srv)
 	_, err := a.GetArtistAlbums(t.Context(), domain.ProviderSpotify, "artist-1")
 	if err == nil || !strings.Contains(err.Error(), "PersistedQueryNotFound") {
 		t.Fatalf("err = %v, want a surfaced GraphQL error", err)
 	}
 }
 
-func TestSpotifyAdapter_doPathfinderContent_non200ErrorTextAndStatusPinned(t *testing.T) {
+func TestSpotifyAdapter_Content_non200ErrorTextPinnedAndNotAnAuthRetry(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
 		_, _ = w.Write([]byte(`{"errors":[{"message":"must not be surfaced"}]}`))
 	}))
 	defer srv.Close()
+	tokens := serveTokens(t, tokenEndpoints{})
 
-	a := newContentSpotifyAdapter(srv)
-	var out any
-	status, err := a.doPathfinderContent(t.Context(), a.resolver.Cached, "queryArtistDiscographyAll", "hash", map[string]any{}, &out)
+	_, err := newSpotifyAdapterWithTokens(tokens, srv, time.Now).GetArtistTopTracks(t.Context(), domain.ProviderSpotify, "artist-1")
 	if err == nil || err.Error() != "http status 429" {
 		t.Fatalf("err = %v, want exactly %q (status gate runs before the GraphQL envelope)", err, "http status 429")
 	}
-	if status != http.StatusTooManyRequests {
-		t.Errorf("status = %d, want 429 surfaced for auth-retry branching", status)
+	if got := tokens.resolves.Load(); got != 1 {
+		t.Errorf("session resolved %d times, want 1 (a 429 is not an auth failure)", got)
 	}
 }
 
@@ -232,7 +222,7 @@ func TestSpotifyAdapter_GetArtistAlbums_paginates(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	a := newContentSpotifyAdapter(srv)
+	a := newTestSpotifyAdapter(t, srv)
 	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSpotify, "artist-1")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums error = %v", err)
@@ -271,7 +261,7 @@ func TestSpotifyAdapter_GetAlbumTracks_paginates(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	a := newContentSpotifyAdapter(srv)
+	a := newTestSpotifyAdapter(t, srv)
 	tracks, err := a.GetAlbumTracks(t.Context(), domain.ProviderSpotify, "album-1")
 	if err != nil {
 		t.Fatalf("GetAlbumTracks error = %v", err)
@@ -304,7 +294,7 @@ func TestSpotifyAdapter_GetArtistAlbums_laterPageErrorKeepsEarlierPages(t *testi
 	}))
 	defer srv.Close()
 
-	a := newContentSpotifyAdapter(srv)
+	a := newTestSpotifyAdapter(t, srv)
 	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSpotify, "artist-1")
 	var partial *domain.PartialResultError
 	if !errors.As(err, &partial) || partial.Page != 1 {
@@ -330,7 +320,7 @@ func TestSpotifyAdapter_GetAlbumTracks_laterPageErrorKeepsEarlierPages(t *testin
 	}))
 	defer srv.Close()
 
-	a := newContentSpotifyAdapter(srv)
+	a := newTestSpotifyAdapter(t, srv)
 	tracks, err := a.GetAlbumTracks(t.Context(), domain.ProviderSpotify, "album-1")
 	var partial *domain.PartialResultError
 	if !errors.As(err, &partial) || partial.Page != 1 {
@@ -363,28 +353,8 @@ func TestSpotifyAdapter_GetArtistAlbums_reResolvesSessionOnAuthFailure(t *testin
 	}))
 	defer srv.Close()
 
-	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
-		case "/server-time":
-			_ = json.NewEncoder(w).Encode(map[string]int64{"serverTime": 1700000000})
-		case "/token":
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"accessToken":                      "fresh-access-token",
-				"accessTokenExpirationTimestampMs": 99999999999999,
-			})
-		case "/clienttoken":
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"granted_token": map[string]any{"token": "fresh-client-token", "expires_after_seconds": 999999},
-			})
-		}
-	}))
-	defer tokenSrv.Close()
-
-	a := newTestSpotifyAdapter(srv)
-	a.resolver.serverTimeURL = tokenSrv.URL + "/server-time"
-	a.resolver.accessTokenURL = tokenSrv.URL + "/token"
-	a.resolver.clientTokenURL = tokenSrv.URL + "/clienttoken"
+	tokens := serveTokens(t, tokenEndpoints{accessToken: grantAccessInTurn(farFutureExpiry, "stale-token", "fresh-access-token")})
+	a := newSpotifyAdapterWithTokens(tokens, srv, time.Now)
 
 	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSpotify, "artist-1")
 	if err != nil {
@@ -395,16 +365,6 @@ func TestSpotifyAdapter_GetArtistAlbums_reResolvesSessionOnAuthFailure(t *testin
 	}
 	if len(albums) != 1 || albums[0].Title != "After Hours" {
 		t.Errorf("albums = %+v", albums)
-	}
-}
-
-func TestMapSpotifyAlbumTrack_CarriesTheProvidersTrackAndDiscNumber(t *testing.T) {
-	r, ok := mapSpotifyAlbumTrack(spotifyAlbumTrack{Name: "Bonus One", URI: "spotify:track:abc", TrackNumber: 1, DiscNumber: 2})
-	if !ok {
-		t.Fatal("track dropped")
-	}
-	if r.TrackPosition != (domain.TrackPosition{Disc: 2, Track: 1}) {
-		t.Errorf("track position = %+v, want track 1 disc 2", r.TrackPosition)
 	}
 }
 
@@ -422,7 +382,7 @@ func servePayload(t *testing.T, fixture string) *httptest.Server {
 }
 
 func TestGetAlbumTracks_PayloadFillsPositionExplicitAndContributors(t *testing.T) {
-	adapter := newContentSpotifyAdapter(servePayload(t, "payload_album_tracks_with_featured_artist.json"))
+	adapter := newTestSpotifyAdapter(t, servePayload(t, "payload_album_tracks_with_featured_artist.json"))
 
 	results, err := adapter.GetAlbumTracks(t.Context(), domain.ProviderSpotify, "41GuZcammIkupMPKH2OJ6I")
 	if err != nil || len(results) != 2 {
@@ -457,7 +417,7 @@ func TestGetAlbumTracks_PayloadFillsPositionExplicitAndContributors(t *testing.T
 }
 
 func TestSearch_PayloadFillsTrackAndAlbumContract(t *testing.T) {
-	adapter := newTestSpotifyAdapter(servePayload(t, "payload_search_track_and_album.json"))
+	adapter := newTestSpotifyAdapter(t, servePayload(t, "payload_search_track_and_album.json"))
 
 	results, err := adapter.Search(t.Context(), "sicko mode", map[domain.ResultKind]bool{domain.ResultKindTrack: true, domain.ResultKindAlbum: true})
 	if err != nil || len(results) != 2 {

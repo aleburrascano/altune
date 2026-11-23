@@ -13,9 +13,8 @@ import (
 )
 
 type SpotifyAdapter struct {
-	client        *http.Client
-	resolver      *spotifyTokenResolver
-	pathfinderURL string
+	client   *http.Client
+	resolver *spotifyTokenResolver
 }
 
 const (
@@ -27,12 +26,8 @@ const (
 	spotifySearchQueryHash   = "db61238974d27839a136c9dc02bfdbe3fab7635f21cf85976ebff9a1ee281345"
 )
 
-func NewSpotifyAdapter(client *http.Client) *SpotifyAdapter {
-	return &SpotifyAdapter{
-		client:        client,
-		resolver:      newSpotifyTokenResolver(client),
-		pathfinderURL: spotifyPathfinderURL,
-	}
+func NewSpotifyAdapter(client *http.Client, now func() time.Time) *SpotifyAdapter {
+	return &SpotifyAdapter{client: client, resolver: newSpotifyTokenResolver(client, now)}
 }
 
 func (a *SpotifyAdapter) Name() domain.ProviderName { return domain.ProviderSpotify }
@@ -85,7 +80,7 @@ func (a *SpotifyAdapter) doSearch(ctx context.Context, sess *spotifySession, que
 	}
 
 	var body spotifySearchResponse
-	status, err := providerhttp.PostJSON(ctx, a.client, a.pathfinderURL, payload, &body, spotifyPathfinderHeaders(sess)...)
+	status, err := providerhttp.PostJSON(ctx, a.client, spotifyPathfinderURL, payload, &body, spotifyPathfinderHeaders(sess)...)
 	if err != nil {
 		return nil, status, err
 	}

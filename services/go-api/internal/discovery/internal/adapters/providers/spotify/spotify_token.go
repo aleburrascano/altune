@@ -2,18 +2,14 @@ package spotify
 
 import (
 	"altune/go-api/internal/discovery/internal/adapters/providers/providerhttp"
+	"altune/go-api/internal/discovery/internal/adapters/providers/spotify/totp"
 	"context"
-	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha1"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 )
 
@@ -30,30 +26,23 @@ type spotifySession struct {
 	clientExpiry time.Time
 }
 
-func (s *spotifySession) valid() bool {
-	now := time.Now()
+func (s *spotifySession) validAt(now time.Time) bool {
 	return s != nil && now.Before(s.accessExpiry) && now.Before(s.clientExpiry)
 }
 
 type spotifyTokenResolver struct {
 	*providerhttp.CachedResolver[*spotifySession]
 	client *http.Client
-
-	serverTimeURL  string
-	accessTokenURL string
-	clientTokenURL string
+	now    func() time.Time
 }
 
-func newSpotifyTokenResolver(client *http.Client) *spotifyTokenResolver {
-	r := &spotifyTokenResolver{
-		client:         client,
-		serverTimeURL:  spotifyServerTimeURL,
-		accessTokenURL: spotifyAccessTokenURL,
-		clientTokenURL: spotifyClientTokenURL,
-	}
-	r.CachedResolver = providerhttp.NewCachedResolver("session", spotifyResolveTimeout, r.resolve, (*spotifySession).valid)
+func newSpotifyTokenResolver(client *http.Client, now func() time.Time) *spotifyTokenResolver {
+	r := &spotifyTokenResolver{client: client, now: now}
+	r.CachedResolver = providerhttp.NewCachedResolver("session", spotifyResolveTimeout, r.resolve, r.usable)
 	return r
 }
+
+func (r *spotifyTokenResolver) usable(s *spotifySession) bool { return s.validAt(r.now()) }
 
 const (
 	spotifyResolveTimeout  = 20 * time.Second
@@ -64,9 +53,9 @@ const (
 	spotifyMaxTokenSeconds = int64(spotifyMaxTokenTTL / time.Second)
 )
 
-func spotifyExpiryAfter(ttl, margin time.Duration) time.Time {
+func spotifyExpiryAfter(now time.Time, ttl, margin time.Duration) time.Time {
 	ttl = min(ttl, spotifyMaxTokenTTL)
-	return time.Now().Add(max(ttl-margin, spotifyMinSessionLife))
+	return now.Add(max(ttl-margin, spotifyMinSessionLife))
 }
 
 func (r *spotifyTokenResolver) resolve(ctx context.Context) (*spotifySession, time.Time, error) {
@@ -92,15 +81,13 @@ func (r *spotifyTokenResolver) resolveAccessToken(ctx context.Context) (string, 
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	now := time.Now().Unix()
+	now := r.now().Unix()
 
 	var lastErr error
 	for _, s := range spotifyTOTPSecrets {
-		totp := spotifyTOTPGenerate(s.secret, now)
-		totpServer := spotifyTOTPGenerate(s.secret, serverTime)
 		u := fmt.Sprintf(
 			"%s?reason=init&productType=web-player&totp=%s&totpServer=%s&totpVer=%d",
-			r.accessTokenURL, totp, totpServer, s.version,
+			spotifyAccessTokenURL, totp.Code(s.secret, now), totp.Code(s.secret, serverTime), s.version,
 		)
 
 		var body struct {
@@ -120,12 +107,12 @@ func (r *spotifyTokenResolver) resolveAccessToken(ctx context.Context) (string, 
 			lastErr = fmt.Errorf("empty access token for totp version %d", s.version)
 			continue
 		}
-		ttlMs := body.AccessTokenExpirationTimestampMs - time.Now().UnixMilli()
+		ttlMs := body.AccessTokenExpirationTimestampMs - r.now().UnixMilli()
 		if body.AccessTokenExpirationTimestampMs <= 0 || ttlMs <= 0 {
 			return "", time.Time{}, fmt.Errorf("access token expiry %d is not in the future", body.AccessTokenExpirationTimestampMs)
 		}
 		ttl := time.Duration(min(ttlMs, spotifyMaxTokenSeconds*1000)) * time.Millisecond
-		return body.AccessToken, spotifyExpiryAfter(ttl, spotifyAccessMargin), nil
+		return body.AccessToken, spotifyExpiryAfter(r.now(), ttl, spotifyAccessMargin), nil
 	}
 	return "", time.Time{}, fmt.Errorf("all totp secret versions exhausted: %w", lastErr)
 }
@@ -134,7 +121,7 @@ func (r *spotifyTokenResolver) fetchServerTime(ctx context.Context) (int64, erro
 	var body struct {
 		ServerTime int64 `json:"serverTime"`
 	}
-	if err := providerhttp.GetJSON(ctx, r.client, r.serverTimeURL, &body, providerhttp.WithHeader("User-Agent", spotifyUserAgent)); err != nil {
+	if err := providerhttp.GetJSON(ctx, r.client, spotifyServerTimeURL, &body, providerhttp.WithHeader("User-Agent", spotifyUserAgent)); err != nil {
 		return 0, err
 	}
 	if body.ServerTime <= 0 {
@@ -168,7 +155,7 @@ func (r *spotifyTokenResolver) resolveClientToken(ctx context.Context) (string, 
 			ExpiresAfterSeconds int64  `json:"expires_after_seconds"`
 		} `json:"granted_token"`
 	}
-	if _, err := providerhttp.PostJSON(ctx, r.client, r.clientTokenURL, payload, &body, spotifyClientTokenHeaders()...); err != nil {
+	if _, err := providerhttp.PostJSON(ctx, r.client, spotifyClientTokenURL, payload, &body, spotifyClientTokenHeaders()...); err != nil {
 		return "", time.Time{}, err
 	}
 	if body.GrantedToken.Token == "" {
@@ -179,7 +166,7 @@ func (r *spotifyTokenResolver) resolveClientToken(ctx context.Context) (string, 
 		return "", time.Time{}, fmt.Errorf("client token lifetime %ds is not positive", seconds)
 	}
 	ttl := time.Duration(min(seconds, spotifyMaxTokenSeconds)) * time.Second
-	return body.GrantedToken.Token, spotifyExpiryAfter(ttl, spotifyClientMargin), nil
+	return body.GrantedToken.Token, spotifyExpiryAfter(r.now(), ttl, spotifyClientMargin), nil
 }
 
 func spotifyClientTokenHeaders() []providerhttp.ReqOption {
@@ -205,46 +192,4 @@ var spotifyTOTPSecrets = []spotifyTOTPSecret{
 	{61, `,7/*F("rLJ2oxaKL^f+E1xvP@N`},
 	{60, `OmE{ZA.J^":0FG\\Uz?[@WW`},
 	{59, `{iOFn;4}<1PFYKPV?5{%u14]M>/V0hDH`},
-}
-
-const (
-	spotifyTOTPPeriod = 30
-	spotifyTOTPDigits = 6
-)
-
-func spotifyTOTPKey(secret string) []byte {
-	var b strings.Builder
-	for i := 0; i < len(secret); i++ {
-		b.WriteString(strconv.Itoa(int(secret[i]) ^ (i%33 + 9)))
-	}
-	return []byte(b.String())
-}
-
-func spotifyTOTPGenerate(secret string, unixSeconds int64) string {
-	key := spotifyTOTPKey(secret)
-	counter := uint64(unixSeconds) / spotifyTOTPPeriod
-
-	var counterBytes [8]byte
-	binary.BigEndian.PutUint64(counterBytes[:], counter)
-
-	mac := hmac.New(sha1.New, key)
-	mac.Write(counterBytes[:])
-	digest := mac.Sum(nil)
-
-	offset := digest[len(digest)-1] & 0x0F
-	code := binary.BigEndian.Uint32(digest[offset:offset+4]) & 0x7FFFFFFF
-
-	mod := uint32(1)
-	for i := 0; i < spotifyTOTPDigits; i++ {
-		mod *= 10
-	}
-	return fmtPad(int(code%mod), spotifyTOTPDigits)
-}
-
-func fmtPad(n, width int) string {
-	s := strconv.Itoa(n)
-	for len(s) < width {
-		s = "0" + s
-	}
-	return s
 }

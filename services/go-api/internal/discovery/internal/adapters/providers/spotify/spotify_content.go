@@ -131,7 +131,7 @@ func (a *SpotifyAdapter) doPathfinderContent(ctx context.Context, sess *spotifyS
 	if err != nil {
 		return 0, err
 	}
-	status, raw, err := providerhttp.PostBytesCappedOK(ctx, a.client, a.pathfinderURL, bytes.NewReader(payload), providerhttp.BodyCap, spotifyPathfinderHeaders(sess)...)
+	status, raw, err := providerhttp.PostBytesCappedOK(ctx, a.client, spotifyPathfinderURL, bytes.NewReader(payload), providerhttp.BodyCap, spotifyPathfinderHeaders(sess)...)
 	if err != nil {
 		return status, err
 	}

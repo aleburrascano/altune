@@ -14,10 +14,10 @@ type CachedResolver[T comparable] struct {
 	resolveFn func(context.Context) (T, time.Time, error)
 	validFn   func(T) bool
 
-	Mu     sync.Mutex
+	mu     sync.Mutex
 	sf     singleflight.Group
-	Cached T
-	Expiry time.Time
+	cached T
+	expiry time.Time
 }
 
 func NewCachedResolver[T comparable](
@@ -38,9 +38,9 @@ func (r *CachedResolver[T]) Get(ctx context.Context) (T, error) {
 }
 
 func (r *CachedResolver[T]) snapshot() (T, time.Time) {
-	r.Mu.Lock()
-	defer r.Mu.Unlock()
-	return r.Cached, r.Expiry
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.cached, r.expiry
 }
 
 func (r *CachedResolver[T]) resolveOnce(ctx context.Context) (T, error) {
@@ -53,9 +53,9 @@ func (r *CachedResolver[T]) resolveOnce(ctx context.Context) (T, error) {
 	if err != nil {
 		return value, err
 	}
-	r.Mu.Lock()
-	r.Cached, r.Expiry = value, valueExpiry
-	r.Mu.Unlock()
+	r.mu.Lock()
+	r.cached, r.expiry = value, valueExpiry
+	r.mu.Unlock()
 	return value, nil
 }
 
@@ -78,12 +78,12 @@ func (r *CachedResolver[T]) fresh(cached T, expiry time.Time) bool {
 }
 
 func (r *CachedResolver[T]) Invalidate(failed T) {
-	r.Mu.Lock()
-	if r.Cached == failed {
+	r.mu.Lock()
+	if r.cached == failed {
 		var zero T
-		r.Cached = zero
+		r.cached = zero
 	}
-	r.Mu.Unlock()
+	r.mu.Unlock()
 }
 
 func WithAuthRetry[T comparable, R any](

@@ -1,10 +1,10 @@
-package spotify
+package spotify_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
+	"altune/go-api/internal/discovery/internal/adapters/providers/spotify"
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,41 +12,6 @@ import (
 	"testing"
 	"time"
 )
-
-func TestSpotifyTOTPGenerate_isDeterministicSixDigits(t *testing.T) {
-	code1 := spotifyTOTPGenerate(spotifyTOTPSecrets[0].secret, 1700000000)
-	code2 := spotifyTOTPGenerate(spotifyTOTPSecrets[0].secret, 1700000000)
-	if code1 != code2 {
-		t.Errorf("same input produced different codes: %q vs %q", code1, code2)
-	}
-	if len(code1) != 6 {
-		t.Errorf("code length = %d, want 6 (zero-padded): %q", len(code1), code1)
-	}
-
-	code3 := spotifyTOTPGenerate(spotifyTOTPSecrets[0].secret, 1700000000+30)
-	if code1 == code3 {
-		t.Errorf("codes for different time steps collided: both %q (extremely unlikely, check the counter math)", code1)
-	}
-}
-
-func TestSpotifyTOTPKey_matchesKnownXORDerivation(t *testing.T) {
-	got := string(spotifyTOTPKey("AB"))
-	if got != "7272" {
-		t.Errorf("spotifyTOTPKey(%q) = %q, want %q", "AB", got, "7272")
-	}
-}
-
-func newTestSpotifyAdapter(searchSrv *httptest.Server) *SpotifyAdapter {
-	a := NewSpotifyAdapter(searchSrv.Client())
-	a.pathfinderURL = searchSrv.URL
-	a.resolver.Cached = &spotifySession{
-		accessToken:  "test-access-token",
-		accessExpiry: providertest.FarFuture,
-		clientToken:  "test-client-token",
-		clientExpiry: providertest.FarFuture,
-	}
-	return a
-}
 
 const spotifyFixtureResponse = `{
   "data": {
@@ -114,7 +79,7 @@ func TestSpotifyAdapter_Search_mapsAllKinds(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	a := newTestSpotifyAdapter(srv)
+	a := newTestSpotifyAdapter(t, srv)
 	results, err := a.Search(t.Context(), "Blinding Lights", providertest.AllKinds())
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
@@ -174,7 +139,7 @@ func TestSpotifyAdapter_Search_graphqlErrorIsSurfaced(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	a := newTestSpotifyAdapter(srv)
+	a := newTestSpotifyAdapter(t, srv)
 	results, err := a.Search(t.Context(), "Blinding Lights", providertest.AllKinds())
 	if err == nil {
 		t.Fatalf("Search() error = nil, want a surfaced GraphQL error (got %d results)", len(results))
@@ -198,7 +163,7 @@ func TestSpotifyAdapter_Search_explicitFlag(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	a := newTestSpotifyAdapter(srv)
+	a := newTestSpotifyAdapter(t, srv)
 	results, err := a.Search(t.Context(), "x", providertest.AllKinds())
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
@@ -223,40 +188,18 @@ func TestSpotifyAdapter_Search_reResolvesSessionOnAuthFailure(t *testing.T) {
 		_, _ = w.Write([]byte(spotifyFixtureResponse))
 	}))
 	defer srv.Close()
+	tokens := serveTokens(t, tokenEndpoints{accessToken: grantAccessInTurn(farFutureExpiry, "stale-token", "fresh-access-token")})
 
-	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
-		case "/server-time":
-			_ = json.NewEncoder(w).Encode(map[string]int64{"serverTime": 1700000000})
-		case "/token":
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"accessToken":                      "fresh-access-token",
-				"accessTokenExpirationTimestampMs": 99999999999999,
-			})
-		case "/clienttoken":
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"granted_token": map[string]any{"token": "fresh-client-token", "expires_after_seconds": 999999},
-			})
-		}
-	}))
-	defer tokenSrv.Close()
-
-	a := newTestSpotifyAdapter(srv)
-	a.resolver.Cached = &spotifySession{
-		accessToken: "stale-token", accessExpiry: providertest.FarFuture,
-		clientToken: "stale-client-token", clientExpiry: providertest.FarFuture,
-	}
-	a.resolver.serverTimeURL = tokenSrv.URL + "/server-time"
-	a.resolver.accessTokenURL = tokenSrv.URL + "/token"
-	a.resolver.clientTokenURL = tokenSrv.URL + "/clienttoken"
-
+	a := newSpotifyAdapterWithTokens(tokens, srv, time.Now)
 	results, err := a.Search(t.Context(), "Blinding Lights", providertest.AllKinds())
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
 	}
 	if calls != 2 {
 		t.Errorf("calls = %d, want 2 (initial 401 then retry after re-resolve)", calls)
+	}
+	if got := tokens.resolves.Load(); got != 2 {
+		t.Errorf("session resolved %d times, want 2 (the 401 drops the cached session)", got)
 	}
 	if len(results) != 3 {
 		t.Errorf("results = %d, want 3", len(results))
@@ -270,7 +213,7 @@ func TestSpotifyAdapter_Search_filtersByRequestedKinds(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	a := newTestSpotifyAdapter(srv)
+	a := newTestSpotifyAdapter(t, srv)
 	results, err := a.Search(t.Context(), "x", map[domain.ResultKind]bool{domain.ResultKindArtist: true})
 	if err != nil {
 		t.Fatalf("Search() error = %v", err)
@@ -281,82 +224,56 @@ func TestSpotifyAdapter_Search_filtersByRequestedKinds(t *testing.T) {
 }
 
 func TestSpotifyAdapter_Name(t *testing.T) {
-	a := NewSpotifyAdapter(http.DefaultClient)
+	a := spotify.NewSpotifyAdapter(http.DefaultClient, time.Now)
 	if got := a.Name(); got != domain.ProviderSpotify {
 		t.Errorf("Name() = %v, want %v", got, domain.ProviderSpotify)
 	}
 }
 
-func TestSpotifyTokenResolver_resolve(t *testing.T) {
+func TestSpotifyAdapter_Search_resolvesASessionAndSendsBothTokens(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
-		case "/server-time":
-			_ = json.NewEncoder(w).Encode(map[string]int64{"serverTime": 1700000000})
-		case "/token":
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"accessToken":                      "resolved-token",
-				"accessTokenExpirationTimestampMs": 99999999999999,
-			})
-		case "/clienttoken":
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"granted_token": map[string]any{"token": "resolved-client-token", "expires_after_seconds": 999999},
-			})
+		if got := r.Header.Get("Authorization"); got != "Bearer resolved-token" {
+			t.Errorf("Authorization = %q, want Bearer resolved-token", got)
 		}
+		if got := r.Header.Get("client-token"); got != "resolved-client-token" {
+			t.Errorf("client-token = %q, want resolved-client-token", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(spotifyFixtureResponse))
 	}))
 	defer srv.Close()
+	tokens := serveTokens(t, tokenEndpoints{
+		accessToken: grantAccess("resolved-token", func() int64 { return farFutureExpiryMs }),
+		clientToken: grantClient("resolved-client-token", longClientLifetimeSec),
+	})
 
-	r := newSpotifyTokenResolver(srv.Client())
-	r.serverTimeURL = srv.URL + "/server-time"
-	r.accessTokenURL = srv.URL + "/token"
-	r.clientTokenURL = srv.URL + "/clienttoken"
-
-	sess, err := r.Get(t.Context())
-	if err != nil {
-		t.Fatalf("get() error = %v", err)
-	}
-	if sess.accessToken != "resolved-token" || sess.clientToken != "resolved-client-token" {
-		t.Errorf("session = %+v", sess)
+	if _, err := newSpotifyAdapterWithTokens(tokens, srv, time.Now).Search(t.Context(), "x", providertest.AllKinds()); err != nil {
+		t.Fatalf("Search() error = %v", err)
 	}
 }
 
-func TestSpotifyTokenResolver_fallsBackOnTotpVerExpired(t *testing.T) {
+func TestSpotifyAdapter_Search_fallsBackOnTotpVerExpired(t *testing.T) {
 	var seenVersions []string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
-		case "/server-time":
-			_ = json.NewEncoder(w).Encode(map[string]int64{"serverTime": 1700000000})
-		case "/token":
-			ver := r.URL.Query().Get("totpVer")
-			seenVersions = append(seenVersions, ver)
-			if ver == "61" {
-				_ = json.NewEncoder(w).Encode(map[string]any{"error": "totpVerExpired"})
-				return
-			}
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"accessToken":                      "token-for-" + ver,
-				"accessTokenExpirationTimestampMs": 99999999999999,
-			})
-		case "/clienttoken":
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"granted_token": map[string]any{"token": "ct", "expires_after_seconds": 999999},
-			})
+	tokens := serveTokens(t, tokenEndpoints{accessToken: func(w http.ResponseWriter, r *http.Request) {
+		ver := r.URL.Query().Get("totpVer")
+		seenVersions = append(seenVersions, ver)
+		if ver == "61" {
+			writeJSON(w, map[string]any{"error": "totpVerExpired"})
+			return
 		}
+		grantAccess("token-for-"+ver, func() int64 { return farFutureExpiryMs })(w, r)
+	}})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer token-for-60" {
+			t.Errorf("Authorization = %q, want Bearer token-for-60 (fell back past the expired v61)", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(spotifyFixtureResponse))
 	}))
 	defer srv.Close()
 
-	r := newSpotifyTokenResolver(srv.Client())
-	r.serverTimeURL = srv.URL + "/server-time"
-	r.accessTokenURL = srv.URL + "/token"
-	r.clientTokenURL = srv.URL + "/clienttoken"
-
-	sess, err := r.Get(t.Context())
-	if err != nil {
-		t.Fatalf("get() error = %v", err)
-	}
-	if sess.accessToken != "token-for-60" {
-		t.Errorf("accessToken = %q, want token-for-60 (fell back past the expired v61)", sess.accessToken)
+	if _, err := newSpotifyAdapterWithTokens(tokens, srv, time.Now).Search(t.Context(), "x", providertest.AllKinds()); err != nil {
+		t.Fatalf("Search() error = %v", err)
 	}
 	if len(seenVersions) < 2 || seenVersions[0] != "61" {
 		t.Errorf("seenVersions = %v, want to start with 61 and fall back", seenVersions)
@@ -367,7 +284,7 @@ func TestSpotifyContentLive_E2E(t *testing.T) {
 	if os.Getenv("SPOTIFY_LIVE") != "1" {
 		t.Skip("set SPOTIFY_LIVE=1 to run the live Spotify content E2E")
 	}
-	a := NewSpotifyAdapter(&http.Client{Timeout: 15 * time.Second})
+	a := spotify.NewSpotifyAdapter(&http.Client{Timeout: 15 * time.Second}, time.Now)
 	ctx := context.Background()
 	const weeknd = "1Xyo4u8uXC1ZmMpatF05PJ"
 
@@ -404,7 +321,7 @@ func TestSpotifyAdapter_Search_marksSpotifysTopResult(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	results, err := newTestSpotifyAdapter(srv).Search(t.Context(), "The Weeknd", providertest.AllKinds())
+	results, err := newTestSpotifyAdapter(t, srv).Search(t.Context(), "The Weeknd", providertest.AllKinds())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -423,7 +340,7 @@ func TestSpotifyAdapter_Search_noTopResultsMarksNothing(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	results, err := newTestSpotifyAdapter(srv).Search(t.Context(), "The Weeknd", providertest.AllKinds())
+	results, err := newTestSpotifyAdapter(t, srv).Search(t.Context(), "The Weeknd", providertest.AllKinds())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -445,7 +362,7 @@ func TestSpotifyAdapter_Search_skipsTopResultsWeDoNotSearch(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	results, err := newTestSpotifyAdapter(srv).Search(t.Context(), "The Weeknd", providertest.AllKinds())
+	results, err := newTestSpotifyAdapter(t, srv).Search(t.Context(), "The Weeknd", providertest.AllKinds())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -468,7 +385,7 @@ func TestSpotifyAdapter_Search_skipsTopResultsMissingFromTheResults(t *testing.T
 	}))
 	defer srv.Close()
 
-	results, err := newTestSpotifyAdapter(srv).Search(t.Context(), "The Weeknd", providertest.AllKinds())
+	results, err := newTestSpotifyAdapter(t, srv).Search(t.Context(), "The Weeknd", providertest.AllKinds())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -487,7 +404,7 @@ func TestAlbumTracksLive_E2E(t *testing.T) {
 	ctx := context.Background()
 	client := &http.Client{Timeout: 15 * time.Second}
 
-	sp := NewSpotifyAdapter(client)
+	sp := spotify.NewSpotifyAdapter(client, time.Now)
 	spTracks, err := sp.GetAlbumTracks(ctx, domain.ProviderSpotify, "6HBXwJApSdQ7qjr4Komyst")
 	if err != nil {
 		t.Fatalf("spotify GetAlbumTracks: %v", err)

@@ -1,8 +1,10 @@
-package spotify
+package spotify_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
+	"altune/go-api/internal/discovery/internal/adapters/providers/spotify"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -14,7 +16,7 @@ func TestProviderContracts(t *testing.T) {
 			Name:   "spotify track",
 			Golden: "contract_spotify_track.json",
 			Search: func(t *testing.T, srv *httptest.Server) ([]domain.SearchResult, error) {
-				return newTestSpotifyAdapter(srv).Search(t.Context(), "sicko mode", providertest.TrackKinds())
+				return newTestSpotifyAdapter(t, srv).Search(t.Context(), "sicko mode", providertest.TrackKinds())
 			},
 			Required: func(t *testing.T, r domain.SearchResult) {
 				if r.Explicit == nil || !*r.Explicit {
@@ -29,7 +31,7 @@ func TestProviderContracts(t *testing.T) {
 			Name:   "spotify album",
 			Golden: "contract_spotify_album.json",
 			Search: func(t *testing.T, srv *httptest.Server) ([]domain.SearchResult, error) {
-				return newTestSpotifyAdapter(srv).Search(t.Context(), "after hours", providertest.AlbumKinds())
+				return newTestSpotifyAdapter(t, srv).Search(t.Context(), "after hours", providertest.AlbumKinds())
 			},
 			Required: func(t *testing.T, r domain.SearchResult) {
 				if r.Subtitle == "" {
@@ -52,7 +54,7 @@ func TestAdapterSearchTimeouts(t *testing.T) {
 		got  time.Duration
 		want time.Duration
 	}{
-		{"spotify", (&SpotifyAdapter{}).SearchTimeout(), spotifySearchTimeout},
+		{"spotify", spotify.NewSpotifyAdapter(http.DefaultClient, time.Now).SearchTimeout(), 5 * time.Second},
 	}
 	for _, tt := range tests {
 		if tt.got != tt.want {
@@ -63,7 +65,7 @@ func TestAdapterSearchTimeouts(t *testing.T) {
 
 func TestAdapterSupportedKinds_allThree(t *testing.T) {
 	for name, kinds := range map[string]map[domain.ResultKind]bool{
-		"spotify": (&SpotifyAdapter{}).SupportedKinds(),
+		"spotify": spotify.NewSpotifyAdapter(http.DefaultClient, time.Now).SupportedKinds(),
 	} {
 		if !kinds[domain.ResultKindTrack] || !kinds[domain.ResultKindAlbum] || !kinds[domain.ResultKindArtist] {
 			t.Errorf("%s SupportedKinds = %v, want track+album+artist", name, kinds)
@@ -76,8 +78,8 @@ func TestArtworkSourceTags(t *testing.T) {
 		got  domain.ProviderKey
 		want string
 	}{
-		{(&SpotifyAdapter{}).ArtworkSource(), "spotify"},
-		{(&SpotifyArtworkResolver{}).ArtworkSource(), "spotify"},
+		{spotify.NewSpotifyAdapter(http.DefaultClient, time.Now).ArtworkSource(), "spotify"},
+		{spotify.NewSpotifyArtworkResolver(http.DefaultClient).ArtworkSource(), "spotify"},
 	}
 	for _, tt := range tests {
 		if tt.got.String() != tt.want {

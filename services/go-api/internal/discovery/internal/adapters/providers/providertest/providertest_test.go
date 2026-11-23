@@ -1,6 +1,7 @@
-package providertest
+package providertest_test
 
 import (
+	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,9 +16,9 @@ func TestNewClient_RewritesHostKeepsPath(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	resp, err := NewClient(srv.URL).Get("https://theaudiodb.com/x")
-	if err != nil {
-		t.Fatalf("Get: %v", err)
+	resp, err := providertest.NewClient(srv.URL).Get("https://theaudiodb.com/x")
+	if err != nil || resp == nil {
+		t.Fatalf("Get: resp %v, err %v", resp, err)
 	}
 	resp.Body.Close()
 	if gotPath != "/x" {
@@ -26,7 +27,7 @@ func TestNewClient_RewritesHostKeepsPath(t *testing.T) {
 }
 
 func TestArtworkFailureHandlers_AllFail(t *testing.T) {
-	handlers := ArtworkFailureHandlers()
+	handlers := providertest.ArtworkFailureHandlers()
 	if len(handlers) == 0 {
 		t.Fatal("no failure handlers")
 	}
@@ -55,7 +56,7 @@ func TestArtworkFailureHandlers_AllFail(t *testing.T) {
 }
 
 func TestCancelMidRequestServer_CancelsContextOnRequest(t *testing.T) {
-	srv, ctx := CancelMidRequestServer(t)
+	srv, ctx := providertest.CancelMidRequestServer(t)
 	if ctx.Err() != nil {
 		t.Fatal("context cancelled before any request")
 	}
