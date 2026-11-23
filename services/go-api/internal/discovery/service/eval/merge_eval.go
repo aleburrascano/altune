@@ -49,7 +49,7 @@ func RunMergeEval(ctx context.Context, entities []LibraryEntity, searcher Search
 	var mu sync.Mutex
 	sigOwners := map[string]map[string]bool{}
 
-	runParallel(entities, concurrency, progress, func(i int, entity LibraryEntity) {
+	runParallel(ctx, entities, concurrency, progress, func(i int, entity LibraryEntity) {
 		results[i] = mergeEvalOne(ctx, entity, entities, searcher, &mu, sigOwners)
 	})
 

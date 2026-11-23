@@ -44,7 +44,7 @@ func RunDiversityEvalMode(ctx context.Context, entities []LibraryEntity, vs Vari
 	concWithout := make([]float64, len(entities))
 	scored := make([]bool, len(entities))
 
-	runParallel(entities, concurrency, progress, func(i int, entity LibraryEntity) {
+	runParallel(ctx, entities, concurrency, progress, func(i int, entity LibraryEntity) {
 		if entity.Artist == "" {
 			return
 		}

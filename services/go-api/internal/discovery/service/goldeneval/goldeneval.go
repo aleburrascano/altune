@@ -200,11 +200,11 @@ type Report struct {
 
 func Run(ctx context.Context, cases []Case, searcher discoveryEval.Searcher, concurrency int) Report {
 	results := make([]Result, len(cases))
-	group := fanout.New(concurrency)
+	group := fanout.New("golden_eval.case_panic", concurrency)
 	for i, c := range cases {
-		group.Go(func() { results[i] = runCase(ctx, c, searcher) })
+		group.Go(ctx, func() { results[i] = runCase(ctx, c, searcher) })
 	}
-	group.Wait()
+	_ = group.Wait()
 	return Report{Results: results}
 }
 

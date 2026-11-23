@@ -44,7 +44,7 @@ type artistCoverage struct {
 
 func (s *CoverageSignalBService) Execute(ctx context.Context, artists []string, concurrency int) (*CoverageReportB, error) {
 	coverage := make([]artistCoverage, len(artists))
-	runParallel(artists, concurrency, nil, func(i int, artist string) {
+	runParallel(ctx, artists, concurrency, nil, func(i int, artist string) {
 		fan := s.fanOut(ctx, artist)
 		responded := []string{}
 		for _, p := range s.providers {

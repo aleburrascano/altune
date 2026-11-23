@@ -2,10 +2,11 @@ package eval
 
 import (
 	"altune/go-api/internal/shared/fanout"
+	"context"
 	"sync/atomic"
 )
 
-func runParallel[T any](items []T, concurrency int, progress func(done, total int), work func(i int, item T)) {
+func runParallel[T any](ctx context.Context, items []T, concurrency int, progress func(done, total int), work func(i int, item T)) {
 	if concurrency < 1 {
 		concurrency = 1
 	}
@@ -16,16 +17,18 @@ func runParallel[T any](items []T, concurrency int, progress func(done, total in
 	}
 
 	var done int32
-	g := fanout.New(concurrency)
+	g := fanout.New("eval.item_panic", concurrency)
 	for i, item := range items {
 		i, item := i, item
-		g.Go(func() {
+		g.Go(ctx, func() {
+			defer func() {
+				n := int(atomic.AddInt32(&done, 1))
+				if progress != nil && (n%step == 0 || n == total) {
+					progress(n, total)
+				}
+			}()
 			work(i, item)
-			n := int(atomic.AddInt32(&done, 1))
-			if progress != nil && (n%step == 0 || n == total) {
-				progress(n, total)
-			}
 		})
 	}
-	g.Wait()
+	_ = g.Wait()
 }

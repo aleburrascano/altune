@@ -25,7 +25,7 @@ func RunHealthEval(ctx context.Context, entities []LibraryEntity, searcher Searc
 		latencies []int64
 	)
 
-	runParallel(entities, concurrency, progress, func(_ int, entity LibraryEntity) {
+	runParallel(ctx, entities, concurrency, progress, func(_ int, entity LibraryEntity) {
 		if entity.Artist == "" {
 			return
 		}

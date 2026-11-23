@@ -90,7 +90,7 @@ func RunArtistIntentEval(ctx context.Context, artists []string, searcher Searche
 	}
 
 	results := make([]ArtistIntentResult, len(artists))
-	runParallel(artists, concurrency, progress, func(i int, artist string) {
+	runParallel(ctx, artists, concurrency, progress, func(i int, artist string) {
 		results[i] = evalOneArtist(ctx, artist, searcher, k)
 	})
 

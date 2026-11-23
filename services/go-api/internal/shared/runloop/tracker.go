@@ -2,8 +2,6 @@ package runloop
 
 import (
 	"context"
-	"log/slog"
-	"runtime/debug"
 	"sync"
 )
 
@@ -28,10 +26,3 @@ func (r *Tracker) Launch(parentCtx context.Context, label string, fn func(ctx co
 }
 
 func (r *Tracker) Wait() { r.wg.Wait() }
-
-func RecoverContext(ctx context.Context, event string, attrs ...any) {
-	if r := recover(); r != nil {
-		slog.ErrorContext(ctx, event,
-			append(attrs, "panic", r, "stack", string(debug.Stack()))...)
-	}
-}
