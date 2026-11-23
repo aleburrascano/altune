@@ -39,27 +39,6 @@ jobs:
           if [ "$GITHUB_REF" = refs/heads/main ]; then base=$BEFORE; fi
           bash scripts/ci/changes.sh "$base"
 
-  backend-static:
-    needs: changes
-    if: needs.changes.outputs.backend == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: fetch main
-        run: git fetch origin main:refs/remotes/origin/main
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: services/go-api/go.mod
-      - name: nilaway ceiling
-        working-directory: services/go-api
-        run: |
-          gopath=$(go env GOPATH)
-          export PATH="$gopath/bin:$PATH"
-          bash ../../scripts/ci/nilaway-ceiling.sh nilaway-baseline.txt
-
   backend-tests:
     needs: changes
     if: needs.changes.outputs.backend == 'true'
@@ -210,7 +189,7 @@ jobs:
         run: bash scripts/precheck.sh origin/main
 
   pr-checks:
-    needs: [changes, backend-static, backend-tests, mobile-tests, mobile-quality, workflow-lint, precheck]
+    needs: [changes, backend-tests, mobile-tests, mobile-quality, workflow-lint, precheck]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

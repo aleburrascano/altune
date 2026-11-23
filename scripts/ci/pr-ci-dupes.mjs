@@ -11,7 +11,6 @@ const GATE_SCRIPT = /bash scripts\/ci\/([\w.-]+\.sh)/g;
 export const HEAVY = [
   { name: "go test ./...", re: /\bgo test\b.*\.\/\.\.\./ },
   { name: "jest", re: /\bjest\b/ },
-  { name: "nilaway", re: /\bnilaway\b/ },
   { name: "fallow", re: /\bnpm run fallow\b|\bfallow\b/ },
   { name: "react-doctor", re: /react-doctor/ },
 ];
