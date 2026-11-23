@@ -87,18 +87,3 @@ func decodeMember(member string) (norm, term, kind string) {
 	}
 	return parts[0], parts[1], parts[2]
 }
-
-func trigrams(s string) []string {
-	runes := []rune(s)
-	if len(runes) == 0 {
-		return nil
-	}
-	if len(runes) < 3 {
-		return []string{s}
-	}
-	out := make([]string, 0, len(runes)-2)
-	for i := 0; i <= len(runes)-3; i++ {
-		out = append(out, string(runes[i:i+3]))
-	}
-	return out
-}

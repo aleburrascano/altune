@@ -1,16 +1,16 @@
-package cache
+package cache_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/adapters/cache"
 	"context"
-	"fmt"
 	"reflect"
 	"testing"
 	"time"
 )
 
 func TestRedisUnreleasedCache_DisabledClientNeverHits(t *testing.T) {
-	c := NewRedisUnreleasedCache(nil)
+	c := cache.NewRedisUnreleasedCache(nil)
 	ctx := context.Background()
 
 	if err := c.Set(ctx, domain.ProviderDeezer, "1", "artist", []domain.UnreleasedSong{{GeniusID: 1}}, time.Hour); err != nil {
@@ -21,55 +21,50 @@ func TestRedisUnreleasedCache_DisabledClientNeverHits(t *testing.T) {
 	}
 }
 
-func TestUnreleasedKey_DiffersByArtistName(t *testing.T) {
-	if unreleasedKey(domain.ProviderDeezer, "1", "right name") == unreleasedKey(domain.ProviderDeezer, "1", "wrong name") {
-		t.Error("two artist names share one cache key")
-	}
-}
-
-func TestRedisUnreleasedCache_RoundTripsWithTheGivenTTL(t *testing.T) {
-	client := testRedisClient(t)
-	c := NewRedisUnreleasedCache(client)
+func TestRedisUnreleasedCache_RoundTripsUnderTheV9KeyWithTheGivenTTL(t *testing.T) {
+	server, client := newRedis(t)
+	c := cache.NewRedisUnreleasedCache(client)
 	ctx := context.Background()
-	id := fmt.Sprintf("round-trip-%s", t.Name())
-	cleanKeys(t, client, unreleasedKey(domain.ProviderDeezer, id, "artist"))
 	want := []domain.UnreleasedSong{{GeniusID: 5, Title: "Cancun", GeniusURL: "https://genius.com/c", HasMedia: new(true), AudioLinks: []domain.AudioLink{{Provider: "youtube", URL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}}}}
 
-	if err := c.Set(ctx, domain.ProviderDeezer, id, "artist", want, time.Hour); err != nil {
+	if err := c.Set(ctx, domain.ProviderDeezer, "13631667", "don toliver", want, time.Hour); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
 
-	got, ok := c.Get(ctx, domain.ProviderDeezer, id, "artist")
+	got, ok := c.Get(ctx, domain.ProviderDeezer, "13631667", "don toliver")
 	if !ok || !reflect.DeepEqual(got, want) {
 		t.Errorf("Get = (%v, %v), want (%v, true)", got, ok, want)
 	}
-	if _, ok := c.Get(ctx, domain.ProviderDeezer, id, "other"); ok {
+	assertStored(t, server, "unreleased:songs:v9:deezer:13631667:don toliver", time.Hour)
+}
+
+func TestRedisUnreleasedCache_KeyDependsOnProviderIDAndArtistName(t *testing.T) {
+	_, client := newRedis(t)
+	c := cache.NewRedisUnreleasedCache(client)
+	ctx := context.Background()
+	if err := c.Set(ctx, domain.ProviderDeezer, "1", "right name", []domain.UnreleasedSong{{GeniusID: 1}}, time.Hour); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	if _, ok := c.Get(ctx, domain.ProviderDeezer, "1", "wrong name"); ok {
 		t.Error("a different artist name hit the entry")
 	}
-	if ttl := client.TTL(ctx, unreleasedKey(domain.ProviderDeezer, id, "artist")).Val(); ttl <= 0 || ttl > time.Hour {
-		t.Errorf("ttl = %v, want within (0, 1h]", ttl)
+	if _, ok := c.Get(ctx, domain.ProviderDeezer, "2", "right name"); ok {
+		t.Error("a different external id hit the entry")
+	}
+	if _, ok := c.Get(ctx, domain.ProviderSpotify, "1", "right name"); ok {
+		t.Error("a different provider hit the entry")
 	}
 }
 
 func TestRedisUnreleasedCache_IgnoresEntriesWrittenUnderTheUnversionedKey(t *testing.T) {
-	client := testRedisClient(t)
-	c := NewRedisUnreleasedCache(client)
-	ctx := context.Background()
-	id := fmt.Sprintf("legacy-%s", t.Name())
-	legacyKey := fmt.Sprintf("unreleased:songs:%s:%s:%s", domain.ProviderDeezer.Key(), id, "artist")
-	cleanKeys(t, client, legacyKey, unreleasedKey(domain.ProviderDeezer, id, "artist"))
-	if err := client.Set(ctx, legacyKey, `[{"genius_id":9,"title":"Released Single"}]`, time.Hour).Err(); err != nil {
+	server, client := newRedis(t)
+	c := cache.NewRedisUnreleasedCache(client)
+	if err := server.Set("unreleased:songs:deezer:13631667:don toliver", `[{"genius_id":9,"title":"Released Single"}]`); err != nil {
 		t.Fatalf("seed legacy entry: %v", err)
 	}
 
-	if songs, ok := c.Get(ctx, domain.ProviderDeezer, id, "artist"); ok {
+	if songs, ok := c.Get(context.Background(), domain.ProviderDeezer, "13631667", "don toliver"); ok {
 		t.Errorf("Get served the legacy entry %v", songs)
-	}
-}
-
-func TestUnreleasedKey_IsNotTheUnversionedLegacyKey(t *testing.T) {
-	legacyKey := fmt.Sprintf("unreleased:songs:%s:%s:%s", domain.ProviderDeezer.Key(), "13631667", "don toliver")
-	if unreleasedKey(domain.ProviderDeezer, "13631667", "don toliver") == legacyKey {
-		t.Error("the key still matches the pre-fix cache entries")
 	}
 }

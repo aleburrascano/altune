@@ -1,7 +1,9 @@
-package cache
+package cache_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/adapters/cache"
+	"altune/go-api/internal/discovery/internal/adapters/cache/vocabmatch"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,14 +11,27 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	goredis "github.com/redis/go-redis/v9"
 )
 
+const (
+	vocabTermsKey   = "discovery:vocab:v1:terms"
+	vocabLexKey     = "discovery:vocab:v1:lex"
+	vocabTriPrefix  = "discovery:vocab:v1:tri:"
+	vocabEntryPfx   = "discovery:vocab:v1:entry:"
+	vocabMetaPrefix = "discovery:vocab:v1:meta:"
+)
+
+func vocabMember(norm, term, kind string) string {
+	return norm + "\x00" + term + "\x00" + kind
+}
+
 func lowercaseNorm(s string) string { return strings.ToLower(s) }
 
 func TestVocabularyStore_NilClient_AddReturnsNil(t *testing.T) {
-	store := NewVocabularyStore(nil, lowercaseNorm)
+	store := cache.NewVocabularyStore(nil, lowercaseNorm)
 	err := store.Add(context.Background(), domain.VocabularyEntry{
 		Term: "test", Kind: "artist", Popularity: 1,
 	})
@@ -26,7 +41,7 @@ func TestVocabularyStore_NilClient_AddReturnsNil(t *testing.T) {
 }
 
 func TestVocabularyStore_NilClient_BulkAddReturnsNil(t *testing.T) {
-	store := NewVocabularyStore(nil, lowercaseNorm)
+	store := cache.NewVocabularyStore(nil, lowercaseNorm)
 	err := store.BulkAdd(context.Background(), []domain.VocabularyEntry{
 		{Term: "a", Kind: "track", Popularity: 1},
 	})
@@ -36,7 +51,7 @@ func TestVocabularyStore_NilClient_BulkAddReturnsNil(t *testing.T) {
 }
 
 func TestVocabularyStore_NilClient_SuggestByPrefixReturnsNil(t *testing.T) {
-	store := NewVocabularyStore(nil, lowercaseNorm)
+	store := cache.NewVocabularyStore(nil, lowercaseNorm)
 	results, err := store.SuggestByPrefix(context.Background(), "test", 10)
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
@@ -47,7 +62,7 @@ func TestVocabularyStore_NilClient_SuggestByPrefixReturnsNil(t *testing.T) {
 }
 
 func TestVocabularyStore_NilClient_FindClosestReturnsNil(t *testing.T) {
-	store := NewVocabularyStore(nil, lowercaseNorm)
+	store := cache.NewVocabularyStore(nil, lowercaseNorm)
 	results, err := store.FindClosest(context.Background(), "test", 10)
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
@@ -57,101 +72,14 @@ func TestVocabularyStore_NilClient_FindClosestReturnsNil(t *testing.T) {
 	}
 }
 
-func TestTrigrams(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		want []string
-	}{
-		{name: "empty", in: "", want: nil},
-		{name: "one char", in: "a", want: []string{"a"}},
-		{name: "two chars", in: "ab", want: []string{"ab"}},
-		{name: "three chars", in: "abc", want: []string{"abc"}},
-		{name: "megaman", in: "megaman", want: []string{"meg", "ega", "gam", "ama", "man"}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := trigrams(tt.in)
-			if !sliceEqual(got, tt.want) {
-				t.Errorf("trigrams(%q) = %v, want %v", tt.in, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestJaccardCoefficient(t *testing.T) {
-	tests := []struct {
-		name             string
-		shared, a, b     int
-		wantMin, wantMax float64
-	}{
-		{"identical", 5, 5, 5, 0.99, 1.01},
-		{"disjoint", 0, 3, 4, 0, 0.01},
-		{"partial", 2, 3, 4, 0.39, 0.41},
-		{"empty", 0, 0, 0, 0, 0.01},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := jaccardCoefficient(tt.shared, tt.a, tt.b)
-			if got < tt.wantMin || got > tt.wantMax {
-				t.Errorf("jaccard(%d,%d,%d) = %f, want [%f, %f]",
-					tt.shared, tt.a, tt.b, got, tt.wantMin, tt.wantMax)
-			}
-		})
-	}
-}
-
-func TestMemberEncoding(t *testing.T) {
-	norm, term, kind := "megaman", "Megaman", "track"
-	encoded := encodeMember(norm, term, kind)
-	gotNorm, gotTerm, gotKind := decodeMember(encoded)
-	if gotNorm != norm || gotTerm != term || gotKind != kind {
-		t.Errorf("round-trip failed: got (%q, %q, %q)", gotNorm, gotTerm, gotKind)
-	}
-}
-
-func TestDecodeMember_Invalid(t *testing.T) {
-	norm, term, kind := decodeMember("no-separators")
-	if norm != "" || term != "" || kind != "" {
-		t.Errorf("expected empty on invalid member, got (%q, %q, %q)", norm, term, kind)
-	}
-}
-
-func vocabAllKeys(norm string) []string {
-	keys := []string{
-		vocabTermsKey,
-		vocabLexKey,
-		vocabEntryPfx + norm,
-	}
-	for _, tri := range trigrams(norm) {
-		keys = append(keys, vocabTriPrefix+tri)
-	}
-	return keys
-}
-
-func vocabCleanKeys(t *testing.T, norms ...string) {
-	t.Helper()
-	client := testRedisClient(t)
-	ctx := context.Background()
-	t.Cleanup(func() {
-		for _, n := range norms {
-			for _, k := range vocabAllKeys(n) {
-				client.Del(ctx, k)
-			}
-		}
-	})
-}
-
 func TestVocabularyStore_Add_ThenSuggestByPrefix(t *testing.T) {
-	client := testRedisClient(t)
-	store := NewVocabularyStore(client, lowercaseNorm)
+	_, client := newRedis(t)
+	store := cache.NewVocabularyStore(client, lowercaseNorm)
 	ctx := context.Background()
 
 	entry := domain.VocabularyEntry{
 		Term: "Megaman", TermNorm: "megaman", Kind: "track", Popularity: 500,
 	}
-	vocabCleanKeys(t, "megaman")
-
 	if err := store.Add(ctx, entry); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -160,24 +88,61 @@ func TestVocabularyStore_Add_ThenSuggestByPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SuggestByPrefix: %v", err)
 	}
-	if len(results) == 0 {
-		t.Fatal("expected at least one result for prefix 'mega'")
+	if len(results) != 1 {
+		t.Fatalf("SuggestByPrefix(mega) = %+v, want the one added entry", results)
 	}
-	if results[0].Term != "Megaman" {
-		t.Errorf("expected term 'Megaman', got %q", results[0].Term)
+	if results[0] != entry {
+		t.Errorf("SuggestByPrefix(mega)[0] = %+v, want %+v", results[0], entry)
+	}
+}
+
+func TestVocabularyStore_Add_StoresTheMemberFormat(t *testing.T) {
+	server, client := newRedis(t)
+	store := cache.NewVocabularyStore(client, lowercaseNorm)
+
+	if err := store.Add(context.Background(), domain.VocabularyEntry{Term: "Megaman", Kind: "track", Popularity: 7}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	member := vocabMember("megaman", "Megaman", "track")
+	if score, err := server.ZScore(vocabTermsKey, member); err != nil || score != 7 {
+		t.Errorf("terms score of %q = %v (err %v), want 7", member, score, err)
+	}
+	if _, err := server.ZScore(vocabLexKey, member); err != nil {
+		t.Errorf("lex has no %q: %v", member, err)
+	}
+}
+
+func TestVocabularyStore_SuggestByPrefix_SkipsMalformedMembers(t *testing.T) {
+	server, client := newRedis(t)
+	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	ctx := context.Background()
+	if err := store.Add(ctx, domain.VocabularyEntry{Term: "Megaman", Kind: "track", Popularity: 1}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	for _, malformed := range []string{"megano-separators", "megatwo\x00parts"} {
+		if _, err := server.ZAdd(vocabLexKey, 0, malformed); err != nil {
+			t.Fatalf("seed %q: %v", malformed, err)
+		}
+	}
+
+	results, err := store.SuggestByPrefix(ctx, "mega", 10)
+	if err != nil {
+		t.Fatalf("SuggestByPrefix: %v", err)
+	}
+	if len(results) != 1 || results[0].Term != "Megaman" {
+		t.Errorf("SuggestByPrefix(mega) = %+v, want only Megaman", results)
 	}
 }
 
 func TestVocabularyStore_FindClosest_FuzzyMatch(t *testing.T) {
-	client := testRedisClient(t)
-	store := NewVocabularyStore(client, lowercaseNorm)
+	_, client := newRedis(t)
+	store := cache.NewVocabularyStore(client, lowercaseNorm)
 	ctx := context.Background()
 
 	entry := domain.VocabularyEntry{
 		Term: "Megaman", TermNorm: "megaman", Kind: "track", Popularity: 500,
 	}
-	vocabCleanKeys(t, "megaman")
-
 	if err := store.Add(ctx, entry); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -189,18 +154,70 @@ func TestVocabularyStore_FindClosest_FuzzyMatch(t *testing.T) {
 	if len(results) == 0 {
 		t.Fatal("expected 'megaman' as fuzzy match for 'megamsn'")
 	}
-	if results[0].Term != "Megaman" {
-		t.Errorf("expected term 'Megaman', got %q", results[0].Term)
+	got := results[0]
+	if got.Term != "Megaman" || got.TermNorm != "megaman" || got.Kind != "track" || got.Popularity != 500 {
+		t.Errorf("FindClosest(megamsn)[0] = %+v, want the stored Megaman entry", got)
+	}
+	if got.MatchScore <= 0 || got.MatchScore > 1 {
+		t.Errorf("MatchScore = %v, want in (0, 1]", got.MatchScore)
+	}
+}
+
+func TestVocabularyStore_FindClosest_SkipsEntriesWhoseBlobIsMissingOrCorrupt(t *testing.T) {
+	server, client := newRedis(t)
+	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	ctx := context.Background()
+	if err := store.BulkAdd(ctx, []domain.VocabularyEntry{
+		{Term: "Megaman", Kind: "track", Popularity: 3},
+		{Term: "Megamen", Kind: "track", Popularity: 2},
+		{Term: "Megamon", Kind: "track", Popularity: 1},
+	}); err != nil {
+		t.Fatalf("BulkAdd: %v", err)
+	}
+	server.Del(vocabEntryPfx + "megamen")
+	if err := server.Set(vocabEntryPfx+"megamon", "{not json"); err != nil {
+		t.Fatalf("corrupt megamon: %v", err)
+	}
+
+	results, err := store.FindClosest(ctx, "megaman", 5)
+	if err != nil {
+		t.Fatalf("FindClosest: %v", err)
+	}
+	if len(results) != 1 || results[0].TermNorm != "megaman" {
+		t.Errorf("FindClosest(megaman) = %+v, want only the entry whose blob still decodes", results)
+	}
+}
+
+func TestVocabularyStore_FindClosest_RanksByScoreAndHonoursTheLimit(t *testing.T) {
+	_, client := newRedis(t)
+	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	ctx := context.Background()
+	if err := store.BulkAdd(ctx, []domain.VocabularyEntry{
+		{Term: "megamxx", Kind: "track"},
+		{Term: "megaman", Kind: "track"},
+		{Term: "megamax", Kind: "track"},
+	}); err != nil {
+		t.Fatalf("BulkAdd: %v", err)
+	}
+
+	results, err := store.FindClosest(ctx, "megaman", 2)
+	if err != nil {
+		t.Fatalf("FindClosest: %v", err)
+	}
+	if len(results) != 2 || results[0].TermNorm != "megaman" || results[1].TermNorm != "megamax" {
+		t.Fatalf("FindClosest(megaman, 2) = %+v, want megaman then megamax", results)
+	}
+	if results[0].MatchScore <= results[1].MatchScore {
+		t.Errorf("scores %v then %v, want descending", results[0].MatchScore, results[1].MatchScore)
 	}
 }
 
 func TestVocabularyStore_BulkAdd_AllRetrievable(t *testing.T) {
-	client := testRedisClient(t)
-	store := NewVocabularyStore(client, lowercaseNorm)
+	_, client := newRedis(t)
+	store := cache.NewVocabularyStore(client, lowercaseNorm)
 	ctx := context.Background()
 
 	entries := make([]domain.VocabularyEntry, 100)
-	norms := make([]string, 100)
 	for i := range entries {
 		name := fmt.Sprintf("bulkartist%03d", i)
 		entries[i] = domain.VocabularyEntry{
@@ -209,9 +226,7 @@ func TestVocabularyStore_BulkAdd_AllRetrievable(t *testing.T) {
 			Kind:       "artist",
 			Popularity: int64(100 - i),
 		}
-		norms[i] = name
 	}
-	vocabCleanKeys(t, norms...)
 
 	if err := store.BulkAdd(ctx, entries); err != nil {
 		t.Fatalf("BulkAdd: %v", err)
@@ -227,8 +242,8 @@ func TestVocabularyStore_BulkAdd_AllRetrievable(t *testing.T) {
 }
 
 func TestVocabularyStore_EmptyPrefix_ReturnsByPopularity(t *testing.T) {
-	client := testRedisClient(t)
-	store := NewVocabularyStore(client, lowercaseNorm)
+	_, client := newRedis(t)
+	store := cache.NewVocabularyStore(client, lowercaseNorm)
 	ctx := context.Background()
 
 	entries := []domain.VocabularyEntry{
@@ -236,9 +251,6 @@ func TestVocabularyStore_EmptyPrefix_ReturnsByPopularity(t *testing.T) {
 		{Term: "emppophigh", TermNorm: "emppophigh", Kind: "artist", Popularity: 999},
 		{Term: "emppopmed", TermNorm: "emppopmed", Kind: "album", Popularity: 100},
 	}
-	norms := []string{"emppoplow", "emppophigh", "emppopmed"}
-	vocabCleanKeys(t, norms...)
-
 	if err := store.BulkAdd(ctx, entries); err != nil {
 		t.Fatalf("BulkAdd: %v", err)
 	}
@@ -247,35 +259,20 @@ func TestVocabularyStore_EmptyPrefix_ReturnsByPopularity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SuggestByPrefix empty: %v", err)
 	}
-	if len(results) < 3 {
-		t.Fatalf("expected at least 3 results, got %d", len(results))
+	var got []string
+	for _, r := range results {
+		got = append(got, r.Term)
 	}
-	rankOf := func(term string) int {
-		for i, r := range results {
-			if r.Term == term {
-				return i
-			}
-		}
-		return -1
-	}
-	high, med, low := rankOf("emppophigh"), rankOf("emppopmed"), rankOf("emppoplow")
-	if high < 0 {
-		t.Fatal("expected 'emppophigh' in results")
-	}
-	if med >= 0 && high > med {
-		t.Errorf("emppophigh (pop 999) ranked after emppopmed (pop 100): %d > %d", high, med)
-	}
-	if low >= 0 && high > low {
-		t.Errorf("emppophigh (pop 999) ranked after emppoplow (pop 10): %d > %d", high, low)
+	if strings.Join(got, ",") != "emppophigh,emppopmed,emppoplow" {
+		t.Errorf("SuggestByPrefix(\"\") = %v, want emppophigh, emppopmed, emppoplow", got)
 	}
 }
 
 func TestVocabularyStore_FindClosest_NoTrigrams_Empty(t *testing.T) {
-	client := testRedisClient(t)
-	store := NewVocabularyStore(client, lowercaseNorm)
-	ctx := context.Background()
+	_, client := newRedis(t)
+	store := cache.NewVocabularyStore(client, lowercaseNorm)
 
-	results, err := store.FindClosest(ctx, "", 5)
+	results, err := store.FindClosest(context.Background(), "", 5)
 	if err != nil {
 		t.Fatalf("FindClosest empty: %v", err)
 	}
@@ -285,8 +282,8 @@ func TestVocabularyStore_FindClosest_NoTrigrams_Empty(t *testing.T) {
 }
 
 func TestVocabularyStore_PrefixResults_SortedByPopularity(t *testing.T) {
-	client := testRedisClient(t)
-	store := NewVocabularyStore(client, lowercaseNorm)
+	_, client := newRedis(t)
+	store := cache.NewVocabularyStore(client, lowercaseNorm)
 	ctx := context.Background()
 
 	entries := []domain.VocabularyEntry{
@@ -294,9 +291,6 @@ func TestVocabularyStore_PrefixResults_SortedByPopularity(t *testing.T) {
 		{Term: "sortpoptrack2", TermNorm: "sortpoptrack2", Kind: "track", Popularity: 500},
 		{Term: "sortpoptrack3", TermNorm: "sortpoptrack3", Kind: "track", Popularity: 200},
 	}
-	norms := []string{"sortpoptrack1", "sortpoptrack2", "sortpoptrack3"}
-	vocabCleanKeys(t, norms...)
-
 	if err := store.BulkAdd(ctx, entries); err != nil {
 		t.Fatalf("BulkAdd: %v", err)
 	}
@@ -308,36 +302,19 @@ func TestVocabularyStore_PrefixResults_SortedByPopularity(t *testing.T) {
 	if len(results) != 3 {
 		t.Fatalf("expected 3 results, got %d", len(results))
 	}
-	if results[0].Term != "sortpoptrack2" {
-		t.Errorf("expected first result 'sortpoptrack2' (pop 500), got %q (pop %d)",
-			results[0].Term, results[0].Popularity)
-	}
-	if results[1].Term != "sortpoptrack3" {
-		t.Errorf("expected second result 'sortpoptrack3' (pop 200), got %q (pop %d)",
-			results[1].Term, results[1].Popularity)
-	}
-	if results[2].Term != "sortpoptrack1" {
-		t.Errorf("expected third result 'sortpoptrack1' (pop 50), got %q (pop %d)",
-			results[2].Term, results[2].Popularity)
-	}
-}
-
-func sliceEqual(a, b []string) bool {
-	if a == nil && b == nil {
-		return true
-	}
-	if a == nil || b == nil {
-		return false
-	}
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
+	for i, want := range []domain.VocabularyEntry{entries[1], entries[2], entries[0]} {
+		if results[i] != want {
+			t.Errorf("result %d = %+v, want %+v", i, results[i], want)
 		}
 	}
-	return true
+
+	limited, err := store.SuggestByPrefix(ctx, "sortpoptrack", 2)
+	if err != nil {
+		t.Fatalf("SuggestByPrefix limit 2: %v", err)
+	}
+	if len(limited) != 2 || limited[0].Term != "sortpoptrack2" || limited[1].Term != "sortpoptrack3" {
+		t.Errorf("SuggestByPrefix limit 2 = %+v, want the two most popular", limited)
+	}
 }
 
 func qaTrimMetaphone(norm string) string {
@@ -351,27 +328,20 @@ func qaTrimMetaphone(norm string) string {
 }
 
 func TestVocabularyStore_NilClient_TrimReturnsNil(t *testing.T) {
-	store := NewVocabularyStore(nil, lowercaseNorm)
+	store := cache.NewVocabularyStore(nil, lowercaseNorm)
 	if err := store.Trim(context.Background(), 10); err != nil {
 		t.Fatalf("nil-client Trim: %v, want nil", err)
 	}
 }
 
 func TestVocabularyStore_Trim_EvictsAcrossAllKeyFamilies(t *testing.T) {
-	client := testRedisClient(t)
-	store := NewVocabularyStore(client, lowercaseNorm, WithMetaphone(qaTrimMetaphone))
+	_, client := newRedis(t)
+	store := cache.NewVocabularyStore(client, lowercaseNorm, cache.WithMetaphone(qaTrimMetaphone))
 	ctx := context.Background()
 
 	victimA := "qatrimvictima"
 	victimB := "qatrimvictimb"
 	keeper := "qatrimkeeper"
-	vocabCleanKeys(t, victimA, victimB, keeper)
-	cleanKeys(t, client, vocabMetaPrefix+"QATRIM")
-
-	baseCount, err := client.ZCard(ctx, vocabTermsKey).Result()
-	if err != nil {
-		t.Fatalf("ZCard: %v", err)
-	}
 
 	entries := []domain.VocabularyEntry{
 		{Term: "QATrimVictimA", TermNorm: victimA, Kind: "artist", Popularity: -3_000_000_000},
@@ -382,32 +352,13 @@ func TestVocabularyStore_Trim_EvictsAcrossAllKeyFamilies(t *testing.T) {
 		t.Fatalf("BulkAdd: %v", err)
 	}
 
-	if err := store.Trim(ctx, int(baseCount)+1); err != nil {
+	if err := store.Trim(ctx, 1); err != nil {
 		t.Fatalf("Trim: %v", err)
 	}
 
-	for _, tc := range []struct {
-		norm, term string
-	}{{victimA, "QATrimVictimA"}, {victimB, "QATrimVictimB"}} {
-		member := encodeMember(tc.norm, tc.term, "artist")
-		if _, err := client.ZScore(ctx, vocabTermsKey, member).Result(); !errors.Is(err, goredis.Nil) {
-			t.Errorf("%s still in terms ZSET (err=%v), want evicted", tc.norm, err)
-		}
-		if _, err := client.ZScore(ctx, vocabLexKey, member).Result(); !errors.Is(err, goredis.Nil) {
-			t.Errorf("%s still in lex ZSET (err=%v), want evicted", tc.norm, err)
-		}
-		if _, err := client.Get(ctx, vocabEntryPfx+tc.norm).Result(); !errors.Is(err, goredis.Nil) {
-			t.Errorf("%s entry blob still present (err=%v), want deleted", tc.norm, err)
-		}
-		for _, tri := range trigrams(tc.norm) {
-			if isMember, _ := client.SIsMember(ctx, vocabTriPrefix+tri, tc.norm).Result(); isMember {
-				t.Errorf("%s still in trigram set %q, want removed", tc.norm, tri)
-			}
-		}
-		if isMember, _ := client.SIsMember(ctx, vocabMetaPrefix+"QATRIM", tc.norm).Result(); isMember {
-			t.Errorf("%s still in metaphone set, want removed", tc.norm)
-		}
-	}
+	assertIndexed(t, client, victimA, "QATrimVictimA", false)
+	assertIndexed(t, client, victimB, "QATrimVictimB", false)
+	assertIndexed(t, client, keeper, "QATrimKeeper", true)
 
 	results, err := store.SuggestByPrefix(ctx, "qatrimkeep", 10)
 	if err != nil {
@@ -416,27 +367,55 @@ func TestVocabularyStore_Trim_EvictsAcrossAllKeyFamilies(t *testing.T) {
 	if len(results) != 1 || results[0].Term != "QATrimKeeper" {
 		t.Errorf("keeper not suggestible after trim: %v", results)
 	}
-	if isMember, _ := client.SIsMember(ctx, vocabMetaPrefix+"QATRIM", keeper).Result(); !isMember {
-		t.Error("keeper lost its metaphone index entry")
-	}
 
-	if err := store.Trim(ctx, int(baseCount)+10); err != nil {
+	if err := store.Trim(ctx, 10); err != nil {
 		t.Fatalf("Trim (within budget): %v", err)
 	}
-	if _, err := client.Get(ctx, vocabEntryPfx+keeper).Result(); err != nil {
-		t.Errorf("within-budget Trim evicted the keeper: %v", err)
+	assertIndexed(t, client, keeper, "QATrimKeeper", true)
+}
+
+func TestVocabularyStore_Trim_NonPositiveBudgetKeepsEverything(t *testing.T) {
+	_, client := newRedis(t)
+	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	ctx := context.Background()
+	if err := store.Add(ctx, domain.VocabularyEntry{Term: "Keeper", Kind: "artist"}); err != nil {
+		t.Fatalf("Add: %v", err)
 	}
+
+	for _, budget := range []int{0, -1} {
+		if err := store.Trim(ctx, budget); err != nil {
+			t.Fatalf("Trim(%d): %v", budget, err)
+		}
+	}
+	assertIndexed(t, client, "keeper", "Keeper", true)
+}
+
+func TestVocabularyStore_Trim_SkipsMalformedMembers(t *testing.T) {
+	server, client := newRedis(t)
+	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	ctx := context.Background()
+	if _, err := server.ZAdd(vocabTermsKey, -1, "malformed"); err != nil {
+		t.Fatalf("seed malformed: %v", err)
+	}
+	if err := store.Add(ctx, domain.VocabularyEntry{Term: "Keeper", Kind: "artist", Popularity: 5}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	if err := store.Trim(ctx, 1); err != nil {
+		t.Fatalf("Trim: %v", err)
+	}
+	if _, err := server.ZScore(vocabTermsKey, "malformed"); err != nil {
+		t.Errorf("malformed member was evicted (%v), want it left alone", err)
+	}
+	assertIndexed(t, client, "keeper", "Keeper", true)
 }
 
 func TestVocabularyStore_WithMetaphone_PhoneticOnlyMatch(t *testing.T) {
-	client := testRedisClient(t)
+	_, client := newRedis(t)
 	ctx := context.Background()
 
-	vocabCleanKeys(t, "vvvv")
-	cleanKeys(t, client, vocabMetaPrefix+"QAVW")
-
-	plain := NewVocabularyStore(client, lowercaseNorm)
-	phonetic := NewVocabularyStore(client, lowercaseNorm, WithMetaphone(qaTrimMetaphone))
+	plain := cache.NewVocabularyStore(client, lowercaseNorm)
+	phonetic := cache.NewVocabularyStore(client, lowercaseNorm, cache.WithMetaphone(qaTrimMetaphone))
 
 	if err := phonetic.Add(ctx, domain.VocabularyEntry{
 		Term: "vvvv", TermNorm: "vvvv", Kind: "artist", Popularity: 1,
@@ -486,12 +465,12 @@ func (h *afterReadHook) ProcessPipelineHook(next goredis.ProcessPipelineHook) go
 func TestVocabularyStore_Trim_ConcurrentReAddSurvives(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
-		write func(ctx context.Context, s *RedisVocabularyStore, e domain.VocabularyEntry) error
+		write func(ctx context.Context, s *cache.RedisVocabularyStore, e domain.VocabularyEntry) error
 	}{
-		{"Add", func(ctx context.Context, s *RedisVocabularyStore, e domain.VocabularyEntry) error {
+		{"Add", func(ctx context.Context, s *cache.RedisVocabularyStore, e domain.VocabularyEntry) error {
 			return s.Add(ctx, e)
 		}},
-		{"BulkAdd", func(ctx context.Context, s *RedisVocabularyStore, e domain.VocabularyEntry) error {
+		{"BulkAdd", func(ctx context.Context, s *cache.RedisVocabularyStore, e domain.VocabularyEntry) error {
 			return s.BulkAdd(ctx, []domain.VocabularyEntry{e})
 		}},
 	} {
@@ -503,21 +482,15 @@ func TestVocabularyStore_Trim_ConcurrentReAddSurvives(t *testing.T) {
 
 func testTrimConcurrentReAdd(
 	t *testing.T,
-	write func(ctx context.Context, s *RedisVocabularyStore, e domain.VocabularyEntry) error,
+	write func(ctx context.Context, s *cache.RedisVocabularyStore, e domain.VocabularyEntry) error,
 ) {
-	writerClient := testRedisClient(t)
-	trimClient := testRedisClient(t)
+	server, writerClient := newRedis(t)
+	trimClient := secondClient(t, server)
 	ctx := context.Background()
 
 	victim, bumped, keeper := "qatrimracevictim", "qatrimracebumped", "qatrimracekeeper"
-	vocabCleanKeys(t, victim, bumped, keeper)
-	cleanKeys(t, writerClient, vocabMetaPrefix+"QATRIM")
 
-	writer := NewVocabularyStore(writerClient, lowercaseNorm, WithMetaphone(qaTrimMetaphone))
-	baseCount, err := writerClient.ZCard(ctx, vocabTermsKey).Result()
-	if err != nil {
-		t.Fatalf("ZCard: %v", err)
-	}
+	writer := cache.NewVocabularyStore(writerClient, lowercaseNorm, cache.WithMetaphone(qaTrimMetaphone))
 	if err := writer.BulkAdd(ctx, []domain.VocabularyEntry{
 		{Term: "QATrimRaceVictim", TermNorm: victim, Kind: "artist", Popularity: -3_000_000_000},
 		{Term: "QATrimRaceBumped", TermNorm: bumped, Kind: "artist", Popularity: -2_000_000_000},
@@ -535,9 +508,9 @@ func testTrimConcurrentReAdd(
 			t.Errorf("concurrent re-add: %v", err)
 		}
 	}})
-	trimmer := NewVocabularyStore(trimClient, lowercaseNorm, WithMetaphone(qaTrimMetaphone))
+	trimmer := cache.NewVocabularyStore(trimClient, lowercaseNorm, cache.WithMetaphone(qaTrimMetaphone))
 
-	if err := trimmer.Trim(ctx, int(baseCount)+1); err != nil {
+	if err := trimmer.Trim(ctx, 1); err != nil {
 		t.Fatalf("Trim: %v", err)
 	}
 	if !reAdded {
@@ -548,7 +521,7 @@ func testTrimConcurrentReAdd(
 	assertIndexed(t, writerClient, victim, "QATrimRaceVictim", false)
 	assertIndexed(t, writerClient, keeper, "QATrimRaceKeeper", false)
 
-	if score, err := writerClient.ZScore(ctx, vocabTermsKey, encodeMember(bumped, "QATrimRaceBumped", "artist")).Result(); err != nil || score != -500_000_000 {
+	if score, err := writerClient.ZScore(ctx, vocabTermsKey, vocabMember(bumped, "QATrimRaceBumped", "artist")).Result(); err != nil || score != -500_000_000 {
 		t.Errorf("bumped score = %v (err=%v), want the re-added popularity", score, err)
 	}
 	terms, err := writerClient.ZCard(ctx, vocabTermsKey).Result()
@@ -559,8 +532,8 @@ func testTrimConcurrentReAdd(
 	if err != nil {
 		t.Fatalf("ZCard lex: %v", err)
 	}
-	if terms != baseCount+1 {
-		t.Errorf("terms size = %d, want trimmed to budget %d", terms, baseCount+1)
+	if terms != 1 {
+		t.Errorf("terms size = %d, want trimmed to budget 1", terms)
 	}
 	if lex != terms {
 		t.Errorf("lex size %d != terms size %d: index families out of sync", lex, terms)
@@ -570,27 +543,29 @@ func testTrimConcurrentReAdd(
 func assertIndexed(t *testing.T, client *goredis.Client, norm, term string, want bool) {
 	t.Helper()
 	ctx := context.Background()
-	member := encodeMember(norm, term, "artist")
+	member := vocabMember(norm, term, "artist")
 
 	_, err := client.ZScore(ctx, vocabTermsKey, member).Result()
-	if got := err == nil; got != want {
+	if got := err == nil; got != want || (err != nil && !errors.Is(err, goredis.Nil)) {
 		t.Errorf("%s in terms ZSET = %v (err=%v), want %v", norm, got, err, want)
 	}
 	_, err = client.ZScore(ctx, vocabLexKey, member).Result()
-	if got := err == nil; got != want {
+	if got := err == nil; got != want || (err != nil && !errors.Is(err, goredis.Nil)) {
 		t.Errorf("%s in lex ZSET = %v (err=%v), want %v", norm, got, err, want)
 	}
 	_, err = client.Get(ctx, vocabEntryPfx+norm).Result()
-	if got := err == nil; got != want {
+	if got := err == nil; got != want || (err != nil && !errors.Is(err, goredis.Nil)) {
 		t.Errorf("%s entry blob present = %v (err=%v), want %v", norm, got, err, want)
 	}
-	for _, tri := range trigrams(norm) {
+	for _, tri := range vocabmatch.Trigrams(norm) {
 		if got, _ := client.SIsMember(ctx, vocabTriPrefix+tri, norm).Result(); got != want {
 			t.Errorf("%s in trigram set %q = %v, want %v", norm, tri, got, want)
 		}
 	}
-	if got, _ := client.SIsMember(ctx, vocabMetaPrefix+"QATRIM", norm).Result(); got != want {
-		t.Errorf("%s in metaphone set = %v, want %v", norm, got, want)
+	if code := qaTrimMetaphone(norm); code != "" {
+		if got, _ := client.SIsMember(ctx, vocabMetaPrefix+code, norm).Result(); got != want {
+			t.Errorf("%s in metaphone set = %v, want %v", norm, got, want)
+		}
 	}
 }
 
@@ -605,7 +580,9 @@ func vocabStoredPopularity(t *testing.T, client *goredis.Client, norm string, me
 	if err != nil {
 		t.Fatalf("Get entry: %v", err)
 	}
-	var data vocabEntryData
+	var data struct {
+		Popularity int64 `json:"popularity"`
+	}
 	if err := json.Unmarshal(raw, &data); err != nil {
 		t.Fatalf("unmarshal entry: %v", err)
 	}
@@ -613,13 +590,10 @@ func vocabStoredPopularity(t *testing.T, client *goredis.Client, norm string, me
 }
 
 func TestVocabularyStore_Add_DoesNotLowerChartPopularity(t *testing.T) {
-	client := testRedisClient(t)
-	store := NewVocabularyStore(client, lowercaseNorm)
+	_, client := newRedis(t)
+	store := cache.NewVocabularyStore(client, lowercaseNorm)
 	ctx := context.Background()
-	vocabCleanKeys(t, "popguard")
-	member := encodeMember("popguard", "PopGuard", "artist")
-	client.ZRem(ctx, vocabTermsKey, member)
-	t.Cleanup(func() { client.ZRem(ctx, vocabTermsKey, member) })
+	member := vocabMember("popguard", "PopGuard", "artist")
 
 	chart := domain.VocabularyEntry{Term: "PopGuard", Kind: "artist", Popularity: 500}
 	if err := store.BulkAdd(ctx, []domain.VocabularyEntry{chart}); err != nil {
@@ -645,13 +619,10 @@ func TestVocabularyStore_Add_DoesNotLowerChartPopularity(t *testing.T) {
 }
 
 func TestVocabularyStore_Add_NewMemberWithZeroPopularityIsAdded(t *testing.T) {
-	client := testRedisClient(t)
-	store := NewVocabularyStore(client, lowercaseNorm)
+	_, client := newRedis(t)
+	store := cache.NewVocabularyStore(client, lowercaseNorm)
 	ctx := context.Background()
-	vocabCleanKeys(t, "zeropop")
-	member := encodeMember("zeropop", "ZeroPop", "artist")
-	client.ZRem(ctx, vocabTermsKey, member)
-	t.Cleanup(func() { client.ZRem(ctx, vocabTermsKey, member) })
+	member := vocabMember("zeropop", "ZeroPop", "artist")
 
 	if err := store.Add(ctx, domain.VocabularyEntry{Term: "ZeroPop", Kind: "artist"}); err != nil {
 		t.Fatalf("Add: %v", err)
@@ -660,4 +631,13 @@ func TestVocabularyStore_Add_NewMemberWithZeroPopularityIsAdded(t *testing.T) {
 	if score != 0 || pop != 0 {
 		t.Errorf("score=%v entry popularity=%d, want 0/0", score, pop)
 	}
+}
+
+func TestVocabularyStore_Add_SetsTheEntryTTL(t *testing.T) {
+	server, client := newRedis(t)
+	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	if err := store.Add(context.Background(), domain.VocabularyEntry{Term: "Megaman", Kind: "track"}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	assertStored(t, server, vocabEntryPfx+"megaman", 90*24*time.Hour)
 }

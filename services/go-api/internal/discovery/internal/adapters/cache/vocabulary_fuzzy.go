@@ -2,7 +2,7 @@ package cache
 
 import (
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared/textnorm"
+	"altune/go-api/internal/discovery/internal/adapters/cache/vocabmatch"
 	"context"
 	"encoding/json"
 	"sort"
@@ -27,11 +27,11 @@ func (s *RedisVocabularyStore) fuzzySearch(
 	limit int,
 ) ([]domain.VocabularyEntry, error) {
 	norm := s.normalizeTerm(query)
-	queryTrigrams := trigrams(norm)
-	if len(queryTrigrams) == 0 {
+	q := vocabmatch.NewQuery(norm)
+	if len(q.Trigrams()) == 0 {
 		return nil, nil
 	}
-	candidates, err := s.trigramCandidates(ctx, queryTrigrams)
+	candidates, err := s.trigramCandidates(ctx, q.Trigrams())
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func (s *RedisVocabularyStore) fuzzySearch(
 		}
 	}
 
-	return s.topMatchingEntries(ctx, candidates, queryTrigrams, norm, limit, phoneticSet)
+	return s.topMatchingEntries(ctx, candidates, q, limit, phoneticSet)
 }
 
 func (s *RedisVocabularyStore) metaphoneCandidatesLogged(ctx context.Context, code string) map[string]bool {
@@ -197,49 +197,28 @@ type fuzzyCandidate struct {
 func (s *RedisVocabularyStore) topMatchingEntries(
 	ctx context.Context,
 	candidates map[string]int,
-	queryTrigrams []string,
-	queryNorm string,
+	q vocabmatch.Query,
 	limit int,
 	phoneticSet map[string]bool,
 ) ([]domain.VocabularyEntry, error) {
-	survivors := survivingNorms(candidates, queryTrigrams, queryNorm, phoneticSet)
+	survivors := survivingNorms(candidates, q, phoneticSet)
 	return topFuzzyCandidates(s.loadEntries(ctx, survivors), limit), nil
 }
 
 func survivingNorms(
 	candidates map[string]int,
-	queryTrigrams []string,
-	queryNorm string,
+	q vocabmatch.Query,
 	phoneticSet map[string]bool,
 ) []scoredNorm {
 	survivors := make([]scoredNorm, 0, len(candidates))
 	for norm, shared := range candidates {
-		score, matched := matchScore(norm, shared, queryTrigrams, queryNorm, phoneticSet[norm])
+		score, matched := q.Score(norm, shared, phoneticSet[norm])
 		if !matched {
 			continue
 		}
 		survivors = append(survivors, scoredNorm{norm: norm, score: score})
 	}
 	return survivors
-}
-
-func matchScore(
-	norm string,
-	shared int,
-	queryTrigrams []string,
-	queryNorm string,
-	isPhonetic bool,
-) (float64, bool) {
-	dist := textnorm.LevenshteinDistance(queryNorm, norm)
-	if dist > maxLevenshtein(queryNorm) && !isPhonetic {
-		return 0, false
-	}
-	return domain.VocabularyMatchScore(
-		jaccardCoefficient(shared, len(queryTrigrams), len(trigrams(norm))),
-		levenshteinSimilarity(queryNorm, norm, dist),
-		phoneticScore(isPhonetic),
-		lengthSimilarity(queryNorm, norm),
-	), true
 }
 
 func (s *RedisVocabularyStore) loadEntries(
@@ -302,58 +281,4 @@ func topFuzzyCandidates(scored []fuzzyCandidate, limit int) []domain.VocabularyE
 		results[i] = c.entry
 	}
 	return results
-}
-
-func jaccardCoefficient(shared, totalA, totalB int) float64 {
-	union := totalA + totalB - shared
-	if union == 0 {
-		return 0
-	}
-	return float64(shared) / float64(union)
-}
-
-func maxLevenshtein(query string) int {
-	n := len([]rune(query))
-	if n <= 4 {
-		return 1
-	}
-	if n <= 8 {
-		return 2
-	}
-	return 3
-}
-
-func levenshteinSimilarity(a, b string, dist int) float64 {
-	maxLen := len([]rune(a))
-	if bl := len([]rune(b)); bl > maxLen {
-		maxLen = bl
-	}
-	if maxLen == 0 {
-		return 0.0
-	}
-	return 1.0 - float64(dist)/float64(maxLen)
-}
-
-func phoneticScore(inPhoneticSet bool) float64 {
-	if inPhoneticSet {
-		return 1.0
-	}
-	return 0.0
-}
-
-func lengthSimilarity(a, b string) float64 {
-	aLen := len([]rune(a))
-	bLen := len([]rune(b))
-	if aLen == 0 && bLen == 0 {
-		return 0.0
-	}
-	bigger := aLen
-	if bLen > bigger {
-		bigger = bLen
-	}
-	diff := aLen - bLen
-	if diff < 0 {
-		diff = -diff
-	}
-	return 1.0 - float64(diff)/float64(bigger)
 }

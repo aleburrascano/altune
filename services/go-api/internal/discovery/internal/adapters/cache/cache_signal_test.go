@@ -1,7 +1,8 @@
-package cache
+package cache_test
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/internal/adapters/cache"
 	"bytes"
 	"context"
 	"errors"
@@ -63,8 +64,8 @@ type signalProbe struct {
 	logs  *bytes.Buffer
 }
 
-func (p *signalProbe) signal() *Signal {
-	return NewSignal(p.ops, func() time.Time { return p.clock })
+func (p *signalProbe) signal() *cache.Signal {
+	return cache.NewSignal(p.ops, func() time.Time { return p.clock })
 }
 
 func (p *signalProbe) counter(name string) string {
@@ -89,7 +90,7 @@ func newSignalProbe(t *testing.T) *signalProbe {
 
 func TestCacheSignal_RedisNilIsCountedMissAndNotLogged(t *testing.T) {
 	probe := newSignalProbe(t)
-	c := NewRedisDeezerEnrichmentCache(scriptedClient(t, replyErr(goredis.Nil)), WithSignal(probe.signal()))
+	c := cache.NewRedisDeezerEnrichmentCache(scriptedClient(t, replyErr(goredis.Nil)), cache.WithSignal(probe.signal()))
 
 	_, hit, err := c.Get(context.Background(), "some query")
 	if hit || err != nil {
@@ -108,7 +109,7 @@ func TestCacheSignal_RedisNilIsCountedMissAndNotLogged(t *testing.T) {
 
 func TestCacheSignal_RedisFailureIsLoggedAndCountedWithoutLeakingKey(t *testing.T) {
 	probe := newSignalProbe(t)
-	c := NewRedisDeezerEnrichmentCache(scriptedClient(t, replyErr(errors.New("connection refused"))), WithSignal(probe.signal()))
+	c := cache.NewRedisDeezerEnrichmentCache(scriptedClient(t, replyErr(errors.New("connection refused"))), cache.WithSignal(probe.signal()))
 
 	_, hit, err := c.Get(context.Background(), "secret query")
 	if hit || err != nil {
@@ -127,7 +128,7 @@ func TestCacheSignal_RedisFailureIsLoggedAndCountedWithoutLeakingKey(t *testing.
 
 func TestCacheSignal_CorruptEntryIsLoggedAsDecodeErrorAndMisses(t *testing.T) {
 	probe := newSignalProbe(t)
-	c := NewRedisDeezerEnrichmentCache(scriptedClient(t, replyString("{not json")), WithSignal(probe.signal()))
+	c := cache.NewRedisDeezerEnrichmentCache(scriptedClient(t, replyString("{not json")), cache.WithSignal(probe.signal()))
 
 	_, hit, err := c.Get(context.Background(), "some query")
 	if hit || err != nil {
@@ -143,7 +144,7 @@ func TestCacheSignal_CorruptEntryIsLoggedAsDecodeErrorAndMisses(t *testing.T) {
 
 func TestCacheSignal_SetFailureReturnsErrorAndIsLogged(t *testing.T) {
 	probe := newSignalProbe(t)
-	c := NewRedisDeezerEnrichmentCache(scriptedClient(t, replyErr(errors.New("readonly replica"))), WithSignal(probe.signal()))
+	c := cache.NewRedisDeezerEnrichmentCache(scriptedClient(t, replyErr(errors.New("readonly replica"))), cache.WithSignal(probe.signal()))
 
 	if err := c.SetNegative(context.Background(), "some query"); err == nil {
 		t.Fatal("SetNegative swallowed the redis error")
@@ -158,11 +159,11 @@ func TestCacheSignal_SetFailureReturnsErrorAndIsLogged(t *testing.T) {
 
 func TestCacheSignal_GetNegativeSurfacesErrorButNotRedisNil(t *testing.T) {
 	probe := newSignalProbe(t)
-	failing := NewRedisEnrichmentCache(scriptedClient(t, replyErr(errors.New("timeout"))), WithSignal(probe.signal()))
+	failing := cache.NewRedisEnrichmentCache(scriptedClient(t, replyErr(errors.New("timeout"))), cache.WithSignal(probe.signal()))
 	if _, err := failing.GetNegative(context.Background(), domain.ResultKindAlbum, "x"); err == nil {
 		t.Error("GetNegative swallowed the redis error")
 	}
-	missing := NewRedisEnrichmentCache(scriptedClient(t, replyErr(goredis.Nil)), WithSignal(probe.signal()))
+	missing := cache.NewRedisEnrichmentCache(scriptedClient(t, replyErr(goredis.Nil)), cache.WithSignal(probe.signal()))
 	if got, err := missing.GetNegative(context.Background(), domain.ResultKindAlbum, "x"); got || err != nil {
 		t.Errorf("GetNegative on redis.Nil = %v, %v, want false, nil", got, err)
 	}
@@ -171,21 +172,39 @@ func TestCacheSignal_GetNegativeSurfacesErrorButNotRedisNil(t *testing.T) {
 func TestCacheSignal_ErrorLogRateLimitedPerCacheAndOpThenResumes(t *testing.T) {
 	probe := newSignalProbe(t)
 	sig := probe.signal()
-	emit := func() { sig.failure(context.Background(), "discovery:x", opGet, context.Canceled) }
+	failing := scriptedClient(t, replyErr(errors.New("connection refused")))
+	enrichment := cache.NewRedisDeezerEnrichmentCache(failing, cache.WithSignal(sig))
+	lyrics := cache.NewRedisDeezerLyricsCache(failing, cache.WithSignal(sig))
+	ctx := context.Background()
+	start := probe.clock
+	logged := func() int { return strings.Count(probe.logs.String(), "discovery.cache_error") }
 
-	emit()
-	emit()
-	emit()
-	if n := strings.Count(probe.logs.String(), "discovery.cache_error"); n != 1 {
-		t.Fatalf("logged %d lines inside the interval, want 1", n)
+	for range 3 {
+		enrichment.Get(ctx, "q")
 	}
-	probe.clock = probe.clock.Add(errorLogInterval)
-	emit()
-	if n := strings.Count(probe.logs.String(), "discovery.cache_error"); n != 2 {
-		t.Errorf("logged %d lines after the interval, want 2", n)
+	if n := logged(); n != 1 {
+		t.Fatalf("logged %d lines for repeated get failures inside the interval, want 1", n)
 	}
-	if got := probe.counter("discovery:x.error"); got != "4" {
-		t.Errorf("error counter = %s, want 4 (every failure counts)", got)
+	_ = enrichment.SetNegative(ctx, "q")
+	lyrics.Get(ctx, "q")
+	if n := logged(); n != 3 {
+		t.Fatalf("logged %d lines, want 3: a new op and a new cache each log once", n)
+	}
+	probe.clock = start.Add(30*time.Second - time.Millisecond)
+	enrichment.Get(ctx, "q")
+	if n := logged(); n != 3 {
+		t.Fatalf("logged %d lines just inside the 30s interval, want 3", n)
+	}
+	probe.clock = start.Add(30 * time.Second)
+	enrichment.Get(ctx, "q")
+	if n := logged(); n != 4 {
+		t.Errorf("logged %d lines once the 30s interval passed, want 4", n)
+	}
+	if got := probe.counter("discovery:dzenrich.error"); got != "6" {
+		t.Errorf("enrichment error counter = %s, want 6 (every failure counts)", got)
+	}
+	if got := probe.counter("discovery:dzlyrics.error"); got != "1" {
+		t.Errorf("lyrics error counter = %s, want 1", got)
 	}
 }
 
@@ -197,7 +216,7 @@ func TestCacheSignal_VocabularyTrigramReadFailureIsLoggedAndCounted(t *testing.T
 		single:   func(goredis.Cmder) {},
 		pipeline: func([]goredis.Cmder) error { return errors.New("pipeline broke") },
 	}
-	store := NewVocabularyStore(scriptedClient(t, hook), identityNormalize, WithVocabSignal(probe.signal()))
+	store := cache.NewVocabularyStore(scriptedClient(t, hook), identityNormalize, cache.WithVocabSignal(probe.signal()))
 
 	if _, err := store.FindClosest(context.Background(), "abcd", 5); err != nil {
 		t.Fatalf("FindClosest err = %v, want degraded nil", err)
@@ -213,11 +232,11 @@ func TestCacheSignal_VocabularyTrigramReadFailureIsLoggedAndCounted(t *testing.T
 func TestCacheSignal_VocabularyMetaphoneReadFailureIsLoggedAndCounted(t *testing.T) {
 	probe := newSignalProbe(t)
 	hook := scriptedRedis{single: func(cmd goredis.Cmder) { cmd.SetErr(errors.New("smembers broke")) }}
-	store := NewVocabularyStore(
+	store := cache.NewVocabularyStore(
 		scriptedClient(t, hook),
 		identityNormalize,
-		WithMetaphone(func(string) string { return "ABCT" }),
-		WithVocabSignal(probe.signal()),
+		cache.WithMetaphone(func(string) string { return "ABCT" }),
+		cache.WithVocabSignal(probe.signal()),
 	)
 
 	if _, err := store.FindClosest(context.Background(), "abcd", 5); err != nil {
