@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/app/canary"
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/app/shutdown"
 	"altune/go-api/internal/auth"
@@ -176,8 +177,10 @@ func (a *App) connectAuth(ctx context.Context) (auth.TokenVerifier, error) {
 func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback playbackWiring) {
 	a.startOrphanedAudioReconcile(ctx, cat.orphanedAudio, cat.audioStore)
 	a.startDeletedIdentityErasure(ctx, playback.forgetDeletedIdentities)
-	a.startSourceCanary(ctx, cat.ytDlpSearcher, cat.ytDlpAvailable, cat.ytmCanary,
-		sourceToggles{ytMusic: a.cfg.YtMusicEnabled, ytDlp: a.cfg.YtDLPEnabled})
+	a.startSourceCanary(canary.Probes{
+		YtDlp: cat.ytDlpSearcher, YtDlpAvailable: cat.ytDlpAvailable, InnerTube: cat.ytmCanary,
+		YtMusicEnabled: a.cfg.YtMusicEnabled, YtDlpEnabled: a.cfg.YtDLPEnabled,
+	})
 	if a.pool != nil {
 		a.startAcquisitionPrune(ctx,
 			acquisition.NewPgxOutcomeStore(a.pool),
