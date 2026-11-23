@@ -175,6 +175,20 @@ commit type-only
 expect "a changed line Stryker has no mutant for passes" 0 'killed 0, survived 0'
 base=$(git -C "$repo" rev-parse HEAD)
 
+write src/shared/lonely/index.ts <<'TS'
+export { alone } from './core/alone';
+TS
+write src/shared/lonely/core/alone.ts <<'TS'
+export function alone(n: number): boolean {
+  return n === 1;
+}
+TS
+commit untested-module
+expect "a changed file no test reaches names its module's test folder" 1 'no test in src/shared/lonely runs src/shared/lonely/core/alone.ts'
+git -C "$repo" rm -rq client/src/shared/lonely
+commit drop-untested-module
+base=$(git -C "$repo" rev-parse HEAD)
+
 sed -i 's/expect(adult(17)).toBe(false);/expect(adult(17)).toBe(true);/' "$client/src/shared/clamp/__tests__/adult.test.ts"
 sed -i 's/age > 64/age >= 65/' "$client/src/shared/clamp/core/adult.ts"
 commit broken

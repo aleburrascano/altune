@@ -64,11 +64,15 @@ for project in native web; do
   mutate=$(IFS=,; echo "${ranges[*]}")
   if ! out=$(env CLIENT_MUTATE_JEST_PROJECT="$project" CLIENT_MUTATE_TEST_ROOTS="$test_roots" "$stryker" run "$work/$project.config.json" --mutate "$mutate" 2>&1); then
     echo "$out" >&2
-    echo "client-mutate: Stryker failed on the $project jest project (a failing test or a broken build stops it). Reproduce: bash scripts/ci/client-mutate.sh $base" >&2
+    if grep -q 'No tests were executed' <<<"$out"; then
+      echo "client-mutate: no test in ${test_roots//:/, } runs ${mutate//,/, } under the $project jest project. Add a test through the module's door (client/src/README.md). Reproduce: bash scripts/ci/client-mutate.sh $base" >&2
+    else
+      echo "client-mutate: Stryker failed on the $project jest project (a failing test or a broken build stops it). Reproduce: bash scripts/ci/client-mutate.sh $base" >&2
+    fi
     exit 1
   fi
   if [ ! -f "$report" ]; then
-    grep -q 'No files marked to be mutated' <<<"$out" && continue
+    grep -q 'No files found for mutation' <<<"$out" && continue
     echo "$out" >&2
     echo "client-mutate: Stryker wrote no report for the $project jest project and did not say why" >&2
     exit 1
@@ -80,6 +84,6 @@ done
 echo "client-mutate: $changed_files changed files, killed $killed, survived ${#survivors[@]}"
 if [ ${#survivors[@]} -gt 0 ]; then
   printf '  %s\n' "${survivors[@]}"
-  echo "client-mutate: add a test that fails on each mutant above, through the module's door (client/src/README.md), or remove the code no test needs" >&2
+  echo "client-mutate: add a test that fails on each mutant above, through the module's door (client/src/README.md), or remove the code no test needs. Reproduce: bash scripts/ci/client-mutate.sh $base" >&2
   exit 1
 fi
