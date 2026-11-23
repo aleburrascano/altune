@@ -1,6 +1,7 @@
-package commands
+package orphans_test
 
 import (
+	"altune/go-api/cmd/api/commands/orphans"
 	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
@@ -49,44 +50,44 @@ func writeAudio(t *testing.T, dir, ref string) {
 	}
 }
 
-func TestCheckReadyTracksWithNoTracksMakesNoRepoCalls(t *testing.T) {
+func TestCheckWithNoTracksMakesNoRepoCalls(t *testing.T) {
 	repo := &fakeTrackRepo{}
 	store := catalog.NewFilesystemAudioStore(t.TempDir())
 
-	orphaned, fixed := checkReadyTracks(context.Background(), nil, store, repo, true)
+	orphaned, fixed := orphans.Check(context.Background(), nil, store, repo, true)
 
 	if orphaned != 0 || fixed != 0 || repo.getN != 0 || len(repo.updates) != 0 {
 		t.Fatalf("got (%d, %d), gets=%d updates=%d; want (0, 0) and no repo calls", orphaned, fixed, repo.getN, len(repo.updates))
 	}
 }
 
-func TestCheckReadyTracksCountsNothingWhenTheFileExists(t *testing.T) {
+func TestCheckCountsNothingWhenTheFileExists(t *testing.T) {
 	dir := t.TempDir()
 	ref := uuid.NewString() + "/song.mp3"
 	writeAudio(t, dir, ref)
 	track, repo := readyFixture(t, ref)
 
-	orphaned, fixed := checkReadyTracks(context.Background(), []catalog.ReadyAudioTrack{track}, catalog.NewFilesystemAudioStore(dir), repo, true)
+	orphaned, fixed := orphans.Check(context.Background(), []catalog.ReadyAudioTrack{track}, catalog.NewFilesystemAudioStore(dir), repo, true)
 
 	if orphaned != 0 || fixed != 0 || len(repo.updates) != 0 {
 		t.Fatalf("got (%d, %d), updates=%d; want (0, 0) and no update", orphaned, fixed, len(repo.updates))
 	}
 }
 
-func TestCheckReadyTracksReportsMissingFileWithoutFixing(t *testing.T) {
+func TestCheckReportsMissingFileWithoutFixing(t *testing.T) {
 	track, repo := readyFixture(t, uuid.NewString()+"/song.mp3")
 
-	orphaned, fixed := checkReadyTracks(context.Background(), []catalog.ReadyAudioTrack{track}, catalog.NewFilesystemAudioStore(t.TempDir()), repo, false)
+	orphaned, fixed := orphans.Check(context.Background(), []catalog.ReadyAudioTrack{track}, catalog.NewFilesystemAudioStore(t.TempDir()), repo, false)
 
 	if orphaned != 1 || fixed != 0 || len(repo.updates) != 0 {
 		t.Fatalf("got (%d, %d), updates=%d; want (1, 0) and no update", orphaned, fixed, len(repo.updates))
 	}
 }
 
-func TestCheckReadyTracksMarksMissingFileFailedWhenFixing(t *testing.T) {
+func TestCheckMarksMissingFileFailedWhenFixing(t *testing.T) {
 	track, repo := readyFixture(t, uuid.NewString()+"/song.mp3")
 
-	orphaned, fixed := checkReadyTracks(context.Background(), []catalog.ReadyAudioTrack{track}, catalog.NewFilesystemAudioStore(t.TempDir()), repo, true)
+	orphaned, fixed := orphans.Check(context.Background(), []catalog.ReadyAudioTrack{track}, catalog.NewFilesystemAudioStore(t.TempDir()), repo, true)
 
 	if orphaned != 1 || fixed != 1 || len(repo.updates) != 1 {
 		t.Fatalf("got (%d, %d), updates=%d; want (1, 1) and one update", orphaned, fixed, len(repo.updates))
@@ -100,13 +101,13 @@ func TestCheckReadyTracksMarksMissingFileFailedWhenFixing(t *testing.T) {
 	}
 }
 
-func TestCheckReadyTracksTreatsASiblingUsersFileAsMissing(t *testing.T) {
+func TestCheckTreatsASiblingUsersFileAsMissing(t *testing.T) {
 	dir := t.TempDir()
 	ref := uuid.NewString() + "/song.mp3"
 	writeAudio(t, dir, uuid.NewString()+"/song.mp3")
 	track, repo := readyFixture(t, ref)
 
-	orphaned, fixed := checkReadyTracks(context.Background(), []catalog.ReadyAudioTrack{track}, catalog.NewFilesystemAudioStore(dir), repo, true)
+	orphaned, fixed := orphans.Check(context.Background(), []catalog.ReadyAudioTrack{track}, catalog.NewFilesystemAudioStore(dir), repo, true)
 
 	if orphaned != 1 || fixed != 1 {
 		t.Fatalf("got (%d, %d), want (1, 1)", orphaned, fixed)

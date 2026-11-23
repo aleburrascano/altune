@@ -1,6 +1,7 @@
-package commands
+package journey_test
 
 import (
+	"altune/go-api/cmd/api/commands/journey"
 	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/config"
@@ -57,7 +58,7 @@ func (f *fakeJourneyDownloader) Download(_ context.Context, url string, outDir s
 	return acquisition.FetchedAudio{Path: path}, nil
 }
 
-func TestRunJourneyCheck(t *testing.T) {
+func TestRun(t *testing.T) {
 	cases := []struct {
 		name       string
 		searcher   *fakeJourneySearcher
@@ -102,26 +103,26 @@ func TestRunJourneyCheck(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var out bytes.Buffer
 
-			err := runJourneyCheck(context.Background(), tc.searcher, tc.downloader, &out)
+			err := journey.Run(context.Background(), tc.searcher, tc.downloader, &out)
 
 			gotErr := ""
 			if err != nil {
 				gotErr = err.Error()
 			}
 			if gotErr != tc.wantErr {
-				t.Errorf("runJourneyCheck error = %q, want %q", gotErr, tc.wantErr)
+				t.Errorf("Run error = %q, want %q", gotErr, tc.wantErr)
 			}
 			if out.String() != tc.wantOut {
-				t.Errorf("runJourneyCheck output = %q, want %q", out.String(), tc.wantOut)
+				t.Errorf("Run output = %q, want %q", out.String(), tc.wantOut)
 			}
 		})
 	}
 }
 
-func TestRunJourneyCheckSearchesAsTheSystemUserWithoutSavingHistory(t *testing.T) {
+func TestRunSearchesAsTheSystemUserWithoutSavingHistory(t *testing.T) {
 	searcher := &fakeJourneySearcher{results: 1, gotSaved: true}
 
-	_ = runJourneyCheck(context.Background(), searcher, &fakeJourneyDownloader{payload: []byte("x")}, &bytes.Buffer{})
+	_ = journey.Run(context.Background(), searcher, &fakeJourneyDownloader{payload: []byte("x")}, &bytes.Buffer{})
 
 	if searcher.gotUser != shared.SystemUserId() || searcher.gotSaved {
 		t.Errorf("Execute(user=%v, saveHistory=%v), want user=%v, saveHistory=false", searcher.gotUser, searcher.gotSaved, shared.SystemUserId())
@@ -140,45 +141,45 @@ func (d *deadlineRecordingSearcher) Execute(ctx context.Context, userId shared.U
 	return d.fakeJourneySearcher.Execute(ctx, userId, query, saveHistory)
 }
 
-func TestRunJourneyCheckBoundsTheSearchWithAMinuteDeadline(t *testing.T) {
+func TestRunBoundsTheSearchWithAMinuteDeadline(t *testing.T) {
 	searcher := &deadlineRecordingSearcher{fakeJourneySearcher: fakeJourneySearcher{results: 1}}
 
-	_ = runJourneyCheck(context.Background(), searcher, &fakeJourneyDownloader{payload: []byte("x")}, &bytes.Buffer{})
+	_ = journey.Run(context.Background(), searcher, &fakeJourneyDownloader{payload: []byte("x")}, &bytes.Buffer{})
 
 	if !searcher.hasDeadline || searcher.remaining < 50*time.Second || searcher.remaining > time.Minute {
 		t.Errorf("search deadline set=%v remaining=%v, want about %v", searcher.hasDeadline, searcher.remaining, time.Minute)
 	}
 }
 
-func TestRunJourneyCheckFailsTheSearchWhenItReturnsNoOutputAndNoError(t *testing.T) {
+func TestRunFailsTheSearchWhenItReturnsNoOutputAndNoError(t *testing.T) {
 	downloader := &fakeJourneyDownloader{payload: []byte("x")}
 
-	err := runJourneyCheck(context.Background(), &nilOutputJourneySearcher{}, downloader, &bytes.Buffer{})
+	err := journey.Run(context.Background(), &nilOutputJourneySearcher{}, downloader, &bytes.Buffer{})
 
 	if err == nil || !strings.HasPrefix(err.Error(), "journey-check: search failed: ") {
-		t.Errorf("runJourneyCheck error = %v, want a search failure", err)
+		t.Errorf("Run error = %v, want a search failure", err)
 	}
 	if downloader.called {
 		t.Error("Download was attempted after the search returned no output")
 	}
 }
 
-func TestRunJourneyCheckSkipsTheDownloadWhenTheSearchFails(t *testing.T) {
+func TestRunSkipsTheDownloadWhenTheSearchFails(t *testing.T) {
 	downloader := &fakeJourneyDownloader{payload: []byte("x")}
 
-	_ = runJourneyCheck(context.Background(), &fakeJourneySearcher{results: 0}, downloader, &bytes.Buffer{})
+	_ = journey.Run(context.Background(), &fakeJourneySearcher{results: 0}, downloader, &bytes.Buffer{})
 
 	if downloader.called {
 		t.Error("Download was attempted after the search failed")
 	}
 }
 
-func TestRunJourneyCheckDownloadsTheYouTubeCanaryIntoARemovedTempDir(t *testing.T) {
+func TestRunDownloadsTheYouTubeCanaryIntoARemovedTempDir(t *testing.T) {
 	for _, downloader := range []*fakeJourneyDownloader{
 		{payload: []byte("audio")},
 		{err: errors.New("boom")},
 	} {
-		_ = runJourneyCheck(context.Background(), &fakeJourneySearcher{results: 1}, downloader, &bytes.Buffer{})
+		_ = journey.Run(context.Background(), &fakeJourneySearcher{results: 1}, downloader, &bytes.Buffer{})
 
 		if downloader.gotURL != acquisition.YouTubeCanary.URL {
 			t.Errorf("Download url = %q, want %q", downloader.gotURL, acquisition.YouTubeCanary.URL)
@@ -189,23 +190,23 @@ func TestRunJourneyCheckDownloadsTheYouTubeCanaryIntoARemovedTempDir(t *testing.
 	}
 }
 
-func TestRunJourneyCheckRedactsCookiePathsInTheFailure(t *testing.T) {
+func TestRunRedactsCookiePathsInTheFailure(t *testing.T) {
 	downloader := &fakeJourneyDownloader{err: errors.New("yt-dlp download: exit 1 (stderr: --cookies /data/cookies.txt rejected)")}
 
-	err := runJourneyCheck(context.Background(), &fakeJourneySearcher{results: 1}, downloader, &bytes.Buffer{})
+	err := journey.Run(context.Background(), &fakeJourneySearcher{results: 1}, downloader, &bytes.Buffer{})
 
 	if err == nil || strings.Contains(err.Error(), "/data/cookies.txt") {
-		t.Errorf("runJourneyCheck error = %v, want the cookie path redacted", err)
+		t.Errorf("Run error = %v, want the cookie path redacted", err)
 	}
 }
 
-func TestRunJourneyCheckRedactsSecretsInASearchFailure(t *testing.T) {
+func TestRunRedactsSecretsInASearchFailure(t *testing.T) {
 	searcher := &fakeJourneySearcher{err: errors.New("GET https://api.example/search?q=x&access_token=sk_live_abc123: 401")}
 
-	err := runJourneyCheck(context.Background(), searcher, &fakeJourneyDownloader{payload: []byte("x")}, &bytes.Buffer{})
+	err := journey.Run(context.Background(), searcher, &fakeJourneyDownloader{payload: []byte("x")}, &bytes.Buffer{})
 
 	if err == nil || !strings.HasPrefix(err.Error(), "journey-check: search failed: ") || strings.Contains(err.Error(), "sk_live_abc123") {
-		t.Errorf("runJourneyCheck error = %v, want a search failure with the token redacted", err)
+		t.Errorf("Run error = %v, want a search failure with the token redacted", err)
 	}
 }
 
@@ -215,35 +216,35 @@ func (missingFileDownloader) Download(_ context.Context, _ string, outDir string
 	return acquisition.FetchedAudio{Path: filepath.Join(outDir, "never-written.mp3")}, nil
 }
 
-func TestRunJourneyCheckFailsWhenTheDownloadReportsAFileThatIsNotThere(t *testing.T) {
-	err := runJourneyCheck(context.Background(), &fakeJourneySearcher{results: 1}, missingFileDownloader{}, &bytes.Buffer{})
+func TestRunFailsWhenTheDownloadReportsAFileThatIsNotThere(t *testing.T) {
+	err := journey.Run(context.Background(), &fakeJourneySearcher{results: 1}, missingFileDownloader{}, &bytes.Buffer{})
 
 	if err == nil || !strings.HasPrefix(err.Error(), "journey-check: download failed: ") {
-		t.Errorf("runJourneyCheck error = %v, want a download failure", err)
+		t.Errorf("Run error = %v, want a download failure", err)
 	}
 }
 
-func TestRunJourneyCheckPassesAOneByteDownload(t *testing.T) {
+func TestRunPassesAOneByteDownload(t *testing.T) {
 	var out bytes.Buffer
 
-	err := runJourneyCheck(context.Background(), &fakeJourneySearcher{results: 1}, &fakeJourneyDownloader{payload: []byte("x")}, &out)
+	err := journey.Run(context.Background(), &fakeJourneySearcher{results: 1}, &fakeJourneyDownloader{payload: []byte("x")}, &out)
 
 	if err != nil || out.String() != "journey-check: search ok (1 results)\njourney-check: download ok (1 bytes)\n" {
-		t.Errorf("runJourneyCheck = %v, output %q; want pass with 1 result and 1 byte", err, out.String())
+		t.Errorf("Run = %v, output %q; want pass with 1 result and 1 byte", err, out.String())
 	}
 }
 
 func TestRankingOnlySearcherComesFromTheDiscoveryTable(t *testing.T) {
-	searcher, err := rankingOnlySearcher(t.Context(), &config.Config{}, nil)
+	searcher, err := journey.RankingOnlySearcher(t.Context(), &config.Config{}, nil)
 	if err != nil {
-		t.Fatalf("rankingOnlySearcher: %v", err)
+		t.Fatalf("RankingOnlySearcher: %v", err)
 	}
 	if _, ok := searcher.(*discovery.SearchService); !ok {
 		t.Errorf("searcher = %T, want the table's ranking-only search service", searcher)
 	}
 }
 
-func TestJourneyCheckDownloadsWithTheLiveJarAndRecordsItsBotCheckUnderTheConfiguredEnvironment(t *testing.T) {
+func TestDownloaderForDownloadsWithTheLiveJarAndRecordsItsBotCheckUnderTheConfiguredEnvironment(t *testing.T) {
 	bin := t.TempDir()
 	if err := os.WriteFile(filepath.Join(bin, "yt-dlp"), []byte("#!/bin/sh\necho \"ERROR: [youtube] x: Sign in to confirm you're not a bot.\" >&2\nexit 1\n"), 0o755); err != nil {
 		t.Fatal(err)
@@ -254,7 +255,7 @@ func TestJourneyCheckDownloadsWithTheLiveJarAndRecordsItsBotCheckUnderTheConfigu
 		t.Fatal(err)
 	}
 
-	_, err := journeyDownloaderFor(&config.Config{YtDLPCookieFile: jar, Env: "production"}).Download(context.Background(), "https://youtube.com/watch?v=1", t.TempDir())
+	_, err := journey.DownloaderFor(&config.Config{YtDLPCookieFile: jar, Env: "production"}).Download(context.Background(), "https://youtube.com/watch?v=1", t.TempDir())
 
 	if err == nil {
 		t.Fatal("Download() = nil, want the bot check's failure")

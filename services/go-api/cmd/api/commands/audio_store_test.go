@@ -1,4 +1,4 @@
-package commands
+package commands_test
 
 import (
 	"altune/go-api/internal/catalog"
@@ -7,9 +7,11 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -115,26 +117,32 @@ func rawSQLCalls(t *testing.T, fset *token.FileSet, name string, src any) []stri
 	return hits
 }
 
-func TestRawSQLGuardPackageHasNoRawSQL(t *testing.T) {
-	paths, err := filepath.Glob("*.go")
+func commandSources(t *testing.T) []string {
+	t.Helper()
+	var paths []string
+	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
+			paths = append(paths, path)
+		}
+		return err
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	checked := 0
+	return paths
+}
+
+func TestRawSQLGuardPackageHasNoRawSQL(t *testing.T) {
+	paths := commandSources(t)
 	for _, path := range paths {
-		if strings.HasSuffix(path, "_test.go") {
-			continue
-		}
-		checked++
 		if hits := rawSQLCalls(t, token.NewFileSet(), path, nil); len(hits) > 0 {
 			t.Errorf("raw SQL in cmd/api/commands, route it through a repository: %v", hits)
 		}
 	}
-	if checked == 0 {
-		t.Fatal("no non-test files found; the guard checked nothing")
-	}
-	if _, err := os.Stat("audio_store.go"); err != nil {
-		t.Fatalf("guard is not running in the commands package: %v", err)
+	for _, want := range []string{"audio_store.go", filepath.Join("orphans", "orphans.go"), filepath.Join("stagingsweep", "sweep.go")} {
+		if !slices.Contains(paths, want) {
+			t.Fatalf("guard did not check %s, so it is not running over the commands tree: checked %v", want, paths)
+		}
 	}
 }
 

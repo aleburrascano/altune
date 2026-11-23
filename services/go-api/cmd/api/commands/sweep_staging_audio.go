@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"altune/go-api/cmd/api/commands/stagingsweep"
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/shared/config"
 	"context"
@@ -8,11 +9,6 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
-)
-
-const (
-	sweepMinAge      = time.Hour
-	stagingRefPrefix = "staging/"
 )
 
 func RunSweepStagingAudio(cfg *config.Config, execute bool) {
@@ -41,11 +37,11 @@ func sweepAudioStore(ctx context.Context, cfg *config.Config, refs catalog.Audio
 		return errors.New("the configured audio store cannot list object age")
 	}
 
-	deleted, keptReferenced, keptFresh, failed, err := sweepStaging(ctx, store, lister, refs, execute, time.Now())
+	tally, err := stagingsweep.Sweep(ctx, store, lister, refs, execute, time.Now())
 	if err != nil {
 		return err
 	}
-	return reportSweep(deleted, keptReferenced, keptFresh, failed, execute)
+	return reportSweep(tally.Deleted, tally.KeptReferenced, tally.KeptFresh, tally.Failed, execute)
 }
 
 func reportSweep(deleted, keptReferenced, keptFresh, failed int, execute bool) error {
@@ -65,58 +61,4 @@ func reportSweep(deleted, keptReferenced, keptFresh, failed int, execute bool) e
 		return fmt.Errorf("sweep-staging-audio: %d delete(s) failed", failed)
 	}
 	return nil
-}
-
-func oldEnoughToSweep(age time.Duration) bool {
-	return age >= sweepMinAge
-}
-
-func sweepStaging(ctx context.Context, store catalog.AudioStore, lister catalog.AudioAgeLister, refs catalog.AudioRefPrefixLister, execute bool, now time.Time) (deleted, keptReferenced, keptFresh, failed int, err error) {
-	objects, err := lister.ListWithAge(ctx, stagingRefPrefix)
-	if err != nil {
-		return 0, 0, 0, 0, fmt.Errorf("list staging objects: %w", err)
-	}
-
-	referenced, err := refs.AudioRefsUnderPrefix(ctx, stagingRefPrefix)
-	if err != nil {
-		return 0, 0, 0, 0, fmt.Errorf("query referenced staging refs: %w", err)
-	}
-
-	fmt.Printf("\nFound %d object(s) under %q.\n\n", len(objects), stagingRefPrefix)
-
-	deleted, keptReferenced, keptFresh, failed = sweepObjects(ctx, store, objects, referenced, execute, now)
-	return deleted, keptReferenced, keptFresh, failed, nil
-}
-
-func sweepObjects(ctx context.Context, store catalog.AudioStore, objects []catalog.ObjectAge, referenced map[string]bool, execute bool, now time.Time) (deleted, keptReferenced, keptFresh, failed int) {
-	for _, obj := range objects {
-		age := now.Sub(obj.LastModified)
-		if referenced[obj.AudioRef] {
-			keptReferenced++
-			continue
-		}
-		if !oldEnoughToSweep(age) {
-			keptFresh++
-			continue
-		}
-
-		if !sweepObject(ctx, store, obj, age, execute) {
-			failed++
-			continue
-		}
-		deleted++
-	}
-	return deleted, keptReferenced, keptFresh, failed
-}
-
-func sweepObject(ctx context.Context, store catalog.AudioStore, obj catalog.ObjectAge, age time.Duration, execute bool) bool {
-	fmt.Printf("  %s (unreferenced, %s old)\n", obj.AudioRef, age.Round(time.Second))
-	if !execute {
-		return true
-	}
-	if err := store.Delete(ctx, obj.AudioRef); err != nil {
-		fmt.Printf("    FAILED: %v\n", err)
-		return false
-	}
-	return true
 }
