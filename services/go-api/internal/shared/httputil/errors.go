@@ -67,7 +67,7 @@ var kindStatus = map[domain.Kind]int{
 }
 
 func HandleServiceError(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(r.Context().Err(), context.Canceled) {
+	if clientLeft(r, err) {
 		slog.InfoContext(r.Context(), "request.cancelled",
 			logging.KeyMethod, r.Method, logging.KeyPath, r.URL.Path, logging.KeyError, err)
 		w.WriteHeader(statusClientClosedRequest)
@@ -79,17 +79,25 @@ func HandleServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	writeProblem(w, p)
 }
 
+func clientLeft(r *http.Request, err error) bool {
+	return errors.Is(err, context.Canceled) && errors.Is(r.Context().Err(), context.Canceled)
+}
+
+func ranOutOfTime(r *http.Request, err error) bool {
+	return errors.Is(err, context.DeadlineExceeded) && errors.Is(r.Context().Err(), context.DeadlineExceeded)
+}
+
 func problemFor(r *http.Request, err error) Problem {
 	var coded *domain.CodedError
 	if errors.As(err, &coded) {
 		return newProblem(r, coded.Code(), coded.Error())
 	}
-	if errors.Is(r.Context().Err(), context.DeadlineExceeded) {
-		return newProblem(r, domain.CodeRequestTimeout, "")
-	}
 	var se StatusError
 	if errors.As(err, &se) {
 		return legacyProblem(r, err, se)
+	}
+	if ranOutOfTime(r, err) {
+		return newProblem(r, domain.CodeRequestTimeout, "")
 	}
 	return newProblem(r, domain.CodeInternal, internalServerErrorDetail)
 }

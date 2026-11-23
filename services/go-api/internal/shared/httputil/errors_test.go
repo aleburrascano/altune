@@ -434,6 +434,32 @@ func TestHandleServiceError_CodedErrorWinsOverAnExpiredDeadline(t *testing.T) {
 	}
 }
 
+func TestHandleServiceError_ARefusalStaysARefusalAfterTheClientLeft(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	r := httptest.NewRequest(http.MethodGet, "/x", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	httputil.HandleServiceError(rec, r, domain.NewError(domain.CodeObservePrincipalRequired, ""))
+
+	if p := decodeProblem(t, rec); rec.Code != http.StatusForbidden || p.Code != "observe.principal_required" {
+		t.Errorf("answered %d %+v, want the coded 403: only a cancellation error means the client left", rec.Code, p)
+	}
+}
+
+func TestHandleServiceError_LegacyCodedErrorWinsOverAnExpiredDeadline(t *testing.T) {
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+	r := httptest.NewRequest(http.MethodGet, "/x", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	httputil.HandleServiceError(rec, r, &codedTestError{msg: "every provider failed", status: http.StatusServiceUnavailable, code: "discovery.all_providers_failed"})
+
+	if p := decodeProblem(t, rec); rec.Code != http.StatusServiceUnavailable || p.Code != "discovery.all_providers_failed" {
+		t.Errorf("answered %d %+v, want the legacy 503 kept", rec.Code, p)
+	}
+}
+
 func TestHandleServiceError_InternalCancellationOrTimeoutIsAFaultWhileTheRequestLives(t *testing.T) {
 	for name, cause := range map[string]error{"canceled": context.Canceled, "deadline": context.DeadlineExceeded} {
 		t.Run(name, func(t *testing.T) {

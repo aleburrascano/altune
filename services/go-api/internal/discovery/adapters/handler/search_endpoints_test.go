@@ -103,13 +103,7 @@ func TestSearchEndpoints_ServiceErrorsUseTypedContract(t *testing.T) {
 			router := tc.router(tc.err)
 			rec := discServe(t, router, tc.method, tc.path, nil)
 
-			discAssertStatus(t, rec, tc.wantStatus)
-			discAssertJSON(t, rec)
-			var resp httputil.ErrorResponse
-			discDecodeJSON(t, rec, &resp)
-			if resp.Code != tc.wantCode {
-				t.Errorf("code = %q, want %q (body detail: %q)", resp.Code, tc.wantCode, resp.Detail)
-			}
+			assertErrorCode(t, rec, tc.wantStatus, tc.wantCode)
 		})
 	}
 }

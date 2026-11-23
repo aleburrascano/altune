@@ -761,7 +761,9 @@ func (e statusCodedError) ErrorCode() string { return e.code }
 func assertErrorCode(t *testing.T, rec *httptest.ResponseRecorder, wantStatus int, wantCode string) {
 	t.Helper()
 	discAssertStatus(t, rec, wantStatus)
-	discAssertJSON(t, rec)
+	if ct := rec.Header().Get("Content-Type"); ct != "application/problem+json" {
+		t.Errorf("Content-Type = %q, want application/problem+json", ct)
+	}
 	var resp httputil.ErrorResponse
 	discDecodeJSON(t, rec, &resp)
 	if resp.Code != wantCode {
