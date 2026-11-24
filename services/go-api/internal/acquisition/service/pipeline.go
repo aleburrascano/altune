@@ -21,9 +21,9 @@ type (
 	pipelineStart struct{}
 	afterSearch   struct{}
 	afterSelect   struct{}
-	afterDownload struct{}
-	afterTag      struct{}
-	afterStore    struct{}
+	afterDownload struct{ kept ports.AudioCandidate }
+	afterTag      struct{ kept ports.AudioCandidate }
+	afterStore    struct{ kept ports.AudioCandidate }
 	afterUpdate   struct{}
 )
 

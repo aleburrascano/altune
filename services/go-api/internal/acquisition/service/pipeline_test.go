@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/internal/core/rejectionlog"
@@ -957,5 +958,20 @@ func TestExcludes_MatchesAcrossURLSpellings(t *testing.T) {
 	}
 	if r.excludes("https://www.youtube.com/watch?v=aaaaaaaaaaa") {
 		t.Error("a different video must not be excluded")
+	}
+}
+
+func TestUpdateTrackStep_RefusesToCommitWithoutTheCandidateItKept(t *testing.T) {
+	track := ports.TrackSnapshot{ID: shared.NewTrackId(), UserId: shared.NewUserId(uuid.New()), Title: "Song", Artist: "Artist", Status: ports.TrackPending}
+	ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
+	step := NewUpdateTrackStep(ledger, track.UserId, track.ID)
+
+	_, err := step.Execute(context.Background(), &AcquisitionContext{AudioRef: "song.mp3"}, afterStore{})
+
+	if err == nil || !strings.Contains(err.Error(), "no kept candidate") {
+		t.Fatalf("Execute = %v, want a refusal naming the missing kept candidate", err)
+	}
+	if got, _ := ledger.Track(track.ID); got.Status != ports.TrackPending || got.AudioRef != nil {
+		t.Errorf("track = status %v, audio ref %v, want it untouched", got.Status, got.AudioRef)
 	}
 }

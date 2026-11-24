@@ -66,7 +66,7 @@ func WithStoreKeyPrefix(prefix string) func(*StoreStep) {
 
 func (s *StoreStep) Name() StepName { return stepNameStore }
 
-func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterTag) (afterStore, error) {
+func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, tagged afterTag) (afterStore, error) {
 	if ac.TempPath == "" {
 		return afterStore{}, fmt.Errorf("no temp file to store")
 	}
@@ -77,12 +77,7 @@ func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, _ after
 		}
 	}
 
-	audioRef := s.keyPrefix + BuildAudioRef(ac.Track, ac.TempPath)
-	if ac.Replace.PreservedRef != "" {
-		audioRef = audioref.StagedReplace(audioRef, s.attemptID())
-	} else if s.sharedWithAnotherTrack(ctx, audioRef) {
-		audioRef = audioref.TrackScoped(audioRef, s.ownTrackID)
-	}
+	audioRef := s.refFor(ctx, ac)
 	ac.AudioRef = audioRef
 
 	file := s.storedFileAt(ac.TempPath)
@@ -91,7 +86,18 @@ func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, _ after
 	}
 	jobReporterFrom(ctx).stored(file)
 
-	return afterStore{}, nil
+	return afterStore(tagged), nil
+}
+
+func (s *StoreStep) refFor(ctx context.Context, ac *AcquisitionContext) string {
+	audioRef := s.keyPrefix + BuildAudioRef(ac.Track, ac.TempPath)
+	if ac.Replace.PreservedRef != "" {
+		return audioref.StagedReplace(audioRef, s.attemptID())
+	}
+	if s.sharedWithAnotherTrack(ctx, audioRef) {
+		return audioref.TrackScoped(audioRef, s.ownTrackID)
+	}
+	return audioRef
 }
 
 func (s *StoreStep) storedFileAt(path string) ports.StoredFile {

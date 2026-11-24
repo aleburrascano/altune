@@ -25,38 +25,46 @@ func NewUpdateTrackStep(ledger ports.TrackLedger, userId shared.UserId, trackId 
 
 func (s *UpdateTrackStep) Name() StepName { return stepNameUpdateTrack }
 
-func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterStore) (afterUpdate, error) {
+func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, stored afterStore) (afterUpdate, error) {
 	evidence := ac.collectEvidence()
 	if err := ac.Replace.Gate.AdmitFetched(evidence.Grade, ac.SourceFormat, ac.ProbedDuration); err != nil {
 		return afterUpdate{}, err
 	}
-	isrc, _ := ac.provenISRC()
-	completion := ports.Completion{
-		AudioRef:           ac.AudioRef,
-		ReplaceAudio:       ac.Replace.PreservedRef != "",
-		Duration:           ac.MeasuredDuration(),
-		ISRC:               isrc,
-		Provenance:         ac.Provenance(),
-		RejectedSourceKeys: ac.Replace.ExcludeKeys,
-		Relabel:            ac.Relabel,
-	}
-	if ac.Selected != nil {
-		raw, err := json.Marshal(evidence)
-		if err != nil {
-			return afterUpdate{}, fmt.Errorf("marshal acquisition evidence: %w", err)
-		}
-		completion.SourceURL = ac.Selected.URL
-		completion.Confidence = ac.Confidence
-		completion.Evidence = raw
+	completion, err := completionOf(ac, stored.kept, evidence)
+	if err != nil {
+		return afterUpdate{}, err
 	}
 	if err := verifyCommitAllowed(ctx); err != nil {
 		return afterUpdate{}, err
 	}
-	err := s.ledger.Complete(ctx, s.trackId, s.userId, jobFenceFrom(ctx), completion)
+	err = s.ledger.Complete(ctx, s.trackId, s.userId, jobFenceFrom(ctx), completion)
 	if errors.Is(err, ports.ErrTrackNotFound) {
 		return afterUpdate{}, errors.New("track not found for update")
 	}
 	return afterUpdate{}, err
+}
+
+func completionOf(ac *AcquisitionContext, kept ports.AudioCandidate, evidence Evidence) (ports.Completion, error) {
+	if kept.URL == "" {
+		return ports.Completion{}, errors.New("no kept candidate to record the stored file's source")
+	}
+	raw, err := json.Marshal(evidence)
+	if err != nil {
+		return ports.Completion{}, fmt.Errorf("marshal acquisition evidence: %w", err)
+	}
+	isrc, _ := ac.provenISRC()
+	return ports.Completion{
+		AudioRef:           ac.AudioRef,
+		ReplaceAudio:       ac.Replace.PreservedRef != "",
+		Duration:           ac.MeasuredDuration(),
+		SourceURL:          kept.URL,
+		Confidence:         ac.Confidence,
+		Evidence:           raw,
+		ISRC:               isrc,
+		Provenance:         ac.Provenance(),
+		RejectedSourceKeys: ac.Replace.ExcludeKeys,
+		Relabel:            ac.Relabel,
+	}, nil
 }
 
 type commitCheckContextKey struct{}

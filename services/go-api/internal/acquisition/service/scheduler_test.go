@@ -2892,7 +2892,7 @@ type committingUpgrader struct {
 func (u *committingUpgrader) ExecuteUpgrade(ctx context.Context, _ shared.UserId, _ domain.TrackId) error {
 	u.startedOne.Do(func() { close(u.started) })
 	<-u.proceed
-	_, err := u.step.Execute(ctx, &AcquisitionContext{AudioRef: "upgraded.mp3"}, afterStore{})
+	_, err := u.step.Execute(ctx, &AcquisitionContext{AudioRef: "upgraded.mp3"}, afterStore{kept: acqports.AudioCandidate{URL: "https://www.youtube.com/watch?v=upgradedAAA"}})
 	u.commitErr <- err
 	return err
 }
