@@ -1,7 +1,6 @@
-package discoverybridge
+package recordingresolver
 
 import (
-	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/versiontag"
 	"cmp"
 	"context"
@@ -18,18 +17,13 @@ const (
 	officialReleaseStatus = "Official"
 )
 
-var _ acqports.RerecordingFinder = (*RecordingResolver)(nil)
+var _ acqports.RerecordingFinder = (*Resolver)(nil)
 
-type rerecordingAuthority interface {
-	WorkRecordings(ctx context.Context, recordingMBID string) ([]discovery.MBWorkRecording, error)
-	RecordingDetail(ctx context.Context, mbid string) (discovery.MBRecordingDetail, bool, error)
+func WithRerecordingAuthority(a acqports.RerecordingAuthority) func(*Resolver) {
+	return func(r *Resolver) { r.rerecording = a }
 }
 
-func WithRerecordingAuthority(a rerecordingAuthority) func(*RecordingResolver) {
-	return func(r *RecordingResolver) { r.rerecording = a }
-}
-
-func (r *RecordingResolver) FindRerecording(ctx context.Context, q acqports.RerecordingQuery) (acqports.RecordingLabel, bool, error) {
+func (r *Resolver) FindRerecording(ctx context.Context, q acqports.RerecordingQuery) (acqports.RecordingLabel, bool, error) {
 	if r.rerecording == nil {
 		return acqports.RecordingLabel{}, false, nil
 	}
@@ -44,7 +38,7 @@ func (r *RecordingResolver) FindRerecording(ctx context.Context, q acqports.Rere
 	return r.rerecordingOf(ctx, original)
 }
 
-func (r *RecordingResolver) rerecordingOf(ctx context.Context, original discovery.MBRecordingDetail) (acqports.RecordingLabel, bool, error) {
+func (r *Resolver) rerecordingOf(ctx context.Context, original acqports.RecordingDetail) (acqports.RecordingLabel, bool, error) {
 	work, err := r.rerecording.WorkRecordings(ctx, original.MBID)
 	if err != nil {
 		return acqports.RecordingLabel{}, false, fmt.Errorf("rerecording work of %s: %w", original.MBID, err)
@@ -64,9 +58,9 @@ func (r *RecordingResolver) rerecordingOf(ctx context.Context, original discover
 	return rerecordingLabel(chosen), true, nil
 }
 
-func labelledRerecordings(original discovery.MBRecordingDetail, work []discovery.MBWorkRecording) []discovery.MBWorkRecording {
+func labelledRerecordings(original acqports.RecordingDetail, work []acqports.WorkRecording) []acqports.WorkRecording {
 	songTitle := versiontag.WithoutVersionPhrases(versiontag.Tokens(original.Title))
-	var kept []discovery.MBWorkRecording
+	var kept []acqports.WorkRecording
 	for _, rec := range work {
 		if rec.MBID == original.MBID || rec.Live || !sameLeadArtist(rec.ArtistIDs, original.ArtistIDs) {
 			continue
@@ -82,7 +76,7 @@ func sameLeadArtist(a, b []string) bool {
 	return len(a) > 0 && len(b) > 0 && a[0] == b[0]
 }
 
-func rerecordingSongTitle(rec discovery.MBWorkRecording) ([]string, bool) {
+func rerecordingSongTitle(rec acqports.WorkRecording) ([]string, bool) {
 	title, inTitle := versiontag.WithoutRerecordingPhrases(versiontag.Tokens(rec.Title))
 	disambiguation, inDisambiguation := versiontag.WithoutRerecordingPhrases(versiontag.Tokens(rec.Disambiguation))
 	if !inTitle && !inDisambiguation {
@@ -98,8 +92,8 @@ func vetoed(tokens []string) bool {
 	return slices.ContainsFunc(versiontag.Matches(tokens), func(e versiontag.Entry) bool { return e.Veto })
 }
 
-func (r *RecordingResolver) releasedAfter(ctx context.Context, original discovery.MBRecordingDetail, candidates []discovery.MBWorkRecording) ([]discovery.MBRecordingDetail, error) {
-	var kept []discovery.MBRecordingDetail
+func (r *Resolver) releasedAfter(ctx context.Context, original acqports.RecordingDetail, candidates []acqports.WorkRecording) ([]acqports.RecordingDetail, error) {
+	var kept []acqports.RecordingDetail
 	for _, rec := range candidates[:min(len(candidates), maxRerecordingLookups)] {
 		detail, found, err := r.rerecording.RecordingDetail(ctx, rec.MBID)
 		if err != nil {
@@ -115,8 +109,8 @@ func (r *RecordingResolver) releasedAfter(ctx context.Context, original discover
 	return kept, nil
 }
 
-func earliestOfficialRelease(releases []discovery.MBRelease) (discovery.MBRelease, bool) {
-	var earliest discovery.MBRelease
+func earliestOfficialRelease(releases []acqports.RecordingRelease) (acqports.RecordingRelease, bool) {
+	var earliest acqports.RecordingRelease
 	found := false
 	for _, rel := range releases {
 		if rel.Status != officialReleaseStatus {
@@ -136,12 +130,12 @@ func releaseDateBefore(a, b string) bool {
 	return a < b
 }
 
-func preferredRerecording(details []discovery.MBRecordingDetail) discovery.MBRecordingDetail {
+func preferredRerecording(details []acqports.RecordingDetail) acqports.RecordingDetail {
 	ranked := slices.Clone(details)
 	if len(ranked) == 0 {
-		return discovery.MBRecordingDetail{}
+		return acqports.RecordingDetail{}
 	}
-	slices.SortStableFunc(ranked, func(a, b discovery.MBRecordingDetail) int {
+	slices.SortStableFunc(ranked, func(a, b acqports.RecordingDetail) int {
 		if hasA, hasB := len(a.ISRCs) > 0, len(b.ISRCs) > 0; hasA != hasB {
 			if hasA {
 				return -1
@@ -153,7 +147,7 @@ func preferredRerecording(details []discovery.MBRecordingDetail) discovery.MBRec
 	return ranked[0]
 }
 
-func rerecordingLabel(detail discovery.MBRecordingDetail) acqports.RecordingLabel {
+func rerecordingLabel(detail acqports.RecordingDetail) acqports.RecordingLabel {
 	release, _ := earliestOfficialRelease(detail.Releases)
 	label := acqports.RecordingLabel{
 		MBID:            detail.MBID,

@@ -2,9 +2,9 @@ package eval
 
 import (
 	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
-	"altune/go-api/internal/acquisition/internal/adapters/discoverybridge"
 	"altune/go-api/internal/acquisition/internal/adapters/tempfs"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/internal/core/recordingresolver"
 	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/acquisition/sourcekey"
 	shared "altune/go-api/internal/shared/kernel"
@@ -146,11 +146,11 @@ func resolverFor(kase Case) ports.RecordingResolver {
 	if res == nil {
 		return copiedIdentity(identityFor(kase))
 	}
-	isrcRecordings := make([]discoverybridge.RecordedISRCRecording, 0, len(res.ISRCRecordings))
+	isrcRecordings := make([]ports.ISRCRecording, 0, len(res.ISRCRecordings))
 	for _, rec := range res.ISRCRecordings {
-		isrcRecordings = append(isrcRecordings, discoverybridge.RecordedISRCRecording{MBID: rec.MBID, Duration: rec.Duration})
+		isrcRecordings = append(isrcRecordings, ports.ISRCRecording{MBID: rec.MBID, Duration: float64(rec.Duration)})
 	}
-	return discoverybridge.NewRecordedResolver(searchHitsFor(res), isrcRecordings, pinnedFactsFor(res))
+	return recordingresolver.NewRecorded(searchHitsFor(res), isrcRecordings, pinnedFactsFor(res))
 }
 
 func pinnedFactsFor(res *Resolution) *ports.RecordingFacts {
@@ -161,16 +161,15 @@ func pinnedFactsFor(res *Resolution) *ports.RecordingFacts {
 	return &facts
 }
 
-func searchHitsFor(res *Resolution) []discoverybridge.RecordedSearchHit {
-	hits := make([]discoverybridge.RecordedSearchHit, 0, len(res.Search))
+func searchHitsFor(res *Resolution) []ports.SearchedRecording {
+	hits := make([]ports.SearchedRecording, 0, len(res.Search))
 	for _, hit := range res.Search {
-		hits = append(hits, discoverybridge.RecordedSearchHit{
+		hits = append(hits, ports.SearchedRecording{
 			Title:    hit.Title,
 			Artist:   hit.Artist,
-			Album:    hit.Album,
 			ISRC:     hit.ISRC,
 			MBID:     hit.MBID,
-			Duration: hit.Duration,
+			Duration: float64(hit.Duration),
 		})
 	}
 	return hits

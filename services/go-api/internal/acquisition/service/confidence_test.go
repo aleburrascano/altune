@@ -3,9 +3,9 @@ package service_test
 import (
 	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
-	"altune/go-api/internal/acquisition/internal/adapters/discoverybridge"
 	"altune/go-api/internal/acquisition/internal/core/isrcproof"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/internal/core/recordingresolver"
 	"altune/go-api/internal/acquisition/service"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
@@ -283,9 +283,9 @@ func TestExecute_DrinkingInLAWritesNoGuessedISRC(t *testing.T) {
 		drinkingAlbum = "5d6efd30-23c6-4a9b-85af-706ea2df9022"
 		drinkingRemix = "d3dc2825-20c0-4a4f-a963-baa589049146"
 	)
-	recorded := discoverybridge.NewRecordedResolver(
-		[]discoverybridge.RecordedSearchHit{{Title: "Drinking in L.A.", Artist: "Bran Van 3000", ISRC: drinkingISRC, MBID: drinkingRemix, Duration: 236}},
-		[]discoverybridge.RecordedISRCRecording{{MBID: drinkingAlbum, Duration: 236}}, nil)
+	recorded := recordingresolver.NewRecorded(
+		[]ports.SearchedRecording{{Title: "Drinking in L.A.", Artist: "Bran Van 3000", ISRC: drinkingISRC, MBID: drinkingRemix, Duration: 236}},
+		[]ports.ISRCRecording{{MBID: drinkingAlbum, Duration: 236}}, nil)
 	track := pendingBlindingLights()
 	catalogLength := 236.0
 	track.Title, track.Artist, track.Album, track.CatalogDurationSeconds = "Drinking in L.A.", "Bran Van 3000", "Glee", &catalogLength
