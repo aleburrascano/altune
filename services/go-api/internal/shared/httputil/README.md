@@ -4,7 +4,7 @@
 
 `HandleServiceError(w, r, err)` is the only way a handler answers an error.
 
-The answer is RFC 9457 `application/problem+json`, with `type` (`urn:altune:problem:<code>`), `title`, `status`, `detail`, `instance` (the correlation id) and `code`.
+The answer is RFC 9457 `application/problem+json`, with `type` (`urn:altune:problem:<code>`), `title`, `status`, `detail`, `instance` (the correlation id, when the request has one) and `code`.
 
 A handler never picks a status. The boundary reads `err`'s chain and takes the first of these that matches:
 
@@ -20,7 +20,7 @@ A handler never picks a status. The boundary reads `err`'s chain and takes the f
 | --- | --- | --- |
 | The `request.timeout` code | `request.timed_out` | Warn |
 | Any other 5xx, including a coded 504 | `request.failed` | Error |
-| A 4xx | `request.rejected` | Debug |
+| Any status below 500 | `request.rejected` | Debug |
 | A client that left | `request.cancelled` | Info |
 
 A handler adds context by wrapping the error (`fmt.Errorf("...: %w", err)`), not by logging it. Separately, `RequestLogger` logs `request.complete` at Info for every request, including failed ones.
