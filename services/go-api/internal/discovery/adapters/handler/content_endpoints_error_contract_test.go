@@ -126,7 +126,7 @@ type throttledError struct{}
 
 func (throttledError) Error() string { return "upstream said 429" }
 
-func (throttledError) HTTPStatus() int { return http.StatusTooManyRequests }
+func (throttledError) UpstreamStatus() int { return http.StatusTooManyRequests }
 
 type scriptedArtistProvider struct {
 	tracksErr, albumsErr error

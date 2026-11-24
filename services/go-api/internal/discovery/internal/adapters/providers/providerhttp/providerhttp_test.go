@@ -2,6 +2,7 @@ package providerhttp_test
 
 import (
 	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/shared/httputil"
 	"context"
 	"errors"
 	"io"
@@ -21,6 +22,24 @@ func TestGetJSON_non200IsError(t *testing.T) {
 	err := discovery.ProviderHTTPGetJSON(context.Background(), srv.Client(), srv.URL, &dst)
 	if err == nil || !strings.Contains(err.Error(), "http status 500") {
 		t.Fatalf("err = %v, want an http status 500 error", err)
+	}
+}
+
+func TestGetJSON_anUpstreamStatusIsNeverAnsweredAsOurs(t *testing.T) {
+	for _, upstream := range []int{http.StatusUnauthorized, http.StatusNotFound, http.StatusTooManyRequests} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(upstream)
+		}))
+		var dst map[string]any
+		err := discovery.ProviderHTTPGetJSON(context.Background(), srv.Client(), srv.URL, &dst)
+		srv.Close()
+
+		rec := httptest.NewRecorder()
+		httputil.HandleServiceError(rec, httptest.NewRequest(http.MethodGet, "/discovery/search", nil), err)
+
+		if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), `"code":"internal"`) {
+			t.Errorf("upstream %d answered %d %s, want our own 500 internal", upstream, rec.Code, rec.Body.String())
+		}
 	}
 }
 

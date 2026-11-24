@@ -22,7 +22,7 @@ type StatusError struct {
 
 func (e StatusError) Error() string { return fmt.Sprintf("http status %d", e.Status) }
 
-func (e StatusError) HTTPStatus() int { return e.Status }
+func (e StatusError) UpstreamStatus() int { return e.Status }
 
 type PersistentAuthError struct{ Cause error }
 
@@ -219,7 +219,7 @@ func PostBytesCapped(ctx context.Context, client *http.Client, rawURL string, bo
 func ArtworkFailure(source domain.ProviderKey, err error) (string, error) {
 	var statusErr StatusError
 	if errors.As(err, &statusErr) {
-		if statusErr.HTTPStatus() == http.StatusNotFound || statusErr.HTTPStatus() == http.StatusBadRequest {
+		if statusErr.UpstreamStatus() == http.StatusNotFound || statusErr.UpstreamStatus() == http.StatusBadRequest {
 			return "", nil
 		}
 	}

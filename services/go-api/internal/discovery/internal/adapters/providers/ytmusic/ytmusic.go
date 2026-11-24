@@ -50,17 +50,17 @@ func ytmSearchRetry(ctx context.Context, client *http.Client, query string, filt
 	return nil, lastErr
 }
 
-type httpStatusCoder interface {
-	HTTPStatus() int
+type upstreamStatusCoder interface {
+	UpstreamStatus() int
 }
 
 func isRetryableProviderError(err error) bool {
 	if errors.Is(err, context.Canceled) {
 		return false
 	}
-	var status httpStatusCoder
+	var status upstreamStatusCoder
 	if errors.As(err, &status) {
-		return isTransientStatus(status.HTTPStatus())
+		return isTransientStatus(status.UpstreamStatus())
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return true

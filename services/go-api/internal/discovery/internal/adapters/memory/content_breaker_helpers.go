@@ -12,4 +12,4 @@ type StatusErr int
 
 func (e StatusErr) Error() string { return fmt.Sprintf("http status %d", int(e)) }
 
-func (e StatusErr) HTTPStatus() int { return int(e) }
+func (e StatusErr) UpstreamStatus() int { return int(e) }

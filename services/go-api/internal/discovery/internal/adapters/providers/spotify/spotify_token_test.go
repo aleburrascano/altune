@@ -129,12 +129,12 @@ func TestSpotifyAdapter_Search_clientTokenStatusReachesBreaker(t *testing.T) {
 	if err == nil {
 		t.Fatal("Search() error = nil, want the client-token 503")
 	}
-	var status interface{ HTTPStatus() int }
+	var status interface{ UpstreamStatus() int }
 	if !errors.As(err, &status) {
-		t.Fatalf("Search() error = %v, want an error carrying HTTPStatus() for the breaker", err)
+		t.Fatalf("Search() error = %v, want an error carrying UpstreamStatus() for the breaker", err)
 	}
-	if got := status.HTTPStatus(); got != http.StatusServiceUnavailable {
-		t.Errorf("HTTPStatus() = %d, want 503", got)
+	if got := status.UpstreamStatus(); got != http.StatusServiceUnavailable {
+		t.Errorf("UpstreamStatus() = %d, want 503", got)
 	}
 }
 
