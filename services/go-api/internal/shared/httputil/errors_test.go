@@ -31,61 +31,6 @@ func TestRetryAfterSeconds_RoundsUpToAtLeastOne(t *testing.T) {
 	}
 }
 
-type codedTestError struct {
-	msg    string
-	status int
-	code   string
-}
-
-func (e *codedTestError) Error() string     { return e.msg }
-func (e *codedTestError) HTTPStatus() int   { return e.status }
-func (e *codedTestError) ErrorCode() string { return e.code }
-
-var _ httputil.ErrorCoder = (*codedTestError)(nil)
-
-type statusOnlyTestError struct {
-	msg    string
-	status int
-}
-
-func (e *statusOnlyTestError) Error() string   { return e.msg }
-func (e *statusOnlyTestError) HTTPStatus() int { return e.status }
-
-func TestHandleServiceError_LegacyStatusErrorsKeepTheirStatusCodeAndDetail(t *testing.T) {
-	tests := []struct {
-		name       string
-		err        error
-		wantStatus int
-		wantDetail string
-		wantCode   string
-	}{
-		{"explicit code", &codedTestError{"track not found", 404, "catalog.track_not_found"}, http.StatusNotFound, "track not found", "catalog.track_not_found"},
-		{"status fallback not_found", &statusOnlyTestError{"missing", 404}, http.StatusNotFound, "missing", "not_found"},
-		{"status fallback bad_request", &statusOnlyTestError{"bad", 400}, http.StatusBadRequest, "bad", "bad_request"},
-		{"status fallback conflict", &statusOnlyTestError{"dupe", 409}, http.StatusConflict, "dupe", "conflict"},
-		{"status fallback other", &statusOnlyTestError{"teapot", 418}, http.StatusTeapot, "teapot", "error"},
-		{"empty explicit code falls back", &codedTestError{"missing", 404, ""}, http.StatusNotFound, "missing", "not_found"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rec := httptest.NewRecorder()
-			httputil.HandleServiceError(rec, httptest.NewRequest(http.MethodGet, "/x", nil), tt.err)
-
-			p := decodeProblem(t, rec)
-			if rec.Code != tt.wantStatus || p.Status != tt.wantStatus {
-				t.Errorf("status = %d (body %d), want %d", rec.Code, p.Status, tt.wantStatus)
-			}
-			if p.Detail != tt.wantDetail || p.Code != tt.wantCode || p.Type != "urn:altune:problem:"+tt.wantCode {
-				t.Errorf("problem = %+v, want detail %q and code %q", p, tt.wantDetail, tt.wantCode)
-			}
-			if p.Title != http.StatusText(tt.wantStatus) {
-				t.Errorf("title = %q, want the status text", p.Title)
-			}
-		})
-	}
-}
-
 func TestWriteJSON(t *testing.T) {
 	type payload struct {
 		Name string `json:"name"`
@@ -382,19 +327,6 @@ func TestHandleServiceError_ARefusalStaysARefusalAfterTheClientLeft(t *testing.T
 	}
 }
 
-func TestHandleServiceError_LegacyCodedErrorWinsOverAnExpiredDeadline(t *testing.T) {
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
-	defer cancel()
-	r := httptest.NewRequest(http.MethodGet, "/x", nil).WithContext(ctx)
-	rec := httptest.NewRecorder()
-
-	httputil.HandleServiceError(rec, r, &codedTestError{msg: "every provider failed", status: http.StatusServiceUnavailable, code: "discovery.all_providers_failed"})
-
-	if p := decodeProblem(t, rec); rec.Code != http.StatusServiceUnavailable || p.Code != "discovery.all_providers_failed" {
-		t.Errorf("answered %d %+v, want the legacy 503 kept", rec.Code, p)
-	}
-}
-
 func TestHandleServiceError_InternalCancellationOrTimeoutIsAFaultWhileTheRequestLives(t *testing.T) {
 	for name, cause := range map[string]error{"canceled": context.Canceled, "deadline": context.DeadlineExceeded} {
 		t.Run(name, func(t *testing.T) {
@@ -449,16 +381,6 @@ func TestHandleServiceError_LogsAClientFaultAtDebugOnly(t *testing.T) {
 	}
 }
 
-func TestHandleServiceError_LegacyServerFaultIsLoggedOnceAtError(t *testing.T) {
-	ring := captureLogs(t)
-
-	httputil.HandleServiceError(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/x", nil), &statusOnlyTestError{"upstream down", 503})
-
-	if errs := recordsAtLevel(ring, slog.LevelError); len(errs) != 1 || errs[0].Attrs["status"] != "503" {
-		t.Errorf("ERROR records = %+v, want one at status 503", errs)
-	}
-}
-
 func TestHandleServiceError_SetsRetryAfterFromTheError(t *testing.T) {
 	rec := httptest.NewRecorder()
 
@@ -493,24 +415,25 @@ func TestHandleServiceError_SetsNoRetryAfterWithoutAWait(t *testing.T) {
 	}
 }
 
-func TestHandleServiceError_LegacyErrorKeepsItsClientDetail(t *testing.T) {
+func TestHandleServiceError_AnErrorCarryingItsOwnStatusIsStillInternal(t *testing.T) {
 	rec := httptest.NewRecorder()
-	err := fmt.Errorf("create issue: %w", &clientDetailTestError{cause: errors.New("dial tcp api.github.com: connection refused")})
+	err := fmt.Errorf("create issue: %w", &selfDescribedTestError{cause: errors.New("dial tcp api.github.com: connection refused")})
 
 	httputil.HandleServiceError(rec, httptest.NewRequest(http.MethodPost, "/v1/feedback", nil), err)
 
-	if p := decodeProblem(t, rec); p.Detail != "upstream unavailable" || p.Code != "tracker_unreachable" || p.Status != http.StatusBadGateway {
-		t.Errorf("problem = %+v, want the client detail, its code and 502", p)
+	p := decodeProblem(t, rec)
+	if rec.Code != http.StatusInternalServerError || p.Code != "internal" || p.Detail != "internal server error" {
+		t.Errorf("answered %d %+v, want 500 internal: only a shared/domain code sets the answer", rec.Code, p)
 	}
 }
 
-type clientDetailTestError struct{ cause error }
+type selfDescribedTestError struct{ cause error }
 
-func (e *clientDetailTestError) Error() string        { return e.cause.Error() }
-func (e *clientDetailTestError) Unwrap() error        { return e.cause }
-func (e *clientDetailTestError) HTTPStatus() int      { return http.StatusBadGateway }
-func (e *clientDetailTestError) ErrorCode() string    { return "tracker_unreachable" }
-func (e *clientDetailTestError) ClientDetail() string { return "upstream unavailable" }
+func (e *selfDescribedTestError) Error() string        { return e.cause.Error() }
+func (e *selfDescribedTestError) Unwrap() error        { return e.cause }
+func (e *selfDescribedTestError) HTTPStatus() int      { return http.StatusBadGateway }
+func (e *selfDescribedTestError) ErrorCode() string    { return "tracker_unreachable" }
+func (e *selfDescribedTestError) ClientDetail() string { return "upstream unavailable" }
 
 func TestWriteJSON_RefusesAValueItCannotEncodeBeforeWritingAnything(t *testing.T) {
 	rec := httptest.NewRecorder()
