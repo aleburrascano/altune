@@ -86,19 +86,6 @@ func TestHandleServiceError_LegacyStatusErrorsKeepTheirStatusCodeAndDetail(t *te
 	}
 }
 
-func TestDirectHelpersOmitCode(t *testing.T) {
-	rec := httptest.NewRecorder()
-	httputil.BadRequest(rec, "authentication unavailable")
-
-	got := strings.TrimSpace(rec.Body.String())
-	if got != `{"detail":"authentication unavailable"}` {
-		t.Errorf("body: got %s, want %s", got, `{"detail":"authentication unavailable"}`)
-	}
-	if strings.Contains(got, "code") {
-		t.Errorf("direct helper leaked a code field: %s", got)
-	}
-}
-
 func TestWriteJSON(t *testing.T) {
 	type payload struct {
 		Name string `json:"name"`
@@ -171,12 +158,8 @@ func TestBadRequest(t *testing.T) {
 		t.Errorf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 
-	var body httputil.ErrorResponse
-	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	if body.Detail != "invalid input" {
-		t.Errorf("detail: got %q, want %q", body.Detail, "invalid input")
+	if got := strings.TrimSpace(rec.Body.String()); got != `{"detail":"invalid input"}` {
+		t.Errorf("body: got %s, want only the detail %s", got, `{"detail":"invalid input"}`)
 	}
 }
 
