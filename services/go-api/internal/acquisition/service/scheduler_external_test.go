@@ -3,13 +3,19 @@ package service_test
 import (
 	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/acquisition/internal/adapters/memqueue"
+	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/service"
 	kernel "altune/go-api/internal/shared/kernel"
 	"context"
+	"errors"
+	"io"
+	"log/slog"
 	"slices"
 	"sync"
 	"testing"
 	"testing/synctest"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -224,4 +230,57 @@ func TestScheduler_ASelectOutageOnTheFinalRunIsNotRetried(t *testing.T) {
 			t.Errorf("persisted failure code = %q, want source_unavailable", code)
 		}
 	})
+}
+
+type failingAcquirer struct{}
+
+func (failingAcquirer) Execute(context.Context, kernel.UserId, kernel.TrackId) error {
+	return errors.New("every source refused the track")
+}
+
+func (failingAcquirer) ExecuteReplace(context.Context, kernel.UserId, kernel.TrackId) error {
+	return errors.New("every source refused the track")
+}
+
+func (failingAcquirer) RefuseQueued(context.Context, kernel.UserId, kernel.TrackId) {}
+
+type panicOnMessage struct {
+	slog.Handler
+	message string
+}
+
+func (h panicOnMessage) Handle(ctx context.Context, r slog.Record) error {
+	if r.Message == h.message {
+		panic("log handler exploded on " + r.Message)
+	}
+	return h.Handler.Handle(ctx, r)
+}
+
+func TestScheduler_AJobWhoseCompletionPanicsAfterItIsRecordedIsRecordedOnce(t *testing.T) {
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	slog.SetDefault(slog.New(panicOnMessage{Handler: slog.NewTextHandler(io.Discard, nil), message: "background acquisition failed"}))
+	queue := &firstOutcomeQueue{Queue: memqueue.New(make(chan struct{}, 1), time.Now), outcome: make(chan jobOutcome, 1)}
+	var wg sync.WaitGroup
+	scheduler := service.NewBackgroundAcquisitionScheduler(failingAcquirer{}, &wg, make(chan struct{}, 1), service.WithJobQueue(queue))
+	defer scheduler.Shutdown(context.Background())
+	trackID := kernel.NewTrackId()
+
+	if err := scheduler.Schedule(context.Background(), kernel.NewUserId(uuid.New()), trackID, ""); err != nil {
+		t.Fatalf("Schedule = %v, want nil", err)
+	}
+	<-queue.outcome
+
+	var records []ports.JobRecord
+	for _, r := range scheduler.Status().Recent {
+		if r.TrackID == trackID.String() {
+			records = append(records, r)
+		}
+	}
+	if len(records) != 1 {
+		t.Fatalf("recent records for the job = %+v, want exactly one", records)
+	}
+	if records[0].State != ports.JobFailed || records[0].Reason == "panic" {
+		t.Errorf("record = %s %q, want the job's own failure, not the log handler's panic", records[0].State, records[0].Reason)
+	}
 }

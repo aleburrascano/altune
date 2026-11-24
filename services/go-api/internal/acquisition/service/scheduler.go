@@ -344,60 +344,58 @@ func (s *BackgroundAcquisitionScheduler) jobContextFor(key string, job ports.Job
 
 func (s *BackgroundAcquisitionScheduler) execClaimedJob(ctx context.Context, key string, run acquisitionRun, job ports.Job) error {
 	var err error
-	panicked := runloop.Try(ctx, "acquisition_panic", func() {
-		err = run(ctx, job.UserID, job.TrackID)
-		s.completeClaimedJob(ctx, key, err)
-	}, "track_id", key)
-	if panicked != nil {
-		s.failPanickedJob(ctx, key)
-		return errJobPanicked
+	if panicked := runloop.Try(ctx, "acquisition_panic", func() { err = run(ctx, job.UserID, job.TrackID) }, "track_id", key); panicked != nil {
+		err = errJobPanicked
 	}
+	s.completeClaimedJob(ctx, key, err)
 	return err
 }
 
 const leaseLostReason = "lease_lost"
 
-func (s *BackgroundAcquisitionScheduler) completeClaimedJob(ctx context.Context, key string, err error) {
-	if err != nil && s.baseCtx.Err() != nil {
-		record := s.log.complete(key, ports.JobCancelled, "shutdown")
-		s.recordOutcome(ctx, record)
-		slog.WarnContext(ctx, "background acquisition cancelled for shutdown", "track_id", key)
-		return
-	}
-	if errors.Is(err, upgrade.ErrKept) {
-		record := s.log.complete(key, ports.JobKept, "")
-		s.recordOutcome(ctx, record)
-		return
-	}
-	if errors.Is(err, acqdomain.ErrLeaseLost) {
-		s.recordLeaseLoss(ctx, key)
-		return
-	}
-	if errors.Is(err, ErrAcquisitionRetryable) {
-		reason := redact.LogError(err)
-		s.log.complete(key, ports.JobRetrying, reason)
-		slog.InfoContext(ctx, "background acquisition will retry", "track_id", key, "reason", reason)
-		return
-	}
-	if err != nil && schedulerCancelledJobContext(ctx) {
-		s.recordLeaseLoss(ctx, key)
-		return
-	}
-	if err != nil {
-		reason := redact.LogError(err)
-		record := s.log.complete(key, ports.JobFailed, reason)
-		s.recordOutcome(ctx, record)
-		slog.ErrorContext(ctx, "background acquisition failed", "track_id", key, "error", reason)
-		return
-	}
-	record := s.log.complete(key, ports.JobSucceeded, "")
-	s.recordOutcome(ctx, record)
+type jobCompletion struct {
+	state   ports.JobState
+	reason  string
+	level   slog.Level
+	message string
+	attrs   []any
 }
 
-func (s *BackgroundAcquisitionScheduler) recordLeaseLoss(ctx context.Context, key string) {
-	record := s.log.complete(key, ports.JobCancelled, leaseLostReason)
-	s.recordOutcome(ctx, record)
-	slog.WarnContext(ctx, "background acquisition cancelled after lease loss", "track_id", key)
+func (s *BackgroundAcquisitionScheduler) completeClaimedJob(ctx context.Context, key string, err error) {
+	defer runloop.RecoverContext(ctx, "acquisition.job_completion_panic", "track_id", key)
+	done := s.classifyJob(ctx, err)
+	record := s.log.complete(key, done.state, done.reason)
+	if done.state != ports.JobRetrying {
+		s.recordOutcome(ctx, record)
+	}
+	if done.message != "" {
+		slog.Log(ctx, done.level, done.message, append([]any{"track_id", key}, done.attrs...)...)
+	}
+}
+
+var leaseLost = jobCompletion{state: ports.JobCancelled, reason: leaseLostReason, level: slog.LevelWarn, message: "background acquisition cancelled after lease loss"}
+
+func (s *BackgroundAcquisitionScheduler) classifyJob(ctx context.Context, err error) jobCompletion {
+	switch {
+	case errors.Is(err, errJobPanicked):
+		return jobCompletion{state: ports.JobFailed, reason: "panic"}
+	case err != nil && s.baseCtx.Err() != nil:
+		return jobCompletion{state: ports.JobCancelled, reason: "shutdown", level: slog.LevelWarn, message: "background acquisition cancelled for shutdown"}
+	case errors.Is(err, upgrade.ErrKept):
+		return jobCompletion{state: ports.JobKept}
+	case errors.Is(err, acqdomain.ErrLeaseLost):
+		return leaseLost
+	case errors.Is(err, ErrAcquisitionRetryable):
+		reason := redact.LogError(err)
+		return jobCompletion{state: ports.JobRetrying, reason: reason, level: slog.LevelInfo, message: "background acquisition will retry", attrs: []any{"reason", reason}}
+	case err != nil && schedulerCancelledJobContext(ctx):
+		return leaseLost
+	case err != nil:
+		reason := redact.LogError(err)
+		return jobCompletion{state: ports.JobFailed, reason: reason, level: slog.LevelError, message: "background acquisition failed", attrs: []any{"error", reason}}
+	default:
+		return jobCompletion{state: ports.JobSucceeded}
+	}
 }
 
 func (s *BackgroundAcquisitionScheduler) recordOutcome(ctx context.Context, record ports.JobRecord) {
@@ -486,11 +484,6 @@ func (s *BackgroundAcquisitionScheduler) logQueueOutcome(op string, trackID shar
 		return
 	}
 	slog.ErrorContext(s.baseCtx, "acquisition."+op+"_failed", "track_id", trackID.String(), "error", err)
-}
-
-func (s *BackgroundAcquisitionScheduler) failPanickedJob(jobCtx context.Context, key string) {
-	record := s.log.complete(key, ports.JobFailed, "panic")
-	s.recordOutcome(jobCtx, record)
 }
 
 func hostOf(rawURL string) string {
