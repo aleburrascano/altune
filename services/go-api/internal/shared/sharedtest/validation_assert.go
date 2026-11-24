@@ -6,11 +6,14 @@ import (
 	"testing"
 )
 
-func AssertValidationError(t testing.TB, err error) *shareddomain.ValidationError {
+func AssertValidationError(t testing.TB, err error) *shareddomain.CodedError {
 	t.Helper()
-	var ve *shareddomain.ValidationError
-	if !errors.As(err, &ve) {
-		t.Fatalf("error = %T (%v), want *shareddomain.ValidationError", err, err)
+	var coded *shareddomain.CodedError
+	if !errors.As(err, &coded) {
+		t.Fatalf("error = %T (%v), want a *shareddomain.CodedError", err, err)
 	}
-	return ve
+	if kind := coded.Code().Kind(); kind != shareddomain.KindInvalid {
+		t.Fatalf("error %v has kind %s, want %s", err, kind, shareddomain.KindInvalid)
+	}
+	return coded
 }

@@ -50,10 +50,7 @@ func TestLibraryLensService_ArtistsRejectYearSort(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected a validation error for sort=year on artists")
 	}
-	validation := sharedtest.AssertValidationError(t, err)
-	if validation.HTTPStatus() != 400 {
-		t.Errorf("status = %d, want 400", validation.HTTPStatus())
-	}
+	sharedtest.AssertValidationError(t, err)
 }
 
 func TestLibraryLensService_ArtistsReportYearSortBeforeOffset(t *testing.T) {

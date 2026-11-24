@@ -1,6 +1,7 @@
 package domain
 
 import (
+	shareddomain "altune/go-api/internal/shared/domain"
 	shared "altune/go-api/internal/shared/kernel"
 	"strings"
 	"time"
@@ -33,7 +34,7 @@ const PreviewArtworkLimit = 4
 
 const MaxPlaylistTracks = MaxLibraryPageSize
 
-var ErrPlaylistFull = &CodedError{Msg: "playlist is full", Status: 400, Code: "catalog.playlist_full"}
+var ErrPlaylistFull = shareddomain.NewError(shareddomain.CodeCatalogPlaylistFull, "playlist is full")
 
 type Playlist struct {
 	ID        PlaylistId

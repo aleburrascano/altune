@@ -419,13 +419,14 @@ func newTestPlaylist(t *testing.T) *catalog.Playlist {
 }
 
 func TestCatalogDomainErrorCodes(t *testing.T) {
-	if got := catalog.ErrTrackAlreadyInPlaylist.ErrorCode(); got != "catalog.track_already_in_playlist" {
+	if got := catalog.ErrTrackAlreadyInPlaylist.Code().String(); got != "catalog.track_already_in_playlist" {
 		t.Errorf("ErrTrackAlreadyInPlaylist code: got %q", got)
 	}
-	if got := catalog.NewValidationError("x").ErrorCode(); got != "catalog.validation_error" {
+	invalid := catalog.NewValidationError("x")
+	if got := invalid.Code().String(); got != "catalog.validation_error" {
 		t.Errorf("ValidationError code: got %q", got)
 	}
-	if got := (&catalog.CodedError{Status: 404}).ErrorCode(); got != "" {
-		t.Errorf("bare CodedError code: got %q, want empty (status fallback)", got)
+	if invalid.Error() != "x" {
+		t.Errorf("ValidationError detail: got %q, want %q", invalid.Error(), "x")
 	}
 }

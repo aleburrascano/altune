@@ -2,6 +2,7 @@ package featured_test
 
 import (
 	"altune/go-api/internal/catalog"
+	shareddomain "altune/go-api/internal/shared/domain"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/sharedtest"
@@ -279,8 +280,8 @@ func TestBackfillFeaturedService(t *testing.T) {
 		if !errors.Is(err, catalog.ErrBackfillCoolingDown) || res != nil {
 			t.Fatalf("run within cooldown: want catalog.ErrBackfillCoolingDown and nil result, got %+v, %v", res, err)
 		}
-		if catalog.ErrBackfillCoolingDown.HTTPStatus() != 429 || catalog.ErrBackfillInProgress.HTTPStatus() != 409 {
-			t.Fatalf("throttle errors must map to 429/409")
+		if catalog.ErrBackfillCoolingDown.Code().Kind() != shareddomain.KindRateLimited || catalog.ErrBackfillInProgress.Code().Kind() != shareddomain.KindConflict {
+			t.Fatalf("throttle errors must be rate limited and conflict")
 		}
 		clock.advance(time.Second)
 		if _, err := svc.Execute(ctx, userId, 0); err != nil {
@@ -297,9 +298,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		if res != nil {
 			t.Fatalf("result = %+v, want nil for a rejected offset", res)
 		}
-		if sharedtest.AssertValidationError(t, err).HTTPStatus() != 400 {
-			t.Errorf("error = %v, want a 400 validation error", err)
-		}
+		sharedtest.AssertValidationError(t, err)
 		if _, err := svc.Execute(ctx, userId, 0); err != nil {
 			t.Fatalf("a run refused before it started must leave the cooldown unspent, got %v", err)
 		}

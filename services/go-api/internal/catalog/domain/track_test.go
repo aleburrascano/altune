@@ -2,8 +2,8 @@ package domain_test
 
 import (
 	"altune/go-api/internal/catalog"
-	shareddomain "altune/go-api/internal/shared/domain"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/sharedtest"
 	"encoding/json"
 	"errors"
 	"math"
@@ -683,13 +683,7 @@ func TestNulByteRefusedByEveryTextEntryPoint(t *testing.T) {
 			if err == nil || err.Error() != tt.want {
 				t.Fatalf("error for NUL input = %v, want %q", err, tt.want)
 			}
-			var invalid *shareddomain.ValidationError
-			if !errors.As(err, &invalid) {
-				t.Fatalf("error %v is not a *shareddomain.ValidationError, so it answers 500 not 400", err)
-			}
-			if got := invalid.HTTPStatus(); got != 400 {
-				t.Errorf("HTTPStatus() = %d, want 400", got)
-			}
+			sharedtest.AssertValidationError(t, err)
 			if err := tt.validate("ab"); err != nil {
 				t.Errorf("same text without the NUL was rejected: %v", err)
 			}
@@ -809,10 +803,7 @@ func TestTrackSetDuration_RejectsUnstorableValues(t *testing.T) {
 
 			err := track.SetDuration(seconds)
 
-			var validation *shareddomain.ValidationError
-			if !errors.As(err, &validation) {
-				t.Fatalf("SetDuration(%v) error = %v, want a ValidationError", seconds, err)
-			}
+			sharedtest.AssertValidationError(t, err)
 			if track.DurationSeconds != nil {
 				t.Errorf("DurationSeconds = %v, want unset", *track.DurationSeconds)
 			}

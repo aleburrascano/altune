@@ -8,6 +8,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -84,7 +85,7 @@ func (r *listFailsAfterFirstPage) ListForUser(ctx context.Context, userId shared
 	return tracks, len(tracks) + 1, err
 }
 
-func TestHandleBackfillFeatured_LogsPartialWorkWhenTheRunFails(t *testing.T) {
+func TestHandleBackfillFeatured_LogsTheFailedRunsProgressOnceAtError(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
 	ring := logging.Setup("info", false)
@@ -96,18 +97,20 @@ func TestHandleBackfillFeatured_LogsPartialWorkWhenTheRunFails(t *testing.T) {
 	rec := request(t, router, http.MethodPost, "/tracks/featured-backfill", nil)
 
 	assertStatus(t, rec, http.StatusInternalServerError)
-	logged := false
+	var failures []string
 	for _, record := range ring.Snapshot() {
-		if record.Message != "featured_backfill.partial" {
-			continue
-		}
-		logged = true
-		if record.Attrs["scanned"] != "1" || record.Attrs["next_offset"] != "1" {
-			t.Errorf("partial log attrs = %v, want scanned 1 and next_offset 1", record.Attrs)
+		if record.Level == slog.LevelError.String() || record.Level == slog.LevelWarn.String() {
+			failures = append(failures, record.Message+": "+record.Attrs["error"])
 		}
 	}
-	if !logged {
-		t.Error("no featured_backfill.partial log line: the failed run's completed work was dropped")
+	if len(failures) != 1 {
+		t.Fatalf("warning and error lines = %q, want the one request failure", failures)
+	}
+	if !strings.Contains(failures[0], "scanned 1,") || !strings.Contains(failures[0], "next offset 1:") {
+		t.Errorf("failure line = %q, want the run's progress (scanned 1, next offset 1) in its error", failures[0])
+	}
+	if strings.Contains(rec.Body.String(), "scanned") {
+		t.Errorf("body = %s, want the progress kept out of the client's answer", rec.Body.String())
 	}
 }
 

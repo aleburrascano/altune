@@ -2,12 +2,13 @@ package domain_test
 
 import (
 	"altune/go-api/internal/catalog"
+	shareddomain "altune/go-api/internal/shared/domain"
 	"testing"
 )
 
 func TestSentinelErrorCodes(t *testing.T) {
 	cases := []struct {
-		err  interface{ ErrorCode() string }
+		err  *shareddomain.CodedError
 		want string
 	}{
 		{catalog.ErrTrackNotFound, "catalog.track_not_found"},
@@ -17,8 +18,8 @@ func TestSentinelErrorCodes(t *testing.T) {
 		{catalog.ErrCatalogTemporarilyUnavailable, "catalog.temporarily_unavailable"},
 	}
 	for _, c := range cases {
-		if got := c.err.ErrorCode(); got != c.want {
-			t.Errorf("ErrorCode: got %q, want %q", got, c.want)
+		if got := c.err.Code().String(); got != c.want {
+			t.Errorf("code: got %q, want %q", got, c.want)
 		}
 	}
 }

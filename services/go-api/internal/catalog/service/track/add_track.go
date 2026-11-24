@@ -3,6 +3,7 @@ package track
 import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/internal/core/ports"
+	shareddomain "altune/go-api/internal/shared/domain"
 	"altune/go-api/internal/shared/events"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
@@ -19,11 +20,7 @@ const MaxFeaturedArtistsPerTrack = 100
 
 const MaxTracksPerUser = 50_000
 
-var ErrLibraryFull = &domain.CodedError{
-	Msg:    "library is full",
-	Status: 400,
-	Code:   "catalog.library_full",
-}
+var ErrLibraryFull = shareddomain.NewError(shareddomain.CodeCatalogLibraryFull, "library is full")
 
 type AddTrackInput struct {
 	Title           string

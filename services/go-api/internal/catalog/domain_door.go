@@ -64,7 +64,6 @@ const (
 type (
 	AlbumGroup     = domain.AlbumGroup
 	CatalogSource  = domain.CatalogSource
-	CodedError     = domain.CodedError
 	FailureCode    = domain.FailureCode
 	FeaturedArtist = domain.FeaturedArtist
 	LibraryQuery   = domain.LibraryQuery
