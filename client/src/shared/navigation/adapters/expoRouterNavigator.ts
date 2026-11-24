@@ -1,10 +1,8 @@
 import { useFocusEffect, useRouter, useSegments } from 'expo-router';
 
-import type { Navigator } from '@shared/navigation/shell/navigator';
-
 export type { Href } from 'expo-router';
 
-export function useNavigator(): Navigator {
+export function useExpoRouter(): ReturnType<typeof useRouter> {
   return useRouter();
 }
 
