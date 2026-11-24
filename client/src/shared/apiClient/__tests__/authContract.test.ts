@@ -110,9 +110,10 @@ function apiClientSource(): string {
 }
 
 const REJECTION_CODES_DECLARATION = /\nvar rejectionCodes = [^{]*\{/;
-const FALLBACK_CODE_RETURN = /return domain\.(Code\w+)/;
+const RETURNED_DOMAIN_CODE = /return domain\.(Code\w+)/g;
 const DOMAIN_CODE_REFERENCE = /domain\.(Code\w+)/g;
-const NEW_ERROR_CODE_ARGUMENT = /domain\.NewError\(domain\.(Code\w+),/;
+const REJECTION_REASON_KEY = /ports\.Reason\w+:/g;
+const NEW_ERROR_CODE_ARGUMENT = /domain\.NewError\(domain\.(Code\w+),/g;
 
 function goApiSource(...segments: string[]): string {
   return fs.readFileSync(
@@ -140,26 +141,34 @@ function rejectionCodeNames(source: string): string[] {
   expect(declaration).not.toBeNull();
   const open = declaration!.index + declaration![0].length - 1;
   const table = source.slice(open, findMatchingBrace(source, open));
-  const fallback = FALLBACK_CODE_RETURN.exec(extractGoFuncBody(source, 'rejectionCode'));
-  expect(fallback).not.toBeNull();
-  return [...[...table.matchAll(DOMAIN_CODE_REFERENCE)].map((m) => m[1]!), fallback![1]!];
+  const tableCodes = [...table.matchAll(DOMAIN_CODE_REFERENCE)].map((m) => m[1]!);
+  expect(tableCodes).toHaveLength([...table.matchAll(REJECTION_REASON_KEY)].length);
+  const fallbacks = [
+    ...extractGoFuncBody(source, 'rejectionCode').matchAll(RETURNED_DOMAIN_CODE),
+  ].map((m) => m[1]!);
+  expect(fallbacks.length).toBeGreaterThan(0);
+  return [...tableCodes, ...fallbacks];
+}
+
+function soleStatusOf(codeNames: string[]): number {
+  const statuses = new Set(codeNames.map(statusOfCode));
+  expect(statuses.size).toBe(1);
+  return [...statuses][0]!;
 }
 
 function deriveRejectTokenStatus(source: string): number {
   expect(extractGoFuncBody(source, 'rejectToken')).toContain(
     'httputil.HandleServiceError(w, r, domain.NewError(rejectionCode(reason),',
   );
-  const statuses = new Set(rejectionCodeNames(source).map(statusOfCode));
-  expect(statuses.size).toBe(1);
-  return [...statuses][0]!;
+  return soleStatusOf(rejectionCodeNames(source));
 }
 
 function deriveVerifierUnavailableStatus(source: string): number {
   const body = extractGoFuncBody(source, 'rejectVerifierUnavailable');
   expect(body).toContain('httputil.HandleServiceError(w, r,');
-  const code = NEW_ERROR_CODE_ARGUMENT.exec(body);
-  expect(code).not.toBeNull();
-  return statusOfCode(code![1]!);
+  const codes = [...body.matchAll(NEW_ERROR_CODE_ARGUMENT)].map((m) => m[1]!);
+  expect(codes.length).toBeGreaterThan(0);
+  return soleStatusOf(codes);
 }
 
 function deriveMobileSessionExpiredStatus(source: string): number {
