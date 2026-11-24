@@ -2,10 +2,13 @@ package middleware
 
 import (
 	"altune/go-api/internal/auth/internal/core/ports"
+	"altune/go-api/internal/shared/domain"
 	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -60,7 +63,7 @@ func middleware(verifier ports.TokenVerifier, throttle *failureThrottle, metrics
 
 			slog.DebugContext(r.Context(), "auth.verified",
 				"user_id", verified.UserID.String(),
-				"path", r.URL.Path,
+				logging.KeyPath, r.URL.Path,
 			)
 
 			next.ServeHTTP(w, r.WithContext(contextFor(r.Context(), verified)))
@@ -121,14 +124,24 @@ func bearerToken(authHeader string) (string, bool) {
 	return token, true
 }
 
-const (
-	codeAuthThrottled   = "auth.throttled"
-	codeAuthUnavailable = "auth.unavailable"
-)
+var rejectionCodes = map[ports.TokenRejectReason]domain.Code{
+	ports.ReasonMissing:          domain.CodeAuthTokenMissing,
+	ports.ReasonMalformed:        domain.CodeAuthTokenMalformed,
+	ports.ReasonSignatureInvalid: domain.CodeAuthTokenSignatureInvalid,
+	ports.ReasonExpired:          domain.CodeAuthTokenExpired,
+	ports.ReasonRevoked:          domain.CodeAuthTokenRevoked,
+	ports.ReasonClaimMissingEXP:  domain.CodeAuthTokenClaimMissingEXP,
+	ports.ReasonClaimInvalidISS:  domain.CodeAuthTokenClaimInvalidISS,
+	ports.ReasonClaimInvalidAUD:  domain.CodeAuthTokenClaimInvalidAUD,
+	ports.ReasonClaimInvalidSUB:  domain.CodeAuthTokenClaimInvalidSUB,
+	ports.ReasonClaimInvalidIAT:  domain.CodeAuthTokenClaimInvalidIAT,
+}
 
-type rejectResponse struct {
-	Detail string `json:"detail"`
-	Reason string `json:"reason"`
+func rejectionCode(reason ports.TokenRejectReason) domain.Code {
+	if code, ok := rejectionCodes[reason]; ok {
+		return code
+	}
+	return domain.CodeAuthTokenInvalid
 }
 
 type rejecter struct {
@@ -141,72 +154,40 @@ func (rej rejecter) rejectFailedVerification(w http.ResponseWriter, r *http.Requ
 		rej.rejectToken(w, r, invalidToken.Reason, "invalid token", err)
 		return
 	}
-	if errors.Is(err, context.Canceled) && r.Context().Err() != nil {
-		rej.rejectClientCancelled(w, r, err)
-		return
-	}
 	rej.rejectVerifierUnavailable(w, r, err)
 }
 
-func (rej rejecter) rejectClientCancelled(w http.ResponseWriter, r *http.Request, err error) {
-	slog.InfoContext(r.Context(), "auth.client_cancelled",
-		"error", err.Error(),
-		"path", r.URL.Path,
-	)
-	writeAuthUnavailable(w)
+func (rej rejecter) rejectVerifierUnavailable(w http.ResponseWriter, r *http.Request, err error) {
+	if !errors.Is(err, context.Canceled) || !errors.Is(r.Context().Err(), context.Canceled) {
+		rej.metrics.VerifierUnavailable()
+	}
+	httputil.HandleServiceError(w, r, fmt.Errorf("verify bearer token: %w: %w",
+		domain.NewError(domain.CodeAuthUnavailable, "authentication unavailable"), err))
 }
 
 func (rej rejecter) rejectThrottled(w http.ResponseWriter, r *http.Request, retryAfter time.Duration) {
 	rej.metrics.RequestThrottled()
 	slog.WarnContext(r.Context(), "auth.throttled",
 		"client", requestuser.ClientKey(r),
-		"path", r.URL.Path,
+		logging.KeyPath, r.URL.Path,
 	)
-	w.Header().Set("Retry-After", httputil.RetryAfterSeconds(retryAfter))
-	httputil.WriteJSON(w, http.StatusTooManyRequests, httputil.ErrorResponse{
-		Detail: "too many failed authentication attempts",
-		Code:   codeAuthThrottled,
-	})
-}
-
-func writeAuthUnavailable(w http.ResponseWriter) {
-	httputil.WriteJSON(w, http.StatusServiceUnavailable, httputil.ErrorResponse{
-		Detail: "authentication unavailable",
-		Code:   codeAuthUnavailable,
-	})
-}
-
-func (rej rejecter) rejectVerifierUnavailable(w http.ResponseWriter, r *http.Request, err error) {
-	rej.metrics.VerifierUnavailable()
-	slog.ErrorContext(r.Context(), "auth.verifier_unavailable",
-		"error", err.Error(),
-		"path", r.URL.Path,
-	)
-	writeAuthUnavailable(w)
+	httputil.HandleServiceError(w, r, domain.NewError(domain.CodeAuthThrottled, "too many failed authentication attempts").WithRetryAfter(retryAfter))
 }
 
 func (rej rejecter) rejectToken(w http.ResponseWriter, r *http.Request, reason ports.TokenRejectReason, detail string, err error) {
 	rej.metrics.TokenRejected(string(reason))
-	writeUnauthorized(w, r, reason, detail, err)
-}
-
-func writeUnauthorized(w http.ResponseWriter, r *http.Request, reason ports.TokenRejectReason, detail string, err error) {
 	attrs := []any{
 		"reason", string(reason),
 		"detail", detail,
 		"client", requestuser.ClientKey(r),
-		"path", r.URL.Path,
+		logging.KeyPath, r.URL.Path,
 	}
 	if err != nil {
-		attrs = append(attrs, "error", err.Error())
+		attrs = append(attrs, logging.KeyError, err.Error())
 	}
 	slog.WarnContext(r.Context(), "auth.token_rejected", attrs...)
-
 	w.Header().Set("WWW-Authenticate", "Bearer")
-	httputil.WriteJSON(w, http.StatusUnauthorized, rejectResponse{
-		Detail: detail,
-		Reason: string(reason),
-	})
+	httputil.HandleServiceError(w, r, domain.NewError(rejectionCode(reason), detail))
 }
 
 var (

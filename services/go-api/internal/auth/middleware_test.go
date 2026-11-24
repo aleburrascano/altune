@@ -44,9 +44,9 @@ func noopHandler() (http.Handler, *bool) {
 	return h, &called
 }
 
-func decodeRejectBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]string {
+func decodeRejectBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 	t.Helper()
-	var body map[string]string
+	var body map[string]any
 	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
 		t.Fatalf("decode reject body: %v", err)
 	}
@@ -66,8 +66,8 @@ func TestMiddleware_MissingHeader(t *testing.T) {
 		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
 	}
 	body := decodeRejectBody(t, rec)
-	if body["reason"] != reasonMissing {
-		t.Errorf("reason: got %q, want %q", body["reason"], reasonMissing)
+	if body["code"] != "auth.token_"+reasonMissing {
+		t.Errorf("code: got %q, want auth.token_%s", body["code"], reasonMissing)
 	}
 	if *called {
 		t.Error("next handler should not have been called")
@@ -99,8 +99,8 @@ func TestMiddleware_MalformedHeader(t *testing.T) {
 				t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
 			}
 			body := decodeRejectBody(t, rec)
-			if body["reason"] != reasonMalformed {
-				t.Errorf("reason: got %q, want %q", body["reason"], reasonMalformed)
+			if body["code"] != "auth.token_"+reasonMalformed {
+				t.Errorf("code: got %q, want auth.token_%s", body["code"], reasonMalformed)
 			}
 			if *called {
 				t.Error("next handler should not have been called")
@@ -124,8 +124,8 @@ func TestMiddleware_OversizedBearerIsMalformedAndNeverVerified(t *testing.T) {
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("%d-byte bearer: status %d, want 401", size, rec.Code)
 		}
-		if body := decodeRejectBody(t, rec); body["reason"] != reasonMalformed {
-			t.Errorf("%d-byte bearer: reason %q, want %q", size, body["reason"], reasonMalformed)
+		if body := decodeRejectBody(t, rec); body["code"] != "auth.token_"+reasonMalformed {
+			t.Errorf("%d-byte bearer: code %q, want auth.token_%s", size, body["code"], reasonMalformed)
 		}
 		if verified || *called {
 			t.Errorf("%d-byte bearer: verifier ran=%v next ran=%v, want neither", size, verified, *called)
@@ -205,8 +205,8 @@ func TestMiddleware_InvalidToken(t *testing.T) {
 		t.Errorf("status: got %d, want %d", rec.Code, http.StatusUnauthorized)
 	}
 	body := decodeRejectBody(t, rec)
-	if body["reason"] != reasonExpired {
-		t.Errorf("reason: got %q, want %q", body["reason"], reasonExpired)
+	if body["code"] != "auth.token_"+reasonExpired {
+		t.Errorf("code: got %q, want auth.token_%s", body["code"], reasonExpired)
 	}
 	if *called {
 		t.Error("next handler should not have been called")
@@ -277,8 +277,8 @@ func TestMiddleware_UnreachableVerifierIs503NotTokenRejection(t *testing.T) {
 		t.Errorf("status: got %d, want %d", rec.Code, http.StatusServiceUnavailable)
 	}
 	body := decodeRejectBody(t, rec)
-	if body["reason"] != "" {
-		t.Errorf("reason: got %q, want none (infra failure is not a token rejection)", body["reason"])
+	if body["code"] != "auth.unavailable" {
+		t.Errorf("code: got %q, want auth.unavailable (infra failure is not a token rejection)", body["code"])
 	}
 	if *called {
 		t.Error("next handler should not have been called")
@@ -386,6 +386,28 @@ func TestMiddleware_VerifierUnavailableCountsAsFailedAttempt(t *testing.T) {
 	}
 }
 
+func TestMiddleware_AnOutageStaysAnOutageWhenTheClientAlsoLeft(t *testing.T) {
+	metrics := &recordingMetrics{}
+	next, _ := noopHandler()
+	ctx, cancel := context.WithCancel(context.Background())
+	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+		cancel()
+		return auth.VerifiedToken{}, errors.New("fetch JWKS: dial tcp 10.0.0.9:443: connection refused")
+	})
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer t")
+	rec := httptest.NewRecorder()
+
+	auth.Middleware(verifier, auth.WithMetrics(metrics))(next).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("status %d, want 503: the verifier failed, the client leaving does not change that", rec.Code)
+	}
+	if metrics.unavailable != 1 {
+		t.Errorf("VerifierUnavailable calls %d, want 1: an outage is counted even when the client gave up", metrics.unavailable)
+	}
+}
+
 func TestMiddleware_ClientCancelledDuringVerifyIsNotAnOutage(t *testing.T) {
 	logs := captureJSONLog(t)
 	metrics := &recordingMetrics{}
@@ -405,8 +427,8 @@ func TestMiddleware_ClientCancelledDuringVerifyIsNotAnOutage(t *testing.T) {
 		return rec
 	}
 
-	if rec := serve(); rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status %d, want 503", rec.Code)
+	if rec := serve(); rec.Code != 499 || rec.Body.Len() != 0 {
+		t.Fatalf("answered %d %q, want 499 and no body for a client that left", rec.Code, rec.Body.String())
 	}
 	if metrics.unavailable != 0 {
 		t.Errorf("VerifierUnavailable calls %d, want 0", metrics.unavailable)
@@ -435,10 +457,10 @@ func TestMiddleware_ThrottledResponseRevealsNothingAboutTheToken(t *testing.T) {
 			t.Fatalf("%s: status %d after burst, want 429", reason, rec.Code)
 		}
 		body := decodeRejectBody(t, rec)
-		if body["reason"] != "" {
-			t.Errorf("%s: throttled body carries reason %q, want none", reason, body["reason"])
+		if body["code"] != "auth.throttled" {
+			t.Errorf("%s: throttled body carries code %q, want auth.throttled", reason, body["code"])
 		}
-		bodies[reason] = body["detail"]
+		bodies[reason] = fmt.Sprint(body["detail"])
 	}
 	if bodies[reasonExpired] != bodies[string(auth.ReasonSignatureInvalid)] || bodies[reasonExpired] != bodies[reasonMalformed] {
 		t.Errorf("throttled bodies differ by token kind: %v", bodies)
@@ -520,8 +542,8 @@ func TestMiddleware_RejectsVerifiedTokenWithoutExpiry(t *testing.T) {
 	if *called {
 		t.Fatal("handler ran for a token with no expiry")
 	}
-	if reason := decodeRejectBody(t, rec)["reason"]; reason != reasonClaimMissingEXP {
-		t.Fatalf("reason = %q, want %q", reason, reasonClaimMissingEXP)
+	if code := decodeRejectBody(t, rec)["code"]; code != "auth.token_"+reasonClaimMissingEXP {
+		t.Fatalf("code = %q, want auth.token_%s", code, reasonClaimMissingEXP)
 	}
 }
 
@@ -678,8 +700,8 @@ func requireExactResponse(t *testing.T, rec *httptest.ResponseRecorder, status i
 	if got := rec.Header().Get("WWW-Authenticate"); got != wwwAuthenticate {
 		t.Errorf("WWW-Authenticate: got %q, want %q", got, wwwAuthenticate)
 	}
-	if got := rec.Header().Get("Content-Type"); got != "application/json" {
-		t.Errorf("Content-Type: got %q, want %q", got, "application/json")
+	if got := rec.Header().Get("Content-Type"); got != "application/problem+json" {
+		t.Errorf("Content-Type: got %q, want %q", got, "application/problem+json")
 	}
 	if got := rec.Body.String(); got != body {
 		t.Errorf("body: got %q, want %q", got, body)
@@ -693,17 +715,17 @@ func TestMiddleware_MissingHeaderBodyIsPinned(t *testing.T) {
 
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 
-	requireExactResponse(t, rec, http.StatusUnauthorized, "Bearer", `{"detail":"missing authorization header","reason":"missing"}`+"\n")
+	requireExactResponse(t, rec, http.StatusUnauthorized, "Bearer", `{"type":"urn:altune:problem:auth.token_missing","title":"Authentication required","status":401,"detail":"missing authorization header","code":"auth.token_missing"}`+"\n")
 	if *called {
 		t.Error("next handler should not have been called")
 	}
 }
 
-func decodeBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]string {
+func decodeBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
 	t.Helper()
-	var body map[string]string
+	var body map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatalf("body %q is not a JSON object of strings: %v", rec.Body.String(), err)
+		t.Fatalf("body %q is not a JSON object: %v", rec.Body.String(), err)
 	}
 	return body
 }
@@ -732,8 +754,8 @@ func TestRequireUserID_UnauthorizedMatchesTheMissingTokenRejection(t *testing.T)
 			t.Errorf("RequireUserID body has no %q: %v", key, requireBody)
 		}
 	}
-	if got, want := requireBody["reason"], reasonMissing; got != want {
-		t.Errorf("reason: RequireUserID %q, want %q", got, want)
+	if got, want := requireBody["code"], "auth.token_"+reasonMissing; got != want {
+		t.Errorf("code: RequireUserID %q, want %q", got, want)
 	}
 }
 
@@ -752,7 +774,7 @@ func TestMiddleware_LookAlikeSchemesArePinnedAsMalformed(t *testing.T) {
 
 			auth.Middleware(verifier)(next).ServeHTTP(rec, req)
 
-			requireExactResponse(t, rec, http.StatusUnauthorized, "Bearer", `{"detail":"malformed authorization header","reason":"malformed"}`+"\n")
+			requireExactResponse(t, rec, http.StatusUnauthorized, "Bearer", `{"type":"urn:altune:problem:auth.token_malformed","title":"Malformed authorization header","status":401,"detail":"malformed authorization header","code":"auth.token_malformed"}`+"\n")
 			if verified || *called {
 				t.Errorf("verifier ran=%v next ran=%v, want neither", verified, *called)
 			}
@@ -784,7 +806,7 @@ func TestMiddleware_InvalidTokenBodyIsPinned(t *testing.T) {
 
 	rec := serveBearer(handler, "203.0.113.7:1", "expired-token")
 
-	requireExactResponse(t, rec, http.StatusUnauthorized, "Bearer", `{"detail":"invalid token","reason":"expired"}`+"\n")
+	requireExactResponse(t, rec, http.StatusUnauthorized, "Bearer", `{"type":"urn:altune:problem:auth.token_expired","title":"Token expired","status":401,"detail":"invalid token","code":"auth.token_expired"}`+"\n")
 	if *called {
 		t.Error("next handler should not have been called")
 	}
@@ -796,7 +818,7 @@ func TestMiddleware_VerifierUnavailableBodyIsPinned(t *testing.T) {
 
 	rec := serveBearer(handler, "203.0.113.7:1", "some-token")
 
-	requireExactResponse(t, rec, http.StatusServiceUnavailable, "", `{"detail":"authentication unavailable","code":"auth.unavailable"}`+"\n")
+	requireExactResponse(t, rec, http.StatusServiceUnavailable, "", `{"type":"urn:altune:problem:auth.unavailable","title":"Authentication unavailable","status":503,"detail":"authentication unavailable","code":"auth.unavailable"}`+"\n")
 	if *called {
 		t.Error("next handler should not have been called")
 	}
@@ -810,7 +832,7 @@ func TestMiddleware_ThrottledBodyIsPinned(t *testing.T) {
 
 	rec := serveBearer(handler, "203.0.113.7:1", "t")
 
-	requireExactResponse(t, rec, http.StatusTooManyRequests, "", `{"detail":"too many failed authentication attempts","code":"auth.throttled"}`+"\n")
+	requireExactResponse(t, rec, http.StatusTooManyRequests, "", `{"type":"urn:altune:problem:auth.throttled","title":"Too many failed authentication attempts","status":429,"detail":"too many failed authentication attempts","code":"auth.throttled"}`+"\n")
 	if got := rec.Header().Get("Retry-After"); got != "60" {
 		t.Errorf("Retry-After: got %q, want %q", got, "60")
 	}
@@ -834,7 +856,7 @@ func TestMiddleware_ThrottledRetryAfterIsNeverZero(t *testing.T) {
 	}
 }
 
-func TestMiddleware_ClientCancelledBodyCarriesUnavailableCode(t *testing.T) {
+func TestMiddleware_AClientThatLeftDuringVerificationGets499WithNoBody(t *testing.T) {
 	next, _ := noopHandler()
 	ctx, cancel := context.WithCancel(context.Background())
 	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
@@ -847,5 +869,63 @@ func TestMiddleware_ClientCancelledBodyCarriesUnavailableCode(t *testing.T) {
 
 	auth.Middleware(verifier)(next).ServeHTTP(rec, req)
 
-	requireExactResponse(t, rec, http.StatusServiceUnavailable, "", `{"detail":"authentication unavailable","code":"auth.unavailable"}`+"\n")
+	if rec.Code != 499 || rec.Body.Len() != 0 {
+		t.Errorf("answered %d with %q, want 499 and no body", rec.Code, rec.Body.String())
+	}
+}
+
+func TestMiddleware_EachRejectionReasonAnswersItsOwnCode(t *testing.T) {
+	rejections := []*auth.InvalidTokenError{
+		{Reason: "signature_invalid"},
+		{Reason: "expired"},
+		{Reason: "revoked"},
+		{Reason: "claim_missing_exp"},
+		{Reason: "claim_invalid_iss"},
+		{Reason: "claim_invalid_aud"},
+		{Reason: "claim_invalid_sub"},
+		{Reason: "claim_invalid_iat"},
+	}
+	for _, rejection := range rejections {
+		reason := string(rejection.Reason)
+		next, _ := noopHandler()
+		handler := auth.Middleware(stubVerifier(shared.UserId{}, rejection))(next)
+
+		rec := serveBearer(handler, "203.0.113.7:1", "t")
+
+		body := decodeRejectBody(t, rec)
+		if rec.Code != http.StatusUnauthorized || body["code"] != "auth.token_"+reason || body["status"] != float64(http.StatusUnauthorized) {
+			t.Errorf("%s: answered %d %v, want 401 auth.token_%s", reason, rec.Code, body, reason)
+		}
+		if got := rec.Header().Get("Content-Type"); got != "application/problem+json" {
+			t.Errorf("%s: Content-Type %q, want application/problem+json", reason, got)
+		}
+	}
+}
+
+func TestMiddleware_AnUnknownRejectionReasonAnswersTheGenericInvalidTokenCode(t *testing.T) {
+	next, _ := noopHandler()
+	handler := auth.Middleware(stubVerifier(shared.UserId{}, &auth.InvalidTokenError{Reason: "from_a_future_verifier"}))(next)
+
+	rec := serveBearer(handler, "203.0.113.7:1", "t")
+
+	if body := decodeRejectBody(t, rec); rec.Code != http.StatusUnauthorized || body["code"] != "auth.token_invalid" {
+		t.Errorf("answered %d %v, want 401 auth.token_invalid", rec.Code, body)
+	}
+}
+
+func TestMiddleware_AVerifierOutageIsLoggedOnceAtErrorWithItsCause(t *testing.T) {
+	logs := captureJSONLog(t)
+	next, _ := noopHandler()
+	handler := auth.Middleware(stubVerifier(shared.UserId{}, errors.New("fetch JWKS: connection refused")))(next)
+
+	serveBearer(handler, "203.0.113.7:1", "t")
+
+	errorLines := strings.Count(logs.String(), `"level":"ERROR"`)
+	if errorLines != 1 {
+		t.Fatalf("ERROR lines = %d, want 1:\n%s", errorLines, logs.String())
+	}
+	record := findLogRecord(t, logs, "request.failed")
+	if record["code"] != "auth.unavailable" || !strings.Contains(fmt.Sprint(record["error"]), "connection refused") {
+		t.Errorf("request.failed = %v, want code auth.unavailable carrying the cause", record)
+	}
 }

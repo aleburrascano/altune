@@ -12,4 +12,5 @@ const (
 	ReasonClaimInvalidAUD  TokenRejectReason = "claim_invalid_aud"
 	ReasonClaimInvalidSUB  TokenRejectReason = "claim_invalid_sub"
 	ReasonClaimInvalidIAT  TokenRejectReason = "claim_invalid_iat"
+	ReasonRevoked          TokenRejectReason = "revoked"
 )
