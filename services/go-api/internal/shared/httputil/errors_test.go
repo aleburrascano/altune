@@ -86,19 +86,6 @@ func TestHandleServiceError_LegacyStatusErrorsKeepTheirStatusCodeAndDetail(t *te
 	}
 }
 
-func TestDirectHelpersOmitCode(t *testing.T) {
-	rec := httptest.NewRecorder()
-	httputil.WriteError(rec, http.StatusServiceUnavailable, "authentication unavailable")
-
-	got := strings.TrimSpace(rec.Body.String())
-	if got != `{"detail":"authentication unavailable"}` {
-		t.Errorf("body: got %s, want %s", got, `{"detail":"authentication unavailable"}`)
-	}
-	if strings.Contains(got, "code") {
-		t.Errorf("direct helper leaked a code field: %s", got)
-	}
-}
-
 func TestWriteJSON(t *testing.T) {
 	type payload struct {
 		Name string `json:"name"`
@@ -122,23 +109,6 @@ func TestWriteJSON(t *testing.T) {
 	}
 	if got.Name != "altune" {
 		t.Errorf("body.name: got %q, want %q", got.Name, "altune")
-	}
-}
-
-func TestWriteError(t *testing.T) {
-	rec := httptest.NewRecorder()
-	httputil.WriteError(rec, http.StatusTeapot, "I'm a teapot")
-
-	if rec.Code != http.StatusTeapot {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusTeapot)
-	}
-
-	var body httputil.ErrorResponse
-	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	if body.Detail != "I'm a teapot" {
-		t.Errorf("detail: got %q, want %q", body.Detail, "I'm a teapot")
 	}
 }
 
@@ -188,25 +158,8 @@ func TestBadRequest(t *testing.T) {
 		t.Errorf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 
-	var body httputil.ErrorResponse
-	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	if body.Detail != "invalid input" {
-		t.Errorf("detail: got %q, want %q", body.Detail, "invalid input")
-	}
-}
-
-func TestBadRequestCode(t *testing.T) {
-	rec := httptest.NewRecorder()
-	httputil.BadRequestCode(rec, "discovery.invalid_param", "offset must be an integer")
-
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
-	}
-	want := `{"detail":"offset must be an integer","code":"discovery.invalid_param"}`
-	if got := strings.TrimSpace(rec.Body.String()); got != want {
-		t.Errorf("body: got %s, want %s", got, want)
+	if got := strings.TrimSpace(rec.Body.String()); got != `{"detail":"invalid input"}` {
+		t.Errorf("body: got %s, want only the detail %s", got, `{"detail":"invalid input"}`)
 	}
 }
 
@@ -224,24 +177,6 @@ func TestInternalError(t *testing.T) {
 	}
 	if body.Detail != "internal server error" {
 		t.Errorf("detail: got %q, want %q", body.Detail, "internal server error")
-	}
-}
-
-func TestWritePlainError_MatchesHttpErrorOutput(t *testing.T) {
-	rec := httptest.NewRecorder()
-	httputil.WritePlainError(rec, http.StatusTooManyRequests, "too many event streams")
-
-	if rec.Code != http.StatusTooManyRequests {
-		t.Fatalf("status = %d, want 429", rec.Code)
-	}
-	if got := rec.Header().Get("Content-Type"); got != "text/plain; charset=utf-8" {
-		t.Fatalf("content type = %q", got)
-	}
-	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
-		t.Fatalf("nosniff = %q", got)
-	}
-	if got := rec.Body.String(); got != "too many event streams\n" {
-		t.Fatalf("body = %q", got)
 	}
 }
 

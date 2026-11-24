@@ -210,7 +210,7 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 	_, _ = w.Write(append(body, '\n'))
 }
 
-func WriteError(w http.ResponseWriter, status int, message string) {
+func writeDetail(w http.ResponseWriter, status int, message string) {
 	WriteJSON(w, status, ErrorResponse{Detail: message})
 }
 
@@ -218,15 +218,11 @@ func NotFound(w http.ResponseWriter, message string) {
 	if message == "" {
 		message = "not found"
 	}
-	WriteError(w, http.StatusNotFound, message)
+	writeDetail(w, http.StatusNotFound, message)
 }
 
 func BadRequest(w http.ResponseWriter, message string) {
-	WriteError(w, http.StatusBadRequest, message)
-}
-
-func BadRequestCode(w http.ResponseWriter, code, message string) {
-	WriteJSON(w, http.StatusBadRequest, ErrorResponse{Detail: message, Code: code})
+	writeDetail(w, http.StatusBadRequest, message)
 }
 
 func InternalError(w http.ResponseWriter, msgs ...string) {
@@ -234,9 +230,5 @@ func InternalError(w http.ResponseWriter, msgs ...string) {
 	if len(msgs) > 0 && msgs[0] != "" {
 		msg = msgs[0]
 	}
-	WriteError(w, http.StatusInternalServerError, msg)
-}
-
-func WritePlainError(w http.ResponseWriter, status int, msg string) {
-	http.Error(w, msg, status)
+	writeDetail(w, http.StatusInternalServerError, msg)
 }
