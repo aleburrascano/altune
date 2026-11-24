@@ -103,55 +103,7 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 	if s.workspace == nil {
 		return afterDownload{}, ErrNoTempWorkspace
 	}
-	if s.width > 1 {
-		return s.executeWindowed(ctx, ac)
-	}
-	failures := downloadFailures{unavailable: ac.SearchUnavailable}
-	holds := holdBook{ws: s.workspace}
-	defer holds.discard()
-	attempts := 0
-
-	for i := range ac.Ranked {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return afterDownload{}, fmt.Errorf("download cancelled: %w", ctxErr)
-		}
-		if attempts >= maxDownloadAttempts {
-			recordNotAttempted(ac, ac.Ranked[i:])
-			break
-		}
-		if failures.sourceDead(ac.Ranked[i]) {
-			recordSourceDead(ac, ac.Ranked[i])
-			continue
-		}
-		if !ac.lengths().Plausible(ac.Ranked[i]) {
-			recordImplausibleDuration(ctx, ac, ac.Ranked[i])
-			continue
-		}
-		if holds.muxedRetrySpent() {
-			recordNotAttempted(ac, ac.Ranked[i:])
-			break
-		}
-
-		tmpDir, err := s.workspace.Create("*")
-		if err != nil {
-			return afterDownload{}, fmt.Errorf("create temp dir: %w", err)
-		}
-
-		ac.Attempted = append(ac.Attempted, AttemptedCandidate{URL: ac.Ranked[i].URL, Window: attempts})
-		attempts++
-		result := s.runAttempt(ctx, ac, ac.Ranked[i], tmpDir)
-		if result.status == attemptAccepted {
-			if downloaded, won := holds.resolveAccepted(ctx, ac, result); won {
-				return downloaded, nil
-			}
-			continue
-		}
-		result.applyTo(ctx, ac)
-		holds.offer(result)
-		failures.noteAttempt(result)
-	}
-
-	return s.settle(ctx, ac, &holds, &failures)
+	return s.executeWindowed(ctx, ac)
 }
 
 func (s *DownloadStep) settle(ctx context.Context, ac *AcquisitionContext, holds *holdBook, failures *downloadFailures) (afterDownload, error) {

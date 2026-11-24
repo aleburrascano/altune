@@ -345,13 +345,14 @@ module already works around the normalization blindness that §7.1 is about.
 
 **Download** walks the ranked list (cap 8 attempts, `maxDownloadAttempts`) in
 windows of `WithVerifyWidth(n)` candidates, falling through to the next candidate
-on rejection. Width 1 is the serial walk and is the default: `CoreSteps` does not set
-it, so production is serial until a caller passes a width (§7.11). Every fetch,
+on rejection. There is no other walk: `CoreSteps` passes `prodVerifyWidth` (2), the
+step's default, and a width of 1 is simply windows of one candidate (§7.11). Every fetch,
 full or preview, takes a slot from the process-wide `DownloadLimiter`
 (`ACQUISITION_DOWNLOAD_CONCURRENCY`, default 6, wired in `catalog_wiring.go`), which
 caps concurrent downloads across all tracks. In a window the first accepted
-candidate cancels the lower-ranked ones, and results merge in rank order so the
-outcome equals the serial walk. Per candidate:
+candidate cancels the lower-ranked ones, and results merge in rank order, so the
+first accepted audio-only file wins, and a muxed one is kept only if it grades better
+than that file. Per candidate:
 
 1. `tracklength.Policy.Plausible` skips, before any bytes move, a candidate whose
    search-time duration is outside the expected window (stage `duration`, log
