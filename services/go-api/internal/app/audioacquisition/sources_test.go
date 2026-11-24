@@ -4,11 +4,17 @@ import (
 	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/app/audioacquisition"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/ytminnertube"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/alicebob/miniredis/v2"
+	goredis "github.com/redis/go-redis/v9"
 )
 
 func TestLiveTiers_EachSourceFollowsItsSwitch(t *testing.T) {
@@ -37,6 +43,14 @@ func TestLiveTiers_EachSourceFollowsItsSwitch(t *testing.T) {
 				t.Errorf("ytdlp present = %v, want %v (sources=%v)", got, tt.wantYtDlp, names)
 			}
 		})
+	}
+}
+
+func TestLiveTiers_WithEverySourceSwitchedOffTheCatalogLinkIsNotAddedAlone(t *testing.T) {
+	tiers, _ := audioacquisition.LiveTiers(t.Context(), &config.Config{}, nil)
+
+	if names := sourceNames(tiers.All()); len(names) != 0 {
+		t.Errorf("sources = %v with YTMUSIC_ENABLED and YTDLP_ENABLED off, want none", names)
 	}
 }
 
@@ -148,5 +162,26 @@ func TestCanaryYTMClient_BoundsEveryCallAndPacesItsSearches(t *testing.T) {
 	}
 	if client.MinInterval() <= 0 {
 		t.Errorf("MinInterval() = %s, want a positive pause between searches", client.MinInterval())
+	}
+}
+
+func TestCanaryYTMClient_ACooldownAnotherInstanceRecordedInRedisHoldsItsSearches(t *testing.T) {
+	redis := goredis.NewClient(&goredis.Options{Addr: miniredis.RunT(t).Addr()})
+	t.Cleanup(func() { _ = redis.Close() })
+	otherInstance, err := ytminnertube.NewBudget(redis, ytminnertube.Settings{Cooldown: time.Hour})
+	if err != nil {
+		t.Fatalf("budget for the other instance: %v", err)
+	}
+	if err := otherInstance.CoolDown(t.Context()); err != nil {
+		t.Fatalf("record the cooldown: %v", err)
+	}
+	client := audioacquisition.CanaryYTMClient(&config.Config{}, redis)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	_, err = client.SearchSongs(ctx, "fixture query")
+
+	if !errors.Is(err, ytminnertube.ErrBudgetRefused) {
+		t.Errorf("SearchSongs during a shared cooldown: err = %v, want %v before any request leaves", err, ytminnertube.ErrBudgetRefused)
 	}
 }
