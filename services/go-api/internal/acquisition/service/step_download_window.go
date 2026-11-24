@@ -3,11 +3,10 @@ package service
 import (
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/internal/core/rejectionlog"
-	"altune/go-api/internal/shared/redact"
+	"altune/go-api/internal/shared/fanout"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"fmt"
-	"log/slog"
-	"runtime/debug"
 	"sync"
 )
 
@@ -94,21 +93,19 @@ func (s *DownloadStep) runWindow(ctx context.Context, ac *AcquisitionContext, wi
 	defer cancelAll(cancels)
 
 	results := make([]attempt, len(window))
-	var wg sync.WaitGroup
 	var mu sync.Mutex
-	for i := range window {
-		wg.Add(1)
-		go func(rank int) {
-			defer wg.Done()
+	g := fanout.New("acquisition.download_attempt_panic", len(window))
+	for rank := range window {
+		g.Go(ctx, func() {
 			results[rank] = s.guardedWindowAttempt(ctxs[rank], ac, window[rank])
 			if results[rank].status == attemptAccepted && !results[rank].muxed() {
 				mu.Lock()
 				cancelAll(cancels[rank+1:])
 				mu.Unlock()
 			}
-		}(i)
+		})
 	}
-	wg.Wait()
+	_ = g.Wait()
 	return results
 }
 
@@ -127,17 +124,15 @@ func cancelAll(cancels []context.CancelFunc) {
 	}
 }
 
-func (s *DownloadStep) guardedWindowAttempt(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate) (result attempt) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			slog.ErrorContext(ctx, "download attempt panicked",
-				"track_id", ac.Track.ID, "panic", redact.LogText(fmt.Sprint(rec)), "stack", string(debug.Stack()))
-			result = attempt{candidate: candidate, rejection: &downloadRejection{
-				stage: rejectionlog.Download, reason: "download failed", err: fmt.Errorf("attempt panicked: %v", rec),
-			}}
-		}
-	}()
-	return s.runWindowAttempt(ctx, ac, candidate)
+func (s *DownloadStep) guardedWindowAttempt(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate) attempt {
+	var result attempt
+	panicked := runloop.Try(ctx, "acquisition.download_attempt_panic", func() { result = s.runWindowAttempt(ctx, ac, candidate) }, "track_id", ac.Track.ID)
+	if panicked != nil {
+		return attempt{candidate: candidate, rejection: &downloadRejection{
+			stage: rejectionlog.Download, reason: "download failed", err: panicked,
+		}}
+	}
+	return result
 }
 
 func (s *DownloadStep) runWindowAttempt(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate) attempt {

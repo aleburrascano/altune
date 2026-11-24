@@ -3,12 +3,13 @@ package service
 import (
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/shared/fanout"
 	"altune/go-api/internal/shared/redact"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
 )
 
 var ErrNoAudioSources = errors.New("no audio sources configured")
@@ -78,24 +79,25 @@ func findAll(ctx context.Context, req ports.FindRequest, sources []ports.AudioSo
 	slots := make([][]ports.AudioCandidate, len(sources))
 	errs := make([]error, len(sources))
 
-	var wg sync.WaitGroup
+	g := fanout.New("acquisition.source_find_panic", len(sources))
 	for i, source := range sources {
-		wg.Add(1)
-		go func(i int, source ports.AudioSource) {
-			defer wg.Done()
-			slots[i], errs[i] = findOne(ctx, req, source)
-		}(i, source)
+		g.Go(ctx, func() { slots[i], errs[i] = findOne(ctx, req, source) })
 	}
-	wg.Wait()
+	_ = g.Wait()
 	return slots, errs
 }
 
-func findOne(ctx context.Context, req ports.FindRequest, source ports.AudioSource) (found []ports.AudioCandidate, err error) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			found, err = nil, fmt.Errorf("source %s panicked: %v", source.Name(), rec)
-		}
-	}()
+func findOne(ctx context.Context, req ports.FindRequest, source ports.AudioSource) ([]ports.AudioCandidate, error) {
+	var found []ports.AudioCandidate
+	var err error
+	panicked := runloop.Try(ctx, "acquisition.source_find_panic", func() { found, err = findStamped(ctx, req, source) })
+	if panicked != nil {
+		return nil, fmt.Errorf("source %s: %w", source.Name(), panicked)
+	}
+	return found, err
+}
+
+func findStamped(ctx context.Context, req ports.FindRequest, source ports.AudioSource) ([]ports.AudioCandidate, error) {
 	candidates, err := source.Find(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("source %s: %w", source.Name(), err)
