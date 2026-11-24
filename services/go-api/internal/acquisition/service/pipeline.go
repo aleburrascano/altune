@@ -9,11 +9,11 @@ import (
 	"altune/go-api/internal/acquisition/service/upgrade"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/redact"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
-	"runtime/debug"
 	"time"
 )
 
@@ -87,34 +87,32 @@ type pipelineRun struct {
 	current   named
 }
 
-func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) (err error) {
+func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) error {
 	run := &pipelineRun{ac: ac, reporter: jobReporterFrom(ctx)}
-
-	defer func() {
-		if rec := recover(); rec != nil {
-			step := stepNamePipeline
-			if run.current != nil {
-				step = run.current.Name()
-			}
-			slog.ErrorContext(ctx, "pipeline step panicked",
-				"step", step, "track_id", ac.Track.ID, "panic", redact.LogText(fmt.Sprint(rec)), "stack", string(debug.Stack()))
-			rollback(ctx, run.completed, ac)
-			err = &StepError{Step: step, Err: fmt.Errorf("panic: %v", rec)}
-		}
-	}()
-
-	downloaded, err := searchAndDownload(ctx, run, p)
-	if err != nil && ac.FallbackSkipped && ctx.Err() == nil {
-		slog.InfoContext(ctx, "acquisition.first_tier_failed_trying_fallback",
-			"track_id", ac.Track.ID, "error", redact.LogError(err))
-		ac.FallbackSkipped, ac.FallbackOnly = false, true
-		ac.clearCandidates()
-		run.completed = nil
-		firstTierErr := err
-		downloaded, err = searchAndDownload(ctx, run, p)
-		err = keepFirstTierOutage(err, firstTierErr)
+	var err error
+	panicked := runloop.Try(ctx, "acquisition.pipeline_panic", func() { err = runStages(ctx, run, p) },
+		"step", run, "track_id", ac.Track.ID)
+	if panicked == nil {
+		return err
 	}
-	logShadowJudge(ctx, ac, err)
+	rollback(ctx, run.completed, ac)
+	return &StepError{Step: run.currentStep(), Err: panicked}
+}
+
+func (run *pipelineRun) currentStep() StepName {
+	if run.current == nil {
+		return stepNamePipeline
+	}
+	return run.current.Name()
+}
+
+func (run *pipelineRun) LogValue() slog.Value {
+	return slog.StringValue(string(run.currentStep()))
+}
+
+func runStages(ctx context.Context, run *pipelineRun, p Pipeline) error {
+	downloaded, err := searchAndDownloadAnyTier(ctx, run, p)
+	logShadowJudge(ctx, run.ac, err)
 	if err != nil {
 		return err
 	}
@@ -150,6 +148,21 @@ func keepFirstTierOutage(fallbackErr, firstTierErr error) error {
 		return fallbackErr
 	}
 	return fmt.Errorf("%w (first tier: %w)", fallbackErr, firstTierErr)
+}
+
+func searchAndDownloadAnyTier(ctx context.Context, run *pipelineRun, p Pipeline) (afterDownload, error) {
+	ac := run.ac
+	downloaded, err := searchAndDownload(ctx, run, p)
+	if err == nil || !ac.FallbackSkipped || ctx.Err() != nil {
+		return downloaded, err
+	}
+	slog.InfoContext(ctx, "acquisition.first_tier_failed_trying_fallback",
+		"track_id", ac.Track.ID, "error", redact.LogError(err))
+	ac.FallbackSkipped, ac.FallbackOnly = false, true
+	ac.clearCandidates()
+	run.completed = nil
+	downloaded, fallbackErr := searchAndDownload(ctx, run, p)
+	return downloaded, keepFirstTierOutage(fallbackErr, err)
 }
 
 func searchAndDownload(ctx context.Context, run *pipelineRun, p Pipeline) (afterDownload, error) {
@@ -225,7 +238,7 @@ func schedulerHandedOver(ctx context.Context) bool {
 }
 
 func rollback(ctx context.Context, completed []undoable, ac *AcquisitionContext) {
-	rbCtx, cancel := detachedTimeout(ctx, rollbackBudget)
+	rbCtx, cancel := runloop.Detach(ctx, rollbackBudget)
 	defer cancel()
 	if schedulerHandedOver(ctx) {
 		rbCtx = withRollbackHandedOver(rbCtx)

@@ -9,11 +9,11 @@ import (
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"errors"
 	"log/slog"
 	"net/url"
-	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -342,15 +342,16 @@ func (s *BackgroundAcquisitionScheduler) jobContextFor(key string, job ports.Job
 	return jobCtx, cancelJob
 }
 
-func (s *BackgroundAcquisitionScheduler) execClaimedJob(ctx context.Context, key string, run acquisitionRun, job ports.Job) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			s.logJobPanic(ctx, key, r)
-			err = errJobPanicked
-		}
-	}()
-	err = run(ctx, job.UserID, job.TrackID)
-	s.completeClaimedJob(ctx, key, err)
+func (s *BackgroundAcquisitionScheduler) execClaimedJob(ctx context.Context, key string, run acquisitionRun, job ports.Job) error {
+	var err error
+	panicked := runloop.Try(ctx, "acquisition_panic", func() {
+		err = run(ctx, job.UserID, job.TrackID)
+		s.completeClaimedJob(ctx, key, err)
+	}, "track_id", key)
+	if panicked != nil {
+		s.failPanickedJob(ctx, key)
+		return errJobPanicked
+	}
 	return err
 }
 
@@ -474,11 +475,7 @@ func (s *BackgroundAcquisitionScheduler) releasePanickedJob(job ports.Job) {
 }
 
 func (s *BackgroundAcquisitionScheduler) refuseQueuedRecovering(job ports.Job) {
-	defer func() {
-		if r := recover(); r != nil {
-			slog.ErrorContext(s.baseCtx, "acquisition_panic_fail_track", "track_id", job.TrackID.String(), "panic", r)
-		}
-	}()
+	defer runloop.RecoverContext(s.baseCtx, "acquisition_panic_fail_track", "track_id", job.TrackID.String())
 	s.svc.RefuseQueued(withJobFence(context.Background(), job.Fence), job.UserID, job.TrackID)
 }
 
@@ -493,14 +490,9 @@ func (s *BackgroundAcquisitionScheduler) logQueueOutcome(op string, trackID shar
 	slog.ErrorContext(s.baseCtx, "acquisition."+op+"_failed", "track_id", trackID.String(), "error", err)
 }
 
-func (s *BackgroundAcquisitionScheduler) logJobPanic(jobCtx context.Context, key string, r any) {
+func (s *BackgroundAcquisitionScheduler) failPanickedJob(jobCtx context.Context, key string) {
 	record := s.log.complete(key, ports.JobFailed, "panic")
 	s.recordOutcome(jobCtx, record)
-	slog.ErrorContext(jobCtx, "acquisition_panic",
-		"track_id", key,
-		"panic", r,
-		"stack", string(debug.Stack()),
-	)
 }
 
 func hostOf(rawURL string) string {

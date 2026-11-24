@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/shared/events"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/redact"
+	"altune/go-api/internal/shared/runloop"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -304,7 +305,7 @@ func (s *AcquireTrackAudioService) deleteSupersededAudio(ctx context.Context, us
 	if old == "" || old == ac.AudioRef {
 		return
 	}
-	delCtx, cancel := detachedTimeout(ctx, supersededDeleteBudget)
+	delCtx, cancel := runloop.Detach(ctx, supersededDeleteBudget)
 	defer cancel()
 	if s.servedByAnotherTrack(delCtx, trackId, old) {
 		return
@@ -507,12 +508,8 @@ const settleBudget = 10 * time.Second
 
 const supersededDeleteBudget = 30 * time.Second
 
-func detachedTimeout(ctx context.Context, budget time.Duration) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.WithoutCancel(ctx), budget)
-}
-
 func settleContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	return detachedTimeout(ctx, settleBudget)
+	return runloop.Detach(ctx, settleBudget)
 }
 
 func (s *AcquireTrackAudioService) reportReplaceFailure(ctx context.Context, userId shared.UserId, trackId shared.TrackId, err error, ac *AcquisitionContext) error {

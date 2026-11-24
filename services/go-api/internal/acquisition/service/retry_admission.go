@@ -4,6 +4,7 @@ import (
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"fmt"
 	"log/slog"
@@ -47,7 +48,7 @@ func (g cooldownGate) run(ctx context.Context, trackID shared.TrackId, schedule 
 }
 
 func (g cooldownGate) release(ctx context.Context, trackID shared.TrackId, at time.Time) {
-	relCtx, cancel := detachedTimeout(ctx, releaseTimeout)
+	relCtx, cancel := runloop.Detach(ctx, releaseTimeout)
 	defer cancel()
 	if err := g.store.Release(relCtx, trackID, g.kind, at); err != nil {
 		slog.WarnContext(ctx, "acquisition: cooldown release failed", "kind", string(g.kind), "track_id", trackID.String(), "error", err)
