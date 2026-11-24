@@ -121,7 +121,6 @@ func (r *PgxEventStore) ZeroResultQueries(ctx context.Context, since time.Time, 
 	if err != nil {
 		return nil, fmt.Errorf("query zero-result events: %w", err)
 	}
-	defer rows.Close()
 	return scanQueryCounts(rows)
 }
 
@@ -173,7 +172,6 @@ func (r *PgxEventStore) NonZeroNoClickQueries(ctx context.Context, since time.Ti
 	if err != nil {
 		return nil, fmt.Errorf("query no-click events: %w", err)
 	}
-	defer rows.Close()
 	return scanQueryCounts(rows)
 }
 
@@ -220,11 +218,9 @@ func (r *PgxEventStore) SatisfactionSignals(ctx context.Context, since time.Time
 	if err != nil {
 		return nil, fmt.Errorf("query satisfaction signals: %w", err)
 	}
-	defer rows.Close()
-
-	return collectRows(rows, func(rows pgx.Rows) (ports.BehavioralSignal, error) {
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (ports.BehavioralSignal, error) {
 		var sig ports.BehavioralSignal
-		if err := rows.Scan(&sig.ResultSignature, &sig.Score); err != nil {
+		if err := row.Scan(&sig.ResultSignature, &sig.Score); err != nil {
 			return sig, fmt.Errorf("scan satisfaction signal: %w", err)
 		}
 		return sig, nil
@@ -257,14 +253,12 @@ func (r *PgxEventStore) BehavioralLabels(ctx context.Context, since time.Time) (
 	if err != nil {
 		return nil, fmt.Errorf("query behavioral labels: %w", err)
 	}
-	defer rows.Close()
-
-	return collectRows(rows, func(rows pgx.Rows) (ports.BehavioralLabel, error) {
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (ports.BehavioralLabel, error) {
 		var (
 			lbl         ports.BehavioralLabel
 			hasNegative int
 		)
-		if err := rows.Scan(&lbl.QueryNorm, &lbl.ResultSignature, &lbl.Title, &lbl.Subtitle, &hasNegative); err != nil {
+		if err := row.Scan(&lbl.QueryNorm, &lbl.ResultSignature, &lbl.Title, &lbl.Subtitle, &hasNegative); err != nil {
 			return lbl, fmt.Errorf("scan behavioral label: %w", err)
 		}
 		lbl.Polarity = 1
@@ -307,7 +301,6 @@ func (r *PgxEventStore) AbandonedSearches(ctx context.Context, since time.Time, 
 	if err != nil {
 		return nil, fmt.Errorf("query abandoned searches: %w", err)
 	}
-	defer rows.Close()
 	return scanQueryCounts(rows)
 }
 
@@ -328,9 +321,9 @@ const eraseEventSearchTextOfUserSQL = `
 	WHERE user_id = $1 AND query_norm IS NOT NULL`
 
 func scanQueryCounts(rows pgx.Rows) ([]ports.QueryCount, error) {
-	return collectRows(rows, func(rows pgx.Rows) (ports.QueryCount, error) {
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (ports.QueryCount, error) {
 		var qc ports.QueryCount
-		if err := rows.Scan(&qc.QueryNorm, &qc.Count); err != nil {
+		if err := row.Scan(&qc.QueryNorm, &qc.Count); err != nil {
 			return qc, fmt.Errorf("scan query count: %w", err)
 		}
 		return qc, nil

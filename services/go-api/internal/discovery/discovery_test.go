@@ -578,7 +578,7 @@ func TestSearch_NeverAsksMusicBrainzEvenWithItsUserAgentSet(t *testing.T) {
 func TestSearch_ActivityHearsOfEachStoredSearch(t *testing.T) {
 	feed := &activityRecorder{}
 	h := newHarness(t, everyProviderOff())
-	h.deps.Pool = integrationPool(t)
+	h.deps.Pool = sharedtest.Pool(t)
 	h.deps.Activity = feed
 	disc := h.start()
 
@@ -760,7 +760,7 @@ func anchoredArtistContent(t *testing.T) []string {
 
 func storedIdentityHarness(t *testing.T, providers discovery.ProviderSettings) *harness {
 	t.Helper()
-	pool := integrationPool(t)
+	pool := sharedtest.Pool(t)
 	ctx := context.Background()
 	forget := func() {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM entity_identity WHERE provider = 'deezer' AND external_id = '1' AND kind = 'artist'`)
@@ -960,21 +960,6 @@ func serve(disc *discovery.Discovery, target string) int {
 	rec := httptest.NewRecorder()
 	disc.Handler.Routes().ServeHTTP(rec, req)
 	return rec.Code
-}
-
-func integrationPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	sharedtest.RequireIntegration(t)
-	url := os.Getenv("DATABASE_URL")
-	if url == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
-	pool, err := pgxpool.New(context.Background(), url)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	return pool
 }
 
 func (h *harness) optionsLoggedAs(message string) []string {

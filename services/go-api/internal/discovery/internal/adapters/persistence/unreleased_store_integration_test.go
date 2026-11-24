@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/adapters/persistence"
 	"altune/go-api/internal/discovery/internal/core/ports"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"testing"
 	"time"
@@ -33,7 +34,7 @@ func unreleasedTitles(songs []domain.UnreleasedSong) []string {
 }
 
 func TestUnreleasedStoreWrite(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxUnreleasedStore(pool)
 	ctx := context.Background()
 	key := newUnreleasedArtist(t, pool, store)
@@ -70,7 +71,7 @@ func TestUnreleasedStoreWrite(t *testing.T) {
 }
 
 func TestUnreleasedStoreDue(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxUnreleasedStore(pool)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -120,7 +121,7 @@ func TestUnreleasedStoreDue(t *testing.T) {
 }
 
 func TestUnreleasedStoreBuildVersion(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxUnreleasedStore(pool)
 	ctx := context.Background()
 	key := newUnreleasedArtist(t, pool, store)
@@ -154,7 +155,7 @@ func unreleasedSearchKeys(t *testing.T, pool *pgxpool.Pool, key ports.Unreleased
 }
 
 func TestUnreleasedSearch_RanksBySimilarityAndMatchesTyposAndAccents(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxUnreleasedStore(pool)
 	ctx := context.Background()
 	key := newUnreleasedArtist(t, pool, store)

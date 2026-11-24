@@ -44,7 +44,7 @@ func showResults(t *testing.T, store *persistence.PgxEventStore, userId shared.U
 
 func TestPgxEventStore_SatisfactionSignals_RequiresShownResult(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -103,7 +103,7 @@ func TestPgxEventStore_SatisfactionSignals_RequiresShownResult(t *testing.T) {
 
 func TestPgxEventStore_SatisfactionSignals(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	ctx := context.Background()
 
@@ -190,7 +190,7 @@ func TestPgxEventStore_SatisfactionSignals(t *testing.T) {
 
 func TestPgxEventStore_ZeroResultQueries(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	ctx := context.Background()
 	userId := newEventTestUser(t, pool)
@@ -233,7 +233,7 @@ func TestPgxEventStore_ZeroResultQueries(t *testing.T) {
 
 func TestPgxEventStore_ZeroResultTotal(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	ctx := context.Background()
 	userId := newEventTestUser(t, pool)
@@ -279,7 +279,7 @@ func TestPgxEventStore_ZeroResultTotal(t *testing.T) {
 
 func TestPgxEventStore_NonZeroNoClickQueries(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	ctx := context.Background()
 	userId := newEventTestUser(t, pool)
@@ -332,7 +332,7 @@ func TestPgxEventStore_NonZeroNoClickQueries(t *testing.T) {
 
 func TestPgxEventStore_BehavioralLabels(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	ctx := context.Background()
 	userId := newEventTestUser(t, pool)
@@ -419,7 +419,7 @@ func TestPgxEventStore_BehavioralLabels(t *testing.T) {
 
 func TestPgxEventStore_AbandonedSearches(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	ctx := context.Background()
 
@@ -500,7 +500,7 @@ func TestPgxEventStore_AbandonedSearches(t *testing.T) {
 
 func TestPgxEventStore_Append_EventIDDedupAndMalformedIDs(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	ctx := context.Background()
 

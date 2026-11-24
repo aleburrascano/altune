@@ -46,14 +46,12 @@ func (r *PgxEventStore) DiscographyQuality(ctx context.Context, since time.Time,
 	if err != nil {
 		return nil, fmt.Errorf("query discography quality: %w", err)
 	}
-	defer rows.Close()
-
-	cases, err := collectRows(rows, func(rows pgx.Rows) (ports.DiscographyCase, error) {
+	cases, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (ports.DiscographyCase, error) {
 		var (
 			c              ports.DiscographyCase
 			providerCounts []byte
 		)
-		if err := rows.Scan(&c.ArtistRef, &c.Releases, &c.SingleProvider, &c.SingleProviderNoID, &providerCounts, &c.LastSeen); err != nil {
+		if err := row.Scan(&c.ArtistRef, &c.Releases, &c.SingleProvider, &c.SingleProviderNoID, &providerCounts, &c.LastSeen); err != nil {
 			return ports.DiscographyCase{}, fmt.Errorf("scan discography case: %w", err)
 		}
 		c.ProviderCounts = map[string]int{}

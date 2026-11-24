@@ -36,7 +36,7 @@ func storedQueryNorm(t *testing.T, pool *pgxpool.Pool, userId shared.UserId, eve
 
 func TestPgxEventStore_NonZeroNoClickQueries_IgnoresClientQueryNorm(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	ctx := context.Background()
 	honest := newEventTestUser(t, pool)
@@ -83,7 +83,7 @@ func TestPgxEventStore_NonZeroNoClickQueries_IgnoresClientQueryNorm(t *testing.T
 
 func TestPgxEventStore_Append_ResolvesClientQueryNormFromSearch(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxEventStore(pool)
 	owner := newEventTestUser(t, pool)
 	other := newEventTestUser(t, pool)

@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/discovery/internal/adapters/persistence"
 	"altune/go-api/internal/discovery/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"testing"
 	"time"
@@ -42,7 +43,7 @@ func matchTitles(ms []ports.RelatedTrackMatch) map[string]bool {
 }
 
 func TestPgxRelationshipQuerier_FindRelated(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	q := persistence.NewPgxRelationshipQuerier(pool)
 	ctx := context.Background()
 
@@ -89,7 +90,7 @@ func TestPgxRelationshipQuerier_FindRelated(t *testing.T) {
 }
 
 func TestPgxRelationshipQuerier_FindRelatedByAlbumArtist(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	q := persistence.NewPgxRelationshipQuerier(pool)
 	ctx := context.Background()
 	user := uuid.New()
@@ -110,7 +111,7 @@ func TestPgxRelationshipQuerier_FindRelatedByAlbumArtist(t *testing.T) {
 }
 
 func TestPgxRelationshipQuerier_FindRelatedByAlbumArtist_CreditsTheAlbumArtistAndAnUnnamedArtistMatchesAll(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	q := persistence.NewPgxRelationshipQuerier(pool)
 	ctx := context.Background()
 	user := uuid.New()

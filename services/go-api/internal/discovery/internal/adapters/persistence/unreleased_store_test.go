@@ -3,6 +3,7 @@ package persistence_test
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/adapters/persistence"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"reflect"
 	"testing"
@@ -10,7 +11,7 @@ import (
 )
 
 func TestUnreleasedStore_SongsRoundTripEveryField(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxUnreleasedStore(pool)
 	ctx := context.Background()
 	hasMedia := true
@@ -49,7 +50,7 @@ func TestUnreleasedStore_SongsRoundTripEveryField(t *testing.T) {
 }
 
 func TestUnreleasedStore_DueReturnsTheRecordedKnownIDs(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	store := persistence.NewPgxUnreleasedStore(pool)
 	ctx := context.Background()
 	if _, err := pool.Exec(ctx, `UPDATE unreleased_artists SET last_requested_at = now() - interval '60 days'`); err != nil {
