@@ -1,161 +1,156 @@
-package service
+package service_test
 
 import (
-	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
+	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/acquisition/internal/adapters/tempfs"
 	"altune/go-api/internal/acquisition/internal/core/ports"
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/shared/events"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
-	"errors"
 	"slices"
+	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
-
-	"github.com/google/uuid"
 )
 
-type recordingReporter struct {
-	stages  []string
-	srcURL  string
-	prov    string
-	timings map[string]time.Duration
-	format  ports.SourceFormat
-	file    ports.StoredFile
+type progressStages struct {
+	mu     sync.Mutex
+	stages []string
 }
 
-func (r *recordingReporter) meta(string, string, string)               {}
-func (r *recordingReporter) stage(n string)                            { r.stages = append(r.stages, n) }
-func (r *recordingReporter) source(u string)                           { r.srcURL = u }
-func (r *recordingReporter) provenance(p string)                       { r.prov = p }
-func (r *recordingReporter) fetched(f ports.SourceFormat)              { r.format = f }
-func (r *recordingReporter) decided(_ float64, _ string, _, _ float64) {}
-func (r *recordingReporter) stored(f ports.StoredFile)                 { r.file = f }
-func (r *recordingReporter) timing(stage string, d time.Duration) {
-	if r.timings == nil {
-		r.timings = map[string]time.Duration{}
+func (p *progressStages) Publish(_ context.Context, _ shared.UserId, eventType events.EventType, payload map[string]any) {
+	if eventType != events.TypeTrackAcquisitionProgress {
+		return
 	}
-	r.timings[stage] += d
-}
-
-func TestRunPipeline_ReportsStageAndSource(t *testing.T) {
-	rep := &recordingReporter{}
-	ctx := withJobReporter(context.Background(), rep)
-	ac := &AcquisitionContext{Track: TrackRef{ID: "t1"}, Selected: &ports.AudioCandidate{URL: "https://src/x"}}
-
-	if err := RunPipeline(ctx, pipelineOf(), ac); err != nil {
-		t.Fatal(err)
-	}
-	assertStepOrder(t, rep.stages, pipelineStageNames)
-	if rep.srcURL != "https://src/x" {
-		t.Errorf("source = %q, want the selected candidate URL", rep.srcURL)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if stage, ok := payload["stage"].(string); ok {
+		p.stages = append(p.stages, stage)
 	}
 }
 
-func TestRunPipeline_NoReporter_IsNoOp(t *testing.T) {
-	ac := &AcquisitionContext{Track: TrackRef{ID: "t1"}}
-	if err := RunPipeline(context.Background(), pipelineOf(), ac); err != nil {
-		t.Fatal(err)
+func (p *progressStages) reported() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.stages)
+}
+
+type finishedJob struct {
+	record ports.JobRecord
+	stages []string
+}
+
+func scheduleAndFinish(t *testing.T, source ports.AudioSource, opts ...func(*service.AcquireTrackAudioService)) finishedJob {
+	t.Helper()
+	var job finishedJob
+	synctest.Test(t, func(t *testing.T) {
+		track := pendingBlindingLights()
+		length := blindingLightsLength
+		track.CatalogDurationSeconds = &length
+		ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
+		opts = append([]func(*service.AcquireTrackAudioService){service.WithAcquireTempWorkspace(tempfs.New())}, opts...)
+		svc := service.NewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, opts...)
+		progress := &progressStages{}
+		var wg sync.WaitGroup
+		scheduler := service.NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), service.WithSchedulerEvents(progress))
+		defer scheduler.Shutdown(context.Background())
+		if err := scheduler.Schedule(context.Background(), track.UserId, track.ID, ""); err != nil {
+			t.Fatalf("Schedule = %v, want nil", err)
+		}
+
+		time.Sleep(10 * time.Second)
+		synctest.Wait()
+
+		recent := scheduler.Status().Recent
+		if len(recent) != 1 || recent[0].TrackID != track.ID.String() {
+			t.Fatalf("Recent = %+v, want the one finished job of %s", recent, track.ID)
+		}
+		job = finishedJob{record: recent[0], stages: progress.reported()}
+	})
+	if t.Failed() {
+		t.FailNow()
+	}
+	return job
+}
+
+type timedSource struct {
+	perURLSource
+	takes map[string]time.Duration
+}
+
+func (s timedSource) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+	time.Sleep(s.takes[candidate.URL])
+	return s.perURLSource.Fetch(ctx, candidate, outDir)
+}
+
+var pipelineStages = []string{"search", "select", "download", "tag", "store", "update_track"}
+
+const (
+	failingRank1URL = "https://music.youtube.com/watch?v=rank1AAAAAA"
+	storedRank2URL  = "https://www.youtube.com/watch?v=rank2AAAAAA"
+)
+
+func TestStatus_AJobReportsEveryPipelineStageInOrderAndTheSourceItStored(t *testing.T) {
+	job := scheduleAndFinish(t, freshAudioSource{})
+
+	if !slices.Equal(job.stages, pipelineStages) {
+		t.Errorf("progress stages = %v, want %v", job.stages, pipelineStages)
+	}
+	if want := "https://www.youtube.com/watch?v=freshAAAAAA"; job.record.ResolvedSource != want {
+		t.Errorf("resolved source = %q, want %q, the selected candidate", job.record.ResolvedSource, want)
 	}
 }
 
-func TestRunPipeline_TimesEveryStageThatRanAndOnlyThose(t *testing.T) {
-	rep := &recordingReporter{}
-	ctx := withJobReporter(context.Background(), rep)
-	var log []string
-	download := newMockStep("download", &log)
-	download.executeErr = errors.New("no audio")
+func TestStatus_AJobTimesEveryPipelineStageThatRanAndOnlyThose(t *testing.T) {
+	source := perURLSource{found: blindingLightsAt(failingRank1URL), broken: map[string]bool{failingRank1URL: true}}
 
-	_ = RunPipeline(ctx, pipelineOf(newMockStep("search", &log), newMockStep("select", &log), download), &AcquisitionContext{Track: TrackRef{ID: "t1"}})
+	job := scheduleAndFinish(t, source)
 
-	got := make([]string, 0, len(rep.timings))
-	for stage := range rep.timings {
-		got = append(got, stage)
+	got := []string{}
+	for stage := range job.record.StageMs {
+		if slices.Contains(pipelineStages, stage) {
+			got = append(got, stage)
+		}
 	}
 	slices.Sort(got)
 	if want := []string{"download", "search", "select"}; !slices.Equal(got, want) {
-		t.Errorf("timed stages = %v, want %v: the failed stage is timed, the skipped ones are absent", got, want)
+		t.Errorf("timed pipeline stages = %v, want %v: the failed stage is timed, the skipped ones are absent", got, want)
 	}
 }
 
-func TestSchedulerJobReporter_SumsRepeatedTimingsForAStage(t *testing.T) {
-	log := newJobLog()
-	log.register("t1", "")
-	rep := schedulerJobReporter{ctx: context.Background(), log: log, trackID: "t1"}
-
-	rep.timing("download.preview", 120*time.Millisecond)
-	rep.timing("download.preview", 30*time.Millisecond)
-	rep.fetched(ports.SourceFormat{ID: "18", Codec: "mp4a.40.2"})
-	rep.stored(ports.StoredFile{Bytes: 4096, Codec: "mp3"})
-	record := log.complete("t1", ports.JobSucceeded, "")
-
-	if got := record.StageMs["download.preview"]; got != 150 {
-		t.Errorf("download.preview = %dms, want 150 (summed across candidates)", got)
+func TestStatus_AJobSumsTheTimeOfEveryFetchAndReportsTheFormatAndFileItStored(t *testing.T) {
+	format := ports.SourceFormat{ID: "140", Codec: "mp4a.40.2"}
+	source := timedSource{
+		perURLSource: perURLSource{
+			found:   blindingLightsAt(failingRank1URL, storedRank2URL),
+			formats: map[string]ports.SourceFormat{storedRank2URL: format},
+			broken:  map[string]bool{failingRank1URL: true},
+		},
+		takes: map[string]time.Duration{failingRank1URL: 120 * time.Millisecond, storedRank2URL: 30 * time.Millisecond},
 	}
-	if record.Source.ID != "18" || record.Stored.Bytes != 4096 || record.Stored.Codec != "mp3" {
-		t.Errorf("record source = %+v stored = %+v, want the reported format and file", record.Source, record.Stored)
+
+	job := scheduleAndFinish(t, source)
+
+	if got := job.record.StageMs["download.full"]; got != 150 {
+		t.Errorf("download.full = %dms, want 150, summed across both candidates' fetches", got)
 	}
-}
-
-func TestSchedulerJobReporter_TheLastReportedSourceWins(t *testing.T) {
-	log := newJobLog()
-	log.register("t1", "")
-	rep := schedulerJobReporter{ctx: context.Background(), log: log, trackID: "t1"}
-
-	rep.source("https://music.youtube.com/watch?v=rank1")
-	rep.source("https://www.youtube.com/watch?v=rank2")
-	record := log.complete("t1", ports.JobSucceeded, "")
-
-	if want := "https://www.youtube.com/watch?v=rank2"; record.ResolvedSource != want {
-		t.Errorf("resolved source = %q, want %q (the candidate reported last)", record.ResolvedSource, want)
+	if job.record.Source != format {
+		t.Errorf("source format = %+v, want %+v, the format of the file it kept", job.record.Source, format)
+	}
+	if want := (ports.StoredFile{Bytes: int64(len("audio bytes")), Codec: "mp3"}); job.record.Stored != want {
+		t.Errorf("stored file = %+v, want %+v", job.record.Stored, want)
 	}
 }
 
-type secondRankSource struct{ unknownTopicSource }
+func TestStatus_AJobReportsTheStoredCandidateAsItsSource(t *testing.T) {
+	source := perURLSource{found: blindingLightsAt(failingRank1URL, storedRank2URL), broken: map[string]bool{failingRank1URL: true}}
 
-const (
-	failingRank1URL = "https://www.youtube.com/watch?v=rank1AAAAAA"
-	storedRank2URL  = "https://music.youtube.com/watch?v=rank2AAAAAA"
-)
+	job := scheduleAndFinish(t, source,
+		service.WithRecordingResolver(resolvedTo(blindingLightsRecording)), service.WithAudioIdentifier(&identifier{}))
 
-func (secondRankSource) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
-	found, err := unknownTopicSource{}.Find(ctx, req)
-	first, second := found[0], found[0]
-	first.URL, second.URL = failingRank1URL, storedRank2URL
-	return []ports.AudioCandidate{first, second}, err
-}
-
-func (s secondRankSource) Fetch(ctx context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
-	if c.URL == failingRank1URL {
-		return ports.FetchedAudio{}, errors.New("exit status 1")
-	}
-	return s.unknownTopicSource.Fetch(ctx, c, outDir)
-}
-
-func TestExecute_ReportsTheStoredCandidateAsTheSource(t *testing.T) {
-	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track, err := domain.NewTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	seconds := 200.0
-	track.DurationSeconds = &seconds
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(secondRankSource{}),
-		&bytesAudioStore{objects: map[string]string{}},
-		WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding"}}),
-		WithAudioIdentifier(&stubIdentifier{}))
-	log := newJobLog()
-	log.register(track.ID.String(), "")
-	rep := schedulerJobReporter{ctx: context.Background(), log: log, events: events.NoopPublisher(), trackID: track.ID.String()}
-
-	if err := svc.Execute(withJobReporter(context.Background(), rep), userId, track.ID); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-
-	record := log.complete(track.ID.String(), ports.JobSucceeded, "")
-	if record.ResolvedSource != storedRank2URL {
-		t.Errorf("job source = %q, want the stored rank-2 candidate %q", record.ResolvedSource, storedRank2URL)
+	if job.record.State != ports.JobSucceeded || job.record.ResolvedSource != storedRank2URL {
+		t.Errorf("job = %v from %q, want succeeded from the stored rank-2 candidate %q", job.record.State, job.record.ResolvedSource, storedRank2URL)
 	}
 }
