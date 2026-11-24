@@ -204,7 +204,7 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   upgrade_planner.go     UpgradePlanner: one picked track per tick, enqueued as an upgrade job
   job_log.go             jobLog: the recent ring, counters (records are ports.JobRecord)
   job_telemetry.go       the jobReporter context seam and its schedulerJobReporter
-  internal/core/domain/admission_error.go admissionError and the admission sentinels (package domain)
+  internal/core/domain/admission_error.go the admission sentinels, as shared/domain coded errors (package domain)
   internal/core/tracklength/ Policy: the expected length, Corroborated, the pre-download Plausible gate, and FileJudge, which exists only when a length is known and judges a downloaded file; which window applies (the windows are `domain.LengthTolerance`) stays inside it
   internal/core/isrcproof/ Prove: which ISRC a finished run may write back (the catalog's own, then the pinned recording's, then one the fingerprint proved) and the isrc_source stored beside it in the evidence; confidence.go's provenISRC hands it the run's facts, and both TAG and UPDATE_TRACK use the answer
   internal/core/ranking/  Rank (the unplayable, re-recording, identity and veto refusals, the resolved, Topic and Other buckets and their orders, the candidate_evaluated log), UploaderOf, UnrequestedQualifiers — identityScore, metadataRank, featureMatch, qualifierDistance inside it
