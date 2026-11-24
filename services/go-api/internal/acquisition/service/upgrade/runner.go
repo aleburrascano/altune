@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/redact"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"errors"
 	"fmt"
@@ -116,7 +117,7 @@ func (r *Runner) settle(ctx context.Context, trackId shared.TrackId, gate Gate, 
 	if result == upgraded || ctx.Err() != nil {
 		return runErr
 	}
-	settleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), settleBudget)
+	settleCtx, cancel := runloop.Detach(ctx, settleBudget)
 	defer cancel()
 	r.record(settleCtx, trackId, gate, attempt, result)
 	if result == failed {

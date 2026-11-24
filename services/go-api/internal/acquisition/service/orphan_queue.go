@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/redact"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"log/slog"
 	"time"
@@ -19,7 +20,7 @@ func recordOrphanedAudio(ctx context.Context, q ports.OrphanedAudioRecorder, use
 }
 
 func queueOrphanedAudio(ctx context.Context, q ports.OrphanedAudioRecorder, orphan ports.OrphanedAudio) error {
-	recordCtx, cancel := detachedTimeout(ctx, orphanRecordTimeout)
+	recordCtx, cancel := runloop.Detach(ctx, orphanRecordTimeout)
 	defer cancel()
 	err := q.RecordOrphanedAudio(recordCtx, orphan)
 	if err != nil {
