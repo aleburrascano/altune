@@ -10,9 +10,8 @@ A handler never picks a status. The boundary reads `err`'s chain and takes the f
 
 1. **The client went away:** the error is a cancellation and the request was cancelled too. The answer is 499 with no body.
 2. **A coded error:** a `shared/domain` coded error is in the chain. Its code's kind sets the status (`kindStatus` in errors.go), and its message is the detail.
-3. **A status-carrying error:** an error with an `HTTPStatus()` method is in the chain. That status still maps until the last such types move to coded errors.
-4. **Out of time:** the error is a deadline and the request's own deadline has passed. The answer is 504 `request.timeout`.
-5. **Anything else** is 500 `internal`. Its detail never carries the cause.
+3. **Out of time:** the error is a deadline and the request's own deadline has passed. The answer is 504 `request.timeout`.
+4. **Anything else** is 500 `internal`. Its detail never carries the cause.
 
 **Logging:** each failure is logged once, here.
 

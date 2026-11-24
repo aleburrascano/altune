@@ -35,19 +35,6 @@ type ErrorResponse struct {
 	Code   string `json:"code,omitempty"`
 }
 
-type StatusError interface {
-	error
-	HTTPStatus() int
-}
-
-type ErrorCoder interface {
-	ErrorCode() string
-}
-
-type clientDetailer interface {
-	ClientDetail() string
-}
-
 type retryAfterer interface {
 	RetryAfter() time.Duration
 }
@@ -92,10 +79,6 @@ func problemFor(r *http.Request, err error) Problem {
 	if errors.As(err, &coded) {
 		return newProblem(r, coded.Code(), coded.Error())
 	}
-	var se StatusError
-	if errors.As(err, &se) {
-		return legacyProblem(r, err, se)
-	}
 	if ranOutOfTime(r, err) {
 		return newProblem(r, domain.CodeRequestTimeout, "")
 	}
@@ -121,46 +104,6 @@ func statusOf(kind domain.Kind) int {
 		return status
 	}
 	return http.StatusInternalServerError
-}
-
-func legacyProblem(r *http.Request, err error, se StatusError) Problem {
-	status := se.HTTPStatus()
-	code := legacyCode(err, status)
-	return Problem{
-		Type:     problemTypePrefix + code,
-		Title:    http.StatusText(status),
-		Status:   status,
-		Detail:   legacyDetail(err, se),
-		Instance: logging.CorrelationIDFromContext(r.Context()),
-		Code:     code,
-	}
-}
-
-func legacyDetail(err error, se StatusError) string {
-	var detailer clientDetailer
-	if errors.As(err, &detailer) {
-		return detailer.ClientDetail()
-	}
-	return se.Error()
-}
-
-func legacyCode(err error, status int) string {
-	var coder ErrorCoder
-	if errors.As(err, &coder) {
-		if code := coder.ErrorCode(); code != "" {
-			return code
-		}
-	}
-	switch status {
-	case http.StatusBadRequest:
-		return "bad_request"
-	case http.StatusNotFound:
-		return "not_found"
-	case http.StatusConflict:
-		return "conflict"
-	default:
-		return "error"
-	}
 }
 
 func logFailure(r *http.Request, p Problem, err error) {
