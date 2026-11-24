@@ -52,12 +52,7 @@ func (t *DiscographyTelemetry) append(ctx context.Context, occurredAt time.Time,
 }
 
 func (t *DiscographyTelemetry) safePayload(ctx context.Context, artistRef string, merged []release.MergedRelease) (payload map[string]any, ok bool) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			slog.WarnContext(ctx, "discography.telemetry.build_panicked", "error", rec)
-			payload, ok = nil, false
-		}
-	}()
+	defer runloop.RecoverContext(ctx, "discography.telemetry.build_panicked")
 	return buildDiscographyPayload(artistRef, merged), true
 }
 

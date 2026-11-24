@@ -1,6 +1,7 @@
 package providerhttp
 
 import (
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"sync"
 	"time"
@@ -47,7 +48,7 @@ func (r *CachedResolver[T]) resolveOnce(ctx context.Context) (T, error) {
 	if existing, existingExpiry := r.snapshot(); r.fresh(existing, existingExpiry) {
 		return existing, nil
 	}
-	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.timeout)
+	rctx, cancel := runloop.Detach(ctx, r.timeout)
 	defer cancel()
 	value, valueExpiry, err := r.resolveFn(rctx)
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/discovery/internal/core/ports"
 	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/shared/redact"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"errors"
 	"fmt"
@@ -121,7 +122,7 @@ func (s *Service) startProviderCall(ctx context.Context, run *fanOutRun, slot in
 
 func (s *Service) callProvider(run *fanOutRun, slot int, call providercall.BreakerCall, provider ports.SearchProvider, req fanOutRequest) {
 	defer run.callDone()
-	res, status := s.searchProvider(run.callCtx, call, provider, req.query, req.kinds)
+	res, status := s.searchProviderGuarded(run.callCtx, call, provider, req.query, req.kinds)
 	if status.Status == domain.ProviderStatusOK {
 		req.answers.set(run.callCtx, provider.Name(), res)
 	}
@@ -172,15 +173,6 @@ func (s *Service) searchProvider(
 	searchQuery string,
 	kinds domain.ResultKindSet,
 ) (res []domain.SearchResult, status domain.ProviderSearchResponse) {
-	defer func() {
-		if r := recover(); r != nil {
-			res = nil
-			status = domain.ProviderSearchResponse{Provider: p.Name(), Status: domain.ProviderStatusError}
-			slog.ErrorContext(ctx, "search.v2.provider_panic",
-				"provider", p.Name().String(), "panic", r)
-		}
-	}()
-
 	timeout := defaultProviderTimeout
 	if tp, ok := p.(ports.SearchTimeouter); ok {
 		timeout = tp.SearchTimeout()
@@ -223,6 +215,22 @@ func (s *Service) searchProvider(
 		LatencyMs:   latencyMs,
 		ResultCount: len(res),
 	}
+}
+
+func (s *Service) searchProviderGuarded(
+	ctx context.Context,
+	call providercall.BreakerCall,
+	p ports.SearchProvider,
+	searchQuery string,
+	kinds domain.ResultKindSet,
+) (res []domain.SearchResult, status domain.ProviderSearchResponse) {
+	panicked := runloop.Try(ctx, "search.v2.provider_panic", func() {
+		res, status = s.searchProvider(ctx, call, p, searchQuery, kinds)
+	}, "provider", p.Name().String())
+	if panicked != nil {
+		return nil, domain.ProviderSearchResponse{Provider: p.Name(), Status: domain.ProviderStatusError}
+	}
+	return res, status
 }
 
 func failureStatus(provCtx context.Context, err error) domain.ProviderStatus {

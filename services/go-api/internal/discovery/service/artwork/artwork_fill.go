@@ -3,6 +3,7 @@ package artwork
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/core/ports"
+	"altune/go-api/internal/shared/fanout"
 	"altune/go-api/internal/shared/runloop"
 	"altune/go-api/internal/shared/textnorm"
 	"cmp"
@@ -12,7 +13,6 @@ import (
 	"maps"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -62,8 +62,7 @@ func (a *ArtworkFiller) Fill(ctx context.Context, results []domain.SearchResult,
 func (a *ArtworkFiller) fillFromCache(ctx, fillCtx context.Context, top []domain.SearchResult) ([]domain.SearchResult, []liveArtworkJob) {
 	filled := slices.Clone(top)
 	live := make([]liveArtworkJob, len(top))
-	forEachBounded(len(top), func(i int) {
-		defer runloop.RecoverContext(ctx, "artwork_fill.panic", "title", top[i].Title)
+	forEachBounded(ctx, len(top), func(i int) string { return top[i].Title }, func(i int) {
 		path, job := a.runCachedStages(fillCtx, &filled[i])
 		live[i] = job
 		setArtworkPath(&filled[i], path)
@@ -95,25 +94,18 @@ func liveArtworkJobs(live []liveArtworkJob) []int {
 }
 
 func (a *ArtworkFiller) resolveJobs(ctx context.Context, results []domain.SearchResult, live []liveArtworkJob, jobs []int) {
-	forEachBounded(len(jobs), func(n int) {
+	forEachBounded(ctx, len(jobs), func(n int) string { return results[jobs[n]].Title }, func(n int) {
 		i := jobs[n]
-		defer runloop.RecoverContext(ctx, "artwork_fill.panic", "title", results[i].Title)
 		a.resolveLive(ctx, results[i], live[i].mbid)
 	})
 }
 
-func forEachBounded(n int, work func(i int)) {
-	var wg sync.WaitGroup
-	slots := make(chan struct{}, artworkFillConcurrency)
+func forEachBounded(ctx context.Context, n int, titleOf func(i int) string, work func(i int)) {
+	g := fanout.New("artwork_fill.panic", artworkFillConcurrency)
 	for i := range n {
-		slots <- struct{}{}
-		wg.Add(1)
-		go func() {
-			defer func() { <-slots; wg.Done() }()
-			work(i)
-		}()
+		g.Go(ctx, func() { work(i) }, "title", titleOf(i))
 	}
-	wg.Wait()
+	_ = g.Wait()
 }
 
 func (a *ArtworkFiller) withPrefetchedIdentities(ctx context.Context, results []domain.SearchResult) *ArtworkFiller {

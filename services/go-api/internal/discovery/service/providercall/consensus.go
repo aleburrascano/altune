@@ -2,7 +2,7 @@ package providercall
 
 import (
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared/runloop"
+	"altune/go-api/internal/shared/fanout"
 	"context"
 	"sync"
 )
@@ -20,18 +20,15 @@ func FanOutConsensus[T any](
 ) map[string]T {
 	var mu sync.Mutex
 	out := make(map[string]T, len(providers))
-	var wg sync.WaitGroup
+	g := fanout.New("consensus.provider_panic", len(providers))
 	for _, p := range providers {
-		wg.Add(1)
-		go func(p ConsensusProvider) {
-			defer wg.Done()
-			defer runloop.RecoverContext(ctx, "consensus.provider_panic", "provider", p.Name)
+		g.Go(ctx, func() {
 			r := collect(ctx, p)
 			mu.Lock()
+			defer mu.Unlock()
 			out[p.Name] = r
-			mu.Unlock()
-		}(p)
+		}, "provider", p.Name)
 	}
-	wg.Wait()
+	_ = g.Wait()
 	return out
 }
