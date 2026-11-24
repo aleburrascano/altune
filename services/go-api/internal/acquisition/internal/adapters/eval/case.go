@@ -707,9 +707,14 @@ func validatePinned(c Case) error {
 	return nil
 }
 
+const maxTrackSeconds = 7 * 24 * 60 * 60
+
 func validateStoredAndSaved(c Case) error {
 	if c.Stored != nil && c.Stored.Duration <= 0 {
 		return fmt.Errorf("case %q stores a file with no duration", c.ID)
+	}
+	if length := targetLength(c.Track); length < 0 || length > maxTrackSeconds || (c.Stored != nil && c.Stored.Duration > maxTrackSeconds) {
+		return fmt.Errorf("case %q gives a track length outside 0 to %d seconds", c.ID, maxTrackSeconds)
 	}
 	if r := c.Rerecording; r != nil && (r.OriginalMBID == "" || r.MBID == "" || r.Title == "") {
 		return fmt.Errorf("case %q records a re-recording without its original mbid, mbid and title", c.ID)
