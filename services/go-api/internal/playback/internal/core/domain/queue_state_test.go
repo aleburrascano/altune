@@ -2,9 +2,7 @@ package domain_test
 
 import (
 	"altune/go-api/internal/playback"
-	shareddomain "altune/go-api/internal/shared/domain"
 	"context"
-	"errors"
 	"strings"
 	"testing"
 )
@@ -139,10 +137,7 @@ func TestNewQueueState_BoundsQueueLength(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected over-limit queue to be rejected")
 			}
-			var validationErr *shareddomain.ValidationError
-			if !errors.As(err, &validationErr) {
-				t.Fatalf("error = %T, want *shareddomain.ValidationError", err)
-			}
+			validationCode(t, err)
 		})
 	}
 }
@@ -173,10 +168,7 @@ func TestNewQueueState_BoundsStringLength(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected oversized queue string to be rejected")
 			}
-			var validationErr *shareddomain.ValidationError
-			if !errors.As(err, &validationErr) {
-				t.Fatalf("error = %T, want *shareddomain.ValidationError", err)
-			}
+			validationCode(t, err)
 		})
 	}
 }
@@ -217,10 +209,7 @@ func TestNewQueueState_RejectsNulBytes(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected NUL byte in string element to be rejected")
 			}
-			var validationErr *shareddomain.ValidationError
-			if !errors.As(err, &validationErr) {
-				t.Fatalf("error = %T, want *shareddomain.ValidationError", err)
-			}
+			validationCode(t, err)
 		})
 	}
 }
@@ -310,10 +299,7 @@ func TestNewQueueState_RejectsEmptyCurrentTrackId(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an empty current-track id to be rejected")
 	}
-	var validationErr *shareddomain.ValidationError
-	if !errors.As(err, &validationErr) {
-		t.Fatalf("error = %T, want *shareddomain.ValidationError", err)
-	}
+	validationCode(t, err)
 }
 
 func TestQueueState_Validate_RejectsEmptyCurrentTrackId(t *testing.T) {
@@ -415,12 +401,11 @@ func rejectedState(in playback.QueueStateInput) func() error {
 	}
 }
 
-func TestQueueStateValidation_CodedErrorIsStillAValidationError(t *testing.T) {
+func TestQueueStateValidation_IsAnInvalidInputWithItsOwnCode(t *testing.T) {
 	_, err := playback.NewQueueState(playback.QueueStateInput{UserId: testUser(), TrackIds: []string{"a"}, PositionMs: -1})
 
-	var validationErr *shareddomain.ValidationError
-	if !errors.As(err, &validationErr) {
-		t.Fatalf("error = %T (%v), want it to unwrap to *shareddomain.ValidationError", err, err)
+	if got := validationCode(t, err); got != "playback.position_ms_negative" {
+		t.Fatalf("code = %q, want playback.position_ms_negative", got)
 	}
 }
 

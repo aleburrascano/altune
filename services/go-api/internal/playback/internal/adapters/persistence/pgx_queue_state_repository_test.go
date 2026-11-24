@@ -2,7 +2,6 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/playback"
-	shareddomain "altune/go-api/internal/shared/domain"
 	"altune/go-api/internal/shared/httputil"
 	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
@@ -118,6 +117,12 @@ func (q rowQuerier) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
 	return q.row
 }
 
+func answeredStatus(err error) int {
+	rec := httptest.NewRecorder()
+	httputil.HandleServiceError(rec, httptest.NewRequest(http.MethodPut, "/queue-state", nil), err)
+	return rec.Code
+}
+
 func assertServerFault(t *testing.T, err error) {
 	t.Helper()
 	if err == nil {
@@ -126,15 +131,8 @@ func assertServerFault(t *testing.T, err error) {
 	if !errors.Is(err, playback.ErrCorruptStoredState) {
 		t.Fatalf("corrupt stored row must satisfy playback.ErrCorruptStoredState so the service can degrade, got %v", err)
 	}
-	var se httputil.StatusError
-	if errors.As(err, &se) {
-		t.Fatalf("corrupt stored state surfaced as HTTP %d (%v); a server-side data fault must map to 500, not a client error", se.HTTPStatus(), err)
-	}
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
-	httputil.HandleServiceError(rec, req, err)
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("HandleServiceError wrote %d for a corrupt stored row, want 500", rec.Code)
+	if got := answeredStatus(err); got != http.StatusInternalServerError {
+		t.Fatalf("a corrupt stored row answered %d, want 500: a server-side data fault is not a client error", got)
 	}
 }
 
@@ -228,9 +226,8 @@ func TestGetForUser_StoredQueueExceedsMax_MapsToServerFault(t *testing.T) {
 func TestSavePathValidationStaysClientFault(t *testing.T) {
 	_, err := playback.NewQueueState(playback.QueueStateInput{PositionMs: -1})
 
-	var se httputil.StatusError
-	if !errors.As(err, &se) || se.HTTPStatus() != http.StatusBadRequest {
-		t.Fatalf("client-input validation must stay a 400 StatusError, got %v", err)
+	if got := answeredStatus(err); got != http.StatusBadRequest {
+		t.Fatalf("client-input validation answered %d, want 400 (%v)", got, err)
 	}
 }
 
@@ -425,9 +422,8 @@ func TestUpsert_GuardRejectedWriteIsReportedNotSilent(t *testing.T) {
 	if !errors.Is(err, playback.ErrStaleQueueWrite) {
 		t.Fatalf("a write the stale guard rejected (0 rows) must return ErrStaleQueueWrite, got %v", err)
 	}
-	var se httputil.StatusError
-	if !errors.As(err, &se) || se.HTTPStatus() != http.StatusConflict {
-		t.Fatalf("stale write must classify as a 409 StatusError, got %v", err)
+	if got := answeredStatus(err); got != http.StatusConflict {
+		t.Fatalf("a stale write answered %d, want 409 (%v)", got, err)
 	}
 }
 
@@ -695,9 +691,8 @@ func TestUpdatePosition_ClassifiesUnappliedSaves(t *testing.T) {
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("UpdatePosition = %v, want %v", err, tt.want)
 			}
-			var se httputil.StatusError
-			if !errors.As(err, &se) || se.HTTPStatus() != http.StatusConflict {
-				t.Fatalf("an unapplied position save must classify as a 409, got %v", err)
+			if got := answeredStatus(err); got != http.StatusConflict {
+				t.Fatalf("an unapplied position save answered %d, want 409 (%v)", got, err)
 			}
 		})
 	}
@@ -709,9 +704,8 @@ func TestUpdatePosition_RejectsInvariantViolatingLiteral(t *testing.T) {
 
 	err := repo.UpdatePosition(context.Background(), &playback.QueuePosition{UserId: testUser(), CurrentIdx: -1, CurrentTrackId: "t1"})
 
-	var ve *shareddomain.ValidationError
-	if !errors.As(err, &ve) {
-		t.Fatalf("UpdatePosition accepted a negative CurrentIdx literal, got %v", err)
+	if got := answeredStatus(err); got != http.StatusBadRequest {
+		t.Fatalf("UpdatePosition with a negative CurrentIdx literal answered %d, want 400 (%v)", got, err)
 	}
 	if q.sql != "" {
 		t.Fatalf("UpdatePosition issued SQL for an invalid position: %q", q.sql)
