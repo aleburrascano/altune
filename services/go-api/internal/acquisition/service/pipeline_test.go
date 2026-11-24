@@ -975,3 +975,24 @@ func TestUpdateTrackStep_RefusesToCommitWithoutTheCandidateItKept(t *testing.T) 
 		t.Errorf("track = status %v, audio ref %v, want it untouched", got.Status, got.AudioRef)
 	}
 }
+
+type recordingReporter struct {
+	stages  []string
+	timings map[string]time.Duration
+	format  ports.SourceFormat
+	file    ports.StoredFile
+}
+
+func (r *recordingReporter) meta(string, string, string)               {}
+func (r *recordingReporter) stage(n string)                            { r.stages = append(r.stages, n) }
+func (r *recordingReporter) source(string)                             {}
+func (r *recordingReporter) provenance(string)                         {}
+func (r *recordingReporter) fetched(f ports.SourceFormat)              { r.format = f }
+func (r *recordingReporter) decided(_ float64, _ string, _, _ float64) {}
+func (r *recordingReporter) stored(f ports.StoredFile)                 { r.file = f }
+func (r *recordingReporter) timing(stage string, d time.Duration) {
+	if r.timings == nil {
+		r.timings = map[string]time.Duration{}
+	}
+	r.timings[stage] += d
+}
