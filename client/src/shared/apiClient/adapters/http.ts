@@ -191,7 +191,7 @@ async function transmit(
 ): Promise<Response> {
   const route = routeOf(path);
   const headers = await requestHeaders(route, id, init);
-  return send(`${apiBase}${path}`, route, { ...init, headers }, deadline, timeoutOf(init), id);
+  return send(`${apiBase()}${path}`, route, { ...init, headers }, deadline, timeoutOf(init), id);
 }
 
 async function dispatch(path: string, id: CorrelationId, init?: RequestInit): Promise<unknown> {

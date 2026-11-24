@@ -37,7 +37,7 @@ function sourceFiles(dir: string): string[] {
 
 describe('apiClient config', () => {
   it('exposes the api base and the 15s timeout', () => {
-    expect(typeof config.apiBase).toBe('string');
+    expect(typeof config.apiBase()).toBe('string');
     expect(config.REQUEST_TIMEOUT_MS).toBe(15000);
   });
 

@@ -34,11 +34,9 @@ function assertSecure(value: string, isDev: boolean): void {
   );
 }
 
-function resolveApiBase(value: string | undefined, isDev: boolean): string {
+export function resolveApiBase(value: string | undefined, isDev: boolean): string {
   if (value == null || value === '') return missingApiBase(isDev);
   assertWellFormed(value);
   assertSecure(value, isDev);
   return value;
 }
-
-export const apiBase = resolveApiBase(process.env.EXPO_PUBLIC_API_URL, __DEV__);

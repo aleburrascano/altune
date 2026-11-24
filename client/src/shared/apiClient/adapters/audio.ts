@@ -20,7 +20,7 @@ function isSessionRefusal(error: unknown): boolean {
 }
 
 export function audioStreamUrl(trackId: TrackId): string {
-  return `${apiBase}/v1/tracks/${idPathSegment(trackId)}/audio`;
+  return `${apiBase()}/v1/tracks/${idPathSegment(trackId)}/audio`;
 }
 
 export async function audioRequestHeaders(): Promise<Record<string, string>> {

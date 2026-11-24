@@ -87,7 +87,7 @@ describe('getPlaylists', () => {
 
     await getPlaylists(page);
 
-    expect(__http.last().url).toBe(`${apiBase}/v1/playlists${expectedSuffix}`);
+    expect(__http.last().url).toBe(`${apiBase()}/v1/playlists${expectedSuffix}`);
   });
 
   it('rejects with a ContractError naming the field when an item drifts from the contract', async () => {

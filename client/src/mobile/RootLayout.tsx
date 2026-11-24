@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { installApiBase } from '@shared/apiConfig';
 import { installAuthClient } from '@shared/auth';
 import { createQueryClient } from '@shared/query';
 import { createAuthClient } from '@/mobile/authClient';
@@ -37,6 +38,7 @@ import { reportOtaLaunchFailures } from '@/mobile/otaLaunchReport';
 import { ScreenViewsBridge, ServerEventsBridge } from '@/mobile/serverEvents';
 import { chainUncaughtErrorHandler } from '@/mobile/uncaughtErrors';
 
+installApiBase(process.env.EXPO_PUBLIC_API_URL, __DEV__);
 installAuthClient(createAuthClient());
 provideOfflinePort(httpOfflinePort);
 

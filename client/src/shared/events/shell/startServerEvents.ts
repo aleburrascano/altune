@@ -36,7 +36,7 @@ function warnUnhandled(deps: ServerEventsDeps, event: ServerEvent): void {
 
 function openClient(deps: ServerEventsDeps): ServerEventsClient {
   return deps.createClient(
-    `${apiBase}/v1/events`,
+    `${apiBase()}/v1/events`,
     () => deps.getToken().catch(() => null),
     (event) => warnUnhandled(deps, event),
     (error) => deps.warn('[sse]', error),

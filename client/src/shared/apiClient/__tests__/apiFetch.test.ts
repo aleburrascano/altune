@@ -391,17 +391,13 @@ describe('deadline release on every path', () => {
 });
 
 describe('apiBase', () => {
-  it('resolves to the documented loopback default when EXPO_PUBLIC_API_URL is unset', () => {
-    expect(apiBase).toBe('http://127.0.0.1:8000');
-  });
-
   it('is used to build the request URL', async () => {
     withSession();
     __http.reply('GET /v1/library/tracks', { status: 200, json: {} });
 
     await apiFetch('/v1/library/tracks');
 
-    expect(__http.last().url).toBe(`${apiBase}/v1/library/tracks`);
+    expect(__http.last().url).toBe(`${apiBase()}/v1/library/tracks`);
     expect(__http.last().url.startsWith('http://127.0.0.1:8000')).toBe(true);
   });
 });

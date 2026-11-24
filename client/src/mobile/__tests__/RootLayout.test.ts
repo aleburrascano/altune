@@ -24,3 +24,27 @@ describe('RootLayout — the app installs its own auth client at startup', () =>
     });
   });
 });
+
+function apiBaseAfterStartupWith(apiUrl: string): string {
+  const unset = process.env.EXPO_PUBLIC_API_URL;
+  process.env.EXPO_PUBLIC_API_URL = apiUrl;
+  let base = '';
+  try {
+    jest.isolateModules(() => {
+      require('@/mobile');
+      base = require('@shared/apiConfig').apiBase();
+    });
+  } finally {
+    if (unset === undefined) delete process.env.EXPO_PUBLIC_API_URL;
+    else process.env.EXPO_PUBLIC_API_URL = unset;
+  }
+  return base;
+}
+
+describe('RootLayout — the app installs the API base from EXPO_PUBLIC_API_URL at startup', () => {
+  it('sends requests to the base the build was given', () => {
+    expect(apiBaseAfterStartupWith('https://altune.example.org')).toBe(
+      'https://altune.example.org',
+    );
+  });
+});
