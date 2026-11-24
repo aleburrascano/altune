@@ -3,6 +3,7 @@ package health_test
 import (
 	"altune/go-api/internal/app/health"
 	"altune/go-api/internal/observe"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
 	"errors"
@@ -247,5 +248,44 @@ func TestEndpoint_TheCheckOutlivesACanceledRequest(t *testing.T) {
 
 	if checkErr != nil {
 		t.Errorf("check ran with a canceled context (%v), want one that outlives the request", checkErr)
+	}
+}
+
+func TestEndpoint_TheDetachedCheckIsBoundedAtThreeProbeTimeouts(t *testing.T) {
+	var remaining time.Duration
+	var hasDeadline bool
+	endpoint := health.NewEndpoint(func(ctx context.Context) observe.DependencyHealth {
+		var deadline time.Time
+		deadline, hasDeadline = ctx.Deadline()
+		remaining = time.Until(deadline)
+		return observe.DependencyHealth{DB: observe.DepUp}
+	}, "v", time.Now)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	endpoint.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/health", nil).WithContext(ctx))
+
+	budget := 3 * health.DefaultProbeTimeout
+	if !hasDeadline {
+		t.Fatal("the detached check has no deadline, want it bounded")
+	}
+	if remaining > budget || remaining < budget-time.Second {
+		t.Errorf("the detached check had %s left, want about %s so three sequential probes each get their full timeout", remaining, budget)
+	}
+}
+
+func TestEndpoint_TheDetachedCheckKeepsTheRequestsCorrelationID(t *testing.T) {
+	var seen string
+	endpoint := health.NewEndpoint(func(ctx context.Context) observe.DependencyHealth {
+		seen = logging.CorrelationIDFromContext(ctx)
+		return observe.DependencyHealth{DB: observe.DepUp}
+	}, "v", time.Now)
+	ctx, cancel := context.WithCancel(logging.WithCorrelationID(context.Background(), "corr-health-1"))
+	cancel()
+
+	endpoint.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/health", nil).WithContext(ctx))
+
+	if seen != "corr-health-1" {
+		t.Errorf("correlation id seen by the check = %q, want %q so its probes log under the request that ran them", seen, "corr-health-1")
 	}
 }
