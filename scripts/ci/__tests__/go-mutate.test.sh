@@ -77,6 +77,59 @@ expect() {
 
 out=$(bash "$script" 2>&1); [ $? = 2 ] && grep -q usage <<<"$out" && echo "ok    no arguments prints usage" || { echo "FAIL  no arguments"; fail=1; }
 
+real_go=$(command -v go)
+mkdir "$work/fake-gremlins"
+cat >"$work/fake-gremlins/go" <<'FAKE'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ ${1:-} = run && ${2:-} = github.com/go-gremlins/* ]] || exec "$GO_MUTATE_TEST_REAL_GO" "$@"
+while [ "$1" != --output ]; do shift; done
+cp "$GO_MUTATE_TEST_REPORT" "$2"
+FAKE
+chmod +x "$work/fake-gremlins/go"
+expect_report() {
+  local name=$1 want=$2 pattern=$3 report=$4
+  printf '%s\n' "$report" >"$work/report.json"
+  PATH="$work/fake-gremlins:$PATH" GO_MUTATE_TEST_REAL_GO="$real_go" GO_MUTATE_TEST_REPORT="$work/report.json" expect "$name" "$want" "$pattern"
+}
+timed_out() { printf '{"files":[{"file_name":"retry.go","mutations":[{"type":"%s","status":"TIMED OUT","line":4,"column":17}]}]}' "$1"; }
+
+shared_base=$base
+mkdir -p "$mod/retry"
+cat >"$mod/retry/retry.go" <<'GO'
+package retry
+
+func Allowed(attempt int) bool {
+	return attempt < 3
+}
+GO
+cat >"$mod/retry/retry_test.go" <<'GO'
+package retry_test
+
+import (
+	"testing"
+
+	"example.com/svc/retry"
+)
+
+func TestAllowed(t *testing.T) {
+	for attempt, want := range map[int]bool{0: true, 5: false} {
+		if got := retry.Allowed(attempt); got != want {
+			t.Fatalf("Allowed(%d) = %v, want %v", attempt, got, want)
+		}
+	}
+}
+GO
+commit retry
+base=$(git -C "$repo" rev-parse HEAD)
+sed -i 's/attempt < 3/attempt < 4/' "$mod/retry/retry.go"
+commit retry-limit
+expect_report "a TIMED OUT mutant the tests miss on rerun survives, labelled TIMED OUT" 1 'svc/retry/retry.go:4:17 TIMED OUT CONDITIONALS_BOUNDARY' "$(timed_out CONDITIONALS_BOUNDARY)"
+expect_report "a TIMED OUT mutant the tests catch on rerun is killed" 0 'killed 1, survived 0' "$(timed_out CONDITIONALS_NEGATION)"
+git -C "$repo" rm -rq svc/retry
+commit retry-gone
+base=$shared_base
+
 sed -i 's/18: true/18: true, 40: true/' "$mod/clamp/clamp_test.go"
 commit tests-only
 expect "a change to tests only has nothing to mutate" 0 '0 changed packages, killed 0, survived 0'

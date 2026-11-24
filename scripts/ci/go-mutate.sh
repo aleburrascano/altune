@@ -53,7 +53,7 @@ rerun_mutant() {
   if ! go test -c -o /dev/null -overlay "$work/overlay.json" "$package" >/dev/null 2>&1; then
     rerun_status="NOT VIABLE"
   elif go test -count=1 -overlay "$work/overlay.json" -timeout 10m "$package" >/dev/null 2>&1; then
-    rerun_status="NOT COVERED"
+    rerun_status=LIVED
   fi
 }
 
@@ -109,15 +109,15 @@ for package in "${packages[@]}"; do
     echo "go-mutate: gremlins wrote no report for $dir/$package and did not say why" >&2
     exit 1
   fi
-  killed=$((killed + $(jq '[.files[].mutations[] | select(.status == "KILLED" or .status == "TIMED OUT")] | length' "$report")))
+  killed=$((killed + $(jq '[.files[].mutations[] | select(.status == "KILLED")] | length' "$report")))
   mapfile -t -O "${#survivors[@]}" survivors < <(jq -r --arg prefix "$dir/$package/" '.files[] | .file_name as $f | .mutations[] | select(.status == "LIVED") | "\($prefix)\($f):\(.line):\(.column) \(.status) \(.type)"' "$report")
-  while read -r file line column type; do
+  while read -r file line column type status; do
     rerun_mutant "$package/$file" "$line" "$column" "$type"
     case $rerun_status in
       KILLED) killed=$((killed + 1)) ;;
-      "NOT COVERED") survivors+=("$dir/$package/$file:$line:$column NOT COVERED $type") ;;
+      LIVED) survivors+=("$dir/$package/$file:$line:$column $status $type") ;;
     esac
-  done < <(jq -r '.files[] | .file_name as $f | .mutations[] | select(.status == "NOT COVERED") | "\($f) \(.line) \(.column) \(.type)"' "$report")
+  done < <(jq -r '.files[] | .file_name as $f | .mutations[] | select(.status == "NOT COVERED" or .status == "TIMED OUT") | "\($f) \(.line) \(.column) \(.type) \(.status)"' "$report")
 done
 
 echo "go-mutate: $dir: ${#packages[@]} changed packages, killed $killed, survived ${#survivors[@]}"
