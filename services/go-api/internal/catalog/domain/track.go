@@ -106,19 +106,12 @@ const maxRejectedSourceKeys = 25
 
 const maxTrackTextLength = 300
 
-const MaxDurationSeconds = 7 * 24 * 60 * 60
-
-func ValidateDurationSeconds(seconds float64) error {
-	if math.IsNaN(seconds) || math.IsInf(seconds, 0) {
-		return NewValidationError("duration_seconds must be a finite number")
+func TrackLengthOf(seconds float64) (shared.TrackLength, error) {
+	length, err := shared.TrackLengthOf(seconds)
+	if err != nil {
+		return shared.TrackLength{}, NewValidationError("duration_seconds must be a finite number of seconds from 0 to 7 days")
 	}
-	if seconds < 0 {
-		return NewValidationError("duration_seconds must not be negative")
-	}
-	if seconds > MaxDurationSeconds {
-		return NewValidationError(fmt.Sprintf("duration_seconds exceeds %d", MaxDurationSeconds))
-	}
-	return nil
+	return length, nil
 }
 
 func trackTextTooLongError(field string) error {
@@ -305,20 +298,22 @@ func (t *Track) AcquisitionEvidence() json.RawMessage {
 }
 
 func (t *Track) SetDuration(seconds float64) error {
-	if err := ValidateDurationSeconds(seconds); err != nil {
+	length, err := TrackLengthOf(seconds)
+	if err != nil {
 		return err
 	}
-	if seconds > 0 {
+	if length.Known() {
 		t.DurationSeconds = &seconds
 	}
 	return nil
 }
 
 func (t *Track) SetCatalogDuration(seconds float64) error {
-	if err := ValidateDurationSeconds(seconds); err != nil {
+	length, err := TrackLengthOf(seconds)
+	if err != nil {
 		return err
 	}
-	if seconds > 0 {
+	if length.Known() {
 		t.CatalogDurationSeconds = &seconds
 		t.DurationSeconds = &seconds
 	}
@@ -342,10 +337,24 @@ func (t *Track) SetCatalogIdentity(mbid *string, explicit *bool, sources []Catal
 	return nil
 }
 
-func (t *Track) RecordAudioLength(measuredSeconds, toleranceSeconds float64) {
-	t.AudioLengthMismatch = t.CatalogDurationSeconds != nil &&
-		measuredSeconds > 0 &&
-		math.Abs(measuredSeconds-*t.CatalogDurationSeconds) > toleranceSeconds
+func (t *Track) RecordAudioLength(measured shared.TrackLength) bool {
+	catalog := t.catalogLength()
+	if !catalog.Known() || !measured.Known() {
+		return false
+	}
+	t.AudioLengthMismatch = !catalog.SameRecording(measured)
+	return true
+}
+
+func (t *Track) catalogLength() shared.TrackLength {
+	if t.CatalogDurationSeconds == nil {
+		return shared.TrackLength{}
+	}
+	length, err := shared.TrackLengthOf(*t.CatalogDurationSeconds)
+	if err != nil {
+		return shared.TrackLength{}
+	}
+	return length
 }
 
 func (t *Track) AdoptISRC(isrc string) {
@@ -375,7 +384,7 @@ func validateRecordingLabel(mbid, title, album string, durationSeconds float64) 
 	if err := validateTrackText(resolved, "album"); err != nil {
 		return recordingLabel{}, err
 	}
-	if err := ValidateDurationSeconds(durationSeconds); err != nil {
+	if _, err := TrackLengthOf(durationSeconds); err != nil {
 		return recordingLabel{}, err
 	}
 	return recordingLabel{mbid: normalizedMBID, title: title, album: resolved, duration: durationSeconds}, nil

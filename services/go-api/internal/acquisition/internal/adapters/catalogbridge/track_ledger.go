@@ -149,21 +149,15 @@ func relabel(ctx context.Context, track *domain.Track, label ports.RecordingLabe
 }
 
 func recordLengthCheck(ctx context.Context, track *domain.Track, measuredSeconds float64) {
-	if measuredSeconds <= 0 || track.CatalogDurationSeconds == nil {
-		return
-	}
-	catalogLength, err := shared.TrackLengthOf(*track.CatalogDurationSeconds)
+	measured, err := shared.TrackLengthOf(measuredSeconds)
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.audio_length_unchecked",
-			"track_id", track.ID.String(), "catalog_seconds", *track.CatalogDurationSeconds, "error", redact.LogError(err))
+			"track_id", track.ID.String(), "audio_seconds", measuredSeconds, "error", redact.LogError(err))
 		return
 	}
-	toleranceSeconds := catalogLength.Allowance()
-	track.RecordAudioLength(measuredSeconds, toleranceSeconds)
-	if track.AudioLengthMismatch {
+	if track.RecordAudioLength(measured) && track.AudioLengthMismatch {
 		slog.WarnContext(ctx, "acquisition.audio_length_mismatch",
-			"track_id", track.ID.String(), "catalog_seconds", *track.CatalogDurationSeconds,
-			"audio_seconds", measuredSeconds, "tolerance_seconds", toleranceSeconds)
+			"track_id", track.ID.String(), "catalog_seconds", *track.CatalogDurationSeconds, "audio_seconds", measuredSeconds)
 	}
 }
 
