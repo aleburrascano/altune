@@ -3,6 +3,7 @@ package playlist
 import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/internal/core/ports"
+	shareddomain "altune/go-api/internal/shared/domain"
 	"altune/go-api/internal/shared/events"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
@@ -13,11 +14,7 @@ import (
 
 const MaxPlaylistsPerUser = 1_000
 
-var ErrTooManyPlaylists = &domain.CodedError{
-	Msg:    "playlist limit reached",
-	Status: 400,
-	Code:   "catalog.too_many_playlists",
-}
+var ErrTooManyPlaylists = shareddomain.NewError(shareddomain.CodeCatalogTooManyPlaylists, "playlist limit reached")
 
 type PlaylistLifecycleService struct {
 	playlistRepo ports.PlaylistLifecycleRepository

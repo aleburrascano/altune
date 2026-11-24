@@ -3,6 +3,7 @@ package featured
 import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/internal/core/ports"
+	shareddomain "altune/go-api/internal/shared/domain"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/runloop"
 	"context"
@@ -220,8 +221,8 @@ func (s *BackfillFeaturedService) resolve(ctx context.Context, t *domain.Track) 
 }
 
 var (
-	ErrBackfillInProgress  = &domain.CodedError{Msg: "featured artist backfill already in progress", Status: 409, Code: "catalog.backfill_in_progress"}
-	ErrBackfillCoolingDown = &domain.CodedError{Msg: "featured artist backfill ran recently; try again later", Status: 429, Code: "catalog.backfill_cooling_down"}
+	ErrBackfillInProgress  = shareddomain.NewError(shareddomain.CodeCatalogBackfillInProgress, "featured artist backfill already in progress")
+	ErrBackfillCoolingDown = shareddomain.NewError(shareddomain.CodeCatalogBackfillCoolingDown, "featured artist backfill ran recently; try again later")
 )
 
 type backfillAdmission struct {

@@ -21,7 +21,7 @@ catalog/
 │   ├── dedup.go                 duplicate-track detection key
 │   ├── source_url.go            validated source URL value
 │   ├── repo_error.go            ErrDBTransient and WrapRepoError, the 503 mapping
-│   └── coded_error.go           CodedError and the domain sentinels
+│   └── coded_error.go           the domain sentinels, as shared/domain coded errors
 ├── ports/                       interfaces the services depend on
 │   ├── track_repo.go            track persistence
 │   ├── playlist_repo.go         playlist persistence

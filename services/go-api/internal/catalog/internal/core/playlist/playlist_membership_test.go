@@ -3,9 +3,12 @@ package playlist_test
 import (
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/shared/events"
+	"altune/go-api/internal/shared/httputil"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
@@ -307,11 +310,9 @@ func freshTrackIds(n int) []catalog.TrackId {
 }
 
 func httpStatus(err error) int {
-	var coded interface{ HTTPStatus() int }
-	if !errors.As(err, &coded) {
-		return 0
-	}
-	return coded.HTTPStatus()
+	rec := httptest.NewRecorder()
+	httputil.HandleServiceError(rec, httptest.NewRequest(http.MethodPost, "/playlists", nil), err)
+	return rec.Code
 }
 
 func assertBatchCap(t *testing.T, call func([]catalog.TrackId) error) {

@@ -5,7 +5,7 @@ import (
 	featuredservice "altune/go-api/internal/catalog/internal/core/featured"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/requestuser"
-	"log/slog"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -41,23 +41,18 @@ func (h *FeaturedArtistHandler) handleBackfillFeatured(w http.ResponseWriter, r 
 	_, offset := pageBounds(r)
 	result, err := h.backfillFeatured.Execute(r.Context(), userId, offset)
 	if err != nil {
-		logPartialBackfill(r, result)
-		httputil.HandleServiceError(w, r, err)
+		httputil.HandleServiceError(w, r, withBackfillProgress(err, result))
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, result)
 }
 
-func logPartialBackfill(r *http.Request, result *featuredservice.BackfillFeaturedResult) {
+func withBackfillProgress(err error, result *featuredservice.BackfillFeaturedResult) error {
 	if result == nil || result.Scanned == 0 {
-		return
+		return err
 	}
-	slog.WarnContext(r.Context(), "featured_backfill.partial",
-		"scanned", result.Scanned,
-		"updated", result.Updated,
-		"failed", result.Failed,
-		"next_offset", result.NextOffset,
-	)
+	return fmt.Errorf("featured backfill stopped after scanned %d, updated %d, failed %d, next offset %d: %w",
+		result.Scanned, result.Updated, result.Failed, result.NextOffset, err)
 }
 
 func (h *FeaturedArtistHandler) handleListFeaturing(w http.ResponseWriter, r *http.Request) {

@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/catalog/domain"
+	shareddomain "altune/go-api/internal/shared/domain"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/requestuser"
 	"net/http"
@@ -16,16 +16,8 @@ var (
 )
 
 var (
-	errAudioRateLimited = &domain.CodedError{
-		Msg:    "too many audio requests, try again later",
-		Status: http.StatusTooManyRequests,
-		Code:   "catalog.audio_rate_limited",
-	}
-	errWriteRateLimited = &domain.CodedError{
-		Msg:    "too many writes, try again later",
-		Status: http.StatusTooManyRequests,
-		Code:   "catalog.write_rate_limited",
-	}
+	errAudioRateLimited = shareddomain.NewError(shareddomain.CodeCatalogAudioRateLimited, "too many audio requests, try again later")
+	errWriteRateLimited = shareddomain.NewError(shareddomain.CodeCatalogWriteRateLimited, "too many writes, try again later")
 )
 
 type rateLimitMiddleware = func(http.Handler) http.Handler
