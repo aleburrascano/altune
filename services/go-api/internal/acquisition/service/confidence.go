@@ -165,14 +165,6 @@ func uploadSourceKind(channelClass string) grade.SourceKind {
 	return grade.FanUpload
 }
 
-func (ac *AcquisitionContext) gradedFingerprint() grade.Fingerprint {
-	fingerprint := FingerprintOf(ac.Verdict.Kind)
-	if fingerprint == grade.Matches && ac.Identity.ReferenceDoubted {
-		return grade.Approximates
-	}
-	return fingerprint
-}
-
 func FingerprintOf(verdict VerdictKind) grade.Fingerprint {
 	switch verdict {
 	case VerdictHard:
@@ -205,7 +197,7 @@ func (ac *AcquisitionContext) gradeFor(kind grade.SourceKind) grade.Grade {
 	if ac.Verdict.Judged.Grade != "" {
 		return ac.Verdict.Judged.Grade
 	}
-	return grade.Of(ac.gradedFingerprint(), ac.Provenance(), kind)
+	return grade.Of(FingerprintOf(ac.Verdict.Kind), ac.Provenance(), kind)
 }
 
 func (ac *AcquisitionContext) provenISRC() (string, isrcproof.Source) {
