@@ -95,10 +95,10 @@ func TestFavoritesEndpoints_ServiceErrorsUseTypedContract(t *testing.T) {
 			wantCode:   "discovery.invalid_favorite",
 		},
 		{
-			name:       "not found",
-			err:        shareddomain.NewError(shareddomain.CodeDiscoveryContentUnserved, "favorite not served"),
-			wantStatus: http.StatusNotFound,
-			wantCode:   "discovery.content_unserved",
+			name:       "conflict",
+			err:        shareddomain.NewError(shareddomain.CodeDiscoveryFavoritesFull, "favorites are full"),
+			wantStatus: http.StatusConflict,
+			wantCode:   "discovery.favorites_full",
 		},
 		{
 			name:       "unavailable",
