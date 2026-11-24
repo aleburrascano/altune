@@ -968,8 +968,8 @@ func TestUpdateTrackStep_RefusesToCommitWithoutTheCandidateItKept(t *testing.T) 
 
 	_, err := step.Execute(context.Background(), &AcquisitionContext{AudioRef: "song.mp3"}, afterStore{})
 
-	if err == nil || !strings.Contains(err.Error(), "no kept candidate") {
-		t.Fatalf("Execute = %v, want a refusal naming the missing kept candidate", err)
+	if !errors.Is(err, errNoKeptCandidate) {
+		t.Fatalf("Execute = %v, want errNoKeptCandidate", err)
 	}
 	if got, _ := ledger.Track(track.ID); got.Status != ports.TrackPending || got.AudioRef != nil {
 		t.Errorf("track = status %v, audio ref %v, want it untouched", got.Status, got.AudioRef)

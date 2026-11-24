@@ -9,6 +9,8 @@ import (
 	"fmt"
 )
 
+var errNoKeptCandidate = errors.New("no kept candidate to record the stored file's source")
+
 type UpdateTrackStep struct {
 	ledger  ports.TrackLedger
 	userId  shared.UserId
@@ -46,7 +48,7 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, s
 
 func completionOf(ac *AcquisitionContext, kept ports.AudioCandidate, evidence Evidence) (ports.Completion, error) {
 	if kept.URL == "" {
-		return ports.Completion{}, errors.New("no kept candidate to record the stored file's source")
+		return ports.Completion{}, errNoKeptCandidate
 	}
 	raw, err := json.Marshal(evidence)
 	if err != nil {

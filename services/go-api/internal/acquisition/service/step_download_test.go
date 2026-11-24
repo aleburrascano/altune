@@ -378,43 +378,6 @@ func TestDownloadStep_SkippedCandidatesDoNotSpendTheAttemptBudget(t *testing.T) 
 	}
 }
 
-type panicProber struct{}
-
-func (panicProber) ProbeDuration(context.Context, string) (float64, error) {
-	panic("prober exploded")
-}
-
-func (panicProber) ValidateDecodable(context.Context, string) error { return nil }
-
-func TestDownloadStep_SerialPath_PanicDuringVerifyPropagatesAndCleansTempDir(t *testing.T) {
-	searcher := &fileWritingSearcher{writeFile: true}
-	step := newTestDownloadStep(searcher, WithDownloadProber(panicProber{}), WithVerifyWidth(1))
-	ac := &AcquisitionContext{
-		Track:  TrackRef{Title: "X", Artist: "Y", CatalogDuration: 226},
-		Ranked: []ports.AudioCandidate{{URL: "https://example.com/x", Duration: 226}},
-	}
-
-	func() {
-		defer func() {
-			if recover() == nil {
-				t.Fatal("expected verify to panic")
-			}
-		}()
-		_, _ = step.Execute(context.Background(), ac, afterSelect{})
-	}()
-
-	if searcher.gotDir == "" {
-		t.Fatal("expected a temp dir to have been created before the panic")
-	}
-	if _, err := os.Stat(searcher.gotDir); !os.IsNotExist(err) {
-		os.RemoveAll(searcher.gotDir)
-		t.Errorf("temp dir %q leaked after a panic during verify", searcher.gotDir)
-	}
-	if ac.TempPath != "" {
-		t.Errorf("TempPath must stay empty when verify panics, got %q", ac.TempPath)
-	}
-}
-
 type sequenceFetcher struct {
 	errs  []error
 	calls int
@@ -426,7 +389,7 @@ func (f *sequenceFetcher) Fetch(_ context.Context, _ ports.AudioCandidate, _ str
 	return fetchedAt("", err)
 }
 
-func TestDownloadStep_SerialPath_EarlierUnavailableSurvivesADifferentLastFailure(t *testing.T) {
+func TestDownloadStep_WidthOne_EarlierUnavailableSurvivesADifferentLastFailure(t *testing.T) {
 	fetcher := &sequenceFetcher{errs: []error{
 		&acqdomain.SourceUnavailableError{Source: "ytdlp", Err: errors.New("HTTP Error 429")},
 		errors.New("exit 1"),
@@ -467,7 +430,7 @@ func (p *queueProber) ValidateDecodable(_ context.Context, _ string) error {
 	return err
 }
 
-func TestDownloadStep_SerialPath_ProbeQueueVerifiesAndFallsBack(t *testing.T) {
+func TestDownloadStep_WidthOne_ProbeQueueVerifiesAndFallsBack(t *testing.T) {
 	searcher := &fileWritingSearcher{writeFile: true}
 	prober := &queueProber{durations: []float64{840, 227}}
 	step := newTestDownloadStep(searcher, WithDownloadProber(prober), WithVerifyWidth(1))
@@ -625,7 +588,7 @@ func TestDownloadStep_NoExpectedDuration_SkipsVerification(t *testing.T) {
 	}
 }
 
-func TestDownloadStep_SerialPath_DecodeQueueRejectsUndecodableAudio(t *testing.T) {
+func TestDownloadStep_WidthOne_DecodeQueueRejectsUndecodableAudio(t *testing.T) {
 	searcher := &fileWritingSearcher{writeFile: true}
 	prober := &queueProber{
 		durations:  []float64{226, 226},
@@ -1088,7 +1051,7 @@ func TestDownloadStep_NoExpectedMBIDSkipsIdentificationEntirely(t *testing.T) {
 	}
 }
 
-func TestDownloadStep_SerialPath_RejectionWalksToTheNextCandidate(t *testing.T) {
+func TestDownloadStep_WidthOne_RejectionWalksToTheNextCandidate(t *testing.T) {
 	identifier := &rejectFirstIdentifier{}
 	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier), WithVerifyWidth(1))
 	ac := downloadContext("mb-master")
@@ -1119,7 +1082,7 @@ func linkedResults(recordings ...ports.LinkedRecording) []ports.AcoustIDResult {
 	return []ports.AcoustIDResult{{ID: "ac-audio", Score: 0.97, Recordings: recordings}}
 }
 
-func TestDownloadStep_SerialPath_LiveOnlyLinksRejectedThenCleanCandidateVerified(t *testing.T) {
+func TestDownloadStep_WidthOne_LiveOnlyLinksRejectedThenCleanCandidateVerified(t *testing.T) {
 	live := ports.RecordingMatch{
 		AcoustID: "ac-live", MBIDs: []string{"mb-live"}, Score: 0.97,
 		Results: linkedResults(ports.LinkedRecording{MBID: "mb-live", Title: "Nessun dorma (live)"}),
@@ -1777,6 +1740,9 @@ func TestDownloadStep_WindowedAllAttemptsPanickingReturnsErrorNotCrash(t *testin
 	if _, statErr := os.Stat(inner.dirOf("only")); !os.IsNotExist(statErr) {
 		t.Errorf("temp dir should be removed, stat err = %v", statErr)
 	}
+	if ac.TempPath != "" {
+		t.Errorf("TempPath = %q, want it empty when every attempt panicked", ac.TempPath)
+	}
 }
 
 func TestDownloadStep_ProbeErrorIsAcceptedAndRecordsAProbeFailedSkip(t *testing.T) {
@@ -2163,7 +2129,7 @@ func fourLinksOneOfThemAnotherTitle() ports.RecordingMatch {
 	return match
 }
 
-func TestDownloadStep_SerialPath_VersionLookupsAreCappedAndCachedPerJob(t *testing.T) {
+func TestDownloadStep_WidthOne_VersionLookupsAreCappedAndCachedPerJob(t *testing.T) {
 	acoustic := func(mbid string) ports.RecordingFacts {
 		return ports.RecordingFacts{MBID: mbid, Title: "Sunglasses at Night", Disambiguation: "acoustic"}
 	}
