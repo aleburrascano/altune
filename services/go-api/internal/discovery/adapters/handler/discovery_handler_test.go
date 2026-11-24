@@ -757,17 +757,6 @@ func TestHandleRelatedTracks(t *testing.T) {
 	})
 }
 
-type statusCodedError struct {
-	status int
-	code   string
-}
-
-func (e statusCodedError) Error() string { return "classified failure" }
-
-func (e statusCodedError) HTTPStatus() int { return e.status }
-
-func (e statusCodedError) ErrorCode() string { return e.code }
-
 func assertErrorCode(t *testing.T, rec *httptest.ResponseRecorder, wantStatus int, wantCode string) {
 	t.Helper()
 	discAssertStatus(t, rec, wantStatus)

@@ -5,6 +5,7 @@ import (
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"slices"
@@ -88,22 +89,22 @@ func TestFavoritesEndpoints_ServiceErrorsUseTypedContract(t *testing.T) {
 		wantCode   string
 	}{
 		{
-			name:       "validation",
-			err:        shareddomain.NewValidationError("discovery", "favorite is invalid"),
+			name:       "invalid",
+			err:        fmt.Errorf("add favorite: %w", shareddomain.NewError(shareddomain.CodeDiscoveryInvalidFavorite, "favorite is invalid")),
 			wantStatus: http.StatusBadRequest,
-			wantCode:   "discovery.validation_error",
+			wantCode:   "discovery.invalid_favorite",
 		},
 		{
 			name:       "not found",
-			err:        statusCodedError{status: http.StatusNotFound},
+			err:        shareddomain.NewError(shareddomain.CodeDiscoveryContentUnserved, "favorite not served"),
 			wantStatus: http.StatusNotFound,
-			wantCode:   "not_found",
+			wantCode:   "discovery.content_unserved",
 		},
 		{
-			name:       "transient",
-			err:        statusCodedError{status: http.StatusServiceUnavailable, code: "favorites_unavailable"},
+			name:       "unavailable",
+			err:        shareddomain.NewError(shareddomain.CodeDiscoveryProviderCircuitOpen, "favorites paused"),
 			wantStatus: http.StatusServiceUnavailable,
-			wantCode:   "favorites_unavailable",
+			wantCode:   "discovery.provider_circuit_open",
 		},
 		{
 			name:       "unclassified",

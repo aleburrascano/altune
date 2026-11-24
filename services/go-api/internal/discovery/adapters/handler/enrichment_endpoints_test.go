@@ -386,7 +386,7 @@ func TestEnrichmentEndpoints_NilCollectionsServeAsEmpty(t *testing.T) {
 }
 
 func TestEnrichmentEndpoints_TypedProviderErrorStaysDegraded(t *testing.T) {
-	upstream := statusCodedError{status: http.StatusNotFound, code: "upstream"}
+	upstream := discovery.StatusError{Status: http.StatusNotFound}
 	router, _ := deezerRouter(&scriptedDeezerEnricher{resolveErr: upstream})
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/deezer?kind=album&title=Illmatic&subtitle=Nas", nil)
