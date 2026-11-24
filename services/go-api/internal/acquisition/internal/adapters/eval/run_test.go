@@ -7,9 +7,11 @@ import (
 	"altune/go-api/internal/acquisition/internal/adapters/ytmusic"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/service"
+	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -1436,8 +1438,8 @@ func TestLoadDir_RejectsATrackLengthNoCatalogWouldHold(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			c.ID, c.Class, c.Candidates = "x", "OK", []eval.Candidate{{URL: "u"}}
-			if err := validate(t, []eval.Case{c}); err == nil || !strings.Contains(err.Error(), "track length outside 0 to 604800 seconds") {
-				t.Fatalf("LoadDir = %v, want a track length error", err)
+			if err := validate(t, []eval.Case{c}); !errors.Is(err, shared.ErrImplausibleTrackLength) {
+				t.Fatalf("LoadDir = %v, want the kernel's implausible track length error", err)
 			}
 		})
 	}

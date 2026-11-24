@@ -711,10 +711,20 @@ func validatePinned(c Case) error {
 	return nil
 }
 
-const (
-	maxTrackSeconds   = 7 * 24 * 60 * 60
-	maxTrackTextBytes = 300
-)
+const maxTrackTextBytes = 300
+
+func validateTrackLengths(c Case) error {
+	lengths := []float64{targetLength(c.Track)}
+	if c.Stored != nil {
+		lengths = append(lengths, c.Stored.Duration)
+	}
+	for _, seconds := range lengths {
+		if _, err := shared.TrackLengthOf(seconds); err != nil {
+			return fmt.Errorf("case %q: %w", c.ID, err)
+		}
+	}
+	return nil
+}
 
 func validateCatalogText(c Case) error {
 	title := strings.TrimSpace(c.Track.Title)
@@ -731,8 +741,8 @@ func validateStoredAndSaved(c Case) error {
 	if c.Stored != nil && c.Stored.Duration <= 0 {
 		return fmt.Errorf("case %q stores a file with no duration", c.ID)
 	}
-	if length := targetLength(c.Track); length < 0 || length > maxTrackSeconds || (c.Stored != nil && c.Stored.Duration > maxTrackSeconds) {
-		return fmt.Errorf("case %q gives a track length outside 0 to %d seconds", c.ID, maxTrackSeconds)
+	if err := validateTrackLengths(c); err != nil {
+		return err
 	}
 	if r := c.Rerecording; r != nil && (r.OriginalMBID == "" || r.MBID == "" || r.Title == "") {
 		return fmt.Errorf("case %q records a re-recording without its original mbid, mbid and title", c.ID)
