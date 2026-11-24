@@ -74,7 +74,7 @@ type BackgroundAcquisitionScheduler struct {
 	log                 *jobLog
 	now                 func() time.Time
 	outcomes            ports.OutcomeRecorder
-	outcomeWG           sync.WaitGroup
+	outcomeRecords      runloop.Tracker
 
 	upgrader       upgradeRunner
 	upgradeWorkers int
@@ -408,10 +408,8 @@ func (s *BackgroundAcquisitionScheduler) recordOutcome(ctx context.Context, reco
 	if record.State == ports.JobSucceeded {
 		sourceHost = hostOf(record.ResolvedSource)
 	}
-	s.outcomeWG.Add(1)
-	go func() {
-		defer s.outcomeWG.Done()
-		recCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), outcomeRecordTimeout)
+	s.outcomeRecords.Track(func() {
+		recCtx, cancel := runloop.Detach(ctx, outcomeRecordTimeout)
 		defer cancel()
 		err := s.outcomes.Record(recCtx, ports.AcquisitionOutcome{
 			TrackID:    record.TrackID,
@@ -435,7 +433,7 @@ func (s *BackgroundAcquisitionScheduler) recordOutcome(ctx context.Context, reco
 			slog.WarnContext(ctx, "acquisition.outcome_record_failed",
 				"track_id", record.TrackID, "error", redact.LogError(err))
 		}
-	}()
+	})
 }
 
 var errJobPanicked = errors.New("acquisition job panicked")

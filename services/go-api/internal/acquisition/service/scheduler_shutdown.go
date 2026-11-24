@@ -92,14 +92,7 @@ func (s *BackgroundAcquisitionScheduler) waitRunners(ctx context.Context) {
 }
 
 func (s *BackgroundAcquisitionScheduler) waitOutcomes(ctx context.Context) {
-	done := make(chan struct{})
-	go func() {
-		s.outcomeWG.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-ctx.Done():
+	if !s.outcomeRecords.Drain(ctx) {
 		slog.WarnContext(ctx, "acquisition scheduler shutdown context ended before every outcome was recorded")
 	}
 }
