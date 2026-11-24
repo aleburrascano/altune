@@ -1,17 +1,27 @@
 package eval
 
 import (
-	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
+	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/acquisition/internal/adapters/discoverybridge"
 	"altune/go-api/internal/acquisition/internal/adapters/tempfs"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/acquisition/sourcekey"
+	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
+
+	"github.com/google/uuid"
+)
+
+const (
+	storedAudioRef        = "eval/stored.mp3"
+	maxRejectedSourceKeys = 25
 )
 
 type Outcome struct {
@@ -32,10 +42,8 @@ type Outcome struct {
 
 func Run(ctx context.Context, kase Case) Outcome {
 	p := newCasePorts(kase)
-	ledger, err := catalogbridge.NewSeededLedger(seedFor(kase))
-	if err != nil {
-		return seedFailure(kase, err)
-	}
+	track := seededTrack(kase)
+	ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
 
 	var observed *service.AcquisitionContext
 	opts := []func(*service.AcquireTrackAudioService){
@@ -51,11 +59,11 @@ func Run(ctx context.Context, kase Case) Outcome {
 		opts = append(opts, service.WithRerecordingFinder(recordedRerecording{*kase.Rerecording}))
 	}
 	svc := service.NewAcquireTrackAudioService(ledger, p.registry(), p, opts...)
-	runErr := executeFor(ctx, svc, kase, ledger)
+	runErr := executeFor(ctx, svc, kase, track)
 	if observed == nil && runErr == nil {
 		runErr = errors.New("eval: the service never started an acquisition")
 	}
-	return outcomeOf(kase, observed, runErr, p.clock, savedTrackOf(ledger.Saved()))
+	return outcomeOf(kase, observed, runErr, p.clock, savedTrackOf(ledger, track.ID))
 }
 
 type recordedRerecording struct{ answer RecordedRerecording }
@@ -74,43 +82,63 @@ func (r recordedRerecording) FindRerecording(_ context.Context, q ports.Rerecord
 	}, true, nil
 }
 
-func executeFor(ctx context.Context, svc *service.AcquireTrackAudioService, kase Case, ledger *catalogbridge.SeededLedger) error {
+func executeFor(ctx context.Context, svc *service.AcquireTrackAudioService, kase Case, track ports.TrackSnapshot) error {
 	if kase.Stored != nil {
-		return svc.ExecuteReplace(ctx, ledger.UserID(), ledger.TrackID())
+		return svc.ExecuteReplace(ctx, track.UserId, track.ID)
 	}
-	return svc.Execute(ctx, ledger.UserID(), ledger.TrackID())
+	return svc.Execute(ctx, track.UserId, track.ID)
 }
 
-func seedFailure(kase Case, err error) Outcome {
-	return Outcome{
-		Case:    kase,
-		Failed:  true,
-		Err:     err.Error(),
-		Pending: kase.isPending(),
-		Reason:  "could not seed the catalog track: " + err.Error(),
-	}
-}
-
-func seedFor(kase Case) catalogbridge.SeededTrack {
+func seededTrack(kase Case) ports.TrackSnapshot {
 	t := kase.Track
-	seed := catalogbridge.SeededTrack{
-		Title:           t.Title,
-		Artist:          t.Artist,
-		Album:           t.Album,
-		ISRC:            t.ISRC,
-		CatalogDuration: targetLength(t),
-		CatalogMBID:     t.CatalogMBID,
-		CatalogExplicit: t.CatalogExplicit,
-		CatalogSources:  t.portCatalogSources(),
-		AudioSourceURL:  t.AudioSourceURL,
+	track := ports.TrackSnapshot{
+		ID:                 shared.NewTrackId(),
+		UserId:             shared.NewUserId(uuid.New()),
+		Title:              strings.TrimSpace(t.Title),
+		Artist:             catalogField(t.Artist),
+		Album:              t.Album,
+		ISRC:               optional(t.ISRC),
+		CatalogMBID:        optional(t.CatalogMBID),
+		CatalogExplicit:    t.CatalogExplicit,
+		CatalogSources:     t.portCatalogSources(),
+		AudioSourceURL:     optional(t.AudioSourceURL),
+		RejectedSourceKeys: rejectedKeys(kase.ExcludeURLs),
+		Status:             ports.TrackPending,
 	}
-	for _, rawURL := range kase.ExcludeURLs {
-		seed.RejectedSourceKeys = append(seed.RejectedSourceKeys, sourcekey.SourceKey(rawURL))
+	if length := targetLength(t); length > 0 {
+		track.CatalogDurationSeconds, track.StoredDurationSeconds = &length, &length
 	}
 	if kase.Stored != nil {
-		seed.Stored = &catalogbridge.SeededFile{Duration: kase.Stored.Duration}
+		ref := storedAudioRef
+		track.Status, track.AudioRef = ports.TrackReady, &ref
+		if length := kase.Stored.Duration; length > 0 {
+			track.StoredDurationSeconds = &length
+		}
 	}
-	return seed
+	return track
+}
+
+func catalogField(s string) string {
+	return strings.Join(strings.Fields(textnorm.NFKC(s)), " ")
+}
+
+func optional(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func rejectedKeys(urls []string) []string {
+	var keys []string
+	for _, rawURL := range urls {
+		key := sourcekey.SourceKey(rawURL)
+		if key != "" && !slices.Contains(keys, key) {
+			keys = append(keys, key)
+			keys = keys[max(0, len(keys)-maxRejectedSourceKeys):]
+		}
+	}
+	return keys
 }
 
 func resolverFor(kase Case) ports.RecordingResolver {
@@ -306,20 +334,32 @@ type SavedTrack struct {
 	CatalogMBID     string
 }
 
-func savedTrackOf(saved catalogbridge.SavedTrack) SavedTrack {
+func savedTrackOf(ledger *acquisitiontest.Ledger, id shared.TrackId) SavedTrack {
+	saved, ok := ledger.Track(id)
+	if !ok {
+		return SavedTrack{}
+	}
 	var evidence struct {
 		ISRCSource string `json:"isrc_source"`
 	}
 	_ = json.Unmarshal(saved.Evidence, &evidence)
 	return SavedTrack{
-		ISRC:            saved.ISRC,
+		ISRC:            derefOrZero(saved.ISRC),
 		ISRCSource:      evidence.ISRCSource,
-		Provenance:      saved.Provenance,
-		DurationSeconds: saved.DurationSeconds,
+		Provenance:      string(saved.Provenance),
+		DurationSeconds: derefOrZero(saved.StoredDurationSeconds),
 		RejectedKeys:    saved.RejectedSourceKeys,
 		Title:           saved.Title,
 		Album:           saved.Album,
-		Year:            saved.Year,
-		CatalogMBID:     saved.CatalogMBID,
+		Year:            derefOrZero(saved.Year),
+		CatalogMBID:     derefOrZero(saved.CatalogMBID),
 	}
+}
+
+func derefOrZero[T any](p *T) T {
+	var zero T
+	if p == nil {
+		return zero
+	}
+	return *p
 }

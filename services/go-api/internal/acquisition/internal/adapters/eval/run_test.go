@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -1376,6 +1377,35 @@ func TestRun_ASeededRejectedSourceNeverComesBack(t *testing.T) {
 	}
 }
 
+func TestRun_ATrackTheRunDidNotStoreKeepsItsCatalogLength(t *testing.T) {
+	kase := eval.Case{
+		ID: "t", Class: "F7",
+		Track:      eval.Track{Title: "Save Your Tears", Artist: "The Weeknd", CatalogDuration: 215},
+		Candidates: []eval.Candidate{{Title: "Cooking Tutorial Episode 47", URL: "cook", Channel: "Cooking", Duration: 215}},
+	}
+
+	out := eval.Run(context.Background(), kase)
+
+	if !out.Failed || out.Stored != "" {
+		t.Fatalf("failed=%v stored=%q, want the run to store nothing", out.Failed, out.Stored)
+	}
+	if out.Saved.DurationSeconds != 215 {
+		t.Errorf("saved length %v, want the catalog's 215 s kept on a track that was never stored", out.Saved.DurationSeconds)
+	}
+}
+
+func TestRun_TheTrackTitleIsTrimmedAsTheCatalogTrimsIt(t *testing.T) {
+	kase := eval.Case{
+		ID: "t", Class: "F7",
+		Track:      eval.Track{Title: "  Save Your Tears ", Artist: "The Weeknd", Duration: 215},
+		Candidates: []eval.Candidate{{Title: "Cooking Tutorial Episode 47", URL: "cook", Channel: "Cooking", Duration: 215}},
+	}
+
+	if got := eval.Run(context.Background(), kase).Saved.Title; got != "Save Your Tears" {
+		t.Errorf("saved title %q, want %q: the catalog trims a new track's title", got, "Save Your Tears")
+	}
+}
+
 func TestRun_TheRejectedKeyStaysOnTheSavedTrack(t *testing.T) {
 	out := eval.Run(context.Background(), embeddedCase(t, "reacquire-never-returns-the-upload-the-user-rejected"))
 
@@ -1393,6 +1423,68 @@ func TestLoadDir_RejectsAStoredFileWithNoDuration(t *testing.T) {
 
 	if err := validate(t, cases); err == nil || !strings.Contains(err.Error(), "stores a file with no duration") {
 		t.Fatalf("LoadDir = %v, want a stored-file duration error", err)
+	}
+}
+
+func TestLoadDir_RejectsATrackLengthNoCatalogWouldHold(t *testing.T) {
+	week := float64(7 * 24 * 60 * 60)
+	for name, c := range map[string]eval.Case{
+		"negative track length":      {Track: eval.Track{Title: "t", Artist: "a", Duration: -1}},
+		"catalog length past a week": {Track: eval.Track{Title: "t", Artist: "a", CatalogDuration: week + 1}},
+		"track length past a week":   {Track: eval.Track{Title: "t", Artist: "a", Duration: week + 1}},
+		"stored file past a week":    {Track: eval.Track{Title: "t", Artist: "a"}, Stored: &eval.StoredFile{Duration: week + 1}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			c.ID, c.Class, c.Candidates = "x", "OK", []eval.Candidate{{URL: "u"}}
+			if err := validate(t, []eval.Case{c}); err == nil || !strings.Contains(err.Error(), "track length outside 0 to 604800 seconds") {
+				t.Fatalf("LoadDir = %v, want a track length error", err)
+			}
+		})
+	}
+	edge := eval.Case{ID: "x", Class: "OK", Track: eval.Track{Title: "t", Artist: "a", CatalogDuration: week}, Candidates: []eval.Candidate{{URL: "u"}}}
+	if err := validate(t, []eval.Case{edge}); err != nil {
+		t.Fatalf("LoadDir = %v, want a length of exactly a week accepted", err)
+	}
+}
+
+func TestLoadDir_RejectsATrackTheCatalogWouldNotHold(t *testing.T) {
+	long := strings.Repeat("a", 301)
+	for name, track := range map[string]eval.Track{
+		"title blank once trimmed":        {Title: "   ", Artist: "a"},
+		"artist blank once canonicalised": {Title: "t", Artist: "\u3000"},
+		"title over 300 bytes":            {Title: long, Artist: "a"},
+		"artist over 300 bytes":           {Title: "t", Artist: long},
+		"album over 300 bytes":            {Title: "t", Artist: "a", Album: long},
+	} {
+		t.Run(name, func(t *testing.T) {
+			c := eval.Case{ID: "x", Class: "OK", Track: track, Candidates: []eval.Candidate{{URL: "u"}}}
+			if err := validate(t, []eval.Case{c}); err == nil || !strings.Contains(err.Error(), "empty or over 300 bytes once the catalog trims it") {
+				t.Fatalf("LoadDir = %v, want a catalog text error", err)
+			}
+		})
+	}
+	edge := eval.Case{ID: "x", Class: "OK", Track: eval.Track{Title: strings.Repeat("t", 300), Artist: " a ", Album: " "}, Candidates: []eval.Candidate{{URL: "u"}}}
+	if err := validate(t, []eval.Case{edge}); err != nil {
+		t.Fatalf("LoadDir = %v, want 300 bytes, a padded artist and a blank album accepted", err)
+	}
+}
+
+func TestRun_RejectedSourceKeysKeepTheNewestTwentyFiveLikeTheCatalog(t *testing.T) {
+	var urls []string
+	for i := range 26 {
+		urls = append(urls, fmt.Sprintf("https://www.youtube.com/watch?v=videoid%04d", i))
+	}
+	urls = append(urls, urls[0])
+	kase := eval.Case{
+		ID: "t", Class: "F7", ExcludeURLs: urls,
+		Track:      eval.Track{Title: "Save Your Tears", Artist: "The Weeknd", Duration: 215},
+		Candidates: []eval.Candidate{{Title: "Cooking Tutorial Episode 47", URL: "cook", Channel: "Cooking", Duration: 215}},
+	}
+
+	got := eval.Run(context.Background(), kase).Saved.RejectedKeys
+
+	if len(got) != 25 || got[0] != "youtube:videoid0002" || got[24] != "youtube:videoid0000" {
+		t.Errorf("saved rejected keys %v, want videoid0002..videoid0025 then videoid0000 again: a key pushed out of the 25 can be rejected again", got)
 	}
 }
 

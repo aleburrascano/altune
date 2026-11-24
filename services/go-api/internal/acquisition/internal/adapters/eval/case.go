@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/service"
 	shared "altune/go-api/internal/shared/kernel"
+	"cmp"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -644,6 +645,9 @@ func validateCaseExtensions(c Case) error {
 	if err := validateStoredAndSaved(c); err != nil {
 		return err
 	}
+	if err := validateCatalogText(c); err != nil {
+		return err
+	}
 	if err := validateRecordings(c); err != nil {
 		return err
 	}
@@ -707,9 +711,28 @@ func validatePinned(c Case) error {
 	return nil
 }
 
+const (
+	maxTrackSeconds   = 7 * 24 * 60 * 60
+	maxTrackTextBytes = 300
+)
+
+func validateCatalogText(c Case) error {
+	title := strings.TrimSpace(c.Track.Title)
+	album := cmp.Or(catalogField(c.Track.Album), title)
+	for _, f := range []textField{{"title", title}, {"artist", catalogField(c.Track.Artist)}, {"album", album}} {
+		if f.value == "" || len(f.value) > maxTrackTextBytes {
+			return fmt.Errorf("case %q track %s is empty or over %d bytes once the catalog trims it", c.ID, f.name, maxTrackTextBytes)
+		}
+	}
+	return nil
+}
+
 func validateStoredAndSaved(c Case) error {
 	if c.Stored != nil && c.Stored.Duration <= 0 {
 		return fmt.Errorf("case %q stores a file with no duration", c.ID)
+	}
+	if length := targetLength(c.Track); length < 0 || length > maxTrackSeconds || (c.Stored != nil && c.Stored.Duration > maxTrackSeconds) {
+		return fmt.Errorf("case %q gives a track length outside 0 to %d seconds", c.ID, maxTrackSeconds)
 	}
 	if r := c.Rerecording; r != nil && (r.OriginalMBID == "" || r.MBID == "" || r.Title == "") {
 		return fmt.Errorf("case %q records a re-recording without its original mbid, mbid and title", c.ID)
