@@ -359,3 +359,93 @@ func TestNewScheduler_AnUpgradeWorkerClaimsAndSettlesAnEnqueuedUpgrade(t *testin
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+func TestNewScheduler_ReportsFingerprintingReadyOnlyWithAnAcoustIDKey(t *testing.T) {
+	binDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(binDir, "fpcalc"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write fpcalc stub: %v", err)
+	}
+	tests := []struct {
+		name string
+		key  string
+		want bool
+	}{
+		{name: "no key", key: "", want: false},
+		{name: "a key", key: "acoustid-test-key", want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := newOfflineScheduler(t, &config.Config{MusicDir: t.TempDir(), FFmpegLocation: binDir, AcoustIDAPIKey: tt.key}, make(chan struct{}, 1), fixtureTiers())
+
+			if got := s.Status().Verification.Fpcalc; got != tt.want {
+				t.Errorf("Status().Verification.Fpcalc = %v with fpcalc installed and AcoustID key %q, want %v", got, tt.key, tt.want)
+			}
+		})
+	}
+}
+
+type sourceThatHangs struct{ started chan struct{} }
+
+func (sourceThatHangs) Name() acquisition.SourceName { return "hangs" }
+
+func (s sourceThatHangs) Find(ctx context.Context, _ acquisition.FindRequest) ([]acquisition.AudioCandidate, error) {
+	select {
+	case s.started <- struct{}{}:
+	default:
+	}
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func (sourceThatHangs) Fetch(context.Context, acquisition.AudioCandidate, string) (acquisition.FetchedAudio, error) {
+	return acquisition.FetchedAudio{}, errors.New("nothing to fetch")
+}
+
+func TestNewScheduler_ShutdownCancelsAJobThatOutlivesTheConfiguredDrainBudget(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := integrationPool(t)
+	userID := shared.NewUserId(uuid.New())
+	track, err := catalog.NewTrack(userID, "Hanging Song", "Artist", "")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	repo := catalog.NewPgxTrackRepository(pool)
+	if _, _, err := repo.Add(context.Background(), track); err != nil {
+		t.Fatalf("insert track: %v", err)
+	}
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID()) })
+	hang := sourceThatHangs{started: make(chan struct{}, 1)}
+	scheduler := audioacquisition.NewScheduler(t.Context(), audioacquisition.Deps{
+		Config:     &config.Config{Env: "test", MusicDir: t.TempDir(), AcquisitionDrainBudgetSeconds: 1},
+		Pool:       pool,
+		Events:     eventTap(t),
+		Ledger:     acquisition.NewTrackLedger(repo),
+		AudioStore: catalog.NewFilesystemAudioStore(t.TempDir()),
+		Sources:    audioacquisition.Tiers{First: []acquisition.AudioSource{hang}},
+		Background: &sync.WaitGroup{},
+		Slots:      make(chan struct{}, 1),
+	})
+	var shutdown sync.Once
+	t.Cleanup(func() { shutdown.Do(func() { scheduler.Shutdown(context.Background()) }) })
+	if err := scheduler.Schedule(context.Background(), userID, track.ID, ""); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+	select {
+	case <-hang.started:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the scheduled job never reached the source within 10s")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	start := time.Now()
+	shutdown.Do(func() { scheduler.Shutdown(ctx) })
+	elapsed := time.Since(start)
+
+	if elapsed < time.Second {
+		t.Errorf("Shutdown returned after %s, want it to give the in-flight job its 1s drain budget first", elapsed)
+	}
+	if elapsed > 10*time.Second {
+		t.Errorf("Shutdown returned after %s, want the job cancelled once the configured 1s drain budget ran out", elapsed)
+	}
+}
