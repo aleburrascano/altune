@@ -22,8 +22,8 @@ user from the shared `internal/shared/requestuser` module.
 | Layer | File | Job |
 |---|---|---|
 | core/domain | `queue_state.go`, `queue_position.go`, `queue_source.go`, `repeat_mode.go` | Snapshot, position update, source and repeat value types with their validation |
-| core/domain | `queue_validation_error.go` | `QueueValidationError`, `newValidationError`, the `playback.*` validation codes |
-| ports | `queue_state.go`, `stale_write_error.go`, `unavailable_error.go` | `QueueStateRepository`, `ErrCorruptStoredState`, and the `QueueStateMetrics` and `RateLimitMetrics` interfaces with their noops; the repository's error contract is `StaleWriteError` with `ErrStaleQueueWrite` and `ErrQueuePositionMismatch` (409) and `UnavailableError` with `ErrQueueStateUnavailable` (503, `Retry-After: 1`) |
+| core/domain | `queue_validation_error.go` | `newValidationError` and the `playback.*` validation codes, as shared/domain coded errors |
+| ports | `queue_state.go`, `stale_write_error.go`, `unavailable_error.go` | `QueueStateRepository`, `ErrCorruptStoredState`, and the `QueueStateMetrics` and `RateLimitMetrics` interfaces with their noops; the repository's error contract is the shared/domain coded errors `ErrStaleQueueWrite` and `ErrQueuePositionMismatch` (409) and `ErrQueueStateUnavailable` (503, `Retry-After: 1`) |
 | ports | `now_playing.go` | `NowPlayingReader`, `NowPlayingTrack`, the `TrackSource` it reads from with `ErrTrackSourceUnavailable`, and the `EnrichmentMetrics` interface with its noop |
 | ports | `erasure.go` | `DeletedIdentityLister`, `OwnerScanPage`, `ErrIdentityStoreUnavailable`, `ErasedStateReaper`, and the `ErasureSweepMetrics` interface with its noop |
 | service | `queue/service.go` | Save, update position, get, enrich the current track |
@@ -59,7 +59,7 @@ An unavailable identity store ends the sweep idle and is counted, not treated as
 ## 5. Invariants
 
 - A stale write or a position that does not match the stored queue is rejected with 409; the stored snapshot is unchanged.
-- A storage outage maps to `UnavailableError`: 503 with `Retry-After: 1`.
+- A storage outage maps to `ErrQueueStateUnavailable`: 503 with `Retry-After: 1`.
 - A corrupt stored snapshot is `ErrCorruptStoredState`, never served as valid state.
 - Every error a caller branches on is declared in `core/domain/` or `core/ports/` and written through `httputil.HandleServiceError`.
 - One snapshot per `UserId`; the sweep is the only path that removes it for an account that no longer exists.
