@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/acquisition/internal/core/judgeshadow"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/internal/core/rejectionlog"
+	"altune/go-api/internal/acquisition/internal/core/tracklength"
 	"altune/go-api/internal/acquisition/service/upgrade"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/redact"
@@ -340,7 +341,7 @@ func (ac *AcquisitionContext) stillJudgedOnTheSameBasis(recorded *ports.Rejectio
 	if recorded.ExpectedSeconds <= 0 || current <= 0 {
 		return recorded.ExpectedSeconds <= 0 && current <= 0
 	}
-	return acqdomain.LengthAuthoritative.Agrees(recorded.ExpectedSeconds, current)
+	return tracklength.SameRecording(recorded.ExpectedSeconds, current)
 }
 
 func (ac *AcquisitionContext) Provenance() shared.AcquisitionProvenance {

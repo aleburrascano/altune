@@ -1,9 +1,9 @@
 package audiojudge
 
 import (
-	"altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/internal/core/tracklength"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/songfacts"
 	"altune/go-api/internal/shared/textnorm"
@@ -275,8 +275,8 @@ func recordingsMatchingLength(audioLength float64, results []ports.AcoustIDResul
 }
 
 func linkLengthAgrees(audioLength, linkLength float64) bool {
-	isLengthUnknown := linkLength == 0 || audioLength <= 0
-	return isLengthUnknown || domain.LengthAuthoritative.Agrees(audioLength, linkLength)
+	isLengthUnknown := linkLength <= 0 || audioLength <= 0
+	return isLengthUnknown || tracklength.SameRecording(audioLength, linkLength)
 }
 
 func sameTitleLinks(identity Identity, survivors []ports.LinkedRecording) []ports.LinkedRecording {
@@ -376,7 +376,7 @@ func (ev *evidence) judgeLength(in Input) {
 	if measured <= 0 || len(known) == 0 {
 		return
 	}
-	ev.lengthFits = slices.ContainsFunc(known, func(catalog float64) bool { return domain.LengthAuthoritative.Agrees(catalog, measured) })
+	ev.lengthFits = slices.ContainsFunc(known, func(catalog float64) bool { return tracklength.SameRecording(catalog, measured) })
 	ev.lengthOuter = !ev.lengthFits
 	if ev.lengthOuter {
 		ev.note("length %.0fs is outside every catalog length %v", measured, known)

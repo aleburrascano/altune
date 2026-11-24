@@ -2,6 +2,7 @@ package judge
 
 import (
 	"altune/go-api/internal/acquisition/internal/core/domain"
+	"altune/go-api/internal/acquisition/internal/core/tracklength"
 	"altune/go-api/internal/shared/textnorm"
 	"altune/go-api/internal/shared/versiontag"
 	"math"
@@ -118,7 +119,7 @@ func kindRank(k Kind) int {
 }
 
 func lengthsAgree(want, got float64) bool {
-	return domain.LengthAuthoritative.Agrees(want, got)
+	return tracklength.SameRecording(want, got)
 }
 
 func titleIdentity(title string) string {

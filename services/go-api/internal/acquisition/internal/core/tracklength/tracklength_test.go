@@ -291,3 +291,49 @@ func TestFileJudge_ANonFiniteFileLengthIsNeverAcceptable(t *testing.T) {
 		}
 	}
 }
+
+func TestFileJudge_AFileWithNoMeasuredLengthIsNotTheSameRecordingAsAShortTrack(t *testing.T) {
+	judges := []struct {
+		name      string
+		policy    tracklength.Policy
+		candidate ports.AudioCandidate
+	}{
+		{"held to the candidate's own four seconds", tracklength.New(0, 0, false), artTrack(4)},
+		{"held to a corroborated four seconds", tracklength.New(4, 4, false), upload(0)},
+		{"held to a saved fifteen seconds in the loose window", tracklength.New(15, 0, false), upload(0)},
+		{"held to a resolved fifteen seconds in the loose window", tracklength.New(0, 15, false), upload(0)},
+	}
+	for _, j := range judges {
+		judge, known := j.policy.FileJudge(j.candidate)
+		if !known {
+			t.Fatalf("%s: FileJudge gave no judge, want one", j.name)
+		}
+		if acceptable, _ := judge.Judge(0); acceptable {
+			t.Errorf("%s: Judge(0) = acceptable, want refused: an unknown measurement is never a match", j.name)
+		}
+	}
+}
+
+func TestSameRecording_ComparesSecondsOnlyWhenBothAreKnownAndPlausible(t *testing.T) {
+	tests := []struct {
+		name             string
+		expected, actual float64
+		want             bool
+	}{
+		{"within five seconds", 100, 105, true},
+		{"past five seconds", 100, 105.1, false},
+		{"within three percent of a long track", 400, 412, true},
+		{"unknown actual length", 4, 0, false},
+		{"unknown expected length", 0, 4, false},
+		{"negative actual length", 4, -1, false},
+		{"not a number", 200, math.NaN(), false},
+		{"longer than seven days", 7*24*60*60 - 1, 7*24*60*60 + 1, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tracklength.SameRecording(tt.expected, tt.actual); got != tt.want {
+				t.Errorf("SameRecording(%v, %v) = %v, want %v", tt.expected, tt.actual, got, tt.want)
+			}
+		})
+	}
+}

@@ -152,7 +152,13 @@ func recordLengthCheck(ctx context.Context, track *domain.Track, measuredSeconds
 	if measuredSeconds <= 0 || track.CatalogDurationSeconds == nil {
 		return
 	}
-	toleranceSeconds := acqdomain.LengthAuthoritative.Allowance(*track.CatalogDurationSeconds)
+	catalogLength, err := shared.TrackLengthOf(*track.CatalogDurationSeconds)
+	if err != nil {
+		slog.WarnContext(ctx, "acquisition.audio_length_unchecked",
+			"track_id", track.ID.String(), "catalog_seconds", *track.CatalogDurationSeconds, "error", redact.LogError(err))
+		return
+	}
+	toleranceSeconds := catalogLength.Allowance()
 	track.RecordAudioLength(measuredSeconds, toleranceSeconds)
 	if track.AudioLengthMismatch {
 		slog.WarnContext(ctx, "acquisition.audio_length_mismatch",

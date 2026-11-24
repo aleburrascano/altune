@@ -44,7 +44,7 @@ func (t target) judge(song acquisition.YtmSong) rejection {
 		return rejectTitle
 	case t.CatalogSeconds <= 0:
 		return rejectNoCatalogLen
-	case !acquisition.LengthAuthoritative.Agrees(t.CatalogSeconds, float64(song.DurationSeconds)):
+	case !acquisition.SameRecording(t.CatalogSeconds, float64(song.DurationSeconds)):
 		return rejectLength
 	case t.knowsAlbum() && !t.isOnAlbum(song):
 		return rejectAlbum

@@ -1,9 +1,9 @@
 package upgrade
 
 import (
-	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/internal/core/tracklength"
 	"errors"
 	"fmt"
 )
@@ -54,6 +54,6 @@ func (g Gate) fitsCatalogLengthOfSameGrade(candidate grade.Grade, fetchedSeconds
 		g.CatalogSeconds > 0 &&
 		g.StoredSeconds > 0 &&
 		fetchedSeconds > 0 &&
-		!acqdomain.LengthAuthoritative.Agrees(g.CatalogSeconds, g.StoredSeconds) &&
-		acqdomain.LengthAuthoritative.Agrees(g.CatalogSeconds, fetchedSeconds)
+		!tracklength.SameRecording(g.CatalogSeconds, g.StoredSeconds) &&
+		tracklength.SameRecording(g.CatalogSeconds, fetchedSeconds)
 }

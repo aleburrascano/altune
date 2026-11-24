@@ -1,7 +1,7 @@
 package discoverybridge
 
 import (
-	"altune/go-api/internal/acquisition/internal/core/domain"
+	"altune/go-api/internal/acquisition/internal/core/tracklength"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/service/search"
 	shared "altune/go-api/internal/shared/kernel"
@@ -204,7 +204,7 @@ func durationDisagrees(want, got float64) bool {
 	if want <= 0 || got <= 0 {
 		return false
 	}
-	return !domain.LengthAuthoritative.Agrees(want, got)
+	return !tracklength.SameRecording(want, got)
 }
 
 func referenceSet(mbid string, recordings []discovery.ISRCRecording) []string {

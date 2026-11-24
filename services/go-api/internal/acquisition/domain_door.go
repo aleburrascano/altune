@@ -15,7 +15,6 @@ var (
 var (
 	ErrEmptyFingerprint  = domain.ErrEmptyFingerprint
 	ErrIdentifyThrottled = domain.ErrIdentifyThrottled
-	LengthAuthoritative  = domain.LengthAuthoritative
 )
 
 type LengthTolerance = domain.LengthTolerance
