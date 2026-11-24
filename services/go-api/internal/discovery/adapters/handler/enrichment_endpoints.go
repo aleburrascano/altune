@@ -3,25 +3,24 @@ package handler
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/core/enrich"
+	shareddomain "altune/go-api/internal/shared/domain"
 	"altune/go-api/internal/shared/httputil"
 	"context"
 	"errors"
-	"log/slog"
+	"fmt"
 	"net/http"
 	"strings"
 )
 
-const enrichmentUnavailableCode = "enrichment_unavailable"
-
 func parseKindParam(w http.ResponseWriter, r *http.Request) (domain.ResultKind, bool) {
 	kindStr := strings.TrimSpace(r.URL.Query().Get("kind"))
 	if kindStr == "" {
-		httputil.BadRequestCode(w, requestCodeInvalidParam, "kind is required")
+		httputil.HandleServiceError(w, r, invalidParam("kind is required"))
 		return 0, false
 	}
 	kind, err := domain.ParseResultKind(kindStr)
 	if err != nil {
-		httputil.BadRequestCode(w, requestCodeInvalidKind, "invalid kind")
+		httputil.HandleServiceError(w, r, shareddomain.NewError(shareddomain.CodeDiscoveryInvalidKind, "invalid kind"))
 		return 0, false
 	}
 	return kind, true
@@ -33,15 +32,11 @@ func withEnricher(
 	available bool,
 	empty func() any,
 	call func() (any, error),
-	logMsg string,
-	logArgs ...any,
+	operation string,
 ) {
 	if !available {
 		if empty == nil {
-			httputil.WriteJSON(w, http.StatusServiceUnavailable, httputil.ErrorResponse{
-				Detail: "enrichment is not configured",
-				Code:   enrichmentUnavailableCode,
-			})
+			httputil.HandleServiceError(w, r, shareddomain.NewError(shareddomain.CodeEnrichmentUnavailable, "enrichment is not configured"))
 			return
 		}
 		httputil.WriteJSON(w, http.StatusOK, empty())
@@ -49,8 +44,7 @@ func withEnricher(
 	}
 	result, err := call()
 	if err != nil {
-		slog.ErrorContext(r.Context(), logMsg, append([]any{"error", err}, logArgs...)...)
-		httputil.HandleServiceError(w, r, err)
+		httputil.HandleServiceError(w, r, fmt.Errorf("%s: %w", operation, err))
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, result)
@@ -88,9 +82,9 @@ func degradedCall[E, D any](exec func() (E, error), toDTO func(E) D, stamp func(
 	}
 }
 
-func requireTitle(w http.ResponseWriter, title string) bool {
+func requireTitle(w http.ResponseWriter, r *http.Request, title string) bool {
 	if title == "" {
-		httputil.BadRequestCode(w, requestCodeInvalidParam, "title is required")
+		httputil.HandleServiceError(w, r, invalidParam("title is required"))
 		return false
 	}
 	return true
@@ -110,7 +104,7 @@ func (h *DiscoveryHandler) handleEnrichment(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if title == "" && mbid == "" {
-		httputil.BadRequestCode(w, requestCodeInvalidParam, "title or mbid is required")
+		httputil.HandleServiceError(w, r, invalidParam("title or mbid is required"))
 		return
 	}
 
@@ -122,7 +116,7 @@ func (h *DiscoveryHandler) handleEnrichment(w http.ResponseWriter, r *http.Reque
 			},
 			enrichmentToDTO,
 			func(d *EnrichmentResponseDTO, v bool) { d.Degraded = v }),
-		"enrichment failed", "kind", kind.String(), "title", title)
+		fmt.Sprintf("enrich %s %q", kind, title))
 }
 
 type EnrichmentResponseDTO struct {
@@ -179,7 +173,7 @@ func namedEnrichmentParams(w http.ResponseWriter, r *http.Request) (domain.Resul
 		return 0, "", "", false
 	}
 	title, subtitle, ok := titleAndSubtitle(w, r)
-	if !ok || !requireTitle(w, title) {
+	if !ok || !requireTitle(w, r, title) {
 		return 0, "", "", false
 	}
 	return kind, title, subtitle, true
@@ -193,7 +187,7 @@ func serveNamedEnrichment[E, D any](
 	empty E,
 	toDTO func(E) D,
 	stamp func(*D, bool),
-	logMsg string,
+	source string,
 ) {
 	kind, title, subtitle, ok := namedEnrichmentParams(w, r)
 	if !ok {
@@ -205,7 +199,7 @@ func serveNamedEnrichment[E, D any](
 		degradedCall(
 			func() (E, error) { return exec(r.Context(), kind, title, subtitle) },
 			toDTO, stamp),
-		logMsg, "kind", kind.String(), "title", title)
+		fmt.Sprintf("%s enrichment of %s %q", source, kind, title))
 }
 
 func (h *DiscoveryHandler) handleDeezerEnrichment(w http.ResponseWriter, r *http.Request) {
@@ -217,7 +211,7 @@ func (h *DiscoveryHandler) handleDeezerEnrichment(w http.ResponseWriter, r *http
 	serveNamedEnrichment(w, r, svc != nil, exec,
 		domain.EmptyDeezerEnrichment(), deezerEnrichmentToDTO,
 		func(d *DeezerEnrichmentResponseDTO, v bool) { d.Degraded = v },
-		"deezer enrichment failed")
+		"deezer")
 }
 
 type DeezerEnrichmentResponseDTO struct {
@@ -252,7 +246,7 @@ func (h *DiscoveryHandler) handleLyrics(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	if !requireTitle(w, title) {
+	if !requireTitle(w, r, title) {
 		return
 	}
 
@@ -262,7 +256,7 @@ func (h *DiscoveryHandler) handleLyrics(w http.ResponseWriter, r *http.Request) 
 			func() (domain.DeezerLyrics, error) { return h.enrichers.Lyrics.Execute(r.Context(), title, subtitle) },
 			lyricsToDTO,
 			func(d *LyricsResponseDTO, v bool) { d.Degraded = v }),
-		"lyrics fetch failed", "title", title)
+		fmt.Sprintf("fetch lyrics for %q", title))
 }
 
 type LyricsResponseDTO struct {

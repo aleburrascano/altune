@@ -2,10 +2,10 @@ package handler
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	shareddomain "altune/go-api/internal/shared/domain"
 	"altune/go-api/internal/shared/httputil"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/requestuser"
-	"log/slog"
 	"net/http"
 )
 
@@ -32,7 +32,6 @@ func (h *DiscoveryHandler) handleListFavorites(w http.ResponseWriter, r *http.Re
 
 	favorites, err := h.favoritesSvc.List(r.Context(), userId)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "list favorites failed", "error", err)
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
@@ -63,7 +62,6 @@ func (h *DiscoveryHandler) handleAddFavorite(w http.ResponseWriter, r *http.Requ
 		ImageURL: req.ImageURL,
 	}
 	if err := h.favoritesSvc.Add(r.Context(), userId, fav); err != nil {
-		slog.ErrorContext(r.Context(), "add favorite failed", "error", err)
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
@@ -84,7 +82,6 @@ func (h *DiscoveryHandler) handleRemoveFavorite(w http.ResponseWriter, r *http.R
 	}
 
 	if err := h.favoritesSvc.Remove(r.Context(), userId, kind, req.Title, req.Subtitle); err != nil {
-		slog.ErrorContext(r.Context(), "remove favorite failed", "error", err)
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
@@ -99,16 +96,16 @@ func decodeFavorite(w http.ResponseWriter, r *http.Request) (shared.UserId, doma
 	}
 
 	var req FavoriteRequest
-	if !httputil.DecodeJSONWithCode(w, r, &req, requestCodeInvalidBody) {
+	if !httputil.DecodeJSONWithCode(w, r, &req, shareddomain.CodeDiscoveryInvalidBody) {
 		return userId, domain.ResultKindUnknown, req, false
 	}
 	kind, err := domain.ParseResultKind(req.Kind)
 	if err != nil {
-		httputil.BadRequestCode(w, requestCodeInvalidKind, "invalid kind")
+		httputil.HandleServiceError(w, r, shareddomain.NewError(shareddomain.CodeDiscoveryInvalidKind, "invalid kind"))
 		return userId, domain.ResultKindUnknown, req, false
 	}
 	if req.Title == "" {
-		httputil.BadRequestCode(w, requestCodeInvalidParam, "title is required")
+		httputil.HandleServiceError(w, r, invalidParam("title is required"))
 		return userId, kind, req, false
 	}
 	return userId, kind, req, true

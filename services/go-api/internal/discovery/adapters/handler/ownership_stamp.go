@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/discovery/service/search"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/requestuser"
+	"fmt"
 	"net/http"
 )
 
@@ -14,12 +15,15 @@ func (h *DiscoveryHandler) writeContentFetch(
 	r *http.Request,
 	resp *providercall.ContentFetchResponse,
 ) {
+	if failure := contentFetchFailure(resp); failure != nil {
+		httputil.HandleServiceError(w, r, fmt.Errorf("%s content: %w", resp.ProviderName, failure))
+		return
+	}
 	dto := contentFetchToDTO(resp)
 	if userId, ok := requestuser.UserIDFromContext(r.Context()); ok {
 		h.ownership.StampOwnership(r.Context(), userId, ownableItems(dto.Items))
 	}
-	status, _ := contentFetchOutcome(resp)
-	httputil.WriteJSON(w, status, dto)
+	httputil.WriteJSON(w, http.StatusOK, dto)
 }
 
 func (h *DiscoveryHandler) WithOwnershipEnrichment(svc *ownership.OwnershipEnrichmentService) *DiscoveryHandler {

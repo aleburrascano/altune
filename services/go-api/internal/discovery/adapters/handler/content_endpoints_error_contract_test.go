@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -65,13 +66,12 @@ func errorContractRouter(t *testing.T) chi.Router {
 }
 
 type contentFailure struct {
-	HTTP   int
-	Status string
-	Code   string
+	HTTP int
+	Code string
 }
 
 func (f contentFailure) String() string {
-	return fmt.Sprintf("HTTP %d status=%q code=%q", f.HTTP, f.Status, f.Code)
+	return fmt.Sprintf("HTTP %d code=%q", f.HTTP, f.Code)
 }
 
 var contentErrorCauses = []struct {
@@ -81,44 +81,45 @@ var contentErrorCauses = []struct {
 }{
 	{
 		cause: "upstream timeout", provider: "itunes",
-		want: contentFailure{HTTP: http.StatusGatewayTimeout, Status: "timeout", Code: "discovery.provider_timeout"},
+		want: contentFailure{HTTP: http.StatusGatewayTimeout, Code: "discovery.provider_timeout"},
 	},
 	{
 		cause: "circuit open", provider: "soundcloud",
-		want: contentFailure{HTTP: http.StatusServiceUnavailable, Status: "circuit_open", Code: "discovery.provider_circuit_open"},
+		want: contentFailure{HTTP: http.StatusServiceUnavailable, Code: "discovery.provider_circuit_open"},
 	},
 	{
 		cause: "provider not configured", provider: "spotify",
-		want: contentFailure{HTTP: http.StatusNotFound, Status: "error", Code: "discovery.content_unserved"},
+		want: contentFailure{HTTP: http.StatusNotFound, Code: "discovery.content_unserved"},
 	},
 }
 
 var contentErrorEndpoints = []struct {
-	name     string
-	path     string
-	combined bool
+	name string
+	path string
 }{
 	{name: "album tracks", path: "/discovery/albums/%s/id-1/tracks"},
 	{name: "artist top tracks", path: "/discovery/artists/%s/id-1/top-tracks"},
 	{name: "artist albums", path: "/discovery/artists/%s/id-1/albums"},
 	{name: "related tracks", path: "/discovery/tracks/%s/id-1/related"},
-	{name: "artist content", path: "/discovery/artists/%s/id-1/content", combined: true},
+	{name: "artist content", path: "/discovery/artists/%s/id-1/content"},
 }
 
-func decodeContentFailure(t *testing.T, httpCode int, raw json.RawMessage) contentFailure {
+func decodeContentFailure(t *testing.T, rec *httptest.ResponseRecorder) contentFailure {
 	t.Helper()
-	var body struct {
-		Status string            `json:"status"`
-		Code   string            `json:"code"`
-		Items  []json.RawMessage `json:"items"`
+	if got := rec.Header().Get("Content-Type"); got != "application/problem+json" {
+		t.Errorf("failed fetch Content-Type = %q, want application/problem+json", got)
 	}
-	if err := json.Unmarshal(raw, &body); err != nil {
-		t.Fatalf("decode %s: %v", raw, err)
+	var problem struct {
+		Status int    `json:"status"`
+		Code   string `json:"code"`
 	}
-	if body.Items == nil || len(body.Items) != 0 {
-		t.Errorf("failed fetch items = %s, want an empty array", raw)
+	if err := json.Unmarshal(rec.Body.Bytes(), &problem); err != nil {
+		t.Fatalf("decode %s: %v", rec.Body.String(), err)
 	}
-	return contentFailure{HTTP: httpCode, Status: body.Status, Code: body.Code}
+	if problem.Status != rec.Code {
+		t.Errorf("problem status = %d, want the response status %d", problem.Status, rec.Code)
+	}
+	return contentFailure{HTTP: rec.Code, Code: problem.Code}
 }
 
 type throttledError struct{}
@@ -210,34 +211,14 @@ func TestContentFetchEndpoints_DistinguishFailureCauses(t *testing.T) {
 			for _, c := range contentErrorCauses {
 				rec := discServe(t, router, http.MethodGet, fmt.Sprintf(ep.path, c.provider), nil)
 
-				var parts []json.RawMessage
-				if ep.combined {
-					var combined struct {
-						Code      string          `json:"code"`
-						TopTracks json.RawMessage `json:"top_tracks"`
-						Albums    json.RawMessage `json:"albums"`
-					}
-					if err := json.Unmarshal(rec.Body.Bytes(), &combined); err != nil {
-						t.Fatalf("%s: decode %s: %v", c.cause, rec.Body.String(), err)
-					}
-					if combined.Code != c.want.Code {
-						t.Errorf("%s: top-level code = %q, want %q", c.cause, combined.Code, c.want.Code)
-					}
-					parts = []json.RawMessage{combined.TopTracks, combined.Albums}
-				} else {
-					parts = []json.RawMessage{rec.Body.Bytes()}
+				got := decodeContentFailure(t, rec)
+				if got != c.want {
+					t.Errorf("%s: got %s, want %s (body %s)", c.cause, got, c.want, strings.TrimSpace(rec.Body.String()))
 				}
-
-				for _, raw := range parts {
-					got := decodeContentFailure(t, rec.Code, raw)
-					if got != c.want {
-						t.Errorf("%s: got %s, want %s (body %s)", c.cause, got, c.want, strings.TrimSpace(rec.Body.String()))
-					}
-					if other, dup := seen[got]; dup && other != c.cause {
-						t.Errorf("%s is indistinguishable from %s: both %s", c.cause, other, got)
-					}
-					seen[got] = c.cause
+				if other, dup := seen[got]; dup && other != c.cause {
+					t.Errorf("%s is indistinguishable from %s: both %s", c.cause, other, got)
 				}
+				seen[got] = c.cause
 			}
 		})
 	}

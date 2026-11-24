@@ -120,20 +120,7 @@ func TestContentEndpoints_NilServiceDegradedEnvelope(t *testing.T) {
 	for _, path := range paths {
 		t.Run(path, func(t *testing.T) {
 			rec := discServe(t, router, http.MethodGet, path, nil)
-			discAssertStatus(t, rec, http.StatusNotFound)
-			discAssertJSON(t, rec)
-
-			var resp discovery.ContentFetchResponseDTO
-			discDecodeJSON(t, rec, &resp)
-			if resp.Status != "error" || resp.Code != "discovery.content_unserved" {
-				t.Errorf("status = %q, code = %q, want error / %s (service not wired)", resp.Status, resp.Code, "discovery.content_unserved")
-			}
-			if resp.Items == nil {
-				t.Error("items must be [] in the degraded envelope, got null")
-			}
-			if resp.Provider != "deezer" {
-				t.Errorf("provider_name = %q, want deezer", resp.Provider)
-			}
+			assertErrorCode(t, rec, http.StatusNotFound, "discovery.content_unserved")
 		})
 	}
 }

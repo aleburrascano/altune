@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service/content"
 	"altune/go-api/internal/discovery/service/providercall"
+	shareddomain "altune/go-api/internal/shared/domain"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
@@ -29,61 +30,50 @@ func contentFetchToDTO(resp *providercall.ContentFetchResponse) ContentFetchResp
 	for i, r := range resp.Items {
 		items[i] = searchResultToDTO(r)
 	}
-	_, code := contentFetchOutcome(resp)
 	return ContentFetchResponseDTO{
 		Provider: resp.ProviderName.String(),
 		Status:   resp.Status.String(),
 		Items:    items,
 		Partial:  resp.Partial,
-		Code:     code,
+		Code:     codeOf(contentFetchFailure(resp)),
 	}
 }
 
-const (
-	contentCodeUnserved        = "discovery.content_unserved"
-	contentCodeProviderTimeout = "discovery.provider_timeout"
-	contentCodeRateLimited     = "discovery.provider_rate_limited"
-	contentCodeCircuitOpen     = "discovery.provider_circuit_open"
-	contentCodeProviderError   = "discovery.provider_error"
-)
+var errContentUnserved = shareddomain.NewError(shareddomain.CodeDiscoveryContentUnserved, "")
 
-func contentFetchOutcome(resp *providercall.ContentFetchResponse) (int, string) {
+func contentFetchFailure(resp *providercall.ContentFetchResponse) *shareddomain.CodedError {
 	if resp.Unserved {
-		return http.StatusNotFound, contentCodeUnserved
+		return errContentUnserved
 	}
 	switch resp.Status {
 	case domain.ProviderStatusOK:
-		return http.StatusOK, ""
+		return nil
 	case domain.ProviderStatusTimeout:
-		return http.StatusGatewayTimeout, contentCodeProviderTimeout
+		return shareddomain.NewError(shareddomain.CodeDiscoveryProviderTimeout, "")
 	case domain.ProviderStatusRateLimited:
-		return http.StatusServiceUnavailable, contentCodeRateLimited
+		return shareddomain.NewError(shareddomain.CodeDiscoveryProviderRateLimited, "")
 	case domain.ProviderStatusCircuitOpen:
-		return http.StatusServiceUnavailable, contentCodeCircuitOpen
+		return shareddomain.NewError(shareddomain.CodeDiscoveryProviderCircuitOpen, "")
 	default:
-		return http.StatusBadGateway, contentCodeProviderError
+		return shareddomain.NewError(shareddomain.CodeDiscoveryProviderError, "")
 	}
 }
 
-func unservedContentDTO(provider string) ContentFetchResponseDTO {
-	return ContentFetchResponseDTO{
-		Provider: provider, Status: domain.ProviderStatusError.String(), Items: []SearchResultDTO{},
-		Code: contentCodeUnserved,
+func codeOf(failure *shareddomain.CodedError) string {
+	if failure == nil {
+		return ""
+	}
+	return failure.Code().String()
+}
+
+func degradeUnserved(w http.ResponseWriter, r *http.Request) func(provider string) {
+	return func(provider string) {
+		httputil.HandleServiceError(w, r, fmt.Errorf("%s content: %w", provider, errContentUnserved))
 	}
 }
 
-func writeContentFetchError(w http.ResponseWriter, provider string) {
-	httputil.WriteJSON(w, http.StatusNotFound, unservedContentDTO(provider))
-}
-
-func degradeUnserved(w http.ResponseWriter) func(provider string) {
-	return func(provider string) { writeContentFetchError(w, provider) }
-}
-
-func failContentFetch(w http.ResponseWriter, r *http.Request, err error, msg, provider, externalID string) {
-	slog.ErrorContext(r.Context(), msg,
-		"error", err, "provider", provider, "external_id", externalID)
-	httputil.HandleServiceError(w, r, err)
+func failContentFetch(w http.ResponseWriter, r *http.Request, err error, operation, provider, externalID string) {
+	httputil.HandleServiceError(w, r, fmt.Errorf("%s for %s %q: %w", operation, provider, externalID, err))
 }
 
 func withProvider(
@@ -96,7 +86,7 @@ func withProvider(
 	provider := chi.URLParam(r, "provider")
 	pn, parseErr := domain.ParseProviderName(provider)
 	if parseErr != nil {
-		httputil.BadRequestCode(w, requestCodeInvalidProvider, "unknown provider")
+		httputil.HandleServiceError(w, r, shareddomain.NewError(shareddomain.CodeDiscoveryInvalidProvider, "unknown provider"))
 		return
 	}
 	externalID, ok := externalIDParam(w, r)
@@ -114,7 +104,7 @@ const maxAlbumTracks = 250
 
 func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Request) {
 	withProvider(w, r, h.albumSvc != nil,
-		degradeUnserved(w),
+		degradeUnserved(w, r),
 		func(pn domain.ProviderName, provider, externalID string) {
 			limit, ok := parseLimit(w, r, "limit", maxAlbumTracks, maxAlbumTracks, clampToMax)
 			if !ok {
@@ -143,22 +133,25 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 				Known:        knownIDsParam(r),
 			})
 			if err != nil {
-				failContentFetch(w, r, err, "get album tracks failed", provider, externalID)
+				failContentFetch(w, r, err, "get album tracks", provider, externalID)
 				return
 			}
 
+			if failure := contentFetchFailure(resp); failure != nil {
+				httputil.HandleServiceError(w, r, fmt.Errorf("album tracks for %s %q: %w", provider, externalID, failure))
+				return
+			}
 			dto := contentFetchToDTO(resp)
 			if userId, hasUser := requestuser.UserIDFromContext(r.Context()); hasUser {
 				h.ownership.EnrichAlbumTracks(r.Context(), userId, albumTrackItems(albumTitle, dto.Items))
 			}
-			status, _ := contentFetchOutcome(resp)
-			httputil.WriteJSON(w, status, dto)
+			httputil.WriteJSON(w, http.StatusOK, dto)
 		})
 }
 
 func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.Request) {
 	withProvider(w, r, h.artistSvc != nil,
-		degradeUnserved(w),
+		degradeUnserved(w, r),
 		func(pn domain.ProviderName, provider, externalID string) {
 			limit, ok := parseLimit(w, r, "limit", 5, 50, clampToMax)
 			if !ok {
@@ -168,7 +161,7 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 
 			resp, err := h.artistSvc.GetTopTracks(r.Context(), pn, externalID, known, limit)
 			if err != nil {
-				failContentFetch(w, r, err, "get artist top tracks failed", provider, externalID)
+				failContentFetch(w, r, err, "get artist top tracks", provider, externalID)
 				return
 			}
 
@@ -178,7 +171,7 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 
 func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Request) {
 	withProvider(w, r, h.artistSvc != nil,
-		degradeUnserved(w),
+		degradeUnserved(w, r),
 		func(pn domain.ProviderName, provider, externalID string) {
 			limit, ok := parseLimit(w, r, "limit", 50, 100, clampToMax)
 			if !ok {
@@ -188,7 +181,7 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 
 			resp, err := h.artistSvc.GetAlbums(r.Context(), pn, externalID, known, limit)
 			if err != nil {
-				failContentFetch(w, r, err, "get artist albums failed", provider, externalID)
+				failContentFetch(w, r, err, "get artist albums", provider, externalID)
 				return
 			}
 
@@ -198,7 +191,7 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 
 func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Request) {
 	withProvider(w, r, h.relatedSvc != nil,
-		degradeUnserved(w),
+		degradeUnserved(w, r),
 		func(pn domain.ProviderName, provider, externalID string) {
 			limit, ok := parseLimit(w, r, "limit", 20, 50, clampToMax)
 			if !ok {
@@ -207,7 +200,7 @@ func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Re
 
 			resp, err := h.relatedSvc.Execute(r.Context(), pn, externalID, limit)
 			if err != nil {
-				failContentFetch(w, r, err, "get related tracks failed", provider, externalID)
+				failContentFetch(w, r, err, "get related tracks", provider, externalID)
 				return
 			}
 
@@ -216,21 +209,19 @@ func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Re
 }
 
 type ArtistContentResponseDTO struct {
-	Code      string                  `json:"code,omitempty"`
 	TopTracks ContentFetchResponseDTO `json:"top_tracks"`
 	Albums    ContentFetchResponseDTO `json:"albums"`
 }
 
-func artistContentOutcome(tracks, albums *providercall.ContentFetchResponse) (int, string) {
-	tracksStatus, tracksCode := contentFetchOutcome(tracks)
-	albumsStatus, albumsCode := contentFetchOutcome(albums)
-	if tracksStatus == http.StatusOK || albumsStatus == http.StatusOK {
-		return http.StatusOK, ""
+func artistContentFailure(tracks, albums *providercall.ContentFetchResponse) *shareddomain.CodedError {
+	tracksFailure, albumsFailure := contentFetchFailure(tracks), contentFetchFailure(albums)
+	if tracksFailure == nil || albumsFailure == nil {
+		return nil
 	}
 	if tracks.Unserved && !albums.Unserved {
-		return albumsStatus, albumsCode
+		return albumsFailure
 	}
-	return tracksStatus, tracksCode
+	return tracksFailure
 }
 
 func runRecovered(ctx context.Context, event string, fetch func() error) (err error) {
@@ -270,13 +261,7 @@ func (h *DiscoveryHandler) fetchTopTracksAndAlbums(
 
 func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Request) {
 	withProvider(w, r, h.artistSvc != nil,
-		func(provider string) {
-			httputil.WriteJSON(w, http.StatusNotFound, ArtistContentResponseDTO{
-				Code:      contentCodeUnserved,
-				TopTracks: unservedContentDTO(provider),
-				Albums:    unservedContentDTO(provider),
-			})
-		},
+		degradeUnserved(w, r),
 		func(pn domain.ProviderName, provider, externalID string) {
 			known := knownIDsParam(r)
 			tracksLimit, ok := parseLimit(w, r, "tracks_limit", 5, 50, clampToMax)
@@ -291,22 +276,21 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 			tracksResp, albumsResp, tracksErr, albumsErr := h.fetchTopTracksAndAlbums(
 				r.Context(), pn, externalID, known, tracksLimit, albumsLimit)
 			if tracksErr != nil || albumsErr != nil {
-				slog.ErrorContext(r.Context(), "artist content failed",
-					"tracks_error", tracksErr, "albums_error", albumsErr,
-					"provider", provider, "external_id", externalID)
-				httputil.HandleServiceError(w, r, errors.Join(tracksErr, albumsErr))
+				failContentFetch(w, r, errors.Join(tracksErr, albumsErr), "get artist content", provider, externalID)
+				return
+			}
+			if failure := artistContentFailure(tracksResp, albumsResp); failure != nil {
+				httputil.HandleServiceError(w, r, fmt.Errorf("artist content for %s %q: %w", provider, externalID, failure))
 				return
 			}
 
-			status, code := artistContentOutcome(tracksResp, albumsResp)
 			dto := ArtistContentResponseDTO{
-				Code:      code,
 				TopTracks: contentFetchToDTO(tracksResp),
 				Albums:    contentFetchToDTO(albumsResp),
 			}
 			if userId, hasUser := requestuser.UserIDFromContext(r.Context()); hasUser {
 				h.ownership.StampOwnership(r.Context(), userId, ownableItems(dto.TopTracks.Items))
 			}
-			httputil.WriteJSON(w, status, dto)
+			httputil.WriteJSON(w, http.StatusOK, dto)
 		})
 }

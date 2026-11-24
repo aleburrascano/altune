@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -37,6 +38,36 @@ func buildFavoritesRouter(err error) chi.Router {
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
 	return r
+}
+
+func TestFavoritesEndpoints_EachFailureIsLoggedOnceByTheBoundary(t *testing.T) {
+	const favBody = `{"kind":"album","title":"DAMN.","subtitle":"Kendrick Lamar"}`
+	for _, tc := range []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantLoud   []string
+	}{
+		{name: "a store failure is one error record", err: errors.New("favorites store down"), wantStatus: http.StatusInternalServerError, wantLoud: []string{"request.failed"}},
+		{name: "a full list is a rejection, not an error", err: discovery.ErrFavoritesFull, wantStatus: http.StatusConflict},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ring := captureLogs(t)
+
+			rec := discServe(t, buildFavoritesRouter(tc.err), http.MethodPut, "/discovery/favorites", strings.NewReader(favBody))
+
+			discAssertStatus(t, rec, tc.wantStatus)
+			var loud []string
+			for _, r := range ring.Snapshot() {
+				if r.Level == "ERROR" || r.Level == "WARN" {
+					loud = append(loud, r.Message)
+				}
+			}
+			if !slices.Equal(loud, tc.wantLoud) {
+				t.Errorf("warn and error records %v, want %v", loud, tc.wantLoud)
+			}
+		})
+	}
 }
 
 func TestFavoritesEndpoints_ServiceErrorsUseTypedContract(t *testing.T) {

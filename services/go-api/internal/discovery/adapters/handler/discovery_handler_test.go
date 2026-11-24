@@ -149,6 +149,13 @@ func discAssertJSON(t *testing.T, rec *httptest.ResponseRecorder) {
 	}
 }
 
+func discAssertProblem(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	if ct := rec.Header().Get("Content-Type"); ct != "application/problem+json" {
+		t.Errorf("Content-Type = %q, want application/problem+json", ct)
+	}
+}
+
 func buildDiscoveryRouter(
 	searchProvider *fakeSearchProvider,
 	historyRepo *fakeSearchHistoryRepo,
@@ -483,7 +490,11 @@ func TestHandleAlbumTracks(t *testing.T) {
 			rec := discServe(t, router, http.MethodGet, tt.path, nil)
 
 			discAssertStatus(t, rec, tt.wantStatus)
-			discAssertJSON(t, rec)
+			if tt.wantStatus == http.StatusOK {
+				discAssertJSON(t, rec)
+			} else {
+				discAssertProblem(t, rec)
+			}
 
 			if tt.wantStatus == http.StatusOK {
 				var resp discovery.ContentFetchResponseDTO
@@ -538,7 +549,11 @@ func TestHandleArtistTopTracks(t *testing.T) {
 			rec := discServe(t, router, http.MethodGet, tt.path, nil)
 
 			discAssertStatus(t, rec, tt.wantStatus)
-			discAssertJSON(t, rec)
+			if tt.wantStatus == http.StatusOK {
+				discAssertJSON(t, rec)
+			} else {
+				discAssertProblem(t, rec)
+			}
 		})
 	}
 }
@@ -585,7 +600,11 @@ func TestHandleArtistAlbums(t *testing.T) {
 			rec := discServe(t, router, http.MethodGet, tt.path, nil)
 
 			discAssertStatus(t, rec, tt.wantStatus)
-			discAssertJSON(t, rec)
+			if tt.wantStatus == http.StatusOK {
+				discAssertJSON(t, rec)
+			} else {
+				discAssertProblem(t, rec)
+			}
 		})
 	}
 }
@@ -725,16 +744,7 @@ func TestHandleRelatedTracks(t *testing.T) {
 		router := buildRelatedRouter(&fakeRelatedTracksProvider{})
 
 		rec := discServe(t, router, http.MethodGet, "/discovery/tracks/deezer/9/related", nil)
-		discAssertStatus(t, rec, http.StatusNotFound)
-
-		var resp discovery.ContentFetchResponseDTO
-		discDecodeJSON(t, rec, &resp)
-		if resp.Status != "error" || resp.Code != "discovery.content_unserved" {
-			t.Errorf("status = %q, code = %q, want error / %s (unsupported provider)", resp.Status, resp.Code, "discovery.content_unserved")
-		}
-		if len(resp.Items) != 0 {
-			t.Errorf("expected empty items, got %d", len(resp.Items))
-		}
+		assertErrorCode(t, rec, http.StatusNotFound, "discovery.content_unserved")
 	})
 
 	t.Run("missing external id returns 400", func(t *testing.T) {
@@ -761,9 +771,7 @@ func (e statusCodedError) ErrorCode() string { return e.code }
 func assertErrorCode(t *testing.T, rec *httptest.ResponseRecorder, wantStatus int, wantCode string) {
 	t.Helper()
 	discAssertStatus(t, rec, wantStatus)
-	if ct := rec.Header().Get("Content-Type"); ct != "application/problem+json" && ct != "application/json" {
-		t.Errorf("Content-Type = %q, want a JSON error body", ct)
-	}
+	discAssertProblem(t, rec)
 	var resp httputil.ErrorResponse
 	discDecodeJSON(t, rec, &resp)
 	if resp.Code != wantCode {

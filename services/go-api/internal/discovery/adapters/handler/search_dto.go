@@ -46,7 +46,6 @@ type ResultSectionDTO struct {
 }
 
 type DiscoverySearchResponse struct {
-	Code           string              `json:"code,omitempty"`
 	Query          string              `json:"query"`
 	QueryNorm      string              `json:"query_norm"`
 	SearchID       string              `json:"search_id"`
