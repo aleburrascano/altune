@@ -85,7 +85,7 @@ describe('toNativeTrack — url resolution', () => {
 
     const native = toNativeTrack(track);
 
-    expect(native.url).toBe(`${apiBase}/v1/tracks/trk-42/audio`);
+    expect(native.url).toBe(`${apiBase()}/v1/tracks/trk-42/audio`);
   });
 
   it.each(['a/b', 'a?b=1', 'a#frag', '../x/y?z#w'])(

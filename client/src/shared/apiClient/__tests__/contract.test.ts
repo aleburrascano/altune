@@ -265,10 +265,15 @@ function deriveGoRoutes(): Set<string> {
 
 const NON_PATH_IDENTIFIERS = new Set(['apiBase']);
 
+function isNonPathExpression(expression: ts.Expression): boolean {
+  const named = ts.isCallExpression(expression) ? expression.expression : expression;
+  return ts.isIdentifier(named) && NON_PATH_IDENTIFIERS.has(named.text);
+}
+
 function templateToPathPattern(head: string, spans: readonly ts.TemplateSpan[]): string {
   let result = head;
   for (const span of spans) {
-    if (ts.isIdentifier(span.expression) && NON_PATH_IDENTIFIERS.has(span.expression.text)) {
+    if (isNonPathExpression(span.expression)) {
       result += span.literal.text;
       continue;
     }

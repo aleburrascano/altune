@@ -74,7 +74,7 @@ describe('Table: libraryQueryString branches, reached through getLibraryAlbums',
 
     await getLibraryAlbums(query);
 
-    expect(__http.last().url).toBe(`${apiBase}/v1/library/albums${expectedSuffix}`);
+    expect(__http.last().url).toBe(`${apiBase()}/v1/library/albums${expectedSuffix}`);
   });
 });
 
@@ -87,7 +87,7 @@ describe('Table: libraryQueryString branches, reached through getLibraryArtists'
 
     await getLibraryArtists(query);
 
-    expect(__http.last().url).toBe(`${apiBase}/v1/library/artists${expectedSuffix}`);
+    expect(__http.last().url).toBe(`${apiBase()}/v1/library/artists${expectedSuffix}`);
   });
 });
 
@@ -98,7 +98,7 @@ describe('getLibraryAlbums / getLibraryArtists default argument', () => {
 
     const result = await getLibraryAlbums();
 
-    expect(__http.last().url).toBe(`${apiBase}/v1/library/albums`);
+    expect(__http.last().url).toBe(`${apiBase()}/v1/library/albums`);
     expect(result).toEqual(payload);
   });
 
@@ -108,7 +108,7 @@ describe('getLibraryAlbums / getLibraryArtists default argument', () => {
 
     const result = await getLibraryArtists();
 
-    expect(__http.last().url).toBe(`${apiBase}/v1/library/artists`);
+    expect(__http.last().url).toBe(`${apiBase()}/v1/library/artists`);
     expect(result).toEqual(payload);
   });
 });

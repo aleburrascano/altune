@@ -1,9 +1,11 @@
 import { apiBase } from '@shared/apiConfig';
 import { appVersion } from '@shared/device';
+import { setLogger } from '@shared/log';
 import { _resetOutboxForTest, flushOutbox } from '@shared/telemetry';
 
 import { reportSignInFailure, thrownErrorDetail } from '@features/signIn';
 import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 const { getSession } = createSupabaseAuthMock('getSession');
 
 const realFetch = global.fetch;
@@ -26,7 +28,7 @@ describe('reportSignInFailure: the anonymous pre-session report', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe(`${apiBase}/v1/public/auth-failures`);
+    expect(url).toBe(`${apiBase()}/v1/public/auth-failures`);
     expect(init.method).toBe('POST');
     expect(JSON.parse(init.body)).toEqual({
       reason: 'invalid_credentials',
@@ -74,20 +76,22 @@ describe('reportSignInFailure: the anonymous pre-session report', () => {
 
 describe('reportSignInFailure', () => {
   afterEach(() => {
-    jest.restoreAllMocks();
+    setLogger();
   });
 
   it('logs a warning with the reason and error detail when the report is not delivered', async () => {
     const error = new Error('offline');
-    jest.spyOn(global, 'fetch').mockRejectedValue(error);
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    fetchMock.mockRejectedValue(error);
+    const logs = recordLogs();
 
     reportSignInFailure('network');
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(warn).toHaveBeenCalledWith('[auth] sign-in failure report not delivered', {
-      reason: 'network',
-      ...thrownErrorDetail(error),
-    });
+    expect(logs.warnings).toEqual([
+      [
+        '[auth] sign-in failure report not delivered',
+        { reason: 'network', ...thrownErrorDetail(error) },
+      ],
+    ]);
   });
 });

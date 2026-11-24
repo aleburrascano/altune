@@ -39,7 +39,7 @@ beforeEach(() => {
 
 describe('audioStreamUrl', () => {
   it('builds the fallback stream URL from apiBase and the trackId', () => {
-    expect(audioStreamUrl(asTrackId('t1'))).toBe(`${apiBase}/v1/tracks/t1/audio`);
+    expect(audioStreamUrl(asTrackId('t1'))).toBe(`${apiBase()}/v1/tracks/t1/audio`);
   });
 
   it.each(['a/b', '.', '..', 'a?b=1', 'a#frag', ''])(

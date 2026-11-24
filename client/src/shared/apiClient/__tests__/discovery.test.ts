@@ -668,7 +668,7 @@ describe('Table: listSearchHistory query-string guard', () => {
 
     await listSearchHistory({ limit: 10 });
 
-    expect(__http.last().url).toBe(`${apiBase}/v1/discovery/search-history?limit=10`);
+    expect(__http.last().url).toBe(`${apiBase()}/v1/discovery/search-history?limit=10`);
   });
 
   it(
@@ -682,7 +682,7 @@ describe('Table: listSearchHistory query-string guard', () => {
 
       await listSearchHistory();
 
-      expect(__http.last().url).toBe(`${apiBase}/v1/discovery/search-history`);
+      expect(__http.last().url).toBe(`${apiBase()}/v1/discovery/search-history`);
     },
   );
 
@@ -694,7 +694,7 @@ describe('Table: listSearchHistory query-string guard', () => {
 
     await listSearchHistory({});
 
-    expect(__http.last().url).toBe(`${apiBase}/v1/discovery/search-history`);
+    expect(__http.last().url).toBe(`${apiBase()}/v1/discovery/search-history`);
   });
 });
 
