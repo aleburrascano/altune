@@ -162,7 +162,7 @@ func TestHandleArtistUnreleased_ReturnsAudioLinksAsAlwaysAnArray(t *testing.T) {
 	}
 }
 
-func ownedUnreleasedRouter(reader goldenOwnershipReader) chi.Router {
+func ownedUnreleasedRouter(t *testing.T, reader goldenOwnershipReader) chi.Router {
 	genius := &discovery.FakeGeniusSongCatalog{
 		ArtistID: 7, ArtistFound: true,
 		Songs: []discovery.UnreleasedSong{
@@ -171,7 +171,7 @@ func ownedUnreleasedRouter(reader goldenOwnershipReader) chi.Router {
 		},
 	}
 	svc := discovery.NewUnreleasedService(genius, &discovery.ArtistCatalogTitles{}, nil, discovery.UnreleasedConfig{MaxPages: 1, MaxDetails: 10})
-	h := wireGoldenOwnership(discovery.NewDiscoveryHandler(discovery.DiscoveryServices{}).WithUnreleased(svc), reader, nil)
+	h := wireGoldenOwnership(t, discovery.NewDiscoveryHandler(discovery.DiscoveryServices{}).WithUnreleased(svc), reader, nil)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -183,7 +183,7 @@ func TestHandleArtistUnreleased_StampsTheSongsTheUserOwns(t *testing.T) {
 		discovery.OwnershipKey("Dream", "Ken Carson"): {TrackID: "track-9", AcquisitionStatus: "ready"},
 	}}
 
-	rec := discServe(t, ownedUnreleasedRouter(reader), http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Ken+Carson", nil)
+	rec := discServe(t, ownedUnreleasedRouter(t, reader), http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Ken+Carson", nil)
 
 	discAssertStatus(t, rec, http.StatusOK)
 	items := decodeUnreleased(t, rec.Body.Bytes()).Items
@@ -196,7 +196,7 @@ func TestHandleArtistUnreleased_StampsTheSongsTheUserOwns(t *testing.T) {
 }
 
 func TestHandleArtistUnreleased_LeavesSongsUnstampedForAUserWhoOwnsNone(t *testing.T) {
-	rec := discServe(t, ownedUnreleasedRouter(goldenOwnershipReader{}), http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Ken+Carson", nil)
+	rec := discServe(t, ownedUnreleasedRouter(t, goldenOwnershipReader{}), http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Ken+Carson", nil)
 
 	discAssertStatus(t, rec, http.StatusOK)
 	for _, item := range decodeUnreleased(t, rec.Body.Bytes()).Items {
@@ -316,7 +316,7 @@ func TestHandleArtistUnreleased_OwnedVersionIsStampedByItsFullTitleNotTheBaseTit
 		discovery.OwnershipKey("Sports Car [V3]", "Carti"): {TrackID: "saved-v3", AcquisitionStatus: "ready"},
 		discovery.OwnershipKey("Other", "Carti"):           {TrackID: "streaming-other", AcquisitionStatus: "ready"},
 	}}
-	h := wireGoldenOwnership(discovery.NewDiscoveryHandler(discovery.DiscoveryServices{}).WithUnreleased(svc), owned, nil)
+	h := wireGoldenOwnership(t, discovery.NewDiscoveryHandler(discovery.DiscoveryServices{}).WithUnreleased(svc), owned, nil)
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
 	router.Mount("/discovery", h.Routes())

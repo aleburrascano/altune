@@ -2,6 +2,7 @@ package vocabulary_test
 
 import (
 	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/discovery/discoverytest"
 	"context"
 	"slices"
 	"sync"
@@ -20,6 +21,7 @@ type ingestedSearch struct {
 
 func searchAndIngest(t *testing.T, query string, kinds map[discovery.ResultKind]bool, results ...discovery.SearchResult) ingestedSearch {
 	t.Helper()
+	bg := discoverytest.NewTracker(t)
 	var mu sync.Mutex
 	var entries []discovery.VocabularyEntry
 	store := &discovery.FakeVocabularyStore{AddFn: func(e discovery.VocabularyEntry) error {
@@ -29,7 +31,7 @@ func searchAndIngest(t *testing.T, query string, kinds map[discovery.ResultKind]
 		return nil
 	}}
 	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: results}
-	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithVocabularyStore(store))
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithVocabularyStore(store))
 	q, err := discovery.NewSearchQuery(query, kinds, everyResultOnOnePage)
 	if err != nil {
 		t.Fatalf("NewSearchQuery: %v", err)
@@ -38,7 +40,7 @@ func searchAndIngest(t *testing.T, query string, kinds map[discovery.ResultKind]
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	svc.WaitForBackground()
+	bg.Wait()
 	mu.Lock()
 	defer mu.Unlock()
 	return ingestedSearch{shown: out.Results, entries: entries}

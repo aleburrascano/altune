@@ -2,6 +2,7 @@ package favorites_test
 
 import (
 	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/discovery/discoverytest"
 	shareddomain "altune/go-api/internal/shared/domain"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
@@ -47,8 +48,9 @@ func searchFor(t *testing.T, svc *discovery.SearchService, user shared.UserId) [
 
 func rankedWithFavorites(t *testing.T, repo *discovery.FakeFavoritesRepo, results []discovery.SearchResult) []string {
 	t.Helper()
+	bg := discoverytest.NewTracker(t)
 	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: results}
-	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithFavorites(repo))
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithFavorites(repo))
 	return searchFor(t, svc, discovery.NewUser())
 }
 
@@ -132,9 +134,10 @@ func TestSearchLift_DoesNotLiftAFavoriteJustOutsideTheWindow(t *testing.T) {
 }
 
 func TestSearchLift_OneUsersFavoritesDoNotReorderTheCachedRankingOthersSee(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	repo := favoritesRepoOf(discovery.FavoriteOf(discovery.ResultKindArtist, "Don Toliver", ""))
 	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: threeNoIdeaTracks()}
-	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(),
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{p}, discovery.NewCircuitBreaker(),
 		discovery.WithFavorites(repo), discovery.WithResultCache(discovery.NewFakeResultCache()))
 
 	unlifted := []string{"Cover Band", "Some DJ", "Don Toliver"}

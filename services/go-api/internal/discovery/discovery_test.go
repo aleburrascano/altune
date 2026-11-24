@@ -2,6 +2,7 @@ package discovery_test
 
 import (
 	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/discovery/discoverytest"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/requestuser"
 	"altune/go-api/internal/shared/sharedtest"
@@ -28,11 +29,11 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-func searchOrder(t *testing.T, disc *discovery.Discovery) []string {
+func searchOrder(t *testing.T, h *harness, disc *discovery.Discovery) []string {
 	t.Helper()
 	query := &discovery.SearchQuery{Raw: "probe song", Kinds: map[discovery.ResultKind]bool{discovery.ResultKindAlbum: true}}
 	_, statuses := disc.Search.InspectSearchWithStatuses(context.Background(), query)
-	disc.Search.WaitForBackground()
+	h.deps.Tracker.Wait()
 	var names []string
 	for _, status := range statuses {
 		names = append(names, status.Provider.String())
@@ -52,8 +53,8 @@ func TestSearch_AsksTheProvidersInTableOrder(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			disc := newHarness(t, tt.providers()).start()
-			assertLines(t, searchOrder(t, disc), tt.want)
+			h := newHarness(t, tt.providers())
+			assertLines(t, searchOrder(t, h, h.start()), tt.want)
 		})
 	}
 }
@@ -67,11 +68,12 @@ func TestSearch_SoundCloudFallsBackToYtDlpWhenItsAPIFails(t *testing.T) {
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	providers := everyProviderOff()
-	disc := newHarness(t, providers).start()
+	h := newHarness(t, providers)
+	disc := h.start()
 
 	query := &discovery.SearchQuery{Raw: "probe song", Kinds: map[discovery.ResultKind]bool{discovery.ResultKindTrack: true}}
 	disc.Search.InspectSearchWithStatuses(context.Background(), query)
-	disc.Search.WaitForBackground()
+	h.deps.Tracker.Wait()
 
 	if _, err := os.Stat(marker); err != nil {
 		t.Error("SoundCloud search never fell back to yt-dlp after its API failed")
@@ -302,7 +304,7 @@ func TestSearch_WithRedisARepeatedSearchDoesNotAskAProviderThatAnswered(t *testi
 	disc := h.start()
 
 	searchPage(disc)
-	disc.Search.WaitForBackground()
+	h.deps.Tracker.Wait()
 	asked := len(h.transport.recorded())
 	if code := searchPage(disc); code != http.StatusOK {
 		t.Fatalf("repeated search answered %d, want 200", code)
@@ -329,7 +331,7 @@ func TestSearch_WithRedisFillsMissingArtworkThroughTheChain(t *testing.T) {
 	disc := h.start()
 
 	searchPage(disc)
-	disc.Search.WaitForBackground()
+	h.deps.Tracker.Wait()
 
 	if !slices.Contains(h.transport.hosts(), "itunes.apple.com") {
 		t.Errorf("a search with an artwork cache never filled artwork; asked %v", h.transport.hosts())
@@ -392,7 +394,7 @@ func TestNew_RefusesDepsWithoutTheHandlesItNeeds(t *testing.T) {
 	if err == nil {
 		t.Fatal("New accepted deps with no transport, logger or lifecycle")
 	}
-	want := "discovery: deps are missing Lifecycle, Background, Logger, Transport, CacheOps, ProviderTimeout, ChartTimeout"
+	want := "discovery: deps are missing Lifecycle, Background, Tracker, Logger, Transport, CacheOps, ProviderTimeout, ChartTimeout"
 	if err.Error() != want {
 		t.Errorf("error = %q, want %q", err, want)
 	}
@@ -544,7 +546,7 @@ func providerCacheTTLs(t *testing.T, providers discovery.ProviderSettings, targe
 	h.deps.Search.ProviderCacheTTL = 7 * time.Minute
 	disc := h.start()
 	serve(disc, target)
-	disc.Search.WaitForBackground()
+	h.deps.Tracker.Wait()
 	var ttls []time.Duration
 	for _, key := range redis.Keys() {
 		if strings.HasPrefix(key, "discovery:provider:") {
@@ -567,7 +569,7 @@ func TestSearch_NeverAsksMusicBrainzEvenWithItsUserAgentSet(t *testing.T) {
 	query := &discovery.SearchQuery{Raw: "probe song", Kinds: discovery.AllKinds()}
 
 	_, statuses := disc.Search.InspectSearchWithStatuses(context.Background(), query)
-	disc.Search.WaitForBackground()
+	h.deps.Tracker.Wait()
 	for _, status := range statuses {
 		if status.Provider == discovery.ProviderMusicBrainz {
 			t.Errorf("search reported MusicBrainz as a searcher: %+v", status)
@@ -583,7 +585,7 @@ func TestSearch_ActivityHearsOfEachStoredSearch(t *testing.T) {
 	disc := h.start()
 
 	serve(disc, "/search?q=probe+album&kinds=album&save_history=false")
-	disc.Search.WaitForBackground()
+	h.deps.Tracker.Wait()
 
 	if !slices.Contains(feed.emitted(), "search_performed") {
 		t.Errorf("activity heard %v, want a search_performed", feed.emitted())
@@ -627,13 +629,14 @@ func servedBy(t *testing.T, targets ...string) []string {
 	for _, target := range targets {
 		serve(disc, target)
 	}
-	disc.Search.WaitForBackground()
+	h.deps.Tracker.Wait()
 	return h.transport.owners()
 }
 
 var jobProbes = map[string]func(t *testing.T, provider string) []string{
 	"search": func(t *testing.T, _ string) []string {
-		return searchOrder(t, newHarness(t, everyProviderOn()).start())
+		h := newHarness(t, everyProviderOn())
+		return searchOrder(t, h, h.start())
 	},
 	"artist": func(t *testing.T, provider string) []string {
 		if provider == "musicbrainz" {
@@ -687,7 +690,7 @@ var jobProbes = map[string]func(t *testing.T, provider string) []string{
 		h := newHarness(t, everyProviderOff())
 		disc := h.start()
 		serve(disc, "/search?q="+strings.ReplaceAll(similarArtistQuery, " ", "+")+"&kinds=artist&save_history=false")
-		disc.Search.WaitForBackground()
+		h.deps.Tracker.Wait()
 		for _, call := range h.transport.recorded() {
 			if call.host == "api.deezer.com" && strings.HasSuffix(call.path, "/albums") {
 				return []string{"deezer"}
@@ -917,6 +920,7 @@ func newHarness(t *testing.T, providers discovery.ProviderSettings) *harness {
 	return &harness{t: t, transport: transport, logs: logs, deps: discovery.Deps{
 		Lifecycle:       ctx,
 		Background:      background,
+		Tracker:         discoverytest.NewTracker(t),
 		Logger:          slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{ReplaceAttr: dropTime})),
 		Transport:       transport,
 		ProviderTimeout: 10 * time.Second,
@@ -1018,7 +1022,7 @@ func TestRankingOnlySearch_AsksTheSameSearchersAsTheServingSearch(t *testing.T) 
 	for _, status := range statuses {
 		asked = append(asked, status.Provider.String())
 	}
-	assertLines(t, asked, searchOrder(t, disc))
+	assertLines(t, asked, searchOrder(t, h, disc))
 }
 
 func TestIdentityStore_AGivenStoreServesSearchWithoutAPool(t *testing.T) {

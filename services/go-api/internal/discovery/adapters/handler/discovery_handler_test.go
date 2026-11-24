@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/discovery/discoverytest"
 	"altune/go-api/internal/shared/httputil"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/requestuser"
@@ -156,12 +157,13 @@ func discAssertProblem(t *testing.T, rec *httptest.ResponseRecorder) {
 	}
 }
 
-func buildDiscoveryRouter(
+func buildDiscoveryRouter(t *testing.T,
 	searchProvider *fakeSearchProvider,
 	historyRepo *fakeSearchHistoryRepo,
 	albumProviders map[discovery.ProviderName]discovery.AlbumContentProvider,
 	artistProviders map[discovery.ProviderName]discovery.ArtistContentProvider,
 ) chi.Router {
+	bg := discoverytest.NewTracker(t)
 	var providers []discovery.SearchProvider
 	if searchProvider != nil {
 		providers = append(providers, searchProvider)
@@ -172,7 +174,7 @@ func buildDiscoveryRouter(
 	if historyRepo != nil {
 		searchOpts = append(searchOpts, discovery.WithHistoryRepository(historyRepo))
 	}
-	searchSvc := discovery.NewSearchService(providers, cb, searchOpts...)
+	searchSvc := discovery.NewSearchService(bg, providers, cb, searchOpts...)
 	historySvc := discovery.NewListSearchHistoryService(historyRepo)
 	clearHistorySvc := discovery.NewClearSearchHistoryService(historyRepo)
 
@@ -202,7 +204,7 @@ func buildDiscoveryRouter(
 }
 
 func TestHandleRecordEvent(t *testing.T) {
-	router := buildDiscoveryRouter(nil, nil, nil, nil)
+	router := buildDiscoveryRouter(t, nil, nil, nil, nil)
 
 	t.Run("valid event returns 204", func(t *testing.T) {
 		body := map[string]any{"type": "play", "payload": map[string]any{"video_id": "abc"}}
@@ -227,8 +229,9 @@ type nopEventStore struct{}
 func (nopEventStore) Append(context.Context, discovery.InteractionEvent) error { return nil }
 
 func TestHandleRecordEvent_ServiceValidation(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	h := discovery.NewDiscoveryHandler(discovery.DiscoveryServices{
-		Search: discovery.NewSearchService(nil, discovery.NewCircuitBreaker()),
+		Search: discovery.NewSearchService(bg, nil, discovery.NewCircuitBreaker()),
 		Event:  discovery.NewRecordEventService(nopEventStore{}),
 	})
 	router := chi.NewRouter()
@@ -302,7 +305,7 @@ func TestHandleSearch(t *testing.T) {
 				results: tt.results,
 			}
 			historyRepo := &fakeSearchHistoryRepo{}
-			router := buildDiscoveryRouter(provider, historyRepo, nil, nil)
+			router := buildDiscoveryRouter(t, provider, historyRepo, nil, nil)
 
 			rec := discServe(t, router, http.MethodGet, "/discovery/search"+tt.query, nil)
 
@@ -327,7 +330,7 @@ func TestHandleSearch(t *testing.T) {
 }
 
 func TestHandleSearch_NoAuth(t *testing.T) {
-	router := buildDiscoveryRouter(&fakeSearchProvider{name: discovery.ProviderDeezer}, &fakeSearchHistoryRepo{}, nil, nil)
+	router := buildDiscoveryRouter(t, &fakeSearchProvider{name: discovery.ProviderDeezer}, &fakeSearchHistoryRepo{}, nil, nil)
 
 	rec := discServeNoAuth(t, router, http.MethodGet, "/discovery/search?q=test")
 
@@ -351,7 +354,7 @@ func TestHandleSearch_ResponseShape(t *testing.T) {
 			},
 		},
 	}
-	router := buildDiscoveryRouter(provider, &fakeSearchHistoryRepo{}, nil, nil)
+	router := buildDiscoveryRouter(t, provider, &fakeSearchHistoryRepo{}, nil, nil)
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/search?q=shape+test", nil)
 
@@ -400,7 +403,7 @@ func TestHandleSearchHistory(t *testing.T) {
 					ExecutedAt: time.Now().UTC(),
 				})
 			}
-			router := buildDiscoveryRouter(nil, historyRepo, nil, nil)
+			router := buildDiscoveryRouter(t, nil, historyRepo, nil, nil)
 
 			rec := discServe(t, router, http.MethodGet, "/discovery/search-history?limit=10", nil)
 
@@ -430,7 +433,7 @@ func TestHandleClearSearchHistory(t *testing.T) {
 			ExecutedAt: time.Now().UTC(),
 		})
 	}
-	router := buildDiscoveryRouter(nil, historyRepo, nil, nil)
+	router := buildDiscoveryRouter(t, nil, historyRepo, nil, nil)
 
 	rec := discServe(t, router, http.MethodDelete, "/discovery/search-history", nil)
 
@@ -485,7 +488,7 @@ func TestHandleAlbumTracks(t *testing.T) {
 			albumProviders := map[discovery.ProviderName]discovery.AlbumContentProvider{
 				discovery.ProviderDeezer: tt.albumProv,
 			}
-			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, albumProviders, nil)
+			router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, albumProviders, nil)
 
 			rec := discServe(t, router, http.MethodGet, tt.path, nil)
 
@@ -544,7 +547,7 @@ func TestHandleArtistTopTracks(t *testing.T) {
 			artistProviders := map[discovery.ProviderName]discovery.ArtistContentProvider{
 				discovery.ProviderDeezer: tt.artistProv,
 			}
-			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
+			router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
 
 			rec := discServe(t, router, http.MethodGet, tt.path, nil)
 
@@ -595,7 +598,7 @@ func TestHandleArtistAlbums(t *testing.T) {
 			artistProviders := map[discovery.ProviderName]discovery.ArtistContentProvider{
 				discovery.ProviderDeezer: tt.artistProv,
 			}
-			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
+			router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
 
 			rec := discServe(t, router, http.MethodGet, tt.path, nil)
 
@@ -779,7 +782,7 @@ func rejectionCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 }
 
 func TestPerUserGets_CarryNoStoreHeaders(t *testing.T) {
-	searchRouter := buildDiscoveryRouter(&fakeSearchProvider{name: discovery.ProviderDeezer}, &fakeSearchHistoryRepo{}, nil, nil)
+	searchRouter := buildDiscoveryRouter(t, &fakeSearchProvider{name: discovery.ProviderDeezer}, &fakeSearchHistoryRepo{}, nil, nil)
 	favoritesRouter := buildFavoritesRouter(nil)
 	tests := []struct {
 		name string
@@ -811,7 +814,7 @@ func TestPerUserGets_CarryNoStoreHeaders(t *testing.T) {
 func TestHandleRecordSearchHistory(t *testing.T) {
 	t.Run("submitted query is saved once", func(t *testing.T) {
 		historyRepo := &fakeSearchHistoryRepo{}
-		router := buildDiscoveryRouter(nil, historyRepo, nil, nil)
+		router := buildDiscoveryRouter(t, nil, historyRepo, nil, nil)
 
 		rec := discServe(t, router, http.MethodPost, "/discovery/search-history",
 			discJsonBody(t, map[string]string{"query": "  Radiohead "}))
@@ -837,7 +840,7 @@ func TestHandleRecordSearchHistory(t *testing.T) {
 	for _, tc := range rejected {
 		t.Run(tc.name+" is rejected and nothing is saved", func(t *testing.T) {
 			historyRepo := &fakeSearchHistoryRepo{}
-			router := buildDiscoveryRouter(nil, historyRepo, nil, nil)
+			router := buildDiscoveryRouter(t, nil, historyRepo, nil, nil)
 
 			rec := discServe(t, router, http.MethodPost, "/discovery/search-history", discJsonBody(t, tc.body))
 
@@ -850,7 +853,7 @@ func TestHandleRecordSearchHistory(t *testing.T) {
 
 	t.Run("anonymous caller is refused", func(t *testing.T) {
 		historyRepo := &fakeSearchHistoryRepo{}
-		router := buildDiscoveryRouter(nil, historyRepo, nil, nil)
+		router := buildDiscoveryRouter(t, nil, historyRepo, nil, nil)
 
 		rec := discServeNoAuth(t, router, http.MethodPost, "/discovery/search-history")
 

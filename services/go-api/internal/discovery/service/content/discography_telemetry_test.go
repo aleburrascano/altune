@@ -2,6 +2,7 @@ package content_test
 
 import (
 	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/discovery/discoverytest"
 	"context"
 	"testing"
 	"time"
@@ -55,12 +56,13 @@ func albumsFrom(albums map[discovery.ProviderName][]discovery.SearchResult) map[
 
 func observeDiscography(t *testing.T, albums map[discovery.ProviderName][]discovery.SearchResult) discovery.InteractionEvent {
 	t.Helper()
+	bg := discoverytest.NewTracker(t)
 	known := map[discovery.ProviderName]string{}
 	for name := range albums {
 		known[name] = name.String() + "-che"
 	}
 	store := newRecordingEventStore()
-	svc := discovery.NewGetArtistContentService(albumsFrom(albums), discovery.WithContentEventStore(store))
+	svc := discovery.NewGetArtistContentService(albumsFrom(albums), discovery.WithContentEventStore(store, bg))
 	if _, err := svc.GetAlbums(context.Background(), discovery.ProviderSpotify, "abc123", known, 50); err != nil {
 		t.Fatalf("GetAlbums: %v", err)
 	}
@@ -142,8 +144,9 @@ func (s panickingEventStore) Append(context.Context, discovery.InteractionEvent)
 }
 
 func TestDiscographyEmit_BestEffortContainsPanic(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	store := panickingEventStore{asked: make(chan struct{})}
-	svc := identityFanOut(func(discovery.ProviderName) bool { return false }, discovery.WithContentEventStore(store))
+	svc := identityFanOut(func(discovery.ProviderName) bool { return false }, discovery.WithContentEventStore(store, bg))
 
 	resp, err := svc.GetAlbums(context.Background(), discovery.ProviderDeezer, "id-deezer", nil, 50)
 	if err != nil {

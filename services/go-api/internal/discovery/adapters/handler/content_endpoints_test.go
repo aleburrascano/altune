@@ -48,7 +48,7 @@ func TestHandleAlbumTracks_LimitClamping(t *testing.T) {
 			albumProviders := map[discovery.ProviderName]discovery.AlbumContentProvider{
 				discovery.ProviderDeezer: &discovery.FakeAlbumContentProvider{Results: seedTracks(3)},
 			}
-			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, albumProviders, nil)
+			router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, albumProviders, nil)
 
 			rec := discServe(t, router, http.MethodGet, "/discovery/albums/deezer/1/tracks"+c.query, nil)
 			discAssertStatus(t, rec, http.StatusOK)
@@ -77,7 +77,7 @@ func TestHandleArtistTopTracks_LimitClamping(t *testing.T) {
 			artistProviders := map[discovery.ProviderName]discovery.ArtistContentProvider{
 				discovery.ProviderDeezer: &discovery.FakeArtistContentProvider{TopTracks: seedTracks(7)},
 			}
-			router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
+			router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
 
 			rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/1/top-tracks"+c.query, nil)
 			discAssertStatus(t, rec, http.StatusOK)
@@ -95,7 +95,7 @@ func TestContentEndpoints_ExternalIDTooLongReturns400(t *testing.T) {
 	albumProviders := map[discovery.ProviderName]discovery.AlbumContentProvider{
 		discovery.ProviderDeezer: &discovery.FakeAlbumContentProvider{},
 	}
-	router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, albumProviders, nil)
+	router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, albumProviders, nil)
 
 	longID := strings.Repeat("a", 257)
 	rec := discServe(t, router, http.MethodGet, "/discovery/albums/deezer/"+longID+"/tracks", nil)
@@ -103,13 +103,13 @@ func TestContentEndpoints_ExternalIDTooLongReturns400(t *testing.T) {
 }
 
 func TestContentEndpoints_UnknownProviderOnArtistAndRelated(t *testing.T) {
-	router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, nil, nil)
+	router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, nil, nil)
 	rec := discServe(t, router, http.MethodGet, "/discovery/tracks/not_a_provider/1/related", nil)
 	discAssertStatus(t, rec, http.StatusBadRequest)
 }
 
 func TestContentEndpoints_NilServiceDegradedEnvelope(t *testing.T) {
-	router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, nil, nil)
+	router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, nil, nil)
 
 	paths := []string{
 		"/discovery/albums/deezer/1/tracks",
@@ -277,7 +277,7 @@ func TestHandleArtistContent_PanickingProviderReturns500(t *testing.T) {
 	artistProviders := map[discovery.ProviderName]discovery.ArtistContentProvider{
 		discovery.ProviderDeezer: panickingArtistContentProvider{},
 	}
-	router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
+	router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/1/content", nil)
 	discAssertStatus(t, rec, http.StatusInternalServerError)
@@ -288,7 +288,7 @@ func TestHandleArtistContent_EachPanickingPartIsLoggedUnderItsOwnEvent(t *testin
 	artistProviders := map[discovery.ProviderName]discovery.ArtistContentProvider{
 		discovery.ProviderDeezer: panickingArtistContentProvider{},
 	}
-	router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
+	router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
 
 	discServe(t, router, http.MethodGet, "/discovery/artists/deezer/1/content", nil)
 

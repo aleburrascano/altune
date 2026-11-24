@@ -37,21 +37,15 @@ type OwnershipEnrichmentService struct {
 }
 
 func NewOwnershipEnrichmentService(
+	bg *runloop.Tracker,
 	ownership ports.OwnershipReader,
 	trackNumbers ports.TrackNumberFiller,
 ) *OwnershipEnrichmentService {
 	return &OwnershipEnrichmentService{
 		ownership:    ownership,
 		trackNumbers: trackNumbers,
-		bg:           &runloop.Tracker{},
+		bg:           bg,
 	}
-}
-
-func (s *OwnershipEnrichmentService) WaitForBackground() {
-	if s == nil {
-		return
-	}
-	s.bg.Wait()
 }
 
 func (s *OwnershipEnrichmentService) StampOwnership(
@@ -131,12 +125,13 @@ func (s *OwnershipEnrichmentService) fillTrackNumbers(
 		return done
 	}
 
-	s.bg.Launch(ctx, "track_number.fill", func(bgCtx context.Context) {
+	launched := s.bg.LaunchWithin(ctx, "track_number.fill", trackNumberFillTimeout, func(bgCtx context.Context) {
 		defer close(done)
-		fillCtx, cancel := context.WithTimeout(bgCtx, trackNumberFillTimeout)
-		defer cancel()
-		s.fillPending(fillCtx, userId, pending)
+		s.fillPending(bgCtx, userId, pending)
 	})
+	if !launched {
+		close(done)
+	}
 	return done
 }
 

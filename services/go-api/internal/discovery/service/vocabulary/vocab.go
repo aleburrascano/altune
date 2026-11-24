@@ -31,12 +31,10 @@ func (v *VocabularyIngestor) Ingest(parentCtx context.Context, results []domain.
 	}
 	entries := buildVocabEntries(results)
 
-	v.bg.Launch(parentCtx, "vocab.ingest", func(ctx context.Context) {
-		ingestCtx, cancel := context.WithTimeout(ctx, vocabIngestTimeout)
-		defer cancel()
+	v.bg.LaunchWithin(parentCtx, "vocab.ingest", vocabIngestTimeout, func(ctx context.Context) {
 		for _, e := range entries {
-			if err := v.vocabStore.Add(ingestCtx, e); err != nil {
-				slog.WarnContext(ingestCtx, "search.v2.vocab_ingest_failed",
+			if err := v.vocabStore.Add(ctx, e); err != nil {
+				slog.WarnContext(ctx, "search.v2.vocab_ingest_failed",
 					"kind", e.Kind, logging.SearchTextAttr(e.Term), "error", logging.ScrubSearchErr(err, e.Term))
 			}
 		}

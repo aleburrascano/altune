@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"errors"
 	"fmt"
@@ -94,6 +95,11 @@ type features struct {
 }
 
 func (a *App) wireFeatures(ctx context.Context, transport http.RoundTripper) (features, error) {
+	background, err := runloop.NewTracker(runloop.TrackerLimits{MaxInFlight: backgroundMaxInFlight})
+	if err != nil {
+		return features{}, fmt.Errorf("background tracker: %w", err)
+	}
+	a.background = background
 	disc, err := discovery.New(a.discoveryDeps(ctx, transport))
 	if err != nil {
 		return features{}, fmt.Errorf("discovery: %w", err)
@@ -109,6 +115,6 @@ func (a *App) wireFeatures(ctx context.Context, transport http.RoundTripper) (fe
 		return features{}, fmt.Errorf("startup switches: %w", err)
 	}
 	playback := a.wirePlayback(ctx, cat.trackRepo)
-	disc.Handler.WithOwnershipEnrichment(newOwnershipEnrichment(cat))
+	disc.Handler.WithOwnershipEnrichment(newOwnershipEnrichment(cat, a.background))
 	return features{discovery: disc, catalog: cat, playback: playback}, nil
 }

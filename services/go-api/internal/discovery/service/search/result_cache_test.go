@@ -2,6 +2,7 @@ package search_test
 
 import (
 	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/discovery/discoverytest"
 	"context"
 	"errors"
 	"slices"
@@ -10,9 +11,10 @@ import (
 )
 
 func TestService_ResultCache_HitSkipsProvidersAndIsCrossUser(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	p := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	cache := discovery.NewFakeResultCache()
-	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithResultCache(cache))
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithResultCache(cache))
 
 	out1 := runSearch(t, svc, "humble")
 	if p.Calls != 1 {
@@ -35,6 +37,7 @@ func TestService_ResultCache_HitSkipsProvidersAndIsCrossUser(t *testing.T) {
 }
 
 func TestService_ResultCache_SymbolOnlyQueriesBypassCache(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	p := &discovery.QueryFakeProvider{
 		Provider: discovery.ProviderDeezer,
 		ResultsByQuery: map[string][]discovery.SearchResult{
@@ -43,7 +46,7 @@ func TestService_ResultCache_SymbolOnlyQueriesBypassCache(t *testing.T) {
 		},
 	}
 	cache := discovery.NewFakeResultCache()
-	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithResultCache(cache))
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithResultCache(cache))
 
 	out1 := runSearch(t, svc, "!!!")
 	out2 := runSearch(t, svc, "†††")
@@ -60,10 +63,11 @@ func TestService_ResultCache_SymbolOnlyQueriesBypassCache(t *testing.T) {
 }
 
 func TestService_ResultCache_PartialNotCached(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	good := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	bad := &discovery.CountingProvider{Provider: discovery.ProviderITunes, Err: errors.New("boom")}
 	cache := discovery.NewFakeResultCache()
-	svc := discovery.NewSearchService([]discovery.SearchProvider{good, bad}, discovery.NewCircuitBreaker(), discovery.WithResultCache(cache))
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{good, bad}, discovery.NewCircuitBreaker(), discovery.WithResultCache(cache))
 
 	out := runSearch(t, svc, "humble")
 	if !out.Partial {
@@ -99,8 +103,9 @@ func (c *fakeProviderCache) Set(_ context.Context, provider discovery.ProviderNa
 }
 
 func TestService_ProviderCache_ReusesEachProvidersAnswer(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	p := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithProviderResultCache(newFakeProviderCache()))
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithProviderResultCache(newFakeProviderCache()))
 
 	runSearch(t, svc, "humble")
 	out := runSearch(t, svc, "humble")
@@ -117,9 +122,10 @@ func TestService_ProviderCache_ReusesEachProvidersAnswer(t *testing.T) {
 }
 
 func TestService_ProviderCache_OnlyTheFailedProviderIsAskedAgain(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	good := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	bad := &discovery.CountingProvider{Provider: discovery.ProviderITunes, Err: errors.New("boom")}
-	svc := discovery.NewSearchService([]discovery.SearchProvider{good, bad}, discovery.NewCircuitBreaker(), discovery.WithProviderResultCache(newFakeProviderCache()))
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{good, bad}, discovery.NewCircuitBreaker(), discovery.WithProviderResultCache(newFakeProviderCache()))
 
 	runSearch(t, svc, "humble")
 	runSearch(t, svc, "humble")
@@ -133,8 +139,9 @@ func TestService_ProviderCache_OnlyTheFailedProviderIsAskedAgain(t *testing.T) {
 }
 
 func TestService_ProviderCache_EmptyAnswerIsCached(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	p := &discovery.CountingProvider{Provider: discovery.ProviderDeezer}
-	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithProviderResultCache(newFakeProviderCache()))
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithProviderResultCache(newFakeProviderCache()))
 
 	runSearch(t, svc, "qwzxv")
 	runSearch(t, svc, "qwzxv")
@@ -145,9 +152,10 @@ func TestService_ProviderCache_EmptyAnswerIsCached(t *testing.T) {
 }
 
 func TestService_ProviderCache_ServesWhileBreakerIsOpen(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	p := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	breaker := discovery.NewCircuitBreaker()
-	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, breaker, discovery.WithProviderResultCache(newFakeProviderCache()))
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{p}, breaker, discovery.WithProviderResultCache(newFakeProviderCache()))
 
 	runSearch(t, svc, "humble")
 	openBreaker(t, breaker, discovery.ProviderDeezer)
@@ -160,8 +168,9 @@ func TestService_ProviderCache_ServesWhileBreakerIsOpen(t *testing.T) {
 }
 
 func TestService_ProviderCache_KeyedByQueryAndKinds(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	p := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithProviderResultCache(newFakeProviderCache()))
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithProviderResultCache(newFakeProviderCache()))
 
 	runSearch(t, svc, "humble")
 	runSearch(t, svc, "  HUMBLE ")
@@ -180,9 +189,10 @@ func TestService_ProviderCache_KeyedByQueryAndKinds(t *testing.T) {
 }
 
 func TestService_ProviderCache_SymbolOnlyQueriesBypassIt(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	p := &discovery.CountingProvider{Provider: discovery.ProviderDeezer}
 	cache := newFakeProviderCache()
-	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithProviderResultCache(cache))
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithProviderResultCache(cache))
 
 	runSearch(t, svc, "!!!")
 	runSearch(t, svc, "†††")
@@ -193,8 +203,9 @@ func TestService_ProviderCache_SymbolOnlyQueriesBypassIt(t *testing.T) {
 }
 
 func TestInspectSearch_BypassesProviderCache(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	p := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithProviderResultCache(newFakeProviderCache()))
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithProviderResultCache(newFakeProviderCache()))
 
 	runSearch(t, svc, "humble")
 	q, err := discovery.NewSearchQuery("humble", discovery.AllKinds(), 10)

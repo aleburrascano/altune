@@ -11,6 +11,7 @@ import (
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/reqmetrics"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"fmt"
 	"log/slog"
@@ -20,6 +21,8 @@ import (
 )
 
 const eventIDFloorFile = "altune-event-id-floor"
+
+const backgroundMaxInFlight = 64
 
 type App struct {
 	cfg           *config.Config
@@ -42,6 +45,8 @@ type App struct {
 	lifecycleDone <-chan struct{}
 
 	jobs jobs.Runner
+
+	background *runloop.Tracker
 }
 
 func New(cfg *config.Config, logRing *logging.RingBuffer) *App {

@@ -235,12 +235,12 @@ func runDiversity(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, r
 	corpusEnts, mode := corpusEntities(entities, opts.corpus)
 	once := func() (discovery.HarnessReport, error) {
 		fmt.Fprintf(os.Stderr, "diversity differential over %d entities (corpus=%s, concurrency=%d, top-%d)...\n", len(corpusEnts), opts.corpus, opts.concurrency, opts.topK)
-		svc, err := evalSearchService(ctx, cfg, pool, redisClient)
+		svc, flush, err := evalSearchService(ctx, cfg, pool, redisClient)
 		if err != nil {
 			return nil, err
 		}
 		report, err := measureDiversity(ctx, corpusEnts, variantSearchAdapter{svc: svc}, opts.concurrency, opts.topK, mode, progress)
-		svc.WaitForBackground()
+		flush()
 		if err != nil {
 			return nil, err
 		}
@@ -441,19 +441,23 @@ func runEvalFixtures(
 }
 
 func buildEvalSearcher(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client) (discovery.Searcher, func(), error) {
-	svc, err := evalSearchService(ctx, cfg, pool, redisClient)
+	svc, flush, err := evalSearchService(ctx, cfg, pool, redisClient)
 	if err != nil {
 		return nil, nil, err
 	}
-	return searchAdapter{svc: svc}, svc.WaitForBackground, nil
+	return searchAdapter{svc: svc}, flush, nil
 }
 
-func evalSearchService(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client) (*discovery.SearchService, error) {
-	disc, err := app.NewEvalDiscovery(ctx, cfg, app.EvalHandles{Pool: pool, Redis: redisClient})
+func evalSearchService(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redisClient *goredis.Client) (*discovery.SearchService, func(), error) {
+	bg, err := newEvalTracker()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return disc.EvalSearch(), nil
+	disc, err := app.NewEvalDiscovery(ctx, cfg, app.EvalHandles{Pool: pool, Redis: redisClient, Tracker: bg})
+	if err != nil {
+		return nil, nil, err
+	}
+	return disc.EvalSearch(), bg.Wait, nil
 }
 
 func evalVocabulary(ctx context.Context, cfg *config.Config, redisClient *goredis.Client) (discovery.VocabularyStore, error) {

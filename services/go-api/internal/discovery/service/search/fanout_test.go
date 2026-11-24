@@ -2,6 +2,7 @@ package search_test
 
 import (
 	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/discovery/discoverytest"
 	"context"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ type slowTimeoutProvider struct {
 func (p *slowTimeoutProvider) SearchTimeout() time.Duration { return p.timeout }
 
 func TestFanOut_PerProviderTimeoutOverride(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	slow := &slowTimeoutProvider{
 		FakeProvider: discovery.FakeProvider{
 			Provider: discovery.ProviderITunes, Delay: 80 * time.Millisecond,
@@ -29,7 +31,7 @@ func TestFanOut_PerProviderTimeoutOverride(t *testing.T) {
 		Provider: discovery.ProviderDeezer, Delay: 80 * time.Millisecond,
 		Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)},
 	}
-	svc := discovery.NewSearchService([]discovery.SearchProvider{slow, normal}, discovery.NewCircuitBreaker())
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{slow, normal}, discovery.NewCircuitBreaker())
 
 	results, statuses := inspect(t, svc, context.Background())
 
@@ -45,12 +47,13 @@ func TestFanOut_PerProviderTimeoutOverride(t *testing.T) {
 }
 
 func TestFanOut_TimeoutRecordsBreakerFailure(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	slow := &slowTimeoutProvider{
 		FakeProvider: discovery.FakeProvider{Provider: discovery.ProviderITunes, Delay: 80 * time.Millisecond},
 		timeout:      10 * time.Millisecond,
 	}
 	cb := discovery.NewCircuitBreaker()
-	svc := discovery.NewSearchService([]discovery.SearchProvider{slow}, cb)
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{slow}, cb)
 
 	inspect(t, svc, context.Background())
 
@@ -61,6 +64,7 @@ func TestFanOut_TimeoutRecordsBreakerFailure(t *testing.T) {
 }
 
 func TestFanOut_OpenBreakerSkipsProviderEntirely(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	skipped := &discovery.CountingProvider{
 		Provider: discovery.ProviderITunes,
 		Results:  []discovery.SearchResult{discovery.DeezerTrack("Humble", "x", 10)},
@@ -71,7 +75,7 @@ func TestFanOut_OpenBreakerSkipsProviderEntirely(t *testing.T) {
 	}
 	cb := discovery.NewCircuitBreaker()
 	openBreaker(t, cb, discovery.ProviderITunes)
-	svc := discovery.NewSearchService([]discovery.SearchProvider{skipped, good}, cb)
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{skipped, good}, cb)
 
 	results, statuses := inspect(t, svc, context.Background())
 
@@ -90,6 +94,7 @@ func TestFanOut_OpenBreakerSkipsProviderEntirely(t *testing.T) {
 }
 
 func TestFanOut_ManyProvidersDeterministicSlotOrder(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	names := []discovery.ProviderName{
 		discovery.ProviderDeezer, discovery.ProviderITunes, discovery.ProviderMusicBrainz,
 		discovery.ProviderSoundCloud, discovery.ProviderTheAudioDB, discovery.ProviderSpotify,
@@ -105,7 +110,7 @@ func TestFanOut_ManyProvidersDeterministicSlotOrder(t *testing.T) {
 			},
 		}
 	}
-	svc := discovery.NewSearchService(providers, discovery.NewCircuitBreaker())
+	svc := discovery.NewSearchService(bg, providers, discovery.NewCircuitBreaker())
 
 	results, statuses := inspect(t, svc, context.Background())
 
@@ -147,6 +152,7 @@ func openBreaker(t *testing.T, cb *discovery.CircuitBreaker, provider discovery.
 var errQueueShed = fmt.Errorf("%w: %w", discovery.ErrProviderRateLimitQueueTimeout, context.DeadlineExceeded)
 
 func TestFanOut_BreakerCountsOnlyHealthFailures(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	cases := []struct {
 		name string
 		err  error
@@ -163,7 +169,7 @@ func TestFanOut_BreakerCountsOnlyHealthFailures(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cb := discovery.NewCircuitBreaker()
-			svc := discovery.NewSearchService([]discovery.SearchProvider{&discovery.FakeProvider{Provider: discovery.ProviderITunes, Err: tc.err}}, cb)
+			svc := discovery.NewSearchService(bg, []discovery.SearchProvider{&discovery.FakeProvider{Provider: discovery.ProviderITunes, Err: tc.err}}, cb)
 
 			_, statuses := inspect(t, svc, context.Background())
 
@@ -178,7 +184,8 @@ func TestFanOut_BreakerCountsOnlyHealthFailures(t *testing.T) {
 }
 
 func TestFanOut_QueueShedReportsTimeout(t *testing.T) {
-	svc := discovery.NewSearchService([]discovery.SearchProvider{&discovery.FakeProvider{Provider: discovery.ProviderITunes, Err: errQueueShed}}, discovery.NewCircuitBreaker())
+	bg := discoverytest.NewTracker(t)
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{&discovery.FakeProvider{Provider: discovery.ProviderITunes, Err: errQueueShed}}, discovery.NewCircuitBreaker())
 
 	_, statuses := inspect(t, svc, context.Background())
 
@@ -188,9 +195,10 @@ func TestFanOut_QueueShedReportsTimeout(t *testing.T) {
 }
 
 func TestFanOut_QueueShedProbeReleasesSlot(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	cb := discovery.NewCircuitBreaker()
 	tripToHalfOpenWindow(t, cb, discovery.ProviderITunes)
-	svc := discovery.NewSearchService([]discovery.SearchProvider{&discovery.FakeProvider{Provider: discovery.ProviderITunes, Err: errQueueShed}}, cb)
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{&discovery.FakeProvider{Provider: discovery.ProviderITunes, Err: errQueueShed}}, cb)
 
 	_, statuses := inspect(t, svc, context.Background())
 
@@ -212,8 +220,9 @@ func (p *ignoresCtxProvider) Search(ctx context.Context, _ string, _ map[discove
 }
 
 func TestFanOut_BudgetCutOffUnclassifiedErrorStillCounts(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	cb := discovery.NewCircuitBreaker()
-	svc := discovery.NewSearchService([]discovery.SearchProvider{&ignoresCtxProvider{discovery.FakeProvider{Provider: discovery.ProviderITunes}}}, cb)
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{&ignoresCtxProvider{discovery.FakeProvider{Provider: discovery.ProviderITunes}}}, cb)
 
 	inspect(t, svc, context.Background())
 
@@ -232,10 +241,11 @@ func (p *partialKindsProvider) Search(ctx context.Context, q string, kinds map[d
 }
 
 func TestFanOut_PartialKindsKeepResultsButAreNeverCached(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	p := &partialKindsProvider{discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}}
 	breaker := discovery.NewCircuitBreaker()
 	slates := discovery.NewFakeResultCache()
-	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, breaker,
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{p}, breaker,
 		discovery.WithResultCache(slates), discovery.WithProviderResultCache(newFakeProviderCache()))
 
 	out := runSearch(t, svc, "humble")
@@ -305,12 +315,13 @@ func statusOf(out *discovery.SearchOutput, provider discovery.ProviderName) disc
 }
 
 func TestDeadline_AnswersWithoutTheSlowProvider(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	fast := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	slow := newLateProvider(discovery.ProviderSpotify, discovery.DeezerTrack("Humble", "Skrillex", 70))
 	slates := discovery.NewFakeResultCache()
-	svc := discovery.NewSearchService([]discovery.SearchProvider{fast, slow}, discovery.NewCircuitBreaker(),
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{fast, slow}, discovery.NewCircuitBreaker(),
 		discovery.WithSearchDeadline(20*time.Millisecond), discovery.WithResultCache(slates))
-	t.Cleanup(func() { close(slow.release); svc.WaitForBackground() })
+	t.Cleanup(func() { close(slow.release); bg.Wait() })
 
 	out := runSearch(t, svc, "humble")
 
@@ -329,15 +340,16 @@ func TestDeadline_AnswersWithoutTheSlowProvider(t *testing.T) {
 }
 
 func TestDeadline_LateAnswerServesTheNextSearch(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	fast := &discovery.CountingProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	slow := newLateProvider(discovery.ProviderSpotify, discovery.DeezerTrack("Humble", "Skrillex", 70))
 	slates := discovery.NewFakeResultCache()
-	svc := discovery.NewSearchService([]discovery.SearchProvider{fast, slow}, discovery.NewCircuitBreaker(),
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{fast, slow}, discovery.NewCircuitBreaker(),
 		discovery.WithSearchDeadline(20*time.Millisecond), discovery.WithResultCache(slates), discovery.WithProviderResultCache(newFakeProviderCache()))
 
 	runSearch(t, svc, "humble")
 	close(slow.release)
-	svc.WaitForBackground()
+	bg.Wait()
 	out := runSearch(t, svc, "humble")
 
 	if got := slow.calls.Load(); got != 1 {
@@ -352,8 +364,9 @@ func TestDeadline_LateAnswerServesTheNextSearch(t *testing.T) {
 }
 
 func TestDeadline_WaitsPastItUntilSomethingArrives(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	slow := newLateProvider(discovery.ProviderSpotify, discovery.DeezerTrack("Humble", "Skrillex", 70))
-	svc := discovery.NewSearchService([]discovery.SearchProvider{slow}, discovery.NewCircuitBreaker(), discovery.WithSearchDeadline(time.Millisecond))
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{slow}, discovery.NewCircuitBreaker(), discovery.WithSearchDeadline(time.Millisecond))
 	done := make(chan *discovery.SearchOutput, 1)
 	go func() { done <- runSearch(t, svc, "humble") }()
 	waitFor(t, slow.started, "the provider call to start")
@@ -376,8 +389,9 @@ func TestDeadline_WaitsPastItUntilSomethingArrives(t *testing.T) {
 }
 
 func TestDeadline_CallerGoneBeforeTheAnswerStopsTheProviders(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	slow := newLateProvider(discovery.ProviderSpotify)
-	svc := discovery.NewSearchService([]discovery.SearchProvider{slow}, discovery.NewCircuitBreaker(), discovery.WithSearchDeadline(time.Second))
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{slow}, discovery.NewCircuitBreaker(), discovery.WithSearchDeadline(time.Second))
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() { _, _ = svc.Execute(ctx, discovery.NewUser(), discovery.NewQuery(t, "dna"), false) }()
 	waitFor(t, slow.started, "the provider call to start")
@@ -385,7 +399,7 @@ func TestDeadline_CallerGoneBeforeTheAnswerStopsTheProviders(t *testing.T) {
 	cancel()
 
 	waitFor(t, slow.cancelled, "the abandoned search's provider call to stop")
-	svc.WaitForBackground()
+	bg.Wait()
 }
 
 func tripToHalfOpenWindow(t *testing.T, cb *discovery.CircuitBreaker, provider discovery.ProviderName) {
@@ -395,6 +409,7 @@ func tripToHalfOpenWindow(t *testing.T, cb *discovery.CircuitBreaker, provider d
 }
 
 func TestFanOut_CanceledHalfOpenProbeDoesNotBlackholeProvider(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	cb := discovery.NewCircuitBreaker()
 	tripToHalfOpenWindow(t, cb, discovery.ProviderDeezer)
 
@@ -403,7 +418,7 @@ func TestFanOut_CanceledHalfOpenProbeDoesNotBlackholeProvider(t *testing.T) {
 		Delay:    time.Minute,
 		Results:  []discovery.SearchResult{discovery.DeezerTrack("Humble", "Kendrick Lamar", 80)},
 	}
-	svc := discovery.NewSearchService([]discovery.SearchProvider{p}, cb)
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{p}, cb)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

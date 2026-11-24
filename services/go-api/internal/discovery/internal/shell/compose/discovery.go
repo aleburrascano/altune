@@ -100,7 +100,7 @@ func newHandlerServices(w wiring) handler.DiscoveryServices {
 		RecordHistory: history.NewRecordSearchHistoryService(s.History),
 		ClearHistory:  history.NewClearSearchHistoryService(s.History),
 		Album:         newAlbumService(t, breaker),
-		Artist:        newArtistService(t, s, breaker),
+		Artist:        newArtistService(t, s, breaker, w.deps.Tracker),
 		Related:       newRelatedService(t, breaker),
 		Enrich:        newEnrichmentService(t, s, w.artwork),
 		Suggest:       vocabulary.NewSuggestService(s.Vocabulary),
