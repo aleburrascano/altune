@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
-usage="usage: client-mutate.sh BASE_REF   mutation-tests the client/src lines changed since BASE_REF with Stryker and jest, each file against its own module's tests, and fails on any mutant a test does not catch"
+usage="usage: client-mutate.sh BASE_REF   mutation-tests the client/src lines changed since BASE_REF with Stryker and jest, each file against its own module's tests, and fails on any mutant a test does not catch
+  CLIENT_MUTATE_TIME_LIMIT_SECONDS    stops Stryker after this many seconds in all, and fails saying so"
 [ $# = 1 ] || { echo "$usage" >&2; exit 2; }
 base=$1
+time_limit_s=${CLIENT_MUTATE_TIME_LIMIT_SECONDS:-}
+if [ -n "$time_limit_s" ]; then
+  [[ $time_limit_s =~ ^[1-9][0-9]*$ ]] || { echo "client-mutate: CLIENT_MUTATE_TIME_LIMIT_SECONDS is '$time_limit_s', and must be a whole number of seconds" >&2; exit 2; }
+  command -v timeout >/dev/null || { echo "client-mutate: CLIENT_MUTATE_TIME_LIMIT_SECONDS needs timeout(1) from coreutils, which is not on PATH" >&2; exit 3; }
+  deadline_s=$((SECONDS + time_limit_s))
+fi
 
 cd "$(git rev-parse --show-toplevel)/client"
 stryker=node_modules/.bin/stryker
@@ -45,6 +52,13 @@ stryker_config() {
   jq --arg report "$work/$1.json" --arg sandbox "$sandbox_prefix-$1" '. + { jsonReporter: { fileName: $report }, tempDirName: $sandbox }' stryker.config.json >"$work/$1.config.json"
 }
 
+time_limited() {
+  [ -n "$time_limit_s" ] || { "$@"; return; }
+  local left_s=$((deadline_s - SECONDS))
+  [ "$left_s" -gt 0 ] || return 124
+  timeout --signal=INT --kill-after=2m "$left_s" "$@"
+}
+
 changed_files=$(cut -d: -f1 "$work/ranges" | sort -u | grep -c . || true)
 killed=0
 survivors=()
@@ -62,9 +76,13 @@ for project in native web; do
   stryker_config "$project"
   test_roots=$(printf '%s\n' "${roots[@]}" | sort -u | paste -sd:)
   mutate=$(IFS=,; echo "${ranges[*]}")
-  if ! out=$(env CLIENT_MUTATE_JEST_PROJECT="$project" CLIENT_MUTATE_TEST_ROOTS="$test_roots" "$stryker" run "$work/$project.config.json" --mutate "$mutate" 2>&1); then
+  rc=0
+  out=$(CLIENT_MUTATE_JEST_PROJECT="$project" CLIENT_MUTATE_TEST_ROOTS="$test_roots" time_limited "$stryker" run "$work/$project.config.json" --mutate "$mutate" 2>&1) || rc=$?
+  if [ "$rc" != 0 ]; then
     echo "$out" >&2
-    if grep -q 'No tests were executed' <<<"$out"; then
+    if [ -n "$time_limit_s" ] && { [ "$rc" = 124 ] || [ "$rc" = 137 ]; }; then
+      echo "client-mutate: Stryker passed its ${time_limit_s}s time limit on the $project jest project and was stopped. A change this size needs more mutation time than the job has: split it into smaller PRs. Reproduce: bash scripts/ci/client-mutate.sh $base" >&2
+    elif grep -q 'No tests were executed' <<<"$out"; then
       echo "client-mutate: no test in ${test_roots//:/, } runs ${mutate//,/, } under the $project jest project. Add a test through the module's door (client/src/README.md). Reproduce: bash scripts/ci/client-mutate.sh $base" >&2
     else
       echo "client-mutate: Stryker failed on the $project jest project (a failing test or a broken build stops it). Reproduce: bash scripts/ci/client-mutate.sh $base" >&2

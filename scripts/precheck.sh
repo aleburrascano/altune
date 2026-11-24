@@ -169,6 +169,9 @@ if touches '\.sh$'; then
 fi
 
 script_tests=$(grep -E '^scripts/(ci/)?(__tests__/)?[a-z0-9-]+(\.test)?\.(sh|mjs)$' <<<"$changed" | grep -vE '/(precheck|test-home)(\.test)?\.(sh|mjs)$' | sed -E 's#^(scripts/(ci/)?)(__tests__/)?([a-z0-9-]+)(\.test)?\.(sh|mjs)$#\1__tests__/\4.test.sh#' | sort -u)
+if touches '^client/(stryker\.config\.json|jest\.mutate\.config\.js)$'; then
+  script_tests=$(printf '%s\n' $script_tests scripts/ci/__tests__/client-mutate.test.sh | sort -u)
+fi
 if [ -n "$script_tests" ] && [ $lint_only = 0 ] && ! link_deps .; then
   echo "SKIP  repo script self-tests: no root node_modules here or in $main_tree"; missing=1
 elif [ -n "$script_tests" ]; then
@@ -268,7 +271,7 @@ if touches '^client/'; then
     check "mobile fallow" $m npm run --silent fallow
     check "mobile boundaries and duplication (changed files)" $m "${heavy[@]}" node scripts/fallow-changed.mjs "$base"
     if [ -n "$src" ] && [ "${CLIENT_MUTATE_RUNS_ELSEWHERE:-}" = 1 ]; then
-      echo "SKIP  mobile mutation (changed lines): the mobile-tests CI job runs it"
+      echo "SKIP  mobile mutation (changed lines): the mobile-mutation CI job runs it"
     elif [ -n "$src" ] && need jq "mobile mutation"; then
       test_check "mobile mutation (changed lines)" . "${heavy[@]}" bash scripts/ci/client-mutate.sh "$base"
     fi
