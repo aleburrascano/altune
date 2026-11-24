@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/app/acquisitioncatalog"
 	"altune/go-api/internal/app/fingerprintstatus"
 	"altune/go-api/internal/catalog"
-	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/config"
@@ -21,7 +20,7 @@ type Deps struct {
 	Config       *config.Config
 	Pool         *pgxpool.Pool
 	Events       *observe.EventTap
-	Discovery    *discovery.Discovery
+	Recording    []func(*acquisition.AcquireTrackAudioService)
 	Ledger       *acquisition.TrackLedger
 	AudioStore   catalog.AudioStore
 	Sources      Tiers
@@ -37,7 +36,7 @@ func NewScheduler(ctx context.Context, d Deps) *acquisition.BackgroundAcquisitio
 	prober := acquisition.NewFfprobeProber(d.Config.FFmpegLocation, acquisition.WithSkipRecorder(skips))
 	d.Verification.Ffprobe, d.Verification.Ffmpeg = prober.Available()
 	opts := storeOptions(d, acquisition.WithAudioProber(prober), skips)
-	opts = append(opts, recordingOptions(d.Discovery)...)
+	opts = append(opts, d.Recording...)
 	lookups, fingerprinting := fingerprintOptions(ctx, d.Config, &d.Verification)
 	opts = append(opts, fingerprinting...)
 	opts = append(opts, pipelineOptions(d)...)
@@ -62,25 +61,6 @@ func storeOptions(d Deps, probing acquireOption, skips *acquisition.VerifySkipCo
 		acquisition.WithAcquireStoreKeyPrefix(cfg.AudioKeyPrefix),
 		acquisition.WithRejectionStore(acquisition.NewPgxRejectionStore(d.Pool)),
 	}
-}
-
-func recordingOptions(disc *discovery.Discovery) []acquireOption {
-	if disc.Search == nil {
-		return nil
-	}
-	var resolverOpts []func(*acquisition.RecordingResolver)
-	if disc.Recordings != nil {
-		resolverOpts = append(resolverOpts,
-			acquisition.WithISRCAuthority(disc.Recordings),
-			acquisition.WithRerecordingAuthority(disc.Recordings),
-			acquisition.WithRecordingLookup(acquisition.NewRecordingLookup(disc.Recordings)))
-	}
-	resolver := acquisition.NewRecordingResolver(disc.Search, resolverOpts...)
-	opts := []acquireOption{acquisition.WithRecordingResolver(resolver)}
-	if disc.Recordings != nil {
-		opts = append(opts, acquisition.WithAcquireRecordingLookup(resolver), acquisition.WithRerecordingFinder(resolver))
-	}
-	return opts
 }
 
 func fingerprintOptions(ctx context.Context, cfg *config.Config, verification *acquisition.AcquisitionVerification) (*fingerprintstatus.Tracker, []acquireOption) {

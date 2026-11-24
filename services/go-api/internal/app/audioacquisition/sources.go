@@ -14,7 +14,6 @@ import (
 )
 
 const (
-	fileHostPageTimeout  = 10 * time.Second
 	ytmSearchMinInterval = 200 * time.Millisecond
 	ytmSearchTimeout     = 10 * time.Second
 )
@@ -73,7 +72,7 @@ func sourcesFor(ctx context.Context, cfg *config.Config, redis *goredis.Client, 
 		slog.InfoContext(ctx, "acquisition: yt-dlp source disabled via YTDLP_ENABLED")
 	}
 	if len(tiers.All()) > 0 {
-		tiers.First = append([]acquisition.AudioSource{acquisition.NewSource(searcher, acquisition.WithPageReader(acquisition.NewHTTPPageReader(providerhttp.Live(), fileHostPageTimeout)))}, tiers.First...)
+		tiers.First = append([]acquisition.AudioSource{acquisition.NewSource(searcher, acquisition.WithPageReader(acquisition.NewHTTPPageReader(providerhttp.Live(), cfg.AcquisitionFileHostPageTimeout)))}, tiers.First...)
 	}
 	return tiers
 }

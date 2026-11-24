@@ -139,3 +139,14 @@ func containsSource(list []acquisition.SourceName, want acquisition.SourceName) 
 	}
 	return false
 }
+
+func TestCanaryYTMClient_BoundsEveryCallAndPacesItsSearches(t *testing.T) {
+	client := audioacquisition.CanaryYTMClient(&config.Config{}, nil)
+
+	if client.Timeout() <= 0 {
+		t.Errorf("Timeout() = %s, want a positive bound on every InnerTube call", client.Timeout())
+	}
+	if client.MinInterval() <= 0 {
+		t.Errorf("MinInterval() = %s, want a positive pause between searches", client.MinInterval())
+	}
+}

@@ -276,6 +276,12 @@ func (c *Config) validateTuning() error {
 	if c.PlaybackErasureScanTimeout <= 0 {
 		return fmt.Errorf("PLAYBACK_ERASURE_SCAN_TIMEOUT must be > 0, got %s", c.PlaybackErasureScanTimeout)
 	}
+	if c.AcquisitionFileHostPageTimeout <= 0 {
+		return fmt.Errorf("ACQUISITION_FILE_HOST_PAGE_TIMEOUT must be > 0, got %s", c.AcquisitionFileHostPageTimeout)
+	}
+	if c.AcquisitionDeezerPreviewTimeout <= 0 {
+		return fmt.Errorf("ACQUISITION_DEEZER_PREVIEW_TIMEOUT must be > 0, got %s", c.AcquisitionDeezerPreviewTimeout)
+	}
 	if c.MusicDirTimeout <= 0 {
 		return fmt.Errorf("MUSIC_DIR_TIMEOUT must be > 0, got %s", c.MusicDirTimeout)
 	}

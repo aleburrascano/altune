@@ -116,9 +116,30 @@ func (a *App) liveTiers(ctx context.Context, audioStore catalog.AudioStore) (aud
 
 func (a *App) schedulerDeps(tap *observe.EventTap, disc *discovery.Discovery, staging audioSourcesStaging, sources audioacquisition.Tiers, tools acquisition.AcquisitionVerification) audioacquisition.Deps {
 	return audioacquisition.Deps{
-		Config: a.cfg, Pool: a.pool, Events: tap, Discovery: disc, Ledger: staging.ledger, AudioStore: staging.audioStore,
+		Config: a.cfg, Pool: a.pool, Events: tap, Recording: recordingOptions(disc), Ledger: staging.ledger, AudioStore: staging.audioStore,
 		Sources: sources, Verification: tools, Background: a.jobs.Background(), Slots: a.sem,
 	}
+}
+
+func recordingOptions(disc *discovery.Discovery) []func(*acquisition.AcquireTrackAudioService) {
+	var acquireOpts []func(*acquisition.AcquireTrackAudioService)
+	if disc.Search != nil {
+		var resolverOpts []func(*acquisition.RecordingResolver)
+		if disc.Recordings != nil {
+			resolverOpts = append(resolverOpts,
+				acquisition.WithISRCAuthority(disc.Recordings),
+				acquisition.WithRerecordingAuthority(disc.Recordings),
+				acquisition.WithRecordingLookup(acquisition.NewRecordingLookup(disc.Recordings)))
+		}
+		recordingResolver := acquisition.NewRecordingResolver(disc.Search, resolverOpts...)
+		acquireOpts = append(acquireOpts, acquisition.WithRecordingResolver(recordingResolver))
+		if disc.Recordings != nil {
+			acquireOpts = append(acquireOpts,
+				acquisition.WithAcquireRecordingLookup(recordingResolver),
+				acquisition.WithRerecordingFinder(recordingResolver))
+		}
+	}
+	return acquireOpts
 }
 
 func (a *App) wireCatalogServices(

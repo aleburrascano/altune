@@ -5,15 +5,11 @@ import (
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/config"
 	"net/http"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const (
-	deezerPreviewTimeout = 20 * time.Second
-	deezerPreviewRate    = 1.0
-)
+const deezerPreviewRate = 1.0
 
 func upgradeLane(cfg *config.Config, pool *pgxpool.Pool, ledger *acquisition.TrackLedger, svc *acquisition.AcquireTrackAudioService) func(*acquisition.BackgroundAcquisitionScheduler) {
 	store := acquisition.NewPgxUpgradeStore(pool)
@@ -28,6 +24,6 @@ func upgradeLane(cfg *config.Config, pool *pgxpool.Pool, ledger *acquisition.Tra
 
 func upgradePreviewMatcher(cfg *config.Config) acquisition.PreviewMatcher {
 	printer := acquisition.NewFpcalcPrinter(binpath.Resolve("fpcalc", cfg.FFmpegLocation))
-	previews := acquisition.NewDeezerPreview(&http.Client{Timeout: deezerPreviewTimeout}, acquisition.DeezerPreviewBaseURL, deezerPreviewRate, printer)
+	previews := acquisition.NewDeezerPreview(&http.Client{Timeout: cfg.AcquisitionDeezerPreviewTimeout}, acquisition.DeezerPreviewBaseURL, deezerPreviewRate, printer)
 	return acquisition.NewPreviewMatcher(previews, printer, acquisition.DefaultMatchMaxBitErrorRate)
 }

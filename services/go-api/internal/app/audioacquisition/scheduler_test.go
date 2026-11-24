@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/app/audioacquisition"
 	"altune/go-api/internal/catalog"
-	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/events"
@@ -65,7 +64,6 @@ func newOfflineScheduler(t *testing.T, cfg *config.Config, slots chan struct{}, 
 	scheduler := audioacquisition.NewScheduler(t.Context(), audioacquisition.Deps{
 		Config:     cfg,
 		Events:     eventTap(t),
-		Discovery:  &discovery.Discovery{},
 		Ledger:     acquisition.NewTrackLedger(&fixtureTrackRepo{}),
 		AudioStore: catalog.NewFilesystemAudioStore(cfg.MusicDir),
 		Sources:    sources,
@@ -95,7 +93,6 @@ func acquireThroughPostgres(t *testing.T) (catalog.Track, string, acquisition.Ac
 		Config:     &config.Config{Env: "test", MusicDir: musicDir},
 		Pool:       pool,
 		Events:     eventTap(t),
-		Discovery:  &discovery.Discovery{},
 		Ledger:     acquisition.NewTrackLedger(repo),
 		AudioStore: catalog.NewFilesystemAudioStore(musicDir),
 		Sources:    fixtureTiers(),
@@ -246,7 +243,6 @@ func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
 		Config:     &config.Config{Env: "test", MusicDir: t.TempDir()},
 		Pool:       pool,
 		Events:     eventTap(t),
-		Discovery:  &discovery.Discovery{},
 		Ledger:     acquisition.NewTrackLedger(trackRepo),
 		AudioStore: catalog.NewFilesystemAudioStore(t.TempDir()),
 		Sources:    fixtureTiers(),
@@ -337,7 +333,6 @@ func TestNewScheduler_AnUpgradeWorkerClaimsAndSettlesAnEnqueuedUpgrade(t *testin
 		Config:     cfg,
 		Pool:       pool,
 		Events:     eventTap(t),
-		Discovery:  &discovery.Discovery{},
 		Ledger:     acquisition.NewTrackLedger(catalog.NewPgxTrackRepository(pool)),
 		AudioStore: catalog.NewFilesystemAudioStore(cfg.MusicDir),
 		Sources:    audioacquisition.Tiers{First: []acquisition.AudioSource{sourceWithNothing{}}},
