@@ -3,14 +3,13 @@ package server_test
 import (
 	"altune/go-api/internal/app/server"
 	"context"
+	"net"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 )
 
-func TestNew_AnInFlightRequestOutlivesTheLifecycleCancel(t *testing.T) {
-	lifecycle, cancel := context.WithCancel(context.Background())
+func TestNew_AnInFlightRequestFinishesWithALiveContextWhileTheServerDrains(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
 	result := make(chan error, 1)
@@ -19,35 +18,43 @@ func TestNew_AnInFlightRequestOutlivesTheLifecycleCancel(t *testing.T) {
 		<-release
 		result <- r.Context().Err()
 	})
-	srv := httptest.NewUnstartedServer(slow)
-	srv.Config.BaseContext = server.New(lifecycle, "", slow).BaseContext
-	srv.Start()
-	defer srv.Close()
-
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	srv := server.New(listener.Addr().String(), slow)
+	go func() { _ = srv.Serve(listener) }()
 	go func() {
-		if resp, err := http.Get(srv.URL); err == nil {
+		if resp, err := http.Get("http://" + listener.Addr().String()); err == nil {
 			_ = resp.Body.Close()
 		}
 	}()
 	<-started
-	cancel()
+
+	drained := make(chan error, 1)
+	drainCtx, cancelDrain := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancelDrain()
+	go func() { drained <- srv.Shutdown(drainCtx) }()
 	time.Sleep(20 * time.Millisecond)
 	close(release)
 
 	select {
 	case err := <-result:
 		if err != nil {
-			t.Fatalf("in-flight request context cancelled by lifecycle cancel: %v", err)
+			t.Fatalf("in-flight request context cancelled while the server drained: %v", err)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("handler did not finish")
+	}
+	if err := <-drained; err != nil {
+		t.Errorf("Shutdown = %v, want the drain to finish once the request did", err)
 	}
 }
 
 func TestNew_ServesTheHandlerAtTheAddressWithTheFixedTimeouts(t *testing.T) {
 	h := http.NotFoundHandler()
 
-	srv := server.New(context.Background(), "127.0.0.1:8000", h)
+	srv := server.New("127.0.0.1:8000", h)
 
 	if srv.Addr != "127.0.0.1:8000" || srv.Handler == nil {
 		t.Errorf("server = %q %v, want the given address and handler", srv.Addr, srv.Handler)

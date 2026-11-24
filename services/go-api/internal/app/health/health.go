@@ -3,6 +3,7 @@ package health
 import (
 	"altune/go-api/internal/observe"
 	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"net/http"
 	"sync"
@@ -12,6 +13,7 @@ import (
 const (
 	DefaultProbeTimeout = 2 * time.Second
 	cacheTTL            = 2 * time.Second
+	checkBudget         = 3 * DefaultProbeTimeout
 )
 
 type Probes struct {
@@ -66,7 +68,9 @@ func NewEndpoint(check func(context.Context) observe.DependencyHealth, version s
 }
 
 func (e *Endpoint) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if e.cached(context.WithoutCancel(r.Context())).DB == observe.DepDown {
+	ctx, cancel := runloop.Detach(r.Context(), checkBudget)
+	defer cancel()
+	if e.cached(ctx).DB == observe.DepDown {
 		httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "degraded", "version": e.version})
 		return
 	}
