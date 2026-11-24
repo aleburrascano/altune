@@ -2,23 +2,15 @@ package app
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/app/audioacquisition"
 	"altune/go-api/internal/app/catalogdiscovery"
 	"altune/go-api/internal/app/discoverycatalog"
 	"altune/go-api/internal/app/jobs"
-	"altune/go-api/internal/app/providerhttp"
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe"
-	"altune/go-api/internal/shared/binpath"
-	"altune/go-api/internal/shared/ytminnertube"
 	"context"
-	"errors"
-	"io"
 	"log/slog"
-	"net/http"
-	"os"
-	"path/filepath"
-	"sync/atomic"
 	"time"
 )
 
@@ -99,52 +91,38 @@ func (a *App) wireAudioSources(
 		return audioSourcesStaging{}, err
 	}
 	trackRepo := catalog.NewPgxTrackRepository(a.pool)
-
-	var audioSources sourceTiers
-	var tools acquisition.AcquisitionVerification
-	if audioStore != nil {
-		audioSources, tools = a.acquisitionSources(ctx)
-	}
-
+	sources, tools := a.liveTiers(ctx, audioStore)
 	staging := audioSourcesStaging{
 		audioStore:     audioStore,
 		trackRepo:      trackRepo,
 		ledger:         acquisition.NewTrackLedger(trackRepo),
-		ytDlpSearcher:  a.sourceCanarySearcher(),
+		ytDlpSearcher:  audioacquisition.YtDlpSearcher(a.cfg),
 		ytDlpAvailable: tools.YtDlp,
-		ytmCanary:      a.sourceCanaryYTMClient(),
+		ytmCanary:      audioacquisition.CanaryYTMClient(a.cfg, a.redisClient),
 	}
-	if len(audioSources.all()) > 0 && audioStore != nil {
-		bgScheduler := a.buildAcquisitionScheduler(ctx, tap, disc, staging.ledger, audioStore, audioSources, tools)
-		staging.background = bgScheduler
-		staging.scheduler = bgScheduler
+	if len(sources.All()) > 0 && audioStore != nil {
+		staging.background = audioacquisition.NewScheduler(ctx, a.schedulerDeps(tap, disc, staging, sources, tools))
+		staging.scheduler = staging.background
 	}
 	return staging, nil
 }
 
-func (a *App) buildAcquisitionScheduler(
-	ctx context.Context,
-	tap *observe.EventTap,
-	disc *discovery.Discovery,
-	ledger *acquisition.TrackLedger,
-	audioStore catalog.AudioStore,
-	audioSources sourceTiers,
-	verification acquisition.AcquisitionVerification,
-) *acquisition.BackgroundAcquisitionScheduler {
-	skips := &acquisition.VerifySkipCounter{}
-	audioProber := acquisition.NewFfprobeProber(a.cfg.FFmpegLocation, acquisition.WithSkipRecorder(skips))
-	verification.Ffprobe, verification.Ffmpeg = audioProber.Available()
-
-	acquireOpts := []func(*acquisition.AcquireTrackAudioService){
-		acquisition.WithAcquireEvents(tap),
-		acquisition.WithAcquireOrphanQueue(acquisition.NewOrphanedAudioRecorder(catalog.NewPgxOrphanedAudioRepository(a.pool))),
-		acquisition.WithSupersededAudioGrace(a.cfg.AcquisitionSupersededAudioGrace),
-		acquisition.WithAudioProber(audioProber),
-		acquisition.WithVerifySkips(skips),
-		acquisition.WithAudioTagger(acquisition.NewFFmpegTagger(binpath.Resolve("ffmpeg", a.cfg.FFmpegLocation), acquisition.NewId3Tagger())),
-		acquisition.WithAcquireStoreKeyPrefix(a.cfg.AudioKeyPrefix),
-		acquisition.WithRejectionStore(acquisition.NewPgxRejectionStore(a.pool)),
+func (a *App) liveTiers(ctx context.Context, audioStore catalog.AudioStore) (audioacquisition.Tiers, acquisition.AcquisitionVerification) {
+	if audioStore == nil {
+		return audioacquisition.Tiers{}, acquisition.AcquisitionVerification{}
 	}
+	return audioacquisition.LiveTiers(ctx, a.cfg, a.redisClient)
+}
+
+func (a *App) schedulerDeps(tap *observe.EventTap, disc *discovery.Discovery, staging audioSourcesStaging, sources audioacquisition.Tiers, tools acquisition.AcquisitionVerification) audioacquisition.Deps {
+	return audioacquisition.Deps{
+		Config: a.cfg, Pool: a.pool, Events: tap, Recording: recordingOptions(disc), Ledger: staging.ledger, AudioStore: staging.audioStore,
+		Sources: sources, Verification: tools, Background: a.jobs.Background(), Slots: a.sem,
+	}
+}
+
+func recordingOptions(disc *discovery.Discovery) []func(*acquisition.AcquireTrackAudioService) {
+	var acquireOpts []func(*acquisition.AcquireTrackAudioService)
 	if disc.Search != nil {
 		var resolverOpts []func(*acquisition.RecordingResolver)
 		if disc.Recordings != nil {
@@ -161,86 +139,8 @@ func (a *App) buildAcquisitionScheduler(
 				acquisition.WithRerecordingFinder(recordingResolver))
 		}
 	}
-	lookups := &lookupTracker{}
-	if a.cfg.AcoustIDAPIKey != "" {
-		identifier := acquisition.NewChromaprintIdentifier(a.cfg.FFmpegLocation, a.cfg.AcoustIDAPIKey)
-		verification.Fpcalc = identifier.Available()
-		lookups.AudioIdentifier = identifier
-		acquireOpts = append(acquireOpts, acquisition.WithAudioIdentifier(lookups))
-		slog.InfoContext(ctx, "acquisition: fingerprint verification wired", "fpcalc", verification.Fpcalc)
-	} else {
-		slog.WarnContext(ctx, "acquisition: fingerprint verification disabled", "reason", "ACOUSTID_API_KEY is empty")
-	}
-	acquireOpts = append(acquireOpts,
-		acquisition.WithDownloadLimiter(acquisition.NewDownloadLimiter(a.cfg.AcquisitionDownloadConcurrency)),
-		acquisition.WithAcquireConfidenceFloor(a.cfg.AcquisitionConfidenceFloor),
-		acquisition.WithAcquireTempWorkspace(acquisition.NewTempWorkspace()),
-		acquisition.WithStoredAudioReader(storedAudioReader{store: audioStore}),
-		acquisition.WithPreviewMatcher(a.upgradePreviewMatcher(), a.cfg.AcquisitionUpgradePreviewAMaxBER))
-	acquireSvc := acquisition.NewAcquireTrackAudioService(
-		ledger,
-		acquisition.NewSourceRegistry(audioSources.first...).WithFallback(audioSources.fallback...),
-		audioStore,
-		acquireOpts...,
-	)
-	schedulerOpts := []func(*acquisition.BackgroundAcquisitionScheduler){
-		acquisition.WithSchedulerPaused(a.cfg.AcquisitionPaused),
-		acquisition.WithSchedulerEvents(tap),
-		acquisition.WithVerificationStatus(verification),
-		acquisition.WithVerifySkipCount(skips.Count),
-		acquisition.WithFingerprintVerified(lookups.Verified),
-		acquisition.WithDrainBudget(time.Duration(a.cfg.AcquisitionDrainBudgetSeconds) * time.Second),
-	}
-	if a.pool != nil {
-		schedulerOpts = append(schedulerOpts,
-			a.upgradeLane(ledger, acquireSvc),
-			acquisition.WithJobQueue(acquisition.NewPgxJobQueue(a.pool)),
-			acquisition.WithJobNotifier(acquisition.NewPgxJobNotifier(a.pool)),
-			acquisition.WithOutcomeRecorder(acquisition.NewPgxOutcomeStore(a.pool)))
-	}
-	return acquisition.NewBackgroundAcquisitionScheduler(acquireSvc, a.jobs.Background(), a.sem, schedulerOpts...)
+	return acquireOpts
 }
-
-type storedAudioReader struct {
-	store catalog.AudioStore
-}
-
-func (r storedAudioReader) CopyStored(ctx context.Context, audioRef, dir string) (string, error) {
-	stream, _, err := r.store.Stream(ctx, audioRef)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = stream.Close() }()
-
-	path := filepath.Join(dir, "stored"+filepath.Ext(audioRef))
-	dst, err := os.Create(path)
-	if err != nil {
-		return "", err
-	}
-	if _, err := io.Copy(dst, stream); err != nil {
-		_ = dst.Close()
-		return "", err
-	}
-	return path, dst.Close()
-}
-
-type lookupTracker struct {
-	acquisition.AudioIdentifier
-	succeeded atomic.Bool
-}
-
-func (t *lookupTracker) Identify(ctx context.Context, filePath string, fullLengthForPreview float64) (acquisition.RecordingMatch, error) {
-	match, err := t.AudioIdentifier.Identify(ctx, filePath, fullLengthForPreview)
-	switch {
-	case err == nil:
-		t.succeeded.Store(true)
-	case !errors.Is(err, acquisition.ErrIdentifyThrottled):
-		t.succeeded.Store(false)
-	}
-	return match, err
-}
-
-func (t *lookupTracker) Verified() bool { return t.succeeded.Load() }
 
 func (a *App) wireCatalogServices(
 	tap *observe.EventTap,
@@ -305,89 +205,6 @@ func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServices
 		scheduler:         audio.background,
 	}
 }
-
-type sourceTiers struct {
-	first    []acquisition.AudioSource
-	fallback []acquisition.AudioSource
-}
-
-func (t sourceTiers) all() []acquisition.AudioSource {
-	return append(append([]acquisition.AudioSource{}, t.first...), t.fallback...)
-}
-
-func (a *App) acquisitionSources(ctx context.Context) (sourceTiers, acquisition.AcquisitionVerification) {
-	if a.fixtureSources != nil {
-		return *a.fixtureSources, acquisition.AcquisitionVerification{}
-	}
-	searcher := a.newYtDlpSearcher()
-	tools := acquisition.AcquisitionVerification{YtDlp: searcher.Available()}
-	return a.audioSourcesFor(ctx, searcher), tools
-}
-
-func (a *App) innerTubeClient(ctx context.Context) *http.Client {
-	settings := ytminnertube.Settings{MinInterval: a.cfg.YtmInnerTubeMinInterval, Cooldown: a.cfg.YtmInnerTubeCooldown}
-	budget, err := ytminnertube.NewBudget(a.redisClient, settings)
-	if err != nil {
-		slog.WarnContext(ctx, "acquisition: no shared InnerTube budget without redis, pacing in-process only")
-		return nil
-	}
-	return &http.Client{Transport: budget.Transport(nil)}
-}
-
-func (a *App) sourceCanarySearcher() *acquisition.YtDlpAudioSearcher {
-	if a.fixtureSources != nil {
-		return nil
-	}
-	return a.newYtDlpSearcher()
-}
-
-func (a *App) sourceCanaryYTMClient() *acquisition.YtmSearchClient {
-	if a.fixtureSources != nil {
-		return nil
-	}
-	return a.budgetedYTMSearchClient(context.Background())
-}
-
-func newYTMSearchClient() *acquisition.YtmSearchClient {
-	return acquisition.NewYtmSearch(acquisition.YtmSearchConfig{MinInterval: ytmSearchMinInterval, Timeout: ytmSearchTimeout})
-}
-
-func (a *App) budgetedYTMSearchClient(ctx context.Context) *acquisition.YtmSearchClient {
-	return acquisition.NewYtmSearch(acquisition.YtmSearchConfig{HTTP: a.innerTubeClient(ctx), MinInterval: ytmSearchMinInterval, Timeout: ytmSearchTimeout})
-}
-
-func (a *App) newYtDlpSearcher() *acquisition.YtDlpAudioSearcher {
-	return acquisition.NewYtDlpAudioSearcher(a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime).
-		WithRemoteComponents(a.cfg.YtDLPRemoteComponents).
-		WithPOTokenURL(a.cfg.YtDLPPOTokenURL).
-		WithEnvironment(a.cfg.Env)
-}
-
-func (a *App) audioSourcesFor(ctx context.Context, searcher *acquisition.YtDlpAudioSearcher) sourceTiers {
-	var tiers sourceTiers
-	if a.cfg.YtMusicEnabled {
-		songs := a.budgetedYTMSearchClient(ctx)
-		tiers.first = append(tiers.first, acquisition.NewYtmSearchSource(songs, searcher), acquisition.NewYtMusicSource(searcher, songs))
-	} else {
-		slog.InfoContext(ctx, "acquisition: ytmusic source disabled via YTMUSIC_ENABLED")
-	}
-	if a.cfg.YtDLPEnabled {
-		tiers.fallback = append(tiers.fallback, acquisition.NewYtDlpSource(searcher))
-	} else {
-		slog.InfoContext(ctx, "acquisition: yt-dlp source disabled via YTDLP_ENABLED")
-	}
-	if len(tiers.all()) > 0 {
-		tiers.first = append([]acquisition.AudioSource{acquisition.NewSource(searcher, acquisition.WithPageReader(acquisition.NewHTTPPageReader(providerhttp.Live(), fileHostPageTimeout)))}, tiers.first...)
-	}
-	return tiers
-}
-
-const fileHostPageTimeout = 10 * time.Second
-
-const (
-	ytmSearchMinInterval = 200 * time.Millisecond
-	ytmSearchTimeout     = 10 * time.Second
-)
 
 func newOwnershipEnrichment(cat catalogWiring) *discovery.OwnershipEnrichmentService {
 	return discovery.NewOwnershipEnrichmentService(

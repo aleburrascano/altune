@@ -19,9 +19,7 @@ const (
 	ruleSyncStateField = "sync-state-field"
 )
 
-var wiringOnlyAllowlist = map[string]string{
-	"catalog_wiring.go": "lookupTracker holding an atomic counter",
-}
+var wiringOnlyAllowlist = map[string]string{}
 
 func wiringViolations(fset *token.FileSet, files map[string]*ast.File) map[string][]string {
 	_ = fset

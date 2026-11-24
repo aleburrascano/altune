@@ -1,0 +1,1 @@
+`fingerprintstatus` owns whether fingerprint verification counts as working: `Tracker` wraps the audio identifier and reports verified after a successful lookup, unverified after a failed one, and leaves the verdict unchanged when the lookup service only throttled. The acquisition scheduler reports it in its status.

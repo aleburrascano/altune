@@ -64,6 +64,10 @@ func New(cfg Config) *Client {
 	return c
 }
 
+func (c *Client) Timeout() time.Duration { return c.timeout }
+
+func (c *Client) MinInterval() time.Duration { return c.search.interval }
+
 func (c *Client) Watch(ctx context.Context, videoID string) (Watch, error) {
 	raw, err := c.postInnerTube(ctx, c.next, "next", map[string]any{"videoId": videoID})
 	if err != nil {

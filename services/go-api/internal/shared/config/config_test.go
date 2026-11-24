@@ -518,7 +518,7 @@ func setEnv(t *testing.T, vars map[string]string) {
 		"MUSIC_DIR", "MUSIC_DIR_TIMEOUT", "FFMPEG_LOCATION", "YTDLP_COOKIE_FILE",
 		"ACQUISITION_CONCURRENCY", "ACQUISITION_DRAIN_BUDGET_SECONDS",
 		"EXPLORATION_RATE",
-		"DB_POOL_MAX_CONNS", "PLAYBACK_QUEUE_RATE_EVERY", "PLAYBACK_QUEUE_RATE_BURST", "PLAYBACK_ERASURE_SCAN_TIMEOUT", "REDIS_POOL_SIZE", "YTDLP_JS_RUNTIME", "YTDLP_REMOTE_COMPONENTS",
+		"DB_POOL_MAX_CONNS", "PLAYBACK_QUEUE_RATE_EVERY", "PLAYBACK_QUEUE_RATE_BURST", "PLAYBACK_ERASURE_SCAN_TIMEOUT", "ACQUISITION_FILE_HOST_PAGE_TIMEOUT", "ACQUISITION_DEEZER_PREVIEW_TIMEOUT", "REDIS_POOL_SIZE", "YTDLP_JS_RUNTIME", "YTDLP_REMOTE_COMPONENTS",
 		"ALERT_WEBHOOK_URL", "RESEND_API_KEY", "ALERT_EMAIL_TO",
 		"OTEL_EXPORTER_OTLP_ENDPOINT",
 	}
@@ -1893,6 +1893,47 @@ func TestLoad_PlaybackErasureScanTimeout(t *testing.T) {
 		if _, err := config.Load(); err == nil {
 			t.Errorf("PLAYBACK_ERASURE_SCAN_TIMEOUT=%q loaded, want an error", bad)
 		}
+	}
+}
+
+func TestLoad_AcquisitionOutboundTimeouts(t *testing.T) {
+	tests := []struct {
+		env         string
+		read        func(*config.Config) time.Duration
+		wantDefault time.Duration
+	}{
+		{"ACQUISITION_FILE_HOST_PAGE_TIMEOUT", func(c *config.Config) time.Duration { return c.AcquisitionFileHostPageTimeout }, 10 * time.Second},
+		{"ACQUISITION_DEEZER_PREVIEW_TIMEOUT", func(c *config.Config) time.Duration { return c.AcquisitionDeezerPreviewTimeout }, 20 * time.Second},
+	}
+	for _, tt := range tests {
+		t.Run(tt.env, func(t *testing.T) {
+			setEnv(t, validConfigEnv(nil))
+			cfg, err := config.Load()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got := tt.read(cfg); got != tt.wantDefault {
+				t.Errorf("default = %s, want %s", got, tt.wantDefault)
+			}
+
+			setEnv(t, validConfigEnv(map[string]string{tt.env: "45s"}))
+			if cfg, err = config.Load(); err != nil {
+				t.Fatalf("override: %v", err)
+			}
+			if got := tt.read(cfg); got != 45*time.Second {
+				t.Errorf("override = %s, want 45s", got)
+			}
+
+			for _, bad := range []string{"0s", "-1s", "slow"} {
+				setEnv(t, validConfigEnv(map[string]string{tt.env: bad}))
+				_, err := config.Load()
+				if err == nil {
+					t.Errorf("%s=%q loaded, want an error", tt.env, bad)
+				} else if bad != "slow" && !strings.Contains(err.Error(), tt.env) {
+					t.Errorf("%s=%q error = %q, want it to name %s", tt.env, bad, err, tt.env)
+				}
+			}
+		})
 	}
 }
 

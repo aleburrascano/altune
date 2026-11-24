@@ -112,3 +112,67 @@ func TestFromConfig_AnUnsetMusicDirTimeoutKeepsTheDefaultCap(t *testing.T) {
 		t.Fatalf("Exists = %v, %v; want true with no error under the default cap", exists, err)
 	}
 }
+
+func TestFromConfig_AMisconfiguredStoreFailsFastNamingWhatIsMissing(t *testing.T) {
+	tests := []struct {
+		name         string
+		cfg          *config.Config
+		wantContains []string
+	}{
+		{
+			name:         "no backend configured",
+			cfg:          &config.Config{},
+			wantContains: []string{"MUSIC_DIR", "OCI_S3_ENDPOINT"},
+		},
+		{
+			name: "incomplete OCI S3 names the missing variable",
+			cfg: &config.Config{
+				OCIS3Endpoint:  "https://objectstorage.example.com",
+				OCIS3AccessKey: "key",
+				OCIS3SecretKey: "secret",
+			},
+			wantContains: []string{"OCI_S3_BUCKET", "incomplete"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store, err := catalog.FromConfig(tt.cfg, slog.Default())
+			if err == nil {
+				t.Fatalf("expected startup error for misconfigured audio store, got store=%v", store)
+			}
+			if store != nil {
+				t.Fatalf("expected nil store alongside error, got %v", store)
+			}
+			for _, want := range tt.wantContains {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not name %q", err.Error(), want)
+				}
+			}
+		})
+	}
+}
+
+func TestFromConfig_AnEmptyKeyPrefixLeavesTheStoreUnscoped(t *testing.T) {
+	dir := t.TempDir()
+	store, err := catalog.FromConfig(&config.Config{MusicDir: dir}, slog.Default())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	ref := "u/a/b/c.mp3"
+	path := filepath.Join(dir, ref)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("audio"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	if err := store.Delete(context.Background(), ref); err != nil {
+		t.Fatalf("expected delete to succeed with no prefix configured, got error: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("expected the file to be deleted when no prefix is configured, got: %v", err)
+	}
+}

@@ -99,6 +99,9 @@ type Config struct {
 
 	AcquisitionSupersededAudioGrace time.Duration `env:"ACQUISITION_SUPERSEDED_AUDIO_GRACE" envDefault:"168h"`
 
+	AcquisitionFileHostPageTimeout  time.Duration `env:"ACQUISITION_FILE_HOST_PAGE_TIMEOUT" envDefault:"10s"`
+	AcquisitionDeezerPreviewTimeout time.Duration `env:"ACQUISITION_DEEZER_PREVIEW_TIMEOUT" envDefault:"20s"`
+
 	AcoustIDAPIKey          string        `env:"ACOUSTID_API_KEY"`
 	YtMusicEnabled          bool          `env:"YTMUSIC_ENABLED" envDefault:"true"`
 	YtmInnerTubeMinInterval time.Duration `env:"YTM_INNERTUBE_MIN_INTERVAL" envDefault:"2s"`

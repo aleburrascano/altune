@@ -6,7 +6,9 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -93,6 +95,37 @@ func emptyDatabasePool(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("connect to the empty database: %v", err)
 	}
 	t.Cleanup(pool.Close)
+	return pool
+}
+
+var migrationStatementEnd = regexp.MustCompile(`;[ \t]*\r?\n`)
+
+func migratedDatabasePool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	pool := emptyDatabasePool(t)
+	files, err := filepath.Glob(filepath.Join("..", "..", "migrations", "*.sql"))
+	if err != nil || len(files) == 0 {
+		t.Fatalf("find the migrations: %v (found %d)", err, len(files))
+	}
+	conn, err := pool.Acquire(t.Context())
+	if err != nil {
+		t.Fatalf("acquire a connection: %v", err)
+	}
+	defer conn.Release()
+	for _, file := range files {
+		migration, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatalf("read %s: %v", file, err)
+		}
+		for _, statement := range migrationStatementEnd.Split(string(migration), -1) {
+			if strings.TrimSpace(statement) == "" {
+				continue
+			}
+			if _, err := conn.Conn().PgConn().Exec(t.Context(), statement).ReadAll(); err != nil {
+				t.Fatalf("apply %s: %v", file, err)
+			}
+		}
+	}
 	return pool
 }
 

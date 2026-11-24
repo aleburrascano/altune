@@ -3,33 +3,8 @@ package app
 import (
 	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/app/jobs"
-	"altune/go-api/internal/shared/binpath"
 	"context"
-	"net/http"
-	"time"
 )
-
-const (
-	deezerPreviewTimeout = 20 * time.Second
-	deezerPreviewRate    = 1.0
-)
-
-func (a *App) upgradeLane(ledger acquisition.TrackLedgerPort, svc *acquisition.AcquireTrackAudioService) func(*acquisition.BackgroundAcquisitionScheduler) {
-	store := acquisition.NewPgxUpgradeStore(a.pool)
-	runner := acquisition.NewUpgradeRunner(ledger, svc, store,
-		acquisition.UpgradeConfig{
-			MaxTries:            a.cfg.AcquisitionUpgradeMaxTries,
-			LowBitrateFloorKbps: a.cfg.AcquisitionLowBitrateFloorKbps,
-		}).
-		WithInPlaceCheck(svc, store, a.cfg.AcquisitionUpgradeVerifyPerHour)
-	return acquisition.WithUpgradeLane(runner, a.cfg.AcquisitionUpgradeConcurrency)
-}
-
-func (a *App) upgradePreviewMatcher() acquisition.PreviewMatcher {
-	printer := acquisition.NewFpcalcPrinter(binpath.Resolve("fpcalc", a.cfg.FFmpegLocation))
-	previews := acquisition.NewDeezerPreview(&http.Client{Timeout: deezerPreviewTimeout}, acquisition.DeezerPreviewBaseURL, deezerPreviewRate, printer)
-	return acquisition.NewPreviewMatcher(previews, printer, acquisition.DefaultMatchMaxBitErrorRate)
-}
 
 func (a *App) startAcquisitionUpgrade(ctx context.Context, scheduler *acquisition.BackgroundAcquisitionScheduler) {
 	if a.pool == nil || scheduler == nil {
