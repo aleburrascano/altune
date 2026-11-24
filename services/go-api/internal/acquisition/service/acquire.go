@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/internal/core/rejectionlog"
+	"altune/go-api/internal/acquisition/internal/core/tracklength"
 	"altune/go-api/internal/acquisition/service/upgrade"
 	"altune/go-api/internal/shared/events"
 	shared "altune/go-api/internal/shared/kernel"
@@ -462,7 +463,7 @@ func logRerecordingTier(ctx context.Context, ac *AcquisitionContext, originalMBI
 
 func storedFileKnownWrong(track *ports.TrackSnapshot) bool {
 	catalog, stored := deref(track.CatalogDurationSeconds), deref(track.StoredDurationSeconds)
-	if catalog > 0 && stored > 0 && !acqdomain.LengthAuthoritative.Agrees(catalog, stored) {
+	if catalog > 0 && stored > 0 && !tracklength.SameRecording(catalog, stored) {
 		return true
 	}
 	var evidence Evidence

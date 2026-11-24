@@ -6,6 +6,23 @@ import (
 	"testing"
 )
 
+func TestLengthTolerance_AnUnknownLengthNeverAgrees(t *testing.T) {
+	profiles := []struct {
+		name    string
+		profile acquisition.LengthTolerance
+	}{
+		{"tight", acquisition.LengthTight},
+		{"loose", acquisition.LengthLoose},
+	}
+	for _, p := range profiles {
+		for _, pair := range [][2]float64{{10, 0}, {0, 10}, {0, 0}, {10, -1}} {
+			if p.profile.Agrees(pair[0], pair[1]) {
+				t.Errorf("%s: Agrees(%v, %v) = true, want false: an unknown length is never a match", p.name, pair[0], pair[1])
+			}
+		}
+	}
+}
+
 func TestLengthTolerance_NamedProfilesKeepTodaysWindows(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -16,8 +33,6 @@ func TestLengthTolerance_NamedProfilesKeepTodaysWindows(t *testing.T) {
 		disagrees     []float64
 	}{
 		{"tight", acquisition.LengthTight, 300, 2, []float64{298, 302}, []float64{297.9, 302.1}},
-		{"authoritative flat", acquisition.LengthAuthoritative, 100, 5, []float64{95, 105}, []float64{94.9, 105.1}},
-		{"authoritative fraction", acquisition.LengthAuthoritative, 400, 12, []float64{388, 412}, []float64{387.9, 412.1}},
 		{"loose flat", acquisition.LengthLoose, 100, 15, []float64{85, 115}, []float64{84.9, 115.1}},
 		{"loose fraction", acquisition.LengthLoose, 400, 28, []float64{372, 428}, []float64{371.9, 428.1}},
 	}

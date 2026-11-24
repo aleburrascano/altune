@@ -399,7 +399,7 @@ func judgeAttempt(ac *AcquisitionContext, candidate ports.AudioCandidate, filePa
 		confidence:   ScoreConfidence(evidence, ac.ExpectedLength()),
 		otherVersion: len(evidence.Qualifiers) > 0,
 	}
-	if result.otherVersion && !otherVersionLengthMatches(evidence.DurationDeltaSeconds, ac.ExpectedLength()) {
+	if result.otherVersion && !tracklength.SameRecording(ac.ExpectedLength(), verified.probed) {
 		reason := rejectOtherVersionLengthUnknown
 		if evidence.DurationDeltaSeconds != nil {
 			reason = fmt.Sprintf(rejectOtherVersionOffLengthFmt, *evidence.DurationDeltaSeconds)

@@ -32,6 +32,7 @@ func TestJudge(t *testing.T) {
 		{"a length beyond the authoritative tolerance", nil, func(s *acquisition.YtmSong) { s.DurationSeconds = 330 }, rejectLength},
 		{"a length at the tolerance edge", nil, func(s *acquisition.YtmSong) { s.DurationSeconds = 288 }, accepted},
 		{"a song with no length", nil, func(s *acquisition.YtmSong) { s.DurationSeconds = 0 }, rejectLength},
+		{"a song with no length against a catalog length inside the five second floor", func(tr *target) { tr.CatalogSeconds = 4 }, func(s *acquisition.YtmSong) { s.DurationSeconds = 0 }, rejectLength},
 		{"a track with no catalog length", func(tr *target) { tr.CatalogSeconds = 0 }, nil, rejectNoCatalogLen},
 		{"another album", nil, func(s *acquisition.YtmSong) { s.Album = "The Greatest Hits" }, rejectAlbum},
 		{"album spelled with other case", func(tr *target) { tr.Album = "BROADCAST" }, nil, accepted},

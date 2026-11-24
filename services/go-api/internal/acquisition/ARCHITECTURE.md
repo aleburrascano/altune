@@ -368,7 +368,7 @@ than that file. Per candidate:
 4. `audiojudge.Judge` judges the fingerprint (skipped when the preview already produced the verdict).
 
 The judge (`internal/core/audiojudge`) drops each linked recording whose length disagrees with
-the audio (authoritative tolerance, max(5s, 3%)) and each link that names no MBID, then
+the audio (the same-recording tolerance, max(5s, 3%)) and each link that names no MBID, then
 returns `proven | likely | unknown | contradicted`, a grade and the reasons. `proven`
 (legacy name `hard`) when a surviving link is the bound recording (any of the reference
 `MBIDs`, or a recording whose MusicBrainz ISRCs include the track's) and the length fits

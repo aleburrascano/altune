@@ -3,6 +3,7 @@ package tracklength
 import (
 	"altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/shared/kernel"
 )
 
 type Policy struct {
@@ -32,7 +33,7 @@ func (p Policy) Corroborated() bool {
 	if p.saved <= 0 || p.resolved <= 0 {
 		return false
 	}
-	return domain.LengthAuthoritative.Agrees(p.saved, p.resolved)
+	return SameRecording(p.saved, p.resolved)
 }
 
 func (p Policy) Plausible(candidate ports.AudioCandidate) bool {
@@ -60,7 +61,7 @@ func (p Policy) FileJudge(candidate ports.AudioCandidate) (FileJudge, bool) {
 func (j FileJudge) Judge(actual float64) (acceptable bool, heldAgainst float64) {
 	p, candidate := j.policy, j.candidate
 	if ownLength(candidate) {
-		if !domain.LengthAuthoritative.Agrees(candidate.Duration, actual) {
+		if !SameRecording(candidate.Duration, actual) {
 			return false, candidate.Duration
 		}
 		return p.Expected() <= 0 || p.accepts(actual), p.Expected()
@@ -74,8 +75,14 @@ func ownLength(candidate ports.AudioCandidate) bool {
 
 func (p Policy) accepts(actual float64) bool {
 	if p.Corroborated() {
-		return domain.LengthAuthoritative.Agrees(p.saved, actual)
+		return SameRecording(p.saved, actual)
 	}
 	return (p.saved > 0 && domain.LengthLoose.Agrees(p.saved, actual)) ||
 		(p.resolved > 0 && domain.LengthLoose.Agrees(p.resolved, actual))
+}
+
+func SameRecording(expectedSeconds, actualSeconds float64) bool {
+	expected, expectedErr := kernel.TrackLengthOf(expectedSeconds)
+	actual, actualErr := kernel.TrackLengthOf(actualSeconds)
+	return expectedErr == nil && actualErr == nil && expected.SameRecording(actual)
 }

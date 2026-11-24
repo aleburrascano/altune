@@ -8,9 +8,8 @@ type LengthTolerance struct {
 }
 
 var (
-	LengthTight         = LengthTolerance{SlackSeconds: 2}
-	LengthAuthoritative = LengthTolerance{SlackSeconds: 5, Fraction: 0.03}
-	LengthLoose         = LengthTolerance{SlackSeconds: 15, Fraction: 0.07}
+	LengthTight = LengthTolerance{SlackSeconds: 2}
+	LengthLoose = LengthTolerance{SlackSeconds: 15, Fraction: 0.07}
 )
 
 func (t LengthTolerance) Allowance(expectedSeconds float64) float64 {
@@ -18,5 +17,8 @@ func (t LengthTolerance) Allowance(expectedSeconds float64) float64 {
 }
 
 func (t LengthTolerance) Agrees(expectedSeconds, actualSeconds float64) bool {
+	if expectedSeconds <= 0 || actualSeconds <= 0 {
+		return false
+	}
 	return math.Abs(expectedSeconds-actualSeconds) <= t.Allowance(expectedSeconds)
 }

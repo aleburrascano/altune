@@ -104,10 +104,6 @@ func (ac *AcquisitionContext) durationDelta(candidate ports.AudioCandidate, prob
 	return probed - expected, true
 }
 
-func otherVersionLengthMatches(delta *float64, trackSeconds float64) bool {
-	return delta != nil && math.Abs(*delta) <= domain.LengthAuthoritative.Allowance(trackSeconds)
-}
-
 func (ac *AcquisitionContext) adopt(ctx context.Context, evidence Evidence, confidence float64) {
 	ac.Evidence = evidence
 	ac.Confidence = confidence
