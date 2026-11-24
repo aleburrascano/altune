@@ -2,9 +2,11 @@ package evalmeter_test
 
 import (
 	"altune/go-api/internal/observe"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -244,6 +246,46 @@ func TestMeter_PanickingRunnerSurfacesAsError(t *testing.T) {
 	}
 	if !strings.Contains(st.Error, "scorer dereferenced a nil provider") {
 		t.Errorf("error = %q, want the panic value in it", st.Error)
+	}
+}
+
+func TestMeter_APanickingRunIsLoggedOnceByTheGuard(t *testing.T) {
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	ring := logging.Setup("error", false)
+	_, r := steppedMeter(t, func(context.Context) (observe.EvalMeterResult, error) {
+		panic("scorer dereferenced a nil provider")
+	})
+
+	r.step(t)
+
+	var messages []string
+	for _, rec := range ring.Snapshot() {
+		if rec.Level == slog.LevelError.String() {
+			messages = append(messages, rec.Message)
+		}
+	}
+	if len(messages) != 1 || messages[0] != "observe.eval_run_panicked" {
+		t.Errorf("error records = %v, want only observe.eval_run_panicked", messages)
+	}
+}
+
+func TestMeter_AFailedRunIsLogged(t *testing.T) {
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	ring := logging.Setup("error", false)
+	_, r := steppedMeter(t, func(context.Context) (observe.EvalMeterResult, error) {
+		return observe.EvalMeterResult{}, errors.New("golden set unreadable")
+	})
+
+	r.step(t)
+
+	found := false
+	for _, rec := range ring.Snapshot() {
+		found = found || rec.Message == "observe.eval_run_failed"
+	}
+	if !found {
+		t.Error("no observe.eval_run_failed record for a run that returned an error")
 	}
 }
 

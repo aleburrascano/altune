@@ -3,9 +3,8 @@ package evalmeter
 import (
 	"altune/go-api/internal/shared/runloop"
 	"context"
-	"fmt"
+	"errors"
 	"log/slog"
-	"runtime/debug"
 	"sync"
 	"time"
 )
@@ -109,14 +108,10 @@ func (m *Meter) runOnce(ctx context.Context) {
 func (m *Meter) runContained(ctx context.Context) (res Result, err error) {
 	runCtx, cancel := context.WithTimeout(ctx, m.runTimeout)
 	defer cancel()
-	defer func() {
-		if rec := recover(); rec != nil {
-			slog.ErrorContext(ctx, "observe.eval_run_panicked",
-				"panic", rec, "stack", string(debug.Stack()))
-			res, err = Result{}, fmt.Errorf("panic: %v", rec)
-		}
-	}()
-	return m.runner(runCtx)
+	if panicked := runloop.Try(ctx, "observe.eval_run_panicked", func() { res, err = m.runner(runCtx) }); panicked != nil {
+		return Result{}, panicked
+	}
+	return res, err
 }
 
 func (m *Meter) recordRun(ctx context.Context, res Result, err error) {
@@ -128,11 +123,19 @@ func (m *Meter) recordRun(ctx context.Context, res Result, err error) {
 	m.lastRun = time.Now().UTC()
 	if err != nil {
 		m.lastErr = err.Error()
-		slog.ErrorContext(ctx, "observe.eval_run_failed", "error", err)
+		logRunFailure(ctx, err)
 		return
 	}
 	m.last = &res
 	m.lastErr = ""
+}
+
+func logRunFailure(ctx context.Context, err error) {
+	var panicked *runloop.PanicError
+	if errors.As(err, &panicked) {
+		return
+	}
+	slog.ErrorContext(ctx, "observe.eval_run_failed", "error", err)
 }
 
 type State string
