@@ -1,4 +1,4 @@
-import type { Href } from '@shared/navigation/adapters/expoRouterNavigator';
+import { useExpoRouter, type Href } from '@shared/navigation/adapters/expoRouterNavigator';
 
 export interface Navigator {
   push(href: Href): void;
@@ -7,8 +7,6 @@ export interface Navigator {
   canGoBack(): boolean;
 }
 
-export type TabRoot = 'discover' | 'library';
-
-export function tabRootFromSegments(segments: readonly string[]): TabRoot {
-  return segments[1] === 'library' ? 'library' : 'discover';
+export function useNavigator(): Navigator {
+  return useExpoRouter();
 }
