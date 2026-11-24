@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"altune/go-api/internal/observe/internal/adapters/codederr"
 	"altune/go-api/internal/observe/internal/shell/eventtap"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/requestuser"
@@ -28,16 +27,16 @@ const keepaliveFrame = ": keepalive\n\n"
 
 func rejectSubscription(w http.ResponseWriter, r *http.Request, stream string, err, limitErr error) {
 	if !errors.Is(err, limitErr) {
-		httputil.HandleServiceError(w, r, codederr.StreamUnavailable(stream))
+		httputil.HandleServiceError(w, r, streamUnavailable(stream))
 		return
 	}
 	slog.WarnContext(r.Context(), "observe.stream_subscriber_limit", slog.String("stream", stream))
-	httputil.HandleServiceError(w, r, codederr.ErrStreamSubscriberLimit)
+	httputil.HandleServiceError(w, r, errStreamSubscriberLimit)
 }
 
 func streamSSE[T any](w http.ResponseWriter, r *http.Request, ch <-chan T, bounds StreamBounds) {
 	if _, canFlush := w.(http.Flusher); !canFlush {
-		httputil.HandleServiceError(w, r, codederr.ErrStreamingUnsupported)
+		httputil.HandleServiceError(w, r, errStreamingUnsupported)
 		return
 	}
 	w = httputil.ExtendWriteDeadlineOnWrite(w, bounds.WriteIdle)

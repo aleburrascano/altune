@@ -1,10 +1,10 @@
 package handler
 
 import (
-	"altune/go-api/internal/observe/internal/adapters/codederr"
 	"altune/go-api/internal/observe/internal/core/ports"
 	"context"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -38,7 +38,7 @@ func queryDiscographyQuality(ctx context.Context, reader ports.DiscographyQualit
 
 func mapQueryError(err error) error {
 	if errors.Is(err, context.DeadlineExceeded) {
-		return codederr.ErrDiscographyQualityTimeout
+		return fmt.Errorf("%w: %w", errDiscographyQualityTimeout, err)
 	}
 	return err
 }
