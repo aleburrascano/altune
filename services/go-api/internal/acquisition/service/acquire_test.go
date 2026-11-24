@@ -2893,6 +2893,37 @@ func TestRerecording_AReplaceOfAFittingOriginalTakesNoRerecording(t *testing.T) 
 	}
 }
 
+func TestRerecording_AReplaceOfAFileWhoseLengthIsUnknownTakesNoRerecording(t *testing.T) {
+	cases := []struct {
+		name   string
+		forget func(row *domain.Track)
+	}{
+		{"no catalog length beside a stored file far off the old one", func(row *domain.Track) {
+			stored := 292.0
+			row.CatalogDurationSeconds, row.DurationSeconds = nil, &stored
+		}},
+		{"no stored length beside the catalog length", func(row *domain.Track) { row.DurationSeconds = nil }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			golden := seedItsOnlyLove(t, 195, nil)
+			row := golden.row()
+			tc.forget(&row)
+			golden.repo.rows[row.ID.String()+":"+golden.userId.String()] = row
+			finder := findsGoldenRerecording()
+
+			err := golden.service(&itsOnlyLoveSources{}, finder).ExecuteReplace(withJobAttempt(context.Background(), maxAcquisitionAttempts), golden.userId, golden.trackId)
+
+			if got := failureCode(err); got != shared.FailureNoConfidentMatch {
+				t.Errorf("failure code = %q (%v), want no_confident_match from the search, not an earlier failure", got, err)
+			}
+			if len(finder.queries) != 0 {
+				t.Errorf("finder queries = %+v, want none: an unknown length never shows the stored file is wrong", finder.queries)
+			}
+		})
+	}
+}
+
 func TestRerecording_AGatedUpgradeNeverTakesARerecording(t *testing.T) {
 	for _, storedSeconds := range []float64{195, 292} {
 		golden := seedItsOnlyLove(t, storedSeconds, nil)

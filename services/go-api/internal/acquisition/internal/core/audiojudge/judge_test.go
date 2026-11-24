@@ -35,6 +35,7 @@ func TestJudge_Table(t *testing.T) {
 		grade     acquisition.Grade
 	}{
 		{"acoustid links the bound recording with matching length", identity, acquisition.JudgeAudio{AcoustID: []acquisition.AcoustIDResult{linked("mb-bound", "Song", 200, "Artist")}, Length: 200}, art, "Song", acquisition.JudgeProven, acquisition.GradeA},
+		{"acoustid links the bound recording when the audio's length is unknown", identity, acquisition.JudgeAudio{AcoustID: []acquisition.AcoustIDResult{linked("mb-bound", "Song", 200, "Artist")}, Length: 0}, art, "Song", acquisition.JudgeProven, acquisition.GradeA},
 		{"acoustid proof on a fan upload grades B", identity, acquisition.JudgeAudio{AcoustID: []acquisition.AcoustIDResult{linked("mb-bound", "Song", 200, "Artist")}, Length: 200}, fan, "Song", acquisition.JudgeProven, acquisition.GradeB},
 		{"acoustid links the bound recording at a length 100s off is no answer", identity, acquisition.JudgeAudio{AcoustID: []acquisition.AcoustIDResult{linked("mb-bound", "Song", 300, "Artist")}, Length: 200}, art, "Song", acquisition.JudgeUnknown, acquisition.GradeC},
 		{"preview at the A cut on an official source with matching tags", identity, acquisition.JudgeAudio{Preview: preview(0.10), Length: 200}, art, "Song", acquisition.JudgeProven, acquisition.GradeA},
