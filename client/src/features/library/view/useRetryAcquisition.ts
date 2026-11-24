@@ -66,26 +66,33 @@ function hasPendingRun(
   return cache.findAll(pendingRunsOf(mutationKey)).some((run) => asRunTrackId(run) === trackId);
 }
 
-export function useOneRunPerTrack<TData, TContext>(
-  mutation: UseMutationResult<TData, Error, TrackId, TContext>,
+function useMutateUnlessPending(
   mutationKey: TrackMutationKey,
-): TrackMutation<TData, TContext> {
+  mutate: (trackId: TrackId) => void,
+): (trackId: TrackId) => void {
   const mutationCache = useQueryClient().getMutationCache();
+  return (trackId) => {
+    if (!hasPendingRun(mutationCache, mutationKey, trackId)) mutate(trackId);
+  };
+}
+
+function useIsInFlight(mutationKey: TrackMutationKey): (trackId: TrackId) => boolean {
   const pendingIds = useMutationState({
     filters: pendingRunsOf(mutationKey),
     select: asRunTrackId,
   });
   const inFlight = useMemo(() => new Set<TrackId>(pendingIds), [pendingIds]);
-  const { mutate, ...run } = mutation;
+  return (trackId) => inFlight.has(trackId);
+}
 
-  return {
-    ...run,
-    mutate: (trackId: TrackId) => {
-      if (hasPendingRun(mutationCache, mutationKey, trackId)) return;
-      mutate(trackId);
-    },
-    isInFlight: (trackId: TrackId) => inFlight.has(trackId),
-  };
+function useOneRunPerTrack<TData, TContext>(
+  mutation: UseMutationResult<TData, Error, TrackId, TContext>,
+  mutationKey: TrackMutationKey,
+): TrackMutation<TData, TContext> {
+  const { mutate, ...run } = mutation;
+  const mutateOnce = useMutateUnlessPending(mutationKey, mutate);
+  const isInFlight = useIsInFlight(mutationKey);
+  return { ...run, mutate: mutateOnce, isInFlight };
 }
 
 type ReacquireContext = { epoch: number };

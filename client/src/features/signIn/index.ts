@@ -1,10 +1,12 @@
-export { AuthCallbackScreen } from '@features/signIn/ui/AuthCallbackScreen';
+import { AuthCallbackScreen } from '@features/signIn/ui/AuthCallbackScreen';
+import { useAuthDeepLink } from '@features/signIn/shell/useAuthDeepLink';
+
+export { AuthCallbackScreen, useAuthDeepLink };
 export { AuthGate } from '@features/signIn/ui/AuthGate';
 export { ForgotPasswordScreen } from '@features/signIn/view/ForgotPasswordScreen';
 export { SetNewPasswordScreen } from '@features/signIn/ui/SetNewPasswordScreen';
 export { SignInScreen } from '@features/signIn/ui/SignInScreen';
 export { SignUpScreen } from '@features/signIn/view/SignUpScreen';
-export { useAuthDeepLink } from '@features/signIn/shell/useAuthDeepLink';
 export { AuthPortProvider, useAuthPort } from '@features/signIn/view/AuthPortProvider';
 export { httpAuthPort } from '@features/signIn/adapters/http/httpAuthPort';
 export {
