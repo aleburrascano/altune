@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/discovery"
+	shareddomain "altune/go-api/internal/shared/domain"
 	"altune/go-api/internal/shared/httputil"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
@@ -26,14 +27,8 @@ import (
 	"go.opentelemetry.io/otel/log/embedded"
 )
 
-type classifiedTestError struct{}
-
-func (classifiedTestError) Error() string     { return "history store unavailable" }
-func (classifiedTestError) HTTPStatus() int   { return http.StatusServiceUnavailable }
-func (classifiedTestError) ErrorCode() string { return "history_unavailable" }
-
 func TestSearchEndpoints_ServiceErrorsUseTypedContract(t *testing.T) {
-	classified := classifiedTestError{}
+	classified := shareddomain.NewError(shareddomain.CodeDiscoveryProviderCircuitOpen, "history store unavailable")
 	unclassified := errors.New("boom")
 
 	cases := []struct {
@@ -52,7 +47,7 @@ func TestSearchEndpoints_ServiceErrorsUseTypedContract(t *testing.T) {
 			path:       "/discovery/suggest?q=kend",
 			err:        classified,
 			wantStatus: http.StatusServiceUnavailable,
-			wantCode:   "history_unavailable",
+			wantCode:   "discovery.provider_circuit_open",
 		},
 		{
 			name:       "suggest unclassified failure",
@@ -72,7 +67,7 @@ func TestSearchEndpoints_ServiceErrorsUseTypedContract(t *testing.T) {
 			path:       "/discovery/search-history?limit=10",
 			err:        classified,
 			wantStatus: http.StatusServiceUnavailable,
-			wantCode:   "history_unavailable",
+			wantCode:   "discovery.provider_circuit_open",
 		},
 		{
 			name: "clear search history classified failure",
@@ -83,7 +78,7 @@ func TestSearchEndpoints_ServiceErrorsUseTypedContract(t *testing.T) {
 			path:       "/discovery/search-history",
 			err:        classified,
 			wantStatus: http.StatusServiceUnavailable,
-			wantCode:   "history_unavailable",
+			wantCode:   "discovery.provider_circuit_open",
 		},
 		{
 			name: "clear search history unclassified failure",
