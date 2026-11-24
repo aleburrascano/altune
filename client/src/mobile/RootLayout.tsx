@@ -10,11 +10,13 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { installApiBase } from '@shared/apiConfig';
 import { installAuthClient } from '@shared/auth';
+import { installBuild } from '@shared/device';
 import { createQueryClient } from '@shared/query';
 import { createAuthClient } from '@/mobile/authClient';
 import { StagingBanner } from '@/mobile/frame/StagingBanner';
@@ -39,6 +41,7 @@ import { ScreenViewsBridge, ServerEventsBridge } from '@/mobile/serverEvents';
 import { chainUncaughtErrorHandler } from '@/mobile/uncaughtErrors';
 
 installApiBase(process.env.EXPO_PUBLIC_API_URL, __DEV__);
+installBuild({ platform: Platform.OS, commit: process.env.EXPO_PUBLIC_BUILD_COMMIT });
 installAuthClient(createAuthClient());
 provideOfflinePort(httpOfflinePort);
 
