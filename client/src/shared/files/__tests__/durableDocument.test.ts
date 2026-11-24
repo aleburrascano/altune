@@ -6,6 +6,7 @@ import {
   writeDocumentAtomically,
   type SchemaSpec,
 } from '@shared/files';
+import { setLogger } from '@shared/log';
 import {
   createMemoryFileStore,
   type MemoryFileStore,
@@ -16,17 +17,18 @@ const TEMP_URI = `${DIR_URI}/doc.json.tmp`;
 
 let store: MemoryFileStore;
 let dir: StoredDirectory;
-let warn: jest.SpyInstance;
+let warn: jest.Mock;
 
 beforeEach(() => {
   store = createMemoryFileStore();
   dir = store.openDirectory('docs');
   dir.create();
-  warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  warn = jest.fn();
+  setLogger({ warn });
 });
 
 afterEach(() => {
-  warn.mockRestore();
+  setLogger();
 });
 
 function read() {

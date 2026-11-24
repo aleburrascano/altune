@@ -4,8 +4,8 @@ export {
   readDocument,
   readVersionedEntries,
   writeDocumentAtomically,
-} from '@shared/files/durableDocument';
-export type { SchemaSpec } from '@shared/files/durableDocument';
+} from '@shared/files/shell/durableDocument';
+export type { SchemaSpec } from '@shared/files/shell/durableDocument';
 export { createFileStoreSlot } from '@shared/files/shell/fileStore';
 export type { FileStore, StoredDirectory, StoredFile } from '@shared/files/shell/fileStore';
 export type { JsonObject } from '@shared/files/core/json';
