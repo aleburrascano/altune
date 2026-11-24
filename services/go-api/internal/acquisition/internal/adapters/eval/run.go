@@ -95,7 +95,7 @@ func seededTrack(kase Case) ports.TrackSnapshot {
 		ID:                 shared.NewTrackId(),
 		UserId:             shared.NewUserId(uuid.New()),
 		Title:              strings.TrimSpace(t.Title),
-		Artist:             strings.Join(strings.Fields(textnorm.NFKC(t.Artist)), " "),
+		Artist:             catalogField(t.Artist),
 		Album:              t.Album,
 		ISRC:               optional(t.ISRC),
 		CatalogMBID:        optional(t.CatalogMBID),
@@ -109,10 +109,17 @@ func seededTrack(kase Case) ports.TrackSnapshot {
 		track.CatalogDurationSeconds, track.StoredDurationSeconds = &length, &length
 	}
 	if kase.Stored != nil {
-		ref, length := storedAudioRef, kase.Stored.Duration
-		track.Status, track.AudioRef, track.StoredDurationSeconds = ports.TrackReady, &ref, &length
+		ref := storedAudioRef
+		track.Status, track.AudioRef = ports.TrackReady, &ref
+		if length := kase.Stored.Duration; length > 0 {
+			track.StoredDurationSeconds = &length
+		}
 	}
 	return track
+}
+
+func catalogField(s string) string {
+	return strings.Join(strings.Fields(textnorm.NFKC(s)), " ")
 }
 
 func optional(s string) *string {
@@ -128,9 +135,10 @@ func rejectedKeys(urls []string) []string {
 		key := sourcekey.SourceKey(rawURL)
 		if key != "" && !slices.Contains(keys, key) {
 			keys = append(keys, key)
+			keys = keys[max(0, len(keys)-maxRejectedSourceKeys):]
 		}
 	}
-	return keys[max(0, len(keys)-maxRejectedSourceKeys):]
+	return keys
 }
 
 func resolverFor(kase Case) ports.RecordingResolver {

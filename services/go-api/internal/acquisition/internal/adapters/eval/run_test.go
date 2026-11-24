@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -1443,6 +1444,47 @@ func TestLoadDir_RejectsATrackLengthNoCatalogWouldHold(t *testing.T) {
 	edge := eval.Case{ID: "x", Class: "OK", Track: eval.Track{Title: "t", Artist: "a", CatalogDuration: week}, Candidates: []eval.Candidate{{URL: "u"}}}
 	if err := validate(t, []eval.Case{edge}); err != nil {
 		t.Fatalf("LoadDir = %v, want a length of exactly a week accepted", err)
+	}
+}
+
+func TestLoadDir_RejectsATrackTheCatalogWouldNotHold(t *testing.T) {
+	long := strings.Repeat("a", 301)
+	for name, track := range map[string]eval.Track{
+		"title blank once trimmed":        {Title: "   ", Artist: "a"},
+		"artist blank once canonicalised": {Title: "t", Artist: "\u3000"},
+		"title over 300 bytes":            {Title: long, Artist: "a"},
+		"artist over 300 bytes":           {Title: "t", Artist: long},
+		"album over 300 bytes":            {Title: "t", Artist: "a", Album: long},
+	} {
+		t.Run(name, func(t *testing.T) {
+			c := eval.Case{ID: "x", Class: "OK", Track: track, Candidates: []eval.Candidate{{URL: "u"}}}
+			if err := validate(t, []eval.Case{c}); err == nil || !strings.Contains(err.Error(), "empty or over 300 bytes once the catalog trims it") {
+				t.Fatalf("LoadDir = %v, want a catalog text error", err)
+			}
+		})
+	}
+	edge := eval.Case{ID: "x", Class: "OK", Track: eval.Track{Title: strings.Repeat("t", 300), Artist: " a ", Album: " "}, Candidates: []eval.Candidate{{URL: "u"}}}
+	if err := validate(t, []eval.Case{edge}); err != nil {
+		t.Fatalf("LoadDir = %v, want 300 bytes, a padded artist and a blank album accepted", err)
+	}
+}
+
+func TestRun_RejectedSourceKeysKeepTheNewestTwentyFiveLikeTheCatalog(t *testing.T) {
+	var urls []string
+	for i := range 26 {
+		urls = append(urls, fmt.Sprintf("https://www.youtube.com/watch?v=videoid%04d", i))
+	}
+	urls = append(urls, urls[0])
+	kase := eval.Case{
+		ID: "t", Class: "F7", ExcludeURLs: urls,
+		Track:      eval.Track{Title: "Save Your Tears", Artist: "The Weeknd", Duration: 215},
+		Candidates: []eval.Candidate{{Title: "Cooking Tutorial Episode 47", URL: "cook", Channel: "Cooking", Duration: 215}},
+	}
+
+	got := eval.Run(context.Background(), kase).Saved.RejectedKeys
+
+	if len(got) != 25 || got[0] != "youtube:videoid0002" || got[24] != "youtube:videoid0000" {
+		t.Errorf("saved rejected keys %v, want videoid0002..videoid0025 then videoid0000 again: a key pushed out of the 25 can be rejected again", got)
 	}
 }
 
