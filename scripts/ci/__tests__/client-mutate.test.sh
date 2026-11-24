@@ -243,11 +243,12 @@ cp "$work/stryker.config.json" "$client/stryker.config.json"
 commit slow
 run_env=(CLIENT_MUTATE_INCREMENTAL_DIR="$incremental" CLIENT_MUTATE_TIME_LIMIT_SECONDS=120 FIRST_MUTANT_MARKER="$work/first-mutant")
 expect "a run past its time limit fails and says the finished mutants are kept" 1 'passed its 120s time limit on the native jest project, and the mutants it finished are kept in .*run it again without pushing'
+stopped_run=$out
 kept=$(jq '[.files[].mutants[] | select(.status != "RuntimeError")] | length' "$incremental/stryker-native.json" 2>&1)
 if [[ $kept =~ ^[1-9][0-9]*$ ]]; then
   echo "ok    the mutants finished before the time limit are kept"
 else
-  echo "FAIL  the mutants finished before the time limit are kept: $kept"; fail=1
+  echo "FAIL  the mutants finished before the time limit are kept: $kept. The stopped run said:"; echo "$stopped_run" | sed 's/^/      /'; fail=1
 fi
 crashed=$(jq '[.files[].mutants[] | select(.status == "RuntimeError")] | length' "$incremental/stryker-native.json" 2>&1)
 if [ "$crashed" = 0 ]; then
