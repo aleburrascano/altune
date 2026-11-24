@@ -5,14 +5,14 @@ import (
 	"altune/go-api/internal/discovery/service/content"
 	"altune/go-api/internal/discovery/service/providercall"
 	shareddomain "altune/go-api/internal/shared/domain"
+	"altune/go-api/internal/shared/fanout"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/requestuser"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
-	"sync"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -224,39 +224,31 @@ func artistContentFailure(tracks, albums *providercall.ContentFetchResponse) *sh
 	return tracksFailure
 }
 
-func runRecovered(ctx context.Context, event string, fetch func() error) (err error) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			slog.ErrorContext(ctx, event, "panic", rec)
-			err = fmt.Errorf("recovered panic: %v", rec)
-		}
-	}()
-	return fetch()
-}
-
 func (h *DiscoveryHandler) fetchTopTracksAndAlbums(
 	ctx context.Context, pn domain.ProviderName, externalID string, known map[domain.ProviderName]string, tracksLimit, albumsLimit int,
 ) (tracksResp, albumsResp *providercall.ContentFetchResponse, tracksErr, albumsErr error) {
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		tracksErr = runRecovered(ctx, "artist_content.top_tracks_panic", func() error {
-			var err error
-			tracksResp, err = h.artistSvc.GetTopTracks(ctx, pn, externalID, known, tracksLimit)
-			return err
+	g := fanout.New("artist_content.fetch", 2)
+	g.Go(ctx, func() {
+		tracksResp, tracksErr = fetchContentPart(ctx, "artist_content.top_tracks_panic", func() (*providercall.ContentFetchResponse, error) {
+			return h.artistSvc.GetTopTracks(ctx, pn, externalID, known, tracksLimit)
 		})
-	}()
-	go func() {
-		defer wg.Done()
-		albumsErr = runRecovered(ctx, "artist_content.albums_panic", func() error {
-			var err error
-			albumsResp, err = h.artistSvc.GetAlbums(ctx, pn, externalID, known, albumsLimit)
-			return err
+	})
+	g.Go(ctx, func() {
+		albumsResp, albumsErr = fetchContentPart(ctx, "artist_content.albums_panic", func() (*providercall.ContentFetchResponse, error) {
+			return h.artistSvc.GetAlbums(ctx, pn, externalID, known, albumsLimit)
 		})
-	}()
-	wg.Wait()
+	})
+	_ = g.Wait()
 	return tracksResp, albumsResp, tracksErr, albumsErr
+}
+
+func fetchContentPart(
+	ctx context.Context, panicEvent string, fetch func() (*providercall.ContentFetchResponse, error),
+) (resp *providercall.ContentFetchResponse, err error) {
+	if panicked := runloop.Try(ctx, panicEvent, func() { resp, err = fetch() }); panicked != nil {
+		return nil, panicked
+	}
+	return resp, err
 }
 
 func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Request) {

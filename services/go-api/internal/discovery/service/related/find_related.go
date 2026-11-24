@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/discovery/internal/core/ports"
 	"altune/go-api/internal/discovery/internal/core/ttlmemo"
 	"altune/go-api/internal/discovery/service/providercall"
+	"altune/go-api/internal/shared/fanout"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/runloop"
 	"altune/go-api/internal/shared/songfacts"
@@ -14,6 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 )
+
+const lookupsPerResult = 2
 
 const (
 	relatedTimeout     = 2 * time.Second
@@ -70,7 +73,7 @@ func (s *FindRelatedService) Execute(
 		return nil
 	}
 
-	fan := &relatedFanOut{ctx: ctx}
+	fan := &relatedFanOut{ctx: ctx, lookups: fanout.New("related.lookup", lookupsPerResult*topN)}
 	for _, result := range organicResults[:topN] {
 		switch result.Kind {
 		case domain.ResultKindTrack:
@@ -179,7 +182,7 @@ func (s *FindRelatedService) serveMemoized(fan *relatedFanOut, lookup relatedGro
 
 type relatedFanOut struct {
 	ctx           context.Context
-	wg            sync.WaitGroup
+	lookups       *fanout.Group
 	mu            sync.Mutex
 	groups        []domain.RelatedGroup
 	providerCalls atomic.Int32
@@ -238,16 +241,14 @@ func (f *relatedFanOut) fetchRelatedGroup(
 	lookup relatedGroupLookup,
 	fetch func(ctx context.Context) ([]domain.SearchResult, error),
 ) {
-	f.wg.Add(1)
-	go func() {
-		defer f.wg.Done()
+	f.lookups.Go(f.ctx, func() {
 		defer runloop.RecoverContext(f.ctx, lookup.panicLog.event, lookup.panicLog.key, lookup.panicLog.value)
 		items, err := fetch(f.ctx)
 		if err != nil || len(items) == 0 {
 			return
 		}
 		f.addGroup(lookup, items)
-	}()
+	})
 }
 
 func (f *relatedFanOut) addGroup(lookup relatedGroupLookup, items []domain.SearchResult) {
@@ -261,7 +262,7 @@ func (f *relatedFanOut) addGroup(lookup relatedGroupLookup, items []domain.Searc
 }
 
 func (f *relatedFanOut) wait() []domain.RelatedGroup {
-	f.wg.Wait()
+	_ = f.lookups.Wait()
 	return f.groups
 }
 

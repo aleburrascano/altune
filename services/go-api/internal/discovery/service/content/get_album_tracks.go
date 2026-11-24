@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/shared/fanout"
 	"altune/go-api/internal/shared/redact"
-	"altune/go-api/internal/shared/runloop"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"log/slog"
@@ -56,7 +55,7 @@ func (s *GetAlbumTracksService) enrichFeatured(ctx context.Context, results []do
 		if !answered[i] && hasDeezerTrackID(results[i]) {
 			g.Go(ctx, func() {
 				s.lookupFeatured(ctx, &results[i])
-			})
+			}, "external_id", results[i].Sources[0].ExternalID)
 		}
 	}
 	_ = g.Wait()
@@ -69,7 +68,6 @@ func hasDeezerTrackID(r domain.SearchResult) bool {
 
 func (s *GetAlbumTracksService) lookupFeatured(ctx context.Context, track *domain.SearchResult) {
 	trackID := track.Sources[0].ExternalID
-	defer runloop.RecoverContext(ctx, "album_tracks.featured_panic", "external_id", trackID)
 	feats, err := providercall.GuardedFetch(ctx, s.breaker, domain.CanonicalContentProvider, func() ([]domain.FeaturedArtist, error) {
 		return s.featured.LookupTrackFeatured(ctx, trackID)
 	})

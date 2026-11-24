@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/discovery/internal/adapters/providers/providerhttp"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providersearch"
 	"altune/go-api/internal/shared/redact"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"errors"
 	"fmt"
@@ -70,7 +71,7 @@ func (a *MusicBrainzAdapter) fetchReleaseGroups(ctx context.Context, mbid string
 		if rgs, ok := a.releaseMemo.Get(mbid); ok {
 			return rgs, nil
 		}
-		fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mbReleaseGroupsFlightTimeout)
+		fctx, cancel := runloop.Detach(ctx, mbReleaseGroupsFlightTimeout)
 		defer cancel()
 		return a.fetchReleaseGroupPages(fctx, mbid)
 	})

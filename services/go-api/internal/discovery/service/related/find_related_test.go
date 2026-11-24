@@ -7,10 +7,12 @@ import (
 	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/discovery/service/related"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -549,6 +551,29 @@ func TestFindRelated_PanickingDependenciesAreContained(t *testing.T) {
 
 	if got := svc.Execute(context.Background(), discoverytest.NewUser(), organic); len(got) != 0 {
 		t.Errorf("groups = %+v, want none when every lookup panics", got)
+	}
+}
+
+func TestFindRelated_EachPanickingLookupIsLoggedUnderItsOwnEvent(t *testing.T) {
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	ring := logging.Setup("error", false)
+	svc := related.NewFindRelatedService(panickingQuerier{}, panickingAlbumProvider{}, panickingArtistProvider{})
+	mainTrack := discoverytest.TrackResult(domain.ProviderDeezer, "1", "Main Track", "Artist", nil)
+	mainTrack.Album = "Some Album"
+	mainTrack.DeezerAlbumID = "12345"
+	organic := []domain.SearchResult{mainTrack, discoverytest.ArtistResult(domain.ProviderDeezer, "dz-1", "Artist", nil)}
+
+	svc.Execute(context.Background(), discoverytest.NewUser(), organic)
+
+	seen := map[string]int{}
+	for _, r := range ring.Snapshot() {
+		seen[r.Message]++
+	}
+	for _, event := range []string{"related.library_lookup_panic", "related.album_tracks_panic", "related.artist_albums_panic"} {
+		if seen[event] != 1 {
+			t.Errorf("%q records = %d, want 1: each lookup keeps its own panic event", event, seen[event])
+		}
 	}
 }
 

@@ -283,6 +283,22 @@ func TestHandleArtistContent_PanickingProviderReturns500(t *testing.T) {
 	discAssertStatus(t, rec, http.StatusInternalServerError)
 }
 
+func TestHandleArtistContent_EachPanickingPartIsLoggedUnderItsOwnEvent(t *testing.T) {
+	ring := captureLogs(t)
+	artistProviders := map[discovery.ProviderName]discovery.ArtistContentProvider{
+		discovery.ProviderDeezer: panickingArtistContentProvider{},
+	}
+	router := buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
+
+	discServe(t, router, http.MethodGet, "/discovery/artists/deezer/1/content", nil)
+
+	for _, event := range []string{"artist_content.top_tracks_panic", "artist_content.albums_panic"} {
+		if _, ok := findRecord(ring, event); !ok {
+			t.Errorf("no %q record: each part keeps its own panic event", event)
+		}
+	}
+}
+
 type countingArtistContentProvider struct {
 	discovery.FakeArtistContentProvider
 	calls int

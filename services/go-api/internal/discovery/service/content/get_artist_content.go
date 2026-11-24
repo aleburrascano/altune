@@ -5,13 +5,12 @@ import (
 	"altune/go-api/internal/discovery/internal/core/ports"
 	"altune/go-api/internal/discovery/internal/core/release"
 	"altune/go-api/internal/discovery/service/providercall"
+	"altune/go-api/internal/shared/fanout"
 	"altune/go-api/internal/shared/redact"
-	"altune/go-api/internal/shared/runloop"
 	"context"
 	"errors"
 	"log/slog"
 	"sort"
-	"sync"
 	"time"
 )
 
@@ -146,17 +145,12 @@ type identityOutcome struct {
 
 func runIdentityJobs(ctx, callerCtx context.Context, jobs []identityJob, fetch identityContentFetch) []identityOutcome {
 	outcomes := make([]identityOutcome, len(jobs))
-	var wg sync.WaitGroup
+	g := fanout.New("artist_content.fanout.provider_panic", len(jobs))
 	for i, j := range jobs {
-		wg.Add(1)
-		go func(i int, j identityJob) {
-			defer wg.Done()
-			defer runloop.RecoverContext(ctx, "artist_content.fanout.provider_panic", "provider", j.provider.String())
-			outcomes[i].failed = true
-			outcomes[i] = runIdentityJob(ctx, callerCtx, j, fetch)
-		}(i, j)
+		outcomes[i].failed = true
+		g.Go(ctx, func() { outcomes[i] = runIdentityJob(ctx, callerCtx, j, fetch) }, "provider", j.provider.String())
 	}
-	wg.Wait()
+	_ = g.Wait()
 	return outcomes
 }
 

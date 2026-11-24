@@ -16,7 +16,6 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"log/slog"
-	"runtime/debug"
 	"slices"
 	"time"
 )
@@ -357,13 +356,8 @@ func (s *Service) resolveRanked(
 	}
 
 	resolved := s.resolver.resolve(ctx, s.cache.key(queryNorm, query.Kinds), func(flightCtx context.Context) (answer rankedResolution) {
-		defer func() {
-			if r := recover(); r != nil {
-				slog.ErrorContext(flightCtx, "search.v2.resolve_panic",
-					"panic", r, "stack", string(debug.Stack()))
-				answer = rankedResolution{partial: true}
-			}
-		}()
+		answer = rankedResolution{partial: true}
+		defer runloop.RecoverContext(flightCtx, "search.v2.resolve_panic")
 		return s.resolveCold(flightCtx, query, searchQuery, queryNorm)
 	})
 	resolved.ranked = slices.Clone(resolved.ranked)
