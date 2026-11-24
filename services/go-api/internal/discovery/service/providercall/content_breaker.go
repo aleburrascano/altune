@@ -93,8 +93,8 @@ func IsPartialResult(err error) bool {
 	return errors.As(err, &partial)
 }
 
-type httpStatusCoder interface {
-	HTTPStatus() int
+type upstreamStatusCoder interface {
+	UpstreamStatus() int
 }
 
 type transportError interface {
@@ -127,9 +127,9 @@ func isProviderHealthFailure(err error) bool {
 	if errors.As(err, &payload) && payload.BadPayload() {
 		return true
 	}
-	var status httpStatusCoder
+	var status upstreamStatusCoder
 	if errors.As(err, &status) {
-		code := status.HTTPStatus()
+		code := status.UpstreamStatus()
 		return code >= statusServerErrorMin || code == statusTooManyRequests
 	}
 	if errors.Is(err, context.DeadlineExceeded) {

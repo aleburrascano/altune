@@ -32,8 +32,8 @@ func UnservedContentResponse(providerName domain.ProviderName) *ContentFetchResp
 }
 
 func contentFailureStatus(err error) domain.ProviderStatus {
-	var status httpStatusCoder
-	if errors.As(err, &status) && status.HTTPStatus() == statusTooManyRequests {
+	var status upstreamStatusCoder
+	if errors.As(err, &status) && status.UpstreamStatus() == statusTooManyRequests {
 		return domain.ProviderStatusRateLimited
 	}
 	if errors.Is(err, context.DeadlineExceeded) {

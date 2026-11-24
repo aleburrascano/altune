@@ -22,7 +22,7 @@ func (r *recordingRoundTripper) RoundTrip(*http.Request) (*http.Response, error)
 	return nil, errors.New("network call should not happen")
 }
 
-type statusCoder interface{ HTTPStatus() int }
+type statusCoder interface{ UpstreamStatus() int }
 
 type cannedRoundTripper struct {
 	status int
@@ -64,10 +64,10 @@ func TestYouTubeMusicAdapter_Search_ThrottledResponseSurfacesStatusErrorForTheBr
 	}
 	var status statusCoder
 	if !errors.As(err, &status) {
-		t.Fatalf("err = %v, want an error carrying HTTPStatus() the breaker classifies as a failure", err)
+		t.Fatalf("err = %v, want an error carrying UpstreamStatus() the breaker classifies as a failure", err)
 	}
-	if got := status.HTTPStatus(); got != http.StatusTooManyRequests {
-		t.Errorf("HTTPStatus() = %d, want 429", got)
+	if got := status.UpstreamStatus(); got != http.StatusTooManyRequests {
+		t.Errorf("UpstreamStatus() = %d, want 429", got)
 	}
 }
 
@@ -330,10 +330,10 @@ func TestYouTubeMusicAdapter_Search_jsonBodyOn500SurfacesStatusErrorForTheBreake
 	}
 	var status statusCoder
 	if !errors.As(err, &status) {
-		t.Fatalf("err = %v, want an error carrying HTTPStatus() the breaker classifies as a failure", err)
+		t.Fatalf("err = %v, want an error carrying UpstreamStatus() the breaker classifies as a failure", err)
 	}
-	if got := status.HTTPStatus(); got != http.StatusInternalServerError {
-		t.Errorf("HTTPStatus() = %d, want 500", got)
+	if got := status.UpstreamStatus(); got != http.StatusInternalServerError {
+		t.Errorf("UpstreamStatus() = %d, want 500", got)
 	}
 }
 
