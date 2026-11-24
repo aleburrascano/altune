@@ -115,6 +115,42 @@ func TestScoreConfidence(t *testing.T) {
 	}
 }
 
+func TestScoreConfidence_ALengthExactlyAtEachToleranceEarnsThatTiersBonus(t *testing.T) {
+	const short, long = 204.0, 400.0
+	const nudge = 0.01
+	const tight, loose, none = 0.4, 0.3, 0.2
+	tightEdge := acquisition.LengthTight.Allowance(short)
+	looseSlackEdge := acquisition.LengthLoose.Allowance(short)
+	looseFractionEdge := acquisition.LengthLoose.Allowance(long)
+	cases := []struct {
+		name  string
+		delta float64
+		track float64
+		want  float64
+	}{
+		{"exactly the tight allowance long", tightEdge, short, tight},
+		{"exactly the tight allowance short", -tightEdge, short, tight},
+		{"just inside the tight allowance", tightEdge - nudge, short, tight},
+		{"just past the tight allowance", tightEdge + nudge, short, loose},
+		{"exactly the loose allowance's slack long", looseSlackEdge, short, loose},
+		{"exactly the loose allowance's slack short", -looseSlackEdge, short, loose},
+		{"just inside the loose allowance's slack", looseSlackEdge - nudge, short, loose},
+		{"just past the loose allowance's slack", looseSlackEdge + nudge, short, none},
+		{"exactly the loose allowance's share of a long track long", looseFractionEdge, long, loose},
+		{"exactly the loose allowance's share of a long track short", -looseFractionEdge, long, loose},
+		{"just inside the loose allowance's share of a long track", looseFractionEdge - nudge, long, loose},
+		{"just past the loose allowance's share of a long track", looseFractionEdge + nudge, long, none},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := acquisition.ConfidenceEvidence{Channel: channelOther, DurationDeltaSeconds: secs(tc.delta)}
+			if got := acquisition.ScoreConfidence(e, tc.track); got != tc.want {
+				t.Errorf("ScoreConfidence(%v s off a %v s track) = %v, want %v", tc.delta, tc.track, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestScoreConfidence_RanksHardOverSoftOverEveryUnknown(t *testing.T) {
 	best := acquisition.ScoreConfidence(acquisition.ConfidenceEvidence{Channel: channelTopic, Resolved: true, DurationDeltaSeconds: secs(0)}, 204)
 	hard := acquisition.ScoreConfidence(acquisition.ConfidenceEvidence{Verdict: "hard", AcoustIDScore: 0.5}, 204)
