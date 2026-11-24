@@ -135,25 +135,10 @@ jobs:
       - name: dependencies
         working-directory: client
         run: npm ci
-      - name: results kept by this branch's last mutation run
-        if: github.ref != 'refs/heads/main'
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ runner.temp }}/client-mutate
-          key: client-mutate-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: client-mutate-${{ github.ref_name }}-
       - name: mutation on changed lines
-        id: mutate
         env:
-          CLIENT_MUTATE_INCREMENTAL_DIR: ${{ runner.temp }}/client-mutate
           CLIENT_MUTATE_TIME_LIMIT_SECONDS: "4800"
         run: bash scripts/ci/client-mutate.sh origin/main
-      - name: keep this run's mutation results for the next run
-        if: always() && github.ref != 'refs/heads/main' && steps.mutate.outcome != 'skipped'
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ runner.temp }}/client-mutate
-          key: client-mutate-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   mobile-quality:
     needs: changes
