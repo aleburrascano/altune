@@ -109,28 +109,57 @@ function apiClientSource(): string {
   );
 }
 
-const GO_WRITE_JSON_STATUS_PATTERN = /httputil\.WriteJSON\(w, (http\.Status\w+),/;
+const REJECTION_CODES_DECLARATION = /\nvar rejectionCodes = [^{]*\{/;
+const FALLBACK_CODE_RETURN = /return domain\.(Code\w+)/;
+const DOMAIN_CODE_REFERENCE = /domain\.(Code\w+)/g;
+const NEW_ERROR_CODE_ARGUMENT = /domain\.NewError\(domain\.(Code\w+),/;
+
+function goApiSource(...segments: string[]): string {
+  return fs.readFileSync(
+    path.join(REPO_ROOT!, 'services', 'go-api', 'internal', ...segments),
+    'utf8',
+  );
+}
+
+function statusOfCode(codeName: string): number {
+  const kind = new RegExp(`\\b${codeName}\\s*=\\s*code\\("[^"]+",\\s*(Kind\\w+),`).exec(
+    goApiSource('shared', 'domain', 'codes.go'),
+  );
+  expect(kind).not.toBeNull();
+  const status = new RegExp(`\\bdomain\\.${kind![1]}:\\s*(http\\.Status\\w+),`).exec(
+    goApiSource('shared', 'httputil', 'errors.go'),
+  );
+  expect(status).not.toBeNull();
+  const value = GO_HTTP_STATUS_CONSTANTS[status![1]!];
+  expect(value).toEqual(expect.any(Number));
+  return value!;
+}
+
+function rejectionCodeNames(source: string): string[] {
+  const declaration = REJECTION_CODES_DECLARATION.exec(source);
+  expect(declaration).not.toBeNull();
+  const open = declaration!.index + declaration![0].length - 1;
+  const table = source.slice(open, findMatchingBrace(source, open));
+  const fallback = FALLBACK_CODE_RETURN.exec(extractGoFuncBody(source, 'rejectionCode'));
+  expect(fallback).not.toBeNull();
+  return [...[...table.matchAll(DOMAIN_CODE_REFERENCE)].map((m) => m[1]!), fallback![1]!];
+}
 
 function deriveRejectTokenStatus(source: string): number {
-  expect(extractGoFuncBody(source, 'rejectToken')).toContain('writeUnauthorized(w, r,');
-  const body = extractGoFuncBody(source, 'writeUnauthorized');
-  const match = GO_WRITE_JSON_STATUS_PATTERN.exec(body);
-  expect(match).not.toBeNull();
-  const status = GO_HTTP_STATUS_CONSTANTS[match![1]!];
-  expect(status).toEqual(expect.any(Number));
-  return status!;
+  expect(extractGoFuncBody(source, 'rejectToken')).toContain(
+    'httputil.HandleServiceError(w, r, domain.NewError(rejectionCode(reason),',
+  );
+  const statuses = new Set(rejectionCodeNames(source).map(statusOfCode));
+  expect(statuses.size).toBe(1);
+  return [...statuses][0]!;
 }
 
 function deriveVerifierUnavailableStatus(source: string): number {
-  expect(extractGoFuncBody(source, 'rejectVerifierUnavailable')).toContain(
-    'writeAuthUnavailable(w)',
-  );
-  const body = extractGoFuncBody(source, 'writeAuthUnavailable');
-  const match = GO_WRITE_JSON_STATUS_PATTERN.exec(body);
-  expect(match).not.toBeNull();
-  const status = GO_HTTP_STATUS_CONSTANTS[match![1]!];
-  expect(status).toEqual(expect.any(Number));
-  return status!;
+  const body = extractGoFuncBody(source, 'rejectVerifierUnavailable');
+  expect(body).toContain('httputil.HandleServiceError(w, r,');
+  const code = NEW_ERROR_CODE_ARGUMENT.exec(body);
+  expect(code).not.toBeNull();
+  return statusOfCode(code![1]!);
 }
 
 function deriveMobileSessionExpiredStatus(source: string): number {
@@ -178,14 +207,12 @@ describe('cross-surface 401 contract, derived from the auth middleware under ser
   it('rejectToken sets the WWW-Authenticate challenge header; rejectVerifierUnavailable does not', () => {
     const source = middlewareSource();
     const rejectTokenBody = extractGoFuncBody(source, 'rejectToken');
-    const writeUnauthorizedBody = extractGoFuncBody(source, 'writeUnauthorized');
     const rejectVerifierUnavailableBody = extractGoFuncBody(source, 'rejectVerifierUnavailable');
-    const writeAuthUnavailableBody = extractGoFuncBody(source, 'writeAuthUnavailable');
 
-    expect(rejectTokenBody).toContain('writeUnauthorized(w, r,');
-    expect(writeUnauthorizedBody).toContain('w.Header().Set("WWW-Authenticate", "Bearer")');
+    const challengeIdx = rejectTokenBody.indexOf('w.Header().Set("WWW-Authenticate", "Bearer")');
+    expect(challengeIdx).toBeGreaterThan(-1);
+    expect(challengeIdx).toBeLessThan(rejectTokenBody.indexOf('httputil.HandleServiceError('));
     expect(rejectVerifierUnavailableBody).not.toContain('WWW-Authenticate');
-    expect(writeAuthUnavailableBody).not.toContain('WWW-Authenticate');
   });
 });
 
@@ -195,7 +222,7 @@ describe('runtime: apiFetch agrees with the derived contract', () => {
     withSession();
     __http.reply('GET /v1/library/tracks', {
       status: rejectTokenStatus,
-      json: { detail: 'invalid token', reason: 'expired' },
+      json: { detail: 'invalid token', code: 'auth.token_expired' },
     });
 
     await expect(apiFetch('/v1/library/tracks')).rejects.toMatchObject({
@@ -209,7 +236,7 @@ describe('runtime: apiFetch agrees with the derived contract', () => {
     withSession();
     __http.reply('GET /v1/library/tracks', {
       status: verifierUnavailableStatus,
-      json: { detail: 'authentication unavailable' },
+      json: { detail: 'authentication unavailable', code: 'auth.unavailable' },
     });
 
     await expect(apiFetch('/v1/library/tracks')).rejects.toMatchObject({

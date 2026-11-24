@@ -154,6 +154,10 @@ func (rej rejecter) rejectFailedVerification(w http.ResponseWriter, r *http.Requ
 		rej.rejectToken(w, r, invalidToken.Reason, "invalid token", err)
 		return
 	}
+	rej.rejectVerifierUnavailable(w, r, err)
+}
+
+func (rej rejecter) rejectVerifierUnavailable(w http.ResponseWriter, r *http.Request, err error) {
 	if !errors.Is(err, context.Canceled) || !errors.Is(r.Context().Err(), context.Canceled) {
 		rej.metrics.VerifierUnavailable()
 	}
