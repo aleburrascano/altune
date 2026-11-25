@@ -10,7 +10,7 @@ import {
   useAlbumDetailState,
   type AlbumDetailState,
 } from '@features/detail/view/useAlbumDetailState';
-import type { DetailRoute } from '@features/detail/domain/detailNavigation';
+import type { DetailRoute } from '@features/detail/core/detailNavigation';
 
 import { albumYear } from '@features/detail/core/formatters';
 import { DetailFacts } from '@features/detail/view/DetailFacts';

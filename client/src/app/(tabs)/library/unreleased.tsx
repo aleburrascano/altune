@@ -1,3 +1,1 @@
-import { UnreleasedAllScreen } from '@features/detail';
-
-export default UnreleasedAllScreen;
+export { UnreleasedRoute as default } from '@/mobile';

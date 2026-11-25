@@ -1,10 +1,15 @@
 import type { DiscoveryResult } from '@shared/catalog';
-import { formatDuration } from '@shared/ui';
+import type { PlaybackSource } from '@shared/playback';
+import { formatDuration, type TextTone } from '@shared/ui';
 
 import { trackExtras } from '@features/detail/core/trackExtras';
-import type { DetailFact } from '@features/detail/view/DetailFacts';
 import { formatRuntime } from '@features/detail/core/formatters';
-import type { TrackDetailActions } from '@features/detail/view/useTrackDetailActions';
+
+export type DetailFact = {
+  label: string;
+  value: string;
+  tone?: TextTone;
+};
 
 export type ArtistFactsInput = {
   releases: number;
@@ -47,20 +52,25 @@ export function buildAlbumFacts(
   return [tracksFact(tracks), runtimeFact(tracks), releasedFact(year)];
 }
 
-type FactsInput = Pick<TrackDetailActions, 'durationSeconds' | 'year' | 'source' | 'isPreview'>;
+export type TrackFactsInput = {
+  durationSeconds: number | null;
+  year: string | null;
+  source: PlaybackSource | null;
+  isPreview: boolean;
+};
 
 function lengthFact(durationSeconds: number | null): DetailFact | null {
   if (durationSeconds == null || durationSeconds <= 0) return null;
   return { label: 'Length', value: formatDuration(durationSeconds) };
 }
 
-function sourceFact(source: FactsInput['source'], isPreview: boolean): DetailFact | null {
+function sourceFact(source: TrackFactsInput['source'], isPreview: boolean): DetailFact | null {
   if (source === null) return null;
   if (isPreview) return { label: 'Source', value: 'Preview', tone: 'warning' };
   return { label: 'Source', value: 'Library' };
 }
 
-export function buildTrackFacts(input: FactsInput): (DetailFact | null)[] {
+export function buildTrackFacts(input: TrackFactsInput): (DetailFact | null)[] {
   return [
     lengthFact(input.durationSeconds),
     input.year !== null ? { label: 'Released', value: input.year } : null,

@@ -2,14 +2,14 @@ import { useState, type ReactElement } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 
 import { Tappable, Text, HorizontalRail, spacing } from '@shared/ui';
-import { useOpenUnreleased } from '@features/detail/hooks/useDetailNavigation';
-import type { DetailRoute } from '@features/detail/domain/detailNavigation';
+import { useOpenUnreleased } from '@features/detail/view/useDetailNavigation';
+import type { DetailRoute } from '@features/detail/core/detailNavigation';
 import type { UnreleasedWhere } from '@features/detail/core/unreleasedView';
 import { hasManyVersions } from '@features/detail/core/unreleasedTrack';
 import type { UnreleasedTrack } from '@shared/apiClient';
 import type { DiscoveryResult } from '@shared/catalog';
 import { warn } from '@shared/log';
-import { useUnreleasedCard, useUnreleasedTracks } from '@features/detail/core/useUnreleasedTracks';
+import { useUnreleasedCard, useUnreleasedTracks } from '@features/detail/view/useUnreleasedTracks';
 import { FilterChips, type ChipGroup } from '@features/detail/view/DiscographySections';
 import { DETAIL_GUTTER } from '@features/detail/view/detailStyles';
 import { AlbumCardsSkeleton } from '@features/detail/view/DetailSkeleton';

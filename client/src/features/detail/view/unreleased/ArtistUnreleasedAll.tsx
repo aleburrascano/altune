@@ -1,4 +1,3 @@
-import { Redirect, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState, type ReactElement } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
 
@@ -6,7 +5,7 @@ import { SortControl, type SortOption, Text, spacing } from '@shared/ui';
 import { recordUserAction } from '@shared/telemetry';
 import type { UnreleasedTrack } from '@shared/apiClient';
 import type { DiscoveryResult } from '@shared/catalog';
-import { readDetailHandoff } from '@shared/navigation';
+import type { DetailHandoff } from '@shared/navigation';
 
 import {
   unreleasedView,
@@ -18,7 +17,7 @@ import { DetailHandoffProvider } from '@features/detail/view/useDetailHandoff';
 import {
   useUnreleasedTracks,
   type UnreleasedTracksState,
-} from '@features/detail/core/useUnreleasedTracks';
+} from '@features/detail/view/useUnreleasedTracks';
 import { DETAIL_GUTTER } from '@features/detail/view/detailStyles';
 import { FilterChips, type ChipGroup } from '@features/detail/view/DiscographySections';
 import { AlbumCardsSkeleton } from '@features/detail/view/DetailSkeleton';
@@ -36,7 +35,8 @@ type BodyProps = {
   choice: ViewChoice;
   shown: UnreleasedTrack[];
 };
-type ScreenParams = { handoff?: string; where?: string };
+type ScreenProps = { handoff: DetailHandoff; where?: string | undefined };
+type BodyOwnProps = ArtistProps & { where?: string | undefined };
 
 const INITIAL_ROWS_RENDERED = 12;
 const PENDING_NOTE = 'Still finding more';
@@ -123,13 +123,12 @@ function isWhat(value: string): value is UnreleasedWhat {
   return value === 'all' || value === 'playable';
 }
 
-function useParamWhere(tracks: UnreleasedTrack[]): UnreleasedWhere {
-  const params = useLocalSearchParams<ScreenParams>();
-  return isWhere(params.where) ? params.where : railFirstChipWhere(tracks);
+function initialWhereFor(tracks: UnreleasedTrack[], where: string | undefined): UnreleasedWhere {
+  return isWhere(where) ? where : railFirstChipWhere(tracks);
 }
 
-function useViewChoice(tracks: UnreleasedTrack[]) {
-  const initialWhere = useParamWhere(tracks);
+function useViewChoice(tracks: UnreleasedTrack[], where: string | undefined) {
+  const initialWhere = initialWhereFor(tracks, where);
   const [sort, setSort] = useState<UnreleasedSort>('popular');
   const [pickedWhere, setWhere] = useState<UnreleasedWhere | null>(null);
   const [what, setWhat] = useState<UnreleasedWhat>('all');
@@ -221,9 +220,9 @@ function UnreleasedFailed({ onRetry }: RetryProps): ReactElement {
   return <SectionError {...error} />;
 }
 
-function UnreleasedAllBody({ artist }: ArtistProps): ReactElement {
+function UnreleasedAllBody({ artist, where: initialWhere }: BodyOwnProps): ReactElement {
   const state = useUnreleasedTracks(artist);
-  const choice = useViewChoice(state.tracks);
+  const choice = useViewChoice(state.tracks, initialWhere);
   const { tracks } = state;
   const { sort, where, what } = choice;
   const shown = useMemo(
@@ -259,13 +258,10 @@ function BodyStates(props: BodyProps): ReactElement {
   return <LoadedBody {...props} />;
 }
 
-export function UnreleasedAllScreen(): ReactElement {
-  const params = useLocalSearchParams<ScreenParams>();
-  const handoff = readDetailHandoff(params.handoff);
-  if (handoff === null) return <Redirect href="/discover" />;
+export function UnreleasedAllScreen({ handoff, where }: ScreenProps): ReactElement {
   return (
     <DetailHandoffProvider value={handoff}>
-      <UnreleasedAllBody artist={handoff.result} />
+      <UnreleasedAllBody artist={handoff.result} where={where} />
     </DetailHandoffProvider>
   );
 }

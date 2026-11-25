@@ -46,7 +46,7 @@ import { useDetailHandoff } from '@features/detail/view/useDetailHandoff';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
 import type { OwnedTrack } from '@features/detail/core/ownedTrack';
-import { useRetryTrack, type RetryTrack } from '@features/detail/core/useRetryTrack';
+import { useRetryTrack, type RetryTrack } from '@features/detail/view/useRetryTrack';
 
 type SaveContext = { optimisticId: TrackId; identity: string | null };
 

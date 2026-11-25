@@ -1,15 +1,14 @@
-import { Redirect, useLocalSearchParams, useRouter, useSegments } from 'expo-router';
 import type { ReactElement } from 'react';
 
-import { readDetailHandoff, type DetailHandoff, tabRootFromSegments } from '@shared/navigation';
+import type { DetailHandoff, TabRoot } from '@shared/navigation';
 import { featuredArtistsFromExtras } from '@shared/catalog';
 import { useArtistDiscovery } from '@features/detail/view/useEntityDiscovery';
 import { realPhotoUrl } from '@features/detail/core/artistPhoto';
-import { useDetailEnrichments } from '@features/detail/core/useDetailEnrichments';
+import { useDetailEnrichments } from '@features/detail/view/useDetailEnrichments';
 import { useResolveMissingSources } from '@features/detail/view/useResolveMissingSources';
-import { useLateralNav } from '@features/detail/hooks/useDetailNavigation';
+import { useDetailNavigator, useLateralNav } from '@features/detail/view/useDetailNavigation';
 import { DetailHandoffProvider } from '@features/detail/view/useDetailHandoff';
-import { detailRouteFor } from '@features/detail/domain/detailNavigation';
+import { detailRouteFor } from '@features/detail/core/detailNavigation';
 
 import { TrackDetailBody } from '@features/detail/view/TrackDetailBody';
 import { AlbumDetailBody } from '@features/detail/view/AlbumDetailBody';
@@ -17,25 +16,18 @@ import { ArtistDetailBody } from '@features/detail/view/ArtistDetailBody';
 import type { DetailChrome } from '@features/detail/view/DetailScaffold';
 import { secondaryLine } from '@features/detail/view/secondaryLine';
 
-export function DetailScreen(): ReactElement {
-  const params = useLocalSearchParams<{ handoff?: string }>();
-  const handoff = readDetailHandoff(params.handoff);
+type DetailScreenProps = { handoff: DetailHandoff; tabRoot: TabRoot };
 
-  if (handoff === null) {
-    return <Redirect href="/discover" />;
-  }
-
+export function DetailScreen({ handoff, tabRoot }: DetailScreenProps): ReactElement {
   return (
     <DetailHandoffProvider value={handoff}>
-      <DetailContent handoff={handoff} />
+      <DetailContent handoff={handoff} tabRoot={tabRoot} />
     </DetailHandoffProvider>
   );
 }
 
-function DetailContent({ handoff }: { handoff: DetailHandoff }): ReactElement {
-  const router = useRouter();
-  const segments = useSegments();
-  const tabRoot = tabRootFromSegments(segments);
+function DetailContent({ handoff, tabRoot }: DetailScreenProps): ReactElement {
+  const navigator = useDetailNavigator();
   const detailRoute = detailRouteFor(tabRoot);
   const rawResult = handoff.result;
   const { resolved: entity, isResolving } = useResolveMissingSources(rawResult);
@@ -66,10 +58,10 @@ function DetailContent({ handoff }: { handoff: DetailHandoff }): ReactElement {
       lateralNav,
     }),
     onBack: () => {
-      if (router.canGoBack()) {
-        router.back();
+      if (navigator.canGoBack()) {
+        navigator.back();
       } else {
-        router.replace(`/${tabRoot}`);
+        navigator.replace(`/${tabRoot}`);
       }
     },
   };

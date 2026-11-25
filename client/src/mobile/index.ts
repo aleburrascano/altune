@@ -16,3 +16,5 @@ export type { UpdateLog } from '@/mobile/otaLaunchReport';
 export { chainUncaughtErrorHandler } from '@/mobile/uncaughtErrors';
 export type { GlobalErrorHandlers } from '@/mobile/uncaughtErrors';
 export { AppChrome } from '@/mobile/frame/AppChrome';
+export { DetailRoute } from '@/mobile/routes/DetailRoute';
+export { UnreleasedRoute } from '@/mobile/routes/UnreleasedRoute';

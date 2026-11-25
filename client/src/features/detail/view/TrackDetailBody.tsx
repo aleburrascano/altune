@@ -8,8 +8,8 @@ import {
   useTrackDetailActions,
   type TrackDetailActions,
 } from '@features/detail/view/useTrackDetailActions';
-import type { LateralNavHandle } from '@features/detail/hooks/useDetailNavigation';
-import { type DetailRoute } from '@features/detail/domain/detailNavigation';
+import type { LateralNavHandle } from '@features/detail/view/useDetailNavigation';
+import { type DetailRoute } from '@features/detail/core/detailNavigation';
 
 import {
   DetailActions,

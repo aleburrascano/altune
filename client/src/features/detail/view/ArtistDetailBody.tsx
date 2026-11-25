@@ -10,7 +10,7 @@ import {
   useArtistDetailState,
   type ArtistDetailState,
 } from '@features/detail/view/useArtistDetailState';
-import type { DetailRoute } from '@features/detail/domain/detailNavigation';
+import type { DetailRoute } from '@features/detail/core/detailNavigation';
 
 import { DetailFacts } from '@features/detail/view/DetailFacts';
 import { buildArtistFacts } from '@features/detail/core/buildDetailFacts';

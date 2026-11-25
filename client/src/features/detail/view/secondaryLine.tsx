@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import type { FeaturedArtist } from '@shared/catalog';
 import { withFeaturing } from '@shared/catalog';
 import { Text, Tappable } from '@shared/ui';
-import type { LateralNavHandle } from '@features/detail/hooks/useDetailNavigation';
+import type { LateralNavHandle } from '@features/detail/view/useDetailNavigation';
 
 import { sharedStyles } from '@features/detail/view/detailStyles';
 

@@ -7,14 +7,14 @@ import {
   type DetailRoute,
   featuringHref,
   unreleasedHref,
-} from '@features/detail/domain/detailNavigation';
+} from '@features/detail/core/detailNavigation';
 import type { UnreleasedWhere } from '@features/detail/core/unreleasedView';
 import { resolveEntityQuery } from '@features/detail/core/resolveEntityQuery';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
 import { useProvidedNavigator } from '@features/detail/view/DetailNavigatorProvider';
 
-function useDetailNavigator(): Navigator {
+export function useDetailNavigator(): Navigator {
   const appNavigator = useNavigator();
   return useProvidedNavigator() ?? appNavigator;
 }
@@ -46,7 +46,7 @@ export type LateralNavHandle = {
 
 type View = { state: LateralNavState; error: string | null };
 type Outcome = { picked: DiscoveryResult } | { message: string };
-type Fetch = () => Promise<DiscoveryResult[]>;
+type Load = () => Promise<DiscoveryResult[]>;
 type Task = () => Promise<Outcome>;
 type OnPicked = (picked: DiscoveryResult) => void;
 type Gate = {
@@ -87,9 +87,9 @@ function outcomeOf(results: DiscoveryResult[], { query, kind }: Search): Outcome
   return picked === undefined ? { message: notFoundMessage(kind, query) } : { picked };
 }
 
-async function lookup(port: DetailPort, fetch: Fetch, search: Search): Promise<Outcome> {
+async function lookup(port: DetailPort, load: Load, search: Search): Promise<Outcome> {
   try {
-    return outcomeOf(await fetch(), search);
+    return outcomeOf(await load(), search);
   } catch (error) {
     warnFetchFailed(port, search, error);
     return { message: SEARCH_FAILED_MESSAGE };

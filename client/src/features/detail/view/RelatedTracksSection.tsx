@@ -3,9 +3,9 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { Artwork, HorizontalRail, Tappable, Text, radius, spacing } from '@shared/ui';
 import type { DiscoveryResult } from '@shared/catalog';
-import { useRelatedTracks } from '@features/detail/core/useRelatedTracks';
-import { type DetailRoute } from '@features/detail/domain/detailNavigation';
-import { useOpenDetail } from '@features/detail/hooks/useDetailNavigation';
+import { useRelatedTracks } from '@features/detail/view/useRelatedTracks';
+import { type DetailRoute } from '@features/detail/core/detailNavigation';
+import { useOpenDetail } from '@features/detail/view/useDetailNavigation';
 import { RELATED_CARD_WIDTH, sharedStyles } from '@features/detail/view/detailStyles';
 
 function relatedKey(track: DiscoveryResult, index: number): string {

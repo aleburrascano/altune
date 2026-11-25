@@ -18,7 +18,7 @@ import {
   toCreateTrackRequest,
 } from '@features/detail/core/saveTrack';
 import { resolveOwnedTrackAtActionTime } from '@features/detail/core/useOwnedTrack';
-import { useRetryTrack } from '@features/detail/core/useRetryTrack';
+import { useRetryTrack } from '@features/detail/view/useRetryTrack';
 import type { SaveTrack } from '@features/detail/view/useSaveTrack';
 
 export type OwnedPlaybackContext = {

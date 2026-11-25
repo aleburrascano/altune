@@ -6,14 +6,11 @@ import { usePlayback } from '@shared/playback';
 
 import { resolveFeatured, trackExtras } from '@features/detail/core/trackExtras';
 import { useDetailHandoff } from '@features/detail/view/useDetailHandoff';
-import {
-  type LateralNavHandle,
-  useOpenFeaturing,
-} from '@features/detail/hooks/useDetailNavigation';
+import { type LateralNavHandle, useOpenFeaturing } from '@features/detail/view/useDetailNavigation';
 import { useOwnedTrack } from '@features/detail/core/useOwnedTrack';
 import { useReportWrongAlbum } from '@features/detail/view/useReportWrongAlbum';
 import { useSaveTrack, useTrackSave, type TrackSave } from '@features/detail/view/useSaveTrack';
-import { type DetailRoute } from '@features/detail/domain/detailNavigation';
+import { type DetailRoute } from '@features/detail/core/detailNavigation';
 import { isResultPlaying, resolvePlaySource } from '@features/detail/core/playSource';
 import { isOptimisticTrackId, toCreateTrackRequest } from '@features/detail/core/saveTrack';
 
