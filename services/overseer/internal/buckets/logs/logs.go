@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -26,7 +25,7 @@ type Bucket struct {
 	records  core.Store
 	src      source
 	minLevel string
-	start    sync.Once
+	start    panicguard.Once
 }
 
 type Deps struct {
@@ -51,7 +50,7 @@ func (b *Bucket) Meta() core.Meta {
 }
 
 func (b *Bucket) Start(ctx context.Context) {
-	b.start.Do(func() { go b.runSource(ctx) })
+	b.start.Contain(ctx, "logs: source pump panicked", func() { _ = b.src.Run(ctx) })
 }
 
 func (b *Bucket) Collect(context.Context) ([]core.Signal, error) {
@@ -60,10 +59,6 @@ func (b *Bucket) Collect(context.Context) ([]core.Signal, error) {
 		return nil, errSourceDown
 	}
 	return signals, nil
-}
-
-func (b *Bucket) runSource(ctx context.Context) {
-	panicguard.Contain(ctx, "logs: source pump panicked", func() { _ = b.src.Run(ctx) })
 }
 
 func (b *Bucket) drain() []core.Signal {

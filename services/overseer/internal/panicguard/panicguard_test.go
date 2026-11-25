@@ -8,7 +8,9 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestTryReportsAPanicAsAnErrorCarryingItsValue(t *testing.T) {
@@ -118,6 +120,54 @@ func TestGroupWaitsForEveryGoroutineAndReportsEachPanic(t *testing.T) {
 	}
 	if err == nil || !strings.Contains(err.Error(), "first") || !strings.Contains(err.Error(), "second") {
 		t.Fatalf("Wait = %v, want both panics", err)
+	}
+}
+
+func TestOnceRunsItsFunctionOnceHoweverOftenAndFromHoweverManyCallers(t *testing.T) {
+	var once panicguard.Once
+	var runs atomic.Int32
+	var callers sync.WaitGroup
+	for range 8 {
+		callers.Go(func() { once.Go(func() { runs.Add(1) }) })
+	}
+	callers.Wait()
+	if err := once.Wait(); err != nil {
+		t.Fatalf("Wait = %v, want nil", err)
+	}
+	if got := runs.Load(); got != 1 {
+		t.Fatalf("function ran %d times, want 1", got)
+	}
+}
+
+func TestOnceContainLogsAPanicAndStillReturnsToTheCaller(t *testing.T) {
+	logs := captureLogs(t)
+	var once panicguard.Once
+	once.Contain(context.Background(), "pump panicked", func() { panic("boom") }, "bucket", "logs")
+
+	if err := once.Wait(); err != nil {
+		t.Fatalf("Wait = %v, want nil because Contain already logged the panic", err)
+	}
+	if out := logs.String(); !strings.Contains(out, "pump panicked") || !strings.Contains(out, "recover=boom") {
+		t.Fatalf("log %q lacks the contained panic", out)
+	}
+}
+
+func TestOnceGoReportsAPanicThroughWait(t *testing.T) {
+	var once panicguard.Once
+	once.Go(func() { panic("boom") })
+	if err := once.Wait(); err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("Wait = %v, want the panic", err)
+	}
+}
+
+func TestWaitWithinReportsWhetherTheWorkFinishedInTime(t *testing.T) {
+	if !panicguard.WaitWithin(time.Second, func() {}) {
+		t.Fatal("WaitWithin gave up on work that finished at once")
+	}
+	release := make(chan struct{})
+	defer close(release)
+	if panicguard.WaitWithin(20*time.Millisecond, func() { <-release }) {
+		t.Fatal("WaitWithin reported work that is still blocked as finished")
 	}
 }
 

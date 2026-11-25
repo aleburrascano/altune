@@ -3,6 +3,7 @@ package security
 import (
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
+	"altune/overseer/internal/panicguard"
 	"context"
 	"errors"
 	"fmt"
@@ -29,7 +30,7 @@ type Bucket struct {
 	stale  bool
 	reason string
 
-	start sync.Once
+	start panicguard.Once
 }
 
 type prober interface {
@@ -73,7 +74,7 @@ func (b *Bucket) Rings() map[string]*core.RingStore {
 }
 
 func (b *Bucket) Start(ctx context.Context) {
-	b.start.Do(func() { go b.scheduler.run(ctx) })
+	b.start.Contain(ctx, "security: scheduler panicked", func() { b.scheduler.run(ctx) })
 }
 
 func (b *Bucket) Collect(context.Context) ([]core.Signal, error) {

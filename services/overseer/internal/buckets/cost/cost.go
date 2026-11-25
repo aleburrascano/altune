@@ -41,7 +41,7 @@ type Bucket struct {
 	spend      SpendReader
 	usage      usageReader
 	spendSched *spendScheduler
-	start      sync.Once
+	start      panicguard.Once
 	series     core.Series
 
 	mu                sync.RWMutex
@@ -87,7 +87,7 @@ func (b *Bucket) KeySeries() string {
 }
 
 func (b *Bucket) Start(ctx context.Context) {
-	b.start.Do(func() { go b.spendSched.run(ctx) })
+	b.start.Contain(ctx, "cost: spend scheduler panicked", func() { b.spendSched.run(ctx) })
 }
 
 func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {

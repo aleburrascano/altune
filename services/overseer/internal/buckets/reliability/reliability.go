@@ -38,8 +38,7 @@ type Bucket struct {
 	adminStale  bool
 	adminReason string
 
-	start   sync.Once
-	running panicguard.Group
+	start panicguard.Once
 }
 
 type Deps struct {
@@ -82,11 +81,11 @@ func (b *Bucket) KeySeries() string {
 }
 
 func (b *Bucket) Start(ctx context.Context) {
-	b.start.Do(func() { b.running.Go(func() { b.poller.run(ctx) }) })
+	b.start.Go(func() { b.poller.run(ctx) })
 }
 
 func (b *Bucket) Wait() {
-	if err := b.running.Wait(); err != nil {
+	if err := b.start.Wait(); err != nil {
 		slog.Error("reliability: poller panicked", "error", err)
 	}
 }

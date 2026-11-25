@@ -27,6 +27,35 @@ func panicking(id, where string) *fakeBucket {
 	return b
 }
 
+type metaPanicsBucket struct {
+	*fakeBucket
+	armed atomic.Bool
+}
+
+func (b *metaPanicsBucket) Meta() core.Meta {
+	if b.armed.Load() {
+		panic("meta boom")
+	}
+	return b.fakeBucket.Meta()
+}
+
+func TestAPanicInACollectCycleIsLoggedAtOnceAndCollectionGoesOn(t *testing.T) {
+	logs := captureLog(t)
+	cfg := newConfig(t)
+	cfg.TickInterval = 5 * time.Millisecond
+	bucket := &metaPanicsBucket{fakeBucket: plain("fragile")}
+	r := boot(t, cfg, bucket)
+	eventually(t, bucket.collectedAtLeast(1), "the bucket never collected before the panic")
+
+	bucket.armed.Store(true)
+	eventually(t, func() bool { return len(logs.named("overseer.collect.tick_loop_panicked")) > 0 }, "a panicking cycle was not logged while the overseer kept running")
+	bucket.armed.Store(false)
+	before := bucket.collects.Load()
+	eventually(t, bucket.collectedAtLeast(before+2), "the tick loop stopped collecting after a panicking cycle")
+
+	r.halt(t)
+}
+
 func wantCounts(t *testing.T, r *running, ok, failed int) {
 	t.Helper()
 	code, h := r.health(t)
