@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/discovery/internal/core/ports"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -32,7 +33,7 @@ func (a *MusicBrainzAdapter) ResolveArtistIdentity(ctx context.Context, name str
 		}
 	}
 	if first == nil {
-		return nil, nil
+		return nil, ports.ErrArtistIdentityNotFound
 	}
 	if candidateCount > 1 {
 		slog.InfoContext(ctx, "mb.multiple_name_matches",
@@ -73,11 +74,11 @@ func parseBirthYear(begin string) int {
 
 func (a *MusicBrainzAdapter) resolveArtistMBID(ctx context.Context, name string) (string, error) {
 	id, err := a.ResolveArtistIdentity(ctx, name)
+	if errors.Is(err, ports.ErrArtistIdentityNotFound) {
+		return "", nil
+	}
 	if err != nil {
 		return "", err
-	}
-	if id == nil {
-		return "", nil
 	}
 	return id.MBID, nil
 }

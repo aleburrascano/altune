@@ -3,6 +3,7 @@ package discogs_test
 import (
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/internal/adapters/providers/providertest"
+	"altune/go-api/internal/discovery/internal/core/ports"
 	"bytes"
 	"context"
 	"errors"
@@ -107,6 +108,22 @@ func TestDiscogsAdapter_Resolve_NoResults(t *testing.T) {
 	}
 	if url != "" {
 		t.Errorf("expected empty URL for no results, got %q", url)
+	}
+}
+
+func TestDiscogsAdapter_ResolveDiscogsArtist_NoResultsIsNotFound(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, `{"results": []}`)
+	}))
+	defer srv.Close()
+
+	info, err := newTestDiscogsAdapter(srv).ResolveDiscogsArtist(context.Background(), "NonexistentArtist", nil)
+	if !errors.Is(err, ports.ErrDiscogsArtistNotFound) {
+		t.Fatalf("error = %v, want ErrDiscogsArtistNotFound", err)
+	}
+	if info != nil {
+		t.Errorf("info = %+v, want nil", info)
 	}
 }
 

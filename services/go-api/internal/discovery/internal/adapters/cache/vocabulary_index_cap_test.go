@@ -42,7 +42,7 @@ func newRecordingVocabStore(t *testing.T) (*cache.RedisVocabularyStore, *pipelin
 		Addr: "127.0.0.1:1",
 		Dialer: func(context.Context, string, string) (net.Conn, error) {
 			t.Fatalf("vocabulary index write must not dial")
-			return nil, nil
+			return nil, net.ErrClosed
 		},
 	})
 	t.Cleanup(func() { _ = client.Close() })
