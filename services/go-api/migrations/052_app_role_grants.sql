@@ -28,7 +28,7 @@ BEGIN
     IF to_regclass('auth.users') IS NOT NULL THEN
         CREATE OR REPLACE VIEW public.auth_user_ids AS SELECT id FROM auth.users;
         REVOKE ALL ON public.auth_user_ids FROM PUBLIC;
-        FOREACH web_role IN ARRAY ARRAY['anon', 'authenticated', 'altune_app'] LOOP
+        FOREACH web_role IN ARRAY ARRAY['anon', 'authenticated', 'service_role', 'altune_app'] LOOP
             IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = web_role) THEN
                 EXECUTE format('REVOKE ALL ON public.auth_user_ids FROM %I', web_role);
             END IF;

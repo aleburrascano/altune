@@ -21,10 +21,6 @@ as_migrator() {
     docker exec -i -e PGPASSWORD=pw "$RUN_ID" psql -X -q -At -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$MIGRATOR" -d app "$@"
 }
 
-apply_052() {
-    docker exec -i -e PGPASSWORD=pw "$RUN_ID" psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$MIGRATOR" -d app -f /api/migrations/052_app_role_grants.sql >/dev/null
-}
-
 in_vm() {
     docker exec -u "$(id -u)" -w /api "$RUN_ID" bash deploy/db-role.sh "$@" >"$WORK/out" 2>&1
 }
@@ -124,17 +120,13 @@ test_create() {
     before=$(grep '^APP_DATABASE_URL=' "$WORK/api/.env.migrate.staging")
     in_vm create staging
     check "a second create succeeds" 0 "$?"
-    check_out "a second create is a no-op" "nothing to do"
+    check_out "a second create keeps the role" "already exists"
+    check_out "a second create re-applies the idempotent grants" "applied migrations/052_app_role_grants.sql"
     after=$(grep '^APP_DATABASE_URL=' "$WORK/api/.env.migrate.staging")
     check "a second create keeps the password" "$before" "$after"
 }
 
 test_grants_then_switch_then_check() {
-    apply_052
-    check "052 applies once the role exists" 0 "$?"
-    apply_052
-    check "052 is idempotent" 0 "$?"
-
     in_vm check staging
     check "check refuses while the app still runs as the migrator" 1 "$?"
     check_out "the refusal names the user" "DATABASE_URL user is the app role"
@@ -215,6 +207,16 @@ test_unswitch_and_drop() {
     check "the migrator URL stays" 1 "$(grep -c '^MIGRATE_DATABASE_URL=' "$WORK/api/.env.migrate.staging")"
     in_vm drop staging
     check_out "a second drop is a no-op" "nothing to drop"
+
+    in_vm create staging
+    check "create after a drop succeeds" 0 "$?"
+    in_vm switch staging
+    check "switch after a drop succeeds" 0 "$?"
+    in_vm check staging
+    check "a drop then create then switch cycle ends fully granted, without re-running the migration" 0 "$?"
+    in_vm unswitch staging
+    in_vm drop staging
+    check "the cycle can be rolled back again" 0 "$?"
     check "the tables are untouched" t "$(as_migrator -c "SELECT count(*) > 20 FROM pg_tables WHERE schemaname = 'public'")"
 }
 
@@ -222,7 +224,11 @@ test_pooler_suffix_follows_the_migrator_user() {
     as_migrator -c "CREATE ROLE \"mig.$REF\" LOGIN CREATEROLE BYPASSRLS PASSWORD 'pw'"
     printf 'DATABASE_URL=postgresql://mig.%s:pw@127.0.0.1:5432/app\n' "$REF" >"$WORK/api/.env.production"
     chmod 600 "$WORK/api/.env.production"
+    printf 'MIGRATE_DATABASE_URL=postgresql://mig.%s:pw@127.0.0.1:5432/app' "$REF" >"$WORK/api/.env.migrate.production"
+    chmod 600 "$WORK/api/.env.migrate.production"
     in_vm create production
+    check "a hand-made migrator file without a trailing newline keeps both lines intact" 2 \
+        "$(grep -cE '^(MIGRATE_DATABASE_URL|APP_DATABASE_URL)=postgresql://' "$WORK/api/.env.migrate.production")"
     check "create works through a suffixed migrator login" 0 "$?"
     check "the stored app login carries the same suffix" 1 \
         "$(grep -c "^APP_DATABASE_URL=postgresql://altune_app.$REF:" "$WORK/api/.env.migrate.production")"

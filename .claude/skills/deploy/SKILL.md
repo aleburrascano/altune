@@ -87,6 +87,8 @@ bash deploy/db-role.sh unswitch <staging|production>  # roll back: restore the o
 bash deploy/db-role.sh drop <staging|production>      # roll back further: revoke and drop the role (refused while the app env uses it)
 ```
 
+Order on a tier: `create` first (it also applies the grants file, so it is safe before or after the deploy that records 052), then release; `switch` only after a release that carries the `auth_user_ids` queries, then release again. `staging.sh` and `prod-migrate.sh` stop with "not found" until `.env.migrate.<tier>` exists, so run `create` on both tiers before the first deploy that carries them. A snapshot restore brings back the grants and RLS state of its day: run `db-role.sh create <tier>` and `check <tier>` after it.
+
 Rotate the app password with `ALTER ROLE` as the migrator, then update `APP_DATABASE_URL` and the app env together and release. Delete stale `.env.*.bak-*` copies once the new role has run a day.
 
 ## Switches

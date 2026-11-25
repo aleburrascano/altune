@@ -6,6 +6,7 @@ cd "$(dirname "$0")/.." || exit
 . deploy/prod_host.sh
 
 APP_ROLE=altune_app
+GRANTS_FILE=migrations/052_app_role_grants.sql
 USAGE="usage: db-role.sh <create|switch|unswitch|check|drop> <staging|production>"
 
 [ $# -eq 2 ] || { echo "$USAGE" >&2; exit 2; }
@@ -81,13 +82,19 @@ do_create() {
     command -v openssl >/dev/null || { log "FAILED: openssl not found on PATH"; exit 1; }
     APP_USER=$(app_user_for "$MIGRATE_DATABASE_URL")
     if role_exists; then
-        if [ -n "$(stored_app_url)" ]; then
-            log "$APP_USER already exists and $MIGRATE_ENV_FILE holds its URL; nothing to do"
-            return 0
+        if [ -z "$(stored_app_url)" ]; then
+            log "FAILED: $APP_USER exists but $MIGRATE_ENV_FILE has no APP_DATABASE_URL; set its password with ALTER ROLE and store the URL by hand"
+            exit 1
         fi
-        log "FAILED: $APP_USER exists but $MIGRATE_ENV_FILE has no APP_DATABASE_URL; set its password with ALTER ROLE and store the URL by hand"
-        exit 1
+        log "$APP_USER already exists and $MIGRATE_ENV_FILE holds its URL"
+    else
+        create_role
     fi
+    migrator_psql -f "$GRANTS_FILE" >/dev/null
+    log "applied $GRANTS_FILE (idempotent); the deploy applies it again when it records the migration"
+}
+
+create_role() {
     local password
     password=$(openssl rand -hex 24)
     {
@@ -96,9 +103,12 @@ do_create() {
 CREATE ROLE "$APP_ROLE" LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOREPLICATION BYPASSRLS PASSWORD :'pw';
 SQL
     } | migrator_psql
-    printf 'APP_DATABASE_URL=%s://%s:%s@%s\n' "$(url_scheme "$MIGRATE_DATABASE_URL")" "$APP_USER" "$password" \
-        "$(url_tail "$MIGRATE_DATABASE_URL")" >>"$MIGRATE_ENV_FILE"
-    log "created role $APP_USER; its URL is in $MIGRATE_ENV_FILE as APP_DATABASE_URL; the grants come from migration 052"
+    local entry
+    entry=$(printf 'APP_DATABASE_URL=%s://%s:%s@%s' "$(url_scheme "$MIGRATE_DATABASE_URL")" "$APP_USER" "$password" \
+        "$(url_tail "$MIGRATE_DATABASE_URL")")
+    [ -z "$(tail -c1 "$MIGRATE_ENV_FILE")" ] || printf '\n' >>"$MIGRATE_ENV_FILE"
+    printf '%s\n' "$entry" >>"$MIGRATE_ENV_FILE"
+    log "created role $APP_USER; its URL is in $MIGRATE_ENV_FILE as APP_DATABASE_URL"
 }
 
 do_switch() {
@@ -195,12 +205,20 @@ do_check() {
         expect_value "the app role holds only SELECT on auth_user_ids" SELECT \
             "$(migrator_psql -c "SELECT string_agg(privilege_type, ',' ORDER BY privilege_type) FROM information_schema.role_table_grants WHERE table_schema = 'public' AND table_name = 'auth_user_ids' AND grantee = '$APP_ROLE'")"
     fi
+    expect_value "the app role is a member of no other role" 0 \
+        "$(migrator_psql -c "SELECT count(*) FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.member WHERE r.rolname = '$APP_ROLE'")"
+    expect_value "the app role does not replicate" f \
+        "$(migrator_psql -c "SELECT rolreplication FROM pg_roles WHERE rolname = '$APP_ROLE'")"
+    expect_value "the app role bypasses row level security" t \
+        "$(migrator_psql -c "SELECT rolbypassrls FROM pg_roles WHERE rolname = '$APP_ROLE'")"
+    expect_value "no web role or service role can write through any view in public" 0 \
+        "$(migrator_psql -c "SELECT count(*) FROM pg_class c, unnest(ARRAY['anon', 'authenticated', 'service_role']) w WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'v' AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = w) AND (has_table_privilege(w, c.oid, 'INSERT') OR has_table_privilege(w, c.oid, 'UPDATE') OR has_table_privilege(w, c.oid, 'DELETE'))")"
     expect_value "the app role has no superuser, createrole, createdb" "f|f|f" \
         "$(migrator_psql -c "SELECT rolsuper, rolcreaterole, rolcreatedb FROM pg_roles WHERE rolname = '$APP_ROLE'")"
     expect_value "the app role owns no table, sequence or function" 0 \
         "$(migrator_psql -c "SELECT (SELECT count(*) FROM pg_class WHERE relowner = r.oid) + (SELECT count(*) FROM pg_proc WHERE proowner = r.oid) FROM pg_roles r WHERE r.rolname = '$APP_ROLE'")"
-    expect_value "anon and authenticated hold no table privilege in public" 0 \
-        "$(migrator_psql -c "SELECT count(*) FROM information_schema.role_table_grants WHERE table_schema = 'public' AND grantee IN ('anon', 'authenticated')")"
+    expect_value "anon and authenticated hold no table or sequence privilege in public" 0 \
+        "$(migrator_psql -c "SELECT count(*) FROM pg_class c, unnest(ARRAY['anon', 'authenticated']) w WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'v', 'S') AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname = w) AND (CASE c.relkind WHEN 'S' THEN has_sequence_privilege(w, c.oid, 'USAGE, SELECT, UPDATE') ELSE has_any_column_privilege(w, c.oid, 'SELECT, INSERT, UPDATE, REFERENCES') OR has_table_privilege(w, c.oid, 'DELETE, TRUNCATE, TRIGGER') END)")"
     expect_value "row level security is on for every public table" 0 \
         "$(migrator_psql -c "SELECT count(*) FROM pg_tables WHERE schemaname = 'public' AND NOT rowsecurity")"
     [ "$FAILED" = 0 ] || { log "FAILED: db role check on $TIER"; exit 1; }
