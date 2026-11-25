@@ -256,7 +256,7 @@ func readTracks(ctx context.Context, databaseURL string, opts options) ([]librar
 	if err != nil {
 		return nil, err
 	}
-	pool, err := openReadOnlyPool(ctx, databaseURL)
+	pool, err := openPool(ctx, databaseURL)
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/database"
+	"altune/go-api/internal/shared/sharedtest"
 	"bytes"
 	"context"
 	"errors"
@@ -9,23 +11,14 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func testStore(t *testing.T) store {
 	t.Helper()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
-	pool, err := pgxpool.New(context.Background(), dbURL)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	return store{pool: pool}
+	pool := sharedtest.Pool(t)
+	return store{pool: pool, runTx: database.InTx}
 }
 
 type seeded struct {
@@ -621,7 +614,7 @@ func TestRunReconcile_FillsAnEmptyCoverAndAnEmptyAlbumAndRecomputesTheKey(t *tes
 func TestReconcileTrack_ReadOnlyAccessRefusesTheWriteEvenWhenTheSessionDefaultIsReadWrite(t *testing.T) {
 	s := testStore(t)
 	row := seedTrack(t, s, nil, nil, nil)
-	dry := store{pool: s.pool, access: pgx.ReadOnly}
+	dry := store{pool: s.pool, runTx: database.ReadOnly}
 
 	_, err := dry.reconcileTrack(context.Background(), uuid.New(), planFor(row, 4, fillChanges()...), true)
 
@@ -653,7 +646,7 @@ func readOnlyGuardURL(t *testing.T, s store) string {
 		t.Fatalf("guard schema: %v", err)
 	}
 	t.Cleanup(func() { _, _ = s.pool.Exec(context.Background(), "DROP SCHEMA "+schema+" CASCADE") })
-	url := os.Getenv("DATABASE_URL")
+	url := sharedtest.DatabaseURL(t)
 	sep := "?"
 	if strings.Contains(url, "?") {
 		sep = "&"
@@ -710,7 +703,7 @@ func TestRun_ADryRunReadsTheLibraryOnlyInsideReadOnlyTransactions(t *testing.T) 
 func TestRun_ApplyAndUndoStillWriteWhenTheSessionDefaultIsReadWrite(t *testing.T) {
 	s := testStore(t)
 	row := seedTrack(t, s, nil, nil, nil)
-	env := reconcileEnv(os.Getenv("DATABASE_URL"))
+	env := reconcileEnv(sharedtest.DatabaseURL(t))
 
 	var out bytes.Buffer
 	applyErr := run(options{reportPath: yearFillReport(t, row), apply: true}, env, &out)
@@ -738,7 +731,7 @@ func TestUndoRun_ReadOnlyAccessRefusesTheRestoreAndLeavesTheAppliedValue(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	dry := store{pool: s.pool, access: pgx.ReadOnly}
+	dry := store{pool: s.pool, runTx: database.ReadOnly}
 
 	results, undoErr := dry.undoRun(context.Background(), runID)
 
@@ -757,7 +750,7 @@ func TestUndoRun_ReadOnlyAccessRefusesTheRestoreAndLeavesTheAppliedValue(t *test
 func TestReconcileTrack_ADryRunOnReadOnlyAccessStillReportsTheChangeItWouldApply(t *testing.T) {
 	s := testStore(t)
 	row := seedTrack(t, s, nil, nil, nil)
-	dry := store{pool: s.pool, access: pgx.ReadOnly}
+	dry := store{pool: s.pool, runTx: database.ReadOnly}
 
 	decisions, err := dry.reconcileTrack(context.Background(), uuid.New(), planFor(row, 4, fillChanges()...), false)
 

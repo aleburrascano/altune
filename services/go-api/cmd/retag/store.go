@@ -20,12 +20,8 @@ func (s selection) changedOnly() bool {
 }
 
 type trackStore struct {
-	pool   *pgxpool.Pool
-	access pgx.TxAccessMode
-}
-
-func (s trackStore) inTx(ctx context.Context, fn func(pgx.Tx) error) error {
-	return pgx.BeginTxFunc(ctx, s.pool, pgx.TxOptions{AccessMode: s.access}, fn)
+	pool  *pgxpool.Pool
+	runTx func(context.Context, *pgxpool.Pool, func(pgx.Tx) error) error
 }
 
 const readyTracksSQL = `SELECT id::text, user_id::text, title, artist, COALESCE(album, ''), COALESCE(album_artist, ''),
@@ -44,28 +40,21 @@ func (s trackStore) readyTracks(ctx context.Context, sel selection) ([]trackRow,
 		query, args = readyTracksSQL+changedFilterSQL+" ORDER BY id", selectionArgs(sel)
 	}
 	var tracks []trackRow
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.runTx(ctx, s.pool, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, query, args...)
 		if err != nil {
 			return fmt.Errorf("query ready tracks: %w", err)
 		}
-		defer rows.Close()
-		for rows.Next() {
-			track, err := scanTrack(rows)
-			if err != nil {
-				return err
-			}
-			tracks = append(tracks, track)
-		}
-		return rows.Err()
+		tracks, err = pgx.CollectRows(rows, scanTrack)
+		return err
 	})
 	return tracks, err
 }
 
-func scanTrack(rows pgx.Rows) (trackRow, error) {
+func scanTrack(row pgx.CollectableRow) (trackRow, error) {
 	var track trackRow
 	tags := &track.Tags
-	if err := rows.Scan(&track.ID, &track.UserID, &tags.Title, &tags.Artist, &tags.Album, &tags.AlbumArtist,
+	if err := row.Scan(&track.ID, &track.UserID, &tags.Title, &tags.Artist, &tags.Album, &tags.AlbumArtist,
 		&tags.Genre, &tags.Year, &tags.TrackNumber, &track.Ref); err != nil {
 		return trackRow{}, fmt.Errorf("scan ready track: %w", err)
 	}
@@ -88,7 +77,7 @@ const stillServesSQL = `SELECT EXISTS (SELECT 1 FROM tracks
 
 func (s trackStore) stillServes(ctx context.Context, track trackRow) (bool, error) {
 	var serves bool
-	err := s.inTx(ctx, func(tx pgx.Tx) error {
+	err := s.runTx(ctx, s.pool, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, stillServesSQL, track.ID, track.UserID, track.Ref).Scan(&serves)
 	})
 	return serves, err

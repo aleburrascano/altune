@@ -5,6 +5,8 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type heldTrack struct {
@@ -60,23 +62,24 @@ const heldTracksSQL = `SELECT t.id::text, t.user_id::text, t.artist, COALESCE(t.
 	  AND ($1 = '' OR t.user_id::text = $1)`
 
 func (s store) loadHeld(ctx context.Context, userID string) (heldIndex, error) {
-	tx, err := s.begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	rows, err := tx.Query(ctx, heldTracksSQL, userID)
-	if err != nil {
-		return nil, fmt.Errorf("query held tracks: %w", err)
-	}
-	defer rows.Close()
 	var tracks []heldTrack
-	for rows.Next() {
-		var held heldTrack
-		if err := rows.Scan(&held.ID, &held.UserID, &held.Artist, &held.Album, &held.Title); err != nil {
-			return nil, fmt.Errorf("scan held track: %w", err)
+	err := s.runTx(ctx, s.pool, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, heldTracksSQL, userID)
+		if err != nil {
+			return fmt.Errorf("query held tracks: %w", err)
 		}
-		tracks = append(tracks, held)
+		tracks, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (heldTrack, error) {
+			var held heldTrack
+			err := row.Scan(&held.ID, &held.UserID, &held.Artist, &held.Album, &held.Title)
+			return held, err
+		})
+		if err != nil {
+			return fmt.Errorf("scan held tracks: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	return newHeldIndex(tracks), rows.Err()
+	return newHeldIndex(tracks), nil
 }

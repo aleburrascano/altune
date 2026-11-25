@@ -2,31 +2,23 @@ package main
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/shared/database"
+	"altune/go-api/internal/shared/sharedtest"
 	"bytes"
 	"context"
 	"errors"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func testStore(t *testing.T) store {
 	t.Helper()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
-	pool, err := pgxpool.New(context.Background(), dbURL)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	return store{pool: pool}
+	pool := sharedtest.Pool(t)
+	return store{pool: pool, runTx: database.InTx}
 }
 
 func seedReadyTrack(t *testing.T, s store, userID string, sourceURL, provenance, evidence *string) string {
@@ -152,7 +144,7 @@ func TestRunUndo_FailsForARunThatWroteNothing(t *testing.T) {
 func TestApplyPatch_ReadOnlyAccessRefusesTheWriteEvenWhenTheSessionDefaultIsReadWrite(t *testing.T) {
 	s, user := testStore(t), uuid.NewString()
 	id := seedReadyTrack(t, s, user, text(youtubeURL), text("verified"), text(`{"verdict":"hard"}`))
-	dry := store{pool: s.pool, access: pgx.ReadOnly}
+	dry := store{pool: s.pool, runTx: database.ReadOnly}
 
 	_, err := dry.applyPatch(context.Background(), trackRow{ID: id, UserID: user, Version: 4}, patch{})
 
@@ -182,7 +174,7 @@ func readOnlyGuardURL(t *testing.T, s store) string {
 		t.Fatalf("guard schema: %v", err)
 	}
 	t.Cleanup(func() { _, _ = s.pool.Exec(context.Background(), "DROP SCHEMA "+schema+" CASCADE") })
-	url := os.Getenv("DATABASE_URL")
+	url := sharedtest.DatabaseURL(t)
 	sep := "?"
 	if strings.Contains(url, "?") {
 		sep = "&"
@@ -231,7 +223,7 @@ func TestRun_ADryRunReadsTheLibraryOnlyInsideReadOnlyTransactions(t *testing.T) 
 func TestRun_ApplyAndUndoStillWriteWhenTheSessionDefaultIsReadWrite(t *testing.T) {
 	s, user := testStore(t), uuid.NewString()
 	id := seedReadyTrack(t, s, user, nil, nil, nil)
-	env := gradeEnv(os.Getenv("DATABASE_URL"))
+	env := gradeEnv(sharedtest.DatabaseURL(t))
 
 	var out bytes.Buffer
 	applyErr := run(options{userID: user, apply: true}, env, &out)
@@ -259,7 +251,7 @@ func TestUndoRun_ReadOnlyAccessRefusesTheRestoreAndLeavesTheGrade(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	dry := store{pool: s.pool, access: pgx.ReadOnly}
+	dry := store{pool: s.pool, runTx: database.ReadOnly}
 
 	_, undoErr := dry.undoRun(context.Background(), runID)
 
@@ -275,7 +267,7 @@ func TestUndoRun_ReadOnlyAccessRefusesTheRestoreAndLeavesTheGrade(t *testing.T) 
 func TestUngradedTracks_ReadOnlyAccessStillListsTheTracksADryRunWouldGrade(t *testing.T) {
 	s, user := testStore(t), uuid.NewString()
 	id := seedReadyTrack(t, s, user, nil, nil, nil)
-	dry := store{pool: s.pool, access: pgx.ReadOnly}
+	dry := store{pool: s.pool, runTx: database.ReadOnly}
 
 	rows, err := dry.ungradedTracks(context.Background(), user, 0)
 

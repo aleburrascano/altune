@@ -13,12 +13,8 @@ import (
 )
 
 type store struct {
-	pool   *pgxpool.Pool
-	access pgx.TxAccessMode
-}
-
-func (s store) begin(ctx context.Context) (pgx.Tx, error) {
-	return s.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: s.access})
+	pool  *pgxpool.Pool
+	runTx func(context.Context, *pgxpool.Pool, func(pgx.Tx) error) error
 }
 
 type saveVerdict string
@@ -39,25 +35,23 @@ const unidentifiedTracksSQL = `SELECT t.id::text, t.user_id::text, t.title, t.ar
 	LIMIT NULLIF($2, 0)`
 
 func (s store) loadTracks(ctx context.Context, userID string, limit int) ([]libraryTrack, error) {
-	tx, err := s.begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	rows, err := tx.Query(ctx, unidentifiedTracksSQL, userID, limit)
-	if err != nil {
-		return nil, fmt.Errorf("query ready tracks: %w", err)
-	}
-	defer rows.Close()
 	var tracks []libraryTrack
-	for rows.Next() {
-		var t libraryTrack
-		if err := rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Artist, &t.Album, &t.ISRC, &t.FileSeconds, &t.Version, &t.SourceURL); err != nil {
-			return nil, fmt.Errorf("scan ready track: %w", err)
+	err := s.runTx(ctx, s.pool, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, unidentifiedTracksSQL, userID, limit)
+		if err != nil {
+			return fmt.Errorf("query ready tracks: %w", err)
 		}
-		tracks = append(tracks, t)
-	}
-	return tracks, rows.Err()
+		tracks, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (libraryTrack, error) {
+			var t libraryTrack
+			err := row.Scan(&t.ID, &t.UserID, &t.Title, &t.Artist, &t.Album, &t.ISRC, &t.FileSeconds, &t.Version, &t.SourceURL)
+			return t, err
+		})
+		if err != nil {
+			return fmt.Errorf("scan ready tracks: %w", err)
+		}
+		return nil
+	})
+	return tracks, err
 }
 
 const pinTargetsSQL = `SELECT t.id::text, t.user_id::text, t.title, t.artist, COALESCE(t.album, ''), COALESCE(t.isrc, ''),
@@ -67,26 +61,34 @@ const pinTargetsSQL = `SELECT t.id::text, t.user_id::text, t.title, t.artist, CO
 	WHERE t.id::text = ANY($1::text[])`
 
 func (s store) loadPinTargets(ctx context.Context, trackIDs []string) (map[string]pinTarget, error) {
-	tx, err := s.begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	rows, err := tx.Query(ctx, pinTargetsSQL, trackIDs)
-	if err != nil {
-		return nil, fmt.Errorf("query pinned tracks: %w", err)
-	}
-	defer rows.Close()
-	targets := map[string]pinTarget{}
-	for rows.Next() {
-		var target pinTarget
-		t := &target.Track
-		if err := rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Artist, &t.Album, &t.ISRC, &t.FileSeconds, &t.Version, &target.IdentityStatus, &target.IdentityISRC, &target.IdentityMBRecordingID); err != nil {
-			return nil, fmt.Errorf("scan pinned track: %w", err)
+	var found []pinTarget
+	err := s.runTx(ctx, s.pool, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, pinTargetsSQL, trackIDs)
+		if err != nil {
+			return fmt.Errorf("query pinned tracks: %w", err)
 		}
-		targets[t.ID] = target
+		found, err = pgx.CollectRows(rows, scanPinTarget)
+		if err != nil {
+			return fmt.Errorf("scan pinned tracks: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	return targets, rows.Err()
+	targets := make(map[string]pinTarget, len(found))
+	for _, target := range found {
+		targets[target.Track.ID] = target
+	}
+	return targets, nil
+}
+
+func scanPinTarget(row pgx.CollectableRow) (pinTarget, error) {
+	var target pinTarget
+	t := &target.Track
+	err := row.Scan(&t.ID, &t.UserID, &t.Title, &t.Artist, &t.Album, &t.ISRC, &t.FileSeconds, &t.Version,
+		&target.IdentityStatus, &target.IdentityISRC, &target.IdentityMBRecordingID)
+	return target, err
 }
 
 const saveIdentitySQL = `INSERT INTO track_identity (track_id, user_id, isrc, mb_recording_id, deezer_track_id, apple_song_id,
@@ -112,11 +114,6 @@ func (s store) save(ctx context.Context, runID uuid.UUID, t libraryTrack, found 
 	if err != nil {
 		return saveSkipped, fmt.Errorf("encode evidence: %w", err)
 	}
-	tx, err := s.begin(ctx)
-	if err != nil {
-		return saveSkipped, fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
 	query, guards := saveIdentitySQL, []any{}
 	if found.Replaces != nil {
 		query, guards = replaceIdentitySQL, []any{nullable(found.Replaces.ISRC), nullable(found.Replaces.MBRecordingID)}
@@ -125,20 +122,25 @@ func (s store) save(ctx context.Context, runID uuid.UUID, t libraryTrack, found 
 		t.ID, t.Version, nullable(found.ISRC), nullable(found.MBRecordingID),
 		nullable(found.DeezerTrackID), nullable(found.AppleSongID), string(found.Status), found.Reason, proof, runID,
 	}, guards...)
-	result, err := tx.Exec(ctx, query, args...)
+	verdict := saveSkipped
+	err = s.runTx(ctx, s.pool, func(tx pgx.Tx) error {
+		result, err := tx.Exec(ctx, query, args...)
+		if err != nil {
+			return fmt.Errorf("save identity: %w", err)
+		}
+		if result.RowsAffected() == 0 {
+			return nil
+		}
+		if err := pinCatalogAfterSave(ctx, tx, runID, t, found); err != nil {
+			return err
+		}
+		verdict = saveWritten
+		return nil
+	})
 	if err != nil {
-		return saveSkipped, fmt.Errorf("save identity: %w", err)
-	}
-	if result.RowsAffected() == 0 {
-		return saveSkipped, nil
-	}
-	if err := pinCatalogAfterSave(ctx, tx, runID, t, found); err != nil {
 		return saveSkipped, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return saveSkipped, fmt.Errorf("commit: %w", err)
-	}
-	return saveWritten, nil
+	return verdict, nil
 }
 
 func pinCatalogAfterSave(ctx context.Context, tx pgx.Tx, runID uuid.UUID, t libraryTrack, found identity) error {
@@ -228,23 +230,21 @@ const undoPinsSQL = `WITH unpinned AS (
 	(SELECT count(*) FROM track_metadata_changes WHERE run_id = $1 AND field = 'catalog_mbid' AND undone_at IS NULL) - (SELECT count(*) FROM unpinned)`
 
 func (s store) undoRun(ctx context.Context, runID uuid.UUID) (undoTally, error) {
-	tx, err := s.begin(ctx)
-	if err != nil {
-		return undoTally{}, fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
 	var tally undoTally
-	if err := tx.QueryRow(ctx, undoRunSQL, runID).Scan(&tally.Removed, &tally.Restored, &tally.Kept); err != nil {
-		return undoTally{}, fmt.Errorf("undo run: %w", err)
+	err := s.runTx(ctx, s.pool, func(tx pgx.Tx) error {
+		if err := tx.QueryRow(ctx, undoRunSQL, runID).Scan(&tally.Removed, &tally.Restored, &tally.Kept); err != nil {
+			return fmt.Errorf("undo run: %w", err)
+		}
+		if err := tx.QueryRow(ctx, undoPinsSQL, runID).Scan(&tally.Unpinned, &tally.PinsKept); err != nil {
+			return fmt.Errorf("undo pins: %w", err)
+		}
+		if tally.isEmpty() {
+			return fmt.Errorf("%w for run_id %s", errNothingToUndo, runID)
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, errNothingToUndo) {
+		return undoTally{}, err
 	}
-	if err := tx.QueryRow(ctx, undoPinsSQL, runID).Scan(&tally.Unpinned, &tally.PinsKept); err != nil {
-		return undoTally{}, fmt.Errorf("undo pins: %w", err)
-	}
-	if tally.isEmpty() {
-		return tally, fmt.Errorf("%w for run_id %s", errNothingToUndo, runID)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return undoTally{}, fmt.Errorf("commit: %w", err)
-	}
-	return tally, nil
+	return tally, err
 }

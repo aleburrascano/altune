@@ -8,6 +8,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
 )
@@ -148,14 +149,9 @@ func loadLibraryArtists(ctx context.Context, pool *pgxpool.Pool, limit int, rand
 	if err != nil {
 		return nil, fmt.Errorf("query artists: %w", err)
 	}
-	defer rows.Close()
-	artists := []string{}
-	for rows.Next() {
-		var a string
-		if err := rows.Scan(&a); err != nil {
-			return nil, fmt.Errorf("scan artist: %w", err)
-		}
-		artists = append(artists, a)
+	artists, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, fmt.Errorf("scan artists: %w", err)
 	}
-	return artists, rows.Err()
+	return artists, nil
 }

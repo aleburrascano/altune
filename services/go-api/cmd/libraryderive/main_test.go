@@ -28,8 +28,8 @@ func TestParseOptions(t *testing.T) {
 	}
 }
 
-func TestOpenReadOnlyPool_RefusesAnEmptyDatabaseURL(t *testing.T) {
-	if _, err := openReadOnlyPool(t.Context(), ""); !errors.Is(err, errEmptyDatabaseURL) {
+func TestOpenPool_RefusesAnEmptyDatabaseURL(t *testing.T) {
+	if _, err := openPool(t.Context(), ""); !errors.Is(err, errEmptyDatabaseURL) {
 		t.Fatalf("err = %v", err)
 	}
 }

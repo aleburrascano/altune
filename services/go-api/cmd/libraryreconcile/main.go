@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/database"
 	"context"
 	"errors"
 	"flag"
@@ -10,7 +11,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -68,20 +68,7 @@ func openPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	if databaseURL == "" {
 		return nil, errEmptyDatabaseURL
 	}
-	cfg, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		return nil, fmt.Errorf("parse database url: %w", err)
-	}
-	cfg.MaxConns = 2
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create pool: %w", err)
-	}
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("ping database: %w", err)
-	}
-	return pool, nil
+	return database.NewPool(ctx, databaseURL, 2)
 }
 
 func main() {
@@ -106,18 +93,18 @@ func run(opts options, env func(string) string, out io.Writer) error {
 		return err
 	}
 	defer pool.Close()
-	access := pgx.ReadWrite
+	runTx := database.InTx
 	if !opts.apply && !opts.undo {
-		access = pgx.ReadOnly
+		runTx = database.ReadOnly
 	}
 	if opts.undo {
-		return runUndo(ctx, store{pool: pool, access: access}, opts.undoRunID, out)
+		return runUndo(ctx, store{pool: pool, runTx: runTx}, opts.undoRunID, out)
 	}
 	plans, err := loadPlan(opts.reportPath)
 	if err != nil {
 		return err
 	}
-	return runReconcile(ctx, store{pool: pool, access: access}, plans, opts.apply, uuid.New(), out)
+	return runReconcile(ctx, store{pool: pool, runTx: runTx}, plans, opts.apply, uuid.New(), out)
 }
 
 func loadPlan(path string) ([]trackPlan, error) {

@@ -24,12 +24,8 @@ type decision struct {
 }
 
 type store struct {
-	pool   *pgxpool.Pool
-	access pgx.TxAccessMode
-}
-
-func (s store) begin(ctx context.Context) (pgx.Tx, error) {
-	return s.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: s.access})
+	pool  *pgxpool.Pool
+	runTx func(context.Context, *pgxpool.Pool, func(pgx.Tx) error) error
 }
 
 type trackRow struct {
@@ -104,20 +100,18 @@ func allFailed(plan trackPlan) []decision {
 }
 
 func (s store) reconcileTrack(ctx context.Context, runID uuid.UUID, plan trackPlan, write bool) ([]decision, error) {
-	tx, err := s.begin(ctx)
+	var decisions []decision
+	err := s.runTx(ctx, s.pool, func(tx pgx.Tx) error {
+		decided, key, err := decideInTx(ctx, tx, plan, write)
+		if err != nil || !write {
+			decisions = decided
+			return err
+		}
+		decisions, err = writeApplied(ctx, tx, runID, plan, decided, key)
+		return err
+	})
 	if err != nil {
-		return allFailed(plan), fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	decisions, key, err := decideInTx(ctx, tx, plan, write)
-	if err != nil || !write {
-		return decisions, err
-	}
-	if decisions, err = writeApplied(ctx, tx, runID, plan, decisions, key); err != nil {
 		return allFailed(plan), err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return allFailed(plan), fmt.Errorf("commit: %w", err)
 	}
 	return decisions, nil
 }
@@ -325,29 +319,30 @@ const loggedChangesSQL = `SELECT track_id::text, user_id::text, field, old_value
 	FROM track_metadata_changes WHERE run_id = $1 AND undone_at IS NULL ORDER BY track_id, field`
 
 func (s store) loggedChanges(ctx context.Context, runID uuid.UUID) ([]loggedChange, error) {
-	tx, err := s.begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	rows, err := tx.Query(ctx, loggedChangesSQL, runID)
-	if err != nil {
-		return nil, fmt.Errorf("query change log: %w", err)
-	}
-	defer rows.Close()
 	var changes []loggedChange
-	for rows.Next() {
-		var change loggedChange
-		var rawField string
-		if err := rows.Scan(&change.TrackID, &change.UserID, &rawField, &change.OldValue, &change.NewValue, &change.Group); err != nil {
-			return nil, fmt.Errorf("scan change log: %w", err)
+	err := s.runTx(ctx, s.pool, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, loggedChangesSQL, runID)
+		if err != nil {
+			return fmt.Errorf("query change log: %w", err)
 		}
-		if change.Field, err = parseField(rawField); err != nil {
-			return nil, err
-		}
-		changes = append(changes, change)
+		changes, err = pgx.CollectRows(rows, scanLoggedChange)
+		return err
+	})
+	return changes, err
+}
+
+func scanLoggedChange(row pgx.CollectableRow) (loggedChange, error) {
+	var change loggedChange
+	var rawField string
+	if err := row.Scan(&change.TrackID, &change.UserID, &rawField, &change.OldValue, &change.NewValue, &change.Group); err != nil {
+		return loggedChange{}, fmt.Errorf("scan change log: %w", err)
 	}
-	return changes, rows.Err()
+	field, err := parseField(rawField)
+	if err != nil {
+		return loggedChange{}, err
+	}
+	change.Field = field
+	return change, nil
 }
 
 func sameValue(a, b *string) bool {
@@ -358,24 +353,32 @@ func sameValue(a, b *string) bool {
 }
 
 func (s store) undoUnit(ctx context.Context, runID uuid.UUID, unit []loggedChange) (undoVerdict, error) {
-	tx, err := s.begin(ctx)
+	verdict := undoFailed
+	err := s.runTx(ctx, s.pool, func(tx pgx.Tx) error {
+		checked, err := checkUnit(ctx, tx, unit)
+		verdict = checked
+		if err != nil || checked != undoRestored {
+			return err
+		}
+		for _, change := range unit {
+			if err := restoreAndStamp(ctx, tx, runID, change); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 	if err != nil {
-		return undoFailed, fmt.Errorf("begin: %w", err)
+		return undoFailed, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
+	return verdict, nil
+}
+
+func checkUnit(ctx context.Context, tx pgx.Tx, unit []loggedChange) (undoVerdict, error) {
 	for _, change := range unit {
 		verdict, err := checkUnchanged(ctx, tx, change)
 		if verdict != undoRestored {
 			return verdict, err
 		}
-	}
-	for _, change := range unit {
-		if err := restoreAndStamp(ctx, tx, runID, change); err != nil {
-			return undoFailed, err
-		}
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return undoFailed, fmt.Errorf("commit: %w", err)
 	}
 	return undoRestored, nil
 }

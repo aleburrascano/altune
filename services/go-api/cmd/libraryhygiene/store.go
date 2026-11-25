@@ -19,24 +19,11 @@ const unmatchedTracksSQL = `SELECT t.id::text, t.user_id::text, t.title, t.artis
 	  AND t.acquisition_status = 'ready'
 	ORDER BY t.user_id, t.artist, t.title, t.id`
 
-func openReadOnlyPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
+func openPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	if databaseURL == "" {
 		return nil, errEmptyDatabaseURL
 	}
-	cfg, err := pgxpool.ParseConfig(databaseURL)
-	if err != nil {
-		return nil, fmt.Errorf("parse database url: %w", err)
-	}
-	cfg.MaxConns = 1
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("create pool: %w", err)
-	}
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("ping database: %w", err)
-	}
-	return pool, nil
+	return database.NewPool(ctx, databaseURL, 1)
 }
 
 func loadUnmatchedTracks(ctx context.Context, pool *pgxpool.Pool) ([]unmatchedTrack, error) {
@@ -46,15 +33,15 @@ func loadUnmatchedTracks(ctx context.Context, pool *pgxpool.Pool) ([]unmatchedTr
 		if err != nil {
 			return fmt.Errorf("query unmatched tracks: %w", err)
 		}
-		defer rows.Close()
-		for rows.Next() {
+		tracks, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (unmatchedTrack, error) {
 			var t unmatchedTrack
-			if err := rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Artist, &t.Album, &t.ArtworkURL, &t.SourceURL, &t.Version); err != nil {
-				return fmt.Errorf("scan unmatched track: %w", err)
-			}
-			tracks = append(tracks, t)
+			err := row.Scan(&t.ID, &t.UserID, &t.Title, &t.Artist, &t.Album, &t.ArtworkURL, &t.SourceURL, &t.Version)
+			return t, err
+		})
+		if err != nil {
+			return fmt.Errorf("scan unmatched track: %w", err)
 		}
-		return rows.Err()
+		return nil
 	})
 	if err != nil {
 		return nil, err

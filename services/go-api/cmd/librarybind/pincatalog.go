@@ -54,25 +54,23 @@ const catalogPinCandidatesSQL = `SELECT t.id::text, t.user_id::text, t.artist, t
 	ORDER BY t.user_id, t.artist, t.title, t.id`
 
 func (s store) loadCatalogPinCandidates(ctx context.Context, userID string) ([]catalogPinCandidate, error) {
-	tx, err := s.begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	rows, err := tx.Query(ctx, catalogPinCandidatesSQL, userID)
-	if err != nil {
-		return nil, fmt.Errorf("query bound tracks to pin: %w", err)
-	}
-	defer rows.Close()
 	var candidates []catalogPinCandidate
-	for rows.Next() {
-		var c catalogPinCandidate
-		if err := rows.Scan(&c.TrackID, &c.UserID, &c.Artist, &c.Title, &c.RecordingID, &c.Version, &c.Current); err != nil {
-			return nil, fmt.Errorf("scan bound track to pin: %w", err)
+	err := s.runTx(ctx, s.pool, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, catalogPinCandidatesSQL, userID)
+		if err != nil {
+			return fmt.Errorf("query bound tracks to pin: %w", err)
 		}
-		candidates = append(candidates, c)
-	}
-	return candidates, rows.Err()
+		candidates, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (catalogPinCandidate, error) {
+			var c catalogPinCandidate
+			err := row.Scan(&c.TrackID, &c.UserID, &c.Artist, &c.Title, &c.RecordingID, &c.Version, &c.Current)
+			return c, err
+		})
+		if err != nil {
+			return fmt.Errorf("scan bound tracks to pin: %w", err)
+		}
+		return nil
+	})
+	return candidates, err
 }
 
 const catalogPinSQL = `UPDATE tracks SET catalog_mbid = $3 WHERE id = $1 AND version = $2 AND catalog_mbid IS NULL`
@@ -95,19 +93,16 @@ func catalogPinInTx(ctx context.Context, tx pgx.Tx, runID uuid.UUID, c catalogPi
 }
 
 func (s store) writeCatalogPin(ctx context.Context, runID uuid.UUID, c catalogPinCandidate) (saveVerdict, error) {
-	tx, err := s.begin(ctx)
+	verdict := saveSkipped
+	err := s.runTx(ctx, s.pool, func(tx pgx.Tx) error {
+		var err error
+		verdict, err = catalogPinInTx(ctx, tx, runID, c)
+		return err
+	})
 	if err != nil {
-		return saveSkipped, fmt.Errorf("begin: %w", err)
+		return saveSkipped, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	verdict, err := catalogPinInTx(ctx, tx, runID, c)
-	if err != nil || verdict == saveSkipped {
-		return verdict, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return saveSkipped, fmt.Errorf("commit: %w", err)
-	}
-	return saveWritten, nil
+	return verdict, nil
 }
 
 type catalogPinTally struct {

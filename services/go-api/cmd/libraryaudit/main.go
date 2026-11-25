@@ -127,7 +127,7 @@ type combinedCatalog struct {
 }
 
 func readTracks(ctx context.Context, cfg settings) ([]libraryTrack, error) {
-	pool, err := openReadOnlyPool(ctx, cfg.databaseURL)
+	pool, err := openPool(ctx, cfg.databaseURL)
 	if err != nil {
 		return nil, err
 	}

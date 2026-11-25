@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -22,18 +23,13 @@ func loadLibraryEntities(ctx context.Context, pool *pgxpool.Pool, limit int, ran
 	if err != nil {
 		return nil, fmt.Errorf("query tracks: %w", err)
 	}
-	defer rows.Close()
-
-	entities := []discovery.LibraryEntity{}
-	for rows.Next() {
-		var title, artist string
-		if err := rows.Scan(&title, &artist); err != nil {
-			return nil, fmt.Errorf("scan track: %w", err)
-		}
-		entities = append(entities, discovery.LibraryEntity{Title: title, Artist: artist})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate tracks: %w", err)
+	entities, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (discovery.LibraryEntity, error) {
+		var e discovery.LibraryEntity
+		err := row.Scan(&e.Title, &e.Artist)
+		return e, err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan tracks: %w", err)
 	}
 	return entities, nil
 }
@@ -67,18 +63,9 @@ func queryStrings(ctx context.Context, pool *pgxpool.Pool, query string, limit i
 	if err != nil {
 		return nil, fmt.Errorf("query: %w", err)
 	}
-	defer rows.Close()
-
-	out := []string{}
-	for rows.Next() {
-		var s string
-		if err := rows.Scan(&s); err != nil {
-			return nil, fmt.Errorf("scan: %w", err)
-		}
-		out = append(out, s)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate: %w", err)
+	out, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, fmt.Errorf("scan: %w", err)
 	}
 	return out, nil
 }

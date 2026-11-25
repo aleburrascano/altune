@@ -1,28 +1,14 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-func testPool(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
-	pool, err := pgxpool.New(context.Background(), dbURL)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	return pool
-}
 
 func seedIdentity(t *testing.T, pool *pgxpool.Pool, userID, status, acquisition string) string {
 	t.Helper()
@@ -47,7 +33,7 @@ func seedIdentity(t *testing.T, pool *pgxpool.Pool, userID, status, acquisition 
 }
 
 func TestLoadBoundTracks_ReadsOnlyBoundReadyTracksWithTheirIdentity(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	user := uuid.NewString()
 	bound := seedIdentity(t, pool, user, "bound", "ready")
 	seedIdentity(t, pool, user, "unbound", "ready")
@@ -65,7 +51,7 @@ func TestLoadBoundTracks_ReadsOnlyBoundReadyTracksWithTheirIdentity(t *testing.T
 }
 
 func TestLoadBoundTracks_HonorsTheLimit(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	user := uuid.NewString()
 	seedIdentity(t, pool, user, "bound", "ready")
 	seedIdentity(t, pool, user, "bound", "ready")
@@ -76,7 +62,7 @@ func TestLoadBoundTracks_HonorsTheLimit(t *testing.T) {
 }
 
 func TestLoadBoundTracksSince_KeepsOnlyTracksAddedOrBoundAfterThatTime(t *testing.T) {
-	pool := testPool(t)
+	pool := sharedtest.Pool(t)
 	user := uuid.NewString()
 	old := seedIdentity(t, pool, user, "bound", "ready")
 	newlyAdded := seedIdentity(t, pool, user, "bound", "ready")

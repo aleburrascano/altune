@@ -1,6 +1,8 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/database"
+	"altune/go-api/internal/shared/sharedtest"
 	"bytes"
 	"context"
 	"errors"
@@ -11,23 +13,13 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func testStore(t *testing.T) store {
 	t.Helper()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
-	pool, err := pgxpool.New(context.Background(), dbURL)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	return store{pool: pool}
+	pool := sharedtest.Pool(t)
+	return store{pool: pool, runTx: database.InTx}
 }
 
 func seedReady(t *testing.T, s store, userID string) libraryTrack {
@@ -625,7 +617,7 @@ func TestStore_AReplaceWithoutARecordingIdClearsACatalogMBIDOnTheReplacedRecordi
 func TestStore_SaveOnAReadOnlyStoreIsRefusedByTheDatabaseWhateverTheSessionDefault(t *testing.T) {
 	seeded := testStore(t)
 	track := seedReady(t, seeded, uuid.NewString())
-	dry := store{pool: seeded.pool, access: pgx.ReadOnly}
+	dry := store{pool: seeded.pool, runTx: database.ReadOnly}
 
 	verdict, err := dry.save(t.Context(), uuid.New(), track, boundIdentity(track))
 	var pgErr *pgconn.PgError
@@ -659,7 +651,7 @@ func readOnlyTrapURL(t *testing.T, s store) string {
 		}
 	}
 	t.Cleanup(func() { _, _ = s.pool.Exec(context.Background(), `DROP SCHEMA `+schema+` CASCADE`) })
-	u, err := url.Parse(os.Getenv("DATABASE_URL"))
+	u, err := url.Parse(sharedtest.DatabaseURL(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -671,7 +663,7 @@ func readOnlyTrapURL(t *testing.T, s store) string {
 
 func TestOpenPool_SetsNoReadOnlySessionDefault(t *testing.T) {
 	testStore(t)
-	pool, err := openPool(t.Context(), os.Getenv("DATABASE_URL"))
+	pool, err := openPool(t.Context(), sharedtest.DatabaseURL(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -765,7 +757,7 @@ func TestRun_PinCatalogApplyStillPinsTheBoundRecording(t *testing.T) {
 	track := seedBoundUnpinned(t, s, user, recording)
 
 	var out bytes.Buffer
-	if err := run(options{pinCatalog: true, apply: true, userID: user}, envWithDatabase(os.Getenv("DATABASE_URL")), &out); err != nil {
+	if err := run(options{pinCatalog: true, apply: true, userID: user}, envWithDatabase(sharedtest.DatabaseURL(t)), &out); err != nil {
 		t.Fatalf("apply: %v\n%s", err, out.String())
 	}
 	if pin := catalogMBIDOf(t, s, track.ID); pin == nil || *pin != recording {
@@ -782,7 +774,7 @@ func TestRun_UndoStillRemovesTheRunsIdentityRows(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := run(options{undo: true, undoRunID: runID}, envWithDatabase(os.Getenv("DATABASE_URL")), &out); err != nil {
+	if err := run(options{undo: true, undoRunID: runID}, envWithDatabase(sharedtest.DatabaseURL(t)), &out); err != nil {
 		t.Fatalf("undo: %v\n%s", err, out.String())
 	}
 	if _, ok := identityOf(t, s, track.ID); ok {
@@ -794,7 +786,7 @@ func TestStore_WriteCatalogPinOnAReadOnlyStoreIsRefusedByTheDatabase(t *testing.
 	seeded := testStore(t)
 	user, recording := uuid.NewString(), uuid.NewString()
 	track := seedBoundUnpinned(t, seeded, user, recording)
-	dry := store{pool: seeded.pool, access: pgx.ReadOnly}
+	dry := store{pool: seeded.pool, runTx: database.ReadOnly}
 	candidates, err := dry.loadCatalogPinCandidates(t.Context(), user)
 	if err != nil || len(candidates) != 1 {
 		t.Fatalf("candidates %+v, err %v", candidates, err)
@@ -817,7 +809,7 @@ func TestStore_UndoRunOnAReadOnlyStoreIsRefusedByTheDatabase(t *testing.T) {
 	if _, err := seeded.save(t.Context(), runID, track, boundIdentity(track)); err != nil {
 		t.Fatal(err)
 	}
-	dry := store{pool: seeded.pool, access: pgx.ReadOnly}
+	dry := store{pool: seeded.pool, runTx: database.ReadOnly}
 
 	_, err := dry.undoRun(t.Context(), runID)
 	var pgErr *pgconn.PgError
