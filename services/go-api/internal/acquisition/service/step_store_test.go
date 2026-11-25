@@ -493,6 +493,9 @@ func TestStoreRollback_DeletesTheAudioWhenTheCommitFails(t *testing.T) {
 		t.Fatal("Execute succeeded, want the failed commit")
 	}
 
+	if len(store.writes) != 1 {
+		t.Fatalf("writes = %v, want the audio stored once before the commit failed", store.writes)
+	}
 	if len(store.objects) != 0 {
 		t.Errorf("objects = %v, want the rolled-back audio deleted", store.objects)
 	}
@@ -509,6 +512,9 @@ func TestStoreRollback_DeletesAFreshlyStagedReplaceAndKeepsTheServedAudio(t *tes
 		t.Fatal("ExecuteReplace succeeded, want the failed commit")
 	}
 
+	if len(store.writes) != 1 {
+		t.Fatalf("writes = %v, want one staged write before the commit failed", store.writes)
+	}
 	if !store.holds(served.originalRef) || len(store.objects) != 1 {
 		t.Errorf("objects = %v, want only the served %q", store.objects, served.originalRef)
 	}
@@ -524,6 +530,9 @@ func TestStoreRollback_OfAScopedStoreDeletesItAndKeepsTheServedAudio(t *testing.
 		t.Fatal("Execute succeeded, want the failed commit")
 	}
 
+	if len(store.writes) != 1 {
+		t.Fatalf("writes = %v, want one scoped write before the commit failed", store.writes)
+	}
 	if !store.holds(canonical) || len(store.objects) != 1 {
 		t.Errorf("objects = %v, want only the served %q: the scoped write is rolled back", store.objects, canonical)
 	}
@@ -612,6 +621,9 @@ func TestStoreRollback_DeletesTheAudioAfterTheJobContextIsCancelled(t *testing.T
 		t.Fatal("Execute succeeded, want the cancelled commit to fail")
 	}
 
+	if len(store.writes) != 1 {
+		t.Fatalf("writes = %v, want the audio stored once before the commit was cancelled", store.writes)
+	}
 	if len(store.objects) != 0 {
 		t.Errorf("objects = %v, want the audio deleted although the job context was cancelled", store.objects)
 	}
