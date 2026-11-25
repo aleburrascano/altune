@@ -46,7 +46,7 @@ Done when: you have seen the candidate list the pipeline saw.
 
 ## 4. Only then, the code
 
-`logs [since] [regex]` gives the running container's acquisition lines. They only cover that container's lifetime, because every deploy starts a fresh container, and the DB is the only durable history. `sql "<select>"` answers anything else, read-only. The module map lives at `services/go-api/internal/acquisition/ARCHITECTURE.md`.
+`logs [since] [regex]` gives the running container's acquisition lines. They only cover that container's lifetime, because every deploy starts a fresh container, and the DB is the only durable history. `sql "<select>"` answers anything else, read-only.
 
 A real failure worth keeping becomes a permanent eval case with:
 

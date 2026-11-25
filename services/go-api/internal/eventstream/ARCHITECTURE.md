@@ -1,8 +1,0 @@
-# Eventstream — Module Architecture
-
-The eventstream bounded context (`services/go-api/internal/eventstream/`) serves the per-user SSE **Event stream** of bus events, with `Last-Event-ID` replay.
-
-- `internal/core/domain/` — the connection-limit sentinels `ErrUserConnLimit` and `ErrGlobalConnLimit`.
-- `ports/` — what the stream needs from outside: `EventSubscriber` (`Subscribe`, `LatestID`, `HighestIssuedID`, `Replay`, `ResumeGapped`).
-- `internal/core/connlimit/` — `connlimit.Limiter`, the per-user and global cap on open streams.
-- `adapters/` — `handler` is the HTTP/SSE edge (`EventStreamHandler`, `sseConn`). The request user id and token expiry come from `internal/shared/requestuser`, which auth's middleware fills in.
