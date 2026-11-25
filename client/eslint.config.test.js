@@ -70,12 +70,14 @@ describe('mobile diff-scoped style rules', () => {
     assert.ok(diffScopedRuleIds(path, 'export const data = 1;\n').includes('id-match'));
   });
 
-  it('exempts useDiscoverSearch from the function line cap only', () => {
+  it('leaves function length and branching to review, not a number', () => {
     const body = Array.from({ length: 12 }, (_, i) => `  const v${i} = ${i};`).join('\n');
-    const code = `export function f() {\n${body}\n  return v0;\n}\n`;
-    const hook = 'src/features/discovery/view/search/useDiscoverSearch.ts';
-    assert.ok(!diffScopedRuleIds(hook, code).includes('max-lines-per-function'));
-    assert.ok(diffScopedRuleIds(path, code).includes('max-lines-per-function'));
+    const branches = Array.from({ length: 12 }, (_, i) => `  if (v0 > ${i}) return ${i};`).join(
+      '\n',
+    );
+    const code = `export function f() {\n${body}\n${branches}\n  return v0;\n}\n`;
+    const rules = diffScopedRuleIds(path, code);
+    assert.ok(!rules.includes('max-lines-per-function') && !rules.includes('complexity'));
   });
 });
 
