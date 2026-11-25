@@ -1,0 +1,39 @@
+title = "altune secret scan"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Supabase anon key: a public client key that the shipped app and its build config carry by design; other secret kinds in these files are still caught"
+targetRules = ["generic-api-key", "jwt"]
+paths = [
+  '''(^|/)eas\.json$''',
+  '''^\.(gitea|github)/workflows/(deploy-web|release-ota|release-ios)\.yml$''',
+]
+
+[[allowlists]]
+description = "YouTube web-player API key: public, hardcoded in the web player's JS bundle that every browser downloads"
+targetRules = ["gcp-api-key"]
+paths = [
+  '''(^|/)ytmusic_client\.go$''',
+  '''(^|/)ytmsearch/client\.go$''',
+  '''(^|/)ytminnertube/client(_test)?\.go$''',
+  '''^docs/providers/youtube-music\.md$''',
+]
+
+[[allowlists]]
+description = "YouTube Music endpoint parameter strings: opaque request parameters, not credentials"
+targetRules = ["generic-api-key"]
+paths = [
+  '''(^|/)providerschema/ytmusic\.go$''',
+]
+
+[[allowlists]]
+description = "Test fixtures: fake tokens that exercise redaction and parsing; a real vendor token in a test is still caught"
+targetRules = ["generic-api-key", "jwt", "gcp-api-key"]
+paths = [
+  '''(^|/)__tests__/''',
+  '''(^|/)testdata/''',
+  '''_test\.go$''',
+  '''\.test\.(ts|tsx)$''',
+]

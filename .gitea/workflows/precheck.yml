@@ -29,4 +29,5 @@ jobs:
           fetch || { sleep 5; fetch; } || { sleep 5; fetch; }
           setup=$(git -C "$repo" show "gitea/pr/$PR:scripts/ci/step-worktree.sh")
           . /dev/stdin "gitea/$BASE" "gitea/pr/$PR" . services/overseer/web <<<"$setup"
+          bash scripts/ci/secret-scan.sh "gitea/$BASE"
           GITEA_URL="$SERVER_URL" GITEA_TOKEN="$PR_SHAPE_TOKEN" bash scripts/ci/pr-shape.sh "$PR"
