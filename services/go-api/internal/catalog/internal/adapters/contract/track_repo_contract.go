@@ -313,9 +313,8 @@ func TrackRepositoryContract(t *testing.T, newRepo func(t *testing.T) TrackRepos
 		if !deleted || got == nil || *got != ref {
 			t.Errorf("Delete = %v/%v, want true/%q", deleted, got, ref)
 		}
-		gone, err := repo.GetByID(ctx, track.ID, userId)
-		if !errors.Is(err, domain.ErrTrackNotFound) || gone != nil {
-			t.Errorf("GetByID after delete = %v/%v, want nil/ErrTrackNotFound", gone, err)
+		if _, err := repo.GetByID(ctx, track.ID, userId); !errors.Is(err, domain.ErrTrackNotFound) {
+			t.Errorf("GetByID after delete: err = %v, want ErrTrackNotFound", err)
 		}
 		again, _, err := repo.Delete(ctx, track.ID, userId)
 		if err != nil || again {

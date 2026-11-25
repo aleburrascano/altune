@@ -226,6 +226,16 @@ func TestMissingTrackReturnsNotFound(t *testing.T) {
 	}
 }
 
+func TestRevertAtMissingTrackReturnsNotFound(t *testing.T) {
+	_, userId := newTrack(t, 1)
+	ledger := acquisitioncatalog.NewTrackLedger(newFakeStore())
+
+	err := ledger.RevertAt(context.Background(), acquisition.TrackSnapshot{ID: domain.NewTrackId(), UserId: userId, Version: 1})
+	if !errors.Is(err, acquisition.ErrTrackNotFound) {
+		t.Fatalf("want acquisition.ErrTrackNotFound, got %v", err)
+	}
+}
+
 func TestFailTransition(t *testing.T) {
 	track, userId := newTrack(t, 1)
 	store := newFakeStore(track)
