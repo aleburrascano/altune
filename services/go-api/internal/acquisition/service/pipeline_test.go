@@ -1,12 +1,16 @@
-package service
+package service_test
 
 import (
 	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/acquisition/internal/adapters/memqueue"
+	"altune/go-api/internal/acquisition/internal/adapters/tempfs"
+	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/internal/core/rejectionlog"
-	"bytes"
+	"altune/go-api/internal/acquisition/service"
+	"altune/go-api/internal/acquisition/sourcekey"
+	"altune/go-api/internal/shared/logging"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,430 +19,64 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	shared "altune/go-api/internal/shared/kernel"
-
-	"github.com/google/uuid"
 )
 
-type mockStep struct {
-	name           string
-	executeErr     error
-	executePanic   any
-	cancelJob      context.CancelFunc
-	rollbackErr    error
-	executed       bool
-	rolledBack     bool
-	rollbackCtxErr error
-	executionLog   *[]string
-}
-
-func newMockStep(name string, executionLog *[]string) *mockStep {
-	return &mockStep{name: name, executionLog: executionLog}
-}
-
-func (s *mockStep) Name() StepName { return StepName(s.name) }
-
-func (s *mockStep) Execute(_ context.Context, _ *AcquisitionContext) error {
-	s.executed = true
-	if s.executionLog != nil {
-		*s.executionLog = append(*s.executionLog, "execute:"+s.name)
-	}
-	if s.cancelJob != nil {
-		s.cancelJob()
-	}
-	if s.executePanic != nil {
-		panic(s.executePanic)
-	}
-	return s.executeErr
-}
-
-func (s *mockStep) Rollback(ctx context.Context, _ *AcquisitionContext) error {
-	s.rolledBack = true
-	s.rollbackCtxErr = ctx.Err()
-	if s.executionLog != nil {
-		*s.executionLog = append(*s.executionLog, "rollback:"+s.name)
-	}
-	return s.rollbackErr
-}
-
-type mockStage[In, Out any] struct{ *mockStep }
-
-func (m mockStage[In, Out]) Execute(ctx context.Context, ac *AcquisitionContext, _ In) (Out, error) {
-	var out Out
-	return out, m.mockStep.Execute(ctx, ac)
-}
-
-var pipelineStageNames = []string{"search", "select", "download", "tag", "store", "update_track"}
-
-func pipelineOf(steps ...*mockStep) Pipeline {
-	all := make([]*mockStep, len(pipelineStageNames))
-	for i, name := range pipelineStageNames {
-		if i < len(steps) {
-			all[i] = steps[i]
-		} else {
-			all[i] = &mockStep{name: name}
-		}
-	}
-	return Pipeline{
-		search:      mockStage[pipelineStart, afterSearch]{all[0]},
-		selectBest:  mockStage[afterSearch, afterSelect]{all[1]},
-		download:    mockStage[afterSelect, afterDownload]{all[2]},
-		tag:         mockStage[afterDownload, afterTag]{all[3]},
-		store:       mockStage[afterTag, afterStore]{all[4]},
-		updateTrack: mockStage[afterStore, afterUpdate]{all[5]},
-	}
-}
-
-func TestRunPipeline(t *testing.T) {
-	tests := []struct {
-		name           string
-		buildSteps     func(log *[]string) Pipeline
-		wantErr        bool
-		wantErrContain string
-		wantLog        []string
-	}{
-		{
-			name: "all steps succeed in order",
-			buildSteps: func(log *[]string) Pipeline {
-				return pipelineOf(
-					newMockStep("search", log),
-					newMockStep("select", log),
-					newMockStep("download", log),
-				)
-			},
-			wantLog: []string{
-				"execute:search",
-				"execute:select",
-				"execute:download",
-			},
-		},
-		{
-			name: "step 3 fails triggers rollback of steps 1 and 2 in reverse",
-			buildSteps: func(log *[]string) Pipeline {
-				s1 := newMockStep("search", log)
-				s2 := newMockStep("select", log)
-				s3 := newMockStep("download", log)
-				s3.executeErr = errors.New("download failed: connection reset")
-				return pipelineOf(s1, s2, s3)
-			},
-			wantErr:        true,
-			wantErrContain: "step download",
-			wantLog: []string{
-				"execute:search",
-				"execute:select",
-				"execute:download",
-				"rollback:select",
-				"rollback:search",
-			},
-		},
-		{
-			name: "all six stages succeed in order",
-			buildSteps: func(log *[]string) Pipeline {
-				steps := make([]*mockStep, len(pipelineStageNames))
-				for i, name := range pipelineStageNames {
-					steps[i] = newMockStep(name, log)
-				}
-				return pipelineOf(steps...)
-			},
-			wantLog: []string{
-				"execute:search",
-				"execute:select",
-				"execute:download",
-				"execute:tag",
-				"execute:store",
-				"execute:update_track",
-			},
-		},
-		{
-			name: "first step fails with no prior steps to rollback",
-			buildSteps: func(log *[]string) Pipeline {
-				s1 := newMockStep("search", log)
-				s1.executeErr = errors.New("searcher unavailable")
-				s2 := newMockStep("select", log)
-				return pipelineOf(s1, s2)
-			},
-			wantErr:        true,
-			wantErrContain: "step search",
-			wantLog: []string{
-				"execute:search",
-			},
-		},
-		{
-			name: "cancelled context triggers rollback of completed steps",
-			buildSteps: func(log *[]string) Pipeline {
-				return pipelineOf(
-					newMockStep("search", log),
-					newMockStep("select", log),
-				)
-			},
-			wantErr:        true,
-			wantErrContain: "pipeline cancelled",
-			wantLog:        nil,
-		},
-		{
-			name: "rollback error does not mask original step error",
-			buildSteps: func(log *[]string) Pipeline {
-				s1 := newMockStep("search", log)
-				s1.rollbackErr = errors.New("rollback failed: file locked")
-				s2 := newMockStep("select", log)
-				s2.executeErr = errors.New("no candidates matched")
-				return pipelineOf(s1, s2)
-			},
-			wantErr:        true,
-			wantErrContain: "step select",
-			wantLog: []string{
-				"execute:search",
-				"execute:select",
-				"rollback:search",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.name == "cancelled context triggers rollback of completed steps" {
-				ctx, cancel := context.WithCancel(context.Background())
-				cancel()
-
-				var log []string
-				steps := tt.buildSteps(&log)
-				ac := &AcquisitionContext{}
-
-				err := RunPipeline(ctx, steps, ac)
-				if err == nil {
-					t.Fatal("expected error for cancelled context, got nil")
-				}
-				if !strings.Contains(err.Error(), "pipeline cancelled") {
-					t.Errorf("error = %q, want it to contain %q", err.Error(), "pipeline cancelled")
-				}
-				return
-			}
-
-			ctx := context.Background()
-			var log []string
-			steps := tt.buildSteps(&log)
-			ac := &AcquisitionContext{}
-
-			err := RunPipeline(ctx, steps, ac)
-
-			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("expected error containing %q, got nil", tt.wantErrContain)
-				}
-				if !strings.Contains(err.Error(), tt.wantErrContain) {
-					t.Errorf("error = %q, want it to contain %q", err.Error(), tt.wantErrContain)
-				}
-			} else {
-				if err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-			}
-
-			if tt.wantLog != nil {
-				if len(log) != len(tt.wantLog) {
-					t.Fatalf("execution log length = %d, want %d\ngot:  %v\nwant: %v",
-						len(log), len(tt.wantLog), log, tt.wantLog)
-				}
-				for i, entry := range tt.wantLog {
-					if log[i] != entry {
-						t.Errorf("execution log[%d] = %q, want %q\nfull log: %v", i, log[i], entry, log)
-					}
-				}
-			}
-		})
-	}
-}
-
-func TestRunPipeline_SecondStepFails_OnlyFirstRolledBack(t *testing.T) {
-	var log []string
-	s1 := newMockStep("search", &log)
-	s2 := newMockStep("select", &log)
-	s2.executeErr = errors.New("no match")
-	s3 := newMockStep("download", &log)
-
-	steps := pipelineOf(s1, s2, s3)
-	ac := &AcquisitionContext{}
-
-	err := RunPipeline(context.Background(), steps, ac)
-
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-
-	if s1.executed != true {
-		t.Error("step 1 should have been executed")
-	}
-	if s2.executed != true {
-		t.Error("step 2 should have been executed (it fails during execute)")
-	}
-	if s3.executed {
-		t.Error("step 3 should NOT have been executed")
-	}
-
-	if s1.rolledBack != true {
-		t.Error("step 1 should have been rolled back")
-	}
-	if s2.rolledBack {
-		t.Error("step 2 should NOT have been rolled back (it failed, was never completed)")
-	}
-	if s3.rolledBack {
-		t.Error("step 3 should NOT have been rolled back (never executed)")
-	}
-}
-
-func TestRunPipeline_RollbackRunsOnALiveContextAfterTheJobIsCancelled(t *testing.T) {
-	cancellations := []struct {
-		name       string
-		executeErr error
-	}{
-		{name: "the job deadline fires between stages"},
-		{name: "a stage fails as the job is cancelled", executeErr: errors.New("acquisition timed out")},
-	}
-
-	for _, tc := range cancellations {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-
-			var log []string
-			search := newMockStep("search", &log)
-			selectBest := newMockStep("select", &log)
-			download := newMockStep("download", &log)
-			download.cancelJob = cancel
-			download.executeErr = tc.executeErr
-
-			err := RunPipeline(ctx, pipelineOf(search, selectBest, download), &AcquisitionContext{})
-			if err == nil {
-				t.Fatal("expected the cancelled pipeline to fail, got nil")
-			}
-
-			for _, step := range []*mockStep{search, selectBest} {
-				if !step.rolledBack {
-					t.Fatalf("step %q was not rolled back", step.name)
-				}
-				if step.rollbackCtxErr != nil {
-					t.Errorf("step %q rolled back on a dead context (%v): its compensation cannot reach storage",
-						step.name, step.rollbackCtxErr)
-				}
-			}
-		})
-	}
-}
-
-func TestRunPipeline_StepPanic_RollsBackAndReturnsStepError(t *testing.T) {
-	var log []string
-	s1 := newMockStep("search", &log)
-	s2 := newMockStep("select", &log)
-	s3 := newMockStep("download", &log)
-	s3.executePanic = "boom: nil map write"
-
-	steps := pipelineOf(s1, s2, s3)
-	ac := &AcquisitionContext{}
-
-	err := RunPipeline(context.Background(), steps, ac)
-
-	if err == nil {
-		t.Fatal("expected a returned error from a panicking step, got nil (panic propagated instead)")
-	}
-
-	var stepErr *StepError
-	if !errors.As(err, &stepErr) {
-		t.Fatalf("error = %T (%v), want *StepError", err, err)
-	}
-	if stepErr.Step != "download" {
-		t.Errorf("StepError.Step = %q, want %q", stepErr.Step, "download")
-	}
-
-	if !s1.rolledBack {
-		t.Error("step 1 (search) should have been rolled back after the panic")
-	}
-	if !s2.rolledBack {
-		t.Error("step 2 (select) should have been rolled back after the panic")
-	}
-	if s3.rolledBack {
-		t.Error("step 3 (download) should NOT have been rolled back (it panicked mid-execute, never completed)")
-	}
-
-	wantLog := []string{
-		"execute:search",
-		"execute:select",
-		"execute:download",
-		"rollback:select",
-		"rollback:search",
-	}
-	if len(log) != len(wantLog) {
-		t.Fatalf("execution log = %v, want %v", log, wantLog)
-	}
-	for i, entry := range wantLog {
-		if log[i] != entry {
-			t.Errorf("execution log[%d] = %q, want %q\nfull log: %v", i, log[i], entry, log)
-		}
-	}
-}
-
-func selectBest(track TrackRef, candidates []ports.AudioCandidate) *ports.AudioCandidate {
-	ranked, _ := rankAndCollect(context.Background(), track, track.CatalogDuration, candidates)
-	if len(ranked) == 0 {
-		return nil
-	}
-	best := ranked[0]
-	return &best
-}
-
-func TestAcqStage_SymbolOnlyArtistDoesNotRescueUnrelatedCandidate(t *testing.T) {
-	track := TrackRef{Title: "Must Be the Moon", Artist: "!!!", CatalogDuration: 253}
-	candidates := []ports.AudioCandidate{{
+func TestSelect_SymbolOnlyArtistDoesNotRescueUnrelatedCandidate(t *testing.T) {
+	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{{
 		Title:   "Completely Unrelated Cooking Show Full Episode Forty Seven Nonsense",
 		URL:     "yt:cooking",
 		Channel: "CookingChannel",
-	}}
+	}}}
+	ac := &service.AcquisitionContext{Track: service.TrackRef{Title: "Must Be the Moon", Artist: "!!!", CatalogDuration: 253}}
 
-	ranked, rejected := rankAndCollect(context.Background(), track, track.CatalogDuration, candidates)
+	err := runPipeline(context.Background(), service.NewSourceRegistry(source), ac)
 
-	if len(ranked) != 0 {
-		t.Fatalf("unrelated candidate must stay gated for a symbol-only artist: ranked=%v", ranked)
+	if step := failedStep(t, err).Step; step != "select" {
+		t.Fatalf("err = %v, want the unrelated candidate to stay gated at select", err)
 	}
-	if len(rejected) != 1 || rejected[0].Stage != rejectionlog.Identity || rejected[0].URL != "yt:cooking" {
-		t.Fatalf("expected one identity rejection for yt:cooking, got %v", rejected)
+	if len(ac.Rejections) != 1 || ac.Rejections[0].Stage != rejectionlog.Identity || ac.Rejections[0].URL != "yt:cooking" {
+		t.Fatalf("rejections = %v, want one identity rejection for yt:cooking", ac.Rejections)
 	}
 }
 
-func TestAcqStage_BuildAudioRef(t *testing.T) {
+func TestBuildAudioRef(t *testing.T) {
 	tests := []struct {
 		name     string
-		track    TrackRef
+		track    service.TrackRef
 		tempPath string
 		want     string
 	}{
 		{
 			name:     "basic",
-			track:    TrackRef{UserID: "user-1", Artist: "The Weeknd", Album: "After Hours", Title: "Blinding Lights"},
+			track:    service.TrackRef{UserID: "user-1", Artist: "The Weeknd", Album: "After Hours", Title: "Blinding Lights"},
 			tempPath: "/tmp/acquire/Blinding Lights.mp3",
 			want:     "user-1/the weeknd/after hours/blinding lights.mp3",
 		},
 		{
 			name:     "empty album uses unknown",
-			track:    TrackRef{UserID: "user-1", Artist: "Drake", Album: "", Title: "God's Plan"},
+			track:    service.TrackRef{UserID: "user-1", Artist: "Drake", Album: "", Title: "God's Plan"},
 			tempPath: "/tmp/acquire/God's Plan.mp3",
 			want:     "user-1/drake/unknown album/gods plan.mp3",
 		},
 		{
 			name:     "special chars stripped and normalized",
-			track:    TrackRef{UserID: "user-1", Artist: "AC/DC", Album: "Back in Black", Title: "Thunderstruck"},
+			track:    service.TrackRef{UserID: "user-1", Artist: "AC/DC", Album: "Back in Black", Title: "Thunderstruck"},
 			tempPath: "/tmp/acquire/Thunderstruck.mp3",
 			want:     "user-1/ac dc/back in black/thunderstruck.mp3",
 		},
 		{
 			name:     "extension follows downloaded file",
-			track:    TrackRef{UserID: "user-1", Artist: "Drake", Album: "Views", Title: "One Dance"},
+			track:    service.TrackRef{UserID: "user-1", Artist: "Drake", Album: "Views", Title: "One Dance"},
 			tempPath: "/tmp/acquire/One Dance.m4a",
 			want:     "user-1/drake/views/one dance.m4a",
 		},
 		{
 			name:     "no extension falls back to mp3",
-			track:    TrackRef{UserID: "user-1", Artist: "Drake", Album: "Views", Title: "One Dance"},
+			track:    service.TrackRef{UserID: "user-1", Artist: "Drake", Album: "Views", Title: "One Dance"},
 			tempPath: "",
 			want:     "user-1/drake/views/one dance.mp3",
 		},
@@ -446,73 +84,52 @@ func TestAcqStage_BuildAudioRef(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := BuildAudioRef(tt.track, tt.tempPath)
-			if got != tt.want {
+			if got := service.BuildAudioRef(tt.track, tt.tempPath); got != tt.want {
 				t.Errorf("BuildAudioRef = %q, want %q", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestAcqStage_FullSelectionTrace(t *testing.T) {
-	track := TrackRef{
-		Title:           "Blinding Lights",
-		Artist:          "The Weeknd",
-		CatalogDuration: 200,
-		ISRC:            "USUM71922973",
-	}
+func TestSelect_PrefersTheTopicUploadOverCoversAndUnrelatedVideos(t *testing.T) {
+	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{
+		{
+			Title: "The Weeknd - Blinding Lights (Official Video)", Channel: "TheWeekndVEVO",
+			Duration: 203, Categories: []string{"Music"}, ViewCount: 3_000_000_000, URL: "yt:official",
+		},
+		{
+			Title: "Blinding Lights", Channel: "The Weeknd - Topic",
+			Duration: 200, Categories: []string{"Music"}, ViewCount: 50_000_000, URL: "yt:topic",
+		},
+		{
+			Title: "Blinding Lights (Piano Cover)", Channel: "Piano Tutorials",
+			Duration: 195, Categories: []string{"Music"}, ViewCount: 5_000_000, URL: "yt:cover",
+		},
+		{
+			Title: "Random Podcast Episode", Channel: "PodcastGuy",
+			Duration: 3600, Categories: []string{"Education"}, ViewCount: 100_000, URL: "yt:podcast",
+		},
+	}}
+	ac := &service.AcquisitionContext{Track: service.TrackRef{
+		Title: "Blinding Lights", Artist: "The Weeknd", CatalogDuration: 200, ISRC: "USUM71922973",
+	}}
 
-	candidates := []ports.AudioCandidate{
-		{
-			Title:      "The Weeknd - Blinding Lights (Official Video)",
-			Channel:    "TheWeekndVEVO",
-			Duration:   203,
-			Categories: []string{"Music"},
-			ViewCount:  3_000_000_000,
-		},
-		{
-			Title:      "Blinding Lights",
-			Channel:    "The Weeknd - Topic",
-			Duration:   200,
-			Categories: []string{"Music"},
-			ViewCount:  50_000_000,
-		},
-		{
-			Title:      "Blinding Lights (Piano Cover)",
-			Channel:    "Piano Tutorials",
-			Duration:   195,
-			Categories: []string{"Music"},
-			ViewCount:  5_000_000,
-		},
-		{
-			Title:      "Random Podcast Episode",
-			Channel:    "PodcastGuy",
-			Duration:   3600,
-			Categories: []string{"Education"},
-			ViewCount:  100_000,
-		},
-	}
+	_ = runPipeline(context.Background(), service.NewSourceRegistry(source), ac)
 
-	selected := selectBest(track, candidates)
-	if selected == nil {
-		t.Fatal("expected a candidate to be selected")
-	}
-	t.Logf("Stage 4 — Selected: %q (channel: %q)", selected.Title, selected.Channel)
-
-	if !strings.Contains(selected.Channel, "Topic") {
-		t.Errorf("expected Topic channel selected, got %q", selected.Channel)
+	if ac.Selected == nil || ac.Selected.URL != "yt:topic" {
+		t.Fatalf("Selected = %+v, want the Topic channel upload", ac.Selected)
 	}
 }
 
 func TestProvenance(t *testing.T) {
 	tests := []struct {
 		name string
-		ac   AcquisitionContext
+		ac   service.AcquisitionContext
 		want shared.AcquisitionProvenance
 	}{
 		{
 			name: "fingerprint match is the strongest claim",
-			ac: AcquisitionContext{
+			ac: service.AcquisitionContext{
 				IdentityVerified: true,
 				DurationVerified: true,
 				Identity:         ports.RecordingIdentity{Duration: 181},
@@ -521,26 +138,26 @@ func TestProvenance(t *testing.T) {
 		},
 		{
 			name: "length corroborated by discovery but no fingerprint",
-			ac: AcquisitionContext{
+			ac: service.AcquisitionContext{
 				DurationVerified: true,
-				Track:            TrackRef{CatalogDuration: 181},
+				Track:            service.TrackRef{CatalogDuration: 181},
 				Identity:         ports.RecordingIdentity{Duration: 181},
 			},
 			want: shared.ProvenanceCorroborated,
 		},
 		{
 			name: "length checked against saved metadata only",
-			ac:   AcquisitionContext{DurationVerified: true},
+			ac:   service.AcquisitionContext{DurationVerified: true},
 			want: shared.ProvenanceBestEffort,
 		},
 		{
 			name: "nothing verified",
-			ac:   AcquisitionContext{},
+			ac:   service.AcquisitionContext{},
 			want: shared.ProvenanceBestEffort,
 		},
 		{
 			name: "a best-effort settlement outranks a fingerprint match",
-			ac:   AcquisitionContext{BestEffort: true, IdentityVerified: true},
+			ac:   service.AcquisitionContext{BestEffort: true, IdentityVerified: true},
 			want: shared.ProvenanceBestEffort,
 		},
 	}
@@ -554,214 +171,148 @@ func TestProvenance(t *testing.T) {
 	}
 }
 
-func handoverPipeline(t *testing.T, acquiring shared.TrackId, userId shared.UserId, queue *recordingOrphanQueue, updateTrack *mockStep) (Pipeline, *cancelSensitiveStore, *AcquisitionContext) {
-	t.Helper()
-	store := &cancelSensitiveStore{stored: map[string]bool{}}
-	ac := &AcquisitionContext{
-		Track:    TrackRef{UserID: "u1", Artist: "Daft Punk", Album: "Discovery", Title: "One More Time"},
-		TempPath: "/tmp/one-more-time.mp3",
-	}
-	ref := BuildAudioRef(ac.Track, ac.TempPath)
-	refs := trackRefIndex{holders: map[string][]shared.TrackId{ref: {acquiring}}}
-	storeStep := NewStoreStep(store, WithStoreAudioRefGuard(refs, acquiring), WithStoreOrphanQueue(queue, userId))
-	storeStep.sleep = func(_ time.Duration) {}
-
-	pipeline := pipelineOf()
-	pipeline.store = storeStep
-	pipeline.updateTrack = mockStage[afterStore, afterUpdate]{updateTrack}
-	return pipeline, store, ac
+type tierSource struct {
+	name   acqdomain.SourceName
+	url    string
+	broken bool
 }
 
-type tieredDownload struct {
-	*DownloadStep
-	tiers [][]ports.AudioCandidate
-	runs  int
+func (s tierSource) Name() acqdomain.SourceName { return s.name }
+
+func (s tierSource) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
+	return []ports.AudioCandidate{{
+		Title: "Blinding Lights", URL: s.url, Channel: "The Weeknd - Topic", Artists: []string{"The Weeknd"},
+		Duration: 200, Categories: []string{"Music"}, Kind: ports.KindArtTrack,
+	}}, nil
 }
 
-func (d *tieredDownload) Execute(ctx context.Context, ac *AcquisitionContext, prev afterSelect) (afterDownload, error) {
-	ac.Ranked = d.tiers[d.runs]
-	d.runs++
-	out, err := d.DownloadStep.Execute(ctx, ac, prev)
-	if err != nil && !ac.FallbackOnly {
-		ac.FallbackSkipped = true
-	}
-	return out, err
-}
-
-type brokenURLFetcher struct{ broken string }
-
-func (f brokenURLFetcher) Fetch(_ context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
-	if c.URL == f.broken {
+func (s tierSource) Fetch(_ context.Context, _ ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+	if s.broken {
 		return ports.FetchedAudio{}, errors.New("yt-dlp: download failed")
 	}
 	path := filepath.Join(outDir, "track.mp3")
-	return fetchedAt(path, os.WriteFile(path, []byte("audio-bytes"), 0o644))
+	return ports.FetchedAudio{Path: path}, os.WriteFile(path, []byte("audio-bytes"), 0o600)
 }
 
 func TestRunPipeline_FallbackWindowsContinueTheFirstTiersCount(t *testing.T) {
-	download := &tieredDownload{
-		DownloadStep: newTestDownloadStep(brokenURLFetcher{broken: "https://example.com/first-tier"}),
-		tiers: [][]ports.AudioCandidate{
-			{{URL: "https://example.com/first-tier"}},
-			{{URL: "https://example.com/fallback"}},
-		},
-	}
-	pipeline := pipelineOf()
-	pipeline.download = download
-	ac := &AcquisitionContext{Track: TrackRef{ID: "t1"}}
+	const firstTier, fallback = "https://example.com/first-tier", "https://example.com/fallback"
+	registry := service.NewSourceRegistry(tierSource{name: "first", url: firstTier, broken: true}).
+		WithFallback(tierSource{name: "fallback", url: fallback})
+	ac := &service.AcquisitionContext{Track: service.TrackRef{ID: "t1", Title: "Blinding Lights", Artist: "The Weeknd", CatalogDuration: 200}}
+	workspace := tempfs.New()
+	steps := service.CoreSteps(registry, nil, &objectStore{objects: map[string]string{}}, nil, nil, workspace, nil)
 
-	if err := RunPipeline(context.Background(), pipeline, ac); err != nil {
+	if err := service.RunPipeline(context.Background(), steps, ac); err != nil {
 		t.Fatalf("RunPipeline: %v", err)
 	}
-	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+	service.CleanupTemp(context.Background(), workspace, ac)
 
-	want := []AttemptedCandidate{
-		{URL: "https://example.com/first-tier", Window: 0},
-		{URL: "https://example.com/fallback", Window: 1},
-	}
+	want := []service.AttemptedCandidate{{URL: firstTier, Window: 0}, {URL: fallback, Window: 1}}
 	if !slices.Equal(ac.Attempted, want) {
 		t.Errorf("Attempted = %+v, want %+v: the fallback tier's windows continue the first tier's numbering", ac.Attempted, want)
 	}
 }
 
 func TestRunPipeline_PlainFailureDeletesTheStoredAudioAndQueuesNothing(t *testing.T) {
-	acquiring, userId := shared.NewTrackId(), shared.NewUserId(uuid.New())
-	queue := &recordingOrphanQueue{}
-	updateTrack := newMockStep("update_track", nil)
-	updateTrack.executeErr = errors.New("update failed")
-	pipeline, store, ac := handoverPipeline(t, acquiring, userId, queue, updateTrack)
+	track := pending("Song", "Artist", "Album")
+	ledger, store, queue := acquisitiontest.NewLedger(track), newRecordingStore(), &recordingOrphanQueue{}
+	ledger.FailWrites(errors.New("database unavailable"))
 
-	if err := RunPipeline(context.Background(), pipeline, ac); err == nil {
-		t.Fatal("expected the pipeline to fail, got nil")
-	}
+	err := storing{t, ledger, store, track}.execute(service.WithAcquireOrphanQueue(queue))
 
-	if store.stored[ac.AudioRef] {
-		t.Errorf("audio %q left behind after a plain failure", ac.AudioRef)
+	if err == nil {
+		t.Fatal("Execute succeeded, want the failed commit")
 	}
-	if len(queue.recorded) != 0 {
-		t.Errorf("recorded = %+v, want nothing queued", queue.recorded)
+	if len(store.writes) != 1 || len(store.objects) != 0 {
+		t.Errorf("writes = %v, objects = %v, want the audio stored once and deleted", store.writes, store.objects)
 	}
+	if recorded := queue.entries(); len(recorded) != 0 {
+		t.Errorf("recorded = %+v, want nothing queued", recorded)
+	}
+}
+
+type waitingCommitLedger struct{ *acquisitiontest.Ledger }
+
+func (waitingCommitLedger) Complete(ctx context.Context, _ shared.TrackId, _ shared.UserId, _ ports.Fence, _ ports.Completion) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+type lostLeaseQueue struct{ *firstOutcomeQueue }
+
+func (lostLeaseQueue) Heartbeat(context.Context, shared.TrackId, ports.Fence, time.Duration) error {
+	return acqdomain.ErrLeaseLost
+}
+
+type storedAndOrphaned struct {
+	store  *recordingStore
+	queued []ports.OrphanedAudio
+	track  acquisitiontest.LedgerTrack
+}
+
+func runJobWaitingOnItsCommit(t *testing.T, leaseLost bool) storedAndOrphaned {
+	t.Helper()
+	var got storedAndOrphaned
+	synctest.Test(t, func(t *testing.T) {
+		track := pending("Song", "Artist", "Album")
+		store, orphans := newRecordingStore(), &recordingOrphanQueue{}
+		svc := service.NewAcquireTrackAudioService(waitingCommitLedger{acquisitiontest.NewLedger(track)}, sourceFor(track), store,
+			service.WithAcquireTempWorkspace(tempfs.New()), service.WithAcquireOrphanQueue(orphans))
+		opts := []func(*service.BackgroundAcquisitionScheduler){}
+		queue := &firstOutcomeQueue{Queue: memqueue.New(make(chan struct{}, 1), time.Now), outcome: make(chan jobOutcome, 1)}
+		if leaseLost {
+			opts = append(opts, service.WithJobQueue(lostLeaseQueue{queue}), service.WithHeartbeatInterval(time.Second))
+		} else {
+			opts = append(opts, service.WithJobQueue(queue))
+		}
+		scheduler := service.NewBackgroundAcquisitionScheduler(svc, 1, opts...)
+		defer scheduler.Shutdown(context.Background())
+		if err := scheduler.Schedule(context.Background(), track.UserId, track.ID, ""); err != nil {
+			t.Fatalf("Schedule = %v, want nil", err)
+		}
+		<-queue.outcome
+		got = storedAndOrphaned{store: store, queued: orphans.entries(), track: track}
+	})
+	return got
 }
 
 func TestRunPipeline_LeaseLossKeepsTheStoredAudioAndQueuesItForTheSweep(t *testing.T) {
-	acquiring, userId := shared.NewTrackId(), shared.NewUserId(uuid.New())
-	queue := &recordingOrphanQueue{}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	updateTrack := newMockStep("update_track", nil)
-	updateTrack.cancelJob = cancel
-	updateTrack.executeErr = errors.New("lease lost")
-	pipeline, store, ac := handoverPipeline(t, acquiring, userId, queue, updateTrack)
+	run := runJobWaitingOnItsCommit(t, true)
 
-	if err := RunPipeline(withSchedulerOwnedJobContext(ctx), pipeline, ac); err == nil {
-		t.Fatal("expected the pipeline to fail, got nil")
+	if len(run.store.objects) != 1 {
+		t.Fatalf("objects = %v, want the stored audio kept: the new lease owner may be serving it", run.store.objects)
 	}
-
-	if !store.stored[ac.AudioRef] {
-		t.Errorf("rollback deleted %q, which the new lease owner may be serving", ac.AudioRef)
+	want := ports.OrphanedAudio{AudioRef: refOf(run.track, ""), UserId: run.track.UserId, TrackId: run.track.ID}
+	if len(run.queued) != 1 || run.queued[0] != want {
+		t.Errorf("recorded = %+v, want exactly %+v", run.queued, want)
 	}
-	want := ports.OrphanedAudio{AudioRef: ac.AudioRef, UserId: userId, TrackId: acquiring}
-	if len(queue.recorded) != 1 || queue.recorded[0] != want {
-		t.Errorf("recorded = %+v, want exactly %+v", queue.recorded, want)
-	}
-}
-
-type storeThenExpire struct{ *StoreStep }
-
-func (s *storeThenExpire) Execute(ctx context.Context, ac *AcquisitionContext, prev afterTag) (afterStore, error) {
-	out, err := s.StoreStep.Execute(ctx, ac, prev)
-	<-ctx.Done()
-	return out, err
 }
 
 func TestRunPipeline_ElapsedAcquireDeadlineStillDeletesTheStoredAudio(t *testing.T) {
-	acquiring, userId := shared.NewTrackId(), shared.NewUserId(uuid.New())
-	queue := &recordingOrphanQueue{}
-	jobCtx, cancel := context.WithCancel(withSchedulerOwnedJobContext(context.Background()))
-	defer cancel()
-	ctx, cancelDeadline := context.WithDeadline(jobCtx, time.Now().Add(50*time.Millisecond))
-	defer cancelDeadline()
-	pipeline, store, ac := handoverPipeline(t, acquiring, userId, queue, newMockStep("update_track", nil))
-	pipeline.store = &storeThenExpire{StoreStep: pipeline.store.(*StoreStep)}
+	run := runJobWaitingOnItsCommit(t, false)
 
-	if err := RunPipeline(ctx, pipeline, ac); err == nil {
-		t.Fatal("expected the pipeline to fail, got nil")
+	if len(run.store.objects) != 0 {
+		t.Errorf("objects = %v, want the audio deleted after the acquire deadline fired", run.store.objects)
 	}
-
-	if store.stored[ac.AudioRef] {
-		t.Errorf("audio %q leaked after the acquire deadline fired", ac.AudioRef)
-	}
-	if len(queue.recorded) != 0 {
-		t.Errorf("recorded = %+v, want nothing queued", queue.recorded)
+	if len(run.queued) != 0 {
+		t.Errorf("recorded = %+v, want nothing queued", run.queued)
 	}
 }
 
-func assertStepOrder(t *testing.T, got, want []string) {
-	t.Helper()
-	if len(got) != len(want) {
-		t.Fatalf("step count = %d %v, want %d %v", len(got), got, len(want), want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("step[%d] = %q, want %q (full order %v)", i, got[i], want[i], got)
-		}
-	}
-}
-
-func acquirableFixture(t *testing.T) (*AcquireTrackAudioService, ledgerTrack, *AcquisitionContext) {
-	t.Helper()
-	userId := shared.NewUserId(uuid.New())
-	track := newLedgerTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
-	ledger := acquisitiontest.NewLedger()
-	ledger.Seed(track)
-
-	audio := filepath.Join(t.TempDir(), "song.mp3")
-	if err := os.WriteFile(audio, []byte("audio"), 0o600); err != nil {
-		t.Fatalf("write audio: %v", err)
-	}
-	searcher := &fakeAudioSearcher{
-		searchResults: []ports.AudioCandidate{{
-			Title:      "Blinding Lights",
-			Channel:    "The Weeknd - Topic",
-			Duration:   200,
-			URL:        "https://youtube.com/watch?v=topic1",
-			Categories: []string{"Music"},
-		}},
-		downloadPath: audio,
-	}
-	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore())
-	ac := &AcquisitionContext{Track: TrackRef{
-		ID: track.ID.String(), UserID: userId.String(),
-		Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours", CatalogDuration: 200,
+func TestCoreSteps_StopAfterStore(t *testing.T) {
+	workspace, store := tempfs.New(), &objectStore{objects: map[string]string{}}
+	steps := service.CoreSteps(service.NewSourceRegistry(tierSource{name: "only", url: "https://example.com/a"}), nil, store, nil, nil, workspace, nil)
+	ac := &service.AcquisitionContext{Track: service.TrackRef{
+		ID: "t1", UserID: "u1", Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours", CatalogDuration: 200,
 	}}
-	return svc, track, ac
-}
 
-func TestBuildSteps_RunsAllSixInOrder(t *testing.T) {
-	svc, track, ac := acquirableFixture(t)
-	rep := &recordingReporter{}
-	ctx := withJobReporter(context.Background(), rep)
-
-	if err := RunPipeline(ctx, svc.buildSteps(track.UserId, track.ID), ac); err != nil {
-		t.Fatalf("pipeline: %v", err)
+	if err := service.RunPipeline(context.Background(), steps, ac); err != nil {
+		t.Fatalf("RunPipeline: %v", err)
 	}
-	CleanupTemp(ctx, svc.workspace, ac)
-	assertStepOrder(t, rep.stages, []string{"search", "select", "download", "tag", "store", "update_track"})
-}
+	service.CleanupTemp(context.Background(), workspace, ac)
 
-func TestCoreSteps_StopsAfterStore(t *testing.T) {
-	svc, _, ac := acquirableFixture(t)
-	rep := &recordingReporter{}
-	ctx := withJobReporter(context.Background(), rep)
-
-	core := CoreSteps(svc.sources, svc.audioTagger, svc.audioStore, svc.audioProber, svc.identifier, svc.workspace, nil)
-	if err := RunPipeline(ctx, core, ac); err != nil {
-		t.Fatalf("pipeline: %v", err)
-	}
-	CleanupTemp(ctx, svc.workspace, ac)
-	assertStepOrder(t, rep.stages, []string{"search", "select", "download", "tag", "store"})
-	if ac.AudioRef == "" {
-		t.Error("store stage did not record an audio ref")
+	if ac.AudioRef == "" || !store.holds(ac.AudioRef) {
+		t.Errorf("AudioRef = %q, held = %v, want the store stage to have stored the audio", ac.AudioRef, store.objects)
 	}
 }
 
@@ -773,287 +324,241 @@ func ytdlpCookieErr() error {
 	return fmt.Errorf("yt-dlp download: %w (stderr: %s)", errors.New("exit status 1"), stderr)
 }
 
-func captureDefaultLog(t *testing.T) *bytes.Buffer {
+func captureLogs(t *testing.T) *logging.RingBuffer {
 	t.Helper()
-	var buf bytes.Buffer
 	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
+	return logging.Setup("debug", false)
 }
 
-func assertNoCookiePath(t *testing.T, logs string, wantMsg string) {
+func recordsNamed(ring *logging.RingBuffer, message string) []logging.CapturedRecord {
+	var found []logging.CapturedRecord
+	for _, r := range ring.Snapshot() {
+		if r.Message == message {
+			found = append(found, r)
+		}
+	}
+	return found
+}
+
+func assertNoCookiePath(t *testing.T, records []logging.CapturedRecord, message string) {
 	t.Helper()
-	if !strings.Contains(logs, wantMsg) {
-		t.Fatalf("expected log %q, got:\n%s", wantMsg, logs)
+	if len(records) == 0 {
+		t.Fatalf("no %q record logged", message)
 	}
-	if strings.Contains(logs, secretCookiePath) || strings.Contains(logs, "/run/secrets") {
-		t.Fatalf("cookie file path leaked into logs:\n%s", logs)
+	for _, r := range records {
+		text := fmt.Sprint(r.Attrs)
+		if strings.Contains(text, secretCookiePath) || strings.Contains(text, "/run/secrets") {
+			t.Fatalf("cookie file path leaked into %q: %v", message, r.Attrs)
+		}
+		if !strings.Contains(text, "exit status 1") {
+			t.Fatalf("redaction dropped the diagnostic error text from %q: %v", message, r.Attrs)
+		}
 	}
-	if !strings.Contains(logs, "exit status 1") {
-		t.Fatalf("redaction dropped the diagnostic error text:\n%s", logs)
+}
+
+type failingCommitLedger struct {
+	*acquisitiontest.Ledger
+	err error
+}
+
+func (l failingCommitLedger) Complete(context.Context, shared.TrackId, shared.UserId, ports.Fence, ports.Completion) error {
+	return l.err
+}
+
+type panickingCommitLedger struct{ *acquisitiontest.Ledger }
+
+func (panickingCommitLedger) Complete(context.Context, shared.TrackId, shared.UserId, ports.Fence, ports.Completion) error {
+	panic("commit exploded")
+}
+
+func TestRunPipeline_APanicInTheLastStageRollsBackTheStoredAudio(t *testing.T) {
+	track := pending("Song", "Artist", "Album")
+	store := newRecordingStore()
+
+	err := storing{t, panickingCommitLedger{acquisitiontest.NewLedger(track)}, store, track}.execute()
+
+	var stepErr *service.StepError
+	if !errors.As(err, &stepErr) || stepErr.Step != "update_track" {
+		t.Fatalf("Execute = %v, want a StepError naming update_track", err)
+	}
+	if len(store.writes) != 1 || len(store.objects) != 0 {
+		t.Errorf("writes = %v, objects = %v, want the audio stored once and rolled back", store.writes, store.objects)
+	}
+}
+
+type cancellingTagger struct{ cancel context.CancelFunc }
+
+func (t cancellingTagger) Tag(context.Context, string, ports.TrackTags) error {
+	t.cancel()
+	return nil
+}
+
+func TestRunPipeline_ACancelledJobStopsBeforeTheNextStage(t *testing.T) {
+	track := pending("Song", "Artist", "Album")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	store := newRecordingStore()
+	svc := service.NewAcquireTrackAudioService(acquisitiontest.NewLedger(track), sourceFor(track), store,
+		service.WithAcquireTempWorkspace(tempfs.New()), service.WithAudioTagger(cancellingTagger{cancel}))
+
+	err := svc.Execute(ctx, track.UserId, track.ID)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Execute = %v, want the cancellation reported", err)
+	}
+	if len(store.writes) != 0 {
+		t.Errorf("writes = %v, want the store stage never started", store.writes)
 	}
 }
 
 func TestRunPipeline_StepFailedLogRedactsCookiePath(t *testing.T) {
-	logs := captureDefaultLog(t)
-	step := &mockStep{name: "download", executeErr: ytdlpCookieErr()}
+	ring := captureLogs(t)
+	track := pending("Song", "Artist", "Album")
+	ledger := failingCommitLedger{Ledger: acquisitiontest.NewLedger(track), err: ytdlpCookieErr()}
 
-	err := RunPipeline(context.Background(), pipelineOf(step), &AcquisitionContext{})
+	err := storing{t, ledger, newRecordingStore(), track}.execute()
+
 	if err == nil {
 		t.Fatal("expected pipeline error")
 	}
-
-	assertNoCookiePath(t, logs.String(), "pipeline step failed")
+	assertNoCookiePath(t, recordsNamed(ring, "pipeline step failed"), "pipeline step failed")
 }
 
 func TestRunPipeline_RollbackFailedLogRedactsCookiePath(t *testing.T) {
-	logs := captureDefaultLog(t)
-	first := &mockStep{name: "search", rollbackErr: ytdlpCookieErr()}
-	second := &mockStep{name: "download", executeErr: errors.New("boom")}
+	ring := captureLogs(t)
+	synctest.Test(t, func(t *testing.T) {
+		track := pending("Song", "Artist", "Album")
+		ledger := failingCommitLedger{Ledger: acquisitiontest.NewLedger(track), err: errors.New("boom")}
+		store := newRecordingStore()
+		store.deleteErr = ytdlpCookieErr()
 
-	_ = RunPipeline(context.Background(), pipelineOf(first, second), &AcquisitionContext{})
+		_ = storing{t, ledger, store, track}.execute()
 
-	assertNoCookiePath(t, logs.String(), "rollback failed")
+		assertNoCookiePath(t, recordsNamed(ring, "rollback failed"), "rollback failed")
+	})
 }
 
-type funcStage[In, Out any] struct {
-	*mockStep
-	run func(ac *AcquisitionContext) error
+type finesseSource struct {
+	candidates []ports.AudioCandidate
+	broken     string
 }
 
-func (f funcStage[In, Out]) Execute(_ context.Context, ac *AcquisitionContext, _ In) (Out, error) {
-	var out Out
-	return out, f.run(ac)
+func (finesseSource) Name() acqdomain.SourceName { return "finesse" }
+
+func (s finesseSource) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
+	return s.candidates, nil
 }
 
-func shadowLines(logs, trackID string) []map[string]any {
-	var lines []map[string]any
-	for _, raw := range strings.Split(logs, "\n") {
-		var line map[string]any
-		if json.Unmarshal([]byte(raw), &line) == nil && line["msg"] == "acquisition.judge_shadow" && line["track_id"] == trackID {
-			lines = append(lines, line)
-		}
+func (s finesseSource) Fetch(_ context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
+	if c.URL == s.broken {
+		return ports.FetchedAudio{}, errors.New("every candidate failed")
 	}
-	return lines
+	path := filepath.Join(outDir, "track.mp3")
+	return ports.FetchedAudio{Path: path}, os.WriteFile(path, []byte("audio-bytes"), 0o600)
 }
 
-func shadowLine(t *testing.T, logs, trackID string) map[string]any {
+const (
+	finesseAlbumURL  = "https://music.youtube.com/watch?v=aaaaaaaaaaa"
+	finesseUploadURL = "https://music.youtube.com/watch?v=bbbbbbbbbbb"
+)
+
+func finesseOn(url, album string) ports.AudioCandidate {
+	return ports.AudioCandidate{
+		Title: "Finesse", URL: url, Duration: 191, Artists: []string{"Bruno Mars"}, Album: album, Kind: ports.KindArtTrack,
+	}
+}
+
+func shadowedRun(t *testing.T, source finesseSource) (*service.AcquisitionContext, []logging.CapturedRecord, error) {
 	t.Helper()
-	if lines := shadowLines(logs, trackID); len(lines) > 0 {
-		return lines[0]
-	}
-	t.Fatalf("no acquisition.judge_shadow line in %s", logs)
-	return nil
+	ring := captureLogs(t)
+	workspace := tempfs.New()
+	steps := service.CoreSteps(service.NewSourceRegistry(source), nil, &objectStore{objects: map[string]string{}}, nil, nil, workspace, nil)
+	ac := &service.AcquisitionContext{Track: service.TrackRef{
+		ID: "track-1", UserID: "u1", Title: "Finesse", Artist: "Bruno Mars", Album: "24K Magic", CatalogDuration: 191,
+	}}
+
+	err := service.RunPipeline(context.Background(), steps, ac)
+
+	service.CleanupTemp(context.Background(), workspace, ac)
+	return ac, recordsNamed(ring, "acquisition.judge_shadow"), err
 }
 
-func shadowPipeline(candidates []ports.AudioCandidate, keep int) Pipeline {
-	p := pipelineOf()
-	p.search = funcStage[pipelineStart, afterSearch]{&mockStep{name: "search"}, func(ac *AcquisitionContext) error {
-		ac.Candidates = candidates
-		return nil
-	}}
-	p.selectBest = funcStage[afterSearch, afterSelect]{&mockStep{name: "select"}, func(ac *AcquisitionContext) error {
-		ac.Selected = &candidates[0]
-		return nil
-	}}
-	p.download = funcStage[afterSelect, afterDownload]{&mockStep{name: "download"}, func(ac *AcquisitionContext) error {
-		if keep < 0 {
-			return errors.New("every candidate failed")
-		}
-		ac.Selected, ac.ProbedDuration = &candidates[keep], probedLength(191)
-		return nil
-	}}
-	return p
-}
-
-func TestRunPipeline_ShadowJudgesTheKeptCandidate(t *testing.T) {
-	logs := captureJSONLogSync(t)
-	pin := ports.AudioCandidate{Title: "Finesse", URL: finesseRemixURL, Artists: []string{"Bruno Mars"}, Kind: ports.KindPinnedVideo}
-	pin.URL = "https://music.youtube.com/watch?v=pinned"
-	candidates := []ports.AudioCandidate{finesseRemix(), pin}
-	ac := &AcquisitionContext{Track: finesseTrack()}
-
-	if err := RunPipeline(context.Background(), shadowPipeline(candidates, 1), ac); err != nil {
+func TestRunPipeline_ShadowJudgesTheKeptCandidateOnce(t *testing.T) {
+	_, lines, err := shadowedRun(t, finesseSource{candidates: []ports.AudioCandidate{finesseOn(finesseAlbumURL, "24K Magic")}})
+	if err != nil {
 		t.Fatalf("RunPipeline: %v", err)
 	}
-
-	line := shadowLine(t, logs.String(), ac.Track.ID)
-	if line["pipeline_url"] != pin.URL || line["judge_url"] != pin.URL || line["verdict"] != "agree" {
-		t.Fatalf("shadow line = %v, want the kept second candidate judged and agreed", line)
+	if len(lines) != 1 {
+		t.Fatalf("shadow lines = %d, want 1", len(lines))
 	}
-	if n := len(shadowLines(logs.String(), ac.Track.ID)); n != 1 {
-		t.Fatalf("shadow lines = %d, want 1", n)
+	attrs := lines[0].Attrs
+	if attrs["pipeline_url"] != finesseAlbumURL || attrs["judge_url"] != finesseAlbumURL || attrs["verdict"] != "agree" {
+		t.Fatalf("shadow line = %v, want the kept candidate judged and agreed", attrs)
 	}
 }
 
 func TestRunPipeline_ShadowLogsDisagreementWithoutChangingThePick(t *testing.T) {
-	logs := captureJSONLogSync(t)
-	candidates := []ports.AudioCandidate{finesseRemix(), finesseAlbumTrack()}
-	ac := &AcquisitionContext{Track: finesseTrack()}
-
-	if err := RunPipeline(context.Background(), shadowPipeline(candidates, 0), ac); err != nil {
-		t.Fatalf("RunPipeline: %v", err)
+	source := finesseSource{
+		candidates: []ports.AudioCandidate{finesseOn(finesseAlbumURL, "24K Magic"), {
+			Title: "Bruno Mars - Finesse (Official Audio)", URL: finesseUploadURL, Channel: "Bruno Mars - Topic",
+			Duration: 192, Categories: []string{"Music"},
+		}},
+		broken: finesseAlbumURL,
 	}
 
-	line := shadowLine(t, logs.String(), ac.Track.ID)
-	if line["verdict"] != "disagree" || line["judge_url"] != finesseAlbumURL || line["pipeline_url"] != finesseRemixURL {
-		t.Fatalf("shadow line = %v, want the judge on the album track and the pipeline on the remix", line)
+	ac, lines, err := shadowedRun(t, source)
+	if err != nil {
+		t.Fatalf("RunPipeline: %v", err)
+	}
+	if ac.Selected == nil || ac.Selected.URL != finesseUploadURL {
+		t.Fatalf("Selected = %+v, want the candidate that could be fetched", ac.Selected)
+	}
+	if len(lines) != 1 {
+		t.Fatalf("shadow lines = %d, want 1", len(lines))
+	}
+	attrs := lines[0].Attrs
+	if attrs["verdict"] != "disagree" || attrs["judge_url"] != finesseAlbumURL || attrs["pipeline_url"] != finesseUploadURL {
+		t.Fatalf("shadow line = %v, want the judge on the album track and the pipeline on the upload", attrs)
 	}
 }
 
 func TestRunPipeline_ShadowLogsAFailedPipeline(t *testing.T) {
-	logs := captureJSONLogSync(t)
-	ac := &AcquisitionContext{Track: finesseTrack()}
+	source := finesseSource{candidates: []ports.AudioCandidate{finesseOn(finesseAlbumURL, "24K Magic")}, broken: finesseAlbumURL}
 
-	if err := RunPipeline(context.Background(), shadowPipeline([]ports.AudioCandidate{finesseAlbumTrack()}, -1), ac); err == nil {
+	_, lines, err := shadowedRun(t, source)
+
+	if err == nil {
 		t.Fatal("RunPipeline: want the download error")
 	}
-
-	line := shadowLine(t, logs.String(), ac.Track.ID)
-	if line["verdict"] != "pipeline_failed" || line["pipeline_url"] != "" {
-		t.Fatalf("shadow line = %v, want pipeline_failed with no kept url", line)
+	if len(lines) != 1 {
+		t.Fatalf("shadow lines = %d, want 1", len(lines))
+	}
+	if attrs := lines[0].Attrs; attrs["verdict"] != "pipeline_failed" || attrs["pipeline_url"] != "" {
+		t.Fatalf("shadow line = %v, want pipeline_failed with no kept url", attrs)
 	}
 }
 
-func TestRunPipeline_AFailingUpdateTrackRollsBackOnlyTheEarlierStages(t *testing.T) {
-	userId := shared.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
-	track := seedTrackInRepo(t, ledger, userId, readyWith("old-ref"))
-	var log []string
-	steps := make([]*mockStep, 5)
-	for i, name := range pipelineStageNames[:5] {
-		steps[i] = newMockStep(name, &log)
+func TestSearch_AReplaceExcludesAVideoUnderItsOtherURLSpelling(t *testing.T) {
+	excluded := sourcekey.SourceKey("https://music.youtube.com/watch?v=dQw4w9WgXcQ")
+	tests := []struct {
+		name      string
+		url       string
+		wantFound bool
+	}{
+		{"the same video under another spelling", "https://www.youtube.com/watch?v=dQw4w9WgXcQ", false},
+		{"a different video", "https://www.youtube.com/watch?v=aaaaaaaaaaa", true},
 	}
-	p := pipelineOf(steps...).withUpdateTrack(NewUpdateTrackStep(ledger, userId, track.ID))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{{URL: tt.url}}}
+			ac := &service.AcquisitionContext{Replace: service.ReplaceState{ExcludeKeys: []string{excluded}}}
 
-	err := RunPipeline(context.Background(), p, &AcquisitionContext{})
+			_ = runPipeline(context.Background(), service.NewSourceRegistry(source), ac)
 
-	var stepErr *StepError
-	if !errors.As(err, &stepErr) || stepErr.Step != stepNameUpdateTrack {
-		t.Fatalf("err = %v, want a StepError from update_track", err)
+			if got := len(ac.Candidates) == 1; got != tt.wantFound {
+				t.Errorf("candidates = %v, want kept = %v", ac.Candidates, tt.wantFound)
+			}
+		})
 	}
-	want := []string{
-		"execute:search", "execute:select", "execute:download", "execute:tag", "execute:store",
-		"rollback:store", "rollback:tag", "rollback:download", "rollback:select", "rollback:search",
-	}
-	if strings.Join(log, ",") != strings.Join(want, ",") {
-		t.Errorf("log = %v, want %v", log, want)
-	}
-	got := storedTrack(t, ledger, track)
-	if got.Status != ports.TrackReady || got.AudioRef == nil || *got.AudioRef != "old-ref" {
-		t.Errorf("status = %v, audio_ref = %v, want ready on old-ref", got.Status, got.AudioRef)
-	}
-}
-
-func TestExcludes_MatchesAcrossURLSpellings(t *testing.T) {
-	r := ReplaceState{ExcludeKeys: []string{sourceKey("https://music.youtube.com/watch?v=dQw4w9WgXcQ")}}
-
-	if !r.excludes("https://www.youtube.com/watch?v=dQw4w9WgXcQ") {
-		t.Error("a replace must not hand back the same video under its other URL")
-	}
-	if r.excludes("https://www.youtube.com/watch?v=aaaaaaaaaaa") {
-		t.Error("a different video must not be excluded")
-	}
-}
-
-func TestUpdateTrackStep_RefusesToCommitWithoutTheCandidateItKept(t *testing.T) {
-	track := ports.TrackSnapshot{ID: shared.NewTrackId(), UserId: shared.NewUserId(uuid.New()), Title: "Song", Artist: "Artist", Status: ports.TrackPending}
-	ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
-	step := NewUpdateTrackStep(ledger, track.UserId, track.ID)
-
-	_, err := step.Execute(context.Background(), &AcquisitionContext{AudioRef: "song.mp3"}, afterStore{})
-
-	if !errors.Is(err, errNoKeptCandidate) {
-		t.Fatalf("Execute = %v, want errNoKeptCandidate", err)
-	}
-	if got, _ := ledger.Track(track.ID); got.Status != ports.TrackPending || got.AudioRef != nil {
-		t.Errorf("track = status %v, audio ref %v, want it untouched", got.Status, got.AudioRef)
-	}
-}
-
-type recordingReporter struct {
-	stages  []string
-	timings map[string]time.Duration
-	format  ports.SourceFormat
-	file    ports.StoredFile
-}
-
-func (r *recordingReporter) meta(string, string, string)               {}
-func (r *recordingReporter) stage(n string)                            { r.stages = append(r.stages, n) }
-func (r *recordingReporter) source(string)                             {}
-func (r *recordingReporter) provenance(string)                         {}
-func (r *recordingReporter) fetched(f ports.SourceFormat)              { r.format = f }
-func (r *recordingReporter) decided(_ float64, _ string, _, _ float64) {}
-func (r *recordingReporter) stored(f ports.StoredFile)                 { r.file = f }
-func (r *recordingReporter) timing(stage string, d time.Duration) {
-	if r.timings == nil {
-		r.timings = map[string]time.Duration{}
-	}
-	r.timings[stage] += d
-}
-
-type trackRefIndex struct {
-	holders map[string][]shared.TrackId
-	err     error
-}
-
-func (i trackRefIndex) AudioRefInUse(_ context.Context, audioRef string, excludeTrackID shared.TrackId) (bool, error) {
-	if i.err != nil {
-		return false, i.err
-	}
-	for _, holder := range i.holders[audioRef] {
-		if holder != excludeTrackID {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-type cancelSensitiveStore struct {
-	stored map[string]bool
-}
-
-func (s *cancelSensitiveStore) Exists(ctx context.Context, audioRef string) (bool, error) {
-	if err := ctx.Err(); err != nil {
-		return false, err
-	}
-	return s.stored[audioRef], nil
-}
-
-func (s *cancelSensitiveStore) Store(ctx context.Context, _ string, audioRef string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	s.stored[audioRef] = true
-	return nil
-}
-
-func (s *cancelSensitiveStore) Delete(ctx context.Context, audioRef string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	delete(s.stored, audioRef)
-	return nil
-}
-
-type recordingOrphanQueue struct {
-	recorded []ports.OrphanedAudio
-	err      error
-}
-
-func (q *recordingOrphanQueue) RecordOrphanedAudio(_ context.Context, o ports.OrphanedAudio) error {
-	if q.err != nil {
-		return q.err
-	}
-	q.recorded = append(q.recorded, o)
-	return nil
-}
-
-func probedLength(seconds float64) shared.TrackLength {
-	length, err := shared.TrackLengthOf(seconds)
-	if err != nil {
-		panic(err)
-	}
-	return length
 }

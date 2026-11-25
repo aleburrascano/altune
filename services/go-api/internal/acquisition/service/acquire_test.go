@@ -3249,3 +3249,24 @@ func finesseAlbumTrack() ports.AudioCandidate {
 func finesseTrack() TrackRef {
 	return TrackRef{ID: "track-1", Title: "Finesse", Artist: "Bruno Mars", Album: "24K Magic", CatalogDuration: 191}
 }
+
+type recordingReporter struct {
+	stages  []string
+	timings map[string]time.Duration
+	format  ports.SourceFormat
+	file    ports.StoredFile
+}
+
+func (r *recordingReporter) meta(string, string, string)               {}
+func (r *recordingReporter) stage(n string)                            { r.stages = append(r.stages, n) }
+func (r *recordingReporter) source(string)                             {}
+func (r *recordingReporter) provenance(string)                         {}
+func (r *recordingReporter) fetched(f ports.SourceFormat)              { r.format = f }
+func (r *recordingReporter) decided(_ float64, _ string, _, _ float64) {}
+func (r *recordingReporter) stored(f ports.StoredFile)                 { r.file = f }
+func (r *recordingReporter) timing(stage string, d time.Duration) {
+	if r.timings == nil {
+		r.timings = map[string]time.Duration{}
+	}
+	r.timings[stage] += d
+}
