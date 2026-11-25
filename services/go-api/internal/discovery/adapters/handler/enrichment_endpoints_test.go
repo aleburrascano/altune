@@ -447,7 +447,7 @@ func TestNamedEnrichmentEndpoints_SharedContract(t *testing.T) {
 		t.Run(tc.name+" missing title is 400", func(t *testing.T) {
 			rec := discServe(t, tc.router(nil), http.MethodGet, tc.path+"?kind=artist", nil)
 			discAssertStatus(t, rec, http.StatusBadRequest)
-			var resp httputil.ErrorResponse
+			var resp httputil.Problem
 			discDecodeJSON(t, rec, &resp)
 			if resp.Code != "discovery.invalid_param" {
 				t.Errorf("code = %q, want %q", resp.Code, "discovery.invalid_param")

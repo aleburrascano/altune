@@ -245,7 +245,7 @@ func assertRateLimited(t *testing.T, rec *httptest.ResponseRecorder) {
 	if rec.Header().Get("Retry-After") == "" {
 		t.Error("throttled response has no Retry-After header")
 	}
-	var resp httputil.ErrorResponse
+	var resp httputil.Problem
 	discDecodeJSON(t, rec, &resp)
 	if resp.Code != "discovery.rate_limited" {
 		t.Errorf("code = %q, want discovery.rate_limited", resp.Code)

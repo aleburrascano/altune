@@ -764,7 +764,7 @@ func assertErrorCode(t *testing.T, rec *httptest.ResponseRecorder, wantStatus in
 	t.Helper()
 	discAssertStatus(t, rec, wantStatus)
 	discAssertProblem(t, rec)
-	var resp httputil.ErrorResponse
+	var resp httputil.Problem
 	discDecodeJSON(t, rec, &resp)
 	if resp.Code != wantCode {
 		t.Errorf("code = %q, want %q (detail: %q)", resp.Code, wantCode, resp.Detail)
@@ -773,7 +773,7 @@ func assertErrorCode(t *testing.T, rec *httptest.ResponseRecorder, wantStatus in
 
 func rejectionCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 	t.Helper()
-	var body httputil.ErrorResponse
+	var body httputil.Problem
 	discDecodeJSON(t, rec, &body)
 	if body.Code == "" {
 		t.Fatalf("rejected request carried no code (detail %q)", body.Detail)
