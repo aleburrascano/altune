@@ -1,5 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+
+import type { Navigator } from '@shared/navigation';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import { ApiError } from '@shared/failure';
@@ -27,12 +29,13 @@ const playlistsPort = createMemoryPlaylistsPort();
 const SKELETON_TILES = 4;
 const SERVICE_UNAVAILABLE = 503;
 
-const mockPush = jest.fn();
-
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush, replace: jest.fn(), back: jest.fn() }),
-  useSegments: () => ['(tabs)', 'library'],
-}));
+const navigator: Navigator = {
+  push: jest.fn(),
+  replace: jest.fn(),
+  back: jest.fn(),
+  canGoBack: () => false,
+};
+const push = jest.mocked(navigator.push);
 
 let client: QueryClient;
 let port: LibraryPort;
@@ -53,7 +56,7 @@ function wrapper({ children }: { children: ReactNode }) {
 
 beforeEach(() => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  mockPush.mockReset();
+  push.mockReset();
   port = createMemoryLibraryPort();
 });
 
@@ -67,7 +70,7 @@ warmUpFirstRender(async () => {
         <PlaylistsPortProvider port={playlistsPort}>
           <PlaybackContext.Provider value={idlePlayback}>
             <LibraryPortProvider port={createMemoryLibraryPort()}>
-              <LibraryScreen />
+              <LibraryScreen navigator={navigator} />
             </LibraryPortProvider>
           </PlaybackContext.Provider>
         </PlaylistsPortProvider>
@@ -81,7 +84,7 @@ warmUpFirstRender(async () => {
 describe('LibraryScreen states', () => {
   it('shows four skeleton tiles while loading', async () => {
     port = { ...createMemoryLibraryPort(), getTracks: () => new Promise(() => undefined) };
-    render(<LibraryScreen />, { wrapper });
+    render(<LibraryScreen navigator={navigator} />, { wrapper });
 
     fireEvent.press(screen.getByTestId('library-chip-tracks'));
 
@@ -100,7 +103,7 @@ describe('LibraryScreen states', () => {
         .fn(memory.getPlaylists)
         .mockRejectedValueOnce(new ApiError(SERVICE_UNAVAILABLE, 'down')),
     };
-    render(<LibraryScreen />, { wrapper });
+    render(<LibraryScreen navigator={navigator} />, { wrapper });
 
     await waitFor(() => expect(screen.getByTestId('library-error')).toBeTruthy());
     expect(screen.queryByText('Road Trip')).toBeNull();
@@ -112,16 +115,16 @@ describe('LibraryScreen states', () => {
   });
 
   it('shows the empty screen for an empty library and routes to discover', async () => {
-    render(<LibraryScreen />, { wrapper });
+    render(<LibraryScreen navigator={navigator} />, { wrapper });
 
     await waitFor(() => expect(screen.getByTestId('library-empty')).toBeTruthy());
     fireEvent.press(screen.getByText('Discover Music'));
-    expect(mockPush).toHaveBeenCalledWith('/discover');
+    expect(push).toHaveBeenCalledWith('/discover');
   });
 
   it('keeps the ready screen when the active chip is empty but the library is not', async () => {
     port = createMemoryLibraryPort({ tracks: [track('t1')] });
-    render(<LibraryScreen />, { wrapper });
+    render(<LibraryScreen navigator={navigator} />, { wrapper });
 
     await waitFor(() =>
       expect(client.getQueryData<{ total: number }>(libraryKeys.summary)?.total).toBe(1),
@@ -145,7 +148,7 @@ describe('LibraryScreen selection downloads', () => {
       pinMany: jest.fn().mockResolvedValue({ requested: 1, failed: 1, refused: null }),
     });
     port = createMemoryLibraryPort({ tracks: [track('t1')] });
-    render(<LibraryScreen />, { wrapper });
+    render(<LibraryScreen navigator={navigator} />, { wrapper });
     fireEvent.press(screen.getByTestId('library-chip-tracks'));
     await waitFor(() => expect(screen.getByTestId('library-row-t1')).toBeTruthy());
 

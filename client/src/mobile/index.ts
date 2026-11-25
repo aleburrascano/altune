@@ -18,3 +18,6 @@ export type { GlobalErrorHandlers } from '@/mobile/uncaughtErrors';
 export { AppChrome } from '@/mobile/frame/AppChrome';
 export { DetailRoute } from '@/mobile/routes/DetailRoute';
 export { UnreleasedRoute } from '@/mobile/routes/UnreleasedRoute';
+export { LibraryRoute } from '@/mobile/routes/LibraryRoute';
+export { PlaylistRoute } from '@/mobile/routes/PlaylistRoute';
+export { FeaturingRoute } from '@/mobile/routes/FeaturingRoute';

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { useNavigator } from '@shared/navigation';
 import { SidebarPlaylists } from '@features/library';
 import { PlayerBar } from '@features/player';
 import { Sidebar } from '@shared/ui';
@@ -13,9 +14,14 @@ export type WideChromeProps = {
 };
 
 function WideChromeRow({ activeRoute, onNavigate, children }: WideChromeProps) {
+  const navigator = useNavigator();
   return (
     <View style={styles.row}>
-      <Sidebar activeRoute={activeRoute} onNavigate={onNavigate} playlists={<SidebarPlaylists />} />
+      <Sidebar
+        activeRoute={activeRoute}
+        onNavigate={onNavigate}
+        playlists={<SidebarPlaylists navigator={navigator} />}
+      />
       <View style={styles.content}>{children}</View>
     </View>
   );

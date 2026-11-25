@@ -1,7 +1,7 @@
 import type { PlaylistId, TrackResponse } from '@shared/catalog';
 import type { Navigator } from '@shared/navigation';
 import { useDeletePlaylist } from '@shared/playlists';
-import { goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
+import { goBackOrToLibrary } from '@features/library/core/libraryRoutes';
 import type { ContextMenuItem } from '@shared/ui';
 import {
   offlineEligibility,

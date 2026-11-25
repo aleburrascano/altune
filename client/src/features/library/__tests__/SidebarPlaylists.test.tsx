@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
+
+import type { Navigator } from '@shared/navigation';
 import { StyleSheet } from 'react-native';
 import { asPlaylistId } from '@shared/catalog';
 import type { PlaylistDetailResponse } from '@shared/catalog';
@@ -12,11 +14,13 @@ import { PlaylistsPortProvider } from '@shared/playlists';
 import { createMemoryPlaylistsPort } from '@testing/fakes/playlists/inMemoryPlaylistsPort';
 
 const playlistsPort = createMemoryPlaylistsPort();
-const mockPush = jest.fn();
-
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush }),
-}));
+const navigator: Navigator = {
+  push: jest.fn(),
+  replace: jest.fn(),
+  back: jest.fn(),
+  canGoBack: () => false,
+};
+const push = jest.mocked(navigator.push);
 
 const TRACK_COUNT = 3;
 
@@ -63,7 +67,7 @@ function wrapper({ children }: WrapperProps) {
 }
 
 function renderSidebar(): void {
-  render(<SidebarPlaylists />, { wrapper });
+  render(<SidebarPlaylists navigator={navigator} />, { wrapper });
 }
 
 function restingStyleOf(testId: string) {
@@ -77,7 +81,7 @@ beforeEach(() => {
 
 afterEach(() => {
   client.clear();
-  mockPush.mockClear();
+  push.mockClear();
   jest.restoreAllMocks();
 });
 
@@ -99,7 +103,7 @@ describe('SidebarPlaylists', () => {
     renderSidebar();
     fireEvent.press(await screen.findByLabelText('Late Night'));
 
-    expect(mockPush).toHaveBeenCalledWith('/library/playlist/42');
+    expect(push).toHaveBeenCalledWith('/library/playlist/42');
   });
 
   it('shows an empty hint when there are no playlists', async () => {

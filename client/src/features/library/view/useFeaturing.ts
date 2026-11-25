@@ -9,9 +9,9 @@ import {
   classifyLibraryError,
 } from '@features/library/core/libraryFailure';
 import type { FailureAlert } from '@shared/ui';
-import { detailHref, useNavigator, type Navigator } from '@shared/navigation';
+import { detailHref, type Navigator } from '@shared/navigation';
 import type { LibraryPort } from '@features/library/ports/libraryPort';
-import type { FeaturingDetailRoute } from '@features/library/domain/libraryRoutes';
+import type { FeaturingDetailRoute } from '@features/library/core/libraryRoutes';
 
 const DIGITS = /^[0-9]+$/;
 
@@ -124,8 +124,7 @@ async function whileBusy(setBusy: SetBusy, work: () => Promise<void>): Promise<v
   }
 }
 
-export function useExploreArtist(): ExploreArtist {
-  const navigator = useNavigator();
+export function useExploreArtist(navigator: Navigator): ExploreArtist {
   const port = useLibraryPort();
   const [exploring, setExploring] = useState(false);
   const explore = async (artist: string, detailPath: DetailPath): Promise<void> => {

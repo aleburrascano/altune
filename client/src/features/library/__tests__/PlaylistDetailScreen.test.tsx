@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
 import { setPlatformOS } from '@testing/setPlatformOS';
+import { setWindowWidth } from '@testing/setWindowWidth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
-import { asTrackId } from '@shared/catalog';
+import { asPlaylistId, asTrackId } from '@shared/catalog';
+import type { Navigator } from '@shared/navigation';
 import { PlaybackContext } from '@shared/playback';
 import { trackResponseFactory } from '@testing/factories';
 import { signInTestUser } from '@testing/signInTestUser';
@@ -15,23 +17,14 @@ import { HttpLibraryPorts } from '@features/library/__tests__/HttpLibraryPorts';
 import { acceptTelemetry, shownFailureSurfaces } from '@features/library/__tests__/failureShown';
 const { __http } = require('@testing/doubles/fetch.js');
 
-let mockParams: { id?: string } = {};
-const mockReplace = jest.fn();
-jest.mock('expo-router', () => ({
-  useLocalSearchParams: () => mockParams,
-  useRouter: () => ({
-    replace: mockReplace,
-    push: jest.fn(),
-    back: jest.fn(),
-    canGoBack: () => false,
-  }),
-}));
+const PLAYLIST_ID = asPlaylistId('p1');
 
-function playlistRequests(): string[] {
-  return (__http.requests as { path: string }[])
-    .map((r) => r.path)
-    .filter((path) => path.startsWith('/v1/playlists'));
-}
+const navigator: Navigator = {
+  push: jest.fn(),
+  replace: jest.fn(),
+  back: jest.fn(),
+  canGoBack: () => false,
+};
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({
@@ -50,49 +43,22 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 warmUpFirstRender(async () => {
-  mockParams = { id: 'p1' };
   await signInTestUser();
 
   __http.reply('GET /v1/playlists/p1', { status: 500, json: { message: 'warm-up failure' } });
-  const failed = render(<PlaylistDetailScreen />, { wrapper });
+  const failed = render(<PlaylistDetailScreen playlistId={PLAYLIST_ID} navigator={navigator} />, {
+    wrapper,
+  });
   await failed.findByTestId('playlist-detail-retry');
   failed.unmount();
   __http.reset();
 
   __http.reply('GET /v1/playlists/p1', { status: 200, json: playlistBody });
-  const loaded = render(<PlaylistDetailScreen />, { wrapper });
+  const loaded = render(<PlaylistDetailScreen playlistId={PLAYLIST_ID} navigator={navigator} />, {
+    wrapper,
+  });
   await loaded.findByText('Road Trip');
   loaded.unmount();
-});
-
-describe('PlaylistDetailScreen route param', () => {
-  beforeEach(async () => {
-    mockReplace.mockClear();
-    await signInTestUser();
-  });
-
-  it.each(['p1/tracks', '../p1', 'p1?x=1', 'p1#frag', 'p1%2Ftracks'])(
-    'redirects to the library and requests nothing for the malformed id %p',
-    async (id) => {
-      mockParams = { id };
-
-      render(<PlaylistDetailScreen />, { wrapper });
-      await Promise.resolve();
-
-      expect(mockReplace).toHaveBeenCalledWith('/library');
-      expect(playlistRequests()).toEqual([]);
-    },
-  );
-
-  it('fetches the playlist for a well-formed id, so the redirect above is not a blanket one', async () => {
-    mockParams = { id: 'p1' };
-    __http.reply('GET /v1/playlists/p1', { status: 404, json: { message: 'not found' } });
-
-    render(<PlaylistDetailScreen />, { wrapper });
-
-    await waitFor(() => expect(playlistRequests()).toEqual(['/v1/playlists/p1']));
-    expect(mockReplace).not.toHaveBeenCalled();
-  });
 });
 
 const SERVER_MESSAGE = 'playlist shard 7 is down for daft punk homework';
@@ -115,11 +81,12 @@ function detailFailureLogs(): unknown[][] {
   return logs.warnings.filter(([message]) => message === LOG_LINE);
 }
 
-describe('PlaylistDetailScreen — a failed load', () => {
-  beforeEach(() => {
-    mockParams = { id: 'p1' };
-  });
+const WIDE_WIDTH = 1440;
+const PHONE_WIDTH = 390;
+const WIDE_EDGE_WIDTH = 1000;
+const NARROW_EDGE_WIDTH = 999;
 
+describe('PlaylistDetailScreen — a failed load', () => {
   beforeEach(async () => {
     logs = recordLogs();
     await signInTestUser();
@@ -128,7 +95,9 @@ describe('PlaylistDetailScreen — a failed load', () => {
   it('offers a retry instead of claiming the playlist is gone when the API fails', async () => {
     __http.reply('GET /v1/playlists/p1', { status: 500, json: { message: SERVER_MESSAGE } });
 
-    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    const screen = render(<PlaylistDetailScreen playlistId={PLAYLIST_ID} navigator={navigator} />, {
+      wrapper,
+    });
 
     expect(await screen.findByTestId('playlist-detail-retry')).toBeTruthy();
     expect(screen.queryByText('Playlist not found')).toBeNull();
@@ -138,7 +107,9 @@ describe('PlaylistDetailScreen — a failed load', () => {
   it('offers a retry and the offline copy when the device cannot reach the API', async () => {
     __http.fail('GET /v1/playlists/p1');
 
-    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    const screen = render(<PlaylistDetailScreen playlistId={PLAYLIST_ID} navigator={navigator} />, {
+      wrapper,
+    });
 
     expect(await screen.findByTestId('playlist-detail-retry')).toBeTruthy();
     expect(screen.queryByText('Playlist not found')).toBeNull();
@@ -154,7 +125,9 @@ describe('PlaylistDetailScreen — a failed load', () => {
       json: { message: SERVER_MESSAGE, code: 'playlist_unavailable' },
     });
 
-    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    const screen = render(<PlaylistDetailScreen playlistId={PLAYLIST_ID} navigator={navigator} />, {
+      wrapper,
+    });
 
     await screen.findByTestId('playlist-detail-retry');
     expect(detailFailureLogs()).toEqual([
@@ -175,7 +148,9 @@ describe('PlaylistDetailScreen — a failed load', () => {
     __http.replyOnce('GET /v1/playlists/p1', { status: 500, json: { message: SERVER_MESSAGE } });
     __http.reply('GET /v1/playlists/p1', { status: 200, json: playlistBody });
 
-    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    const screen = render(<PlaylistDetailScreen playlistId={PLAYLIST_ID} navigator={navigator} />, {
+      wrapper,
+    });
 
     fireEvent.press(await screen.findByTestId('playlist-detail-retry'));
 
@@ -186,7 +161,9 @@ describe('PlaylistDetailScreen — a failed load', () => {
   it('keeps the "Playlist not found" copy and no retry for a playlist that is really gone', async () => {
     __http.reply('GET /v1/playlists/p1', { status: 404, json: { message: 'not found' } });
 
-    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    const screen = render(<PlaylistDetailScreen playlistId={PLAYLIST_ID} navigator={navigator} />, {
+      wrapper,
+    });
 
     expect(await screen.findByText('Playlist not found')).toBeTruthy();
     expect(screen.getByText('Go back')).toBeTruthy();
@@ -229,13 +206,14 @@ const oneReadyTrackPlaylist = {
 
 describe('PlaylistDetailScreen — offline download controls on native', () => {
   beforeEach(async () => {
-    mockParams = { id: 'p1' };
     await signInTestUser();
     __http.reply('GET /v1/playlists/p1', { status: 200, json: oneReadyTrackPlaylist });
   });
 
   async function renderLoaded() {
-    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    const screen = render(<PlaylistDetailScreen playlistId={PLAYLIST_ID} navigator={navigator} />, {
+      wrapper,
+    });
     await screen.findByText('Road Trip');
     return screen;
   }
@@ -281,31 +259,25 @@ describe('PlaylistDetailScreen — offline download controls on native', () => {
 
 const { Platform: RNPlatform } = require('react-native');
 
-let mockDetailWindowWidth = 390;
-
-jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
-  __esModule: true,
-  default: () => ({ width: mockDetailWindowWidth, height: 800, scale: 2, fontScale: 1 }),
-}));
-
 describe('PlaylistDetailScreen — wide web layout', () => {
   const originalOS = RNPlatform.OS;
 
   beforeEach(async () => {
-    mockParams = { id: 'p1' };
     await signInTestUser();
     __http.reply('GET /v1/playlists/p1', { status: 200, json: oneReadyTrackPlaylist });
     setPlatformOS('web');
-    mockDetailWindowWidth = 1440;
+    setWindowWidth(WIDE_WIDTH);
   });
 
   afterEach(() => {
     setPlatformOS(originalOS);
-    mockDetailWindowWidth = 390;
+    setWindowWidth(PHONE_WIDTH);
   });
 
   it('puts the hero to the left and the tracks to the right at 1440px', async () => {
-    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    const screen = render(<PlaylistDetailScreen playlistId={PLAYLIST_ID} navigator={navigator} />, {
+      wrapper,
+    });
     await screen.findByText('Road Trip');
 
     expect(screen.getByTestId('playlist-wide-hero')).toBeTruthy();
@@ -315,8 +287,10 @@ describe('PlaylistDetailScreen — wide web layout', () => {
   }, 60000);
 
   it('keeps the single-column layout at a compact width even on web', async () => {
-    mockDetailWindowWidth = 390;
-    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    setWindowWidth(PHONE_WIDTH);
+    const screen = render(<PlaylistDetailScreen playlistId={PLAYLIST_ID} navigator={navigator} />, {
+      wrapper,
+    });
     await screen.findByText('Road Trip');
 
     expect(screen.queryByTestId('playlist-wide-layout')).toBeNull();
@@ -327,15 +301,14 @@ describe('PlaylistDetailScreen — wide web layout edges (#2842)', () => {
   const originalOS = RNPlatform.OS;
 
   beforeEach(async () => {
-    mockParams = { id: 'p1' };
     await signInTestUser();
     setPlatformOS('web');
-    mockDetailWindowWidth = 1440;
+    setWindowWidth(WIDE_WIDTH);
   });
 
   afterEach(() => {
     setPlatformOS(originalOS);
-    mockDetailWindowWidth = 390;
+    setWindowWidth(PHONE_WIDTH);
   });
 
   function serveOneTrackPlaylist() {
@@ -344,7 +317,9 @@ describe('PlaylistDetailScreen — wide web layout edges (#2842)', () => {
 
   it('keeps the hero-left layout for an empty playlist at 1440px', async () => {
     __http.reply('GET /v1/playlists/p1', { status: 200, json: playlistBody });
-    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    const screen = render(<PlaylistDetailScreen playlistId={PLAYLIST_ID} navigator={navigator} />, {
+      wrapper,
+    });
     await screen.findByText('Road Trip');
 
     expect(screen.queryByTestId('library-row-t1')).toBeNull();
@@ -356,8 +331,10 @@ describe('PlaylistDetailScreen — wide web layout edges (#2842)', () => {
 
   it('lays the hero beside the tracks from exactly 1000px on web', async () => {
     serveOneTrackPlaylist();
-    mockDetailWindowWidth = 1000;
-    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    setWindowWidth(WIDE_EDGE_WIDTH);
+    const screen = render(<PlaylistDetailScreen playlistId={PLAYLIST_ID} navigator={navigator} />, {
+      wrapper,
+    });
     await screen.findByText('Road Trip');
 
     expect(screen.getByTestId('playlist-wide-layout')).toBeTruthy();
@@ -365,8 +342,10 @@ describe('PlaylistDetailScreen — wide web layout edges (#2842)', () => {
 
   it('keeps the single-column layout at 999px on web', async () => {
     serveOneTrackPlaylist();
-    mockDetailWindowWidth = 999;
-    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    setWindowWidth(NARROW_EDGE_WIDTH);
+    const screen = render(<PlaylistDetailScreen playlistId={PLAYLIST_ID} navigator={navigator} />, {
+      wrapper,
+    });
     await screen.findByText('Road Trip');
 
     expect(screen.queryByTestId('playlist-wide-layout')).toBeNull();
@@ -375,7 +354,9 @@ describe('PlaylistDetailScreen — wide web layout edges (#2842)', () => {
   it('keeps the single-column layout on native at 1440pt', async () => {
     serveOneTrackPlaylist();
     setPlatformOS('ios');
-    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    const screen = render(<PlaylistDetailScreen playlistId={PLAYLIST_ID} navigator={navigator} />, {
+      wrapper,
+    });
     await screen.findByText('Road Trip');
 
     expect(screen.queryByTestId('playlist-wide-layout')).toBeNull();
@@ -384,8 +365,10 @@ describe('PlaylistDetailScreen — wide web layout edges (#2842)', () => {
   it('keeps the single-column layout on native at 999pt', async () => {
     serveOneTrackPlaylist();
     setPlatformOS('android');
-    mockDetailWindowWidth = 999;
-    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    setWindowWidth(NARROW_EDGE_WIDTH);
+    const screen = render(<PlaylistDetailScreen playlistId={PLAYLIST_ID} navigator={navigator} />, {
+      wrapper,
+    });
     await screen.findByText('Road Trip');
 
     expect(screen.queryByTestId('playlist-wide-layout')).toBeNull();
@@ -393,7 +376,9 @@ describe('PlaylistDetailScreen — wide web layout edges (#2842)', () => {
 
   it('enters selection mode from a long press on a track in the wide layout', async () => {
     serveOneTrackPlaylist();
-    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    const screen = render(<PlaylistDetailScreen playlistId={PLAYLIST_ID} navigator={navigator} />, {
+      wrapper,
+    });
     await screen.findByText('Road Trip');
 
     fireEvent(screen.getByTestId('library-row-t1'), 'longPress');
@@ -403,7 +388,9 @@ describe('PlaylistDetailScreen — wide web layout edges (#2842)', () => {
 
   it('keeps the playlist options menu in the wide layout', async () => {
     serveOneTrackPlaylist();
-    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    const screen = render(<PlaylistDetailScreen playlistId={PLAYLIST_ID} navigator={navigator} />, {
+      wrapper,
+    });
     await screen.findByText('Road Trip');
 
     fireEvent.press(screen.getByLabelText('Playlist options'));

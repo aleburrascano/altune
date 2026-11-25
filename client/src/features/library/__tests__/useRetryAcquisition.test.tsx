@@ -686,7 +686,6 @@ describe('useRetryAcquisition', () => {
 
     it('records a failed retry_request with the status once the request rejects', async () => {
       const { wrapper } = setup(ports);
-      const { ApiError } = jest.requireActual('@shared/failure/core/errors');
       mockRetryAcquisition.mockRejectedValue(new ApiError(500, 'internal'));
       const { result } = renderHook(() => useRetryAcquisition('detail'), { wrapper });
 

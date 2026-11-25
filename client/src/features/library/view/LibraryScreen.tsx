@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import { useState, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 import {
@@ -10,6 +9,7 @@ import {
   SearchBar,
   SortControl,
 } from '@shared/ui';
+import type { Navigator } from '@shared/navigation';
 import { usePlayback, useQueuePlayback } from '@shared/playback';
 import { AddToPlaylistSheet, CreatePlaylistModal } from '@shared/playlists';
 import { useActiveLibraryView } from '@features/library/view/useActiveLibraryView';
@@ -28,7 +28,7 @@ import {
   LibrarySkeletonScreen,
 } from '@features/library/view/LibraryStateScreens';
 import { TrackSelectionOverlay } from '@features/library/view/TrackSelectionOverlay';
-import { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
+import { useLibraryNavigation } from '@features/library/view/useLibraryNavigation';
 
 const DEFAULT_SORTS: Record<LibraryChip, SortKey> = {
   playlists: 'recent',
@@ -37,12 +37,13 @@ const DEFAULT_SORTS: Record<LibraryChip, SortKey> = {
   artists: 'az',
 };
 
-export function LibraryScreen(): ReactElement {
-  const router = useRouter();
+type LibraryScreenProps = { navigator: Navigator };
+
+export function LibraryScreen({ navigator }: LibraryScreenProps): ReactElement {
   const theme = useTheme();
   const pl = usePlaylistActions();
   const search = useLibrarySearch();
-  const navigation = useLibraryNavigation(router);
+  const navigation = useLibraryNavigation(navigator);
   const retryMutation = useRetryAcquisition('library_row');
   const playback = usePlayback();
   const queue = useQueuePlayback();
@@ -82,7 +83,7 @@ export function LibraryScreen(): ReactElement {
       view={section}
       skeleton={() => <LibrarySkeletonScreen />}
       error={() => <LibraryErrorScreen error={active.error} onRetry={active.onRetry} />}
-      empty={() => <LibraryEmptyScreen onDiscover={() => router.push('/discover')} />}
+      empty={() => <LibraryEmptyScreen onDiscover={() => navigator.push('/discover')} />}
     >
       <Screen>
         <LibraryHeader />

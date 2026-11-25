@@ -1,8 +1,8 @@
-export { FeaturingScreen } from '@features/library/ui/FeaturingScreen';
-export { LibraryScreen } from '@features/library/ui/LibraryScreen';
-export { PlaylistDetailScreen } from '@features/library/ui/PlaylistDetailScreen';
+export { FeaturingScreen, type FeaturingParams } from '@features/library/view/FeaturingScreen';
+export { LibraryScreen } from '@features/library/view/LibraryScreen';
+export { PlaylistDetailScreen } from '@features/library/view/PlaylistDetailScreen';
 export { usePlaylistActions } from '@features/library/view/usePlaylistActions';
-export { SidebarPlaylists } from '@features/library/ui/SidebarPlaylists';
+export { SidebarPlaylists } from '@features/library/view/SidebarPlaylists';
 export { LibraryPortProvider, useLibraryPort } from '@features/library/view/LibraryPortProvider';
 export { httpLibraryPort } from '@features/library/adapters/http/httpLibraryPort';
 export type { LibraryPort } from '@features/library/ports/libraryPort';
@@ -29,7 +29,7 @@ export { AlbumsGrid, ArtistsGrid } from '@features/library/view/GroupGrids';
 export { PlaylistsGrid } from '@features/library/view/PlaylistsGrid';
 export { useLibraryAlbums, useLibraryArtists } from '@features/library/view/useLibraryGroups';
 export { useLibraryTracks } from '@features/library/view/useLibraryTracks';
-export { featuringDetailRoute, goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
+export { featuringDetailRoute, goBackOrToLibrary } from '@features/library/core/libraryRoutes';
 export { LibraryRow } from '@features/library/view/LibraryRow';
 export { LibraryRowPinnedIcon } from '@features/library/view/LibraryRowAccessories';
 export { PINNED_GLYPH } from '@features/library/view/pinnedGlyphs';
@@ -70,13 +70,13 @@ export { TrackSelectionOverlay } from '@features/library/view/TrackSelectionOver
 export { TracksList } from '@features/library/view/TracksList';
 export { useActiveLibraryView } from '@features/library/view/useActiveLibraryView';
 export { useSelection } from '@features/library/view/useSelection';
-export { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
+export { useLibraryNavigation } from '@features/library/view/useLibraryNavigation';
 export { useDeleteTrack, useDeleteTracks } from '@features/library/view/useDeleteTracks';
 export {
   parseDeezerIdParam,
   parseStringParam,
   useTracksFeaturing,
-} from '@features/library/hooks/useFeaturing';
+} from '@features/library/view/useFeaturing';
 export { useAlbumsView, useArtistsView } from '@features/library/view/useGroupViews';
 export { useLibrarySearch } from '@features/library/view/useLibrarySearch';
 export { usePlaylistsView } from '@features/library/view/usePlaylistsView';

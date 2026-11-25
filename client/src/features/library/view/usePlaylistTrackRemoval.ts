@@ -2,7 +2,7 @@ import type { PlaylistId, TrackId, TrackResponse } from '@shared/catalog';
 import { countLabel, confirmDestructive, showFailureAlert } from '@shared/ui';
 import type { useQueuePlayback } from '@shared/playback';
 import { useRemoveTracksFromPlaylist } from '@shared/playlists';
-import type { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
+import type { useLibraryNavigation } from '@features/library/view/useLibraryNavigation';
 import {
   useTrackSelection,
   type TrackSelectionController,
