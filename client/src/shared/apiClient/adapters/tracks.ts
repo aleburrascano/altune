@@ -1,7 +1,13 @@
 import { randomUuid } from '@shared/id';
 
 import { ContractError } from '@shared/failure';
-import { apiFetch, apiSend, signalInit, withQuery } from '@shared/apiClient/adapters/http';
+import {
+  apiFetch,
+  apiSend,
+  setQueryParam,
+  signalInit,
+  withQuery,
+} from '@shared/apiClient/adapters/http';
 import { LONG_REQUEST_TIMEOUT_MS } from '@shared/apiConfig';
 import {
   asTrackId,
@@ -140,7 +146,7 @@ export async function getTracks(
     limit: String(params.limit),
     offset: String(params.offset),
   });
-  if (params.q) qs.set('q', params.q);
+  setQueryParam(qs, 'q', params.q);
   if (params.sort) qs.set('sort', params.sort);
   return parseListTracksResponse(await apiFetch(withQuery('/v1/tracks', qs), signalInit(signal)));
 }
@@ -157,7 +163,7 @@ export async function getAllTracks(params: {
   const { signal, ...filter } = params;
   const items: TrackResponse[] = [];
   while (items.length < MAX_ALL_TRACKS) {
-    if (signal?.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
+    if (signal?.aborted === true) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
     const page = await getTracks({ ...filter, limit: MAX_PAGE, offset: items.length }, signal);
     items.push(...page.items);
     if (!page.has_more || page.items.length === 0) return { items, truncated: false };
@@ -191,7 +197,7 @@ export async function retryAcquisition(trackId: TrackId): Promise<void> {
 
 export async function listTracksFeaturing(fa: FeaturedArtist): Promise<ListTracksResponse> {
   const qs = new URLSearchParams();
-  if (fa.mbid) qs.set('mbid', fa.mbid);
+  setQueryParam(qs, 'mbid', fa.mbid);
   if (fa.deezer_id != null) qs.set('deezer_id', String(fa.deezer_id));
   if (fa.name) qs.set('name', fa.name);
   return parseListTracksResponse(await apiFetch(withQuery('/v1/tracks/featuring', qs)));

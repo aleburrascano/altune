@@ -244,6 +244,14 @@ export function apiSend(
   return apiFetch(path, jsonRequest(method, body, init));
 }
 
+export function setQueryParam(
+  params: URLSearchParams,
+  name: string,
+  value: string | null | undefined,
+): void {
+  if (value !== undefined && value !== null && value !== '') params.set(name, value);
+}
+
 export function withQuery(path: string, params: URLSearchParams): string {
   const qs = params.toString();
   return qs ? `${path}?${qs}` : path;

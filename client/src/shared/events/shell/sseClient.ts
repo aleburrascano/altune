@@ -91,7 +91,7 @@ export class SSEClient {
   }
 
   private abandoned(): boolean {
-    return this.disposed || !this.connectionRequested;
+    return this.disposed || this.connectionRequested !== true;
   }
 
   private async openStream(): Promise<void> {
@@ -104,7 +104,7 @@ export class SSEClient {
       return;
     }
     if (this.abandoned()) return;
-    if (!token) {
+    if (token === null || token === '') {
       this.scheduleReconnect();
       return;
     }

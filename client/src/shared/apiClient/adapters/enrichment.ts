@@ -1,7 +1,7 @@
 import { ContractError } from '@shared/failure';
 import { parseDiscoveryResult } from '@shared/apiClient/adapters/discovery';
 import { PROVIDER_STATUSES, sourceIdList } from '@shared/catalog';
-import { apiFetch, signalInit, withQuery } from '@shared/apiClient/adapters/http';
+import { apiFetch, setQueryParam, signalInit, withQuery } from '@shared/apiClient/adapters/http';
 import { LONG_REQUEST_TIMEOUT_MS } from '@shared/apiConfig';
 import {
   asArray,
@@ -61,6 +61,13 @@ function parseContentFetchResponse(
   };
 }
 
+function setIdsParam(
+  params: URLSearchParams,
+  knownIds: readonly DiscoverySource[] | undefined,
+): void {
+  if (knownIds !== undefined && knownIds.length > 0) params.set('ids', sourceIdList(knownIds));
+}
+
 export type AlbumTracksRequest = {
   provider: string;
   externalId: string;
@@ -84,10 +91,10 @@ export async function getAlbumTracks({
 }: AlbumTracksRequest): Promise<ContentFetchResponse> {
   const params = new URLSearchParams();
   if (limit !== undefined) params.set('limit', String(limit));
-  if (albumTitle) params.set('title', albumTitle);
-  if (albumArtist) params.set('artist', albumArtist);
-  if (mbExternalId) params.set('mbid', mbExternalId);
-  if (knownIds?.length) params.set('ids', sourceIdList(knownIds));
+  setQueryParam(params, 'title', albumTitle);
+  setQueryParam(params, 'artist', albumArtist);
+  setQueryParam(params, 'mbid', mbExternalId);
+  setIdsParam(params, knownIds);
   const path = discoveryEntityPath('albums', provider, externalId, 'tracks');
   return parseContentFetchResponse(await apiFetch(withQuery(path, params), signalInit(signal)));
 }
@@ -141,9 +148,9 @@ export async function getEnrichment(params: {
   signal?: AbortSignal | undefined;
 }): Promise<EnrichmentResponse> {
   const qs = new URLSearchParams({ kind: params.kind });
-  if (params.title) qs.set('title', params.title);
-  if (params.subtitle) qs.set('subtitle', params.subtitle);
-  if (params.mbid) qs.set('mbid', params.mbid);
+  setQueryParam(qs, 'title', params.title);
+  setQueryParam(qs, 'subtitle', params.subtitle);
+  setQueryParam(qs, 'mbid', params.mbid);
   return parseEnrichmentResponse(
     await apiFetch(withQuery('/v1/discovery/enrichment', qs), signalInit(params.signal)),
   );
@@ -155,7 +162,7 @@ function kindTitleQs(
   subtitle?: string | null,
 ): URLSearchParams {
   const qs = new URLSearchParams({ kind, title });
-  if (subtitle) qs.set('subtitle', subtitle);
+  setQueryParam(qs, 'subtitle', subtitle);
   return qs;
 }
 
@@ -239,7 +246,7 @@ export async function getArtistContent(
   const params = new URLSearchParams();
   if (opts.tracksLimit !== undefined) params.set('tracks_limit', String(opts.tracksLimit));
   if (opts.albumsLimit !== undefined) params.set('albums_limit', String(opts.albumsLimit));
-  if (opts.knownIds?.length) params.set('ids', sourceIdList(opts.knownIds));
+  setIdsParam(params, opts.knownIds);
   const path = discoveryEntityPath('artists', provider, externalId, 'content');
   return parseArtistContentResponse(await apiFetch(withQuery(path, params), signalInit(signal)));
 }
@@ -408,7 +415,7 @@ export type UnreleasedTracksRequest = {
 
 function unreleasedParams({ name, knownIds }: UnreleasedTracksRequest): URLSearchParams {
   const params = new URLSearchParams({ name });
-  if (knownIds?.length) params.set('ids', sourceIdList(knownIds));
+  setIdsParam(params, knownIds);
   return params;
 }
 

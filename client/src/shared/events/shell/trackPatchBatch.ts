@@ -88,7 +88,9 @@ function exactWriter(
 }
 
 function isFreshSuccess(change: CacheChange): boolean {
-  return change.type === 'updated' && change.action.type === 'success' && !change.action.manual;
+  return (
+    change.type === 'updated' && change.action.type === 'success' && change.action.manual !== true
+  );
 }
 
 function isSettled(change: CacheChange, query: CachedQuery): boolean {
