@@ -3,6 +3,7 @@ package cache
 import (
 	"altune/go-api/internal/discovery/domain"
 	"context"
+	"fmt"
 	"sort"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -43,19 +44,34 @@ func (s *RedisVocabularyStore) lexRangeMembers(
 	}
 	lo := "[" + normPrefix
 	hi := "[" + normPrefix + "\xff"
-	return s.client.ZRangeByLex(ctx, vocabLexKey, &goredis.ZRangeBy{
-		Min:   lo,
-		Max:   hi,
-		Count: vocabPrefixScanCap,
+	members, err := s.client.ZRangeArgs(ctx, goredis.ZRangeArgs{
+		Key:    vocabLexKey,
+		ByLex:  true,
+		Start:  lo,
+		Stop:   hi,
+		Offset: 0,
+		Count:  vocabPrefixScanCap,
 	}).Result()
+	if err != nil {
+		return nil, fmt.Errorf("read vocabulary terms with prefix %q: %w", normPrefix, err)
+	}
+	return members, nil
 }
 
 func (s *RedisVocabularyStore) topByScore(ctx context.Context) ([]string, error) {
-	return s.client.ZRevRangeByScore(ctx, vocabTermsKey, &goredis.ZRangeBy{
-		Min:   "-inf",
-		Max:   "+inf",
-		Count: 100,
+	members, err := s.client.ZRangeArgs(ctx, goredis.ZRangeArgs{
+		Key:     vocabTermsKey,
+		ByScore: true,
+		Rev:     true,
+		Start:   "+inf",
+		Stop:    "-inf",
+		Offset:  0,
+		Count:   100,
 	}).Result()
+	if err != nil {
+		return nil, fmt.Errorf("read top vocabulary terms: %w", err)
+	}
+	return members, nil
 }
 
 func (s *RedisVocabularyStore) membersToSortedEntries(
