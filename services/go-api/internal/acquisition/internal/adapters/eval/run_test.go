@@ -1637,7 +1637,7 @@ func TestRun_ObservedCandidatesGoThroughTheAdapters(t *testing.T) {
 			t.Fatalf("ytmsearch Find = %v, %v", want, err)
 		}
 
-		got := loadedCandidate(t, `{"observed":{"ytmsearch_song":{"VideoID":"abcdefghijk","Title":"Halo","Artists":["Nova"],"Album":"Glow","DurationSeconds":201,"Type":"MUSIC_VIDEO_TYPE_ATV","Explicit":true}}}`)
+		got := loadedCandidate(t, `{"observed":{"ytmsearch_song":{"video_id":"abcdefghijk","title":"Halo","artists":["Nova"],"album":"Glow","duration_seconds":201,"type":"MUSIC_VIDEO_TYPE_ATV","explicit":true}}}`)
 
 		if got, emits := factsOf(got), emitted(want[0]); !reflect.DeepEqual(got, emits) {
 			t.Errorf("golden candidate = %+v, want what ytmsearch Find emits: %+v", got, emits)
@@ -1651,7 +1651,7 @@ func TestRun_ObservedCandidatesGoThroughTheAdapters(t *testing.T) {
 			t.Fatalf("ytmusic Find = %v, %v", want, err)
 		}
 
-		got := loadedCandidate(t, `{"observed":{"ytmusic_watch":{"VideoID":"abcdefghijk","Title":"Halo","Artists":["Nova"],"Type":"MUSIC_VIDEO_TYPE_OMV","Pinned":true}}}`)
+		got := loadedCandidate(t, `{"observed":{"ytmusic_watch":{"video_id":"abcdefghijk","title":"Halo","artists":["Nova"],"type":"MUSIC_VIDEO_TYPE_OMV","pinned":true}}}`)
 
 		if got, emits := factsOf(got), emitted(want[0]); !reflect.DeepEqual(got, emits) {
 			t.Errorf("golden candidate = %+v, want what ytmusic Find emits: %+v", got, emits)
@@ -1679,7 +1679,7 @@ func TestRun_ObservedCandidatesGoThroughTheAdapters(t *testing.T) {
 func TestLoad_RefusesAnObservedCandidateThatAlsoSetsWhatTheAdapterEmits(t *testing.T) {
 	for name, candidate := range map[string]string{
 		"a hand-set channel":       `{"channel":"ezcodylee","observed":{"ytdlp_entry":{"webpage_url":"https://soundcloud.com/a/b"}}}`,
-		"two observed forms":       `{"observed":{"ytdlp_entry":{"webpage_url":"https://soundcloud.com/a/b"},"ytmsearch_song":{"VideoID":"abcdefghijk"}}}`,
+		"two observed forms":       `{"observed":{"ytdlp_entry":{"webpage_url":"https://soundcloud.com/a/b"},"ytmsearch_song":{"video_id":"abcdefghijk"}}}`,
 		"an observed with no form": `{"observed":{}}`,
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -1718,7 +1718,7 @@ func auditedGrade(t *testing.T, logged *bytes.Buffer) string {
 func TestRun_APinnedVideoIsGradedAsTheKindItsWatchReports(t *testing.T) {
 	const url = "https://music.youtube.com/watch?v=abcdefghijk"
 	watch := func(videoType ytmsearch.VideoType) *eval.Observed {
-		return &eval.Observed{Watch: &eval.ObservedWatch{Watch: ytmsearch.Watch{VideoID: "abcdefghijk", Title: "Halo", Artists: []string{"Nova"}, Type: videoType}}}
+		return &eval.Observed{Watch: &eval.ObservedWatch{VideoID: "abcdefghijk", Title: "Halo", Artists: []string{"Nova"}, Type: videoType}}
 	}
 	pinned := func(cand eval.Candidate) eval.Case {
 		cand.URL, cand.Correct, cand.ActualDuration = url, true, 200

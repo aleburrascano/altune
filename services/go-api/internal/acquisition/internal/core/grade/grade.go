@@ -40,6 +40,7 @@ func Of(fingerprint Fingerprint, provenance shared.AcquisitionProvenance, kind S
 		return B
 	case Unsupported:
 		return D
+	case Silent:
 	}
 	if provenance == shared.ProvenanceVerified || provenance == shared.ProvenanceCorroborated {
 		return C

@@ -10,7 +10,7 @@
       },
       "sources": [
         { "name": "ytmsearch", "search_seconds": 2, "candidates": [
-          { "observed": { "ytmsearch_song": { "VideoID": "1XUdM44TuVw", "Title": "Standing In The Dark (Live at City Hall, Toronto)", "Artists": ["Platinum Blonde"], "Album": "Seven Year Itch: 1982-1989", "DurationSeconds": 198, "Type": "MUSIC_VIDEO_TYPE_ATV", "Explicit": false } }, "actual_duration": 197.22 }
+          { "observed": { "ytmsearch_song": { "video_id": "1XUdM44TuVw", "title": "Standing In The Dark (Live at City Hall, Toronto)", "artists": ["Platinum Blonde"], "album": "Seven Year Itch: 1982-1989", "duration_seconds": 198, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": false } }, "actual_duration": 197.22 }
         ] }
       ]
     }

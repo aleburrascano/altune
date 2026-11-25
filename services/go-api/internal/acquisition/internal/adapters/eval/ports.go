@@ -85,6 +85,8 @@ func flatTierOf(c Candidate) acqdomain.SourceName {
 		return ytmusic.SourceName
 	case ports.KindCatalogPin:
 		return catalogpin.SourceName
+	case ports.KindUpload:
+		return ytdlp.SourceName
 	}
 	return ytdlp.SourceName
 }
@@ -308,7 +310,7 @@ func (c Candidate) chromaprintResults(trackArtist string) []ports.AcoustIDResult
 
 func (c Candidate) watch(videoID string) ytmsearch.Watch {
 	if c.Observed != nil && c.Observed.Watch != nil {
-		return c.Observed.Watch.Watch
+		return c.Observed.Watch.watch()
 	}
 	return ytmsearch.Watch{VideoID: videoID, Title: c.Title, Artists: c.Artists, Explicit: c.Explicit, Type: watchTypeOf(ports.CandidateKind(c.Kind))}
 }
@@ -321,6 +323,8 @@ func watchTypeOf(kind ports.CandidateKind) ytmsearch.VideoType {
 		return ytmsearch.VideoTypeUGC
 	case ports.KindPinnedVideo:
 		return ytmsearch.VideoTypeOMV
+	case ports.KindCatalogPin:
+		return ""
 	}
 	return ""
 }

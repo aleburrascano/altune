@@ -33,7 +33,7 @@
         }
       },
       "candidates": [
-          { "observed": { "ytmsearch_song": { "VideoID": "TB0z2HVFxEE", "Title": "Phone (Interlude)", "Artists": ["slayr"], "Album": "Half Blood", "DurationSeconds": 113, "Type": "MUSIC_VIDEO_TYPE_ATV", "Explicit": true } }, "actual_duration": 112,
+          { "observed": { "ytmsearch_song": { "video_id": "TB0z2HVFxEE", "title": "Phone (Interlude)", "artists": ["slayr"], "album": "Half Blood", "duration_seconds": 113, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true } }, "actual_duration": 112,
             "acoustid": "67d29ae9-708c-42a1-b5ca-9ba2367e65eb", "recording_mbids": ["e7ca1ccd-65cf-43e3-9964-ffb5a0479077"], "acoustid_results": [ { "id": "67d29ae9-708c-42a1-b5ca-9ba2367e65eb", "score": 0.95413136, "recordings": [ { "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "title": "Phone (interlude)", "artists": ["slayr", "TJAYY"], "duration": 128 } ] } ] },
           { "observed": { "ytdlp_entry": { "title": "slayr - Phone (Interlude) (feat. TJAYY)", "duration": 129, "webpage_url": "https://www.youtube.com/watch?v=fV3KcFFVZJ8", "channel": "slayr", "view_count": 222232 } }, "correct": true,
             "acoustid": "2b99657a-d010-4e3d-9dda-7b972f14bd9c", "recording_mbids": ["e7ca1ccd-65cf-43e3-9964-ffb5a0479077"], "acoustid_results": [ { "id": "2b99657a-d010-4e3d-9dda-7b972f14bd9c", "score": 0.98552877, "recordings": [ { "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "title": "Phone (interlude)", "artists": ["slayr", "TJAYY"], "duration": 128 } ] } ] }
@@ -51,7 +51,7 @@
         }
       },
       "candidates": [
-          { "observed": { "ytmsearch_song": { "VideoID": "TB0z2HVFxEE", "Title": "Phone (Interlude)", "Artists": ["slayr"], "Album": "Half Blood", "DurationSeconds": 113, "Type": "MUSIC_VIDEO_TYPE_ATV", "Explicit": true } }, "actual_duration": 112,
+          { "observed": { "ytmsearch_song": { "video_id": "TB0z2HVFxEE", "title": "Phone (Interlude)", "artists": ["slayr"], "album": "Half Blood", "duration_seconds": 113, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": true } }, "actual_duration": 112,
             "acoustid": "67d29ae9-708c-42a1-b5ca-9ba2367e65eb", "recording_mbids": ["e7ca1ccd-65cf-43e3-9964-ffb5a0479077"], "acoustid_results": [ { "id": "67d29ae9-708c-42a1-b5ca-9ba2367e65eb", "score": 0.95413136, "recordings": [ { "mbid": "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", "title": "Phone (interlude)", "artists": ["slayr", "TJAYY"], "duration": 128 } ] } ] }
       ]
     },
@@ -166,7 +166,7 @@
       "note": "a catalog hit that will not download must not end the walk",
       "track": { "title": "Circles", "artist": "Post Malone", "duration": 215, "authoritative_duration": 215 },
       "candidates": [
-        { "observed": { "ytmsearch_song": { "VideoID": "4EQkYVtE-28", "Title": "Circles", "Artists": ["Post Malone"], "Album": "Hollywood's Bleeding", "DurationSeconds": 216, "Type": "MUSIC_VIDEO_TYPE_ATV", "Explicit": false } }, "download_fails": true },
+        { "observed": { "ytmsearch_song": { "video_id": "4EQkYVtE-28", "title": "Circles", "artists": ["Post Malone"], "album": "Hollywood's Bleeding", "duration_seconds": 216, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": false } }, "download_fails": true },
         { "title": "Circles", "url": "yt:master", "channel": "Post Malone - Topic", "categories": ["Music"], "duration": 215, "correct": true }
       ]
     },
@@ -176,8 +176,8 @@
       "note": "sources are equal; the pinned music video carries no length before download (the ytmusic adapter emits none), so it is downloaded first, probed at 222s against the corroborated 215s and rejected, and the art track is stored",
       "track": { "title": "Circles", "artist": "Post Malone", "duration": 215, "authoritative_duration": 215 },
       "candidates": [
-        { "observed": { "ytmusic_watch": { "VideoID": "wXhTHyIgQ_U", "Title": "Circles", "Artists": ["Post Malone"], "Type": "MUSIC_VIDEO_TYPE_OMV", "Pinned": true } }, "actual_duration": 222 },
-        { "observed": { "ytmsearch_song": { "VideoID": "4EQkYVtE-28", "Title": "Circles", "Artists": ["Post Malone"], "Album": "Hollywood's Bleeding", "DurationSeconds": 216, "Type": "MUSIC_VIDEO_TYPE_ATV", "Explicit": false } }, "actual_duration": 216, "correct": true }
+        { "observed": { "ytmusic_watch": { "video_id": "wXhTHyIgQ_U", "title": "Circles", "artists": ["Post Malone"], "type": "MUSIC_VIDEO_TYPE_OMV", "pinned": true } }, "actual_duration": 222 },
+        { "observed": { "ytmsearch_song": { "video_id": "4EQkYVtE-28", "title": "Circles", "artists": ["Post Malone"], "album": "Hollywood's Bleeding", "duration_seconds": 216, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": false } }, "actual_duration": 216, "correct": true }
       ]
     },
     {
@@ -186,7 +186,7 @@
       "note": "a catalog hit with corrupt samples must not be trusted for being resolved",
       "track": { "title": "How Sweet", "artist": "NewJeans", "duration": 220, "authoritative_duration": 220 },
       "candidates": [
-        { "observed": { "ytmsearch_song": { "VideoID": "vrM2mrI83uk", "Title": "How Sweet", "Artists": ["NewJeans"], "Album": "How Sweet", "DurationSeconds": 220, "Type": "MUSIC_VIDEO_TYPE_ATV", "Explicit": false } }, "undecodable": true },
+        { "observed": { "ytmsearch_song": { "video_id": "vrM2mrI83uk", "title": "How Sweet", "artists": ["NewJeans"], "album": "How Sweet", "duration_seconds": 220, "type": "MUSIC_VIDEO_TYPE_ATV", "explicit": false } }, "undecodable": true },
         { "title": "NewJeans - How Sweet", "url": "yt:good", "channel": "NewJeans - Topic", "categories": ["Music"], "duration": 220, "correct": true }
       ]
     },
