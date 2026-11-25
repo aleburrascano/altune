@@ -4,6 +4,12 @@ const assert = require('node:assert');
 
 const eslint = new ESLint({ cwd: __dirname });
 
+const typeAwareRulesOff = Object.fromEntries(
+  Object.entries(require('@typescript-eslint/eslint-plugin').rules)
+    .filter(([, rule]) => rule.meta.docs.requiresTypeChecking === true)
+    .map(([name]) => [`@typescript-eslint/${name}`, 'off']),
+);
+
 async function noCommentsErrors(filePath, code) {
   const [result] = await eslint.lintText(code, { filePath });
   return result.messages.filter((m) => m.ruleId === 'local/no-comments' && m.severity === 2);
@@ -86,16 +92,7 @@ describe('browser globals', () => {
     cwd: __dirname,
     overrideConfig: {
       languageOptions: { parserOptions: { projectService: false } },
-      rules: Object.fromEntries(
-        [
-          'no-floating-promises',
-          'no-misused-promises',
-          'await-thenable',
-          'no-misused-spread',
-          'use-unknown-in-catch-callback-variable',
-          'no-unnecessary-type-assertion',
-        ].map((name) => [`@typescript-eslint/${name}`, 'off']),
-      ),
+      rules: typeAwareRulesOff,
     },
   });
 
@@ -256,16 +253,7 @@ describe('module rules point at client/src/README.md', () => {
     cwd: __dirname,
     overrideConfig: {
       languageOptions: { parserOptions: { projectService: false } },
-      rules: Object.fromEntries(
-        [
-          'no-floating-promises',
-          'no-misused-promises',
-          'await-thenable',
-          'no-misused-spread',
-          'use-unknown-in-catch-callback-variable',
-          'no-unnecessary-type-assertion',
-        ].map((name) => [`@typescript-eslint/${name}`, 'off']),
-      ),
+      rules: typeAwareRulesOff,
     },
   });
 
