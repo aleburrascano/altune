@@ -163,7 +163,7 @@ func (a *App) awaitTickLoop(ticks *panicguard.Group) {
 	budget := a.shutdownBudget()
 	stopped := panicguard.WaitWithin(budget, func() {
 		if err := ticks.Wait(); err != nil {
-			slog.Error("overseer.collect.tick_loop_panicked", "error", err)
+			slog.Error("overseer.shutdown.tick_loop_panicked", "error", err)
 		}
 	})
 	if !stopped {
@@ -233,7 +233,7 @@ func (a *App) tickLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			a.collectAll(ctx)
+			panicguard.Contain(ctx, "overseer.collect.tick_loop_panicked", func() { a.collectAll(ctx) })
 		}
 	}
 }
