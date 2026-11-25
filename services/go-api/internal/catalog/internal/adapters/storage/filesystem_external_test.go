@@ -144,8 +144,8 @@ func TestFilesystemAudioStore_Stream_NotFound(t *testing.T) {
 		rc.Close()
 		t.Fatal("expected error streaming non-existent file, got nil")
 	}
-	if !os.IsNotExist(err) {
-		t.Errorf("expected os.IsNotExist error, got: %v", err)
+	if !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("expected an error satisfying errors.Is(fs.ErrNotExist), got: %v", err)
 	}
 }
 
@@ -191,13 +191,14 @@ func TestFilesystemAudioStore_SafePath(t *testing.T) {
 	}
 }
 
-func TestFilesystemAudioStore_ReturnsTheFilesystemsOwnError(t *testing.T) {
+func TestFilesystemAudioStore_StreamErrorCarriesTheFilesystemsPathError(t *testing.T) {
 	store := catalog.NewFilesystemAudioStore(t.TempDir())
 
 	_, _, err := store.Stream(context.Background(), "missing.opus")
+
 	var pathErr *fs.PathError
-	if !errors.As(err, &pathErr) || err.Error() != pathErr.Error() {
-		t.Fatalf("Stream = %v, want the filesystem's own *fs.PathError, unwrapped", err)
+	if !errors.As(err, &pathErr) || pathErr.Op != "open" || !strings.Contains(err.Error(), "missing.opus") {
+		t.Fatalf("Stream = %v, want an error naming missing.opus that wraps the filesystem's *fs.PathError for open", err)
 	}
 }
 
