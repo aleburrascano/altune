@@ -23,14 +23,14 @@ func NewNowPlayingTracks(tracks CatalogTracks) playback.TrackSource {
 
 func (s nowPlayingTracks) NowPlayingTrack(ctx context.Context, userId shared.UserId, id shared.TrackId) (*playback.NowPlayingTrack, error) {
 	track, err := s.tracks.GetByID(ctx, id, userId)
+	if errors.Is(err, catalog.ErrTrackNotFound) {
+		return nil, playback.ErrNowPlayingTrackNotFound
+	}
 	if errors.Is(err, catalog.ErrDBTransient) {
 		return nil, fmt.Errorf("%w: %w", playback.ErrTrackSourceUnavailable, err)
 	}
 	if err != nil {
 		return nil, err
-	}
-	if track == nil {
-		return nil, playback.ErrNowPlayingTrackNotFound
 	}
 	return &playback.NowPlayingTrack{
 		Id:                track.ID.String(),

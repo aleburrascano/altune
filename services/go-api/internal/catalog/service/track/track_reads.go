@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/catalog/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
+	"errors"
 )
 
 type GetTrackStatusService struct {
@@ -17,11 +18,11 @@ func NewGetTrackStatusService(trackRepo ports.TrackGetter) *GetTrackStatusServic
 
 func (s *GetTrackStatusService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) (*domain.Track, error) {
 	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
+	if errors.Is(err, domain.ErrTrackNotFound) {
+		return nil, domain.ErrTrackNotFound
+	}
 	if err != nil {
 		return nil, domain.WrapRepoError(ctx, "get track status", err)
-	}
-	if track == nil {
-		return nil, domain.ErrTrackNotFound
 	}
 	return track, nil
 }

@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/catalog/service/track"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -72,11 +73,11 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId shared.UserId, 
 	dbStart := time.Now()
 	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
 	dbDuration := time.Since(dbStart)
+	if errors.Is(err, domain.ErrTrackNotFound) {
+		return nil, domain.ErrTrackNotFound
+	}
 	if err != nil {
 		return nil, domain.WrapRepoError(ctx, "stream track", err)
-	}
-	if track == nil {
-		return nil, domain.ErrTrackNotFound
 	}
 
 	if !track.IsStreamable() {
@@ -115,11 +116,11 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId shared.UserId, 
 
 func (s *StreamTrackService) RecoverIfMissing(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
 	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
+	if errors.Is(err, domain.ErrTrackNotFound) {
+		return domain.ErrTrackNotFound
+	}
 	if err != nil {
 		return domain.WrapRepoError(ctx, "recover audio", err)
-	}
-	if track == nil {
-		return domain.ErrTrackNotFound
 	}
 	if !track.IsStreamable() {
 		return nil

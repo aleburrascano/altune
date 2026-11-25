@@ -45,7 +45,7 @@ func (s *fakeStore) GetByID(_ context.Context, id domain.TrackId, userId shared.
 	s.gets++
 	t, ok := s.tracks[id]
 	if !ok || t.UserId != userId {
-		return nil, nil
+		return nil, domain.ErrTrackNotFound
 	}
 	cp := *t
 	return &cp, nil
@@ -223,6 +223,16 @@ func TestMissingTrackReturnsNotFound(t *testing.T) {
 	err := ledger.Fail(context.Background(), domain.NewTrackId(), userId, 0, "boom")
 	if !errors.Is(err, acquisition.ErrTrackNotFound) {
 		t.Fatalf("want ErrTrackNotFound, got %v", err)
+	}
+}
+
+func TestRevertAtMissingTrackReturnsNotFound(t *testing.T) {
+	_, userId := newTrack(t, 1)
+	ledger := acquisitioncatalog.NewTrackLedger(newFakeStore())
+
+	err := ledger.RevertAt(context.Background(), acquisition.TrackSnapshot{ID: domain.NewTrackId(), UserId: userId, Version: 1})
+	if !errors.Is(err, acquisition.ErrTrackNotFound) {
+		t.Fatalf("want acquisition.ErrTrackNotFound, got %v", err)
 	}
 }
 
