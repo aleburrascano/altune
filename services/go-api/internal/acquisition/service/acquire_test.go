@@ -450,11 +450,12 @@ func TestReconcileForReacquire_ExistsError_PreservesAudioRef(t *testing.T) {
 	if proceed {
 		t.Error("expected proceed=false when the exists check errors")
 	}
-	if track.Status != ports.TrackReady {
-		t.Errorf("status = %v, want %v (must stay ready on transient error)", track.Status, ports.TrackReady)
+	stored := committedTrack(t, ledger, track.ID)
+	if stored.Status != ports.TrackReady {
+		t.Errorf("status = %v, want %v (must stay ready on transient error)", stored.Status, ports.TrackReady)
 	}
-	if track.AudioRef == nil || *track.AudioRef != audioRef {
-		t.Errorf("AudioRef = %v, want %q preserved (a transient error is not evidence the file is gone)", track.AudioRef, audioRef)
+	if stored.AudioRef == nil || *stored.AudioRef != audioRef {
+		t.Errorf("AudioRef = %v, want %q preserved (a transient error is not evidence the file is gone)", stored.AudioRef, audioRef)
 	}
 }
 
@@ -1440,6 +1441,7 @@ func captureLogs(t *testing.T) *strings.Builder {
 }
 
 func seedUnknownSourceTrack(t *testing.T, ledger *acquisitiontest.Ledger, userId shared.UserId, trackId shared.TrackId) {
+	t.Helper()
 	row := committedTrack(t, ledger, trackId)
 	stored := 112.0
 	row.AudioSourceURL = nil
@@ -2616,7 +2618,10 @@ func (f itsOnlyLoveTrack) service(sources *itsOnlyLoveSources, finder ports.Rere
 }
 
 func (f itsOnlyLoveTrack) row() ledgerTrack {
-	row, _ := f.book.Track(f.trackId)
+	row, ok := f.book.Track(f.trackId)
+	if !ok {
+		panic("the golden track is missing from the ledger")
+	}
 	return row
 }
 

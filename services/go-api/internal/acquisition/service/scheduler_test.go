@@ -118,6 +118,13 @@ func (l liveCtxLedger) Complete(ctx context.Context, id shared.TrackId, userId s
 	return l.Ledger.Complete(ctx, id, userId, fence, c)
 }
 
+func (l liveCtxLedger) RevertAt(ctx context.Context, track acqports.TrackSnapshot) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return l.Ledger.RevertAt(ctx, track)
+}
+
 func (l liveCtxLedger) Fail(ctx context.Context, id shared.TrackId, userId shared.UserId, fence acqports.Fence, reason string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -659,11 +666,30 @@ type burstLedger struct {
 	calls   atomic.Int32
 }
 
-func (r *burstLedger) Get(_ context.Context, _ shared.TrackId, _ shared.UserId) (*acqports.TrackSnapshot, error) {
+func (r *burstLedger) enter() {
 	r.calls.Add(1)
 	r.once.Do(func() { close(r.started) })
 	<-r.release
-	return nil, nil
+}
+
+func (r *burstLedger) Get(ctx context.Context, id shared.TrackId, userId shared.UserId) (*acqports.TrackSnapshot, error) {
+	r.enter()
+	return r.emptyLedger.Get(ctx, id, userId)
+}
+
+func (r *burstLedger) Complete(ctx context.Context, id shared.TrackId, userId shared.UserId, fence acqports.Fence, c acqports.Completion) error {
+	r.enter()
+	return r.emptyLedger.Complete(ctx, id, userId, fence, c)
+}
+
+func (r *burstLedger) Fail(ctx context.Context, id shared.TrackId, userId shared.UserId, fence acqports.Fence, reason string) error {
+	r.enter()
+	return r.emptyLedger.Fail(ctx, id, userId, fence, reason)
+}
+
+func (r *burstLedger) RevertAt(ctx context.Context, track acqports.TrackSnapshot) error {
+	r.enter()
+	return r.emptyLedger.RevertAt(ctx, track)
 }
 
 func TestBackgroundScheduler_BoundsQueueDepthUnderBurst(t *testing.T) {
@@ -822,11 +848,30 @@ type blockingLedger struct {
 	calls       atomic.Int32
 }
 
-func (r *blockingLedger) Get(_ context.Context, _ shared.TrackId, _ shared.UserId) (*acqports.TrackSnapshot, error) {
+func (r *blockingLedger) enter() {
 	r.calls.Add(1)
 	r.startedOnce.Do(func() { close(r.started) })
 	<-r.release
-	return nil, nil
+}
+
+func (r *blockingLedger) Get(ctx context.Context, id shared.TrackId, userId shared.UserId) (*acqports.TrackSnapshot, error) {
+	r.enter()
+	return r.emptyLedger.Get(ctx, id, userId)
+}
+
+func (r *blockingLedger) Complete(ctx context.Context, id shared.TrackId, userId shared.UserId, fence acqports.Fence, c acqports.Completion) error {
+	r.enter()
+	return r.emptyLedger.Complete(ctx, id, userId, fence, c)
+}
+
+func (r *blockingLedger) Fail(ctx context.Context, id shared.TrackId, userId shared.UserId, fence acqports.Fence, reason string) error {
+	r.enter()
+	return r.emptyLedger.Fail(ctx, id, userId, fence, reason)
+}
+
+func (r *blockingLedger) RevertAt(ctx context.Context, track acqports.TrackSnapshot) error {
+	r.enter()
+	return r.emptyLedger.RevertAt(ctx, track)
 }
 
 func TestBackgroundScheduler_Schedule_DedupsConcurrentRun_ButReplaysAfterSettle(t *testing.T) {
@@ -869,9 +914,28 @@ type countingLedger struct {
 	calls atomic.Int32
 }
 
-func (r *countingLedger) Get(_ context.Context, _ shared.TrackId, _ shared.UserId) (*acqports.TrackSnapshot, error) {
+func (r *countingLedger) enter() {
 	r.calls.Add(1)
-	return nil, nil
+}
+
+func (r *countingLedger) Get(ctx context.Context, id shared.TrackId, userId shared.UserId) (*acqports.TrackSnapshot, error) {
+	r.enter()
+	return r.emptyLedger.Get(ctx, id, userId)
+}
+
+func (r *countingLedger) Complete(ctx context.Context, id shared.TrackId, userId shared.UserId, fence acqports.Fence, c acqports.Completion) error {
+	r.enter()
+	return r.emptyLedger.Complete(ctx, id, userId, fence, c)
+}
+
+func (r *countingLedger) Fail(ctx context.Context, id shared.TrackId, userId shared.UserId, fence acqports.Fence, reason string) error {
+	r.enter()
+	return r.emptyLedger.Fail(ctx, id, userId, fence, reason)
+}
+
+func (r *countingLedger) RevertAt(ctx context.Context, track acqports.TrackSnapshot) error {
+	r.enter()
+	return r.emptyLedger.RevertAt(ctx, track)
 }
 
 func TestBackgroundScheduler_Schedule_AfterShutdown_NoOp(t *testing.T) {
@@ -896,8 +960,28 @@ func TestBackgroundScheduler_Schedule_AfterShutdown_NoOp(t *testing.T) {
 
 type panicLedger struct{ emptyLedger }
 
-func (r *panicLedger) Get(_ context.Context, _ shared.TrackId, _ shared.UserId) (*acqports.TrackSnapshot, error) {
+func (r *panicLedger) enter() {
 	panic("boom")
+}
+
+func (r *panicLedger) Get(ctx context.Context, id shared.TrackId, userId shared.UserId) (*acqports.TrackSnapshot, error) {
+	r.enter()
+	return r.emptyLedger.Get(ctx, id, userId)
+}
+
+func (r *panicLedger) Complete(ctx context.Context, id shared.TrackId, userId shared.UserId, fence acqports.Fence, c acqports.Completion) error {
+	r.enter()
+	return r.emptyLedger.Complete(ctx, id, userId, fence, c)
+}
+
+func (r *panicLedger) Fail(ctx context.Context, id shared.TrackId, userId shared.UserId, fence acqports.Fence, reason string) error {
+	r.enter()
+	return r.emptyLedger.Fail(ctx, id, userId, fence, reason)
+}
+
+func (r *panicLedger) RevertAt(ctx context.Context, track acqports.TrackSnapshot) error {
+	r.enter()
+	return r.emptyLedger.RevertAt(ctx, track)
 }
 
 func TestBackgroundScheduler_Schedule_RecoversFromPanic(t *testing.T) {
