@@ -123,10 +123,17 @@ func TestUnreleasedRefresh_NoUnreleasedSourceStartsNoRefresh(t *testing.T) {
 	}
 }
 
-func TestNewEvalDiscovery_RefusesABackgroundCapBelowOne(t *testing.T) {
-	_, err := app.NewEvalDiscovery(t.Context(), &config.Config{}, app.EvalHandles{Pool: unreachablePool(t), Transport: refuseEgress{}})
+func TestNewTracker_RefusesACapBelowOne(t *testing.T) {
+	_, err := app.NewTracker(&config.Config{})
 	if !errors.Is(err, runloop.ErrTrackerLimit) {
-		t.Fatalf("NewEvalDiscovery = %v, want runloop.ErrTrackerLimit", err)
+		t.Fatalf("NewTracker = %v, want runloop.ErrTrackerLimit", err)
+	}
+}
+
+func TestNewEvalDiscovery_RefusesAMissingTracker(t *testing.T) {
+	_, err := app.NewEvalDiscovery(t.Context(), &config.Config{}, app.EvalHandles{Pool: unreachablePool(t), Transport: refuseEgress{}})
+	if err == nil || !strings.Contains(err.Error(), "Tracker") {
+		t.Fatalf("NewEvalDiscovery = %v, want an error naming the missing Tracker", err)
 	}
 }
 
@@ -136,7 +143,7 @@ func TestNewEvalDiscovery_SearchesThroughTheGivenTransport(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	disc, err := app.NewEvalDiscovery(t.Context(), &config.Config{BackgroundMaxInFlight: 64}, app.EvalHandles{Pool: unreachablePool(t), Transport: refuseEgress{}})
+	disc, err := app.NewEvalDiscovery(t.Context(), &config.Config{}, app.EvalHandles{Pool: unreachablePool(t), Transport: refuseEgress{}, Tracker: testTracker(t)})
 	if err != nil {
 		t.Fatalf("NewEvalDiscovery: %v", err)
 	}

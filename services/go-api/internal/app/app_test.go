@@ -44,7 +44,7 @@ func TestStartupSwitches_AnUnknownDisabledJobFailsAssembly(t *testing.T) {
 	cfg := jwksConfig(t)
 	cfg.DisabledJobs = []string{"nope"}
 
-	_, err := app.Assemble(t.Context(), cfg, app.Handles{Pool: unreachablePool(t), Transport: refuseEgress{}})
+	_, err := app.Assemble(t.Context(), cfg, app.Handles{Pool: unreachablePool(t), Transport: refuseEgress{}, Tracker: testTracker(t)})
 
 	if err == nil || !strings.Contains(err.Error(), "nope") {
 		t.Fatalf("Assemble = %v, want an error naming %q", err, "nope")

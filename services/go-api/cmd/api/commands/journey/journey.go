@@ -43,7 +43,11 @@ func DownloaderFor(cfg *config.Config) *acquisition.YtDlpAudioSearcher {
 }
 
 func RankingOnlySearcher(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (Searcher, error) {
-	disc, err := app.NewEvalDiscovery(ctx, cfg, app.EvalHandles{Pool: pool})
+	tracker, err := app.NewTracker(cfg)
+	if err != nil {
+		return nil, err
+	}
+	disc, err := app.NewEvalDiscovery(ctx, cfg, app.EvalHandles{Pool: pool, Tracker: tracker})
 	if err != nil {
 		return nil, err
 	}

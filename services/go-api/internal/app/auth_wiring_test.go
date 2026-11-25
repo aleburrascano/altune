@@ -106,7 +106,7 @@ func signedTokenWithKeyID(t *testing.T, key *rsa.PrivateKey, keyID string, userI
 func assembledHandler(t *testing.T, cfg *config.Config) http.Handler {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
-	assembly, err := app.Assemble(ctx, cfg, app.Handles{Pool: unreachablePool(t), Transport: refuseEgress{}})
+	assembly, err := app.Assemble(ctx, cfg, app.Handles{Pool: unreachablePool(t), Transport: refuseEgress{}, Tracker: testTracker(t)})
 	if err != nil {
 		t.Fatalf("Assemble: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestAuth_APlaintextJWKSURLFailsAssembly(t *testing.T) {
 	cfg := jwksConfig(t)
 	cfg.SupabaseJWTJWKSURL = "http://jwks.example.com/keys"
 
-	_, err := app.Assemble(t.Context(), cfg, app.Handles{Pool: unreachablePool(t), Transport: refuseEgress{}})
+	_, err := app.Assemble(t.Context(), cfg, app.Handles{Pool: unreachablePool(t), Transport: refuseEgress{}, Tracker: testTracker(t)})
 
 	if err == nil || !strings.HasPrefix(err.Error(), "auth: ") {
 		t.Fatalf("Assemble error = %v, want the auth-wrapped refusal of a plaintext JWKS URL", err)

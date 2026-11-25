@@ -40,7 +40,7 @@ func assembleOn(t *testing.T, cfg *config.Config, pool *pgxpool.Pool, transport 
 	slog.SetDefault(slog.New(slog.NewTextHandler(logs, nil)))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	ctx, cancel := context.WithCancel(t.Context())
-	assembly, err := app.Assemble(ctx, cfg, app.Handles{Pool: pool, Transport: transport})
+	assembly, err := app.Assemble(ctx, cfg, app.Handles{Pool: pool, Transport: transport, Tracker: testTracker(t)})
 	if err != nil {
 		t.Fatalf("Assemble: %v", err)
 	}

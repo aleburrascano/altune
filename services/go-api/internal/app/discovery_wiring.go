@@ -18,6 +18,7 @@ import (
 type EvalHandles struct {
 	Pool      *pgxpool.Pool
 	Transport http.RoundTripper
+	Tracker   *runloop.Tracker
 }
 
 func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*discovery.Discovery, error) {
@@ -27,11 +28,7 @@ func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*
 	}
 	deps := discoveryconfig.Deps(ctx, cfg, transport)
 	deps.Background = &sync.WaitGroup{}
-	tracker, err := runloop.NewTracker(runloop.TrackerLimits{MaxInFlight: cfg.BackgroundMaxInFlight})
-	if err != nil {
-		return nil, err
-	}
-	deps.Tracker = tracker
+	deps.Tracker = h.Tracker
 	deps.Pool = h.Pool
 	return discovery.New(deps)
 }

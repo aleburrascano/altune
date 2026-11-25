@@ -411,6 +411,30 @@ func TestLoad_AcquisitionDownloadConcurrency(t *testing.T) {
 	}
 }
 
+func TestLoad_ShutdownDrainBudgetsDefaultAndRefuseBelowOne(t *testing.T) {
+	setEnv(t, validConfigEnv(nil))
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load with the defaults: %v", err)
+	}
+	if cfg.BackgroundDrainBudgetSeconds != 15 || cfg.DetachedDrainBudgetSeconds != 10 {
+		t.Errorf("default budgets = background %d, detached %d, want 15 and 10", cfg.BackgroundDrainBudgetSeconds, cfg.DetachedDrainBudgetSeconds)
+	}
+
+	for _, key := range []string{"BACKGROUND_DRAIN_BUDGET_SECONDS", "DETACHED_DRAIN_BUDGET_SECONDS"} {
+		for _, value := range []string{"0", "-3"} {
+			setEnv(t, validConfigEnv(map[string]string{key: value}))
+			if _, err := config.Load(); err == nil || !searchString(err.Error(), key) {
+				t.Errorf("Load with %s=%s = %v, want an error naming %s", key, value, err, key)
+			}
+		}
+		setEnv(t, validConfigEnv(map[string]string{key: "1"}))
+		if _, err := config.Load(); err != nil {
+			t.Errorf("Load with %s=1 = %v, want the lowest allowed value accepted", key, err)
+		}
+	}
+}
+
 func TestLoad_BackgroundMaxInFlightDefaultsTo64AndRefusesBelowOne(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
 	cfg, err := config.Load()

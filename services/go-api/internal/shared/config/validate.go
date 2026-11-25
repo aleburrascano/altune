@@ -240,6 +240,12 @@ func (c *Config) validateTuning() error {
 	if c.AcquisitionDrainBudgetSeconds < 1 {
 		return fmt.Errorf("ACQUISITION_DRAIN_BUDGET_SECONDS must be >= 1, got %d", c.AcquisitionDrainBudgetSeconds)
 	}
+	if c.BackgroundDrainBudgetSeconds < 1 {
+		return fmt.Errorf("BACKGROUND_DRAIN_BUDGET_SECONDS must be >= 1, got %d", c.BackgroundDrainBudgetSeconds)
+	}
+	if c.DetachedDrainBudgetSeconds < 1 {
+		return fmt.Errorf("DETACHED_DRAIN_BUDGET_SECONDS must be >= 1, got %d", c.DetachedDrainBudgetSeconds)
+	}
 	if err := c.validateAcquisitionUpgrade(); err != nil {
 		return err
 	}

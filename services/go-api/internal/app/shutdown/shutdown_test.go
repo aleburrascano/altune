@@ -170,7 +170,7 @@ func TestPlan_StopsComponentsInThePinnedOrder(t *testing.T) {
 		"detached request tasks",
 	}
 
-	outcomes := shutdown.Run(shutdown.Plan(shutdown.Components{}, 0))
+	outcomes := shutdown.Run(shutdown.Plan(shutdown.Components{}, shutdown.Budgets{}))
 
 	got := make([]string, 0, len(outcomes))
 	for _, o := range outcomes {
@@ -198,7 +198,7 @@ func TestPlan_RunsEachComponentsOwnStop(t *testing.T) {
 		Background:     stopper("background tasks"),
 		LeaderElection: stopper("leader election"),
 		DetachedTasks:  stopper("detached request tasks"),
-	}, 0))
+	}, shutdown.Budgets{}))
 
 	want := "alert monitor,event feed,eval meter,acquisition scheduler,background tasks,leader election,detached request tasks"
 	if strings.Join(stopped, ",") != want {
@@ -225,7 +225,7 @@ func TestPlan_TimeoutsPinned(t *testing.T) {
 		"detached request tasks": 10 * time.Second,
 	}
 
-	plan := shutdown.Plan(shutdown.Components{}, 0)
+	plan := shutdown.Plan(shutdown.Components{}, shutdown.Budgets{})
 	if len(plan) != len(want) {
 		t.Fatalf("plan has %d components, want %d", len(plan), len(want))
 	}
@@ -246,7 +246,7 @@ func TestPlan_BudgetsPlusServerDrainFitInsideTheTotal(t *testing.T) {
 		t.Fatalf("server drain timeout = %v, want 10s", shutdown.ServerDrainTimeout)
 	}
 	total := shutdown.ServerDrainTimeout
-	for _, timeout := range timeouts(shutdown.Plan(shutdown.Components{}, 600)) {
+	for _, timeout := range timeouts(shutdown.Plan(shutdown.Components{}, shutdown.Budgets{SchedulerSeconds: 600, BackgroundSeconds: 600, DetachedSeconds: 600})) {
 		total += timeout
 	}
 	if total > totalShutdownBudget || total >= stopGracePeriod {
@@ -263,8 +263,32 @@ func TestPlan_SchedulerTimeoutFollowsTheDrainBudgetUpToItsCap(t *testing.T) {
 		0:   35 * time.Second,
 		-5:  35 * time.Second,
 	} {
-		if got := timeouts(shutdown.Plan(shutdown.Components{}, budget))["acquisition scheduler"]; got != want {
+		if got := timeouts(shutdown.Plan(shutdown.Components{}, shutdown.Budgets{SchedulerSeconds: budget}))["acquisition scheduler"]; got != want {
 			t.Errorf("drain budget %ds: scheduler timeout %v, want %v", budget, got, want)
+		}
+	}
+}
+
+func TestPlan_BackgroundAndDetachedTimeoutsFollowTheirBudgetsUpToTheirCaps(t *testing.T) {
+	cases := []struct {
+		background, detached         int
+		wantBackground, wantDetached time.Duration
+	}{
+		{1, 2, 1 * time.Second, 2 * time.Second},
+		{7, 3, 7 * time.Second, 3 * time.Second},
+		{12, 12, 12 * time.Second, 10 * time.Second},
+		{600, 600, 15 * time.Second, 10 * time.Second},
+		{0, 4, 15 * time.Second, 4 * time.Second},
+		{4, 0, 4 * time.Second, 10 * time.Second},
+		{-5, -5, 15 * time.Second, 10 * time.Second},
+	}
+	for _, tc := range cases {
+		plan := timeouts(shutdown.Plan(shutdown.Components{}, shutdown.Budgets{BackgroundSeconds: tc.background, DetachedSeconds: tc.detached}))
+		if got := plan["background tasks"]; got != tc.wantBackground {
+			t.Errorf("background %ds, detached %ds: background timeout %v, want %v", tc.background, tc.detached, got, tc.wantBackground)
+		}
+		if got := plan["detached request tasks"]; got != tc.wantDetached {
+			t.Errorf("background %ds, detached %ds: detached timeout %v, want %v", tc.background, tc.detached, got, tc.wantDetached)
 		}
 	}
 }
@@ -288,7 +312,7 @@ func TestRun_ABackgroundDrainTimeoutKeepsTheLeaderLock(t *testing.T) {
 	outcomes := shutdown.Run(withBackgroundBudget(shutdown.Plan(shutdown.Components{
 		Background:     blocked,
 		LeaderElection: shutdown.Stop(election),
-	}, 0), 20*time.Millisecond))
+	}, shutdown.Budgets{}), 20*time.Millisecond))
 
 	if n := election.stops.Load(); n != 0 {
 		t.Fatalf("election released %d time(s) although the background drain timed out", n)
@@ -308,7 +332,7 @@ func TestRun_ACleanBackgroundDrainReleasesTheLeaderLock(t *testing.T) {
 	outcomes := shutdown.Run(shutdown.Plan(shutdown.Components{
 		Background:     func(context.Context) {},
 		LeaderElection: shutdown.Stop(election),
-	}, 0))
+	}, shutdown.Budgets{}))
 
 	if n := election.stops.Load(); n != 1 {
 		t.Fatalf("election released %d time(s) after a clean drain, want 1", n)

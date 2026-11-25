@@ -84,6 +84,9 @@ type Config struct {
 
 	AcquisitionDrainBudgetSeconds int `env:"ACQUISITION_DRAIN_BUDGET_SECONDS" envDefault:"60"`
 
+	BackgroundDrainBudgetSeconds int `env:"BACKGROUND_DRAIN_BUDGET_SECONDS" envDefault:"15"`
+	DetachedDrainBudgetSeconds   int `env:"DETACHED_DRAIN_BUDGET_SECONDS" envDefault:"10"`
+
 	AcquisitionUpgradeEnabled     bool `env:"ACQUISITION_UPGRADE_ENABLED" envDefault:"false"`
 	AcquisitionUpgradeDryRun      bool `env:"ACQUISITION_UPGRADE_DRY_RUN" envDefault:"false"`
 	AcquisitionUpgradePerHour     int  `env:"ACQUISITION_UPGRADE_PER_HOUR" envDefault:"30"`
