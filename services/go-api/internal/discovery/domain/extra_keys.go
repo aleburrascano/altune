@@ -33,14 +33,3 @@ func StringExtra(extras map[string]any, key string) string {
 		return ""
 	}
 }
-
-func IntExtra(extras map[string]any, key string) int {
-	switch v := extras[key].(type) {
-	case int:
-		return v
-	case float64:
-		return int(v)
-	default:
-		return 0
-	}
-}

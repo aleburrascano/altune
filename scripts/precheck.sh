@@ -157,6 +157,7 @@ if touches '^services/go-api/'; then
       test_check "go-api acquisition selection gate" $m "${heavy[@]}" go run ./cmd/acquisitioneval -baseline ./cmd/acquisitioneval/baselines.json
     fi
     [ $lint_only = 1 ] || { need govulncheck "go-api govulncheck" && check "go-api govulncheck" $m "${heavy[@]}" govulncheck ./...; }
+    [ $lint_only = 1 ] || check "go-api deadcode" $m "${heavy[@]}" bash "$root/scripts/ci/go-deadcode.sh"
   fi
 fi
 

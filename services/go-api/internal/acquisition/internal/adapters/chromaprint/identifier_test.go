@@ -846,16 +846,6 @@ func TestLookup_SendsAPIKeyInPostFormNotURL(t *testing.T) {
 	}
 }
 
-type identifyOnly struct{}
-
-func (identifyOnly) Identify(context.Context, string, float64) (acquisition.RecordingMatch, error) {
-	return acquisition.RecordingMatch{}, nil
-}
-
-func TestAudioIdentifier_IsIdentifyOnly(t *testing.T) {
-	var _ acquisition.AudioIdentifier = identifyOnly{}
-}
-
 func TestIdentify_EmptyFingerprintIsAnError(t *testing.T) {
 	var hits int
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits++ }))
