@@ -3,6 +3,7 @@ package app
 import (
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/history"
+	"altune/overseer/internal/panicguard"
 	"context"
 	"log/slog"
 	"sync"
@@ -62,13 +63,10 @@ func (j *ringJournal) restoreRing(ctx context.Context, bucket, name string, ring
 	return ring.Cursor()
 }
 
-func safeRings(bucket string, r core.Restorable) (rings map[string]*core.RingStore) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			slog.Error("overseer.start.bucket_panic", "bucket", bucket, "stage", "Rings", "recover", rec)
-		}
-	}()
-	return r.Rings()
+func safeRings(bucket string, r core.Restorable) map[string]*core.RingStore {
+	var rings map[string]*core.RingStore
+	panicguard.Contain(context.Background(), "overseer.start.bucket_panic", func() { rings = r.Rings() }, "bucket", bucket, "stage", "Rings")
+	return rings
 }
 
 func (j *ringJournal) persist() {

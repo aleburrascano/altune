@@ -241,6 +241,7 @@ linters:
             - "**/overseer/internal/goapi/**"
             - "**/overseer/internal/history/**"
             - "**/overseer/internal/oci/**"
+            - "**/overseer/internal/panicguard/**"
             - "**/overseer/internal/webui/**"
           deny:
             - pkg: altune/overseer/internal/app
@@ -254,6 +255,10 @@ linters:
       forbid:
         - pattern: ^os\.(Getenv|LookupEnv|Environ)$
           msg: read settings once in internal/config and pass them in
+        - pattern: ^recover$
+          msg: contain a panic through panicguard.Try, Call or Contain (services/overseer/internal/panicguard), the one panic guard
+        - pattern: ^sync\.WaitGroup$
+          msg: run goroutines through panicguard.Group (services/overseer/internal/panicguard) so a panic in one is contained and reported by Wait
 
     revive:
       rules:
@@ -282,6 +287,10 @@ linters:
           - revive
           - forbidigo
           - noctx
+      - path: ^internal/panicguard/
+        linters:
+          - forbidigo
+        text: use of `(recover|sync\.WaitGroup)` forbidden
       - path: ^cmd/
         linters:
           - forbidigo

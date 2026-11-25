@@ -3,10 +3,10 @@ package usage
 import (
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
+	"altune/overseer/internal/panicguard"
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"sync"
 	"time"
 )
@@ -75,12 +75,7 @@ func (b *Bucket) Collect(context.Context) ([]core.Signal, error) {
 }
 
 func (b *Bucket) runSource(ctx context.Context) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			slog.ErrorContext(ctx, "usage: source pump panicked", "recover", rec)
-		}
-	}()
-	_ = b.src.Run(ctx)
+	panicguard.Contain(ctx, "usage: source pump panicked", func() { _ = b.src.Run(ctx) })
 }
 
 func (b *Bucket) drain() []core.Signal {

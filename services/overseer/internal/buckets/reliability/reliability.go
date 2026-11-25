@@ -3,6 +3,7 @@ package reliability
 import (
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
+	"altune/overseer/internal/panicguard"
 	"context"
 	"errors"
 	"fmt"
@@ -37,7 +38,7 @@ type Bucket struct {
 	adminReason string
 
 	start   sync.Once
-	running sync.WaitGroup
+	running panicguard.Group
 }
 
 type Deps struct {
@@ -84,7 +85,7 @@ func (b *Bucket) Start(ctx context.Context) {
 }
 
 func (b *Bucket) Wait() {
-	b.running.Wait()
+	_ = b.running.Wait()
 }
 
 func (b *Bucket) Rings() map[string]*core.RingStore {

@@ -3,10 +3,10 @@ package liveactivity
 import (
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
+	"altune/overseer/internal/panicguard"
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -57,12 +57,7 @@ func (b *Bucket) Collect(context.Context) ([]core.Signal, error) {
 }
 
 func (b *Bucket) runSource(ctx context.Context) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			slog.ErrorContext(ctx, "liveactivity: source pump panicked", "recover", rec)
-		}
-	}()
-	_ = b.src.Run(ctx)
+	panicguard.Contain(ctx, "liveactivity: source pump panicked", func() { _ = b.src.Run(ctx) })
 }
 
 func (b *Bucket) drain() []core.Signal {

@@ -6,6 +6,7 @@ import (
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
 	"altune/overseer/internal/history"
+	"altune/overseer/internal/panicguard"
 	"altune/overseer/internal/shell"
 	"altune/overseer/internal/webui"
 	"context"
@@ -185,12 +186,7 @@ func wireSeries(registry *core.Registry, series core.Series) {
 }
 
 func safeUseSeries(id string, w core.SeriesWriter, series core.Series) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			slog.Error("overseer.start.bucket_panic", "bucket", id, "stage", "UseSeries", "recover", rec)
-		}
-	}()
-	w.UseSeries(series)
+	panicguard.Contain(context.Background(), "overseer.start.bucket_panic", func() { w.UseSeries(series) }, "bucket", id, "stage", "UseSeries")
 }
 
 func (a *App) startPruner(ctx context.Context) <-chan struct{} {
@@ -226,12 +222,7 @@ func (a *App) startBuckets(ctx context.Context) {
 }
 
 func safeStart(ctx context.Context, id string, s core.Starter) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			slog.ErrorContext(ctx, "overseer.start.bucket_panic", "bucket", id, "recover", rec)
-		}
-	}()
-	s.Start(ctx)
+	panicguard.Contain(ctx, "overseer.start.bucket_panic", func() { s.Start(ctx) }, "bucket", id)
 }
 
 func (a *App) tickLoop(ctx context.Context) {
@@ -306,21 +297,23 @@ func (a *App) collectOne(ctx context.Context, b core.Bucket) error {
 	return safeStore(b, signals)
 }
 
-func safeCollect(ctx context.Context, b core.Bucket) (signals []core.Signal, err error) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			signals, err = nil, &bucketPanicError{stage: "Collect", value: rec}
-		}
-	}()
-	return b.Collect(ctx)
+func safeCollect(ctx context.Context, b core.Bucket) ([]core.Signal, error) {
+	var signals []core.Signal
+	var collectErr error
+	if perr := panicguard.Try(func() { signals, collectErr = b.Collect(ctx) }); perr != nil {
+		return nil, bucketPanic("Collect", perr)
+	}
+	return signals, collectErr
 }
 
-func safeStore(b core.Bucket, signals []core.Signal) (err error) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			err = &bucketPanicError{stage: "Store", value: rec}
-		}
-	}()
-	b.Store(signals)
+func safeStore(b core.Bucket, signals []core.Signal) error {
+	if perr := panicguard.Try(func() { b.Store(signals) }); perr != nil {
+		return bucketPanic("Store", perr)
+	}
 	return nil
+}
+
+func bucketPanic(stage string, perr error) *bucketPanicError {
+	value, _ := panicguard.Recovered(perr)
+	return &bucketPanicError{stage: stage, value: value}
 }
