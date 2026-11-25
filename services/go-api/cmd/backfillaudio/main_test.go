@@ -3,10 +3,13 @@ package main
 import (
 	"altune/go-api/internal/catalog"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 type fakeStore struct {
@@ -262,5 +265,23 @@ func TestReconcile_LocatesAPreCapLegacyFile(t *testing.T) {
 	}
 	if repo.updated == nil || !repo.updated.IsStreamable() {
 		t.Fatal("track was not persisted as streamable")
+	}
+}
+
+func TestLoadCandidates_ReadsTheUsersTracksThatLackAudio(t *testing.T) {
+	pool := sharedtest.Pool(t)
+	ctx := context.Background()
+	id, user := uuid.New(), uuid.New()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO tracks (id, user_id, title, artist, album, dedup_key, acquisition_status) VALUES ($1, $2, 'Song', 'Artist', 'Album', gen_random_uuid()::text, 'pending')`,
+		id, user); err != nil {
+		t.Fatalf("seed track: %v", err)
+	}
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, id) })
+
+	got, err := loadCandidates(ctx, pool, options{user: user.String()})
+
+	if err != nil || len(got) != 1 || got[0].trackID.UUID() != id || got[0].userID.UUID() != user || got[0].album != "Album" {
+		t.Fatalf("loadCandidates = %+v, %v; want the one seeded track with its parsed ids", got, err)
 	}
 }

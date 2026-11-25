@@ -1,7 +1,14 @@
 package main
 
 import (
+	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/shared/sharedtest"
+	"context"
+	"slices"
 	"testing"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 func timedSearch(query string, totalMs float64, cached bool, top ...map[string]any) searchEvent {
@@ -57,5 +64,26 @@ func TestSummarizeSearches_artistFirstCountsSearchesThatNamedAnArtist(t *testing
 	}
 	if r.Abandoned != 1 {
 		t.Errorf("abandoned = %d, want 1", r.Abandoned)
+	}
+}
+
+func TestLoadSearchEvents_ReadsSearchesSinceTheCutoff(t *testing.T) {
+	pool := sharedtest.Pool(t)
+	ctx := context.Background()
+	user, query := uuid.New(), "query "+uuid.NewString()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO discovery_events (user_id, event_type, query_norm, payload) VALUES ($1, $2, $3, '{"total_ms": 12}')`,
+		user, discovery.EventTypeSearchPerformed.String(), query); err != nil {
+		t.Fatalf("seed event: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM discovery_events WHERE user_id = $1`, user)
+	})
+
+	events, err := loadSearchEvents(ctx, pool, time.Now().Add(-time.Minute))
+
+	i := slices.IndexFunc(events, func(e searchEvent) bool { return e.QueryNorm == query })
+	if err != nil || i < 0 || events[i].Payload["total_ms"] != 12.0 {
+		t.Fatalf("loadSearchEvents = %d events, %v; want the seeded search with its payload", len(events), err)
 	}
 }
