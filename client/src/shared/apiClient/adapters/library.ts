@@ -1,4 +1,4 @@
-import { apiFetch, signalInit, withQuery } from '@shared/apiClient/adapters/http';
+import { apiFetch, setQueryParam, signalInit, withQuery } from '@shared/apiClient/adapters/http';
 import {
   parseListEnvelope,
   asNumber,
@@ -81,7 +81,7 @@ function parseListArtistsResponse(value: unknown, at = 'ListArtistsResponse'): L
 
 function libraryParams(query: LibraryQuery): URLSearchParams {
   const params = new URLSearchParams();
-  if (query.q) params.set('q', query.q);
+  setQueryParam(params, 'q', query.q);
   if (query.sort) params.set('sort', query.sort);
   if (query.limit !== undefined) params.set('limit', String(query.limit));
   if (query.offset !== undefined) params.set('offset', String(query.offset));

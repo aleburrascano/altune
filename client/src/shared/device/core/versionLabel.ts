@@ -12,5 +12,6 @@ export function versionLabel(version: string, runningUpdateId: string | null): s
 }
 
 export function telemetryVersionOf(commit: string | undefined, label: string): string {
-  return `${commit?.slice(0, BUILD_COMMIT_LENGTH) || 'dev'}/${label}`;
+  const shortCommit = commit?.slice(0, BUILD_COMMIT_LENGTH) ?? '';
+  return `${shortCommit === '' ? 'dev' : shortCommit}/${label}`;
 }

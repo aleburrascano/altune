@@ -178,7 +178,7 @@ export function useOptimisticMutation<TData, TVariables, TCache>(
     options.invalidate?.(variables) ?? [queryKey];
 
   const writeOptimistic = (previous: TCache | undefined, variables: TVariables): void => {
-    if (previous) {
+    if (previous !== undefined) {
       queryClient.setQueryData(queryKey, options.applyOptimistic(previous, variables));
     }
   };
@@ -190,9 +190,9 @@ export function useOptimisticMutation<TData, TVariables, TCache>(
   };
 
   function rollback(variables: TVariables, { previous }: Snapshot<TCache>): void {
-    if (!previous) return;
+    if (previous === undefined) return;
     queryClient.setQueryData<TCache>(queryKey, (current) =>
-      current ? options.revertOptimistic(current, variables, previous) : current,
+      current !== undefined ? options.revertOptimistic(current, variables, previous) : current,
     );
   }
 

@@ -21,7 +21,7 @@ function armTimer(controller: AbortController, ms: number): ArmedTimer {
 
 function relayAbort(controller: AbortController, external: AbortSignal | undefined): () => void {
   const relay = (): void => controller.abort();
-  if (external?.aborted) relay();
+  if (external?.aborted === true) relay();
   else external?.addEventListener('abort', relay);
   return relay;
 }

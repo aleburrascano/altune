@@ -6,7 +6,7 @@ export function trackToDiscoveryResult(track: TrackResponse): DiscoveryResult {
     kind: 'track',
     title: track.title,
     subtitle: track.artist,
-    image_url: track.artwork_url || null,
+    image_url: track.artwork_url === '' ? null : track.artwork_url,
     confidence: 'high',
     sources: [],
     extras: {

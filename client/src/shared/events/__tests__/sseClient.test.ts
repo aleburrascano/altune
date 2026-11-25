@@ -9,6 +9,7 @@ const { __http } = require('@testing/doubles/fetch.js');
 const HEARTBEAT_WATCHDOG_MS = 60_000;
 const PAST_FIRST_BACKOFF_MS = 2_000;
 const BOTH_REQUESTS = 2;
+const TOKEN_RETRY_MS = 30_000;
 const FIRST_BACKOFF_MS = 1_000;
 const TWELVE_SECONDS_MS = 12_000;
 const FIVE_MINUTES_MS = 300_000;
@@ -511,6 +512,19 @@ describe('SSEClient', () => {
 
       getToken.mockResolvedValue('token-after-sign-in');
       await jest.advanceTimersByTimeAsync(30_000);
+
+      expect(FakeXHR.instances.length).toBe(1);
+    });
+
+    it('retries after an empty token instead of connecting without credentials', async () => {
+      const getToken = jest.fn<Promise<string | null>, []>().mockResolvedValue('');
+      const { client } = makeClient(getToken);
+
+      await client.connect();
+      expect(FakeXHR.instances.length).toBe(0);
+
+      getToken.mockResolvedValue('token-after-sign-in');
+      await jest.advanceTimersByTimeAsync(TOKEN_RETRY_MS);
 
       expect(FakeXHR.instances.length).toBe(1);
     });
