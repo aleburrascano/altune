@@ -1,6 +1,5 @@
 import React from 'react';
-import { Alert } from 'react-native';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { renderHook, act, waitFor } from '@testing-library/react-native';
 import fc from 'fast-check';
 
@@ -27,16 +26,15 @@ import {
   type PlaylistId,
 } from '@shared/catalog';
 import { playlistKeys } from '@shared/query';
-import { signInTestUser } from '@testing/signInTestUser';
 import { apiClientPlaylistsPort } from '@testing/apiClientPorts';
+import { ObservedQueryClient } from '@testing/observedQueryClient';
+import { recordDialogs, type RecordedDialogs } from '@testing/recordDialogs';
+import { signInTestUser } from '@testing/signInTestUser';
 import { runSignOutCleanups } from '@shared/session';
-import * as playlistsApi from '@shared/apiClient/playlists';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
 const REFUSED_STATUS = 422;
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const EVENTS_ROUTE = 'POST /v1/discovery/events';
 
@@ -45,12 +43,12 @@ beforeEach(async () => {
   __http.reply(EVENTS_ROUTE, { status: 202 });
 });
 
-let alertSpy: jest.SpyInstance;
+let dialogs: RecordedDialogs;
 beforeEach(() => {
-  alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  dialogs = recordDialogs();
 });
 afterEach(() => {
-  alertSpy.mockRestore();
+  dialogs.restore();
   jest.useRealTimers();
 });
 
@@ -109,10 +107,8 @@ function makeDetail(
   };
 }
 
-function newClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+function newClient(): ObservedQueryClient {
+  return new ObservedQueryClient();
 }
 
 function createWrapper(queryClient: QueryClient) {
@@ -200,7 +196,7 @@ describe('useAddTracksToPlaylist(): onMutate optimistic bump', () => {
     });
 
     expect(queryClient.getQueryData(playlistKeys.list)).toBeUndefined();
-    expect(alertSpy).toHaveBeenCalledWith('Add failed', expect.any(String));
+    expect(dialogs.alerts).toContainEqual(['Add failed', expect.any(String)]);
   });
 });
 
@@ -229,8 +225,8 @@ describe('useAddTracksToPlaylist(): onSuccess skip-count report', () => {
       ).resolves.toEqual({ added: 1, skipped: 1 });
     });
 
-    expect(alertSpy).toHaveBeenCalledWith('Note', 'One track was already in Focus.');
-    expect(alertSpy).not.toHaveBeenCalledWith('Add failed', expect.any(String));
+    expect(dialogs.alerts).toContainEqual(['Note', 'One track was already in Focus.']);
+    expect(dialogs.alerts).not.toContainEqual(['Add failed', expect.any(String)]);
   });
 
   it('reports a plural skip count using the playlist name', async () => {
@@ -255,7 +251,7 @@ describe('useAddTracksToPlaylist(): onSuccess skip-count report', () => {
       });
     });
 
-    expect(alertSpy).toHaveBeenCalledWith('Note', '2 tracks were already in Focus.');
+    expect(dialogs.alerts).toContainEqual(['Note', '2 tracks were already in Focus.']);
   });
 
   it('falls back to a generic message when the mutated playlist id is not present in the cached list (name lookup miss)', async () => {
@@ -280,7 +276,7 @@ describe('useAddTracksToPlaylist(): onSuccess skip-count report', () => {
       });
     });
 
-    expect(alertSpy).toHaveBeenCalledWith('Note', 'One track was already in the playlist.');
+    expect(dialogs.alerts).toContainEqual(['Note', 'One track was already in the playlist.']);
   });
 
   it('falls back to the generic message and settles without throwing when playlistKeys.list was never populated — deep-linking straight into PlaylistDetailScreen', async () => {
@@ -303,7 +299,7 @@ describe('useAddTracksToPlaylist(): onSuccess skip-count report', () => {
       ).resolves.toEqual({ added: 1, skipped: 1 });
     });
 
-    expect(alertSpy).toHaveBeenCalledWith('Note', 'One track was already in the playlist.');
+    expect(dialogs.alerts).toContainEqual(['Note', 'One track was already in the playlist.']);
   });
 
   it('treats a batch body missing added as a failed add, rather than reading it as a complete batch', async () => {
@@ -327,7 +323,7 @@ describe('useAddTracksToPlaylist(): onSuccess skip-count report', () => {
       ).rejects.toBeInstanceOf(ContractError);
     });
 
-    expect(alertSpy).toHaveBeenCalledWith('Add failed', expect.any(String));
+    expect(dialogs.alerts).toContainEqual(['Add failed', expect.any(String)]);
   });
 
   it('does not alert when every requested track was added', async () => {
@@ -352,7 +348,7 @@ describe('useAddTracksToPlaylist(): onSuccess skip-count report', () => {
       });
     });
 
-    expect(alertSpy).not.toHaveBeenCalled();
+    expect(dialogs.alerts).toEqual([]);
   });
 
   it('does not alert or throw when the server reports more added than requested (adversarial over-count)', async () => {
@@ -376,7 +372,7 @@ describe('useAddTracksToPlaylist(): onSuccess skip-count report', () => {
       ).resolves.toEqual({ added: 9, skipped: 0 });
     });
 
-    expect(alertSpy).not.toHaveBeenCalled();
+    expect(dialogs.alerts).toEqual([]);
   });
 
   it('treats an empty trackIds batch as a no-op: no track_count bump, no alert', async () => {
@@ -401,7 +397,7 @@ describe('useAddTracksToPlaylist(): onSuccess skip-count report', () => {
     expect(
       queryClient.getQueryData<ListPlaylistsResponse>(playlistKeys.list)!.items[0]!.track_count,
     ).toBe(5);
-    expect(alertSpy).not.toHaveBeenCalled();
+    expect(dialogs.alerts).toEqual([]);
   });
 });
 
@@ -548,7 +544,7 @@ describe('useAddTracksToPlaylist(): onError rollback', () => {
         ).rejects.toThrow();
       });
 
-      expect(alertSpy).toHaveBeenCalledWith('Add failed', message);
+      expect(dialogs.alerts).toContainEqual(['Add failed', message]);
     },
   );
 });
@@ -560,7 +556,6 @@ describe('useAddTracksToPlaylist(): onSettled invalidation', () => {
       json: { added: 1, skipped: 0 },
     });
     const queryClient = newClient();
-    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
     const { result } = renderHook(() => useAddTracksToPlaylist(), {
       wrapper: createWrapper(queryClient),
@@ -573,8 +568,8 @@ describe('useAddTracksToPlaylist(): onSettled invalidation', () => {
       });
     });
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: playlistKeys.list });
-    expect(invalidateSpy).toHaveBeenCalledWith({
+    expect(queryClient.invalidated).toContainEqual({ queryKey: playlistKeys.list });
+    expect(queryClient.invalidated).toContainEqual({
       queryKey: playlistKeys.detail(asPlaylistId('p1')),
     });
   });
@@ -582,7 +577,6 @@ describe('useAddTracksToPlaylist(): onSettled invalidation', () => {
   it('invalidates the same two keys on failure', async () => {
     __http.fail('POST /v1/playlists/p1/tracks/batch');
     const queryClient = newClient();
-    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
     const { result } = renderHook(() => useAddTracksToPlaylist(), {
       wrapper: createWrapper(queryClient),
@@ -594,8 +588,8 @@ describe('useAddTracksToPlaylist(): onSettled invalidation', () => {
       ).rejects.toThrow();
     });
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: playlistKeys.list });
-    expect(invalidateSpy).toHaveBeenCalledWith({
+    expect(queryClient.invalidated).toContainEqual({ queryKey: playlistKeys.list });
+    expect(queryClient.invalidated).toContainEqual({
       queryKey: playlistKeys.detail(asPlaylistId('p1')),
     });
   });
@@ -612,7 +606,6 @@ describe('useAddTracksToPlaylist(): replay is not idempotent, and the list inval
       playlistKeys.list,
       makeList([makePlaylist({ id: asPlaylistId('p1'), track_count: 5 })]),
     );
-    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
     const { result } = renderHook(() => useAddTracksToPlaylist(), {
       wrapper: createWrapper(queryClient),
@@ -634,8 +627,8 @@ describe('useAddTracksToPlaylist(): replay is not idempotent, and the list inval
     expect(
       queryClient.getQueryData<ListPlaylistsResponse>(playlistKeys.list)!.items[0]!.track_count,
     ).toBe(9);
-    const listInvalidations = invalidateSpy.mock.calls.filter(
-      ([arg]) => (arg as { queryKey: unknown } | undefined)?.queryKey === playlistKeys.list,
+    const listInvalidations = queryClient.invalidated.filter(
+      (filters) => filters?.queryKey === playlistKeys.list,
     );
     expect(listInvalidations).toHaveLength(2);
   });
@@ -752,10 +745,10 @@ describe('useRenamePlaylist(): onError rollback', () => {
     });
 
     expect(queryClient.getQueryData(playlistKeys.detail(asPlaylistId('p1')))).toEqual(seeded);
-    expect(alertSpy).toHaveBeenCalledWith(
+    expect(dialogs.alerts).toContainEqual([
       'Rename failed',
       'Could not rename the playlist. Please try again.',
-    );
+    ]);
   });
 
   it('restores only the name, keeping tracks an SSE update added mid-flight', async () => {
@@ -856,7 +849,6 @@ describe('useRenamePlaylist(): onSettled invalidation', () => {
       json: makePlaylist({ id: asPlaylistId('p1'), name: 'New Name' }),
     });
     const queryClient = newClient();
-    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
     const { result } = renderHook(() => useRenamePlaylist(asPlaylistId('p1')), {
       wrapper: createWrapper(queryClient),
@@ -866,10 +858,10 @@ describe('useRenamePlaylist(): onSettled invalidation', () => {
       await result.current.mutateAsync('New Name');
     });
 
-    expect(invalidateSpy).toHaveBeenCalledWith({
+    expect(queryClient.invalidated).toContainEqual({
       queryKey: playlistKeys.detail(asPlaylistId('p1')),
     });
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: playlistKeys.list });
+    expect(queryClient.invalidated).toContainEqual({ queryKey: playlistKeys.list });
   });
 });
 
@@ -877,7 +869,6 @@ describe('useDeletePlaylist(): onSuccess invalidation', () => {
   it('invalidates exactly playlistKeys.list and playlistKeys.detail(playlistId), by identity', async () => {
     __http.reply('DELETE /v1/playlists/p1', { status: 204 });
     const queryClient = newClient();
-    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
     const { result } = renderHook(() => useDeletePlaylist(asPlaylistId('p1')), {
       wrapper: createWrapper(queryClient),
@@ -887,8 +878,8 @@ describe('useDeletePlaylist(): onSuccess invalidation', () => {
       await result.current.mutateAsync();
     });
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: playlistKeys.list });
-    expect(invalidateSpy).toHaveBeenCalledWith({
+    expect(queryClient.invalidated).toContainEqual({ queryKey: playlistKeys.list });
+    expect(queryClient.invalidated).toContainEqual({
       queryKey: playlistKeys.detail(asPlaylistId('p1')),
     });
   });
@@ -902,7 +893,6 @@ describe('useDeletePlaylist(): a failed delete invalidates nothing — onSuccess
     const seededDetail = makeDetail('p1', []);
     queryClient.setQueryData(playlistKeys.list, seededList);
     queryClient.setQueryData(playlistKeys.detail(asPlaylistId('p1')), seededDetail);
-    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
     const { result } = renderHook(() => useDeletePlaylist(asPlaylistId('p1')), {
       wrapper: createWrapper(queryClient),
@@ -912,13 +902,13 @@ describe('useDeletePlaylist(): a failed delete invalidates nothing — onSuccess
       await expect(result.current.mutateAsync()).rejects.toThrow();
     });
 
-    expect(invalidateSpy).not.toHaveBeenCalled();
+    expect(queryClient.invalidated).toEqual([]);
     expect(queryClient.getQueryData(playlistKeys.list)).toEqual(seededList);
     expect(queryClient.getQueryData(playlistKeys.detail(asPlaylistId('p1')))).toEqual(seededDetail);
-    expect(alertSpy).toHaveBeenCalledWith(
+    expect(dialogs.alerts).toContainEqual([
       'Delete failed',
       'Could not delete the playlist. Please try again.',
-    );
+    ]);
   });
 });
 
@@ -1121,7 +1111,7 @@ describe('useRemoveTracksFromPlaylist(): onError rollback', () => {
     });
 
     expect(queryClient.getQueryData(playlistKeys.detail(asPlaylistId('p1')))).toBeUndefined();
-    expect(alertSpy).toHaveBeenCalledWith('Remove failed', expect.any(String));
+    expect(dialogs.alerts).toContainEqual(['Remove failed', expect.any(String)]);
   });
 
   it.each<[TrackId[], string]>([
@@ -1141,7 +1131,7 @@ describe('useRemoveTracksFromPlaylist(): onError rollback', () => {
         await expect(result.current.mutateAsync(trackIds)).rejects.toThrow();
       });
 
-      expect(alertSpy).toHaveBeenCalledWith('Remove failed', message);
+      expect(dialogs.alerts).toContainEqual(['Remove failed', message]);
     },
   );
 });
@@ -1150,7 +1140,6 @@ describe('useRemoveTracksFromPlaylist(): onSettled invalidation', () => {
   it('invalidates exactly playlistKeys.detail(playlistId) and playlistKeys.list, by identity', async () => {
     __http.reply('DELETE /v1/playlists/p1/tracks', { status: 200, json: { removed: 1 } });
     const queryClient = newClient();
-    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
     const { result } = renderHook(() => useRemoveTracksFromPlaylist(asPlaylistId('p1')), {
       wrapper: createWrapper(queryClient),
@@ -1160,10 +1149,10 @@ describe('useRemoveTracksFromPlaylist(): onSettled invalidation', () => {
       await result.current.mutateAsync([asTrackId('t1')]);
     });
 
-    expect(invalidateSpy).toHaveBeenCalledWith({
+    expect(queryClient.invalidated).toContainEqual({
       queryKey: playlistKeys.detail(asPlaylistId('p1')),
     });
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: playlistKeys.list });
+    expect(queryClient.invalidated).toContainEqual({ queryKey: playlistKeys.list });
   });
 });
 
@@ -1249,19 +1238,17 @@ describe('create', () => {
   }
 
   function freshClient() {
-    return new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
+    return new ObservedQueryClient();
   }
 
-  let alertSpy: jest.SpyInstance;
+  let dialogs: RecordedDialogs;
 
   beforeEach(() => {
-    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    dialogs = recordDialogs();
   });
 
   afterEach(() => {
-    alertSpy.mockRestore();
+    dialogs.restore();
   });
 
   describe('useCreatePlaylistWithTracks: addTracksToPlaylist fails after createPlaylist already landed (:36-43)', () => {
@@ -1380,11 +1367,11 @@ describe('create', () => {
         });
       });
 
-      expect(alertSpy).toHaveBeenCalledTimes(1);
-      expect(alertSpy).toHaveBeenCalledWith(
+      expect(dialogs.alerts).toHaveLength(1);
+      expect(dialogs.alerts).toContainEqual([
         'Error',
         'Could not create the playlist. Please try again.',
-      );
+      ]);
     });
 
     it.each([
@@ -1413,7 +1400,7 @@ describe('create', () => {
           await result.current.mutateAsync({ name: 'Focus', trackIds: [...trackIds] });
         });
 
-        expect(alertSpy).toHaveBeenCalledWith('Note', expectedMessage);
+        expect(dialogs.alerts).toContainEqual(['Note', expectedMessage]);
       },
     );
 
@@ -1433,7 +1420,7 @@ describe('create', () => {
         });
       });
 
-      expect(alertSpy).toHaveBeenCalledTimes(1);
+      expect(dialogs.alerts).toHaveLength(1);
     });
   });
 
@@ -1466,7 +1453,7 @@ describe('create', () => {
       });
 
       expect(result.current.isError).toBe(false);
-      expect(alertSpy).toHaveBeenCalledWith('Note', expectedMessage);
+      expect(dialogs.alerts).toContainEqual(['Note', expectedMessage]);
     });
 
     it('a thin create response missing name is rejected by the contract layer: a mutation error, never a batch-add', async () => {
@@ -1487,10 +1474,10 @@ describe('create', () => {
 
       expect(caught).toBeInstanceOf(ContractError);
       expect(__http.countFor('POST /v1/playlists/p1/tracks/batch')).toBe(0);
-      expect(alertSpy).toHaveBeenCalledWith(
+      expect(dialogs.alerts).toContainEqual([
         'Error',
         'Could not create the playlist. Please try again.',
-      );
+      ]);
     });
 
     it('every requested track lands (added === trackIds.length) stays silent, no false skip note', async () => {
@@ -1511,7 +1498,7 @@ describe('create', () => {
         });
       });
 
-      expect(alertSpy).not.toHaveBeenCalled();
+      expect(dialogs.alerts).toEqual([]);
     });
 
     it('a batch body missing added is refused by the contract layer, so the skip note can never read "NaN tracks" and the playlist is kept', async () => {
@@ -1530,11 +1517,11 @@ describe('create', () => {
         });
       });
 
-      expect(alertSpy).not.toHaveBeenCalledWith('Note', expect.stringContaining('NaN'));
-      expect(alertSpy).toHaveBeenCalledWith(
+      expect(dialogs.alerts).not.toContainEqual(['Note', expect.stringContaining('NaN')]);
+      expect(dialogs.alerts).toContainEqual([
         'Note',
         'Playlist created, but the tracks could not be added. Try adding them manually.',
-      );
+      ]);
       expect(__http.countFor('DELETE /v1/playlists/p1')).toBe(0);
     });
 
@@ -1556,7 +1543,7 @@ describe('create', () => {
         });
       });
 
-      expect(alertSpy).not.toHaveBeenCalled();
+      expect(dialogs.alerts).toEqual([]);
     });
   });
 
@@ -1579,10 +1566,10 @@ describe('create', () => {
 
       expect(caught).toBeInstanceOf(Error);
       await waitFor(() => expect(result.current.isError).toBe(true));
-      expect(alertSpy).toHaveBeenCalledWith(
+      expect(dialogs.alerts).toContainEqual([
         'Error',
         'Could not create the playlist. Please try again.',
-      );
+      ]);
     });
 
     it('useCreatePlaylistWithTracks surfaces the same failure, and never reaches the batch-add endpoint', async () => {
@@ -1603,10 +1590,10 @@ describe('create', () => {
 
       expect(caught).toBeInstanceOf(Error);
       await waitFor(() => expect(result.current.isError).toBe(true));
-      expect(alertSpy).toHaveBeenCalledWith(
+      expect(dialogs.alerts).toContainEqual([
         'Error',
         'Could not create the playlist. Please try again.',
-      );
+      ]);
       expect(
         __http.requests.filter((r: { path: string }) => r.path.includes('tracks/batch')),
       ).toHaveLength(0);
@@ -1617,7 +1604,6 @@ describe('create', () => {
     it('useCreatePlaylist invalidates playlistKeys.list, and only that key, on success', async () => {
       __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
       const queryClient = freshClient();
-      const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
       const { result } = renderHook(() => useCreatePlaylist(), {
         wrapper: createWrapper(queryClient),
       });
@@ -1626,14 +1612,13 @@ describe('create', () => {
         await result.current.mutateAsync('Focus');
       });
 
-      expect(invalidateSpy).toHaveBeenCalledTimes(1);
-      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: playlistKeys.list });
+      expect(queryClient.invalidated).toHaveLength(1);
+      expect(queryClient.invalidated).toContainEqual({ queryKey: playlistKeys.list });
     });
 
     it('useCreatePlaylist invalidates playlistKeys.list even when the create call fails', async () => {
       __http.reply('POST /v1/playlists', { status: 500 });
       const queryClient = freshClient();
-      const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
       const { result } = renderHook(() => useCreatePlaylist(), {
         wrapper: createWrapper(queryClient),
       });
@@ -1642,7 +1627,7 @@ describe('create', () => {
         await result.current.mutateAsync('Focus').catch(() => {});
       });
 
-      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: playlistKeys.list });
+      expect(queryClient.invalidated).toContainEqual({ queryKey: playlistKeys.list });
     });
 
     it('useCreatePlaylistWithTracks invalidates playlistKeys.list, and only that key, even when the add step failed and the playlist was rolled back', async () => {
@@ -1650,7 +1635,6 @@ describe('create', () => {
       __http.reply('POST /v1/playlists/p1/tracks/batch', { status: REFUSED_STATUS });
       __http.reply('DELETE /v1/playlists/p1', { status: 204 });
       const queryClient = freshClient();
-      const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
       const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
         wrapper: createWrapper(queryClient),
       });
@@ -1659,8 +1643,8 @@ describe('create', () => {
         await result.current.mutateAsync({ name: 'Focus', trackIds: [asTrackId('t1')] });
       });
 
-      expect(invalidateSpy).toHaveBeenCalledTimes(1);
-      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: playlistKeys.list });
+      expect(queryClient.invalidated).toHaveLength(1);
+      expect(queryClient.invalidated).toContainEqual({ queryKey: playlistKeys.list });
     });
   });
 
@@ -1743,19 +1727,23 @@ describe('after sign-out', () => {
 
   const USER_B_PLAYLISTS = { items: [playlist('b1', 'B Mix', 3)] };
 
+  const port: PlaylistsPort = {
+    ...createMemoryPlaylistsPort(),
+    createPlaylist: (body) => mockCreatePlaylist(body),
+    addTracksToPlaylist: (id, body) => mockAddTracks(id, body) as never,
+    deletePlaylist: (id) => mockDeletePlaylist(id),
+  };
+
   function setup() {
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
+    const queryClient = new ObservedQueryClient();
     function Wrapper({ children }: { children: React.ReactNode }) {
       return (
         <QueryClientProvider client={queryClient}>
-          <PlaylistsPortProvider port={apiClientPlaylistsPort}>{children}</PlaylistsPortProvider>
+          <PlaylistsPortProvider port={port}>{children}</PlaylistsPortProvider>
         </QueryClientProvider>
       );
     }
-    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
-    return { queryClient, wrapper: Wrapper, invalidateSpy };
+    return { queryClient, wrapper: Wrapper };
   }
 
   function signOutThenLoadUserB(queryClient: QueryClient): void {
@@ -1764,34 +1752,22 @@ describe('after sign-out', () => {
     queryClient.setQueryData(playlistKeys.list, USER_B_PLAYLISTS);
   }
 
-  let alertSpy: jest.SpyInstance;
+  let dialogs: RecordedDialogs;
 
   beforeEach(() => {
-    jest
-      .spyOn(playlistsApi, 'createPlaylist')
-      .mockImplementation((body: { name: string }) => mockCreatePlaylist(body));
-    jest
-      .spyOn(playlistsApi, 'addTracksToPlaylist')
-      .mockImplementation((id: PlaylistId, body: unknown) => mockAddTracks(id, body) as never);
-    jest
-      .spyOn(playlistsApi, 'deletePlaylist')
-      .mockImplementation((id: PlaylistId) => mockDeletePlaylist(id));
-    jest.spyOn(playlistsApi, 'removeTracksFromPlaylist').mockImplementation(jest.fn());
-    jest.spyOn(playlistsApi, 'renamePlaylist').mockImplementation(jest.fn());
     mockCreatePlaylist.mockReset();
     mockAddTracks.mockReset();
     mockDeletePlaylist.mockReset();
-    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    dialogs = recordDialogs();
   });
 
   afterEach(() => {
-    alertSpy.mockRestore();
-    jest.restoreAllMocks();
+    dialogs.restore();
   });
 
   describe('playlist mutations that settle after sign-out leave the next user untouched', () => {
     it('useCreatePlaylist: a create failing after sign-out neither alerts nor refetches user B playlists', async () => {
-      const { queryClient, wrapper, invalidateSpy } = setup();
+      const { queryClient, wrapper } = setup();
       const request = deferred<PlaylistResponse>();
       mockCreatePlaylist.mockReturnValue(request.promise);
       const { result } = renderHook(() => useCreatePlaylist(), { wrapper });
@@ -1802,8 +1778,8 @@ describe('after sign-out', () => {
       await act(async () => request.reject(new Error('offline')));
       await waitFor(() => expect(result.current.isError).toBe(true));
 
-      expect(alertSpy).not.toHaveBeenCalled();
-      expect(invalidateSpy).not.toHaveBeenCalled();
+      expect(dialogs.alerts).toEqual([]);
+      expect(queryClient.invalidated).toEqual([]);
       expect(queryClient.getQueryData(playlistKeys.list)).toEqual(USER_B_PLAYLISTS);
     });
 
@@ -1822,7 +1798,7 @@ describe('after sign-out', () => {
 
       expect(mockAddTracks).not.toHaveBeenCalled();
       expect(mockDeletePlaylist).not.toHaveBeenCalled();
-      expect(alertSpy).not.toHaveBeenCalled();
+      expect(dialogs.alerts).toEqual([]);
     });
 
     it("useCreatePlaylistWithTracks: an add failing after sign-out does not roll back under the next user's session", async () => {
@@ -1839,7 +1815,7 @@ describe('after sign-out', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(mockDeletePlaylist).not.toHaveBeenCalled();
-      expect(alertSpy).not.toHaveBeenCalled();
+      expect(dialogs.alerts).toEqual([]);
     });
 
     it('useDeletePlaylist: a delete failing after sign-out does not alert the next user', async () => {
@@ -1854,11 +1830,11 @@ describe('after sign-out', () => {
       await act(async () => request.reject(new Error('offline')));
       await waitFor(() => expect(result.current.isError).toBe(true));
 
-      expect(alertSpy).not.toHaveBeenCalled();
+      expect(dialogs.alerts).toEqual([]);
     });
 
     it('useDeletePlaylist: a delete succeeding after sign-out does not refetch user B playlists', async () => {
-      const { queryClient, wrapper, invalidateSpy } = setup();
+      const { queryClient, wrapper } = setup();
       const request = deferred<void>();
       mockDeletePlaylist.mockReturnValue(request.promise);
       const { result } = renderHook(() => useDeletePlaylist(asPlaylistId('a1')), { wrapper });
@@ -1869,7 +1845,7 @@ describe('after sign-out', () => {
       await act(async () => request.resolve());
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(invalidateSpy).not.toHaveBeenCalled();
+      expect(queryClient.invalidated).toEqual([]);
     });
 
     it("useAddTracksToPlaylist: an add answering after sign-out does not tell user B about user A's playlist", async () => {
@@ -1886,7 +1862,7 @@ describe('after sign-out', () => {
       await act(async () => request.resolve({ added: 0 }));
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-      expect(alertSpy).not.toHaveBeenCalled();
+      expect(dialogs.alerts).toEqual([]);
       expect(queryClient.getQueryData(playlistKeys.list)).toEqual(USER_B_PLAYLISTS);
     });
   });
@@ -2020,7 +1996,7 @@ describe('useCreatePlaylistWithTracks: an add that failed without a definite ref
 
     expect(await storedTrackIds(port)).toEqual([['t1', 't2']]);
     expect(data).toMatchObject({ added: TIMEOUT_TRACKS.length, addFailed: false });
-    expect(alertSpy).not.toHaveBeenCalled();
+    expect(dialogs.alerts).toEqual([]);
   });
 
   it('a timed-out add the server never applied keeps the empty playlist and says the tracks need adding', async () => {
@@ -2032,10 +2008,10 @@ describe('useCreatePlaylistWithTracks: an add that failed without a definite ref
     });
 
     expect(await storedTrackIds(port)).toEqual([[]]);
-    expect(alertSpy).toHaveBeenCalledWith(
+    expect(dialogs.alerts).toContainEqual([
       'Note',
       'Playlist created, but the tracks could not be added. Try adding them manually.',
-    );
+    ]);
   });
 
   it('a gateway 5xx is as ambiguous as a timeout, so the playlist is kept', async () => {
@@ -2058,9 +2034,9 @@ describe('useCreatePlaylistWithTracks: an add that failed without a definite ref
     });
 
     expect(await storedTrackIds(port)).toEqual([]);
-    expect(alertSpy).toHaveBeenCalledWith(
+    expect(dialogs.alerts).toContainEqual([
       'Error',
       'Could not create the playlist. Please try again.',
-    );
+    ]);
   });
 });

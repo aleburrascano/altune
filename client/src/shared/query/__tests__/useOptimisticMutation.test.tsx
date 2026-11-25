@@ -1,8 +1,9 @@
 import React from 'react';
-import { QueryClient, QueryClientProvider, type QueryKey } from '@tanstack/react-query';
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
 import { runSignOutCleanups } from '@shared/session';
+import { ObservedQueryClient } from '@testing/observedQueryClient';
 import { recordDialogs, type RecordedDialogs } from '@testing/recordDialogs';
 import { signInTestUser } from '@testing/signInTestUser';
 
@@ -30,36 +31,6 @@ beforeEach(() => {
 afterEach(() => {
   dialogs.restore();
 });
-
-type Filters = { queryKey?: QueryKey } | undefined;
-
-class ObservedQueryClient extends QueryClient {
-  readonly cancelled: Filters[] = [];
-  readonly invalidated: Filters[] = [];
-  readonly written: QueryKey[] = [];
-  invalidationHeldUntil: Promise<void> | undefined;
-  whenCancelling: (() => void) | undefined;
-
-  constructor() {
-    super({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-    const write = this.setQueryData.bind(this);
-    this.setQueryData = ((key: QueryKey, ...rest: [never, never?]) => {
-      this.written.push(key);
-      return write(key, ...rest);
-    }) as QueryClient['setQueryData'];
-  }
-
-  override cancelQueries(...args: Parameters<QueryClient['cancelQueries']>) {
-    this.cancelled.push(args[0]);
-    this.whenCancelling?.();
-    return super.cancelQueries(...args);
-  }
-
-  override invalidateQueries(...args: Parameters<QueryClient['invalidateQueries']>) {
-    this.invalidated.push(args[0]);
-    return this.invalidationHeldUntil ?? super.invalidateQueries(...args);
-  }
-}
 
 function newClient(): ObservedQueryClient {
   return new ObservedQueryClient();

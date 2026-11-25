@@ -95,5 +95,5 @@ export {
   getPlaylists,
   removeTracksFromPlaylist,
   renamePlaylist,
-} from '@shared/apiClient/playlists';
-export type { PlaylistPage } from '@shared/apiClient/playlists';
+} from '@shared/apiClient/adapters/playlists';
+export type { PlaylistPage } from '@shared/apiClient/adapters/playlists';

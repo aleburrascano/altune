@@ -59,7 +59,7 @@ function namedValueImportsFrom(source: string, moduleSpecifier: string): string[
 }
 
 function importsApiClientPlaylists(source: string): boolean {
-  return importSpecifiers(source, false).includes('@shared/apiClient/playlists');
+  return importSpecifiers(source, false).includes('@shared/apiClient/adapters/playlists');
 }
 
 function exportedFunctionNames(source: string): string[] {
@@ -77,7 +77,7 @@ describe('sanity: this suite is actually scanning the real slice', () => {
 
 describe('rule 1 — every membership write is a batch, never a singular-track hook', () => {
   const mutationsSource = fs.readFileSync(
-    path.join(SLICE_DIR, 'hooks', 'playlist', 'mutations.ts'),
+    path.join(SLICE_DIR, 'view', 'playlist', 'mutations.ts'),
     'utf8',
   );
   const hookNames = exportedFunctionNames(mutationsSource);
@@ -203,20 +203,20 @@ describe('rule 4 — components never call playlist write functions directly; on
     expect(componentFiles.length).toBeGreaterThan(0);
   });
 
-  it('no component imports a playlist writer from @shared/apiClient/playlists', () => {
+  it('no component imports a playlist writer from @shared/apiClient/adapters/playlists', () => {
     const offenders = componentFiles
       .map((file) => ({
         file: path.basename(file),
         writers: namedValueImportsFrom(
           fs.readFileSync(file, 'utf8'),
-          '@shared/apiClient/playlists',
+          '@shared/apiClient/adapters/playlists',
         ).filter((name) => WRITE_FUNCTIONS.includes(name)),
       }))
       .filter(({ writers }) => writers.length > 0);
     expect(offenders).toEqual([]);
   });
 
-  it('no slice file outside adapters/ value-imports from @shared/apiClient/playlists', () => {
+  it('no slice file outside adapters/ value-imports from @shared/apiClient/adapters/playlists', () => {
     const offenders = listSourceFiles(SLICE_DIR)
       .filter((file) => !file.includes(`${path.sep}adapters${path.sep}`))
       .filter((file) => importsApiClientPlaylists(fs.readFileSync(file, 'utf8')))
@@ -226,7 +226,9 @@ describe('rule 4 — components never call playlist write functions directly; on
 
   it('the apiClient detector flags a value import and allows a type-only import from apiClient/types', () => {
     expect(
-      importsApiClientPlaylists("import { getPlaylists } from '@shared/apiClient/playlists';"),
+      importsApiClientPlaylists(
+        "import { getPlaylists } from '@shared/apiClient/adapters/playlists';",
+      ),
     ).toBe(true);
     expect(
       importsApiClientPlaylists("import type { PlaylistResponse } from '@shared/catalog';"),
@@ -234,9 +236,10 @@ describe('rule 4 — components never call playlist write functions directly; on
   });
 
   it('the writer-import detector fires when a component imports createPlaylist directly', () => {
-    const violating = "import { createPlaylist, getPlaylists } from '@shared/apiClient/playlists';";
+    const violating =
+      "import { createPlaylist, getPlaylists } from '@shared/apiClient/adapters/playlists';";
     expect(
-      namedValueImportsFrom(violating, '@shared/apiClient/playlists').filter((name) =>
+      namedValueImportsFrom(violating, '@shared/apiClient/adapters/playlists').filter((name) =>
         WRITE_FUNCTIONS.includes(name),
       ),
     ).toEqual(['createPlaylist']);
@@ -294,17 +297,17 @@ describe('rule 5 — the barrel is the public surface', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('the deep-import detector fires on @shared/playlists/hooks/playlist/mutations and a relative equivalent, not on the bare barrel specifier', () => {
+  it('the deep-import detector fires on @shared/playlists/view/playlist/mutations and a relative equivalent, not on the bare barrel specifier', () => {
     expect(
       deepImportViolations(
-        "import { useCreatePlaylist } from '@shared/playlists/hooks/playlist/mutations';",
+        "import { useCreatePlaylist } from '@shared/playlists/view/playlist/mutations';",
       ),
-    ).toEqual(['@shared/playlists/hooks/playlist/mutations']);
+    ).toEqual(['@shared/playlists/view/playlist/mutations']);
     expect(
       deepImportViolations(
-        "import { useCreatePlaylist } from '../../../shared/playlists/hooks/playlist/mutations';",
+        "import { useCreatePlaylist } from '../../../shared/playlists/view/playlist/mutations';",
       ),
-    ).toEqual(['../../../shared/playlists/hooks/playlist/mutations']);
+    ).toEqual(['../../../shared/playlists/view/playlist/mutations']);
     expect(deepImportViolations("import { AddToPlaylistSheet } from '@shared/playlists';")).toEqual(
       [],
     );

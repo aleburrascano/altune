@@ -1,17 +1,17 @@
 import React from 'react';
-import { Alert, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 
 import { AddToPlaylistSheet, PlaylistsPortProvider } from '@shared/playlists';
 import { playlistKeys } from '@shared/query';
 import { type PlaylistResponse, asPlaylistId, asTrackId, type TrackId } from '@shared/catalog';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
+import { recordDialogs, type RecordedDialogs } from '@testing/recordDialogs';
 import { signInTestUser } from '@testing/signInTestUser';
 import { apiClientPlaylistsPort } from '@testing/apiClientPorts';
 
 const { __http } = require('@testing/doubles/fetch.js');
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 function playlist(overrides: Partial<PlaylistResponse> = {}): PlaylistResponse {
   return {
@@ -57,18 +57,17 @@ function renderSheet(options: RenderOptions = {}) {
   return { ...utils, onClose, queryClient };
 }
 
-let alertSpy: jest.SpyInstance;
-let warnSpy: jest.SpyInstance;
+let dialogs: RecordedDialogs;
+let logs: RecordedLogs;
 
 beforeEach(async () => {
   await signInTestUser();
-  alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-  warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  dialogs = recordDialogs();
+  logs = recordLogs();
 });
 
 afterEach(() => {
-  alertSpy.mockRestore();
-  warnSpy.mockRestore();
+  dialogs.restore();
 });
 
 describe('AddToPlaylistSheet(): withTrackIds rejecting closes the sheet and never reaches the add endpoint (:57-70)', () => {
@@ -110,7 +109,7 @@ describe('AddToPlaylistSheet(): withTrackIds rejecting closes the sheet and neve
       await Promise.resolve();
     }
 
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[playlists]'), failure);
+    expect(logs.warnings).toContainEqual([expect.stringContaining('[playlists]'), failure]);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
@@ -561,10 +560,10 @@ describe('AddToPlaylistSheet(): failure injection', () => {
     fireEvent.press(screen.getByTestId('add-to-playlist-p1'));
 
     await waitFor(() =>
-      expect(alertSpy).toHaveBeenCalledWith(
+      expect(dialogs.alerts).toContainEqual([
         'Add failed',
         'Could not add the track to the playlist. Please try again.',
-      ),
+      ]),
     );
     expect(screen.queryByText('Added ✓')).toBeNull();
     expect(onClose).not.toHaveBeenCalled();
@@ -781,10 +780,10 @@ describe('AddToPlaylistSheet(): createAndAdd (:92-104)', () => {
     fireEvent.press(screen.getByTestId('create-playlist-confirm'));
 
     await waitFor(() =>
-      expect(alertSpy).toHaveBeenCalledWith(
+      expect(dialogs.alerts).toContainEqual([
         'Error',
         'Could not create the playlist. Please try again.',
-      ),
+      ]),
     );
 
     expect(onClose).not.toHaveBeenCalled();
