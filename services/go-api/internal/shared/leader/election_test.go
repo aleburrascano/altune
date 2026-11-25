@@ -771,3 +771,36 @@ func TestElection_ShutdownDuringVerifyReleasesLockWithoutLostWarning(t *testing.
 		t.Fatalf("HoldsLost = %d, want 0: shutting down is not losing the lease", got)
 	}
 }
+
+func TestPoolLocks_SessionLocksPingsUnlocksAndNamesWhatFailsOnceReleased(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	ctx := context.Background()
+	session, err := leader.PoolLocks(sharedtest.Pool(t)).Acquire(ctx)
+	if err != nil {
+		t.Fatalf("Acquire = %v", err)
+	}
+	const key = int64(7_410_001)
+
+	won, err := session.TryAdvisoryLock(ctx, key)
+	if err != nil || !won {
+		t.Fatalf("TryAdvisoryLock = %v, %v, want true, nil", won, err)
+	}
+	if err := session.Ping(ctx); err != nil {
+		t.Fatalf("Ping = %v, want nil", err)
+	}
+	if err := session.AdvisoryUnlock(ctx, key); err != nil {
+		t.Fatalf("AdvisoryUnlock = %v, want nil", err)
+	}
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	if err := session.Ping(cancelled); err == nil || !strings.Contains(err.Error(), "ping the leader connection") {
+		t.Errorf("Ping on a cancelled context = %v, want an error naming the ping", err)
+	}
+	if err := session.AdvisoryUnlock(cancelled, key); err == nil || !strings.Contains(err.Error(), "advisory unlock") {
+		t.Errorf("AdvisoryUnlock on a cancelled context = %v, want an error naming the unlock", err)
+	}
+	if _, err := session.TryAdvisoryLock(cancelled, key); err == nil || !strings.Contains(err.Error(), "try advisory lock") {
+		t.Errorf("TryAdvisoryLock on a cancelled context = %v, want an error naming the lock", err)
+	}
+	session.Release()
+}
