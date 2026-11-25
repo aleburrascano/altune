@@ -40,7 +40,10 @@ const typedLinting = [
       '@typescript-eslint/no-unsafe-function-type': 'error',
       '@typescript-eslint/no-unsafe-unary-minus': 'error',
       'no-unused-expressions': 'off',
-      '@typescript-eslint/no-unused-expressions': 'error',
+      '@typescript-eslint/no-unused-expressions': [
+        'error',
+        { allowShortCircuit: true, enforceForJSX: true },
+      ],
       '@typescript-eslint/no-useless-default-assignment': 'error',
       '@typescript-eslint/prefer-as-const': 'error',
       '@typescript-eslint/prefer-literal-enum-member': 'error',
