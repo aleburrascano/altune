@@ -4,7 +4,7 @@ import type { Navigator } from '@shared/navigation';
 import type { PlaybackContextValue } from '@shared/playback';
 import { runSignOutCleanups } from '@shared/session';
 
-import { DetailNavigatorProvider, DetailScreen } from '@features/detail';
+import { DetailScreen } from '@features/detail';
 import {
   createRecordingPorts,
   createTestQueryClient,
@@ -56,12 +56,11 @@ function renderScreen(
   );
   return render(
     <Base>
-      <DetailNavigatorProvider navigator={navigator}>
-        <DetailScreen
-          handoff={handoffFor(result, '/discover/detail', searchId)}
-          tabRoot="discover"
-        />
-      </DetailNavigatorProvider>
+      <DetailScreen
+        handoff={handoffFor(result, '/discover/detail', searchId)}
+        tabRoot="discover"
+        navigator={navigator}
+      />
     </Base>,
   );
 }
@@ -144,7 +143,7 @@ describe('DetailScreen on a library artist page', () => {
 });
 
 describe('DetailScreen renders the handoff it is given', () => {
-  it('plays the result and search id of its own navigation after a later tap', async () => {
+  it('plays the result and search id its handoff carries when the preview is pressed', async () => {
     const previewExtras = { preview_url: 'https://p.example/first.mp3' };
     const first = track('First', previewExtras);
     const play = jest.fn().mockResolvedValue(undefined);

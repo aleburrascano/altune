@@ -23,7 +23,7 @@ import { trackExtras } from '@features/detail/core/trackExtras';
 import { isAcquirable, unreleasedAsResult } from '@features/detail/core/unreleasedTrack';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
-import { useResolvedOwnedTrack } from '@features/detail/core/useOwnedTrack';
+import { useResolvedOwnedTrack } from '@features/detail/view/useOwnedTrack';
 import { useTrackSave } from '@features/detail/view/useSaveTrack';
 
 const NO_TRACKS: UnreleasedTrack[] = [];

@@ -12,6 +12,7 @@ import {
 } from '@testing/queryHarness';
 
 import { handoffFor } from '@features/detail/__tests__/screenHandoff';
+import { recordingNavigator } from '@features/detail/__tests__/recordingNavigator';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -147,7 +148,7 @@ function libraryResult(kind: 'album' | 'artist'): DiscoveryResult {
 
 function renderDetail(result: DiscoveryResult): void {
   const handoff = handoffFor(result, '/library/detail', 'search-1');
-  render(<DetailScreen handoff={handoff} tabRoot="library" />, {
+  render(<DetailScreen handoff={handoff} tabRoot="library" navigator={recordingNavigator()} />, {
     wrapper: createPlaybackWrapper(
       createTestQueryClient({ mutations: true }),
       idlePlayback,

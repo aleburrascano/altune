@@ -11,7 +11,7 @@ import {
 } from '@features/detail/core/contentStatus';
 import { fetchTallyingOutcome } from '@features/detail/core/detailHealth';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
-import { useContentFetchRetry } from '@features/detail/core/useContentFetchRetry';
+import { useContentFetchRetry } from '@features/detail/view/useContentFetchRetry';
 
 type UseAlbumTracksParams = {
   provider: string;

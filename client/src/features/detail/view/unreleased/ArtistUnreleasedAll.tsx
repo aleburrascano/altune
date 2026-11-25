@@ -5,7 +5,7 @@ import { SortControl, type SortOption, Text, spacing } from '@shared/ui';
 import { recordUserAction } from '@shared/telemetry';
 import type { UnreleasedTrack } from '@shared/apiClient';
 import type { DiscoveryResult } from '@shared/catalog';
-import type { DetailHandoff } from '@shared/navigation';
+import type { DetailHandoff, Navigator } from '@shared/navigation';
 
 import {
   unreleasedView,
@@ -14,6 +14,7 @@ import {
   type UnreleasedWhere,
 } from '@features/detail/core/unreleasedView';
 import { DetailHandoffProvider } from '@features/detail/view/useDetailHandoff';
+import { DetailNavigatorProvider } from '@features/detail/view/DetailNavigatorProvider';
 import {
   useUnreleasedTracks,
   type UnreleasedTracksState,
@@ -35,7 +36,7 @@ type BodyProps = {
   choice: ViewChoice;
   shown: UnreleasedTrack[];
 };
-type ScreenProps = { handoff: DetailHandoff; where?: string | undefined };
+type ScreenProps = { handoff: DetailHandoff; navigator: Navigator; where?: string | undefined };
 type BodyOwnProps = ArtistProps & { where?: string | undefined };
 
 const INITIAL_ROWS_RENDERED = 12;
@@ -258,11 +259,13 @@ function BodyStates(props: BodyProps): ReactElement {
   return <LoadedBody {...props} />;
 }
 
-export function UnreleasedAllScreen({ handoff, where }: ScreenProps): ReactElement {
+export function UnreleasedAllScreen({ handoff, navigator, where }: ScreenProps): ReactElement {
   return (
-    <DetailHandoffProvider value={handoff}>
-      <UnreleasedAllBody artist={handoff.result} where={where} />
-    </DetailHandoffProvider>
+    <DetailNavigatorProvider navigator={navigator}>
+      <DetailHandoffProvider value={handoff}>
+        <UnreleasedAllBody artist={handoff.result} where={where} />
+      </DetailHandoffProvider>
+    </DetailNavigatorProvider>
   );
 }
 

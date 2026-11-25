@@ -14,7 +14,7 @@ import { resolveEntityQuery } from '@features/detail/core/resolveEntityQuery';
 import { realPhotoUrl } from '@features/detail/core/artistPhoto';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
-import { useContentFetchRetry } from '@features/detail/core/useContentFetchRetry';
+import { useContentFetchRetry } from '@features/detail/view/useContentFetchRetry';
 
 type ReadQueryFields<T> = Pick<
   UseQueryResult<T>,

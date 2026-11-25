@@ -4,6 +4,8 @@ import type { Navigator } from '@shared/navigation';
 
 const DetailNavigatorContext = createContext<Navigator | null>(null);
 
+const MISSING_NAVIGATOR = 'Detail views must be rendered inside a DetailNavigatorProvider';
+
 interface DetailNavigatorProviderProps {
   navigator: Navigator;
   children: ReactNode;
@@ -18,6 +20,8 @@ export function DetailNavigatorProvider({
   );
 }
 
-export function useProvidedNavigator(): Navigator | null {
-  return use(DetailNavigatorContext);
+export function useProvidedNavigator(): Navigator {
+  const navigator = use(DetailNavigatorContext);
+  if (navigator === null) throw new Error(MISSING_NAVIGATOR);
+  return navigator;
 }
