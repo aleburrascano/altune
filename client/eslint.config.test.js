@@ -404,3 +404,21 @@ describe('module rules point at client/src/README.md', () => {
     });
   }
 });
+
+describe('mobile eslint config has no warnings', () => {
+  for (const file of [
+    'src/mobile/index.ts',
+    'src/features/player/view/useMediaSession.ts',
+    'src/shared/apiClient/index.ts',
+    'src/shared/apiClient/__tests__/tracks.test.ts',
+    'scripts/lint-changed-lines.mjs',
+  ]) {
+    it(`sets no rule to warn for ${file}`, async () => {
+      const { rules } = await eslint.calculateConfigForFile(file);
+      const warned = Object.entries(rules)
+        .filter(([, setting]) => [setting].flat()[0] === 1 || [setting].flat()[0] === 'warn')
+        .map(([name]) => name);
+      assert.deepStrictEqual(warned, []);
+    });
+  }
+});
