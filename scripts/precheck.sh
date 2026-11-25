@@ -169,7 +169,7 @@ if touches '\.sh$'; then
   check "no pipefail script pipes into grep -q" . bash scripts/pipefail-grep-q.sh
 fi
 
-[ $lint_only = 1 ] || { need jq "secret scan" && check "secret scan (commits since base)" . bash "$root/scripts/ci/secret-scan.sh" "$base"; }
+[ $lint_only = 1 ] || { need go "secret scan" && need jq "secret scan" && check "secret scan (commits since base)" . bash "$root/scripts/ci/secret-scan.sh" "$base"; }
 
 script_tests=$(grep -E '^scripts/(ci/)?(__tests__/)?[a-z0-9-]+(\.test)?\.(sh|mjs)$' <<<"$changed" | grep -vE '/(precheck|test-home)(\.test)?\.(sh|mjs)$' | sed -E 's#^(scripts/(ci/)?)(__tests__/)?([a-z0-9-]+)(\.test)?\.(sh|mjs)$#\1__tests__/\4.test.sh#' | sort -u)
 if touches '^client/(stryker\.config\.json|jest\.mutate\.config\.js)$'; then
