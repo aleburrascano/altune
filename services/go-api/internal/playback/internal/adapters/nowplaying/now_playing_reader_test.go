@@ -372,6 +372,54 @@ func TestLookup_BreakerRecoversAfterCatalogHeals(t *testing.T) {
 	}
 }
 
+func TestLookup_AnAbsentTrackAsTheRecoveryProbeClosesTheBreaker(t *testing.T) {
+	m := &recordingMetrics{}
+	clock := newTestClock()
+	catalog := &switchableSource{current: blockingSource(nil)}
+	reader := playback.NewNowPlayingReader(catalog, playback.WithNowPlayingMetrics(m),
+		playback.WithNowPlayingLookupTimeout(testLookupTimeout), playback.WithNowPlayingClock(clock.read))
+	user := testUser()
+
+	for i := 0; i < enrichmentFailureThreshold; i++ {
+		_, _ = lookup(context.Background(), reader, user)
+	}
+	if !rejected(reader, m, user) {
+		t.Fatal("precondition: breaker should be open")
+	}
+
+	catalog.use(absentSource())
+	clock.advance(enrichmentOpenDuration + time.Second)
+
+	if _, err := lookup(context.Background(), reader, user); !errors.Is(err, playback.ErrNowPlayingTrackNotFound) {
+		t.Fatalf("probe err = %v, want ErrNowPlayingTrackNotFound", err)
+	}
+	if m.breakerClosed != 1 {
+		t.Fatalf("breakerClosed = %d, want 1: an absent track answers the probe, so the catalog is up", m.breakerClosed)
+	}
+	if rejected(reader, m, user) {
+		t.Fatal("the next lookup was rejected: the breaker did not close")
+	}
+}
+
+func TestLookup_AnAbsentTrackResetsTheConsecutiveFailureCount(t *testing.T) {
+	m := &recordingMetrics{}
+	catalog := &switchableSource{current: failingSource()}
+	reader := playback.NewNowPlayingReader(catalog, playback.WithNowPlayingMetrics(m))
+	user := testUser()
+
+	for i := 0; i < enrichmentFailureThreshold-1; i++ {
+		_, _ = lookup(context.Background(), reader, user)
+	}
+	catalog.use(absentSource())
+	_, _ = lookup(context.Background(), reader, user)
+	catalog.use(failingSource())
+	_, _ = lookup(context.Background(), reader, user)
+
+	if m.breakerOpened != 0 {
+		t.Fatalf("breakerOpened = %d, want 0: the absent track in between ended the failure streak", m.breakerOpened)
+	}
+}
+
 func TestLookup_BreakerStaysOpenForItsWholeWindow(t *testing.T) {
 	m := &recordingMetrics{}
 	clock := newTestClock()
