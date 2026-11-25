@@ -535,10 +535,19 @@ commit_as_base() {
 
 add_go_fixture() {
     mkdir -p "$WORK/bin" "$WORK/home"
-    printf '#!/usr/bin/env bash\nprintf "go %%s\\n" "$*" >>"%s/tools.log"\nexec "%s" "$@"\n' "$WORK" "$REAL_GO" >"$WORK/bin/go"
+    cat >"$WORK/bin/go" <<STUB
+#!/usr/bin/env bash
+printf "go %s\\n" "\$*" >>"$WORK/tools.log"
+case "\$*" in
+"run golang.org/x/tools/cmd/deadcode@"*) printf "%s" "\${DEADCODE_STUB_OUT:-}"; exit "\${DEADCODE_STUB_RC:-0}" ;;
+esac
+exec "$REAL_GO" "\$@"
+STUB
     printf '#!/usr/bin/env bash\nprintf "golangci-lint %%s\\n" "$*" >>"%s/tools.log"\nprintf "golangci-lint-cache %%s %%s\\n" "$1" "$GOLANGCI_LINT_CACHE" >>"%s/tools.log"\n' "$WORK" "$WORK" >"$WORK/bin/golangci-lint"
     printf '#!/usr/bin/env bash\nprintf "govulncheck %%s\\n" "$*" >>"%s/tools.log"\n' "$WORK" >"$WORK/bin/govulncheck"
     chmod +x "$WORK/bin/go" "$WORK/bin/golangci-lint" "$WORK/bin/govulncheck"
+    mkdir -p "$WORK/repo/scripts/ci"
+    cp "$HERE/ci/go-deadcode.sh" "$WORK/repo/scripts/ci/"
     (
         cd "$WORK/repo" || exit 1
         api=services/go-api
@@ -586,6 +595,38 @@ edit_go_file internal/discovery/adapters/x/x.go
 run_with_tools --lint
 forbid_log "govulncheck"
 expect_log "vet altune/go-api/internal/discovery/adapters/x"
+
+CASE="a go-api change runs deadcode, which reports nothing"
+new_repo
+add_go_fixture
+edit_go_file internal/discovery/adapters/x/x.go
+run_with_tools
+expect_log "go run golang.org/x/tools/cmd/deadcode@v0.53.0 -test ./..."
+grep -q "FAIL  go-api deadcode" "$WORK/out.log" && fail "deadcode with no findings must pass"
+
+CASE="a function deadcode finds fails the check and names it"
+new_repo
+add_go_fixture
+edit_go_file internal/discovery/adapters/x/x.go
+DEADCODE_STUB_OUT='x/x.go:5:6: unreachable func: Orphan' run_with_tools
+grep -q "FAIL  go-api deadcode" "$WORK/out.log" || fail "a deadcode finding must fail the check"
+grep -qF "unreachable func: Orphan" "$WORK/out.log" || fail "the failure must show the finding"
+[ "$RC" != 0 ] || fail "a deadcode finding must make precheck exit non-zero"
+
+CASE="a deadcode run that fails outright is not mistaken for a clean tree"
+new_repo
+add_go_fixture
+edit_go_file internal/discovery/adapters/x/x.go
+DEADCODE_STUB_RC=1 run_with_tools
+grep -q "FAIL  go-api deadcode" "$WORK/out.log" || fail "a tool failure must fail the check"
+grep -qF "so nothing was checked" "$WORK/out.log" || fail "the failure must say nothing was checked"
+
+CASE="--lint (the pre-commit hook) leaves deadcode to CI"
+new_repo
+add_go_fixture
+edit_go_file internal/discovery/adapters/x/x.go
+run_with_tools --lint
+forbid_log "deadcode"
 
 CASE="without INTEGRATION=1 a go-api change skips the mutation step and names the job that runs it"
 new_repo

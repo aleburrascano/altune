@@ -52,13 +52,11 @@ type mutableSignalStore struct {
 	mu      sync.Mutex
 	signals []ports.BehavioralSignal
 	err     error
-	calls   int
 }
 
 func (f *mutableSignalStore) SatisfactionSignals(context.Context, time.Time) ([]ports.BehavioralSignal, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.calls++
 	return f.signals, f.err
 }
 
@@ -66,12 +64,6 @@ func (f *mutableSignalStore) set(signals []ports.BehavioralSignal, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.signals, f.err = signals, err
-}
-
-func (f *mutableSignalStore) callCount() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.calls
 }
 
 func TestRefreshBehavioralScores_NoConsumerIsNoop(t *testing.T) {
