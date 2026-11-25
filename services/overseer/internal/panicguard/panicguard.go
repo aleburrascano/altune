@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"slices"
 	"sync"
+	"time"
 )
 
 type PanicError struct {
@@ -78,4 +79,37 @@ func (g *Group) Wait() error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return errors.Join(g.errs...)
+}
+
+type Once struct {
+	once  sync.Once
+	group Group
+}
+
+func (o *Once) Go(f func()) {
+	o.once.Do(func() { o.group.Go(f) })
+}
+
+func (o *Once) Contain(ctx context.Context, msg string, f func(), attrs ...any) {
+	o.Go(func() { Contain(ctx, msg, f, attrs...) })
+}
+
+func (o *Once) Wait() error {
+	return o.group.Wait()
+}
+
+func WaitWithin(budget time.Duration, wait func()) bool {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		wait()
+	}()
+	timer := time.NewTimer(budget)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+		return false
+	}
 }

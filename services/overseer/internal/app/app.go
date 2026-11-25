@@ -159,22 +159,22 @@ func (a *App) shutdownBudget() time.Duration {
 	return defaultShutdownBudget
 }
 
-func (a *App) awaitTickLoop(ticked <-chan struct{}) {
+func (a *App) awaitTickLoop(ticks *panicguard.Group) {
 	budget := a.shutdownBudget()
-	select {
-	case <-ticked:
-	case <-time.After(budget):
+	stopped := panicguard.WaitWithin(budget, func() {
+		if err := ticks.Wait(); err != nil {
+			slog.Error("overseer.collect.tick_loop_panicked", "error", err)
+		}
+	})
+	if !stopped {
 		slog.Warn("overseer.shutdown.tick_loop_did_not_stop", "budget", budget)
 	}
 }
 
-func (a *App) startTickLoop(ctx context.Context) <-chan struct{} {
-	ticked := make(chan struct{})
-	go func() {
-		defer close(ticked)
-		a.tickLoop(ctx)
-	}()
-	return ticked
+func (a *App) startTickLoop(ctx context.Context) *panicguard.Group {
+	var ticks panicguard.Group
+	ticks.Go(func() { a.tickLoop(ctx) })
+	return &ticks
 }
 
 func wireSeries(registry *core.Registry, series core.Series) {

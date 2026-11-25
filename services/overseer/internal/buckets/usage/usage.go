@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 )
 
@@ -28,7 +27,7 @@ type source interface {
 type Bucket struct {
 	roll   *aggregator
 	src    source
-	start  sync.Once
+	start  panicguard.Once
 	series core.Series
 	window *activityWindow
 }
@@ -63,7 +62,7 @@ func (b *Bucket) KeySeries() string {
 }
 
 func (b *Bucket) Start(ctx context.Context) {
-	b.start.Do(func() { go b.runSource(ctx) })
+	b.start.Contain(ctx, "usage: source pump panicked", func() { _ = b.src.Run(ctx) })
 }
 
 func (b *Bucket) Collect(context.Context) ([]core.Signal, error) {
@@ -72,10 +71,6 @@ func (b *Bucket) Collect(context.Context) ([]core.Signal, error) {
 		return nil, errSourceDown
 	}
 	return signals, nil
-}
-
-func (b *Bucket) runSource(ctx context.Context) {
-	panicguard.Contain(ctx, "usage: source pump panicked", func() { _ = b.src.Run(ctx) })
 }
 
 func (b *Bucket) drain() []core.Signal {
