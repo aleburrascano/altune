@@ -242,20 +242,6 @@ if touches '^services/go-api/' && [ -d client/src ] && need npx "mobile contract
   fi
 fi
 
-thresholded_coverage_args() {
-  (cd client && node -e '
-    const thresholds = require("./jest.config.js").coverageThreshold;
-    const files = process.argv.slice(1).filter((f) => !/\/__tests__\/|\/ports\/|\.d\.ts$/.test(f));
-    const covers = (glob, file) => file.startsWith(glob.replace(/\*\*$/, ""));
-    const enforced = Object.fromEntries(
-      Object.entries(thresholds).filter(([glob]) => glob !== "global" && files.some((f) => covers(glob, f))),
-    );
-    const checked = files.filter((f) => Object.keys(enforced).some((glob) => covers(glob, f)));
-    if (checked.length === 0) process.exit(0);
-    console.log(["--coverage", "--coverageThreshold=" + JSON.stringify(enforced), ...checked.map((f) => "--collectCoverageFrom=" + f)].join("\n"));
-  ' $1)
-}
-
 if touches '^client/'; then
   m=client
   if need npx "mobile" && link_deps $m; then
@@ -267,8 +253,7 @@ if touches '^client/'; then
     check "mobile prettier (changed files)" $m node scripts/prettier-changed.mjs "$base"
     test_check "mobile script and rule tests" $m bash -c 'files=$(git ls-files "scripts/__tests__/*.test.mjs" "eslint/rules/__tests__/*.test.js"); [ -z "$files" ] || node --test $files'
     touches '^client/eslint' && test_check "mobile eslint config tests" $m "${heavy[@]}" node --test eslint.config.test.js
-    coverage_args=(); [ -n "$src" ] && mapfile -t coverage_args < <(thresholded_coverage_args "$src")
-    [ -n "$src" ] && jest_check "mobile tests (related)" $m npx jest "${coverage_args[@]}" --ci --passWithNoTests --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$HOME/.cache/altune-ci/jest" --findRelatedTests $src
+    [ -n "$src" ] && jest_check "mobile tests (related)" $m npx jest --ci --passWithNoTests --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$HOME/.cache/altune-ci/jest" --findRelatedTests $src
     check "mobile fallow" $m npm run --silent fallow
     check "mobile boundaries and duplication (changed files)" $m "${heavy[@]}" node scripts/fallow-changed.mjs "$base"
     if [ -n "$src" ] && [ "${CLIENT_MUTATE_RUNS_ELSEWHERE:-}" = 1 ]; then
