@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -60,14 +61,17 @@ func (r redisJSON) getNegative(ctx context.Context, key string) (bool, error) {
 	if errors.Is(err, goredis.Nil) {
 		return false, nil
 	}
-	return false, err
+	if err != nil {
+		return false, fmt.Errorf("read negative marker %s: %w", key, err)
+	}
+	return false, nil
 }
 
 func (r redisJSON) setJSON(ctx context.Context, key string, v any, ttl time.Duration) error {
 	blob, err := json.Marshal(v)
 	if err != nil {
 		r.signal.failure(ctx, kindOf(key), opEncode, err)
-		return err
+		return fmt.Errorf("encode cache value %s: %w", key, err)
 	}
 	return r.setRaw(ctx, key, blob, ttl)
 }
@@ -77,5 +81,8 @@ func (r redisJSON) setRaw(ctx context.Context, key string, payload any, ttl time
 	if err != nil {
 		r.signal.failure(ctx, kindOf(key), opSet, err)
 	}
-	return err
+	if err != nil {
+		return fmt.Errorf("write cache value %s: %w", key, err)
+	}
+	return nil
 }

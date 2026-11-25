@@ -216,7 +216,7 @@ func (a *DiscogsAdapter) searchArtists(ctx context.Context, name string) ([]disc
 
 	var resp discogsSearchResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode discogs artist search: %w", err)
 	}
 	return resp.Results, nil
 }
@@ -231,7 +231,7 @@ func (a *DiscogsAdapter) fetchArtistDetail(ctx context.Context, artistID int) (*
 
 	var detail discogsArtistDetail
 	if err := json.Unmarshal(body, &detail); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode discogs artist %d: %w", artistID, err)
 	}
 	return &detail, nil
 }
@@ -247,7 +247,7 @@ func (a *DiscogsAdapter) fetchArtistReleases(ctx context.Context, artistID, perP
 
 	var resp discogsReleasesResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode the discogs releases of artist %d: %w", artistID, err)
 	}
 	return resp.Releases, nil
 }

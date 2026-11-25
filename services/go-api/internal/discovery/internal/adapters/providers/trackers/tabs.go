@@ -2,6 +2,7 @@ package trackers
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"unicode"
 )
@@ -27,7 +28,7 @@ type tabsResponse struct {
 func pickTabs(body []byte) (sheetTabs, error) {
 	var resp tabsResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return sheetTabs{}, err
+		return sheetTabs{}, fmt.Errorf("decode the tracker tabs: %w", err)
 	}
 	titles := make([]string, 0, len(resp.Sheets))
 	for _, sheet := range resp.Sheets {

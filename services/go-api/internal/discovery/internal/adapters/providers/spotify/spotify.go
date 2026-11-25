@@ -76,7 +76,7 @@ func (a *SpotifyAdapter) doSearch(ctx context.Context, sess *spotifySession, que
 		},
 	})
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("encode the spotify search request: %w", err)
 	}
 
 	var body spotifySearchResponse

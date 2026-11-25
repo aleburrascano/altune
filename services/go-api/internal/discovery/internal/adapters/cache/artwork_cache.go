@@ -72,7 +72,7 @@ func (c *RedisArtworkCache) Set(ctx context.Context, kind domain.ResultKind, tit
 	blob, err := json.Marshal(entry)
 	if err != nil {
 		c.signal.failure(ctx, kindOf(key), opEncode, err)
-		return err
+		return fmt.Errorf("encode artwork cache entry %s: %w", key, err)
 	}
 	ttl := artworkTTL(kind, url, confidence)
 
@@ -80,9 +80,13 @@ func (c *RedisArtworkCache) Set(ctx context.Context, kind domain.ResultKind, tit
 		err = c.client.Watch(ctx, func(tx *goredis.Tx) error {
 			return c.setIfNotDowngrade(ctx, tx, key, blob, int(confidence), ttl)
 		}, key)
-		if !errors.Is(err, goredis.TxFailedErr) {
-			return err
+		if errors.Is(err, goredis.TxFailedErr) {
+			continue
 		}
+		if err != nil {
+			return fmt.Errorf("watch artwork cache entry %s: %w", key, err)
+		}
+		return nil
 	}
 	return fmt.Errorf("artwork set: key kept changing across %d attempts: %w", artworkSetAttempts, goredis.TxFailedErr)
 }
@@ -90,7 +94,7 @@ func (c *RedisArtworkCache) Set(ctx context.Context, kind domain.ResultKind, tit
 func (c *RedisArtworkCache) setIfNotDowngrade(ctx context.Context, tx *goredis.Tx, key string, blob []byte, confidence int, ttl time.Duration) error {
 	raw, err := tx.Get(ctx, key).Result()
 	if err != nil && !errors.Is(err, goredis.Nil) {
-		return err
+		return fmt.Errorf("read artwork cache entry %s: %w", key, err)
 	}
 	var existing artworkEntry
 	if err == nil && json.Unmarshal([]byte(raw), &existing) == nil && existing.URL != "" && confidence < existing.Confidence {
@@ -102,7 +106,10 @@ func (c *RedisArtworkCache) setIfNotDowngrade(ctx context.Context, tx *goredis.T
 	if err != nil && !errors.Is(err, goredis.TxFailedErr) {
 		c.signal.failure(ctx, kindOf(key), opSet, err)
 	}
-	return err
+	if err != nil {
+		return fmt.Errorf("write artwork cache entry %s: %w", key, err)
+	}
+	return nil
 }
 
 func (c *RedisArtworkCache) read(ctx context.Context, key string) (artworkEntry, bool) {

@@ -129,7 +129,7 @@ func (a *SpotifyAdapter) doPathfinderContent(ctx context.Context, sess *spotifyS
 		Extensions:    spotifyExtensions{PersistedQuery: spotifyPersistedQuery{Version: 1, Sha256Hash: hash}},
 	})
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("encode the pathfinder %s request: %w", operationName, err)
 	}
 	status, raw, err := providerhttp.PostBytesCappedOK(ctx, a.client, spotifyPathfinderURL, bytes.NewReader(payload), providerhttp.BodyCap, spotifyPathfinderHeaders(sess)...)
 	if err != nil {

@@ -94,7 +94,7 @@ func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind 
 	case domain.ResultKindTrack:
 		var body mbRecordingResponse
 		if err := json.Unmarshal(rawBody, &body); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("decode musicbrainz recording search: %w", err)
 		}
 		for _, rec := range body.Recordings {
 			results = append(results, mapMBRecording(rec))
@@ -102,7 +102,7 @@ func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind 
 	case domain.ResultKindArtist:
 		var body mbArtistResponse
 		if err := json.Unmarshal(rawBody, &body); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("decode musicbrainz artist search: %w", err)
 		}
 		for _, art := range body.Artists {
 			results = append(results, mapMBArtist(art))
@@ -110,7 +110,7 @@ func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind 
 	case domain.ResultKindAlbum:
 		var body mbReleaseGroupResponse
 		if err := json.Unmarshal(rawBody, &body); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("decode musicbrainz release group search: %w", err)
 		}
 		for _, rg := range body.ReleaseGroups {
 			results = append(results, mapMBReleaseGroup(rg))

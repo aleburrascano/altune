@@ -33,7 +33,10 @@ func (s *RedisVocabularyStore) BulkAdd(ctx context.Context, entries []domain.Voc
 		return nil
 	}
 	_, err := pipe.Exec(ctx)
-	return err
+	if err != nil {
+		return fmt.Errorf("write vocabulary entries: %w", err)
+	}
+	return nil
 }
 
 func (s *RedisVocabularyStore) indexEntry(
@@ -47,7 +50,10 @@ func (s *RedisVocabularyStore) indexEntry(
 	pipe := s.client.Pipeline()
 	addEntryToPipeline(pipe, ctx, norm, entry, s.metaphone, true)
 	_, err := pipe.Exec(ctx)
-	return err
+	if err != nil {
+		return fmt.Errorf("index one vocabulary entry: %w", err)
+	}
+	return nil
 }
 
 func addEntryToPipeline(
@@ -97,9 +103,13 @@ func (s *RedisVocabularyStore) Trim(ctx context.Context, maxEntries int) error {
 		err := s.client.Watch(ctx, func(tx *goredis.Tx) error {
 			return s.trimTx(ctx, tx, maxEntries)
 		}, vocabTermsKey)
-		if !errors.Is(err, goredis.TxFailedErr) {
-			return err
+		if errors.Is(err, goredis.TxFailedErr) {
+			continue
 		}
+		if err != nil {
+			return fmt.Errorf("trim the vocabulary: %w", err)
+		}
+		return nil
 	}
 	return fmt.Errorf("vocab trim: terms kept changing across %d attempts: %w", vocabTrimAttempts, goredis.TxFailedErr)
 }
@@ -128,7 +138,7 @@ func (s *RedisVocabularyStore) trimTx(ctx context.Context, tx *goredis.Tx, maxEn
 		return nil
 	})
 	if errors.Is(err, goredis.TxFailedErr) {
-		return err
+		return fmt.Errorf("trim the vocabulary in one transaction: %w", err)
 	}
 	if err != nil {
 		return fmt.Errorf("vocab trim: evict: %w", err)

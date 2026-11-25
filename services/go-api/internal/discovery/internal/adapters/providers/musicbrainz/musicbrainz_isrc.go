@@ -36,7 +36,7 @@ func (a *MusicBrainzAdapter) RecordingsByISRC(ctx context.Context, isrc string) 
 func parseISRCRecordings(rawBody []byte) ([]ports.ISRCRecording, error) {
 	var body mbRecordingResponse
 	if err := json.Unmarshal(rawBody, &body); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode musicbrainz isrc recordings: %w", err)
 	}
 	out := make([]ports.ISRCRecording, 0, len(body.Recordings))
 	for _, rec := range body.Recordings {

@@ -109,7 +109,10 @@ func (a *DeezerAdapter) getJSON(ctx context.Context, u string, dst any) error {
 	if err := json.Unmarshal(raw, &envelope); err == nil && envelope.Error != nil {
 		return envelope.Error
 	}
-	return json.Unmarshal(raw, dst)
+	if err := json.Unmarshal(raw, dst); err != nil {
+		return fmt.Errorf("decode deezer response: %w", err)
+	}
+	return nil
 }
 
 func dedupeDeezerGenres(genres []struct {

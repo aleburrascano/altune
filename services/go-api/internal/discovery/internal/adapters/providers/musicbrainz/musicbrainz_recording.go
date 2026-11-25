@@ -37,7 +37,7 @@ func (a *MusicBrainzAdapter) RecordingByMBID(ctx context.Context, mbid string) (
 func parseRecordingFacts(rawBody []byte) (ports.MBRecording, bool, error) {
 	var rec mbRecording
 	if err := json.Unmarshal(rawBody, &rec); err != nil {
-		return ports.MBRecording{}, false, err
+		return ports.MBRecording{}, false, fmt.Errorf("decode musicbrainz recording: %w", err)
 	}
 	if rec.ID == "" {
 		return ports.MBRecording{}, false, nil
