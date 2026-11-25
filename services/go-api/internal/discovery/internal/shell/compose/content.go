@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/discovery/service/content"
 	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/discovery/service/related"
+	"altune/go-api/internal/shared/runloop"
 )
 
 func newAlbumService(t *providerTable, breaker *providercall.CircuitBreaker) *content.GetAlbumTracksService {
@@ -21,10 +22,10 @@ func newRelatedService(t *providerTable, breaker *providercall.CircuitBreaker) *
 	return related.NewGetRelatedTracksService(t.relatedProviders(), related.WithRelatedCircuitBreaker(breaker))
 }
 
-func newArtistService(t *providerTable, s handles.Stores, breaker *providercall.CircuitBreaker) *content.GetArtistContentService {
+func newArtistService(t *providerTable, s handles.Stores, breaker *providercall.CircuitBreaker, bg *runloop.Tracker) *content.GetArtistContentService {
 	return content.NewGetArtistContentService(t.artistProviders(),
 		content.WithContentCircuitBreaker(breaker),
-		content.WithContentEventStore(s.Events),
+		content.WithContentEventStore(s.Events, bg),
 		content.WithMBAnchor(t.named(rowMusicBrainz).artistAnchor),
 		content.WithContentIdentityStore(s.Identities),
 	)

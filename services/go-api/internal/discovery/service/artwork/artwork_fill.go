@@ -76,9 +76,7 @@ func (a *ArtworkFiller) resolveLater(ctx context.Context, bg *runloop.Tracker, f
 		return
 	}
 	results := slices.Clone(filled)
-	bg.Launch(ctx, "artwork_fill", func(bgCtx context.Context) {
-		bgCtx, cancel := context.WithTimeout(bgCtx, artworkFillTimeout)
-		defer cancel()
+	bg.LaunchWithin(ctx, "artwork_fill", artworkFillTimeout, func(bgCtx context.Context) {
 		a.resolveJobs(bgCtx, results, live, jobs)
 	})
 }

@@ -50,7 +50,7 @@ func (t *SearchTelemetry) emit(parentCtx context.Context, run searchRun, page fi
 		SearchId:   run.searchId,
 		Payload:    payload,
 	}
-	t.bg.Launch(parentCtx, "telemetry.emit", func(ctx context.Context) { t.append(ctx, event) })
+	t.bg.LaunchWithin(parentCtx, "telemetry.emit", emitTimeout, func(ctx context.Context) { t.append(ctx, event) })
 }
 
 func searchPerformedPayload(shown []domain.SearchResult, shownSigs []string, explored bool, explorationRate float64) map[string]any {
@@ -72,10 +72,8 @@ func searchPerformedPayload(shown []domain.SearchResult, shownSigs []string, exp
 }
 
 func (t *SearchTelemetry) append(ctx context.Context, event domain.InteractionEvent) {
-	emitCtx, cancel := context.WithTimeout(ctx, emitTimeout)
-	defer cancel()
-	if err := t.eventStore.Append(emitCtx, event); err != nil {
-		slog.WarnContext(emitCtx, "search.v2.telemetry_emit_failed",
+	if err := t.eventStore.Append(ctx, event); err != nil {
+		slog.WarnContext(ctx, "search.v2.telemetry_emit_failed",
 			"search_id", event.SearchId,
 			"user_id", event.UserId.String(),
 			"error", err)

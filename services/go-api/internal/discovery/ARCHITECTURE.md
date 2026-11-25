@@ -226,12 +226,14 @@ collaborators above — favorites lift, related aggregation, pagination, the
 exploration coin-flip, then (first page only) history persistence, telemetry
 emit and vocabulary ingest.
 
-Background work (telemetry, vocabulary ingest, artwork resolution, the
-behavioral-score refresh loop) runs through one `backgroundRunner`
-(`background.go`): `launch` detaches from request cancellation, tracks on a
-`WaitGroup` (`WaitForBackground` drains it for shutdown/tests), and recovers+logs
-panics so async work can't crash the process. Each background-emitting
-collaborator depends on this one primitive rather than on `Service`.
+Detached work (search and discography telemetry, vocabulary ingest, artwork
+resolution, track-number fills) runs on one `runloop.Tracker` that `internal/app`
+builds and passes in: `search.NewService`, `NewOwnershipEnrichmentService` and
+`WithContentEventStore` take it as a required parameter, and `handles.Deps.Tracker`
+carries it through the composed facade. `LaunchWithin` detaches each job with its
+own budget, guards it against panics, and drops it once the tracker is at its cap
+or draining. Shutdown drains the tracker once, before the datastores close. Tests
+build one with `discoverytest.NewTracker(t)` and flush with `bg.Wait()`.
 
 ### 4.1 Merge (entity resolution)
 

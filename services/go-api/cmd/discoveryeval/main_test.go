@@ -3,6 +3,7 @@ package main
 import (
 	"altune/go-api/internal/shared/config"
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -77,6 +78,19 @@ func TestClampSinceDays_WithinWindowIsUntouchedAndSilent(t *testing.T) {
 	}
 	if notice.Len() != 0 {
 		t.Errorf("a within-window value must not print a notice, got:\n%s", notice.String())
+	}
+}
+
+func TestEvalSearchService_RefusesAMissingLifecycleContext(t *testing.T) {
+	var noLifecycle context.Context
+
+	svc, flush, err := evalSearchService(noLifecycle, &config.Config{}, nil, nil)
+
+	if err == nil || !strings.Contains(err.Error(), "Lifecycle") {
+		t.Errorf("evalSearchService = %v, %v, want an error naming Lifecycle", svc, err)
+	}
+	if svc != nil || flush != nil {
+		t.Errorf("evalSearchService returned a service or flush beside its error: %v, %p", svc, flush)
 	}
 }
 

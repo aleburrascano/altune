@@ -13,7 +13,7 @@ func (a *App) shutdownComponents() shutdown.Components {
 		Scheduler:       shutdown.Stop(a.scheduler),
 		Background:      func(context.Context) { a.jobs.Background().Wait() },
 		LeaderElection:  shutdown.Stop(a.jobs.Election()),
-		DiscoverySearch: shutdown.Wait(a.searchSvc),
+		DiscoverySearch: func(ctx context.Context) { a.background.Drain(ctx) },
 	}
 }
 

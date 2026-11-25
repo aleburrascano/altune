@@ -2,6 +2,7 @@ package smokeeval_test
 
 import (
 	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/discovery/discoverytest"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
@@ -100,8 +101,9 @@ func (stubSearchProvider) SupportedKinds() map[discovery.ResultKind]bool {
 
 func runSmokeEvalRecording(t *testing.T, user shared.UserId) int {
 	t.Helper()
+	bg := discoverytest.NewTracker(t)
 	store := &recordingEventStore{}
-	svc := discovery.NewSearchService(
+	svc := discovery.NewSearchService(bg,
 		[]discovery.SearchProvider{stubSearchProvider{}},
 		discovery.NewCircuitBreaker(),
 		discovery.WithEventStore(store),
@@ -109,7 +111,7 @@ func runSmokeEvalRecording(t *testing.T, user shared.UserId) int {
 	if _, err := discovery.RunSmokeEval(context.Background(), svc, user); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	svc.WaitForBackground()
+	bg.Wait()
 	return store.count()
 }
 

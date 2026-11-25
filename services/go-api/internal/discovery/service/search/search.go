@@ -169,12 +169,11 @@ func (s *Service) CircuitBreaker() *providercall.CircuitBreaker {
 	return s.circuitBreaker
 }
 
-func NewService(providers []ports.SearchProvider, circuitBreaker *providercall.CircuitBreaker, opts ...Option) *Service {
+func NewService(bg *runloop.Tracker, providers []ports.SearchProvider, circuitBreaker *providercall.CircuitBreaker, opts ...Option) *Service {
 	var cfg serviceConfig
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	bg := &runloop.Tracker{}
 	s := assembleService(providers, circuitBreaker, cfg, bg)
 	if cfg.vocabStore != nil {
 		s.correctionSvc = vocabulary.NewCorrectionService(cfg.vocabStore)
@@ -472,10 +471,6 @@ func (s *Service) InspectSearchWithStatuses(
 		ranked = ranked[:query.Limit]
 	}
 	return ranked, statuses
-}
-
-func (s *Service) WaitForBackground() {
-	s.bg.Wait()
 }
 
 func pageOf(ranked []domain.SearchResult, offset, limit int) []domain.SearchResult {

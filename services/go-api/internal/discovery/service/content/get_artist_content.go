@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/discovery/service/providercall"
 	"altune/go-api/internal/shared/fanout"
 	"altune/go-api/internal/shared/redact"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"errors"
 	"log/slog"
@@ -47,10 +48,10 @@ func WithMBAnchor(anchor ports.MBDiscographyAnchor) ArtistContentOption {
 	return func(s *GetArtistContentService) { s.mbAnchor = anchor }
 }
 
-func WithContentEventStore(eventStore ports.EventStore) ArtistContentOption {
+func WithContentEventStore(eventStore ports.EventStore, bg *runloop.Tracker) ArtistContentOption {
 	return func(s *GetArtistContentService) {
 		if eventStore != nil {
-			s.discographyTelemetry = newDiscographyTelemetry(eventStore)
+			s.discographyTelemetry = newDiscographyTelemetry(eventStore, bg)
 		}
 	}
 }

@@ -2,7 +2,10 @@ package content_test
 
 import (
 	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/discovery/discoverytest"
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -55,12 +58,13 @@ func albumsFrom(albums map[discovery.ProviderName][]discovery.SearchResult) map[
 
 func observeDiscography(t *testing.T, albums map[discovery.ProviderName][]discovery.SearchResult) discovery.InteractionEvent {
 	t.Helper()
+	bg := discoverytest.NewTracker(t)
 	known := map[discovery.ProviderName]string{}
 	for name := range albums {
 		known[name] = name.String() + "-che"
 	}
 	store := newRecordingEventStore()
-	svc := discovery.NewGetArtistContentService(albumsFrom(albums), discovery.WithContentEventStore(store))
+	svc := discovery.NewGetArtistContentService(albumsFrom(albums), discovery.WithContentEventStore(store, bg))
 	if _, err := svc.GetAlbums(context.Background(), discovery.ProviderSpotify, "abc123", known, 50); err != nil {
 		t.Fatalf("GetAlbums: %v", err)
 	}
@@ -134,6 +138,33 @@ func TestDiscographyEmit_ReleasesFromTheIdentityFanOutAreNeverSuspects(t *testin
 	assertPayloadInt(t, ev.Payload, "single_provider_no_id", 0)
 }
 
+func discographyEmitLogs(t *testing.T, appendErr error) string {
+	t.Helper()
+	logs := discoverytest.CaptureLogs(t)
+	bg := discoverytest.NewTracker(t)
+	store := &discoverytest.FakeEventStore{Err: appendErr}
+	albums := map[discovery.ProviderName][]discovery.SearchResult{
+		discovery.ProviderSpotify: {catalogAlbum(discovery.ProviderSpotify, "sp-a", "Fully Loaded")},
+	}
+	svc := discovery.NewGetArtistContentService(albumsFrom(albums), discovery.WithContentEventStore(store, bg))
+	if _, err := svc.GetAlbums(context.Background(), discovery.ProviderSpotify, "abc123", map[discovery.ProviderName]string{discovery.ProviderSpotify: "sp-che"}, 50); err != nil {
+		t.Fatalf("GetAlbums: %v", err)
+	}
+	bg.Wait()
+	return logs.String()
+}
+
+func TestDiscographyEmit_AFailedAppendIsLoggedAndASuccessfulOneIsNot(t *testing.T) {
+	const failed = `"msg":"discography.telemetry.emit_failed"`
+
+	if got := discographyEmitLogs(t, errors.New("store down")); !strings.Contains(got, failed) {
+		t.Errorf("logs = %s, want an emit_failed warning", got)
+	}
+	if got := discographyEmitLogs(t, nil); strings.Contains(got, failed) {
+		t.Errorf("logs = %s, want no emit_failed warning", got)
+	}
+}
+
 type panickingEventStore struct{ asked chan struct{} }
 
 func (s panickingEventStore) Append(context.Context, discovery.InteractionEvent) error {
@@ -142,8 +173,9 @@ func (s panickingEventStore) Append(context.Context, discovery.InteractionEvent)
 }
 
 func TestDiscographyEmit_BestEffortContainsPanic(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
 	store := panickingEventStore{asked: make(chan struct{})}
-	svc := identityFanOut(func(discovery.ProviderName) bool { return false }, discovery.WithContentEventStore(store))
+	svc := identityFanOut(func(discovery.ProviderName) bool { return false }, discovery.WithContentEventStore(store, bg))
 
 	resp, err := svc.GetAlbums(context.Background(), discovery.ProviderDeezer, "id-deezer", nil, 50)
 	if err != nil {

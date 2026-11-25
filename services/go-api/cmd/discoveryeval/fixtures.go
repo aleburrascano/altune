@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/egress"
 	"altune/go-api/internal/shared/httptrace"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -82,14 +83,14 @@ func recordCorpus(
 	progress func(done, total int),
 ) (discovery.HarnessReport, error) {
 	rec := httptrace.NewRecorder(egress.NewLiveTransport())
-	svc, err := rankingOnlySearchService(ctx, cfg, pool, rec)
+	svc, flush, err := rankingOnlySearchService(ctx, cfg, pool, rec)
 	if err != nil {
 		return nil, err
 	}
 	searcher := searchAdapter{svc: svc}
 
 	report := discovery.RunLibraryEvalMode(ctx, ents, searcher, concurrency, topK, mode, progress)
-	svc.WaitForBackground()
+	flush()
 
 	exchanges := dedupExchanges(rec.Exchanges())
 	if err := saveExchanges(dir, "corpus", exchanges); err != nil {
@@ -109,14 +110,14 @@ func recordArtistCorpus(
 	progress func(done, total int),
 ) (discovery.HarnessReport, error) {
 	rec := httptrace.NewRecorder(egress.NewLiveTransport())
-	svc, err := rankingOnlySearchService(ctx, cfg, pool, rec)
+	svc, flush, err := rankingOnlySearchService(ctx, cfg, pool, rec)
 	if err != nil {
 		return nil, err
 	}
 	searcher := searchAdapter{svc: svc}
 
 	report := discovery.RunArtistIntentEval(ctx, artists, searcher, concurrency, topK, corpus, progress)
-	svc.WaitForBackground()
+	flush()
 
 	exchanges := dedupExchanges(rec.Exchanges())
 	if err := saveExchanges(dir, "corpus", exchanges); err != nil {
@@ -130,17 +131,27 @@ func buildReplaySearcher(ctx context.Context, cfg *config.Config, pool *pgxpool.
 	if err != nil {
 		return searchAdapter{}, err
 	}
-	svc, err := rankingOnlySearchService(ctx, cfg, pool, httptrace.NewReplayer(exchanges))
+	svc, _, err := rankingOnlySearchService(ctx, cfg, pool, httptrace.NewReplayer(exchanges))
 	if err != nil {
 		return searchAdapter{}, err
 	}
 	return searchAdapter{svc: svc}, nil
 }
 
-func rankingOnlySearchService(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, transport http.RoundTripper) (*discovery.SearchService, error) {
-	disc, err := app.NewEvalDiscovery(ctx, cfg, app.EvalHandles{Pool: pool, Transport: transport})
+func rankingOnlySearchService(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, transport http.RoundTripper) (*discovery.SearchService, func(), error) {
+	bg, err := newEvalTracker()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return disc.RankingOnlySearch(), nil
+	disc, err := app.NewEvalDiscovery(ctx, cfg, app.EvalHandles{Pool: pool, Transport: transport, Tracker: bg})
+	if err != nil {
+		return nil, nil, err
+	}
+	return disc.RankingOnlySearch(), bg.Wait, nil
+}
+
+const evalBackgroundMaxInFlight = 64
+
+func newEvalTracker() (*runloop.Tracker, error) {
+	return runloop.NewTracker(runloop.TrackerLimits{MaxInFlight: evalBackgroundMaxInFlight})
 }

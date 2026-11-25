@@ -46,14 +46,6 @@ func (r *Tracker) Track(fn func()) {
 	}()
 }
 
-func (r *Tracker) Launch(parentCtx context.Context, label string, fn func(ctx context.Context)) {
-	ctx := context.WithoutCancel(parentCtx)
-	r.Track(func() {
-		defer RecoverContext(ctx, "search.v2.background_panic", "label", label)
-		fn(ctx)
-	})
-}
-
 func (r *Tracker) LaunchWithin(parent context.Context, label string, budget time.Duration, fn func(ctx context.Context)) bool {
 	if !r.admit() {
 		r.dropped.Add(1)

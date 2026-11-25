@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/observe"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"log/slog"
 	"time"
@@ -206,8 +207,9 @@ func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServices
 	}
 }
 
-func newOwnershipEnrichment(cat catalogWiring) *discovery.OwnershipEnrichmentService {
+func newOwnershipEnrichment(cat catalogWiring, bg *runloop.Tracker) *discovery.OwnershipEnrichmentService {
 	return discovery.NewOwnershipEnrichmentService(
+		bg,
 		discovery.NewOwnershipReader(discoverycatalog.NewOwnedTracks(cat.trackRepo)),
 		discoverycatalog.NewTrackNumberFiller(cat.setTrackNumberSvc),
 	)

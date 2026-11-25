@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/core/ports"
 	"altune/go-api/internal/discovery/service/artwork"
-	"altune/go-api/internal/shared/runloop"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"errors"
@@ -21,8 +20,9 @@ const (
 	placeholderArtHash = "d41d8cd98f00b204e9800998ecf8427e"
 )
 
-func fillAndSettle(f *artwork.ArtworkFiller, results ...domain.SearchResult) []domain.SearchResult {
-	bg := &runloop.Tracker{}
+func fillAndSettle(t *testing.T, f *artwork.ArtworkFiller, results ...domain.SearchResult) []domain.SearchResult {
+	t.Helper()
+	bg := discoverytest.NewTracker(t)
 	got := f.Fill(context.Background(), results, bg)
 	bg.Wait()
 	return got
@@ -33,7 +33,7 @@ func TestArtworkFiller_OutageLeavesTheCacheOpenForTheNextFill(t *testing.T) {
 	cache := &discoverytest.FakeArtworkCache{Store: map[string]string{}}
 	outage := &scriptedResolver{log: &stageLog{}, outage: errors.New("coverartarchive 503")}
 
-	fillAndSettle(artwork.NewArtworkFiller(outage, cache, nil, nil), track)
+	fillAndSettle(t, artwork.NewArtworkFiller(outage, cache, nil, nil), track)
 
 	if want := []string{"resolve.name:"}; !reflect.DeepEqual(outage.log.calls, want) {
 		t.Fatalf("resolver calls during the outage = %q, want %q", outage.log.calls, want)
@@ -43,8 +43,8 @@ func TestArtworkFiller_OutageLeavesTheCacheOpenForTheNextFill(t *testing.T) {
 	}
 
 	recovered := &scriptedResolver{log: &stageLog{}, nameURL: "https://caa/cover.jpg"}
-	fillAndSettle(artwork.NewArtworkFiller(recovered, cache, nil, nil), track)
-	afterRecovery := fillAndSettle(artwork.NewArtworkFiller(recovered, cache, nil, nil), track)
+	fillAndSettle(t, artwork.NewArtworkFiller(recovered, cache, nil, nil), track)
+	afterRecovery := fillAndSettle(t, artwork.NewArtworkFiller(recovered, cache, nil, nil), track)
 
 	if afterRecovery[0].ImageURL != "https://caa/cover.jpg" || afterRecovery[0].ArtworkPath != domain.ArtworkPathCache {
 		t.Errorf("after recovery = (%q, %q), want the resolved cover served from the cache", afterRecovery[0].ImageURL, afterRecovery[0].ArtworkPath)
@@ -468,7 +468,7 @@ func TestArtworkFiller_FillStageCascade(t *testing.T) {
 			}
 			f := artwork.NewArtworkFiller(&tc.st.live, cache, store, index)
 
-			got := fillAndSettle(f, tc.in)[0]
+			got := fillAndSettle(t, f, tc.in)[0]
 
 			if path := got.ArtworkPath; path != domain.ArtworkPath(tc.wantPath) {
 				t.Errorf("ArtworkPath = %q, want %q", path, tc.wantPath)

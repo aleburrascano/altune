@@ -3,6 +3,7 @@ package shutdown_test
 import (
 	"altune/go-api/internal/app/shutdown"
 	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/discovery/discoverytest"
 	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"context"
@@ -57,9 +58,11 @@ func (s *gatedStore) Append(ctx context.Context, _ discovery.InteractionEvent) e
 	return nil
 }
 
-func TestWait_DiscoverySearchDrainWaitsForInFlightWork(t *testing.T) {
+func TestDiscoverySearchStep_DrainingTheTrackerWaitsForInFlightSearchWork(t *testing.T) {
+	bg := discoverytest.NewTracker(t)
+	drain := func(ctx context.Context) { bg.Drain(ctx) }
 	store := &gatedStore{entered: make(chan struct{}), release: make(chan struct{})}
-	svc := discovery.NewSearchService(nil, discovery.NewCircuitBreaker(), discovery.WithEventStore(store))
+	svc := discovery.NewSearchService(bg, nil, discovery.NewCircuitBreaker(), discovery.WithEventStore(store))
 	query, err := discovery.NewSearchQuery("humble", discovery.AllKinds(), 10)
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +71,7 @@ func TestWait_DiscoverySearchDrainWaitsForInFlightWork(t *testing.T) {
 	_, _ = svc.Execute(ctx, shared.NewUserId(uuid.New()), query, false)
 	<-store.entered
 
-	inFlight := runOne(shutdown.DiscoverySearch, 50*time.Millisecond, shutdown.Wait(svc))
+	inFlight := runOne(shutdown.DiscoverySearch, 50*time.Millisecond, drain)
 	if inFlight != (shutdown.Outcome{Component: "discovery search", Status: shutdown.TimedOut}) {
 		t.Fatalf("drain with search work in flight = %+v, want discovery search timed out", inFlight)
 	}
@@ -76,13 +79,17 @@ func TestWait_DiscoverySearchDrainWaitsForInFlightWork(t *testing.T) {
 	close(store.release)
 	cancel()
 
-	if drained := runOne(shutdown.DiscoverySearch, 2*time.Second, shutdown.Wait(svc)); drained.Status != shutdown.Completed {
+	if drained := runOne(shutdown.DiscoverySearch, 2*time.Second, drain); drained.Status != shutdown.Completed {
 		t.Fatalf("drain after the search work finished = %+v, want completed", drained)
 	}
 }
 
+type backgroundWaiter struct{}
+
+func (*backgroundWaiter) WaitForBackground() {}
+
 func TestWait_AnAbsentServiceHasNothingToDrain(t *testing.T) {
-	var svc *discovery.SearchService
+	var svc *backgroundWaiter
 
 	if stop := shutdown.Wait(svc); stop != nil {
 		t.Fatal("an absent search service got a drain to run")

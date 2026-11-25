@@ -3,6 +3,7 @@ package handles
 import (
 	"altune/go-api/internal/discovery/internal/core/ports"
 	"altune/go-api/internal/discovery/service/unreleased"
+	"altune/go-api/internal/shared/runloop"
 	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"expvar"
@@ -20,6 +21,7 @@ import (
 type Deps struct {
 	Lifecycle       context.Context
 	Background      *sync.WaitGroup
+	Tracker         *runloop.Tracker
 	Logger          *slog.Logger
 	Transport       http.RoundTripper
 	ProviderTimeout time.Duration
@@ -69,6 +71,7 @@ func (d Deps) requiredHandles() []requiredHandle {
 	return []requiredHandle{
 		{"Lifecycle", d.Lifecycle == nil},
 		{"Background", d.Background == nil},
+		{"Tracker", d.Tracker == nil},
 		{"Logger", d.Logger == nil},
 		{"Transport", d.Transport == nil},
 		{"CacheOps", d.CacheOps == nil},

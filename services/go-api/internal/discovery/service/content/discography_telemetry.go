@@ -18,8 +18,8 @@ type DiscographyTelemetry struct {
 	bg         *runloop.Tracker
 }
 
-func newDiscographyTelemetry(eventStore ports.EventStore) *DiscographyTelemetry {
-	return &DiscographyTelemetry{eventStore: eventStore, bg: &runloop.Tracker{}}
+func newDiscographyTelemetry(eventStore ports.EventStore, bg *runloop.Tracker) *DiscographyTelemetry {
+	return &DiscographyTelemetry{eventStore: eventStore, bg: bg}
 }
 
 func (t *DiscographyTelemetry) emit(parentCtx context.Context, artistRef string, merged []release.MergedRelease) {
@@ -31,23 +31,20 @@ func (t *DiscographyTelemetry) emit(parentCtx context.Context, artistRef string,
 		return
 	}
 	occurredAt := time.Now().UTC()
-	t.bg.Launch(parentCtx, "discography.telemetry.emit", func(ctx context.Context) {
+	t.bg.LaunchWithin(parentCtx, "discography.telemetry.emit", emitTimeout, func(ctx context.Context) {
 		t.append(ctx, occurredAt, payload)
 	})
 }
 
 func (t *DiscographyTelemetry) append(ctx context.Context, occurredAt time.Time, payload map[string]any) {
-	emitCtx, cancel := context.WithTimeout(ctx, emitTimeout)
-	defer cancel()
-
 	event := domain.InteractionEvent{
 		OccurredAt: occurredAt,
 		UserId:     shared.SystemUserId(),
 		Type:       domain.EventTypeDiscographyObserved,
 		Payload:    payload,
 	}
-	if err := t.eventStore.Append(emitCtx, event); err != nil {
-		slog.WarnContext(emitCtx, "discography.telemetry.emit_failed", "error", err)
+	if err := t.eventStore.Append(ctx, event); err != nil {
+		slog.WarnContext(ctx, "discography.telemetry.emit_failed", "error", err)
 	}
 }
 

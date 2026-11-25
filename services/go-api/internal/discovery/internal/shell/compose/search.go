@@ -36,7 +36,7 @@ func newRankingOnlySearchService(w wiring) *search.Service {
 
 func (w wiring) namedSearchService(message string, named []searchOption, breaker *providercall.CircuitBreaker) *search.Service {
 	w.deps.Logger.InfoContext(w.deps.Lifecycle, message, "options", searchOptionNames(named))
-	return search.NewService(w.table.searchProviders(), breaker, searchOptions(named)...)
+	return search.NewService(w.deps.Tracker, w.table.searchProviders(), breaker, searchOptions(named)...)
 }
 
 func unrecordedOptions(w wiring, breaker *providercall.CircuitBreaker) []searchOption {

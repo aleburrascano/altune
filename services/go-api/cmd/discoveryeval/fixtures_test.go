@@ -98,12 +98,12 @@ func titles(t *testing.T, searcher searchAdapter) []string {
 func TestFixtures_ARecordedSearchReplaysTheSameAnswersOffline(t *testing.T) {
 	cfg := &config.Config{}
 	rec := httptrace.NewRecorder(deezerOnlyTransport{})
-	live, err := rankingOnlySearchService(t.Context(), cfg, nil, rec)
+	live, flush, err := rankingOnlySearchService(t.Context(), cfg, nil, rec)
 	if err != nil {
 		t.Fatalf("ranking-only search: %v", err)
 	}
 	recorded := titles(t, searchAdapter{svc: live})
-	live.WaitForBackground()
+	flush()
 	if !slices.Contains(recorded, "Probe Song") {
 		t.Fatalf("recorded search answered %v, want the Deezer track through the recorder", recorded)
 	}
