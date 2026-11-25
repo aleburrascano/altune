@@ -3227,25 +3227,23 @@ func outageSource() findOnlySource {
 	return findOnlySource{name: "down", err: &acqdomain.SourceUnavailableError{Source: "down", Err: errors.New("429")}}
 }
 
-const (
-	finesseRemixURL = "https://music.youtube.com/watch?v=remix"
-	finesseAlbumURL = "https://music.youtube.com/watch?v=album"
-)
-
-func finesseRemix() ports.AudioCandidate {
-	return ports.AudioCandidate{
-		Title: "Finesse (Remix)", URL: finesseRemixURL, Duration: 218,
-		Artists: []string{"Bruno Mars", "Cardi B"}, Album: "Finesse (Remix)", Kind: ports.KindArtTrack,
-	}
+type recordingReporter struct {
+	stages  []string
+	timings map[string]time.Duration
+	format  ports.SourceFormat
+	file    ports.StoredFile
 }
 
-func finesseAlbumTrack() ports.AudioCandidate {
-	return ports.AudioCandidate{
-		Title: "Finesse", URL: finesseAlbumURL, Duration: 191,
-		Artists: []string{"Bruno Mars"}, Album: "24K Magic", Kind: ports.KindArtTrack,
+func (r *recordingReporter) meta(string, string, string)               {}
+func (r *recordingReporter) stage(n string)                            { r.stages = append(r.stages, n) }
+func (r *recordingReporter) source(string)                             {}
+func (r *recordingReporter) provenance(string)                         {}
+func (r *recordingReporter) fetched(f ports.SourceFormat)              { r.format = f }
+func (r *recordingReporter) decided(_ float64, _ string, _, _ float64) {}
+func (r *recordingReporter) stored(f ports.StoredFile)                 { r.file = f }
+func (r *recordingReporter) timing(stage string, d time.Duration) {
+	if r.timings == nil {
+		r.timings = map[string]time.Duration{}
 	}
-}
-
-func finesseTrack() TrackRef {
-	return TrackRef{ID: "track-1", Title: "Finesse", Artist: "Bruno Mars", Album: "24K Magic", CatalogDuration: 191}
+	r.timings[stage] += d
 }

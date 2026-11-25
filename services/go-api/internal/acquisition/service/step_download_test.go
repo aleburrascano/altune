@@ -2023,6 +2023,44 @@ func TestDownloadStep_WorkspaceRollbackWithOnlyTempPathRemovesThatFile(t *testin
 	}
 }
 
+func probedLength(seconds float64) shared.TrackLength {
+	length, err := shared.TrackLengthOf(seconds)
+	if err != nil {
+		panic(err)
+	}
+	return length
+}
+
+const secretCookiePath = "/run/secrets/altune/yt_cookies.txt"
+
+func ytdlpCookieErr() error {
+	stderr := "ERROR: '" + secretCookiePath + "' does not look like a Netscape format cookies file " +
+		"(called with --cookies " + secretCookiePath + ")"
+	return fmt.Errorf("yt-dlp download: %w (stderr: %s)", errors.New("exit status 1"), stderr)
+}
+
+func captureDefaultLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+func assertNoCookiePath(t *testing.T, logs string, wantMsg string) {
+	t.Helper()
+	if !strings.Contains(logs, wantMsg) {
+		t.Fatalf("expected log %q, got:\n%s", wantMsg, logs)
+	}
+	if strings.Contains(logs, secretCookiePath) || strings.Contains(logs, "/run/secrets") {
+		t.Fatalf("cookie file path leaked into logs:\n%s", logs)
+	}
+	if !strings.Contains(logs, "exit status 1") {
+		t.Fatalf("redaction dropped the diagnostic error text:\n%s", logs)
+	}
+}
+
 func TestDownloadStep_CandidateDownloadFailedLogRedactsCookiePath(t *testing.T) {
 	logs := captureDefaultLog(t)
 	step := newTestDownloadStep(&fileWritingSearcher{err: ytdlpCookieErr()})
