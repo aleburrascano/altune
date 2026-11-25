@@ -3,7 +3,9 @@ package contract
 import (
 	"altune/go-api/internal/catalog/internal/core/ports"
 	"context"
+	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -62,8 +64,8 @@ func AudioStoreContract(t *testing.T, newStore func(t *testing.T) ports.AudioSto
 			_ = rc.Close()
 			t.Fatal("Stream of a ref never stored succeeded")
 		}
-		if !os.IsNotExist(err) {
-			t.Errorf("Stream error = %v, want one satisfying os.IsNotExist", err)
+		if !errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("Stream error = %v, want one satisfying errors.Is(fs.ErrNotExist)", err)
 		}
 	})
 
