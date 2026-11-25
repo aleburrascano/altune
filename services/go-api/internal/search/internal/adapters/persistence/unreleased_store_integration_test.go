@@ -151,6 +151,9 @@ func unreleasedSearchKeys(t *testing.T, pool *pgxpool.Pool, key ports.Unreleased
 		}
 		keys = append(keys, k)
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate keys: %v", err)
+	}
 	return keys
 }
 

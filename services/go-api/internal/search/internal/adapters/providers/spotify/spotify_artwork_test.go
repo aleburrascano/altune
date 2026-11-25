@@ -87,7 +87,7 @@ func TestSpotifyArtworkResolver_NameResolveIsNoop(t *testing.T) {
 	called := false
 	r := search.NewSpotifyArtworkLookup(&http.Client{Transport: providertest.FakeRoundTripper{Fn: func(*http.Request) (*http.Response, error) {
 		called = true
-		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("{}")), Header: make(http.Header)}, nil
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("{}")), Header: make(http.Header)}, nil
 	}}})
 	url, _ := r.Resolve(context.Background(), search.ResultKindArtist, "Che", "", "")
 	if url != "" || called {

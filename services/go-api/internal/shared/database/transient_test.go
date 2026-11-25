@@ -167,6 +167,9 @@ func TestIsTransient_RealPostgresFailures(t *testing.T) {
 				}
 				defer rows.Close()
 				_, err = tx.Exec(ctx, "SELECT 1")
+				if rowsErr := rows.Err(); rowsErr != nil {
+					t.Fatalf("rows: %v", rowsErr)
+				}
 				return err
 			})
 		}, false},

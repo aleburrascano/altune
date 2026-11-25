@@ -97,15 +97,15 @@ func TestCountsPerProviderAndOutcome(t *testing.T) {
 
 func TestTransparentDelegate(t *testing.T) {
 	t.Run("response and request pass through unchanged", func(t *testing.T) {
-		stub := &stubTransport{status: 201}
+		stub := &stubTransport{status: http.StatusCreated}
 		req, _ := http.NewRequest(http.MethodGet, "https://api.deezer.com/x?q=y", nil)
 		resp, err := search.NewCountingTransport(stub).RoundTrip(req)
 		if err != nil {
 			t.Fatalf("err = %v, want nil", err)
 		}
 		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != 201 {
-			t.Errorf("status = %d, want 201", resp.StatusCode)
+		if resp.StatusCode != http.StatusCreated {
+			t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
 		}
 		if stub.lastReq != req {
 			t.Errorf("request was replaced; delegate must pass the same *http.Request")

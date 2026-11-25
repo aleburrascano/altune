@@ -130,7 +130,7 @@ func TestDiscogsAdapter_ResolveDiscogsArtist_NoResultsIsNotFound(t *testing.T) {
 func TestDiscogsAdapter_Resolve_429(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(429)
+		w.WriteHeader(http.StatusTooManyRequests)
 	}))
 	defer srv.Close()
 
@@ -358,7 +358,7 @@ func TestDiscogsAdapter_429LogOmitsQuery(t *testing.T) {
 	defer slog.SetDefault(prev)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(429)
+		w.WriteHeader(http.StatusTooManyRequests)
 	}))
 	defer srv.Close()
 	adapter := newTestDiscogsAdapter(srv)

@@ -269,6 +269,9 @@ func remainingDiscographyRefs(t *testing.T, pool *pgxpool.Pool) map[string]bool 
 		}
 		refs[ref] = true
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate remaining refs: %v", err)
+	}
 	return refs
 }
 
