@@ -9,7 +9,7 @@ import type { DiscoveryResult } from '@shared/catalog';
 import type {
   UnreleasedCard as UnreleasedCardModel,
   UnreleasedCardState,
-} from '@features/detail/core/useUnreleasedTracks';
+} from '@features/detail/view/useUnreleasedTracks';
 import { RELATED_CARD_WIDTH, sharedStyles } from '@features/detail/view/detailStyles';
 
 type UnreleasedRowProps = { track: UnreleasedTrack };

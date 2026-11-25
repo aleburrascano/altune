@@ -1,6 +1,6 @@
 const pagingLoopsAwaitInOrder = {
   files: [
-    'src/features/detail/core/useLibraryMatches.ts',
+    'src/features/detail/view/useLibraryMatches.ts',
     'src/features/library/view/useLibraryTracks.ts',
     'src/shared/apiClient/adapters/tracks.ts',
   ],

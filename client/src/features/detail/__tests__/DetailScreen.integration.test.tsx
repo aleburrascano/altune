@@ -1,6 +1,5 @@
 import { render, screen } from '@testing-library/react-native';
 import type { DiscoveryResult } from '@shared/catalog';
-import { detailHref } from '@shared/navigation';
 import { runSignOutCleanups } from '@shared/session';
 
 import { DetailScreen } from '@features/detail';
@@ -12,21 +11,7 @@ import {
   signInTestUser,
 } from '@testing/queryHarness';
 
-let mockParams: { handoff?: string } = {};
-jest.mock('expo-router', () => {
-  const { Text: RNText } = jest.requireActual('react-native');
-  return {
-    useLocalSearchParams: () => mockParams,
-    useRouter: () => ({
-      push: jest.fn(),
-      replace: jest.fn(),
-      back: jest.fn(),
-      canGoBack: () => true,
-    }),
-    useSegments: () => ['(tabs)', 'library', 'detail'],
-    Redirect: ({ href }: { href: string }) => <RNText>{`redirect:${href}`}</RNText>,
-  };
-});
+import { handoffFor } from '@features/detail/__tests__/screenHandoff';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -161,8 +146,8 @@ function libraryResult(kind: 'album' | 'artist'): DiscoveryResult {
 }
 
 function renderDetail(result: DiscoveryResult): void {
-  mockParams = { handoff: detailHref('/library/detail', result, 'search-1').params.handoff };
-  render(<DetailScreen />, {
+  const handoff = handoffFor(result, '/library/detail', 'search-1');
+  render(<DetailScreen handoff={handoff} tabRoot="library" />, {
     wrapper: createPlaybackWrapper(
       createTestQueryClient({ mutations: true }),
       idlePlayback,
@@ -173,7 +158,6 @@ function renderDetail(result: DiscoveryResult): void {
 
 beforeEach(async () => {
   runSignOutCleanups();
-  mockParams = {};
   await signInTestUser();
   replyWithCatalogue();
 });

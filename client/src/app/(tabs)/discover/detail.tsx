@@ -1,3 +1,1 @@
-import { DetailScreen } from '@features/detail';
-
-export default DetailScreen;
+export { DetailRoute as default } from '@/mobile';

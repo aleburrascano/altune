@@ -4,7 +4,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Banner, Text, spacing } from '@shared/ui';
 import { recordFailureShownOnce } from '@shared/acquisition';
 
-import type { LateralNavHandle } from '@features/detail/hooks/useDetailNavigation';
+import type { LateralNavHandle } from '@features/detail/view/useDetailNavigation';
 import { saveFailureBanner, type SaveFailure } from '@features/detail/core/saveTrack';
 
 const styles = StyleSheet.create({

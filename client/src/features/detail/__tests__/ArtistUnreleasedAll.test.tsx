@@ -1,6 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { DiscoveryResult } from '@shared/catalog';
-import { detailHref } from '@shared/navigation';
 
 import { httpDetailPort, DetailPortProvider, UnreleasedAllScreen } from '@features/detail';
 import {
@@ -10,17 +9,9 @@ import {
   signInTestUser,
 } from '@testing/queryHarness';
 
-const { __http } = require('@testing/doubles/fetch.js');
+import { handoffFor } from '@features/detail/__tests__/screenHandoff';
 
-type RedirectProps = { href: string };
-let mockParams: { handoff?: string; where?: string } = {};
-jest.mock('expo-router', () => {
-  const { Text: RNText } = jest.requireActual('react-native');
-  return {
-    useLocalSearchParams: () => mockParams,
-    Redirect: ({ href }: RedirectProps) => <RNText>{`redirect:${href}`}</RNText>,
-  };
-});
+const { __http } = require('@testing/doubles/fetch.js');
 
 const UNRELEASED = 'GET /v1/discovery/artists/spotify/artist-1/unreleased';
 const EVENTS = 'POST /v1/discovery/events';
@@ -87,23 +78,18 @@ function pick(testID: string): void {
   fireEvent.press(screen.getByTestId(testID));
 }
 
-function openArtist(): void {
-  mockParams = { handoff: detailHref('/discover/unreleased', ARTIST).params.handoff };
-}
-
-function renderScreen() {
+function renderScreen(where?: string) {
   const Base = createPlaybackWrapper(createTestQueryClient({ mutations: true }), idlePlayback);
   return render(
     <Base>
       <DetailPortProvider port={httpDetailPort}>
-        <UnreleasedAllScreen />
+        <UnreleasedAllScreen handoff={handoffFor(ARTIST, '/discover/unreleased')} where={where} />
       </DetailPortProvider>
     </Base>,
   );
 }
 
 beforeEach(async () => {
-  mockParams = {};
   await signInTestUser();
 });
 
@@ -111,7 +97,6 @@ describe('UnreleasedAllScreen', () => {
   it('gives the list every one of an artist with 25 tracks', async () => {
     const items = Array.from({ length: TRACK_COUNT }, (_, i) => genius(GENIUS_ID_BASE + i, true));
     __http.reply(UNRELEASED, { status: 200, json: { items } });
-    openArtist();
     renderScreen();
 
     await waitFor(() => expect(screen.getAllByTestId(ROW_TEST_ID).length).toBeGreaterThan(0));
@@ -123,7 +108,6 @@ describe('UnreleasedAllScreen', () => {
   it('shows the rail first chip group when no where param is given', async () => {
     const items = [genius(OFF_STREAMING_ID, true), genius(ON_STREAMING_ID, false)];
     __http.reply(UNRELEASED, { status: 200, json: { items } });
-    openArtist();
     renderScreen();
 
     expect(await screen.findByText(`Full list entry ${OFF_STREAMING_ID}`)).toBeTruthy();
@@ -133,18 +117,10 @@ describe('UnreleasedAllScreen', () => {
   it('shows the other group when the where param asks for it', async () => {
     const items = [genius(OTHER_OFF_STREAMING_ID, true), genius(OTHER_ON_STREAMING_ID, false)];
     __http.reply(UNRELEASED, { status: 200, json: { items } });
-    openArtist();
-    mockParams = { ...mockParams, where: 'unreleased' };
-    renderScreen();
+    renderScreen('unreleased');
 
     expect(await screen.findByText(`Full list entry ${OTHER_ON_STREAMING_ID}`)).toBeTruthy();
     expect(screen.queryByText(`Full list entry ${OTHER_OFF_STREAMING_ID}`)).toBeNull();
-  });
-
-  it('redirects when the handoff is missing', () => {
-    mockParams = { handoff: 'gone-handoff' };
-    renderScreen();
-    expect(screen.getByText('redirect:/discover')).toBeTruthy();
   });
 
   describe('sort and filters', () => {
@@ -159,7 +135,6 @@ describe('UnreleasedAllScreen', () => {
         ranked(NO_LINK_ID, HIGH_RANK + 1, false),
       ];
       __http.reply(UNRELEASED, { status: 200, json: { items } });
-      openArtist();
       renderScreen();
       await screen.findByText(`Full list entry ${LOW_ID}`);
 
@@ -181,7 +156,6 @@ describe('UnreleasedAllScreen', () => {
 
     it('says no playable tracks when Playable leaves nothing', async () => {
       __http.reply(UNRELEASED, { status: 200, json: { items: [ranked(NO_LINK_ID, 0, false)] } });
-      openArtist();
       renderScreen();
       await screen.findByText(`Full list entry ${NO_LINK_ID}`);
 
@@ -193,7 +167,6 @@ describe('UnreleasedAllScreen', () => {
     it('shows the list with a Still finding more footer while pending, not a skeleton', async () => {
       const json = { items: [genius(PENDING_ID, true)], pending: true };
       __http.reply(UNRELEASED, { status: 200, json });
-      openArtist();
       renderScreen();
 
       expect(await screen.findByText(`Full list entry ${PENDING_ID}`)).toBeTruthy();

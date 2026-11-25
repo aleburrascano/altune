@@ -1,5 +1,5 @@
-export { DetailScreen } from '@features/detail/ui/DetailScreen';
-export { UnreleasedAllScreen } from '@features/detail/ui/unreleased/ArtistUnreleasedAll';
+export { DetailScreen } from '@features/detail/view/DetailScreen';
+export { UnreleasedAllScreen } from '@features/detail/view/unreleased/ArtistUnreleasedAll';
 export { UnreleasedSearchHits } from '@features/detail/view/unreleased/UnreleasedSearchHits';
 export { DetailPortProvider, useDetailPort } from '@features/detail/view/DetailPortProvider';
 export { httpDetailPort } from '@features/detail/adapters/http/httpDetailPort';
@@ -29,9 +29,9 @@ export {
   flushDetailHealth,
   recordContentFetchOutcome,
 } from '@features/detail/core/detailHealth';
-export { useAlbumTracks } from '@features/detail/core/useAlbumTracks';
-export { useDetailEnrichments } from '@features/detail/core/useDetailEnrichments';
-export { useArtistContent } from '@features/detail/core/useArtistContent';
+export { useAlbumTracks } from '@features/detail/view/useAlbumTracks';
+export { useDetailEnrichments } from '@features/detail/view/useDetailEnrichments';
+export { useArtistContent } from '@features/detail/view/useArtistContent';
 export { DetailBodyLayout, DetailScaffold } from '@features/detail/view/DetailScaffold';
 export { DiscographySections } from '@features/detail/view/DiscographySections';
 export { AlbumCardsSkeleton } from '@features/detail/view/DetailSkeleton';
@@ -43,16 +43,12 @@ export {
   trackSubtitleWithFeaturing,
 } from '@features/detail/core/formatters';
 export { DetailNavigatorProvider } from '@features/detail/view/DetailNavigatorProvider';
-export {
-  detailRouteFor,
-  featuringHref,
-  openDetail,
-} from '@features/detail/domain/detailNavigation';
+export { detailRouteFor, featuringHref, openDetail } from '@features/detail/core/detailNavigation';
 export {
   useLateralNav,
   useOpenDetail,
   useOpenFeaturing,
-} from '@features/detail/hooks/useDetailNavigation';
+} from '@features/detail/view/useDetailNavigation';
 export { normalizeForCompare } from '@features/detail/core/normalizeForCompare';
 export {
   albumExtras,
@@ -83,7 +79,7 @@ export { isAcquirable, unreleasedAsResult } from '@features/detail/core/unreleas
 export { unreleasedView } from '@features/detail/core/unreleasedView';
 export { useAlbumDetailState } from '@features/detail/view/useAlbumDetailState';
 export { useAlbumSaveAll } from '@features/detail/view/useAlbumSaveAll';
-export { useRelatedTracks } from '@features/detail/core/useRelatedTracks';
+export { useRelatedTracks } from '@features/detail/view/useRelatedTracks';
 export { useAlbumDiscovery, useArtistDiscovery } from '@features/detail/view/useEntityDiscovery';
 export { useResolveMissingSources } from '@features/detail/view/useResolveMissingSources';
 export { useDiscographyFilter } from '@features/detail/view/useDiscographyFilter';
@@ -91,14 +87,14 @@ export {
   useLibraryAlbumsForArtist,
   useLibraryTracksForAlbum,
   useLibraryTracksForArtist,
-} from '@features/detail/core/useLibraryMatches';
-export { useOwnedPlayback } from '@features/detail/core/useOwnedPlayback';
-export type { OwnedPlaybackContext } from '@features/detail/core/useOwnedPlayback';
+} from '@features/detail/view/useLibraryMatches';
+export { useOwnedPlayback } from '@features/detail/view/useOwnedPlayback';
+export type { OwnedPlaybackContext } from '@features/detail/view/useOwnedPlayback';
 export { useSaveTrack, useTrackSave } from '@features/detail/view/useSaveTrack';
 export type { SaveTrack } from '@features/detail/view/useSaveTrack';
 export { DetailHandoffProvider } from '@features/detail/view/useDetailHandoff';
 export { useReportWrongAlbum } from '@features/detail/view/useReportWrongAlbum';
-export { useRetryTrack } from '@features/detail/core/useRetryTrack';
+export { useRetryTrack } from '@features/detail/view/useRetryTrack';
 export { SaveAllPill, TrackSaveControl, TrackSavePill } from '@features/detail/view/SaveControls';
 export { useResolvedOwnedTrack } from '@features/detail/core/useOwnedTrack';
 export type { TrackIdentity } from '@features/detail/core/useOwnedTrack';

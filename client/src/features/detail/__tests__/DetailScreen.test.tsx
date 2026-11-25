@@ -1,9 +1,10 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { DiscoveryResult } from '@shared/catalog';
-import { detailHref } from '@shared/navigation';
+import type { Navigator } from '@shared/navigation';
+import type { PlaybackContextValue } from '@shared/playback';
 import { runSignOutCleanups } from '@shared/session';
 
-import { DetailScreen } from '@features/detail';
+import { DetailNavigatorProvider, DetailScreen } from '@features/detail';
 import {
   createRecordingPorts,
   createTestQueryClient,
@@ -12,26 +13,10 @@ import {
   signInTestUser,
 } from '@testing/queryHarness';
 
-const { __http } = require('@testing/doubles/fetch.js');
+import { handoffFor } from '@features/detail/__tests__/screenHandoff';
+import { recordingNavigator } from '@features/detail/__tests__/recordingNavigator';
 
-let mockParams: { handoff?: string } = {};
-let mockCanGoBack = true;
-const mockBack = jest.fn();
-const mockReplace = jest.fn();
-jest.mock('expo-router', () => {
-  const { Text: RNText } = jest.requireActual('react-native');
-  return {
-    useLocalSearchParams: () => mockParams,
-    useRouter: () => ({
-      push: jest.fn(),
-      replace: mockReplace,
-      back: mockBack,
-      canGoBack: () => mockCanGoBack,
-    }),
-    useSegments: () => ['(tabs)', 'discover', 'detail'],
-    Redirect: ({ href }: { href: string }) => <RNText>{`redirect:${href}`}</RNText>,
-  };
-});
+const { __http } = require('@testing/doubles/fetch.js');
 
 const SETTLE_MS = 50;
 
@@ -54,14 +39,31 @@ function track(title: string, extras: DiscoveryResult['extras'] = {}): Discovery
   };
 }
 
-function renderScreen(playback = idlePlayback) {
-  render(<DetailScreen />, {
-    wrapper: createPlaybackWrapper(
-      createTestQueryClient({ mutations: true }),
-      playback,
-      createRecordingPorts(),
-    ),
-  });
+interface ScreenOptions {
+  playback?: PlaybackContextValue;
+  navigator?: Navigator;
+  searchId?: string;
+}
+
+function renderScreen(
+  result: DiscoveryResult,
+  { playback = idlePlayback, navigator = recordingNavigator(), searchId }: ScreenOptions = {},
+) {
+  const Base = createPlaybackWrapper(
+    createTestQueryClient({ mutations: true }),
+    playback,
+    createRecordingPorts(),
+  );
+  return render(
+    <Base>
+      <DetailNavigatorProvider navigator={navigator}>
+        <DetailScreen
+          handoff={handoffFor(result, '/discover/detail', searchId)}
+          tabRoot="discover"
+        />
+      </DetailNavigatorProvider>
+    </Base>,
+  );
 }
 
 function searchResponse(results: DiscoveryResult[]) {
@@ -84,10 +86,6 @@ function searchResponse(results: DiscoveryResult[]) {
 
 beforeEach(async () => {
   runSignOutCleanups();
-  mockParams = {};
-  mockCanGoBack = true;
-  mockBack.mockClear();
-  mockReplace.mockClear();
   await signInTestUser();
   __http.replyAll({ status: 200, json: { items: [], total: 0 } });
 });
@@ -114,8 +112,7 @@ describe('DetailScreen on a library artist page', () => {
   }
 
   function openArtist(): void {
-    mockParams = { handoff: detailHref('/discover/detail', libraryArtist).params.handoff };
-    renderScreen();
+    renderScreen(libraryArtist);
   }
 
   it('does not search again for a photo once the first search found the artist', async () => {
@@ -146,49 +143,40 @@ describe('DetailScreen on a library artist page', () => {
   });
 });
 
-describe('DetailScreen reads the handoff named by its route param', () => {
-  it('renders the result and search id of its own navigation after a later tap', async () => {
+describe('DetailScreen renders the handoff it is given', () => {
+  it('plays the result and search id of its own navigation after a later tap', async () => {
     const previewExtras = { preview_url: 'https://p.example/first.mp3' };
-    const first = detailHref('/discover/detail', track('First', previewExtras), 'search-1');
-    detailHref('/discover/detail', track('Second'), 'search-2');
+    const first = track('First', previewExtras);
     const play = jest.fn().mockResolvedValue(undefined);
 
-    mockParams = { handoff: first.params.handoff };
-    renderScreen({ ...idlePlayback, play });
+    renderScreen(first, { playback: { ...idlePlayback, play }, searchId: 'search-1' });
     fireEvent.press(await screen.findByTestId('detail-preview'));
 
     expect(play).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'First', searchId: 'search-1' }),
     );
   });
-
-  it('redirects to discover when the param names no handoff', () => {
-    mockParams = { handoff: 'unknown' };
-    renderScreen();
-
-    expect(screen.getByText('redirect:/discover')).toBeTruthy();
-  });
 });
 
 describe('DetailScreen back button', () => {
-  async function pressBack(canGoBack: boolean): Promise<void> {
-    mockCanGoBack = canGoBack;
-    mockParams = { handoff: detailHref('/discover/detail', track('First')).params.handoff };
-    renderScreen();
+  async function pressBack(canGoBack: boolean) {
+    const navigator = { ...recordingNavigator(), canGoBack: () => canGoBack };
+    renderScreen(track('First'), { navigator });
     fireEvent.press(await screen.findByTestId('detail-back'));
+    return navigator;
   }
 
-  it('calls router.back() when canGoBack is true', async () => {
-    await pressBack(true);
+  it('goes back when there is a screen behind it', async () => {
+    const navigator = await pressBack(true);
 
-    expect(mockBack).toHaveBeenCalledTimes(1);
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(navigator.back).toHaveBeenCalledTimes(1);
+    expect(navigator.replace).not.toHaveBeenCalled();
   });
 
-  it("calls router.replace('/discover') when canGoBack is false", async () => {
-    await pressBack(false);
+  it('replaces itself with the tab root when it was opened directly', async () => {
+    const navigator = await pressBack(false);
 
-    expect(mockReplace).toHaveBeenCalledWith('/discover');
-    expect(mockBack).not.toHaveBeenCalled();
+    expect(navigator.replace).toHaveBeenCalledWith('/discover');
+    expect(navigator.back).not.toHaveBeenCalled();
   });
 });

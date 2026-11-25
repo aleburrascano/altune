@@ -4,18 +4,18 @@ import { trackToDiscoveryResult } from '@shared/catalog';
 import type { OwnedSplit, OwnedTrack } from '@features/detail/core/ownedTrack';
 import { type ContentFailure } from '@features/detail/core/contentStatus';
 
-import { type DetailRoute } from '@features/detail/domain/detailNavigation';
-import { useOpenDetail } from '@features/detail/hooks/useDetailNavigation';
+import { type DetailRoute } from '@features/detail/core/detailNavigation';
+import { useOpenDetail } from '@features/detail/view/useDetailNavigation';
 import { useAlbumDiscovery } from '@features/detail/view/useEntityDiscovery';
-import { useAlbumTracks } from '@features/detail/core/useAlbumTracks';
-import { useLibraryTracksForAlbum } from '@features/detail/core/useLibraryMatches';
+import { useAlbumTracks } from '@features/detail/view/useAlbumTracks';
+import { useLibraryTracksForAlbum } from '@features/detail/view/useLibraryMatches';
 import { useSaveTrack } from '@features/detail/view/useSaveTrack';
 import {
   enrichAlbumTrack,
   useAlbumSaveAll,
   type LastBatch,
 } from '@features/detail/view/useAlbumSaveAll';
-import { useOwnedPlayback } from '@features/detail/core/useOwnedPlayback';
+import { useOwnedPlayback } from '@features/detail/view/useOwnedPlayback';
 import { trackExtras } from '@features/detail/core/trackExtras';
 import { normalizeForCompare } from '@features/detail/core/normalizeForCompare';
 

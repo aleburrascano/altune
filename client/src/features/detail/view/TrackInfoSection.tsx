@@ -5,7 +5,7 @@ import { ChevronRight } from 'lucide-react-native';
 
 import { radius, spacing, useTheme, Artwork, Text, Tappable } from '@shared/ui';
 import type { DiscoveryResult, FeaturedArtist } from '@shared/catalog';
-import type { LateralNavHandle } from '@features/detail/hooks/useDetailNavigation';
+import type { LateralNavHandle } from '@features/detail/view/useDetailNavigation';
 import type { TrackDetailActions } from '@features/detail/view/useTrackDetailActions';
 import { Section } from '@features/detail/view/Section';
 import { sharedStyles } from '@features/detail/view/detailStyles';

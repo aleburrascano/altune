@@ -1,12 +1,9 @@
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Text, type TextTone, spacing, useTheme } from '@shared/ui';
-export type DetailFact = {
-  label: string;
-  value: string;
-  tone?: TextTone;
-};
+import { Text, spacing, useTheme } from '@shared/ui';
+
+import type { DetailFact } from '@features/detail/core/buildDetailFacts';
 
 export function DetailFacts({
   facts,

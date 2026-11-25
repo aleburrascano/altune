@@ -377,7 +377,6 @@ describe('TrackDetailBody pins its router calls', () => {
     expect(push).toHaveBeenCalledTimes(1);
     const [href] = push.mock.calls[0]!;
     expect(href.pathname).toBe('/discover/detail');
-    const { readDetailHandoff } = jest.requireActual('@shared/navigation/core/detailHandoff');
     expect(readDetailHandoff(href.params.handoff)?.result.title).toBe('Related One');
     expect(resultCarriedBy(href.params.handoff)).toBe('Related One');
   });
