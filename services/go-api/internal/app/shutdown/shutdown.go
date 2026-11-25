@@ -1,6 +1,7 @@
 package shutdown
 
 import (
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"log/slog"
 	"net/http"
@@ -8,19 +9,19 @@ import (
 )
 
 const (
-	AlertMonitor    = "alert monitor"
-	EventFeed       = "event feed"
-	EvalMeter       = "eval meter"
-	Scheduler       = "acquisition scheduler"
-	Background      = "background tasks"
-	LeaderElection  = "leader election"
-	DiscoverySearch = "discovery search"
+	AlertMonitor   = "alert monitor"
+	EventFeed      = "event feed"
+	EvalMeter      = "eval meter"
+	Scheduler      = "acquisition scheduler"
+	Background     = "background tasks"
+	LeaderElection = "leader election"
+	DetachedTasks  = "detached request tasks"
 )
 
 const (
 	ServerDrainTimeout     = 10 * time.Second
 	backgroundDrainTimeout = 15 * time.Second
-	discoveryDrainTimeout  = 10 * time.Second
+	detachedDrainTimeout   = 10 * time.Second
 	observerDrainTimeout   = 2 * time.Second
 	leaderReleaseTimeout   = 3 * time.Second
 	schedulerDrainCap      = 35 * time.Second
@@ -52,13 +53,13 @@ type Step struct {
 }
 
 type Components struct {
-	AlertMonitor    func(context.Context)
-	EventFeed       func(context.Context)
-	EvalMeter       func(context.Context)
-	Scheduler       func(context.Context)
-	Background      func(context.Context)
-	LeaderElection  func(context.Context)
-	DiscoverySearch func(context.Context)
+	AlertMonitor   func(context.Context)
+	EventFeed      func(context.Context)
+	EvalMeter      func(context.Context)
+	Scheduler      func(context.Context)
+	Background     func(context.Context)
+	LeaderElection func(context.Context)
+	DetachedTasks  func(context.Context)
 }
 
 type stopper interface {
@@ -74,19 +75,6 @@ func Stop[T stopper](component T) func(context.Context) {
 	return component.Shutdown
 }
 
-type waiter interface {
-	comparable
-	WaitForBackground()
-}
-
-func Wait[T waiter](component T) func(context.Context) {
-	var absent T
-	if component == absent {
-		return nil
-	}
-	return func(context.Context) { component.WaitForBackground() }
-}
-
 func Plan(c Components, schedulerDrainBudgetSeconds int) []Step {
 	return []Step{
 		{Component: AlertMonitor, Timeout: observerDrainTimeout, Stop: c.AlertMonitor},
@@ -95,7 +83,7 @@ func Plan(c Components, schedulerDrainBudgetSeconds int) []Step {
 		{Component: Scheduler, Timeout: schedulerDrainTimeout(schedulerDrainBudgetSeconds), Stop: c.Scheduler},
 		{Component: Background, Timeout: backgroundDrainTimeout, Stop: c.Background},
 		{Component: LeaderElection, Timeout: leaderReleaseTimeout, Stop: c.LeaderElection, requires: Background, blockedMsg: leaderLockKeptMessage},
-		{Component: DiscoverySearch, Timeout: discoveryDrainTimeout, Stop: c.DiscoverySearch},
+		{Component: DetachedTasks, Timeout: detachedDrainTimeout, Stop: c.DetachedTasks},
 	}
 }
 
@@ -132,19 +120,12 @@ func runStep(ctx context.Context, step Step, completed map[string]bool) Outcome 
 func stopWithin(component string, timeout time.Duration, stop func(context.Context)) Outcome {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		stop(ctx)
-	}()
-	select {
-	case <-done:
+	if runloop.WaitWithin(ctx, func() { stop(ctx) }) {
 		return Outcome{Component: component, Status: Completed}
-	case <-ctx.Done():
-		slog.WarnContext(ctx, "component shutdown exceeded its budget",
-			"component", component, "timeout", timeout.String())
-		return Outcome{Component: component, Status: TimedOut}
 	}
+	slog.WarnContext(ctx, "component shutdown exceeded its budget",
+		"component", component, "timeout", timeout.String())
+	return Outcome{Component: component, Status: TimedOut}
 }
 
 func unfinished(outcomes []Outcome) []string {

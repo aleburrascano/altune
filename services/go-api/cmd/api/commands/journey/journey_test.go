@@ -216,7 +216,7 @@ func TestRunPassesAOneByteDownload(t *testing.T) {
 }
 
 func TestRankingOnlySearcherComesFromTheDiscoveryTable(t *testing.T) {
-	searcher, err := journey.RankingOnlySearcher(t.Context(), &config.Config{}, nil)
+	searcher, err := journey.RankingOnlySearcher(t.Context(), &config.Config{BackgroundMaxInFlight: 64}, nil)
 	if err != nil {
 		t.Fatalf("RankingOnlySearcher: %v", err)
 	}

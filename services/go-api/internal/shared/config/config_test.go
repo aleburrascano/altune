@@ -411,6 +411,28 @@ func TestLoad_AcquisitionDownloadConcurrency(t *testing.T) {
 	}
 }
 
+func TestLoad_BackgroundMaxInFlightDefaultsTo64AndRefusesBelowOne(t *testing.T) {
+	setEnv(t, validConfigEnv(nil))
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load with the default: %v", err)
+	}
+	if cfg.BackgroundMaxInFlight != 64 {
+		t.Errorf("default BackgroundMaxInFlight = %d, want 64", cfg.BackgroundMaxInFlight)
+	}
+
+	for _, value := range []string{"0", "-1"} {
+		setEnv(t, validConfigEnv(map[string]string{"BACKGROUND_MAX_IN_FLIGHT": value}))
+		if _, err := config.Load(); err == nil || !searchString(err.Error(), "BACKGROUND_MAX_IN_FLIGHT") {
+			t.Errorf("Load with %s = %v, want an error naming BACKGROUND_MAX_IN_FLIGHT", value, err)
+		}
+	}
+	setEnv(t, validConfigEnv(map[string]string{"BACKGROUND_MAX_IN_FLIGHT": "1"}))
+	if _, err := config.Load(); err != nil {
+		t.Errorf("Load with 1 = %v, want the lowest allowed value accepted", err)
+	}
+}
+
 func TestLoad_AcquisitionConcurrencyDefaultValid(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
 

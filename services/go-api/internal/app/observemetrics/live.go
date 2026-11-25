@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/leader"
 	"altune/go-api/internal/shared/redis"
 	"altune/go-api/internal/shared/reqmetrics"
+	"altune/go-api/internal/shared/runloop"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
@@ -21,6 +22,7 @@ type Sources struct {
 	EventTap     *observe.EventTap
 	EventFeed    *observe.EventFeed
 	AlertMonitor *observe.AlertMonitor
+	Background   *runloop.Tracker
 }
 
 type eventBusStats struct {
@@ -40,5 +42,6 @@ func Live(s Sources) observe.LiveMetrics {
 	m["event_bus"] = eventBusStats{Dropped: s.EventBus.Dropped()}
 	m["alert_monitor"] = s.AlertMonitor.Status()
 	m["event_tap"] = eventTapStats{TapDropped: s.EventTap.Dropped(), FeedDropped: s.EventFeed.Dropped()}
+	m["background_tasks_dropped"] = s.Background.Dropped()
 	return m
 }

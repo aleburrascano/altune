@@ -29,6 +29,7 @@ func NewElection(pool *pgxpool.Pool) *leader.Election {
 }
 
 type Runner struct {
+	loops    runloop.Tracker
 	wg       sync.WaitGroup
 	registry runloop.JobRegistry
 	election Election
@@ -37,6 +38,11 @@ type Runner struct {
 
 func (r *Runner) Background() *sync.WaitGroup {
 	return &r.wg
+}
+
+func (r *Runner) Wait() {
+	r.loops.Wait()
+	r.wg.Wait()
 }
 
 func (r *Runner) Control(name Name) *runloop.JobControl {
@@ -66,7 +72,7 @@ func (r *Runner) Ticker(name Name, interval time.Duration, fn func(context.Conte
 	r.Control(name)
 	r.WhenLeader(name, func(ctx context.Context) {
 		run := r.newRun(name, interval)
-		runloop.Every(ctx, &r.wg, interval, func() { r.tickAsLeader(ctx, run, fn) })
+		runloop.Every(ctx, &r.loops, interval, func() { r.tickAsLeader(ctx, run, fn) })
 	})
 }
 
@@ -75,13 +81,13 @@ func (r *Runner) EveryInstance(ctx context.Context, name Name, interval time.Dur
 		panic(fmt.Sprintf("jobs: %q is leader-only, so it registers with Ticker; only a job the table marks everyInstance may use EveryInstance", name))
 	}
 	run := r.newRun(name, interval)
-	runloop.Every(ctx, &r.wg, interval, func() { r.tick(ctx, run, fn) })
+	runloop.Every(ctx, &r.loops, interval, func() { r.tick(ctx, run, fn) })
 }
 
 func (r *Runner) Lead(ctx context.Context, election Election) {
 	r.election = election
 	election.Start(ctx)
-	runloop.StartWhenLeader(ctx, &r.wg, election.Await, r.starts)
+	runloop.StartWhenLeader(ctx, &r.loops, election.Await, r.starts)
 }
 
 func (r *Runner) Election() Election {

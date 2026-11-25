@@ -5,9 +5,11 @@ import (
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/runloop"
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -121,13 +123,20 @@ func TestUnreleasedRefresh_NoUnreleasedSourceStartsNoRefresh(t *testing.T) {
 	}
 }
 
+func TestNewEvalDiscovery_RefusesABackgroundCapBelowOne(t *testing.T) {
+	_, err := app.NewEvalDiscovery(t.Context(), &config.Config{}, app.EvalHandles{Pool: unreachablePool(t), Transport: refuseEgress{}})
+	if !errors.Is(err, runloop.ErrTrackerLimit) {
+		t.Fatalf("NewEvalDiscovery = %v, want runloop.ErrTrackerLimit", err)
+	}
+}
+
 func TestNewEvalDiscovery_SearchesThroughTheGivenTransport(t *testing.T) {
 	var logs bytes.Buffer
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	disc, err := app.NewEvalDiscovery(t.Context(), &config.Config{}, app.EvalHandles{Pool: unreachablePool(t), Transport: refuseEgress{}})
+	disc, err := app.NewEvalDiscovery(t.Context(), &config.Config{BackgroundMaxInFlight: 64}, app.EvalHandles{Pool: unreachablePool(t), Transport: refuseEgress{}})
 	if err != nil {
 		t.Fatalf("NewEvalDiscovery: %v", err)
 	}
