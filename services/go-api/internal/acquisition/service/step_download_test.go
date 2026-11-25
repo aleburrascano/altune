@@ -1,10 +1,10 @@
 package service
 
 import (
-	"altune/go-api/internal/acquisition/internal/adapters/discoverybridge"
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/isrcproof"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition/internal/core/recordingresolver"
 	"altune/go-api/internal/acquisition/internal/core/rejectionlog"
 	"altune/go-api/internal/catalog/domain"
 	"bytes"
@@ -2629,9 +2629,9 @@ func TestDurationDelta_IsUnknownWithoutAProbeOrATarget(t *testing.T) {
 
 func TestResolvedIdentity_StandingInTheDarkCatalogLengthConflictReachesTheReaders(t *testing.T) {
 	const isrc, mbid = "USAAA2400001", "standing-in-the-dark-live"
-	resolver := discoverybridge.NewRecordedResolver(
-		[]discoverybridge.RecordedSearchHit{{Title: "Standing In The Dark (Live)", Artist: "Artist", ISRC: isrc, MBID: mbid, Duration: 197}},
-		[]discoverybridge.RecordedISRCRecording{{MBID: mbid, Duration: 197}}, nil)
+	resolver := recordingresolver.NewRecorded(
+		[]ports.SearchedRecording{{Title: "Standing In The Dark (Live)", Artist: "Artist", ISRC: isrc, MBID: mbid, Duration: 197}},
+		[]ports.ISRCRecording{{MBID: mbid, Duration: 197}}, nil)
 	ac := &AcquisitionContext{
 		Track:   TrackRef{Title: "Standing In The Dark (Live)", Artist: "Artist", ISRC: isrc, CatalogDuration: 300},
 		Verdict: AudioVerdict{Kind: VerdictHard, Surviving: []ports.LinkedRecording{{MBID: mbid}}},

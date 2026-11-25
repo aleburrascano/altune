@@ -207,6 +207,7 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   internal/core/domain/admission_error.go the admission sentinels, as shared/domain coded errors (package domain)
   internal/core/tracklength/ Policy: the expected length, Corroborated, the pre-download Plausible gate, and FileJudge, which exists only when a length is known and judges a downloaded file; which window applies (the windows are `domain.LengthTolerance`) stays inside it
   internal/core/isrcproof/ Prove: which ISRC a finished run may write back (the catalog's own, then the pinned recording's, then one the fingerprint proved) and the isrc_source stored beside it in the evidence; confidence.go's provenISRC hands it the run's facts, and both TAG and UPDATE_TRACK use the answer
+  internal/core/recordingresolver/ Resolver — a RecordingIdentity from acquisition's RecordingSearch, ISRCAuthority and RecordingLookup ports, and FindRerecording over its RerecordingAuthority port; internal/app/acquisitiondiscovery implements those ports over discovery
   internal/core/ranking/  Rank (the unplayable, re-recording, identity and veto refusals, the resolved, Topic and Other buckets and their orders, the candidate_evaluated log), UploaderOf, UnrequestedQualifiers — identityScore, metadataRank, featureMatch, qualifierDistance inside it
   audio_ref.go           BuildAudioRef (+ legacy variants), thin wrappers that hand a TrackRef to internal/core/audioref
   retry_admission.go     RetryAdmission, ReacquireAdmission, cooldownGate
@@ -230,8 +231,6 @@ adapters/
     tagger.go            Tagger — ID3v2.4, MP3-only
   chromaprint/
     identifier.go        Identifier — fpcalc fingerprint, AcoustID lookup and cluster expansion
-  discoverybridge/
-    recording_resolver.go RecordingResolver — discovery's search service to a RecordingIdentity
   persistence/
     cooldown_store.go    PgxCooldownStore — the atomic reserve/release upsert on acquisition_cooldowns
   memqueue/
@@ -746,7 +745,7 @@ flowchart TD
     NAMES["stage Name() strings"] --> FR["failureReason"]
     NAMES --> EVP["track_acquisition_progress · stage payload"]
     EVP --> MOB["mobile download UI"]
-    PROV["ports.Provider* keys"] --> DBR["discoverybridge · providerKey"]
+    PROV["ports.Provider* keys"] --> DBR["app/acquisitiondiscovery · providerOf"]
     PROV --> SFOR["RecordingIdentity.SourceFor"]
     SFOR --> YTM["ytmusic · identityKey"]
     SRC["source Name() strings"] --> STAMP["stampSource → AudioCandidate.Source"]
@@ -771,7 +770,7 @@ flowchart TD
 | `sourceKey` | every stored `rejected_source_keys` value | changing the key shape orphans the memory and re-acquire silently toggles again |
 | a stage `Name()` string | `failureReason`'s vocabulary, the `progress` event payload the mobile client renders | rename compiles clean and breaks the client silently |
 | a source's `Name()` (`ytdlp`, `ytmusic`) | `stampSource` stamps it onto `AudioCandidate.Source`; `SourceRegistry.Fetch` routes the download by matching it back, and it labels every candidate log line and `rejectionlog.Entry` | renaming one leaves `Fetch` with "no source named" for every candidate that source found — the search is paid for and then discarded wholesale |
-| a `ports.Provider*` identity key (`youtube`, `deezer`, `soundcloud`) | `discoverybridge.providerKey`'s mapping off discovery's `ProviderName`, `RecordingIdentity.SourceFor`, `ytmusic`'s `identityKey` | a key written by one side and not looked up by the other fails *silently*: `SourceFor` returns false and the resolved source simply never produces a candidate |
+| a `ports.Provider*` identity key (`youtube`, `deezer`, `soundcloud`) | `app/acquisitiondiscovery`'s `providerOf` mapping off discovery's `ProviderName`, `RecordingIdentity.SourceFor`, `ytmusic`'s `identityKey` | a key written by one side and not looked up by the other fails *silently*: `SourceFor` returns false and the resolved source simply never produces a candidate |
 | an `isrcproof.Source` value | the `isrc_source` of every stored acquisition evidence, and the `isrc_source` the eval goldens expect of a saved track | renaming one splits the provenance history, and every golden that pins the old name fails |
 | a `rejectionlog.Stage` constant | the `reason` of every `acquisition_rejections` row, the per-stage counts in `rejectionlog.Summary`, persisted into `failure_reason` after `domain.FailureDetailSeparator`, and every rejection log line | renaming one splits that stage's history — rows and dashboards group the old and new spelling as two different, half-populated stages |
 | a `ports.CooldownKind` value (`retry`, `reacquire`) | the `acquisition_cooldowns.kind` CHECK constraint (migration 019), and both admissions | a kind the constraint doesn't list fails every reserve with a 500; renaming one abandons the windows already written and reopens the cooldown for every track |

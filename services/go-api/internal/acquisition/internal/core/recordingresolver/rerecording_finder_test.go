@@ -1,8 +1,7 @@
-package discoverybridge_test
+package recordingresolver_test
 
 import (
 	"altune/go-api/internal/acquisition"
-	"altune/go-api/internal/discovery"
 	"context"
 	"errors"
 	"fmt"
@@ -18,57 +17,57 @@ const (
 )
 
 type stubRerecordingAuthority struct {
-	work        []discovery.MBWorkRecording
-	details     map[string]discovery.MBRecordingDetail
+	work        []acquisition.WorkRecording
+	details     map[string]acquisition.RecordingDetail
 	workErr     error
 	detailErr   map[string]error
 	detailCalls int
 }
 
-func (s *stubRerecordingAuthority) WorkRecordings(context.Context, string) ([]discovery.MBWorkRecording, error) {
+func (s *stubRerecordingAuthority) WorkRecordings(context.Context, string) ([]acquisition.WorkRecording, error) {
 	return s.work, s.workErr
 }
 
-func (s *stubRerecordingAuthority) RecordingDetail(_ context.Context, mbid string) (discovery.MBRecordingDetail, bool, error) {
+func (s *stubRerecordingAuthority) RecordingDetail(_ context.Context, mbid string) (acquisition.RecordingDetail, bool, error) {
 	s.detailCalls++
 	if err := s.detailErr[mbid]; err != nil {
-		return discovery.MBRecordingDetail{}, false, err
+		return acquisition.RecordingDetail{}, false, err
 	}
 	detail, ok := s.details[mbid]
 	return detail, ok, nil
 }
 
-func official(title, date string) []discovery.MBRelease {
-	return []discovery.MBRelease{{Title: title, Date: date, Status: "Official"}}
+func official(title, date string) []acquisition.RecordingRelease {
+	return []acquisition.RecordingRelease{{Title: title, Date: date, Status: "Official"}}
 }
 
-func itsOnlyLoveOriginal() discovery.MBRecordingDetail {
-	return discovery.MBRecordingDetail{
+func itsOnlyLoveOriginal() acquisition.RecordingDetail {
+	return acquisition.RecordingDetail{
 		MBID: itsOnlyLove, Title: "It’s Only Love", ArtistIDs: []string{bryanAdams},
 		Duration: 195, FirstReleaseDate: "1984-10-29", Releases: official("Reckless", "1984-10-29"),
 	}
 }
 
 func itsOnlyLoveWork() *stubRerecordingAuthority {
-	work := []discovery.MBWorkRecording{
-		{MBID: itsOnlyLove, Title: "It’s Only Love", ArtistIDs: []string{bryanAdams}, Duration: 195},
+	work := []acquisition.WorkRecording{
+		{MBID: itsOnlyLove, Title: "It’s Only Love", ArtistIDs: []string{bryanAdams}},
 		{MBID: "e5cdd7d1-727a-4a5d-9318-11a1cb8e19dc", Title: "It’s Only Love (classic version)", ArtistIDs: []string{bryanAdams}},
-		{MBID: "b9eec01c-7c0b-48c2-ba44-f0b9952e6599", Title: "It’s Only Love (live at The Royal Albert Hall 2024)", ArtistIDs: []string{bryanAdams}, Duration: 291.986},
+		{MBID: "b9eec01c-7c0b-48c2-ba44-f0b9952e6599", Title: "It’s Only Love (live at The Royal Albert Hall 2024)", ArtistIDs: []string{bryanAdams}},
 		{MBID: "8d393956-4a15-4bf8-982b-d4e0aea20550", Title: "It’s Only Love", ArtistIDs: []string{bryanAdams}, Live: true},
-		{MBID: "5d216325", Title: "It's Only Love", ArtistIDs: []string{bryanAdams}, Duration: 302},
+		{MBID: "5d216325", Title: "It's Only Love", ArtistIDs: []string{bryanAdams}},
 		{MBID: "9857887e-aa9a-47b0-868a-0f51049cdaed", Title: "It’s Only Love (classic version)", ArtistIDs: []string{bryanAdams}},
-		{MBID: itsOnlyLoveClassi, Title: "It’s Only Love (classic version)", ArtistIDs: []string{bryanAdams}, Duration: 194},
+		{MBID: itsOnlyLoveClassi, Title: "It’s Only Love (classic version)", ArtistIDs: []string{bryanAdams}},
 	}
-	details := map[string]discovery.MBRecordingDetail{itsOnlyLove: itsOnlyLoveOriginal()}
-	details["e5cdd7d1-727a-4a5d-9318-11a1cb8e19dc"] = discovery.MBRecordingDetail{
+	details := map[string]acquisition.RecordingDetail{itsOnlyLove: itsOnlyLoveOriginal()}
+	details["e5cdd7d1-727a-4a5d-9318-11a1cb8e19dc"] = acquisition.RecordingDetail{
 		MBID: "e5cdd7d1-727a-4a5d-9318-11a1cb8e19dc", Title: "It’s Only Love (classic version)", ArtistIDs: []string{bryanAdams},
 		FirstReleaseDate: "2025-05-09", Releases: official("Bryan Adams: Classic", "2025-05-09"),
 	}
-	details["9857887e-aa9a-47b0-868a-0f51049cdaed"] = discovery.MBRecordingDetail{
+	details["9857887e-aa9a-47b0-868a-0f51049cdaed"] = acquisition.RecordingDetail{
 		MBID: "9857887e-aa9a-47b0-868a-0f51049cdaed", Title: "It’s Only Love (classic version)", ArtistIDs: []string{bryanAdams},
 		FirstReleaseDate: "2025-05-09", Releases: official("Classic", "2025-05-09"),
 	}
-	details[itsOnlyLoveClassi] = discovery.MBRecordingDetail{
+	details[itsOnlyLoveClassi] = acquisition.RecordingDetail{
 		MBID: itsOnlyLoveClassi, Title: "It’s Only Love (classic version)", ArtistIDs: []string{bryanAdams},
 		ISRCs: []string{"IETLH2500023"}, Duration: 194, FirstReleaseDate: "2025-04-25", Releases: official("It’s Only Love", "2025-04-25"),
 	}
@@ -104,16 +103,16 @@ func TestFindRerecording_BryanAdamsItsOnlyLoveTakesTheClassicVersionWithAnISRC(t
 	}
 }
 
-func onlyRecording(rec discovery.MBWorkRecording, detail discovery.MBRecordingDetail) *stubRerecordingAuthority {
+func onlyRecording(rec acquisition.WorkRecording, detail acquisition.RecordingDetail) *stubRerecordingAuthority {
 	return &stubRerecordingAuthority{
-		work:    []discovery.MBWorkRecording{rec},
-		details: map[string]discovery.MBRecordingDetail{itsOnlyLove: itsOnlyLoveOriginal(), rec.MBID: detail},
+		work:    []acquisition.WorkRecording{rec},
+		details: map[string]acquisition.RecordingDetail{itsOnlyLove: itsOnlyLoveOriginal(), rec.MBID: detail},
 	}
 }
 
-func laterClassic(mbid, title, disambiguation string, artist string) (discovery.MBWorkRecording, discovery.MBRecordingDetail) {
-	rec := discovery.MBWorkRecording{MBID: mbid, Title: title, Disambiguation: disambiguation, ArtistIDs: []string{artist}}
-	detail := discovery.MBRecordingDetail{
+func laterClassic(mbid, title, disambiguation string, artist string) (acquisition.WorkRecording, acquisition.RecordingDetail) {
+	rec := acquisition.WorkRecording{MBID: mbid, Title: title, Disambiguation: disambiguation, ArtistIDs: []string{artist}}
+	detail := acquisition.RecordingDetail{
 		MBID: mbid, Title: title, ArtistIDs: []string{artist}, ISRCs: []string{"IETLH2500099"},
 		FirstReleaseDate: "2025-04-25", Releases: official("Classic", "2025-04-25"),
 	}
@@ -133,7 +132,7 @@ func TestFindRerecording_NoneWhenNoOtherRecordingIsALabelledLaterStudioRerecordi
 	undated, undatedDetail := laterClassic("undated", "It’s Only Love (classic version)", "", bryanAdams)
 	undatedDetail.FirstReleaseDate = ""
 	promoOnly, promoOnlyDetail := laterClassic("promo", "It’s Only Love (classic version)", "", bryanAdams)
-	promoOnlyDetail.Releases = []discovery.MBRelease{{Title: "Classic", Date: "2025-04-25", Status: "Promotion"}}
+	promoOnlyDetail.Releases = []acquisition.RecordingRelease{{Title: "Classic", Date: "2025-04-25", Status: "Promotion"}}
 	noArtist, noArtistDetail := laterClassic("no-artist", "It’s Only Love (classic version)", "", bryanAdams)
 	noArtist.ArtistIDs = nil
 
@@ -174,7 +173,7 @@ func TestFindRerecording_LogsNoneWithTheCandidateCount(t *testing.T) {
 	logs := captureDefaultLog(t)
 	authority := itsOnlyLoveWork()
 	authority.work = authority.work[:6]
-	authority.details["e5cdd7d1-727a-4a5d-9318-11a1cb8e19dc"] = discovery.MBRecordingDetail{}
+	authority.details["e5cdd7d1-727a-4a5d-9318-11a1cb8e19dc"] = acquisition.RecordingDetail{}
 	delete(authority.details, "9857887e-aa9a-47b0-868a-0f51049cdaed")
 
 	if _, found := findRerecording(t, authority); found {
@@ -197,8 +196,8 @@ func TestFindRerecording_PrefersAnISRCThenTheEarliestReleaseThenMusicBrainzOrder
 	fourth, fourthDetail := laterClassic("fourth", "It’s Only Love (Taylor’s Version)", "", bryanAdams)
 	fourthDetail.FirstReleaseDate = "2023-03-01"
 	authority := &stubRerecordingAuthority{
-		work: []discovery.MBWorkRecording{first, second, third, fourth},
-		details: map[string]discovery.MBRecordingDetail{
+		work: []acquisition.WorkRecording{first, second, third, fourth},
+		details: map[string]acquisition.RecordingDetail{
 			itsOnlyLove: itsOnlyLoveOriginal(), "first": firstDetail, "second": secondDetail, "third": thirdDetail, "fourth": fourthDetail,
 		},
 	}
@@ -212,7 +211,7 @@ func TestFindRerecording_PrefersAnISRCThenTheEarliestReleaseThenMusicBrainzOrder
 
 func TestFindRerecording_LabelTakesTheEarliestOfficialRelease(t *testing.T) {
 	rec, detail := laterClassic("multi", "It’s Only Love (classic version)", "", bryanAdams)
-	detail.Releases = []discovery.MBRelease{
+	detail.Releases = []acquisition.RecordingRelease{
 		{Title: "Bootleg", Date: "2024-01-01", Status: "Bootleg"},
 		{Title: "Undated", Status: "Official"},
 		{Title: "Later", Date: "2026-02-02", Status: "Official"},
@@ -229,7 +228,7 @@ func TestFindRerecording_LabelTakesTheEarliestOfficialRelease(t *testing.T) {
 const rerecordingLookupCap = 5
 
 func TestFindRerecording_LooksUpAtMostFiveCandidatesBesideTheOriginal(t *testing.T) {
-	authority := &stubRerecordingAuthority{details: map[string]discovery.MBRecordingDetail{itsOnlyLove: itsOnlyLoveOriginal()}}
+	authority := &stubRerecordingAuthority{details: map[string]acquisition.RecordingDetail{itsOnlyLove: itsOnlyLoveOriginal()}}
 	for i := range 40 {
 		rec, detail := laterClassic(fmt.Sprintf("classic-%d", i), "It’s Only Love (classic version)", "", bryanAdams)
 		detail.Releases = nil
@@ -328,8 +327,8 @@ func TestFindRerecording_SkipsACandidateMusicBrainzNoLongerKnowsAndTakesTheNext(
 	gone, _ := laterClassic("gone", "It’s Only Love (classic version)", "", bryanAdams)
 	kept, keptDetail := laterClassic("kept", "It’s Only Love (classic version)", "", bryanAdams)
 	authority := &stubRerecordingAuthority{
-		work:    []discovery.MBWorkRecording{gone, kept},
-		details: map[string]discovery.MBRecordingDetail{itsOnlyLove: itsOnlyLoveOriginal(), "kept": keptDetail},
+		work:    []acquisition.WorkRecording{gone, kept},
+		details: map[string]acquisition.RecordingDetail{itsOnlyLove: itsOnlyLoveOriginal(), "kept": keptDetail},
 	}
 
 	label, found := findRerecording(t, authority)

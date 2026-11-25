@@ -1,0 +1,1 @@
+`acquisitiondiscovery` implements the ports acquisition owns from the discovery feature, translating types only, and builds the recording options the acquisition scheduler takes from what discovery can answer.
