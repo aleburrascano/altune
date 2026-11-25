@@ -1,13 +1,12 @@
 package service
 
 import (
-	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
+	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/acquisition/internal/adapters/memqueue"
 	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	acqports "altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/service/upgrade"
 	"altune/go-api/internal/catalog"
-	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared/events"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
@@ -31,82 +30,98 @@ type memJobQueue = memqueue.Queue
 
 func newMemJobQueue(wake chan<- struct{}) *memJobQueue { return memqueue.New(wake, time.Now) }
 
-type fakeTrackRepository struct {
-	tracks map[string]*domain.Track
-	err    error
-}
+type ledgerTrack = acquisitiontest.LedgerTrack
 
-func newFakeTrackRepository() *fakeTrackRepository {
-	return &fakeTrackRepository{tracks: make(map[string]*domain.Track)}
-}
-
-func (r *fakeTrackRepository) Add(_ context.Context, track *domain.Track) (bool, error) {
-	if r.err != nil {
-		return false, r.err
+func newLedgerTrack(userId shared.UserId, title, artist, album string) ledgerTrack {
+	title = strings.TrimSpace(title)
+	if strings.TrimSpace(album) == "" {
+		album = title
 	}
-	key := track.ID.String() + ":" + track.UserId.String()
-	if _, exists := r.tracks[key]; exists {
-		return false, nil
+	return ledgerTrack{TrackSnapshot: acqports.TrackSnapshot{
+		ID:     shared.NewTrackId(),
+		UserId: userId,
+		Title:  title,
+		Artist: artist,
+		Album:  album,
+		Status: acqports.TrackPending,
+	}}
+}
+
+func makeReady(track *ledgerTrack, audioRef string) {
+	track.Status, track.AudioRef, track.FailureReason = acqports.TrackReady, &audioRef, ""
+}
+
+func makeFailed(track *ledgerTrack, reason string) {
+	track.Status, track.AudioRef, track.FailureReason = acqports.TrackFailed, nil, reason
+}
+
+func useSource(track *ledgerTrack, url string) { track.AudioSourceURL = &url }
+
+func withCatalogLength(t *testing.T, ledger *acquisitiontest.Ledger, track ledgerTrack, seconds float64) ledgerTrack {
+	t.Helper()
+	track.CatalogDurationSeconds = &seconds
+	ledger.Seed(track)
+	return track
+}
+
+func ptrTo[T any](v T) *T { return &v }
+
+func readyWith(ref string) func(*ledgerTrack) {
+	return func(track *ledgerTrack) { makeReady(track, ref) }
+}
+
+func committedTrack(t *testing.T, ledger *acquisitiontest.Ledger, id shared.TrackId) ledgerTrack {
+	t.Helper()
+	track, ok := ledger.Track(id)
+	if !ok {
+		t.Fatalf("track %s is missing from the ledger", id)
 	}
-	r.tracks[key] = track
-	return true, nil
+	return track
 }
 
-func (r *fakeTrackRepository) GetByID(_ context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {
-	if r.err != nil {
-		return nil, r.err
-	}
-	key := id.String() + ":" + userId.String()
-	return r.tracks[key], nil
-}
+type emptyLedger struct{}
 
-func (r *fakeTrackRepository) AudioRefInUse(_ context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error) {
-	if r.err != nil {
-		return false, r.err
-	}
-	for _, t := range r.tracks {
-		if t.ID != excludeTrackID && t.AudioRef != nil && *t.AudioRef == audioRef {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func (r *fakeTrackRepository) ListForUser(_ context.Context, _ shared.UserId, _, _ int) ([]*domain.Track, int, error) {
-	return nil, 0, nil
-}
-
-func (r *fakeTrackRepository) Update(_ context.Context, track *domain.Track, _ int) error {
-	if r.err != nil {
-		return r.err
-	}
-	key := track.ID.String() + ":" + track.UserId.String()
-	r.tracks[key] = track
-	return nil
-}
-
-func (r *fakeTrackRepository) Delete(_ context.Context, _ domain.TrackId, _ shared.UserId) (bool, error) {
-	return false, nil
-}
-
-func (r *fakeTrackRepository) GetByDedupKey(_ context.Context, _ shared.UserId, _ string) (*domain.Track, error) {
+func (emptyLedger) Get(context.Context, shared.TrackId, shared.UserId) (*acqports.TrackSnapshot, error) {
 	return nil, nil
 }
 
-type liveCtxTrackRepository struct{ *fakeTrackRepository }
+func (emptyLedger) AudioRefInUse(context.Context, string, shared.TrackId) (bool, error) {
+	return false, nil
+}
 
-func (r liveCtxTrackRepository) GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {
+func (emptyLedger) Complete(context.Context, shared.TrackId, shared.UserId, acqports.Fence, acqports.Completion) error {
+	return acqports.ErrTrackNotFound
+}
+
+func (emptyLedger) Fail(context.Context, shared.TrackId, shared.UserId, acqports.Fence, string) error {
+	return acqports.ErrTrackNotFound
+}
+
+func (emptyLedger) RevertAt(context.Context, acqports.TrackSnapshot) error {
+	return acqports.ErrTrackNotFound
+}
+
+type liveCtxLedger struct{ *acquisitiontest.Ledger }
+
+func (l liveCtxLedger) Get(ctx context.Context, id shared.TrackId, userId shared.UserId) (*acqports.TrackSnapshot, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	return r.fakeTrackRepository.GetByID(ctx, id, userId)
+	return l.Ledger.Get(ctx, id, userId)
 }
 
-func (r liveCtxTrackRepository) Update(ctx context.Context, track *domain.Track, expectedVersion int) error {
+func (l liveCtxLedger) Complete(ctx context.Context, id shared.TrackId, userId shared.UserId, fence acqports.Fence, c acqports.Completion) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return r.fakeTrackRepository.Update(ctx, track, expectedVersion)
+	return l.Ledger.Complete(ctx, id, userId, fence, c)
+}
+
+func (l liveCtxLedger) Fail(ctx context.Context, id shared.TrackId, userId shared.UserId, fence acqports.Fence, reason string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return l.Ledger.Fail(ctx, id, userId, fence, reason)
 }
 
 type blockingSource struct {
@@ -199,11 +214,11 @@ func (s *fakeAudioStore) Delete(_ context.Context, audioRef string) error {
 }
 
 func TestBackgroundScheduler_Schedule(t *testing.T) {
-	repo := newFakeTrackRepository()
+	ledger := acquisitiontest.NewLedger()
 	searcher := &fakeAudioSearcher{}
 	store := newFakeAudioStore()
 
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store)
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 2)
@@ -213,7 +228,7 @@ func TestBackgroundScheduler_Schedule(t *testing.T) {
 	})
 
 	userId := shared.NewUserId(uuid.New())
-	trackId := domain.NewTrackId()
+	trackId := shared.NewTrackId()
 
 	scheduler.Schedule(context.Background(), userId, trackId, "")
 
@@ -224,11 +239,11 @@ func TestBackgroundScheduler_Schedule(t *testing.T) {
 }
 
 func TestBackgroundScheduler_ScheduleMultiple_RespectsSemaphore(t *testing.T) {
-	repo := newFakeTrackRepository()
+	ledger := acquisitiontest.NewLedger()
 	searcher := &fakeAudioSearcher{}
 	store := newFakeAudioStore()
 
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store)
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)
@@ -243,7 +258,7 @@ func TestBackgroundScheduler_ScheduleMultiple_RespectsSemaphore(t *testing.T) {
 	const numSchedules = 3
 
 	for i := 0; i < numSchedules; i++ {
-		trackId := domain.NewTrackId()
+		trackId := shared.NewTrackId()
 		scheduler.Schedule(context.Background(), userId, trackId, "")
 	}
 
@@ -257,15 +272,11 @@ func TestBackgroundScheduler_ScheduleMultiple_RespectsSemaphore(t *testing.T) {
 
 func TestBackgroundScheduler_ShutdownMidSearch_ReleasesTheJobForAnotherWorker(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	repo := newFakeTrackRepository()
-	key := track.ID.String() + ":" + userId.String()
-	repo.tracks[key] = track
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
 	source := newBlockingSource()
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(liveCtxTrackRepository{repo}), NewSourceRegistry(source), newFakeAudioStore())
+	svc := newTestAcquireService(liveCtxLedger{ledger}, NewSourceRegistry(source), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithDrainBudget(10*time.Millisecond))
 	if err := scheduler.Schedule(context.Background(), userId, track.ID, ""); err != nil {
@@ -275,28 +286,24 @@ func TestBackgroundScheduler_ShutdownMidSearch_ReleasesTheJobForAnotherWorker(t 
 
 	scheduler.Shutdown(context.Background())
 
-	settled := repo.tracks[key]
-	if settled.AcquisitionStatus != domain.AcquisitionPending {
-		t.Errorf("status = %v, want %v (released for another worker)", settled.AcquisitionStatus, domain.AcquisitionPending)
+	settled := committedTrack(t, ledger, track.ID)
+	if settled.Status != acqports.TrackPending {
+		t.Errorf("status = %v, want %v (released for another worker)", settled.Status, acqports.TrackPending)
 	}
-	if settled.FailureReason != nil {
-		t.Errorf("persisted failure_reason = %q, want nil", deref(settled.FailureReason))
+	if settled.FailureReason != "" {
+		t.Errorf("persisted failure_reason = %q, want nil", settled.FailureReason)
 	}
 }
 
 func TestBackgroundScheduler_ShutdownMidSearch_ReleasesTheReplaceJobForAnotherWorker(t *testing.T) {
 	logs := captureJSONLog(t)
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	track.SetAudioSource("https://www.youtube.com/watch?v=currentAAAA")
-	repo := newFakeTrackRepository()
-	key := track.ID.String() + ":" + userId.String()
-	repo.tracks[key] = track
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	useSource(&track, "https://www.youtube.com/watch?v=currentAAAA")
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
 	source := newBlockingSource()
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(liveCtxTrackRepository{repo}), NewSourceRegistry(source), newFakeAudioStore())
+	svc := newTestAcquireService(liveCtxLedger{ledger}, NewSourceRegistry(source), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithDrainBudget(10*time.Millisecond))
 	if err := scheduler.ScheduleReplace(context.Background(), userId, track.ID); err != nil {
@@ -306,12 +313,12 @@ func TestBackgroundScheduler_ShutdownMidSearch_ReleasesTheReplaceJobForAnotherWo
 
 	scheduler.Shutdown(context.Background())
 
-	settled := repo.tracks[key]
-	if settled.AcquisitionStatus != domain.AcquisitionPending {
-		t.Errorf("status = %v, want %v (released for another worker)", settled.AcquisitionStatus, domain.AcquisitionPending)
+	settled := committedTrack(t, ledger, track.ID)
+	if settled.Status != acqports.TrackPending {
+		t.Errorf("status = %v, want %v (released for another worker)", settled.Status, acqports.TrackPending)
 	}
-	if settled.FailureReason != nil {
-		t.Errorf("persisted failure_reason = %q, want nil", deref(settled.FailureReason))
+	if settled.FailureReason != "" {
+		t.Errorf("persisted failure_reason = %q, want nil", settled.FailureReason)
 	}
 	if findLogRecord(t, logs, "track_acquisition_cancelled") == nil {
 		t.Error("want a track_acquisition_cancelled log for the scheduler-cancelled replace, got none")
@@ -323,14 +330,11 @@ const cookieJarPath = "/home/x/cookies.txt"
 func TestBackgroundScheduler_FailedJob_KeepsTheCookiePathOutOfTheReasonAndTheLog(t *testing.T) {
 	logs := captureJSONLog(t)
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	repo := newFakeTrackRepository()
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
 	leaking := &fakeAudioSearcher{searchErr: errors.New("yt-dlp exited 1: --cookies " + cookieJarPath + ": permission denied")}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(leaking), newFakeAudioStore())
+	svc := newTestAcquireService(ledger, fakeRegistry(leaking), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1))
 	t.Cleanup(func() {
@@ -379,7 +383,7 @@ func TestBackgroundScheduler_ScheduleRacingShutdown_NeverLosesAnAcceptedJob(t *t
 
 func scheduleWhileShuttingDown(t *testing.T) (accepted []string, settled map[string]acqports.JobRecord, remaining map[string]struct{}) {
 	t.Helper()
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(&countingRepo{}), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := newTestAcquireService(&countingLedger{}, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var jobs sync.WaitGroup
 	var queueAhead atomic.Int64
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &jobs, make(chan struct{}, 4), func(s *BackgroundAcquisitionScheduler) {
@@ -396,7 +400,7 @@ func scheduleWhileShuttingDown(t *testing.T) (accepted []string, settled map[str
 	start := make(chan struct{})
 	var callers sync.WaitGroup
 	for i := 0; i < racingSchedulers; i++ {
-		trackId := domain.NewTrackId()
+		trackId := shared.NewTrackId()
 		callers.Add(1)
 		go func() {
 			defer callers.Done()
@@ -440,18 +444,18 @@ type startedAcquirer struct {
 	calls   atomic.Int32
 }
 
-func (a *startedAcquirer) Execute(context.Context, shared.UserId, domain.TrackId) error {
+func (a *startedAcquirer) Execute(context.Context, shared.UserId, shared.TrackId) error {
 	a.calls.Add(1)
 	a.once.Do(func() { close(a.started) })
 	<-a.release
 	return nil
 }
 
-func (a *startedAcquirer) ExecuteReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
+func (a *startedAcquirer) ExecuteReplace(ctx context.Context, userId shared.UserId, trackId shared.TrackId) error {
 	return a.Execute(ctx, userId, trackId)
 }
 
-func (a *startedAcquirer) RefuseQueued(context.Context, shared.UserId, domain.TrackId) {}
+func (a *startedAcquirer) RefuseQueued(context.Context, shared.UserId, shared.TrackId) {}
 
 func TestBackgroundScheduler_QueuedJobWaitsForAWorkerSlotAndRuns(t *testing.T) {
 	acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}
@@ -461,11 +465,11 @@ func TestBackgroundScheduler_QueuedJobWaitsForAWorkerSlotAndRuns(t *testing.T) {
 		scheduler.Shutdown(context.Background())
 	})
 	userId := shared.NewUserId(uuid.New())
-	if err := scheduler.Schedule(context.Background(), userId, domain.NewTrackId(), ""); err != nil {
+	if err := scheduler.Schedule(context.Background(), userId, shared.NewTrackId(), ""); err != nil {
 		t.Fatalf("first Schedule = %v, want nil", err)
 	}
 	<-acq.started
-	queued := domain.NewTrackId()
+	queued := shared.NewTrackId()
 
 	if err := scheduler.Schedule(context.Background(), userId, queued, ""); err != nil {
 		t.Fatalf("second Schedule = %v, want nil (enqueued, waiting for a worker)", err)
@@ -511,8 +515,8 @@ func settledJob(s *BackgroundAcquisitionScheduler, trackID string) (acqports.Job
 
 func trackHeldByJob(t *testing.T, hold func(*BackgroundAcquisitionScheduler) error) (*BackgroundAcquisitionScheduler, func()) {
 	t.Helper()
-	repo := &burstRepo{started: make(chan struct{}), release: make(chan struct{})}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	ledger := &burstLedger{started: make(chan struct{}), release: make(chan struct{})}
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 2))
 	t.Cleanup(func() {
@@ -520,19 +524,19 @@ func trackHeldByJob(t *testing.T, hold func(*BackgroundAcquisitionScheduler) err
 	})
 	var released sync.Once
 	drain := func() {
-		released.Do(func() { close(repo.release) })
+		released.Do(func() { close(ledger.release) })
 		wg.Wait()
 	}
 	t.Cleanup(drain)
 	if err := hold(scheduler); err != nil {
 		t.Fatalf("holding schedule = %v, want nil", err)
 	}
-	<-repo.started
+	<-ledger.started
 	return scheduler, drain
 }
 
 func TestBackgroundScheduler_AReplaceWaitsOutAPlainJobOnTheSameTrack(t *testing.T) {
-	userId, trackId := shared.NewUserId(uuid.New()), domain.NewTrackId()
+	userId, trackId := shared.NewUserId(uuid.New()), shared.NewTrackId()
 	scheduler, drain := trackHeldByJob(t, func(s *BackgroundAcquisitionScheduler) error {
 		return s.Schedule(context.Background(), userId, trackId, "")
 	})
@@ -548,7 +552,7 @@ func TestBackgroundScheduler_AReplaceWaitsOutAPlainJobOnTheSameTrack(t *testing.
 }
 
 func TestBackgroundScheduler_ARetryWaitsOutAReplaceOnTheSameTrack(t *testing.T) {
-	userId, trackId := shared.NewUserId(uuid.New()), domain.NewTrackId()
+	userId, trackId := shared.NewUserId(uuid.New()), shared.NewTrackId()
 	scheduler, drain := trackHeldByJob(t, func(s *BackgroundAcquisitionScheduler) error {
 		return s.ScheduleReplace(context.Background(), userId, trackId)
 	})
@@ -564,10 +568,10 @@ func TestBackgroundScheduler_ARetryWaitsOutAReplaceOnTheSameTrack(t *testing.T) 
 }
 
 func TestNewBackgroundAcquisitionScheduler_ReturnsNonNil(t *testing.T) {
-	repo := newFakeTrackRepository()
+	ledger := acquisitiontest.NewLedger()
 	searcher := &fakeAudioSearcher{}
 	store := newFakeAudioStore()
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store)
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)
@@ -586,17 +590,17 @@ type stubAcquirer struct {
 	ran []string
 }
 
-func (s *stubAcquirer) Execute(context.Context, shared.UserId, domain.TrackId) error {
+func (s *stubAcquirer) Execute(context.Context, shared.UserId, shared.TrackId) error {
 	s.record("Execute")
 	return nil
 }
 
-func (s *stubAcquirer) ExecuteReplace(context.Context, shared.UserId, domain.TrackId) error {
+func (s *stubAcquirer) ExecuteReplace(context.Context, shared.UserId, shared.TrackId) error {
 	s.record("ExecuteReplace")
 	return nil
 }
 
-func (s *stubAcquirer) RefuseQueued(context.Context, shared.UserId, domain.TrackId) {}
+func (s *stubAcquirer) RefuseQueued(context.Context, shared.UserId, shared.TrackId) {}
 
 func (s *stubAcquirer) record(entryPoint string) {
 	s.mu.Lock()
@@ -612,17 +616,17 @@ func (s *stubAcquirer) entryPointsRun() []string {
 
 func TestBackgroundScheduler_RunsTheStubbedAcquirerEntryPoint(t *testing.T) {
 	cases := map[string]struct {
-		schedule func(*BackgroundAcquisitionScheduler, shared.UserId, domain.TrackId) error
+		schedule func(*BackgroundAcquisitionScheduler, shared.UserId, shared.TrackId) error
 		want     string
 	}{
 		"Schedule runs Execute": {
-			schedule: func(s *BackgroundAcquisitionScheduler, userId shared.UserId, trackId domain.TrackId) error {
+			schedule: func(s *BackgroundAcquisitionScheduler, userId shared.UserId, trackId shared.TrackId) error {
 				return s.Schedule(context.Background(), userId, trackId, "")
 			},
 			want: "Execute",
 		},
 		"ScheduleReplace runs ExecuteReplace": {
-			schedule: func(s *BackgroundAcquisitionScheduler, userId shared.UserId, trackId domain.TrackId) error {
+			schedule: func(s *BackgroundAcquisitionScheduler, userId shared.UserId, trackId shared.TrackId) error {
 				return s.ScheduleReplace(context.Background(), userId, trackId)
 			},
 			want: "ExecuteReplace",
@@ -637,7 +641,7 @@ func TestBackgroundScheduler_RunsTheStubbedAcquirerEntryPoint(t *testing.T) {
 				scheduler.Shutdown(context.Background())
 			})
 
-			if err := tc.schedule(scheduler, shared.NewUserId(uuid.New()), domain.NewTrackId()); err != nil {
+			if err := tc.schedule(scheduler, shared.NewUserId(uuid.New()), shared.NewTrackId()); err != nil {
 				t.Fatalf("schedule: %v", err)
 			}
 			wg.Wait()
@@ -650,29 +654,26 @@ func TestBackgroundScheduler_RunsTheStubbedAcquirerEntryPoint(t *testing.T) {
 	}
 }
 
-type burstRepo struct {
+type burstLedger struct {
+	emptyLedger
 	started chan struct{}
 	release chan struct{}
 	once    sync.Once
 	calls   atomic.Int32
 }
 
-func (r *burstRepo) GetByID(_ context.Context, _ domain.TrackId, _ shared.UserId) (*domain.Track, error) {
+func (r *burstLedger) Get(_ context.Context, _ shared.TrackId, _ shared.UserId) (*acqports.TrackSnapshot, error) {
 	r.calls.Add(1)
 	r.once.Do(func() { close(r.started) })
 	<-r.release
 	return nil, nil
 }
 
-func (r *burstRepo) Update(_ context.Context, _ *domain.Track, _ int) error { return nil }
 
-func (r *burstRepo) AudioRefInUse(_ context.Context, _ string, _ domain.TrackId) (bool, error) {
-	return false, nil
-}
 
 func TestBackgroundScheduler_BoundsQueueDepthUnderBurst(t *testing.T) {
-	repo := &burstRepo{started: make(chan struct{}), release: make(chan struct{})}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	ledger := &burstLedger{started: make(chan struct{}), release: make(chan struct{})}
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)
@@ -684,10 +685,10 @@ func TestBackgroundScheduler_BoundsQueueDepthUnderBurst(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	const burst = 60
 	for i := 0; i < burst; i++ {
-		scheduler.Schedule(context.Background(), userId, domain.NewTrackId(), "")
+		scheduler.Schedule(context.Background(), userId, shared.NewTrackId(), "")
 	}
 
-	<-repo.started
+	<-ledger.started
 
 	active := len(scheduler.Status().ActiveJobs)
 	maxAllowed := cap(sem) * 8
@@ -696,21 +697,21 @@ func TestBackgroundScheduler_BoundsQueueDepthUnderBurst(t *testing.T) {
 			active, burst, maxAllowed)
 	}
 
-	close(repo.release)
+	close(ledger.release)
 	wg.Wait()
 }
 
 func TestBackgroundScheduler_StatusQueueDrainsAndCountsShutdownRejections(t *testing.T) {
-	repo := &burstRepo{started: make(chan struct{}), release: make(chan struct{})}
-	close(repo.release)
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	ledger := &burstLedger{started: make(chan struct{}), release: make(chan struct{})}
+	close(ledger.release)
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, sem)
 
 	userId := shared.NewUserId(uuid.New())
-	if err := scheduler.Schedule(context.Background(), userId, domain.NewTrackId(), ""); err != nil {
+	if err := scheduler.Schedule(context.Background(), userId, shared.NewTrackId(), ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
 	wg.Wait()
@@ -724,7 +725,7 @@ func TestBackgroundScheduler_StatusQueueDrainsAndCountsShutdownRejections(t *tes
 	}
 
 	scheduler.Shutdown(context.Background())
-	err := scheduler.ScheduleReplace(context.Background(), userId, domain.NewTrackId())
+	err := scheduler.ScheduleReplace(context.Background(), userId, shared.NewTrackId())
 	if !errors.Is(err, acqdomain.ErrSchedulerShutdown) {
 		t.Fatalf("schedule after shutdown err = %v, want ErrSchedulerShutdown", err)
 	}
@@ -733,24 +734,24 @@ func TestBackgroundScheduler_StatusQueueDrainsAndCountsShutdownRejections(t *tes
 	}
 }
 
-type corrCapturingRepo struct {
-	*fakeTrackRepository
+type corrCapturingLedger struct {
+	*acquisitiontest.Ledger
 	mu     sync.Mutex
 	corrID string
 	seen   bool
 }
 
-func (r *corrCapturingRepo) GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {
+func (r *corrCapturingLedger) Get(ctx context.Context, id shared.TrackId, userId shared.UserId) (*acqports.TrackSnapshot, error) {
 	r.mu.Lock()
 	r.corrID = logging.CorrelationIDFromContext(ctx)
 	r.seen = true
 	r.mu.Unlock()
-	return r.fakeTrackRepository.GetByID(ctx, id, userId)
+	return r.Ledger.Get(ctx, id, userId)
 }
 
 func TestBackgroundScheduler_ThreadsCorrelationIDIntoJobContext(t *testing.T) {
-	repo := &corrCapturingRepo{fakeTrackRepository: newFakeTrackRepository()}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	ledger := &corrCapturingLedger{Ledger: acquisitiontest.NewLedger()}
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)
@@ -761,17 +762,17 @@ func TestBackgroundScheduler_ThreadsCorrelationIDIntoJobContext(t *testing.T) {
 
 	const wantCorrID = "corr-xyz-345"
 	ctx := logging.WithCorrelationID(context.Background(), wantCorrID)
-	scheduler.Schedule(ctx, shared.NewUserId(uuid.New()), domain.NewTrackId(), "")
+	scheduler.Schedule(ctx, shared.NewUserId(uuid.New()), shared.NewTrackId(), "")
 
 	wg.Wait()
 
-	repo.mu.Lock()
-	defer repo.mu.Unlock()
-	if !repo.seen {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	if !ledger.seen {
 		t.Fatal("acquisition service was never invoked by the scheduled job")
 	}
-	if repo.corrID != wantCorrID {
-		t.Fatalf("job context lost the request correlation id: got %q, want %q", repo.corrID, wantCorrID)
+	if ledger.corrID != wantCorrID {
+		t.Fatalf("job context lost the request correlation id: got %q, want %q", ledger.corrID, wantCorrID)
 	}
 }
 
@@ -792,12 +793,12 @@ func TestBackgroundScheduler_DispatchesToTheMatchingServiceEntryPoint(t *testing
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			userId := shared.NewUserId(uuid.New())
-			repo := newFakeTrackRepository()
-			track := readyTrackWithSource(t, repo, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=old")
+			ledger := acquisitiontest.NewLedger()
+			track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=old")
 			store := newFakeAudioStore()
 			store.stored["u/a/b/c.mp3"] = true
 			searcher := &fakeAudioSearcher{}
-			svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store)
+			svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
 			var wg sync.WaitGroup
 			scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1))
@@ -818,28 +819,25 @@ func TestBackgroundScheduler_DispatchesToTheMatchingServiceEntryPoint(t *testing
 	}
 }
 
-type blockingRepo struct {
+type blockingLedger struct {
+	emptyLedger
 	started     chan struct{}
 	startedOnce sync.Once
 	release     chan struct{}
 	calls       atomic.Int32
 }
 
-func (r *blockingRepo) GetByID(_ context.Context, _ domain.TrackId, _ shared.UserId) (*domain.Track, error) {
+func (r *blockingLedger) Get(_ context.Context, _ shared.TrackId, _ shared.UserId) (*acqports.TrackSnapshot, error) {
 	r.calls.Add(1)
 	r.startedOnce.Do(func() { close(r.started) })
 	<-r.release
 	return nil, nil
 }
-func (r *blockingRepo) Update(_ context.Context, _ *domain.Track, _ int) error { return nil }
 
-func (r *blockingRepo) AudioRefInUse(_ context.Context, _ string, _ domain.TrackId) (bool, error) {
-	return false, nil
-}
 
 func TestBackgroundScheduler_Schedule_DedupsConcurrentRun_ButReplaysAfterSettle(t *testing.T) {
-	repo := &blockingRepo{started: make(chan struct{}), release: make(chan struct{})}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	ledger := &blockingLedger{started: make(chan struct{}), release: make(chan struct{})}
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 4)
@@ -849,44 +847,43 @@ func TestBackgroundScheduler_Schedule_DedupsConcurrentRun_ButReplaysAfterSettle(
 	})
 
 	userId := shared.NewUserId(uuid.New())
-	trackId := domain.NewTrackId()
+	trackId := shared.NewTrackId()
 
 	scheduler.Schedule(context.Background(), userId, trackId, "")
-	<-repo.started
+	<-ledger.started
 	scheduler.Schedule(context.Background(), userId, trackId, "")
 
-	if got := repo.calls.Load(); got != 1 {
+	if got := ledger.calls.Load(); got != 1 {
 		t.Fatalf("GetByID calls while the first run is still in flight = %d, want 1 (no concurrent second run)", got)
 	}
 
-	close(repo.release)
+	close(ledger.release)
 
 	deadline := time.Now().Add(jobSettleTimeout)
-	for repo.calls.Load() < 2 && time.Now().Before(deadline) {
+	for ledger.calls.Load() < 2 && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 	}
 	wg.Wait()
 
-	if got := repo.calls.Load(); got != 2 {
+	if got := ledger.calls.Load(); got != 2 {
 		t.Errorf("GetByID calls = %d, want 2 (the deduped request replays once the first run settles)", got)
 	}
 }
 
-type countingRepo struct{ calls atomic.Int32 }
+type countingLedger struct {
+	emptyLedger
+	calls atomic.Int32
+}
 
-func (r *countingRepo) GetByID(_ context.Context, _ domain.TrackId, _ shared.UserId) (*domain.Track, error) {
+func (r *countingLedger) Get(_ context.Context, _ shared.TrackId, _ shared.UserId) (*acqports.TrackSnapshot, error) {
 	r.calls.Add(1)
 	return nil, nil
 }
-func (r *countingRepo) Update(_ context.Context, _ *domain.Track, _ int) error { return nil }
 
-func (r *countingRepo) AudioRefInUse(_ context.Context, _ string, _ domain.TrackId) (bool, error) {
-	return false, nil
-}
 
 func TestBackgroundScheduler_Schedule_AfterShutdown_NoOp(t *testing.T) {
-	repo := &countingRepo{}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	ledger := &countingLedger{}
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)
@@ -896,27 +893,23 @@ func TestBackgroundScheduler_Schedule_AfterShutdown_NoOp(t *testing.T) {
 	cancel()
 	scheduler.Shutdown(ctx)
 
-	scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), "")
+	scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), shared.NewTrackId(), "")
 	wg.Wait()
 
-	if got := repo.calls.Load(); got != 0 {
+	if got := ledger.calls.Load(); got != 0 {
 		t.Errorf("GetByID calls = %d, want 0 (schedule after shutdown must be a no-op)", got)
 	}
 }
 
-type panicRepo struct{}
+type panicLedger struct{ emptyLedger }
 
-func (r *panicRepo) GetByID(_ context.Context, _ domain.TrackId, _ shared.UserId) (*domain.Track, error) {
+func (r *panicLedger) Get(_ context.Context, _ shared.TrackId, _ shared.UserId) (*acqports.TrackSnapshot, error) {
 	panic("boom")
 }
-func (r *panicRepo) Update(_ context.Context, _ *domain.Track, _ int) error { return nil }
 
-func (r *panicRepo) AudioRefInUse(_ context.Context, _ string, _ domain.TrackId) (bool, error) {
-	return false, nil
-}
 
 func TestBackgroundScheduler_Schedule_RecoversFromPanic(t *testing.T) {
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(&panicRepo{}), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := newTestAcquireService(&panicLedger{}, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)
@@ -925,7 +918,7 @@ func TestBackgroundScheduler_Schedule_RecoversFromPanic(t *testing.T) {
 		scheduler.Shutdown(context.Background())
 	})
 
-	scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), "")
+	scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), shared.NewTrackId(), "")
 	wg.Wait()
 }
 
@@ -934,22 +927,22 @@ type panickingAcquirer struct {
 	refused atomic.Int32
 }
 
-func (a *panickingAcquirer) Execute(context.Context, shared.UserId, domain.TrackId) error {
+func (a *panickingAcquirer) Execute(context.Context, shared.UserId, shared.TrackId) error {
 	a.runs.Add(1)
 	panic("boom")
 }
 
-func (a *panickingAcquirer) ExecuteReplace(ctx context.Context, u shared.UserId, t domain.TrackId) error {
+func (a *panickingAcquirer) ExecuteReplace(ctx context.Context, u shared.UserId, t shared.TrackId) error {
 	return a.Execute(ctx, u, t)
 }
 
-func (a *panickingAcquirer) RefuseQueued(context.Context, shared.UserId, domain.TrackId) {
+func (a *panickingAcquirer) RefuseQueued(context.Context, shared.UserId, shared.TrackId) {
 	a.refused.Add(1)
 }
 
 type settleKeepsPendingQueue struct{ *memJobQueue }
 
-func (q settleKeepsPendingQueue) Settle(ctx context.Context, trackID domain.TrackId, fence acqports.Fence) error {
+func (q settleKeepsPendingQueue) Settle(ctx context.Context, trackID shared.TrackId, fence acqports.Fence) error {
 	return q.Release(ctx, trackID, fence, 0)
 }
 
@@ -964,7 +957,7 @@ func TestBackgroundScheduler_Schedule_PanickingJobIsNotReclaimedWithinAPoll(t *t
 		scheduler.Shutdown(context.Background())
 	})
 
-	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), shared.NewTrackId(), ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
 	time.Sleep(300 * time.Millisecond)
@@ -982,7 +975,7 @@ func TestBackgroundScheduler_Schedule_PanickingJobAtTheAttemptCapFailsTheTrack(t
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
-	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Run: maxAcquisitionAttempts}
+	job := acqports.Job{TrackID: shared.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Run: maxAcquisitionAttempts}
 
 	scheduler.releasePanickedJob(job)
 
@@ -999,7 +992,7 @@ func TestBackgroundScheduler_Schedule_PanickingJobWithOldClaimsButFreshRunIsRetr
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
-	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Fence: acqports.Fence(maxAcquisitionAttempts + 4), Run: 1}
+	job := acqports.Job{TrackID: shared.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Fence: acqports.Fence(maxAcquisitionAttempts + 4), Run: 1}
 
 	scheduler.releasePanickedJob(job)
 
@@ -1016,7 +1009,7 @@ func TestBackgroundScheduler_Schedule_PanickingJobAtTheRunCapFailsTheTrack(t *te
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
-	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Fence: acqports.Fence(maxAcquisitionAttempts + 4), Run: maxAcquisitionAttempts}
+	job := acqports.Job{TrackID: shared.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Fence: acqports.Fence(maxAcquisitionAttempts + 4), Run: maxAcquisitionAttempts}
 
 	scheduler.releasePanickedJob(job)
 
@@ -1026,8 +1019,8 @@ func TestBackgroundScheduler_Schedule_PanickingJobAtTheRunCapFailsTheTrack(t *te
 }
 
 func TestBackgroundScheduler_OnePrincipalCannotStarveAnother(t *testing.T) {
-	repo := &burstRepo{started: make(chan struct{}), release: make(chan struct{})}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	ledger := &burstLedger{started: make(chan struct{}), release: make(chan struct{})}
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)
@@ -1041,18 +1034,18 @@ func TestBackgroundScheduler_OnePrincipalCannotStarveAnother(t *testing.T) {
 
 	const flood = 10
 	for i := 0; i < flood; i++ {
-		if err := scheduler.Schedule(context.Background(), userA, domain.NewTrackId(), ""); err != nil {
+		if err := scheduler.Schedule(context.Background(), userA, shared.NewTrackId(), ""); err != nil {
 			t.Fatalf("user A schedule #%d = %v, want nil (the queue is unbounded)", i+1, err)
 		}
 	}
 
-	<-repo.started
+	<-ledger.started
 
-	if err := scheduler.Schedule(context.Background(), userB, domain.NewTrackId(), ""); err != nil {
+	if err := scheduler.Schedule(context.Background(), userB, shared.NewTrackId(), ""); err != nil {
 		t.Fatalf("user B schedule while A floods = %v, want nil (A must not starve B)", err)
 	}
 
-	close(repo.release)
+	close(ledger.release)
 	wg.Wait()
 }
 
@@ -1064,7 +1057,7 @@ func TestBackgroundScheduler_RuntimeKillSwitchTogglesAdmission(t *testing.T) {
 
 	user := shared.NewUserId(uuid.New())
 
-	if err := scheduler.Schedule(context.Background(), user, domain.NewTrackId(), ""); err != nil {
+	if err := scheduler.Schedule(context.Background(), user, shared.NewTrackId(), ""); err != nil {
 		t.Fatalf("schedule while enabled = %v, want nil", err)
 	}
 	<-acq.started
@@ -1078,11 +1071,11 @@ func TestBackgroundScheduler_RuntimeKillSwitchTogglesAdmission(t *testing.T) {
 	if !scheduler.Status().Paused {
 		t.Fatal("Status().Paused = false after Pause, want true")
 	}
-	paused := domain.NewTrackId()
+	paused := shared.NewTrackId()
 	if err := scheduler.Schedule(context.Background(), user, paused, ""); !errors.Is(err, acqdomain.ErrAcquisitionPaused) {
 		t.Fatalf("schedule while paused = %v, want ErrAcquisitionPaused", err)
 	}
-	if err := scheduler.ScheduleReplace(context.Background(), user, domain.NewTrackId()); !errors.Is(err, acqdomain.ErrAcquisitionPaused) {
+	if err := scheduler.ScheduleReplace(context.Background(), user, shared.NewTrackId()); !errors.Is(err, acqdomain.ErrAcquisitionPaused) {
 		t.Fatalf("replace while paused = %v, want ErrAcquisitionPaused", err)
 	}
 
@@ -1118,7 +1111,7 @@ func TestBackgroundScheduler_ResumeClaimsWithoutWaitingAPollInterval(t *testing.
 
 	scheduler.Pause()
 	user := shared.NewUserId(uuid.New())
-	if err := scheduler.Schedule(context.Background(), user, domain.NewTrackId(), ""); !errors.Is(err, acqdomain.ErrAcquisitionPaused) {
+	if err := scheduler.Schedule(context.Background(), user, shared.NewTrackId(), ""); !errors.Is(err, acqdomain.ErrAcquisitionPaused) {
 		t.Fatalf("schedule while paused = %v, want ErrAcquisitionPaused", err)
 	}
 	time.Sleep(50 * time.Millisecond)
@@ -1129,7 +1122,7 @@ func TestBackgroundScheduler_ResumeClaimsWithoutWaitingAPollInterval(t *testing.
 	}
 
 	scheduler.Resume()
-	if err := scheduler.Schedule(context.Background(), user, domain.NewTrackId(), ""); err != nil {
+	if err := scheduler.Schedule(context.Background(), user, shared.NewTrackId(), ""); err != nil {
 		t.Fatalf("schedule after Resume = %v, want nil", err)
 	}
 	select {
@@ -1140,8 +1133,8 @@ func TestBackgroundScheduler_ResumeClaimsWithoutWaitingAPollInterval(t *testing.
 }
 
 func TestBackgroundScheduler_PauseLeavesInflightRunning(t *testing.T) {
-	repo := &burstRepo{started: make(chan struct{}), release: make(chan struct{})}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	ledger := &burstLedger{started: make(chan struct{}), release: make(chan struct{})}
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 1)
@@ -1151,19 +1144,19 @@ func TestBackgroundScheduler_PauseLeavesInflightRunning(t *testing.T) {
 	})
 
 	user := shared.NewUserId(uuid.New())
-	running := domain.NewTrackId()
+	running := shared.NewTrackId()
 	if err := scheduler.Schedule(context.Background(), user, running, ""); err != nil {
 		t.Fatalf("schedule = %v, want nil", err)
 	}
-	<-repo.started
+	<-ledger.started
 
 	scheduler.Pause()
-	queued := domain.NewTrackId()
+	queued := shared.NewTrackId()
 	if err := scheduler.Schedule(context.Background(), user, queued, ""); !errors.Is(err, acqdomain.ErrAcquisitionPaused) {
 		t.Fatalf("schedule while paused = %v, want ErrAcquisitionPaused", err)
 	}
 
-	close(repo.release)
+	close(ledger.release)
 	_ = awaitSettledJob(t, scheduler, running.String())
 	time.Sleep(30 * time.Millisecond)
 	if _, settled := settledJob(scheduler, queued.String()); settled {
@@ -1240,8 +1233,8 @@ func TestSchedulerJobReporter_StageWithoutConfiguredEventsDoesNotPanic(t *testin
 
 func replaceThroughTheScheduler(t *testing.T, kind acqports.JobKind, pub *recordingPublisher) {
 	t.Helper()
-	repo, store, userId, trackId, _ := seedReadyTrack(t)
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store, WithAcquireEvents(pub))
+	ledger, store, userId, trackId, _ := seedReadyTrack(t)
+	svc := newTestAcquireService(ledger, NewSourceRegistry(newAudioSource{}), store, WithAcquireEvents(pub))
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1),
 		WithPollInterval(5*time.Millisecond), WithSchedulerEvents(pub))
@@ -1284,17 +1277,17 @@ type blockingAcquirer struct {
 	calls   atomic.Int32
 }
 
-func (a *blockingAcquirer) Execute(context.Context, shared.UserId, domain.TrackId) error {
+func (a *blockingAcquirer) Execute(context.Context, shared.UserId, shared.TrackId) error {
 	a.calls.Add(1)
 	<-a.release
 	return nil
 }
 
-func (a *blockingAcquirer) ExecuteReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
+func (a *blockingAcquirer) ExecuteReplace(ctx context.Context, userId shared.UserId, trackId shared.TrackId) error {
 	return a.Execute(ctx, userId, trackId)
 }
 
-func (a *blockingAcquirer) RefuseQueued(context.Context, shared.UserId, domain.TrackId) {}
+func (a *blockingAcquirer) RefuseQueued(context.Context, shared.UserId, shared.TrackId) {}
 
 func TestBackgroundScheduler_PrincipalDefault_AdmitsOneUserUpToGlobalDepth(t *testing.T) {
 	const concurrency = 2
@@ -1313,7 +1306,7 @@ func TestBackgroundScheduler_PrincipalDefault_AdmitsOneUserUpToGlobalDepth(t *te
 	userId := shared.NewUserId(uuid.New())
 	const burst = concurrency*4 + 5
 	for i := 0; i < burst; i++ {
-		if err := scheduler.Schedule(context.Background(), userId, domain.NewTrackId(), ""); err != nil {
+		if err := scheduler.Schedule(context.Background(), userId, shared.NewTrackId(), ""); err != nil {
 			t.Fatalf("schedule %d of %d for one user = %v, want nil (the queue is unbounded)", i+1, burst, err)
 		}
 	}
@@ -1342,31 +1335,26 @@ func (p *recordingPublisher) count(eventType events.EventType) int {
 	return p.byType[eventType]
 }
 
-type holdOneTrackRepo struct {
-	*fakeTrackRepository
-	hold     domain.TrackId
+type holdOneTrackLedger struct {
+	*acquisitiontest.Ledger
+	hold     shared.TrackId
 	holding  chan struct{}
 	release  chan struct{}
 	holdOnce sync.Once
 }
 
-func (r *holdOneTrackRepo) GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {
+func (r *holdOneTrackLedger) Get(ctx context.Context, id shared.TrackId, userId shared.UserId) (*acqports.TrackSnapshot, error) {
 	if id == r.hold {
 		r.holdOnce.Do(func() { close(r.holding) })
 		<-r.release
 	}
-	return r.fakeTrackRepository.GetByID(ctx, id, userId)
+	return r.Ledger.Get(ctx, id, userId)
 }
 
-func newPendingTrack(t *testing.T, userId shared.UserId, repo *fakeTrackRepository) *domain.Track {
+func newPendingTrack(t *testing.T, userId shared.UserId, ledger *acquisitiontest.Ledger) ledgerTrack {
 	t.Helper()
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	if _, err := repo.Add(context.Background(), track); err != nil {
-		t.Fatalf("add track: %v", err)
-	}
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	ledger.Seed(track)
 	return track
 }
 
@@ -1383,25 +1371,25 @@ func claimableTracks(q *memJobQueue) map[string]struct{} {
 
 func TestBackgroundScheduler_ShutdownCancellation_LeavesTheQueuedJobUnclaimed(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	base := newFakeTrackRepository()
+	base := acquisitiontest.NewLedger()
 	running := newPendingTrack(t, userId, base)
 	queued := newPendingTrack(t, userId, base)
 
-	repo := &holdOneTrackRepo{fakeTrackRepository: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
+	ledger := &holdOneTrackLedger{Ledger: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
 	pub := newRecordingPublisher()
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
 
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithDrainBudget(10*time.Millisecond))
 	t.Cleanup(func() {
-		close(repo.release)
+		close(ledger.release)
 		scheduler.Shutdown(context.Background())
 	})
 
 	if err := scheduler.Schedule(context.Background(), userId, running.ID, ""); err != nil {
 		t.Fatalf("first Schedule = %v, want nil", err)
 	}
-	<-repo.holding
+	<-ledger.holding
 
 	if err := scheduler.Schedule(context.Background(), userId, queued.ID, ""); err != nil {
 		t.Fatalf("second Schedule = %v, want nil (admitted, waiting for a slot)", err)
@@ -1423,12 +1411,9 @@ func TestBackgroundScheduler_ShutdownCancellation_LeavesTheQueuedJobUnclaimed(t 
 		t.Error("queued job missing from the queue after shutdown, want still enqueued for the next worker")
 	}
 
-	stored, ok := base.tracks[queued.ID.String()+":"+userId.String()]
-	if !ok {
-		t.Fatal("track missing from the repo")
-	}
-	if stored.AcquisitionStatus != domain.AcquisitionPending {
-		t.Errorf("queued track status = %q, want %q (untouched by shutdown)", stored.AcquisitionStatus, domain.AcquisitionPending)
+	stored := committedTrack(t, base, queued.ID)
+	if stored.Status != acqports.TrackPending {
+		t.Errorf("queued track status = %v, want %v (untouched by shutdown)", stored.Status, acqports.TrackPending)
 	}
 	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
 		t.Errorf("track_acquisition_failed publishes = %d, want 0", got)
@@ -1437,25 +1422,25 @@ func TestBackgroundScheduler_ShutdownCancellation_LeavesTheQueuedJobUnclaimed(t 
 
 func TestBackgroundScheduler_ScheduleDuringShutdown_Refuses(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	base := newFakeTrackRepository()
+	base := acquisitiontest.NewLedger()
 	running := newPendingTrack(t, userId, base)
 	queued := newPendingTrack(t, userId, base)
 
-	repo := &holdOneTrackRepo{fakeTrackRepository: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
+	ledger := &holdOneTrackLedger{Ledger: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
 	pub := newRecordingPublisher()
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
 
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithDrainBudget(10*time.Millisecond))
 	t.Cleanup(func() {
-		close(repo.release)
+		close(ledger.release)
 		scheduler.Shutdown(context.Background())
 	})
 
 	if err := scheduler.Schedule(context.Background(), userId, running.ID, ""); err != nil {
 		t.Fatalf("first Schedule = %v, want nil", err)
 	}
-	<-repo.holding
+	<-ledger.holding
 	scheduler.closed.Store(true)
 
 	if err := scheduler.Schedule(context.Background(), userId, queued.ID, ""); !errors.Is(err, acqdomain.ErrSchedulerShutdown) {
@@ -1466,12 +1451,9 @@ func TestBackgroundScheduler_ScheduleDuringShutdown_Refuses(t *testing.T) {
 	defer shutdownCancel()
 	scheduler.Shutdown(shutdownCtx)
 
-	stored, ok := base.tracks[queued.ID.String()+":"+userId.String()]
-	if !ok {
-		t.Fatal("track missing from the repo")
-	}
-	if stored.AcquisitionStatus != domain.AcquisitionPending {
-		t.Errorf("refused track status = %q, want %q (untouched)", stored.AcquisitionStatus, domain.AcquisitionPending)
+	stored := committedTrack(t, base, queued.ID)
+	if stored.Status != acqports.TrackPending {
+		t.Errorf("refused track status = %v, want %v (untouched)", stored.Status, acqports.TrackPending)
 	}
 	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
 		t.Errorf("track_acquisition_failed publishes = %d, want 0", got)
@@ -1480,29 +1462,19 @@ func TestBackgroundScheduler_ScheduleDuringShutdown_Refuses(t *testing.T) {
 
 func TestAcquireTrackAudioService_RefuseQueued_AlreadySettledTrack_IsQuietNoOp(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	if err := track.MarkReady("audio/ref.mp3"); err != nil {
-		t.Fatalf("mark ready: %v", err)
-	}
-	if _, err := repo.Add(context.Background(), track); err != nil {
-		t.Fatalf("add track: %v", err)
-	}
+	ledger := acquisitiontest.NewLedger()
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	makeReady(&track, "audio/ref.mp3")
+	ledger.Seed(track)
 
 	pub := newRecordingPublisher()
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
 
 	svc.RefuseQueued(context.Background(), userId, track.ID)
 
-	stored, ok := repo.tracks[track.ID.String()+":"+userId.String()]
-	if !ok {
-		t.Fatal("track missing from the repo")
-	}
-	if stored.AcquisitionStatus != domain.AcquisitionReady {
-		t.Errorf("already-ready track status = %q, want %q (untouched)", stored.AcquisitionStatus, domain.AcquisitionReady)
+	stored := committedTrack(t, ledger, track.ID)
+	if stored.Status != acqports.TrackReady {
+		t.Errorf("already-ready track status = %v, want %v (untouched)", stored.Status, acqports.TrackReady)
 	}
 	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
 		t.Errorf("track_acquisition_failed publishes = %d, want 0 (quiet no-op)", got)
@@ -1510,33 +1482,33 @@ func TestAcquireTrackAudioService_RefuseQueued_AlreadySettledTrack_IsQuietNoOp(t
 }
 
 func TestBackgroundScheduler_InflightDedupIsNotARefusal(t *testing.T) {
-	repo := &blockingRepo{started: make(chan struct{}), release: make(chan struct{})}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	ledger := &blockingLedger{started: make(chan struct{}), release: make(chan struct{})}
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
-	userId, trackId := shared.NewUserId(uuid.New()), domain.NewTrackId()
+	userId, trackId := shared.NewUserId(uuid.New()), shared.NewTrackId()
 
 	if err := scheduler.Schedule(context.Background(), userId, trackId, ""); err != nil {
 		t.Fatalf("first Schedule = %v, want nil", err)
 	}
-	<-repo.started
+	<-ledger.started
 	if err := scheduler.Schedule(context.Background(), userId, trackId, ""); err != nil {
 		t.Errorf("duplicate Schedule while in flight = %v, want nil (a job is already running)", err)
 	}
-	close(repo.release)
+	close(ledger.release)
 	wg.Wait()
 }
 
 func TestBackgroundScheduler_AfterShutdownRefuses(t *testing.T) {
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(&countingRepo{}), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := newTestAcquireService(&countingLedger{}, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1))
 	scheduler.Shutdown(context.Background())
 
-	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); !errors.Is(err, acqdomain.ErrSchedulerShutdown) {
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), shared.NewTrackId(), ""); !errors.Is(err, acqdomain.ErrSchedulerShutdown) {
 		t.Errorf("Schedule after shutdown = %v, want ErrSchedulerShutdown", err)
 	}
 }
@@ -1661,13 +1633,13 @@ func assertExactlyOneOutcome(t *testing.T, calls chan acqports.AcquisitionOutcom
 func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 	t.Run("succeeded", func(t *testing.T) {
 		recorder := newFakeOutcomeRecorder()
-		svc := newTestAcquireService(catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+		svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 		var wg sync.WaitGroup
 		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 		t.Cleanup(func() {
 			scheduler.Shutdown(context.Background())
 		})
-		trackId := domain.NewTrackId()
+		trackId := shared.NewTrackId()
 
 		if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), trackId, ""); err != nil {
 			t.Fatalf("schedule: %v", err)
@@ -1689,14 +1661,11 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 	t.Run("failed", func(t *testing.T) {
 		recorder := newFakeOutcomeRecorder()
 		userId := shared.NewUserId(uuid.New())
-		track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-		if err != nil {
-			t.Fatalf("new track: %v", err)
-		}
-		repo := newFakeTrackRepository()
-		repo.tracks[track.ID.String()+":"+userId.String()] = track
+		track := newLedgerTrack(userId, "Song", "Artist", "Album")
+		ledger := acquisitiontest.NewLedger()
+		ledger.Seed(track)
 		leaking := &fakeAudioSearcher{searchErr: errors.New("boom")}
-		svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(leaking), newFakeAudioStore())
+		svc := newTestAcquireService(ledger, fakeRegistry(leaking), newFakeAudioStore())
 		var wg sync.WaitGroup
 		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 		t.Cleanup(func() {
@@ -1725,13 +1694,13 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 
 	t.Run("panicked", func(t *testing.T) {
 		recorder := newFakeOutcomeRecorder()
-		svc := newTestAcquireService(catalogbridge.NewTrackLedger(&panicRepo{}), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+		svc := newTestAcquireService(&panicLedger{}, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 		var wg sync.WaitGroup
 		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 		t.Cleanup(func() {
 			scheduler.Shutdown(context.Background())
 		})
-		trackId := domain.NewTrackId()
+		trackId := shared.NewTrackId()
 
 		if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), trackId, ""); err != nil {
 			t.Fatalf("schedule: %v", err)
@@ -1759,12 +1728,12 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 			scheduler.Shutdown(context.Background())
 		})
 		userId := shared.NewUserId(uuid.New())
-		running := domain.NewTrackId()
+		running := shared.NewTrackId()
 		if err := scheduler.Schedule(context.Background(), userId, running, ""); err != nil {
 			t.Fatalf("first schedule: %v", err)
 		}
 		<-acq.started
-		queued := domain.NewTrackId()
+		queued := shared.NewTrackId()
 
 		if err := scheduler.Schedule(context.Background(), userId, queued, ""); err != nil {
 			t.Fatalf("second schedule: %v", err)
@@ -1807,13 +1776,13 @@ func TestBackgroundScheduler_OutcomeRecorderFailure_DoesNotAffectTheJob(t *testi
 	t.Run("erroring recorder leaves the job succeeded", func(t *testing.T) {
 		recorder := newFakeOutcomeRecorder()
 		recorder.err = errors.New("outcome store unavailable")
-		svc := newTestAcquireService(catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+		svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 		var wg sync.WaitGroup
 		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 		t.Cleanup(func() {
 			scheduler.Shutdown(context.Background())
 		})
-		trackId := domain.NewTrackId()
+		trackId := shared.NewTrackId()
 
 		if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), trackId, ""); err != nil {
 			t.Fatalf("schedule: %v", err)
@@ -1838,7 +1807,7 @@ func TestBackgroundScheduler_OutcomeRecorderFailure_DoesNotAffectTheJob(t *testi
 		})
 		userId := shared.NewUserId(uuid.New())
 
-		if err := scheduler.Schedule(context.Background(), userId, domain.NewTrackId(), ""); err != nil {
+		if err := scheduler.Schedule(context.Background(), userId, shared.NewTrackId(), ""); err != nil {
 			t.Fatalf("first schedule: %v", err)
 		}
 		<-acq.started
@@ -1846,7 +1815,7 @@ func TestBackgroundScheduler_OutcomeRecorderFailure_DoesNotAffectTheJob(t *testi
 		wg.Wait()
 
 		start := time.Now()
-		if err := scheduler.Schedule(context.Background(), userId, domain.NewTrackId(), ""); err != nil {
+		if err := scheduler.Schedule(context.Background(), userId, shared.NewTrackId(), ""); err != nil {
 			t.Fatalf("second schedule: %v", err)
 		}
 		wg.Wait()
@@ -1868,14 +1837,14 @@ func TestBackgroundScheduler_OutcomeRecorderFailure_DoesNotAffectTheJob(t *testi
 
 func TestBackgroundScheduler_RecordOutcome_GivesTheRecorderAWorkingMargin(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
 
-	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), shared.NewTrackId(), ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
 	assertExactlyOneOutcome(t, recorder.calls)
@@ -1968,14 +1937,14 @@ func TestBackgroundScheduler_RecordOutcome_LogsWarnOnlyWhenRecordFails(t *testin
 		logs := captureJSONLogSync(t)
 		recorder := newFakeOutcomeRecorder()
 		recorder.err = errors.New("outcome store unavailable")
-		svc := newTestAcquireService(catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+		svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 		var wg sync.WaitGroup
 		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 		t.Cleanup(func() {
 			scheduler.Shutdown(context.Background())
 		})
 
-		if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+		if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), shared.NewTrackId(), ""); err != nil {
 			t.Fatalf("schedule: %v", err)
 		}
 		assertExactlyOneOutcome(t, recorder.calls)
@@ -1993,14 +1962,14 @@ func TestBackgroundScheduler_RecordOutcome_LogsWarnOnlyWhenRecordFails(t *testin
 	t.Run("success logs no warning", func(t *testing.T) {
 		logs := captureJSONLogSync(t)
 		recorder := newFakeOutcomeRecorder()
-		svc := newTestAcquireService(catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+		svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 		var wg sync.WaitGroup
 		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 		t.Cleanup(func() {
 			scheduler.Shutdown(context.Background())
 		})
 
-		if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+		if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), shared.NewTrackId(), ""); err != nil {
 			t.Fatalf("schedule: %v", err)
 		}
 		assertExactlyOneOutcome(t, recorder.calls)
@@ -2033,15 +2002,12 @@ func (r *ctxAtRecordRecorder) Record(ctx context.Context, o acqports.Acquisition
 
 func TestBackgroundScheduler_ShutdownMidRun_RecordsTheOutcomeOnALiveContext(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	repo := newFakeTrackRepository()
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
 	source := newBlockingSource()
 	recorder := newCtxAtRecordRecorder()
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(liveCtxTrackRepository{repo}), NewSourceRegistry(source), newFakeAudioStore())
+	svc := newTestAcquireService(liveCtxLedger{ledger}, NewSourceRegistry(source), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder), WithDrainBudget(10*time.Millisecond))
 	if err := scheduler.Schedule(context.Background(), userId, track.ID, ""); err != nil {
@@ -2069,17 +2035,17 @@ func TestBackgroundScheduler_ShutdownMidRun_RecordsTheOutcomeOnALiveContext(t *t
 
 func TestBackgroundScheduler_ShutdownBeforeStart_LeavesTheQueuedJobWithNoOutcome(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	base := newFakeTrackRepository()
+	base := acquisitiontest.NewLedger()
 	running := newPendingTrack(t, userId, base)
 	queued := newPendingTrack(t, userId, base)
-	repo := &holdOneTrackRepo{fakeTrackRepository: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	ledger := &holdOneTrackLedger{Ledger: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	recorder := newCtxAtRecordRecorder()
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder), WithDrainBudget(10*time.Millisecond))
 	var released sync.Once
 	release := func() {
-		released.Do(func() { close(repo.release) })
+		released.Do(func() { close(ledger.release) })
 		wg.Wait()
 	}
 	t.Cleanup(release)
@@ -2087,7 +2053,7 @@ func TestBackgroundScheduler_ShutdownBeforeStart_LeavesTheQueuedJobWithNoOutcome
 	if err := scheduler.Schedule(context.Background(), userId, running.ID, ""); err != nil {
 		t.Fatalf("first schedule: %v", err)
 	}
-	<-repo.holding
+	<-ledger.holding
 	if err := scheduler.Schedule(context.Background(), userId, queued.ID, ""); err != nil {
 		t.Fatalf("second schedule: %v", err)
 	}
@@ -2120,12 +2086,12 @@ func TestBackgroundScheduler_ShutdownBeforeStart_LeavesTheQueuedJobWithNoOutcome
 func TestBackgroundScheduler_Shutdown_WaitsForTheInFlightOutcomeWrite(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
 	recorder.delay = 300 * time.Millisecond
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 
 	start := time.Now()
-	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), shared.NewTrackId(), ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
 	wg.Wait()
@@ -2147,7 +2113,7 @@ func TestBackgroundScheduler_RecordedOutcome_MatchesWhatTheJobLogShows(t *testin
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
-	trackId := domain.NewTrackId()
+	trackId := shared.NewTrackId()
 	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), trackId, ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
@@ -2175,14 +2141,11 @@ func TestBackgroundScheduler_RecordedOutcome_MatchesWhatTheJobLogShows(t *testin
 
 func TestBackgroundScheduler_RecordedFailureReason_KeepsTheCookiePathOut(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	repo := newFakeTrackRepository()
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
 	leaking := &fakeAudioSearcher{searchErr: errors.New("yt-dlp exited 1: --cookies " + cookieJarPath + ": permission denied")}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(leaking), newFakeAudioStore())
+	svc := newTestAcquireService(ledger, fakeRegistry(leaking), newFakeAudioStore())
 	recorder := newFakeOutcomeRecorder()
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
@@ -2214,7 +2177,7 @@ func TestBackgroundScheduler_FailedOutcomeWrite_LogsOneWarnWithoutTheCookiePath(
 		scheduler.Shutdown(context.Background())
 	})
 
-	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), shared.NewTrackId(), ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
 	assertExactlyOneOutcome(t, recorder.calls)
@@ -2253,7 +2216,7 @@ func TestBackgroundScheduler_RecordOutcome_BoundsTheWriteToTwoSeconds(t *testing
 		scheduler.Shutdown(context.Background())
 	})
 
-	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), shared.NewTrackId(), ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
 	assertExactlyOneOutcome(t, recorder.calls)
@@ -2276,7 +2239,7 @@ func TestBackgroundScheduler_ReplaceJob_RecordsItsOutcome(t *testing.T) {
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
-	trackId := domain.NewTrackId()
+	trackId := shared.NewTrackId()
 
 	if err := scheduler.ScheduleReplace(context.Background(), shared.NewUserId(uuid.New()), trackId); err != nil {
 		t.Fatalf("schedule replace: %v", err)
@@ -2297,7 +2260,7 @@ func TestBackgroundScheduler_DedupedSchedule_ReplaysAndRecordsBothOutcomes(t *te
 		scheduler.Shutdown(context.Background())
 	})
 	userId := shared.NewUserId(uuid.New())
-	trackId := domain.NewTrackId()
+	trackId := shared.NewTrackId()
 	if err := scheduler.Schedule(context.Background(), userId, trackId, ""); err != nil {
 		t.Fatalf("first schedule: %v", err)
 	}
@@ -2326,7 +2289,7 @@ func TestBackgroundScheduler_NilOutcomeRecorder_LeavesTheJobUntouched(t *testing
 		scheduler.Shutdown(context.Background())
 	})
 
-	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), shared.NewTrackId(), ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
 	wg.Wait()
@@ -2344,7 +2307,7 @@ type ctxCapturingAcquirer struct {
 	ctx     atomic.Value
 }
 
-func (a *ctxCapturingAcquirer) Execute(ctx context.Context, _ shared.UserId, _ domain.TrackId) error {
+func (a *ctxCapturingAcquirer) Execute(ctx context.Context, _ shared.UserId, _ shared.TrackId) error {
 	a.ctx.Store(ctx)
 	a.once.Do(func() { close(a.started) })
 	select {
@@ -2354,18 +2317,18 @@ func (a *ctxCapturingAcquirer) Execute(ctx context.Context, _ shared.UserId, _ d
 	return ctx.Err()
 }
 
-func (a *ctxCapturingAcquirer) ExecuteReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
+func (a *ctxCapturingAcquirer) ExecuteReplace(ctx context.Context, userId shared.UserId, trackId shared.TrackId) error {
 	return a.Execute(ctx, userId, trackId)
 }
 
-func (a *ctxCapturingAcquirer) RefuseQueued(context.Context, shared.UserId, domain.TrackId) {}
+func (a *ctxCapturingAcquirer) RefuseQueued(context.Context, shared.UserId, shared.TrackId) {}
 
 type flakyHeartbeatQueue struct {
 	*memJobQueue
 	heartbeatErr error
 }
 
-func (q *flakyHeartbeatQueue) Heartbeat(context.Context, domain.TrackId, acqports.Fence, time.Duration) error {
+func (q *flakyHeartbeatQueue) Heartbeat(context.Context, shared.TrackId, acqports.Fence, time.Duration) error {
 	return q.heartbeatErr
 }
 
@@ -2384,7 +2347,7 @@ func TestBackgroundScheduler_HeartbeatFailuresOutlastingTheLease_CancelsTheJob(t
 		scheduler.Shutdown(context.Background())
 	})
 
-	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), shared.NewTrackId(), ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
 	<-acq.started
@@ -2432,18 +2395,18 @@ type releaseRecordingQueue struct {
 	releases chan releaseRecord
 }
 
-func (q *releaseRecordingQueue) Release(ctx context.Context, trackID domain.TrackId, fence acqports.Fence, delay time.Duration) error {
+func (q *releaseRecordingQueue) Release(ctx context.Context, trackID shared.TrackId, fence acqports.Fence, delay time.Duration) error {
 	q.releases <- releaseRecord{fence: fence, delay: delay}
 	return q.memJobQueue.Release(ctx, trackID, fence, delay)
 }
 
 func TestBackgroundScheduler_TransientFailure_ReleasesTheJobWithBackoffAndKeepsTheTrackPending(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := newPendingTrack(t, userId, repo)
+	ledger := acquisitiontest.NewLedger()
+	track := newPendingTrack(t, userId, ledger)
 	searcher := &fakeAudioSearcher{searchErr: &acqdomain.SourceUnavailableError{Source: "fake", Err: errors.New("http error 503")}}
 	pub := newRecordingPublisher()
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore(), WithAcquireEvents(pub))
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(), WithAcquireEvents(pub))
 	wake := make(chan struct{}, 1)
 	queue := &releaseRecordingQueue{memJobQueue: newMemJobQueue(wake), releases: make(chan releaseRecord, 1)}
 	queue.RememberUser(track.ID, userId)
@@ -2468,9 +2431,9 @@ func TestBackgroundScheduler_TransientFailure_ReleasesTheJobWithBackoffAndKeepsT
 	if released.delay != retryBackoff(1) {
 		t.Errorf("released delay = %v, want %v", released.delay, retryBackoff(1))
 	}
-	stored := storedTrack(t, repo, track)
-	if stored.AcquisitionStatus != domain.AcquisitionPending {
-		t.Errorf("status = %v, want %v", stored.AcquisitionStatus, domain.AcquisitionPending)
+	stored := storedTrack(t, ledger, track)
+	if stored.Status != acqports.TrackPending {
+		t.Errorf("status = %v, want %v", stored.Status, acqports.TrackPending)
 	}
 	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
 		t.Errorf("track_acquisition_failed publishes = %d, want 0", got)
@@ -2487,11 +2450,11 @@ func TestBackgroundScheduler_PauseRefusesAdmissionUntilResume(t *testing.T) {
 	user := shared.NewUserId(uuid.New())
 	scheduler.Pause()
 
-	refused := domain.NewTrackId()
+	refused := shared.NewTrackId()
 	if err := scheduler.Schedule(context.Background(), user, refused, ""); !errors.Is(err, acqdomain.ErrAcquisitionPaused) {
 		t.Fatalf("schedule while paused = %v, want ErrAcquisitionPaused", err)
 	}
-	if err := scheduler.ScheduleReplace(context.Background(), user, domain.NewTrackId()); !errors.Is(err, acqdomain.ErrAcquisitionPaused) {
+	if err := scheduler.ScheduleReplace(context.Background(), user, shared.NewTrackId()); !errors.Is(err, acqdomain.ErrAcquisitionPaused) {
 		t.Fatalf("replace while paused = %v, want ErrAcquisitionPaused", err)
 	}
 	if _, queued := settledJob(scheduler, refused.String()); queued {
@@ -2499,7 +2462,7 @@ func TestBackgroundScheduler_PauseRefusesAdmissionUntilResume(t *testing.T) {
 	}
 
 	scheduler.Resume()
-	accepted := domain.NewTrackId()
+	accepted := shared.NewTrackId()
 	if err := scheduler.Schedule(context.Background(), user, accepted, ""); err != nil {
 		t.Fatalf("schedule after Resume = %v, want nil", err)
 	}
@@ -2571,7 +2534,7 @@ type conflictingQueue struct {
 	gate      chan struct{}
 }
 
-func (q *conflictingQueue) Enqueue(ctx context.Context, trackID domain.TrackId, kind acqports.JobKind, delay time.Duration) error {
+func (q *conflictingQueue) Enqueue(ctx context.Context, trackID shared.TrackId, kind acqports.JobKind, delay time.Duration) error {
 	if n := q.enqueues.Add(1); q.rejectAll || n > 1 {
 		return acqdomain.ErrJobKindConflict
 	}
@@ -2600,7 +2563,7 @@ func TestBackgroundScheduler_Schedule_RejectedEnqueueLeavesNoCorrelationID(t *te
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
 	ctx := logging.WithCorrelationID(context.Background(), "corr-rejected")
-	err := scheduler.Schedule(ctx, shared.NewUserId(uuid.New()), domain.NewTrackId(), "")
+	err := scheduler.Schedule(ctx, shared.NewUserId(uuid.New()), shared.NewTrackId(), "")
 
 	if !errors.Is(err, acqdomain.ErrTrackJobInFlight) {
 		t.Fatalf("schedule = %v, want ErrTrackJobInFlight", err)
@@ -2611,8 +2574,8 @@ func TestBackgroundScheduler_Schedule_RejectedEnqueueLeavesNoCorrelationID(t *te
 }
 
 func TestBackgroundScheduler_Schedule_RejectedSecondRequestKeepsTheQueuedJobsCorrelationID(t *testing.T) {
-	repo := &corrCapturingRepo{fakeTrackRepository: newFakeTrackRepository()}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	ledger := &corrCapturingLedger{Ledger: acquisitiontest.NewLedger()}
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	queue := &conflictingQueue{memJobQueue: newMemJobQueue(make(chan struct{}, 1)), gate: make(chan struct{})}
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1),
@@ -2620,7 +2583,7 @@ func TestBackgroundScheduler_Schedule_RejectedSecondRequestKeepsTheQueuedJobsCor
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
 	userId := shared.NewUserId(uuid.New())
-	trackId := domain.NewTrackId()
+	trackId := shared.NewTrackId()
 	first := logging.WithCorrelationID(context.Background(), "corr-first")
 	second := logging.WithCorrelationID(context.Background(), "corr-second")
 	if err := scheduler.Schedule(first, userId, trackId, ""); err != nil {
@@ -2634,18 +2597,18 @@ func TestBackgroundScheduler_Schedule_RejectedSecondRequestKeepsTheQueuedJobsCor
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		repo.mu.Lock()
-		seen := repo.seen
-		repo.mu.Unlock()
+		ledger.mu.Lock()
+		seen := ledger.seen
+		ledger.mu.Unlock()
 		if seen {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	repo.mu.Lock()
-	defer repo.mu.Unlock()
-	if repo.corrID != "corr-first" {
-		t.Errorf("claimed job ran under correlation id %q, want %q", repo.corrID, "corr-first")
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	if ledger.corrID != "corr-first" {
+		t.Errorf("claimed job ran under correlation id %q, want %q", ledger.corrID, "corr-first")
 	}
 }
 
@@ -2661,7 +2624,7 @@ func TestBackgroundScheduler_Schedule_RunsTheJobWhenTheSchedulerClockIsAnHourAhe
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
-	trackID := domain.NewTrackId()
+	trackID := shared.NewTrackId()
 
 	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), trackID, ""); err != nil {
 		t.Fatalf("Schedule = %v, want nil", err)
@@ -2691,7 +2654,7 @@ func (q *claimSignalQueue) Claim(ctx context.Context, lease time.Duration) (acqp
 func seededPendingQueue(t *testing.T) *claimSignalQueue {
 	t.Helper()
 	mem := newMemJobQueue(nil)
-	trackID := domain.NewTrackId()
+	trackID := shared.NewTrackId()
 	mem.RememberUser(trackID, shared.NewUserId(uuid.New()))
 	if err := mem.Enqueue(context.Background(), trackID, acqports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("seed pending job: %v", err)
@@ -2732,12 +2695,12 @@ func TestBackgroundScheduler_StartedPausedNeverClaimsASeededJobUntilResume(t *te
 }
 
 func TestBackgroundScheduler_AClaimedJobRecordsItsQueueWait(t *testing.T) {
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
-	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Waited: 3 * time.Second}
+	job := acqports.Job{TrackID: shared.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Waited: 3 * time.Second}
 	scheduler.startClaimedJob(context.Background(), job.TrackID.String(), job)
 	record := scheduler.log.complete(job.TrackID.String(), acqports.JobSucceeded, "")
 
@@ -2748,7 +2711,7 @@ func TestBackgroundScheduler_AClaimedJobRecordsItsQueueWait(t *testing.T) {
 
 func TestBackgroundScheduler_OutcomeCarriesStageTimesSourceHostAndFileFacts(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
@@ -2773,7 +2736,7 @@ func TestBackgroundScheduler_OutcomeCarriesStageTimesSourceHostAndFileFacts(t *t
 
 func TestBackgroundScheduler_AFailedOutcomeNamesNoSourceHost(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
@@ -2797,7 +2760,7 @@ type orderedAcquirer struct {
 	firstOnce    sync.Once
 }
 
-func (a *orderedAcquirer) Execute(context.Context, shared.UserId, domain.TrackId) error {
+func (a *orderedAcquirer) Execute(context.Context, shared.UserId, shared.TrackId) error {
 	a.firstOnce.Do(func() {
 		close(a.firstStarted)
 		<-a.releaseFirst
@@ -2806,7 +2769,7 @@ func (a *orderedAcquirer) Execute(context.Context, shared.UserId, domain.TrackId
 	return nil
 }
 
-func (a *orderedAcquirer) ExecuteUpgrade(context.Context, shared.UserId, domain.TrackId) error {
+func (a *orderedAcquirer) ExecuteUpgrade(context.Context, shared.UserId, shared.TrackId) error {
 	a.record("ExecuteUpgrade")
 	return nil
 }
@@ -2826,14 +2789,14 @@ func TestBackgroundScheduler_UpgradeJobsRunOnTheUpgradeLaneAfterEveryWaitingUser
 	ctx := context.Background()
 	user := shared.NewUserId(uuid.New())
 
-	if err := scheduler.Schedule(ctx, user, domain.NewTrackId(), ""); err != nil {
+	if err := scheduler.Schedule(ctx, user, shared.NewTrackId(), ""); err != nil {
 		t.Fatalf("Schedule: %v", err)
 	}
 	<-acq.firstStarted
-	if err := scheduler.Schedule(ctx, user, domain.NewTrackId(), ""); err != nil {
+	if err := scheduler.Schedule(ctx, user, shared.NewTrackId(), ""); err != nil {
 		t.Fatalf("Schedule: %v", err)
 	}
-	if err := scheduler.ScheduleUpgrade(ctx, user, domain.NewTrackId()); err != nil {
+	if err := scheduler.ScheduleUpgrade(ctx, user, shared.NewTrackId()); err != nil {
 		t.Fatalf("ScheduleUpgrade: %v", err)
 	}
 	time.Sleep(50 * time.Millisecond)
@@ -2852,7 +2815,7 @@ func TestBackgroundScheduler_UpgradeJobsRunOnTheUpgradeLaneAfterEveryWaitingUser
 
 type keptUpgrader struct{ stubAcquirer }
 
-func (*keptUpgrader) ExecuteUpgrade(context.Context, shared.UserId, domain.TrackId) error {
+func (*keptUpgrader) ExecuteUpgrade(context.Context, shared.UserId, shared.TrackId) error {
 	return upgrade.ErrKept
 }
 
@@ -2866,7 +2829,7 @@ func TestBackgroundScheduler_AKeptUpgradeIsRecordedAsKeptNotAsSuccessOrFailure(t
 		WithUpgradeLane(acq, 1))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
-	if err := scheduler.ScheduleUpgrade(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId()); err != nil {
+	if err := scheduler.ScheduleUpgrade(context.Background(), shared.NewUserId(uuid.New()), shared.NewTrackId()); err != nil {
 		t.Fatalf("ScheduleUpgrade: %v", err)
 	}
 	wg.Wait()
@@ -2889,7 +2852,7 @@ type committingUpgrader struct {
 	startedOne sync.Once
 }
 
-func (u *committingUpgrader) ExecuteUpgrade(ctx context.Context, _ shared.UserId, _ domain.TrackId) error {
+func (u *committingUpgrader) ExecuteUpgrade(ctx context.Context, _ shared.UserId, _ shared.TrackId) error {
 	u.startedOne.Do(func() { close(u.started) })
 	<-u.proceed
 	_, err := u.step.Execute(ctx, &AcquisitionContext{AudioRef: "upgraded.mp3"}, afterStore{kept: acqports.AudioCandidate{URL: "https://www.youtube.com/watch?v=upgradedAAA"}})
@@ -2899,14 +2862,11 @@ func (u *committingUpgrader) ExecuteUpgrade(ctx context.Context, _ shared.UserId
 
 func TestBackgroundScheduler_AnUpgradeTakenOverByAReplaceDuringItsDownloadNeverCommits(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	repo := newFakeTrackRepository()
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
 	acq := &committingUpgrader{
-		step:      NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID),
+		step:      NewUpdateTrackStep(ledger, userId, track.ID),
 		started:   make(chan struct{}),
 		proceed:   make(chan struct{}),
 		commitErr: make(chan error, 1),
@@ -2930,7 +2890,7 @@ func TestBackgroundScheduler_AnUpgradeTakenOverByAReplaceDuringItsDownloadNeverC
 	if commitErr := <-acq.commitErr; !errors.Is(commitErr, acqdomain.ErrLeaseLost) {
 		t.Errorf("upgrade commit = %v, want ErrLeaseLost", commitErr)
 	}
-	if status := storedTrack(t, repo, track).AcquisitionStatus; status != domain.AcquisitionPending {
+	if status := storedTrack(t, ledger, track).Status; status != acqports.TrackPending {
 		t.Errorf("track status = %v, want the upgrade to have written nothing", status)
 	}
 }
@@ -2941,12 +2901,12 @@ type queueCallRecorder struct {
 	settled  atomic.Int32
 }
 
-func (q *queueCallRecorder) Release(ctx context.Context, trackID domain.TrackId, fence acqports.Fence, delay time.Duration) error {
+func (q *queueCallRecorder) Release(ctx context.Context, trackID shared.TrackId, fence acqports.Fence, delay time.Duration) error {
 	q.released.Add(1)
 	return q.memJobQueue.Release(ctx, trackID, fence, delay)
 }
 
-func (q *queueCallRecorder) Settle(ctx context.Context, trackID domain.TrackId, fence acqports.Fence) error {
+func (q *queueCallRecorder) Settle(ctx context.Context, trackID shared.TrackId, fence acqports.Fence) error {
 	q.settled.Add(1)
 	return q.memJobQueue.Settle(ctx, trackID, fence)
 }
@@ -2959,7 +2919,7 @@ func TestBackgroundScheduler_APanickingReplaceAtTheRunCapIsSettled(t *testing.T)
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
-	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Kind: acqports.JobKindReplace, Run: maxAcquisitionAttempts}
+	job := acqports.Job{TrackID: shared.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Kind: acqports.JobKindReplace, Run: maxAcquisitionAttempts}
 
 	scheduler.releasePanickedJob(job)
 
@@ -2978,14 +2938,14 @@ type panicQueueRecorder struct {
 	settled atomic.Int32
 }
 
-func (q *panicQueueRecorder) Release(ctx context.Context, trackID domain.TrackId, fence acqports.Fence, delay time.Duration) error {
+func (q *panicQueueRecorder) Release(ctx context.Context, trackID shared.TrackId, fence acqports.Fence, delay time.Duration) error {
 	q.mu.Lock()
 	q.delays = append(q.delays, delay)
 	q.mu.Unlock()
 	return q.memJobQueue.Release(ctx, trackID, fence, delay)
 }
 
-func (q *panicQueueRecorder) Settle(ctx context.Context, trackID domain.TrackId, fence acqports.Fence) error {
+func (q *panicQueueRecorder) Settle(ctx context.Context, trackID shared.TrackId, fence acqports.Fence) error {
 	q.settled.Add(1)
 	return q.memJobQueue.Settle(ctx, trackID, fence)
 }
@@ -3005,7 +2965,7 @@ func panickedJobOutcome(t *testing.T, job acqports.Job) (*panickingAcquirer, *pa
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
-	job.TrackID = domain.NewTrackId()
+	job.TrackID = shared.NewTrackId()
 	job.UserID = shared.NewUserId(uuid.New())
 
 	scheduler.releasePanickedJob(job)
@@ -3041,15 +3001,11 @@ func TestBackgroundScheduler_APanickedJobAtOrPastTheRunCapLeavesTheQueueWhatever
 
 func TestBackgroundScheduler_APanickedJobThatLostItsLeaseDoesNotFailTheTrack(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	track.AcquisitionFence = 1000
-	repo := newFakeTrackRepository()
-	key := track.ID.String() + ":" + userId.String()
-	repo.tracks[key] = track
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	track.Fence = 1000
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var wg sync.WaitGroup
 	queue := settleKeepsPendingQueue{newMemJobQueue(make(chan struct{}, 1))}
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithJobQueue(queue))
@@ -3060,11 +3016,11 @@ func TestBackgroundScheduler_APanickedJobThatLostItsLeaseDoesNotFailTheTrack(t *
 
 	scheduler.releasePanickedJob(job)
 
-	if got := repo.tracks[key].AcquisitionStatus; got != domain.AcquisitionPending {
+	if got := committedTrack(t, ledger, track.ID).Status; got != acqports.TrackPending {
 		t.Errorf("status = %v, want pending: the panicked job no longer holds the lease", got)
 	}
-	if got := repo.tracks[key].FailureReason; got != nil {
-		t.Errorf("failure_reason = %q, want none", *got)
+	if got := committedTrack(t, ledger, track.ID).FailureReason; got != "" {
+		t.Errorf("failure_reason = %q, want none", got)
 	}
 }
 
@@ -3101,15 +3057,15 @@ func TestBackgroundScheduler_APanickedJobBelowTheRunCapIsRetriedAfterItsBackoff(
 
 type retryableAcquirer struct{}
 
-func (retryableAcquirer) Execute(context.Context, shared.UserId, domain.TrackId) error {
+func (retryableAcquirer) Execute(context.Context, shared.UserId, shared.TrackId) error {
 	return ErrAcquisitionRetryable
 }
 
-func (retryableAcquirer) ExecuteReplace(context.Context, shared.UserId, domain.TrackId) error {
+func (retryableAcquirer) ExecuteReplace(context.Context, shared.UserId, shared.TrackId) error {
 	return ErrAcquisitionRetryable
 }
 
-func (retryableAcquirer) RefuseQueued(context.Context, shared.UserId, domain.TrackId) {}
+func (retryableAcquirer) RefuseQueued(context.Context, shared.UserId, shared.TrackId) {}
 
 func TestBackgroundScheduler_ARetryableJobIsRetryingNotFailed(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
@@ -3119,7 +3075,7 @@ func TestBackgroundScheduler_ARetryableJobIsRetryingNotFailed(t *testing.T) {
 		scheduler.Shutdown(context.Background())
 	})
 
-	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), shared.NewTrackId(), ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
 
@@ -3157,7 +3113,7 @@ func TestBackgroundScheduler_ALeaseLostJobRecordsCancelled(t *testing.T) {
 		scheduler.Shutdown(context.Background())
 	})
 
-	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), shared.NewTrackId(), ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
 
@@ -3172,12 +3128,12 @@ func TestBackgroundScheduler_ALeaseLostJobRecordsCancelled(t *testing.T) {
 
 func TestScheduler_OutcomeCarriesJobKindRunAndProvenance(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
-	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Kind: acqports.JobKindReplace, Run: 2}
+	job := acqports.Job{TrackID: shared.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Kind: acqports.JobKindReplace, Run: 2}
 	key := job.TrackID.String()
 	reportedCtx := scheduler.startClaimedJob(context.Background(), key, job)
 	jobReporterFrom(reportedCtx).provenance("corroborated")
@@ -3192,15 +3148,11 @@ func TestScheduler_OutcomeCarriesJobKindRunAndProvenance(t *testing.T) {
 func TestBackgroundScheduler_AJobWhoseLeaseWasReclaimedLeavesTheTrackPending(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	track.AcquisitionFence = 1000
-	repo := newFakeTrackRepository()
-	key := track.ID.String() + ":" + userId.String()
-	repo.tracks[key] = track
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{searchErr: errors.New("boom")}), newFakeAudioStore())
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	track.Fence = 1000
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{searchErr: errors.New("boom")}), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 	t.Cleanup(func() {
@@ -3213,25 +3165,22 @@ func TestBackgroundScheduler_AJobWhoseLeaseWasReclaimedLeavesTheTrackPending(t *
 
 	assertExactlyOneOutcome(t, recorder.calls)
 	wg.Wait()
-	if got := repo.tracks[key].AcquisitionStatus; got != domain.AcquisitionPending {
+	if got := committedTrack(t, ledger, track.ID).Status; got != acqports.TrackPending {
 		t.Errorf("status = %v, want pending: the job ran on a fence the track no longer carries", got)
 	}
-	if got := repo.tracks[key].FailureReason; got != nil {
-		t.Errorf("failure_reason = %q, want none", *got)
+	if got := committedTrack(t, ledger, track.ID).FailureReason; got != "" {
+		t.Errorf("failure_reason = %q, want none", got)
 	}
 }
 
 func TestBackgroundScheduler_ALedgerRefusalForAStaleFenceRecordsCancelledNotFailed(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	track.AcquisitionFence = 1000
-	repo := newFakeTrackRepository()
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{searchErr: errors.New("boom")}), newFakeAudioStore())
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	track.Fence = 1000
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{searchErr: errors.New("boom")}), newFakeAudioStore())
 	var wg sync.WaitGroup
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 	t.Cleanup(func() {
@@ -3251,17 +3200,14 @@ func TestBackgroundScheduler_ALedgerRefusalForAStaleFenceRecordsCancelledNotFail
 
 func TestExecute_ALedgerRefusalForAStaleFenceSurfacesErrLeaseLostWithTheCause(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	track.AcquisitionFence = 2
-	repo := newFakeTrackRepository()
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	track.Fence = 2
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
 	cause := errors.New("boom")
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{searchErr: cause}), newFakeAudioStore())
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{searchErr: cause}), newFakeAudioStore())
 
-	err = svc.Execute(withJobFence(context.Background(), 1), userId, track.ID)
+	err := svc.Execute(withJobFence(context.Background(), 1), userId, track.ID)
 
 	if !errors.Is(err, acqdomain.ErrLeaseLost) || !errors.Is(err, cause) {
 		t.Errorf("err = %v, want both ErrLeaseLost and the pipeline's cause", err)
@@ -3291,12 +3237,10 @@ func TestScheduler_OutcomeCarriesTheRunsConfidenceSourceAndLengths(t *testing.T)
 		t.Run(tc.name, func(t *testing.T) {
 			recorder := newFakeOutcomeRecorder()
 			userId := shared.NewUserId(uuid.New())
-			repo := newFakeTrackRepository()
-			track := pendingTrack(t, repo, userId)
-			if err := track.SetCatalogDuration(target); err != nil {
-				t.Fatalf("set duration: %v", err)
-			}
-			svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(tc.searcher), newFakeAudioStore(), WithAudioProber(tc.prober))
+			ledger := acquisitiontest.NewLedger()
+			track := pendingTrack(t, ledger, userId)
+			track = withCatalogLength(t, ledger, track, target)
+			svc := newTestAcquireService(ledger, fakeRegistry(tc.searcher), newFakeAudioStore(), WithAudioProber(tc.prober))
 			var wg sync.WaitGroup
 			scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
 			t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
@@ -3314,19 +3258,20 @@ func TestScheduler_OutcomeCarriesTheRunsConfidenceSourceAndLengths(t *testing.T)
 	}
 }
 
-func fencedPendingTrack(t *testing.T, fence int) (*fakeTrackRepository, *domain.Track) {
+func fencedPendingTrack(t *testing.T, fence int) (*acquisitiontest.Ledger, ledgerTrack) {
 	t.Helper()
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := newPendingTrack(t, userId, repo)
-	storedTrack(t, repo, track).AcquisitionFence = fence
-	return repo, track
+	ledger := acquisitiontest.NewLedger()
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	track.Fence = acqports.Fence(fence)
+	ledger.Seed(track)
+	return ledger, track
 }
 
-func panicThroughTheLedger(t *testing.T, store catalogbridge.TrackStore, job acqports.Job) (*queueCallRecorder, *recordingPublisher) {
+func panicThroughTheLedger(t *testing.T, store acqports.TrackLedger, job acqports.Job) (*queueCallRecorder, *recordingPublisher) {
 	t.Helper()
 	pub := newRecordingPublisher()
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(store), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
+	svc := newTestAcquireService(store, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
 	var wg sync.WaitGroup
 	queue := &queueCallRecorder{memJobQueue: newMemJobQueue(make(chan struct{}, 1))}
 	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithJobQueue(queue))
@@ -3338,12 +3283,12 @@ func panicThroughTheLedger(t *testing.T, store catalogbridge.TrackStore, job acq
 }
 
 func TestBackgroundScheduler_APanickedJobAtTheRunCapThatStillHoldsItsLeaseFailsTheTrack(t *testing.T) {
-	repo, track := fencedPendingTrack(t, 7)
+	ledger, track := fencedPendingTrack(t, 7)
 	job := acqports.Job{TrackID: track.ID, UserID: track.UserId, Fence: 7, Run: maxAcquisitionAttempts}
 
-	_, pub := panicThroughTheLedger(t, repo, job)
+	_, pub := panicThroughTheLedger(t, ledger, job)
 
-	if got := storedTrack(t, repo, track).AcquisitionStatus; got != domain.AcquisitionFailed {
+	if got := storedTrack(t, ledger, track).Status; got != acqports.TrackFailed {
 		t.Errorf("status = %v, want failed: the job still holds the lease", got)
 	}
 	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 1 {
@@ -3352,17 +3297,17 @@ func TestBackgroundScheduler_APanickedJobAtTheRunCapThatStillHoldsItsLeaseFailsT
 }
 
 func TestBackgroundScheduler_APanickedJobOneFenceBehindDoesNotFailTheTrackOrAnnounceIt(t *testing.T) {
-	repo, track := fencedPendingTrack(t, 7)
+	ledger, track := fencedPendingTrack(t, 7)
 	job := acqports.Job{TrackID: track.ID, UserID: track.UserId, Fence: 6, Run: maxAcquisitionAttempts}
 
-	_, pub := panicThroughTheLedger(t, repo, job)
+	_, pub := panicThroughTheLedger(t, ledger, job)
 
-	stored := storedTrack(t, repo, track)
-	if stored.AcquisitionStatus != domain.AcquisitionPending {
-		t.Errorf("status = %v, want pending: a fence one behind has lost the lease", stored.AcquisitionStatus)
+	stored := storedTrack(t, ledger, track)
+	if stored.Status != acqports.TrackPending {
+		t.Errorf("status = %v, want pending: a fence one behind has lost the lease", stored.Status)
 	}
-	if stored.FailureReason != nil {
-		t.Errorf("failure_reason = %q, want none", *stored.FailureReason)
+	if stored.FailureReason != "" {
+		t.Errorf("failure_reason = %q, want none", stored.FailureReason)
 	}
 	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
 		t.Errorf("track_acquisition_failed publishes = %d, want 0: nothing failed", got)
@@ -3370,12 +3315,12 @@ func TestBackgroundScheduler_APanickedJobOneFenceBehindDoesNotFailTheTrackOrAnno
 }
 
 func TestBackgroundScheduler_APanickedJobBelowTheRunCapLeavesTheTrackPendingForItsRetry(t *testing.T) {
-	repo, track := fencedPendingTrack(t, 7)
+	ledger, track := fencedPendingTrack(t, 7)
 	job := acqports.Job{TrackID: track.ID, UserID: track.UserId, Fence: 7, Run: maxAcquisitionAttempts - 1}
 
-	queue, _ := panicThroughTheLedger(t, repo, job)
+	queue, _ := panicThroughTheLedger(t, ledger, job)
 
-	if got := storedTrack(t, repo, track).AcquisitionStatus; got != domain.AcquisitionPending {
+	if got := storedTrack(t, ledger, track).Status; got != acqports.TrackPending {
 		t.Errorf("status = %v, want pending: below the cap the job is retried", got)
 	}
 	if got := queue.released.Load(); got != 1 {
@@ -3387,18 +3332,18 @@ func TestBackgroundScheduler_APanickedJobBelowTheRunCapLeavesTheTrackPendingForI
 }
 
 func TestBackgroundScheduler_AnUnfencedPanickedJobAtTheRunCapStillFailsTheTrack(t *testing.T) {
-	repo, track := fencedPendingTrack(t, 1000)
+	ledger, track := fencedPendingTrack(t, 1000)
 	job := acqports.Job{TrackID: track.ID, UserID: track.UserId, Fence: 0, Run: maxAcquisitionAttempts}
 
-	panicThroughTheLedger(t, repo, job)
+	panicThroughTheLedger(t, ledger, job)
 
-	if got := storedTrack(t, repo, track).AcquisitionStatus; got != domain.AcquisitionFailed {
+	if got := storedTrack(t, ledger, track).Status; got != acqports.TrackFailed {
 		t.Errorf("status = %v, want failed: an unfenced job is not checked against the lease", got)
 	}
 }
 
 func TestBackgroundScheduler_APanickedJobAtTheRunCapSurvivesARefusalThatPanicsAndLeavesTheQueue(t *testing.T) {
-	job := acqports.Job{TrackID: domain.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Fence: 7, Run: maxAcquisitionAttempts}
+	job := acqports.Job{TrackID: shared.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Fence: 7, Run: maxAcquisitionAttempts}
 
 	var queue *queueCallRecorder
 	func() {
@@ -3407,7 +3352,7 @@ func TestBackgroundScheduler_APanickedJobAtTheRunCapSurvivesARefusalThatPanicsAn
 				t.Fatalf("panic escaped the scheduler: %v", r)
 			}
 		}()
-		queue, _ = panicThroughTheLedger(t, &panicRepo{}, job)
+		queue, _ = panicThroughTheLedger(t, &panicLedger{}, job)
 	}()
 
 	if queue == nil {
@@ -3421,12 +3366,12 @@ func TestBackgroundScheduler_APanickedJobAtTheRunCapSurvivesARefusalThatPanicsAn
 func TestBackgroundScheduler_APanickedReplaceOrUpgradeThatLostItsLeaseLeavesTheTrackPending(t *testing.T) {
 	for _, kind := range []acqports.JobKind{acqports.JobKindReplace, acqports.JobKindUpgrade} {
 		t.Run(string(kind), func(t *testing.T) {
-			repo, track := fencedPendingTrack(t, 1000)
+			ledger, track := fencedPendingTrack(t, 1000)
 			job := acqports.Job{TrackID: track.ID, UserID: track.UserId, Kind: kind, Fence: 1, Run: maxAcquisitionAttempts}
 
-			panicThroughTheLedger(t, repo, job)
+			panicThroughTheLedger(t, ledger, job)
 
-			if got := storedTrack(t, repo, track).AcquisitionStatus; got != domain.AcquisitionPending {
+			if got := storedTrack(t, ledger, track).Status; got != acqports.TrackPending {
 				t.Errorf("status = %v, want pending: the panicked %s job no longer holds the lease", got, kind)
 			}
 		})
@@ -3435,23 +3380,16 @@ func TestBackgroundScheduler_APanickedReplaceOrUpgradeThatLostItsLeaseLeavesTheT
 
 func TestBackgroundScheduler_APanickedUpgradeAtTheRunCapThatHoldsItsLeaseLeavesAReadyTrackReady(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	if err := track.MarkReady("audio/ref.mp3"); err != nil {
-		t.Fatalf("mark ready: %v", err)
-	}
-	track.AcquisitionFence = 7
-	if _, err := repo.Add(context.Background(), track); err != nil {
-		t.Fatalf("add track: %v", err)
-	}
+	ledger := acquisitiontest.NewLedger()
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	makeReady(&track, "audio/ref.mp3")
+	track.Fence = 7
+	ledger.Seed(track)
 	job := acqports.Job{TrackID: track.ID, UserID: userId, Kind: acqports.JobKindUpgrade, Fence: 7, Run: maxAcquisitionAttempts}
 
-	panicThroughTheLedger(t, repo, job)
+	panicThroughTheLedger(t, ledger, job)
 
-	if got := storedTrack(t, repo, track).AcquisitionStatus; got != domain.AcquisitionReady {
+	if got := storedTrack(t, ledger, track).Status; got != acqports.TrackReady {
 		t.Errorf("status = %v, want ready: a failed upgrade never un-readies the playing file", got)
 	}
 }

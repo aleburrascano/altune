@@ -2,10 +2,8 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
-	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/internal/core/rejectionlog"
-	"altune/go-api/internal/catalog/domain"
 	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"context"
@@ -509,7 +507,7 @@ func TestProvenance(t *testing.T) {
 	tests := []struct {
 		name string
 		ac   AcquisitionContext
-		want domain.AcquisitionProvenance
+		want shared.AcquisitionProvenance
 	}{
 		{
 			name: "fingerprint match is the strongest claim",
@@ -518,7 +516,7 @@ func TestProvenance(t *testing.T) {
 				DurationVerified: true,
 				Identity:         ports.RecordingIdentity{Duration: 181},
 			},
-			want: domain.ProvenanceVerified,
+			want: shared.ProvenanceVerified,
 		},
 		{
 			name: "length corroborated by discovery but no fingerprint",
@@ -527,22 +525,22 @@ func TestProvenance(t *testing.T) {
 				Track:            TrackRef{CatalogDuration: 181},
 				Identity:         ports.RecordingIdentity{Duration: 181},
 			},
-			want: domain.ProvenanceCorroborated,
+			want: shared.ProvenanceCorroborated,
 		},
 		{
 			name: "length checked against saved metadata only",
 			ac:   AcquisitionContext{DurationVerified: true},
-			want: domain.ProvenanceBestEffort,
+			want: shared.ProvenanceBestEffort,
 		},
 		{
 			name: "nothing verified",
 			ac:   AcquisitionContext{},
-			want: domain.ProvenanceBestEffort,
+			want: shared.ProvenanceBestEffort,
 		},
 		{
 			name: "a best-effort settlement outranks a fingerprint match",
 			ac:   AcquisitionContext{BestEffort: true, IdentityVerified: true},
-			want: domain.ProvenanceBestEffort,
+			want: shared.ProvenanceBestEffort,
 		},
 	}
 
@@ -555,7 +553,7 @@ func TestProvenance(t *testing.T) {
 	}
 }
 
-func handoverPipeline(t *testing.T, acquiring domain.TrackId, userId shared.UserId, queue *recordingOrphanQueue, updateTrack *mockStep) (Pipeline, *cancelSensitiveStore, *AcquisitionContext) {
+func handoverPipeline(t *testing.T, acquiring shared.TrackId, userId shared.UserId, queue *recordingOrphanQueue, updateTrack *mockStep) (Pipeline, *cancelSensitiveStore, *AcquisitionContext) {
 	t.Helper()
 	store := &cancelSensitiveStore{stored: map[string]bool{}}
 	ac := &AcquisitionContext{
@@ -563,7 +561,7 @@ func handoverPipeline(t *testing.T, acquiring domain.TrackId, userId shared.User
 		TempPath: "/tmp/one-more-time.mp3",
 	}
 	ref := BuildAudioRef(ac.Track, ac.TempPath)
-	refs := trackRefIndex{holders: map[string][]domain.TrackId{ref: {acquiring}}}
+	refs := trackRefIndex{holders: map[string][]shared.TrackId{ref: {acquiring}}}
 	storeStep := NewStoreStep(store, WithStoreAudioRefGuard(refs, acquiring), WithStoreOrphanQueue(queue, userId))
 	storeStep.sleep = func(_ time.Duration) {}
 
@@ -626,7 +624,7 @@ func TestRunPipeline_FallbackWindowsContinueTheFirstTiersCount(t *testing.T) {
 }
 
 func TestRunPipeline_PlainFailureDeletesTheStoredAudioAndQueuesNothing(t *testing.T) {
-	acquiring, userId := domain.NewTrackId(), shared.NewUserId(uuid.New())
+	acquiring, userId := shared.NewTrackId(), shared.NewUserId(uuid.New())
 	queue := &recordingOrphanQueue{}
 	updateTrack := newMockStep("update_track", nil)
 	updateTrack.executeErr = errors.New("update failed")
@@ -645,7 +643,7 @@ func TestRunPipeline_PlainFailureDeletesTheStoredAudioAndQueuesNothing(t *testin
 }
 
 func TestRunPipeline_LeaseLossKeepsTheStoredAudioAndQueuesItForTheSweep(t *testing.T) {
-	acquiring, userId := domain.NewTrackId(), shared.NewUserId(uuid.New())
+	acquiring, userId := shared.NewTrackId(), shared.NewUserId(uuid.New())
 	queue := &recordingOrphanQueue{}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -676,7 +674,7 @@ func (s *storeThenExpire) Execute(ctx context.Context, ac *AcquisitionContext, p
 }
 
 func TestRunPipeline_ElapsedAcquireDeadlineStillDeletesTheStoredAudio(t *testing.T) {
-	acquiring, userId := domain.NewTrackId(), shared.NewUserId(uuid.New())
+	acquiring, userId := shared.NewTrackId(), shared.NewUserId(uuid.New())
 	queue := &recordingOrphanQueue{}
 	jobCtx, cancel := context.WithCancel(withSchedulerOwnedJobContext(context.Background()))
 	defer cancel()
@@ -709,15 +707,12 @@ func assertStepOrder(t *testing.T, got, want []string) {
 	}
 }
 
-func acquirableFixture(t *testing.T) (*AcquireTrackAudioService, *domain.Track, *AcquisitionContext) {
+func acquirableFixture(t *testing.T) (*AcquireTrackAudioService, ledgerTrack, *AcquisitionContext) {
 	t.Helper()
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	repo := newFakeTrackRepository()
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	track := newLedgerTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
 
 	audio := filepath.Join(t.TempDir(), "song.mp3")
 	if err := os.WriteFile(audio, []byte("audio"), 0o600); err != nil {
@@ -733,7 +728,7 @@ func acquirableFixture(t *testing.T) (*AcquireTrackAudioService, *domain.Track, 
 		}},
 		downloadPath: audio,
 	}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore())
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore())
 	ac := &AcquisitionContext{Track: TrackRef{
 		ID: track.ID.String(), UserID: userId.String(),
 		Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours", CatalogDuration: 200,
@@ -922,14 +917,14 @@ func TestRunPipeline_ShadowLogsAFailedPipeline(t *testing.T) {
 
 func TestRunPipeline_AFailingUpdateTrackRollsBackOnlyTheEarlierStages(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := seedTrackInRepo(t, repo, userId, markReadyWith("old-ref"))
+	ledger := acquisitiontest.NewLedger()
+	track := seedTrackInRepo(t, ledger, userId, readyWith("old-ref"))
 	var log []string
 	steps := make([]*mockStep, 5)
 	for i, name := range pipelineStageNames[:5] {
 		steps[i] = newMockStep(name, &log)
 	}
-	p := pipelineOf(steps...).withUpdateTrack(NewUpdateTrackStep(catalogbridge.NewTrackLedger(repo), userId, track.ID))
+	p := pipelineOf(steps...).withUpdateTrack(NewUpdateTrackStep(ledger, userId, track.ID))
 
 	err := RunPipeline(context.Background(), p, &AcquisitionContext{})
 
@@ -944,9 +939,9 @@ func TestRunPipeline_AFailingUpdateTrackRollsBackOnlyTheEarlierStages(t *testing
 	if strings.Join(log, ",") != strings.Join(want, ",") {
 		t.Errorf("log = %v, want %v", log, want)
 	}
-	got := storedTrack(t, repo, track)
-	if got.AcquisitionStatus != domain.AcquisitionReady || got.AudioRef == nil || *got.AudioRef != "old-ref" {
-		t.Errorf("status = %v, audio_ref = %v, want ready on old-ref", got.AcquisitionStatus, got.AudioRef)
+	got := storedTrack(t, ledger, track)
+	if got.Status != ports.TrackReady || got.AudioRef == nil || *got.AudioRef != "old-ref" {
+		t.Errorf("status = %v, audio_ref = %v, want ready on old-ref", got.Status, got.AudioRef)
 	}
 }
 
