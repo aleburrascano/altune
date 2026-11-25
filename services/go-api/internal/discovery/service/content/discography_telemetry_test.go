@@ -4,6 +4,8 @@ import (
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/discoverytest"
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -134,6 +136,33 @@ func TestDiscographyEmit_ReleasesFromTheIdentityFanOutAreNeverSuspects(t *testin
 	assertPayloadInt(t, ev.Payload, "releases", 3)
 	assertPayloadInt(t, ev.Payload, "single_provider", 2)
 	assertPayloadInt(t, ev.Payload, "single_provider_no_id", 0)
+}
+
+func discographyEmitLogs(t *testing.T, appendErr error) string {
+	t.Helper()
+	logs := discoverytest.CaptureLogs(t)
+	bg := discoverytest.NewTracker(t)
+	store := &discoverytest.FakeEventStore{Err: appendErr}
+	albums := map[discovery.ProviderName][]discovery.SearchResult{
+		discovery.ProviderSpotify: {catalogAlbum(discovery.ProviderSpotify, "sp-a", "Fully Loaded")},
+	}
+	svc := discovery.NewGetArtistContentService(albumsFrom(albums), discovery.WithContentEventStore(store, bg))
+	if _, err := svc.GetAlbums(context.Background(), discovery.ProviderSpotify, "abc123", map[discovery.ProviderName]string{discovery.ProviderSpotify: "sp-che"}, 50); err != nil {
+		t.Fatalf("GetAlbums: %v", err)
+	}
+	bg.Wait()
+	return logs.String()
+}
+
+func TestDiscographyEmit_AFailedAppendIsLoggedAndASuccessfulOneIsNot(t *testing.T) {
+	const failed = `"msg":"discography.telemetry.emit_failed"`
+
+	if got := discographyEmitLogs(t, errors.New("store down")); !strings.Contains(got, failed) {
+		t.Errorf("logs = %s, want an emit_failed warning", got)
+	}
+	if got := discographyEmitLogs(t, nil); strings.Contains(got, failed) {
+		t.Errorf("logs = %s, want no emit_failed warning", got)
+	}
 }
 
 type panickingEventStore struct{ asked chan struct{} }

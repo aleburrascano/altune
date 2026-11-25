@@ -4,7 +4,9 @@ import (
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/discovery/discoverytest"
 	"context"
+	"errors"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -159,4 +161,42 @@ func TestSearchIngest_FewerResultsThanTheTopAreAllIngested(t *testing.T) {
 	if len(got.entries) != 1 {
 		t.Fatalf("want 1 entry, got %d: %+v", len(got.entries), got.entries)
 	}
+}
+
+func searchWithVocabularyStore(t *testing.T, store *discovery.FakeVocabularyStore) {
+	t.Helper()
+	bg := discoverytest.NewTracker(t)
+	p := &discovery.FakeProvider{Provider: discovery.ProviderDeezer, Results: []discovery.SearchResult{
+		deezerResult(discovery.ResultKindArtist, "Drake", "", 90),
+	}}
+	svc := discovery.NewSearchService(bg, []discovery.SearchProvider{p}, discovery.NewCircuitBreaker(), discovery.WithVocabularyStore(store))
+	q, err := discovery.NewSearchQuery("drake", allKinds(), everyResultOnOnePage)
+	if err != nil {
+		t.Fatalf("NewSearchQuery: %v", err)
+	}
+	if _, err := svc.Execute(context.Background(), discovery.NewUser(), q, false); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	bg.Wait()
+}
+
+func TestSearchIngest_AFailedAddIsLoggedAndASuccessfulOneIsNot(t *testing.T) {
+	const failed = `"msg":"search.v2.vocab_ingest_failed"`
+
+	t.Run("failing store", func(t *testing.T) {
+		logs := discoverytest.CaptureLogs(t)
+		searchWithVocabularyStore(t, &discovery.FakeVocabularyStore{AddFn: func(discovery.VocabularyEntry) error { return errors.New("store down") }})
+
+		if !strings.Contains(logs.String(), failed) {
+			t.Errorf("logs = %s, want a vocab_ingest_failed warning", logs)
+		}
+	})
+	t.Run("working store", func(t *testing.T) {
+		logs := discoverytest.CaptureLogs(t)
+		searchWithVocabularyStore(t, &discovery.FakeVocabularyStore{AddFn: func(discovery.VocabularyEntry) error { return nil }})
+
+		if strings.Contains(logs.String(), failed) {
+			t.Errorf("logs = %s, want no vocab_ingest_failed warning", logs)
+		}
+	})
 }

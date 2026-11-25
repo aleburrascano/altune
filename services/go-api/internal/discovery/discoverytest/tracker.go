@@ -5,14 +5,9 @@ import (
 	"testing"
 )
 
-const testMaxInFlight = 64
-
 func NewTracker(t testing.TB) *runloop.Tracker {
 	t.Helper()
-	bg, err := runloop.NewTracker(runloop.TrackerLimits{MaxInFlight: testMaxInFlight})
-	if err != nil {
-		t.Fatalf("background tracker: %v", err)
-	}
+	bg := &runloop.Tracker{}
 	t.Cleanup(bg.Wait)
 	return bg
 }
