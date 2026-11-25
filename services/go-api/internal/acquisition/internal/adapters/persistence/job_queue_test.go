@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/acquisition"
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -21,7 +22,11 @@ type lockedBuffer struct {
 func (b *lockedBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.buf.Write(p)
+	n, err := b.buf.Write(p)
+	if err != nil {
+		return n, fmt.Errorf("write to the captured log: %w", err)
+	}
+	return n, nil
 }
 
 func (b *lockedBuffer) String() string {

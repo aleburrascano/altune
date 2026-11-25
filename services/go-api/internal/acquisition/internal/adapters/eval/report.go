@@ -181,9 +181,12 @@ func (r Report) WriteBaseline(path string) error {
 	}
 	raw, err := json.MarshalIndent(b, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("encode the eval baseline: %w", err)
 	}
-	return os.WriteFile(path, append(raw, '\n'), 0o644)
+	if err := os.WriteFile(path, append(raw, '\n'), 0o644); err != nil {
+		return fmt.Errorf("write the eval baseline: %w", err)
+	}
+	return nil
 }
 
 func (r Report) Regressions(base Baseline) []string {

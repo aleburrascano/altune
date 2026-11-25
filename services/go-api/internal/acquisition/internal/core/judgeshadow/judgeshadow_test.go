@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -35,7 +36,10 @@ func (h panicOnShadowHandler) Handle(ctx context.Context, r slog.Record) error {
 	if r.Message == "acquisition.judge_shadow" {
 		panic("shadow log blew up")
 	}
-	return h.Handler.Handle(ctx, r)
+	if err := h.Handler.Handle(ctx, r); err != nil {
+		return fmt.Errorf("handle the log record: %w", err)
+	}
+	return nil
 }
 
 func finesseCandidate(url string, kind ports.CandidateKind, seconds float64) ports.AudioCandidate {

@@ -615,25 +615,13 @@ func (r *recordedQueries) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data
 
 func (*recordedQueries) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
 
-func tracedPool(t *testing.T, pool *pgxpool.Pool, tracer pgx.QueryTracer) *pgxpool.Pool {
-	t.Helper()
-	cfg := pool.Config()
-	cfg.ConnConfig.Tracer = tracer
-	traced, err := pgxpool.NewWithConfig(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("traced pool: %v", err)
-	}
-	t.Cleanup(traced.Close)
-	return traced
-}
-
 func TestPgxJobQueue_ClaimPlanUsesScheduledAvailableAtIndex(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
 	ctx := context.Background()
 	insertPendingTrack(t, pool, time.Now().Add(-time.Minute))
 	recorded := &recordedQueries{}
-	if _, err := acquisition.NewPgxJobQueue(tracedPool(t, pool, recorded)).Claim(ctx, 30*time.Second); err != nil && !errors.Is(err, acquisition.ErrNoJobAvailable) {
+	if _, err := acquisition.NewPgxJobQueue(sharedtest.TracedPool(t, recorded)).Claim(ctx, 30*time.Second); err != nil && !errors.Is(err, acquisition.ErrNoJobAvailable) {
 		t.Fatalf("Claim = %v", err)
 	}
 	if len(recorded.sql) != 1 {

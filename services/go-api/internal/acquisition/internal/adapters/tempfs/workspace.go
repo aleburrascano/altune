@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/shared/redact"
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -18,17 +19,24 @@ type Workspace struct{}
 func New() *Workspace { return &Workspace{} }
 
 func (*Workspace) Create(pattern string) (string, error) {
-	return os.MkdirTemp("", ports.TempDirPrefix+pattern)
+	dir, err := os.MkdirTemp("", ports.TempDirPrefix+pattern)
+	if err != nil {
+		return "", fmt.Errorf("create a temp workspace: %w", err)
+	}
+	return dir, nil
 }
 
 func (*Workspace) Remove(path string) error {
-	return os.RemoveAll(path)
+	if err := os.RemoveAll(path); err != nil {
+		return fmt.Errorf("remove a temp workspace: %w", err)
+	}
+	return nil
 }
 
 func (*Workspace) Size(path string) (int64, error) {
 	info, err := os.Stat(path)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("size a temp workspace: %w", err)
 	}
 	return info.Size(), nil
 }

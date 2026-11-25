@@ -156,7 +156,7 @@ func insertAt(mp4 []byte, at int, insert []byte) []byte {
 func embedISRC(path, isrc string) error {
 	mp4, err := os.ReadFile(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("read the file to tag: %w", err)
 	}
 	chain, err := ilstChain(mp4)
 	if err != nil {
@@ -171,5 +171,8 @@ func embedISRC(path, isrc string) error {
 	for _, b := range chain {
 		binary.BigEndian.PutUint32(mp4[b.start:], uint32(b.end-b.start)+delta)
 	}
-	return os.WriteFile(path, insertAt(mp4, ilst.end, atom), 0o600)
+	if err := os.WriteFile(path, insertAt(mp4, ilst.end, atom), 0o600); err != nil {
+		return fmt.Errorf("write the tagged file: %w", err)
+	}
+	return nil
 }

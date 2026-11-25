@@ -79,7 +79,10 @@ func (s *YtDlpAudioSearcher) canaryStopped(parent, run context.Context) error {
 	if ports.RunTimedOut(parent, run) {
 		return fmt.Errorf("timed out after %s", s.canaryTimeout)
 	}
-	return parent.Err()
+	if err := parent.Err(); err != nil {
+		return fmt.Errorf("canary stopped: %w", err)
+	}
+	return nil
 }
 
 func isSoundCloudPreviewDuration(stdout string) bool {
@@ -90,7 +93,7 @@ func isSoundCloudPreviewDuration(stdout string) bool {
 func writeTempCopy(contents []byte, pattern string) (path string, cleanup func(), err error) {
 	dir, err := os.MkdirTemp("", cookieCopyDirPattern)
 	if err != nil {
-		return "", func() {}, err
+		return "", func() {}, fmt.Errorf("create the cookie copy dir: %w", err)
 	}
 	removeDir := func() { _ = os.RemoveAll(dir) }
 

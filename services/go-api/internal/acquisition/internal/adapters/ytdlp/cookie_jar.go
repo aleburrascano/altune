@@ -143,7 +143,7 @@ func asksToSignIn(stderr string) bool {
 func (l cookieLease) keepRenewedCookies(ctx context.Context) error {
 	renewed, err := os.ReadFile(l.path)
 	if err != nil {
-		return err
+		return fmt.Errorf("read the renewed cookies: %w", err)
 	}
 	if bytes.Equal(renewed, l.snapshot) {
 		return nil
@@ -253,15 +253,18 @@ func (l cookieLease) locked(ctx context.Context, update func(jarFile) error) err
 func readJarFile(path string) (jarFile, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return jarFile{}, err
+		return jarFile{}, fmt.Errorf("open the cookie jar: %w", err)
 	}
 	defer func() { _ = f.Close() }()
 	info, err := f.Stat()
 	if err != nil {
-		return jarFile{}, err
+		return jarFile{}, fmt.Errorf("stat the cookie jar: %w", err)
 	}
 	contents, err := io.ReadAll(f)
-	return jarFile{contents: contents, mode: info.Mode().Perm(), modTime: info.ModTime()}, err
+	if err != nil {
+		return jarFile{}, fmt.Errorf("read the cookie jar: %w", err)
+	}
+	return jarFile{contents: contents, mode: info.Mode().Perm(), modTime: info.ModTime()}, nil
 }
 
 func loadSession(live string) jarSession {
@@ -282,7 +285,7 @@ func (s jarSession) following(current jarFile) jarSession {
 func (s jarSession) save(live string) error {
 	raw, err := json.Marshal(s)
 	if err != nil {
-		return err
+		return fmt.Errorf("encode the cookie session: %w", err)
 	}
 	return replaceFile(live+cookieJarSessionSuffix, raw, sessionFileMode)
 }
@@ -297,13 +300,16 @@ func replaceFile(path string, contents []byte, mode fs.FileMode) error {
 	_ = os.Remove(next)
 	f, err := os.OpenFile(next, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
-		return err
+		return fmt.Errorf("create the replacement file: %w", err)
 	}
 	_, writeErr := f.Write(contents)
 	if err := errors.Join(writeErr, f.Chmod(mode), f.Sync(), f.Close()); err != nil {
-		return err
+		return fmt.Errorf("write the replacement file: %w", err)
 	}
-	return os.Rename(next, path)
+	if err := os.Rename(next, path); err != nil {
+		return fmt.Errorf("move the replacement into place: %w", err)
+	}
+	return nil
 }
 
 func lockJar(ctx context.Context, path string) (unlock func(), err error) {

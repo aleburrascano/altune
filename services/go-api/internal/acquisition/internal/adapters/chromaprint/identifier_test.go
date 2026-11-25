@@ -255,10 +255,10 @@ func writeFakeFpcalcs(root string) error {
 	for name, output := range outputs {
 		dir := filepath.Join(root, name)
 		if err := os.Mkdir(dir, 0o755); err != nil {
-			return err
+			return fmt.Errorf("make the fake fpcalc dir: %w", err)
 		}
 		if err := os.WriteFile(filepath.Join(dir, "fpcalc"), []byte("#!/bin/sh\nprintf '"+output+"'\n"), 0o755); err != nil {
-			return err
+			return fmt.Errorf("write the fake fpcalc: %w", err)
 		}
 		fakeFpcalcDirs[name] = dir
 	}
