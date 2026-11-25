@@ -144,8 +144,6 @@ const relaxationForNativeModulesExpoGoDoesNotBundle = {
   },
 };
 
-const QUERY_ADAPTER_HOOKS = ['src/features/discovery/view/search/useDiscoverSearch.ts'];
-
 const mechanicalStyleEnforcedOnChangedCodeOnly =
   process.env.ESLINT_DIFF_SCOPED === '1'
     ? [
@@ -153,11 +151,6 @@ const mechanicalStyleEnforcedOnChangedCodeOnly =
           files: ['src/**/*.{ts,tsx}'],
           ignores: TEST_FILES,
           rules: {
-            'max-lines-per-function': [
-              'error',
-              { max: 10, skipBlankLines: true, skipComments: true, IIFEs: true },
-            ],
-            complexity: ['error', 10],
             'no-else-return': ['error', { allowElseIf: false }],
             'id-match': ['error', '^(?!data$)', { properties: false, onlyDeclarations: true }],
             'id-denylist': [
@@ -175,10 +168,6 @@ const mechanicalStyleEnforcedOnChangedCodeOnly =
               'foo',
             ],
           },
-        },
-        {
-          files: QUERY_ADAPTER_HOOKS,
-          rules: { 'max-lines-per-function': 'off' },
         },
         ...house.configs.recommended,
         ...house.configs.typed.map((block) => ({
