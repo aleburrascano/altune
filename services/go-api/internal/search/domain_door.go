@@ -40,6 +40,7 @@ const (
 	ResultKindArtist         = domain.ResultKindArtist
 	ResultKindPlaylist       = domain.ResultKindPlaylist
 	ResultKindTrack          = domain.ResultKindTrack
+	ResultKindUnknown        = domain.ResultKindUnknown
 	VocabKindArtist          = domain.VocabKindArtist
 	VocabKindTrack           = domain.VocabKindTrack
 )

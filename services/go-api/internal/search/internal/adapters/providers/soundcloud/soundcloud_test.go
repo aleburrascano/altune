@@ -267,6 +267,8 @@ func TestSoundCloudAPIAdapter_Search_AlbumsAndArtists(t *testing.T) {
 		case search.ResultKindArtist:
 			nArtist++
 			artist = r
+		case discovery.ResultKindUnknown, discovery.ResultKindPlaylist:
+			t.Errorf("unexpected result kind %v: %+v", r.Kind, r)
 		}
 	}
 	if nTrack != 1 || nAlbum != 1 || nArtist != 1 {

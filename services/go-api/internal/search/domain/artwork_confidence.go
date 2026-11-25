@@ -15,6 +15,7 @@ func (r SearchResult) ArtworkConfidenceRank() int {
 		return ArtworkRankIdentity
 	case ArtworkPathName:
 		return ArtworkRankProvider
+	case ArtworkPathNone, ArtworkPathProvider, ArtworkPathCache, ArtworkPathDegraded, ArtworkPathPending:
 	}
 	if r.HasArtworkIdentity() {
 		return ArtworkRankIdentity

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -113,12 +114,12 @@ func validatePayloadTypes(payload map[string]any) error {
 }
 
 func requiresEventID(t domain.EventType) bool {
-	switch t {
-	case domain.EventTypeLibraryAdd, domain.EventTypeWrongAlbum,
-		domain.EventTypeAcquisitionUi, domain.EventTypeClientError:
-		return true
-	}
-	return false
+	return slices.Contains(eventTypesRequiringID, t)
+}
+
+var eventTypesRequiringID = []domain.EventType{
+	domain.EventTypeLibraryAdd, domain.EventTypeWrongAlbum,
+	domain.EventTypeAcquisitionUi, domain.EventTypeClientError,
 }
 
 func validateEventID(t domain.EventType, eventID string) error {

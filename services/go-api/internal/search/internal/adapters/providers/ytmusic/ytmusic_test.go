@@ -247,6 +247,8 @@ func TestYouTubeMusicAdapter_Search_mapsAllKinds(t *testing.T) {
 					t.Errorf("artist sombr missing browseId or thumbnail: %+v", r)
 				}
 			}
+		case discovery.ResultKindUnknown, discovery.ResultKindPlaylist:
+			t.Errorf("unexpected result kind %v: %+v", r.Kind, r)
 		}
 	}
 	if !sawSombr {

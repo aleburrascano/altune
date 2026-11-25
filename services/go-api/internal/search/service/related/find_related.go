@@ -81,6 +81,7 @@ func (s *FindRelatedService) Execute(
 			s.dispatchAlbumTracks(fan, result)
 		case domain.ResultKindArtist:
 			s.dispatchArtistAlbums(fan, result)
+		case domain.ResultKindUnknown, domain.ResultKindAlbum, domain.ResultKindPlaylist:
 		}
 	}
 	groups := dedupRelatedAgainstOrganic(fan.wait(), organicResults)

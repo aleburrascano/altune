@@ -136,6 +136,7 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 	case domain.ResultKindArtist:
 		title = item.Name
 		imageURL = preferURL(item.PictureXL, item.PictureBig)
+	case domain.ResultKindUnknown, domain.ResultKindPlaylist:
 	}
 
 	r := domain.NewProviderResult(kind, title, subtitle, imageURL,

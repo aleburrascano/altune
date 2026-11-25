@@ -101,6 +101,7 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 		}
 	case domain.ResultKindArtist:
 		title = item.ArtistName
+	case domain.ResultKindUnknown, domain.ResultKindPlaylist:
 	}
 
 	externalID, sourceURL := itunesSourceRef(item, kind)

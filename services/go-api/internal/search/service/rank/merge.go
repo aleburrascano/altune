@@ -318,6 +318,7 @@ func confidenceFor(tier domain.EntityResolutionTier, sourceCount int) domain.Con
 	switch tier {
 	case domain.EntityResolutionISRC, domain.EntityResolutionUPC:
 		return domain.ConfidenceHigh
+	case domain.EntityResolutionNone, domain.EntityResolutionMBID, domain.EntityResolutionBridge:
 	}
 	if sourceCount > 1 {
 		return domain.ConfidenceMedium
