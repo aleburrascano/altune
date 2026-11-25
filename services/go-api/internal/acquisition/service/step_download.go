@@ -126,6 +126,27 @@ func (s *DownloadStep) settle(ctx context.Context, ac *AcquisitionContext, holds
 	return downloaded, nil
 }
 
+type attemptStatus int
+
+const (
+	attemptRejected attemptStatus = iota
+	attemptHeld
+	attemptAccepted
+)
+
+type attempt struct {
+	candidate    ports.AudioCandidate
+	filePath     string
+	tmpDir       string
+	verified     verificationResult
+	rejection    *downloadRejection
+	status       attemptStatus
+	otherVersion bool
+	evidence     Evidence
+	confidence   float64
+	format       ports.SourceFormat
+}
+
 func (a attempt) muxed() bool { return a.format.ID == ports.MuxedFallbackFormatID }
 
 type holdBook struct {
@@ -290,27 +311,6 @@ func recordImplausibleDuration(ctx context.Context, ac *AcquisitionContext, cand
 		"search_duration", candidate.Duration,
 		"expected_duration", ac.ExpectedLength(),
 	)
-}
-
-type attemptStatus int
-
-const (
-	attemptRejected attemptStatus = iota
-	attemptHeld
-	attemptAccepted
-)
-
-type attempt struct {
-	candidate    ports.AudioCandidate
-	filePath     string
-	tmpDir       string
-	verified     verificationResult
-	rejection    *downloadRejection
-	status       attemptStatus
-	otherVersion bool
-	evidence     Evidence
-	confidence   float64
-	format       ports.SourceFormat
 }
 
 func (a attempt) err() error {
