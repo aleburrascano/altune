@@ -147,7 +147,7 @@ if touches '^services/go-api/'; then
     check "go-api no comments (whole tree)" $m go run ./scripts/lintcomments --all .
     check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
     mapfile -t pkgs < <(go_pkgs $m)
-    [ ${#pkgs[@]} -gt 0 ] && test_check "go-api tests (race, changed packages)" $m "${heavy[@]}" env CGO_ENABLED=1 go test -race -shuffle=on -count=1 "${pkgs[@]}"
+    [ ${#pkgs[@]} -gt 0 ] && test_check "go-api tests (race, changed packages)" $m "${heavy[@]}" go test -race -shuffle=on -count=1 "${pkgs[@]}"
     if [ ${#pkgs[@]} -gt 0 ] && [ "${INTEGRATION:-}" != 1 ]; then
       echo "SKIP  go-api mutation (changed lines): integration tests cover lines here, so it needs INTEGRATION=1 and a database; the backend-tests CI job runs it"
     elif [ ${#pkgs[@]} -gt 0 ] && need jq "go-api mutation"; then
