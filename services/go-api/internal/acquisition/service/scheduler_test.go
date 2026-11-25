@@ -223,10 +223,7 @@ func TestBackgroundScheduler_Schedule(t *testing.T) {
 	store := newFakeAudioStore()
 
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, 2)
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, sem)
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 2)
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -236,9 +233,9 @@ func TestBackgroundScheduler_Schedule(t *testing.T) {
 
 	scheduler.Schedule(context.Background(), userId, trackId, "")
 
-	wg.Wait()
-	if len(sem) != 0 {
-		t.Errorf("semaphore should be empty after goroutine completes, got %d tokens held", len(sem))
+	awaitIdle(t, scheduler)
+	if inFlight := scheduler.Status().InFlight; inFlight != 0 {
+		t.Errorf("in flight = %d after the job completed, want 0", inFlight)
 	}
 }
 
@@ -248,10 +245,7 @@ func TestBackgroundScheduler_ScheduleMultiple_RespectsSemaphore(t *testing.T) {
 	store := newFakeAudioStore()
 
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, 1)
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, sem)
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1)
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -266,11 +260,11 @@ func TestBackgroundScheduler_ScheduleMultiple_RespectsSemaphore(t *testing.T) {
 		scheduler.Schedule(context.Background(), userId, trackId, "")
 	}
 
-	wg.Wait()
+	awaitIdle(t, scheduler)
 	_ = completedCount.Load()
 
-	if len(sem) != 0 {
-		t.Errorf("semaphore should be empty after all goroutines complete, got %d tokens held", len(sem))
+	if inFlight := scheduler.Status().InFlight; inFlight != 0 {
+		t.Errorf("in flight = %d after every job completed, want 0", inFlight)
 	}
 }
 
@@ -281,8 +275,7 @@ func TestBackgroundScheduler_ShutdownMidSearch_ReleasesTheJobForAnotherWorker(t 
 	ledger.Seed(track)
 	source := newBlockingSource()
 	svc := newTestAcquireService(liveCtxLedger{ledger}, NewSourceRegistry(source), newFakeAudioStore())
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithDrainBudget(10*time.Millisecond))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithDrainBudget(10*time.Millisecond))
 	if err := scheduler.Schedule(context.Background(), userId, track.ID, ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
@@ -308,8 +301,7 @@ func TestBackgroundScheduler_ShutdownMidSearch_ReleasesTheReplaceJobForAnotherWo
 	ledger.Seed(track)
 	source := newBlockingSource()
 	svc := newTestAcquireService(liveCtxLedger{ledger}, NewSourceRegistry(source), newFakeAudioStore())
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithDrainBudget(10*time.Millisecond))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithDrainBudget(10*time.Millisecond))
 	if err := scheduler.ScheduleReplace(context.Background(), userId, track.ID); err != nil {
 		t.Fatalf("schedule replace: %v", err)
 	}
@@ -339,8 +331,7 @@ func TestBackgroundScheduler_FailedJob_KeepsTheCookiePathOutOfTheReasonAndTheLog
 	ledger.Seed(track)
 	leaking := &fakeAudioSearcher{searchErr: errors.New("yt-dlp exited 1: --cookies " + cookieJarPath + ": permission denied")}
 	svc := newTestAcquireService(ledger, fakeRegistry(leaking), newFakeAudioStore())
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1)
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -348,7 +339,7 @@ func TestBackgroundScheduler_FailedJob_KeepsTheCookiePathOutOfTheReasonAndTheLog
 	if err := scheduler.Schedule(context.Background(), userId, track.ID, ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
-	wg.Wait()
+	awaitIdle(t, scheduler)
 
 	_, recent := scheduler.log.snapshot()
 	if len(recent) != 1 || recent[0].State != acqports.JobFailed {
@@ -390,7 +381,7 @@ func scheduleWhileShuttingDown(t *testing.T) (accepted []string, settled map[str
 	svc := newTestAcquireService(&countingLedger{}, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	var jobs sync.WaitGroup
 	var queueAhead atomic.Int64
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &jobs, make(chan struct{}, 4), func(s *BackgroundAcquisitionScheduler) {
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 4, func(s *BackgroundAcquisitionScheduler) {
 		s.queue = memqueue.New(s.wake, func() time.Time { return time.Now().Add(time.Duration(queueAhead.Load())) })
 	})
 	queue, ok := scheduler.queue.(*memJobQueue)
@@ -463,8 +454,7 @@ func (a *startedAcquirer) RefuseQueued(context.Context, shared.UserId, shared.Tr
 
 func TestBackgroundScheduler_QueuedJobWaitsForAWorkerSlotAndRuns(t *testing.T) {
 	acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1))
+	scheduler := NewBackgroundAcquisitionScheduler(acq, 1)
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -491,7 +481,7 @@ func TestBackgroundScheduler_QueuedJobWaitsForAWorkerSlotAndRuns(t *testing.T) {
 	if got := acq.calls.Load(); got != 2 {
 		t.Errorf("acquirer executions = %d, want 2 (both jobs eventually run)", got)
 	}
-	wg.Wait()
+	awaitIdle(t, scheduler)
 }
 
 func awaitSettledJob(t *testing.T, s *BackgroundAcquisitionScheduler, trackID string) acqports.JobRecord {
@@ -521,15 +511,14 @@ func trackHeldByJob(t *testing.T, hold func(*BackgroundAcquisitionScheduler) err
 	t.Helper()
 	ledger := &burstLedger{started: make(chan struct{}), release: make(chan struct{})}
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 2))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 2)
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
 	var released sync.Once
 	drain := func() {
 		released.Do(func() { close(ledger.release) })
-		wg.Wait()
+		awaitIdle(t, scheduler)
 	}
 	t.Cleanup(drain)
 	if err := hold(scheduler); err != nil {
@@ -577,10 +566,7 @@ func TestNewBackgroundAcquisitionScheduler_ReturnsNonNil(t *testing.T) {
 	store := newFakeAudioStore()
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, 1)
-
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, sem)
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1)
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -639,8 +625,7 @@ func TestBackgroundScheduler_RunsTheStubbedAcquirerEntryPoint(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			acq := &stubAcquirer{}
-			var wg sync.WaitGroup
-			scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1))
+			scheduler := NewBackgroundAcquisitionScheduler(acq, 1)
 			t.Cleanup(func() {
 				scheduler.Shutdown(context.Background())
 			})
@@ -648,7 +633,7 @@ func TestBackgroundScheduler_RunsTheStubbedAcquirerEntryPoint(t *testing.T) {
 			if err := tc.schedule(scheduler, shared.NewUserId(uuid.New()), shared.NewTrackId()); err != nil {
 				t.Fatalf("schedule: %v", err)
 			}
-			wg.Wait()
+			awaitIdle(t, scheduler)
 
 			got := acq.entryPointsRun()
 			if len(got) != 1 || got[0] != tc.want {
@@ -695,10 +680,8 @@ func (r *burstLedger) RevertAt(ctx context.Context, track acqports.TrackSnapshot
 func TestBackgroundScheduler_BoundsQueueDepthUnderBurst(t *testing.T) {
 	ledger := &burstLedger{started: make(chan struct{}), release: make(chan struct{})}
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, 1)
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, sem)
+	const workers = 1
+	scheduler := NewBackgroundAcquisitionScheduler(svc, workers)
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -712,37 +695,35 @@ func TestBackgroundScheduler_BoundsQueueDepthUnderBurst(t *testing.T) {
 	<-ledger.started
 
 	active := len(scheduler.Status().ActiveJobs)
-	maxAllowed := cap(sem) * 8
+	maxAllowed := workers * 8
 	if active > maxAllowed {
 		t.Errorf("active job-log entries = %d under burst of %d; want bounded <= %d (arrivals must not spawn unbounded work)",
 			active, burst, maxAllowed)
 	}
 
 	close(ledger.release)
-	wg.Wait()
+	awaitIdle(t, scheduler)
 }
 
 func TestBackgroundScheduler_StatusQueueDrainsAndCountsShutdownRejections(t *testing.T) {
 	ledger := &burstLedger{started: make(chan struct{}), release: make(chan struct{})}
 	close(ledger.release)
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, 1)
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, sem)
+	const workers = 1
+	scheduler := NewBackgroundAcquisitionScheduler(svc, workers)
 
 	userId := shared.NewUserId(uuid.New())
 	if err := scheduler.Schedule(context.Background(), userId, shared.NewTrackId(), ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
-	wg.Wait()
+	awaitIdle(t, scheduler)
 
 	status := scheduler.Status()
 	if status.QueueDepth != 0 {
 		t.Errorf("queue depth after drain = %d, want 0", status.QueueDepth)
 	}
-	if status.Workers != cap(sem) {
-		t.Errorf("queue capacity = %d, want %d (worker count)", status.Workers, cap(sem))
+	if status.Workers != workers {
+		t.Errorf("queue capacity = %d, want %d (worker count)", status.Workers, workers)
 	}
 
 	scheduler.Shutdown(context.Background())
@@ -773,10 +754,7 @@ func (r *corrCapturingLedger) Get(ctx context.Context, id shared.TrackId, userId
 func TestBackgroundScheduler_ThreadsCorrelationIDIntoJobContext(t *testing.T) {
 	ledger := &corrCapturingLedger{Ledger: acquisitiontest.NewLedger()}
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, 1)
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, sem)
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1)
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -785,7 +763,7 @@ func TestBackgroundScheduler_ThreadsCorrelationIDIntoJobContext(t *testing.T) {
 	ctx := logging.WithCorrelationID(context.Background(), wantCorrID)
 	scheduler.Schedule(ctx, shared.NewUserId(uuid.New()), shared.NewTrackId(), "")
 
-	wg.Wait()
+	awaitIdle(t, scheduler)
 
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
@@ -820,9 +798,7 @@ func TestBackgroundScheduler_DispatchesToTheMatchingServiceEntryPoint(t *testing
 			store.stored["u/a/b/c.mp3"] = true
 			searcher := &fakeAudioSearcher{}
 			svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
-
-			var wg sync.WaitGroup
-			scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1))
+			scheduler := NewBackgroundAcquisitionScheduler(svc, 1)
 			t.Cleanup(func() {
 				scheduler.Shutdown(context.Background())
 			})
@@ -831,7 +807,7 @@ func TestBackgroundScheduler_DispatchesToTheMatchingServiceEntryPoint(t *testing
 			} else {
 				scheduler.Schedule(context.Background(), userId, track.ID, "")
 			}
-			wg.Wait()
+			awaitIdle(t, scheduler)
 
 			if searcher.searchCalled != tc.wantSearch {
 				t.Errorf("search called = %v, want %v", searcher.searchCalled, tc.wantSearch)
@@ -877,10 +853,7 @@ func (r *blockingLedger) RevertAt(ctx context.Context, track acqports.TrackSnaps
 func TestBackgroundScheduler_Schedule_DedupsConcurrentRun_ButReplaysAfterSettle(t *testing.T) {
 	ledger := &blockingLedger{started: make(chan struct{}), release: make(chan struct{})}
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, 4)
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, sem)
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 4)
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -902,7 +875,7 @@ func TestBackgroundScheduler_Schedule_DedupsConcurrentRun_ButReplaysAfterSettle(
 	for ledger.calls.Load() < 2 && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 	}
-	wg.Wait()
+	awaitIdle(t, scheduler)
 
 	if got := ledger.calls.Load(); got != 2 {
 		t.Errorf("GetByID calls = %d, want 2 (the deduped request replays once the first run settles)", got)
@@ -941,17 +914,14 @@ func (r *countingLedger) RevertAt(ctx context.Context, track acqports.TrackSnaps
 func TestBackgroundScheduler_Schedule_AfterShutdown_NoOp(t *testing.T) {
 	ledger := &countingLedger{}
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, 1)
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, sem)
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	scheduler.Shutdown(ctx)
 
 	scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), shared.NewTrackId(), "")
-	wg.Wait()
+	awaitIdle(t, scheduler)
 
 	if got := ledger.calls.Load(); got != 0 {
 		t.Errorf("GetByID calls = %d, want 0 (schedule after shutdown must be a no-op)", got)
@@ -986,16 +956,13 @@ func (r *panicLedger) RevertAt(ctx context.Context, track acqports.TrackSnapshot
 
 func TestBackgroundScheduler_Schedule_RecoversFromPanic(t *testing.T) {
 	svc := newTestAcquireService(&panicLedger{}, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, 1)
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, sem)
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1)
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
 
 	scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), shared.NewTrackId(), "")
-	wg.Wait()
+	awaitIdle(t, scheduler)
 }
 
 type panickingAcquirer struct {
@@ -1024,10 +991,9 @@ func (q settleKeepsPendingQueue) Settle(ctx context.Context, trackID shared.Trac
 
 func TestBackgroundScheduler_Schedule_PanickingJobIsNotReclaimedWithinAPoll(t *testing.T) {
 	acq := &panickingAcquirer{}
-	var wg sync.WaitGroup
 	wake := make(chan struct{}, 1)
 	queue := settleKeepsPendingQueue{newMemJobQueue(wake)}
-	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+	scheduler := NewBackgroundAcquisitionScheduler(acq, 1,
 		WithJobQueue(queue), WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
@@ -1045,9 +1011,8 @@ func TestBackgroundScheduler_Schedule_PanickingJobIsNotReclaimedWithinAPoll(t *t
 
 func TestBackgroundScheduler_Schedule_PanickingJobAtTheAttemptCapFailsTheTrack(t *testing.T) {
 	acq := &panickingAcquirer{}
-	var wg sync.WaitGroup
 	queue := settleKeepsPendingQueue{newMemJobQueue(make(chan struct{}, 1))}
-	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), WithJobQueue(queue))
+	scheduler := NewBackgroundAcquisitionScheduler(acq, 1, WithJobQueue(queue))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -1062,9 +1027,8 @@ func TestBackgroundScheduler_Schedule_PanickingJobAtTheAttemptCapFailsTheTrack(t
 
 func TestBackgroundScheduler_Schedule_PanickingJobWithOldClaimsButFreshRunIsRetried(t *testing.T) {
 	acq := &panickingAcquirer{}
-	var wg sync.WaitGroup
 	queue := settleKeepsPendingQueue{newMemJobQueue(make(chan struct{}, 1))}
-	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), WithJobQueue(queue))
+	scheduler := NewBackgroundAcquisitionScheduler(acq, 1, WithJobQueue(queue))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -1079,9 +1043,8 @@ func TestBackgroundScheduler_Schedule_PanickingJobWithOldClaimsButFreshRunIsRetr
 
 func TestBackgroundScheduler_Schedule_PanickingJobAtTheRunCapFailsTheTrack(t *testing.T) {
 	acq := &panickingAcquirer{}
-	var wg sync.WaitGroup
 	queue := settleKeepsPendingQueue{newMemJobQueue(make(chan struct{}, 1))}
-	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), WithJobQueue(queue))
+	scheduler := NewBackgroundAcquisitionScheduler(acq, 1, WithJobQueue(queue))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -1097,10 +1060,7 @@ func TestBackgroundScheduler_Schedule_PanickingJobAtTheRunCapFailsTheTrack(t *te
 func TestBackgroundScheduler_OnePrincipalCannotStarveAnother(t *testing.T) {
 	ledger := &burstLedger{started: make(chan struct{}), release: make(chan struct{})}
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, 1)
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, sem)
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1)
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -1122,13 +1082,12 @@ func TestBackgroundScheduler_OnePrincipalCannotStarveAnother(t *testing.T) {
 	}
 
 	close(ledger.release)
-	wg.Wait()
+	awaitIdle(t, scheduler)
 }
 
 func TestBackgroundScheduler_RuntimeKillSwitchTogglesAdmission(t *testing.T) {
 	acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), WithPollInterval(10*time.Millisecond))
+	scheduler := NewBackgroundAcquisitionScheduler(acq, 1, WithPollInterval(10*time.Millisecond))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
 	user := shared.NewUserId(uuid.New())
@@ -1141,7 +1100,7 @@ func TestBackgroundScheduler_RuntimeKillSwitchTogglesAdmission(t *testing.T) {
 		t.Fatal("Status().Paused = true before any Pause, want false")
 	}
 	close(acq.release)
-	wg.Wait()
+	awaitIdle(t, scheduler)
 
 	scheduler.Pause()
 	if !scheduler.Status().Paused {
@@ -1178,8 +1137,7 @@ func TestBackgroundScheduler_RuntimeKillSwitchTogglesAdmission(t *testing.T) {
 
 func TestBackgroundScheduler_ResumeClaimsWithoutWaitingAPollInterval(t *testing.T) {
 	acq := &startedAcquirer{started: make(chan struct{}, 1), release: make(chan struct{})}
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), WithPollInterval(10*time.Second))
+	scheduler := NewBackgroundAcquisitionScheduler(acq, 1, WithPollInterval(10*time.Second))
 	t.Cleanup(func() {
 		close(acq.release)
 		scheduler.Shutdown(context.Background())
@@ -1211,10 +1169,7 @@ func TestBackgroundScheduler_ResumeClaimsWithoutWaitingAPollInterval(t *testing.
 func TestBackgroundScheduler_PauseLeavesInflightRunning(t *testing.T) {
 	ledger := &burstLedger{started: make(chan struct{}), release: make(chan struct{})}
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, 1)
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, sem, WithPollInterval(10*time.Millisecond))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithPollInterval(10*time.Millisecond))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -1247,7 +1202,7 @@ func TestBackgroundScheduler_PauseLeavesInflightRunning(t *testing.T) {
 	if settled.State != acqports.JobSucceeded {
 		t.Errorf("resumed job state = %q, want %q", settled.State, acqports.JobSucceeded)
 	}
-	wg.Wait()
+	awaitIdle(t, scheduler)
 }
 
 type recordingProgressPublisher struct {
@@ -1291,7 +1246,7 @@ func TestSchedulerJobReporter_StageWithoutConfiguredEventsDoesNotPanic(t *testin
 		"nil events option": {WithSchedulerEvents(nil)},
 	} {
 		t.Run(name, func(t *testing.T) {
-			s := NewBackgroundAcquisitionScheduler(nil, &sync.WaitGroup{}, make(chan struct{}, 1), opts...)
+			s := NewBackgroundAcquisitionScheduler(nil, 1, opts...)
 			t.Cleanup(func() {
 				s.Shutdown(context.Background())
 			})
@@ -1311,8 +1266,7 @@ func replaceThroughTheScheduler(t *testing.T, kind acqports.JobKind, pub *record
 	t.Helper()
 	ledger, store, userId, trackId, _ := seedReadyTrack(t)
 	svc := newTestAcquireService(ledger, NewSourceRegistry(newAudioSource{}), store, WithAcquireEvents(pub))
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1),
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1,
 		WithPollInterval(5*time.Millisecond), WithSchedulerEvents(pub))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 	scheduler.queue.(userRememberer).RememberUser(trackId, userId)
@@ -1368,15 +1322,13 @@ func (a *blockingAcquirer) RefuseQueued(context.Context, shared.UserId, shared.T
 func TestBackgroundScheduler_PrincipalDefault_AdmitsOneUserUpToGlobalDepth(t *testing.T) {
 	const concurrency = 2
 	acq := &blockingAcquirer{release: make(chan struct{})}
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, concurrency)
-	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, sem)
+	scheduler := NewBackgroundAcquisitionScheduler(acq, concurrency)
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
 	t.Cleanup(func() {
 		close(acq.release)
-		wg.Wait()
+		awaitIdle(t, scheduler)
 	})
 
 	userId := shared.NewUserId(uuid.New())
@@ -1454,9 +1406,7 @@ func TestBackgroundScheduler_ShutdownCancellation_LeavesTheQueuedJobUnclaimed(t 
 	ledger := &holdOneTrackLedger{Ledger: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
 	pub := newRecordingPublisher()
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
-
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithDrainBudget(10*time.Millisecond))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithDrainBudget(10*time.Millisecond))
 	t.Cleanup(func() {
 		close(ledger.release)
 		scheduler.Shutdown(context.Background())
@@ -1505,9 +1455,7 @@ func TestBackgroundScheduler_ScheduleDuringShutdown_Refuses(t *testing.T) {
 	ledger := &holdOneTrackLedger{Ledger: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
 	pub := newRecordingPublisher()
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
-
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithDrainBudget(10*time.Millisecond))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithDrainBudget(10*time.Millisecond))
 	t.Cleanup(func() {
 		close(ledger.release)
 		scheduler.Shutdown(context.Background())
@@ -1560,8 +1508,7 @@ func TestAcquireTrackAudioService_RefuseQueued_AlreadySettledTrack_IsQuietNoOp(t
 func TestBackgroundScheduler_InflightDedupIsNotARefusal(t *testing.T) {
 	ledger := &blockingLedger{started: make(chan struct{}), release: make(chan struct{})}
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1)
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -1575,13 +1522,12 @@ func TestBackgroundScheduler_InflightDedupIsNotARefusal(t *testing.T) {
 		t.Errorf("duplicate Schedule while in flight = %v, want nil (a job is already running)", err)
 	}
 	close(ledger.release)
-	wg.Wait()
+	awaitIdle(t, scheduler)
 }
 
 func TestBackgroundScheduler_AfterShutdownRefuses(t *testing.T) {
 	svc := newTestAcquireService(&countingLedger{}, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1)
 	scheduler.Shutdown(context.Background())
 
 	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), shared.NewTrackId(), ""); !errors.Is(err, acqdomain.ErrSchedulerShutdown) {
@@ -1591,8 +1537,7 @@ func TestBackgroundScheduler_AfterShutdownRefuses(t *testing.T) {
 
 func newStatusTestScheduler(t *testing.T) *BackgroundAcquisitionScheduler {
 	t.Helper()
-	var wg sync.WaitGroup
-	s := NewBackgroundAcquisitionScheduler(nil, &wg, make(chan struct{}, 1))
+	s := NewBackgroundAcquisitionScheduler(nil, 1)
 	t.Cleanup(func() { s.Shutdown(context.Background()) })
 	return s
 }
@@ -1710,8 +1655,7 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 	t.Run("succeeded", func(t *testing.T) {
 		recorder := newFakeOutcomeRecorder()
 		svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-		var wg sync.WaitGroup
-		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+		scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithOutcomeRecorder(recorder))
 		t.Cleanup(func() {
 			scheduler.Shutdown(context.Background())
 		})
@@ -1722,7 +1666,7 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 		}
 
 		outcome := assertExactlyOneOutcome(t, recorder.calls)
-		wg.Wait()
+		awaitIdle(t, scheduler)
 		if outcome.TrackID != trackId.String() {
 			t.Errorf("track id = %q, want %q", outcome.TrackID, trackId.String())
 		}
@@ -1742,8 +1686,7 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 		ledger.Seed(track)
 		leaking := &fakeAudioSearcher{searchErr: errors.New("boom")}
 		svc := newTestAcquireService(ledger, fakeRegistry(leaking), newFakeAudioStore())
-		var wg sync.WaitGroup
-		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+		scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithOutcomeRecorder(recorder))
 		t.Cleanup(func() {
 			scheduler.Shutdown(context.Background())
 		})
@@ -1753,7 +1696,7 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 		}
 
 		outcome := assertExactlyOneOutcome(t, recorder.calls)
-		wg.Wait()
+		awaitIdle(t, scheduler)
 		if outcome.TrackID != track.ID.String() {
 			t.Errorf("track id = %q, want %q", outcome.TrackID, track.ID.String())
 		}
@@ -1771,8 +1714,7 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 	t.Run("panicked", func(t *testing.T) {
 		recorder := newFakeOutcomeRecorder()
 		svc := newTestAcquireService(&panicLedger{}, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-		var wg sync.WaitGroup
-		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+		scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithOutcomeRecorder(recorder))
 		t.Cleanup(func() {
 			scheduler.Shutdown(context.Background())
 		})
@@ -1783,7 +1725,7 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 		}
 
 		outcome := assertExactlyOneOutcome(t, recorder.calls)
-		wg.Wait()
+		awaitIdle(t, scheduler)
 		if outcome.Outcome != acqports.JobFailed {
 			t.Errorf("outcome = %q, want %q", outcome.Outcome, acqports.JobFailed)
 		}
@@ -1798,8 +1740,7 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 	t.Run("queued job runs and records its own outcome once a worker frees up", func(t *testing.T) {
 		recorder := newFakeOutcomeRecorder()
 		acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}
-		var wg sync.WaitGroup
-		scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+		scheduler := NewBackgroundAcquisitionScheduler(acq, 1, WithOutcomeRecorder(recorder))
 		t.Cleanup(func() {
 			scheduler.Shutdown(context.Background())
 		})
@@ -1825,7 +1766,7 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 			o := awaitOutcome(t, recorder.calls)
 			byTrackID[o.TrackID] = o
 		}
-		wg.Wait()
+		awaitIdle(t, scheduler)
 
 		runningOutcome, ok := byTrackID[running.String()]
 		if !ok {
@@ -1853,8 +1794,7 @@ func TestBackgroundScheduler_OutcomeRecorderFailure_DoesNotAffectTheJob(t *testi
 		recorder := newFakeOutcomeRecorder()
 		recorder.err = errors.New("outcome store unavailable")
 		svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-		var wg sync.WaitGroup
-		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+		scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithOutcomeRecorder(recorder))
 		t.Cleanup(func() {
 			scheduler.Shutdown(context.Background())
 		})
@@ -1864,7 +1804,7 @@ func TestBackgroundScheduler_OutcomeRecorderFailure_DoesNotAffectTheJob(t *testi
 			t.Fatalf("schedule: %v", err)
 		}
 		awaitOutcome(t, recorder.calls)
-		wg.Wait()
+		awaitIdle(t, scheduler)
 
 		_, recent := scheduler.log.snapshot()
 		if len(recent) != 1 || recent[0].State != acqports.JobSucceeded {
@@ -1876,8 +1816,7 @@ func TestBackgroundScheduler_OutcomeRecorderFailure_DoesNotAffectTheJob(t *testi
 		recorder := newFakeOutcomeRecorder()
 		recorder.delay = outcomeRecordTimeout * 3
 		acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}
-		var wg sync.WaitGroup
-		scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+		scheduler := NewBackgroundAcquisitionScheduler(acq, 1, WithOutcomeRecorder(recorder))
 		t.Cleanup(func() {
 			scheduler.Shutdown(context.Background())
 		})
@@ -1888,13 +1827,13 @@ func TestBackgroundScheduler_OutcomeRecorderFailure_DoesNotAffectTheJob(t *testi
 		}
 		<-acq.started
 		close(acq.release)
-		wg.Wait()
+		awaitIdle(t, scheduler)
 
 		start := time.Now()
 		if err := scheduler.Schedule(context.Background(), userId, shared.NewTrackId(), ""); err != nil {
 			t.Fatalf("second schedule: %v", err)
 		}
-		wg.Wait()
+		awaitIdle(t, scheduler)
 		if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
 			t.Errorf("second job took %s to run, want well under the recorder's %s hang (outcome recording must not block the next job)", elapsed, recorder.delay)
 		}
@@ -1914,8 +1853,7 @@ func TestBackgroundScheduler_OutcomeRecorderFailure_DoesNotAffectTheJob(t *testi
 func TestBackgroundScheduler_RecordOutcome_GivesTheRecorderAWorkingMargin(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
 	svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithOutcomeRecorder(recorder))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -1924,7 +1862,7 @@ func TestBackgroundScheduler_RecordOutcome_GivesTheRecorderAWorkingMargin(t *tes
 		t.Fatalf("schedule: %v", err)
 	}
 	assertExactlyOneOutcome(t, recorder.calls)
-	wg.Wait()
+	awaitIdle(t, scheduler)
 
 	select {
 	case margin := <-recorder.deadlines:
@@ -2014,8 +1952,7 @@ func TestBackgroundScheduler_RecordOutcome_LogsWarnOnlyWhenRecordFails(t *testin
 		recorder := newFakeOutcomeRecorder()
 		recorder.err = errors.New("outcome store unavailable")
 		svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-		var wg sync.WaitGroup
-		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+		scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithOutcomeRecorder(recorder))
 		t.Cleanup(func() {
 			scheduler.Shutdown(context.Background())
 		})
@@ -2024,7 +1961,7 @@ func TestBackgroundScheduler_RecordOutcome_LogsWarnOnlyWhenRecordFails(t *testin
 			t.Fatalf("schedule: %v", err)
 		}
 		assertExactlyOneOutcome(t, recorder.calls)
-		wg.Wait()
+		awaitIdle(t, scheduler)
 
 		deadline := time.Now().Add(jobSettleTimeout)
 		for !strings.Contains(logs.String(), "acquisition.outcome_record_failed") {
@@ -2039,8 +1976,7 @@ func TestBackgroundScheduler_RecordOutcome_LogsWarnOnlyWhenRecordFails(t *testin
 		logs := captureJSONLogSync(t)
 		recorder := newFakeOutcomeRecorder()
 		svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-		var wg sync.WaitGroup
-		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+		scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithOutcomeRecorder(recorder))
 		t.Cleanup(func() {
 			scheduler.Shutdown(context.Background())
 		})
@@ -2049,7 +1985,7 @@ func TestBackgroundScheduler_RecordOutcome_LogsWarnOnlyWhenRecordFails(t *testin
 			t.Fatalf("schedule: %v", err)
 		}
 		assertExactlyOneOutcome(t, recorder.calls)
-		wg.Wait()
+		awaitIdle(t, scheduler)
 		time.Sleep(20 * time.Millisecond)
 
 		if strings.Contains(logs.String(), "acquisition.outcome_record_failed") {
@@ -2084,8 +2020,7 @@ func TestBackgroundScheduler_ShutdownMidRun_RecordsTheOutcomeOnALiveContext(t *t
 	source := newBlockingSource()
 	recorder := newCtxAtRecordRecorder()
 	svc := newTestAcquireService(liveCtxLedger{ledger}, NewSourceRegistry(source), newFakeAudioStore())
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder), WithDrainBudget(10*time.Millisecond))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithOutcomeRecorder(recorder), WithDrainBudget(10*time.Millisecond))
 	if err := scheduler.Schedule(context.Background(), userId, track.ID, ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
@@ -2094,7 +2029,7 @@ func TestBackgroundScheduler_ShutdownMidRun_RecordsTheOutcomeOnALiveContext(t *t
 	scheduler.Shutdown(context.Background())
 
 	outcome := assertExactlyOneOutcome(t, recorder.calls)
-	wg.Wait()
+	awaitIdle(t, scheduler)
 	if outcome.TrackID != track.ID.String() {
 		t.Errorf("track id = %q, want %q", outcome.TrackID, track.ID.String())
 	}
@@ -2117,12 +2052,11 @@ func TestBackgroundScheduler_ShutdownBeforeStart_LeavesTheQueuedJobWithNoOutcome
 	ledger := &holdOneTrackLedger{Ledger: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	recorder := newCtxAtRecordRecorder()
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder), WithDrainBudget(10*time.Millisecond))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithOutcomeRecorder(recorder), WithDrainBudget(10*time.Millisecond))
 	var released sync.Once
 	release := func() {
 		released.Do(func() { close(ledger.release) })
-		wg.Wait()
+		awaitIdle(t, scheduler)
 	}
 	t.Cleanup(release)
 
@@ -2163,14 +2097,13 @@ func TestBackgroundScheduler_Shutdown_WaitsForTheInFlightOutcomeWrite(t *testing
 	recorder := newFakeOutcomeRecorder()
 	recorder.delay = 300 * time.Millisecond
 	svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithOutcomeRecorder(recorder))
 
 	start := time.Now()
 	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), shared.NewTrackId(), ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
-	wg.Wait()
+	awaitIdle(t, scheduler)
 
 	scheduler.Shutdown(context.Background())
 	elapsed := time.Since(start)
@@ -2184,8 +2117,7 @@ func TestBackgroundScheduler_Shutdown_WaitsForTheInFlightOutcomeWrite(t *testing
 func TestBackgroundScheduler_RecordedOutcome_MatchesWhatTheJobLogShows(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
 	acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	scheduler := NewBackgroundAcquisitionScheduler(acq, 1, WithOutcomeRecorder(recorder))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -2198,7 +2130,7 @@ func TestBackgroundScheduler_RecordedOutcome_MatchesWhatTheJobLogShows(t *testin
 	close(acq.release)
 
 	outcome := assertExactlyOneOutcome(t, recorder.calls)
-	wg.Wait()
+	awaitIdle(t, scheduler)
 	recent := scheduler.Status().Recent
 	if len(recent) != 1 {
 		t.Fatalf("Status().Recent = %+v, want exactly one job", recent)
@@ -2223,8 +2155,7 @@ func TestBackgroundScheduler_RecordedFailureReason_KeepsTheCookiePathOut(t *test
 	leaking := &fakeAudioSearcher{searchErr: errors.New("yt-dlp exited 1: --cookies " + cookieJarPath + ": permission denied")}
 	svc := newTestAcquireService(ledger, fakeRegistry(leaking), newFakeAudioStore())
 	recorder := newFakeOutcomeRecorder()
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithOutcomeRecorder(recorder))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -2233,7 +2164,7 @@ func TestBackgroundScheduler_RecordedFailureReason_KeepsTheCookiePathOut(t *test
 		t.Fatalf("schedule: %v", err)
 	}
 	outcome := assertExactlyOneOutcome(t, recorder.calls)
-	wg.Wait()
+	awaitIdle(t, scheduler)
 
 	if outcome.Outcome != acqports.JobFailed {
 		t.Fatalf("outcome = %q, want %q", outcome.Outcome, acqports.JobFailed)
@@ -2247,8 +2178,7 @@ func TestBackgroundScheduler_FailedOutcomeWrite_LogsOneWarnWithoutTheCookiePath(
 	logs := captureJSONLogSync(t)
 	recorder := newFakeOutcomeRecorder()
 	recorder.err = errors.New("pg write: --cookies " + cookieJarPath + ": permission denied")
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(&stubAcquirer{}, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	scheduler := NewBackgroundAcquisitionScheduler(&stubAcquirer{}, 1, WithOutcomeRecorder(recorder))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -2257,7 +2187,7 @@ func TestBackgroundScheduler_FailedOutcomeWrite_LogsOneWarnWithoutTheCookiePath(
 		t.Fatalf("schedule: %v", err)
 	}
 	assertExactlyOneOutcome(t, recorder.calls)
-	wg.Wait()
+	awaitIdle(t, scheduler)
 
 	var warnLines []string
 	deadline := time.Now().Add(jobSettleTimeout)
@@ -2286,8 +2216,7 @@ func TestBackgroundScheduler_FailedOutcomeWrite_LogsOneWarnWithoutTheCookiePath(
 
 func TestBackgroundScheduler_RecordOutcome_BoundsTheWriteToTwoSeconds(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(&stubAcquirer{}, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	scheduler := NewBackgroundAcquisitionScheduler(&stubAcquirer{}, 1, WithOutcomeRecorder(recorder))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -2296,7 +2225,7 @@ func TestBackgroundScheduler_RecordOutcome_BoundsTheWriteToTwoSeconds(t *testing
 		t.Fatalf("schedule: %v", err)
 	}
 	assertExactlyOneOutcome(t, recorder.calls)
-	wg.Wait()
+	awaitIdle(t, scheduler)
 
 	select {
 	case margin := <-recorder.deadlines:
@@ -2310,8 +2239,7 @@ func TestBackgroundScheduler_RecordOutcome_BoundsTheWriteToTwoSeconds(t *testing
 
 func TestBackgroundScheduler_ReplaceJob_RecordsItsOutcome(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(&stubAcquirer{}, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	scheduler := NewBackgroundAcquisitionScheduler(&stubAcquirer{}, 1, WithOutcomeRecorder(recorder))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -2321,7 +2249,7 @@ func TestBackgroundScheduler_ReplaceJob_RecordsItsOutcome(t *testing.T) {
 		t.Fatalf("schedule replace: %v", err)
 	}
 	outcome := assertExactlyOneOutcome(t, recorder.calls)
-	wg.Wait()
+	awaitIdle(t, scheduler)
 	if outcome.TrackID != trackId.String() || outcome.Outcome != acqports.JobSucceeded {
 		t.Errorf("recorded (%q, %q), want (%q, %q)", outcome.TrackID, outcome.Outcome, trackId.String(), acqports.JobSucceeded)
 	}
@@ -2330,8 +2258,7 @@ func TestBackgroundScheduler_ReplaceJob_RecordsItsOutcome(t *testing.T) {
 func TestBackgroundScheduler_DedupedSchedule_ReplaysAndRecordsBothOutcomes(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
 	acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 2), WithOutcomeRecorder(recorder))
+	scheduler := NewBackgroundAcquisitionScheduler(acq, 2, WithOutcomeRecorder(recorder))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -2349,7 +2276,7 @@ func TestBackgroundScheduler_DedupedSchedule_ReplaysAndRecordsBothOutcomes(t *te
 
 	first := awaitOutcome(t, recorder.calls)
 	second := awaitOutcome(t, recorder.calls)
-	wg.Wait()
+	awaitIdle(t, scheduler)
 	if first.TrackID != trackId.String() || second.TrackID != trackId.String() {
 		t.Errorf("track ids = %q, %q, want both %q", first.TrackID, second.TrackID, trackId.String())
 	}
@@ -2359,8 +2286,7 @@ func TestBackgroundScheduler_DedupedSchedule_ReplaysAndRecordsBothOutcomes(t *te
 }
 
 func TestBackgroundScheduler_NilOutcomeRecorder_LeavesTheJobUntouched(t *testing.T) {
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(&stubAcquirer{}, &wg, make(chan struct{}, 1), WithOutcomeRecorder(nil))
+	scheduler := NewBackgroundAcquisitionScheduler(&stubAcquirer{}, 1, WithOutcomeRecorder(nil))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -2368,7 +2294,7 @@ func TestBackgroundScheduler_NilOutcomeRecorder_LeavesTheJobUntouched(t *testing
 	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), shared.NewTrackId(), ""); err != nil {
 		t.Fatalf("schedule: %v", err)
 	}
-	wg.Wait()
+	awaitIdle(t, scheduler)
 
 	status := scheduler.Status()
 	if status.Succeeded != 1 || len(status.Recent) != 1 || status.Recent[0].State != acqports.JobSucceeded {
@@ -2412,8 +2338,7 @@ func TestBackgroundScheduler_HeartbeatFailuresOutlastingTheLease_CancelsTheJob(t
 	acq := &ctxCapturingAcquirer{started: make(chan struct{}), release: make(chan struct{})}
 	wake := make(chan struct{}, 1)
 	queue := &flakyHeartbeatQueue{memJobQueue: newMemJobQueue(wake), heartbeatErr: errors.New("db blip")}
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+	scheduler := NewBackgroundAcquisitionScheduler(acq, 1,
 		WithJobQueue(queue),
 		WithHeartbeatInterval(5*time.Millisecond),
 		WithLeaseDuration(20*time.Millisecond),
@@ -2486,8 +2411,7 @@ func TestBackgroundScheduler_TransientFailure_ReleasesTheJobWithBackoffAndKeepsT
 	wake := make(chan struct{}, 1)
 	queue := &releaseRecordingQueue{memJobQueue: newMemJobQueue(wake), releases: make(chan releaseRecord, 1)}
 	queue.RememberUser(track.ID, userId)
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1),
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1,
 		WithJobQueue(queue), WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
@@ -2519,8 +2443,7 @@ func TestBackgroundScheduler_TransientFailure_ReleasesTheJobWithBackoffAndKeepsT
 func TestBackgroundScheduler_PauseRefusesAdmissionUntilResume(t *testing.T) {
 	acq := &startedAcquirer{started: make(chan struct{}, 2), release: make(chan struct{})}
 	close(acq.release)
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), WithPollInterval(10*time.Millisecond))
+	scheduler := NewBackgroundAcquisitionScheduler(acq, 1, WithPollInterval(10*time.Millisecond))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
 	user := shared.NewUserId(uuid.New())
@@ -2558,9 +2481,8 @@ func (q backlogQueue) PendingDepth(context.Context) (int, time.Duration, error) 
 }
 
 func TestSchedulerStatus_QueueDepthIsThePendingBacklogNotInFlight(t *testing.T) {
-	var wg sync.WaitGroup
 	queue := backlogQueue{memJobQueue: newMemJobQueue(nil), pending: 5, oldestAge: 90 * time.Second}
-	s := NewBackgroundAcquisitionScheduler(nil, &wg, make(chan struct{}, 2), WithJobQueue(queue))
+	s := NewBackgroundAcquisitionScheduler(nil, 2, WithJobQueue(queue))
 	t.Cleanup(func() { s.Shutdown(context.Background()) })
 	s.inflightCount.Add(2)
 
@@ -2583,8 +2505,7 @@ func (failingDepthQueue) PendingDepth(context.Context) (int, time.Duration, erro
 }
 
 func TestSchedulerStatus_QueueDepthKnownFalseWhenDepthReadFails(t *testing.T) {
-	var wg sync.WaitGroup
-	s := NewBackgroundAcquisitionScheduler(nil, &wg, make(chan struct{}, 2), WithJobQueue(failingDepthQueue{newMemJobQueue(nil)}))
+	s := NewBackgroundAcquisitionScheduler(nil, 2, WithJobQueue(failingDepthQueue{newMemJobQueue(nil)}))
 	t.Cleanup(func() { s.Shutdown(context.Background()) })
 
 	if got := s.Status(); got.QueueDepthKnown {
@@ -2593,9 +2514,8 @@ func TestSchedulerStatus_QueueDepthKnownFalseWhenDepthReadFails(t *testing.T) {
 }
 
 func TestSchedulerStatus_QueueDepthKnownTrueWhenDepthReadSucceeds(t *testing.T) {
-	var wg sync.WaitGroup
 	queue := backlogQueue{memJobQueue: newMemJobQueue(nil)}
-	s := NewBackgroundAcquisitionScheduler(nil, &wg, make(chan struct{}, 2), WithJobQueue(queue))
+	s := NewBackgroundAcquisitionScheduler(nil, 2, WithJobQueue(queue))
 	t.Cleanup(func() { s.Shutdown(context.Background()) })
 
 	if got := s.Status(); !got.QueueDepthKnown {
@@ -2634,8 +2554,7 @@ func countCorrIDs(s *BackgroundAcquisitionScheduler) int {
 
 func TestBackgroundScheduler_Schedule_RejectedEnqueueLeavesNoCorrelationID(t *testing.T) {
 	queue := &conflictingQueue{memJobQueue: newMemJobQueue(make(chan struct{}, 1)), rejectAll: true, gate: make(chan struct{})}
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(&stubAcquirer{}, &wg, make(chan struct{}, 1), WithJobQueue(queue))
+	scheduler := NewBackgroundAcquisitionScheduler(&stubAcquirer{}, 1, WithJobQueue(queue))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
 	ctx := logging.WithCorrelationID(context.Background(), "corr-rejected")
@@ -2653,8 +2572,7 @@ func TestBackgroundScheduler_Schedule_RejectedSecondRequestKeepsTheQueuedJobsCor
 	ledger := &corrCapturingLedger{Ledger: acquisitiontest.NewLedger()}
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	queue := &conflictingQueue{memJobQueue: newMemJobQueue(make(chan struct{}, 1)), gate: make(chan struct{})}
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1),
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1,
 		WithJobQueue(queue), WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
@@ -2669,7 +2587,7 @@ func TestBackgroundScheduler_Schedule_RejectedSecondRequestKeepsTheQueuedJobsCor
 		t.Fatalf("second schedule = %v, want ErrTrackJobInFlight", err)
 	}
 	close(queue.gate)
-	wg.Wait()
+	awaitIdle(t, scheduler)
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
@@ -2691,12 +2609,11 @@ func TestBackgroundScheduler_Schedule_RejectedSecondRequestKeepsTheQueuedJobsCor
 func TestBackgroundScheduler_Schedule_RunsTheJobWhenTheSchedulerClockIsAnHourAhead(t *testing.T) {
 	acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}
 	close(acq.release)
-	var wg sync.WaitGroup
 	skewed := func(s *BackgroundAcquisitionScheduler) {
 		s.now = func() time.Time { return time.Now().Add(time.Hour) }
 		s.queue = newMemJobQueue(s.wake)
 	}
-	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), skewed)
+	scheduler := NewBackgroundAcquisitionScheduler(acq, 1, skewed)
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -2747,8 +2664,7 @@ func driveWorkerLoops(s *BackgroundAcquisitionScheduler, loops int) {
 func TestBackgroundScheduler_StartedPausedNeverClaimsASeededJobUntilResume(t *testing.T) {
 	queue := seededPendingQueue(t)
 	acq := &stubAcquirer{}
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+	scheduler := NewBackgroundAcquisitionScheduler(acq, 1,
 		WithJobQueue(queue),
 		WithPollInterval(time.Hour),
 		WithSchedulerPaused(true))
@@ -2772,8 +2688,7 @@ func TestBackgroundScheduler_StartedPausedNeverClaimsASeededJobUntilResume(t *te
 
 func TestBackgroundScheduler_AClaimedJobRecordsItsQueueWait(t *testing.T) {
 	svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1)
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
 	job := acqports.Job{TrackID: shared.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Waited: 3 * time.Second}
@@ -2788,8 +2703,7 @@ func TestBackgroundScheduler_AClaimedJobRecordsItsQueueWait(t *testing.T) {
 func TestBackgroundScheduler_OutcomeCarriesStageTimesSourceHostAndFileFacts(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
 	svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithOutcomeRecorder(recorder))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
 	scheduler.recordOutcome(context.Background(), acqports.JobRecord{
@@ -2813,8 +2727,7 @@ func TestBackgroundScheduler_OutcomeCarriesStageTimesSourceHostAndFileFacts(t *t
 func TestBackgroundScheduler_AFailedOutcomeNamesNoSourceHost(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
 	svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithOutcomeRecorder(recorder))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
 	scheduler.recordOutcome(context.Background(), acqports.JobRecord{
@@ -2852,8 +2765,7 @@ func (a *orderedAcquirer) ExecuteUpgrade(context.Context, shared.UserId, shared.
 
 func TestBackgroundScheduler_UpgradeJobsRunOnTheUpgradeLaneAfterEveryWaitingUserAdd(t *testing.T) {
 	acq := &orderedAcquirer{releaseFirst: make(chan struct{}), firstStarted: make(chan struct{})}
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+	scheduler := NewBackgroundAcquisitionScheduler(acq, 1,
 		WithPollInterval(5*time.Millisecond),
 		WithUpgradeLane(acq, 1))
 	var releaseOnce sync.Once
@@ -2880,7 +2792,7 @@ func TestBackgroundScheduler_UpgradeJobsRunOnTheUpgradeLaneAfterEveryWaitingUser
 		t.Fatalf("ran %v while the user's add was still waiting, want the upgrade held back", ran)
 	}
 	release()
-	wg.Wait()
+	awaitIdle(t, scheduler)
 
 	got := acq.entryPointsRun()
 	want := []string{"Execute", "Execute", "ExecuteUpgrade"}
@@ -2898,8 +2810,7 @@ func (*keptUpgrader) ExecuteUpgrade(context.Context, shared.UserId, shared.Track
 func TestBackgroundScheduler_AKeptUpgradeIsRecordedAsKeptNotAsSuccessOrFailure(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
 	acq := &keptUpgrader{}
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+	scheduler := NewBackgroundAcquisitionScheduler(acq, 1,
 		WithPollInterval(5*time.Millisecond),
 		WithOutcomeRecorder(recorder),
 		WithUpgradeLane(acq, 1))
@@ -2908,7 +2819,7 @@ func TestBackgroundScheduler_AKeptUpgradeIsRecordedAsKeptNotAsSuccessOrFailure(t
 	if err := scheduler.ScheduleUpgrade(context.Background(), shared.NewUserId(uuid.New()), shared.NewTrackId()); err != nil {
 		t.Fatalf("ScheduleUpgrade: %v", err)
 	}
-	wg.Wait()
+	awaitIdle(t, scheduler)
 
 	got := assertExactlyOneOutcome(t, recorder.calls)
 	if got.Outcome != acqports.JobKept {
@@ -2947,8 +2858,7 @@ func TestBackgroundScheduler_AnUpgradeTakenOverByAReplaceDuringItsDownloadNeverC
 		proceed:   make(chan struct{}),
 		commitErr: make(chan error, 1),
 	}
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 2),
+	scheduler := NewBackgroundAcquisitionScheduler(acq, 2,
 		WithPollInterval(5*time.Millisecond),
 		WithUpgradeLane(acq, 1))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
@@ -2989,9 +2899,8 @@ func (q *queueCallRecorder) Settle(ctx context.Context, trackID shared.TrackId, 
 
 func TestBackgroundScheduler_APanickingReplaceAtTheRunCapIsSettled(t *testing.T) {
 	acq := &panickingAcquirer{}
-	var wg sync.WaitGroup
 	queue := &queueCallRecorder{memJobQueue: newMemJobQueue(make(chan struct{}, 1))}
-	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), WithJobQueue(queue))
+	scheduler := NewBackgroundAcquisitionScheduler(acq, 1, WithJobQueue(queue))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -3035,9 +2944,8 @@ func (q *panicQueueRecorder) releaseDelays() []time.Duration {
 func panickedJobOutcome(t *testing.T, job acqports.Job) (*panickingAcquirer, *panicQueueRecorder) {
 	t.Helper()
 	acq := &panickingAcquirer{}
-	var wg sync.WaitGroup
 	queue := &panicQueueRecorder{memJobQueue: newMemJobQueue(make(chan struct{}, 1))}
-	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), WithJobQueue(queue))
+	scheduler := NewBackgroundAcquisitionScheduler(acq, 1, WithJobQueue(queue))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -3082,9 +2990,8 @@ func TestBackgroundScheduler_APanickedJobThatLostItsLeaseDoesNotFailTheTrack(t *
 	ledger := acquisitiontest.NewLedger()
 	ledger.Seed(track)
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-	var wg sync.WaitGroup
 	queue := settleKeepsPendingQueue{newMemJobQueue(make(chan struct{}, 1))}
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithJobQueue(queue))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithJobQueue(queue))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -3145,8 +3052,7 @@ func (retryableAcquirer) RefuseQueued(context.Context, shared.UserId, shared.Tra
 
 func TestBackgroundScheduler_ARetryableJobIsRetryingNotFailed(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(retryableAcquirer{}, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	scheduler := NewBackgroundAcquisitionScheduler(retryableAcquirer{}, 1, WithOutcomeRecorder(recorder))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -3177,8 +3083,7 @@ func TestBackgroundScheduler_ALeaseLostJobRecordsCancelled(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
 	acq := &ctxCapturingAcquirer{started: make(chan struct{}), release: make(chan struct{})}
 	queue := &flakyHeartbeatQueue{memJobQueue: newMemJobQueue(make(chan struct{}, 1)), heartbeatErr: acqdomain.ErrLeaseLost}
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+	scheduler := NewBackgroundAcquisitionScheduler(acq, 1,
 		WithJobQueue(queue),
 		WithHeartbeatInterval(5*time.Millisecond),
 		WithPollInterval(5*time.Millisecond),
@@ -3205,8 +3110,7 @@ func TestBackgroundScheduler_ALeaseLostJobRecordsCancelled(t *testing.T) {
 func TestScheduler_OutcomeCarriesJobKindRunAndProvenance(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
 	svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithOutcomeRecorder(recorder))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
 	job := acqports.Job{TrackID: shared.NewTrackId(), UserID: shared.NewUserId(uuid.New()), Kind: acqports.JobKindReplace, Run: 2}
@@ -3229,8 +3133,7 @@ func TestBackgroundScheduler_AJobWhoseLeaseWasReclaimedLeavesTheTrackPending(t *
 	ledger := acquisitiontest.NewLedger()
 	ledger.Seed(track)
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{searchErr: errors.New("boom")}), newFakeAudioStore())
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithOutcomeRecorder(recorder))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -3240,7 +3143,7 @@ func TestBackgroundScheduler_AJobWhoseLeaseWasReclaimedLeavesTheTrackPending(t *
 	}
 
 	assertExactlyOneOutcome(t, recorder.calls)
-	wg.Wait()
+	awaitIdle(t, scheduler)
 	if got := committedTrack(t, ledger, track.ID).Status; got != acqports.TrackPending {
 		t.Errorf("status = %v, want pending: the job ran on a fence the track no longer carries", got)
 	}
@@ -3257,8 +3160,7 @@ func TestBackgroundScheduler_ALedgerRefusalForAStaleFenceRecordsCancelledNotFail
 	ledger := acquisitiontest.NewLedger()
 	ledger.Seed(track)
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{searchErr: errors.New("boom")}), newFakeAudioStore())
-	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithOutcomeRecorder(recorder))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -3268,7 +3170,7 @@ func TestBackgroundScheduler_ALedgerRefusalForAStaleFenceRecordsCancelledNotFail
 	}
 
 	outcome := assertExactlyOneOutcome(t, recorder.calls)
-	wg.Wait()
+	awaitIdle(t, scheduler)
 	if outcome.Outcome != acqports.JobCancelled || outcome.Reason != leaseLostReason {
 		t.Errorf("outcome = %q/%q, want %q/%q", outcome.Outcome, outcome.Reason, acqports.JobCancelled, leaseLostReason)
 	}
@@ -3317,8 +3219,7 @@ func TestScheduler_OutcomeCarriesTheRunsConfidenceSourceAndLengths(t *testing.T)
 			track := pendingTrack(t, ledger, userId)
 			track = withCatalogLength(t, ledger, track, target)
 			svc := newTestAcquireService(ledger, fakeRegistry(tc.searcher), newFakeAudioStore(), WithAudioProber(tc.prober))
-			var wg sync.WaitGroup
-			scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+			scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithOutcomeRecorder(recorder))
 			t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
 			if err := scheduler.Schedule(context.Background(), userId, track.ID, ""); err != nil {
@@ -3326,7 +3227,7 @@ func TestScheduler_OutcomeCarriesTheRunsConfidenceSourceAndLengths(t *testing.T)
 			}
 
 			got := assertExactlyOneOutcome(t, recorder.calls)
-			wg.Wait()
+			awaitIdle(t, scheduler)
 			if (got.Confidence > 0) != tc.wantScored || got.SourceKey != tc.wantSource || got.TargetSeconds != target || got.MeasuredSeconds != tc.wantMeasured {
 				t.Errorf("outcome = %v/%q/%v/%v, want scored=%v/%q/%v/%v", got.Confidence, got.SourceKey, got.TargetSeconds, got.MeasuredSeconds, tc.wantScored, tc.wantSource, float64(target), tc.wantMeasured)
 			}
@@ -3348,9 +3249,8 @@ func panicThroughTheLedger(t *testing.T, store acqports.TrackLedger, job acqport
 	t.Helper()
 	pub := newRecordingPublisher()
 	svc := newTestAcquireService(store, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
-	var wg sync.WaitGroup
 	queue := &queueCallRecorder{memJobQueue: newMemJobQueue(make(chan struct{}, 1))}
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithJobQueue(queue))
+	scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithJobQueue(queue))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -3467,5 +3367,26 @@ func TestBackgroundScheduler_APanickedUpgradeAtTheRunCapThatHoldsItsLeaseLeavesA
 
 	if got := storedTrack(t, ledger, track).Status; got != acqports.TrackReady {
 		t.Errorf("status = %v, want ready: a failed upgrade never un-readies the playing file", got)
+	}
+}
+
+func (p *pendingTracker) size() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.set)
+}
+
+func awaitIdle(t *testing.T, s *BackgroundAcquisitionScheduler) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for s.pending.size() > 0 {
+		if s.closed.Load() {
+			s.jobs.Wait()
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("scheduler still has %d pending jobs after 30s", s.pending.size())
+		}
+		time.Sleep(time.Millisecond)
 	}
 }

@@ -62,9 +62,8 @@ func runOneJobAs(t *testing.T, acquirer jobRunner, track acquisitiontest.LedgerT
 func scheduleOnce(t *testing.T, acquirer jobRunner, track acquisitiontest.LedgerTrack, run *int, opts ...func(*service.BackgroundAcquisitionScheduler)) jobOutcome {
 	t.Helper()
 	queue := &firstOutcomeQueue{Queue: memqueue.New(make(chan struct{}, 1), time.Now), run: run, outcome: make(chan jobOutcome, 1)}
-	var wg sync.WaitGroup
 	opts = append([]func(*service.BackgroundAcquisitionScheduler){service.WithJobQueue(queue)}, opts...)
-	scheduler := service.NewBackgroundAcquisitionScheduler(acquirer, &wg, make(chan struct{}, 1), opts...)
+	scheduler := service.NewBackgroundAcquisitionScheduler(acquirer, 1, opts...)
 	defer scheduler.Shutdown(context.Background())
 	if err := scheduler.Schedule(context.Background(), track.UserId, track.ID, ""); err != nil {
 		t.Fatalf("Schedule = %v, want nil", err)

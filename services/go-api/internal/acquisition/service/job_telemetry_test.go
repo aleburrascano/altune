@@ -53,8 +53,7 @@ func scheduleAndFinish(t *testing.T, source ports.AudioSource, opts ...func(*ser
 		opts = append([]func(*service.AcquireTrackAudioService){service.WithAcquireTempWorkspace(tempfs.New())}, opts...)
 		svc := service.NewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, opts...)
 		progress := &progressStages{}
-		var wg sync.WaitGroup
-		scheduler := service.NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), service.WithSchedulerEvents(progress))
+		scheduler := service.NewBackgroundAcquisitionScheduler(svc, 1, service.WithSchedulerEvents(progress))
 		defer scheduler.Shutdown(context.Background())
 		if err := scheduler.Schedule(context.Background(), track.UserId, track.ID, ""); err != nil {
 			t.Fatalf("Schedule = %v, want nil", err)

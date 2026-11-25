@@ -82,9 +82,8 @@ func (a *holdingAcquirer) RefuseQueued(context.Context, kernel.UserId, kernel.Tr
 
 func TestScheduler_ABurstOfAddsStartsOnEveryIdleAcquireWorker(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		var wg sync.WaitGroup
 		acquirer := &holdingAcquirer{release: make(chan struct{})}
-		scheduler := acquisition.NewBackgroundAcquisitionScheduler(acquirer, &wg, make(chan struct{}, 4))
+		scheduler := acquisition.NewBackgroundAcquisitionScheduler(acquirer, 4)
 		defer scheduler.Shutdown(context.Background())
 		defer close(acquirer.release)
 		user := kernel.NewUserId(uuid.New())
@@ -105,9 +104,8 @@ func TestScheduler_ABurstOfAddsStartsOnEveryIdleAcquireWorker(t *testing.T) {
 
 func TestScheduler_ResumeRunsAJobThatWaitedWhilePaused(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		var wg sync.WaitGroup
 		acquirer := &holdingAcquirer{release: make(chan struct{})}
-		scheduler := acquisition.NewBackgroundAcquisitionScheduler(acquirer, &wg, make(chan struct{}, 1))
+		scheduler := acquisition.NewBackgroundAcquisitionScheduler(acquirer, 1)
 		defer scheduler.Shutdown(context.Background())
 		user := kernel.NewUserId(uuid.New())
 		running, waiting := kernel.NewTrackId(), kernel.NewTrackId()
@@ -137,9 +135,8 @@ func TestScheduler_ResumeRunsAJobThatWaitedWhilePaused(t *testing.T) {
 
 func TestScheduler_ResumeStartsTheWholeBacklogOnEveryIdleWorker(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		var wg sync.WaitGroup
 		acquirer := &holdingAcquirer{release: make(chan struct{})}
-		scheduler := acquisition.NewBackgroundAcquisitionScheduler(acquirer, &wg, make(chan struct{}, 4))
+		scheduler := acquisition.NewBackgroundAcquisitionScheduler(acquirer, 4)
 		defer scheduler.Shutdown(context.Background())
 		defer close(acquirer.release)
 		user := kernel.NewUserId(uuid.New())
@@ -171,9 +168,8 @@ func TestScheduler_ResumeStartsTheWholeBacklogOnEveryIdleWorker(t *testing.T) {
 
 func TestScheduler_AnUpgradeRunsAtOnceWhileAcquireWorkersAreIdle(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		var wg sync.WaitGroup
 		upgrader := &recordingUpgrader{}
-		scheduler := acquisition.NewBackgroundAcquisitionScheduler(&recordingAcquirer{}, &wg, make(chan struct{}, 4),
+		scheduler := acquisition.NewBackgroundAcquisitionScheduler(&recordingAcquirer{}, 4,
 			acquisition.WithUpgradeLane(upgrader, 1))
 		defer scheduler.Shutdown(context.Background())
 		user := kernel.NewUserId(uuid.New())
@@ -194,9 +190,8 @@ func TestScheduler_AnUpgradeRunsAtOnceWhileAcquireWorkersAreIdle(t *testing.T) {
 
 func TestScheduler_AnAddRunsAtOnceWhileUpgradeWorkersAreIdle(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		var wg sync.WaitGroup
 		acquirer := &recordingAcquirer{}
-		scheduler := acquisition.NewBackgroundAcquisitionScheduler(acquirer, &wg, make(chan struct{}, 1),
+		scheduler := acquisition.NewBackgroundAcquisitionScheduler(acquirer, 1,
 			acquisition.WithUpgradeLane(&recordingUpgrader{}, 4))
 		defer scheduler.Shutdown(context.Background())
 		user := kernel.NewUserId(uuid.New())
@@ -261,8 +256,7 @@ func TestScheduler_AJobWhoseCompletionPanicsAfterItIsRecordedIsRecordedOnce(t *t
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	slog.SetDefault(slog.New(panicOnMessage{Handler: slog.NewTextHandler(io.Discard, nil), message: "background acquisition failed"}))
 	queue := &firstOutcomeQueue{Queue: memqueue.New(make(chan struct{}, 1), time.Now), outcome: make(chan jobOutcome, 1)}
-	var wg sync.WaitGroup
-	scheduler := service.NewBackgroundAcquisitionScheduler(failingAcquirer{}, &wg, make(chan struct{}, 1), service.WithJobQueue(queue))
+	scheduler := service.NewBackgroundAcquisitionScheduler(failingAcquirer{}, 1, service.WithJobQueue(queue))
 	defer scheduler.Shutdown(context.Background())
 	trackID := kernel.NewTrackId()
 
@@ -319,8 +313,7 @@ func logsOfOneJob(t *testing.T, acquirer interface {
 	var records []slog.Record
 	slog.SetDefault(slog.New(capturedLogs{mu: &sync.Mutex{}, records: &records}))
 	queue := &firstOutcomeQueue{Queue: memqueue.New(make(chan struct{}, 1), time.Now), outcome: make(chan jobOutcome, 1)}
-	var wg sync.WaitGroup
-	scheduler := service.NewBackgroundAcquisitionScheduler(acquirer, &wg, make(chan struct{}, 1), service.WithJobQueue(queue))
+	scheduler := service.NewBackgroundAcquisitionScheduler(acquirer, 1, service.WithJobQueue(queue))
 	if err := scheduler.Schedule(context.Background(), kernel.NewUserId(uuid.New()), kernel.NewTrackId(), ""); err != nil {
 		t.Fatalf("Schedule = %v, want nil", err)
 	}
@@ -358,4 +351,38 @@ func TestScheduler_ASucceededJobLogsNoCompletionRecord(t *testing.T) {
 			t.Errorf("record %q at %v, want no completion record for a job that succeeded", r.Message, r.Level)
 		}
 	}
+}
+
+func TestScheduler_ShutdownWaitsForAnInFlightJobToFinishAndDoesNotCancelIt(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		acquirer := &holdingAcquirer{release: make(chan struct{})}
+		scheduler := acquisition.NewBackgroundAcquisitionScheduler(acquirer, 1)
+		if err := scheduler.Schedule(context.Background(), kernel.NewUserId(uuid.New()), kernel.NewTrackId(), ""); err != nil {
+			t.Fatalf("Schedule = %v, want nil", err)
+		}
+		synctest.Wait()
+
+		returned := make(chan struct{})
+		go func() {
+			scheduler.Shutdown(context.Background())
+			close(returned)
+		}()
+		synctest.Wait()
+		select {
+		case <-returned:
+			t.Fatal("Shutdown returned while a job was still in flight, want it to drain first")
+		default:
+		}
+
+		close(acquirer.release)
+		synctest.Wait()
+		select {
+		case <-returned:
+		default:
+			t.Fatal("Shutdown did not return after the in-flight job finished")
+		}
+		if status := scheduler.Status(); status.Succeeded != 1 || status.Failed != 0 {
+			t.Errorf("succeeded = %d, failed = %d, want the job to finish normally (1, 0), not be cancelled", status.Succeeded, status.Failed)
+		}
+	})
 }

@@ -578,8 +578,7 @@ func TestPgxJobQueue_PanickedJobRowIsNotClaimableAgainImmediately(t *testing.T) 
 	queue := acquisition.NewPgxJobQueue(pool)
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
 	acq := &panickingAcquirer{}
-	var wg sync.WaitGroup
-	scheduler := acquisition.NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+	scheduler := acquisition.NewBackgroundAcquisitionScheduler(acq, 1,
 		acquisition.WithJobQueue(queue), acquisition.WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
@@ -1036,8 +1035,7 @@ func TestPgxJobQueue_APanickingReplaceAtTheRunCapIsNotClaimedAgain(t *testing.T)
 		t.Fatalf("set run attempts: %v", err)
 	}
 	acq := &panickingAcquirer{}
-	var wg sync.WaitGroup
-	scheduler := acquisition.NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+	scheduler := acquisition.NewBackgroundAcquisitionScheduler(acq, 1,
 		acquisition.WithJobQueue(queue), acquisition.WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
@@ -1069,8 +1067,7 @@ func TestPgxJobQueue_APanickingReplaceBelowTheRunCapIsRetriedAfterItsBackoff(t *
 		t.Fatalf("Enqueue = %v", err)
 	}
 	acq := &panickingAcquirer{}
-	var wg sync.WaitGroup
-	scheduler := acquisition.NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+	scheduler := acquisition.NewBackgroundAcquisitionScheduler(acq, 1,
 		acquisition.WithJobQueue(queue), acquisition.WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())

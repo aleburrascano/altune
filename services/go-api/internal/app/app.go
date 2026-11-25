@@ -30,7 +30,6 @@ type App struct {
 	dbPing        func(context.Context) error
 	redisClient   *goredis.Client
 	authVerifier  authHealthChecker
-	sem           chan struct{}
 	scheduler     *acquisition.BackgroundAcquisitionScheduler
 	vocabRefresh  *discovery.VocabularyRefreshService
 	searchSvc     *discovery.SearchService
@@ -52,7 +51,6 @@ type App struct {
 func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
 	return &App{
 		cfg:     cfg,
-		sem:     make(chan struct{}, cfg.AcquisitionConcurrency),
 		logRing: logRing,
 		latency: reqmetrics.NewRegistry(),
 	}
