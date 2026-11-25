@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -40,9 +39,6 @@ func (c *Config) validate() error {
 		return err
 	}
 	if err := c.validateAlerting(); err != nil {
-		return err
-	}
-	if err := c.validateBehavioralCorpusPath(); err != nil {
 		return err
 	}
 	if err := c.validateDiscoverySearch(); err != nil {
@@ -88,29 +84,6 @@ func (c *Config) validateDiscoverySearchProviders() error {
 		}
 	}
 	return nil
-}
-
-func (c *Config) validateBehavioralCorpusPath() error {
-	if c.BehavioralCorpusPath == "" {
-		return nil
-	}
-	dir := filepath.Dir(c.BehavioralCorpusPath)
-	info, err := fsprobe.Stat(dir)
-	if err != nil {
-		return fmt.Errorf("BEHAVIORAL_CORPUS_PATH parent directory is unusable: %w", err)
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("BEHAVIORAL_CORPUS_PATH parent %q is not a directory", dir)
-	}
-	return probeWritableDir(dir)
-}
-
-func probeWritableDir(dir string) error {
-	cleanup, err := fsprobe.TempFile(dir, ".altune-write-probe-*")
-	if err != nil {
-		return fmt.Errorf("BEHAVIORAL_CORPUS_PATH parent %q is not writable (read-only mount or missing permission): %w", dir, err)
-	}
-	return cleanup()
 }
 
 func (c *Config) validateAlerting() error {

@@ -110,7 +110,7 @@ ranking path:
 - **Rich artist metadata (7).** `/artists/{id}` `profile` (BBCode), `realname`, `aliases[]`,
   `namevariations[]`, `groups[]` / `members[]`, `urls[]`.
 
-Anything here that feeds *order* must clear `discoveryeval --top-k 3`.
+Anything here that feeds *order* needs a ranking review (the offline `discoveryeval` gate is gone).
 
 ## 6. Costs & risks
 
@@ -124,8 +124,8 @@ Anything here that feeds *order* must clear `discoveryeval --top-k 3`.
   never the fan-out); (b) **cache by `master_id`/`artist_id` with a long TTL** (Redis — Discogs data
   is near-static). **No blocking Discogs call on the
   hot search path.**
-- **Styles/community into ranking → eval gate.** Anything touching *order* must clear
-  `discoveryeval --top-k 3`. Pure display enrichment does not.
+- **Styles/community into ranking → ranking review.** Anything touching *order* needs one (the
+  offline `discoveryeval` gate is gone). Pure display enrichment does not.
 - **Not an artwork upgrade.** 600px ceiling < CAA 1200px — keep artwork MB-keyed; Discogs stays
   metadata + the ≤600px artist fallback already wired.
 - **ToS:** sanctioned; token + descriptive `User-Agent` required (403 without UA), attribution

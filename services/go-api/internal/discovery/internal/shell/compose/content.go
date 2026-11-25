@@ -31,13 +31,6 @@ func newArtistService(t *providerTable, s handles.Stores, breaker *providercall.
 	)
 }
 
-func newEvalArtistService(t *providerTable, s handles.Stores) *content.GetArtistContentService {
-	return content.NewGetArtistContentService(t.artistProviders(),
-		content.WithMBAnchor(t.named(rowMusicBrainz).artistAnchor),
-		content.WithContentIdentityStore(s.Identities),
-	)
-}
-
 func newFeaturedArtists(t *providerTable) *content.FeaturedArtistResolver {
 	return content.NewFeaturedArtistResolver(t.named(rowMusicBrainz).featuredSearch, t.named(rowDeezer).trackFeatured)
 }

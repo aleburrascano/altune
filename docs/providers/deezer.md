@@ -166,7 +166,7 @@ covered by httptest fixtures of the documented shapes.
 `gain` (ReplayGain — carried in the payload but **not displayed**: a volume-normalization value, not
 user-facing), and `explicit_lyrics`. The app does not display these fields today. **Contributors are deliberately excluded** — the detail screen's existing three-tier
 featured-artists path already fetches `/track/{id}` contributors, so re-surfacing them here would
-duplicate. Display-only; if `bpm` ever feeds *order*, that increment must clear `discoveryeval --top-k 3`.
+duplicate. Display-only; if `bpm` ever feeds *order*, that increment needs a ranking review (the offline `discoveryeval` gate is gone).
 
 ### 8. **Album liner data** (label/genres/upc/record_type) — ✅ BUILT (2026-06-22)
 `Lookup(album)` fetches `/album/{id}` and maps `label`, `genres{data[]}` (deduped/capped),
@@ -195,7 +195,7 @@ ranking path.
 - **Not the artwork or popularity primary.** Deezer *is* the popularity primary already (`nb_fan`/
   `rank`); for *artwork* it's a 1000px fallback, below CAA. Don't re-task it.
 - **Ranking gate.** Anything from here that touches *order* (bpm, contributor-derived signals) must
-  clear `discoveryeval --top-k 3`. Pure display enrichment does not.
+  get a ranking review (the offline `discoveryeval` gate is gone). Pure display enrichment does not.
 
 ## 7. Current implementation state
 
@@ -263,8 +263,8 @@ optional refinements, not capabilities:
    and the `writers` scalar-vs-array shape were not field-dumped in the audit session; verify on the
    next live run and correct the adapter if needed.
 
-**Optional, eval-gated:** feeding Deezer `bpm` or any new signal into *rank* (must clear
-`discoveryeval --top-k 3`). Deezer `nb_fan`/`rank` already *is* the popularity primary — unchanged.
+**Optional, needs a ranking review:** feeding Deezer `bpm` or any new signal into *rank* (the
+offline `discoveryeval` gate is gone). Deezer `nb_fan`/`rank` already *is* the popularity primary — unchanged.
 
 **Not verifiable in this dev environment:** the real-world lyrics coverage / synced-line accuracy and
 the JWT-rotation cadence on live traffic (needs the running pipeline + a device). The §4 public-API

@@ -128,7 +128,6 @@ type Config struct {
 	TailDemotionEnabled        bool    `env:"TAIL_DEMOTION_ENABLED" envDefault:"false"`
 	CrossKindProminenceEnabled bool    `env:"CROSS_KIND_PROMINENCE_ENABLED" envDefault:"true"`
 	BehavioralRankingEnabled   bool    `env:"BEHAVIORAL_RANKING_ENABLED" envDefault:"false"`
-	BehavioralCorpusPath       string  `env:"BEHAVIORAL_CORPUS_PATH"`
 	ExplorationEnabled         bool    `env:"EXPLORATION_ENABLED" envDefault:"false"`
 	ExplorationRate            float64 `env:"EXPLORATION_RATE" envDefault:"0.03"`
 	AcquisitionConfidenceFloor float64 `env:"ACQUISITION_CONFIDENCE_FLOOR" envDefault:"0.5"`

@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/adapters/handles"
 	"altune/go-api/internal/discovery/internal/core/ports"
-	"altune/go-api/internal/discovery/service/providercall"
 	"context"
 	"slices"
 )
@@ -36,7 +35,6 @@ const (
 	jobRelated    job = "related"
 	jobArtwork    job = "artwork"
 	jobCharts     job = "charts"
-	jobConsensus  job = "consensus"
 	jobDetails    job = "details"
 	jobEnrichment job = "enrichment"
 	jobFeatured   job = "featured"
@@ -72,7 +70,6 @@ type provider struct {
 	related         ports.RelatedTracksProvider
 	artwork         []ports.ArtworkResolver
 	charts          ports.ChartProvider
-	consensus       providercall.ConsensusProvider
 	deezerDetails   ports.DeezerEnricher
 	enrichment      ports.MetadataEnricher
 	trackFeatured   trackFeaturedLookup
@@ -138,7 +135,6 @@ func (p provider) catalogSlots() []jobSlot {
 		{jobRelated, p.related != nil},
 		{jobArtwork, len(p.artwork) > 0},
 		{jobCharts, p.charts != nil},
-		{jobConsensus, p.consensus.Fetcher != nil},
 	}
 }
 

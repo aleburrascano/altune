@@ -67,9 +67,8 @@ Code: `soundcloud_search.go`.
 helper; mappers for the album-playlist and user objects.
 - **Album fields:** `artwork_url, set_type, is_album, track_count, release_date, description, genre, created_at, user`.
 - **Artist (user) fields:** `avatar_url, username, full_name, city, country_code, followers_count, verified, creator_subscriptions[] (pro/badges), description, permalink_url`.
-- **Risk:** ranking gate — SC "albums" are often bootlegs/compilations and SC "artists" are noisy
-  (any uploader). Must run the full `discoveryeval --pipeline v2` gate (≥ baseline top-3) before/after,
-  exactly as the track increment did.
+- **Risk:** ranking review — SC "albums" are often bootlegs/compilations and SC "artists" are noisy
+  (any uploader). The offline `discoveryeval` gate the track increment used is gone.
 
 ### 3. Artwork resolver — ✅ BUILT
 `SoundCloudAPIAdapter` implements `ports.ArtworkResolver` (`Resolve(kind,title,subtitle,mbid)`),

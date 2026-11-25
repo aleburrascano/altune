@@ -663,7 +663,7 @@ func TestTicker_RefusesAJobTheTableRunsOnEveryInstance(t *testing.T) {
 
 func TestEveryInstance_RefusesEveryLeaderOnlyJob(t *testing.T) {
 	leaderOnly := []jobs.Name{
-		jobs.OrphanedAudioReconcile, jobs.BehavioralCorpusRefresh, jobs.DiscographyEventPrune, jobs.VocabularyRefresh,
+		jobs.OrphanedAudioReconcile, jobs.DiscographyEventPrune, jobs.VocabularyRefresh,
 		jobs.DeletedIdentityErasure, jobs.AcquisitionSourceCanary, jobs.StreamRecovery, jobs.AcquisitionPrune,
 		jobs.AcquisitionUpgrade, jobs.UnreleasedRefresh, jobs.EvalMeter, jobs.AlertMonitor,
 	}

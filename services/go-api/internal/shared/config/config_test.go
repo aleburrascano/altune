@@ -394,40 +394,6 @@ func TestLoad_YtDLPCookieFile(t *testing.T) {
 	}
 }
 
-func TestLoad_BehavioralCorpusPath(t *testing.T) {
-	dir := t.TempDir()
-	file := dir + "/plain-file"
-	if err := os.WriteFile(file, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	tests := []struct {
-		name    string
-		path    string
-		wantErr bool
-	}{
-		{"empty accepted", "", false},
-		{"file in writable dir accepted", dir + "/corpus.json", false},
-		{"missing parent rejected", dir + "/absent/corpus.json", true},
-		{"parent is a file rejected", file + "/corpus.json", true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			setEnv(t, validConfigEnv(map[string]string{"BEHAVIORAL_CORPUS_PATH": tt.path}))
-
-			_, err := config.Load()
-			if !tt.wantErr {
-				if err != nil {
-					t.Fatalf("Load: unexpected error %v", err)
-				}
-				return
-			}
-			if err == nil || !searchString(err.Error(), "BEHAVIORAL_CORPUS_PATH") {
-				t.Fatalf("Load error = %v, want it to name BEHAVIORAL_CORPUS_PATH", err)
-			}
-		})
-	}
-}
-
 func TestLoad_AcquisitionDownloadConcurrency(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
 	cfg, err := config.Load()
@@ -1992,42 +1958,6 @@ func TestLoad_KnownNonProductionEnvSkipsProductionChecks(t *testing.T) {
 				t.Fatalf("ENV=%q: unexpected error %v", env, err)
 			}
 		})
-	}
-}
-
-func TestLoad_BehavioralCorpusPathReadOnlyDirRejected(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root ignores directory write permission")
-	}
-	dir := t.TempDir()
-	if err := os.Chmod(dir, 0o555); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
-	setEnv(t, validConfigEnv(map[string]string{"BEHAVIORAL_CORPUS_PATH": dir + "/corpus.json"}))
-
-	_, err := config.Load()
-	if err == nil {
-		t.Fatal("Load accepted BEHAVIORAL_CORPUS_PATH in a read-only directory")
-	}
-	if !strings.Contains(err.Error(), "BEHAVIORAL_CORPUS_PATH") || !strings.Contains(err.Error(), "not writable") {
-		t.Errorf("error = %v, want it to name BEHAVIORAL_CORPUS_PATH and say not writable", err)
-	}
-}
-
-func TestLoad_BehavioralCorpusPathProbeLeavesNoFile(t *testing.T) {
-	dir := t.TempDir()
-	setEnv(t, validConfigEnv(map[string]string{"BEHAVIORAL_CORPUS_PATH": dir + "/corpus.json"}))
-
-	if _, err := config.Load(); err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 0 {
-		t.Errorf("write probe left %d entries behind", len(entries))
 	}
 }
 

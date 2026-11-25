@@ -22,11 +22,6 @@ func newSearchService(w wiring, breaker *providercall.CircuitBreaker) *search.Se
 	return w.namedSearchService("discovery.search", named, breaker)
 }
 
-func newEvalSearchService(w wiring) *search.Service {
-	breaker := providercall.NewCircuitBreaker()
-	return w.namedSearchService("discovery.eval_search", unrecordedOptions(w, breaker), breaker)
-}
-
 func newRankingOnlySearchService(w wiring) *search.Service {
 	named := rankingOptions(w.deps.Search, w.stores)
 	named = append(named, enrichmentCacheOptions(w.stores)...)

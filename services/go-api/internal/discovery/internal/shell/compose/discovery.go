@@ -25,7 +25,6 @@ type RecordingAuthority interface {
 }
 
 type EventRetention interface {
-	BehavioralLabels(ctx context.Context, since time.Time) ([]ports.BehavioralLabel, error)
 	PruneDiscographyObserved(ctx context.Context, now time.Time) (int64, error)
 	PruneEvents(ctx context.Context, now time.Time) (int64, error)
 }
@@ -36,7 +35,6 @@ type Discovery struct {
 	FeaturedArtists   *content.FeaturedArtistResolver
 	Recordings        RecordingAuthority
 	Charts            []ports.ChartProvider
-	Consensus         []providercall.ConsensusProvider
 	Vocabulary        ports.VocabularyStore
 	UnreleasedRefresh *unreleased.Service
 	Events            EventRetention
@@ -64,7 +62,6 @@ func New(d handles.Deps) (*Discovery, error) {
 		FeaturedArtists:   newFeaturedArtists(t),
 		Recordings:        t.named(rowMusicBrainz).recordings,
 		Charts:            t.chartProviders(),
-		Consensus:         t.consensusProviders(),
 		Vocabulary:        s.Vocabulary,
 		UnreleasedRefresh: unreleasedServices.refresh,
 		Events:            s.Events,
@@ -79,16 +76,8 @@ func newWiring(d handles.Deps) wiring {
 	return wiring{deps: d, table: t, stores: s, artwork: t.artworkChain()}
 }
 
-func (d *Discovery) EvalSearch() *search.Service {
-	return newEvalSearchService(d.wiring)
-}
-
 func (d *Discovery) RankingOnlySearch() *search.Service {
 	return newRankingOnlySearchService(d.wiring)
-}
-
-func (d *Discovery) EvalArtistContent() *content.GetArtistContentService {
-	return newEvalArtistService(d.wiring.table, d.wiring.stores)
 }
 
 func newHandlerServices(w wiring) handler.DiscoveryServices {
