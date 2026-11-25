@@ -138,7 +138,7 @@ func (s *FilesystemAudioStore) Stream(ctx context.Context, audioRef string) (por
 func openAudio(path string) (openedAudio, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return openedAudio{}, fmt.Errorf("open audio %s: %w", path, err)
+		return openedAudio{}, fmt.Errorf("open audio: %w", err)
 	}
 	stat, err := file.Stat()
 	if err != nil {
