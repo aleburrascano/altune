@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -33,8 +34,9 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: go run ./scripts/lintnames <base-ref>")
 		os.Exit(2)
 	}
+	ctx := context.Background()
 	base := os.Args[1]
-	files := changedGoFiles(base)
+	files := changedGoFiles(ctx, base)
 	if len(files) == 0 {
 		fmt.Println("No changed go files to check for vague identifier names.")
 		return
@@ -45,7 +47,7 @@ func main() {
 	}
 	hits := 0
 	for _, file := range files {
-		hits += reportFile(base, file)
+		hits += reportFile(ctx, base, file)
 	}
 	fmt.Printf("new-code vague-name violations: %d\n", hits)
 	if hits > 0 {
@@ -58,8 +60,8 @@ type changedFile struct {
 	from string
 }
 
-func changedGoFiles(base string) []changedFile {
-	out := git("diff", "-M", "--name-status", "--relative", "--diff-filter=ACMR", base, "--", ".")
+func changedGoFiles(ctx context.Context, base string) []changedFile {
+	out := git(ctx, "diff", "-M", "--name-status", "--relative", "--diff-filter=ACMR", base, "--", ".")
 	var files []changedFile
 	for _, line := range strings.Split(out, "\n") {
 		file := parseNameStatus(line)
@@ -79,17 +81,17 @@ func parseNameStatus(line string) changedFile {
 	return file
 }
 
-func diffOf(base string, file changedFile) string {
+func diffOf(ctx context.Context, base string, file changedFile) string {
 	args := []string{"diff", "-M", "-U0", base, "--", file.path}
 	if file.from != "" {
 		args = append(args, file.from)
 	}
-	return git(args...)
+	return git(ctx, args...)
 }
 
-func addedLines(base string, file changedFile) map[int]bool {
+func addedLines(ctx context.Context, base string, file changedFile) map[int]bool {
 	added := map[int]bool{}
-	for _, line := range strings.Split(diffOf(base, file), "\n") {
+	for _, line := range strings.Split(diffOf(ctx, base, file), "\n") {
 		match := hunkHeader.FindStringSubmatch(line)
 		if match == nil {
 			continue
@@ -106,8 +108,8 @@ func addedLines(base string, file changedFile) map[int]bool {
 	return added
 }
 
-func reportFile(base string, file changedFile) int {
-	added := addedLines(base, file)
+func reportFile(ctx context.Context, base string, file changedFile) int {
+	added := addedLines(ctx, base, file)
 	if len(added) == 0 {
 		return 0
 	}
@@ -190,8 +192,8 @@ func fieldNames(fields *ast.FieldList) []*ast.Ident {
 	return idents
 }
 
-func git(args ...string) string {
-	cmd := exec.Command("git", args...)
+func git(ctx context.Context, args ...string) string {
+	cmd := exec.CommandContext(ctx, "git", args...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = os.Stderr

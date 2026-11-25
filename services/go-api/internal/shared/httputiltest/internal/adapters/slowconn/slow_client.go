@@ -22,7 +22,7 @@ func NewServer(t testing.TB, h http.Handler) *httptest.Server {
 
 func Get(t testing.TB, srv *httptest.Server, path string, header http.Header) (net.Conn, *bufio.Reader) {
 	t.Helper()
-	conn, err := net.Dial("tcp", srv.Listener.Addr().String())
+	conn, err := (&net.Dialer{}).DialContext(t.Context(), "tcp", srv.Listener.Addr().String())
 	if err != nil {
 		t.Fatalf("dial: %v", err)
 	}
@@ -30,7 +30,7 @@ func Get(t testing.TB, srv *httptest.Server, path string, header http.Header) (n
 	if tc, ok := conn.(*net.TCPConn); ok {
 		_ = tc.SetReadBuffer(socketBuffer)
 	}
-	req, err := http.NewRequest(http.MethodGet, srv.URL+path, http.NoBody)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+path, http.NoBody)
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}

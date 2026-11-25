@@ -101,6 +101,7 @@ func significantTokens(tokens []scanToken) []scanToken {
 	var out []scanToken
 	for _, tok := range tokens {
 		switch tok.class {
+		case tokenCode:
 		case tokenSpace, tokenComment:
 			continue
 		case tokenNewline, tokenCommentNewline:

@@ -28,8 +28,6 @@ var (
 	caddyMissingImport = regexp.MustCompile(`File to import not found: (.+), at `)
 )
 
-func init() { register(caddyfileKind) }
-
 var caddyfileKind = kind{
 	name:     "caddyfile",
 	match:    matchCaddyfile,

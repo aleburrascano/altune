@@ -26,7 +26,7 @@ func TestRunAllFlagsCommentsAndNamesFileLine(t *testing.T) {
 			writeFile(t, dir, tc.name, tc.body)
 
 			var stdout strings.Builder
-			code := run([]string{"--all", dir}, &stdout)
+			code := run(t.Context(), []string{"--all", dir}, &stdout)
 
 			if code != 1 {
 				t.Fatalf("exit = %d, want 1; output:\n%s", code, stdout.String())
@@ -46,7 +46,7 @@ func TestRunAllAllowsGoEmbedOnly(t *testing.T) {
 	writeFile(t, dir, "embed.go", "package p\n\nimport _ \"embed\"\n\n//go:embed clip.mp3\nvar clip []byte\n")
 
 	var stdout strings.Builder
-	code := run([]string{"--all", dir}, &stdout)
+	code := run(t.Context(), []string{"--all", dir}, &stdout)
 
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0; output:\n%s", code, stdout.String())
@@ -58,7 +58,7 @@ func TestRunAllExitsTwoOnUnparsableFile(t *testing.T) {
 	writeFile(t, dir, "broken.go", "package p\n\nfunc (\n")
 
 	var stdout strings.Builder
-	code := run([]string{"--all", dir}, &stdout)
+	code := run(t.Context(), []string{"--all", dir}, &stdout)
 
 	if code != 2 {
 		t.Fatalf("exit = %d, want 2; output:\n%s", code, stdout.String())
@@ -72,7 +72,7 @@ func TestRunAllSkipsVendorTestdataAndNodeModules(t *testing.T) {
 	}
 
 	var stdout strings.Builder
-	code := run([]string{"--all", dir}, &stdout)
+	code := run(t.Context(), []string{"--all", dir}, &stdout)
 
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0; output:\n%s", code, stdout.String())
@@ -85,7 +85,7 @@ func TestRunAllSortsByPathThenLine(t *testing.T) {
 	writeFile(t, dir, "a.go", "package p\n\n// one\n")
 
 	var stdout strings.Builder
-	run([]string{"--all", dir}, &stdout)
+	run(t.Context(), []string{"--all", dir}, &stdout)
 
 	want := []string{
 		filepath.Join(dir, "a.go") + ":3",
@@ -101,7 +101,7 @@ func TestRunAllSortsByPathThenLine(t *testing.T) {
 func TestRunAllWithoutDirExitsTwo(t *testing.T) {
 	var stdout strings.Builder
 
-	if code := run([]string{"--all"}, &stdout); code != 2 {
+	if code := run(t.Context(), []string{"--all"}, &stdout); code != 2 {
 		t.Fatalf("exit = %d, want 2", code)
 	}
 }
@@ -121,7 +121,7 @@ func TestRunDiffFlagsOnlyLinesAddedSinceBase(t *testing.T) {
 	t.Chdir(dir)
 
 	var stdout strings.Builder
-	code := run([]string{strings.TrimSpace(base)}, &stdout)
+	code := run(t.Context(), []string{strings.TrimSpace(base)}, &stdout)
 
 	want := "Checking added lines for new comments/suppressions in:\n  a.go\n" +
 		"  a.go:6  new comment on a changed line — zero-comments rule\n" +

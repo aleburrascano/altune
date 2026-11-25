@@ -142,13 +142,13 @@ func TestShellCommentsFailsLoudlyWhenTheWalkMissesAComment(t *testing.T) {
 	}
 
 	stdout := &strings.Builder{}
-	code := run([]string{"check", writeTempShellFile(t, "time # c1\n:\n")}, stdout)
+	code := run(t.Context(), []string{"check", writeTempShellFile(t, "time # c1\n:\n")}, stdout)
 	if code != 2 {
 		t.Fatalf("check exit = %d, want 2", code)
 	}
 
 	out := strings.Builder{}
-	stripCode := run([]string{"strip", writeTempShellFile(t, "time # c1\n:\n")}, &out)
+	stripCode := run(t.Context(), []string{"strip", writeTempShellFile(t, "time # c1\n:\n")}, &out)
 	if stripCode != 1 {
 		t.Fatalf("strip exit = %d, want 1", stripCode)
 	}
@@ -161,7 +161,7 @@ func TestShellCommentsFailsLoudlyWhenAHerestringPrecedesAWalkMissedComment(t *te
 	}
 
 	stdout := &strings.Builder{}
-	code := run([]string{"check", writeTempShellFile(t, "cat <<< \"hi\"\ntime # x\n:\n")}, stdout)
+	code := run(t.Context(), []string{"check", writeTempShellFile(t, "cat <<< \"hi\"\ntime # x\n:\n")}, stdout)
 	if code != 2 {
 		t.Fatalf("check exit = %d, want 2", code)
 	}

@@ -11,6 +11,19 @@ type kind struct {
 
 type span struct{ start, end, line int }
 
-var kinds []kind
-
-func register(k kind) { kinds = append(kinds, k) }
+var kinds = []kind{
+	caddyfileKind,
+	gitPatternKind,
+	lineConfigKind,
+	npmrcKind,
+	cssKind,
+	dockerfileKind,
+	jsKind,
+	markdownKind,
+	htmlKind,
+	shellKind,
+	sqlKind,
+	tomlKind,
+	workflowKind,
+	yamlKind,
+}

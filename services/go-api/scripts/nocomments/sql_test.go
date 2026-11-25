@@ -63,7 +63,7 @@ func TestSQLSameRejectsDifferentStatements(t *testing.T) {
 }
 
 func TestSQLStripKeepsEveryTrackedSQLFileEquivalentAndCommentFree(t *testing.T) {
-	root, err := repoRoot()
+	root, err := repoRoot(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}

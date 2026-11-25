@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -23,10 +24,10 @@ var (
 )
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout))
+	os.Exit(run(context.Background(), os.Args[1:], os.Stdout))
 }
 
-func run(args []string, stdout io.Writer) int {
+func run(ctx context.Context, args []string, stdout io.Writer) int {
 	if len(args) >= 1 && args[0] == "--all" {
 		return runAll(args[1:], stdout)
 	}
@@ -34,10 +35,10 @@ func run(args []string, stdout io.Writer) int {
 		fmt.Fprintln(os.Stderr, "usage: go run ./scripts/lintcomments <base-ref> [module-dir]\n       go run ./scripts/lintcomments --all <dir>...")
 		return 2
 	}
-	return runDiff(args, stdout)
+	return runDiff(ctx, args, stdout)
 }
 
-func runDiff(args []string, stdout io.Writer) int {
+func runDiff(ctx context.Context, args []string, stdout io.Writer) int {
 	rawBase := args[0]
 	if len(args) >= 2 {
 		if err := os.Chdir(args[1]); err != nil {
@@ -45,8 +46,8 @@ func runDiff(args []string, stdout io.Writer) int {
 			return 2
 		}
 	}
-	base := resolveBase(rawBase)
-	addedByFile := changedAddedLines(base)
+	base := resolveBase(ctx, rawBase)
+	addedByFile := changedAddedLines(ctx, base)
 	files := goFiles(addedByFile)
 	if len(files) == 0 {
 		fmt.Fprintln(stdout, "No changed go files to check for new comments.")
@@ -148,17 +149,17 @@ func isEmbed(text string) bool {
 	return len(fields) > 0 && fields[0] == "//go:embed"
 }
 
-func resolveBase(rawBase string) string {
-	return strings.TrimSpace(git("rev-parse", "--verify", "--end-of-options", rawBase+"^{commit}"))
+func resolveBase(ctx context.Context, rawBase string) string {
+	return strings.TrimSpace(git(ctx, "rev-parse", "--verify", "--end-of-options", rawBase+"^{commit}"))
 }
 
-func changedAddedLines(base string) map[string]map[int]bool {
+func changedAddedLines(ctx context.Context, base string) map[string]map[int]bool {
 	byFile := map[string]map[int]bool{}
-	names := splitNUL(git("diff", "--text", "--name-only", "-z", "--diff-filter=ACMR", "-M", "-C", "--find-copies-harder", "--relative", base))
+	names := splitNUL(git(ctx, "diff", "--text", "--name-only", "-z", "--diff-filter=ACMR", "-M", "-C", "--find-copies-harder", "--relative", base))
 	if len(names) == 0 {
 		return byFile
 	}
-	patch := git("diff", "--text", "--diff-filter=ACMR", "-M", "-C", "--find-copies-harder", "-U0", "--relative", base)
+	patch := git(ctx, "diff", "--text", "--diff-filter=ACMR", "-M", "-C", "--find-copies-harder", "-U0", "--relative", base)
 	blocks := splitDiffBlocks(patch)
 	for i, path := range names {
 		if strings.HasPrefix(path, "../") {
@@ -288,8 +289,8 @@ func spansAddedLine(start, end int, added map[int]bool) bool {
 	return false
 }
 
-func git(args ...string) string {
-	cmd := exec.Command("git", append([]string{"-c", "core.quotePath=false"}, args...)...)
+func git(ctx context.Context, args ...string) string {
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-c", "core.quotePath=false"}, args...)...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = os.Stderr

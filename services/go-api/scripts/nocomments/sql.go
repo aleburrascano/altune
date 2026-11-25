@@ -12,8 +12,6 @@ import (
 	pgquery "github.com/wasilibs/go-pgquery"
 )
 
-func init() { register(sqlKind) }
-
 var sqlKind = kind{
 	name:     "sql",
 	match:    matchSQLFile,

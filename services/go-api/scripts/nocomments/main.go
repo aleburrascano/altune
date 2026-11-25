@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -23,33 +24,33 @@ type target struct {
 }
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout))
+	os.Exit(run(context.Background(), os.Args[1:], os.Stdout))
 }
 
-func run(args []string, stdout io.Writer) int {
+func run(ctx context.Context, args []string, stdout io.Writer) int {
 	if len(args) == 0 {
 		_, _ = fmt.Fprintln(stdout, "usage: go run ./scripts/nocomments <strip|check|diff> <path>...")
 		return 2
 	}
 	switch args[0] {
 	case "strip":
-		return runStrip(args[1:], stdout)
+		return runStrip(ctx, args[1:], stdout)
 	case "check":
-		return runCheck(args[1:], stdout)
+		return runCheck(ctx, args[1:], stdout)
 	case "diff":
-		return runDiff(args[1:], stdout)
+		return runDiff(ctx, args[1:], stdout)
 	default:
 		_, _ = fmt.Fprintln(stdout, "usage: go run ./scripts/nocomments <strip|check|diff> <path>...")
 		return 2
 	}
 }
 
-func runStrip(args []string, stdout io.Writer) int {
+func runStrip(ctx context.Context, args []string, stdout io.Writer) int {
 	if len(args) == 0 {
 		_, _ = fmt.Fprintln(stdout, "usage: go run ./scripts/nocomments strip <path>...")
 		return 2
 	}
-	targets, err := resolveTargets(args)
+	targets, err := resolveTargets(ctx, args)
 	if err != nil {
 		_, _ = fmt.Fprintf(stdout, "%v\n", err)
 		return 2
@@ -163,12 +164,12 @@ func deleteSpans(src []byte, spans []span) []byte {
 	return out.Bytes()
 }
 
-func runCheck(args []string, stdout io.Writer) int {
+func runCheck(ctx context.Context, args []string, stdout io.Writer) int {
 	if len(args) == 0 {
 		_, _ = fmt.Fprintln(stdout, "usage: go run ./scripts/nocomments check <path>...")
 		return 2
 	}
-	targets, err := resolveTargets(args)
+	targets, err := resolveTargets(ctx, args)
 	if err != nil {
 		_, _ = fmt.Fprintf(stdout, "%v\n", err)
 		return 2
@@ -251,18 +252,18 @@ func reportedLines(k kind, src []byte) ([]int, error) {
 
 var hunkHeader = regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@`)
 
-func runDiff(args []string, stdout io.Writer) int {
+func runDiff(ctx context.Context, args []string, stdout io.Writer) int {
 	if len(args) != 1 {
 		_, _ = fmt.Fprintln(stdout, "usage: go run ./scripts/nocomments diff <base-ref>")
 		return 2
 	}
 	base := args[0]
-	root, err := repoRoot()
+	root, err := repoRoot(ctx)
 	if err != nil {
 		_, _ = fmt.Fprintf(stdout, "%v\n", err)
 		return 2
 	}
-	targets, err := diffTargets(root, base)
+	targets, err := diffTargets(ctx, root, base)
 	if err != nil {
 		_, _ = fmt.Fprintf(stdout, "%v\n", err)
 		return 2
@@ -274,14 +275,14 @@ func runDiff(args []string, stdout io.Writer) int {
 	return violationExit(stdout, violations)
 }
 
-func diffTargets(root, base string) ([]target, error) {
-	changed, err := changedFiles(root, base)
+func diffTargets(ctx context.Context, root, base string) ([]target, error) {
+	changed, err := changedFiles(ctx, root, base)
 	if err != nil {
 		return nil, err
 	}
 	var targets []target
 	for _, c := range changed {
-		t, ok, err := diffTarget(root, base, c)
+		t, ok, err := diffTarget(ctx, root, base, c)
 		if err != nil {
 			return nil, err
 		}
@@ -292,7 +293,7 @@ func diffTargets(root, base string) ([]target, error) {
 	return targets, nil
 }
 
-func diffTarget(root, base string, c change) (target, bool, error) {
+func diffTarget(ctx context.Context, root, base string, c change) (target, bool, error) {
 	full := filepath.Join(root, c.path)
 	k, ok, err := matchKind(full)
 	if err != nil {
@@ -301,15 +302,15 @@ func diffTarget(root, base string, c change) (target, bool, error) {
 	if !ok {
 		return target{}, false, nil
 	}
-	added, err := addedLines(root, base, c)
+	added, err := addedLines(ctx, root, base, c)
 	if err != nil {
 		return target{}, false, err
 	}
 	return target{display: c.path, read: full, kind: k, added: added}, true, nil
 }
 
-func repoRoot() (string, error) {
-	out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+func repoRoot(ctx context.Context) (string, error) {
+	out, err := exec.CommandContext(ctx, "git", "rev-parse", "--show-toplevel").Output()
 	if err != nil {
 		return "", fmt.Errorf("git rev-parse --show-toplevel: %w", err)
 	}
@@ -321,8 +322,8 @@ type change struct {
 	from string
 }
 
-func changedFiles(root, base string) ([]change, error) {
-	out, err := gitIn(root, "diff", "-M", "-C", "--name-status", "--diff-filter=ACMRC", base)
+func changedFiles(ctx context.Context, root, base string) ([]change, error) {
+	out, err := gitIn(ctx, root, "diff", "-M", "-C", "--name-status", "--diff-filter=ACMRC", base)
 	if err != nil {
 		return nil, err
 	}
@@ -355,13 +356,13 @@ func parseNameStatusLine(line string) (change, error) {
 	return change{path: fields[1]}, nil
 }
 
-func addedLines(root, base string, c change) (map[int]bool, error) {
+func addedLines(ctx context.Context, root, base string, c change) (map[int]bool, error) {
 	pathArgs := []string{c.path}
 	if c.from != "" && c.from != c.path {
 		pathArgs = []string{c.from, c.path}
 	}
 	args := append([]string{"diff", "-M", "-C", "-U0", base, "--"}, pathArgs...)
-	out, err := gitIn(root, args...)
+	out, err := gitIn(ctx, root, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -387,8 +388,8 @@ func addHunkLines(added map[int]bool, line string) {
 	}
 }
 
-func gitIn(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
+func gitIn(ctx context.Context, dir string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	var out, errOut bytes.Buffer
 	cmd.Stdout = &out
@@ -399,10 +400,10 @@ func gitIn(dir string, args ...string) (string, error) {
 	return out.String(), nil
 }
 
-func resolveTargets(args []string) ([]target, error) {
+func resolveTargets(ctx context.Context, args []string) ([]target, error) {
 	var targets []target
 	for _, arg := range args {
-		found, err := collectTargets(arg)
+		found, err := collectTargets(ctx, arg)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", arg, err)
 		}
@@ -411,7 +412,7 @@ func resolveTargets(args []string) ([]target, error) {
 	return targets, nil
 }
 
-func collectTargets(root string) ([]target, error) {
+func collectTargets(ctx context.Context, root string) ([]target, error) {
 	info, err := os.Stat(root)
 	if err != nil {
 		return nil, err
@@ -426,11 +427,11 @@ func collectTargets(root string) ([]target, error) {
 	if walkErr != nil {
 		return nil, walkErr
 	}
-	return withoutIgnored(root, targets)
+	return withoutIgnored(ctx, root, targets)
 }
 
-func withoutIgnored(root string, targets []target) ([]target, error) {
-	ignored, err := gitIgnored(root, targets)
+func withoutIgnored(ctx context.Context, root string, targets []target) ([]target, error) {
+	ignored, err := gitIgnored(ctx, root, targets)
 	if err != nil {
 		return nil, err
 	}
@@ -443,12 +444,12 @@ func withoutIgnored(root string, targets []target) ([]target, error) {
 	return kept, nil
 }
 
-func gitIgnored(root string, targets []target) (map[string]bool, error) {
+func gitIgnored(ctx context.Context, root string, targets []target) (map[string]bool, error) {
 	absolute, paths, err := absolutePaths(targets)
 	if err != nil {
 		return nil, err
 	}
-	listed, err := checkIgnore(root, paths)
+	listed, err := checkIgnore(ctx, root, paths)
 	if err != nil {
 		return nil, err
 	}
@@ -475,8 +476,8 @@ func absolutePaths(targets []target) (map[string]string, io.Reader, error) {
 	return absolute, &paths, nil
 }
 
-func checkIgnore(root string, paths io.Reader) (string, error) {
-	cmd := exec.Command("git", "check-ignore", "--stdin", "-z")
+func checkIgnore(ctx context.Context, root string, paths io.Reader) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "check-ignore", "--stdin", "-z")
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), "LC_ALL=C")
 	cmd.Stdin = paths

@@ -81,7 +81,7 @@ func search(ctx context.Context, searcher Searcher) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if output == nil || len(output.Results) == 0 {
+	if len(output.Results) == 0 {
 		return 0, errNoResults
 	}
 	return len(output.Results), nil

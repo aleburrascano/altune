@@ -13,11 +13,6 @@ import (
 	xhtml "golang.org/x/net/html"
 )
 
-func init() {
-	register(markdownKind)
-	register(htmlKind)
-}
-
 var markdownKind = kind{
 	name:     "markdown",
 	match:    matchMarkdownFile,

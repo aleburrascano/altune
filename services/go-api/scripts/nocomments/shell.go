@@ -10,8 +10,6 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
-func init() { register(shellKind) }
-
 var shellKind = kind{
 	name:     "shell",
 	match:    matchShellFile,

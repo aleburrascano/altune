@@ -13,11 +13,6 @@ import (
 
 const yamlUTF8BOM = "\xEF\xBB\xBF"
 
-func init() {
-	register(workflowKind)
-	register(yamlKind)
-}
-
 var workflowKind = kind{
 	name:      "workflow",
 	match:     matchWorkflowFile,
