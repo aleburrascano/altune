@@ -3,12 +3,10 @@ package service
 import (
 	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/acquisition/internal/adapters/catalogpin"
-	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/service/upgrade"
 	"altune/go-api/internal/shared/events"
-	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"encoding/json"
 	"errors"
@@ -20,6 +18,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
+
+	shared "altune/go-api/internal/shared/kernel"
 
 	"github.com/google/uuid"
 )
@@ -182,8 +184,6 @@ func TestAcquireTrackAudioService_Execute_FailedStatus_RetriesToAcquire(t *testi
 	_ = svc.Execute(context.Background(), userId, track.ID)
 
 	updated := storedTrack(t, ledger, track)
-	if updated.Status == ports.TrackPending {
-	}
 	if updated.FailureReason == "previous failure reason" {
 		t.Error("expected failure reason to change after retry attempt, but it remained the original")
 	}
@@ -2152,7 +2152,7 @@ func TestExecute_AnExpiredOwnTimeBudgetOnTheLastAttemptIsSourceUnavailable(t *te
 
 type replaceFixture struct {
 	svc    *AcquireTrackAudioService
-	ledger   *acquisitiontest.Ledger
+	ledger *acquisitiontest.Ledger
 	track  ledgerTrack
 	store  *fakeAudioStore
 	pub    *recordingPublisher

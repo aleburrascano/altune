@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/internal/core/rejectionlog"
-	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -17,6 +16,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	shared "altune/go-api/internal/shared/kernel"
 
 	"github.com/google/uuid"
 )

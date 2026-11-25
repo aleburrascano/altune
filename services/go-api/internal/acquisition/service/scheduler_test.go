@@ -3,12 +3,8 @@ package service
 import (
 	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/acquisition/internal/adapters/memqueue"
-	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
-	acqports "altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/service/upgrade"
-	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/shared/events"
-	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/logging"
 	"bytes"
 	"context"
@@ -22,6 +18,11 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
+	acqports "altune/go-api/internal/acquisition/internal/core/ports"
+
+	shared "altune/go-api/internal/shared/kernel"
 
 	"github.com/google/uuid"
 )
@@ -202,10 +203,6 @@ func (s *fakeAudioStore) Store(_ context.Context, _ string, audioRef string) err
 	}
 	s.stored[audioRef] = true
 	return nil
-}
-
-func (s *fakeAudioStore) Stream(_ context.Context, _ string) (catalog.AudioStream, int64, error) {
-	return nil, 0, nil
 }
 
 func (s *fakeAudioStore) Delete(_ context.Context, audioRef string) error {
@@ -669,8 +666,6 @@ func (r *burstLedger) Get(_ context.Context, _ shared.TrackId, _ shared.UserId) 
 	return nil, nil
 }
 
-
-
 func TestBackgroundScheduler_BoundsQueueDepthUnderBurst(t *testing.T) {
 	ledger := &burstLedger{started: make(chan struct{}), release: make(chan struct{})}
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
@@ -834,7 +829,6 @@ func (r *blockingLedger) Get(_ context.Context, _ shared.TrackId, _ shared.UserI
 	return nil, nil
 }
 
-
 func TestBackgroundScheduler_Schedule_DedupsConcurrentRun_ButReplaysAfterSettle(t *testing.T) {
 	ledger := &blockingLedger{started: make(chan struct{}), release: make(chan struct{})}
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
@@ -880,7 +874,6 @@ func (r *countingLedger) Get(_ context.Context, _ shared.TrackId, _ shared.UserI
 	return nil, nil
 }
 
-
 func TestBackgroundScheduler_Schedule_AfterShutdown_NoOp(t *testing.T) {
 	ledger := &countingLedger{}
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
@@ -906,7 +899,6 @@ type panicLedger struct{ emptyLedger }
 func (r *panicLedger) Get(_ context.Context, _ shared.TrackId, _ shared.UserId) (*acqports.TrackSnapshot, error) {
 	panic("boom")
 }
-
 
 func TestBackgroundScheduler_Schedule_RecoversFromPanic(t *testing.T) {
 	svc := newTestAcquireService(&panicLedger{}, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
