@@ -14,6 +14,9 @@ type setupConfig struct {
 }
 
 func WithClock(now func() time.Time) SetupOption {
+	if now == nil {
+		panic("logging: WithClock requires a clock")
+	}
 	return func(c *setupConfig) { c.now = now }
 }
 

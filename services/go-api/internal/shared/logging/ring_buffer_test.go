@@ -277,6 +277,24 @@ func TestSetup_RingBufferEvictsByTheInjectedClockNotTheWallClock(t *testing.T) {
 	}
 }
 
+func TestRingBufferClockIsRequired(t *testing.T) {
+	tests := map[string]func(){
+		"NewRingBuffer": func() { logging.NewRingBuffer(4, nil) },
+		"WithClock":     func() { logging.WithClock(nil) },
+	}
+	for name, build := range tests {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatal("a nil clock was accepted, want a panic at construction")
+				}
+			}()
+
+			build()
+		})
+	}
+}
+
 func TestRingBuffer_KeepsARecordExactlyAtTheRetentionEdge(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		logger, ring := newCaptureLogger(t)

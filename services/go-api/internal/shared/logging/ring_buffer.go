@@ -41,6 +41,9 @@ type RingBuffer struct {
 func (rb *RingBuffer) Dropped() uint64 { return rb.dropped.Load() }
 
 func NewRingBuffer(capacity int, now func() time.Time) *RingBuffer {
+	if now == nil {
+		panic("logging: NewRingBuffer requires a clock")
+	}
 	if capacity < 1 {
 		capacity = 1
 	}
