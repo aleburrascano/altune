@@ -13,7 +13,6 @@ type EvalResult = discovery.SmokeResult
 type EvalRunner func(ctx context.Context) (EvalResult, error)
 
 func (a *App) keepSearches(disc *discovery.Discovery) {
-	a.searchSvc = disc.Search
 	a.evalSearch = disc.RankingOnlySearch()
 }
 

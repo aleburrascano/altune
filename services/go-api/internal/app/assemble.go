@@ -95,7 +95,7 @@ type features struct {
 }
 
 func (a *App) wireFeatures(ctx context.Context, transport http.RoundTripper) (features, error) {
-	background, err := runloop.NewTracker(runloop.TrackerLimits{MaxInFlight: backgroundMaxInFlight})
+	background, err := runloop.NewTracker(runloop.TrackerLimits{MaxInFlight: a.cfg.BackgroundMaxInFlight})
 	if err != nil {
 		return features{}, fmt.Errorf("background tracker: %w", err)
 	}

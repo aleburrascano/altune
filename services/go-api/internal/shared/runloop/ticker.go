@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"sync"
 	"time"
 )
 
@@ -43,10 +42,8 @@ func RunJob(parent context.Context, control *JobControl, name string, budget tim
 	control.Record(err)
 }
 
-func Every(ctx context.Context, wg *sync.WaitGroup, interval time.Duration, run func()) {
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+func Every(ctx context.Context, bg *Tracker, interval time.Duration, run func()) {
+	bg.Track(func() {
 		run()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -58,18 +55,16 @@ func Every(ctx context.Context, wg *sync.WaitGroup, interval time.Duration, run 
 				run()
 			}
 		}
-	}()
+	})
 }
 
-func StartWhenLeader(ctx context.Context, wg *sync.WaitGroup, await func(context.Context) bool, starts []NamedStart) {
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+func StartWhenLeader(ctx context.Context, bg *Tracker, await func(context.Context) bool, starts []NamedStart) {
+	bg.Track(func() {
 		if !await(ctx) {
 			return
 		}
 		for _, job := range starts {
 			_ = Try(ctx, backgroundJobPanic, func() { job.Start(ctx) }, "job", job.Name)
 		}
-	}()
+	})
 }

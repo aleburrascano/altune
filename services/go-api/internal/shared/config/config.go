@@ -144,6 +144,8 @@ type Config struct {
 
 	SSEMaxConns int `env:"SSE_MAX_CONNS" envDefault:"2048"`
 
+	BackgroundMaxInFlight int `env:"BACKGROUND_MAX_IN_FLIGHT" envDefault:"64"`
+
 	AcquisitionPaused bool     `env:"ACQUISITION_PAUSED" envDefault:"false"`
 	DisabledJobs      []string `env:"DISABLED_JOBS" envSeparator:","`
 }

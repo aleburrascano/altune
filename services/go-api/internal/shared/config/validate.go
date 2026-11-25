@@ -231,6 +231,9 @@ func (c *Config) validateTuning() error {
 	if c.AcquisitionConcurrency < 1 {
 		return fmt.Errorf("ACQUISITION_CONCURRENCY must be >= 1, got %d", c.AcquisitionConcurrency)
 	}
+	if c.BackgroundMaxInFlight < 1 {
+		return fmt.Errorf("BACKGROUND_MAX_IN_FLIGHT must be >= 1, got %d", c.BackgroundMaxInFlight)
+	}
 	if c.AcquisitionDownloadConcurrency < 1 {
 		return fmt.Errorf("ACQUISITION_DOWNLOAD_CONCURRENCY must be >= 1, got %d", c.AcquisitionDownloadConcurrency)
 	}
