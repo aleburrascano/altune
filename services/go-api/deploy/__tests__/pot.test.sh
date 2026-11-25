@@ -36,7 +36,7 @@ CASE="staging go-api never reaches the prod token provider"
 grep -qF "altune-pot:" "$HERE/compose.staging.yml" && fail "staging points at the prod provider"
 
 CASE="the Dockerfile pins yt-dlp with its challenge solver and the token plugin"
-grep -qF 'yt-dlp[default]==2026.8.19' "$HERE/Dockerfile" || fail "yt-dlp[default]==2026.8.19 not pinned"
+grep -qF 'yt-dlp[default]==2026.11.23' "$HERE/Dockerfile" || fail "yt-dlp[default]==2026.11.23 not pinned"
 grep -qF 'bgutil-ytdlp-pot-provider==2.0.2' "$HERE/Dockerfile" || fail "bgutil plugin not pinned"
 
 if [ "$FAILURES" -gt 0 ]; then
