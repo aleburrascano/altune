@@ -114,10 +114,15 @@ SQL
 
 write_env() {
     local prod_db=${1:-prod} staging_db=${2:-staging}
-    printf 'DATABASE_URL=postgresql://postgres:pw@127.0.0.1:5432/%s\nSUPABASE_PROJECT_URL=https://prod.supabase.co\n' \
+    printf 'DATABASE_URL=postgresql://app:pw@127.0.0.1:5432/%s\nSUPABASE_PROJECT_URL=https://prod.supabase.co\n' \
         "$prod_db" >"$WORK/api/.env.production"
-    printf 'DATABASE_URL=postgresql://postgres:pw@127.0.0.1:5432/%s\nSUPABASE_PROJECT_URL=https://staging.supabase.co\n' \
+    printf 'DATABASE_URL=postgresql://app:pw@127.0.0.1:5432/%s\nSUPABASE_PROJECT_URL=https://staging.supabase.co\n' \
         "$staging_db" >"$WORK/api/.env.staging"
+    printf 'MIGRATE_DATABASE_URL=postgresql://postgres:pw@127.0.0.1:5432/%s\n' \
+        "$prod_db" >"$WORK/api/.env.migrate.production"
+    printf 'MIGRATE_DATABASE_URL=postgresql://postgres:pw@127.0.0.1:5432/%s\n' \
+        "$staging_db" >"$WORK/api/.env.migrate.staging"
+    chmod 600 "$WORK/api/.env.migrate.production" "$WORK/api/.env.migrate.staging"
 }
 
 run_sync() {
@@ -202,6 +207,11 @@ test_env_gates() {
     rm "$WORK/api/.env.staging"
     check "a missing staging env file is refused" 1 "$(sync_refused)"
     check "a refused run leaves staging untouched" 1 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T_STALE'")"
+
+    write_env
+    rm "$WORK/api/.env.migrate.staging"
+    check "a missing staging migrator file is refused" 1 "$(sync_refused)"
+    check "the refusal names the migrator file" 1 "$(grep -c 'env.migrate.staging not found' "$WORK/out")"
 
     write_env
     sql staging -c "DELETE FROM auth.users WHERE id = '$S1'"

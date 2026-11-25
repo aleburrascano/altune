@@ -61,9 +61,9 @@ func (r *PgxFavoritesRepository) Remove(ctx context.Context, userId shared.UserI
 
 const eraseFavoritesOfDeletedIdentitiesSQL = `
 	DELETE FROM discovery_favorites f
-	WHERE EXISTS (SELECT 1 FROM auth.users)
+	WHERE EXISTS (SELECT 1 FROM auth_user_ids)
 	  AND f.user_id <> $1
-	  AND NOT EXISTS (SELECT 1 FROM auth.users u WHERE u.id = f.user_id)`
+	  AND NOT EXISTS (SELECT 1 FROM auth_user_ids u WHERE u.id = f.user_id)`
 
 func (r *PgxFavoritesRepository) EraseRowsOfDeletedIdentities(ctx context.Context) (int64, error) {
 	return eraseRowsOfDeletedIdentities(ctx, r.pool,

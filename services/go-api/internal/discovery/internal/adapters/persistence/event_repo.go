@@ -267,9 +267,9 @@ func (r *PgxEventStore) AbandonedSearches(ctx context.Context, since time.Time, 
 
 const eraseEventsOfDeletedIdentitiesSQL = `
 	DELETE FROM discovery_events e
-	WHERE EXISTS (SELECT 1 FROM auth.users)
+	WHERE EXISTS (SELECT 1 FROM auth_user_ids)
 	  AND e.user_id <> $1
-	  AND NOT EXISTS (SELECT 1 FROM auth.users u WHERE u.id = e.user_id)`
+	  AND NOT EXISTS (SELECT 1 FROM auth_user_ids u WHERE u.id = e.user_id)`
 
 func (r *PgxEventStore) EraseRowsOfDeletedIdentities(ctx context.Context) (int64, error) {
 	return eraseRowsOfDeletedIdentities(ctx, r.pool,
