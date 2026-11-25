@@ -1,0 +1,283 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gocritic
+    - errorlint
+    - bodyclose
+    - unconvert
+    - nilerr
+    - misspell
+    - dupl
+    - revive
+    - forbidigo
+    - depguard
+    - testpackage
+    - nilnil
+    - exhaustive
+    - noctx
+    - errchkjson
+    - errname
+    - gochecknoinits
+    - usestdlibvars
+    - musttag
+    - usetesting
+    - nilnesserr
+    - durationcheck
+
+  settings:
+    exhaustive:
+      default-signifies-exhaustive: true
+    dupl:
+      threshold: 150
+    testpackage:
+      skip-regexp: ^$
+    depguard:
+      rules:
+        feature-buckets:
+          files: ["**/internal/buckets/**"]
+          deny:
+            - pkg: altune/overseer/internal/app
+              desc: a feature never imports another feature or internal/app, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/shell
+              desc: a feature never imports another feature or internal/app, connect them in internal/app (read services/overseer/internal/README.md)
+        feature-bucket-backendperf:
+          files: ["**/internal/buckets/backendperf/**"]
+          deny:
+            - pkg: altune/overseer/internal/buckets/cost
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/domainquality
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/heartbeat
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/liveactivity
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/logs
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/reliability
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/security
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/usage
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+        feature-bucket-cost:
+          files: ["**/internal/buckets/cost/**"]
+          deny:
+            - pkg: altune/overseer/internal/buckets/backendperf
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/domainquality
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/heartbeat
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/liveactivity
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/logs
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/reliability
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/security
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/usage
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+        feature-bucket-domainquality:
+          files: ["**/internal/buckets/domainquality/**"]
+          deny:
+            - pkg: altune/overseer/internal/buckets/backendperf
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/cost
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/heartbeat
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/liveactivity
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/logs
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/reliability
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/security
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/usage
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+        feature-bucket-heartbeat:
+          files: ["**/internal/buckets/heartbeat/**"]
+          deny:
+            - pkg: altune/overseer/internal/buckets/backendperf
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/cost
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/domainquality
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/liveactivity
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/logs
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/reliability
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/security
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/usage
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+        feature-bucket-liveactivity:
+          files: ["**/internal/buckets/liveactivity/**"]
+          deny:
+            - pkg: altune/overseer/internal/buckets/backendperf
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/cost
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/domainquality
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/heartbeat
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/logs
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/reliability
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/security
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/usage
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+        feature-bucket-logs:
+          files: ["**/internal/buckets/logs/**"]
+          deny:
+            - pkg: altune/overseer/internal/buckets/backendperf
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/cost
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/domainquality
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/heartbeat
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/liveactivity
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/reliability
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/security
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/usage
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+        feature-bucket-reliability:
+          files: ["**/internal/buckets/reliability/**"]
+          deny:
+            - pkg: altune/overseer/internal/buckets/backendperf
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/cost
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/domainquality
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/heartbeat
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/liveactivity
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/logs
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/security
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/usage
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+        feature-bucket-security:
+          files: ["**/internal/buckets/security/**"]
+          deny:
+            - pkg: altune/overseer/internal/buckets/backendperf
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/cost
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/domainquality
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/heartbeat
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/liveactivity
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/logs
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/reliability
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/usage
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+        feature-bucket-usage:
+          files: ["**/internal/buckets/usage/**"]
+          deny:
+            - pkg: altune/overseer/internal/buckets/backendperf
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/cost
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/domainquality
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/heartbeat
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/liveactivity
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/logs
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/reliability
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets/security
+              desc: a bucket never imports another bucket, connect them in internal/app (read services/overseer/internal/README.md)
+        feature-shell:
+          files: ["**/internal/shell/**"]
+          deny:
+            - pkg: altune/overseer/internal/app
+              desc: a feature never imports another feature or internal/app, connect them in internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets
+              desc: a feature never imports another feature or internal/app, connect them in internal/app (read services/overseer/internal/README.md)
+        shared:
+          files:
+            - "**/internal/authn/**"
+            - "**/internal/config/**"
+            - "**/internal/core/**"
+            - "**/internal/goapi/**"
+            - "**/internal/history/**"
+            - "**/internal/oci/**"
+            - "**/internal/webui/**"
+          deny:
+            - pkg: altune/overseer/internal/app
+              desc: a shared module never imports a feature or internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/shell
+              desc: a shared module never imports a feature or internal/app (read services/overseer/internal/README.md)
+            - pkg: altune/overseer/internal/buckets
+              desc: a shared module never imports a feature or internal/app (read services/overseer/internal/README.md)
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^os\.(Getenv|LookupEnv|Environ)$
+          msg: read settings once in internal/config and pass them in
+
+    revive:
+      rules:
+        - name: indent-error-flow
+        - name: superfluous-else
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+        - style
+      disabled-checks:
+        - hugeParam
+        - rangeValCopy
+        - unnamedResult
+
+  exclusions:
+    generated: lax
+    paths:
+      - node_modules/
+    rules:
+      - path: _test\.go
+        linters:
+          - dupl
+          - errcheck
+          - gocritic
+          - revive
+          - forbidigo
+          - noctx
+      - path: ^cmd/
+        linters:
+          - forbidigo
+
+formatters:
+  enable:
+    - gofumpt

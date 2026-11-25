@@ -123,8 +123,9 @@ func walkUncovered(path string, fixture json.RawMessage, typ reflect.Type, stric
 			out = append(out, walkUncovered(path+"."+k, entries[k], typ.Elem(), strict)...)
 		}
 		return out
+	default:
+		return nil
 	}
-	return nil
 }
 
 func needsKeys(typ reflect.Type) bool {

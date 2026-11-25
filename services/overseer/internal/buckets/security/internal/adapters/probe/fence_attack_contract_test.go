@@ -22,7 +22,7 @@ func (t *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error
 	t.mu.Lock()
 	t.hosts = append(t.hosts, req.URL.Hostname())
 	t.mu.Unlock()
-	return &http.Response{StatusCode: 401, Body: http.NoBody, Header: make(http.Header)}, nil
+	return &http.Response{StatusCode: http.StatusUnauthorized, Body: http.NoBody, Header: make(http.Header)}, nil
 }
 
 func (t *recordingTransport) seen() []string {
