@@ -22,7 +22,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	logRing := logging.Setup(cfg.LogLevel, cfg.IsDevelopment())
+	logRing := logging.Setup(cfg.LogLevel, cfg.IsDevelopment(), logging.WithClock(time.Now))
 
 	if len(os.Args) < 2 {
 		runServer(cfg, logRing)
