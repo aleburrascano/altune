@@ -11,7 +11,7 @@ import {
   useDownloadStore,
   useTrackStatusStore,
 } from '@shared/acquisition';
-import { installAuthClient, supabase, useSession, useSignOut } from '@shared/auth';
+import { installAuthClient, useSession, useSignOut } from '@shared/auth';
 import type { DiscoveryResult } from '@shared/catalog';
 import { asTrackId } from '@shared/catalog';
 import {
@@ -235,6 +235,7 @@ describe('session restore across process death', () => {
         status: 'signed-in',
         session: { user: { id: FIXTURE_USER_ID } },
       });
+      unmount();
       await restarted.auth.stopAutoRefresh();
     });
 
@@ -249,6 +250,7 @@ describe('session restore across process death', () => {
       await waitFor(() => {
         expect(result.current.status).toBe('signed-out');
       });
+      unmount();
       await fresh.auth.stopAutoRefresh();
     });
   });

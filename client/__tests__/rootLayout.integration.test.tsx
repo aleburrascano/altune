@@ -304,7 +304,7 @@ describe('app chrome: the player bar reflects the live queue', () => {
   it('offers a next-track control once a second track is queued', async () => {
     setPlatformOS('web');
     setWindowWidth(1440);
-    const { useQueueStore } = require('@shared/playback/queueStore');
+    const { useQueueStore } = require('@shared/playback');
     useQueueStore.getState().loadQueue(
       [
         {

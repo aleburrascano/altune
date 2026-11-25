@@ -24,7 +24,15 @@ export function scriptedAuth(
       getSession: async () => ({ data: { session: current }, error: null }),
       onAuthStateChange: (listener: AuthListener) => {
         listeners.add(listener);
-        return { data: { subscription: { unsubscribe: () => listeners.delete(listener) } } };
+        return {
+          data: {
+            subscription: {
+              unsubscribe: () => {
+                listeners.delete(listener);
+              },
+            },
+          },
+        };
       },
       signOut: async () => signOut(),
     }),

@@ -242,7 +242,7 @@ describe('tabs layout: does not mount the web keyboard shortcuts on its own', ()
 
 describe('tabs layout: renders no player bar of its own even with a queued second track', () => {
   it('renders no player bar on a 1440px web window', async () => {
-    const { useQueueStore } = require('@shared/playback/queueStore');
+    const { useQueueStore } = require('@shared/playback');
     useQueueStore.getState().loadQueue(
       [
         {

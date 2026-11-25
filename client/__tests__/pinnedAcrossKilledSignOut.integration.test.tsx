@@ -1,10 +1,12 @@
+import type { ReactNode } from 'react';
+import type * as React from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { waitFor } from '@testing-library/react-native';
+import type * as ReactQuery from '@tanstack/react-query';
+import type * as RenderTesting from '@testing-library/react-native/pure';
 
 import type * as AuthDoor from '@shared/auth';
 import { asTrackId } from '@shared/catalog';
 import type * as OfflineDoor from '@shared/offline';
-import type * as SessionDoor from '@shared/session';
 import { scriptedAuth } from '@testing/scriptedAuth';
 
 const { __http } = require('@testing/doubles/fetch.js');
@@ -17,8 +19,10 @@ describe('pinned downloads across a killed sign-out', () => {
   };
 
   type App = {
+    react: typeof React;
+    query: typeof ReactQuery;
+    testing: typeof RenderTesting;
     auth: typeof AuthDoor;
-    session: typeof SessionDoor;
     pinned: typeof OfflineDoor;
   };
 
@@ -43,8 +47,10 @@ describe('pinned downloads across a killed sign-out', () => {
 
   function bootApp(): App {
     const app: App = {
+      react: require('react'),
+      query: require('@tanstack/react-query'),
+      testing: require('@testing-library/react-native/pure'),
       auth: require('@shared/auth'),
-      session: require('@shared/session'),
       pinned: require('@shared/offline'),
     };
     app.pinned.provideOfflinePort(require('@testing/apiClientPorts').apiClientOfflinePort);
@@ -59,9 +65,14 @@ describe('pinned downloads across a killed sign-out', () => {
     return bootApp();
   }
 
-  function signIn(app: App, userId: string): void {
+  async function signIn(app: App, userId: string): Promise<() => void> {
     scriptedAuth(app.auth.installAuthClient, sessionFor(userId));
-    app.session.notifyIdentityChange(userId);
+    const client = new app.query.QueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      app.react.createElement(app.query.QueryClientProvider, { client }, children);
+    const hook = app.testing.renderHook(() => app.auth.useSession(), { wrapper });
+    await app.testing.waitFor(() => expect(hook.result.current.status).toBe('signed-in'));
+    return hook.unmount;
   }
 
   async function pinAsReady(app: App, trackId: string): Promise<void> {
@@ -72,7 +83,7 @@ describe('pinned downloads across a killed sign-out', () => {
       },
     });
     app.pinned.usePinnedStore.getState().pin(asTrackId(trackId));
-    await waitFor(() =>
+    await app.testing.waitFor(() =>
       expect(app.pinned.usePinnedStore.getState().entries[trackId]?.status).toBe('ready'),
     );
   }
@@ -84,14 +95,15 @@ describe('pinned downloads across a killed sign-out', () => {
   describe('pinned downloads never cross accounts after a killed sign-out', () => {
     it('B signing in after A was killed mid sign-out sees and plays none of A downloads', async () => {
       const first = bootApp();
-      signIn(first, USER_A);
+      const unmountA = await signIn(first, USER_A);
       await pinAsReady(first, 't1');
+      unmountA();
       expect(currentFs().readFile(AUDIO_URI)).toBeDefined();
 
       const second = killAndRelaunch();
       expect(second.pinned.usePinnedStore.getState().entries['t1']).toBeDefined();
 
-      signIn(second, USER_B);
+      const unmountB = await signIn(second, USER_B);
 
       expect(second.pinned.usePinnedStore.getState().entries).toEqual({});
       expect(second.pinned.resolvePinnedUri(asTrackId('t1'))).toBeUndefined();
@@ -101,6 +113,7 @@ describe('pinned downloads across a killed sign-out', () => {
         schemaVersion: 1,
         entries: {},
       });
+      unmountB();
 
       const third = killAndRelaunch();
       expect(third.pinned.usePinnedStore.getState().entries).toEqual({});
@@ -108,14 +121,16 @@ describe('pinned downloads across a killed sign-out', () => {
 
     it('A relaunching into their own session keeps their downloads', async () => {
       const first = bootApp();
-      signIn(first, USER_A);
+      const unmountA = await signIn(first, USER_A);
       await pinAsReady(first, 't1');
+      unmountA();
 
       const second = killAndRelaunch();
-      signIn(second, USER_A);
+      const unmountAgain = await signIn(second, USER_A);
 
       expect(second.pinned.resolvePinnedUri(asTrackId('t1'))).toBe(AUDIO_URI);
       expect(currentFs().readFile(AUDIO_URI)).toBeDefined();
+      unmountAgain();
     });
 
     it('downloads of unknown owner (written before ownership was recorded) are cleared, not adopted', async () => {
@@ -127,10 +142,11 @@ describe('pinned downloads across a killed sign-out', () => {
       );
       const app = killAndRelaunch();
 
-      signIn(app, USER_B);
+      const unmountB = await signIn(app, USER_B);
 
       expect(app.pinned.resolvePinnedUri(asTrackId('t1'))).toBeUndefined();
       expect(currentFs().allFiles()[AUDIO_URI]).toBeUndefined();
+      unmountB();
     });
   });
 });
