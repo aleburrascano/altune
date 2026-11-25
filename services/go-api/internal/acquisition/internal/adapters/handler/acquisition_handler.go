@@ -2,6 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/shared/domain"
 	"altune/go-api/internal/shared/httputil"
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/requestuser"
@@ -46,7 +47,7 @@ func (c acquisitionCommand) serve(w http.ResponseWriter, r *http.Request) {
 func (c acquisitionCommand) resolveTrack(w http.ResponseWriter, r *http.Request, userId shared.UserId) (shared.TrackId, *ports.TrackSnapshot, bool) {
 	trackId, err := shared.ParseTrackId(chi.URLParam(r, "trackId"))
 	if err != nil {
-		httputil.BadRequest(w, "invalid track ID")
+		httputil.HandleServiceError(w, r, domain.NewError(domain.CodeCatalogInvalidTrackID, "invalid track ID"))
 		return trackId, nil, false
 	}
 	track, ok := c.loadTrack(w, r, userId, trackId)
@@ -57,11 +58,11 @@ func (c acquisitionCommand) loadTrack(w http.ResponseWriter, r *http.Request, us
 	track, err := c.trackRepo.Get(r.Context(), trackId, userId)
 	if err != nil {
 		slog.ErrorContext(r.Context(), c.logMsg, "error", err, "track_id", trackId.String())
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return nil, false
 	}
 	if track == nil {
-		httputil.NotFound(w, "track not found")
+		httputil.HandleServiceError(w, r, domain.NewError(domain.CodeCatalogTrackNotFound, "track not found"))
 		return nil, false
 	}
 	return track, true

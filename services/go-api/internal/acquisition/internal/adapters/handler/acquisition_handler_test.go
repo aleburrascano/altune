@@ -605,3 +605,38 @@ func TestHandlers_AnotherUsersTrackIsAnsweredExactlyLikeAMissingOne(t *testing.T
 		})
 	}
 }
+
+func TestHandlers_RefusalsAreProblemDocumentsWithACode(t *testing.T) {
+	routes := map[string]func() (chi.Router, string){
+		"reacquire": func() (chi.Router, string) {
+			return buildReacquireRouter(acquisitiontest.NewLedger(), &reacquireFakeScheduler{}), "reacquire"
+		},
+		"retry": func() (chi.Router, string) {
+			return buildRetryRouter(acquisitiontest.NewLedger(), &retryFakeScheduler{}), "retry"
+		},
+	}
+	refusals := map[string]struct {
+		id         string
+		wantStatus int
+		wantCode   string
+	}{
+		"malformed id":  {"not-a-uuid", http.StatusBadRequest, "catalog.invalid_track_id"},
+		"unknown track": {uuid.New().String(), http.StatusNotFound, "catalog.track_not_found"},
+	}
+	for routeName, build := range routes {
+		for refusalName, want := range refusals {
+			t.Run(routeName+"/"+refusalName, func(t *testing.T) {
+				router, suffix := build()
+				rec := retryServe(t, router, http.MethodPost, "/tracks/"+want.id+"/"+suffix)
+				retryAssertStatus(t, rec, want.wantStatus)
+				if ct := rec.Header().Get("Content-Type"); ct != "application/problem+json" {
+					t.Errorf("Content-Type = %q, want application/problem+json", ct)
+				}
+				var body struct{ Code string }
+				if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body.Code != want.wantCode {
+					t.Errorf("body %s: code %q (decode error %v), want %q", rec.Body.String(), body.Code, err, want.wantCode)
+				}
+			})
+		}
+	}
+}
