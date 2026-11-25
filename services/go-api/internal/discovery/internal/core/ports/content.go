@@ -3,6 +3,12 @@ package ports
 import (
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
+	"errors"
+)
+
+var (
+	ErrArtistIdentityNotFound = errors.New("no artist matches the name exactly")
+	ErrDiscogsArtistNotFound  = errors.New("no discogs artist matches the name")
 )
 
 type ArtistIdentityResolver interface {

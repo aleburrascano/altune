@@ -439,7 +439,7 @@ func TestMusicBrainzAdapter_ResolveArtistIdentity(t *testing.T) {
 	}
 }
 
-func TestMusicBrainzAdapter_ResolveArtistIdentity_noExactMatchIsNil(t *testing.T) {
+func TestMusicBrainzAdapter_ResolveArtistIdentity_noExactMatchIsNotFound(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"artists": [{"id": "mbid-x", "name": "Radiohead Tribute Band"}]}`))
@@ -448,11 +448,11 @@ func TestMusicBrainzAdapter_ResolveArtistIdentity_noExactMatchIsNil(t *testing.T
 
 	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
 	id, err := adapter.ResolveArtistIdentity(context.Background(), "Radiohead")
-	if err != nil {
-		t.Fatalf("ResolveArtistIdentity: %v", err)
+	if !errors.Is(err, ports.ErrArtistIdentityNotFound) {
+		t.Fatalf("ResolveArtistIdentity error = %v, want ErrArtistIdentityNotFound when no result matches the name exactly", err)
 	}
 	if id != nil {
-		t.Errorf("identity = %+v, want nil when no result matches the name exactly", id)
+		t.Errorf("identity = %+v, want nil", id)
 	}
 }
 
@@ -709,7 +709,7 @@ func TestMusicBrainzAdapter_ResolveArtistIdentity_escapesLuceneMetacharacters(t 
 	defer server.Close()
 
 	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
-	if _, err := adapter.ResolveArtistIdentity(context.Background(), "Sunn O)))"); err != nil {
+	if _, err := adapter.ResolveArtistIdentity(context.Background(), "Sunn O)))"); !errors.Is(err, ports.ErrArtistIdentityNotFound) {
 		t.Fatalf("ResolveArtistIdentity: %v", err)
 	}
 

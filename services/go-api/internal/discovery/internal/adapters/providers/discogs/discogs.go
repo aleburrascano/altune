@@ -102,7 +102,7 @@ func (a *DiscogsAdapter) ResolveDiscogsArtist(ctx context.Context, name string, 
 		return nil, err
 	}
 	if len(artists) == 0 {
-		return nil, nil
+		return nil, ports.ErrDiscogsArtistNotFound
 	}
 	if len(artists) == 1 {
 		genre := strings.Join(artists[0].Genre, ", ")
