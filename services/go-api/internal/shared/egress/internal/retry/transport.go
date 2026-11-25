@@ -139,7 +139,11 @@ func rewindBody(req *http.Request) (io.ReadCloser, error) {
 	if req.GetBody == nil {
 		return nil, errors.New("live transport: request body is not replayable for retry")
 	}
-	return req.GetBody()
+	body, err := req.GetBody()
+	if err != nil {
+		return nil, fmt.Errorf("rewind the request body: %w", err)
+	}
+	return body, nil
 }
 
 func (t *Transport) retryDelay(attempt int, retryAfter time.Duration) time.Duration {

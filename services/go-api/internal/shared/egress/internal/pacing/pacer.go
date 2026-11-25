@@ -1,6 +1,7 @@
 package pacing
 
 import (
+	"fmt"
 	"net/http"
 	"sync"
 
@@ -54,7 +55,10 @@ func (p *Pacer) Wait(req *http.Request) error {
 	if l == nil {
 		return nil
 	}
-	return l.Wait(req.Context())
+	if err := l.Wait(req.Context()); err != nil {
+		return fmt.Errorf("wait for a pacing slot for %s: %w", req.URL.Host, err)
+	}
+	return nil
 }
 
 func (p *Pacer) limiter(host string) *rate.Limiter {

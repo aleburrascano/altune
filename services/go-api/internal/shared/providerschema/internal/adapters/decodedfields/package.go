@@ -66,11 +66,11 @@ func (p *goPackage) readFile(file string) error {
 	}
 	text, err := os.ReadFile(file)
 	if err != nil {
-		return err
+		return fmt.Errorf("read %s: %w", file, err)
 	}
 	parsed, err := parser.ParseFile(token.NewFileSet(), file, text, parser.SkipObjectResolution)
 	if err != nil {
-		return err
+		return fmt.Errorf("parse %s: %w", file, err)
 	}
 	ast.Inspect(parsed, p.learn)
 	return nil

@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/shared/domain"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -33,7 +34,7 @@ func DecodeJSONWithCode(w http.ResponseWriter, r *http.Request, dst any, invalid
 func decodeSingleValue(r *http.Request, dst any) error {
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(dst); err != nil {
-		return err
+		return fmt.Errorf("decode request body: %w", err)
 	}
 	if err := dec.Decode(&struct{}{}); err != io.EOF {
 		return errTrailingData

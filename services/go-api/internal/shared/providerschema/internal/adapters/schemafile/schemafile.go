@@ -35,5 +35,8 @@ func Save(path string, s schema.Schema) error {
 	if err := encoder.Encode(s.Sorted()); err != nil {
 		return fmt.Errorf("encode schema: %w", err)
 	}
-	return os.WriteFile(path, buf.Bytes(), 0o644)
+	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
 }

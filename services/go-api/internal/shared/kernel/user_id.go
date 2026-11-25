@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 )
@@ -42,7 +43,7 @@ func NewUserId(id uuid.UUID) UserId {
 func ParseUserId(s string) (UserId, error) {
 	id, err := uuid.Parse(s)
 	if err != nil {
-		return UserId{}, err
+		return UserId{}, fmt.Errorf("parse user id: %w", err)
 	}
 	return UserId{value: id}, nil
 }

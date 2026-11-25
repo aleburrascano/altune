@@ -10,6 +10,7 @@ import (
 	"time"
 
 	sharedRedis "altune/go-api/internal/shared/redis"
+
 	goredis "github.com/redis/go-redis/v9"
 )
 
@@ -135,7 +136,11 @@ func (b *Budget) Wait(ctx context.Context) error {
 func (b *Budget) reserve(ctx context.Context) (int64, error) {
 	commandCtx, cancel := context.WithTimeout(ctx, redisCommandDeadline)
 	defer cancel()
-	return reserveScript.Run(commandCtx, b.redis, []string{budgetKey}, b.settings.MinInterval.Milliseconds(), maxWaitMillis(ctx)).Int64()
+	reply, err := reserveScript.Run(commandCtx, b.redis, []string{budgetKey}, b.settings.MinInterval.Milliseconds(), maxWaitMillis(ctx)).Int64()
+	if err != nil {
+		return 0, fmt.Errorf("run the reserve script: %w", err)
+	}
+	return reply, nil
 }
 
 func maxWaitMillis(ctx context.Context) int64 {
@@ -149,7 +154,10 @@ func maxWaitMillis(ctx context.Context) int64 {
 func (b *Budget) CoolDown(ctx context.Context) error {
 	commandCtx, cancel := runloop.Detach(ctx, redisCommandDeadline)
 	defer cancel()
-	return coolScript.Run(commandCtx, b.redis, []string{budgetKey}, b.settings.Cooldown.Milliseconds()).Err()
+	if err := coolScript.Run(commandCtx, b.redis, []string{budgetKey}, b.settings.Cooldown.Milliseconds()).Err(); err != nil {
+		return fmt.Errorf("run the cooldown script: %w", err)
+	}
+	return nil
 }
 
 func (b *Budget) Transport(base http.RoundTripper) http.RoundTripper {
