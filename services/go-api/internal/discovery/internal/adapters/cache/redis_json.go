@@ -61,10 +61,7 @@ func (r redisJSON) getNegative(ctx context.Context, key string) (bool, error) {
 	if errors.Is(err, goredis.Nil) {
 		return false, nil
 	}
-	if err != nil {
-		return false, fmt.Errorf("read negative marker %s: %w", key, err)
-	}
-	return false, nil
+	return false, fmt.Errorf("read negative marker %s: %w", key, err)
 }
 
 func (r redisJSON) setJSON(ctx context.Context, key string, v any, ttl time.Duration) error {

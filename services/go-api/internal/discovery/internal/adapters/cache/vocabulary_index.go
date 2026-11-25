@@ -107,7 +107,7 @@ func (s *RedisVocabularyStore) Trim(ctx context.Context, maxEntries int) error {
 			continue
 		}
 		if err != nil {
-			return fmt.Errorf("trim the vocabulary: %w", err)
+			return fmt.Errorf("vocab trim: %w", err)
 		}
 		return nil
 	}
@@ -137,9 +137,6 @@ func (s *RedisVocabularyStore) trimTx(ctx context.Context, tx *goredis.Tx, maxEn
 		}
 		return nil
 	})
-	if errors.Is(err, goredis.TxFailedErr) {
-		return fmt.Errorf("trim the vocabulary in one transaction: %w", err)
-	}
 	if err != nil {
 		return fmt.Errorf("vocab trim: evict: %w", err)
 	}

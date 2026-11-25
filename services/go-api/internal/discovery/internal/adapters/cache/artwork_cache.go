@@ -84,7 +84,7 @@ func (c *RedisArtworkCache) Set(ctx context.Context, kind domain.ResultKind, tit
 			continue
 		}
 		if err != nil {
-			return fmt.Errorf("watch artwork cache entry %s: %w", key, err)
+			return fmt.Errorf("artwork set: %w", err)
 		}
 		return nil
 	}
