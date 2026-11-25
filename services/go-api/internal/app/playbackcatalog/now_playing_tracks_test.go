@@ -50,7 +50,7 @@ func TestNowPlayingTracks_MapsTheUsersCatalogTrack(t *testing.T) {
 }
 
 func TestNowPlayingTracks_AbsentTrackIsNotFound(t *testing.T) {
-	source := playbackcatalog.NewNowPlayingTracks(catalogTracksFunc(func(catalog.TrackId, shared.UserId) (*catalog.Track, error) { return nil, nil }))
+	source := playbackcatalog.NewNowPlayingTracks(catalogTracksFunc(func(catalog.TrackId, shared.UserId) (*catalog.Track, error) { return nil, catalog.ErrTrackNotFound }))
 
 	got, err := source.NowPlayingTrack(context.Background(), shared.NewUserId(uuid.New()), catalog.NewTrackId())
 	if got != nil || !errors.Is(err, playback.ErrNowPlayingTrackNotFound) {

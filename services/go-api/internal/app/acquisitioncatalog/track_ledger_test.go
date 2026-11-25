@@ -45,7 +45,7 @@ func (s *fakeStore) GetByID(_ context.Context, id domain.TrackId, userId shared.
 	s.gets++
 	t, ok := s.tracks[id]
 	if !ok || t.UserId != userId {
-		return nil, nil
+		return nil, domain.ErrTrackNotFound
 	}
 	cp := *t
 	return &cp, nil

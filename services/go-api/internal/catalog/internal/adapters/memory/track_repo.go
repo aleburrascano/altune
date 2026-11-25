@@ -82,7 +82,7 @@ func (r *TrackRepo) GetByID(_ context.Context, id domain.TrackId, userId shared.
 			return t, nil
 		}
 	}
-	return nil, nil
+	return nil, domain.ErrTrackNotFound
 }
 
 func (r *TrackRepo) AudioRefInUse(_ context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error) {
@@ -291,30 +291,6 @@ func (r *TrackRepo) Delete(_ context.Context, id domain.TrackId, userId shared.U
 	audioRef := t.AudioRef
 	delete(r.Tracks, key)
 	return true, audioRef, nil
-}
-
-func (r *TrackRepo) GetByDedupKey(_ context.Context, userId shared.UserId, dedupKey string) (*domain.Track, error) {
-	if r.ErrOnGetBy != nil {
-		return nil, r.ErrOnGetBy
-	}
-	for _, t := range r.Tracks {
-		if t.DedupKey == dedupKey && t.UserId == userId {
-			return t, nil
-		}
-	}
-	return nil, nil
-}
-
-func (r *TrackRepo) GetByIdempotencyKey(_ context.Context, userId shared.UserId, idempotencyKey string) (*domain.Track, error) {
-	if r.ErrOnGetBy != nil {
-		return nil, r.ErrOnGetBy
-	}
-	for _, t := range r.Tracks {
-		if t.UserId == userId && t.IdempotencyKey != nil && *t.IdempotencyKey == idempotencyKey {
-			return t, nil
-		}
-	}
-	return nil, nil
 }
 
 func (r *TrackRepo) ReplaceFeaturedArtists(_ context.Context, id domain.TrackId, userId shared.UserId, feats []domain.FeaturedArtist) error {

@@ -55,6 +55,9 @@ func (l *TrackLedger) AudioRefInUse(ctx context.Context, audioRef string, exclud
 
 func (l *TrackLedger) Get(ctx context.Context, id shared.TrackId, userId shared.UserId) (*acquisition.TrackSnapshot, error) {
 	track, err := l.store.GetByID(ctx, id, userId)
+	if errors.Is(err, domain.ErrTrackNotFound) {
+		track, err = nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -203,11 +206,11 @@ func (l *TrackLedger) Fail(ctx context.Context, id shared.TrackId, userId shared
 
 func (l *TrackLedger) RevertAt(ctx context.Context, snapshot acquisition.TrackSnapshot) error {
 	track, err := l.store.GetByID(ctx, snapshot.ID, snapshot.UserId)
+	if errors.Is(err, domain.ErrTrackNotFound) {
+		return acquisition.ErrTrackNotFound
+	}
 	if err != nil {
 		return fmt.Errorf("get track: %w", err)
-	}
-	if track == nil {
-		return acquisition.ErrTrackNotFound
 	}
 	if track.Version != snapshot.Version {
 		return fmt.Errorf("revert to pending: %w", catalog.ErrTrackVersionConflict)
@@ -234,11 +237,11 @@ func (l *TrackLedger) loadAndUpdate(ctx context.Context, id shared.TrackId, user
 
 func (l *TrackLedger) attempt(ctx context.Context, id shared.TrackId, userId shared.UserId, fence acquisition.Fence, mutate func(*domain.Track) error) error {
 	track, err := l.store.GetByID(ctx, id, userId)
+	if errors.Is(err, domain.ErrTrackNotFound) {
+		return acquisition.ErrTrackNotFound
+	}
 	if err != nil {
 		return fmt.Errorf("get track: %w", err)
-	}
-	if track == nil {
-		return acquisition.ErrTrackNotFound
 	}
 	if leaseSuperseded(fence, track.AcquisitionFence) {
 		return fmt.Errorf("track %s claimed by fence %d, caller holds %d: %w", id, track.AcquisitionFence, fence, acquisition.ErrLeaseLost)

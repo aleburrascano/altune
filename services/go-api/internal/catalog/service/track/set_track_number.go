@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/catalog/internal/core/ports"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
+	"errors"
 	"fmt"
 )
 
@@ -39,12 +40,12 @@ func (s *SetTrackNumberService) Execute(
 }
 
 func (s *SetTrackNumberService) requireOwnedTrack(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
-	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
+	_, err := s.trackRepo.GetByID(ctx, trackId, userId)
+	if errors.Is(err, domain.ErrTrackNotFound) {
+		return domain.ErrTrackNotFound
+	}
 	if err != nil {
 		return fmt.Errorf("set track number: lookup: %w", err)
-	}
-	if track == nil {
-		return domain.ErrTrackNotFound
 	}
 	return nil
 }

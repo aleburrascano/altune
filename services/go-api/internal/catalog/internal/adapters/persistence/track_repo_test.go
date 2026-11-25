@@ -372,8 +372,8 @@ func TestPgxTrackRepo_Delete(t *testing.T) {
 	}
 
 	got, err := repo.GetByID(ctx, track.ID, userId)
-	if err != nil {
-		t.Fatalf("GetByID after delete: %v", err)
+	if !errors.Is(err, catalog.ErrTrackNotFound) {
+		t.Fatalf("GetByID after delete: err = %v, want ErrTrackNotFound", err)
 	}
 	if got != nil {
 		t.Errorf("GetByID after delete returned non-nil track: %v", got.ID)
@@ -547,11 +547,25 @@ func TestPgxTrackRepo_GetByID_NotFound(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 
 	got, err := repo.GetByID(ctx, catalog.NewTrackId(), userId)
-	if err != nil {
-		t.Fatalf("GetByID() error = %v", err)
+	if !errors.Is(err, catalog.ErrTrackNotFound) {
+		t.Fatalf("GetByID() error = %v, want ErrTrackNotFound", err)
 	}
 	if got != nil {
 		t.Errorf("GetByID() for missing track returned non-nil: %v", got.ID)
+	}
+}
+
+func TestPgxTrackRepo_GetByDedupAndIdempotencyKey_UnknownKeyIsNotFound(t *testing.T) {
+	pool := sharedtest.Pool(t)
+	repo := catalog.NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	if got, err := repo.GetByDedupKey(ctx, userId, "no-such-dedup-key"); !errors.Is(err, catalog.ErrTrackNotFound) || got != nil {
+		t.Errorf("GetByDedupKey = (%v, %v), want nil and ErrTrackNotFound", got, err)
+	}
+	if got, err := repo.GetByIdempotencyKey(ctx, userId, "no-such-idempotency-key"); !errors.Is(err, catalog.ErrTrackNotFound) || got != nil {
+		t.Errorf("GetByIdempotencyKey = (%v, %v), want nil and ErrTrackNotFound", got, err)
 	}
 }
 

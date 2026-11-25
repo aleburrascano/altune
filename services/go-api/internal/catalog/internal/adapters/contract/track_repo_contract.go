@@ -79,11 +79,11 @@ func TrackRepositoryContract(t *testing.T, newRepo func(t *testing.T) TrackRepos
 		}
 	})
 
-	t.Run("get of an unknown id returns nil", func(t *testing.T) {
+	t.Run("get of an unknown id is ErrTrackNotFound", func(t *testing.T) {
 		repo := newRepo(t)
 		got, err := repo.GetByID(ctx, domain.NewTrackId(), shared.NewUserId(uuid.New()))
-		if err != nil {
-			t.Fatalf("GetByID: %v", err)
+		if !errors.Is(err, domain.ErrTrackNotFound) {
+			t.Fatalf("GetByID error = %v, want ErrTrackNotFound", err)
 		}
 		if got != nil {
 			t.Errorf("GetByID = %v, want nil", got.ID)
@@ -120,8 +120,8 @@ func TrackRepositoryContract(t *testing.T, newRepo func(t *testing.T) TrackRepos
 		contractAdd(t, repo, track)
 
 		got, err := repo.GetByID(ctx, track.ID, intruder)
-		if err != nil {
-			t.Fatalf("GetByID: %v", err)
+		if !errors.Is(err, domain.ErrTrackNotFound) {
+			t.Fatalf("GetByID error = %v, want ErrTrackNotFound", err)
 		}
 		if got != nil {
 			t.Error("GetByID exposed another user's track")
@@ -314,8 +314,8 @@ func TrackRepositoryContract(t *testing.T, newRepo func(t *testing.T) TrackRepos
 			t.Errorf("Delete = %v/%v, want true/%q", deleted, got, ref)
 		}
 		gone, err := repo.GetByID(ctx, track.ID, userId)
-		if err != nil || gone != nil {
-			t.Errorf("GetByID after delete = %v/%v, want nil/nil", gone, err)
+		if !errors.Is(err, domain.ErrTrackNotFound) || gone != nil {
+			t.Errorf("GetByID after delete = %v/%v, want nil/ErrTrackNotFound", gone, err)
 		}
 		again, _, err := repo.Delete(ctx, track.ID, userId)
 		if err != nil || again {

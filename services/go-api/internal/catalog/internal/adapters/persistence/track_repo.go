@@ -61,6 +61,9 @@ func (r *PgxTrackRepository) addInTx(ctx context.Context, track *domain.Track) (
 	})
 	if errors.Is(err, errTrackAlreadyStored) {
 		existing, err := r.resolveConflictingTrack(ctx, track)
+		if errors.Is(err, domain.ErrTrackNotFound) {
+			return nil, false, nil
+		}
 		return existing, false, err
 	}
 	if err != nil {
@@ -311,11 +314,11 @@ func (r *PgxTrackRepository) deleteTrackRow(ctx context.Context, id domain.Track
 func (r *PgxTrackRepository) resolveConflictingTrack(ctx context.Context, track *domain.Track) (*domain.Track, error) {
 	if track.IdempotencyKey != nil {
 		existing, err := r.GetByIdempotencyKey(ctx, track.UserId, *track.IdempotencyKey)
-		if err != nil {
-			return nil, err
-		}
-		if existing != nil {
+		if err == nil {
 			return existing, nil
+		}
+		if !errors.Is(err, domain.ErrTrackNotFound) {
+			return nil, err
 		}
 	}
 	return r.GetByDedupKey(ctx, track.UserId, track.DedupKey)
@@ -344,8 +347,8 @@ func (r *PgxTrackRepository) findTrackByUniqueKey(ctx context.Context, userId sh
 		userId.UUID(), value,
 	)
 	track, err := scanTrack(row)
-	if err != nil || track == nil {
-		return track, err
+	if err != nil {
+		return nil, err
 	}
 	if err := loadFeaturedForTracks(ctx, r.pool, []*domain.Track{track}); err != nil {
 		return nil, err
@@ -620,7 +623,7 @@ func scanTrackColumns(s scanner) (*domain.Track, error) {
 func scanTrack(row pgx.Row) (*domain.Track, error) {
 	track, err := scanTrackColumns(row)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
+		return nil, domain.ErrTrackNotFound
 	}
 	return track, err
 }

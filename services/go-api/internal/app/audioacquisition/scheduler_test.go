@@ -41,6 +41,9 @@ type fixtureTrackRepo struct {
 func (r *fixtureTrackRepo) GetByID(_ context.Context, _ catalog.TrackId, _ shared.UserId) (*catalog.Track, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.track == nil {
+		return nil, catalog.ErrTrackNotFound
+	}
 	return r.track, nil
 }
 
