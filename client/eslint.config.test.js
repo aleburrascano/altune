@@ -410,6 +410,7 @@ describe('mobile eslint config has no warnings', () => {
     'src/mobile/index.ts',
     'src/features/player/view/useMediaSession.ts',
     'src/shared/apiClient/index.ts',
+    'src/shared/ui/view/primitives/Banner.tsx',
     'src/shared/apiClient/__tests__/tracks.test.ts',
     'scripts/lint-changed-lines.mjs',
   ]) {
