@@ -156,7 +156,7 @@ if touches '^services/go-api/'; then
     if [ $whole_module = 1 ] || grep -qE '(^| )[^ ]*/cmd/acquisitioneval( |$)' <<<"${affected[*]}"; then
       test_check "go-api acquisition selection gate" $m "${heavy[@]}" go run ./cmd/acquisitioneval -baseline ./cmd/acquisitioneval/baselines.json
     fi
-    touches "^$m/go\.(mod|sum)\$" && need govulncheck "go-api govulncheck" && check "go-api govulncheck" $m "${heavy[@]}" govulncheck ./...
+    need govulncheck "go-api govulncheck" && check "go-api govulncheck" $m "${heavy[@]}" govulncheck ./...
   fi
 fi
 

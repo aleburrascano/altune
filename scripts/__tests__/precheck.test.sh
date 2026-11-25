@@ -569,13 +569,13 @@ run_with_tools() {
     RC=$?
 }
 
-CASE="a go-api change in a package the selection gate does not import skips the gate and govulncheck, and vets only that package"
+CASE="a go-api change in a package the selection gate does not import skips the gate, vets only that package, and still runs govulncheck"
 new_repo
 add_go_fixture
 edit_go_file internal/discovery/adapters/x/x.go
 run_with_tools
 forbid_log "run ./cmd/acquisitioneval"
-forbid_log "govulncheck"
+expect_log "govulncheck ./..."
 expect_log "vet altune/go-api/internal/discovery/adapters/x"
 forbid_log "vet ./..."
 
@@ -599,7 +599,7 @@ add_go_fixture
 edit_go_file internal/shared/s/s.go
 run_with_tools
 expect_log "run ./cmd/acquisitioneval"
-forbid_log "govulncheck"
+expect_log "govulncheck ./..."
 expect_log "vet altune/go-api/internal/shared/s altune/go-api/internal/acq altune/go-api/cmd/acquisitioneval"
 
 CASE="a change to the selection gate command runs the gate"
