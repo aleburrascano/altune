@@ -65,7 +65,7 @@ func (c *queryCounter) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryE
 func queryCountingPool(t *testing.T) (*pgxpool.Pool, *queryCounter) {
 	t.Helper()
 	counter := &queryCounter{}
-	return tracedPool(t, counter), counter
+	return sharedtest.TracedPool(t, counter), counter
 }
 
 func TestPgxIdentityStore_LookupByProviderIDsIsOneQuery(t *testing.T) {

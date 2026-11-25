@@ -1263,19 +1263,8 @@ type queryTrace struct {
 
 func tracedPool(t *testing.T) (*pgxpool.Pool, *queryTrace) {
 	t.Helper()
-	dbURL := sharedtest.DatabaseURL(t)
-	cfg, err := pgxpool.ParseConfig(dbURL)
-	if err != nil {
-		t.Fatalf("parse DATABASE_URL: %v", err)
-	}
 	trace := &queryTrace{}
-	cfg.ConnConfig.Tracer = trace
-	pool, err := pgxpool.NewWithConfig(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	return pool, trace
+	return sharedtest.TracedPool(t, trace), trace
 }
 
 func (q *queryTrace) afterNextQuery(f func()) {
