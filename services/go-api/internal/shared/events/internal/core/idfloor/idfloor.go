@@ -3,6 +3,7 @@ package idfloor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -86,7 +87,10 @@ func (f *Floor) persistOrWarn(ceiling uint64) {
 func (f *Floor) persist(ceiling uint64) error {
 	tmp := f.path + ".tmp"
 	if err := os.WriteFile(tmp, []byte(strconv.FormatUint(ceiling, 10)), 0o600); err != nil {
-		return err
+		return fmt.Errorf("write %s: %w", tmp, err)
 	}
-	return os.Rename(tmp, f.path)
+	if err := os.Rename(tmp, f.path); err != nil {
+		return fmt.Errorf("replace %s: %w", f.path, err)
+	}
+	return nil
 }

@@ -3,6 +3,7 @@ package transport
 import (
 	"altune/go-api/internal/shared/redact"
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"sync"
@@ -22,6 +23,9 @@ const truncatedErr = "body exceeds capture limit; recording is incomplete"
 
 func capture(body io.ReadCloser) (string, io.ReadCloser, bool, error) {
 	read, err := io.ReadAll(io.LimitReader(body, maxCaptureBytes+1))
+	if err != nil {
+		err = fmt.Errorf("read a body for capture: %w", err)
+	}
 	replay := replayBody{io.MultiReader(bytes.NewReader(read), body), body}
 	if len(read) > maxCaptureBytes {
 		return truncatedBody, replay, true, err

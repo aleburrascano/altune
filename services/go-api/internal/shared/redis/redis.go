@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"time"
@@ -48,7 +49,7 @@ func ValidateURL(redisURL string) error {
 func clientOptions(redisURL string, poolSize int) (*goredis.Options, error) {
 	opts, err := goredis.ParseURL(redisURL)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse the redis url: %w", err)
 	}
 	if poolSize <= 0 {
 		poolSize = defaultPoolSize

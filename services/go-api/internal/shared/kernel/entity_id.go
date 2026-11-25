@@ -1,6 +1,8 @@
 package kernel
 
 import (
+	"fmt"
+
 	"github.com/google/uuid"
 )
 
@@ -15,7 +17,7 @@ func NewEntityId() EntityId {
 func ParseEntityId(s string) (EntityId, error) {
 	id, err := uuid.Parse(s)
 	if err != nil {
-		return EntityId{}, err
+		return EntityId{}, fmt.Errorf("parse entity id: %w", err)
 	}
 	return EntityId{value: id}, nil
 }

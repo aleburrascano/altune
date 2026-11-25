@@ -78,7 +78,10 @@ func (h *prettyHandler) Handle(_ context.Context, r slog.Record) error {
 
 	b.WriteByte('\n')
 	_, err := io.WriteString(h.w, b.String())
-	return err
+	if err != nil {
+		return fmt.Errorf("write log record: %w", err)
+	}
+	return nil
 }
 
 func (h *prettyHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
