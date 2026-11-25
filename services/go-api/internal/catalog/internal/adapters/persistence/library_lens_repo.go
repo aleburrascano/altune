@@ -106,7 +106,7 @@ func (r *PgxLibraryLensRepository) ListAlbumsForUser(
 		var g domain.AlbumGroup
 		err := row.Scan(&g.Key, &g.Album, &g.Artist, &g.ArtworkURL, &g.Year, &g.TrackCount, &g.MostRecentAddedAt)
 		if err != nil {
-			return g, fmt.Errorf("scan library album %q: %w", g.Album, err)
+			return g, fmt.Errorf("scan library album row: %w", err)
 		}
 		return g, nil
 	})
@@ -141,7 +141,7 @@ func (r *PgxLibraryLensRepository) ListArtistsForUser(
 		var g domain.ArtistGroup
 		err := row.Scan(&g.Key, &g.Artist, &g.ArtworkURL, &g.TrackCount, &g.MostRecentAddedAt)
 		if err != nil {
-			return g, fmt.Errorf("scan library artist %q: %w", g.Artist, err)
+			return g, fmt.Errorf("scan library artist row: %w", err)
 		}
 		return g, nil
 	})

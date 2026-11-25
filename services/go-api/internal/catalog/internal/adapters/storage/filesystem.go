@@ -143,7 +143,7 @@ func openAudio(path string) (openedAudio, error) {
 	stat, err := file.Stat()
 	if err != nil {
 		file.Close()
-		return openedAudio{}, err
+		return openedAudio{}, fmt.Errorf("stat audio %s: %w", path, err)
 	}
 	return openedAudio{file: file, size: stat.Size()}, nil
 }
