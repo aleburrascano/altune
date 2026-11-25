@@ -46,7 +46,10 @@ missing() {
   return 3
 }
 
-strip_root() { sed "s#$root/##g"; }
+strip_root() {
+  local line
+  while IFS= read -r line || [ -n "$line" ]; do printf '%s\n' "${line//"$root/"/}"; done
+}
 
 comment_hint="Comments are banned; say it in a name, a type or a test."
 

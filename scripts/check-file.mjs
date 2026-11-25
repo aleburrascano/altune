@@ -78,7 +78,9 @@ async function eslintFindings() {
 
 async function prettierFindings() {
   const prettier = load('prettier');
-  if (!prettier) return { lines: [] };
+  if (!prettier) {
+    return { missing: `prettier is not installed in ${relative(process.cwd(), projectDir)}/node_modules` };
+  }
   const info = await prettier.getFileInfo(file, { ignorePath: join(projectDir, '.prettierignore') });
   const config = await prettier.resolveConfig(file);
   if (info.ignored || !info.inferredParser || config === null) return { lines: [] };
