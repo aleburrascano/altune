@@ -4,10 +4,10 @@ import (
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
 	"altune/overseer/internal/oci"
+	"altune/overseer/internal/panicguard"
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"math"
 	"strings"
 	"sync"
@@ -339,12 +339,7 @@ func (s *spendScheduler) run(ctx context.Context) {
 }
 
 func (s *spendScheduler) safeRefreshOnce(ctx context.Context) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			slog.ErrorContext(ctx, "cost: spend refresh panicked", "recover", rec)
-		}
-	}()
-	s.refresh(ctx)
+	panicguard.Contain(ctx, "cost: spend refresh panicked", func() { s.refresh(ctx) })
 }
 
 type lazyReader struct {

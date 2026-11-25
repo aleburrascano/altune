@@ -1,8 +1,8 @@
 package security
 
 import (
+	"altune/overseer/internal/panicguard"
 	"context"
-	"log/slog"
 	"time"
 )
 
@@ -36,10 +36,7 @@ func (s *scheduler) run(ctx context.Context) {
 }
 
 func (s *scheduler) safeRunOnce(ctx context.Context) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			slog.ErrorContext(ctx, "security: suite run panicked", "recover", rec)
-		}
-	}()
-	s.sink(runSuite(ctx, s.client, s.checks, s.now))
+	panicguard.Contain(ctx, "security: suite run panicked", func() {
+		s.sink(runSuite(ctx, s.client, s.checks, s.now))
+	})
 }

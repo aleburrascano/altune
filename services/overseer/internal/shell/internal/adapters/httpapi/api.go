@@ -3,8 +3,9 @@ package httpapi
 import (
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
+	"altune/overseer/internal/panicguard"
+	"context"
 	"encoding/json"
-	"log/slog"
 	"net/http"
 	"time"
 )
@@ -77,21 +78,24 @@ func (h *Handler) snapshots() []core.Snapshot {
 	return out
 }
 
-func safeSnapshot(b core.Bucket) (snap core.Snapshot) {
+func safeSnapshot(b core.Bucket) core.Snapshot {
 	meta := b.Meta()
-	defer func() {
-		if rec := recover(); rec != nil {
-			slog.Error("overseer.shell.snapshot_panic", "bucket", meta.ID, "recover", rec)
-			snap = core.Snapshot{
-				ID:       meta.ID,
-				Title:    meta.Title,
-				State:    core.StateSourceDown,
-				Reason:   goapi.ReasonDown,
-				Severity: core.SeverityCritical,
-				Headline: "panel unavailable",
-				Data:     json.RawMessage(`{"error":"panel unavailable"}`),
-			}
-		}
-	}()
-	return b.Snapshot()
+	var snap core.Snapshot
+	panicked := true
+	panicguard.Contain(context.Background(), "overseer.shell.snapshot_panic", func() {
+		snap = b.Snapshot()
+		panicked = false
+	}, "bucket", meta.ID)
+	if !panicked {
+		return snap
+	}
+	return core.Snapshot{
+		ID:       meta.ID,
+		Title:    meta.Title,
+		State:    core.StateSourceDown,
+		Reason:   goapi.ReasonDown,
+		Severity: core.SeverityCritical,
+		Headline: "panel unavailable",
+		Data:     json.RawMessage(`{"error":"panel unavailable"}`),
+	}
 }

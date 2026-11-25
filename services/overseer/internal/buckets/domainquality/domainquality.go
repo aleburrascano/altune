@@ -3,6 +3,7 @@ package domainquality
 import (
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
+	"altune/overseer/internal/panicguard"
 	"context"
 	"errors"
 	"fmt"
@@ -112,36 +113,22 @@ func (b *Bucket) KeySeries() string {
 func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 	var evalErr, acqErr error
 
-	var wg sync.WaitGroup
-	wg.Add(3)
-	go func() {
-		defer wg.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				evalErr = b.recoverSource(ctx, "eval", "GET /observe/eval", r, b.markEvalStale)
-			}
-		}()
-		evalErr = b.collectEval(ctx)
-	}()
-	go func() {
-		defer wg.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				acqErr = b.recoverSource(ctx, "acquisition", "GET /observe/acquisition", r, b.markAcqStale)
-			}
-		}()
-		acqErr = b.collectAcq(ctx)
-	}()
-	go func() {
-		defer wg.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				_ = b.recoverSource(ctx, "discography", "GET /observe/quality/discography", r, b.markDiscoStale)
-			}
-		}()
-		b.collectDisco(ctx)
-	}()
-	wg.Wait()
+	var group panicguard.Group
+	group.Go(func() {
+		evalErr = b.guarded(ctx, "eval", "GET /observe/eval", b.markEvalStale, func() error { return b.collectEval(ctx) })
+	})
+	group.Go(func() {
+		acqErr = b.guarded(ctx, "acquisition", "GET /observe/acquisition", b.markAcqStale, func() error { return b.collectAcq(ctx) })
+	})
+	group.Go(func() {
+		_ = b.guarded(ctx, "discography", "GET /observe/quality/discography", b.markDiscoStale, func() error {
+			b.collectDisco(ctx)
+			return nil
+		})
+	})
+	if err := group.Wait(); err != nil {
+		slog.ErrorContext(ctx, "domainquality: a source read panicked past its recovery", "error", err)
+	}
 
 	if evalErr != nil && acqErr != nil {
 		return nil, fmt.Errorf("%w: eval=%s acquisition=%s", ErrBothDown, evalErr.Error(), acqErr.Error())
@@ -149,8 +136,14 @@ func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 	return nil, nil
 }
 
-func (b *Bucket) recoverSource(ctx context.Context, source, op string, r any, mark func(error) bool) error {
-	err := fmt.Errorf("%s: recovered panic: %v", source, r)
+func (b *Bucket) guarded(ctx context.Context, source, op string, mark func(error) bool, read func() error) error {
+	var readErr error
+	perr := panicguard.Try(func() { readErr = read() })
+	if perr == nil {
+		return readErr
+	}
+	value, _ := panicguard.Recovered(perr)
+	err := fmt.Errorf("%s: recovered panic: %v", source, value)
 	everMirrored := mark(err)
 	b.logSourceUnreachable(ctx, source, op, everMirrored, err)
 	return err

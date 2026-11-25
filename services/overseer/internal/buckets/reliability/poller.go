@@ -3,8 +3,8 @@ package reliability
 import (
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
+	"altune/overseer/internal/panicguard"
 	"context"
-	"log/slog"
 	"sync/atomic"
 	"time"
 )
@@ -86,12 +86,7 @@ func (p *reachPoller) run(ctx context.Context) {
 }
 
 func (p *reachPoller) safePollOnce(ctx context.Context) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			slog.ErrorContext(ctx, "reliability: reachability probe panicked", "recover", rec)
-		}
-	}()
-	p.pollOnce(ctx)
+	panicguard.Contain(ctx, "reliability: reachability probe panicked", func() { p.pollOnce(ctx) })
 }
 
 func (p *reachPoller) pollOnce(ctx context.Context) {

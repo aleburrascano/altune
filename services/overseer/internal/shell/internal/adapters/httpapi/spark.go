@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"altune/overseer/internal/core"
+	"altune/overseer/internal/panicguard"
+	"context"
 	"log/slog"
 	"sync"
 	"time"
@@ -17,13 +19,13 @@ type TailReader interface {
 	Tail(bucket, series string, from, to time.Time, limit int) ([]core.Point, error)
 }
 
-func (h *Handler) spark(b core.Bucket, id string) (spark []core.SparkPoint) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			slog.Error("overseer.shell.spark_panic", "bucket", id, "recover", rec)
-			spark = nil
-		}
-	}()
+func (h *Handler) spark(b core.Bucket, id string) []core.SparkPoint {
+	var spark []core.SparkPoint
+	panicguard.Contain(context.Background(), "overseer.shell.spark_panic", func() { spark = h.loadSpark(b, id) }, "bucket", id)
+	return spark
+}
+
+func (h *Handler) loadSpark(b core.Bucket, id string) []core.SparkPoint {
 	keyed, ok := b.(core.KeySeries)
 	if !ok {
 		return nil
