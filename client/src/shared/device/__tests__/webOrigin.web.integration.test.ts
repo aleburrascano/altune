@@ -20,6 +20,14 @@ describe('webOrigin (web)', () => {
     expect(webOrigin()).toBeNull();
   });
 
+  it('returns null when the origin is empty', () => {
+    Object.defineProperty(globalThis, 'window', {
+      value: { location: { origin: '' } },
+      configurable: true,
+    });
+    expect(webOrigin()).toBeNull();
+  });
+
   it('returns null when window has no location', () => {
     Object.defineProperty(globalThis, 'window', { value: {}, configurable: true });
     expect(webOrigin()).toBeNull();
