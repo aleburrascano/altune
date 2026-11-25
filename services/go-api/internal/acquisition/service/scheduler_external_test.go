@@ -284,3 +284,78 @@ func TestScheduler_AJobWhoseCompletionPanicsAfterItIsRecordedIsRecordedOnce(t *t
 		t.Errorf("record = %s %q, want the job's own failure, not the log handler's panic", records[0].State, records[0].Reason)
 	}
 }
+
+type succeedingAcquirer struct{ failingAcquirer }
+
+func (succeedingAcquirer) Execute(context.Context, kernel.UserId, kernel.TrackId) error { return nil }
+
+type capturedLogs struct {
+	mu      sync.Mutex
+	records *[]slog.Record
+}
+
+func (h capturedLogs) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h capturedLogs) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	*h.records = append(*h.records, r)
+	return nil
+}
+
+func (h capturedLogs) WithAttrs([]slog.Attr) slog.Handler { return h }
+
+func (h capturedLogs) WithGroup(string) slog.Handler { return h }
+
+func logsOfOneJob(t *testing.T, acquirer interface {
+	Execute(context.Context, kernel.UserId, kernel.TrackId) error
+	ExecuteReplace(context.Context, kernel.UserId, kernel.TrackId) error
+	RefuseQueued(context.Context, kernel.UserId, kernel.TrackId)
+},
+) []slog.Record {
+	t.Helper()
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	var records []slog.Record
+	slog.SetDefault(slog.New(capturedLogs{records: &records}))
+	queue := &firstOutcomeQueue{Queue: memqueue.New(make(chan struct{}, 1), time.Now), outcome: make(chan jobOutcome, 1)}
+	var wg sync.WaitGroup
+	scheduler := service.NewBackgroundAcquisitionScheduler(acquirer, &wg, make(chan struct{}, 1), service.WithJobQueue(queue))
+	if err := scheduler.Schedule(context.Background(), kernel.NewUserId(uuid.New()), kernel.NewTrackId(), ""); err != nil {
+		t.Fatalf("Schedule = %v, want nil", err)
+	}
+	<-queue.outcome
+	scheduler.Shutdown(context.Background())
+	return records
+}
+
+func TestScheduler_AFailedJobIsLoggedAsAnErrorWithItsReason(t *testing.T) {
+	var failed []slog.Record
+	for _, r := range logsOfOneJob(t, failingAcquirer{}) {
+		if r.Message == "background acquisition failed" {
+			failed = append(failed, r)
+		}
+	}
+
+	if len(failed) != 1 || failed[0].Level != slog.LevelError {
+		t.Fatalf("failure records = %+v, want exactly one at error level", failed)
+	}
+	reason := ""
+	failed[0].Attrs(func(a slog.Attr) bool {
+		if a.Key == "error" {
+			reason = a.Value.String()
+		}
+		return true
+	})
+	if reason != "every source refused the track" {
+		t.Errorf("logged error = %q, want the job's failure reason", reason)
+	}
+}
+
+func TestScheduler_ASucceededJobLogsNoCompletionRecord(t *testing.T) {
+	for _, r := range logsOfOneJob(t, succeedingAcquirer{}) {
+		if r.Message == "" || r.Message == "background acquisition failed" || r.Message == "background acquisition will retry" {
+			t.Errorf("record %q at %v, want no completion record for a job that succeeded", r.Message, r.Level)
+		}
+	}
+}
