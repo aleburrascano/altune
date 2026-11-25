@@ -15,3 +15,4 @@ export { reportOtaLaunchFailures } from '@/mobile/otaLaunchReport';
 export type { UpdateLog } from '@/mobile/otaLaunchReport';
 export { chainUncaughtErrorHandler } from '@/mobile/uncaughtErrors';
 export type { GlobalErrorHandlers } from '@/mobile/uncaughtErrors';
+export { AppChrome } from '@/mobile/frame/AppChrome';
