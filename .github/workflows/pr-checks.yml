@@ -74,11 +74,11 @@ jobs:
       - name: apply migrations
         working-directory: services/go-api
         run: bash ../../scripts/ci/test-backend-migrate.sh
-      - name: go test with integration tests
+      - name: go test with integration tests, under the race detector
         working-directory: services/go-api
         env:
           INTEGRATION: "1"
-        run: go test -shuffle=on -count=1 -coverprofile=coverage.out ./...
+        run: go test -race -shuffle=on -count=1 -coverprofile=coverage.out ./...
       - name: coverage ratchet
         working-directory: services/go-api
         env:

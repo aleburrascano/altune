@@ -14,7 +14,7 @@ cd services/go-api
 export GOTOOLCHAIN="go$(awk '/^go /{print $2; exit}' go.mod)"
 bash ../../scripts/ci/test-backend-migrate.sh >/dev/null
 log=$(mktemp)
-if go test -shuffle=on -count=1 -coverprofile=coverage.out ./... 2>&1 | tee "$log"; then
+if go test -race -shuffle=on -count=1 -coverprofile=coverage.out ./... 2>&1 | tee "$log"; then
   rm -f "$log"
 else
   mapfile -t reruns < <(awk '
@@ -29,7 +29,7 @@ else
     pkg=${r%% *}
     names=${r#* }
     echo "::warning::re-running $names in $pkg once; a pass means a load-sensitive test, a second failure fails the gate"
-    go test -count=1 -run "^($names)\$" "./${pkg#altune/go-api/}"
+    go test -race -count=1 -run "^($names)\$" "./${pkg#altune/go-api/}"
   done
 fi
 MIN=65 bash ../../scripts/ci/test-backend-coverage.sh
