@@ -784,7 +784,7 @@ commit_as_base
 )
 run_with_tools
 expect_log "vet altune/go-api/internal/discovery/adapters/x"
-expect_log "test -shuffle=on -count=1 ./internal/discovery/adapters/x"
+expect_log "test -race -shuffle=on -count=1 ./internal/discovery/adapters/x"
 
 CASE="every golangci-lint call runs with a cache inside the checkout"
 new_repo
