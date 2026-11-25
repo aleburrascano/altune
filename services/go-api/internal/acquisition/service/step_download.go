@@ -10,6 +10,7 @@ import (
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/redact"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -440,8 +441,15 @@ func (s *DownloadStep) fetchFull(
 			"error", redact.LogError(err))
 		return ports.FetchedAudio{}, &downloadRejection{stage: rejectionlog.Download, reason: "download failed", err: err}
 	}
+	if fetched.Path == "" {
+		slog.WarnContext(ctx, "acquisition.candidate_download_no_file",
+			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source)
+		return ports.FetchedAudio{}, &downloadRejection{stage: rejectionlog.Download, reason: "download failed", err: errFetchedNoFile}
+	}
 	return fetched, nil
 }
+
+var errFetchedNoFile = errors.New("fetcher returned no file")
 
 func candidateTimedOut(jobCtx, fetchCtx context.Context, candidate ports.AudioCandidate, err error) error {
 	if !ports.RunTimedOut(jobCtx, fetchCtx) {
