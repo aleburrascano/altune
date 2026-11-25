@@ -18,5 +18,13 @@ for dir in "$work" "$work/services/go-api" "$work/elsewhere"; do
   [ "$(cat "$work/psql.log")" = "$want" ] || { echo "FAIL from ${dir#"$work"} the migrations were not applied in order: $(cat "$work/psql.log")"; fail=1; }
 done
 
+: >"$work/psql.log"
+out=$(cd "$work" && CDPATH="$work" PATH="$work/bin:$PATH" STUB_LOG="$work/psql.log" DATABASE_URL=postgres://x bash scripts/ci/test-backend-migrate.sh 2>&1) || { echo "FAIL with CDPATH set: $out"; fail=1; }
+[ "$(wc -l <"$work/psql.log")" = 2 ] || { echo "FAIL with CDPATH set the migrations were not applied: $(cat "$work/psql.log")"; fail=1; }
+
+rm -rf "$work/services"
+out=$(cd "$work/elsewhere" && PATH="$work/bin:$PATH" STUB_LOG="$work/psql.log" DATABASE_URL=postgres://x bash "$work/scripts/ci/test-backend-migrate.sh" 2>&1) && rc=0 || rc=$?
+{ [ "$rc" = 2 ] && grep -qF "services/go-api was not found" <<<"$out"; } || { echo "FAIL a missing module folder: exit $rc, output: $out"; fail=1; }
+
 [ "$fail" = 0 ] && echo "test-backend-migrate.test.sh: all cases pass"
 exit "$fail"

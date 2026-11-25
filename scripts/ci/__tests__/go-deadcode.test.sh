@@ -39,11 +39,18 @@ for dir in "$work" "$work/scripts" "$work/services/go-api/internal/deep/er" "$wo
   }
 done
 
+: >"$work/go.log"
+out=$(cd "$work" && CDPATH="$work" PATH="$work/bin:$PATH" STUB_LOG="$work/go.log" bash scripts/ci/go-deadcode.sh 2>&1) || { echo "FAIL with CDPATH set: $out"; fail=1; }
+grep -qxF "$module run golang.org/x/tools/cmd/deadcode@v0.53.0 -test ./..." "$work/go.log" || { echo "FAIL with CDPATH set deadcode did not run in the module: $(cat "$work/go.log")"; fail=1; }
+
 t 1 "a finding fails and is shown" "unreachable func: Orphan" "$work/elsewhere" STUB_OUT="x/x.go:5:6: unreachable func: Orphan"
 t 2 "a deadcode run that fails is not a clean tree" "nothing was checked" "$work/elsewhere" STUB_RC=1
 
 rm "$work/services/go-api/go.mod"
 t 2 "a missing module is an error, not a pass" "go.mod is missing, so nothing was checked" "$work/elsewhere"
+
+rm -rf "$work/services"
+t 2 "a missing module folder is exit 2, not the exit 1 of a finding" "services/go-api was not found" "$work/elsewhere"
 
 [ "$fail" = 0 ] && echo "go-deadcode.test.sh: all cases pass"
 exit "$fail"
