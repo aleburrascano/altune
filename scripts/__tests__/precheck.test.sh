@@ -579,6 +579,13 @@ expect_log "govulncheck ./..."
 expect_log "vet altune/go-api/internal/discovery/adapters/x"
 forbid_log "vet ./..."
 
+CASE="--lint (the pre-commit hook) leaves govulncheck to CI"
+new_repo
+add_go_fixture
+edit_go_file internal/discovery/adapters/x/x.go
+run_with_tools --lint
+forbid_log "govulncheck"
+
 CASE="without INTEGRATION=1 a go-api change skips the mutation step and names the job that runs it"
 new_repo
 add_go_fixture
