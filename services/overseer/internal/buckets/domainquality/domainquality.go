@@ -79,7 +79,7 @@ func New(deps Deps) *Bucket {
 	b := &Bucket{
 		reader:     deps.Reader,
 		discoTrend: core.NewRingStore(discoTrendCapacity),
-		series:     discardSeries{},
+		series:     core.DiscardSeries{},
 		now:        deps.Now,
 	}
 	if b.reader == nil {
@@ -504,12 +504,4 @@ func (nullReader) AdminAcquisition(context.Context) (goapi.AcquisitionStatus, er
 
 func (nullReader) AdminDiscographyQuality(context.Context) (goapi.DiscographyQuality, error) {
 	return goapi.DiscographyQuality{}, &goapi.SourceDownError{Op: "GET /observe/quality/discography", Err: errUnconfigured}
-}
-
-type discardSeries struct{}
-
-func (discardSeries) Record(string, string, core.Point) {}
-
-func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
-	return nil, nil
 }

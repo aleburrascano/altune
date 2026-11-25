@@ -63,7 +63,7 @@ type Deps struct {
 }
 
 func New(deps Deps) *Bucket {
-	b := &Bucket{spend: nullSpendReader{}, usage: deps.Usage, series: discardSeries{}}
+	b := &Bucket{spend: nullSpendReader{}, usage: deps.Usage, series: core.DiscardSeries{}}
 	if deps.ConnectSpend != nil {
 		b.spend = &lazyReader{build: deps.ConnectSpend}
 	}
@@ -386,12 +386,4 @@ type nullUsageReader struct{}
 
 func (nullUsageReader) AdminProviderUsage(context.Context) (goapi.ProviderUsage, error) {
 	return nil, &goapi.SourceDownError{Op: "GET /observe/metrics/live", Err: errUsageUnconfigured}
-}
-
-type discardSeries struct{}
-
-func (discardSeries) Record(string, string, core.Point) {}
-
-func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
-	return nil, nil
 }

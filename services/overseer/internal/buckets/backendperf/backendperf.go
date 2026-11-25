@@ -71,7 +71,7 @@ func New(deps Deps) *Bucket {
 	return &Bucket{
 		reader:  reader,
 		history: core.NewRingStore(historyCapacity),
-		series:  discardSeries{},
+		series:  core.DiscardSeries{},
 	}
 }
 
@@ -344,12 +344,4 @@ type nullReader struct{}
 
 func (nullReader) AdminMetricsLive(context.Context) (goapi.LiveMetrics, error) {
 	return goapi.LiveMetrics{}, &goapi.SourceDownError{Op: "GET /observe/metrics/live", Err: errUnconfigured}
-}
-
-type discardSeries struct{}
-
-func (discardSeries) Record(string, string, core.Point) {}
-
-func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
-	return nil, nil
 }

@@ -45,7 +45,7 @@ func New(deps Deps) *Bucket {
 	return &Bucket{
 		roll:   newAggregator(),
 		src:    src,
-		series: discardSeries{},
+		series: core.DiscardSeries{},
 		window: newActivityWindow(timelineWindow),
 	}
 }
@@ -179,11 +179,3 @@ func toSignal(ev goapi.Event) core.Signal {
 type nullSource = goapi.NullEventSource
 
 func newNullSource() *nullSource { return goapi.NewNullEventSource(errSourceDown) }
-
-type discardSeries struct{}
-
-func (discardSeries) Record(string, string, core.Point) {}
-
-func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
-	return nil, nil
-}
