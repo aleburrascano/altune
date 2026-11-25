@@ -34,6 +34,7 @@ require (
 	golang.org/x/text v0.42.0
 	golang.org/x/time v0.16.0
 	mvdan.cc/sh/v3 v3.14.1
+	pgregory.net/rapid v1.3.0
 )
 
 require github.com/yuin/gopher-lua v1.1.1 // indirect
