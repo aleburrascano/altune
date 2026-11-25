@@ -52,27 +52,17 @@ func assembleOn(t *testing.T, cfg *config.Config, pool *pgxpool.Pool, transport 
 }
 
 func TestBackgroundJobs_TheAssemblyStartsTheHousekeepingJobsWithTheirOldLogLines(t *testing.T) {
-	cfg := jwksConfig(t)
-	cfg.BehavioralCorpusPath = filepath.Join(t.TempDir(), "corpus.json")
-
-	logged := assembleLogging(t, cfg).logs.String()
+	logged := assembleLogging(t, jwksConfig(t)).logs.String()
 
 	for _, want := range []string{
 		`level=INFO msg="orphaned audio reconcile started" interval=10m0s` + "\n",
 		`level=INFO msg="deleted identity erasure started" interval=1h0m0s` + "\n",
 		`level=INFO msg="discography event prune started" interval=24h0m0s` + "\n",
 		`level=INFO msg="acquisition prune started" interval=24h0m0s` + "\n",
-		`level=INFO msg="behavioral corpus refresh started" path=` + cfg.BehavioralCorpusPath + " interval=24h0m0s\n",
 	} {
 		if !strings.Contains(logged, want) {
 			t.Errorf("want %q in\n%s", want, logged)
 		}
-	}
-}
-
-func TestBackgroundJobs_NoCorpusPathStartsNoCorpusRefresh(t *testing.T) {
-	if logged := assembleLogging(t, jwksConfig(t)).logs.String(); strings.Contains(logged, "behavioral corpus refresh started") {
-		t.Errorf("the corpus refresh started without BEHAVIORAL_CORPUS_PATH:\n%s", logged)
 	}
 }
 

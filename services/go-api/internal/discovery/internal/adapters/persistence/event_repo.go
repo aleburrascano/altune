@@ -18,7 +18,6 @@ var (
 	_ ports.EventStore               = (*PgxEventStore)(nil)
 	_ ports.EventQuery               = (*PgxEventStore)(nil)
 	_ ports.BehavioralSignalStore    = (*PgxEventStore)(nil)
-	_ ports.BehavioralLabelStore     = (*PgxEventStore)(nil)
 	_ ports.DiscographyQualityReader = (*PgxEventStore)(nil)
 	_ ports.DeletedIdentityEraser    = (*PgxEventStore)(nil)
 )
@@ -229,48 +228,6 @@ func (r *PgxEventStore) SatisfactionSignals(ctx context.Context, since time.Time
 		return nil, fmt.Errorf("collect satisfaction signals: %w", err)
 	}
 	return collected, nil
-}
-
-var behavioralLabelsSQL = fmt.Sprintf(`SELECT sp.query_norm,
-		ev.payload->>'%[1]s' AS sig,
-		COALESCE(ev.payload->>'title', '') AS title,
-		COALESCE(ev.payload->>'subtitle', ev.payload->>'artist', ev.payload->>'album', '') AS subtitle,
-		MAX(CASE WHEN ev.event_type = $4 THEN 1 ELSE 0 END) AS has_negative
-	FROM discovery_events ev
-	JOIN discovery_events sp
-		ON sp.search_id = ev.search_id AND sp.event_type = $5
-	WHERE ev.occurred_at >= $1
-		AND ev.search_id IS NOT NULL
-		AND ev.event_type IN ($2, $3, $4)
-		AND COALESCE(ev.payload->>'%[1]s', '') <> ''
-		AND COALESCE(sp.query_norm, '') <> ''
-	GROUP BY sp.query_norm, sig, title, subtitle`, domain.PayloadKeyResultSignature)
-
-func (r *PgxEventStore) BehavioralLabels(ctx context.Context, since time.Time) ([]ports.BehavioralLabel, error) {
-	rows, err := r.pool.Query(ctx, behavioralLabelsSQL,
-		since,
-		domain.EventTypeCompleted.String(),
-		domain.EventTypeLibraryAdd.String(),
-		domain.EventTypeWrongAlbum.String(),
-		domain.EventTypeSearchPerformed.String(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("query behavioral labels: %w", err)
-	}
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (ports.BehavioralLabel, error) {
-		var (
-			lbl         ports.BehavioralLabel
-			hasNegative int
-		)
-		if err := row.Scan(&lbl.QueryNorm, &lbl.ResultSignature, &lbl.Title, &lbl.Subtitle, &hasNegative); err != nil {
-			return lbl, fmt.Errorf("scan behavioral label: %w", err)
-		}
-		lbl.Polarity = 1
-		if hasNegative == 1 {
-			lbl.Polarity = -1
-		}
-		return lbl, nil
-	})
 }
 
 const abandonedSearchesSQL = `SELECT sp.query_norm, COUNT(*) AS cnt

@@ -8,20 +8,16 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"errors"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
-	goredis "github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
@@ -125,67 +121,20 @@ func TestUnreleasedRefresh_NoUnreleasedSourceStartsNoRefresh(t *testing.T) {
 	}
 }
 
-type hostRecordingTransport struct {
-	mu    sync.Mutex
-	hosts []string
-}
-
-func (rt *hostRecordingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	rt.hosts = append(rt.hosts, req.URL.Host)
-	return nil, errors.New("recorded only")
-}
-
-func (rt *hostRecordingTransport) asked() []string {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	return slices.Clone(rt.hosts)
-}
-
-func TestNewEvalDiscovery_CallsProvidersThroughTheGivenTransportAndIdentityStore(t *testing.T) {
-	transport := &hostRecordingTransport{}
-	store := &discovery.FakeIdentityStore{Mbid: "mbid-1", Xref: map[discovery.ProviderKey]string{"spotify": "4"}}
-
-	disc, err := app.NewEvalDiscovery(t.Context(), &config.Config{}, app.EvalHandles{Transport: transport, IdentityStore: store})
-	if err != nil {
-		t.Fatalf("NewEvalDiscovery: %v", err)
-	}
-	_, _ = disc.EvalArtistContent().GetTopTracks(t.Context(), discovery.ProviderDeezer, "1", nil, 10)
-	if !slices.Contains(transport.asked(), "api.deezer.com") || !slices.Contains(transport.asked(), "open.spotify.com") {
-		t.Errorf("asked %v, want Deezer and the Spotify id bridged by the given identity store", transport.asked())
-	}
-}
-
-func TestNewEvalDiscovery_MapsTheConfigIntoTheProviderTable(t *testing.T) {
-	disc, err := app.NewEvalDiscovery(t.Context(), &config.Config{MusicBrainzUserAgent: "altune-test"}, app.EvalHandles{Transport: refuseEgress{}})
-	if err != nil {
-		t.Fatalf("NewEvalDiscovery: %v", err)
-	}
-	var consensus []string
-	for _, source := range disc.Consensus {
-		consensus = append(consensus, source.Name)
-	}
-	if !slices.Contains(consensus, "musicbrainz") {
-		t.Errorf("consensus = %v, want MusicBrainz once its user agent is configured", consensus)
-	}
-}
-
-func TestNewEvalDiscovery_SearchesWithTheGivenPoolAndRedis(t *testing.T) {
+func TestNewEvalDiscovery_SearchesThroughTheGivenTransport(t *testing.T) {
 	var logs bytes.Buffer
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
 	t.Cleanup(func() { slog.SetDefault(prev) })
-	pool := unreachablePool(t)
-	redisClient := goredis.NewClient(&goredis.Options{Addr: miniredis.RunT(t).Addr()})
 
-	disc, err := app.NewEvalDiscovery(t.Context(), &config.Config{}, app.EvalHandles{Pool: pool, Redis: redisClient, Transport: refuseEgress{}})
+	disc, err := app.NewEvalDiscovery(t.Context(), &config.Config{}, app.EvalHandles{Pool: unreachablePool(t), Transport: refuseEgress{}})
 	if err != nil {
 		t.Fatalf("NewEvalDiscovery: %v", err)
 	}
-	disc.EvalSearch()
-	if !strings.Contains(logs.String(), "favorites") || disc.Vocabulary == nil {
-		t.Errorf("eval discovery ignored the given pool or redis; logs:\n%s", logs.String())
+	query := &discovery.SearchQuery{Raw: "probe song", Kinds: map[discovery.ResultKind]bool{discovery.ResultKindAlbum: true}}
+	disc.RankingOnlySearch().InspectSearchWithStatuses(t.Context(), query)
+	if !strings.Contains(logs.String(), "test transport: provider egress refused") {
+		t.Errorf("a ranking search never went through the given transport; logs:\n%s", logs.String())
 	}
 }
 

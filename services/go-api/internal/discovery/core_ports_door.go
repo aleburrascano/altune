@@ -6,8 +6,6 @@ type (
 	AlbumContentProvider     = ports.AlbumContentProvider
 	ArtistContentProvider    = ports.ArtistContentProvider
 	ArtworkResolver          = ports.ArtworkResolver
-	BehavioralLabel          = ports.BehavioralLabel
-	BehavioralLabelStore     = ports.BehavioralLabelStore
 	BehavioralSignal         = ports.BehavioralSignal
 	ChartProvider            = ports.ChartProvider
 	DeletedIdentityEraser    = ports.DeletedIdentityEraser

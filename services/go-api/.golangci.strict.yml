@@ -241,7 +241,7 @@ linters:
       - linters:
           - sloglint
         text: DiscardHandler
-      - path: (cmd/(api/main\.go|discoveryeval/)|/eval/|/catalogtest/)
+      - path: (cmd/api/main\.go|/eval/|/catalogtest/)
         linters:
           - dupl
 

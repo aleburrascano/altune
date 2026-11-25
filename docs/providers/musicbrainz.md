@@ -66,7 +66,7 @@ MBID and returns the group's chosen front cover, resolving to a `/release/{relea
 | `GET /ws/2/release-group?query=&fmt=json` | release-groups (title, primary-type, first-release-date) | 200 | `SearchProvider` (album) ✅ built |
 | `GET /ws/2/artist/{mbid}?inc=url-rels+genres+tags+ratings&fmt=json` | curated `genres[]`, `tags[]`, `rating`, `relations[]` (Deezer/Spotify/Discogs/Last.fm/Wikidata/AllMusic/Genius/official) | 200 | **new: enrichment + cross-provider bridge** |
 | `GET /ws/2/release-group/{mbid}?inc=genres+ratings&fmt=json` | primary/secondary types, first-release-date, RG-level `genres[]`, `rating` | 200 | **new: album enrichment** |
-| `GET /ws/2/release-group?artist={mbid}&type=album\|ep\|single&limit=100` | an artist's discography | 200 | `fetchReleaseGroups` ✅ built (V2 album anchor; `ListArtistDiscography` for `signal-b`) |
+| `GET /ws/2/release-group?artist={mbid}&type=album\|ep\|single&limit=100` | an artist's discography | 200 | `fetchReleaseGroups` ✅ built (V2 album anchor) |
 | `GET https://coverartarchive.org/release-group/{mbid}` | `images[]` — `front:true`, full `image`, `thumbnails {250,500,1200}` | 200 | **artwork (separate `coverartarchive.go`)** |
 
 ## 5. Capabilities to maximize
@@ -95,7 +95,7 @@ The single highest-value addition. One lookup per resolved entity yields:
   Soundtrack/Remix — lets us *demote or label* non-canonical albums), `first-release-date` (the
   authoritative year).
 - Risk: **off the ranking path** (display/enrichment only) unless we feed genres/rating into rank —
-  if we do, it must clear the `discoveryeval --top-k 3` gate like every ranking change.
+  if we do, it needs a ranking review like every ranking change (the offline `discoveryeval` gate is gone).
 
 ### 4. Cross-provider identity bridge (url-relations) — ✅ EXTRACTED + MERGE-USE DONE (ADR-0011 Accepted)
 `inc=url-rels` on an artist returns its IDs on **Deezer (`deezer.com/artist/525046`), Spotify,
@@ -143,8 +143,8 @@ the cap-4 bridge + cap-5 `MBIDIndex`).
   keep Deezer (`nb_fan`/`rank`) as the popularity primary. MB's value is metadata + identity, not rank.
 - **Genres ≠ tags.** Use the curated `genres[]` list, not raw `tags[]` (decade/mood noise). Verified
   they are separate fields.
-- **Ranking gate.** Anything from here that touches *order* (e.g. genre/rating signals) must clear
-  `discoveryeval --top-k 3`. Pure display enrichment does not.
+- **Ranking review.** Anything from here that touches *order* (e.g. genre/rating signals) needs one
+  (the offline `discoveryeval` gate is gone). Pure display enrichment does not.
 - **ToS:** none meaningful — sanctioned non-commercial use, CC0 data.
 
 ## 7. Current implementation state
@@ -158,7 +158,7 @@ Built and on `main` (search + identity/consensus), thin projection only:
 - `services/go-api/internal/discovery/internal/adapters/providers/coverartarchive/coverartarchive.go` — `ArtworkResolver`,
   wired **first** in `buildArtworkChain` (`internal/app/build_consensus_providers.go`). Already consumes release-group MBIDs.
 - Wired in `internal/app/build_search_service.go`: `sharedMB` as a `SearchProvider` and in the content options;
-  `BuildConsensusProviders` in `internal/app/build_consensus_providers.go` (for `discoveryeval -mode signal-b`) uses `ListArtistDiscography`. Config-gated by `cfg.HasMusicBrainz()`
+  config-gated by `cfg.HasMusicBrainz()`
   (`MUSICBRAINZ_USER_AGENT`).
 - `rateLimit()` enforces 1 req/sec across all calls.
 

@@ -56,32 +56,29 @@ func (t *providerTable) addMusicBrainz(userAgent string, c handles.Clients) {
 		enrichment:     adapter,
 		featuredSearch: adapter,
 		recordings:     adapter,
-		consensus:      newConsensus(domain.ProviderKeyMusicBrainz, domain.ProviderMusicBrainz, adapter.ListArtistDiscography),
 	})
 }
 
 func (t *providerTable) addSoundCloud(c handles.Clients) {
 	adapter := soundcloud.NewSoundCloudAPIAdapter(c.ProviderCalls, nil)
 	t.add(provider{
-		name:      rowSoundCloud,
-		id:        domain.ProviderSoundCloud,
-		search:    soundcloud.NewSoundCloudAPIAdapter(c.ProviderCalls, soundcloud.NewSoundCloudAdapter()),
-		artist:    adapter,
-		album:     adapter,
-		related:   adapter,
-		artwork:   []ports.ArtworkResolver{adapter},
-		consensus: albumSearchConsensus(domain.ProviderKeySoundCloud, domain.ProviderSoundCloud, adapter),
+		name:    rowSoundCloud,
+		id:      domain.ProviderSoundCloud,
+		search:  soundcloud.NewSoundCloudAPIAdapter(c.ProviderCalls, soundcloud.NewSoundCloudAdapter()),
+		artist:  adapter,
+		album:   adapter,
+		related: adapter,
+		artwork: []ports.ArtworkResolver{adapter},
 	})
 }
 
 func (t *providerTable) addYouTubeMusic(c handles.Clients) {
 	adapter := ytmusic.NewYouTubeMusicAdapter(c.Transport)
 	t.add(provider{
-		name:      rowYouTube,
-		id:        domain.ProviderYouTube,
-		search:    adapter,
-		artwork:   []ports.ArtworkResolver{ytmusic.NewYouTubeMusicArtworkResolver(c.Transport)},
-		consensus: artistAlbumsConsensus(domain.ProviderKeyYTMusic, domain.ProviderYouTube, adapter),
+		name:    rowYouTube,
+		id:      domain.ProviderYouTube,
+		search:  adapter,
+		artwork: []ports.ArtworkResolver{ytmusic.NewYouTubeMusicArtworkResolver(c.Transport)},
 	})
 }
 
@@ -100,11 +97,10 @@ func (t *providerTable) addSpotify(c handles.Clients) {
 func (t *providerTable) addITunes(c handles.Clients) {
 	adapter := itunes.NewITunesAdapter(c.ProviderCalls)
 	t.add(provider{
-		name:      rowITunes,
-		id:        domain.ProviderITunes,
-		album:     adapter,
-		artwork:   []ports.ArtworkResolver{adapter},
-		consensus: albumSearchConsensus(domain.ProviderKeyITunes, domain.ProviderITunes, adapter),
+		name:    rowITunes,
+		id:      domain.ProviderITunes,
+		album:   adapter,
+		artwork: []ports.ArtworkResolver{adapter},
 	})
 }
 
@@ -121,10 +117,9 @@ func (t *providerTable) addDiscogs(token, userAgent string, c handles.Clients) {
 	}
 	adapter := discogs.NewDiscogsAdapter(c.ProviderCalls, token, userAgent)
 	t.add(provider{
-		name:      rowDiscogs,
-		id:        domain.ProviderDiscogs,
-		artwork:   []ports.ArtworkResolver{adapter},
-		consensus: newConsensus(domain.ProviderKeyDiscogs, domain.ProviderDiscogs, discogsReleases(adapter)),
+		name:    rowDiscogs,
+		id:      domain.ProviderDiscogs,
+		artwork: []ports.ArtworkResolver{adapter},
 	})
 }
 

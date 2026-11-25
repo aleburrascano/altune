@@ -180,7 +180,7 @@ becomes worth the membership + key-management cost. **Out of scope for the keyle
   sweet spot above CAA's 1200. Raising the constant trades mobile bandwidth for sharpness.
 - **Apple Music API is a paywall, not a hack** (§5.6). The deep axes cost a paid membership + a
   signed JWT to unlock; most duplicate keyless axes we already have.
-- **Ranking gate.** Anything from here that touches *order* must clear `discoveryeval --top-k 3`.
+- **Ranking review.** Anything from here that touches *order* needs one (the offline `discoveryeval` gate is gone).
   The cap-2 artwork change is pure display — no gate.
 
 ## 7. Current implementation state

@@ -12,7 +12,6 @@ const (
 	EvalMeter                Name = "eval meter"
 	AlertMonitor             Name = "alert monitor"
 	OrphanedAudioReconcile   Name = "orphaned audio reconcile"
-	BehavioralCorpusRefresh  Name = "behavioral corpus refresh"
 	DiscographyEventPrune    Name = "discography event prune"
 	VocabularyRefresh        Name = "vocabulary refresh"
 	BehavioralRankingRefresh Name = "behavioral ranking refresh"
@@ -33,7 +32,6 @@ type spec struct {
 
 var table = []spec{
 	{name: OrphanedAudioReconcile, alertable: true, switchable: true},
-	{name: BehavioralCorpusRefresh, alertable: true, switchable: true},
 	{name: DiscographyEventPrune, alertable: true, switchable: true},
 	{name: VocabularyRefresh, alertable: true, switchable: true},
 	{name: BehavioralRankingRefresh, alertable: true, switchable: true, everyInstance: true},

@@ -13,15 +13,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	goredis "github.com/redis/go-redis/v9"
 )
 
 type EvalHandles struct {
-	Pool          *pgxpool.Pool
-	Redis         *goredis.Client
-	Transport     http.RoundTripper
-	IdentityStore discovery.IdentityStore
-	Tracker       *runloop.Tracker
+	Pool      *pgxpool.Pool
+	Transport http.RoundTripper
 }
 
 func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*discovery.Discovery, error) {
@@ -31,22 +27,13 @@ func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*
 	}
 	deps := discoveryconfig.Deps(ctx, cfg, transport)
 	deps.Background = &sync.WaitGroup{}
-	tracker, err := evalTracker(h.Tracker)
+	tracker, err := runloop.NewTracker(runloop.TrackerLimits{MaxInFlight: backgroundMaxInFlight})
 	if err != nil {
 		return nil, err
 	}
 	deps.Tracker = tracker
 	deps.Pool = h.Pool
-	deps.Redis = h.Redis
-	deps.IdentityStore = h.IdentityStore
 	return discovery.New(deps)
-}
-
-func evalTracker(given *runloop.Tracker) (*runloop.Tracker, error) {
-	if given != nil {
-		return given, nil
-	}
-	return runloop.NewTracker(runloop.TrackerLimits{MaxInFlight: backgroundMaxInFlight})
 }
 
 func (a *App) discoveryDeps(ctx context.Context, transport http.RoundTripper) discovery.Deps {
@@ -66,7 +53,6 @@ func (a *App) startDiscoveryBackgroundJobs(ctx context.Context, disc *discovery.
 		a.jobs.EveryInstance(ctx, jobs.BehavioralRankingRefresh, 30*time.Minute,
 			jobs.WarnOnFailure(jobs.BehavioralRankingRefresh, disc.Search.RefreshBehavioralScores))
 	}
-	a.startCorpusRefresh(ctx, disc.Events)
 	a.startDiscographyPrune(ctx, disc.Events)
 	a.startVocabularyRefresh(disc.Vocabulary, disc.Charts)
 }

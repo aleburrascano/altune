@@ -49,15 +49,6 @@ func (a *App) discoveryDeletedIdentityErasers() []discovery.DeletedIdentityErase
 	}
 }
 
-func (a *App) startCorpusRefresh(ctx context.Context, store discovery.BehavioralLabelStore) {
-	if a.cfg.BehavioralCorpusPath == "" {
-		return
-	}
-	interval := 24 * time.Hour
-	a.jobs.StartTicker(ctx, jobs.BehavioralCorpusRefresh, interval,
-		housekeeping.MaterializeBehavioralCorpus(store, a.cfg.BehavioralCorpusPath), "path", a.cfg.BehavioralCorpusPath, "interval", interval.String())
-}
-
 const discographyPruneInterval = 24 * time.Hour
 
 func (a *App) startDiscographyPrune(ctx context.Context, pruner housekeeping.DiscoveryEventPruner) {

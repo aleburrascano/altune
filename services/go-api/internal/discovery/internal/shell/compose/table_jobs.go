@@ -4,15 +4,12 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/internal/adapters/providers/artworkchain"
 	"altune/go-api/internal/discovery/internal/core/ports"
-	"altune/go-api/internal/discovery/service/providercall"
 )
 
 var artworkAskingOrder = []rowName{
 	rowCoverArtArchive, rowSpotify, rowDiscogs, rowFanartTV, rowGenius, rowTheAudioDB,
 	rowDeezer, rowITunes, rowYouTube, rowSoundCloud,
 }
-
-var consensusAskingOrder = []rowName{rowMusicBrainz, rowDiscogs, rowITunes, rowYouTube, rowSoundCloud}
 
 func (t *providerTable) searchProviders() []ports.SearchProvider {
 	var searchers []ports.SearchProvider
@@ -62,16 +59,6 @@ func (t *providerTable) chartProviders() []ports.ChartProvider {
 		}
 	}
 	return charts
-}
-
-func (t *providerTable) consensusProviders() []providercall.ConsensusProvider {
-	var consensus []providercall.ConsensusProvider
-	for _, name := range consensusAskingOrder {
-		if p := t.named(name); p.consensus.Fetcher != nil {
-			consensus = append(consensus, p.consensus)
-		}
-	}
-	return consensus
 }
 
 func (t *providerTable) artworkChain() *artworkchain.ChainedArtworkResolver {

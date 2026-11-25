@@ -28,18 +28,6 @@ type BehavioralSignalStore interface {
 	SatisfactionSignals(ctx context.Context, since time.Time) ([]BehavioralSignal, error)
 }
 
-type BehavioralLabel struct {
-	QueryNorm       string
-	ResultSignature string
-	Title           string
-	Subtitle        string
-	Polarity        int
-}
-
-type BehavioralLabelStore interface {
-	BehavioralLabels(ctx context.Context, since time.Time) ([]BehavioralLabel, error)
-}
-
 type EventQuery interface {
 	ZeroResultQueries(ctx context.Context, since time.Time, limit int) ([]QueryCount, error)
 	NonZeroNoClickQueries(ctx context.Context, since time.Time, limit int) ([]QueryCount, error)

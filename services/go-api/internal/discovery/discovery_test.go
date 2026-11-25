@@ -8,7 +8,6 @@ import (
 	"altune/go-api/internal/shared/sharedtest"
 	"bytes"
 	"context"
-	"errors"
 	"expvar"
 	"io"
 	"log/slog"
@@ -345,11 +344,11 @@ func TestNew_LogsOneLinePerProviderForAProdLikeConfig(t *testing.T) {
 	assertLines(t, h.logLines("discovery.provider"), []string{
 		`level=INFO msg=discovery.provider name=deezer on=true jobs=search,artist,album,artwork,charts,details,featured,lyrics,similar`,
 		`level=INFO msg=discovery.provider name=applemusic on=true jobs=search,artist,album`,
-		`level=INFO msg=discovery.provider name=musicbrainz on=true jobs=artist,consensus,enrichment,featured,recordings`,
-		`level=INFO msg=discovery.provider name=soundcloud on=true jobs=search,artist,album,related,artwork,consensus`,
-		`level=INFO msg=discovery.provider name=youtube on=true jobs=search,artwork,consensus`,
+		`level=INFO msg=discovery.provider name=musicbrainz on=true jobs=artist,enrichment,featured,recordings`,
+		`level=INFO msg=discovery.provider name=soundcloud on=true jobs=search,artist,album,related,artwork`,
+		`level=INFO msg=discovery.provider name=youtube on=true jobs=search,artwork`,
 		`level=INFO msg=discovery.provider name=spotify on=true jobs=search,artist,album,artwork`,
-		`level=INFO msg=discovery.provider name=itunes on=true jobs=album,artwork,consensus`,
+		`level=INFO msg=discovery.provider name=itunes on=true jobs=album,artwork`,
 		`level=INFO msg=discovery.provider name=coverartarchive on=true jobs=artwork`,
 		`level=INFO msg=discovery.provider name=discogs on=false reason="DISCOGS_TOKEN is empty"`,
 		`level=INFO msg=discovery.provider name=fanarttv on=true jobs=artwork`,
@@ -367,10 +366,10 @@ func TestNew_LogsWhichKeyEachKeyedProviderIsMissing(t *testing.T) {
 		`level=INFO msg=discovery.provider name=deezer on=true jobs=search,artist,album,artwork,charts,details,featured,lyrics,similar`,
 		`level=INFO msg=discovery.provider name=applemusic on=true jobs=search,artist,album`,
 		`level=INFO msg=discovery.provider name=musicbrainz on=false reason="MUSICBRAINZ_USER_AGENT is empty"`,
-		`level=INFO msg=discovery.provider name=soundcloud on=true jobs=search,artist,album,related,artwork,consensus`,
-		`level=INFO msg=discovery.provider name=youtube on=true jobs=search,artwork,consensus`,
+		`level=INFO msg=discovery.provider name=soundcloud on=true jobs=search,artist,album,related,artwork`,
+		`level=INFO msg=discovery.provider name=youtube on=true jobs=search,artwork`,
 		`level=INFO msg=discovery.provider name=spotify on=true jobs=search,artist,album,artwork`,
-		`level=INFO msg=discovery.provider name=itunes on=true jobs=album,artwork,consensus`,
+		`level=INFO msg=discovery.provider name=itunes on=true jobs=album,artwork`,
 		`level=INFO msg=discovery.provider name=coverartarchive on=true jobs=artwork`,
 		`level=INFO msg=discovery.provider name=discogs on=false reason="DISCOGS_TOKEN is empty"`,
 		`level=INFO msg=discovery.provider name=fanarttv on=false reason="FANARTTV_API_KEY is empty"`,
@@ -380,12 +379,12 @@ func TestNew_LogsWhichKeyEachKeyedProviderIsMissing(t *testing.T) {
 	})
 }
 
-func TestNew_WithEveryKeySetDiscogsServesArtworkAndConsensus(t *testing.T) {
+func TestNew_WithEveryKeySetDiscogsServesArtwork(t *testing.T) {
 	h := newHarness(t, everyProviderOn())
 	h.start()
 
-	if line := lineNaming(h.logLines("discovery.provider"), "discogs"); line != `level=INFO msg=discovery.provider name=discogs on=true jobs=artwork,consensus` {
-		t.Errorf("discogs line = %q, want it on for artwork and consensus once DISCOGS_TOKEN is set", line)
+	if line := lineNaming(h.logLines("discovery.provider"), "discogs"); line != `level=INFO msg=discovery.provider name=discogs on=true jobs=artwork` {
+		t.Errorf("discogs line = %q, want it on for artwork once DISCOGS_TOKEN is set", line)
 	}
 }
 
@@ -656,13 +655,6 @@ var jobProbes = map[string]func(t *testing.T, provider string) []string{
 		disc := h.start()
 		serve(disc, "/enrichment?kind=artist&title=Probe+Artist")
 		serve(disc, "/enrichment?kind=album&title=Probe+Album&subtitle=Probe+Artist")
-		return h.transport.owners()
-	},
-	"consensus": func(t *testing.T, _ string) []string {
-		h := newHarness(t, everyProviderOn())
-		for _, source := range h.start().Consensus {
-			_, _ = source.Fetcher(context.Background(), "Probe Artist")
-		}
 		return h.transport.owners()
 	},
 	"charts": func(t *testing.T, _ string) []string {
@@ -985,16 +977,6 @@ func everySearchSettingOn(h *harness) {
 	h.deps.Search.BehavioralRanking = true
 }
 
-func TestEvalSearch_IsTheServingSearchWithoutAnythingThatRecords(t *testing.T) {
-	h := newHarness(t, prodLikeProviders())
-	everySearchSettingOn(h)
-	h.start().EvalSearch()
-
-	recording := []string{"event_store", "behavioral_ranking", "activity"}
-	want := slices.DeleteFunc(h.searchOptions(), func(option string) bool { return slices.Contains(recording, option) })
-	assertLines(t, h.optionsLoggedAs("discovery.eval_search"), want)
-}
-
 func TestRankingOnlySearch_RanksWithoutDeadlineArtworkResultCachesOrRecording(t *testing.T) {
 	h := newHarness(t, prodLikeProviders())
 	everySearchSettingOn(h)
@@ -1033,107 +1015,6 @@ func TestIdentityStore_AGivenStoreServesSearchWithoutAPool(t *testing.T) {
 	options := h.searchOptions()
 	if !slices.Contains(options, "identity_store") || slices.Contains(options, "favorites") {
 		t.Errorf("options = %v, want the given identity store and no favorites without a pool", options)
-	}
-}
-
-func bridgedToSpotify() *discovery.FakeIdentityStore {
-	return &discovery.FakeIdentityStore{Mbid: probeArtistMBID, Xref: map[discovery.ProviderKey]string{"spotify": "4"}}
-}
-
-func TestEvalArtistContent_FansOutToTheIdsInTheGivenIdentityStore(t *testing.T) {
-	h := newHarness(t, everyProviderOff())
-	h.deps.IdentityStore = bridgedToSpotify()
-
-	_, _ = h.start().EvalArtistContent().GetTopTracks(context.Background(), discovery.ProviderDeezer, "1", nil, 10)
-	if owners := h.transport.owners(); !slices.Contains(owners, "spotify") {
-		t.Errorf("eval artist content reached %v, want Spotify through the bridged id", owners)
-	}
-}
-
-type unreachableTransport struct {
-	mu    sync.Mutex
-	calls int
-}
-
-func (rt *unreachableTransport) RoundTrip(*http.Request) (*http.Response, error) {
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	rt.calls++
-	return nil, errors.New("provider unreachable")
-}
-
-func TestEvalArtistContent_NeverStopsAskingAFailingProvider(t *testing.T) {
-	h := newHarness(t, everyProviderOff())
-	unreachable := &unreachableTransport{}
-	h.deps.Transport = unreachable
-	content := h.start().EvalArtistContent()
-
-	for range 7 {
-		_, _ = content.GetAlbums(context.Background(), discovery.ProviderDeezer, "1", nil, 10)
-	}
-	if unreachable.calls < 7 {
-		t.Errorf("Deezer was asked %d times over 7 album lookups, want every lookup to reach it", unreachable.calls)
-	}
-}
-
-func consensusNames(disc *discovery.Discovery) []string {
-	var names []string
-	for _, source := range disc.Consensus {
-		names = append(names, source.Name+"="+source.Provider.String())
-	}
-	return names
-}
-
-func TestConsensus_AsksEveryCatalogInOrderAndOnlyThoseWithTheirKey(t *testing.T) {
-	assertLines(t, consensusNames(newHarness(t, everyProviderOn()).start()), []string{
-		"musicbrainz=musicbrainz", "discogs=discogs", "itunes=itunes", "ytmusic=youtube", "soundcloud=soundcloud",
-	})
-	assertLines(t, consensusNames(newHarness(t, everyProviderOff()).start()), []string{
-		"itunes=itunes", "ytmusic=youtube", "soundcloud=soundcloud",
-	})
-}
-
-type discogsCatalog struct{}
-
-func (discogsCatalog) RoundTrip(req *http.Request) (*http.Response, error) {
-	status, body := http.StatusNotFound, `{}`
-	switch {
-	case req.URL.Path == "/database/search" && req.URL.Query().Get("q") == "Probe Artist":
-		status, body = http.StatusOK, `{"results":[{"id":7,"title":"Probe Artist","type":"artist"}]}`
-	case req.URL.Path == "/database/search":
-		status, body = http.StatusOK, `{"results":[]}`
-	case req.URL.Path == "/artists/7":
-		status, body = http.StatusOK, `{"id":7,"name":"Probe Artist"}`
-	case req.URL.Path == "/artists/7/releases":
-		status, body = http.StatusOK, `{"releases":[{"id":1,"title":"Probe Album","year":2020,"type":"master"}]}`
-	}
-	return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body)), Request: req}, nil
-}
-
-func discogsConsensus(t *testing.T) discovery.ConsensusProvider {
-	t.Helper()
-	h := newHarness(t, everyProviderOn())
-	h.deps.Transport = discogsCatalog{}
-	for _, source := range h.start().Consensus {
-		if source.Name == "discogs" {
-			return source
-		}
-	}
-	t.Fatal("no discogs consensus source with every key set")
-	return discovery.ConsensusProvider{}
-}
-
-func TestConsensus_DiscogsListsTheReleasesOfTheArtistItResolves(t *testing.T) {
-	albums, err := discogsConsensus(t).Fetcher(context.Background(), "Probe Artist")
-	if err != nil || len(albums) != 1 || albums[0].Title != "Probe Album" || albums[0].Kind != discovery.ResultKindAlbum {
-		t.Errorf("discogs consensus = %+v, %v, want the resolved artist's one album", albums, err)
-	}
-}
-
-func TestConsensus_DiscogsAnswersNothingForAnArtistItCannotResolve(t *testing.T) {
-	albums, err := discogsConsensus(t).Fetcher(context.Background(), "Nobody Here")
-	if err != nil || len(albums) != 0 {
-		t.Errorf("discogs consensus = %+v, %v, want no albums and no error", albums, err)
 	}
 }
 

@@ -9,7 +9,6 @@ import (
 
 var everyName = []jobs.Name{
 	jobs.OrphanedAudioReconcile,
-	jobs.BehavioralCorpusRefresh,
 	jobs.DiscographyEventPrune,
 	jobs.VocabularyRefresh,
 	jobs.BehavioralRankingRefresh,
@@ -26,7 +25,6 @@ func TestNames_WireIdentifiersUnchanged(t *testing.T) {
 		jobs.EvalMeter:                "eval meter",
 		jobs.AlertMonitor:             "alert monitor",
 		jobs.OrphanedAudioReconcile:   "orphaned audio reconcile",
-		jobs.BehavioralCorpusRefresh:  "behavioral corpus refresh",
 		jobs.DiscographyEventPrune:    "discography event prune",
 		jobs.VocabularyRefresh:        "vocabulary refresh",
 		jobs.BehavioralRankingRefresh: "behavioral ranking refresh",
@@ -63,7 +61,6 @@ func TestDisableAtStartup_AcceptsEveryJobButTheAlwaysOnErasure(t *testing.T) {
 func TestAlertable_PinnedInOrder(t *testing.T) {
 	want := []jobs.Name{
 		jobs.OrphanedAudioReconcile,
-		jobs.BehavioralCorpusRefresh,
 		jobs.DiscographyEventPrune,
 		jobs.VocabularyRefresh,
 		jobs.BehavioralRankingRefresh,
