@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -116,7 +117,10 @@ func dataFrame[T any](v T) (string, bool) {
 
 func writeFrame(w http.ResponseWriter, rc *http.ResponseController, frame string) error {
 	if _, err := io.WriteString(w, frame); err != nil {
-		return err
+		return fmt.Errorf("write an sse frame: %w", err)
 	}
-	return rc.Flush()
+	if err := rc.Flush(); err != nil {
+		return fmt.Errorf("flush an sse frame: %w", err)
+	}
+	return nil
 }

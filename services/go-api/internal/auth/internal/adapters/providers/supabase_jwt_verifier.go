@@ -317,13 +317,17 @@ func (v *SupabaseJWTVerifier) fetchFreshKeySet(ctx context.Context) (jwk.Set, er
 	if err := v.refresher.checkFresh(); err != nil {
 		return nil, err
 	}
-	return v.cache.Get(ctx, v.jwksURL)
+	keySet, err = v.cache.Get(ctx, v.jwksURL)
+	if err != nil {
+		return nil, fmt.Errorf("read the JWKS after a refresh: %w", err)
+	}
+	return keySet, nil
 }
 
 func (v *SupabaseJWTVerifier) forceRefresh(ctx context.Context) error {
 	if _, err := v.cache.Refresh(ctx, v.jwksURL); err != nil {
 		v.metrics.JWKSFetchFailed()
-		return err
+		return fmt.Errorf("refresh the JWKS: %w", err)
 	}
 	v.primed.Store(true)
 	return nil
