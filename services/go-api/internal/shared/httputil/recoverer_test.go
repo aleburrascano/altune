@@ -23,7 +23,7 @@ func TestRecoverer_CatchesPanic_Returns500(t *testing.T) {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
 
-	var body httputil.ErrorResponse
+	var body httputil.Problem
 	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
 		t.Fatalf("failed to decode body: %v", err)
 	}

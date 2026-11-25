@@ -24,4 +24,4 @@ A handler never picks a status. The boundary reads `err`'s chain and takes the f
 
 A handler adds context by wrapping the error (`fmt.Errorf("...: %w", err)`), not by logging it. Separately, `RequestLogger` logs `request.complete` at Info for every request, including failed ones.
 
-`BadRequest`, `NotFound` and `InternalError` predate this boundary and still serve their last caller. The strict lint (`forbidigo`) bans them in new code, as it bans `http.Error`.
+Write every error through `HandleServiceError`; the strict lint (`forbidigo`) bans `http.Error`.

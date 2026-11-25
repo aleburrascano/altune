@@ -30,11 +30,6 @@ type Problem struct {
 	Code     string `json:"code"`
 }
 
-type ErrorResponse struct {
-	Detail string `json:"detail"`
-	Code   string `json:"code,omitempty"`
-}
-
 type retryAfterer interface {
 	RetryAfter() time.Duration
 }
@@ -151,27 +146,4 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_, _ = w.Write(append(body, '\n'))
-}
-
-func writeDetail(w http.ResponseWriter, status int, message string) {
-	WriteJSON(w, status, ErrorResponse{Detail: message})
-}
-
-func NotFound(w http.ResponseWriter, message string) {
-	if message == "" {
-		message = "not found"
-	}
-	writeDetail(w, http.StatusNotFound, message)
-}
-
-func BadRequest(w http.ResponseWriter, message string) {
-	writeDetail(w, http.StatusBadRequest, message)
-}
-
-func InternalError(w http.ResponseWriter, msgs ...string) {
-	msg := internalServerErrorDetail
-	if len(msgs) > 0 && msgs[0] != "" {
-		msg = msgs[0]
-	}
-	writeDetail(w, http.StatusInternalServerError, msg)
 }

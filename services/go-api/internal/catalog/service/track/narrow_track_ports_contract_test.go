@@ -257,7 +257,7 @@ func assertServiceErrorResponse(t *testing.T, err error, wantStatus int, wantCod
 	if rec.Code != wantStatus {
 		t.Errorf("status = %d, want %d", rec.Code, wantStatus)
 	}
-	var body httputil.ErrorResponse
+	var body httputil.Problem
 	if decodeErr := json.NewDecoder(rec.Body).Decode(&body); decodeErr != nil {
 		t.Fatalf("decode body: %v", decodeErr)
 	}
