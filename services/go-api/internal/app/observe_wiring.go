@@ -62,6 +62,7 @@ func (a *App) liveMetrics() observe.LiveMetrics {
 		EventTap:     a.eventTap,
 		EventFeed:    a.eventFeed,
 		AlertMonitor: a.alertMonitor,
+		Background:   a.background,
 	})
 }
 

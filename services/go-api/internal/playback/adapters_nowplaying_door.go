@@ -7,7 +7,10 @@ import (
 
 type TrackSource = ports.TrackSource
 
-var ErrTrackSourceUnavailable = ports.ErrTrackSourceUnavailable
+var (
+	ErrTrackSourceUnavailable  = ports.ErrTrackSourceUnavailable
+	ErrNowPlayingTrackNotFound = ports.ErrNowPlayingTrackNotFound
+)
 
 var (
 	NewNowPlayingReader         = nowplaying.NewNowPlayingReader

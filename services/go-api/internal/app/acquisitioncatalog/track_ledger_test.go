@@ -124,7 +124,7 @@ func TestCompleteMarksPendingTrackReady(t *testing.T) {
 
 	err := ledger.Complete(context.Background(), track.ID, userId, 0, acquisition.Completion{
 		AudioRef:           "ref-1",
-		Duration:           215.5,
+		Duration:           trackLength(t, 215.5),
 		Provenance:         shared.ProvenanceVerified,
 		RejectedSourceKeys: []string{"bad-key"},
 		SourceURL:          "https://example.test/a",
@@ -314,7 +314,7 @@ func completeWithAudioLength(t *testing.T, catalogSeconds, audioSeconds float64)
 		t.Fatal(err)
 	}
 	store := newFakeStore(track)
-	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0, acquisition.Completion{AudioRef: "ref", Duration: audioSeconds})
+	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0, acquisition.Completion{AudioRef: "ref", Duration: trackLength(t, audioSeconds)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -431,7 +431,7 @@ func TestCompleteDoesNotFlagATrackWithoutACatalogLength(t *testing.T) {
 	track, userId := newTrack(t, 1)
 	store := newFakeStore(track)
 
-	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0, acquisition.Completion{AudioRef: "ref", Duration: 137})
+	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0, acquisition.Completion{AudioRef: "ref", Duration: trackLength(t, 137)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -452,7 +452,7 @@ func TestCompleteClearsTheFlagWhenReplacementAudioMatches(t *testing.T) {
 	track.AudioLengthMismatch = true
 	store := newFakeStore(track)
 
-	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0, acquisition.Completion{AudioRef: "new", ReplaceAudio: true, Duration: 236})
+	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0, acquisition.Completion{AudioRef: "new", ReplaceAudio: true, Duration: trackLength(t, 236)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -787,7 +787,7 @@ func TestTrackLedger_CompleteWithARelabelStoresTheRecordingActuallyStored(t *tes
 	store := newFakeStore(track)
 
 	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
-		acquisition.Completion{AudioRef: "ref", Duration: 194, ISRC: "IETLH2500023", Relabel: goldenRelabel()})
+		acquisition.Completion{AudioRef: "ref", Duration: trackLength(t, 194), ISRC: "IETLH2500023", Relabel: goldenRelabel()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -821,7 +821,7 @@ func TestTrackLedger_CompleteWithoutARelabelKeepsTheTracksLabels(t *testing.T) {
 	store := newFakeStore(track)
 
 	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
-		acquisition.Completion{AudioRef: "ref", Duration: 195, ISRC: "IETLH2500023"})
+		acquisition.Completion{AudioRef: "ref", Duration: trackLength(t, 195), ISRC: "IETLH2500023"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -843,7 +843,7 @@ func TestTrackLedger_ARefusedRelabelFailsTheCompletionAndWritesNothing(t *testin
 	label.MBID = ""
 
 	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
-		acquisition.Completion{AudioRef: "ref", Duration: 194, Relabel: label})
+		acquisition.Completion{AudioRef: "ref", Duration: trackLength(t, 194), Relabel: label})
 
 	if err == nil {
 		t.Fatal("expected the completion to fail")
@@ -859,7 +859,7 @@ func TestTrackLedger_ARelabelSurvivesAVersionConflictRetry(t *testing.T) {
 	store.conflicts = 1
 
 	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
-		acquisition.Completion{AudioRef: "ref", Duration: 194, Relabel: goldenRelabel()})
+		acquisition.Completion{AudioRef: "ref", Duration: trackLength(t, 194), Relabel: goldenRelabel()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -886,7 +886,7 @@ func TestTrackLedger_ARelabelChecksTheMeasuredLengthAgainstTheNewCatalogLength(t
 	label.DurationSeconds = 400
 
 	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
-		acquisition.Completion{AudioRef: "ref", Duration: 195, Relabel: label})
+		acquisition.Completion{AudioRef: "ref", Duration: trackLength(t, 195), Relabel: label})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -903,7 +903,7 @@ func TestTrackLedger_ARelabelWithNoKnownLengthLeavesNothingToMismatch(t *testing
 	label.DurationSeconds = 0
 
 	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
-		acquisition.Completion{AudioRef: "ref", Duration: 60, Relabel: label})
+		acquisition.Completion{AudioRef: "ref", Duration: trackLength(t, 60), Relabel: label})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -922,7 +922,7 @@ func TestTrackLedger_TheRelabelsISRCWinsOverTheCompletionsISRC(t *testing.T) {
 	store := newFakeStore(track)
 
 	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
-		acquisition.Completion{AudioRef: "ref", Duration: 194, ISRC: "USAM18490008", Relabel: goldenRelabel()})
+		acquisition.Completion{AudioRef: "ref", Duration: trackLength(t, 194), ISRC: "USAM18490008", Relabel: goldenRelabel()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -939,7 +939,7 @@ func TestTrackLedger_ARelabelWithNoISRCTakesTheCompletionsResolvedISRC(t *testin
 	label.ISRC = ""
 
 	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
-		acquisition.Completion{AudioRef: "ref", Duration: 194, ISRC: "IETLH2500023", Relabel: label})
+		acquisition.Completion{AudioRef: "ref", Duration: trackLength(t, 194), ISRC: "IETLH2500023", Relabel: label})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -957,7 +957,7 @@ func TestTrackLedger_AReplaceOfAReadyTrackCanRelabelIt(t *testing.T) {
 	store := newFakeStore(track)
 
 	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
-		acquisition.Completion{AudioRef: "rerecording-ref", ReplaceAudio: true, Duration: 194, Relabel: goldenRelabel()})
+		acquisition.Completion{AudioRef: "rerecording-ref", ReplaceAudio: true, Duration: trackLength(t, 194), Relabel: goldenRelabel()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -979,7 +979,7 @@ func TestTrackLedger_AnIllegalReplaceWithARelabelWritesNoLabels(t *testing.T) {
 	store := newFakeStore(track)
 
 	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
-		acquisition.Completion{AudioRef: "ref", ReplaceAudio: true, Duration: 194, Relabel: goldenRelabel()})
+		acquisition.Completion{AudioRef: "ref", ReplaceAudio: true, Duration: trackLength(t, 194), Relabel: goldenRelabel()})
 	if !errors.Is(err, acquisition.ErrIllegalTransition) {
 		t.Fatalf("want ErrIllegalTransition, got %v", err)
 	}
@@ -987,4 +987,13 @@ func TestTrackLedger_AnIllegalReplaceWithARelabelWritesNoLabels(t *testing.T) {
 	if got := storedTrack(t, store, track.ID); got.Title != "It's Only Love" || *got.CatalogMBID != "7933a65c-2c66-4ec1-9880-e46b5d2f05de" {
 		t.Errorf("labels changed on a refused completion: %q / %v", got.Title, *got.CatalogMBID)
 	}
+}
+
+func trackLength(t *testing.T, seconds float64) shared.TrackLength {
+	t.Helper()
+	length, err := shared.TrackLengthOf(seconds)
+	if err != nil {
+		t.Fatalf("TrackLengthOf(%v) = %v", seconds, err)
+	}
+	return length
 }

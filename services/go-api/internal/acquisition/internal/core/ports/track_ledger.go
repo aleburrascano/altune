@@ -63,7 +63,7 @@ type RecordingLabel struct {
 type Completion struct {
 	AudioRef           string
 	ReplaceAudio       bool
-	Duration           float64
+	Duration           shared.TrackLength
 	ISRC               string
 	Provenance         shared.AcquisitionProvenance
 	RejectedSourceKeys []string

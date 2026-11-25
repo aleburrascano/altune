@@ -861,7 +861,7 @@ func shadowPipeline(candidates []ports.AudioCandidate, keep int) Pipeline {
 		if keep < 0 {
 			return errors.New("every candidate failed")
 		}
-		ac.Selected, ac.ProbedDuration = &candidates[keep], 191
+		ac.Selected, ac.ProbedDuration = &candidates[keep], probedLength(191)
 		return nil
 	}}
 	return p
@@ -1048,4 +1048,12 @@ func (q *recordingOrphanQueue) RecordOrphanedAudio(_ context.Context, o ports.Or
 	}
 	q.recorded = append(q.recorded, o)
 	return nil
+}
+
+func probedLength(seconds float64) shared.TrackLength {
+	length, err := shared.TrackLengthOf(seconds)
+	if err != nil {
+		panic(err)
+	}
+	return length
 }

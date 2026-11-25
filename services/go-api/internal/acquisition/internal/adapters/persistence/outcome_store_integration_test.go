@@ -194,7 +194,7 @@ func TestPgxOutcomeStore_CancelledContextReturnsErrorAndWritesNothing(t *testing
 
 func TestPgxOutcomeStore_ClosedPoolReturnsError(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := sharedtest.Pool(t)
 	store := acquisition.NewPgxOutcomeStore(pool)
 	pool.Close()
 

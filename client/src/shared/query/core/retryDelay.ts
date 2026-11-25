@@ -9,7 +9,15 @@ function retryDelayMs(failureCount: number, random: number): number {
   return equalJitterMs(RETRY_BACKOFF_BASE_MS, RETRY_BACKOFF_CAP_MS, exponent, random);
 }
 
-export const transientRetryOptions = {
-  retry: (failureCount: number, error: unknown) => isRetryable(error) && failureCount < 5,
-  retryDelay: (failureCount: number) => retryDelayMs(failureCount, Math.random()),
-};
+export interface RetryClock {
+  random: () => number;
+}
+
+export function createTransientRetryOptions({ random }: RetryClock) {
+  return {
+    retry: (failureCount: number, error: unknown) => isRetryable(error) && failureCount < 5,
+    retryDelay: (failureCount: number) => retryDelayMs(failureCount, random()),
+  };
+}
+
+export const transientRetryOptions = createTransientRetryOptions({ random: () => Math.random() });

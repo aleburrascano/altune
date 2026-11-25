@@ -6,13 +6,14 @@ import (
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/internal/core/recordingresolver"
 	"altune/go-api/internal/acquisition/internal/core/rejectionlog"
-	"altune/go-api/internal/catalog/domain"
+	shared "altune/go-api/internal/shared/kernel"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -195,8 +196,8 @@ func TestDownloadStep_CancelledMidLoop_ReportsCancellationAndStops(t *testing.T)
 			if err == nil {
 				t.Fatal("expected an error from a cancelled download")
 			}
-			if got := failureReason(&StepError{Step: "download", Err: err}); got != string(domain.FailureAcquisitionCancelled) {
-				t.Errorf("failureReason = %q, want %q", got, domain.FailureAcquisitionCancelled)
+			if got := failureReason(&StepError{Step: "download", Err: err}); got != string(shared.FailureAcquisitionCancelled) {
+				t.Errorf("failureReason = %q, want %q", got, shared.FailureAcquisitionCancelled)
 			}
 			if got := int(fetcher.calls.Load()); got > tt.wantMax {
 				t.Errorf("attempted %d candidates after cancellation, want <= %d (the one window already in flight)", got, tt.wantMax)
@@ -216,8 +217,8 @@ func TestDownloadStep_CancelledOnLastCandidate_ReportsCancellation(t *testing.T)
 	if err == nil {
 		t.Fatal("expected an error from a cancelled download")
 	}
-	if got := failureReason(&StepError{Step: "download", Err: err}); got != string(domain.FailureAcquisitionCancelled) {
-		t.Errorf("failureReason = %q, want %q", got, domain.FailureAcquisitionCancelled)
+	if got := failureReason(&StepError{Step: "download", Err: err}); got != string(shared.FailureAcquisitionCancelled) {
+		t.Errorf("failureReason = %q, want %q", got, shared.FailureAcquisitionCancelled)
 	}
 }
 
@@ -232,8 +233,8 @@ func TestDownloadStep_DeadlineExpiredBeforeStart_ReportsCancellation(t *testing.
 	if err == nil {
 		t.Fatal("expected an error from an expired deadline")
 	}
-	if got := failureReason(&StepError{Step: "download", Err: err}); got != string(domain.FailureAcquisitionCancelled) {
-		t.Errorf("failureReason = %q, want %q", got, domain.FailureAcquisitionCancelled)
+	if got := failureReason(&StepError{Step: "download", Err: err}); got != string(shared.FailureAcquisitionCancelled) {
+		t.Errorf("failureReason = %q, want %q", got, shared.FailureAcquisitionCancelled)
 	}
 	if fetcher.calls.Load() != 0 {
 		t.Errorf("attempted %d candidates with an expired deadline, want 0", fetcher.calls.Load())
@@ -252,8 +253,8 @@ func TestDownloadStep_GenuineFailure_KeepsDownloadReasonAndTriesAll(t *testing.T
 	if err == nil {
 		t.Fatal("expected a download error")
 	}
-	if got := failureReason(&StepError{Step: "download", Err: err}); got != string(domain.FailureDownloadFailed) {
-		t.Errorf("failureReason = %q, want %q", got, domain.FailureDownloadFailed)
+	if got := failureReason(&StepError{Step: "download", Err: err}); got != string(shared.FailureDownloadFailed) {
+		t.Errorf("failureReason = %q, want %q", got, shared.FailureDownloadFailed)
 	}
 	if fetcher.calls.Load() != 2 {
 		t.Errorf("attempted %d candidates, want 2 (whole list under a live context)", fetcher.calls.Load())
@@ -397,8 +398,8 @@ func TestDownloadStep_WidthOne_EarlierUnavailableSurvivesADifferentLastFailure(t
 
 	_, err := newTestDownloadStep(fetcher, WithVerifyWidth(1)).Execute(context.Background(), ac, afterSelect{})
 
-	if code := failureCode(&StepError{Step: stepNameDownload, Err: err}); code != domain.FailureSourceUnavailable {
-		t.Fatalf("failure code = %s, want %s", code, domain.FailureSourceUnavailable)
+	if code := failureCode(&StepError{Step: stepNameDownload, Err: err}); code != shared.FailureSourceUnavailable {
+		t.Fatalf("failure code = %s, want %s", code, shared.FailureSourceUnavailable)
 	}
 }
 
@@ -1002,7 +1003,7 @@ func TestDownloadStep_NeverRejectsAudioTheFingerprintCannotLink(t *testing.T) {
 	if ac.IdentityVerified {
 		t.Error("accepting without evidence must not claim verification")
 	}
-	if ac.Provenance() != domain.ProvenanceBestEffort {
+	if ac.Provenance() != shared.ProvenanceBestEffort {
 		t.Errorf("provenance = %q, want best_effort", ac.Provenance())
 	}
 }
@@ -1019,7 +1020,7 @@ func TestDownloadStep_UnknownAudioIsAccepted(t *testing.T) {
 	}
 	defer os.RemoveAll(filepath.Dir(ac.TempPath))
 
-	if ac.Provenance() != domain.ProvenanceBestEffort {
+	if ac.Provenance() != shared.ProvenanceBestEffort {
 		t.Errorf("provenance = %q, want best_effort", ac.Provenance())
 	}
 }
@@ -1106,7 +1107,7 @@ func TestDownloadStep_WidthOne_LiveOnlyLinksRejectedThenCleanCandidateVerified(t
 	if len(ac.Rejections) != 1 || ac.Rejections[0].Stage != rejectionlog.Fingerprint || !strings.HasPrefix(ac.Rejections[0].Reason, "contradicted") {
 		t.Errorf("rejections = %+v, want one fingerprint rejection as contradicted: the live link and the live title agree", ac.Rejections)
 	}
-	if ac.Provenance() != domain.ProvenanceVerified || ac.Verdict.Kind != VerdictHard {
+	if ac.Provenance() != shared.ProvenanceVerified || ac.Verdict.Kind != VerdictHard {
 		t.Errorf("provenance = %v, verdict = %v, want verified and hard", ac.Provenance(), ac.Verdict.Kind)
 	}
 }
@@ -1617,7 +1618,7 @@ func TestDownloadStep_WalksPastUnknownFingerprintToALaterHardMatch(t *testing.T)
 			if ac.Selected == nil || ac.Selected.URL != "hard" {
 				t.Fatalf("selected = %+v, want the hard match", ac.Selected)
 			}
-			if got := ac.Provenance(); got != domain.ProvenanceVerified {
+			if got := ac.Provenance(); got != shared.ProvenanceVerified {
 				t.Errorf("provenance = %q, want verified", got)
 			}
 			if _, err := os.Stat(fetcher.dirOf("unknown")); !os.IsNotExist(err) {
@@ -1644,7 +1645,7 @@ func TestDownloadStep_CleanHoldBeatsAHigherRankedOtherVersionHold(t *testing.T) 
 	if ac.Selected == nil || ac.Selected.URL != "clean" {
 		t.Fatalf("selected = %+v, want the clean hold", ac.Selected)
 	}
-	if !ac.BestEffort || ac.Provenance() != domain.ProvenanceBestEffort {
+	if !ac.BestEffort || ac.Provenance() != shared.ProvenanceBestEffort {
 		t.Errorf("a held selection must be best_effort, got BestEffort=%v provenance=%q", ac.BestEffort, ac.Provenance())
 	}
 	if _, err := os.Stat(fetcher.dirOf("edit")); !os.IsNotExist(err) {
@@ -1762,6 +1763,46 @@ func TestDownloadStep_ProbeErrorIsAcceptedAndRecordsAProbeFailedSkip(t *testing.
 	assertWindowSkips(t, rec.gates, ports.SkipProbeFailed)
 }
 
+func TestDownloadStep_AProbeNoRecordingCanHaveIsAProbeFailureAndNothingIsRecordedAsTheLength(t *testing.T) {
+	for name, probed := range map[string]float64{"above seven days": 8 * 24 * 60 * 60, "negative": -3, "not a number": math.NaN()} {
+		t.Run(name, func(t *testing.T) {
+			rec := &gateRecorder{}
+			step := newTestDownloadStep(&fileWritingSearcher{writeFile: true},
+				WithDownloadProber(scriptedProber{duration: probed}), WithStepVerifySkips(rec))
+			ac := downloadContext("")
+			ac.Track.CatalogDuration = 200
+
+			if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+			if ac.TempPath == "" {
+				t.Error("an implausible probe is a probe failure, which still accepts the candidate")
+			}
+			if ac.ProbedDuration.Known() || ac.DurationVerified {
+				t.Errorf("probed length = %v s, duration verified = %v, want neither recorded", ac.ProbedDuration.Seconds(), ac.DurationVerified)
+			}
+			assertWindowSkips(t, rec.gates, ports.SkipProbeFailed)
+		})
+	}
+}
+
+func TestDownloadStep_APlausibleProbeIsRecordedAsTheProbedLength(t *testing.T) {
+	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadProber(scriptedProber{duration: 201.5}))
+	ac := downloadContext("")
+	ac.Track.CatalogDuration = 200
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	if got := ac.ProbedDuration.Seconds(); got != 201.5 {
+		t.Errorf("probed length = %v s, want 201.5", got)
+	}
+}
+
 func TestDownloadStep_UnknownDurationIsAcceptedAndRecordsANoDurationSkip(t *testing.T) {
 	rec := &gateRecorder{}
 	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true},
@@ -1846,8 +1887,8 @@ func TestDownloadStep_EveryCandidateTimingOutIsTransient(t *testing.T) {
 
 	_, err := newTestDownloadStep(fetcher, WithCandidateTimeout(20*time.Millisecond)).Execute(ctx, ac, afterSelect{})
 
-	if code := failureCode(&StepError{Step: stepNameDownload, Err: err}); code != domain.FailureSourceUnavailable {
-		t.Fatalf("failure code = %s, want %s (err=%v)", code, domain.FailureSourceUnavailable, err)
+	if code := failureCode(&StepError{Step: stepNameDownload, Err: err}); code != shared.FailureSourceUnavailable {
+		t.Fatalf("failure code = %s, want %s (err=%v)", code, shared.FailureSourceUnavailable, err)
 	}
 	if !willRetry(withJobAttempt(ctx, 1), err) {
 		t.Fatalf("willRetry = false for %v", err)
@@ -1866,8 +1907,8 @@ func TestDownloadStep_UnavailableSourceIsFetchedOncePerJob(t *testing.T) {
 
 			_, err := newTestDownloadStep(fetcher, WithVerifyWidth(width)).Execute(context.Background(), ac, afterSelect{})
 
-			if code := failureCode(&StepError{Step: stepNameDownload, Err: err}); code != domain.FailureSourceUnavailable {
-				t.Fatalf("failure code = %s, want %s", code, domain.FailureSourceUnavailable)
+			if code := failureCode(&StepError{Step: stepNameDownload, Err: err}); code != shared.FailureSourceUnavailable {
+				t.Fatalf("failure code = %s, want %s", code, shared.FailureSourceUnavailable)
 			}
 			want := width
 			if got := fetcher.calls["ytdlp"]; got != want {
@@ -2074,7 +2115,7 @@ func TestDownloadStep_SoftNeedsTheSameVersionLabels(t *testing.T) {
 			if ac.Verdict.Kind != tt.wantVerdict {
 				t.Errorf("verdict = %q, want %q", ac.Verdict.Kind, tt.wantVerdict)
 			}
-			if got := ac.Provenance() == domain.ProvenanceVerified; got != tt.wantVerified {
+			if got := ac.Provenance() == shared.ProvenanceVerified; got != tt.wantVerified {
 				t.Errorf("verified = %v, want %v", got, tt.wantVerified)
 			}
 		})
@@ -2085,10 +2126,10 @@ func TestDownloadStep_ASoftVerdictIsAcceptedButNotIdentityVerified(t *testing.T)
 	tests := []struct {
 		name        string
 		catalog     float64
-		wantProvens domain.AcquisitionProvenance
+		wantProvens shared.AcquisitionProvenance
 	}{
-		{"a corroborated length is corroborated", 180, domain.ProvenanceCorroborated},
-		{"an uncorroborated length is best effort", 0, domain.ProvenanceBestEffort},
+		{"a corroborated length is corroborated", 180, shared.ProvenanceCorroborated},
+		{"an uncorroborated length is best effort", 0, shared.ProvenanceBestEffort},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2374,7 +2415,7 @@ func TestJudgeAttempt_AnOtherVersionIsHeldOrRejectedByLength(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			verified := verificationResult{probed: tt.probed, verdict: AudioVerdict{Kind: VerdictSoft}}
+			verified := verificationResult{probed: probedLength(tt.probed), verdict: AudioVerdict{Kind: VerdictSoft}}
 			got := judgeAttempt(ac, ports.AudioCandidate{Title: tt.title}, "/tmp/a.m4a", verified)
 			if tt.wantReason != "" {
 				if got.rejection == nil || got.rejection.reason != tt.wantReason {

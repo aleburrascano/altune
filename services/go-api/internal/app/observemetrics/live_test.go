@@ -11,6 +11,7 @@ import (
 	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/leader"
 	"altune/go-api/internal/shared/reqmetrics"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -41,6 +42,7 @@ func newSources(t *testing.T) sources {
 			EventTap:     tap,
 			EventFeed:    observe.NewEventFeed(),
 			AlertMonitor: observe.NewAlertMonitor(observe.NopNotifier{}, time.Second),
+			Background:   &runloop.Tracker{},
 		},
 		bus: bus,
 	}
@@ -91,6 +93,36 @@ func TestLive_CarriesEverySourceUnderItsOwnKey(t *testing.T) {
 	}
 	if string(monitor["nop_notifier"]) != "true" {
 		t.Errorf("nop_notifier = %s, want true", monitor["nop_notifier"])
+	}
+}
+
+func TestLive_ReportsDroppedBackgroundTasks(t *testing.T) {
+	s := newSources(t)
+	bg, err := runloop.NewTracker(runloop.TrackerLimits{MaxInFlight: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Background = bg
+	release := make(chan struct{})
+	started := make(chan struct{})
+	t.Cleanup(func() { close(release); bg.Wait() })
+	if !bg.LaunchWithin(context.Background(), "hold", time.Minute, func(context.Context) { close(started); <-release }) {
+		t.Fatal("precondition: the first task was refused")
+	}
+	<-started
+	for range 3 {
+		if bg.LaunchWithin(context.Background(), "over the cap", time.Minute, func(context.Context) {}) {
+			t.Fatal("precondition: a task over the cap was admitted")
+		}
+	}
+
+	var out struct {
+		Dropped uint64 `json:"background_tasks_dropped"`
+	}
+	decode(t, served(t, s.Sources), &out)
+
+	if out.Dropped != 3 {
+		t.Errorf("background_tasks_dropped = %d, want 3", out.Dropped)
 	}
 }
 

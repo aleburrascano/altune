@@ -1,8 +1,7 @@
 import fc from 'fast-check';
 
-import * as retryDelayModule from '@shared/query/core/retryDelay';
 import { ApiError, NetworkError } from '@shared/failure';
-import { transientRetryOptions } from '@shared/query';
+import { createTransientRetryOptions, transientRetryOptions } from '@shared/query';
 
 const RETRY_BACKOFF_BASE_MS = 1_000;
 const RETRY_BACKOFF_CAP_MS = 30_000;
@@ -11,21 +10,23 @@ const ATTEMPTS_IN_A_SESSION = [0, 1, 2, 3, 4];
 const DOUBLING = 2;
 const ATTEMPTS_PAST_THE_CAP = 10;
 const SAMPLES_PER_ATTEMPT = 20;
+const A_MIDDLE_ATTEMPT = 3;
 
 function retryDelayMs(failureCount: number, random: number): number {
-  const sample = jest.spyOn(Math, 'random').mockReturnValue(random);
-  const delay = transientRetryOptions.retryDelay(failureCount);
-  sample.mockRestore();
-  return delay;
+  return createTransientRetryOptions({ random: () => random }).retryDelay(failureCount);
 }
 
 function scheduleForOneClient(): number[] {
-  return ATTEMPTS_IN_A_SESSION.map((failureCount) => retryDelayMs(failureCount, Math.random()));
+  return ATTEMPTS_IN_A_SESSION.map((failureCount) =>
+    transientRetryOptions.retryDelay(failureCount),
+  );
 }
 
 describe('jitter: clients that fail together do not retry together', () => {
   it('spreads the wait for one attempt number across many values instead of one', () => {
-    const waits = new Set(Array.from({ length: 100 }, () => retryDelayMs(3, Math.random())));
+    const waits = new Set(
+      Array.from({ length: 100 }, () => transientRetryOptions.retryDelay(A_MIDDLE_ATTEMPT)),
+    );
 
     expect(waits.size).toBeGreaterThan(1);
   });
@@ -115,11 +116,5 @@ describe('the app-wide QueryClient retries only transient failures, at most five
   it('never retries a failure that a retry cannot fix', () => {
     expect(retry(0, new ApiError(NOT_FOUND, 'not found'))).toBe(false);
     expect(retry(0, new Error('bug'))).toBe(false);
-  });
-});
-
-describe('retryDelay module surface', () => {
-  it('exposes only the retry options, keeping its backoff internals private', () => {
-    expect(Object.keys(retryDelayModule)).toEqual(['transientRetryOptions']);
   });
 });

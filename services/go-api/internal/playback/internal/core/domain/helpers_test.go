@@ -42,6 +42,9 @@ func (s *storeSpy) UpdatePosition(_ context.Context, position *playback.QueuePos
 }
 
 func (s *storeSpy) GetForUser(context.Context, shared.UserId) (*playback.QueueState, error) {
+	if s.stored == nil {
+		return nil, playback.ErrQueueStateNotFound
+	}
 	return s.stored, nil
 }
 

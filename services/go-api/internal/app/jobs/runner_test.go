@@ -78,7 +78,7 @@ func lead(t *testing.T, r *jobs.Runner, e jobs.Election) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(func() {
 		cancel()
-		r.Background().Wait()
+		r.Wait()
 	})
 	r.Lead(ctx, e)
 }
@@ -229,6 +229,63 @@ func TestEveryInstance_RunsWithoutLeadershipAndHonoursItsKillSwitch(t *testing.T
 	if extra := runs.Load() - baseline; extra > 0 {
 		t.Fatalf("disabled job kept running: %d extra runs", extra)
 	}
+}
+
+func waitAsync(r *jobs.Runner) <-chan struct{} {
+	waited := make(chan struct{})
+	go func() {
+		r.Wait()
+		close(waited)
+	}()
+	return waited
+}
+
+func assertStillWaiting(t *testing.T, waited <-chan struct{}, what string) {
+	t.Helper()
+	select {
+	case <-waited:
+		t.Fatalf("Wait returned while %s", what)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func assertWaitReturns(t *testing.T, waited <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-waited:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Wait did not return once everything had finished")
+	}
+}
+
+func TestWait_BlocksWhileAJobRunIsInFlight(t *testing.T) {
+	var r jobs.Runner
+	ctx, cancel := context.WithCancel(context.Background())
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	r.EveryInstance(ctx, jobs.BehavioralRankingRefresh, time.Hour, func(context.Context) error {
+		once.Do(func() { close(started) })
+		<-release
+		return nil
+	})
+	<-started
+	cancel()
+	waited := waitAsync(&r)
+
+	assertStillWaiting(t, waited, "a job run was in flight")
+	close(release)
+	assertWaitReturns(t, waited)
+}
+
+func TestWait_BlocksWhileTheSharedBackgroundGroupIsRunning(t *testing.T) {
+	var r jobs.Runner
+	r.Background().Add(1)
+	waited := waitAsync(&r)
+
+	assertStillWaiting(t, waited, "the shared background group was running")
+	r.Background().Done()
+	assertWaitReturns(t, waited)
 }
 
 func TestTicker_RecoversFromAPanickingJob(t *testing.T) {
@@ -432,7 +489,7 @@ func TestTicker_RunsCanceledByLeadershipLossDoNotCountAsFailures(t *testing.T) {
 			t.Fatalf("leadership-lost runs counted as failures: %+v", h)
 		}
 		cancel()
-		r.Background().Wait()
+		r.Wait()
 	})
 }
 
@@ -587,7 +644,7 @@ func TestNewElection_WinsTheBackgroundLockAndAnnouncesATwentyFiveSecondSettle(t 
 	t.Cleanup(func() {
 		cancel()
 		election.Shutdown(context.Background())
-		r.Background().Wait()
+		r.Wait()
 	})
 	r.Lead(ctx, election)
 
@@ -673,7 +730,7 @@ func TestEveryInstance_RefusesEveryLeaderOnlyJob(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer func() {
 				cancel()
-				r.Background().Wait()
+				r.Wait()
 			}()
 
 			msg := registrationPanic(func() {

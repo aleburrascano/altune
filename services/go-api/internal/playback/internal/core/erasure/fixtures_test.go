@@ -49,7 +49,11 @@ func (r *inMemoryQueueRepo) UpdatePosition(_ context.Context, position *playback
 }
 
 func (r *inMemoryQueueRepo) GetForUser(_ context.Context, userId shared.UserId) (*playback.QueueState, error) {
-	return r.States[userId.UUID()], nil
+	state, ok := r.States[userId.UUID()]
+	if !ok {
+		return nil, playback.ErrQueueStateNotFound
+	}
+	return state, nil
 }
 
 func (r *inMemoryQueueRepo) DeleteForUser(_ context.Context, userId shared.UserId) error {
@@ -70,7 +74,11 @@ type fakeNowPlaying struct {
 }
 
 func (f *fakeNowPlaying) Lookup(_ context.Context, _ shared.UserId, trackId string) (*playback.NowPlayingTrack, error) {
-	return f.Tracks[trackId], nil
+	track, ok := f.Tracks[trackId]
+	if !ok {
+		return nil, playback.ErrNowPlayingTrackNotFound
+	}
+	return track, nil
 }
 
 func auditRecord(t *testing.T, logs *bytes.Buffer, msg string) map[string]any {

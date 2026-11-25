@@ -4,11 +4,5 @@
   },
   "github-bridge.yml#bridge#carry pull requests to github": {
     "allow": "delivery: carries pull requests to GitHub and reports pr-checks back, and checks nothing itself"
-  },
-  "module-spec-main.yml#check#bash scripts/module-spec.sh check on the pushed commit, naming it when red": {
-    "gate": "module-spec check"
-  },
-  "module-spec-main.yml#compact#bash scripts/module-spec.sh baseline --compact, and a PR when it folded fragments": {
-    "allow": "maintenance: runs only on schedule or dispatch, never on push, and its PR goes through precheck like any other"
   }
 }

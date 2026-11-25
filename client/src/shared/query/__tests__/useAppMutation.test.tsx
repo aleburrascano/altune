@@ -13,8 +13,6 @@ import {
   useOptimisticMutation,
 } from '@shared/query';
 
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
-
 const { __http } = require('@testing/doubles/fetch.js');
 
 const EVENTS_PATH = '/v1/discovery/events';

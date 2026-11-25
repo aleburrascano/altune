@@ -58,7 +58,15 @@ func failingSource() sourceFunc {
 }
 
 func absentSource() sourceFunc {
-	return func(context.Context) (*playback.NowPlayingTrack, error) { return nil, nil }
+	return func(context.Context) (*playback.NowPlayingTrack, error) {
+		return nil, playback.ErrNowPlayingTrackNotFound
+	}
+}
+
+func healthySource() sourceFunc {
+	return func(context.Context) (*playback.NowPlayingTrack, error) {
+		return &playback.NowPlayingTrack{}, nil
+	}
 }
 
 func permanentRowErrorSource() sourceFunc {
@@ -150,12 +158,12 @@ func TestLookup_MalformedTrackId_EmitsDistinguishableSignal(t *testing.T) {
 	called := false
 	reader := playback.NewNowPlayingReader(sourceFunc(func(context.Context) (*playback.NowPlayingTrack, error) {
 		called = true
-		return nil, nil
+		return &playback.NowPlayingTrack{}, nil
 	}))
 	user := testUser()
 
 	track, err := reader.Lookup(context.Background(), user, "not-a-uuid")
-	if err != nil || track != nil {
+	if !errors.Is(err, playback.ErrNowPlayingTrackNotFound) || track != nil {
 		t.Fatalf("malformed id must degrade to track-absent, got track=%v err=%v", track, err)
 	}
 	if called {
@@ -176,11 +184,25 @@ func TestLookup_ValidButAbsentTrack_StaysSilent(t *testing.T) {
 	reader := playback.NewNowPlayingReader(absentSource())
 
 	track, err := lookup(context.Background(), reader, testUser())
-	if err != nil || track != nil {
-		t.Fatalf("valid but absent track must degrade cleanly, got track=%v err=%v", track, err)
+	if !errors.Is(err, playback.ErrNowPlayingTrackNotFound) || track != nil {
+		t.Fatalf("valid but absent track must be reported as not found, got track=%v err=%v", track, err)
 	}
 	if strings.Contains(logs.String(), "malformed") {
 		t.Fatalf("empty-queue path must not log a malformed-id signal; logs=%q", logs.String())
+	}
+}
+
+func TestLookup_AbsentTrackIsNotAnEnrichmentFailureAndNeverTripsTheBreaker(t *testing.T) {
+	m := &recordingMetrics{}
+	reader := playback.NewNowPlayingReader(absentSource(), playback.WithNowPlayingMetrics(m))
+
+	for range 20 {
+		if _, err := lookup(context.Background(), reader, testUser()); !errors.Is(err, playback.ErrNowPlayingTrackNotFound) {
+			t.Fatalf("Lookup error = %v, want ErrNowPlayingTrackNotFound every time", err)
+		}
+	}
+	if m.enrichmentFailed != 0 || m.breakerOpened != 0 || m.breakerRejected != 0 {
+		t.Errorf("failed=%d opened=%d rejected=%d, want none: an absent track is not an outage", m.enrichmentFailed, m.breakerOpened, m.breakerRejected)
 	}
 }
 
@@ -215,7 +237,7 @@ type trackSourceFunc func(shared.UserId, shared.TrackId)
 
 func (f trackSourceFunc) NowPlayingTrack(_ context.Context, userId shared.UserId, id shared.TrackId) (*playback.NowPlayingTrack, error) {
 	f(userId, id)
-	return nil, nil
+	return &playback.NowPlayingTrack{}, nil
 }
 
 func TestLookup_EnrichmentFailure_IncrementsMetric(t *testing.T) {
@@ -339,7 +361,7 @@ func TestLookup_BreakerRecoversAfterCatalogHeals(t *testing.T) {
 		t.Fatal("precondition: breaker should be open")
 	}
 
-	catalog.use(absentSource())
+	catalog.use(healthySource())
 	clock.advance(enrichmentOpenDuration + time.Second)
 
 	if _, err := lookup(context.Background(), reader, user); err != nil {
@@ -347,6 +369,54 @@ func TestLookup_BreakerRecoversAfterCatalogHeals(t *testing.T) {
 	}
 	if _, err := lookup(context.Background(), reader, user); err != nil {
 		t.Fatalf("expected breaker closed after recovery, got err = %v", err)
+	}
+}
+
+func TestLookup_AnAbsentTrackAsTheRecoveryProbeClosesTheBreaker(t *testing.T) {
+	m := &recordingMetrics{}
+	clock := newTestClock()
+	catalog := &switchableSource{current: blockingSource(nil)}
+	reader := playback.NewNowPlayingReader(catalog, playback.WithNowPlayingMetrics(m),
+		playback.WithNowPlayingLookupTimeout(testLookupTimeout), playback.WithNowPlayingClock(clock.read))
+	user := testUser()
+
+	for i := 0; i < enrichmentFailureThreshold; i++ {
+		_, _ = lookup(context.Background(), reader, user)
+	}
+	if !rejected(reader, m, user) {
+		t.Fatal("precondition: breaker should be open")
+	}
+
+	catalog.use(absentSource())
+	clock.advance(enrichmentOpenDuration + time.Second)
+
+	if _, err := lookup(context.Background(), reader, user); !errors.Is(err, playback.ErrNowPlayingTrackNotFound) {
+		t.Fatalf("probe err = %v, want ErrNowPlayingTrackNotFound", err)
+	}
+	if m.breakerClosed != 1 {
+		t.Fatalf("breakerClosed = %d, want 1: an absent track answers the probe, so the catalog is up", m.breakerClosed)
+	}
+	if rejected(reader, m, user) {
+		t.Fatal("the next lookup was rejected: the breaker did not close")
+	}
+}
+
+func TestLookup_AnAbsentTrackResetsTheConsecutiveFailureCount(t *testing.T) {
+	m := &recordingMetrics{}
+	catalog := &switchableSource{current: failingSource()}
+	reader := playback.NewNowPlayingReader(catalog, playback.WithNowPlayingMetrics(m))
+	user := testUser()
+
+	for i := 0; i < enrichmentFailureThreshold-1; i++ {
+		_, _ = lookup(context.Background(), reader, user)
+	}
+	catalog.use(absentSource())
+	_, _ = lookup(context.Background(), reader, user)
+	catalog.use(failingSource())
+	_, _ = lookup(context.Background(), reader, user)
+
+	if m.breakerOpened != 0 {
+		t.Fatalf("breakerOpened = %d, want 0: the absent track in between ended the failure streak", m.breakerOpened)
 	}
 }
 
@@ -405,7 +475,7 @@ func TestLookup_BreakerStateChangesAreReported(t *testing.T) {
 		t.Fatalf("after the outage: opened = %d, closed = %d; want 1/0", m.breakerOpened, m.breakerClosed)
 	}
 
-	catalog.use(absentSource())
+	catalog.use(healthySource())
 	clock.advance(enrichmentOpenDuration + time.Second)
 
 	if _, err := lookup(context.Background(), reader, user); err != nil {
@@ -450,7 +520,7 @@ func TestLookup_ProbeAbandonedByItsClientDoesNotWedgeBreaker(t *testing.T) {
 		t.Fatalf("precondition: the abandoned probe must fail with its client's cancellation, got err = %v", err)
 	}
 
-	catalog.use(absentSource())
+	catalog.use(healthySource())
 	clock.advance(enrichmentOpenDuration + time.Second)
 
 	if _, err := lookup(context.Background(), reader, user); err != nil {
@@ -514,7 +584,7 @@ func (s *staleSuccessSource) NowPlayingTrack(context.Context, shared.UserId, sha
 	if first {
 		close(s.firstCallAdmitted)
 		<-s.releaseFirstCall
-		return nil, nil
+		return &playback.NowPlayingTrack{}, nil
 	}
 	return nil, playback.ErrTrackSourceUnavailable
 }

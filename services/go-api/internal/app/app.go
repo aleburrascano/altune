@@ -22,8 +22,6 @@ import (
 
 const eventIDFloorFile = "altune-event-id-floor"
 
-const backgroundMaxInFlight = 64
-
 type App struct {
 	cfg           *config.Config
 	pool          *pgxpool.Pool
@@ -32,7 +30,6 @@ type App struct {
 	authVerifier  authHealthChecker
 	scheduler     *acquisition.BackgroundAcquisitionScheduler
 	vocabRefresh  *discovery.VocabularyRefreshService
-	searchSvc     *discovery.SearchService
 	evalSearch    *discovery.SearchService
 	eventBus      *events.InProcessBus
 	eventTap      *observe.EventTap

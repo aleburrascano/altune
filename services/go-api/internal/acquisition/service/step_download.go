@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/internal/core/rejectionlog"
 	"altune/go-api/internal/acquisition/internal/core/tracklength"
+	shared "altune/go-api/internal/shared/kernel"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"fmt"
@@ -123,6 +124,27 @@ func (s *DownloadStep) settle(ctx context.Context, ac *AcquisitionContext, holds
 	downloaded := held.keep(ctx, ac)
 	ac.BestEffort = true
 	return downloaded, nil
+}
+
+type attemptStatus int
+
+const (
+	attemptRejected attemptStatus = iota
+	attemptHeld
+	attemptAccepted
+)
+
+type attempt struct {
+	candidate    ports.AudioCandidate
+	filePath     string
+	tmpDir       string
+	verified     verificationResult
+	rejection    *downloadRejection
+	status       attemptStatus
+	otherVersion bool
+	evidence     Evidence
+	confidence   float64
+	format       ports.SourceFormat
 }
 
 func (a attempt) muxed() bool { return a.format.ID == ports.MuxedFallbackFormatID }
@@ -291,27 +313,6 @@ func recordImplausibleDuration(ctx context.Context, ac *AcquisitionContext, cand
 	)
 }
 
-type attemptStatus int
-
-const (
-	attemptRejected attemptStatus = iota
-	attemptHeld
-	attemptAccepted
-)
-
-type attempt struct {
-	candidate    ports.AudioCandidate
-	filePath     string
-	tmpDir       string
-	verified     verificationResult
-	rejection    *downloadRejection
-	status       attemptStatus
-	otherVersion bool
-	evidence     Evidence
-	confidence   float64
-	format       ports.SourceFormat
-}
-
 func (a attempt) err() error {
 	if a.rejection == nil {
 		return nil
@@ -399,7 +400,7 @@ func judgeAttempt(ac *AcquisitionContext, candidate ports.AudioCandidate, filePa
 		confidence:   ScoreConfidence(evidence, ac.ExpectedLength()),
 		otherVersion: len(evidence.Qualifiers) > 0,
 	}
-	if result.otherVersion && !tracklength.SameRecording(ac.ExpectedLength(), verified.probed) {
+	if result.otherVersion && !tracklength.SameRecording(ac.ExpectedLength(), verified.probed.Seconds()) {
 		reason := rejectOtherVersionLengthUnknown
 		if evidence.DurationDeltaSeconds != nil {
 			reason = fmt.Sprintf(rejectOtherVersionOffLengthFmt, *evidence.DurationDeltaSeconds)
@@ -455,7 +456,7 @@ func candidateTimedOut(jobCtx, fetchCtx context.Context, candidate ports.AudioCa
 type verificationResult struct {
 	duration bool
 	identity bool
-	probed   float64
+	probed   shared.TrackLength
 	verdict  AudioVerdict
 }
 
@@ -494,7 +495,7 @@ func (s *DownloadStep) verify(
 		return result, rejection
 	}
 	if result.verdict.Judged.Kind == "" {
-		result.verdict.Judged = s.judgeUnfingerprinted(ac, result.probed, sourceOf(ac, candidate))
+		result.verdict.Judged = s.judgeUnfingerprinted(ac, result.probed.Seconds(), sourceOf(ac, candidate))
 	}
 
 	return result, nil
@@ -505,14 +506,14 @@ func (s *DownloadStep) verifyDuration(
 	ac *AcquisitionContext,
 	candidate ports.AudioCandidate,
 	filePath string,
-) (bool, float64, *downloadRejection) {
+) (bool, shared.TrackLength, *downloadRejection) {
 	if s.prober == nil {
-		return false, 0, nil
+		return false, shared.TrackLength{}, nil
 	}
 	judge, known := ac.lengths().FileJudge(candidate)
 	if !known {
 		s.recordSkip(ports.SkipNoDuration)
-		return false, 0, nil
+		return false, shared.TrackLength{}, nil
 	}
 	return s.probeDuration(ctx, ac, candidate, filePath, judge)
 }
@@ -523,22 +524,26 @@ func (s *DownloadStep) probeDuration(
 	candidate ports.AudioCandidate,
 	filePath string,
 	judge tracklength.FileJudge,
-) (bool, float64, *downloadRejection) {
+) (bool, shared.TrackLength, *downloadRejection) {
 	actual, err := s.prober.ProbeDuration(ctx, filePath)
+	probed, lengthErr := shared.TrackLengthOf(actual)
+	if err == nil {
+		err = lengthErr
+	}
 	switch {
 	case err != nil && ctx.Err() != nil:
-		return false, 0, nil
+		return false, shared.TrackLength{}, nil
 	case err != nil:
 		slog.WarnContext(ctx, "acquisition.probe_failed_accepting",
 			"track_id", ac.Track.ID, "url", candidate.URL, "source", candidate.Source,
-			"error", redact.LogError(err))
+			"probed_seconds", actual, "error", redact.LogError(err))
 		s.recordSkip(ports.SkipProbeFailed)
-		return false, 0, nil
+		return false, shared.TrackLength{}, nil
 	}
 	if acceptable, held := judge.Judge(actual); !acceptable {
-		return false, 0, durationRejection(ctx, ac, candidate, actual, held)
+		return false, shared.TrackLength{}, durationRejection(ctx, ac, candidate, actual, held)
 	}
-	return true, actual, nil
+	return true, probed, nil
 }
 
 func durationRejection(

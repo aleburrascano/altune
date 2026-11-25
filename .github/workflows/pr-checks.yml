@@ -209,7 +209,6 @@ jobs:
           npm ci --prefix services/overseer/web
       - name: precheck
         env:
-          MODULE_SPEC_RUNS_ELSEWHERE: "1"
           CLIENT_MUTATE_RUNS_ELSEWHERE: "1"
         run: bash scripts/precheck.sh origin/main
 

@@ -58,7 +58,7 @@ func (s *gatedStore) Append(ctx context.Context, _ discovery.InteractionEvent) e
 	return nil
 }
 
-func TestDiscoverySearchStep_DrainingTheTrackerWaitsForInFlightSearchWork(t *testing.T) {
+func TestDetachedTasksStep_DrainingTheTrackerWaitsForInFlightSearchWork(t *testing.T) {
 	bg := discoverytest.NewTracker(t)
 	drain := func(ctx context.Context) { bg.Drain(ctx) }
 	store := &gatedStore{entered: make(chan struct{}), release: make(chan struct{})}
@@ -71,31 +71,16 @@ func TestDiscoverySearchStep_DrainingTheTrackerWaitsForInFlightSearchWork(t *tes
 	_, _ = svc.Execute(ctx, shared.NewUserId(uuid.New()), query, false)
 	<-store.entered
 
-	inFlight := runOne(shutdown.DiscoverySearch, 50*time.Millisecond, drain)
-	if inFlight != (shutdown.Outcome{Component: "discovery search", Status: shutdown.TimedOut}) {
-		t.Fatalf("drain with search work in flight = %+v, want discovery search timed out", inFlight)
+	inFlight := runOne(shutdown.DetachedTasks, 50*time.Millisecond, drain)
+	if inFlight != (shutdown.Outcome{Component: "detached request tasks", Status: shutdown.TimedOut}) {
+		t.Fatalf("drain with search work in flight = %+v, want detached request tasks timed out", inFlight)
 	}
 
 	close(store.release)
 	cancel()
 
-	if drained := runOne(shutdown.DiscoverySearch, 2*time.Second, drain); drained.Status != shutdown.Completed {
+	if drained := runOne(shutdown.DetachedTasks, 2*time.Second, drain); drained.Status != shutdown.Completed {
 		t.Fatalf("drain after the search work finished = %+v, want completed", drained)
-	}
-}
-
-type backgroundWaiter struct{}
-
-func (*backgroundWaiter) WaitForBackground() {}
-
-func TestWait_AnAbsentServiceHasNothingToDrain(t *testing.T) {
-	var svc *backgroundWaiter
-
-	if stop := shutdown.Wait(svc); stop != nil {
-		t.Fatal("an absent search service got a drain to run")
-	}
-	if clean := runOne(shutdown.DiscoverySearch, time.Second, shutdown.Wait(svc)); clean != (shutdown.Outcome{Component: "discovery search", Status: shutdown.Completed}) {
-		t.Fatalf("outcome = %+v, want discovery search completed", clean)
 	}
 }
 
@@ -182,7 +167,7 @@ func TestPlan_StopsComponentsInThePinnedOrder(t *testing.T) {
 		"acquisition scheduler",
 		"background tasks",
 		"leader election",
-		"discovery search",
+		"detached request tasks",
 	}
 
 	outcomes := shutdown.Run(shutdown.Plan(shutdown.Components{}, 0))
@@ -206,16 +191,16 @@ func TestPlan_RunsEachComponentsOwnStop(t *testing.T) {
 	}
 
 	shutdown.Run(shutdown.Plan(shutdown.Components{
-		AlertMonitor:    stopper("alert monitor"),
-		EventFeed:       stopper("event feed"),
-		EvalMeter:       stopper("eval meter"),
-		Scheduler:       stopper("acquisition scheduler"),
-		Background:      stopper("background tasks"),
-		LeaderElection:  stopper("leader election"),
-		DiscoverySearch: stopper("discovery search"),
+		AlertMonitor:   stopper("alert monitor"),
+		EventFeed:      stopper("event feed"),
+		EvalMeter:      stopper("eval meter"),
+		Scheduler:      stopper("acquisition scheduler"),
+		Background:     stopper("background tasks"),
+		LeaderElection: stopper("leader election"),
+		DetachedTasks:  stopper("detached request tasks"),
 	}, 0))
 
-	want := "alert monitor,event feed,eval meter,acquisition scheduler,background tasks,leader election,discovery search"
+	want := "alert monitor,event feed,eval meter,acquisition scheduler,background tasks,leader election,detached request tasks"
 	if strings.Join(stopped, ",") != want {
 		t.Fatalf("stopped %v, want %s", stopped, want)
 	}
@@ -231,13 +216,13 @@ func timeouts(plan []shutdown.Step) map[string]time.Duration {
 
 func TestPlan_TimeoutsPinned(t *testing.T) {
 	want := map[string]time.Duration{
-		"alert monitor":         2 * time.Second,
-		"event feed":            2 * time.Second,
-		"eval meter":            2 * time.Second,
-		"acquisition scheduler": 35 * time.Second,
-		"background tasks":      15 * time.Second,
-		"leader election":       3 * time.Second,
-		"discovery search":      10 * time.Second,
+		"alert monitor":          2 * time.Second,
+		"event feed":             2 * time.Second,
+		"eval meter":             2 * time.Second,
+		"acquisition scheduler":  35 * time.Second,
+		"background tasks":       15 * time.Second,
+		"leader election":        3 * time.Second,
+		"detached request tasks": 10 * time.Second,
 	}
 
 	plan := shutdown.Plan(shutdown.Components{}, 0)

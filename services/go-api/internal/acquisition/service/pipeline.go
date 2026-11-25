@@ -137,7 +137,7 @@ func logShadowJudge(ctx context.Context, ac *AcquisitionContext, downloadErr err
 	if downloadErr == nil {
 		kept = ac.Selected
 	}
-	judgeshadow.Log(ctx, shadowTarget(ac.Track), ac.Track.ID, kept, ac.ProbedDuration, ac.Candidates)
+	judgeshadow.Log(ctx, shadowTarget(ac.Track), ac.Track.ID, kept, ac.ProbedDuration.Seconds(), ac.Candidates)
 }
 
 func shadowTarget(t TrackRef) judge.Target {
@@ -264,7 +264,7 @@ type AcquisitionContext struct {
 	TempPath          string
 	TempDir           string
 	AudioRef          string
-	ProbedDuration    float64
+	ProbedDuration    shared.TrackLength
 	DurationVerified  bool
 	IdentityVerified  bool
 	Verdict           AudioVerdict
@@ -370,14 +370,18 @@ func (ac *AcquisitionContext) Provenance() shared.AcquisitionProvenance {
 	}
 }
 
-func (ac *AcquisitionContext) MeasuredDuration() float64 {
-	if ac.ProbedDuration > 0 {
+func (ac *AcquisitionContext) StoredLength() shared.TrackLength {
+	if ac.ProbedDuration.Known() {
 		return ac.ProbedDuration
 	}
-	if ac.Selected != nil {
-		return ac.Selected.Duration
+	if ac.Selected == nil {
+		return shared.TrackLength{}
 	}
-	return 0
+	reported, err := shared.TrackLengthOf(ac.Selected.Duration)
+	if err != nil {
+		return shared.TrackLength{}
+	}
+	return reported
 }
 
 type TrackRef struct {

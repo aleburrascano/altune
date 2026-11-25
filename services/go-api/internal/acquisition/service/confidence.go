@@ -82,7 +82,7 @@ func durationBonus(delta *float64, trackSeconds float64) float64 {
 func (ac *AcquisitionContext) buildEvidence(candidate ports.AudioCandidate, verified verificationResult) Evidence {
 	_, qualifiers := ranking.UnrequestedQualifiers(ac.Track.Title, ac.Track.Artist, candidate.Title)
 	var delta *float64
-	if d, known := ac.durationDelta(candidate, verified.probed); known {
+	if d, known := ac.durationDelta(candidate, verified.probed.Seconds()); known {
 		delta = &d
 	}
 	return Evidence{

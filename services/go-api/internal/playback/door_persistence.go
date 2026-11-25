@@ -19,4 +19,5 @@ var (
 	ErrQueueStateUnavailable = ports.ErrQueueStateUnavailable
 	ErrQueuePositionMismatch = ports.ErrQueuePositionMismatch
 	ErrCorruptStoredState    = ports.ErrCorruptStoredState
+	ErrQueueStateNotFound    = ports.ErrQueueStateNotFound
 )

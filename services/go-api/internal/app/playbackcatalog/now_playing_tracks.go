@@ -26,8 +26,11 @@ func (s nowPlayingTracks) NowPlayingTrack(ctx context.Context, userId shared.Use
 	if errors.Is(err, catalog.ErrDBTransient) {
 		return nil, fmt.Errorf("%w: %w", playback.ErrTrackSourceUnavailable, err)
 	}
-	if err != nil || track == nil {
+	if err != nil {
 		return nil, err
+	}
+	if track == nil {
+		return nil, playback.ErrNowPlayingTrackNotFound
 	}
 	return &playback.NowPlayingTrack{
 		Id:                track.ID.String(),

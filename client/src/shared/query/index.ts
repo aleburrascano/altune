@@ -6,7 +6,7 @@ export {
   libraryKeys,
   playlistKeys,
 } from '@shared/query/core/queryKeys';
-export { transientRetryOptions } from '@shared/query/core/retryDelay';
+export { createTransientRetryOptions, transientRetryOptions } from '@shared/query/core/retryDelay';
 export {
   useAppMutation,
   useOptimisticMutation,

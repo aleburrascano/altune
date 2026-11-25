@@ -97,11 +97,11 @@ func (s *Service) Resume(ctx context.Context, userId shared.UserId) (*domain.Que
 			"user_id", userId.String(), "error", err)
 		return domain.EmptyQueueState(userId), nil
 	}
+	if errors.Is(err, ports.ErrQueueStateNotFound) {
+		return domain.EmptyQueueState(userId), nil
+	}
 	if err != nil {
 		return nil, err
-	}
-	if state == nil {
-		return domain.EmptyQueueState(userId), nil
 	}
 	return state, nil
 }
@@ -125,6 +125,9 @@ func (s *Service) ResumeView(ctx context.Context, userId shared.UserId) (*Resume
 	}
 
 	current, err := s.nowPlaying.Lookup(ctx, userId, trackId)
+	if errors.Is(err, ports.ErrNowPlayingTrackNotFound) {
+		return view, nil
+	}
 	if err != nil {
 		slog.WarnContext(ctx, "resume.current_track_enrichment_failed",
 			"user_id", userId.String(), "error", err)
