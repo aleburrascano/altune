@@ -1,3 +1,8 @@
+import { installDialogs } from '@shared/ui/shell/dialogs';
+import { platformDialogs } from '@shared/ui/view/dialog/dialog';
+
+installDialogs(platformDialogs);
+
 export * from '@shared/ui/view/theme';
 export * from '@shared/ui/view/primitives';
 export * from '@shared/ui/view/layout';
@@ -31,7 +36,10 @@ export type { AsyncInputs, AsyncView } from '@shared/ui/core/async/asyncView';
 export { SortControl } from '@shared/ui/view/primitives/SortControl';
 export { TABLET_LAYOUT_MIN_WIDTH, WIDE_LAYOUT_MIN_WIDTH } from '@shared/ui/core/layout/breakpoints';
 export type { MenuAnchor } from '@shared/ui/core/primitives/menuPlacement';
-export { confirmDestructive, showAlert } from '@shared/ui/view/dialog/dialog';
+export { confirmDestructive, installDialogs, showAlert } from '@shared/ui/shell/dialogs';
+export { platformDialogs };
+export { createNativeDialogs } from '@shared/ui/view/dialog/nativeDialogs';
+export type { ConfirmOptions, Dialogs } from '@shared/ui/ports/dialogs';
 export { IconButton } from '@shared/ui/view/primitives/IconButton';
 export type { TappableProps } from '@shared/ui/view/primitives/Tappable';
 export { ModalFrame } from '@shared/ui/view/primitives/ModalFrame';

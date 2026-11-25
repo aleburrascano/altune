@@ -1,20 +1,5 @@
 import { Alert } from 'react-native';
 
-export interface ConfirmOptions {
-  title: string;
-  message: string;
-  confirmLabel: string;
-  onConfirm: () => void;
-}
+import { createNativeDialogs } from '@shared/ui/view/dialog/nativeDialogs';
 
-export function showAlert(title: string, message: string): void {
-  Alert.alert(title, message);
-}
-
-export function confirmDestructive(options: ConfirmOptions): void {
-  const { title, message, confirmLabel, onConfirm } = options;
-  Alert.alert(title, message, [
-    { text: 'Cancel', style: 'cancel' },
-    { text: confirmLabel, style: 'destructive', onPress: onConfirm },
-  ]);
-}
+export const platformDialogs = createNativeDialogs(Alert);

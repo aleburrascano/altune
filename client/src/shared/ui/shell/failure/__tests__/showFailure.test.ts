@@ -1,11 +1,8 @@
-import { Alert } from 'react-native';
-
+import { recordDialogs, type RecordedDialogs } from '@testing/recordDialogs';
 import { signInTestUser } from '@testing/signInTestUser';
 
 import { showFailureAlert, showFailureAlert as showFailureAlertFromUi } from '@shared/ui';
 const { __http } = require('@testing/doubles/fetch.js');
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const SETTLE_TICKS = 20;
 const MAX_RECORDED_MESSAGE = 200;
@@ -14,7 +11,7 @@ const OVERFLOW = 50;
 type RecordedEvent = { type: string; payload: Record<string, unknown> };
 type RecordedRequest = { body: string };
 
-let alertSpy: jest.SpyInstance;
+let dialogs: RecordedDialogs;
 
 async function settle(): Promise<void> {
   for (let i = 0; i < SETTLE_TICKS; i += 1) await Promise.resolve();
@@ -27,17 +24,17 @@ function recordedEvents(): RecordedEvent[] {
 beforeEach(async () => {
   __http.reply('POST /v1/discovery/events', { status: 202 });
   await signInTestUser();
-  alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+  dialogs = recordDialogs();
 });
 
 afterEach(() => {
-  alertSpy.mockRestore();
+  dialogs.restore();
 });
 
 describe('showFailureAlert', () => {
   it('records one failure_shown then shows the alert once', async () => {
     showFailureAlert({ surface: 'library.retry', title: 'Oops', message: 'Nope', trackId: 't1' });
-    expect(alertSpy.mock.calls).toEqual([['Oops', 'Nope']]);
+    expect(dialogs.alerts).toEqual([['Oops', 'Nope']]);
     await settle();
 
     const events = recordedEvents();
@@ -57,7 +54,7 @@ describe('showFailureAlert', () => {
     await settle();
 
     expect((recordedEvents()[0]?.payload.message as string).length).toBe(MAX_RECORDED_MESSAGE);
-    expect(alertSpy.mock.calls).toEqual([['T', message]]);
+    expect(dialogs.alerts).toEqual([['T', message]]);
   });
 
   it('is exported from @shared/ui', () => {
