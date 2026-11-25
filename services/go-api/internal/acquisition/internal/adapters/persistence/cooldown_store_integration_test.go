@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
-	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -17,15 +16,8 @@ import (
 
 func newPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
-	pool, err := pgxpool.New(context.Background(), dbURL)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
+	pool := sharedtest.Pool(t)
+	sharedtest.ExclusiveAcquisitionQueue(t, pool)
 	return pool
 }
 
@@ -48,7 +40,7 @@ func queued() error { return nil }
 
 func TestPgxCooldownStore_SurvivesRestart(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	first, second := newPool(t), newPool(t)
+	first, second := newPool(t), sharedtest.Pool(t)
 	track := insertFailedTrack(t, first)
 	ctx := context.Background()
 

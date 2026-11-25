@@ -193,7 +193,7 @@ func TestPgxRejectionStore_RecordWithCancelledContextReturnsError(t *testing.T) 
 
 func TestPgxRejectionStore_RecordOnClosedPoolReturnsError(t *testing.T) {
 	sharedtest.RequireIntegration(t)
-	pool := newPool(t)
+	pool := sharedtest.Pool(t)
 	store := acquisition.NewPgxRejectionStore(pool)
 	pool.Close()
 
