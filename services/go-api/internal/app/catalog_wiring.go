@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/app/acquisitioncatalog"
 	"altune/go-api/internal/app/acquisitiondiscovery"
 	"altune/go-api/internal/app/audioacquisition"
 	"altune/go-api/internal/app/catalogdiscovery"
@@ -37,7 +38,7 @@ type catalogWiring struct {
 type audioSourcesStaging struct {
 	audioStore     catalog.AudioStore
 	trackRepo      *catalog.PgxTrackRepository
-	ledger         *acquisition.TrackLedger
+	ledger         acquisition.TrackLedgerPort
 	scheduler      catalog.AcquisitionScheduler
 	background     *acquisition.BackgroundAcquisitionScheduler
 	ytDlpSearcher  *acquisition.YtDlpAudioSearcher
@@ -97,7 +98,7 @@ func (a *App) wireAudioSources(
 	staging := audioSourcesStaging{
 		audioStore:     audioStore,
 		trackRepo:      trackRepo,
-		ledger:         acquisition.NewTrackLedger(trackRepo),
+		ledger:         acquisitioncatalog.NewTrackLedger(trackRepo),
 		ytDlpSearcher:  audioacquisition.YtDlpSearcher(a.cfg),
 		ytDlpAvailable: tools.YtDlp,
 		ytmCanary:      audioacquisition.CanaryYTMClient(a.cfg, a.redisClient),

@@ -1,8 +1,7 @@
-package catalogbridge
+package acquisitioncatalog
 
 import (
-	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
-	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/domain"
 	shared "altune/go-api/internal/shared/kernel"
@@ -25,7 +24,7 @@ type TrackLedger struct {
 	store TrackStore
 }
 
-var _ ports.TrackLedger = (*TrackLedger)(nil)
+var _ acquisition.TrackLedgerPort = (*TrackLedger)(nil)
 
 func NewTrackLedger(store TrackStore) *TrackLedger {
 	return &TrackLedger{store: store}
@@ -39,7 +38,9 @@ func (e illegalTransitionError) Error() string { return e.err.Error() }
 
 func (e illegalTransitionError) Unwrap() error { return e.err }
 
-func (e illegalTransitionError) Is(target error) bool { return target == ports.ErrIllegalTransition }
+func (e illegalTransitionError) Is(target error) bool {
+	return target == acquisition.ErrIllegalTransition
+}
 
 func translate(err error) error {
 	if errors.Is(err, domain.ErrIllegalAcquisitionTransition) {
@@ -52,7 +53,7 @@ func (l *TrackLedger) AudioRefInUse(ctx context.Context, audioRef string, exclud
 	return l.store.AudioRefInUse(ctx, audioRef, excludeTrackID)
 }
 
-func (l *TrackLedger) Get(ctx context.Context, id shared.TrackId, userId shared.UserId) (*ports.TrackSnapshot, error) {
+func (l *TrackLedger) Get(ctx context.Context, id shared.TrackId, userId shared.UserId) (*acquisition.TrackSnapshot, error) {
 	track, err := l.store.GetByID(ctx, id, userId)
 	if err != nil {
 		return nil, err
@@ -63,8 +64,21 @@ func (l *TrackLedger) Get(ctx context.Context, id shared.TrackId, userId shared.
 	return snapshotOf(track), nil
 }
 
-func snapshotOf(track *domain.Track) *ports.TrackSnapshot {
-	return &ports.TrackSnapshot{
+func snapshotOf(track *domain.Track) *acquisition.TrackSnapshot {
+	snapshot := catalogFactsOf(track)
+	snapshot.AudioRef = track.AudioRef
+	snapshot.AudioSourceURL = track.AudioSourceURL
+	snapshot.StoredDurationSeconds = track.DurationSeconds
+	snapshot.RejectedSourceKeys = track.RejectedSourceKeys
+	snapshot.Evidence = track.AcquisitionEvidence()
+	snapshot.Status = mapStatus(track.AcquisitionStatus)
+	snapshot.Streamable = track.IsStreamable()
+	snapshot.Version = track.Version
+	return snapshot
+}
+
+func catalogFactsOf(track *domain.Track) *acquisition.TrackSnapshot {
+	return &acquisition.TrackSnapshot{
 		ID:                     track.ID,
 		UserId:                 track.UserId,
 		Title:                  track.Title,
@@ -79,46 +93,38 @@ func snapshotOf(track *domain.Track) *ports.TrackSnapshot {
 		TrackNumber:            track.TrackNumber,
 		AlbumArtist:            track.AlbumArtist,
 		Genre:                  track.Genre,
-		AudioRef:               track.AudioRef,
-		AudioSourceURL:         track.AudioSourceURL,
-		StoredDurationSeconds:  track.DurationSeconds,
-		RejectedSourceKeys:     track.RejectedSourceKeys,
-		Evidence:               track.AcquisitionEvidence(),
-		Status:                 mapStatus(track.AcquisitionStatus),
-		Streamable:             track.IsStreamable(),
-		Version:                track.Version,
 	}
 }
 
-func snapshotSources(sources []domain.CatalogSource) []ports.CatalogSource {
+func snapshotSources(sources []domain.CatalogSource) []acquisition.CatalogSource {
 	if len(sources) == 0 {
 		return nil
 	}
-	out := make([]ports.CatalogSource, len(sources))
+	out := make([]acquisition.CatalogSource, len(sources))
 	for i, s := range sources {
-		out[i] = ports.CatalogSource{Provider: s.Provider, ExternalID: s.ExternalID, URL: s.URL}
+		out[i] = acquisition.CatalogSource{Provider: s.Provider, ExternalID: s.ExternalID, URL: s.URL}
 	}
 	return out
 }
 
-func mapStatus(s domain.AcquisitionStatus) ports.TrackStatus {
+func mapStatus(s domain.AcquisitionStatus) acquisition.TrackStatus {
 	switch s {
 	case domain.AcquisitionReady:
-		return ports.TrackReady
+		return acquisition.TrackReady
 	case domain.AcquisitionFailed:
-		return ports.TrackFailed
+		return acquisition.TrackFailed
 	default:
-		return ports.TrackPending
+		return acquisition.TrackPending
 	}
 }
 
-func (l *TrackLedger) Complete(ctx context.Context, id shared.TrackId, userId shared.UserId, fence ports.Fence, c ports.Completion) error {
+func (l *TrackLedger) Complete(ctx context.Context, id shared.TrackId, userId shared.UserId, fence acquisition.Fence, c acquisition.Completion) error {
 	return l.loadAndUpdate(ctx, id, userId, fence, func(track *domain.Track) error {
 		return complete(ctx, track, c)
 	})
 }
 
-func complete(ctx context.Context, track *domain.Track, c ports.Completion) error {
+func complete(ctx context.Context, track *domain.Track, c acquisition.Completion) error {
 	if err := settleAudio(track, c); err != nil {
 		return err
 	}
@@ -133,7 +139,7 @@ func complete(ctx context.Context, track *domain.Track, c ports.Completion) erro
 	return nil
 }
 
-func relabel(ctx context.Context, track *domain.Track, label ports.RecordingLabel) error {
+func relabel(ctx context.Context, track *domain.Track, label acquisition.RecordingLabel) error {
 	oldMBID, oldTitle := "", track.Title
 	if track.CatalogMBID != nil {
 		oldMBID = *track.CatalogMBID
@@ -161,7 +167,7 @@ func recordLengthCheck(ctx context.Context, track *domain.Track, measuredSeconds
 	}
 }
 
-func settleAudio(track *domain.Track, c ports.Completion) error {
+func settleAudio(track *domain.Track, c acquisition.Completion) error {
 	if c.ReplaceAudio {
 		if err := track.ReplaceAudio(c.AudioRef); err != nil {
 			return fmt.Errorf("replace audio: %w", err)
@@ -174,7 +180,7 @@ func settleAudio(track *domain.Track, c ports.Completion) error {
 	return nil
 }
 
-func recordMetadata(ctx context.Context, track *domain.Track, c ports.Completion) {
+func recordMetadata(ctx context.Context, track *domain.Track, c acquisition.Completion) {
 	if c.Duration > 0 {
 		if err := track.SetDuration(c.Duration); err != nil {
 			slog.WarnContext(ctx, "acquisition.duration_rejected",
@@ -196,19 +202,19 @@ func recordMetadata(ctx context.Context, track *domain.Track, c ports.Completion
 	}
 }
 
-func (l *TrackLedger) Fail(ctx context.Context, id shared.TrackId, userId shared.UserId, fence ports.Fence, reason string) error {
+func (l *TrackLedger) Fail(ctx context.Context, id shared.TrackId, userId shared.UserId, fence acquisition.Fence, reason string) error {
 	return l.loadAndUpdate(ctx, id, userId, fence, func(track *domain.Track) error {
 		return track.FailAcquisition(reason)
 	})
 }
 
-func (l *TrackLedger) RevertAt(ctx context.Context, snapshot ports.TrackSnapshot) error {
+func (l *TrackLedger) RevertAt(ctx context.Context, snapshot acquisition.TrackSnapshot) error {
 	track, err := l.store.GetByID(ctx, snapshot.ID, snapshot.UserId)
 	if err != nil {
 		return fmt.Errorf("get track: %w", err)
 	}
 	if track == nil {
-		return ports.ErrTrackNotFound
+		return acquisition.ErrTrackNotFound
 	}
 	if track.Version != snapshot.Version {
 		return fmt.Errorf("revert to pending: %w", catalog.ErrTrackVersionConflict)
@@ -222,7 +228,7 @@ func (l *TrackLedger) RevertAt(ctx context.Context, snapshot ports.TrackSnapshot
 	return nil
 }
 
-func (l *TrackLedger) loadAndUpdate(ctx context.Context, id shared.TrackId, userId shared.UserId, fence ports.Fence, mutate func(*domain.Track) error) error {
+func (l *TrackLedger) loadAndUpdate(ctx context.Context, id shared.TrackId, userId shared.UserId, fence acquisition.Fence, mutate func(*domain.Track) error) error {
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		lastErr = l.attempt(ctx, id, userId, fence, mutate)
@@ -233,16 +239,16 @@ func (l *TrackLedger) loadAndUpdate(ctx context.Context, id shared.TrackId, user
 	return fmt.Errorf("update track: exhausted %d CAS attempts: %w", maxAttempts, lastErr)
 }
 
-func (l *TrackLedger) attempt(ctx context.Context, id shared.TrackId, userId shared.UserId, fence ports.Fence, mutate func(*domain.Track) error) error {
+func (l *TrackLedger) attempt(ctx context.Context, id shared.TrackId, userId shared.UserId, fence acquisition.Fence, mutate func(*domain.Track) error) error {
 	track, err := l.store.GetByID(ctx, id, userId)
 	if err != nil {
 		return fmt.Errorf("get track: %w", err)
 	}
 	if track == nil {
-		return ports.ErrTrackNotFound
+		return acquisition.ErrTrackNotFound
 	}
 	if leaseSuperseded(fence, track.AcquisitionFence) {
-		return fmt.Errorf("track %s claimed by fence %d, caller holds %d: %w", id, track.AcquisitionFence, fence, acqdomain.ErrLeaseLost)
+		return fmt.Errorf("track %s claimed by fence %d, caller holds %d: %w", id, track.AcquisitionFence, fence, acquisition.ErrLeaseLost)
 	}
 	expectedVersion := track.Version
 	if err := mutate(track); err != nil {
@@ -261,6 +267,6 @@ func (l *TrackLedger) write(ctx context.Context, track *domain.Track, expectedVe
 	return nil
 }
 
-func leaseSuperseded(held ports.Fence, current int) bool {
+func leaseSuperseded(held acquisition.Fence, current int) bool {
 	return held > 0 && current > 0 && current != int(held)
 }

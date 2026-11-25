@@ -21,7 +21,7 @@ type Deps struct {
 	Pool         *pgxpool.Pool
 	Events       *observe.EventTap
 	Recording    []func(*acquisition.AcquireTrackAudioService)
-	Ledger       *acquisition.TrackLedger
+	Ledger       acquisition.TrackLedgerPort
 	AudioStore   catalog.AudioStore
 	Sources      Tiers
 	Verification acquisition.AcquisitionVerification
@@ -53,7 +53,7 @@ func storeOptions(d Deps, probing acquireOption, skips *acquisition.VerifySkipCo
 	cfg := d.Config
 	return []acquireOption{
 		acquisition.WithAcquireEvents(d.Events),
-		acquisition.WithAcquireOrphanQueue(acquisition.NewOrphanedAudioRecorder(catalog.NewPgxOrphanedAudioRepository(d.Pool))),
+		acquisition.WithAcquireOrphanQueue(acquisitioncatalog.NewOrphanedAudioRecorder(catalog.NewPgxOrphanedAudioRepository(d.Pool))),
 		acquisition.WithSupersededAudioGrace(cfg.AcquisitionSupersededAudioGrace),
 		probing,
 		acquisition.WithVerifySkips(skips),

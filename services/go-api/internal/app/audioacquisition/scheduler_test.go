@@ -2,6 +2,7 @@ package audioacquisition_test
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/app/acquisitioncatalog"
 	"altune/go-api/internal/app/audioacquisition"
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/observe"
@@ -64,7 +65,7 @@ func newOfflineScheduler(t *testing.T, cfg *config.Config, slots chan struct{}, 
 	scheduler := audioacquisition.NewScheduler(t.Context(), audioacquisition.Deps{
 		Config:     cfg,
 		Events:     eventTap(t),
-		Ledger:     acquisition.NewTrackLedger(&fixtureTrackRepo{}),
+		Ledger:     acquisitioncatalog.NewTrackLedger(&fixtureTrackRepo{}),
 		AudioStore: catalog.NewFilesystemAudioStore(cfg.MusicDir),
 		Sources:    sources,
 		Background: &sync.WaitGroup{},
@@ -93,7 +94,7 @@ func acquireThroughPostgres(t *testing.T) (catalog.Track, string, acquisition.Ac
 		Config:     &config.Config{Env: "test", MusicDir: musicDir},
 		Pool:       pool,
 		Events:     eventTap(t),
-		Ledger:     acquisition.NewTrackLedger(repo),
+		Ledger:     acquisitioncatalog.NewTrackLedger(repo),
 		AudioStore: catalog.NewFilesystemAudioStore(musicDir),
 		Sources:    fixtureTiers(),
 		Background: &sync.WaitGroup{},
@@ -243,7 +244,7 @@ func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
 		Config:     &config.Config{Env: "test", MusicDir: t.TempDir()},
 		Pool:       pool,
 		Events:     eventTap(t),
-		Ledger:     acquisition.NewTrackLedger(trackRepo),
+		Ledger:     acquisitioncatalog.NewTrackLedger(trackRepo),
 		AudioStore: catalog.NewFilesystemAudioStore(t.TempDir()),
 		Sources:    fixtureTiers(),
 		Background: &sync.WaitGroup{},
@@ -333,7 +334,7 @@ func TestNewScheduler_AnUpgradeWorkerClaimsAndSettlesAnEnqueuedUpgrade(t *testin
 		Config:     cfg,
 		Pool:       pool,
 		Events:     eventTap(t),
-		Ledger:     acquisition.NewTrackLedger(catalog.NewPgxTrackRepository(pool)),
+		Ledger:     acquisitioncatalog.NewTrackLedger(catalog.NewPgxTrackRepository(pool)),
 		AudioStore: catalog.NewFilesystemAudioStore(cfg.MusicDir),
 		Sources:    audioacquisition.Tiers{First: []acquisition.AudioSource{sourceWithNothing{}}},
 		Background: &sync.WaitGroup{},
@@ -419,7 +420,7 @@ func TestNewScheduler_ShutdownCancelsAJobThatOutlivesTheConfiguredDrainBudget(t 
 		Config:     &config.Config{Env: "test", MusicDir: t.TempDir(), AcquisitionDrainBudgetSeconds: 1},
 		Pool:       pool,
 		Events:     eventTap(t),
-		Ledger:     acquisition.NewTrackLedger(repo),
+		Ledger:     acquisitioncatalog.NewTrackLedger(repo),
 		AudioStore: catalog.NewFilesystemAudioStore(t.TempDir()),
 		Sources:    audioacquisition.Tiers{First: []acquisition.AudioSource{hang}},
 		Background: &sync.WaitGroup{},
