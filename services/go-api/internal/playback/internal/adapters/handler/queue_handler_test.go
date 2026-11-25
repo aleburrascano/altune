@@ -39,6 +39,9 @@ func (r *recordingRepo) UpdatePosition(_ context.Context, position *playback.Que
 }
 
 func (r *recordingRepo) GetForUser(_ context.Context, _ shared.UserId) (*playback.QueueState, error) {
+	if r.saved == nil {
+		return nil, playback.ErrQueueStateNotFound
+	}
 	return r.saved, nil
 }
 
@@ -47,10 +50,10 @@ func (r *recordingRepo) DeleteForUser(_ context.Context, _ shared.UserId) error 
 	return nil
 }
 
-type nilNowPlaying struct{}
+type absentNowPlaying struct{}
 
-func (nilNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*playback.NowPlayingTrack, error) {
-	return nil, nil
+func (absentNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*playback.NowPlayingTrack, error) {
+	return nil, playback.ErrNowPlayingTrackNotFound
 }
 
 type nowPlayingReader interface {
@@ -65,7 +68,7 @@ type sourceDTO struct {
 }
 
 func newHandler(repo playback.QueueStateRepository) *playback.QueueHandler {
-	return playback.NewQueueHandler(playback.NewQueueService(repo, nilNowPlaying{}))
+	return playback.NewQueueHandler(playback.NewQueueService(repo, absentNowPlaying{}))
 }
 
 func savePut(body string) *http.Request {
@@ -313,7 +316,7 @@ func getResume(t *testing.T, nowPlaying nowPlayingReader) (int, map[string]json.
 
 func TestHandleGet_FailedNowPlayingLookupIsDistinguishableFromAbsentTrack(t *testing.T) {
 	failedCode, failed := getResume(t, failingNowPlaying{})
-	absentCode, absent := getResume(t, nilNowPlaying{})
+	absentCode, absent := getResume(t, absentNowPlaying{})
 
 	if failedCode != http.StatusOK || absentCode != http.StatusOK {
 		t.Fatalf("resume must still succeed with 200 either way, got failed=%d absent=%d", failedCode, absentCode)
@@ -397,7 +400,7 @@ func TestHandleSavePosition_UnappliedSaveIsConflictWithItsCode(t *testing.T) {
 }
 
 func TestHandleSavePosition_SharesTheQueueStateRateLimit(t *testing.T) {
-	h := playback.NewQueueHandler(playback.NewQueueService(&recordingRepo{}, nilNowPlaying{}),
+	h := playback.NewQueueHandler(playback.NewQueueService(&recordingRepo{}, absentNowPlaying{}),
 		playback.WithQueueStateRateLimit(playback.QueueStateRateLimit{Every: time.Hour, Burst: 1}))
 	user := shared.NewUserId(uuid.New())
 	as := func(req *http.Request) *http.Request {
@@ -418,7 +421,7 @@ func TestHandleGet_ResponseIsUncachedAndNotSniffable(t *testing.T) {
 	h := playback.NewQueueHandler(playback.NewQueueService(&recordingRepo{saved: &playback.QueueState{
 		TrackIds:     []string{"00000000-0000-4000-8000-000000000001"},
 		NaturalOrder: []string{"00000000-0000-4000-8000-000000000001"},
-	}}, nilNowPlaying{}))
+	}}, absentNowPlaying{}))
 	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
 	req = req.WithContext(requestuser.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
 	rec := httptest.NewRecorder()

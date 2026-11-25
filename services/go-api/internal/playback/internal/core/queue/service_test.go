@@ -383,8 +383,8 @@ func TestQueueService_Forget_ErasesPersistedState(t *testing.T) {
 	}
 
 	stored, err := repo.GetForUser(context.Background(), user)
-	if err != nil {
-		t.Fatalf("GetForUser after Forget: %v", err)
+	if !errors.Is(err, playback.ErrQueueStateNotFound) {
+		t.Fatalf("GetForUser after Forget: err = %v, want ErrQueueStateNotFound", err)
 	}
 	if stored != nil {
 		t.Fatalf("queue state (incl. free-text search source_id) survived erasure: %+v", stored)

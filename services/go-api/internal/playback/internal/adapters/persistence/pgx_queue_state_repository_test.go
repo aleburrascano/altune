@@ -529,8 +529,8 @@ func TestDeleteForUser_ErasesStoredState(t *testing.T) {
 	}
 
 	got, err := repo.GetForUser(ctx, user)
-	if err != nil {
-		t.Fatalf("GetForUser after delete: %v", err)
+	if !errors.Is(err, playback.ErrQueueStateNotFound) {
+		t.Fatalf("GetForUser after delete: err = %v, want ErrQueueStateNotFound", err)
 	}
 	if got != nil {
 		t.Fatalf("persisted queue state survived DeleteForUser: %+v", got)
@@ -860,8 +860,8 @@ func TestQueueStateOp_ClassifiedOutcome_EmitsNoFaultLine(t *testing.T) {
 		{outcome: "no stored queue", act: func(t *testing.T) {
 			repo := playback.NewPgxQueueStateRepository(newFakeStore())
 			state, err := repo.GetForUser(context.Background(), testUser())
-			if state != nil || err != nil {
-				t.Fatalf("precondition: an absent queue reads as (nil, nil), got (%v, %v)", state, err)
+			if state != nil || !errors.Is(err, playback.ErrQueueStateNotFound) {
+				t.Fatalf("precondition: an absent queue reads as ErrQueueStateNotFound, got (%v, %v)", state, err)
 			}
 		}},
 	}

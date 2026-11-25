@@ -61,10 +61,6 @@ func isDependencyFailure(err error) bool {
 	return errors.Is(err, ports.ErrTrackSourceUnavailable) || errors.Is(err, context.DeadlineExceeded)
 }
 
-func trackAbsent() (*ports.NowPlayingTrack, error) {
-	return nil, nil
-}
-
 func (r *NowPlayingReader) Lookup(
 	ctx context.Context,
 	userId shared.UserId,
@@ -74,7 +70,7 @@ func (r *NowPlayingReader) Lookup(
 	if err != nil {
 		slog.WarnContext(ctx, "now_playing.malformed_track_id",
 			"user_id", userId.String(), "raw_len", len(trackId), "error", err)
-		return trackAbsent()
+		return nil, ports.ErrNowPlayingTrackNotFound
 	}
 
 	admitted, admission := r.breaker.allow(ctx)
@@ -88,6 +84,10 @@ func (r *NowPlayingReader) Lookup(
 	defer cancel()
 
 	track, err := r.tracks.NowPlayingTrack(callCtx, userId, id)
+	if errors.Is(err, ports.ErrNowPlayingTrackNotFound) {
+		r.breaker.recordSuccess(ctx, admission)
+		return nil, ports.ErrNowPlayingTrackNotFound
+	}
 	if err != nil {
 		if ctx.Err() == nil {
 			if isDependencyFailure(err) {
@@ -101,8 +101,5 @@ func (r *NowPlayingReader) Lookup(
 		return nil, fmt.Errorf("lookup now-playing track: %w", err)
 	}
 	r.breaker.recordSuccess(ctx, admission)
-	if track == nil {
-		return trackAbsent()
-	}
 	return track, nil
 }
