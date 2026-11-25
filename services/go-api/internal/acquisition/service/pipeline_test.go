@@ -992,3 +992,60 @@ func (r *recordingReporter) timing(stage string, d time.Duration) {
 	}
 	r.timings[stage] += d
 }
+
+type trackRefIndex struct {
+	holders map[string][]shared.TrackId
+	err     error
+}
+
+func (i trackRefIndex) AudioRefInUse(_ context.Context, audioRef string, excludeTrackID shared.TrackId) (bool, error) {
+	if i.err != nil {
+		return false, i.err
+	}
+	for _, holder := range i.holders[audioRef] {
+		if holder != excludeTrackID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+type cancelSensitiveStore struct {
+	stored map[string]bool
+}
+
+func (s *cancelSensitiveStore) Exists(ctx context.Context, audioRef string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	return s.stored[audioRef], nil
+}
+
+func (s *cancelSensitiveStore) Store(ctx context.Context, _ string, audioRef string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.stored[audioRef] = true
+	return nil
+}
+
+func (s *cancelSensitiveStore) Delete(ctx context.Context, audioRef string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	delete(s.stored, audioRef)
+	return nil
+}
+
+type recordingOrphanQueue struct {
+	recorded []ports.OrphanedAudio
+	err      error
+}
+
+func (q *recordingOrphanQueue) RecordOrphanedAudio(_ context.Context, o ports.OrphanedAudio) error {
+	if q.err != nil {
+		return q.err
+	}
+	q.recorded = append(q.recorded, o)
+	return nil
+}

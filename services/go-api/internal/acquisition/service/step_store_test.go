@@ -1,233 +1,316 @@
-package service
+package service_test
 
 import (
+	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/acquisition/internal/adapters/tempfs"
+	"altune/go-api/internal/acquisition/internal/core/audioref"
 	"altune/go-api/internal/acquisition/internal/core/ports"
-	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/acquisition/service"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
-	"fmt"
+	"regexp"
+	"slices"
+	"strings"
+	"sync"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 )
 
-type flakyDeleteStore struct {
-	stored      map[string]bool
-	deleteErr   error
-	failDeletes int
+var errDeleteFailed = errors.New("object store unavailable")
+
+type recordingStore struct {
+	*objectStore
+	mu          sync.Mutex
+	writes      []string
 	deleteCalls int
+	failDeletes int
 }
 
-func (s *flakyDeleteStore) Exists(_ context.Context, audioRef string) (bool, error) {
-	return s.stored[audioRef], nil
+func newRecordingStore(held ...string) *recordingStore {
+	objects := make(map[string]string, len(held))
+	for _, ref := range held {
+		objects[ref] = "bytes"
+	}
+	return &recordingStore{objectStore: &objectStore{objects: objects}}
 }
 
-func (s *flakyDeleteStore) Store(_ context.Context, _ string, audioRef string) error {
-	s.stored[audioRef] = true
-	return nil
+func (s *recordingStore) Store(ctx context.Context, sourcePath, audioRef string) error {
+	s.mu.Lock()
+	s.writes = append(s.writes, audioRef)
+	s.mu.Unlock()
+	return s.objectStore.Store(ctx, sourcePath, audioRef)
 }
 
-func (s *flakyDeleteStore) Delete(_ context.Context, audioRef string) error {
+func (s *recordingStore) Delete(ctx context.Context, audioRef string) error {
+	s.mu.Lock()
 	s.deleteCalls++
-	if s.deleteCalls <= s.failDeletes {
-		return s.deleteErr
+	failing := s.deleteCalls <= s.failDeletes
+	s.mu.Unlock()
+	if failing {
+		return errDeleteFailed
 	}
-	delete(s.stored, audioRef)
+	return s.objectStore.Delete(ctx, audioRef)
+}
+
+func (s *recordingStore) wroteTo(audioRef string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Contains(s.writes, audioRef)
+}
+
+type orphanLog struct {
+	mu       sync.Mutex
+	recorded []ports.OrphanedAudio
+}
+
+func (q *orphanLog) RecordOrphanedAudio(_ context.Context, o ports.OrphanedAudio) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.recorded = append(q.recorded, o)
 	return nil
 }
 
-func TestStoreRollback_SurfacesDeleteFailureInsteadOfOrphaning(t *testing.T) {
-	deleteErr := errors.New("object store unavailable")
-	store := &flakyDeleteStore{
-		stored:      map[string]bool{"u/a/b/new.mp3": true},
-		deleteErr:   deleteErr,
-		failDeletes: 1 << 30,
-	}
-	step := NewStoreStep(store)
-	step.sleep = func(_ time.Duration) {}
-
-	ac := &AcquisitionContext{AudioRef: "u/a/b/new.mp3"}
-	err := step.Rollback(context.Background(), ac)
-	if err == nil {
-		t.Fatal("Rollback swallowed a permanent delete failure; the orphaned object is invisible to the caller")
-	}
-	if !errors.Is(err, deleteErr) {
-		t.Fatalf("Rollback error must wrap the underlying delete failure, got %v", err)
-	}
-	if store.deleteCalls < 2 {
-		t.Errorf("a retryable compensation must attempt the delete more than once, got %d", store.deleteCalls)
-	}
+type refUsageLedger struct {
+	*acquisitiontest.Ledger
+	mu    sync.Mutex
+	calls int
+	usage func(call int) (bool, error)
 }
 
-func TestStoreRollback_RetriesTransientDeleteFailure(t *testing.T) {
-	store := &flakyDeleteStore{
-		stored:      map[string]bool{"u/a/b/new.mp3": true},
-		deleteErr:   errors.New("transient blip"),
-		failDeletes: 2,
+func (l *refUsageLedger) AudioRefInUse(ctx context.Context, audioRef string, exclude shared.TrackId) (bool, error) {
+	l.mu.Lock()
+	l.calls++
+	call := l.calls
+	l.mu.Unlock()
+	if l.usage == nil {
+		return l.Ledger.AudioRefInUse(ctx, audioRef, exclude)
 	}
-	step := NewStoreStep(store)
-	step.sleep = func(_ time.Duration) {}
-
-	ac := &AcquisitionContext{AudioRef: "u/a/b/new.mp3"}
-	if err := step.Rollback(context.Background(), ac); err != nil {
-		t.Fatalf("Rollback must retry a transient delete failure, got %v", err)
-	}
-	if store.stored["u/a/b/new.mp3"] {
-		t.Error("object left orphaned: compensation did not delete it after retrying")
-	}
-	if store.deleteCalls < 3 {
-		t.Errorf("expected the delete to be retried until success, got %d calls", store.deleteCalls)
-	}
+	return l.usage(call)
 }
 
-type trackRefIndex struct {
-	holders map[string][]domain.TrackId
-	err     error
+type cancellingCompleteLedger struct {
+	*acquisitiontest.Ledger
+	cancel context.CancelFunc
 }
 
-func (i trackRefIndex) AudioRefInUse(_ context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error) {
-	if i.err != nil {
-		return false, i.err
-	}
-	for _, holder := range i.holders[audioRef] {
-		if holder != excludeTrackID {
-			return true, nil
-		}
-	}
-	return false, nil
+func (l cancellingCompleteLedger) Complete(context.Context, shared.TrackId, shared.UserId, ports.Fence, ports.Completion) error {
+	l.cancel()
+	return errors.New("scheduler shutting down")
 }
 
-func TestStoreRollback_KeepsAudioAnotherTrackStillServes(t *testing.T) {
-	const sharedRef = "u/the weeknd/after hours/blinding lights.mp3"
-	acquiring, serving := domain.NewTrackId(), domain.NewTrackId()
-	store := &flakyDeleteStore{stored: map[string]bool{sharedRef: true}}
-	refs := trackRefIndex{holders: map[string][]domain.TrackId{sharedRef: {serving}}}
-	step := NewStoreStep(store, WithStoreAudioRefGuard(refs, acquiring))
-	step.sleep = func(_ time.Duration) {}
-
-	if err := step.Rollback(context.Background(), &AcquisitionContext{AudioRef: sharedRef}); err != nil {
-		t.Fatalf("Rollback: %v", err)
-	}
-
-	if !store.stored[sharedRef] {
-		t.Errorf("rollback deleted %q, which track %s is still serving", sharedRef, serving)
-	}
+type cancellingStore struct {
+	*objectStore
+	cancel context.CancelFunc
 }
 
-func TestStoreRollback_DeletesAudioNoOtherTrackHolds(t *testing.T) {
-	const ownRef = "u/a/b/own.mp3"
-	acquiring := domain.NewTrackId()
-	store := &flakyDeleteStore{stored: map[string]bool{ownRef: true}}
-	refs := trackRefIndex{holders: map[string][]domain.TrackId{ownRef: {acquiring}}}
-	step := NewStoreStep(store, WithStoreAudioRefGuard(refs, acquiring))
-	step.sleep = func(_ time.Duration) {}
-
-	if err := step.Rollback(context.Background(), &AcquisitionContext{AudioRef: ownRef}); err != nil {
-		t.Fatalf("Rollback: %v", err)
-	}
-
-	if store.stored[ownRef] {
-		t.Errorf("object %q left orphaned: only the acquiring track held it", ownRef)
-	}
+func (s cancellingStore) Store(context.Context, string, string) error {
+	s.cancel()
+	return errors.New("put object: connection reset")
 }
 
-func TestStoreRollback_KeepsAudioWhenTheReferenceCheckFails(t *testing.T) {
-	const ref = "u/a/b/unknown.mp3"
-	store := &flakyDeleteStore{stored: map[string]bool{ref: true}}
-	refs := trackRefIndex{err: errors.New("database unavailable")}
-	step := NewStoreStep(store, WithStoreAudioRefGuard(refs, domain.NewTrackId()))
-	step.sleep = func(_ time.Duration) {}
-
-	if err := step.Rollback(context.Background(), &AcquisitionContext{AudioRef: ref}); err != nil {
-		t.Fatalf("Rollback: %v", err)
-	}
-
-	if !store.stored[ref] {
-		t.Errorf("rollback deleted %q while it could not tell whether a track still serves it", ref)
-	}
+type decodeFailingFromTheSecondCheck struct {
+	mu     sync.Mutex
+	checks int
 }
 
-type cancelSensitiveStore struct {
-	stored map[string]bool
+func (p *decodeFailingFromTheSecondCheck) ProbeDuration(context.Context, string) (float64, error) {
+	return 0, nil
 }
 
-func (s *cancelSensitiveStore) Exists(ctx context.Context, audioRef string) (bool, error) {
-	if err := ctx.Err(); err != nil {
-		return false, err
+func (p *decodeFailingFromTheSecondCheck) ValidateDecodable(context.Context, string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.checks++
+	if p.checks > 1 {
+		return errors.New("audio stream failed to decode")
 	}
-	return s.stored[audioRef], nil
-}
-
-func (s *cancelSensitiveStore) Store(ctx context.Context, _ string, audioRef string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	s.stored[audioRef] = true
 	return nil
 }
 
-func (s *cancelSensitiveStore) Delete(ctx context.Context, audioRef string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	delete(s.stored, audioRef)
-	return nil
+type topicSource struct {
+	freshAudioSource
+	title, artist string
 }
 
-func TestStoreRollback_DeletesStoredAudioAfterTheJobContextIsCancelled(t *testing.T) {
+func (s topicSource) Find(context.Context, ports.FindRequest) ([]ports.AudioCandidate, error) {
+	return []ports.AudioCandidate{{
+		Title:      s.title,
+		URL:        "https://www.youtube.com/watch?v=freshAAAAAA",
+		Channel:    s.artist + " - Topic",
+		Categories: []string{"Music"},
+	}}, nil
+}
+
+func sourceFor(track acquisitiontest.LedgerTrack) *service.SourceRegistry {
+	return service.NewSourceRegistry(topicSource{title: track.Title, artist: track.Artist})
+}
+
+type storing struct {
+	t      *testing.T
+	ledger ports.TrackLedger
+	store  ports.AudioWriter
+	track  acquisitiontest.LedgerTrack
+}
+
+func (s storing) execute(opts ...func(*service.AcquireTrackAudioService)) error {
+	s.t.Helper()
+	opts = append([]func(*service.AcquireTrackAudioService){service.WithAcquireTempWorkspace(tempfs.New())}, opts...)
+	svc := service.NewAcquireTrackAudioService(s.ledger, sourceFor(s.track), s.store, opts...)
+	return svc.Execute(context.Background(), s.track.UserId, s.track.ID)
+}
+
+func pending(title, artist, album string) acquisitiontest.LedgerTrack {
+	return acquisitiontest.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
+		ID: shared.NewTrackId(), UserId: shared.NewUserId(uuid.New()),
+		Title: title, Artist: artist, Album: album, Status: ports.TrackPending,
+	}}
+}
+
+func refOf(track acquisitiontest.LedgerTrack, prefix string) string {
+	return prefix + service.BuildAudioRef(service.TrackRef{
+		ID: track.ID.String(), UserID: track.UserId.String(),
+		Title: track.Title, Artist: track.Artist, Album: track.Album,
+	}, "audio.mp3")
+}
+
+func servedBy(track acquisitiontest.LedgerTrack, audioRef string) acquisitiontest.LedgerTrack {
+	serving := pending(track.Title, track.Artist, track.Album)
+	serving.UserId = track.UserId
+	serving.Status, serving.AudioRef = ports.TrackReady, &audioRef
+	return serving
+}
+
+func storedRef(t *testing.T, ledger *acquisitiontest.Ledger, id shared.TrackId) string {
+	t.Helper()
+	got, ok := ledger.Track(id)
+	if !ok || got.AudioRef == nil {
+		t.Fatalf("track %s holds no audio ref: %+v", id, got)
+	}
+	return *got.AudioRef
+}
+
+func TestStore_ANewTrackIsStoredAtItsCanonicalRef(t *testing.T) {
+	track := pending("Song Title", "Artist Name", "Album Name")
+	ledger, store := acquisitiontest.NewLedger(track), newRecordingStore()
+
+	if err := (storing{t, ledger, store, track}).execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	want := track.UserId.String() + "/artist name/album name/song title.mp3"
+	if got := storedRef(t, ledger, track.ID); got != want {
+		t.Errorf("audio ref = %q, want %q", got, want)
+	}
+	if !store.holds(want) {
+		t.Errorf("the object store does not hold %q", want)
+	}
+}
+
+func TestStore_TheKeyPrefixLeadsTheStoredRef(t *testing.T) {
+	track := pending("Song Title", "Artist Name", "Album Name")
+	ledger, store := acquisitiontest.NewLedger(track), newRecordingStore()
+
+	if err := (storing{t, ledger, store, track}).execute(service.WithAcquireStoreKeyPrefix("staging/")); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	want := "staging/" + track.UserId.String() + "/artist name/album name/song title.mp3"
+	if got := storedRef(t, ledger, track.ID); got != want || !store.holds(want) {
+		t.Errorf("audio ref = %q, stored = %v, want %q stored", got, store.holds(want), want)
+	}
+}
+
+var stagedReplaceRef = regexp.MustCompile(`^staging/.*/blinding lights\.replace-[0-9a-f-]{36}\.mp3$`)
+
+func TestStore_AReplaceStagesItsOwnPrefixedRef(t *testing.T) {
+	served := seedReadyTrack(t)
+	ledger, store := served.ledger, newRecordingStore(served.originalRef)
+
+	svc := service.NewAcquireTrackAudioService(ledger, service.NewSourceRegistry(freshAudioSource{}), store,
+		service.WithAcquireTempWorkspace(tempfs.New()), service.WithAcquireStoreKeyPrefix("staging/"))
+	if err := svc.ExecuteReplace(context.Background(), served.userID, served.trackID); err != nil {
+		t.Fatalf("ExecuteReplace: %v", err)
+	}
+
+	if got := storedRef(t, ledger, served.trackID); !stagedReplaceRef.MatchString(got) {
+		t.Errorf("audio ref = %q, want a staged replace ref under the prefix", got)
+	}
+}
+
+func TestStore_AFileTheStoreCannotDecodeIsNeverStored(t *testing.T) {
+	track := pending("Song", "Artist", "Album")
+	ledger, store := acquisitiontest.NewLedger(track), newRecordingStore()
+
+	err := (storing{t, ledger, store, track}).execute(service.WithAudioProber(&decodeFailingFromTheSecondCheck{}))
+
+	var stepErr *service.StepError
+	if !errors.As(err, &stepErr) || stepErr.Step != "store" {
+		t.Fatalf("Execute = %v, want a StepError from the store step", err)
+	}
+	if len(store.writes) != 0 {
+		t.Errorf("writes = %v, want nothing stored when validation fails", store.writes)
+	}
+}
+
+func TestStore_AFailedStoreWriteIsReportedAsTheStoreStep(t *testing.T) {
+	track := pending("Song", "Artist", "Album")
+	store := newRecordingStore()
+	store.storeErr = errors.New("storage unavailable")
+
+	err := (storing{t, acquisitiontest.NewLedger(track), store, track}).execute()
+
+	var stepErr *service.StepError
+	if !errors.As(err, &stepErr) || stepErr.Step != "store" {
+		t.Fatalf("Execute = %v, want a StepError from the store step", err)
+	}
+	if len(store.objects) != 0 {
+		t.Errorf("objects = %v, want none", store.objects)
+	}
+}
+
+func TestStore_ACancelledWriteSettlesTheTrackAsCancelled(t *testing.T) {
+	track := pending("Song", "Artist", "Album")
+	ledger := acquisitiontest.NewLedger(track)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	store := cancellingStore{objectStore: &objectStore{objects: map[string]string{}}, cancel: cancel}
+	svc := service.NewAcquireTrackAudioService(ledger, sourceFor(track), store,
+		service.WithAcquireTempWorkspace(tempfs.New()))
 
-	store := &cancelSensitiveStore{stored: map[string]bool{}}
-	storeStep := NewStoreStep(store)
-	storeStep.sleep = func(_ time.Duration) {}
-
-	updateTrack := newMockStep("update_track", nil)
-	updateTrack.cancelJob = cancel
-	updateTrack.executeErr = errors.New("scheduler shutting down")
-
-	pipeline := pipelineOf()
-	pipeline.store = storeStep
-	pipeline.updateTrack = mockStage[afterStore, afterUpdate]{updateTrack}
-
-	ac := &AcquisitionContext{
-		Track:    TrackRef{UserID: "u1", Artist: "Daft Punk", Album: "Discovery", Title: "One More Time"},
-		TempPath: "/tmp/one-more-time.mp3",
+	if err := svc.Execute(ctx, track.UserId, track.ID); err == nil {
+		t.Fatal("Execute succeeded, want the cancelled store to fail")
 	}
 
-	if err := RunPipeline(ctx, pipeline, ac); err == nil {
-		t.Fatal("expected the cancelled pipeline to fail, got nil")
-	}
-
-	if store.stored[ac.AudioRef] {
-		t.Fatalf("audio %q left orphaned: the rollback delete ran on the cancelled job context", ac.AudioRef)
+	got, _ := ledger.Track(track.ID)
+	if got.Status != ports.TrackFailed || got.FailureReason != string(shared.FailureAcquisitionCancelled) {
+		t.Errorf("track = %v %q, want failed as %q", got.Status, got.FailureReason, shared.FailureAcquisitionCancelled)
 	}
 }
 
 func TestBuildAudioRefNormalizesCaseAndUnicode(t *testing.T) {
 	cases := []struct {
 		name string
-		a    TrackRef
-		b    TrackRef
+		a    service.TrackRef
+		b    service.TrackRef
 	}{
 		{
 			name: "case fold",
-			a:    TrackRef{UserID: "u1", Artist: "Daft Punk", Album: "Discovery", Title: "One More Time"},
-			b:    TrackRef{UserID: "u1", Artist: "DAFT PUNK", Album: "DISCOVERY", Title: "ONE MORE TIME"},
+			a:    service.TrackRef{UserID: "u1", Artist: "Daft Punk", Album: "Discovery", Title: "One More Time"},
+			b:    service.TrackRef{UserID: "u1", Artist: "DAFT PUNK", Album: "DISCOVERY", Title: "ONE MORE TIME"},
 		},
 		{
 			name: "unicode composition (precomposed vs decomposed é)",
-			a:    TrackRef{UserID: "u1", Artist: "Beyoncé", Album: "Lemonade", Title: "Sorry"},
-			b:    TrackRef{UserID: "u1", Artist: "Beyoncé", Album: "Lemonade", Title: "Sorry"},
+			a:    service.TrackRef{UserID: "u1", Artist: "Beyoncé", Album: "Lemonade", Title: "Sorry"},
+			b:    service.TrackRef{UserID: "u1", Artist: "Beyoncé", Album: "Lemonade", Title: "Sorry"},
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := BuildAudioRef(tc.a, "track.mp3")
-			want := BuildAudioRef(tc.b, "track.mp3")
+			got := service.BuildAudioRef(tc.a, "track.mp3")
+			want := service.BuildAudioRef(tc.b, "track.mp3")
 			if got != want {
 				t.Fatalf("storage paths diverge for equivalent metadata:\n a = %q\n b = %q", got, want)
 			}
@@ -235,506 +318,301 @@ func TestBuildAudioRefNormalizesCaseAndUnicode(t *testing.T) {
 	}
 }
 
-func TestStoreRollback_KeepsThePreservedRef(t *testing.T) {
-	store := newFakeAudioStore()
-	store.stored["u/a/b/c.mp3"] = true
-	step := NewStoreStep(store)
+func TestStore_NeverOverwritesAudioAnotherTrackServes(t *testing.T) {
+	track := pending("Halo", "Beyonce", "X")
+	canonical := refOf(track, "")
+	serving := servedBy(track, canonical)
+	ledger, store := acquisitiontest.NewLedger(track, serving), newRecordingStore(canonical)
 
-	ac := &AcquisitionContext{AudioRef: "u/a/b/c.mp3", Replace: ReplaceState{PreservedRef: "u/a/b/c.mp3"}}
-	if err := step.Rollback(context.Background(), ac); err != nil {
-		t.Fatalf("Rollback: %v", err)
+	if err := (storing{t, ledger, store, track}).execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
 	}
-	if !store.stored["u/a/b/c.mp3"] {
-		t.Error("rollback deleted audio the pipeline did not create")
-	}
-}
 
-func TestStoreRollback_DeletesAFreshlyWrittenRef(t *testing.T) {
-	store := newFakeAudioStore()
-	store.stored["u/a/b/new.mp3"] = true
-	step := NewStoreStep(store)
-
-	ac := &AcquisitionContext{AudioRef: "u/a/b/new.mp3", Replace: ReplaceState{PreservedRef: "u/a/b/old.mp3"}}
-	if err := step.Rollback(context.Background(), ac); err != nil {
-		t.Fatalf("Rollback: %v", err)
+	want := audioref.TrackScoped(canonical, track.ID)
+	if got := storedRef(t, ledger, track.ID); got != want {
+		t.Errorf("audio ref = %q, want %q", got, want)
 	}
-	if store.stored["u/a/b/new.mp3"] {
-		t.Error("rollback must delete an object this run created")
+	if store.wroteTo(canonical) || len(store.writes) != 1 {
+		t.Errorf("writes = %v, want only %q: track %s serves %q", store.writes, want, serving.ID, canonical)
 	}
 }
 
-type cancellingWriter struct {
-	cancel func()
+func TestStore_KeepsTheCanonicalRefTheTrackAlreadyHolds(t *testing.T) {
+	track := pending("Halo", "Beyonce", "X")
+	canonical := refOf(track, "")
+	track.AudioRef = &canonical
+	ledger, store := acquisitiontest.NewLedger(track), newRecordingStore()
+
+	if err := (storing{t, ledger, store, track}).execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if got := storedRef(t, ledger, track.ID); got != canonical {
+		t.Errorf("audio ref = %q, want %q", got, canonical)
+	}
 }
 
-func (w *cancellingWriter) Exists(context.Context, string) (bool, error) { return false, nil }
+func TestStore_KeepsTheCanonicalRefWhenNoTrackHoldsIt(t *testing.T) {
+	track := pending("Halo", "Beyonce", "X")
+	canonical := refOf(track, "")
+	ledger, store := acquisitiontest.NewLedger(track), newRecordingStore(canonical)
 
-func (w *cancellingWriter) Delete(context.Context, string) error { return nil }
+	if err := (storing{t, ledger, store, track}).execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
 
-func (w *cancellingWriter) Store(context.Context, string, string) error {
-	w.cancel()
-	return errors.New("put object: connection reset")
+	if got := storedRef(t, ledger, track.ID); got != canonical {
+		t.Errorf("audio ref = %q, want the canonical %q", got, canonical)
+	}
 }
 
-func TestStoreStep_CancelledMidStore_ReportsCancellation(t *testing.T) {
+func TestStore_ScopesTheRefWhenUsageIsUnknown(t *testing.T) {
+	track := pending("Halo", "Beyonce", "X")
+	ledger := &refUsageLedger{Ledger: acquisitiontest.NewLedger(track), usage: func(int) (bool, error) {
+		return false, errors.New("database unavailable")
+	}}
+
+	if err := (storing{t, ledger, newRecordingStore(), track}).execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	want := audioref.TrackScoped(refOf(track, ""), track.ID)
+	if got := storedRef(t, ledger.Ledger, track.ID); got != want {
+		t.Errorf("audio ref = %q, want %q", got, want)
+	}
+}
+
+func TestStore_ScopesTheRefWhenAnotherTrackSharesItWithTheAcquiringTrack(t *testing.T) {
+	track := pending("Halo", "Beyonce", "X")
+	canonical := refOf(track, "")
+	track.AudioRef = &canonical
+	serving := servedBy(track, canonical)
+	ledger, store := acquisitiontest.NewLedger(track, serving), newRecordingStore(canonical)
+
+	if err := (storing{t, ledger, store, track}).execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	want := audioref.TrackScoped(canonical, track.ID)
+	if got := storedRef(t, ledger, track.ID); got != want {
+		t.Errorf("audio ref = %q, want %q", got, want)
+	}
+	if store.wroteTo(canonical) {
+		t.Errorf("wrote %q, which track %s still serves", canonical, serving.ID)
+	}
+}
+
+func TestStore_ScopesTheRefWhenAnAmpersandVariantServesTheCanonicalRef(t *testing.T) {
+	track := pending("Cecilia", "Simon & Garfunkel", "X")
+	canonical := refOf(track, "")
+	serving := servedBy(track, canonical)
+	ledger, store := acquisitiontest.NewLedger(track, serving), newRecordingStore(canonical)
+
+	if err := (storing{t, ledger, store, track}).execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if !strings.Contains(canonical, "simon and garfunkel") {
+		t.Fatalf("canonical ref %q does not spell the ampersand out", canonical)
+	}
+	want := audioref.TrackScoped(canonical, track.ID)
+	if got := storedRef(t, ledger, track.ID); got != want || len(store.writes) != 1 {
+		t.Errorf("audio ref = %q, writes = %v, want only %q", got, store.writes, want)
+	}
+}
+
+func TestStore_ScopesThePrefixedRefAnotherTrackServes(t *testing.T) {
+	track := pending("Halo", "Beyonce", "X")
+	canonical := refOf(track, "staging/")
+	serving := servedBy(track, canonical)
+	ledger, store := acquisitiontest.NewLedger(track, serving), newRecordingStore(canonical)
+
+	if err := (storing{t, ledger, store, track}).execute(service.WithAcquireStoreKeyPrefix("staging/")); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	want := audioref.TrackScoped(canonical, track.ID)
+	if got := storedRef(t, ledger, track.ID); got != want || len(store.writes) != 1 {
+		t.Errorf("audio ref = %q, writes = %v, want only %q", got, store.writes, want)
+	}
+}
+
+func TestStore_ARetryUnderACollisionReusesOneScopedRef(t *testing.T) {
+	track := pending("Halo", "Beyonce", "X")
+	canonical := refOf(track, "")
+	ledger, store := acquisitiontest.NewLedger(track, servedBy(track, canonical)), newRecordingStore(canonical)
+	acquire := storing{t, ledger, store, track}
+
+	ledger.FailWrites(errors.New("database unavailable"))
+	if err := acquire.execute(); err == nil {
+		t.Fatal("first Execute succeeded, want the failed commit")
+	}
+	ledger.FailWrites(nil)
+	if err := acquire.execute(); err != nil {
+		t.Fatalf("second Execute: %v", err)
+	}
+
+	scoped := audioref.TrackScoped(canonical, track.ID)
+	if got := storedRef(t, ledger, track.ID); got != scoped {
+		t.Errorf("audio ref = %q, want %q", got, scoped)
+	}
+	if store.wroteTo(canonical) {
+		t.Errorf("writes = %v, want %q never written", store.writes, canonical)
+	}
+	if got := len(store.writes); got != 2 {
+		t.Errorf("writes = %v, want the scoped ref written once per attempt", store.writes)
+	}
+}
+
+func TestStore_AReplaceStagesItsOwnRefEvenWhenAnotherTrackServesTheCanonicalRef(t *testing.T) {
+	served := seedReadyTrack(t)
+	twin := servedBy(acquisitiontest.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
+		ID: shared.NewTrackId(), UserId: served.userID, Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours",
+	}}, served.originalRef)
+	served.ledger.Seed(twin)
+	store := newRecordingStore(served.originalRef)
+	svc := service.NewAcquireTrackAudioService(served.ledger, service.NewSourceRegistry(freshAudioSource{}), store,
+		service.WithAcquireTempWorkspace(tempfs.New()))
+
+	if err := svc.ExecuteReplace(context.Background(), served.userID, served.trackID); err != nil {
+		t.Fatalf("ExecuteReplace: %v", err)
+	}
+
+	got := storedRef(t, served.ledger, served.trackID)
+	if !strings.Contains(got, ".replace-") || store.wroteTo(served.originalRef) || len(store.writes) != 1 {
+		t.Errorf("audio ref = %q, writes = %v, want one write to a staged ref, never %q", got, store.writes, served.originalRef)
+	}
+}
+
+func TestStoreRollback_DeletesTheAudioWhenTheCommitFails(t *testing.T) {
+	track := pending("Song", "Artist", "Album")
+	ledger, store := acquisitiontest.NewLedger(track), newRecordingStore()
+	ledger.FailWrites(errors.New("database unavailable"))
+
+	if err := (storing{t, ledger, store, track}).execute(); err == nil {
+		t.Fatal("Execute succeeded, want the failed commit")
+	}
+
+	if len(store.objects) != 0 {
+		t.Errorf("objects = %v, want the rolled-back audio deleted", store.objects)
+	}
+}
+
+func TestStoreRollback_DeletesAFreshlyStagedReplaceAndKeepsTheServedAudio(t *testing.T) {
+	served := seedReadyTrack(t)
+	store := newRecordingStore(served.originalRef)
+	served.ledger.FailWrites(errors.New("database unavailable"))
+	svc := service.NewAcquireTrackAudioService(served.ledger, service.NewSourceRegistry(freshAudioSource{}), store,
+		service.WithAcquireTempWorkspace(tempfs.New()))
+
+	if err := svc.ExecuteReplace(context.Background(), served.userID, served.trackID); err == nil {
+		t.Fatal("ExecuteReplace succeeded, want the failed commit")
+	}
+
+	if !store.holds(served.originalRef) || len(store.objects) != 1 {
+		t.Errorf("objects = %v, want only the served %q", store.objects, served.originalRef)
+	}
+}
+
+func TestStoreRollback_OfAScopedStoreDeletesItAndKeepsTheServedAudio(t *testing.T) {
+	track := pending("Halo", "Beyonce", "X")
+	canonical := refOf(track, "")
+	ledger, store := acquisitiontest.NewLedger(track, servedBy(track, canonical)), newRecordingStore(canonical)
+	ledger.FailWrites(errors.New("database unavailable"))
+
+	if err := (storing{t, ledger, store, track}).execute(); err == nil {
+		t.Fatal("Execute succeeded, want the failed commit")
+	}
+
+	if !store.holds(canonical) || len(store.objects) != 1 {
+		t.Errorf("objects = %v, want only the served %q: the scoped write is rolled back", store.objects, canonical)
+	}
+}
+
+func TestStoreRollback_RetriesATransientDeleteFailure(t *testing.T) {
+	track := pending("Song", "Artist", "Album")
+	ledger, store := acquisitiontest.NewLedger(track), newRecordingStore()
+	store.failDeletes = 2
+	ledger.FailWrites(errors.New("database unavailable"))
+
+	if err := (storing{t, ledger, store, track}).execute(); err == nil {
+		t.Fatal("Execute succeeded, want the failed commit")
+	}
+
+	if len(store.objects) != 0 || store.deleteCalls != 3 {
+		t.Errorf("objects = %v after %d delete calls, want the audio deleted on the third", store.objects, store.deleteCalls)
+	}
+}
+
+func TestStoreRollback_SurfacesAPermanentDeleteFailureAndQueuesTheOrphan(t *testing.T) {
+	track := pending("Song", "Artist", "Album")
+	ledger, store, orphans := acquisitiontest.NewLedger(track), newRecordingStore(), &orphanLog{}
+	store.failDeletes = 1 << 30
+	ledger.FailWrites(errors.New("database unavailable"))
+
+	err := (storing{t, ledger, store, track}).execute(service.WithAcquireOrphanQueue(orphans))
+
+	if err == nil {
+		t.Fatal("Execute succeeded, want the failed commit")
+	}
+	if store.deleteCalls < 2 {
+		t.Errorf("delete calls = %d, want the compensation retried", store.deleteCalls)
+	}
+	want := ports.OrphanedAudio{AudioRef: refOf(track, ""), UserId: track.UserId, TrackId: track.ID}
+	if len(orphans.recorded) != 1 || orphans.recorded[0] != want {
+		t.Errorf("recorded = %+v, want exactly %+v", orphans.recorded, want)
+	}
+}
+
+func TestStoreRollback_KeepsAudioAnotherTrackStartedServingMeanwhile(t *testing.T) {
+	track := pending("Song", "Artist", "Album")
+	ledger := &refUsageLedger{Ledger: acquisitiontest.NewLedger(track), usage: func(call int) (bool, error) { return call > 1, nil }}
+	store := newRecordingStore()
+	ledger.FailWrites(errors.New("database unavailable"))
+
+	if err := (storing{t, ledger, store, track}).execute(); err == nil {
+		t.Fatal("Execute succeeded, want the failed commit")
+	}
+
+	if !store.holds(refOf(track, "")) || store.deleteCalls != 0 {
+		t.Errorf("objects = %v, deletes = %d, want the audio another track now serves kept", store.objects, store.deleteCalls)
+	}
+}
+
+func TestStoreRollback_KeepsAudioWhenTheReferenceCheckFails(t *testing.T) {
+	track := pending("Song", "Artist", "Album")
+	ledger := &refUsageLedger{Ledger: acquisitiontest.NewLedger(track), usage: func(call int) (bool, error) {
+		if call > 1 {
+			return false, errors.New("database unavailable")
+		}
+		return false, nil
+	}}
+	store := newRecordingStore()
+	ledger.FailWrites(errors.New("database unavailable"))
+
+	if err := (storing{t, ledger, store, track}).execute(); err == nil {
+		t.Fatal("Execute succeeded, want the failed commit")
+	}
+
+	if !store.holds(refOf(track, "")) {
+		t.Error("rollback deleted audio it could not tell whether a track still serves")
+	}
+}
+
+func TestStoreRollback_DeletesTheAudioAfterTheJobContextIsCancelled(t *testing.T) {
+	track := pending("Song", "Artist", "Album")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	step := NewStoreStep(&cancellingWriter{cancel: cancel})
-	ac := &AcquisitionContext{Track: TrackRef{UserID: "u1", Title: "Song", Artist: "Artist"}, TempPath: "/tmp/x/track.mp3"}
+	ledger := cancellingCompleteLedger{Ledger: acquisitiontest.NewLedger(track), cancel: cancel}
+	store := newRecordingStore()
+	svc := service.NewAcquireTrackAudioService(ledger, sourceFor(track), store,
+		service.WithAcquireTempWorkspace(tempfs.New()))
 
-	_, err := step.Execute(ctx, ac, afterTag{})
-	if err == nil {
-		t.Fatal("expected an error from a cancelled store")
-	}
-	if got := failureReason(&StepError{Step: "store", Err: err}); got != string(domain.FailureAcquisitionCancelled) {
-		t.Errorf("failureReason = %q, want %q", got, domain.FailureAcquisitionCancelled)
-	}
-}
-
-func TestStoreStep_Execute(t *testing.T) {
-	store := newFakeAudioStore()
-	step := NewStoreStep(store)
-	ac := &AcquisitionContext{
-		Track: TrackRef{
-			UserID: "user-123",
-			Title:  "Song Title",
-			Artist: "Artist Name",
-			Album:  "Album Name",
-		},
-		TempPath: "/tmp/altune-test/song.mp3",
+	if err := svc.Execute(ctx, track.UserId, track.ID); err == nil {
+		t.Fatal("Execute succeeded, want the cancelled commit to fail")
 	}
 
-	_, err := step.Execute(context.Background(), ac, afterTag{})
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
+	if len(store.objects) != 0 {
+		t.Errorf("objects = %v, want the audio deleted although the job context was cancelled", store.objects)
 	}
-	if ac.AudioRef == "" {
-		t.Fatal("expected ac.AudioRef to be set, got empty string")
-	}
-	wantRef := "user-123/artist name/album name/song title.mp3"
-	if ac.AudioRef != wantRef {
-		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, wantRef)
-	}
-	if !store.stored[ac.AudioRef] {
-		t.Error("expected audio ref to be stored in fake store")
-	}
-}
-
-func TestStoreStep_Execute_KeyPrefix(t *testing.T) {
-	store := newFakeAudioStore()
-	step := NewStoreStep(store, WithStoreKeyPrefix("staging/"))
-	ac := &AcquisitionContext{
-		Track: TrackRef{
-			UserID: "user-123",
-			Title:  "Song Title",
-			Artist: "Artist Name",
-			Album:  "Album Name",
-		},
-		TempPath: "/tmp/altune-test/song.mp3",
-	}
-
-	_, err := step.Execute(context.Background(), ac, afterTag{})
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	wantRef := "staging/user-123/artist name/album name/song title.mp3"
-	if ac.AudioRef != wantRef {
-		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, wantRef)
-	}
-	if !store.stored[ac.AudioRef] {
-		t.Error("expected the prefixed audio ref to be stored")
-	}
-}
-
-func TestStoreStep_Execute_KeyPrefixOnReplace(t *testing.T) {
-	store := newFakeAudioStore()
-	step := NewStoreStep(store, WithStoreKeyPrefix("staging/"))
-	step.attemptID = func() string { return testAttemptID }
-	ac := &AcquisitionContext{
-		Track: TrackRef{
-			UserID: "user-123",
-			Title:  "Song Title",
-			Artist: "Artist Name",
-			Album:  "Album Name",
-		},
-		TempPath: "/tmp/altune-test/song.mp3",
-		Replace:  ReplaceState{PreservedRef: "staging/user-123/artist name/album name/song title.mp3"},
-	}
-
-	_, err := step.Execute(context.Background(), ac, afterTag{})
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	wantRef := "staging/user-123/artist name/album name/song title.replace-" + testAttemptID + ".mp3"
-	if ac.AudioRef != wantRef {
-		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, wantRef)
-	}
-	if !store.stored[ac.AudioRef] {
-		t.Error("expected the prefixed staged-replace ref to be stored")
-	}
-}
-
-func TestStoreStep_Execute_RejectsUndecodable(t *testing.T) {
-	store := newFakeAudioStore()
-	prober := &queueProber{decodeErrs: []error{errors.New("audio stream failed to decode")}}
-	step := NewStoreStep(store, WithStoreProber(prober))
-	ac := &AcquisitionContext{
-		Track:    TrackRef{UserID: "u", Title: "T", Artist: "A"},
-		TempPath: "/tmp/altune-test/song.mp3",
-	}
-
-	if _, err := step.Execute(context.Background(), ac, afterTag{}); err == nil {
-		t.Fatal("expected store to reject an undecodable final file")
-	}
-	if len(store.stored) != 0 {
-		t.Errorf("nothing should be stored when validation fails, got %d", len(store.stored))
-	}
-}
-
-func TestStoreStep_Execute_NoTempPath(t *testing.T) {
-	store := newFakeAudioStore()
-	step := NewStoreStep(store)
-	ac := &AcquisitionContext{
-		TempPath: "",
-	}
-
-	_, err := step.Execute(context.Background(), ac, afterTag{})
-
-	if err == nil {
-		t.Fatal("expected error for missing temp path, got nil")
-	}
-	if got := err.Error(); got != "no temp file to store" {
-		t.Errorf("error = %q, want %q", got, "no temp file to store")
-	}
-}
-
-func TestStoreStep_Execute_StoreError(t *testing.T) {
-	store := newFakeAudioStore()
-	store.err = fmt.Errorf("storage unavailable")
-	step := NewStoreStep(store)
-	ac := &AcquisitionContext{
-		Track: TrackRef{
-			UserID: "user-123",
-			Title:  "Song",
-			Artist: "Artist",
-		},
-		TempPath: "/tmp/altune-test/song.mp3",
-	}
-
-	_, err := step.Execute(context.Background(), ac, afterTag{})
-
-	if err == nil {
-		t.Fatal("expected error when store fails, got nil")
-	}
-}
-
-func TestStoreStep_Rollback_DeletesStoredAudio(t *testing.T) {
-	store := newFakeAudioStore()
-	store.stored["user-123/Artist/Album/Song.mp3"] = true
-	step := NewStoreStep(store)
-	ac := &AcquisitionContext{
-		AudioRef: "user-123/Artist/Album/Song.mp3",
-	}
-
-	if err := step.Rollback(context.Background(), ac); err != nil {
-		t.Fatalf("expected no error on rollback, got %v", err)
-	}
-	if store.stored["user-123/Artist/Album/Song.mp3"] {
-		t.Error("expected audio ref to be deleted from store after rollback")
-	}
-}
-
-func TestStoreStep_Name(t *testing.T) {
-	step := NewStoreStep(nil)
-	if got := step.Name(); got != "store" {
-		t.Errorf("Name() = %q, want %q", got, "store")
-	}
-}
-
-func TestStoreRollback_HandedOver(t *testing.T) {
-	ctx := withRollbackHandedOver(context.Background())
-	acquiring, userId := domain.NewTrackId(), shared.NewUserId(uuid.New())
-
-	newStep := func(store *flakyDeleteStore, queue *recordingOrphanQueue) *StoreStep {
-		refs := trackRefIndex{err: errors.New("database unavailable")}
-		step := NewStoreStep(store, WithStoreAudioRefGuard(refs, acquiring), WithStoreOrphanQueue(queue, userId))
-		step.sleep = func(_ time.Duration) {}
-		return step
-	}
-
-	t.Run("empty ref", func(t *testing.T) {
-		store, queue := &flakyDeleteStore{stored: map[string]bool{}}, &recordingOrphanQueue{}
-		if err := newStep(store, queue).Rollback(ctx, &AcquisitionContext{}); err != nil {
-			t.Fatalf("Rollback: %v", err)
-		}
-		if store.deleteCalls != 0 || len(queue.recorded) != 0 {
-			t.Errorf("deletes = %d, recorded = %+v, want neither", store.deleteCalls, queue.recorded)
-		}
-	})
-
-	t.Run("preserved ref", func(t *testing.T) {
-		store, queue := &flakyDeleteStore{stored: map[string]bool{"u/a/b/c.mp3": true}}, &recordingOrphanQueue{}
-		ac := &AcquisitionContext{AudioRef: "u/a/b/c.mp3", Replace: ReplaceState{PreservedRef: "u/a/b/c.mp3"}}
-		if err := newStep(store, queue).Rollback(ctx, ac); err != nil {
-			t.Fatalf("Rollback: %v", err)
-		}
-		if !store.stored["u/a/b/c.mp3"] || store.deleteCalls != 0 || len(queue.recorded) != 0 {
-			t.Errorf("stored = %v, deletes = %d, recorded = %+v, want kept and unqueued", store.stored, store.deleteCalls, queue.recorded)
-		}
-	})
-
-	t.Run("fresh ref", func(t *testing.T) {
-		store, queue := &flakyDeleteStore{stored: map[string]bool{"u/a/b/new.mp3": true}}, &recordingOrphanQueue{}
-		ac := &AcquisitionContext{AudioRef: "u/a/b/new.mp3", Replace: ReplaceState{PreservedRef: "u/a/b/old.mp3"}}
-		if err := newStep(store, queue).Rollback(ctx, ac); err != nil {
-			t.Fatalf("Rollback: %v", err)
-		}
-		want := ports.OrphanedAudio{AudioRef: "u/a/b/new.mp3", UserId: userId, TrackId: acquiring}
-		if !store.stored["u/a/b/new.mp3"] || store.deleteCalls != 0 {
-			t.Errorf("stored = %v, deletes = %d, want kept without a delete", store.stored, store.deleteCalls)
-		}
-		if len(queue.recorded) != 1 || queue.recorded[0] != want {
-			t.Errorf("recorded = %+v, want exactly %+v", queue.recorded, want)
-		}
-	})
-}
-
-type writeLogStore struct {
-	fakeAudioStore
-	writes []string
-}
-
-func (s *writeLogStore) Store(ctx context.Context, src, audioRef string) error {
-	s.writes = append(s.writes, audioRef)
-	return s.fakeAudioStore.Store(ctx, src, audioRef)
-}
-
-func beyonceTrack() TrackRef {
-	return TrackRef{UserID: "u", Title: "Halo", Artist: "Beyonce", Album: "X"}
-}
-
-func executeStore(t *testing.T, store ports.AudioWriter, refs ports.AudioRefLookup, own domain.TrackId) *AcquisitionContext {
-	t.Helper()
-	step := NewStoreStep(store, WithStoreAudioRefGuard(refs, own))
-	ac := &AcquisitionContext{Track: beyonceTrack(), TempPath: "/tmp/altune-test/halo.opus"}
-	if _, err := step.Execute(context.Background(), ac, afterTag{}); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	return ac
-}
-
-func TestStoreStep_NeverOverwritesAudioAnotherTrackServes(t *testing.T) {
-	const canonical = "u/beyonce/x/halo.opus"
-	serving, acquiring := domain.NewTrackId(), domain.NewTrackId()
-	store := &writeLogStore{fakeAudioStore: *newFakeAudioStore()}
-	store.stored[canonical] = true
-	refs := trackRefIndex{holders: map[string][]domain.TrackId{canonical: {serving}}}
-
-	ac := executeStore(t, store, refs, acquiring)
-
-	want := "u/beyonce/x/halo." + acquiring.String() + ".opus"
-	if ac.AudioRef != want {
-		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, want)
-	}
-	if !store.stored[want] {
-		t.Errorf("scoped ref %q was not stored", want)
-	}
-	if len(store.writes) != 1 || store.writes[0] != want {
-		t.Errorf("writes = %v, want only %q: canonical ref %q is served by track %s", store.writes, want, canonical, serving)
-	}
-}
-
-func TestStoreStep_KeepsTheCanonicalRefItAlreadyHolds(t *testing.T) {
-	const canonical = "u/beyonce/x/halo.opus"
-	acquiring := domain.NewTrackId()
-	store := newFakeAudioStore()
-	refs := trackRefIndex{holders: map[string][]domain.TrackId{canonical: {acquiring}}}
-
-	ac := executeStore(t, store, refs, acquiring)
-
-	if ac.AudioRef != canonical {
-		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, canonical)
-	}
-}
-
-func TestStoreStep_ScopesTheRefWhenUsageIsUnknown(t *testing.T) {
-	acquiring := domain.NewTrackId()
-	store := newFakeAudioStore()
-	refs := trackRefIndex{err: errors.New("database unavailable")}
-
-	ac := executeStore(t, store, refs, acquiring)
-
-	want := "u/beyonce/x/halo." + acquiring.String() + ".opus"
-	if ac.AudioRef != want {
-		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, want)
-	}
-}
-
-func TestStoreStep_ScopesTheRefWhenAnotherTrackSharesItWithTheAcquiringTrack(t *testing.T) {
-	const canonical = "u/beyonce/x/halo.opus"
-	serving, acquiring := domain.NewTrackId(), domain.NewTrackId()
-	store := &writeLogStore{fakeAudioStore: *newFakeAudioStore()}
-	store.stored[canonical] = true
-	refs := trackRefIndex{holders: map[string][]domain.TrackId{canonical: {acquiring, serving}}}
-
-	ac := executeStore(t, store, refs, acquiring)
-
-	want := "u/beyonce/x/halo." + acquiring.String() + ".opus"
-	if ac.AudioRef != want {
-		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, want)
-	}
-	for _, w := range store.writes {
-		if w == canonical {
-			t.Errorf("wrote %q, which track %s still serves", canonical, serving)
-		}
-	}
-}
-
-func TestStoreStep_RollbackOfAScopedStoreDeletesItAndKeepsTheServedAudio(t *testing.T) {
-	const canonical = "u/beyonce/x/halo.opus"
-	serving, acquiring := domain.NewTrackId(), domain.NewTrackId()
-	store := newFakeAudioStore()
-	store.stored[canonical] = true
-	refs := trackRefIndex{holders: map[string][]domain.TrackId{canonical: {serving}}}
-	step := NewStoreStep(store, WithStoreAudioRefGuard(refs, acquiring))
-	step.sleep = func(_ time.Duration) {}
-	ac := &AcquisitionContext{Track: beyonceTrack(), TempPath: "/tmp/altune-test/halo.opus"}
-
-	if _, err := step.Execute(context.Background(), ac, afterTag{}); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if err := step.Rollback(context.Background(), ac); err != nil {
-		t.Fatalf("Rollback: %v", err)
-	}
-
-	scoped := "u/beyonce/x/halo." + acquiring.String() + ".opus"
-	if store.stored[scoped] {
-		t.Errorf("rollback left %q orphaned: only the rolled-back track wrote it", scoped)
-	}
-	if !store.stored[canonical] {
-		t.Errorf("rollback deleted %q, which track %s serves", canonical, serving)
-	}
-}
-
-func TestStoreStep_ScopesTheRefWhenAnAmpersandVariantServesTheCanonicalRef(t *testing.T) {
-	const canonical = "u/simon and garfunkel/x/cecilia.opus"
-	serving, acquiring := domain.NewTrackId(), domain.NewTrackId()
-	store := &writeLogStore{fakeAudioStore: *newFakeAudioStore()}
-	store.stored[canonical] = true
-	refs := trackRefIndex{holders: map[string][]domain.TrackId{canonical: {serving}}}
-	step := NewStoreStep(store, WithStoreAudioRefGuard(refs, acquiring))
-	ac := &AcquisitionContext{
-		Track:    TrackRef{UserID: "u", Title: "Cecilia", Artist: "Simon & Garfunkel", Album: "X"},
-		TempPath: "/tmp/altune-test/cecilia.opus",
-	}
-
-	if _, err := step.Execute(context.Background(), ac, afterTag{}); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-
-	want := "u/simon and garfunkel/x/cecilia." + acquiring.String() + ".opus"
-	if ac.AudioRef != want {
-		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, want)
-	}
-	if len(store.writes) != 1 || store.writes[0] != want {
-		t.Errorf("writes = %v, want only %q", store.writes, want)
-	}
-}
-
-func TestStoreStep_ScopesThePrefixedRefAnotherTrackServes(t *testing.T) {
-	const canonical = "staging/u/beyonce/x/halo.opus"
-	serving, acquiring := domain.NewTrackId(), domain.NewTrackId()
-	store := &writeLogStore{fakeAudioStore: *newFakeAudioStore()}
-	store.stored[canonical] = true
-	refs := trackRefIndex{holders: map[string][]domain.TrackId{canonical: {serving}}}
-	step := NewStoreStep(store, WithStoreKeyPrefix("staging/"), WithStoreAudioRefGuard(refs, acquiring))
-	ac := &AcquisitionContext{Track: beyonceTrack(), TempPath: "/tmp/altune-test/halo.opus"}
-
-	if _, err := step.Execute(context.Background(), ac, afterTag{}); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-
-	want := "staging/u/beyonce/x/halo." + acquiring.String() + ".opus"
-	if ac.AudioRef != want {
-		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, want)
-	}
-	if len(store.writes) != 1 || store.writes[0] != want {
-		t.Errorf("writes = %v, want only %q", store.writes, want)
-	}
-}
-
-func TestStoreStep_KeepsTheCanonicalRefWhenNoTrackHoldsIt(t *testing.T) {
-	const canonical = "u/beyonce/x/halo.opus"
-	store := newFakeAudioStore()
-	store.stored[canonical] = true
-	refs := trackRefIndex{holders: map[string][]domain.TrackId{}}
-
-	ac := executeStore(t, store, refs, domain.NewTrackId())
-
-	if ac.AudioRef != canonical {
-		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, canonical)
-	}
-}
-
-func TestStoreStep_RepeatedAcquisitionUnderACollisionReusesOneScopedRef(t *testing.T) {
-	const canonical = "u/beyonce/x/halo.opus"
-	serving, acquiring := domain.NewTrackId(), domain.NewTrackId()
-	store := &writeLogStore{fakeAudioStore: *newFakeAudioStore()}
-	store.stored[canonical] = true
-	refs := trackRefIndex{holders: map[string][]domain.TrackId{canonical: {serving}}}
-
-	first := executeStore(t, store, refs, acquiring)
-	second := executeStore(t, store, refs, acquiring)
-
-	want := "u/beyonce/x/halo." + acquiring.String() + ".opus"
-	if first.AudioRef != want || second.AudioRef != want {
-		t.Errorf("AudioRefs = %q, %q, want both %q", first.AudioRef, second.AudioRef, want)
-	}
-	for _, w := range store.writes {
-		if w == canonical {
-			t.Errorf("wrote %q, which track %s serves", canonical, serving)
-		}
-	}
-}
-
-func TestStoreStep_ReplaceStagesItsOwnRefEvenWhenAnotherTrackServesTheCanonicalRef(t *testing.T) {
-	const canonical = "u/beyonce/x/halo.opus"
-	serving, acquiring := domain.NewTrackId(), domain.NewTrackId()
-	store := &writeLogStore{fakeAudioStore: *newFakeAudioStore()}
-	store.stored[canonical] = true
-	refs := trackRefIndex{holders: map[string][]domain.TrackId{canonical: {serving, acquiring}}}
-	step := NewStoreStep(store, WithStoreAudioRefGuard(refs, acquiring))
-	step.attemptID = func() string { return testAttemptID }
-	ac := &AcquisitionContext{
-		Track:    beyonceTrack(),
-		TempPath: "/tmp/altune-test/halo.opus",
-		Replace:  ReplaceState{PreservedRef: canonical},
-	}
-
-	if _, err := step.Execute(context.Background(), ac, afterTag{}); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-
-	want := "u/beyonce/x/halo.replace-" + testAttemptID + ".opus"
-	if ac.AudioRef != want {
-		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, want)
-	}
-	if len(store.writes) != 1 || store.writes[0] != want {
-		t.Errorf("writes = %v, want only %q", store.writes, want)
-	}
-}
-
-const testAttemptID = "11111111-1111-1111-1111-111111111111"
-
-type recordingOrphanQueue struct {
-	recorded []ports.OrphanedAudio
-	err      error
-}
-
-func (q *recordingOrphanQueue) RecordOrphanedAudio(_ context.Context, o ports.OrphanedAudio) error {
-	if q.err != nil {
-		return q.err
-	}
-	q.recorded = append(q.recorded, o)
-	return nil
 }
