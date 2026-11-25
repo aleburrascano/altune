@@ -5,6 +5,8 @@ import (
 	"errors"
 	"math"
 	"testing"
+
+	"pgregory.net/rapid"
 )
 
 func TestTrackLengthOf_AcceptsAnyFiniteLengthFromZeroToSevenDays(t *testing.T) {
@@ -105,6 +107,135 @@ func TestTrackLength_AnUnknownLengthIsNeverTheSameRecording(t *testing.T) {
 			}
 		})
 	}
+}
+
+const sevenDaysInSeconds = 7 * 24 * 60 * 60
+
+func knownLengthSeconds() *rapid.Generator[float64] {
+	return rapid.Float64Range(0.001, sevenDaysInSeconds)
+}
+
+func lengthFor(t *rapid.T, seconds float64) kernel.TrackLength {
+	t.Helper()
+	l, err := kernel.TrackLengthOf(seconds)
+	if err != nil {
+		t.Fatalf("TrackLengthOf(%v): %v", seconds, err)
+	}
+	return l
+}
+
+func TestTrackLengthOf_AcceptsExactlyTheLengthsFromZeroToSevenDays(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		seconds := rapid.OneOf(
+			rapid.Float64(),
+			rapid.Float64Range(-10, sevenDaysInSeconds+10),
+			rapid.Just(math.NaN()),
+			rapid.Just(math.Inf(1)),
+			rapid.Just(math.Inf(-1)),
+		).Draw(t, "seconds")
+
+		got, err := kernel.TrackLengthOf(seconds)
+
+		plausible := seconds >= 0 && seconds <= sevenDaysInSeconds
+		if plausible != (err == nil) {
+			t.Fatalf("TrackLengthOf(%v) error = %v, want an error exactly when the length is outside 0 to 7 days", seconds, err)
+		}
+		if err != nil {
+			if !errors.Is(err, kernel.ErrImplausibleTrackLength) || got.Known() {
+				t.Fatalf("TrackLengthOf(%v) = %v, %v, want the unknown length and ErrImplausibleTrackLength", seconds, got, err)
+			}
+			return
+		}
+		if got.Seconds() != seconds || got.Known() != (seconds > 0) {
+			t.Fatalf("TrackLengthOf(%v) = %v s known=%v, want the same seconds, known exactly when above zero", seconds, got.Seconds(), got.Known())
+		}
+	})
+}
+
+func TestTrackLength_SameRecordingIsReflexiveForAKnownLength(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		length := lengthFor(t, knownLengthSeconds().Draw(t, "seconds"))
+		if !length.SameRecording(length) {
+			t.Fatalf("%v s is not the same recording as itself", length.Seconds())
+		}
+	})
+}
+
+func TestTrackLength_SameRecordingAcceptsAnyGapUnderFiveSecondsAnywhereOnTheRange(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		expected := knownLengthSeconds().Draw(t, "expected")
+		gap := rapid.Float64Range(0, 4.99).Draw(t, "gap")
+		actual := expected + gap
+		if rapid.Bool().Draw(t, "shorter") && expected-gap > 0 {
+			actual = expected - gap
+		}
+		if actual > sevenDaysInSeconds {
+			t.Skip()
+		}
+		if !lengthFor(t, expected).SameRecording(lengthFor(t, actual)) {
+			t.Fatalf("%v s vs %v s differ by %v s, want the same recording", expected, actual, gap)
+		}
+	})
+}
+
+func TestTrackLength_SameRecordingAcceptsAnyGapUnderThreePercentOfTheExpectedLength(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		expected := knownLengthSeconds().Draw(t, "expected")
+		share := rapid.Float64Range(0, 0.0299).Draw(t, "share")
+		actual := expected * (1 + share)
+		if rapid.Bool().Draw(t, "shorter") {
+			actual = expected * (1 - share)
+		}
+		if actual <= 0 || actual > sevenDaysInSeconds {
+			t.Skip()
+		}
+		if !lengthFor(t, expected).SameRecording(lengthFor(t, actual)) {
+			t.Fatalf("%v s vs %v s differ by %v of the expected length, want the same recording", expected, actual, share)
+		}
+	})
+}
+
+func TestTrackLength_SameRecordingRefusesAnyGapBeyondTheLargerOfFiveSecondsAndThreePercent(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		expected := rapid.Float64Range(1, sevenDaysInSeconds/2).Draw(t, "expected")
+		allowance := math.Max(5, 0.03*expected)
+		gap := allowance * (1 + rapid.Float64Range(0.001, 5).Draw(t, "overshoot"))
+		actual := expected + gap
+		if rapid.Bool().Draw(t, "shorter") && expected-gap > 0 {
+			actual = expected - gap
+		}
+		if lengthFor(t, expected).SameRecording(lengthFor(t, actual)) {
+			t.Fatalf("%v s vs %v s differ by %v s, past the %v s allowance, want different recordings", expected, actual, gap, allowance)
+		}
+	})
+}
+
+func TestTrackLength_AMatchStaysAMatchWhenTheActualLengthMovesTowardTheExpectedOne(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		expected := lengthFor(t, knownLengthSeconds().Draw(t, "expected"))
+		far := lengthFor(t, knownLengthSeconds().Draw(t, "far"))
+		if !expected.SameRecording(far) {
+			t.Skip()
+		}
+		fraction := rapid.Float64Range(0, 0.999).Draw(t, "fraction")
+		nearer := lengthFor(t, expected.Seconds()+fraction*(far.Seconds()-expected.Seconds()))
+		if !nearer.Known() {
+			t.Skip()
+		}
+		if !expected.SameRecording(nearer) {
+			t.Fatalf("%v s matched %v s but not %v s, which is closer on the same side", expected.Seconds(), far.Seconds(), nearer.Seconds())
+		}
+	})
+}
+
+func TestTrackLength_AnUnknownLengthIsNeverTheSameRecordingAsAnyLength(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		unknown := lengthFor(t, 0)
+		other := lengthFor(t, rapid.Float64Range(0, sevenDaysInSeconds).Draw(t, "other"))
+		if unknown.SameRecording(other) || other.SameRecording(unknown) {
+			t.Fatalf("the unknown length matched %v s", other.Seconds())
+		}
+	})
 }
 
 func lengthOf(t *testing.T, seconds float64) kernel.TrackLength {
