@@ -221,15 +221,16 @@ test_unswitch_and_drop() {
 }
 
 test_pooler_suffix_follows_the_migrator_user() {
-    as_migrator -c "CREATE ROLE \"mig.$REF\" LOGIN CREATEROLE BYPASSRLS PASSWORD 'pw'"
+    docker exec -i "$RUN_ID" psql -X -q -At -v ON_ERROR_STOP=1 -U postgres -d app -c "CREATE ROLE \"mig.$REF\" LOGIN CREATEROLE BYPASSRLS PASSWORD 'pw' IN ROLE \"$MIGRATOR\""
     printf 'DATABASE_URL=postgresql://mig.%s:pw@127.0.0.1:5432/app\n' "$REF" >"$WORK/api/.env.production"
     chmod 600 "$WORK/api/.env.production"
     printf 'MIGRATE_DATABASE_URL=postgresql://mig.%s:pw@127.0.0.1:5432/app' "$REF" >"$WORK/api/.env.migrate.production"
     chmod 600 "$WORK/api/.env.migrate.production"
     in_vm create production
+    local rc=$?
+    check "create works through a suffixed migrator login" 0 "$rc"
     check "a hand-made migrator file without a trailing newline keeps both lines intact" 2 \
         "$(grep -cE '^(MIGRATE_DATABASE_URL|APP_DATABASE_URL)=postgresql://' "$WORK/api/.env.migrate.production")"
-    check "create works through a suffixed migrator login" 0 "$?"
     check "the stored app login carries the same suffix" 1 \
         "$(grep -c "^APP_DATABASE_URL=postgresql://altune_app.$REF:" "$WORK/api/.env.migrate.production")"
     check "the role itself has no suffix" t "$(as_migrator -c "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'altune_app')")"
