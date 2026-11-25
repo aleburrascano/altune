@@ -412,13 +412,26 @@ const onlyWithinSrc = (block) => {
   return { ...block, files: files.map((pattern) => [SRC_ONLY, ...[pattern].flat()]) };
 };
 
+const WARNING_SEVERITIES = new Set(['warn', 1]);
+
+const warningsAreErrors = (block) => {
+  if (!block.rules) return block;
+  const rules = Object.fromEntries(
+    Object.entries(block.rules).map(([name, setting]) => {
+      const [severity, ...options] = [setting].flat();
+      return [name, WARNING_SEVERITIES.has(severity) ? ['error', ...options] : setting];
+    }),
+  );
+  return { ...block, rules };
+};
+
 const styleRulesConfig = [
-  ...expoConfig,
+  ...expoConfig.map(warningsAreErrors),
   ...typedLinting,
   typeScriptPluginRegisteredDirectlyRatherThanViaExpoConfig,
   {
     rules: {
-      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'no-console': ['error', { allow: ['warn', 'error'] }],
     },
   },
   rulesWrittenForTheWebAndWrongForReactNative,
