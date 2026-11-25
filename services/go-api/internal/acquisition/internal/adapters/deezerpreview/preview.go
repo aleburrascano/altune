@@ -228,7 +228,10 @@ func (d *Previews) awaitTurn(ctx context.Context) error {
 	if err := sleepContext(ctx, d.pause.remaining()); err != nil {
 		return err
 	}
-	return d.limiter.Wait(ctx)
+	if err := d.limiter.Wait(ctx); err != nil {
+		return fmt.Errorf("wait for the deezer rate limit: %w", err)
+	}
+	return nil
 }
 
 func newDeezerRequest(ctx context.Context, target string) (*http.Request, error) {
@@ -268,7 +271,7 @@ func sleepContext(ctx context.Context, d time.Duration) error {
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return fmt.Errorf("wait out the deezer pause: %w", ctx.Err())
 	case <-timer.C:
 		return nil
 	}

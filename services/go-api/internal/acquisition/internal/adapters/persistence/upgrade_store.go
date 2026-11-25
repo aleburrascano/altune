@@ -76,7 +76,10 @@ func collectUpgradeCandidates(rows pgx.Rows) ([]ports.UpgradeCandidate, error) {
 			TrackID: shared.TrackIdFromUUID(trackID), UserID: shared.NewUserId(userID), Grade: grade,
 		})
 	}
-	return candidates, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read upgrade candidates: %w", err)
+	}
+	return candidates, nil
 }
 
 const noteUpgradeAttemptSQL = `

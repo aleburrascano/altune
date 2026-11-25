@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"bytes"
 	"context"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -76,12 +77,12 @@ func fixtureLength(seconds float64) int {
 
 func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
 	if err := ctx.Err(); err != nil {
-		return ports.FetchedAudio{}, err
+		return ports.FetchedAudio{}, fmt.Errorf("fixture fetch: %w", err)
 	}
 	path := filepath.Join(outDir, fetchedName)
 	audio := bytes.Repeat(s.clip, clipRepeats(candidate.Duration))
 	if err := os.WriteFile(path, audio, 0o600); err != nil {
-		return ports.FetchedAudio{}, err
+		return ports.FetchedAudio{}, fmt.Errorf("write the fixture clip: %w", err)
 	}
 	return ports.FetchedAudio{Path: path}, nil
 }

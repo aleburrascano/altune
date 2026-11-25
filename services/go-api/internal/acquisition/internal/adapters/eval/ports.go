@@ -215,7 +215,7 @@ func (p *casePorts) Download(_ context.Context, url string, outDir string) (stri
 	}
 	path := filepath.Join(outDir, "track.mp3")
 	if err := os.WriteFile(path, []byte("eval-audio-bytes"), 0o644); err != nil {
-		return "", err
+		return "", fmt.Errorf("eval: write the simulated download: %w", err)
 	}
 	p.pathsMu.Lock()
 	defer p.pathsMu.Unlock()
@@ -264,7 +264,7 @@ func (p *casePorts) Identify(_ context.Context, filePath string, _ float64) (por
 func (p *casePorts) CopyStored(_ context.Context, _, dir string) (string, error) {
 	path := filepath.Join(dir, "stored.mp3")
 	if err := os.WriteFile(path, []byte("eval-stored-audio-bytes"), 0o644); err != nil {
-		return "", err
+		return "", fmt.Errorf("eval: write the simulated stored file: %w", err)
 	}
 	p.pathsMu.Lock()
 	defer p.pathsMu.Unlock()

@@ -284,6 +284,41 @@ func TestRegressions_SilentWhenAtBaseline(t *testing.T) {
 	}
 }
 
+func TestWriteBaseline_IsWhatLoadBaselineReadsBack(t *testing.T) {
+	r := eval.Report{
+		Total: 4, Passed: 3,
+		Classes:                []eval.ClassResult{{Class: "F1", Total: 2, Passed: 1}, {Class: "F2", Total: 2, Passed: 2}},
+		MedianSimulatedSeconds: 12.5, MeanAttempts: 1.5,
+	}
+	path := filepath.Join(t.TempDir(), "baselines.json")
+
+	if err := r.WriteBaseline(path); err != nil {
+		t.Fatalf("WriteBaseline: %v", err)
+	}
+
+	got, err := eval.LoadBaseline(path)
+	if err != nil {
+		t.Fatalf("LoadBaseline: %v", err)
+	}
+	want := eval.Baseline{Accuracy: 0.75, Classes: map[string]float64{"F1": 0.5, "F2": 1}, MedianSeconds: 12.5, MeanAttempts: 1.5}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("baseline read back = %+v, want %+v", got, want)
+	}
+	if regressions := r.Regressions(got); len(regressions) != 0 {
+		t.Errorf("a report regressed against the baseline written from it: %v", regressions)
+	}
+}
+
+func TestWriteBaseline_ReportsAFileItCannotWrite(t *testing.T) {
+	missingDir := filepath.Join(t.TempDir(), "missing", "baselines.json")
+
+	err := eval.Report{Total: 1, Passed: 1}.WriteBaseline(missingDir)
+
+	if err == nil || !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("WriteBaseline into a missing directory = %v, want an error wrapping os.ErrNotExist", err)
+	}
+}
+
 func TestEmbeddedSuiteMatchesCommittedBaseline(t *testing.T) {
 	cases, err := eval.LoadEmbedded()
 	if err != nil {

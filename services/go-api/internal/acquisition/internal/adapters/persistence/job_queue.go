@@ -244,7 +244,7 @@ func scanClaimedJob(row pgx.Row) (ports.Job, error) {
 func scanTrackClaim(row pgx.Row, trackID *shared.TrackId, userID *shared.UserId, kind *string, attempts, run *int, waited *float64) error {
 	var rawTrackID, rawUserID uuid.UUID
 	if err := row.Scan(&rawTrackID, &rawUserID, kind, attempts, run, waited); err != nil {
-		return err
+		return fmt.Errorf("scan track claim: %w", err)
 	}
 	*trackID = shared.TrackIdFromUUID(rawTrackID)
 	*userID = shared.NewUserId(rawUserID)

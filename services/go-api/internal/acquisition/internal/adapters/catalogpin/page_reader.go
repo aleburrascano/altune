@@ -31,11 +31,11 @@ func NewHTTPPageReader(transport http.RoundTripper, timeout time.Duration) *HTTP
 func (r *HTTPPageReader) ReadPage(ctx context.Context, pageURL string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, http.NoBody)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build file host page request: %w", err)
 	}
 	resp, err := r.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetch file host page: %w", err)
 	}
 	if resp == nil {
 		return nil, errNoResponse
@@ -44,5 +44,9 @@ func (r *HTTPPageReader) ReadPage(ctx context.Context, pageURL string) ([]byte, 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("file host page answered %d", resp.StatusCode)
 	}
-	return io.ReadAll(io.LimitReader(resp.Body, maxPageBytes))
+	page, err := io.ReadAll(io.LimitReader(resp.Body, maxPageBytes))
+	if err != nil {
+		return nil, fmt.Errorf("read file host page: %w", err)
+	}
+	return page, nil
 }

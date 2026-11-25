@@ -168,7 +168,7 @@ func pruneInBatches(ctx context.Context, pool *pgxpool.Pool, sql string, args ..
 		tag, err := pool.Exec(batchCtx, sql, append(args, pruneBatchSize)...)
 		cancel()
 		if err != nil {
-			return total, err
+			return total, fmt.Errorf("delete a prune batch: %w", err)
 		}
 		total += tag.RowsAffected()
 		if tag.RowsAffected() < pruneBatchSize {

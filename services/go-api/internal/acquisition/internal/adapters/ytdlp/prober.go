@@ -109,7 +109,7 @@ func (p *FfprobeProber) ValidateDecodable(ctx context.Context, filePath string) 
 	case err == nil:
 		return nil
 	case ctx.Err() != nil:
-		return ctx.Err()
+		return fmt.Errorf("decode check stopped: %w", ctx.Err())
 	case errors.Is(decodeCtx.Err(), context.DeadlineExceeded):
 		slog.WarnContext(ctx, "acquisition.decode_timeout_accepting",
 			"file", filePath, "timeout", p.decodeTimeout.String())

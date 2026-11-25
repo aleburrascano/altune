@@ -94,7 +94,7 @@ func (c *Client) SearchSongs(ctx context.Context, query string) ([]Song, error) 
 
 func (c *Client) outage(ctx context.Context, err error) error {
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		return ctxErr
+		return fmt.Errorf("ytmsearch: stopped: %w", ctxErr)
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		err = fmt.Errorf("ytmsearch: timed out after %v", c.timeout)
@@ -197,6 +197,6 @@ func (g *gate) wait(ctx context.Context) error {
 	case <-timer.C:
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return fmt.Errorf("ytmsearch: wait for a request slot: %w", ctx.Err())
 	}
 }
