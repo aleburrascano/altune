@@ -67,10 +67,6 @@ func WithStoreKeyPrefix(prefix string) func(*StoreStep) {
 func (s *StoreStep) Name() StepName { return stepNameStore }
 
 func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, tagged afterTag) (afterStore, error) {
-	if ac.TempPath == "" {
-		return afterStore{}, fmt.Errorf("no temp file to store")
-	}
-
 	if s.prober != nil {
 		if err := s.prober.ValidateDecodable(ctx, ac.TempPath); err != nil {
 			return afterStore{}, withCancellation(ctx, fmt.Errorf("final audio failed decode validation: %w", err))
@@ -116,10 +112,7 @@ func WithStoreWorkspace(w ports.TempWorkspace) func(*StoreStep) {
 }
 
 func (s *StoreStep) Rollback(ctx context.Context, ac *AcquisitionContext) error {
-	if ac.AudioRef == "" {
-		return nil
-	}
-	if rollbackHandedOver(ctx) && ac.AudioRef != ac.Replace.PreservedRef {
+	if rollbackHandedOver(ctx) {
 		recordOrphanedAudio(ctx, s.orphans, s.userID, s.ownTrackID, ac.AudioRef)
 		return nil
 	}
@@ -134,10 +127,6 @@ func (s *StoreStep) Rollback(ctx context.Context, ac *AcquisitionContext) error 
 }
 
 func (s *StoreStep) stillServesATrack(ctx context.Context, ac *AcquisitionContext) bool {
-	if ac.AudioRef == ac.Replace.PreservedRef {
-		slog.WarnContext(ctx, "acquisition.rollback_kept_preserved_audio", "audio_ref", ac.AudioRef)
-		return true
-	}
 	if !s.sharedWithAnotherTrack(ctx, ac.AudioRef) {
 		return false
 	}
