@@ -72,6 +72,20 @@ func TestContainLogsOnceAtErrorWithItsAttributesAndTheValue(t *testing.T) {
 	if n := strings.Count(out, "\n"); n != 1 {
 		t.Errorf("logged %d lines, want 1", n)
 	}
+	if strings.Index(out, "bucket=usage") > strings.Index(out, "recover=boom") {
+		t.Errorf("log %q puts recover before the attributes it was given", out)
+	}
+}
+
+func TestContainDoesNotWriteIntoTheCallersAttributeSlice(t *testing.T) {
+	captureLogs(t)
+	attrs := make([]any, 2, 8)
+	attrs[0], attrs[1] = "bucket", "usage"
+	panicguard.Contain(context.Background(), "msg", func() { panic("boom") }, attrs...)
+
+	if got := attrs[:3][2]; got != nil {
+		t.Fatalf("Contain wrote %v into the spare capacity of the caller's slice", got)
+	}
 }
 
 func TestContainSaysNothingWhenNothingPanics(t *testing.T) {

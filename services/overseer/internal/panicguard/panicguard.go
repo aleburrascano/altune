@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync"
 )
 
@@ -52,7 +53,7 @@ func Call[T any](f func() T) (T, error) {
 
 func Contain(ctx context.Context, msg string, f func(), attrs ...any) {
 	if pe := recovered(f); pe != nil {
-		slog.ErrorContext(ctx, msg, append(attrs, "recover", pe.Value)...)
+		slog.ErrorContext(ctx, msg, append(slices.Clip(attrs), "recover", pe.Value)...)
 	}
 }
 

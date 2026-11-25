@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -85,7 +86,9 @@ func (b *Bucket) Start(ctx context.Context) {
 }
 
 func (b *Bucket) Wait() {
-	_ = b.running.Wait()
+	if err := b.running.Wait(); err != nil {
+		slog.Error("reliability: poller panicked", "error", err)
+	}
 }
 
 func (b *Bucket) Rings() map[string]*core.RingStore {

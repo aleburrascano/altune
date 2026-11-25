@@ -126,7 +126,9 @@ func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 			return nil
 		})
 	})
-	_ = group.Wait()
+	if err := group.Wait(); err != nil {
+		slog.ErrorContext(ctx, "domainquality: a source read panicked past its recovery", "error", err)
+	}
 
 	if evalErr != nil && acqErr != nil {
 		return nil, fmt.Errorf("%w: eval=%s acquisition=%s", ErrBothDown, evalErr.Error(), acqErr.Error())
