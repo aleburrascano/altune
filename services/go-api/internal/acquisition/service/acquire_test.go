@@ -1,15 +1,12 @@
 package service
 
 import (
-	"altune/go-api/internal/acquisition/internal/adapters/catalogbridge"
+	"altune/go-api/internal/acquisition/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/acquisition/internal/adapters/catalogpin"
-	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
 	"altune/go-api/internal/acquisition/internal/core/grade"
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/service/upgrade"
-	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared/events"
-	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"encoding/json"
 	"errors"
@@ -21,6 +18,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	acqdomain "altune/go-api/internal/acquisition/internal/core/domain"
+
+	shared "altune/go-api/internal/shared/kernel"
 
 	"github.com/google/uuid"
 )
@@ -48,17 +49,13 @@ func (p *ctxRecordingPublisher) publishedOnLiveCtx(eventType events.EventType) b
 
 func TestAcquireTrackAudioService_Execute_ContextEndsMidSearch_SettlesOnDetachedContext(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	repo := newFakeTrackRepository()
-	key := track.ID.String() + ":" + userId.String()
-	repo.tracks[key] = track
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
 	source := newBlockingSource()
 	pub := newCtxRecordingPublisher()
 	svc := newTestAcquireService(
-		catalogbridge.NewTrackLedger(liveCtxTrackRepository{repo}), NewSourceRegistry(source), newFakeAudioStore(),
+		liveCtxLedger{ledger}, NewSourceRegistry(source), newFakeAudioStore(),
 		WithAcquireEvents(pub),
 	)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -70,35 +67,30 @@ func TestAcquireTrackAudioService_Execute_ContextEndsMidSearch_SettlesOnDetached
 
 	_ = svc.Execute(ctx, userId, track.ID)
 
-	settled := repo.tracks[key]
-	if settled.AcquisitionStatus != domain.AcquisitionFailed {
-		t.Errorf("status = %v, want %v (failed)", settled.AcquisitionStatus, domain.AcquisitionFailed)
+	settled := committedTrack(t, ledger, track.ID)
+	if settled.Status != ports.TrackFailed {
+		t.Errorf("status = %v, want %v (failed)", settled.Status, ports.TrackFailed)
 	}
-	if got := deref(settled.FailureReason); got != string(domain.FailureAcquisitionCancelled) {
-		t.Errorf("persisted failure_reason = %q, want %q", got, domain.FailureAcquisitionCancelled)
+	if got := settled.FailureReason; got != string(shared.FailureAcquisitionCancelled) {
+		t.Errorf("persisted failure_reason = %q, want %q", got, shared.FailureAcquisitionCancelled)
 	}
 	if !pub.publishedOnLiveCtx(events.TypeTrackAcquisitionFailed) {
 		t.Errorf("%q was not published on a live context", events.TypeTrackAcquisitionFailed)
 	}
 }
 
-func seedTwinTrack(t *testing.T, repo *committingTrackRepo, userId shared.UserId, audioRef string) domain.TrackId {
+func seedTwinTrack(t *testing.T, ledger *acquisitiontest.Ledger, userId shared.UserId, audioRef string) shared.TrackId {
 	t.Helper()
-	twin, err := domain.NewTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
-	if err != nil {
-		t.Fatalf("new twin track: %v", err)
-	}
-	if err := twin.MarkReady(audioRef); err != nil {
-		t.Fatalf("mark twin ready: %v", err)
-	}
-	repo.rows[twin.ID.String()+":"+userId.String()] = *twin
+	twin := newLedgerTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
+	makeReady(&twin, audioRef)
+	ledger.Seed(twin)
 	return twin.ID
 }
 
 func TestExecuteReplace_KeepsSupersededAudioATwinTrackStillServes(t *testing.T) {
-	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
-	twinId := seedTwinTrack(t, repo, userId, originalRef)
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store)
+	ledger, store, userId, trackId, originalRef := seedReadyTrack(t)
+	twinId := seedTwinTrack(t, ledger, userId, originalRef)
+	svc := newTestAcquireService(ledger, NewSourceRegistry(newAudioSource{}), store)
 
 	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
@@ -107,20 +99,20 @@ func TestExecuteReplace_KeepsSupersededAudioATwinTrackStillServes(t *testing.T) 
 	if got := store.objects[originalRef]; got != "original bytes" {
 		t.Errorf("object at %q = %q, want the audio track %s still serves", originalRef, got, twinId)
 	}
-	row := repo.committed(trackId, userId)
+	row := committedTrack(t, ledger, trackId)
 	if row.AudioRef == nil || *row.AudioRef == originalRef {
 		t.Errorf("audio_ref = %v, want the replaced track moved onto its own new ref", row.AudioRef)
 	}
 }
 
 func TestAcquireTrackAudioService_Execute_TrackNotFound(t *testing.T) {
-	repo := newFakeTrackRepository()
+	ledger := acquisitiontest.NewLedger()
 	searcher := &fakeAudioSearcher{}
 	store := newFakeAudioStore()
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store)
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
 	userId := shared.NewUserId(uuid.New())
-	trackId := domain.NewTrackId()
+	trackId := shared.NewTrackId()
 
 	err := svc.Execute(context.Background(), userId, trackId)
 	if err != nil {
@@ -130,21 +122,18 @@ func TestAcquireTrackAudioService_Execute_TrackNotFound(t *testing.T) {
 
 func TestAcquireTrackAudioService_Execute_AlreadyReady_AudioExists(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("failed to create track: %v", err)
-	}
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
 	audioRef := "user/artist/album/song.mp3"
-	_ = track.MarkReady(audioRef)
+	makeReady(&track, audioRef)
 
-	repo := newFakeTrackRepository()
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
 
 	store := newFakeAudioStore()
 	store.stored[audioRef] = true
 
 	searcher := &fakeAudioSearcher{}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store)
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
 	execErr := svc.Execute(context.Background(), userId, track.ID)
 
@@ -152,80 +141,69 @@ func TestAcquireTrackAudioService_Execute_AlreadyReady_AudioExists(t *testing.T)
 		t.Fatalf("expected nil for already-ready track with existing audio, got %v", execErr)
 	}
 
-	updated := storedTrack(t, repo, track)
-	if updated.AcquisitionStatus != domain.AcquisitionReady {
-		t.Errorf("track status = %v, want %v (should remain ready)", updated.AcquisitionStatus, domain.AcquisitionReady)
+	updated := storedTrack(t, ledger, track)
+	if updated.Status != ports.TrackReady {
+		t.Errorf("track status = %v, want %v (should remain ready)", updated.Status, ports.TrackReady)
 	}
 }
 
 func TestAcquireTrackAudioService_Execute_AlreadyReady_AudioMissing(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("failed to create track: %v", err)
-	}
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
 	audioRef := "user/artist/album/song.mp3"
-	_ = track.MarkReady(audioRef)
+	makeReady(&track, audioRef)
 
-	repo := newFakeTrackRepository()
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
 
 	store := newFakeAudioStore()
 
 	searcher := &fakeAudioSearcher{}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store)
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
 
-	updated := storedTrack(t, repo, track)
-	if updated.AcquisitionStatus == domain.AcquisitionReady {
+	updated := storedTrack(t, ledger, track)
+	if updated.Status == ports.TrackReady {
 		t.Error("track should not remain in 'ready' status when audio file is missing")
 	}
 }
 
 func TestAcquireTrackAudioService_Execute_FailedStatus_RetriesToAcquire(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("failed to create track: %v", err)
-	}
-	_ = track.MarkFailed("previous failure reason")
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	makeFailed(&track, "previous failure reason")
 
-	repo := newFakeTrackRepository()
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
 
 	store := newFakeAudioStore()
 	searcher := &fakeAudioSearcher{}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store)
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
 
-	updated := storedTrack(t, repo, track)
-	if updated.AcquisitionStatus == domain.AcquisitionPending {
-	}
-	if updated.FailureReason != nil && *updated.FailureReason == "previous failure reason" {
+	updated := storedTrack(t, ledger, track)
+	if updated.FailureReason == "previous failure reason" {
 		t.Error("expected failure reason to change after retry attempt, but it remained the original")
 	}
 }
 
-func pendingTrack(t *testing.T, repo *fakeTrackRepository, userId shared.UserId) *domain.Track {
+func pendingTrack(t *testing.T, ledger *acquisitiontest.Ledger, userId shared.UserId) ledgerTrack {
 	t.Helper()
-	track, err := domain.NewTrack(userId, "Fell In Love", "Lil Tecca", "")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	track := newLedgerTrack(userId, "Fell In Love", "Lil Tecca", "")
+	ledger.Seed(track)
 	return track
 }
 
 func TestExecute_AlwaysSearches(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := pendingTrack(t, repo, userId)
+	ledger := acquisitiontest.NewLedger()
+	track := pendingTrack(t, ledger, userId)
 
 	searcher := &fakeAudioSearcher{}
 	store := newFakeAudioStore()
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store)
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
 
@@ -239,17 +217,14 @@ func TestExecute_AlwaysSearches(t *testing.T) {
 
 func TestExecute_PublishesStartedEvent(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
 
-	repo := newFakeTrackRepository()
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
 
 	pub := &recordingProgressPublisher{}
 	svc := newTestAcquireService(
-		catalogbridge.NewTrackLedger(repo),
+		ledger,
 		fakeRegistry(&fakeAudioSearcher{}),
 		newFakeAudioStore(),
 		WithAcquireEvents(pub),
@@ -279,13 +254,10 @@ func TestExecute_WithoutConfiguredEventsDoesNotPanic(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			userId := shared.NewUserId(uuid.New())
-			track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-			if err != nil {
-				t.Fatalf("new track: %v", err)
-			}
-			repo := newFakeTrackRepository()
-			repo.tracks[track.ID.String()+":"+userId.String()] = track
-			svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), opts...)
+			track := newLedgerTrack(userId, "Song", "Artist", "Album")
+			ledger := acquisitiontest.NewLedger()
+			ledger.Seed(track)
+			svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), opts...)
 
 			if err := svc.Execute(context.Background(), userId, track.ID); err == nil {
 				t.Fatalf("Execute with no candidates: want error, got nil")
@@ -312,25 +284,22 @@ func TestExecute_FailureReasonResolvesToSpecificMessage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			userId := shared.NewUserId(uuid.New())
-			track, err := domain.NewTrack(userId, "I've Been in Love Before", "Cutting Crew", "Broadcast")
-			if err != nil {
-				t.Fatalf("new track: %v", err)
-			}
-			repo := newFakeTrackRepository()
-			repo.tracks[track.ID.String()+":"+userId.String()] = track
+			track := newLedgerTrack(userId, "I've Been in Love Before", "Cutting Crew", "Broadcast")
+			ledger := acquisitiontest.NewLedger()
+			ledger.Seed(track)
 			searcher := &fakeAudioSearcher{searchResults: tt.candidates}
-			svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore())
+			svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore())
 
 			_ = svc.Execute(context.Background(), userId, track.ID)
 
-			updated := repo.tracks[track.ID.String()+":"+userId.String()]
-			if updated == nil || updated.AcquisitionStatus != domain.AcquisitionFailed {
+			updated := committedTrack(t, ledger, track.ID)
+			if updated.Status != ports.TrackFailed {
 				t.Fatalf("track not marked failed: %+v", updated)
 				return
 			}
 			const want = "Couldn't find this track"
-			if got := domain.FailureMessage(updated.FailureReason); got != want {
-				t.Errorf("FailureMessage(%q) = %q, want %q", deref(updated.FailureReason), got, want)
+			if got := shared.FailureMessage(&updated.FailureReason); got != want {
+				t.Errorf("FailureMessage(%q) = %q, want %q", updated.FailureReason, got, want)
 			}
 		})
 	}
@@ -353,7 +322,7 @@ func (r *stubResolver) Resolve(_ context.Context, q ports.RecordingQuery) (ports
 
 func serviceWithResolver(r ports.RecordingResolver) *AcquireTrackAudioService {
 	return newTestAcquireService(
-		catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(),
+		acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(),
 		WithRecordingResolver(r),
 	)
 }
@@ -431,7 +400,7 @@ func TestResolveIdentity_PassesTrackMetadataToResolver(t *testing.T) {
 func TestResolveIdentity_WithAnIdentifierNeverAsksForACluster(t *testing.T) {
 	identifier := &stubIdentifier{}
 	svc := newTestAcquireService(
-		catalogbridge.NewTrackLedger(newFakeTrackRepository()), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(),
+		acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(),
 		WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mbid-1"}}),
 		WithAudioIdentifier(identifier),
 	)
@@ -446,34 +415,28 @@ func TestResolveIdentity_WithAnIdentifierNeverAsksForACluster(t *testing.T) {
 
 func TestExecute_WithoutResolverStillRuns(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	ledger := acquisitiontest.NewLedger()
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	ledger.Seed(track)
 
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
 }
 
 func TestReconcileForReacquire_ExistsError_PreservesAudioRef(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("failed to create track: %v", err)
-	}
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
 	audioRef := "user/artist/album/song.mp3"
-	_ = track.MarkReady(audioRef)
+	makeReady(&track, audioRef)
 
-	repo := newFakeTrackRepository()
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
 
 	store := newFakeAudioStore()
 	store.err = errors.New("transient s3 hiccup")
 
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), store)
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), store)
 
 	snapshot, err := svc.ledger.Get(context.Background(), track.ID, userId)
 	if err != nil || snapshot == nil {
@@ -487,11 +450,12 @@ func TestReconcileForReacquire_ExistsError_PreservesAudioRef(t *testing.T) {
 	if proceed {
 		t.Error("expected proceed=false when the exists check errors")
 	}
-	if track.AcquisitionStatus != domain.AcquisitionReady {
-		t.Errorf("status = %v, want %v (must stay ready on transient error)", track.AcquisitionStatus, domain.AcquisitionReady)
+	stored := committedTrack(t, ledger, track.ID)
+	if stored.Status != ports.TrackReady {
+		t.Errorf("status = %v, want %v (must stay ready on transient error)", stored.Status, ports.TrackReady)
 	}
-	if track.AudioRef == nil || *track.AudioRef != audioRef {
-		t.Errorf("AudioRef = %v, want %q preserved (a transient error is not evidence the file is gone)", track.AudioRef, audioRef)
+	if stored.AudioRef == nil || *stored.AudioRef != audioRef {
+		t.Errorf("AudioRef = %v, want %q preserved (a transient error is not evidence the file is gone)", stored.AudioRef, audioRef)
 	}
 }
 
@@ -522,40 +486,6 @@ func (s *bytesAudioStore) Delete(_ context.Context, audioRef string) error {
 	return nil
 }
 
-type committingTrackRepo struct {
-	rows      map[string]domain.Track
-	updateErr error
-}
-
-func (r *committingTrackRepo) GetByID(_ context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {
-	row, ok := r.rows[id.String()+":"+userId.String()]
-	if !ok {
-		return nil, nil
-	}
-	return &row, nil
-}
-
-func (r *committingTrackRepo) Update(_ context.Context, track *domain.Track, _ int) error {
-	if r.updateErr != nil {
-		return r.updateErr
-	}
-	r.rows[track.ID.String()+":"+track.UserId.String()] = *track
-	return nil
-}
-
-func (r *committingTrackRepo) AudioRefInUse(_ context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error) {
-	for _, row := range r.rows {
-		if row.ID != excludeTrackID && row.AudioRef != nil && *row.AudioRef == audioRef {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func (r *committingTrackRepo) committed(id domain.TrackId, userId shared.UserId) domain.Track {
-	return r.rows[id.String()+":"+userId.String()]
-}
-
 type newAudioSource struct{}
 
 func (newAudioSource) Name() acqdomain.SourceName { return "new-audio" }
@@ -574,7 +504,7 @@ func (newAudioSource) Fetch(_ context.Context, _ ports.AudioCandidate, outDir st
 	return fetchedAt(path, os.WriteFile(path, []byte("new bytes"), 0o600))
 }
 
-func trackRefOf(track *domain.Track) TrackRef {
+func trackRefOf(track ledgerTrack) TrackRef {
 	return TrackRef{
 		ID:     track.ID.String(),
 		UserID: track.UserId.String(),
@@ -584,28 +514,23 @@ func trackRefOf(track *domain.Track) TrackRef {
 	}
 }
 
-func seedReadyTrack(t *testing.T) (*committingTrackRepo, *bytesAudioStore, shared.UserId, domain.TrackId, string) {
+func seedReadyTrack(t *testing.T) (*acquisitiontest.Ledger, *bytesAudioStore, shared.UserId, shared.TrackId, string) {
 	t.Helper()
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
+	track := newLedgerTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
 	originalRef := BuildAudioRef(trackRefOf(track), "audio.mp3")
-	if err := track.MarkReady(originalRef); err != nil {
-		t.Fatalf("mark ready: %v", err)
-	}
-	track.SetAudioSource("https://www.youtube.com/watch?v=currentAAAA")
+	makeReady(&track, originalRef)
+	useSource(&track, "https://www.youtube.com/watch?v=currentAAAA")
 
-	repo := &committingTrackRepo{rows: map[string]domain.Track{track.ID.String() + ":" + userId.String(): *track}}
+	ledger := acquisitiontest.NewLedger(track)
 	store := &bytesAudioStore{objects: map[string]string{originalRef: "original bytes"}}
-	return repo, store, userId, track.ID, originalRef
+	return ledger, store, userId, track.ID, originalRef
 }
 
 func TestExecuteReplace_FailedCommitKeepsTheOriginalAudioIntact(t *testing.T) {
-	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
-	repo.updateErr = errors.New("transient db error")
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store)
+	ledger, store, userId, trackId, originalRef := seedReadyTrack(t)
+	ledger.FailWrites(errors.New("transient db error"))
+	svc := newTestAcquireService(ledger, NewSourceRegistry(newAudioSource{}), store)
 
 	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err == nil {
 		t.Fatal("expected the replace to fail when the track update cannot commit")
@@ -617,21 +542,21 @@ func TestExecuteReplace_FailedCommitKeepsTheOriginalAudioIntact(t *testing.T) {
 	if len(store.objects) != 1 {
 		t.Errorf("objects = %v, want the failed attempt's staged audio rolled back", store.objects)
 	}
-	row := repo.committed(trackId, userId)
-	if row.AcquisitionStatus != domain.AcquisitionReady || row.AudioRef == nil || *row.AudioRef != originalRef {
-		t.Errorf("track = %v %v, want it still ready on the original ref", row.AcquisitionStatus, row.AudioRef)
+	row := committedTrack(t, ledger, trackId)
+	if row.Status != ports.TrackReady || row.AudioRef == nil || *row.AudioRef != originalRef {
+		t.Errorf("track = %v %v, want it still ready on the original ref", row.Status, row.AudioRef)
 	}
 }
 
 func TestExecuteReplace_CommittedSwapPointsAtTheNewAudioAndDropsTheOld(t *testing.T) {
-	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store)
+	ledger, store, userId, trackId, originalRef := seedReadyTrack(t)
+	svc := newTestAcquireService(ledger, NewSourceRegistry(newAudioSource{}), store)
 
 	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
-	row := repo.committed(trackId, userId)
+	row := committedTrack(t, ledger, trackId)
 	if row.AudioRef == nil || *row.AudioRef == originalRef {
 		t.Fatalf("audio_ref = %v, want a new per-attempt ref distinct from %q", row.AudioRef, originalRef)
 	}
@@ -647,15 +572,15 @@ func TestExecuteReplace_CommittedSwapPointsAtTheNewAudioAndDropsTheOld(t *testin
 }
 
 func TestExecuteReplace_OldAudioDeleteFailureDoesNotUndoTheSwap(t *testing.T) {
-	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
+	ledger, store, userId, trackId, originalRef := seedReadyTrack(t)
 	store.deleteErr = errors.New("object storage unavailable")
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store)
+	svc := newTestAcquireService(ledger, NewSourceRegistry(newAudioSource{}), store)
 
 	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
 		t.Fatalf("ExecuteReplace: %v, want the committed swap reported as success", err)
 	}
 
-	row := repo.committed(trackId, userId)
+	row := committedTrack(t, ledger, trackId)
 	if row.AudioRef == nil || *row.AudioRef == originalRef || store.objects[*row.AudioRef] != "new bytes" {
 		t.Errorf("audio_ref = %v, want the committed ref serving the replacement", row.AudioRef)
 	}
@@ -663,48 +588,40 @@ func TestExecuteReplace_OldAudioDeleteFailureDoesNotUndoTheSwap(t *testing.T) {
 
 func TestExecute_FreshAcquisitionKeepsTheCanonicalRef(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	repo := &committingTrackRepo{rows: map[string]domain.Track{track.ID.String() + ":" + userId.String(): *track}}
+	track := newLedgerTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
+	ledger := acquisitiontest.NewLedger(track)
 	store := &bytesAudioStore{objects: map[string]string{}}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store)
+	svc := newTestAcquireService(ledger, NewSourceRegistry(newAudioSource{}), store)
 
 	if err := svc.Execute(context.Background(), userId, track.ID); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	row := repo.committed(track.ID, userId)
+	row := committedTrack(t, ledger, track.ID)
 	want := BuildAudioRef(trackRefOf(track), "audio.mp3")
 	if row.AudioRef == nil || *row.AudioRef != want {
 		t.Errorf("audio_ref = %v, want the canonical %q", row.AudioRef, want)
 	}
 }
 
-func readyTrackWithSource(t *testing.T, repo *fakeTrackRepository, userId shared.UserId, ref, source string) *domain.Track {
+func readyTrackWithSource(t *testing.T, ledger *acquisitiontest.Ledger, userId shared.UserId, ref, source string) ledgerTrack {
 	t.Helper()
-	track, err := domain.NewTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	if err := track.MarkReady(ref); err != nil {
-		t.Fatalf("mark ready: %v", err)
-	}
-	track.SetAudioSource(source)
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	track := newLedgerTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
+	makeReady(&track, ref)
+	useSource(&track, source)
+	ledger.Seed(track)
 	return track
 }
 
 func TestExecuteReplace_ExcludesTheStoredSource(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := readyTrackWithSource(t, repo, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrong")
+	ledger := acquisitiontest.NewLedger()
+	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrong")
 
 	store := newFakeAudioStore()
 	store.stored["u/a/b/c.mp3"] = true
 	searcher := &fakeAudioSearcher{}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store)
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
 	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
 
@@ -715,20 +632,20 @@ func TestExecuteReplace_ExcludesTheStoredSource(t *testing.T) {
 
 func TestExecuteReplace_FailureLeavesTheTrackReady(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := readyTrackWithSource(t, repo, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrong")
+	ledger := acquisitiontest.NewLedger()
+	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrong")
 
 	store := newFakeAudioStore()
 	store.stored["u/a/b/c.mp3"] = true
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), store)
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), store)
 
 	if err := svc.ExecuteReplace(context.Background(), userId, track.ID); err == nil {
 		t.Fatal("expected the replace to fail with no candidates")
 	}
 
-	updated := storedTrack(t, repo, track)
-	if updated.AcquisitionStatus != domain.AcquisitionReady {
-		t.Errorf("status = %v, want the track left ready", updated.AcquisitionStatus)
+	updated := storedTrack(t, ledger, track)
+	if updated.Status != ports.TrackReady {
+		t.Errorf("status = %v, want the track left ready", updated.Status)
 	}
 	if updated.AudioRef == nil || *updated.AudioRef != "u/a/b/c.mp3" {
 		t.Errorf("audio_ref = %v, want the original preserved", updated.AudioRef)
@@ -740,13 +657,13 @@ func TestExecuteReplace_FailureLeavesTheTrackReady(t *testing.T) {
 
 func TestExecute_NonReplaceStillSkipsAReadyTrack(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := readyTrackWithSource(t, repo, userId, "u/a/b/c.mp3", "")
+	ledger := acquisitiontest.NewLedger()
+	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "")
 
 	store := newFakeAudioStore()
 	store.stored["u/a/b/c.mp3"] = true
 	searcher := &fakeAudioSearcher{}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store)
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
 
@@ -757,18 +674,18 @@ func TestExecute_NonReplaceStillSkipsAReadyTrack(t *testing.T) {
 
 func TestExecuteReplace_LegacyTrackSkipsTopRankedInsteadOfExcluding(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := readyTrackWithSource(t, repo, userId, "u/a/b/c.mp3", "")
+	ledger := acquisitiontest.NewLedger()
+	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "")
 
 	store := newFakeAudioStore()
 	store.stored["u/a/b/c.mp3"] = true
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), store)
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), store)
 
 	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
 
-	updated := storedTrack(t, repo, track)
-	if updated.AcquisitionStatus != domain.AcquisitionReady {
-		t.Errorf("status = %v, want the track left ready", updated.AcquisitionStatus)
+	updated := storedTrack(t, ledger, track)
+	if updated.Status != ports.TrackReady {
+		t.Errorf("status = %v, want the track left ready", updated.Status)
 	}
 }
 
@@ -784,64 +701,47 @@ func (s *cancellingSource) Find(_ context.Context, _ ports.FindRequest) ([]ports
 
 func TestExecute_CancelledMidSearch_PersistsCancellation(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	repo := newFakeTrackRepository()
-	key := track.ID.String() + ":" + userId.String()
-	repo.tracks[key] = track
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	source := &cancellingSource{fakeAudioSearcher: &fakeAudioSearcher{}, cancel: cancel}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(source), newFakeAudioStore())
+	svc := newTestAcquireService(ledger, NewSourceRegistry(source), newFakeAudioStore())
 
 	_ = svc.Execute(ctx, userId, track.ID)
 
-	if got := deref(repo.tracks[key].FailureReason); got != string(domain.FailureAcquisitionCancelled) {
-		t.Errorf("persisted failure_reason = %q, want %q", got, domain.FailureAcquisitionCancelled)
+	if got := committedTrack(t, ledger, track.ID).FailureReason; got != string(shared.FailureAcquisitionCancelled) {
+		t.Errorf("persisted failure_reason = %q, want %q", got, shared.FailureAcquisitionCancelled)
 	}
 }
 
-func seedTrackInRepo(t *testing.T, repo *fakeTrackRepository, userId shared.UserId, settle func(*domain.Track) error) *domain.Track {
+func seedTrackInRepo(t *testing.T, ledger *acquisitiontest.Ledger, userId shared.UserId, settle func(*ledgerTrack)) ledgerTrack {
 	t.Helper()
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("NewTrack: %v", err)
-	}
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
 	if settle != nil {
-		if err := settle(track); err != nil {
-			t.Fatalf("settle track: %v", err)
-		}
+		settle(&track)
 	}
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	ledger.Seed(track)
 	return track
 }
 
-func storedTrack(t *testing.T, repo *fakeTrackRepository, track *domain.Track) *domain.Track {
+func storedTrack(t *testing.T, ledger *acquisitiontest.Ledger, track ledgerTrack) ledgerTrack {
 	t.Helper()
-	got, ok := repo.tracks[track.ID.String()+":"+track.UserId.String()]
-	if !ok || got == nil {
-		t.Fatal("track missing from repository")
-	}
-	return got
-}
-
-func markReadyWith(ref string) func(*domain.Track) error {
-	return func(tr *domain.Track) error { return tr.MarkReady(ref) }
+	return committedTrack(t, ledger, track.ID)
 }
 
 func TestAcquire_StaleFailureDoesNotOverwriteReadyTrack(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := seedTrackInRepo(t, repo, userId, markReadyWith("u/a/b/good.opus"))
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	ledger := acquisitiontest.NewLedger()
+	track := seedTrackInRepo(t, ledger, userId, readyWith("u/a/b/good.opus"))
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	svc.markFailed(context.Background(), track.ID, userId, "download_failed")
 
-	got := storedTrack(t, repo, track)
-	if got.AcquisitionStatus != domain.AcquisitionReady {
-		t.Fatalf("status = %v, want ready: a stale failure overwrote a completed acquisition", got.AcquisitionStatus)
+	got := storedTrack(t, ledger, track)
+	if got.Status != ports.TrackReady {
+		t.Fatalf("status = %v, want ready: a stale failure overwrote a completed acquisition", got.Status)
 	}
 	if got.AudioRef == nil || *got.AudioRef != "u/a/b/good.opus" {
 		t.Errorf("AudioRef = %v, want the concurrent success's audio kept", got.AudioRef)
@@ -850,31 +750,31 @@ func TestAcquire_StaleFailureDoesNotOverwriteReadyTrack(t *testing.T) {
 
 func TestAcquire_DuplicateFailureKeepsOriginalReason(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := seedTrackInRepo(t, repo, userId, func(tr *domain.Track) error {
-		return tr.MarkFailed(string(domain.FailureAcquisitionInterrupted))
+	ledger := acquisitiontest.NewLedger()
+	track := seedTrackInRepo(t, ledger, userId, func(tr *ledgerTrack) {
+		makeFailed(tr, string(shared.FailureAcquisitionInterrupted))
 	})
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	svc.markFailed(context.Background(), track.ID, userId, "download_failed")
 
-	got := storedTrack(t, repo, track)
-	if got.FailureReason == nil || *got.FailureReason != string(domain.FailureAcquisitionInterrupted) {
+	got := storedTrack(t, ledger, track)
+	if got.FailureReason != string(shared.FailureAcquisitionInterrupted) {
 		t.Errorf("FailureReason = %v, want the first failure's reason kept", got.FailureReason)
 	}
 }
 
 func TestAcquire_FailureOnPendingTrackStillMarksFailed(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := seedTrackInRepo(t, repo, userId, nil)
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	ledger := acquisitiontest.NewLedger()
+	track := seedTrackInRepo(t, ledger, userId, nil)
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	svc.markFailed(context.Background(), track.ID, userId, "download_failed")
 
-	got := storedTrack(t, repo, track)
-	if got.AcquisitionStatus != domain.AcquisitionFailed {
-		t.Errorf("status = %v, want failed", got.AcquisitionStatus)
+	got := storedTrack(t, ledger, track)
+	if got.Status != ports.TrackFailed {
+		t.Errorf("status = %v, want failed", got.Status)
 	}
 }
 
@@ -925,24 +825,24 @@ func namedCandidate(url string) ports.AudioCandidate {
 	return ports.AudioCandidate{Title: "Lil Tecca - Fell In Love", URL: url, Source: "fake"}
 }
 
-func retryWith(t *testing.T, store ports.RejectionStore, urls ...string) (*fakeAudioSearcher, *fakeTrackRepository) {
+func retryWith(t *testing.T, store ports.RejectionStore, urls ...string) (*fakeAudioSearcher, *acquisitiontest.Ledger, shared.TrackId) {
 	t.Helper()
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := pendingTrack(t, repo, userId)
+	ledger := acquisitiontest.NewLedger()
+	track := pendingTrack(t, ledger, userId)
 	searcher := &fakeAudioSearcher{downloadErr: errors.New("boom")}
 	for _, u := range urls {
 		searcher.searchResults = append(searcher.searchResults, namedCandidate(u))
 	}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore(), WithRejectionStore(store))
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(), WithRejectionStore(store))
 	_ = svc.Execute(context.Background(), userId, track.ID)
-	return searcher, repo
+	return searcher, ledger, track.ID
 }
 
 func TestExecute_RetrySkipsAURLRejectedAsDRMTenDaysAgo(t *testing.T) {
 	store := &fakeRejectionStore{active: priorRejectionsOnTheRunsBasis(drmURL)}
 
-	searcher, _ := retryWith(t, store, drmURL, otherURL)
+	searcher, _, _ := retryWith(t, store, drmURL, otherURL)
 
 	if len(searcher.downloadURLs) != 1 || searcher.downloadURLs[0] != otherURL {
 		t.Errorf("download attempts = %v, want only %q", searcher.downloadURLs, otherURL)
@@ -955,7 +855,7 @@ func TestExecute_RetrySkipsAURLRejectedAsDRMTenDaysAgo(t *testing.T) {
 func TestExecute_RetryAttemptsAPriorRejectionWhenItIsTheOnlyCandidate(t *testing.T) {
 	store := &fakeRejectionStore{active: priorRejectionsOnTheRunsBasis(drmURL)}
 
-	searcher, _ := retryWith(t, store, drmURL)
+	searcher, _, _ := retryWith(t, store, drmURL)
 
 	if len(searcher.downloadURLs) != 1 || searcher.downloadURLs[0] != drmURL {
 		t.Errorf("download attempts = %v, want the only candidate %q", searcher.downloadURLs, drmURL)
@@ -964,11 +864,9 @@ func TestExecute_RetryAttemptsAPriorRejectionWhenItIsTheOnlyCandidate(t *testing
 
 func TestExecute_ASearchLengthRejectionIsNotRemembered(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := pendingTrack(t, repo, userId)
-	if err := track.SetCatalogDuration(200); err != nil {
-		t.Fatalf("set duration: %v", err)
-	}
+	ledger := acquisitiontest.NewLedger()
+	track := pendingTrack(t, ledger, userId)
+	track = withCatalogLength(t, ledger, track, 200)
 	audio := filepath.Join(t.TempDir(), "song.mp3")
 	if err := os.WriteFile(audio, []byte("audio"), 0o600); err != nil {
 		t.Fatalf("write audio: %v", err)
@@ -978,7 +876,7 @@ func TestExecute_ASearchLengthRejectionIsNotRemembered(t *testing.T) {
 	downloaded := namedCandidate(otherURL)
 	searcher := &fakeAudioSearcher{searchResults: []ports.AudioCandidate{short, downloaded}, downloadPath: audio}
 	store := &fakeRejectionStore{}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore(),
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(),
 		WithRejectionStore(store), WithAudioProber(&queueProber{durations: []float64{30}}))
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
@@ -1002,17 +900,15 @@ const (
 func retryOnALength(t *testing.T, prior []ports.PriorRejection, urls ...string) (*fakeAudioSearcher, *fakeRejectionStore) {
 	t.Helper()
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := pendingTrack(t, repo, userId)
-	if err := track.SetCatalogDuration(recordedLength); err != nil {
-		t.Fatalf("set duration: %v", err)
-	}
+	ledger := acquisitiontest.NewLedger()
+	track := pendingTrack(t, ledger, userId)
+	track = withCatalogLength(t, ledger, track, recordedLength)
 	searcher := &fakeAudioSearcher{downloadErr: errors.New("boom")}
 	for _, u := range urls {
 		searcher.searchResults = append(searcher.searchResults, namedCandidate(u))
 	}
 	store := &fakeRejectionStore{active: prior}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore(),
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(),
 		WithRejectionStore(store), WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: runMBID}}))
 	_ = svc.Execute(context.Background(), userId, track.ID)
 	return searcher, store
@@ -1066,14 +962,12 @@ func TestExecute_RecordsTheBasisWithEachLastingRejection(t *testing.T) {
 		t.Fatalf("write audio: %v", err)
 	}
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := pendingTrack(t, repo, userId)
-	if err := track.SetCatalogDuration(recordedLength); err != nil {
-		t.Fatalf("set duration: %v", err)
-	}
+	ledger := acquisitiontest.NewLedger()
+	track := pendingTrack(t, ledger, userId)
+	track = withCatalogLength(t, ledger, track, recordedLength)
 	searcher := &fakeAudioSearcher{searchResults: []ports.AudioCandidate{namedCandidate(otherURL)}, downloadPath: audio}
 	store := &fakeRejectionStore{}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore(),
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(),
 		WithRejectionStore(store), WithAudioProber(&queueProber{durations: []float64{30}}), WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: runMBID}}))
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
@@ -1087,26 +981,22 @@ func TestExecute_RecordsTheBasisWithEachLastingRejection(t *testing.T) {
 func TestExecute_FailingRejectionStoreNeverChangesTheOutcome(t *testing.T) {
 	store := &fakeRejectionStore{activeErr: errors.New("db down"), recordErr: errors.New("db down")}
 
-	searcher, repo := retryWith(t, store, otherURL)
+	searcher, ledger, trackId := retryWith(t, store, otherURL)
 
 	if len(searcher.downloadURLs) != 1 {
 		t.Errorf("download attempts = %v, want the candidate still tried", searcher.downloadURLs)
 	}
-	for _, track := range repo.tracks {
-		if track == nil {
-			t.Fatal("nil track in repository")
-		}
-		if track.AcquisitionStatus != domain.AcquisitionFailed {
-			t.Errorf("status = %v, want failed from the download, not the store", track.AcquisitionStatus)
-		}
+	if got := committedTrack(t, ledger, trackId).Status; got != ports.TrackFailed {
+		t.Errorf("status = %v, want failed from the download, not the store", got)
 	}
 }
 
 func TestExecuteReplace_ExcludesStoredKeysAndRejectedSourceKeys(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := readyTrackWithSource(t, repo, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrongwrong1")
+	ledger := acquisitiontest.NewLedger()
+	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrongwrong1")
 	track.RejectedSourceKeys = []string{sourceKey("https://youtube.com/watch?v=earlier0000")}
+	ledger.Seed(track)
 	store := newFakeAudioStore()
 	store.stored["u/a/b/c.mp3"] = true
 	var results []ports.AudioCandidate
@@ -1115,7 +1005,7 @@ func TestExecuteReplace_ExcludesStoredKeysAndRejectedSourceKeys(t *testing.T) {
 	}
 	searcher := &fakeAudioSearcher{searchResults: results, downloadErr: errors.New("boom")}
 	rejections := &fakeRejectionStore{active: priorRejectionsOnTheRunsBasis(drmURL)}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store, WithRejectionStore(rejections))
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store, WithRejectionStore(rejections))
 
 	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
 
@@ -1128,36 +1018,33 @@ func transientSearchFailure() *fakeAudioSearcher {
 	return &fakeAudioSearcher{searchErr: &acqdomain.SourceUnavailableError{Source: "fake", Err: errors.New("http error 503")}}
 }
 
-func executeOnAttempt(t *testing.T, searcher *fakeAudioSearcher, attempt int) (*domain.Track, *recordingPublisher, error) {
+func executeOnAttempt(t *testing.T, searcher *fakeAudioSearcher, attempt int) (ledgerTrack, *recordingPublisher, error) {
 	t.Helper()
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	repo := newFakeTrackRepository()
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
 	pub := newRecordingPublisher()
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore(), WithAcquireEvents(pub))
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(), WithAcquireEvents(pub))
 	ctx := withJobAttempt(withSchedulerOwnedJobContext(context.Background()), attempt)
 
 	execErr := svc.Execute(ctx, userId, track.ID)
 
-	return storedTrack(t, repo, track), pub, execErr
+	return storedTrack(t, ledger, track), pub, execErr
 }
 
 func TestExecute_TransientFailureBelowTheAttemptCap_ReturnsRetryableAndLeavesTheTrackPending(t *testing.T) {
 	for attempt := 1; attempt < maxAcquisitionAttempts; attempt++ {
 		stored, pub, execErr := executeOnAttempt(t, transientSearchFailure(), attempt)
-		if stored == nil || pub == nil {
-			t.Fatal("no stored track or publisher")
+		if pub == nil {
+			t.Fatal("no publisher")
 		}
 
 		if !errors.Is(execErr, ErrAcquisitionRetryable) {
 			t.Errorf("attempt %d: err = %v, want ErrAcquisitionRetryable", attempt, execErr)
 		}
-		if stored.AcquisitionStatus != domain.AcquisitionPending {
-			t.Errorf("attempt %d: status = %v, want pending", attempt, stored.AcquisitionStatus)
+		if stored.Status != ports.TrackPending {
+			t.Errorf("attempt %d: status = %v, want pending", attempt, stored.Status)
 		}
 		if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
 			t.Errorf("attempt %d: failed publishes = %d, want 0", attempt, got)
@@ -1167,18 +1054,18 @@ func TestExecute_TransientFailureBelowTheAttemptCap_ReturnsRetryableAndLeavesThe
 
 func TestExecute_TransientFailureOnTheLastAttempt_SettlesFailedAsSourceUnavailable(t *testing.T) {
 	stored, pub, execErr := executeOnAttempt(t, transientSearchFailure(), maxAcquisitionAttempts)
-	if stored == nil || pub == nil {
-		t.Fatal("no stored track or publisher")
+	if pub == nil {
+		t.Fatal("no publisher")
 	}
 
 	if errors.Is(execErr, ErrAcquisitionRetryable) {
 		t.Errorf("err = %v, want a terminal failure", execErr)
 	}
-	if stored.AcquisitionStatus != domain.AcquisitionFailed {
-		t.Fatalf("status = %v, want failed", stored.AcquisitionStatus)
+	if stored.Status != ports.TrackFailed {
+		t.Fatalf("status = %v, want failed", stored.Status)
 	}
-	if got := deref(stored.FailureReason); got != string(domain.FailureSourceUnavailable) {
-		t.Errorf("failure reason = %q, want %q", got, domain.FailureSourceUnavailable)
+	if got := stored.FailureReason; got != string(shared.FailureSourceUnavailable) {
+		t.Errorf("failure reason = %q, want %q", got, shared.FailureSourceUnavailable)
 	}
 	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 1 {
 		t.Errorf("failed publishes = %d, want 1", got)
@@ -1187,18 +1074,15 @@ func TestExecute_TransientFailureOnTheLastAttempt_SettlesFailedAsSourceUnavailab
 
 func TestExecute_PermanentFailureOnTheFirstAttempt_SettlesFailedAsNoMatch(t *testing.T) {
 	stored, _, execErr := executeOnAttempt(t, &fakeAudioSearcher{}, 1)
-	if stored == nil {
-		t.Fatal("no stored track")
-	}
 
 	if errors.Is(execErr, ErrAcquisitionRetryable) {
 		t.Errorf("err = %v, want a terminal failure", execErr)
 	}
-	if stored.AcquisitionStatus != domain.AcquisitionFailed {
-		t.Fatalf("status = %v, want failed", stored.AcquisitionStatus)
+	if stored.Status != ports.TrackFailed {
+		t.Fatalf("status = %v, want failed", stored.Status)
 	}
-	if got := deref(stored.FailureReason); !strings.HasPrefix(got, string(domain.FailureNoMatchFound)) {
-		t.Errorf("failure reason = %q, want prefix %q", got, domain.FailureNoMatchFound)
+	if got := stored.FailureReason; !strings.HasPrefix(got, string(shared.FailureNoMatchFound)) {
+		t.Errorf("failure reason = %q, want prefix %q", got, shared.FailureNoMatchFound)
 	}
 }
 
@@ -1222,30 +1106,27 @@ func (unknownTopicSource) Fetch(ctx context.Context, c ports.AudioCandidate, out
 	return fetched, err
 }
 
-func acquireUnknownTopicWithFloor(t *testing.T, opts ...func(*AcquireTrackAudioService)) (*domain.Track, error) {
+func acquireUnknownTopicWithFloor(t *testing.T, opts ...func(*AcquireTrackAudioService)) (ledgerTrack, error) {
 	t.Helper()
 	return acquireUnknownTopicIn(t, context.Background(), opts...)
 }
 
-func acquireUnknownTopicIn(t *testing.T, ctx context.Context, opts ...func(*AcquireTrackAudioService)) (*domain.Track, error) {
+func acquireUnknownTopicIn(t *testing.T, ctx context.Context, opts ...func(*AcquireTrackAudioService)) (ledgerTrack, error) {
 	t.Helper()
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track, err := domain.NewTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
+	ledger := acquisitiontest.NewLedger()
+	track := newLedgerTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
 	seconds := 200.0
-	track.DurationSeconds = &seconds
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(unknownTopicSource{}),
+	track.StoredDurationSeconds = &seconds
+	ledger.Seed(track)
+	svc := newTestAcquireService(ledger, NewSourceRegistry(unknownTopicSource{}),
 		&bytesAudioStore{objects: map[string]string{}},
 		append([]func(*AcquireTrackAudioService){
 			WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding"}}),
 			WithAudioIdentifier(&stubIdentifier{}),
 		}, opts...)...)
-	err = svc.Execute(ctx, userId, track.ID)
-	return storedTrack(t, repo, track), err
+	err := svc.Execute(ctx, userId, track.ID)
+	return storedTrack(t, ledger, track), err
 }
 
 func TestExecute_ReportsStageTimesSourceFormatAndStoredFile(t *testing.T) {
@@ -1273,15 +1154,11 @@ func TestExecute_ReportsStageTimesSourceFormatAndStoredFile(t *testing.T) {
 
 func TestExecute_FloorAboveTheCandidatesConfidenceFailsAsNoConfidentMatch(t *testing.T) {
 	track, err := acquireUnknownTopicWithFloor(t, WithAcquireConfidenceFloor(0.9))
-	if track == nil {
-		t.Fatal("no stored track")
-	}
-
 	if !errors.Is(err, ErrNoConfidentMatch) {
 		t.Fatalf("err = %v, want ErrNoConfidentMatch", err)
 	}
-	if track.AcquisitionStatus != domain.AcquisitionFailed {
-		t.Errorf("status = %v, want failed", track.AcquisitionStatus)
+	if track.Status != ports.TrackFailed {
+		t.Errorf("status = %v, want failed", track.Status)
 	}
 }
 
@@ -1290,8 +1167,8 @@ func TestExecute_DefaultFloorStoresTheSameCandidate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if track.AcquisitionStatus != domain.AcquisitionReady {
-		t.Errorf("status = %v, want ready", track.AcquisitionStatus)
+	if track.Status != ports.TrackReady {
+		t.Errorf("status = %v, want ready", track.Status)
 	}
 }
 
@@ -1322,14 +1199,14 @@ func (m4aAudioSource) Fetch(_ context.Context, _ ports.AudioCandidate, outDir st
 }
 
 func TestExecuteReplace_AnM4AReplacesAnOldMP3AndDropsIt(t *testing.T) {
-	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(m4aAudioSource{}), store)
+	ledger, store, userId, trackId, originalRef := seedReadyTrack(t)
+	svc := newTestAcquireService(ledger, NewSourceRegistry(m4aAudioSource{}), store)
 
 	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
 	}
 
-	row := repo.committed(trackId, userId)
+	row := committedTrack(t, ledger, trackId)
 	if row.AudioRef == nil || filepath.Ext(*row.AudioRef) != ".m4a" {
 		t.Fatalf("audio_ref = %v, want an .m4a key", row.AudioRef)
 	}
@@ -1359,15 +1236,15 @@ func (*brokenArtTrackSource) Fetch(_ context.Context, _ ports.AudioCandidate, _ 
 }
 
 func TestExecuteReplace_AFailedFirstTierDownloadFallsBackToTheTextSearch(t *testing.T) {
-	repo, store, userId, trackId, _ := seedReadyTrack(t)
+	ledger, store, userId, trackId, _ := seedReadyTrack(t)
 	first := &brokenArtTrackSource{}
 	registry := NewSourceRegistry(first).WithFallback(newAudioSource{})
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), registry, store)
+	svc := newTestAcquireService(ledger, registry, store)
 
 	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
 		t.Fatalf("ExecuteReplace: %v, want the fallback candidate to succeed", err)
 	}
-	row := repo.committed(trackId, userId)
+	row := committedTrack(t, ledger, trackId)
 	if row.AudioRef == nil || store.objects[*row.AudioRef] != "new bytes" {
 		t.Fatalf("stored audio = %v, want the fallback source's audio", row.AudioRef)
 	}
@@ -1377,10 +1254,10 @@ func TestExecuteReplace_AFailedFirstTierDownloadFallsBackToTheTextSearch(t *test
 }
 
 func TestExecuteReplace_NoFallbackRetryWhenTheFallbackAlreadyRan(t *testing.T) {
-	repo, store, userId, trackId, _ := seedReadyTrack(t)
+	ledger, store, userId, trackId, _ := seedReadyTrack(t)
 	unresolvedBroken := &stubSource{name: "ytdlp", found: []ports.AudioCandidate{candidate("https://www.youtube.com/watch?v=brokenAAAAA")}, fetchErr: errors.New("exit status 1")}
 	first := &stubSource{name: "ytmsearch"}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(first).WithFallback(unresolvedBroken), store)
+	svc := newTestAcquireService(ledger, NewSourceRegistry(first).WithFallback(unresolvedBroken), store)
 
 	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err == nil {
 		t.Fatal("ExecuteReplace = nil, want the download failure")
@@ -1430,14 +1307,13 @@ func TestConfigureReplaceExclusion_KnownSourceIgnoresLength(t *testing.T) {
 }
 
 func TestExecuteReplace_FailsCleanlyWhenNoFactIdentifiesTheCurrentFile(t *testing.T) {
-	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
-	key := trackId.String() + ":" + userId.String()
-	row := repo.rows[key]
+	ledger, store, userId, trackId, originalRef := seedReadyTrack(t)
+	row := committedTrack(t, ledger, trackId)
 	row.AudioSourceURL = nil
-	row.DurationSeconds = nil
-	repo.rows[key] = row
+	row.StoredDurationSeconds = nil
+	ledger.Seed(row)
 	source := &stubSource{name: "ytmsearch", found: []ports.AudioCandidate{candidate("https://www.youtube.com/watch?v=otherAAAAAA")}}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(source), store)
+	svc := newTestAcquireService(ledger, NewSourceRegistry(source), store)
 
 	err := svc.ExecuteReplace(context.Background(), userId, trackId)
 
@@ -1453,7 +1329,7 @@ func TestExecuteReplace_FailsCleanlyWhenNoFactIdentifiesTheCurrentFile(t *testin
 	if got := store.objects[originalRef]; got != "original bytes" || len(store.objects) != 1 {
 		t.Errorf("store = %v, want only the original audio untouched", store.objects)
 	}
-	if got := repo.rows[key].AudioRef; got == nil || *got != originalRef {
+	if got := committedTrack(t, ledger, trackId).AudioRef; got == nil || *got != originalRef {
 		t.Errorf("track audio ref = %v, want %q kept", got, originalRef)
 	}
 }
@@ -1491,15 +1367,14 @@ func (s *lengthRecordingSource) Find(ctx context.Context, req ports.FindRequest)
 }
 
 func TestExecuteReplace_TheStoredLengthIsNotTheTarget(t *testing.T) {
-	repo, store, userId, trackId, _ := seedReadyTrack(t)
-	key := trackId.String() + ":" + userId.String()
-	row := repo.rows[key]
+	ledger, store, userId, trackId, _ := seedReadyTrack(t)
+	row := committedTrack(t, ledger, trackId)
 	wrongVersion := 112.0
-	row.DurationSeconds = &wrongVersion
-	repo.rows[key] = row
+	row.StoredDurationSeconds = &wrongVersion
+	ledger.Seed(row)
 	resolver := &stubResolver{identity: ports.RecordingIdentity{MBID: "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", Duration: 128}}
 	source := &lengthRecordingSource{}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(source), store, WithRecordingResolver(resolver))
+	svc := newTestAcquireService(ledger, NewSourceRegistry(source), store, WithRecordingResolver(resolver))
 
 	_ = svc.ExecuteReplace(context.Background(), userId, trackId)
 
@@ -1565,13 +1440,13 @@ func captureLogs(t *testing.T) *strings.Builder {
 	return &out
 }
 
-func seedUnknownSourceTrack(repo *committingTrackRepo, userId shared.UserId, trackId domain.TrackId) {
-	key := trackId.String() + ":" + userId.String()
-	row := repo.rows[key]
+func seedUnknownSourceTrack(t *testing.T, ledger *acquisitiontest.Ledger, userId shared.UserId, trackId shared.TrackId) {
+	t.Helper()
+	row := committedTrack(t, ledger, trackId)
 	stored := 112.0
 	row.AudioSourceURL = nil
-	row.DurationSeconds = &stored
-	repo.rows[key] = row
+	row.StoredDurationSeconds = &stored
+	ledger.Seed(row)
 }
 
 func TestExecuteReplace_FingerprintsTheStoredFileOnce(t *testing.T) {
@@ -1585,13 +1460,13 @@ func TestExecuteReplace_FingerprintsTheStoredFileOnce(t *testing.T) {
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			repo, store, userId, trackId, _ := seedReadyTrack(t)
+			ledger, store, userId, trackId, _ := seedReadyTrack(t)
 			if tt.clearSource {
-				seedUnknownSourceTrack(repo, userId, trackId)
+				seedUnknownSourceTrack(t, ledger, userId, trackId)
 			}
 			identifier := &contentRecordingIdentifier{storedID: "acoustid-of-the-stored-file"}
 			logs := captureLogs(t)
-			svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store,
+			svc := newTestAcquireService(ledger, NewSourceRegistry(newAudioSource{}), store,
 				WithAudioIdentifier(identifier), WithStoredAudioReader(storedBytesReader{store: store}))
 
 			if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
@@ -1611,11 +1486,11 @@ func TestExecuteReplace_FingerprintsTheStoredFileOnce(t *testing.T) {
 }
 
 func TestExecuteReplace_AFailedStoredCopyIsLoggedAndTheReplaceStillRuns(t *testing.T) {
-	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
-	seedUnknownSourceTrack(repo, userId, trackId)
+	ledger, store, userId, trackId, originalRef := seedReadyTrack(t)
+	seedUnknownSourceTrack(t, ledger, userId, trackId)
 	identifier := &contentRecordingIdentifier{storedID: "never-recorded"}
 	logs := captureLogs(t)
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store,
+	svc := newTestAcquireService(ledger, NewSourceRegistry(newAudioSource{}), store,
 		WithAudioIdentifier(identifier), WithStoredAudioReader(storedBytesReader{store: store, err: errors.New("object storage unavailable")}))
 
 	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
@@ -1628,7 +1503,7 @@ func TestExecuteReplace_AFailedStoredCopyIsLoggedAndTheReplaceStillRuns(t *testi
 	if strings.Contains(logs.String(), "acquisition.replace_current_file_fingerprinted") {
 		t.Error("a failed copy must not log a fingerprint")
 	}
-	row := repo.committed(trackId, userId)
+	row := committedTrack(t, ledger, trackId)
 	if row.AudioRef == nil || *row.AudioRef == originalRef {
 		t.Errorf("audio_ref = %v, want the replace to have swapped in the new audio", row.AudioRef)
 	}
@@ -1641,10 +1516,10 @@ func TestExecuteReplace_TheStoredCopyWorkspaceIsRemovedWhateverTheOutcome(t *tes
 	}
 	for name, copyErr := range tests {
 		t.Run(name, func(t *testing.T) {
-			repo, store, userId, trackId, _ := seedReadyTrack(t)
-			seedUnknownSourceTrack(repo, userId, trackId)
+			ledger, store, userId, trackId, _ := seedReadyTrack(t)
+			seedUnknownSourceTrack(t, ledger, userId, trackId)
 			ws := newCallRecordingWorkspace()
-			svc := NewAcquireTrackAudioService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store,
+			svc := NewAcquireTrackAudioService(ledger, NewSourceRegistry(newAudioSource{}), store,
 				WithAcquireTempWorkspace(ws), WithAudioIdentifier(&contentRecordingIdentifier{}),
 				WithStoredAudioReader(storedBytesReader{store: store, err: copyErr}))
 
@@ -1720,14 +1595,14 @@ func sameLengthUploads() *uploadsByBytesSource {
 
 func replaceOfAnUnknownSource(t *testing.T, source *uploadsByBytesSource, identifier acoustIDByBytesIdentifier, readerFor func(*bytesAudioStore) ports.StoredAudioReader) (*bytesAudioStore, error) {
 	t.Helper()
-	repo, store, userId, trackId, _ := seedReadyTrack(t)
-	seedUnknownSourceTrack(repo, userId, trackId)
+	ledger, store, userId, trackId, _ := seedReadyTrack(t)
+	seedUnknownSourceTrack(t, ledger, userId, trackId)
 	resolver := &stubResolver{identity: ports.RecordingIdentity{MBID: recordingMBID, Duration: 112}}
 	options := []func(*AcquireTrackAudioService){WithRecordingResolver(resolver), WithAudioIdentifier(identifier)}
 	if readerFor != nil {
 		options = append(options, WithStoredAudioReader(readerFor(store)))
 	}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(source), store, options...)
+	svc := newTestAcquireService(ledger, NewSourceRegistry(source), store, options...)
 	return store, svc.ExecuteReplace(context.Background(), userId, trackId)
 }
 
@@ -1809,8 +1684,8 @@ func TestExecuteReplace_NoFingerprintExcludesNothing(t *testing.T) {
 }
 
 func TestExecuteReplace_AnOutageWithOnlyTheCurrentFileLeftIsSourceUnavailableAndRecordsNothing(t *testing.T) {
-	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
-	seedUnknownSourceTrack(repo, userId, trackId)
+	ledger, store, userId, trackId, originalRef := seedReadyTrack(t)
+	seedUnknownSourceTrack(t, ledger, userId, trackId)
 	healthy := &uploadsByBytesSource{
 		uploads: map[string]string{sameLengthCurrentURL: "the current file again"},
 		found: []ports.AudioCandidate{
@@ -1822,7 +1697,7 @@ func TestExecuteReplace_AnOutageWithOnlyTheCurrentFileLeftIsSourceUnavailableAnd
 		"original bytes":         {AcoustID: "acoustid-of-the-stored-file", MBIDs: []string{recordingMBID}},
 		"the current file again": {AcoustID: "acoustid-of-the-stored-file", MBIDs: []string{recordingMBID}},
 	}}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(outageSource(), healthy), store,
+	svc := newTestAcquireService(ledger, NewSourceRegistry(outageSource(), healthy), store,
 		WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: recordingMBID, Duration: 112}}),
 		WithAudioIdentifier(identifier), WithStoredAudioReader(storedBytesReader{store: store}), WithRejectionStore(rejections))
 
@@ -1840,15 +1715,15 @@ func TestExecuteReplace_AnOutageWithOnlyTheCurrentFileLeftIsSourceUnavailableAnd
 }
 
 func TestExecuteReplace_TheCurrentFileIsFoundWithoutAResolvedRecording(t *testing.T) {
-	repo, store, userId, trackId, _ := seedReadyTrack(t)
-	seedUnknownSourceTrack(repo, userId, trackId)
+	ledger, store, userId, trackId, _ := seedReadyTrack(t)
+	seedUnknownSourceTrack(t, ledger, userId, trackId)
 	source := sameLengthUploads()
 	identifier := acoustIDByBytesIdentifier{byBytes: map[string]ports.RecordingMatch{
 		"original bytes":         {AcoustID: "acoustid-of-the-stored-file"},
 		"the current file again": {AcoustID: "acoustid-of-the-stored-file"},
 		"another upload":         {AcoustID: "acoustid-of-another-upload"},
 	}}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(source), store,
+	svc := newTestAcquireService(ledger, NewSourceRegistry(source), store,
 		WithRecordingResolver(&stubResolver{}), WithAudioIdentifier(identifier), WithStoredAudioReader(storedBytesReader{store: store}))
 
 	err := svc.ExecuteReplace(context.Background(), userId, trackId)
@@ -1865,17 +1740,12 @@ const (
 	prodOverCurrentSource  = "https://music.youtube.com/watch?v=NxTPVbk-FZQ"
 )
 
-func prodOverTrack(t *testing.T, repo *fakeTrackRepository, userId shared.UserId, settle func(*domain.Track) error) *domain.Track {
+func prodOverTrack(t *testing.T, ledger *acquisitiontest.Ledger, userId shared.UserId, settle func(*ledgerTrack)) ledgerTrack {
 	t.Helper()
-	track, err := domain.NewTrack(userId, "Over", "LUCKI", "Watch My Back")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	if err := settle(track); err != nil {
-		t.Fatalf("settle: %v", err)
-	}
+	track := newLedgerTrack(userId, "Over", "LUCKI", "Watch My Back")
+	settle(&track)
 	track.RejectedSourceKeys = []string{"youtube:FjkkqbEbFOY"}
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	ledger.Seed(track)
 	return track
 }
 
@@ -1887,22 +1757,22 @@ func prodOverCandidates() []ports.AudioCandidate {
 }
 
 func TestExecute_ExcludesTheUsersRejectedSources(t *testing.T) {
-	missingFile := func(track *domain.Track) error { return track.MarkReady("lucki/watch-my-back/over.mp3") }
+	missingFile := readyWith("lucki/watch-my-back/over.mp3")
 	tests := []struct {
 		name   string
-		settle func(*domain.Track) error
+		settle func(*ledgerTrack)
 	}{
-		{"first acquisition", func(*domain.Track) error { return nil }},
-		{"retry after a failure", func(track *domain.Track) error { return track.MarkFailed("no match") }},
+		{"first acquisition", func(*ledgerTrack) {}},
+		{"retry after a failure", func(track *ledgerTrack) { makeFailed(track, "no match") }},
 		{"reacquire of a missing file", missingFile},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			userId := shared.NewUserId(uuid.New())
-			repo := newFakeTrackRepository()
-			track := prodOverTrack(t, repo, userId, tt.settle)
+			ledger := acquisitiontest.NewLedger()
+			track := prodOverTrack(t, ledger, userId, tt.settle)
 			searcher := &fakeAudioSearcher{searchResults: prodOverCandidates(), downloadErr: errors.New("boom")}
-			svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore())
+			svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore())
 
 			_ = svc.Execute(context.Background(), userId, track.ID)
 
@@ -1915,10 +1785,10 @@ func TestExecute_ExcludesTheUsersRejectedSources(t *testing.T) {
 
 func TestExecute_FailsRatherThanDownloadTheOnlyCandidateTheUserRejected(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := prodOverTrack(t, repo, userId, func(*domain.Track) error { return nil })
+	ledger := acquisitiontest.NewLedger()
+	track := prodOverTrack(t, ledger, userId, func(*ledgerTrack) {})
 	searcher := &fakeAudioSearcher{searchResults: prodOverCandidates()[:1], downloadErr: errors.New("boom")}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore())
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore())
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
 
@@ -1929,14 +1799,16 @@ func TestExecute_FailsRatherThanDownloadTheOnlyCandidateTheUserRejected(t *testi
 
 func TestExecuteReplace_StillExcludesTheUsersRejectedSourcesAndTheCurrentOne(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := prodOverTrack(t, repo, userId, func(track *domain.Track) error { return track.MarkReady("lucki/watch-my-back/over.mp3") })
-	track.SetAudioSource(prodOverCurrentSource)
+	ledger := acquisitiontest.NewLedger()
+	track := prodOverTrack(t, ledger, userId, func(track *ledgerTrack) {
+		makeReady(track, "lucki/watch-my-back/over.mp3")
+		useSource(track, prodOverCurrentSource)
+	})
 	store := newFakeAudioStore()
 	store.stored["lucki/watch-my-back/over.mp3"] = true
 	other := ports.AudioCandidate{Title: "Over [prod. Ugly Friend]", URL: "https://api.soundcloud.com/tracks/soundcloud%3Atracks%3A321193537", Channel: "LUCKI", Duration: 136, Kind: ports.KindUpload, Source: "fake"}
 	searcher := &fakeAudioSearcher{searchResults: append(prodOverCandidates(), other), downloadErr: errors.New("boom")}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store)
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
 	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
 
@@ -1971,16 +1843,17 @@ func TestExecute_AMissingFileTriesItsStoredSourceFirst(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			userId := shared.NewUserId(uuid.New())
-			repo := newFakeTrackRepository()
-			track := readyTrackWithSource(t, repo, userId, "u/a/b/c.mp3", storedSource)
+			ledger := acquisitiontest.NewLedger()
+			track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", storedSource)
 			track.RejectedSourceKeys = tt.rejected
+			ledger.Seed(track)
 			var found []ports.AudioCandidate
 			for _, u := range rivals {
 				found = append(found, ports.AudioCandidate{Title: "Blinding Lights", URL: u, Channel: "The Weeknd", Artists: []string{"The Weeknd"}, Kind: ports.KindArtTrack, Source: "fake"})
 			}
 			searcher := &fakeAudioSearcher{searchResults: found, downloadErr: errors.New("boom")}
 			registry := NewSourceRegistry(catalogpin.NewSource(searcherDownloads{searcher}), searcher)
-			svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), registry, newFakeAudioStore())
+			svc := newTestAcquireService(ledger, registry, newFakeAudioStore())
 
 			_ = svc.Execute(context.Background(), userId, track.ID)
 
@@ -1998,14 +1871,14 @@ func TestExecute_AMissingFileTriesItsStoredSourceFirst(t *testing.T) {
 func TestExecuteReplace_NeverOffersTheCurrentSourceAsTheKnownOne(t *testing.T) {
 	const storedSource = "https://music.youtube.com/watch?v=NxTPVbk-FZQ"
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := readyTrackWithSource(t, repo, userId, "u/a/b/c.mp3", storedSource)
+	ledger := acquisitiontest.NewLedger()
+	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", storedSource)
 	store := newFakeAudioStore()
 	store.stored["u/a/b/c.mp3"] = true
 	rival := ports.AudioCandidate{Title: "Blinding Lights", URL: "https://music.youtube.com/watch?v=aaaaaaaaaaa", Kind: ports.KindArtTrack, Artists: []string{"The Weeknd"}, Source: "fake"}
 	searcher := &fakeAudioSearcher{searchResults: []ports.AudioCandidate{rival}, downloadErr: errors.New("boom")}
 	registry := NewSourceRegistry(catalogpin.NewSource(searcherDownloads{searcher}), searcher)
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), registry, store)
+	svc := newTestAcquireService(ledger, registry, store)
 
 	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
 
@@ -2016,9 +1889,9 @@ func TestExecuteReplace_NeverOffersTheCurrentSourceAsTheKnownOne(t *testing.T) {
 
 func TestExecuteReplace_NeverFetchesTheCurrentSourceAgainEvenWhenItRanksFirst(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
+	ledger := acquisitiontest.NewLedger()
 	wrongURL := "https://youtube.com/watch?v=wrongwrong1"
-	track := readyTrackWithSource(t, repo, userId, "u/a/b/c.mp3", wrongURL)
+	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", wrongURL)
 	store := newFakeAudioStore()
 	store.stored["u/a/b/c.mp3"] = true
 	var results []ports.AudioCandidate
@@ -2026,7 +1899,7 @@ func TestExecuteReplace_NeverFetchesTheCurrentSourceAgainEvenWhenItRanksFirst(t 
 		results = append(results, ports.AudioCandidate{Title: "The Weeknd - Blinding Lights", URL: u, Source: "fake"})
 	}
 	searcher := &fakeAudioSearcher{searchResults: results, downloadErr: errors.New("boom")}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store)
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
 
 	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
 
@@ -2048,25 +1921,22 @@ func (lowConfidenceSource) Find(_ context.Context, _ ports.FindRequest) ([]ports
 	}}, nil
 }
 
-func acquireLowConfidence(t *testing.T, opts ...func(*AcquireTrackAudioService)) (*domain.Track, error) {
+func acquireLowConfidence(t *testing.T, opts ...func(*AcquireTrackAudioService)) (ledgerTrack, error) {
 	t.Helper()
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track, err := domain.NewTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
+	ledger := acquisitiontest.NewLedger()
+	track := newLedgerTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
 	seconds := 200.0
-	track.DurationSeconds = &seconds
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(lowConfidenceSource{}),
+	track.StoredDurationSeconds = &seconds
+	ledger.Seed(track)
+	svc := newTestAcquireService(ledger, NewSourceRegistry(lowConfidenceSource{}),
 		&bytesAudioStore{objects: map[string]string{}},
 		append([]func(*AcquireTrackAudioService){
 			WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding"}}),
 			WithAudioIdentifier(&stubIdentifier{}),
 		}, opts...)...)
-	err = svc.Execute(context.Background(), userId, track.ID)
-	return storedTrack(t, repo, track), err
+	err := svc.Execute(context.Background(), userId, track.ID)
+	return storedTrack(t, ledger, track), err
 }
 
 func TestExecute_AConfiguredZeroFloorIsHonoured(t *testing.T) {
@@ -2074,8 +1944,8 @@ func TestExecute_AConfiguredZeroFloorIsHonoured(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a floor of 0 should store the held candidate, got %v", err)
 	}
-	if track.AcquisitionStatus != domain.AcquisitionReady {
-		t.Errorf("status = %v, want ready", track.AcquisitionStatus)
+	if track.Status != ports.TrackReady {
+		t.Errorf("status = %v, want ready", track.Status)
 	}
 
 	_, err = acquireLowConfidence(t)
@@ -2087,18 +1957,16 @@ func TestExecute_AConfiguredZeroFloorIsHonoured(t *testing.T) {
 func retryWithBasis(t *testing.T, catalogLength float64, identity ports.RecordingIdentity, prior []ports.PriorRejection, urls ...string) *fakeAudioSearcher {
 	t.Helper()
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := pendingTrack(t, repo, userId)
+	ledger := acquisitiontest.NewLedger()
+	track := pendingTrack(t, ledger, userId)
 	if catalogLength > 0 {
-		if err := track.SetCatalogDuration(catalogLength); err != nil {
-			t.Fatalf("set duration: %v", err)
-		}
+		track = withCatalogLength(t, ledger, track, catalogLength)
 	}
 	searcher := &fakeAudioSearcher{downloadErr: errors.New("boom")}
 	for _, u := range urls {
 		searcher.searchResults = append(searcher.searchResults, namedCandidate(u))
 	}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore(),
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(),
 		WithRejectionStore(&fakeRejectionStore{active: prior}), WithRecordingResolver(&stubResolver{identity: identity}))
 	_ = svc.Execute(context.Background(), userId, track.ID)
 	return searcher
@@ -2193,11 +2061,9 @@ func TestExecute_AStaleRejectionDoesNotReviveASourceRejectedOnTheSameBasis(t *te
 
 func TestExecuteReplace_RetriesAPriorRejectionJudgedOnAnotherLength(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := readyTrackWithSource(t, repo, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrongwrong1")
-	if err := track.SetCatalogDuration(200); err != nil {
-		t.Fatalf("set duration: %v", err)
-	}
+	ledger := acquisitiontest.NewLedger()
+	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrongwrong1")
+	track = withCatalogLength(t, ledger, track, 200)
 	store := newFakeAudioStore()
 	store.stored["u/a/b/c.mp3"] = true
 	var results []ports.AudioCandidate
@@ -2206,7 +2072,7 @@ func TestExecuteReplace_RetriesAPriorRejectionJudgedOnAnotherLength(t *testing.T
 	}
 	searcher := &fakeAudioSearcher{searchResults: results, downloadErr: errors.New("boom")}
 	rejections := &fakeRejectionStore{active: priorRejectionOn(drmURL, &ports.RejectionBasis{ExpectedSeconds: 150, ReferenceMBID: runMBID})}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store,
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store,
 		WithRejectionStore(rejections), WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: runMBID}}))
 
 	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
@@ -2230,29 +2096,26 @@ func (stalledSource) Fetch(ctx context.Context, _ ports.AudioCandidate, _ string
 	return ports.FetchedAudio{}, withCancellation(ctx, ctx.Err())
 }
 
-func executeAfterOwnTimeBudget(t *testing.T, attempt int) (*domain.Track, *recordingPublisher, error) {
+func executeAfterOwnTimeBudget(t *testing.T, attempt int) (ledgerTrack, *recordingPublisher, error) {
 	t.Helper()
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	repo := newFakeTrackRepository()
-	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
 	pub := newRecordingPublisher()
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(stalledSource{}), newFakeAudioStore(), WithAcquireEvents(pub))
+	svc := newTestAcquireService(ledger, NewSourceRegistry(stalledSource{}), newFakeAudioStore(), WithAcquireEvents(pub))
 	svc.acquireTimeout = time.Millisecond
 	ctx := withJobAttempt(withSchedulerOwnedJobContext(context.Background()), attempt)
 
 	execErr := svc.Execute(ctx, userId, track.ID)
 
-	return storedTrack(t, repo, track), pub, execErr
+	return storedTrack(t, ledger, track), pub, execErr
 }
 
 func TestExecute_AnExpiredOwnTimeBudgetIsRetried(t *testing.T) {
 	stored, pub, execErr := executeAfterOwnTimeBudget(t, 1)
-	if stored == nil || pub == nil {
-		t.Fatal("no stored track or publisher")
+	if pub == nil {
+		t.Fatal("no publisher")
 	}
 
 	if !errors.Is(execErr, ErrAcquisitionRetryable) {
@@ -2261,8 +2124,8 @@ func TestExecute_AnExpiredOwnTimeBudgetIsRetried(t *testing.T) {
 	if !errors.Is(execErr, ErrAcquisitionTimedOut) {
 		t.Errorf("err = %v, want ErrAcquisitionTimedOut", execErr)
 	}
-	if stored.AcquisitionStatus != domain.AcquisitionPending {
-		t.Errorf("status = %v, want pending", stored.AcquisitionStatus)
+	if stored.Status != ports.TrackPending {
+		t.Errorf("status = %v, want pending", stored.Status)
 	}
 	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
 		t.Errorf("failed publishes = %d, want 0", got)
@@ -2271,18 +2134,18 @@ func TestExecute_AnExpiredOwnTimeBudgetIsRetried(t *testing.T) {
 
 func TestExecute_AnExpiredOwnTimeBudgetOnTheLastAttemptIsSourceUnavailable(t *testing.T) {
 	stored, pub, execErr := executeAfterOwnTimeBudget(t, maxAcquisitionAttempts)
-	if stored == nil || pub == nil {
-		t.Fatal("no stored track or publisher")
+	if pub == nil {
+		t.Fatal("no publisher")
 	}
 
 	if errors.Is(execErr, ErrAcquisitionRetryable) {
 		t.Errorf("err = %v, want a terminal failure", execErr)
 	}
-	if stored.AcquisitionStatus != domain.AcquisitionFailed {
-		t.Fatalf("status = %v, want failed", stored.AcquisitionStatus)
+	if stored.Status != ports.TrackFailed {
+		t.Fatalf("status = %v, want failed", stored.Status)
 	}
-	if got := deref(stored.FailureReason); got != string(domain.FailureSourceUnavailable) {
-		t.Errorf("failure reason = %q, want %q", got, domain.FailureSourceUnavailable)
+	if got := stored.FailureReason; got != string(shared.FailureSourceUnavailable) {
+		t.Errorf("failure reason = %q, want %q", got, shared.FailureSourceUnavailable)
 	}
 	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 1 {
 		t.Errorf("failed publishes = %d, want 1", got)
@@ -2291,8 +2154,8 @@ func TestExecute_AnExpiredOwnTimeBudgetOnTheLastAttemptIsSourceUnavailable(t *te
 
 type replaceFixture struct {
 	svc    *AcquireTrackAudioService
-	repo   *fakeTrackRepository
-	track  *domain.Track
+	ledger *acquisitiontest.Ledger
+	track  ledgerTrack
 	store  *fakeAudioStore
 	pub    *recordingPublisher
 	userId shared.UserId
@@ -2302,27 +2165,27 @@ type replaceFixture struct {
 func newReplaceFixture(t *testing.T, searcher *fakeAudioSearcher, attempt int) replaceFixture {
 	t.Helper()
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
-	track := readyTrackWithSource(t, repo, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrong")
+	ledger := acquisitiontest.NewLedger()
+	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrong")
 	store := newFakeAudioStore()
 	store.stored["u/a/b/c.mp3"] = true
 	pub := newRecordingPublisher()
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), store, WithAcquireEvents(pub))
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store, WithAcquireEvents(pub))
 	ctx := withJobAttempt(withSchedulerOwnedJobContext(context.Background()), attempt)
-	return replaceFixture{svc: svc, repo: repo, track: track, store: store, pub: pub, userId: userId, ctx: ctx}
+	return replaceFixture{svc: svc, ledger: ledger, track: track, store: store, pub: pub, userId: userId, ctx: ctx}
 }
 
 func TestExecuteReplace_ATransientOutageBelowTheCapIsRetried(t *testing.T) {
 	for attempt := 1; attempt < maxAcquisitionAttempts; attempt++ {
 		f := newReplaceFixture(t, transientSearchFailure(), attempt)
 		err := f.svc.ExecuteReplace(f.ctx, f.userId, f.track.ID)
-		stored, store, pub := storedTrack(t, f.repo, f.track), f.store, f.pub
+		stored, store, pub := storedTrack(t, f.ledger, f.track), f.store, f.pub
 
 		if !errors.Is(err, ErrAcquisitionRetryable) {
 			t.Errorf("attempt %d: err = %v, want ErrAcquisitionRetryable", attempt, err)
 		}
-		if stored.AcquisitionStatus != domain.AcquisitionReady || stored.AudioRef == nil || *stored.AudioRef != "u/a/b/c.mp3" {
-			t.Errorf("attempt %d: status = %v, audio_ref = %v, want the track ready with its audio", attempt, stored.AcquisitionStatus, stored.AudioRef)
+		if stored.Status != ports.TrackReady || stored.AudioRef == nil || *stored.AudioRef != "u/a/b/c.mp3" {
+			t.Errorf("attempt %d: status = %v, audio_ref = %v, want the track ready with its audio", attempt, stored.Status, stored.AudioRef)
 		}
 		if !store.stored["u/a/b/c.mp3"] {
 			t.Errorf("attempt %d: the user's audio must survive", attempt)
@@ -2336,13 +2199,13 @@ func TestExecuteReplace_ATransientOutageBelowTheCapIsRetried(t *testing.T) {
 func TestExecuteReplace_ATransientOutageOnTheLastAttemptFails(t *testing.T) {
 	f := newReplaceFixture(t, transientSearchFailure(), maxAcquisitionAttempts)
 	err := f.svc.ExecuteReplace(f.ctx, f.userId, f.track.ID)
-	stored, pub := storedTrack(t, f.repo, f.track), f.pub
+	stored, pub := storedTrack(t, f.ledger, f.track), f.pub
 
 	if err == nil || errors.Is(err, ErrAcquisitionRetryable) {
 		t.Errorf("err = %v, want a terminal failure", err)
 	}
-	if stored.AcquisitionStatus != domain.AcquisitionReady {
-		t.Errorf("status = %v, want the track left ready", stored.AcquisitionStatus)
+	if stored.Status != ports.TrackReady {
+		t.Errorf("status = %v, want the track left ready", stored.Status)
 	}
 	if got := pub.count(events.TypeTrackReplaceFailed); got != 1 {
 		t.Errorf("replace-failed publishes = %d, want 1", got)
@@ -2364,38 +2227,30 @@ func TestReplaceGated_ATransientOutageBelowTheCapIsNotRetried(t *testing.T) {
 
 func TestExecute_AWorkerThatLostItsLeaseDoesNotFailTheTrack(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	track.AcquisitionFence = 2
-	repo := newFakeTrackRepository()
-	key := track.ID.String() + ":" + userId.String()
-	repo.tracks[key] = track
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	track.Fence = 2
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	_ = svc.Execute(withJobFence(context.Background(), 1), userId, track.ID)
 
-	if got := repo.tracks[key].AcquisitionStatus; got != domain.AcquisitionPending {
+	if got := committedTrack(t, ledger, track.ID).Status; got != ports.TrackPending {
 		t.Errorf("status = %v, want pending: the new lease owner is still downloading", got)
 	}
 }
 
 func TestExecute_AWorkerHoldingTheCurrentLeaseStillFailsTheTrack(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
-	track.AcquisitionFence = 2
-	repo := newFakeTrackRepository()
-	key := track.ID.String() + ":" + userId.String()
-	repo.tracks[key] = track
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	track := newLedgerTrack(userId, "Song", "Artist", "Album")
+	track.Fence = 2
+	ledger := acquisitiontest.NewLedger()
+	ledger.Seed(track)
+	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	_ = svc.Execute(withJobFence(context.Background(), 2), userId, track.ID)
 
-	if got := repo.tracks[key].AcquisitionStatus; got != domain.AcquisitionFailed {
+	if got := committedTrack(t, ledger, track.ID).Status; got != ports.TrackFailed {
 		t.Errorf("status = %v, want failed", got)
 	}
 }
@@ -2404,53 +2259,49 @@ func TestExecute_AWorkerThatLostItsLeaseCannotLandItsDownload(t *testing.T) {
 	cases := []struct {
 		name       string
 		held       ports.Fence
-		wantStatus domain.AcquisitionStatus
+		wantStatus ports.TrackStatus
 		wantAudio  bool
 	}{
-		{"the lease was reclaimed", 1, domain.AcquisitionPending, false},
-		{"the lease is still held", 2, domain.AcquisitionReady, true},
+		{"the lease was reclaimed", 1, ports.TrackPending, false},
+		{"the lease is still held", 2, ports.TrackReady, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			userId := shared.NewUserId(uuid.New())
-			track, err := domain.NewTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
-			if err != nil {
-				t.Fatalf("new track: %v", err)
-			}
-			track.AcquisitionFence = 2
-			repo := &committingTrackRepo{rows: map[string]domain.Track{track.ID.String() + ":" + userId.String(): *track}}
+			track := newLedgerTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
+			track.Fence = 2
+			ledger := acquisitiontest.NewLedger(track)
 			store := &bytesAudioStore{objects: map[string]string{}}
-			svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store)
+			svc := newTestAcquireService(ledger, NewSourceRegistry(newAudioSource{}), store)
 
 			_ = svc.Execute(withJobFence(context.Background(), tc.held), userId, track.ID)
 
-			row := repo.committed(track.ID, userId)
-			if row.AcquisitionStatus != tc.wantStatus {
-				t.Errorf("status = %v, want %v", row.AcquisitionStatus, tc.wantStatus)
+			row := committedTrack(t, ledger, track.ID)
+			if row.Status != tc.wantStatus {
+				t.Errorf("status = %v, want %v", row.Status, tc.wantStatus)
 			}
 			if (row.AudioRef != nil) != tc.wantAudio {
 				t.Errorf("audio_ref = %v, want set = %v", row.AudioRef, tc.wantAudio)
 			}
-			if row.FailureReason != nil {
-				t.Errorf("failure_reason = %q, want none", *row.FailureReason)
+			if row.FailureReason != "" {
+				t.Errorf("failure_reason = %q, want none", row.FailureReason)
 			}
 		})
 	}
 }
 
 func TestExecuteReplace_AWorkerThatLostItsLeaseLeavesTheServingAudioInPlace(t *testing.T) {
-	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
-	key := trackId.String() + ":" + userId.String()
-	row := repo.rows[key]
-	row.AcquisitionFence = 2
-	repo.rows[key] = row
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), NewSourceRegistry(newAudioSource{}), store)
+	ledger, store, userId, trackId, originalRef := seedReadyTrack(t)
+	row := committedTrack(t, ledger, trackId)
+	row.Fence = 2
+	ledger.Seed(row)
+	svc := newTestAcquireService(ledger, NewSourceRegistry(newAudioSource{}), store)
 
 	_ = svc.ExecuteReplace(withJobFence(context.Background(), 1), userId, trackId)
 
-	got := repo.committed(trackId, userId)
-	if got.AcquisitionStatus != domain.AcquisitionReady || got.AudioRef == nil || *got.AudioRef != originalRef {
-		t.Errorf("track = %v %v, want ready on the original ref %q", got.AcquisitionStatus, got.AudioRef, originalRef)
+	got := committedTrack(t, ledger, trackId)
+	if got.Status != ports.TrackReady || got.AudioRef == nil || *got.AudioRef != originalRef {
+		t.Errorf("track = %v %v, want ready on the original ref %q", got.Status, got.AudioRef, originalRef)
 	}
 	if store.objects[originalRef] != "original bytes" {
 		t.Errorf("object at the serving ref = %q, want the original audio kept", store.objects[originalRef])
@@ -2459,25 +2310,20 @@ func TestExecuteReplace_AWorkerThatLostItsLeaseLeavesTheServingAudioInPlace(t *t
 
 func TestExecute_TheSourceIsAskedWithTheCatalogFacts(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	repo := newFakeTrackRepository()
+	ledger := acquisitiontest.NewLedger()
 	explicit := true
-	sources := []domain.CatalogSource{
+	sources := []ports.CatalogSource{
 		{Provider: "spotify", ExternalID: "4uLU6hMCjMI75M1A2tKUQC", URL: "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC"},
 		{Provider: "deezer", ExternalID: "3135556"},
 	}
-	track := seedTrackInRepo(t, repo, userId, func(tr *domain.Track) error {
-		isrc := "USUM71703861"
-		tr.ISRC = &isrc
-		if err := tr.SetCatalogDuration(214); err != nil {
-			return err
-		}
-		if err := tr.SetDuration(200); err != nil {
-			return err
-		}
-		return tr.SetCatalogIdentity(nil, &explicit, sources)
+	track := seedTrackInRepo(t, ledger, userId, func(tr *ledgerTrack) {
+		tr.ISRC = ptrTo("USUM71703861")
+		tr.CatalogDurationSeconds = ptrTo(214.0)
+		tr.StoredDurationSeconds = ptrTo(200.0)
+		tr.CatalogExplicit, tr.CatalogSources = &explicit, sources
 	})
 	searcher := &fakeAudioSearcher{}
-	svc := newTestAcquireService(catalogbridge.NewTrackLedger(repo), fakeRegistry(searcher), newFakeAudioStore())
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore())
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
 
@@ -2538,8 +2384,8 @@ func (s audioOnlyOfTheStoredSource) Fetch(ctx context.Context, c ports.AudioCand
 }
 
 func TestReplaceGated_AMuxedFallbackIsSwappedForTheAudioOnlyStreamOfTheSameSource(t *testing.T) {
-	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
-	ledger := &completionRecordingLedger{TrackLedger: catalogbridge.NewTrackLedger(repo)}
+	book, store, userId, trackId, originalRef := seedReadyTrack(t)
+	ledger := &completionRecordingLedger{TrackLedger: book}
 	svc := newTestAcquireService(ledger, NewSourceRegistry(audioOnlyOfTheStoredSource{}), store,
 		WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding", MBIDs: []string{"mb-blinding"}}}),
 		WithAudioIdentifier(&stubIdentifier{match: inPlaceMatch(ports.LinkedRecording{MBID: "mb-blinding", Title: "Blinding Lights", Artists: []string{"The Weeknd"}})}),
@@ -2558,7 +2404,7 @@ func TestReplaceGated_AMuxedFallbackIsSwappedForTheAudioOnlyStreamOfTheSameSourc
 		t.Fatalf("ReplaceGated: %v, want the 140 stream at 130 kbps admitted over the stored format 18 at 96", err)
 	}
 
-	if row := repo.committed(trackId, userId); row.AudioRef == nil || *row.AudioRef == originalRef {
+	if row := committedTrack(t, book, trackId); row.AudioRef == nil || *row.AudioRef == originalRef {
 		t.Fatalf("audio_ref = %v, want the swap committed to a new ref", row.AudioRef)
 	}
 	if len(ledger.completed) != 1 {
@@ -2591,8 +2437,8 @@ func (fullLengthAlbumCut) Find(ctx context.Context, req ports.FindRequest) ([]po
 }
 
 func TestReplaceGated_AFileThatFitsTheCatalogLengthReplacesAStoredEditAtTheSameGrade(t *testing.T) {
-	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
-	ledger := &completionRecordingLedger{TrackLedger: catalogbridge.NewTrackLedger(repo)}
+	book, store, userId, trackId, originalRef := seedReadyTrack(t)
+	ledger := &completionRecordingLedger{TrackLedger: book}
 	svc := newTestAcquireService(ledger, NewSourceRegistry(fullLengthAlbumCut{}), store,
 		WithAudioProber(&queueProber{durations: []float64{285, 285, 285}}),
 		WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding", MBIDs: []string{"mb-blinding"}}}),
@@ -2610,7 +2456,7 @@ func TestReplaceGated_AFileThatFitsTheCatalogLengthReplacesAStoredEditAtTheSameG
 		t.Fatalf("ReplaceGated: %v, want the 285 s file admitted over the 231 s edit", err)
 	}
 
-	if row := repo.committed(trackId, userId); row.AudioRef == nil || *row.AudioRef == originalRef {
+	if row := committedTrack(t, book, trackId); row.AudioRef == nil || *row.AudioRef == originalRef {
 		t.Fatalf("audio_ref = %v, want the swap committed to a new ref", row.AudioRef)
 	}
 	if len(ledger.completed) != 1 || ledger.completed[0].Duration != 285 {
@@ -2628,8 +2474,8 @@ func TestReplaceGated_ASameGradeFileIsRefusedWhenTheLengthRescueDoesNotHold(t *t
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			repo, store, userId, trackId, originalRef := seedReadyTrack(t)
-			ledger := &completionRecordingLedger{TrackLedger: catalogbridge.NewTrackLedger(repo)}
+			book, store, userId, trackId, originalRef := seedReadyTrack(t)
+			ledger := &completionRecordingLedger{TrackLedger: book}
 			svc := newTestAcquireService(ledger, NewSourceRegistry(fullLengthAlbumCut{}), store,
 				WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding", MBIDs: []string{"mb-blinding"}}}),
 				WithAudioIdentifier(&stubIdentifier{match: inPlaceMatch(ports.LinkedRecording{MBID: "mb-blinding", Title: "Blinding Lights", Artists: []string{"The Weeknd"}})}),
@@ -2644,7 +2490,7 @@ func TestReplaceGated_ASameGradeFileIsRefusedWhenTheLengthRescueDoesNotHold(t *t
 				t.Fatalf("ReplaceGated = %v, want ErrNotAnUpgrade for the same-grade 285 s file", err)
 			}
 
-			if row := repo.committed(trackId, userId); row.AudioRef == nil || *row.AudioRef != originalRef {
+			if row := committedTrack(t, book, trackId); row.AudioRef == nil || *row.AudioRef != originalRef {
 				t.Errorf("audio_ref = %v, want the original %q kept", row.AudioRef, originalRef)
 			}
 			if len(ledger.completed) != 0 {
@@ -2735,44 +2581,33 @@ func (s *itsOnlyLoveSources) Fetch(_ context.Context, c ports.AudioCandidate, ou
 }
 
 type itsOnlyLoveTrack struct {
-	repo    *committingTrackRepo
+	book    *acquisitiontest.Ledger
 	store   *bytesAudioStore
 	ledger  *completionRecordingLedger
 	userId  shared.UserId
-	trackId domain.TrackId
+	trackId shared.TrackId
 	ref     string
 }
 
-func seedItsOnlyLove(t *testing.T, storedSeconds float64, sources []domain.CatalogSource) itsOnlyLoveTrack {
+func seedItsOnlyLove(t *testing.T, storedSeconds float64, sources []ports.CatalogSource) itsOnlyLoveTrack {
 	t.Helper()
 	userId := shared.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "It's Only Love", "Bryan Adams", "Reckless")
-	if err != nil {
-		t.Fatalf("new track: %v", err)
-	}
+	track := newLedgerTrack(userId, "It's Only Love", "Bryan Adams", "Reckless")
 	isrc, mbid := "USAM18490008", recklessMBID
 	track.ISRC = &isrc
-	if err := track.SetCatalogDuration(195); err != nil {
-		t.Fatalf("catalog duration: %v", err)
-	}
-	if err := track.SetCatalogIdentity(&mbid, nil, sources); err != nil {
-		t.Fatalf("catalog identity: %v", err)
-	}
+	track.CatalogDurationSeconds = ptrTo(195.0)
+	track.CatalogMBID, track.CatalogSources = &mbid, sources
 	store := &bytesAudioStore{objects: map[string]string{}}
 	var ref string
 	if storedSeconds > 0 {
 		ref = BuildAudioRef(trackRefOf(track), "audio.m4a")
-		if err := track.MarkReady(ref); err != nil {
-			t.Fatalf("mark ready: %v", err)
-		}
-		track.SetAudioSource("https://www.youtube.com/watch?v=storedIOLAA")
-		if err := track.SetDuration(storedSeconds); err != nil {
-			t.Fatalf("stored duration: %v", err)
-		}
+		makeReady(&track, ref)
+		useSource(&track, "https://www.youtube.com/watch?v=storedIOLAA")
+		track.StoredDurationSeconds = &storedSeconds
 		store.objects[ref] = "stored bytes"
 	}
-	repo := &committingTrackRepo{rows: map[string]domain.Track{track.ID.String() + ":" + userId.String(): *track}}
-	return itsOnlyLoveTrack{repo: repo, store: store, ledger: &completionRecordingLedger{TrackLedger: catalogbridge.NewTrackLedger(repo)}, userId: userId, trackId: track.ID, ref: ref}
+	ledger := acquisitiontest.NewLedger(track)
+	return itsOnlyLoveTrack{book: ledger, store: store, ledger: &completionRecordingLedger{TrackLedger: ledger}, userId: userId, trackId: track.ID, ref: ref}
 }
 
 func (f itsOnlyLoveTrack) service(sources *itsOnlyLoveSources, finder ports.RerecordingFinder) *AcquireTrackAudioService {
@@ -2782,7 +2617,13 @@ func (f itsOnlyLoveTrack) service(sources *itsOnlyLoveSources, finder ports.Rere
 		WithRerecordingFinder(finder))
 }
 
-func (f itsOnlyLoveTrack) row() domain.Track { return f.repo.committed(f.trackId, f.userId) }
+func (f itsOnlyLoveTrack) row() ledgerTrack {
+	row, ok := f.book.Track(f.trackId)
+	if !ok {
+		panic("the golden track is missing from the ledger")
+	}
+	return row
+}
 
 func TestRerecording_NoConfidentOriginalTakesTheOfficialRerecordingLabelledAsIt(t *testing.T) {
 	cases := []struct {
@@ -2896,20 +2737,20 @@ func TestRerecording_AReplaceOfAFittingOriginalTakesNoRerecording(t *testing.T) 
 func TestRerecording_AReplaceOfAFileWhoseLengthIsUnknownTakesNoRerecording(t *testing.T) {
 	cases := []struct {
 		name   string
-		forget func(row *domain.Track)
+		forget func(row *ledgerTrack)
 	}{
-		{"no catalog length beside a stored file far off the old one", func(row *domain.Track) {
+		{"no catalog length beside a stored file far off the old one", func(row *ledgerTrack) {
 			stored := 292.0
-			row.CatalogDurationSeconds, row.DurationSeconds = nil, &stored
+			row.CatalogDurationSeconds, row.StoredDurationSeconds = nil, &stored
 		}},
-		{"no stored length beside the catalog length", func(row *domain.Track) { row.DurationSeconds = nil }},
+		{"no stored length beside the catalog length", func(row *ledgerTrack) { row.StoredDurationSeconds = nil }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			golden := seedItsOnlyLove(t, 195, nil)
 			row := golden.row()
 			tc.forget(&row)
-			golden.repo.rows[row.ID.String()+":"+golden.userId.String()] = row
+			golden.book.Seed(row)
 			finder := findsGoldenRerecording()
 
 			err := golden.service(&itsOnlyLoveSources{}, finder).ExecuteReplace(withJobAttempt(context.Background(), maxAcquisitionAttempts), golden.userId, golden.trackId)
@@ -2949,7 +2790,7 @@ func TestRerecording_AGatedUpgradeNeverTakesARerecording(t *testing.T) {
 }
 
 func TestRerecording_TheSecondSearchCarriesNoPinOrKnownURLOfTheOriginal(t *testing.T) {
-	pins := []domain.CatalogSource{
+	pins := []ports.CatalogSource{
 		{Provider: "soundcloud", ExternalID: "reckless", URL: "https://soundcloud.com/bryanadams/its-only-love"},
 		{Provider: string(ports.ProviderYouTube), ExternalID: "recklessIOL"},
 	}
@@ -2979,16 +2820,16 @@ func TestRerecording_TheSecondSearchCarriesNoPinOrKnownURLOfTheOriginal(t *testi
 
 func acquireFromAKnownSourceURL(ctx context.Context, golden itsOnlyLoveTrack, sources *itsOnlyLoveSources) error {
 	row := golden.row()
-	row.SetAudioSource("https://soundcloud.com/bryanadams/its-only-love")
-	golden.repo.rows[row.ID.String()+":"+golden.userId.String()] = row
+	useSource(&row, "https://soundcloud.com/bryanadams/its-only-love")
+	golden.book.Seed(row)
 	return golden.service(sources, findsGoldenRerecording()).Execute(ctx, golden.userId, golden.trackId)
 }
 
 func TestRerecording_AReplaceOfAGradeFFileTakesTheRerecording(t *testing.T) {
 	golden := seedItsOnlyLove(t, 195, nil)
 	row := golden.row()
-	row.EvidenceJSON = json.RawMessage(`{"grade":"F"}`)
-	golden.repo.rows[row.ID.String()+":"+golden.userId.String()] = row
+	row.Evidence = json.RawMessage(`{"grade":"F"}`)
+	golden.book.Seed(row)
 
 	if err := golden.service(&itsOnlyLoveSources{}, findsGoldenRerecording()).ExecuteReplace(context.Background(), golden.userId, golden.trackId); err != nil {
 		t.Fatalf("ExecuteReplace: %v, want the grade F file replaced by the re-recording", err)
@@ -3104,7 +2945,7 @@ func (failingPinDownloads) Download(context.Context, string, string) (ports.Fetc
 }
 
 func TestRerecording_AnOriginalWhoseSoundCloudPinFailsToDownloadNeverAsksForARerecording(t *testing.T) {
-	pins := []domain.CatalogSource{{Provider: "soundcloud", ExternalID: "1", URL: "https://soundcloud.com/bryanadams/its-only-love-reckless"}}
+	pins := []ports.CatalogSource{{Provider: "soundcloud", ExternalID: "1", URL: "https://soundcloud.com/bryanadams/its-only-love-reckless"}}
 	golden := seedItsOnlyLove(t, 0, pins)
 	sources := &itsOnlyLoveSources{}
 	finder := findsGoldenRerecording()
@@ -3131,7 +2972,7 @@ func TestRerecording_ALabelNamingTheTrackItselfRunsNoSecondPass(t *testing.T) {
 	row := golden.row()
 	same := goldenRerecording().MBID
 	row.CatalogMBID = &same
-	golden.repo.rows[row.ID.String()+":"+golden.userId.String()] = row
+	golden.book.Seed(row)
 	sources := &itsOnlyLoveSources{}
 
 	err := golden.service(sources, findsGoldenRerecording()).Execute(withJobAttempt(context.Background(), maxAcquisitionAttempts), golden.userId, golden.trackId)
