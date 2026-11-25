@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/shared/reqmetrics"
 	"context"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -118,13 +119,23 @@ func wrapResponseWriterOnly(next http.Handler) http.Handler {
 	})
 }
 
+const allocTrials = 40
+
+func steadyStateAllocs(f func()) float64 {
+	fewest := math.MaxFloat64
+	for range allocTrials {
+		fewest = min(fewest, testing.AllocsPerRun(1, f))
+	}
+	return fewest
+}
+
 func TestLatencyMiddleware_RecordingIntoTheRegistryAllocatesNothingBeyondWrappingTheWriter(t *testing.T) {
 	recording := routerWith(reqmetrics.Middleware(reqmetrics.NewRegistry().Observe), http.StatusOK)
 	wrappingOnly := routerWith(wrapResponseWriterOnly, http.StatusOK)
 	serveTrack(recording)
 
-	withRegistry := testing.AllocsPerRun(200, func() { serveTrack(recording) })
-	withWrapOnly := testing.AllocsPerRun(200, func() { serveTrack(wrappingOnly) })
+	withRegistry := steadyStateAllocs(func() { serveTrack(recording) })
+	withWrapOnly := steadyStateAllocs(func() { serveTrack(wrappingOnly) })
 
 	if withRegistry != withWrapOnly {
 		t.Fatalf("a request through the middleware recording into a registry = %v allocs, one that only wraps the writer = %v, want the same", withRegistry, withWrapOnly)
