@@ -25,7 +25,16 @@ type Handles struct {
 	Pool      *pgxpool.Pool
 	Redis     *goredis.Client
 	Transport http.RoundTripper
+	Tracker   *runloop.Tracker
 	LogRing   *logging.RingBuffer
+}
+
+func NewTracker(cfg *config.Config) (*runloop.Tracker, error) {
+	tracker, err := runloop.NewTracker(runloop.TrackerLimits{MaxInFlight: cfg.BackgroundMaxInFlight})
+	if err != nil {
+		return nil, fmt.Errorf("background tracker: %w", err)
+	}
+	return tracker, nil
 }
 
 type Assembly struct {
@@ -39,6 +48,9 @@ func Assemble(ctx context.Context, cfg *config.Config, h Handles) (*Assembly, er
 	}
 	if h.Transport == nil {
 		return nil, errors.New("assemble: Handles.Transport is required, so provider calls never fall back to an unguarded transport")
+	}
+	if h.Tracker == nil {
+		return nil, errors.New("assemble: Handles.Tracker is required: it bounds, counts and drains every detached task, and shutdown drains it before the datastores close")
 	}
 	a := New(cfg, h.LogRing)
 	a.attach(ctx, h)
@@ -59,6 +71,7 @@ func (a *App) attach(ctx context.Context, h Handles) {
 	a.pool = h.Pool
 	a.dbPing = h.Pool.Ping
 	a.redisClient = h.Redis
+	a.background = h.Tracker
 	a.lifecycleDone = ctx.Done()
 }
 
@@ -95,11 +108,6 @@ type features struct {
 }
 
 func (a *App) wireFeatures(ctx context.Context, transport http.RoundTripper) (features, error) {
-	background, err := runloop.NewTracker(runloop.TrackerLimits{MaxInFlight: a.cfg.BackgroundMaxInFlight})
-	if err != nil {
-		return features{}, fmt.Errorf("background tracker: %w", err)
-	}
-	a.background = background
 	disc, err := discovery.New(a.discoveryDeps(ctx, transport))
 	if err != nil {
 		return features{}, fmt.Errorf("discovery: %w", err)

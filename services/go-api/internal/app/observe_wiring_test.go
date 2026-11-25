@@ -207,6 +207,7 @@ func readObservedHealth(t *testing.T, handles app.Handles, wantCode int) observe
 	f := newJWKSFixture(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	handles.Transport = refuseEgress{}
+	handles.Tracker = testTracker(t)
 	assembly, err := app.Assemble(ctx, f.cfg, handles)
 	if err != nil {
 		t.Fatalf("Assemble: %v", err)

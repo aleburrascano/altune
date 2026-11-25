@@ -3,6 +3,8 @@ package app_test
 import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/app/shutdown"
+	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/runloop"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
@@ -21,6 +23,16 @@ type refuseEgress struct{}
 
 func (refuseEgress) RoundTrip(*http.Request) (*http.Response, error) {
 	return nil, errors.New("test transport: provider egress refused")
+}
+
+func testTracker(t *testing.T) *runloop.Tracker {
+	t.Helper()
+	tracker, err := app.NewTracker(&config.Config{BackgroundMaxInFlight: 64})
+	if err != nil {
+		t.Fatalf("NewTracker: %v", err)
+	}
+	t.Cleanup(tracker.Wait)
+	return tracker
 }
 
 func integrationPool(t *testing.T) *pgxpool.Pool {
@@ -51,6 +63,7 @@ func TestAssemble_RefusesMissingHandles(t *testing.T) {
 	}{
 		"no pool":      {app.Handles{Transport: refuseEgress{}}, "Pool"},
 		"no transport": {app.Handles{Pool: unreachablePool(t)}, "Transport"},
+		"no tracker":   {app.Handles{Pool: unreachablePool(t), Transport: refuseEgress{}}, "Tracker"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -70,7 +83,7 @@ func TestAssemble_ServesHealthStartsTheJobsAndShutsDownCleanly(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	assembly, err := app.Assemble(ctx, jwksConfig(t), app.Handles{Pool: pool, Redis: redisClient, Transport: refuseEgress{}})
+	assembly, err := app.Assemble(ctx, jwksConfig(t), app.Handles{Pool: pool, Redis: redisClient, Transport: refuseEgress{}, Tracker: testTracker(t)})
 	if err != nil {
 		t.Fatalf("Assemble: %v", err)
 	}
@@ -101,7 +114,7 @@ func TestAssemble_AnUnreachableDatabaseDegradesHealth(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	assembly, err := app.Assemble(ctx, jwksConfig(t), app.Handles{Pool: unreachablePool(t), Transport: refuseEgress{}})
+	assembly, err := app.Assemble(ctx, jwksConfig(t), app.Handles{Pool: unreachablePool(t), Transport: refuseEgress{}, Tracker: testTracker(t)})
 	if err != nil {
 		t.Fatalf("Assemble: %v", err)
 	}

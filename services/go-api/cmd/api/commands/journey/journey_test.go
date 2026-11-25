@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/discovery"
 	"altune/go-api/internal/shared/config"
 	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/runloop"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -222,6 +223,13 @@ func TestRankingOnlySearcherComesFromTheDiscoveryTable(t *testing.T) {
 	}
 	if _, ok := searcher.(*discovery.SearchService); !ok {
 		t.Errorf("searcher = %T, want the table's ranking-only search service", searcher)
+	}
+}
+
+func TestRankingOnlySearcherRefusesABackgroundCapBelowOne(t *testing.T) {
+	_, err := journey.RankingOnlySearcher(t.Context(), &config.Config{}, nil)
+	if !errors.Is(err, runloop.ErrTrackerLimit) {
+		t.Fatalf("RankingOnlySearcher = %v, want runloop.ErrTrackerLimit", err)
 	}
 }
 

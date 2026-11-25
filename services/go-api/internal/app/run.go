@@ -24,7 +24,11 @@ func (a *App) Run(ctx context.Context) error {
 		return fmt.Errorf("database: %w", err)
 	}
 	redisClient := sharedRedis.NewClient(ctx, a.cfg.RedisURL, a.cfg.RedisPoolSize)
-	assembly, err := Assemble(ctx, a.cfg, Handles{Pool: pool, Redis: redisClient, Transport: providerhttp.Live(), LogRing: a.logRing})
+	tracker, err := NewTracker(a.cfg)
+	if err != nil {
+		return err
+	}
+	assembly, err := Assemble(ctx, a.cfg, Handles{Pool: pool, Redis: redisClient, Transport: providerhttp.Live(), Tracker: tracker, LogRing: a.logRing})
 	if err != nil {
 		return err
 	}

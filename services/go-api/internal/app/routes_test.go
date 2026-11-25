@@ -30,7 +30,7 @@ func productionRouterFor(t *testing.T, cfg *config.Config) *chi.Mux {
 func assembledRouter(t *testing.T, cfg *config.Config, pool *pgxpool.Pool) *chi.Mux {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
-	assembly, err := app.Assemble(ctx, cfg, app.Handles{Pool: pool, Transport: refuseEgress{}})
+	assembly, err := app.Assemble(ctx, cfg, app.Handles{Pool: pool, Transport: refuseEgress{}, Tracker: testTracker(t)})
 	if err != nil {
 		t.Fatalf("Assemble: %v", err)
 	}

@@ -56,7 +56,7 @@ func TestCatalog_AnUnconfiguredAudioStoreFailsAssembly(t *testing.T) {
 	cfg := jwksConfig(t)
 	cfg.MusicDir, cfg.YtMusicEnabled = "", true
 
-	_, err := app.Assemble(t.Context(), cfg, app.Handles{Pool: unreachablePool(t), Transport: refuseEgress{}})
+	_, err := app.Assemble(t.Context(), cfg, app.Handles{Pool: unreachablePool(t), Transport: refuseEgress{}, Tracker: testTracker(t)})
 
 	if err == nil || !strings.Contains(err.Error(), "MUSIC_DIR") {
 		t.Fatalf("Assemble with no audio store configured = %v, want an error naming MUSIC_DIR", err)
@@ -68,7 +68,7 @@ func TestCatalog_APartialOCIS3ConfigFailsAssemblyEvenWithMusicDir(t *testing.T) 
 	cfg.YtMusicEnabled = true
 	cfg.OCIS3Endpoint, cfg.OCIS3Bucket = "https://objectstorage.example.com", "audio"
 
-	_, err := app.Assemble(t.Context(), cfg, app.Handles{Pool: unreachablePool(t), Transport: refuseEgress{}})
+	_, err := app.Assemble(t.Context(), cfg, app.Handles{Pool: unreachablePool(t), Transport: refuseEgress{}, Tracker: testTracker(t)})
 
 	if err == nil {
 		t.Fatal("Assemble with 2 of 4 OCI keys and MUSIC_DIR: want error, got nil")
@@ -86,7 +86,7 @@ func TestCatalog_ADBCallTimeoutReachesOperatorLiveMetrics(t *testing.T) {
 	}
 	fixture := newJWKSFixture(t)
 	ctx, cancel := context.WithCancel(t.Context())
-	assembly, err := app.Assemble(ctx, fixture.cfg, app.Handles{Pool: blackHolePool(t), Transport: refuseEgress{}})
+	assembly, err := app.Assemble(ctx, fixture.cfg, app.Handles{Pool: blackHolePool(t), Transport: refuseEgress{}, Tracker: testTracker(t)})
 	if err != nil {
 		t.Fatalf("Assemble: %v", err)
 	}

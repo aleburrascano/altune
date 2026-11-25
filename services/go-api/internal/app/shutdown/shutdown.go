@@ -19,12 +19,12 @@ const (
 )
 
 const (
-	ServerDrainTimeout     = 10 * time.Second
-	backgroundDrainTimeout = 15 * time.Second
-	detachedDrainTimeout   = 10 * time.Second
-	observerDrainTimeout   = 2 * time.Second
-	leaderReleaseTimeout   = 3 * time.Second
-	schedulerDrainCap      = 35 * time.Second
+	ServerDrainTimeout   = 10 * time.Second
+	backgroundDrainCap   = 15 * time.Second
+	detachedDrainCap     = 10 * time.Second
+	observerDrainTimeout = 2 * time.Second
+	leaderReleaseTimeout = 3 * time.Second
+	schedulerDrainCap    = 35 * time.Second
 )
 
 const leaderLockKeptMessage = "leadership intentionally NOT released: background drain timed out with " +
@@ -75,23 +75,29 @@ func Stop[T stopper](component T) func(context.Context) {
 	return component.Shutdown
 }
 
-func Plan(c Components, schedulerDrainBudgetSeconds int) []Step {
+type Budgets struct {
+	SchedulerSeconds  int
+	BackgroundSeconds int
+	DetachedSeconds   int
+}
+
+func Plan(c Components, b Budgets) []Step {
 	return []Step{
 		{Component: AlertMonitor, Timeout: observerDrainTimeout, Stop: c.AlertMonitor},
 		{Component: EventFeed, Timeout: observerDrainTimeout, Stop: c.EventFeed},
 		{Component: EvalMeter, Timeout: observerDrainTimeout, Stop: c.EvalMeter},
-		{Component: Scheduler, Timeout: schedulerDrainTimeout(schedulerDrainBudgetSeconds), Stop: c.Scheduler},
-		{Component: Background, Timeout: backgroundDrainTimeout, Stop: c.Background},
+		{Component: Scheduler, Timeout: cappedDrain(b.SchedulerSeconds, schedulerDrainCap), Stop: c.Scheduler},
+		{Component: Background, Timeout: cappedDrain(b.BackgroundSeconds, backgroundDrainCap), Stop: c.Background},
 		{Component: LeaderElection, Timeout: leaderReleaseTimeout, Stop: c.LeaderElection, requires: Background, blockedMsg: leaderLockKeptMessage},
-		{Component: DetachedTasks, Timeout: detachedDrainTimeout, Stop: c.DetachedTasks},
+		{Component: DetachedTasks, Timeout: cappedDrain(b.DetachedSeconds, detachedDrainCap), Stop: c.DetachedTasks},
 	}
 }
 
-func schedulerDrainTimeout(budgetSeconds int) time.Duration {
+func cappedDrain(budgetSeconds int, limit time.Duration) time.Duration {
 	if budgetSeconds <= 0 {
-		return schedulerDrainCap
+		return limit
 	}
-	return min(time.Duration(budgetSeconds)*time.Second, schedulerDrainCap)
+	return min(time.Duration(budgetSeconds)*time.Second, limit)
 }
 
 func Run(plan []Step) []Outcome {

@@ -18,5 +18,9 @@ func (a *App) shutdownComponents() shutdown.Components {
 }
 
 func (a *App) runShutdownSequence() []shutdown.Outcome {
-	return shutdown.Run(shutdown.Plan(a.shutdownComponents(), a.cfg.AcquisitionDrainBudgetSeconds))
+	return shutdown.Run(shutdown.Plan(a.shutdownComponents(), shutdown.Budgets{
+		SchedulerSeconds:  a.cfg.AcquisitionDrainBudgetSeconds,
+		BackgroundSeconds: a.cfg.BackgroundDrainBudgetSeconds,
+		DetachedSeconds:   a.cfg.DetachedDrainBudgetSeconds,
+	}))
 }
