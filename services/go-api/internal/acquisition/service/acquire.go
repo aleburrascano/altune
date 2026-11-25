@@ -475,7 +475,7 @@ func reportDecision(ctx context.Context, ac *AcquisitionContext) {
 	if ac.Selected != nil {
 		key = sourceKey(ac.Selected.URL)
 	}
-	jobReporterFrom(ctx).decided(ac.Confidence, key, ac.ExpectedLength(), ac.MeasuredDuration())
+	jobReporterFrom(ctx).decided(ac.Confidence, key, ac.ExpectedLength(), ac.StoredLength().Seconds())
 }
 
 func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, trackId shared.TrackId) error {

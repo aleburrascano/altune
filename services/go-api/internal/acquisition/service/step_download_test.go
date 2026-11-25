@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1762,6 +1763,46 @@ func TestDownloadStep_ProbeErrorIsAcceptedAndRecordsAProbeFailedSkip(t *testing.
 	assertWindowSkips(t, rec.gates, ports.SkipProbeFailed)
 }
 
+func TestDownloadStep_AProbeNoRecordingCanHaveIsAProbeFailureAndNothingIsRecordedAsTheLength(t *testing.T) {
+	for name, probed := range map[string]float64{"above seven days": 8 * 24 * 60 * 60, "negative": -3, "not a number": math.NaN()} {
+		t.Run(name, func(t *testing.T) {
+			rec := &gateRecorder{}
+			step := newTestDownloadStep(&fileWritingSearcher{writeFile: true},
+				WithDownloadProber(scriptedProber{duration: probed}), WithStepVerifySkips(rec))
+			ac := downloadContext("")
+			ac.Track.CatalogDuration = 200
+
+			if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+			if ac.TempPath == "" {
+				t.Error("an implausible probe is a probe failure, which still accepts the candidate")
+			}
+			if ac.ProbedDuration.Known() || ac.DurationVerified {
+				t.Errorf("probed length = %v s, duration verified = %v, want neither recorded", ac.ProbedDuration.Seconds(), ac.DurationVerified)
+			}
+			assertWindowSkips(t, rec.gates, ports.SkipProbeFailed)
+		})
+	}
+}
+
+func TestDownloadStep_APlausibleProbeIsRecordedAsTheProbedLength(t *testing.T) {
+	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadProber(scriptedProber{duration: 201.5}))
+	ac := downloadContext("")
+	ac.Track.CatalogDuration = 200
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	if got := ac.ProbedDuration.Seconds(); got != 201.5 {
+		t.Errorf("probed length = %v s, want 201.5", got)
+	}
+}
+
 func TestDownloadStep_UnknownDurationIsAcceptedAndRecordsANoDurationSkip(t *testing.T) {
 	rec := &gateRecorder{}
 	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true},
@@ -2374,7 +2415,7 @@ func TestJudgeAttempt_AnOtherVersionIsHeldOrRejectedByLength(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			verified := verificationResult{probed: tt.probed, verdict: AudioVerdict{Kind: VerdictSoft}}
+			verified := verificationResult{probed: probedLength(tt.probed), verdict: AudioVerdict{Kind: VerdictSoft}}
 			got := judgeAttempt(ac, ports.AudioCandidate{Title: tt.title}, "/tmp/a.m4a", verified)
 			if tt.wantReason != "" {
 				if got.rejection == nil || got.rejection.reason != tt.wantReason {

@@ -2459,7 +2459,7 @@ func TestReplaceGated_AFileThatFitsTheCatalogLengthReplacesAStoredEditAtTheSameG
 	if row := committedTrack(t, book, trackId); row.AudioRef == nil || *row.AudioRef == originalRef {
 		t.Fatalf("audio_ref = %v, want the swap committed to a new ref", row.AudioRef)
 	}
-	if len(ledger.completed) != 1 || ledger.completed[0].Duration != 285 {
+	if len(ledger.completed) != 1 || ledger.completed[0].Duration.Seconds() != 285 {
 		t.Errorf("completions = %+v, want one carrying the 285 s length", ledger.completed)
 	}
 }
