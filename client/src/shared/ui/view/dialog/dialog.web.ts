@@ -1,14 +1,10 @@
-export interface ConfirmOptions {
-  title: string;
-  message: string;
-  confirmLabel: string;
-  onConfirm: () => void;
-}
+import type { Dialogs } from '@shared/ui/ports/dialogs';
 
-export function showAlert(title: string, message: string): void {
-  window.alert(`${title}\n\n${message}`);
-}
-
-export function confirmDestructive({ title, message, onConfirm }: ConfirmOptions): void {
-  if (window.confirm(`${title}\n\n${message}`)) onConfirm();
-}
+export const platformDialogs: Dialogs = {
+  alert: (title, message) => {
+    window.alert(`${title}\n\n${message}`);
+  },
+  confirmDestructive: ({ title, message, onConfirm }) => {
+    if (window.confirm(`${title}\n\n${message}`)) onConfirm();
+  },
+};
