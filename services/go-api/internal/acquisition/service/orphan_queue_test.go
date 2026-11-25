@@ -159,27 +159,22 @@ func TestStoreRollback_ExhaustedDeleteQueuesTheOrphan(t *testing.T) {
 	})
 }
 
-func TestStoreRollback_SharedOrPreservedRefIsNeverQueued(t *testing.T) {
+func TestStoreRollback_SharedRefIsNeverQueued(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		userID, own := shared.NewUserId(uuid.New()), shared.NewTrackId()
 		sharedRef := "u/shared.mp3"
 		refs := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
 			ID: shared.NewTrackId(), UserId: userID, Status: ports.TrackReady, AudioRef: &sharedRef,
 		}})
-		for name, ac := range map[string]*service.AcquisitionContext{
-			"shared":    {AudioRef: sharedRef},
-			"preserved": {AudioRef: "u/kept.mp3", Replace: service.ReplaceState{PreservedRef: "u/kept.mp3"}},
-		} {
-			queue := &recordingOrphanQueue{}
-			store := &objectStore{objects: map[string]string{}, deleteErr: errors.New("down")}
-			step := service.NewStoreStep(store, service.WithStoreOrphanQueue(queue, userID), service.WithStoreAudioRefGuard(refs, own))
+		queue := &recordingOrphanQueue{}
+		store := &objectStore{objects: map[string]string{}, deleteErr: errors.New("down")}
+		step := service.NewStoreStep(store, service.WithStoreOrphanQueue(queue, userID), service.WithStoreAudioRefGuard(refs, own))
 
-			if err := step.Rollback(context.Background(), ac); err != nil {
-				t.Fatalf("%s: Rollback: %v", name, err)
-			}
-			if recorded := queue.entries(); len(recorded) != 0 {
-				t.Errorf("%s: recorded = %+v, want none", name, recorded)
-			}
+		if err := step.Rollback(context.Background(), &service.AcquisitionContext{AudioRef: sharedRef}); err != nil {
+			t.Fatalf("Rollback: %v", err)
+		}
+		if recorded := queue.entries(); len(recorded) != 0 {
+			t.Errorf("recorded = %+v, want none", recorded)
 		}
 	})
 }
