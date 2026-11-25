@@ -4,6 +4,8 @@ set -uo pipefail
 if [ $# -gt 0 ]; then
   files=("$@")
 else
+  root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "pipefail-grep-q: not inside a git checkout, so nothing was checked" >&2; exit 2; }
+  cd "$root" >/dev/null || exit 2
   mapfile -t files < <(git ls-files -- '*.sh')
 fi
 

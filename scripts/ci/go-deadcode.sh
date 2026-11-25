@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
-usage="usage: go-deadcode.sh   run in a Go module directory; fails when deadcode -test ./... reports any function no main or test reaches"
+usage="usage: go-deadcode.sh   from any directory; fails when deadcode -test ./... over services/go-api reports any function no main or test reaches"
 [ $# = 0 ] || { echo "$usage" >&2; exit 2; }
+module=$(cd "$(dirname "$0")/../../services/go-api" >/dev/null 2>&1 && pwd) || { echo "go-deadcode: services/go-api was not found beside $(dirname "$0")/../.., so nothing was checked" >&2; exit 2; }
+[ -f "$module/go.mod" ] || { echo "go-deadcode: $module/go.mod is missing, so nothing was checked" >&2; exit 2; }
+cd "$module"
 deadcode=golang.org/x/tools/cmd/deadcode@v0.53.0
 if ! found=$(go run "$deadcode" -test ./...); then
   echo "go-deadcode: go run $deadcode failed, so nothing was checked" >&2

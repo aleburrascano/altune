@@ -35,4 +35,22 @@ check 0 "a script without pipefail passes"
 run "$scratch/herestring.sh" "$scratch/piped.sh"
 check 1 "one offending file among several fails"
 
+repo=$scratch/repo
+mkdir -p "$repo/deep/er"
+git init -qb main "$repo"
+cp "$scratch/piped.sh" "$repo/piped.sh"
+cp "$scratch/herestring.sh" "$repo/deep/clean.sh"
+git -C "$repo" add -A
+
+run_in() { local dir=$1; shift; OUT=$(cd "$dir" && bash "$script" "$@" 2>&1); CODE=$?; }
+run_in "$repo"
+check 1 "with no arguments a violation in the checkout is found from its root"
+expect_out "piped.sh:3:"
+run_in "$repo/deep/er"
+check 1 "with no arguments a violation in the checkout is found from a subdirectory too"
+expect_out "piped.sh:3:"
+run_in "$scratch"
+check 2 "with no arguments outside a git checkout is an error, not a pass"
+expect_out "nothing was checked"
+
 exit $fail
