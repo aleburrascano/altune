@@ -104,7 +104,7 @@ func (c *Client) outage(ctx context.Context, err error) error {
 
 func (c *Client) OEmbed(ctx context.Context, videoID string) (OEmbed, error) {
 	query := url.Values{"url": {watchURLPrefix + videoID}, "format": {"json"}}
-	req, err := http.NewRequest(http.MethodGet, c.oembedURL+"?"+query.Encode(), http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.oembedURL+"?"+query.Encode(), http.NoBody)
 	if err != nil {
 		return OEmbed{}, fmt.Errorf("ytmsearch: build oembed request: %w", err)
 	}
@@ -121,7 +121,7 @@ func (c *Client) postInnerTube(ctx context.Context, g *gate, endpoint string, fi
 		return nil, fmt.Errorf("ytmsearch: marshal %s: %w", endpoint, err)
 	}
 	target := ytminnertube.URL(c.musicURL, endpoint)
-	req, err := http.NewRequest(http.MethodPost, target, bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("ytmsearch: build %s request: %w", endpoint, err)
 	}

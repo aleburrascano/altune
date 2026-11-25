@@ -12,7 +12,7 @@
       "stored": { "duration": 241.335011 },
       "sources": [
         { "name": "ytmsearch", "candidates": [
-          { "observed": { "ytmsearch_song": { "VideoID": "7wBgcalM4c4", "Title": "Time After Time", "Artists": ["Cyndi Lauper"], "Album": "She's So Unusual", "DurationSeconds": 242, "Type": "MUSIC_VIDEO_TYPE_ATV" } } }
+          { "observed": { "ytmsearch_song": { "video_id": "7wBgcalM4c4", "title": "Time After Time", "artists": ["Cyndi Lauper"], "album": "She's So Unusual", "duration_seconds": 242, "type": "MUSIC_VIDEO_TYPE_ATV" } } }
         ] },
         { "name": "ytdlp", "candidates": [
           { "observed": { "ytdlp_entry": { "title": "Time After Time", "duration": 242, "webpage_url": "https://www.youtube.com/watch?v=7wBgcalM4c4", "channel": "Cyndi Lauper", "view_count": 182928781 } }, "query": "isrc" }

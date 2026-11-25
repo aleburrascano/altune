@@ -632,7 +632,9 @@ func TestHandlers_RefusalsAreProblemDocumentsWithACode(t *testing.T) {
 				if ct := rec.Header().Get("Content-Type"); ct != "application/problem+json" {
 					t.Errorf("Content-Type = %q, want application/problem+json", ct)
 				}
-				var body struct{ Code string }
+				var body struct {
+					Code string `json:"code"`
+				}
 				if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil || body.Code != want.wantCode {
 					t.Errorf("body %s: code %q (decode error %v), want %q", rec.Body.String(), body.Code, err, want.wantCode)
 				}

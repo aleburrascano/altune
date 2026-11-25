@@ -107,22 +107,30 @@ type Candidate struct {
 }
 
 type Observed struct {
-	Song  *ytmsearch.Song `json:"ytmsearch_song,omitempty"`
-	Watch *ObservedWatch  `json:"ytmusic_watch,omitempty"`
-	Entry *ytdlp.Entry    `json:"ytdlp_entry,omitempty"`
+	Song  *ObservedSong  `json:"ytmsearch_song,omitempty"`
+	Watch *ObservedWatch `json:"ytmusic_watch,omitempty"`
+	Entry *ytdlp.Entry   `json:"ytdlp_entry,omitempty"`
 }
 
 type ObservedWatch struct {
-	ytmsearch.Watch
-	Pinned bool
+	VideoID  string              `json:"video_id"`
+	Title    string              `json:"title"`
+	Artists  []string            `json:"artists,omitempty"`
+	Type     ytmsearch.VideoType `json:"type"`
+	Explicit bool                `json:"explicit,omitempty"`
+	Pinned   bool                `json:"pinned,omitempty"`
+}
+
+func (w ObservedWatch) watch() ytmsearch.Watch {
+	return ytmsearch.Watch{VideoID: w.VideoID, Title: w.Title, Artists: w.Artists, Type: w.Type, Explicit: w.Explicit}
 }
 
 func (o Observed) emit() (ports.AudioCandidate, error) {
 	switch {
 	case o.Song != nil && o.Watch == nil && o.Entry == nil:
-		return ytmsearch.CandidateFor(*o.Song), nil
+		return ytmsearch.CandidateFor(ytmsearch.Song(*o.Song)), nil
 	case o.Watch != nil && o.Song == nil && o.Entry == nil:
-		return ytmusic.CandidateForWatch(o.Watch.VideoID, o.Watch.Watch, o.Watch.Pinned), nil
+		return ytmusic.CandidateForWatch(o.Watch.VideoID, o.Watch.watch(), o.Watch.Pinned), nil
 	case o.Entry != nil && o.Song == nil && o.Watch == nil:
 		return ytdlp.CandidateFromEntry(*o.Entry), nil
 	}

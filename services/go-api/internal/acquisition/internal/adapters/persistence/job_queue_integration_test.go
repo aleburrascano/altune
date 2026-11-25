@@ -649,6 +649,9 @@ func TestPgxJobQueue_ClaimPlanUsesScheduledAvailableAtIndex(t *testing.T) {
 		}
 		plan.WriteString(line + "\n")
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read plan: %v", err)
+	}
 	if !strings.Contains(plan.String(), "idx_tracks_acquisition_available_at_scheduled") {
 		t.Errorf("claim plan does not use the scheduled available_at index:\n%s", plan.String())
 	}
