@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/catalog/internal/core/ports"
 	"bytes"
 	"context"
+	"fmt"
 	"io/fs"
 	"os"
 )
@@ -37,7 +38,7 @@ func (s *AudioStore) Store(_ context.Context, sourcePath, audioRef string) error
 	}
 	content, err := os.ReadFile(sourcePath)
 	if err != nil {
-		return err
+		return fmt.Errorf("read %s: %w", sourcePath, err)
 	}
 	s.Files[audioRef] = content
 	return nil

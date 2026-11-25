@@ -78,7 +78,7 @@ func (s *ObjectStorageAudioStore) Exists(ctx context.Context, audioRef string) (
 		if resp.Code == "NoSuchKey" {
 			return false, nil
 		}
-		return false, err
+		return false, fmt.Errorf("stat object %s: %w", audioRef, err)
 	}
 	return true, nil
 }
@@ -169,5 +169,8 @@ func (s *ObjectStorageAudioStore) Delete(ctx context.Context, audioRef string) e
 	ctx, cancel := context.WithTimeout(ctx, storageOpTimeout)
 	defer cancel()
 
-	return s.client.RemoveObject(ctx, s.bucket, audioRef, minio.RemoveObjectOptions{})
+	if err := s.client.RemoveObject(ctx, s.bucket, audioRef, minio.RemoveObjectOptions{}); err != nil {
+		return fmt.Errorf("remove object %s: %w", audioRef, err)
+	}
+	return nil
 }

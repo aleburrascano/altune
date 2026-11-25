@@ -69,7 +69,7 @@ func upsertFeaturedArtist(ctx context.Context, tx pgx.Tx, userID uuid.UUID, fa d
 			return faID, nil
 		}
 		if !errors.Is(err, pgx.ErrNoRows) {
-			return uuid.Nil, err
+			return uuid.Nil, fmt.Errorf("upsert featured artist %q: %w", fa.Name, err)
 		}
 	}
 	err := tx.QueryRow(ctx,
@@ -79,7 +79,10 @@ func upsertFeaturedArtist(ctx context.Context, tx pgx.Tx, userID uuid.UUID, fa d
 		RETURNING id`,
 		userID, nullString(fa.MBID), nullInt64(fa.DeezerID), fa.Name, fa.NormalizedName(),
 	).Scan(&faID)
-	return faID, err
+	if err != nil {
+		return faID, fmt.Errorf("insert featured artist %q: %w", fa.Name, err)
+	}
+	return faID, nil
 }
 
 func featuredIdentityKeys(fa domain.FeaturedArtist) []string {
@@ -166,7 +169,7 @@ func requireOwnedTrack(ctx context.Context, tx pgx.Tx, id domain.TrackId, userId
 		id.UUID(), userId.UUID(),
 	).Scan(&owned)
 	if err != nil {
-		return err
+		return fmt.Errorf("check that user %s owns track %s: %w", userId.UUID(), id.UUID(), err)
 	}
 	if !owned {
 		return fmt.Errorf("track %s not found for user", id.String())
