@@ -419,6 +419,7 @@ func TestAddTrackService_ValidatesRanges(t *testing.T) {
 	hugeTrackNumber := 3000000000
 	farFutureYear := time.Now().UTC().Year() + 50
 	ancientYear := 1000
+	plausibleDuration := 215.0
 
 	tests := []struct {
 		name    string
@@ -434,6 +435,10 @@ func TestAddTrackService_ValidatesRanges(t *testing.T) {
 		{"out-of-range track number is rejected", func(in *catalog.AddTrackInput) { in.TrackNumber = &hugeTrackNumber }, "track_number"},
 		{"far-future year is rejected", func(in *catalog.AddTrackInput) { in.Year = &farFutureYear }, "year"},
 		{"ancient year is rejected", func(in *catalog.AddTrackInput) { in.Year = &ancientYear }, "year"},
+		{"a plausible duration does not excuse an ancient year", func(in *catalog.AddTrackInput) {
+			in.DurationSeconds = &plausibleDuration
+			in.Year = &ancientYear
+		}, "year"},
 	}
 
 	for _, tt := range tests {
