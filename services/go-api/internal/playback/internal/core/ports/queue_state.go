@@ -9,6 +9,8 @@ import (
 
 var ErrCorruptStoredState = errors.New("corrupt stored queue state")
 
+var ErrQueueStateNotFound = errors.New("no stored queue state")
+
 type QueueStateRepository interface {
 	Upsert(ctx context.Context, state *domain.QueueState) error
 	UpdatePosition(ctx context.Context, position *domain.QueuePosition) error

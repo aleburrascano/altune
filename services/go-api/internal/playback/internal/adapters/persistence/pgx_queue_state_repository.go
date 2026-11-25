@@ -214,7 +214,7 @@ func (r *PgxQueueStateRepository) GetForUser(
 	})
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
+		return nil, ports.ErrQueueStateNotFound
 	}
 	if err != nil {
 		return nil, err

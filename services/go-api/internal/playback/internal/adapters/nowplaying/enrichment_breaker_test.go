@@ -58,7 +58,7 @@ type trackScript struct{}
 func (trackScript) NowPlayingTrack(_ context.Context, _ shared.UserId, id shared.TrackId) (*playback.NowPlayingTrack, error) {
 	switch id.String() {
 	case succeedingTrack:
-		return nil, nil
+		return &playback.NowPlayingTrack{}, nil
 	case failingTrack:
 		return nil, playback.ErrTrackSourceUnavailable
 	default:

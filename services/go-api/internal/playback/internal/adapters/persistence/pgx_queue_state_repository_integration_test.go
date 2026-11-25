@@ -70,8 +70,8 @@ func TestDeleteForUser_ErasesPersistedRow(t *testing.T) {
 	}
 
 	got, err := repo.GetForUser(ctx, userId)
-	if err != nil {
-		t.Fatalf("GetForUser after delete: %v", err)
+	if !errors.Is(err, playback.ErrQueueStateNotFound) {
+		t.Fatalf("GetForUser after delete: err = %v, want ErrQueueStateNotFound", err)
 	}
 	if got != nil {
 		t.Fatalf("row survived DeleteForUser: %+v", got)
@@ -245,8 +245,8 @@ func TestUpsert_SaveDelayedPastAnErasureDoesNotResurrectIt(t *testing.T) {
 		t.Fatalf("Upsert(handled before the erasure, executed after it) = %v, want ErrStaleQueueWrite", err)
 	}
 	got, err := playback.NewPgxQueueStateRepository(wide).GetForUser(ctx, userId)
-	if err != nil {
-		t.Fatalf("GetForUser: %v", err)
+	if !errors.Is(err, playback.ErrQueueStateNotFound) {
+		t.Fatalf("GetForUser: err = %v, want ErrQueueStateNotFound", err)
 	}
 	if got != nil {
 		t.Fatalf("erased queue state came back: %+v; a save handled before the erasure recreated the row", got)
@@ -286,8 +286,8 @@ func TestUpsert_SaveBlockedOnTheErasureLockDoesNotResurrectIt(t *testing.T) {
 		t.Fatalf("Upsert(blocked on the erasure's lock) = %v, want ErrStaleQueueWrite", err)
 	}
 	got, err := playback.NewPgxQueueStateRepository(pool).GetForUser(ctx, userId)
-	if err != nil {
-		t.Fatalf("GetForUser: %v", err)
+	if !errors.Is(err, playback.ErrQueueStateNotFound) {
+		t.Fatalf("GetForUser: err = %v, want ErrQueueStateNotFound", err)
 	}
 	if got != nil {
 		t.Fatalf("erased queue state came back: %+v; the save that waited out the erasure recreated it", got)
@@ -395,8 +395,8 @@ func TestUpdatePosition_DelayedPastAnErasureDoesNotRecreateTheRow(t *testing.T) 
 		t.Fatalf("UpdatePosition(executed after the erasure) = %v, want ErrQueuePositionMismatch", err)
 	}
 	got, err := playback.NewPgxQueueStateRepository(wide).GetForUser(ctx, userId)
-	if err != nil {
-		t.Fatalf("GetForUser: %v", err)
+	if !errors.Is(err, playback.ErrQueueStateNotFound) {
+		t.Fatalf("GetForUser: err = %v, want ErrQueueStateNotFound", err)
 	}
 	if got != nil {
 		t.Fatalf("erased queue state came back: %+v", got)
@@ -677,7 +677,7 @@ func TestUpdatePosition_DoesNotLandOnADifferentQueue(t *testing.T) {
 	if err := repo.UpdatePosition(ctx, positionAt(t, userId, 0, trk("a"), 1, 0)); !errors.Is(err, playback.ErrQueuePositionMismatch) {
 		t.Fatalf("UpdatePosition with nothing stored = %v, want ErrQueuePositionMismatch", err)
 	}
-	if got, err := repo.GetForUser(ctx, userId); err != nil || got != nil {
+	if got, err := repo.GetForUser(ctx, userId); !errors.Is(err, playback.ErrQueueStateNotFound) || got != nil {
 		t.Fatalf("a position-only save created a row: state=%+v err=%v", got, err)
 	}
 
@@ -849,8 +849,8 @@ func TestUpsert_SaveStampedWithinTheGraceAfterAnErasureIsRefused(t *testing.T) {
 		t.Fatalf("Upsert(stamped within the grace of the erasure) = %v, want ErrStaleQueueWrite", err)
 	}
 	got, err := repo.GetForUser(ctx, userId)
-	if err != nil {
-		t.Fatalf("GetForUser: %v", err)
+	if !errors.Is(err, playback.ErrQueueStateNotFound) {
+		t.Fatalf("GetForUser: err = %v, want ErrQueueStateNotFound", err)
 	}
 	if got != nil {
 		t.Fatalf("erased queue state came back: %+v; a save inside the grace recreated it", got)

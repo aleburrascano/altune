@@ -49,12 +49,12 @@ func TestNowPlayingTracks_MapsTheUsersCatalogTrack(t *testing.T) {
 	}
 }
 
-func TestNowPlayingTracks_AbsentTrackIsNoTrack(t *testing.T) {
+func TestNowPlayingTracks_AbsentTrackIsNotFound(t *testing.T) {
 	source := playbackcatalog.NewNowPlayingTracks(catalogTracksFunc(func(catalog.TrackId, shared.UserId) (*catalog.Track, error) { return nil, nil }))
 
 	got, err := source.NowPlayingTrack(context.Background(), shared.NewUserId(uuid.New()), catalog.NewTrackId())
-	if got != nil || err != nil {
-		t.Errorf("NowPlayingTrack = (%+v, %v), want no track and no error", got, err)
+	if got != nil || !errors.Is(err, playback.ErrNowPlayingTrackNotFound) {
+		t.Errorf("NowPlayingTrack = (%+v, %v), want no track and ErrNowPlayingTrackNotFound", got, err)
 	}
 }
 

@@ -8,6 +8,8 @@ import (
 
 var ErrTrackSourceUnavailable = errors.New("now-playing track source unavailable")
 
+var ErrNowPlayingTrackNotFound = errors.New("now-playing track not found")
+
 type TrackSource interface {
 	NowPlayingTrack(ctx context.Context, userId shared.UserId, id shared.TrackId) (*NowPlayingTrack, error)
 }
