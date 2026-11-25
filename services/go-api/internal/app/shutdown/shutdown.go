@@ -42,6 +42,7 @@ const (
 type Outcome struct {
 	Component string
 	Status    Status
+	Budget    time.Duration
 }
 
 type Step struct {
@@ -115,10 +116,10 @@ func Run(plan []Step) []Outcome {
 func runStep(ctx context.Context, step Step, completed map[string]bool) Outcome {
 	if step.requires != "" && !completed[step.requires] {
 		slog.ErrorContext(ctx, step.blockedMsg, "component", step.Component, "requires", step.requires)
-		return Outcome{Component: step.Component, Status: Skipped}
+		return Outcome{Component: step.Component, Status: Skipped, Budget: step.Timeout}
 	}
 	if step.Stop == nil {
-		return Outcome{Component: step.Component, Status: Completed}
+		return Outcome{Component: step.Component, Status: Completed, Budget: step.Timeout}
 	}
 	return stopWithin(step.Component, step.Timeout, step.Stop)
 }
@@ -127,11 +128,11 @@ func stopWithin(component string, timeout time.Duration, stop func(context.Conte
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	if runloop.WaitWithin(ctx, func() { stop(ctx) }) {
-		return Outcome{Component: component, Status: Completed}
+		return Outcome{Component: component, Status: Completed, Budget: timeout}
 	}
 	slog.WarnContext(ctx, "component shutdown exceeded its budget",
 		"component", component, "timeout", timeout.String())
-	return Outcome{Component: component, Status: TimedOut}
+	return Outcome{Component: component, Status: TimedOut, Budget: timeout}
 }
 
 func unfinished(outcomes []Outcome) []string {
