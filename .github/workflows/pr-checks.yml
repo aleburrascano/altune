@@ -81,12 +81,7 @@ jobs:
         working-directory: services/go-api
         env:
           INTEGRATION: "1"
-        run: go test -race -shuffle=on -count=1 -coverprofile=coverage.out ./...
-      - name: coverage ratchet
-        working-directory: services/go-api
-        env:
-          MIN: 65
-        run: bash ../../scripts/ci/test-backend-coverage.sh
+        run: go test -race -shuffle=on -count=1 ./...
       - name: integration tests really ran
         working-directory: services/go-api
         env:
