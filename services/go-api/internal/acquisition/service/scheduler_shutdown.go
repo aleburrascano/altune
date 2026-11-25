@@ -1,9 +1,9 @@
 package service
 
 import (
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"log/slog"
-	"time"
 )
 
 func (s *BackgroundAcquisitionScheduler) closeAdmission() {
@@ -15,15 +15,15 @@ func (s *BackgroundAcquisitionScheduler) closeAdmission() {
 
 func (s *BackgroundAcquisitionScheduler) Shutdown(ctx context.Context) {
 	s.closeAdmission()
-	defer s.pending.sweep()
 
-	done := s.jobsDone()
-
-	drained := s.awaitDrainBudget(done, ctx)
+	drained := s.drainWithinBudget(ctx)
 
 	s.cancel()
 	if !drained {
-		drained = s.awaitCancelledJobs(done, ctx)
+		drained = s.jobs.Drain(ctx)
+		if !drained {
+			slog.WarnContext(ctx, "acquisition scheduler drain timed out waiting for cancelled jobs to release")
+		}
 	}
 
 	s.waitRunners(ctx)
@@ -34,59 +34,19 @@ func (s *BackgroundAcquisitionScheduler) Shutdown(ctx context.Context) {
 	s.waitOutcomes(ctx)
 }
 
-func (s *BackgroundAcquisitionScheduler) awaitDrainBudget(done <-chan struct{}, ctx context.Context) bool {
-	drained := s.awaitJobsWG(done, s.drainBudget, ctx)
-	if drained {
+func (s *BackgroundAcquisitionScheduler) drainWithinBudget(ctx context.Context) bool {
+	budget, cancel := context.WithTimeout(ctx, s.drainBudget)
+	defer cancel()
+	if s.jobs.Drain(budget) {
 		slog.InfoContext(ctx, "acquisition scheduler drained")
-	} else {
-		slog.WarnContext(ctx, "acquisition drain budget exceeded, cancelling in-flight jobs for release", "budget", s.drainBudget.String())
-	}
-	return drained
-}
-
-func (s *BackgroundAcquisitionScheduler) jobsDone() <-chan struct{} {
-	done := make(chan struct{})
-	go func() {
-		s.jobsWG.Wait()
-		close(done)
-	}()
-	return done
-}
-
-func (s *BackgroundAcquisitionScheduler) awaitCancelledJobs(done <-chan struct{}, ctx context.Context) bool {
-	if s.awaitJobsWG(done, 0, ctx) {
 		return true
 	}
-	slog.WarnContext(ctx, "acquisition scheduler drain timed out waiting for cancelled jobs to release")
+	slog.WarnContext(ctx, "acquisition drain budget exceeded, cancelling in-flight jobs for release", "budget", s.drainBudget.String())
 	return false
 }
 
-func (s *BackgroundAcquisitionScheduler) awaitJobsWG(done <-chan struct{}, budget time.Duration, ctx context.Context) bool {
-	var timerC <-chan time.Time
-	if budget > 0 {
-		timer := time.NewTimer(budget)
-		defer timer.Stop()
-		timerC = timer.C
-	}
-	select {
-	case <-done:
-		return true
-	case <-timerC:
-		return false
-	case <-ctx.Done():
-		return false
-	}
-}
-
 func (s *BackgroundAcquisitionScheduler) waitRunners(ctx context.Context) {
-	done := make(chan struct{})
-	go func() {
-		s.runnersWG.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-ctx.Done():
+	if !runloop.WaitWithin(ctx, s.runners.Wait) {
 		slog.WarnContext(ctx, "acquisition scheduler shutdown context ended before every worker goroutine exited")
 	}
 }

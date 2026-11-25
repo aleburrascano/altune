@@ -10,7 +10,6 @@ import (
 	"altune/go-api/internal/shared/config"
 	"context"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -25,8 +24,6 @@ type Deps struct {
 	AudioStore   catalog.AudioStore
 	Sources      Tiers
 	Verification acquisition.AcquisitionVerification
-	Background   *sync.WaitGroup
-	Slots        chan struct{}
 }
 
 type acquireOption = func(*acquisition.AcquireTrackAudioService)
@@ -46,7 +43,7 @@ func NewScheduler(ctx context.Context, d Deps) *acquisition.BackgroundAcquisitio
 		d.AudioStore,
 		opts...,
 	)
-	return acquisition.NewBackgroundAcquisitionScheduler(acquireSvc, d.Background, d.Slots, schedulerOptions(d, acquireSvc, skips, lookups)...)
+	return acquisition.NewBackgroundAcquisitionScheduler(acquireSvc, d.Config.AcquisitionConcurrency, schedulerOptions(d, acquireSvc, skips, lookups)...)
 }
 
 func storeOptions(d Deps, probing acquireOption, skips *acquisition.VerifySkipCounter) []acquireOption {

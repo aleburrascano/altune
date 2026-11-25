@@ -120,7 +120,7 @@ func (a *App) liveTiers(ctx context.Context, audioStore catalog.AudioStore) (aud
 func (a *App) schedulerDeps(tap *observe.EventTap, disc *discovery.Discovery, staging audioSourcesStaging, sources audioacquisition.Tiers, tools acquisition.AcquisitionVerification) audioacquisition.Deps {
 	return audioacquisition.Deps{
 		Config: a.cfg, Pool: a.pool, Events: tap, Recording: acquisitiondiscovery.RecordingOptions(disc), Ledger: staging.ledger, AudioStore: staging.audioStore,
-		Sources: sources, Verification: tools, Background: a.jobs.Background(), Slots: a.sem,
+		Sources: sources, Verification: tools,
 	}
 }
 

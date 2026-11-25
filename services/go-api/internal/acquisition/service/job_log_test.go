@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/acquisition"
 	kernel "altune/go-api/internal/shared/kernel"
 	"context"
-	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -29,9 +28,8 @@ func (slowAcquirer) RefuseQueued(context.Context, kernel.UserId, kernel.TrackId)
 
 func TestStatus_ARunningJobReportsTheTimeSinceItWasScheduled(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		var wg sync.WaitGroup
 		acquirer := &holdingAcquirer{release: make(chan struct{})}
-		scheduler := acquisition.NewBackgroundAcquisitionScheduler(acquirer, &wg, make(chan struct{}, 1))
+		scheduler := acquisition.NewBackgroundAcquisitionScheduler(acquirer, 1)
 		defer scheduler.Shutdown(context.Background())
 		defer close(acquirer.release)
 		track := kernel.NewTrackId()
@@ -54,8 +52,7 @@ func TestStatus_ARunningJobReportsTheTimeSinceItWasScheduled(t *testing.T) {
 
 func TestStatus_AFinishedJobReportsHowLongItRan(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		var wg sync.WaitGroup
-		scheduler := acquisition.NewBackgroundAcquisitionScheduler(slowAcquirer{}, &wg, make(chan struct{}, 1))
+		scheduler := acquisition.NewBackgroundAcquisitionScheduler(slowAcquirer{}, 1)
 		defer scheduler.Shutdown(context.Background())
 		track := kernel.NewTrackId()
 		if err := scheduler.Schedule(context.Background(), kernel.NewUserId(uuid.New()), track, ""); err != nil {

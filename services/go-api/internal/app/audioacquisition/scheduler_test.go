@@ -60,7 +60,7 @@ func eventTap(t *testing.T) *observe.EventTap {
 	return observe.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
 }
 
-func newOfflineScheduler(t *testing.T, cfg *config.Config, slots chan struct{}, sources audioacquisition.Tiers) *acquisition.BackgroundAcquisitionScheduler {
+func newOfflineScheduler(t *testing.T, cfg *config.Config, sources audioacquisition.Tiers) *acquisition.BackgroundAcquisitionScheduler {
 	t.Helper()
 	scheduler := audioacquisition.NewScheduler(t.Context(), audioacquisition.Deps{
 		Config:     cfg,
@@ -68,8 +68,6 @@ func newOfflineScheduler(t *testing.T, cfg *config.Config, slots chan struct{}, 
 		Ledger:     acquisitioncatalog.NewTrackLedger(&fixtureTrackRepo{}),
 		AudioStore: catalog.NewFilesystemAudioStore(cfg.MusicDir),
 		Sources:    sources,
-		Background: &sync.WaitGroup{},
-		Slots:      slots,
 	})
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 	return scheduler
@@ -97,8 +95,6 @@ func acquireThroughPostgres(t *testing.T) (catalog.Track, string, acquisition.Ac
 		Ledger:     acquisitioncatalog.NewTrackLedger(repo),
 		AudioStore: catalog.NewFilesystemAudioStore(musicDir),
 		Sources:    fixtureTiers(),
-		Background: &sync.WaitGroup{},
-		Slots:      make(chan struct{}, 1),
 	})
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
@@ -156,17 +152,9 @@ func TestNewScheduler_FetchedAudioPassesTheProbeAndDecodeGates(t *testing.T) {
 	assertReadyWithAudio(t, track, musicDir)
 }
 
-func fullSlots(n int) chan struct{} {
-	slots := make(chan struct{}, n)
-	for range n {
-		slots <- struct{}{}
-	}
-	return slots
-}
-
 func TestNewScheduler_OneUserMayQueuePastTheOldGlobalDepth(t *testing.T) {
 	const concurrency = 2
-	s := newOfflineScheduler(t, &config.Config{MusicDir: t.TempDir(), AcquisitionConcurrency: concurrency}, fullSlots(concurrency), fixtureTiers())
+	s := newOfflineScheduler(t, &config.Config{MusicDir: t.TempDir(), AcquisitionConcurrency: concurrency}, fixtureTiers())
 
 	userA := shared.NewUserId(uuid.New())
 	const pastOldGlobalDepth = concurrency*4 + 5
@@ -180,7 +168,7 @@ func TestNewScheduler_OneUserMayQueuePastTheOldGlobalDepth(t *testing.T) {
 func TestNewScheduler_DoesNotCapAPrincipalsQueue(t *testing.T) {
 	const concurrency = 2
 	const principalCap = concurrency
-	s := newOfflineScheduler(t, &config.Config{MusicDir: t.TempDir(), AcquisitionConcurrency: concurrency}, fullSlots(concurrency), fixtureTiers())
+	s := newOfflineScheduler(t, &config.Config{MusicDir: t.TempDir(), AcquisitionConcurrency: concurrency}, fixtureTiers())
 
 	userA := shared.NewUserId(uuid.New())
 	for i := 0; i < principalCap+2; i++ {
@@ -194,7 +182,7 @@ func TestNewScheduler_DoesNotCapAPrincipalsQueue(t *testing.T) {
 }
 
 func TestNewScheduler_AcquisitionPausedStartsPaused(t *testing.T) {
-	s := newOfflineScheduler(t, &config.Config{MusicDir: t.TempDir(), AcquisitionPaused: true}, make(chan struct{}, 1), fixtureTiers())
+	s := newOfflineScheduler(t, &config.Config{MusicDir: t.TempDir(), AcquisitionPaused: true}, fixtureTiers())
 
 	if !s.Status().Paused {
 		t.Fatal("Status().Paused = false straight out of NewScheduler, want true so no worker claims before the startup switches apply")
@@ -247,8 +235,6 @@ func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
 		Ledger:     acquisitioncatalog.NewTrackLedger(trackRepo),
 		AudioStore: catalog.NewFilesystemAudioStore(t.TempDir()),
 		Sources:    fixtureTiers(),
-		Background: &sync.WaitGroup{},
-		Slots:      make(chan struct{}, 1),
 	})
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
@@ -337,8 +323,6 @@ func TestNewScheduler_AnUpgradeWorkerClaimsAndSettlesAnEnqueuedUpgrade(t *testin
 		Ledger:     acquisitioncatalog.NewTrackLedger(catalog.NewPgxTrackRepository(pool)),
 		AudioStore: catalog.NewFilesystemAudioStore(cfg.MusicDir),
 		Sources:    audioacquisition.Tiers{First: []acquisition.AudioSource{sourceWithNothing{}}},
-		Background: &sync.WaitGroup{},
-		Slots:      make(chan struct{}, 1),
 	})
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
@@ -376,7 +360,7 @@ func TestNewScheduler_ReportsFingerprintingReadyOnlyWithAnAcoustIDKey(t *testing
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := newOfflineScheduler(t, &config.Config{MusicDir: t.TempDir(), FFmpegLocation: binDir, AcoustIDAPIKey: tt.key}, make(chan struct{}, 1), fixtureTiers())
+			s := newOfflineScheduler(t, &config.Config{MusicDir: t.TempDir(), FFmpegLocation: binDir, AcoustIDAPIKey: tt.key}, fixtureTiers())
 
 			if got := s.Status().Verification.Fpcalc; got != tt.want {
 				t.Errorf("Status().Verification.Fpcalc = %v with fpcalc installed and AcoustID key %q, want %v", got, tt.key, tt.want)
@@ -423,8 +407,6 @@ func TestNewScheduler_ShutdownCancelsAJobThatOutlivesTheConfiguredDrainBudget(t 
 		Ledger:     acquisitioncatalog.NewTrackLedger(repo),
 		AudioStore: catalog.NewFilesystemAudioStore(t.TempDir()),
 		Sources:    audioacquisition.Tiers{First: []acquisition.AudioSource{hang}},
-		Background: &sync.WaitGroup{},
-		Slots:      make(chan struct{}, 1),
 	})
 	var shutdown sync.Once
 	t.Cleanup(func() { shutdown.Do(func() { scheduler.Shutdown(context.Background()) }) })

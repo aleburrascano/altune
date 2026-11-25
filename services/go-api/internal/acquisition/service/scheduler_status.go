@@ -7,7 +7,7 @@ import (
 )
 
 func (s *BackgroundAcquisitionScheduler) workerCount() int {
-	return max(cap(s.sem), 1)
+	return s.workers
 }
 
 func (s *BackgroundAcquisitionScheduler) Status() ports.AcquisitionStatus {
