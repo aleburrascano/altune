@@ -192,8 +192,8 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.Us
 	jobCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, s.acquireTimeout)
 	defer cancel()
-	track, err := s.loadTrack(ctx, userId, trackId)
-	if err != nil || track == nil {
+	track, found, err := s.loadTrack(ctx, userId, trackId)
+	if err != nil || !found {
 		return err
 	}
 	proceed, err := s.reconcileForReacquire(ctx, track)
@@ -244,8 +244,8 @@ func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId sh
 	jobCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, s.acquireTimeout)
 	defer cancel()
-	track, err := s.loadTrack(ctx, userId, trackId)
-	if err != nil || track == nil {
+	track, found, err := s.loadTrack(ctx, userId, trackId)
+	if err != nil || !found {
 		return err
 	}
 	_, err = s.replaceLoaded(ctx, jobCtx, userId, track, upgrade.Gate{}, willRetry)
@@ -350,16 +350,16 @@ func (s *AcquireTrackAudioService) servedByAnotherTrack(ctx context.Context, tra
 	return inUse
 }
 
-func (s *AcquireTrackAudioService) loadTrack(ctx context.Context, userId shared.UserId, trackId shared.TrackId) (*ports.TrackSnapshot, error) {
+func (s *AcquireTrackAudioService) loadTrack(ctx context.Context, userId shared.UserId, trackId shared.TrackId) (*ports.TrackSnapshot, bool, error) {
 	track, err := s.ledger.Get(ctx, trackId, userId)
 	if err != nil {
-		return nil, fmt.Errorf("get track: %w", err)
+		return nil, false, fmt.Errorf("get track: %w", err)
 	}
 	if track == nil {
 		slog.WarnContext(ctx, "acquire_track_not_found", "track_id", trackId.String())
-		return nil, nil
+		return nil, false, nil
 	}
-	return track, nil
+	return track, true, nil
 }
 
 func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, userId shared.UserId, trackId shared.TrackId, track *ports.TrackSnapshot) *AcquisitionContext {

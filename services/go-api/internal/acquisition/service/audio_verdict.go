@@ -36,6 +36,8 @@ func verdictKindOf(kind audiojudge.Kind) VerdictKind {
 		return VerdictSoft
 	case audiojudge.Contradicted:
 		return VerdictContradicted
+	case audiojudge.Unknown:
+		return VerdictUnknown
 	}
 	return VerdictUnknown
 }
