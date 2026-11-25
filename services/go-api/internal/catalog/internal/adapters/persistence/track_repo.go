@@ -95,7 +95,10 @@ func insertTrack(ctx context.Context, tx pgx.Tx, track *domain.Track) error {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errTrackAlreadyStored
 	}
-	return err
+	if err != nil {
+		return fmt.Errorf("insert track %s: %w", track.ID.UUID(), err)
+	}
+	return nil
 }
 
 func (r *PgxTrackRepository) GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {
@@ -157,7 +160,7 @@ const listTracksForUserSQL = `SELECT ` + trackColumns + `
 func (r *PgxTrackRepository) listForUser(ctx context.Context, userId shared.UserId, limit, offset int) ([]*domain.Track, int, error) {
 	rows, err := r.pool.Query(ctx, listTracksForUserSQL, userId.UUID(), limit, offset)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("list tracks of user %s: %w", userId.UUID(), err)
 	}
 	tracks, err := collectTracks(rows)
 	if err != nil {
@@ -193,7 +196,7 @@ func (r *PgxTrackRepository) listByIDs(ctx context.Context, userId shared.UserId
 		userId.UUID(), ids,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load tracks of user %s by id: %w", userId.UUID(), err)
 	}
 	return collectTracks(rows)
 }
@@ -300,7 +303,7 @@ func (r *PgxTrackRepository) deleteTrackRow(ctx context.Context, id domain.Track
 		return false, nil, nil
 	}
 	if err != nil {
-		return false, nil, err
+		return false, nil, fmt.Errorf("delete track %s: %w", id.UUID(), err)
 	}
 	return true, ref, nil
 }
@@ -490,13 +493,17 @@ func scanAudioRefSet(rows pgx.Rows) (map[string]bool, error) {
 }
 
 func scanOwnedTrackRefs(rows pgx.Rows) ([]domain.OwnedTrackRef, error) {
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.OwnedTrackRef, error) {
+	refs, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.OwnedTrackRef, error) {
 		var ref domain.OwnedTrackRef
 		if err := row.Scan(&ref.ID, &ref.Title, &ref.Artist, &ref.AcquisitionStatus, &ref.TrackNumber, &ref.ISRC, &ref.Album); err != nil {
 			return domain.OwnedTrackRef{}, fmt.Errorf("scan owned track ref: %w", err)
 		}
 		return ref, nil
 	})
+	if err != nil {
+		return nil, fmt.Errorf("collect owned track refs: %w", err)
+	}
+	return refs, nil
 }
 
 type scanner interface {
@@ -619,9 +626,13 @@ func scanTrack(row pgx.Row) (*domain.Track, error) {
 }
 
 func collectTracks(rows pgx.Rows) ([]*domain.Track, error) {
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (*domain.Track, error) {
+	tracks, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (*domain.Track, error) {
 		return scanTrackColumns(row)
 	})
+	if err != nil {
+		return nil, fmt.Errorf("collect tracks: %w", err)
+	}
+	return tracks, nil
 }
 
 func pageTotal(ctx context.Context, pool *pgxpool.Pool, limit, offset, got int, countSQL string, args ...any) (int, error) {

@@ -251,7 +251,10 @@ func lockOwnedPlaylist(ctx context.Context, tx pgx.Tx, playlistId domain.Playlis
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ErrPlaylistNotOwned
 	}
-	return err
+	if err != nil {
+		return fmt.Errorf("lock playlist %s: %w", playlistId.UUID(), err)
+	}
+	return nil
 }
 
 func (r *PgxPlaylistRepository) Exists(ctx context.Context, playlistId domain.PlaylistId, userId shared.UserId) (bool, error) {
@@ -307,7 +310,7 @@ func (r *PgxPlaylistRepository) AddTrack(ctx context.Context, userId shared.User
 			playlistId.UUID(), trackId.UUID(),
 		)
 		if err != nil {
-			return err
+			return fmt.Errorf("add track %s to playlist %s: %w", trackId.UUID(), playlistId.UUID(), err)
 		}
 		if tag.RowsAffected() == 0 {
 			return domain.ErrTrackAlreadyInPlaylist
@@ -324,7 +327,7 @@ func requireWithinTrackCap(ctx context.Context, tx pgx.Tx, playlistId domain.Pla
 		playlistId.UUID(),
 	).Scan(&total)
 	if err != nil {
-		return err
+		return fmt.Errorf("count tracks of playlist %s: %w", playlistId.UUID(), err)
 	}
 	if total > maxPlaylistTracks {
 		return domain.ErrPlaylistFull
@@ -375,7 +378,7 @@ func (r *PgxPlaylistRepository) AddTracks(ctx context.Context, userId shared.Use
 	err := r.withOwnedPlaylistLock(ctx, playlistId, userId, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, addTracksSQL, playlistId.UUID(), trackIdUUIDs(trackIds))
 		if err != nil {
-			return err
+			return fmt.Errorf("insert tracks into playlist %s: %w", playlistId.UUID(), err)
 		}
 		inserted, err := collectUUIDSet(rows)
 		if err != nil {
@@ -408,14 +411,17 @@ func (r *PgxPlaylistRepository) RemoveTrack(ctx context.Context, userId shared.U
 			return nil
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("remove track %s from playlist %s: %w", trackId.UUID(), playlistId.UUID(), err)
 		}
 		removed = true
 		_, err = tx.Exec(ctx,
 			`UPDATE playlist_tracks SET position = position - 1 WHERE playlist_id = $1 AND position > $2`,
 			playlistId.UUID(), position,
 		)
-		return err
+		if err != nil {
+			return fmt.Errorf("close the position gap in playlist %s: %w", playlistId.UUID(), err)
+		}
+		return nil
 	})
 	if err != nil {
 		return false, err
@@ -439,7 +445,10 @@ func (r *PgxPlaylistRepository) RemoveTracks(ctx context.Context, userId shared.
 			WHERE playlist_id = $1 AND position > $3`,
 			playlistId.UUID(), positions, positions[0],
 		)
-		return err
+		if err != nil {
+			return fmt.Errorf("close the position gaps in playlist %s: %w", playlistId.UUID(), err)
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -453,11 +462,11 @@ func deleteMemberships(ctx context.Context, tx pgx.Tx, playlistId domain.Playlis
 		playlistId.UUID(), trackIdUUIDs(trackIds),
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("delete tracks from playlist %s: %w", playlistId.UUID(), err)
 	}
 	removed, err := pgx.CollectRows(rows, pgx.RowToStructByName[removedMembership])
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("collect the removed memberships of playlist %s: %w", playlistId.UUID(), err)
 	}
 	gone := make(map[uuid.UUID]bool, len(removed))
 	positions := make([]int, len(removed))
@@ -498,7 +507,10 @@ func (r *PgxPlaylistRepository) ReorderTracks(ctx context.Context, userId shared
 			WHERE pt.playlist_id = $1 AND pt.track_id = u.track_id AND pt.position <> u.position`,
 			playlistId.UUID(), ids, positions,
 		)
-		return err
+		if err != nil {
+			return fmt.Errorf("reorder playlist %s: %w", playlistId.UUID(), err)
+		}
+		return nil
 	})
 }
 
@@ -512,7 +524,7 @@ func requirePlanCoversMembership(ctx context.Context, tx pgx.Tx, playlistId doma
 		playlistId.UUID(), maxPlaylistTracks,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("read the members of playlist %s: %w", playlistId.UUID(), err)
 	}
 	members, err := collectUUIDSet(rows)
 	if err != nil {
@@ -543,7 +555,7 @@ func trackIdUUIDs(ids []domain.TrackId) []uuid.UUID {
 func collectUUIDSet(rows pgx.Rows) (map[uuid.UUID]bool, error) {
 	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("collect playlist track ids: %w", err)
 	}
 	return uuidSet(ids), nil
 }

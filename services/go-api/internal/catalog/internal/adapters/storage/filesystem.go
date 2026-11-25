@@ -47,7 +47,10 @@ func (s *FilesystemAudioStore) Exists(ctx context.Context, audioRef string) (boo
 		if os.IsNotExist(err) {
 			return false, nil
 		}
-		return err == nil, err
+		if err != nil {
+			return false, fmt.Errorf("stat audio %s: %w", path, err)
+		}
+		return true, nil
 	}, nil)
 }
 
@@ -91,20 +94,23 @@ func copyThenRemoveAcrossFilesystems(ctx context.Context, sourcePath, destPath s
 func copyFile(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {
-		return err
+		return fmt.Errorf("open source %s: %w", src, err)
 	}
 	defer in.Close()
 
 	out, err := os.Create(dst)
 	if err != nil {
-		return err
+		return fmt.Errorf("create %s: %w", dst, err)
 	}
 	if _, err := io.Copy(out, in); err != nil {
 		out.Close()
 		os.Remove(dst)
-		return err
+		return fmt.Errorf("copy %s to %s: %w", src, dst, err)
 	}
-	return out.Close()
+	if err := out.Close(); err != nil {
+		return fmt.Errorf("close %s: %w", dst, err)
+	}
+	return nil
 }
 
 type openedAudio struct {
@@ -137,7 +143,7 @@ func openAudio(path string) (openedAudio, error) {
 	stat, err := file.Stat()
 	if err != nil {
 		file.Close()
-		return openedAudio{}, err
+		return openedAudio{}, fmt.Errorf("stat audio %s: %w", path, err)
 	}
 	return openedAudio{file: file, size: stat.Size()}, nil
 }
@@ -164,7 +170,10 @@ func (s *FilesystemAudioStore) Delete(ctx context.Context, audioRef string) erro
 		if os.IsNotExist(err) {
 			return struct{}{}, nil
 		}
-		return struct{}{}, err
+		if err != nil {
+			return struct{}{}, fmt.Errorf("remove audio %s: %w", path, err)
+		}
+		return struct{}{}, nil
 	}, nil)
 	return err
 }
@@ -196,7 +205,10 @@ func walkObjectAges(ctx context.Context, baseDir, root string) ([]ports.ObjectAg
 		objects = append(objects, obj)
 		return nil
 	})
-	return objects, err
+	if err != nil {
+		return objects, fmt.Errorf("walk audio objects under %s: %w", root, err)
+	}
+	return objects, nil
 }
 
 func objectAgeFor(ctx context.Context, baseDir, path string, entry os.DirEntry, walkErr error) (ports.ObjectAge, bool, error) {
@@ -204,18 +216,18 @@ func objectAgeFor(ctx context.Context, baseDir, path string, entry os.DirEntry, 
 		return ports.ObjectAge{}, false, walkErrOrNilIfMissing(walkErr)
 	}
 	if ctx.Err() != nil {
-		return ports.ObjectAge{}, false, ctx.Err()
+		return ports.ObjectAge{}, false, fmt.Errorf("list audio objects: %w", ctx.Err())
 	}
 	if entry.IsDir() {
 		return ports.ObjectAge{}, false, nil
 	}
 	info, err := entry.Info()
 	if err != nil {
-		return ports.ObjectAge{}, false, err
+		return ports.ObjectAge{}, false, fmt.Errorf("read modification time of %s: %w", path, err)
 	}
 	rel, err := filepath.Rel(baseDir, path)
 	if err != nil {
-		return ports.ObjectAge{}, false, err
+		return ports.ObjectAge{}, false, fmt.Errorf("relate %s to the audio directory: %w", path, err)
 	}
 	return ports.ObjectAge{AudioRef: filepath.ToSlash(rel), LastModified: info.ModTime()}, true, nil
 }

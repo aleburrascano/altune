@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -15,7 +16,7 @@ type StuckScheduler struct {
 func (s *StuckScheduler) Schedule(ctx context.Context, _ shared.UserId, _ domain.TrackId, _ string) error {
 	s.Deadline, s.HasDeadline = ctx.Deadline()
 	<-ctx.Done()
-	return ctx.Err()
+	return fmt.Errorf("stuck scheduler released: %w", ctx.Err())
 }
 
 func AssertScheduleDeadline(t TB, sched *StuckScheduler, start time.Time, timeout time.Duration) {

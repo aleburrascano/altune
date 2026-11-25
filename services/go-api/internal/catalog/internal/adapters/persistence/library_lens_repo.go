@@ -105,7 +105,10 @@ func (r *PgxLibraryLensRepository) ListAlbumsForUser(
 	albums, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.AlbumGroup, error) {
 		var g domain.AlbumGroup
 		err := row.Scan(&g.Key, &g.Album, &g.Artist, &g.ArtworkURL, &g.Year, &g.TrackCount, &g.MostRecentAddedAt)
-		return g, err
+		if err != nil {
+			return g, fmt.Errorf("scan library album row: %w", err)
+		}
+		return g, nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("scan library albums: %w", classifyDBError(err))
@@ -137,7 +140,10 @@ func (r *PgxLibraryLensRepository) ListArtistsForUser(
 	artists, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.ArtistGroup, error) {
 		var g domain.ArtistGroup
 		err := row.Scan(&g.Key, &g.Artist, &g.ArtworkURL, &g.TrackCount, &g.MostRecentAddedAt)
-		return g, err
+		if err != nil {
+			return g, fmt.Errorf("scan library artist row: %w", err)
+		}
+		return g, nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("scan library artists: %w", classifyDBError(err))
