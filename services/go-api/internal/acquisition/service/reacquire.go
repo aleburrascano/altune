@@ -21,6 +21,7 @@ func (p reacquirePolicy) reconcile(ctx context.Context, track *ports.TrackSnapsh
 		if err := p.revertToPending(ctx, track); err != nil {
 			return false, err
 		}
+	case ports.TrackPending:
 	case ports.TrackFailed:
 		slog.InfoContext(ctx, "acquire_retrying_failed", "track_id", track.ID.String())
 		if err := p.revertToPending(ctx, track); err != nil {

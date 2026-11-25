@@ -55,6 +55,7 @@ func (l *jobLog) countCompletion(state ports.JobState) {
 		l.succeeded.Add(1)
 	case ports.JobFailed:
 		l.failed.Add(1)
+	case ports.JobQueued, ports.JobRunning, ports.JobCancelled, ports.JobRetrying, ports.JobKept:
 	}
 }
 

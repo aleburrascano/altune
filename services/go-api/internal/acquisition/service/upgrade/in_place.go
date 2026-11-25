@@ -172,6 +172,7 @@ func userUploadVerdict(record ports.InPlaceRecord, finding Finding) ports.InPlac
 		record.Grade = string(grade.AUser)
 	case grade.Contradicts, grade.Unsupported:
 		record.UserUploadMismatch = true
+	case grade.Silent, grade.Approximates:
 	}
 	return record
 }

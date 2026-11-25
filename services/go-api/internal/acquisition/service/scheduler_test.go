@@ -82,8 +82,8 @@ func committedTrack(t *testing.T, ledger *acquisitiontest.Ledger, id shared.Trac
 
 type emptyLedger struct{}
 
-func (emptyLedger) Get(context.Context, shared.TrackId, shared.UserId) (*acqports.TrackSnapshot, error) {
-	return nil, nil
+func (emptyLedger) Get(ctx context.Context, id shared.TrackId, userId shared.UserId) (*acqports.TrackSnapshot, error) {
+	return acquisitiontest.NewLedger().Get(ctx, id, userId)
 }
 
 func (emptyLedger) AudioRefInUse(context.Context, string, shared.TrackId) (bool, error) {

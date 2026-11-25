@@ -2214,9 +2214,9 @@ func TestExecuteReplace_ATransientOutageOnTheLastAttemptFails(t *testing.T) {
 
 func TestReplaceGated_ATransientOutageBelowTheCapIsNotRetried(t *testing.T) {
 	f := newReplaceFixture(t, transientSearchFailure(), 1)
-	snapshot, err := f.svc.loadTrack(f.ctx, f.userId, f.track.ID)
-	if err != nil || snapshot == nil {
-		t.Fatalf("load track: %v", err)
+	snapshot, found, err := f.svc.loadTrack(f.ctx, f.userId, f.track.ID)
+	if err != nil || !found {
+		t.Fatalf("load track: found = %v, err = %v", found, err)
 	}
 	_, err = f.svc.ReplaceGated(f.ctx, f.userId, snapshot, upgrade.Gate{})
 

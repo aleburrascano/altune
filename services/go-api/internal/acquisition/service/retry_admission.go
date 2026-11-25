@@ -16,13 +16,13 @@ const (
 	ReacquireCooldown = 60 * time.Second
 )
 
-type cooldownRefusal struct {
+type cooldownRefusedError struct {
 	wait time.Duration
 }
 
-func (e cooldownRefusal) Error() string             { return acqdomain.ErrCooldownActive.Error() }
-func (e cooldownRefusal) Unwrap() error             { return acqdomain.ErrCooldownActive }
-func (e cooldownRefusal) RetryAfter() time.Duration { return max(e.wait, time.Second) }
+func (e cooldownRefusedError) Error() string             { return acqdomain.ErrCooldownActive.Error() }
+func (e cooldownRefusedError) Unwrap() error             { return acqdomain.ErrCooldownActive }
+func (e cooldownRefusedError) RetryAfter() time.Duration { return max(e.wait, time.Second) }
 
 const releaseTimeout = 5 * time.Second
 
@@ -38,7 +38,7 @@ func (g cooldownGate) run(ctx context.Context, trackID shared.TrackId, schedule 
 		return fmt.Errorf("%s admission: %w", g.kind, err)
 	}
 	if !ok {
-		return cooldownRefusal{wait: wait}
+		return cooldownRefusedError{wait: wait}
 	}
 	if err := schedule(); err != nil {
 		g.release(ctx, trackID, at)
