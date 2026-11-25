@@ -915,7 +915,13 @@ func TestPgxTrackRepo_UpdateKeepsISRCCatalogLengthAndLengthFlag(t *testing.T) {
 		t.Fatal(err)
 	}
 	stored.AdoptISRC("GBAYE0601498")
-	stored.RecordAudioLength(137, 10)
+	audioLength, err := shared.TrackLengthOf(137)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !stored.RecordAudioLength(audioLength) {
+		t.Fatal("RecordAudioLength = false, want the 137 s file checked against the 235 s catalog length")
+	}
 	if err := repo.Update(ctx, stored, stored.Version); err != nil {
 		t.Fatalf("Update: %v", err)
 	}

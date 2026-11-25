@@ -199,7 +199,7 @@ func validateAddTrackInput(input AddTrackInput, now time.Time) error {
 		return domain.NewValidationError("track_number exceeds maximum (int4)")
 	}
 	if input.DurationSeconds != nil {
-		if err := domain.ValidateDurationSeconds(*input.DurationSeconds); err != nil {
+		if _, err := domain.TrackLengthOf(*input.DurationSeconds); err != nil {
 			return err
 		}
 	}

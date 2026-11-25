@@ -1152,3 +1152,73 @@ func TestTrack_RejectAudioSourceIsIdempotentAndBounded(t *testing.T) {
 		t.Errorf("keys = %v, want the 25 most recent rejections %v", track.RejectedSourceKeys, want)
 	}
 }
+
+func audioLength(t *testing.T, seconds float64) shared.TrackLength {
+	t.Helper()
+	length, err := shared.TrackLengthOf(seconds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return length
+}
+
+func TestTrack_RecordAudioLengthFlagsAudioThatIsNotTheCatalogRecording(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		catalog  float64
+		audio    float64
+		wantFlag bool
+	}{
+		{"five seconds off a short track", 100, 105, false},
+		{"just past five seconds off a short track", 100, 105.1, true},
+		{"three percent off a long track", 400, 388, false},
+		{"just past three percent off a long track", 400, 387.9, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			track := &catalog.Track{AudioLengthMismatch: !tt.wantFlag}
+			if err := track.SetCatalogDuration(tt.catalog); err != nil {
+				t.Fatal(err)
+			}
+
+			if !track.RecordAudioLength(audioLength(t, tt.audio)) {
+				t.Fatalf("RecordAudioLength(%v s) = false, want the audio checked against the %v s catalog length", tt.audio, tt.catalog)
+			}
+			if track.AudioLengthMismatch != tt.wantFlag {
+				t.Errorf("AudioLengthMismatch = %v, want %v", track.AudioLengthMismatch, tt.wantFlag)
+			}
+		})
+	}
+}
+
+func TestTrack_RecordAudioLengthLeavesTheFlagWhileEitherLengthIsUnknown(t *testing.T) {
+	t.Parallel()
+	known, unknown, implausible := 200.0, 0.0, -1.0
+	tests := []struct {
+		name    string
+		catalog *float64
+		audio   float64
+	}{
+		{"no catalog length", nil, 200},
+		{"a stored catalog length of zero", &unknown, 200},
+		{"a stored catalog length no recording can have", &implausible, 200},
+		{"no measured length", &known, 0},
+	}
+	for _, tt := range tests {
+		for name, flagged := range map[string]bool{"flagged": true, "unflagged": false} {
+			t.Run(tt.name+", "+name, func(t *testing.T) {
+				t.Parallel()
+				track := &catalog.Track{CatalogDurationSeconds: tt.catalog, AudioLengthMismatch: flagged}
+
+				if track.RecordAudioLength(audioLength(t, tt.audio)) {
+					t.Error("RecordAudioLength = true, want nothing compared while a length is unknown")
+				}
+				if track.AudioLengthMismatch != flagged {
+					t.Errorf("AudioLengthMismatch = %v, want it left at %v", track.AudioLengthMismatch, flagged)
+				}
+			})
+		}
+	}
+}

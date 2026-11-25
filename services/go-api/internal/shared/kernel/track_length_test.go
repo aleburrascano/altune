@@ -71,6 +71,8 @@ func TestTrackLength_SameRecordingAllowsFiveSecondsOrThreePercentOfTheExpectedLe
 		{"three percent short on a long track", 400, 388, true},
 		{"just past three percent long on a long track", 400, 412.1, false},
 		{"just past three percent short on a long track", 400, 387.9, false},
+		{"just inside five seconds where three percent meets the floor", 500.0 / 3, 500.0/3 + 4.999, true},
+		{"just past five seconds where three percent meets the floor", 500.0 / 3, 500.0/3 + 5.001, false},
 		{"three percent of the longer expected length covers the gap", 420, 407.5, true},
 		{"three percent of the shorter expected length does not", 407.5, 420, false},
 	}
@@ -78,26 +80,6 @@ func TestTrackLength_SameRecordingAllowsFiveSecondsOrThreePercentOfTheExpectedLe
 		t.Run(tt.name, func(t *testing.T) {
 			if got := lengthOf(t, tt.expected).SameRecording(lengthOf(t, tt.actual)); got != tt.want {
 				t.Errorf("%v s SameRecording(%v s) = %v, want %v", tt.expected, tt.actual, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestTrackLength_AllowanceIsFiveSecondsOrThreePercentOfTheLength(t *testing.T) {
-	tests := []struct {
-		name    string
-		seconds float64
-		want    float64
-	}{
-		{"an unknown length gets the five second floor", 0, 5},
-		{"a short track gets the five second floor", 100, 5},
-		{"where three percent meets the floor", 500.0 / 3, 5},
-		{"a long track gets three percent", 400, 12},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := lengthOf(t, tt.seconds).Allowance(); math.Abs(got-tt.want) > 1e-9 {
-				t.Errorf("%v s Allowance() = %v, want %v", tt.seconds, got, tt.want)
 			}
 		})
 	}

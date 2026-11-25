@@ -24,7 +24,7 @@ func TrackLengthOf(seconds float64) (TrackLength, error) {
 
 func (l TrackLength) Known() bool { return l.seconds > 0 }
 
-func (l TrackLength) Allowance() float64 {
+func (l TrackLength) allowance() float64 {
 	return math.Max(sameRecordingSlackSeconds, l.seconds*sameRecordingShareOfLength)
 }
 
@@ -32,5 +32,5 @@ func (l TrackLength) SameRecording(actual TrackLength) bool {
 	if !l.Known() || !actual.Known() {
 		return false
 	}
-	return math.Abs(l.seconds-actual.seconds) <= l.Allowance()
+	return math.Abs(l.seconds-actual.seconds) <= l.allowance()
 }
