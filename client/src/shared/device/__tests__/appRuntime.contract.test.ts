@@ -3,6 +3,8 @@ import { ExecutionEnvironment } from 'expo-constants';
 import appJson from '@/../app.json';
 import {
   type AppRuntime,
+  type ExpoSources,
+  createExpoAppRuntime,
   appVersion,
   appVersionLabel,
   declaredAppScheme,
@@ -61,5 +63,43 @@ describe('AppRuntime contract: Expo Go', () => {
       executionEnvironment: () => ExecutionEnvironment.StoreClient,
     });
     expect(isExpoGoRuntime()).toBe(true);
+  });
+});
+
+describe('the expo adapter over the sources expo gives it', () => {
+  const NO_UPDATES = { isEnabled: false, isEmbeddedLaunch: true, updateId: null };
+
+  function adapterOver(sources: Partial<ExpoSources['constants']> = {}): AppRuntime {
+    return createExpoAppRuntime({
+      constants: { expoConfig: null, executionEnvironment: 'bare', ...sources },
+      updates: NO_UPDATES,
+    });
+  }
+
+  it('reports no version and no scheme when the app has no expo config', () => {
+    const runtime = adapterOver({ expoConfig: null });
+    expect(runtime.manifestVersion()).toBeUndefined();
+    expect(runtime.declaredScheme()).toBeUndefined();
+  });
+
+  it('reports the version and scheme the config declares', () => {
+    const runtime = adapterOver({ expoConfig: { version: '3.1.4', scheme: ['a', 'b'] } });
+    expect(runtime.manifestVersion()).toBe('3.1.4');
+    expect(runtime.declaredScheme()).toEqual(['a', 'b']);
+  });
+
+  it('reports the execution environment expo names', () => {
+    expect(adapterOver({ executionEnvironment: 'storeClient' }).executionEnvironment()).toBe(
+      'storeClient',
+    );
+  });
+
+  it('reports the updates state expo holds', () => {
+    const updates = { isEnabled: true, isEmbeddedLaunch: false, updateId: 'abc' };
+    const runtime = createExpoAppRuntime({
+      constants: { expoConfig: null, executionEnvironment: 'bare' },
+      updates,
+    });
+    expect(runtime.updates()).toEqual(updates);
   });
 });

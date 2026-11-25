@@ -1,7 +1,9 @@
+import { createExpoAppRuntime } from '@shared/device/adapters/expoAppRuntime';
 import { isWebPlatform } from '@shared/device/core/isWebPlatform';
 import { webOrigin } from '@shared/device/core/webOrigin';
 
-export { isWebPlatform, webOrigin };
+export { createExpoAppRuntime, isWebPlatform, webOrigin };
+export type { ExpoSources } from '@shared/device/adapters/expoAppRuntime';
 export type { AppRuntime, Build, UpdatesState } from '@shared/device/ports/appRuntime';
 export {
   appVersion,
