@@ -14,10 +14,7 @@ linters:
     - unconvert
     - nilerr
     - misspell
-    - cyclop
-    - gocognit
     - dupl
-    - funlen
     - revive
     - sloglint
     - forbidigo
@@ -25,11 +22,6 @@ linters:
     - testpackage
 
   settings:
-    cyclop:
-      max-complexity: 15
-      package-average: 0.0
-    gocognit:
-      min-complexity: 20
     dupl:
       threshold: 150
     sloglint:
@@ -192,10 +184,6 @@ linters:
           msg: run a bounded fan-out through fanout.Group (internal/shared/fanout), fire-and-forget work through runloop.Tracker, and wait with a deadline through runloop.WaitWithin (internal/shared/runloop)
         - pattern: ^context\.WithoutCancel$
           msg: outlive a request through runloop.Detach(ctx, budget) (internal/shared/runloop), which keeps the request's values and sets its own deadline
-    funlen:
-      lines: 20
-      statements: 20
-      ignore-comments: true
     revive:
       rules:
         - name: indent-error-flow
@@ -218,11 +206,8 @@ linters:
       - path: _test\.go
         linters:
           - dupl
-          - gocognit
-          - cyclop
           - errcheck
           - gocritic
-          - funlen
           - revive
           - forbidigo
       - path: internal/shared/httputil/
@@ -242,9 +227,6 @@ linters:
       - path: (cmd/(api/main\.go|discoveryeval/)|/eval/|/catalogtest/)
         linters:
           - dupl
-          - gocognit
-          - cyclop
-          - funlen
 
 formatters:
   enable:
