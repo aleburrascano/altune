@@ -3,6 +3,7 @@ package judgeshadow
 import (
 	"altune/go-api/internal/acquisition/internal/core/judge"
 	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"log/slog"
 )
@@ -17,11 +18,7 @@ const (
 )
 
 func Log(ctx context.Context, target judge.Target, trackID string, kept *ports.AudioCandidate, keptProbedSeconds float64, candidates []ports.AudioCandidate) {
-	defer func() {
-		if r := recover(); r != nil {
-			slog.ErrorContext(ctx, "acquisition.judge_shadow_panic", "track_id", trackID, "panic", r)
-		}
-	}()
+	defer runloop.RecoverContext(ctx, "acquisition.judge_shadow_panic", "track_id", trackID)
 	keptURL := ""
 	if kept != nil {
 		keptURL = kept.URL
