@@ -3,30 +3,13 @@ import { Text } from 'react-native';
 import type { ReactNode } from 'react';
 import { act, renderRouter, screen } from 'expo-router/testing-library';
 
-import { PlaybackContext } from '@shared/playback/view/usePlayback';
-import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { PlaybackContext, type PlaybackContextValue } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';
+import { setWindowWidth } from '@testing/setWindowWidth';
 
 import PlayerLayout from '@/app/player/_layout';
 
 const { __http } = require('@testing/doubles/fetch.js');
-
-jest.mock('decode-uri-component', () => ({
-  __esModule: true,
-  default: (s: string) => {
-    try {
-      return decodeURIComponent(s);
-    } catch {
-      return s;
-    }
-  },
-}));
-
-let mockWindowWidth = 1440;
-jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
-  __esModule: true,
-  default: () => ({ width: mockWindowWidth, height: 900, scale: 2, fontScale: 1 }),
-}));
 
 const RN = require('react-native');
 const NATIVE_OS: string = RN.Platform.OS;
@@ -42,7 +25,6 @@ beforeEach(() => {
 
 afterEach(() => {
   RN.Platform.OS = NATIVE_OS;
-  mockWindowWidth = 1440;
   client.clear();
 });
 
@@ -63,7 +45,7 @@ const ROUTES = {
 
 async function openPlayer(initialUrl: string, { os, width }: { os: string; width: number }) {
   RN.Platform.OS = os;
-  mockWindowWidth = width;
+  setWindowWidth(width);
   const result = renderRouter(ROUTES, { initialUrl, wrapper });
   await act(async () => {});
   return result;
@@ -193,7 +175,7 @@ describe('player layout: does not mount keyboard shortcuts on its own', () => {
   async function openApp(initialUrl: string, { os, width }: { os: string; width: number }) {
     const playback = playingControls();
     RN.Platform.OS = os;
-    mockWindowWidth = width;
+    setWindowWidth(width);
     rendered = renderRouter(
       {
         _layout: RootStack,

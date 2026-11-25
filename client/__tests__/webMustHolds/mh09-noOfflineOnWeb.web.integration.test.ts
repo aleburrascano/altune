@@ -2,14 +2,12 @@ import * as React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react-native';
 import { asTrackId } from '@shared/catalog';
-import { applyServerEvent } from '@shared/events/shell/applyServerEvent';
-import { notifyIdentityChange } from '@shared/session/signOutCleanup';
-import { readOwner } from '@shared/offline/state/pinnedIndex';
-import { usePinnedStore } from '@shared/offline/state/pinnedStore';
-import { OfflineReconcileBridge } from '@shared/offline/view/OfflineReconcileBridge';
+import { applyServerEvent } from '@shared/events';
+import { notifyIdentityChange } from '@shared/session';
+import { OfflineReconcileBridge, readOwner, usePinnedStore } from '@shared/offline';
 import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
 import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
-import { SettingsScreen } from '@features/settings/ui/SettingsScreen';
+import { SettingsScreen } from '@features/settings';
 
 const INDEX_URI = 'file:///document/offline/pinned.json';
 
@@ -28,7 +26,7 @@ describe('mh09: the pinned-store machinery never starts on web', () => {
         INDEX_URI,
         JSON.stringify({ old: { trackId: 'old', status: 'failed' } }),
       );
-      const store = require('@shared/offline/state/pinnedStore').usePinnedStore;
+      const store = require('@shared/offline').usePinnedStore;
       loaded = { ...store.getState().entries };
       store.getState().pin(asTrackId('t1'));
       working = store.getState().isWorking;

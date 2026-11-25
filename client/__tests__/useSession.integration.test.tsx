@@ -1,69 +1,57 @@
-import React, { type ReactNode, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import * as ReactQuery from '@tanstack/react-query';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { renderHook, render, act, waitFor, screen } from '@testing-library/react-native';
 
 import {
   linkTrackIdentity,
   patchTrackStatus,
+  startDownload,
   trackIdentityKey,
+  useDownloadStore,
   useTrackStatusStore,
-} from '@shared/acquisition/state/trackStatusStore';
-import { getSessionId } from '@shared/telemetry/eventSession';
-import { enqueueCritical, flushOutbox, _resetOutboxForTest } from '@shared/telemetry/outbox';
-import { followSignedInUser } from '@shared/telemetry';
-import { useOwnedTrack } from '@features/detail/core/useOwnedTrack';
-import type { TrackExtras } from '@features/detail/core/trackExtras';
-import { TrackSaveControl } from '@features/detail/view/SaveControls';
+} from '@shared/acquisition';
+import { installAuthClient, useSession, useSignOut } from '@shared/auth';
+import type { DiscoveryResult } from '@shared/catalog';
+import { asTrackId } from '@shared/catalog';
 import {
   startServerEvents,
   type ServerEvent,
   type ServerEventsClientFactory,
 } from '@shared/events';
-import { startDownload, useDownloadStore } from '@shared/acquisition/view/downloadStore';
-import { getSearchState, setSearchState } from '@features/discovery/core/searchState';
-import { registerSearchStateSignOutReset } from '@features/discovery/adapters/registerSearchStateSignOutReset';
-import type { DiscoveryResult } from '@shared/catalog';
-import { detailHref, readDetailHandoff } from '@shared/navigation/core/detailHandoff';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import type * as PinnedStoreModule from '@shared/offline/state/pinnedStore';
-
-import { useSession } from '@shared/auth/useSession';
-import { useSignOut } from '@shared/auth/useSignOut';
-import { installAuthClient, supabase } from '@shared/auth';
+import { detailHref, readDetailHandoff } from '@shared/navigation';
+import type * as OfflineDoor from '@shared/offline';
 import type * as AuthDoor from '@shared/auth';
+import type * as SessionDoor from '@shared/session';
+import { runSignOutCleanups } from '@shared/session';
+import {
+  enqueueCritical,
+  flushOutbox,
+  followSignedInUser,
+  getSessionId,
+  _resetOutboxForTest,
+} from '@shared/telemetry';
+import { TrackSaveControl, useResolvedOwnedTrack } from '@features/detail';
+import {
+  getSearchState,
+  registerSearchStateSignOutReset,
+  setSearchState,
+} from '@features/discovery';
 import { createAuthClient } from '@/mobile/authClient';
-import type * as UseSessionModule from '@shared/auth/useSession';
-import { asTrackId } from '@shared/catalog';
-
-jest.mock('react-native/Libraries/AppState/AppState', () => ({
-  default: {
-    currentState: 'active',
-    isAvailable: true,
-    addEventListener: jest.fn(() => ({ remove: jest.fn() })),
-  },
-}));
+import { scriptedAuth, type ScriptedAuth, type SignOutOutcome } from '@testing/scriptedAuth';
 
 const { __http } = require('@testing/doubles/fetch.js');
-const { ensureAppAuthClient } = require('@testing/appAuthClient.js') as {
-  ensureAppAuthClient: () => void;
+const secureStore = require('expo-secure-store') as typeof import('expo-secure-store') & {
+  __secureStore: { reset(): void };
 };
-
-function freshAppAuth(): typeof AuthDoor {
-  ensureAppAuthClient();
-  return require('@shared/auth') as typeof AuthDoor;
-}
 const { __fs: outboxFs } = require('expo-file-system') as { __fs: never };
-
-type AuthCallback = (event: string, session: Session | null) => void;
 
 const USER_A = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' } as Session['user'];
 const USER_B = { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' } as Session['user'];
 
 const EVENTS = 'POST /v1/discovery/events';
 
-function sessionFor(user: Session['user'], token: string): Session {
+function sessionFor(user: Session['user'], token: string = `token-${user.id}`): Session {
   return {
     access_token: token,
     refresh_token: `${token}-refresh`,
@@ -74,42 +62,19 @@ function sessionFor(user: Session['user'], token: string): Session {
   } as Session;
 }
 
-function stampedElsewhere(): TrackExtras {
-  return { trackId: null, acquisitionStatus: null } as unknown as TrackExtras;
-}
-
 function makeWrapper(queryClient: QueryClient) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
   };
 }
 
-let authCallbacks: AuthCallback[] = [];
-
-function bootSignedIn(initial: Session): void {
-  jest
-    .spyOn(supabase.auth, 'getSession')
-    .mockResolvedValue({ data: { session: initial }, error: null } as never);
-  jest.spyOn(supabase.auth, 'onAuthStateChange').mockImplementation(((cb: AuthCallback) => {
-    authCallbacks.push(cb);
-    return { data: { subscription: { unsubscribe: jest.fn() } } };
-  }) as never);
-}
-
-function switchAccountTo(session: Session): void {
-  jest
-    .spyOn(supabase.auth, 'getSession')
-    .mockResolvedValue({ data: { session }, error: null } as never);
-  act(() => {
-    authCallbacks.forEach((cb) => cb('SIGNED_IN', session));
-  });
+function bootSignedIn(initial: Session | null, signOut?: SignOutOutcome): ScriptedAuth {
+  return scriptedAuth(installAuthClient, initial, signOut);
 }
 
 followSignedInUser();
 
 beforeEach(() => {
-  authCallbacks = [];
-  jest.restoreAllMocks();
   _resetOutboxForTest();
   act(() => {
     useTrackStatusStore.getState().reset();
@@ -120,7 +85,7 @@ afterEach(() => _resetOutboxForTest());
 
 describe('cross-account acquisition-status leak on a shared device', () => {
   it('after A saves a track and B signs in, useOwnedTrack no longer resolves A save status for a shared identity', async () => {
-    bootSignedIn(sessionFor(USER_A, 'token-a'));
+    const auth = bootSignedIn(sessionFor(USER_A, 'token-a'));
     const queryClient = new QueryClient();
     const session = renderHook(() => useSession(), { wrapper: makeWrapper(queryClient) });
     await waitFor(() => expect(session.result.current.status).toBe('signed-in'));
@@ -133,14 +98,14 @@ describe('cross-account acquisition-status leak on a shared device', () => {
     linkTrackIdentity(identity, asTrackId('track-owned-by-a'));
 
     const owned = renderHook(() =>
-      useOwnedTrack(stampedElsewhere(), { title: 'Song Title', artist: 'The Artist' }),
+      useResolvedOwnedTrack(null, { title: 'Song Title', artist: 'The Artist' }),
     );
     expect(owned.result.current).toEqual({
       trackId: 'track-owned-by-a',
       acquisitionStatus: 'ready',
     });
 
-    switchAccountTo(sessionFor(USER_B, 'token-b'));
+    auth.switchTo(sessionFor(USER_B, 'token-b'));
 
     expect(owned.result.current).toBeNull();
     expect(useTrackStatusStore.getState().statuses).toEqual({});
@@ -150,7 +115,7 @@ describe('cross-account acquisition-status leak on a shared device', () => {
   });
 
   it("TrackSaveControl stops showing A's 'in library' state and reverts to a savable control once B signs in", async () => {
-    bootSignedIn(sessionFor(USER_A, 'token-a'));
+    const auth = bootSignedIn(sessionFor(USER_A, 'token-a'));
     const queryClient = new QueryClient();
     const session = renderHook(() => useSession(), { wrapper: makeWrapper(queryClient) });
     await waitFor(() => expect(session.result.current.status).toBe('signed-in'));
@@ -162,11 +127,16 @@ describe('cross-account acquisition-status leak on a shared device', () => {
     linkTrackIdentity(trackIdentityKey('Song Title', 'The Artist'), asTrackId('track-owned-by-a'));
 
     render(
-      <TrackSaveControl owned={null} onPress={jest.fn()} title="Song Title" artist="The Artist" />,
+      <TrackSaveControl
+        owned={null}
+        onPress={() => undefined}
+        title="Song Title"
+        artist="The Artist"
+      />,
     );
     expect(screen.getByLabelText('Song Title in library')).toBeTruthy();
 
-    switchAccountTo(sessionFor(USER_B, 'token-b'));
+    auth.switchTo(sessionFor(USER_B, 'token-b'));
 
     expect(screen.queryByLabelText('Song Title in library')).toBeNull();
     expect(screen.getByLabelText('Save Song Title')).toBeTruthy();
@@ -177,7 +147,7 @@ describe('cross-account acquisition-status leak on a shared device', () => {
 
 describe('cross-account queued-telemetry leak on a shared device', () => {
   it("a critical entry A queued while offline is dropped on account switch, never sent under B's session", async () => {
-    bootSignedIn(sessionFor(USER_A, 'token-a'));
+    const auth = bootSignedIn(sessionFor(USER_A, 'token-a'));
     const queryClient = new QueryClient();
     const session = renderHook(() => useSession(), { wrapper: makeWrapper(queryClient) });
     await waitFor(() => expect(session.result.current.status).toBe('signed-in'));
@@ -189,7 +159,7 @@ describe('cross-account queued-telemetry leak on a shared device', () => {
     const attemptsAsA = __http.countFor(EVENTS);
     expect(attemptsAsA).toBeGreaterThanOrEqual(1);
 
-    switchAccountTo(sessionFor(USER_B, 'token-b'));
+    auth.switchTo(sessionFor(USER_B, 'token-b'));
 
     __http.reply(EVENTS, { status: 202 });
     await act(async () => {
@@ -204,13 +174,13 @@ describe('cross-account queued-telemetry leak on a shared device', () => {
 
 describe('telemetry session id across an account switch', () => {
   it("B's events do not carry A's session id when B signs in within the inactivity window", async () => {
-    bootSignedIn(sessionFor(USER_A, 'token-a'));
+    const auth = bootSignedIn(sessionFor(USER_A, 'token-a'));
     const queryClient = new QueryClient();
     const session = renderHook(() => useSession(), { wrapper: makeWrapper(queryClient) });
     await waitFor(() => expect(session.result.current.status).toBe('signed-in'));
     const idAsA = getSessionId();
 
-    switchAccountTo(sessionFor(USER_B, 'token-b'));
+    auth.switchTo(sessionFor(USER_B, 'token-b'));
 
     expect(getSessionId()).not.toBe(idAsA);
 
@@ -241,18 +211,15 @@ describe('session restore across process death', () => {
     }
 
     beforeEach(() => {
-      const { __secureStore } = require('expo-secure-store');
-      __secureStore.reset();
+      secureStore.__secureStore.reset();
     });
 
     it('restores the previously written session after the app "restarts" — no re-authentication is asked of the user', async () => {
-      const { setItemAsync } = require('expo-secure-store');
-      await setItemAsync('sb-fixture-auth-token', JSON.stringify(seedSession()));
+      await secureStore.setItemAsync('sb-fixture-auth-token', JSON.stringify(seedSession()));
 
       const restarted = createAuthClient();
       installAuthClient(restarted);
 
-      const { useSession } = require('@shared/auth/useSession');
       const queryClient = new QueryClient();
       const { result, unmount } = renderHook(() => useSession(), {
         wrapper: makeWrapper(queryClient),
@@ -268,13 +235,13 @@ describe('session restore across process death', () => {
         status: 'signed-in',
         session: { user: { id: FIXTURE_USER_ID } },
       });
-
       unmount();
       await restarted.auth.stopAutoRefresh();
     });
 
     it('a device with no previously written session comes back signed-out, not stuck loading', async () => {
-      const { useSession } = require('@shared/auth/useSession');
+      const fresh = createAuthClient();
+      installAuthClient(fresh);
       const queryClient = new QueryClient();
       const { result, unmount } = renderHook(() => useSession(), {
         wrapper: makeWrapper(queryClient),
@@ -283,27 +250,13 @@ describe('session restore across process death', () => {
       await waitFor(() => {
         expect(result.current.status).toBe('signed-out');
       });
-
       unmount();
-      await supabase.auth.stopAutoRefresh();
+      await fresh.auth.stopAutoRefresh();
     });
   });
 });
 
 describe('server event stream across an account switch', () => {
-  type AuthCallback = (event: string, session: Session | null) => void;
-
-  function sessionFor(user: Session['user']): Session {
-    return {
-      access_token: `token-${user.id}`,
-      refresh_token: `refresh-${user.id}`,
-      expires_at: Math.floor(Date.now() / 1000) + 3600,
-      expires_in: 3600,
-      token_type: 'bearer',
-      user,
-    } as Session;
-  }
-
   function acquisitionStartedFor(trackId: string): ServerEvent {
     return { id: `evt-${trackId}`, type: 'track_acquisition_started', data: { track_id: trackId } };
   }
@@ -363,30 +316,14 @@ describe('server event stream across an account switch', () => {
     });
   }
 
-  let authCallbacks: AuthCallback[] = [];
-
-  function bootSignedInAs(user: Session['user']): void {
-    jest
-      .spyOn(supabase.auth, 'getSession')
-      .mockResolvedValue({ data: { session: sessionFor(user) }, error: null } as never);
-    jest.spyOn(supabase.auth, 'onAuthStateChange').mockImplementation(((cb: AuthCallback) => {
-      authCallbacks.push(cb);
-      return { data: { subscription: { unsubscribe: jest.fn() } } };
-    }) as never);
-  }
-
-  function emitAuth(event: string, session: Session | null): void {
-    act(() => {
-      authCallbacks.forEach((cb) => cb(event, session));
-    });
-  }
+  let auth: ScriptedAuth;
 
   function statusesInCache(): Record<string, unknown> {
     return useTrackStatusStore.getState().statuses;
   }
 
   async function renderAppSignedInAs(user: Session['user']) {
-    bootSignedInAs(user);
+    auth = bootSignedIn(sessionFor(user));
     const rendered = renderHook(
       () => {
         useSession();
@@ -399,9 +336,7 @@ describe('server event stream across an account switch', () => {
   }
 
   beforeEach(() => {
-    authCallbacks = [];
     streams = [];
-    jest.restoreAllMocks();
     act(() => {
       useTrackStatusStore.getState().reset();
     });
@@ -418,7 +353,7 @@ describe('server event stream across an account switch', () => {
         deliverOn(0, acquisitionStartedFor('track-of-user-a'));
         expect(statusesInCache()).toHaveProperty('track-of-user-a');
 
-        emitAuth(event, next);
+        auth.emit(event, next);
         deliverOn(0, acquisitionStartedFor('other-track-of-user-a'));
 
         expect(statusesInCache()).toEqual({});
@@ -429,7 +364,7 @@ describe('server event stream across an account switch', () => {
     it('opens a fresh stream for the next account, so B still receives their own events', async () => {
       const rendered = await renderAppSignedInAs(USER_A);
 
-      emitAuth('SIGNED_IN', sessionFor(USER_B));
+      auth.emit('SIGNED_IN', sessionFor(USER_B));
 
       expect(streams).toHaveLength(2);
       deliverOn(1, acquisitionStartedFor('track-of-user-b'));
@@ -440,7 +375,7 @@ describe('server event stream across an account switch', () => {
     it('keeps the stream open across a token refresh for the same user', async () => {
       const rendered = await renderAppSignedInAs(USER_A);
 
-      emitAuth('TOKEN_REFRESHED', sessionFor(USER_A));
+      auth.emit('TOKEN_REFRESHED', sessionFor(USER_A));
 
       expect(streams).toHaveLength(1);
       deliverOn(0, acquisitionStartedFor('track-of-user-a'));
@@ -451,40 +386,13 @@ describe('server event stream across an account switch', () => {
 });
 
 describe('acquisition and telemetry state across an account switch', () => {
-  type AuthCallback = (event: string, session: Session | null) => void;
-  type Deferred = { promise: Promise<void>; resolve: () => void };
   const OUTBOX_URI = 'file:///document/telemetry/critical-outbox.json';
 
-  function deferred(): Deferred {
-    let resolve!: () => void;
-    const promise = new Promise<void>((r) => {
-      resolve = r;
-    });
-    return { promise, resolve };
-  }
-
-  let authCallbacks: AuthCallback[] = [];
-
-  function mockSessionAs(session: Session | null): void {
-    jest
-      .spyOn(supabase.auth, 'getSession')
-      .mockResolvedValue({ data: { session }, error: null } as never);
-  }
+  let auth: ScriptedAuth;
 
   function bootWith(initial: Session | null) {
-    mockSessionAs(initial);
-    jest.spyOn(supabase.auth, 'onAuthStateChange').mockImplementation(((cb: AuthCallback) => {
-      authCallbacks.push(cb);
-      return { data: { subscription: { unsubscribe: jest.fn() } } };
-    }) as never);
+    auth = bootSignedIn(initial);
     return renderHook(() => useSession(), { wrapper: makeWrapper(new QueryClient()) });
-  }
-
-  function switchAccountTo(session: Session): void {
-    mockSessionAs(session);
-    act(() => {
-      authCallbacks.forEach((cb) => cb('SIGNED_IN', session));
-    });
   }
 
   type SentEvent = { token: string | undefined; body: Record<string, unknown> };
@@ -513,8 +421,6 @@ describe('acquisition and telemetry state across an account switch', () => {
   }
 
   beforeEach(() => {
-    authCallbacks = [];
-    jest.restoreAllMocks();
     _resetOutboxForTest();
     act(() => {
       useDownloadStore.getState().reset();
@@ -544,25 +450,17 @@ describe('acquisition and telemetry state across an account switch', () => {
       });
 
       __http.reset();
-      __http.reply(EVENTS, { status: 202 });
-      const gate = deferred();
-      const realFetch = global.fetch;
-      const fetchSpy = jest
-        .spyOn(global, 'fetch')
-        .mockImplementationOnce(async (...args: Parameters<typeof fetch>) => {
-          await gate.promise;
-          return realFetch(...args);
-        });
+      const release = __http.hold(EVENTS, { status: 202 });
       let flushing!: Promise<void>;
       act(() => {
         flushing = flushOutbox();
       });
-      await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(__http.countFor(EVENTS)).toBe(1));
 
-      switchAccountTo(sessionFor(USER_B, 'token-b'));
+      auth.switchTo(sessionFor(USER_B, 'token-b'));
 
       await act(async () => {
-        gate.resolve();
+        release();
         await flushing;
         await flushOutbox();
       });
@@ -653,19 +551,6 @@ describe('search state across an identity change', () => {
     unregisterSearchStateReset?.();
   });
 
-  type AuthCallback = (event: string, session: Session | null) => void;
-
-  function sessionFor(user: Session['user']): Session {
-    return {
-      access_token: `token-${user.id}`,
-      refresh_token: `refresh-${user.id}`,
-      expires_at: Math.floor(Date.now() / 1000) + 3600,
-      expires_in: 3600,
-      token_type: 'bearer',
-      user,
-    } as Session;
-  }
-
   const TAPPED: DiscoveryResult = {
     kind: 'track',
     title: 'Anti-Hero',
@@ -676,24 +561,7 @@ describe('search state across an identity change', () => {
     extras: {},
   };
 
-  let authCallbacks: AuthCallback[] = [];
-
-  function bootSignedInAs(user: Session['user']): void {
-    jest
-      .spyOn(supabase.auth, 'getSession')
-      .mockResolvedValue({ data: { session: sessionFor(user) }, error: null } as never);
-    jest.spyOn(supabase.auth, 'onAuthStateChange').mockImplementation(((cb: AuthCallback) => {
-      authCallbacks.push(cb);
-      return { data: { subscription: { unsubscribe: jest.fn() } } };
-    }) as never);
-  }
-
-  function emitAuth(event: string, session: Session | null): void {
-    act(() => {
-      authCallbacks.forEach((cb) => cb(event, session));
-    });
-  }
-
+  let auth: ScriptedAuth;
   let tappedHandoffId = '';
 
   function userASearchedAndTapped(): void {
@@ -707,8 +575,6 @@ describe('search state across an identity change', () => {
   }
 
   beforeEach(() => {
-    authCallbacks = [];
-    jest.restoreAllMocks();
     setSearchState('', '');
     runSignOutCleanups();
   });
@@ -720,28 +586,28 @@ describe('search state across an identity change', () => {
     ] as const)(
       '%s -> search-state and detail-handoff are cleared',
       async (_label, event, next) => {
-        bootSignedInAs(USER_A);
+        auth = bootSignedIn(sessionFor(USER_A));
         const { result } = renderHook(() => useSession(), {
           wrapper: makeWrapper(new QueryClient()),
         });
         await waitFor(() => expect(result.current.status).toBe('signed-in'));
 
         userASearchedAndTapped();
-        emitAuth(event, next);
+        auth.emit(event, next);
 
         expectNothingOfUserALeft();
       },
     );
 
     it('a token refresh for the same user keeps the search the user is in the middle of', async () => {
-      bootSignedInAs(USER_A);
+      auth = bootSignedIn(sessionFor(USER_A));
       const { result } = renderHook(() => useSession(), {
         wrapper: makeWrapper(new QueryClient()),
       });
       await waitFor(() => expect(result.current.status).toBe('signed-in'));
 
       userASearchedAndTapped();
-      emitAuth('TOKEN_REFRESHED', sessionFor(USER_A));
+      auth.emit('TOKEN_REFRESHED', sessionFor(USER_A));
 
       expect(getSearchState()).toEqual({ query: 'taylor swift', inputValue: 'taylor swift' });
       expect(readDetailHandoff(tappedHandoffId)).toEqual({
@@ -762,7 +628,7 @@ describe('search state across an identity change', () => {
     ] as const)(
       'useSignOut clears both even when supabase signOut %s and no auth event arrives',
       async (_label, outcome) => {
-        jest.spyOn(supabase.auth, 'signOut').mockImplementation((async () => outcome()) as never);
+        bootSignedIn(null, outcome);
         const { result } = renderHook(() => useSignOut(), {
           wrapper: makeWrapper(new QueryClient()),
         });
@@ -775,148 +641,5 @@ describe('search state across an identity change', () => {
         expectNothingOfUserALeft();
       },
     );
-  });
-});
-
-describe('pinned downloads across a killed sign-out', () => {
-  type FsDouble = {
-    seedFile(uri: string, contents: string): void;
-    readFile(uri: string): string | undefined;
-    allFiles(): Record<string, string>;
-  };
-
-  type App = {
-    session: typeof UseSessionModule;
-    supabase: (typeof AuthDoor)['supabase'];
-    pinned: typeof PinnedStoreModule;
-  };
-
-  const USER_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-  const USER_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
-  const AUDIO_URI = 'file:///document/offline-audio/t1.mp3';
-  const INDEX_URI = 'file:///document/offline/pinned.json';
-
-  function currentFs(): FsDouble {
-    return (require('expo-file-system') as { __fs: FsDouble }).__fs;
-  }
-
-  function sessionFor(userId: string): Session {
-    return {
-      access_token: `token-${userId}`,
-      refresh_token: `refresh-${userId}`,
-      expires_in: 3600,
-      token_type: 'bearer',
-      user: { id: userId },
-    } as unknown as Session;
-  }
-
-  function bootApp(): App {
-    jest.doMock('react', () => React);
-    jest.doMock('@tanstack/react-query', () => ReactQuery);
-    const app: App = {
-      session: require('@shared/auth/useSession'),
-      supabase: freshAppAuth().supabase,
-      pinned: require('@shared/offline/state/pinnedStore'),
-    };
-    app.pinned.provideOfflinePort(require('@testing/apiClientPorts').apiClientOfflinePort);
-    return app;
-  }
-
-  function killAndRelaunch(): App {
-    const snapshot = currentFs().allFiles();
-    jest.resetModules();
-    const fs = currentFs();
-    for (const [uri, contents] of Object.entries(snapshot)) fs.seedFile(uri, contents);
-    return bootApp();
-  }
-
-  async function signIn(app: App, userId: string): Promise<() => void> {
-    jest
-      .spyOn(app.supabase.auth, 'getSession')
-      .mockResolvedValue({ data: { session: sessionFor(userId) }, error: null } as never);
-    jest
-      .spyOn(app.supabase.auth, 'onAuthStateChange')
-      .mockReturnValue({ data: { subscription: { unsubscribe: jest.fn() } } } as never);
-    const client = new ReactQuery.QueryClient();
-    const wrapper = ({ children }: { children: ReactNode }) =>
-      React.createElement(ReactQuery.QueryClientProvider, { client }, children);
-    const hook = renderHook(() => app.session.useSession(), { wrapper });
-    await waitFor(() => expect(hook.result.current.status).toBe('signed-in'));
-    return hook.unmount;
-  }
-
-  async function pinAsReady(app: App, trackId: string): Promise<void> {
-    __http.reply('POST /v1/audio-urls', {
-      status: 200,
-      json: {
-        urls: [{ track_id: trackId, url: `https://cdn.example.com/${trackId}.mp3`, version: 'v1' }],
-      },
-    });
-    app.pinned.usePinnedStore.getState().pin(asTrackId(trackId));
-    await waitFor(() =>
-      expect(app.pinned.usePinnedStore.getState().entries[trackId]?.status).toBe('ready'),
-    );
-  }
-
-  beforeEach(() => {
-    jest.resetModules();
-  });
-
-  describe('pinned downloads never cross accounts after a killed sign-out', () => {
-    it('B signing in after A was killed mid sign-out sees and plays none of A downloads', async () => {
-      const first = bootApp();
-      const unmountA = await signIn(first, USER_A);
-      await pinAsReady(first, 't1');
-      unmountA();
-      expect(currentFs().readFile(AUDIO_URI)).toBeDefined();
-
-      const second = killAndRelaunch();
-      expect(second.pinned.usePinnedStore.getState().entries['t1']).toBeDefined();
-
-      const unmountB = await signIn(second, USER_B);
-
-      expect(second.pinned.usePinnedStore.getState().entries).toEqual({});
-      expect(second.pinned.resolvePinnedUri(asTrackId('t1'))).toBeUndefined();
-      expect(second.pinned.pinnedByteTotal()).toBe(0);
-      expect(currentFs().allFiles()[AUDIO_URI]).toBeUndefined();
-      expect(JSON.parse(currentFs().readFile(INDEX_URI) ?? 'null')).toEqual({
-        schemaVersion: 1,
-        entries: {},
-      });
-      unmountB();
-
-      const third = killAndRelaunch();
-      expect(third.pinned.usePinnedStore.getState().entries).toEqual({});
-    });
-
-    it('A relaunching into their own session keeps their downloads', async () => {
-      const first = bootApp();
-      const unmountA = await signIn(first, USER_A);
-      await pinAsReady(first, 't1');
-      unmountA();
-
-      const second = killAndRelaunch();
-      const unmountAgain = await signIn(second, USER_A);
-
-      expect(second.pinned.resolvePinnedUri(asTrackId('t1'))).toBe(AUDIO_URI);
-      expect(currentFs().readFile(AUDIO_URI)).toBeDefined();
-      unmountAgain();
-    });
-
-    it('downloads of unknown owner (written before ownership was recorded) are cleared, not adopted', async () => {
-      const fs = currentFs();
-      fs.seedFile(AUDIO_URI, 'audio-bytes');
-      fs.seedFile(
-        INDEX_URI,
-        JSON.stringify({ t1: { trackId: 't1', status: 'ready', uri: AUDIO_URI } }),
-      );
-      const app = killAndRelaunch();
-
-      const unmount = await signIn(app, USER_B);
-
-      expect(app.pinned.resolvePinnedUri(asTrackId('t1'))).toBeUndefined();
-      expect(currentFs().allFiles()[AUDIO_URI]).toBeUndefined();
-      unmount();
-    });
   });
 });

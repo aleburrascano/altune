@@ -4,41 +4,22 @@ import { Text } from 'react-native';
 import type { ReactNode } from 'react';
 import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-router/testing-library';
 
-import { supabase } from '@shared/auth';
-import { useWideWebLayout } from '@shared/ui/view/layout/useLayoutMode';
-import { PlaybackContext, usePlayback } from '@shared/playback/view/usePlayback';
-import type { PlaybackContextValue } from '@shared/playback/playbackContextValue';
+import { installAuthClient } from '@shared/auth';
+import { useKeyboardShortcuts, useWideWebLayout } from '@shared/ui';
+import { PlaybackContext, usePlayback, type PlaybackContextValue } from '@shared/playback';
+import { authClientOver } from '@testing/fakeAuthClient';
 import { makeIdlePlayback } from '@testing/factories';
-import { useKeyboardShortcuts } from '@shared/ui/keyboard/useKeyboardShortcuts';
+import { setWindowWidth } from '@testing/setWindowWidth';
 
-import { AppChrome } from '@/mobile/frame/AppChrome';
+import { AppChrome, FeaturePorts, httpFeaturePorts } from '@/mobile';
 import TabsLayout from '@/app/(tabs)/_layout';
 import DiscoverLayout from '@/app/(tabs)/discover/_layout';
 import LibraryLayout from '@/app/(tabs)/library/_layout';
 import SettingsLayout from '@/app/(tabs)/settings/_layout';
 import PlayerLayout from '@/app/player/_layout';
-import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
-import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
 import { setPlatformOS } from '@testing/setPlatformOS';
 
 const { __http } = require('@testing/doubles/fetch.js');
-
-jest.mock('decode-uri-component', () => ({
-  __esModule: true,
-  default: (s: string) => {
-    try {
-      return decodeURIComponent(s);
-    } catch {
-      return s;
-    }
-  },
-}));
-
-let mockWindowWidth = 1440;
-jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
-  __esModule: true,
-  default: () => ({ width: mockWindowWidth, height: 900, scale: 2, fontScale: 1 }),
-}));
 
 const RN = require('react-native');
 const NATIVE_OS: string = RN.Platform.OS;
@@ -77,20 +58,19 @@ const PLAYING = {
 let client: QueryClient;
 
 beforeEach(() => {
-  jest.spyOn(supabase.auth, 'getSession').mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  } as never);
-  jest.spyOn(supabase.auth, 'onAuthStateChange').mockReturnValue({
-    data: { subscription: { unsubscribe: jest.fn() } },
-  } as never);
+  installAuthClient(
+    authClientOver({
+      getSession: async () => ({ data: { session: { access_token: 'tok' } }, error: null }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => undefined } } }),
+    }),
+  );
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   __http.reply('GET /v1/playlists', { status: 200, json: { items: [], total: 0 } });
 });
 
 afterEach(() => {
   setPlatformOS(NATIVE_OS);
-  mockWindowWidth = 1440;
+  setWindowWidth(1440);
   client.clear();
 });
 
@@ -167,7 +147,7 @@ const LATE_NIGHT = {
 describe('app chrome: the sidebar highlights the active route and navigates on press', () => {
   it('highlights Library in the sidebar on a playlist opened under Library', async () => {
     setPlatformOS('web');
-    mockWindowWidth = 1440;
+    setWindowWidth(1440);
 
     renderRouter(ROUTES, { initialUrl: '/library/playlist/42', wrapper });
     await act(async () => {});
@@ -180,7 +160,7 @@ describe('app chrome: the sidebar highlights the active route and navigates on p
 
   it('opens Settings and moves the highlight when its sidebar item is pressed', async () => {
     setPlatformOS('web');
-    mockWindowWidth = 1440;
+    setWindowWidth(1440);
 
     const router = renderRouter(ROUTES, { initialUrl: '/library', wrapper });
     await act(async () => {});
@@ -196,7 +176,7 @@ describe('app chrome: the sidebar highlights the active route and navigates on p
 
   it('returns to the Library screen from a playlist when Library is pressed in the sidebar', async () => {
     setPlatformOS('web');
-    mockWindowWidth = 1440;
+    setWindowWidth(1440);
 
     const router = renderRouter(ROUTES, { initialUrl: '/library/playlist/42', wrapper });
     await act(async () => {});
@@ -211,7 +191,7 @@ describe('app chrome: the sidebar highlights the active route and navigates on p
 
   it('opens a playlist from the sidebar list and moves the highlight to Library', async () => {
     setPlatformOS('web');
-    mockWindowWidth = 1440;
+    setWindowWidth(1440);
     __http.reset();
     __http.reply('GET /v1/playlists', { status: 200, json: { items: [LATE_NIGHT], total: 1 } });
 
@@ -231,7 +211,7 @@ describe('app chrome: the sidebar highlights the active route and navigates on p
 describe('app chrome: one sidebar and one player bar across a tab-to-player navigation', () => {
   it('keeps a single sidebar and a single player bar across a tab, then the player, then the queue', async () => {
     setPlatformOS('web');
-    mockWindowWidth = 1440;
+    setWindowWidth(1440);
 
     const router = renderRouter(ROUTES, { initialUrl: '/library', wrapper });
     await act(async () => {});
@@ -259,7 +239,7 @@ describe('app chrome: one sidebar and one player bar across a tab-to-player navi
 
   it('shows no sidebar or player bar chrome around the tab on a native app', async () => {
     setPlatformOS(NATIVE_OS);
-    mockWindowWidth = 1440;
+    setWindowWidth(1440);
 
     renderRouter(ROUTES, { initialUrl: '/library', wrapper });
     await act(async () => {});
@@ -270,7 +250,7 @@ describe('app chrome: one sidebar and one player bar across a tab-to-player navi
 
   it('shows the sidebar and player bar beside the player, queue and lyrics pages on a 1440px web window', async () => {
     setPlatformOS('web');
-    mockWindowWidth = 1440;
+    setWindowWidth(1440);
 
     const { router } = require('expo-router');
     renderRouter(ROUTES, { initialUrl: '/player/queue', wrapper });
@@ -297,7 +277,7 @@ describe('app chrome: one sidebar and one player bar across a tab-to-player navi
 
   it('shows neither sidebar nor player bar around the queue page on a 999px web window', async () => {
     setPlatformOS('web');
-    mockWindowWidth = 999;
+    setWindowWidth(999);
 
     renderRouter(ROUTES, { initialUrl: '/player/queue', wrapper });
     await act(async () => {});
@@ -309,7 +289,7 @@ describe('app chrome: one sidebar and one player bar across a tab-to-player navi
 
   it('shows no sidebar or player bar chrome around the player on a native tablet 1440px wide', async () => {
     setPlatformOS(NATIVE_OS);
-    mockWindowWidth = 1440;
+    setWindowWidth(1440);
 
     renderRouter(ROUTES, { initialUrl: '/player', wrapper });
     await act(async () => {});
@@ -323,8 +303,8 @@ describe('app chrome: one sidebar and one player bar across a tab-to-player navi
 describe('app chrome: the player bar reflects the live queue', () => {
   it('offers a next-track control once a second track is queued', async () => {
     setPlatformOS('web');
-    mockWindowWidth = 1440;
-    const { useQueueStore } = require('@shared/playback/queueStore');
+    setWindowWidth(1440);
+    const { useQueueStore } = require('@shared/playback');
     useQueueStore.getState().loadQueue(
       [
         {
@@ -358,7 +338,7 @@ describe('app chrome: the idle player bar stays on every screen in wide web layo
     'shows the idle player bar on %s on a 1440px web window',
     async (url) => {
       setPlatformOS('web');
-      mockWindowWidth = 1440;
+      setWindowWidth(1440);
 
       renderRouter(ROUTES, { initialUrl: url, wrapper: idleWrapper });
       await act(async () => {});
@@ -371,7 +351,7 @@ describe('app chrome: the idle player bar stays on every screen in wide web layo
 
   it('shows neither player bar nor idle placeholder on a 390px phone', async () => {
     setPlatformOS(NATIVE_OS);
-    mockWindowWidth = 390;
+    setWindowWidth(390);
 
     renderRouter(ROUTES, { initialUrl: '/library', wrapper: idleWrapper });
     await act(async () => {});
@@ -440,7 +420,7 @@ describe('app chrome: the web keyboard shortcuts bridge mounts once at the root'
   async function openApp(initialUrl: string, { os, width }: { os: string; width: number }) {
     const playback = playingControls();
     setPlatformOS(os);
-    mockWindowWidth = width;
+    setWindowWidth(width);
     const rendered = renderRouter(ROUTES, {
       initialUrl,
       wrapper: ({ children }: { children: ReactNode }) => (
