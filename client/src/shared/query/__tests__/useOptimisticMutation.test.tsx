@@ -1,14 +1,12 @@
 import React from 'react';
-import { Alert } from 'react-native';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, type QueryKey } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
 import { runSignOutCleanups } from '@shared/session';
+import { recordDialogs, type RecordedDialogs } from '@testing/recordDialogs';
 import { signInTestUser } from '@testing/signInTestUser';
 
 import { useOptimisticMutation } from '@shared/query';
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -25,18 +23,46 @@ type Counter = { count: number };
 const KEY = ['counter'] as const;
 const OTHER_KEY = ['other'] as const;
 
-let alertSpy: jest.SpyInstance;
+let dialogs: RecordedDialogs;
 beforeEach(() => {
-  alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  dialogs = recordDialogs();
 });
 afterEach(() => {
-  alertSpy.mockRestore();
+  dialogs.restore();
 });
 
-function newClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+type Filters = { queryKey?: QueryKey } | undefined;
+
+class ObservedQueryClient extends QueryClient {
+  readonly cancelled: Filters[] = [];
+  readonly invalidated: Filters[] = [];
+  readonly written: QueryKey[] = [];
+  invalidationHeldUntil: Promise<void> | undefined;
+  whenCancelling: (() => void) | undefined;
+
+  constructor() {
+    super({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const write = this.setQueryData.bind(this);
+    this.setQueryData = ((key: QueryKey, ...rest: [never, never?]) => {
+      this.written.push(key);
+      return write(key, ...rest);
+    }) as QueryClient['setQueryData'];
+  }
+
+  override cancelQueries(...args: Parameters<QueryClient['cancelQueries']>) {
+    this.cancelled.push(args[0]);
+    this.whenCancelling?.();
+    return super.cancelQueries(...args);
+  }
+
+  override invalidateQueries(...args: Parameters<QueryClient['invalidateQueries']>) {
+    this.invalidated.push(args[0]);
+    return this.invalidationHeldUntil ?? super.invalidateQueries(...args);
+  }
+}
+
+function newClient(): ObservedQueryClient {
+  return new ObservedQueryClient();
 }
 
 function wrapperFor(queryClient: QueryClient) {
@@ -53,7 +79,6 @@ describe('useOptimisticMutation(): guarded (default)', () => {
   it('cancels the key, writes optimistically, and keeps the write on success', async () => {
     const queryClient = newClient();
     queryClient.setQueryData(KEY, { count: 1 });
-    const cancelSpy = jest.spyOn(queryClient, 'cancelQueries');
     let seenMidFlight: Counter | undefined;
 
     const { result } = renderHook(
@@ -75,14 +100,13 @@ describe('useOptimisticMutation(): guarded (default)', () => {
       await result.current.mutateAsync(2);
     });
 
-    expect(cancelSpy).toHaveBeenCalledWith({ queryKey: KEY });
+    expect(queryClient.cancelled).toEqual([{ queryKey: KEY }]);
     expect(seenMidFlight).toEqual({ count: 3 });
     expect(queryClient.getQueryData(KEY)).toEqual({ count: 3 });
   });
 
   it('leaves a cold cache untouched and skips the rollback on failure', async () => {
     const queryClient = newClient();
-    const setSpy = jest.spyOn(queryClient, 'setQueryData');
     const applyOptimistic = jest.fn(bump);
 
     const { result } = renderHook(
@@ -102,9 +126,9 @@ describe('useOptimisticMutation(): guarded (default)', () => {
     });
 
     expect(applyOptimistic).not.toHaveBeenCalled();
-    expect(setSpy).not.toHaveBeenCalled();
+    expect(queryClient.written).toEqual([]);
     expect(queryClient.getQueryData(KEY)).toBeUndefined();
-    expect(alertSpy).not.toHaveBeenCalled();
+    expect(dialogs.alerts).toEqual([]);
   });
 
   it('reverts the optimistic write and shows the alert built from the variables', async () => {
@@ -129,7 +153,7 @@ describe('useOptimisticMutation(): guarded (default)', () => {
     });
 
     expect(queryClient.getQueryData(KEY)).toEqual({ count: 1 });
-    expect(alertSpy).toHaveBeenCalledWith('Failed', 'Could not add 4.');
+    expect(dialogs.alerts).toEqual([['Failed', 'Could not add 4.']]);
   });
 
   it('rolls back by reverting its own delta on the current cache, keeping a write that landed mid-flight', async () => {
@@ -204,9 +228,9 @@ describe('useOptimisticMutation(): guarded (default)', () => {
     const queryClient = newClient();
     queryClient.setQueryData(KEY, { count: 1 });
     let releaseInvalidation!: () => void;
-    const invalidateSpy = jest
-      .spyOn(queryClient, 'invalidateQueries')
-      .mockImplementation(() => new Promise<void>((resolve) => (releaseInvalidation = resolve)));
+    queryClient.invalidationHeldUntil = new Promise<void>(
+      (resolve) => (releaseInvalidation = resolve),
+    );
     const onSuccess = jest.fn();
 
     const { result } = renderHook(
@@ -230,8 +254,7 @@ describe('useOptimisticMutation(): guarded (default)', () => {
     });
 
     expect(onSuccess).toHaveBeenCalledWith(10, 1, expect.anything(), expect.anything());
-    expect(invalidateSpy).toHaveBeenCalledTimes(1);
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: OTHER_KEY });
+    expect(queryClient.invalidated).toEqual([{ queryKey: OTHER_KEY }]);
     expect(settled).toBe(false);
 
     await act(async () => {
@@ -243,7 +266,6 @@ describe('useOptimisticMutation(): guarded (default)', () => {
 
   it('invalidates the optimistic key itself when no `invalidate` is given', async () => {
     const queryClient = newClient();
-    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
     const { result } = renderHook(
       () =>
@@ -261,7 +283,7 @@ describe('useOptimisticMutation(): guarded (default)', () => {
       await result.current.mutateAsync(1);
     });
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: KEY });
+    expect(queryClient.invalidated).toEqual([{ queryKey: KEY }]);
   });
 });
 
@@ -302,7 +324,6 @@ describe('useOptimisticMutation(): session fencing', () => {
   it('does not invalidate the next user queries when the mutation settles after a user switch', async () => {
     const queryClient = newClient();
     queryClient.setQueryData(KEY, { count: 1 });
-    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
     const { result } = renderHook(
       () =>
@@ -323,7 +344,7 @@ describe('useOptimisticMutation(): session fencing', () => {
       await result.current.mutateAsync(2);
     });
 
-    expect(invalidateSpy).not.toHaveBeenCalled();
+    expect(queryClient.invalidated).toEqual([]);
     expect(queryClient.getQueryData(KEY)).toEqual({ count: 99 });
   });
 });
@@ -332,10 +353,8 @@ describe('session fencing of the request and its callbacks', () => {
   type Counter = { count: number };
   const USER_B_COUNTER: Counter = { count: 99 };
 
-  function newClient(): QueryClient {
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
+  function newClient(): ObservedQueryClient {
+    const queryClient = new ObservedQueryClient();
     queryClient.setQueryData(KEY, { count: 1 });
     return queryClient;
   }
@@ -345,14 +364,6 @@ describe('session fencing of the request and its callbacks', () => {
     queryClient.clear();
     queryClient.setQueryData(KEY, USER_B_COUNTER);
   }
-
-  let alertSpy: jest.SpyInstance;
-  beforeEach(() => {
-    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
-  });
-  afterEach(() => {
-    alertSpy.mockRestore();
-  });
 
   describe('useOptimisticMutation(): fencing the request and its callbacks by session', () => {
     it('shows no error alert to the next user when the request fails after a sign-out', async () => {
@@ -377,7 +388,7 @@ describe('session fencing of the request and its callbacks', () => {
         await expect(result.current.mutateAsync(2)).rejects.toThrow('boom');
       });
 
-      expect(alertSpy).not.toHaveBeenCalled();
+      expect(dialogs.alerts).toEqual([]);
       expect(queryClient.getQueryData(KEY)).toEqual(USER_B_COUNTER);
     });
 
@@ -410,9 +421,7 @@ describe('session fencing of the request and its callbacks', () => {
     it('never sends the request, nor writes optimistically, when the user signs out while in-flight fetches are cancelled', async () => {
       const queryClient = newClient();
       const mutationFn = jest.fn(async (by: number) => by);
-      jest.spyOn(queryClient, 'cancelQueries').mockImplementation(async () => {
-        signOutThenLoadUserB(queryClient);
-      });
+      queryClient.whenCancelling = () => signOutThenLoadUserB(queryClient);
       const { result } = renderHook(
         () =>
           useOptimisticMutation({
