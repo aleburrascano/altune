@@ -20,16 +20,13 @@ flowchart LR
         events[("discovery_events<br/>dedup on user_id + event_id<br/>pruned at 30 / 90 / 400 days")]
         sat["SatisfactionConsumer<br/>every 30 min"]
         rollup["Metrics rollup<br/>every 6h, leader only"]
-        corpus["CorpusBuilder<br/>daily, leader only"]
         alert["Alert monitor<br/>every 30s, leader only"]
         metrics[("discovery_metrics<br/>zero_result_rate · ctr · searches")]
     end
 
     ranking(["Search ranking<br/>behavioral score"])
-    corpusfile[/"behavioral corpus<br/>JSON on disk"/]
     observem(["GET /observe/metrics"])
     logs[("process log<br/>alert.signal")]
-    nightly["Gitea Actions nightly eval<br/>coverage signal A · report"]
 
     session -.-> ff & outbox
     emitters --> ff --> ingest
@@ -39,10 +36,7 @@ flowchart LR
     server_emit --> events
     events --> sat -.->|off by default| ranking
     events --> rollup --> metrics --> observem
-    events --> corpus -.->|only if path set| corpusfile
     events --> alert --> logs
-    events -->|reads prod DB| nightly
-    nightly --> metrics
 ```
 
 ## Operational

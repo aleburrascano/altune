@@ -20,8 +20,6 @@ type EvalHandles struct {
 	Transport http.RoundTripper
 }
 
-const evalBackgroundMaxInFlight = 64
-
 func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*discovery.Discovery, error) {
 	transport := h.Transport
 	if transport == nil {
@@ -29,7 +27,7 @@ func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*
 	}
 	deps := discoveryconfig.Deps(ctx, cfg, transport)
 	deps.Background = &sync.WaitGroup{}
-	tracker, err := runloop.NewTracker(runloop.TrackerLimits{MaxInFlight: evalBackgroundMaxInFlight})
+	tracker, err := runloop.NewTracker(runloop.TrackerLimits{MaxInFlight: backgroundMaxInFlight})
 	if err != nil {
 		return nil, err
 	}

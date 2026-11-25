@@ -121,7 +121,7 @@ func TestUnreleasedRefresh_NoUnreleasedSourceStartsNoRefresh(t *testing.T) {
 	}
 }
 
-func TestNewEvalDiscovery_RanksWithTheGivenPool(t *testing.T) {
+func TestNewEvalDiscovery_SearchesThroughTheGivenTransport(t *testing.T) {
 	var logs bytes.Buffer
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
@@ -131,9 +131,10 @@ func TestNewEvalDiscovery_RanksWithTheGivenPool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewEvalDiscovery: %v", err)
 	}
-	disc.RankingOnlySearch()
-	if !strings.Contains(logs.String(), "history") {
-		t.Errorf("eval discovery ignored the given pool; logs:\n%s", logs.String())
+	query := &discovery.SearchQuery{Raw: "probe song", Kinds: map[discovery.ResultKind]bool{discovery.ResultKindAlbum: true}}
+	disc.RankingOnlySearch().InspectSearchWithStatuses(t.Context(), query)
+	if !strings.Contains(logs.String(), "test transport: provider egress refused") {
+		t.Errorf("a ranking search never went through the given transport; logs:\n%s", logs.String())
 	}
 }
 
