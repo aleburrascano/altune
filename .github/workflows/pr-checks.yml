@@ -108,11 +108,11 @@ jobs:
       - name: dependencies
         working-directory: client
         run: npm ci
-      - name: jest with coverage ratchet
+      - name: jest
         working-directory: client
         env:
           NODE_OPTIONS: --max-old-space-size=3072
-        run: npx jest --coverage --ci --maxWorkers=2 --workerIdleMemoryLimit=1GB --testTimeout=30000
+        run: npx jest --ci --maxWorkers=2 --workerIdleMemoryLimit=1GB --testTimeout=30000
 
   mobile-mutation:
     needs: changes

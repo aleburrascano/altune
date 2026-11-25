@@ -346,74 +346,13 @@ expect_rc 1
 expect_out "FAIL  mobile tests (related)"
 expect_out "jest did not exit within 2s and was killed"
 
-add_thresholded_jest_stub() {
-    (
-        cd "$WORK/repo" || exit 1
-        printf 'module.exports = { coverageThreshold: { "src/shared/apiClient/**": { lines: 100 }, global: { lines: 0 } } };\n' >client/jest.config.js
-        git add -A
-        git commit -qm "jest config fixture"
-        git update-ref refs/remotes/gitea/main HEAD
-    )
-    cat >"$WORK/bin/npx" <<'STUB'
-#!/usr/bin/env bash
-printf 'npx %s\n' "$*" >>"$NPX_LOG"
-case " $* " in *" jest "*) ;; *) exit 0 ;; esac
-case " $* " in
-    *" --coverage "*)
-        echo "Jest: coverage threshold for lines (100%) not met: 50%"
-        exit 1
-        ;;
-esac
-exit 0
-STUB
-    chmod +x "$WORK/bin/npx"
-}
-
-CASE="a change that drops a thresholded file below its threshold turns the mobile jest step red"
+CASE="a mobile source change runs the related jest step with no coverage gate"
 new_repo
 add_mobile_stubs
-add_thresholded_jest_stub
-(
-    cd "$WORK/repo" || exit 1
-    mkdir -p client/src/shared/apiClient
-    printf 'export const x = 1;\n' >client/src/shared/apiClient/x.ts
-    git add -A
-    git commit -qm "thresholded change"
-)
-NPX_LOG="$WORK/npx.log" run_script_with_stubs
-expect_rc 1
-expect_out "FAIL  mobile tests (related)"
-expect_npx "--collectCoverageFrom=src/shared/apiClient/x.ts"
-
-CASE="a change outside every thresholded glob runs the mobile jest step without coverage"
-new_repo
-add_mobile_stubs
-add_thresholded_jest_stub
-(
-    cd "$WORK/repo" || exit 1
-    mkdir -p client/src/ui
-    printf 'export const x = 1;\n' >client/src/ui/x.ts
-    git add -A
-    git commit -qm "unthresholded change"
-)
+mobile_src_change
 NPX_LOG="$WORK/npx.log" run_script_with_stubs
 expect_out "ok    mobile tests (related)"
-grep -qF -- "--coverage" "$WORK/npx.log" && fail "no coverage flag expected outside thresholded globs"
-
-CASE="a type-only port change in a thresholded module runs the mobile jest step without coverage"
-new_repo
-add_mobile_stubs
-add_thresholded_jest_stub
-(
-    cd "$WORK/repo" || exit 1
-    mkdir -p client/src/shared/apiClient/ports
-    printf 'export interface Port {\n  run(): void;\n}\n' >client/src/shared/apiClient/ports/port.ts
-    git add -A
-    git commit -qm "port change"
-)
-NPX_LOG="$WORK/npx.log" run_script_with_stubs
-expect_out "ok    mobile tests (related)"
-grep -qF -- "--coverage" "$WORK/npx.log" && fail "no coverage flag expected for a ports/ file, which holds only types"
+grep -qF -- "--coverage" "$WORK/npx.log" && fail "no coverage flag expected: mutation testing is the test-strength check"
 
 add_migrations() {
     (
