@@ -299,7 +299,7 @@ func TestClearSearchHistory_AnInsertRacingAnOpenEraseLeavesNoSearchText(t *testi
 	suffix := uuid.New().String()[:8]
 
 	gate := newCommitGate()
-	eraser := persistence.NewPgxSearchHistoryRepository(tracedPool(t, gate))
+	eraser := persistence.NewPgxSearchHistoryRepository(sharedtest.TracedPool(t, gate))
 	t.Cleanup(gate.open)
 	erased := make(chan error, 1)
 	go func() { erased <- eraser.EraseSearchTextForUser(ctx, owner) }()

@@ -56,3 +56,25 @@ func TestDatabaseURL_IsTheURLPoolConnectsTo(t *testing.T) {
 		t.Fatalf("Pool's database = %q, %v, want %q from DatabaseURL", database, err, cfg.Database)
 	}
 }
+
+type countingTracer struct{ started int }
+
+func (c *countingTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryStartData) context.Context {
+	c.started++
+	return ctx
+}
+
+func (c *countingTracer) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
+
+func TestTracedPool_ReportsEveryQueryToTheTracer(t *testing.T) {
+	tracer := &countingTracer{}
+	pool := sharedtest.TracedPool(t, tracer)
+
+	var got int
+	if err := pool.QueryRow(context.Background(), "SELECT 1").Scan(&got); err != nil || got != 1 {
+		t.Fatalf("SELECT = %d, %v, want 1, nil", got, err)
+	}
+	if tracer.started != 1 {
+		t.Fatalf("tracer saw %d queries, want 1", tracer.started)
+	}
+}

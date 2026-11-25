@@ -30,6 +30,21 @@ func Pool(t testing.TB) *pgxpool.Pool {
 	return pool
 }
 
+func TracedPool(t testing.TB, tracer pgx.QueryTracer) *pgxpool.Pool {
+	t.Helper()
+	cfg, err := pgxpool.ParseConfig(DatabaseURL(t))
+	if err != nil {
+		t.Fatalf("parse DATABASE_URL: %v", err)
+	}
+	cfg.ConnConfig.Tracer = tracer
+	pool, err := pgxpool.NewWithConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("connect to DATABASE_URL: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	return pool
+}
+
 func Tx(t testing.TB) pgx.Tx {
 	t.Helper()
 	tx, err := Pool(t).Begin(context.Background())

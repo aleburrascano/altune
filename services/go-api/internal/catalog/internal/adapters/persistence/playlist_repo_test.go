@@ -1070,19 +1070,8 @@ func (c *rowCounter) TraceBatchEnd(context.Context, *pgx.Conn, pgx.TraceBatchEnd
 
 func rowCountingPool(t *testing.T) (*pgxpool.Pool, *rowCounter) {
 	t.Helper()
-	dbURL := sharedtest.DatabaseURL(t)
-	cfg, err := pgxpool.ParseConfig(dbURL)
-	if err != nil {
-		t.Fatalf("parse DATABASE_URL: %v", err)
-	}
 	counter := &rowCounter{}
-	cfg.ConnConfig.Tracer = counter
-	pool, err := pgxpool.NewWithConfig(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	return pool, counter
+	return sharedtest.TracedPool(t, counter), counter
 }
 
 func assertContiguousOrder(ctx context.Context, t *testing.T, pool *pgxpool.Pool, playlistId catalog.PlaylistId, want []catalog.TrackId) {
