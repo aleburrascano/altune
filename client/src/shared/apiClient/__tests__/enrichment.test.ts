@@ -91,6 +91,23 @@ describe('getAlbumTracks', () => {
     expect(__http.last().query).toBe('limit=5&title=Rumours&artist=Fleetwood+Mac&mbid=mb-album-2');
   });
 
+  it('sends knownIds as ids, and omits ids for an empty list', async () => {
+    __http.reply('GET /v1/discovery/albums/musicbrainz/mb-1/tracks', {
+      status: 200,
+      json: emptyContent,
+    });
+
+    await getAlbumTracks({ provider: 'musicbrainz', externalId: 'mb-1', knownIds: [] });
+    expect(new URLSearchParams(__http.last().query).has('ids')).toBe(false);
+
+    await getAlbumTracks({
+      provider: 'musicbrainz',
+      externalId: 'mb-1',
+      knownIds: [{ provider: 'deezer', external_id: 'alb-1', url: '' }],
+    });
+    expect(new URLSearchParams(__http.last().query).get('ids')).toBe('deezer:alb-1');
+  });
+
   it('drops albumArtist when absent or empty, and includes it only when a real string is given', async () => {
     __http.reply('GET /v1/discovery/albums/musicbrainz/mb-1/tracks', {
       status: 200,

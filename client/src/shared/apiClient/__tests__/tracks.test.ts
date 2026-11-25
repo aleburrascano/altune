@@ -716,7 +716,10 @@ describe('getAllTracks truncation and cancellation', () => {
     __http.reply('GET /v1/tracks', fullPage(0));
     controller.abort();
 
-    await expect(getAllTracks({ signal: controller.signal })).rejects.toBeDefined();
+    await expect(getAllTracks({ signal: controller.signal })).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'Aborted',
+    });
     expect(__http.countFor('GET /v1/tracks')).toBe(0);
   });
 
