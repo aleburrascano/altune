@@ -146,7 +146,7 @@ func (r *spotifyTokenResolver) resolveClientToken(ctx context.Context) (string, 
 		},
 	})
 	if err != nil {
-		return "", time.Time{}, err
+		return "", time.Time{}, fmt.Errorf("encode the spotify client token request: %w", err)
 	}
 
 	var body struct {

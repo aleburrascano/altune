@@ -57,7 +57,7 @@ func WithHeader(key, value string) ReqOption {
 func NewGetRequest(ctx context.Context, rawURL string, opts ...ReqOption) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, http.NoBody)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build the GET request: %w", err)
 	}
 	for _, opt := range opts {
 		opt(req)
@@ -68,7 +68,7 @@ func NewGetRequest(ctx context.Context, rawURL string, opts ...ReqOption) (*http
 func NewHeadRequest(ctx context.Context, rawURL string, opts ...ReqOption) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, rawURL, http.NoBody)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build the HEAD request: %w", err)
 	}
 	for _, opt := range opts {
 		opt(req)
@@ -79,7 +79,7 @@ func NewHeadRequest(ctx context.Context, rawURL string, opts ...ReqOption) (*htt
 func NewPostRequest(ctx context.Context, rawURL string, body io.Reader, opts ...ReqOption) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build the POST request: %w", err)
 	}
 	for _, opt := range opts {
 		opt(req)
@@ -153,7 +153,7 @@ func GetBytesCapped(ctx context.Context, client *http.Client, rawURL string, lim
 		return resp.StatusCode, body, StatusError{Status: resp.StatusCode}
 	}
 	if readErr != nil {
-		return resp.StatusCode, nil, readErr
+		return resp.StatusCode, nil, fmt.Errorf("read the response body: %w", readErr)
 	}
 	return resp.StatusCode, body, nil
 }
@@ -211,7 +211,7 @@ func PostBytesCapped(ctx context.Context, client *http.Client, rawURL string, bo
 	defer func() { _ = resp.Body.Close() }()
 	payload, readErr := io.ReadAll(io.LimitReader(resp.Body, limit))
 	if readErr != nil {
-		return resp.StatusCode, nil, readErr
+		return resp.StatusCode, nil, fmt.Errorf("read the response body: %w", readErr)
 	}
 	return resp.StatusCode, payload, nil
 }

@@ -2,6 +2,7 @@ package trackers
 
 import (
 	"encoding/json"
+	"fmt"
 	"slices"
 	"strings"
 	"unicode"
@@ -34,7 +35,7 @@ type gridResponse struct {
 func decodeRows(body []byte) ([]gridRow, error) {
 	var resp gridResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode the tracker grid: %w", err)
 	}
 	if len(resp.Sheets) == 0 || len(resp.Sheets[0].Data) == 0 {
 		return []gridRow{}, nil

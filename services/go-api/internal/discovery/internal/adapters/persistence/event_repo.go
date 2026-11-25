@@ -218,13 +218,17 @@ func (r *PgxEventStore) SatisfactionSignals(ctx context.Context, since time.Time
 	if err != nil {
 		return nil, fmt.Errorf("query satisfaction signals: %w", err)
 	}
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (ports.BehavioralSignal, error) {
+	collected, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (ports.BehavioralSignal, error) {
 		var sig ports.BehavioralSignal
 		if err := row.Scan(&sig.ResultSignature, &sig.Score); err != nil {
 			return sig, fmt.Errorf("scan satisfaction signal: %w", err)
 		}
 		return sig, nil
 	})
+	if err != nil {
+		return nil, fmt.Errorf("collect satisfaction signals: %w", err)
+	}
+	return collected, nil
 }
 
 var behavioralLabelsSQL = fmt.Sprintf(`SELECT sp.query_norm,
@@ -321,11 +325,15 @@ const eraseEventSearchTextOfUserSQL = `
 	WHERE user_id = $1 AND query_norm IS NOT NULL`
 
 func scanQueryCounts(rows pgx.Rows) ([]ports.QueryCount, error) {
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (ports.QueryCount, error) {
+	collected, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (ports.QueryCount, error) {
 		var qc ports.QueryCount
 		if err := row.Scan(&qc.QueryNorm, &qc.Count); err != nil {
 			return qc, fmt.Errorf("scan query count: %w", err)
 		}
 		return qc, nil
 	})
+	if err != nil {
+		return nil, fmt.Errorf("collect query counts: %w", err)
+	}
+	return collected, nil
 }

@@ -63,7 +63,7 @@ func (r *PgxEventStore) DiscographyQuality(ctx context.Context, since time.Time,
 		return c, nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("collect discography cases: %w", err)
 	}
 	return discographyrank.Rank(cases, groupBy), nil
 }

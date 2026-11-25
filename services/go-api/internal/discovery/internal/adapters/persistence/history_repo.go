@@ -100,11 +100,14 @@ func execUnderLocks(ctx context.Context, pool *pgxpool.Pool, userId uuid.UUID, l
 	return database.InTx(ctx, pool, func(tx pgx.Tx) error {
 		for _, lock := range locks {
 			if _, err := tx.Exec(ctx, lock, userId); err != nil {
-				return err
+				return fmt.Errorf("lock search history of user %s: %w", userId, err)
 			}
 		}
 		_, err := tx.Exec(ctx, sql, args...)
-		return err
+		if err != nil {
+			return fmt.Errorf("write search history of user %s: %w", userId, err)
+		}
+		return nil
 	})
 }
 
@@ -123,7 +126,7 @@ func (r *PgxSearchHistoryRepository) EraseSearchTextForUser(ctx context.Context,
 	err := database.InTx(ctx, r.pool, func(tx pgx.Tx) error {
 		for _, eraseSQL := range eraseSearchTextOfUserSQL {
 			if _, err := tx.Exec(ctx, eraseSQL, userId.UUID()); err != nil {
-				return err
+				return fmt.Errorf("erase search text of user %s: %w", userId.UUID(), err)
 			}
 		}
 		return nil
@@ -165,7 +168,7 @@ func (r *PgxSearchHistoryRepository) ListDistinctRecent(ctx context.Context, use
 	if err != nil {
 		return nil, fmt.Errorf("query search history: %w", err)
 	}
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (*domain.SearchHistoryEntry, error) {
+	collected, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (*domain.SearchHistoryEntry, error) {
 		var (
 			id        uuid.UUID
 			uid       uuid.UUID
@@ -186,4 +189,8 @@ func (r *PgxSearchHistoryRepository) ListDistinctRecent(ctx context.Context, use
 			ResultClickedSignature: clickSig,
 		}, nil
 	})
+	if err != nil {
+		return nil, fmt.Errorf("collect search history: %w", err)
+	}
+	return collected, nil
 }

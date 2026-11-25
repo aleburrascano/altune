@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/discovery/internal/adapters/cache/vocabmatch"
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -89,7 +90,7 @@ func (s *RedisVocabularyStore) scanCapped(
 	for len(members) < readCap {
 		page, next, err := s.client.SScan(ctx, key, cursor, "", int64(readCap)).Result()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan vocabulary set %s: %w", key, err)
 		}
 		members = append(members, page...)
 		if next == 0 {

@@ -54,7 +54,10 @@ func (c *RedisEnrichmentCache) SetNegative(ctx context.Context, kind domain.Resu
 	if c.disabled() {
 		return nil
 	}
-	return c.client.Set(ctx, enrichmentNegKey(kind, nameKey), redisNegSentinel, enrichmentNegativeTTL).Err()
+	if err := c.client.Set(ctx, enrichmentNegKey(kind, nameKey), redisNegSentinel, enrichmentNegativeTTL).Err(); err != nil {
+		return fmt.Errorf("remember negative enrichment %s: %w", nameKey, err)
+	}
+	return nil
 }
 
 func (c *RedisEnrichmentCache) LookupMBID(ctx context.Context, kind domain.ResultKind, nameKey string) (string, bool) {
@@ -72,7 +75,10 @@ func (c *RedisEnrichmentCache) RememberMBID(ctx context.Context, kind domain.Res
 	if c.disabled() || nameKey == "" || mbid == "" {
 		return nil
 	}
-	return c.client.Set(ctx, mbidIndexKey(kind, nameKey), mbid, enrichmentPositiveTTL).Err()
+	if err := c.client.Set(ctx, mbidIndexKey(kind, nameKey), mbid, enrichmentPositiveTTL).Err(); err != nil {
+		return fmt.Errorf("remember mbid of %s: %w", nameKey, err)
+	}
+	return nil
 }
 
 func mbidIndexKey(kind domain.ResultKind, nameKey string) string {

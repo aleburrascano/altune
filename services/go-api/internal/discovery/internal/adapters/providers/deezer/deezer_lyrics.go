@@ -91,7 +91,7 @@ func (a *DeezerLyricsAdapter) postLyrics(ctx context.Context, jwt, trackID strin
 		"variables":     map[string]string{"trackId": trackID},
 	})
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("encode the lyrics request for track %s: %w", trackID, err)
 	}
 
 	status, body, err := providerhttp.PostBytesCapped(ctx, a.client, deezerPipeURL, bytes.NewReader(payload), deezerLyricsMaxBody,
