@@ -24,13 +24,16 @@ type sseConn struct {
 func (c *sseConn) writeFrame(frame string) error {
 	if c.writeTimeout > 0 {
 		if err := c.rc.SetWriteDeadline(time.Now().Add(c.writeTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
-			return err
+			return fmt.Errorf("set the sse write deadline: %w", err)
 		}
 	}
 	if _, err := io.WriteString(c.w, frame); err != nil {
-		return err
+		return fmt.Errorf("write an sse frame: %w", err)
 	}
-	return c.rc.Flush()
+	if err := c.rc.Flush(); err != nil {
+		return fmt.Errorf("flush an sse frame: %w", err)
+	}
+	return nil
 }
 
 func (c *sseConn) writeEvent(evt events.Event) error {
