@@ -1,7 +1,10 @@
 package logging_test
 
 import (
+	"context"
+	"errors"
 	"log/slog"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -97,5 +100,26 @@ func TestPrettyHandler_EmptyGroupNameAddsNoPrefix(t *testing.T) {
 	got := lines()
 	if len(got) != 1 || !strings.Contains(got[0], " k=1") || strings.Contains(got[0], ".k=1") {
 		t.Fatalf("lines = %q, want k=1 with no group prefix", got)
+	}
+}
+
+func TestPrettyHandler_HandleReportsAWriteFailureAndNothingOnSuccess(t *testing.T) {
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	stdout, err := os.CreateTemp(t.TempDir(), "stdout")
+	if err != nil {
+		t.Fatal(err)
+	}
+	setupWritingTo(stdout, "debug", true)
+	handler := slog.Default().Handler()
+	record := slog.NewRecord(time.Now(), slog.LevelInfo, "hello", 0)
+
+	if err := handler.Handle(context.Background(), record); err != nil {
+		t.Fatalf("Handle on a writable stdout = %v, want nil", err)
+	}
+	_ = stdout.Close()
+	err = handler.Handle(context.Background(), record)
+	if err == nil || !strings.Contains(err.Error(), "write log record") || !errors.Is(err, os.ErrClosed) {
+		t.Fatalf("Handle on a closed stdout = %v, want a write error wrapping os.ErrClosed", err)
 	}
 }

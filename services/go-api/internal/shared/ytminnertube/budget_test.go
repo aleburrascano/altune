@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -257,4 +258,18 @@ func slotMillis(t *testing.T, server *miniredis.Miniredis) int64 {
 		t.Fatal(err)
 	}
 	return slot
+}
+
+func TestBudget_CoolDownSucceedsOnALiveRedisAndNamesTheScriptWhenRedisIsDown(t *testing.T) {
+	server := miniredis.RunT(t)
+	budget := budgetOn(t, server, ytminnertube.Settings{Cooldown: time.Minute})
+
+	if err := budget.CoolDown(context.Background()); err != nil {
+		t.Fatalf("CoolDown on a live redis = %v, want nil", err)
+	}
+	server.Close()
+	err := budget.CoolDown(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "cooldown script") {
+		t.Fatalf("CoolDown with redis down = %v, want an error naming the cooldown script", err)
+	}
 }
