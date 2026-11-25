@@ -8,6 +8,8 @@ new_repo() {
     WORK=$(mktemp -d)
     mkdir -p "$WORK/repo/scripts/__tests__"
     cp "$HERE/precheck.sh" "$WORK/repo/scripts/"
+    mkdir -p "$WORK/repo/scripts/ci"
+    printf '#!/usr/bin/env bash\nprintf "secret-scan %%s\\n" "$*" >>"%s/tools.log"\nexit "${SECRET_SCAN_STUB_RC:-0}"\n' "$WORK" >"$WORK/repo/scripts/ci/secret-scan.sh"
     (
         cd "$WORK/repo" || exit 1
         git init -qb main
@@ -794,6 +796,29 @@ run_with_tools --lint
 expect_log "golangci-lint-cache run $WORK/repo/.cache/golangci-lint"
 stray=$(grep "^golangci-lint-cache run " "$WORK/tools.log" | grep -vF " $WORK/repo/.cache/golangci-lint")
 [ -z "$stray" ] || fail "a golangci-lint call ran outside the checkout cache"
+
+CASE="every change is scanned for secrets from the merge base to HEAD"
+new_repo
+commit_as_base
+add_plain_file
+run_with_tools
+expect_log "secret-scan $(git -C "$WORK/repo" rev-parse gitea/main)"
+expect_out "ok    secret scan (commits since base)"
+
+CASE="a secret found in the range fails precheck"
+new_repo
+commit_as_base
+add_plain_file
+SECRET_SCAN_STUB_RC=1 run_with_tools
+expect_out "FAIL  secret scan (commits since base)"
+[ "$RC" != 0 ] || fail "a secret scan finding must make precheck exit non-zero"
+
+CASE="--lint (the pre-commit hook) leaves the secret scan to CI"
+new_repo
+commit_as_base
+add_plain_file
+run_with_tools --lint
+forbid_log "secret-scan"
 
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"

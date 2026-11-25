@@ -1,0 +1,30 @@
+title = "altune secret scan"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Supabase anon key: a public client key that the shipped app and its build config carry by design"
+paths = [
+  '''(^|/)eas\.json$''',
+  '''^\.(gitea|github)/workflows/(deploy-web|release-ota|release-ios)\.yml$''',
+]
+
+[[allowlists]]
+description = "YouTube web-player API key: public, hardcoded in the web player's JS bundle that every browser downloads"
+paths = [
+  '''(^|/)ytmusic_client\.go$''',
+  '''(^|/)ytmsearch/client\.go$''',
+  '''(^|/)ytminnertube/client(_test)?\.go$''',
+  '''(^|/)providerschema/ytmusic\.go$''',
+  '''^docs/providers/youtube-music\.md$''',
+]
+
+[[allowlists]]
+description = "Test fixtures: fake tokens and keys that exercise redaction and parsing"
+paths = [
+  '''(^|/)__tests__/''',
+  '''(^|/)testdata/''',
+  '''_test\.go$''',
+  '''\.test\.(ts|tsx)$''',
+]
