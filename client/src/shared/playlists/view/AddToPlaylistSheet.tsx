@@ -26,7 +26,7 @@ import { usePlaylistsPort } from '@shared/playlists/view/PlaylistsPortProvider';
 import {
   useAddTracksToPlaylist,
   useCreatePlaylistWithTracks,
-} from '@shared/playlists/hooks/playlist/mutations';
+} from '@shared/playlists/view/playlist/mutations';
 import { useSingleFlightAction } from '@shared/playlists/view/playlist/useSingleFlightAction';
 import { warn } from '@shared/log';
 const SHEET_PLAYLIST_CAP = 2000;

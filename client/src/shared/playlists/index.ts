@@ -1,4 +1,4 @@
-export { AddToPlaylistSheet } from '@shared/playlists/ui/AddToPlaylistSheet';
+export { AddToPlaylistSheet } from '@shared/playlists/view/AddToPlaylistSheet';
 export { CreatePlaylistModal } from '@shared/playlists/view/CreatePlaylistModal';
 export {
   useAddTracksToPlaylist,
@@ -7,7 +7,7 @@ export {
   useDeletePlaylist,
   useRemoveTracksFromPlaylist,
   useRenamePlaylist,
-} from '@shared/playlists/hooks/playlist/mutations';
+} from '@shared/playlists/view/playlist/mutations';
 export { useSingleFlightAction } from '@shared/playlists/view/playlist/useSingleFlightAction';
 export {
   PlaylistsPortProvider,
