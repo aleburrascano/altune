@@ -10,10 +10,10 @@ import (
 
 const allShutdownSteps = 7
 
-func statuses(outcomes []shutdown.Outcome) map[string]shutdown.Status {
-	got := make(map[string]shutdown.Status, len(outcomes))
+func byComponent(outcomes []shutdown.Outcome) map[string]shutdown.Outcome {
+	got := make(map[string]shutdown.Outcome, len(outcomes))
 	for _, o := range outcomes {
-		got[o.Component] = o.Status
+		got[o.Component] = o
 	}
 	return got
 }
@@ -41,24 +41,25 @@ func TestAssemblyShutdown_ADetachedTaskHeldOpenTimesOutOnlyTheDetachedStep(t *te
 	}
 
 	cancel()
-	begun := time.Now()
 	outcomes := assembly.Shutdown()
-	elapsed := time.Since(begun)
 
 	if len(outcomes) != allShutdownSteps {
 		t.Fatalf("Shutdown reported %d steps, want %d", len(outcomes), allShutdownSteps)
 	}
-	got := statuses(outcomes)
-	if got[shutdown.DetachedTasks] != shutdown.TimedOut {
-		t.Errorf("%q = %v, want TimedOut: the held task is drained by the detached step", shutdown.DetachedTasks, got[shutdown.DetachedTasks])
+	got := byComponent(outcomes)
+	if got[shutdown.DetachedTasks].Status != shutdown.TimedOut {
+		t.Errorf("%q = %v, want TimedOut: the held task is drained by the detached step", shutdown.DetachedTasks, got[shutdown.DetachedTasks].Status)
 	}
 	for _, name := range []string{shutdown.AlertMonitor, shutdown.EventFeed, shutdown.EvalMeter, shutdown.Scheduler, shutdown.Background, shutdown.LeaderElection} {
-		if got[name] != shutdown.Completed {
-			t.Errorf("%q = %v, want Completed: it does not wait on detached tasks", name, got[name])
+		if got[name].Status != shutdown.Completed {
+			t.Errorf("%q = %v, want Completed: it does not wait on detached tasks", name, got[name].Status)
 		}
 	}
-	if elapsed >= 4*time.Second {
-		t.Errorf("Shutdown took %v, want about the detached budget of 1s: the detached step must use DETACHED_DRAIN_BUDGET_SECONDS, not the background one or its cap", elapsed)
+	if b := got[shutdown.DetachedTasks].Budget; b != 1*time.Second {
+		t.Errorf("%q ran with budget %v, want DETACHED_DRAIN_BUDGET_SECONDS (1s)", shutdown.DetachedTasks, b)
+	}
+	if b := got[shutdown.Background].Budget; b != 5*time.Second {
+		t.Errorf("%q ran with budget %v, want BACKGROUND_DRAIN_BUDGET_SECONDS (5s)", shutdown.Background, b)
 	}
 }
 
@@ -76,24 +77,25 @@ func TestAssemblyShutdown_JobLoopsStillRunningTimeOutOnlyTheBackgroundStepAndKee
 		assembly.Jobs().Wait()
 	})
 
-	begun := time.Now()
 	outcomes := assembly.Shutdown()
-	elapsed := time.Since(begun)
 
 	if len(outcomes) != allShutdownSteps {
 		t.Fatalf("Shutdown reported %d steps, want %d", len(outcomes), allShutdownSteps)
 	}
-	got := statuses(outcomes)
-	if got[shutdown.Background] != shutdown.TimedOut {
-		t.Errorf("%q = %v, want TimedOut: the job loops were never cancelled", shutdown.Background, got[shutdown.Background])
+	got := byComponent(outcomes)
+	if got[shutdown.Background].Status != shutdown.TimedOut {
+		t.Errorf("%q = %v, want TimedOut: the job loops were never cancelled", shutdown.Background, got[shutdown.Background].Status)
 	}
-	if got[shutdown.LeaderElection] != shutdown.Skipped {
-		t.Errorf("%q = %v, want Skipped: the lock is kept while jobs may still run", shutdown.LeaderElection, got[shutdown.LeaderElection])
+	if got[shutdown.LeaderElection].Status != shutdown.Skipped {
+		t.Errorf("%q = %v, want Skipped: the lock is kept while jobs may still run", shutdown.LeaderElection, got[shutdown.LeaderElection].Status)
 	}
-	if got[shutdown.DetachedTasks] != shutdown.Completed {
-		t.Errorf("%q = %v, want Completed: no detached task is held", shutdown.DetachedTasks, got[shutdown.DetachedTasks])
+	if got[shutdown.DetachedTasks].Status != shutdown.Completed {
+		t.Errorf("%q = %v, want Completed: no detached task is held", shutdown.DetachedTasks, got[shutdown.DetachedTasks].Status)
 	}
-	if elapsed >= 4*time.Second {
-		t.Errorf("Shutdown took %v, want about the background budget of 1s: the background step must use BACKGROUND_DRAIN_BUDGET_SECONDS, not the detached one or its cap", elapsed)
+	if b := got[shutdown.Background].Budget; b != 1*time.Second {
+		t.Errorf("%q ran with budget %v, want BACKGROUND_DRAIN_BUDGET_SECONDS (1s)", shutdown.Background, b)
+	}
+	if b := got[shutdown.DetachedTasks].Budget; b != 5*time.Second {
+		t.Errorf("%q ran with budget %v, want DETACHED_DRAIN_BUDGET_SECONDS (5s)", shutdown.DetachedTasks, b)
 	}
 }

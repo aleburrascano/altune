@@ -72,7 +72,7 @@ func TestDetachedTasksStep_DrainingTheTrackerWaitsForInFlightSearchWork(t *testi
 	<-store.entered
 
 	inFlight := runOne(shutdown.DetachedTasks, 50*time.Millisecond, drain)
-	if inFlight != (shutdown.Outcome{Component: "detached request tasks", Status: shutdown.TimedOut}) {
+	if inFlight != (shutdown.Outcome{Component: "detached request tasks", Status: shutdown.TimedOut, Budget: 50 * time.Millisecond}) {
 		t.Fatalf("drain with search work in flight = %+v, want detached request tasks timed out", inFlight)
 	}
 
@@ -115,11 +115,41 @@ func TestRun_ATimeoutIsSurfacedDistinctlyFromACleanStop(t *testing.T) {
 	<-started
 
 	want := []shutdown.Outcome{
-		{Component: "slow component", Status: shutdown.TimedOut},
-		{Component: "fast component", Status: shutdown.Completed},
+		{Component: "slow component", Status: shutdown.TimedOut, Budget: 30 * time.Millisecond},
+		{Component: "fast component", Status: shutdown.Completed, Budget: 5 * time.Second},
 	}
 	if len(outcomes) != 2 || outcomes[0] != want[0] || outcomes[1] != want[1] {
 		t.Fatalf("outcomes = %+v, want %+v", outcomes, want)
+	}
+}
+
+func TestRun_EveryOutcomeReportsItsStepsPlannedBudgetEvenWhenTheStepIsSkipped(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	outcomes := shutdown.Run(shutdown.Plan(shutdown.Components{
+		Background:     func(context.Context) { <-release },
+		LeaderElection: shutdown.Stop(&countingStopper{}),
+	}, shutdown.Budgets{SchedulerSeconds: 20, BackgroundSeconds: 1, DetachedSeconds: 3}))
+
+	want := map[string]time.Duration{
+		shutdown.AlertMonitor:   2 * time.Second,
+		shutdown.EventFeed:      2 * time.Second,
+		shutdown.EvalMeter:      2 * time.Second,
+		shutdown.Scheduler:      20 * time.Second,
+		shutdown.Background:     1 * time.Second,
+		shutdown.LeaderElection: 3 * time.Second,
+		shutdown.DetachedTasks:  3 * time.Second,
+	}
+	if len(outcomes) != len(want) {
+		t.Fatalf("got %d outcomes, want %d", len(outcomes), len(want))
+	}
+	for _, o := range outcomes {
+		if o.Budget != want[o.Component] {
+			t.Errorf("%s ran with budget %v, want %v (status %v)", o.Component, o.Budget, want[o.Component], o.Status)
+		}
+	}
+	if got := outcomeOf(t, outcomes, shutdown.LeaderElection).Status; got != shutdown.Skipped {
+		t.Errorf("leader election = %v, want Skipped after the background step timed out, and still reporting its budget", got)
 	}
 }
 
