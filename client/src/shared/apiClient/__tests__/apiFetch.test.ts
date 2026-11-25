@@ -7,6 +7,7 @@ import {
   installSessionLookup,
   type SessionLookup,
 } from '@shared/apiClient/__tests__/sessionLookup';
+import { installBuild } from '@shared/device';
 import { ContractError, describeError, isNetworkError } from '@shared/failure';
 import { runSignOutCleanups } from '@shared/session';
 
@@ -1131,18 +1132,36 @@ describe('a hung request is aborted at the deadline', () => {
 
 const DEV_VERSION_PATTERN = /^dev\//;
 
+const SHORT_COMMIT_VERSION_PATTERN = /^0123456789ab\//;
+
+const BUILD_BEFORE_ANY_INSTALL = { platform: 'unknown', commit: undefined };
+
 describe('telemetry headers', () => {
   beforeEach(() => {
     withSession();
     __http.reply('GET /v1/library/tracks', { status: 200, json: [] });
   });
 
-  it('sends the platform and a dev-prefixed app version', async () => {
+  afterEach(() => {
+    installBuild(BUILD_BEFORE_ANY_INSTALL);
+  });
+
+  it('sends the platform and the build commit the app installed', async () => {
+    installBuild({ platform: 'android', commit: '0123456789abcdef' });
+
     await apiFetch('/v1/library/tracks');
 
     const { headers } = __http.last();
-    expect(headers['X-Altune-Platform']).toBe(Platform.OS);
-    expect(headers['X-Altune-App-Version']).toMatch(DEV_VERSION_PATTERN);
+    expect(headers['X-Altune-Platform']).toBe('android');
+    expect(headers['X-Altune-App-Version']).toMatch(SHORT_COMMIT_VERSION_PATTERN);
+  });
+
+  it('sends a dev-prefixed app version from a build with no commit', async () => {
+    installBuild({ platform: 'android', commit: undefined });
+
+    await apiFetch('/v1/library/tracks');
+
+    expect(__http.last().headers['X-Altune-App-Version']).toMatch(DEV_VERSION_PATTERN);
   });
 
   it('never sends an analytics opt-out header', async () => {

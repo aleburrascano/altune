@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 import { supabase } from '@shared/auth';
 import { RootLayout } from '@/mobile';
 
@@ -25,26 +27,45 @@ describe('RootLayout — the app installs its own auth client at startup', () =>
   });
 });
 
-function apiBaseAfterStartupWith(apiUrl: string): string {
-  const unset = process.env.EXPO_PUBLIC_API_URL;
-  process.env.EXPO_PUBLIC_API_URL = apiUrl;
-  let base = '';
+const STARTS_WITH_THE_SHORT_COMMIT = /^0123456789ab\//;
+
+function afterStartupWith<T>(env: Record<string, string>, read: () => T): T {
+  const previous = Object.fromEntries(Object.keys(env).map((name) => [name, process.env[name]]));
+  Object.assign(process.env, env);
+  let value!: T;
   try {
     jest.isolateModules(() => {
       require('@/mobile');
-      base = require('@shared/apiConfig').apiBase();
+      value = read();
     });
   } finally {
-    if (unset === undefined) delete process.env.EXPO_PUBLIC_API_URL;
-    else process.env.EXPO_PUBLIC_API_URL = unset;
+    for (const [name, before] of Object.entries(previous)) {
+      if (before === undefined) delete process.env[name];
+      else process.env[name] = before;
+    }
   }
-  return base;
+  return value;
 }
 
 describe('RootLayout — the app installs the API base from EXPO_PUBLIC_API_URL at startup', () => {
   it('sends requests to the base the build was given', () => {
-    expect(apiBaseAfterStartupWith('https://altune.example.org')).toBe(
-      'https://altune.example.org',
+    const base = afterStartupWith({ EXPO_PUBLIC_API_URL: 'https://altune.example.org' }, () =>
+      require('@shared/apiConfig').apiBase(),
     );
+    expect(base).toBe('https://altune.example.org');
+  });
+});
+
+describe('RootLayout — the app installs its build from EXPO_PUBLIC_BUILD_COMMIT at startup', () => {
+  it('names the build commit in the telemetry version', () => {
+    const version = afterStartupWith({ EXPO_PUBLIC_BUILD_COMMIT: '0123456789abcdef' }, () =>
+      require('@shared/device').telemetryVersion(),
+    );
+    expect(version).toMatch(STARTS_WITH_THE_SHORT_COMMIT);
+  });
+
+  it('names the platform the app runs on', () => {
+    const platform = afterStartupWith({}, () => require('@shared/device').platformName());
+    expect(platform).toBe(Platform.OS);
   });
 });

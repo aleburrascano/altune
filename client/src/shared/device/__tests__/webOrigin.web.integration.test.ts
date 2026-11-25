@@ -1,4 +1,4 @@
-import { webOrigin } from '@shared/device/core/webOrigin.web';
+import { webOrigin } from '@shared/device';
 
 function removeWindow(): void {
   Reflect.deleteProperty(globalThis, 'window');
