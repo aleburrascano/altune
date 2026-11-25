@@ -128,6 +128,11 @@ func complete(ctx context.Context, track *domain.Track, c acquisition.Completion
 	if err := settleAudio(track, c); err != nil {
 		return err
 	}
+	if c.Duration.Known() {
+		if err := track.SetDuration(c.Duration.Seconds()); err != nil {
+			return fmt.Errorf("set duration: %w", err)
+		}
+	}
 	recordMetadata(ctx, track, c)
 	if c.Relabel != nil {
 		if err := relabel(ctx, track, *c.Relabel); err != nil {
@@ -154,16 +159,10 @@ func relabel(ctx context.Context, track *domain.Track, label acquisition.Recordi
 	return nil
 }
 
-func recordLengthCheck(ctx context.Context, track *domain.Track, measuredSeconds float64) {
-	measured, err := shared.TrackLengthOf(measuredSeconds)
-	if err != nil {
-		slog.WarnContext(ctx, "acquisition.audio_length_unchecked",
-			"track_id", track.ID.String(), "audio_seconds", measuredSeconds, "error", redact.LogError(err))
-		return
-	}
+func recordLengthCheck(ctx context.Context, track *domain.Track, measured shared.TrackLength) {
 	if track.RecordAudioLength(measured) && track.AudioLengthMismatch {
 		slog.WarnContext(ctx, "acquisition.audio_length_mismatch",
-			"track_id", track.ID.String(), "catalog_seconds", *track.CatalogDurationSeconds, "audio_seconds", measuredSeconds)
+			"track_id", track.ID.String(), "catalog_seconds", *track.CatalogDurationSeconds, "audio_seconds", measured.Seconds())
 	}
 }
 
@@ -181,12 +180,6 @@ func settleAudio(track *domain.Track, c acquisition.Completion) error {
 }
 
 func recordMetadata(ctx context.Context, track *domain.Track, c acquisition.Completion) {
-	if c.Duration > 0 {
-		if err := track.SetDuration(c.Duration); err != nil {
-			slog.WarnContext(ctx, "acquisition.duration_rejected",
-				"track_id", track.ID.String(), "duration", c.Duration, "error", redact.LogError(err))
-		}
-	}
 	track.SetAcquisitionProvenance(c.Provenance)
 	for _, key := range c.RejectedSourceKeys {
 		track.RejectAudioSource(key)

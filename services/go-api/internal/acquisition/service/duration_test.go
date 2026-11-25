@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/acquisition/internal/core/ports"
 	"altune/go-api/internal/acquisition/service"
 	shared "altune/go-api/internal/shared/kernel"
+	"math"
 	"testing"
 )
 
@@ -41,18 +42,41 @@ func TestProvenance_OneLengthSourceIsNotCorroborated(t *testing.T) {
 	}
 }
 
-func TestMeasuredDuration_PrefersTheProbedValue(t *testing.T) {
+func lengthOfSeconds(t *testing.T, seconds float64) shared.TrackLength {
+	t.Helper()
+	length, err := shared.TrackLengthOf(seconds)
+	if err != nil {
+		t.Fatalf("TrackLengthOf(%v) = %v", seconds, err)
+	}
+	return length
+}
+
+func TestStoredLength_PrefersTheProbedLengthOverTheSourcesReportedOne(t *testing.T) {
 	ac := &service.AcquisitionContext{
-		ProbedDuration: 232,
+		ProbedDuration: lengthOfSeconds(t, 232),
 		Selected:       &ports.AudioCandidate{Duration: 999},
 	}
-	if got := ac.MeasuredDuration(); got != 232 {
-		t.Errorf("MeasuredDuration() = %v, want the probed 232 rather than provider metadata", got)
+	if got := ac.StoredLength().Seconds(); got != 232 {
+		t.Errorf("StoredLength() = %v s, want the probed 232 rather than the source's metadata", got)
 	}
+}
 
-	ac = &service.AcquisitionContext{Selected: &ports.AudioCandidate{Duration: 240}}
-	if got := ac.MeasuredDuration(); got != 240 {
-		t.Errorf("MeasuredDuration() = %v, want the provider value when nothing was probed", got)
+func TestStoredLength_FallsBackToTheChosenSourcesReportedLength(t *testing.T) {
+	ac := &service.AcquisitionContext{Selected: &ports.AudioCandidate{Duration: 240}}
+	if got := ac.StoredLength().Seconds(); got != 240 {
+		t.Errorf("StoredLength() = %v s, want the source's 240 when nothing was probed", got)
+	}
+}
+
+func TestStoredLength_IsUnknownWhenTheSourceReportsALengthNoRecordingCanHave(t *testing.T) {
+	for name, reported := range map[string]float64{"above seven days": 8 * 24 * 60 * 60, "negative": -1, "not a number": math.NaN()} {
+		ac := &service.AcquisitionContext{Selected: &ports.AudioCandidate{Duration: reported}}
+		if got := ac.StoredLength(); got.Known() {
+			t.Errorf("%s: StoredLength() = %v s, want an unknown length", name, got.Seconds())
+		}
+	}
+	if got := (&service.AcquisitionContext{}).StoredLength(); got.Known() {
+		t.Errorf("no probe and no selected source: StoredLength() = %v s, want unknown", got.Seconds())
 	}
 }
 

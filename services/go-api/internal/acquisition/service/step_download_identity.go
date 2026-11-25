@@ -173,7 +173,7 @@ func (s *DownloadStep) identify(
 	if ac.Identity.MBID == "" {
 		return nil
 	}
-	result.verdict = s.classifyMatch(ctx, ac, match, result.probed, sourceOf(ac, candidate))
+	result.verdict = s.classifyMatch(ctx, ac, match, result.probed.Seconds(), sourceOf(ac, candidate))
 	logAudioVerdict(ctx, ac, candidate, result.verdict, match.Results)
 	return judgeVerdict(ctx, ac, candidate, match, result)
 }

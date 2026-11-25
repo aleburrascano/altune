@@ -176,8 +176,8 @@ func settleAudio(track *LedgerTrack, c ports.Completion) error {
 }
 
 func recordCompletion(track *LedgerTrack, c ports.Completion) {
-	if storableLength(c.Duration) {
-		duration := c.Duration
+	if c.Duration.Known() {
+		duration := c.Duration.Seconds()
 		track.StoredDurationSeconds = &duration
 	}
 	if c.Provenance.Valid() {
@@ -191,11 +191,6 @@ func recordCompletion(track *LedgerTrack, c ports.Completion) {
 	if c.Evidence != nil && validConfidence(c.Confidence, c.Evidence) {
 		track.Confidence, track.Evidence = c.Confidence, slices.Clone(c.Evidence)
 	}
-}
-
-func storableLength(seconds float64) bool {
-	length, err := shared.TrackLengthOf(seconds)
-	return err == nil && length.Known()
 }
 
 func withRejected(stored, rejected []string) []string {

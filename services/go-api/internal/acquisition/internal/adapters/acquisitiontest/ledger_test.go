@@ -159,7 +159,7 @@ func TestLedger_CompleteMarksAPendingTrackReadyWithEverythingTheCompletionCarrie
 	ledger := acquisitiontest.NewLedger(track)
 
 	complete(t, ledger, track, ports.Completion{
-		AudioRef: servingRef, Duration: 201.5, ISRC: "USUG11904206", Provenance: shared.ProvenanceVerified,
+		AudioRef: servingRef, Duration: trackLength(t, 201.5), ISRC: "USUG11904206", Provenance: shared.ProvenanceVerified,
 		RejectedSourceKeys: []string{"youtube:old", "youtube:new", ""}, SourceURL: "https://music.youtube.com/watch?v=a",
 		Confidence: 0.9, Evidence: json.RawMessage(`{"grade":"a"}`),
 	})
@@ -200,46 +200,16 @@ func TestLedger_CompleteLeavesWhatTheCompletionDoesNotCarry(t *testing.T) {
 	}
 }
 
-func lengthOf(seconds *float64) string {
-	if seconds == nil {
-		return "no length"
-	}
-	return fmt.Sprintf("%vs", *seconds)
-}
-
-func TestLedger_AnUnstorableCompletionLengthStillMarksTheTrackReadyAndChangesNoLength(t *testing.T) {
-	const week = 7 * 24 * 60 * 60.0
-	for name, seconds := range map[string]float64{
-		"+Inf":      math.Inf(1),
-		"-Inf":      math.Inf(-1),
-		"NaN":       math.NaN(),
-		"above cap": week + 1,
-		"max float": math.MaxFloat64,
-	} {
-		for _, stored := range []*float64{nil, func() *float64 { s := 180.0; return &s }()} {
-			track := pendingTrack()
-			track.StoredDurationSeconds = stored
-			ledger := acquisitiontest.NewLedger(track)
-
-			complete(t, ledger, track, ports.Completion{AudioRef: servingRef, Duration: seconds})
-
-			got := committed(t, ledger, track.ID)
-			if got.Status != ports.TrackReady {
-				t.Errorf("%s over %s: status = %v, want ready: the catalog refuses the length, not the completion", name, lengthOf(stored), got.Status)
-			}
-			if lengthOf(got.StoredDurationSeconds) != lengthOf(stored) {
-				t.Errorf("%s over %s: stored length = %s, want it unchanged as the catalog leaves it", name, lengthOf(stored), lengthOf(got.StoredDurationSeconds))
-			}
-		}
-	}
-}
-
 func TestLedger_ACompletionLengthAtTheCatalogsCapIsStored(t *testing.T) {
 	const week = 7 * 24 * 60 * 60.0
 	track := pendingTrack()
 	ledger := acquisitiontest.NewLedger(track)
 
-	complete(t, ledger, track, ports.Completion{AudioRef: servingRef, Duration: week})
+	atTheCap, err := shared.TrackLengthOf(week)
+	if err != nil {
+		t.Fatalf("TrackLengthOf(%v) = %v, want the cap itself accepted", week, err)
+	}
+	complete(t, ledger, track, ports.Completion{AudioRef: servingRef, Duration: atTheCap})
 
 	if got := committed(t, ledger, track.ID); got.StoredDurationSeconds == nil || *got.StoredDurationSeconds != week {
 		t.Errorf("stored length = %v, want %v: the catalog's cap is inclusive", got.StoredDurationSeconds, week)
@@ -639,4 +609,13 @@ func TestLedger_ARelabelWithoutATitleOrAnMBIDFailsTheCompletionAndWritesNothing(
 			t.Errorf("track = %+v, want nothing written", got)
 		}
 	}
+}
+
+func trackLength(t *testing.T, seconds float64) shared.TrackLength {
+	t.Helper()
+	length, err := shared.TrackLengthOf(seconds)
+	if err != nil {
+		t.Fatalf("TrackLengthOf(%v) = %v", seconds, err)
+	}
+	return length
 }

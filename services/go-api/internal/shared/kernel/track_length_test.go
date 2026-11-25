@@ -27,6 +27,9 @@ func TestTrackLengthOf_AcceptsAnyFiniteLengthFromZeroToSevenDays(t *testing.T) {
 			if got.Known() != tt.wantKnown {
 				t.Errorf("Known() = %v, want %v", got.Known(), tt.wantKnown)
 			}
+			if got.Seconds() != tt.seconds {
+				t.Errorf("Seconds() = %v, want the %v it was made from", got.Seconds(), tt.seconds)
+			}
 		})
 	}
 }

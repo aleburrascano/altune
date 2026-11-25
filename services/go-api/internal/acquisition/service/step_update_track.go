@@ -29,7 +29,7 @@ func (s *UpdateTrackStep) Name() StepName { return stepNameUpdateTrack }
 
 func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, stored afterStore) (afterUpdate, error) {
 	evidence := ac.collectEvidence()
-	if err := ac.Replace.Gate.AdmitFetched(evidence.Grade, ac.SourceFormat, ac.ProbedDuration); err != nil {
+	if err := ac.Replace.Gate.AdmitFetched(evidence.Grade, ac.SourceFormat, ac.ProbedDuration.Seconds()); err != nil {
 		return afterUpdate{}, err
 	}
 	completion, err := completionOf(ac, stored.kept, evidence)
@@ -58,7 +58,7 @@ func completionOf(ac *AcquisitionContext, kept ports.AudioCandidate, evidence Ev
 	return ports.Completion{
 		AudioRef:           ac.AudioRef,
 		ReplaceAudio:       ac.Replace.PreservedRef != "",
-		Duration:           ac.MeasuredDuration(),
+		Duration:           ac.StoredLength(),
 		SourceURL:          kept.URL,
 		Confidence:         ac.Confidence,
 		Evidence:           raw,

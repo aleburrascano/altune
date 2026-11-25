@@ -5,7 +5,6 @@ import (
 	shared "altune/go-api/internal/shared/kernel"
 	"context"
 	"errors"
-	"math"
 	"testing"
 
 	"github.com/google/uuid"
@@ -121,35 +120,35 @@ func contractGetReportsEachStatusAndWhetherTheTrackIsStreamable(t *testing.T, l 
 	}
 }
 
-const overTheCap = 7*24*60*60 + 1
-
-func completeWithLength(t *testing.T, l LedgerUnderTest, prior *float64, seconds float64) ports.TrackSnapshot {
+func completeWithLength(t *testing.T, l LedgerUnderTest, prior *float64, length shared.TrackLength) ports.TrackSnapshot {
 	t.Helper()
 	track := contractTrack(ports.TrackPending)
 	track.StoredDurationSeconds = prior
 	l.AddTrack(t, track)
-	if err := l.Complete(context.Background(), track.ID, track.UserId, 0, ports.Completion{AudioRef: contractAudioRef, Duration: seconds}); err != nil {
-		t.Fatalf("Complete with length %v = %v, want the track marked ready", seconds, err)
+	if err := l.Complete(context.Background(), track.ID, track.UserId, 0, ports.Completion{AudioRef: contractAudioRef, Duration: length}); err != nil {
+		t.Fatalf("Complete with length %v = %v, want the track marked ready", length.Seconds(), err)
 	}
 	got := ownersView(t, l, track)
 	if got.Status != ports.TrackReady {
-		t.Errorf("after completing with length %v the track is %v, want ready", seconds, got.Status)
+		t.Errorf("after completing with length %v the track is %v, want ready", length.Seconds(), got.Status)
 	}
 	return got
 }
 
-func contractACompletionStoresAStorableLengthAndKeepsTheOldOneOverAnUnstorableOne(t *testing.T, l LedgerUnderTest) {
-	if got := completeWithLength(t, l, nil, 201.5); got.StoredDurationSeconds == nil || *got.StoredDurationSeconds != 201.5 {
+func contractACompletionStoresAKnownLengthAndKeepsTheOldOneOverAnUnknownOne(t *testing.T, l LedgerUnderTest) {
+	known, err := shared.TrackLengthOf(201.5)
+	if err != nil {
+		t.Fatalf("TrackLengthOf(201.5) = %v", err)
+	}
+	if got := completeWithLength(t, l, nil, known); got.StoredDurationSeconds == nil || *got.StoredDurationSeconds != 201.5 {
 		t.Errorf("after completing with 201.5 s the stored length is %v, want 201.5", got.StoredDurationSeconds)
 	}
-	for _, seconds := range []float64{math.Inf(1), math.NaN(), overTheCap} {
-		if got := completeWithLength(t, l, nil, seconds); got.StoredDurationSeconds != nil {
-			t.Errorf("after completing with unstorable length %v the stored length is %v, want it left unknown", seconds, *got.StoredDurationSeconds)
-		}
-		prior := 180.0
-		if got := completeWithLength(t, l, &prior, seconds); got.StoredDurationSeconds == nil || *got.StoredDurationSeconds != prior {
-			t.Errorf("after completing with unstorable length %v the stored length is %v, want the old %v kept", seconds, got.StoredDurationSeconds, prior)
-		}
+	if got := completeWithLength(t, l, nil, shared.TrackLength{}); got.StoredDurationSeconds != nil {
+		t.Errorf("after completing with an unknown length the stored length is %v, want it left unknown", *got.StoredDurationSeconds)
+	}
+	prior := 180.0
+	if got := completeWithLength(t, l, &prior, shared.TrackLength{}); got.StoredDurationSeconds == nil || *got.StoredDurationSeconds != prior {
+		t.Errorf("after completing with an unknown length the stored length is %v, want the old %v kept", got.StoredDurationSeconds, prior)
 	}
 }
 
@@ -161,7 +160,7 @@ var ledgerContractCases = []struct {
 	{"complete on another owner's track is not found and writes nothing", contractCompleteOnAnotherOwnersTrackIsNotFoundAndWritesNothing},
 	{"fail on another owner's track is not found and writes nothing", contractFailOnAnotherOwnersTrackIsNotFoundAndWritesNothing},
 	{"get reports each status and whether the track is streamable", contractGetReportsEachStatusAndWhetherTheTrackIsStreamable},
-	{"a completion stores a storable length and keeps the old one over an unstorable one", contractACompletionStoresAStorableLengthAndKeepsTheOldOneOverAnUnstorableOne},
+	{"a completion stores a known length and keeps the old one over an unknown one", contractACompletionStoresAKnownLengthAndKeepsTheOldOneOverAnUnknownOne},
 }
 
 func LedgerContract(t *testing.T, newLedger func(t *testing.T) LedgerUnderTest) {
