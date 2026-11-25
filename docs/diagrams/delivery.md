@@ -14,7 +14,7 @@ flowchart TD
     end
 
     subgraph ghgate [PR gate · GitHub pr-checks]
-        ghtests["pr-checks · backend-tests<br/>migrations · INTEGRATION=1 go test · coverage ratchet"]
+        ghtests["pr-checks · backend-tests<br/>migrations · INTEGRATION=1 go test -race · mutation on changed lines"]
         ghprecheck["pr-checks · precheck<br/>scripts/precheck.sh origin/main"]
     end
 
