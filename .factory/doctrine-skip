@@ -1,1 +1,1 @@
-mocked-internals covered by eslint no-restricted-properties in client and module-spec T2 in services/overseer (tests pass fakes in, never patch)
+mocked-internals covered by eslint no-restricted-properties in client, and by `testpackage` in services/overseer (tests pass fakes in, never patch)

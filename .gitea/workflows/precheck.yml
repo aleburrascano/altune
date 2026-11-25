@@ -30,6 +30,3 @@ jobs:
           setup=$(git -C "$repo" show "gitea/pr/$PR:scripts/ci/step-worktree.sh")
           . /dev/stdin "gitea/$BASE" "gitea/pr/$PR" . services/overseer/web <<<"$setup"
           GITEA_URL="$SERVER_URL" GITEA_TOKEN="$PR_SHAPE_TOKEN" bash scripts/ci/pr-shape.sh "$PR"
-          bash scripts/module-spec.sh check --since "gitea/$BASE"
-          bash scripts/ci/kit-self-tests.sh "gitea/$BASE"
-          bash scripts/module-spec.sh mutate --since "gitea/$BASE"

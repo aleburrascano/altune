@@ -124,7 +124,16 @@ func (s *rtsStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		resp["refresh_token"] = fmt.Sprintf("rotated-refresh-%d", n)
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	rtsWriteJSON(w, resp)
+}
+
+func rtsWriteJSON(w http.ResponseWriter, v map[string]any) {
+	body, err := json.Marshal(v)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_, _ = w.Write(body)
 }
 
 func rtsNewSource(t *testing.T, stub *rtsStub) (*goapihttp.RefreshingTokenSource, *httptest.Server) {
@@ -559,7 +568,7 @@ func (s *rtsSwitchStub) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	}
 	exp := s.clock.now().Add(s.lifetime).Unix()
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	rtsWriteJSON(w, map[string]any{
 		"access_token": rtsMakeJWT(fmt.Sprintf("%s-%d", rtsAccessMark, n), exp),
 		"token_type":   "bearer",
 	})
@@ -1062,7 +1071,7 @@ func (s *rtsRotatingStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	rtsWriteJSON(w, map[string]any{
 		"access_token":  rtsMakeJWT(fmt.Sprintf("%s-%d", rtsAccessMark, n), s.clock.now().Add(time.Hour).Unix()),
 		"refresh_token": rotated,
 	})
@@ -1367,7 +1376,7 @@ func (s *pgStub) servePassword(w http.ResponseWriter, raw []byte) {
 
 func (s *pgStub) writeTokens(w http.ResponseWriter, mark, refresh string) {
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
+	rtsWriteJSON(w, map[string]any{
 		"access_token":  rtsMakeJWT(rtsAccessMark+"-"+mark, s.clock.now().Add(time.Hour).Unix()),
 		"refresh_token": refresh,
 	})

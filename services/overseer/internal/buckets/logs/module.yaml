@@ -1,3 +1,0 @@
-role: feature
-owns: "which backend log lines count as trouble"
-depends_on: [core, goapi]
