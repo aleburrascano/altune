@@ -290,7 +290,7 @@ type succeedingAcquirer struct{ failingAcquirer }
 func (succeedingAcquirer) Execute(context.Context, kernel.UserId, kernel.TrackId) error { return nil }
 
 type capturedLogs struct {
-	mu      sync.Mutex
+	mu      *sync.Mutex
 	records *[]slog.Record
 }
 
@@ -317,7 +317,7 @@ func logsOfOneJob(t *testing.T, acquirer interface {
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	var records []slog.Record
-	slog.SetDefault(slog.New(capturedLogs{records: &records}))
+	slog.SetDefault(slog.New(capturedLogs{mu: &sync.Mutex{}, records: &records}))
 	queue := &firstOutcomeQueue{Queue: memqueue.New(make(chan struct{}, 1), time.Now), outcome: make(chan jobOutcome, 1)}
 	var wg sync.WaitGroup
 	scheduler := service.NewBackgroundAcquisitionScheduler(acquirer, &wg, make(chan struct{}, 1), service.WithJobQueue(queue))
