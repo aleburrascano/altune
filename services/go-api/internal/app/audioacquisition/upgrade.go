@@ -11,7 +11,7 @@ import (
 
 const deezerPreviewRate = 1.0
 
-func upgradeLane(cfg *config.Config, pool *pgxpool.Pool, ledger *acquisition.TrackLedger, svc *acquisition.AcquireTrackAudioService) func(*acquisition.BackgroundAcquisitionScheduler) {
+func upgradeLane(cfg *config.Config, pool *pgxpool.Pool, ledger acquisition.TrackLedgerPort, svc *acquisition.AcquireTrackAudioService) func(*acquisition.BackgroundAcquisitionScheduler) {
 	store := acquisition.NewPgxUpgradeStore(pool)
 	runner := acquisition.NewUpgradeRunner(ledger, svc, store,
 		acquisition.UpgradeConfig{

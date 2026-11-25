@@ -1,7 +1,8 @@
-package catalogbridge_test
+package acquisitioncatalog_test
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/app/acquisitioncatalog"
 	catalogdoor "altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/domain"
 	shared "altune/go-api/internal/shared/kernel"
@@ -91,7 +92,7 @@ func TestGetMapsFieldsAndReturnsNilWhenMissing(t *testing.T) {
 	if err := track.MarkReady("ref-1"); err != nil {
 		t.Fatal(err)
 	}
-	ledger := acquisition.NewTrackLedger(newFakeStore(track))
+	ledger := acquisitioncatalog.NewTrackLedger(newFakeStore(track))
 
 	snap, err := ledger.Get(context.Background(), track.ID, userId)
 	if err != nil {
@@ -119,7 +120,7 @@ func TestGetMapsFieldsAndReturnsNilWhenMissing(t *testing.T) {
 func TestCompleteMarksPendingTrackReady(t *testing.T) {
 	track, userId := newTrack(t, 4)
 	store := newFakeStore(track)
-	ledger := acquisition.NewTrackLedger(store)
+	ledger := acquisitioncatalog.NewTrackLedger(store)
 
 	err := ledger.Complete(context.Background(), track.ID, userId, 0, acquisition.Completion{
 		AudioRef:           "ref-1",
@@ -163,7 +164,7 @@ func TestCompleteWithReplaceAudioReplacesReadyTrack(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := newFakeStore(track)
-	ledger := acquisition.NewTrackLedger(store)
+	ledger := acquisitioncatalog.NewTrackLedger(store)
 
 	if err := ledger.Complete(context.Background(), track.ID, userId, 0, acquisition.Completion{AudioRef: "new-ref", ReplaceAudio: true}); err != nil {
 		t.Fatal(err)
@@ -180,7 +181,7 @@ func TestCompleteOnFailedTrackIsIllegalTransition(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := newFakeStore(track)
-	ledger := acquisition.NewTrackLedger(store)
+	ledger := acquisitioncatalog.NewTrackLedger(store)
 
 	err := ledger.Complete(context.Background(), track.ID, userId, 0, acquisition.Completion{AudioRef: "ref", ReplaceAudio: true})
 	if !errors.Is(err, acquisition.ErrIllegalTransition) {
@@ -204,7 +205,7 @@ func TestRevertAtUpdateConflictIsNotRetried(t *testing.T) {
 	}
 	store := newFakeStore(track)
 	store.conflicts = 1
-	ledger := acquisition.NewTrackLedger(store)
+	ledger := acquisitioncatalog.NewTrackLedger(store)
 
 	err := ledger.RevertAt(context.Background(), acquisition.TrackSnapshot{ID: track.ID, UserId: userId, Version: 5})
 	if !errors.Is(err, catalogdoor.ErrTrackVersionConflict) {
@@ -217,7 +218,7 @@ func TestRevertAtUpdateConflictIsNotRetried(t *testing.T) {
 
 func TestMissingTrackReturnsNotFound(t *testing.T) {
 	_, userId := newTrack(t, 1)
-	ledger := acquisition.NewTrackLedger(newFakeStore())
+	ledger := acquisitioncatalog.NewTrackLedger(newFakeStore())
 
 	err := ledger.Fail(context.Background(), domain.NewTrackId(), userId, 0, "boom")
 	if !errors.Is(err, acquisition.ErrTrackNotFound) {
@@ -228,7 +229,7 @@ func TestMissingTrackReturnsNotFound(t *testing.T) {
 func TestFailTransition(t *testing.T) {
 	track, userId := newTrack(t, 1)
 	store := newFakeStore(track)
-	ledger := acquisition.NewTrackLedger(store)
+	ledger := acquisitioncatalog.NewTrackLedger(store)
 
 	if err := ledger.Fail(context.Background(), track.ID, userId, 0, "boom"); err != nil {
 		t.Fatal(err)
@@ -242,7 +243,7 @@ func TestVersionConflictIsRetried(t *testing.T) {
 	track, userId := newTrack(t, 2)
 	store := newFakeStore(track)
 	store.conflicts = 1
-	ledger := acquisition.NewTrackLedger(store)
+	ledger := acquisitioncatalog.NewTrackLedger(store)
 
 	if err := ledger.Fail(context.Background(), track.ID, userId, 0, "boom"); err != nil {
 		t.Fatal(err)
@@ -259,7 +260,7 @@ func TestVersionConflictExhaustsAttempts(t *testing.T) {
 	track, userId := newTrack(t, 2)
 	store := newFakeStore(track)
 	store.conflicts = 100
-	ledger := acquisition.NewTrackLedger(store)
+	ledger := acquisitioncatalog.NewTrackLedger(store)
 
 	err := ledger.Fail(context.Background(), track.ID, userId, 0, "boom")
 	if !errors.Is(err, catalogdoor.ErrTrackVersionConflict) {
@@ -276,7 +277,7 @@ func TestRevertAtStaleVersionReturnsConflictWithoutRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := newFakeStore(track)
-	ledger := acquisition.NewTrackLedger(store)
+	ledger := acquisitioncatalog.NewTrackLedger(store)
 
 	err := ledger.RevertAt(context.Background(), acquisition.TrackSnapshot{ID: track.ID, UserId: userId, Version: 4})
 	if !errors.Is(err, catalogdoor.ErrTrackVersionConflict) {
@@ -293,7 +294,7 @@ func TestRevertAtRevertsAtSnapshotVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := newFakeStore(track)
-	ledger := acquisition.NewTrackLedger(store)
+	ledger := acquisitioncatalog.NewTrackLedger(store)
 
 	if err := ledger.RevertAt(context.Background(), acquisition.TrackSnapshot{ID: track.ID, UserId: userId, Version: 5}); err != nil {
 		t.Fatal(err)
@@ -313,7 +314,7 @@ func completeWithAudioLength(t *testing.T, catalogSeconds, audioSeconds float64)
 		t.Fatal(err)
 	}
 	store := newFakeStore(track)
-	err := acquisition.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0, acquisition.Completion{AudioRef: "ref", Duration: audioSeconds})
+	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0, acquisition.Completion{AudioRef: "ref", Duration: audioSeconds})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,7 +338,7 @@ func TestGetNeverAimsAtTheLastMeasuredFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	snap, err := acquisition.NewTrackLedger(newFakeStore(track)).Get(context.Background(), track.ID, userId)
+	snap, err := acquisitioncatalog.NewTrackLedger(newFakeStore(track)).Get(context.Background(), track.ID, userId)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +371,7 @@ func TestGetAimsADownloadAtTheCatalogLengthNotTheStoredFile(t *testing.T) {
 			if err := track.SetDuration(137); err != nil {
 				t.Fatal(err)
 			}
-			snap, err := acquisition.NewTrackLedger(newFakeStore(track)).Get(context.Background(), track.ID, userId)
+			snap, err := acquisitioncatalog.NewTrackLedger(newFakeStore(track)).Get(context.Background(), track.ID, userId)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -430,7 +431,7 @@ func TestCompleteDoesNotFlagATrackWithoutACatalogLength(t *testing.T) {
 	track, userId := newTrack(t, 1)
 	store := newFakeStore(track)
 
-	err := acquisition.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0, acquisition.Completion{AudioRef: "ref", Duration: 137})
+	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0, acquisition.Completion{AudioRef: "ref", Duration: 137})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -451,7 +452,7 @@ func TestCompleteClearsTheFlagWhenReplacementAudioMatches(t *testing.T) {
 	track.AudioLengthMismatch = true
 	store := newFakeStore(track)
 
-	err := acquisition.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0, acquisition.Completion{AudioRef: "new", ReplaceAudio: true, Duration: 236})
+	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0, acquisition.Completion{AudioRef: "new", ReplaceAudio: true, Duration: 236})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -479,7 +480,7 @@ func TestCompletePersistsTheResolvedISRCOnlyWhenTheTrackHasNone(t *testing.T) {
 			track.ISRC = tt.have
 			store := newFakeStore(track)
 
-			err := acquisition.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0, acquisition.Completion{AudioRef: "ref", ISRC: tt.got})
+			err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0, acquisition.Completion{AudioRef: "ref", ISRC: tt.got})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -510,7 +511,7 @@ func TestGetExposesTheCatalogIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	snap, err := acquisition.NewTrackLedger(newFakeStore(track)).Get(context.Background(), track.ID, userId)
+	snap, err := acquisitioncatalog.NewTrackLedger(newFakeStore(track)).Get(context.Background(), track.ID, userId)
 	if err != nil || snap == nil {
 		t.Fatalf("Get = %v, %v", snap, err)
 	}
@@ -533,7 +534,7 @@ func TestGetKeepsTheMeasuredFileLengthBesideTheCatalogLength(t *testing.T) {
 	measured, catalog := 112.0, 128.0
 	track.DurationSeconds = &measured
 	track.CatalogDurationSeconds = &catalog
-	ledger := acquisition.NewTrackLedger(newFakeStore(track))
+	ledger := acquisitioncatalog.NewTrackLedger(newFakeStore(track))
 
 	snap, err := ledger.Get(context.Background(), track.ID, userId)
 	if err != nil {
@@ -555,7 +556,7 @@ func TestGetExposesThePickedSourceURL(t *testing.T) {
 	const pick = "https://soundcloud.com/artist/track"
 	track.CatalogSources = []domain.CatalogSource{{Provider: "soundcloud", ExternalID: pick, URL: pick}}
 
-	snap, err := acquisition.NewTrackLedger(newFakeStore(track)).Get(context.Background(), track.ID, userId)
+	snap, err := acquisitioncatalog.NewTrackLedger(newFakeStore(track)).Get(context.Background(), track.ID, userId)
 	if err != nil || snap == nil {
 		t.Fatalf("Get: %v, %v", snap, err)
 	}
@@ -569,7 +570,7 @@ func TestTrackLedger_CompleteWithAStaleFenceIsLeaseLost(t *testing.T) {
 	track, userId := newTrack(t, 4)
 	track.AcquisitionFence = 3
 	store := newFakeStore(track)
-	ledger := acquisition.NewTrackLedger(store)
+	ledger := acquisitioncatalog.NewTrackLedger(store)
 
 	err := ledger.Complete(context.Background(), track.ID, userId, 2, acquisition.Completion{AudioRef: "ref-1"})
 
@@ -585,7 +586,7 @@ func TestTrackLedger_FailWithAStaleFenceIsLeaseLost(t *testing.T) {
 	track, userId := newTrack(t, 1)
 	track.AcquisitionFence = 3
 	store := newFakeStore(track)
-	ledger := acquisition.NewTrackLedger(store)
+	ledger := acquisitioncatalog.NewTrackLedger(store)
 
 	failErr := ledger.Fail(context.Background(), track.ID, userId, 2, "boom")
 
@@ -613,7 +614,7 @@ func TestTrackLedger_WritesThatOwnTheLeaseOrCarryNoFenceGoThrough(t *testing.T) 
 			track.AcquisitionFence = tc.trackedFence
 			store := newFakeStore(track)
 
-			err := acquisition.NewTrackLedger(store).Fail(context.Background(), track.ID, userId, tc.heldFence, "boom")
+			err := acquisitioncatalog.NewTrackLedger(store).Fail(context.Background(), track.ID, userId, tc.heldFence, "boom")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -629,7 +630,7 @@ func TestTrackLedger_AClaimBetweenReadAndUpdateFencesOutTheWriter(t *testing.T) 
 	track.AcquisitionFence = 2
 	store := &reclaimingStore{fakeStore: newFakeStore(track)}
 
-	err := acquisition.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 2, acquisition.Completion{AudioRef: "ref-1"})
+	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 2, acquisition.Completion{AudioRef: "ref-1"})
 
 	if !errors.Is(err, acquisition.ErrLeaseLost) {
 		t.Fatalf("err = %v, want ErrLeaseLost once the retry re-reads the new owner's fence", err)
@@ -664,7 +665,7 @@ func TestTrackLedger_AFenceAheadOfTheTracksIsAlsoLeaseLost(t *testing.T) {
 	track.AcquisitionFence = 3
 	store := newFakeStore(track)
 
-	err := acquisition.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 4, acquisition.Completion{AudioRef: "ref-1"})
+	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 4, acquisition.Completion{AudioRef: "ref-1"})
 
 	if !errors.Is(err, acquisition.ErrLeaseLost) {
 		t.Fatalf("err = %v, want ErrLeaseLost: a fence that differs either way is not the owner", err)
@@ -682,7 +683,7 @@ func TestTrackLedger_AStaleReplaceKeepsTheTrackOnItsServingAudio(t *testing.T) {
 	track.AcquisitionFence = 3
 	store := newFakeStore(track)
 
-	err := acquisition.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 2, acquisition.Completion{AudioRef: "new-ref", ReplaceAudio: true})
+	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 2, acquisition.Completion{AudioRef: "new-ref", ReplaceAudio: true})
 
 	if !errors.Is(err, acquisition.ErrLeaseLost) {
 		t.Fatalf("err = %v, want ErrLeaseLost", err)
@@ -711,7 +712,7 @@ func TestTrackLedger_CompleteWithoutAFenceOnEitherSideGoesThrough(t *testing.T) 
 			track.AcquisitionFence = tc.trackedFence
 			store := newFakeStore(track)
 
-			if err := acquisition.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, tc.heldFence, acquisition.Completion{AudioRef: "ref-1"}); err != nil {
+			if err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, tc.heldFence, acquisition.Completion{AudioRef: "ref-1"}); err != nil {
 				t.Fatal(err)
 			}
 			got := storedTrack(t, store, track.ID)
@@ -727,7 +728,7 @@ func TestTrackLedger_AClaimBetweenReadAndUpdateStopsTheOldOwnerFailingTheTrack(t
 	track.AcquisitionFence = 2
 	store := &reclaimingStore{fakeStore: newFakeStore(track)}
 
-	err := acquisition.NewTrackLedger(store).Fail(context.Background(), track.ID, userId, 2, "boom")
+	err := acquisitioncatalog.NewTrackLedger(store).Fail(context.Background(), track.ID, userId, 2, "boom")
 
 	if !errors.Is(err, acquisition.ErrLeaseLost) {
 		t.Fatalf("err = %v, want ErrLeaseLost", err)
@@ -749,7 +750,7 @@ func TestTrackLedger_RevertAtIgnoresTheLease(t *testing.T) {
 	track.AcquisitionFence = 3
 	store := newFakeStore(track)
 
-	if err := acquisition.NewTrackLedger(store).RevertAt(context.Background(), acquisition.TrackSnapshot{ID: track.ID, UserId: userId, Version: 5}); err != nil {
+	if err := acquisitioncatalog.NewTrackLedger(store).RevertAt(context.Background(), acquisition.TrackSnapshot{ID: track.ID, UserId: userId, Version: 5}); err != nil {
 		t.Fatal(err)
 	}
 	if got := storedTrack(t, store, track.ID); got.AcquisitionStatus != domain.AcquisitionPending {
@@ -785,7 +786,7 @@ func TestTrackLedger_CompleteWithARelabelStoresTheRecordingActuallyStored(t *tes
 	track, userId := studioLabelledTrack(t)
 	store := newFakeStore(track)
 
-	err := acquisition.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
+	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
 		acquisition.Completion{AudioRef: "ref", Duration: 194, ISRC: "IETLH2500023", Relabel: goldenRelabel()})
 	if err != nil {
 		t.Fatal(err)
@@ -819,7 +820,7 @@ func TestTrackLedger_CompleteWithoutARelabelKeepsTheTracksLabels(t *testing.T) {
 	track, userId := studioLabelledTrack(t)
 	store := newFakeStore(track)
 
-	err := acquisition.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
+	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
 		acquisition.Completion{AudioRef: "ref", Duration: 195, ISRC: "IETLH2500023"})
 	if err != nil {
 		t.Fatal(err)
@@ -841,7 +842,7 @@ func TestTrackLedger_ARefusedRelabelFailsTheCompletionAndWritesNothing(t *testin
 	label := goldenRelabel()
 	label.MBID = ""
 
-	err := acquisition.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
+	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
 		acquisition.Completion{AudioRef: "ref", Duration: 194, Relabel: label})
 
 	if err == nil {
@@ -857,7 +858,7 @@ func TestTrackLedger_ARelabelSurvivesAVersionConflictRetry(t *testing.T) {
 	store := newFakeStore(track)
 	store.conflicts = 1
 
-	err := acquisition.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
+	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
 		acquisition.Completion{AudioRef: "ref", Duration: 194, Relabel: goldenRelabel()})
 	if err != nil {
 		t.Fatal(err)
@@ -884,7 +885,7 @@ func TestTrackLedger_ARelabelChecksTheMeasuredLengthAgainstTheNewCatalogLength(t
 	label := goldenRelabel()
 	label.DurationSeconds = 400
 
-	err := acquisition.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
+	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
 		acquisition.Completion{AudioRef: "ref", Duration: 195, Relabel: label})
 	if err != nil {
 		t.Fatal(err)
@@ -901,7 +902,7 @@ func TestTrackLedger_ARelabelWithNoKnownLengthLeavesNothingToMismatch(t *testing
 	label := goldenRelabel()
 	label.DurationSeconds = 0
 
-	err := acquisition.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
+	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
 		acquisition.Completion{AudioRef: "ref", Duration: 60, Relabel: label})
 	if err != nil {
 		t.Fatal(err)
@@ -920,7 +921,7 @@ func TestTrackLedger_TheRelabelsISRCWinsOverTheCompletionsISRC(t *testing.T) {
 	track, userId := studioLabelledTrack(t)
 	store := newFakeStore(track)
 
-	err := acquisition.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
+	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
 		acquisition.Completion{AudioRef: "ref", Duration: 194, ISRC: "USAM18490008", Relabel: goldenRelabel()})
 	if err != nil {
 		t.Fatal(err)
@@ -937,7 +938,7 @@ func TestTrackLedger_ARelabelWithNoISRCTakesTheCompletionsResolvedISRC(t *testin
 	label := goldenRelabel()
 	label.ISRC = ""
 
-	err := acquisition.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
+	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
 		acquisition.Completion{AudioRef: "ref", Duration: 194, ISRC: "IETLH2500023", Relabel: label})
 	if err != nil {
 		t.Fatal(err)
@@ -955,7 +956,7 @@ func TestTrackLedger_AReplaceOfAReadyTrackCanRelabelIt(t *testing.T) {
 	}
 	store := newFakeStore(track)
 
-	err := acquisition.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
+	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
 		acquisition.Completion{AudioRef: "rerecording-ref", ReplaceAudio: true, Duration: 194, Relabel: goldenRelabel()})
 	if err != nil {
 		t.Fatal(err)
@@ -977,7 +978,7 @@ func TestTrackLedger_AnIllegalReplaceWithARelabelWritesNoLabels(t *testing.T) {
 	}
 	store := newFakeStore(track)
 
-	err := acquisition.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
+	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, userId, 0,
 		acquisition.Completion{AudioRef: "ref", ReplaceAudio: true, Duration: 194, Relabel: goldenRelabel()})
 	if !errors.Is(err, acquisition.ErrIllegalTransition) {
 		t.Fatalf("want ErrIllegalTransition, got %v", err)

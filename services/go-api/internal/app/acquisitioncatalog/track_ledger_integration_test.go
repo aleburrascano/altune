@@ -1,7 +1,8 @@
-package catalogbridge_test
+package acquisitioncatalog_test
 
 import (
 	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/app/acquisitioncatalog"
 	"altune/go-api/internal/catalog"
 	"altune/go-api/internal/catalog/domain"
 	shared "altune/go-api/internal/shared/kernel"
@@ -73,7 +74,7 @@ func rowState(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId) (string,
 
 func TestTrackLedger_OnPostgresAReclaimedTrackRefusesTheOldOwnerAndAcceptsTheNew(t *testing.T) {
 	pool := newLedgerPool(t)
-	ledger := acquisition.NewTrackLedger(catalog.NewPgxTrackRepository(pool))
+	ledger := acquisitioncatalog.NewTrackLedger(catalog.NewPgxTrackRepository(pool))
 	ctx := context.Background()
 	track := insertUnqueuedTrack(t, pool)
 
@@ -121,7 +122,7 @@ func TestTrackLedger_OnPostgresAClaimBetweenReadAndUpdateFencesOutTheWriter(t *t
 	held := reclaimTrack(t, pool, track.ID)
 	store := &claimDuringUpdateStore{PgxTrackRepository: catalog.NewPgxTrackRepository(pool), pool: pool, t: t}
 
-	err := acquisition.NewTrackLedger(store).Complete(context.Background(), track.ID, track.UserId, held, acquisition.Completion{AudioRef: "old-owner-ref"})
+	err := acquisitioncatalog.NewTrackLedger(store).Complete(context.Background(), track.ID, track.UserId, held, acquisition.Completion{AudioRef: "old-owner-ref"})
 
 	if !errors.Is(err, acquisition.ErrLeaseLost) {
 		t.Fatalf("err = %v, want ErrLeaseLost once the version conflict re-reads the new owner's attempts", err)

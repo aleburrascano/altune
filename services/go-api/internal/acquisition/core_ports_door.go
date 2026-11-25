@@ -21,6 +21,7 @@ type (
 	RecordingQuery          = ports.RecordingQuery
 	TrackLedgerPort         = ports.TrackLedger
 	TrackSnapshot           = ports.TrackSnapshot
+	TrackStatus             = ports.TrackStatus
 	TrackTags               = ports.TrackTags
 )
 

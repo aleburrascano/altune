@@ -1,7 +1,7 @@
-package catalogbridge
+package acquisitioncatalog
 
 import (
-	"altune/go-api/internal/acquisition/internal/core/ports"
+	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/catalog"
 	"context"
 )
@@ -14,7 +14,7 @@ func NewOrphanedAudioRecorder(q catalog.OrphanedAudioRecorder) *OrphanedAudioRec
 	return &OrphanedAudioRecorder{queue: q}
 }
 
-func (r *OrphanedAudioRecorder) RecordOrphanedAudio(ctx context.Context, orphan ports.OrphanedAudio) error {
+func (r *OrphanedAudioRecorder) RecordOrphanedAudio(ctx context.Context, orphan acquisition.OrphanedAudio) error {
 	return r.queue.RecordOrphanedAudio(ctx, catalog.OrphanedAudio{
 		AudioRef:  orphan.AudioRef,
 		UserId:    orphan.UserId,
