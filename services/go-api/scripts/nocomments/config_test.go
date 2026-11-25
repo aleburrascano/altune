@@ -254,7 +254,7 @@ func TestRunCheckReportsLineConfigViolations(t *testing.T) {
 	writeFile(t, dir, ".gitignore", "# a comment\nnode_modules/\n")
 
 	var stdout strings.Builder
-	code := run([]string{"check", dir}, &stdout)
+	code := run(t.Context(), []string{"check", dir}, &stdout)
 
 	if code != 1 {
 		t.Fatalf("exit = %d, want 1; output:\n%s", code, stdout.String())
@@ -300,7 +300,7 @@ func TestLineConfigStripOfAnEmptyFileLeavesItEmptyAndCheckReportsZero(t *testing
 	dir := t.TempDir()
 	writeFile(t, dir, ".env.example", "")
 	var stdout strings.Builder
-	if code := run([]string{"check", dir + "/.env.example"}, &stdout); code != 0 {
+	if code := run(t.Context(), []string{"check", dir + "/.env.example"}, &stdout); code != 0 {
 		t.Fatalf("check exit = %d, want 0; output:\n%s", code, stdout.String())
 	}
 }

@@ -23,13 +23,13 @@ func (e errRT) RoundTrip(*http.Request) (*http.Response, error) { return nil, e.
 type okRT struct{}
 
 func (okRT) RoundTrip(req *http.Request) (*http.Response, error) {
-	return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("ok")), Request: req}, nil
+	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("ok")), Request: req}, nil
 }
 
 type bodyRT struct{ body string }
 
 func (b bodyRT) RoundTrip(req *http.Request) (*http.Response, error) {
-	return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(b.body)), Request: req}, nil
+	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(b.body)), Request: req}, nil
 }
 
 func mustPost(t *testing.T, rt http.RoundTripper, url, body string) *http.Response {
@@ -219,7 +219,7 @@ func TestRecorder_OversizedRequestIsMarkedTruncatedAndForwardedWhole(t *testing.
 	rec := httptrace.NewRecorder(rtFunc(func(req *http.Request) (*http.Response, error) {
 		b, _ := io.ReadAll(req.Body)
 		seen = len(b)
-		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("ok")), Request: req}, nil
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("ok")), Request: req}, nil
 	}))
 
 	resp := mustPost(t, rec, "http://fixture.local/big", body)
@@ -294,7 +294,7 @@ func TestReplayer_ReturnsRecordedResponse(t *testing.T) {
 
 	resp := mustGet(t, r, "https://api.example.com/search?q=foo")
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Errorf("status = %d, want 200", resp.StatusCode)
 	}
 	if got := bodyString(t, resp); got != `{"hit":"foo"}` {

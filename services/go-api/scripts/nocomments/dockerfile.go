@@ -11,8 +11,6 @@ import (
 	"github.com/moby/buildkit/frontend/dockerfile/parser"
 )
 
-func init() { register(dockerfileKind) }
-
 var dockerfileKind = kind{
 	name:     "dockerfile",
 	match:    matchDockerfile,

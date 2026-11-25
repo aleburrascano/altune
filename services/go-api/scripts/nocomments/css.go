@@ -10,8 +10,6 @@ import (
 	"github.com/tdewolff/parse/v2/css"
 )
 
-func init() { register(cssKind) }
-
 var cssKind = kind{
 	name:     "css",
 	match:    matchCSSFile,

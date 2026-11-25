@@ -161,7 +161,7 @@ func TestYamlStripHandlesCRLF(t *testing.T) {
 }
 
 func TestTrackedYamlFilesStripToEquivalentTrees(t *testing.T) {
-	root, err := repoRoot()
+	root, err := repoRoot(t.Context())
 	if err != nil {
 		t.Skipf("no git root: %v", err)
 	}
@@ -206,7 +206,7 @@ func runInDir(t *testing.T, verb, name, content string) (int, string, string) {
 	dir := t.TempDir()
 	writeFile(t, dir, name, content)
 	var out strings.Builder
-	code := run([]string{verb, dir}, &out)
+	code := run(t.Context(), []string{verb, dir}, &out)
 	return code, out.String(), dir
 }
 
@@ -257,7 +257,7 @@ func stripWorkflow(t *testing.T, src string) (int, string, string) {
 	}
 	writeFile(t, workflows, "w.yml", src)
 	var out strings.Builder
-	code := run([]string{"strip", dir}, &out)
+	code := run(t.Context(), []string{"strip", dir}, &out)
 	got, err := os.ReadFile(filepath.Join(workflows, "w.yml"))
 	if err != nil {
 		t.Fatal(err)

@@ -34,7 +34,7 @@ func stripFixture(t *testing.T, name, content string) (string, int, string) {
 	dir := t.TempDir()
 	writeFile(t, dir, name, content)
 	var stdout strings.Builder
-	code := run([]string{"strip", filepath.Join(dir, name)}, &stdout)
+	code := run(t.Context(), []string{"strip", filepath.Join(dir, name)}, &stdout)
 	after, err := os.ReadFile(filepath.Join(dir, name))
 	if err != nil {
 		t.Fatalf("read: %v", err)
@@ -76,7 +76,7 @@ func TestCheckHTMLFragmentCountsLeadingAndNestedCommentsOnly(t *testing.T) {
 	writeFile(t, dir, "raw.html", "<div><![CDATA[ x ]]></div>\n<script>var a = \"<!-- not a comment -->\";</script>\n")
 
 	var frag strings.Builder
-	if code := run([]string{"check", filepath.Join(dir, "frag.html")}, &frag); code != 1 {
+	if code := run(t.Context(), []string{"check", filepath.Join(dir, "frag.html")}, &frag); code != 1 {
 		t.Fatalf("frag exit = %d, want 1; output:\n%s", code, frag.String())
 	}
 	if !strings.Contains(frag.String(), "frag.html:1") || !strings.Contains(frag.String(), "frag.html:3") {
@@ -87,7 +87,7 @@ func TestCheckHTMLFragmentCountsLeadingAndNestedCommentsOnly(t *testing.T) {
 	}
 
 	var raw strings.Builder
-	if code := run([]string{"check", filepath.Join(dir, "raw.html")}, &raw); code != 0 {
+	if code := run(t.Context(), []string{"check", filepath.Join(dir, "raw.html")}, &raw); code != 0 {
 		t.Fatalf("raw exit = %d, want 0; output:\n%s", code, raw.String())
 	}
 }

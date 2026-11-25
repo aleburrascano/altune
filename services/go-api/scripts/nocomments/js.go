@@ -13,8 +13,6 @@ import (
 	"github.com/tdewolff/parse/v2/js"
 )
 
-func init() { register(jsKind) }
-
 var jsKind = kind{
 	name:     "js",
 	match:    matchJSFile,

@@ -105,7 +105,9 @@ func TestTrackId_IsZero(t *testing.T) {
 
 func TestTrackIdJSONUnchanged(t *testing.T) {
 	t.Parallel()
-	raw, err := json.Marshal(struct{ ID kernel.TrackId }{})
+	raw, err := json.Marshal(struct {
+		ID kernel.TrackId `json:"ID"`
+	}{})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}

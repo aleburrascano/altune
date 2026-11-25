@@ -58,11 +58,13 @@ rerun_mutant() {
 }
 
 real_git=$(command -v git)
+root=$(git rev-parse --show-toplevel)
 mkdir "$work/bin"
 cat >"$work/bin/git" <<'WRAPPER'
 #!/usr/bin/env bash
 set -euo pipefail
 [ "${1:-}" = diff ] || exec "$GO_MUTATE_REAL_GIT" "$@"
+[ "$("$GO_MUTATE_REAL_GIT" rev-parse --show-toplevel 2>/dev/null)" = "$GO_MUTATE_ROOT" ] || exec "$GO_MUTATE_REAL_GIT" "$@"
 shift
 "$GO_MUTATE_REAL_GIT" -c core.quotePath=false diff --find-renames --unified=0 --inter-hunk-context=0 --relative${GO_MUTATE_MODULE:+="$GO_MUTATE_MODULE"} "$@" -- . | awk -v package="$GO_MUTATE_PACKAGE" '
   function emit() {
@@ -98,7 +100,7 @@ for package in "${packages[@]}"; do
   package_prefix=$package/
   [ "$package" != . ] || package_prefix=
   rm -f "$report"
-  if ! out=$(env GOFLAGS="${GOFLAGS:+$GOFLAGS }-count=1" PATH="$work/bin:$PATH" GO_MUTATE_REAL_GIT="$real_git" GO_MUTATE_MODULE="$module_prefix" GO_MUTATE_PACKAGE="$package_prefix" go run "$gremlins" unleash --diff "$base" --output "$report" "./$package" 2>&1); then
+  if ! out=$(env GOFLAGS="${GOFLAGS:+$GOFLAGS }-count=1" PATH="$work/bin:$PATH" GO_MUTATE_REAL_GIT="$real_git" GO_MUTATE_ROOT="$root" GO_MUTATE_MODULE="$module_prefix" GO_MUTATE_PACKAGE="$package_prefix" go run "$gremlins" unleash --diff "$base" --output "$report" "./$package" 2>&1); then
     echo "$out" >&2
     echo "go-mutate: gremlins failed in $dir/$package (a failing test or build stops it)" >&2
     exit 1

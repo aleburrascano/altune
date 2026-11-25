@@ -9,8 +9,6 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-func init() { register(tomlKind) }
-
 var tomlKind = kind{
 	name:     "toml",
 	match:    matchTomlFile,

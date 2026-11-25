@@ -9,12 +9,6 @@ import (
 	"strings"
 )
 
-func init() {
-	register(gitPatternKind)
-	register(lineConfigKind)
-	register(npmrcKind)
-}
-
 var gitPatternKind = kind{
 	name:     "git-pattern",
 	match:    matchGitPatternFile,

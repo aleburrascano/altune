@@ -524,16 +524,16 @@ func TestTransport_LogsAndCountsEachRetriedAttempt(t *testing.T) {
 	}
 }
 
-type timeoutErr struct{}
+type timeoutError struct{}
 
-func (timeoutErr) Error() string   { return "i/o timeout" }
-func (timeoutErr) Timeout() bool   { return true }
-func (timeoutErr) Temporary() bool { return true }
+func (timeoutError) Error() string   { return "i/o timeout" }
+func (timeoutError) Timeout() bool   { return true }
+func (timeoutError) Temporary() bool { return true }
 
 func TestTransport_RetryAfterTransportErrorNamesTheErrorClass(t *testing.T) {
 	cases := map[string]error{
 		"dial":      &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")},
-		"timeout":   &net.OpError{Op: "read", Net: "tcp", Err: timeoutErr{}},
+		"timeout":   &net.OpError{Op: "read", Net: "tcp", Err: timeoutError{}},
 		"transport": errors.New("connection reset"),
 	}
 	for class, transportErr := range cases {

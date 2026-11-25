@@ -29,7 +29,9 @@ func (f fakeSource) Resource(_ context.Context, _, id string) (json.RawMessage, 
 	return json.RawMessage(raw), nil
 }
 
-func noReads(providerschema.Schema) (map[string]providerschema.Reads, error) { return nil, nil }
+func noReads(providerschema.Schema) (map[string]providerschema.Reads, error) {
+	return map[string]providerschema.Reads{}, nil
+}
 
 func writeSchema(t *testing.T, body string) string {
 	t.Helper()

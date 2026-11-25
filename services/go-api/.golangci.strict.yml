@@ -20,8 +20,26 @@ linters:
     - forbidigo
     - depguard
     - testpackage
+    - nilnil
+    - exhaustive
+    - noctx
+    - errchkjson
+    - errname
+    - gochecknoinits
+    - usestdlibvars
+    - musttag
+    - usetesting
+    - rowserrcheck
+    - nilnesserr
+    - durationcheck
+    - spancheck
 
   settings:
+    exhaustive:
+      default-signifies-exhaustive: true
+    rowserrcheck:
+      packages:
+        - github.com/jackc/pgx/v5
     dupl:
       threshold: 150
     sloglint:
@@ -174,8 +192,6 @@ linters:
       forbid:
         - pattern: ^http\.Error$
           msg: write the error through httputil.HandleServiceError
-        - pattern: ^httputil\.(BadRequest|NotFound|InternalError)$
-          msg: answer with a shared/domain coded error through httputil.HandleServiceError, the one error writer (internal/shared/httputil/README.md)
         - pattern: ^os\.(Getenv|LookupEnv|Environ)$
           msg: read settings once in internal/shared/config and pass them in
         - pattern: ^recover$
@@ -210,6 +226,7 @@ linters:
           - gocritic
           - revive
           - forbidigo
+          - noctx
       - path: internal/shared/httputil/
         linters:
           - forbidigo

@@ -188,7 +188,7 @@ func TestRunCheckReportsTomlViolations(t *testing.T) {
 	writeFile(t, dir, "a.toml", "# a comment\nk = 1\n")
 
 	var stdout strings.Builder
-	code := run([]string{"check", dir}, &stdout)
+	code := run(t.Context(), []string{"check", dir}, &stdout)
 
 	if code != 1 {
 		t.Fatalf("exit = %d, want 1; output:\n%s", code, stdout.String())
@@ -203,7 +203,7 @@ func stripFileThroughRun(t *testing.T, name, content string) string {
 	dir := t.TempDir()
 	writeFile(t, dir, name, content)
 	var stdout strings.Builder
-	if code := run([]string{"strip", dir + "/" + name}, &stdout); code != 0 {
+	if code := run(t.Context(), []string{"strip", dir + "/" + name}, &stdout); code != 0 {
 		t.Fatalf("strip exit = %d, want 0; output:\n%s", code, stdout.String())
 	}
 	got, err := os.ReadFile(dir + "/" + name)
@@ -285,7 +285,7 @@ func TestTomlCheckFindsACommentAfterAMultiLineStringClosedByFourQuotes(t *testin
 			dir := t.TempDir()
 			writeFile(t, dir, "a.toml", src)
 			var stdout strings.Builder
-			if code := run([]string{"check", dir + "/a.toml"}, &stdout); code != 1 {
+			if code := run(t.Context(), []string{"check", dir + "/a.toml"}, &stdout); code != 1 {
 				t.Fatalf("check exit = %d, want 1; output:\n%s", code, stdout.String())
 			}
 		})

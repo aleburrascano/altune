@@ -14,7 +14,7 @@ func TestRunCheckExitsOneAndNamesFileLine(t *testing.T) {
 	writeFile(t, dir, "hi.sh", "#!/bin/sh\n# hi\necho hi\n")
 
 	var stdout strings.Builder
-	code := run([]string{"check", dir}, &stdout)
+	code := run(t.Context(), []string{"check", dir}, &stdout)
 
 	if code != 1 {
 		t.Fatalf("exit = %d, want 1; output:\n%s", code, stdout.String())
@@ -30,7 +30,7 @@ func TestRunCheckExitsZeroOnShebangOnly(t *testing.T) {
 	writeFile(t, dir, "clean.sh", "#!/bin/sh\necho hi\n")
 
 	var stdout strings.Builder
-	code := run([]string{"check", dir}, &stdout)
+	code := run(t.Context(), []string{"check", dir}, &stdout)
 
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0; output:\n%s", code, stdout.String())
@@ -52,21 +52,10 @@ func TestRunDiffFlagsOnlyLinesAddedSinceBase(t *testing.T) {
 	gitCmd(t, dir, "add", "-A")
 	gitCmd(t, dir, "commit", "-m", "second")
 
-	oldWd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	if err := os.Chdir(dir); err != nil {
-		t.Fatalf("chdir: %v", err)
-	}
-	defer func() {
-		if err := os.Chdir(oldWd); err != nil {
-			t.Fatalf("chdir back: %v", err)
-		}
-	}()
+	t.Chdir(dir)
 
 	var stdout strings.Builder
-	code := run([]string{"diff", base}, &stdout)
+	code := run(t.Context(), []string{"diff", base}, &stdout)
 
 	if code != 1 {
 		t.Fatalf("exit = %d, want 1; output:\n%s", code, stdout.String())
@@ -89,7 +78,7 @@ func TestRunCheckListsLeftoverAndStripLeavesItByteIdentical(t *testing.T) {
 	writeFile(t, wfDir, "ci.yml", body)
 
 	var checkOut strings.Builder
-	if code := run([]string{"check", wfDir}, &checkOut); code != 1 {
+	if code := run(t.Context(), []string{"check", wfDir}, &checkOut); code != 1 {
 		t.Fatalf("check exit = %d, want 1:\n%s", code, checkOut.String())
 	}
 	path := filepath.Join(wfDir, "ci.yml")
@@ -100,7 +89,7 @@ func TestRunCheckListsLeftoverAndStripLeavesItByteIdentical(t *testing.T) {
 	}
 
 	var stripOut strings.Builder
-	if code := run([]string{"strip", wfDir}, &stripOut); code != 0 {
+	if code := run(t.Context(), []string{"strip", wfDir}, &stripOut); code != 0 {
 		t.Fatalf("strip exit = %d:\n%s", code, stripOut.String())
 	}
 	got, err := os.ReadFile(path)
@@ -120,7 +109,7 @@ func TestRunStripExitsNonZeroNamingPathOnUnsafeYaml(t *testing.T) {
 	writeFile(t, dir, "a.yml", "a: 1\rb: 2\n")
 
 	var out strings.Builder
-	code := run([]string{"strip", dir}, &out)
+	code := run(t.Context(), []string{"strip", dir}, &out)
 
 	if code == 0 || !strings.Contains(out.String(), filepath.Join(dir, "a.yml")+": lone CR") {
 		t.Fatalf("exit = %d, output:\n%s", code, out.String())
@@ -196,7 +185,7 @@ func TestStripPreservesWhatTheScriptPrints(t *testing.T) {
 			writeFile(t, dir, "s.sh", tc.src)
 
 			var stdout strings.Builder
-			if code := run([]string{"strip", dir}, &stdout); code != 0 {
+			if code := run(t.Context(), []string{"strip", dir}, &stdout); code != 0 {
 				t.Fatalf("strip(%q) exit = %d, want 0; output:\n%s", tc.src, code, stdout.String())
 			}
 			stripped, err := os.ReadFile(filepath.Join(dir, "s.sh"))
@@ -207,7 +196,7 @@ func TestStripPreservesWhatTheScriptPrints(t *testing.T) {
 				t.Fatalf("strip(%q) = %q, which prints %q, want %q", tc.src, stripped, got, tc.want)
 			}
 			var check strings.Builder
-			if code := run([]string{"check", dir}, &check); code != 0 {
+			if code := run(t.Context(), []string{"check", dir}, &check); code != 0 {
 				t.Fatalf("check after strip(%q) exit = %d, want 0; stripped %q; output:\n%s", tc.src, code, stripped, check.String())
 			}
 		})
@@ -230,7 +219,7 @@ func TestCheckFlagsAShebangThatIsNotAtLineOneColumnOne(t *testing.T) {
 			writeFile(t, dir, "a.sh", tc.src)
 
 			var stdout strings.Builder
-			code := run([]string{"check", dir}, &stdout)
+			code := run(t.Context(), []string{"check", dir}, &stdout)
 
 			if code != 1 {
 				t.Fatalf("check(%q) exit = %d, want 1; output:\n%s", tc.src, code, stdout.String())
@@ -247,7 +236,7 @@ func TestStripKeepsCRLFLineEndings(t *testing.T) {
 	writeFile(t, dir, "a.sh", "echo hi # x\r\necho yo\r\n")
 
 	var stdout strings.Builder
-	code := run([]string{"strip", dir}, &stdout)
+	code := run(t.Context(), []string{"strip", dir}, &stdout)
 
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0; output:\n%s", code, stdout.String())
@@ -271,7 +260,7 @@ func TestCheckExitsTwoOnAnUnreadableFileInsteadOfSkippingItAsClean(t *testing.T)
 	t.Cleanup(func() { _ = os.Chmod(path, 0o644) })
 
 	var stdout strings.Builder
-	code := run([]string{"check", dir}, &stdout)
+	code := run(t.Context(), []string{"check", dir}, &stdout)
 
 	if code != 2 {
 		t.Fatalf("exit = %d, want 2; output:\n%s", code, stdout.String())
@@ -289,7 +278,7 @@ func TestCheckExitsTwoOnAParseError(t *testing.T) {
 	writeFile(t, dir, "bad.sh", "f() { # x\n}\n")
 
 	var stdout strings.Builder
-	code := run([]string{"check", dir}, &stdout)
+	code := run(t.Context(), []string{"check", dir}, &stdout)
 
 	if code != 2 {
 		t.Fatalf("exit = %d, want 2; output:\n%s", code, stdout.String())
@@ -303,7 +292,7 @@ func TestStripLeavesAnUnparseableFileUntouchedAndStripsTheRest(t *testing.T) {
 	writeFile(t, dir, "good.sh", "echo hi # x\n")
 
 	var stdout strings.Builder
-	code := run([]string{"strip", dir}, &stdout)
+	code := run(t.Context(), []string{"strip", dir}, &stdout)
 
 	if code != 1 {
 		t.Fatalf("exit = %d, want 1; output:\n%s", code, stdout.String())
@@ -336,7 +325,7 @@ func TestSelectsExtensionlessShellByShebangAndLeavesOtherScriptsAlone(t *testing
 	writeFile(t, dir, "notes.txt", "# hi\n")
 
 	var check strings.Builder
-	code := run([]string{"check", dir}, &check)
+	code := run(t.Context(), []string{"check", dir}, &check)
 
 	if code != 1 {
 		t.Fatalf("check exit = %d, want 1; output:\n%s", code, check.String())
@@ -351,7 +340,7 @@ func TestSelectsExtensionlessShellByShebangAndLeavesOtherScriptsAlone(t *testing
 	}
 
 	var strip strings.Builder
-	if code := run([]string{"strip", dir}, &strip); code != 0 {
+	if code := run(t.Context(), []string{"strip", dir}, &strip); code != 0 {
 		t.Fatalf("strip exit = %d, want 0; output:\n%s", code, strip.String())
 	}
 	for _, name := range []string{"script", "run.py"} {
@@ -375,7 +364,7 @@ func TestWalkSkipsNodeModulesVendorAndGit(t *testing.T) {
 	}
 
 	var stdout strings.Builder
-	code := run([]string{"check", dir}, &stdout)
+	code := run(t.Context(), []string{"check", dir}, &stdout)
 
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0; output:\n%s", code, stdout.String())
@@ -392,7 +381,7 @@ func TestWalkSkipsFilesGitIgnoresButChecksTrackedOnes(t *testing.T) {
 	writeFile(t, dir, "new.sh", "echo new # x\n")
 
 	var stdout strings.Builder
-	code := run([]string{"check", dir}, &stdout)
+	code := run(t.Context(), []string{"check", dir}, &stdout)
 
 	if code != 1 || strings.Contains(stdout.String(), "mine.local.sh") {
 		t.Fatalf("exit = %d, want 1 without the ignored file; output:\n%s", code, stdout.String())
@@ -411,7 +400,7 @@ func TestStripLeavesFilesGitIgnoresUntouched(t *testing.T) {
 	writeFile(t, dir, "mine.sh", "echo mine # x\n")
 
 	var stdout strings.Builder
-	run([]string{"strip", dir}, &stdout)
+	run(t.Context(), []string{"strip", dir}, &stdout)
 
 	got, err := os.ReadFile(filepath.Join(dir, "mine.sh"))
 	if err != nil || string(got) != "echo mine # x\n" {
@@ -428,7 +417,7 @@ func TestWalkSkipsCoverageReports(t *testing.T) {
 	writeFile(t, report, "a.sh", "echo hi # x\n")
 
 	var stdout strings.Builder
-	code := run([]string{"check", dir}, &stdout)
+	code := run(t.Context(), []string{"check", dir}, &stdout)
 
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0; output:\n%s", code, stdout.String())
@@ -444,7 +433,7 @@ func TestWalkSkipsSymlinkedDirectories(t *testing.T) {
 	}
 
 	var stdout strings.Builder
-	code := run([]string{"check", dir}, &stdout)
+	code := run(t.Context(), []string{"check", dir}, &stdout)
 
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0; output:\n%s", code, stdout.String())
@@ -458,7 +447,7 @@ func TestStripReportsCountsAndASecondStripChangesNothing(t *testing.T) {
 	writeFile(t, dir, "c.sh", "echo d\n")
 
 	var first strings.Builder
-	if code := run([]string{"strip", dir}, &first); code != 0 {
+	if code := run(t.Context(), []string{"strip", dir}, &first); code != 0 {
 		t.Fatalf("first strip exit = %d, want 0; output:\n%s", code, first.String())
 	}
 	if !strings.Contains(first.String(), "stripped 3 comments in 2 files") {
@@ -473,7 +462,7 @@ func TestStripReportsCountsAndASecondStripChangesNothing(t *testing.T) {
 	}
 
 	var second strings.Builder
-	if code := run([]string{"strip", dir}, &second); code != 0 {
+	if code := run(t.Context(), []string{"strip", dir}, &second); code != 0 {
 		t.Fatalf("second strip exit = %d, want 0; output:\n%s", code, second.String())
 	}
 	if !strings.Contains(second.String(), "stripped 0 comments in 0 files") {
@@ -498,7 +487,7 @@ func TestRunExitsTwoOnUsageErrors(t *testing.T) {
 	}
 	for _, args := range cases {
 		var stdout strings.Builder
-		if code := run(args, &stdout); code != 2 {
+		if code := run(t.Context(), args, &stdout); code != 2 {
 			t.Errorf("run(%q) exit = %d, want 2; output:\n%s", args, code, stdout.String())
 		}
 	}
@@ -524,10 +513,10 @@ func TestRunDiffFromASubdirectoryReportsRepoRelativePaths(t *testing.T) {
 	writeFile(t, dir, "deploy/up.sh", "#!/bin/sh\necho up\n# x\n")
 	gitCmd(t, dir, "add", "-A")
 	gitCmd(t, dir, "commit", "-m", "second")
-	chdirFor(t, filepath.Join(dir, "svc"))
+	t.Chdir(filepath.Join(dir, "svc"))
 
 	var stdout strings.Builder
-	code := run([]string{"diff", base}, &stdout)
+	code := run(t.Context(), []string{"diff", base}, &stdout)
 
 	if code != 1 {
 		t.Fatalf("exit = %d, want 1; output:\n%s", code, stdout.String())
@@ -535,22 +524,6 @@ func TestRunDiffFromASubdirectoryReportsRepoRelativePaths(t *testing.T) {
 	if !strings.Contains(stdout.String(), "deploy/up.sh:3") {
 		t.Fatalf("output missing deploy/up.sh:3:\n%s", stdout.String())
 	}
-}
-
-func chdirFor(t *testing.T, dir string) {
-	t.Helper()
-	oldWd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	if err := os.Chdir(dir); err != nil {
-		t.Fatalf("chdir: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := os.Chdir(oldWd); err != nil {
-			t.Fatalf("chdir back: %v", err)
-		}
-	})
 }
 
 func bashStdout(t *testing.T, src string) string {
@@ -572,7 +545,7 @@ func TestCheckFlagsACommentOnLineOneThatIsNotAShebang(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "a.sh", "# hi\necho hi\n")
 	var stdout strings.Builder
-	code := run([]string{"check", dir}, &stdout)
+	code := run(t.Context(), []string{"check", dir}, &stdout)
 	if code != 1 {
 		t.Fatalf("exit = %d, want 1; output:\n%s", code, stdout.String())
 	}
@@ -585,7 +558,7 @@ func TestStripTakesTheWholeLineOfAStandaloneComment(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "a.sh", "#!/bin/sh\necho a\n# c\n  # d\necho b\n")
 	var stdout strings.Builder
-	if code := run([]string{"strip", dir}, &stdout); code != 0 {
+	if code := run(t.Context(), []string{"strip", dir}, &stdout); code != 0 {
 		t.Fatalf("exit = %d, want 0; output:\n%s", code, stdout.String())
 	}
 	got, _ := os.ReadFile(filepath.Join(dir, "a.sh"))
@@ -599,7 +572,7 @@ func TestStripRemovesTrailingCommentEndingInBackslash(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "s.sh", src)
 	var stdout strings.Builder
-	if code := run([]string{"strip", dir}, &stdout); code != 0 {
+	if code := run(t.Context(), []string{"strip", dir}, &stdout); code != 0 {
 		t.Fatalf("strip(%q) exit = %d, want 0; output:\n%s", src, code, stdout.String())
 	}
 	got, _ := os.ReadFile(filepath.Join(dir, "s.sh"))
@@ -621,9 +594,9 @@ func TestRunDiffDoesNotFlagCommentsCarriedAcrossARename(t *testing.T) {
 	writeFile(t, dir, "new.sh", "#!/bin/sh\n# base comment\necho one\necho two\necho three\necho four\n# x\n")
 	gitCmd(t, dir, "add", "-A")
 	gitCmd(t, dir, "commit", "-m", "rename")
-	chdirFor(t, dir)
+	t.Chdir(dir)
 	var stdout strings.Builder
-	code := run([]string{"diff", base}, &stdout)
+	code := run(t.Context(), []string{"diff", base}, &stdout)
 	if code != 1 {
 		t.Fatalf("exit = %d, want 1; output:\n%s", code, stdout.String())
 	}
@@ -687,7 +660,7 @@ func TestCheckReportsAMultiLineCommentBetweenCodeAsOneLine(t *testing.T) {
 	writeFile(t, dir, "a.js", "a(); /* one\ntwo */ b();\n")
 
 	var stdout strings.Builder
-	code := run([]string{"check", dir}, &stdout)
+	code := run(t.Context(), []string{"check", dir}, &stdout)
 
 	want := filepath.Join(dir, "a.js") + ":1\ncomment violations: 1\n"
 	if code != 1 || stdout.String() != want {
@@ -701,7 +674,7 @@ func TestCheckReportsLaterViolationsAfterAParseError(t *testing.T) {
 	writeFile(t, dir, "b_real.sh", "#!/bin/sh\n# real\necho hi\n")
 
 	var stdout strings.Builder
-	code := run([]string{"check", dir}, &stdout)
+	code := run(t.Context(), []string{"check", dir}, &stdout)
 
 	if code != 2 {
 		t.Fatalf("exit = %d, want 2; output:\n%s", code, stdout.String())
@@ -727,10 +700,10 @@ func TestRunDiffReportsLaterViolationsAfterAParseError(t *testing.T) {
 	writeFile(t, dir, "b_real.sh", "#!/bin/sh\n# real\necho hi\n")
 	gitCmd(t, dir, "add", "-A")
 	gitCmd(t, dir, "commit", "-m", "second")
-	chdirFor(t, dir)
+	t.Chdir(dir)
 
 	var stdout strings.Builder
-	code := run([]string{"diff", base}, &stdout)
+	code := run(t.Context(), []string{"diff", base}, &stdout)
 
 	if code != 2 {
 		t.Fatalf("exit = %d, want 2; output:\n%s", code, stdout.String())
@@ -755,7 +728,7 @@ func TestStripReplacesTheFileAtomicallyKeepingItsMode(t *testing.T) {
 	}
 
 	var out strings.Builder
-	code := run([]string{"strip", dir}, &out)
+	code := run(t.Context(), []string{"strip", dir}, &out)
 
 	after, err := os.Stat(path)
 	if err != nil {
@@ -774,7 +747,7 @@ func TestStripLeavesAnHTMLLikeCommentFileUntouchedAndExitsNonZero(t *testing.T) 
 	writeFile(t, dir, "q.mjs", src)
 
 	var stdout strings.Builder
-	code := run([]string{"strip", dir}, &stdout)
+	code := run(t.Context(), []string{"strip", dir}, &stdout)
 
 	got, err := os.ReadFile(filepath.Join(dir, "q.mjs"))
 	if err != nil {
@@ -790,8 +763,8 @@ func TestCheckAndStripCountTwoCommentsOnOneLineTheSame(t *testing.T) {
 	writeFile(t, dir, "a.js", "a; /* x */ b; /* y */\n")
 
 	var checkOut, stripOut strings.Builder
-	run([]string{"check", dir}, &checkOut)
-	run([]string{"strip", dir}, &stripOut)
+	run(t.Context(), []string{"check", dir}, &checkOut)
+	run(t.Context(), []string{"strip", dir}, &stripOut)
 
 	if !strings.Contains(checkOut.String(), "comment violations: 1\n") || !strings.Contains(stripOut.String(), "stripped 1 comments in 1 files") {
 		t.Fatalf("check:\n%s\nstrip:\n%s", checkOut.String(), stripOut.String())
