@@ -68,11 +68,18 @@ func (pathlessSource) Fetch(context.Context, ports.AudioCandidate, string) (port
 	return ports.FetchedAudio{}, nil
 }
 
-func TestExecute_ADownloadWithoutAFileIsNeverTagged(t *testing.T) {
+func TestExecute_ADownloadWithoutAFileFailsTheAcquisitionAndIsNeverTagged(t *testing.T) {
 	tagger := &recordingTagger{}
+	track := pendingBlindingLights()
 
-	_, _ = acquireWith(t, pendingBlindingLights(), pathlessSource{}, service.WithAudioTagger(tagger))
+	ledger, err := acquireWith(t, track, pathlessSource{}, service.WithAudioTagger(tagger))
 
+	if err == nil || !strings.Contains(err.Error(), "fetcher returned no file") {
+		t.Fatalf("Execute = %v, want the download to fail because the fetcher returned no file", err)
+	}
+	if got, _ := ledger.Track(track.ID); got.Status == ports.TrackReady {
+		t.Errorf("status = %v, want the track not acquired", got.Status)
+	}
 	if paths, _ := tagger.calls(); len(paths) != 0 {
 		t.Fatalf("tagger called for a download without a file: %v", paths)
 	}

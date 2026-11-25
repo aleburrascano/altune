@@ -16,7 +16,7 @@ func NewTagStep(tagger ports.AudioTagger) *TagStep { return &TagStep{tagger: tag
 func (s *TagStep) Name() StepName { return stepNameTag }
 
 func (s *TagStep) Execute(ctx context.Context, ac *AcquisitionContext, downloaded afterDownload) (afterTag, error) {
-	if ac.TempPath == "" || s.tagger == nil {
+	if s.tagger == nil {
 		return afterTag(downloaded), nil
 	}
 
