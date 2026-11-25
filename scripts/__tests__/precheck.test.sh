@@ -7,7 +7,7 @@ FAILURES=0
 new_repo() {
     WORK=$(mktemp -d)
     mkdir -p "$WORK/repo/scripts/__tests__"
-    cp "$HERE/precheck.sh" "$HERE/module-spec.sh" "$WORK/repo/scripts/"
+    cp "$HERE/precheck.sh" "$WORK/repo/scripts/"
     (
         cd "$WORK/repo" || exit 1
         git init -qb main
@@ -768,84 +768,6 @@ expect_out "mobile mutation (changed lines)"
 CASE="a CI job that runs client mutation itself skips it in precheck"
 CLIENT_MUTATE_RUNS_ELSEWHERE=1 run_script_with_stubs
 expect_out "SKIP  mobile mutation (changed lines): the mobile-mutation CI job runs it"
-
-add_module_spec_root() {
-    (
-        cd "$WORK/repo" || exit 1
-        git update-ref refs/remotes/gitea/main HEAD
-        mkdir -p demo
-        printf '{}\n' >demo/module-spec.json
-        git add -A
-        git commit -qm "module-spec root"
-    )
-}
-
-add_module_spec_kit() {
-    mkdir -p "$WORK/repo/node_modules/.bin"
-    printf '#!/usr/bin/env bash\necho "kit $*" >>"%s/module-spec.log"\n' "$WORK" >"$WORK/repo/node_modules/.bin/module-spec"
-    chmod +x "$WORK/repo/node_modules/.bin/module-spec"
-}
-
-CASE="a repo with no module-spec.json runs no module-spec step"
-new_repo
-(cd "$WORK/repo" && git update-ref refs/remotes/gitea/main HEAD)
-add_plain_file
-run_script_with_stubs
-forbid_out "module-spec"
-
-CASE="a code root with module-spec.json runs check and mutate against the merge base"
-new_repo
-add_module_spec_root
-add_module_spec_kit
-run_script_with_stubs
-expect_out "module-spec check"
-grep -q "^kit check --since [0-9a-f]\{40\} --root demo$" "$WORK/module-spec.log" || fail "module-spec check should get --since <merge base> for each root"
-grep -q "^kit mutate --since " "$WORK/module-spec.log" || fail "module-spec mutate should run in a full precheck"
-
-CASE="--lint runs module-spec check but leaves mutate to CI"
-new_repo
-add_module_spec_root
-add_module_spec_kit
-run_script_with_stubs --lint
-grep -q "^kit check " "$WORK/module-spec.log" || fail "--lint should still run module-spec check"
-grep -q "^kit mutate" "$WORK/module-spec.log" && fail "--lint should not mutate"
-
-CASE="without the kit, module-spec is a SKIP that makes precheck incomplete"
-new_repo
-add_module_spec_root
-MODULE_SPEC_RUNS_ELSEWHERE= run_script_with_stubs
-expect_out "SKIP  module-spec: not installed"
-expect_rc 3
-
-CASE="without the kit where another job runs it, module-spec is a SKIP that keeps precheck green"
-new_repo
-add_module_spec_root
-MODULE_SPEC_RUNS_ELSEWHERE=1 run_script_with_stubs
-expect_out "the gitea precheck job runs it"
-expect_rc 0
-
-CASE="roots prints a root whose path holds a space whole"
-new_repo
-(cd "$WORK/repo" && mkdir -p "a b" && printf '{}\n' >"a b/module-spec.json")
-[ "$(cd "$WORK/repo" && bash scripts/module-spec.sh roots)" = "a b" ] || fail "roots should print 'a b' as one root"
-
-CASE="when roots cannot list the code roots, precheck shows the error and ends red"
-new_repo
-(cd "$WORK/repo" && git update-ref refs/remotes/gitea/main HEAD)
-add_plain_file
-printf '#!/usr/bin/env bash\necho "roots broke" >&2\nexit 1\n' >"$WORK/repo/scripts/module-spec.sh"
-run_script_with_stubs
-expect_out "roots broke"
-expect_out "FAIL  module-spec: could not list the code roots"
-expect_rc 1
-
-CASE="check with no code roots fails rather than passing having checked nothing"
-new_repo
-add_module_spec_kit
-(cd "$WORK/repo" && bash scripts/module-spec.sh check >"$WORK/out.log" 2>&1)
-RC=$?
-expect_rc 2
-expect_out "no module-spec.json in this repo"
 
 add_contract_tests() {
     (

@@ -1,3 +1,0 @@
-role: feature
-owns: "what users are doing right now"
-depends_on: [core, goapi]

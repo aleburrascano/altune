@@ -31,7 +31,7 @@ func New(deps Deps) *Bucket {
 	if now == nil {
 		now = time.Now
 	}
-	return &Bucket{store: core.NewRingStore(capacity), now: now, series: discardSeries{}}
+	return &Bucket{store: core.NewRingStore(capacity), now: now, series: core.DiscardSeries{}}
 }
 
 func (b *Bucket) Meta() core.Meta {
@@ -101,12 +101,4 @@ func ticksHeadline(ticks int) string {
 		return "no ticks yet"
 	}
 	return fmt.Sprintf("%d ticks", ticks)
-}
-
-type discardSeries struct{}
-
-func (discardSeries) Record(string, string, core.Point) {}
-
-func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
-	return nil, nil
 }

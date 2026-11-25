@@ -1,3 +1,0 @@
-role: feature
-owns: "how much the app is used over time"
-depends_on: [core, goapi]

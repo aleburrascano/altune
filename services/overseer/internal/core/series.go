@@ -19,6 +19,14 @@ type Series interface {
 	Query(bucket, series string, from, to time.Time) ([]Point, error)
 }
 
+type DiscardSeries struct{}
+
+func (DiscardSeries) Record(string, string, Point) {}
+
+func (DiscardSeries) Query(string, string, time.Time, time.Time) ([]Point, error) {
+	return nil, nil
+}
+
 type SeriesWriter interface {
 	UseSeries(s Series)
 }

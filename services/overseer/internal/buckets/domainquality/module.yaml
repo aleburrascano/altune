@@ -1,3 +1,0 @@
-role: feature
-owns: "how search and acquisition quality are graded"
-depends_on: [core, goapi]

@@ -51,7 +51,7 @@ func New(deps Deps) *Bucket {
 	if now == nil {
 		now = time.Now
 	}
-	b := &Bucket{history: core.NewRingStore(historyCapacity), series: discardSeries{}}
+	b := &Bucket{history: core.NewRingStore(historyCapacity), series: core.DiscardSeries{}}
 	b.scheduler = newScheduler(probe, defaultSuite(), deps.Interval, now, b.record)
 	return b
 }
@@ -137,12 +137,4 @@ type nullProber struct{}
 
 func (nullProber) Probe(context.Context, string, string) (int, error) {
 	return 0, fmt.Errorf("security: go-api unreachable: %w", errUnconfigured)
-}
-
-type discardSeries struct{}
-
-func (discardSeries) Record(string, string, core.Point) {}
-
-func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
-	return nil, nil
 }

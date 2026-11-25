@@ -1,3 +1,0 @@
-role: feature
-owns: "how backend errors and outages are graded"
-depends_on: [core, goapi]

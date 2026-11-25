@@ -64,7 +64,7 @@ func newReachPoller(checker reachChecker, interval time.Duration, now func() tim
 		checker:  checker,
 		interval: interval,
 		samples:  core.NewRingStore(pollCapacity),
-		series:   discardSeries{},
+		series:   core.DiscardSeries{},
 		now:      now,
 	}
 	p.outcome.Store(int32(outcomeConnecting))
@@ -124,12 +124,4 @@ func (p *reachPoller) recordProbe(status goapi.Status, answered bool, at time.Ti
 	if answered {
 		p.series.Record(bucketID, seriesLatencyMS, core.Point{At: at, Value: float64(latency.Microseconds()) / 1000})
 	}
-}
-
-type discardSeries struct{}
-
-func (discardSeries) Record(string, string, core.Point) {}
-
-func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
-	return nil, nil
 }

@@ -206,7 +206,7 @@ if touches '^services/overseer/'; then
   if need go "overseer" && need golangci-lint "overseer lint"; then
     check "overseer build" $m "${heavy[@]}" go build ./...
     check "overseer vet" $m "${heavy[@]}" go vet ./...
-    check "overseer strict linters" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config "$root/services/go-api/.golangci.strict.yml" --disable=revive,sloglint,forbidigo,depguard,testpackage --allow-serial-runners
+    check "overseer strict linters" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --allow-serial-runners
     check "overseer no comments (whole tree)" services/go-api go run ./scripts/lintcomments --all ../overseer
     test_check "overseer tests (race)" $m "${heavy[@]}" env CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...
     touches '^services/overseer/go\.(mod|sum)$' && need govulncheck "overseer govulncheck" && check "overseer govulncheck" $m "${heavy[@]}" govulncheck ./...
@@ -307,19 +307,6 @@ fi
 
 if [ -f scripts/ci/pr-ci-dupes.mjs ] && need node "duplicate PR CI work" && link_deps .; then
   check "no duplicate PR CI work" . node scripts/ci/pr-ci-dupes.mjs
-fi
-
-spec_roots=$(bash scripts/module-spec.sh roots) || { echo "FAIL  module-spec: could not list the code roots (error above)"; failed=1; spec_roots=; }
-if [ -n "$spec_roots" ]; then
-  link_deps . || true
-  if [ -x node_modules/.bin/module-spec ]; then
-    check "module-spec check" . "${heavy[@]}" bash scripts/module-spec.sh check --since "$base"
-    test_check "module-spec mutate (changed modules)" . "${heavy[@]}" bash scripts/module-spec.sh mutate --since "$base"
-  elif [ "${MODULE_SPEC_RUNS_ELSEWHERE:-}" = 1 ]; then
-    echo "SKIP  module-spec: the kit is not reachable here, the gitea precheck job runs it"
-  else
-    echo "SKIP  module-spec: not installed, run pnpm install at the repo root"; missing=1
-  fi
 fi
 
 if [ -d services/go-api/scripts/nocomments ] && need go "nocomments"; then

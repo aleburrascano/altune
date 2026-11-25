@@ -18,10 +18,10 @@ const maxProbeBody = 1 << 20
 
 var ErrOffAllowlist = errors.New("security: target host off allowlist — refused, no request sent")
 
-type sourceDown struct{ err error }
+type sourceDownError struct{ err error }
 
-func (e *sourceDown) Error() string { return "security: go-api unreachable: " + e.err.Error() }
-func (e *sourceDown) Unwrap() error { return e.err }
+func (e *sourceDownError) Error() string { return "security: go-api unreachable: " + e.err.Error() }
+func (e *sourceDownError) Unwrap() error { return e.err }
 
 type Client struct {
 	base      *url.URL
@@ -126,10 +126,10 @@ func (c *Client) Do(ctx context.Context, target *url.URL) (int, error) {
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return 0, &sourceDown{err: err}
+		return 0, &sourceDownError{err: err}
 	}
 	if resp == nil {
-		return 0, &sourceDown{err: errors.New("nil response")}
+		return 0, &sourceDownError{err: errors.New("nil response")}
 	}
 	defer func() { _, _ = io.CopyN(io.Discard, resp.Body, maxProbeBody); _ = resp.Body.Close() }()
 	return resp.StatusCode, nil

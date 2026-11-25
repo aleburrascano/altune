@@ -1,3 +1,0 @@
-role: feature
-owns: "how backend latency and throughput are graded"
-depends_on: [core, goapi]

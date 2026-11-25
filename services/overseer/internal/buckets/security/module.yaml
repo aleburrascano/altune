@@ -1,3 +1,0 @@
-role: feature
-owns: "how open security findings and failed probes are graded"
-depends_on: [core, goapi]
