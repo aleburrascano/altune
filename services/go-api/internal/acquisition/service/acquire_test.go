@@ -3227,29 +3227,6 @@ func outageSource() findOnlySource {
 	return findOnlySource{name: "down", err: &acqdomain.SourceUnavailableError{Source: "down", Err: errors.New("429")}}
 }
 
-const (
-	finesseRemixURL = "https://music.youtube.com/watch?v=remix"
-	finesseAlbumURL = "https://music.youtube.com/watch?v=album"
-)
-
-func finesseRemix() ports.AudioCandidate {
-	return ports.AudioCandidate{
-		Title: "Finesse (Remix)", URL: finesseRemixURL, Duration: 218,
-		Artists: []string{"Bruno Mars", "Cardi B"}, Album: "Finesse (Remix)", Kind: ports.KindArtTrack,
-	}
-}
-
-func finesseAlbumTrack() ports.AudioCandidate {
-	return ports.AudioCandidate{
-		Title: "Finesse", URL: finesseAlbumURL, Duration: 191,
-		Artists: []string{"Bruno Mars"}, Album: "24K Magic", Kind: ports.KindArtTrack,
-	}
-}
-
-func finesseTrack() TrackRef {
-	return TrackRef{ID: "track-1", Title: "Finesse", Artist: "Bruno Mars", Album: "24K Magic", CatalogDuration: 191}
-}
-
 type recordingReporter struct {
 	stages  []string
 	timings map[string]time.Duration
