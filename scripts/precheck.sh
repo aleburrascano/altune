@@ -356,7 +356,7 @@ if touches '^services/go-api/'; then
       fi
       if [ $stage = push ]; then
         if touches "^$m/.*\.go\$|^$m/architecture\.json\$"; then
-          check "go-api architecture: every module has a role and imports only what its role may" $m go run ./scripts/lintarch --rules role,edge
+          check "go-api architecture: every module has a role and imports only what its role may" $m go run ./scripts/lintarch --rules role,edge,driver
         fi
         if touches "^$m/.*\.go\$|^$m/go\.(mod|sum)\$"; then
           par check "go-api vet (whole module, so an importer a change broke fails here)" $m "${heavy[@]}" go vet ./...
