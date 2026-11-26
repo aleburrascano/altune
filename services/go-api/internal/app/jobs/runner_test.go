@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/testdb"
 	"bytes"
 	"context"
@@ -385,6 +386,47 @@ func TestLeaderContext_WithoutAnElectionEveryPassLeads(t *testing.T) {
 		t.Fatal("a runner with no election refused the pass")
 	}
 	release()
+}
+
+func TestLeaderContextFor_EachPassBindsTheJobAndAFreshRunID(t *testing.T) {
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	ring := logging.Setup("info")
+	var r jobs.Runner
+	scope := r.LeaderContextFor(jobs.AlertMonitor)
+
+	for _, msg := range []string{"first pass", "second pass"} {
+		ctx, release, ok := scope(context.Background())
+		if !ok {
+			t.Fatal("a runner with no election refused the pass")
+		}
+		slog.InfoContext(ctx, msg)
+		release()
+	}
+
+	snap := ring.Snapshot()
+	if len(snap) != 2 {
+		t.Fatalf("captured %d records, want 2", len(snap))
+	}
+	for _, rec := range snap {
+		if rec.Attrs["job"] != string(jobs.AlertMonitor) || rec.Attrs["run_id"] == "" {
+			t.Errorf("record %q attrs job=%q run_id=%q, want the job name and a run_id", rec.Message, rec.Attrs["job"], rec.Attrs["run_id"])
+		}
+	}
+	if snap[0].Attrs["run_id"] == snap[1].Attrs["run_id"] {
+		t.Errorf("both passes logged run_id %q, want a fresh id per pass", snap[0].Attrs["run_id"])
+	}
+}
+
+func TestLeaderContextFor_APassWithoutTheTermIsRefused(t *testing.T) {
+	var r jobs.Runner
+	r.Lead(t.Context(), &fakeElection{})
+
+	ctx, release, ok := r.LeaderContextFor(jobs.EvalMeter)(context.Background())
+
+	if ok || ctx != nil || release != nil {
+		t.Fatalf("a follower was given a pass: ok=%v ctx=%v", ok, ctx)
+	}
 }
 
 func TestTicker_TheOldLeaderStopsAfterAHandoff(t *testing.T) {

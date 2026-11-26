@@ -105,6 +105,16 @@ func (r *Runner) LeaderContext(ctx context.Context) (context.Context, context.Ca
 	return r.election.LeaderContext(ctx)
 }
 
+func (r *Runner) LeaderContextFor(name Name) background.OnlyWhileLeader {
+	return func(ctx context.Context) (context.Context, context.CancelFunc, bool) {
+		leaderCtx, release, ok := r.LeaderContext(ctx)
+		if !ok {
+			return nil, nil, false
+		}
+		return background.BindRun(leaderCtx, string(name)), release, true
+	}
+}
+
 type jobRun struct {
 	control *background.JobControl
 	name    Name

@@ -32,7 +32,7 @@ func (a *App) startObserveSources(ctx context.Context, tap *monitoring.EventTap)
 	a.eventFeed = monitoring.NewEventFeed()
 	a.eventFeed.Start(ctx, tap)
 	a.evalMeter = monitoring.NewEvalMeter(0, a.evalMeterRunner()).
-		WithLeadership(a.jobs.LeaderContext)
+		WithLeadership(a.jobs.LeaderContextFor(jobs.EvalMeter))
 	a.jobs.WhenLeader(jobs.EvalMeter, a.evalMeter.Start)
 }
 
