@@ -253,7 +253,7 @@ describe('mobile eslint config keeps raw style numbers out of StyleSheet.create'
     const code =
       "import { StyleSheet } from 'react-native';\nexport const styles = StyleSheet.create({ a: { width: 44 } });\n";
     assert.strictEqual(
-      (await rawStyleErrors('src/shared/ui/primitives/TextField.tsx', code)).length,
+      (await rawStyleErrors('src/shared/ui/view/primitives/TextField.tsx', code)).length,
       1,
     );
   });
@@ -261,7 +261,7 @@ describe('mobile eslint config keeps raw style numbers out of StyleSheet.create'
     const code =
       "import { StyleSheet } from 'react-native';\nexport const styles = StyleSheet.create({ a: { flex: 3, margin: 0, opacity: 1 } });\n";
     assert.strictEqual(
-      (await rawStyleErrors('src/shared/ui/primitives/TextField.tsx', code)).length,
+      (await rawStyleErrors('src/shared/ui/view/primitives/TextField.tsx', code)).length,
       0,
     );
   });
