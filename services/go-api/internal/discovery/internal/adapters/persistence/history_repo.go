@@ -139,9 +139,9 @@ func (r *PgxSearchHistoryRepository) EraseSearchTextForUser(ctx context.Context,
 
 const eraseHistoryOfDeletedIdentitiesSQL = `
 	DELETE FROM discovery_search_history h
-	WHERE EXISTS (SELECT 1 FROM auth.users)
+	WHERE EXISTS (SELECT 1 FROM auth_user_ids)
 	  AND h.user_id <> $1
-	  AND NOT EXISTS (SELECT 1 FROM auth.users u WHERE u.id = h.user_id)`
+	  AND NOT EXISTS (SELECT 1 FROM auth_user_ids u WHERE u.id = h.user_id)`
 
 func (r *PgxSearchHistoryRepository) EraseRowsOfDeletedIdentities(ctx context.Context) (int64, error) {
 	return eraseRowsOfDeletedIdentities(ctx, r.pool,

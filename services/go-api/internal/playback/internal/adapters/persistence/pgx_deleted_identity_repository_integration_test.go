@@ -23,7 +23,8 @@ func identityStoreTx(t *testing.T) pgx.Tx {
 	if existing != nil {
 		t.Skip("auth.users is the real identity store here; this test will not write to it")
 	}
-	if _, err := tx.Exec(ctx, `CREATE SCHEMA auth; CREATE TABLE auth.users (id UUID PRIMARY KEY)`); err != nil {
+	if _, err := tx.Exec(ctx, `CREATE SCHEMA auth; CREATE TABLE auth.users (id UUID PRIMARY KEY);
+		CREATE VIEW public.auth_user_ids AS SELECT id FROM auth.users`); err != nil {
 		t.Fatalf("create the identity store: %v", err)
 	}
 	return tx

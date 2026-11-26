@@ -27,7 +27,8 @@ setup_case() {
         >"$WORK/api/migrations/022_prose_only.sql"
 
     if [ "$has_file" = yes ]; then
-        printf '%s\n' "$env_body" >"$WORK/api/.env.production"
+        printf '%s\n' "$env_body" >"$WORK/api/.env.migrate.production"
+        chmod "${STUB_MIGRATE_MODE:-600}" "$WORK/api/.env.migrate.production"
     fi
 
     cat >"$WORK/bin/psql" <<EOF
@@ -82,7 +83,7 @@ EOF
     (cd "$WORK/api" && PATH="$WORK/bin:$PATH" SNAPSHOT_DIR="$WORK/snapshots" \
         bash deploy/prod-migrate.sh >"$WORK/out.log" 2>&1)
     RC=$?
-    unset STUB_TRACKER_READ_FAIL STUB_TRACKS STUB_MIGRATE_FAIL STUB_PREAPPLIED STUB_DUMP_RC STUB_OLD_SNAPSHOTS
+    unset STUB_MIGRATE_MODE STUB_TRACKER_READ_FAIL STUB_TRACKS STUB_MIGRATE_FAIL STUB_PREAPPLIED STUB_DUMP_RC STUB_OLD_SNAPSHOTS
 }
 
 fail() {
@@ -111,18 +112,30 @@ expect_untracked() {
     grep -qxF "$1" "$WORK/applied" && fail "recorded $1 as applied despite its failed apply"
 }
 
-FULL_ENV='DATABASE_URL=postgres://u:p@h:5432/db'
+FULL_ENV='MIGRATE_DATABASE_URL=postgres://u:p@h:5432/db'
 
-CASE="a missing .env.production fails before touching migrations"
+CASE="a missing .env.migrate.production fails before touching migrations"
 setup_case "" no
 expect_rc 1
-expect_out ".env.production not found"
+expect_out ".env.migrate.production not found"
 expect_no_apply "touched migrations without an env file"
 
-CASE="an empty DATABASE_URL fails loudly before any migration"
-setup_case 'DATABASE_URL='
+CASE="an empty MIGRATE_DATABASE_URL fails loudly before any migration"
+setup_case 'MIGRATE_DATABASE_URL='
 expect_rc 1
-expect_out "DATABASE_URL is unset or empty"
+expect_out "MIGRATE_DATABASE_URL is unset or empty"
+
+CASE="an app-only env (DATABASE_URL, no MIGRATE_DATABASE_URL) never migrates"
+setup_case 'DATABASE_URL=postgres://app:p@h:5432/db'
+expect_rc 1
+expect_out "MIGRATE_DATABASE_URL is unset or empty"
+expect_no_apply "migrated with the app URL"
+
+CASE="a group- or world-readable migrator env file is refused"
+STUB_MIGRATE_MODE=644 setup_case "$FULL_ENV"
+expect_rc 1
+expect_out "chmod 600"
+expect_no_apply "migrated from a world-readable credential file"
 
 CASE="an already-migrated prod DB with an empty tracker fails closed, never adopts"
 STUB_TRACKS=t setup_case "$FULL_ENV"

@@ -136,7 +136,7 @@ resolve_public_health_url "$ENV_FILE"
 keep_running_build_as_previous_on_first_drill
 
 log "applying staging migrations"
-MIGRATE_DATABASE_URL=$(read_env_var DATABASE_URL)
+MIGRATE_DATABASE_URL=$(migrate_database_url "${STAGING_MIGRATE_ENV_FILE:-.env.migrate.staging}") || exit 1
 apply_migrations staging
 
 log "building and recreating the staging stack"

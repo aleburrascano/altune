@@ -246,12 +246,8 @@ swap_sql() {
 
 require_env_file "$PROD_ENV"
 require_env_file "$STAGING_ENV"
-PROD_URL=$(env_value "$PROD_ENV" DATABASE_URL)
-STAGING_URL=$(env_value "$STAGING_ENV" DATABASE_URL)
-if [ -z "$PROD_URL" ] || [ -z "$STAGING_URL" ]; then
-    log "FAILED: DATABASE_URL is unset or empty in $PROD_ENV or $STAGING_ENV"
-    exit 1
-fi
+PROD_URL=$(migrate_database_url "${PROD_MIGRATE_ENV_FILE:-.env.migrate.production}") || exit 1
+STAGING_URL=$(migrate_database_url "${STAGING_MIGRATE_ENV_FILE:-.env.migrate.staging}") || exit 1
 PROD_PROJECT=$(env_value "$PROD_ENV" SUPABASE_PROJECT_URL)
 STAGING_PROJECT=$(env_value "$STAGING_ENV" SUPABASE_PROJECT_URL)
 if [ "$PROD_URL" = "$STAGING_URL" ] || { [ -n "$PROD_PROJECT" ] && [ "$PROD_PROJECT" = "$STAGING_PROJECT" ]; }; then

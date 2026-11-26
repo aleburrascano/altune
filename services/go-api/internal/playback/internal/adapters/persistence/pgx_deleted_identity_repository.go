@@ -44,8 +44,8 @@ const ownersWithoutIdentitySQL = `
 	)
 	SELECT p.user_id, u.id IS NULL AS orphaned
 	FROM page p
-	LEFT JOIN LATERAL (SELECT a.id FROM auth.users a WHERE a.id = p.user_id) u ON true
-	WHERE EXISTS (SELECT 1 FROM auth.users)
+	LEFT JOIN LATERAL (SELECT a.id FROM auth_user_ids a WHERE a.id = p.user_id) u ON true
+	WHERE EXISTS (SELECT 1 FROM auth_user_ids)
 	ORDER BY p.user_id`
 
 func (r *PgxDeletedIdentityRepository) ListOwnersWithoutIdentity(ctx context.Context, after shared.UserId, window int) (ports.OwnerScanPage, error) {

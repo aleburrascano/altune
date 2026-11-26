@@ -90,6 +90,19 @@ func emptyDatabasePool(t *testing.T) *pgxpool.Pool {
 
 var migrationStatementEnd = regexp.MustCompile(`;[ \t]*\r?\n`)
 
+func migrationStatements(migration string) []string {
+	var statements []string
+	start := 0
+	for _, end := range migrationStatementEnd.FindAllStringIndex(migration, -1) {
+		if strings.Count(migration[start:end[0]], "$$")%2 == 1 {
+			continue
+		}
+		statements = append(statements, migration[start:end[0]])
+		start = end[1]
+	}
+	return append(statements, migration[start:])
+}
+
 func migratedDatabasePool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	pool := emptyDatabasePool(t)
@@ -107,7 +120,7 @@ func migratedDatabasePool(t *testing.T) *pgxpool.Pool {
 		if err != nil {
 			t.Fatalf("read %s: %v", file, err)
 		}
-		for _, statement := range migrationStatementEnd.Split(string(migration), -1) {
+		for _, statement := range migrationStatements(string(migration)) {
 			if strings.TrimSpace(statement) == "" {
 				continue
 			}

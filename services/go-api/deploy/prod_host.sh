@@ -130,6 +130,25 @@ read_env_var() {
     grep -E "^[[:space:]]*$1=" "$ENV_FILE" | head -1 | sed -E "s/^[[:space:]]*$1=//"
 }
 
+migrate_database_url() {
+    local file=$1 mode migrator_url
+    if [ ! -f "$file" ]; then
+        log "FAILED: $file not found; schema changes need the migrator URL (MIGRATE_DATABASE_URL), kept apart from the app env"
+        return 1
+    fi
+    mode=$(stat -c %a "$file")
+    if [ "${mode: -2}" != 00 ]; then
+        log "FAILED: $file is mode $mode; it holds the migrator credential, so chmod 600 it"
+        return 1
+    fi
+    migrator_url=$(ENV_FILE=$file read_env_var MIGRATE_DATABASE_URL)
+    if [ -z "$migrator_url" ]; then
+        log "FAILED: MIGRATE_DATABASE_URL is unset or empty in $file"
+        return 1
+    fi
+    printf '%s' "$migrator_url"
+}
+
 migration_versions() {
     local file
     for file in "$MIGRATIONS_DIR"/*.sql; do

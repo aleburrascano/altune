@@ -30,6 +30,10 @@ setup_case() {
     if [ "$has_file" = yes ]; then
         printf '%s\n' "$env_body" >"$WORK/api/.env.staging"
     fi
+    if [ "${STUB_MIGRATE_ENV:-yes}" = yes ]; then
+        printf 'MIGRATE_DATABASE_URL=postgres://migrator:p@h:5432/db\n' >"$WORK/api/.env.migrate.staging"
+        chmod 600 "$WORK/api/.env.migrate.staging"
+    fi
 
     cat >"$WORK/bin/psql" <<EOF
 #!/usr/bin/env bash
@@ -95,7 +99,7 @@ EOF
     unset STUB_TRACKS STUB_HEALTHY
     unset STUB_IMAGES STUB_GREEN_HEALTHY STUB_GREEN_STOPS
     unset STUB_RUNNING_BLUE_HEALTHY
-    unset STUB_TAG_FAILS STUB_SIGNAL_DURING_DRILL
+    unset STUB_TAG_FAILS STUB_SIGNAL_DURING_DRILL STUB_MIGRATE_ENV
 }
 
 fail() {
@@ -162,6 +166,13 @@ grep -qE "applying staging migration [0-9]" "$WORK/out.log" && fail "re-ran a mi
 expect_action "compose -f deploy/compose.staging.yml up -d --build go-api-blue overseer redis pot"
 expect_out "deployed staging"
 expect_action "curl https://staging.example.test/health"
+
+CASE="a missing migrator env file fails before any migration or build"
+STUB_MIGRATE_ENV=no STUB_TRACKS=f setup_case "$FULL_ENV"
+expect_rc 1
+expect_out ".env.migrate.staging not found"
+grep -q . "$WORK/applies.log" && fail "applied a migration without the migrator URL"
+expect_no_action "up"
 
 CASE="no staging health URL fails before migrations or any build"
 STUB_TRACKS=f setup_case "$NO_URL_ENV"

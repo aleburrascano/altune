@@ -3,20 +3,11 @@
 cd "$(dirname "$0")/.." || exit
 . deploy/prod_host.sh
 
-ENV_FILE="${PROD_ENV_FILE:-.env.production}"
+MIGRATE_ENV_FILE="${PROD_MIGRATE_ENV_FILE:-.env.migrate.production}"
 MIGRATIONS_DIR=migrations
 MIGRATE_TIER=prod
 
-if [ ! -f "$ENV_FILE" ]; then
-    log "FAILED: $ENV_FILE not found; cannot apply prod migrations"
-    exit 1
-fi
-
-MIGRATE_DATABASE_URL=$(read_env_var DATABASE_URL)
-if [ -z "$MIGRATE_DATABASE_URL" ]; then
-    log "FAILED: DATABASE_URL is unset or empty in $ENV_FILE"
-    exit 1
-fi
+MIGRATE_DATABASE_URL=$(migrate_database_url "$MIGRATE_ENV_FILE") || exit 1
 
 require_psql
 ensure_migration_tracker

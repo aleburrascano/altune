@@ -61,12 +61,35 @@ Done when: `/health` reports the prior sha and `bash deploy/smoke.sh` passes for
 Both tiers apply `migrations/*.sql` once each, tracked in `schema_migrations`. A failure stops the release with the live colour still serving. A `CONCURRENTLY` index build that fails leaves an INVALID index that `IF NOT EXISTS` skips on the retry. Drop it first:
 
 ```bash
-U=$(grep -E '^DATABASE_URL=' .env.production | head -1 | sed -E 's/^DATABASE_URL=//')
+U=$(grep -E '^MIGRATE_DATABASE_URL=' .env.migrate.production | head -1 | sed -E 's/^MIGRATE_DATABASE_URL=//')
 psql "$U" -c "SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;"
 psql "$U" -c "DROP INDEX CONCURRENTLY <invalid index>;"
 ```
 
 Done when: the query returns no rows and the release is re-run green.
+
+## Database roles
+
+The database is hosted Supabase, so two logins reach it:
+
+| Login | Held in | Used by | Can |
+|---|---|---|---|
+| `postgres.<ref>` (the migrator, owns every table) | `MIGRATE_DATABASE_URL` in `.env.migrate.production` / `.env.migrate.staging` (mode 600, outside every compose `env_file`) | `prod-migrate.sh`, `staging.sh`, `restore-snapshot.sh`, `staging-sync.sh`, snapshots | DDL |
+| `altune_app.<ref>` (BYPASSRLS, owns nothing) | `DATABASE_URL` in `.env.production` / `.env.staging`; the same URL waits in `.env.migrate.<tier>` as `APP_DATABASE_URL` until switched | go-api and its cmd tools | SELECT, INSERT, UPDATE, DELETE; no DDL, no TRUNCATE, no `schema_migrations` |
+
+Migration `052_app_role_grants.sql` gives the app role its rights and default privileges for future tables, turns RLS on, and takes every right from `anon` and `authenticated`. A migration that creates a table needs nothing extra: default privileges cover the app role, and RLS has no policy for the web roles.
+
+```bash
+bash deploy/db-role.sh create <staging|production>    # once per tier: role, password from openssl rand, URL stored in .env.migrate.<tier>
+bash deploy/db-role.sh switch <staging|production>    # DATABASE_URL -> app role; backup .env.<tier>.bak-approle-<stamp> keeps the old line commented out; then release the running sha
+bash deploy/db-role.sh check <staging|production>     # after every deploy: app URL is not the migrator, DDL and TRUNCATE are refused, no web role holds a table privilege
+bash deploy/db-role.sh unswitch <staging|production>  # roll back: restore the old DATABASE_URL from the newest backup, then release
+bash deploy/db-role.sh drop <staging|production>      # roll back further: revoke and drop the role (refused while the app env uses it)
+```
+
+Order on a tier: `create` first (it also applies the grants file, which turns RLS on and revokes the web roles, so it changes the tier's security state as well as adding the role, and is safe before or after the deploy that records 052), then release; `switch` only after a release that carries the `auth_user_ids` queries, then release again. `staging.sh` and `prod-migrate.sh` stop with "not found" until `.env.migrate.<tier>` exists, so run `create` on both tiers before the first deploy that carries them. A snapshot restore brings back the grants and RLS state of its day: run `db-role.sh create <tier>` and `check <tier>` after it.
+
+Rotate the app password with `ALTER ROLE` as the migrator, then update `APP_DATABASE_URL` and the app env together and release. Delete stale `.env.*.bak-*` copies once the new role has run a day.
 
 ## Switches
 
