@@ -3,6 +3,7 @@ package downloadsetup_test
 import (
 	"altune/go-api/internal/app/downloadsetup"
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/youtubemusicapi"
 	"context"
@@ -275,7 +276,7 @@ func TestCanaryYTMClient_BoundsEveryCall(t *testing.T) {
 func TestCanaryYTMClient_ACooldownAnotherInstanceRecordedInRedisHoldsItsSearches(t *testing.T) {
 	redis := goredis.NewClient(&goredis.Options{Addr: miniredis.RunT(t).Addr()})
 	t.Cleanup(func() { _ = redis.Close() })
-	otherInstance, err := youtubemusicapi.NewBudget(redis, youtubemusicapi.Settings{Cooldown: time.Hour})
+	otherInstance, err := youtubemusicapi.NewBudget(redis, youtubemusicapi.Settings{Cooldown: time.Hour}, clock.Sleep)
 	if err != nil {
 		t.Fatalf("budget for the other instance: %v", err)
 	}

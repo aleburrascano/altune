@@ -1,10 +1,72 @@
 package app_test
 
 import (
+	"altune/go-api/internal/app"
+	"altune/go-api/internal/app/jobs"
+	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/shared/logging"
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"testing"
+	"time"
 )
+
+func captureLeaderLoopLogs(t *testing.T) *logging.RingBuffer {
+	t.Helper()
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return logging.Setup("info")
+}
+
+func awaitPass(t *testing.T, passed <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-passed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the loop never ran a pass")
+	}
+}
+
+func recordNamed(t *testing.T, ring *logging.RingBuffer, msg string) logging.CapturedRecord {
+	t.Helper()
+	for _, rec := range ring.Snapshot() {
+		if rec.Message == msg {
+			return rec
+		}
+	}
+	t.Fatalf("no %q record was captured", msg)
+	return logging.CapturedRecord{}
+}
+
+func TestAlertMonitor_ALogInsideAPassCarriesTheJobAndARunID(t *testing.T) {
+	ring := captureLeaderLoopLogs(t)
+	passed := make(chan struct{}, 1)
+	var runner jobs.Runner
+	condition := monitoring.Condition{Key: "probe", Eval: func(ctx context.Context) *monitoring.Alert {
+		slog.InfoContext(ctx, "alert pass line")
+		select {
+		case passed <- struct{}{}:
+		default:
+		}
+		return nil
+	}}
+	monitor, err := app.NewAlertMonitor(&runner, monitoring.NopNotifier{}, 5*time.Millisecond, []monitoring.Condition{condition})
+	if err != nil {
+		t.Fatalf("NewAlertMonitor: %v", err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	monitor.Start(ctx)
+	awaitPass(t, passed)
+
+	rec := recordNamed(t, ring, "alert pass line")
+	if rec.Attrs["job"] != string(jobs.AlertMonitor) || rec.Attrs["run_id"] == "" {
+		t.Errorf("attrs job=%q run_id=%q, want %q and a run_id", rec.Attrs["job"], rec.Attrs["run_id"], jobs.AlertMonitor)
+	}
+}
 
 func alertMonitorUsesNopNotifier(t *testing.T, h http.Handler, token string) bool {
 	t.Helper()

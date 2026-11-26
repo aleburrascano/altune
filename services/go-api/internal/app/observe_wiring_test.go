@@ -2,10 +2,12 @@ package app_test
 
 import (
 	"altune/go-api/internal/app"
+	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/platform/requestmetrics"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -225,6 +227,27 @@ func readObservedHealth(t *testing.T, handles app.Handles, wantCode int) observe
 		t.Fatalf("decode %s: %v", body, err)
 	}
 	return got
+}
+
+func TestEvalMeter_ALogInsideAPassCarriesTheJobAndARunID(t *testing.T) {
+	ring := captureLeaderLoopLogs(t)
+	passed := make(chan struct{}, 1)
+	var runner jobs.Runner
+	meter := app.NewEvalMeter(&runner, func(ctx context.Context) (monitoring.EvalMeterResult, error) {
+		slog.InfoContext(ctx, "eval pass line")
+		passed <- struct{}{}
+		return monitoring.EvalMeterResult{}, nil
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	meter.Start(ctx)
+	awaitPass(t, passed)
+
+	rec := recordNamed(t, ring, "eval pass line")
+	if rec.Attrs["job"] != string(jobs.EvalMeter) || rec.Attrs["run_id"] == "" {
+		t.Errorf("attrs job=%q run_id=%q, want %q and a run_id", rec.Attrs["job"], rec.Attrs["run_id"], jobs.EvalMeter)
+	}
 }
 
 func TestObserveHealth_ProbesTheAssembledDatabaseRedisAndAuth(t *testing.T) {

@@ -2,6 +2,7 @@ package youtubemusicapi
 
 import (
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
 	"fmt"
@@ -34,6 +35,7 @@ var (
 	errBadCooldown     = errors.New(cooldownVarName + " must be a duration of zero or more, like 10m")
 	ErrNoRedisForTool  = errors.New(redisURLVarName + " is not set: the shared InnerTube budget lives in Redis")
 	errBudgetNeedsHost = errors.New("ytminnertube: a budget needs a redis client")
+	ErrSleeperRequired = errors.New("ytminnertube: the budget requires a sleeper")
 )
 
 var reserveScript = goredis.NewScript(`
@@ -92,7 +94,7 @@ func ToolClient(ctx context.Context, env func(string) string) (*http.Client, Set
 	if env(redisURLVarName) == "" {
 		return nil, Settings{}, ErrNoRedisForTool
 	}
-	budget, err := NewBudget(sharedRedis.NewClient(ctx, env(redisURLVarName), toolRedisPoolSize), settings)
+	budget, err := NewBudget(sharedRedis.NewClient(ctx, env(redisURLVarName), toolRedisPoolSize), settings, clock.Sleep)
 	if err != nil {
 		return nil, Settings{}, err
 	}
@@ -106,13 +108,17 @@ func (s Settings) Describe() string {
 type Budget struct {
 	redis    *goredis.Client
 	settings Settings
+	sleep    clock.Sleeper
 }
 
-func NewBudget(client *goredis.Client, settings Settings) (*Budget, error) {
+func NewBudget(client *goredis.Client, settings Settings, sleep clock.Sleeper) (*Budget, error) {
 	if client == nil {
 		return nil, errBudgetNeedsHost
 	}
-	return &Budget{redis: client, settings: settings}, nil
+	if sleep == nil {
+		return nil, fmt.Errorf("NewBudget: %w", ErrSleeperRequired)
+	}
+	return &Budget{redis: client, settings: settings, sleep: sleep}, nil
 }
 
 func (b *Budget) Wait(ctx context.Context) error {
@@ -123,14 +129,7 @@ func (b *Budget) Wait(ctx context.Context) error {
 	if reply == refusedWaitMillis {
 		return ErrBudgetRefused
 	}
-	timer := time.NewTimer(time.Duration(reply) * time.Millisecond)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	return b.sleep(ctx, time.Duration(reply)*time.Millisecond)
 }
 
 func (b *Budget) reserve(ctx context.Context) (int64, error) {

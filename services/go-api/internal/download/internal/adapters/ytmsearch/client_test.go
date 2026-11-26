@@ -2,6 +2,7 @@ package ytmsearch_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/youtubemusicapi"
 	"context"
 	"encoding/json"
@@ -343,7 +344,7 @@ func TestClient_WaitsForASharedBudgetSlotBeyondTheTimeout(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	redisClient := goredis.NewClient(&goredis.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = redisClient.Close() })
-	budget, err := youtubemusicapi.NewBudget(redisClient, youtubemusicapi.Settings{MinInterval: interval})
+	budget, err := youtubemusicapi.NewBudget(redisClient, youtubemusicapi.Settings{MinInterval: interval}, clock.Sleep)
 	if err != nil {
 		t.Fatal(err)
 	}
