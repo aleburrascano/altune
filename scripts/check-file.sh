@@ -58,7 +58,7 @@ go_lint() {
   case $rel in *_test.go) with_tests=true ;; esac
   command -v golangci-lint >/dev/null || missing golangci-lint "Install it with: bash scripts/ci/go-tools.sh" || return
   (cd "$module" && GOLANGCI_LINT_CACHE="$root/.cache/golangci-lint" golangci-lint run \
-    --config .golangci.strict.yml --disable=gocritic --new-from-rev=HEAD --tests=$with_tests \
+    --config .golangci.strict.yml --fast-only --new-from-rev=HEAD --tests=$with_tests \
     --allow-parallel-runners --show-stats=false --path-prefix "$module" "./$pkg/") 2>&1 || return 1
 }
 
@@ -71,6 +71,17 @@ go_vet() {
 comment_check() {
   go -C "$go_api" run "$@" 2>&1 | strip_root | grep -vE '^(comment violations: 0|exit status [0-9]+)$'
   [ "${PIPESTATUS[0]}" = 0 ] || { echo "$comment_hint"; return 1; }
+}
+
+name_check() {
+  local in_module=${rel#"$go_api"/} out rc=0
+  out=$(go -C "$go_api" run ./scripts/lintnames HEAD 2>&1) || rc=$?
+  if [ "$rc" -gt 1 ]; then
+    printf '%s\n' "$out" | strip_root
+    return 1
+  fi
+  out=$(grep -F "  $in_module:" <<<"$out" | grep -F "vague identifier" || true)
+  [ -z "$out" ] || { printf '%s\n' "$out"; return 1; }
 }
 
 js_check() {
@@ -96,7 +107,8 @@ case $rel in
     if ! go_tool_ignores "$rel" && module=$(nearest_dir_with go.mod) && needs_go; then
       pkg=$(dirname "${rel#"$module"/}")
       if [ -f "$module/.golangci.strict.yml" ]; then
-        start "golangci-lint (strict config, lines changed since HEAD)" go_lint "$module" "$pkg"
+        start "golangci-lint (fast linters and format, lines changed since HEAD)" go_lint "$module" "$pkg"
+        case $rel in *_test.go) ;; "$go_api"/*) start "no new vague names" name_check ;; esac
       else
         start "go vet" go_vet "$module" "$pkg"
       fi

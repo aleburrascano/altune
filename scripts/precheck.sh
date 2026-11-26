@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+stage=push
+case "${1:-}" in
+  --lint) stage=commit; shift ;;
+esac
 lint_only=0
-[ "${1:-}" = --lint ] && { lint_only=1; shift; }
+[ $stage = commit ] && lint_only=1
 
 root=$(git rev-parse --show-toplevel) || exit 3
 cd "$root" || exit 3
@@ -13,9 +17,15 @@ base=$(git merge-base "$base_ref" HEAD) || { echo "precheck: no merge base with 
 
 PATH="$PATH:$(go env GOPATH 2>/dev/null)/bin"
 
-untracked() { [ $lint_only = 1 ] || git ls-files --others --exclude-standard; }
-changed=$( { git diff --name-only --diff-filter=ACMR "$base"; untracked; } | sort -u)
-deleted=$(git diff --name-only --no-renames --diff-filter=D "$base")
+untracked() { [ $stage = commit ] || git ls-files --others --exclude-standard; }
+if [ $stage = commit ]; then
+  base=$(git rev-parse HEAD) || { echo "precheck: no HEAD commit to compare the pending changes with"; exit 3; }
+  changed=$(git -c core.quotePath=false diff --name-only --diff-filter=ACMR "$base" | sort -u)
+  deleted=$(git -c core.quotePath=false diff --name-only --no-renames --diff-filter=D "$base")
+else
+  changed=$( { git diff --name-only --diff-filter=ACMR "$base"; untracked; } | sort -u)
+  deleted=$(git diff --name-only --no-renames --diff-filter=D "$base")
+fi
 touches() { grep -qE "$1" <<<"$changed"$'\n'"$deleted"; }
 
 main_tree=$(git worktree list --porcelain | awk '/^worktree /{print $2; exit}')
@@ -31,11 +41,34 @@ heavy=()
 failed=0
 missing=0
 log=$(mktemp)
-trap 'rm -f "$log"' EXIT
+
+fail_summaries=()
+current_step=start
+finished=0
+record_fail() {
+  local name=$1 rc=$2 text=$3 first
+  first=$(printf '%s\n' "$text" | sed -E 's/\x1b\[[0-9;]*m//g' | grep -v '^[[:space:]]*$' | head -n 3 | sed 's/^[[:space:]]*/    /')
+  [ -n "$first" ] || first="    (no output; exit $rc)"
+  fail_summaries+=("FAIL $name (exit $rc):"$'\n'"$first")
+}
+abort_rc=
+announce_abort() {
+  local rc=${abort_rc:-$?}
+  [ $finished = 1 ] && return
+  [ "$rc" = 0 ] && return
+  echo "precheck: stopped early with exit $rc during: $current_step"
+  [ ${#fail_summaries[@]} -eq 0 ] || printf '%s\n' "${fail_summaries[@]}"
+  echo "FAIL precheck itself (exit $rc): died during $current_step"
+}
+trap 'announce_abort; rm -f "$log"' EXIT
+trap 'abort_rc=129; exit 129' HUP
+trap 'abort_rc=130; exit 130' INT
+trap 'abort_rc=143; exit 143' TERM
 
 last_rc=0
 run_check() {
   local show=$1 name=$2 dir=$3; shift 3
+  current_step=$name
   (cd "$dir" && "$@") >"$log" 2>&1
   last_rc=$?
   if [ $last_rc = 0 ]; then
@@ -43,8 +76,10 @@ run_check() {
   else
     echo "FAIL  $name   ($dir: $*)"
     "$show" | sed 's/^/      /'
+    record_fail "$name" "$last_rc" "$("$show")"
     failed=1
   fi
+  current_step="between steps, after $name"
 }
 
 log_tail() { tail -n 40 "$log"; }
@@ -91,7 +126,7 @@ go_pin() {
 
 go_pkgs() {
   local m=$1 d
-  printf '%s\n%s\n' "$changed" "$deleted" | grep -E "^$m/.*\.go$" | xargs -r -n1 dirname | sort -u \
+  printf '%s\n%s\n' "$changed" "$deleted" | grep -E "^$m/.*\.go$" | xargs -r -d '\n' -n1 dirname | sort -u \
     | sed "s#^$m#.#" | while read -r d; do
       [ -d "$m/$d" ] || continue
       (cd "$m" && go list "$d") >/dev/null 2>&1 && echo "$d"
@@ -131,33 +166,43 @@ if touches '^services/go-api/'; then
   m=services/go-api
   go_pin $m
   if need go "go-api" && need golangci-lint "go-api lint"; then
-    affected=()
-    if touches "^$m/go\.(mod|sum)\$" || ! affected_out=$(go_affected $m); then
-      whole_module=1
+    if [ $stage = commit ]; then
+      mapfile -t staged_go < <(grep -E "^$m/.*\.go\$" <<<"$changed" | sed "s#^$m/##")
+      if [ ${#staged_go[@]} -gt 0 ]; then
+        mapfile -t staged_pkgs < <(printf '%s\n' "${staged_go[@]}" | xargs -r -d '\n' -n1 dirname | sort -u | sed 's#^#./#')
+        check "go-api fast linters and format (pending packages)" $m env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --fast-only --new-from-rev=HEAD --allow-parallel-runners "${staged_pkgs[@]}"
+        check "go-api no comments (pending files)" $m go run ./scripts/lintcomments --all "${staged_go[@]}"
+        check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
+      fi
     else
-      whole_module=0
-      [ -n "$affected_out" ] && mapfile -t affected <<<"$affected_out"
+      affected=()
+      if touches "^$m/go\.(mod|sum)\$" || ! affected_out=$(go_affected $m); then
+        whole_module=1
+      else
+        whole_module=0
+        [ -n "$affected_out" ] && mapfile -t affected <<<"$affected_out"
+      fi
+      if [ $whole_module = 1 ]; then
+        check "go-api vet" $m "${heavy[@]}" go vet ./...
+      elif [ ${#affected[@]} -gt 0 ]; then
+        check "go-api vet" $m "${heavy[@]}" go vet "${affected[@]}"
+      fi
+      check "go-api strict linters (new code)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --new-from-rev="$base" --allow-serial-runners
+      check "go-api no comments (whole tree)" $m go run ./scripts/lintcomments --all .
+      check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
+      mapfile -t pkgs < <(go_pkgs $m)
+      [ ${#pkgs[@]} -gt 0 ] && test_check "go-api tests (race, changed packages)" $m "${heavy[@]}" go test -race -shuffle=on -count=1 "${pkgs[@]}"
+      if [ ${#pkgs[@]} -gt 0 ] && [ "${INTEGRATION:-}" != 1 ]; then
+        echo "SKIP  go-api mutation (changed lines): integration tests cover lines here, so it needs INTEGRATION=1 and a database; the backend-tests CI job runs it"
+      elif [ ${#pkgs[@]} -gt 0 ] && need jq "go-api mutation"; then
+        test_check "go-api mutation (changed lines)" . "${heavy[@]}" bash scripts/ci/go-mutate.sh "$base" $m
+      fi
+      if [ $whole_module = 1 ] || grep -qE '(^| )[^ ]*/cmd/acquisitioneval( |$)' <<<"${affected[*]}"; then
+        test_check "go-api acquisition selection gate" $m "${heavy[@]}" go run ./cmd/acquisitioneval -baseline ./cmd/acquisitioneval/baselines.json
+      fi
+      need govulncheck "go-api govulncheck" && check "go-api govulncheck" $m "${heavy[@]}" govulncheck ./...
+      check "go-api deadcode" $m "${heavy[@]}" bash "$root/scripts/ci/go-deadcode.sh"
     fi
-    if [ $whole_module = 1 ]; then
-      check "go-api vet" $m "${heavy[@]}" go vet ./...
-    elif [ ${#affected[@]} -gt 0 ]; then
-      check "go-api vet" $m "${heavy[@]}" go vet "${affected[@]}"
-    fi
-    check "go-api strict linters (new code)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --new-from-rev="$base" --allow-serial-runners
-    check "go-api no comments (whole tree)" $m go run ./scripts/lintcomments --all .
-    check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
-    mapfile -t pkgs < <(go_pkgs $m)
-    [ ${#pkgs[@]} -gt 0 ] && test_check "go-api tests (race, changed packages)" $m "${heavy[@]}" go test -race -shuffle=on -count=1 "${pkgs[@]}"
-    if [ ${#pkgs[@]} -gt 0 ] && [ "${INTEGRATION:-}" != 1 ]; then
-      echo "SKIP  go-api mutation (changed lines): integration tests cover lines here, so it needs INTEGRATION=1 and a database; the backend-tests CI job runs it"
-    elif [ ${#pkgs[@]} -gt 0 ] && need jq "go-api mutation"; then
-      test_check "go-api mutation (changed lines)" . "${heavy[@]}" bash scripts/ci/go-mutate.sh "$base" $m
-    fi
-    if [ $whole_module = 1 ] || grep -qE '(^| )[^ ]*/cmd/acquisitioneval( |$)' <<<"${affected[*]}"; then
-      test_check "go-api acquisition selection gate" $m "${heavy[@]}" go run ./cmd/acquisitioneval -baseline ./cmd/acquisitioneval/baselines.json
-    fi
-    [ $lint_only = 1 ] || { need govulncheck "go-api govulncheck" && check "go-api govulncheck" $m "${heavy[@]}" govulncheck ./...; }
-    [ $lint_only = 1 ] || check "go-api deadcode" $m "${heavy[@]}" bash "$root/scripts/ci/go-deadcode.sh"
   fi
 fi
 
@@ -169,7 +214,13 @@ if touches '\.sh$'; then
   check "no pipefail script pipes into grep -q" . bash scripts/pipefail-grep-q.sh
 fi
 
-[ $lint_only = 1 ] || { need go "secret scan" && need jq "secret scan" && check "secret scan (commits since base)" . bash "$root/scripts/ci/secret-scan.sh" "$base"; }
+if need go "secret scan" && need jq "secret scan"; then
+  if [ $stage = commit ]; then
+    check "secret scan (pending changes)" . bash "$root/scripts/ci/secret-scan.sh" --pending
+  else
+    check "secret scan (commits since base)" . bash "$root/scripts/ci/secret-scan.sh" "$base"
+  fi
+fi
 
 script_tests=$(grep -E '^scripts/(ci/)?(__tests__/)?[a-z0-9-]+(\.test)?\.(sh|mjs)$' <<<"$changed" | grep -vE '/(precheck|test-home)(\.test)?\.(sh|mjs)$' | sed -E 's#^(scripts/(ci/)?)(__tests__/)?([a-z0-9-]+)(\.test)?\.(sh|mjs)$#\1__tests__/\4.test.sh#' | sort -u)
 if touches '^client/(stryker\.config\.json|jest\.mutate\.config\.js)$'; then
@@ -206,12 +257,21 @@ if touches '^services/overseer/'; then
   m=services/overseer
   go_pin $m
   if need go "overseer" && need golangci-lint "overseer lint"; then
-    check "overseer build" $m "${heavy[@]}" go build ./...
-    check "overseer vet" $m "${heavy[@]}" go vet ./...
-    check "overseer strict linters" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --allow-serial-runners
-    check "overseer no comments (whole tree)" services/go-api go run ./scripts/lintcomments --all ../overseer
-    test_check "overseer tests (race)" $m "${heavy[@]}" env CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...
-    touches '^services/overseer/go\.(mod|sum)$' && need govulncheck "overseer govulncheck" && check "overseer govulncheck" $m "${heavy[@]}" govulncheck ./...
+    if [ $stage = commit ]; then
+      mapfile -t staged_overseer < <(grep -E "^$m/.*\.go\$" <<<"$changed" | sed "s#^$m/##")
+      if [ ${#staged_overseer[@]} -gt 0 ]; then
+        mapfile -t staged_overseer_pkgs < <(printf '%s\n' "${staged_overseer[@]}" | xargs -r -d '\n' -n1 dirname | sort -u | sed 's#^#./#')
+        check "overseer fast linters and format (pending packages)" $m env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --fast-only --allow-parallel-runners "${staged_overseer_pkgs[@]}"
+        check "overseer no comments (pending files)" services/go-api go run ./scripts/lintcomments --all "${staged_overseer[@]/#/../overseer/}"
+      fi
+    else
+      check "overseer build" $m "${heavy[@]}" go build ./...
+      check "overseer vet" $m "${heavy[@]}" go vet ./...
+      check "overseer strict linters" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --allow-serial-runners
+      check "overseer no comments (whole tree)" services/go-api go run ./scripts/lintcomments --all ../overseer
+      test_check "overseer tests (race)" $m "${heavy[@]}" env CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...
+      touches '^services/overseer/go\.(mod|sum)$' && need govulncheck "overseer govulncheck" && check "overseer govulncheck" $m "${heavy[@]}" govulncheck ./...
+    fi
   fi
   if touches '^services/overseer/web/' && need npm "overseer web"; then
     if link_deps $m/web; then
@@ -236,7 +296,7 @@ fi
 if touches '^services/go-api/' && [ -d client/src ] && need npx "mobile contract tests"; then
   contract_tests=$(grep -rlF --include='*.test.ts' --include='*.test.tsx' "'go-api'" client/src | sed 's#^client/##' | sort)
   if [ -z "$contract_tests" ]; then
-    [ $lint_only = 1 ] || { echo "FAIL  mobile contract tests (go-api changed): no client test file mentions 'go-api'"; failed=1; }
+    [ $lint_only = 1 ] || { echo "FAIL  mobile contract tests (go-api changed): no client test file mentions 'go-api'"; record_fail "mobile contract tests (go-api changed)" 1 "no client test file mentions 'go-api'"; failed=1; }
   elif link_deps client; then
     jest_check "mobile contract tests (go-api changed)" client npx jest --ci --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$HOME/.cache/altune-ci/jest" $contract_tests
   else
@@ -270,11 +330,12 @@ if touches '^client/'; then
 fi
 
 if touches '(_test\.go|\.(test|spec)\.[cm]?[jt]sx?)$|^scripts/test-home' && need node "test-home"; then
+  current_step="test files live with their unit"
   node scripts/test-home.mjs "$base" >"$log" 2>&1
   case $? in
     0) echo "ok    test files live with their unit" ;;
     3) echo "SKIP  test-home: could not run"; tail -n 5 "$log" | sed 's/^/      /'; missing=1 ;;
-    *) echo "FAIL  test files live with their unit"; tail -n 40 "$log" | sed 's/^/      /'; failed=1 ;;
+    *) rc=$?; echo "FAIL  test files live with their unit"; tail -n 40 "$log" | sed 's/^/      /'; record_fail "test files live with their unit" "$rc" "$(cat "$log")"; failed=1 ;;
   esac
   if touches '^scripts/test-home'; then
     test_check "test-home regression suite" . bash scripts/test-home.test.sh
@@ -298,10 +359,19 @@ fi
 
 if [ -d services/go-api/scripts/nocomments ] && need go "nocomments"; then
   go_pin services/go-api
-  check "no comments (whole tree)" services/go-api go run ./scripts/nocomments check ../..
+  if [ $stage = commit ]; then
+    check "no comments (pending changes)" services/go-api go run ./scripts/nocomments diff HEAD
+  else
+    check "no comments (whole tree)" services/go-api go run ./scripts/nocomments check ../..
+  fi
 fi
 
-[ $failed = 1 ] && { echo "precheck: red. Fix the FAIL lines, then rerun: bash scripts/precheck.sh $base_ref"; exit 1; }
+finished=1
+if [ $failed = 1 ]; then
+  echo "precheck: red. Fix the FAIL lines, then rerun: bash scripts/precheck.sh $base_ref"
+  printf '%s\n' "${fail_summaries[@]}"
+  exit 1
+fi
 [ $missing = 1 ] && { echo "precheck: incomplete, see SKIP lines"; exit 3; }
 [ $lint_only = 1 ] && { echo "precheck: lint green, tests left to CI"; exit 0; }
 echo "precheck: green"
