@@ -1,1 +1,1 @@
-export { DiscoverScreen as default } from '@features/discovery';
+export { DiscoverRoute as default } from '@/mobile';

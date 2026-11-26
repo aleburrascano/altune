@@ -14,7 +14,7 @@ import {
 } from '@shared/ui';
 import { kindLabel, resultKey } from '@features/discovery/core/resultDisplay';
 import type { DiscoveryResult } from '@shared/catalog';
-import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';
+import type { ResultTapHandler } from '@features/discovery/view/results/useResultTap';
 
 function gridColumnsFor(contentWidth: number): number {
   if (contentWidth >= 1080) return 6;

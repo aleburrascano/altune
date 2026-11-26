@@ -1,6 +1,5 @@
 import React from 'react';
-import { Alert } from 'react-native';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
 import { useFavorites, FavoritesPortProvider } from '@features/discovery';
@@ -10,23 +9,25 @@ import { asFavoriteKey } from '@shared/catalog';
 import type { FavoritesPort } from '@features/discovery';
 import { discoveryKeys } from '@shared/query';
 import { runSignOutCleanups } from '@shared/session';
+import { ObservedQueryClient } from '@testing/observedQueryClient';
+import { recordDialogs, type RecordedDialogs } from '@testing/recordDialogs';
 
 let mockedAdd: jest.MockedFunction<FavoritesPort['addFavorite']>;
 let mockedList: jest.MockedFunction<FavoritesPort['listFavorites']>;
 let mockedRemove: jest.MockedFunction<FavoritesPort['removeFavorite']>;
 let port: FavoritesPort;
 
-let alertSpy: jest.SpyInstance;
+let dialogs: RecordedDialogs;
 beforeEach(() => {
   const memory = createMemoryFavoritesPort();
   mockedAdd = jest.fn(memory.addFavorite);
   mockedList = jest.fn(memory.listFavorites);
   mockedRemove = jest.fn(memory.removeFavorite);
   port = { addFavorite: mockedAdd, listFavorites: mockedList, removeFavorite: mockedRemove };
-  alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  dialogs = recordDialogs();
 });
 afterEach(() => {
-  alertSpy.mockRestore();
+  dialogs.restore();
 });
 
 const target: FavoriteTarget = {
@@ -45,10 +46,8 @@ const saved: FavoritesResponse = {
 
 const addedFavorite = saved.items[0]!;
 
-function newClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+function newClient(): ObservedQueryClient {
+  return new ObservedQueryClient();
 }
 
 function wrapperFor(queryClient: QueryClient) {
@@ -149,14 +148,13 @@ describe('useFavorites(): optimistic toggle', () => {
     const queryClient = newClient();
     const snapshot = { items: [], total: 0 };
     queryClient.setQueryData(discoveryKeys.favorites, snapshot);
-    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
     const { result } = renderHook(() => useFavorites(), { wrapper: wrapperFor(queryClient) });
     act(() => result.current.toggle(target));
     await act(flush);
 
     expect(queryClient.getQueryData(discoveryKeys.favorites)).toEqual(snapshot);
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: discoveryKeys.favorites });
+    expect(queryClient.invalidated).toContainEqual({ queryKey: discoveryKeys.favorites });
   });
 
   it('alerts when saving a favorite fails, so the rollback is not silent', async () => {
@@ -169,10 +167,10 @@ describe('useFavorites(): optimistic toggle', () => {
     act(() => result.current.toggle(target));
     await act(flush);
 
-    expect(alertSpy).toHaveBeenCalledWith(
+    expect(dialogs.alerts).toContainEqual([
       'Update failed',
       'Could not update your favorites. Please try again.',
-    );
+    ]);
   });
 
   it('alerts when removing a favorite fails, so the rollback is not silent', async () => {
@@ -185,10 +183,10 @@ describe('useFavorites(): optimistic toggle', () => {
     act(() => result.current.toggle(target));
     await act(flush);
 
-    expect(alertSpy).toHaveBeenCalledWith(
+    expect(dialogs.alerts).toContainEqual([
       'Update failed',
       'Could not update your favorites. Please try again.',
-    );
+    ]);
   });
 
   it('does not cancel an in-flight favorites fetch before writing optimistically', async () => {
@@ -197,13 +195,12 @@ describe('useFavorites(): optimistic toggle', () => {
     mockedList.mockReturnValue(new Promise(() => {}));
     const queryClient = newClient();
     queryClient.setQueryData(discoveryKeys.favorites, { items: [], total: 0 });
-    const cancelSpy = jest.spyOn(queryClient, 'cancelQueries');
 
     const { result } = renderHook(() => useFavorites(), { wrapper: wrapperFor(queryClient) });
     act(() => result.current.toggle(target));
     await act(flush);
 
-    expect(cancelSpy).not.toHaveBeenCalled();
+    expect(queryClient.cancelled).toEqual([]);
     await act(async () => {
       pending.resolve();
       await flush();
@@ -388,7 +385,7 @@ describe('useFavorites(): rapid toggles of one target', () => {
     expect(await server.isSaved()).toBe(true);
     expect(result.current.isFavorite(tapped)).toBe(true);
     expect(server.maxInFlight()).toBe(1);
-    expect(alertSpy).not.toHaveBeenCalled();
+    expect(dialogs.alerts).toEqual([]);
   });
 
   it('rolls back to the server state and alerts when the latest request fails', async () => {
@@ -415,10 +412,10 @@ describe('useFavorites(): rapid toggles of one target', () => {
 
     expect(await server.isSaved()).toBe(true);
     expect(result.current.isFavorite(tapped)).toBe(true);
-    expect(alertSpy).toHaveBeenCalledWith(
+    expect(dialogs.alerts).toContainEqual([
       'Update failed',
       'Could not update your favorites. Please try again.',
-    );
+    ]);
   });
 
   it('leaves the next user favorites alone when a request fails after sign-out', async () => {
@@ -445,7 +442,7 @@ describe('useFavorites(): rapid toggles of one target', () => {
 
     expect(server.held).toEqual([]);
     expect(queryClient.getQueryData(discoveryKeys.favorites)).toEqual(nextUser);
-    expect(alertSpy).not.toHaveBeenCalled();
+    expect(dialogs.alerts).toEqual([]);
   });
 
   it('sends the toggle back when the first request timed out after the server applied it', async () => {
@@ -469,7 +466,7 @@ describe('useFavorites(): rapid toggles of one target', () => {
 
     expect(await server.isSaved()).toBe(false);
     expect(result.current.isFavorite(tapped)).toBe(false);
-    expect(alertSpy).not.toHaveBeenCalled();
+    expect(dialogs.alerts).toEqual([]);
   });
 
   it('keeps the server and the cache on the last tap when the button unmounts mid-request', async () => {
@@ -511,13 +508,13 @@ describe('useFavorites(): rapid toggles of one target', () => {
     };
     runSignOutCleanups();
     queryClient.setQueryData(discoveryKeys.favorites, nextUser);
-    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+    queryClient.invalidated.length = 0;
     await deliverNewestFirst(server);
 
     expect(server.held).toEqual([]);
     expect(await server.isSaved()).toBe(true);
     expect(queryClient.getQueryData(discoveryKeys.favorites)).toEqual(nextUser);
-    expect(invalidateSpy).not.toHaveBeenCalled();
+    expect(queryClient.invalidated).toEqual([]);
   });
 });
 

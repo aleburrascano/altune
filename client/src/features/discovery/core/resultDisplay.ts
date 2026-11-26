@@ -8,7 +8,7 @@ const KIND_LABELS: Record<DiscoveryKind, readonly [string, string]> = {
 };
 
 export function kindLabel(kind: DiscoveryKind, opts?: { plural?: boolean }): string {
-  return KIND_LABELS[kind][opts?.plural ? 1 : 0];
+  return KIND_LABELS[kind][opts?.plural === true ? 1 : 0];
 }
 
 export function resultKey(item: DiscoveryResult, index: number): string {
@@ -19,25 +19,29 @@ export function resultKey(item: DiscoveryResult, index: number): string {
   return `${item.kind}-${source?.provider ?? 'x'}-${idPart}`;
 }
 
-export function resultSecondaryLine(result: DiscoveryResult): string {
-  const kind = kindLabel(result.kind);
+function hasSubtitle(subtitle: string | null): subtitle is string {
+  return subtitle !== null && subtitle.length > 0;
+}
 
-  if (result.kind === 'artist') {
+export function resultSecondaryLine(item: DiscoveryResult): string {
+  const kind = kindLabel(item.kind);
+
+  if (item.kind === 'artist') {
     return kind;
   }
-  if (result.kind === 'album') {
-    const year = result.extras['year'];
+  if (item.kind === 'album') {
+    const year = item.extras['year'];
     const parts = [kind];
-    if (result.subtitle) parts.push(result.subtitle);
+    if (hasSubtitle(item.subtitle)) parts.push(item.subtitle);
     if (typeof year === 'number' || typeof year === 'string') parts.push(String(year));
     return parts.join(' · ');
   }
   const parts = [kind];
-  if (result.subtitle) {
-    const guests = featuredArtistsFromExtras(result.extras['featured_artists']);
-    parts.push(withFeaturing(result.subtitle, guests));
+  if (hasSubtitle(item.subtitle)) {
+    const guests = featuredArtistsFromExtras(item.extras['featured_artists']);
+    parts.push(withFeaturing(item.subtitle, guests));
   }
-  const count = result.extras['variant_count'];
+  const count = item.extras['variant_count'];
   if (typeof count === 'number' && count > 1) {
     parts.push(`+${count - 1} version${count > 2 ? 's' : ''}`);
   }

@@ -1,9 +1,9 @@
-import { useCallback, useRef } from 'react';
+import { useState } from 'react';
 
-import { useNavigator, useScreenFocusEffect } from '@shared/navigation';
-import { dismissKeyboard } from '@shared/ui';
+import type { Navigator } from '@shared/navigation';
 import { useRecordEvent } from '@shared/telemetry';
-import { stashHandoffForDetail } from '@features/discovery/domain/stashHandoffForDetail';
+import type { DiscoverEnv } from '@features/discovery/view/search/screenEnv';
+import { stashHandoffForDetail } from '@features/discovery/core/stashHandoffForDetail';
 import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/catalog';
 
 export type ResultTapHandler = (tapped: DiscoveryResult, position: number) => void;
@@ -27,7 +27,9 @@ function globalRank(results: readonly DiscoveryResult[], result: DiscoveryResult
   const bySource = results.findIndex((r) => sameSource(r, result));
   if (bySource >= 0) return bySource;
   const signature = result.result_signature;
-  return signature ? results.findIndex((r) => r.result_signature === signature) : -1;
+  return signature !== undefined && signature !== ''
+    ? results.findIndex((r) => r.result_signature === signature)
+    : -1;
 }
 
 function resultClickedIdentity(tapped: DiscoveryResult) {
@@ -50,12 +52,20 @@ function resultClickedPayload(
   return { ...resultClickedIdentity(tapped), position: globalIndex >= 0 ? globalIndex : position };
 }
 
-function useResetNavigationPendingOnFocus(navigationPendingRef: { current: boolean }): void {
-  useScreenFocusEffect(
-    useCallback(() => {
-      navigationPendingRef.current = false;
-    }, [navigationPendingRef]),
-  );
+type TapGate = { tryLock: () => boolean; release: () => void };
+
+function createTapGate(): TapGate {
+  let locked = false;
+  return {
+    tryLock: () => {
+      if (locked) return false;
+      locked = true;
+      return true;
+    },
+    release: () => {
+      locked = false;
+    },
+  };
 }
 
 type ResultClickArgs = {
@@ -74,9 +84,10 @@ function recordResultClicked({ recordEvent, searchData, tapped, position }: Resu
 }
 
 type TapDeps = {
-  navigationPendingRef: { current: boolean };
+  dismissKeyboard: () => void;
+  gate: TapGate;
   recordEvent: ReturnType<typeof useRecordEvent>;
-  router: ReturnType<typeof useNavigator>;
+  router: Navigator;
   searchData: DiscoverySearchResponse | undefined;
 };
 
@@ -85,18 +96,19 @@ function tapArgs(deps: TapDeps, tapped: DiscoveryResult, position: number): Resu
 }
 
 function handleResultTap(deps: TapDeps, tapped: DiscoveryResult, position: number): void {
-  if (deps.navigationPendingRef.current) return;
-  deps.navigationPendingRef.current = true;
-  dismissKeyboard();
+  if (!deps.gate.tryLock()) return;
+  deps.dismissKeyboard();
   recordResultClicked(tapArgs(deps, tapped, position));
   deps.router.push(stashHandoffForDetail(tapped, deps.searchData?.search_id));
 }
 
-export function useResultTap(searchData: DiscoverySearchResponse | undefined): ResultTapHandler {
-  const router = useNavigator();
+export function useResultTap(
+  searchData: DiscoverySearchResponse | undefined,
+  { navigator: router, useFocus, dismissKeyboard }: DiscoverEnv,
+): ResultTapHandler {
   const recordEvent = useRecordEvent();
-  const navigationPendingRef = useRef(false);
-  useResetNavigationPendingOnFocus(navigationPendingRef);
+  const [gate] = useState(createTapGate);
+  useFocus(gate.release);
   return (tapped, position) =>
-    handleResultTap({ navigationPendingRef, recordEvent, router, searchData }, tapped, position);
+    handleResultTap({ dismissKeyboard, gate, recordEvent, router, searchData }, tapped, position);
 }

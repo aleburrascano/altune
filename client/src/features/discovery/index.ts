@@ -1,4 +1,5 @@
-export { DiscoverScreen } from '@features/discovery/ui/search/DiscoverScreen';
+export type { DiscoverEnv, FocusEffect } from '@features/discovery/view/search/screenEnv';
+export { DiscoverScreen } from '@features/discovery/view/search/DiscoverScreen';
 export { registerSearchStateSignOutReset } from '@features/discovery/adapters/registerSearchStateSignOutReset';
 export {
   DiscoverPortProvider,
@@ -61,12 +62,12 @@ export {
 } from '@features/discovery/core/searchState';
 export { SectionGrid } from '@features/discovery/view/results/SectionGrid';
 export { TopResultCard } from '@features/discovery/view/results/TopResultCard';
-export { stashHandoffForDetail } from '@features/discovery/domain/stashHandoffForDetail';
+export { stashHandoffForDetail } from '@features/discovery/core/stashHandoffForDetail';
 export { useDebouncedSearch } from '@features/discovery/view/search/useDebouncedSearch';
 export { useDiscoverLogic } from '@features/discovery/view/search/useDiscoverLogic';
 export { useFavorites } from '@features/discovery/view/favorites/useFavorites';
 export { useImpressionLogger } from '@features/discovery/view/results/useImpressionLogger';
 export { usePreviewPlayback } from '@features/discovery/view/results/usePreviewPlayback';
 export { useResultsFilter } from '@features/discovery/view/results/useResultsFilter';
-export { useResultTap } from '@features/discovery/hooks/results/useResultTap';
+export { useResultTap } from '@features/discovery/view/results/useResultTap';
 export { useRefreshFromFirstPage } from '@features/discovery/view/search/useSearchRefresh';

@@ -117,7 +117,7 @@ const passwordHintIsFormTextNotACredential = {
 };
 
 const resultSignatureIsASearchResultIdentityNotACryptoSignature = {
-  files: ['src/features/discovery/hooks/results/useResultTap.ts'],
+  files: ['src/features/discovery/view/results/useResultTap.ts'],
   rules: ['react-doctor/insecure-crypto-risk'],
 };
 
@@ -148,6 +148,7 @@ export default {
           'src/shared/ui/haptics.ts',
           'src/shared/ui/view/keyboard/keyboard.ios.tsx',
           'src/shared/ui/view/keyboard/keyboard.tsx',
+          'src/shared/ui/view/keyboard/keyboardAreas.tsx',
           'src/shared/ui/view/primitives/HorizontalRail.tsx',
         ],
         rules: ['deslop/unused-export'],
@@ -166,6 +167,7 @@ export default {
           'src/shared/ui/view/keyboard/keyboard.ios.tsx',
           'src/shared/ui/view/keyboard/keyboard.tsx',
           'src/shared/ui/view/keyboard/keyboard.web.tsx',
+          'src/shared/ui/view/keyboard/keyboardAreas.tsx',
         ],
         rules: ['react-doctor/only-export-components'],
       },

@@ -7,6 +7,7 @@ export type DismissKeyboardAreaProps = {
   children: ReactNode;
   testID?: string;
   style?: StyleProp<ViewStyle>;
+  onDismiss?: () => void;
 };
 
 export function DismissKeyboardArea(props: DismissKeyboardAreaProps): ReactElement {

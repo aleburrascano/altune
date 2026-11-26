@@ -72,6 +72,10 @@
       "exports": ["*"]
     },
     {
+      "file": "src/shared/ui/view/keyboard/keyboardAreas.tsx",
+      "exports": ["*"]
+    },
+    {
       "file": "src/shared/ui/view/primitives/HorizontalRail.tsx",
       "exports": ["*"]
     }

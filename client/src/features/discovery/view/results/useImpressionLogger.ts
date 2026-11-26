@@ -21,8 +21,9 @@ function unreportedSearch(
   viewableItems: readonly ViewableItem[],
   emittedFor: string | null,
 ): UnreportedSearch | null {
-  const searchId = response?.search_id;
-  if (!searchId || viewableItems.length === 0) return null;
+  if (response === undefined || viewableItems.length === 0) return null;
+  const searchId = response.search_id;
+  if (searchId === undefined || searchId === '') return null;
   return emittedFor === searchId ? null : { searchId, results: response.results };
 }
 

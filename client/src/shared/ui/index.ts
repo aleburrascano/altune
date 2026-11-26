@@ -38,6 +38,8 @@ export { TABLET_LAYOUT_MIN_WIDTH, WIDE_LAYOUT_MIN_WIDTH } from '@shared/ui/core/
 export type { MenuAnchor } from '@shared/ui/core/primitives/menuPlacement';
 export { confirmDestructive, installDialogs, showAlert } from '@shared/ui/shell/dialogs';
 export { platformDialogs };
+export { MotionPreferenceProvider } from '@shared/ui/view/motion/MotionPreferenceProvider';
+export type { MotionPreference } from '@shared/ui/ports/motionPreference';
 export { createNativeDialogs } from '@shared/ui/view/dialog/nativeDialogs';
 export type { ConfirmOptions, Dialogs } from '@shared/ui/ports/dialogs';
 export { IconButton } from '@shared/ui/view/primitives/IconButton';

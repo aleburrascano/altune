@@ -25,7 +25,7 @@ import {
   type FavoriteButtonProps,
 } from '@features/discovery/view/favorites/FavoriteButton';
 import type { DiscoveryResult, FavoriteKey } from '@shared/catalog';
-import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';
+import type { ResultTapHandler } from '@features/discovery/view/results/useResultTap';
 
 import { resultSecondaryLine } from '@features/discovery/core/resultDisplay';
 import {

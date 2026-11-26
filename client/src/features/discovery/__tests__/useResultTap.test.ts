@@ -1,9 +1,9 @@
 import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-import { Keyboard } from 'react-native';
 
 import { useResultTap } from '@features/discovery';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
+import { discoverEnv, type TestEnv } from '@features/discovery/__tests__/discoverEnv';
 import { readDetailHandoff } from '@shared/navigation';
 import { runSignOutCleanups } from '@shared/session';
 import { makeWrapper } from '@testing/makeWrapper';
@@ -15,15 +15,8 @@ const { __http } = require('@testing/doubles/fetch.js');
 const EVENTS = 'POST /v1/discovery/events';
 const EVENTS_PATH = '/v1/discovery/events';
 const TWO_EVENTS = 2;
+const TWO_PUSHES = 2;
 const TOP_RESULT_RANK = 2;
-
-const mockPush = jest.fn();
-const mockUseFocusEffect = jest.fn();
-
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush }),
-  useFocusEffect: (effect: () => void) => mockUseFocusEffect(effect),
-}));
 
 interface RecordedRequest {
   path: string;
@@ -42,6 +35,7 @@ function sentEvents(): RecordedEvent[] {
     .map((request) => JSON.parse(request.body) as RecordedEvent);
 }
 
+let fake: TestEnv;
 let queryClient: QueryClient;
 let wrapper: ReturnType<typeof makeWrapper>;
 
@@ -51,7 +45,7 @@ interface PushedDetailHref {
 }
 
 function pushedHref(call: number): PushedDetailHref {
-  return mockPush.mock.calls[call]![0] as PushedDetailHref;
+  return fake.navigator.push.mock.calls[call]![0] as PushedDetailHref;
 }
 
 function pushedHandoff(call: number) {
@@ -78,7 +72,7 @@ function responseFixture(
 }
 
 beforeEach(async () => {
-  jest.clearAllMocks();
+  fake = discoverEnv();
   runSignOutCleanups();
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -95,14 +89,13 @@ afterEach(() => {
 
 describe('useResultTap records result_clicked and hands off to the detail screen', () => {
   it('uses the global index, search identity and signature from the response', async () => {
-    const dismiss = jest.spyOn(Keyboard, 'dismiss');
     const data = responseFixture();
     const tapped = data.results[1]!;
-    const { result } = renderHook(() => useResultTap(data), { wrapper });
+    const { result } = renderHook(() => useResultTap(data, fake.env), { wrapper });
 
     result.current(tapped, 0);
 
-    expect(dismiss).toHaveBeenCalledTimes(1);
+    expect(fake.dismissKeyboard).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(sentEvents()).toHaveLength(1));
     expect(sentEvents()[0]).toEqual({
       type: 'result_clicked',
@@ -118,7 +111,7 @@ describe('useResultTap records result_clicked and hands off to the detail screen
         result_signature: 'sig',
       },
     });
-    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(fake.navigator.push).toHaveBeenCalledTimes(1);
     expect(pushedHref(0).pathname).toBe('/discover/detail');
     expect(pushedHandoff(0)?.result).toBe(tapped);
     expect(pushedHandoff(0)?.searchId).toBe('search-1');
@@ -149,11 +142,10 @@ describe('useResultTap records result_clicked and hands off to the detail screen
       top_result: copy(results[0]!),
       sections: [{ kind: 'track', items: [copy(results[1]!), copy(results[2]!)], has_more: false }],
     });
-    const { result } = renderHook(() => useResultTap(data), { wrapper });
-    const onFocus = () => act(() => (mockUseFocusEffect.mock.calls.at(-1)![0] as () => void)());
+    const { result } = renderHook(() => useResultTap(data, fake.env), { wrapper });
 
     result.current(data.sections[0]!.items[1]!, 1);
-    onFocus();
+    act(() => fake.focus());
     result.current(data.top_result!, 0);
 
     await waitFor(() => expect(sentEvents()).toHaveLength(TWO_EVENTS));
@@ -166,7 +158,7 @@ describe('useResultTap records result_clicked and hands off to the detail screen
       resultFixture({ title: 'b', result_signature: 'track|b|', sources: [] }),
     ];
     const data = responseFixture({ results });
-    const { result } = renderHook(() => useResultTap(data), { wrapper });
+    const { result } = renderHook(() => useResultTap(data, fake.env), { wrapper });
 
     result.current(structuredClone(results[1]!), 0);
 
@@ -176,7 +168,7 @@ describe('useResultTap records result_clicked and hands off to the detail screen
 
   it('falls back to the passed position, and omits a missing signature', async () => {
     const orphan = resultFixture({ result_signature: undefined, sources: [] });
-    const { result } = renderHook(() => useResultTap(undefined), { wrapper });
+    const { result } = renderHook(() => useResultTap(undefined, fake.env), { wrapper });
 
     result.current(orphan, 4);
 
@@ -198,20 +190,19 @@ describe('useResultTap records result_clicked and hands off to the detail screen
   it('ignores a second tap while the first navigation is pending, until the screen refocuses', async () => {
     const data = responseFixture();
     const [first, second] = data.results;
-    const { result } = renderHook(() => useResultTap(data), { wrapper });
+    const { result } = renderHook(() => useResultTap(data, fake.env), { wrapper });
 
     result.current(first!, 0);
     result.current(second!, 1);
 
-    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(fake.navigator.push).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(sentEvents()).toHaveLength(1));
     expect(pushedHandoff(0)?.result).toBe(first);
 
-    const onFocus = mockUseFocusEffect.mock.calls.at(-1)![0] as () => void;
-    act(() => onFocus());
+    act(() => fake.focus());
     result.current(second!, 1);
 
-    expect(mockPush).toHaveBeenCalledTimes(2);
+    expect(fake.navigator.push).toHaveBeenCalledTimes(TWO_PUSHES);
     expect(pushedHandoff(1)?.result).toBe(second);
     expect(pushedHandoff(1)?.searchId).toBe('search-1');
   });

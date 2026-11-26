@@ -17,6 +17,7 @@ import {
 import { createMemoryDiscoverPort } from '@testing/fakes/discovery/inMemoryDiscoverPort';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import type { DiscoverPort } from '@features/discovery';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
@@ -203,8 +204,6 @@ function wrapperWith(port: DiscoverPort) {
 
 describe('useDiscoverPort', () => {
   it('throws when no provider is mounted', () => {
-    jest.spyOn(console, 'error').mockImplementation(() => {});
-
     expect(() => renderHook(() => useDiscoverPort())).toThrow('no discover port provided');
   });
 
@@ -303,8 +302,6 @@ describe('the discover hooks run on the port the provider was given', () => {
 });
 
 describe('httpDiscoverPort', () => {
-  afterEach(() => jest.restoreAllMocks());
-
   it('rejects searchDiscovery with an AbortError when the signal aborts while the request is on the wire', async () => {
     __http.hang(`GET ${SEARCH_PATH}`);
     const controller = new AbortController();
@@ -332,7 +329,7 @@ describe('httpDiscoverPort', () => {
     ['suggestDiscovery', () => httpDiscoverPort.suggestDiscovery({ q: 'q' }), SUGGEST_PATH],
     ['listSearchHistory', () => httpDiscoverPort.listSearchHistory(), HISTORY_PATH],
   ])('passes a 404 from the server through %s as an ApiError', async (_m, call, path) => {
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
     __http.reply(`GET ${path}`, { status: 404, json: { detail: 'not found' } });
 
     const calling = call();

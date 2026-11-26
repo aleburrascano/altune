@@ -13,7 +13,8 @@ export type PreviewPlayback =
 
 type Playback = ReturnType<typeof usePlayback>;
 
-type PreviewToggle = Pick<Playback, 'play' | 'pause'> & {
+type PreviewToggle = {
+  playback: Pick<Playback, 'play' | 'pause'>;
   isPlaying: boolean;
   feedback: typeof tapFeedback;
   item: DiscoveryResult;
@@ -47,10 +48,10 @@ function previewTrack(item: DiscoveryResult, previewUrl: string): Parameters<Pla
 function togglePreview(toggle: PreviewToggle): void {
   toggle.feedback('light');
   if (toggle.isPlaying) {
-    toggle.pause();
+    toggle.playback.pause();
     return;
   }
-  void toggle.play(previewTrack(toggle.item, toggle.previewUrl));
+  void toggle.playback.play(previewTrack(toggle.item, toggle.previewUrl));
 }
 
 function previewToggle(toggle: PreviewToggle): () => void {
@@ -58,10 +59,11 @@ function previewToggle(toggle: PreviewToggle): () => void {
 }
 
 export function usePreviewPlayback(item: DiscoveryResult, feedback = tapFeedback): PreviewPlayback {
-  const { track, status, play, pause } = usePlayback();
+  const playback = usePlayback();
+  const { track, status } = playback;
   const previewUrl = previewUrlOf(item);
   if (previewUrl === null) return { hasPreview: false };
   const isPlaying = isPreviewPlaying({ track, status }, previewUrl);
-  const toggle = previewToggle({ isPlaying, play, pause, feedback, item, previewUrl });
+  const toggle = previewToggle({ isPlaying, playback, feedback, item, previewUrl });
   return { hasPreview: true, isPlaying, togglePreview: toggle };
 }

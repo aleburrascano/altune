@@ -18,7 +18,7 @@ import { SectionGrid, useGridColumns } from '@features/discovery/view/results/Se
 import { TopResultCard } from '@features/discovery/view/results/TopResultCard';
 import { kindLabel, resultKey } from '@features/discovery/core/resultDisplay';
 
-import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';
+import type { ResultTapHandler } from '@features/discovery/view/results/useResultTap';
 import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/catalog';
 
 type SeeAllLinkProps = {

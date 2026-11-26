@@ -57,7 +57,9 @@ export function correctionForResponse(
 ): SearchCorrection | null {
   const corrected = data?.corrected_query;
   const original = data?.original_query;
-  if (!corrected || !original) return null;
+  if (corrected === undefined || corrected === '' || original === undefined || original === '') {
+    return null;
+  }
   return { corrected, original };
 }
 

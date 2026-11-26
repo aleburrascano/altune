@@ -1,24 +1,21 @@
-import { AccessibilityInfo } from 'react-native';
+import { MotionPreferenceProvider } from '@shared/ui';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { DiscoverySearchResponse } from '@shared/catalog';
 import { resetSearchState, DiscoverScreen } from '@features/discovery';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
+import { fixedMotion } from '@testing/fixedMotionPreference';
 import {
   createPlaybackWrapper,
   createTestQueryClient,
   idlePlayback,
   signInTestUser,
 } from '@testing/queryHarness';
-
-jest.mock('decode-uri-component', () => ({ __esModule: true, default: (s: string) => s }));
-
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
-  useFocusEffect: jest.fn(),
-}));
+import { discoverEnv, type TestEnv } from '@features/discovery/__tests__/discoverEnv';
 
 const { __http } = require('@testing/doubles/fetch.js');
+
+let fake: TestEnv;
 
 const SEARCH = 'GET /v1/discovery/search';
 const UNRELEASED_SEARCH = 'GET /v1/discovery/unreleased/search';
@@ -81,12 +78,15 @@ function renderDiscover() {
   const Base = createPlaybackWrapper(createTestQueryClient({ mutations: true }), PLAYBACK);
   return render(
     <Base>
-      <DiscoverScreen />
+      <MotionPreferenceProvider preference={fixedMotion(true)}>
+        <DiscoverScreen {...fake.env} />
+      </MotionPreferenceProvider>
     </Base>,
   );
 }
 
 warmUpFirstRender(async () => {
+  fake = discoverEnv();
   signInTestUser();
   serve(0, []);
   renderDiscover();
@@ -99,9 +99,9 @@ function typeQuery(text: string): void {
 }
 
 beforeEach(() => {
+  fake = discoverEnv();
   resetSearchState();
   startQueue.mockClear();
-  jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
   signInTestUser();
 });
 
