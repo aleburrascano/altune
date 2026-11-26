@@ -86,29 +86,19 @@ func ReadPoolStats(pool *pgxpool.Pool) PoolStats {
 	}
 }
 
-type HealthStatus struct {
-	OK  bool
-	Err error
-}
-
-func CheckHealth(ctx context.Context, pool *pgxpool.Pool) HealthStatus {
-	err := pool.Ping(ctx)
-	return HealthStatus{OK: err == nil, Err: err}
-}
-
 const (
 	undefinedTableCode   = "42P01"
 	insufficientPrivCode = "42501"
 )
 
 func WrapUnreadable(op string, sentinel, err error) error {
-	if IsUnreadable(err) {
+	if isUnreadable(err) {
 		return fmt.Errorf("%s: %w: %w", op, sentinel, err)
 	}
 	return fmt.Errorf("%s: %w", op, err)
 }
 
-func IsUnreadable(err error) bool {
+func isUnreadable(err error) bool {
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) {
 		return false

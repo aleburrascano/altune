@@ -2,22 +2,22 @@ package database
 
 import "github.com/jackc/pgx/v5/pgconn"
 
-type Endpoint struct {
+type endpoint struct {
 	Host                 string
 	RequiresTLS          bool
 	FallsBackToPlaintext bool
 }
 
-func ParseEndpoint(databaseURL string) (Endpoint, error) {
+func ParseEndpoint(databaseURL string) (endpoint, error) {
 	cfg, err := pgconn.ParseConfig(databaseURL)
 	if err != nil {
-		return Endpoint{}, err
+		return endpoint{}, err
 	}
-	endpoint := Endpoint{Host: cfg.Host, RequiresTLS: cfg.TLSConfig != nil}
+	ep := endpoint{Host: cfg.Host, RequiresTLS: cfg.TLSConfig != nil}
 	for _, fallback := range cfg.Fallbacks {
 		if fallback.TLSConfig == nil {
-			endpoint.FallsBackToPlaintext = true
+			ep.FallsBackToPlaintext = true
 		}
 	}
-	return endpoint, nil
+	return ep, nil
 }

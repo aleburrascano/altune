@@ -16,7 +16,7 @@ const runBudgetFraction = 2
 
 const backgroundJobPanic = "background_job.panic"
 
-var ErrTickerRequired = errors.New("a repeating job needs a ticker")
+var errTickerRequired = errors.New("a repeating job needs a ticker")
 
 var ErrRunBudgetExceeded = errors.New("background job run exceeded its budget")
 
@@ -59,7 +59,7 @@ func RunJob(parent context.Context, control *JobControl, now clock.Func, name st
 
 func Every(ctx context.Context, bg *Tracker, interval time.Duration, newTicker clock.TickerFunc, run func()) error {
 	if newTicker == nil {
-		return fmt.Errorf("background.Every: %w", ErrTickerRequired)
+		return fmt.Errorf("background.Every: %w", errTickerRequired)
 	}
 	bg.Track(func() {
 		run()

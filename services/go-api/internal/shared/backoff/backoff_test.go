@@ -2,35 +2,46 @@ package backoff_test
 
 import (
 	"altune/go-api/internal/shared/backoff"
-	"errors"
 	"math"
+	"strings"
 	"testing"
 	"time"
 )
 
 var policy = backoff.MustCapped(100*time.Millisecond, time.Second)
 
-func TestCapped_RefusesAnythingThatCannotBeAWait(t *testing.T) {
+func panicError(build func()) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err, _ = r.(error)
+		}
+	}()
+	build()
+	return nil
+}
+
+func TestMustCapped_RefusesAnythingThatCannotBeAWait(t *testing.T) {
 	cases := map[string]struct {
-		build func() (backoff.Policy, error)
-		want  error
+		build func()
+		want  string
 	}{
-		"zero cap":         {func() (backoff.Policy, error) { return backoff.Capped(time.Second, 0) }, backoff.ErrCapNotPositive},
-		"negative cap":     {func() (backoff.Policy, error) { return backoff.Capped(time.Second, -time.Second) }, backoff.ErrCapNotPositive},
-		"cap below base":   {func() (backoff.Policy, error) { return backoff.Capped(time.Minute, time.Second) }, backoff.ErrCapBelowBase},
-		"zero base":        {func() (backoff.Policy, error) { return backoff.Capped(0, time.Second) }, backoff.ErrBaseNotPositive},
-		"negative base":    {func() (backoff.Policy, error) { return backoff.Uncapped(-time.Second) }, backoff.ErrBaseNotPositive},
-		"factor of one":    {func() (backoff.Policy, error) { return backoff.Uncapped(time.Second, backoff.WithFactor(1)) }, backoff.ErrFactorBelowTwo},
-		"negative spread":  {func() (backoff.Policy, error) { return backoff.Uncapped(time.Second, backoff.WithSpread(-0.1)) }, backoff.ErrSpreadOutside},
-		"spread above one": {func() (backoff.Policy, error) { return backoff.Uncapped(time.Second, backoff.WithSpread(1.5)) }, backoff.ErrSpreadOutside},
-		"spread not a number": {func() (backoff.Policy, error) {
-			return backoff.Uncapped(time.Second, backoff.WithSpread(math.NaN()))
-		}, backoff.ErrSpreadOutside},
+		"zero cap":         {func() { backoff.MustCapped(time.Second, 0) }, "backoff: cap must be positive"},
+		"negative cap":     {func() { backoff.MustCapped(time.Second, -time.Second) }, "backoff: cap must be positive"},
+		"cap below base":   {func() { backoff.MustCapped(time.Minute, time.Second) }, "backoff: cap must not be below the base"},
+		"zero base":        {func() { backoff.MustCapped(0, time.Second) }, "backoff: base must be positive"},
+		"negative base":    {func() { backoff.MustUncapped(-time.Second) }, "backoff: base must be positive"},
+		"factor of one":    {func() { backoff.MustUncapped(time.Second, backoff.WithFactor(1)) }, "backoff: factor must be at least 2"},
+		"negative spread":  {func() { backoff.MustUncapped(time.Second, backoff.WithSpread(-0.1)) }, "backoff: spread must be within [0, 1]"},
+		"spread above one": {func() { backoff.MustUncapped(time.Second, backoff.WithSpread(1.5)) }, "backoff: spread must be within [0, 1]"},
+		"spread not a number": {func() {
+			backoff.MustUncapped(time.Second, backoff.WithSpread(math.NaN()))
+		}, "backoff: spread must be within [0, 1]"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			if _, err := tc.build(); !errors.Is(err, tc.want) {
-				t.Errorf("err = %v, want %v", err, tc.want)
+			err := panicError(tc.build)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("panic error = %v, want one containing %q", err, tc.want)
 			}
 		})
 	}

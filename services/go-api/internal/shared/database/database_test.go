@@ -35,7 +35,7 @@ func TestWrapUnreadable_MarksMissingOrDeniedStoreWithSentinel(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			got := database.WrapUnreadable("op", sentinel, tc.err)
-			if errors.Is(got, sentinel) != tc.wantFlag || database.IsUnreadable(tc.err) != tc.wantFlag {
+			if errors.Is(got, sentinel) != tc.wantFlag {
 				t.Fatalf("sentinel flag = %v, want %v (%v)", errors.Is(got, sentinel), tc.wantFlag, got)
 			}
 			if !errors.Is(got, tc.err) {
@@ -193,19 +193,6 @@ func TestReadPoolStats_CountsAConnectionHeldFromALivePool(t *testing.T) {
 func TestReadPoolStats_NilPoolReadsAsZero(t *testing.T) {
 	if stats := database.ReadPoolStats(nil); stats != (database.PoolStats{}) {
 		t.Fatalf("ReadPoolStats(nil) = %+v, want zero value", stats)
-	}
-}
-
-func TestCheckHealth_ReportsALiveAndAClosedPool(t *testing.T) {
-	pool := openPool(t, 2)
-	if got := database.CheckHealth(context.Background(), pool); !got.OK || got.Err != nil {
-		t.Fatalf("CheckHealth on a live pool = %+v, want OK", got)
-	}
-
-	pool.Close()
-
-	if got := database.CheckHealth(context.Background(), pool); got.OK || got.Err == nil {
-		t.Fatalf("CheckHealth on a closed pool = %+v, want not OK with the cause", got)
 	}
 }
 
