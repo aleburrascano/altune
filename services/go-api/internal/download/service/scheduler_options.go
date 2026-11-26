@@ -2,20 +2,13 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
-	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"context"
+	"errors"
 	"log/slog"
 	"sync/atomic"
 	"time"
 )
-
-func WithSchedulerEvents(pub events.Publisher) func(*BackgroundAcquisitionScheduler) {
-	return func(s *BackgroundAcquisitionScheduler) {
-		requirePort("WithSchedulerEvents", "publisher", pub == nil)
-		s.events = pub
-	}
-}
 
 func WithSchedulerPaused(paused bool) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) { s.paused.Store(paused) }
@@ -23,15 +16,11 @@ func WithSchedulerPaused(paused bool) func(*BackgroundAcquisitionScheduler) {
 
 func WithJobQueue(q ports.DownloadQueue) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) {
-		requirePort("WithJobQueue", "queue", q == nil)
+		if q == nil {
+			s.setupErr = errors.Join(s.setupErr, missingPort("WithJobQueue", "queue", true))
+			return
+		}
 		s.queue = q
-	}
-}
-
-func WithJobNotifier(n ports.JobNotifier) func(*BackgroundAcquisitionScheduler) {
-	return func(s *BackgroundAcquisitionScheduler) {
-		requirePort("WithJobNotifier", "notifier", n == nil)
-		s.notifier = n
 	}
 }
 
@@ -67,13 +56,6 @@ func WithPollInterval(d time.Duration) func(*BackgroundAcquisitionScheduler) {
 	}
 }
 
-func WithOutcomeRecorder(r ports.OutcomeRecorder) func(*BackgroundAcquisitionScheduler) {
-	return func(s *BackgroundAcquisitionScheduler) {
-		requirePort("WithOutcomeRecorder", "recorder", r == nil)
-		s.outcomes = r
-	}
-}
-
 const fingerprintLookupUnverified = "unverified until the first successful lookup"
 
 func WithVerificationStatus(v ports.Verification) func(*BackgroundAcquisitionScheduler) {
@@ -87,20 +69,6 @@ func WithVerificationStatus(v ports.Verification) func(*BackgroundAcquisitionSch
 		}
 		slog.InfoContext(context.Background(), "acquisition.verification_armed",
 			"fpcalc", v.Fpcalc, "fingerprint_lookup", fingerprintLookupUnverified)
-	}
-}
-
-func WithVerifySkipCount(count func() uint64) func(*BackgroundAcquisitionScheduler) {
-	return func(s *BackgroundAcquisitionScheduler) {
-		requirePort("WithVerifySkipCount", "count", count == nil)
-		s.skipCount = count
-	}
-}
-
-func WithFingerprintVerified(verified func() bool) func(*BackgroundAcquisitionScheduler) {
-	return func(s *BackgroundAcquisitionScheduler) {
-		requirePort("WithFingerprintVerified", "verified", verified == nil)
-		s.fingerprintVerified = verified
 	}
 }
 

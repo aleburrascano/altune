@@ -143,7 +143,7 @@ func TestExecuteReplace_FailedRollbackDeleteIsQueuedForTheSweep(t *testing.T) {
 
 func TestDirectDeleteOrphans_DeleteTheRefAtOnceWhateverTheGrace(t *testing.T) {
 	store := &objectStore{objects: map[string]string{"u/old.mp3": "old bytes"}}
-	recorder := service.DirectDeleteOrphans(store)
+	recorder := service.MustDirectDeleteOrphans(store)
 
 	err := recorder.RecordOrphanedAudio(context.Background(), ports.OrphanedAudio{AudioRef: "u/old.mp3", NotBefore: time.Now().Add(time.Hour)})
 
@@ -155,7 +155,7 @@ func TestDirectDeleteOrphans_DeleteTheRefAtOnceWhateverTheGrace(t *testing.T) {
 func TestDirectDeleteOrphans_SurfacesAFailedDelete(t *testing.T) {
 	store := &objectStore{objects: map[string]string{"u/old.mp3": "old bytes"}, deleteErr: errors.New("down")}
 
-	err := service.DirectDeleteOrphans(store).RecordOrphanedAudio(context.Background(), ports.OrphanedAudio{AudioRef: "u/old.mp3"})
+	err := service.MustDirectDeleteOrphans(store).RecordOrphanedAudio(context.Background(), ports.OrphanedAudio{AudioRef: "u/old.mp3"})
 
 	if err == nil {
 		t.Error("RecordOrphanedAudio = nil, want the delete failure so the caller can log it")
@@ -167,7 +167,7 @@ func TestStoreRollback_ExhaustedDeleteQueuesTheOrphan(t *testing.T) {
 		userID, trackID := ids.NewUserId(uuid.New()), ids.NewTrackId()
 		store := &objectStore{objects: map[string]string{"u/new.mp3": "new bytes"}, deleteErr: errors.New("down")}
 		queue := &recordingOrphanQueue{}
-		step := service.NewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), queue, acquisitiontest.NewLedger(),
+		step := service.MustNewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), queue, acquisitiontest.NewLedger(),
 			service.WithStoreOwner(userID, trackID))
 
 		if err := step.Rollback(context.Background(), &service.AcquisitionContext{AudioRef: "u/new.mp3"}); err == nil {
@@ -190,7 +190,7 @@ func TestStoreRollback_SharedRefIsNeverQueued(t *testing.T) {
 		}})
 		queue := &recordingOrphanQueue{}
 		store := &objectStore{objects: map[string]string{}, deleteErr: errors.New("down")}
-		step := service.NewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), queue, refs, service.WithStoreOwner(userID, own))
+		step := service.MustNewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), queue, refs, service.WithStoreOwner(userID, own))
 
 		if err := step.Rollback(context.Background(), &service.AcquisitionContext{AudioRef: sharedRef}); err != nil {
 			t.Fatalf("Rollback: %v", err)

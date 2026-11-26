@@ -64,7 +64,7 @@ func TestAcquireTrackAudioService_Execute_ContextEndsMidSearch_SettlesOnDetached
 	pub := newCtxRecordingPublisher()
 	svc := newTestAcquireService(
 		liveCtxLedger{ledger}, service.NewSourceRegistry(source), newFakeAudioStore(),
-		service.WithAcquireEvents(pub),
+		withServiceEvents(pub),
 	)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -235,7 +235,7 @@ func TestExecute_PublishesStartedEvent(t *testing.T) {
 		ledger,
 		fakeRegistry(&fakeAudioSearcher{}),
 		newFakeAudioStore(),
-		service.WithAcquireEvents(pub),
+		withServiceEvents(pub),
 	)
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
@@ -994,7 +994,7 @@ func executeOnAttempt(t *testing.T, searcher *fakeAudioSearcher, attempt int) (l
 	ledger := acquisitiontest.NewLedger()
 	ledger.Seed(track)
 	pub := newRecordingPublisher()
-	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(), service.WithAcquireEvents(pub))
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(), withServiceEvents(pub))
 	ctx := service.WithJobRun(context.Background(), service.JobRun{Attempt: attempt, SchedulerOwned: true})
 
 	execErr := svc.Execute(ctx, userId, track.ID)
@@ -1969,7 +1969,7 @@ func executeAfterOwnTimeBudget(t *testing.T, attempt int) (ledgerTrack, *recordi
 	ledger := acquisitiontest.NewLedger()
 	ledger.Seed(track)
 	pub := newRecordingPublisher()
-	svc := newTestAcquireService(ledger, service.NewSourceRegistry(stalledSource{}), newFakeAudioStore(), service.WithAcquireEvents(pub), service.WithAcquireTimeout(time.Millisecond))
+	svc := newTestAcquireService(ledger, service.NewSourceRegistry(stalledSource{}), newFakeAudioStore(), withServiceEvents(pub), service.WithAcquireTimeout(time.Millisecond))
 	ctx := service.WithJobRun(context.Background(), service.JobRun{Attempt: attempt, SchedulerOwned: true})
 
 	execErr := svc.Execute(ctx, userId, track.ID)
@@ -2035,7 +2035,7 @@ func newReplaceFixture(t *testing.T, searcher *fakeAudioSearcher, attempt int) r
 	store := newFakeAudioStore()
 	store.stored["u/a/b/c.mp3"] = true
 	pub := newRecordingPublisher()
-	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store, service.WithAcquireEvents(pub))
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store, withServiceEvents(pub))
 	ctx := service.WithJobRun(context.Background(), service.JobRun{Attempt: attempt, SchedulerOwned: true})
 	return replaceFixture{svc: svc, ledger: ledger, track: track, store: store, pub: pub, userId: userId, ctx: ctx}
 }
@@ -2998,7 +2998,7 @@ func newTestAcquireServiceIn(
 	opts ...any,
 ) *service.AcquireTrackAudioService {
 	stages := noopStages()
-	stages.Orphans = service.DirectDeleteOrphans(audioStore)
+	stages.Orphans = service.MustDirectDeleteOrphans(audioStore)
 	wiring := noopVerification()
 	var public []func(*service.AcquireTrackAudioService)
 	for _, opt := range opts {
@@ -3011,7 +3011,7 @@ func newTestAcquireServiceIn(
 			panic(fmt.Sprintf("newTestAcquireService: unsupported option %T", opt))
 		}
 	}
-	return service.NewAcquireTrackAudioService(ledger, sources, audioStore, workspace, wiring, stages, public...)
+	return service.MustNewAcquireTrackAudioService(ledger, sources, audioStore, workspace, wiring, stages, public...)
 }
 
 type discardingDeleter struct{}
@@ -3020,13 +3020,19 @@ func (discardingDeleter) Delete(context.Context, string) error { return nil }
 
 func noopStages() service.StagePorts {
 	return service.StagePorts{
-		Prober:      ports.NoopAudioProber(),
-		Tagger:      ports.NoopAudioTagger(),
-		Rejections:  ports.NoopRejectionStore(),
-		StoredAudio: ports.NoopStoredAudioReader(),
-		Orphans:     service.DirectDeleteOrphans(discardingDeleter{}),
-		Skips:       ports.NoopVerifySkipRecorder(),
+		Prober:        ports.NoopAudioProber(),
+		Tagger:        ports.NoopAudioTagger(),
+		Rejections:    ports.NoopRejectionStore(),
+		StoredAudio:   ports.NoopStoredAudioReader(),
+		Orphans:       service.MustDirectDeleteOrphans(discardingDeleter{}),
+		Skips:         ports.NoopVerifySkipRecorder(),
+		Events:        events.NoopPublisher(),
+		DownloadLimit: service.Unlimited(),
 	}
+}
+
+func withServiceEvents(pub events.Publisher) portsOption {
+	return func(stages *service.StagePorts, wiring *service.VerificationPorts) { stages.Events = pub }
 }
 
 func withServiceResolver(r ports.RecordingResolver) portsOption {
@@ -3072,6 +3078,7 @@ type stepPorts struct {
 	lookup     ports.RecordingLookup
 	prober     ports.AudioProber
 	skips      ports.VerifySkipRecorder
+	limit      *service.ConcurrencyLimit
 }
 
 type stepPortsOption func(*stepPorts)
@@ -3086,6 +3093,7 @@ func newTestDownloadStep(fetcher fetcherPort, opts ...any) *service.DownloadStep
 		lookup:     ports.NoopRecordingLookup(),
 		prober:     ports.NoopAudioProber(),
 		skips:      ports.NoopVerifySkipRecorder(),
+		limit:      service.Unlimited(),
 	}
 	var public []func(*service.DownloadStep)
 	for _, opt := range opts {
@@ -3098,7 +3106,11 @@ func newTestDownloadStep(fetcher fetcherPort, opts ...any) *service.DownloadStep
 			panic(fmt.Sprintf("newTestDownloadStep: unsupported option %T", opt))
 		}
 	}
-	return service.NewDownloadStep(fetcher, osWorkspace{}, wired.identifier, wired.lookup, wired.prober, wired.skips, public...)
+	return service.MustNewDownloadStep(fetcher, osWorkspace{}, wired.identifier, wired.lookup, wired.prober, wired.skips, wired.limit, public...)
+}
+
+func withTestLimit(l *service.ConcurrencyLimit) stepPortsOption {
+	return func(w *stepPorts) { w.limit = l }
 }
 
 func withTestProber(p ports.AudioProber) stepPortsOption {
@@ -3190,17 +3202,10 @@ func outageSource() findOnlySource {
 	return findOnlySource{name: "down", err: &acqdomain.SourceUnavailableError{Source: "down", Err: errors.New("429")}}
 }
 
-func TestAcquireOptions_RefuseANilCollaborator(t *testing.T) {
-	options := map[string]func(*service.AcquireTrackAudioService){
-		"acquire events":   service.WithAcquireEvents(nil),
-		"download limiter": service.WithDownloadLimiter(nil),
-		"context observer": service.WithContextObserver(nil),
-	}
-	for name, option := range options {
-		t.Run(name, func(t *testing.T) {
-			defer expectRefusal(t)
+func TestAcquireOptions_RefuseANilContextObserver(t *testing.T) {
+	_, err := service.NewAcquireTrackAudioService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), osWorkspace{}, noopVerification(), noopStages(), service.WithContextObserver(nil))
 
-			newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), option)
-		})
+	if !errors.Is(err, service.ErrMissingCollaborator) {
+		t.Errorf("error = %v, want ErrMissingCollaborator", err)
 	}
 }

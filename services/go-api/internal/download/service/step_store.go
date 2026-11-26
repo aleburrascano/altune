@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/redact"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -34,13 +35,31 @@ type StoreStep struct {
 	workspace   ports.ScratchFolder
 }
 
-func NewStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder, prober ports.AudioProber, orphans ports.OrphanedAudioRecorder, refs ports.AudioRefLookup, opts ...func(*StoreStep)) *StoreStep {
-	requirePort("NewStoreStep", "prober", prober == nil)
-	requirePort("NewStoreStep", "orphan recorder", orphans == nil)
-	requirePort("NewStoreStep", "audio ref lookup", refs == nil)
+func NewStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder, prober ports.AudioProber, orphans ports.OrphanedAudioRecorder, refs ports.AudioRefLookup, opts ...func(*StoreStep)) (*StoreStep, error) {
+	const owner = "NewStoreStep"
+	if err := errors.Join(
+		missingPort(owner, "prober", prober == nil),
+		missingPort(owner, "orphan recorder", orphans == nil),
+		missingPort(owner, "audio ref lookup", refs == nil),
+		requireWorkspace(owner, workspace),
+	); err != nil {
+		return nil, err
+	}
+	return buildStoreStep(audioStore, workspace, prober, orphans, refs, opts...), nil
+}
+
+func MustNewStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder, prober ports.AudioProber, orphans ports.OrphanedAudioRecorder, refs ports.AudioRefLookup, opts ...func(*StoreStep)) *StoreStep {
+	step, err := NewStoreStep(audioStore, workspace, prober, orphans, refs, opts...)
+	if err != nil {
+		panic(err)
+	}
+	return step
+}
+
+func buildStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder, prober ports.AudioProber, orphans ports.OrphanedAudioRecorder, refs ports.AudioRefLookup, opts ...func(*StoreStep)) *StoreStep {
 	s := &StoreStep{
 		audioStore:  audioStore,
-		workspace:   requireWorkspace("NewStoreStep", workspace),
+		workspace:   workspace,
 		prober:      prober,
 		orphans:     orphans,
 		trackRefs:   refs,

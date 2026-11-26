@@ -78,17 +78,40 @@ type BackgroundAcquisitionScheduler struct {
 	outcomes            ports.OutcomeRecorder
 	outcomeRecords      background.Tracker
 
+	setupErr       error
 	upgrader       upgradeRunner
 	upgradeWorkers int
+}
+
+type SchedulerPorts struct {
+	Notifier            ports.JobNotifier
+	Outcomes            ports.OutcomeRecorder
+	Events              events.Publisher
+	VerifySkips         func() uint64
+	FingerprintVerified func() bool
+}
+
+func (p SchedulerPorts) validate(owner string) error {
+	return errors.Join(
+		missingPort(owner, "Notifier", p.Notifier == nil),
+		missingPort(owner, "Outcomes", p.Outcomes == nil),
+		missingPort(owner, "Events", p.Events == nil),
+		missingPort(owner, "VerifySkips", p.VerifySkips == nil),
+		missingPort(owner, "FingerprintVerified", p.FingerprintVerified == nil),
+	)
 }
 
 func NewBackgroundAcquisitionScheduler(
 	svc acquirer,
 	workers int,
 	now clock.Func,
+	wiring SchedulerPorts,
 	opts ...func(*BackgroundAcquisitionScheduler),
-) *BackgroundAcquisitionScheduler {
-	requirePort("NewBackgroundAcquisitionScheduler", "clock", now == nil)
+) (*BackgroundAcquisitionScheduler, error) {
+	const owner = "NewBackgroundAcquisitionScheduler"
+	if err := errors.Join(missingPort(owner, "clock", now == nil), wiring.validate(owner)); err != nil {
+		return nil, err
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &BackgroundAcquisitionScheduler{
 		svc:                 svc,
@@ -101,11 +124,11 @@ func NewBackgroundAcquisitionScheduler(
 		lanes:               newLaneWakes(),
 		log:                 newJobLog(now),
 		now:                 now,
-		events:              events.NoopPublisher(),
-		notifier:            ports.NoopJobNotifier(),
-		outcomes:            ports.NoopOutcomeRecorder(),
-		skipCount:           func() uint64 { return 0 },
-		fingerprintVerified: func() bool { return false },
+		events:              wiring.Events,
+		notifier:            wiring.Notifier,
+		outcomes:            wiring.Outcomes,
+		skipCount:           wiring.VerifySkips,
+		fingerprintVerified: wiring.FingerprintVerified,
 		leaseDuration:       defaultLeaseDuration,
 		heartbeatInterval:   defaultHeartbeatInterval,
 		pollInterval:        defaultPollInterval,
@@ -113,6 +136,10 @@ func NewBackgroundAcquisitionScheduler(
 	}
 	for _, opt := range opts {
 		opt(s)
+	}
+	if s.setupErr != nil {
+		cancel()
+		return nil, s.setupErr
 	}
 	if s.queue == nil {
 		s.queue = inmemoryqueue.New(s.wake, s.now)
@@ -124,6 +151,20 @@ func NewBackgroundAcquisitionScheduler(
 		s.runners.Track(func() { s.runWorker(s.claimJob, s.lanes.acquire) })
 	}
 	s.startUpgradeWorkers()
+	return s, nil
+}
+
+func MustNewBackgroundAcquisitionScheduler(
+	svc acquirer,
+	workers int,
+	now clock.Func,
+	wiring SchedulerPorts,
+	opts ...func(*BackgroundAcquisitionScheduler),
+) *BackgroundAcquisitionScheduler {
+	s, err := NewBackgroundAcquisitionScheduler(svc, workers, now, wiring, opts...)
+	if err != nil {
+		panic(err)
+	}
 	return s
 }
 

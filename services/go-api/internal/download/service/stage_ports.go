@@ -1,21 +1,31 @@
 package service
 
-import "altune/go-api/internal/download/internal/core/ports"
+import (
+	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/events"
+	"errors"
+)
 
 type StagePorts struct {
-	Prober      ports.AudioProber
-	Tagger      ports.AudioTagger
-	Rejections  ports.RejectionStore
-	StoredAudio ports.StoredAudioReader
-	Orphans     ports.OrphanedAudioRecorder
-	Skips       ports.VerifySkipRecorder
+	Prober        ports.AudioProber
+	Tagger        ports.AudioTagger
+	Rejections    ports.RejectionStore
+	StoredAudio   ports.StoredAudioReader
+	Orphans       ports.OrphanedAudioRecorder
+	Skips         ports.VerifySkipRecorder
+	Events        events.Publisher
+	DownloadLimit *ConcurrencyLimit
 }
 
-func (p StagePorts) require(owner string) {
-	requirePort(owner, "Prober", p.Prober == nil)
-	requirePort(owner, "Tagger", p.Tagger == nil)
-	requirePort(owner, "Rejections", p.Rejections == nil)
-	requirePort(owner, "StoredAudio", p.StoredAudio == nil)
-	requirePort(owner, "Orphans", p.Orphans == nil)
-	requirePort(owner, "Skips", p.Skips == nil)
+func (p StagePorts) validate(owner string) error {
+	return errors.Join(
+		missingPort(owner, "Prober", p.Prober == nil),
+		missingPort(owner, "Tagger", p.Tagger == nil),
+		missingPort(owner, "Rejections", p.Rejections == nil),
+		missingPort(owner, "StoredAudio", p.StoredAudio == nil),
+		missingPort(owner, "Orphans", p.Orphans == nil),
+		missingPort(owner, "Skips", p.Skips == nil),
+		missingPort(owner, "Events", p.Events == nil),
+		missingPort(owner, "DownloadLimit", p.DownloadLimit == nil),
+	)
 }

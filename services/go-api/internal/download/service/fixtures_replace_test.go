@@ -6,6 +6,7 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
+	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"os"
@@ -112,23 +113,25 @@ type audioDeleter interface {
 }
 
 func deletingFrom(store audioDeleter) stageMod {
-	return func(s *service.StagePorts) { s.Orphans = service.DirectDeleteOrphans(store) }
+	return func(s *service.StagePorts) { s.Orphans = service.MustDirectDeleteOrphans(store) }
 }
 
 func (r servedTrack) serviceStaged(stages service.StagePorts, opts ...func(*service.AcquireTrackAudioService)) *service.AcquireTrackAudioService {
-	return service.NewAcquireTrackAudioService(r.ledger, service.NewSourceRegistry(freshAudioSource{}), r.store, scratchfiles.New(), noVerification(), stages, opts...)
+	return service.MustNewAcquireTrackAudioService(r.ledger, service.NewSourceRegistry(freshAudioSource{}), r.store, scratchfiles.New(), noVerification(), stages, opts...)
 }
 
 type stageMod func(*service.StagePorts)
 
 func noStages(mods ...stageMod) service.StagePorts {
 	stages := service.StagePorts{
-		Prober:      ports.NoopAudioProber(),
-		Tagger:      ports.NoopAudioTagger(),
-		Rejections:  ports.NoopRejectionStore(),
-		StoredAudio: ports.NoopStoredAudioReader(),
-		Orphans:     service.DirectDeleteOrphans(&objectStore{objects: map[string]string{}}),
-		Skips:       ports.NoopVerifySkipRecorder(),
+		Prober:        ports.NoopAudioProber(),
+		Tagger:        ports.NoopAudioTagger(),
+		Rejections:    ports.NoopRejectionStore(),
+		StoredAudio:   ports.NoopStoredAudioReader(),
+		Orphans:       service.MustDirectDeleteOrphans(&objectStore{objects: map[string]string{}}),
+		Skips:         ports.NoopVerifySkipRecorder(),
+		Events:        events.NoopPublisher(),
+		DownloadLimit: service.Unlimited(),
 	}
 	for _, mod := range mods {
 		mod(&stages)

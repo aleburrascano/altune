@@ -14,40 +14,43 @@ type (
 )
 
 var (
-	AudioVerdictOf                    = service.AudioVerdictOf
-	BuildLegacyAudioRef               = service.BuildLegacyAudioRef
-	BuildLegacyAudioRefUncapped       = service.BuildLegacyAudioRefUncapped
-	FingerprintOf                     = service.FingerprintOf
-	NewAcquireTrackAudioService       = service.NewAcquireTrackAudioService
-	NewBackgroundAcquisitionScheduler = service.NewBackgroundAcquisitionScheduler
-	NewDownloadLimiter                = service.NewDownloadLimiter
-	NewReacquireAdmission             = service.NewReacquireAdmission
-	NewRetryAdmission                 = service.NewRetryAdmission
-	NewSourceRegistry                 = service.NewSourceRegistry
-	ScoreConfidence                   = service.ScoreConfidence
-	SourceKindOf                      = service.SourceKindOf
-	DirectDeleteOrphans               = service.DirectDeleteOrphans
-	SweepStaleTempDirs                = service.SweepStaleTempDirs
-	UploaderSourceKind                = service.UploaderSourceKind
-	WithAcquireConfidenceFloor        = service.WithAcquireConfidenceFloor
-	WithAcquireEvents                 = service.WithAcquireEvents
-	WithAcquireStoreKeyPrefix         = service.WithAcquireStoreKeyPrefix
-	WithDownloadLimiter               = service.WithDownloadLimiter
-	WithDrainBudget                   = service.WithDrainBudget
-	WithFingerprintVerified           = service.WithFingerprintVerified
-	WithJobNotifier                   = service.WithJobNotifier
-	WithJobQueue                      = service.WithJobQueue
-	WithOutcomeRecorder               = service.WithOutcomeRecorder
-	WithProvenMaxBitErrorRate         = service.WithProvenMaxBitErrorRate
-	WithSchedulerEvents               = service.WithSchedulerEvents
-	WithSchedulerPaused               = service.WithSchedulerPaused
-	WithSupersededAudioGrace          = service.WithSupersededAudioGrace
-	WithUpgradeLane                   = service.WithUpgradeLane
-	WithVerificationStatus            = service.WithVerificationStatus
-	WithVerifySkipCount               = service.WithVerifySkipCount
+	AudioVerdictOf                        = service.AudioVerdictOf
+	BuildLegacyAudioRef                   = service.BuildLegacyAudioRef
+	BuildLegacyAudioRefUncapped           = service.BuildLegacyAudioRefUncapped
+	FingerprintOf                         = service.FingerprintOf
+	NewAcquireTrackAudioService           = service.NewAcquireTrackAudioService
+	NewBackgroundAcquisitionScheduler     = service.NewBackgroundAcquisitionScheduler
+	NewReacquireAdmission                 = service.NewReacquireAdmission
+	NewRetryAdmission                     = service.NewRetryAdmission
+	NewSourceRegistry                     = service.NewSourceRegistry
+	ScoreConfidence                       = service.ScoreConfidence
+	SourceKindOf                          = service.SourceKindOf
+	DirectDeleteOrphans                   = service.DirectDeleteOrphans
+	MustDirectDeleteOrphans               = service.MustDirectDeleteOrphans
+	MustNewAcquireTrackAudioService       = service.MustNewAcquireTrackAudioService
+	MustNewBackgroundAcquisitionScheduler = service.MustNewBackgroundAcquisitionScheduler
+	ErrLimitBelowOne                      = service.ErrLimitBelowOne
+	ErrLimitNotConfigured                 = service.ErrLimitNotConfigured
+	ErrMissingCollaborator                = service.ErrMissingCollaborator
+	LimitedTo                             = service.LimitedTo
+	MustLimitedTo                         = service.MustLimitedTo
+	Unlimited                             = service.Unlimited
+	SweepStaleTempDirs                    = service.SweepStaleTempDirs
+	UploaderSourceKind                    = service.UploaderSourceKind
+	WithAcquireConfidenceFloor            = service.WithAcquireConfidenceFloor
+	WithAcquireStoreKeyPrefix             = service.WithAcquireStoreKeyPrefix
+	WithDrainBudget                       = service.WithDrainBudget
+	WithJobQueue                          = service.WithJobQueue
+	WithProvenMaxBitErrorRate             = service.WithProvenMaxBitErrorRate
+	WithSchedulerPaused                   = service.WithSchedulerPaused
+	WithSupersededAudioGrace              = service.WithSupersededAudioGrace
+	WithUpgradeLane                       = service.WithUpgradeLane
+	WithVerificationStatus                = service.WithVerificationStatus
 )
 
 type ConcurrencyLimit = service.ConcurrencyLimit
+
+type SchedulerPorts = service.SchedulerPorts
 
 const (
 	VerdictContradicted  = service.VerdictContradicted

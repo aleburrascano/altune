@@ -163,7 +163,7 @@ func (s storing) execute(opts ...func(*service.AcquireTrackAudioService)) error 
 
 func (s storing) executeStaged(stages service.StagePorts, opts ...func(*service.AcquireTrackAudioService)) error {
 	s.t.Helper()
-	svc := service.NewAcquireTrackAudioService(s.ledger, sourceFor(s.track), s.store, scratchfiles.New(), noVerification(), stages, opts...)
+	svc := service.MustNewAcquireTrackAudioService(s.ledger, sourceFor(s.track), s.store, scratchfiles.New(), noVerification(), stages, opts...)
 	return svc.Execute(context.Background(), s.track.UserId, s.track.ID)
 }
 
@@ -234,7 +234,7 @@ func TestStore_AReplaceStagesItsOwnPrefixedRef(t *testing.T) {
 	served := seedReadyTrack(t)
 	ledger, store := served.ledger, newRecordingStore(served.originalRef)
 
-	svc := service.NewAcquireTrackAudioService(ledger, service.NewSourceRegistry(freshAudioSource{}), store,
+	svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(freshAudioSource{}), store,
 		scratchfiles.New(), noVerification(), noStages(), service.WithAcquireStoreKeyPrefix("staging/"))
 	if err := svc.ExecuteReplace(context.Background(), served.userID, served.trackID); err != nil {
 		t.Fatalf("ExecuteReplace: %v", err)
@@ -282,7 +282,7 @@ func TestStore_ACancelledWriteSettlesTheTrackAsCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	store := cancellingStore{objectStore: &objectStore{objects: map[string]string{}}, cancel: cancel}
-	svc := service.NewAcquireTrackAudioService(ledger, sourceFor(track), store,
+	svc := service.MustNewAcquireTrackAudioService(ledger, sourceFor(track), store,
 		scratchfiles.New(), noVerification(), noStages())
 
 	if err := svc.Execute(ctx, track.UserId, track.ID); err == nil {
@@ -477,7 +477,7 @@ func TestStore_AReplaceStagesItsOwnRefEvenWhenAnotherTrackServesTheCanonicalRef(
 	}}, served.originalRef)
 	served.ledger.Seed(twin)
 	store := newRecordingStore(served.originalRef)
-	svc := service.NewAcquireTrackAudioService(served.ledger, service.NewSourceRegistry(freshAudioSource{}), store,
+	svc := service.MustNewAcquireTrackAudioService(served.ledger, service.NewSourceRegistry(freshAudioSource{}), store,
 		scratchfiles.New(), noVerification(), noStages())
 
 	if err := svc.ExecuteReplace(context.Background(), served.userID, served.trackID); err != nil {
@@ -511,7 +511,7 @@ func TestStoreRollback_DeletesAFreshlyStagedReplaceAndKeepsTheServedAudio(t *tes
 	served := seedReadyTrack(t)
 	store := newRecordingStore(served.originalRef)
 	served.ledger.FailWrites(errors.New("database unavailable"))
-	svc := service.NewAcquireTrackAudioService(served.ledger, service.NewSourceRegistry(freshAudioSource{}), store,
+	svc := service.MustNewAcquireTrackAudioService(served.ledger, service.NewSourceRegistry(freshAudioSource{}), store,
 		scratchfiles.New(), noVerification(), noStages())
 
 	if err := svc.ExecuteReplace(context.Background(), served.userID, served.trackID); err == nil {
@@ -563,7 +563,7 @@ func TestStoreRollback_WaitsLongerBeforeEachRetryOfTheDelete(t *testing.T) {
 	store := newRecordingStore()
 	store.failDeletes = 1 << 30
 	var waits []time.Duration
-	step := service.NewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), service.DirectDeleteOrphans(store), ports.NoopAudioRefLookup(), service.WithStoreSleep(func(d time.Duration) { waits = append(waits, d) }))
+	step := service.MustNewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), service.MustDirectDeleteOrphans(store), ports.NoopAudioRefLookup(), service.WithStoreSleep(func(d time.Duration) { waits = append(waits, d) }))
 
 	err := step.Rollback(context.Background(), &service.AcquisitionContext{AudioRef: "u/song.mp3"})
 
@@ -642,7 +642,7 @@ func TestStoreRollback_DeletesTheAudioAfterTheJobContextIsCancelled(t *testing.T
 	defer cancel()
 	ledger := cancellingCompleteLedger{Ledger: acquisitiontest.NewLedger(track), cancel: cancel}
 	store := newRecordingStore()
-	svc := service.NewAcquireTrackAudioService(ledger, sourceFor(track), store,
+	svc := service.MustNewAcquireTrackAudioService(ledger, sourceFor(track), store,
 		scratchfiles.New(), noVerification(), noStages())
 
 	if err := svc.Execute(ctx, track.UserId, track.ID); err == nil {

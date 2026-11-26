@@ -49,23 +49,35 @@ type DownloadStep struct {
 
 const ProdVerifyWidth = 2
 
-func NewDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, opts ...func(*DownloadStep)) *DownloadStep {
-	requirePort("NewDownloadStep", "identifier", identifier == nil)
-	requirePort("NewDownloadStep", "recording lookup", lookup == nil)
-	requirePort("NewDownloadStep", "prober", prober == nil)
-	requirePort("NewDownloadStep", "skip recorder", skips == nil)
-	s := &DownloadStep{fetcher: fetcher, workspace: requireWorkspace("NewDownloadStep", workspace), identifier: identifier, recordingLookup: lookup, factsCache: newRecordingFactsCache(time.Now), limiter: &ConcurrencyLimit{}, prober: prober, skips: skips, width: ProdVerifyWidth, candidateTimeout: DefaultCandidateTimeout, floor: defaultConfidenceFloor, cuts: audioverdict.DefaultCuts()}
+func NewDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, limit *ConcurrencyLimit, opts ...func(*DownloadStep)) (*DownloadStep, error) {
+	const owner = "NewDownloadStep"
+	if err := errors.Join(
+		missingPort(owner, "identifier", identifier == nil),
+		missingPort(owner, "recording lookup", lookup == nil),
+		missingPort(owner, "prober", prober == nil),
+		missingPort(owner, "skip recorder", skips == nil),
+		missingPort(owner, "download limit", limit == nil),
+		requireWorkspace(owner, workspace),
+	); err != nil {
+		return nil, err
+	}
+	return buildDownloadStep(fetcher, workspace, identifier, lookup, prober, skips, limit, opts...), nil
+}
+
+func MustNewDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, limit *ConcurrencyLimit, opts ...func(*DownloadStep)) *DownloadStep {
+	step, err := NewDownloadStep(fetcher, workspace, identifier, lookup, prober, skips, limit, opts...)
+	if err != nil {
+		panic(err)
+	}
+	return step
+}
+
+func buildDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, limit *ConcurrencyLimit, opts ...func(*DownloadStep)) *DownloadStep {
+	s := &DownloadStep{fetcher: fetcher, workspace: workspace, identifier: identifier, recordingLookup: lookup, factsCache: newRecordingFactsCache(time.Now), limiter: limit, prober: prober, skips: skips, width: ProdVerifyWidth, candidateTimeout: DefaultCandidateTimeout, floor: defaultConfidenceFloor, cuts: audioverdict.DefaultCuts()}
 	for _, opt := range opts {
 		opt(s)
 	}
 	return s
-}
-
-func WithStepDownloadLimiter(l *ConcurrencyLimit) func(*DownloadStep) {
-	return func(s *DownloadStep) {
-		requirePort("WithStepDownloadLimiter", "limiter", l == nil)
-		s.limiter = l
-	}
 }
 
 func (s *DownloadStep) recordSkip(gate string) {

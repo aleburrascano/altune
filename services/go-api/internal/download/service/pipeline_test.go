@@ -27,9 +27,13 @@ import (
 )
 
 func coreStepsOver(sources *service.SourceRegistry, store *objectStore, workspace ports.ScratchFolder) service.Pipeline {
-	return service.CoreSteps(sources, ports.NoopAudioTagger(), store, ports.NoopAudioProber(),
+	steps, err := service.CoreSteps(sources, ports.NoopAudioTagger(), store, ports.NoopAudioProber(),
 		ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopVerifySkipRecorder(),
-		service.DirectDeleteOrphans(store), ports.NoopAudioRefLookup(), workspace, nil)
+		service.MustDirectDeleteOrphans(store), ports.NoopAudioRefLookup(), workspace, service.Unlimited(), nil)
+	if err != nil {
+		panic(err)
+	}
+	return steps
 }
 
 func TestSelect_SymbolOnlyArtistDoesNotRescueUnrelatedCandidate(t *testing.T) {
@@ -263,16 +267,16 @@ func runJobWaitingOnItsCommit(t *testing.T, leaseLost bool) storedAndOrphaned {
 	synctest.Test(t, func(t *testing.T) {
 		track := pending("Song", "Artist", "Album")
 		store, orphans := newRecordingStore(), &recordingOrphanQueue{}
-		svc := service.NewAcquireTrackAudioService(waitingCommitLedger{acquisitiontest.NewLedger(track)}, sourceFor(track), store,
+		svc := service.MustNewAcquireTrackAudioService(waitingCommitLedger{acquisitiontest.NewLedger(track)}, sourceFor(track), store,
 			scratchfiles.New(), noVerification(), noStages(orphaningInto(orphans)))
-		opts := []func(*service.BackgroundAcquisitionScheduler){}
+		opts := []any{}
 		queue := &firstOutcomeQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), outcome: make(chan jobOutcome, 1)}
 		if leaseLost {
 			opts = append(opts, service.WithJobQueue(lostLeaseQueue{queue}), service.WithHeartbeatInterval(time.Second))
 		} else {
 			opts = append(opts, service.WithJobQueue(queue))
 		}
-		scheduler := service.NewBackgroundAcquisitionScheduler(svc, 1, time.Now, opts...)
+		scheduler := newTestScheduler(svc, 1, time.Now, opts...)
 		defer scheduler.Shutdown(context.Background())
 		if err := scheduler.Schedule(context.Background(), track.UserId, track.ID, ""); err != nil {
 			t.Fatalf("Schedule = %v, want nil", err)
@@ -406,7 +410,7 @@ func TestRunPipeline_ACancelledJobStopsBeforeTheNextStage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	store := newRecordingStore()
-	svc := service.NewAcquireTrackAudioService(acquisitiontest.NewLedger(track), sourceFor(track), store,
+	svc := service.MustNewAcquireTrackAudioService(acquisitiontest.NewLedger(track), sourceFor(track), store,
 		scratchfiles.New(), noVerification(), noStages(taggedBy(cancellingTagger{cancel})))
 
 	err := svc.Execute(ctx, track.UserId, track.ID)

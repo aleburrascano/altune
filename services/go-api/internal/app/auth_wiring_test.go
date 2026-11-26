@@ -68,12 +68,13 @@ func newJWKSFixture(t *testing.T) jwksFixture {
 	t.Cleanup(srv.Close)
 	operator := uuid.New()
 	return jwksFixture{key: key, operator: operator, jwks: srv, keysDown: keysDown, cfg: &config.Config{
-		MusicDir:              t.TempDir(),
-		SupabaseJWTJWKSURL:    srv.URL,
-		SupabaseProjectURL:    "https://p.supabase.co",
-		SupabaseJWTAud:        "authenticated",
-		OverseerPrincipalID:   operator.String(),
-		BackgroundMaxInFlight: 64,
+		MusicDir:                       t.TempDir(),
+		AcquisitionDownloadConcurrency: 1,
+		SupabaseJWTJWKSURL:             srv.URL,
+		SupabaseProjectURL:             "https://p.supabase.co",
+		SupabaseJWTAud:                 "authenticated",
+		OverseerPrincipalID:            operator.String(),
+		BackgroundMaxInFlight:          64,
 
 		PlaybackNowPlayingLookupTimeout: 3 * time.Second,
 	}}

@@ -5,8 +5,10 @@ import (
 	"altune/go-api/internal/download/internal/adapters/inmemoryqueue"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
+	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -59,14 +61,61 @@ func runOneJobAs(t *testing.T, acquirer jobRunner, track acquisitiontest.LedgerT
 	return scheduleOnce(t, acquirer, track, &run)
 }
 
-func scheduleOnce(t *testing.T, acquirer jobRunner, track acquisitiontest.LedgerTrack, run *int, opts ...func(*service.BackgroundAcquisitionScheduler)) jobOutcome {
+func scheduleOnce(t *testing.T, acquirer jobRunner, track acquisitiontest.LedgerTrack, run *int, opts ...any) jobOutcome {
 	t.Helper()
 	queue := &firstOutcomeQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), run: run, outcome: make(chan jobOutcome, 1)}
-	opts = append([]func(*service.BackgroundAcquisitionScheduler){service.WithJobQueue(queue)}, opts...)
-	scheduler := service.NewBackgroundAcquisitionScheduler(acquirer, 1, time.Now, opts...)
+	opts = append([]any{service.WithJobQueue(queue)}, opts...)
+	scheduler := newTestScheduler(acquirer, 1, time.Now, opts...)
 	defer scheduler.Shutdown(context.Background())
 	if err := scheduler.Schedule(context.Background(), track.UserId, track.ID, ""); err != nil {
 		t.Fatalf("Schedule = %v, want nil", err)
 	}
 	return <-queue.outcome
+}
+
+type schedulerPortsOption func(*service.SchedulerPorts)
+
+func testSchedulerPorts() service.SchedulerPorts {
+	return service.SchedulerPorts{
+		Notifier:            ports.NoopJobNotifier(),
+		Outcomes:            ports.NoopOutcomeRecorder(),
+		Events:              events.NoopPublisher(),
+		VerifySkips:         func() uint64 { return 0 },
+		FingerprintVerified: func() bool { return false },
+	}
+}
+
+func newTestScheduler(acquirer jobRunner, workers int, now func() time.Time, opts ...any) *service.BackgroundAcquisitionScheduler {
+	wiring := testSchedulerPorts()
+	var public []func(*service.BackgroundAcquisitionScheduler)
+	for _, opt := range opts {
+		switch opt := opt.(type) {
+		case schedulerPortsOption:
+			opt(&wiring)
+		case func(*service.BackgroundAcquisitionScheduler):
+			public = append(public, opt)
+		default:
+			panic(fmt.Sprintf("newTestScheduler: unsupported option %T", opt))
+		}
+	}
+	return service.MustNewBackgroundAcquisitionScheduler(acquirer, workers, now, wiring, public...)
+}
+
+func withTestOutcomes(r ports.OutcomeRecorder) schedulerPortsOption {
+	return func(wiring *service.SchedulerPorts) { wiring.Outcomes = r }
+}
+
+func withTestSchedulerEvents(pub events.Publisher) schedulerPortsOption {
+	return func(wiring *service.SchedulerPorts) { wiring.Events = pub }
+}
+
+func withTestNotifier(n ports.JobNotifier) schedulerPortsOption {
+	return func(wiring *service.SchedulerPorts) { wiring.Notifier = n }
+}
+
+func withTestVerification(skips func() uint64, fingerprinted func() bool) schedulerPortsOption {
+	return func(wiring *service.SchedulerPorts) {
+		wiring.VerifySkips = skips
+		wiring.FingerprintVerified = fingerprinted
+	}
 }

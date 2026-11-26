@@ -1,18 +1,44 @@
 package service
 
-import "context"
+import (
+	"context"
+	"errors"
+	"fmt"
+)
+
+var (
+	ErrLimitNotConfigured = errors.New("download limit is not configured; build it with LimitedTo or Unlimited")
+	ErrLimitBelowOne      = errors.New("download limit must allow at least one download")
+)
 
 type ConcurrencyLimit struct {
-	slots chan struct{}
+	slots     chan struct{}
+	unlimited bool
 }
 
-func NewDownloadLimiter(n int) *ConcurrencyLimit {
-	return &ConcurrencyLimit{slots: make(chan struct{}, max(n, 1))}
+func LimitedTo(n int) (*ConcurrencyLimit, error) {
+	if n < 1 {
+		return nil, fmt.Errorf("%w: got %d", ErrLimitBelowOne, n)
+	}
+	return &ConcurrencyLimit{slots: make(chan struct{}, n)}, nil
 }
+
+func MustLimitedTo(n int) *ConcurrencyLimit {
+	limit, err := LimitedTo(n)
+	if err != nil {
+		panic(err)
+	}
+	return limit
+}
+
+func Unlimited() *ConcurrencyLimit { return &ConcurrencyLimit{unlimited: true} }
 
 func (l *ConcurrencyLimit) Acquire(ctx context.Context) error {
-	if l.slots == nil {
+	if l.unlimited {
 		return nil
+	}
+	if l.slots == nil {
+		return ErrLimitNotConfigured
 	}
 	select {
 	case l.slots <- struct{}{}:
@@ -23,7 +49,7 @@ func (l *ConcurrencyLimit) Acquire(ctx context.Context) error {
 }
 
 func (l *ConcurrencyLimit) Release() {
-	if l.slots == nil {
+	if l.unlimited || l.slots == nil {
 		return
 	}
 	<-l.slots

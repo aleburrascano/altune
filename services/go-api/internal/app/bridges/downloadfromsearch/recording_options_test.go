@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/searchtest"
 	searchquery "altune/go-api/internal/search/service/query"
+	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"slices"
@@ -95,7 +96,7 @@ func acquireUnfoundTrack(t *testing.T, disc *search.Discovery, catalogMBID *stri
 	}
 	ledger := downloadtest.NewLedger(downloadtest.LedgerTrack{TrackSnapshot: track})
 	recording := downloadfromsearch.RecordingOptions(disc)
-	svc := download.NewAcquireTrackAudioService(ledger, download.NewSourceRegistry(), nil, download.NewTempWorkspace(),
+	svc := download.MustNewAcquireTrackAudioService(ledger, download.NewSourceRegistry(), nil, download.NewTempWorkspace(),
 		download.VerificationPorts{
 			Identifier:      download.NoopAudioIdentifier(),
 			RecordingLookup: recording.Lookup,
@@ -103,12 +104,14 @@ func acquireUnfoundTrack(t *testing.T, disc *search.Discovery, catalogMBID *stri
 			Previews:        download.NoopPreviewMatcher(),
 			Recordings:      recording.Resolver,
 		}, download.StagePorts{
-			Prober:      download.NoopAudioProber(),
-			Tagger:      download.NoopAudioTagger(),
-			Rejections:  download.NoopRejectionStore(),
-			StoredAudio: download.NoopStoredAudioReader(),
-			Orphans:     download.DirectDeleteOrphans(deletedNothing{}),
-			Skips:       download.NoopVerifySkipRecorder(),
+			Prober:        download.NoopAudioProber(),
+			Tagger:        download.NoopAudioTagger(),
+			Rejections:    download.NoopRejectionStore(),
+			StoredAudio:   download.NoopStoredAudioReader(),
+			Orphans:       download.MustDirectDeleteOrphans(deletedNothing{}),
+			Skips:         download.NoopVerifySkipRecorder(),
+			Events:        events.NoopPublisher(),
+			DownloadLimit: download.Unlimited(),
 		})
 
 	_ = svc.Execute(context.Background(), track.UserId, track.ID)

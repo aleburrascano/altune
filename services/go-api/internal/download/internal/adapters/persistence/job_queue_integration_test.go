@@ -2,6 +2,7 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/testdb"
 	"context"
@@ -578,7 +579,7 @@ func TestPostgresJobQueue_PanickedJobRowIsNotClaimableAgainImmediately(t *testin
 	queue := download.NewPostgresJobQueue(pool)
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
 	acq := &panickingAcquirer{}
-	scheduler := download.NewBackgroundAcquisitionScheduler(acq, 1, time.Now,
+	scheduler := download.MustNewBackgroundAcquisitionScheduler(acq, 1, time.Now, integrationSchedulerPorts(),
 		download.WithJobQueue(queue), download.WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
@@ -1038,7 +1039,7 @@ func TestPostgresJobQueue_APanickingReplaceAtTheRunCapIsNotClaimedAgain(t *testi
 		t.Fatalf("set run attempts: %v", err)
 	}
 	acq := &panickingAcquirer{}
-	scheduler := download.NewBackgroundAcquisitionScheduler(acq, 1, time.Now,
+	scheduler := download.MustNewBackgroundAcquisitionScheduler(acq, 1, time.Now, integrationSchedulerPorts(),
 		download.WithJobQueue(queue), download.WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
@@ -1070,7 +1071,7 @@ func TestPostgresJobQueue_APanickingReplaceBelowTheRunCapIsRetriedAfterItsBackof
 		t.Fatalf("Enqueue = %v", err)
 	}
 	acq := &panickingAcquirer{}
-	scheduler := download.NewBackgroundAcquisitionScheduler(acq, 1, time.Now,
+	scheduler := download.MustNewBackgroundAcquisitionScheduler(acq, 1, time.Now, integrationSchedulerPorts(),
 		download.WithJobQueue(queue), download.WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
@@ -1152,5 +1153,15 @@ func TestPostgresJobQueue_SettledReplaceLeavesNoJobKindBehind(t *testing.T) {
 	}
 	if kind != string(download.JobKindAcquire) {
 		t.Errorf("job kind after a settled replace = %q, want %q", kind, download.JobKindAcquire)
+	}
+}
+
+func integrationSchedulerPorts() download.SchedulerPorts {
+	return download.SchedulerPorts{
+		Notifier:            download.NoopJobNotifier(),
+		Outcomes:            download.NoopOutcomeRecorder(),
+		Events:              events.NoopPublisher(),
+		VerifySkips:         func() uint64 { return 0 },
+		FingerprintVerified: func() bool { return false },
 	}
 }

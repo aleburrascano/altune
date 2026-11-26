@@ -43,6 +43,7 @@ type AcquireTrackAudioService struct {
 	cuts            audioverdict.Cuts
 	acquireTimeout  time.Duration
 	supersededGrace time.Duration
+	setupErr        error
 }
 
 func NewAcquireTrackAudioService(
@@ -53,14 +54,16 @@ func NewAcquireTrackAudioService(
 	wiring VerificationPorts,
 	stages StagePorts,
 	opts ...func(*AcquireTrackAudioService),
-) *AcquireTrackAudioService {
-	wiring.require("NewAcquireTrackAudioService")
-	stages.require("NewAcquireTrackAudioService")
+) (*AcquireTrackAudioService, error) {
+	const owner = "NewAcquireTrackAudioService"
+	if err := errors.Join(wiring.validate(owner), stages.validate(owner), requireWorkspace(owner, workspace)); err != nil {
+		return nil, err
+	}
 	s := &AcquireTrackAudioService{
 		ledger:          ledger,
 		sources:         sources,
 		audioStore:      audioStore,
-		workspace:       requireWorkspace("NewAcquireTrackAudioService", workspace),
+		workspace:       workspace,
 		identifier:      wiring.Identifier,
 		recordingLookup: wiring.RecordingLookup,
 		rerecordings:    wiring.Rerecordings,
@@ -72,8 +75,8 @@ func NewAcquireTrackAudioService(
 		orphans:         stages.Orphans,
 		verifySkips:     stages.Skips,
 		recordings:      wiring.Recordings,
-		events:          events.NoopPublisher(),
-		downloadLimiter: &ConcurrencyLimit{},
+		events:          stages.Events,
+		downloadLimiter: stages.DownloadLimit,
 		contextObserver: func(*AcquisitionContext) {},
 		cuts:            audioverdict.DefaultCuts(),
 
@@ -83,32 +86,40 @@ func NewAcquireTrackAudioService(
 	for _, opt := range opts {
 		opt(s)
 	}
-	return s
+	if s.setupErr != nil {
+		return nil, s.setupErr
+	}
+	return s, nil
 }
 
-func WithDownloadLimiter(l *ConcurrencyLimit) func(*AcquireTrackAudioService) {
-	return func(s *AcquireTrackAudioService) {
-		requirePort("WithDownloadLimiter", "limiter", l == nil)
-		s.downloadLimiter = l
+func MustNewAcquireTrackAudioService(
+	ledger ports.LibraryTracks,
+	sources *SourceRegistry,
+	audioStore ports.AudioWriter,
+	workspace ports.ScratchFolder,
+	wiring VerificationPorts,
+	stages StagePorts,
+	opts ...func(*AcquireTrackAudioService),
+) *AcquireTrackAudioService {
+	s, err := NewAcquireTrackAudioService(ledger, sources, audioStore, workspace, wiring, stages, opts...)
+	if err != nil {
+		panic(err)
 	}
+	return s
 }
 
 func WithContextObserver(f func(*AcquisitionContext)) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) {
-		requirePort("WithContextObserver", "observer", f == nil)
+		if f == nil {
+			s.setupErr = errors.Join(s.setupErr, missingPort("WithContextObserver", "observer", true))
+			return
+		}
 		s.contextObserver = f
 	}
 }
 
 func WithAcquireConfidenceFloor(floor float64) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.confidenceFloor = floor }
-}
-
-func WithAcquireEvents(pub events.Publisher) func(*AcquireTrackAudioService) {
-	return func(s *AcquireTrackAudioService) {
-		requirePort("WithAcquireEvents", "publisher", pub == nil)
-		s.events = pub
-	}
 }
 
 func WithAcquireTimeout(d time.Duration) func(*AcquireTrackAudioService) {

@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/download/sourcekey"
+	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
@@ -60,14 +61,16 @@ func Run(ctx context.Context, kase Case) Outcome {
 		wiring.Rerecordings = recordedRerecording{*kase.Rerecording}
 	}
 	stages := service.StagePorts{
-		Prober:      p,
-		Tagger:      ports.NoopAudioTagger(),
-		Rejections:  ports.NoopRejectionStore(),
-		StoredAudio: p,
-		Orphans:     service.DirectDeleteOrphans(p),
-		Skips:       ports.NoopVerifySkipRecorder(),
+		Prober:        p,
+		Tagger:        ports.NoopAudioTagger(),
+		Rejections:    ports.NoopRejectionStore(),
+		StoredAudio:   p,
+		Orphans:       service.MustDirectDeleteOrphans(p),
+		Skips:         ports.NoopVerifySkipRecorder(),
+		Events:        events.NoopPublisher(),
+		DownloadLimit: service.Unlimited(),
 	}
-	svc := service.NewAcquireTrackAudioService(ledger, p.registry(), p, scratchfiles.New(), wiring, stages, opts...)
+	svc := service.MustNewAcquireTrackAudioService(ledger, p.registry(), p, scratchfiles.New(), wiring, stages, opts...)
 	runErr := executeFor(ctx, svc, kase, track)
 	if observed == nil && runErr == nil {
 		runErr = errors.New("eval: the service never started an acquisition")

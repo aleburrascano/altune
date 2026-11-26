@@ -10,11 +10,8 @@ import (
 
 const maxLiveTempAge = AcquireTimeout + 15*time.Minute
 
-func requireWorkspace(owner string, ws ports.ScratchFolder) ports.ScratchFolder {
-	if ws == nil {
-		panic(owner + ": a temp workspace is required")
-	}
-	return ws
+func requireWorkspace(owner string, ws ports.ScratchFolder) error {
+	return missingPort(owner, "workspace", ws == nil)
 }
 
 func SweepStaleTempDirs(ws ports.ScratchFolder) {

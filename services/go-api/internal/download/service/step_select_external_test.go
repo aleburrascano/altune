@@ -47,7 +47,7 @@ func TestSelect_RanksArtTracksByTheResolvedLengthWhenTheTrackHasNone(t *testing.
 		ID: ids.NewTrackId(), UserId: ids.NewUserId(uuid.New()),
 		Title: "Phone (Interlude)", Artist: "SLAYR", Album: "Phone", Status: download.TrackPending,
 	}
-	svc := download.NewAcquireTrackAudioService(&pendingLedger{track: track}, download.NewSourceRegistry(source), storedAudio{},
+	svc := download.MustNewAcquireTrackAudioService(&pendingLedger{track: track}, download.NewSourceRegistry(source), storedAudio{},
 		download.NewTempWorkspace(),
 		resolving(&resolver{identity: download.RecordingIdentity{Duration: 128}}, noVerification()), noStages())
 

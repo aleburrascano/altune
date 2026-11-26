@@ -179,8 +179,14 @@ func (w *world) storedLengths(catalogSeconds, storedSeconds float64) {
 	})
 }
 
-func (w *world) runner(cfg download.UpgradeConfig, opts ...func(*download.AcquireTrackAudioService)) *download.UpgradeRunner {
-	svc := download.NewAcquireTrackAudioService(w.tracks, download.NewSourceRegistry(w.source), w.audio, download.NewTempWorkspace(), noVerification(), noStages(w.audio), opts...)
+func (w *world) runner(cfg download.UpgradeConfig) *download.UpgradeRunner {
+	return w.runnerPublishingTo(cfg, events.NoopPublisher())
+}
+
+func (w *world) runnerPublishingTo(cfg download.UpgradeConfig, pub events.Publisher) *download.UpgradeRunner {
+	stages := noStages(w.audio)
+	stages.Events = pub
+	svc := download.MustNewAcquireTrackAudioService(w.tracks, download.NewSourceRegistry(w.source), w.audio, download.NewTempWorkspace(), noVerification(), stages)
 	return download.NewUpgradeRunner(w.tracks, svc, w.upgrades, cfg)
 }
 
@@ -190,12 +196,14 @@ type audioDeleter interface {
 
 func noStages(store audioDeleter) download.StagePorts {
 	return download.StagePorts{
-		Prober:      download.NoopAudioProber(),
-		Tagger:      download.NoopAudioTagger(),
-		Rejections:  download.NoopRejectionStore(),
-		StoredAudio: download.NoopStoredAudioReader(),
-		Orphans:     download.DirectDeleteOrphans(store),
-		Skips:       download.NoopVerifySkipRecorder(),
+		Prober:        download.NoopAudioProber(),
+		Tagger:        download.NoopAudioTagger(),
+		Rejections:    download.NoopRejectionStore(),
+		StoredAudio:   download.NoopStoredAudioReader(),
+		Orphans:       download.MustDirectDeleteOrphans(store),
+		Skips:         download.NoopVerifySkipRecorder(),
+		Events:        events.NoopPublisher(),
+		DownloadLimit: download.Unlimited(),
 	}
 }
 
@@ -378,7 +386,7 @@ func TestRunner_PublishesNothingToTheUser(t *testing.T) {
 	w := seed(t, download.GradeF)
 	pub := &publisher{}
 
-	if err := w.runner(download.UpgradeConfig{MaxTries: 3}, download.WithAcquireEvents(pub)).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
+	if err := w.runnerPublishingTo(download.UpgradeConfig{MaxTries: 3}, pub).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -389,7 +397,7 @@ func TestRunner_PublishesNothingToTheUser(t *testing.T) {
 
 func TestReplace_IsNotHeldToTheRatchet(t *testing.T) {
 	w := seed(t, download.GradeB)
-	svc := download.NewAcquireTrackAudioService(w.tracks, download.NewSourceRegistry(w.source), w.audio,
+	svc := download.MustNewAcquireTrackAudioService(w.tracks, download.NewSourceRegistry(w.source), w.audio,
 		download.NewTempWorkspace(), noVerification(), noStages(w.audio))
 
 	if err := svc.ExecuteReplace(context.Background(), w.userId, w.trackId); err != nil {
@@ -414,7 +422,7 @@ func (f *failingGiveUpStore) GiveUp(context.Context, ids.TrackId, int, string) e
 func TestRunner_AFailedGiveUpStillSettlesTheKeptFile(t *testing.T) {
 	w := seed(t, download.GradeD)
 	store := &failingGiveUpStore{}
-	svc := download.NewAcquireTrackAudioService(w.tracks, download.NewSourceRegistry(w.source), w.audio, download.NewTempWorkspace(), noVerification(), noStages(w.audio))
+	svc := download.MustNewAcquireTrackAudioService(w.tracks, download.NewSourceRegistry(w.source), w.audio, download.NewTempWorkspace(), noVerification(), noStages(w.audio))
 	runner := download.NewUpgradeRunner(w.tracks, svc, store, download.UpgradeConfig{MaxTries: 1})
 
 	err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId)
