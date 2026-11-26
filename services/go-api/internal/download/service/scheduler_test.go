@@ -18,7 +18,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -2488,17 +2487,12 @@ func TestBackgroundScheduler_TheHeartbeatBeatsOnTheInjectedTicker(t *testing.T) 
 	}
 	<-acq.started
 
-	deadline := time.After(5 * time.Second)
-	for {
-		manual.Advance(time.Hour)
-		select {
-		case <-queue.beats:
-			return
-		case <-deadline:
-			t.Fatal("no heartbeat was sent after the injected ticker fired an hour-long interval")
-		default:
-			runtime.Gosched()
-		}
+	manual.BlockUntil(1)
+	manual.Advance(time.Hour)
+	select {
+	case <-queue.beats:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no heartbeat was sent after the injected ticker fired an hour-long interval")
 	}
 }
 
