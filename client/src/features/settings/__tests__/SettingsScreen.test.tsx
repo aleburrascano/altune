@@ -7,7 +7,7 @@ import { signInTestUser } from '@testing/signInTestUser';
 
 import { SettingsScreen } from '@features/settings';
 import { makeWrapper } from '@testing/makeWrapper';
-import { retryOptionsWithJitter } from '@features/settings/__tests__/retryFixtures';
+import { retryOptionsWithJitter } from '@testing/retryOptions';
 const RETRY_BACKOFF_BASE_MS = 1_000;
 
 const { __http } = require('@testing/doubles/fetch.js');

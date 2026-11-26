@@ -4,7 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import type { BackfillFeaturedResult } from '@shared/apiClient';
 import { makeWrapper } from '@testing/makeWrapper';
-import { retryOptionsWithJitter } from '@features/settings/__tests__/retryFixtures';
+import { retryOptionsWithJitter } from '@testing/retryOptions';
 import { signInTestUser } from '@testing/signInTestUser';
 import {
   httpSettingsPort,

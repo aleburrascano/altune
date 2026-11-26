@@ -9,7 +9,7 @@ import { discoveryKeys, libraryKeys } from '@shared/query';
 import { makeWrapper } from '@testing/makeWrapper';
 import { ObservedQueryClient } from '@testing/observedQueryClient';
 import { scriptedAuth, type ScriptedAuth } from '@testing/scriptedAuth';
-import { retryOptionsWithJitter } from '@features/settings/__tests__/retryFixtures';
+import { retryOptionsWithJitter } from '@testing/retryOptions';
 import { useBackfillFeatured, useSettingsClearSearchHistory } from '@features/settings';
 const RETRY_BACKOFF_BASE_MS = 1_000;
 

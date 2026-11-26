@@ -5,7 +5,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react-native
 import { signInTestUser } from '@testing/signInTestUser';
 import { LibraryCard } from '@features/settings';
 import { makeWrapper } from '@testing/makeWrapper';
-import { retryOptionsWithJitter } from '@features/settings/__tests__/retryFixtures';
+import { retryOptionsWithJitter } from '@testing/retryOptions';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const BACKFILL_ROUTE = 'POST /v1/tracks/featured-backfill';
