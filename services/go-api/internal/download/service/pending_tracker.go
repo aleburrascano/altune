@@ -24,3 +24,9 @@ func (p *pendingTracker) untrack(key string) {
 	defer p.mu.Unlock()
 	delete(p.set, key)
 }
+
+func (p *pendingTracker) size() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.set)
+}

@@ -15,19 +15,18 @@ import (
 	"altune/go-api/internal/shared/redact"
 	sharedtracklength "altune/go-api/internal/shared/tracklength"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 )
 
 type (
-	pipelineStart struct{}
+	PipelineStart struct{}
 	afterSearch   struct{}
-	afterSelect   struct{}
-	afterDownload struct{ kept ports.AudioCandidate }
-	afterTag      struct{ kept ports.AudioCandidate }
-	afterStore    struct{ kept ports.AudioCandidate }
+	AfterSelect   struct{}
+	afterDownload struct{ Kept ports.AudioCandidate }
+	afterTag      struct{ Kept ports.AudioCandidate }
+	AfterStore    struct{ Kept ports.AudioCandidate }
 	afterUpdate   struct{}
 )
 
@@ -36,7 +35,7 @@ type StepName string
 const (
 	stepNameSearch      StepName = "search"
 	stepNameSelect      StepName = "select"
-	stepNameDownload    StepName = "download"
+	StepNameDownload    StepName = "download"
 	stepNameTag         StepName = "tag"
 	stepNameStore       StepName = "store"
 	stepNameUpdateTrack StepName = "update_track"
@@ -63,15 +62,15 @@ type finalStage[In, Out any] interface {
 }
 
 type Pipeline struct {
-	search      stage[pipelineStart, afterSearch]
-	selectBest  stage[afterSearch, afterSelect]
-	download    stage[afterSelect, afterDownload]
+	search      stage[PipelineStart, afterSearch]
+	selectBest  stage[afterSearch, AfterSelect]
+	download    stage[AfterSelect, afterDownload]
 	tag         stage[afterDownload, afterTag]
-	store       stage[afterTag, afterStore]
-	updateTrack finalStage[afterStore, afterUpdate]
+	store       stage[afterTag, AfterStore]
+	updateTrack finalStage[AfterStore, afterUpdate]
 }
 
-func (p Pipeline) withUpdateTrack(s finalStage[afterStore, afterUpdate]) Pipeline {
+func (p Pipeline) withUpdateTrack(s finalStage[AfterStore, afterUpdate]) Pipeline {
 	p.updateTrack = s
 	return p
 }
@@ -178,7 +177,7 @@ func searchAndDownloadAnyTier(ctx context.Context, run *pipelineRun, p Pipeline)
 }
 
 func searchAndDownload(ctx context.Context, run *pipelineRun, p Pipeline) (afterDownload, error) {
-	searched, err := runStage(ctx, run, p.search, pipelineStart{})
+	searched, err := runStage(ctx, run, p.search, PipelineStart{})
 	if err != nil {
 		return afterDownload{}, err
 	}
@@ -232,22 +231,6 @@ func execStage[In, Out any](ctx context.Context, run *pipelineRun, s finalStage[
 }
 
 const rollbackBudget = 30 * time.Second
-
-type rollbackHandedOverKey struct{}
-
-func withRollbackHandedOver(ctx context.Context) context.Context {
-	return context.WithValue(ctx, rollbackHandedOverKey{}, true)
-}
-
-func rollbackHandedOver(ctx context.Context) bool {
-	handedOver, _ := ctx.Value(rollbackHandedOverKey{}).(bool)
-	return handedOver
-}
-
-func schedulerHandedOver(ctx context.Context) bool {
-	ownedByScheduler, _ := ctx.Value(schedulerOwnedJobContextKey{}).(bool)
-	return ownedByScheduler && errors.Is(ctx.Err(), context.Canceled)
-}
 
 func rollback(ctx context.Context, completed []undoable, ac *AcquisitionContext) {
 	rbCtx, cancel := background.Detach(ctx, rollbackBudget)
@@ -452,7 +435,7 @@ func CoreSteps(
 	return Pipeline{
 		search:     NewSearchStep(sources),
 		selectBest: NewSelectStep(),
-		download:   NewDownloadStep(sources, workspace, identifier, lookup, prober, skips, append([]func(*DownloadStep){WithVerifyWidth(prodVerifyWidth)}, downloadOpts...)...),
+		download:   NewDownloadStep(sources, workspace, identifier, lookup, prober, skips, append([]func(*DownloadStep){WithVerifyWidth(ProdVerifyWidth)}, downloadOpts...)...),
 		tag:        NewTagStep(tagger),
 		store:      NewStoreStep(store, workspace, prober, orphans, refs, storeOpts...),
 	}

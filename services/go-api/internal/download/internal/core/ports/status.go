@@ -69,6 +69,7 @@ type JobRecord struct {
 
 type Status struct {
 	InFlight         int
+	Pending          int
 	Succeeded        uint64
 	Failed           uint64
 	Rejected         uint64

@@ -27,9 +27,9 @@ type retryPolicy func(jobCtx context.Context, err error) bool
 
 func neverRetry(context.Context, error) bool { return false }
 
-func willRetry(jobCtx context.Context, err error) bool {
+func WillRetry(jobCtx context.Context, err error) bool {
 	attempt := jobAttemptFrom(jobCtx)
-	return attempt > 0 && attempt < maxAcquisitionAttempts && isTransientFailure(err)
+	return attempt > 0 && attempt < MaxAcquisitionAttempts && isTransientFailure(err)
 }
 
 func settleContext(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -37,7 +37,7 @@ func settleContext(ctx context.Context) (context.Context, context.CancelFunc) {
 }
 
 func (o outcomeReporter) settleExecute(ctx, jobCtx context.Context, userId ids.UserId, trackId ids.TrackId, err error, ac *AcquisitionContext) error {
-	return o.settle(ctx, jobCtx, userId, trackId, err, willRetry, func(err error) error {
+	return o.settle(ctx, jobCtx, userId, trackId, err, WillRetry, func(err error) error {
 		return o.reportAcquireFailure(ctx, userId, trackId, err, ac)
 	})
 }

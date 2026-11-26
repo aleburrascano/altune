@@ -176,7 +176,7 @@ func FingerprintOf(verdict VerdictKind) audioquality.FingerprintResult {
 	}
 }
 
-func (ac *AcquisitionContext) collectEvidence() Evidence {
+func (ac *AcquisitionContext) CollectEvidence() Evidence {
 	evidence := ac.Evidence
 	_, evidence.ISRCSource = ac.provenISRC()
 	if ac.Selected != nil {

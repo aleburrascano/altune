@@ -71,9 +71,9 @@ func WithStoreKeyPrefix(prefix string) func(*StoreStep) {
 
 func (s *StoreStep) Name() StepName { return stepNameStore }
 
-func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, tagged afterTag) (afterStore, error) {
+func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, tagged afterTag) (AfterStore, error) {
 	if err := s.prober.ValidateDecodable(ctx, ac.TempPath); err != nil {
-		return afterStore{}, withCancellation(ctx, fmt.Errorf("final audio failed decode validation: %w", err))
+		return AfterStore{}, withCancellation(ctx, fmt.Errorf("final audio failed decode validation: %w", err))
 	}
 
 	audioRef := s.refFor(ctx, ac)
@@ -81,11 +81,11 @@ func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, tagged 
 
 	file := s.storedFileAt(ac.TempPath)
 	if err := s.audioStore.Store(ctx, ac.TempPath, audioRef); err != nil {
-		return afterStore{}, withCancellation(ctx, fmt.Errorf("store audio: %w", err))
+		return AfterStore{}, withCancellation(ctx, fmt.Errorf("store audio: %w", err))
 	}
 	jobReporterFrom(ctx).stored(file)
 
-	return afterStore(tagged), nil
+	return AfterStore(tagged), nil
 }
 
 func (s *StoreStep) refFor(ctx context.Context, ac *AcquisitionContext) string {

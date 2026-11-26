@@ -272,7 +272,7 @@ func runJobWaitingOnItsCommit(t *testing.T, leaseLost bool) storedAndOrphaned {
 		} else {
 			opts = append(opts, service.WithJobQueue(queue))
 		}
-		scheduler := service.NewBackgroundAcquisitionScheduler(svc, 1, opts...)
+		scheduler := service.NewBackgroundAcquisitionScheduler(svc, 1, time.Now, opts...)
 		defer scheduler.Shutdown(context.Background())
 		if err := scheduler.Schedule(context.Background(), track.UserId, track.ID, ""); err != nil {
 			t.Fatalf("Schedule = %v, want nil", err)

@@ -48,7 +48,7 @@ func (s *DownloadStep) nextWindow(
 	used int,
 	failures *downloadFailures,
 ) (window, rest []ports.AudioCandidate) {
-	limit := min(s.width, maxDownloadAttempts-used)
+	limit := min(s.width, MaxDownloadAttempts-used)
 	for i, candidate := range pending {
 		if len(window) == limit {
 			return window, remainingAfter(ac, pending[i:], used+len(window))
@@ -81,7 +81,7 @@ func recordWindow(ac *AcquisitionContext, window []ports.AudioCandidate, index i
 }
 
 func remainingAfter(ac *AcquisitionContext, rest []ports.AudioCandidate, started int) []ports.AudioCandidate {
-	if started < maxDownloadAttempts {
+	if started < MaxDownloadAttempts {
 		return rest
 	}
 	recordNotAttempted(ac, rest)

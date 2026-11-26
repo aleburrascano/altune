@@ -104,6 +104,10 @@ func WithAcquireEvents(pub events.Publisher) func(*AcquireTrackAudioService) {
 	}
 }
 
+func WithAcquireTimeout(d time.Duration) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.acquireTimeout = d }
+}
+
 func WithSupersededAudioGrace(d time.Duration) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.supersededGrace = d }
 }
@@ -113,45 +117,6 @@ func WithAcquireStoreKeyPrefix(prefix string) func(*AcquireTrackAudioService) {
 }
 
 const AcquireTimeout = 10 * time.Minute
-
-type schedulerOwnedJobContextKey struct{}
-
-func withSchedulerOwnedJobContext(ctx context.Context) context.Context {
-	return context.WithValue(ctx, schedulerOwnedJobContextKey{}, true)
-}
-
-type jobAttemptContextKey struct{}
-
-func withJobAttempt(ctx context.Context, attempt int) context.Context {
-	return context.WithValue(ctx, jobAttemptContextKey{}, attempt)
-}
-
-func jobAttemptFrom(ctx context.Context) int {
-	if ctx == nil {
-		return 0
-	}
-	attempt, _ := ctx.Value(jobAttemptContextKey{}).(int)
-	return attempt
-}
-
-type jobFenceContextKey struct{}
-
-func withJobFence(ctx context.Context, fence ports.ClaimNumber) context.Context {
-	return context.WithValue(ctx, jobFenceContextKey{}, fence)
-}
-
-func jobFenceFrom(ctx context.Context) ports.ClaimNumber {
-	if ctx == nil {
-		return 0
-	}
-	fence, _ := ctx.Value(jobFenceContextKey{}).(ports.ClaimNumber)
-	return fence
-}
-
-func schedulerCancelledJobContext(ctx context.Context) bool {
-	ownedByScheduler, _ := ctx.Value(schedulerOwnedJobContextKey{}).(bool)
-	return ownedByScheduler && ctx.Err() != nil
-}
 
 func (s *AcquireTrackAudioService) outcomes() outcomeReporter {
 	return outcomeReporter{ledger: s.ledger, events: s.events}
@@ -201,7 +166,7 @@ func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId id
 	if err != nil || !found {
 		return err
 	}
-	_, err = s.replaceLoaded(ctx, jobCtx, userId, track, replacement.ReplacementGate{}, willRetry)
+	_, err = s.replaceLoaded(ctx, jobCtx, userId, track, replacement.ReplacementGate{}, WillRetry)
 	return err
 }
 
@@ -224,7 +189,7 @@ func attemptOf(ac *AcquisitionContext, err error) replacement.Attempt {
 	attempt := replacement.Attempt{NoSource: err != nil && foundNoSource(err)}
 	if ac != nil && ac.Selected != nil {
 		attempt.SourceKey = sourceKey(ac.Selected.URL)
-		attempt.Grade = ac.collectEvidence().Grade
+		attempt.Grade = ac.CollectEvidence().Grade
 	}
 	return attempt
 }

@@ -25,12 +25,12 @@ func NewUpdateTrackStep(ledger ports.LibraryTracks, userId ids.UserId, trackId i
 
 func (s *UpdateTrackStep) Name() StepName { return stepNameUpdateTrack }
 
-func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, stored afterStore) (afterUpdate, error) {
-	evidence := ac.collectEvidence()
+func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, stored AfterStore) (afterUpdate, error) {
+	evidence := ac.CollectEvidence()
 	if err := ac.admitFetched(evidence.Grade); err != nil {
 		return afterUpdate{}, err
 	}
-	completion, err := completionOf(ac, stored.kept, evidence)
+	completion, err := completionOf(ac, stored.Kept, evidence)
 	if err != nil {
 		return afterUpdate{}, err
 	}

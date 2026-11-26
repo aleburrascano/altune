@@ -29,7 +29,7 @@ func (slowAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {}
 func TestStatus_ARunningJobReportsTheTimeSinceItWasScheduled(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		acquirer := &holdingAcquirer{release: make(chan struct{})}
-		scheduler := download.NewBackgroundAcquisitionScheduler(acquirer, 1)
+		scheduler := download.NewBackgroundAcquisitionScheduler(acquirer, 1, time.Now)
 		defer scheduler.Shutdown(context.Background())
 		defer close(acquirer.release)
 		track := ids.NewTrackId()
@@ -52,7 +52,7 @@ func TestStatus_ARunningJobReportsTheTimeSinceItWasScheduled(t *testing.T) {
 
 func TestStatus_AFinishedJobReportsHowLongItRan(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		scheduler := download.NewBackgroundAcquisitionScheduler(slowAcquirer{}, 1)
+		scheduler := download.NewBackgroundAcquisitionScheduler(slowAcquirer{}, 1, time.Now)
 		defer scheduler.Shutdown(context.Background())
 		track := ids.NewTrackId()
 		if err := scheduler.Schedule(context.Background(), ids.NewUserId(uuid.New()), track, ""); err != nil {

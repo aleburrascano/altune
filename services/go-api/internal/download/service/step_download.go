@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	maxDownloadAttempts = 8
+	MaxDownloadAttempts = 8
 	previewSeconds      = 130
 
 	DefaultCandidateTimeout = 3 * time.Minute
@@ -38,7 +38,7 @@ type DownloadStep struct {
 	identifier      ports.AudioIdentifier
 	limiter         *ConcurrencyLimit
 	recordingLookup ports.RecordingLookup
-	factsCache      recordingFactsCache
+	factsCache      *recordingFactsCache
 	skips           ports.VerifySkipRecorder
 	width           int
 	floor           float64
@@ -47,14 +47,14 @@ type DownloadStep struct {
 	candidateTimeout time.Duration
 }
 
-const prodVerifyWidth = 2
+const ProdVerifyWidth = 2
 
 func NewDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, opts ...func(*DownloadStep)) *DownloadStep {
 	requirePort("NewDownloadStep", "identifier", identifier == nil)
 	requirePort("NewDownloadStep", "recording lookup", lookup == nil)
 	requirePort("NewDownloadStep", "prober", prober == nil)
 	requirePort("NewDownloadStep", "skip recorder", skips == nil)
-	s := &DownloadStep{fetcher: fetcher, workspace: requireWorkspace("NewDownloadStep", workspace), identifier: identifier, recordingLookup: lookup, prober: prober, skips: skips, width: prodVerifyWidth, candidateTimeout: DefaultCandidateTimeout, floor: defaultConfidenceFloor, cuts: audioverdict.DefaultCuts()}
+	s := &DownloadStep{fetcher: fetcher, workspace: requireWorkspace("NewDownloadStep", workspace), identifier: identifier, recordingLookup: lookup, factsCache: newRecordingFactsCache(time.Now), prober: prober, skips: skips, width: ProdVerifyWidth, candidateTimeout: DefaultCandidateTimeout, floor: defaultConfidenceFloor, cuts: audioverdict.DefaultCuts()}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -85,9 +85,9 @@ func WithConfidenceFloor(floor float64) func(*DownloadStep) {
 	return func(s *DownloadStep) { s.floor = floor }
 }
 
-func (s *DownloadStep) Name() StepName { return stepNameDownload }
+func (s *DownloadStep) Name() StepName { return StepNameDownload }
 
-func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterSelect) (afterDownload, error) {
+func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ AfterSelect) (afterDownload, error) {
 	return s.executeWindowed(ctx, ac)
 }
 
@@ -182,7 +182,7 @@ func (h *holdBook) chooseAgainstMuxed(ctx context.Context, ac *AcquisitionContex
 func gradeOf(ctx context.Context, ac *AcquisitionContext, a attempt) audioquality.Grade {
 	scratch := *ac
 	a.applyTo(ctx, &scratch)
-	return scratch.collectEvidence().Grade
+	return scratch.CollectEvidence().Grade
 }
 
 func (h *holdBook) offer(candidate attempt) {
@@ -281,7 +281,7 @@ func (f *downloadFailures) result(ctx context.Context) error {
 func recordNotAttempted(ac *AcquisitionContext, untried []ports.AudioCandidate) {
 	for _, c := range untried {
 		ac.recordRejection(c.URL, c.Title, c.Source, rejectedcandidates.NotAttempted,
-			fmt.Sprintf("skipped after %d download attempts", maxDownloadAttempts))
+			fmt.Sprintf("skipped after %d download attempts", MaxDownloadAttempts))
 	}
 }
 
@@ -325,7 +325,7 @@ func (a attempt) applyTo(ctx context.Context, ac *AcquisitionContext) {
 
 func (a attempt) keep(ctx context.Context, ac *AcquisitionContext) afterDownload {
 	a.applyTo(ctx, ac)
-	return afterDownload{kept: a.candidate}
+	return afterDownload{Kept: a.candidate}
 }
 
 func (s *DownloadStep) runAttempt(
@@ -371,8 +371,8 @@ func (s *DownloadStep) attemptAudio(
 }
 
 const (
-	rejectOtherVersionLengthUnknown = "other version, length unknown"
-	rejectOtherVersionOffLengthFmt  = "other version %.0fs off the expected length"
+	RejectOtherVersionLengthUnknown = "other version, length unknown"
+	RejectOtherVersionOffLengthFmt  = "other version %.0fs off the expected length"
 )
 
 func judgeAttempt(ac *AcquisitionContext, candidate ports.AudioCandidate, filePath string, verified verificationResult) attempt {
@@ -385,9 +385,9 @@ func judgeAttempt(ac *AcquisitionContext, candidate ports.AudioCandidate, filePa
 		otherVersion: len(evidence.Qualifiers) > 0,
 	}
 	if result.otherVersion && !tracklength.SameRecording(ac.ExpectedLength(), verified.probed.Seconds()) {
-		reason := rejectOtherVersionLengthUnknown
+		reason := RejectOtherVersionLengthUnknown
 		if evidence.DurationDeltaSeconds != nil {
-			reason = fmt.Sprintf(rejectOtherVersionOffLengthFmt, *evidence.DurationDeltaSeconds)
+			reason = fmt.Sprintf(RejectOtherVersionOffLengthFmt, *evidence.DurationDeltaSeconds)
 		}
 		result.rejection = &downloadRejection{stage: rejectedcandidates.Duration, reason: reason}
 		return result
