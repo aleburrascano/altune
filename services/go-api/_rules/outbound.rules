@@ -3,7 +3,6 @@ package gorules
 import "github.com/quasilyte/go-ruleguard/dsl"
 
 func outboundClients(m dsl.Matcher) {
-	m.Import(`net/http`)
 	m.Match(`http.Client{$*_}`, `http.Transport{$*_}`, `new(http.Client)`, `new(http.Transport)`).
 		Where(!m.File().PkgPath.Matches(`/platform/outbound(/|$)|test$`)).
 		Report("build an HTTP client or transport through outbound.NewClient or outbound.NewTransport, the one home for outbound HTTP")
