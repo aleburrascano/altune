@@ -3,6 +3,7 @@ package app
 import (
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/app/sourcecheck"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"time"
 )
@@ -15,6 +16,6 @@ func (a *App) startSourceCanary(probes sourcecheck.Probes) {
 		return
 	}
 	a.startSimpleJob(jobs.AcquisitionSourceCanary, sourceCanaryInterval, func(ctx context.Context) error {
-		return sourcecheck.Run(ctx, checks)
+		return sourcecheck.Run(ctx, clock.Now, checks)
 	}, "interval", sourceCanaryInterval.String())
 }

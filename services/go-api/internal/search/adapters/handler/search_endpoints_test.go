@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/searchtest"
 	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
@@ -1686,7 +1687,7 @@ func (l *recordingLogger) Enabled(context.Context, log.EnabledParameters) bool {
 func buildClientEventRouter(t *testing.T, logger *recordingLogger) chi.Router {
 	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{
 		Event:        searchtest.NewRecordEvent(t, &recordingEventStore{}),
-		ClientEvents: telemetry.NewClientEvents("k", logger),
+		ClientEvents: telemetry.NewClientEvents(clock.Now, "k", logger),
 	}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
@@ -1730,7 +1731,7 @@ func TestHandleRecordEvent_ClientEventSkippedWhenStoreFails(t *testing.T) {
 	logger := &recordingLogger{}
 	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{
 		Event:        searchtest.NewRecordEvent(t, &recordingEventStore{err: context.DeadlineExceeded}),
-		ClientEvents: telemetry.NewClientEvents("k", logger),
+		ClientEvents: telemetry.NewClientEvents(clock.Now, "k", logger),
 	}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)

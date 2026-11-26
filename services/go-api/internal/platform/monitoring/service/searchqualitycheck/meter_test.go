@@ -3,6 +3,7 @@ package searchqualitycheck_test
 import (
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
@@ -67,7 +68,7 @@ func (r *runs) assertNoTickStarts(t *testing.T, why string) {
 
 func mustMeter(t *testing.T, interval time.Duration, runner monitoring.EvalMeterRunner, scope background.OnlyWhileLeader) *monitoring.EvalMeter {
 	t.Helper()
-	m, err := monitoring.NewEvalMeter(interval, runner, scope)
+	m, err := monitoring.NewEvalMeter(interval, clock.Now, runner, scope)
 	if err != nil {
 		t.Fatalf("NewEvalMeter: %v", err)
 	}
@@ -342,10 +343,13 @@ func TestMeter_CancelledRunKeepsLastGoodResult(t *testing.T) {
 func TestNewEvalMeter_RefusesAMissingRunnerOrLeadershipScope(t *testing.T) {
 	runner := returning(monitoring.EvalMeterResult{}, nil)
 
-	if _, err := monitoring.NewEvalMeter(0, nil, background.EveryPassLeads); !errors.Is(err, monitoring.ErrEvalMeterRunnerRequired) {
+	if _, err := monitoring.NewEvalMeter(0, nil, runner, background.EveryPassLeads); !errors.Is(err, monitoring.ErrEvalMeterClockRequired) {
+		t.Errorf("nil clock: err = %v, want ErrEvalMeterClockRequired", err)
+	}
+	if _, err := monitoring.NewEvalMeter(0, clock.Now, nil, background.EveryPassLeads); !errors.Is(err, monitoring.ErrEvalMeterRunnerRequired) {
 		t.Errorf("nil runner: err = %v, want ErrEvalMeterRunnerRequired", err)
 	}
-	if _, err := monitoring.NewEvalMeter(0, runner, nil); !errors.Is(err, monitoring.ErrEvalMeterLeadershipRequired) {
+	if _, err := monitoring.NewEvalMeter(0, clock.Now, runner, nil); !errors.Is(err, monitoring.ErrEvalMeterLeadershipRequired) {
 		t.Errorf("nil scope: err = %v, want ErrEvalMeterLeadershipRequired", err)
 	}
 }

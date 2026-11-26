@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/app/bridges/playbackfromlibrary"
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/playback"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"fmt"
@@ -46,15 +47,15 @@ func newQueueService(
 	lookupTimeout time.Duration,
 ) (*playback.QueueService, error) {
 	nowPlayingReader, err := playback.NewNowPlayingReader(playbackfromlibrary.NewNowPlayingTracks(trackRepo),
-		metrics, time.Now, lookupTimeout)
+		metrics, clock.Now, lookupTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("build the now-playing reader: %w", err)
 	}
-	return playback.NewQueueService(queueStateRepo, nowPlayingReader, time.Now)
+	return playback.NewQueueService(queueStateRepo, nowPlayingReader, clock.Now)
 }
 
 func newQueueHandler(queueSvc *playback.QueueService, metrics playbackMetricsSink, limit playback.QueueSaveLimit) (*playback.QueueHandler, error) {
-	return playback.NewQueueHandler(queueSvc, limit, time.Now, metrics)
+	return playback.NewQueueHandler(queueSvc, limit, clock.Now, metrics)
 }
 
 func queueRateLimit(cfg *config.Config) playback.QueueSaveLimit {

@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/platform/eventstream/internal/core/domain"
 	"altune/go-api/internal/platform/eventstream/internal/core/ports"
 	apierror "altune/go-api/internal/shared/apierror"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
@@ -25,6 +26,7 @@ const (
 )
 
 type EventStreamHandler struct {
+	now          clock.Func
 	bus          ports.EventSubscriber
 	heartbeat    time.Duration
 	writeTimeout time.Duration
@@ -32,11 +34,15 @@ type EventStreamHandler struct {
 	shutdown     <-chan struct{}
 }
 
-func NewEventStreamHandler(bus ports.EventSubscriber, maxConnsTotal int) *EventStreamHandler {
+func NewEventStreamHandler(now clock.Func, bus ports.EventSubscriber, maxConnsTotal int) *EventStreamHandler {
+	if now == nil {
+		panic("handler.NewEventStreamHandler: a nil clock")
+	}
 	if maxConnsTotal <= 0 {
 		maxConnsTotal = defaultMaxConnsTotal
 	}
 	return &EventStreamHandler{
+		now:          now,
 		bus:          bus,
 		heartbeat:    defaultHeartbeatInterval,
 		writeTimeout: defaultSSEWriteTimeout,
@@ -98,7 +104,7 @@ func (h *EventStreamHandler) setup(
 
 	httpserver.ClearWriteDeadline(w)
 	setSSEHeaders(w)
-	conn := &sseConn{ctx: r.Context(), rc: http.NewResponseController(w), w: w, userId: userId, writeTimeout: h.writeTimeout}
+	conn := &sseConn{ctx: r.Context(), rc: http.NewResponseController(w), w: w, userId: userId, now: h.now, writeTimeout: h.writeTimeout}
 	ch, cancel := h.bus.Subscribe(userId)
 	return conn, ch, cancel, true
 }

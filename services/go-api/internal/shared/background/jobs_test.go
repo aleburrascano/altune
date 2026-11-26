@@ -2,6 +2,7 @@ package background_test
 
 import (
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"errors"
 	"testing"
 )
@@ -19,11 +20,11 @@ func TestJobRegistry_EmptyHasNoHealthAndRejectsUnknownName(t *testing.T) {
 func TestJobControl_RecordTracksConsecutiveFailures(t *testing.T) {
 	var r background.JobRegistry
 	jc := r.Control("job")
-	jc.Record(errors.New("boom"))
+	jc.Record(clock.Now(), errors.New("boom"))
 	if got := jc.ConsecutiveFailures(); got != 1 {
 		t.Fatalf("after failure = %d, want 1", got)
 	}
-	jc.Record(nil)
+	jc.Record(clock.Now(), nil)
 	if got := jc.ConsecutiveFailures(); got != 0 {
 		t.Fatalf("after success = %d, want 0", got)
 	}

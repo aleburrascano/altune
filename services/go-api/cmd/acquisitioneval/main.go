@@ -2,19 +2,19 @@ package main
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"flag"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
-	"time"
 )
 
 func main() {
 	switch cmd, rest := subcommand(os.Args); cmd {
 	case "capture":
-		os.Exit(runCapture(rest, os.Stdin, os.Stdout, time.Now()))
+		os.Exit(runCapture(rest, os.Stdin, os.Stdout, clock.Now()))
 	case "audit-qualifiers":
 		os.Exit(runAuditQualifiers(os.Stdin, os.Stdout))
 	case "live":
@@ -48,7 +48,7 @@ func run(goldenDir, baselinePath string, updateBaseline bool) error {
 		return fmt.Errorf("no golden cases found")
 	}
 
-	report := download.SummarizeEval(download.RunAllEvalCases(context.Background(), time.Now, cases))
+	report := download.SummarizeEval(download.RunAllEvalCases(context.Background(), clock.Now, cases))
 	fmt.Print(report.Render())
 
 	if updateBaseline {

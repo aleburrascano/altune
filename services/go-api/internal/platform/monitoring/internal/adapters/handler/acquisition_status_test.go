@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/shared/clock"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -23,7 +24,7 @@ func (s *stubAcquisitionReader) Status() monitoring.DownloadStatusReport {
 func serveAcquisition(t *testing.T, reader monitoring.AcquisitionReader) map[string]json.RawMessage {
 	t.Helper()
 	r := chi.NewRouter()
-	monitoring.NewObserveHandler(monitoring.Deps{Acquisition: reader}).Register(r)
+	monitoring.NewObserveHandler(clock.Now, monitoring.Deps{Acquisition: reader}).Register(r)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/acquisition", nil))
 	if rec.Code != http.StatusOK {

@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 )
 
 type spotifyTOTPSecret struct {
@@ -106,7 +105,7 @@ func (spotify *spotifySession) accessTokenBody(ctx context.Context, version stri
 		return nil, err
 	}
 	rawURL := fmt.Sprintf("%s/api/token?reason=init&productType=web-player&totp=%s&totpServer=%s&totpVer=%s",
-		spotify.urls.site, spotifyTOTP(secret, time.Now().Unix()), spotifyTOTP(secret, serverSeconds), version)
+		spotify.urls.site, spotifyTOTP(secret, spotify.now().Unix()), spotifyTOTP(secret, serverSeconds), version)
 	return fetch(ctx, spotify.client, request{method: http.MethodGet, url: rawURL, header: map[string]string{"User-Agent": spotifyUserAgent}})
 }
 

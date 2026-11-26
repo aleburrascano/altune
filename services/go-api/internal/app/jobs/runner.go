@@ -25,10 +25,11 @@ type Election interface {
 }
 
 func NewElection(pool *pgxpool.Pool) (*leader.Election, error) {
-	return leader.NewElection(leader.PostgresLocks(pool), backgroundLockKey, backgroundLockInterval, clock.NewTimer)
+	return leader.NewElection(leader.PostgresLocks(pool), backgroundLockKey, backgroundLockInterval, clock.Now, clock.NewTimer)
 }
 
 type Runner struct {
+	Now       clock.Func
 	NewTicker clock.TickerFunc
 
 	loops    background.Tracker
@@ -70,7 +71,7 @@ func (r *Runner) Ticker(name Name, interval time.Duration, fn func(context.Conte
 	if runsOnEveryInstance(name) {
 		panic(fmt.Sprintf("jobs: %q runs on every instance, so it registers with EveryInstance, not the leader-only Ticker", name))
 	}
-	r.requireTicker(name)
+	r.requireClock(name)
 	r.Control(name)
 	r.WhenLeader(name, func(ctx context.Context) {
 		run := r.newRun(name, interval)
@@ -84,16 +85,16 @@ func (r *Runner) EveryInstance(ctx context.Context, name Name, interval time.Dur
 	if !runsOnEveryInstance(name) {
 		panic(fmt.Sprintf("jobs: %q is leader-only, so it registers with Ticker; only a job the table marks everyInstance may use EveryInstance", name))
 	}
-	r.requireTicker(name)
+	r.requireClock(name)
 	run := r.newRun(name, interval)
 	if err := background.Every(ctx, &r.loops, interval, r.NewTicker, func() { r.tick(ctx, run, fn) }); err != nil {
 		panic(fmt.Sprintf("jobs: %q: %v", name, err))
 	}
 }
 
-func (r *Runner) requireTicker(name Name) {
-	if r.NewTicker == nil {
-		panic(fmt.Sprintf("jobs: %q needs the Runner's NewTicker set before it registers", name))
+func (r *Runner) requireClock(name Name) {
+	if r.Now == nil || r.NewTicker == nil {
+		panic(fmt.Sprintf("jobs: %q needs the Runner's Now and NewTicker set before it registers", name))
 	}
 }
 
@@ -146,7 +147,7 @@ func (r *Runner) tick(ctx context.Context, run jobRun, fn func(context.Context) 
 	if !run.control.Admit() {
 		return
 	}
-	background.RunJob(ctx, run.control, string(run.name), run.budget, fn)
+	background.RunJob(ctx, run.control, r.Now, string(run.name), run.budget, fn)
 }
 
 func (r *Runner) tickAsLeader(ctx context.Context, run jobRun, fn func(context.Context) error) {
@@ -158,7 +159,7 @@ func (r *Runner) tickAsLeader(ctx context.Context, run jobRun, fn func(context.C
 		return
 	}
 	defer release()
-	background.RunJob(leaderCtx, run.control, string(run.name), run.budget, fn)
+	background.RunJob(leaderCtx, run.control, r.Now, string(run.name), run.budget, fn)
 }
 
 func (r *Runner) StartTicker(ctx context.Context, name Name, interval time.Duration, run func(context.Context) error, startedAttrs ...any) {

@@ -2,6 +2,7 @@ package requestmetrics
 
 import (
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"net/http"
 	"time"
@@ -10,13 +11,16 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-func Middleware(record func(route string, d time.Duration, status int)) func(http.Handler) http.Handler {
+func Middleware(now clock.Func, record func(route string, d time.Duration, status int)) func(http.Handler) http.Handler {
+	if now == nil {
+		panic("requestmetrics.Middleware: a nil clock")
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			start := time.Now()
+			start := now()
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 			next.ServeHTTP(ww, r)
-			recordLatency(r.Context(), record, routePattern(r), time.Since(start), ww.Status())
+			recordLatency(r.Context(), record, routePattern(r), now().Sub(start), ww.Status())
 		})
 	}
 }

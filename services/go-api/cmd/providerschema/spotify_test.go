@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"
 	"io"
@@ -64,7 +65,7 @@ func spotifyServer(t *testing.T, routes map[string]string, failing map[string]in
 	}))
 	t.Cleanup(srv.Close)
 	urls := spotifyURLs{site: srv.URL, clientToken: srv.URL + "/v1/clienttoken", pathfinder: srv.URL + "/pathfinder/v2/query"}
-	return newSpotifySource(srv.Client(), urls), calls
+	return newSpotifySource(clock.Now, srv.Client(), urls), calls
 }
 
 var spotifyRoutes = map[string]string{

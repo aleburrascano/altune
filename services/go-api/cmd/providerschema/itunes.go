@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -33,7 +34,7 @@ func itunesProvider() provider {
 		adapter:   adapterRoot + "itunes",
 		decodedAs: decodedTypes(itunesEndpoints),
 		source: func(client *http.Client) (source, error) {
-			return newITunesSource(client, itunesBaseURL, newIntervalGate(itunesInterval)), nil
+			return newITunesSource(client, itunesBaseURL, newIntervalGate(clock.Now, itunesInterval)), nil
 		},
 	}
 }

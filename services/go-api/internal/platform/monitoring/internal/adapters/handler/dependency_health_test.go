@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -56,7 +57,7 @@ func TestHealth_ProbeRunsUnderADeadline(t *testing.T) {
 
 func TestHealth_StalledProbeIsReleasedWhenTheRequestEnds(t *testing.T) {
 	r := chi.NewRouter()
-	monitoring.NewObserveHandler(monitoring.Deps{Health: func(ctx context.Context) monitoring.DependencyHealth {
+	monitoring.NewObserveHandler(clock.Now, monitoring.Deps{Health: func(ctx context.Context) monitoring.DependencyHealth {
 		<-ctx.Done()
 		return monitoring.DependencyHealth{DB: monitoring.DepDown}
 	}}).Register(r)

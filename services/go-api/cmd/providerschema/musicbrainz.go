@@ -44,7 +44,7 @@ func musicBrainzProvider() provider {
 		adapter:   adapterRoot + "musicbrainz",
 		decodedAs: decodedTypes(musicBrainzEndpoints),
 		source: func(client *http.Client) (source, error) {
-			return newMusicBrainzSource(client, musicBrainzBaseURL, newIntervalGate(musicBrainzInterval), musicBrainzBackoff), nil
+			return newMusicBrainzSource(client, musicBrainzBaseURL, newIntervalGate(clock.Now, musicBrainzInterval), musicBrainzBackoff), nil
 		},
 	}
 }

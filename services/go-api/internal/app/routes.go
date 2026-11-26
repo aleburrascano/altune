@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/platform/eventstream"
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/shared/clock"
 	"net/http"
 	"time"
 
@@ -26,7 +27,7 @@ func (a *App) mountRoutes(
 ) *chi.Mux {
 	r := a.newRouter(apiWriteTimeout)
 
-	r.Method(http.MethodGet, "/health", health.NewEndpoint(a.dependencyHealth, buildCommit, time.Now))
+	r.Method(http.MethodGet, "/health", health.NewEndpoint(a.dependencyHealth, buildCommit, clock.Now))
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(router.V1ResponseHeaders)
@@ -48,7 +49,7 @@ func (a *App) mountRoutes(
 			r.Mount("/playlists", cat.playlistHandler.Routes())
 			r.Mount("/playback", queueHandler.Routes())
 			r.Mount("/discovery", discoveryH.Routes())
-			r.Handle("/events", eventstream.NewEventStreamHandler(a.eventBus, a.cfg.SSEMaxConns).WithShutdown(a.lifecycleDone))
+			r.Handle("/events", eventstream.NewEventStreamHandler(clock.Now, a.eventBus, a.cfg.SSEMaxConns).WithShutdown(a.lifecycleDone))
 		})
 	})
 

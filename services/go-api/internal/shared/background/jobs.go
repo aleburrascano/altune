@@ -24,8 +24,8 @@ func (jc *JobControl) Admit() bool {
 	return true
 }
 
-func (jc *JobControl) Record(err error) {
-	now := time.Now().UnixNano()
+func (jc *JobControl) Record(at time.Time, err error) {
+	now := at.UnixNano()
 	if err != nil {
 		jc.failures.Add(1)
 		jc.consecutive.Add(1)

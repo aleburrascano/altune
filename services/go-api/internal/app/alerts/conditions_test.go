@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
 	"fmt"
@@ -330,13 +331,13 @@ func TestJobFailingCondition(t *testing.T) {
 	cond := condition(t, s, "job_failing:deleted identity erasure")
 
 	for range jobFailureEscalation - 1 {
-		jc.Record(errors.New("boom secret"))
+		jc.Record(clock.Now(), errors.New("boom secret"))
 	}
 	if got := cond.Eval(ctx); got != nil {
 		t.Fatalf("fired below escalation: %+v", got)
 	}
 
-	jc.Record(errors.New("boom secret"))
+	jc.Record(clock.Now(), errors.New("boom secret"))
 	got := cond.Eval(ctx)
 	if got == nil {
 		t.Fatal("consecutive failures produced no alert")
@@ -353,7 +354,7 @@ func TestJobFailingCondition(t *testing.T) {
 	}
 	s.Jobs.SetEnabled(name, true)
 
-	jc.Record(nil)
+	jc.Record(clock.Now(), nil)
 	if got := cond.Eval(ctx); got != nil {
 		t.Fatalf("recovered job still firing: %+v", got)
 	}
@@ -366,7 +367,7 @@ func TestJobFailingCondition_UnreadableIdentityStoreFiresAfterEscalation(t *test
 	sweepErr := fmt.Errorf("deleted identity sweep idle: %w", playback.ErrIdentityStoreUnavailable)
 
 	for range jobFailureEscalation {
-		jc.Record(sweepErr)
+		jc.Record(clock.Now(), sweepErr)
 	}
 
 	if got := cond.Eval(context.Background()); got == nil {

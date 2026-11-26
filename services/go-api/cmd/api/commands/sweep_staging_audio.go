@@ -3,12 +3,12 @@ package commands
 import (
 	"altune/go-api/cmd/api/commands/stagingsweep"
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 )
 
 func RunSweepStagingAudio(cfg *config.Config, execute bool) {
@@ -37,7 +37,7 @@ func sweepAudioStore(ctx context.Context, cfg *config.Config, refs library.Audio
 		return errors.New("the configured audio store cannot list object age")
 	}
 
-	tally, err := stagingsweep.Sweep(ctx, store, lister, refs, execute, time.Now())
+	tally, err := stagingsweep.Sweep(ctx, store, lister, refs, execute, clock.Now())
 	if err != nil {
 		return err
 	}

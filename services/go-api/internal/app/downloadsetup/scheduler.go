@@ -69,12 +69,12 @@ func NewScheduler(ctx context.Context, d Deps) *download.BackgroundAcquisitionSc
 			DownloadLimit: download.MustLimitedTo(d.Config.AcquisitionDownloadConcurrency),
 			Observer:      download.NoObserver(),
 			Sleep:         clock.Sleep,
-			Now:           time.Now,
+			Now:           clock.Now,
 			Unit:          random.Real,
 		},
 		opts...,
 	)
-	return download.MustNewBackgroundAcquisitionScheduler(acquireSvc, d.Config.AcquisitionConcurrency, time.Now, schedulerPorts(d, acquireSvc, skips, lookups), schedulerOptions(d)...)
+	return download.MustNewBackgroundAcquisitionScheduler(acquireSvc, d.Config.AcquisitionConcurrency, clock.Now, schedulerPorts(d, acquireSvc, skips, lookups), schedulerOptions(d)...)
 }
 
 func storeOptions(d Deps) []acquireOption {

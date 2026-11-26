@@ -2,6 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/platform/monitoring/internal/shell/eventwatch"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
@@ -35,12 +36,12 @@ func rejectSubscription(w http.ResponseWriter, r *http.Request, stream string, e
 	httpserver.HandleServiceError(w, r, errStreamSubscriberLimit)
 }
 
-func streamSSE[T any](w http.ResponseWriter, r *http.Request, ch <-chan T, bounds StreamBounds) {
+func streamSSE[T any](now clock.Func, w http.ResponseWriter, r *http.Request, ch <-chan T, bounds StreamBounds) {
 	if _, canFlush := w.(http.Flusher); !canFlush {
 		httpserver.HandleServiceError(w, r, errStreamingUnsupported)
 		return
 	}
-	w = httpserver.ExtendWriteDeadlineOnWrite(w, bounds.WriteIdle)
+	w = httpserver.ExtendWriteDeadlineOnWrite(now, w, bounds.WriteIdle)
 	rc := http.NewResponseController(w)
 	setStreamHeaders(w)
 	w.WriteHeader(http.StatusOK)

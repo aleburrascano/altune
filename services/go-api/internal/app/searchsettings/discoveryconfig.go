@@ -2,6 +2,7 @@ package searchsettings
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/telemetry"
 	"context"
@@ -72,7 +73,7 @@ func ClientEvents(cfg *config.Config) search.ClientEventSink {
 	if !cfg.HasTelemetryExport() {
 		return search.NoClientEvents{}
 	}
-	return telemetry.NewClientEvents(cfg.TelemetryUserKey, otel.GetLoggerProvider().Logger(telemetry.ScopeName))
+	return telemetry.NewClientEvents(clock.Now, cfg.TelemetryUserKey, otel.GetLoggerProvider().Logger(telemetry.ScopeName))
 }
 
 const cacheOpsVarName = "discovery_cache_ops"

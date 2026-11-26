@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -19,11 +20,12 @@ type sseConn struct {
 	w            http.ResponseWriter
 	userId       ids.UserId
 	writeTimeout time.Duration
+	now          clock.Func
 }
 
 func (c *sseConn) writeFrame(frame string) error {
 	if c.writeTimeout > 0 {
-		if err := c.rc.SetWriteDeadline(time.Now().Add(c.writeTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		if err := c.rc.SetWriteDeadline(c.now().Add(c.writeTimeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
 			return fmt.Errorf("set the sse write deadline: %w", err)
 		}
 	}

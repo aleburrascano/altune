@@ -1,11 +1,11 @@
 package otlp
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/log"
@@ -33,17 +33,21 @@ type ClientEvent struct {
 }
 
 type ClientEvents struct {
+	now    clock.Func
 	key    []byte
 	logger log.Logger
 }
 
-func NewClientEvents(userKey string, logger log.Logger) *ClientEvents {
-	return &ClientEvents{key: []byte(userKey), logger: logger}
+func NewClientEvents(now clock.Func, userKey string, logger log.Logger) *ClientEvents {
+	if now == nil {
+		panic("otlp.NewClientEvents: a nil clock")
+	}
+	return &ClientEvents{now: now, key: []byte(userKey), logger: logger}
 }
 
 func (c *ClientEvents) Emit(ctx context.Context, e ClientEvent) {
 	var rec log.Record
-	rec.SetTimestamp(time.Now())
+	rec.SetTimestamp(c.now())
 	rec.SetSeverity(log.SeverityInfo)
 	rec.SetBody(attribute.StringValue(clientEventBody))
 	rec.AddAttributes(c.attributes(e)...)

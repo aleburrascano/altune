@@ -1,11 +1,13 @@
 package httpserver_test
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/slowclienttest"
 	"bytes"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -28,7 +30,7 @@ func writeUntilError(w io.Writer, giveUp time.Duration) error {
 }
 
 func deadlineStack(h http.HandlerFunc) http.Handler {
-	return httpserver.WriteDeadline(testWriteDeadline)(httpserver.RequestLogger(h))
+	return httpserver.WriteDeadline(clock.Now, testWriteDeadline)(httpserver.RequestLogger(h))
 }
 
 func awaitWriteError(t *testing.T, errs <-chan error) {
@@ -83,7 +85,7 @@ func TestClearWriteDeadline_StreamOutlivesRouteDeadline(t *testing.T) {
 func TestExtendWriteDeadlineOnWrite_SlowButSteadyClientGetsWholeBody(t *testing.T) {
 	const size = 2 << 20
 	srv := slowclienttest.NewServer(t, deadlineStack(func(w http.ResponseWriter, _ *http.Request) {
-		ew := httpserver.ExtendWriteDeadlineOnWrite(w, time.Second)
+		ew := httpserver.ExtendWriteDeadlineOnWrite(clock.Now, w, time.Second)
 		_, _ = io.Copy(ew, io.LimitReader(zeroReader{}, size))
 	}))
 
@@ -112,7 +114,7 @@ func TestExtendWriteDeadlineOnWrite_SlowButSteadyClientGetsWholeBody(t *testing.
 func TestExtendWriteDeadlineOnWrite_CutsOffStalledClient(t *testing.T) {
 	errs := make(chan error, 1)
 	srv := slowclienttest.NewServer(t, deadlineStack(func(w http.ResponseWriter, _ *http.Request) {
-		errs <- writeUntilError(httpserver.ExtendWriteDeadlineOnWrite(w, testWriteDeadline), 2*cutoffWait)
+		errs <- writeUntilError(httpserver.ExtendWriteDeadlineOnWrite(clock.Now, w, testWriteDeadline), 2*cutoffWait)
 	}))
 
 	slowclienttest.Get(t, srv, "/", nil)
@@ -125,4 +127,22 @@ type zeroReader struct{}
 func (zeroReader) Read(p []byte) (int, error) {
 	clear(p)
 	return len(p), nil
+}
+
+func TestWriteDeadline_RefusesAMissingClock(t *testing.T) {
+	defer func() {
+		if msg, _ := recover().(string); !strings.Contains(msg, "WriteDeadline") {
+			t.Errorf("panic = %q, want a refusal naming WriteDeadline", msg)
+		}
+	}()
+	httpserver.WriteDeadline(nil, time.Second)
+}
+
+func TestExtendWriteDeadlineOnWrite_RefusesAMissingClock(t *testing.T) {
+	defer func() {
+		if msg, _ := recover().(string); !strings.Contains(msg, "ExtendWriteDeadlineOnWrite") {
+			t.Errorf("panic = %q, want a refusal naming ExtendWriteDeadlineOnWrite", msg)
+		}
+	}()
+	httpserver.ExtendWriteDeadlineOnWrite(nil, nil, time.Second)
 }

@@ -3,12 +3,15 @@ package health_test
 import (
 	"altune/go-api/internal/app/health"
 	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -25,7 +28,7 @@ func failing(msg string) func(context.Context) error {
 func TestCheck_ReportsTheRealDBError(t *testing.T) {
 	wantErr := "connection refused: pool exhausted"
 
-	got := health.Check(context.Background(), health.Probes{DB: failing(wantErr)}, time.Second)
+	got := health.Check(context.Background(), clock.Now, health.Probes{DB: failing(wantErr)}, time.Second)
 
 	if got.DB != monitoring.DepDown || got.Detail.DBError != wantErr {
 		t.Errorf("db = %q error %q, want down with %q", got.DB, got.Detail.DBError, wantErr)
@@ -43,7 +46,7 @@ func TestCheck_AHangingProbeIsCutOffAtTheTimeout(t *testing.T) {
 	done := make(chan monitoring.DependencyHealth, 1)
 
 	go func() {
-		done <- health.Check(context.Background(), health.Probes{DB: hang, Redis: hang, Auth: hang}, 50*time.Millisecond)
+		done <- health.Check(context.Background(), clock.Now, health.Probes{DB: hang, Redis: hang, Auth: hang}, 50*time.Millisecond)
 	}()
 
 	select {
@@ -69,7 +72,7 @@ func TestCheck_TheDefaultTimeoutGivesEachProbeTwoSeconds(t *testing.T) {
 			}
 		}
 
-		got := health.Check(context.Background(), health.Probes{
+		got := health.Check(context.Background(), clock.Now, health.Probes{
 			DB:    takes(2*time.Second - time.Millisecond),
 			Redis: takes(2*time.Second + time.Millisecond),
 		}, health.DefaultProbeTimeout)
@@ -81,7 +84,7 @@ func TestCheck_TheDefaultTimeoutGivesEachProbeTwoSeconds(t *testing.T) {
 }
 
 func TestCheck_HealthyProbesAreUpWithNoError(t *testing.T) {
-	got := health.Check(context.Background(), health.Probes{DB: up, Redis: up, Auth: up}, time.Second)
+	got := health.Check(context.Background(), clock.Now, health.Probes{DB: up, Redis: up, Auth: up}, time.Second)
 
 	if got.DB != monitoring.DepUp || got.Redis != monitoring.DepUp || got.Auth != monitoring.DepUp {
 		t.Errorf("statuses = %q/%q/%q, want all ok", got.DB, got.Redis, got.Auth)
@@ -92,7 +95,7 @@ func TestCheck_HealthyProbesAreUpWithNoError(t *testing.T) {
 }
 
 func TestCheck_AnAbsentProbeIsNotConfiguredAndHealthy(t *testing.T) {
-	got := health.Check(context.Background(), health.Probes{}, time.Second)
+	got := health.Check(context.Background(), clock.Now, health.Probes{}, time.Second)
 
 	if got.DB != monitoring.DepNotConfigured || got.Redis != monitoring.DepNotConfigured || got.Auth != monitoring.DepNotConfigured {
 		t.Errorf("statuses = %q/%q/%q, want all not_configured", got.DB, got.Redis, got.Auth)
@@ -103,7 +106,7 @@ func TestCheck_AnAbsentProbeIsNotConfiguredAndHealthy(t *testing.T) {
 }
 
 func TestCheck_EachDependencyReportsItsOwnFailure(t *testing.T) {
-	got := health.Check(context.Background(), health.Probes{DB: up, Redis: failing("redis refused"), Auth: failing("fetch JWKS: boom")}, time.Second)
+	got := health.Check(context.Background(), clock.Now, health.Probes{DB: up, Redis: failing("redis refused"), Auth: failing("fetch JWKS: boom")}, time.Second)
 
 	if got.DB != monitoring.DepUp || got.Redis != monitoring.DepDown || got.Auth != monitoring.DepDown {
 		t.Errorf("statuses = %q/%q/%q, want ok/down/down", got.DB, got.Redis, got.Auth)
@@ -119,7 +122,7 @@ func TestCheck_LatencyIsTheProbesOwnDuration(t *testing.T) {
 		return nil
 	}
 
-	got := health.Check(context.Background(), health.Probes{DB: slow, Redis: slow, Auth: slow}, time.Second)
+	got := health.Check(context.Background(), clock.Now, health.Probes{DB: slow, Redis: slow, Auth: slow}, time.Second)
 
 	for name, ms := range map[string]int64{"db": got.Detail.DBLatencyMs, "redis": got.Detail.RedisLatencyMs, "auth": got.Detail.AuthLatencyMs} {
 		if ms < 30 || ms > 1000 {
@@ -131,7 +134,7 @@ func TestCheck_LatencyIsTheProbesOwnDuration(t *testing.T) {
 func TestCheck_StampsTheCheckInUTC(t *testing.T) {
 	before := time.Now()
 
-	got := health.Check(context.Background(), health.Probes{}, time.Second)
+	got := health.Check(context.Background(), clock.Now, health.Probes{}, time.Second)
 
 	if got.Detail.CheckedAt.Location() != time.UTC || got.Detail.CheckedAt.Before(before.Add(-time.Second)) {
 		t.Errorf("checked at = %v, want now in UTC", got.Detail.CheckedAt)
@@ -287,5 +290,25 @@ func TestEndpoint_TheDetachedCheckKeepsTheRequestsCorrelationID(t *testing.T) {
 
 	if seen != "corr-health-1" {
 		t.Errorf("correlation id seen by the check = %q, want %q so its probes log under the request that ran them", seen, "corr-health-1")
+	}
+}
+
+func TestCheck_RefusesAMissingClock(t *testing.T) {
+	defer func() {
+		if msg, _ := recover().(string); !strings.Contains(msg, "health.Check") {
+			t.Errorf("panic = %q, want a refusal naming health.Check", msg)
+		}
+	}()
+	health.Check(context.Background(), nil, health.Probes{}, time.Second)
+}
+
+func TestCheck_StampsTheReadingWithTheGivenClock(t *testing.T) {
+	at := time.Date(2031, 4, 5, 6, 7, 8, 0, time.UTC)
+	clk := clocktest.NewManual(at)
+
+	got := health.Check(context.Background(), clk.Func(), health.Probes{DB: up}, time.Second)
+
+	if !got.Detail.CheckedAt.Equal(at) {
+		t.Errorf("CheckedAt = %v, want the injected clock's %v", got.Detail.CheckedAt, at)
 	}
 }

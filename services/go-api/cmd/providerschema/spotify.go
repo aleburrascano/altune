@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -44,7 +45,7 @@ func spotifyProvider() provider {
 		decodedAs: decodedTypes(spotifyEndpoints),
 		source: func(client *http.Client) (source, error) {
 			urls := spotifyURLs{site: spotifySiteURL, clientToken: spotifyClientTokenURL, pathfinder: spotifyPathfinderURL}
-			return newSpotifySource(client, urls), nil
+			return newSpotifySource(clock.Now, client, urls), nil
 		},
 	}
 }
@@ -60,10 +61,11 @@ type spotifySession struct {
 	urls        spotifyURLs
 	accessToken string
 	clientToken string
+	now         clock.Func
 }
 
-func newSpotifySource(client *http.Client, urls spotifyURLs) liveSource {
-	spotify := &spotifySession{client: client, urls: urls}
+func newSpotifySource(now clock.Func, client *http.Client, urls spotifyURLs) liveSource {
+	spotify := &spotifySession{client: client, urls: urls, now: now}
 	fetchers := liveSource{}
 	for entity, endpoint := range spotifyEndpoints {
 		fetchers[entity] = func(ctx context.Context, id string) (json.RawMessage, error) {

@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
 	"net/http"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -16,7 +15,7 @@ func upgradeLane(cfg *config.Config, pool *pgxpool.Pool, ledger download.TrackLe
 		return download.NoUpgradeLane()
 	}
 	store := download.NewPostgresUpgradeStore(pool)
-	inPlace, err := download.InPlaceCheckOf(svc, store, cfg.AcquisitionUpgradeVerifyPerHour, time.Now, clock.Sleep)
+	inPlace, err := download.InPlaceCheckOf(svc, store, cfg.AcquisitionUpgradeVerifyPerHour, clock.Now, clock.Sleep)
 	if err != nil {
 		panic(err)
 	}
@@ -30,6 +29,6 @@ func upgradeLane(cfg *config.Config, pool *pgxpool.Pool, ledger download.TrackLe
 
 func upgradePreviewMatcher(cfg *config.Config, transport http.RoundTripper) download.PreviewMatcher {
 	printer := download.NewFpcalcPrinter(binpath.Resolve("fpcalc", cfg.FFmpegLocation))
-	previews := download.MustNewDeezerPreview(&http.Client{Timeout: cfg.AcquisitionDeezerPreviewTimeout, Transport: transport}, download.DeezerPreviewBaseURL, printer, clock.Sleep, time.Now)
+	previews := download.MustNewDeezerPreview(&http.Client{Timeout: cfg.AcquisitionDeezerPreviewTimeout, Transport: transport}, download.DeezerPreviewBaseURL, printer, clock.Sleep, clock.Now)
 	return download.NewPreviewMatcher(previews, printer, download.DefaultMatchMaxBitErrorRate)
 }

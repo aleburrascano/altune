@@ -2,6 +2,7 @@ package requestmetrics_test
 
 import (
 	"altune/go-api/internal/platform/requestmetrics"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
@@ -18,7 +19,7 @@ import (
 )
 
 func routerRecordingWith(record func(string, time.Duration, int), status int) http.Handler {
-	return routerWith(requestmetrics.Middleware(record), status)
+	return routerWith(requestmetrics.Middleware(clock.Now, record), status)
 }
 
 func routerWith(mw func(http.Handler) http.Handler, status int) http.Handler {
@@ -91,7 +92,7 @@ func TestLatencyMiddleware_RecordsRoutePattern(t *testing.T) {
 func TestLatencyMiddleware_RecordsAnEmptyRouteOutsideARouter(t *testing.T) {
 	gotRoute := "unset"
 	rec := func(route string, _ time.Duration, _ int) { gotRoute = route }
-	h := requestmetrics.Middleware(rec)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	h := requestmetrics.Middleware(clock.Now, rec)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -130,7 +131,7 @@ func steadyStateAllocs(f func()) float64 {
 }
 
 func TestLatencyMiddleware_RecordingIntoTheRegistryAllocatesNothingBeyondWrappingTheWriter(t *testing.T) {
-	recording := routerWith(requestmetrics.Middleware(requestmetrics.NewRegistry().Observe), http.StatusOK)
+	recording := routerWith(requestmetrics.Middleware(clock.Now, requestmetrics.NewRegistry().Observe), http.StatusOK)
 	wrappingOnly := routerWith(wrapResponseWriterOnly, http.StatusOK)
 	serveTrack(recording)
 
@@ -140,4 +141,13 @@ func TestLatencyMiddleware_RecordingIntoTheRegistryAllocatesNothingBeyondWrappin
 	if withRegistry != withWrapOnly {
 		t.Fatalf("a request through the middleware recording into a registry = %v allocs, one that only wraps the writer = %v, want the same", withRegistry, withWrapOnly)
 	}
+}
+
+func TestMiddleware_RefusesAMissingClock(t *testing.T) {
+	defer func() {
+		if msg, _ := recover().(string); !strings.Contains(msg, "requestmetrics.Middleware") {
+			t.Errorf("panic = %q, want a refusal naming requestmetrics.Middleware", msg)
+		}
+	}()
+	requestmetrics.Middleware(nil, func(string, time.Duration, int) {})
 }

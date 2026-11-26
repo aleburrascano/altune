@@ -2,6 +2,7 @@ package searchqualitycheck
 
 import (
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
 	"log/slog"
@@ -35,6 +36,7 @@ type LeadershipScope = background.OnlyWhileLeader
 
 type Meter struct {
 	interval   time.Duration
+	now        clock.Func
 	runTimeout time.Duration
 	runner     Runner
 	leadership LeadershipScope
@@ -48,11 +50,15 @@ type Meter struct {
 }
 
 var (
+	ErrClockRequired      = errors.New("the eval meter requires a clock")
 	ErrRunnerRequired     = errors.New("the eval meter requires a runner")
 	ErrLeadershipRequired = errors.New("the eval meter requires a leadership scope, pass background.EveryPassLeads to run on every pass")
 )
 
-func New(interval time.Duration, runner Runner, leadership LeadershipScope) (*Meter, error) {
+func New(interval time.Duration, now clock.Func, runner Runner, leadership LeadershipScope) (*Meter, error) {
+	if now == nil {
+		return nil, ErrClockRequired
+	}
 	if runner == nil {
 		return nil, ErrRunnerRequired
 	}
@@ -64,6 +70,7 @@ func New(interval time.Duration, runner Runner, leadership LeadershipScope) (*Me
 	}
 	return &Meter{
 		interval:   interval,
+		now:        now,
 		runTimeout: defaultRunTimeout,
 		runner:     runner,
 		leadership: leadership,
@@ -120,7 +127,7 @@ func (m *Meter) recordRun(ctx context.Context, res Result, err error) {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.lastRun = time.Now().UTC()
+	m.lastRun = m.now.UTC()
 	if err != nil {
 		m.lastErr = err.Error()
 		logRunFailure(ctx, err)
