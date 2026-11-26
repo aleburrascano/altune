@@ -6,27 +6,23 @@ import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 import { usePinnedStore } from '@shared/offline';
 
-import { useSession, supabase } from '@shared/auth';
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
-
-type LooseAuth = {
-  getSession: () => Promise<unknown>;
-  onAuthStateChange: (cb: Listener) => unknown;
-};
+import { installAuthClient, useSession } from '@shared/auth';
+import { authClientOver } from '@testing/fakeAuthClient';
 
 type Listener = (event: AuthChangeEvent, session: Session | null) => void;
 
 function installAuth() {
-  const auth = supabase.auth as LooseAuth;
-  const getSession = jest.spyOn(auth, 'getSession');
-  const onAuthStateChange = jest.spyOn(auth, 'onAuthStateChange');
   let listener: Listener | null = null;
 
-  onAuthStateChange.mockImplementation((cb: Listener) => {
-    listener = cb;
-    return { data: { subscription: { unsubscribe: jest.fn() } } };
-  });
-  getSession.mockReturnValue(new Promise<never>(() => {}));
+  installAuthClient(
+    authClientOver({
+      onAuthStateChange: (cb: Listener) => {
+        listener = cb;
+        return { data: { subscription: { unsubscribe: jest.fn() } } };
+      },
+      getSession: () => new Promise<never>(() => {}),
+    }),
+  );
 
   return {
     emit(event: AuthChangeEvent, session: Session | null): void {

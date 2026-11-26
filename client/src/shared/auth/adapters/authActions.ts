@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { provideAuthSource } from '@shared/auth/ports/authSource';
+
 type Auth = SupabaseClient['auth'];
 
 type PasswordChange = { password: string };
@@ -27,10 +29,6 @@ export const supabase: { readonly auth: Auth } = {
     return authClient().auth;
   },
 };
-
-export function clearPersistedAuthSession(): Promise<void> {
-  return authClient().clearPersistedSession();
-}
 
 export function signInWithPassword(...args: Parameters<Auth['signInWithPassword']>) {
   return supabase.auth.signInWithPassword(...args);
@@ -62,3 +60,10 @@ export function authIntentClient(): Pick<
 > {
   return supabase.auth;
 }
+
+provideAuthSource({
+  getSession: () => authClient().auth.getSession(),
+  onAuthStateChange: (listener) => authClient().auth.onAuthStateChange(listener),
+  signOut: (options) => authClient().auth.signOut(options),
+  clearPersistedSession: () => authClient().clearPersistedSession(),
+});
