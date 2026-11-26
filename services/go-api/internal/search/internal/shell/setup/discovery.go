@@ -14,6 +14,8 @@ import (
 	"altune/go-api/internal/search/service/useractivity"
 	"altune/go-api/internal/search/service/vocabulary"
 	"context"
+	"errors"
+	"fmt"
 	"time"
 )
 
@@ -54,8 +56,14 @@ func New(d connections.Deps) (*Discovery, error) {
 	}
 	w := newWiring(d)
 	t, s := w.table, w.stores
-	services := newHandlerServices(w)
-	unreleasedServices := newUnreleasedServices(d, t, s, services.Artist)
+	services, err := newHandlerServices(w)
+	if err != nil {
+		return nil, err
+	}
+	unreleasedServices, err := newUnreleasedServices(d, t, s, services.Artist)
+	if err != nil {
+		return nil, err
+	}
 	return &Discovery{
 		Handler:           newHandler(d, t, s, services, unreleasedServices.lookup),
 		Search:            services.Search,
@@ -80,9 +88,13 @@ func (d *Discovery) RankingOnlySearch() *query.Service {
 	return newRankingOnlySearchService(d.wiring)
 }
 
-func newHandlerServices(w wiring) handler.DiscoveryServices {
+func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 	breaker := providerguard.NewCircuitBreaker()
 	t, s := w.table, w.stores
+	enrichment, err := newEnrichmentService(t, s, w.artwork)
+	if err != nil && !errors.Is(err, errEnrichmentSwitchedOff) {
+		return handler.DiscoveryServices{}, fmt.Errorf("build the enrichment service: %w", err)
+	}
 	return handler.DiscoveryServices{
 		Search:        newSearchService(w, breaker),
 		History:       history.NewListSearchHistoryService(s.History),
@@ -91,11 +103,11 @@ func newHandlerServices(w wiring) handler.DiscoveryServices {
 		Album:         newAlbumService(t, breaker),
 		Artist:        newArtistService(t, s, breaker, w.deps.Tracker),
 		Related:       newRelatedService(t, breaker),
-		Enrich:        newEnrichmentService(t, s, w.artwork),
+		Enrich:        enrichment,
 		Suggest:       vocabulary.NewSuggestService(s.SpellingHints),
 		Event:         newEventService(w.deps.Activity, s),
 		Favorites:     favorites.NewFavoritesService(persistence.NewPostgresFavoritesRepository(s.Pool)),
-	}
+	}, nil
 }
 
 func newEventService(activity ports.ActivityFeed, s connections.Stores) *useractivity.RecordEventService {

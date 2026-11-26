@@ -72,7 +72,7 @@ func (s *GetAlbumTracksService) lookupFeatured(ctx context.Context, track *domai
 		return s.featured.LookupTrackFeatured(ctx, trackID)
 	})
 	if err == nil && len(feats) > 0 {
-		track.PutExtra(domain.ExtraFeaturedArtists, domain.FeaturedArtistsToExtras(feats))
+		*track = track.WithExtra(domain.ExtraFeaturedArtists, domain.FeaturedArtistsToExtras(feats))
 	}
 }
 
@@ -164,7 +164,7 @@ func copyFeaturedByTitle(from, to []domain.SearchResult) (matched map[int]bool) 
 		}
 		matched[i] = true
 		if _, present := to[i].Extras[domain.ExtraFeaturedArtists]; !present && feats != nil {
-			to[i].PutExtra(domain.ExtraFeaturedArtists, feats)
+			to[i] = to[i].WithExtra(domain.ExtraFeaturedArtists, feats)
 		}
 	}
 	return matched

@@ -42,7 +42,18 @@ type Client struct {
 	oembed    *gate
 }
 
-func New(cfg Config) *Client {
+var (
+	ErrHTTPRequired    = errors.New("ytmsearch: an HTTP client is required")
+	ErrTimeoutRequired = errors.New("ytmsearch: a positive per-call timeout is required")
+)
+
+func New(cfg Config) (*Client, error) {
+	if cfg.HTTP == nil {
+		return nil, ErrHTTPRequired
+	}
+	if cfg.Timeout <= 0 {
+		return nil, ErrTimeoutRequired
+	}
 	c := &Client{
 		http:      cfg.HTTP,
 		musicURL:  cfg.MusicURL,
@@ -52,16 +63,13 @@ func New(cfg Config) *Client {
 		search:    &gate{interval: cfg.MinInterval},
 		oembed:    &gate{interval: cfg.MinInterval},
 	}
-	if c.http == nil {
-		c.http = &http.Client{}
-	}
 	if c.musicURL == "" {
 		c.musicURL = DefaultMusicURL
 	}
 	if c.oembedURL == "" {
 		c.oembedURL = DefaultOEmbedURL
 	}
-	return c
+	return c, nil
 }
 
 func (c *Client) Timeout() time.Duration { return c.timeout }
@@ -146,9 +154,6 @@ func (c *Client) do(ctx context.Context, g *gate, req *http.Request) ([]byte, er
 }
 
 func (c *Client) boundedContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	if c.timeout <= 0 {
-		return ctx, func() {}
-	}
 	return context.WithTimeout(ctx, c.timeout)
 }
 

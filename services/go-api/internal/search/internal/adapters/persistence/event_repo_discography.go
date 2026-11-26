@@ -65,7 +65,7 @@ func (r *PostgresEventStore) DiscographyQuality(ctx context.Context, since time.
 	if err != nil {
 		return nil, fmt.Errorf("collect discography cases: %w", err)
 	}
-	return albumordering.Rank(cases, groupBy), nil
+	return albumordering.Rank(cases, groupBy)
 }
 
 var discographySuspectRateSQL = fmt.Sprintf(`SELECT

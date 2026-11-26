@@ -79,7 +79,7 @@ func TestEnrichmentService_CallerSuppliedMBID_RealChainReachesCoverArtArchive(t 
 	chain := search.NewChainedArtworkLookup(caa, search.NewCoverArtArchiveIdentityResolver(caa))
 	enrichment := search.EmptyEnrichment()
 	enrichment.MBID, enrichment.Genres, enrichment.Year = "mbid-1", []string{"hip hop"}, 2017
-	svc := search.NewEnrichmentService(&callerMBIDEnricher{enrichment: enrichment}, chain, newMemEnrichmentCache())
+	svc := newService(t, &callerMBIDEnricher{enrichment: enrichment}, chain, newMemEnrichmentCache(), search.NoMBIDIndex{})
 
 	got, err := svc.Execute(context.Background(), search.ResultKindAlbum, "Some Other Album", "Other Artist", "mbid-1")
 	if err != nil {
@@ -103,7 +103,7 @@ func TestEnrichmentService_CallerSuppliedMBID_RealChainForwardsBridgedExternalID
 	enrichment := search.EmptyEnrichment()
 	enrichment.MBID = "mbid-artist-1"
 	enrichment.ExternalIDs = map[search.ProviderKey]string{"discogs": "38"}
-	svc := search.NewEnrichmentService(&callerMBIDEnricher{enrichment: enrichment}, chain, newMemEnrichmentCache())
+	svc := newService(t, &callerMBIDEnricher{enrichment: enrichment}, chain, newMemEnrichmentCache(), search.NoMBIDIndex{})
 
 	got, err := svc.Execute(context.Background(), search.ResultKindArtist, "Some Other Artist Name", "", "mbid-artist-1")
 	if err != nil {

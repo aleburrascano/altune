@@ -81,6 +81,8 @@ func (t liveTrack) evidenceSourceTitle() string {
 	return t.Evidence.SourceTitle
 }
 
+var errLiveTimeoutNotPositive = errors.New("the per-call timeout must be positive")
+
 func liveConfigFromEnv(getenv func(string) string) (download.YouTubeMusicSearchConfig, error) {
 	interval, err := durationFromEnv(getenv, liveIntervalEnv, defaultLiveInterval)
 	if err != nil {
@@ -89,6 +91,9 @@ func liveConfigFromEnv(getenv func(string) string) (download.YouTubeMusicSearchC
 	timeout, err := durationFromEnv(getenv, liveTimeoutEnv, defaultLiveTimeout)
 	if err != nil {
 		return download.YouTubeMusicSearchConfig{}, err
+	}
+	if timeout <= 0 {
+		return download.YouTubeMusicSearchConfig{}, fmt.Errorf("%s: %w, got %v", liveTimeoutEnv, errLiveTimeoutNotPositive, timeout)
 	}
 	return download.YouTubeMusicSearchConfig{MinInterval: interval, Timeout: timeout}, nil
 }
@@ -117,7 +122,12 @@ func runLiveCommand(args []string, stdout io.Writer, getenv func(string) string)
 		return liveUsageExitCode
 	}
 	cfg.HTTP = budgeted
-	return runLive(args, stdout, download.NewYtmSearch(cfg))
+	client, err := download.NewYtmSearch(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "acquisitioneval: live: %v\n", err)
+		return liveUsageExitCode
+	}
+	return runLive(args, stdout, client)
 }
 
 func budgetedClient(ctx context.Context, getenv func(string) string, out io.Writer) (*http.Client, error) {

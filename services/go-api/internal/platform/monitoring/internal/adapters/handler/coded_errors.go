@@ -10,6 +10,10 @@ var (
 	errStreamingUnsupported      = apierror.NewError(apierror.CodeObserveStreamingUnsupported, "streaming unsupported")
 )
 
+func invalidGroupBy(cause error) error {
+	return apierror.NewError(apierror.CodeObserveInvalidGroupBy, cause.Error())
+}
+
 func streamUnavailable(stream string) error {
 	return apierror.NewError(apierror.CodeObserveStreamUnavailable, stream+" stream unavailable")
 }

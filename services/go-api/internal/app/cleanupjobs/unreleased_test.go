@@ -3,6 +3,7 @@ package cleanupjobs_test
 import (
 	"altune/go-api/internal/app/cleanupjobs"
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/searchtest"
 	"context"
 	"slices"
 	"testing"
@@ -21,7 +22,7 @@ func (l *limitRecordingStore) Due(_ context.Context, _ time.Time, limit int) ([]
 
 func TestRefreshDueUnreleased_EachRunAsksTheStoreForAtMostTwoArtists(t *testing.T) {
 	store := &limitRecordingStore{}
-	svc := search.NewUnreleasedService(nil, nil, nil, search.UnreleasedConfig{}, search.WithUnreleasedStore(store))
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, search.UnreleasedConfig{}, search.WithUnreleasedStore(store)))
 	if err := cleanupjobs.RefreshDueUnreleased(svc)(context.Background()); err != nil {
 		t.Fatalf("run: %v", err)
 	}

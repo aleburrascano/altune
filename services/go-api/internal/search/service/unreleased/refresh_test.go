@@ -2,6 +2,7 @@ package unreleased_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
 	"slices"
@@ -42,7 +43,7 @@ func dueArtist(id, name string) search.UnreleasedDueArtist {
 
 func refreshService(genius search.GeniusSongCatalog, store *dueStore) *search.UnreleasedService {
 	cfg := search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2, Wait: time.Second}
-	return search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{}, nil, cfg, search.WithUnreleasedStore(store))
+	return searchtest.MustUnreleased(search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, cfg, search.WithUnreleasedStore(store)))
 }
 
 func TestService_RefreshDue_RebuildsExactlyTheArtistsDueReturns(t *testing.T) {

@@ -122,7 +122,7 @@ func markSpotifyTopPick(results []domain.SearchResult, uri string) bool {
 	id := spotifyIDFromURI(uri)
 	for i := range results {
 		if results[i].Kind == kind && results[i].Sources[0].ExternalID == id {
-			results[i].Extras[domain.ExtraTopPick] = true
+			results[i] = results[i].WithExtra(domain.ExtraTopPick, true)
 			return true
 		}
 	}

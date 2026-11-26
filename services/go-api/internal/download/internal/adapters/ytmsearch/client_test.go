@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -54,7 +55,30 @@ func fixtureServer(t *testing.T, requests *[]recordedRequest) *httptest.Server {
 }
 
 func clientFor(srv *httptest.Server, interval, timeout time.Duration) *download.YouTubeMusicSearchClient {
-	return download.NewYtmSearch(download.YouTubeMusicSearchConfig{MusicURL: srv.URL, OEmbedURL: srv.URL + "/oembed", MinInterval: interval, Timeout: timeout})
+	client, err := download.NewYtmSearch(download.YouTubeMusicSearchConfig{HTTP: &http.Client{}, MusicURL: srv.URL, OEmbedURL: srv.URL + "/oembed", MinInterval: interval, Timeout: timeout})
+	if err != nil {
+		panic(fmt.Sprintf("clientFor: a valid test config was refused: %v", err))
+	}
+	return client
+}
+
+func TestNewYtmSearch_RefusesWithoutAnHTTPClientOrATimeout(t *testing.T) {
+	tests := map[string]struct {
+		cfg  download.YouTubeMusicSearchConfig
+		want error
+	}{
+		"no HTTP client": {download.YouTubeMusicSearchConfig{Timeout: time.Second}, download.ErrYtmSearchHTTPRequired},
+		"no timeout":     {download.YouTubeMusicSearchConfig{HTTP: &http.Client{}}, download.ErrYtmSearchTimeoutRequired},
+		"negative":       {download.YouTubeMusicSearchConfig{HTTP: &http.Client{}, Timeout: -time.Second}, download.ErrYtmSearchTimeoutRequired},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			client, err := download.NewYtmSearch(tt.cfg)
+			if !errors.Is(err, tt.want) || client != nil {
+				t.Errorf("NewYtmSearch = (%v, %v), want (nil, %v)", client, err, tt.want)
+			}
+		})
+	}
 }
 
 func TestClientWatch_PostsTheWebRemixNextRequestAndParsesIt(t *testing.T) {
@@ -399,13 +423,16 @@ func TestClient_WaitsForASharedBudgetSlotBeyondTheTimeout(t *testing.T) {
 
 	var requests []recordedRequest
 	srv := fixtureServer(t, &requests)
-	client := download.NewYtmSearch(download.YouTubeMusicSearchConfig{
+	client, err := download.NewYtmSearch(download.YouTubeMusicSearchConfig{
 		HTTP:        &http.Client{Transport: budget.Transport(nil)},
 		MusicURL:    srv.URL,
 		OEmbedURL:   srv.URL + "/oembed",
 		MinInterval: time.Millisecond,
 		Timeout:     timeout,
 	})
+	if err != nil {
+		t.Fatalf("build the client: %v", err)
+	}
 
 	if _, err := client.SearchSongs(context.Background(), "waits for the shared budget"); err != nil {
 		if errors.Is(err, youtubemusicapi.ErrBudgetRefused) {

@@ -13,6 +13,7 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/background"
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 )
@@ -94,14 +95,21 @@ func (a *App) wireAudioSources(
 		return audioSourcesStaging{}, err
 	}
 	trackRepo := library.NewPostgresTrackRepository(a.pool)
-	sources, tools := a.liveTiers(ctx, audioStore)
+	sources, tools, err := a.liveTiers(ctx, audioStore)
+	if err != nil {
+		return audioSourcesStaging{}, err
+	}
+	ytmCanary, err := downloadsetup.CanaryYTMClient(a.cfg, a.redisClient)
+	if err != nil {
+		return audioSourcesStaging{}, fmt.Errorf("build the ytmusic canary client: %w", err)
+	}
 	staging := audioSourcesStaging{
 		audioStore:     audioStore,
 		trackRepo:      trackRepo,
 		ledger:         downloadfromlibrary.NewLibraryTracks(trackRepo),
 		ytDlpSearcher:  downloadsetup.YtDlpSearcher(a.cfg),
 		ytDlpAvailable: tools.YtDlp,
-		ytmCanary:      downloadsetup.CanaryYTMClient(a.cfg, a.redisClient),
+		ytmCanary:      ytmCanary,
 	}
 	if len(sources.All()) > 0 && audioStore != nil {
 		staging.background = downloadsetup.NewScheduler(ctx, a.schedulerDeps(tap, disc, staging, sources, tools))
@@ -110,9 +118,9 @@ func (a *App) wireAudioSources(
 	return staging, nil
 }
 
-func (a *App) liveTiers(ctx context.Context, audioStore library.AudioStore) (downloadsetup.SourceOrder, download.Verification) {
+func (a *App) liveTiers(ctx context.Context, audioStore library.AudioStore) (downloadsetup.SourceOrder, download.Verification, error) {
 	if audioStore == nil {
-		return downloadsetup.SourceOrder{}, download.Verification{}
+		return downloadsetup.SourceOrder{}, download.Verification{}, nil
 	}
 	return downloadsetup.EnabledSources(ctx, a.cfg, a.redisClient)
 }

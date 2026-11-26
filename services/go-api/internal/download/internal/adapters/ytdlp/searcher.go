@@ -5,6 +5,8 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/childprocess"
+	"altune/go-api/internal/shared/expiringcache"
+	"altune/go-api/internal/shared/parallel"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"encoding/json"
@@ -18,8 +20,6 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-
-	"golang.org/x/sync/errgroup"
 
 	sharedytdlp "altune/go-api/internal/shared/ytdlprunner"
 )
@@ -49,7 +49,8 @@ type YouTubeAudioSearcher struct {
 	jsRuntime        string
 	remoteComponents string
 	potURL           string
-	inspections      *inspectionCache
+	inspections      *expiringcache.Memo[string, inspection]
+	inspectionNow    func() time.Time
 	searchTimeout    time.Duration
 	downloadTimeout  time.Duration
 	previewTimeout   time.Duration
@@ -89,23 +90,25 @@ func (s *YouTubeAudioSearcher) WithCanaryTimeout(timeout time.Duration) *YouTube
 
 func (s *YouTubeAudioSearcher) WithInspectionClock(now func() time.Time) *YouTubeAudioSearcher {
 	if now != nil {
-		s.inspections.now = now
+		s.inspectionNow = now
 	}
 	return s
 }
 
 func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string) *YouTubeAudioSearcher {
-	return &YouTubeAudioSearcher{
+	s := &YouTubeAudioSearcher{
 		ffmpegLocation:   ffmpegLocation,
 		cookieFile:       cookieFile,
 		jsRuntime:        jsRuntime,
 		remoteComponents: defaultRemoteComponents,
+		inspectionNow:    time.Now,
 		searchTimeout:    searchTimeout,
 		downloadTimeout:  downloadTimeout,
 		previewTimeout:   previewTimeout,
 		canaryTimeout:    canaryTimeout,
-		inspections:      newInspectionCache(),
 	}
+	s.inspections = expiringcache.New[string, inspection](inspectCacheTTL, inspectCacheMax, func() time.Time { return s.inspectionNow() })
+	return s
 }
 
 const maxEmbeddedStderrBytes = 2048
@@ -135,6 +138,8 @@ func (s *YouTubeAudioSearcher) classifiedFailure(err error, stderr string, timed
 	return &acqdomain.SourceUnavailableError{Source: SourceName, Err: err}
 }
 
+var errSearchPanicked = errors.New("yt-dlp search panicked")
+
 type pairOutcome struct {
 	candidates []ports.AudioCandidate
 	err        error
@@ -146,16 +151,15 @@ func (s *YouTubeAudioSearcher) runSearchPairs(ctx context.Context, queries []str
 		outcomes[qi] = make([]pairOutcome, len(searchEngines))
 	}
 
-	g := new(errgroup.Group)
-	g.SetLimit(maxConcurrentSearches)
+	g := parallel.New("acquisition.engine_search_panic", maxConcurrentSearches)
 	for qi, query := range queries {
 		for ei, engine := range searchEngines {
 			spec := engine + query
-			g.Go(func() error {
+			outcomes[qi][ei] = pairOutcome{err: errSearchPanicked}
+			g.Go(ctx, func() {
 				candidates, err := s.runYtDlpSearch(ctx, spec)
 				outcomes[qi][ei] = pairOutcome{candidates: candidates, err: err}
-				return nil
-			})
+			}, "spec", spec)
 		}
 	}
 	_ = g.Wait()

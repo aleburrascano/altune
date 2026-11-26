@@ -8,6 +8,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
@@ -41,7 +42,45 @@ type Service struct {
 	inflight  map[string]*job
 }
 
-func NewService(genius ports.GeniusSongCatalog, catalog ports.ArtistCatalogTitles, cache ports.UnreleasedCache, cfg Config, opts ...Option) *Service {
+var (
+	ErrCollaboratorRequired = errors.New("unreleased service needs every collaborator, pass the null object to switch one off")
+	ErrSourceNotConfigured  = errors.New("unreleased source not configured")
+)
+
+type NoCache struct{}
+
+func (NoCache) Get(context.Context, domain.ProviderName, string, string) ([]domain.UnreleasedSong, bool) {
+	return nil, false
+}
+
+func (NoCache) Set(context.Context, domain.ProviderName, string, string, []domain.UnreleasedSong, time.Duration) error {
+	return nil
+}
+
+type NoGenius struct{}
+
+func (NoGenius) FindArtistID(context.Context, string, []string) (int, bool, error) {
+	return 0, false, ErrSourceNotConfigured
+}
+
+func (NoGenius) ArtistSongs(context.Context, int, int) ([]domain.UnreleasedSong, error) {
+	return nil, ErrSourceNotConfigured
+}
+
+func (NoGenius) SongDetail(context.Context, int) (domain.GeniusSongDetail, error) {
+	return domain.GeniusSongDetail{}, ErrSourceNotConfigured
+}
+
+func NewService(genius ports.GeniusSongCatalog, catalog ports.ArtistCatalogTitles, cache ports.UnreleasedCache, cfg Config, opts ...Option) (*Service, error) {
+	for name, missing := range map[string]bool{
+		"genius":  genius == nil,
+		"catalog": catalog == nil,
+		"cache":   cache == nil,
+	} {
+		if missing {
+			return nil, fmt.Errorf("%w: %s is nil", ErrCollaboratorRequired, name)
+		}
+	}
 	s := &Service{
 		genius:    genius,
 		catalog:   catalog,
@@ -54,7 +93,7 @@ func NewService(genius ports.GeniusSongCatalog, catalog ports.ArtistCatalogTitle
 	for _, opt := range opts {
 		opt(s)
 	}
-	return s
+	return s, nil
 }
 
 func WithStore(store ports.UnreleasedStore) Option {
@@ -84,19 +123,15 @@ func (s *Service) List(ctx context.Context, provider domain.ProviderName, extern
 		return s.Rebuild(ctx, ports.UnreleasedArtistKey{Provider: provider, ExternalID: externalID}, artistName, known)
 	}
 	nameKey := textnorm.NormalizeForIdentity(artistName)
-	if s.cache != nil {
-		if songs, ok := s.cache.Get(ctx, provider, externalID, nameKey); ok {
-			return songs, nil
-		}
+	if songs, ok := s.cache.Get(ctx, provider, externalID, nameKey); ok {
+		return songs, nil
 	}
 	songs, complete, err := s.build(ctx, provider, externalID, artistName, known)
 	if err != nil {
 		return nil, err
 	}
-	if s.cache != nil {
-		if err := s.cache.Set(ctx, provider, externalID, nameKey, songs, s.cacheTTL(songs, complete)); err != nil {
-			slog.WarnContext(ctx, "unreleased.cache_set_failed", "error", err)
-		}
+	if err := s.cache.Set(ctx, provider, externalID, nameKey, songs, s.cacheTTL(songs, complete)); err != nil {
+		slog.WarnContext(ctx, "unreleased.cache_set_failed", "error", err)
 	}
 	return songs, nil
 }

@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/searchtest"
 	"encoding/json"
 	"errors"
 	"maps"
@@ -16,7 +17,7 @@ import (
 )
 
 func unreleasedRouter(genius *search.FakeGeniusSongCatalog, catalog []string) chi.Router {
-	svc := search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{Titles: catalog}, nil, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10})
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{Titles: catalog}, search.NoUnreleasedCache{}, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10}))
 	h := search.NewDiscoveryHandler(search.DiscoveryServices{}).WithUnreleased(svc)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
@@ -109,7 +110,7 @@ func TestHandleArtistUnreleased_UpstreamFailureIsAnError(t *testing.T) {
 
 func TestHandleArtistUnreleased_SlowJobAnswersPendingWithNoItems(t *testing.T) {
 	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: []search.UnreleasedSong{{GeniusID: 1, Title: "Leak"}}, Gate: make(chan struct{})}
-	svc := search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{}, nil, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, Wait: 10 * time.Millisecond})
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, Wait: 10 * time.Millisecond}))
 	h := search.NewDiscoveryHandler(search.DiscoveryServices{}).WithUnreleased(svc)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
@@ -170,7 +171,7 @@ func ownedUnreleasedRouter(t *testing.T, reader goldenOwnershipReader) chi.Route
 			{GeniusID: 2, Title: "Loot", GeniusURL: "https://genius.com/l"},
 		},
 	}
-	svc := search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{}, nil, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10})
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10}))
 	h := wireGoldenOwnership(t, search.NewDiscoveryHandler(search.DiscoveryServices{}).WithUnreleased(svc), reader, nil)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
@@ -211,7 +212,7 @@ func TestHandleArtistUnreleased_TrackerOnlyItemHasNullGeniusFieldsOnTheWire(t *t
 		Title: "Dream [V2]", Quality: "High Quality", TrackerKey: "ken-carson:dream-v2", HasMedia: new(true), OffStreaming: true,
 		AudioLinks: []search.AudioLink{{Provider: "pixeldrain", ExternalID: "ozSpSjn7", URL: "https://pixeldrain.com/u/ozSpSjn7"}},
 	}}}
-	svc := search.NewUnreleasedService(nil, &search.ArtistCatalogTitles{}, nil, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10}, search.WithUnreleasedTrackers(trackers))
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10}, search.WithUnreleasedTrackers(trackers)))
 	h := search.NewDiscoveryHandler(search.DiscoveryServices{}).WithUnreleased(svc)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
@@ -280,7 +281,7 @@ func TestHandleArtistUnreleased_StoreBuiltArtistAnswersFromTheStoreWithNoGeniusC
 		Songs: []search.UnreleasedSong{{GeniusID: 1, Title: "A"}, {GeniusID: 2, Title: "B"}, {GeniusID: 3, Title: "C"}},
 	}}}
 	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: []search.UnreleasedSong{{GeniusID: 9, Title: "Other"}}}
-	svc := search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{}, nil, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10}, search.WithUnreleasedStore(store))
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10}, search.WithUnreleasedStore(store)))
 	h := search.NewDiscoveryHandler(search.DiscoveryServices{}).WithUnreleased(svc)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
@@ -311,7 +312,7 @@ func TestHandleArtistUnreleased_OwnedVersionIsStampedByItsFullTitleNotTheBaseTit
 		},
 		DetailByID: map[int]search.GeniusSongDetail{1: {AudioLinks: link}},
 	}
-	svc := search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{}, nil, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10})
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10}))
 	owned := goldenOwnershipReader{owned: map[string]search.OwnedTrack{
 		search.OwnershipKey("Sports Car [V3]", "Carti"): {TrackID: "saved-v3", AcquisitionStatus: "ready"},
 		search.OwnershipKey("Other", "Carti"):           {TrackID: "streaming-other", AcquisitionStatus: "ready"},
@@ -376,7 +377,7 @@ func TestHandleArtistUnreleased_BestVersionTitleIsTheServersPickedVersion(t *tes
 }
 
 func unreleasedSearchRouter(store *search.FakeUnreleasedStore) chi.Router {
-	svc := search.NewUnreleasedService(&search.FakeGeniusSongCatalog{}, &search.ArtistCatalogTitles{}, nil, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10}, search.WithUnreleasedStore(store))
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(&search.FakeGeniusSongCatalog{}, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10}, search.WithUnreleasedStore(store)))
 	h := search.NewDiscoveryHandler(search.DiscoveryServices{}).WithUnreleased(svc)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
@@ -455,7 +456,7 @@ func TestArtistUnreleased_KnownIDsKeepValidEntriesAndSkipTheRest(t *testing.T) {
 				key: {Built: true, BuildVersion: search.UnreleasedCurrentBuildVersion},
 			},
 		}}
-		svc := search.NewUnreleasedService(nil, &search.ArtistCatalogTitles{}, nil, search.UnreleasedConfig{}, search.WithUnreleasedStore(store))
+		svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, search.UnreleasedConfig{}, search.WithUnreleasedStore(store)))
 		r := chi.NewRouter()
 		r.Use(discAsTestUser)
 		r.Mount("/discovery", search.NewDiscoveryHandler(search.DiscoveryServices{}).WithUnreleased(svc).Routes())

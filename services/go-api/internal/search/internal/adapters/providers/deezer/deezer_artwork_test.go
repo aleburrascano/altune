@@ -47,6 +47,25 @@ func TestDeezerAdapter_Resolve_Hit(t *testing.T) {
 	}
 }
 
+func TestDeezerAdapter_Resolve_ItsOwnPlaceholderImageIsAMiss(t *testing.T) {
+	for _, placeholder := range []string{
+		"https://e-cdns-images.dzcdn.net/images/artist//500x500-000000-80-0-0.jpg",
+		"https://e-cdns-images.dzcdn.net/images/artist/d41d8cd98f00b204e9800998ecf8427e/500x500.jpg",
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"data":[{"id":1,"picture_xl":"` + placeholder + `"}]}`))
+		}))
+
+		art, err := search.NewDeezerAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindArtist, "Che", "", "")
+
+		server.Close()
+		if art != "" || err != nil {
+			t.Errorf("Resolve on the placeholder %q = (%q, %v), want (\"\", nil) so the chain moves to the next source", placeholder, art, err)
+		}
+	}
+}
+
 func TestDeezerAdapter_Resolve_RateLimitIsArtworkUnavailable(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)

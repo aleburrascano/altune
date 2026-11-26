@@ -72,13 +72,6 @@ func (r SearchResult) HasEntityMBID() bool {
 	return r.RecordingMBID != "" || r.ReleaseMBID != "" || r.ReleaseGroupMBID != "" || r.ArtistMBID != ""
 }
 
-func (r *SearchResult) PutExtra(key string, value any) {
-	if r.Extras == nil {
-		r.Extras = map[string]any{}
-	}
-	r.Extras[key] = value
-}
-
 func (r SearchResult) WithExtra(key string, value any) SearchResult {
 	r.Extras = copyExtras(r.Extras)
 	r.Extras[key] = value

@@ -2,6 +2,8 @@ package ports
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 )
 
@@ -13,14 +15,14 @@ const (
 	GroupByContaminationBand DiscographyGroupBy = "contamination_band"
 )
 
-func ParseDiscographyGroupBy(raw string) DiscographyGroupBy {
-	switch DiscographyGroupBy(raw) {
-	case GroupByProvider:
-		return GroupByProvider
-	case GroupByContaminationBand:
-		return GroupByContaminationBand
+var ErrUnknownDiscographyGroupBy = errors.New("unknown discography grouping")
+
+func ParseDiscographyGroupBy(raw string) (DiscographyGroupBy, error) {
+	switch groupBy := DiscographyGroupBy(raw); groupBy {
+	case GroupByArtist, GroupByProvider, GroupByContaminationBand:
+		return groupBy, nil
 	default:
-		return GroupByArtist
+		return "", fmt.Errorf("%w: %q", ErrUnknownDiscographyGroupBy, raw)
 	}
 }
 

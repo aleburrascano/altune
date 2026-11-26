@@ -3,6 +3,7 @@ package albumordering
 import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"cmp"
+	"fmt"
 	"maps"
 	"math"
 	"slices"
@@ -10,16 +11,20 @@ import (
 	"strings"
 )
 
-func Rank(cases []ports.DiscographyCase, groupBy ports.DiscographyGroupBy) []ports.DiscographyCase {
+func Rank(cases []ports.DiscographyCase, groupBy ports.DiscographyGroupBy) ([]ports.DiscographyCase, error) {
 	switch groupBy {
 	case ports.GroupByProvider:
-		return clusterByProvider(cases)
+		return clusterByProvider(cases), nil
 	case ports.GroupByContaminationBand:
-		sort.SliceStable(cases, func(i, j int) bool { return bandThenWorse(cases[i], cases[j]) })
-		return cases
+		ranked := slices.Clone(cases)
+		sort.SliceStable(ranked, func(i, j int) bool { return bandThenWorse(ranked[i], ranked[j]) })
+		return ranked, nil
+	case ports.GroupByArtist:
+		ranked := slices.Clone(cases)
+		sort.SliceStable(ranked, func(i, j int) bool { return worseThan(ranked[i], ranked[j]) })
+		return ranked, nil
 	default:
-		sort.SliceStable(cases, func(i, j int) bool { return worseThan(cases[i], cases[j]) })
-		return cases
+		return nil, fmt.Errorf("%w: %q", ports.ErrUnknownDiscographyGroupBy, groupBy)
 	}
 }
 

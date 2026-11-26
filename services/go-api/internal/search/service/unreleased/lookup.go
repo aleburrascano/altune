@@ -45,10 +45,8 @@ func (s *Service) Lookup(ctx context.Context, provider domain.ProviderName, exte
 		return s.lookupStored(ctx, provider, externalID, artistName, known)
 	}
 	nameKey := textnorm.NormalizeForIdentity(artistName)
-	if s.cache != nil {
-		if songs, ok := s.cache.Get(ctx, provider, externalID, nameKey); ok {
-			return Lookup{Songs: songs}, nil
-		}
+	if songs, ok := s.cache.Get(ctx, provider, externalID, nameKey); ok {
+		return Lookup{Songs: songs}, nil
 	}
 	j := s.joinJob(fmt.Sprintf("%s:%s:%s", provider.Key(), externalID, nameKey), func(jobCtx context.Context) ([]domain.UnreleasedSong, error) {
 		return s.List(jobCtx, provider, externalID, artistName, known)

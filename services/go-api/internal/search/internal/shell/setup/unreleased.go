@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/service/artistpage"
 	"altune/go-api/internal/search/service/unreleased"
+	"fmt"
 )
 
 type unreleasedServices struct {
@@ -14,20 +15,30 @@ type unreleasedServices struct {
 	refresh *unreleased.Service
 }
 
-func newUnreleasedServices(d connections.Deps, t *providerTable, s connections.Stores, artists *artistpage.GetArtistContentService) unreleasedServices {
+func newUnreleasedServices(d connections.Deps, t *providerTable, s connections.Stores, artists *artistpage.GetArtistContentService) (unreleasedServices, error) {
 	songs, lists := t.named(rowGenius).unreleasedSongs, t.named(rowTrackers).unreleasedLists
 	if songs == nil && lists == nil {
-		return unreleasedServices{}
+		return unreleasedServices{}, nil
+	}
+	var genius ports.GeniusSongCatalog = unreleased.NoGenius{}
+	if songs != nil {
+		genius = songs
 	}
 	opts := []unreleased.Option{unreleased.WithLifecycle(d.Lifecycle, d.Background), unreleased.WithTrackers(lists)}
 	store := unreleasedStore(d, s)
 	if store == nil {
-		lookup := unreleased.NewService(songs, artists, cache.NewRedisUnreleasedCache(s.Redis, s.CacheOption()), d.Unreleased.Tuning, opts...)
-		return unreleasedServices{lookup: lookup}
+		lookup, err := unreleased.NewService(genius, artists, cache.NewRedisUnreleasedCache(s.Redis, s.CacheOption()), d.Unreleased.Tuning, opts...)
+		if err != nil {
+			return unreleasedServices{}, fmt.Errorf("build the unreleased service: %w", err)
+		}
+		return unreleasedServices{lookup: lookup}, nil
 	}
 	opts = append(opts, unreleased.WithStore(store))
-	lookup := unreleased.NewService(songs, artists, nil, d.Unreleased.Tuning, opts...)
-	return unreleasedServices{lookup: lookup, refresh: lookup}
+	lookup, err := unreleased.NewService(genius, artists, unreleased.NoCache{}, d.Unreleased.Tuning, opts...)
+	if err != nil {
+		return unreleasedServices{}, fmt.Errorf("build the unreleased service: %w", err)
+	}
+	return unreleasedServices{lookup: lookup, refresh: lookup}, nil
 }
 
 func unreleasedStore(d connections.Deps, s connections.Stores) ports.UnreleasedStore {

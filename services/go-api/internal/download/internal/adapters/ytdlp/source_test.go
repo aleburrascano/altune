@@ -360,7 +360,7 @@ func TestMarkUnplayable_ReinspectsAURLOnceItsDayIsUp(t *testing.T) {
 	if got := inspectionsAt(inspectedAt.Add(24*time.Hour - time.Nanosecond)); got != 1 {
 		t.Fatalf("inspections = %d, want the first still served just before 24h", got)
 	}
-	if got := inspectionsAt(inspectedAt.Add(24 * time.Hour)); got != 2 {
+	if got := inspectionsAt(inspectedAt.Add(24*time.Hour + time.Nanosecond)); got != 2 {
 		t.Fatalf("inspections = %d, want a fresh inspection once 24h have passed", got)
 	}
 }

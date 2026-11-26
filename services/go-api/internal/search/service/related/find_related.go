@@ -2,10 +2,10 @@ package related
 
 import (
 	"altune/go-api/internal/search/domain"
-	"altune/go-api/internal/search/internal/core/expiringcache"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/service/providerguard"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/expiringcache"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/parallel"
 	"altune/go-api/internal/shared/songfields"

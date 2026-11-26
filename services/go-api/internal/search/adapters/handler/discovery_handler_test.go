@@ -624,6 +624,13 @@ func (f *fakeMetadataEnricher) Lookup(_ context.Context, _ search.ResultKind, _ 
 	return f.enrichment, nil
 }
 
+func mustEnrichment(svc *search.DetailsService, err error) *search.DetailsService {
+	if err != nil {
+		panic(err)
+	}
+	return svc
+}
+
 func buildEnrichmentRouter(svc *search.DetailsService) chi.Router {
 	h := search.NewDiscoveryHandler(search.DiscoveryServices{Enrich: svc})
 	r := chi.NewRouter()
@@ -644,7 +651,7 @@ func sampleAlbumEnrichment() search.MusicBrainzEnrichment {
 
 func TestHandleEnrichment(t *testing.T) {
 	t.Run("valid request returns enrichment DTO", func(t *testing.T) {
-		svc := search.NewEnrichmentService(&fakeMetadataEnricher{enrichment: sampleAlbumEnrichment()}, nil, nil)
+		svc := mustEnrichment(search.NewEnrichmentService(&fakeMetadataEnricher{enrichment: sampleAlbumEnrichment()}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{}))
 		router := buildEnrichmentRouter(svc)
 
 		rec := discServe(t, router, http.MethodGet,
@@ -666,19 +673,19 @@ func TestHandleEnrichment(t *testing.T) {
 	})
 
 	t.Run("missing kind returns 400", func(t *testing.T) {
-		router := buildEnrichmentRouter(search.NewEnrichmentService(&fakeMetadataEnricher{}, nil, nil))
+		router := buildEnrichmentRouter(mustEnrichment(search.NewEnrichmentService(&fakeMetadataEnricher{}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{})))
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?title=DAMN.", nil)
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})
 
 	t.Run("unknown kind returns 400", func(t *testing.T) {
-		router := buildEnrichmentRouter(search.NewEnrichmentService(&fakeMetadataEnricher{}, nil, nil))
+		router := buildEnrichmentRouter(mustEnrichment(search.NewEnrichmentService(&fakeMetadataEnricher{}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{})))
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?kind=playlistx&title=X", nil)
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})
 
 	t.Run("blank title and no mbid returns 400", func(t *testing.T) {
-		router := buildEnrichmentRouter(search.NewEnrichmentService(&fakeMetadataEnricher{}, nil, nil))
+		router := buildEnrichmentRouter(mustEnrichment(search.NewEnrichmentService(&fakeMetadataEnricher{}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{})))
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?kind=album", nil)
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})

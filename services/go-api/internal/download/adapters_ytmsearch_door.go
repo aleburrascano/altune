@@ -20,7 +20,11 @@ var (
 	SameTitle          = ytmsearch.SameTitle
 )
 
-var ErrNoWatchTrack = ytmsearch.ErrNoWatchTrack
+var (
+	ErrNoWatchTrack             = ytmsearch.ErrNoWatchTrack
+	ErrYtmSearchHTTPRequired    = ytmsearch.ErrHTTPRequired
+	ErrYtmSearchTimeoutRequired = ytmsearch.ErrTimeoutRequired
+)
 
 const (
 	YouTubeMusicSearchSourceName = ytmsearch.SourceName

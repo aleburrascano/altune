@@ -2,65 +2,17 @@ package service_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 )
-
-type cooldownStore struct {
-	mu         sync.Mutex
-	now        func() time.Time
-	lastAt     map[string]time.Time
-	reserveErr error
-	releaseErr error
-	released   int
-}
-
-func newCooldownStore() *cooldownStore {
-	return &cooldownStore{now: time.Now, lastAt: make(map[string]time.Time)}
-}
-
-func cooldownKey(trackID ids.TrackId, kind download.CooldownKind) string {
-	return string(kind) + "/" + trackID.String()
-}
-
-func (s *cooldownStore) Reserve(_ context.Context, trackID ids.TrackId, kind download.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.reserveErr != nil {
-		return time.Time{}, false, 0, s.reserveErr
-	}
-	now, key := s.now(), cooldownKey(trackID, kind)
-	if last, ok := s.lastAt[key]; ok && now.Sub(last) < cooldown {
-		return time.Time{}, false, cooldown - now.Sub(last), nil
-	}
-	s.lastAt[key] = now
-	return now, true, 0, nil
-}
-
-func (s *cooldownStore) Release(ctx context.Context, trackID ids.TrackId, kind download.CooldownKind, at time.Time) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.released++
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if s.releaseErr != nil {
-		return s.releaseErr
-	}
-	key := cooldownKey(trackID, kind)
-	if last, ok := s.lastAt[key]; ok && last.Equal(at) {
-		delete(s.lastAt, key)
-	}
-	return nil
-}
 
 func blindingLights() *download.TrackSnapshot {
 	return &download.TrackSnapshot{
@@ -106,7 +58,7 @@ func (s *scheduleSpy) schedule() error {
 func TestRetryAdmission_AdmitsTheFirstRetryOfAFailedTrack(t *testing.T) {
 	spy := &scheduleSpy{}
 
-	err := download.NewRetryAdmission(newCooldownStore()).Admit(context.Background(), failedTrack(), spy.schedule)
+	err := download.NewRetryAdmission(acquisitiontest.NewCooldownStore()).Admit(context.Background(), failedTrack(), spy.schedule)
 
 	if err != nil || spy.calls != 1 {
 		t.Fatalf("Admit = %v with %d schedules, want nil and one schedule", err, spy.calls)
@@ -114,7 +66,7 @@ func TestRetryAdmission_AdmitsTheFirstRetryOfAFailedTrack(t *testing.T) {
 }
 
 func TestRetryAdmission_RefusesASecondRetryInsideTheCooldownWithoutScheduling(t *testing.T) {
-	admission := download.NewRetryAdmission(newCooldownStore())
+	admission := download.NewRetryAdmission(acquisitiontest.NewCooldownStore())
 	track := failedTrack()
 	if err := admission.Admit(context.Background(), track, scheduleQueued); err != nil {
 		t.Fatalf("first Admit = %v, want nil", err)
@@ -132,13 +84,13 @@ func TestRetryAdmission_RefusesASecondRetryInsideTheCooldownWithoutScheduling(t 
 }
 
 func TestRetryAdmission_AdmitsAgainOnceTheOneMinuteCooldownElapsed(t *testing.T) {
-	store := newCooldownStore()
+	store := acquisitiontest.NewCooldownStore()
 	admission := download.NewRetryAdmission(store)
 	track := failedTrack()
 	if err := admission.Admit(context.Background(), track, scheduleQueued); err != nil {
 		t.Fatalf("first Admit = %v, want nil", err)
 	}
-	store.now = func() time.Time { return time.Now().Add(time.Minute + time.Second) }
+	store.SetClock(func() time.Time { return time.Now().Add(time.Minute + time.Second) })
 
 	if err := admission.Admit(context.Background(), track, scheduleQueued); err != nil {
 		t.Errorf("Admit after the cooldown elapsed = %v, want nil", err)
@@ -146,7 +98,7 @@ func TestRetryAdmission_AdmitsAgainOnceTheOneMinuteCooldownElapsed(t *testing.T)
 }
 
 func TestRetryAdmission_AdmitsDistinctTracksIndependently(t *testing.T) {
-	admission := download.NewRetryAdmission(newCooldownStore())
+	admission := download.NewRetryAdmission(acquisitiontest.NewCooldownStore())
 
 	if err := admission.Admit(context.Background(), failedTrack(), scheduleQueued); err != nil {
 		t.Errorf("first track Admit = %v, want nil", err)
@@ -162,7 +114,7 @@ func TestRetryAdmission_RefusesATrackThatHasNotFailed(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			spy := &scheduleSpy{}
 
-			err := download.NewRetryAdmission(newCooldownStore()).Admit(context.Background(), track, spy.schedule)
+			err := download.NewRetryAdmission(acquisitiontest.NewCooldownStore()).Admit(context.Background(), track, spy.schedule)
 
 			if !errors.Is(err, download.ErrRetryNotFailed) || spy.calls != 0 {
 				t.Errorf("Admit = %v with %d schedules, want ErrRetryNotFailed and none", err, spy.calls)
@@ -177,7 +129,7 @@ func TestReacquireAdmission_RefusesATrackThatIsNotStreamable(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			spy := &scheduleSpy{}
 
-			err := download.NewReacquireAdmission(newCooldownStore()).Admit(context.Background(), track, spy.schedule)
+			err := download.NewReacquireAdmission(acquisitiontest.NewCooldownStore()).Admit(context.Background(), track, spy.schedule)
 
 			if !errors.Is(err, download.ErrReacquireNotReady) || spy.calls != 0 {
 				t.Errorf("Admit = %v with %d schedules, want ErrReacquireNotReady and none", err, spy.calls)
@@ -187,7 +139,7 @@ func TestReacquireAdmission_RefusesATrackThatIsNotStreamable(t *testing.T) {
 }
 
 func TestReacquireAdmission_AdmitsAStreamableTrackOnceThenHoldsTheCooldown(t *testing.T) {
-	admission := download.NewReacquireAdmission(newCooldownStore())
+	admission := download.NewReacquireAdmission(acquisitiontest.NewCooldownStore())
 	track := readyTrack()
 
 	if err := admission.Admit(context.Background(), track, scheduleQueued); err != nil {
@@ -199,7 +151,7 @@ func TestReacquireAdmission_AdmitsAStreamableTrackOnceThenHoldsTheCooldown(t *te
 }
 
 func TestAdmission_RetryAndReacquireWindowsAreIndependent(t *testing.T) {
-	store := newCooldownStore()
+	store := acquisitiontest.NewCooldownStore()
 	track := failedTrack()
 	if err := download.NewRetryAdmission(store).Admit(context.Background(), track, scheduleQueued); err != nil {
 		t.Fatalf("retry Admit = %v, want nil", err)
@@ -212,7 +164,7 @@ func TestAdmission_RetryAndReacquireWindowsAreIndependent(t *testing.T) {
 }
 
 func TestAdmission_TheCooldownLivesInTheStoreAndSurvivesARestart(t *testing.T) {
-	store := newCooldownStore()
+	store := acquisitiontest.NewCooldownStore()
 	retryTrack, reacquireTrack := failedTrack(), readyTrack()
 	if err := download.NewRetryAdmission(store).Admit(context.Background(), retryTrack, scheduleQueued); err != nil {
 		t.Fatalf("first retry Admit = %v, want nil", err)
@@ -230,17 +182,18 @@ func TestAdmission_TheCooldownLivesInTheStoreAndSurvivesARestart(t *testing.T) {
 }
 
 func TestRetryAdmission_AStoreErrorRefusesWithoutSchedulingAndKeepsTheCause(t *testing.T) {
-	store := newCooldownStore()
-	store.reserveErr = fmt.Errorf("reserve cooldown: %w", &pgconn.PgError{
+	store := acquisitiontest.NewCooldownStore()
+	reserveErr := fmt.Errorf("reserve cooldown: %w", &pgconn.PgError{
 		Code:    "42P01",
 		Message: `relation "acquisition_cooldowns" does not exist`,
 	})
+	store.FailReserve(reserveErr)
 	spy := &scheduleSpy{}
 
 	err := download.NewRetryAdmission(store).Admit(context.Background(), failedTrack(), spy.schedule)
 
 	var pgErr *pgconn.PgError
-	if !errors.Is(err, store.reserveErr) || !errors.As(err, &pgErr) || pgErr.Code != "42P01" {
+	if !errors.Is(err, reserveErr) || !errors.As(err, &pgErr) || pgErr.Code != "42P01" {
 		t.Errorf("Admit = %v, want the store error carrying SQLSTATE 42P01", err)
 	}
 	if spy.calls != 0 {
@@ -249,7 +202,7 @@ func TestRetryAdmission_AStoreErrorRefusesWithoutSchedulingAndKeepsTheCause(t *t
 }
 
 func TestRetryAdmission_ARefusedScheduleRefundsTheCooldownAfterTheCallerHasGone(t *testing.T) {
-	admission := download.NewRetryAdmission(newCooldownStore())
+	admission := download.NewRetryAdmission(acquisitiontest.NewCooldownStore())
 	track := failedTrack()
 	gone, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -263,15 +216,16 @@ func TestRetryAdmission_ARefusedScheduleRefundsTheCooldownAfterTheCallerHasGone(
 }
 
 func TestRetryAdmission_AFailedRefundStillReturnsTheScheduleError(t *testing.T) {
-	store := newCooldownStore()
-	store.releaseErr = errors.New("db down")
+	store := acquisitiontest.NewCooldownStore()
+	releaseErr := errors.New("db down")
+	store.FailRelease(releaseErr)
 
 	err := download.NewRetryAdmission(store).Admit(context.Background(), failedTrack(), scheduleRefused)
 
-	if !errors.Is(err, errNotQueued) || errors.Is(err, store.releaseErr) {
+	if !errors.Is(err, errNotQueued) || errors.Is(err, releaseErr) {
 		t.Errorf("Admit = %v, want the schedule error, not the release error", err)
 	}
-	if store.released != 1 {
-		t.Errorf("release attempts = %d, want 1", store.released)
+	if got := store.Releases(); got != 1 {
+		t.Errorf("release attempts = %d, want 1", got)
 	}
 }

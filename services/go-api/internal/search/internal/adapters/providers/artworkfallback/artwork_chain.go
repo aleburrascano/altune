@@ -2,7 +2,6 @@ package artworkfallback
 
 import (
 	"altune/go-api/internal/search/domain"
-	"altune/go-api/internal/search/internal/adapters/providers/deezer"
 	"altune/go-api/internal/search/internal/core/ports"
 	"context"
 	"errors"
@@ -42,7 +41,7 @@ func (c *ChainedArtworkLookup) ResolveTagged(ctx context.Context, kind domain.Re
 			failures = errors.Join(failures, err)
 			continue
 		}
-		if url != "" && !deezer.IsDeezerPlaceholder(url) {
+		if url != "" {
 			return url, artworkSourceOf(resolver), nil
 		}
 	}
@@ -81,7 +80,7 @@ func (c *ChainedArtworkLookup) ResolveWithIdentityTagged(ctx context.Context, ki
 			failures = errors.Join(failures, err)
 			continue
 		}
-		if url != "" && !deezer.IsDeezerPlaceholder(url) {
+		if url != "" {
 			return url, artworkSourceOf(resolver), nil
 		}
 	}

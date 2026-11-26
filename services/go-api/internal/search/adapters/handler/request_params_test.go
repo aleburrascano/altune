@@ -33,7 +33,7 @@ func paramValidationRouter(t *testing.T) chi.Router {
 		ClearHistory: search.NewClearSearchHistoryService(historyRepo),
 		Album:        search.NewGetAlbumTracksService(albumProviders),
 		Artist:       search.NewGetArtistContentService(artistProviders),
-		Enrich:       search.NewEnrichmentService(&fakeMetadataEnricher{}, nil, nil),
+		Enrich:       mustEnrichment(search.NewEnrichmentService(&fakeMetadataEnricher{}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{})),
 	})
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)

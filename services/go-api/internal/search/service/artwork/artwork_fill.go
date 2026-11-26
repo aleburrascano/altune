@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/parallel"
+	"altune/go-api/internal/shared/redact"
 	"altune/go-api/internal/shared/textnorm"
 	"cmp"
 	"context"
@@ -237,7 +238,9 @@ func (a *ArtworkFiller) resolveLive(ctx context.Context, result domain.SearchRes
 			"kind", result.Kind.String(), "had_mbid", mbid != "", "error", err)
 		return
 	}
-	_ = a.cache.Set(ctx, result.Kind, result.Title, result.Subtitle, mbid, resolved, source, confidence)
+	if err := a.cache.Set(ctx, result.Kind, result.Title, result.Subtitle, mbid, resolved, source, confidence); err != nil {
+		slog.WarnContext(ctx, "artwork.cache_set_failed", "kind", result.Kind.String(), "error", redact.Secrets(err.Error()))
+	}
 	slog.DebugContext(ctx, "artwork.enriched",
 		"kind", result.Kind.String(), "source", source.String(),
 		"resolved", resolved != "", "had_mbid", mbid != "")

@@ -8,8 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 func captureLogs(t *testing.T) *bytes.Buffer {
@@ -41,8 +43,13 @@ func checkNames(checks []sourcecheck.Check) string {
 	return strings.Join(names, ",")
 }
 
-func innerTube() *download.YouTubeMusicSearchClient {
-	return download.NewYtmSearch(download.YouTubeMusicSearchConfig{})
+func innerTube(t *testing.T) *download.YouTubeMusicSearchClient {
+	t.Helper()
+	client, err := download.NewYtmSearch(download.YouTubeMusicSearchConfig{HTTP: &http.Client{}, Timeout: time.Second})
+	if err != nil {
+		t.Fatalf("build the InnerTube client: %v", err)
+	}
+	return client
 }
 
 func TestRun_NilWhenEverySourceExtracts(t *testing.T) {
@@ -120,7 +127,7 @@ func TestChecks_OnlyProbeEnabledSources(t *testing.T) {
 		{false, false, ""},
 	}
 	for _, tt := range tests {
-		got := checkNames(sourcecheck.Checks(sourcecheck.Probes{YtDlp: searcher, YtDlpAvailable: true, InnerTube: innerTube(), YtMusicEnabled: tt.ytMusic, YtDlpEnabled: tt.ytDlp}))
+		got := checkNames(sourcecheck.Checks(sourcecheck.Probes{YtDlp: searcher, YtDlpAvailable: true, InnerTube: innerTube(t), YtMusicEnabled: tt.ytMusic, YtDlpEnabled: tt.ytDlp}))
 		if got != tt.want {
 			t.Errorf("Checks(ytMusic=%v, ytDlp=%v) = %q, want %q", tt.ytMusic, tt.ytDlp, got, tt.want)
 		}
@@ -129,7 +136,7 @@ func TestChecks_OnlyProbeEnabledSources(t *testing.T) {
 
 func TestChecks_ProbeInnerTubeWithoutYtDlp(t *testing.T) {
 	for _, searcher := range []*download.YouTubeAudioSearcher{nil, download.NewYtDlpAudioSearcher("", "", "")} {
-		got := checkNames(sourcecheck.Checks(sourcecheck.Probes{YtDlp: searcher, InnerTube: innerTube(), YtMusicEnabled: true, YtDlpEnabled: true}))
+		got := checkNames(sourcecheck.Checks(sourcecheck.Probes{YtDlp: searcher, InnerTube: innerTube(t), YtMusicEnabled: true, YtDlpEnabled: true}))
 		if got != "ytmsearch" {
 			t.Errorf("Checks(searcher=%v, unavailable) = %q, want only ytmsearch", searcher != nil, got)
 		}
@@ -137,7 +144,7 @@ func TestChecks_ProbeInnerTubeWithoutYtDlp(t *testing.T) {
 	if got := sourcecheck.Checks(sourcecheck.Probes{YtMusicEnabled: true, YtDlpEnabled: true}); len(got) != 0 {
 		t.Errorf("Checks without any client = %q, want none", checkNames(got))
 	}
-	if got := sourcecheck.Checks(sourcecheck.Probes{InnerTube: innerTube(), YtDlpEnabled: true}); len(got) != 0 {
+	if got := sourcecheck.Checks(sourcecheck.Probes{InnerTube: innerTube(t), YtDlpEnabled: true}); len(got) != 0 {
 		t.Errorf("Checks with ytmusic disabled = %q, want none", checkNames(got))
 	}
 }
