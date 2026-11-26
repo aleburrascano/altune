@@ -16,7 +16,7 @@ import (
 
 const rollbackDeleteTries = 3
 
-var rollbackDeleteBackoff = backoff.Policy{Base: 100 * time.Millisecond, Cap: time.Second}
+var rollbackDeleteBackoff = backoff.MustCapped(100*time.Millisecond, time.Second)
 
 type StoreStep struct {
 	audioStore  ports.AudioWriter

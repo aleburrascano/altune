@@ -1,3 +1,5 @@
-`backoff` owns how long to wait before the next attempt of anything that retries outside the outbound HTTP transport: exponential from a base, capped, with equal jitter so the wait is never below half the ceiling.
+`backoff` owns how long to wait before the next attempt of anything that retries: exponential from a base, bounded, with a jitter shape the caller names.
 
-`Ceiling(attempt)` is the wait without jitter, for attempt 1, 2, 3 and so on. `DelayAt(attempt, unit)` places the wait within [ceiling/2, ceiling] by `unit` in [0, 1), so a test passes the point it wants. `Delay(attempt)` draws `unit` at random.
+A `Policy` is built only by `Capped(base, cap, opts...)` or `Uncapped(base, opts...)`, which return an error for a base or cap that is not positive, a cap below the base, a factor below 2 or a spread outside [0, 1]. `MustCapped` and `MustUncapped` are for policies written in code: they panic at startup on a bad value. `WithFactor(n)` sets the growth per attempt (2 when unset). `WithSpread(f)` picks symmetric jitter.
+
+`Ceiling(attempt)` is the wait without jitter, for attempt 1, 2, 3 and so on; it grows by the factor and stops at the cap, or saturates when uncapped. `DelayAt(attempt, unit)` places the wait by `unit` in [0, 1), so a test passes the point it wants: without a spread it is equal jitter, within [ceiling/2, ceiling]; with a spread it is within ceiling plus or minus that fraction of the ceiling. `Delay(attempt)` draws `unit` at random. A caller whose tests pin exact waits uses `Ceiling`.

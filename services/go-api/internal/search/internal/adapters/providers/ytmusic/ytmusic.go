@@ -18,7 +18,7 @@ import (
 
 const ytmusicTimeout = 8 * time.Second
 
-var ytmChallengeBackoff = backoff.Policy{Base: 250 * time.Millisecond, Cap: 250 * time.Millisecond}
+var ytmChallengeBackoff = backoff.MustCapped(250*time.Millisecond, 250*time.Millisecond)
 
 func ytmHTTPClient(transport http.RoundTripper) *http.Client {
 	return &http.Client{Timeout: ytmusicTimeout, Transport: transport}
