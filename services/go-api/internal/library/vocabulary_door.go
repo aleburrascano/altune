@@ -1,9 +1,9 @@
 package library
 
 import (
-	domain "altune/go-api/internal/library/domain"
 	audio "altune/go-api/internal/library/internal/core/audio"
 	ports "altune/go-api/internal/library/internal/core/ports"
+	domain "altune/go-api/internal/library/internal/domain"
 )
 
 type (
@@ -12,6 +12,7 @@ type (
 	FeaturedArtistRepository  = ports.FeaturedArtistRepository
 	LibraryViewRepository     = ports.LibraryViewRepository
 	OrphanedAudioSweep        = audio.OrphanedAudioSweep
+	OwnedTrackRef             = domain.OwnedTrackRef
 	CleanUpUnusedAudioService = audio.CleanUpUnusedAudioService
 )
 

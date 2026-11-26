@@ -30,7 +30,7 @@ func writeUntilError(w io.Writer, giveUp time.Duration) error {
 }
 
 func deadlineStack(h http.HandlerFunc) http.Handler {
-	return httpserver.WriteDeadline(clock.Now, testWriteDeadline)(httpserver.RequestLogger(h))
+	return httpserver.WriteDeadline(clock.Now, testWriteDeadline)(httpserver.RequestLogger(clock.Now)(h))
 }
 
 func awaitWriteError(t *testing.T, errs <-chan error) {

@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
@@ -77,7 +78,7 @@ func TestHandleListTracks(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := library.NewInMemoryTrackRepo()
 			for i := 0; i < tt.seedCount; i++ {
-				library.SeedTrack(t, repo, library.FixtureUserId(), "Track "+string(rune('A'+i)), "Artist", "Album")
+				librarytest.SeedTrack(t, repo, librarytest.UserId(), "Track "+string(rune('A'+i)), "Artist", "Album")
 			}
 			router := trackRoutes(repo)
 
@@ -167,7 +168,7 @@ func TestHandleCreateTrack(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := library.NewInMemoryTrackRepo()
 			if tt.seedDedup {
-				library.SeedTrack(t, repo, library.FixtureUserId(), "Existing", "Artist", "")
+				librarytest.SeedTrack(t, repo, librarytest.UserId(), "Existing", "Artist", "")
 			}
 			router := trackRoutesWith(repo, trackDeps{scheduler: &library.InMemoryScheduler{}})
 
@@ -208,7 +209,7 @@ func TestHandleDeleteTrack(t *testing.T) {
 		{
 			name: "existing track returns 204",
 			trackIdFn: func(repo *library.InMemoryTrackRepo) string {
-				track := library.SeedTrack(t, repo, library.FixtureUserId(), "To Delete", "Artist", "Album")
+				track := librarytest.SeedTrack(t, repo, librarytest.UserId(), "To Delete", "Artist", "Album")
 				return track.ID.UUID().String()
 			},
 			wantStatus: http.StatusNoContent,
@@ -248,7 +249,7 @@ func TestHandleDeleteTrack_LogsActor(t *testing.T) {
 	ring := logging.Setup("info")
 
 	repo := library.NewInMemoryTrackRepo()
-	track := library.SeedTrack(t, repo, library.FixtureUserId(), "To Delete", "Artist", "Album")
+	track := librarytest.SeedTrack(t, repo, librarytest.UserId(), "To Delete", "Artist", "Album")
 	router := trackRoutes(repo)
 
 	assertStatus(t, request(t, router, http.MethodDelete, "/tracks/"+track.ID.UUID().String(), nil), http.StatusNoContent)
@@ -257,8 +258,8 @@ func TestHandleDeleteTrack_LogsActor(t *testing.T) {
 		if r.Message != "track.delete" {
 			continue
 		}
-		if r.Attrs["user_id"] != library.FixtureUserId().String() || r.Attrs["track_id"] != track.ID.String() {
-			t.Fatalf("track.delete attrs = %v, want user_id %s and track_id %s", r.Attrs, library.FixtureUserId(), track.ID)
+		if r.Attrs["user_id"] != librarytest.UserId().String() || r.Attrs["track_id"] != track.ID.String() {
+			t.Fatalf("track.delete attrs = %v, want user_id %s and track_id %s", r.Attrs, librarytest.UserId(), track.ID)
 		}
 		return
 	}
@@ -309,7 +310,7 @@ func TestHandleCreateTrack_NulByteInIdempotencyKeyRejected(t *testing.T) {
 	body := library.CreateTrackRequest{Title: "Title", Artist: "Artist"}
 	req := httptest.NewRequest(http.MethodPost, "/tracks", jsonBody(t, body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+library.FixtureUserId().String())
+	req.Header.Set("Authorization", "Bearer "+librarytest.UserId().String())
 	req.Header.Set("Idempotency-Key", "a\x00b")
 	rec := httptest.NewRecorder()
 
@@ -406,7 +407,7 @@ func TestHandleSetTrackNumber(t *testing.T) {
 	ring := logging.Setup("info")
 
 	repo := library.NewInMemoryTrackRepo()
-	track := library.SeedTrack(t, repo, library.FixtureUserId(), "Dreams", "Fleetwood Mac", "Rumours")
+	track := librarytest.SeedTrack(t, repo, librarytest.UserId(), "Dreams", "Fleetwood Mac", "Rumours")
 	router := trackRoutes(repo)
 	path := "/tracks/" + track.ID.UUID().String() + "/track-number"
 
@@ -435,7 +436,7 @@ func TestHandleSetTrackNumber(t *testing.T) {
 
 func TestHandleSetTrackNumber_NotFound(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
-	foreign := library.SeedTrack(t, repo, ids.NewUserId(uuid.New()), "Theirs", "Artist", "Album")
+	foreign := librarytest.SeedTrack(t, repo, ids.NewUserId(uuid.New()), "Theirs", "Artist", "Album")
 	router := trackRoutes(repo)
 
 	tests := []struct{ name, trackId string }{
@@ -660,7 +661,7 @@ func TestCreateTrack_ThrottlesPerUser(t *testing.T) {
 func TestHandleListTracks_EchoesTheRequestedOffset(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
 	for _, title := range []string{"One", "Two", "Three"} {
-		library.SeedTrack(t, repo, library.FixtureUserId(), title, "Artist", "Album")
+		librarytest.SeedTrack(t, repo, librarytest.UserId(), title, "Artist", "Album")
 	}
 	router := trackRoutes(repo)
 
@@ -676,8 +677,8 @@ func TestHandleListTracks_EchoesTheRequestedOffset(t *testing.T) {
 
 func TestHandleListTracks_FiltersByTheSearchTerm(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
-	library.SeedTrack(t, repo, library.FixtureUserId(), "Enter Sandman", "Metallica", "Metallica")
-	library.SeedTrack(t, repo, library.FixtureUserId(), "Dreams", "Fleetwood Mac", "Rumours")
+	librarytest.SeedTrack(t, repo, librarytest.UserId(), "Enter Sandman", "Metallica", "Metallica")
+	librarytest.SeedTrack(t, repo, librarytest.UserId(), "Dreams", "Fleetwood Mac", "Rumours")
 	router := trackRoutes(repo)
 
 	rec := request(t, router, http.MethodGet, "/tracks?q=metallica", nil)

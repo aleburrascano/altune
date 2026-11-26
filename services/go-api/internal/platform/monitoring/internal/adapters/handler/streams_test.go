@@ -698,7 +698,7 @@ func TestStreams_NonPositiveBoundsKeepTheDefaults(t *testing.T) {
 func TestStreams_OutliveTheRouteWriteDeadline(t *testing.T) {
 	const routeDeadline = 150 * time.Millisecond
 	fx := newStreamFixture(t)
-	srv := httptest.NewServer(boundedRouter(fx.deps, idleBounds(10*time.Second, routeDeadline), httpserver.WriteDeadline(clock.Now, routeDeadline), httpserver.RequestLogger))
+	srv := httptest.NewServer(boundedRouter(fx.deps, idleBounds(10*time.Second, routeDeadline), httpserver.WriteDeadline(clock.Now, routeDeadline), httpserver.RequestLogger(clock.Now)))
 	t.Cleanup(srv.Close)
 	emit := map[string]func(string){
 		"/events/stream": func(marker string) {
@@ -754,7 +754,7 @@ func slotReleasedWithin(t *testing.T, srv *httptest.Server, limit time.Duration)
 func TestStreams_StalledClientReleasesItsSlotAtTheWriteDeadline(t *testing.T) {
 	const idle = 200 * time.Millisecond
 	fx := newStreamFixture(t)
-	srv := slowclienttest.NewServer(t, boundedRouter(fx.deps, idleBounds(idle, 5*idle), httpserver.RequestLogger))
+	srv := slowclienttest.NewServer(t, boundedRouter(fx.deps, idleBounds(idle, 5*idle), httpserver.RequestLogger(clock.Now)))
 	for i := 0; i < eventFeedCeiling; i++ {
 		openStalledStream(t, srv)
 	}

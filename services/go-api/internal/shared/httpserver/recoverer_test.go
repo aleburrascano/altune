@@ -1,6 +1,7 @@
 package httpserver_test
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"encoding/json"
 	"errors"
@@ -111,7 +112,7 @@ func TestRecoverer_PanicAfterHeadersSentKeepsTheSentResponse(t *testing.T) {
 
 func TestRequestLogger_OutsideRecovererLogsAPanicOnceAtError(t *testing.T) {
 	ring := captureLogs(t)
-	handler := httpserver.RequestLogger(httpserver.Recoverer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	handler := httpserver.RequestLogger(clock.Now)(httpserver.Recoverer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("boom")
 	})))
 

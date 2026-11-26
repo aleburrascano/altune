@@ -1,7 +1,7 @@
 package track
 
 import (
-	"altune/go-api/internal/library/domain"
+	"altune/go-api/internal/library/internal/domain"
 	"time"
 )
 

@@ -2,6 +2,8 @@ package handler_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
@@ -73,7 +75,7 @@ func mountTracks(router chi.Router, repo *library.InMemoryTrackRepo, deps trackD
 		library.MustNewAddTrackService(repo, events.NoopPublisher(), deps.addScheduler(), time.Now),
 		library.NewListTracksService(repo),
 		library.NewGetTrackStatusService(repo),
-		library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore(), events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo())),
+		library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore(), events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo(), clock.Now)),
 		library.NewSetTrackNumberService(repo),
 		library.NewFeaturedArtistHandler(deps.backfillFor(repo), library.NewListFeaturingService(repo)), now,
 		opts...)
@@ -96,7 +98,7 @@ func mountPlaylists(router chi.Router, playlists *library.InMemoryPlaylistRepo, 
 
 func request(t *testing.T, router http.Handler, method, path string, body io.Reader) *httptest.ResponseRecorder {
 	t.Helper()
-	return requestAs(t, router, library.FixtureUserId(), method, path, body)
+	return requestAs(t, router, librarytest.UserId(), method, path, body)
 }
 
 func requestAs(t *testing.T, router http.Handler, user ids.UserId, method, path string, body io.Reader) *httptest.ResponseRecorder {
@@ -271,8 +273,8 @@ func (rig *writeRig) addTracksToPlaylist(t *testing.T, user ids.UserId, playlist
 
 func (rig *writeRig) seedPlaylistAndTrack(t *testing.T, user ids.UserId) (library.PlaylistId, library.TrackId) {
 	t.Helper()
-	playlist := library.SeedPlaylist(t, rig.playlists, user, "Seeded")
-	track := library.SeedTrack(t, rig.tracks, user, "Seeded Track", "Artist", "Album")
+	playlist := librarytest.SeedPlaylist(t, rig.playlists, user, "Seeded")
+	track := librarytest.SeedTrack(t, rig.tracks, user, "Seeded Track", "Artist", "Album")
 	return playlist.ID, track.ID
 }
 
@@ -282,7 +284,7 @@ func postgresTrackRoutes(pool *pgxpool.Pool) chi.Router {
 		library.MustNewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now),
 		library.NewListTracksService(repo),
 		library.NewGetTrackStatusService(repo),
-		library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore(), events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo())),
+		library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore(), events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo(), clock.Now)),
 		library.NewSetTrackNumberService(repo),
 		library.NewFeaturedArtistHandler(
 			library.MustNewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{}, time.Now),
@@ -351,7 +353,7 @@ func failingRepoRoutes(err error) chi.Router {
 		library.MustNewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now),
 		library.NewListTracksService(repo),
 		library.NewGetTrackStatusService(repo),
-		library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore(), events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo())),
+		library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore(), events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo(), clock.Now)),
 		library.NewSetTrackNumberService(repo),
 		library.NewFeaturedArtistHandler(
 			library.MustNewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{}, time.Now),

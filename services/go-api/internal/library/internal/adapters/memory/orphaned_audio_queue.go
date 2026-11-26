@@ -1,8 +1,9 @@
 package memory
 
 import (
-	"altune/go-api/internal/library/domain"
 	"altune/go-api/internal/library/internal/core/ports"
+	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"sort"
@@ -15,6 +16,7 @@ type OrphanedAudioQueue struct {
 	Errors  map[string]string
 
 	attemptedAt map[string]time.Time
+	now         clock.Func
 
 	ErrOnRecord error
 	ErrOnList   error
@@ -23,8 +25,11 @@ type OrphanedAudioQueue struct {
 
 var _ ports.OrphanedAudioQueue = (*OrphanedAudioQueue)(nil)
 
-func NewOrphanedAudioQueue(tracks *TrackRepo) *OrphanedAudioQueue {
-	return &OrphanedAudioQueue{Tracks: tracks, Orphans: map[string]*ports.OrphanedAudio{}, Errors: map[string]string{}, attemptedAt: map[string]time.Time{}}
+func NewOrphanedAudioQueue(tracks *TrackRepo, now clock.Func) *OrphanedAudioQueue {
+	if now == nil {
+		panic("memory.NewOrphanedAudioQueue: a clock is required")
+	}
+	return &OrphanedAudioQueue{Tracks: tracks, Orphans: map[string]*ports.OrphanedAudio{}, Errors: map[string]string{}, attemptedAt: map[string]time.Time{}, now: now}
 }
 
 func (q *OrphanedAudioQueue) RecordOrphanedAudio(_ context.Context, orphan ports.OrphanedAudio) error {
@@ -32,7 +37,7 @@ func (q *OrphanedAudioQueue) RecordOrphanedAudio(_ context.Context, orphan ports
 		return q.ErrOnRecord
 	}
 	orphan.Attempts = 0
-	orphan.RecordedAt = time.Now()
+	orphan.RecordedAt = q.now()
 	delete(q.attemptedAt, orphan.AudioRef)
 	delete(q.Errors, orphan.AudioRef)
 	q.Orphans[orphan.AudioRef] = &orphan
@@ -45,7 +50,7 @@ func (q *OrphanedAudioQueue) ListOrphanedAudio(_ context.Context, limit int) ([]
 	}
 	out := make([]ports.OrphanedAudio, 0, len(q.Orphans))
 	for _, o := range q.Orphans {
-		if o.NotBefore.After(time.Now()) {
+		if o.NotBefore.After(q.now()) {
 			continue
 		}
 		out = append(out, *o)
@@ -97,7 +102,7 @@ func (q *OrphanedAudioQueue) ResolveOrphanedAudio(_ context.Context, audioRef st
 func (q *OrphanedAudioQueue) MarkOrphanedAudioAttempt(_ context.Context, audioRef, cause string) error {
 	if o, ok := q.Orphans[audioRef]; ok {
 		o.Attempts++
-		q.attemptedAt[audioRef] = time.Now()
+		q.attemptedAt[audioRef] = q.now()
 		q.Errors[audioRef] = cause
 	}
 	return nil

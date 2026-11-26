@@ -2,7 +2,6 @@ package searchfromlibrary
 
 import (
 	"altune/go-api/internal/library"
-	librarydomain "altune/go-api/internal/library/domain"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -10,7 +9,7 @@ import (
 )
 
 type OwnedTrackRefLister interface {
-	ListOwnedTrackRefs(ctx context.Context, userId ids.UserId) ([]librarydomain.OwnedTrackRef, error)
+	ListOwnedTrackRefs(ctx context.Context, userId ids.UserId) ([]library.OwnedTrackRef, error)
 }
 
 type ownedTracks struct {

@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"altune/go-api/internal/library/domain"
 	audioservice "altune/go-api/internal/library/internal/core/audio"
+	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
@@ -70,7 +70,7 @@ type resolveAudioURLsResponse struct {
 }
 
 func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) {
-	start := time.Now()
+	start := h.now()
 	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return
@@ -113,7 +113,7 @@ func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) 
 	slog.InfoContext(r.Context(), "audio_urls.handled",
 		"requested", len(ids),
 		"resolved", len(urls),
-		"duration_ms", time.Since(start).Milliseconds(),
+		"duration_ms", h.now().Sub(start).Milliseconds(),
 	)
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")

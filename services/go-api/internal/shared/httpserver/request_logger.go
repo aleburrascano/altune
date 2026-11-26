@@ -1,17 +1,26 @@
 package httpserver
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 )
 
-func RequestLogger(next http.Handler) http.Handler {
+func RequestLogger(now clock.Func) func(http.Handler) http.Handler {
+	if now == nil {
+		panic("httpserver.RequestLogger: a clock is required")
+	}
+	return func(next http.Handler) http.Handler {
+		return requestLogger(next, now)
+	}
+}
+
+func requestLogger(next http.Handler, now clock.Func) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
+		start := now()
 		sw := newStatusWriter(w)
 		ctx, scope := withRequestScope(r.Context())
 		r = r.WithContext(ctx)
@@ -21,7 +30,7 @@ func RequestLogger(next http.Handler) http.Handler {
 				logging.KeyPath, r.URL.Path,
 				logging.KeyRoute, routePattern(r),
 				logging.KeyStatus, sw.status,
-				logging.KeyDuration, time.Since(start),
+				logging.KeyDuration, now().Sub(start),
 				logging.KeyBytes, sw.bytes,
 			}
 			if userID := scope.user(); userID != "" {

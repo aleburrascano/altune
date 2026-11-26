@@ -2,6 +2,8 @@ package track_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
@@ -17,7 +19,7 @@ func TestNewDeleteTrackService_PanicsWithoutACollaborator(t *testing.T) {
 	store := library.NewInMemoryAudioStore()
 	pub := events.NoopPublisher()
 	metrics := &library.InMemoryAudioStoreMetrics{}
-	queue := library.NewInMemoryOrphanedAudioQueue(repo)
+	queue := library.NewInMemoryOrphanedAudioQueue(repo, clock.Now)
 	tests := []struct {
 		name string
 		make func()
@@ -41,7 +43,7 @@ func TestNewDeleteTrackService_PanicsWithoutACollaborator(t *testing.T) {
 
 func TestDeleteTrackService_Execute(t *testing.T) {
 	ctx := context.Background()
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 	errRepo := errors.New("db error")
 
 	tests := []struct {
@@ -52,7 +54,7 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 		{
 			name: "existing track is deleted",
 			setup: func(repo *library.InMemoryTrackRepo) library.TrackId {
-				track := library.SeedTrack(t, repo, userId, "Track", "Artist", "Album")
+				track := librarytest.SeedTrack(t, repo, userId, "Track", "Artist", "Album")
 				return track.ID
 			},
 			wantErr: nil,
@@ -67,7 +69,7 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 		{
 			name: "repo error propagates",
 			setup: func(repo *library.InMemoryTrackRepo) library.TrackId {
-				track := library.SeedTrack(t, repo, userId, "Track", "Artist", "Album")
+				track := librarytest.SeedTrack(t, repo, userId, "Track", "Artist", "Album")
 				repo.ErrOnDelete = errRepo
 				return track.ID
 			},
@@ -79,7 +81,7 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := library.NewInMemoryTrackRepo()
 			trackId := tt.setup(repo)
-			svc := library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore(), events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo()))
+			svc := library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore(), events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo(), clock.Now))
 
 			err := svc.Execute(ctx, userId, trackId)
 
@@ -102,13 +104,13 @@ func TestDeleteTrackService_Execute(t *testing.T) {
 func TestDeleteTrack_KeepsAudioSharedWithAnotherTrack(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
 	store := library.NewInMemoryAudioStore()
-	userId := library.FixtureUserId()
-	deleted := library.SeedReadyTrack(t, repo, userId, "Come Together", "Artist", "Abbey Road", sharedAudioRef)
-	kept := library.SeedReadyTrack(t, repo, userId, "Come Together", "Artist", "Abbey Road (Remastered)", sharedAudioRef)
+	userId := librarytest.UserId()
+	deleted := librarytest.SeedReadyTrack(t, repo, userId, "Come Together", "Artist", "Abbey Road", sharedAudioRef)
+	kept := librarytest.SeedReadyTrack(t, repo, userId, "Come Together", "Artist", "Abbey Road (Remastered)", sharedAudioRef)
 	assertCollidesOnOneStorageKey(t, deleted, kept)
 	store.Seed(sharedAudioRef, []byte("audio"))
 
-	if err := library.NewDeleteTrackService(repo, store, events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo())).Execute(context.Background(), userId, deleted.ID); err != nil {
+	if err := library.NewDeleteTrackService(repo, store, events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo(), clock.Now)).Execute(context.Background(), userId, deleted.ID); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 
@@ -120,11 +122,11 @@ func TestDeleteTrack_KeepsAudioSharedWithAnotherTrack(t *testing.T) {
 func TestDeleteTrack_DeletesAudioOnTheLastReference(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
 	store := library.NewInMemoryAudioStore()
-	userId := library.FixtureUserId()
-	only := library.SeedReadyTrack(t, repo, userId, "Come Together", "Artist", "Abbey Road", sharedAudioRef)
+	userId := librarytest.UserId()
+	only := librarytest.SeedReadyTrack(t, repo, userId, "Come Together", "Artist", "Abbey Road", sharedAudioRef)
 	store.Seed(sharedAudioRef, []byte("audio"))
 
-	if err := library.NewDeleteTrackService(repo, store, events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo())).Execute(context.Background(), userId, only.ID); err != nil {
+	if err := library.NewDeleteTrackService(repo, store, events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo(), clock.Now)).Execute(context.Background(), userId, only.ID); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 
@@ -136,9 +138,9 @@ func TestDeleteTrack_DeletesAudioOnTheLastReference(t *testing.T) {
 func TestDeleteTrack_QueuesTheOrphanWhenTheUsageCheckFails(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
 	store := library.NewInMemoryAudioStore()
-	queue := library.NewInMemoryOrphanedAudioQueue(repo)
-	userId := library.FixtureUserId()
-	track := library.SeedReadyTrack(t, repo, userId, "Come Together", "Artist", "Abbey Road", sharedAudioRef)
+	queue := library.NewInMemoryOrphanedAudioQueue(repo, clock.Now)
+	userId := librarytest.UserId()
+	track := librarytest.SeedReadyTrack(t, repo, userId, "Come Together", "Artist", "Abbey Road", sharedAudioRef)
 	store.Seed(sharedAudioRef, []byte("audio"))
 	repo.ErrOnGetBy = errors.New("db error")
 
@@ -175,14 +177,14 @@ func assertCollidesOnOneStorageKey(t *testing.T, a, b *library.Track) {
 
 func TestDeleteTrackService_OrphanedDeleteMetric(t *testing.T) {
 	ctx := context.Background()
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 
 	repo := library.NewInMemoryTrackRepo()
-	track := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
+	track := librarytest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
 	store := library.NewInMemoryAudioStore()
 	store.ErrOnDelete = errors.New("s3 down")
 	metrics := &library.InMemoryAudioStoreMetrics{}
-	svc := library.NewDeleteTrackService(repo, store, events.NoopPublisher(), metrics, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo()))
+	svc := library.NewDeleteTrackService(repo, store, events.NoopPublisher(), metrics, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo(), clock.Now))
 
 	err := svc.Execute(ctx, userId, track.ID)
 	if err == nil {
@@ -198,14 +200,14 @@ func TestDeleteTrackService_OrphanedDeleteMetric(t *testing.T) {
 
 func TestDeleteTrackService_NoOrphanMetricOnCleanDelete(t *testing.T) {
 	ctx := context.Background()
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 
 	repo := library.NewInMemoryTrackRepo()
-	track := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
+	track := librarytest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 	store := library.NewInMemoryAudioStore()
 	store.Seed("audio/ok.opus", []byte("data"))
 	metrics := &library.InMemoryAudioStoreMetrics{}
-	svc := library.NewDeleteTrackService(repo, store, events.NoopPublisher(), metrics, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo()))
+	svc := library.NewDeleteTrackService(repo, store, events.NoopPublisher(), metrics, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo(), clock.Now))
 
 	if err := svc.Execute(ctx, userId, track.ID); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -217,11 +219,11 @@ func TestDeleteTrackService_NoOrphanMetricOnCleanDelete(t *testing.T) {
 
 func TestDeleteTrackService_LogsActorAndObject(t *testing.T) {
 	logs := library.CaptureAuditLogs(t)
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 	repo := library.NewInMemoryTrackRepo()
-	track := library.SeedTrack(t, repo, userId, "Track", "Artist", "Album")
+	track := librarytest.SeedTrack(t, repo, userId, "Track", "Artist", "Album")
 
-	if err := library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore(), events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo())).Execute(context.Background(), userId, track.ID); err != nil {
+	if err := library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore(), events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo(), clock.Now)).Execute(context.Background(), userId, track.ID); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -233,13 +235,13 @@ func TestDeleteTrackService_LogsActorAndObject(t *testing.T) {
 
 func TestDeleteTrackService_OrphanLogCarriesActor(t *testing.T) {
 	logs := library.CaptureAuditLogs(t)
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 	repo := library.NewInMemoryTrackRepo()
-	track := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
+	track := librarytest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
 	store := library.NewInMemoryAudioStore()
 	store.ErrOnDelete = errors.New("s3 down")
 
-	err := library.NewDeleteTrackService(repo, store, events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo())).Execute(context.Background(), userId, track.ID)
+	err := library.NewDeleteTrackService(repo, store, events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo(), clock.Now)).Execute(context.Background(), userId, track.ID)
 	if !errors.Is(err, library.ErrAudioOrphaned) {
 		t.Fatalf("error = %v, want ErrAudioOrphaned", err)
 	}

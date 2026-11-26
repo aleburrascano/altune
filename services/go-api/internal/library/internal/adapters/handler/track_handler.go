@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"altune/go-api/internal/library/domain"
-	trackservice "altune/go-api/internal/library/service/track"
+	"altune/go-api/internal/library/internal/domain"
+	trackservice "altune/go-api/internal/library/internal/service/track"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"

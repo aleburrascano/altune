@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/httpserver"
 	sharedids "altune/go-api/internal/shared/ids"
 	"encoding/json"
@@ -110,7 +111,7 @@ func TestHandleListPlaylists(t *testing.T) {
 			plRepo := library.NewInMemoryPlaylistRepo()
 			trRepo := library.NewInMemoryTrackRepo()
 			for i := 0; i < tt.seedCount; i++ {
-				library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "Playlist "+string(rune('A'+i)))
+				librarytest.SeedPlaylist(t, plRepo, librarytest.UserId(), "Playlist "+string(rune('A'+i)))
 			}
 			router := playlistRoutes(plRepo, trRepo)
 
@@ -222,7 +223,7 @@ func seededPlaylistRepo(t *testing.T, count int) *library.InMemoryPlaylistRepo {
 	t.Helper()
 	repo := library.NewInMemoryPlaylistRepo()
 	for i := 0; i < count; i++ {
-		library.SeedPlaylist(t, repo, library.FixtureUserId(), "Playlist "+strconv.Itoa(i))
+		librarytest.SeedPlaylist(t, repo, librarytest.UserId(), "Playlist "+strconv.Itoa(i))
 	}
 	return repo
 }
@@ -249,8 +250,8 @@ func TestHandleGetPlaylist(t *testing.T) {
 		{
 			name: "found returns detail with tracks",
 			setup: func(t *testing.T, plRepo *library.InMemoryPlaylistRepo, trRepo *library.InMemoryTrackRepo) string {
-				pl := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "Rock")
-				track := library.SeedTrack(t, plRepo.Tracks, library.FixtureUserId(), "Track", "Artist", "Album")
+				pl := librarytest.SeedPlaylist(t, plRepo, librarytest.UserId(), "Rock")
+				track := librarytest.SeedTrack(t, plRepo.Tracks, librarytest.UserId(), "Track", "Artist", "Album")
 				plRepo.SeedWithTracks(t, pl, []*library.Track{track})
 				return pl.ID.UUID().String()
 			},
@@ -309,7 +310,7 @@ func TestHandleDeletePlaylist(t *testing.T) {
 		{
 			name: "existing returns 204",
 			setup: func(t *testing.T, repo *library.InMemoryPlaylistRepo) string {
-				pl := library.SeedPlaylist(t, repo, library.FixtureUserId(), "To Delete")
+				pl := librarytest.SeedPlaylist(t, repo, librarytest.UserId(), "To Delete")
 				return pl.ID.UUID().String()
 			},
 			wantStatus: http.StatusNoContent,
@@ -354,7 +355,7 @@ func TestHandleRenamePlaylist(t *testing.T) {
 		{
 			name: "valid rename returns 200",
 			setup: func(t *testing.T, repo *library.InMemoryPlaylistRepo) string {
-				pl := library.SeedPlaylist(t, repo, library.FixtureUserId(), "Old Name")
+				pl := librarytest.SeedPlaylist(t, repo, librarytest.UserId(), "Old Name")
 				return pl.ID.UUID().String()
 			},
 			body:       library.RenamePlaylistRequest{Name: "New Name"},
@@ -371,7 +372,7 @@ func TestHandleRenamePlaylist(t *testing.T) {
 		{
 			name: "empty name returns 400",
 			setup: func(t *testing.T, repo *library.InMemoryPlaylistRepo) string {
-				pl := library.SeedPlaylist(t, repo, library.FixtureUserId(), "Has Name")
+				pl := librarytest.SeedPlaylist(t, repo, librarytest.UserId(), "Has Name")
 				return pl.ID.UUID().String()
 			},
 			body:       library.RenamePlaylistRequest{Name: ""},
@@ -380,7 +381,7 @@ func TestHandleRenamePlaylist(t *testing.T) {
 		{
 			name: "whitespace-only name returns 400",
 			setup: func(t *testing.T, repo *library.InMemoryPlaylistRepo) string {
-				pl := library.SeedPlaylist(t, repo, library.FixtureUserId(), "Has Name")
+				pl := librarytest.SeedPlaylist(t, repo, librarytest.UserId(), "Has Name")
 				return pl.ID.UUID().String()
 			},
 			body:       library.RenamePlaylistRequest{Name: "   \t "},
@@ -389,7 +390,7 @@ func TestHandleRenamePlaylist(t *testing.T) {
 		{
 			name: "surrounding whitespace is trimmed on rename",
 			setup: func(t *testing.T, repo *library.InMemoryPlaylistRepo) string {
-				pl := library.SeedPlaylist(t, repo, library.FixtureUserId(), "Old Name")
+				pl := librarytest.SeedPlaylist(t, repo, librarytest.UserId(), "Old Name")
 				return pl.ID.UUID().String()
 			},
 			body:       library.RenamePlaylistRequest{Name: " New Name  "},
@@ -428,8 +429,8 @@ func TestHandleAddTrack(t *testing.T) {
 		{
 			name: "valid add returns 204",
 			setup: func(t *testing.T, plRepo *library.InMemoryPlaylistRepo, trRepo *library.InMemoryTrackRepo) (string, uuid.UUID) {
-				pl := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "My List")
-				track := library.SeedTrack(t, trRepo, library.FixtureUserId(), "Track", "Artist", "Album")
+				pl := librarytest.SeedPlaylist(t, plRepo, librarytest.UserId(), "My List")
+				track := librarytest.SeedTrack(t, trRepo, librarytest.UserId(), "Track", "Artist", "Album")
 				return pl.ID.UUID().String(), track.ID.UUID()
 			},
 			wantStatus: http.StatusNoContent,
@@ -437,8 +438,8 @@ func TestHandleAddTrack(t *testing.T) {
 		{
 			name: "duplicate track returns 409 Conflict",
 			setup: func(t *testing.T, plRepo *library.InMemoryPlaylistRepo, trRepo *library.InMemoryTrackRepo) (string, uuid.UUID) {
-				pl := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "My List")
-				track := library.SeedTrack(t, trRepo, library.FixtureUserId(), "Track", "Artist", "Album")
+				pl := librarytest.SeedPlaylist(t, plRepo, librarytest.UserId(), "My List")
+				track := librarytest.SeedTrack(t, trRepo, librarytest.UserId(), "Track", "Artist", "Album")
 				_ = pl.AddTrack(track.ID, time.Now())
 				return pl.ID.UUID().String(), track.ID.UUID()
 			},
@@ -447,7 +448,7 @@ func TestHandleAddTrack(t *testing.T) {
 		{
 			name: "playlist not found returns 404",
 			setup: func(t *testing.T, plRepo *library.InMemoryPlaylistRepo, trRepo *library.InMemoryTrackRepo) (string, uuid.UUID) {
-				track := library.SeedTrack(t, trRepo, library.FixtureUserId(), "Track", "Artist", "Album")
+				track := librarytest.SeedTrack(t, trRepo, librarytest.UserId(), "Track", "Artist", "Album")
 				return uuid.New().String(), track.ID.UUID()
 			},
 			wantStatus: http.StatusNotFound,
@@ -455,7 +456,7 @@ func TestHandleAddTrack(t *testing.T) {
 		{
 			name: "track not found returns 404",
 			setup: func(t *testing.T, plRepo *library.InMemoryPlaylistRepo, trRepo *library.InMemoryTrackRepo) (string, uuid.UUID) {
-				pl := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "My List")
+				pl := librarytest.SeedPlaylist(t, plRepo, librarytest.UserId(), "My List")
 				return pl.ID.UUID().String(), uuid.New()
 			},
 			wantStatus: http.StatusNotFound,
@@ -489,9 +490,9 @@ func TestHandleAddTracks(t *testing.T) {
 		{
 			name: "valid batch returns the added and skipped counts",
 			setup: func(t *testing.T, plRepo *library.InMemoryPlaylistRepo, trRepo *library.InMemoryTrackRepo) (string, []uuid.UUID) {
-				pl := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "My List")
-				first := library.SeedTrack(t, trRepo, library.FixtureUserId(), "First", "Artist", "Album")
-				second := library.SeedTrack(t, trRepo, library.FixtureUserId(), "Second", "Artist", "Album")
+				pl := librarytest.SeedPlaylist(t, plRepo, librarytest.UserId(), "My List")
+				first := librarytest.SeedTrack(t, trRepo, librarytest.UserId(), "First", "Artist", "Album")
+				second := librarytest.SeedTrack(t, trRepo, librarytest.UserId(), "Second", "Artist", "Album")
 				return pl.ID.UUID().String(), []uuid.UUID{first.ID.UUID(), second.ID.UUID()}
 			},
 			wantStatus: http.StatusOK,
@@ -500,9 +501,9 @@ func TestHandleAddTracks(t *testing.T) {
 		{
 			name: "a track already in the playlist is skipped, not a conflict",
 			setup: func(t *testing.T, plRepo *library.InMemoryPlaylistRepo, trRepo *library.InMemoryTrackRepo) (string, []uuid.UUID) {
-				pl := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "My List")
-				existing := library.SeedTrack(t, trRepo, library.FixtureUserId(), "Existing", "Artist", "Album")
-				fresh := library.SeedTrack(t, trRepo, library.FixtureUserId(), "Fresh", "Artist", "Album")
+				pl := librarytest.SeedPlaylist(t, plRepo, librarytest.UserId(), "My List")
+				existing := librarytest.SeedTrack(t, trRepo, librarytest.UserId(), "Existing", "Artist", "Album")
+				fresh := librarytest.SeedTrack(t, trRepo, librarytest.UserId(), "Fresh", "Artist", "Album")
 				_ = pl.AddTrack(existing.ID, time.Now())
 				return pl.ID.UUID().String(), []uuid.UUID{existing.ID.UUID(), fresh.ID.UUID()}
 			},
@@ -513,8 +514,8 @@ func TestHandleAddTracks(t *testing.T) {
 		{
 			name: "an unowned track is skipped, not a 404",
 			setup: func(t *testing.T, plRepo *library.InMemoryPlaylistRepo, trRepo *library.InMemoryTrackRepo) (string, []uuid.UUID) {
-				pl := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "My List")
-				owned := library.SeedTrack(t, trRepo, library.FixtureUserId(), "Owned", "Artist", "Album")
+				pl := librarytest.SeedPlaylist(t, plRepo, librarytest.UserId(), "My List")
+				owned := librarytest.SeedTrack(t, trRepo, librarytest.UserId(), "Owned", "Artist", "Album")
 				return pl.ID.UUID().String(), []uuid.UUID{owned.ID.UUID(), uuid.New()}
 			},
 			wantStatus:  http.StatusOK,
@@ -524,7 +525,7 @@ func TestHandleAddTracks(t *testing.T) {
 		{
 			name: "empty track_ids returns 400",
 			setup: func(t *testing.T, plRepo *library.InMemoryPlaylistRepo, trRepo *library.InMemoryTrackRepo) (string, []uuid.UUID) {
-				pl := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "My List")
+				pl := librarytest.SeedPlaylist(t, plRepo, librarytest.UserId(), "My List")
 				return pl.ID.UUID().String(), []uuid.UUID{}
 			},
 			wantStatus: http.StatusBadRequest,
@@ -532,7 +533,7 @@ func TestHandleAddTracks(t *testing.T) {
 		{
 			name: "playlist not found returns 404",
 			setup: func(t *testing.T, plRepo *library.InMemoryPlaylistRepo, trRepo *library.InMemoryTrackRepo) (string, []uuid.UUID) {
-				track := library.SeedTrack(t, trRepo, library.FixtureUserId(), "Track", "Artist", "Album")
+				track := librarytest.SeedTrack(t, trRepo, librarytest.UserId(), "Track", "Artist", "Album")
 				return uuid.New().String(), []uuid.UUID{track.ID.UUID()}
 			},
 			wantStatus: http.StatusNotFound,
@@ -576,7 +577,7 @@ func TestHandleRemoveTrack(t *testing.T) {
 		{
 			name: "existing track returns 204",
 			setup: func(t *testing.T, repo *library.InMemoryPlaylistRepo) (string, string) {
-				pl := library.SeedPlaylist(t, repo, library.FixtureUserId(), "My List")
+				pl := librarytest.SeedPlaylist(t, repo, librarytest.UserId(), "My List")
 				return pl.ID.UUID().String(), uuid.New().String()
 			},
 			wantStatus: http.StatusNoContent,
@@ -598,7 +599,7 @@ func TestHandleRemoveTrack(t *testing.T) {
 		{
 			name: "invalid track ID returns 400",
 			setup: func(t *testing.T, repo *library.InMemoryPlaylistRepo) (string, string) {
-				pl := library.SeedPlaylist(t, repo, library.FixtureUserId(), "My List")
+				pl := librarytest.SeedPlaylist(t, repo, librarytest.UserId(), "My List")
 				return pl.ID.UUID().String(), "bad-id"
 			},
 			wantStatus: http.StatusBadRequest,
@@ -629,9 +630,9 @@ func TestHandleRemoveTracks(t *testing.T) {
 		{
 			name: "valid batch returns the removed count",
 			setup: func(t *testing.T, plRepo *library.InMemoryPlaylistRepo, trRepo *library.InMemoryTrackRepo) (string, []uuid.UUID) {
-				pl := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "My List")
-				first := library.SeedTrack(t, trRepo, library.FixtureUserId(), "First", "Artist", "Album")
-				second := library.SeedTrack(t, trRepo, library.FixtureUserId(), "Second", "Artist", "Album")
+				pl := librarytest.SeedPlaylist(t, plRepo, librarytest.UserId(), "My List")
+				first := librarytest.SeedTrack(t, trRepo, librarytest.UserId(), "First", "Artist", "Album")
+				second := librarytest.SeedTrack(t, trRepo, librarytest.UserId(), "Second", "Artist", "Album")
 				_ = pl.AddTrack(first.ID, time.Now())
 				_ = pl.AddTrack(second.ID, time.Now())
 				return pl.ID.UUID().String(), []uuid.UUID{first.ID.UUID(), second.ID.UUID()}
@@ -642,8 +643,8 @@ func TestHandleRemoveTracks(t *testing.T) {
 		{
 			name: "a track that is not in the playlist is skipped, not a 404",
 			setup: func(t *testing.T, plRepo *library.InMemoryPlaylistRepo, trRepo *library.InMemoryTrackRepo) (string, []uuid.UUID) {
-				pl := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "My List")
-				member := library.SeedTrack(t, trRepo, library.FixtureUserId(), "Member", "Artist", "Album")
+				pl := librarytest.SeedPlaylist(t, plRepo, librarytest.UserId(), "My List")
+				member := librarytest.SeedTrack(t, trRepo, librarytest.UserId(), "Member", "Artist", "Album")
 				_ = pl.AddTrack(member.ID, time.Now())
 				return pl.ID.UUID().String(), []uuid.UUID{member.ID.UUID(), uuid.New()}
 			},
@@ -653,7 +654,7 @@ func TestHandleRemoveTracks(t *testing.T) {
 		{
 			name: "empty track_ids returns 400",
 			setup: func(t *testing.T, plRepo *library.InMemoryPlaylistRepo, trRepo *library.InMemoryTrackRepo) (string, []uuid.UUID) {
-				pl := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "My List")
+				pl := librarytest.SeedPlaylist(t, plRepo, librarytest.UserId(), "My List")
 				return pl.ID.UUID().String(), []uuid.UUID{}
 			},
 			wantStatus: http.StatusBadRequest,
@@ -694,9 +695,9 @@ func TestHandleRemoveTracks(t *testing.T) {
 	t.Run("the single-track path still addresses exactly that track", func(t *testing.T) {
 		plRepo := library.NewInMemoryPlaylistRepo()
 		trRepo := library.NewInMemoryTrackRepo()
-		pl := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "My List")
-		keep := library.SeedTrack(t, trRepo, library.FixtureUserId(), "Keep", "Artist", "Album")
-		drop := library.SeedTrack(t, trRepo, library.FixtureUserId(), "Drop", "Artist", "Album")
+		pl := librarytest.SeedPlaylist(t, plRepo, librarytest.UserId(), "My List")
+		keep := librarytest.SeedTrack(t, trRepo, librarytest.UserId(), "Keep", "Artist", "Album")
+		drop := librarytest.SeedTrack(t, trRepo, librarytest.UserId(), "Drop", "Artist", "Album")
 		_ = pl.AddTrack(keep.ID, time.Now())
 		_ = pl.AddTrack(drop.ID, time.Now())
 		router := playlistRoutes(plRepo, trRepo)
@@ -721,7 +722,7 @@ func TestHandleReorder(t *testing.T) {
 		{
 			name: "valid reorder returns 204",
 			setup: func(t *testing.T, repo *library.InMemoryPlaylistRepo) string {
-				pl := library.SeedPlaylist(t, repo, library.FixtureUserId(), "My List")
+				pl := librarytest.SeedPlaylist(t, repo, librarytest.UserId(), "My List")
 				return pl.ID.UUID().String()
 			},
 			body:       library.ReorderTracksRequest{TrackIDs: []uuid.UUID{}},
@@ -753,7 +754,7 @@ func TestHandleReorder(t *testing.T) {
 
 func TestPlaylistBatchRoutes_EmptyTrackIDsCarryACode(t *testing.T) {
 	plRepo := library.NewInMemoryPlaylistRepo()
-	playlist := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "My List")
+	playlist := librarytest.SeedPlaylist(t, plRepo, librarytest.UserId(), "My List")
 	router := playlistRoutes(plRepo, library.NewInMemoryTrackRepo())
 	tracksPath := "/playlists/" + playlist.ID.UUID().String() + "/tracks"
 
@@ -785,7 +786,7 @@ func TestHandleGetPlaylist_EncodesAfterHugeDurationsSubmitted(t *testing.T) {
 		stored = append(stored, track)
 	}
 	plRepo := library.NewInMemoryPlaylistRepo()
-	pl := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "Long")
+	pl := librarytest.SeedPlaylist(t, plRepo, librarytest.UserId(), "Long")
 	plRepo.SeedWithTracks(t, pl, stored)
 	playlistRouter := playlistRoutes(plRepo, trRepo)
 
@@ -863,10 +864,10 @@ func TestPlaylistWrites_LeaveReadsAndRemovalsUnthrottled(t *testing.T) {
 
 func TestHandleListPlaylists_ReportsEachPlaylistsTrackCount(t *testing.T) {
 	plRepo := library.NewInMemoryPlaylistRepo()
-	pl := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "Rock")
+	pl := librarytest.SeedPlaylist(t, plRepo, librarytest.UserId(), "Rock")
 	plRepo.SeedWithTracks(t, pl, []*library.Track{
-		library.SeedTrack(t, plRepo.Tracks, library.FixtureUserId(), "One", "Artist", "Album"),
-		library.SeedTrack(t, plRepo.Tracks, library.FixtureUserId(), "Two", "Artist", "Album"),
+		librarytest.SeedTrack(t, plRepo.Tracks, librarytest.UserId(), "One", "Artist", "Album"),
+		librarytest.SeedTrack(t, plRepo.Tracks, librarytest.UserId(), "Two", "Artist", "Album"),
 	})
 	router := playlistRoutes(plRepo, library.NewInMemoryTrackRepo())
 
@@ -893,13 +894,13 @@ func TestHandleCreatePlaylist_SendsArtworkAsAnEmptyArrayNotNull(t *testing.T) {
 
 func TestHandleGetPlaylist_SumsTheTrackDurations(t *testing.T) {
 	plRepo := library.NewInMemoryPlaylistRepo()
-	pl := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "Timed")
+	pl := librarytest.SeedPlaylist(t, plRepo, librarytest.UserId(), "Timed")
 	first, second := 100.5, 200.0
-	one := library.SeedTrack(t, plRepo.Tracks, library.FixtureUserId(), "One", "Artist", "Album")
+	one := librarytest.SeedTrack(t, plRepo.Tracks, librarytest.UserId(), "One", "Artist", "Album")
 	one.DurationSeconds = &first
-	two := library.SeedTrack(t, plRepo.Tracks, library.FixtureUserId(), "Two", "Artist", "Album")
+	two := librarytest.SeedTrack(t, plRepo.Tracks, librarytest.UserId(), "Two", "Artist", "Album")
 	two.DurationSeconds = &second
-	untimed := library.SeedTrack(t, plRepo.Tracks, library.FixtureUserId(), "Untimed", "Artist", "Album")
+	untimed := librarytest.SeedTrack(t, plRepo.Tracks, librarytest.UserId(), "Untimed", "Artist", "Album")
 	plRepo.SeedWithTracks(t, pl, []*library.Track{one, two, untimed})
 	router := playlistRoutes(plRepo, library.NewInMemoryTrackRepo())
 

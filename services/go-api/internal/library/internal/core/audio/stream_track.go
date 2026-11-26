@@ -1,15 +1,15 @@
 package audio
 
 import (
-	"altune/go-api/internal/library/domain"
 	"altune/go-api/internal/library/internal/core/ports"
-	"altune/go-api/internal/library/service/track"
+	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/library/internal/service/track"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 )
 
 type StreamOutput struct {
@@ -24,6 +24,7 @@ type StreamTrackService struct {
 	scheduler       ports.AcquisitionScheduler
 	metrics         ports.AudioStoreMetrics
 	recoveryEnabled func() bool
+	now             clock.Func
 }
 
 func NewStreamTrackService(
@@ -32,9 +33,10 @@ func NewStreamTrackService(
 	scheduler ports.AcquisitionScheduler,
 	metrics ports.AudioStoreMetrics,
 	recoveryEnabled func() bool,
+	now clock.Func,
 ) *StreamTrackService {
-	if scheduler == nil || metrics == nil || recoveryEnabled == nil {
-		panic("audio: NewStreamTrackService requires a scheduler, metrics and a recovery switch")
+	if scheduler == nil || metrics == nil || recoveryEnabled == nil || now == nil {
+		panic("audio: NewStreamTrackService requires a scheduler, metrics, a recovery switch and a clock")
 	}
 	return &StreamTrackService{
 		trackRepo:       trackRepo,
@@ -42,15 +44,16 @@ func NewStreamTrackService(
 		scheduler:       scheduler,
 		metrics:         metrics,
 		recoveryEnabled: recoveryEnabled,
+		now:             now,
 	}
 }
 
 func AlwaysEnabled() bool { return true }
 
 func (s *StreamTrackService) Execute(ctx context.Context, userId ids.UserId, trackId domain.TrackId) (*StreamOutput, error) {
-	dbStart := time.Now()
+	dbStart := s.now()
 	loaded, err := s.trackRepo.GetByID(ctx, trackId, userId)
-	dbDuration := time.Since(dbStart)
+	dbDuration := s.now().Sub(dbStart)
 	if errors.Is(err, domain.ErrTrackNotFound) {
 		return nil, domain.ErrTrackNotFound
 	}
@@ -62,7 +65,7 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId ids.UserId, tra
 		return nil, domain.ErrAudioNotAvailable
 	}
 
-	storageStart := time.Now()
+	storageStart := s.now()
 	reader, size, err := s.audioStore.Stream(ctx, *loaded.AudioRef)
 	if err != nil {
 		slog.WarnContext(ctx, "stream.audio_missing",
@@ -86,7 +89,7 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId ids.UserId, tra
 	slog.InfoContext(ctx, "stream.opened",
 		"track_id", trackId.String(),
 		"db_lookup_ms", dbDuration.Milliseconds(),
-		"storage_open_ms", time.Since(storageStart).Milliseconds(),
+		"storage_open_ms", s.now().Sub(storageStart).Milliseconds(),
 	)
 
 	return &StreamOutput{Reader: reader, Size: size, Track: loaded}, nil

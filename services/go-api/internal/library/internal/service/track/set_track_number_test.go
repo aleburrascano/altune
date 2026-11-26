@@ -2,6 +2,7 @@ package track_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"errors"
@@ -10,7 +11,7 @@ import (
 )
 
 func TestSetTrackNumberService(t *testing.T) {
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 
 	t.Run("rejects a non-positive number", func(t *testing.T) {
 		svc := library.NewSetTrackNumberService(library.NewInMemoryTrackRepo())
@@ -35,7 +36,7 @@ func TestSetTrackNumberService(t *testing.T) {
 	t.Run("missing or foreign track is not found", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		svc := library.NewSetTrackNumberService(repo)
-		foreign := library.SeedTrack(t, repo, library.FixtureOtherUserId(), "Theirs", "Artist", "Album")
+		foreign := librarytest.SeedTrack(t, repo, librarytest.OtherUserId(), "Theirs", "Artist", "Album")
 
 		for _, id := range []library.TrackId{library.NewTrackId(), foreign.ID} {
 			updated, err := svc.Execute(context.Background(), userId, id, 4)
@@ -62,7 +63,7 @@ func TestSetTrackNumberService(t *testing.T) {
 	t.Run("fills an unset position and refuses to overwrite it", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		svc := library.NewSetTrackNumberService(repo)
-		track := library.SeedTrack(t, repo, userId, "Sicko Mode", "Travis Scott", "ASTROWORLD")
+		track := librarytest.SeedTrack(t, repo, userId, "Sicko Mode", "Travis Scott", "ASTROWORLD")
 
 		updated, err := svc.Execute(context.Background(), userId, track.ID, 3)
 		if err != nil {

@@ -2,6 +2,7 @@ package featured_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/dbtest"
@@ -567,17 +568,17 @@ func (f featuringErrLister) ListTracksFeaturing(_ context.Context, _ ids.UserId,
 
 func TestListFeaturingService_Execute(t *testing.T) {
 	ctx := context.Background()
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 	sza := library.NewFeaturedArtistIdentityOnly("SZA", "", 0)
 	drake := library.NewFeaturedArtistIdentityOnly("Drake", "", 0)
 
 	t.Run("returns only the tracks featuring the queried artist", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
-		withSza := library.SeedTrack(t, repo, userId, "Feature", "Artist", "Album")
+		withSza := librarytest.SeedTrack(t, repo, userId, "Feature", "Artist", "Album")
 		withSza.FeaturedArtists = []library.FeaturedArtist{sza}
-		withDrake := library.SeedTrack(t, repo, userId, "Other", "Artist", "Album")
+		withDrake := librarytest.SeedTrack(t, repo, userId, "Other", "Artist", "Album")
 		withDrake.FeaturedArtists = []library.FeaturedArtist{drake}
-		library.SeedTrack(t, repo, userId, "Plain", "Artist", "Album")
+		librarytest.SeedTrack(t, repo, userId, "Plain", "Artist", "Album")
 		svc := library.NewListFeaturingService(repo)
 
 		got, err := svc.Execute(ctx, userId, sza)
@@ -594,7 +595,7 @@ func TestListFeaturingService_Execute(t *testing.T) {
 
 	t.Run("returns nothing when no track features the artist", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
-		withDrake := library.SeedTrack(t, repo, userId, "Other", "Artist", "Album")
+		withDrake := librarytest.SeedTrack(t, repo, userId, "Other", "Artist", "Album")
 		withDrake.FeaturedArtists = []library.FeaturedArtist{drake}
 		svc := library.NewListFeaturingService(repo)
 
@@ -610,7 +611,7 @@ func TestListFeaturingService_Execute(t *testing.T) {
 	t.Run("excludes a matching track owned by another user", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		other := ids.NewUserId(uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
-		theirs := library.SeedTrack(t, repo, other, "Feature", "Artist", "Album")
+		theirs := librarytest.SeedTrack(t, repo, other, "Feature", "Artist", "Album")
 		theirs.FeaturedArtists = []library.FeaturedArtist{sza}
 		svc := library.NewListFeaturingService(repo)
 
@@ -626,7 +627,7 @@ func TestListFeaturingService_Execute(t *testing.T) {
 	t.Run("matches by identity key regardless of the queried display name", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		stored := library.NewFeaturedArtistIdentityOnly("SZA", "mbid-1", 0)
-		track := library.SeedTrack(t, repo, userId, "Feature", "Artist", "Album")
+		track := librarytest.SeedTrack(t, repo, userId, "Feature", "Artist", "Album")
 		track.FeaturedArtists = []library.FeaturedArtist{stored}
 		svc := library.NewListFeaturingService(repo)
 
@@ -704,7 +705,7 @@ func TestBackfill_BoundsEachLookupAndTheWholeRun(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			userId := library.FixtureUserId()
+			userId := librarytest.UserId()
 			repo := &deadlineRecordingRepo{InMemoryTrackRepo: library.NewInMemoryTrackRepo(), track: newTrackFeat(t, userId, "T")}
 			resolver := &deadlineRecordingResolver{}
 			svc := tc.build(repo, resolver)
@@ -745,7 +746,7 @@ func (r *canceledDuringWriteRepo) ReplaceFeaturedArtists(ctx context.Context, id
 }
 
 func TestBackfill_ARunCanceledDuringAWriteStillLandsThatWrite(t *testing.T) {
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 	runCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	first := newTrackFeat(t, userId, "Track 1")

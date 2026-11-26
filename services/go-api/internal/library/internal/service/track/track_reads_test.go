@@ -2,6 +2,7 @@ package track_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -14,7 +15,7 @@ import (
 
 func TestGetTrackStatusService_Execute(t *testing.T) {
 	ctx := context.Background()
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 	errRepo := errors.New("db error")
 
 	tests := []struct {
@@ -26,7 +27,7 @@ func TestGetTrackStatusService_Execute(t *testing.T) {
 		{
 			name: "existing track is returned",
 			setup: func(repo *library.InMemoryTrackRepo) library.TrackId {
-				track := library.SeedTrack(t, repo, userId, "Track", "Artist", "Album")
+				track := librarytest.SeedTrack(t, repo, userId, "Track", "Artist", "Album")
 				return track.ID
 			},
 			wantTitle: "Track",
@@ -42,7 +43,7 @@ func TestGetTrackStatusService_Execute(t *testing.T) {
 			name: "track owned by another user returns ErrTrackNotFound",
 			setup: func(repo *library.InMemoryTrackRepo) library.TrackId {
 				other := ids.NewUserId(uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
-				track := library.SeedTrack(t, repo, other, "Track", "Artist", "Album")
+				track := librarytest.SeedTrack(t, repo, other, "Track", "Artist", "Album")
 				return track.ID
 			},
 			wantErr: library.ErrTrackNotFound,
@@ -93,7 +94,7 @@ func TestGetTrackStatusService_Execute(t *testing.T) {
 func TestListTracksService_RejectsNegativeOffset(t *testing.T) {
 	svc := library.NewListTracksService(library.NewInMemoryTrackRepo())
 
-	out, err := svc.Execute(context.Background(), library.FixtureUserId(), library.LibraryQuery{Offset: -1})
+	out, err := svc.Execute(context.Background(), librarytest.UserId(), library.LibraryQuery{Offset: -1})
 
 	if err == nil {
 		t.Fatalf("expected a validation error for a negative offset, got nil (out=%+v)", out)
@@ -106,7 +107,7 @@ func TestListTracksService_RejectsNegativeOffset(t *testing.T) {
 
 func TestListTracksService_Execute(t *testing.T) {
 	ctx := context.Background()
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 	errRepo := errors.New("db timeout")
 
 	tests := []struct {
@@ -184,7 +185,7 @@ func TestListTracksService_Execute(t *testing.T) {
 				tt.setup(repo)
 			}
 			for i := 0; i < tt.seedCount; i++ {
-				library.SeedTrack(t, repo, userId, "Track "+string(rune('A'+i)), "Artist", "Album")
+				librarytest.SeedTrack(t, repo, userId, "Track "+string(rune('A'+i)), "Artist", "Album")
 			}
 			svc := library.NewListTracksService(repo)
 

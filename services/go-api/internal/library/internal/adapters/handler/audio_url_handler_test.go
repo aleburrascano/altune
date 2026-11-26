@@ -2,6 +2,8 @@ package handler_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -34,7 +36,7 @@ func audioURLRoutes(store library.AudioStore, opts ...func(*library.AudioURLHand
 func resolveOneReadyTrack(t *testing.T, opts ...func(*library.AudioURLHandler)) map[string]any {
 	t.Helper()
 	repo, router := audioURLRoutes(library.NewInMemoryAudioStore(), opts...)
-	track := library.SeedReadyTrack(t, repo, library.FixtureUserId(), "Track", "Artist", "Album", "audio/ok.opus")
+	track := librarytest.SeedReadyTrack(t, repo, librarytest.UserId(), "Track", "Artist", "Album", "audio/ok.opus")
 
 	rec := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{track.ID.UUID().String()}}))
 
@@ -88,7 +90,7 @@ func TestAudioURLs_RejectsAMalformedTrackIDWithItsOwnCode(t *testing.T) {
 
 func TestAudioURLs_ResponseIsNeverCached(t *testing.T) {
 	repo, router := audioURLRoutes(library.NewInMemoryAudioStore())
-	track := library.SeedReadyTrack(t, repo, library.FixtureUserId(), "Track", "Artist", "Album", "audio/ok.opus")
+	track := librarytest.SeedReadyTrack(t, repo, librarytest.UserId(), "Track", "Artist", "Album", "audio/ok.opus")
 
 	rec := request(t, router, http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{track.ID.UUID().String()}}))
 
@@ -110,10 +112,10 @@ func TestCorrelationID_ReachesCatalogServiceLogs(t *testing.T) {
 	ring := logging.Setup("info")
 
 	repo := library.NewInMemoryTrackRepo()
-	track := library.SeedReadyTrack(t, repo, library.FixtureUserId(), "Track", "Artist", "Album", "audio/ok.opus")
+	track := librarytest.SeedReadyTrack(t, repo, librarytest.UserId(), "Track", "Artist", "Album", "audio/ok.opus")
 	router := chi.NewRouter()
 	router.Use(httpserver.CorrelationID)
-	router.Use(httpserver.RequestLogger)
+	router.Use(httpserver.RequestLogger(clock.Now))
 	router.Use(asBearer)
 	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, failingSigner{library.NewInMemoryAudioStore()}, time.Now, library.NoopAudioStoreMetrics()), time.Now).Routes(router)
 
@@ -121,7 +123,7 @@ func TestCorrelationID_ReachesCatalogServiceLogs(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/audio-urls", jsonBody(t, resolveRequest{TrackIDs: []string{track.ID.UUID().String()}}))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Correlation-ID", inbound)
-	rec := sendAs(router, req, library.FixtureUserId())
+	rec := sendAs(router, req, librarytest.UserId())
 
 	assertStatus(t, rec, http.StatusOK)
 	echoed := rec.Header().Get("X-Correlation-ID")

@@ -1,6 +1,6 @@
 package library
 
-import handler "altune/go-api/internal/library/adapters/handler"
+import handler "altune/go-api/internal/library/internal/adapters/handler"
 
 type (
 	AudioURLHandler = handler.AudioURLHandler

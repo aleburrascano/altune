@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"log/slog"
 	"os"
 	"strings"
@@ -8,7 +9,7 @@ import (
 )
 
 func Setup(logLevel string) *RingBuffer {
-	return install(logLevel, jsonHandler, time.Now)
+	return install(logLevel, jsonHandler, clock.Now)
 }
 
 func SetupWithClock(logLevel string, now func() time.Time) *RingBuffer {
@@ -19,7 +20,7 @@ func SetupWithClock(logLevel string, now func() time.Time) *RingBuffer {
 }
 
 func SetupDevelopment(logLevel string) *RingBuffer {
-	return install(logLevel, prettyHandlerFor, time.Now)
+	return install(logLevel, prettyHandlerFor, clock.Now)
 }
 
 func jsonHandler(level slog.Level) slog.Handler {

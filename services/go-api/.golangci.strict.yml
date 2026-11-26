@@ -143,6 +143,8 @@ linters:
           msg: build a client with outbound.NewClient and take the shared transport from outbound.DefaultTransport (internal/platform/outbound), the one home for outbound HTTP
         - pattern: ^context\.WithoutCancel$
           msg: outlive a request through background.Detach(ctx, budget) (internal/shared/background), which keeps the request's values and sets its own deadline
+        - pattern: ^time\.(Now|Since|Until|After|AfterFunc|NewTimer|NewTicker|Tick)$
+          msg: take the clock as a clock.Func parameter and read it through clock.Now at the composition root (internal/shared/clock), the one home for time
     revive:
       rules:
         - name: indent-error-flow
@@ -185,6 +187,10 @@ linters:
         linters:
           - forbidigo
         text: 'use of `(recover|sync\.WaitGroup|context\.WithoutCancel)` forbidden'
+      - path: (^internal/shared/clock/|/[^/]*test/)
+        linters:
+          - forbidigo
+        text: 'use of `time\.'
       - path: ^(internal/shared/(config|dbtest)/|cmd/|scripts/)
         linters:
           - forbidigo

@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"altune/go-api/internal/library/domain"
 	featuredservice "altune/go-api/internal/library/internal/core/featured"
+	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
 	"fmt"

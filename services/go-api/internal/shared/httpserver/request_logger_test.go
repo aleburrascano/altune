@@ -1,6 +1,8 @@
 package httpserver_test
 
 import (
+	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/logging"
 	"bytes"
@@ -11,12 +13,13 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
 
 func TestRequestLogger_DoesNotPanic(t *testing.T) {
-	handler := httpserver.RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := httpserver.RequestLogger(clock.Now)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
 	}))
@@ -33,7 +36,7 @@ func TestRequestLogger_DoesNotPanic(t *testing.T) {
 func TestRequestLogger_LogsTheRoutePatternAndTheUserTheHandlerRecorded(t *testing.T) {
 	ring := captureLogs(t)
 	router := chi.NewRouter()
-	router.Use(httpserver.RequestLogger)
+	router.Use(httpserver.RequestLogger(clock.Now))
 	router.Get("/tracks/{trackId}", func(w http.ResponseWriter, r *http.Request) {
 		httpserver.RecordRequestUser(r.Context(), "user-7")
 		w.WriteHeader(http.StatusNoContent)
@@ -50,7 +53,7 @@ func TestRequestLogger_LogsTheRoutePatternAndTheUserTheHandlerRecorded(t *testin
 func TestRequestLogger_AnUnmatchedRouteIsOneBucketAndAnAnonymousRequestHasNoUser(t *testing.T) {
 	ring := captureLogs(t)
 	router := chi.NewRouter()
-	router.Use(httpserver.RequestLogger)
+	router.Use(httpserver.RequestLogger(clock.Now))
 	router.Get("/health", func(http.ResponseWriter, *http.Request) {})
 
 	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/no/such/route", nil))
@@ -69,7 +72,7 @@ func TestRecordRequestUser_OutsideARequestLoggerIsANoOp(t *testing.T) {
 }
 
 func TestRequestLogger_TracksStatusCode(t *testing.T) {
-	handler := httpserver.RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := httpserver.RequestLogger(clock.Now)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/missing", nil)
@@ -88,7 +91,7 @@ func TestRequestLogger_RawQueryAbsentFromRing(t *testing.T) {
 	ring := logging.Setup("debug")
 
 	const secret = "queenssecretobsessionquery"
-	handler := httpserver.RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := httpserver.RequestLogger(clock.Now)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/v1/discovery/search?q="+secret+"&limit=5", nil)
@@ -121,7 +124,7 @@ func completedRequest(t *testing.T, h http.HandlerFunc) map[string]any {
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&out, &slog.HandlerOptions{Level: slog.LevelDebug})))
 
-	httpserver.RequestLogger(h).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/probe", nil))
+	httpserver.RequestLogger(clock.Now)(h).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/probe", nil))
 
 	dec := json.NewDecoder(&out)
 	for dec.More() {
@@ -171,11 +174,35 @@ func TestRequestLogger_LogsEveryOutcomeOnceAtInfoAndLeavesFaultsToTheBoundary(t 
 func TestRequestLogger_WritesOneLinePerRequest(t *testing.T) {
 	ring := captureLogs(t)
 
-	httpserver.RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	httpserver.RequestLogger(clock.Now)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/probe", nil))
 
 	if got := ring.Snapshot(); len(got) != 1 || got[0].Message != "request.complete" {
 		t.Errorf("records = %+v, want only request.complete", got)
 	}
+}
+
+func TestRequestLogger_LogsTheDurationTheInjectedClockMeasured(t *testing.T) {
+	manual := clocktest.NewManual(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	ring := captureLogs(t)
+
+	httpserver.RequestLogger(manual.Func())(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		manual.Advance(1500 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	})).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/probe", nil))
+
+	complete := onlyRecord(t, ring, "request.complete")
+	if got := complete.Attrs[logging.KeyDuration]; got != (1500 * time.Millisecond).String() {
+		t.Errorf("duration = %v (%T), want 1.5s from the injected clock", got, got)
+	}
+}
+
+func TestRequestLogger_RefusesANilClock(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("RequestLogger(nil) did not panic, want a refusal at construction")
+		}
+	}()
+	httpserver.RequestLogger(nil)
 }
