@@ -10,23 +10,23 @@ type EventType string
 
 const (
 	TypeTrackAddedToLibrary      EventType = "track_added_to_library"
-	TypeTrackDeleted             EventType = "track_deleted"
+	typeTrackDeleted             EventType = "track_deleted"
 	TypeTrackAcquisitionStarted  EventType = "track_acquisition_started"
 	TypeTrackAcquisitionProgress EventType = "track_acquisition_progress"
 
-	TypeTrackAcquisitionCompleted EventType = "track_acquisition_completed"
+	typeTrackAcquisitionCompleted EventType = "track_acquisition_completed"
 	TypeTrackAcquisitionFailed    EventType = "track_acquisition_failed"
 	TypeTrackReplaceFailed        EventType = "track_replace_failed"
 
-	TypeTrackAddedToPlaylist      EventType = "track_added_to_playlist"
-	TypeTracksAddedToPlaylist     EventType = "tracks_added_to_playlist"
-	TypeTrackRemovedFromPlaylist  EventType = "track_removed_from_playlist"
-	TypeTracksRemovedFromPlaylist EventType = "tracks_removed_from_playlist"
+	typeTrackAddedToPlaylist      EventType = "track_added_to_playlist"
+	typeTracksAddedToPlaylist     EventType = "tracks_added_to_playlist"
+	typeTrackRemovedFromPlaylist  EventType = "track_removed_from_playlist"
+	typeTracksRemovedFromPlaylist EventType = "tracks_removed_from_playlist"
 
-	TypePlaylistCreated   EventType = "playlist_created"
-	TypePlaylistDeleted   EventType = "playlist_deleted"
+	typePlaylistCreated   EventType = "playlist_created"
+	typePlaylistDeleted   EventType = "playlist_deleted"
 	TypePlaylistRenamed   EventType = "playlist_renamed"
-	TypePlaylistReordered EventType = "playlist_reordered"
+	typePlaylistReordered EventType = "playlist_reordered"
 )
 
 type Event struct {

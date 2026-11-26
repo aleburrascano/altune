@@ -2,7 +2,7 @@ package ids_test
 
 import (
 	"altune/go-api/internal/shared/ids"
-	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -105,7 +105,7 @@ func TestGuardNotSystem(t *testing.T) {
 				}
 				return
 			}
-			if !errors.Is(err, ids.ErrSystemUserPersonalization) {
+			if err == nil || !strings.Contains(err.Error(), "the system user id has no personalization data") {
 				t.Fatalf("GuardNotSystem(%v)=%v, want ErrSystemUserPersonalization", tt.uid, err)
 			}
 		})

@@ -261,41 +261,21 @@ func TestRingBuffer_EvictsRecordsPastRetention(t *testing.T) {
 	})
 }
 
-func TestSetup_RingBufferEvictsByTheInjectedClockNotTheWallClock(t *testing.T) {
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	now := time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC)
-	ring := logging.SetupWithClock("info", func() time.Time { return now })
+func TestSetup_RingBufferEvictsByTheClockNotTheWallClock(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		prev := slog.Default()
+		t.Cleanup(func() { slog.SetDefault(prev) })
+		ring := logging.Setup("info")
 
-	slog.Info("old")
-	now = now.Add(30*time.Minute + time.Nanosecond)
-	slog.Info("fresh")
+		slog.Info("old")
+		time.Sleep(30*time.Minute + time.Nanosecond)
+		slog.Info("fresh")
 
-	snap := ring.Snapshot()
-	if len(snap) != 1 || snap[0].Message != "fresh" {
-		t.Fatalf("snapshot = %+v, want only fresh: old is a nanosecond past the window on the injected clock", snap)
-	}
-}
-
-func TestNewRingBuffer_RefusesANilClock(t *testing.T) {
-	ring, err := logging.NewRingBuffer(4, nil)
-
-	if !errors.Is(err, logging.ErrClockRequired) || ring != nil {
-		t.Fatalf("NewRingBuffer(nil clock) = (%v, %v), want ErrClockRequired and no buffer", ring, err)
-	}
-	if !strings.Contains(err.Error(), "NewRingBuffer") {
-		t.Fatalf("error %q does not name the constructor", err)
-	}
-}
-
-func TestSetupWithClock_PanicsOnANilClock(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Fatal("a nil clock was accepted, want a panic at construction")
+		snap := ring.Snapshot()
+		if len(snap) != 1 || snap[0].Message != "fresh" {
+			t.Fatalf("snapshot = %+v, want only fresh: old is a nanosecond past the window", snap)
 		}
-	}()
-
-	logging.SetupWithClock("info", nil)
+	})
 }
 
 func TestRingBuffer_KeepsARecordExactlyAtTheRetentionEdge(t *testing.T) {

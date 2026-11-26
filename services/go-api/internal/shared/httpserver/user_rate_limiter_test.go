@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,7 +24,11 @@ func (c *limiterClock) now() time.Time { return c.t }
 
 func (c *limiterClock) advance(d time.Duration) { c.t = c.t.Add(d) }
 
-func allowedRun(l *httpserver.UserRateLimiter, key string, requests int) []bool {
+type allower interface {
+	Allow(key string) (bool, time.Duration)
+}
+
+func allowedRun(l allower, key string, requests int) []bool {
 	got := make([]bool, requests)
 	for i := range got {
 		got[i], _ = l.Allow(key)
@@ -112,12 +117,18 @@ func TestUserRateLimiter_ZeroBurstStillAdmitsOne(t *testing.T) {
 	}
 }
 
-func TestNewUserRateLimiter_RefusesANilClock(t *testing.T) {
-	l, err := httpserver.NewUserRateLimiter(httpserver.RateLimit{Every: time.Hour, Burst: 1}, nil)
+func TestMustNewUserRateLimiter_PanicsOnANilClock(t *testing.T) {
+	defer func() {
+		r := recover()
+		err, isErr := r.(error)
+		if !isErr || !strings.Contains(err.Error(), "the rate limiter requires a clock") {
+			t.Fatalf("MustNewUserRateLimiter(nil clock) panicked with %v, want the clock-required error", r)
+		}
+	}()
 
-	if !errors.Is(err, httpserver.ErrClockRequired) || l != nil {
-		t.Fatalf("NewUserRateLimiter(nil clock) = (%v, %v), want ErrClockRequired and no limiter", l, err)
-	}
+	httpserver.MustNewUserRateLimiter(httpserver.RateLimit{Every: time.Hour, Burst: 1}, nil)
+
+	t.Fatal("MustNewUserRateLimiter(nil clock) returned a limiter, want a panic")
 }
 
 func heapInUse() uint64 {

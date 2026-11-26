@@ -9,13 +9,11 @@ import (
 const (
 	SeenReference = schema.SeenReference
 	SeenLive      = schema.SeenLive
-	TypeUnseen    = schema.TypeUnseen
 )
 
 type (
 	Schema   = schema.Schema
 	Entity   = schema.Entity
-	Fixture  = schema.Fixture
 	Field    = schema.Field
 	Observed = schema.Observed
 	Reads    = schema.Reads

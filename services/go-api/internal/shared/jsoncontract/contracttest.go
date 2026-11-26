@@ -83,7 +83,7 @@ func arrayDrift(path string, fixture, body []any) []string {
 	return walkDrift(path+"[0]", fixture[0], body[0])
 }
 
-func Drift(fixture, body json.RawMessage) []string {
+func driftBetween(fixture, body json.RawMessage) []string {
 	var f, b any
 	if err := json.Unmarshal(fixture, &f); err != nil {
 		return []string{"fixture: invalid JSON: " + err.Error()}
@@ -104,7 +104,7 @@ func AssertMatchesFixture(t testing.TB, path string, body []byte) {
 	if err != nil {
 		t.Fatalf("read fixture %s: %v (run with -update-contract to create it)", path, err)
 	}
-	for _, drift := range Drift(fixture, body) {
+	for _, drift := range driftBetween(fixture, body) {
 		t.Errorf("%s drifted: %s", filepath.Base(path), drift)
 	}
 }

@@ -2,6 +2,7 @@ package providerfields_test
 
 import (
 	"altune/go-api/internal/shared/providerfields"
+	"altune/go-api/internal/shared/providerfields/internal/core/schema"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -250,7 +251,7 @@ func TestDecodedFieldsFailsOnAFolderWithNoGoSource(t *testing.T) {
 func TestAccountMarksWhatTheAdapterReads(t *testing.T) {
 	e := providerfields.Entity{Fields: []providerfields.Field{{Path: "a"}, {Path: "b", Read: true}}}
 	e.Account(providerfields.Reads{Paths: map[string]bool{"a": true, "0new": true}})
-	want := []providerfields.Field{{Path: "0new", Type: providerfields.TypeUnseen, Read: true}, {Path: "a", Read: true}, {Path: "b"}}
+	want := []providerfields.Field{{Path: "0new", Type: schema.TypeUnseen, Read: true}, {Path: "a", Read: true}, {Path: "b"}}
 	if !reflect.DeepEqual(e.Fields, want) {
 		t.Fatalf("got %+v", e.Fields)
 	}
@@ -288,7 +289,7 @@ func TestSaveWritesSortedFieldsThatLoadReadsBack(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "p.yaml")
 	in := providerfields.Schema{Provider: "p", Reference: "r", Entities: map[string]*providerfields.Entity{
 		"song": {
-			Fixtures: []providerfields.Fixture{{ID: "1", Why: "plain"}},
+			Fixtures: []schema.Fixture{{ID: "1", Why: "plain"}},
 			Fields:   []providerfields.Field{{Path: "b", Type: "string", Seen: []string{"live"}}, {Path: "a", Type: "number", Seen: []string{"live"}, Read: true}},
 		},
 	}}

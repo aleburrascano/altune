@@ -51,15 +51,15 @@ func (h *correlationHandler) Handle(ctx context.Context, r slog.Record) error {
 		stamps = append(stamps, slog.String(KeyCorrelationID, id))
 	}
 	if run, ok := ctx.Value(jobRunKey{}).(jobRun); ok {
-		if !recordHasKey(r, KeyJob) {
-			stamps = append(stamps, slog.String(KeyJob, run.job))
+		if !recordHasKey(r, keyJob) {
+			stamps = append(stamps, slog.String(keyJob, run.job))
 		}
-		if !recordHasKey(r, KeyRunID) {
-			stamps = append(stamps, slog.String(KeyRunID, run.runID))
+		if !recordHasKey(r, keyRunID) {
+			stamps = append(stamps, slog.String(keyRunID, run.runID))
 		}
 	}
-	if span := trace.SpanContextFromContext(ctx); span.HasTraceID() && !recordHasKey(r, KeyTraceID) {
-		stamps = append(stamps, slog.String(KeyTraceID, span.TraceID().String()))
+	if span := trace.SpanContextFromContext(ctx); span.HasTraceID() && !recordHasKey(r, keyTraceID) {
+		stamps = append(stamps, slog.String(keyTraceID, span.TraceID().String()))
 	}
 	r = r.Clone()
 	r.AddAttrs(stamps...)

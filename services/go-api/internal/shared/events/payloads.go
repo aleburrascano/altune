@@ -40,7 +40,7 @@ type TrackDeleted struct {
 	TrackID string `json:"track_id"`
 }
 
-func (TrackDeleted) EventType() EventType { return TypeTrackDeleted }
+func (TrackDeleted) EventType() EventType { return typeTrackDeleted }
 
 func (p TrackDeleted) Subject() string { return p.TrackID }
 
@@ -70,7 +70,7 @@ type TrackAcquisitionCompleted struct {
 	AudioRef string `json:"audio_ref"`
 }
 
-func (TrackAcquisitionCompleted) EventType() EventType { return TypeTrackAcquisitionCompleted }
+func (TrackAcquisitionCompleted) EventType() EventType { return typeTrackAcquisitionCompleted }
 
 func (p TrackAcquisitionCompleted) Subject() string { return p.TrackID }
 
@@ -97,7 +97,7 @@ type TrackAddedToPlaylist struct {
 	TrackID    string `json:"track_id"`
 }
 
-func (TrackAddedToPlaylist) EventType() EventType { return TypeTrackAddedToPlaylist }
+func (TrackAddedToPlaylist) EventType() EventType { return typeTrackAddedToPlaylist }
 
 func (p TrackAddedToPlaylist) Subject() string { return p.TrackID }
 
@@ -106,7 +106,7 @@ type TrackRemovedFromPlaylist struct {
 	TrackID    string `json:"track_id"`
 }
 
-func (TrackRemovedFromPlaylist) EventType() EventType { return TypeTrackRemovedFromPlaylist }
+func (TrackRemovedFromPlaylist) EventType() EventType { return typeTrackRemovedFromPlaylist }
 
 func (p TrackRemovedFromPlaylist) Subject() string { return p.TrackID }
 
@@ -115,34 +115,34 @@ type TracksAddedToPlaylist struct {
 	TrackIDs   []string `json:"track_ids"`
 }
 
-func (TracksAddedToPlaylist) EventType() EventType { return TypeTracksAddedToPlaylist }
+func (TracksAddedToPlaylist) EventType() EventType { return typeTracksAddedToPlaylist }
 
 type TracksRemovedFromPlaylist struct {
 	PlaylistID string   `json:"playlist_id"`
 	TrackIDs   []string `json:"track_ids"`
 }
 
-func (TracksRemovedFromPlaylist) EventType() EventType { return TypeTracksRemovedFromPlaylist }
+func (TracksRemovedFromPlaylist) EventType() EventType { return typeTracksRemovedFromPlaylist }
 
 type PlaylistReordered struct {
 	PlaylistID string   `json:"playlist_id"`
 	TrackIDs   []string `json:"track_ids"`
 }
 
-func (PlaylistReordered) EventType() EventType { return TypePlaylistReordered }
+func (PlaylistReordered) EventType() EventType { return typePlaylistReordered }
 
 type PlaylistCreated struct {
 	PlaylistID string `json:"playlist_id"`
 	Name       string `json:"name"`
 }
 
-func (PlaylistCreated) EventType() EventType { return TypePlaylistCreated }
+func (PlaylistCreated) EventType() EventType { return typePlaylistCreated }
 
 type PlaylistDeleted struct {
 	PlaylistID string `json:"playlist_id"`
 }
 
-func (PlaylistDeleted) EventType() EventType { return TypePlaylistDeleted }
+func (PlaylistDeleted) EventType() EventType { return typePlaylistDeleted }
 
 type PlaylistRenamed struct {
 	PlaylistID string `json:"playlist_id"`
