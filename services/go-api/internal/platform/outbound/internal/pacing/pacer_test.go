@@ -300,6 +300,8 @@ func TestPacer_HoldsEachHostToItsStrictestRate(t *testing.T) {
 		{"musicbrainz.org", 1, time.Second},
 		{"api.discogs.com", 1, time.Second},
 		{"itunes.apple.com", 4, 4 * time.Second},
+		{"api.acoustid.org", 3, time.Second / 3},
+		{"www.youtube.com", 1, 200 * time.Millisecond},
 	}
 	for _, tc := range cases {
 		t.Run(tc.host, func(t *testing.T) {

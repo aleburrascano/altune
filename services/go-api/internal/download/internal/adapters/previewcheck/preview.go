@@ -16,8 +16,6 @@ import (
 	"strconv"
 	"sync"
 	"time"
-
-	"golang.org/x/time/rate"
 )
 
 const (
@@ -110,17 +108,13 @@ func (c *cooldown) remaining() time.Duration {
 type Previews struct {
 	client  *http.Client
 	baseURL string
-	limiter *rate.Limiter
 	backoff backoff.Policy
 	pause   cooldown
 	printer RawFingerprint
 }
 
-func New(client *http.Client, baseURL string, requestsPerSecond float64, printer RawFingerprint) *Previews {
-	return &Previews{
-		client: client, baseURL: baseURL, limiter: rate.NewLimiter(rate.Limit(requestsPerSecond), 1),
-		backoff: deezerPause, printer: printer,
-	}
+func New(client *http.Client, baseURL string, printer RawFingerprint) *Previews {
+	return &Previews{client: client, baseURL: baseURL, backoff: deezerPause, printer: printer}
 }
 
 type deezerTrackBody struct {
@@ -228,13 +222,7 @@ func (d *Previews) get(ctx context.Context, target string, bodyCap int64, isThro
 }
 
 func (d *Previews) awaitTurn(ctx context.Context) error {
-	if err := sleepContext(ctx, d.pause.remaining()); err != nil {
-		return err
-	}
-	if err := d.limiter.Wait(ctx); err != nil {
-		return fmt.Errorf("wait for the deezer rate limit: %w", err)
-	}
-	return nil
+	return sleepContext(ctx, d.pause.remaining())
 }
 
 func newDeezerRequest(ctx context.Context, target string) (*http.Request, error) {

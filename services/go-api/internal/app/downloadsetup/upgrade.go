@@ -9,8 +9,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const deezerPreviewRate = 1.0
-
 func upgradeLane(cfg *config.Config, pool *pgxpool.Pool, ledger download.TrackLedgerPort, svc *download.AcquireTrackAudioService) download.UpgradeLane {
 	store := download.NewPostgresUpgradeStore(pool)
 	runner := download.NewUpgradeRunner(ledger, svc, store,
@@ -22,8 +20,8 @@ func upgradeLane(cfg *config.Config, pool *pgxpool.Pool, ledger download.TrackLe
 	return download.UpgradeLaneOf(runner, cfg.AcquisitionUpgradeConcurrency)
 }
 
-func upgradePreviewMatcher(cfg *config.Config) download.PreviewMatcher {
+func upgradePreviewMatcher(cfg *config.Config, transport http.RoundTripper) download.PreviewMatcher {
 	printer := download.NewFpcalcPrinter(binpath.Resolve("fpcalc", cfg.FFmpegLocation))
-	previews := download.NewDeezerPreview(&http.Client{Timeout: cfg.AcquisitionDeezerPreviewTimeout}, download.DeezerPreviewBaseURL, deezerPreviewRate, printer)
+	previews := download.NewDeezerPreview(&http.Client{Timeout: cfg.AcquisitionDeezerPreviewTimeout, Transport: transport}, download.DeezerPreviewBaseURL, printer)
 	return download.NewPreviewMatcher(previews, printer, download.DefaultMatchMaxBitErrorRate)
 }

@@ -12,7 +12,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"sync"
 	"time"
 )
 
@@ -26,11 +25,10 @@ const (
 )
 
 type Config struct {
-	HTTP        *http.Client
-	MusicURL    string
-	OEmbedURL   string
-	MinInterval time.Duration
-	Timeout     time.Duration
+	HTTP      *http.Client
+	MusicURL  string
+	OEmbedURL string
+	Timeout   time.Duration
 }
 
 type Client struct {
@@ -38,9 +36,6 @@ type Client struct {
 	musicURL  string
 	oembedURL string
 	timeout   time.Duration
-	next      *gate
-	search    *gate
-	oembed    *gate
 }
 
 var (
@@ -60,9 +55,6 @@ func New(cfg Config) (*Client, error) {
 		musicURL:  cfg.MusicURL,
 		oembedURL: cfg.OEmbedURL,
 		timeout:   cfg.Timeout,
-		next:      &gate{interval: cfg.MinInterval},
-		search:    &gate{interval: cfg.MinInterval},
-		oembed:    &gate{interval: cfg.MinInterval},
 	}
 	if c.musicURL == "" {
 		c.musicURL = DefaultMusicURL
@@ -75,10 +67,8 @@ func New(cfg Config) (*Client, error) {
 
 func (c *Client) Timeout() time.Duration { return c.timeout }
 
-func (c *Client) MinInterval() time.Duration { return c.search.interval }
-
 func (c *Client) Watch(ctx context.Context, videoID string) (Watch, error) {
-	raw, err := c.postInnerTube(ctx, c.next, "next", map[string]any{"videoId": videoID})
+	raw, err := c.postInnerTube(ctx, "next", map[string]any{"videoId": videoID})
 	if err != nil {
 		return Watch{}, c.outage(ctx, err)
 	}
@@ -90,7 +80,7 @@ func (c *Client) Watch(ctx context.Context, videoID string) (Watch, error) {
 }
 
 func (c *Client) SearchSongs(ctx context.Context, query string) ([]Song, error) {
-	raw, err := c.postInnerTube(ctx, c.search, "search", map[string]any{"query": query, "params": songsFilterParams})
+	raw, err := c.postInnerTube(ctx, "search", map[string]any{"query": query, "params": songsFilterParams})
 	if err != nil {
 		return nil, c.outage(ctx, err)
 	}
@@ -117,14 +107,14 @@ func (c *Client) OEmbed(ctx context.Context, videoID string) (OEmbed, error) {
 	if err != nil {
 		return OEmbed{}, fmt.Errorf("ytmsearch: build oembed request: %w", err)
 	}
-	raw, err := c.do(ctx, c.oembed, req)
+	raw, err := c.do(ctx, req)
 	if err != nil {
 		return OEmbed{}, err
 	}
 	return ParseOEmbed(raw)
 }
 
-func (c *Client) postInnerTube(ctx context.Context, g *gate, endpoint string, fields map[string]any) ([]byte, error) {
+func (c *Client) postInnerTube(ctx context.Context, endpoint string, fields map[string]any) ([]byte, error) {
 	payload, err := json.Marshal(youtubemusicapi.Body(fields))
 	if err != nil {
 		return nil, fmt.Errorf("ytmsearch: marshal %s: %w", endpoint, err)
@@ -136,13 +126,10 @@ func (c *Client) postInnerTube(ctx context.Context, g *gate, endpoint string, fi
 	}
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Set("Referer", DefaultMusicURL+"/")
-	return c.do(ctx, g, req)
+	return c.do(ctx, req)
 }
 
-func (c *Client) do(ctx context.Context, g *gate, req *http.Request) ([]byte, error) {
-	if err := g.wait(ctx); err != nil {
-		return nil, err
-	}
+func (c *Client) do(ctx context.Context, req *http.Request) ([]byte, error) {
 	ctx, err := youtubemusicapi.ReserveSlot(ctx, c.http)
 	if err != nil {
 		return nil, err
@@ -172,37 +159,4 @@ func (c *Client) send(req *http.Request) ([]byte, error) {
 		return nil, fmt.Errorf("ytmsearch: %s: read body: %w", req.URL.Path, err)
 	}
 	return raw, nil
-}
-
-type gate struct {
-	mu       sync.Mutex
-	interval time.Duration
-	nextSlot time.Time
-}
-
-func (g *gate) reserve() time.Duration {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	now := time.Now()
-	slot := g.nextSlot
-	if slot.Before(now) {
-		slot = now
-	}
-	g.nextSlot = slot.Add(g.interval)
-	return slot.Sub(now)
-}
-
-func (g *gate) wait(ctx context.Context) error {
-	delay := g.reserve()
-	if delay <= 0 {
-		return nil
-	}
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-		return nil
-	case <-ctx.Done():
-		return fmt.Errorf("ytmsearch: wait for a request slot: %w", ctx.Err())
-	}
 }

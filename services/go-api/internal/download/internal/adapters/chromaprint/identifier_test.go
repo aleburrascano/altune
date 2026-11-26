@@ -21,11 +21,57 @@ import (
 	"time"
 )
 
+func newIdentifier(t *testing.T, binDir, apiKey string) *download.ChromaprintIdentifier {
+	t.Helper()
+	id, err := download.NewChromaprintIdentifier(binDir, apiKey, &http.Client{})
+	if err != nil {
+		t.Fatalf("NewChromaprintIdentifier: %v", err)
+	}
+	return id
+}
+
+func TestNewIdentifier_RefusesANilClient(t *testing.T) {
+	id, err := download.NewChromaprintIdentifier(t.TempDir(), "key", nil)
+
+	if !errors.Is(err, download.ErrChromaprintClientRequired) {
+		t.Fatalf("err = %v, want ErrChromaprintClientRequired", err)
+	}
+	if id != nil {
+		t.Errorf("identifier = %v, want nil beside the error", id)
+	}
+}
+
+func TestNewIdentifier_SendsLookupsThroughTheClientItWasGiven(t *testing.T) {
+	srv := lookupServerServing(`{"status":"ok","results":[]}`)
+	defer srv.Close()
+	var through int
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		through++
+		return http.DefaultTransport.RoundTrip(r)
+	})}
+	id, err := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key", client)
+	if err != nil {
+		t.Fatalf("NewChromaprintIdentifier: %v", err)
+	}
+
+	if _, err := id.WithEndpoint(srv.URL).Identify(context.Background(), "/tmp/full.mp3", 0); err != nil {
+		t.Fatalf("Identify: %v", err)
+	}
+
+	if through != 1 {
+		t.Errorf("requests through the supplied client = %d, want 1", through)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
 func matchFromBody(t *testing.T, body string) download.RecordingMatch {
 	t.Helper()
 	srv := lookupServerServing(body)
 	t.Cleanup(srv.Close)
-	match, err := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL).Identify(context.Background(), "/tmp/full.mp3", 0)
+	match, err := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL).Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err != nil {
 		t.Fatalf("Identify: %v", err)
 	}
@@ -80,7 +126,7 @@ func TestNewIdentifier_DefaultsToAcoustIDEndpoint(t *testing.T) {
 	http.DefaultTransport = transport
 	t.Cleanup(func() { http.DefaultTransport = prev })
 
-	if _, err := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "key").Identify(context.Background(), "/tmp/full.mp3", 0); err != nil {
+	if _, err := newIdentifier(t, fakeFpcalcDir(t, 100), "key").Identify(context.Background(), "/tmp/full.mp3", 0); err != nil {
 		t.Fatalf("Identify: %v", err)
 	}
 
@@ -121,7 +167,7 @@ func captureWarnings(t *testing.T) *warnCapture {
 func TestNewIdentifier_EmptyKeyWarnsAtStartup(t *testing.T) {
 	logs := captureWarnings(t)
 
-	download.NewChromaprintIdentifier("", "")
+	newIdentifier(t, "", "")
 
 	if !logs.warned {
 		t.Fatal("an empty AcoustID API key must warn at startup, got no warning")
@@ -131,7 +177,7 @@ func TestNewIdentifier_EmptyKeyWarnsAtStartup(t *testing.T) {
 func TestNewIdentifier_WhitespaceOnlyKeyWarnsAndDisables(t *testing.T) {
 	logs := captureWarnings(t)
 
-	id := download.NewChromaprintIdentifier("", "   \t\n ")
+	id := newIdentifier(t, "", "   \t\n ")
 
 	if !logs.warned {
 		t.Fatal("a whitespace-only AcoustID API key must warn at startup, got no warning")
@@ -144,7 +190,7 @@ func TestNewIdentifier_WhitespaceOnlyKeyWarnsAndDisables(t *testing.T) {
 func TestNewIdentifier_ValidKeyDoesNotWarn(t *testing.T) {
 	logs := captureWarnings(t)
 
-	download.NewChromaprintIdentifier("", "real-key")
+	newIdentifier(t, "", "real-key")
 
 	if logs.warned {
 		t.Errorf("a valid API key must not warn, got %v", logs.msgs)
@@ -163,7 +209,7 @@ func captureJSONLogs(t *testing.T) *bytes.Buffer {
 func TestNewIdentifier_BlankKeyLogsExactlyOneWarn(t *testing.T) {
 	logs := captureJSONLogs(t)
 
-	download.NewChromaprintIdentifier(t.TempDir(), "   ")
+	newIdentifier(t, t.TempDir(), "   ")
 
 	lines := strings.Split(strings.TrimSpace(logs.String()), "\n")
 	if len(lines) != 1 {
@@ -187,7 +233,7 @@ func TestNewIdentifier_BlankKeyLogsExactlyOneWarn(t *testing.T) {
 func TestNewIdentifier_NonBlankKeyLogsNothing(t *testing.T) {
 	logs := captureJSONLogs(t)
 
-	download.NewChromaprintIdentifier(t.TempDir(), "key")
+	newIdentifier(t, t.TempDir(), "key")
 
 	if logs.Len() != 0 {
 		t.Errorf("a non-blank key logged:\n%s", logs.String())
@@ -198,7 +244,7 @@ func TestLookup_EmptyKeyReturnsError(t *testing.T) {
 	var hits int
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits++ }))
 	defer srv.Close()
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 100), "").WithEndpoint(srv.URL)
 
 	_, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 
@@ -218,7 +264,7 @@ func TestLookup_OversizedResponseBodyIsRejected(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
 
 	_, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 
@@ -286,7 +332,7 @@ func TestIdentify_SendsCandidateDurationNotFpcalcsMeasuredLength(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
 
 	if _, err := id.Identify(context.Background(), "/tmp/preview.mp3", 236); err != nil {
 		t.Fatalf("Identify: %v", err)
@@ -311,7 +357,7 @@ func TestIdentify_ReturnsEveryResultAboveTheScoreFloorWithLinkedRecordings(t *te
 	}))
 	defer srv.Close()
 
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
 
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err != nil {
@@ -344,7 +390,7 @@ func TestIdentify_CarriesReleaseGroupsOnLinkedRecordings(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err != nil {
 		t.Fatalf("Identify: %v", err)
@@ -371,7 +417,7 @@ func TestIdentify_TheMatchIsTheTopResult(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err != nil {
 		t.Fatalf("Identify: %v", err)
@@ -381,59 +427,6 @@ func TestIdentify_TheMatchIsTheTopResult(t *testing.T) {
 	if top.ID != "ac-first" || match.AcoustID != top.ID || match.Score != top.Score ||
 		!reflect.DeepEqual(match.MBIDs, []string{"mb-first"}) {
 		t.Errorf("match = %+v, want it derived from Results[0] = %+v", match, top)
-	}
-}
-
-func identifyEach(t *testing.T, id *download.ChromaprintIdentifier, n int, within time.Duration) time.Duration {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), within)
-	defer cancel()
-	start := time.Now()
-	for i := range n {
-		if _, err := id.Identify(ctx, "/tmp/full.mp3", 0); err != nil {
-			t.Fatalf("Identify %d of %d: %v", i+1, n, err)
-		}
-	}
-	return time.Since(start)
-}
-
-func TestIdentifier_DefaultsToThreeRequestsPerSecond(t *testing.T) {
-	srv := lookupServerServing(`{"status":"ok","results":[]}`)
-	defer srv.Close()
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
-
-	took := identifyEach(t, id, 7, 1750*time.Millisecond)
-
-	if took < 1250*time.Millisecond {
-		t.Errorf("7 lookups took %v, want at least 4/3s: a burst of 3 then 3 per second", took)
-	}
-}
-
-func TestLookup_ContextDeadlineAbortsTheRateLimitWaitBeforeAnyRequest(t *testing.T) {
-	var hits int
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		hits++
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok","results":[]}`))
-	}))
-	defer srv.Close()
-
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL).WithRequestsPerSecond(1.0 / 3600)
-	if _, err := id.Identify(context.Background(), "/tmp/full.mp3", 0); err != nil {
-		t.Fatalf("first Identify: %v", err)
-	}
-	hits = 0
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	_, err := id.Identify(ctx, "/tmp/full.mp3", 0)
-
-	if err == nil {
-		t.Fatal("lookup blocked on an exhausted limiter must fail, got nil error")
-	}
-	if hits != 0 {
-		t.Errorf("hits = %d, want 0: the rate limit wait must abort before any request reaches the network", hits)
 	}
 }
 
@@ -449,7 +442,7 @@ func TestIdentify_ZeroFullLengthForPreviewKeepsFpcalcsMeasuredDuration(t *testin
 	}))
 	defer srv.Close()
 
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
 
 	if _, err := id.Identify(context.Background(), "/tmp/preview.mp3", 0); err != nil {
 		t.Fatalf("Identify: %v", err)
@@ -469,7 +462,7 @@ func TestIdentify_KeepsResultAtExactlyTheScoreFloor(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 200), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 200), "real-key").WithEndpoint(srv.URL)
 
 	match, err := id.Identify(context.Background(), "/tmp/floor.mp3", 0)
 	if err != nil {
@@ -491,7 +484,7 @@ func TestIdentify_TiedScoresKeepStableInputOrder(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 200), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 200), "real-key").WithEndpoint(srv.URL)
 
 	match, err := id.Identify(context.Background(), "/tmp/tied.mp3", 0)
 	if err != nil {
@@ -525,7 +518,7 @@ func TestLookup_BodyJustUnderTheCapStillReturnsItsMatch(t *testing.T) {
 	srv := lookupServerServing(lookupBodyOfSize(t, acoustIDBodyCap-1))
 	defer srv.Close()
 
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
 
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err != nil {
@@ -539,7 +532,7 @@ func TestLookup_BodyJustUnderTheCapStillReturnsItsMatch(t *testing.T) {
 func TestLookup_OversizedBodyWhoseCappedPrefixIsValidJSONIsRejected(t *testing.T) {
 	srv := lookupServerServing(lookupBodyOfSize(t, acoustIDBodyCap+1024))
 	defer srv.Close()
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err == nil {
 		t.Fatalf("oversized body must error, not parse the truncated prefix; got match %+v", match)
@@ -549,7 +542,7 @@ func TestLookup_OversizedBodyWhoseCappedPrefixIsValidJSONIsRejected(t *testing.T
 func TestLookup_BodyExactlyAtTheCapIsRejected(t *testing.T) {
 	srv := lookupServerServing(lookupBodyOfSize(t, acoustIDBodyCap))
 	defer srv.Close()
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err == nil {
 		t.Fatalf("a body at the cap must error; got match %+v", match)
@@ -568,7 +561,7 @@ func matchingLookupBodyPaddedTo(t *testing.T, size int) string {
 func TestIdentify_OversizedBodyWhoseCappedPrefixHoldsAMatchIsRejected(t *testing.T) {
 	srv := lookupServerServing(matchingLookupBodyPaddedTo(t, acoustIDBodyCap+1024))
 	defer srv.Close()
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
 
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 
@@ -583,7 +576,7 @@ func TestIdentify_OversizedBodyWhoseCappedPrefixHoldsAMatchIsRejected(t *testing
 func TestIdentify_BodyExactlyAtTheCapHoldingAMatchIsRejected(t *testing.T) {
 	srv := lookupServerServing(matchingLookupBodyPaddedTo(t, acoustIDBodyCap))
 	defer srv.Close()
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
 
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 
@@ -595,7 +588,7 @@ func TestIdentify_BodyExactlyAtTheCapHoldingAMatchIsRejected(t *testing.T) {
 func TestIdentify_BodyJustUnderTheCapStillReturnsItsMatch(t *testing.T) {
 	srv := lookupServerServing(matchingLookupBodyPaddedTo(t, acoustIDBodyCap-1))
 	defer srv.Close()
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 236), "real-key").WithEndpoint(srv.URL)
 
 	match, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 	if err != nil {
@@ -609,7 +602,7 @@ func TestIdentify_BodyJustUnderTheCapStillReturnsItsMatch(t *testing.T) {
 func TestLookup_OversizedBodyErrorNamesTheLookupResponse(t *testing.T) {
 	srv := lookupServerServing(lookupBodyOfSize(t, acoustIDBodyCap+1024))
 	defer srv.Close()
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
 
 	_, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 
@@ -641,7 +634,7 @@ func TestLookup_EndlessStreamingBodyReturnsAnErrorPromptly(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -685,7 +678,7 @@ const throttleMatchBody = `{"status":"ok","results":[{"id":"ac-1","score":0.97,"
 
 func TestIdentify_TwoThrottledAnswersSurfaceErrIdentifyThrottled(t *testing.T) {
 	srv, hits := throttlingServer(t, 2, throttleMatchBody)
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
 
 	_, err := id.Identify(context.Background(), "/tmp/a.mp3", 0)
 
@@ -699,7 +692,7 @@ func TestIdentify_TwoThrottledAnswersSurfaceErrIdentifyThrottled(t *testing.T) {
 
 func TestIdentify_ThrottledOnceThenOKReturnsTheMatch(t *testing.T) {
 	srv, _ := throttlingServer(t, 1, throttleMatchBody)
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
 
 	match, err := id.Identify(context.Background(), "/tmp/a.mp3", 0)
 	if err != nil {
@@ -712,7 +705,7 @@ func TestIdentify_ThrottledOnceThenOKReturnsTheMatch(t *testing.T) {
 
 func TestIdentify_NoMatchIsZeroMatchAndServerErrorIsNotThrottled(t *testing.T) {
 	srv, _ := throttlingServer(t, 0, `{"status":"ok","results":[]}`)
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
 	match, err := id.Identify(context.Background(), "/tmp/a.mp3", 0)
 	if err != nil || match.Known() {
 		t.Fatalf("no-match = %+v, %v; want zero match and nil error", match, err)
@@ -722,7 +715,7 @@ func TestIdentify_NoMatchIsZeroMatchAndServerErrorIsNotThrottled(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer failing.Close()
-	id = download.NewChromaprintIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(failing.URL)
+	id = newIdentifier(t, fakeFpcalcDir(t, 130), "real-key").WithEndpoint(failing.URL)
 	_, err = id.Identify(context.Background(), "/tmp/a.mp3", 0)
 	if err == nil || errors.Is(err, download.ErrIdentifyThrottled) {
 		t.Errorf("500 err = %v, want a non-throttled error", err)
@@ -737,7 +730,7 @@ func TestLookup_ContextCancelAbortsTheRetryAfterWait(t *testing.T) {
 		w.WriteHeader(http.StatusTooManyRequests)
 	}))
 	defer srv.Close()
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -780,7 +773,7 @@ func TestRetryAfter_ParsesSecondsCapsAtFiveAndDefaultsToOne(t *testing.T) {
 			_, _ = w.Write([]byte(throttleMatchBody))
 		}))
 		t.Cleanup(srv.Close)
-		id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
+		id := newIdentifier(t, fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 			defer cancel()
@@ -801,18 +794,6 @@ func TestRetryAfter_ParsesSecondsCapsAtFiveAndDefaultsToOne(t *testing.T) {
 	}
 }
 
-func TestWithRequestsPerSecond_LowersTheLookupRate(t *testing.T) {
-	srv := lookupServerServing(`{"status":"ok","results":[]}`)
-	defer srv.Close()
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL).WithRequestsPerSecond(1.5)
-
-	took := identifyEach(t, id, 3, 1750*time.Millisecond)
-
-	if took < 1250*time.Millisecond {
-		t.Errorf("3 lookups took %v, want at least 4/3s: one then 1.5 per second", took)
-	}
-}
-
 func TestLookup_SendsAPIKeyInPostFormNotURL(t *testing.T) {
 	const apiKey = "secret-api-key"
 
@@ -830,7 +811,7 @@ func TestLookup_SendsAPIKeyInPostFormNotURL(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), apiKey).WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDir(t, 100), apiKey).WithEndpoint(srv.URL)
 	if _, err := id.Identify(context.Background(), "/tmp/full.mp3", 0); err != nil {
 		t.Fatalf("Identify: %v", err)
 	}
@@ -850,7 +831,7 @@ func TestIdentify_EmptyFingerprintIsAnError(t *testing.T) {
 	var hits int
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits++ }))
 	defer srv.Close()
-	id := download.NewChromaprintIdentifier(fakeFpcalcDirs[emptyFingerprint], "real-key").WithEndpoint(srv.URL)
+	id := newIdentifier(t, fakeFpcalcDirs[emptyFingerprint], "real-key").WithEndpoint(srv.URL)
 
 	_, err := id.Identify(context.Background(), "/tmp/broken.mp3", 0)
 

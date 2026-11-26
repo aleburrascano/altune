@@ -20,18 +20,18 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"golang.org/x/time/rate"
 )
 
-var ErrMissingAPIKey = errors.New("chromaprint: AcoustID API key is empty")
+var (
+	ErrMissingAPIKey  = errors.New("chromaprint: AcoustID API key is empty")
+	ErrClientRequired = errors.New("chromaprint: an HTTP client is required")
+)
 
 const (
 	fingerprintTimeout = 60 * time.Second
 	lookupTimeout      = 15 * time.Second
 	MinScore           = 0.85
 	defaultEndpoint    = "https://api.acoustid.org/v2/lookup"
-	requestsPerSecond  = 3
 	lookupBodyCap      = 2 << 20
 	defaultRetryAfter  = time.Second
 	maxRetryAfter      = 5 * time.Second
@@ -44,26 +44,32 @@ type Identifier struct {
 	apiKey   string
 	endpoint string
 	client   *http.Client
-	limiter  *rate.Limiter
 }
 
-func NewIdentifier(binDir, apiKey string) *Identifier {
+func NewIdentifier(binDir, apiKey string, client *http.Client) (*Identifier, error) {
+	if client == nil {
+		return nil, ErrClientRequired
+	}
 	key := strings.TrimSpace(apiKey)
 	if key == "" {
 		slog.WarnContext(context.Background(), "chromaprint: AcoustID API key is empty or blank; "+
 			"audio fingerprint identification is disabled and every lookup will fail")
 	}
+	bounded := *client
+	bounded.Timeout = lookupTimeout
 	return &Identifier{
 		fpcalc:   binpath.Resolve("fpcalc", binDir),
 		apiKey:   key,
 		endpoint: defaultEndpoint,
-		client:   &http.Client{Timeout: lookupTimeout},
-		limiter:  rate.NewLimiter(rate.Limit(requestsPerSecond), requestsPerSecond),
-	}
+		client:   &bounded,
+	}, nil
 }
 
-func (i *Identifier) WithRequestsPerSecond(perSecond float64) *Identifier {
-	i.limiter = rate.NewLimiter(rate.Limit(perSecond), 1)
+func MustNewIdentifier(binDir, apiKey string, client *http.Client) *Identifier {
+	i, err := NewIdentifier(binDir, apiKey, client)
+	if err != nil {
+		panic(err)
+	}
 	return i
 }
 
@@ -206,9 +212,6 @@ func (i *Identifier) send(ctx context.Context, endpoint string, form url.Values,
 }
 
 func (i *Identifier) post(ctx context.Context, endpoint string, form url.Values, label string) (*http.Response, error) {
-	if err := i.limiter.Wait(ctx); err != nil {
-		return nil, fmt.Errorf("%s: %w", label, err)
-	}
 	req, err := http.NewRequestWithContext(retrysafe.Mark(ctx), http.MethodPost, endpoint, bytes.NewBufferString(form.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("build %s request: %w", label, err)

@@ -89,7 +89,7 @@ type previewSource interface {
 }
 
 func (s *deezerStub) serve() previewSource {
-	return download.NewDeezerPreview(&http.Client{Transport: s}, deezer, 1000, fixedPrinter{print: []uint32{7, 8, 9}})
+	return download.NewDeezerPreview(&http.Client{Transport: s}, deezer, fixedPrinter{print: []uint32{7, 8, 9}})
 }
 
 const trackJSON = `{"id":132201194,"title":"outside","isrc":"USSM11607554","preview":"` + deezer + `/preview.mp3"}`
@@ -191,7 +191,7 @@ func TestDeezerPreviews_GivesUpAfterFiveAttemptsWhenQuotaNeverLifts(t *testing.T
 func TestDeezerPreviews_AnHTTP429BacksOffLikeAQuotaError(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		stub := &throttlingOnce{deezerStub: deezerStub{trackBody: func(int) string { return noPreview }}}
-		previews := download.NewDeezerPreview(&http.Client{Transport: stub}, deezer, 1000, fixedPrinter{})
+		previews := download.NewDeezerPreview(&http.Client{Transport: stub}, deezer, fixedPrinter{})
 		started := time.Now()
 
 		clip, err := previews.Clip(context.Background(), download.DeezerPreviewTarget{ISRC: "USSM11607554"})

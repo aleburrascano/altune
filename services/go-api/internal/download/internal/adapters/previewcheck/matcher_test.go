@@ -54,7 +54,7 @@ func deezerServing(t *testing.T, trackBody func(server string) string) *httptest
 }
 
 func matcherFor(server *httptest.Server, prints download.RawFingerprint) download.PreviewMatcher {
-	return download.NewPreviewMatcher(download.NewDeezerPreview(server.Client(), server.URL, 1000, prints), prints, download.DefaultMatchMaxBitErrorRate)
+	return download.NewPreviewMatcher(download.NewDeezerPreview(server.Client(), server.URL, prints), prints, download.DefaultMatchMaxBitErrorRate)
 }
 
 func previewTrackBody(server string) string {

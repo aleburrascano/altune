@@ -60,8 +60,8 @@ func fixtureServer(t *testing.T, requests *[]recordedRequest) *httptest.Server {
 	return srv
 }
 
-func clientFor(srv *httptest.Server, interval, timeout time.Duration) *download.YouTubeMusicSearchClient {
-	client, err := download.NewYtmSearch(download.YouTubeMusicSearchConfig{HTTP: &http.Client{}, MusicURL: srv.URL, OEmbedURL: srv.URL + "/oembed", MinInterval: interval, Timeout: timeout})
+func clientFor(srv *httptest.Server, timeout time.Duration) *download.YouTubeMusicSearchClient {
+	client, err := download.NewYtmSearch(download.YouTubeMusicSearchConfig{HTTP: &http.Client{}, MusicURL: srv.URL, OEmbedURL: srv.URL + "/oembed", Timeout: timeout})
 	if err != nil {
 		panic(fmt.Sprintf("clientFor: a valid test config was refused: %v", err))
 	}
@@ -89,7 +89,7 @@ func TestNewYtmSearch_RefusesWithoutAnHTTPClientOrATimeout(t *testing.T) {
 
 func TestClientWatch_PostsTheWebRemixNextRequestAndParsesIt(t *testing.T) {
 	var requests []recordedRequest
-	client := clientFor(fixtureServer(t, &requests), 0, time.Second)
+	client := clientFor(fixtureServer(t, &requests), time.Second)
 
 	got, err := client.Watch(context.Background(), "u4GAeAYGAqE")
 	if err != nil {
@@ -113,7 +113,7 @@ func TestClientWatch_PostsTheWebRemixNextRequestAndParsesIt(t *testing.T) {
 
 func TestClientSearchSongs_PostsTheQueryWithTheSongsFilter(t *testing.T) {
 	var requests []recordedRequest
-	client := clientFor(fixtureServer(t, &requests), 0, time.Second)
+	client := clientFor(fixtureServer(t, &requests), time.Second)
 
 	songs, err := client.SearchSongs(context.Background(), "2021 Vibes LUCKI")
 	if err != nil {
@@ -131,7 +131,7 @@ func TestClientSearchSongs_PostsTheQueryWithTheSongsFilter(t *testing.T) {
 
 func TestClientOEmbed_FetchesTheWatchURL(t *testing.T) {
 	var requests []recordedRequest
-	client := clientFor(fixtureServer(t, &requests), 0, time.Second)
+	client := clientFor(fixtureServer(t, &requests), time.Second)
 
 	got, err := client.OEmbed(context.Background(), "XDC3uH1FSgw")
 	if err != nil {
@@ -148,7 +148,7 @@ func TestClient_NonOKStatusIsAnError(t *testing.T) {
 		http.Error(w, "nope", http.StatusTooManyRequests)
 	}))
 	defer srv.Close()
-	client := clientFor(srv, 0, time.Second)
+	client := clientFor(srv, time.Second)
 
 	if _, err := client.Watch(context.Background(), "XDC3uH1FSgw"); err == nil || !strings.Contains(err.Error(), "429") {
 		t.Fatalf("err = %v, want a 429 error", err)
@@ -163,7 +163,7 @@ func TestClient_TimeoutBoundsAHungEndpoint(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { <-release }))
 	defer srv.Close()
 	defer close(release)
-	client := clientFor(srv, 0, 30*time.Millisecond)
+	client := clientFor(srv, 30*time.Millisecond)
 
 	start := time.Now()
 	_, err := client.SearchSongs(context.Background(), "anything")
@@ -173,49 +173,6 @@ func TestClient_TimeoutBoundsAHungEndpoint(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 2*time.Second {
 		t.Fatalf("took %v, the timeout did not bound the call", elapsed)
-	}
-}
-
-func TestClient_SpacesRequestsToOneEndpointByTheMinimumInterval(t *testing.T) {
-	var requests []recordedRequest
-	const interval = 80 * time.Millisecond
-	client := clientFor(fixtureServer(t, &requests), interval, time.Second)
-
-	start := time.Now()
-	for _, id := range []string{"XDC3uH1FSgw", "u4GAeAYGAqE", "88oFlVnMEsc"} {
-		if _, err := client.Watch(context.Background(), id); err != nil {
-			t.Fatalf("Watch %s: %v", id, err)
-		}
-	}
-
-	if elapsed := time.Since(start); elapsed < 2*interval {
-		t.Fatalf("3 calls took %v, want at least %v", elapsed, 2*interval)
-	}
-}
-
-func TestClient_EndpointsDoNotShareARateLimit(t *testing.T) {
-	var requests []recordedRequest
-	client := clientFor(fixtureServer(t, &requests), time.Hour, time.Second)
-
-	start := time.Now()
-	_, _ = client.Watch(context.Background(), "XDC3uH1FSgw")
-	_, _ = client.SearchSongs(context.Background(), "q")
-	_, _ = client.OEmbed(context.Background(), "XDC3uH1FSgw")
-
-	if elapsed := time.Since(start); elapsed > 2*time.Second {
-		t.Fatalf("first call per endpoint took %v, want no wait", elapsed)
-	}
-}
-
-func TestClient_CancelledContextStopsTheWait(t *testing.T) {
-	var requests []recordedRequest
-	client := clientFor(fixtureServer(t, &requests), time.Hour, time.Second)
-	_, _ = client.Watch(context.Background(), "XDC3uH1FSgw")
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
-	defer cancel()
-
-	if _, err := client.Watch(ctx, "u4GAeAYGAqE"); err == nil {
-		t.Fatal("want the context error while waiting for the slot")
 	}
 }
 
@@ -248,7 +205,7 @@ func TestClient_AnOutageIsSourceUnavailable(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			client := clientFor(tc.srv, 0, tc.timeout)
+			client := clientFor(tc.srv, tc.timeout)
 
 			_, searchErr := client.SearchSongs(context.Background(), "anything")
 			_, watchErr := client.Watch(context.Background(), "XDC3uH1FSgw")
@@ -270,7 +227,7 @@ func TestClient_ACancelledCallerIsNotAnOutage(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { <-hung }))
 	t.Cleanup(srv.Close)
 	t.Cleanup(func() { close(hung) })
-	client := clientFor(srv, 0, time.Minute)
+	client := clientFor(srv, time.Minute)
 	ctx, cancel := context.WithCancel(context.Background())
 	time.AfterFunc(30*time.Millisecond, cancel)
 
@@ -288,7 +245,7 @@ func TestClient_AnOutageNamesYtmsearchAsTheUnavailableSource(t *testing.T) {
 	for _, status := range []int{http.StatusInternalServerError, http.StatusBadGateway, http.StatusNotFound} {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) }))
 		t.Cleanup(srv.Close)
-		client := clientFor(srv, 0, time.Second)
+		client := clientFor(srv, time.Second)
 
 		_, searchErr := client.SearchSongs(context.Background(), "anything")
 		_, watchErr := client.Watch(context.Background(), "XDC3uH1FSgw")
@@ -307,7 +264,7 @@ func TestClient_ACallerDeadlineIsNotAnOutage(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { <-hung }))
 	t.Cleanup(srv.Close)
 	t.Cleanup(func() { close(hung) })
-	client := clientFor(srv, 0, time.Minute)
+	client := clientFor(srv, time.Minute)
 
 	for name, call := range map[string]func(context.Context) error{
 		"SearchSongs": func(ctx context.Context) error { _, err := client.SearchSongs(ctx, "anything"); return err },
@@ -322,28 +279,10 @@ func TestClient_ACallerDeadlineIsNotAnOutage(t *testing.T) {
 	}
 }
 
-func TestClient_ACallerCancelledWhileWaitingForItsTurnIsNotAnOutage(t *testing.T) {
-	var requests []recordedRequest
-	client := clientFor(fixtureServer(t, &requests), time.Hour, time.Second)
-	_, _ = client.Watch(context.Background(), "XDC3uH1FSgw")
-	_, _ = client.SearchSongs(context.Background(), "q")
-	ctx, cancel := context.WithCancel(context.Background())
-	time.AfterFunc(30*time.Millisecond, cancel)
-
-	_, watchErr := client.Watch(ctx, "u4GAeAYGAqE")
-	_, searchErr := client.SearchSongs(ctx, "q")
-
-	for name, err := range map[string]error{"SearchSongs": searchErr, "Watch": watchErr} {
-		if !errors.Is(err, context.Canceled) || isSourceUnavailable(err) {
-			t.Errorf("%s err = %v, want the caller's cancellation, not an outage", name, err)
-		}
-	}
-}
-
 func TestClient_AnAlreadyCancelledCallerIsNotAnOutageEvenWhenTheServerIsDown(t *testing.T) {
 	refused := httptest.NewServer(http.NotFoundHandler())
 	refused.Close()
-	client := clientFor(refused, 0, time.Second)
+	client := clientFor(refused, time.Second)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -369,7 +308,7 @@ func TestClient_AConnectionDroppedMidResponseIsSourceUnavailable(t *testing.T) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	client := clientFor(srv, 0, time.Second)
+	client := clientFor(srv, time.Second)
 
 	_, searchErr := client.SearchSongs(context.Background(), "anything")
 	_, watchErr := client.Watch(context.Background(), "XDC3uH1FSgw")
@@ -386,7 +325,7 @@ func TestClient_ItsOwnTimeoutSaysItTimedOut(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { <-hung }))
 	t.Cleanup(srv.Close)
 	t.Cleanup(func() { close(hung) })
-	client := clientFor(srv, 0, 30*time.Millisecond)
+	client := clientFor(srv, 30*time.Millisecond)
 
 	_, searchErr := client.SearchSongs(context.Background(), "anything")
 	_, watchErr := client.Watch(context.Background(), "XDC3uH1FSgw")
@@ -395,20 +334,6 @@ func TestClient_ItsOwnTimeoutSaysItTimedOut(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "timed out after 30ms") {
 			t.Errorf("%s err = %v, want it to say it timed out after 30ms", name, err)
 		}
-	}
-}
-
-func TestClient_WaitingForItsTurnDoesNotUseUpTheRequestTimeout(t *testing.T) {
-	var requests []recordedRequest
-	const interval, timeout = 150 * time.Millisecond, 50 * time.Millisecond
-	client := clientFor(fixtureServer(t, &requests), interval, timeout)
-	if _, err := client.SearchSongs(context.Background(), "first"); err != nil {
-		t.Fatalf("first search: %v", err)
-	}
-
-	_, err := client.SearchSongs(context.Background(), "waits longer than the timeout for its turn")
-	if err != nil {
-		t.Fatalf("second search err = %v, want the turn wait outside the %v request timeout", err, timeout)
 	}
 }
 
@@ -430,11 +355,10 @@ func TestClient_WaitsForASharedBudgetSlotBeyondTheTimeout(t *testing.T) {
 	var requests []recordedRequest
 	srv := fixtureServer(t, &requests)
 	client, err := download.NewYtmSearch(download.YouTubeMusicSearchConfig{
-		HTTP:        &http.Client{Transport: budget.Transport(nil)},
-		MusicURL:    srv.URL,
-		OEmbedURL:   srv.URL + "/oembed",
-		MinInterval: time.Millisecond,
-		Timeout:     timeout,
+		HTTP:      &http.Client{Transport: budget.Transport(nil)},
+		MusicURL:  srv.URL,
+		OEmbedURL: srv.URL + "/oembed",
+		Timeout:   timeout,
 	})
 	if err != nil {
 		t.Fatalf("build the client: %v", err)

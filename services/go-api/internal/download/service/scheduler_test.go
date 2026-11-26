@@ -3435,6 +3435,7 @@ func awaitIdle(t *testing.T, s *service.BackgroundAcquisitionScheduler) {
 	}
 	t.Fatalf("scheduler still has %d pending jobs after %d simulated seconds, want idle", s.Status().Pending, rounds)
 }
+
 func TestNewBackgroundAcquisitionScheduler_RefusesAMissingClock(t *testing.T) {
 	_, err := service.NewBackgroundAcquisitionScheduler(outcomeAcquirer{}, 1, nil, testSchedulerPorts())
 

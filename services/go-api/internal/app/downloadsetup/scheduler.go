@@ -10,7 +10,9 @@ import (
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/config"
 	"context"
+	"errors"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,6 +20,7 @@ import (
 
 type Deps struct {
 	Config       *config.Config
+	Transport    http.RoundTripper
 	Pool         *pgxpool.Pool
 	Events       *monitoring.EventTap
 	Recording    downloadfromsearch.RecordingWiring
@@ -29,7 +32,12 @@ type Deps struct {
 
 type acquireOption = func(*download.AcquireTrackAudioService)
 
+var ErrTransportRequired = errors.New("downloadsetup: Deps.Transport is required, so acquisition calls never fall back to an unpaced transport")
+
 func NewScheduler(ctx context.Context, d Deps) *download.BackgroundAcquisitionScheduler {
+	if d.Transport == nil {
+		panic(ErrTransportRequired)
+	}
 	skips := &download.VerifySkipCounter{}
 	prober := download.NewFfprobeProber(d.Config.FFmpegLocation, download.WithSkipRecorder(skips))
 	d.Verification.Ffprobe, d.Verification.Ffmpeg = prober.Available()
@@ -45,7 +53,7 @@ func NewScheduler(ctx context.Context, d Deps) *download.BackgroundAcquisitionSc
 			Identifier:      identifier,
 			RecordingLookup: d.Recording.Lookup,
 			Rerecordings:    d.Recording.Rerecordings,
-			Previews:        upgradePreviewMatcher(d.Config),
+			Previews:        upgradePreviewMatcher(d.Config, d.Transport),
 			Recordings:      d.Recording.Resolver,
 		},
 		download.StagePorts{
@@ -78,7 +86,7 @@ func fingerprinting(ctx context.Context, d *Deps) (*fingerprintstatus.HealthTrac
 		slog.WarnContext(ctx, "acquisition: fingerprint verification disabled", "reason", "ACOUSTID_API_KEY is empty")
 		return fingerprintstatus.NewTracker(nil), download.NoopAudioIdentifier(), download.NoopStoredAudioReader()
 	}
-	identifier := download.NewChromaprintIdentifier(cfg.FFmpegLocation, cfg.AcoustIDAPIKey)
+	identifier := download.MustNewChromaprintIdentifier(cfg.FFmpegLocation, cfg.AcoustIDAPIKey, &http.Client{Transport: d.Transport})
 	d.Verification.Fpcalc = identifier.Available()
 	lookups := fingerprintstatus.NewTracker(identifier)
 	slog.InfoContext(ctx, "acquisition: fingerprint verification wired", "fpcalc", d.Verification.Fpcalc)

@@ -13,10 +13,7 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-const (
-	ytmSearchMinInterval = 200 * time.Millisecond
-	ytmSearchTimeout     = 10 * time.Second
-)
+const ytmSearchTimeout = 10 * time.Second
 
 type SourceOrder struct {
 	First    []download.AudioSource
@@ -41,28 +38,28 @@ func YtDlpSearcher(cfg *config.Config) *download.YouTubeAudioSearcher {
 		WithEnvironment(cfg.Env)
 }
 
-func CanaryYTMClient(cfg *config.Config, redis *goredis.Client) (*download.YouTubeMusicSearchClient, error) {
-	return budgetedYTMSearchClient(context.Background(), cfg, redis)
+func CanaryYTMClient(cfg *config.Config, redis *goredis.Client, transport http.RoundTripper) (*download.YouTubeMusicSearchClient, error) {
+	return budgetedYTMSearchClient(context.Background(), cfg, redis, transport)
 }
 
-func budgetedYTMSearchClient(ctx context.Context, cfg *config.Config, redis *goredis.Client) (*download.YouTubeMusicSearchClient, error) {
-	return download.NewYtmSearch(download.YouTubeMusicSearchConfig{HTTP: innerTubeClient(ctx, cfg, redis), MinInterval: ytmSearchMinInterval, Timeout: ytmSearchTimeout})
+func budgetedYTMSearchClient(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper) (*download.YouTubeMusicSearchClient, error) {
+	return download.NewYtmSearch(download.YouTubeMusicSearchConfig{HTTP: innerTubeClient(ctx, cfg, redis, transport), Timeout: ytmSearchTimeout})
 }
 
-func innerTubeClient(ctx context.Context, cfg *config.Config, redis *goredis.Client) *http.Client {
+func innerTubeClient(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper) *http.Client {
 	settings := youtubemusicapi.Settings{MinInterval: cfg.YtmInnerTubeMinInterval, Cooldown: cfg.YtmInnerTubeCooldown}
 	budget, err := youtubemusicapi.NewBudget(redis, settings)
 	if err != nil {
-		slog.WarnContext(ctx, "acquisition: no shared InnerTube budget without redis, pacing in-process only")
-		return &http.Client{Timeout: ytmSearchTimeout}
+		slog.WarnContext(ctx, "acquisition: no shared InnerTube budget without redis, pacing through the shared outbound pacer only")
+		return &http.Client{Timeout: ytmSearchTimeout, Transport: transport}
 	}
-	return &http.Client{Timeout: ytmSearchTimeout, Transport: budget.Transport(nil)}
+	return &http.Client{Timeout: ytmSearchTimeout, Transport: budget.Transport(transport)}
 }
 
 func sourcesFor(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper, searcher *download.YouTubeAudioSearcher) (SourceOrder, error) {
 	var tiers SourceOrder
 	if cfg.YtMusicEnabled {
-		songs, err := budgetedYTMSearchClient(ctx, cfg, redis)
+		songs, err := budgetedYTMSearchClient(ctx, cfg, redis, transport)
 		if err != nil {
 			return SourceOrder{}, fmt.Errorf("build the ytmusic search client: %w", err)
 		}

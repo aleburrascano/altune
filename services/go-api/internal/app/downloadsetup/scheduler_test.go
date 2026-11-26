@@ -14,6 +14,7 @@ import (
 	"context"
 	_ "embed"
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -67,6 +68,7 @@ func eventTap(t *testing.T) *monitoring.EventTap {
 func newOfflineScheduler(t *testing.T, cfg *config.Config, sources downloadsetup.SourceOrder) *download.BackgroundAcquisitionScheduler {
 	t.Helper()
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
+		Transport:  http.DefaultTransport,
 		Config:     cfg,
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(&fixtureTrackRepo{}),
@@ -93,6 +95,7 @@ func acquireThroughPostgres(t *testing.T) (library.Track, string, download.Verif
 	}
 	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID()) })
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
+		Transport:  http.DefaultTransport,
 		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, MusicDir: musicDir},
 		Pool:       pool,
 		Events:     eventTap(t),
@@ -133,6 +136,19 @@ func assertReadyWithAudio(t *testing.T, track library.Track, musicDir string) {
 	if err != nil || stored.Size() == 0 {
 		t.Fatalf("stored audio %q: size %v err %v", *track.AudioRef, stored, err)
 	}
+}
+
+func TestNewScheduler_RefusesAMissingTransport(t *testing.T) {
+	defer func() {
+		got, _ := recover().(error)
+		if !errors.Is(got, downloadsetup.ErrTransportRequired) {
+			t.Fatalf("panic = %v, want ErrTransportRequired", got)
+		}
+	}()
+
+	downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{Config: &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1}})
+
+	t.Fatal("NewScheduler built a scheduler without a transport")
 }
 
 func TestNewScheduler_TheFirstTierArtTrackIsTheStoredSource(t *testing.T) {
@@ -226,6 +242,7 @@ func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
 
 	trackRepo := library.NewPostgresTrackRepository(pool)
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
+		Transport:  http.DefaultTransport,
 		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, MusicDir: t.TempDir()},
 		Pool:       pool,
 		Events:     eventTap(t),
@@ -314,6 +331,7 @@ func TestNewScheduler_AnUpgradeWorkerClaimsAndSettlesAnEnqueuedUpgrade(t *testin
 
 	cfg := &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, MusicDir: t.TempDir(), AcquisitionUpgradeConcurrency: 1, AcquisitionUpgradeMaxTries: 3}
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
+		Transport:  http.DefaultTransport,
 		Config:     cfg,
 		Pool:       pool,
 		Events:     eventTap(t),
@@ -398,6 +416,7 @@ func TestNewScheduler_ShutdownCancelsAJobThatOutlivesTheConfiguredDrainBudget(t 
 	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID()) })
 	hang := sourceThatHangs{started: make(chan struct{}, 1)}
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
+		Transport:  http.DefaultTransport,
 		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, MusicDir: t.TempDir(), AcquisitionDrainBudgetSeconds: 1},
 		Pool:       pool,
 		Events:     eventTap(t),
