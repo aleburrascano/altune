@@ -1,9 +1,10 @@
-import { Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import {
   DismissKeyboardArea,
   KeepInputFocusArea,
+  ModalFrame,
   adjustsKeyboardInsets,
   dismissKeyboard,
 } from '@shared/ui';
@@ -22,7 +23,7 @@ describe('keyboard (native)', () => {
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
-  it('DismissKeyboardArea dismisses the keyboard on press when it is given no dismissal', () => {
+  it('DismissKeyboardArea does not throw on press when it is given no dismissal', () => {
     render(
       <DismissKeyboardArea testID="area">
         <Text>child</Text>
@@ -32,7 +33,7 @@ describe('keyboard (native)', () => {
     expect(() => fireEvent.press(screen.getByTestId('area'))).not.toThrow();
   });
 
-  it('KeepInputFocusArea renders its children and is not a press target', () => {
+  it('a press on KeepInputFocusArea content passes through to the surrounding dismiss area', () => {
     const onDismiss = jest.fn();
     render(
       <DismissKeyboardArea testID="outer" onDismiss={onDismiss}>
@@ -42,15 +43,29 @@ describe('keyboard (native)', () => {
       </DismissKeyboardArea>,
     );
 
-    expect(screen.getByTestId('area')).toBeTruthy();
-    expect(screen.getByText('child')).toBeTruthy();
+    fireEvent.press(screen.getByText('child'));
+
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
-  it('dismissKeyboard asks the platform to hide the keyboard without failing', () => {
+  it('dismissKeyboard does not throw', () => {
     expect(() => dismissKeyboard()).not.toThrow();
   });
 
   it('adjusts keyboard insets on the native platform the tests run as', () => {
     expect(adjustsKeyboardInsets).toBe(true);
+  });
+
+  it('a modal avoids the keyboard with padding by default on the native platform', () => {
+    render(
+      <ModalFrame visible onClose={jest.fn()} closeAction="test.modal.close" testID="frame">
+        <Text>content</Text>
+      </ModalFrame>,
+    );
+
+    expect(StyleSheet.flatten(screen.getByTestId('frame-keyboard').props.style)).toHaveProperty(
+      'paddingBottom',
+      0,
+    );
   });
 });

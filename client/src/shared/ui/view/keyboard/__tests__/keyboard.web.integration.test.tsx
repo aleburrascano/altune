@@ -1,5 +1,5 @@
 import { act } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createRoot, type Root } from 'react-dom/client';
 import { Text, TextInput } from 'react-native';
 
 import {
@@ -9,14 +9,27 @@ import {
   dismissKeyboard,
 } from '@shared/ui';
 
+type Mounted = { container: HTMLElement; root: Root };
+
+const mounted: Mounted[] = [];
+
 function mount(element: React.ReactElement): HTMLElement {
   const container = document.createElement('div');
   document.body.appendChild(container);
+  const root = createRoot(container);
+  mounted.push({ container, root });
   act(() => {
-    createRoot(container).render(element);
+    root.render(element);
   });
   return container;
 }
+
+afterEach(() => {
+  for (const { container, root } of mounted.splice(0)) {
+    act(() => root.unmount());
+    container.remove();
+  }
+});
 
 function byTestId(container: HTMLElement, testID: string): HTMLElement {
   const node = container.querySelector<HTMLElement>(`[data-testid="${testID}"]`);
@@ -24,7 +37,9 @@ function byTestId(container: HTMLElement, testID: string): HTMLElement {
   return node;
 }
 
-function focusedField(): HTMLElement {
+type FieldAndArea = { field: HTMLElement; area: HTMLElement };
+
+function focusedFieldBesideDismissArea(): FieldAndArea {
   const container = mount(
     <>
       <TextInput testID="field" />
@@ -35,14 +50,14 @@ function focusedField(): HTMLElement {
   );
   const field = byTestId(container, 'field');
   act(() => field.focus());
-  return field;
+  return { field, area: byTestId(container, 'area') };
 }
 
 describe('keyboard (web)', () => {
   it('DismissKeyboardArea leaves the focused input focused when pressed', () => {
-    const field = focusedField();
+    const { field, area } = focusedFieldBesideDismissArea();
 
-    act(() => document.querySelector<HTMLElement>('[data-testid="area"]')?.click());
+    act(() => area.click());
 
     expect(document.activeElement).toBe(field);
   });
@@ -61,7 +76,7 @@ describe('keyboard (web)', () => {
   });
 
   it('dismissKeyboard leaves the focused input focused', () => {
-    const field = focusedField();
+    const { field } = focusedFieldBesideDismissArea();
 
     dismissKeyboard();
 
