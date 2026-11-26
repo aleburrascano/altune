@@ -155,7 +155,7 @@ export function useArtistDetailState(
     discoveryLoading: discoverySearch.isLoading,
     discoveryError: discoverySearch.isError,
     discoveryRefetch: () => {
-      void discoverySearch.refetch();
+      discoverySearch.refetch();
       refetchContent();
     },
     onTrackPress,

@@ -163,7 +163,7 @@ export function useAlbumDetailState(
     discoveryError: discovery.isError,
     discoveryFailure: discovery.failure,
     discoveryRefetch: () => {
-      void discovery.refetch();
+      discovery.refetch();
     },
     lastBatch,
     savingAll,

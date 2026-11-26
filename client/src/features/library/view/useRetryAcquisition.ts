@@ -54,7 +54,7 @@ function pendingRunsOf(mutationKey: TrackMutationKey): MutationFilters {
   return { mutationKey, status: 'pending' };
 }
 
-function asRunTrackId(run: Mutation<unknown, Error, unknown, unknown>): TrackId {
+function asRunTrackId(run: Mutation): TrackId {
   return run.state.variables as TrackId;
 }
 
@@ -104,7 +104,7 @@ function reacquireEndpoint(trackId: TrackId) {
 const REACQUIRE_FAILED = 'Could not start a re-acquisition. Your current audio is unchanged.';
 
 function markReacquirePending(queryClient: QueryClient) {
-  return (_started: void, trackId: TrackId): void => {
+  return (_started: unknown, trackId: TrackId): void => {
     patchTrackInCaches(queryClient, trackId, toPending());
   };
 }

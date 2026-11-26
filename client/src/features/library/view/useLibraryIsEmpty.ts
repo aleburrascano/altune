@@ -11,5 +11,5 @@ export function useLibraryIsEmpty(): boolean {
     queryFn: () => port.getTracks({ limit: 1, offset: 0 }),
     staleTime: Infinity,
   });
-  return data !== undefined && data.total === 0;
+  return data?.total === 0;
 }
