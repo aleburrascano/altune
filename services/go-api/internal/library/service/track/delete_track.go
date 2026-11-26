@@ -48,9 +48,7 @@ func (s *DeleteTrackService) Execute(ctx context.Context, userId ids.UserId, tra
 
 	slog.InfoContext(ctx, "track deleted from library",
 		"track_id", trackId.String(), "user_id", userId.String())
-	s.events.Publish(ctx, userId, events.TypeTrackDeleted, map[string]any{
-		"track_id": trackId.String(),
-	})
+	s.events.Publish(ctx, userId, events.TrackDeleted{TrackID: trackId.String()})
 
 	if audioRef == nil {
 		return nil

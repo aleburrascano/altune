@@ -65,11 +65,11 @@ func (r schedulerJobReporter) stage(name string) {
 		j.Stage = name
 		title, artist = j.Title, j.Artist
 	})
-	r.events.Publish(r.ctx, r.userId, events.TypeTrackAcquisitionProgress, map[string]any{
-		"track_id": r.trackID,
-		"stage":    name,
-		"title":    title,
-		"artist":   artist,
+	r.events.Publish(r.ctx, r.userId, events.TrackAcquisitionProgress{
+		TrackID: r.trackID,
+		Stage:   name,
+		Title:   title,
+		Artist:  artist,
 	})
 }
 

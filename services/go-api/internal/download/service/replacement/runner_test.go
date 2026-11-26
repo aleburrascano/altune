@@ -100,7 +100,7 @@ type publisher struct {
 	published int
 }
 
-func (p *publisher) Publish(context.Context, ids.UserId, events.EventType, map[string]any) {
+func (p *publisher) Publish(context.Context, ids.UserId, events.Payload) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.published++

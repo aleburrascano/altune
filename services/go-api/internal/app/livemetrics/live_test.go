@@ -11,6 +11,7 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/events"
+	"altune/go-api/internal/shared/events/eventstest"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"encoding/json"
@@ -136,7 +137,7 @@ func TestLive_ReportsEventBusDrops(t *testing.T) {
 	_, unsubscribe := s.bus.Subscribe(user)
 	t.Cleanup(unsubscribe)
 	for i := 0; i < 10000 && s.bus.Dropped() == 0; i++ {
-		s.bus.Publish(context.Background(), user, "probe", nil)
+		s.bus.Publish(context.Background(), user, eventstest.Named("probe"))
 	}
 	if s.bus.Dropped() == 0 {
 		t.Fatal("precondition: an unread subscriber never overflowed, so the bus dropped nothing")
@@ -170,7 +171,7 @@ func TestLive_ReportsEventTapAndFeedDrops(t *testing.T) {
 	user := ids.NewUserId(uuid.New())
 	deadline := time.Now().Add(5 * time.Second)
 	for s.EventFeed.Dropped() == 0 && time.Now().Before(deadline) {
-		s.EventTap.Publish(context.Background(), user, "flood", nil)
+		s.EventTap.Publish(context.Background(), user, eventstest.Named("flood"))
 	}
 	if s.EventFeed.Dropped() == 0 {
 		t.Fatal("precondition: an unread subscriber never overflowed, so the feed dropped nothing")

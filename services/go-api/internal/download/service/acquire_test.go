@@ -35,10 +35,10 @@ func newCtxRecordingPublisher() *ctxRecordingPublisher {
 	return &ctxRecordingPublisher{onLive: make(map[events.EventType]bool)}
 }
 
-func (p *ctxRecordingPublisher) Publish(ctx context.Context, _ ids.UserId, eventType events.EventType, _ map[string]any) {
+func (p *ctxRecordingPublisher) Publish(ctx context.Context, _ ids.UserId, payload events.Payload) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.onLive[eventType] = ctx.Err() == nil
+	p.onLive[payload.EventType()] = ctx.Err() == nil
 }
 
 func (p *ctxRecordingPublisher) publishedOnLiveCtx(eventType events.EventType) bool {

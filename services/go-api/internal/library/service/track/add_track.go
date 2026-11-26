@@ -6,9 +6,7 @@ import (
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"time"
 )
@@ -112,11 +110,8 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 			"track_id", track.ID.String(),
 			"user_id", userId.String(),
 		)
-		if payload, encodeErr := trackAddedPayload(track); encodeErr != nil {
-			slog.WarnContext(ctx, "catalog.track_added_event_dropped", "track_id", track.ID.String(), "error", encodeErr)
-		} else {
-			s.events.Publish(ctx, userId, events.TypeTrackAddedToLibrary, payload)
-		}
+		dto := TrackToDTO(track)
+		s.events.Publish(ctx, userId, events.TrackAddedToLibrary{TrackID: dto.ID, Track: dto})
 		sourceURL := ""
 		if input.SourceURL != nil {
 			sourceURL = *input.SourceURL
@@ -152,9 +147,9 @@ func (s *AddTrackService) scheduleAcquisition(ctx context.Context, userId ids.Us
 		return
 	}
 	*track = failed
-	s.events.Publish(ctx, userId, events.TypeTrackAcquisitionFailed, map[string]any{
-		"track_id": track.ID.String(),
-		"reason":   string(domain.FailureAcquisitionRefused),
+	s.events.Publish(ctx, userId, events.TrackAcquisitionFailed{
+		TrackID: track.ID.String(),
+		Reason:  string(domain.FailureAcquisitionRefused),
 	})
 }
 
@@ -244,18 +239,4 @@ func validateAddTrackText(input AddTrackInput) error {
 
 func plausibleYear(year int, now time.Time) bool {
 	return year >= minPlausibleYear && year <= now.UTC().Year()+1
-}
-
-func trackAddedPayload(t *domain.Track) (map[string]any, error) {
-	dto := TrackToDTO(t)
-	raw, err := json.Marshal(dto)
-	if err != nil {
-		return nil, fmt.Errorf("encode track %s: %w", dto.ID, err)
-	}
-	payload := map[string]any{}
-	if err := json.Unmarshal(raw, &payload); err != nil {
-		return nil, fmt.Errorf("decode track %s payload: %w", dto.ID, err)
-	}
-	payload["track_id"] = dto.ID
-	return payload, nil
 }

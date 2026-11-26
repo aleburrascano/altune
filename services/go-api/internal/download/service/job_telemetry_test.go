@@ -20,15 +20,14 @@ type progressStages struct {
 	stages []string
 }
 
-func (p *progressStages) Publish(_ context.Context, _ ids.UserId, eventType events.EventType, payload map[string]any) {
-	if eventType != events.TypeTrackAcquisitionProgress {
+func (p *progressStages) Publish(_ context.Context, _ ids.UserId, payload events.Payload) {
+	progress, ok := payload.(events.TrackAcquisitionProgress)
+	if !ok {
 		return
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if stage, ok := payload["stage"].(string); ok {
-		p.stages = append(p.stages, stage)
-	}
+	p.stages = append(p.stages, progress.Stage)
 }
 
 func (p *progressStages) reported() []string {

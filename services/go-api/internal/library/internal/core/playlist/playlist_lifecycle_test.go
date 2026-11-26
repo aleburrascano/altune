@@ -452,7 +452,7 @@ func TestPlaylistLifecycleService_Rename_PublishesTheNewName(t *testing.T) {
 	if _, _, err := svc.Rename(ctx, userId, pl.ID, "New Name"); err != nil {
 		t.Fatalf("rename: %v", err)
 	}
-	p := pub.Last("playlist_renamed")
+	p := pub.LastFields("playlist_renamed")
 	if p == nil || p["playlist_id"] != pl.ID.String() || p["name"] != "New Name" {
 		t.Fatalf("playlist_renamed payload = %v", p)
 	}

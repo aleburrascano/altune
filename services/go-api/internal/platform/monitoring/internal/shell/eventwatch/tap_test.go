@@ -3,6 +3,7 @@ package eventwatch_test
 import (
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/events"
+	"altune/go-api/internal/shared/events/eventstest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -24,7 +25,7 @@ func TestSubscribeAll_CapturesNeverSeenUser(t *testing.T) {
 	defer cancel()
 
 	freshUser := ids.NewUserId(uuid.New())
-	tp.Publish(context.Background(), freshUser, "track_added", map[string]any{"track_id": "secret"})
+	tp.Publish(context.Background(), freshUser, eventstest.With("track_added", map[string]any{"track_id": "secret"}))
 
 	select {
 	case evt := <-tap:
@@ -48,7 +49,7 @@ func TestPublish_StampsCorrelationIDFromContext(t *testing.T) {
 	defer cancel()
 
 	ctx := logging.WithCorrelationID(context.Background(), "req-abc123")
-	tp.Publish(ctx, ids.NewUserId(uuid.New()), "track_added", nil)
+	tp.Publish(ctx, ids.NewUserId(uuid.New()), eventstest.Named("track_added"))
 
 	select {
 	case evt := <-tap:
@@ -68,7 +69,7 @@ func TestPublish_ContextWithoutCorrelationIDYieldsEmptyCorrID(t *testing.T) {
 	}
 	defer cancel()
 
-	tp.Publish(context.Background(), ids.NewUserId(uuid.New()), "track_added", nil)
+	tp.Publish(context.Background(), ids.NewUserId(uuid.New()), eventstest.Named("track_added"))
 
 	select {
 	case evt := <-tap:
@@ -103,7 +104,7 @@ func TestSubscribeAll_SlowConsumerDropsNotBlocks(t *testing.T) {
 
 	user := ids.NewUserId(uuid.New())
 	for i := 0; i < 3*tapBufferSize; i++ {
-		tp.Publish(context.Background(), user, "spam", nil)
+		tp.Publish(context.Background(), user, eventstest.Named("spam"))
 	}
 	if tp.Dropped() == 0 {
 		t.Error("expected some tap drops once the consumer buffer filled")
@@ -132,7 +133,7 @@ func TestPublish_SubjectOmitsUserAuthoredText(t *testing.T) {
 	}
 	defer cancel()
 
-	tp.Publish(context.Background(), ids.NewUserId(uuid.New()), "playlist_created", map[string]any{"name": "my private playlist", "title": "a title"})
+	tp.Publish(context.Background(), ids.NewUserId(uuid.New()), eventstest.With("playlist_created", map[string]any{"name": "my private playlist", "title": "a title"}))
 
 	evt := <-tap
 	if evt.Subject != "" {

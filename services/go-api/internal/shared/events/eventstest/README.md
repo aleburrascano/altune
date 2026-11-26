@@ -1,0 +1,1 @@
+`eventstest` owns the one untyped `events.Payload` that tests use when the event name or its fields are the point, not a real event: transport tests of the bus, the SSE handler and the tap publish `Named("e")` or `With("seed", fields)`. Production code publishes only the typed payloads in `events`; nothing outside a test imports this package.

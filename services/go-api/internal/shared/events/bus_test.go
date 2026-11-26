@@ -2,6 +2,7 @@ package events_test
 
 import (
 	"altune/go-api/internal/shared/events"
+	"altune/go-api/internal/shared/events/eventstest"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"log/slog"
@@ -46,7 +47,7 @@ func newUser() ids.UserId { return ids.NewUserId(uuid.New()) }
 
 func evictIdleUsers(bus *events.InProcessBus, clock *testClock) {
 	clock.advance(userIdleTTL + time.Minute)
-	bus.Publish(context.Background(), newUser(), "trigger", nil)
+	bus.Publish(context.Background(), newUser(), eventstest.Named("trigger"))
 }
 
 func isTracked(bus *events.InProcessBus, user ids.UserId) bool {
@@ -60,13 +61,13 @@ func TestPublish_EpochSeedsEventIDs(t *testing.T) {
 	ch, cancel := bus.Subscribe(user)
 	defer cancel()
 
-	bus.Publish(context.Background(), user, "first", map[string]any{"k": "v"})
+	bus.Publish(context.Background(), user, eventstest.With("first", map[string]any{"k": "v"}))
 	evt := <-ch
 
 	if evt.ID <= 1 {
 		t.Fatalf("first event id = %d, want an epoch-seeded id well above 1", evt.ID)
 	}
-	if evt.Type != "first" || evt.UserID != user || evt.Payload["k"] != "v" || evt.Timestamp.IsZero() {
+	if evt.Type != "first" || evt.UserID != user || evt.Payload.(eventstest.Event).Fields["k"] != "v" || evt.Timestamp.IsZero() {
 		t.Fatalf("event = %+v, want the published type, user, payload and a timestamp", evt)
 	}
 	if got := bus.HighestIssuedID(); got != evt.ID {
@@ -80,16 +81,16 @@ func TestEvictIdleUsers_ReclaimsIdleButKeepsActiveAndRecent(t *testing.T) {
 
 	idle := newUser()
 	active := newUser()
-	bus.Publish(context.Background(), idle, "e", nil)
+	bus.Publish(context.Background(), idle, eventstest.Named("e"))
 	_, cancelActive := bus.Subscribe(active)
 	defer cancelActive()
-	bus.Publish(context.Background(), active, "e", nil)
+	bus.Publish(context.Background(), active, eventstest.Named("e"))
 
 	clock.advance(userIdleTTL + time.Minute)
 
 	recent := newUser()
-	bus.Publish(context.Background(), recent, "e", nil)
-	bus.Publish(context.Background(), newUser(), "e", nil)
+	bus.Publish(context.Background(), recent, eventstest.Named("e"))
+	bus.Publish(context.Background(), newUser(), eventstest.Named("e"))
 
 	if isTracked(bus, idle) {
 		t.Fatalf("idle subscriber-less user was not evicted")
@@ -106,10 +107,10 @@ func TestEvictIdleUsers_KeepsAUserIdleForExactlyTheTTL(t *testing.T) {
 	clock := newTestClock(time.Unix(0, 0))
 	bus := busAt(t, clock)
 	user := newUser()
-	bus.Publish(context.Background(), user, "e", nil)
+	bus.Publish(context.Background(), user, eventstest.Named("e"))
 
 	clock.advance(userIdleTTL)
-	bus.Publish(context.Background(), newUser(), "trigger", nil)
+	bus.Publish(context.Background(), newUser(), eventstest.Named("trigger"))
 
 	if !isTracked(bus, user) {
 		t.Fatalf("user idle for exactly %s was evicted, want eviction only past it", userIdleTTL)
@@ -121,11 +122,11 @@ func TestEvictIdleUsers_CancelledSubscriptionStartsTheIdleClock(t *testing.T) {
 	bus := busAt(t, clock)
 	user := newUser()
 	_, cancel := bus.Subscribe(user)
-	bus.Publish(context.Background(), user, "e", nil)
+	bus.Publish(context.Background(), user, eventstest.Named("e"))
 	clock.advance(userIdleTTL + time.Minute)
 	cancel()
 
-	bus.Publish(context.Background(), newUser(), "trigger", nil)
+	bus.Publish(context.Background(), newUser(), eventstest.Named("trigger"))
 	if !isTracked(bus, user) {
 		t.Fatal("user evicted right after its last subscriber left, want the idle TTL to start then")
 	}
@@ -142,7 +143,7 @@ func TestPublish_LaterProcessHasHigherIDs(t *testing.T) {
 	bus1 := events.NewInProcessBus(time.Now, floorPath)
 	ch1, cancel1 := bus1.Subscribe(user)
 	defer cancel1()
-	bus1.Publish(context.Background(), user, "e", nil)
+	bus1.Publish(context.Background(), user, eventstest.Named("e"))
 	id1 := (<-ch1).ID
 
 	time.Sleep(time.Millisecond)
@@ -150,7 +151,7 @@ func TestPublish_LaterProcessHasHigherIDs(t *testing.T) {
 	bus2 := events.NewInProcessBus(time.Now, floorPath)
 	ch2, cancel2 := bus2.Subscribe(user)
 	defer cancel2()
-	bus2.Publish(context.Background(), user, "e", nil)
+	bus2.Publish(context.Background(), user, eventstest.Named("e"))
 	id2 := (<-ch2).ID
 
 	if id2 <= id1 {
@@ -168,11 +169,11 @@ func TestReplay_AfterBackwardClockJumpAcrossRestart_SeesNewEvents(t *testing.T) 
 	beforeRestart := time.Unix(1_700_000_000, 0).UTC()
 
 	old := restartAt(beforeRestart, floorPath)
-	old.Publish(context.Background(), user, "before", nil)
+	old.Publish(context.Background(), user, eventstest.Named("before"))
 	clientAfterID := old.Replay(user, 0)[0].ID
 
 	restarted := restartAt(beforeRestart.Add(-time.Hour), floorPath)
-	restarted.Publish(context.Background(), user, "after", nil)
+	restarted.Publish(context.Background(), user, eventstest.Named("after"))
 
 	got := restarted.Replay(user, clientAfterID)
 	if len(got) != 1 || got[0].Type != "after" {
@@ -188,7 +189,7 @@ func TestPublish_AcrossRepeatedBackwardClockJumps_NeverReissuesAnID(t *testing.T
 	var highest uint64
 	for restart := 0; restart < 5; restart++ {
 		bus := restartAt(clock, floorPath)
-		bus.Publish(context.Background(), user, "e", nil)
+		bus.Publish(context.Background(), user, eventstest.Named("e"))
 		id := bus.Replay(user, 0)[0].ID
 		if id <= highest {
 			t.Fatalf("restart %d issued id %d, at or below the already-issued %d", restart, id, highest)
@@ -204,7 +205,7 @@ func TestReplay_AfterIdleEvictionAndRecreate_ReturnsNewEvents(t *testing.T) {
 	user := newUser()
 
 	for i := 0; i < 5; i++ {
-		bus.Publish(context.Background(), user, "before", nil)
+		bus.Publish(context.Background(), user, eventstest.Named("before"))
 	}
 	var lastSeenID uint64
 	for _, evt := range bus.Replay(user, 0) {
@@ -222,7 +223,7 @@ func TestReplay_AfterIdleEvictionAndRecreate_ReturnsNewEvents(t *testing.T) {
 		t.Fatalf("replay of an evicted user = %+v, want nothing", got)
 	}
 
-	bus.Publish(context.Background(), user, "after", nil)
+	bus.Publish(context.Background(), user, eventstest.Named("after"))
 
 	got := bus.Replay(user, lastSeenID)
 	if len(got) != 1 || got[0].Type != "after" {
@@ -237,7 +238,7 @@ func TestReplay_ReturnsOnlyEventsAfterTheGivenID(t *testing.T) {
 	bus := busAt(t, newTestClock(time.Unix(1_700_000_000, 0)))
 	user := newUser()
 	for range 3 {
-		bus.Publish(context.Background(), user, "e", nil)
+		bus.Publish(context.Background(), user, eventstest.Named("e"))
 	}
 	all := bus.Replay(user, 0)
 
@@ -252,7 +253,7 @@ func TestReplay_FullRingKeepsTheNewestEventsInOrder(t *testing.T) {
 	bus := busAt(t, newTestClock(time.Unix(1_700_000_000, 0)))
 	user := newUser()
 	for range ringSize + 2 {
-		bus.Publish(context.Background(), user, "e", nil)
+		bus.Publish(context.Background(), user, eventstest.Named("e"))
 	}
 
 	got := bus.Replay(user, 0)
@@ -336,7 +337,7 @@ func TestReplay_WarnsWithTheLostCountOnlyWhenTheRingDroppedEventsTheClientNeeds(
 	user := newUser()
 	var first uint64
 	for i := range ringSize + 2 {
-		bus.Publish(context.Background(), user, "e", nil)
+		bus.Publish(context.Background(), user, eventstest.Named("e"))
 		if i == 0 {
 			first = bus.LatestID(user)
 		}
@@ -382,7 +383,7 @@ func TestPublish_ConcurrentSameUserDeliversIDsInOrder(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				for range perPublisher {
-					bus.Publish(context.Background(), user, "e", nil)
+					bus.Publish(context.Background(), user, eventstest.Named("e"))
 				}
 			}()
 		}
@@ -446,7 +447,7 @@ func (c *gatedClock) advance(d time.Duration) {
 func holdUserLockWithStaleActivity(bus *events.InProcessBus, clock *gatedClock, user ids.UserId, staleAt time.Time) chan struct{} {
 	release := make(chan struct{})
 	held := clock.gateNextCall(staleAt, release)
-	go bus.Publish(context.Background(), user, "held", nil)
+	go bus.Publish(context.Background(), user, eventstest.Named("held"))
 	<-held.entered
 	return release
 }
@@ -458,7 +459,7 @@ func startEvictionQueuedOnUserLock(bus *events.InProcessBus, clock *gatedClock) 
 	cutoffRead := clock.gateNextCall(clock.current(), released)
 	go func() {
 		defer close(done)
-		bus.Publish(context.Background(), newUser(), "trigger", nil)
+		bus.Publish(context.Background(), newUser(), eventstest.Named("trigger"))
 	}()
 	<-cutoffRead.entered
 	time.Sleep(50 * time.Millisecond)
@@ -470,7 +471,7 @@ func TestEvictIdleUsers_SubscribeQueuedBehindTheEvictionIsNotOrphaned(t *testing
 	clock := &gatedClock{at: start}
 	bus := events.NewInProcessBus(clock.now, testFloorPath(t))
 	idle := newUser()
-	bus.Publish(context.Background(), idle, "before", nil)
+	bus.Publish(context.Background(), idle, eventstest.Named("before"))
 	clock.advance(userIdleTTL + time.Minute)
 
 	releaseUser := holdUserLockWithStaleActivity(bus, clock, idle, start)
@@ -486,7 +487,7 @@ func TestEvictIdleUsers_SubscribeQueuedBehindTheEvictionIsNotOrphaned(t *testing
 	sub := <-subscribed
 	defer sub.cancel()
 
-	bus.Publish(context.Background(), idle, "after", nil)
+	bus.Publish(context.Background(), idle, eventstest.Named("after"))
 
 	select {
 	case evt := <-sub.ch:
@@ -507,7 +508,7 @@ func TestLatestID_TracksLastPublishedIDEvenWhenSubscriberDropped(t *testing.T) {
 	_, cancel := bus.Subscribe(uid)
 	defer cancel()
 	for i := 0; i < subscriberChanSize+4; i++ {
-		bus.Publish(context.Background(), uid, "e", nil)
+		bus.Publish(context.Background(), uid, eventstest.Named("e"))
 	}
 	replayed := bus.Replay(uid, 0)
 	if want := replayed[len(replayed)-1].ID; bus.LatestID(uid) != want {
@@ -522,7 +523,7 @@ func TestResumeGapped_AfterIdleEvictionWithNothingPublished_ReportsGap(t *testin
 	clock := newTestClock(time.Unix(0, 0))
 	bus := busAt(t, clock)
 	user := newUser()
-	bus.Publish(context.Background(), user, "before", nil)
+	bus.Publish(context.Background(), user, eventstest.Named("before"))
 	lastSeenID := bus.Replay(user, 0)[0].ID
 
 	evictIdleUsers(bus, clock)
@@ -544,7 +545,7 @@ func TestResumeGapped_ClientAtTheHighestIDWhenStateWasRecreated_ReportsNoGap(t *
 	clock := newTestClock(time.Unix(0, 0))
 	bus := busAt(t, clock)
 	user := newUser()
-	bus.Publish(context.Background(), user, "before", nil)
+	bus.Publish(context.Background(), user, eventstest.Named("before"))
 	lastSeenID := bus.LatestID(user)
 	clock.advance(userIdleTTL + time.Minute)
 	_, cancelTrigger := bus.Subscribe(newUser())
@@ -565,7 +566,7 @@ func TestResumeGapped_AfterRestart_ReportsGap(t *testing.T) {
 	floorPath := testFloorPath(t)
 	user := newUser()
 	old := restartAt(time.Unix(1_700_000_000, 0).UTC(), floorPath)
-	old.Publish(context.Background(), user, "before", nil)
+	old.Publish(context.Background(), user, eventstest.Named("before"))
 	lastSeenID := old.Replay(user, 0)[0].ID
 
 	restarted := restartAt(time.Unix(1_700_000_000, 0).UTC(), floorPath)
@@ -577,7 +578,7 @@ func TestResumeGapped_AfterRestart_ReportsGap(t *testing.T) {
 func TestResumeGapped_CaughtUpOrFresh_ReportsNoGap(t *testing.T) {
 	bus := events.NewInProcessBus(time.Now, testFloorPath(t))
 	user := newUser()
-	bus.Publish(context.Background(), user, "e", nil)
+	bus.Publish(context.Background(), user, eventstest.Named("e"))
 	lastSeenID := bus.Replay(user, 0)[0].ID
 
 	if bus.ResumeGapped(user, lastSeenID) {
