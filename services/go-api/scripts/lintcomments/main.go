@@ -27,6 +27,10 @@ func main() {
 	os.Exit(run(context.Background(), os.Args[1:], os.Stdout))
 }
 
+func say(w io.Writer, format string, a ...any) {
+	_, _ = fmt.Fprintf(w, format, a...)
+}
+
 func run(ctx context.Context, args []string, stdout io.Writer) int {
 	if len(args) >= 1 && args[0] == "--all" {
 		return runAll(args[1:], stdout)
@@ -50,18 +54,18 @@ func runDiff(ctx context.Context, args []string, stdout io.Writer) int {
 	addedByFile := changedAddedLines(ctx, base)
 	files := goFiles(addedByFile)
 	if len(files) == 0 {
-		fmt.Fprintln(stdout, "No changed go files to check for new comments.")
+		say(stdout, "No changed go files to check for new comments.\n")
 		return 0
 	}
-	fmt.Fprintln(stdout, "Checking added lines for new comments/suppressions in:")
+	say(stdout, "Checking added lines for new comments/suppressions in:\n")
 	for _, file := range files {
-		fmt.Fprintf(stdout, "  %s\n", file)
+		say(stdout, "  %s\n", file)
 	}
 	hits := 0
 	for _, file := range files {
 		hits += reportFile(stdout, file, addedByFile[file])
 	}
-	fmt.Fprintf(stdout, "new-code comment/suppression violations: %d\n", hits)
+	say(stdout, "new-code comment/suppression violations: %d\n", hits)
 	if hits > 0 {
 		return 1
 	}
@@ -96,9 +100,9 @@ func runAll(dirs []string, stdout io.Writer) int {
 		return found[i].line < found[j].line
 	})
 	for _, hit := range found {
-		fmt.Fprintf(stdout, "%s:%d\n", hit.path, hit.line)
+		say(stdout, "%s:%d\n", hit.path, hit.line)
 	}
-	fmt.Fprintf(stdout, "comment violations: %d\n", len(found))
+	say(stdout, "comment violations: %d\n", len(found))
 	if len(found) > 0 {
 		return 1
 	}
@@ -254,7 +258,7 @@ func reportComment(stdout io.Writer, fset *token.FileSet, file string, added map
 	if kind == "" {
 		return 0
 	}
-	fmt.Fprintf(stdout, "  %s:%d  new %s on a changed line — zero-comments rule\n", file, start, kind)
+	say(stdout, "  %s:%d  new %s on a changed line — zero-comments rule\n", file, start, kind)
 	return 1
 }
 
