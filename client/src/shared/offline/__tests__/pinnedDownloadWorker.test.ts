@@ -17,6 +17,9 @@ const DOWNLOAD_RETRY_BASE_MS = 2_000;
 function noJitter(): number {
   return 0;
 }
+function running(): boolean {
+  return false;
+}
 const PIN_DOWNLOAD_TIMEOUT_MS = 120_000;
 const MIN_FREE_BYTES = 536_870_912;
 
@@ -62,7 +65,7 @@ describe('runDownloadQueue', () => {
       state = { ...state, ...update(state) };
     };
 
-    await runDownloadQueue(set, get, port, Math.random);
+    await runDownloadQueue(set, get, port, Math.random, running);
 
     expect(state.entries).toEqual({});
     expect(state.queue).toEqual([]);
@@ -117,11 +120,49 @@ describe('a transient pinned-download failure is retried before the track is fai
     setPinnedFileStore();
   });
 
+  it('stays quiet and stops retrying when it is stopped while a failed download waits to retry', async () => {
+    fetchAudioUrlsMock.mockRejectedValue(new NetworkError('transport', 'the API is unreachable'));
+    const track = queuedTrack(asTrackId('t1'));
+    let stopped = false;
+
+    const drained = runDownloadQueue(track.set, track.get, port, noJitter, () => stopped);
+    await settleMicrotasks();
+    await jest.advanceTimersByTimeAsync(0);
+    warn.mockClear();
+    stopped = true;
+    await jest.advanceTimersByTimeAsync(PIN_DOWNLOAD_TIMEOUT_MS);
+    await drained;
+
+    expect(fetchAudioUrlsMock).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('stays quiet when it is stopped while a download is in flight and then fails', async () => {
+    let failTheFetch: (error: Error) => void = noJitter;
+    fetchAudioUrlsMock.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          failTheFetch = reject;
+        }),
+    );
+    const track = queuedTrack(asTrackId('t1'));
+    let stopped = false;
+
+    const drained = runDownloadQueue(track.set, track.get, port, noJitter, () => stopped);
+    await settleMicrotasks();
+    stopped = true;
+    failTheFetch(new NetworkError('transport', 'the API is unreachable'));
+    await drained;
+
+    expect(warn).not.toHaveBeenCalled();
+    expect(fetchAudioUrlsMock).toHaveBeenCalledTimes(1);
+  });
+
   it('reattempts a dropped connection twice on a doubling backoff before marking the entry failed', async () => {
     fetchAudioUrlsMock.mockRejectedValue(new NetworkError('transport', 'the API is unreachable'));
     const track = queuedTrack(asTrackId('t1'));
 
-    const drained = runDownloadQueue(track.set, track.get, port, noJitter);
+    const drained = runDownloadQueue(track.set, track.get, port, noJitter, running);
     await settleMicrotasks();
     expect(fetchAudioUrlsMock).toHaveBeenCalledTimes(1);
 
@@ -150,7 +191,7 @@ describe('a transient pinned-download failure is retried before the track is fai
     fetchAudioUrlsMock.mockRejectedValueOnce(new ApiError(503, 'audio urls unavailable'));
     const track = queuedTrack(asTrackId('t1'));
 
-    const drained = runDownloadQueue(track.set, track.get, port, noJitter);
+    const drained = runDownloadQueue(track.set, track.get, port, noJitter, running);
     await jest.advanceTimersByTimeAsync(DOWNLOAD_RETRY_BASE_MS);
     await drained;
 
@@ -167,7 +208,7 @@ describe('a transient pinned-download failure is retried before the track is fai
     store.freeBytes = MIN_FREE_BYTES - 1;
     const track = queuedTrack(asTrackId('t1'));
 
-    const drained = runDownloadQueue(track.set, track.get, port, noJitter);
+    const drained = runDownloadQueue(track.set, track.get, port, noJitter, running);
     await settleMicrotasks();
 
     expect(track.entry?.status).toBe('failed');
@@ -179,7 +220,7 @@ describe('a transient pinned-download failure is retried before the track is fai
     fetchAudioUrlsMock.mockRejectedValue(new NetworkError('transport', 'the API is unreachable'));
     const track = queuedTrack(asTrackId('t1'));
 
-    const drained = runDownloadQueue(track.set, track.get, port, noJitter);
+    const drained = runDownloadQueue(track.set, track.get, port, noJitter, running);
     await settleMicrotasks();
     track.unpin();
     await jest.advanceTimersByTimeAsync(DOWNLOAD_RETRY_BASE_MS * 4);
@@ -216,7 +257,7 @@ describe('a failed byte transfer is retried like any other transient failure', (
     };
     const track = queuedTrack(asTrackId('t1'));
 
-    const drained = runDownloadQueue(track.set, track.get, port, noJitter);
+    const drained = runDownloadQueue(track.set, track.get, port, noJitter, running);
     await jest.advanceTimersByTimeAsync(10_000);
     await drained;
 
@@ -228,7 +269,7 @@ describe('a failed byte transfer is retried like any other transient failure', (
     store.download = () => new Promise(() => {});
     const track = queuedTrack(asTrackId('t1'));
 
-    const drained = runDownloadQueue(track.set, track.get, port, noJitter);
+    const drained = runDownloadQueue(track.set, track.get, port, noJitter, running);
     await jest.advanceTimersByTimeAsync(PIN_DOWNLOAD_TIMEOUT_MS * 3 + 30_000);
     await drained;
 
@@ -240,7 +281,7 @@ describe('a failed byte transfer is retried like any other transient failure', (
     store.freeBytes = MIN_FREE_BYTES - 1;
     const track = queuedTrack(asTrackId('t1'));
 
-    const drained = runDownloadQueue(track.set, track.get, port, noJitter);
+    const drained = runDownloadQueue(track.set, track.get, port, noJitter, running);
     await jest.advanceTimersByTimeAsync(10_000);
     await drained;
 
@@ -289,7 +330,7 @@ describe('download_failed telemetry', () => {
     seededUrls['tel-1'] = { url: signedUrl('tel-1'), version: 'v1' };
     const track = queuedTrack(asTrackId('tel-1'));
 
-    const drained = runDownloadQueue(track.set, track.get, port, noJitter);
+    const drained = runDownloadQueue(track.set, track.get, port, noJitter, running);
     await jest.advanceTimersByTimeAsync(DOWNLOAD_RETRY_BASE_MS * 10);
     await drained;
 
@@ -307,7 +348,7 @@ describe('download_failed telemetry', () => {
     fetchAudioUrlsMock.mockRejectedValue(new ApiError(404, 'gone'));
     const track = queuedTrack(asTrackId('tel-2'));
 
-    await runDownloadQueue(track.set, track.get, port, noJitter);
+    await runDownloadQueue(track.set, track.get, port, noJitter, running);
     await jest.advanceTimersByTimeAsync(DOWNLOAD_RETRY_BASE_MS);
 
     expect(track.entry?.status).toBe('failed');

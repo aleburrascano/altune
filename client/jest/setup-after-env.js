@@ -51,9 +51,15 @@ async function stopTelemetryWork() {
   installStoppedTelemetry();
 }
 
+function stopOfflineWork() {
+  require('../src/shared/offline').stopOffline();
+}
+
 afterEach(stopTelemetryWork);
 
 afterAll(stopTelemetryWork);
+
+afterAll(stopOfflineWork);
 
 beforeEach(() => {
   ensureAppAuthClient();

@@ -5,6 +5,7 @@ export const {
   resolvePinnedUri,
   repinIfPinned,
   providePort: provideOfflinePort,
+  dispose: stopOffline,
 } = createOffline({
   now: () => performance.now(),
   random: () => Math.random(),

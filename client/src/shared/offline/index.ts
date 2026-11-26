@@ -17,6 +17,7 @@ export {
   provideOfflinePort,
   repinIfPinned,
   resolvePinnedUri,
+  stopOffline,
   usePinnedStore,
 } from '@shared/offline/shell/appOffline';
 export type {

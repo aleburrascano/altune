@@ -198,6 +198,11 @@ type StartQueue = (
 export function createOffline({ now, random }: OfflineDeps) {
   let offlinePort: OfflinePort | null = null;
   let previousUserSurvivors: ReadonlySet<string> = new Set();
+  let disposed = false;
+
+  function isDisposed(): boolean {
+    return disposed;
+  }
 
   function providePort(port: OfflinePort): void {
     offlinePort = port;
@@ -209,7 +214,9 @@ export function createOffline({ now, random }: OfflineDeps) {
   }
 
   function startQueue(...[set, get]: Parameters<StartQueue>): void {
-    if (offlineDownloadsSupported) void runDownloadQueue(set, get, providedOfflinePort(), random);
+    if (offlineDownloadsSupported) {
+      void runDownloadQueue(set, get, providedOfflinePort(), random, isDisposed);
+    }
   }
 
   const usePinnedStore: PinnedStore = create<PinnedState>((set, get) => ({
@@ -362,6 +369,7 @@ export function createOffline({ now, random }: OfflineDeps) {
   }
 
   function dispose(): void {
+    disposed = true;
     unsubscribeSignOut();
     unsubscribeIdentity();
   }
