@@ -7,9 +7,11 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --lint) stage=commit; shift ;;
     --full) full=1; shift ;;
+    -*) echo "usage: precheck.sh [--lint] [--full] [BASE_REF]" >&2; exit 2 ;;
     *) break ;;
   esac
 done
+[ $# -le 1 ] || { echo "usage: precheck.sh [--lint] [--full] [BASE_REF]" >&2; exit 2; }
 lint_only=0
 [ $stage = commit ] && lint_only=1
 
@@ -260,6 +262,9 @@ fi
 script_tests=$(grep -E '^scripts/(ci/)?(__tests__/)?[a-z0-9-]+(\.test)?\.(sh|mjs)$' <<<"$changed" | grep -vE '/(precheck|test-home)(\.test)?\.(sh|mjs)$' | sed -E 's#^(scripts/(ci/)?)(__tests__/)?([a-z0-9-]+)(\.test)?\.(sh|mjs)$#\1__tests__/\4.test.sh#' | sort -u)
 if touches '^client/(stryker\.config\.json|jest\.mutate\.config\.js)$'; then
   script_tests=$(printf '%s\n' $script_tests scripts/ci/__tests__/client-mutate.test.sh | sort -u)
+fi
+if touches '^scripts/(__tests__/(precheck|acq-debug|temp-cleanup)\.test\.sh|ci/deploy-web-smoke\.sh)$'; then
+  script_tests=$(printf '%s\n' $script_tests scripts/__tests__/temp-cleanup.test.sh | sort -u)
 fi
 if [ -n "$script_tests" ] && [ $lint_only = 0 ] && ! link_deps .; then
   echo "SKIP  repo script self-tests: no root node_modules here or in $main_tree"; missing=1

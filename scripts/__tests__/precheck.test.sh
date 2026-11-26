@@ -10,13 +10,13 @@ REPOS=0
 PRECHECK_ARGS=(--full)
 
 remove_fixtures() {
-    [ ${#FIXTURES[@]} -eq 0 ] || rm -rf "${FIXTURES[@]}"
+    [ ${#FIXTURES[@]} -eq 0 ] || { chmod -R u+w "${FIXTURES[@]}" 2>/dev/null; rm -rf "${FIXTURES[@]}"; }
 }
 trap remove_fixtures EXIT
 
 new_repo() {
     REPOS=$((REPOS + 1))
-    [ "${PRECHECK_TEST_MAX_REPOS:-0}" = 0 ] || [ "$REPOS" -le "$PRECHECK_TEST_MAX_REPOS" ] || exit 0
+    [ "${PRECHECK_TEST_MAX_REPOS:-0}" = 0 ] || [ "$REPOS" -le "$PRECHECK_TEST_MAX_REPOS" ] || exit $((FAILURES > 0))
     WORK=$(mktemp -d)
     FIXTURES+=("$WORK")
     mkdir -p "$WORK/repo/scripts/__tests__"
@@ -494,6 +494,7 @@ add_go_fixture() {
 printf "go %s\\n" "\$*" >>"$WORK/tools.log"
 case "\$*" in
 "run golang.org/x/tools/cmd/deadcode@"*) printf "%s" "\${DEADCODE_STUB_OUT:-}"; exit "\${DEADCODE_STUB_RC:-0}" ;;
+"run ./scripts/lintcomments"*|"run ./scripts/lintnames"*) exit 0 ;;
 esac
 exec "$REAL_GO" "\$@"
 STUB
@@ -731,6 +732,17 @@ expect_log "golangci-lint run --config .golangci.strict.yml --fast-only --new-fr
 expect_log "./internal/shared/s"
 forbid_log "--allow-serial-runners"
 forbid_log "--new-from-rev=HEAD"
+expect_log "go run ./scripts/lintcomments --all internal/shared/s/s.go"
+expect_log "go run ./scripts/lintnames"
+
+CASE="precheck rejects an unknown flag and a flag after the base ref with the usage and exit 2"
+new_repo
+run_script --ful
+expect_rc 2
+expect_out "usage:"
+run_script gitea/main --full
+expect_rc 2
+expect_out "usage:"
 
 CASE="a push (no --full) tests the changed packages and runs no vet, govulncheck, deadcode or selection gate"
 new_repo
@@ -751,11 +763,6 @@ edit_go_file internal/search/adapters/x/x.go
 run_with_tools
 expect_log "--allow-serial-runners ./..."
 expect_log "govulncheck ./..."
-
-CASE="--full and a push without it are not served from each other's cache"
-cached_green_repo
-run_push_scoped
-expect_not_cached "a run without --full is a different set of checks"
 
 CASE="a change to go.sum runs govulncheck"
 new_repo
@@ -1145,6 +1152,11 @@ cached_green_repo
 )
 run_with_tools
 expect_not_cached "a moved base ref must rerun the checks, since some read its tip"
+
+CASE="a push without --full is not served from a green --full run's cache"
+cached_green_repo
+run_push_scoped
+expect_not_cached "a run without --full is a different set of checks"
 
 CASE="a different INTEGRATION value is not served from the cache"
 cached_green_repo
