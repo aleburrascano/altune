@@ -3,7 +3,7 @@ package queue
 import (
 	"altune/go-api/internal/playback/internal/core/domain"
 	"altune/go-api/internal/playback/internal/core/ports"
-	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
 	"fmt"
@@ -30,7 +30,7 @@ func New(repo ports.QueueStateRepository, nowPlaying ports.NowPlayingReader) *Se
 	return &Service{repo: repo, nowPlaying: nowPlaying}
 }
 
-func (s *Service) Save(ctx context.Context, userId shared.UserId, input SaveQueueStateInput) error {
+func (s *Service) Save(ctx context.Context, userId ids.UserId, input SaveQueueStateInput) error {
 	state, err := newQueueState(userId, input)
 	if err != nil {
 		return err
@@ -50,7 +50,7 @@ func parseSourceAndRepeat(input SaveQueueStateInput) (string, domain.RepeatMode,
 	return sourceId, rm, nil
 }
 
-func newQueueState(userId shared.UserId, input SaveQueueStateInput) (*domain.QueueState, error) {
+func newQueueState(userId ids.UserId, input SaveQueueStateInput) (*domain.QueueState, error) {
 	sourceId, rm, err := parseSourceAndRepeat(input)
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ type SaveQueuePositionInput struct {
 	PositionMs     int64
 }
 
-func (s *Service) SavePosition(ctx context.Context, userId shared.UserId, input SaveQueuePositionInput) error {
+func (s *Service) SavePosition(ctx context.Context, userId ids.UserId, input SaveQueuePositionInput) error {
 	position, err := domain.NewQueuePosition(domain.QueuePositionInput{
 		UserId:         userId,
 		CurrentIdx:     input.CurrentIdx,
@@ -90,7 +90,7 @@ func (s *Service) SavePosition(ctx context.Context, userId shared.UserId, input 
 	return s.repo.UpdatePosition(ctx, position)
 }
 
-func (s *Service) Resume(ctx context.Context, userId shared.UserId) (*domain.QueueState, error) {
+func (s *Service) Resume(ctx context.Context, userId ids.UserId) (*domain.QueueState, error) {
 	state, err := s.repo.GetForUser(ctx, userId)
 	if errors.Is(err, ports.ErrCorruptStoredState) {
 		slog.ErrorContext(ctx, "resume.corrupt_stored_queue_state",
@@ -112,7 +112,7 @@ type ResumeView struct {
 	CurrentTrackUnavailable bool
 }
 
-func (s *Service) ResumeView(ctx context.Context, userId shared.UserId) (*ResumeView, error) {
+func (s *Service) ResumeView(ctx context.Context, userId ids.UserId) (*ResumeView, error) {
 	state, err := s.Resume(ctx, userId)
 	if err != nil {
 		return nil, err
@@ -145,15 +145,15 @@ const (
 	forgetTriggerSweep = "sweep"
 )
 
-func (s *Service) Forget(ctx context.Context, userId shared.UserId) error {
+func (s *Service) Forget(ctx context.Context, userId ids.UserId) error {
 	return s.forget(ctx, userId, forgetTriggerSelf)
 }
 
-func (s *Service) ForgetDeletedAccount(ctx context.Context, userId shared.UserId) error {
+func (s *Service) ForgetDeletedAccount(ctx context.Context, userId ids.UserId) error {
 	return s.forget(ctx, userId, forgetTriggerSweep)
 }
 
-func (s *Service) forget(ctx context.Context, userId shared.UserId, trigger string) error {
+func (s *Service) forget(ctx context.Context, userId ids.UserId, trigger string) error {
 	if err := s.repo.DeleteForUser(ctx, userId); err != nil {
 		return err
 	}
@@ -161,7 +161,7 @@ func (s *Service) forget(ctx context.Context, userId shared.UserId, trigger stri
 	return nil
 }
 
-func auditQueueStateForgotten(ctx context.Context, userId shared.UserId, trigger string) {
+func auditQueueStateForgotten(ctx context.Context, userId ids.UserId, trigger string) {
 	slog.InfoContext(ctx, "playback.queue_state_forgotten",
 		"action", forgetQueueStateAction,
 		"user_id", userId.String(),

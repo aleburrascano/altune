@@ -2,7 +2,7 @@ package commands
 
 import (
 	"altune/go-api/cmd/api/commands/stagingsweep"
-	"altune/go-api/internal/catalog"
+	"altune/go-api/internal/library"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"errors"
@@ -24,15 +24,15 @@ func runSweepStagingAudio(cfg *config.Config, execute bool) error {
 	}
 	defer pool.Close()
 
-	return sweepAudioStore(ctx, cfg, catalog.NewPgxTrackRepository(pool), execute)
+	return sweepAudioStore(ctx, cfg, library.NewPostgresTrackRepository(pool), execute)
 }
 
-func sweepAudioStore(ctx context.Context, cfg *config.Config, refs catalog.AudioRefPrefixLister, execute bool) error {
-	store, err := catalog.FromConfig(cfg, slog.Default())
+func sweepAudioStore(ctx context.Context, cfg *config.Config, refs library.AudioRefPrefixLister, execute bool) error {
+	store, err := library.NewAudioStoreFromConfig(cfg, slog.Default())
 	if err != nil {
 		return err
 	}
-	lister, ok := store.(catalog.AudioAgeLister)
+	lister, ok := store.(library.AudioAgeLister)
 	if !ok {
 		return errors.New("the configured audio store cannot list object age")
 	}

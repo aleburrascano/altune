@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/download"
 	"bufio"
 	"fmt"
 	"io"
@@ -30,7 +30,7 @@ func (r auditRow) vetoWords() []string {
 	if r.sourceTitle == "" {
 		return nil
 	}
-	veto, _ := acquisition.UnrequestedQualifiers(r.title, r.artist, r.sourceTitle)
+	veto, _ := download.UnrequestedQualifiers(r.title, r.artist, r.sourceTitle)
 	return veto
 }
 

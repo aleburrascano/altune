@@ -1,8 +1,8 @@
 package fingerprintstatus_test
 
 import (
-	"altune/go-api/internal/acquisition"
 	"altune/go-api/internal/app/fingerprintstatus"
+	"altune/go-api/internal/download"
 	"context"
 	"errors"
 	"fmt"
@@ -10,12 +10,12 @@ import (
 )
 
 type scriptedIdentifier struct {
-	acquisition.AudioIdentifier
+	download.AudioIdentifier
 	err error
 }
 
-func (s scriptedIdentifier) Identify(context.Context, string, float64) (acquisition.RecordingMatch, error) {
-	return acquisition.RecordingMatch{}, s.err
+func (s scriptedIdentifier) Identify(context.Context, string, float64) (download.RecordingMatch, error) {
+	return download.RecordingMatch{}, s.err
 }
 
 func TestTracker_VerifiedStaysFalseUntilALookupSucceeds(t *testing.T) {
@@ -34,19 +34,19 @@ func TestTracker_VerifiedStaysFalseUntilALookupSucceeds(t *testing.T) {
 }
 
 type sequencedIdentifier struct {
-	acquisition.AudioIdentifier
+	download.AudioIdentifier
 	errs []error
 	next int
 }
 
-func (s *sequencedIdentifier) Identify(context.Context, string, float64) (acquisition.RecordingMatch, error) {
+func (s *sequencedIdentifier) Identify(context.Context, string, float64) (download.RecordingMatch, error) {
 	err := s.errs[s.next]
 	s.next++
-	return acquisition.RecordingMatch{}, err
+	return download.RecordingMatch{}, err
 }
 
 func TestTracker_VerifiedFollowsTheLatestLookup(t *testing.T) {
-	throttled := fmt.Errorf("acoustid lookup: %w", acquisition.ErrIdentifyThrottled)
+	throttled := fmt.Errorf("acoustid lookup: %w", download.ErrIdentifyThrottled)
 	tracker := fingerprintstatus.NewTracker(&sequencedIdentifier{errs: []error{
 		nil, throttled, errors.New("invalid api key"), throttled, nil,
 	}})

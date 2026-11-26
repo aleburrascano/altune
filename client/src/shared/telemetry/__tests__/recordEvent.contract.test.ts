@@ -56,7 +56,7 @@ function listMobileSourceFiles(root: string): string[] {
   return found;
 }
 
-const EVENTS_GO = 'internal/discovery/domain/events.go';
+const EVENTS_GO = 'internal/search/domain/events.go';
 const EVENT_TYPES_TS = path.join(TELEMETRY_SRC, 'core', 'discoveryEvent.ts');
 const RECORD_EVENT_TS = path.join(TELEMETRY_SRC, 'shell', 'recordEvent.ts');
 const OUTBOX_TS = path.join(TELEMETRY_SRC, 'core', 'outboxEntries.ts');
@@ -241,7 +241,7 @@ describe('client-submittable subset: every DiscoveryEventType the mobile client 
 describe('envelope field names: every field the mobile client sends is one search_endpoints.go decodes', () => {
   it('DiscoveryEvent field names are a subset of DiscoveryEventRequest json tags', () => {
     const goFields = deriveGoEnvelopeFieldNames(
-      readGoFile('internal/discovery/adapters/handler/search_dto.go'),
+      readGoFile('internal/search/adapters/handler/search_dto.go'),
     );
     const mobileFields = deriveMobileEnvelopeFieldNames(fs.readFileSync(EVENT_TYPES_TS, 'utf8'));
 
@@ -254,7 +254,7 @@ describe('envelope field names: every field the mobile client sends is one searc
 
   it('the outbox envelope (event_id, client_occurred_at) also names fields Go decodes', () => {
     const goFields = deriveGoEnvelopeFieldNames(
-      readGoFile('internal/discovery/adapters/handler/search_dto.go'),
+      readGoFile('internal/search/adapters/handler/search_dto.go'),
     );
     const outboxSource = fs.readFileSync(OUTBOX_TS, 'utf8');
 
@@ -268,7 +268,7 @@ describe('envelope field names: every field the mobile client sends is one searc
 describe('payload value types: the key this slice writes into payload satisfies the type Go requires', () => {
   it('session_id is derived as a Go string-constrained payload key', () => {
     const constraints = deriveGoPayloadTypeConstraints(
-      readGoFile('internal/discovery/service/interaction/record_event.go'),
+      readGoFile('internal/search/service/useractivity/record_event.go'),
       readGoFile(EVENTS_GO),
     );
     const key = deriveSessionKeyWrittenByTelemetry(fs.readFileSync(RECORD_EVENT_TS, 'utf8'));
@@ -288,7 +288,7 @@ describe('payload value types: the key this slice writes into payload satisfies 
 
   it('no mobile call site sends a Go string-constrained payload key as null, which the server 400s', () => {
     const constraints = deriveGoPayloadTypeConstraints(
-      readGoFile('internal/discovery/service/interaction/record_event.go'),
+      readGoFile('internal/search/service/useractivity/record_event.go'),
       readGoFile(EVENTS_GO),
     );
     const offenders: string[] = [];

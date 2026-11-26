@@ -1,0 +1,274 @@
+package domain_test
+
+import (
+	"altune/go-api/internal/library"
+	"reflect"
+	"testing"
+)
+
+func TestSearchKeys_VariantQualifiers(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		title string
+		want  []string
+	}{
+		{"Song (2013 Remaster)", nil},
+		{"Song (Clean)", nil},
+		{"Song (Explicit)", nil},
+		{"Song (Live)", []string{"live"}},
+		{"Song (Slowed + Reverb) (Remastered)", []string{"reverb", "slowed"}},
+		{"Song (Spider-Man: Into the Spider-Verse)", nil},
+		{"Song (Club Mix)", []string{"club mix"}},
+		{"Song - Dub Mix", []string{"dub mix"}},
+		{"Song (Karaoke Version)", []string{"karaoke"}},
+		{"Song (Piano Version)", []string{"piano version"}},
+		{"Song (Acapella)", []string{"acapella"}},
+		{"Song (A Cappella)", []string{"acapella"}},
+		{"Song (Spanish Version)", []string{"language version"}},
+		{"Song (Stripped)", []string{"stripped"}},
+		{"Song (Orchestral)", []string{"orchestral"}},
+		{"Song (VIP)", []string{"vip"}},
+		{"Song (Pt. 2)", []string{"part"}},
+		{"Song (Part 2)", []string{"part"}},
+		{"Song - Part II", []string{"part"}},
+		{"Song (II)", []string{"part"}},
+		{"Alive", nil},
+		{"Delivery", nil},
+		{"Cover Girl", nil},
+		{"Hate - I Love You", nil},
+		{"Concept 2", nil},
+		{"Song (Part of Me)", nil},
+		{"Song (Pt)", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.title, func(t *testing.T) {
+			t.Parallel()
+			got := library.CleanSearchKeys(tt.title, "", "").VariantQualifiers()
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("VariantQualifiers(%q) = %v, want %v", tt.title, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCleanSearchKeys(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		title    string
+		artist   string
+		uploader string
+		want     library.SearchKeys
+	}{
+		{
+			name: "artist prefix split off", title: "Tate McRae - One track mind", artist: "Tate McRae",
+			want: library.SearchKeys{Artist: "Tate McRae", Title: "One track mind"},
+		},
+		{
+			name: "en dash separator", title: "Tate McRae – One track mind", artist: "Tate McRae",
+			want: library.SearchKeys{Artist: "Tate McRae", Title: "One track mind"},
+		},
+		{
+			name: "pipe separator", title: "Tate McRae | One track mind", artist: "Tate McRae",
+			want: library.SearchKeys{Artist: "Tate McRae", Title: "One track mind"},
+		},
+		{
+			name: "left side matching only the uploader splits", title: "Tate McRae - One track mind", artist: "", uploader: "Tate McRae VEVO",
+			want: library.SearchKeys{Artist: "Tate McRae", Title: "One track mind", ArtistFromUploader: true},
+		},
+		{
+			name: "left side unrelated to artist is kept", title: "Love - Hate", artist: "Someone Else",
+			want: library.SearchKeys{Artist: "Someone Else", Title: "Love - Hate"},
+		},
+		{
+			name: "star prefix and cjk duplicate dropped", title: "☆ Good Stuff - aespa karina solo (에스파 카리나 솔로)", artist: "aespa karina solo (에스파 카리나 솔로)",
+			want: library.SearchKeys{Artist: "aespa karina solo", Title: "Good Stuff"},
+		},
+		{
+			name: "slowed and reverb", title: "POPTHATRUNK (slowed + reverb)", artist: "POPTHATRUNK",
+			want: library.SearchKeys{Artist: "POPTHATRUNK", Title: "POPTHATRUNK", Qualifiers: []string{"reverb", "slowed"}, Variant: true},
+		},
+		{
+			name: "uploader artist with remix and producer tag", title: "MINDA (민다) NewJeans (뉴진스) - 'Cookie' (Highschool Band Remix) (Prod.MINDA)",
+			artist: "MINDA (민다)", uploader: "MINDA (민다)",
+			want: library.SearchKeys{Artist: "MINDA", Title: "MINDA NewJeans - 'Cookie'", Qualifiers: []string{"remix"}, Variant: true},
+		},
+		{
+			name: "extended", title: "Gorah (Extended)", artist: "Gorah",
+			want: library.SearchKeys{Artist: "Gorah", Title: "Gorah", Qualifiers: []string{"extended"}, Variant: true},
+		},
+		{
+			name: "official music video dropped", title: "Never Gonna Give You Up (Official Music Video)", artist: "Rick Astley",
+			want: library.SearchKeys{Artist: "Rick Astley", Title: "Never Gonna Give You Up"},
+		},
+		{
+			name: "remaster is a qualifier but not a variant", title: "Faithfully (2024 Remaster)", artist: "Journey",
+			want: library.SearchKeys{Artist: "Journey", Title: "Faithfully", Qualifiers: []string{"remaster"}},
+		},
+		{
+			name: "remaster dash suffix", title: "Here Comes The Sun - Remastered 2009", artist: "The Beatles",
+			want: library.SearchKeys{Artist: "The Beatles", Title: "Here Comes The Sun", Qualifiers: []string{"remaster"}},
+		},
+		{
+			name: "credit is not a qualifier", title: "Smaxk Or Die (feat. Playboi Carti)", artist: "Ken Carson",
+			want: library.SearchKeys{Artist: "Ken Carson", Title: "Smaxk Or Die"},
+		},
+		{
+			name: "leading paren kept", title: "(I Just) Died In Your Arms", artist: "Cutting Crew",
+			want: library.SearchKeys{Artist: "Cutting Crew", Title: "(I Just) Died In Your Arms"},
+		},
+		{
+			name: "plain title unchanged", title: "Hotel California", artist: "Eagles",
+			want: library.SearchKeys{Artist: "Eagles", Title: "Hotel California"},
+		},
+		{
+			name: "hd tag and prod by dropped", title: "Song Name [HD] (prod by Someone)", artist: "A",
+			want: library.SearchKeys{Artist: "A", Title: "Song Name"},
+		},
+		{
+			name: "live dash suffix", title: "Song Name - Live", artist: "A",
+			want: library.SearchKeys{Artist: "A", Title: "Song Name", Qualifiers: []string{"live"}, Variant: true},
+		},
+		{
+			name: "sped up nightcore and clean", title: "Song (Sped Up) (Nightcore) [Clean]", artist: "A",
+			want: library.SearchKeys{Artist: "A", Title: "Song", Qualifiers: []string{"clean", "nightcore", "sped up"}, Variant: true},
+		},
+		{
+			name: "topic artist stripped and flagged", title: "Song", artist: "Some Band - Topic",
+			want: library.SearchKeys{Artist: "Some Band", Title: "Song", ArtistIsChannel: true},
+		},
+		{
+			name: "vevo artist stripped and flagged", title: "Song", artist: "SomeBandVEVO",
+			want: library.SearchKeys{Artist: "SomeBand", Title: "Song", ArtistIsChannel: true},
+		},
+		{
+			name: "title that is only decoration falls back", title: "(Official Video)", artist: "A",
+			want: library.SearchKeys{Artist: "A", Title: "(Official Video)"},
+		},
+		{
+			name: "live dash suffix after artist-containing title", title: "Killer Queen - Live", artist: "Queen",
+			want: library.SearchKeys{Artist: "Queen", Title: "Killer Queen", Qualifiers: []string{"live"}, Variant: true},
+		},
+		{
+			name: "remastered year suffix after artist-containing title", title: "Killer Queen - Remastered 2011", artist: "Queen",
+			want: library.SearchKeys{Artist: "Queen", Title: "Killer Queen", Qualifiers: []string{"remaster"}},
+		},
+		{
+			name: "artist prefix with slowed title stays", title: "Drake - Slowed", artist: "Drake",
+			want: library.SearchKeys{Artist: "Drake", Title: "Slowed"},
+		},
+		{
+			name: "live suffix when title starts with artist name", title: "Love Hurts - Live", artist: "Love",
+			want: library.SearchKeys{Artist: "Love", Title: "Love Hurts", Qualifiers: []string{"live"}, Variant: true},
+		},
+		{
+			name: "title after dash not split on partial artist", title: "Hate - I Love You", artist: "Love",
+			want: library.SearchKeys{Artist: "Love", Title: "Hate - I Love You"},
+		},
+		{
+			name: "artist and live in dash suffix", title: "Wish You Were Here - Pink Floyd Live", artist: "Pink Floyd",
+			want: library.SearchKeys{Artist: "Pink Floyd", Title: "Wish You Were Here", Qualifiers: []string{"live"}, Variant: true},
+		},
+		{
+			name: "katakana remix", title: "Song (リミックス)", artist: "A",
+			want: library.SearchKeys{Artist: "A", Title: "Song", Qualifiers: []string{"remix"}, Variant: true},
+		},
+		{
+			name: "katakana live", title: "Song (ライブ)", artist: "A",
+			want: library.SearchKeys{Artist: "A", Title: "Song", Qualifiers: []string{"live"}, Variant: true},
+		},
+		{
+			name: "chinese live", title: "晴天 (现场)", artist: "A",
+			want: library.SearchKeys{Artist: "A", Title: "晴天", Qualifiers: []string{"live"}, Variant: true},
+		},
+		{
+			name: "chinese slowed", title: "晴天 (慢速)", artist: "A",
+			want: library.SearchKeys{Artist: "A", Title: "晴天", Qualifiers: []string{"slowed"}, Variant: true},
+		},
+		{
+			name: "non-latin group without latin neighbour kept", title: "晴天 (晴天)", artist: "A",
+			want: library.SearchKeys{Artist: "A", Title: "晴天 (晴天)"},
+		},
+		{
+			name: "stacked dash suffixes", title: "Song - Slowed Reverb - Remastered", artist: "A",
+			want: library.SearchKeys{Artist: "A", Title: "Song", Qualifiers: []string{"remaster", "reverb", "slowed"}, Variant: true},
+		},
+		{
+			name: "year remaster suffix", title: "Pictures of You - 2010 Remaster", artist: "The Cure",
+			want: library.SearchKeys{Artist: "The Cure", Title: "Pictures of You", Qualifiers: []string{"remaster"}},
+		},
+		{
+			name: "live suffix", title: "Mr. Brightside - Live", artist: "The Killers",
+			want: library.SearchKeys{Artist: "The Killers", Title: "Mr. Brightside", Qualifiers: []string{"live"}, Variant: true},
+		},
+		{
+			name: "hyphenated sped-up", title: "Song (sped-up)", artist: "A",
+			want: library.SearchKeys{Artist: "A", Title: "Song", Qualifiers: []string{"sped up"}, Variant: true},
+		},
+		{
+			name: "cover", title: "Song (Cover)", artist: "A",
+			want: library.SearchKeys{Artist: "A", Title: "Song", Qualifiers: []string{"cover"}, Variant: true},
+		},
+		{
+			name: "mashup", title: "Song (Mashup)", artist: "A",
+			want: library.SearchKeys{Artist: "A", Title: "Song", Qualifiers: []string{"mashup"}, Variant: true},
+		},
+		{
+			name: "bass boosted", title: "Song (Bass Boosted)", artist: "A",
+			want: library.SearchKeys{Artist: "A", Title: "Song", Qualifiers: []string{"bass boosted"}, Variant: true},
+		},
+		{
+			name: "8d audio", title: "Song (8D Audio)", artist: "A",
+			want: library.SearchKeys{Artist: "A", Title: "Song", Qualifiers: []string{"8d audio"}, Variant: true},
+		},
+		{
+			name: "remixed", title: "Song (Remixed)", artist: "A",
+			want: library.SearchKeys{Artist: "A", Title: "Song", Qualifiers: []string{"remix"}, Variant: true},
+		},
+		{
+			name: "edit", title: "Song (Edit)", artist: "A",
+			want: library.SearchKeys{Artist: "A", Title: "Song", Qualifiers: []string{"edit"}, Variant: true},
+		},
+		{
+			name: "unplugged", title: "Song (Unplugged)", artist: "A",
+			want: library.SearchKeys{Artist: "A", Title: "Song", Qualifiers: []string{"unplugged"}, Variant: true},
+		},
+		{
+			name: "official live video", title: "Song (Official Live Video)", artist: "A",
+			want: library.SearchKeys{Artist: "A", Title: "Song", Qualifiers: []string{"live"}, Variant: true},
+		},
+		{
+			name: "radio edit is not also edit", title: "Song (Radio Edit)", artist: "A",
+			want: library.SearchKeys{Artist: "A", Title: "Song", Qualifiers: []string{"radio edit"}, Variant: true},
+		},
+		{
+			name: "artist prefix repeated twice", title: "Tate McRae - Tate McRae - One track mind", artist: "Tate McRae",
+			want: library.SearchKeys{Artist: "Tate McRae", Title: "One track mind"},
+		},
+		{
+			name: "credit group naming the lead artist and a guest", title: "100 Racks (Offset feat. Playboi Carti)", artist: "Quality Control",
+			want: library.SearchKeys{Artist: "Quality Control", Title: "100 Racks"},
+		},
+		{
+			name: "dangling artist group repeated in the title", title: "CHERISH (Kool & The Gang)", artist: "CHERISH (Kool & The Gang",
+			want: library.SearchKeys{Artist: "Kool & The Gang", Title: "CHERISH"},
+		},
+		{
+			name: "dangling group that the title does not repeat is kept", title: "Song", artist: "Band (Live",
+			want: library.SearchKeys{Artist: "Band (Live", Title: "Song"},
+		},
+		{
+			name: "remix credit group is still a remix", title: "Song (Remix feat. B)", artist: "A",
+			want: library.SearchKeys{Artist: "A", Title: "Song", Qualifiers: []string{"remix"}, Variant: true},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := library.CleanSearchKeys(tt.title, tt.artist, tt.uploader)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("CleanSearchKeys(%q, %q, %q) = %+v, want %+v", tt.title, tt.artist, tt.uploader, got, tt.want)
+			}
+		})
+	}
+}

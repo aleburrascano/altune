@@ -1,1 +1,0 @@
-`isrcproof` owns which ISRC a finished acquisition run may write back to the track, and the provenance stored beside it in `acquisition_evidence.isrc_source`. The catalog's own ISRC comes first, then the pinned recording's, then one the fingerprint proved. Anything else is unproven and is never written.

@@ -2,8 +2,8 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/playback"
-	shared "altune/go-api/internal/shared/kernel"
-	"altune/go-api/internal/shared/sharedtest"
+	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/testdb"
 	"context"
 	"errors"
 	"slices"
@@ -24,15 +24,15 @@ type storedQueueRow struct {
 
 func readStoredRow(t *testing.T, row storedQueueRow) (*playback.QueueState, error) {
 	t.Helper()
-	sharedtest.RequireIntegration(t)
-	dbURL := sharedtest.DatabaseURL(t)
+	testdb.RequireIntegration(t)
+	dbURL := testdb.DatabaseURL(t)
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	t.Cleanup(pool.Close)
-	user := shared.NewUserId(uuid.New())
+	user := ids.NewUserId(uuid.New())
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM playback_queue_state WHERE user_id = $1`, user.UUID())
 	})
@@ -44,7 +44,7 @@ func readStoredRow(t *testing.T, row storedQueueRow) (*playback.QueueState, erro
 		user.UUID(), row.trackIds, row.currentIdx, row.shuffled, row.naturalOrder, row.updatedAt); err != nil {
 		t.Fatalf("store row: %v", err)
 	}
-	return playback.NewPgxQueueStateRepository(pool).GetForUser(ctx, user)
+	return playback.NewPostgresQueueStateRepository(pool).GetForUser(ctx, user)
 }
 
 func TestGetForUser_StoredRowWithCurrentIdxPastEndIsCorrupt(t *testing.T) {

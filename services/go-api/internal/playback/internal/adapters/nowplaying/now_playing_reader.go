@@ -2,7 +2,7 @@ package nowplaying
 
 import (
 	"altune/go-api/internal/playback/internal/core/ports"
-	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
 	"fmt"
@@ -63,10 +63,10 @@ func isDependencyFailure(err error) bool {
 
 func (r *NowPlayingReader) Lookup(
 	ctx context.Context,
-	userId shared.UserId,
+	userId ids.UserId,
 	trackId string,
 ) (*ports.NowPlayingTrack, error) {
-	id, err := shared.ParseTrackId(trackId)
+	id, err := ids.ParseTrackId(trackId)
 	if err != nil {
 		slog.WarnContext(ctx, "now_playing.malformed_track_id",
 			"user_id", userId.String(), "raw_len", len(trackId), "error", err)

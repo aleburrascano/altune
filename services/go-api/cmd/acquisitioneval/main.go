@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/download"
 	"context"
 	"flag"
 	"fmt"
@@ -48,7 +48,7 @@ func run(goldenDir, baselinePath string, updateBaseline bool) error {
 		return fmt.Errorf("no golden cases found")
 	}
 
-	report := acquisition.SummarizeEval(acquisition.RunAllEvalCases(context.Background(), cases))
+	report := download.SummarizeEval(download.RunAllEvalCases(context.Background(), cases))
 	fmt.Print(report.Render())
 
 	if updateBaseline {
@@ -66,7 +66,7 @@ func run(goldenDir, baselinePath string, updateBaseline bool) error {
 		return nil
 	}
 
-	base, err := acquisition.LoadEvalBaseline(baselinePath)
+	base, err := download.LoadEvalBaseline(baselinePath)
 	if err != nil {
 		return err
 	}
@@ -89,9 +89,9 @@ func subcommand(args []string) (name string, rest []string) {
 	return "", args[1:]
 }
 
-func loadCases(goldenDir string) ([]acquisition.EvalCase, error) {
+func loadCases(goldenDir string) ([]download.EvalCase, error) {
 	if goldenDir == "" {
-		return acquisition.LoadEmbeddedEvalCases()
+		return download.LoadEmbeddedEvalCases()
 	}
-	return acquisition.LoadEvalDir(goldenDir)
+	return download.LoadEvalDir(goldenDir)
 }

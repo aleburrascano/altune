@@ -1,12 +1,12 @@
 package app
 
 import (
-	"altune/go-api/internal/app/discoveryconfig"
 	"altune/go-api/internal/app/jobs"
-	"altune/go-api/internal/app/providerhttp"
-	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/app/providertransport"
+	"altune/go-api/internal/app/searchsettings"
+	"altune/go-api/internal/search"
+	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/runloop"
 	"context"
 	"net/http"
 	"sync"
@@ -18,38 +18,38 @@ import (
 type EvalHandles struct {
 	Pool      *pgxpool.Pool
 	Transport http.RoundTripper
-	Tracker   *runloop.Tracker
+	Tracker   *background.Tracker
 }
 
-func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*discovery.Discovery, error) {
+func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*search.Discovery, error) {
 	transport := h.Transport
 	if transport == nil {
-		transport = providerhttp.Live()
+		transport = providertransport.Live()
 	}
-	deps := discoveryconfig.Deps(ctx, cfg, transport)
+	deps := searchsettings.Deps(ctx, cfg, transport)
 	deps.Background = &sync.WaitGroup{}
 	deps.Tracker = h.Tracker
 	deps.Pool = h.Pool
-	return discovery.New(deps)
+	return search.New(deps)
 }
 
-func (a *App) discoveryDeps(ctx context.Context, transport http.RoundTripper) discovery.Deps {
-	deps := discoveryconfig.Deps(ctx, a.cfg, transport)
+func (a *App) discoveryDeps(ctx context.Context, transport http.RoundTripper) search.Deps {
+	deps := searchsettings.Deps(ctx, a.cfg, transport)
 	deps.Background = a.jobs.Background()
 	deps.Tracker = a.background
 	deps.Pool = a.pool
 	deps.Redis = a.redisClient
-	deps.ClientEvents = discoveryconfig.ClientEvents(a.cfg)
+	deps.ClientEvents = searchsettings.ClientEvents(a.cfg)
 	deps.Activity = a.eventTap
 	return deps
 }
 
-func (a *App) startDiscoveryBackgroundJobs(ctx context.Context, disc *discovery.Discovery) {
+func (a *App) startDiscoveryBackgroundJobs(ctx context.Context, disc *search.Discovery) {
 	a.startUnreleasedRefresh(disc.UnreleasedRefresh)
 	if a.cfg.BehavioralRankingEnabled {
 		a.jobs.EveryInstance(ctx, jobs.BehavioralRankingRefresh, 30*time.Minute,
 			jobs.WarnOnFailure(jobs.BehavioralRankingRefresh, disc.Search.RefreshBehavioralScores))
 	}
 	a.startDiscographyPrune(ctx, disc.Events)
-	a.startVocabularyRefresh(disc.Vocabulary, disc.Charts)
+	a.startVocabularyRefresh(disc.SpellingHints, disc.Charts)
 }

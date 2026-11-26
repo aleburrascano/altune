@@ -1,1 +1,0 @@
-`housekeeping` owns what the periodic upkeep jobs do on each run: erasing the discovery rows of deleted identities, pruning old discovery events and acquisition rows, and refreshing a few due artists' unreleased songs at a time. The app schedules each body with `jobs`.

@@ -1,73 +1,73 @@
 package app
 
 import (
-	"altune/go-api/internal/acquisition"
-	"altune/go-api/internal/app/acquisitioncatalog"
-	"altune/go-api/internal/app/acquisitiondiscovery"
-	"altune/go-api/internal/app/audioacquisition"
-	"altune/go-api/internal/app/catalogdiscovery"
-	"altune/go-api/internal/app/discoverycatalog"
+	"altune/go-api/internal/app/bridges/downloadfromlibrary"
+	"altune/go-api/internal/app/bridges/downloadfromsearch"
+	"altune/go-api/internal/app/bridges/libraryfromsearch"
+	"altune/go-api/internal/app/bridges/searchfromlibrary"
+	"altune/go-api/internal/app/downloadsetup"
 	"altune/go-api/internal/app/jobs"
-	"altune/go-api/internal/catalog"
-	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/observe"
-	"altune/go-api/internal/shared/runloop"
+	"altune/go-api/internal/download"
+	"altune/go-api/internal/library"
+	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/search"
+	"altune/go-api/internal/shared/background"
 	"context"
 	"log/slog"
 	"time"
 )
 
 type catalogWiring struct {
-	trackRepo         *catalog.PgxTrackRepository
-	audioStore        catalog.AudioStore
-	orphanedAudio     *catalog.PgxOrphanedAudioRepository
-	setTrackNumberSvc *catalog.SetTrackNumberService
-	trackHandler      *catalog.TrackHandler
-	libraryHandler    *catalog.LibraryHandler
-	playlistHandler   *catalog.PlaylistHandler
-	streamHandler     *catalog.StreamHandler
-	audioURLHandler   *catalog.AudioURLHandler
-	retryH            *acquisition.RetryHandler
-	reacquireH        *acquisition.ReacquireHandler
-	ytDlpSearcher     *acquisition.YtDlpAudioSearcher
+	trackRepo         *library.PostgresTrackRepository
+	audioStore        library.AudioStore
+	orphanedAudio     *library.PostgresOrphanedAudioRepository
+	setTrackNumberSvc *library.SetTrackNumberService
+	trackHandler      *library.TrackHandler
+	libraryHandler    *library.LibraryHandler
+	playlistHandler   *library.PlaylistHandler
+	streamHandler     *library.StreamHandler
+	audioURLHandler   *library.AudioURLHandler
+	retryH            *download.RetryHandler
+	reacquireH        *download.ReacquireHandler
+	ytDlpSearcher     *download.YouTubeAudioSearcher
 	ytDlpAvailable    bool
-	ytmCanary         *acquisition.YtmSearchClient
-	scheduler         *acquisition.BackgroundAcquisitionScheduler
+	ytmCanary         *download.YouTubeMusicSearchClient
+	scheduler         *download.BackgroundAcquisitionScheduler
 }
 
 type audioSourcesStaging struct {
-	audioStore     catalog.AudioStore
-	trackRepo      *catalog.PgxTrackRepository
-	ledger         acquisition.TrackLedgerPort
-	scheduler      catalog.AcquisitionScheduler
-	background     *acquisition.BackgroundAcquisitionScheduler
-	ytDlpSearcher  *acquisition.YtDlpAudioSearcher
+	audioStore     library.AudioStore
+	trackRepo      *library.PostgresTrackRepository
+	ledger         download.TrackLedgerPort
+	scheduler      library.AcquisitionScheduler
+	background     *download.BackgroundAcquisitionScheduler
+	ytDlpSearcher  *download.YouTubeAudioSearcher
 	ytDlpAvailable bool
-	ytmCanary      *acquisition.YtmSearchClient
+	ytmCanary      *download.YouTubeMusicSearchClient
 }
 
 type catalogServicesStaging struct {
-	catalogTrackRepo      *catalog.PgxCatalogTrackRepository
-	orphanedAudio         *catalog.PgxOrphanedAudioRepository
-	addTrackSvc           *catalog.AddTrackService
-	listTracksSvc         *catalog.ListTracksService
-	deleteTrackSvc        *catalog.DeleteTrackService
-	setTrackNumberSvc     *catalog.SetTrackNumberService
-	playlistLifecycleSvc  *catalog.PlaylistLifecycleService
-	playlistMembershipSvc *catalog.PlaylistMembershipService
-	backfillFeaturedSvc   *catalog.BackfillFeaturedService
-	listFeaturingSvc      *catalog.ListFeaturingService
-	getTrackStatusSvc     *catalog.GetTrackStatusService
-	streamTrackSvc        *catalog.StreamTrackService
-	audioURLSvc           *catalog.AudioURLService
+	catalogTrackRepo      *library.PostgresCatalogTrackRepository
+	orphanedAudio         *library.PostgresOrphanedAudioRepository
+	addTrackSvc           *library.AddTrackService
+	listTracksSvc         *library.ListTracksService
+	deleteTrackSvc        *library.DeleteTrackService
+	setTrackNumberSvc     *library.SetTrackNumberService
+	playlistLifecycleSvc  *library.PlaylistLifecycleService
+	playlistMembershipSvc *library.PlaylistMembershipService
+	backfillFeaturedSvc   *library.FillFeaturedArtistsService
+	listFeaturingSvc      *library.ListFeaturingService
+	getTrackStatusSvc     *library.GetTrackStatusService
+	streamTrackSvc        *library.StreamTrackService
+	audioURLSvc           *library.AudioLinkService
 }
 
 func (a *App) wireCatalog(
 	ctx context.Context,
-	tap *observe.EventTap,
-	disc *discovery.Discovery,
+	tap *monitoring.EventTap,
+	disc *search.Discovery,
 ) (catalogWiring, error) {
-	acquisition.SweepStaleTempDirs(acquisition.NewTempWorkspace())
+	download.SweepStaleTempDirs(download.NewTempWorkspace())
 
 	audio, err := a.wireAudioSources(ctx, tap, disc)
 	if err != nil {
@@ -77,96 +77,96 @@ func (a *App) wireCatalog(
 	return a.wireCatalogHandlers(audio, services), nil
 }
 
-func featuredBridge(disc *discovery.Discovery) catalog.FeaturedArtistResolver {
+func featuredBridge(disc *search.Discovery) library.FeaturedArtistResolver {
 	if disc.FeaturedArtists == nil {
 		return nil
 	}
-	return catalog.NewFeaturedArtistResolver(catalogdiscovery.NewFeaturedArtistCredits(disc.FeaturedArtists))
+	return library.NewFeaturedArtistResolver(libraryfromsearch.NewFeaturedArtistCredits(disc.FeaturedArtists))
 }
 
 func (a *App) wireAudioSources(
 	ctx context.Context,
-	tap *observe.EventTap,
-	disc *discovery.Discovery,
+	tap *monitoring.EventTap,
+	disc *search.Discovery,
 ) (audioSourcesStaging, error) {
-	audioStore, err := catalog.FromConfig(a.cfg, slog.Default())
+	audioStore, err := library.NewAudioStoreFromConfig(a.cfg, slog.Default())
 	if err != nil {
 		return audioSourcesStaging{}, err
 	}
-	trackRepo := catalog.NewPgxTrackRepository(a.pool)
+	trackRepo := library.NewPostgresTrackRepository(a.pool)
 	sources, tools := a.liveTiers(ctx, audioStore)
 	staging := audioSourcesStaging{
 		audioStore:     audioStore,
 		trackRepo:      trackRepo,
-		ledger:         acquisitioncatalog.NewTrackLedger(trackRepo),
-		ytDlpSearcher:  audioacquisition.YtDlpSearcher(a.cfg),
+		ledger:         downloadfromlibrary.NewLibraryTracks(trackRepo),
+		ytDlpSearcher:  downloadsetup.YtDlpSearcher(a.cfg),
 		ytDlpAvailable: tools.YtDlp,
-		ytmCanary:      audioacquisition.CanaryYTMClient(a.cfg, a.redisClient),
+		ytmCanary:      downloadsetup.CanaryYTMClient(a.cfg, a.redisClient),
 	}
 	if len(sources.All()) > 0 && audioStore != nil {
-		staging.background = audioacquisition.NewScheduler(ctx, a.schedulerDeps(tap, disc, staging, sources, tools))
+		staging.background = downloadsetup.NewScheduler(ctx, a.schedulerDeps(tap, disc, staging, sources, tools))
 		staging.scheduler = staging.background
 	}
 	return staging, nil
 }
 
-func (a *App) liveTiers(ctx context.Context, audioStore catalog.AudioStore) (audioacquisition.Tiers, acquisition.AcquisitionVerification) {
+func (a *App) liveTiers(ctx context.Context, audioStore library.AudioStore) (downloadsetup.SourceOrder, download.Verification) {
 	if audioStore == nil {
-		return audioacquisition.Tiers{}, acquisition.AcquisitionVerification{}
+		return downloadsetup.SourceOrder{}, download.Verification{}
 	}
-	return audioacquisition.LiveTiers(ctx, a.cfg, a.redisClient)
+	return downloadsetup.EnabledSources(ctx, a.cfg, a.redisClient)
 }
 
-func (a *App) schedulerDeps(tap *observe.EventTap, disc *discovery.Discovery, staging audioSourcesStaging, sources audioacquisition.Tiers, tools acquisition.AcquisitionVerification) audioacquisition.Deps {
-	return audioacquisition.Deps{
-		Config: a.cfg, Pool: a.pool, Events: tap, Recording: acquisitiondiscovery.RecordingOptions(disc), Ledger: staging.ledger, AudioStore: staging.audioStore,
+func (a *App) schedulerDeps(tap *monitoring.EventTap, disc *search.Discovery, staging audioSourcesStaging, sources downloadsetup.SourceOrder, tools download.Verification) downloadsetup.Deps {
+	return downloadsetup.Deps{
+		Config: a.cfg, Pool: a.pool, Events: tap, Recording: downloadfromsearch.RecordingOptions(disc), Ledger: staging.ledger, AudioStore: staging.audioStore,
 		Sources: sources, Verification: tools,
 	}
 }
 
 func (a *App) wireCatalogServices(
-	tap *observe.EventTap,
-	featuredBridge catalog.FeaturedArtistResolver,
+	tap *monitoring.EventTap,
+	featuredBridge library.FeaturedArtistResolver,
 	audio audioSourcesStaging,
 ) catalogServicesStaging {
-	catalogTrackRepo := catalog.NewPgxCatalogTrackRepository(a.pool)
-	playlistRepo := catalog.NewPgxPlaylistRepository(a.pool)
-	orphanedAudio := catalog.NewPgxOrphanedAudioRepository(a.pool)
-	audioStoreMetrics := catalog.NewExpvarAudioStoreMetrics()
-	catalog.SetDBCallMetrics(catalog.NewExpvarDBCallMetrics())
+	catalogTrackRepo := library.NewPostgresCatalogTrackRepository(a.pool)
+	playlistRepo := library.NewPostgresPlaylistRepository(a.pool)
+	orphanedAudio := library.NewPostgresOrphanedAudioRepository(a.pool)
+	audioStoreMetrics := library.NewExpvarAudioStoreMetrics()
+	library.SetDBCallMetrics(library.NewExpvarDBCallMetrics())
 
 	return catalogServicesStaging{
 		catalogTrackRepo: catalogTrackRepo,
 		orphanedAudio:    orphanedAudio,
-		addTrackSvc: catalog.NewAddTrackService(
+		addTrackSvc: library.NewAddTrackService(
 			catalogTrackRepo,
-			catalog.WithAddTrackEvents(tap),
-			catalog.WithAcquisitionScheduler(audio.scheduler),
-			catalog.WithAddTrackClock(time.Now),
+			library.WithAddTrackEvents(tap),
+			library.WithAcquisitionScheduler(audio.scheduler),
+			library.WithAddTrackClock(time.Now),
 		),
-		listTracksSvc:         catalog.NewListTracksService(catalogTrackRepo),
-		deleteTrackSvc:        catalog.NewDeleteTrackService(catalogTrackRepo, audio.audioStore, catalog.WithDeleteTrackEvents(tap), catalog.WithDeleteTrackMetrics(audioStoreMetrics), catalog.WithDeleteTrackOrphanQueue(orphanedAudio)),
-		setTrackNumberSvc:     catalog.NewSetTrackNumberService(catalogTrackRepo),
-		playlistLifecycleSvc:  catalog.NewPlaylistLifecycleService(playlistRepo, catalog.WithPlaylistLifecycleEvents(tap)),
-		playlistMembershipSvc: catalog.NewPlaylistMembershipService(playlistRepo, catalogTrackRepo, catalog.WithPlaylistMembershipEvents(tap)),
-		backfillFeaturedSvc:   catalog.NewBackfillFeaturedService(catalogTrackRepo, catalogTrackRepo, featuredBridge, catalog.WithBackfillClock(time.Now)),
-		listFeaturingSvc:      catalog.NewListFeaturingService(catalogTrackRepo),
-		getTrackStatusSvc:     catalog.NewGetTrackStatusService(catalogTrackRepo),
-		streamTrackSvc:        catalog.NewStreamTrackService(catalogTrackRepo, audio.audioStore, catalog.WithStreamScheduler(audio.scheduler), catalog.WithStreamMetrics(audioStoreMetrics), catalog.WithStreamRecoverySwitch(a.jobs.Switch(jobs.StreamRecovery))),
-		audioURLSvc: catalog.NewAudioURLService(catalogTrackRepo, audio.audioStore,
-			catalog.WithAudioURLMetrics(audioStoreMetrics), catalog.WithAudioURLClock(time.Now)),
+		listTracksSvc:         library.NewListTracksService(catalogTrackRepo),
+		deleteTrackSvc:        library.NewDeleteTrackService(catalogTrackRepo, audio.audioStore, library.WithDeleteTrackEvents(tap), library.WithDeleteTrackMetrics(audioStoreMetrics), library.WithDeleteTrackOrphanQueue(orphanedAudio)),
+		setTrackNumberSvc:     library.NewSetTrackNumberService(catalogTrackRepo),
+		playlistLifecycleSvc:  library.NewPlaylistLifecycleService(playlistRepo, library.WithPlaylistLifecycleEvents(tap)),
+		playlistMembershipSvc: library.NewPlaylistMembershipService(playlistRepo, catalogTrackRepo, library.WithPlaylistMembershipEvents(tap)),
+		backfillFeaturedSvc:   library.NewBackfillFeaturedService(catalogTrackRepo, catalogTrackRepo, featuredBridge, library.WithBackfillClock(time.Now)),
+		listFeaturingSvc:      library.NewListFeaturingService(catalogTrackRepo),
+		getTrackStatusSvc:     library.NewGetTrackStatusService(catalogTrackRepo),
+		streamTrackSvc:        library.NewStreamTrackService(catalogTrackRepo, audio.audioStore, library.WithStreamScheduler(audio.scheduler), library.WithStreamMetrics(audioStoreMetrics), library.WithStreamRecoverySwitch(a.jobs.Switch(jobs.StreamRecovery))),
+		audioURLSvc: library.NewAudioURLService(catalogTrackRepo, audio.audioStore,
+			library.WithAudioURLMetrics(audioStoreMetrics), library.WithAudioURLClock(time.Now)),
 	}
 }
 
 func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServicesStaging) catalogWiring {
-	featuredArtistHandler := catalog.NewFeaturedArtistHandler(svc.backfillFeaturedSvc, svc.listFeaturingSvc)
+	featuredArtistHandler := library.NewFeaturedArtistHandler(svc.backfillFeaturedSvc, svc.listFeaturingSvc)
 
-	var retryH *acquisition.RetryHandler
-	var reacquireH *acquisition.ReacquireHandler
+	var retryH *download.RetryHandler
+	var reacquireH *download.ReacquireHandler
 	if audio.scheduler != nil {
-		cooldowns := acquisition.NewPgxCooldownStore(a.pool)
-		retryH = acquisition.NewRetryHandler(audio.ledger, audio.scheduler, acquisition.NewRetryAdmission(cooldowns))
-		reacquireH = acquisition.NewReacquireHandler(audio.ledger, audio.background, acquisition.NewReacquireAdmission(cooldowns))
+		cooldowns := download.NewPostgresCooldownStore(a.pool)
+		retryH = download.NewRetryHandler(audio.ledger, audio.scheduler, download.NewRetryAdmission(cooldowns))
+		reacquireH = download.NewReacquireHandler(audio.ledger, audio.background, download.NewReacquireAdmission(cooldowns))
 	}
 
 	return catalogWiring{
@@ -174,11 +174,11 @@ func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServices
 		audioStore:        audio.audioStore,
 		orphanedAudio:     svc.orphanedAudio,
 		setTrackNumberSvc: svc.setTrackNumberSvc,
-		trackHandler:      catalog.NewTrackHandler(svc.addTrackSvc, svc.listTracksSvc, svc.getTrackStatusSvc, svc.deleteTrackSvc, svc.setTrackNumberSvc, featuredArtistHandler, catalog.WithTrackWriteLimiterClock(time.Now)),
-		libraryHandler:    catalog.NewLibraryHandler(catalog.NewLibraryLensService(svc.catalogTrackRepo)),
-		playlistHandler:   catalog.NewPlaylistHandler(svc.playlistLifecycleSvc, svc.playlistMembershipSvc, catalog.WithPlaylistWriteLimiterClock(time.Now)),
-		streamHandler:     catalog.NewStreamHandler(svc.streamTrackSvc, catalog.WithStreamLimiterClock(time.Now)),
-		audioURLHandler:   catalog.NewAudioURLHandler(svc.audioURLSvc, catalog.WithPrefetchEnabled(a.cfg.AudioPrefetchEnabled), catalog.WithAudioURLLimiterClock(time.Now)),
+		trackHandler:      library.NewTrackHandler(svc.addTrackSvc, svc.listTracksSvc, svc.getTrackStatusSvc, svc.deleteTrackSvc, svc.setTrackNumberSvc, featuredArtistHandler, library.WithTrackWriteLimiterClock(time.Now)),
+		libraryHandler:    library.NewLibraryHandler(library.NewLibraryLensService(svc.catalogTrackRepo)),
+		playlistHandler:   library.NewPlaylistHandler(svc.playlistLifecycleSvc, svc.playlistMembershipSvc, library.WithPlaylistWriteLimiterClock(time.Now)),
+		streamHandler:     library.NewStreamHandler(svc.streamTrackSvc, library.WithStreamLimiterClock(time.Now)),
+		audioURLHandler:   library.NewAudioURLHandler(svc.audioURLSvc, library.WithPrefetchEnabled(a.cfg.AudioPrefetchEnabled), library.WithAudioURLLimiterClock(time.Now)),
 		retryH:            retryH,
 		reacquireH:        reacquireH,
 		ytDlpSearcher:     audio.ytDlpSearcher,
@@ -188,10 +188,10 @@ func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServices
 	}
 }
 
-func newOwnershipEnrichment(cat catalogWiring, bg *runloop.Tracker) *discovery.OwnershipEnrichmentService {
-	return discovery.NewOwnershipEnrichmentService(
+func newOwnershipEnrichment(cat catalogWiring, bg *background.Tracker) *search.OwnershipEnrichmentService {
+	return search.NewOwnershipEnrichmentService(
 		bg,
-		discovery.NewOwnershipReader(discoverycatalog.NewOwnedTracks(cat.trackRepo)),
-		discoverycatalog.NewTrackNumberFiller(cat.setTrackNumberSvc),
+		search.NewOwnershipReader(searchfromlibrary.NewOwnedTracks(cat.trackRepo)),
+		searchfromlibrary.NewTrackNumberFiller(cat.setTrackNumberSvc),
 	)
 }

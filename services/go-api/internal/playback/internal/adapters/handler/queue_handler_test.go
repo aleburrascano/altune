@@ -2,7 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/playback"
-	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"encoding/json"
@@ -38,26 +38,26 @@ func (r *recordingRepo) UpdatePosition(_ context.Context, position *playback.Que
 	return r.positionErr
 }
 
-func (r *recordingRepo) GetForUser(_ context.Context, _ shared.UserId) (*playback.QueueState, error) {
+func (r *recordingRepo) GetForUser(_ context.Context, _ ids.UserId) (*playback.QueueState, error) {
 	if r.saved == nil {
 		return nil, playback.ErrQueueStateNotFound
 	}
 	return r.saved, nil
 }
 
-func (r *recordingRepo) DeleteForUser(_ context.Context, _ shared.UserId) error {
+func (r *recordingRepo) DeleteForUser(_ context.Context, _ ids.UserId) error {
 	r.saved = nil
 	return nil
 }
 
 type absentNowPlaying struct{}
 
-func (absentNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*playback.NowPlayingTrack, error) {
+func (absentNowPlaying) Lookup(_ context.Context, _ ids.UserId, _ string) (*playback.NowPlayingTrack, error) {
 	return nil, playback.ErrNowPlayingTrackNotFound
 }
 
 type nowPlayingReader interface {
-	Lookup(ctx context.Context, userId shared.UserId, trackId string) (*playback.NowPlayingTrack, error)
+	Lookup(ctx context.Context, userId ids.UserId, trackId string) (*playback.NowPlayingTrack, error)
 }
 
 type sourceDTO struct {
@@ -73,13 +73,13 @@ func newHandler(repo playback.QueueStateRepository) *playback.QueueHandler {
 
 func savePut(body string) *http.Request {
 	req := httptest.NewRequest(http.MethodPut, "/queue-state", strings.NewReader(body))
-	ctx := requestuser.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New()))
+	ctx := requestuser.ContextWithUserID(req.Context(), ids.NewUserId(uuid.New()))
 	return req.WithContext(ctx)
 }
 
 func deleteReq() *http.Request {
 	req := httptest.NewRequest(http.MethodDelete, "/queue-state", nil)
-	ctx := requestuser.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New()))
+	ctx := requestuser.ContextWithUserID(req.Context(), ids.NewUserId(uuid.New()))
 	return req.WithContext(ctx)
 }
 
@@ -208,7 +208,7 @@ func resavedSource(t *testing.T, resumed json.RawMessage) string {
 func resumedSource(t *testing.T, h *playback.QueueHandler) json.RawMessage {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
-	req = req.WithContext(requestuser.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
+	req = req.WithContext(requestuser.ContextWithUserID(req.Context(), ids.NewUserId(uuid.New())))
 	rec := httptest.NewRecorder()
 
 	h.Routes().ServeHTTP(rec, req)
@@ -289,7 +289,7 @@ func TestHandleSave_IdlessPlaylistLegacySourceIdIsStoredAsNoSource(t *testing.T)
 
 type failingNowPlaying struct{}
 
-func (failingNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*playback.NowPlayingTrack, error) {
+func (failingNowPlaying) Lookup(_ context.Context, _ ids.UserId, _ string) (*playback.NowPlayingTrack, error) {
 	return nil, errors.New("lookup now-playing track: context deadline exceeded")
 }
 
@@ -302,7 +302,7 @@ func getResume(t *testing.T, nowPlaying nowPlayingReader) (int, map[string]json.
 	}}
 	h := playback.NewQueueHandler(playback.NewQueueService(repo, nowPlaying))
 	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
-	req = req.WithContext(requestuser.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
+	req = req.WithContext(requestuser.ContextWithUserID(req.Context(), ids.NewUserId(uuid.New())))
 	rec := httptest.NewRecorder()
 
 	h.Routes().ServeHTTP(rec, req)
@@ -337,7 +337,7 @@ func TestHandleGet_FailedNowPlayingLookupIsDistinguishableFromAbsentTrack(t *tes
 
 func positionPut(body string) *http.Request {
 	req := httptest.NewRequest(http.MethodPut, "/queue-state/position", strings.NewReader(body))
-	return req.WithContext(requestuser.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
+	return req.WithContext(requestuser.ContextWithUserID(req.Context(), ids.NewUserId(uuid.New())))
 }
 
 func TestHandleSavePosition_WritesPositionWithoutTheQueue(t *testing.T) {
@@ -401,8 +401,8 @@ func TestHandleSavePosition_UnappliedSaveIsConflictWithItsCode(t *testing.T) {
 
 func TestHandleSavePosition_SharesTheQueueStateRateLimit(t *testing.T) {
 	h := playback.NewQueueHandler(playback.NewQueueService(&recordingRepo{}, absentNowPlaying{}),
-		playback.WithQueueStateRateLimit(playback.QueueStateRateLimit{Every: time.Hour, Burst: 1}))
-	user := shared.NewUserId(uuid.New())
+		playback.WithQueueSaveLimit(playback.QueueSaveLimit{Every: time.Hour, Burst: 1}))
+	user := ids.NewUserId(uuid.New())
 	as := func(req *http.Request) *http.Request {
 		return req.WithContext(requestuser.ContextWithUserID(req.Context(), user))
 	}
@@ -423,7 +423,7 @@ func TestHandleGet_ResponseIsUncachedAndNotSniffable(t *testing.T) {
 		NaturalOrder: []string{"00000000-0000-4000-8000-000000000001"},
 	}}, absentNowPlaying{}))
 	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
-	req = req.WithContext(requestuser.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
+	req = req.WithContext(requestuser.ContextWithUserID(req.Context(), ids.NewUserId(uuid.New())))
 	rec := httptest.NewRecorder()
 
 	h.Routes().ServeHTTP(rec, req)
@@ -610,13 +610,13 @@ func (r *exactPositionRepo) UpdatePosition(_ context.Context, position *playback
 	return nil
 }
 
-func asUser(req *http.Request, user shared.UserId) *http.Request {
+func asUser(req *http.Request, user ids.UserId) *http.Request {
 	return req.WithContext(requestuser.ContextWithUserID(req.Context(), user))
 }
 
 func TestHandleSavePosition_CaseDifferingTrackIdIsNotAConflict(t *testing.T) {
 	h := newHandler(&exactPositionRepo{})
-	user := shared.NewUserId(uuid.New())
+	user := ids.NewUserId(uuid.New())
 	saved := httptest.NewRecorder()
 	h.Routes().ServeHTTP(saved, asUser(savePut(`{"track_ids":["3F2504E0-4F89-11D3-9A0C-0305E82C3301"],"current_index":0,"repeat_mode":"off"}`), user))
 	if saved.Code != http.StatusNoContent {

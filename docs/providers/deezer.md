@@ -203,7 +203,7 @@ Built and on `main` (search + artwork + charts + content), thin projection only 
 **unconditionally wired** (no `cfg.HasDeezer()` gate, unlike MB/Discogs; the public API needs
 no key):
 
-- `services/go-api/internal/discovery/internal/adapters/providers/deezer/deezer.go` — `DeezerAdapter`: `Search` /
+- `services/go-api/internal/search/internal/adapters/providers/deezer/deezer.go` — `DeezerAdapter`: `Search` /
   `SearchStructured` / `searchKind` (track/album/artist), `Resolve` (`ArtworkResolver`, 1000px `_xl`,
   placeholder-skipping), `GetAlbumTracks` / `GetArtistTopTracks` / `GetArtistAlbums`
   (`Album/ArtistContentProvider`), `FetchCharts` (`ChartProvider`). Maps
@@ -213,7 +213,7 @@ no key):
 - Covered by httptest fixtures in `deezer_test.go`.
 
 Detail-open enrichment (caps 7–8), mirroring the Discogs enricher. Paths are under
-`services/go-api/internal/discovery/` unless noted:
+`services/go-api/internal/search/` unless noted:
 
 - `domain/enrichment.go`: the `DeezerEnrichment` value object (+ `Empty`/`IsZero`).
 - `ports/enrichment.go`: `DeezerEnricher` (`ResolveID` + `Lookup`) + `DeezerEnrichmentCache`.

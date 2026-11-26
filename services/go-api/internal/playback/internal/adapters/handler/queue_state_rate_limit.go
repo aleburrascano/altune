@@ -2,18 +2,18 @@ package handler
 
 import (
 	"altune/go-api/internal/playback/internal/core/ports"
-	shareddomain "altune/go-api/internal/shared/domain"
-	"altune/go-api/internal/shared/httputil"
+	apierror "altune/go-api/internal/shared/apierror"
+	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
 	"net/http"
 	"time"
 )
 
-type QueueStateRateLimit = httputil.RateLimit
+type QueueSaveLimit = httpserver.RateLimit
 
-var errQueueRateLimited = shareddomain.NewError(shareddomain.CodePlaybackRateLimited, "too many queue state requests, try again later")
+var errQueueRateLimited = apierror.NewError(apierror.CodePlaybackRateLimited, "too many queue state requests, try again later")
 
-var DefaultQueueStateRateLimit = QueueStateRateLimit{
+var DefaultQueueStateRateLimit = QueueSaveLimit{
 	Every: 2 * time.Second,
 	Burst: 20,
 }
@@ -26,6 +26,6 @@ func WithQueueStateRateLimitMetrics(m ports.RateLimitMetrics) QueueHandlerOption
 	}
 }
 
-func newUserRateLimiter(limit QueueStateRateLimit, now func() time.Time, metrics ports.RateLimitMetrics) func(http.Handler) http.Handler {
-	return httputil.NewUserRateLimiter(limit, now).Middleware(httputil.UserKey(requestuser.UserIDFromContext), errQueueRateLimited, metrics.QueueStateRateLimited)
+func newUserRateLimiter(limit QueueSaveLimit, now func() time.Time, metrics ports.RateLimitMetrics) func(http.Handler) http.Handler {
+	return httpserver.NewUserRateLimiter(limit, now).Middleware(httpserver.UserKey(requestuser.UserIDFromContext), errQueueRateLimited, metrics.QueueStateRateLimited)
 }

@@ -77,7 +77,7 @@ describe('cross-surface contract: services/go-api ToExtrasMap <-> featuredArtist
 
   it('reads only the keys ToExtrasMap actually emits, plus a documented known gap on "role"', () => {
     const goSource = readGoSource(
-      path.join('services', 'go-api', 'internal', 'discovery', 'domain', 'featured_artist.go'),
+      path.join('services', 'go-api', 'internal', 'search', 'domain', 'featured_artist.go'),
     );
     const goEmittedKeys = deriveGoExtrasMapEmittedKeys(goSource);
     expect(goEmittedKeys.size).toBeGreaterThan(0);
@@ -101,7 +101,7 @@ describe('cross-surface contract: FeaturedArtist (TS write side) <-> FeaturedArt
 
   it('the mobile client can only send keys the Go ingest DTO declares, and vice versa', () => {
     const goDtoSource = readGoSource(
-      path.join('services', 'go-api', 'internal', 'catalog', 'service', 'track', 'track_dto.go'),
+      path.join('services', 'go-api', 'internal', 'library', 'service', 'track', 'track_dto.go'),
     );
     const goDtoKeys = deriveGoFeaturedArtistDTOKeys(goDtoSource);
     expect(goDtoKeys.size).toBeGreaterThan(0);

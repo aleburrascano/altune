@@ -2,7 +2,7 @@ package events_test
 
 import (
 	"altune/go-api/internal/shared/events"
-	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/ids"
 	"context"
 	"log/slog"
 	"path/filepath"
@@ -42,14 +42,14 @@ func busAt(t *testing.T, clock *testClock) *events.InProcessBus {
 	return events.NewInProcessBus(clock.now, testFloorPath(t))
 }
 
-func newUser() shared.UserId { return shared.NewUserId(uuid.New()) }
+func newUser() ids.UserId { return ids.NewUserId(uuid.New()) }
 
 func evictIdleUsers(bus *events.InProcessBus, clock *testClock) {
 	clock.advance(userIdleTTL + time.Minute)
 	bus.Publish(context.Background(), newUser(), "trigger", nil)
 }
 
-func isTracked(bus *events.InProcessBus, user shared.UserId) bool {
+func isTracked(bus *events.InProcessBus, user ids.UserId) bool {
 	return bus.LatestID(user) != 0
 }
 
@@ -443,7 +443,7 @@ func (c *gatedClock) advance(d time.Duration) {
 	c.at = c.at.Add(d)
 }
 
-func holdUserLockWithStaleActivity(bus *events.InProcessBus, clock *gatedClock, user shared.UserId, staleAt time.Time) chan struct{} {
+func holdUserLockWithStaleActivity(bus *events.InProcessBus, clock *gatedClock, user ids.UserId, staleAt time.Time) chan struct{} {
 	release := make(chan struct{})
 	held := clock.gateNextCall(staleAt, release)
 	go bus.Publish(context.Background(), user, "held", nil)

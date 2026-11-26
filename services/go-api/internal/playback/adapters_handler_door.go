@@ -3,14 +3,14 @@ package playback
 import handler "altune/go-api/internal/playback/internal/adapters/handler"
 
 type (
-	QueueHandler        = handler.QueueHandler
-	QueueStateRateLimit = handler.QueueStateRateLimit
+	QueueHandler   = handler.QueueHandler
+	QueueSaveLimit = handler.QueueSaveLimit
 )
 
 var (
 	NewQueueHandler                = handler.NewQueueHandler
 	WithQueueStateClock            = handler.WithQueueStateClock
-	WithQueueStateRateLimit        = handler.WithQueueStateRateLimit
+	WithQueueSaveLimit             = handler.WithQueueSaveLimit
 	WithQueueStateRateLimitMetrics = handler.WithQueueStateRateLimitMetrics
 )
 

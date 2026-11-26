@@ -2,7 +2,7 @@ package health_test
 
 import (
 	"altune/go-api/internal/app/health"
-	"altune/go-api/internal/observe"
+	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
@@ -27,7 +27,7 @@ func TestCheck_ReportsTheRealDBError(t *testing.T) {
 
 	got := health.Check(context.Background(), health.Probes{DB: failing(wantErr)}, time.Second)
 
-	if got.DB != observe.DepDown || got.Detail.DBError != wantErr {
+	if got.DB != monitoring.DepDown || got.Detail.DBError != wantErr {
 		t.Errorf("db = %q error %q, want down with %q", got.DB, got.Detail.DBError, wantErr)
 	}
 	if got.Healthy() {
@@ -40,7 +40,7 @@ func TestCheck_AHangingProbeIsCutOffAtTheTimeout(t *testing.T) {
 		<-ctx.Done()
 		return ctx.Err()
 	}
-	done := make(chan observe.DependencyHealth, 1)
+	done := make(chan monitoring.DependencyHealth, 1)
 
 	go func() {
 		done <- health.Check(context.Background(), health.Probes{DB: hang, Redis: hang, Auth: hang}, 50*time.Millisecond)
@@ -48,7 +48,7 @@ func TestCheck_AHangingProbeIsCutOffAtTheTimeout(t *testing.T) {
 
 	select {
 	case got := <-done:
-		if got.DB != observe.DepDown || got.Redis != observe.DepDown || got.Auth != observe.DepDown {
+		if got.DB != monitoring.DepDown || got.Redis != monitoring.DepDown || got.Auth != monitoring.DepDown {
 			t.Errorf("statuses = %q/%q/%q, want every hung probe down", got.DB, got.Redis, got.Auth)
 		}
 	case <-time.After(2 * time.Second):
@@ -74,7 +74,7 @@ func TestCheck_TheDefaultTimeoutGivesEachProbeTwoSeconds(t *testing.T) {
 			Redis: takes(2*time.Second + time.Millisecond),
 		}, health.DefaultProbeTimeout)
 
-		if got.DB != observe.DepUp || got.Redis != observe.DepDown {
+		if got.DB != monitoring.DepUp || got.Redis != monitoring.DepDown {
 			t.Errorf("DB %q after 1.999s, Redis %q after 2.001s; want up then down at the 2s default", got.DB, got.Redis)
 		}
 	})
@@ -83,7 +83,7 @@ func TestCheck_TheDefaultTimeoutGivesEachProbeTwoSeconds(t *testing.T) {
 func TestCheck_HealthyProbesAreUpWithNoError(t *testing.T) {
 	got := health.Check(context.Background(), health.Probes{DB: up, Redis: up, Auth: up}, time.Second)
 
-	if got.DB != observe.DepUp || got.Redis != observe.DepUp || got.Auth != observe.DepUp {
+	if got.DB != monitoring.DepUp || got.Redis != monitoring.DepUp || got.Auth != monitoring.DepUp {
 		t.Errorf("statuses = %q/%q/%q, want all ok", got.DB, got.Redis, got.Auth)
 	}
 	if got.Detail.DBError != "" || got.Detail.RedisError != "" || got.Detail.AuthError != "" || !got.Healthy() {
@@ -94,7 +94,7 @@ func TestCheck_HealthyProbesAreUpWithNoError(t *testing.T) {
 func TestCheck_AnAbsentProbeIsNotConfiguredAndHealthy(t *testing.T) {
 	got := health.Check(context.Background(), health.Probes{}, time.Second)
 
-	if got.DB != observe.DepNotConfigured || got.Redis != observe.DepNotConfigured || got.Auth != observe.DepNotConfigured {
+	if got.DB != monitoring.DepNotConfigured || got.Redis != monitoring.DepNotConfigured || got.Auth != monitoring.DepNotConfigured {
 		t.Errorf("statuses = %q/%q/%q, want all not_configured", got.DB, got.Redis, got.Auth)
 	}
 	if !got.Healthy() {
@@ -105,7 +105,7 @@ func TestCheck_AnAbsentProbeIsNotConfiguredAndHealthy(t *testing.T) {
 func TestCheck_EachDependencyReportsItsOwnFailure(t *testing.T) {
 	got := health.Check(context.Background(), health.Probes{DB: up, Redis: failing("redis refused"), Auth: failing("fetch JWKS: boom")}, time.Second)
 
-	if got.DB != observe.DepUp || got.Redis != observe.DepDown || got.Auth != observe.DepDown {
+	if got.DB != monitoring.DepUp || got.Redis != monitoring.DepDown || got.Auth != monitoring.DepDown {
 		t.Errorf("statuses = %q/%q/%q, want ok/down/down", got.DB, got.Redis, got.Auth)
 	}
 	if got.Detail.DBError != "" || got.Detail.RedisError != "redis refused" || got.Detail.AuthError != "fetch JWKS: boom" {
@@ -154,13 +154,13 @@ func serve(t *testing.T, endpoint http.Handler) (int, healthBody) {
 	return rec.Code, body
 }
 
-func checkWith(status observe.DependencyHealth) func(context.Context) observe.DependencyHealth {
-	return func(context.Context) observe.DependencyHealth { return status }
+func checkWith(status monitoring.DependencyHealth) func(context.Context) monitoring.DependencyHealth {
+	return func(context.Context) monitoring.DependencyHealth { return status }
 }
 
 func TestEndpoint_ReportsTheVersionHealthyOrDegraded(t *testing.T) {
-	healthy := health.NewEndpoint(checkWith(observe.DependencyHealth{DB: observe.DepUp}), "abc123deadbeef", time.Now)
-	degraded := health.NewEndpoint(checkWith(observe.DependencyHealth{DB: observe.DepDown}), "abc123deadbeef", time.Now)
+	healthy := health.NewEndpoint(checkWith(monitoring.DependencyHealth{DB: monitoring.DepUp}), "abc123deadbeef", time.Now)
+	degraded := health.NewEndpoint(checkWith(monitoring.DependencyHealth{DB: monitoring.DepDown}), "abc123deadbeef", time.Now)
 
 	if code, body := serve(t, healthy); code != http.StatusOK || body != (healthBody{Status: "ok", Version: "abc123deadbeef"}) {
 		t.Errorf("healthy = %d %+v, want 200 ok with the version", code, body)
@@ -172,13 +172,13 @@ func TestEndpoint_ReportsTheVersionHealthyOrDegraded(t *testing.T) {
 
 func TestEndpoint_OnlyADownDatabaseFailsTheCheck(t *testing.T) {
 	cases := map[string]struct {
-		status observe.DependencyHealth
+		status monitoring.DependencyHealth
 		want   int
 	}{
-		"only redis down":           {observe.DependencyHealth{DB: observe.DepUp, Redis: observe.DepDown, Auth: observe.DepUp}, http.StatusOK},
-		"only auth stale":           {observe.DependencyHealth{DB: observe.DepUp, Auth: observe.DepDown}, http.StatusOK},
-		"db not configured":         {observe.DependencyHealth{DB: observe.DepNotConfigured}, http.StatusOK},
-		"db down despite others up": {observe.DependencyHealth{DB: observe.DepDown, Redis: observe.DepUp, Auth: observe.DepUp}, http.StatusServiceUnavailable},
+		"only redis down":           {monitoring.DependencyHealth{DB: monitoring.DepUp, Redis: monitoring.DepDown, Auth: monitoring.DepUp}, http.StatusOK},
+		"only auth stale":           {monitoring.DependencyHealth{DB: monitoring.DepUp, Auth: monitoring.DepDown}, http.StatusOK},
+		"db not configured":         {monitoring.DependencyHealth{DB: monitoring.DepNotConfigured}, http.StatusOK},
+		"db down despite others up": {monitoring.DependencyHealth{DB: monitoring.DepDown, Redis: monitoring.DepUp, Auth: monitoring.DepUp}, http.StatusServiceUnavailable},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -191,9 +191,9 @@ func TestEndpoint_OnlyADownDatabaseFailsTheCheck(t *testing.T) {
 
 func TestEndpoint_ConcurrentRequestsShareOneCheck(t *testing.T) {
 	var checks atomic.Int64
-	endpoint := health.NewEndpoint(func(context.Context) observe.DependencyHealth {
+	endpoint := health.NewEndpoint(func(context.Context) monitoring.DependencyHealth {
 		checks.Add(1)
-		return observe.DependencyHealth{DB: observe.DepUp}
+		return monitoring.DependencyHealth{DB: monitoring.DepUp}
 	}, "v", time.Now)
 
 	var wg sync.WaitGroup
@@ -216,9 +216,9 @@ func TestEndpoint_ConcurrentRequestsShareOneCheck(t *testing.T) {
 func TestEndpoint_ChecksAgainOnceTwoSecondsHavePassed(t *testing.T) {
 	current := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	checks := 0
-	endpoint := health.NewEndpoint(func(context.Context) observe.DependencyHealth {
+	endpoint := health.NewEndpoint(func(context.Context) monitoring.DependencyHealth {
 		checks++
-		return observe.DependencyHealth{DB: observe.DepUp}
+		return monitoring.DependencyHealth{DB: monitoring.DepUp}
 	}, "v", func() time.Time { return current })
 
 	serve(t, endpoint)
@@ -237,9 +237,9 @@ func TestEndpoint_ChecksAgainOnceTwoSecondsHavePassed(t *testing.T) {
 
 func TestEndpoint_TheCheckOutlivesACanceledRequest(t *testing.T) {
 	var checkErr error
-	endpoint := health.NewEndpoint(func(ctx context.Context) observe.DependencyHealth {
+	endpoint := health.NewEndpoint(func(ctx context.Context) monitoring.DependencyHealth {
 		checkErr = ctx.Err()
-		return observe.DependencyHealth{DB: observe.DepUp}
+		return monitoring.DependencyHealth{DB: monitoring.DepUp}
 	}, "v", time.Now)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -254,11 +254,11 @@ func TestEndpoint_TheCheckOutlivesACanceledRequest(t *testing.T) {
 func TestEndpoint_TheDetachedCheckIsBoundedAtThreeProbeTimeouts(t *testing.T) {
 	var remaining time.Duration
 	var hasDeadline bool
-	endpoint := health.NewEndpoint(func(ctx context.Context) observe.DependencyHealth {
+	endpoint := health.NewEndpoint(func(ctx context.Context) monitoring.DependencyHealth {
 		var deadline time.Time
 		deadline, hasDeadline = ctx.Deadline()
 		remaining = time.Until(deadline)
-		return observe.DependencyHealth{DB: observe.DepUp}
+		return monitoring.DependencyHealth{DB: monitoring.DepUp}
 	}, "v", time.Now)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -276,9 +276,9 @@ func TestEndpoint_TheDetachedCheckIsBoundedAtThreeProbeTimeouts(t *testing.T) {
 
 func TestEndpoint_TheDetachedCheckKeepsTheRequestsCorrelationID(t *testing.T) {
 	var seen string
-	endpoint := health.NewEndpoint(func(ctx context.Context) observe.DependencyHealth {
+	endpoint := health.NewEndpoint(func(ctx context.Context) monitoring.DependencyHealth {
 		seen = logging.CorrelationIDFromContext(ctx)
-		return observe.DependencyHealth{DB: observe.DepUp}
+		return monitoring.DependencyHealth{DB: monitoring.DepUp}
 	}, "v", time.Now)
 	ctx, cancel := context.WithCancel(logging.WithCorrelationID(context.Background(), "corr-health-1"))
 	cancel()

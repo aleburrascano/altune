@@ -1,0 +1,111 @@
+package ports
+
+import (
+	"context"
+	"time"
+)
+
+type Verification struct {
+	Ffprobe             bool
+	Ffmpeg              bool
+	Fpcalc              bool
+	YtDlp               bool
+	FingerprintVerified bool
+}
+
+type JobState string
+
+const (
+	JobQueued    JobState = "queued"
+	JobRunning   JobState = "running"
+	JobSucceeded JobState = "succeeded"
+	JobFailed    JobState = "failed"
+	JobCancelled JobState = "cancelled"
+	JobRetrying  JobState = "retrying"
+	JobKept      JobState = "kept"
+)
+
+type VerifySkipRecorder interface {
+	RecordVerifySkip(gate string)
+}
+
+const (
+	SkipDecodeTimeout      = "decode_timeout"
+	SkipDecoderUnavailable = "decoder_unavailable"
+	SkipIdentifyFailed     = "identify_failed"
+	SkipPreviewFallback    = "preview_fallback"
+	SkipProbeFailed        = "probe_failed"
+	SkipNoDuration         = "no_duration"
+)
+
+func (v Verification) ToolsPresent() bool {
+	return v.Ffprobe && v.Ffmpeg && v.Fpcalc && v.YtDlp
+}
+
+type JobRecord struct {
+	TrackID        string
+	Title          string
+	Artist         string
+	Album          string
+	SourceURL      string
+	ResolvedSource string
+	State          JobState
+	Stage          string
+	ScheduledAt    time.Time
+	ElapsedMs      int64
+	Reason         string
+	Provenance     string
+	Kind           JobKind
+	Run            int
+	StageMs        map[string]int64
+	Source         SourceFormat
+	Stored         StoredFile
+
+	Confidence      float64
+	SourceKey       string
+	TargetSeconds   float64
+	MeasuredSeconds float64
+}
+
+type Status struct {
+	InFlight         int
+	Succeeded        uint64
+	Failed           uint64
+	Rejected         uint64
+	VerifySkipped    uint64
+	Paused           bool
+	QueueDepth       int
+	OldestPendingAge time.Duration
+	QueueDepthKnown  bool
+	Workers          int
+	Verification     Verification
+	ActiveJobs       []JobRecord
+	Recent           []JobRecord
+}
+
+type AcquisitionOutcome struct {
+	TrackID         string
+	Outcome         JobState
+	Reason          string
+	ElapsedMs       int64
+	StageMs         map[string]int64
+	SourceHost      string
+	Source          SourceFormat
+	Stored          StoredFile
+	Kind            JobKind
+	Run             int
+	Provenance      string
+	Confidence      float64
+	SourceKey       string
+	TargetSeconds   float64
+	MeasuredSeconds float64
+}
+
+type StoredFile struct {
+	Bytes int64
+	Codec string
+}
+
+type OutcomeRecorder interface {
+	Record(ctx context.Context, o AcquisitionOutcome) error
+}

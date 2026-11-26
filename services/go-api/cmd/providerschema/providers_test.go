@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/shared/providerschema"
+	"altune/go-api/internal/shared/providerfields"
 	"flag"
 	"strings"
 	"testing"
@@ -16,7 +16,7 @@ func TestEverySchemaAccountsForEveryField(t *testing.T) {
 	}
 	for provider, p := range providers {
 		path := schemaPath(root, provider)
-		s, err := providerschema.Load(path)
+		s, err := providerfields.Load(path)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -25,7 +25,7 @@ func TestEverySchemaAccountsForEveryField(t *testing.T) {
 			t.Fatalf("%s: %v", provider, err)
 		}
 		if *updateSchema {
-			if err := providerschema.Save(path, s); err != nil {
+			if err := providerfields.Save(path, s); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -40,7 +40,7 @@ func TestAccountFailsWhenTheSchemaLacksAnEntity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := providerschema.Schema{Entities: map[string]*providerschema.Entity{}}
+	s := providerfields.Schema{Entities: map[string]*providerfields.Entity{}}
 	if _, err := account(s, root, providers["applemusic"], false); err == nil {
 		t.Fatal("want an error")
 	}
@@ -51,7 +51,7 @@ func TestAccountFailsWhenTheSchemaHasAnEntityNobodyAudits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := providerschema.Schema{Entities: map[string]*providerschema.Entity{"song": {}, "album": {}, "artist": {}, "playlist": {}}}
+	s := providerfields.Schema{Entities: map[string]*providerfields.Entity{"song": {}, "album": {}, "artist": {}, "playlist": {}}}
 	if _, err := account(s, root, providers["applemusic"], false); err == nil {
 		t.Fatal("want an error")
 	}

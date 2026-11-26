@@ -2,8 +2,8 @@ package domain_test
 
 import (
 	"altune/go-api/internal/playback"
-	shareddomain "altune/go-api/internal/shared/domain"
-	shared "altune/go-api/internal/shared/kernel"
+	apierror "altune/go-api/internal/shared/apierror"
+	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
 	"testing"
@@ -21,8 +21,8 @@ const (
 	canonicalTrackB = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
 )
 
-func testUser() shared.UserId {
-	return shared.NewUserId(uuid.New())
+func testUser() ids.UserId {
+	return ids.NewUserId(uuid.New())
 }
 
 type storeSpy struct {
@@ -41,14 +41,14 @@ func (s *storeSpy) UpdatePosition(_ context.Context, position *playback.QueuePos
 	return nil
 }
 
-func (s *storeSpy) GetForUser(context.Context, shared.UserId) (*playback.QueueState, error) {
+func (s *storeSpy) GetForUser(context.Context, ids.UserId) (*playback.QueueState, error) {
 	if s.stored == nil {
 		return nil, playback.ErrQueueStateNotFound
 	}
 	return s.stored, nil
 }
 
-func (s *storeSpy) DeleteForUser(context.Context, shared.UserId) error {
+func (s *storeSpy) DeleteForUser(context.Context, ids.UserId) error {
 	return nil
 }
 
@@ -69,12 +69,12 @@ func validationCode(t *testing.T, err error) string {
 	if err == nil {
 		t.Fatal("expected a validation error, got nil")
 	}
-	var coded *shareddomain.CodedError
+	var coded *apierror.CodedError
 	if !errors.As(err, &coded) {
 		t.Fatalf("error = %T (%v), want a coded validation error", err, err)
 	}
-	if kind := coded.Code().Kind(); kind != shareddomain.KindInvalid {
-		t.Fatalf("kind = %s, want %s", kind, shareddomain.KindInvalid)
+	if kind := coded.Code().Kind(); kind != apierror.KindInvalid {
+		t.Fatalf("kind = %s, want %s", kind, apierror.KindInvalid)
 	}
 	return coded.Code().String()
 }

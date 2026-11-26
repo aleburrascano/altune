@@ -1,7 +1,7 @@
 package app
 
 import (
-	"altune/go-api/internal/auth"
+	"altune/go-api/internal/platform/auth"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"net/http"

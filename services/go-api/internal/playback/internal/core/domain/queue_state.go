@@ -1,7 +1,7 @@
 package domain
 
 import (
-	shared "altune/go-api/internal/shared/kernel"
+	sharedids "altune/go-api/internal/shared/ids"
 	"fmt"
 	"strings"
 	"time"
@@ -12,7 +12,7 @@ const MaxQueueLength = 10000
 const MaxQueueStringBytes = 4096
 
 type QueueState struct {
-	UserId       shared.UserId
+	UserId       sharedids.UserId
 	TrackIds     []string
 	CurrentIdx   int
 	PositionMs   int64
@@ -24,7 +24,7 @@ type QueueState struct {
 }
 
 type QueueStateInput struct {
-	UserId       shared.UserId
+	UserId       sharedids.UserId
 	TrackIds     []string
 	CurrentIdx   int
 	PositionMs   int64
@@ -211,7 +211,7 @@ func canonicalTrackIds(field string, ids []string) ([]string, error) {
 }
 
 func canonicalTrackId(field, id string) (string, error) {
-	parsed, err := shared.ParseEntityId(id)
+	parsed, err := sharedids.ParseEntityId(id)
 	if err != nil {
 		return "", newValidationError(codeMalformedTrackId, field+" is not a track id")
 	}
@@ -253,7 +253,7 @@ func RehydrateQueueState(in QueueStateInput, updatedAt time.Time) (*QueueState, 
 	return newQueueState(in, updatedAt)
 }
 
-func EmptyQueueState(userId shared.UserId) *QueueState {
+func EmptyQueueState(userId sharedids.UserId) *QueueState {
 	state, err := newQueueState(QueueStateInput{UserId: userId}, handledNow())
 	if err != nil {
 		panic("empty queue state must always be valid: " + err.Error())

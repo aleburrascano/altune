@@ -64,7 +64,7 @@ function resolveStepName(returned: string, constants: Map<string, string>): stri
   const value = constants.get(returned);
   if (value === undefined) {
     throw new Error(
-      `Name() returns ${returned}, which is no string constant of internal/acquisition/service`,
+      `Name() returns ${returned}, which is no string constant of internal/download/service`,
     );
   }
   return value;
@@ -75,7 +75,7 @@ function returnedStepNames(goSource: string): string[] {
 }
 
 function deriveAcquisitionStepNames(goApiRoot: string): Set<string> {
-  const sources = readPackageSources(path.join(goApiRoot, 'internal', 'acquisition', 'service'));
+  const sources = readPackageSources(path.join(goApiRoot, 'internal', 'download', 'service'));
   const constants = goStringConstants(sources);
   const names = new Set<string>();
   for (const { fileName, text } of sources) {

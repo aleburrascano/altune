@@ -1,21 +1,21 @@
 package domain
 
-import shareddomain "altune/go-api/internal/shared/domain"
+import apierror "altune/go-api/internal/shared/apierror"
 
 var (
-	codePositionMsNegative    = shareddomain.CodePlaybackPositionMsNegative
-	codeQueueTooLong          = shareddomain.CodePlaybackQueueTooLong
-	codeStringTooLong         = shareddomain.CodePlaybackStringTooLong
-	codeStringContainsNul     = shareddomain.CodePlaybackStringContainsNul
-	codeCurrentIdxOutOfRange  = shareddomain.CodePlaybackCurrentIdxOutOfRange
-	codeCurrentTrackIdMissing = shareddomain.CodePlaybackCurrentTrackIDMissing
-	codeUnknownRepeatMode     = shareddomain.CodePlaybackUnknownRepeatMode
-	codeUnknownSourceKind     = shareddomain.CodePlaybackUnknownSourceKind
-	codeUnrecognizedSourceId  = shareddomain.CodePlaybackUnrecognizedSourceID
-	codeMalformedTrackId      = shareddomain.CodePlaybackMalformedTrackID
-	codeNaturalOrderMismatch  = shareddomain.CodePlaybackNaturalOrderMismatch
+	codePositionMsNegative    = apierror.CodePlaybackPositionMsNegative
+	codeQueueTooLong          = apierror.CodePlaybackQueueTooLong
+	codeStringTooLong         = apierror.CodePlaybackStringTooLong
+	codeStringContainsNul     = apierror.CodePlaybackStringContainsNul
+	codeCurrentIdxOutOfRange  = apierror.CodePlaybackCurrentIdxOutOfRange
+	codeCurrentTrackIdMissing = apierror.CodePlaybackCurrentTrackIDMissing
+	codeUnknownRepeatMode     = apierror.CodePlaybackUnknownRepeatMode
+	codeUnknownSourceKind     = apierror.CodePlaybackUnknownSourceKind
+	codeUnrecognizedSourceId  = apierror.CodePlaybackUnrecognizedSourceID
+	codeMalformedTrackId      = apierror.CodePlaybackMalformedTrackID
+	codeNaturalOrderMismatch  = apierror.CodePlaybackNaturalOrderMismatch
 )
 
-func newValidationError(code shareddomain.Code, msg string) *shareddomain.CodedError {
-	return shareddomain.NewError(code, msg)
+func newValidationError(code apierror.Code, msg string) *apierror.CodedError {
+	return apierror.NewError(code, msg)
 }

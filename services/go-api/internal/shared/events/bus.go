@@ -2,7 +2,7 @@ package events
 
 import (
 	"altune/go-api/internal/shared/events/internal/core/idfloor"
-	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/ids"
 	"context"
 	"log/slog"
 	"sync"
@@ -61,7 +61,7 @@ func NewInProcessBus(now func() time.Time, idFloorPath string) *InProcessBus {
 	return b
 }
 
-func (b *InProcessBus) getOrCreateUser(userId shared.UserId) *userState {
+func (b *InProcessBus) getOrCreateUser(userId ids.UserId) *userState {
 	key := userId.String()
 	if v, ok := b.users.Load(key); ok {
 		return v.(*userState)
@@ -87,7 +87,7 @@ func (b *InProcessBus) evictIdleUsers() {
 	})
 }
 
-func (b *InProcessBus) lockLiveUser(userId shared.UserId) *userState {
+func (b *InProcessBus) lockLiveUser(userId ids.UserId) *userState {
 	for {
 		us := b.getOrCreateUser(userId)
 		us.mu.Lock()
@@ -98,7 +98,7 @@ func (b *InProcessBus) lockLiveUser(userId shared.UserId) *userState {
 	}
 }
 
-func (b *InProcessBus) Publish(_ context.Context, userId shared.UserId, eventType EventType, payload map[string]any) {
+func (b *InProcessBus) Publish(_ context.Context, userId ids.UserId, eventType EventType, payload map[string]any) {
 	us := b.lockLiveUser(userId)
 
 	us.lastActive = b.now()
@@ -125,7 +125,7 @@ func (b *InProcessBus) appendToRing(us *userState, evt Event) {
 	}
 }
 
-func (b *InProcessBus) fanOut(us *userState, userId shared.UserId, evt Event) {
+func (b *InProcessBus) fanOut(us *userState, userId ids.UserId, evt Event) {
 	for _, ch := range us.subscribers {
 		select {
 		case ch <- evt:
@@ -148,14 +148,14 @@ func (b *InProcessBus) recordIssuedID(id uint64) {
 	}
 }
 
-func (b *InProcessBus) recordDropForFullSubscriber(userId shared.UserId, eventType EventType, eventID uint64) {
+func (b *InProcessBus) recordDropForFullSubscriber(userId ids.UserId, eventType EventType, eventID uint64) {
 	total := b.dropped.Add(1)
 	slog.WarnContext(context.Background(), "events.subscriber_dropped",
 		"user_id", userId.String(), "event_type", eventType,
 		"event_id", eventID, "dropped_total", total)
 }
 
-func (b *InProcessBus) Subscribe(userId shared.UserId) (<-chan Event, func()) {
+func (b *InProcessBus) Subscribe(userId ids.UserId) (<-chan Event, func()) {
 	ch := make(chan Event, subscriberChanSize)
 
 	us := b.lockLiveUser(userId)
@@ -173,7 +173,7 @@ func (b *InProcessBus) Subscribe(userId shared.UserId) (<-chan Event, func()) {
 	return ch, cancel
 }
 
-func (b *InProcessBus) LatestID(userId shared.UserId) uint64 {
+func (b *InProcessBus) LatestID(userId ids.UserId) uint64 {
 	v, ok := b.users.Load(userId.String())
 	if !ok {
 		return 0
@@ -184,7 +184,7 @@ func (b *InProcessBus) LatestID(userId shared.UserId) uint64 {
 	return us.nextID
 }
 
-func (b *InProcessBus) ResumeGapped(userId shared.UserId, afterID uint64) bool {
+func (b *InProcessBus) ResumeGapped(userId ids.UserId, afterID uint64) bool {
 	if afterID == 0 {
 		return false
 	}
@@ -198,7 +198,7 @@ func (b *InProcessBus) ResumeGapped(userId shared.UserId, afterID uint64) bool {
 	return afterID < us.firstID
 }
 
-func (b *InProcessBus) Replay(userId shared.UserId, afterID uint64) []Event {
+func (b *InProcessBus) Replay(userId ids.UserId, afterID uint64) []Event {
 	key := userId.String()
 	v, ok := b.users.Load(key)
 	if !ok {
@@ -231,7 +231,7 @@ func (b *InProcessBus) Replay(userId shared.UserId, afterID uint64) []Event {
 	return result
 }
 
-func warnIfEventsWereEvictedBeforeResume(userId shared.UserId, afterID, oldestRetainedID uint64) {
+func warnIfEventsWereEvictedBeforeResume(userId ids.UserId, afterID, oldestRetainedID uint64) {
 	resumingFromBeginning := afterID == 0
 	if resumingFromBeginning || oldestRetainedID <= afterID+1 {
 		return

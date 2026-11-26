@@ -2,13 +2,13 @@ package router_test
 
 import (
 	"altune/go-api/internal/app/router"
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/eventstream"
+	"altune/go-api/internal/platform/auth"
+	"altune/go-api/internal/platform/eventstream"
+	"altune/go-api/internal/platform/requestmetrics"
 	"altune/go-api/internal/shared/events"
-	"altune/go-api/internal/shared/httputiltest"
-	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/reqmetrics"
+	"altune/go-api/internal/shared/slowclient"
 	"bufio"
 	"bytes"
 	"context"
@@ -42,7 +42,7 @@ func newRouter(s router.Settings) *chi.Mux {
 	if s.RequestTimeout == 0 {
 		s.RequestTimeout = productionRequestTimeout
 	}
-	s.Latency = reqmetrics.NewRegistry()
+	s.Latency = requestmetrics.NewRegistry()
 	return router.New(s)
 }
 
@@ -88,7 +88,7 @@ func TestRouter_PanickingHandlerLogsOneErrorAndRequestCompleteAt500(t *testing.T
 	}
 }
 
-func newDeadlineRouter(uid shared.UserId, sse *eventstream.EventStreamHandler, bulkErrs chan<- error) *chi.Mux {
+func newDeadlineRouter(uid ids.UserId, sse *eventstream.EventStreamHandler, bulkErrs chan<- error) *chi.Mux {
 	r := newRouter(router.Settings{WriteTimeout: routeWriteDeadline})
 	r.Get("/v1/bulk", func(w http.ResponseWriter, _ *http.Request) {
 		chunk := bytes.Repeat([]byte("x"), 16<<10)
@@ -110,10 +110,10 @@ func newDeadlineRouter(uid shared.UserId, sse *eventstream.EventStreamHandler, b
 func TestRouter_WriteDeadlineCutsOffSlowReaderOnNonSSERoute(t *testing.T) {
 	bulkErrs := make(chan error, 1)
 	sse := eventstream.NewEventStreamHandler(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), 0)
-	srv := httputiltest.NewServer(t, newDeadlineRouter(shared.NewUserId(uuid.New()), sse, bulkErrs))
+	srv := slowclient.NewServer(t, newDeadlineRouter(ids.NewUserId(uuid.New()), sse, bulkErrs))
 
 	began := time.Now()
-	httputiltest.Get(t, srv, "/v1/bulk", nil)
+	slowclient.Get(t, srv, "/v1/bulk", nil)
 
 	select {
 	case err := <-bulkErrs:
@@ -130,12 +130,12 @@ func TestRouter_WriteDeadlineCutsOffSlowReaderOnNonSSERoute(t *testing.T) {
 
 func TestRouter_SSEStreamOutlivesRouteWriteDeadline(t *testing.T) {
 	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
-	uid := shared.NewUserId(uuid.New())
+	uid := ids.NewUserId(uuid.New())
 	sse := eventstream.NewEventStreamHandler(bus, 0).WithHeartbeat(routeWriteDeadline / 3)
-	srv := httputiltest.NewServer(t, newDeadlineRouter(uid, sse, make(chan error, 1)))
+	srv := slowclient.NewServer(t, newDeadlineRouter(uid, sse, make(chan error, 1)))
 
-	conn, br := httputiltest.Get(t, srv, "/v1/events", nil)
-	resp := httputiltest.ReadResponse(t, conn, br)
+	conn, br := slowclient.Get(t, srv, "/v1/events", nil)
+	resp := slowclient.ReadResponse(t, conn, br)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -153,16 +153,16 @@ func TestRouter_SSEPerFrameDeadlineReachesConnection(t *testing.T) {
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 
 	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
-	uid := shared.NewUserId(uuid.New())
+	uid := ids.NewUserId(uuid.New())
 	sse := eventstream.NewEventStreamHandler(bus, 0).WithWriteTimeout(routeWriteDeadline).WithHeartbeat(time.Hour)
 	done := make(chan struct{})
 	router := newDeadlineRouter(uid, sse, make(chan error, 1))
-	srv := httputiltest.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := slowclient.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer close(done)
 		router.ServeHTTP(w, r)
 	}))
 
-	httputiltest.Get(t, srv, "/v1/events", nil)
+	slowclient.Get(t, srv, "/v1/events", nil)
 
 	payload := map[string]any{"pad": strings.Repeat("x", 16<<10)}
 	giveUp := time.After(5 * time.Second)
@@ -345,7 +345,7 @@ func TestRouter_HealthAndLongLivedRoutesAreNotTraced(t *testing.T) {
 	previous := otel.GetTracerProvider()
 	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)))
 	t.Cleanup(func() { otel.SetTracerProvider(previous) })
-	r := router.New(router.Settings{WriteTimeout: time.Minute, RequestTimeout: time.Minute, Latency: reqmetrics.NewRegistry()})
+	r := router.New(router.Settings{WriteTimeout: time.Minute, RequestTimeout: time.Minute, Latency: requestmetrics.NewRegistry()})
 	ok := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }
 	r.Get("/health", ok)
 	r.Get("/v1/events", ok)
@@ -372,7 +372,7 @@ func TestRouter_HealthAndLongLivedRoutesAreNotTraced(t *testing.T) {
 }
 
 func TestRouter_RecordsEachRequestsLatencyByRouteAndStatusClass(t *testing.T) {
-	latency := reqmetrics.NewRegistry()
+	latency := requestmetrics.NewRegistry()
 	r := router.New(router.Settings{WriteTimeout: time.Minute, RequestTimeout: time.Minute, Latency: latency})
 	const route = "/v1/latency-probe/{status}"
 	r.Get(route, func(w http.ResponseWriter, req *http.Request) {

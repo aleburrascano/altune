@@ -3,9 +3,9 @@ package app_test
 import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/app/jobs"
-	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/search"
+	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/runloop"
 	"bufio"
 	"bytes"
 	"context"
@@ -48,7 +48,7 @@ func (rt *countingProviderRT) roundTrips() int {
 	return rt.calls
 }
 
-func totalProviderCounts(s discovery.ProviderMetricsSnapshot) int64 {
+func totalProviderCounts(s search.ProviderMetricsSnapshot) int64 {
 	var total int64
 	for _, o := range s {
 		total += o.OK + o.Quota + o.Error
@@ -70,13 +70,13 @@ func TestDiscovery_RequestPathProviderCallsAreCountedOnce(t *testing.T) {
 			fixture := newJWKSFixture(t)
 			fixture.cfg.MusicBrainzUserAgent = "altune-test/1.0"
 			rt := &countingProviderRT{}
-			h := assembleWith(t, fixture.cfg, discovery.NewCountingTransport(rt)).assembly.Handler()
-			before, callsBefore := discovery.ReadProviderMetricsSnapshot(), rt.roundTrips()
+			h := assembleWith(t, fixture.cfg, search.NewCountingTransport(rt)).assembly.Handler()
+			before, callsBefore := search.ReadProviderMetricsSnapshot(), rt.roundTrips()
 
 			code, body := getAs(t, h, route.target, signedToken(t, fixture.key, fixture.operator))
 
 			calls := rt.roundTrips() - callsBefore
-			counted := totalProviderCounts(discovery.ReadProviderMetricsSnapshot()) - totalProviderCounts(before)
+			counted := totalProviderCounts(search.ReadProviderMetricsSnapshot()) - totalProviderCounts(before)
 			if calls == 0 {
 				t.Fatalf("%s made no provider call (status %d, body %s), so it proves nothing about the transport", route.target, code, body)
 			}
@@ -125,7 +125,7 @@ func TestUnreleasedRefresh_NoUnreleasedSourceStartsNoRefresh(t *testing.T) {
 
 func TestNewTracker_RefusesACapBelowOne(t *testing.T) {
 	_, err := app.NewTracker(&config.Config{})
-	if !errors.Is(err, runloop.ErrTrackerLimit) {
+	if !errors.Is(err, background.ErrTrackerLimit) {
 		t.Fatalf("NewTracker = %v, want runloop.ErrTrackerLimit", err)
 	}
 }
@@ -147,7 +147,7 @@ func TestNewEvalDiscovery_SearchesThroughTheGivenTransport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewEvalDiscovery: %v", err)
 	}
-	query := &discovery.SearchQuery{Raw: "probe song", Kinds: map[discovery.ResultKind]bool{discovery.ResultKindAlbum: true}}
+	query := &search.SearchQuery{Raw: "probe song", Kinds: map[search.ResultKind]bool{search.ResultKindAlbum: true}}
 	disc.RankingOnlySearch().InspectSearchWithStatuses(t.Context(), query)
 	if !strings.Contains(logs.String(), "test transport: provider egress refused") {
 		t.Errorf("a ranking search never went through the given transport; logs:\n%s", logs.String())

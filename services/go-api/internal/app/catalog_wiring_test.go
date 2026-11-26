@@ -2,7 +2,7 @@ package app_test
 
 import (
 	"altune/go-api/internal/app"
-	"altune/go-api/internal/catalog"
+	"altune/go-api/internal/library"
 	"context"
 	"encoding/json"
 	"net"
@@ -96,7 +96,7 @@ func TestCatalog_ADBCallTimeoutReachesOperatorLiveMetrics(t *testing.T) {
 	})
 	h, token := assembly.Handler(), signedToken(t, fixture.key, fixture.operator)
 
-	before := catalog.ReadSnapshot().DBCallTimeouts
+	before := library.ReadSnapshot().DBCallTimeouts
 	start := time.Now()
 	code, body := getAs(t, h, "/v1/library/albums", token)
 	if code < http.StatusInternalServerError {
@@ -111,7 +111,7 @@ func TestCatalog_ADBCallTimeoutReachesOperatorLiveMetrics(t *testing.T) {
 		t.Fatalf("operator metrics read: status %d, want 200; body %s", code, body)
 	}
 	var got struct {
-		Catalog catalog.MetricsSnapshot `json:"catalog"`
+		Catalog library.MetricsSnapshot `json:"catalog"`
 	}
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("decode %s: %v", body, err)

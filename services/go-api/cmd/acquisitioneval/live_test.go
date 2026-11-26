@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/download"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -46,10 +46,10 @@ func (s liveServer) handler(t *testing.T) http.Handler {
 	})
 }
 
-func (s liveServer) client(t *testing.T) *acquisition.YtmSearchClient {
+func (s liveServer) client(t *testing.T) *download.YouTubeMusicSearchClient {
 	srv := httptest.NewServer(s.handler(t))
 	t.Cleanup(srv.Close)
-	return acquisition.NewYtmSearch(acquisition.YtmSearchConfig{MusicURL: srv.URL, OEmbedURL: srv.URL + "/oembed", Timeout: 5 * time.Second})
+	return download.NewYtmSearch(download.YouTubeMusicSearchConfig{MusicURL: srv.URL, OEmbedURL: srv.URL + "/oembed", Timeout: 5 * time.Second})
 }
 
 const liveTracksJSONL = `{"id":"t-atv","title":"remember them days","artist":"SLAYR","album":"a","duration_seconds":113,"audio_source_url":"https://www.youtube.com/watch?v=XDC3uH1FSgw","acquisition_provenance":"verified","acquisition_evidence":{"duration_delta_seconds":0.4},"isrc":"ignored"}
@@ -153,7 +153,7 @@ func TestRunLive_FailedLookupDegradesToALookupFailedFlag(t *testing.T) {
 func TestRunLive_UnreachableYouTubeMarksEveryStepFailed(t *testing.T) {
 	srv := httptest.NewServer(http.NotFoundHandler())
 	srv.Close()
-	client := acquisition.NewYtmSearch(acquisition.YtmSearchConfig{MusicURL: srv.URL, OEmbedURL: srv.URL + "/oembed", Timeout: time.Second})
+	client := download.NewYtmSearch(download.YouTubeMusicSearchConfig{MusicURL: srv.URL, OEmbedURL: srv.URL + "/oembed", Timeout: time.Second})
 	tracks := writeTracks(t, strings.Split(liveTracksJSONL, "\n")[0]+"\n")
 	out := filepath.Join(t.TempDir(), "judged.jsonl")
 

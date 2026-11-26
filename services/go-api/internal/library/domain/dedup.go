@@ -1,0 +1,42 @@
+package domain
+
+import (
+	"altune/go-api/internal/shared/textnorm"
+	"strings"
+	"unicode"
+)
+
+func computeDedupKey(title, artist, album string) string {
+	parts := []string{
+		normalizeForDedup(title),
+		normalizeForDedup(artist),
+		normalizeForDedup(album),
+	}
+	return strings.Join(parts, "|")
+}
+
+func TrackDedupKey(title, artist, album string) string {
+	return computeDedupKey(title, artist, resolveAlbum(album, title))
+}
+
+func normalizeForDedup(s string) string {
+	s = strings.ToLower(canonicalizeField(s))
+	s = stripNonAlphanumeric(s)
+	return strings.Join(strings.Fields(s), " ")
+}
+
+func canonicalizeField(s string) string {
+	s = textnorm.NFKC(s)
+	s = strings.Join(strings.Fields(s), " ")
+	return strings.TrimSpace(s)
+}
+
+func stripNonAlphanumeric(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsSpace(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}

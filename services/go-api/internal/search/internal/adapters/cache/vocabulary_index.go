@@ -1,0 +1,158 @@
+package cache
+
+import (
+	"altune/go-api/internal/search/domain"
+	"altune/go-api/internal/search/internal/adapters/cache/spellingmatch"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+
+	goredis "github.com/redis/go-redis/v9"
+)
+
+func (s *RedisVocabularyStore) Add(ctx context.Context, entry domain.SpellingHintsEntry) error {
+	if s.disabled() {
+		return nil
+	}
+	return s.indexEntry(ctx, entry)
+}
+
+func (s *RedisVocabularyStore) BulkAdd(ctx context.Context, entries []domain.SpellingHintsEntry) error {
+	if s.disabled() || len(entries) == 0 {
+		return nil
+	}
+	pipe := s.client.Pipeline()
+	for _, e := range entries {
+		norm := s.buildNorm(e)
+		if domain.IsIndexableVocabularyTerm(e.Term, norm) {
+			addEntryToPipeline(pipe, ctx, norm, e, s.metaphone, false)
+		}
+	}
+	if pipe.Len() == 0 {
+		return nil
+	}
+	_, err := pipe.Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("write vocabulary entries: %w", err)
+	}
+	return nil
+}
+
+func (s *RedisVocabularyStore) indexEntry(
+	ctx context.Context,
+	entry domain.SpellingHintsEntry,
+) error {
+	norm := s.buildNorm(entry)
+	if !domain.IsIndexableVocabularyTerm(entry.Term, norm) {
+		return nil
+	}
+	pipe := s.client.Pipeline()
+	addEntryToPipeline(pipe, ctx, norm, entry, s.metaphone, true)
+	_, err := pipe.Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("index one vocabulary entry: %w", err)
+	}
+	return nil
+}
+
+func addEntryToPipeline(
+	pipe goredis.Pipeliner,
+	ctx context.Context,
+	norm string,
+	entry domain.SpellingHintsEntry,
+	metaphone MetaphoneFunc,
+	keepHigherPopularity bool,
+) {
+	member := encodeMember(norm, entry.Term, string(entry.Kind))
+	score := goredis.Z{Score: float64(entry.Popularity), Member: member}
+	if keepHigherPopularity {
+		pipe.ZAddGT(ctx, vocabTermsKey, score)
+	} else {
+		pipe.ZAdd(ctx, vocabTermsKey, score)
+	}
+	pipe.ZAdd(ctx, vocabLexKey, goredis.Z{Score: 0, Member: member})
+	entryJSON, _ := json.Marshal(vocabEntryData{
+		Term:       entry.Term,
+		Kind:       string(entry.Kind),
+		Popularity: entry.Popularity,
+	})
+	if keepHigherPopularity {
+		pipe.SetNX(ctx, vocabEntryPfx+norm, entryJSON, vocabEntryTTL)
+	} else {
+		pipe.Set(ctx, vocabEntryPfx+norm, entryJSON, vocabEntryTTL)
+	}
+	for _, tri := range spellingmatch.Trigrams(norm) {
+		pipe.SAdd(ctx, vocabTriPrefix+tri, norm)
+	}
+	if metaphone != nil {
+		code := metaphone(norm)
+		if code != "" {
+			pipe.SAdd(ctx, vocabMetaPrefix+code, norm)
+		}
+	}
+}
+
+const vocabTrimAttempts = 5
+
+func (s *RedisVocabularyStore) Trim(ctx context.Context, maxEntries int) error {
+	if s.disabled() || maxEntries <= 0 {
+		return nil
+	}
+	for range vocabTrimAttempts {
+		err := s.client.Watch(ctx, func(tx *goredis.Tx) error {
+			return s.trimTx(ctx, tx, maxEntries)
+		}, vocabTermsKey)
+		if errors.Is(err, goredis.TxFailedErr) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("vocab trim: %w", err)
+		}
+		return nil
+	}
+	return fmt.Errorf("vocab trim: terms kept changing across %d attempts: %w", vocabTrimAttempts, goredis.TxFailedErr)
+}
+
+func (s *RedisVocabularyStore) trimTx(ctx context.Context, tx *goredis.Tx, maxEntries int) error {
+	count, err := tx.ZCard(ctx, vocabTermsKey).Result()
+	if err != nil {
+		return fmt.Errorf("vocab trim: card: %w", err)
+	}
+	overflow := int(count) - maxEntries
+	if overflow <= 0 {
+		return nil
+	}
+	members, err := tx.ZRange(ctx, vocabTermsKey, 0, int64(overflow-1)).Result()
+	if err != nil {
+		return fmt.Errorf("vocab trim: range: %w", err)
+	}
+	_, err = tx.TxPipelined(ctx, func(pipe goredis.Pipeliner) error {
+		for _, member := range members {
+			norm, _, _ := decodeMember(member)
+			if norm == "" {
+				continue
+			}
+			s.queueEvict(ctx, pipe, norm, member)
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("vocab trim: evict: %w", err)
+	}
+	return nil
+}
+
+func (s *RedisVocabularyStore) queueEvict(ctx context.Context, pipe goredis.Pipeliner, norm, member string) {
+	pipe.ZRem(ctx, vocabTermsKey, member)
+	pipe.ZRem(ctx, vocabLexKey, member)
+	for _, tri := range spellingmatch.Trigrams(norm) {
+		pipe.SRem(ctx, vocabTriPrefix+tri, norm)
+	}
+	if s.metaphone != nil {
+		if code := s.metaphone(norm); code != "" {
+			pipe.SRem(ctx, vocabMetaPrefix+code, norm)
+		}
+	}
+	pipe.Del(ctx, vocabEntryPfx+norm)
+}

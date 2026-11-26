@@ -10,9 +10,9 @@ import (
 var everyName = []jobs.Name{
 	jobs.OrphanedAudioReconcile,
 	jobs.DiscographyEventPrune,
-	jobs.VocabularyRefresh,
+	jobs.SpellingHintsRefresh,
 	jobs.BehavioralRankingRefresh,
-	jobs.DeletedIdentityErasure,
+	jobs.DeletedUserDataErasure,
 	jobs.AcquisitionSourceCanary,
 	jobs.StreamRecovery,
 	jobs.AcquisitionPrune,
@@ -26,9 +26,9 @@ func TestNames_WireIdentifiersUnchanged(t *testing.T) {
 		jobs.AlertMonitor:             "alert monitor",
 		jobs.OrphanedAudioReconcile:   "orphaned audio reconcile",
 		jobs.DiscographyEventPrune:    "discography event prune",
-		jobs.VocabularyRefresh:        "vocabulary refresh",
+		jobs.SpellingHintsRefresh:     "vocabulary refresh",
 		jobs.BehavioralRankingRefresh: "behavioral ranking refresh",
-		jobs.DeletedIdentityErasure:   "deleted identity erasure",
+		jobs.DeletedUserDataErasure:   "deleted identity erasure",
 		jobs.AcquisitionSourceCanary:  "acquisition source canary",
 		jobs.StreamRecovery:           "stream recovery",
 		jobs.AcquisitionPrune:         "acquisition prune",
@@ -44,7 +44,7 @@ func TestNames_WireIdentifiersUnchanged(t *testing.T) {
 
 func TestDisableAtStartup_AcceptsEveryJobButTheAlwaysOnErasure(t *testing.T) {
 	for _, name := range everyName {
-		if name == jobs.DeletedIdentityErasure {
+		if name == jobs.DeletedUserDataErasure {
 			continue
 		}
 		var r jobs.Runner
@@ -62,9 +62,9 @@ func TestAlertable_PinnedInOrder(t *testing.T) {
 	want := []jobs.Name{
 		jobs.OrphanedAudioReconcile,
 		jobs.DiscographyEventPrune,
-		jobs.VocabularyRefresh,
+		jobs.SpellingHintsRefresh,
 		jobs.BehavioralRankingRefresh,
-		jobs.DeletedIdentityErasure,
+		jobs.DeletedUserDataErasure,
 		jobs.AcquisitionSourceCanary,
 		jobs.AcquisitionPrune,
 		jobs.AcquisitionUpgrade,

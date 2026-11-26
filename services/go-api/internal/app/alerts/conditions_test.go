@@ -3,9 +3,9 @@ package alerts_test
 import (
 	"altune/go-api/internal/app/alerts"
 	"altune/go-api/internal/app/jobs"
-	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/observe"
+	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/playback"
+	"altune/go-api/internal/search"
 	"context"
 	"errors"
 	"fmt"
@@ -20,7 +20,7 @@ const (
 )
 
 type fakeCoverageEvents struct {
-	topN     []discovery.QueryCount
+	topN     []search.QueryCount
 	total    int
 	totalErr error
 	since    time.Time
@@ -34,15 +34,15 @@ func (f *fakeCoverageEvents) ZeroResultTotal(_ context.Context, since time.Time)
 	return f.total, nil
 }
 
-func (f *fakeCoverageEvents) ZeroResultQueries(_ context.Context, _ time.Time, limit int) ([]discovery.QueryCount, error) {
+func (f *fakeCoverageEvents) NoResultSearches(_ context.Context, _ time.Time, limit int) ([]search.QueryCount, error) {
 	if len(f.topN) > limit {
 		return f.topN[:limit], nil
 	}
 	return f.topN, nil
 }
 
-func healthy(context.Context) observe.DependencyHealth {
-	return observe.DependencyHealth{DB: observe.DepUp, Redis: observe.DepUp, Auth: observe.DepUp}
+func healthy(context.Context) monitoring.DependencyHealth {
+	return monitoring.DependencyHealth{DB: monitoring.DepUp, Redis: monitoring.DepUp, Auth: monitoring.DepUp}
 }
 
 func signedIn(context.Context) (time.Time, bool) { return time.Time{}, false }
@@ -56,15 +56,15 @@ func sources() alerts.Sources {
 	}
 }
 
-func conditionsByKey(s alerts.Sources) map[string]observe.Condition {
-	byKey := map[string]observe.Condition{}
+func conditionsByKey(s alerts.Sources) map[string]monitoring.Condition {
+	byKey := map[string]monitoring.Condition{}
 	for _, c := range alerts.Conditions(s) {
 		byKey[c.Key] = c
 	}
 	return byKey
 }
 
-func condition(t *testing.T, s alerts.Sources, key string) observe.Condition {
+func condition(t *testing.T, s alerts.Sources, key string) monitoring.Condition {
 	t.Helper()
 	c, ok := conditionsByKey(s)[key]
 	if !ok {
@@ -73,15 +73,15 @@ func condition(t *testing.T, s alerts.Sources, key string) observe.Condition {
 	return c
 }
 
-func coverageWatch(events *fakeCoverageEvents) (gap, queryFailing observe.Condition) {
+func coverageWatch(events *fakeCoverageEvents) (gap, queryFailing monitoring.Condition) {
 	s := sources()
 	s.Coverage = events
 	byKey := conditionsByKey(s)
 	return byKey["coverage_zero_result"], byKey["coverage_query_failing"]
 }
 
-func evalTick(ctx context.Context, conds ...observe.Condition) map[string]*observe.Alert {
-	fired := make(map[string]*observe.Alert)
+func evalTick(ctx context.Context, conds ...monitoring.Condition) map[string]*monitoring.Alert {
+	fired := make(map[string]*monitoring.Alert)
 	for _, c := range conds {
 		if a := c.Eval(ctx); a != nil {
 			fired[c.Key] = a
@@ -116,7 +116,7 @@ func TestCoverageCondition(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("fires on the true total even when the listed queries sum below the threshold", func(t *testing.T) {
-		events := &fakeCoverageEvents{topN: []discovery.QueryCount{{QueryNorm: "q", Count: 1}}, total: 25}
+		events := &fakeCoverageEvents{topN: []search.QueryCount{{QueryNorm: "q", Count: 1}}, total: 25}
 		gap, _ := coverageWatch(events)
 		if alert := gap.Eval(ctx); alert == nil {
 			t.Fatalf("alert did not fire: true total %d meets the threshold but the listed queries sum to 1", events.total)
@@ -124,7 +124,7 @@ func TestCoverageCondition(t *testing.T) {
 	})
 
 	t.Run("24 zero-result searches do not fire", func(t *testing.T) {
-		events := &fakeCoverageEvents{topN: []discovery.QueryCount{{QueryNorm: "rare", Count: 3}}, total: 24}
+		events := &fakeCoverageEvents{topN: []search.QueryCount{{QueryNorm: "rare", Count: 3}}, total: 24}
 		gap, _ := coverageWatch(events)
 		if alert := gap.Eval(ctx); alert != nil {
 			t.Fatalf("alert fired with total %d below the threshold of 25: %+v", events.total, alert)
@@ -132,13 +132,13 @@ func TestCoverageCondition(t *testing.T) {
 	})
 
 	t.Run("25 zero-result searches fire", func(t *testing.T) {
-		events := &fakeCoverageEvents{topN: []discovery.QueryCount{{QueryNorm: "missing band", Count: 20}}, total: 25}
+		events := &fakeCoverageEvents{topN: []search.QueryCount{{QueryNorm: "missing band", Count: 20}}, total: 25}
 		gap, _ := coverageWatch(events)
 		alert := gap.Eval(ctx)
 		if alert == nil {
 			t.Fatal("alert did not fire at total == 25")
 		}
-		if alert.Title != "altune discovery coverage gap" || alert.Severity != observe.SeveritySignal {
+		if alert.Title != "altune discovery coverage gap" || alert.Severity != monitoring.SeverityWatch {
 			t.Errorf("alert = %+v, want the coverage gap signal", alert)
 		}
 		if want := "zero-result searches in 24h: 25 (threshold 25); top query hit 20 times"; alert.Message != want {
@@ -169,7 +169,7 @@ func TestCoverageCondition_CountsTheLast24Hours(t *testing.T) {
 func TestCoverageCondition_MessageExcludesQueryText(t *testing.T) {
 	const query = "my private search \"quoted\" term"
 	gap, _ := coverageWatch(&fakeCoverageEvents{
-		topN:  []discovery.QueryCount{{QueryNorm: query, Count: 42}},
+		topN:  []search.QueryCount{{QueryNorm: query, Count: 42}},
 		total: 50,
 	})
 	alert := gap.Eval(context.Background())
@@ -203,7 +203,7 @@ func TestCoverageConditions_QueryFailureIsNotHealthy(t *testing.T) {
 		if alert == nil {
 			t.Fatalf("%d consecutive query failures resolved to healthy; want a failure signal", coverageQueryFailureEscalation)
 		}
-		if alert.Severity != observe.SeveritySignal || alert.Title != "altune coverage alert check failing" {
+		if alert.Severity != monitoring.SeverityWatch || alert.Title != "altune coverage alert check failing" {
 			t.Errorf("alert = %+v, want the coverage-check-failing signal", alert)
 		}
 		if want := "coverage-gap query failed 3 consecutive times; gap status unknown"; alert.Message != want {
@@ -246,23 +246,23 @@ func TestDependencyCondition(t *testing.T) {
 
 	cases := []struct {
 		name    string
-		health  observe.DependencyHealth
+		health  monitoring.DependencyHealth
 		wantMsg string
 	}{
-		{"auth only down names auth", observe.DependencyHealth{DB: observe.DepUp, Redis: observe.DepUp, Auth: observe.DepDown}, "dependencies down: auth"},
-		{"db only down names db", observe.DependencyHealth{DB: observe.DepDown, Redis: observe.DepUp, Auth: observe.DepUp}, "dependencies down: db"},
-		{"redis only down names redis", observe.DependencyHealth{DB: observe.DepUp, Redis: observe.DepDown, Auth: observe.DepUp}, "dependencies down: redis"},
-		{"all down names all", observe.DependencyHealth{DB: observe.DepDown, Redis: observe.DepDown, Auth: observe.DepDown}, "dependencies down: db redis auth"},
+		{"auth only down names auth", monitoring.DependencyHealth{DB: monitoring.DepUp, Redis: monitoring.DepUp, Auth: monitoring.DepDown}, "dependencies down: auth"},
+		{"db only down names db", monitoring.DependencyHealth{DB: monitoring.DepDown, Redis: monitoring.DepUp, Auth: monitoring.DepUp}, "dependencies down: db"},
+		{"redis only down names redis", monitoring.DependencyHealth{DB: monitoring.DepUp, Redis: monitoring.DepDown, Auth: monitoring.DepUp}, "dependencies down: redis"},
+		{"all down names all", monitoring.DependencyHealth{DB: monitoring.DepDown, Redis: monitoring.DepDown, Auth: monitoring.DepDown}, "dependencies down: db redis auth"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			s := sources()
-			s.DependencyHealth = func(context.Context) observe.DependencyHealth { return tc.health }
+			s.DependencyHealth = func(context.Context) monitoring.DependencyHealth { return tc.health }
 			alert := condition(t, s, "dependency_down").Eval(ctx)
 			if alert == nil {
 				t.Fatal("alert = nil, want it to fire")
 			}
-			if alert.Message != tc.wantMsg || alert.Title != "altune dependency down" || alert.Severity != observe.SeveritySignal {
+			if alert.Message != tc.wantMsg || alert.Title != "altune dependency down" || alert.Severity != monitoring.SeverityWatch {
 				t.Fatalf("alert = %+v, want the dependency signal with message %q", alert, tc.wantMsg)
 			}
 		})
@@ -288,7 +288,7 @@ func TestYouTubeCookiesCondition(t *testing.T) {
 		want := "YouTube has asked yt-dlp to sign in since 2026-11-20T14:30:00Z, so YouTube downloads fail. " +
 			"Export cookies.txt from a browser signed in to YouTube, copy it to the VM and run: " +
 			"cd ~/altune/services/go-api && bash deploy/cookie-jar-dir.sh <export>"
-		if alert.Title != "altune YouTube cookies expired" || alert.Message != want || alert.Severity != observe.SeveritySignal {
+		if alert.Title != "altune YouTube cookies expired" || alert.Message != want || alert.Severity != monitoring.SeverityWatch {
 			t.Errorf("alert = %+v, want the cookies-expired signal with message %q", alert, want)
 		}
 	})
@@ -303,7 +303,7 @@ func TestYouTubeCookiesCondition(t *testing.T) {
 func TestJobFailingCondition(t *testing.T) {
 	ctx := context.Background()
 	s := sources()
-	name := jobs.DeletedIdentityErasure
+	name := jobs.DeletedUserDataErasure
 	jc := s.Jobs.Control(name)
 	cond := condition(t, s, "job_failing:deleted identity erasure")
 
@@ -319,7 +319,7 @@ func TestJobFailingCondition(t *testing.T) {
 	if got == nil {
 		t.Fatal("consecutive failures produced no alert")
 	}
-	if want := `job "deleted identity erasure" failed 3 consecutive runs`; got.Message != want || got.Title != "altune background job failing" || got.Severity != observe.SeveritySignal {
+	if want := `job "deleted identity erasure" failed 3 consecutive runs`; got.Message != want || got.Title != "altune background job failing" || got.Severity != monitoring.SeverityWatch {
 		t.Fatalf("alert = %+v, want the job signal with message %q and no error text", got, want)
 	}
 
@@ -339,7 +339,7 @@ func TestJobFailingCondition(t *testing.T) {
 
 func TestJobFailingCondition_UnreadableIdentityStoreFiresAfterEscalation(t *testing.T) {
 	s := sources()
-	jc := s.Jobs.Control(jobs.DeletedIdentityErasure)
+	jc := s.Jobs.Control(jobs.DeletedUserDataErasure)
 	cond := condition(t, s, "job_failing:deleted identity erasure")
 	sweepErr := fmt.Errorf("deleted identity sweep idle: %w", playback.ErrIdentityStoreUnavailable)
 

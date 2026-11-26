@@ -1,1 +1,0 @@
-`releasepick` owns which release of a song counts as the earliest.

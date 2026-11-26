@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/shared/providerschema"
+	"altune/go-api/internal/shared/providerfields"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -13,11 +13,11 @@ import (
 )
 
 type fakeSource struct {
-	reference providerschema.Observed
+	reference providerfields.Observed
 	resources map[string]string
 }
 
-func (f fakeSource) Reference(context.Context, string) (providerschema.Observed, error) {
+func (f fakeSource) Reference(context.Context, string) (providerfields.Observed, error) {
 	return f.reference, nil
 }
 
@@ -29,8 +29,8 @@ func (f fakeSource) Resource(_ context.Context, _, id string) (json.RawMessage, 
 	return json.RawMessage(raw), nil
 }
 
-func noReads(providerschema.Schema) (map[string]providerschema.Reads, error) {
-	return map[string]providerschema.Reads{}, nil
+func noReads(providerfields.Schema) (map[string]providerfields.Reads, error) {
+	return map[string]providerfields.Reads{}, nil
 }
 
 func writeSchema(t *testing.T, body string) string {
@@ -47,14 +47,14 @@ const seed = "provider: p\nreference: r\nentities:\n  song:\n    fixtures:\n    
 func TestRefreshMergesTheReferenceWithEveryFixture(t *testing.T) {
 	path := writeSchema(t, seed)
 	src := fakeSource{
-		reference: providerschema.Observed{"id": "string", "attributes.isrc": "string"},
+		reference: providerfields.Observed{"id": "string", "attributes.isrc": "string"},
 		resources: map[string]string{"1": `{"id":"1","attributes":{"isrc":"X"}}`, "2": `{"id":"2","attributes":{"audioLocale":"zxx"}}`},
 	}
 	var out bytes.Buffer
 	if err := refresh(context.Background(), src, path, noReads, &out); err != nil {
 		t.Fatal(err)
 	}
-	s, err := providerschema.Load(path)
+	s, err := providerfields.Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestRefreshFailsOnAMissingSchema(t *testing.T) {
 func TestRefreshWritesNothingWhenMarkingReadFieldsFails(t *testing.T) {
 	path := writeSchema(t, seed)
 	src := fakeSource{resources: map[string]string{"1": `{"id":"1"}`, "2": `{"id":"2"}`}}
-	fail := func(providerschema.Schema) (map[string]providerschema.Reads, error) {
+	fail := func(providerfields.Schema) (map[string]providerfields.Reads, error) {
 		return nil, errors.New("no source")
 	}
 	if err := refresh(context.Background(), src, path, fail, &bytes.Buffer{}); err == nil {
@@ -109,8 +109,8 @@ func TestRefreshWritesNothingWhenMarkingReadFieldsFails(t *testing.T) {
 }
 
 func TestReportCountsWhereEachFieldWasSeenAndWhatLacksAReason(t *testing.T) {
-	ref, live := providerschema.SeenReference, providerschema.SeenLive
-	entity := &providerschema.Entity{Fields: []providerschema.Field{
+	ref, live := providerfields.SeenReference, providerfields.SeenLive
+	entity := &providerfields.Entity{Fields: []providerfields.Field{
 		{Path: "a", Seen: []string{ref}, Unused: "x"},
 		{Path: "b", Seen: []string{live}, Read: true},
 		{Path: "c", Seen: []string{ref, live}},
