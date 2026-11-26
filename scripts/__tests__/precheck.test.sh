@@ -306,6 +306,27 @@ case "${STUB_JEST:-pass}" in
         echo "Tests:       2 failed, 40 passed, 42 total"
         exit 1
         ;;
+    norun)
+        echo "PASS src/__tests__/fine.test.ts"
+        echo "FAIL src/__tests__/broken.test.ts"
+        echo "  ● Test suite failed to run"
+        echo ""
+        echo "    Cannot find module './missing' from 'src/__tests__/broken.test.ts'"
+        echo ""
+        echo "      1 | import { thing } from './missing';"
+        for i in $(seq 1 30); do echo "    at frame $i (node_modules/z.js:$i:1)"; done
+        echo "FAIL src/features/other/__tests__/bad.test.tsx"
+        echo "  ● Test suite failed to run"
+        echo ""
+        echo "    SyntaxError: Unexpected token"
+        echo "PASS src/__tests__/also-fine.test.ts"
+        echo "Summary of all failing tests"
+        echo "FAIL src/__tests__/broken.test.ts"
+        echo "  ● Test suite failed to run"
+        echo "Test Suites: 2 failed, 377 passed, 379 total"
+        echo "Tests:       0 total"
+        exit 1
+        ;;
     hang) exec sleep 60 ;;
 esac
 exit 0
@@ -351,9 +372,28 @@ expect_out 'Expected: "Ada Lovelace"'
 expect_out 'Received: ""'
 grep -qF "at frame 1 (node_modules/x.js" "$WORK/out.log" && fail "the first failure block should drop stack frames"
 grep -qF "at frame 80 (node_modules/y.js" "$WORK/out.log" && fail "the stack trace tail should not be printed"
-[ "$(sed '/^precheck: red/q' "$WORK/out.log" | grep -cF "● library rows › shows the artist name")" = 2 ] || fail "the first failed test should be named once in the list and once heading its block"
+[ "$(sed '/^precheck: red/q' "$WORK/out.log" | grep -cF "● library rows › shows the artist name")" = 3 ] || fail "the first failed test should be named in the list, under its suite and heading its block"
 [ "$(sed '/^precheck: red/q' "$WORK/out.log" | grep -cF "● player › resumes after a seek")" = 1 ] || fail "a later failed test should be named once, in the list only"
 grep -qF "● Console" "$WORK/out.log" && fail "console blocks are not failed tests"
+
+CASE="a jest run with suites that fail to run names each suite and the first lines of its error"
+new_repo
+add_mobile_stubs
+add_jest_stub
+mobile_src_change
+STUB_JEST=norun NPX_LOG="$WORK/npx.log" run_script_with_stubs
+expect_rc 1
+expect_out "FAIL  mobile tests (related)"
+expect_out "failed suites (path, then the first lines of its error):"
+expect_out "src/__tests__/broken.test.ts"
+expect_out "src/features/other/__tests__/bad.test.tsx"
+expect_out "Cannot find module './missing' from 'src/__tests__/broken.test.ts'"
+expect_out "SyntaxError: Unexpected token"
+expect_out "Test Suites: 2 failed, 377 passed, 379 total"
+[ "$(sed '/^precheck: red/q' "$WORK/out.log" | grep -cF "FAIL src/__tests__/broken.test.ts")" = 0 ] || fail "a suite's FAIL line should be reshaped into the failed suites list"
+[ "$(sed '/^precheck: red/q' "$WORK/out.log" | grep -cE "^ +src/__tests__/broken\.test\.ts$")" = 1 ] || fail "a suite jest names twice should be listed once"
+grep -qF "fine.test.ts" "$WORK/out.log" && fail "passing suites are not listed"
+grep -qF "at frame 1 (node_modules/z.js" "$WORK/out.log" && fail "the suite's error should drop stack frames"
 
 CASE="a jest run that never exits is killed at the timeout and fails loud"
 new_repo

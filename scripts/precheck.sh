@@ -233,16 +233,40 @@ go_test_check() {
 jest_limit=${PRECHECK_JEST_TIMEOUT:-1800}
 jest_cache=../.cache/jest
 
+jest_failed_suites() {
+  sed -E 's/\x1b\[[0-9;]*m//g' "$log" | awk '
+    /^FAIL / {
+      path = $2
+      capturing = !(path in seen)
+      seen[path] = 1
+      count = 0
+      if (capturing) print "  " path
+      next
+    }
+    /^(PASS |Summary of all failing tests|Test Suites:)/ { capturing = 0; next }
+    /^[[:space:]]*● Console$/ { capturing = 0; next }
+    capturing && NF > 0 && !/^[[:space:]]+at / && count < 6 {
+      sub(/^[[:space:]]+/, "")
+      print "      " $0
+      count++
+    }'
+}
+
 jest_failures() {
   if [ "$last_rc" = 124 ] || [ "$last_rc" = 137 ]; then
     echo "jest did not exit within ${jest_limit}s and was killed (raise PRECHECK_JEST_TIMEOUT if the suite is just slow)"
   fi
-  local names
+  local names suites
   names=$(sed -E 's/\x1b\[[0-9;]*m//g' "$log" | grep -E '^[[:space:]]*● ' | grep -vE '● Console$' | sed -E 's/^[[:space:]]+//' | awk '!seen[$0]++')
+  suites=$(jest_failed_suites)
   if [ -n "$names" ]; then
     echo "failed tests:"
     echo "$names"
     sed -E 's/\x1b\[[0-9;]*m//g' "$log" | grep -E '^(Test Suites|Tests):'
+    if [ -n "$suites" ]; then
+      echo "failed suites (path, then the first lines of its error):"
+      echo "$suites"
+    fi
     echo "first failure:"
     sed -E 's/\x1b\[[0-9;]*m//g' "$log" | awk '
       /^[[:space:]]*● / { if (on) exit; if (!/● Console$/) on = 1 }
