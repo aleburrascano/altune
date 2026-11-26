@@ -2,15 +2,16 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/clock"
 	"sort"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
 const RecentJobCap = 20
 
 type jobLog struct {
+	now       clock.Func
 	mu        sync.Mutex
 	jobs      map[string]*ports.JobRecord
 	recent    []ports.JobRecord
@@ -18,8 +19,8 @@ type jobLog struct {
 	failed    atomic.Uint64
 }
 
-func newJobLog() *jobLog {
-	return &jobLog{jobs: make(map[string]*ports.JobRecord)}
+func newJobLog(now clock.Func) *jobLog {
+	return &jobLog{now: now, jobs: make(map[string]*ports.JobRecord)}
 }
 
 func (l *jobLog) register(trackID, sourceURL string) {
@@ -28,7 +29,7 @@ func (l *jobLog) register(trackID, sourceURL string) {
 		TrackID:     trackID,
 		SourceURL:   sourceURL,
 		State:       ports.JobQueued,
-		ScheduledAt: time.Now(),
+		ScheduledAt: l.now(),
 	}
 	l.mu.Unlock()
 }
@@ -66,12 +67,12 @@ func (l *jobLog) complete(trackID string, state ports.JobState, reason string) p
 	defer l.mu.Unlock()
 	j := l.jobs[trackID]
 	if j == nil {
-		j = &ports.JobRecord{TrackID: trackID, ScheduledAt: time.Now()}
+		j = &ports.JobRecord{TrackID: trackID, ScheduledAt: l.now()}
 	}
 	delete(l.jobs, trackID)
 	j.State = state
 	j.Reason = reason
-	j.ElapsedMs = time.Since(j.ScheduledAt).Milliseconds()
+	j.ElapsedMs = l.now().Sub(j.ScheduledAt).Milliseconds()
 	l.recent = append(l.recent, *j)
 	if len(l.recent) > RecentJobCap {
 		l.recent = l.recent[len(l.recent)-RecentJobCap:]
@@ -88,7 +89,7 @@ func (l *jobLog) snapshot() (jobs, recent []ports.JobRecord) {
 	jobs = make([]ports.JobRecord, 0, len(l.jobs))
 	for _, j := range l.jobs {
 		jr := *j
-		jr.ElapsedMs = time.Since(j.ScheduledAt).Milliseconds()
+		jr.ElapsedMs = l.now().Sub(j.ScheduledAt).Milliseconds()
 		jobs = append(jobs, jr)
 	}
 	recent = make([]ports.JobRecord, len(l.recent))

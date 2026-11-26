@@ -24,6 +24,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -2654,6 +2655,87 @@ func TestDownloadStep_ConcurrentCandidatesShareOneVersionLookup(t *testing.T) {
 
 	if want := []string{"mb-linked"}; !equalStrings(lookup.calls, want) {
 		t.Errorf("lookups = %v, want %v: both candidates share one MusicBrainz call", lookup.calls, want)
+	}
+}
+
+type gatedVersionLookup struct {
+	started chan struct{}
+	release chan struct{}
+	calls   atomic.Int32
+}
+
+func (g *gatedVersionLookup) RecordingByMBID(ctx context.Context, mbid string) (ports.RecordingFacts, bool, error) {
+	if g.calls.Add(1) == 1 {
+		close(g.started)
+	}
+	select {
+	case <-g.release:
+		return ports.RecordingFacts{MBID: mbid, Title: "Sunglasses at Night"}, true, nil
+	case <-ctx.Done():
+		return ports.RecordingFacts{}, false, ctx.Err()
+	}
+}
+
+func TestDownloadStep_ALookupSharedWithACancelledJobStillAnswersTheOtherJob(t *testing.T) {
+	logs := captureJSONLog(t)
+	synctest.Test(t, func(t *testing.T) {
+		lookup := &gatedVersionLookup{started: make(chan struct{}), release: make(chan struct{})}
+		step := newTestDownloadStep(&fileWritingSearcher{writeFile: true},
+			withTestIdentifier(&stubIdentifier{match: plainTitledLinks("mb-linked")}), withTestLookup(lookup), service.WithVerifyWidth(1))
+		run := func(ctx context.Context) <-chan struct{} {
+			done := make(chan struct{})
+			ac := downloadContext("mb-master")
+			ac.Ranked = ac.Ranked[:1]
+			ac.Ranked[0].Title = ""
+			go func() {
+				defer close(done)
+				_, _ = step.Execute(ctx, ac, service.AfterSelect{})
+				if ac.TempPath != "" {
+					_ = os.RemoveAll(filepath.Dir(ac.TempPath))
+				}
+			}()
+			return done
+		}
+		leaderCtx, cancelLeader := context.WithCancel(context.Background())
+		leader := run(leaderCtx)
+		<-lookup.started
+		synctest.Wait()
+		follower := run(context.Background())
+		synctest.Wait()
+
+		cancelLeader()
+		synctest.Wait()
+		close(lookup.release)
+		<-leader
+		<-follower
+
+		if got := lookup.calls.Load(); got != 1 {
+			t.Errorf("lookups = %d, want 1: the second job shares the first job's call", got)
+		}
+	})
+	if failed := strings.Count(logs.String(), "acquisition.version_lookup_failed"); failed > 1 {
+		t.Errorf("%d lookups failed, want at most the cancelled job's own: the other job must not inherit its cancellation:\n%s", failed, logs.String())
+	}
+}
+
+type panickingVersionLookup struct{}
+
+func (panickingVersionLookup) RecordingByMBID(context.Context, string) (ports.RecordingFacts, bool, error) {
+	panic("lookup exploded")
+}
+
+func TestDownloadStep_APanickingVersionLookupFailsOnlyThatLookup(t *testing.T) {
+	step := newTestDownloadStep(&fileWritingSearcher{writeFile: true},
+		withTestIdentifier(&stubIdentifier{match: plainTitledLinks("mb-linked")}), withTestLookup(panickingVersionLookup{}), service.WithVerifyWidth(1))
+	ac := downloadContext("mb-master")
+	ac.Ranked = ac.Ranked[:1]
+	ac.Ranked[0].Title = ""
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	_, err := step.Execute(context.Background(), ac, service.AfterSelect{})
+
+	if err != nil && strings.Contains(err.Error(), "panic") {
+		t.Fatalf("Execute: %v, want the lookup's panic contained as a missing fact", err)
 	}
 }
 

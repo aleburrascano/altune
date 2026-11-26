@@ -7,6 +7,7 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/internal/core/rejectedcandidates"
+	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/expiringcache"
 	"altune/go-api/internal/shared/redact"
 	"cmp"
@@ -341,6 +342,8 @@ const maxVersionLookupsPerCandidate = 3
 const (
 	recordingFactsTTL = 10 * time.Minute
 	recordingFactsCap = 256
+
+	recordingLookupBudget = 30 * time.Second
 )
 
 type recordedFacts struct {
@@ -364,11 +367,15 @@ func (c *recordingFactsCache) lookup(ctx context.Context, mbid string, fetch rec
 		return known.facts, known.found, nil
 	}
 	pending := c.flight.DoChan(mbid, func() (any, error) {
-		facts, found, err := fetch(ctx, mbid)
+		if known, ok := c.memo.Get(mbid); ok {
+			return known, nil
+		}
+		flightCtx, cancel := background.Detach(ctx, recordingLookupBudget)
+		defer cancel()
+		known, err := fetchRecorded(flightCtx, mbid, fetch)
 		if err != nil {
 			return nil, err
 		}
-		known := recordedFacts{facts: facts, found: found}
 		c.memo.Put(mbid, known)
 		return known, nil
 	})
@@ -382,6 +389,19 @@ func (c *recordingFactsCache) lookup(ctx context.Context, mbid string, fetch rec
 		known := result.Val.(recordedFacts)
 		return known.facts, known.found, nil
 	}
+}
+
+func fetchRecorded(ctx context.Context, mbid string, fetch recordingFetch) (known recordedFacts, err error) {
+	panicked := background.SafeRun(ctx, "acquisition.recording_lookup_panicked", func() {
+		var facts ports.RecordingFacts
+		var found bool
+		facts, found, err = fetch(ctx, mbid)
+		known = recordedFacts{facts: facts, found: found}
+	}, "mbid", mbid)
+	if panicked != nil {
+		return recordedFacts{}, panicked
+	}
+	return known, err
 }
 
 func versionFactsOf(ctx context.Context, cache *recordingFactsCache, lookup ports.RecordingLookup, input audioverdict.Input) map[string]ports.RecordingFacts {

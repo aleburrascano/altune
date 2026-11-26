@@ -99,7 +99,7 @@ func NewBackgroundAcquisitionScheduler(
 		stop:              make(chan struct{}),
 		wake:              make(chan struct{}, 1),
 		lanes:             newLaneWakes(),
-		log:               newJobLog(),
+		log:               newJobLog(now),
 		now:               now,
 		events:            events.NoopPublisher(),
 		leaseDuration:     defaultLeaseDuration,

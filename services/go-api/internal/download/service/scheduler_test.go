@@ -2130,7 +2130,8 @@ func TestBackgroundScheduler_ShutdownBeforeStart_LeavesTheQueuedJobWithNoOutcome
 		var released sync.Once
 		release := func() {
 			released.Do(func() { close(ledger.release) })
-			for scheduler.Status().InFlight > 0 {
+			deadline := time.Now().Add(jobSettleTimeout)
+			for scheduler.Status().InFlight > 0 && time.Now().Before(deadline) {
 				time.Sleep(time.Millisecond)
 			}
 		}
