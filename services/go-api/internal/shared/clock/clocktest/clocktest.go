@@ -16,6 +16,7 @@ type Manual struct {
 
 type waiter struct {
 	wakeAt time.Time
+	period time.Duration
 	fire   func(now time.Time)
 }
 
@@ -29,6 +30,10 @@ func (m *Manual) Sleeper() clock.Sleeper {
 
 func (m *Manual) Timer() clock.TimerFunc {
 	return m.newTimer
+}
+
+func (m *Manual) Ticker() clock.TickerFunc {
+	return m.newTicker
 }
 
 func (m *Manual) Sleeping() int {
@@ -63,7 +68,25 @@ func (m *Manual) newTimer(d time.Duration) (<-chan time.Time, func() bool) {
 	return fires, func() bool { return m.cancel(key) }
 }
 
+func (m *Manual) newTicker(d time.Duration) (<-chan time.Time, func()) {
+	if d <= 0 {
+		panic("clocktest: non-positive interval for Ticker")
+	}
+	ticks := make(chan time.Time, 1)
+	key := m.registerEvery(d, d, func(now time.Time) {
+		select {
+		case ticks <- now:
+		default:
+		}
+	})
+	return ticks, func() { m.cancel(key) }
+}
+
 func (m *Manual) register(d time.Duration, fire func(time.Time)) int {
+	return m.registerEvery(d, 0, fire)
+}
+
+func (m *Manual) registerEvery(d, period time.Duration, fire func(time.Time)) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.waiters == nil {
@@ -71,7 +94,7 @@ func (m *Manual) register(d time.Duration, fire func(time.Time)) int {
 	}
 	key := m.nextKey
 	m.nextKey++
-	m.waiters[key] = waiter{wakeAt: m.now.Add(d), fire: fire}
+	m.waiters[key] = waiter{wakeAt: m.now.Add(d), period: period, fire: fire}
 	return key
 }
 
@@ -84,9 +107,19 @@ func (m *Manual) cancel(key int) bool {
 }
 
 func (m *Manual) wakeDueLocked() {
-	for key, w := range m.waiters {
-		if !w.wakeAt.After(m.now) {
-			delete(m.waiters, key)
+	for fired := true; fired; {
+		fired = false
+		for key, w := range m.waiters {
+			if w.wakeAt.After(m.now) {
+				continue
+			}
+			fired = true
+			if w.period > 0 {
+				w.wakeAt = w.wakeAt.Add(w.period)
+				m.waiters[key] = w
+			} else {
+				delete(m.waiters, key)
+			}
 			w.fire(m.now)
 		}
 	}

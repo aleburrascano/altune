@@ -124,6 +124,39 @@ func TestManualTimer_FiresWhenTheClockReachesTheDeadlineAndStopCancelsIt(t *test
 	}
 }
 
+func TestManualTicker_KeepsAFixedRateAndStopEndsIt(t *testing.T) {
+	m := clocktest.NewManual(start)
+	ticks, stop := m.Ticker()(10 * time.Second)
+
+	m.Advance(9 * time.Second)
+	select {
+	case <-ticks:
+		t.Fatal("ticked before the first interval")
+	default:
+	}
+
+	m.Advance(5 * time.Second)
+	<-ticks
+
+	m.Advance(6 * time.Second)
+	select {
+	case <-ticks:
+	default:
+		t.Fatal("no tick at 20s, a slow reader must not shift the schedule")
+	}
+
+	stop()
+	m.Advance(time.Hour)
+	select {
+	case <-ticks:
+		t.Fatal("a stopped ticker ticked")
+	default:
+	}
+	if got := m.Sleeping(); got != 0 {
+		t.Fatalf("Sleeping() = %d after stop, want 0", got)
+	}
+}
+
 func TestManualTimer_ANonPositiveDurationFiresAtOnce(t *testing.T) {
 	m := clocktest.NewManual(start)
 

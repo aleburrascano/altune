@@ -27,3 +27,10 @@ func NewTimer(d time.Duration) (<-chan time.Time, func() bool) {
 	timer := time.NewTimer(d)
 	return timer.C, timer.Stop
 }
+
+type TickerFunc func(d time.Duration) (ticks <-chan time.Time, stop func())
+
+func NewTicker(d time.Duration) (<-chan time.Time, func()) {
+	ticker := time.NewTicker(d)
+	return ticker.C, ticker.Stop
+}
