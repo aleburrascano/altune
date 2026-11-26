@@ -2,6 +2,7 @@ package leader_test
 
 import (
 	"altune/go-api/internal/platform/leader"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/testdb"
 	"bytes"
 	"context"
@@ -45,9 +46,26 @@ func isLeader(e *leader.Election) bool {
 	return ok
 }
 
+func newElection(t *testing.T, locks leader.LockStore, key int64, interval time.Duration) *leader.Election {
+	t.Helper()
+	e, err := leader.NewElection(locks, key, interval, clock.NewTimer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return e
+}
+
+func TestNewElection_RefusesAMissingTimer(t *testing.T) {
+	e, err := leader.NewElection(&store{}, testKey, singleTick, nil)
+
+	if e != nil || !errors.Is(err, leader.ErrTimerRequired) || !strings.Contains(err.Error(), "NewElection") {
+		t.Fatalf("got (%v, %v), want a nil election and an error naming NewElection wrapping ErrTimerRequired", e, err)
+	}
+}
+
 func startElection(t *testing.T, locks leader.LockStore, interval time.Duration) *leader.Election {
 	t.Helper()
-	e := leader.NewElection(locks, testKey, interval)
+	e := newElection(t, locks, testKey, interval)
 	e.Start(context.Background())
 	t.Cleanup(func() { e.Shutdown(context.Background()) })
 	return e
@@ -188,7 +206,7 @@ func captureLogs(t *testing.T, level slog.Level) *bytes.Buffer {
 
 func runOneTick(t *testing.T, s *store) *leader.Election {
 	t.Helper()
-	e := leader.NewElection(s, testKey, singleTick)
+	e := newElection(t, s, testKey, singleTick)
 	e.Start(context.Background())
 	s.acquired.wait(t, 2*time.Second, "the first lock attempt")
 	e.Shutdown(context.Background())
@@ -213,7 +231,7 @@ func TestElection_SuccessorTakesOverAfterShutdown(t *testing.T) {
 	pool := testdb.Pool(t)
 	ctx := context.Background()
 
-	outgoing := leader.NewElection(leader.PostgresLocks(pool), testKey, databaseInterval)
+	outgoing := newElection(t, leader.PostgresLocks(pool), testKey, databaseInterval)
 	outgoing.Start(ctx)
 	if !awaitLeader(outgoing, 5*time.Second) {
 		t.Fatal("outgoing election never acquired the lock")
@@ -254,7 +272,7 @@ func TestElection_AwaitReturnsFalseWhenNeverLeader(t *testing.T) {
 }
 
 func TestElection_ShutdownWithoutStartIsSafe(t *testing.T) {
-	e := leader.NewElection(&store{}, testKey, singleTick)
+	e := newElection(t, &store{}, testKey, singleTick)
 	e.Shutdown(context.Background())
 }
 
@@ -342,7 +360,7 @@ func TestElection_CountsWinsAndTermEnds(t *testing.T) {
 func TestElection_ShutdownReleasesLockWithFreshDeadline(t *testing.T) {
 	conn := newSession()
 	s := storeOf(conn)
-	e := leader.NewElection(s, testKey, singleTick)
+	e := newElection(t, s, testKey, singleTick)
 	e.Start(context.Background())
 	conn.locked.wait(t, 2*time.Second, "winning the lock")
 
@@ -448,7 +466,7 @@ func (c *blockingPingConn) touchedAtAll() bool {
 
 func TestElection_ShutdownReleasesOnlyAfterInFlightVerifyFinishes(t *testing.T) {
 	conn := newBlockingPingConn()
-	e := leader.NewElection(storeOf(conn), testKey, fastInterval)
+	e := newElection(t, storeOf(conn), testKey, fastInterval)
 	e.Start(context.Background())
 	conn.pinging.wait(t, 2*time.Second, "the first verify ping")
 
@@ -496,7 +514,7 @@ func (s *lateStore) Acquire(context.Context) (leader.LockSession, error) {
 func TestElection_ShutdownReleasesALockWonWhileItWasRunning(t *testing.T) {
 	conn := newSession()
 	db := &lateStore{conn: conn, acquiring: newSignal(), unblock: make(chan struct{})}
-	e := leader.NewElection(db, testKey, fastInterval)
+	e := newElection(t, db, testKey, fastInterval)
 	e.Start(context.Background())
 	db.acquiring.wait(t, 2*time.Second, "the first lock attempt")
 
@@ -514,7 +532,7 @@ func TestElection_ShutdownKeepsTheLockWhenTheLoopNeverStops(t *testing.T) {
 	logged := captureWarnings(t)
 	conn := newBlockingPingConn()
 	t.Cleanup(func() { close(conn.unblock) })
-	e := leader.NewElection(storeOf(conn), testKey, fastInterval)
+	e := newElection(t, storeOf(conn), testKey, fastInterval)
 	e.Start(context.Background())
 	conn.pinging.wait(t, 2*time.Second, "the verify ping that wedges the loop")
 
@@ -560,7 +578,7 @@ var loggedSettle = regexp.MustCompile(`msg=leader\.lock_won .*settle=(\S+)`)
 
 func TestElection_SettleWindowOutlastsPredecessorDetection(t *testing.T) {
 	logged := captureLogs(t, slog.LevelInfo)
-	e := leader.NewElection(storeOf(newSession()), testKey, fastInterval)
+	e := newElection(t, storeOf(newSession()), testKey, fastInterval)
 	e.Start(context.Background())
 	if !awaitLeader(e, 5*time.Second) {
 		t.Fatal("election never settled into leadership")
@@ -729,7 +747,7 @@ func TestElection_FailedPingIsLoggedWithCauseAndCounted(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			logged := captureWarnings(t)
 			conn := newSession()
-			e := leader.NewElection(storeOf(conn), testKey, fastInterval)
+			e := newElection(t, storeOf(conn), testKey, fastInterval)
 			e.Start(context.Background())
 			conn.locked.wait(t, 2*time.Second, "winning the lock")
 			if tc.settled && !awaitLeader(e, 5*time.Second) {
@@ -755,7 +773,7 @@ func TestElection_ShutdownDuringVerifyReleasesLockWithoutLostWarning(t *testing.
 	warnings := captureWarnings(t)
 	conn := newSession()
 	conn.pingWaitsForDeadline = true
-	e := leader.NewElection(storeOf(conn), testKey, interval)
+	e := newElection(t, storeOf(conn), testKey, interval)
 	e.Start(context.Background())
 	conn.pinged.wait(t, 2*time.Second, "the first verify ping")
 

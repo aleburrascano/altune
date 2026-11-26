@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/service/unreleased"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"context"
 )
 
@@ -20,6 +21,7 @@ func UnreleasedWiring(cache ports.UnreleasedCache, parts ...UnreleasedPart) unre
 		Storage:   storage,
 		Lifecycle: context.Background(),
 		Jobs:      &background.Tracker{},
+		Timer:     clock.NewTimer,
 	}
 	for _, part := range parts {
 		part(&w)
