@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/database"
 	"context"
 	"fmt"
 
@@ -72,7 +73,7 @@ func (a *App) observeAcquisition() monitoring.AcquisitionReader {
 func (a *App) liveMetrics() monitoring.LiveMetrics {
 	return livemetrics.Live(livemetrics.Sources{
 		Latency:      a.latency,
-		Pool:         a.pool,
+		PoolStats:    func() database.PoolStats { return database.ReadPoolStats(a.pool) },
 		Redis:        a.redisClient,
 		Leader:       a.jobs.LeaderCounters(),
 		EventBus:     a.eventBus,

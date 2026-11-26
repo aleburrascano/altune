@@ -9,13 +9,12 @@ import (
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/redis"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
 )
 
 type Sources struct {
 	Latency      *requestmetrics.Registry
-	Pool         *pgxpool.Pool
+	PoolStats    func() database.PoolStats
 	Redis        *goredis.Client
 	Leader       leader.Counters
 	EventBus     *events.InProcessBus
@@ -36,7 +35,7 @@ type eventTapStats struct {
 
 func Live(s Sources) monitoring.LiveMetrics {
 	m := FeatureMetrics(s.Latency)
-	m["db_pool"] = database.ReadPoolStats(s.Pool)
+	m["db_pool"] = s.PoolStats()
 	m["redis_pool"] = redis.ReadPoolStats(s.Redis)
 	m["leader"] = s.Leader
 	m["event_bus"] = eventBusStats{Dropped: s.EventBus.Dropped()}

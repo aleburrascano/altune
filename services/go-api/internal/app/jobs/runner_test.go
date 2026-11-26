@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/testdb"
@@ -690,7 +691,7 @@ func TestNewElection_WinsTheBackgroundLockAndAnnouncesATwentyFiveSecondSettle(t 
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
-	election, err := jobs.NewElection(pool)
+	election, err := jobs.NewElection(leader.AdaptLocks(database.NewAdvisoryLocks(pool).Acquire))
 	if err != nil {
 		t.Fatal(err)
 	}
