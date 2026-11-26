@@ -617,7 +617,7 @@ if [ -n "\${GO_RENDEZVOUS:-}" ] && { [ "\$1" = vet ] || [ "\$1" = test ]; }; the
 fi
 case "\$*" in
 "run golang.org/x/tools/cmd/deadcode@"*) printf "%s" "\${DEADCODE_STUB_OUT:-}"; exit "\${DEADCODE_STUB_RC:-0}" ;;
-"run ./scripts/lintcomments"*|"run ./scripts/lintnames"*) exit 0 ;;
+"run ./scripts/lintcomments"*|"run ./scripts/lintnames"*|"run ./scripts/lintarch"*) exit 0 ;;
 "test "*) if [ -n "\${GO_TEST_STUB_OUT:-}" ]; then printf "%b" "\$GO_TEST_STUB_OUT"; exit 1; fi ;;
 esac
 exec "$REAL_GO" "\$@"
@@ -952,6 +952,7 @@ expect_rc 0
 expect_log "golangci-lint run --config .golangci.strict.yml --allow-serial-runners ./..."
 forbid_log "--new-from-rev"
 expect_log "go run ./scripts/lintnames $(git -C "$WORK/repo" rev-list --max-parents=0 HEAD | tail -n 1)"
+expect_log "go run ./scripts/lintarch --rules role,edge"
 
 CASE="a push (no --full) lints only the changed package with the fast linters against the merge base"
 new_repo

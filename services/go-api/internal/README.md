@@ -9,4 +9,4 @@ A package's tests live in `package <name>_test` and use only its exported API, s
 
 Only `internal/shared/config` reads the environment in production code. Tests, `internal/shared/testdb` and the programs in `cmd/` and `scripts/` may read it too.
 
-`golangci-lint` checks these rules, configured in `.golangci.strict.yml`: `depguard` for imports, `testpackage` for tests and `forbidigo` for the environment. For now they check only new code, because older code still breaks them.
+`go run ./scripts/lintarch` checks the module rules, all declared in `services/go-api/architecture.json`: every folder here must have a role there (a new module fails until it does), a module imports only the roles its role may, core, service, domain, ports and shell packages import no I/O, database driver packages are imported only from `adapters` packages, and only the module that owns a table writes it. The role and edge rules run on every change over the whole tree; `layer`, `driver` and `table` join them as each reaches zero. `golangci-lint` checks `testpackage` for tests and `forbidigo` for the environment, configured in `.golangci.strict.yml`.
