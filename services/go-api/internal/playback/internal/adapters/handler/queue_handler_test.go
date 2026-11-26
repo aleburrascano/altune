@@ -68,7 +68,7 @@ type sourceDTO struct {
 }
 
 func newHandler(repo playback.QueueStateRepository) *playback.QueueHandler {
-	return playback.NewQueueHandler(playback.NewQueueService(repo, absentNowPlaying{}))
+	return playback.NewQueueHandler(playback.NewQueueService(repo, absentNowPlaying{}, time.Now))
 }
 
 func savePut(body string) *http.Request {
@@ -300,7 +300,7 @@ func getResume(t *testing.T, nowPlaying nowPlayingReader) (int, map[string]json.
 		CurrentIdx:   1,
 		NaturalOrder: []string{"00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"},
 	}}
-	h := playback.NewQueueHandler(playback.NewQueueService(repo, nowPlaying))
+	h := playback.NewQueueHandler(playback.NewQueueService(repo, nowPlaying, time.Now))
 	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
 	req = req.WithContext(requestuser.ContextWithUserID(req.Context(), ids.NewUserId(uuid.New())))
 	rec := httptest.NewRecorder()
@@ -400,7 +400,7 @@ func TestHandleSavePosition_UnappliedSaveIsConflictWithItsCode(t *testing.T) {
 }
 
 func TestHandleSavePosition_SharesTheQueueStateRateLimit(t *testing.T) {
-	h := playback.NewQueueHandler(playback.NewQueueService(&recordingRepo{}, absentNowPlaying{}),
+	h := playback.NewQueueHandler(playback.NewQueueService(&recordingRepo{}, absentNowPlaying{}, time.Now),
 		playback.WithQueueSaveLimit(playback.QueueSaveLimit{Every: time.Hour, Burst: 1}))
 	user := ids.NewUserId(uuid.New())
 	as := func(req *http.Request) *http.Request {
@@ -421,7 +421,7 @@ func TestHandleGet_ResponseIsUncachedAndNotSniffable(t *testing.T) {
 	h := playback.NewQueueHandler(playback.NewQueueService(&recordingRepo{saved: &playback.QueueState{
 		TrackIds:     []string{"00000000-0000-4000-8000-000000000001"},
 		NaturalOrder: []string{"00000000-0000-4000-8000-000000000001"},
-	}}, absentNowPlaying{}))
+	}}, absentNowPlaying{}, time.Now))
 	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
 	req = req.WithContext(requestuser.ContextWithUserID(req.Context(), ids.NewUserId(uuid.New())))
 	rec := httptest.NewRecorder()

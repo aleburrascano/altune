@@ -21,13 +21,13 @@ type QueuePositionInput struct {
 	PositionMs     int64
 }
 
-func NewQueuePosition(in QueuePositionInput) (*QueuePosition, error) {
+func NewQueuePosition(in QueuePositionInput, now time.Time) (*QueuePosition, error) {
 	p := &QueuePosition{
 		UserId:         in.UserId,
 		CurrentIdx:     in.CurrentIdx,
 		CurrentTrackId: in.CurrentTrackId,
 		PositionMs:     in.PositionMs,
-		UpdatedAt:      handledNow(),
+		UpdatedAt:      now,
 	}
 	if err := p.Validate(); err != nil {
 		return nil, err

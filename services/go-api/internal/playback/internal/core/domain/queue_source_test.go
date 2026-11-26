@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 type sourceDTO struct {
@@ -30,7 +31,7 @@ func sourceRead(t *testing.T, storedSourceId string) *sourceDTO {
 	t.Helper()
 	user := testUser()
 	store := &storeSpy{stored: &playback.QueueState{UserId: user, TrackIds: []string{}, NaturalOrder: []string{}, SourceId: storedSourceId}}
-	routes := playback.NewQueueHandler(playback.NewQueueService(store, nil)).Routes()
+	routes := playback.NewQueueHandler(playback.NewQueueService(store, nil, time.Now)).Routes()
 	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
 	req = req.WithContext(requestuser.ContextWithUserID(req.Context(), user))
 	rec := httptest.NewRecorder()

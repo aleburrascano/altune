@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 )
 
 type SaveQueueStateInput struct {
@@ -24,14 +25,18 @@ type SaveQueueStateInput struct {
 type Service struct {
 	repo       ports.QueueStateRepository
 	nowPlaying ports.NowPlayingReader
+	now        func() time.Time
 }
 
-func New(repo ports.QueueStateRepository, nowPlaying ports.NowPlayingReader) *Service {
-	return &Service{repo: repo, nowPlaying: nowPlaying}
+func New(repo ports.QueueStateRepository, nowPlaying ports.NowPlayingReader, now func() time.Time) *Service {
+	if now == nil {
+		panic("queue: New requires a clock")
+	}
+	return &Service{repo: repo, nowPlaying: nowPlaying, now: now}
 }
 
 func (s *Service) Save(ctx context.Context, userId ids.UserId, input SaveQueueStateInput) error {
-	state, err := newQueueState(userId, input)
+	state, err := newQueueState(userId, input, s.now())
 	if err != nil {
 		return err
 	}
@@ -50,7 +55,7 @@ func parseSourceAndRepeat(input SaveQueueStateInput) (string, domain.RepeatMode,
 	return sourceId, rm, nil
 }
 
-func newQueueState(userId ids.UserId, input SaveQueueStateInput) (*domain.QueueState, error) {
+func newQueueState(userId ids.UserId, input SaveQueueStateInput, now time.Time) (*domain.QueueState, error) {
 	sourceId, rm, err := parseSourceAndRepeat(input)
 	if err != nil {
 		return nil, err
@@ -64,7 +69,7 @@ func newQueueState(userId ids.UserId, input SaveQueueStateInput) (*domain.QueueS
 		RepeatMode:   rm,
 		SourceId:     sourceId,
 		NaturalOrder: input.NaturalOrder,
-	})
+	}, now)
 	if err != nil {
 		return nil, fmt.Errorf("invalid queue state: %w", err)
 	}
@@ -83,7 +88,7 @@ func (s *Service) SavePosition(ctx context.Context, userId ids.UserId, input Sav
 		CurrentIdx:     input.CurrentIdx,
 		CurrentTrackId: input.CurrentTrackId,
 		PositionMs:     input.PositionMs,
-	})
+	}, s.now())
 	if err != nil {
 		return fmt.Errorf("invalid queue position: %w", err)
 	}
@@ -95,10 +100,10 @@ func (s *Service) Resume(ctx context.Context, userId ids.UserId) (*domain.QueueS
 	if errors.Is(err, ports.ErrCorruptStoredState) {
 		slog.ErrorContext(ctx, "resume.corrupt_stored_queue_state",
 			"user_id", userId.String(), "error", err)
-		return domain.EmptyQueueState(userId), nil
+		return domain.EmptyQueueState(userId, s.now()), nil
 	}
 	if errors.Is(err, ports.ErrQueueStateNotFound) {
-		return domain.EmptyQueueState(userId), nil
+		return domain.EmptyQueueState(userId, s.now()), nil
 	}
 	if err != nil {
 		return nil, err

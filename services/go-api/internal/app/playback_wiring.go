@@ -43,7 +43,7 @@ func newQueueService(
 		playback.WithNowPlayingMetrics(metrics),
 		playback.WithNowPlayingLookupTimeout(lookupTimeout),
 		playback.WithNowPlayingClock(time.Now))
-	return playback.NewQueueService(queueStateRepo, nowPlayingReader)
+	return playback.NewQueueService(queueStateRepo, nowPlayingReader, time.Now)
 }
 
 func newQueueHandler(queueSvc *playback.QueueService, metrics playbackMetricsSink, limit playback.QueueSaveLimit) *playback.QueueHandler {

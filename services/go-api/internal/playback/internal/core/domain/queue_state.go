@@ -167,8 +167,8 @@ func indexWithinQueue(currentIdx, queueLen int) (int, error) {
 	return currentIdx, nil
 }
 
-func NewQueueState(in QueueStateInput) (*QueueState, error) {
-	state, err := newQueueState(in, handledNow())
+func NewQueueState(in QueueStateInput, now time.Time) (*QueueState, error) {
+	state, err := newQueueState(in, now)
 	if err != nil {
 		return nil, err
 	}
@@ -245,16 +245,12 @@ func sameTracks(a, b []string) bool {
 	return true
 }
 
-func handledNow() time.Time {
-	return time.Now()
-}
-
 func RehydrateQueueState(in QueueStateInput, updatedAt time.Time) (*QueueState, error) {
 	return newQueueState(in, updatedAt)
 }
 
-func EmptyQueueState(userId sharedids.UserId) *QueueState {
-	state, err := newQueueState(QueueStateInput{UserId: userId}, handledNow())
+func EmptyQueueState(userId sharedids.UserId, now time.Time) *QueueState {
+	state, err := newQueueState(QueueStateInput{UserId: userId}, now)
 	if err != nil {
 		panic("empty queue state must always be valid: " + err.Error())
 	}

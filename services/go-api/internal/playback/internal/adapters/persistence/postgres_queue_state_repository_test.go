@@ -79,7 +79,7 @@ func testUser() ids.UserId {
 }
 
 func emptyQueueState(user ids.UserId) *playback.QueueState {
-	state, err := playback.NewQueueState(playback.QueueStateInput{UserId: user})
+	state, err := playback.NewQueueState(playback.QueueStateInput{UserId: user}, time.Now())
 	if err != nil {
 		panic("an empty queue must always be valid: " + err.Error())
 	}
@@ -224,7 +224,7 @@ func TestGetForUser_StoredQueueExceedsMax_MapsToServerFault(t *testing.T) {
 }
 
 func TestSavePathValidationStaysClientFault(t *testing.T) {
-	_, err := playback.NewQueueState(playback.QueueStateInput{PositionMs: -1})
+	_, err := playback.NewQueueState(playback.QueueStateInput{PositionMs: -1}, time.Now())
 
 	if got := answeredStatus(err); got != http.StatusBadRequest {
 		t.Fatalf("client-input validation answered %d, want 400 (%v)", got, err)
@@ -513,7 +513,7 @@ func TestDeleteForUser_ErasesStoredState(t *testing.T) {
 		CurrentIdx: 1,
 		RepeatMode: playback.RepeatOff,
 		SourceId:   "search:mac demarco",
-	})
+	}, time.Now())
 	if err != nil {
 		t.Fatalf("build state: %v", err)
 	}
@@ -546,7 +546,7 @@ func TestDeleteForUser_IsScopedToUser(t *testing.T) {
 	for _, u := range []ids.UserId{target, other} {
 		state, _ := playback.NewQueueState(playback.QueueStateInput{
 			UserId: u, RepeatMode: playback.RepeatOff,
-		})
+		}, time.Now())
 		if err := repo.Upsert(ctx, state); err != nil {
 			t.Fatalf("Upsert(%v): %v", u.UUID(), err)
 		}
@@ -889,7 +889,7 @@ func TestUpsert_FailureLogNamesTheUserNotTheQueue(t *testing.T) {
 		CurrentIdx: 1,
 		RepeatMode: playback.RepeatOff,
 		SourceId:   privateSourceId,
-	})
+	}, time.Now())
 	if err != nil {
 		t.Fatalf("build state: %v", err)
 	}
