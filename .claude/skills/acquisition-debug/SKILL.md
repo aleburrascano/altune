@@ -71,6 +71,6 @@ bash scripts/acq-debug.sh [--staging] export-tracks [days] > tracks.jsonl
 cd services/go-api && go run ./cmd/acquisitioneval live -tracks ../../tracks.jsonl -out judged.jsonl
 ```
 
-`export-tracks` is read-only. `live` queries YouTube Music and oEmbed from the machine it runs on (about 1 request per second per endpoint; `ACQEVAL_LIVE_INTERVAL` and `ACQEVAL_LIVE_TIMEOUT` tune it), writes one judged row per track and prints a count per flag, then `flagged N of M`. A lookup that fails shows as `lookup_failed:<step>`; SoundCloud and other hosts carry a `skipped:<host>` marker.
+`export-tracks` is read-only. `live` queries YouTube Music and oEmbed from the machine it runs on (paced by the shared InnerTube budget; `ACQEVAL_LIVE_TIMEOUT` bounds each call), writes one judged row per track and prints a count per flag, then `flagged N of M`. A lookup that fails shows as `lookup_failed:<step>`; SoundCloud and other hosts carry a `skipped:<host>` marker.
 
 Anything that writes to prod (retrying a track, failing a stuck row, replacing cookies) needs the user's yes first. Name the exact change and wait for approval.

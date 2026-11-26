@@ -2,7 +2,6 @@ package ytmsearch
 
 import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
-	"altune/go-api/internal/shared/retrysafe"
 	"altune/go-api/internal/shared/youtubemusicapi"
 	"bytes"
 	"context"
@@ -120,7 +119,7 @@ func (c *Client) postInnerTube(ctx context.Context, endpoint string, fields map[
 		return nil, fmt.Errorf("ytmsearch: marshal %s: %w", endpoint, err)
 	}
 	target := youtubemusicapi.URL(c.musicURL, endpoint)
-	req, err := http.NewRequestWithContext(retrysafe.Mark(ctx), http.MethodPost, target, bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("ytmsearch: build %s request: %w", endpoint, err)
 	}

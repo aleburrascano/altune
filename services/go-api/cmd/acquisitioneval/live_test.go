@@ -241,12 +241,12 @@ func TestLiveCommand_RefusesANonPositiveTimeoutBeforeAnythingConnects(t *testing
 }
 
 func TestLiveConfigFromEnv(t *testing.T) {
-	env := map[string]string{"ACQEVAL_LIVE_INTERVAL": "250ms", "ACQEVAL_LIVE_TIMEOUT": "7s"}
+	env := map[string]string{"ACQEVAL_LIVE_TIMEOUT": "7s"}
 	cfg, err := liveConfigFromEnv(func(k string) string { return env[k] })
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.MinInterval != 250*time.Millisecond || cfg.Timeout != 7*time.Second {
+	if cfg.Timeout != 7*time.Second {
 		t.Errorf("cfg = %+v", cfg)
 	}
 
@@ -254,8 +254,8 @@ func TestLiveConfigFromEnv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if defaults.MinInterval != time.Second || defaults.Timeout != 20*time.Second {
-		t.Errorf("defaults = %+v, want 1s interval and 20s timeout", defaults)
+	if defaults.Timeout != 20*time.Second {
+		t.Errorf("defaults = %+v, want a 20s timeout", defaults)
 	}
 
 	if _, err := liveConfigFromEnv(func(string) string { return "soon" }); err == nil {
