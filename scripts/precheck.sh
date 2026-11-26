@@ -293,7 +293,7 @@ if touches '^services/go-api/internal/(shared/events/|discovery/domain/events\.g
   fi
 fi
 
-if touches '^services/go-api/' && [ -d client/src ] && need npx "mobile contract tests"; then
+if [ $lint_only = 0 ] && touches '^services/go-api/' && [ -d client/src ] && need npx "mobile contract tests"; then
   contract_tests=$(grep -rlF --include='*.test.ts' --include='*.test.tsx' "'go-api'" client/src | sed 's#^client/##' | sort)
   if [ -z "$contract_tests" ]; then
     [ $lint_only = 1 ] || { echo "FAIL  mobile contract tests (go-api changed): no client test file mentions 'go-api'"; record_fail "mobile contract tests (go-api changed)" 1 "no client test file mentions 'go-api'"; failed=1; }
@@ -349,11 +349,13 @@ if touches '^scripts/(__tests__/)?precheck(\.test)?\.sh$'; then
   test_check "precheck self-tests" . bash scripts/__tests__/precheck.test.sh
 fi
 
-if [ -f scripts/gate-parity.mjs ] && need node "gate parity" && link_deps .; then
+workflow_files='^(\.github|\.gitea)/|^scripts/(gate-parity\.mjs|ci/pr-ci-dupes\.mjs|precheck\.sh)$'
+
+if [ -f scripts/gate-parity.mjs ] && { [ $stage = push ] || touches "$workflow_files"; } && need node "gate parity" && link_deps .; then
   check "gate parity with main" . node scripts/gate-parity.mjs
 fi
 
-if [ -f scripts/ci/pr-ci-dupes.mjs ] && need node "duplicate PR CI work" && link_deps .; then
+if [ -f scripts/ci/pr-ci-dupes.mjs ] && { [ $stage = push ] || touches "$workflow_files"; } && need node "duplicate PR CI work" && link_deps .; then
   check "no duplicate PR CI work" . node scripts/ci/pr-ci-dupes.mjs
 fi
 
