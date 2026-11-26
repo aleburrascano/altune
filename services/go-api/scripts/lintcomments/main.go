@@ -21,6 +21,7 @@ import (
 var (
 	hunkHeader  = regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@`)
 	diffGitLine = regexp.MustCompile(`(?m)^diff --git .*$`)
+	directive   = regexp.MustCompile(`^//go:[a-z]+`)
 )
 
 func main() {
@@ -153,17 +154,12 @@ func commentsIn(path string) ([]violation, error) {
 	var found []violation
 	for _, group := range parsed.Comments {
 		for _, comment := range group.List {
-			if !isEmbed(comment.Text) {
+			if !directive.MatchString(comment.Text) {
 				found = append(found, violation{path, fset.Position(comment.Pos()).Line})
 			}
 		}
 	}
 	return found, nil
-}
-
-func isEmbed(text string) bool {
-	fields := strings.Fields(text)
-	return len(fields) > 0 && fields[0] == "//go:embed"
 }
 
 func resolveBase(ctx context.Context, rawBase string) (string, error) {
@@ -290,7 +286,7 @@ func classify(text string) string {
 	if isSuppression(body) {
 		return "suppression"
 	}
-	if isDirective(body) {
+	if directive.MatchString(text) {
 		return ""
 	}
 	return "comment"
@@ -298,10 +294,6 @@ func classify(text string) string {
 
 func isSuppression(body string) bool {
 	return strings.HasPrefix(body, "nolint") || strings.HasPrefix(body, "lint:")
-}
-
-func isDirective(body string) bool {
-	return strings.HasPrefix(body, "go:") || strings.HasPrefix(body, "line ")
 }
 
 func spansAddedLine(start, end int, added map[int]bool) bool {

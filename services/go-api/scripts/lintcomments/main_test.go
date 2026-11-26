@@ -17,7 +17,8 @@ func TestRunAllFlagsCommentsAndNamesFileLine(t *testing.T) {
 		"line comment":  {"hello.go", "package p\n\n// hello\nvar x = 1\n", ":3"},
 		"test file":     {"hello_test.go", "package p\n\n// hello\n", ":3"},
 		"block comment": {"block.go", "package p\n\n/* x */\nvar x = 1\n", ":3"},
-		"build tag":     {"tag.go", "//go:build integration\n\npackage p\n", ":1"},
+		"spaced build":  {"spaced.go", "// go:build integration\n\npackage p\n", ":1"},
+		"uppercase go":  {"upper.go", "package p\n\n//go:Generate x\nvar x = 1\n", ":3"},
 		"suppression":   {"lint.go", "package p\n\nvar x = 1 //nolint:errcheck\n", ":3"},
 	}
 	for name, tc := range cases {
@@ -41,9 +42,11 @@ func TestRunAllFlagsCommentsAndNamesFileLine(t *testing.T) {
 	}
 }
 
-func TestRunAllAllowsGoEmbedOnly(t *testing.T) {
+func TestRunAllAllowsGoDirectivesOnly(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "embed.go", "package p\n\nimport _ \"embed\"\n\n//go:embed clip.mp3\nvar clip []byte\n")
+	writeFile(t, dir, "tools.go", "//go:build tools\n\npackage tools\n")
+	writeFile(t, dir, "gen.go", "package p\n\n//go:generate stringer -type=K\ntype K int\n")
 
 	var stdout strings.Builder
 	code := run(t.Context(), []string{"--all", dir}, &stdout)
@@ -128,6 +131,29 @@ func TestRunDiffFlagsOnlyLinesAddedSinceBase(t *testing.T) {
 		"new-code comment/suppression violations: 1\n"
 	if code != 1 || stdout.String() != want {
 		t.Fatalf("exit = %d, output:\n%s\nwant:\n%s", code, stdout.String(), want)
+	}
+}
+
+func TestRunDiffAllowsGoDirectivesAndFlagsSuppressions(t *testing.T) {
+	dir := t.TempDir()
+	gitCmd(t, dir, "init")
+	gitCmd(t, dir, "config", "user.email", "test@example.com")
+	gitCmd(t, dir, "config", "user.name", "test")
+	writeFile(t, dir, "a.go", "package p\n")
+	gitCmd(t, dir, "add", "-A")
+	gitCmd(t, dir, "commit", "-m", "base")
+	base := gitOutput(t, dir, "rev-parse", "HEAD")
+	writeFile(t, dir, "tools.go", "//go:build tools\n\npackage tools\n")
+	writeFile(t, dir, "a.go", "package p\n\n//go:generate stringer -type=K\ntype K int\n\nvar x = 1 //nolint:errcheck\n")
+	gitCmd(t, dir, "add", "-A")
+	gitCmd(t, dir, "commit", "-m", "second")
+	t.Chdir(dir)
+
+	var stdout strings.Builder
+	code := run(t.Context(), []string{strings.TrimSpace(base)}, &stdout)
+
+	if code != 1 || !strings.Contains(stdout.String(), "a.go:6  new suppression") || strings.Contains(stdout.String(), "a.go:3") || strings.Contains(stdout.String(), "tools.go:1  new") {
+		t.Fatalf("exit = %d, output:\n%s\nwant only the nolint on a.go:6 flagged", code, stdout.String())
 	}
 }
 
