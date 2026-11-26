@@ -71,7 +71,7 @@ func WithStreamMetrics(m ports.AudioStoreMetrics) func(*StreamTrackService) {
 
 func (s *StreamTrackService) Execute(ctx context.Context, userId ids.UserId, trackId domain.TrackId) (*StreamOutput, error) {
 	dbStart := time.Now()
-	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
+	loaded, err := s.trackRepo.GetByID(ctx, trackId, userId)
 	dbDuration := time.Since(dbStart)
 	if errors.Is(err, domain.ErrTrackNotFound) {
 		return nil, domain.ErrTrackNotFound
@@ -80,12 +80,12 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId ids.UserId, tra
 		return nil, domain.WrapRepoError(ctx, "stream track", err)
 	}
 
-	if !track.IsStreamable() {
+	if !loaded.IsStreamable() {
 		return nil, domain.ErrAudioNotAvailable
 	}
 
 	storageStart := time.Now()
-	reader, size, err := s.audioStore.Stream(ctx, *track.AudioRef)
+	reader, size, err := s.audioStore.Stream(ctx, *loaded.AudioRef)
 	if err != nil {
 		slog.WarnContext(ctx, "stream.audio_missing",
 			"track_id", trackId.String(), "error", err)
@@ -94,7 +94,7 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId ids.UserId, tra
 			return nil, domain.ErrAudioTemporarilyUnavailable
 		}
 		s.metrics.StreamRecoveryTriggered()
-		confirmedMissing, recErr := s.recoverMissingAudio(ctx, userId, track)
+		confirmedMissing, recErr := s.recoverMissingAudio(ctx, userId, loaded)
 		if recErr != nil {
 			slog.ErrorContext(ctx, "stream.recover_failed",
 				"track_id", trackId.String(), "error", recErr)
@@ -111,18 +111,18 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId ids.UserId, tra
 		"storage_open_ms", time.Since(storageStart).Milliseconds(),
 	)
 
-	return &StreamOutput{Reader: reader, Size: size, Track: track}, nil
+	return &StreamOutput{Reader: reader, Size: size, Track: loaded}, nil
 }
 
 func (s *StreamTrackService) RecoverIfMissing(ctx context.Context, userId ids.UserId, trackId domain.TrackId) error {
-	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
+	loaded, err := s.trackRepo.GetByID(ctx, trackId, userId)
 	if errors.Is(err, domain.ErrTrackNotFound) {
 		return domain.ErrTrackNotFound
 	}
 	if err != nil {
 		return domain.WrapRepoError(ctx, "recover audio", err)
 	}
-	if !track.IsStreamable() {
+	if !loaded.IsStreamable() {
 		return nil
 	}
 	if !s.recoveryEnabled() {
@@ -130,14 +130,14 @@ func (s *StreamTrackService) RecoverIfMissing(ctx context.Context, userId ids.Us
 		return nil
 	}
 
-	exists, err := s.audioStore.Exists(ctx, *track.AudioRef)
+	exists, err := s.audioStore.Exists(ctx, *loaded.AudioRef)
 	if err != nil {
 		return fmt.Errorf("recover audio: exists check: %w", err)
 	}
 	if exists {
 		return nil
 	}
-	return s.reconcileMissingAudio(ctx, userId, track, false, nil)
+	return s.reconcileMissingAudio(ctx, userId, loaded, false, nil)
 }
 
 func (s *StreamTrackService) recoverMissingAudio(ctx context.Context, userId ids.UserId, current *domain.Track) (confirmedMissing bool, err error) {

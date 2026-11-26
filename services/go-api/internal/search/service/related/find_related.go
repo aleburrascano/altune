@@ -280,10 +280,10 @@ func truncateRelated(items []domain.SearchResult) []domain.SearchResult {
 	return items
 }
 
-func tryReserveProviderCall(calls *atomic.Int32, max int) bool {
+func tryReserveProviderCall(calls *atomic.Int32, limit int) bool {
 	for {
 		cur := calls.Load()
-		if cur >= int32(max) {
+		if cur >= int32(limit) {
 			return false
 		}
 		if calls.CompareAndSwap(cur, cur+1) {

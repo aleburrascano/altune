@@ -212,11 +212,6 @@ func TestNoSongFactIsDefinedOutsideThePackage(t *testing.T) {
 		if copiedSongFactDefinitionRe.Match(source) {
 			copies = append(copies, path+": defines a song fact function that songfacts owns")
 		}
-		relative, err := filepath.Rel(moduleRoot, path)
-		if err != nil {
-			return err
-		}
-		relative = filepath.ToSlash(relative)
 		if !strings.HasSuffix(path, "_test.go") && hasEditionWordPattern(source) {
 			copies = append(copies, path+": keeps its own edition word list")
 		}

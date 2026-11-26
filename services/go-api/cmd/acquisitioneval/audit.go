@@ -53,13 +53,13 @@ func auditQualifiers(stdin io.Reader, stdout io.Writer) error {
 		total++
 		if words := row.vetoWords(); len(words) > 0 {
 			flagged++
-			fmt.Fprintln(stdout, row.flaggedLine(words))
+			_, _ = fmt.Fprintln(stdout, row.flaggedLine(words))
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("read tsv: %w", err)
 	}
-	fmt.Fprintf(stdout, "flagged %d of %d\n", flagged, total)
+	_, _ = fmt.Fprintf(stdout, "flagged %d of %d\n", flagged, total)
 	return nil
 }
 

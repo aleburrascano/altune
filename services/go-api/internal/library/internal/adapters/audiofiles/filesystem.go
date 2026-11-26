@@ -99,15 +99,15 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("open source %s: %w", src, err)
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 
 	out, err := os.Create(dst)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", dst, err)
 	}
 	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		os.Remove(dst)
+		_ = out.Close()
+		_ = os.Remove(dst)
 		return fmt.Errorf("copy %s to %s: %w", src, dst, err)
 	}
 	if err := out.Close(); err != nil {
@@ -145,7 +145,7 @@ func openAudio(path string) (openedAudio, error) {
 	}
 	stat, err := file.Stat()
 	if err != nil {
-		file.Close()
+		_ = file.Close()
 		return openedAudio{}, fmt.Errorf("stat audio %s: %w", path, err)
 	}
 	return openedAudio{file: file, size: stat.Size()}, nil

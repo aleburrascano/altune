@@ -58,13 +58,13 @@ func runServer(cfg *config.Config, logRing *logging.RingBuffer) {
 	a := app.New(cfg, logRing)
 	runErr := a.Run(context.Background())
 	flushCtx, cancel := context.WithTimeout(context.Background(), telemetryFlushTimeout)
-	defer cancel()
-	if err := shutdown(flushCtx); err != nil {
-		fmt.Fprintf(os.Stderr, "telemetry flush: %v\n", err)
+	flushErr := shutdown(flushCtx)
+	cancel()
+	if flushErr != nil {
+		fmt.Fprintf(os.Stderr, "telemetry flush: %v\n", flushErr)
 	}
 	if runErr != nil {
 		fmt.Fprintf(os.Stderr, "server error: %v\n", runErr)
-		cancel()
 		os.Exit(1)
 	}
 }

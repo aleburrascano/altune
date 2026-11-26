@@ -64,11 +64,11 @@ func (c *RedisEnrichmentCache) LookupMBID(ctx context.Context, kind domain.Resul
 	if c.disabled() || nameKey == "" {
 		return "", false
 	}
-	val, err := c.client.Get(ctx, mbidIndexKey(kind, nameKey)).Result()
-	if err != nil || val == "" {
+	cached, err := c.client.Get(ctx, mbidIndexKey(kind, nameKey)).Result()
+	if err != nil || cached == "" {
 		return "", false
 	}
-	return val, true
+	return cached, true
 }
 
 func (c *RedisEnrichmentCache) RememberMBID(ctx context.Context, kind domain.ResultKind, nameKey, mbid string) error {

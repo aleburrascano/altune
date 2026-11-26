@@ -130,27 +130,27 @@ func writeAttr(b *strings.Builder, a slog.Attr, prefix string) {
 	}
 
 	key := prefix + a.Key
-	val := a.Value.Resolve()
-	if val.Kind() == slog.KindGroup {
-		for _, ga := range val.Group() {
+	value := a.Value.Resolve()
+	if value.Kind() == slog.KindGroup {
+		for _, ga := range value.Group() {
 			writeAttr(b, ga, key+".")
 		}
 		return
 	}
 
-	switch val.Kind() {
+	switch value.Kind() {
 	case slog.KindTime:
 		fmt.Fprintf(b, " %s%s%s=%s%s%s",
 			colorCyan, key, colorReset,
-			colorGray, val.Time().Format(time.RFC3339), colorReset)
+			colorGray, value.Time().Format(time.RFC3339), colorReset)
 	case slog.KindDuration:
 		fmt.Fprintf(b, " %s%s%s=%s%s%s",
 			colorCyan, key, colorReset,
-			colorGray, val.Duration(), colorReset)
+			colorGray, value.Duration(), colorReset)
 	default:
 		fmt.Fprintf(b, " %s%s%s=%s%s%s",
 			colorCyan, key, colorReset,
-			colorGray, val.String(), colorReset)
+			colorGray, value.String(), colorReset)
 	}
 }
 
