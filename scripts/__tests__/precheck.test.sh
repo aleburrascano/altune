@@ -73,7 +73,7 @@ expect_rc() {
 }
 
 expect_out() {
-    grep -qF "$1" "$WORK/out.log" || fail "expected output to mention '$1'"
+    grep -qF -- "$1" "$WORK/out.log" || fail "expected output to mention '$1'"
 }
 
 CASE="default uses gitea/main when both gitea/main and origin/main exist, so a fresh base commit is green"
@@ -500,6 +500,7 @@ printf "go %s\\n" "\$*" >>"$WORK/tools.log"
 case "\$*" in
 "run golang.org/x/tools/cmd/deadcode@"*) printf "%s" "\${DEADCODE_STUB_OUT:-}"; exit "\${DEADCODE_STUB_RC:-0}" ;;
 "run ./scripts/lintcomments"*|"run ./scripts/lintnames"*) exit 0 ;;
+"test "*) if [ -n "\${GO_TEST_STUB_OUT:-}" ]; then printf "%b" "\$GO_TEST_STUB_OUT"; exit 1; fi ;;
 esac
 exec "$REAL_GO" "\$@"
 STUB
@@ -774,6 +775,61 @@ run_with_tools --lint
 expect_log "./internal/search/adapters/y"
 forbid_log "adapters/x"
 expect_lint_args_exist
+
+CASE="a failing go test step names the failed test and prints its output, however many passing packages follow"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+passing=$(for i in $(seq 1 80); do printf 'ok  \\taltune/go-api/internal/p%s\\t0.1s\\n' "$i"; done)
+noise=$(for i in $(seq 1 250); do printf 'time=now level=INFO msg="noise line %s"\\n' "$i"; done)
+GO_TEST_STUB_OUT="$noise\\n--- FAIL: TestFlaky (0.01s)\\n    flaky_test.go:12: boom\\nFAIL\\nFAIL\\taltune/go-api/internal/shared/s\\t11.4s\\n$passing" run_push_scoped
+expect_rc 1
+expect_out "--- FAIL: TestFlaky (0.01s)"
+expect_out "flaky_test.go:12: boom"
+expect_out "FAIL	altune/go-api/internal/shared/s"
+last_lines=$(tail -n 8 "$WORK/out.log")
+grep -qF -- "--- FAIL: TestFlaky" <<<"$last_lines" || fail "the failed test is not among the last lines"
+! grep -qF "altune/go-api/internal/p1	" "$WORK/out.log" || fail "output of passing packages was printed"
+! grep -qF "noise line 1\"" "$WORK/out.log" || fail "log noise from passing tests was printed"
+summary=$(sed -n '/^FAIL go-api tests (race, changed packages) (exit 1):/,$p' "$WORK/out.log" | sed -n '2p')
+[ "$summary" = "    --- FAIL: TestFlaky (0.01s)" ] || fail "the failure summary does not start with the failed test: '$summary'"
+
+CASE="a go test step that fails to build shows the compiler errors"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+GO_TEST_STUB_OUT="# altune/go-api/internal/shared/s\\ns.go:3:1: undefined: nope\\nFAIL\\taltune/go-api/internal/shared/s [build failed]\\n" run_push_scoped
+expect_rc 1
+expect_out "s.go:3:1: undefined: nope"
+
+add_test_home_stub() {
+    mkdir -p "$WORK/bin" "$WORK/home"
+    (
+        cd "$WORK/repo" || exit 1
+        printf 'console.error("test-home: stub verdict");\nprocess.exit(%s);\n' "$1" >scripts/test-home.mjs
+        git add -A
+        git commit -qm "test-home stub"
+        git update-ref refs/remotes/gitea/main HEAD
+        printf 'package keep\n' >misplaced_test.go
+        git add -A
+        git commit -qm "add a test file"
+    )
+}
+
+CASE="a push without --full fails when test-home rejects a changed test file"
+new_repo
+add_test_home_stub 1
+run_push_scoped
+expect_rc 1
+expect_out "FAIL  test files live with their unit"
+expect_out "FAIL test files live with their unit (exit 1):"
+
+CASE="a push without --full passes the placement check when test-home passes"
+new_repo
+add_test_home_stub 0
+run_push_scoped
+expect_rc 0
+expect_out "ok    test files live with their unit"
 
 CASE="precheck rejects an unknown flag and a flag after the base ref with the usage and exit 2"
 new_repo

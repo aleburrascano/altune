@@ -121,6 +121,37 @@ test_check() {
   [ $lint_only = 1 ] || check "$@"
 }
 
+go_test_failures() {
+  local failures others
+  failures=$(awk '
+    race { print; if ($0 == "==================") race = 0; next }
+    pan && pan_lines < 40 { print; pan_lines++; next }
+    /^WARNING: DATA RACE/ { race = 1; print; next }
+    /^panic:/ { pan = 1; pan_lines = 1; print; next }
+    /^--- FAIL:/ { on = 1; print; next }
+    /^FAIL/ { on = 0; print; next }
+    on && /^[[:space:]]/ { print; next }
+    { on = 0 }
+  ' "$log")
+  if grep -qE '^(--- FAIL:|panic:|WARNING: DATA RACE)' <<<"$failures"; then
+    head -n 300 <<<"$failures"
+    [ "$(wc -l <<<"$failures")" -le 300 ] || echo "(cut at 300 lines)"
+    echo "(only the failed tests and their output are shown; rerun the command above for the logs of passing tests)"
+    return
+  fi
+  others=$(grep -vE '^(ok|\?)[[:space:]]' "$log")
+  if [ -z "$others" ]; then
+    log_tail
+  else
+    head -n 200 <<<"$others"
+    [ "$(wc -l <<<"$others")" -le 200 ] || echo "(cut at 200 lines; rerun the command above for the rest)"
+  fi
+}
+
+go_test_check() {
+  [ $lint_only = 1 ] || run_check go_test_failures "$@"
+}
+
 jest_limit=${PRECHECK_JEST_TIMEOUT:-1800}
 jest_cache=../.cache/jest
 
@@ -210,7 +241,7 @@ if touches '^services/go-api/'; then
       fi
       if [ $stage = push ]; then
         mapfile -t pkgs < <(go_pkgs $m)
-        [ ${#pkgs[@]} -gt 0 ] && test_check "go-api tests (race, changed packages)" $m "${heavy[@]}" go test -race -shuffle=on -count=1 "${pkgs[@]}"
+        [ ${#pkgs[@]} -gt 0 ] && go_test_check "go-api tests (race, changed packages)" $m "${heavy[@]}" go test -race -shuffle=on -count=1 "${pkgs[@]}"
       fi
     else
       affected=()
@@ -229,7 +260,7 @@ if touches '^services/go-api/'; then
       check "go-api no comments (whole tree)" $m go run ./scripts/lintcomments --all .
       check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
       mapfile -t pkgs < <(go_pkgs $m)
-      [ ${#pkgs[@]} -gt 0 ] && test_check "go-api tests (race, changed packages)" $m "${heavy[@]}" go test -race -shuffle=on -count=1 "${pkgs[@]}"
+      [ ${#pkgs[@]} -gt 0 ] && go_test_check "go-api tests (race, changed packages)" $m "${heavy[@]}" go test -race -shuffle=on -count=1 "${pkgs[@]}"
       if [ ${#pkgs[@]} -gt 0 ] && [ "${INTEGRATION:-}" != 1 ]; then
         echo "SKIP  go-api mutation (changed lines): integration tests cover lines here, so it needs INTEGRATION=1 and a database; the backend-tests CI job runs it"
       elif [ ${#pkgs[@]} -gt 0 ] && need jq "go-api mutation"; then
@@ -291,7 +322,7 @@ fi
 
 if touches '^(docs/features/[^/]+/notes\.md|services/go-api/internal/app/)' && need go "capability notes"; then
   go_pin services/go-api
-  test_check "capability notes name mounted routes" services/go-api "${heavy[@]}" go test -count=1 ./internal/app -run TestCapabilityNotes_NameMountedRoutes
+  go_test_check "capability notes name mounted routes" services/go-api "${heavy[@]}" go test -count=1 ./internal/app -run TestCapabilityNotes_NameMountedRoutes
 fi
 
 if touches '^services/overseer/'; then
@@ -306,14 +337,14 @@ if touches '^services/overseer/'; then
         check "overseer no comments (changed files)" services/go-api go run ./scripts/lintcomments --all "${staged_overseer[@]/#/../overseer/}"
       fi
       if [ $stage = push ]; then
-        test_check "overseer tests (race)" $m "${heavy[@]}" env CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...
+        go_test_check "overseer tests (race)" $m "${heavy[@]}" env CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...
       fi
     else
       check "overseer build" $m "${heavy[@]}" go build ./...
       check "overseer vet" $m "${heavy[@]}" go vet ./...
       check "overseer strict linters" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --allow-serial-runners
       check "overseer no comments (whole tree)" services/go-api go run ./scripts/lintcomments --all ../overseer
-      test_check "overseer tests (race)" $m "${heavy[@]}" env CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...
+      go_test_check "overseer tests (race)" $m "${heavy[@]}" env CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...
       touches '^services/overseer/go\.(mod|sum)$' && need govulncheck "overseer govulncheck" && check "overseer govulncheck" $m "${heavy[@]}" govulncheck ./...
     fi
   fi
