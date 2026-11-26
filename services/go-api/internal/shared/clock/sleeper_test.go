@@ -56,6 +56,29 @@ func TestSleep_ANonPositiveDurationOnACanceledContextReportsIt(t *testing.T) {
 	}
 }
 
+func TestNewTimer_FiresAfterTheDurationAndStopPreventsIt(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var newTimer clock.TimerFunc = clock.NewTimer
+		start := time.Now()
+		fires, _ := newTimer(2 * time.Second)
+		stoppedFires, stop := newTimer(time.Hour)
+
+		if !stop() {
+			t.Fatal("stop() = false for a pending timer, want true")
+		}
+		got := <-fires
+
+		if got.Sub(start) != 2*time.Second {
+			t.Fatalf("fired after %v, want 2s", got.Sub(start))
+		}
+		select {
+		case <-stoppedFires:
+			t.Fatal("a stopped timer fired")
+		default:
+		}
+	})
+}
+
 func TestSleep_SatisfiesSleeper(t *testing.T) {
 	var sleep clock.Sleeper = clock.Sleep
 

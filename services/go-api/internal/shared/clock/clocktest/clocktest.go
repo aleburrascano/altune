@@ -10,59 +10,84 @@ import (
 type Manual struct {
 	mu      sync.Mutex
 	now     time.Time
-	sleeps  map[int]sleep
+	waiters map[int]waiter
 	nextKey int
 }
 
-type sleep struct {
+type waiter struct {
 	wakeAt time.Time
-	wake   chan struct{}
+	fire   func(now time.Time)
 }
 
 func NewManual(start time.Time) *Manual {
-	return &Manual{now: start, sleeps: map[int]sleep{}}
+	return &Manual{now: start, waiters: map[int]waiter{}}
 }
 
 func (m *Manual) Sleeper() clock.Sleeper {
 	return m.sleep
 }
 
+func (m *Manual) Timer() clock.TimerFunc {
+	return m.newTimer
+}
+
 func (m *Manual) Sleeping() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return len(m.sleeps)
+	return len(m.waiters)
 }
 
 func (m *Manual) sleep(ctx context.Context, d time.Duration) error {
 	if d <= 0 {
 		return ctx.Err()
 	}
-	m.mu.Lock()
-	if len(m.sleeps) == 0 {
-		m.sleeps = map[int]sleep{}
-	}
-	key := m.nextKey
-	m.nextKey++
 	wake := make(chan struct{})
-	m.sleeps[key] = sleep{wakeAt: m.now.Add(d), wake: wake}
-	m.mu.Unlock()
+	key := m.register(d, func(time.Time) { close(wake) })
 
 	select {
 	case <-wake:
 		return nil
 	case <-ctx.Done():
-		m.mu.Lock()
-		delete(m.sleeps, key)
-		m.mu.Unlock()
+		m.cancel(key)
 		return ctx.Err()
 	}
 }
 
+func (m *Manual) newTimer(d time.Duration) (<-chan time.Time, func() bool) {
+	fires := make(chan time.Time, 1)
+	if d <= 0 {
+		fires <- m.Now()
+		return fires, func() bool { return false }
+	}
+	key := m.register(d, func(now time.Time) { fires <- now })
+	return fires, func() bool { return m.cancel(key) }
+}
+
+func (m *Manual) register(d time.Duration, fire func(time.Time)) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.waiters == nil {
+		m.waiters = map[int]waiter{}
+	}
+	key := m.nextKey
+	m.nextKey++
+	m.waiters[key] = waiter{wakeAt: m.now.Add(d), fire: fire}
+	return key
+}
+
+func (m *Manual) cancel(key int) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, pending := m.waiters[key]
+	delete(m.waiters, key)
+	return pending
+}
+
 func (m *Manual) wakeDueLocked() {
-	for key, s := range m.sleeps {
-		if !s.wakeAt.After(m.now) {
-			delete(m.sleeps, key)
-			close(s.wake)
+	for key, w := range m.waiters {
+		if !w.wakeAt.After(m.now) {
+			delete(m.waiters, key)
+			w.fire(m.now)
 		}
 	}
 }

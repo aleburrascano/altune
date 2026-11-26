@@ -90,6 +90,55 @@ func TestManualSleeper_WorksOnAZeroValueManual(t *testing.T) {
 	})
 }
 
+func TestManualTimer_FiresWhenTheClockReachesTheDeadlineAndStopCancelsIt(t *testing.T) {
+	m := clocktest.NewManual(start)
+	fires, _ := m.Timer()(time.Minute)
+	stoppedFires, stop := m.Timer()(time.Minute)
+
+	m.Advance(59 * time.Second)
+	select {
+	case <-fires:
+		t.Fatal("the timer fired a second early")
+	default:
+	}
+	if !stop() {
+		t.Fatal("stop() = false for a pending timer, want true")
+	}
+	m.Advance(time.Second)
+
+	select {
+	case got := <-fires:
+		if !got.Equal(start.Add(time.Minute)) {
+			t.Fatalf("fired with %v, want the clock's time %v", got, start.Add(time.Minute))
+		}
+	default:
+		t.Fatal("the timer did not fire at its deadline")
+	}
+	select {
+	case <-stoppedFires:
+		t.Fatal("a stopped timer fired")
+	default:
+	}
+	if stop() {
+		t.Fatal("stop() = true for a timer already stopped, want false")
+	}
+}
+
+func TestManualTimer_ANonPositiveDurationFiresAtOnce(t *testing.T) {
+	m := clocktest.NewManual(start)
+
+	fires, stop := m.Timer()(0)
+
+	select {
+	case <-fires:
+	default:
+		t.Fatal("a zero-duration timer did not fire at once")
+	}
+	if stop() {
+		t.Fatal("stop() = true for a fired timer, want false")
+	}
+}
+
 func TestManualSleeper_ANonPositiveDurationReturnsAtOnce(t *testing.T) {
 	m := clocktest.NewManual(start)
 
