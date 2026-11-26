@@ -3,10 +3,7 @@ set -euo pipefail
 
 [ $# -ge 1 ] || { echo "usage: test-home-tree.sh DIR..." >&2; exit 2; }
 here=$(cd "$(dirname "$0")" && pwd)
-if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
-  echo "test-home-tree: this clone is shallow, so the root commit is unknown and files added before the boundary would go unchecked; fetch the full history" >&2
-  exit 3
-fi
+bash "$here/history-complete.sh" || exit 3
 root_commit=$(git rev-list --max-parents=0 HEAD | tail -n 1)
 
 status=0

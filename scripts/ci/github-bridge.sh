@@ -71,11 +71,6 @@ post_status() {
 }
 
 merge_result() {
-  if ! bridge_git cat-file -e main:scripts/ci/merge-result.sh 2>/dev/null; then
-    echo "main has no scripts/ci/merge-result.sh yet, so the pr head is checked as it is" >&2
-    echo "$1"
-    return 0
-  fi
   bridge_git show main:scripts/ci/merge-result.sh | bash -s -- "$BRIDGE_GIT" main "$1"
 }
 

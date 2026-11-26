@@ -12,7 +12,7 @@ fail() {
 }
 
 mkdir -p "$WORK/repo/scripts" "$WORK/repo/svc/a" "$WORK/repo/other/b"
-cp "$HERE/test-home-tree.sh" "$HERE/test-home.mjs" "$WORK/repo/scripts/"
+cp "$HERE/test-home-tree.sh" "$HERE/history-complete.sh" "$HERE/test-home.mjs" "$WORK/repo/scripts/"
 cd "$WORK/repo" || exit 1
 git init -q
 git config user.email t@t

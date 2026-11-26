@@ -372,7 +372,8 @@ if touches '^services/go-api/'; then
       fi
       par check "go-api strict linters (whole module)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --allow-serial-runners ./...
       check "go-api no comments (whole tree)" $m go run ./scripts/lintcomments --all .
-      check "go-api no vague names (whole tree)" $m sh -c '[ "$(git rev-parse --is-shallow-repository)" = false ] || { echo "this clone is shallow, so names added before its boundary would go unchecked; fetch the full history" >&2; exit 1; }; exec go run ./scripts/lintnames "$(git rev-list --max-parents=0 HEAD | tail -n 1)"'
+      check "history is whole, so the whole-tree checks see every file" . bash scripts/history-complete.sh
+      check "go-api no vague names (whole tree)" $m go run ./scripts/lintnames "$(git rev-list --max-parents=0 HEAD | tail -n 1)"
       mapfile -t pkgs < <(go_pkgs $m)
       [ ${#pkgs[@]} -gt 0 ] && par go_test_check "go-api tests (race, changed packages)" $m "${heavy[@]}" go test -race -shuffle=on -count=1 "${pkgs[@]}"
       if [ ${#pkgs[@]} -gt 0 ] && [ "${INTEGRATION:-}" != 1 ]; then
