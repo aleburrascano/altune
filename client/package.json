@@ -10,6 +10,7 @@
     "web": "expo start --web",
     "tsc": "tsc --noEmit",
     "lint": "eslint .",
+    "lint:areas": "node scripts/lint-by-area.mjs",
     "test": "jest",
     "fallow": "fallow dead-code --fail-on-issues",
     "react-doctor": "react-doctor --scope full --yes --no-score --blocking warning --verbose"
