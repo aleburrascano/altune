@@ -2,42 +2,11 @@ package details_test
 
 import (
 	"altune/go-api/internal/search/internal/core/details"
+	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
 	"testing"
 )
-
-type memStringCache struct {
-	pos  map[string]string
-	neg  map[string]bool
-	sets int
-	negs int
-}
-
-func newMemStringCache() *memStringCache {
-	return &memStringCache{pos: map[string]string{}, neg: map[string]bool{}}
-}
-
-func (c *memStringCache) Get(_ context.Context, k string) (string, bool, error) {
-	v, ok := c.pos[k]
-	return v, ok, nil
-}
-
-func (c *memStringCache) Set(_ context.Context, k string, v string) error {
-	c.sets++
-	c.pos[k] = v
-	return nil
-}
-
-func (c *memStringCache) GetNegative(_ context.Context, k string) (bool, error) {
-	return c.neg[k], nil
-}
-
-func (c *memStringCache) SetNegative(_ context.Context, k string) error {
-	c.negs++
-	c.neg[k] = true
-	return nil
-}
 
 func countingFetch(calls *int, value string, found bool, err error) func(context.Context) (string, bool, error) {
 	return func(context.Context) (string, bool, error) {
@@ -47,8 +16,8 @@ func countingFetch(calls *int, value string, found bool, err error) func(context
 }
 
 func TestCachedLookup_PositiveHitSkipsLoader(t *testing.T) {
-	cache := newMemStringCache()
-	cache.pos["daft punk"] = "cached"
+	cache := searchtest.NewNameKeyedCache[string]()
+	cache.Seed("daft punk", "cached")
 	calls := 0
 
 	got, err := details.CachedLookup(context.Background(), cache, "daft punk", "", countingFetch(&calls, "fresh", true, nil))
@@ -64,8 +33,8 @@ func TestCachedLookup_PositiveHitSkipsLoader(t *testing.T) {
 }
 
 func TestCachedLookup_NegativeHitReturnsEmptyWithoutLoader(t *testing.T) {
-	cache := newMemStringCache()
-	cache.neg["nobody"] = true
+	cache := searchtest.NewNameKeyedCache[string]()
+	cache.SeedNegative("nobody")
 	calls := 0
 
 	got, err := details.CachedLookup(context.Background(), cache, "nobody", "", countingFetch(&calls, "fresh", true, nil))
@@ -81,7 +50,7 @@ func TestCachedLookup_NegativeHitReturnsEmptyWithoutLoader(t *testing.T) {
 }
 
 func TestCachedLookup_LoaderHitIsPositiveCached(t *testing.T) {
-	cache := newMemStringCache()
+	cache := searchtest.NewNameKeyedCache[string]()
 	calls := 0
 	fetch := countingFetch(&calls, "fresh", true, nil)
 
@@ -89,8 +58,8 @@ func TestCachedLookup_LoaderHitIsPositiveCached(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != "fresh" || calls != 1 || cache.sets != 1 || cache.negs != 0 {
-		t.Fatalf("first call: got=%q calls=%d sets=%d negs=%d", got, calls, cache.sets, cache.negs)
+	if got != "fresh" || calls != 1 || cache.Sets() != 1 || cache.Negatives() != 0 {
+		t.Fatalf("first call: got=%q calls=%d sets=%d negs=%d", got, calls, cache.Sets(), cache.Negatives())
 	}
 
 	got, _ = details.CachedLookup(context.Background(), cache, "daft punk", "", fetch)
@@ -100,7 +69,7 @@ func TestCachedLookup_LoaderHitIsPositiveCached(t *testing.T) {
 }
 
 func TestCachedLookup_DefinitiveMissIsNegativeCached(t *testing.T) {
-	cache := newMemStringCache()
+	cache := searchtest.NewNameKeyedCache[string]()
 	calls := 0
 	fetch := countingFetch(&calls, "", false, nil)
 
@@ -108,8 +77,8 @@ func TestCachedLookup_DefinitiveMissIsNegativeCached(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != "" || cache.negs != 1 || cache.sets != 0 {
-		t.Fatalf("miss: got=%q negs=%d sets=%d", got, cache.negs, cache.sets)
+	if got != "" || cache.Negatives() != 1 || cache.Sets() != 0 {
+		t.Fatalf("miss: got=%q negs=%d sets=%d", got, cache.Negatives(), cache.Sets())
 	}
 
 	_, _ = details.CachedLookup(context.Background(), cache, "nobody", "", fetch)
@@ -119,7 +88,7 @@ func TestCachedLookup_DefinitiveMissIsNegativeCached(t *testing.T) {
 }
 
 func TestCachedLookup_TransientErrorDegradesAndIsNotCached(t *testing.T) {
-	cache := newMemStringCache()
+	cache := searchtest.NewNameKeyedCache[string]()
 	calls := 0
 	fetch := countingFetch(&calls, "", false, errors.New("network down"))
 
@@ -130,8 +99,8 @@ func TestCachedLookup_TransientErrorDegradesAndIsNotCached(t *testing.T) {
 	if got != "" {
 		t.Errorf("want empty on transient error, got %q", got)
 	}
-	if cache.sets != 0 || cache.negs != 0 {
-		t.Errorf("a transient error must not poison the cache, got sets=%d negs=%d", cache.sets, cache.negs)
+	if cache.Sets() != 0 || cache.Negatives() != 0 {
+		t.Errorf("a transient error must not poison the cache, got sets=%d negs=%d", cache.Sets(), cache.Negatives())
 	}
 
 	_, _ = details.CachedLookup(context.Background(), cache, "daft punk", "", fetch)
@@ -141,8 +110,8 @@ func TestCachedLookup_TransientErrorDegradesAndIsNotCached(t *testing.T) {
 }
 
 func TestCachedLookup_EmptyNameKeyRunsUncached(t *testing.T) {
-	cache := newMemStringCache()
-	cache.pos[""] = "another symbol-only track's data"
+	cache := searchtest.NewNameKeyedCache[string]()
+	cache.Seed("", "another symbol-only track's data")
 	calls := 0
 
 	got, err := details.CachedLookup(context.Background(), cache, "", "", countingFetch(&calls, "", false, nil))
@@ -155,8 +124,8 @@ func TestCachedLookup_EmptyNameKeyRunsUncached(t *testing.T) {
 	if calls != 1 {
 		t.Errorf("want the fetch to run uncached, got %d calls", calls)
 	}
-	if cache.sets != 0 || cache.negs != 0 {
-		t.Errorf("an empty name key must not be written, got sets=%d negs=%d", cache.sets, cache.negs)
+	if cache.Sets() != 0 || cache.Negatives() != 0 {
+		t.Errorf("an empty name key must not be written, got sets=%d negs=%d", cache.Sets(), cache.Negatives())
 	}
 }
 
@@ -174,14 +143,16 @@ func TestCachedLookup_NilCacheRunsUncached(t *testing.T) {
 	}
 }
 
-type failingNegativeCache struct{ memStringCache }
+type failingNegativeCache struct {
+	*searchtest.NameKeyedCache[string]
+}
 
 func (failingNegativeCache) GetNegative(context.Context, string) (bool, error) {
 	return false, errors.New("redis unreachable")
 }
 
 func TestCachedLookup_ErroringGetNegativeStillFallsThroughToFetch(t *testing.T) {
-	cache := &failingNegativeCache{*newMemStringCache()}
+	cache := &failingNegativeCache{searchtest.NewNameKeyedCache[string]()}
 	calls := 0
 
 	got, err := details.CachedLookup(context.Background(), cache, "daft punk", "", countingFetch(&calls, "fresh", true, nil))
