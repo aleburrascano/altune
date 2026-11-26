@@ -75,11 +75,16 @@ merge_result() {
 }
 
 pending_run() {
-  local n=$1 head=$2 old=${remote[$1]:-} run
+  local n=$1 head=$2 old=${remote[$1]:-} run state last
   [ -n "$old" ] || return 1
   [ "$old" = "$head" ] || [ "$(bridge_git rev-parse --verify -q "$old^2" 2>/dev/null)" = "$head" ] || return 1
   run=$(check_run "$old") || return 1
-  [ "$(jq -r '.id // empty' <<<"$run")" != "" ] && [ "$(to_state "$run")" = pending ] || return 1
+  [ "$(jq -r '.id // empty' <<<"$run")" != "" ] || return 1
+  state=$(to_state "$run")
+  if [ "$state" != pending ]; then
+    last=$(latest_state "$head") || return 1
+    [ "$last" != "$state|$(describe "$state")" ] || return 1
+  fi
   echo "$run"
 }
 
@@ -98,7 +103,7 @@ bridge_pr() {
     *) echo "pr $n: building the merge result failed" >&2; return 1 ;;
   esac
   if [ "${remote[$n]:-}" != "$sha" ] && run=$(pending_run "$n" "$head"); then
-    echo "pr $n: main moved, keeping ${remote[$n]:0:12} until its run completes"
+    echo "pr $n: main moved, keeping ${remote[$n]:0:12} until its result is posted"
   else
     if [ "${remote[$n]:-}" != "$sha" ]; then
       github_git push -q --force "$GITHUB_REMOTE" "$sha:refs/heads/pr/$n" || { echo "pr $n: push failed" >&2; return 1; }

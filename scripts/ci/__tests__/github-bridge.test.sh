@@ -89,7 +89,13 @@ grep -q 'statuses/abc123' "$work/posts.log" || { echo "FAIL pending status not p
 
 echo '{"check_runs":[{"id":2,"name":"pr-checks","status":"completed","conclusion":"success"}]}' > "$work/checks.json"
 PARENT2=abc123 MERGE_SCRIPT='echo def456' run
-check "main moved, run completed: push" "1" "$(pushes)"
+check "main moved, run completed, not posted: no push" "0" "$(pushes)"
+check "main moved, run completed, not posted: posts success" "1" "$(posted success)"
+grep -q 'statuses/abc123' "$work/posts.log" || { echo "FAIL completed status not posted to the pr head"; fail=1; }
+
+echo '[{"id":5,"context":"github / pr-checks","status":"success","description":"pr-checks passed on github"}]' > "$work/statuses.json"
+PARENT2=abc123 MERGE_SCRIPT='echo def456' run
+check "main moved, run completed and posted: push" "1" "$(pushes)"
 grep -q 'push -q --force git@github.com:o/r.git def456:refs/heads/pr/7' "$work/git.log" || { echo "FAIL completed run: merge result not pushed"; fail=1; }
 
 echo '{"check_runs":[{"id":2,"name":"pr-checks","status":"in_progress"}]}' > "$work/checks.json"
