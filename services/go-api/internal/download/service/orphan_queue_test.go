@@ -167,7 +167,7 @@ func TestStoreRollback_ExhaustedDeleteQueuesTheOrphan(t *testing.T) {
 		userID, trackID := ids.NewUserId(uuid.New()), ids.NewTrackId()
 		store := &objectStore{objects: map[string]string{"u/new.mp3": "new bytes"}, deleteErr: errors.New("down")}
 		queue := &recordingOrphanQueue{}
-		step := service.MustNewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), queue, acquisitiontest.NewLedger(),
+		step := mustNewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), queue, acquisitiontest.NewLedger(),
 			service.WithStoreOwner(userID, trackID))
 
 		if err := step.Rollback(context.Background(), &service.AcquisitionContext{AudioRef: "u/new.mp3"}); err == nil {
@@ -190,7 +190,7 @@ func TestStoreRollback_SharedRefIsNeverQueued(t *testing.T) {
 		}})
 		queue := &recordingOrphanQueue{}
 		store := &objectStore{objects: map[string]string{}, deleteErr: errors.New("down")}
-		step := service.MustNewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), queue, refs, service.WithStoreOwner(userID, own))
+		step := mustNewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), queue, refs, service.WithStoreOwner(userID, own))
 
 		if err := step.Rollback(context.Background(), &service.AcquisitionContext{AudioRef: sharedRef}); err != nil {
 			t.Fatalf("Rollback: %v", err)

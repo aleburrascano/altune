@@ -47,14 +47,6 @@ func NewStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder, p
 	return buildStoreStep(audioStore, workspace, prober, orphans, refs, opts...), nil
 }
 
-func MustNewStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder, prober ports.AudioProber, orphans ports.OrphanedAudioRecorder, refs ports.AudioRefLookup, opts ...func(*StoreStep)) *StoreStep {
-	step, err := NewStoreStep(audioStore, workspace, prober, orphans, refs, opts...)
-	if err != nil {
-		panic(err)
-	}
-	return step
-}
-
 func buildStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder, prober ports.AudioProber, orphans ports.OrphanedAudioRecorder, refs ports.AudioRefLookup, opts ...func(*StoreStep)) *StoreStep {
 	s := &StoreStep{
 		audioStore:  audioStore,

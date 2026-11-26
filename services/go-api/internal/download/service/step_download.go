@@ -64,14 +64,6 @@ func NewDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, id
 	return buildDownloadStep(fetcher, workspace, identifier, lookup, prober, skips, limit, opts...), nil
 }
 
-func MustNewDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, limit *ConcurrencyLimit, opts ...func(*DownloadStep)) *DownloadStep {
-	step, err := NewDownloadStep(fetcher, workspace, identifier, lookup, prober, skips, limit, opts...)
-	if err != nil {
-		panic(err)
-	}
-	return step
-}
-
 func buildDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, limit *ConcurrencyLimit, opts ...func(*DownloadStep)) *DownloadStep {
 	s := &DownloadStep{fetcher: fetcher, workspace: workspace, identifier: identifier, recordingLookup: lookup, factsCache: newRecordingFactsCache(time.Now), limiter: limit, prober: prober, skips: skips, width: ProdVerifyWidth, candidateTimeout: DefaultCandidateTimeout, floor: defaultConfidenceFloor, cuts: audioverdict.DefaultCuts()}
 	for _, opt := range opts {

@@ -564,7 +564,7 @@ func TestStoreRollback_WaitsLongerBeforeEachRetryOfTheDelete(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		store := &timingStore{recordingStore: newRecordingStore()}
 		store.failDeletes = 1 << 30
-		step := service.MustNewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), service.MustDirectDeleteOrphans(store), ports.NoopAudioRefLookup())
+		step := mustNewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), service.MustDirectDeleteOrphans(store), ports.NoopAudioRefLookup())
 
 		err := step.Rollback(context.Background(), &service.AcquisitionContext{AudioRef: "u/song.mp3"})
 

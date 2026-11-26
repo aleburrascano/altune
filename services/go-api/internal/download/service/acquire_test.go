@@ -3107,7 +3107,7 @@ func newTestDownloadStep(fetcher fetcherPort, opts ...any) *service.DownloadStep
 			panic(fmt.Sprintf("newTestDownloadStep: unsupported option %T", opt))
 		}
 	}
-	return service.MustNewDownloadStep(fetcher, osWorkspace{}, wired.identifier, wired.lookup, wired.prober, wired.skips, wired.limit, public...)
+	return mustNewDownloadStep(fetcher, osWorkspace{}, wired.identifier, wired.lookup, wired.prober, wired.skips, wired.limit, public...)
 }
 
 func withTestLimit(l *service.ConcurrencyLimit) stepPortsOption {
@@ -3201,4 +3201,28 @@ func (r *creationRecordingWorkspace) liveDirs() []string {
 
 func outageSource() findOnlySource {
 	return findOnlySource{name: "down", err: &acqdomain.SourceUnavailableError{Source: "down", Err: errors.New("429")}}
+}
+
+func mustNewDownloadStep(fetcher fetcherPort, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, limit *service.ConcurrencyLimit, opts ...func(*service.DownloadStep)) *service.DownloadStep {
+	step, err := service.NewDownloadStep(fetcher, workspace, identifier, lookup, prober, skips, limit, opts...)
+	if err != nil {
+		panic(err)
+	}
+	return step
+}
+
+func mustNewStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder, prober ports.AudioProber, orphans ports.OrphanedAudioRecorder, refs ports.AudioRefLookup, opts ...func(*service.StoreStep)) *service.StoreStep {
+	step, err := service.NewStoreStep(audioStore, workspace, prober, orphans, refs, opts...)
+	if err != nil {
+		panic(err)
+	}
+	return step
+}
+
+func mustNewTagStep(tagger ports.AudioTagger) *service.TagStep {
+	step, err := service.NewTagStep(tagger)
+	if err != nil {
+		panic(err)
+	}
+	return step
 }

@@ -189,6 +189,24 @@ func TestNewStoreStep_RefusesAMissingCollaborator(t *testing.T) {
 	}
 }
 
+func TestDirectDeleteOrphans_RefusesAMissingAudioStore(t *testing.T) {
+	_, err := service.DirectDeleteOrphans(nil)
+
+	if !errors.Is(err, service.ErrMissingCollaborator) || !strings.Contains(err.Error(), "audio store") {
+		t.Errorf("error = %v, want ErrMissingCollaborator naming the audio store", err)
+	}
+}
+
+func TestCoreSteps_RefuseAMissingCollaborator(t *testing.T) {
+	_, err := service.CoreSteps(service.NewSourceRegistry(), nil, nil, nil, nil, nil, nil, nil, nil, osWorkspace{}, nil, nil)
+
+	for _, name := range []string{"identifier", "tagger", "prober", "download limit", "orphan recorder"} {
+		if !errors.Is(err, service.ErrMissingCollaborator) || !strings.Contains(err.Error(), name) {
+			t.Errorf("error = %v, want ErrMissingCollaborator naming the %s", err, name)
+		}
+	}
+}
+
 func TestNewDownloadStep_RefusesAMissingCollaborator(t *testing.T) {
 	builders := map[string]func() error{
 		"identifier": func() error {
@@ -2037,7 +2055,7 @@ func TestDownloadStep_UnavailableSourceIsFetchedOncePerJob(t *testing.T) {
 
 func TestDownloadStep_WorkspaceRejectedCandidateLeavesNoLiveDir(t *testing.T) {
 	ws := newCreationRecordingWorkspace()
-	step := service.MustNewDownloadStep(&fileWritingSearcher{err: errors.New("boom")}, ws, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited())
+	step := mustNewDownloadStep(&fileWritingSearcher{err: errors.New("boom")}, ws, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited())
 	ac := &service.AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "https://example.com/x"}}}
 
 	if _, err := step.Execute(context.Background(), ac, service.AfterSelect{}); err == nil {
@@ -2060,7 +2078,7 @@ func TestDownloadStep_WorkspaceWindowRemovesLoserAndKeepsWinnerUntilCleanup(t *t
 	done := make(chan error, 1)
 
 	go func() {
-		_, err := service.MustNewDownloadStep(fetcher, ws, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), service.WithVerifyWidth(2)).Execute(context.Background(), ac, service.AfterSelect{})
+		_, err := mustNewDownloadStep(fetcher, ws, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), service.WithVerifyWidth(2)).Execute(context.Background(), ac, service.AfterSelect{})
 		done <- err
 	}()
 	for range 2 {
@@ -2102,7 +2120,7 @@ func TestDownloadStep_WorkspacePreviewDirCreatedAndRemovedAfterIdentify(t *testi
 	ws := newCreationRecordingWorkspace()
 	fetcher := &previewingFetcher{fileWritingSearcher: fileWritingSearcher{writeFile: true}}
 	identifier := &durationRecordingIdentifier{match: previewMatch("mb-live", "Nessun dorma (live)")}
-	step := service.MustNewDownloadStep(fetcher, ws, identifier, ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited())
+	step := mustNewDownloadStep(fetcher, ws, identifier, ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited())
 
 	if _, err := step.Execute(context.Background(), previewContext(), service.AfterSelect{}); err == nil {
 		t.Fatal("expected the live preview to reject the only candidate")
@@ -2130,7 +2148,7 @@ func TestDownloadStep_WorkspaceRollbackWithOnlyTempPathRemovesThatFile(t *testin
 		t.Fatal(err)
 	}
 
-	step := service.MustNewDownloadStep(&fileWritingSearcher{}, ws, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited())
+	step := mustNewDownloadStep(&fileWritingSearcher{}, ws, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited())
 	if err := step.Rollback(context.Background(), &service.AcquisitionContext{TempPath: file}); err != nil {
 		t.Fatalf("Rollback error: %v", err)
 	}
@@ -2793,7 +2811,7 @@ func selectedAmongMuxedAndAudioOnly(t *testing.T, width int, muxedKind ports.Can
 		muxedURL:     {ID: "18", Kbps: 96},
 		audioOnlyURL: {ID: "hls_aac_160k", Kbps: 160},
 	}}
-	step := service.MustNewDownloadStep(fetcher, osWorkspace{}, &stubIdentifier{match: referenceMatch()}, ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), service.WithVerifyWidth(width))
+	step := mustNewDownloadStep(fetcher, osWorkspace{}, &stubIdentifier{match: referenceMatch()}, ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), service.WithVerifyWidth(width))
 	ac := downloadContext("mb-master")
 	ac.Ranked = []ports.AudioCandidate{{URL: muxedURL, Kind: muxedKind}, {URL: audioOnlyURL, Kind: ports.KindUpload}}
 	if _, err := step.Execute(context.Background(), ac, service.AfterSelect{}); err != nil {
@@ -2826,7 +2844,7 @@ func TestDownloadStep_WhenEveryCandidateIsMuxedTheFirstAcceptedFileIsStored(t *t
 			firstURL:  {ID: "18", Kbps: 96},
 			secondURL: {ID: "18", Kbps: 96},
 		}}
-		step := service.MustNewDownloadStep(fetcher, osWorkspace{}, &stubIdentifier{match: referenceMatch()}, ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), service.WithVerifyWidth(width))
+		step := mustNewDownloadStep(fetcher, osWorkspace{}, &stubIdentifier{match: referenceMatch()}, ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), service.WithVerifyWidth(width))
 		ac := downloadContext("mb-master")
 		ac.Ranked = []ports.AudioCandidate{{URL: firstURL, Kind: ports.KindUpload}, {URL: secondURL, Kind: ports.KindUpload}}
 		if _, err := step.Execute(context.Background(), ac, service.AfterSelect{}); err != nil {
@@ -2871,7 +2889,7 @@ func TestResolvedIdentity_StandingInTheDarkCatalogLengthConflictReachesTheReader
 
 func TestDownloadStep_RollbackLogsAScratchFolderItCouldNotRemove(t *testing.T) {
 	logs := captureJSONLog(t)
-	step := service.MustNewDownloadStep(&fileWritingSearcher{}, failingRemoveWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited())
+	step := mustNewDownloadStep(&fileWritingSearcher{}, failingRemoveWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited())
 
 	if err := step.Rollback(context.Background(), &service.AcquisitionContext{TempDir: "/tmp/altune-acquire-x"}); err != nil {
 		t.Fatalf("Rollback: %v, want nil", err)

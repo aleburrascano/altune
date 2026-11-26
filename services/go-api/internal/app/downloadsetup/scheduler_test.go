@@ -246,7 +246,7 @@ func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("no acquisition_outcomes row written for track %s within 5s (wiring must pass WithOutcomeRecorder with the Postgres store)", track.ID)
+			t.Fatalf("no acquisition_outcomes row written for track %s within 5s (wiring must set SchedulerPorts.Outcomes to the Postgres store)", track.ID)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}

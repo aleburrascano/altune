@@ -56,9 +56,9 @@ func TestStepName_IsTheOneItsFailureCodeIsKeyedOn(t *testing.T) {
 	}{
 		{service.NewSearchStep(nil), "search", downloadfailure.FailureNoMatchFound},
 		{service.NewSelectStep(), "select", downloadfailure.FailureNoMatchFound},
-		{service.MustNewDownloadStep(nil, scratchfiles.New(), ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited()), "download", downloadfailure.FailureDownloadFailed},
-		{service.MustNewTagStep(ports.NoopAudioTagger()), "tag", downloadfailure.FailureAcquisitionFailed},
-		{service.MustNewStoreStep(nil, scratchfiles.New(), ports.NoopAudioProber(), service.MustDirectDeleteOrphans(&objectStore{objects: map[string]string{}}), ports.NoopAudioRefLookup()), "store", downloadfailure.FailureStorageFailed},
+		{mustNewDownloadStep(nil, scratchfiles.New(), ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited()), "download", downloadfailure.FailureDownloadFailed},
+		{mustNewTagStep(ports.NoopAudioTagger()), "tag", downloadfailure.FailureAcquisitionFailed},
+		{mustNewStoreStep(nil, scratchfiles.New(), ports.NoopAudioProber(), service.MustDirectDeleteOrphans(&objectStore{objects: map[string]string{}}), ports.NoopAudioRefLookup()), "store", downloadfailure.FailureStorageFailed},
 		{service.NewUpdateTrackStep(nil, ids.UserId{}, ids.TrackId{}), "update_track", downloadfailure.FailureAcquisitionFailed},
 	}
 

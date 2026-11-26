@@ -78,7 +78,6 @@ type BackgroundAcquisitionScheduler struct {
 	outcomes            ports.OutcomeRecorder
 	outcomeRecords      background.Tracker
 
-	setupErr error
 	upgrades UpgradeLane
 }
 
@@ -164,10 +163,6 @@ func NewBackgroundAcquisitionScheduler(
 	}
 	for _, opt := range opts {
 		opt(s)
-	}
-	if s.setupErr != nil {
-		cancel()
-		return nil, s.setupErr
 	}
 	s.queue = wiring.Queue(s.wake, s.now)
 	s.runners.Track(func() { s.notifier.Listen(s.baseCtx, s.wake) })
