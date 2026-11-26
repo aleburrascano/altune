@@ -17,7 +17,8 @@ function findGoApiRoot(): string | null {
 
 const GO_API_ROOT = findGoApiRoot();
 
-const PUBLISH_EVENT_TYPE_ARG = /\.Publish\(\s*[\w.]+,\s*[\w.]+,\s*([^,\s]+)\s*,/g;
+const PAYLOAD_EVENT_TYPE =
+  /\)\s*EventType\(\)\s*(?:events\.)?EventType\s*\{\s*return\s+((?:events\.)?Type\w+)\s*\}/g;
 const GO_STRING_CONSTANT = /^\s*([A-Z]\w*)\s*(?:[A-Za-z_.]\w*\s*)?=\s*"([a-zA-Z_]+)"/gm;
 const SSE_LITERAL_EVENT_LINE = /"event:\s*([a-zA-Z_]+)\\n/g;
 const QUOTED_LITERAL = /^"([a-zA-Z_]+)"$/;
@@ -54,7 +55,7 @@ function derivePublishedEventTypes(root: string): PublishedEventTypes {
   const unresolved = new Set<string>();
 
   for (const text of sources) {
-    for (const [, argument] of text.matchAll(PUBLISH_EVENT_TYPE_ARG)) {
+    for (const [, argument] of text.matchAll(PAYLOAD_EVENT_TYPE)) {
       const literal = QUOTED_LITERAL.exec(argument!);
       if (literal !== null) {
         types.add(literal[1]!);
