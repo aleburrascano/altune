@@ -1,6 +1,7 @@
 package otlp
 
 import (
+	"altune/go-api/internal/shared/logging"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -51,6 +52,9 @@ func describe(span trace.Span, r *http.Request, status int) {
 		attribute.String("app.version", clip(r.Header.Get(AppVersionHeader))),
 		attribute.String("app.platform", clip(r.Header.Get(PlatformHeader))),
 	)
+	if corrID := logging.CorrelationIDFromContext(r.Context()); corrID != "" {
+		span.SetAttributes(attribute.String(logging.KeyCorrelationID, corrID))
+	}
 	if status >= http.StatusInternalServerError {
 		span.SetStatus(codes.Error, http.StatusText(status))
 	}
