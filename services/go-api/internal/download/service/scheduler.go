@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service/replacement"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
@@ -84,7 +85,7 @@ type BackgroundAcquisitionScheduler struct {
 func NewBackgroundAcquisitionScheduler(
 	svc acquirer,
 	workers int,
-	now func() time.Time,
+	now clock.Func,
 	opts ...func(*BackgroundAcquisitionScheduler),
 ) *BackgroundAcquisitionScheduler {
 	requirePort("NewBackgroundAcquisitionScheduler", "clock", now == nil)
