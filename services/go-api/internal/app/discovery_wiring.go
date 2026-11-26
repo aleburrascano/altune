@@ -2,12 +2,12 @@ package app
 
 import (
 	"altune/go-api/internal/app/jobs"
-	"altune/go-api/internal/app/providertransport"
 	"altune/go-api/internal/app/searchsettings"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/config"
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -21,11 +21,10 @@ type EvalHandles struct {
 }
 
 func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*search.Discovery, error) {
-	transport := h.Transport
-	if transport == nil {
-		transport = providertransport.Live()
+	if h.Transport == nil {
+		return nil, errors.New("eval discovery: EvalHandles.Transport is required, so provider calls never fall back to an unguarded transport")
 	}
-	deps := searchsettings.Deps(ctx, cfg, transport)
+	deps := searchsettings.Deps(ctx, cfg, h.Transport)
 	deps.Background = &background.Tracker{}
 	deps.Tracker = h.Tracker
 	deps.Pool = h.Pool

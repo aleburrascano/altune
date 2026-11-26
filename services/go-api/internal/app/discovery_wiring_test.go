@@ -137,6 +137,13 @@ func TestNewEvalDiscovery_RefusesAMissingTracker(t *testing.T) {
 	}
 }
 
+func TestNewEvalDiscovery_RefusesAMissingTransport(t *testing.T) {
+	_, err := app.NewEvalDiscovery(t.Context(), &config.Config{}, app.EvalHandles{Pool: unreachablePool(t), Tracker: testTracker(t)})
+	if err == nil || !strings.Contains(err.Error(), "Transport") {
+		t.Fatalf("NewEvalDiscovery = %v, want an error naming the missing Transport", err)
+	}
+}
+
 func TestNewEvalDiscovery_SearchesThroughTheGivenTransport(t *testing.T) {
 	var logs bytes.Buffer
 	prev := slog.Default()
