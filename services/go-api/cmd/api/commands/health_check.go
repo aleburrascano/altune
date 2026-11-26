@@ -45,12 +45,13 @@ func healthCheck(ctx context.Context, cfg *config.Config, repo *library.Postgres
 	}
 
 	orphaned := orphans.Check(ctx, tracks, audioStore)
-	fixed := 0
-	if mode == HealthCheckFix {
-		fixed = orphans.Fix(ctx, orphaned, repo)
+	if mode != HealthCheckFix {
+		reportHealthCheck(totalChecked, len(orphaned), 0, false)
+		return nil
 	}
-	reportHealthCheck(totalChecked, len(orphaned), fixed, mode == HealthCheckFix)
-	return nil
+	fixed := orphans.Fix(ctx, orphaned, repo)
+	reportHealthCheck(totalChecked, len(orphaned), fixed, true)
+	return orphans.RepairOutcome(len(orphaned), fixed)
 }
 
 func reportHealthCheck(totalChecked, orphanedDB, fixed int, fix bool) {

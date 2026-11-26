@@ -34,6 +34,13 @@ func Fix(ctx context.Context, orphaned []library.ReadyAudioTrack, repo library.T
 	return fixed
 }
 
+func RepairOutcome(orphaned, fixed int) error {
+	if fixed >= orphaned {
+		return nil
+	}
+	return fmt.Errorf("%d of %d orphaned tracks could not be marked failed", orphaned-fixed, orphaned)
+}
+
 func markTrackFailed(ctx context.Context, repo library.TrackReadWriter, t library.ReadyAudioTrack) error {
 	track, err := repo.GetByID(ctx, t.Id, t.UserId)
 	if err != nil {
