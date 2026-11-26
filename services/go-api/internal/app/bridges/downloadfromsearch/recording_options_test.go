@@ -98,7 +98,10 @@ func acquireUnfoundTrack(t *testing.T, disc *search.Discovery, catalogMBID *stri
 		Title: unfoundTitle, Artist: unfoundArtist, ISRC: &isrc, CatalogMBID: catalogMBID, Status: download.TrackPending,
 	}
 	ledger := downloadtest.NewLedger(downloadtest.LedgerTrack{TrackSnapshot: track})
-	recording := downloadfromsearch.RecordingOptions(disc)
+	recording, err := downloadfromsearch.RecordingOptions(disc)
+	if err != nil {
+		t.Fatalf("RecordingOptions: %v", err)
+	}
 	svc := download.MustNewAcquireTrackAudioService(ledger, download.NewSourceRegistry(), discardingStore{}, download.NewTempWorkspace(),
 		download.VerificationPorts{
 			Identifier:      download.NoopAudioIdentifier(),

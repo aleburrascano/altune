@@ -3473,6 +3473,7 @@ func TestNewBackgroundAcquisitionScheduler_RefusesAMissingPort(t *testing.T) {
 		"VerifySkips":         func(p *service.SchedulerPorts) { p.VerifySkips = nil },
 		"FingerprintVerified": func(p *service.SchedulerPorts) { p.FingerprintVerified = nil },
 		"Timer":               func(p *service.SchedulerPorts) { p.Timer = nil },
+		"Ticker":              func(p *service.SchedulerPorts) { p.Ticker = nil },
 	}
 	for field, drop := range cases {
 		t.Run(field, func(t *testing.T) {

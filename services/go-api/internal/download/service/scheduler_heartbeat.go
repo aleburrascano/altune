@@ -12,14 +12,14 @@ import (
 
 func (s *BackgroundAcquisitionScheduler) heartbeatLoop(ctx context.Context, job ports.Job, cancelJob context.CancelFunc, done chan<- struct{}) {
 	defer close(done)
-	ticker := time.NewTicker(s.heartbeatInterval)
-	defer ticker.Stop()
+	ticks, stop := s.ticker(s.heartbeatInterval)
+	defer stop()
 	lastSuccess := s.now()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-ticks:
 			if !s.sendHeartbeat(ctx, job, &lastSuccess) {
 				cancelJob()
 				return

@@ -104,12 +104,15 @@ func TestSearchRecordings_KeysSourcesByAcquisitionsProviderConstants(t *testing.
 			{Provider: domain.ProviderSoundCloud, ExternalID: "999"},
 		},
 	})
-	resolver := download.MustNewRecordingResolver(download.RecordingResolverPorts{
+	resolver, err := download.NewRecordingResolver(download.RecordingResolverPorts{
 		Search:      downloadfromsearch.NewSearch(searcher),
 		ISRC:        download.NoopISRCLookup(),
 		Recording:   download.NoopRecordingLookup(),
 		Rerecording: download.NoopRerecordingLookup(),
 	})
+	if err != nil {
+		t.Fatalf("NewRecordingResolver: %v", err)
+	}
 
 	identity, err := resolver.Resolve(context.Background(), download.RecordingQuery{Title: "Song", Artist: "Artist"})
 	if err != nil {

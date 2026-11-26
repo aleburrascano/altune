@@ -86,6 +86,7 @@ func testSchedulerPorts() service.SchedulerPorts {
 		VerifySkips:         func() uint64 { return 0 },
 		FingerprintVerified: func() bool { return false },
 		Timer:               clock.NewTimer,
+		Ticker:              clock.NewTicker,
 	}
 }
 

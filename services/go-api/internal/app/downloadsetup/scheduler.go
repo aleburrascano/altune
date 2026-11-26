@@ -116,6 +116,7 @@ func schedulerPorts(d Deps, acquireSvc *download.AcquireTrackAudioService, skips
 		VerifySkips:         skips.Count,
 		FingerprintVerified: lookups.Verified,
 		Timer:               clock.NewTimer,
+		Ticker:              clock.NewTicker,
 	}
 	if d.Pool != nil {
 		wiring.Queue = download.QueueOf(download.NewPostgresJobQueue(d.Pool))

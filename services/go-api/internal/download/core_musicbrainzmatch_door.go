@@ -8,7 +8,7 @@ import (
 type RecordingResolverPorts = recordingresolver.Ports
 
 var (
-	MustNewRecordingResolver = recordingresolver.MustNew
-	NoopISRCLookup           = ports.NoopISRCLookup
-	NoopRerecordingLookup    = ports.NoopRerecordingLookup
+	NewRecordingResolver  = recordingresolver.New
+	NoopISRCLookup        = ports.NoopISRCLookup
+	NoopRerecordingLookup = ports.NoopRerecordingLookup
 )

@@ -1170,5 +1170,6 @@ func integrationSchedulerPorts(queue ports.DownloadQueue) download.SchedulerPort
 		VerifySkips:         func() uint64 { return 0 },
 		FingerprintVerified: func() bool { return false },
 		Timer:               clock.NewTimer,
+		Ticker:              clock.NewTicker,
 	}
 }
