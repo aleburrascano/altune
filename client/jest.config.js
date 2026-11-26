@@ -71,9 +71,14 @@ const webProject = {
   },
 };
 
+const RESTART_WORKER_ABOVE_SO_EARLYOOM_DOES_NOT_KILL_IT = '1G';
+const WORKERS_THAT_SHARE_THE_CI_BOX_WITH_TWO_RUNNERS = 2;
+
 module.exports = {
   rootDir: __dirname,
   randomize: true,
   forceExit: true,
+  maxWorkers: WORKERS_THAT_SHARE_THE_CI_BOX_WITH_TWO_RUNNERS,
+  workerIdleMemoryLimit: RESTART_WORKER_ABOVE_SO_EARLYOOM_DOES_NOT_KILL_IT,
   projects: [nativeProject, webProject],
 };

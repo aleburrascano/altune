@@ -26,7 +26,7 @@
     ],
     "coverage": {
       "requireAllFiles": true,
-      "allowUnmatched": ["*.config.js", "doctor.config.ts", "eslint.config.test.js", "scripts/**", "eslint/**", "targets/**", "vendor/**"]
+      "allowUnmatched": ["*.config.js", "doctor.config.ts", "eslint.config.test.js", "jest.config.test.js", "scripts/**", "eslint/**", "targets/**", "vendor/**"]
     },
     "calls": {
       "forbidden": [
