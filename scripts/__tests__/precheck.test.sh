@@ -844,6 +844,16 @@ run_push_scoped
 expect_rc 0
 expect_out "ok    capability notes name mounted routes"
 
+CASE="--full lints the whole module and every line, not only new code"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+run_with_tools
+expect_rc 0
+expect_log "golangci-lint run --config .golangci.strict.yml --allow-serial-runners ./..."
+forbid_log "--new-from-rev"
+expect_log "go run ./scripts/lintnames $(git -C "$WORK/repo" rev-list --max-parents=0 HEAD | tail -n 1)"
+
 CASE="a push (no --full) lints only the changed package with the fast linters against the merge base"
 new_repo
 add_go_fixture
