@@ -10,6 +10,9 @@ import (
 )
 
 func upgradeLane(cfg *config.Config, pool *pgxpool.Pool, ledger download.TrackLedgerPort, svc *download.AcquireTrackAudioService) download.UpgradeLane {
+	if cfg.AcquisitionUpgradeConcurrency < 1 {
+		return download.NoUpgradeLane()
+	}
 	store := download.NewPostgresUpgradeStore(pool)
 	inPlace, err := download.InPlaceCheckOf(svc, store, cfg.AcquisitionUpgradeVerifyPerHour)
 	if err != nil {
