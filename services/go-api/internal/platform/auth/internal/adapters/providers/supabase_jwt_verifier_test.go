@@ -2,6 +2,7 @@ package providers_test
 
 import (
 	"altune/go-api/internal/platform/auth"
+	"altune/go-api/internal/platform/auth/internal/core/ports"
 	"altune/go-api/internal/shared/ids"
 	"bytes"
 	"context"
@@ -33,7 +34,7 @@ const (
 	unknownKidGap  = 30 * time.Second
 )
 
-var fastBackgroundRefresh = auth.WithJWKSBackgroundRefresh(time.Second, time.Second)
+var fastBackgroundRefresh = withJWKSBackgroundRefresh(time.Second, time.Second)
 
 type testClock struct{ offset atomic.Int64 }
 
@@ -99,9 +100,10 @@ func (f *testJWTFixture) newVerifier(t *testing.T) *auth.SupabaseJWTVerifier {
 	return newVerifier(t, f.jwksServer.URL, time.Now)
 }
 
-func newVerifier(t *testing.T, jwksURL string, now func() time.Time, opts ...auth.SupabaseJWTVerifierOption) *auth.SupabaseJWTVerifier {
+func newVerifier(t *testing.T, jwksURL string, now func() time.Time, opts ...verifierOption) *auth.SupabaseJWTVerifier {
 	t.Helper()
-	verifier, err := auth.NewSupabaseJWTVerifier(t.Context(), jwksURL, testProjectURL, testAudience, now, opts...)
+	settings := newVerifierSettings(opts)
+	verifier, err := auth.NewSupabaseJWTVerifier(t.Context(), jwksURL, testProjectURL, testAudience, now, settings.metrics, settings.revoker, settings.schedule)
 	if err != nil {
 		t.Fatalf("create verifier: %v", err)
 	}
@@ -288,7 +290,7 @@ func TestSupabaseJWTVerifier_IssuerGoldenValue(t *testing.T) {
 	f := newTestJWTFixture(t)
 	token := f.signToken(t, validClaims("https://test-project.supabase.co/auth/v1", f.audience))
 	for _, projectURL := range []string{f.projectURL, f.projectURL + "/", f.projectURL + "//"} {
-		verifier, err := auth.NewSupabaseJWTVerifier(t.Context(), f.jwksServer.URL, projectURL, f.audience, time.Now)
+		verifier, err := auth.NewSupabaseJWTVerifier(t.Context(), f.jwksServer.URL, projectURL, f.audience, time.Now, auth.NoopAuthMetrics(), auth.NoopTokenRevoker(), auth.DefaultJWKSSchedule())
 		if err != nil {
 			t.Fatalf("create verifier for %q: %v", projectURL, err)
 		}
@@ -346,7 +348,7 @@ func TestSupabaseJWTVerifier_SlowJWKSEndpointDoesNotHang(t *testing.T) {
 
 	startupDone := make(chan *auth.SupabaseJWTVerifier, 1)
 	go func() {
-		v, err := auth.NewSupabaseJWTVerifier(context.Background(), server.URL, testProjectURL, testAudience, time.Now, auth.WithJWKSFetchTimeout(200*time.Millisecond))
+		v, err := auth.NewSupabaseJWTVerifier(context.Background(), server.URL, testProjectURL, testAudience, time.Now, auth.NoopAuthMetrics(), auth.NoopTokenRevoker(), auth.JWKSSchedule{FetchTimeout: 200 * time.Millisecond})
 		if err != nil {
 			t.Errorf("NewSupabaseJWTVerifier returned error: %v", err)
 		}
@@ -411,7 +413,7 @@ func TestSupabaseJWTVerifier_CheckHealthDegradesAfterSustainedBackgroundRefreshF
 	f, jwks := newRotatingFixture(t)
 	clock := &testClock{}
 	metrics := &countingAuthMetrics{}
-	verifier := newVerifier(t, f.jwksServer.URL, clock.now, auth.WithJWKSMetrics(metrics), fastBackgroundRefresh)
+	verifier := newVerifier(t, f.jwksServer.URL, clock.now, withJWKSMetrics(metrics), fastBackgroundRefresh)
 	if err := verifier.CheckHealth(t.Context()); err != nil {
 		t.Fatalf("CheckHealth right after a successful startup fetch: %v", err)
 	}
@@ -504,7 +506,7 @@ func TestSupabaseJWTVerifier_CanceledCallerIsReleasedFromSharedFetch(t *testing.
 	release := make(chan struct{})
 	server, _ := newCountingJWKSServer(t, time.Minute, release)
 	t.Cleanup(func() { close(release) })
-	verifier := newVerifier(t, server.URL, time.Now, auth.WithJWKSFetchTimeout(2*time.Second))
+	verifier := newVerifier(t, server.URL, time.Now, withJWKSFetchTimeout(2*time.Second))
 
 	go func() { _, _ = verifier.Verify(context.Background(), "any-token") }()
 	time.Sleep(100 * time.Millisecond)
@@ -639,7 +641,7 @@ func TestSupabaseJWTVerifier_UnknownKidInsideRecentRefreshWindowIsRejected(t *te
 func TestSupabaseJWTVerifier_RefreshPublishingNoKeysKeepsCachedKeys(t *testing.T) {
 	f, jwks := newRotatingFixture(t)
 	metrics := &countingAuthMetrics{}
-	verifier := newVerifier(t, f.jwksServer.URL, time.Now, auth.WithJWKSMetrics(metrics))
+	verifier := newVerifier(t, f.jwksServer.URL, time.Now, withJWKSMetrics(metrics))
 	known := f.validToken(t)
 
 	jwks.publishNoKeys()
@@ -756,7 +758,7 @@ func TestSupabaseJWTVerifier_CountsStartupAndForcedJWKSFetchFailures(t *testing.
 	server, hits := newCountingJWKSServer(t, 0, nil)
 	metrics := &countingAuthMetrics{}
 	clock := &testClock{}
-	verifier := newVerifier(t, server.URL, clock.now, auth.WithJWKSMetrics(metrics))
+	verifier := newVerifier(t, server.URL, clock.now, withJWKSMetrics(metrics))
 	if got := metrics.jwksFailures.Load(); got != 1 {
 		t.Fatalf("after failed startup fetch: JWKSFetchFailed %d, want 1", got)
 	}
@@ -774,7 +776,7 @@ func TestSupabaseJWTVerifier_CountsStartupAndForcedJWKSFetchFailures(t *testing.
 func TestSupabaseJWTVerifier_CountsBackgroundJWKSRefreshFailures(t *testing.T) {
 	f, jwks := newRotatingFixture(t)
 	metrics := &countingAuthMetrics{}
-	newVerifier(t, f.jwksServer.URL, time.Now, auth.WithJWKSMetrics(metrics), fastBackgroundRefresh)
+	newVerifier(t, f.jwksServer.URL, time.Now, withJWKSMetrics(metrics), fastBackgroundRefresh)
 	if got := metrics.jwksFailures.Load(); got != 0 {
 		t.Fatalf("after successful startup fetch: JWKSFetchFailed %d, want 0", got)
 	}
@@ -788,7 +790,7 @@ func TestSupabaseJWTVerifier_VerifyRefusesKeySetPastStalenessBound(t *testing.T)
 	f, jwks := newRotatingFixture(t)
 	clock := &testClock{}
 	metrics := &countingAuthMetrics{}
-	verifier := newVerifier(t, f.jwksServer.URL, clock.now, auth.WithJWKSMetrics(metrics), fastBackgroundRefresh)
+	verifier := newVerifier(t, f.jwksServer.URL, clock.now, withJWKSMetrics(metrics), fastBackgroundRefresh)
 	token := f.validToken(t)
 
 	jwks.down.Store(true)
@@ -803,7 +805,7 @@ func TestSupabaseJWTVerifier_VerifyRefusesKeySetPastStalenessBound(t *testing.T)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
-	auth.MustMiddleware(verifier, time.Now)(next).ServeHTTP(rec, req)
+	auth.MustMiddleware(verifier, time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next).ServeHTTP(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("middleware status with a stale key set: got %d, want %d", rec.Code, http.StatusServiceUnavailable)
 	}
@@ -836,7 +838,7 @@ func (s stubRevoker) Revoked(context.Context, ids.UserId, time.Time) (bool, erro
 	return s.revoked, s.err
 }
 
-func verifyWithRevoker(t *testing.T, opts ...auth.SupabaseJWTVerifierOption) error {
+func verifyWithRevoker(t *testing.T, opts ...verifierOption) error {
 	t.Helper()
 	f := newTestJWTFixture(t)
 	verifier := newVerifier(t, f.jwksServer.URL, time.Now, opts...)
@@ -845,7 +847,7 @@ func verifyWithRevoker(t *testing.T, opts ...auth.SupabaseJWTVerifierOption) err
 }
 
 func TestSupabaseJWTVerifier_RevokedTokenRejected(t *testing.T) {
-	err := verifyWithRevoker(t, auth.WithTokenRevoker(stubRevoker{revoked: true}))
+	err := verifyWithRevoker(t, withTokenRevoker(stubRevoker{revoked: true}))
 	assertInvalidTokenReason(t, err, "revoked")
 }
 
@@ -856,7 +858,7 @@ func TestSupabaseJWTVerifier_DefaultRevokerAcceptsToken(t *testing.T) {
 }
 
 func TestSupabaseJWTVerifier_RevokerErrorIsUnavailableNotInvalid(t *testing.T) {
-	err := verifyWithRevoker(t, auth.WithTokenRevoker(stubRevoker{err: errors.New("store down")}))
+	err := verifyWithRevoker(t, withTokenRevoker(stubRevoker{err: errors.New("store down")}))
 	assertVerifierUnavailable(t, err)
 }
 
@@ -873,7 +875,7 @@ func (r *recordingRevoker) Revoked(_ context.Context, user ids.UserId, issuedAt 
 func TestSupabaseJWTVerifier_RevokerSeesTheTokensSubjectAndIssuedAt(t *testing.T) {
 	f := newTestJWTFixture(t)
 	revoker := &recordingRevoker{}
-	verifier := newVerifier(t, f.jwksServer.URL, time.Now, auth.WithTokenRevoker(revoker))
+	verifier := newVerifier(t, f.jwksServer.URL, time.Now, withTokenRevoker(revoker))
 	claims := validClaims(f.issuer, f.audience)
 	iat := time.Now().Add(-10 * time.Minute).Truncate(time.Second)
 	claims["iat"] = iat
@@ -933,7 +935,7 @@ func TestSupabaseJWTVerifier_LifetimeBoundIsOneHourPlusSkew(t *testing.T) {
 func TestNewSupabaseJWTVerifier_RefusesANilClock(t *testing.T) {
 	f := newTestJWTFixture(t)
 
-	verifier, err := auth.NewSupabaseJWTVerifier(t.Context(), f.jwksServer.URL, testProjectURL, testAudience, nil)
+	verifier, err := auth.NewSupabaseJWTVerifier(t.Context(), f.jwksServer.URL, testProjectURL, testAudience, nil, auth.NoopAuthMetrics(), auth.NoopTokenRevoker(), auth.DefaultJWKSSchedule())
 
 	if !errors.Is(err, auth.ErrJWKSClockRequired) || verifier != nil {
 		t.Fatalf("NewSupabaseJWTVerifier(nil clock) = (%v, %v), want ErrJWKSClockRequired and no verifier", verifier, err)
@@ -941,19 +943,19 @@ func TestNewSupabaseJWTVerifier_RefusesANilClock(t *testing.T) {
 }
 
 func TestSupabaseJWTVerifier_NonPositiveOrNilOptionsKeepTheDefaults(t *testing.T) {
-	cases := map[string]auth.SupabaseJWTVerifierOption{
-		"zero fetch timeout":        auth.WithJWKSFetchTimeout(0),
-		"negative fetch timeout":    auth.WithJWKSFetchTimeout(-time.Second),
-		"zero refresh schedule":     auth.WithJWKSBackgroundRefresh(0, 0),
-		"negative refresh schedule": auth.WithJWKSBackgroundRefresh(-time.Second, -time.Second),
-		"zero refresh window":       auth.WithJWKSBackgroundRefresh(90*time.Second, 0),
-		"negative refresh window":   auth.WithJWKSBackgroundRefresh(90*time.Second, -time.Second),
+	cases := map[string]verifierOption{
+		"zero fetch timeout":        withJWKSFetchTimeout(0),
+		"negative fetch timeout":    withJWKSFetchTimeout(-time.Second),
+		"zero refresh schedule":     withJWKSBackgroundRefresh(0, 0),
+		"negative refresh schedule": withJWKSBackgroundRefresh(-time.Second, -time.Second),
+		"zero refresh window":       withJWKSBackgroundRefresh(90*time.Second, 0),
+		"negative refresh window":   withJWKSBackgroundRefresh(90*time.Second, -time.Second),
 	}
 	for name, opt := range cases {
 		t.Run(name, func(t *testing.T) {
 			f := newTestJWTFixture(t)
 			metrics := &countingAuthMetrics{}
-			verifier := newVerifier(t, f.jwksServer.URL, time.Now, opt, auth.WithJWKSMetrics(metrics))
+			verifier := newVerifier(t, f.jwksServer.URL, time.Now, opt, withJWKSMetrics(metrics))
 
 			if _, err := verifier.Verify(t.Context(), f.validToken(t)); err != nil {
 				t.Fatalf("Verify: %v", err)
@@ -970,10 +972,10 @@ func TestSupabaseJWTVerifier_NonPositiveOrNilOptionsKeepTheDefaults(t *testing.T
 
 func TestSupabaseJWTVerifier_NonPositiveRefreshIntervalKeepsTheFifteenMinuteDefault(t *testing.T) {
 	f := newTestJWTFixture(t)
-	newVerifier(t, f.jwksServer.URL, time.Now, auth.WithJWKSBackgroundRefresh(0, 15*time.Minute))
+	newVerifier(t, f.jwksServer.URL, time.Now, withJWKSBackgroundRefresh(0, 15*time.Minute))
 	for _, interval := range []time.Duration{0, -time.Second} {
 		_, err := auth.NewSupabaseJWTVerifier(t.Context(), f.jwksServer.URL, testProjectURL, testAudience, time.Now,
-			auth.WithJWKSBackgroundRefresh(interval, 15*time.Minute+time.Second))
+			auth.NoopAuthMetrics(), auth.NoopTokenRevoker(), auth.JWKSSchedule{RefreshInterval: interval, RefreshWindow: 15*time.Minute + time.Second})
 		if err == nil {
 			t.Fatalf("interval %s with a 15m1s window built, want the 15m default interval to refuse the longer window", interval)
 		}
@@ -984,7 +986,7 @@ func TestSupabaseJWTVerifier_NonPositiveRefreshIntervalKeepsTheFifteenMinuteDefa
 func TestSupabaseJWTVerifier_StalledBackgroundRefreshFailsWithinTheFetchTimeout(t *testing.T) {
 	f, jwks := newRotatingFixture(t)
 	metrics := &countingAuthMetrics{}
-	newVerifier(t, f.jwksServer.URL, time.Now, auth.WithJWKSMetrics(metrics), auth.WithJWKSFetchTimeout(200*time.Millisecond), fastBackgroundRefresh)
+	newVerifier(t, f.jwksServer.URL, time.Now, withJWKSMetrics(metrics), withJWKSFetchTimeout(200*time.Millisecond), fastBackgroundRefresh)
 
 	jwks.stall.Store(true)
 
@@ -1035,5 +1037,65 @@ func TestSupabaseJWTVerifier_InitialJWKSFetchFailureLogsOneWarn(t *testing.T) {
 	}
 	if got := len(warnRecords(t, &buf)); got != 1 {
 		t.Fatalf("WARN records after successful fetch: got %d, want still 1: %s", got, buf.String())
+	}
+}
+
+func TestNewSupabaseJWTVerifier_RefusesMissingMetricsOrRevoker(t *testing.T) {
+	f := newTestJWTFixture(t)
+	for name, build := range map[string]func(){
+		"no metrics": func() {
+			_, _ = auth.NewSupabaseJWTVerifier(t.Context(), f.jwksServer.URL, testProjectURL, testAudience, time.Now, nil, auth.NoopTokenRevoker(), auth.DefaultJWKSSchedule())
+		},
+		"no revoker": func() {
+			_, _ = auth.NewSupabaseJWTVerifier(t.Context(), f.jwksServer.URL, testProjectURL, testAudience, time.Now, auth.NoopAuthMetrics(), nil, auth.DefaultJWKSSchedule())
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatal("construction succeeded, want a panic at construction")
+				}
+			}()
+			build()
+		})
+	}
+}
+
+type verifierSettings struct {
+	metrics  ports.AuthMetrics
+	revoker  ports.TokenRevoker
+	schedule auth.JWKSSchedule
+}
+
+type verifierOption func(*verifierSettings)
+
+func newVerifierSettings(opts []verifierOption) verifierSettings {
+	settings := verifierSettings{
+		metrics:  auth.NoopAuthMetrics(),
+		revoker:  auth.NoopTokenRevoker(),
+		schedule: auth.DefaultJWKSSchedule(),
+	}
+	for _, opt := range opts {
+		opt(&settings)
+	}
+	return settings
+}
+
+func withJWKSMetrics(m ports.AuthMetrics) verifierOption {
+	return func(s *verifierSettings) { s.metrics = m }
+}
+
+func withTokenRevoker(r ports.TokenRevoker) verifierOption {
+	return func(s *verifierSettings) { s.revoker = r }
+}
+
+func withJWKSFetchTimeout(timeout time.Duration) verifierOption {
+	return func(s *verifierSettings) { s.schedule.FetchTimeout = timeout }
+}
+
+func withJWKSBackgroundRefresh(interval, window time.Duration) verifierOption {
+	return func(s *verifierSettings) {
+		s.schedule.RefreshInterval = interval
+		s.schedule.RefreshWindow = window
 	}
 }
