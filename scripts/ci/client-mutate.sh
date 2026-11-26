@@ -48,6 +48,10 @@ jest_project() {
   esac
 }
 
+glob_escaped() {
+  sed -E 's/([][(){}*?+@])/[\1]/g' <<<"$1"
+}
+
 stryker_config() {
   jq --arg report "$work/$1.json" --arg sandbox "$sandbox_prefix-$1" '. + { jsonReporter: { fileName: $report }, tempDirName: $sandbox }' stryker.config.json >"$work/$1.config.json"
 }
@@ -64,11 +68,13 @@ killed=0
 survivors=()
 for project in native web; do
   ranges=()
+  escaped_ranges=()
   roots=()
   while IFS= read -r range; do
     file=${range%:*}
     [ "$(jest_project "$file")" = "$project" ] || continue
     ranges+=("$range")
+    escaped_ranges+=("$(glob_escaped "$file"):${range##*:}")
     mapfile -t -O "${#roots[@]}" roots < <(test_root "$file")
   done <"$work/ranges"
   [ ${#ranges[@]} -gt 0 ] || continue
@@ -76,8 +82,9 @@ for project in native web; do
   stryker_config "$project"
   test_roots=$(printf '%s\n' "${roots[@]}" | sort -u | paste -sd:)
   mutate=$(IFS=,; echo "${ranges[*]}")
+  mutate_globs=$(IFS=,; echo "${escaped_ranges[*]}")
   rc=0
-  out=$(CLIENT_MUTATE_JEST_PROJECT="$project" CLIENT_MUTATE_TEST_ROOTS="$test_roots" time_limited "$stryker" run "$work/$project.config.json" --mutate "$mutate" 2>&1) || rc=$?
+  out=$(CLIENT_MUTATE_JEST_PROJECT="$project" CLIENT_MUTATE_TEST_ROOTS="$test_roots" time_limited "$stryker" run "$work/$project.config.json" --mutate "$mutate_globs" 2>&1) || rc=$?
   if [ "$rc" != 0 ]; then
     echo "$out" >&2
     if [ -n "$time_limit_s" ] && { [ "$rc" = 124 ] || [ "$rc" = 137 ]; }; then

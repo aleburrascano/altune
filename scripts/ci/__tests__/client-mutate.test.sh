@@ -147,6 +147,28 @@ commit web-file
 expect "a web file is mutated against the web jest project, which runs its tests" 0 '1 changed files, killed [1-9][0-9]*, survived 0'
 base=$(git -C "$repo" rev-parse HEAD)
 
+write 'src/shared/clamp/core/(route)/[id].ts' <<'TS'
+export function routeAdult(age: number): boolean {
+  return age >= 18;
+}
+TS
+write src/shared/clamp/__tests__/routeAdult.test.ts <<'TS'
+import { routeAdult } from '@shared/clamp/core/(route)/[id]';
+import { adult } from '@shared/clamp';
+
+test('routeAdult', () => {
+  expect(routeAdult(17)).toBe(false);
+  expect(routeAdult(18)).toBe(true);
+  expect(adult(40)).toBe(true);
+});
+TS
+commit route-file
+base=$(git -C "$repo" rev-parse HEAD)
+sed -i 's/age >= 18/18 <= age/' "$client/src/shared/clamp/core/(route)/[id].ts"
+commit route-file-only
+expect "a file with brackets and parentheses in its path is mutated, not read as a glob or skipped" 0 '1 changed files, killed [1-9][0-9]*, survived 0'
+base=$(git -C "$repo" rev-parse HEAD)
+
 write src/shared/clamp/core/minor.ts <<'TS'
 export function minor(age: number): boolean {
   return age < 18;
