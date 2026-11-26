@@ -195,7 +195,7 @@ export function saveControlText(state: SaveControlState): string {
 }
 
 export function ownedRetryTrackId(owned: OwnedTrack | null): TrackId | null {
-  if (owned === null || owned.acquisitionStatus !== 'failed') {
+  if (owned?.acquisitionStatus !== 'failed') {
     return null;
   }
   return isOptimisticTrackId(owned.trackId) ? null : owned.trackId;

@@ -252,7 +252,7 @@ function removeOptimistically(queryClient: QueryClient) {
 }
 
 function confirmRemoval(queryClient: QueryClient) {
-  return (_deleted: void, trackId: TrackId): void => {
+  return (_deleted: unknown, trackId: TrackId): void => {
     unpin(trackId);
     invalidateLibraryDerived(queryClient);
   };

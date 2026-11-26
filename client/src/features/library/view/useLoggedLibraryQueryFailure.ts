@@ -2,13 +2,13 @@ import { useEffect } from 'react';
 import type { LibrarySort } from '@shared/apiClient';
 import { failureLogFields } from '@features/library/core/libraryFailure';
 import { useLibraryPort } from '@features/library/view/LibraryPortProvider';
-import type { LibraryChip, SortKey } from '@features/library/view/libraryView';
+import type { LibraryChip } from '@features/library/view/libraryView';
 
 type LibraryQueryChip = LibraryChip;
 
 type LibraryQueryContext = {
   chip: LibraryQueryChip;
-  sort?: LibrarySort | SortKey;
+  sort?: LibrarySort;
   isSearching: boolean;
 };
 
