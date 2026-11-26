@@ -96,6 +96,12 @@ echo '{"check_runs":[{"id":2,"name":"pr-checks","status":"in_progress"}]}' > "$w
 PARENT2=other999 MERGE_SCRIPT='echo def456' run
 check "head moved, run pending: push" "1" "$(pushes)"
 
+echo '{"check_runs":[{"id":2,"name":"pr-checks","status":"in_progress"}]}' > "$work/checks.json"
+printf 'abc123\trefs/heads/pr/7\n' > "$work/remote.txt"
+MERGE_SCRIPT='echo def456' run
+check "pr/N is the head itself, run pending: no push" "0" "$(pushes)"
+printf 'oldsha\trefs/heads/pr/7\n' > "$work/remote.txt"
+
 echo '{"check_runs":[{"id":2,"name":"pr-checks","status":"completed","conclusion":"success"}]}' > "$work/checks.json"
 MERGE_SCRIPT='echo "conflict in x" >&2; exit 1' run
 check "conflict exits 0" "0" "$got"
