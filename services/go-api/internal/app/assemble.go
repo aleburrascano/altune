@@ -3,11 +3,13 @@ package app
 import (
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/app/shutdown"
+	"altune/go-api/internal/platform/leader"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -101,7 +103,7 @@ func (a *App) compose(ctx context.Context, transport http.RoundTripper) (http.Ha
 		return nil, err
 	}
 	a.startCatalogJobs(ctx, f.catalog, f.playback)
-	election, err := jobs.NewElection(a.pool)
+	election, err := jobs.NewElection(leader.AdaptLocks(database.NewAdvisoryLocks(a.pool).Acquire))
 	if err != nil {
 		return nil, fmt.Errorf("background election: %w", err)
 	}

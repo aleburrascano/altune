@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
@@ -24,8 +22,8 @@ type Election interface {
 	Shutdown(context.Context)
 }
 
-func NewElection(pool *pgxpool.Pool) (*leader.Election, error) {
-	return leader.NewElection(leader.PostgresLocks(pool), backgroundLockKey, backgroundLockInterval, clock.Now, clock.NewTimer)
+func NewElection(locks leader.LockStore) (*leader.Election, error) {
+	return leader.NewElection(locks, backgroundLockKey, backgroundLockInterval, clock.Now, clock.NewTimer)
 }
 
 type Runner struct {

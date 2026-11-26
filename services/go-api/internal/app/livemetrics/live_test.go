@@ -11,6 +11,7 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/events/eventstest"
 	"altune/go-api/internal/shared/ids"
@@ -44,6 +45,7 @@ func newSources(t *testing.T) sources {
 	return sources{
 		Sources: livemetrics.Sources{
 			Latency:      requestmetrics.NewRegistry(),
+			PoolStats:    func() database.PoolStats { return database.PoolStats{} },
 			EventBus:     bus,
 			EventTap:     tap,
 			EventFeed:    monitoring.NewEventFeed(),
