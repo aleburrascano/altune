@@ -42,20 +42,11 @@ type PostgresQueueStateRepository struct {
 	metrics ports.QueueStateMetrics
 }
 
-func NewPostgresQueueStateRepository(pool QueueStateDB, opts ...func(*PostgresQueueStateRepository)) *PostgresQueueStateRepository {
-	r := &PostgresQueueStateRepository{pool: pool, metrics: ports.NoopQueueStateMetrics()}
-	for _, opt := range opts {
-		opt(r)
+func NewPostgresQueueStateRepository(pool QueueStateDB, metrics ports.QueueStateMetrics) *PostgresQueueStateRepository {
+	if pool == nil || metrics == nil {
+		panic("persistence: NewPostgresQueueStateRepository requires a database and metrics")
 	}
-	return r
-}
-
-func WithQueueStateMetrics(m ports.QueueStateMetrics) func(*PostgresQueueStateRepository) {
-	return func(r *PostgresQueueStateRepository) {
-		if m != nil {
-			r.metrics = m
-		}
-	}
+	return &PostgresQueueStateRepository{pool: pool, metrics: metrics}
 }
 
 func (r *PostgresQueueStateRepository) recordTimeout(parent context.Context, err error) {

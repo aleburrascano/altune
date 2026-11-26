@@ -5,5 +5,4 @@ import persistence "altune/go-api/internal/playback/internal/adapters/persistenc
 var (
 	NewPostgresDeletedIdentityRepository = persistence.NewPostgresDeletedIdentityRepository
 	NewPostgresQueueStateRepository      = persistence.NewPostgresQueueStateRepository
-	WithQueueStateMetrics                = persistence.WithQueueStateMetrics
 )

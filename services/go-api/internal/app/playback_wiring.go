@@ -17,7 +17,7 @@ type playbackWiring struct {
 
 func (a *App) wirePlayback(ctx context.Context, trackRepo *library.PostgresTrackRepository) (playbackWiring, error) {
 	metrics := playback.NewExpvarPlaybackMetrics()
-	queueStateRepo := playback.NewPostgresQueueStateRepository(a.pool, playback.WithQueueStateMetrics(metrics))
+	queueStateRepo := playback.NewPostgresQueueStateRepository(a.pool, metrics)
 	queueSvc, err := newQueueService(queueStateRepo, trackRepo, metrics, a.cfg.PlaybackNowPlayingLookupTimeout)
 	if err != nil {
 		return playbackWiring{}, err
@@ -30,9 +30,7 @@ func (a *App) wirePlayback(ctx context.Context, trackRepo *library.PostgresTrack
 		handler: queueHandler,
 		forgetDeletedIdentities: playback.NewErasureSweeper(
 			playback.NewPostgresDeletedIdentityRepository(a.pool), queueSvc,
-			playback.WithSweepRunBudget(a.cfg.PlaybackErasureScanTimeout),
-			playback.WithErasureSweepMetrics(metrics),
-			playback.WithErasedStateReaper(queueStateRepo)),
+			metrics, queueStateRepo, a.cfg.PlaybackErasureScanTimeout),
 	}, nil
 }
 

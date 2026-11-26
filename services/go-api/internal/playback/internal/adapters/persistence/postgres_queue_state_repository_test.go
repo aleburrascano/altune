@@ -151,7 +151,7 @@ func (m *recordingMetrics) QueueStateStaleWrite()        { m.staleWrites++ }
 
 func TestGetForUser_CorruptRow_IncrementsMetric(t *testing.T) {
 	m := &recordingMetrics{}
-	repo := playback.NewPostgresQueueStateRepository(rowQuerier{row: corruptRow{repeatMode: "sideways"}}, playback.WithQueueStateMetrics(m))
+	repo := playback.NewPostgresQueueStateRepository(rowQuerier{row: corruptRow{repeatMode: "sideways"}}, m)
 
 	if _, err := repo.GetForUser(context.Background(), testUser()); err == nil {
 		t.Fatal("precondition: a corrupt stored row must still return an error")
@@ -163,7 +163,7 @@ func TestGetForUser_CorruptRow_IncrementsMetric(t *testing.T) {
 
 func TestGetForUser_HealthyRow_RecordsNoCorruption(t *testing.T) {
 	m := &recordingMetrics{}
-	repo := playback.NewPostgresQueueStateRepository(newFakeStore(), playback.WithQueueStateMetrics(m))
+	repo := playback.NewPostgresQueueStateRepository(newFakeStore(), m)
 	user := testUser()
 
 	if err := repo.Upsert(context.Background(), emptyQueueState(user)); err != nil {
@@ -179,7 +179,7 @@ func TestGetForUser_HealthyRow_RecordsNoCorruption(t *testing.T) {
 
 func TestGetForUser_Timeout_IncrementsMetric(t *testing.T) {
 	m := &recordingMetrics{}
-	repo := playback.NewPostgresQueueStateRepository(timingOutQuerier{}, playback.WithQueueStateMetrics(m))
+	repo := playback.NewPostgresQueueStateRepository(timingOutQuerier{}, m)
 
 	err := runWithGuard(t, func() error {
 		_, err := repo.GetForUser(context.Background(), testUser())
@@ -195,7 +195,7 @@ func TestGetForUser_Timeout_IncrementsMetric(t *testing.T) {
 
 func TestDeleteForUser_ClientCancel_RecordsNoTimeout(t *testing.T) {
 	m := &recordingMetrics{}
-	repo := playback.NewPostgresQueueStateRepository(timingOutQuerier{}, playback.WithQueueStateMetrics(m))
+	repo := playback.NewPostgresQueueStateRepository(timingOutQuerier{}, m)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -209,7 +209,7 @@ func TestDeleteForUser_ClientCancel_RecordsNoTimeout(t *testing.T) {
 }
 
 func TestGetForUser_CorruptStoredRepeatMode_MapsToServerFault(t *testing.T) {
-	repo := playback.NewPostgresQueueStateRepository(rowQuerier{row: corruptRow{repeatMode: "sideways"}})
+	repo := playback.NewPostgresQueueStateRepository(rowQuerier{row: corruptRow{repeatMode: "sideways"}}, playback.NoopQueueStateMetrics())
 
 	_, err := repo.GetForUser(context.Background(), testUser())
 	assertServerFault(t, err)
@@ -217,7 +217,7 @@ func TestGetForUser_CorruptStoredRepeatMode_MapsToServerFault(t *testing.T) {
 
 func TestGetForUser_StoredQueueExceedsMax_MapsToServerFault(t *testing.T) {
 	oversized := make([]string, maxQueueLength+1)
-	repo := playback.NewPostgresQueueStateRepository(rowQuerier{row: corruptRow{repeatMode: "off", trackIds: oversized}})
+	repo := playback.NewPostgresQueueStateRepository(rowQuerier{row: corruptRow{repeatMode: "off", trackIds: oversized}}, playback.NoopQueueStateMetrics())
 
 	_, err := repo.GetForUser(context.Background(), testUser())
 	assertServerFault(t, err)
@@ -233,7 +233,7 @@ func TestSavePathValidationStaysClientFault(t *testing.T) {
 
 func TestUpsert_RejectsInvariantViolatingLiteral(t *testing.T) {
 	q := &capturingQuerier{}
-	repo := playback.NewPostgresQueueStateRepository(q)
+	repo := playback.NewPostgresQueueStateRepository(q, playback.NoopQueueStateMetrics())
 
 	invalid := &playback.QueueState{
 		UserId:       testUser(),
@@ -255,7 +255,7 @@ func TestUpsert_RejectsInvariantViolatingLiteral(t *testing.T) {
 
 func TestUpsert_GuardsAgainstStaleClobber(t *testing.T) {
 	q := &capturingQuerier{}
-	repo := playback.NewPostgresQueueStateRepository(q)
+	repo := playback.NewPostgresQueueStateRepository(q, playback.NoopQueueStateMetrics())
 
 	if err := repo.Upsert(context.Background(), emptyQueueState(testUser())); err != nil {
 		t.Fatalf("Upsert: %v", err)
@@ -284,7 +284,7 @@ func (*argsQuerier) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
 
 func TestUpsert_OrdersSavesOnDatabaseClock(t *testing.T) {
 	q := &argsQuerier{}
-	repo := playback.NewPostgresQueueStateRepository(q)
+	repo := playback.NewPostgresQueueStateRepository(q, playback.NoopQueueStateMetrics())
 	fastClock := emptyQueueState(testUser())
 	fastClock.UpdatedAt = time.Now().UTC().Add(time.Hour)
 
@@ -306,7 +306,7 @@ func TestUpsert_OrdersSavesOnDatabaseClock(t *testing.T) {
 func boundHandlingAge(t *testing.T, state *playback.QueueState) driver.Valuer {
 	t.Helper()
 	q := &argsQuerier{}
-	if err := playback.NewPostgresQueueStateRepository(q).Upsert(context.Background(), state); err != nil {
+	if err := playback.NewPostgresQueueStateRepository(q, playback.NoopQueueStateMetrics()).Upsert(context.Background(), state); err != nil {
 		t.Fatalf("Upsert: %v", err)
 	}
 	age, ok := q.args[8].(driver.Valuer)
@@ -342,10 +342,10 @@ func TestHandlingAge_FutureStampClampsToZero(t *testing.T) {
 	}
 }
 
-func boundSaveGrace(t *testing.T, opts ...func(*playback.PostgresQueueStateRepository)) any {
+func boundSaveGrace(t *testing.T) any {
 	t.Helper()
 	q := &argsQuerier{}
-	if err := playback.NewPostgresQueueStateRepository(q, opts...).Upsert(context.Background(), emptyQueueState(testUser())); err != nil {
+	if err := playback.NewPostgresQueueStateRepository(q, playback.NoopQueueStateMetrics()).Upsert(context.Background(), emptyQueueState(testUser())); err != nil {
 		t.Fatalf("Upsert: %v", err)
 	}
 	return q.args[9]
@@ -353,13 +353,12 @@ func boundSaveGrace(t *testing.T, opts ...func(*playback.PostgresQueueStateRepos
 
 func TestUpsert_ErasureSaveGrace(t *testing.T) {
 	for name, tt := range map[string]struct {
-		opts []func(*playback.PostgresQueueStateRepository)
 		want time.Duration
 	}{
 		"defaults to the op timeout": {want: defaultQueueStateOpTimeout},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if got := boundSaveGrace(t, tt.opts...); got != tt.want.Microseconds() {
+			if got := boundSaveGrace(t); got != tt.want.Microseconds() {
 				t.Errorf("Upsert binds a save grace of %vµs as $10, want %dµs", got, tt.want.Microseconds())
 			}
 		})
@@ -385,14 +384,13 @@ func (q *deadlineQuerier) QueryRow(ctx context.Context, sql string, args ...any)
 
 func TestQueueStateOp_Deadline(t *testing.T) {
 	for name, tt := range map[string]struct {
-		opts []func(*playback.PostgresQueueStateRepository)
 		want time.Duration
 	}{
 		"defaults to the request timeout": {want: defaultQueueStateOpTimeout},
 	} {
 		t.Run(name, func(t *testing.T) {
 			q := &deadlineQuerier{}
-			if err := playback.NewPostgresQueueStateRepository(q, tt.opts...).DeleteForUser(context.Background(), testUser()); err != nil {
+			if err := playback.NewPostgresQueueStateRepository(q, playback.NoopQueueStateMetrics()).DeleteForUser(context.Background(), testUser()); err != nil {
 				t.Fatalf("DeleteForUser: %v", err)
 			}
 			if q.left > tt.want || q.left < tt.want-time.Second {
@@ -415,7 +413,7 @@ func (tagQuerier) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
 }
 
 func TestUpsert_GuardRejectedWriteIsReportedNotSilent(t *testing.T) {
-	repo := playback.NewPostgresQueueStateRepository(tagQuerier{tag: "INSERT 0 0"})
+	repo := playback.NewPostgresQueueStateRepository(tagQuerier{tag: "INSERT 0 0"}, playback.NoopQueueStateMetrics())
 
 	err := repo.Upsert(context.Background(), emptyQueueState(testUser()))
 
@@ -428,7 +426,7 @@ func TestUpsert_GuardRejectedWriteIsReportedNotSilent(t *testing.T) {
 }
 
 func TestUpsert_AppliedWriteReportsSuccess(t *testing.T) {
-	repo := playback.NewPostgresQueueStateRepository(tagQuerier{tag: "INSERT 0 1"})
+	repo := playback.NewPostgresQueueStateRepository(tagQuerier{tag: "INSERT 0 1"}, playback.NoopQueueStateMetrics())
 
 	if err := repo.Upsert(context.Background(), emptyQueueState(testUser())); err != nil {
 		t.Fatalf("a write that affected one row must succeed, got %v", err)
@@ -503,7 +501,7 @@ func (r storeRow) Scan(dest ...any) error {
 }
 
 func TestDeleteForUser_ErasesStoredState(t *testing.T) {
-	repo := playback.NewPostgresQueueStateRepository(newFakeStore())
+	repo := playback.NewPostgresQueueStateRepository(newFakeStore(), playback.NoopQueueStateMetrics())
 	ctx := context.Background()
 	user := testUser()
 
@@ -539,7 +537,7 @@ func TestDeleteForUser_ErasesStoredState(t *testing.T) {
 
 func TestDeleteForUser_IsScopedToUser(t *testing.T) {
 	store := newFakeStore()
-	repo := playback.NewPostgresQueueStateRepository(store)
+	repo := playback.NewPostgresQueueStateRepository(store, playback.NoopQueueStateMetrics())
 	ctx := context.Background()
 	target, other := testUser(), testUser()
 
@@ -562,7 +560,7 @@ func TestDeleteForUser_IsScopedToUser(t *testing.T) {
 }
 
 func TestDeleteForUser_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
-	repo := playback.NewPostgresQueueStateRepository(timingOutQuerier{})
+	repo := playback.NewPostgresQueueStateRepository(timingOutQuerier{}, playback.NoopQueueStateMetrics())
 
 	err := runWithGuard(t, func() error {
 		return repo.DeleteForUser(context.Background(), testUser())
@@ -586,7 +584,7 @@ func runWithGuard(t *testing.T, call func() error) error {
 }
 
 func TestUpsert_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
-	repo := playback.NewPostgresQueueStateRepository(timingOutQuerier{})
+	repo := playback.NewPostgresQueueStateRepository(timingOutQuerier{}, playback.NoopQueueStateMetrics())
 
 	err := runWithGuard(t, func() error {
 		return repo.Upsert(context.Background(), emptyQueueState(testUser()))
@@ -637,7 +635,7 @@ func testPosition(t *testing.T) *playback.QueuePosition {
 
 func TestUpdatePosition_BindsNoTrackList(t *testing.T) {
 	q := &positionQuerier{applied: true, matched: true}
-	repo := playback.NewPostgresQueueStateRepository(q)
+	repo := playback.NewPostgresQueueStateRepository(q, playback.NoopQueueStateMetrics())
 
 	if err := repo.UpdatePosition(context.Background(), testPosition(t)); err != nil {
 		t.Fatalf("UpdatePosition: %v", err)
@@ -678,7 +676,7 @@ func TestUpdatePosition_ClassifiesUnappliedSaves(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := playback.NewPostgresQueueStateRepository(&positionQuerier{applied: tt.applied, matched: tt.matched})
+			repo := playback.NewPostgresQueueStateRepository(&positionQuerier{applied: tt.applied, matched: tt.matched}, playback.NoopQueueStateMetrics())
 
 			err := repo.UpdatePosition(context.Background(), testPosition(t))
 
@@ -700,7 +698,7 @@ func TestUpdatePosition_ClassifiesUnappliedSaves(t *testing.T) {
 
 func TestUpdatePosition_RejectsInvariantViolatingLiteral(t *testing.T) {
 	q := &positionQuerier{applied: true, matched: true}
-	repo := playback.NewPostgresQueueStateRepository(q)
+	repo := playback.NewPostgresQueueStateRepository(q, playback.NoopQueueStateMetrics())
 
 	err := repo.UpdatePosition(context.Background(), &playback.QueuePosition{UserId: testUser(), CurrentIdx: -1, CurrentTrackId: "t1"})
 
@@ -714,7 +712,7 @@ func TestUpdatePosition_RejectsInvariantViolatingLiteral(t *testing.T) {
 
 func TestUpdatePosition_Timeout_IncrementsMetric(t *testing.T) {
 	m := &recordingMetrics{}
-	repo := playback.NewPostgresQueueStateRepository(timingOutQuerier{}, playback.WithQueueStateMetrics(m))
+	repo := playback.NewPostgresQueueStateRepository(timingOutQuerier{}, m)
 
 	err := runWithGuard(t, func() error {
 		return repo.UpdatePosition(context.Background(), testPosition(t))
@@ -728,7 +726,7 @@ func TestUpdatePosition_Timeout_IncrementsMetric(t *testing.T) {
 }
 
 func TestGetForUser_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
-	repo := playback.NewPostgresQueueStateRepository(timingOutQuerier{})
+	repo := playback.NewPostgresQueueStateRepository(timingOutQuerier{}, playback.NoopQueueStateMetrics())
 
 	err := runWithGuard(t, func() error {
 		_, err := repo.GetForUser(context.Background(), testUser())
@@ -814,7 +812,7 @@ func TestQueueStateOp_UnclassifiedFailure_NamesTheAffectedUser(t *testing.T) {
 		t.Run(tt.op, func(t *testing.T) {
 			logs := captureLogs(t)
 			dbDown := errors.New("connection refused")
-			repo := playback.NewPostgresQueueStateRepository(faultingQuerier{cause: dbDown})
+			repo := playback.NewPostgresQueueStateRepository(faultingQuerier{cause: dbDown}, playback.NoopQueueStateMetrics())
 			user := testUser()
 
 			if err := tt.call(t, repo, user); !errors.Is(err, dbDown) {
@@ -841,7 +839,7 @@ func TestQueueStateOp_ClassifiedOutcome_EmitsNoFaultLine(t *testing.T) {
 		act     func(*testing.T)
 	}{
 		{outcome: "op timeout", act: func(t *testing.T) {
-			repo := playback.NewPostgresQueueStateRepository(timingOutQuerier{})
+			repo := playback.NewPostgresQueueStateRepository(timingOutQuerier{}, playback.NoopQueueStateMetrics())
 			err := runWithGuard(t, func() error {
 				return repo.Upsert(context.Background(), emptyQueueState(testUser()))
 			})
@@ -850,7 +848,7 @@ func TestQueueStateOp_ClassifiedOutcome_EmitsNoFaultLine(t *testing.T) {
 			}
 		}},
 		{outcome: "client cancel", act: func(t *testing.T) {
-			repo := playback.NewPostgresQueueStateRepository(timingOutQuerier{})
+			repo := playback.NewPostgresQueueStateRepository(timingOutQuerier{}, playback.NoopQueueStateMetrics())
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
 			if err := repo.DeleteForUser(ctx, testUser()); !errors.Is(err, context.Canceled) {
@@ -858,7 +856,7 @@ func TestQueueStateOp_ClassifiedOutcome_EmitsNoFaultLine(t *testing.T) {
 			}
 		}},
 		{outcome: "no stored queue", act: func(t *testing.T) {
-			repo := playback.NewPostgresQueueStateRepository(newFakeStore())
+			repo := playback.NewPostgresQueueStateRepository(newFakeStore(), playback.NoopQueueStateMetrics())
 			state, err := repo.GetForUser(context.Background(), testUser())
 			if state != nil || !errors.Is(err, playback.ErrQueueStateNotFound) {
 				t.Fatalf("precondition: an absent queue reads as ErrQueueStateNotFound, got (%v, %v)", state, err)
@@ -880,7 +878,7 @@ func TestQueueStateOp_ClassifiedOutcome_EmitsNoFaultLine(t *testing.T) {
 
 func TestUpsert_FailureLogNamesTheUserNotTheQueue(t *testing.T) {
 	logs := captureLogs(t)
-	repo := playback.NewPostgresQueueStateRepository(faultingQuerier{cause: errors.New("connection refused")})
+	repo := playback.NewPostgresQueueStateRepository(faultingQuerier{cause: errors.New("connection refused")}, playback.NoopQueueStateMetrics())
 	const privateSourceId = "search:mac demarco"
 	const privateTrackId = "3b9c77e4-5d1a-4f0e-9c2b-7a6e1f4d8c30"
 	state, err := playback.NewQueueState(playback.QueueStateInput{
@@ -919,7 +917,7 @@ func (f erroringQuerier) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row
 }
 
 func failingRepo(err error) playback.QueueStateRepository {
-	return playback.NewPostgresQueueStateRepository(erroringQuerier{err: err})
+	return playback.NewPostgresQueueStateRepository(erroringQuerier{err: err}, playback.NoopQueueStateMetrics())
 }
 
 func TestDeleteForUser_DeadlineExceeded_IsRetryable503(t *testing.T) {
@@ -986,7 +984,7 @@ func (f failingStore) QueryRow(context.Context, string, ...any) pgx.Row { return
 
 func TestRunOp_TransientFault_CountsTransientNotTimeout(t *testing.T) {
 	m := &recordingMetrics{}
-	repo := playback.NewPostgresQueueStateRepository(failingStore{err: &pgconn.PgError{Code: "57P01"}}, playback.WithQueueStateMetrics(m))
+	repo := playback.NewPostgresQueueStateRepository(failingStore{err: &pgconn.PgError{Code: "57P01"}}, m)
 
 	if err := repo.Upsert(context.Background(), emptyQueueState(testUser())); !errors.Is(err, playback.ErrQueueStateUnavailable) {
 		t.Fatalf("Upsert = %v, want ErrQueueStateUnavailable", err)
@@ -1003,7 +1001,7 @@ func TestRunOp_ClientCancelAndNoRows_MoveNoFailureCounter(t *testing.T) {
 	for name, cause := range map[string]error{"client cancel": context.Canceled, "no rows": pgx.ErrNoRows} {
 		t.Run(name, func(t *testing.T) {
 			m := &recordingMetrics{}
-			repo := playback.NewPostgresQueueStateRepository(failingStore{err: cause}, playback.WithQueueStateMetrics(m))
+			repo := playback.NewPostgresQueueStateRepository(failingStore{err: cause}, m)
 
 			_, _ = repo.GetForUser(context.Background(), testUser())
 
@@ -1016,15 +1014,25 @@ func TestRunOp_ClientCancelAndNoRows_MoveNoFailureCounter(t *testing.T) {
 
 func TestStaleAndMismatchedSaves_CountStaleWrites(t *testing.T) {
 	m := &recordingMetrics{}
-	stale := playback.NewPostgresQueueStateRepository(tagQuerier{tag: "INSERT 0 0"}, playback.WithQueueStateMetrics(m))
+	stale := playback.NewPostgresQueueStateRepository(tagQuerier{tag: "INSERT 0 0"}, m)
 	if err := stale.Upsert(context.Background(), emptyQueueState(testUser())); !errors.Is(err, playback.ErrStaleQueueWrite) {
 		t.Fatalf("Upsert = %v, want ErrStaleQueueWrite", err)
 	}
-	mismatch := playback.NewPostgresQueueStateRepository(&positionQuerier{}, playback.WithQueueStateMetrics(m))
+	mismatch := playback.NewPostgresQueueStateRepository(&positionQuerier{}, m)
 	if err := mismatch.UpdatePosition(context.Background(), testPosition(t)); !errors.Is(err, playback.ErrQueuePositionMismatch) {
 		t.Fatalf("UpdatePosition = %v, want ErrQueuePositionMismatch", err)
 	}
 	if m.staleWrites != 2 {
 		t.Fatalf("stale writes = %d, want 2", m.staleWrites)
 	}
+}
+
+func TestNewPostgresQueueStateRepository_RefusesMissingMetrics(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("construction without metrics succeeded, want a panic at construction")
+		}
+	}()
+
+	playback.NewPostgresQueueStateRepository(newFakeStore(), nil)
 }
