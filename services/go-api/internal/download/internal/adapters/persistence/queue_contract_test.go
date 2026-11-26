@@ -29,6 +29,6 @@ func TestPostgresJobQueue_Contract(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	acquisitiontest.JobQueueContract(t, func(*testing.T) acquisitiontest.JobQueueUnderTest {
-		return contractPgxJobQueue{PostgresJobQueue: download.NewPostgresJobQueue(pool), pool: pool}
+		return contractPgxJobQueue{PostgresJobQueue: download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool}), pool: pool}
 	})
 }

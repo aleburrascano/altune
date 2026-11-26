@@ -18,11 +18,18 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const trackColumns = `id, user_id, title, artist, album, duration_seconds,
+const trackBaseColumns = `id, user_id, title, artist, album, duration_seconds,
 	added_at, artwork_url, acquisition_status, dedup_key,
-	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url, rejected_source_keys, audio_version, acquisition_started_at, acquisition_confidence, acquisition_evidence, catalog_duration_seconds, catalog_mbid, catalog_explicit, catalog_sources, audio_length_mismatch, version, acquisition_attempts`
+	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url, rejected_source_keys, audio_version, acquisition_started_at, acquisition_confidence, acquisition_evidence, catalog_duration_seconds, catalog_mbid, catalog_explicit, catalog_sources, audio_length_mismatch, version`
 
-var trackColumnsPrefixed = prefixColumns(trackColumns, "t.")
+var (
+	trackColumns         = trackBaseColumns + ", " + fenceColumn("tracks")
+	trackColumnsPrefixed = prefixColumns(trackBaseColumns, "t.") + ", " + fenceColumn("t")
+)
+
+func fenceColumn(alias string) string {
+	return "COALESCE((SELECT j.attempts FROM acquisition_jobs j WHERE j.track_id = " + alias + ".id), 0)"
+}
 
 func prefixColumns(columns, prefix string) string {
 	parts := strings.Split(columns, ",")
@@ -114,9 +121,8 @@ const insertTrackSQL = `INSERT INTO tracks (
 		added_at, artwork_url, acquisition_status, dedup_key,
 		year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url,
 		rejected_source_keys, audio_version, acquisition_started_at, idempotency_key,
-		acquisition_confidence, acquisition_evidence, catalog_duration_seconds, catalog_mbid, catalog_explicit, catalog_sources, acquisition_available_at
-	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,
-		CASE WHEN $9::text = 'pending' THEN now() END)
+		acquisition_confidence, acquisition_evidence, catalog_duration_seconds, catalog_mbid, catalog_explicit, catalog_sources
+	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
 	ON CONFLICT DO NOTHING
 	RETURNING id`
 
@@ -196,7 +202,7 @@ func (r *PostgresTrackRepository) ListForUser(ctx context.Context, userId shared
 	return tracks, total, classifyDBError(err)
 }
 
-const listTracksForUserSQL = `SELECT ` + trackColumns + `
+var listTracksForUserSQL = `SELECT ` + trackColumns + `
 	FROM tracks WHERE user_id = $1
 	ORDER BY added_at DESC, id DESC
 	LIMIT $2 OFFSET $3`
@@ -312,6 +318,20 @@ func (r *PostgresTrackRepository) classifyFailedCAS(ctx context.Context, track *
 	}
 	return fmt.Errorf("%w: track %s expected version %d, found %d",
 		ports.ErrTrackVersionConflict, track.ID.String(), expectedVersion, currentVersion)
+}
+
+func (r *PostgresTrackRepository) Requeue(ctx context.Context, id domain.TrackId) error {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
+	if _, err := r.pool.Exec(ctx,
+		`UPDATE tracks SET acquisition_status = 'pending', failure_reason = NULL, acquisition_started_at = now(), version = version + 1
+		 WHERE id = $1 AND acquisition_status = 'failed'`,
+		id.UUID(),
+	); err != nil {
+		return classifyDBError(fmt.Errorf("requeue track %s: %w", id.String(), err))
+	}
+	return nil
 }
 
 func (r *PostgresTrackRepository) SetTrackNumber(ctx context.Context, id domain.TrackId, userId sharedids.UserId, trackNumber int) (bool, error) {

@@ -82,6 +82,10 @@ type refUsageLedger struct {
 	usage func(call int) (bool, error)
 }
 
+func (l *refUsageLedger) Requeue(context.Context, ids.TrackId) error {
+	return nil
+}
+
 func (l *refUsageLedger) AudioRefInUse(ctx context.Context, audioRef string, exclude ids.TrackId) (bool, error) {
 	l.mu.Lock()
 	l.calls++

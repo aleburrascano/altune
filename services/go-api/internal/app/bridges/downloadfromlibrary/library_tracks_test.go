@@ -73,6 +73,10 @@ func (s *fakeStore) Update(_ context.Context, track *domain.Track, expectedVersi
 	return nil
 }
 
+func (s *fakeStore) Requeue(context.Context, domain.TrackId) error {
+	return nil
+}
+
 func (s *fakeStore) AudioRefInUse(context.Context, string, domain.TrackId) (bool, error) {
 	return false, nil
 }

@@ -20,6 +20,7 @@ type TrackStore interface {
 	GetByID(ctx context.Context, id domain.TrackId, userId ids.UserId) (*domain.Track, error)
 	Update(ctx context.Context, track *domain.Track, expectedVersion int) error
 	AudioRefInUse(ctx context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error)
+	Requeue(ctx context.Context, id domain.TrackId) error
 }
 
 type LibraryTracks struct {
@@ -57,6 +58,10 @@ func translate(err error) error {
 
 func (l *LibraryTracks) AudioRefInUse(ctx context.Context, audioRef string, excludeTrackID ids.TrackId) (bool, error) {
 	return l.store.AudioRefInUse(ctx, audioRef, excludeTrackID)
+}
+
+func (l *LibraryTracks) Requeue(ctx context.Context, id ids.TrackId) error {
+	return l.store.Requeue(ctx, id)
 }
 
 func (l *LibraryTracks) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*download.TrackSnapshot, error) {

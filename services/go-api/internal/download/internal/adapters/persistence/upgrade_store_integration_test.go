@@ -387,7 +387,7 @@ func TestPostgresUpgradeStore_NoCandidatesWhileTheUpgradeQueueIsFull(t *testing.
 	store := download.NewPostgresUpgradeStore(pool)
 	queued := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("F"), sourceURL: sourceURL("queued")})
 	waiting := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("waiting")})
-	if err := download.NewPostgresJobQueue(pool).Enqueue(context.Background(), queued, ports.JobKindUpgrade, 0); err != nil {
+	if err := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool}).Enqueue(context.Background(), queued, ports.JobKindUpgrade, 0); err != nil {
 		t.Fatalf("Enqueue: %v", err)
 	}
 	full := selectionOf(10)

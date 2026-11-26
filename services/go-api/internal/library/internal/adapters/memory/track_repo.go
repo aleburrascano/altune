@@ -293,6 +293,17 @@ func (r *TrackRepo) Update(_ context.Context, track *domain.Track, expectedVersi
 	return nil
 }
 
+func (r *TrackRepo) Requeue(_ context.Context, id domain.TrackId) error {
+	for _, t := range r.Tracks {
+		if t.ID == id && t.DownloadStatus == domain.AcquisitionFailed {
+			t.DownloadStatus = domain.AcquisitionPending
+			t.FailureReason = nil
+			t.Version++
+		}
+	}
+	return nil
+}
+
 func (r *TrackRepo) SetTrackNumber(_ context.Context, id domain.TrackId, userId sharedids.UserId, n int) (bool, error) {
 	t, ok := r.Tracks[id.String()]
 	if !ok || t.UserId != userId || t.TrackNumber != nil {

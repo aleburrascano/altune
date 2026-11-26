@@ -56,6 +56,10 @@ func (r *fixtureTrackRepo) Update(_ context.Context, track *library.Track, _ int
 	return nil
 }
 
+func (r *fixtureTrackRepo) Requeue(context.Context, library.TrackId) error {
+	return nil
+}
+
 func (r *fixtureTrackRepo) AudioRefInUse(_ context.Context, _ string, _ library.TrackId) (bool, error) {
 	return false, nil
 }

@@ -1,6 +1,7 @@
 package downloadfromlibrary_test
 
 import (
+	"altune/go-api/internal/app/bridges/downloadfromlibrary"
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/shared/dbtest"
@@ -8,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -88,7 +90,7 @@ func acquisitionStatus(t *testing.T, pool *pgxpool.Pool, trackID ids.TrackId) st
 func TestPostgresJobQueue_EnqueueMakesAStaleCatalogWriteConflict(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := download.NewPostgresJobQueue(pool)
+	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 
@@ -111,10 +113,10 @@ func TestPostgresJobQueue_EnqueueMakesAStaleCatalogWriteConflict(t *testing.T) {
 	}
 }
 
-func TestPostgresJobQueue_ClaimMakesAStaleCatalogWriteConflict(t *testing.T) {
+func TestPostgresJobQueue_ClaimDoesNotMakeACatalogWriteStale(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := download.NewPostgresJobQueue(pool)
+	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 
@@ -128,16 +130,15 @@ func TestPostgresJobQueue_ClaimMakesAStaleCatalogWriteConflict(t *testing.T) {
 		t.Fatalf("Claim = %v, want a job", err)
 	}
 
-	err = repo.Update(ctx, loaded, loaded.Version)
-	if !errors.Is(err, library.ErrTrackVersionConflict) {
-		t.Fatalf("stale Update = %v, want ErrTrackVersionConflict", err)
+	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+		t.Fatalf("Update loaded before a claim = %v, want nil (a claim writes only the job row)", err)
 	}
 }
 
 func TestPostgresJobQueue_RetryBetweenAudioMissingLoadAndWriteLeavesTheTrackPendingAndClaimable(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := download.NewPostgresJobQueue(pool)
+	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 
@@ -170,10 +171,10 @@ func TestPostgresJobQueue_RetryBetweenAudioMissingLoadAndWriteLeavesTheTrackPend
 	}
 }
 
-func TestPostgresJobQueue_ReplaceEnqueueMakesAStaleCatalogWriteConflict(t *testing.T) {
+func TestPostgresJobQueue_ReplaceEnqueueDoesNotMakeACatalogWriteStale(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := download.NewPostgresJobQueue(pool)
+	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 
@@ -190,18 +191,18 @@ func TestPostgresJobQueue_ReplaceEnqueueMakesAStaleCatalogWriteConflict(t *testi
 		t.Fatalf("Enqueue replace = %v, want nil", err)
 	}
 
-	if err := repo.Update(ctx, loaded, loaded.Version); !errors.Is(err, library.ErrTrackVersionConflict) {
-		t.Fatalf("stale Update after a replace enqueue = %v, want ErrTrackVersionConflict", err)
+	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+		t.Fatalf("Update after a replace enqueue = %v, want nil (a replace enqueue writes only the job row)", err)
 	}
-	if got := acquisitionStatus(t, pool, track.ID); got != "ready" {
-		t.Errorf("status = %q, want ready", got)
+	if got := acquisitionStatus(t, pool, track.ID); got != "failed" {
+		t.Errorf("status = %q, want failed (the catalog write owns status)", got)
 	}
 }
 
-func TestPostgresJobQueue_SecondEnqueueMakesAWriterLoadedBetweenTheTwoConflict(t *testing.T) {
+func TestPostgresJobQueue_SecondEnqueueDoesNotMakeAWriterLoadedBetweenTheTwoStale(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := download.NewPostgresJobQueue(pool)
+	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 
@@ -217,15 +218,15 @@ func TestPostgresJobQueue_SecondEnqueueMakesAWriterLoadedBetweenTheTwoConflict(t
 		t.Fatalf("second Enqueue = %v", err)
 	}
 
-	if err := repo.Update(ctx, loaded, loaded.Version); !errors.Is(err, library.ErrTrackVersionConflict) {
-		t.Fatalf("Update loaded between two enqueues = %v, want ErrTrackVersionConflict", err)
+	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+		t.Fatalf("Update loaded between two enqueues = %v, want nil", err)
 	}
 }
 
-func TestPostgresJobQueue_ReclaimOfALapsedLeaseMakesAStaleCatalogWriteConflict(t *testing.T) {
+func TestPostgresJobQueue_ReclaimOfALapsedLeaseDoesNotMakeACatalogWriteStale(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := download.NewPostgresJobQueue(pool)
+	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 
@@ -243,15 +244,15 @@ func TestPostgresJobQueue_ReclaimOfALapsedLeaseMakesAStaleCatalogWriteConflict(t
 		t.Fatalf("reclaim = %v, want the lapsed job", err)
 	}
 
-	if err := repo.Update(ctx, loaded, loaded.Version); !errors.Is(err, library.ErrTrackVersionConflict) {
-		t.Fatalf("Update loaded before the reclaim = %v, want ErrTrackVersionConflict", err)
+	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+		t.Fatalf("Update loaded before the reclaim = %v, want nil", err)
 	}
 }
 
-func TestPostgresJobQueue_ClaimOfAReplaceJobMakesAStaleCatalogWriteConflict(t *testing.T) {
+func TestPostgresJobQueue_ClaimOfAReplaceJobDoesNotMakeACatalogWriteStale(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := download.NewPostgresJobQueue(pool)
+	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 
@@ -268,15 +269,15 @@ func TestPostgresJobQueue_ClaimOfAReplaceJobMakesAStaleCatalogWriteConflict(t *t
 		t.Fatalf("Claim = %v, want the replace job", err)
 	}
 
-	if err := repo.Update(ctx, loaded, loaded.Version); !errors.Is(err, library.ErrTrackVersionConflict) {
-		t.Fatalf("Update loaded before the replace claim = %v, want ErrTrackVersionConflict", err)
+	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+		t.Fatalf("Update loaded before the replace claim = %v, want nil", err)
 	}
 }
 
 func TestPostgresJobQueue_CatalogWriteThatRereadsAfterEnqueueAndClaimLands(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := download.NewPostgresJobQueue(pool)
+	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 
@@ -313,7 +314,7 @@ func TestPostgresJobQueue_CatalogWriteThatRereadsAfterEnqueueAndClaimLands(t *te
 func TestPostgresJobQueue_EnqueueRacingAStaleCatalogWriteAlwaysEndsPending(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := download.NewPostgresJobQueue(pool)
+	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 
@@ -353,19 +354,26 @@ func TestPostgresJobQueue_EnqueueRacingAStaleCatalogWriteAlwaysEndsPending(t *te
 	}
 }
 
-func TestPostgresJobQueue_ClaimRacingAStaleCatalogWriteKeepsTheStartTime(t *testing.T) {
+func TestPostgresJobQueue_ClaimRacingACatalogWriteCannotTouchTheStartTime(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := download.NewPostgresJobQueue(pool)
+	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 
 	for i := 0; i < 40; i++ {
 		track := insertPendingTrack(t, pool, time.Now().Add(-time.Minute))
+		if _, err := pool.Exec(ctx, `UPDATE tracks SET acquisition_started_at = now() - interval '2 minutes' WHERE id = $1`, track.ID.UUID()); err != nil {
+			t.Fatalf("set start time: %v", err)
+		}
 		loaded, err := repo.GetByID(ctx, track.ID, track.UserId)
 		if err != nil {
 			t.Fatalf("GetByID = %v", err)
 		}
+		if loaded.AcquisitionStartedAt == nil {
+			t.Fatalf("round %d: a pending track has no start time", i)
+		}
+		want := *loaded.AcquisitionStartedAt
 
 		var wg sync.WaitGroup
 		var claimErr, updateErr error
@@ -376,31 +384,102 @@ func TestPostgresJobQueue_ClaimRacingAStaleCatalogWriteKeepsTheStartTime(t *test
 		close(start)
 		wg.Wait()
 
-		if errors.Is(claimErr, download.ErrNoJobAvailable) {
-			_, _ = pool.Exec(ctx, `DELETE FROM tracks WHERE id = $1`, track.ID.UUID())
-			continue
-		}
-		if claimErr != nil {
+		if claimErr != nil && !errors.Is(claimErr, download.ErrNoJobAvailable) {
 			t.Fatalf("round %d: Claim = %v, want a job or ErrNoJobAvailable", i, claimErr)
 		}
-		if updateErr != nil && !errors.Is(updateErr, library.ErrTrackVersionConflict) {
-			t.Fatalf("round %d: Update = %v, want nil or ErrTrackVersionConflict", i, updateErr)
+		if updateErr != nil {
+			t.Fatalf("round %d: Update = %v, want nil (a claim writes only the job row)", i, updateErr)
 		}
 		reread, err := repo.GetByID(ctx, track.ID, track.UserId)
 		if err != nil {
 			t.Fatalf("round %d: re-read = %v", i, err)
 		}
-		if reread.AcquisitionStartedAt == nil {
-			t.Fatalf("round %d: AcquisitionStartedAt = nil (update err %v), want the claim's start time", i, updateErr)
+		if reread.AcquisitionStartedAt == nil || !reread.AcquisitionStartedAt.Equal(want) {
+			t.Fatalf("round %d: AcquisitionStartedAt = %v, want %v untouched by the claim", i, reread.AcquisitionStartedAt, want)
 		}
 		_, _ = pool.Exec(ctx, `DELETE FROM tracks WHERE id = $1`, track.ID.UUID())
+	}
+}
+
+type flakyRequeuer struct {
+	inner download.TrackLedgerPort
+	fail  atomic.Bool
+}
+
+func (f *flakyRequeuer) Requeue(ctx context.Context, id ids.TrackId) error {
+	if f.fail.Load() {
+		return errors.New("ledger unavailable")
+	}
+	return f.inner.Requeue(ctx, id)
+}
+
+func jobRowExists(t *testing.T, pool *pgxpool.Pool, id ids.TrackId) bool {
+	t.Helper()
+	var n int
+	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM acquisition_jobs WHERE track_id = $1`, id.UUID()).Scan(&n); err != nil {
+		t.Fatalf("count job rows: %v", err)
+	}
+	return n == 1
+}
+
+func TestPostgresJobQueue_EnqueueWhoseStatusFlipFailsStillQueuesTheJobAndTheClaimConverges(t *testing.T) {
+	dbtest.RequireIntegration(t)
+	pool := newPool(t)
+	ledger := download.TrackLedgerPort(downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now))
+	requeuer := &flakyRequeuer{inner: ledger}
+	queue := download.MustNewPostgresJobQueue(pool, requeuer)
+	ctx := context.Background()
+
+	snap := insertFailedTrack(t, pool)
+	requeuer.fail.Store(true)
+	if err := queue.Enqueue(ctx, snap.ID, download.JobKindAcquire, 0); err != nil {
+		t.Fatalf("Enqueue with a failing status flip = %v, want nil (the job is durable)", err)
+	}
+	if !jobRowExists(t, pool, snap.ID) {
+		t.Fatal("no job row after Enqueue, want the job queued")
+	}
+	if got := acquisitionStatus(t, pool, snap.ID); got != "failed" {
+		t.Fatalf("status = %q, want failed until a claim converges it", got)
+	}
+
+	requeuer.fail.Store(false)
+	if _, err := queue.Claim(ctx, time.Minute); err != nil {
+		t.Fatalf("Claim = %v, want the queued job", err)
+	}
+	if got := acquisitionStatus(t, pool, snap.ID); got != "pending" {
+		t.Errorf("status after the claim = %q, want pending", got)
+	}
+}
+
+func TestPostgresJobQueue_ClaimWhoseStatusFlipFailsReleasesTheJob(t *testing.T) {
+	dbtest.RequireIntegration(t)
+	pool := newPool(t)
+	ledger := download.TrackLedgerPort(downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now))
+	requeuer := &flakyRequeuer{inner: ledger}
+	queue := download.MustNewPostgresJobQueue(pool, requeuer)
+	ctx := context.Background()
+
+	snap := insertFailedTrack(t, pool)
+	requeuer.fail.Store(true)
+	if err := queue.Enqueue(ctx, snap.ID, download.JobKindAcquire, 0); err != nil {
+		t.Fatalf("Enqueue = %v", err)
+	}
+	if _, err := queue.Claim(ctx, time.Minute); err == nil || errors.Is(err, download.ErrNoJobAvailable) {
+		t.Fatalf("Claim with a failing status flip = %v, want the flip error", err)
+	}
+	var leased bool
+	if err := pool.QueryRow(ctx, `SELECT lease_until IS NOT NULL FROM acquisition_jobs WHERE track_id = $1`, snap.ID.UUID()).Scan(&leased); err != nil {
+		t.Fatalf("read lease: %v", err)
+	}
+	if leased {
+		t.Error("the job is still leased after the failed claim, want it released")
 	}
 }
 
 func TestPostgresJobQueue_HeartbeatReleaseAndSettleLeaveACatalogWriteLoadedDuringTheRunValid(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := download.NewPostgresJobQueue(pool)
+	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 
@@ -431,4 +510,8 @@ func TestPostgresJobQueue_HeartbeatReleaseAndSettleLeaveACatalogWriteLoadedDurin
 			}
 		})
 	}
+}
+
+func newQueue(pool *pgxpool.Pool) *download.PostgresJobQueue {
+	return download.MustNewPostgresJobQueue(pool, downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now))
 }
