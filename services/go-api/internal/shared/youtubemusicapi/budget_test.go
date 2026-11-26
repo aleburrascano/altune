@@ -144,7 +144,7 @@ func TestToolClient_PacesThroughTheSharedBucket(t *testing.T) {
 	env := func(key string) string {
 		return map[string]string{redisURLVar: "redis://" + server.Addr(), minIntervalVar: "300ms"}[key]
 	}
-	client, settings, err := youtubemusicapi.ToolClient(context.Background(), env, time.Second)
+	client, settings, err := youtubemusicapi.ToolClient(context.Background(), env, 30*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
