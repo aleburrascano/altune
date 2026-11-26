@@ -1070,6 +1070,7 @@ func trackLength(t *testing.T, seconds float64) tracklength.TrackLength {
 }
 
 type settleCall struct {
+	fence download.ClaimNumber
 	keys  []string
 	reset bool
 }
@@ -1084,8 +1085,8 @@ func (f *fakeUpgradeState) State(context.Context, ids.TrackId) (download.Upgrade
 	return f.snapshot, f.err
 }
 
-func (f *fakeUpgradeState) SettleAcquisition(_ context.Context, _ ids.TrackId, keys []string, reset bool) error {
-	f.settled = append(f.settled, settleCall{keys: keys, reset: reset})
+func (f *fakeUpgradeState) SettleAcquisition(_ context.Context, _ ids.TrackId, fence download.ClaimNumber, keys []string, reset bool) error {
+	f.settled = append(f.settled, settleCall{fence: fence, keys: keys, reset: reset})
 	return f.err
 }
 
@@ -1166,16 +1167,22 @@ func TestCompleteThatFailsAfterTheStateWriteIsRetriedWithTheSameStateWrite(t *te
 	}
 }
 
-func TestCompleteByALapsedOwnerWritesNoUpgradeState(t *testing.T) {
+func TestCompleteHandsTheClaimFenceToTheStateWriteAndReturnsALostLease(t *testing.T) {
 	track, userId := newTrack(t, 1)
-	track.AcquisitionFence = 5
-	state := &fakeUpgradeState{}
+	store := newFakeStore(track)
+	state := &fakeUpgradeState{err: download.ErrLeaseLost}
 
-	err := downloadfromlibrary.NewLibraryTracks(newFakeStore(track), time.Now, state).
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now, state).
 		Complete(context.Background(), track.ID, userId, 4, download.Completion{AudioRef: "ref-1", RejectedSourceKeys: []string{"bad"}})
 
-	if !errors.Is(err, download.ErrLeaseLost) || len(state.settled) != 0 {
-		t.Errorf("Complete = %v, settled = %+v, want ErrLeaseLost and no state write", err, state.settled)
+	if !errors.Is(err, download.ErrLeaseLost) {
+		t.Fatalf("Complete = %v, want ErrLeaseLost from the fenced state write", err)
+	}
+	if len(state.settled) != 1 || state.settled[0].fence != 4 {
+		t.Errorf("settled = %+v, want one write carrying fence 4", state.settled)
+	}
+	if got := storedTrack(t, store, track.ID); got.DownloadStatus != domain.AcquisitionPending {
+		t.Errorf("status = %v, want pending because Complete never ran", got.DownloadStatus)
 	}
 }
 
@@ -1225,5 +1232,21 @@ func TestNewLibraryTracksRefusesAMissingUpgradeStateOrClock(t *testing.T) {
 			}()
 			build()
 		})
+	}
+}
+
+func TestCompleteByAnotherOwnerWritesNoUpgradeState(t *testing.T) {
+	track, _ := newTrack(t, 1)
+	store := newFakeStore(track)
+	state := &fakeUpgradeState{}
+
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now, state).
+		Complete(context.Background(), track.ID, ids.NewUserId(uuid.New()), 1, download.Completion{AudioRef: "ref-1", RejectedSourceKeys: []string{"bad"}})
+
+	if !errors.Is(err, download.ErrTrackNotFound) {
+		t.Fatalf("Complete = %v, want ErrTrackNotFound", err)
+	}
+	if len(state.settled) != 0 {
+		t.Errorf("settled = %+v, want no state write for another owner's track", state.settled)
 	}
 }

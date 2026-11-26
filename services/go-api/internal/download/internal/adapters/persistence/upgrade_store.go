@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/ids"
@@ -204,6 +205,20 @@ func (s *PostgresUpgradeStore) State(ctx context.Context, trackID ids.TrackId) (
 
 const lockTrackSQL = `SELECT 1 FROM tracks WHERE id = $1 FOR NO KEY UPDATE`
 
+const readJobFenceSQL = `SELECT attempts FROM acquisition_jobs WHERE track_id = $1 FOR SHARE`
+
+func checkJobFence(ctx context.Context, tx pgx.Tx, trackID ids.TrackId, fence ports.ClaimNumber) error {
+	var current int
+	err := tx.QueryRow(ctx, readJobFenceSQL, trackID.UUID()).Scan(&current)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("read job fence: %w", err)
+	}
+	if fence > 0 && current > 0 && current != int(fence) {
+		return fmt.Errorf("track %s claimed by attempt %d, caller holds %d: %w", trackID, current, fence, acqdomain.ErrLeaseLost)
+	}
+	return nil
+}
+
 const ensureUpgradeStateSQL = `
 INSERT INTO acquisition_upgrade_state (track_id) SELECT id FROM tracks WHERE id = $1 ON CONFLICT (track_id) DO NOTHING`
 
@@ -215,13 +230,16 @@ SET rejected_source_keys = $2,
 	evidence = CASE WHEN $3::boolean THEN '{}'::jsonb ELSE evidence END
 WHERE track_id = $1`
 
-func (s *PostgresUpgradeStore) SettleAcquisition(ctx context.Context, trackID ids.TrackId, rejectedSourceKeys []string, resetEvidence bool) error {
+func (s *PostgresUpgradeStore) SettleAcquisition(ctx context.Context, trackID ids.TrackId, fence ports.ClaimNumber, rejectedSourceKeys []string, resetEvidence bool) error {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
 	err := database.InTx(ctx, s.pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, lockTrackSQL, trackID.UUID()); err != nil {
 			return fmt.Errorf("lock track: %w", err)
+		}
+		if err := checkJobFence(ctx, tx, trackID, fence); err != nil {
+			return err
 		}
 		if _, err := tx.Exec(ctx, ensureUpgradeStateSQL, trackID.UUID()); err != nil {
 			return fmt.Errorf("ensure upgrade state: %w", err)

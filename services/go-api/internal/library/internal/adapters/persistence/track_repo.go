@@ -290,27 +290,62 @@ func (r *PostgresTrackRepository) UpdateFenced(ctx context.Context, track *domai
 	return r.update(ctx, track, expectedVersion, fence)
 }
 
-const fenceClause = ` AND ($%d::int = 0 OR acquisition_attempts = 0 OR acquisition_attempts = $%d)`
+type rowQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
 
 func (r *PostgresTrackRepository) update(ctx context.Context, track *domain.Track, expectedVersion, fence int) error {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
-	set, args := updateStatement(track, expectedVersion)
-	where := `id = $1 AND user_id = $2 AND version = $15`
-	if fence > 0 {
-		args = append(args, fence)
-		where += fmt.Sprintf(fenceClause, len(args), len(args))
+	if fence == 0 {
+		return r.updateRow(ctx, r.pool, track, expectedVersion)
 	}
+	return classifyDBError(database.InTx(ctx, r.pool, func(tx pgx.Tx) error {
+		if err := checkFence(ctx, tx, track, fence); err != nil {
+			return err
+		}
+		return r.updateRow(ctx, tx, track, expectedVersion)
+	}))
+}
+
+const (
+	lockTrackForFenceSQL = `SELECT 1 FROM tracks WHERE id = $1 AND user_id = $2 FOR NO KEY UPDATE`
+	readJobFenceSQL      = `SELECT attempts FROM acquisition_jobs WHERE track_id = $1 FOR SHARE`
+)
+
+func checkFence(ctx context.Context, q rowQuerier, track *domain.Track, fence int) error {
+	var locked int
+	err := q.QueryRow(ctx, lockTrackForFenceSQL, track.ID.UUID(), track.UserId.UUID()).Scan(&locked)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("track %s not found or was deleted", track.ID.String())
+	}
+	if err != nil {
+		return classifyDBError(err)
+	}
+	var current int
+	err = q.QueryRow(ctx, readJobFenceSQL, track.ID.UUID()).Scan(&current)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return classifyDBError(err)
+	}
+	if current > 0 && current != fence {
+		return fmt.Errorf("%w: track %s held by attempt %d, caller holds %d",
+			ports.ErrTrackFenceSuperseded, track.ID.String(), current, fence)
+	}
+	return nil
+}
+
+func (r *PostgresTrackRepository) updateRow(ctx context.Context, q rowQuerier, track *domain.Track, expectedVersion int) error {
+	set, args := updateStatement(track, expectedVersion)
 	var newVersion int
-	err := r.pool.QueryRow(ctx,
+	err := q.QueryRow(ctx,
 		`UPDATE tracks SET `+set+`
-		WHERE `+where+`
+		WHERE id = $1 AND user_id = $2 AND version = $15
 		RETURNING version`,
 		args...,
 	).Scan(&newVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return r.classifyFailedCAS(ctx, track, expectedVersion, fence)
+		return classifyFailedCAS(ctx, q, track, expectedVersion)
 	}
 	if err != nil {
 		return classifyDBError(err)
@@ -319,21 +354,17 @@ func (r *PostgresTrackRepository) update(ctx context.Context, track *domain.Trac
 	return nil
 }
 
-func (r *PostgresTrackRepository) classifyFailedCAS(ctx context.Context, track *domain.Track, expectedVersion, fence int) error {
-	var currentVersion, currentFence int
-	err := r.pool.QueryRow(ctx,
-		`SELECT version, acquisition_attempts FROM tracks WHERE id = $1 AND user_id = $2`,
+func classifyFailedCAS(ctx context.Context, q rowQuerier, track *domain.Track, expectedVersion int) error {
+	var currentVersion int
+	err := q.QueryRow(ctx,
+		`SELECT version FROM tracks WHERE id = $1 AND user_id = $2`,
 		track.ID.UUID(), track.UserId.UUID(),
-	).Scan(&currentVersion, &currentFence)
+	).Scan(&currentVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("track %s not found or was deleted", track.ID.String())
 	}
 	if err != nil {
 		return classifyDBError(err)
-	}
-	if fence > 0 && currentFence > 0 && currentFence != fence {
-		return fmt.Errorf("%w: track %s held by attempt %d, caller holds %d",
-			ports.ErrTrackFenceSuperseded, track.ID.String(), currentFence, fence)
 	}
 	return fmt.Errorf("%w: track %s expected version %d, found %d",
 		ports.ErrTrackVersionConflict, track.ID.String(), expectedVersion, currentVersion)

@@ -431,7 +431,7 @@ func TestPostgresUpgradeStore_SettleAcquisitionAppendsRejectedKeysOnceAndResetsO
 	ctx := context.Background()
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","upgrade_tries":3}`, sourceURL: sourceURL("settle")})
 
-	if err := store.SettleAcquisition(ctx, id, []string{"yt:a", "yt:a", "", "yt:b"}, false); err != nil {
+	if err := store.SettleAcquisition(ctx, id, 0, []string{"yt:a", "yt:a", "", "yt:b"}, false); err != nil {
 		t.Fatalf("SettleAcquisition: %v", err)
 	}
 	state, err := store.State(ctx, id)
@@ -442,7 +442,7 @@ func TestPostgresUpgradeStore_SettleAcquisitionAppendsRejectedKeysOnceAndResetsO
 		t.Errorf("state = %s %v, want each key once and the evidence kept", state.Evidence, state.RejectedSourceKeys)
 	}
 
-	if err := store.SettleAcquisition(ctx, id, []string{"yt:b", "yt:c"}, true); err != nil {
+	if err := store.SettleAcquisition(ctx, id, 0, []string{"yt:b", "yt:c"}, true); err != nil {
 		t.Fatalf("SettleAcquisition reset: %v", err)
 	}
 	state, err = store.State(ctx, id)
@@ -464,7 +464,7 @@ func TestPostgresUpgradeStore_SettleAcquisitionKeepsTheNewestTwentyFive(t *testi
 	for i := range 30 {
 		keys = append(keys, fmt.Sprintf("youtube:%02d", i))
 	}
-	if err := store.SettleAcquisition(context.Background(), id, keys, false); err != nil {
+	if err := store.SettleAcquisition(context.Background(), id, 0, keys, false); err != nil {
 		t.Fatalf("SettleAcquisition: %v", err)
 	}
 
@@ -506,7 +506,7 @@ func TestPostgresUpgradeStore_BookkeepingWritesRacingATrackDeleteNeverDeadlock(t
 		{"give up", func(id sharedids.TrackId) error { return store.GiveUp(ctx, id, 1, "nothing better") }},
 		{"record in place", func(id sharedids.TrackId) error { return store.RecordInPlaceState(ctx, id, 1, "acoustid", 0.1) }},
 		{"note in-place failure", func(id sharedids.TrackId) error { _, err := store.NoteInPlaceFailure(ctx, id); return err }},
-		{"settle acquisition", func(id sharedids.TrackId) error { return store.SettleAcquisition(ctx, id, []string{"yt:b"}, true) }},
+		{"settle acquisition", func(id sharedids.TrackId) error { return store.SettleAcquisition(ctx, id, 0, []string{"yt:b"}, true) }},
 	}
 	for _, op := range ops {
 		t.Run(op.name, func(t *testing.T) {
@@ -540,5 +540,32 @@ func TestPostgresUpgradeStore_BookkeepingWritesRacingATrackDeleteNeverDeadlock(t
 				}
 			}
 		})
+	}
+}
+
+func TestPostgresUpgradeStore_SettleAcquisitionRefusesAStaleFenceAndWritesNothing(t *testing.T) {
+	dbtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := persistence.NewPostgresUpgradeStore(pool)
+	ctx := context.Background()
+
+	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C"}`, sourceURL: sourceURL("fence")})
+	if _, err := pool.Exec(ctx, `UPDATE acquisition_jobs SET attempts = 5 WHERE track_id = $1`, id.UUID()); err != nil {
+		t.Fatalf("hold the job at attempt 5: %v", err)
+	}
+
+	err := store.SettleAcquisition(ctx, id, 4, []string{"yt:stale"}, true)
+	if !errors.Is(err, download.ErrLeaseLost) {
+		t.Fatalf("SettleAcquisition with fence 4 = %v, want ErrLeaseLost", err)
+	}
+	if _, keys := upgradeStateOf(t, pool, id); len(keys) != 0 {
+		t.Errorf("rejected keys after a refused settle = %v, want none", keys)
+	}
+
+	if err := store.SettleAcquisition(ctx, id, 5, []string{"yt:fresh"}, false); err != nil {
+		t.Fatalf("SettleAcquisition with the held fence = %v", err)
+	}
+	if _, keys := upgradeStateOf(t, pool, id); !slices.Equal(keys, []string{"yt:fresh"}) {
+		t.Errorf("rejected keys = %v, want [yt:fresh]", keys)
 	}
 }

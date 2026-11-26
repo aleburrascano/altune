@@ -88,8 +88,8 @@ func TestPool_RowsAPackageWritesAreInvisibleToTheSharedDatabase(t *testing.T) {
 	ctx := context.Background()
 	id := uuid.New()
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO tracks (id, user_id, title, artist, dedup_key, acquisition_status, acquisition_available_at)
-		 VALUES ($1, $2, 'isolation probe', 'probe', $3, 'pending', now())`,
+		`INSERT INTO tracks (id, user_id, title, artist, dedup_key, acquisition_status)
+		 VALUES ($1, $2, 'isolation probe', 'probe', $3, 'pending')`,
 		id, uuid.New(), uuid.NewString()); err != nil {
 		t.Fatalf("insert a claimable track: %v", err)
 	}

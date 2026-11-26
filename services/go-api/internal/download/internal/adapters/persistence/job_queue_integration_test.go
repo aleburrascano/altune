@@ -31,11 +31,15 @@ func insertPendingTrackForUser(t *testing.T, pool *pgxpool.Pool, userID ids.User
 	t.Helper()
 	track := blindingLights(userID)
 	_, err := pool.Exec(context.Background(),
-		`INSERT INTO tracks (id, user_id, title, artist, album, dedup_key, acquisition_status, acquisition_available_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)`,
-		track.ID.UUID(), track.UserId.UUID(), track.Title, track.Artist, track.Album, uuid.NewString(), availableAt)
+		`INSERT INTO tracks (id, user_id, title, artist, album, dedup_key, acquisition_status)
+		 VALUES ($1, $2, $3, $4, $5, $6, 'pending')`,
+		track.ID.UUID(), track.UserId.UUID(), track.Title, track.Artist, track.Album, uuid.NewString())
 	if err != nil {
 		t.Fatalf("insert track: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE acquisition_jobs SET available_at = $2 WHERE track_id = $1`, track.ID.UUID(), availableAt); err != nil {
+		t.Fatalf("schedule job: %v", err)
 	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID())
@@ -66,7 +70,7 @@ func insertPendingTrack(t *testing.T, pool *pgxpool.Pool, availableAt time.Time)
 func expireLease(t *testing.T, pool *pgxpool.Pool, trackID ids.TrackId) {
 	t.Helper()
 	if _, err := pool.Exec(context.Background(),
-		`UPDATE tracks SET acquisition_lease_until = now() - interval '1 second' WHERE id = $1`, trackID.UUID()); err != nil {
+		`UPDATE acquisition_jobs SET lease_until = now() - interval '1 second' WHERE track_id = $1`, trackID.UUID()); err != nil {
 		t.Fatalf("expire lease: %v", err)
 	}
 }
@@ -75,7 +79,7 @@ func leaseUntil(t *testing.T, pool *pgxpool.Pool, trackID ids.TrackId) time.Time
 	t.Helper()
 	var until time.Time
 	if err := pool.QueryRow(context.Background(),
-		`SELECT acquisition_lease_until FROM tracks WHERE id = $1`, trackID.UUID()).Scan(&until); err != nil {
+		`SELECT lease_until FROM acquisition_jobs WHERE track_id = $1`, trackID.UUID()).Scan(&until); err != nil {
 		t.Fatalf("select lease: %v", err)
 	}
 	return until
@@ -405,7 +409,7 @@ func TestPostgresJobQueue_SettleOfAFinishedJobClearsItsSchedule(t *testing.T) {
 	}
 
 	var availableAt, leaseUntil *time.Time
-	if err := pool.QueryRow(ctx, `SELECT acquisition_available_at, acquisition_lease_until FROM tracks WHERE id = $1`, track.ID.UUID()).
+	if err := pool.QueryRow(ctx, `SELECT available_at, lease_until FROM acquisition_jobs WHERE track_id = $1`, track.ID.UUID()).
 		Scan(&availableAt, &leaseUntil); err != nil {
 		t.Fatalf("select track: %v", err)
 	}
@@ -698,7 +702,7 @@ func TestPostgresJobQueue_PendingDepthCountsUnleasedJobsAndReportsOldestAge(t *t
 	insertPendingTrack(t, pool, time.Now().Add(time.Hour))
 	leased := insertPendingTrack(t, pool, time.Now().Add(-time.Minute))
 	if _, err := pool.Exec(ctx,
-		`UPDATE tracks SET acquisition_lease_until = now() + interval '2 minutes' WHERE id = $1`, leased.ID.UUID()); err != nil {
+		`UPDATE acquisition_jobs SET lease_until = now() + interval '2 minutes' WHERE track_id = $1`, leased.ID.UUID()); err != nil {
 		t.Fatalf("lease track: %v", err)
 	}
 
@@ -760,7 +764,7 @@ func availableAt(t *testing.T, pool *pgxpool.Pool, trackID ids.TrackId) time.Tim
 	t.Helper()
 	var at time.Time
 	if err := pool.QueryRow(context.Background(),
-		`SELECT acquisition_available_at FROM tracks WHERE id = $1`, trackID.UUID()).Scan(&at); err != nil {
+		`SELECT available_at FROM acquisition_jobs WHERE track_id = $1`, trackID.UUID()).Scan(&at); err != nil {
 		t.Fatalf("select available_at: %v", err)
 	}
 	return at
@@ -774,7 +778,7 @@ func TestPostgresJobQueue_ReleaseDelayIsMeasuredOnTheDatabaseClock(t *testing.T)
 
 	track := insertPendingTrack(t, pool, time.Now())
 	if _, err := pool.Exec(ctx,
-		`UPDATE tracks SET acquisition_available_at = now() - interval '1 minute' WHERE id = $1`, track.ID.UUID()); err != nil {
+		`UPDATE acquisition_jobs SET available_at = now() - interval '1 minute' WHERE track_id = $1`, track.ID.UUID()); err != nil {
 		t.Fatalf("backdate on the database clock: %v", err)
 	}
 	job, err := queue.Claim(ctx, time.Minute)
@@ -916,7 +920,7 @@ func TestPostgresJobQueue_AnUpgradeIsNeverQueuedForATrackWithoutAPlayableFile(t 
 		t.Fatal("Enqueue upgrade on a pending track = nil, want it refused")
 	}
 	var kind string
-	if err := pool.QueryRow(context.Background(), `SELECT acquisition_job_kind FROM tracks WHERE id = $1`, track.ID.UUID()).Scan(&kind); err != nil {
+	if err := pool.QueryRow(context.Background(), `SELECT job_kind FROM acquisition_jobs WHERE track_id = $1`, track.ID.UUID()).Scan(&kind); err != nil {
 		t.Fatalf("read kind: %v", err)
 	}
 	if kind == string(ports.JobKindUpgrade) {
@@ -981,7 +985,7 @@ func TestPostgresJobQueue_AnUpgradeNeverOverwritesAQueuedUserReplace(t *testing.
 	}
 	var kind string
 	var queued bool
-	if err := pool.QueryRow(ctx, `SELECT acquisition_job_kind, acquisition_available_at > now() + interval '30 minutes' FROM tracks WHERE id = $1`, id.UUID()).Scan(&kind, &queued); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT job_kind, available_at > now() + interval '30 minutes' FROM acquisition_jobs WHERE track_id = $1`, id.UUID()).Scan(&kind, &queued); err != nil {
 		t.Fatalf("read job: %v", err)
 	}
 	if kind != string(download.JobKindReplace) || !queued {
@@ -1046,7 +1050,7 @@ func scheduledAvailableAt(t *testing.T, pool *pgxpool.Pool, trackID ids.TrackId)
 	t.Helper()
 	var at *time.Time
 	if err := pool.QueryRow(context.Background(),
-		`SELECT acquisition_available_at FROM tracks WHERE id = $1`, trackID.UUID()).Scan(&at); err != nil {
+		`SELECT available_at FROM acquisition_jobs WHERE track_id = $1`, trackID.UUID()).Scan(&at); err != nil {
 		t.Fatalf("select available_at: %v", err)
 	}
 	return at
@@ -1061,7 +1065,7 @@ func TestPostgresJobQueue_APanickingReplaceAtTheRunCapIsNotClaimedAgain(t *testi
 	if err := queue.Enqueue(ctx, track.ID, download.JobKindReplace, 0); err != nil {
 		t.Fatalf("Enqueue = %v", err)
 	}
-	if _, err := pool.Exec(ctx, `UPDATE tracks SET acquisition_run_attempts = 2 WHERE id = $1`, track.ID.UUID()); err != nil {
+	if _, err := pool.Exec(ctx, `UPDATE acquisition_jobs SET run_attempts = 2 WHERE track_id = $1`, track.ID.UUID()); err != nil {
 		t.Fatalf("set run attempts: %v", err)
 	}
 	acq := &panickingAcquirer{}
@@ -1174,7 +1178,7 @@ func TestPostgresJobQueue_SettledReplaceLeavesNoJobKindBehind(t *testing.T) {
 	}
 
 	var kind string
-	if err := pool.QueryRow(ctx, `SELECT acquisition_job_kind FROM tracks WHERE id = $1`, track.ID.UUID()).Scan(&kind); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT job_kind FROM acquisition_jobs WHERE track_id = $1`, track.ID.UUID()).Scan(&kind); err != nil {
 		t.Fatalf("read kind: %v", err)
 	}
 	if kind != string(download.JobKindAcquire) {

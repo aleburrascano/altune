@@ -30,7 +30,7 @@ func (s *State) State(_ context.Context, trackID ids.TrackId) (download.UpgradeS
 	return snapshot, nil
 }
 
-func (s *State) SettleAcquisition(_ context.Context, trackID ids.TrackId, rejectedSourceKeys []string, resetEvidence bool) error {
+func (s *State) SettleAcquisition(_ context.Context, trackID ids.TrackId, _ download.ClaimNumber, rejectedSourceKeys []string, resetEvidence bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.rejected[trackID] = download.AppendRejectedSourceKeys(s.rejected[trackID], rejectedSourceKeys)

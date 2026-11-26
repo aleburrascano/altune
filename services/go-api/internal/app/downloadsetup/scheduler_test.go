@@ -331,10 +331,14 @@ func insertReadyTrackGradedC(t *testing.T, pool *pgxpool.Pool) (ids.UserId, ids.
 	})
 	if _, err := pool.Exec(context.Background(), `
 UPDATE tracks SET acquisition_status = 'ready', audio_ref = 'stored.mp3',
-	audio_source_url = 'https://www.youtube.com/watch?v=storedvid01', acquisition_available_at = NULL,
+	audio_source_url = 'https://www.youtube.com/watch?v=storedvid01',
 	acquisition_evidence = '{"grade": "C"}'
 WHERE id = $1`, track.ID.UUID()); err != nil {
 		t.Fatalf("mark ready graded C: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE acquisition_jobs SET available_at = NULL WHERE track_id = $1`, track.ID.UUID()); err != nil {
+		t.Fatalf("unschedule the finished job: %v", err)
 	}
 	if _, err := pool.Exec(context.Background(), `
 INSERT INTO acquisition_upgrade_state (track_id, evidence) VALUES ($1, '{"in_place_generation": 2}')
