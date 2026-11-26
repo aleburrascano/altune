@@ -37,6 +37,4 @@ var (
 
 type SchedulerPorts = service.SchedulerPorts
 
-type ProcessRoot = service.ProcessRoot
-
 type UpgradeLane = service.UpgradeLane

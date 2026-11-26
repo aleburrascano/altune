@@ -6,7 +6,7 @@ import (
 	"context"
 )
 
-func (a *App) startAcquisitionUpgrade(ctx context.Context, scheduler *download.BackgroundAcquisitionScheduler) {
+func (a *application) startAcquisitionUpgrade(ctx context.Context, scheduler *download.BackgroundAcquisitionScheduler) {
 	planner := download.NewReplacementPlanner(download.NewPostgresUpgradeStore(a.pool), scheduler, a.cfg.AcquisitionUpgradeConcurrency, a.cfg.AcquisitionUpgradeRetryAfter).CheckingUploads().
 		RescuingLowBitrate(a.cfg.AcquisitionLowBitrateFloorKbps)
 	interval := download.UpgradeInterval(a.cfg.AcquisitionUpgradePerHour)

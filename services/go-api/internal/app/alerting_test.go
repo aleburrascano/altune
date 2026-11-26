@@ -1,9 +1,9 @@
 package app_test
 
 import (
-	"altune/go-api/internal/app"
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
@@ -52,7 +52,7 @@ func TestAlertMonitor_ALogInsideAPassCarriesTheJobAndARunID(t *testing.T) {
 		}
 		return nil
 	}}
-	monitor, err := app.NewAlertMonitor(&runner, monitoring.NopNotifier{}, 5*time.Millisecond, []monitoring.Condition{condition})
+	monitor, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, 5*time.Millisecond, clock.Now, clock.NewTicker, runner.LeaderContextFor(jobs.AlertMonitor), condition)
 	if err != nil {
 		t.Fatalf("NewAlertMonitor: %v", err)
 	}

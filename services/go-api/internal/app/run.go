@@ -18,7 +18,7 @@ import (
 	sharedRedis "altune/go-api/internal/shared/redis"
 )
 
-func (a *App) Run(ctx context.Context) error {
+func (a *application) Run(ctx context.Context) error {
 	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	pool, err := database.NewPool(ctx, a.cfg.DatabaseURL, a.cfg.DBPoolMaxConns)

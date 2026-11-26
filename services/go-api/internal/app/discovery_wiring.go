@@ -33,7 +33,7 @@ func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*
 	return search.New(deps)
 }
 
-func (a *App) discoveryDeps(ctx context.Context, transport http.RoundTripper) search.Deps {
+func (a *application) discoveryDeps(ctx context.Context, transport http.RoundTripper) search.Deps {
 	deps := searchsettings.Deps(ctx, a.cfg, transport)
 	deps.Background = a.jobs.Background()
 	deps.Tracker = a.background
@@ -46,7 +46,7 @@ func (a *App) discoveryDeps(ctx context.Context, transport http.RoundTripper) se
 
 const behavioralRankingRefreshInterval = 30 * time.Minute
 
-func (a *App) startDiscoveryBackgroundJobs(ctx context.Context, disc *search.Discovery) {
+func (a *application) startDiscoveryBackgroundJobs(ctx context.Context, disc *search.Discovery) {
 	a.startUnreleasedRefresh(ctx, disc.UnreleasedRefresh)
 	if a.cfg.BehavioralRankingEnabled {
 		a.jobs.EveryInstance(ctx, jobs.BehavioralRankingRefresh, behavioralRankingRefreshInterval,

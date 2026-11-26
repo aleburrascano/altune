@@ -16,7 +16,7 @@ type playbackWiring struct {
 	forgetDeletedIdentities *playback.DeletedUserDataCleanup
 }
 
-func (a *App) wirePlayback(ctx context.Context, trackRepo *library.PostgresTrackRepository) (playbackWiring, error) {
+func (a *application) wirePlayback(ctx context.Context, trackRepo *library.PostgresTrackRepository) (playbackWiring, error) {
 	metrics := playback.NewExpvarPlaybackMetrics()
 	queueStateRepo := playback.NewPostgresQueueStateRepository(a.pool, metrics, clock.Now)
 	queueSvc, err := newQueueService(queueStateRepo, trackRepo, metrics, a.cfg.PlaybackNowPlayingLookupTimeout)

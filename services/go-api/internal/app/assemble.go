@@ -40,7 +40,7 @@ func NewTracker(cfg *config.Config) (*background.Tracker, error) {
 }
 
 type Assembly struct {
-	app     *App
+	app     *application
 	handler http.Handler
 }
 
@@ -71,7 +71,7 @@ func (s *Assembly) Shutdown(ctx context.Context) []shutdown.Outcome {
 	return s.app.runShutdownSequence(ctx)
 }
 
-func (a *App) attach(ctx context.Context, h Handles) {
+func (a *application) attach(ctx context.Context, h Handles) {
 	a.pool = h.Pool
 	a.probes.DB = h.Pool.Ping
 	a.redisClient = h.Redis
@@ -82,7 +82,7 @@ func (a *App) attach(ctx context.Context, h Handles) {
 	a.lifecycleDone = ctx.Done()
 }
 
-func (a *App) compose(ctx context.Context, transport http.RoundTripper) (http.Handler, error) {
+func (a *application) compose(ctx context.Context, transport http.RoundTripper) (http.Handler, error) {
 	verifier, err := a.connectAuth(ctx)
 	if err != nil {
 		return nil, err
@@ -113,7 +113,7 @@ func (a *App) compose(ctx context.Context, transport http.RoundTripper) (http.Ha
 	return r, nil
 }
 
-func (a *App) openEventBus(ctx context.Context) error {
+func (a *application) openEventBus(ctx context.Context) error {
 	a.eventBus = events.NewInProcessBus(ctx, clock.Now, filepath.Join(os.TempDir(), eventIDFloorFile))
 	tap, err := monitoring.NewEventTap(a.eventBus, clock.Now)
 	if err != nil {
@@ -129,7 +129,7 @@ type features struct {
 	playback  playbackWiring
 }
 
-func (a *App) wireFeatures(ctx context.Context, transport http.RoundTripper) (features, error) {
+func (a *application) wireFeatures(ctx context.Context, transport http.RoundTripper) (features, error) {
 	disc, err := search.New(a.discoveryDeps(ctx, transport))
 	if err != nil {
 		return features{}, fmt.Errorf("discovery: %w", err)

@@ -5,7 +5,7 @@ import (
 	"context"
 )
 
-func (a *App) shutdownComponents() shutdown.Components {
+func (a *application) shutdownComponents() shutdown.Components {
 	return shutdown.Components{
 		AlertMonitor:   shutdown.Stop(a.alertMonitor),
 		EventFeed:      shutdown.Stop(a.eventFeed),
@@ -17,7 +17,7 @@ func (a *App) shutdownComponents() shutdown.Components {
 	}
 }
 
-func (a *App) runShutdownSequence(ctx context.Context) []shutdown.Outcome {
+func (a *application) runShutdownSequence(ctx context.Context) []shutdown.Outcome {
 	return shutdown.Run(ctx, shutdown.Plan(a.shutdownComponents(), shutdown.Budgets{
 		SchedulerSeconds:  a.cfg.AcquisitionDrainBudgetSeconds,
 		BackgroundSeconds: a.cfg.BackgroundDrainBudgetSeconds,

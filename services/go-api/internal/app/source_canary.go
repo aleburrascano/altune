@@ -10,7 +10,7 @@ import (
 
 const sourceCanaryInterval = time.Hour
 
-func (a *App) startSourceCanary(ctx context.Context, probes sourcecheck.Probes) {
+func (a *application) startSourceCanary(ctx context.Context, probes sourcecheck.Probes) {
 	checks := sourcecheck.Checks(probes)
 	if len(checks) == 0 {
 		return

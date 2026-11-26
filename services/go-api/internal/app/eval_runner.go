@@ -6,19 +6,15 @@ import (
 	"context"
 )
 
-type EvalQueryResult = search.SmokeQueryResult
+type evalRunner func(ctx context.Context) (search.SmokeResult, error)
 
-type EvalResult = search.SmokeResult
-
-type EvalRunner func(ctx context.Context) (EvalResult, error)
-
-func (a *App) keepSearches(disc *search.Discovery) {
+func (a *application) keepSearches(disc *search.Discovery) {
 	a.evalSearch = disc.RankingOnlySearch()
 }
 
-func (a *App) buildEvalRunner() EvalRunner {
+func (a *application) buildEvalRunner() evalRunner {
 	evalSvc := a.evalSearch
-	return func(ctx context.Context) (EvalResult, error) {
+	return func(ctx context.Context) (search.SmokeResult, error) {
 		return search.RunSmokeEval(ctx, evalSvc, evalUserId())
 	}
 }

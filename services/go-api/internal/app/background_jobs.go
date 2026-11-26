@@ -12,13 +12,13 @@ import (
 	"time"
 )
 
-func (a *App) startSimpleJob(ctx context.Context, name jobs.Name, interval time.Duration, run func(context.Context) error, startedAttrs ...any) {
+func (a *application) startSimpleJob(ctx context.Context, name jobs.Name, interval time.Duration, run func(context.Context) error, startedAttrs ...any) {
 	a.jobs.StartTicker(ctx, name, interval, jobs.WarnOnFailure(name, run), startedAttrs...)
 }
 
 const orphanedAudioReconcileInterval = 10 * time.Minute
 
-func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue library.OrphanedAudioQueue, audioStore library.AudioStore) {
+func (a *application) startOrphanedAudioReconcile(ctx context.Context, queue library.OrphanedAudioQueue, audioStore library.AudioStore) {
 	if audioStore == nil {
 		return
 	}
@@ -32,7 +32,7 @@ func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue library.Orp
 
 const deletedIdentityErasureInterval = time.Hour
 
-func (a *App) startDeletedIdentityErasure(ctx context.Context, svc *playback.DeletedUserDataCleanup) {
+func (a *application) startDeletedIdentityErasure(ctx context.Context, svc *playback.DeletedUserDataCleanup) {
 	discoveryErasers := a.discoveryDeletedIdentityErasers()
 	a.startSimpleJob(ctx, jobs.DeletedUserDataErasure, deletedIdentityErasureInterval, func(ctx context.Context) error {
 		_, queueErr := svc.Execute(ctx)
@@ -40,7 +40,7 @@ func (a *App) startDeletedIdentityErasure(ctx context.Context, svc *playback.Del
 	}, "interval", deletedIdentityErasureInterval.String())
 }
 
-func (a *App) discoveryDeletedIdentityErasers() []search.DeletedUserDataEraser {
+func (a *application) discoveryDeletedIdentityErasers() []search.DeletedUserDataEraser {
 	return []search.DeletedUserDataEraser{
 		search.NewPostgresSearchHistoryRepository(a.pool),
 		search.NewPostgresFavoritesRepository(a.pool),
@@ -50,19 +50,19 @@ func (a *App) discoveryDeletedIdentityErasers() []search.DeletedUserDataEraser {
 
 const discographyPruneInterval = 24 * time.Hour
 
-func (a *App) startDiscographyPrune(ctx context.Context, pruner cleanupjobs.DiscoveryEventPruner) {
+func (a *application) startDiscographyPrune(ctx context.Context, pruner cleanupjobs.DiscoveryEventPruner) {
 	a.jobs.StartTicker(ctx, jobs.DiscographyEventPrune, discographyPruneInterval,
 		cleanupjobs.PruneDiscoveryEvents(pruner, clock.Now), "interval", discographyPruneInterval.String())
 }
 
 const acquisitionPruneInterval = 24 * time.Hour
 
-func (a *App) startAcquisitionPrune(ctx context.Context, outcomes, rejections cleanupjobs.RetentionPruner) {
+func (a *application) startAcquisitionPrune(ctx context.Context, outcomes, rejections cleanupjobs.RetentionPruner) {
 	a.jobs.StartTicker(ctx, jobs.AcquisitionPrune, acquisitionPruneInterval,
 		cleanupjobs.PruneAcquisitionRows(outcomes, rejections, clock.Now), "interval", acquisitionPruneInterval.String())
 }
 
-func (a *App) startVocabularyRefresh(ctx context.Context, vocabStore search.SpellingHintsStore, charts []search.ChartProvider) {
+func (a *application) startVocabularyRefresh(ctx context.Context, vocabStore search.SpellingHintsStore, charts []search.ChartProvider) {
 	if vocabStore == nil || len(charts) == 0 {
 		return
 	}
@@ -77,7 +77,7 @@ func (a *App) startVocabularyRefresh(ctx context.Context, vocabStore search.Spel
 
 const unreleasedRefreshInterval = 30 * time.Minute
 
-func (a *App) startUnreleasedRefresh(ctx context.Context, svc *search.UnreleasedService) {
+func (a *application) startUnreleasedRefresh(ctx context.Context, svc *search.UnreleasedService) {
 	if svc == nil {
 		return
 	}
