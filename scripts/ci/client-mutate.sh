@@ -49,7 +49,7 @@ jest_project() {
 }
 
 glob_escaped() {
-  sed -E 's/([][(){}*?!+@\\])/\\\1/g' <<<"$1"
+  sed -E 's/([][(){}*?+@])/[\1]/g' <<<"$1"
 }
 
 stryker_config() {

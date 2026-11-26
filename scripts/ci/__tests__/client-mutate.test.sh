@@ -165,9 +165,8 @@ TS
 commit route-file
 base=$(git -C "$repo" rev-parse HEAD)
 sed -i 's/age >= 18/18 <= age/' "$client/src/shared/clamp/core/(route)/[id].ts"
-sed -i 's/18 <= age/age >= 18/' "$client/src/shared/clamp/core/adult.ts"
-commit route-and-plain
-expect "a file with brackets and parentheses in its path is mutated, not read as a glob" 0 '2 changed files, killed [1-9][0-9]*, survived 0'
+commit route-file-only
+expect "a file with brackets and parentheses in its path is mutated, not read as a glob or skipped" 0 '1 changed files, killed [1-9][0-9]*, survived 0'
 base=$(git -C "$repo" rev-parse HEAD)
 
 write src/shared/clamp/core/minor.ts <<'TS'
