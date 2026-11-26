@@ -166,18 +166,15 @@ func TestChainedArtworkResolver_NoResolvers(t *testing.T) {
 	}
 }
 
-func TestChainedArtworkResolver_SkipsDeezerPlaceholder(t *testing.T) {
+func TestChainedArtworkResolver_ResolveTagged_MovesOnFromAResolverThatFindsNothing(t *testing.T) {
 	chain := search.NewChainedArtworkLookup(
-		&search.FakeArtworkLookup{URL: "https://e-cdns-images.dzcdn.net/images/artist//500x500-000000-80-0-0.jpg", Err: nil},
-		&search.FakeArtworkLookup{URL: "https://images.example.com/real.jpg", Err: nil},
+		&search.FakeArtworkLookup{URL: ""},
+		&search.FakeArtworkLookup{URL: "https://images.example.com/real.jpg"},
 	)
 
 	url, _, err := chain.ResolveTagged(context.Background(), search.ResultKindArtist, "Artist", "", "mbid")
-	if err != nil {
-		t.Fatalf("ResolveTagged returned error: %v", err)
-	}
-	if url != "https://images.example.com/real.jpg" {
-		t.Errorf("expected real URL after skipping Deezer placeholder, got %q", url)
+	if err != nil || url != "https://images.example.com/real.jpg" {
+		t.Errorf("(%q, %v), want the second resolver's image", url, err)
 	}
 }
 
@@ -230,18 +227,15 @@ func TestChainedArtworkResolver_ResolveWithIdentityTagged(t *testing.T) {
 	}
 }
 
-func TestChainedArtworkResolver_ResolveWithIdentityTagged_skipsPlaceholder(t *testing.T) {
-	placeholder := &fakeIdentityResolver{url: search.DeezerPlaceholderImage, source: "deezer"}
+func TestChainedArtworkResolver_ResolveWithIdentityTagged_MovesOnFromAResolverThatFindsNothing(t *testing.T) {
+	empty := &fakeIdentityResolver{source: "spotify"}
 	real := &fakeIdentityResolver{url: "https://img/real.jpg", source: "discogs"}
 
-	chain := search.NewChainedArtworkLookup(placeholder, real)
+	chain := search.NewChainedArtworkLookup(empty, real)
 	url, source, err := chain.ResolveWithIdentityTagged(
 		context.Background(), search.ResultKindArtist, "Che", "", search.ArtworkIdentity{})
-	if err != nil {
-		t.Fatalf("ResolveWithIdentityTagged: %v", err)
-	}
-	if url != "https://img/real.jpg" || source != "discogs" {
-		t.Errorf("(%q, %q), want the placeholder skipped", url, source)
+	if err != nil || url != "https://img/real.jpg" || source != "discogs" {
+		t.Errorf("(%q, %q, %v), want the second resolver's image", url, source, err)
 	}
 }
 

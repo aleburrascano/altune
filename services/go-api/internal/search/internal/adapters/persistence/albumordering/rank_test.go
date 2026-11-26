@@ -3,6 +3,7 @@ package albumordering_test
 import (
 	"altune/go-api/internal/search/internal/adapters/persistence/albumordering"
 	"altune/go-api/internal/search/internal/core/ports"
+	"errors"
 	"slices"
 	"testing"
 	"time"
@@ -37,7 +38,7 @@ func TestRankByArtist_WorstFirst(t *testing.T) {
 		dc("mid", 10, 5, "spotify", 8, "musicbrainz", 4),
 		dc("tie-lo-imb", 10, 9, "spotify", 6, "musicbrainz", 5),
 	}
-	got := refs(albumordering.Rank(cases, ports.GroupByArtist))
+	got := refs(rank(t, cases, ports.GroupByArtist))
 	want := []string{"worst", "tie-lo-imb", "mid", "clean"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("order = %v, want %v", got, want)
@@ -49,7 +50,7 @@ func TestRankByArtist_IDAnchorBeatsHeadcount(t *testing.T) {
 		dcNoID("id-verified", 10, 10, 0, "spotify", 10),
 		dcNoID("no-id", 10, 3, 3, "spotify", 7, "deezer", 3),
 	}
-	got := refs(albumordering.Rank(cases, ports.GroupByArtist))
+	got := refs(rank(t, cases, ports.GroupByArtist))
 	want := []string{"no-id", "id-verified"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("order = %v, want %v (id anchor ranks the no-id artist first; headcount is only the fallback)", got, want)
@@ -65,7 +66,7 @@ func TestRankByArtist_DivideByZeroSafe(t *testing.T) {
 		dc("negative", -3, -9),
 		dc("real", 4, 3, "spotify", 4, "deezer", 1),
 	}
-	got := refs(albumordering.Rank(cases, ports.GroupByArtist))
+	got := refs(rank(t, cases, ports.GroupByArtist))
 	if got[0] != "real" {
 		t.Fatalf("worst-first = %v, want real first (zero/neg ratios are 0)", got)
 	}
@@ -77,7 +78,7 @@ func TestRankByProvider_ClustersWorstFirst(t *testing.T) {
 		dc("s1", 10, 9, "spotify", 10, "deezer", 1),
 		dc("s2", 10, 7, "spotify", 9, "deezer", 2),
 	}
-	got := refs(albumordering.Rank(cases, ports.GroupByProvider))
+	got := refs(rank(t, cases, ports.GroupByProvider))
 	want := []string{"s1", "s2", "d1"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("order = %v, want %v", got, want)
@@ -91,21 +92,45 @@ func TestRankByContaminationBand(t *testing.T) {
 		dc("medium", 10, 3),
 		dc("high-b", 10, 9, "s", 9),
 	}
-	got := refs(albumordering.Rank(cases, ports.GroupByContaminationBand))
+	got := refs(rank(t, cases, ports.GroupByContaminationBand))
 	want := []string{"high-b", "high-a", "medium", "low"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("order = %v, want %v", got, want)
 	}
 }
 
-func TestRank_UnknownGroupByIsArtist(t *testing.T) {
+func rank(t *testing.T, cases []ports.DiscographyCase, groupBy ports.DiscographyGroupBy) []ports.DiscographyCase {
+	t.Helper()
+	ranked, err := albumordering.Rank(cases, groupBy)
+	if err != nil {
+		t.Fatalf("Rank(%s): %v", groupBy, err)
+	}
+	return ranked
+}
+
+func TestRank_UnknownGroupByIsRefused(t *testing.T) {
 	cases := []ports.DiscographyCase{
 		dc("a", 10, 2),
 		dc("b", 10, 8),
 	}
-	got := refs(albumordering.Rank(cases, ports.DiscographyGroupBy("bogus")))
-	if want := []string{"b", "a"}; !slices.Equal(got, want) {
-		t.Fatalf("order = %v, want %v (artist default)", got, want)
+	got, err := albumordering.Rank(cases, ports.DiscographyGroupBy("bogus"))
+	if !errors.Is(err, ports.ErrUnknownDiscographyGroupBy) || got != nil {
+		t.Fatalf("Rank(bogus) = (%v, %v), want (nil, %v)", got, err, ports.ErrUnknownDiscographyGroupBy)
+	}
+}
+
+func TestRank_LeavesTheCallersSliceInItsOrder(t *testing.T) {
+	for _, groupBy := range []ports.DiscographyGroupBy{ports.GroupByArtist, ports.GroupByContaminationBand, ports.GroupByProvider} {
+		t.Run(string(groupBy), func(t *testing.T) {
+			cases := []ports.DiscographyCase{dc("a", 10, 2, "spotify", 10), dc("b", 10, 8, "deezer", 10)}
+			before := refs(cases)
+
+			rank(t, cases, groupBy)
+
+			if after := refs(cases); !slices.Equal(after, before) {
+				t.Fatalf("Rank reordered the caller's slice: %v, was %v", after, before)
+			}
+		})
 	}
 }
 
@@ -113,7 +138,7 @@ func assertTiedOnScore(t *testing.T, x, y ports.DiscographyCase) {
 	t.Helper()
 	for _, labels := range [][2]string{{"a", "b"}, {"b", "a"}} {
 		x.ArtistRef, y.ArtistRef = labels[0], labels[1]
-		got := refs(albumordering.Rank([]ports.DiscographyCase{y, x}, ports.GroupByArtist))
+		got := refs(rank(t, []ports.DiscographyCase{y, x}, ports.GroupByArtist))
 		if want := []string{"a", "b"}; !slices.Equal(got, want) {
 			t.Errorf("with %v labelled %q and %v labelled %q, order = %v, want %v: they must tie and fall back to artist_ref",
 				x.ProviderCounts, labels[0], y.ProviderCounts, labels[1], got, want)
@@ -145,7 +170,7 @@ func TestRankByArtist_TieBreaksOnProviderImbalance(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := refs(albumordering.Rank([]ports.DiscographyCase{tt.better, tt.worse}, ports.GroupByArtist))
+			got := refs(rank(t, []ports.DiscographyCase{tt.better, tt.worse}, ports.GroupByArtist))
 			if want := []string{tt.worse.ArtistRef, tt.better.ArtistRef}; !slices.Equal(got, want) {
 				t.Errorf("order = %v, want %v", got, want)
 			}
@@ -155,7 +180,7 @@ func TestRankByArtist_TieBreaksOnProviderImbalance(t *testing.T) {
 
 func assertOrder(t *testing.T, cases []ports.DiscographyCase, groupBy ports.DiscographyGroupBy, want ...string) {
 	t.Helper()
-	if got := refs(albumordering.Rank(cases, groupBy)); !slices.Equal(got, want) {
+	if got := refs(rank(t, cases, groupBy)); !slices.Equal(got, want) {
 		t.Errorf("Rank(%s) order = %v, want %v", groupBy, got, want)
 	}
 }
@@ -174,7 +199,7 @@ func TestRank_TiedCasesKeepTheirInputOrder(t *testing.T) {
 				cases[i] = dc(ref, 10, single, "spotify", 10)
 				cases[i].LastSeen = first.Add(time.Duration(i) * time.Hour)
 			}
-			got := albumordering.Rank(cases, groupBy)
+			got := rank(t, cases, groupBy)
 			if len(got) != n {
 				t.Fatalf("Rank returned %d cases, want %d", len(got), n)
 			}

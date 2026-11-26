@@ -84,16 +84,18 @@ func TestYouTubeMusicAdapter_Search_DoesNotRetryPermanent4xx(t *testing.T) {
 	}
 }
 
-func TestYouTubeMusicAdapter_Search_RetriesTransient5xx(t *testing.T) {
-	rt := &cannedRoundTripper{status: http.StatusServiceUnavailable, body: `{}`}
+func TestYouTubeMusicAdapter_Search_LeavesTransientRetriesToTheEgressTransport(t *testing.T) {
+	for _, status := range []int{http.StatusServiceUnavailable, http.StatusTooManyRequests} {
+		rt := &cannedRoundTripper{status: status, body: `{}`}
 
-	_, err := search.NewYouTubeMusicAdapter(rt).Search(context.Background(), "anything", providertest.AllKinds())
+		_, err := search.NewYouTubeMusicAdapter(rt).Search(context.Background(), "anything", providertest.AllKinds())
 
-	if err == nil {
-		t.Fatal("want a status-bearing error on a 503")
-	}
-	if rt.calls != 2 {
-		t.Errorf("calls = %d, want 2: a 503 is transient and must be retried once", rt.calls)
+		if err == nil {
+			t.Fatalf("want a status-bearing error on a %d", status)
+		}
+		if rt.calls != 1 {
+			t.Errorf("status %d: calls = %d, want 1: the egress transport already retries it, so the adapter must not stack a second retry loop on top", status, rt.calls)
+		}
 	}
 }
 

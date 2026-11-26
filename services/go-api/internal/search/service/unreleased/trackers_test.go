@@ -2,6 +2,7 @@ package unreleased_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/searchtest"
 	"bytes"
 	"context"
 	"errors"
@@ -21,13 +22,16 @@ func trackerSong(title, id string) search.UnreleasedSong {
 
 func listWith(t *testing.T, genius *search.FakeGeniusSongCatalog, trackers *search.TrackerSongs, cache search.UnreleasedCache) ([]search.UnreleasedSong, error) {
 	t.Helper()
-	svc := search.NewUnreleasedService(geniusPort(genius), &search.ArtistCatalogTitles{}, cache, cachedConfig, search.WithUnreleasedTrackers(trackers))
+	if cache == nil {
+		cache = search.NoUnreleasedCache{}
+	}
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(geniusPort(genius), &search.ArtistCatalogTitles{}, cache, cachedConfig, search.WithUnreleasedTrackers(trackers)))
 	return svc.List(context.Background(), search.ProviderDeezer, "1", "Ken Carson", nil)
 }
 
 func geniusPort(g *search.FakeGeniusSongCatalog) search.GeniusSongCatalog {
 	if g == nil {
-		return nil
+		return search.NoUnreleasedGenius{}
 	}
 	return g
 }
@@ -73,7 +77,7 @@ func TestService_List_TrackerSongsDoNotUseUpDetailLookups(t *testing.T) {
 
 func TestService_List_ReleasedTrackerSongIsHidden(t *testing.T) {
 	trackers := &search.TrackerSongs{Songs: []search.UnreleasedSong{trackerSong("Magnolia", "magnolia"), trackerSong("Dream [V2]", "dreamv2a")}}
-	svc := search.NewUnreleasedService(nil, &search.ArtistCatalogTitles{Titles: []string{"Magnolia"}}, nil, cachedConfig, search.WithUnreleasedTrackers(trackers))
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{Titles: []string{"Magnolia"}}, search.NoUnreleasedCache{}, cachedConfig, search.WithUnreleasedTrackers(trackers)))
 	got, err := svc.List(context.Background(), search.ProviderDeezer, "1", "Ken Carson", nil)
 	if err != nil || !slices.Equal(titlesOf(got), []string{"Dream [V2]"}) {
 		t.Errorf("got %v, err %v, want only the unreleased tracker song", titlesOf(got), err)
@@ -89,7 +93,7 @@ func TestService_List_ReleasedSongKeepsItsTaggedTrackerVersions(t *testing.T) {
 		search.UnreleasedVersion{Title: "Sports Car", Quality: "Lossless"},
 		search.UnreleasedVersion{Title: "Sports Car [V3]", Label: "V3", Quality: "High Quality"})
 	trackers := &search.TrackerSongs{Songs: []search.UnreleasedSong{sportsCar, trackerSong("Magnolia", "magnolia")}}
-	svc := search.NewUnreleasedService(nil, &search.ArtistCatalogTitles{Titles: []string{"Sports Car", "Magnolia"}}, nil, cachedConfig, search.WithUnreleasedTrackers(trackers))
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{Titles: []string{"Sports Car", "Magnolia"}}, search.NoUnreleasedCache{}, cachedConfig, search.WithUnreleasedTrackers(trackers)))
 	got, err := svc.List(context.Background(), search.ProviderDeezer, "1", "Ken Carson", nil)
 	if err != nil || len(got) != 1 || got[0].Title != "Sports Car" {
 		t.Fatalf("got %v, err %v, want only Sports Car", titlesOf(got), err)
@@ -103,7 +107,7 @@ func TestService_List_ReleasedSongKeepsItsTaggedTrackerVersions(t *testing.T) {
 func TestService_List_CatalogMatchDropsASongWhoseVersionsAreAllUntagged(t *testing.T) {
 	song := versionedTrackerSong("Sports Car", search.UnreleasedVersion{Title: "Sports Car"})
 	trackers := &search.TrackerSongs{Songs: []search.UnreleasedSong{song}}
-	svc := search.NewUnreleasedService(nil, &search.ArtistCatalogTitles{Titles: []string{"Sports Car"}}, nil, cachedConfig, search.WithUnreleasedTrackers(trackers))
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{Titles: []string{"Sports Car"}}, search.NoUnreleasedCache{}, cachedConfig, search.WithUnreleasedTrackers(trackers)))
 	got, err := svc.List(context.Background(), search.ProviderDeezer, "1", "Ken Carson", nil)
 	if err != nil || len(got) != 0 {
 		t.Errorf("got %v, err %v, want nothing", titlesOf(got), err)
@@ -183,7 +187,7 @@ func TestService_List_CancelledJobIsAnErrorEvenWithTrackerSongs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	trackers := &search.TrackerSongs{Songs: []search.UnreleasedSong{trackerSong("Dream [V2]", "dreamv2a")}}
-	svc := search.NewUnreleasedService(nil, &search.ArtistCatalogTitles{}, nil, cachedConfig, search.WithUnreleasedTrackers(trackers))
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, cachedConfig, search.WithUnreleasedTrackers(trackers)))
 	if _, err := svc.List(ctx, search.ProviderDeezer, "1", "Ken Carson", nil); !errors.Is(err, context.Canceled) {
 		t.Errorf("err = %v, want context.Canceled", err)
 	}

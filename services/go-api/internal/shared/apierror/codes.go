@@ -38,6 +38,7 @@ var (
 	CodeEventStreamUnsupported      = code("eventstream.streaming_unsupported", KindInternal, "Streaming unsupported")
 	CodeEventStreamTooManyStreams   = code("eventstream.too_many_streams", KindRateLimited, "Too many event streams")
 	CodeObservePrincipalRequired    = code("observe.principal_required", KindForbidden, "Overseer principal required")
+	CodeObserveInvalidGroupBy       = code("observe.invalid_group_by", KindInvalid, "Invalid discography grouping")
 	CodeObserveQualityTimeout       = code("observe.discography_quality_timeout", KindTimeout, "Discography quality query timed out")
 	CodeObserveEventFeedDown        = code("observe.event_feed_unavailable", KindUnavailable, "Event feed unavailable")
 	CodeObserveStreamLimit          = code("observe.stream_subscriber_limit", KindRateLimited, "Too many observe streams open")

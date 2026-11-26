@@ -135,11 +135,19 @@ func runStages(ctx context.Context, run *pipelineRun, p Pipeline) error {
 }
 
 func logShadowJudge(ctx context.Context, ac *AcquisitionContext, downloadErr error) {
+	defer background.RecoverContext(ctx, "acquisition.judge_shadow_panic", "track_id", ac.Track.ID)
 	var kept *ports.AudioCandidate
 	if downloadErr == nil {
 		kept = ac.Selected
 	}
-	judgeshadow.Log(ctx, shadowTarget(ac.Track), ac.Track.ID, kept, ac.ProbedDuration.Seconds(), ac.Candidates)
+	c := judgeshadow.Compare(shadowTarget(ac.Track), kept, ac.ProbedDuration.Seconds(), ac.Candidates)
+	slog.InfoContext(ctx, "acquisition.judge_shadow",
+		"track_id", ac.Track.ID,
+		"pipeline_url", c.PipelineURL,
+		"judge_url", c.JudgeURL,
+		"judge_reason", c.Reason,
+		"verdict", c.Verdict,
+	)
 }
 
 func shadowTarget(t TrackRef) titlematch.Target {

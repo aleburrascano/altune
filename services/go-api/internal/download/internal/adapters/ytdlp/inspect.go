@@ -3,6 +3,7 @@ package ytdlp
 import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/childprocess"
+	"altune/go-api/internal/shared/parallel"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"encoding/json"
@@ -11,10 +12,7 @@ import (
 	"math"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -106,45 +104,6 @@ func (i inspection) isPreviewDuration(flatDuration float64) bool {
 		flatDuration > soundCloudPreviewDuration+previewFlatMargin
 }
 
-type cachedInspection struct {
-	result  inspection
-	expires time.Time
-}
-
-type inspectionCache struct {
-	mu      sync.Mutex
-	now     func() time.Time
-	entries map[string]cachedInspection
-	order   []string
-}
-
-func newInspectionCache() *inspectionCache {
-	return &inspectionCache{now: time.Now, entries: make(map[string]cachedInspection)}
-}
-
-func (c *inspectionCache) get(key string) (inspection, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	entry, ok := c.entries[key]
-	if !ok || !c.now().Before(entry.expires) {
-		return inspection{}, false
-	}
-	return entry.result, true
-}
-
-func (c *inspectionCache) put(key string, result inspection) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if _, exists := c.entries[key]; !exists {
-		c.order = append(c.order, key)
-	}
-	c.entries[key] = cachedInspection{result: result, expires: c.now().Add(inspectCacheTTL)}
-	for len(c.order) > inspectCacheMax {
-		delete(c.entries, c.order[0])
-		c.order = c.order[1:]
-	}
-}
-
 func isSoundCloudURL(rawURL string) bool {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil {
@@ -155,16 +114,14 @@ func isSoundCloudURL(rawURL string) bool {
 }
 
 func (s *YouTubeAudioSearcher) MarkUnplayable(ctx context.Context, candidates []ports.AudioCandidate) {
-	g := new(errgroup.Group)
-	g.SetLimit(inspectConcurrency)
+	g := parallel.New("acquisition.soundcloud_inspect_panic", inspectConcurrency)
 	for i := range candidates {
 		if !isSoundCloudURL(candidates[i].URL) {
 			continue
 		}
-		g.Go(func() error {
+		g.Go(ctx, func() {
 			candidates[i].Unplayable = s.unplayableReason(ctx, candidates[i])
-			return nil
-		})
+		}, "url", candidates[i].URL)
 	}
 	_ = g.Wait()
 }
@@ -180,14 +137,14 @@ func (s *YouTubeAudioSearcher) unplayableReason(ctx context.Context, c ports.Aud
 }
 
 func (s *YouTubeAudioSearcher) inspectCached(ctx context.Context, trackURL string) (inspection, error) {
-	if result, ok := s.inspections.get(trackURL); ok {
+	if result, ok := s.inspections.Get(trackURL); ok {
 		return result, nil
 	}
 	result, err := s.runYtDlpInspect(ctx, trackURL)
 	if err != nil {
 		return inspection{}, err
 	}
-	s.inspections.put(trackURL, result)
+	s.inspections.Put(trackURL, result)
 	return result, nil
 }
 

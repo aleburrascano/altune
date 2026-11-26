@@ -25,55 +25,28 @@ func ytmHTTPClient(transport http.RoundTripper) *http.Client {
 }
 
 func ytmSearchRetry(ctx context.Context, client *http.Client, query string, filter ytmFilter) (*ytmResult, error) {
-	const attempts = 2
-	var lastErr error
-	for i := 0; i < attempts; i++ {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		res, err := ytmSearch(ctx, client, query, filter)
-		if err == nil {
-			return res, nil
-		}
-		lastErr = err
-		if !isRetryableProviderError(err) {
-			return nil, err
-		}
-		if i < attempts-1 {
-			select {
-			case <-time.After(ytmRetryBackoff()):
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			}
-		}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-	return nil, lastErr
+	res, err := ytmSearch(ctx, client, query, filter)
+	if !isAuthChallenge(err) {
+		return res, err
+	}
+	select {
+	case <-time.After(ytmRetryBackoff()):
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return ytmSearch(ctx, client, query, filter)
 }
 
 type upstreamStatusCoder interface {
 	UpstreamStatus() int
 }
 
-func isRetryableProviderError(err error) bool {
-	if errors.Is(err, context.Canceled) {
-		return false
-	}
+func isAuthChallenge(err error) bool {
 	var status upstreamStatusCoder
-	if errors.As(err, &status) {
-		return isTransientStatus(status.UpstreamStatus())
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
-	}
-	var transport interface {
-		error
-		Timeout() bool
-	}
-	return errors.As(err, &transport)
-}
-
-func isTransientStatus(code int) bool {
-	return code >= http.StatusInternalServerError || code == http.StatusTooManyRequests || providerrequests.IsAuthStatus(code)
+	return errors.As(err, &status) && providerrequests.IsAuthStatus(status.UpstreamStatus())
 }
 
 func ytmRetryBackoff() time.Duration {

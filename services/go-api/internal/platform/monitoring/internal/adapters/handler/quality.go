@@ -35,7 +35,11 @@ func emptyDiscographyQualityResponse(windowDays int, groupBy ports.DiscographyGr
 
 func (h *Handler) serveDiscographyQuality(w http.ResponseWriter, r *http.Request) {
 	windowDays := clampWindowDays(r.URL.Query().Get("window_days"))
-	groupBy := ports.ParseDiscographyGroupBy(r.URL.Query().Get("by"))
+	groupBy, err := groupByFromQuery(r.URL.Query().Get("by"))
+	if err != nil {
+		httpserver.HandleServiceError(w, r, err)
+		return
+	}
 	resp := emptyDiscographyQualityResponse(windowDays, groupBy)
 	if h.deps.Discography == nil {
 		httpserver.WriteJSON(w, http.StatusOK, resp)
@@ -53,6 +57,17 @@ func (h *Handler) serveDiscographyQuality(w http.ResponseWriter, r *http.Request
 	resp.SuspectRate = result.suspectRate
 	resp.LastSampleAt = result.lastSample
 	httpserver.WriteJSON(w, http.StatusOK, resp)
+}
+
+func groupByFromQuery(raw string) (ports.DiscographyGroupBy, error) {
+	if raw == "" {
+		return ports.GroupByArtist, nil
+	}
+	groupBy, err := ports.ParseDiscographyGroupBy(raw)
+	if err != nil {
+		return "", invalidGroupBy(err)
+	}
+	return groupBy, nil
 }
 
 func clampWindowDays(raw string) int {

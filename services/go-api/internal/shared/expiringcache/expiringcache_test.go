@@ -1,7 +1,7 @@
-package memo_test
+package expiringcache_test
 
 import (
-	"altune/go-api/internal/search/internal/adapters/providers/musicbrainz/memo"
+	"altune/go-api/internal/shared/expiringcache"
 	"strconv"
 	"testing"
 	"time"
@@ -15,23 +15,46 @@ func (c *clock) advance(d time.Duration) { c.t = c.t.Add(d) }
 
 func newClock() *clock { return &clock{t: time.Unix(1_700_000_000, 0)} }
 
-func present[V comparable](t *testing.T, m *memo.Memo[V], key string, want V) {
+func present[V comparable](t *testing.T, m *expiringcache.Memo[string, V], key string, want V) {
 	t.Helper()
 	if got, ok := m.Get(key); !ok || got != want {
 		t.Errorf("Get(%q) = %v, %v; want %v, true", key, got, ok, want)
 	}
 }
 
-func absent[V any](t *testing.T, m *memo.Memo[V], key string) {
+func absent[V any](t *testing.T, m *expiringcache.Memo[string, V], key string) {
 	t.Helper()
 	if got, ok := m.Get(key); ok {
 		t.Errorf("Get(%q) = %v, true; want a miss", key, got)
 	}
 }
 
+func TestMemo_UnknownKeyIsNotServed(t *testing.T) {
+	m := expiringcache.New[string, int](time.Hour, 4, newClock().now)
+	m.Put("humble", 1)
+
+	absent(t, m, "dna")
+}
+
+func TestMemo_KeysAreNotLimitedToStrings(t *testing.T) {
+	type key struct {
+		artist string
+		page   int
+	}
+	m := expiringcache.New[key, string](time.Hour, 4, newClock().now)
+	m.Put(key{"kendrick", 1}, "first")
+
+	if got, ok := m.Get(key{"kendrick", 1}); !ok || got != "first" {
+		t.Errorf("Get = %q, %v; want first, true", got, ok)
+	}
+	if _, ok := m.Get(key{"kendrick", 2}); ok {
+		t.Error("a different struct key was served")
+	}
+}
+
 func TestMemo_CapBoundsDistinctKeysToTheNewest(t *testing.T) {
 	const capacity = 4
-	m := memo.New[int](time.Hour, capacity, newClock().now)
+	m := expiringcache.New[string, int](time.Hour, capacity, newClock().now)
 	for i := range capacity * 3 {
 		m.Put("artist-"+strconv.Itoa(i), i)
 	}
@@ -43,8 +66,8 @@ func TestMemo_CapBoundsDistinctKeysToTheNewest(t *testing.T) {
 	}
 }
 
-func TestMemo_EvictsLeastRecentlyUsed(t *testing.T) {
-	m := memo.New[string](time.Hour, 2, newClock().now)
+func TestMemo_FullOfLiveEntriesEvictsTheLeastRecentlyUsed(t *testing.T) {
+	m := expiringcache.New[string, string](time.Hour, 2, newClock().now)
 	m.Put("a", "A")
 	m.Put("b", "B")
 	present(t, m, "a", "A")
@@ -55,7 +78,7 @@ func TestMemo_EvictsLeastRecentlyUsed(t *testing.T) {
 }
 
 func TestMemo_ACapBelowOneHoldsOneEntry(t *testing.T) {
-	m := memo.New[int](time.Hour, 0, newClock().now)
+	m := expiringcache.New[string, int](time.Hour, 0, newClock().now)
 	m.Put("a", 1)
 	present(t, m, "a", 1)
 	m.Put("b", 2)
@@ -64,7 +87,7 @@ func TestMemo_ACapBelowOneHoldsOneEntry(t *testing.T) {
 }
 
 func TestMemo_ReputReplacesTheValueWithoutTakingAnotherSlot(t *testing.T) {
-	m := memo.New[int](time.Hour, 2, newClock().now)
+	m := expiringcache.New[string, int](time.Hour, 2, newClock().now)
 	for i := range 10 {
 		m.Put("same", i)
 	}
@@ -78,7 +101,7 @@ func TestMemo_ReputReplacesTheValueWithoutTakingAnotherSlot(t *testing.T) {
 
 func TestMemo_ReputRenewsTheTTL(t *testing.T) {
 	c := newClock()
-	m := memo.New[int](time.Hour, 2, c.now)
+	m := expiringcache.New[string, int](time.Hour, 2, c.now)
 	m.Put("a", 1)
 	c.advance(50 * time.Minute)
 	m.Put("a", 2)
@@ -88,7 +111,7 @@ func TestMemo_ReputRenewsTheTTL(t *testing.T) {
 
 func TestMemo_AnEntryExpiresAfterItsTTLAndCanBeStoredAgain(t *testing.T) {
 	c := newClock()
-	m := memo.New[int](time.Hour, 50, c.now)
+	m := expiringcache.New[string, int](time.Hour, 50, c.now)
 	m.Put("a", 1)
 	c.advance(time.Hour)
 	present(t, m, "a", 1)
@@ -100,7 +123,7 @@ func TestMemo_AnEntryExpiresAfterItsTTLAndCanBeStoredAgain(t *testing.T) {
 
 func TestMemo_AFullMemoPurgesExpiredEntriesBeforeEvictingLiveOnes(t *testing.T) {
 	c := newClock()
-	m := memo.New[string](time.Hour, 2, c.now)
+	m := expiringcache.New[string, string](time.Hour, 2, c.now)
 	m.Put("expiring", "E")
 	c.advance(30 * time.Minute)
 	m.Put("live", "L")
@@ -114,7 +137,7 @@ func TestMemo_AFullMemoPurgesExpiredEntriesBeforeEvictingLiveOnes(t *testing.T) 
 
 func TestMemo_AFullMemoSweepsAtMostOncePerTTL(t *testing.T) {
 	c := newClock()
-	m := memo.New[string](time.Hour, 2, c.now)
+	m := expiringcache.New[string, string](time.Hour, 2, c.now)
 	c.advance(10 * time.Minute)
 	m.Put("x", "X")
 	c.advance(40 * time.Minute)
@@ -133,7 +156,7 @@ func TestMemo_AFullMemoSweepsAtMostOncePerTTL(t *testing.T) {
 
 func TestMemo_ReadingAnExpiredEntryFreesItsSlot(t *testing.T) {
 	c := newClock()
-	m := memo.New[string](time.Hour, 2, c.now)
+	m := expiringcache.New[string, string](time.Hour, 2, c.now)
 	c.advance(10 * time.Minute)
 	m.Put("a", "A")
 	c.advance(50 * time.Minute)

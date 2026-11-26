@@ -1772,8 +1772,8 @@ func searchAsWarmUp(t *testing.T, store search.UnreleasedStore, results []search
 	t.Helper()
 	bg := searchtest.NewTracker(t)
 	var jobs sync.WaitGroup
-	svc := search.NewUnreleasedService(nil, &search.ArtistCatalogTitles{}, nil, search.UnreleasedConfig{},
-		search.WithUnreleasedStore(store), search.WithUnreleasedLifecycle(context.Background(), &jobs))
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, search.UnreleasedConfig{},
+		search.WithUnreleasedStore(store), search.WithUnreleasedLifecycle(context.Background(), &jobs)))
 	p := &fakeSearchProvider{name: search.ProviderDeezer, results: results}
 	searchSvc := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker())
 	h := search.NewDiscoveryHandler(search.DiscoveryServices{Search: searchSvc}).WithUnreleased(svc)

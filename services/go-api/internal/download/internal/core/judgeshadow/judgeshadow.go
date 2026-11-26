@@ -3,22 +3,25 @@ package judgeshadow
 import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/internal/core/titlematch"
-	"altune/go-api/internal/shared/background"
-	"context"
-	"log/slog"
 )
 
-type verdict string
+type Verdict string
 
 const (
-	verdictAgree          verdict = "agree"
-	verdictDisagree       verdict = "disagree"
-	verdictJudgeAbstained verdict = "judge_abstained"
-	verdictPipelineFailed verdict = "pipeline_failed"
+	VerdictAgree          Verdict = "agree"
+	VerdictDisagree       Verdict = "disagree"
+	VerdictJudgeAbstained Verdict = "judge_abstained"
+	VerdictPipelineFailed Verdict = "pipeline_failed"
 )
 
-func Log(ctx context.Context, target titlematch.Target, trackID string, kept *ports.AudioCandidate, keptProbedSeconds float64, candidates []ports.AudioCandidate) {
-	defer background.RecoverContext(ctx, "acquisition.judge_shadow_panic", "track_id", trackID)
+type Comparison struct {
+	PipelineURL string
+	JudgeURL    string
+	Reason      string
+	Verdict     Verdict
+}
+
+func Compare(target titlematch.Target, kept *ports.AudioCandidate, keptProbedSeconds float64, candidates []ports.AudioCandidate) Comparison {
 	keptURL := ""
 	if kept != nil {
 		keptURL = kept.URL
@@ -27,25 +30,24 @@ func Log(ctx context.Context, target titlematch.Target, trackID string, kept *po
 	if best, decision, found := titlematch.Choose(target, observed(candidates, keptURL, keptProbedSeconds)); found {
 		judgeURL, reason = best.URL, decision.Reason
 	}
-	slog.InfoContext(ctx, "acquisition.judge_shadow",
-		"track_id", trackID,
-		"pipeline_url", keptURL,
-		"judge_url", judgeURL,
-		"judge_reason", reason,
-		"verdict", verdictOf(kept != nil, keptURL, judgeURL),
-	)
+	return Comparison{
+		PipelineURL: keptURL,
+		JudgeURL:    judgeURL,
+		Reason:      reason,
+		Verdict:     verdictOf(kept != nil, keptURL, judgeURL),
+	}
 }
 
-func verdictOf(keptAny bool, keptURL, judgeURL string) verdict {
+func verdictOf(keptAny bool, keptURL, judgeURL string) Verdict {
 	switch {
 	case !keptAny:
-		return verdictPipelineFailed
+		return VerdictPipelineFailed
 	case judgeURL == "":
-		return verdictJudgeAbstained
+		return VerdictJudgeAbstained
 	case judgeURL == keptURL:
-		return verdictAgree
+		return VerdictAgree
 	default:
-		return verdictDisagree
+		return VerdictDisagree
 	}
 }
 

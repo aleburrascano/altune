@@ -5,7 +5,6 @@ import (
 	domain "altune/go-api/internal/search/domain"
 	providermetrics "altune/go-api/internal/search/internal/adapters/providermetrics"
 	artworkchain "altune/go-api/internal/search/internal/adapters/providers/artworkfallback"
-	deezer "altune/go-api/internal/search/internal/adapters/providers/deezer"
 	itunes "altune/go-api/internal/search/internal/adapters/providers/itunes"
 	providerhttp "altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	providersearch "altune/go-api/internal/search/internal/adapters/providers/providersearch"
@@ -54,7 +53,6 @@ const (
 	ConfidenceHigh                = domain.ConfidenceHigh
 	ContributorFeatured           = domain.ContributorFeatured
 	ContributorMain               = domain.ContributorMain
-	DeezerPlaceholderImage        = deezer.DeezerPlaceholderImage
 	EntityResolutionISRC          = domain.EntityResolutionISRC
 	EventTypeAuthFailed           = domain.EventTypeAuthFailed
 	EventTypeDetailHealth         = domain.EventTypeDetailHealth

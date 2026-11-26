@@ -40,10 +40,10 @@ func (s *Service) trackerResult(ctx context.Context, artistName string, catalogT
 }
 
 func (s *Service) geniusResult(ctx context.Context, artistName string, catalogTitles []string) sourceResult {
-	if s.genius == nil {
+	artistID, found, err := s.genius.FindArtistID(ctx, artistName, catalogTitles)
+	if errors.Is(err, ErrSourceNotConfigured) {
 		return sourceResult{}
 	}
-	artistID, found, err := s.genius.FindArtistID(ctx, artistName, catalogTitles)
 	if err != nil {
 		slog.WarnContext(ctx, "unreleased.genius_failed", "error", err)
 		return sourceResult{used: true, err: err}

@@ -2,6 +2,8 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/testdb"
 	"context"
 	"errors"
@@ -37,6 +39,23 @@ func insertFailedTrack(t *testing.T, pool *pgxpool.Pool) *download.TrackSnapshot
 }
 
 func queued() error { return nil }
+
+type contractPgxCooldowns struct {
+	*download.PostgresCooldownStore
+	pool *pgxpool.Pool
+}
+
+func (c contractPgxCooldowns) AddTrack(t *testing.T) ids.TrackId {
+	return insertFailedTrack(t, c.pool).ID
+}
+
+func TestPostgresCooldownStore_Contract(t *testing.T) {
+	testdb.RequireIntegration(t)
+	pool := newPool(t)
+	acquisitiontest.CooldownContract(t, func(*testing.T) acquisitiontest.CooldownUnderTest {
+		return contractPgxCooldowns{PostgresCooldownStore: download.NewPostgresCooldownStore(pool), pool: pool}
+	})
+}
 
 func TestPostgresCooldownStore_SurvivesRestart(t *testing.T) {
 	testdb.RequireIntegration(t)

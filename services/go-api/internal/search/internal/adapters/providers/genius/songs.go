@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -85,20 +86,28 @@ func (c *SongCatalog) searchHits(ctx context.Context, query string) ([]geniusSon
 }
 
 func (c *SongCatalog) ArtistSongs(ctx context.Context, artistID, maxPages int) ([]domain.UnreleasedSong, error) {
-	var songs []domain.UnreleasedSong
-	for page := 1; page > 0 && page <= maxPages; {
-		pageSongs, next, err := c.songsPage(ctx, artistID, page)
-		if err != nil {
-			return nil, err
-		}
-		for _, s := range pageSongs {
-			if s.PrimaryArtist.ID == artistID {
-				songs = append(songs, toUnreleasedSong(s))
+	next := 1
+	songs, err := providerrequests.FetchPaged(maxPages,
+		func(int) ([]domain.UnreleasedSong, bool, error) {
+			pageSongs, following, err := c.songsPage(ctx, artistID, next)
+			if err != nil {
+				return nil, false, err
 			}
-		}
-		page = next
+			next = following
+			var own []domain.UnreleasedSong
+			for _, s := range pageSongs {
+				if s.PrimaryArtist.ID == artistID {
+					own = append(own, toUnreleasedSong(s))
+				}
+			}
+			return own, following > 0, nil
+		},
+		func(int, error) {})
+	var partial *domain.PartialResultError
+	if errors.As(err, &partial) {
+		return nil, partial.Err
 	}
-	return songs, nil
+	return songs, err
 }
 
 func (c *SongCatalog) songsPage(ctx context.Context, artistID, page int) (songs []geniusSong, nextPage int, err error) {

@@ -302,6 +302,27 @@ func TestSongCatalog_ArtistSongs_StopsAtThePageCap(t *testing.T) {
 	}
 }
 
+func TestSongCatalog_ArtistSongs_AFailedLaterPageIsAFailureWithNoSongs(t *testing.T) {
+	pages := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pages++
+		if pages == 2 {
+			http.Error(w, "boom", http.StatusInternalServerError)
+			return
+		}
+		fmt.Fprint(w, `{"response":{"next_page":2,"songs":[{"id":1,"title":"A","primary_artist":{"id":7}}]}}`)
+	}))
+	defer server.Close()
+	catalog := search.NewSongCatalog(providertest.NewClient(server.URL), "tok")
+
+	songs, err := catalog.ArtistSongs(context.Background(), 7, 3)
+
+	var partial *search.PartialResultError
+	if err == nil || errors.As(err, &partial) || songs != nil {
+		t.Errorf("got %v, %v; want a plain error and no songs, so the unreleased service treats the catalog as unread", songs, err)
+	}
+}
+
 func TestSongCatalog_FindArtistID_RequiresAnExactPrimaryArtistName(t *testing.T) {
 	server := songCatalogServer(t, map[string]string{"/search": `{"response":{"hits":[
 		{"result":{"primary_artist":{"id":11,"name":"Internet Money"}}},

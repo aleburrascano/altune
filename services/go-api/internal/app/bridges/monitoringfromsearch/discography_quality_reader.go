@@ -17,9 +17,9 @@ func NewDiscographyQualityReader(store search.DiscographyQualityReader) monitori
 }
 
 func (r discographyQualityReader) DiscographyQuality(ctx context.Context, since time.Time, groupBy monitoring.DiscographyGroupBy, limit int) ([]monitoring.DiscographyCase, error) {
-	grouping := search.ParseDiscographyGroupBy(string(groupBy))
-	if string(grouping) != string(groupBy) {
-		return nil, fmt.Errorf("discography quality: discovery has no grouping for %q", groupBy)
+	grouping, err := search.ParseDiscographyGroupBy(string(groupBy))
+	if err != nil {
+		return nil, fmt.Errorf("discography quality: %w", err)
 	}
 	cases, err := r.store.DiscographyQuality(ctx, since, grouping, limit)
 	if err != nil {

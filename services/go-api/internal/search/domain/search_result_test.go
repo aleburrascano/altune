@@ -5,6 +5,26 @@ import (
 	"testing"
 )
 
+func TestSearchResult_WithExtraLeavesTheOriginalUntouched(t *testing.T) {
+	for name, extras := range map[string]map[string]any{"no extras": nil, "some extras": {"kept": 1}} {
+		t.Run(name, func(t *testing.T) {
+			original := domain.SearchResult{Extras: extras}
+
+			changed := original.WithExtra("added", true)
+
+			if _, leaked := original.Extras["added"]; leaked {
+				t.Errorf("original extras = %v, want the added key only on the copy", original.Extras)
+			}
+			if changed.Extras["added"] != true {
+				t.Errorf("copy extras = %v, want the added key", changed.Extras)
+			}
+			if extras != nil && changed.Extras["kept"] != 1 {
+				t.Errorf("copy extras = %v, want the existing keys kept", changed.Extras)
+			}
+		})
+	}
+}
+
 func TestNewProviderResult(t *testing.T) {
 	source := domain.ProviderLink{Provider: domain.ProviderDeezer, ExternalID: "123", URL: "https://deezer.com/track/123"}
 	r := domain.NewProviderResult(domain.ResultKindTrack, "HUMBLE.", "Kendrick Lamar", "https://img/x.jpg", source, nil)

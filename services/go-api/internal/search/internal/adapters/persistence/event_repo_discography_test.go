@@ -60,12 +60,7 @@ func discographyRefs(cases []ports.DiscographyCase) []string {
 func TestPostgresEventStore_DiscographyQuality_WorstFirstAndRegroup(t *testing.T) {
 	pool := testdb.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
-	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(),
-			`DELETE FROM discovery_events WHERE event_type = 'discography_observed'`)
-	})
-	_, _ = pool.Exec(context.Background(),
-		`DELETE FROM discovery_events WHERE event_type = 'discography_observed'`)
+	claimDiscographyObservations(t, pool)
 
 	now := time.Now().UTC()
 	seedObservation(t, store, now.Add(-1*time.Hour), "spotify:clean", 10, 0, map[string]int{"spotify": 10, "musicbrainz": 10})
@@ -107,12 +102,7 @@ func TestPostgresEventStore_DiscographyQuality_WorstFirstAndRegroup(t *testing.T
 func TestPostgresEventStore_DiscographyQuality_IDAnchoredRanking(t *testing.T) {
 	pool := testdb.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
-	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(),
-			`DELETE FROM discovery_events WHERE event_type = 'discography_observed'`)
-	})
-	_, _ = pool.Exec(context.Background(),
-		`DELETE FROM discovery_events WHERE event_type = 'discography_observed'`)
+	claimDiscographyObservations(t, pool)
 
 	now := time.Now().UTC()
 	seedObservationWithNoID(t, store, now.Add(-1*time.Hour), "spotify:id-verified", 10, 10, 0, map[string]int{"spotify": 10})
@@ -134,17 +124,21 @@ func TestPostgresEventStore_DiscographyQuality_IDAnchoredRanking(t *testing.T) {
 	}
 }
 
-func clearDiscographyObserved(t *testing.T, pool *pgxpool.Pool) {
+func claimDiscographyObservations(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	_, _ = pool.Exec(context.Background(),
-		`DELETE FROM discovery_events WHERE event_type = 'discography_observed'`)
+	testdb.ExclusiveDiscographyObservations(t, pool)
+	clearDiscographyObserved := func() {
+		_, _ = pool.Exec(context.Background(),
+			`DELETE FROM discovery_events WHERE event_type = 'discography_observed'`)
+	}
+	clearDiscographyObserved()
+	t.Cleanup(clearDiscographyObserved)
 }
 
 func TestPostgresEventStore_SuspectRate_WindowedRealOpens(t *testing.T) {
 	pool := testdb.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
-	t.Cleanup(func() { clearDiscographyObserved(t, pool) })
-	clearDiscographyObserved(t, pool)
+	claimDiscographyObservations(t, pool)
 
 	now := time.Now().UTC()
 	newest := now.Add(-1 * time.Hour)
@@ -189,9 +183,8 @@ func TestPostgresEventStore_SuspectRate_EvalRunLeavesNoSystemEvents(t *testing.T
 func TestPostgresEventStore_SuspectRate_EvalRunDoesNotMoveIt(t *testing.T) {
 	pool := testdb.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
-	t.Cleanup(func() { clearDiscographyObserved(t, pool) })
 	t.Cleanup(func() { clearSystemNonDiscographyEvents(t, pool) })
-	clearDiscographyObserved(t, pool)
+	claimDiscographyObservations(t, pool)
 
 	now := time.Now().UTC()
 	since := now.AddDate(0, 0, -30)
@@ -222,8 +215,7 @@ func TestPostgresEventStore_SuspectRate_EvalRunDoesNotMoveIt(t *testing.T) {
 func TestPostgresEventStore_SuspectRate_EmptyWindowIsZero(t *testing.T) {
 	pool := testdb.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
-	t.Cleanup(func() { clearDiscographyObserved(t, pool) })
-	clearDiscographyObserved(t, pool)
+	claimDiscographyObservations(t, pool)
 
 	got, err := store.SuspectRate(context.Background(), time.Now().UTC().AddDate(0, 0, -30))
 	if err != nil {
@@ -283,12 +275,7 @@ func remainingDiscographyRefs(t *testing.T, pool *pgxpool.Pool) map[string]bool 
 func TestPostgresEventStore_PruneDiscographyObserved(t *testing.T) {
 	pool := testdb.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
-	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(),
-			`DELETE FROM discovery_events WHERE event_type = 'discography_observed'`)
-	})
-	_, _ = pool.Exec(context.Background(),
-		`DELETE FROM discovery_events WHERE event_type = 'discography_observed'`)
+	claimDiscographyObservations(t, pool)
 
 	now := time.Now().UTC()
 	counts := map[string]int{"spotify": 10, "musicbrainz": 2}
@@ -332,12 +319,7 @@ func TestPostgresEventStore_PruneDiscographyObserved(t *testing.T) {
 func TestPostgresEventStore_PruneDiscographyObserved_Idempotent(t *testing.T) {
 	pool := testdb.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
-	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(),
-			`DELETE FROM discovery_events WHERE event_type = 'discography_observed'`)
-	})
-	_, _ = pool.Exec(context.Background(),
-		`DELETE FROM discovery_events WHERE event_type = 'discography_observed'`)
+	claimDiscographyObservations(t, pool)
 
 	now := time.Now().UTC()
 	seedObservation(t, store, now.Add(-1*time.Hour), "spotify:fresh", 10, 8, map[string]int{"spotify": 10})

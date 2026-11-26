@@ -40,16 +40,14 @@ func (a *DeezerAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 		case item.PictureBig != "":
 			img = item.PictureBig
 		}
-		if img != "" && !IsDeezerPlaceholder(img) {
+		if img != "" && !isDeezerPlaceholder(img) {
 			return img, nil
 		}
 	}
 	return "", nil
 }
 
-const DeezerPlaceholderImage = "https://e-cdns-images.dzcdn.net/images/artist//500x500-000000-80-0-0.jpg"
-
-func IsDeezerPlaceholder(u string) bool {
+func isDeezerPlaceholder(u string) bool {
 	return strings.Contains(u, "/images/artist//") || strings.Contains(u, "d41d8cd98f00b204e9800998ecf8427e")
 }
 

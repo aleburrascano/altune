@@ -142,7 +142,7 @@ type degradedCase struct {
 }
 
 func mbRouter(f *scriptedMBEnricher) (chi.Router, *int) {
-	svc := search.NewEnrichmentService(f, nil, newMemMBCache())
+	svc := mustEnrichment(search.NewEnrichmentService(f, search.NoArtwork{}, newMemMBCache(), search.NoMBIDIndex{}))
 	return buildEnrichmentRouter(svc), &f.calls
 }
 
@@ -365,7 +365,7 @@ func TestEnrichmentEndpoints_NilCollectionsServeAsEmpty(t *testing.T) {
 	}{
 		{
 			name:   "musicbrainz",
-			router: buildEnrichmentRouter(search.NewEnrichmentService(bareMBEnricher{}, nil, nil)),
+			router: buildEnrichmentRouter(mustEnrichment(search.NewEnrichmentService(bareMBEnricher{}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{}))),
 			path:   "/discovery/enrichment?kind=album&title=Illmatic",
 			want:   map[string]string{"genres": "[]", "secondary_types": "[]", "external_ids": "{}"},
 		},

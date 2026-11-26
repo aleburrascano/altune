@@ -11,7 +11,6 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strconv"
-	"sync"
 	"testing"
 	"time"
 
@@ -47,9 +46,9 @@ func TestHandleRetryAcquisition_CooldownRetryAfterIsTimeLeft(t *testing.T) {
 	repo := acquisitiontest.NewLedger()
 	track := failedTrack(retryTestUserId)
 	repo.Seed(track)
-	store := newMemCooldownStore()
+	store := acquisitiontest.NewCooldownStore()
 	clock := time.Now()
-	store.now = func() time.Time { return clock }
+	store.SetClock(func() time.Time { return clock })
 	h := download.NewRetryHandler(repo, &retryFakeScheduler{}, download.NewRetryAdmission(store))
 	router := chi.NewRouter()
 	router.Use(signedInAs(retryTestUserId))
@@ -196,37 +195,6 @@ func TestHandleReacquire_UsesTheInjectedAdmission(t *testing.T) {
 	}
 }
 
-type memCooldownStore struct {
-	mu     sync.Mutex
-	now    func() time.Time
-	lastAt map[string]time.Time
-}
-
-func newMemCooldownStore() *memCooldownStore {
-	return &memCooldownStore{now: time.Now, lastAt: make(map[string]time.Time)}
-}
-
-func (s *memCooldownStore) Reserve(_ context.Context, trackID ids.TrackId, kind download.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now, key := s.now(), string(kind)+"/"+trackID.String()
-	if last, ok := s.lastAt[key]; ok && now.Sub(last) < cooldown {
-		return time.Time{}, false, cooldown - now.Sub(last), nil
-	}
-	s.lastAt[key] = now
-	return now, true, 0, nil
-}
-
-func (s *memCooldownStore) Release(_ context.Context, trackID ids.TrackId, kind download.CooldownKind, at time.Time) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	key := string(kind) + "/" + trackID.String()
-	if last, ok := s.lastAt[key]; ok && last.Equal(at) {
-		delete(s.lastAt, key)
-	}
-	return nil
-}
-
 var (
 	reacquireTestUserUUID = uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 	reacquireTestUserId   = ids.NewUserId(reacquireTestUserUUID)
@@ -246,7 +214,7 @@ func (s *reacquireFakeScheduler) ScheduleReplace(_ context.Context, _ ids.UserId
 }
 
 func buildReacquireRouter(trackRepo *acquisitiontest.Ledger, scheduler *reacquireFakeScheduler) chi.Router {
-	h := download.NewReacquireHandler(trackRepo, scheduler, download.NewReacquireAdmission(newMemCooldownStore()))
+	h := download.NewReacquireHandler(trackRepo, scheduler, download.NewReacquireAdmission(acquisitiontest.NewCooldownStore()))
 	r := chi.NewRouter()
 	r.Use(signedInAs(reacquireTestUserId))
 	r.Post("/tracks/{trackId}/reacquire", h.HandleReacquire)
@@ -449,7 +417,7 @@ func retryAssertStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
 }
 
 func buildRetryRouter(trackRepo *acquisitiontest.Ledger, scheduler *retryFakeScheduler) chi.Router {
-	h := download.NewRetryHandler(trackRepo, scheduler, download.NewRetryAdmission(newMemCooldownStore()))
+	h := download.NewRetryHandler(trackRepo, scheduler, download.NewRetryAdmission(acquisitiontest.NewCooldownStore()))
 	r := chi.NewRouter()
 	r.Use(signedInAs(retryTestUserId))
 	r.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
@@ -544,7 +512,7 @@ type ownedRoute struct {
 	name       string
 	path       string
 	actionable func(ids.UserId) acquisitiontest.LedgerTrack
-	mount      func(ledger *acquisitiontest.Ledger, cooldowns *memCooldownStore, as ids.UserId) (chi.Router, func() int)
+	mount      func(ledger *acquisitiontest.Ledger, cooldowns *acquisitiontest.CooldownStore, as ids.UserId) (chi.Router, func() int)
 }
 
 func ownedRoutes() []ownedRoute {
@@ -553,7 +521,7 @@ func ownedRoutes() []ownedRoute {
 			name:       "retry",
 			path:       "/retry",
 			actionable: failedTrack,
-			mount: func(ledger *acquisitiontest.Ledger, cooldowns *memCooldownStore, as ids.UserId) (chi.Router, func() int) {
+			mount: func(ledger *acquisitiontest.Ledger, cooldowns *acquisitiontest.CooldownStore, as ids.UserId) (chi.Router, func() int) {
 				scheduler := &retryFakeScheduler{}
 				r := chi.NewRouter()
 				r.Use(signedInAs(as))
@@ -565,7 +533,7 @@ func ownedRoutes() []ownedRoute {
 			name:       "reacquire",
 			path:       "/reacquire",
 			actionable: readyTrack,
-			mount: func(ledger *acquisitiontest.Ledger, cooldowns *memCooldownStore, as ids.UserId) (chi.Router, func() int) {
+			mount: func(ledger *acquisitiontest.Ledger, cooldowns *acquisitiontest.CooldownStore, as ids.UserId) (chi.Router, func() int) {
 				scheduler := &reacquireFakeScheduler{}
 				r := chi.NewRouter()
 				r.Use(signedInAs(as))
@@ -582,7 +550,7 @@ func TestHandlers_AnotherUsersTrackIsAnsweredExactlyLikeAMissingOne(t *testing.T
 			owner, intruder := ids.NewUserId(uuid.New()), ids.NewUserId(uuid.New())
 			track := route.actionable(owner)
 			ledger := acquisitiontest.NewLedger(track)
-			cooldowns := newMemCooldownStore()
+			cooldowns := acquisitiontest.NewCooldownStore()
 			asIntruder, intruderScheduled := route.mount(ledger, cooldowns, intruder)
 
 			missing := retryServe(t, asIntruder, http.MethodPost, "/tracks/"+uuid.New().String()+route.path)

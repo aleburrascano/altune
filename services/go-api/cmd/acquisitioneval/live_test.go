@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -49,7 +50,16 @@ func (s liveServer) handler(t *testing.T) http.Handler {
 func (s liveServer) client(t *testing.T) *download.YouTubeMusicSearchClient {
 	srv := httptest.NewServer(s.handler(t))
 	t.Cleanup(srv.Close)
-	return download.NewYtmSearch(download.YouTubeMusicSearchConfig{MusicURL: srv.URL, OEmbedURL: srv.URL + "/oembed", Timeout: 5 * time.Second})
+	return liveClient(t, srv.URL, 5*time.Second)
+}
+
+func liveClient(t *testing.T, baseURL string, timeout time.Duration) *download.YouTubeMusicSearchClient {
+	t.Helper()
+	client, err := download.NewYtmSearch(download.YouTubeMusicSearchConfig{HTTP: &http.Client{}, MusicURL: baseURL, OEmbedURL: baseURL + "/oembed", Timeout: timeout})
+	if err != nil {
+		t.Fatalf("build the live client: %v", err)
+	}
+	return client
 }
 
 const liveTracksJSONL = `{"id":"t-atv","title":"remember them days","artist":"SLAYR","album":"a","duration_seconds":113,"audio_source_url":"https://www.youtube.com/watch?v=XDC3uH1FSgw","acquisition_provenance":"verified","acquisition_evidence":{"duration_delta_seconds":0.4},"isrc":"ignored"}
@@ -153,7 +163,7 @@ func TestRunLive_FailedLookupDegradesToALookupFailedFlag(t *testing.T) {
 func TestRunLive_UnreachableYouTubeMarksEveryStepFailed(t *testing.T) {
 	srv := httptest.NewServer(http.NotFoundHandler())
 	srv.Close()
-	client := download.NewYtmSearch(download.YouTubeMusicSearchConfig{MusicURL: srv.URL, OEmbedURL: srv.URL + "/oembed", Timeout: time.Second})
+	client := liveClient(t, srv.URL, time.Second)
 	tracks := writeTracks(t, strings.Split(liveTracksJSONL, "\n")[0]+"\n")
 	out := filepath.Join(t.TempDir(), "judged.jsonl")
 
@@ -206,6 +216,23 @@ func TestYoutubeVideoID(t *testing.T) {
 				t.Fatalf("youtubeVideoID(%q) = %q, %v; want %q, %v", tc.url, id, ok, tc.wantID, tc.wantOK)
 			}
 		})
+	}
+}
+
+func TestLiveCommand_RefusesANonPositiveTimeoutBeforeAnythingConnects(t *testing.T) {
+	for _, timeout := range []string{"0s", "-5s"} {
+		getenv := func(k string) string {
+			if k == liveTimeoutEnv {
+				return timeout
+			}
+			return ""
+		}
+		if _, err := liveConfigFromEnv(getenv); !errors.Is(err, errLiveTimeoutNotPositive) {
+			t.Errorf("liveConfigFromEnv(timeout %s) error = %v, want %v", timeout, err, errLiveTimeoutNotPositive)
+		}
+		if code := runLiveCommand(nil, io.Discard, getenv); code != liveUsageExitCode {
+			t.Errorf("runLiveCommand(timeout %s) exit code = %d, want %d", timeout, code, liveUsageExitCode)
+		}
 	}
 }
 

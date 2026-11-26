@@ -223,6 +223,32 @@ func TestReadsAcquisition_NilReaderAnswers200WithEmptyStatus(t *testing.T) {
 	}
 }
 
+func TestReadsQuality_AnUnknownGroupingIsABadRequestAndNeverReachesTheReader(t *testing.T) {
+	reader := &fakeDiscographyReader{}
+
+	rec := serveRead(t, monitoring.Deps{Discography: reader}, "/quality/discography?by=genre")
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body %s)", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "observe.invalid_group_by") {
+		t.Errorf("body = %s, want the observe.invalid_group_by code", rec.Body.String())
+	}
+	if reader.gotLimit != 0 {
+		t.Errorf("the reader was asked for %d cases, want no call for a grouping nobody defined", reader.gotLimit)
+	}
+}
+
+func TestReadsQuality_NoGroupingMeansByArtist(t *testing.T) {
+	reader := &fakeDiscographyReader{}
+
+	rec := serveRead(t, monitoring.Deps{Discography: reader}, "/quality/discography")
+
+	if rec.Code != http.StatusOK || reader.gotGroupBy != monitoring.GroupByArtist {
+		t.Fatalf("status = %d, grouping = %q, want 200 and %q", rec.Code, reader.gotGroupBy, monitoring.GroupByArtist)
+	}
+}
+
 func TestReadsQuality_ServesTheWindowedCases(t *testing.T) {
 	seen := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
 	reader := &fakeDiscographyReader{

@@ -17,6 +17,15 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
+func liveTiers(t *testing.T, cfg *config.Config) (downloadsetup.SourceOrder, download.Verification) {
+	t.Helper()
+	tiers, tools, err := downloadsetup.EnabledSources(t.Context(), cfg, nil)
+	if err != nil {
+		t.Fatalf("LiveTiers: %v", err)
+	}
+	return tiers, tools
+}
+
 func TestLiveTiers_EachSourceFollowsItsSwitch(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -33,7 +42,7 @@ func TestLiveTiers_EachSourceFollowsItsSwitch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sources, _ := downloadsetup.EnabledSources(t.Context(), &config.Config{YtMusicEnabled: tt.ytMusic, YtDLPEnabled: tt.ytDlp}, nil)
+			sources, _ := liveTiers(t, &config.Config{YtMusicEnabled: tt.ytMusic, YtDLPEnabled: tt.ytDlp})
 			names := sourceNames(sources.All())
 
 			if got := containsSource(names, download.YtMusicSourceName); got != tt.wantYtMusic {
@@ -47,7 +56,7 @@ func TestLiveTiers_EachSourceFollowsItsSwitch(t *testing.T) {
 }
 
 func TestLiveTiers_WithEverySourceSwitchedOffTheCatalogLinkIsNotAddedAlone(t *testing.T) {
-	tiers, _ := downloadsetup.EnabledSources(t.Context(), &config.Config{}, nil)
+	tiers, _ := liveTiers(t, &config.Config{})
 
 	if names := sourceNames(tiers.All()); len(names) != 0 {
 		t.Errorf("sources = %v with YTMUSIC_ENABLED and YTDLP_ENABLED off, want none", names)
@@ -55,7 +64,7 @@ func TestLiveTiers_WithEverySourceSwitchedOffTheCatalogLinkIsNotAddedAlone(t *te
 }
 
 func TestLiveTiers_YouTubeMusicSearchRunsFirstAndYtDlpIsTheFallback(t *testing.T) {
-	tiers, _ := downloadsetup.EnabledSources(t.Context(), &config.Config{YtMusicEnabled: true, YtDLPEnabled: true}, nil)
+	tiers, _ := liveTiers(t, &config.Config{YtMusicEnabled: true, YtDLPEnabled: true})
 
 	first, fallback := sourceNames(tiers.First), sourceNames(tiers.Fallback)
 	if !containsSource(first, download.YtMusicSourceName) || !containsSource(first, download.YouTubeMusicSearchSourceName) {
@@ -67,7 +76,7 @@ func TestLiveTiers_YouTubeMusicSearchRunsFirstAndYtDlpIsTheFallback(t *testing.T
 }
 
 func TestLiveTiers_TheSongsSearchOutranksTheCatalogLinkForTheSameVideo(t *testing.T) {
-	tiers, _ := downloadsetup.EnabledSources(t.Context(), &config.Config{YtMusicEnabled: true, YtDLPEnabled: true}, nil)
+	tiers, _ := liveTiers(t, &config.Config{YtMusicEnabled: true, YtDLPEnabled: true})
 	first := sourceNames(tiers.First)
 
 	if len(first) != 3 || first[0] != download.SavedLinkSourceName || first[1] != download.YouTubeMusicSearchSourceName || first[2] != download.YtMusicSourceName {
@@ -93,7 +102,7 @@ func TestLiveTiers_ReportWhetherYtDlpIsInstalled(t *testing.T) {
 			}
 			t.Setenv("PATH", bin)
 
-			tiers, tools := downloadsetup.EnabledSources(t.Context(), &config.Config{YtDLPEnabled: true}, nil)
+			tiers, tools := liveTiers(t, &config.Config{YtDLPEnabled: true})
 
 			if tools.YtDlp != tt.installed {
 				t.Errorf("tools report yt-dlp installed = %v, want %v", tools.YtDlp, tt.installed)
@@ -155,7 +164,10 @@ func containsSource(list []download.SourceName, want download.SourceName) bool {
 }
 
 func TestCanaryYTMClient_BoundsEveryCallAndPacesItsSearches(t *testing.T) {
-	client := downloadsetup.CanaryYTMClient(&config.Config{}, nil)
+	client, err := downloadsetup.CanaryYTMClient(&config.Config{}, nil)
+	if err != nil {
+		t.Fatalf("CanaryYTMClient without redis: %v", err)
+	}
 
 	if client.Timeout() <= 0 {
 		t.Errorf("Timeout() = %s, want a positive bound on every InnerTube call", client.Timeout())
@@ -175,7 +187,10 @@ func TestCanaryYTMClient_ACooldownAnotherInstanceRecordedInRedisHoldsItsSearches
 	if err := otherInstance.CoolDown(t.Context()); err != nil {
 		t.Fatalf("record the cooldown: %v", err)
 	}
-	client := downloadsetup.CanaryYTMClient(&config.Config{}, redis)
+	client, err := downloadsetup.CanaryYTMClient(&config.Config{}, redis)
+	if err != nil {
+		t.Fatalf("CanaryYTMClient with redis: %v", err)
+	}
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()

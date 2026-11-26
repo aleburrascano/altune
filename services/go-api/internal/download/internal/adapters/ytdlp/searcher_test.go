@@ -495,6 +495,29 @@ func TestYtDlpAudioSearcher_MarkUnplayable_SetsTheExactPersistedReasonStrings(t 
 	}
 }
 
+type panickingContext struct{ context.Context }
+
+func (panickingContext) Deadline() (time.Time, bool) { panic("deadline exploded") }
+
+func TestYtDlpAudioSearcher_SearchQueries_APanicInsideEverySearchIsAFailureNotAnEmptyAnswer(t *testing.T) {
+	candidates, err := download.NewYtDlpAudioSearcher("", "", "").
+		SearchQueries(panickingContext{context.Background()}, []string{"Blinding Lights"})
+
+	if err == nil {
+		t.Fatalf("SearchQueries = %d candidates, nil; want an error so the track is not reported as having no match", len(candidates))
+	}
+}
+
+func TestYtDlpAudioSearcher_MarkUnplayable_APanicInsideAnInspectionLeavesTheCandidatePlayable(t *testing.T) {
+	candidates := []download.AudioCandidate{{Title: "Drinking in L.A.", URL: soundCloudTrackURL, Duration: 240}}
+
+	download.NewYtDlpAudioSearcher("", "", "").MarkUnplayable(panickingContext{context.Background()}, candidates)
+
+	if got := candidates[0].Unplayable; got != "" {
+		t.Errorf("Unplayable = %q, want it left empty", got)
+	}
+}
+
 const leakyStderr = "echo \"ERROR: unable to open /home/op/secrets/cookies.txt https://cdn.example/a?Expires=1&token=SIGNEDTOKEN123456&Signature=SIGNEDSIG987654\" >&2\n" +
 	"head -c 100000 /dev/zero | tr '\\0' 'x' >&2\n" +
 	"exit 1"

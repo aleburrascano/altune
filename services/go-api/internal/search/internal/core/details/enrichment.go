@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 )
@@ -26,23 +27,63 @@ type DetailsService struct {
 	mbidIndex ports.MBIDIndex
 }
 
-type EnrichmentOption func(*DetailsService)
+var ErrCollaboratorRequired = errors.New("enrichment service needs every collaborator, pass the null object to switch one off")
 
-func WithMBIDMemo(idx ports.MBIDIndex) EnrichmentOption {
-	return func(s *DetailsService) { s.mbidIndex = idx }
+type NoArtwork struct{}
+
+func (NoArtwork) ResolveTagged(context.Context, domain.ResultKind, string, string, string) (string, domain.ProviderKey, error) {
+	return "", "", nil
+}
+
+func (NoArtwork) ResolveWithIdentityTagged(context.Context, domain.ResultKind, string, string, ports.ArtworkIdentity) (string, domain.ProviderKey, error) {
+	return "", "", nil
+}
+
+type NoEnrichmentCache struct{}
+
+func (NoEnrichmentCache) Get(context.Context, domain.ResultKind, string) (domain.MusicBrainzEnrichment, bool, error) {
+	return domain.EmptyEnrichment(), false, nil
+}
+
+func (NoEnrichmentCache) Set(context.Context, domain.ResultKind, string, domain.MusicBrainzEnrichment) error {
+	return nil
+}
+
+func (NoEnrichmentCache) GetNegative(context.Context, domain.ResultKind, string) (bool, error) {
+	return false, nil
+}
+
+func (NoEnrichmentCache) SetNegative(context.Context, domain.ResultKind, string) error {
+	return nil
+}
+
+type NoMBIDIndex struct{}
+
+func (NoMBIDIndex) LookupMBID(context.Context, domain.ResultKind, string) (string, bool) {
+	return "", false
+}
+
+func (NoMBIDIndex) RememberMBID(context.Context, domain.ResultKind, string, string) error {
+	return nil
 }
 
 func NewEnrichmentService(
 	enricher ports.DetailsProvider,
 	artwork ports.TaggingArtworkLookup,
 	cache ports.EnrichmentCache,
-	opts ...EnrichmentOption,
-) *DetailsService {
-	s := &DetailsService{enricher: enricher, artwork: artwork, cache: cache}
-	for _, opt := range opts {
-		opt(s)
+	mbidIndex ports.MBIDIndex,
+) (*DetailsService, error) {
+	for name, missing := range map[string]bool{
+		"enricher":  enricher == nil,
+		"artwork":   artwork == nil,
+		"cache":     cache == nil,
+		"mbidIndex": mbidIndex == nil,
+	} {
+		if missing {
+			return nil, fmt.Errorf("%w: %s is nil", ErrCollaboratorRequired, name)
+		}
 	}
-	return s
+	return &DetailsService{enricher: enricher, artwork: artwork, cache: cache, mbidIndex: mbidIndex}, nil
 }
 
 func (s *DetailsService) Execute(
@@ -50,20 +91,12 @@ func (s *DetailsService) Execute(
 	kind domain.ResultKind,
 	title, subtitle, mbidParam string,
 ) (domain.MusicBrainzEnrichment, error) {
-	if s.enricher == nil {
-		return domain.EmptyEnrichment(), nil
-	}
-
 	if mbidParam != "" {
 		return s.lookup(ctx, kind, title, subtitle, mbidParam, mbidFromCaller)
 	}
 
 	nameKey := textnorm.NameKey(title, subtitle)
-	var memo ports.NameKeyedCache[domain.MusicBrainzEnrichment]
-	if s.cache != nil {
-		memo = mbResolutionMemo{cache: s.cache, kind: kind}
-	}
-	return CachedLookup(ctx, memo, nameKey, domain.EmptyEnrichment(),
+	return CachedLookup(ctx, mbResolutionMemo{cache: s.cache, kind: kind}, nameKey, domain.EmptyEnrichment(),
 		func(ctx context.Context) (domain.MusicBrainzEnrichment, bool, error) {
 			mbid, err := s.enricher.ResolveMBID(ctx, kind, title, subtitle)
 			if err != nil {
@@ -74,9 +107,7 @@ func (s *DetailsService) Execute(
 			if mbid == "" {
 				return domain.EmptyEnrichment(), false, nil
 			}
-			if s.mbidIndex != nil {
-				_ = s.mbidIndex.RememberMBID(ctx, kind, nameKey, mbid)
-			}
+			_ = s.mbidIndex.RememberMBID(ctx, kind, nameKey, mbid)
 			e, err := s.lookup(ctx, kind, title, subtitle, mbid, mbidFromTitleResolution)
 			if err != nil {
 				return e, false, err
@@ -91,10 +122,8 @@ func (s *DetailsService) lookup(
 	title, subtitle, mbid string,
 	origin mbidOrigin,
 ) (domain.MusicBrainzEnrichment, error) {
-	if s.cache != nil {
-		if cached, found, _ := s.cache.Get(ctx, kind, mbid); found {
-			return cached, nil
-		}
+	if cached, found, _ := s.cache.Get(ctx, kind, mbid); found {
+		return cached, nil
 	}
 
 	e, err := s.enricher.Lookup(ctx, kind, mbid)
@@ -111,9 +140,7 @@ func (s *DetailsService) lookup(
 		return e, nil
 	}
 
-	if s.cache != nil {
-		_ = s.cache.Set(ctx, kind, mbid, e)
-	}
+	_ = s.cache.Set(ctx, kind, mbid, e)
 	return e, nil
 }
 
@@ -124,9 +151,6 @@ func (s *DetailsService) mergeArtwork(
 	title, subtitle, mbid string,
 	origin mbidOrigin,
 ) error {
-	if s.artwork == nil {
-		return nil
-	}
 	ctx, cancel := context.WithTimeout(ctx, artworkMergeBudget)
 	defer cancel()
 

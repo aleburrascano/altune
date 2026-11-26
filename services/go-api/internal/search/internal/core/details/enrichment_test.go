@@ -6,9 +6,53 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
+
+func newService(t *testing.T, enr ports.DetailsProvider, art ports.TaggingArtworkLookup, cache ports.EnrichmentCache, idx ports.MBIDIndex) *details.DetailsService {
+	t.Helper()
+	svc, err := details.NewEnrichmentService(enr, art, cache, idx)
+	if err != nil {
+		t.Fatalf("NewEnrichmentService: %v", err)
+	}
+	return svc
+}
+
+func TestNewEnrichmentService_RefusesAMissingCollaborator(t *testing.T) {
+	enr, art, cache, idx := ports.DetailsProvider(&fakeEnricher{}), ports.TaggingArtworkLookup(details.NoArtwork{}), ports.EnrichmentCache(details.NoEnrichmentCache{}), ports.MBIDIndex(details.NoMBIDIndex{})
+	cases := map[string]func() (*details.DetailsService, error){
+		"enricher":  func() (*details.DetailsService, error) { return details.NewEnrichmentService(nil, art, cache, idx) },
+		"artwork":   func() (*details.DetailsService, error) { return details.NewEnrichmentService(enr, nil, cache, idx) },
+		"cache":     func() (*details.DetailsService, error) { return details.NewEnrichmentService(enr, art, nil, idx) },
+		"mbidIndex": func() (*details.DetailsService, error) { return details.NewEnrichmentService(enr, art, cache, nil) },
+	}
+	for missing, build := range cases {
+		t.Run(missing, func(t *testing.T) {
+			svc, err := build()
+			if !errors.Is(err, details.ErrCollaboratorRequired) || svc != nil || !strings.Contains(err.Error(), missing) {
+				t.Errorf("built (%v, %v), want a nil service and an error naming %s", svc, err, missing)
+			}
+		})
+	}
+}
+
+func TestEnrichmentService_NullCacheRemembersNoMissBetweenCalls(t *testing.T) {
+	enr := &fakeEnricher{resolveID: ""}
+	svc := newService(t, enr, details.NoArtwork{}, details.NoEnrichmentCache{}, details.NoMBIDIndex{})
+
+	for range 2 {
+		got, err := svc.Execute(context.Background(), domain.ResultKindAlbum, "Unknown", "Nobody", "")
+		if err != nil || !got.IsZero() {
+			t.Fatalf("Execute = %#v, %v; want an empty enrichment and no error", got, err)
+		}
+	}
+
+	if enr.resolves != 2 {
+		t.Errorf("title resolutions = %d, want 2: a null cache must not remember the miss", enr.resolves)
+	}
+}
 
 type fakeEnricher struct {
 	lookups    int
@@ -66,7 +110,7 @@ func (m *fakeMBIDMemo) RememberMBID(_ context.Context, kind domain.ResultKind, n
 func TestEnrichmentService_ResolveWarmsMBIDMemo(t *testing.T) {
 	enr := &fakeEnricher{resolveID: "mbid-warm", enrichment: sampleEnrichment()}
 	memo := &fakeMBIDMemo{remembered: map[string]string{}}
-	svc := details.NewEnrichmentService(enr, &fakeArtwork{}, newMemEnrichmentCache(), details.WithMBIDMemo(memo))
+	svc := newService(t, enr, &fakeArtwork{}, newMemEnrichmentCache(), memo)
 
 	if _, err := svc.Execute(context.Background(), domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", ""); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -93,7 +137,7 @@ func TestEnrichmentService_PassedMBID_CachesWholeValue(t *testing.T) {
 	enr := &fakeEnricher{enrichment: sampleEnrichment()}
 	art := &fakeArtwork{url: "https://caa/1200.jpg"}
 	cache := newMemEnrichmentCache()
-	svc := details.NewEnrichmentService(enr, art, cache)
+	svc := newService(t, enr, art, cache, details.NoMBIDIndex{})
 
 	got, err := svc.Execute(context.Background(), domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", "mbid-1")
 	if err != nil {
@@ -118,7 +162,7 @@ func TestEnrichmentService_PassedMBID_CachesWholeValue(t *testing.T) {
 func TestEnrichmentService_LookupError_DegradesToEmpty(t *testing.T) {
 	enr := &fakeEnricher{lookupErr: errors.New("mb 503")}
 	cache := newMemEnrichmentCache()
-	svc := details.NewEnrichmentService(enr, &fakeArtwork{}, cache)
+	svc := newService(t, enr, &fakeArtwork{}, cache, details.NoMBIDIndex{})
 
 	got, err := svc.Execute(context.Background(), domain.ResultKindArtist, "X", "", "mbid-err")
 	if !errors.Is(err, details.ErrDegraded) {
@@ -134,7 +178,7 @@ func TestEnrichmentService_LookupError_DegradesToEmpty(t *testing.T) {
 
 func TestEnrichmentService_PassedMBID_404DegradesToEmpty(t *testing.T) {
 	enr := &fakeEnricher{lookupErr: errors.New("musicbrainz returned 404")}
-	svc := details.NewEnrichmentService(enr, nil, nil)
+	svc := newService(t, enr, details.NoArtwork{}, details.NoEnrichmentCache{}, details.NoMBIDIndex{})
 
 	got, err := svc.Execute(context.Background(), domain.ResultKindAlbum, "Stale", "", "stale-mbid")
 	if !errors.Is(err, details.ErrDegraded) || !got.IsZero() {
@@ -145,7 +189,7 @@ func TestEnrichmentService_PassedMBID_404DegradesToEmpty(t *testing.T) {
 func TestEnrichmentService_ArtworkMerged(t *testing.T) {
 	enr := &fakeEnricher{enrichment: domain.EmptyEnrichment()}
 	art := &fakeArtwork{url: "https://caa/front-1200.jpg"}
-	svc := details.NewEnrichmentService(enr, art, nil)
+	svc := newService(t, enr, art, details.NoEnrichmentCache{}, details.NoMBIDIndex{})
 
 	got, _ := svc.Execute(context.Background(), domain.ResultKindAlbum, "T", "A", "mbid-art")
 	if got.ArtworkURL != "https://caa/front-1200.jpg" {
@@ -157,7 +201,7 @@ func TestEnrichmentService_CoverlessEntryFromADownChainIsNotCached(t *testing.T)
 	enr := &fakeEnricher{enrichment: sampleEnrichment()}
 	art := &fakeArtwork{err: ports.ErrArtworkDegraded}
 	cache := newMemEnrichmentCache()
-	svc := details.NewEnrichmentService(enr, art, cache)
+	svc := newService(t, enr, art, cache, details.NoMBIDIndex{})
 
 	got, err := svc.Execute(context.Background(), domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", "mbid-1")
 	if err != nil {
@@ -181,7 +225,7 @@ func TestEnrichmentService_CoverlessEntryFromADownChainIsNotCached(t *testing.T)
 func TestEnrichmentService_Unresolved_NegativeCached(t *testing.T) {
 	enr := &fakeEnricher{resolveID: ""}
 	cache := newMemEnrichmentCache()
-	svc := details.NewEnrichmentService(enr, &fakeArtwork{}, cache)
+	svc := newService(t, enr, &fakeArtwork{}, cache, details.NoMBIDIndex{})
 
 	got, _ := svc.Execute(context.Background(), domain.ResultKindAlbum, "Unknown", "Nobody", "")
 	if !got.IsZero() {
@@ -224,7 +268,7 @@ func TestEnrichmentService_CallerSuppliedMBID_DoesNotMergeNameDerivedArtwork(t *
 	enr := &fakeEnricher{enrichment: sampleEnrichment()}
 	art := &nameVsIdentityArtwork{nameURL: "https://poisoned/from-unrelated-title.jpg"}
 	cache := newMemEnrichmentCache()
-	svc := details.NewEnrichmentService(enr, art, cache)
+	svc := newService(t, enr, art, cache, details.NoMBIDIndex{})
 
 	got, err := svc.Execute(context.Background(), domain.ResultKindAlbum,
 		"Some Other Album", "Other Artist", "mbid-1")
@@ -256,7 +300,7 @@ func TestEnrichmentService_CallerSuppliedMBID_UsesIdentityArtworkWhenAvailable(t
 		nameURL:     "https://poisoned/from-unrelated-title.jpg",
 		identityURL: "https://caa/real-cover.jpg",
 	}
-	svc := details.NewEnrichmentService(enr, art, newMemEnrichmentCache())
+	svc := newService(t, enr, art, newMemEnrichmentCache(), details.NoMBIDIndex{})
 
 	got, err := svc.Execute(context.Background(), domain.ResultKindAlbum,
 		"Some Other Album", "Other Artist", "mbid-1")
@@ -272,7 +316,7 @@ func TestEnrichmentService_ResolvedFromTitle_FallsBackToNameSearchWhenIdentityMi
 	enr := &fakeEnricher{resolveID: "mbid-title-1", enrichment: sampleEnrichment()}
 	art := &nameVsIdentityArtwork{nameURL: "https://caa/name-derived.jpg"}
 	cache := newMemEnrichmentCache()
-	svc := details.NewEnrichmentService(enr, art, cache)
+	svc := newService(t, enr, art, cache, details.NoMBIDIndex{})
 
 	got, err := svc.Execute(context.Background(), domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", "")
 	if err != nil {
@@ -293,7 +337,7 @@ func TestEnrichmentService_NameVerifiedMissWithIdentityError_CachesVerifiedMiss(
 	enr := &fakeEnricher{resolveID: "mbid-verified-miss", enrichment: sampleEnrichment()}
 	art := &nameVsIdentityArtwork{identityErr: errors.New("identity provider 503")}
 	cache := newMemEnrichmentCache()
-	svc := details.NewEnrichmentService(enr, art, cache)
+	svc := newService(t, enr, art, cache, details.NoMBIDIndex{})
 
 	got, err := svc.Execute(context.Background(), domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", "")
 	if err != nil {
@@ -330,7 +374,7 @@ func (f *deadlineCapturingArtwork) ResolveTagged(ctx context.Context, _ domain.R
 func TestEnrichmentService_TitleResolvedLookup_SharesOneArtworkDeadline(t *testing.T) {
 	enr := &fakeEnricher{resolveID: "mbid-deadline", enrichment: sampleEnrichment()}
 	art := &deadlineCapturingArtwork{}
-	svc := details.NewEnrichmentService(enr, art, newMemEnrichmentCache())
+	svc := newService(t, enr, art, newMemEnrichmentCache(), details.NoMBIDIndex{})
 
 	if _, err := svc.Execute(context.Background(), domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", ""); err != nil {
 		t.Fatalf("Execute: %v", err)

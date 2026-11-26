@@ -6,8 +6,10 @@ import (
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/search/service/artwork"
 	"altune/go-api/internal/shared/textnorm"
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"reflect"
 	"strconv"
 	"strings"
@@ -48,6 +50,31 @@ func TestArtworkFiller_OutageLeavesTheCacheOpenForTheNextFill(t *testing.T) {
 
 	if afterRecovery[0].ImageURL != "https://caa/cover.jpg" || afterRecovery[0].ArtworkPath != domain.ArtworkPathCache {
 		t.Errorf("after recovery = (%q, %q), want the resolved cover served from the cache", afterRecovery[0].ImageURL, afterRecovery[0].ArtworkPath)
+	}
+}
+
+type failingArtworkCache struct{ scriptedArtworkCache }
+
+func (failingArtworkCache) Set(context.Context, domain.ResultKind, string, string, string, string, domain.ProviderKey, ports.ArtworkConfidence) error {
+	return errors.New("redis down")
+}
+
+func TestArtworkFiller_AFailedCacheWriteIsLogged(t *testing.T) {
+	var logs bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	track := domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar"}
+	cache := &failingArtworkCache{scriptedArtworkCache{log: &stageLog{}}}
+	resolver := &scriptedResolver{log: &stageLog{}, nameURL: "https://caa/cover.jpg"}
+
+	fillAndSettle(t, artwork.NewArtworkFiller(resolver, cache, nil, nil), track)
+
+	if want := []string{"resolve.name:"}; !reflect.DeepEqual(resolver.log.calls, want) {
+		t.Fatalf("resolver calls = %q, want %q", resolver.log.calls, want)
+	}
+	if !strings.Contains(logs.String(), "artwork.cache_set_failed") {
+		t.Errorf("failed cache write not logged: %q", logs.String())
 	}
 }
 

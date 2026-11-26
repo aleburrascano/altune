@@ -1,0 +1,84 @@
+package acquisitiontest
+
+import (
+	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/ids"
+	"context"
+	"sync"
+	"time"
+)
+
+var _ ports.CooldownStore = (*CooldownStore)(nil)
+
+type cooldownKey struct {
+	track ids.TrackId
+	kind  ports.CooldownKind
+}
+
+type CooldownStore struct {
+	mu         sync.Mutex
+	now        func() time.Time
+	admittedAt map[cooldownKey]time.Time
+	reserveErr error
+	releaseErr error
+	releases   int
+}
+
+func NewCooldownStore() *CooldownStore {
+	return &CooldownStore{now: time.Now, admittedAt: map[cooldownKey]time.Time{}}
+}
+
+func (s *CooldownStore) SetClock(now func() time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.now = now
+}
+
+func (s *CooldownStore) FailReserve(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.reserveErr = err
+}
+
+func (s *CooldownStore) FailRelease(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.releaseErr = err
+}
+
+func (s *CooldownStore) Releases() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.releases
+}
+
+func (s *CooldownStore) Reserve(_ context.Context, trackID ids.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.reserveErr != nil {
+		return time.Time{}, false, 0, s.reserveErr
+	}
+	now, key := s.now(), cooldownKey{track: trackID, kind: kind}
+	if last, held := s.admittedAt[key]; held && now.Sub(last) < cooldown {
+		return time.Time{}, false, cooldown - now.Sub(last), nil
+	}
+	s.admittedAt[key] = now
+	return now, true, 0, nil
+}
+
+func (s *CooldownStore) Release(ctx context.Context, trackID ids.TrackId, kind ports.CooldownKind, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.releases++
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if s.releaseErr != nil {
+		return s.releaseErr
+	}
+	key := cooldownKey{track: trackID, kind: kind}
+	if last, held := s.admittedAt[key]; held && last.Equal(at) {
+		delete(s.admittedAt, key)
+	}
+	return nil
+}

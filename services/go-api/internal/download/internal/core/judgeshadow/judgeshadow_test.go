@@ -4,103 +4,59 @@ import (
 	"altune/go-api/internal/download/internal/core/judgeshadow"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/internal/core/titlematch"
-	"bytes"
-	"context"
-	"fmt"
-	"log/slog"
-	"strings"
 	"testing"
 )
 
 var finesse = titlematch.Target{Title: "Finesse", Artist: "Bruno Mars"}
 
-func captureLog(t *testing.T, handler func(*bytes.Buffer) slog.Handler) *bytes.Buffer {
-	t.Helper()
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(handler(&buf)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return &buf
-}
-
-func textLog(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	return captureLog(t, func(buf *bytes.Buffer) slog.Handler { return slog.NewTextHandler(buf, nil) })
-}
-
-type panicOnShadowHandler struct {
-	slog.Handler
-}
-
-func (h panicOnShadowHandler) Handle(ctx context.Context, r slog.Record) error {
-	if r.Message == "acquisition.judge_shadow" {
-		panic("shadow log blew up")
-	}
-	if err := h.Handler.Handle(ctx, r); err != nil {
-		return fmt.Errorf("handle the log record: %w", err)
-	}
-	return nil
-}
-
 func finesseCandidate(url string, kind ports.CandidateKind, seconds float64) ports.AudioCandidate {
 	return ports.AudioCandidate{URL: url, Title: "Finesse", Artists: []string{"Bruno Mars"}, Kind: kind, Duration: seconds}
 }
 
-func wantLogged(t *testing.T, buf *bytes.Buffer, fields ...string) {
+func wantComparison(t *testing.T, got judgeshadow.Comparison, pipelineURL, judgeURL string, verdict judgeshadow.Verdict) {
 	t.Helper()
-	for _, field := range fields {
-		if !strings.Contains(buf.String(), field) {
-			t.Errorf("log = %q, want %s", buf.String(), field)
-		}
+	if got.PipelineURL != pipelineURL || got.JudgeURL != judgeURL || got.Verdict != verdict {
+		t.Errorf("comparison = %+v, want pipeline %q, judge %q, verdict %s", got, pipelineURL, judgeURL, verdict)
 	}
 }
 
-func TestLog_APanicInsideTheShadowIsLoggedAndSwallowed(t *testing.T) {
-	buf := captureLog(t, func(buf *bytes.Buffer) slog.Handler {
-		return panicOnShadowHandler{slog.NewTextHandler(buf, nil)}
-	})
-
-	judgeshadow.Log(context.Background(), finesse, "t1",
-		&ports.AudioCandidate{URL: "https://music.youtube.com/watch?v=LsoLEjrDogU"}, 0, nil)
-
-	wantLogged(t, buf, "acquisition.judge_shadow_panic", "track_id=t1", `panic="shadow log blew up"`)
-}
-
-func TestLog_TheCatalogPinIsJudgedAsThePinnedVideo(t *testing.T) {
-	buf := textLog(t)
+func TestCompare_TheCatalogPinIsJudgedAsThePinnedVideo(t *testing.T) {
 	art := finesseCandidate("art", ports.KindArtTrack, 0)
 	pin := finesseCandidate("pin", ports.KindCatalogPin, 0)
 
-	judgeshadow.Log(context.Background(), finesse, "t1", &pin, 0, []ports.AudioCandidate{art, pin})
+	got := judgeshadow.Compare(finesse, &pin, 0, []ports.AudioCandidate{art, pin})
 
-	wantLogged(t, buf, "judge_url=pin", "verdict=agree")
+	wantComparison(t, got, "pin", "pin", judgeshadow.VerdictAgree)
+	if got.Reason == "" || got.Reason == "no candidate accepted" {
+		t.Errorf("reason = %q, want the judge's own reason for the candidate it chose", got.Reason)
+	}
 }
 
-func TestLog_AnAbstainingJudgeIsNotADisagreement(t *testing.T) {
-	buf := textLog(t)
+func TestCompare_AnAbstainingJudgeIsNotADisagreement(t *testing.T) {
 	upload := finesseCandidate("https://music.youtube.com/watch?v=up", ports.KindUpload, 0)
 
-	judgeshadow.Log(context.Background(), finesse, "t1", &upload, 191, []ports.AudioCandidate{upload})
+	got := judgeshadow.Compare(finesse, &upload, 191, []ports.AudioCandidate{upload})
 
-	wantLogged(t, buf, "verdict=judge_abstained")
+	wantComparison(t, got, upload.URL, "", judgeshadow.VerdictJudgeAbstained)
+	if got.Reason == "" {
+		t.Error("an abstaining judge must say why")
+	}
 }
 
-func TestLog_OnlyTheKeptCandidateGainsTheProbedLength(t *testing.T) {
-	buf := textLog(t)
+func TestCompare_OnlyTheKeptCandidateGainsTheProbedLength(t *testing.T) {
 	target := titlematch.Target{Title: "Finesse", Artist: "Bruno Mars", Length: 300}
 	kept := finesseCandidate("kept", ports.KindArtTrack, 0)
 	other := finesseCandidate("other", ports.KindArtTrack, 0)
 
-	judgeshadow.Log(context.Background(), target, "t1", &kept, 191, []ports.AudioCandidate{kept, other})
+	got := judgeshadow.Compare(target, &kept, 191, []ports.AudioCandidate{kept, other})
 
-	wantLogged(t, buf, "pipeline_url=kept", "judge_url=other", "verdict=disagree")
+	wantComparison(t, got, "kept", "other", judgeshadow.VerdictDisagree)
 }
 
-func TestLog_APipelineThatKeptNothingFailed(t *testing.T) {
-	buf := textLog(t)
+func TestCompare_APipelineThatKeptNothingFailed(t *testing.T) {
 	art := finesseCandidate("art", ports.KindArtTrack, 0)
 
-	judgeshadow.Log(context.Background(), finesse, "t1", nil, 0, []ports.AudioCandidate{art})
+	got := judgeshadow.Compare(finesse, nil, 0, []ports.AudioCandidate{art})
 
-	wantLogged(t, buf, `pipeline_url=""`, "judge_url=art", "verdict=pipeline_failed")
+	wantComparison(t, got, "", "art", judgeshadow.VerdictPipelineFailed)
 }

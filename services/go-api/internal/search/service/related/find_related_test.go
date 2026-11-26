@@ -688,6 +688,31 @@ func TestFindRelated_SameAlbumNameOfAnotherArtistIsNotRelated(t *testing.T) {
 	}
 }
 
+func TestFindRelated_ACallerWritingToAServedGroupDoesNotChangeWhatTheMemoServesNext(t *testing.T) {
+	var callCount atomic.Int64
+	albumProvider := &countingAlbumProvider{
+		inner: &fakeAlbumProvider{tracks: []domain.SearchResult{
+			searchtest.TrackResult(domain.ProviderDeezer, "t1", "Sibling Track", "Artist", nil),
+		}},
+		count: &callCount,
+	}
+	svc := related.NewFindRelatedService(nil, albumProvider, nil)
+	user := searchtest.NewUser()
+
+	first := svc.Execute(context.Background(), user, relatedAlbumTrackQuery())
+	first[0].Items[0].Title = "scribbled on the first answer"
+	second := svc.Execute(context.Background(), user, relatedAlbumTrackQuery())
+	second[0].Items[0].Title = "scribbled on a memoized answer"
+	third := svc.Execute(context.Background(), user, relatedAlbumTrackQuery())
+
+	if got := callCount.Load(); got != 1 {
+		t.Fatalf("provider calls = %d, want 1 (every repeat is memoized)", got)
+	}
+	if got := third[0].Items[0].Title; got != "Sibling Track" {
+		t.Errorf("third answer title = %q, want %q: a caller's write must not reach the memo", got, "Sibling Track")
+	}
+}
+
 func TestFindRelated_RepeatedQueryIsServedFromTheMemo(t *testing.T) {
 	var callCount atomic.Int64
 	albumProvider := &countingAlbumProvider{
