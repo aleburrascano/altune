@@ -1,13 +1,24 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-unset INTEGRATION CLIENT_MUTATE_RUNS_ELSEWHERE PRECHECK_LINT_WHOLE PRECHECK_NO_CACHE
+unset INTEGRATION CLIENT_MUTATE_RUNS_ELSEWHERE PRECHECK_NO_CACHE
 
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 FAILURES=0
+FIXTURES=()
+REPOS=0
+PRECHECK_ARGS=(--full)
+
+remove_fixtures() {
+    [ ${#FIXTURES[@]} -eq 0 ] || { chmod -R u+w "${FIXTURES[@]}" 2>/dev/null; rm -rf "${FIXTURES[@]}"; }
+}
+trap remove_fixtures EXIT
 
 new_repo() {
+    REPOS=$((REPOS + 1))
+    [ "${PRECHECK_TEST_MAX_REPOS:-0}" = 0 ] || [ "$REPOS" -le "$PRECHECK_TEST_MAX_REPOS" ] || exit $((FAILURES > 0))
     WORK=$(mktemp -d)
+    FIXTURES+=("$WORK")
     mkdir -p "$WORK/repo/scripts/__tests__"
     cp "$HERE/precheck.sh" "$WORK/repo/scripts/"
     mkdir -p "$WORK/repo/scripts/ci"
@@ -187,7 +198,7 @@ add_mobile_stubs() {
 run_script_with_stubs() {
     (
         cd "$WORK/repo" || exit 1
-        HOME="$WORK/home" PATH="$WORK/bin:$PATH" bash scripts/precheck.sh "$@" >"$WORK/out.log" 2>&1
+        HOME="$WORK/home" PATH="$WORK/bin:$PATH" bash scripts/precheck.sh "${PRECHECK_ARGS[@]}" "$@" >"$WORK/out.log" 2>&1
     )
     RC=$?
 }
@@ -483,6 +494,7 @@ add_go_fixture() {
 printf "go %s\\n" "\$*" >>"$WORK/tools.log"
 case "\$*" in
 "run golang.org/x/tools/cmd/deadcode@"*) printf "%s" "\${DEADCODE_STUB_OUT:-}"; exit "\${DEADCODE_STUB_RC:-0}" ;;
+"run ./scripts/lintcomments"*|"run ./scripts/lintnames"*) exit 0 ;;
 esac
 exec "$REAL_GO" "\$@"
 STUB
@@ -516,9 +528,14 @@ edit_go_file() {
 run_with_tools() {
     (
         cd "$WORK/repo" || exit 1
-        HOME="$WORK/home" PATH="$WORK/bin:$PATH" NPX_LOG="$WORK/npx.log" bash scripts/precheck.sh "$@" >"$WORK/out.log" 2>&1
+        HOME="$WORK/home" PATH="$WORK/bin:$PATH" NPX_LOG="$WORK/npx.log" bash scripts/precheck.sh "${PRECHECK_ARGS[@]}" "$@" >"$WORK/out.log" 2>&1
     )
     RC=$?
+}
+
+run_push_scoped() {
+    local PRECHECK_ARGS=()
+    run_with_tools "$@"
 }
 
 CASE="a go-api change in a package the selection gate does not import skips the gate, vets only that package, and still runs govulncheck"
@@ -705,33 +722,82 @@ expect_log "govulncheck ./..."
 expect_log "vet ./..."
 expect_log "run ./cmd/acquisitioneval"
 
-CASE="a go-api change lints the changed package and its importers, not ./..."
+CASE="a push (no --full) lints only the changed package with the fast linters against the merge base"
 new_repo
 add_go_fixture
 edit_go_file internal/shared/s/s.go
-run_with_tools
-expect_log "golangci-lint run --config .golangci.strict.yml --new-from-rev="
-expect_log "altune/go-api/internal/shared/s altune/go-api/internal/acq altune/go-api/cmd/acquisitioneval"
-forbid_log "--allow-serial-runners ./..."
+run_push_scoped
+expect_rc 0
+expect_log "golangci-lint run --config .golangci.strict.yml --fast-only --new-from-rev="
+expect_log "./internal/shared/s"
+forbid_log "--allow-serial-runners"
+forbid_log "--new-from-rev=HEAD"
+expect_log "go run ./scripts/lintcomments --all internal/shared/s/s.go"
+expect_log "go run ./scripts/lintnames"
 
-CASE="a change to go.mod lints the whole module"
+expect_lint_args_exist() {
+    local arg missing=""
+    while read -r arg; do
+        case "$arg" in ./*) [ -d "$WORK/repo/services/go-api/$arg" ] || missing="$missing $arg" ;; esac
+    done < <(grep '^golangci-lint run' "$WORK/tools.log" | tr ' ' '\n')
+    [ -z "$missing" ] || fail "golangci-lint was given directories that do not exist:$missing"
+}
+
+CASE="a push after a package moved lints only the directory it moved to, and never an import path or the old directory"
 new_repo
 add_go_fixture
 (
     cd "$WORK/repo" || exit 1
-    printf '\nexclude example.invalid/none v1.0.0\n' >>services/go-api/go.mod
-    git add -A
-    git commit -qm "touch go.mod"
+    git mv services/go-api/internal/search/adapters/x services/go-api/internal/search/adapters/y
+    git commit -qm "move x to y"
 )
-run_with_tools
-expect_log "--allow-serial-runners ./..."
+run_push_scoped
+expect_rc 0
+expect_log "./internal/search/adapters/y"
+forbid_log "adapters/x"
+forbid_log "altune/go-api/"
+expect_lint_args_exist
 
-CASE="PRECHECK_LINT_WHOLE=1 lints the whole module for a one-package change"
+CASE="a commit after a package moved lints only the directory it moved to"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    git mv services/go-api/internal/search/adapters/x services/go-api/internal/search/adapters/y
+)
+run_with_tools --lint
+expect_log "./internal/search/adapters/y"
+forbid_log "adapters/x"
+expect_lint_args_exist
+
+CASE="precheck rejects an unknown flag and a flag after the base ref with the usage and exit 2"
+new_repo
+run_script --ful
+expect_rc 2
+expect_out "usage:"
+run_script gitea/main --full
+expect_rc 2
+expect_out "usage:"
+
+CASE="a push (no --full) tests the changed packages and runs no vet, govulncheck, deadcode or selection gate"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+run_push_scoped
+expect_rc 0
+expect_out "go-api tests (race, changed packages)"
+forbid_log "govulncheck"
+forbid_log "go vet"
+forbid_log "deadcode"
+forbid_log "acquisitioneval"
+
+CASE="--full lints the whole module for a one-package change"
 new_repo
 add_go_fixture
 edit_go_file internal/search/adapters/x/x.go
-PRECHECK_LINT_WHOLE=1 run_with_tools
+run_with_tools
 expect_log "--allow-serial-runners ./..."
+expect_log "govulncheck ./..."
 
 CASE="a change to go.sum runs govulncheck"
 new_repo
@@ -1122,15 +1188,15 @@ cached_green_repo
 run_with_tools
 expect_not_cached "a moved base ref must rerun the checks, since some read its tip"
 
+CASE="a push without --full is not served from a green --full run's cache"
+cached_green_repo
+run_push_scoped
+expect_not_cached "a run without --full is a different set of checks"
+
 CASE="a different INTEGRATION value is not served from the cache"
 cached_green_repo
 INTEGRATION=1 run_with_tools
 expect_not_cached "INTEGRATION changes which checks run"
-
-CASE="a different PRECHECK_LINT_WHOLE value is not served from the cache"
-cached_green_repo
-PRECHECK_LINT_WHOLE=1 run_with_tools
-expect_not_cached "PRECHECK_LINT_WHOLE changes what is linted"
 
 CASE="a different CLIENT_MUTATE_RUNS_ELSEWHERE value is not served from the cache"
 cached_green_repo

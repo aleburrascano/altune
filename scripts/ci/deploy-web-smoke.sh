@@ -2,7 +2,9 @@
 
 set -euo pipefail
 
-cd "$(mktemp -d)"
+work=$(mktemp -d)
+trap 'cd / && rm -rf "$work"' EXIT
+cd "$work"
 fetch() { curl -sS --max-time 20 --retry 5 --retry-delay 3 --retry-all-errors "$@"; }
 fetch -D index.headers -o index.html "$BASE_URL/"
 grep -qE '^HTTP/[0-9.]+ 200' index.headers || { echo "::error::GET / is not 200"; cat index.headers; exit 1; }
