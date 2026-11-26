@@ -775,6 +775,34 @@ expect_log "./internal/search/adapters/y"
 forbid_log "adapters/x"
 expect_lint_args_exist
 
+add_test_home_stub() {
+    mkdir -p "$WORK/bin" "$WORK/home"
+    (
+        cd "$WORK/repo" || exit 1
+        printf 'console.error("test-home: stub verdict");\nprocess.exit(%s);\n' "$1" >scripts/test-home.mjs
+        git add -A
+        git commit -qm "test-home stub"
+        git update-ref refs/remotes/gitea/main HEAD
+        printf 'package keep\n' >misplaced_test.go
+        git add -A
+        git commit -qm "add a test file"
+    )
+}
+
+CASE="a push without --full fails on a test file that is not in its unit's test file"
+new_repo
+add_test_home_stub 1
+run_push_scoped
+expect_rc 1
+expect_out "FAIL  test files live with their unit"
+expect_out "FAIL test files live with their unit (exit 1):"
+
+CASE="a push without --full passes the placement check when test-home passes"
+new_repo
+add_test_home_stub 0
+run_push_scoped
+expect_out "ok    test files live with their unit"
+
 CASE="precheck rejects an unknown flag and a flag after the base ref with the usage and exit 2"
 new_repo
 run_script --ful
