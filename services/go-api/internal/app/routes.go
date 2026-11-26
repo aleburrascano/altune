@@ -40,12 +40,7 @@ func (a *App) mountRoutes(
 			})
 			cat.streamHandler.Routes(r)
 			cat.audioURLHandler.Routes(r)
-			if cat.reacquireH != nil {
-				r.Post("/tracks/{trackId}/reacquire", cat.reacquireH.HandleReacquire)
-			}
-			if cat.retryH != nil {
-				r.Post("/tracks/{trackId}/retry", cat.retryH.HandleRetryAcquisition)
-			}
+			cat.acquisitionRoutes(r)
 			r.Mount("/library", cat.libraryHandler.Routes())
 			r.Mount("/playlists", cat.playlistHandler.Routes())
 			r.Mount("/playback", queueHandler.Routes())

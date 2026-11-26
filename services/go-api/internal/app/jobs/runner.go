@@ -31,6 +31,7 @@ type Runner struct {
 	loops    background.Tracker
 	registry background.JobRegistry
 	election Election
+	led      bool
 	starts   []background.NamedStart
 }
 
@@ -83,6 +84,7 @@ func (r *Runner) EveryInstance(ctx context.Context, name Name, interval time.Dur
 
 func (r *Runner) Lead(ctx context.Context, election Election) {
 	r.election = election
+	r.led = true
 	election.Start(ctx)
 	background.StartWhenLeader(ctx, &r.loops, election.Await, r.starts)
 }
@@ -99,7 +101,7 @@ func (r *Runner) LeaderCounters() leader.Counters {
 }
 
 func (r *Runner) LeaderContext(ctx context.Context) (context.Context, context.CancelFunc, bool) {
-	if r.election == nil {
+	if !r.led {
 		return background.EveryPassLeads(ctx)
 	}
 	return r.election.LeaderContext(ctx)

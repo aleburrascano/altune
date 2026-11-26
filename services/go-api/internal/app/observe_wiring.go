@@ -46,7 +46,7 @@ func mountObserve(r chi.Router, verifier auth.TokenVerifier, principalID string,
 }
 
 func (a *App) observeAcquisition() monitoring.AcquisitionReader {
-	if a.scheduler == nil {
+	if !a.acquisitionOn {
 		return nil
 	}
 	return monitoringfromdownload.NewAcquisitionReader(a.scheduler)

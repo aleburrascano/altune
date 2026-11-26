@@ -1,6 +1,7 @@
 package app
 
 import (
+	"altune/go-api/internal/app/health"
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/app/sourcecheck"
 	"altune/go-api/internal/download"
@@ -25,10 +26,10 @@ const eventIDFloorFile = "altune-event-id-floor"
 type App struct {
 	cfg           *config.Config
 	pool          *pgxpool.Pool
-	dbPing        func(context.Context) error
+	probes        health.Probes
 	redisClient   *goredis.Client
-	authVerifier  authHealthChecker
 	scheduler     *download.BackgroundAcquisitionScheduler
+	acquisitionOn bool
 	vocabRefresh  *search.SpellingHintsRefreshService
 	evalSearch    *search.SearchService
 	eventBus      *events.InProcessBus
@@ -58,7 +59,7 @@ func (a *App) connectAuth(ctx context.Context) (auth.TokenVerifier, error) {
 	if err != nil {
 		return nil, fmt.Errorf("auth: %w", err)
 	}
-	a.authVerifier = supaVerifier
+	a.probes.Auth = supaVerifier.CheckHealth
 	return supaVerifier, nil
 }
 
@@ -69,12 +70,12 @@ func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback 
 		YtDlp: cat.ytDlpSearcher, YtDlpAvailable: cat.ytDlpAvailable, InnerTube: cat.ytmCanary,
 		YtMusicEnabled: a.cfg.YtMusicEnabled, YtDlpEnabled: a.cfg.YtDLPEnabled,
 	})
-	if a.pool != nil {
-		a.startAcquisitionPrune(ctx,
-			download.NewPostgresOutcomeStore(a.pool),
-			download.NewPostgresRejectionStore(a.pool))
+	a.startAcquisitionPrune(ctx,
+		download.NewPostgresOutcomeStore(a.pool),
+		download.NewPostgresRejectionStore(a.pool))
+	if cat.acquisitionOn {
+		a.startAcquisitionUpgrade(ctx, cat.scheduler)
 	}
-	a.startAcquisitionUpgrade(ctx, cat.scheduler)
 }
 
 func (a *App) applyDisabledJobs(ctx context.Context) error {
@@ -82,7 +83,7 @@ func (a *App) applyDisabledJobs(ctx context.Context) error {
 }
 
 func (a *App) applyStartupSwitches(ctx context.Context) error {
-	if a.cfg.AcquisitionPaused && a.scheduler != nil {
+	if a.cfg.AcquisitionPaused && a.acquisitionOn {
 		a.scheduler.Pause()
 		slog.InfoContext(ctx, "acquisition started paused")
 	}
