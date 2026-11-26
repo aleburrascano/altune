@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/ids"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -13,20 +14,20 @@ const RecentJobCap = 20
 type jobLog struct {
 	now       clock.Func
 	mu        sync.Mutex
-	jobs      map[string]*ports.JobRecord
+	jobs      map[ids.TrackId]*ports.JobRecord
 	recent    []ports.JobRecord
 	succeeded atomic.Uint64
 	failed    atomic.Uint64
 }
 
 func newJobLog(now clock.Func) *jobLog {
-	return &jobLog{now: now, jobs: make(map[string]*ports.JobRecord)}
+	return &jobLog{now: now, jobs: make(map[ids.TrackId]*ports.JobRecord)}
 }
 
-func (l *jobLog) register(trackID, sourceURL string) {
+func (l *jobLog) register(trackID ids.TrackId, sourceURL string) {
 	l.mu.Lock()
 	l.jobs[trackID] = &ports.JobRecord{
-		TrackID:     trackID,
+		TrackID:     trackID.String(),
 		SourceURL:   sourceURL,
 		State:       ports.JobQueued,
 		ScheduledAt: l.now(),
@@ -34,7 +35,7 @@ func (l *jobLog) register(trackID, sourceURL string) {
 	l.mu.Unlock()
 }
 
-func (l *jobLog) markRunning(trackID string) {
+func (l *jobLog) markRunning(trackID ids.TrackId) {
 	l.mu.Lock()
 	if j := l.jobs[trackID]; j != nil {
 		j.State = ports.JobRunning
@@ -42,7 +43,7 @@ func (l *jobLog) markRunning(trackID string) {
 	l.mu.Unlock()
 }
 
-func (l *jobLog) update(trackID string, fn func(*ports.JobRecord)) {
+func (l *jobLog) update(trackID ids.TrackId, fn func(*ports.JobRecord)) {
 	l.mu.Lock()
 	if j := l.jobs[trackID]; j != nil {
 		fn(j)
@@ -60,14 +61,14 @@ func (l *jobLog) countCompletion(state ports.JobState) {
 	}
 }
 
-func (l *jobLog) complete(trackID string, state ports.JobState, reason string) ports.JobRecord {
+func (l *jobLog) complete(trackID ids.TrackId, state ports.JobState, reason string) ports.JobRecord {
 	l.countCompletion(state)
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	j := l.jobs[trackID]
 	if j == nil {
-		j = &ports.JobRecord{TrackID: trackID, ScheduledAt: l.now()}
+		j = &ports.JobRecord{TrackID: trackID.String(), ScheduledAt: l.now()}
 	}
 	delete(l.jobs, trackID)
 	j.State = state

@@ -435,8 +435,9 @@ func (q *callRecordingQueue) released() []queueCall {
 }
 
 type alwaysPanickingAcquirer struct {
-	runs    atomic.Int32
-	refused atomic.Int32
+	runs          atomic.Int32
+	refused       atomic.Int32
+	refusedCorrID atomic.Value
 }
 
 func (a *alwaysPanickingAcquirer) Execute(context.Context, ids.UserId, ids.TrackId) error {
@@ -448,7 +449,8 @@ func (a *alwaysPanickingAcquirer) ExecuteReplace(ctx context.Context, user ids.U
 	return a.Execute(ctx, user, track)
 }
 
-func (a *alwaysPanickingAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {
+func (a *alwaysPanickingAcquirer) RefuseQueued(ctx context.Context, _ ids.UserId, _ ids.TrackId) {
+	a.refusedCorrID.Store(logging.CorrelationIDFromContext(ctx))
 	a.refused.Add(1)
 }
 
@@ -459,18 +461,22 @@ func TestScheduler_ATrackThatKeepsPanickingIsRefusedAndSettledWithinABudgetAtThe
 		scheduler := service.NewBackgroundAcquisitionScheduler(acquirer, 1, time.Now, service.WithJobQueue(queue))
 		defer scheduler.Shutdown(context.Background())
 
-		if err := scheduler.Schedule(context.Background(), ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
+		ctx := logging.WithCorrelationID(context.Background(), "corr-panic-cap")
+		if err := scheduler.Schedule(ctx, ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
 			t.Fatalf("Schedule = %v, want nil", err)
 		}
 		<-queue.settledCh
 
 		settles, _ := queue.calls()
-		want := queueCall{hasDeadline: true, live: true}
+		want := queueCall{corrID: "corr-panic-cap", hasDeadline: true, live: true}
 		if len(settles) != 1 || settles[0] != want {
 			t.Fatalf("settle calls = %+v after %d runs, want exactly one %+v", settles, acquirer.runs.Load(), want)
 		}
 		if got := acquirer.refused.Load(); got != 1 {
 			t.Errorf("track refused %d times, want once when the attempt cap is reached", got)
+		}
+		if got := acquirer.refusedCorrID.Load(); got != "corr-panic-cap" {
+			t.Errorf("refusal ran under correlation id %v, want the job's corr-panic-cap", got)
 		}
 		if got, retries := acquirer.runs.Load(), len(queue.released()); int(got) != retries+1 {
 			t.Errorf("%d runs and %d releases, want every run but the last released for another try", got, retries)

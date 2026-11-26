@@ -51,7 +51,7 @@ type schedulerJobReporter struct {
 	ctx     context.Context
 	log     *jobLog
 	events  events.Publisher
-	trackID string
+	trackID ids.TrackId
 	userId  ids.UserId
 }
 
@@ -66,7 +66,7 @@ func (r schedulerJobReporter) stage(name string) {
 		title, artist = j.Title, j.Artist
 	})
 	r.events.Publish(r.ctx, r.userId, events.TrackAcquisitionProgress{
-		TrackID: r.trackID,
+		TrackID: r.trackID.String(),
 		Stage:   name,
 		Title:   title,
 		Artist:  artist,

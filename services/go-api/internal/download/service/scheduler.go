@@ -278,7 +278,6 @@ func (s *BackgroundAcquisitionScheduler) idleWait(wake <-chan struct{}) bool {
 }
 
 func (s *BackgroundAcquisitionScheduler) runClaimedJob(job ports.Job) {
-	key := job.TrackID.String()
 	run := s.acquisitionRunFor(job.Kind)
 
 	jobCtx, cancelJob := s.jobContextFor(job)
@@ -288,8 +287,8 @@ func (s *BackgroundAcquisitionScheduler) runClaimedJob(job ports.Job) {
 	heartbeatDone := make(chan struct{})
 	go s.heartbeatLoop(jobCtx, job, cancelJob, heartbeatDone)
 
-	reportedCtx := s.startClaimedJob(jobCtx, key, job)
-	jobErr := s.execClaimedJob(reportedCtx, key, run, job)
+	reportedCtx := s.startClaimedJob(jobCtx, job.TrackID, job)
+	jobErr := s.execClaimedJob(reportedCtx, job.TrackID, run, job)
 	s.stopClaimedJob(cancelJob, heartbeatDone)
 
 	s.finishJob(finishContextOf(jobCtx), job, jobErr)
@@ -311,15 +310,15 @@ func (s *BackgroundAcquisitionScheduler) settleWithin(ctx context.Context, job p
 	return s.queue.Settle(queueCtx, job.TrackID, job.ClaimNumber)
 }
 
-func (s *BackgroundAcquisitionScheduler) startClaimedJob(jobCtx context.Context, key string, job ports.Job) context.Context {
+func (s *BackgroundAcquisitionScheduler) startClaimedJob(jobCtx context.Context, trackId ids.TrackId, job ports.Job) context.Context {
 	s.inflightCount.Add(1)
-	s.log.register(key, "")
-	s.log.markRunning(key)
-	s.log.update(key, func(r *ports.JobRecord) {
+	s.log.register(trackId, "")
+	s.log.markRunning(trackId)
+	s.log.update(trackId, func(r *ports.JobRecord) {
 		r.Kind = job.Kind
 		r.Run = job.Run
 	})
-	reporter := schedulerJobReporter{ctx: jobCtx, log: s.log, events: s.eventsFor(job.Kind), trackID: key, userId: job.UserID}
+	reporter := schedulerJobReporter{ctx: jobCtx, log: s.log, events: s.eventsFor(job.Kind), trackID: trackId, userId: job.UserID}
 	reporter.timing("queue", job.Waited)
 	return withJobReporter(jobCtx, reporter)
 }
@@ -350,12 +349,12 @@ func (s *BackgroundAcquisitionScheduler) jobContextFor(job ports.Job) (context.C
 	return jobCtx, cancelJob
 }
 
-func (s *BackgroundAcquisitionScheduler) execClaimedJob(ctx context.Context, key string, run acquisitionRun, job ports.Job) error {
+func (s *BackgroundAcquisitionScheduler) execClaimedJob(ctx context.Context, trackId ids.TrackId, run acquisitionRun, job ports.Job) error {
 	var err error
-	if panicked := background.SafeRun(ctx, "acquisition_panic", func() { err = run(ctx, job.UserID, job.TrackID) }, "track_id", key); panicked != nil {
+	if panicked := background.SafeRun(ctx, "acquisition_panic", func() { err = run(ctx, job.UserID, job.TrackID) }, "track_id", trackId.String()); panicked != nil {
 		err = errJobPanicked
 	}
-	s.completeClaimedJob(ctx, key, err)
+	s.completeClaimedJob(ctx, trackId, err)
 	return err
 }
 
@@ -369,15 +368,15 @@ type jobCompletion struct {
 	attrs   []any
 }
 
-func (s *BackgroundAcquisitionScheduler) completeClaimedJob(ctx context.Context, key string, err error) {
-	defer background.RecoverContext(ctx, "acquisition.job_completion_panic", "track_id", key)
+func (s *BackgroundAcquisitionScheduler) completeClaimedJob(ctx context.Context, trackId ids.TrackId, err error) {
+	defer background.RecoverContext(ctx, "acquisition.job_completion_panic", "track_id", trackId.String())
 	done := s.classifyJob(ctx, err)
-	record := s.log.complete(key, done.state, done.reason)
+	record := s.log.complete(trackId, done.state, done.reason)
 	if done.state != ports.JobRetrying {
 		s.recordOutcome(ctx, record)
 	}
 	if done.message != "" {
-		slog.Log(ctx, done.level, done.message, append([]any{"track_id", key}, done.attrs...)...)
+		slog.Log(ctx, done.level, done.message, append([]any{"track_id", trackId.String()}, done.attrs...)...)
 	}
 }
 
