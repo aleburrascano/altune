@@ -2,6 +2,7 @@ package songfields_test
 
 import (
 	"altune/go-api/internal/shared/songfields"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -118,7 +119,7 @@ func TestBracketEditionSuffix(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := songfields.BracketEditionSuffix(tt.input); got != tt.want {
+			if got := bracketEditionSuffix(tt.input); got != tt.want {
 				t.Fatalf("BracketEditionSuffix(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
@@ -223,4 +224,19 @@ func TestNoSongFactIsDefinedOutsideThePackage(t *testing.T) {
 	if len(copies) > 0 {
 		t.Fatalf("song facts live in internal/shared/songfacts only:\n%s", strings.Join(copies, "\n"))
 	}
+}
+
+const (
+	editionKinds = `original|album|single|mono|stereo|deluxe|bonus(?:\s+track)?`
+	editionNouns = `version|edition`
+)
+
+var editionSuffixRe = regexp.MustCompile(fmt.Sprintf(`(?i)^(.*\S)\s[-–—]\s+([^-–—|]*\b(?:%s|%s)\b[^-–—|]*)$`, editionKinds, editionNouns))
+
+func bracketEditionSuffix(title string) string {
+	m := editionSuffixRe.FindStringSubmatch(title)
+	if m == nil {
+		return title
+	}
+	return m[1] + " (" + m[2] + ")"
 }

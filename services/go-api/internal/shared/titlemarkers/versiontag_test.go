@@ -154,9 +154,9 @@ func TestParseTags_VersionNumberIsALabelNotAPart(t *testing.T) {
 		{"Song Part 2 (Version 2)", 2, "v2"},
 	}
 	for _, tc := range cases {
-		want := titlemarkers.Tags{Part: tc.wantPart, Labels: []string{tc.wantLabel}}
-		if got := titlemarkers.ParseTags(tc.title); !got.Equal(want) {
-			t.Errorf("ParseTags(%q) = %+v, want %+v", tc.title, got, want)
+		got := titlemarkers.ParseTags(tc.title)
+		if got.Part != tc.wantPart || !slices.Equal(got.Labels, []string{tc.wantLabel}) {
+			t.Errorf("ParseTags(%q) = %+v, want part %d labels [%s]", tc.title, got, tc.wantPart, tc.wantLabel)
 		}
 	}
 }

@@ -3,9 +3,8 @@ package telemetry
 import "altune/go-api/internal/shared/telemetry/internal/adapters/otlp"
 
 type (
-	Service      = otlp.Service
-	ClientEvent  = otlp.ClientEvent
-	ClientEvents = otlp.ClientEvents
+	Service     = otlp.Service
+	ClientEvent = otlp.ClientEvent
 )
 
 const (
@@ -15,7 +14,6 @@ const (
 )
 
 var (
-	Enabled         = otlp.Enabled
 	Setup           = otlp.Setup
 	Middleware      = otlp.Middleware
 	NewClientEvents = otlp.NewClientEvents

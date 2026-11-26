@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/telemetry"
+	"altune/go-api/internal/shared/telemetry/internal/adapters/otlp"
 	"context"
 	"net"
 	"net/http"
@@ -33,7 +34,7 @@ func TestSetupWithoutEndpointIsANoOp(t *testing.T) {
 	if err := shutdown(context.Background()); err != nil {
 		t.Fatalf("shutdown: %v", err)
 	}
-	if telemetry.Enabled(noEndpoint) {
+	if otlp.Enabled(noEndpoint) {
 		t.Fatal("Enabled() = true with no endpoint")
 	}
 }

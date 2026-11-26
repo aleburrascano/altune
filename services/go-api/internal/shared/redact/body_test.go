@@ -2,6 +2,9 @@ package redact_test
 
 import (
 	"altune/go-api/internal/shared/redact"
+	"bytes"
+	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 )
@@ -12,7 +15,7 @@ func TestSecretsInBody_masksCredentialFieldsAtAnyDepth(t *testing.T) {
 	in := `{"accessToken":"` + bearer + `","pages":[{"api_key":"` + bearer + `","title":"Blue"}],` +
 		`"nested":{"deep":{"refresh_token":"` + bearer + `"}},"count":7}`
 
-	got := redact.SecretsInBody(in)
+	got := secretsInBody(in)
 
 	if strings.Contains(got, bearer) {
 		t.Fatalf("a credential survived the walk: %s", got)
@@ -27,7 +30,7 @@ func TestSecretsInBody_masksCredentialFieldsAtAnyDepth(t *testing.T) {
 func TestSecretsInBody_masksCredentialFieldsWhateverTheCase(t *testing.T) {
 	in := `{"ACCESS_TOKEN":"` + bearer + `","Api_Key":"` + bearer + `","ClientSecret":"` + bearer + `"}`
 
-	got := redact.SecretsInBody(in)
+	got := secretsInBody(in)
 
 	if strings.Contains(got, bearer) {
 		t.Errorf("a differently-cased credential name escaped: %s", got)
@@ -35,7 +38,7 @@ func TestSecretsInBody_masksCredentialFieldsWhateverTheCase(t *testing.T) {
 }
 
 func TestSecretsInBody_masksACredentialFieldWhateverItsValueType(t *testing.T) {
-	got := redact.SecretsInBody(`{"password":123456789,"token":{"inner":"x"},"title":"Blue"}`)
+	got := secretsInBody(`{"password":123456789,"token":{"inner":"x"},"title":"Blue"}`)
 
 	for _, leaked := range []string{"123456789", "inner"} {
 		if strings.Contains(got, leaked) {
@@ -52,7 +55,7 @@ func TestSecretsInBody_masksACredentialThatOnlyAnArrayHolds(t *testing.T) {
 		`[{"api_key":"` + bearer + `"}]`,
 		`{"pages":[{"api_key":"` + bearer + `"}],"title":"Blue"}`,
 	} {
-		if got := redact.SecretsInBody(in); strings.Contains(got, bearer) {
+		if got := secretsInBody(in); strings.Contains(got, bearer) {
 			t.Errorf("SecretsInBody(%q) = %q, leaks the credential", in, got)
 		}
 	}
@@ -67,7 +70,7 @@ func TestSecretsInBody_masksCredentialsInUndecodableJSON(t *testing.T) {
 	}
 
 	for name, in := range cases {
-		got := redact.SecretsInBody(in)
+		got := secretsInBody(in)
 		if strings.Contains(got, bearer) {
 			t.Errorf("%s body leaked the credential: %s", name, got)
 		}
@@ -84,7 +87,7 @@ func TestSecretsInBody_keepsBodiesThatCarryNoCredentialByteForByte(t *testing.T)
 	}
 
 	for _, in := range cases {
-		if got := redact.SecretsInBody(in); got != in {
+		if got := secretsInBody(in); got != in {
 			t.Errorf("body rewritten with nothing to mask:\n in: %q\nout: %q", in, got)
 		}
 	}
@@ -99,8 +102,8 @@ func TestSecretsInBody_isIdempotent(t *testing.T) {
 	}
 
 	for _, in := range cases {
-		once := redact.SecretsInBody(in)
-		if twice := redact.SecretsInBody(once); twice != once {
+		once := secretsInBody(in)
+		if twice := secretsInBody(once); twice != once {
 			t.Errorf("not idempotent for %q:\nonce:  %q\ntwice: %q", in, once, twice)
 		}
 	}
@@ -109,7 +112,7 @@ func TestSecretsInBody_isIdempotent(t *testing.T) {
 func TestSecretsInBody_masksCredentialParamsInsideStringValues(t *testing.T) {
 	in := `{"next":"https://api.example.com/page?cursor=2&api_key=` + bearer + `"}`
 
-	got := redact.SecretsInBody(in)
+	got := secretsInBody(in)
 
 	if strings.Contains(got, bearer) {
 		t.Errorf("a credential inside a string value leaked: %s", got)
@@ -122,7 +125,7 @@ func TestSecretsInBody_masksCredentialParamsInsideStringValues(t *testing.T) {
 func TestSecretsInBody_survivesPathologicalNesting(t *testing.T) {
 	for _, depth := range []int{5_000, 20_000} {
 		nested := strings.Repeat("[", depth) + strings.Repeat("]", depth)
-		if got := redact.SecretsInBody(nested); got != nested {
+		if got := secretsInBody(nested); got != nested {
 			t.Errorf("depth %d body rewritten with nothing to mask (len %d)", depth, len(got))
 		}
 	}
@@ -142,7 +145,7 @@ func TestIsSecretKey_keepsNonSecretLookalikeNames(t *testing.T) {
 }
 
 func TestSecretsInBody_masksExactNameAndMarkerCredentials(t *testing.T) {
-	got := redact.SecretsInBody(`{"client_id":"a","jwt":"b","pwd":"c","key":"d","keywords":"kw","author":"au","dedup_key":"dk"}`)
+	got := secretsInBody(`{"client_id":"a","jwt":"b","pwd":"c","key":"d","keywords":"kw","author":"au","dedup_key":"dk"}`)
 	for _, leaked := range []string{`"a"`, `"b"`, `"c"`, `"d"`} {
 		if strings.Contains(got, leaked) {
 			t.Errorf("credential value %s leaked: %s", leaked, got)
@@ -160,8 +163,86 @@ func TestSecretsInBodyMasksCredentialAfterStrayClosingByte(t *testing.T) {
 		`{"a":1}] "password":"hunter2"`,
 		`{"a":1}} "password":"hunter2"`,
 	} {
-		if got := redact.SecretsInBody(body); strings.Contains(got, "hunter2") {
+		if got := secretsInBody(body); strings.Contains(got, "hunter2") {
 			t.Errorf("SecretsInBody(%q) = %q, leaks credential", body, got)
 		}
 	}
+}
+
+func secretsInBody(body string) string {
+	scrubbed, isJSON := scrubbedJSON(body)
+	if !isJSON {
+		return redact.Secrets(body)
+	}
+	return scrubbed
+}
+
+func scrubbedJSON(body string) (string, bool) {
+	document, isJSON := decodedJSONDocument(body)
+	if !isJSON {
+		return "", false
+	}
+	scrubbed, masked := withoutCredentials(document)
+	if !masked {
+		return body, true
+	}
+	return encodedOrMasked(scrubbed), true
+}
+
+func decodedJSONDocument(body string) (any, bool) {
+	decoder := json.NewDecoder(strings.NewReader(body))
+	decoder.UseNumber()
+	var document any
+	if err := decoder.Decode(&document); err != nil {
+		return nil, false
+	}
+	return document, decoder.Decode(&struct{}{}) == io.EOF
+}
+
+func withoutCredentials(v any) (any, bool) {
+	switch value := v.(type) {
+	case map[string]any:
+		return maskedFields(value)
+	case []any:
+		return maskedItems(value)
+	case string:
+		masked := redact.Secrets(value)
+		return masked, masked != value
+	}
+	return v, false
+}
+
+func maskedFields(fields map[string]any) (map[string]any, bool) {
+	masked := false
+	for name, v := range fields {
+		if redact.IsSecretKey(name) {
+			fields[name] = redact.Mask
+			masked = true
+			continue
+		}
+		scrubbed, fieldMasked := withoutCredentials(v)
+		fields[name] = scrubbed
+		masked = masked || fieldMasked
+	}
+	return fields, masked
+}
+
+func maskedItems(items []any) ([]any, bool) {
+	masked := false
+	for i, item := range items {
+		scrubbed, itemMasked := withoutCredentials(item)
+		items[i] = scrubbed
+		masked = masked || itemMasked
+	}
+	return items, masked
+}
+
+func encodedOrMasked(v any) string {
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(v); err != nil {
+		return redact.Mask
+	}
+	return strings.TrimSuffix(buf.String(), "\n")
 }

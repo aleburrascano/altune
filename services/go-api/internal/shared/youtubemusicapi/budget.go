@@ -22,8 +22,8 @@ const (
 	cooldownVarName      = "YTM_INNERTUBE_COOLDOWN"
 	redisURLVarName      = "REDIS_URL"
 	toolRedisPoolSize    = 2
-	DefaultMinInterval   = 2 * time.Second
-	DefaultCooldown      = 10 * time.Minute
+	defaultMinInterval   = 2 * time.Second
+	defaultCooldown      = 10 * time.Minute
 	unlimitedWaitMillis  = -1
 	refusedWaitMillis    = -1
 	redisCommandDeadline = 3 * time.Second
@@ -34,10 +34,10 @@ var (
 	ErrBudgetRefused   = errors.New("ytminnertube: the shared budget cannot serve this call before its deadline")
 	errBadMinInterval  = errors.New(minIntervalVarName + " must be a duration of zero or more, like 2s")
 	errBadCooldown     = errors.New(cooldownVarName + " must be a duration of zero or more, like 10m")
-	ErrNoRedisForTool  = errors.New(redisURLVarName + " is not set: the shared InnerTube budget lives in Redis")
+	errNoRedisForTool  = errors.New(redisURLVarName + " is not set: the shared InnerTube budget lives in Redis")
 	errBudgetNeedsHost = errors.New("ytminnertube: a budget needs a redis client")
-	ErrSleeperRequired = errors.New("ytminnertube: the budget requires a sleeper")
-	ErrClockRequired   = errors.New("ytminnertube: the budget requires a clock")
+	errSleeperRequired = errors.New("ytminnertube: the budget requires a sleeper")
+	errClockRequired   = errors.New("ytminnertube: the budget requires a clock")
 )
 
 var reserveScript = goredis.NewScript(`
@@ -69,8 +69,8 @@ type Settings struct {
 	Cooldown    time.Duration
 }
 
-func SettingsFromEnv(env func(string) string) (Settings, error) {
-	settings := Settings{MinInterval: DefaultMinInterval, Cooldown: DefaultCooldown}
+func settingsFromEnv(env func(string) string) (Settings, error) {
+	settings := Settings{MinInterval: defaultMinInterval, Cooldown: defaultCooldown}
 	if raw := env(minIntervalVarName); raw != "" {
 		interval, err := time.ParseDuration(raw)
 		if err != nil || interval < 0 {
@@ -92,12 +92,12 @@ func ToolClient(ctx context.Context, env func(string) string, timeout time.Durat
 	if timeout <= 0 {
 		return nil, Settings{}, outbound.ErrClientTimeoutRequired
 	}
-	settings, err := SettingsFromEnv(env)
+	settings, err := settingsFromEnv(env)
 	if err != nil {
 		return nil, Settings{}, err
 	}
 	if env(redisURLVarName) == "" {
-		return nil, Settings{}, ErrNoRedisForTool
+		return nil, Settings{}, errNoRedisForTool
 	}
 	budget, err := NewBudget(sharedRedis.NewClient(ctx, env(redisURLVarName), toolRedisPoolSize), settings, clock.Now, clock.Sleep)
 	if err != nil {
@@ -114,27 +114,27 @@ func (s Settings) Describe() string {
 	return fmt.Sprintf("shared InnerTube budget: one call per %v across the app and the tools, %v cooldown after a 403", s.MinInterval, s.Cooldown)
 }
 
-type Budget struct {
+type sharedBudget struct {
 	redis    *goredis.Client
 	settings Settings
 	now      clock.Func
 	sleep    clock.Sleeper
 }
 
-func NewBudget(client *goredis.Client, settings Settings, now clock.Func, sleep clock.Sleeper) (*Budget, error) {
+func NewBudget(client *goredis.Client, settings Settings, now clock.Func, sleep clock.Sleeper) (*sharedBudget, error) {
 	if client == nil {
 		return nil, errBudgetNeedsHost
 	}
 	if now == nil {
-		return nil, fmt.Errorf("NewBudget: %w", ErrClockRequired)
+		return nil, fmt.Errorf("NewBudget: %w", errClockRequired)
 	}
 	if sleep == nil {
-		return nil, fmt.Errorf("NewBudget: %w", ErrSleeperRequired)
+		return nil, fmt.Errorf("NewBudget: %w", errSleeperRequired)
 	}
-	return &Budget{redis: client, settings: settings, now: now, sleep: sleep}, nil
+	return &sharedBudget{redis: client, settings: settings, now: now, sleep: sleep}, nil
 }
 
-func (b *Budget) Wait(ctx context.Context) error {
+func (b *sharedBudget) Wait(ctx context.Context) error {
 	reply, err := b.reserve(ctx)
 	if err != nil {
 		return fmt.Errorf("ytminnertube: reserve a slot: %w", err)
@@ -145,7 +145,7 @@ func (b *Budget) Wait(ctx context.Context) error {
 	return b.sleep(ctx, time.Duration(reply)*time.Millisecond)
 }
 
-func (b *Budget) reserve(ctx context.Context) (int64, error) {
+func (b *sharedBudget) reserve(ctx context.Context) (int64, error) {
 	commandCtx, cancel := context.WithTimeout(ctx, redisCommandDeadline)
 	defer cancel()
 	reply, err := reserveScript.Run(commandCtx, b.redis, []string{budgetKey}, b.settings.MinInterval.Milliseconds(), b.maxWaitMillis(ctx)).Int64()
@@ -155,7 +155,7 @@ func (b *Budget) reserve(ctx context.Context) (int64, error) {
 	return reply, nil
 }
 
-func (b *Budget) maxWaitMillis(ctx context.Context) int64 {
+func (b *sharedBudget) maxWaitMillis(ctx context.Context) int64 {
 	deadline, ok := ctx.Deadline()
 	if !ok {
 		return unlimitedWaitMillis
@@ -163,7 +163,7 @@ func (b *Budget) maxWaitMillis(ctx context.Context) int64 {
 	return max((deadline.Sub(b.now()) - minRequestTime).Milliseconds(), 0)
 }
 
-func (b *Budget) CoolDown(ctx context.Context) error {
+func (b *sharedBudget) CoolDown(ctx context.Context) error {
 	commandCtx, cancel := background.Detach(ctx, redisCommandDeadline)
 	defer cancel()
 	if err := coolScript.Run(commandCtx, b.redis, []string{budgetKey}, b.settings.Cooldown.Milliseconds()).Err(); err != nil {
@@ -172,7 +172,7 @@ func (b *Budget) CoolDown(ctx context.Context) error {
 	return nil
 }
 
-func (b *Budget) Transport(base http.RoundTripper) http.RoundTripper {
+func (b *sharedBudget) Transport(base http.RoundTripper) http.RoundTripper {
 	if base == nil {
 		base = outbound.DefaultTransport()
 	}
@@ -180,7 +180,7 @@ func (b *Budget) Transport(base http.RoundTripper) http.RoundTripper {
 }
 
 type budgetTransport struct {
-	budget *Budget
+	budget *sharedBudget
 	base   http.RoundTripper
 }
 

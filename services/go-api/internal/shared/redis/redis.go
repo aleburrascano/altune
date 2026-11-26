@@ -58,19 +58,19 @@ func clientOptions(redisURL string, poolSize int) (*goredis.Options, error) {
 	return opts, nil
 }
 
-type PoolStats struct {
+type poolStats struct {
 	PoolSize   int    `json:"pool_size"`
 	TotalConns uint32 `json:"total_conns"`
 	IdleConns  uint32 `json:"idle_conns"`
 	Timeouts   uint32 `json:"timeouts"`
 }
 
-func ReadPoolStats(client *goredis.Client) PoolStats {
+func ReadPoolStats(client *goredis.Client) poolStats {
 	if client == nil {
-		return PoolStats{}
+		return poolStats{}
 	}
 	stats := client.PoolStats()
-	return PoolStats{
+	return poolStats{
 		PoolSize:   client.Options().PoolSize,
 		TotalConns: stats.TotalConns,
 		IdleConns:  stats.IdleConns,

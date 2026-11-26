@@ -48,10 +48,7 @@ const (
 	editionNouns = `version|edition`
 )
 
-var (
-	editionLabelRe  = regexp.MustCompile(fmt.Sprintf(`(?i)^\s*(?:%s)(?:\s+(?:%s))?\s*$`, editionKinds, editionNouns))
-	editionSuffixRe = regexp.MustCompile(fmt.Sprintf(`(?i)^(.*\S)\s[-–—]\s+([^-–—|]*\b(?:%s|%s)\b[^-–—|]*)$`, editionKinds, editionNouns))
-)
+var editionLabelRe = regexp.MustCompile(fmt.Sprintf(`(?i)^\s*(?:%s)(?:\s+(?:%s))?\s*$`, editionKinds, editionNouns))
 
 var releaseMarkerRe = regexp.MustCompile(`(?i)^\s*(?:(?:\d{4}\s+)?(?:digitally\s+)?remaster(?:ed)?(?:\s+\d{4})?|radio\s+edit|explicit|clean)\s*$`)
 
@@ -61,12 +58,4 @@ func IsReleaseMarker(text string) bool {
 
 func IsEditionLabel(text string) bool {
 	return editionLabelRe.MatchString(text)
-}
-
-func BracketEditionSuffix(title string) string {
-	m := editionSuffixRe.FindStringSubmatch(title)
-	if m == nil {
-		return title
-	}
-	return m[1] + " (" + m[2] + ")"
 }

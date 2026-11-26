@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/shared/redis"
 	"bytes"
 	"context"
+	"encoding/json"
 	"log/slog"
 	"strings"
 	"testing"
@@ -66,7 +67,12 @@ func TestNewClient_PinsPoolSizeFromConfiguration(t *testing.T) {
 }
 
 func TestReadPoolStats_NilClientReadsAsZero(t *testing.T) {
-	if stats := redis.ReadPoolStats(nil); stats != (redis.PoolStats{}) {
-		t.Fatalf("ReadPoolStats(nil) = %+v, want zero value", stats)
+	got, err := json.Marshal(redis.ReadPoolStats(nil))
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	const want = `{"pool_size":0,"total_conns":0,"idle_conns":0,"timeouts":0}`
+	if string(got) != want {
+		t.Fatalf("ReadPoolStats(nil) = %s, want %s", got, want)
 	}
 }
