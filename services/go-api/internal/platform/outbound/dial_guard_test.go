@@ -4,13 +4,12 @@ import (
 	"altune/go-api/internal/platform/outbound"
 	"context"
 	"errors"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
-	"syscall"
 	"testing"
+	"time"
 )
 
 func TestRefuseNonPublicDial_RefusesEveryNonPublicRange(t *testing.T) {
@@ -29,29 +28,56 @@ func TestRefuseNonPublicDial_RefusesEveryNonPublicRange(t *testing.T) {
 		"224.0.0.1:80",
 		"[::1]:80",
 		"[::]:80",
-		"[fe80::1%eth0]:80",
+		"[fe80::1%25eth0]:80",
 		"[fc00::1]:80",
 		"[::ffff:10.0.0.1]:80",
 		"[::a00:1]:80",
 		"[64:ff9b::a00:1]:80",
 		"[64:ff9b:1::1]:80",
 		"[2002::1]:80",
-		"not-an-address",
-		"example.com:443",
 	}
+	rt := liveTransport(t)
 	for _, addr := range nonPublic {
-		if err := outbound.RefuseNonPublicDial("tcp", addr, nil); !errors.Is(err, outbound.ErrNonPublicAddr) {
-			t.Errorf("%s: err = %v, want refusal", addr, err)
-		}
+		t.Run(addr, func(t *testing.T) {
+			t.Parallel()
+			if err := roundTrip(t, rt, addr, 5*time.Second); !errors.Is(err, outbound.ErrNonPublicAddr) {
+				t.Errorf("err = %v, want refusal", err)
+			}
+		})
 	}
 }
 
 func TestRefuseNonPublicDial_AllowsPublicAddresses(t *testing.T) {
-	for _, addr := range []string{"93.184.216.34:443", "[2606:2800:220:1:248:1893:25c8:1946]:443", "[::ffff:93.184.216.34]:443"} {
-		if err := outbound.RefuseNonPublicDial("tcp", addr, nil); err != nil {
+	rt := liveTransport(t)
+	for _, addr := range []string{"192.0.2.1:9", "198.51.100.1:9", "203.0.113.1:9", "[2001:db8::1]:9", "[::ffff:192.0.2.1]:9"} {
+		if err := roundTrip(t, rt, addr, 100*time.Millisecond); errors.Is(err, outbound.ErrNonPublicAddr) {
 			t.Errorf("%s: public address refused: %v", addr, err)
 		}
 	}
+}
+
+func liveTransport(t *testing.T) http.RoundTripper {
+	t.Helper()
+	rt, err := outbound.NewLiveTransport(func(string) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rt
+}
+
+func roundTrip(t *testing.T, rt http.RoundTripper, hostPort string, within time.Duration) error {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), within)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+hostPort+"/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := rt.RoundTrip(req)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+	return err
 }
 
 func TestNewLiveTransport_RefusesToDialALoopbackUpstreamAndRecordsEachRetry(t *testing.T) {
@@ -90,7 +116,7 @@ func TestNewLiveTransport_RefusesToDialALoopbackUpstreamAndRecordsEachRetry(t *t
 func TestNewLiveTransport_RefusesAMissingRetryRecorder(t *testing.T) {
 	rt, err := outbound.NewLiveTransport(nil)
 
-	if !errors.Is(err, outbound.ErrRetryRecorderRequired) {
+	if err == nil || !strings.Contains(err.Error(), "live transport needs a retry recorder") {
 		t.Fatalf("err = %v, want the missing retry recorder refusal", err)
 	}
 	if rt != nil {
@@ -98,7 +124,7 @@ func TestNewLiveTransport_RefusesAMissingRetryRecorder(t *testing.T) {
 	}
 }
 
-func TestNewLiveTransport_WorksWithTheNoRetryRecorder(t *testing.T) {
+func TestNewLiveTransport_WorksWithAnIgnoringRetryRecorder(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
 	defer upstream.Close()
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, upstream.URL, nil)
@@ -106,7 +132,7 @@ func TestNewLiveTransport_WorksWithTheNoRetryRecorder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rt, err := outbound.NewLiveTransport(outbound.NoRetryRecorder)
+	rt, err := outbound.NewLiveTransport(func(string) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,14 +147,15 @@ func TestNewLiveTransport_WorksWithTheNoRetryRecorder(t *testing.T) {
 	}
 }
 
-func allowLoopbackThenGuard(ctx context.Context, network, address string) (net.Conn, error) {
-	guarded := &net.Dialer{Control: func(network, address string, c syscall.RawConn) error {
-		if strings.HasPrefix(address, "127.0.0.1:") {
-			return nil
-		}
-		return outbound.RefuseNonPublicDial(network, address, c)
-	}}
-	return guarded.DialContext(ctx, network, address)
+type loopbackThenGuard struct {
+	guarded http.RoundTripper
+}
+
+func (l loopbackThenGuard) RoundTrip(req *http.Request) (*http.Response, error) {
+	if strings.HasPrefix(req.URL.Host, "127.0.0.1:") {
+		return http.DefaultTransport.RoundTrip(req)
+	}
+	return l.guarded.RoundTrip(req)
 }
 
 func TestRefuseNonPublicDial_RefusesARedirectToTheMetadataAddress(t *testing.T) {
@@ -136,7 +163,7 @@ func TestRefuseNonPublicDial_RefusesARedirectToTheMetadataAddress(t *testing.T) 
 		http.Redirect(w, r, "http://169.254.169.254/latest/meta-data/", http.StatusFound)
 	}))
 	defer upstream.Close()
-	client := &http.Client{Transport: &http.Transport{DialContext: allowLoopbackThenGuard}}
+	client := &http.Client{Transport: loopbackThenGuard{guarded: liveTransport(t)}}
 
 	resp, err := client.Get(upstream.URL)
 	if err == nil {

@@ -2,6 +2,8 @@ package auth_test
 
 import (
 	"altune/go-api/internal/platform/auth"
+	"altune/go-api/internal/platform/auth/internal/adapters/middleware"
+	"altune/go-api/internal/platform/auth/internal/core/ports"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
@@ -32,9 +34,9 @@ const (
 	reasonClaimMissingEXP = "claim_missing_exp"
 )
 
-func stubVerifier(userID ids.UserId, err error) auth.VerifierFunc {
-	return func(context.Context, string) (auth.VerifiedToken, error) {
-		return auth.VerifiedToken{UserID: userID, ExpiresAt: time.Now().Add(time.Hour)}, err
+func stubVerifier(userID ids.UserId, err error) ports.VerifierFunc {
+	return func(context.Context, string) (ports.VerifiedToken, error) {
+		return ports.VerifiedToken{UserID: userID, ExpiresAt: time.Now().Add(time.Hour)}, err
 	}
 }
 
@@ -115,9 +117,9 @@ func TestMiddleware_MalformedHeader(t *testing.T) {
 func TestMiddleware_OversizedBearerIsMalformedAndNeverVerified(t *testing.T) {
 	for _, size := range []int{maxBearerBytes + 1, 64 << 10, 1 << 20} {
 		verified := false
-		verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+		verifier := ports.VerifierFunc(func(context.Context, string) (ports.VerifiedToken, error) {
 			verified = true
-			return auth.VerifiedToken{UserID: ids.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
+			return ports.VerifiedToken{UserID: ids.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
 		})
 		next, called := noopHandler()
 		handler := auth.MustMiddleware(verifier, time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next)
@@ -138,9 +140,9 @@ func TestMiddleware_OversizedBearerIsMalformedAndNeverVerified(t *testing.T) {
 
 func TestMiddleware_BearerAtTheBoundStillReachesTheVerifier(t *testing.T) {
 	var got string
-	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
+	verifier := ports.VerifierFunc(func(_ context.Context, token string) (ports.VerifiedToken, error) {
 		got = token
-		return auth.VerifiedToken{UserID: ids.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
+		return ports.VerifiedToken{UserID: ids.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
 	})
 	next, _ := noopHandler()
 	token := strings.Repeat("a", maxBearerBytes)
@@ -310,9 +312,9 @@ func TestMiddleware_UnreachableVerifierIs503NotTokenRejection(t *testing.T) {
 
 func TestMiddleware_RepeatedFailedVerificationsFromOneCallerAreThrottled(t *testing.T) {
 	calls := 0
-	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+	verifier := ports.VerifierFunc(func(context.Context, string) (ports.VerifiedToken, error) {
 		calls++
-		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
+		return ports.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
 	})
 	next, _ := noopHandler()
 	handler := auth.MustMiddleware(verifier, time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next)
@@ -335,7 +337,7 @@ type fakeClock struct{ t time.Time }
 func (c *fakeClock) now() time.Time          { return c.t }
 func (c *fakeClock) advance(d time.Duration) { c.t = c.t.Add(d) }
 
-var testFailureLimits = auth.FailureLimits{Burst: 3, Refill: time.Minute, MaxClients: 100}
+var testFailureLimits = middleware.FailureLimits{Burst: 3, Refill: time.Minute, MaxClients: 100}
 
 func throttledMiddleware(verifier auth.TokenVerifier) (http.Handler, *fakeClock) {
 	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
@@ -345,9 +347,9 @@ func throttledMiddleware(verifier auth.TokenVerifier) (http.Handler, *fakeClock)
 
 func TestMiddleware_ThrottleRefusesWithoutVerifyingOnceFailuresExhaustBurst(t *testing.T) {
 	calls := 0
-	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+	verifier := ports.VerifierFunc(func(context.Context, string) (ports.VerifiedToken, error) {
 		calls++
-		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
+		return ports.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
 	})
 	handler, clock := throttledMiddleware(verifier)
 
@@ -385,9 +387,9 @@ func TestMiddleware_ThrottleIsPerClient(t *testing.T) {
 
 func TestMiddleware_SuccessfulVerificationsAreNeverThrottled(t *testing.T) {
 	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
-	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+	verifier := ports.VerifierFunc(func(context.Context, string) (ports.VerifiedToken, error) {
 		clock.advance(time.Millisecond)
-		return auth.VerifiedToken{UserID: ids.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
+		return ports.VerifiedToken{UserID: ids.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
 	})
 	next, _ := noopHandler()
 	handler := auth.MustMiddleware(verifier, clock.now, auth.NoopAuthMetrics(), testFailureLimits)(next)
@@ -413,9 +415,9 @@ func TestMiddleware_AnOutageStaysAnOutageWhenTheClientAlsoLeft(t *testing.T) {
 	metrics := &recordingMetrics{}
 	next, _ := noopHandler()
 	ctx, cancel := context.WithCancel(context.Background())
-	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+	verifier := ports.VerifierFunc(func(context.Context, string) (ports.VerifiedToken, error) {
 		cancel()
-		return auth.VerifiedToken{}, errors.New("fetch JWKS: dial tcp 10.0.0.9:443: connection refused")
+		return ports.VerifiedToken{}, errors.New("fetch JWKS: dial tcp 10.0.0.9:443: connection refused")
 	})
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer t")
@@ -493,10 +495,10 @@ func TestMiddleware_ThrottledResponseRevealsNothingAboutTheToken(t *testing.T) {
 func TestMiddleware_ConcurrentFailuresCannotOvershootBurst(t *testing.T) {
 	var calls atomic.Int32
 	release := make(chan struct{})
-	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+	verifier := ports.VerifierFunc(func(context.Context, string) (ports.VerifiedToken, error) {
 		calls.Add(1)
 		<-release
-		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
+		return ports.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
 	})
 	handler, _ := throttledMiddleware(verifier)
 
@@ -521,8 +523,8 @@ func serveBearer(handler http.Handler, remoteAddr, token string) *httptest.Respo
 	return rec
 }
 
-func verifies(verified auth.VerifiedToken) auth.VerifierFunc {
-	return func(context.Context, string) (auth.VerifiedToken, error) {
+func verifies(verified ports.VerifiedToken) ports.VerifierFunc {
+	return func(context.Context, string) (ports.VerifiedToken, error) {
 		return verified, nil
 	}
 }
@@ -542,7 +544,7 @@ func serveThroughMiddleware(t *testing.T, verifier auth.TokenVerifier) (time.Tim
 
 func TestMiddleware_TokenExpiryReachesHandler(t *testing.T) {
 	want := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
-	verifier := verifies(auth.VerifiedToken{UserID: ids.NewUserId(uuid.New()), ExpiresAt: want})
+	verifier := verifies(ports.VerifiedToken{UserID: ids.NewUserId(uuid.New()), ExpiresAt: want})
 
 	got, known := serveThroughMiddleware(t, verifier)
 
@@ -557,7 +559,7 @@ func TestMiddleware_RejectsVerifiedTokenWithoutExpiry(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer token")
 	rec := httptest.NewRecorder()
 
-	auth.MustMiddleware(verifies(auth.VerifiedToken{UserID: ids.NewUserId(uuid.New())}), time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next).ServeHTTP(rec, req)
+	auth.MustMiddleware(verifies(ports.VerifiedToken{UserID: ids.NewUserId(uuid.New())}), time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401 for a token with no expiry", rec.Code)
@@ -786,9 +788,9 @@ func TestMiddleware_LookAlikeSchemesArePinnedAsMalformed(t *testing.T) {
 	for _, header := range []string{"Basic abc", "Bearer", "Bearerabc"} {
 		t.Run(header, func(t *testing.T) {
 			verified := false
-			verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+			verifier := ports.VerifierFunc(func(context.Context, string) (ports.VerifiedToken, error) {
 				verified = true
-				return auth.VerifiedToken{}, nil
+				return ports.VerifiedToken{}, nil
 			})
 			next, called := noopHandler()
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -807,9 +809,9 @@ func TestMiddleware_LookAlikeSchemesArePinnedAsMalformed(t *testing.T) {
 
 func TestMiddleware_LowerCaseSchemeReachesTheVerifier(t *testing.T) {
 	var got string
-	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
+	verifier := ports.VerifierFunc(func(_ context.Context, token string) (ports.VerifiedToken, error) {
 		got = token
-		return auth.VerifiedToken{UserID: ids.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
+		return ports.VerifiedToken{UserID: ids.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
 	})
 	next, called := noopHandler()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -864,7 +866,7 @@ func TestMiddleware_ThrottledBodyIsPinned(t *testing.T) {
 func TestMiddleware_ThrottledRetryAfterIsNeverZero(t *testing.T) {
 	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
 	next, _ := noopHandler()
-	limits := auth.FailureLimits{Burst: 1, Refill: time.Millisecond, MaxClients: 10}
+	limits := middleware.FailureLimits{Burst: 1, Refill: time.Millisecond, MaxClients: 10}
 	handler := auth.MustMiddleware(stubVerifier(ids.UserId{}, &auth.InvalidTokenError{Reason: reasonExpired}), clock.now, auth.NoopAuthMetrics(), limits)(next)
 	serveBearer(handler, "203.0.113.7:1", "t")
 
@@ -882,9 +884,9 @@ func TestMiddleware_ThrottledRetryAfterIsNeverZero(t *testing.T) {
 func TestMiddleware_AClientThatLeftDuringVerificationGets499WithNoBody(t *testing.T) {
 	next, _ := noopHandler()
 	ctx, cancel := context.WithCancel(context.Background())
-	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+	verifier := ports.VerifierFunc(func(context.Context, string) (ports.VerifiedToken, error) {
 		cancel()
-		return auth.VerifiedToken{}, context.Canceled
+		return ports.VerifiedToken{}, context.Canceled
 	})
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Bearer t")
@@ -957,13 +959,13 @@ func clientAddr(i int) string {
 	return fmt.Sprintf("198.18.%d.%d:4444", i/250, i%250+1)
 }
 
-func failingVerifier() auth.VerifierFunc {
-	return func(context.Context, string) (auth.VerifiedToken, error) {
-		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
+func failingVerifier() ports.VerifierFunc {
+	return func(context.Context, string) (ports.VerifiedToken, error) {
+		return ports.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
 	}
 }
 
-func limitedMiddleware(limits auth.FailureLimits) (http.Handler, *fakeClock) {
+func limitedMiddleware(limits middleware.FailureLimits) (http.Handler, *fakeClock) {
 	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
 	next, _ := noopHandler()
 	return auth.MustMiddleware(failingVerifier(), clock.now, auth.NoopAuthMetrics(), limits)(next), clock
@@ -974,9 +976,9 @@ func admitted(handler http.Handler, addr string) bool {
 }
 
 func TestMiddleware_RefusesANilClock(t *testing.T) {
-	mw, err := auth.Middleware(failingVerifier(), nil, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)
+	mw, err := middleware.Middleware(failingVerifier(), nil, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)
 
-	if !errors.Is(err, auth.ErrMiddlewareClockRequired) || mw != nil {
+	if !errors.Is(err, middleware.ErrClockRequired) || mw != nil {
 		t.Fatalf("Middleware(nil clock) = (%v, %v), want ErrMiddlewareClockRequired and no middleware", mw != nil, err)
 	}
 }
@@ -985,15 +987,15 @@ func TestFailureThrottle_NonPositiveLimitsKeepTheDefaults(t *testing.T) {
 	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
 	cases := []struct {
 		name   string
-		limits auth.FailureLimits
+		limits middleware.FailureLimits
 		now    func() time.Time
 		burst  int
 	}{
-		{"all zero", auth.FailureLimits{}, clock.now, 20},
-		{"zero refill", auth.FailureLimits{Burst: 3, MaxClients: 10}, clock.now, 3},
-		{"negative refill", auth.FailureLimits{Burst: 3, Refill: -time.Second, MaxClients: 10}, clock.now, 3},
-		{"zero max clients", auth.FailureLimits{Burst: 3, Refill: time.Hour}, clock.now, 3},
-		{"negative burst", auth.FailureLimits{Burst: -1, Refill: time.Hour, MaxClients: 10}, clock.now, 20},
+		{"all zero", middleware.FailureLimits{}, clock.now, 20},
+		{"zero refill", middleware.FailureLimits{Burst: 3, MaxClients: 10}, clock.now, 3},
+		{"negative refill", middleware.FailureLimits{Burst: 3, Refill: -time.Second, MaxClients: 10}, clock.now, 3},
+		{"zero max clients", middleware.FailureLimits{Burst: 3, Refill: time.Hour}, clock.now, 3},
+		{"negative burst", middleware.FailureLimits{Burst: -1, Refill: time.Hour, MaxClients: 10}, clock.now, 20},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1012,7 +1014,7 @@ func TestFailureThrottle_NonPositiveLimitsKeepTheDefaults(t *testing.T) {
 }
 
 func TestFailureThrottle_TrackedClientsStayBounded(t *testing.T) {
-	handler, _ := limitedMiddleware(auth.FailureLimits{Burst: 2, Refill: time.Hour, MaxClients: 8})
+	handler, _ := limitedMiddleware(middleware.FailureLimits{Burst: 2, Refill: time.Hour, MaxClients: 8})
 
 	for i := range 1000 {
 		if !admitted(handler, clientAddr(i)) {
@@ -1028,7 +1030,7 @@ func TestFailureThrottle_TrackedClientsStayBounded(t *testing.T) {
 }
 
 func TestFailureThrottle_EvictionDropsToTheLowWaterMark(t *testing.T) {
-	limits := auth.FailureLimits{Burst: 2, Refill: time.Hour, MaxClients: 100}
+	limits := middleware.FailureLimits{Burst: 2, Refill: time.Hour, MaxClients: 100}
 	handler, _ := limitedMiddleware(limits)
 	const keepers, spenders = 90, 10
 	for i := range keepers {
@@ -1054,7 +1056,7 @@ func TestFailureThrottle_EvictionDropsToTheLowWaterMark(t *testing.T) {
 }
 
 func TestFailureThrottle_RefilledClientsArePrunedBeforeEvictingPenalisedOnes(t *testing.T) {
-	handler, clock := limitedMiddleware(auth.FailureLimits{Burst: 1, Refill: time.Minute, MaxClients: 2})
+	handler, clock := limitedMiddleware(middleware.FailureLimits{Burst: 1, Refill: time.Minute, MaxClients: 2})
 
 	admitted(handler, "203.0.113.1:1")
 	clock.advance(time.Minute)
@@ -1067,7 +1069,7 @@ func TestFailureThrottle_RefilledClientsArePrunedBeforeEvictingPenalisedOnes(t *
 }
 
 func TestFailureThrottle_ExhaustedClientSurvivesEvictionChurn(t *testing.T) {
-	limits := auth.FailureLimits{Burst: 2, Refill: time.Hour, MaxClients: 50}
+	limits := middleware.FailureLimits{Burst: 2, Refill: time.Hour, MaxClients: 50}
 	handler, _ := limitedMiddleware(limits)
 	for i := range limits.MaxClients - 1 {
 		admitted(handler, clientAddr(i))
@@ -1089,7 +1091,7 @@ func TestFailureThrottle_ExhaustedClientSurvivesEvictionChurn(t *testing.T) {
 }
 
 func TestFailureThrottle_PruningRefilledClientsSparesAPartlySpentOneFromLaterEviction(t *testing.T) {
-	handler, clock := limitedMiddleware(auth.FailureLimits{Burst: 2, Refill: time.Hour, MaxClients: 100})
+	handler, clock := limitedMiddleware(middleware.FailureLimits{Burst: 2, Refill: time.Hour, MaxClients: 100})
 	for i := range 15 {
 		admitted(handler, clientAddr(i))
 	}
@@ -1110,7 +1112,7 @@ func TestFailureThrottle_PruningRefilledClientsSparesAPartlySpentOneFromLaterEvi
 }
 
 func TestFailureThrottle_NoClientIsForgottenBelowCapacity(t *testing.T) {
-	handler, clock := limitedMiddleware(auth.FailureLimits{Burst: 2, Refill: time.Hour, MaxClients: 100})
+	handler, clock := limitedMiddleware(middleware.FailureLimits{Burst: 2, Refill: time.Hour, MaxClients: 100})
 	const early = "203.0.113.10:1"
 	admitted(handler, early)
 	clock.advance(30 * time.Minute)
@@ -1135,7 +1137,7 @@ func benchmarkChurn(b *testing.B, step time.Duration) {
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.DiscardHandler))
 	b.Cleanup(func() { slog.SetDefault(prev) })
-	handler, clock := limitedMiddleware(auth.FailureLimits{Burst: 20, Refill: 3 * time.Second, MaxClients: 10_000})
+	handler, clock := limitedMiddleware(middleware.FailureLimits{Burst: 20, Refill: 3 * time.Second, MaxClients: 10_000})
 	var worst time.Duration
 	for i := 0; b.Loop(); i++ {
 		clock.advance(step)

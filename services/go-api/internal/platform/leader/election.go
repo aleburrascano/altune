@@ -22,10 +22,10 @@ const (
 var ErrLeadershipLost = errors.New("leader: leadership lost")
 
 type LockStore interface {
-	Acquire(ctx context.Context) (LockSession, error)
+	Acquire(ctx context.Context) (lockSession, error)
 }
 
-type LockSession interface {
+type lockSession interface {
 	TryAdvisoryLock(ctx context.Context, key int64) (bool, error)
 	Ping(ctx context.Context) error
 	AdvisoryUnlock(ctx context.Context, key int64) error
@@ -41,7 +41,7 @@ type Election struct {
 	newTicker clock.TickerFunc
 
 	mu        sync.RWMutex
-	conn      LockSession
+	conn      lockSession
 	heldSince time.Time
 	term      *term
 
@@ -55,20 +55,20 @@ type Election struct {
 }
 
 var (
-	ErrClockRequired  = errors.New("leader: an election needs a clock")
-	ErrTimerRequired  = errors.New("leader: an election needs a timer")
-	ErrTickerRequired = errors.New("leader: an election needs a ticker")
+	errClockRequired  = errors.New("leader: an election needs a clock")
+	errTimerRequired  = errors.New("leader: an election needs a timer")
+	errTickerRequired = errors.New("leader: an election needs a ticker")
 )
 
 func NewElection(locks LockStore, key int64, interval time.Duration, now clock.Func, newTimer clock.TimerFunc, newTicker clock.TickerFunc) (*Election, error) {
 	if now == nil {
-		return nil, fmt.Errorf("NewElection: %w", ErrClockRequired)
+		return nil, fmt.Errorf("NewElection: %w", errClockRequired)
 	}
 	if newTimer == nil {
-		return nil, fmt.Errorf("NewElection: %w", ErrTimerRequired)
+		return nil, fmt.Errorf("NewElection: %w", errTimerRequired)
 	}
 	if newTicker == nil {
-		return nil, fmt.Errorf("NewElection: %w", ErrTickerRequired)
+		return nil, fmt.Errorf("NewElection: %w", errTickerRequired)
 	}
 	return &Election{
 		db:        locks,
@@ -158,7 +158,7 @@ func (e *Election) acquire(base context.Context) {
 	slog.InfoContext(ctx, "leader.lock_won", "key", e.key, "settle", e.settleWindow().String())
 }
 
-func (e *Election) lockedConn(ctx context.Context) (LockSession, bool) {
+func (e *Election) lockedConn(ctx context.Context) (lockSession, bool) {
 	conn, err := e.db.Acquire(ctx)
 	if err != nil {
 		e.acquireFailed(ctx, "pool_acquire", err)
@@ -182,7 +182,7 @@ func (e *Election) acquireFailed(ctx context.Context, stage string, err error) {
 	slog.WarnContext(ctx, "leader.acquire_failed", "key", e.key, "stage", stage, "err", err)
 }
 
-func (e *Election) hold(conn LockSession) {
+func (e *Election) hold(conn lockSession) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.conn = conn
@@ -240,7 +240,7 @@ func (e *Election) release(base context.Context) {
 	conn.Release()
 }
 
-func (e *Election) detach() LockSession {
+func (e *Election) detach() lockSession {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	conn := e.conn
