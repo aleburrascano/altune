@@ -34,7 +34,7 @@ func (a *application) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	assembly, err := Assemble(ctx, a.cfg, Handles{Pool: pool, Redis: redisClient, Transport: transport, Tracker: tracker, LogRing: a.logRing})
+	assembly, err := assemble(ctx, a.cfg, handles{Pool: pool, Redis: redisClient, Transport: transport, Tracker: tracker, LogRing: a.logRing})
 	if err != nil {
 		return err
 	}

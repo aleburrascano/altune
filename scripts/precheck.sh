@@ -359,6 +359,9 @@ if touches '^services/go-api/'; then
         if touches "^$m/.*\.go\$|^$m/\.go-arch-lint\.yml\$" && need go-arch-lint "go-api architecture"; then
           check "go-api architecture: every module imports only what its role may (go-arch-lint)" $m go-arch-lint check
         fi
+        if touches "^$m/.*\.go\$"; then
+          check "go-api module doors: test support imported only from tests, no unused root export (lintdoors --exports)" $m go run ./scripts/lintdoors --exports .
+        fi
         if touches "^$m/go\.(mod|sum)\$"; then
           check "go-api go.mod and go.sum are tidy" $m go mod tidy -diff
         fi
@@ -392,6 +395,7 @@ if touches '^services/go-api/'; then
       check "history is whole, so the whole-tree checks see every file" . bash scripts/history-complete.sh
       check "go-api no vague names (whole tree)" $m go run ./scripts/lintnames "$(git rev-list --max-parents=0 HEAD | tail -n 1)"
       need go-arch-lint "go-api architecture" && check "go-api architecture: every module imports only what its role may (go-arch-lint, whole tree)" $m go-arch-lint check
+      check "go-api module doors: test support imported only from tests, no unused root export (lintdoors --exports, whole tree)" $m go run ./scripts/lintdoors --exports .
       mapfile -t pkgs < <(go_pkgs $m)
       [ ${#pkgs[@]} -gt 0 ] && par go_test_check "go-api tests (race, changed packages)" $m "${heavy[@]}" go test -race -shuffle=on -count=1 "${pkgs[@]}"
       if [ ${#pkgs[@]} -gt 0 ] && [ "${INTEGRATION:-}" != 1 ]; then
