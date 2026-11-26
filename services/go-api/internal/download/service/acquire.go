@@ -114,45 +114,6 @@ func WithAcquireStoreKeyPrefix(prefix string) func(*AcquireTrackAudioService) {
 
 const AcquireTimeout = 10 * time.Minute
 
-type schedulerOwnedJobContextKey struct{}
-
-func withSchedulerOwnedJobContext(ctx context.Context) context.Context {
-	return context.WithValue(ctx, schedulerOwnedJobContextKey{}, true)
-}
-
-type jobAttemptContextKey struct{}
-
-func withJobAttempt(ctx context.Context, attempt int) context.Context {
-	return context.WithValue(ctx, jobAttemptContextKey{}, attempt)
-}
-
-func jobAttemptFrom(ctx context.Context) int {
-	if ctx == nil {
-		return 0
-	}
-	attempt, _ := ctx.Value(jobAttemptContextKey{}).(int)
-	return attempt
-}
-
-type jobFenceContextKey struct{}
-
-func withJobFence(ctx context.Context, fence ports.ClaimNumber) context.Context {
-	return context.WithValue(ctx, jobFenceContextKey{}, fence)
-}
-
-func jobFenceFrom(ctx context.Context) ports.ClaimNumber {
-	if ctx == nil {
-		return 0
-	}
-	fence, _ := ctx.Value(jobFenceContextKey{}).(ports.ClaimNumber)
-	return fence
-}
-
-func schedulerCancelledJobContext(ctx context.Context) bool {
-	ownedByScheduler, _ := ctx.Value(schedulerOwnedJobContextKey{}).(bool)
-	return ownedByScheduler && ctx.Err() != nil
-}
-
 func (s *AcquireTrackAudioService) outcomes() outcomeReporter {
 	return outcomeReporter{ledger: s.ledger, events: s.events}
 }

@@ -15,7 +15,6 @@ import (
 	"altune/go-api/internal/shared/redact"
 	sharedtracklength "altune/go-api/internal/shared/tracklength"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -232,22 +231,6 @@ func execStage[In, Out any](ctx context.Context, run *pipelineRun, s finalStage[
 }
 
 const rollbackBudget = 30 * time.Second
-
-type rollbackHandedOverKey struct{}
-
-func withRollbackHandedOver(ctx context.Context) context.Context {
-	return context.WithValue(ctx, rollbackHandedOverKey{}, true)
-}
-
-func rollbackHandedOver(ctx context.Context) bool {
-	handedOver, _ := ctx.Value(rollbackHandedOverKey{}).(bool)
-	return handedOver
-}
-
-func schedulerHandedOver(ctx context.Context) bool {
-	ownedByScheduler, _ := ctx.Value(schedulerOwnedJobContextKey{}).(bool)
-	return ownedByScheduler && errors.Is(ctx.Err(), context.Canceled)
-}
 
 func rollback(ctx context.Context, completed []undoable, ac *AcquisitionContext) {
 	rbCtx, cancel := background.Detach(ctx, rollbackBudget)
