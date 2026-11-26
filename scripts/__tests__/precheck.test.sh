@@ -789,7 +789,7 @@ add_test_home_stub() {
     )
 }
 
-CASE="a push without --full fails on a test file that is not in its unit's test file"
+CASE="a push without --full fails when test-home rejects a changed test file"
 new_repo
 add_test_home_stub 1
 run_push_scoped
@@ -801,6 +801,7 @@ CASE="a push without --full passes the placement check when test-home passes"
 new_repo
 add_test_home_stub 0
 run_push_scoped
+expect_rc 0
 expect_out "ok    test files live with their unit"
 
 CASE="precheck rejects an unknown flag and a flag after the base ref with the usage and exit 2"
