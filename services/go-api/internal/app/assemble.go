@@ -97,7 +97,9 @@ func (a *App) compose(ctx context.Context, transport http.RoundTripper) (http.Ha
 	if err := a.startAlertMonitor(ctx); err != nil {
 		return nil, err
 	}
-	a.wireObserve(ctx, r, verifier, a.eventTap)
+	if err := a.wireObserve(ctx, r, verifier, a.eventTap); err != nil {
+		return nil, err
+	}
 	a.startCatalogJobs(ctx, f.catalog, f.playback)
 	election, err := jobs.NewElection(a.pool)
 	if err != nil {
@@ -147,6 +149,8 @@ func (a *App) wireFeatures(ctx context.Context, transport http.RoundTripper) (fe
 	if err != nil {
 		return features{}, fmt.Errorf("ownership enrichment: %w", err)
 	}
-	disc.Handler.WithOwnershipEnrichment(ownership)
+	if err := disc.Handler.AttachOwnership(ownership); err != nil {
+		return features{}, fmt.Errorf("ownership enrichment: %w", err)
+	}
 	return features{discovery: disc, catalog: cat, playback: playback}, nil
 }

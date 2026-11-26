@@ -136,9 +136,6 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 const warmArtistLimit = 3
 
 func (h *DiscoveryHandler) warmUnreleased(results []domain.SearchResult) {
-	if h.unreleasedSvc == nil {
-		return
-	}
 	var artists []unreleased.ArtistToRefresh
 	for _, res := range results {
 		if res.Kind != domain.ResultKindArtist || len(res.Sources) == 0 {
@@ -241,11 +238,6 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if h.eventSvc == nil {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-
 	var clientOccurredAt time.Time
 	if req.ClientOccurredAt != "" {
 		if t, parseErr := time.Parse(time.RFC3339, req.ClientOccurredAt); parseErr == nil {
@@ -270,9 +262,6 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *DiscoveryHandler) emitClientEvent(r *http.Request, eventType domain.EventType, userId ids.UserId, req DiscoveryEventRequest) {
-	if h.clientEvents == nil {
-		return
-	}
 	h.clientEvents.Emit(r.Context(), telemetry.ClientEvent{
 		Type:       eventType.String(),
 		EventID:    req.EventID,

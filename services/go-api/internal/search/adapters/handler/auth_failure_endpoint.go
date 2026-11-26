@@ -69,11 +69,6 @@ func (h *DiscoveryHandler) handleAuthFailure(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if h.eventSvc == nil {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-
 	if err := h.eventSvc.RecordAnonymousAuthFailure(r.Context(), reason, appVersion); err != nil {
 		httpserver.HandleServiceError(w, r, fmt.Errorf("record anonymous auth failure %q: %w", reason, err))
 		return

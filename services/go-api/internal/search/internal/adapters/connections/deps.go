@@ -1,11 +1,11 @@
 package connections
 
 import (
+	"altune/go-api/internal/search/adapters/handler"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/service/unreleased"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/queuetimeout"
-	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"expvar"
 	"fmt"
@@ -30,7 +30,7 @@ type Deps struct {
 	Redis           *goredis.Client
 	CacheOps        *expvar.Map
 	Activity        ports.ActivityFeed
-	ClientEvents    *telemetry.ClientEvents
+	ClientEvents    handler.ClientEventSink
 	IdentityStore   ports.IdentityStore
 	Providers       ProviderSettings
 	Search          SearchSettings
@@ -73,6 +73,8 @@ func (d Deps) requiredHandles() []requiredHandle {
 		{"Background", d.Background == nil},
 		{"Tracker", d.Tracker == nil},
 		{"Logger", d.Logger == nil},
+		{"Activity", d.Activity == nil},
+		{"ClientEvents", d.ClientEvents == nil},
 		{"Transport", d.Transport == nil},
 		{"CacheOps", d.CacheOps == nil},
 		{"ProviderTimeout", d.ProviderTimeout <= 0},

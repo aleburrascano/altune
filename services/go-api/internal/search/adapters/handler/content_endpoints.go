@@ -66,12 +66,6 @@ func codeOf(failure *apierror.CodedError) string {
 	return failure.Code().String()
 }
 
-func degradeUnserved(w http.ResponseWriter, r *http.Request) func(provider string) {
-	return func(provider string) {
-		httpserver.HandleServiceError(w, r, fmt.Errorf("%s content: %w", provider, errContentUnserved))
-	}
-}
-
 func failContentFetch(w http.ResponseWriter, r *http.Request, err error, operation, provider, externalID string) {
 	httpserver.HandleServiceError(w, r, fmt.Errorf("%s for %s %q: %w", operation, provider, externalID, err))
 }
@@ -79,8 +73,6 @@ func failContentFetch(w http.ResponseWriter, r *http.Request, err error, operati
 func withProvider(
 	w http.ResponseWriter,
 	r *http.Request,
-	available bool,
-	degrade func(provider string),
 	call func(pn domain.ProviderName, provider, externalID string),
 ) {
 	provider := chi.URLParam(r, "provider")
@@ -93,18 +85,13 @@ func withProvider(
 	if !ok {
 		return
 	}
-	if !available {
-		degrade(provider)
-		return
-	}
 	call(pn, provider, externalID)
 }
 
 const maxAlbumTracks = 250
 
 func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Request) {
-	withProvider(w, r, h.albumSvc != nil,
-		degradeUnserved(w, r),
+	withProvider(w, r,
 		func(pn domain.ProviderName, provider, externalID string) {
 			limit, ok := parseLimit(w, r, "limit", maxAlbumTracks, maxAlbumTracks, clampToMax)
 			if !ok {
@@ -150,8 +137,7 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.Request) {
-	withProvider(w, r, h.artistSvc != nil,
-		degradeUnserved(w, r),
+	withProvider(w, r,
 		func(pn domain.ProviderName, provider, externalID string) {
 			limit, ok := parseLimit(w, r, "limit", 5, 50, clampToMax)
 			if !ok {
@@ -170,8 +156,7 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 }
 
 func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Request) {
-	withProvider(w, r, h.artistSvc != nil,
-		degradeUnserved(w, r),
+	withProvider(w, r,
 		func(pn domain.ProviderName, provider, externalID string) {
 			limit, ok := parseLimit(w, r, "limit", 50, 100, clampToMax)
 			if !ok {
@@ -190,8 +175,7 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 }
 
 func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Request) {
-	withProvider(w, r, h.relatedSvc != nil,
-		degradeUnserved(w, r),
+	withProvider(w, r,
 		func(pn domain.ProviderName, provider, externalID string) {
 			limit, ok := parseLimit(w, r, "limit", 20, 50, clampToMax)
 			if !ok {
@@ -252,8 +236,7 @@ func fetchContentPart(
 }
 
 func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Request) {
-	withProvider(w, r, h.artistSvc != nil,
-		degradeUnserved(w, r),
+	withProvider(w, r,
 		func(pn domain.ProviderName, provider, externalID string) {
 			known := knownIDsParam(r)
 			tracksLimit, ok := parseLimit(w, r, "tracks_limit", 5, 50, clampToMax)

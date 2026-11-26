@@ -9,12 +9,15 @@ import (
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/search"
 	"context"
+	"fmt"
 
 	"github.com/go-chi/chi/v5"
 )
 
-func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVerifier, tap *monitoring.EventTap) {
-	a.startObserveSources(ctx, tap)
+func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVerifier, tap *monitoring.EventTap) error {
+	if err := a.startObserveSources(ctx, tap); err != nil {
+		return err
+	}
 	deps := monitoring.Deps{
 		Health:      a.dependencyHealth,
 		Logs:        a.logRing,
@@ -26,17 +29,27 @@ func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVe
 		Shutdown:    a.lifecycleDone,
 	}
 	mountObserve(r, verifier, a.cfg.OverseerPrincipalID, monitoring.NewObserveHandler(deps))
+	return nil
 }
 
-func (a *App) startObserveSources(ctx context.Context, tap *monitoring.EventTap) {
+func (a *App) startObserveSources(ctx context.Context, tap *monitoring.EventTap) error {
 	a.eventFeed = monitoring.NewEventFeed()
 	a.eventFeed.Start(ctx, tap)
-	a.evalMeter = NewEvalMeter(&a.jobs, a.evalMeterRunner())
+	meter, err := NewEvalMeter(&a.jobs, a.evalMeterRunner())
+	if err != nil {
+		return err
+	}
+	a.evalMeter = meter
 	a.jobs.WhenLeader(jobs.EvalMeter, a.evalMeter.Start)
+	return nil
 }
 
-func NewEvalMeter(runner *jobs.Runner, run monitoring.EvalMeterRunner) *monitoring.EvalMeter {
-	return monitoring.NewEvalMeter(0, run).WithLeadership(runner.LeaderContextFor(jobs.EvalMeter))
+func NewEvalMeter(runner *jobs.Runner, run monitoring.EvalMeterRunner) (*monitoring.EvalMeter, error) {
+	meter, err := monitoring.NewEvalMeter(0, run, runner.LeaderContextFor(jobs.EvalMeter))
+	if err != nil {
+		return nil, fmt.Errorf("eval meter: %w", err)
+	}
+	return meter, nil
 }
 
 func mountObserve(r chi.Router, verifier auth.TokenVerifier, principalID string, h *monitoring.Handler) {

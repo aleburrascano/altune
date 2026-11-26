@@ -85,12 +85,17 @@ var ErrInvalidInterval = errors.New("the interval must be positive")
 
 var ErrClockRequired = errors.New("the alert monitor requires a clock")
 
-func NewMonitor(notifier ports.AlertNotifier, interval time.Duration, now clock.Func, conditions ...domain.Condition) (*Monitor, error) {
+var ErrLeadershipRequired = errors.New("the alert monitor requires a leadership scope, pass background.EveryPassLeads to run on every pass")
+
+func NewMonitor(notifier ports.AlertNotifier, interval time.Duration, now clock.Func, leadership LeadershipScope, conditions ...domain.Condition) (*Monitor, error) {
 	if interval <= 0 {
 		return nil, ErrInvalidInterval
 	}
 	if now == nil {
 		return nil, ErrClockRequired
+	}
+	if leadership == nil {
+		return nil, ErrLeadershipRequired
 	}
 	return &Monitor{
 		notifier:    notifier,
@@ -98,19 +103,11 @@ func NewMonitor(notifier ports.AlertNotifier, interval time.Duration, now clock.
 		interval:    interval,
 		evalTimeout: defaultEvalTimeout,
 		logger:      slog.Default(),
-		leadership:  background.EveryPassLeads,
+		leadership:  leadership,
 		now:         now,
 		firing:      make(map[string]bool),
 		pages:       make(map[string]domain.Alert),
 	}, nil
-}
-
-func (m *Monitor) WithLeadership(scope LeadershipScope) *Monitor {
-	if scope == nil {
-		return m
-	}
-	m.leadership = scope
-	return m
 }
 
 func (m *Monitor) Start(ctx context.Context) {

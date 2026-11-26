@@ -9,9 +9,11 @@ type (
 )
 
 var (
-	ErrDiscoveryClockRequired = handler.ErrClockRequired
-	MustNewDiscoveryHandler   = handler.MustNewDiscoveryHandler
-	NewDiscoveryHandler       = handler.NewDiscoveryHandler
+	ErrDiscoveryClockRequired   = handler.ErrClockRequired
+	ErrDiscoveryServiceRequired = handler.ErrServiceRequired
+	ErrOwnershipStamperRequired = handler.ErrOwnershipRequired
+	MustNewDiscoveryHandler     = handler.MustNewDiscoveryHandler
+	NewDiscoveryHandler         = handler.NewDiscoveryHandler
 )
 
 var DefaultAuthFailureLimit = handler.DefaultAuthFailureLimit

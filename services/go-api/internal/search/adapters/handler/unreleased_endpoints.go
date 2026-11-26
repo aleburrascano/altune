@@ -41,14 +41,10 @@ func (h *DiscoveryHandler) handleUnreleasedSearch(w http.ResponseWriter, r *http
 	if !ok {
 		return
 	}
-	hits := []ports.UnreleasedHit{}
-	if h.unreleasedSvc != nil {
-		found, err := h.unreleasedSvc.Search(r.Context(), query)
-		if err != nil {
-			httpserver.HandleServiceError(w, r, err)
-			return
-		}
-		hits = found
+	hits, err := h.unreleasedSvc.Search(r.Context(), query)
+	if err != nil {
+		httpserver.HandleServiceError(w, r, err)
+		return
 	}
 	dto := unreleasedSearchToDTO(hits)
 	if userId, ok := requestuser.UserIDFromContext(r.Context()); ok {
@@ -92,11 +88,6 @@ type UnreleasedVersionDTO struct {
 type UnreleasedResponseDTO struct {
 	Items   []UnreleasedSongDTO `json:"items"`
 	Pending bool                `json:"pending"`
-}
-
-func (h *DiscoveryHandler) WithUnreleased(svc *unreleased.Service) *DiscoveryHandler {
-	h.unreleasedSvc = svc
-	return h
 }
 
 func unreleasedToDTO(found unreleased.Lookup) UnreleasedResponseDTO {
@@ -191,15 +182,10 @@ func nonEmpty(s string) *string {
 }
 
 func (h *DiscoveryHandler) handleArtistUnreleased(w http.ResponseWriter, r *http.Request) {
-	withProvider(w, r, true,
-		nil,
+	withProvider(w, r,
 		func(pn domain.ProviderName, provider, externalID string) {
 			name, ok := textParam(w, r, "name")
 			if !ok {
-				return
-			}
-			if h.unreleasedSvc == nil {
-				httpserver.WriteJSON(w, http.StatusOK, unreleasedToDTO(unreleased.Lookup{}))
 				return
 			}
 			found, err := h.unreleasedSvc.Lookup(r.Context(), pn, externalID, name, knownIDsParam(r))

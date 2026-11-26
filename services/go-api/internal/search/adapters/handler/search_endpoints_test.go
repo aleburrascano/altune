@@ -44,7 +44,7 @@ func TestSearchEndpoints_ServiceErrorsUseTypedContract(t *testing.T) {
 	}{
 		{
 			name:       "suggest classified failure",
-			router:     func(err error) chi.Router { return buildSuggestRouter(&fakeVocabStore{err: err}) },
+			router:     func(err error) chi.Router { return buildSuggestRouter(t, &fakeVocabStore{err: err}) },
 			method:     http.MethodGet,
 			path:       "/discovery/suggest?q=kend",
 			err:        classified,
@@ -53,7 +53,7 @@ func TestSearchEndpoints_ServiceErrorsUseTypedContract(t *testing.T) {
 		},
 		{
 			name:       "suggest unclassified failure",
-			router:     func(err error) chi.Router { return buildSuggestRouter(&fakeVocabStore{err: err}) },
+			router:     func(err error) chi.Router { return buildSuggestRouter(t, &fakeVocabStore{err: err}) },
 			method:     http.MethodGet,
 			path:       "/discovery/suggest?q=kend",
 			err:        unclassified,
@@ -324,8 +324,8 @@ func (s *recordingEventStore) Append(_ context.Context, e search.InteractionEven
 	return nil
 }
 
-func buildSuggestRouter(vocab *fakeVocabStore) chi.Router {
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Suggest: search.NewSuggestService(vocab)}, time.Now)
+func buildSuggestRouter(t *testing.T, vocab *fakeVocabStore) chi.Router {
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Suggest: search.NewSuggestService(vocab)}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -333,7 +333,7 @@ func buildSuggestRouter(vocab *fakeVocabStore) chi.Router {
 }
 
 func buildEventRouter(t *testing.T, store *recordingEventStore) chi.Router {
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Event: searchtest.NewRecordEvent(t, store)}, time.Now)
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Event: searchtest.NewRecordEvent(t, store)}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Use(httpserver.MaxBodySize(1 << 20))
@@ -343,13 +343,13 @@ func buildEventRouter(t *testing.T, store *recordingEventStore) chi.Router {
 
 func TestHandleSuggest(t *testing.T) {
 	t.Run("missing q returns 400", func(t *testing.T) {
-		router := buildSuggestRouter(&fakeVocabStore{})
+		router := buildSuggestRouter(t, &fakeVocabStore{})
 		rec := discServe(t, router, http.MethodGet, "/discovery/suggest", nil)
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})
 
 	t.Run("whitespace-only q returns 400", func(t *testing.T) {
-		router := buildSuggestRouter(&fakeVocabStore{})
+		router := buildSuggestRouter(t, &fakeVocabStore{})
 		rec := discServe(t, router, http.MethodGet, "/discovery/suggest?q=%20%20", nil)
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})
@@ -358,7 +358,7 @@ func TestHandleSuggest(t *testing.T) {
 		vocab := &fakeVocabStore{entries: []search.SpellingHintsEntry{
 			{Term: "Kendrick Lamar", TermNorm: "kendrick lamar", Kind: search.VocabKindArtist, Popularity: 99},
 		}}
-		router := buildSuggestRouter(vocab)
+		router := buildSuggestRouter(t, vocab)
 		rec := discServe(t, router, http.MethodGet, "/discovery/suggest?q=kend", nil)
 		discAssertStatus(t, rec, http.StatusOK)
 		discAssertJSON(t, rec)
@@ -388,7 +388,7 @@ func TestHandleSuggest(t *testing.T) {
 		}
 		for _, c := range cases {
 			vocab := &fakeVocabStore{}
-			router := buildSuggestRouter(vocab)
+			router := buildSuggestRouter(t, vocab)
 			rec := discServe(t, router, http.MethodGet, c.query, nil)
 			discAssertStatus(t, rec, http.StatusOK)
 			if vocab.capturedLimit != c.want {
@@ -398,7 +398,7 @@ func TestHandleSuggest(t *testing.T) {
 	})
 
 	t.Run("empty result emits non-null suggestions array", func(t *testing.T) {
-		router := buildSuggestRouter(&fakeVocabStore{})
+		router := buildSuggestRouter(t, &fakeVocabStore{})
 		rec := discServe(t, router, http.MethodGet, "/discovery/suggest?q=zzz", nil)
 		discAssertStatus(t, rec, http.StatusOK)
 
@@ -410,13 +410,13 @@ func TestHandleSuggest(t *testing.T) {
 	})
 
 	t.Run("store error returns 500", func(t *testing.T) {
-		router := buildSuggestRouter(&fakeVocabStore{err: context.DeadlineExceeded})
+		router := buildSuggestRouter(t, &fakeVocabStore{err: context.DeadlineExceeded})
 		rec := discServe(t, router, http.MethodGet, "/discovery/suggest?q=x", nil)
 		discAssertStatus(t, rec, http.StatusInternalServerError)
 	})
 
 	t.Run("no auth returns 401", func(t *testing.T) {
-		router := buildSuggestRouter(&fakeVocabStore{})
+		router := buildSuggestRouter(t, &fakeVocabStore{})
 		rec := discServeNoAuth(t, router, http.MethodGet, "/discovery/suggest?q=x")
 		discAssertStatus(t, rec, http.StatusUnauthorized)
 	})
@@ -428,7 +428,7 @@ func TestHandleSuggest_StoreErrorDoesNotLogQueryText(t *testing.T) {
 	ring := logging.Setup("error")
 
 	const secret = "kendricksecretunreleasedcut"
-	router := buildSuggestRouter(&fakeVocabStore{err: context.DeadlineExceeded})
+	router := buildSuggestRouter(t, &fakeVocabStore{err: context.DeadlineExceeded})
 	rec := discServe(t, router, http.MethodGet, "/discovery/suggest?q="+secret, nil)
 	discAssertStatus(t, rec, http.StatusInternalServerError)
 
@@ -868,8 +868,8 @@ func TestSearchResultDTO_JSONNeverNullCollections(t *testing.T) {
 	}
 }
 
-func searchOnlyRouter(svc *search.SearchService) chi.Router {
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Search: svc}, time.Now)
+func searchOnlyRouter(t *testing.T, svc *search.SearchService) chi.Router {
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Search: svc}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -886,7 +886,7 @@ func TestSearch_RelatedGroupsReachTheWire(t *testing.T) {
 	provider := &fakeSearchProvider{name: search.ProviderDeezer, results: []search.SearchResult{artist}}
 
 	t.Run("no related groups leaves the key absent", func(t *testing.T) {
-		router := searchOnlyRouter(searchtest.NewSearchService(t, bg, []search.SearchProvider{provider}, search.NewCircuitBreaker()))
+		router := searchOnlyRouter(t, searchtest.NewSearchService(t, bg, []search.SearchProvider{provider}, search.NewCircuitBreaker()))
 
 		rec := discServe(t, router, http.MethodGet, "/discovery/search?q=nas&save_history=false", nil)
 
@@ -900,7 +900,7 @@ func TestSearch_RelatedGroupsReachTheWire(t *testing.T) {
 
 	t.Run("an artist's albums come back as a group with its items", func(t *testing.T) {
 		findRelated := searchtest.NewFindRelated(t, searchtest.RelatedArtistAlbums(stubContentProvider{provider: search.ProviderDeezer}))
-		router := searchOnlyRouter(searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{provider}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Related = findRelated }))
+		router := searchOnlyRouter(t, searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{provider}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Related = findRelated }))
 
 		rec := discServe(t, router, http.MethodGet, "/discovery/search?q=nas&save_history=false", nil)
 
@@ -941,7 +941,7 @@ func TestSearch_OutcomeFollowsTheProviders(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			router := searchOnlyRouter(searchtest.NewSearchService(t, bg, c.providers, search.NewCircuitBreaker()))
+			router := searchOnlyRouter(t, searchtest.NewSearchService(t, bg, c.providers, search.NewCircuitBreaker()))
 
 			rec := discServe(t, router, http.MethodGet, "/discovery/search?q=hello&save_history=false", nil)
 
@@ -1016,7 +1016,7 @@ func (s *recordingVocabStore) written() []string {
 func buildQueryCapRouter(t *testing.T, p search.SearchProvider, vocab search.SpellingHintsStore) chi.Router {
 	bg := searchtest.NewTracker(t)
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Vocabulary = vocab })
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Search: svc}, time.Now)
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Search: svc}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -1106,7 +1106,7 @@ func buildQueryNormRouter(t *testing.T, history *fakeSearchHistoryRepo) chi.Rout
 		}},
 	}
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.History = history })
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Search: svc}, time.Now)
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Search: svc}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -1347,7 +1347,7 @@ func TestRecordEvent_BodyPastTheRouteCapIs413TooLarge(t *testing.T) {
 }
 
 func TestHandleSuggest_OverlongQ(t *testing.T) {
-	router := buildSuggestRouter(&fakeVocabStore{})
+	router := buildSuggestRouter(t, &fakeVocabStore{})
 	rec := discServe(t, router, http.MethodGet, "/discovery/suggest?q="+strings.Repeat("a", 201), nil)
 	discAssertStatus(t, rec, http.StatusBadRequest)
 }
@@ -1506,7 +1506,7 @@ func pagingRouter(t *testing.T, provider search.SearchProvider) chi.Router {
 		cache := &mapResultCache{entries: map[string][]search.SearchResult{}}
 		c.ResultCache, c.HeldSlates = cache, cache
 	})
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Search: searchSvc}, time.Now)
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Search: searchSvc}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -1658,7 +1658,7 @@ func TestHandleSearch_CacheHitReflectsTheResultCache(t *testing.T) {
 	searchSvc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{provider}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
 		c.ResultCache = &mapResultCache{entries: map[string][]search.SearchResult{}}
 	})
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Search: searchSvc}, time.Now)
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Search: searchSvc}), time.Now)
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
 	router.Mount("/discovery", h.Routes())
@@ -1684,8 +1684,10 @@ func (l *recordingLogger) Enabled(context.Context, log.EnabledParameters) bool {
 }
 
 func buildClientEventRouter(t *testing.T, logger *recordingLogger) chi.Router {
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Event: searchtest.NewRecordEvent(t, &recordingEventStore{})}, time.Now).
-		WithClientEvents(telemetry.NewClientEvents("k", logger))
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{
+		Event:        searchtest.NewRecordEvent(t, &recordingEventStore{}),
+		ClientEvents: telemetry.NewClientEvents("k", logger),
+	}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -1726,8 +1728,10 @@ func TestHandleRecordEvent_AnOldBuildThatSendsAnalyticsOffIsStillRecorded(t *tes
 
 func TestHandleRecordEvent_ClientEventSkippedWhenStoreFails(t *testing.T) {
 	logger := &recordingLogger{}
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Event: searchtest.NewRecordEvent(t, &recordingEventStore{err: context.DeadlineExceeded})}, time.Now).
-		WithClientEvents(telemetry.NewClientEvents("k", logger))
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{
+		Event:        searchtest.NewRecordEvent(t, &recordingEventStore{err: context.DeadlineExceeded}),
+		ClientEvents: telemetry.NewClientEvents("k", logger),
+	}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -1771,7 +1775,7 @@ func searchAsWarmUp(t *testing.T, store search.UnreleasedStore, results []search
 	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.UnreleasedConfig{}, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store), searchtest.UnreleasedLifecycle(context.Background(), &jobs))))
 	p := &fakeSearchProvider{name: search.ProviderDeezer, results: results}
 	searchSvc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker())
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Search: searchSvc}, time.Now).WithUnreleased(svc)
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Search: searchSvc, Unreleased: svc}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())

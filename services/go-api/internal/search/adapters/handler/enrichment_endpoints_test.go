@@ -143,19 +143,19 @@ type degradedCase struct {
 	wantSecondCalls int
 }
 
-func mbRouter(f *scriptedMBEnricher) (chi.Router, *int) {
+func mbRouter(t *testing.T, f *scriptedMBEnricher) (chi.Router, *int) {
 	svc := mustEnrichment(search.NewEnrichmentService(f, search.NoArtwork{}, newMemMBCache(), search.NoMBIDIndex{}))
-	return buildEnrichmentRouter(svc), &f.calls
+	return buildEnrichmentRouter(t, svc), &f.calls
 }
 
 func deezerRouter(t *testing.T, f *scriptedDeezerEnricher) (chi.Router, *int) {
 	svc := searchtest.NewDeezerEnrichment(t, f, newMemNameCache[search.DeezerEnrichment]())
-	return buildEnrichersRouter(search.DetailEnrichers{Deezer: svc}), &f.calls
+	return buildEnrichersRouter(t, search.DetailEnrichers{Deezer: svc}), &f.calls
 }
 
 func lyricsRouter(t *testing.T, f *scriptedLyricsProvider) (chi.Router, *int) {
 	svc := searchtest.NewLyrics(t, f, newMemNameCache[search.DeezerLyrics]())
-	return buildEnrichersRouter(search.DetailEnrichers{Lyrics: svc}), &f.calls
+	return buildEnrichersRouter(t, search.DetailEnrichers{Lyrics: svc}), &f.calls
 }
 
 func TestEnrichmentEndpoints_TransientFailureIsDistinguishableFromNoData(t *testing.T) {
@@ -168,24 +168,24 @@ func TestEnrichmentEndpoints_TransientFailureIsDistinguishableFromNoData(t *test
 	cases := []degradedCase{
 		{
 			name:  "musicbrainz resolve error is degraded and retried",
-			build: func() (chi.Router, *int) { return mbRouter(&scriptedMBEnricher{resolveErr: errProviderDown}) },
+			build: func() (chi.Router, *int) { return mbRouter(t, &scriptedMBEnricher{resolveErr: errProviderDown}) },
 			path:  mbPath, wantDegraded: true, wantSecondCalls: 2,
 		},
 		{
 			name: "musicbrainz lookup error after resolve is degraded and retried",
 			build: func() (chi.Router, *int) {
-				return mbRouter(&scriptedMBEnricher{mbid: "abc", lookupErr: errProviderDown})
+				return mbRouter(t, &scriptedMBEnricher{mbid: "abc", lookupErr: errProviderDown})
 			},
 			path: mbPath, wantDegraded: true, wantSecondCalls: 4,
 		},
 		{
 			name:  "musicbrainz lookup error by mbid is degraded and retried",
-			build: func() (chi.Router, *int) { return mbRouter(&scriptedMBEnricher{lookupErr: errProviderDown}) },
+			build: func() (chi.Router, *int) { return mbRouter(t, &scriptedMBEnricher{lookupErr: errProviderDown}) },
 			path:  mbidPath, wantDegraded: true, wantSecondCalls: 2,
 		},
 		{
 			name:  "musicbrainz unresolved name is genuine empty and negative-cached",
-			build: func() (chi.Router, *int) { return mbRouter(&scriptedMBEnricher{}) },
+			build: func() (chi.Router, *int) { return mbRouter(t, &scriptedMBEnricher{}) },
 			path:  mbPath, wantDegraded: false, wantSecondCalls: 1,
 		},
 		{
@@ -249,8 +249,8 @@ func TestEnrichmentEndpoints_TransientFailureIsDistinguishableFromNoData(t *test
 	}
 }
 
-func buildEnrichersRouter(e search.DetailEnrichers) chi.Router {
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{}, time.Now).WithDetailEnrichers(e)
+func buildEnrichersRouter(t *testing.T, e search.DetailEnrichers) chi.Router {
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Enrichers: e}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -259,13 +259,13 @@ func buildEnrichersRouter(e search.DetailEnrichers) chi.Router {
 
 func TestHandleDeezerEnrichment(t *testing.T) {
 	t.Run("missing kind returns 400", func(t *testing.T) {
-		router := buildEnrichersRouter(search.DetailEnrichers{})
+		router := buildEnrichersRouter(t, search.DetailEnrichers{})
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/deezer?title=X", nil)
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})
 
 	t.Run("missing title returns 400", func(t *testing.T) {
-		router := buildEnrichersRouter(search.DetailEnrichers{})
+		router := buildEnrichersRouter(t, search.DetailEnrichers{})
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/deezer?kind=track", nil)
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})
@@ -274,7 +274,7 @@ func TestHandleDeezerEnrichment(t *testing.T) {
 		e := search.EmptyDeezerEnrichment()
 		e.BPM = 90
 		svc := searchtest.NewDeezerEnrichment(t, &scriptedDeezerEnricher{id: "dz-1", found: &e}, search.NoNameKeyedCache[search.DeezerEnrichment]{})
-		router := buildEnrichersRouter(search.DetailEnrichers{Deezer: svc})
+		router := buildEnrichersRouter(t, search.DetailEnrichers{Deezer: svc})
 
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/deezer?kind=artist&title=Nas", nil)
 		discAssertStatus(t, rec, http.StatusOK)
@@ -286,8 +286,8 @@ func TestHandleDeezerEnrichment(t *testing.T) {
 		}
 	})
 
-	t.Run("nil enricher returns 200 empty DTO with non-null genres", func(t *testing.T) {
-		router := buildEnrichersRouter(search.DetailEnrichers{})
+	t.Run("an enricher with nothing to say returns 200 empty DTO with non-null genres", func(t *testing.T) {
+		router := buildEnrichersRouter(t, search.DetailEnrichers{})
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/deezer?kind=track&title=X", nil)
 		discAssertStatus(t, rec, http.StatusOK)
 
@@ -301,7 +301,7 @@ func TestHandleDeezerEnrichment(t *testing.T) {
 
 func TestHandleLyrics(t *testing.T) {
 	t.Run("missing title returns 400", func(t *testing.T) {
-		router := buildEnrichersRouter(search.DetailEnrichers{})
+		router := buildEnrichersRouter(t, search.DetailEnrichers{})
 		rec := discServe(t, router, http.MethodGet, "/discovery/lyrics?subtitle=Nas", nil)
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})
@@ -316,7 +316,7 @@ func TestHandleLyrics(t *testing.T) {
 		l.Copyright = "© 1994 Columbia"
 
 		svc := searchtest.NewLyrics(t, &scriptedLyricsProvider{id: "t-1", found: &l}, search.NoNameKeyedCache[search.DeezerLyrics]{})
-		router := buildEnrichersRouter(search.DetailEnrichers{Lyrics: svc})
+		router := buildEnrichersRouter(t, search.DetailEnrichers{Lyrics: svc})
 
 		rec := discServe(t, router, http.MethodGet,
 			"/discovery/lyrics?title=N.Y.+State+of+Mind&subtitle=Nas", nil)
@@ -336,7 +336,7 @@ func TestHandleLyrics(t *testing.T) {
 	})
 
 	t.Run("nil provider returns 200 empty DTO with non-null collections", func(t *testing.T) {
-		router := buildEnrichersRouter(search.DetailEnrichers{})
+		router := buildEnrichersRouter(t, search.DetailEnrichers{})
 		rec := discServe(t, router, http.MethodGet, "/discovery/lyrics?title=X", nil)
 		discAssertStatus(t, rec, http.StatusOK)
 
@@ -369,7 +369,7 @@ func TestEnrichmentEndpoints_NilCollectionsServeAsEmpty(t *testing.T) {
 	}{
 		{
 			name:   "musicbrainz",
-			router: buildEnrichmentRouter(mustEnrichment(search.NewEnrichmentService(bareMBEnricher{}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{}))),
+			router: buildEnrichmentRouter(t, mustEnrichment(search.NewEnrichmentService(bareMBEnricher{}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{}))),
 			path:   "/discovery/enrichment?kind=album&title=Illmatic",
 			want:   map[string]string{"genres": "[]", "secondary_types": "[]", "external_ids": "{}"},
 		},
@@ -409,7 +409,7 @@ func TestEnrichmentRoutes_NoIdentityIs401(t *testing.T) {
 		"/discovery/enrichment/deezer?kind=track&title=X",
 		"/discovery/lyrics?title=X&artist=Y",
 	}
-	router := unauthenticatedDiscoveryRouter(search.MustNewDiscoveryHandler(search.DiscoveryServices{}, time.Now))
+	router := unauthenticatedDiscoveryRouter(search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{}), time.Now))
 	for _, path := range paths {
 		t.Run(path, func(t *testing.T) {
 			discAssertStatus(t, discServeNoAuth(t, router, http.MethodGet, path), http.StatusUnauthorized)
@@ -418,7 +418,7 @@ func TestEnrichmentRoutes_NoIdentityIs401(t *testing.T) {
 }
 
 func TestHandleEnrichment_UnconfiguredIsNotEmptySuccess(t *testing.T) {
-	router := buildEnrichersRouter(search.DetailEnrichers{})
+	router := buildEnrichersRouter(t, search.DetailEnrichers{})
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?kind=album&title=X", nil)
 
@@ -471,8 +471,8 @@ func TestNamedEnrichmentEndpoints_SharedContract(t *testing.T) {
 			assertErrorCode(t, rec, http.StatusBadRequest, "discovery.invalid_param")
 		})
 
-		t.Run(tc.name+" nil enricher is 200 with the empty DTO", func(t *testing.T) {
-			router := buildEnrichersRouter(search.DetailEnrichers{})
+		t.Run(tc.name+" an enricher with nothing to say is 200 with the empty DTO", func(t *testing.T) {
+			router := buildEnrichersRouter(t, search.DetailEnrichers{})
 			rec := discServe(t, router, http.MethodGet, tc.path+"?kind=artist&title=Nas", nil)
 			discAssertStatus(t, rec, http.StatusOK)
 			var raw map[string]json.RawMessage

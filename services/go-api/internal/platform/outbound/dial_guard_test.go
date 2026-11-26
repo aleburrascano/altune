@@ -62,7 +62,10 @@ func TestNewLiveTransport_RefusesToDialALoopbackUpstreamAndRecordsEachRetry(t *t
 	}))
 	defer upstream.Close()
 	var retried []string
-	rt := outbound.NewLiveTransport(func(host string) { retried = append(retried, host) })
+	rt, err := outbound.NewLiveTransport(func(host string) { retried = append(retried, host) })
+	if err != nil {
+		t.Fatal(err)
+	}
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, upstream.URL, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -85,18 +88,13 @@ func TestNewLiveTransport_RefusesToDialALoopbackUpstreamAndRecordsEachRetry(t *t
 }
 
 func TestNewLiveTransport_RefusesAMissingRetryRecorder(t *testing.T) {
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://example.test/", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	resp, err := outbound.NewLiveTransport(nil).RoundTrip(req)
-	if resp != nil {
-		_ = resp.Body.Close()
-	}
+	rt, err := outbound.NewLiveTransport(nil)
 
 	if !errors.Is(err, outbound.ErrRetryRecorderRequired) {
 		t.Fatalf("err = %v, want the missing retry recorder refusal", err)
+	}
+	if rt != nil {
+		t.Errorf("transport = %v, want none", rt)
 	}
 }
 
@@ -108,7 +106,12 @@ func TestNewLiveTransport_WorksWithTheNoRetryRecorder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resp, err := outbound.NewLiveTransport(outbound.NoRetryRecorder).RoundTrip(req)
+	rt, err := outbound.NewLiveTransport(outbound.NoRetryRecorder)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := rt.RoundTrip(req)
 	if resp != nil {
 		_ = resp.Body.Close()
 	}
