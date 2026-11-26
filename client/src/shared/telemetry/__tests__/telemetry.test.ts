@@ -68,6 +68,19 @@ describe('stopping telemetry', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
+  it('sends nothing recorded after the stop', async () => {
+    const send = jest.fn(() => Promise.resolve());
+    const { telemetry } = bootWith(send);
+    await telemetry.stop();
+
+    await telemetry.recordEvent(LIBRARY_ADD);
+    telemetry.recordUserAction({ action: 'play', outcome: 'tapped' });
+    await telemetry.enqueueCritical(LIBRARY_ADD);
+    await settle();
+
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it('keeps logging a failed user action while it is running', async () => {
     const { telemetry, warn } = bootWith(() => Promise.reject(new Error('unreachable')));
 

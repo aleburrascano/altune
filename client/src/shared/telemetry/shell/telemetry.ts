@@ -17,6 +17,7 @@ export function createTelemetry(deps: TelemetryDeps) {
   const eventSession = createEventSession({ clock, appState, onSignOut: session.onSignOut });
   const sendRecorded = createRecordEvent(send, eventSession.getSessionId);
   function recordEvent(...args: Parameters<RecordEvent>): ReturnType<RecordEvent> {
+    if (stopped) return Promise.resolve();
     const attempt = sendRecorded(...args);
     sending.add(attempt);
     function done(): void {
