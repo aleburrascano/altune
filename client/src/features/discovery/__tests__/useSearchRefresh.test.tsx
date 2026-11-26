@@ -2,10 +2,14 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { DiscoverySearchResponse } from '@shared/catalog';
-import { useDiscoverSearch, useRefreshFromFirstPage } from '@features/discovery';
+import {
+  useDiscoverSearch,
+  useRefreshFromFirstPage,
+  DiscoverPortProvider,
+  httpDiscoverPort,
+} from '@features/discovery';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { signInTestUser } from '@testing/signInTestUser';
-import { FeaturePorts, httpFeaturePorts } from '@/mobile';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -32,7 +36,7 @@ let queryClient: QueryClient;
 function wrapper({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
-      <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
+      <DiscoverPortProvider port={httpDiscoverPort}>{children}</DiscoverPortProvider>
     </QueryClientProvider>
   );
 }
@@ -132,7 +136,7 @@ describe('useRefreshFromFirstPage', () => {
     queryClient.setQueryData(queryKey, pagesOf('old-row'));
     const wrapper = ({ children }: { children: React.ReactNode }) => (
       <QueryClientProvider client={queryClient}>
-        <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
+        <DiscoverPortProvider port={httpDiscoverPort}>{children}</DiscoverPortProvider>
       </QueryClientProvider>
     );
     const refetch = jest.fn().mockRejectedValue(new Error('offline'));

@@ -21,3 +21,4 @@ export { UnreleasedRoute } from '@/mobile/routes/UnreleasedRoute';
 export { LibraryRoute } from '@/mobile/routes/LibraryRoute';
 export { PlaylistRoute } from '@/mobile/routes/PlaylistRoute';
 export { FeaturingRoute } from '@/mobile/routes/FeaturingRoute';
+export { DiscoverRoute } from '@/mobile/routes/DiscoverRoute';

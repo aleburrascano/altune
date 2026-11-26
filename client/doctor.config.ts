@@ -117,7 +117,7 @@ const passwordHintIsFormTextNotACredential = {
 };
 
 const resultSignatureIsASearchResultIdentityNotACryptoSignature = {
-  files: ['src/features/discovery/hooks/results/useResultTap.ts'],
+  files: ['src/features/discovery/view/results/useResultTap.ts'],
   rules: ['react-doctor/insecure-crypto-risk'],
 };
 

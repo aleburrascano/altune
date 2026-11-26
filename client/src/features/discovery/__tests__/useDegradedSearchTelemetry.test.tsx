@@ -2,16 +2,18 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { DiscoverySearchResponse } from '@shared/catalog';
-import { useDiscoverLogic, setSearchState } from '@features/discovery';
+import {
+  useDiscoverLogic,
+  setSearchState,
+  DiscoverPortProvider,
+  httpDiscoverPort,
+} from '@features/discovery';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { signInTestUser } from '@testing/signInTestUser';
-import { FeaturePorts, httpFeaturePorts } from '@/mobile';
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn() }),
-  useFocusEffect: jest.fn(),
-}));
-
+import { discoverEnv, type TestEnv } from '@features/discovery/__tests__/discoverEnv';
 const { __http } = require('@testing/doubles/fetch.js');
+
+let fake: TestEnv;
 
 const SEARCH = 'GET /v1/discovery/search';
 const SUGGEST = 'GET /v1/discovery/suggest';
@@ -24,7 +26,7 @@ let queryClient: QueryClient;
 function wrapper({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
-      <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
+      <DiscoverPortProvider port={httpDiscoverPort}>{children}</DiscoverPortProvider>
     </QueryClientProvider>
   );
 }
@@ -65,6 +67,7 @@ function degradedEvents(): RecordedEvent[] {
 }
 
 beforeEach(async () => {
+  fake = discoverEnv();
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -85,7 +88,7 @@ describe('useDiscoverLogic surfaces a partial (degraded) search to the UI and te
   it('marks a partial response incomplete and records one search_degraded event', async () => {
     __http.reply(SEARCH, { json: searchResponse(true) });
 
-    const { result, rerender } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result, rerender } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
 
     await waitFor(() => expect(result.current.results.view).toBe('results'));
     expect(result.current.results.resultsIncomplete).toBe(true);
@@ -111,7 +114,7 @@ describe('useDiscoverLogic surfaces a partial (degraded) search to the UI and te
     __http.replyOnce(SEARCH, { json: healthyFirstPage });
     __http.reply(SEARCH, { json: degradedSecondPage });
 
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
 
     await waitFor(() => expect(result.current.results.view).toBe('results'));
     expect(degradedEvents()).toHaveLength(0);
@@ -136,7 +139,7 @@ describe('useDiscoverLogic surfaces a partial (degraded) search to the UI and te
   it('leaves a healthy response complete and records no search_degraded event', async () => {
     __http.reply(SEARCH, { json: searchResponse(false) });
 
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
 
     await waitFor(() => expect(result.current.results.view).toBe('results'));
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));

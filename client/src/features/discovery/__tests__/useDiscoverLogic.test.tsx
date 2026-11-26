@@ -16,13 +16,11 @@ import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { signInTestUser } from '@testing/signInTestUser';
 import type { DiscoverPort } from '@features/discovery';
 import type { DiscoverySearchResponse } from '@shared/catalog';
-
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: jest.fn() }),
-  useFocusEffect: jest.fn(),
-}));
+import { discoverEnv, type TestEnv } from '@features/discovery/__tests__/discoverEnv';
 
 const { __http } = require('@testing/doubles/fetch.js');
+
+let fake: TestEnv;
 
 const CLEAR_HISTORY = 'DELETE /v1/discovery/search-history';
 const EVENTS = 'POST /v1/discovery/events';
@@ -88,6 +86,7 @@ function clearRequests(): number {
 }
 
 beforeEach(async () => {
+  fake = discoverEnv();
   queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -122,7 +121,7 @@ describe('useDiscoverLogic opens every query gate at the same minimum length', (
   });
 
   it('keeps the suggest query, the dropdown and the pending state closed below the minimum', async () => {
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
 
     act(() => {
       result.current.setIsFocused(true);
@@ -136,7 +135,7 @@ describe('useDiscoverLogic opens every query gate at the same minimum length', (
   });
 
   it('opens the pending state, the suggest query, the dropdown and the search at the minimum', async () => {
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
 
     act(() => {
       result.current.setIsFocused(true);
@@ -162,7 +161,7 @@ describe('useDiscoverLogic leaves the suggestion and history lists empty when th
     portSuggest.mockRejectedValue(new ApiError(SERVER_ERROR, 'suggest down'));
     portHistory.mockRejectedValue(new ApiError(SERVER_ERROR, 'history down'));
 
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     act(() => result.current.setIsFocused(true));
 
     await waitFor(() => expect(portSuggest).toHaveBeenCalledTimes(1));
@@ -176,7 +175,7 @@ describe('useDiscoverLogic leaves the suggestion and history lists empty when th
     portSuggest.mockResolvedValue({ suggestions: [] });
     portHistory.mockResolvedValue({ items: [] });
 
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     act(() => result.current.setIsFocused(true));
 
     await waitFor(() => expect(portSuggest).toHaveBeenCalledTimes(1));
@@ -193,7 +192,7 @@ describe('useDiscoverLogic reports a failed history load', () => {
     portSuggest.mockResolvedValue({ suggestions: [] });
     portHistory.mockRejectedValue(new ApiError(SERVER_ERROR, 'history down'));
 
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
 
     await waitFor(() => expect(result.current.history.failed).toBe(true));
   });
@@ -203,7 +202,7 @@ describe('useDiscoverLogic reports a failed history load', () => {
     portHistory.mockRejectedValueOnce(new ApiError(SERVER_ERROR, 'history down'));
     portHistory.mockResolvedValue({ items: [{ query: 'radiohead' }] });
 
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     await waitFor(() => expect(result.current.history.failed).toBe(true));
 
     act(() => result.current.history.onRetry());
@@ -216,7 +215,7 @@ describe('useDiscoverLogic reports a failed history load', () => {
     portSuggest.mockResolvedValue({ suggestions: [] });
     portHistory.mockResolvedValue({ items: [] });
 
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
 
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     expect(result.current.history.failed).toBe(false);
@@ -229,7 +228,7 @@ describe('useDiscoverLogic keeps the history list when clearing it fails', () =>
     portHistory.mockResolvedValue({ items: [{ query: 'radiohead' }] });
     __http.reply(CLEAR_HISTORY, { status: BAD_REQUEST });
 
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     await waitFor(() => expect(result.current.history.items).toEqual([{ query: 'radiohead' }]));
 
     act(() => result.current.history.onClear());
@@ -257,7 +256,7 @@ describe('useDiscoverLogic recovers from failures', () => {
   }
 
   function Probe() {
-    const logic = useDiscoverLogic();
+    const logic = useDiscoverLogic(fake.env);
     return (
       <DiscoverBody results={logic.results} pagination={logic.pagination} history={logic.history} />
     );
@@ -307,7 +306,7 @@ describe('useDiscoverLogic recovers from failures', () => {
       .mockRejectedValueOnce(new ApiError(502, 'bad gateway'))
       .mockRejectedValueOnce(new ApiError(502, 'bad gateway'))
       .mockResolvedValueOnce(page(SEARCH_PAGE_SIZE));
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     await waitFor(() =>
       expect(result.current.results.searchData?.search_id).toEqual(expect.any(String)),
     );
@@ -357,7 +356,7 @@ describe('useDiscoverLogic history invalidation', () => {
   });
 
   it('loading another page does not refetch history', async () => {
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     await waitFor(() =>
       expect(result.current.results.searchData?.search_id).toEqual(expect.any(String)),
     );
@@ -402,7 +401,7 @@ describe('useDiscoverLogic history tap', () => {
   });
 
   it('is not pending after tapping a history item with trailing whitespace', async () => {
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
 
     act(() => {
       result.current.history.onTap({ query: 'ab ' } as never);
@@ -412,7 +411,7 @@ describe('useDiscoverLogic history tap', () => {
   });
 
   it('never sends a q longer than MAX_QUERY_LENGTH', async () => {
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
 
     act(() => {
       result.current.onChangeText('a'.repeat(5000));
@@ -449,7 +448,7 @@ describe('useDiscoverLogic refresh failure', () => {
     portSearch
       .mockReset()
       .mockImplementation(({ offset }: PageRequest) => Promise.resolve(page(offset)));
-    const hook = renderHook(() => useDiscoverLogic(), { wrapper });
+    const hook = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     await waitFor(() =>
       expect(hook.result.current.results.searchData?.search_id).toEqual(expect.any(String)),
     );
@@ -558,7 +557,7 @@ describe('a direct account switch with Discover still mounted', () => {
   });
 
   async function submitRadiohead() {
-    const hook = renderHook(() => useDiscoverLogic(), { wrapper });
+    const hook = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     act(() => hook.result.current.onChangeText('radiohead'));
     act(() => hook.result.current.onSubmit());
     await waitFor(() => expect(portSearch).toHaveBeenCalledTimes(1));
@@ -595,7 +594,7 @@ describe('a direct account switch with Discover still mounted', () => {
 
   it('drops a pending debounced commit', () => {
     jest.useFakeTimers();
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     act(() => result.current.onChangeText('radiohead'));
 
     switchAccount();
@@ -650,7 +649,7 @@ describe('useDiscoverLogic submit and history', () => {
   });
 
   it('pressing Enter after the debounced search does not search again', async () => {
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     act(() => result.current.onChangeText('radiohead'));
     await waitFor(() =>
       expect(result.current.results.searchData?.search_id).toEqual(expect.any(String)),
@@ -665,7 +664,7 @@ describe('useDiscoverLogic submit and history', () => {
   });
 
   it('pressing Enter before the debounce fires searches once and saves once', async () => {
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     act(() => result.current.onChangeText('radiohead'));
     act(() => result.current.onSubmit());
     await settle();
@@ -675,7 +674,7 @@ describe('useDiscoverLogic submit and history', () => {
   });
 
   it('pressing Enter twice on the same query saves it once', async () => {
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     act(() => result.current.onChangeText('radiohead'));
     act(() => result.current.onSubmit());
     await settle();
@@ -686,7 +685,7 @@ describe('useDiscoverLogic submit and history', () => {
   });
 
   it('a query searched again after another one is saved again', async () => {
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     for (const q of ['radiohead', 'portishead', 'radiohead']) {
       act(() => result.current.onChangeText(q));
       act(() => result.current.onSubmit());
@@ -701,7 +700,7 @@ describe('useDiscoverLogic submit and history', () => {
   });
 
   it('picking a suggestion searches once and saves once', async () => {
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     act(() => result.current.onSuggestionSelect('radiohead'));
     await settle();
 
@@ -710,7 +709,7 @@ describe('useDiscoverLogic submit and history', () => {
   });
 
   it('typing without submitting never saves history', async () => {
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     act(() => result.current.onChangeText('radiohead'));
     await waitFor(() =>
       expect(result.current.results.searchData?.search_id).toEqual(expect.any(String)),
@@ -721,7 +720,7 @@ describe('useDiscoverLogic submit and history', () => {
   });
 
   it('never asks the search endpoint to save history', async () => {
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     act(() => result.current.onChangeText('radiohead'));
     act(() => result.current.onSubmit());
     await settle();
@@ -733,7 +732,7 @@ describe('useDiscoverLogic submit and history', () => {
 
   it('a failed history save leaves the results on screen', async () => {
     portRecordHistory.mockRejectedValue(new ApiError(SERVER_ERROR, 'history down'));
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     act(() => result.current.onChangeText('radiohead'));
     act(() => result.current.onSubmit());
     await settle();
@@ -743,7 +742,7 @@ describe('useDiscoverLogic submit and history', () => {
   });
 
   it('refreshes the history list after a save, not after each search', async () => {
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     await waitFor(() => expect(portHistory).toHaveBeenCalledTimes(1));
     portHistory.mockClear();
 
@@ -802,7 +801,7 @@ describe('useDiscoverLogic keeps the previous results while the next search load
 
   async function showRadiohead() {
     holdSearches();
-    const hook = renderHook(() => useDiscoverLogic(), { wrapper });
+    const hook = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     act(() => hook.result.current.onChangeText('radiohead'));
     await answer('radiohead', { ...submitPage('radiohead'), has_more: true, total: 40 });
     await waitFor(() => expect(hook.result.current.results.view).toBe('results'));
@@ -815,7 +814,7 @@ describe('useDiscoverLogic keeps the previous results while the next search load
 
   it('the first search of a session still shows the loading state', async () => {
     holdSearches();
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     act(() => result.current.onChangeText('radiohead'));
     await waitFor(() => expect(pending.has('radiohead')).toBe(true));
 
@@ -906,7 +905,7 @@ describe('useDiscoverLogic asks for suggestions only while they can be shown', (
   });
 
   it('typing in the focused box fetches and shows suggestions', async () => {
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     act(() => result.current.setIsFocused(true));
     act(() => result.current.onChangeText('radio'));
 
@@ -915,7 +914,7 @@ describe('useDiscoverLogic asks for suggestions only while they can be shown', (
   });
 
   it('text set while the box is not focused does not fetch suggestions', async () => {
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     act(() => result.current.onChangeText('radio'));
     await settle(SUGGEST_SETTLED_MS);
 
@@ -923,7 +922,7 @@ describe('useDiscoverLogic asks for suggestions only while they can be shown', (
   });
 
   it('pressing Enter before suggestions settle does not fetch them', async () => {
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     act(() => result.current.setIsFocused(true));
     act(() => result.current.onChangeText('radio'));
     act(() => result.current.onSubmit());
@@ -933,7 +932,7 @@ describe('useDiscoverLogic asks for suggestions only while they can be shown', (
   });
 
   it('picking a suggestion does not fetch suggestions for the picked text', async () => {
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     act(() => result.current.setIsFocused(true));
     act(() => result.current.onChangeText('radio'));
     await waitFor(() => expect(result.current.showSuggestions).toBe(true));
@@ -945,7 +944,7 @@ describe('useDiscoverLogic asks for suggestions only while they can be shown', (
   });
 
   it('tapping a history item does not fetch suggestions', async () => {
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     act(() => result.current.setIsFocused(true));
     act(() => result.current.history.onTap({ query: 'radiohead' } as never));
     await settle(SUGGEST_SETTLED_MS);
@@ -954,7 +953,7 @@ describe('useDiscoverLogic asks for suggestions only while they can be shown', (
   });
 
   it('typing again after a submit fetches suggestions again', async () => {
-    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    const { result } = renderHook(() => useDiscoverLogic(fake.env), { wrapper });
     act(() => result.current.setIsFocused(true));
     act(() => result.current.onChangeText('radio'));
     act(() => result.current.onSubmit());

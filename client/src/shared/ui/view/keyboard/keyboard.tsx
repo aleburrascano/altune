@@ -10,12 +10,13 @@ export type DismissKeyboardAreaProps = {
   children: ReactNode;
   testID?: string;
   style?: StyleProp<ViewStyle>;
+  onDismiss?: () => void;
 };
 
 export function DismissKeyboardArea(props: DismissKeyboardAreaProps): ReactElement {
-  const { children, testID, style } = props;
+  const { children, testID, style, onDismiss = dismissKeyboard } = props;
   return (
-    <Tappable action="ui.dismiss_keyboard" testID={testID} onPress={dismissKeyboard} style={style}>
+    <Tappable action="ui.dismiss_keyboard" testID={testID} onPress={onDismiss} style={style}>
       {children}
     </Tappable>
   );

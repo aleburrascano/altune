@@ -1,4 +1,6 @@
-import { AccessibilityInfo, Linking } from 'react-native';
+import { Linking } from 'react-native';
+import { MotionPreferenceProvider } from '@shared/ui';
+import { fixedMotion } from '@testing/fixedMotionPreference';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { DiscoveryResult } from '@shared/catalog';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
@@ -76,18 +78,19 @@ function renderSectionFor(artist: DiscoveryResult) {
   const Base = createPlaybackWrapper(createTestQueryClient({ mutations: true }), PLAYBACK);
   return render(
     <Base>
-      <DetailPortProvider port={httpDetailPort}>
-        <DetailNavigatorProvider navigator={navigator}>
-          <ArtistUnreleased artist={artist} detailRoute="/discover/detail" />
-        </DetailNavigatorProvider>
-      </DetailPortProvider>
+      <MotionPreferenceProvider preference={fixedMotion(true)}>
+        <DetailPortProvider port={httpDetailPort}>
+          <DetailNavigatorProvider navigator={navigator}>
+            <ArtistUnreleased artist={artist} detailRoute="/discover/detail" />
+          </DetailNavigatorProvider>
+        </DetailPortProvider>
+      </MotionPreferenceProvider>
     </Base>,
   );
 }
 
 beforeEach(() => {
   navigator = recordingNavigator();
-  (AccessibilityInfo.isReduceMotionEnabled as jest.Mock).mockResolvedValue(true);
   (Linking.openURL as jest.Mock).mockReset();
   startQueue.mockClear();
   signInTestUser();

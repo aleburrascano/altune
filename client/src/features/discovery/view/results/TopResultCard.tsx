@@ -17,7 +17,7 @@ import {
 import { SectionLabel } from '@features/discovery/view/results/SectionLabel';
 import { kindLabel } from '@features/discovery/core/resultDisplay';
 import type { DiscoveryResult } from '@shared/catalog';
-import type { ResultTapHandler } from '@features/discovery/hooks/results/useResultTap';
+import type { ResultTapHandler } from '@features/discovery/view/results/useResultTap';
 
 function pressedStyle({ pressed }: PressableInteractionState) {
   return pressed ? styles.pressed : null;

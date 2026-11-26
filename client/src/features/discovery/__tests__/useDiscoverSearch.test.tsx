@@ -12,10 +12,11 @@ import {
   setSearchState,
   useDebouncedSearch,
   useDiscoverSearch,
+  DiscoverPortProvider,
+  httpDiscoverPort,
 } from '@features/discovery';
 import { resultFixture } from '@features/discovery/__tests__/fixtures';
 import { signInTestUser } from '@testing/signInTestUser';
-import { FeaturePorts, httpFeaturePorts } from '@/mobile';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 
@@ -68,7 +69,7 @@ let queryClient: QueryClient;
 function wrapper({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
-      <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
+      <DiscoverPortProvider port={httpDiscoverPort}>{children}</DiscoverPortProvider>
     </QueryClientProvider>
   );
 }

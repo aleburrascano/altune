@@ -1,5 +1,4 @@
 import { useCallback, useRef, type ReactElement } from 'react';
-import { useFocusEffect } from 'expo-router';
 import { StyleSheet, View, type TextInput } from 'react-native';
 
 import {
@@ -11,21 +10,26 @@ import {
   DismissKeyboardArea,
   registerSearchFocus,
 } from '@shared/ui';
+import type { DiscoverEnv } from '@features/discovery/view/search/screenEnv';
 import { DiscoverBody } from '@features/discovery/view/search/DiscoverBody';
 import { SuggestionsList } from '@features/discovery/view/history/SuggestionsList';
 import { useDiscoverLogic } from '@features/discovery/view/search/useDiscoverLogic';
 import { MAX_QUERY_LENGTH } from '@features/discovery/core/searchPaging';
 
-export function DiscoverScreen(): ReactElement {
+export function DiscoverScreen(env: DiscoverEnv): ReactElement {
   const theme = useTheme();
-  const d = useDiscoverLogic();
+  const d = useDiscoverLogic(env);
   const searchInputRef = useRef<TextInput>(null);
 
-  useFocusEffect(useCallback(() => registerSearchFocus(() => searchInputRef.current?.focus()), []));
+  env.useFocus(useCallback(() => registerSearchFocus(() => searchInputRef.current?.focus()), []));
 
   return (
     <Screen>
-      <DismissKeyboardArea testID="discover-screen-body" style={styles.flex}>
+      <DismissKeyboardArea
+        testID="discover-screen-body"
+        onDismiss={env.dismissKeyboard}
+        style={styles.flex}
+      >
         <View style={styles.titleBlock}>
           <Text variant="displayL" style={styles.title}>
             Discover

@@ -4,9 +4,13 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { NetworkError, CORRELATION_HEADER } from '@shared/apiClient';
 import { transientRetryOptions } from '@shared/query';
-import { useAutocompleteSuggestions, useSuggestionVisibility } from '@features/discovery';
+import {
+  useAutocompleteSuggestions,
+  useSuggestionVisibility,
+  DiscoverPortProvider,
+  httpDiscoverPort,
+} from '@features/discovery';
 import { signInTestUser } from '@testing/signInTestUser';
-import { FeaturePorts, httpFeaturePorts } from '@/mobile';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -40,7 +44,7 @@ let queryClient: QueryClient;
 function wrapper({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
-      <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
+      <DiscoverPortProvider port={httpDiscoverPort}>{children}</DiscoverPortProvider>
     </QueryClientProvider>
   );
 }

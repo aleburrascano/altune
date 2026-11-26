@@ -20,10 +20,8 @@ import {
   useSearchHistory,
 } from '@features/discovery/view/history/useSearchHistory';
 import { useResultsFilter } from '@features/discovery/view/results/useResultsFilter';
-import {
-  useResultTap,
-  type ResultTapHandler,
-} from '@features/discovery/hooks/results/useResultTap';
+import type { DiscoverEnv } from '@features/discovery/view/search/screenEnv';
+import { useResultTap, type ResultTapHandler } from '@features/discovery/view/results/useResultTap';
 import { useDegradedSearchTelemetry } from '@features/discovery/view/search/useDegradedSearchTelemetry';
 import {
   correctionForResponse,
@@ -118,7 +116,7 @@ function historySlice(parts: HistoryParts): HistorySlice {
   return { ...historyStatus(parts), ...historyActions(parts) };
 }
 
-export function useDiscoverLogic(): DiscoverLogic {
+export function useDiscoverLogic(env: DiscoverEnv): DiscoverLogic {
   const recordSearch = useRecordSearchHistory();
   const search = useDebouncedSearch({
     debounceMs: SEARCH_DEBOUNCE_MS,
@@ -151,7 +149,7 @@ export function useDiscoverLogic(): DiscoverLogic {
   const impression = useImpressionLogger(searchData);
   const { filter, setFilter } = useResultsFilter(search.committedQuery);
   const clearHistory = useDiscoverClearSearchHistory();
-  const onResultTap = useResultTap(searchData);
+  const onResultTap = useResultTap(searchData, env);
   const hookState = {
     query: search.committedQuery,
     isLoading: isSearching,
