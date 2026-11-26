@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/download/service/replacement"
 	"altune/go-api/internal/download/sourcekey"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
@@ -17,6 +18,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -2453,6 +2455,53 @@ func TestBackgroundScheduler_HeartbeatFailuresOutlastingTheLease_CancelsTheJob(t
 	}
 }
 
+type beatingQueue struct {
+	*memJobQueue
+	beats chan struct{}
+}
+
+func (q *beatingQueue) Heartbeat(context.Context, ids.TrackId, acqports.ClaimNumber, time.Duration) error {
+	select {
+	case q.beats <- struct{}{}:
+	default:
+	}
+	return nil
+}
+
+func TestBackgroundScheduler_TheHeartbeatBeatsOnTheInjectedTicker(t *testing.T) {
+	acq := &ctxCapturingAcquirer{started: make(chan struct{}), release: make(chan struct{})}
+	queue := &beatingQueue{memJobQueue: newMemJobQueue(make(chan struct{}, 1)), beats: make(chan struct{}, 1)}
+	manual := clocktest.NewManual(time.Unix(0, 0))
+	useManualTicker := schedulerPortsOption(func(p *service.SchedulerPorts) { p.Ticker = manual.Ticker() })
+	scheduler := newTestScheduler(acq, 1, time.Now,
+		withTestQueue(queue),
+		useManualTicker,
+		service.WithHeartbeatInterval(time.Hour),
+	)
+	t.Cleanup(func() {
+		close(acq.release)
+		scheduler.Shutdown(context.Background())
+	})
+
+	if err := scheduler.Schedule(context.Background(), ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+	<-acq.started
+
+	deadline := time.After(5 * time.Second)
+	for {
+		manual.Advance(time.Hour)
+		select {
+		case <-queue.beats:
+			return
+		case <-deadline:
+			t.Fatal("no heartbeat was sent after the injected ticker fired an hour-long interval")
+		default:
+			runtime.Gosched()
+		}
+	}
+}
+
 func TestAcquisitionStatus_ReportsVerifySkipsAndFingerprintVerification(t *testing.T) {
 	skips := &service.VerifySkipCounter{}
 	fingerprinted := false
@@ -3473,6 +3522,7 @@ func TestNewBackgroundAcquisitionScheduler_RefusesAMissingPort(t *testing.T) {
 		"VerifySkips":         func(p *service.SchedulerPorts) { p.VerifySkips = nil },
 		"FingerprintVerified": func(p *service.SchedulerPorts) { p.FingerprintVerified = nil },
 		"Timer":               func(p *service.SchedulerPorts) { p.Timer = nil },
+		"Ticker":              func(p *service.SchedulerPorts) { p.Ticker = nil },
 	}
 	for field, drop := range cases {
 		t.Run(field, func(t *testing.T) {

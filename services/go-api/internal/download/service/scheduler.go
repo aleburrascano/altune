@@ -67,6 +67,7 @@ type BackgroundAcquisitionScheduler struct {
 	heartbeatInterval time.Duration
 	pollInterval      time.Duration
 	timer             clock.TimerFunc
+	ticker            clock.TickerFunc
 	drainBudget       time.Duration
 
 	inflightCount atomic.Int64
@@ -131,6 +132,7 @@ type SchedulerPorts struct {
 	VerifySkips         func() uint64
 	FingerprintVerified func() bool
 	Timer               clock.TimerFunc
+	Ticker              clock.TickerFunc
 }
 
 func (p SchedulerPorts) validate(owner string) error {
@@ -143,6 +145,7 @@ func (p SchedulerPorts) validate(owner string) error {
 		missingPort(owner, "VerifySkips", p.VerifySkips == nil),
 		missingPort(owner, "FingerprintVerified", p.FingerprintVerified == nil),
 		missingPort(owner, "Timer", p.Timer == nil),
+		missingPort(owner, "Ticker", p.Ticker == nil),
 	)
 }
 
@@ -172,6 +175,7 @@ func NewBackgroundAcquisitionScheduler(
 		upgrades:            wiring.Upgrades,
 		events:              wiring.Events,
 		timer:               wiring.Timer,
+		ticker:              wiring.Ticker,
 		notifier:            wiring.Notifier,
 		outcomes:            wiring.Outcomes,
 		skipCount:           wiring.VerifySkips,
