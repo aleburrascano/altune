@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+unset INTEGRATION CLIENT_MUTATE_RUNS_ELSEWHERE PRECHECK_LINT_WHOLE PRECHECK_NO_CACHE
+
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 FAILURES=0
 
