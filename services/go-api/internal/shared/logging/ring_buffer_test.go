@@ -265,7 +265,7 @@ func TestSetup_RingBufferEvictsByTheInjectedClockNotTheWallClock(t *testing.T) {
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	now := time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC)
-	ring := logging.Setup("info", false, logging.WithClock(func() time.Time { return now }))
+	ring := logging.Setup("info", logging.WithClock(func() time.Time { return now }))
 
 	slog.Info("old")
 	now = now.Add(30*time.Minute + time.Nanosecond)

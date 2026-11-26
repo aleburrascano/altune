@@ -20,7 +20,7 @@ func captureLogsAt(t *testing.T, level string) *logging.RingBuffer {
 	t.Helper()
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })
-	return logging.Setup(level, false)
+	return logging.Setup(level)
 }
 
 func onlyRecord(t *testing.T, ring *logging.RingBuffer, msg string) logging.CapturedRecord {

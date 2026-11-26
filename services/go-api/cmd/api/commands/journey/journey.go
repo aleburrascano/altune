@@ -36,12 +36,6 @@ type Downloader interface {
 	Download(ctx context.Context, url string, outDir string) (download.FetchedAudio, error)
 }
 
-func DownloaderFor(cfg *config.Config) *download.YouTubeAudioSearcher {
-	return download.NewYtDlpAudioSearcher(cfg.FFmpegLocation, cfg.YtDLPCookieFile, cfg.YtDLPJSRuntime).
-		WithPOTokenURL(cfg.YtDLPPOTokenURL).
-		WithEnvironment(cfg.Env)
-}
-
 func RankingOnlySearcher(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (Searcher, error) {
 	tracker, err := app.NewTracker(cfg)
 	if err != nil {

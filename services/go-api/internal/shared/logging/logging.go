@@ -20,26 +20,35 @@ func WithClock(now func() time.Time) SetupOption {
 	return func(c *setupConfig) { c.now = now }
 }
 
-func Setup(logLevel string, development bool, opts ...SetupOption) *RingBuffer {
+func Setup(logLevel string, opts ...SetupOption) *RingBuffer {
+	return install(logLevel, jsonHandler, opts)
+}
+
+func SetupDevelopment(logLevel string, opts ...SetupOption) *RingBuffer {
+	return install(logLevel, prettyHandlerFor, opts)
+}
+
+func jsonHandler(level slog.Level) slog.Handler {
+	return slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level:     level,
+		AddSource: true,
+	})
+}
+
+func prettyHandlerFor(level slog.Level) slog.Handler {
+	return &prettyHandler{
+		level:     level,
+		w:         os.Stdout,
+		addSource: true,
+	}
+}
+
+func install(logLevel string, newBase func(slog.Level) slog.Handler, opts []SetupOption) *RingBuffer {
 	cfg := setupConfig{now: time.Now}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	level := parseLevel(logLevel)
-
-	var base slog.Handler
-	if development {
-		base = &prettyHandler{
-			level:     level,
-			w:         os.Stdout,
-			addSource: true,
-		}
-	} else {
-		base = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			Level:     level,
-			AddSource: true,
-		})
-	}
+	base := newBase(parseLevel(logLevel))
 
 	ring := NewRingBuffer(logRingCapacity, cfg.now)
 	slog.SetDefault(slog.New(newCorrelationHandler(newRingHandler(base, ring))))

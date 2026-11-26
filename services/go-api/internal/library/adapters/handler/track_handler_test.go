@@ -245,7 +245,7 @@ func TestHandleDeleteTrack(t *testing.T) {
 func TestHandleDeleteTrack_LogsActor(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
-	ring := logging.Setup("info", false)
+	ring := logging.Setup("info")
 
 	repo := library.NewInMemoryTrackRepo()
 	track := library.SeedTrack(t, repo, library.FixtureUserId(), "To Delete", "Artist", "Album")
@@ -403,7 +403,7 @@ func strPtr(s string) *string { return &s }
 func TestHandleSetTrackNumber(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
-	ring := logging.Setup("info", false)
+	ring := logging.Setup("info")
 
 	repo := library.NewInMemoryTrackRepo()
 	track := library.SeedTrack(t, repo, library.FixtureUserId(), "Dreams", "Fleetwood Mac", "Rumours")

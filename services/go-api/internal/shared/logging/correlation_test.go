@@ -13,7 +13,7 @@ import (
 func TestCorrelationHandler_StampsEveryContextLog(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
-	ring := logging.Setup("debug", false)
+	ring := logging.Setup("debug")
 
 	ctx := logging.WithCorrelationID(context.Background(), "corr-xyz789")
 	slog.InfoContext(ctx, "deep.domain.event", "detail", "v")
@@ -36,7 +36,7 @@ func TestCorrelationHandler_StampsEveryContextLog(t *testing.T) {
 func TestCorrelationHandler_NoIDLeavesRecordUntagged(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
-	ring := logging.Setup("debug", false)
+	ring := logging.Setup("debug")
 
 	slog.InfoContext(context.Background(), "no.correlation")
 
@@ -94,7 +94,7 @@ func TestCorrelationIDFromContext_EmptyWithoutAnID(t *testing.T) {
 func TestCorrelationAttr_KeepsEmptyIDOnTheRecord(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
-	ring := logging.Setup("debug", false)
+	ring := logging.Setup("debug")
 
 	slog.InfoContext(context.Background(), "audit.no_request", logging.CorrelationAttr(context.Background()))
 

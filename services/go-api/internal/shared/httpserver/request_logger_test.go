@@ -85,7 +85,7 @@ func TestRequestLogger_TracksStatusCode(t *testing.T) {
 func TestRequestLogger_RawQueryAbsentFromRing(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
-	ring := logging.Setup("debug", false)
+	ring := logging.Setup("debug")
 
 	const secret = "queenssecretobsessionquery"
 	handler := httpserver.RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

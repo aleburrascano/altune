@@ -164,7 +164,7 @@ func TestMiddleware_OversizedBearerDoesNotSpendFailureBudget(t *testing.T) {
 func TestMiddleware_TheVerifiedUserReachesTheRequestCompleteLine(t *testing.T) {
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })
-	ring := logging.Setup("info", false)
+	ring := logging.Setup("info")
 	uid := ids.NewUserId(uuid.New())
 	next, _ := noopHandler()
 

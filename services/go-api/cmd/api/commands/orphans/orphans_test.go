@@ -54,10 +54,11 @@ func TestCheckWithNoTracksMakesNoRepoCalls(t *testing.T) {
 	repo := &fakeTrackRepo{}
 	store := library.NewFilesystemAudioStore(t.TempDir())
 
-	orphaned, fixed := orphans.Check(context.Background(), nil, store, repo, true)
+	orphaned := orphans.Check(context.Background(), nil, store)
+	fixed := orphans.Fix(context.Background(), orphaned, repo)
 
-	if orphaned != 0 || fixed != 0 || repo.getN != 0 || len(repo.updates) != 0 {
-		t.Fatalf("got (%d, %d), gets=%d updates=%d; want (0, 0) and no repo calls", orphaned, fixed, repo.getN, len(repo.updates))
+	if len(orphaned) != 0 || fixed != 0 || repo.getN != 0 || len(repo.updates) != 0 {
+		t.Fatalf("got (%d, %d), gets=%d updates=%d; want (0, 0) and no repo calls", len(orphaned), fixed, repo.getN, len(repo.updates))
 	}
 }
 
@@ -67,30 +68,45 @@ func TestCheckCountsNothingWhenTheFileExists(t *testing.T) {
 	writeAudio(t, dir, ref)
 	track, repo := readyFixture(t, ref)
 
-	orphaned, fixed := orphans.Check(context.Background(), []library.ReadyAudioTrack{track}, library.NewFilesystemAudioStore(dir), repo, true)
+	orphaned := orphans.Check(context.Background(), []library.ReadyAudioTrack{track}, library.NewFilesystemAudioStore(dir))
+	fixed := orphans.Fix(context.Background(), orphaned, repo)
 
-	if orphaned != 0 || fixed != 0 || len(repo.updates) != 0 {
-		t.Fatalf("got (%d, %d), updates=%d; want (0, 0) and no update", orphaned, fixed, len(repo.updates))
+	if len(orphaned) != 0 || fixed != 0 || len(repo.updates) != 0 {
+		t.Fatalf("got (%d, %d), updates=%d; want (0, 0) and no update", len(orphaned), fixed, len(repo.updates))
 	}
 }
 
-func TestCheckReportsMissingFileWithoutFixing(t *testing.T) {
+func TestCheckReportsMissingFileAndTouchesNoRepo(t *testing.T) {
 	track, repo := readyFixture(t, uuid.NewString()+"/song.mp3")
 
-	orphaned, fixed := orphans.Check(context.Background(), []library.ReadyAudioTrack{track}, library.NewFilesystemAudioStore(t.TempDir()), repo, false)
+	orphaned := orphans.Check(context.Background(), []library.ReadyAudioTrack{track}, library.NewFilesystemAudioStore(t.TempDir()))
 
-	if orphaned != 1 || fixed != 0 || len(repo.updates) != 0 {
-		t.Fatalf("got (%d, %d), updates=%d; want (1, 0) and no update", orphaned, fixed, len(repo.updates))
+	if len(orphaned) != 1 || orphaned[0].Id != track.Id {
+		t.Fatalf("orphaned = %+v, want exactly the missing track", orphaned)
+	}
+	if repo.getN != 0 || len(repo.updates) != 0 {
+		t.Errorf("Check touched the repo: gets=%d updates=%d", repo.getN, len(repo.updates))
 	}
 }
 
-func TestCheckMarksMissingFileFailedWhenFixing(t *testing.T) {
+func TestFixDoesNotCountATrackItCouldNotMark(t *testing.T) {
+	track, repo := readyFixture(t, uuid.NewString()+"/song.mp3")
+	repo.tracks = map[library.TrackId]*library.Track{}
+
+	fixed := orphans.Fix(context.Background(), []library.ReadyAudioTrack{track}, repo)
+
+	if fixed != 0 || len(repo.updates) != 0 {
+		t.Fatalf("fixed = %d, updates=%d; want 0 and no update for a track that is gone", fixed, len(repo.updates))
+	}
+}
+
+func TestFixMarksMissingFileFailed(t *testing.T) {
 	track, repo := readyFixture(t, uuid.NewString()+"/song.mp3")
 
-	orphaned, fixed := orphans.Check(context.Background(), []library.ReadyAudioTrack{track}, library.NewFilesystemAudioStore(t.TempDir()), repo, true)
+	fixed := orphans.Fix(context.Background(), []library.ReadyAudioTrack{track}, repo)
 
-	if orphaned != 1 || fixed != 1 || len(repo.updates) != 1 {
-		t.Fatalf("got (%d, %d), updates=%d; want (1, 1) and one update", orphaned, fixed, len(repo.updates))
+	if fixed != 1 || len(repo.updates) != 1 {
+		t.Fatalf("fixed = %d, updates=%d; want 1 and one update", fixed, len(repo.updates))
 	}
 	got := repo.updates[0]
 	if got.DownloadStatus != library.AcquisitionFailed {
@@ -107,9 +123,10 @@ func TestCheckTreatsASiblingUsersFileAsMissing(t *testing.T) {
 	writeAudio(t, dir, uuid.NewString()+"/song.mp3")
 	track, repo := readyFixture(t, ref)
 
-	orphaned, fixed := orphans.Check(context.Background(), []library.ReadyAudioTrack{track}, library.NewFilesystemAudioStore(dir), repo, true)
+	orphaned := orphans.Check(context.Background(), []library.ReadyAudioTrack{track}, library.NewFilesystemAudioStore(dir))
+	fixed := orphans.Fix(context.Background(), orphaned, repo)
 
-	if orphaned != 1 || fixed != 1 {
-		t.Fatalf("got (%d, %d), want (1, 1)", orphaned, fixed)
+	if len(orphaned) != 1 || fixed != 1 {
+		t.Fatalf("got (%d, %d), want (1, 1)", len(orphaned), fixed)
 	}
 }

@@ -84,7 +84,7 @@ func TestSetup_dropsAuthorizationAndJWTAttrsFromRingAndStdout(t *testing.T) {
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	ring := logging.Setup("info", false)
+	ring := logging.Setup("info")
 	slog.Info("outbound", "authorization", "Bearer abc123secret", "jwt", "eyJjwtvalue", "path", "/x")
 	w.Close()
 	out, _ := io.ReadAll(r)
