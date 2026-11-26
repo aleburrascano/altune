@@ -1,22 +1,37 @@
+import type { ShortcutPlayback } from '@shared/ui/core/keyboard/shortcuts';
+import { useNavigator } from '@shared/navigation';
+import { appSearchFocus } from '@shared/ui/shell/appSearchFocus';
 import { installDialogs } from '@shared/ui/shell/dialogs';
 import { platformDialogs } from '@shared/ui/view/dialog/dialog';
+import type { ShortcutTarget } from '@shared/ui/ports/shortcutTarget';
+import { useShortcutBindings } from '@shared/ui/view/keyboard/useShortcutBindings';
 
 installDialogs(platformDialogs);
+
+export function registerSearchFocus(focus: () => void): () => void {
+  return appSearchFocus.register(focus);
+}
+
+export function useKeyboardShortcuts(playback: ShortcutPlayback, target: ShortcutTarget): void {
+  const navigator = useNavigator();
+  useShortcutBindings(playback, target, () => appSearchFocus.requestFocus(navigator));
+}
 
 export * from '@shared/ui/view/theme';
 export * from '@shared/ui/view/primitives';
 export * from '@shared/ui/view/layout';
 export * from '@shared/ui/shell/failure/showFailure';
 export { ScreenBoundary } from '@shared/ui/view/failure/ScreenBoundary';
-export { setThemePreferenceFileStore, useThemePreference } from '@shared/ui/theme/themePreference';
+export { useThemePreference } from '@shared/ui/view/theme/appThemePreference';
+export { createThemePreference } from '@shared/ui/view/theme/themePreference';
 export { ArtworkBackground } from '@shared/ui/view/hero/ArtworkBackground';
-export { TabBar } from '@shared/ui/navigation/TabBar';
+export { TabBar } from '@shared/ui/view/navigation/TabBar';
 export { TAB_ROUTES, pageTitleFor } from '@shared/ui/view/navigation/tabRoutes';
 export type { TabRoute } from '@shared/ui/view/navigation/tabRoutes';
-export {
-  registerSearchFocus,
-  useKeyboardShortcuts,
-} from '@shared/ui/keyboard/useKeyboardShortcuts';
+export { createSearchFocus } from '@shared/ui/shell/searchFocus';
+export type { SearchFocus } from '@shared/ui/ports/searchFocus';
+export { useShortcutBindings };
+export type { ShortcutPlayback };
 export { Sidebar } from '@shared/ui/view/navigation/Sidebar';
 export { darkTheme } from '@shared/ui/core/theme/theme';
 export { HorizontalRail } from '@shared/ui/view/primitives/HorizontalRail';
@@ -27,7 +42,10 @@ export type { PressableInteractionState } from '@shared/ui/view/primitives/usePr
 export { asyncView } from '@shared/ui/core/async/asyncView';
 export { AsyncSection } from '@shared/ui/view/async/AsyncSection';
 export { countLabel, formatDuration } from '@shared/ui/core/format/displayFormat';
-export { tapFeedback } from '@shared/ui/haptics';
+export { tapFeedback } from '@shared/ui/shell/appTapFeedback';
+export { createTapFeedback } from '@shared/ui/core/haptics/createTapFeedback';
+export type { TapDevice, TapFeedback } from '@shared/ui/ports/tapFeedback';
+export { TapFeedbackProvider } from '@shared/ui/view/haptics/TapFeedbackProvider';
 export type { TextTone } from '@shared/ui/view/primitives/Text';
 export type { ContextMenuItem } from '@shared/ui/view/primitives/ContextMenu';
 export { ContextMenu } from '@shared/ui/view/primitives/ContextMenu';
@@ -45,6 +63,7 @@ export type { ConfirmOptions, Dialogs } from '@shared/ui/ports/dialogs';
 export { IconButton } from '@shared/ui/view/primitives/IconButton';
 export type { TappableProps } from '@shared/ui/view/primitives/Tappable';
 export { ModalFrame } from '@shared/ui/view/primitives/ModalFrame';
+export type { KeyboardAvoiding } from '@shared/ui/view/primitives/ModalFrame';
 export { SearchBar } from '@shared/ui/view/primitives/SearchBar';
 export { useAnnounceChange } from '@shared/ui/view/useAnnounceChange';
 export { fontFamily, shadow, zLayer } from '@shared/ui/core/theme/tokens';
@@ -52,7 +71,7 @@ export { sidebarItemStyle } from '@shared/ui/view/navigation/sidebarItemStyle';
 export type { ActionSheetOption } from '@shared/ui/view/primitives/ActionSheet';
 export { useReduceMotion } from '@shared/ui/view/motion/useMotion';
 export { ActionSheet } from '@shared/ui/view/primitives/ActionSheet';
-export { TextField } from '@shared/ui/primitives/TextField';
+export { TextField } from '@shared/ui/view/primitives/TextField';
 export { AuthHeroLayout } from '@shared/ui/view/hero/AuthHeroLayout';
 export { Wordmark } from '@shared/ui/view/primitives/Wordmark';
 export type { SortOption } from '@shared/ui/view/primitives/SortControl';
@@ -64,5 +83,7 @@ export {
 } from '@shared/ui/view/keyboard/keyboard';
 export type { AsyncSectionProps } from '@shared/ui/view/async/AsyncSection';
 export { announce } from '@shared/ui/view/a11y/announce';
+export { createAnnounce } from '@shared/ui/view/a11y/createAnnounce';
+export type { ScreenReader } from '@shared/ui/view/a11y/createAnnounce';
 export { useLayoutMode } from '@shared/ui/view/layout/useLayoutMode';
 export type { LayoutMode } from '@shared/ui/view/layout/useLayoutMode';

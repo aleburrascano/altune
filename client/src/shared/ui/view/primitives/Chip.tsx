@@ -1,13 +1,15 @@
 import type { ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 
-import { tapFeedback } from '@shared/ui/haptics';
+import type { TapFeedback } from '@shared/ui/ports/tapFeedback';
+import { useTapFeedback } from '@shared/ui/view/haptics/TapFeedbackProvider';
 import { radius, spacing } from '@shared/ui/core/theme/tokens';
 import { useTheme } from '@shared/ui/view/theme/useTheme';
 import { pressedStyle } from '@shared/ui/view/primitives/pressedStyle';
 import { Text } from '@shared/ui/view/primitives/Text';
 import type { TextTone } from '@shared/ui/view/primitives/Text';
-import { recordTap } from '@shared/ui/primitives/recordTap';
+import { recordUserAction } from '@shared/telemetry';
+import { tapAction } from '@shared/ui/core/telemetry/tapAction';
 
 type ChipBase = {
   label: string;
@@ -58,9 +60,12 @@ function ChipBody({ label, selected = false, icon }: ChipBase) {
   );
 }
 
-function handleChipPress({ onPress, action, trackId }: PressableChipProps) {
+function handleChipPress(
+  { onPress, action, trackId }: PressableChipProps,
+  tapFeedback: TapFeedback,
+) {
   tapFeedback();
-  recordTap(action, trackId);
+  recordUserAction(tapAction(action, trackId));
   onPress();
 }
 
@@ -70,19 +75,20 @@ const pressableBase = {
   style: ({ pressed }: { pressed: boolean }) => pressedStyle(pressed),
 } as const;
 
-function chipPressProps(props: PressableChipProps) {
+function chipPressProps(props: PressableChipProps, tapFeedback: TapFeedback) {
   return {
     ...pressableBase,
     testID: props.testID,
-    onPress: () => handleChipPress(props),
+    onPress: () => handleChipPress(props, tapFeedback),
     accessibilityLabel: props.label,
     accessibilityState: { selected: props.selected ?? false },
   };
 }
 
 function PressableChip(props: PressableChipProps) {
+  const tapFeedback = useTapFeedback();
   return (
-    <Pressable {...chipPressProps(props)}>
+    <Pressable {...chipPressProps(props, tapFeedback)}>
       <ChipBody {...props} />
     </Pressable>
   );

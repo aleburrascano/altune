@@ -2,7 +2,8 @@ import type { Ref } from 'react';
 import { Pressable } from 'react-native';
 import type { GestureResponderEvent, PressableProps, View } from 'react-native';
 
-import { recordTap } from '@shared/ui/primitives/recordTap';
+import { recordUserAction } from '@shared/telemetry';
+import { tapAction } from '@shared/ui/core/telemetry/tapAction';
 
 export type TappableProps = Omit<PressableProps, 'onPress'> & {
   action: string;
@@ -16,7 +17,7 @@ export function Tappable({ action, trackId, onPress, disabled, ...rest }: Tappab
     if (disabled) {
       return;
     }
-    recordTap(action, trackId);
+    recordUserAction(tapAction(action, trackId));
     onPress(event);
   }
   return <Pressable {...rest} disabled={disabled} onPress={handlePress} />;

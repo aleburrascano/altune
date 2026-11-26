@@ -5,5 +5,5 @@ export { Row } from '@shared/ui/view/primitives/Row';
 export { pressedStyle } from '@shared/ui/view/primitives/pressedStyle';
 export { Chip } from '@shared/ui/view/primitives/Chip';
 export { IconBadge } from '@shared/ui/view/primitives/IconBadge';
-export { Button } from '@shared/ui/primitives/Button';
+export { Button } from '@shared/ui/view/primitives/Button';
 export { Skeleton } from '@shared/ui/view/primitives/Skeleton';

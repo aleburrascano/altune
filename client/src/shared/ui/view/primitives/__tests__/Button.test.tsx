@@ -1,11 +1,9 @@
 import { Text } from 'react-native';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import { signInTestUser } from '@testing/signInTestUser';
 import { Button, Chip, IconButton } from '@shared/ui';
 const { __http } = require('@testing/doubles/fetch.js');
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 type Sent = { type: string; payload: Record<string, unknown> };
 
@@ -37,8 +35,7 @@ describe('Button', () => {
     const onPress = jest.fn();
     render(<Button label="Go" action="auth.sign_in" trackId="t1" onPress={onPress} testID="b" />);
     fireEvent.press(screen.getByTestId('b'));
-    await settle();
-    expect(sent()).toHaveLength(1);
+    await waitFor(() => expect(sent()).toHaveLength(1));
     expect(sent()[0]).toMatchObject({
       type: 'user_action',
       payload: { action: 'auth.sign_in', outcome: 'tapped', track_id: 't1' },
@@ -52,8 +49,7 @@ describe('Button', () => {
     });
     render(<Button label="Go" action="auth.sign_in" onPress={onPress} testID="b" />);
     expect(() => fireEvent.press(screen.getByTestId('b'))).toThrow('press failed');
-    await settle();
-    expect(sent()).toHaveLength(1);
+    await waitFor(() => expect(sent()).toHaveLength(1));
     expect(sent()[0]).toMatchObject({
       type: 'user_action',
       payload: { action: 'auth.sign_in', outcome: 'tapped' },
@@ -84,8 +80,7 @@ describe('IconButton', () => {
       />,
     );
     fireEvent.press(screen.getByTestId('i'));
-    await settle();
-    expect(sent()).toHaveLength(1);
+    await waitFor(() => expect(sent()).toHaveLength(1));
     expect(sent()[0]).toMatchObject({
       type: 'user_action',
       payload: { action: 'playback.mini.play_pause', outcome: 'tapped', track_id: 't2' },
@@ -119,8 +114,7 @@ describe('Chip', () => {
       <Chip label="Downloaded" action="library.chip.downloaded" onPress={onPress} testID="c" />,
     );
     fireEvent.press(screen.getByTestId('c'));
-    await settle();
-    expect(sent()).toHaveLength(1);
+    await waitFor(() => expect(sent()).toHaveLength(1));
     expect(sent()[0]).toMatchObject({
       type: 'user_action',
       payload: { action: 'library.chip.downloaded', outcome: 'tapped' },

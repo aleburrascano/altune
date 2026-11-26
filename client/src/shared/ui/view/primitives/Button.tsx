@@ -1,12 +1,13 @@
 import { ActivityIndicator, Animated, Pressable, StyleSheet } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 
-import { tapFeedback } from '@shared/ui/haptics';
+import { useTapFeedback } from '@shared/ui/view/haptics/TapFeedbackProvider';
 import { usePressScale } from '@shared/ui/view/motion/useMotion';
 import type { Theme } from '@shared/ui/core/theme/theme';
 import { minInteractiveHeight, radius, spacing } from '@shared/ui/core/theme/tokens';
 import { useTheme } from '@shared/ui/view/theme/useTheme';
-import { recordTap } from '@shared/ui/primitives/recordTap';
+import { recordUserAction } from '@shared/telemetry';
+import { tapAction } from '@shared/ui/core/telemetry/tapAction';
 import { Text } from '@shared/ui/view/primitives/Text';
 import type { TextTone } from '@shared/ui/view/primitives/Text';
 
@@ -58,6 +59,7 @@ export function Button({
   style,
 }: ButtonProps) {
   const theme = useTheme();
+  const tapFeedback = useTapFeedback();
   const { onPressIn, onPressOut, animatedStyle } = usePressScale();
   const isDisabled = disabled || loading;
 
@@ -68,7 +70,7 @@ export function Button({
     if (haptic) {
       tapFeedback();
     }
-    recordTap(action, trackId);
+    recordUserAction(tapAction(action, trackId));
     onPress();
   };
 
