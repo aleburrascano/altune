@@ -14,7 +14,8 @@ defaults:
     shell: bash
 
 env:
-  REPO: /home/ubuntu/projects/altune
+  GITEA_GIT: ${{ github.server_url }}/${{ github.repository }}.git
+  BRIDGE_GIT: /home/ubuntu/.cache/altune-github-bridge.git
   MIRROR_KEY: /home/ubuntu/.ssh/altune-github-mirror.key
   GITHUB_REMOTE: git@github.com:aleburrascano/altune.git
 
@@ -23,10 +24,19 @@ jobs:
     runs-on: host
     timeout-minutes: 10
     steps:
+      - name: fetch main into the bridge repo
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: |
+          set -euo pipefail
+          [ -e "$BRIDGE_GIT/HEAD" ] || git init -q --bare "$BRIDGE_GIT"
+          fetch_main() {
+            GIT_TERMINAL_PROMPT=0 GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraHeader \
+              GIT_CONFIG_VALUE_0="Authorization: token $GITEA_TOKEN" \
+              git --git-dir "$BRIDGE_GIT" fetch -q "$GITEA_GIT" '+refs/heads/main:refs/heads/main'
+          }
+          fetch_main || { sleep 5; fetch_main; }
       - name: push main to github
         run: |
           set -euo pipefail
-          git -C "$REPO" fetch -q gitea main || { sleep 5; git -C "$REPO" fetch -q gitea main; }
-          GIT_SSH_COMMAND="ssh -i $MIRROR_KEY -o IdentitiesOnly=yes" \
-            git -C "$REPO" push --force "$GITHUB_REMOTE" refs/remotes/gitea/main:refs/heads/main
-          echo "github main is $(git -C "$REPO" rev-parse --short refs/remotes/gitea/main)"
+          git --git-dir "$BRIDGE_GIT" show main:scripts/ci/github-mirror.sh | bash
