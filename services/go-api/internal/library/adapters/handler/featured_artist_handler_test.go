@@ -71,6 +71,17 @@ func TestHandleBackfillFeatured_RejectsANegativeOffset(t *testing.T) {
 	assertStatus(t, accepted, http.StatusOK)
 }
 
+func TestHandleBackfillFeatured_RejectsANonNumericOffset(t *testing.T) {
+	repo := library.NewInMemoryTrackRepo()
+	seedTracks(t, repo, "Song")
+	router := trackRoutes(repo)
+
+	rejected := request(t, router, http.MethodPost, "/tracks/featured-backfill?offset=abc", nil)
+
+	assertStatus(t, rejected, http.StatusBadRequest)
+	assertProblem(t, rejected, "catalog.validation_error", "offset must be an integer")
+}
+
 type listFailsAfterFirstPage struct {
 	*library.InMemoryTrackRepo
 	served bool

@@ -159,6 +159,18 @@ func assertErrorCode(t *testing.T, rec *httptest.ResponseRecorder, want string) 
 	}
 }
 
+func assertProblem(t *testing.T, rec *httptest.ResponseRecorder, wantCode, wantDetail string) {
+	t.Helper()
+	var body struct {
+		Code   string `json:"code"`
+		Detail string `json:"detail"`
+	}
+	decodeJSON(t, rec, &body)
+	if body.Code != wantCode || body.Detail != wantDetail {
+		t.Errorf("problem = {%q, %q}, want {%q, %q}", body.Code, body.Detail, wantCode, wantDetail)
+	}
+}
+
 func assertPrivateAudioHeaders(t *testing.T, rec *httptest.ResponseRecorder, wantCacheControl string) {
 	t.Helper()
 	if got := rec.Header().Get("Cache-Control"); got != wantCacheControl {

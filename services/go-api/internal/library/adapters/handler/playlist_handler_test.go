@@ -163,13 +163,17 @@ func TestHandleListPlaylistsServesOneWindow(t *testing.T) {
 }
 
 func TestHandleListPlaylistsRejectsAnUnparseableWindow(t *testing.T) {
-	for _, query := range []string{"?limit=abc", "?offset=1.5"} {
+	for query, wantDetail := range map[string]string{
+		"?limit=abc":  "limit must be an integer",
+		"?offset=1.5": "offset must be an integer",
+	} {
 		t.Run(query, func(t *testing.T) {
 			router := playlistRoutes(seededPlaylistRepo(t, 3), library.NewInMemoryTrackRepo())
 
 			rec := request(t, router, http.MethodGet, "/playlists"+query, nil)
 
 			assertStatus(t, rec, http.StatusBadRequest)
+			assertProblem(t, rec, "catalog.validation_error", wantDetail)
 		})
 	}
 }

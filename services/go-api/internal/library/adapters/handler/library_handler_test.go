@@ -33,13 +33,17 @@ func TestLibraryHandler_NegativeOffsetRejected(t *testing.T) {
 }
 
 func TestLibraryHandler_UnparseableLimitOrOffsetRejected(t *testing.T) {
-	for _, query := range []string{"?limit=abc", "?offset=x"} {
+	for query, wantDetail := range map[string]string{
+		"?limit=abc": "limit must be an integer",
+		"?offset=x":  "offset must be an integer",
+	} {
 		t.Run(query, func(t *testing.T) {
 			router := libraryRoutes(library.NewInMemoryTrackRepo())
 
 			rec := request(t, router, http.MethodGet, "/library/albums"+query, nil)
 
 			assertStatus(t, rec, http.StatusBadRequest)
+			assertProblem(t, rec, "catalog.validation_error", wantDetail)
 		})
 	}
 }
