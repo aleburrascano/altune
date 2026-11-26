@@ -36,7 +36,11 @@ func main() {
 	}
 	ctx := context.Background()
 	base := os.Args[1]
-	files := changedGoFiles(ctx, base)
+	files, err := changedGoFiles(ctx, base)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
 	if len(files) == 0 {
 		fmt.Println("No changed go files to check for vague identifier names.")
 		return
@@ -47,7 +51,12 @@ func main() {
 	}
 	hits := 0
 	for _, file := range files {
-		hits += reportFile(ctx, base, file)
+		fileHits, err := reportFile(ctx, base, file)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		hits += fileHits
 	}
 	fmt.Printf("new-code vague-name violations: %d\n", hits)
 	if hits > 0 {
@@ -60,8 +69,11 @@ type changedFile struct {
 	from string
 }
 
-func changedGoFiles(ctx context.Context, base string) []changedFile {
-	out := git(ctx, "diff", "-M", "--name-status", "--relative", "--diff-filter=ACMR", base, "--", ".")
+func changedGoFiles(ctx context.Context, base string) ([]changedFile, error) {
+	out, err := git(ctx, "diff", "-M", "--name-status", "--relative", "--diff-filter=ACMR", base, "--", ".")
+	if err != nil {
+		return nil, err
+	}
 	var files []changedFile
 	for _, line := range strings.Split(out, "\n") {
 		file := parseNameStatus(line)
@@ -69,7 +81,7 @@ func changedGoFiles(ctx context.Context, base string) []changedFile {
 			files = append(files, file)
 		}
 	}
-	return files
+	return files, nil
 }
 
 func parseNameStatus(line string) changedFile {
@@ -81,7 +93,7 @@ func parseNameStatus(line string) changedFile {
 	return file
 }
 
-func diffOf(ctx context.Context, base string, file changedFile) string {
+func diffOf(ctx context.Context, base string, file changedFile) (string, error) {
 	args := []string{"diff", "-M", "-U0", base, "--", file.path}
 	if file.from != "" {
 		args = append(args, file.from)
@@ -89,9 +101,13 @@ func diffOf(ctx context.Context, base string, file changedFile) string {
 	return git(ctx, args...)
 }
 
-func addedLines(ctx context.Context, base string, file changedFile) map[int]bool {
+func addedLines(ctx context.Context, base string, file changedFile) (map[int]bool, error) {
 	added := map[int]bool{}
-	for _, line := range strings.Split(diffOf(ctx, base, file), "\n") {
+	diff, err := diffOf(ctx, base, file)
+	if err != nil {
+		return nil, err
+	}
+	for _, line := range strings.Split(diff, "\n") {
 		match := hunkHeader.FindStringSubmatch(line)
 		if match == nil {
 			continue
@@ -105,25 +121,27 @@ func addedLines(ctx context.Context, base string, file changedFile) map[int]bool
 			added[n] = true
 		}
 	}
-	return added
+	return added, nil
 }
 
-func reportFile(ctx context.Context, base string, file changedFile) int {
-	added := addedLines(ctx, base, file)
+func reportFile(ctx context.Context, base string, file changedFile) (int, error) {
+	added, err := addedLines(ctx, base, file)
+	if err != nil {
+		return 0, err
+	}
 	if len(added) == 0 {
-		return 0
+		return 0, nil
 	}
 	fset := token.NewFileSet()
 	parsed, err := parser.ParseFile(fset, file.path, nil, parser.SkipObjectResolution)
 	if parsed == nil {
-		fmt.Fprintf(os.Stderr, "parse %s: %v\n", file.path, err)
-		os.Exit(2)
+		return 0, fmt.Errorf("parse %s: %w", file.path, err)
 	}
 	hits := 0
 	for _, ident := range declaredNames(parsed) {
 		hits += reportIdent(fset, file.path, added, ident)
 	}
-	return hits
+	return hits, nil
 }
 
 func reportIdent(fset *token.FileSet, file string, added map[int]bool, ident *ast.Ident) int {
@@ -192,14 +210,13 @@ func fieldNames(fields *ast.FieldList) []*ast.Ident {
 	return idents
 }
 
-func git(ctx context.Context, args ...string) string {
+func git(ctx context.Context, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "git %s: %v\n", strings.Join(args, " "), err)
-		os.Exit(2)
+		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
-	return out.String()
+	return out.String(), nil
 }

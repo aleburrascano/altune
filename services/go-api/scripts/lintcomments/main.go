@@ -50,8 +50,16 @@ func runDiff(ctx context.Context, args []string, stdout io.Writer) int {
 			return 2
 		}
 	}
-	base := resolveBase(ctx, rawBase)
-	addedByFile := changedAddedLines(ctx, base)
+	base, err := resolveBase(ctx, rawBase)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+	addedByFile, err := changedAddedLines(ctx, base)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
 	files := goFiles(addedByFile)
 	if len(files) == 0 {
 		say(stdout, "No changed go files to check for new comments.\n")
@@ -63,7 +71,12 @@ func runDiff(ctx context.Context, args []string, stdout io.Writer) int {
 	}
 	hits := 0
 	for _, file := range files {
-		hits += reportFile(stdout, file, addedByFile[file])
+		fileHits, err := reportFile(stdout, file, addedByFile[file])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 2
+		}
+		hits += fileHits
 	}
 	say(stdout, "new-code comment/suppression violations: %d\n", hits)
 	if hits > 0 {
@@ -153,17 +166,25 @@ func isEmbed(text string) bool {
 	return len(fields) > 0 && fields[0] == "//go:embed"
 }
 
-func resolveBase(ctx context.Context, rawBase string) string {
-	return strings.TrimSpace(git(ctx, "rev-parse", "--verify", "--end-of-options", rawBase+"^{commit}"))
+func resolveBase(ctx context.Context, rawBase string) (string, error) {
+	out, err := git(ctx, "rev-parse", "--verify", "--end-of-options", rawBase+"^{commit}")
+	return strings.TrimSpace(out), err
 }
 
-func changedAddedLines(ctx context.Context, base string) map[string]map[int]bool {
+func changedAddedLines(ctx context.Context, base string) (map[string]map[int]bool, error) {
 	byFile := map[string]map[int]bool{}
-	names := splitNUL(git(ctx, "diff", "--text", "--name-only", "-z", "--diff-filter=ACMR", "-M", "-C", "--find-copies-harder", "--relative", base))
-	if len(names) == 0 {
-		return byFile
+	nameList, err := git(ctx, "diff", "--text", "--name-only", "-z", "--diff-filter=ACMR", "-M", "-C", "--find-copies-harder", "--relative", base)
+	if err != nil {
+		return nil, err
 	}
-	patch := git(ctx, "diff", "--text", "--diff-filter=ACMR", "-M", "-C", "--find-copies-harder", "-U0", "--relative", base)
+	names := splitNUL(nameList)
+	if len(names) == 0 {
+		return byFile, nil
+	}
+	patch, err := git(ctx, "diff", "--text", "--diff-filter=ACMR", "-M", "-C", "--find-copies-harder", "-U0", "--relative", base)
+	if err != nil {
+		return nil, err
+	}
 	blocks := splitDiffBlocks(patch)
 	for i, path := range names {
 		if strings.HasPrefix(path, "../") {
@@ -175,7 +196,7 @@ func changedAddedLines(ctx context.Context, base string) map[string]map[int]bool
 		}
 		byFile[path] = hunksOf(block)
 	}
-	return byFile
+	return byFile, nil
 }
 
 func splitNUL(s string) []string {
@@ -229,15 +250,14 @@ func goFiles(addedByFile map[string]map[int]bool) []string {
 	return files
 }
 
-func reportFile(stdout io.Writer, file string, added map[int]bool) int {
+func reportFile(stdout io.Writer, file string, added map[int]bool) (int, error) {
 	if len(added) == 0 {
-		return 0
+		return 0, nil
 	}
 	fset := token.NewFileSet()
 	parsed, err := parser.ParseFile(fset, file, nil, parser.ParseComments|parser.SkipObjectResolution)
 	if parsed == nil {
-		fmt.Fprintf(os.Stderr, "parse %s: %v\n", file, err)
-		os.Exit(2)
+		return 0, fmt.Errorf("parse %s: %w", file, err)
 	}
 	hits := 0
 	for _, group := range parsed.Comments {
@@ -245,7 +265,7 @@ func reportFile(stdout io.Writer, file string, added map[int]bool) int {
 			hits += reportComment(stdout, fset, file, added, comment)
 		}
 	}
-	return hits
+	return hits, nil
 }
 
 func reportComment(stdout io.Writer, fset *token.FileSet, file string, added map[int]bool, comment *ast.Comment) int {
@@ -293,14 +313,13 @@ func spansAddedLine(start, end int, added map[int]bool) bool {
 	return false
 }
 
-func git(ctx context.Context, args ...string) string {
+func git(ctx context.Context, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-c", "core.quotePath=false"}, args...)...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "git %s: %v\n", strings.Join(args, " "), err)
-		os.Exit(2)
+		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
-	return out.String()
+	return out.String(), nil
 }
