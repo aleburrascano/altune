@@ -198,7 +198,7 @@ describe('useAsyncAuthAction: what an unknown failure leaves behind (#1647)', ()
   });
 
   it('logs nothing for a failure the network reason already names', async () => {
-    const state = await stateAfterRejectionWith(new Error('Network request failed'));
+    const state = await stateAfterRejectionWith(new TypeError('Network request failed'));
 
     expect(state).toEqual({ kind: 'error', reason: 'network' });
     expect(logs.warnings).toEqual([]);

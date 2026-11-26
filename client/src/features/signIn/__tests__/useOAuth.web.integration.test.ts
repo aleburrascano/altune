@@ -102,7 +102,7 @@ describe('useOAuth: a rejected web redirect request settles into error, not pend
   });
 
   it('reports a network error when signInWithOAuth rejects on web', async () => {
-    signInWithOAuth.mockRejectedValue(new Error('failed to fetch'));
+    signInWithOAuth.mockRejectedValue(new TypeError('Failed to fetch'));
 
     expect(await signIn()).toEqual({ kind: 'error', reason: 'network' });
     expect(authPort.reportSignInFailure).toHaveBeenCalledWith('network');
