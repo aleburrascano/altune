@@ -2,6 +2,7 @@ package providertest
 
 import (
 	"altune/go-api/internal/search/domain"
+	"altune/go-api/internal/shared/clock"
 	"bytes"
 	"context"
 	"io"
@@ -98,9 +99,11 @@ func CancelMidRequestServer(t *testing.T) (*httptest.Server, context.Context) {
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
 		cancel()
+		giveUp, stop := clock.NewTimer(5 * time.Second)
+		defer stop()
 		select {
 		case <-r.Context().Done():
-		case <-time.After(5 * time.Second):
+		case <-giveUp:
 			t.Error("client kept the request open after its context was cancelled")
 		}
 	}))

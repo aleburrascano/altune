@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/binpath"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"errors"
@@ -114,7 +115,7 @@ func schedulerPorts(d Deps, acquireSvc *download.AcquireTrackAudioService, skips
 	if d.Pool != nil {
 		wiring.Queue = download.QueueOf(download.NewPostgresJobQueue(d.Pool))
 		wiring.Upgrades = upgradeLane(d.Config, d.Pool, d.Ledger, acquireSvc)
-		wiring.Notifier = download.NewPostgresJobNotifier(d.Pool)
+		wiring.Notifier = download.MustNewPostgresJobNotifier(d.Pool, clock.Sleep)
 		wiring.Outcomes = download.NewPostgresOutcomeStore(d.Pool)
 	}
 	return wiring
