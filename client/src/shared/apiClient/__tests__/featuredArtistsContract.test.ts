@@ -77,7 +77,15 @@ describe('cross-surface contract: services/go-api ToExtrasMap <-> featuredArtist
 
   it('reads only the keys ToExtrasMap actually emits, plus a documented known gap on "role"', () => {
     const goSource = readGoSource(
-      path.join('services', 'go-api', 'internal', 'search', 'internal', 'domain', 'featured_artist.go'),
+      path.join(
+        'services',
+        'go-api',
+        'internal',
+        'search',
+        'internal',
+        'domain',
+        'featured_artist.go',
+      ),
     );
     const goEmittedKeys = deriveGoExtrasMapEmittedKeys(goSource);
     expect(goEmittedKeys.size).toBeGreaterThan(0);
