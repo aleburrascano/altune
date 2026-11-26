@@ -341,7 +341,9 @@ func savedTrackOf(ledger *acquisitiontest.Ledger, id ids.TrackId) SavedTrack {
 	var evidence struct {
 		ISRCSource string `json:"isrc_source"`
 	}
-	_ = json.Unmarshal(saved.Evidence, &evidence)
+	if err := json.Unmarshal(saved.Evidence, &evidence); err != nil {
+		evidence.ISRCSource = ""
+	}
 	return SavedTrack{
 		ISRC:            derefOrZero(saved.ISRC),
 		ISRCSource:      evidence.ISRCSource,

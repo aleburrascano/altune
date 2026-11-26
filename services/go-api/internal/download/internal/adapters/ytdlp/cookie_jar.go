@@ -270,7 +270,9 @@ func readJarFile(path string) (jarFile, error) {
 func loadSession(live string) jarSession {
 	var session jarSession
 	raw, _ := os.ReadFile(live + cookieJarSessionSuffix)
-	_ = json.Unmarshal(raw, &session)
+	if err := json.Unmarshal(raw, &session); err != nil {
+		return jarSession{}
+	}
 	return session
 }
 

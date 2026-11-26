@@ -62,9 +62,13 @@ func newTestJWTFixture(t *testing.T) *testJWTFixture {
 	f.privateKey, f.keyID = generateRSAKey(t), "test-key-1"
 	keySet := jwk.NewSet()
 	_ = keySet.AddKey(signingJWK(t, f.privateKey.PublicKey, f.keyID))
+	keySetJSON, err := json.Marshal(keySet)
+	if err != nil {
+		t.Fatalf("encode the key set: %v", err)
+	}
 	f.jwksServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(keySet)
+		_, _ = w.Write(keySetJSON)
 	}))
 	t.Cleanup(f.jwksServer.Close)
 	return f

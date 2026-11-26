@@ -30,7 +30,11 @@ func (s liveServer) handler(t *testing.T) http.Handler {
 				VideoID string `json:"videoId"`
 			}
 			raw, _ := io.ReadAll(r.Body)
-			_ = json.Unmarshal(raw, &body)
+			if err := json.Unmarshal(raw, &body); err != nil {
+				t.Errorf("decode the request body %q: %v", raw, err)
+				http.Error(w, "bad request body", http.StatusBadRequest)
+				return
+			}
 			_, _ = w.Write(readTestdata(t, "next_"+body.VideoID+".json"))
 		case "/youtubei/v1/search":
 			_, _ = w.Write(readTestdata(t, "search_lucki_2021_vibes.json"))
