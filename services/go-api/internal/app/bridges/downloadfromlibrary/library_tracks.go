@@ -27,15 +27,17 @@ type TrackStore interface {
 type LibraryTracks struct {
 	store TrackStore
 	now   clock.Func
+	state download.UpgradeState
 }
 
-var _ download.TrackLedgerPort = (*LibraryTracks)(nil)
-
-func NewLibraryTracks(store TrackStore, now clock.Func) *LibraryTracks {
+func NewLibraryTracks(store TrackStore, now clock.Func, state download.UpgradeState) *LibraryTracks {
 	if now == nil {
 		panic("downloadfromlibrary: NewLibraryTracks requires a clock")
 	}
-	return &LibraryTracks{store: store, now: now}
+	if state == nil {
+		panic("downloadfromlibrary: NewLibraryTracks requires the upgrade state, or rejected source keys are silently dropped")
+	}
+	return &LibraryTracks{store: store, now: now, state: state}
 }
 
 type illegalTransitionError struct {
@@ -76,7 +78,16 @@ func (l *LibraryTracks) Get(ctx context.Context, id ids.TrackId, userId ids.User
 	if track == nil {
 		return nil, download.ErrTrackNotFound
 	}
-	return snapshotOf(track), nil
+	snapshot := snapshotOf(track)
+	state, err := l.state.State(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("read upgrade state: %w", err)
+	}
+	snapshot.RejectedSourceKeys = state.RejectedSourceKeys
+	if snapshot.Evidence, err = download.MergeUpgradeEvidence(snapshot.Evidence, state.Evidence); err != nil {
+		return nil, fmt.Errorf("merge upgrade evidence: %w", err)
+	}
+	return snapshot, nil
 }
 
 func snapshotOf(track *domain.Track) *download.TrackSnapshot {
@@ -84,7 +95,6 @@ func snapshotOf(track *domain.Track) *download.TrackSnapshot {
 	snapshot.AudioRef = track.AudioRef
 	snapshot.AudioSourceURL = track.AudioSourceURL
 	snapshot.StoredDurationSeconds = track.DurationSeconds
-	snapshot.RejectedSourceKeys = track.RejectedSourceKeys
 	snapshot.Evidence = track.AcquisitionEvidence()
 	snapshot.Status = mapStatus(track.DownloadStatus)
 	snapshot.Streamable = track.IsStreamable()
@@ -134,9 +144,37 @@ func mapStatus(s domain.DownloadStatus) download.TrackStatus {
 }
 
 func (l *LibraryTracks) Complete(ctx context.Context, id ids.TrackId, userId ids.UserId, fence download.ClaimNumber, c download.Completion) error {
+	if err := l.settleUpgradeState(ctx, id, userId, fence, c); err != nil {
+		return err
+	}
 	return l.loadAndUpdate(ctx, id, userId, fence, func(track *domain.Track) error {
 		return complete(ctx, track, c)
 	})
+}
+
+func (l *LibraryTracks) settleUpgradeState(ctx context.Context, id ids.TrackId, userId ids.UserId, fence download.ClaimNumber, c download.Completion) error {
+	reset := evidenceAccepted(c)
+	if len(c.RejectedSourceKeys) == 0 && !reset {
+		return nil
+	}
+	track, err := l.store.GetByID(ctx, id, userId)
+	if errors.Is(err, domain.ErrTrackNotFound) {
+		return download.ErrTrackNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("get track: %w", err)
+	}
+	if leaseSuperseded(fence, track.AcquisitionFence) {
+		return fmt.Errorf("track %s claimed by fence %d, caller holds %d: %w", id, track.AcquisitionFence, fence, download.ErrLeaseLost)
+	}
+	if err := l.state.SettleAcquisition(ctx, id, c.RejectedSourceKeys, reset); err != nil {
+		return fmt.Errorf("settle upgrade state: %w", err)
+	}
+	return nil
+}
+
+func evidenceAccepted(c download.Completion) bool {
+	return c.Evidence != nil && (&domain.Track{}).SetAcquisitionConfidence(c.Confidence, c.Evidence) == nil
 }
 
 func complete(ctx context.Context, track *domain.Track, c download.Completion) error {
@@ -196,9 +234,6 @@ func settleAudio(track *domain.Track, c download.Completion) error {
 
 func recordMetadata(ctx context.Context, track *domain.Track, c download.Completion) {
 	track.SetAcquisitionProvenance(c.Provenance)
-	for _, key := range c.RejectedSourceKeys {
-		track.RejectAudioSource(key)
-	}
 	if c.SourceURL != "" {
 		track.SetAudioSource(c.SourceURL)
 	}

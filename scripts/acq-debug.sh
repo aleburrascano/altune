@@ -151,10 +151,15 @@ SQL
   [ -n "$ids" ] || { echo "no track matches '$1'" >&2; exit 1; }
   for id in $ids; do
     db -x -v id="$id" <<'SQL'
-SELECT id, title, artist, album, duration_seconds, acquisition_status, failure_reason,
-       acquisition_provenance, acquisition_confidence, acquisition_evidence, audio_source_url, cardinality(rejected_source_keys) AS rejected_sources,
-       added_at, acquisition_started_at, audio_ref IS NOT NULL AS has_audio
-  FROM tracks WHERE id = :'id';
+SELECT t.id, t.title, t.artist, t.album, t.duration_seconds, t.acquisition_status, t.failure_reason,
+       t.acquisition_provenance, t.acquisition_confidence, t.acquisition_evidence, s.evidence AS upgrade_state,
+       t.audio_source_url, COALESCE(cardinality(s.rejected_source_keys), 0) AS rejected_sources,
+       j.job_kind, j.available_at, j.lease_until, j.attempts, j.run_attempts, j.needs_pending,
+       t.added_at, t.acquisition_started_at, t.audio_ref IS NOT NULL AS has_audio
+  FROM tracks t
+  LEFT JOIN acquisition_upgrade_state s ON s.track_id = t.id
+  LEFT JOIN acquisition_jobs j ON j.track_id = t.id
+ WHERE t.id = :'id';
 SQL
     if [ -n "$api" ]; then
       echo "-- log lines for $id in every ${prefix}-* colour"

@@ -1,7 +1,9 @@
 package downloadsetup
 
 import (
+	"altune/go-api/internal/app/bridges/downloadfromlibrary"
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/library"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
@@ -15,7 +17,8 @@ func upgradeLane(cfg *config.Config, pool *pgxpool.Pool, ledger download.TrackLe
 		return download.NoUpgradeLane()
 	}
 	store := download.NewPostgresUpgradeStore(pool)
-	inPlace, err := download.InPlaceCheckOf(svc, store, cfg.AcquisitionUpgradeVerifyPerHour, clock.Now, clock.Sleep)
+	recorder := downloadfromlibrary.NewInPlaceRecorder(library.NewPostgresTrackRepository(pool), store)
+	inPlace, err := download.InPlaceCheckOf(svc, recorder, cfg.AcquisitionUpgradeVerifyPerHour, clock.Now, clock.Sleep)
 	if err != nil {
 		panic(err)
 	}

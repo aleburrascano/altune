@@ -20,7 +20,7 @@ import (
 
 const trackBaseColumns = `id, user_id, title, artist, album, duration_seconds,
 	added_at, artwork_url, acquisition_status, dedup_key,
-	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url, rejected_source_keys, audio_version, acquisition_started_at, acquisition_confidence, acquisition_evidence, catalog_duration_seconds, catalog_mbid, catalog_explicit, catalog_sources, audio_length_mismatch, version`
+	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url, audio_version, acquisition_started_at, acquisition_confidence, acquisition_evidence, catalog_duration_seconds, catalog_mbid, catalog_explicit, catalog_sources, audio_length_mismatch, version`
 
 var (
 	trackColumns         = trackBaseColumns + ", " + fenceColumn("tracks")
@@ -120,9 +120,9 @@ const insertTrackSQL = `INSERT INTO tracks (
 		id, user_id, title, artist, album, duration_seconds,
 		added_at, artwork_url, acquisition_status, dedup_key,
 		year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url,
-		rejected_source_keys, audio_version, acquisition_started_at, idempotency_key,
+		audio_version, acquisition_started_at, idempotency_key,
 		acquisition_confidence, acquisition_evidence, catalog_duration_seconds, catalog_mbid, catalog_explicit, catalog_sources
-	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
+	) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
 	ON CONFLICT DO NOTHING
 	RETURNING id`
 
@@ -138,7 +138,7 @@ func insertTrack(ctx context.Context, tx pgx.Tx, track *domain.Track) error {
 		track.AddedAt, track.ArtworkURL, track.DownloadStatus.String(), track.DedupKey,
 		track.Year, track.Genre, track.TrackNumber, track.AlbumArtist,
 		track.ISRC, track.AudioRef, track.FailureReason, track.AcquisitionProvenance, track.AudioSourceURL,
-		track.RejectedSourceKeys, track.AudioVersion, track.AcquisitionStartedAt, track.IdempotencyKey,
+		track.AudioVersion, track.AcquisitionStartedAt, track.IdempotencyKey,
 		track.ConfidenceScore, track.EvidenceJSON, track.CatalogDurationSeconds,
 		track.CatalogMBID, track.CatalogExplicit, sources,
 	).Scan(&returnedID)
@@ -253,14 +253,14 @@ func (r *PostgresTrackRepository) listByIDs(ctx context.Context, userId sharedid
 
 const updateAcquisitionColumns = `duration_seconds=$3, acquisition_status=$4, audio_ref=$5,
 			failure_reason=$6, acquisition_provenance=$7, audio_source_url=$8,
-			rejected_source_keys=$9, audio_version=$10, acquisition_started_at=$11,
-			acquisition_confidence=$12, acquisition_evidence=$13,
-			isrc=$14, audio_length_mismatch=$15,
+			audio_version=$9, acquisition_started_at=$10,
+			acquisition_confidence=$11, acquisition_evidence=$12,
+			isrc=$13, audio_length_mismatch=$14,
 			version = version + 1`
 
 const updateRelabelColumns = `,
-			title=$17, album=$18, year=$19, dedup_key=$20,
-			catalog_mbid=$21, catalog_duration_seconds=$22`
+			title=$16, album=$17, year=$18, dedup_key=$19,
+			catalog_mbid=$20, catalog_duration_seconds=$21`
 
 func updateStatement(track *domain.Track, expectedVersion int) (string, []any) {
 	set := updateAcquisitionColumns
@@ -268,7 +268,7 @@ func updateStatement(track *domain.Track, expectedVersion int) (string, []any) {
 		track.ID.UUID(), track.UserId.UUID(),
 		track.DurationSeconds, track.DownloadStatus.String(), track.AudioRef,
 		track.FailureReason, track.AcquisitionProvenance, track.AudioSourceURL,
-		track.RejectedSourceKeys, track.AudioVersion, track.AcquisitionStartedAt,
+		track.AudioVersion, track.AcquisitionStartedAt,
 		track.ConfidenceScore, track.EvidenceJSON,
 		track.ISRC, track.AudioLengthMismatch,
 		expectedVersion,
@@ -297,7 +297,7 @@ func (r *PostgresTrackRepository) update(ctx context.Context, track *domain.Trac
 	defer cancel()
 
 	set, args := updateStatement(track, expectedVersion)
-	where := `id = $1 AND user_id = $2 AND version = $16`
+	where := `id = $1 AND user_id = $2 AND version = $15`
 	if fence > 0 {
 		args = append(args, fence)
 		where += fmt.Sprintf(fenceClause, len(args), len(args))
@@ -337,6 +337,33 @@ func (r *PostgresTrackRepository) classifyFailedCAS(ctx context.Context, track *
 	}
 	return fmt.Errorf("%w: track %s expected version %d, found %d",
 		ports.ErrTrackVersionConflict, track.ID.String(), expectedVersion, currentVersion)
+}
+
+const gradeRankSQL = `array_position(ARRAY['F', 'D', 'C', 'B', 'A', 'A_user'], %s)`
+
+var recordInPlaceVerdictSQL = fmt.Sprintf(`
+UPDATE tracks
+SET acquisition_evidence = (COALESCE(acquisition_evidence, '{}'::jsonb) - CASE WHEN $6::boolean
+			THEN ARRAY['acoustid_score'] ELSE '{}'::text[] END) || jsonb_strip_nulls(jsonb_build_object(
+		'verdict', NULLIF($3::text, ''),
+		'acoustid_score', NULLIF($4::float8, 0),
+		'grade', CASE WHEN NULLIF($5::text, '') IS NOT NULL AND COALESCE(acquisition_evidence->>'grade', 'D') <> 'best_available' AND ($8::boolean OR %s > %s) THEN $5::text END,
+		'user_upload_mismatch', CASE WHEN $7::boolean THEN true END)),
+	version = version + 1
+WHERE id = $1 AND audio_ref = $2 AND acquisition_status = 'ready'`,
+	fmt.Sprintf(gradeRankSQL, "NULLIF($5::text, '')"),
+	fmt.Sprintf(gradeRankSQL, "COALESCE(acquisition_evidence->>'grade', 'D')"))
+
+func (r *PostgresTrackRepository) RecordInPlaceVerdict(ctx context.Context, id domain.TrackId, audioRef string, v ports.InPlaceVerdict) (bool, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
+	tag, err := r.pool.Exec(ctx, recordInPlaceVerdictSQL, id.UUID(), audioRef,
+		v.Verdict, v.Score, v.Grade, v.DropScore, v.UserUploadMismatch, v.MayLower)
+	if err != nil {
+		return false, classifyDBError(fmt.Errorf("record in-place verdict %s: %w", id.String(), err))
+	}
+	return tag.RowsAffected() == 1, nil
 }
 
 func (r *PostgresTrackRepository) Requeue(ctx context.Context, id domain.TrackId) error {
@@ -617,7 +644,6 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 		failureReason   *string
 		provenance      *string
 		sourceURL       *string
-		rejectedKeys    []string
 		audioVersion    *string
 		startedAt       *time.Time
 		confidence      *float64
@@ -635,7 +661,7 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 		&id, &userId, &title, &artist, &album, &durSecs,
 		&addedAt, &artworkURL, &acqStatus, &dedupKey,
 		&year, &genre, &trackNumber, &albumArtist, &isrc, &audioRef, &failureReason, &provenance, &sourceURL,
-		&rejectedKeys, &audioVersion, &startedAt, &confidence, &evidence, &catalogDurSecs, &catalogMBID, &catalogExplicit, &catalogSources, &lengthMismatch, &version, &fence,
+		&audioVersion, &startedAt, &confidence, &evidence, &catalogDurSecs, &catalogMBID, &catalogExplicit, &catalogSources, &lengthMismatch, &version, &fence,
 	}
 
 	build = func() (*domain.Track, error) {
@@ -680,7 +706,6 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 			FailureReason:          failureReason,
 			AcquisitionProvenance:  provenance,
 			AudioSourceURL:         sourceURL,
-			RejectedSourceKeys:     rejectedKeys,
 			AcquisitionStartedAt:   startedAt,
 			ConfidenceScore:        confidence,
 			EvidenceJSON:           evidence,

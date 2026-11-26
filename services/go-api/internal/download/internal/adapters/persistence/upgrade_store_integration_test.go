@@ -8,12 +8,17 @@ import (
 	"altune/go-api/internal/shared/dbtest"
 	sharedids "altune/go-api/internal/shared/ids"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -25,9 +30,10 @@ type readyTrackSpec struct {
 func insertUpgradableTrack(t *testing.T, pool *pgxpool.Pool, spec readyTrackSpec) sharedids.TrackId {
 	t.Helper()
 	id := sharedids.TrackIdFromUUID(uuid.New())
-	var evidence any
+	var evidence, state any
 	if spec.evidence != "" {
-		evidence = spec.evidence
+		trackKeys, stateKeys := splitEvidence(t, spec.evidence)
+		evidence, state = trackKeys, stateKeys
 	}
 	_, err := pool.Exec(context.Background(),
 		`INSERT INTO tracks (id, user_id, title, artist, album, dedup_key, acquisition_status, audio_ref, audio_source_url, acquisition_evidence)
@@ -36,10 +42,42 @@ func insertUpgradableTrack(t *testing.T, pool *pgxpool.Pool, spec readyTrackSpec
 	if err != nil {
 		t.Fatalf("insert ready track: %v", err)
 	}
+	if state != nil {
+		if _, err := pool.Exec(context.Background(),
+			`INSERT INTO acquisition_upgrade_state (track_id, evidence) VALUES ($1, $2::jsonb)
+			 ON CONFLICT (track_id) DO UPDATE SET evidence = EXCLUDED.evidence`, id.UUID(), state); err != nil {
+			t.Fatalf("insert upgrade state: %v", err)
+		}
+	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, id.UUID())
 	})
 	return id
+}
+
+func splitEvidence(t *testing.T, raw string) (track, state string) {
+	t.Helper()
+	var all map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &all); err != nil {
+		t.Fatalf("evidence %q is not a JSON object: %v", raw, err)
+	}
+	trackKeys, stateKeys := map[string]json.RawMessage{}, map[string]json.RawMessage{}
+	for key, value := range all {
+		if slices.Contains(ports.UpgradeEvidenceKeys, key) {
+			stateKeys[key] = value
+		} else {
+			trackKeys[key] = value
+		}
+	}
+	trackJSON, err := json.Marshal(trackKeys)
+	if err != nil {
+		t.Fatalf("encode track evidence: %v", err)
+	}
+	stateJSON, err := json.Marshal(stateKeys)
+	if err != nil {
+		t.Fatalf("encode state evidence: %v", err)
+	}
+	return string(trackJSON), string(stateJSON)
 }
 
 func sourceURL(id string) *string {
@@ -155,134 +193,6 @@ func TestPostgresUpgradeStore_AGradeAUserTrackIsNeverACandidate(t *testing.T) {
 	}
 }
 
-type recordedEvidence struct {
-	Grade      string
-	Verdict    string
-	Basis      string
-	Score      float64
-	Generation int
-	Mismatch   bool
-	Channel    string
-}
-
-func readEvidence(t *testing.T, pool *pgxpool.Pool, id sharedids.TrackId) recordedEvidence {
-	t.Helper()
-	var evidence recordedEvidence
-	err := pool.QueryRow(context.Background(), `
-		SELECT COALESCE(acquisition_evidence->>'grade', ''),
-			COALESCE(acquisition_evidence->>'verdict', ''),
-			COALESCE(acquisition_evidence->>'in_place_basis', ''),
-			COALESCE((acquisition_evidence->>'acoustid_score')::float8, 0),
-			COALESCE((acquisition_evidence->>'in_place_generation')::int, 0),
-			COALESCE((acquisition_evidence->>'user_upload_mismatch')::boolean, false),
-			COALESCE(acquisition_evidence->>'channel', '')
-		FROM tracks WHERE id = $1`, id.UUID()).
-		Scan(&evidence.Grade, &evidence.Verdict, &evidence.Basis, &evidence.Score, &evidence.Generation, &evidence.Mismatch, &evidence.Channel)
-	if err != nil {
-		t.Fatalf("read evidence: %v", err)
-	}
-	return evidence
-}
-
-func TestPostgresUpgradeStore_RecordInPlaceWritesTheVerdictAndGradeAndKeepsTheRestOfTheEvidence(t *testing.T) {
-	dbtest.RequireIntegration(t)
-	pool := newPool(t)
-	store := download.NewPostgresUpgradeStore(pool)
-	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","verdict":"unknown","channel":"topic"}`, sourceURL: sourceURL("art")})
-
-	recorded, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{
-		AudioRef: "u/" + id.String() + ".mp3", Generation: 1, Verdict: "hard", Basis: "acoustid", Score: 0.97, Grade: "A",
-	})
-
-	if err != nil || !recorded {
-		t.Fatalf("RecordInPlace = %v, %v, want it recorded", recorded, err)
-	}
-	want := recordedEvidence{Grade: "A", Verdict: "hard", Basis: "acoustid", Score: 0.97, Generation: 1, Channel: "topic"}
-	if got := readEvidence(t, pool, id); got != want {
-		t.Errorf("evidence = %+v, want %+v", got, want)
-	}
-}
-
-func TestPostgresUpgradeStore_RecordInPlaceWithNoGradeOrVerdictOnlyStampsTheGeneration(t *testing.T) {
-	dbtest.RequireIntegration(t)
-	pool := newPool(t)
-	store := download.NewPostgresUpgradeStore(pool)
-	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","verdict":"unknown"}`, sourceURL: sourceURL("art")})
-
-	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{AudioRef: "u/" + id.String() + ".mp3", Generation: 1}); err != nil {
-		t.Fatalf("RecordInPlace: %v", err)
-	}
-
-	want := recordedEvidence{Grade: "C", Verdict: "unknown", Generation: 1}
-	if got := readEvidence(t, pool, id); got != want {
-		t.Errorf("evidence = %+v, want %+v", got, want)
-	}
-}
-
-func TestPostgresUpgradeStore_RecordInPlaceFlagsAMismatchedUserUploadWithoutRegrading(t *testing.T) {
-	dbtest.RequireIntegration(t)
-	pool := newPool(t)
-	store := download.NewPostgresUpgradeStore(pool)
-	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D")})
-
-	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{
-		AudioRef: "u/" + id.String() + ".mp3", Generation: 1, Verdict: "other_version", Basis: "acoustid", Score: 0.9, UserUploadMismatch: true,
-	}); err != nil {
-		t.Fatalf("RecordInPlace: %v", err)
-	}
-
-	want := recordedEvidence{Grade: "D", Verdict: "other_version", Basis: "acoustid", Score: 0.9, Generation: 1, Mismatch: true}
-	if got := readEvidence(t, pool, id); got != want {
-		t.Errorf("evidence = %+v, want %+v", got, want)
-	}
-}
-
-func TestPostgresUpgradeStore_RecordInPlaceNeverLowersTheStoredGrade(t *testing.T) {
-	dbtest.RequireIntegration(t)
-	pool := newPool(t)
-	store := download.NewPostgresUpgradeStore(pool)
-	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("C"), sourceURL: sourceURL("art")})
-	ctx := context.Background()
-	ref := "u/" + id.String() + ".mp3"
-
-	for _, grade := range []string{"F", "D", "C"} {
-		if _, err := store.RecordInPlace(ctx, id, ports.InPlaceRecord{AudioRef: ref, Generation: 1, Verdict: "other_version", Grade: grade}); err != nil {
-			t.Fatalf("RecordInPlace %s: %v", grade, err)
-		}
-		if got := readEvidence(t, pool, id); got.Grade != "C" || got.Verdict != "other_version" {
-			t.Errorf("after %s: evidence = %+v, want grade C kept and the verdict recorded", grade, got)
-		}
-	}
-	if _, err := store.RecordInPlace(ctx, id, ports.InPlaceRecord{AudioRef: ref, Generation: 1, Verdict: "preview", Basis: "preview", BitErrorRate: 0.06, Grade: "A"}); err != nil {
-		t.Fatalf("RecordInPlace A: %v", err)
-	}
-	var rate float64
-	if err := pool.QueryRow(ctx, `SELECT (acquisition_evidence->>'in_place_bit_error_rate')::float8 FROM tracks WHERE id = $1`, id.UUID()).Scan(&rate); err != nil {
-		t.Fatalf("read bit error rate: %v", err)
-	}
-	if got := readEvidence(t, pool, id); got.Grade != "A" || got.Verdict != "preview" || rate != 0.06 {
-		t.Errorf("evidence = %+v, rate = %v, want the raise to A with the preview verdict and its bit error rate", got, rate)
-	}
-}
-
-func TestPostgresUpgradeStore_RecordInPlaceLowersTheGradeOnlyForAContradictionThatStands(t *testing.T) {
-	dbtest.RequireIntegration(t)
-	pool := newPool(t)
-	store := download.NewPostgresUpgradeStore(pool)
-	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("C"), sourceURL: sourceURL("art")})
-
-	recorded, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{
-		AudioRef: "u/" + id.String() + ".mp3", Generation: 1, Verdict: "other_version", Basis: "acoustid", Grade: "F", MayLower: true,
-	})
-
-	if err != nil || !recorded {
-		t.Fatalf("RecordInPlace = %v, %v, want it recorded", recorded, err)
-	}
-	if got := readEvidence(t, pool, id); got.Grade != "F" || got.Verdict != "other_version" {
-		t.Errorf("evidence = %+v, want the stored grade to tell the truth about the file: F", got)
-	}
-}
-
 func TestPostgresUpgradeStore_NoteInPlaceFailureCountsAndMakesTheTrackWaitItsTurn(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
@@ -303,22 +213,6 @@ func TestPostgresUpgradeStore_NoteInPlaceFailureCountsAndMakesTheTrackWaitItsTur
 	}
 	if got := candidatesAmong(t, store, selectionOf(10), id); len(got) != 0 {
 		t.Errorf("candidates = %v, want the track to wait out the retry delay", got)
-	}
-}
-
-func TestPostgresUpgradeStore_RecordInPlaceIgnoresAFileThatChangedMeanwhile(t *testing.T) {
-	dbtest.RequireIntegration(t)
-	pool := newPool(t)
-	store := download.NewPostgresUpgradeStore(pool)
-	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("C"), sourceURL: sourceURL("art")})
-
-	recorded, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{AudioRef: "u/replaced-since.mp3", Generation: 1, Verdict: "hard", Grade: "A"})
-
-	if err != nil || recorded {
-		t.Fatalf("RecordInPlace = %v, %v, want a verdict on an old file to be dropped", recorded, err)
-	}
-	if got := readEvidence(t, pool, id); got.Grade != "C" || got.Generation != 0 {
-		t.Errorf("evidence = %+v, want the track untouched", got)
 	}
 }
 
@@ -357,7 +251,7 @@ func TestPostgresUpgradeStore_ATrackGivenUpOnWaitsForTheNextGeneration(t *testin
 	}
 	var reason string
 	if err := pool.QueryRow(context.Background(),
-		`SELECT acquisition_evidence->>'best_available_reason' FROM tracks WHERE id = $1`, id.UUID()).Scan(&reason); err != nil {
+		`SELECT evidence->>'best_available_reason' FROM acquisition_upgrade_state WHERE track_id = $1`, id.UUID()).Scan(&reason); err != nil {
 		t.Fatalf("read reason: %v", err)
 	}
 	if reason != "the extended mix exists only on a promo channel" {
@@ -423,7 +317,7 @@ func TestPostgresUpgradeStore_NoteAttemptCountsTriesAndRemembersTheRejectedSourc
 	}
 	var keys []string
 	var grade string
-	if err := pool.QueryRow(ctx, `SELECT rejected_source_keys, acquisition_evidence->>'grade' FROM tracks WHERE id = $1`, id.UUID()).Scan(&keys, &grade); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT s.rejected_source_keys, t.acquisition_evidence->>'grade' FROM tracks t JOIN acquisition_upgrade_state s ON s.track_id = t.id WHERE t.id = $1`, id.UUID()).Scan(&keys, &grade); err != nil {
 		t.Fatalf("read track: %v", err)
 	}
 	if !slices.Equal(keys, []string{"youtube:aaa", "youtube:bbb"}) {
@@ -448,7 +342,7 @@ func TestPostgresUpgradeStore_RejectedSourceKeysKeepTheNewestTwentyFive(t *testi
 	}
 
 	var keys []string
-	if err := pool.QueryRow(context.Background(), `SELECT rejected_source_keys FROM tracks WHERE id = $1`, id.UUID()).Scan(&keys); err != nil {
+	if err := pool.QueryRow(context.Background(), `SELECT rejected_source_keys FROM acquisition_upgrade_state WHERE track_id = $1`, id.UUID()).Scan(&keys); err != nil {
 		t.Fatalf("read keys: %v", err)
 	}
 	if len(keys) != 25 || keys[0] != "youtube:02" || keys[24] != "youtube:26" {
@@ -495,78 +389,6 @@ func TestPostgresUpgradeStore_AGradeATrackIsACandidateOnlyWhenNotYetJudgedThisGe
 	}
 }
 
-func TestPostgresUpgradeStore_RecordInPlaceNeverReplacesAStoredBestAvailableGrade(t *testing.T) {
-	dbtest.RequireIntegration(t)
-	pool := newPool(t)
-	store := download.NewPostgresUpgradeStore(pool)
-	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("best_available"), sourceURL: sourceURL("leak")})
-
-	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{
-		AudioRef: "u/" + id.String() + ".mp3", Generation: 1, Verdict: "contradicted", Basis: "acoustid", Grade: "F", MayLower: true,
-	}); err != nil {
-		t.Fatalf("RecordInPlace: %v", err)
-	}
-
-	if got := readEvidence(t, pool, id); got.Grade != "best_available" {
-		t.Errorf("grade = %q, want best_available kept: it is never replaced", got.Grade)
-	}
-}
-
-func TestPostgresUpgradeStore_RecordInPlaceLowersAWrongLengthGradeAToB(t *testing.T) {
-	dbtest.RequireIntegration(t)
-	pool := newPool(t)
-	store := download.NewPostgresUpgradeStore(pool)
-	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("A"), sourceURL: sourceURL("art")})
-	ref := "u/" + id.String() + ".mp3"
-
-	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{AudioRef: ref, Generation: 2, Verdict: "hard", Grade: "B"}); err != nil {
-		t.Fatalf("RecordInPlace: %v", err)
-	}
-	if got := readEvidence(t, pool, id); got.Grade != "A" {
-		t.Fatalf("grade = %q, want A kept: weaker evidence alone never lowers", got.Grade)
-	}
-	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{AudioRef: ref, Generation: 2, Verdict: "hard", Grade: "B", MayLower: true}); err != nil {
-		t.Fatalf("RecordInPlace: %v", err)
-	}
-
-	if got := readEvidence(t, pool, id); got.Grade != "B" {
-		t.Errorf("grade = %q, want B once the length contradicts the file", got.Grade)
-	}
-}
-
-func TestPostgresUpgradeStore_RecordInPlaceClearsTheFailureCountSoANewGenerationStartsFresh(t *testing.T) {
-	dbtest.RequireIntegration(t)
-	pool := newPool(t)
-	store := download.NewPostgresUpgradeStore(pool)
-	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","in_place_failures":2}`, sourceURL: sourceURL("art")})
-
-	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{AudioRef: "u/" + id.String() + ".mp3", Generation: 2, Verdict: "hard", Grade: "A"}); err != nil {
-		t.Fatalf("RecordInPlace: %v", err)
-	}
-	failures, err := store.NoteInPlaceFailure(context.Background(), id)
-
-	if err != nil || failures != 1 {
-		t.Errorf("failures after a recorded verdict = %d, %v, want 1: the count starts over", failures, err)
-	}
-}
-
-func TestPostgresUpgradeStore_RecordInPlaceClearsAStaleAcoustIDScoreOnAPreviewVerdict(t *testing.T) {
-	dbtest.RequireIntegration(t)
-	pool := newPool(t)
-	store := download.NewPostgresUpgradeStore(pool)
-	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","acoustid_score":0.9}`, sourceURL: sourceURL("art")})
-
-	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{
-		AudioRef: "u/" + id.String() + ".mp3", Generation: 2, Verdict: "preview", Basis: "preview", BitErrorRate: 0.06,
-	}); err != nil {
-		t.Fatalf("RecordInPlace: %v", err)
-	}
-
-	if got := readEvidence(t, pool, id); got.Score != 0 || got.Verdict != "preview" {
-		t.Errorf("evidence = %+v, want the old score cleared and the preview verdict recorded", got)
-	}
-}
-
 func TestUpgradeStore_Candidates_LowBitrateRescue(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
@@ -586,5 +408,137 @@ func TestUpgradeStore_Candidates_LowBitrateRescue(t *testing.T) {
 	}
 	if got := candidatesAmong(t, store, selectionOf(10), muxed, audioOnly); len(got) != 0 {
 		t.Errorf("candidates at floor 0 = %v, want none: a zero floor switches the rescue off", got)
+	}
+}
+
+func TestPostgresUpgradeStore_StateOfATrackWithNoBookkeepingIsEmpty(t *testing.T) {
+	dbtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := download.NewPostgresUpgradeStore(pool)
+	id := insertUpgradableTrack(t, pool, readyTrackSpec{sourceURL: sourceURL("fresh")})
+
+	state, err := store.State(context.Background(), id)
+
+	if err != nil || len(state.Evidence) != 0 || len(state.RejectedSourceKeys) != 0 {
+		t.Errorf("State = %+v, %v, want empty", state, err)
+	}
+}
+
+func TestPostgresUpgradeStore_SettleAcquisitionAppendsRejectedKeysOnceAndResetsOnlyWhenAsked(t *testing.T) {
+	dbtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := download.NewPostgresUpgradeStore(pool)
+	ctx := context.Background()
+	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","upgrade_tries":3}`, sourceURL: sourceURL("settle")})
+
+	if err := store.SettleAcquisition(ctx, id, []string{"yt:a", "yt:a", "", "yt:b"}, false); err != nil {
+		t.Fatalf("SettleAcquisition: %v", err)
+	}
+	state, err := store.State(ctx, id)
+	if err != nil {
+		t.Fatalf("State: %v", err)
+	}
+	if !slices.Equal(state.RejectedSourceKeys, []string{"yt:a", "yt:b"}) || !strings.Contains(string(state.Evidence), "upgrade_tries") {
+		t.Errorf("state = %s %v, want each key once and the evidence kept", state.Evidence, state.RejectedSourceKeys)
+	}
+
+	if err := store.SettleAcquisition(ctx, id, []string{"yt:b", "yt:c"}, true); err != nil {
+		t.Fatalf("SettleAcquisition reset: %v", err)
+	}
+	state, err = store.State(ctx, id)
+	if err != nil {
+		t.Fatalf("State: %v", err)
+	}
+	if !slices.Equal(state.RejectedSourceKeys, []string{"yt:a", "yt:b", "yt:c"}) || string(state.Evidence) != "{}" {
+		t.Errorf("state = %s %v, want the keys kept and the upgrade evidence reset", state.Evidence, state.RejectedSourceKeys)
+	}
+}
+
+func TestPostgresUpgradeStore_SettleAcquisitionKeepsTheNewestTwentyFive(t *testing.T) {
+	dbtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := download.NewPostgresUpgradeStore(pool)
+	id := insertUpgradableTrack(t, pool, readyTrackSpec{sourceURL: sourceURL("cap")})
+
+	var keys []string
+	for i := range 30 {
+		keys = append(keys, fmt.Sprintf("youtube:%02d", i))
+	}
+	if err := store.SettleAcquisition(context.Background(), id, keys, false); err != nil {
+		t.Fatalf("SettleAcquisition: %v", err)
+	}
+
+	state, err := store.State(context.Background(), id)
+	if err != nil || len(state.RejectedSourceKeys) != 25 || state.RejectedSourceKeys[0] != "youtube:05" {
+		t.Errorf("state keys = %v, %v, want the newest 25 (05 to 29)", state.RejectedSourceKeys, err)
+	}
+}
+
+func TestPostgresUpgradeStore_ABookkeepingWriteForATrackThatIsGoneChangesNothing(t *testing.T) {
+	dbtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := download.NewPostgresUpgradeStore(pool)
+	gone := sharedids.TrackIdFromUUID(uuid.New())
+
+	if err := store.GiveUp(context.Background(), gone, 1, "gone"); err != nil {
+		t.Errorf("GiveUp for a missing track = %v, want nil as before", err)
+	}
+	var rows int
+	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM acquisition_upgrade_state WHERE track_id = $1`, gone.UUID()).Scan(&rows); err != nil || rows != 0 {
+		t.Errorf("state rows = %d, %v, want none", rows, err)
+	}
+}
+
+func TestPostgresUpgradeStore_BookkeepingWritesRacingATrackDeleteNeverDeadlock(t *testing.T) {
+	dbtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := download.NewPostgresUpgradeStore(pool)
+	ctx := context.Background()
+
+	ops := []struct {
+		name string
+		run  func(id sharedids.TrackId) error
+	}{
+		{"note attempt", func(id sharedids.TrackId) error {
+			_, err := store.NoteAttempt(ctx, id, ports.UpgradeAttempt{RejectedSourceKey: "yt:a", CountsAsTry: true})
+			return err
+		}},
+		{"give up", func(id sharedids.TrackId) error { return store.GiveUp(ctx, id, 1, "nothing better") }},
+		{"record in place", func(id sharedids.TrackId) error { return store.RecordInPlaceState(ctx, id, 1, "acoustid", 0.1) }},
+		{"note in-place failure", func(id sharedids.TrackId) error { _, err := store.NoteInPlaceFailure(ctx, id); return err }},
+		{"settle acquisition", func(id sharedids.TrackId) error { return store.SettleAcquisition(ctx, id, []string{"yt:b"}, true) }},
+	}
+	for _, op := range ops {
+		t.Run(op.name, func(t *testing.T) {
+			for i := 0; i < 30; i++ {
+				id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("C"), sourceURL: sourceURL("race")})
+				if _, err := store.NoteInPlaceFailure(ctx, id); err != nil {
+					t.Fatalf("seed the state row: %v", err)
+				}
+
+				var wg sync.WaitGroup
+				var opErr, deleteErr error
+				start := make(chan struct{})
+				wg.Add(2)
+				go func() { defer wg.Done(); <-start; opErr = op.run(id) }()
+				go func() {
+					defer wg.Done()
+					<-start
+					_, deleteErr = pool.Exec(ctx, `DELETE FROM tracks WHERE id = $1`, id.UUID())
+				}()
+				close(start)
+				wg.Wait()
+
+				for _, err := range []error{opErr, deleteErr} {
+					var pgErr *pgconn.PgError
+					if errors.As(err, &pgErr) && pgErr.Code == "40P01" {
+						t.Fatalf("round %d: %s raced a track delete into a deadlock: %v", i, op.name, err)
+					}
+				}
+				if deleteErr != nil {
+					t.Fatalf("round %d: delete = %v", i, deleteErr)
+				}
+			}
+		})
 	}
 }

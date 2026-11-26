@@ -1125,35 +1125,6 @@ func TestTrack_RelabelAsRecordingAcceptsAnAlbumAtTheTextLimit(t *testing.T) {
 	}
 }
 
-func TestTrack_RejectAudioSourceIsIdempotentAndBounded(t *testing.T) {
-	t.Parallel()
-	track := &library.Track{}
-
-	track.RejectAudioSource("youtube:aaa")
-	track.RejectAudioSource("youtube:aaa")
-	if len(track.RejectedSourceKeys) != 1 {
-		t.Errorf("keys = %v, want no duplicate", track.RejectedSourceKeys)
-	}
-
-	track.RejectAudioSource("")
-	if len(track.RejectedSourceKeys) != 1 {
-		t.Errorf("keys = %v, want an empty key ignored", track.RejectedSourceKeys)
-	}
-
-	var added []string
-	for i := range 60 {
-		key := string(rune('a'+i%26)) + string(rune('0'+i/26))
-		added = append(added, key)
-		track.RejectAudioSource(key)
-	}
-	if len(track.RejectedSourceKeys) > 25 {
-		t.Errorf("keys = %d, want the list bounded so a row cannot grow without limit", len(track.RejectedSourceKeys))
-	}
-	if want := added[len(added)-25:]; !reflect.DeepEqual(track.RejectedSourceKeys, want) {
-		t.Errorf("keys = %v, want the 25 most recent rejections %v", track.RejectedSourceKeys, want)
-	}
-}
-
 func audioLength(t *testing.T, seconds float64) tracklength.TrackLength {
 	t.Helper()
 	length, err := tracklength.TrackLengthOf(seconds)

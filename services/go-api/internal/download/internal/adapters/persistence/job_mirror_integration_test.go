@@ -108,7 +108,7 @@ func upgradeStateOf(t *testing.T, pool *pgxpool.Pool, id sharedids.TrackId) (map
 	return evidence, keys
 }
 
-func TestPostgresUpgradeStore_TheBookkeepingKeysAndRejectedSourcesAreMirroredButTheGradeIsNot(t *testing.T) {
+func TestPostgresUpgradeStore_TheStateOwnsTheBookkeepingKeysAndOnlyCopiesThemBackToTracks(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := persistence.NewPostgresUpgradeStore(pool)
@@ -139,5 +139,22 @@ func TestPostgresUpgradeStore_TheBookkeepingKeysAndRejectedSourcesAreMirroredBut
 		if _, ok := evidence[key]; ok {
 			t.Errorf("upgrade state holds the library-owned key %q", key)
 		}
+	}
+
+	var copiedReason string
+	var copiedKeys []string
+	if err := pool.QueryRow(ctx, `SELECT acquisition_evidence->>'best_available_reason', rejected_source_keys FROM tracks WHERE id = $1`, id.UUID()).Scan(&copiedReason, &copiedKeys); err != nil {
+		t.Fatalf("read the track copy: %v", err)
+	}
+	if copiedReason != "nothing better" || !slices.Equal(copiedKeys, []string{"yt:bad"}) {
+		t.Errorf("track copy = %q, %v, want the state copied back for a rollback", copiedReason, copiedKeys)
+	}
+
+	if _, err := pool.Exec(ctx, `UPDATE tracks SET acquisition_evidence = '{"grade":"B"}'::jsonb, rejected_source_keys = '{}' WHERE id = $1`, id.UUID()); err != nil {
+		t.Fatalf("write the track evidence: %v", err)
+	}
+	evidenceAfter, keysAfter := upgradeStateOf(t, pool, id)
+	if !slices.Equal(keysAfter, []string{"yt:bad"}) || evidenceAfter["best_available_reason"] != "nothing better" {
+		t.Errorf("state after a write to tracks = %v, %v, want it untouched (nothing flows from tracks to the state)", evidenceAfter, keysAfter)
 	}
 }

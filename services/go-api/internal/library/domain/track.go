@@ -85,7 +85,6 @@ type Track struct {
 
 	AcquisitionProvenance *string
 	AudioSourceURL        *string
-	RejectedSourceKeys    []string
 
 	ConfidenceScore *float64
 	EvidenceJSON    json.RawMessage
@@ -104,8 +103,6 @@ type Track struct {
 
 	relabelled bool
 }
-
-const maxRejectedSourceKeys = 25
 
 const maxTrackTextLength = 300
 
@@ -257,21 +254,6 @@ func (t *Track) SetAudioSource(url string) {
 		return
 	}
 	t.AudioSourceURL = &url
-}
-
-func (t *Track) RejectAudioSource(key string) {
-	if key == "" {
-		return
-	}
-	for _, existing := range t.RejectedSourceKeys {
-		if existing == key {
-			return
-		}
-	}
-	t.RejectedSourceKeys = append(t.RejectedSourceKeys, key)
-	if len(t.RejectedSourceKeys) > maxRejectedSourceKeys {
-		t.RejectedSourceKeys = t.RejectedSourceKeys[len(t.RejectedSourceKeys)-maxRejectedSourceKeys:]
-	}
 }
 
 func (t *Track) SetAcquisitionProvenance(p AcquisitionProvenance) {
