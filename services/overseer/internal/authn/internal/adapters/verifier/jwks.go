@@ -172,11 +172,19 @@ func (k jwk) ecKey() (*ecdsa.PublicKey, error) {
 	if err != nil {
 		return nil, errors.New("authn: bad ec y")
 	}
-	return &ecdsa.PublicKey{
-		Curve: curve,
-		X:     new(big.Int).SetBytes(xBytes),
-		Y:     new(big.Int).SetBytes(yBytes),
-	}, nil
+	size := (curve.Params().BitSize + 7) / 8
+	if len(xBytes) > size || len(yBytes) > size {
+		return nil, errors.New("authn: ec coordinate too long")
+	}
+	point := make([]byte, 1+2*size)
+	point[0] = 4
+	copy(point[1+size-len(xBytes):], xBytes)
+	copy(point[1+2*size-len(yBytes):], yBytes)
+	key, err := ecdsa.ParseUncompressedPublicKey(curve, point)
+	if err != nil {
+		return nil, errors.New("authn: ec point is not on the curve")
+	}
+	return key, nil
 }
 
 func ecCurve(crv string) (elliptic.Curve, error) {

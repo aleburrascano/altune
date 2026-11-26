@@ -105,6 +105,32 @@ func TestRejectsExpiredToken(t *testing.T) {
 	}
 }
 
+func TestRejectsKeyWhosePointIsOffTheCurve(t *testing.T) {
+	key := genKey(t)
+	pub, err := key.PublicKey.Bytes()
+	if err != nil {
+		t.Fatalf("public key bytes: %v", err)
+	}
+	const coord = 32
+	offCurveY := append([]byte(nil), pub[1+coord:]...)
+	offCurveY[coord-1] ^= 1
+	doc := map[string]any{"keys": []map[string]any{{
+		"kty": "EC", "crv": "P-256", "kid": "kid-1", "alg": "ES256", "use": "sig",
+		"x": base64.RawURLEncoding.EncodeToString(pub[1 : 1+coord]),
+		"y": base64.RawURLEncoding.EncodeToString(offCurveY),
+	}}}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(doc)
+	}))
+	defer srv.Close()
+	v := jwksVerifier(srv)
+
+	token := es256Token(t, key, "kid-1", validClaims("owner-sub"))
+	if _, err := v.Verify(context.Background(), token); err == nil {
+		t.Fatal("token verified against an off-curve key, want error")
+	}
+}
+
 func TestRejectsWrongSignature(t *testing.T) {
 	srvKey := genKey(t)
 	attackerKey := genKey(t)
