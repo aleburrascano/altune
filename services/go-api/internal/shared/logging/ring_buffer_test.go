@@ -261,7 +261,7 @@ func TestRingBuffer_EvictsRecordsPastRetention(t *testing.T) {
 	})
 }
 
-func TestSetup_RingBufferEvictsByTheClockNotTheWallClock(t *testing.T) {
+func TestSetup_RingBufferDropsRecordsOlderThanItsRetentionWindow(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		prev := slog.Default()
 		t.Cleanup(func() { slog.SetDefault(prev) })

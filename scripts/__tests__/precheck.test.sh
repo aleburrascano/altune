@@ -1033,6 +1033,9 @@ edit_go_file internal/shared/s/s.go
 run_with_tools
 expect_rc 0
 expect_log "go run ./scripts/lintdoors --exports ."
+GO_LINTDOORS_STUB_RC=1 run_with_tools
+expect_rc 1
+expect_out "FAIL  go-api module doors"
 
 CASE="a change to go.sum is checked for tidiness and a dirty go.sum turns a push red"
 new_repo

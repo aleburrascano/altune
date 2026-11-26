@@ -5,4 +5,8 @@ type (
 	Assembly = composed
 )
 
-var Assemble = assemble
+var (
+	Assemble        = assemble
+	NewAlertMonitor = newAlertMonitor
+	NewEvalMeter    = newEvalMeter
+)
