@@ -39,7 +39,6 @@ type (
 	UpstreamStatusError          = memory.UpstreamStatusError
 	StoredArtist                 = memory.StoredArtist
 	TrackerSongs                 = memory.TrackerSongs
-	AlbumTracksOption            = content.AlbumTracksOption
 	AlbumTracksRequest           = content.AlbumTracksRequest
 	CircuitState                 = providercall.CircuitState
 	Favorite                     = domain.Favorite

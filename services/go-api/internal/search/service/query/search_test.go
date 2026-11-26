@@ -1472,8 +1472,7 @@ func TestContentBreaker_SearchTrippedProviderShortCircuitsContent(t *testing.T) 
 					calls.Add(1)
 					return []search.SearchResult{breakerTrack(search.ProviderDeezer, "1")}, nil
 				}}
-				svc := search.NewGetArtistContentService(map[search.ProviderName]search.ArtistContentProvider{search.ProviderDeezer: p},
-					search.WithContentCircuitBreaker(cb))
+				svc := searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{search.ProviderDeezer: p}, searchtest.ArtistBreaker(cb))
 				return svc.GetTopTracks(context.Background(), search.ProviderDeezer, "42", nil, 10)
 			},
 		},
@@ -1485,8 +1484,7 @@ func TestContentBreaker_SearchTrippedProviderShortCircuitsContent(t *testing.T) 
 					calls.Add(1)
 					return []search.SearchResult{search.V2Album(search.ProviderDeezer, "a", "DAMN.")}, nil
 				}}
-				svc := search.NewGetArtistContentService(map[search.ProviderName]search.ArtistContentProvider{search.ProviderDeezer: p},
-					search.WithContentCircuitBreaker(cb))
+				svc := searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{search.ProviderDeezer: p}, searchtest.ArtistBreaker(cb))
 				return svc.GetAlbums(context.Background(), search.ProviderDeezer, "42", nil, 10)
 			},
 		},
@@ -1498,8 +1496,7 @@ func TestContentBreaker_SearchTrippedProviderShortCircuitsContent(t *testing.T) 
 					calls.Add(1)
 					return []search.SearchResult{search.V2Album(search.ProviderDeezer, "a", "DAMN.")}, nil
 				}}
-				svc := search.NewGetArtistContentService(map[search.ProviderName]search.ArtistContentProvider{search.ProviderDeezer: p},
-					search.WithContentIdentityStore(&search.FakeIdentityStore{}), search.WithContentCircuitBreaker(cb))
+				svc := searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{search.ProviderDeezer: p}, searchtest.ArtistIdentities(&search.FakeIdentityStore{}), searchtest.ArtistBreaker(cb))
 				return svc.GetAlbums(context.Background(), search.ProviderDeezer, "42", nil, 10)
 			},
 		},
@@ -1512,8 +1509,7 @@ func TestContentBreaker_SearchTrippedProviderShortCircuitsContent(t *testing.T) 
 					return []search.SearchResult{breakerTrack(search.ProviderDeezer, "1")}, nil
 				}}
 				searcher := &search.CountingProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.AlbumSearchResult("Kendrick Lamar", "9")}}
-				svc := search.NewGetAlbumTracksService(map[search.ProviderName]search.AlbumContentProvider{search.ProviderDeezer: p},
-					search.WithAlbumFallbackSearcher(searcher), search.WithAlbumCircuitBreaker(cb))
+				svc := searchtest.NewAlbumTracks(t, map[search.ProviderName]search.AlbumContentProvider{search.ProviderDeezer: p}, searchtest.AlbumFallbackSearcher(searcher), searchtest.AlbumBreaker(cb))
 				resp, err := svc.ExecuteRequest(context.Background(), search.AlbumTracksRequest{
 					Provider: search.ProviderDeezer, ExternalID: "7", Title: "DAMN.", Artist: "Kendrick Lamar",
 				})
@@ -1555,9 +1551,9 @@ func TestContentBreaker_SearchTrippedProviderShortCircuitsContent(t *testing.T) 
 func TestContentBreaker_SingleProviderOpenCircuitReportsCircuitOpen(t *testing.T) {
 	cb := search.NewCircuitBreaker()
 	tripViaSearch(t, cb, search.ProviderDeezer)
-	svc := search.NewGetArtistContentService(map[search.ProviderName]search.ArtistContentProvider{
+	svc := searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{
 		search.ProviderDeezer: &search.FakeArtistContentProvider{},
-	}, search.WithContentCircuitBreaker(cb))
+	}, searchtest.ArtistBreaker(cb))
 
 	resp, err := svc.GetTopTracks(context.Background(), search.ProviderDeezer, "42", nil, 10)
 	if err != nil {
@@ -1576,8 +1572,7 @@ func TestContentBreaker_ContentFailuresTripSearch(t *testing.T) {
 		contentCalls.Add(1)
 		return nil, search.ErrUpstreamDown
 	}}
-	content := search.NewGetArtistContentService(map[search.ProviderName]search.ArtistContentProvider{search.ProviderDeezer: p},
-		search.WithContentCircuitBreaker(cb))
+	content := searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{search.ProviderDeezer: p}, searchtest.ArtistBreaker(cb))
 	for range breakerTripsAfter + 2 {
 		if _, err := content.GetTopTracks(context.Background(), search.ProviderDeezer, "42", nil, 10); err != nil {
 			t.Fatalf("error = %v", err)
@@ -1654,8 +1649,7 @@ func TestContentBreaker_HalfOpenProbeOutcomes(t *testing.T) {
 				}
 				return []search.SearchResult{search.V2Album(search.ProviderDeezer, "a", "DAMN.")}, tc.err
 			}}
-			svc := search.NewGetArtistContentService(map[search.ProviderName]search.ArtistContentProvider{search.ProviderDeezer: p},
-				search.WithContentIdentityStore(&search.FakeIdentityStore{}), search.WithContentCircuitBreaker(cb))
+			svc := searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{search.ProviderDeezer: p}, searchtest.ArtistIdentities(&search.FakeIdentityStore{}), searchtest.ArtistBreaker(cb))
 
 			_, _ = svc.GetAlbums(ctx, search.ProviderDeezer, "42", nil, 10)
 
@@ -1706,8 +1700,7 @@ func TestContentBreaker_PersistentAuthAndBadPayloadTripBreaker(t *testing.T) {
 			p := &search.FakeArtistContentProvider{GetTopTracksFn: func(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
 				return nil, tc.err
 			}}
-			content := search.NewGetArtistContentService(map[search.ProviderName]search.ArtistContentProvider{search.ProviderDeezer: p},
-				search.WithContentCircuitBreaker(cb))
+			content := searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{search.ProviderDeezer: p}, searchtest.ArtistBreaker(cb))
 			for range breakerTripsAfter {
 				_, _ = content.GetTopTracks(context.Background(), search.ProviderDeezer, "42", nil, 10)
 			}

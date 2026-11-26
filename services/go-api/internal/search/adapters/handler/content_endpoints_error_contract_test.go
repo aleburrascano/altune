@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/searchtest"
 	"context"
 	"encoding/json"
 	"errors"
@@ -53,12 +54,12 @@ func errorContractRouter(t *testing.T) chi.Router {
 	timingOut := timingOutContentProvider{}
 	healthy := stubContentProvider{provider: search.ProviderSoundCloud}
 	h := search.NewDiscoveryHandler(search.DiscoveryServices{
-		Album: search.NewGetAlbumTracksService(map[search.ProviderName]search.AlbumContentProvider{
+		Album: searchtest.NewAlbumTracks(t, map[search.ProviderName]search.AlbumContentProvider{
 			search.ProviderITunes: timingOut, search.ProviderSoundCloud: healthy,
-		}, search.WithAlbumCircuitBreaker(breaker)),
-		Artist: search.NewGetArtistContentService(map[search.ProviderName]search.ArtistContentProvider{
+		}, searchtest.AlbumBreaker(breaker)),
+		Artist: searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{
 			search.ProviderITunes: timingOut, search.ProviderSoundCloud: healthy,
-		}, search.WithContentCircuitBreaker(breaker)),
+		}, searchtest.ArtistBreaker(breaker)),
 		Related: search.NewGetRelatedTracksService(map[string]search.RelatedTracksProvider{
 			search.ProviderITunes.String(): timingOut, search.ProviderSoundCloud.String(): healthy,
 		}, search.WithRelatedCircuitBreaker(breaker)),
@@ -185,7 +186,7 @@ func TestArtistContent_OutcomeFollowsBothHalves(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			h := search.NewDiscoveryHandler(search.DiscoveryServices{
-				Artist: search.NewGetArtistContentService(map[search.ProviderName]search.ArtistContentProvider{
+				Artist: searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{
 					search.ProviderDeezer: scriptedArtistProvider{tracksErr: tc.tracksErr, albumsErr: tc.albumsErr},
 				}),
 			})

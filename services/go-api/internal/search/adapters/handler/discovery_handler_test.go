@@ -180,12 +180,12 @@ func buildDiscoveryRouter(t *testing.T,
 
 	var albumSvc *search.GetAlbumTracksService
 	if albumProviders != nil {
-		albumSvc = search.NewGetAlbumTracksService(albumProviders)
+		albumSvc = searchtest.NewAlbumTracks(t, albumProviders)
 	}
 
 	var artistSvc *search.GetArtistContentService
 	if artistProviders != nil {
-		artistSvc = search.NewGetArtistContentService(artistProviders)
+		artistSvc = searchtest.NewArtistContent(t, artistProviders)
 	}
 
 	h := search.NewDiscoveryHandler(search.DiscoveryServices{

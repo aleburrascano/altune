@@ -29,8 +29,8 @@ func paramValidationRouter(t *testing.T) chi.Router {
 		Search:       searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{&fakeSearchProvider{name: search.ProviderDeezer}}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.History = historyRepo }),
 		History:      search.NewListSearchHistoryService(historyRepo),
 		ClearHistory: search.NewClearSearchHistoryService(historyRepo),
-		Album:        search.NewGetAlbumTracksService(albumProviders),
-		Artist:       search.NewGetArtistContentService(artistProviders),
+		Album:        searchtest.NewAlbumTracks(t, albumProviders),
+		Artist:       searchtest.NewArtistContent(t, artistProviders),
 		Enrich:       mustEnrichment(search.NewEnrichmentService(&fakeMetadataEnricher{}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{})),
 	})
 	r := chi.NewRouter()

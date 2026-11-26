@@ -9,47 +9,58 @@ import (
 	"log/slog"
 )
 
-type mbFeaturedSearcher interface {
+type MBFeaturedSearcher interface {
 	SearchStructured(ctx context.Context, artist, track string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error)
 }
 
-type deezerFeaturedLookup interface {
+type DeezerFeaturedLookup interface {
 	ResolveID(ctx context.Context, kind domain.ResultKind, artist, title string) (string, error)
 	LookupTrackFeatured(ctx context.Context, trackID string) ([]domain.FeaturedArtist, error)
 }
 
+var errFeaturedSourceAbsent = errors.New("featured source is switched off")
+
 type FeaturedArtistResolver struct {
-	mb     mbFeaturedSearcher
-	deezer deezerFeaturedLookup
+	mb     MBFeaturedSearcher
+	deezer DeezerFeaturedLookup
 }
 
-func NewFeaturedArtistResolver(mb mbFeaturedSearcher, deezer deezerFeaturedLookup) *FeaturedArtistResolver {
-	return &FeaturedArtistResolver{mb: mb, deezer: deezer}
+func NewFeaturedArtistResolver(mb MBFeaturedSearcher, deezer DeezerFeaturedLookup) (*FeaturedArtistResolver, error) {
+	if err := requireCollaborators("the featured artist resolver",
+		collaborator{"a MusicBrainz featured searcher", mb == nil},
+		collaborator{"a Deezer featured lookup", deezer == nil},
+	); err != nil {
+		return nil, err
+	}
+	return &FeaturedArtistResolver{mb: mb, deezer: deezer}, nil
+}
+
+type featuredSource struct {
+	name  string
+	fetch func(ctx context.Context, artist, title string) ([]domain.FeaturedArtist, error)
 }
 
 func (r *FeaturedArtistResolver) Resolve(ctx context.Context, artist, title string) ([]domain.FeaturedArtist, error) {
 	var attempted int
 	var errs []error
-	var mbFeats, dzFeats []domain.FeaturedArtist
-	if r.mb != nil {
-		attempted++
-		feats, err := r.mbFeatured(ctx, artist, title)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("musicbrainz featured: %w", err))
-			logFeaturedFailure(ctx, "musicbrainz", err)
-		}
-		mbFeats = feats
+	sources := []featuredSource{
+		{"musicbrainz", r.mbFeatured},
+		{"deezer", r.deezerFeatured},
 	}
-	if r.deezer != nil {
-		attempted++
-		feats, err := r.deezerFeatured(ctx, artist, title)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("deezer featured: %w", err))
-			logFeaturedFailure(ctx, "deezer", err)
+	found := make([][]domain.FeaturedArtist, len(sources))
+	for i, src := range sources {
+		feats, err := src.fetch(ctx, artist, title)
+		if errors.Is(err, errFeaturedSourceAbsent) {
+			continue
 		}
-		dzFeats = feats
+		attempted++
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s featured: %w", src.name, err))
+			logFeaturedFailure(ctx, src.name, err)
+		}
+		found[i] = feats
 	}
-	merged := MergeFeaturedArtists(mbFeats, dzFeats)
+	merged := MergeFeaturedArtists(found[0], found[1])
 	if len(merged) > 0 {
 		return merged, nil
 	}

@@ -3,20 +3,33 @@ package search
 import content "altune/go-api/internal/search/service/artistpage"
 
 type (
-	ArtistContentOption     = content.ArtistContentOption
+	AlbumFallback           = content.AlbumFallback
+	Anchoring               = content.Anchoring
+	ArtistIdentity          = content.ArtistIdentity
+	DeezerFeaturedLookup    = content.DeezerFeaturedLookup
+	DiscographyObserver     = content.DiscographyObserver
+	FeaturedEnrichment      = content.FeaturedEnrichment
 	GetAlbumTracksService   = content.GetAlbumTracksService
 	GetArtistContentService = content.GetArtistContentService
+	MBFeaturedSearcher      = content.MBFeaturedSearcher
+	NoAlbumFallback         = content.NoAlbumFallback
+	NoAnchoring             = content.NoAnchoring
+	NoDeezerFeatured        = content.NoDeezerFeatured
+	NoDiscographyObserver   = content.NoDiscographyObserver
+	NoFeaturedEnrichment    = content.NoFeaturedEnrichment
+	NoMBFeatured            = content.NoMBFeatured
+	SeedPathIdentity        = content.SeedPathIdentity
 )
 
 var (
-	NewFeaturedArtistResolver  = content.NewFeaturedArtistResolver
-	NewGetAlbumTracksService   = content.NewGetAlbumTracksService
-	NewGetArtistContentService = content.NewGetArtistContentService
-	WithAlbumCircuitBreaker    = content.WithAlbumCircuitBreaker
-	WithAlbumFallbackSearcher  = content.WithAlbumFallbackSearcher
-	WithContentCircuitBreaker  = content.WithContentCircuitBreaker
-	WithContentEventStore      = content.WithContentEventStore
-	WithContentIdentityStore   = content.WithContentIdentityStore
-	WithMBAnchor               = content.WithMBAnchor
-	WithTrackFeatured          = content.WithTrackFeatured
+	ErrArtistPageCollaboratorRequired = content.ErrCollaboratorRequired
+
+	NewDeezerFeaturedEnrichment = content.NewDeezerFeaturedEnrichment
+	NewDiscographyTelemetry     = content.NewDiscographyTelemetry
+	NewFeaturedArtistResolver   = content.NewFeaturedArtistResolver
+	NewGetAlbumTracksService    = content.NewGetAlbumTracksService
+	NewGetArtistContentService  = content.NewGetArtistContentService
+	NewMusicBrainzAnchoring     = content.NewMusicBrainzAnchoring
+	NewSearchAlbumFallback      = content.NewSearchAlbumFallback
+	NewStoreIdentity            = content.NewStoreIdentity
 )

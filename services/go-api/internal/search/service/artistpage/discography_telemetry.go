@@ -13,19 +13,30 @@ import (
 
 const emitTimeout = 3 * time.Second
 
+type DiscographyObserver interface {
+	emit(ctx context.Context, artistRef string, merged []albumgrouping.MergedRelease)
+}
+
+type NoDiscographyObserver struct{}
+
+func (NoDiscographyObserver) emit(context.Context, string, []albumgrouping.MergedRelease) {}
+
 type DiscographyTelemetry struct {
 	eventStore ports.EventStore
 	bg         *background.Tracker
 }
 
-func newDiscographyTelemetry(eventStore ports.EventStore, bg *background.Tracker) *DiscographyTelemetry {
-	return &DiscographyTelemetry{eventStore: eventStore, bg: bg}
+func NewDiscographyTelemetry(eventStore ports.EventStore, bg *background.Tracker) (*DiscographyTelemetry, error) {
+	if err := requireCollaborators("the discography telemetry",
+		collaborator{"an event store", eventStore == nil},
+		collaborator{"a background tracker", bg == nil},
+	); err != nil {
+		return nil, err
+	}
+	return &DiscographyTelemetry{eventStore: eventStore, bg: bg}, nil
 }
 
 func (t *DiscographyTelemetry) emit(parentCtx context.Context, artistRef string, merged []albumgrouping.MergedRelease) {
-	if t == nil || t.eventStore == nil {
-		return
-	}
 	payload, ok := t.safePayload(parentCtx, artistRef, merged)
 	if !ok {
 		return

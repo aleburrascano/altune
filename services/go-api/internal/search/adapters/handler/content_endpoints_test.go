@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/searchtest"
 	"context"
 	"encoding/json"
 	"errors"
@@ -179,7 +180,7 @@ func (p partialContentProvider) GetArtistAlbums(_ context.Context, _ search.Prov
 	return p.result(search.ResultKindAlbum, id)
 }
 
-func identityContentRouter(down map[search.ProviderName]bool) chi.Router {
+func identityContentRouter(t testing.TB, down map[search.ProviderName]bool) chi.Router {
 	all := []search.ProviderName{
 		search.ProviderDeezer, search.ProviderMusicBrainz, search.ProviderSoundCloud,
 		search.ProviderITunes, search.ProviderTheAudioDB,
@@ -192,8 +193,7 @@ func identityContentRouter(down map[search.ProviderName]bool) chi.Router {
 		providers[pn] = partialContentProvider{provider: pn, down: down[pn]}
 		xref[pn.Key()] = "id-" + pn.String()
 	}
-	svc := search.NewGetArtistContentService(providers,
-		search.WithContentIdentityStore(stubIdentityStore{xref: xref}))
+	svc := searchtest.NewArtistContent(t, providers, searchtest.ArtistIdentities(stubIdentityStore{xref: xref}))
 	h := search.NewDiscoveryHandler(search.DiscoveryServices{Artist: svc})
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
@@ -234,7 +234,7 @@ func TestArtistContentEndpoints_IdentityFanOutReportsPartial(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			router := identityContentRouter(tc.down)
+			router := identityContentRouter(t, tc.down)
 			bodies := map[string]json.RawMessage{}
 			for _, path := range []string{"top-tracks", "albums"} {
 				rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/id-deezer/"+path+"?name=Artist", nil)
@@ -323,7 +323,7 @@ func unauthenticatedDiscoveryRouter(h *search.DiscoveryHandler) chi.Router {
 func TestHandleArtistContent_NoIdentityIs401AndSkipsService(t *testing.T) {
 	provider := &countingArtistContentProvider{}
 	h := search.NewDiscoveryHandler(search.DiscoveryServices{
-		Artist: search.NewGetArtistContentService(map[search.ProviderName]search.ArtistContentProvider{
+		Artist: searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{
 			search.ProviderDeezer: provider,
 		}),
 	})
@@ -363,7 +363,7 @@ func TestArtistContentEndpoints_AskTheProvidersTheSearchCardKnows(t *testing.T) 
 		}
 		return &search.FakeArtistContentProvider{GetAlbumsFn: record, GetTopTracksFn: record}
 	}
-	svc := search.NewGetArtistContentService(map[search.ProviderName]search.ArtistContentProvider{
+	svc := searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{
 		search.ProviderDeezer:  recording(search.ProviderDeezer),
 		search.ProviderSpotify: recording(search.ProviderSpotify),
 	})
@@ -383,7 +383,7 @@ func TestArtistContentEndpoints_AskTheProvidersTheSearchCardKnows(t *testing.T) 
 }
 
 func TestArtistContentEndpoints_IgnoreTheArtistName(t *testing.T) {
-	svc := search.NewGetArtistContentService(map[search.ProviderName]search.ArtistContentProvider{
+	svc := searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{
 		search.ProviderDeezer: &search.FakeArtistContentProvider{Albums: seedTracks(1), TopTracks: seedTracks(1)},
 	})
 	router := chi.NewRouter()
@@ -404,7 +404,7 @@ func TestAlbumTracks_ServesLongAlbumsWholeAndPassesTheCardIDs(t *testing.T) {
 		gotSpotifyID = id
 		return nil, nil
 	}}
-	svc := search.NewGetAlbumTracksService(map[search.ProviderName]search.AlbumContentProvider{
+	svc := searchtest.NewAlbumTracks(t, map[search.ProviderName]search.AlbumContentProvider{
 		search.ProviderDeezer:  deezer,
 		search.ProviderSpotify: spotify,
 	})
@@ -444,7 +444,7 @@ func TestHandleArtistAlbums_LimitClamping(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			svc := search.NewGetArtistContentService(map[search.ProviderName]search.ArtistContentProvider{
+			svc := searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{
 				search.ProviderDeezer: &search.FakeArtistContentProvider{Albums: numberedAlbums(120)},
 			})
 			router := chi.NewRouter()
