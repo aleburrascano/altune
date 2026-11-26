@@ -42,10 +42,12 @@ func (a *App) discoveryDeps(ctx context.Context, transport http.RoundTripper) se
 	return deps
 }
 
+const behavioralRankingRefreshInterval = 30 * time.Minute
+
 func (a *App) startDiscoveryBackgroundJobs(ctx context.Context, disc *search.Discovery) {
 	a.startUnreleasedRefresh(disc.UnreleasedRefresh)
 	if a.cfg.BehavioralRankingEnabled {
-		a.jobs.EveryInstance(ctx, jobs.BehavioralRankingRefresh, 30*time.Minute,
+		a.jobs.EveryInstance(ctx, jobs.BehavioralRankingRefresh, behavioralRankingRefreshInterval,
 			jobs.WarnOnFailure(jobs.BehavioralRankingRefresh, disc.Search.RefreshBehavioralScores))
 	}
 	a.startDiscographyPrune(ctx, disc.Events)

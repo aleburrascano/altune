@@ -13,13 +13,18 @@ import (
 	"go.opentelemetry.io/otel"
 )
 
+const (
+	discoveryProviderTimeout = 10 * time.Second
+	discoveryChartTimeout    = 15 * time.Second
+)
+
 func Deps(ctx context.Context, cfg *config.Config, transport http.RoundTripper) search.Deps {
 	return search.Deps{
 		Lifecycle:       ctx,
 		Logger:          slog.Default(),
 		Transport:       transport,
-		ProviderTimeout: 10 * time.Second,
-		ChartTimeout:    15 * time.Second,
+		ProviderTimeout: discoveryProviderTimeout,
+		ChartTimeout:    discoveryChartTimeout,
 		CacheOps:        cacheOps(),
 		Providers:       discoveryProviderSettings(cfg),
 		Search:          discoverySearchSettings(cfg),
