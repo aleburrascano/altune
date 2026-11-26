@@ -1,4 +1,7 @@
 {
+  "github-mirror.yml#mirror#fetch main into the bridge repo": {
+    "allow": "delivery: fetches gitea main into the bridge's bare repo, and checks nothing"
+  },
   "github-mirror.yml#mirror#push main to github": {
     "allow": "delivery: pushes gitea main to the github mirror, and checks nothing"
   },

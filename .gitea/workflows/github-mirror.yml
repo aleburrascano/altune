@@ -14,7 +14,6 @@ defaults:
     shell: bash
 
 env:
-  GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
   GITEA_GIT: ${{ github.server_url }}/${{ github.repository }}.git
   BRIDGE_GIT: /home/ubuntu/.cache/altune-github-bridge.git
   MIRROR_KEY: /home/ubuntu/.ssh/altune-github-mirror.key
@@ -25,7 +24,9 @@ jobs:
     runs-on: host
     timeout-minutes: 10
     steps:
-      - name: push main to github
+      - name: fetch main into the bridge repo
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
         run: |
           set -euo pipefail
           [ -e "$BRIDGE_GIT/HEAD" ] || git init -q --bare "$BRIDGE_GIT"
@@ -35,4 +36,7 @@ jobs:
               git --git-dir "$BRIDGE_GIT" fetch -q "$GITEA_GIT" '+refs/heads/main:refs/heads/main'
           }
           fetch_main || { sleep 5; fetch_main; }
+      - name: push main to github
+        run: |
+          set -euo pipefail
           git --git-dir "$BRIDGE_GIT" show main:scripts/ci/github-mirror.sh | bash
