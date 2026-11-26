@@ -84,7 +84,7 @@ export function TopResultCard({
         onPress={() => onPress(item, 0)}
         {...pressableProps}
         accessibilityRole="button"
-        accessibilityLabel={`${item.title}${item.subtitle ? `, ${item.subtitle}` : ''}, ${label}`}
+        accessibilityLabel={`${item.title}${item.subtitle !== null && item.subtitle.length > 0 ? `, ${item.subtitle}` : ''}, ${label}`}
       >
         <Card
           testID="discover-top-result-card"

@@ -15,7 +15,7 @@ function NoticeText(): ReactElement {
 }
 
 export function RefreshFailedNotice({ visible }: { visible: boolean | undefined }) {
-  if (!visible) return null;
+  if (visible !== true) return null;
   return <NoticeText />;
 }
 
@@ -32,7 +32,7 @@ export function IncompleteResultsBanner({
   visible: boolean | undefined;
 }): ReactElement | null {
   const theme = useTheme();
-  if (!visible) return null;
+  if (visible !== true) return null;
   return (
     <View testID="discover-incomplete-results" style={bannerStyles.incompleteBanner}>
       <AlertTriangle size={14} color={theme.color.textSecondary} />

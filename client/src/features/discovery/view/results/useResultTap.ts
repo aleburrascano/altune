@@ -27,7 +27,9 @@ function globalRank(results: readonly DiscoveryResult[], result: DiscoveryResult
   const bySource = results.findIndex((r) => sameSource(r, result));
   if (bySource >= 0) return bySource;
   const signature = result.result_signature;
-  return signature ? results.findIndex((r) => r.result_signature === signature) : -1;
+  return signature !== undefined && signature !== ''
+    ? results.findIndex((r) => r.result_signature === signature)
+    : -1;
 }
 
 function resultClickedIdentity(tapped: DiscoveryResult) {
