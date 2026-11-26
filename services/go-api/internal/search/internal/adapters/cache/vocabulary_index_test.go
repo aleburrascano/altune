@@ -48,7 +48,7 @@ func newRecordingVocabStore(t *testing.T) (*cache.RedisVocabularyStore, *pipelin
 	t.Cleanup(func() { _ = client.Close() })
 	rec := &pipelineRecorder{}
 	client.AddHook(rec)
-	return cache.NewVocabularyStore(client, lowercaseNorm), rec
+	return newVocabularyStore(t, client, lowercaseNorm, cache.NoMetaphone), rec
 }
 
 func TestVocabularyStore_OversizedTerm_NotIndexed(t *testing.T) {

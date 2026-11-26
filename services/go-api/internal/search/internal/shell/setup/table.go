@@ -85,12 +85,14 @@ type providerTable struct {
 	providers []provider
 }
 
-func newProviderTable(s connections.ProviderSettings, c connections.Clients, st connections.Stores) *providerTable {
+func newProviderTable(s connections.ProviderSettings, c connections.Clients, st connections.Stores) (*providerTable, error) {
 	t := &providerTable{}
 	t.addDeezer(c)
 	t.addAppleMusic(c)
 	t.addMusicBrainz(s.MusicBrainzUserAgent, c)
-	t.addSoundCloud(c)
+	if err := t.addSoundCloud(c); err != nil {
+		return nil, err
+	}
 	t.addYouTubeMusic(c)
 	t.addSpotify(c)
 	t.addITunes(c)
@@ -99,8 +101,10 @@ func newProviderTable(s connections.ProviderSettings, c connections.Clients, st 
 	t.addFanartTV(s.FanartTVAPIKey, c)
 	t.addGenius(s.GeniusAccessToken, c)
 	t.addTheAudioDB(s.TheAudioDBAPIKey, c)
-	t.addTrackers(s.GoogleSheetsAPIKey, s.TrackerHubSheetID, c, st)
-	return t
+	if err := t.addTrackers(s.GoogleSheetsAPIKey, s.TrackerHubSheetID, c, st); err != nil {
+		return nil, err
+	}
+	return t, nil
 }
 
 func (t *providerTable) add(p provider) {

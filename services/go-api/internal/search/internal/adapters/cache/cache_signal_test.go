@@ -216,7 +216,7 @@ func TestCacheSignal_VocabularyTrigramReadFailureIsLoggedAndCounted(t *testing.T
 		single:   func(goredis.Cmder) {},
 		pipeline: func([]goredis.Cmder) error { return errors.New("pipeline broke") },
 	}
-	store := cache.NewVocabularyStore(scriptedClient(t, hook), identityNormalize, cache.WithVocabSignal(probe.signal()))
+	store := newVocabularyStore(t, scriptedClient(t, hook), identityNormalize, cache.NoMetaphone, cache.WithVocabSignal(probe.signal()))
 
 	if _, err := store.FindClosest(context.Background(), "abcd", 5); err != nil {
 		t.Fatalf("FindClosest err = %v, want degraded nil", err)
@@ -232,12 +232,7 @@ func TestCacheSignal_VocabularyTrigramReadFailureIsLoggedAndCounted(t *testing.T
 func TestCacheSignal_VocabularyMetaphoneReadFailureIsLoggedAndCounted(t *testing.T) {
 	probe := newSignalProbe(t)
 	hook := scriptedRedis{single: func(cmd goredis.Cmder) { cmd.SetErr(errors.New("smembers broke")) }}
-	store := cache.NewVocabularyStore(
-		scriptedClient(t, hook),
-		identityNormalize,
-		cache.WithMetaphone(func(string) string { return "ABCT" }),
-		cache.WithVocabSignal(probe.signal()),
-	)
+	store := newVocabularyStore(t, scriptedClient(t, hook), identityNormalize, func(string) string { return "ABCT" }, cache.WithVocabSignal(probe.signal()))
 
 	if _, err := store.FindClosest(context.Background(), "abcd", 5); err != nil {
 		t.Fatalf("FindClosest err = %v, want degraded nil", err)

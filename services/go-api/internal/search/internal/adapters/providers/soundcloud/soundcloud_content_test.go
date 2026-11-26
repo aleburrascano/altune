@@ -13,7 +13,7 @@ func TestSoundCloudDiscographyLive(t *testing.T) {
 	if os.Getenv("SC_LIVE") != "1" {
 		t.Skip("set SC_LIVE=1")
 	}
-	a := search.NewSoundCloudAPIAdapter(&http.Client{Timeout: 20 * time.Second}, nil)
+	a := mustSoundCloudAPI(t, &http.Client{Timeout: 20 * time.Second}, search.NoSoundCloudFallback{})
 	ctx := context.Background()
 
 	albums, err := a.GetArtistAlbums(ctx, search.ProviderSoundCloud, "che")
@@ -47,7 +47,7 @@ func TestSoundCloudAlbumTracksLive(t *testing.T) {
 	if os.Getenv("SC_LIVE") != "1" {
 		t.Skip("set SC_LIVE=1")
 	}
-	a := search.NewSoundCloudAPIAdapter(&http.Client{Timeout: 20 * time.Second}, nil)
+	a := mustSoundCloudAPI(t, &http.Client{Timeout: 20 * time.Second}, search.NoSoundCloudFallback{})
 	ctx := context.Background()
 
 	albums, err := a.GetArtistAlbums(ctx, search.ProviderSoundCloud, "che")

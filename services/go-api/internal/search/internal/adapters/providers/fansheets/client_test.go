@@ -2,6 +2,7 @@ package fansheets_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/core/ports"
 	"bytes"
 	"context"
 	"errors"
@@ -118,14 +119,32 @@ func (s *sheetsServer) httpClient() *http.Client {
 	return &http.Client{Transport: redirectTransport{target: target}}
 }
 
-func (s *sheetsServer) client(cache *fakeIndexCache) interface {
+func (s *sheetsServer) client(t *testing.T, cache *fakeIndexCache) interface {
 	ArtistSongs(context.Context, string) ([]search.UnreleasedSong, error)
 	Artists(context.Context) ([]string, error)
 } {
+	t.Helper()
 	if cache == nil {
-		return search.NewTrackersClient(s.httpClient(), testKey, "HUB1234567890123456789", nil)
+		return newTrackersClient(t, s.httpClient(), search.NoTrackerIndexCache{})
 	}
-	return search.NewTrackersClient(s.httpClient(), testKey, "HUB1234567890123456789", cache)
+	return newTrackersClient(t, s.httpClient(), cache)
+}
+
+func newTrackersClient(t *testing.T, httpClient *http.Client, index ports.TrackerIndexCache) *search.TrackersClient {
+	t.Helper()
+	client, err := search.NewTrackersClient(httpClient, testKey, "HUB1234567890123456789", index)
+	if err != nil {
+		t.Fatalf("search.NewTrackersClient: %v", err)
+	}
+	return client
+}
+
+func TestNewClient_RefusesAMissingIndexCache(t *testing.T) {
+	client, err := search.NewTrackersClient(http.DefaultClient, testKey, "hub", nil)
+
+	if client != nil || !errors.Is(err, search.ErrTrackersCollaboratorRequired) {
+		t.Fatalf("got (%v, %v), want a refusal wrapping ErrTrackersCollaboratorRequired", client, err)
+	}
 }
 
 func captureLog(t *testing.T) *bytes.Buffer {
@@ -139,7 +158,7 @@ func captureLog(t *testing.T) *bytes.Buffer {
 
 func TestClient_ArtistSongsReturnsTheTrackersFullLeaks(t *testing.T) {
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
-	songs, err := srv.client(&fakeIndexCache{}).ArtistSongs(context.Background(), "Ken Carson")
+	songs, err := srv.client(t, &fakeIndexCache{}).ArtistSongs(context.Background(), "Ken Carson")
 	if err != nil {
 		t.Fatalf("ArtistSongs: %v", err)
 	}
@@ -155,7 +174,7 @@ func TestClient_ArtistSongsReturnsTheTrackersFullLeaks(t *testing.T) {
 func TestClient_SendsTheKeyInAHeaderNeverInTheURL(t *testing.T) {
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
 	srv.tabs = tabsBody("Unreleased")
-	if _, err := srv.client(nil).ArtistSongs(context.Background(), "Ken Carson"); err != nil {
+	if _, err := srv.client(t, nil).ArtistSongs(context.Background(), "Ken Carson"); err != nil {
 		t.Fatal(err)
 	}
 	query, _ := srv.lastQuery.Load().(string)
@@ -178,7 +197,7 @@ func TestClient_SendsTheKeyInAHeaderNeverInTheURL(t *testing.T) {
 func TestClient_HubIndexIsCachedAcrossCalls(t *testing.T) {
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
 	cache := &fakeIndexCache{}
-	c := srv.client(cache)
+	c := srv.client(t, cache)
 	for range 2 {
 		if _, err := c.ArtistSongs(context.Background(), "Ken Carson"); err != nil {
 			t.Fatal(err)
@@ -191,7 +210,7 @@ func TestClient_HubIndexIsCachedAcrossCalls(t *testing.T) {
 
 func TestClient_ArtistNotOnTheHubIsEmptyWithoutASheetFetch(t *testing.T) {
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), nil)
-	songs, err := srv.client(&fakeIndexCache{}).ArtistSongs(context.Background(), "Nobody Known")
+	songs, err := srv.client(t, &fakeIndexCache{}).ArtistSongs(context.Background(), "Nobody Known")
 	if err != nil || songs == nil || len(songs) != 0 || srv.artistCalls.Load() != 0 {
 		t.Errorf("songs = %v, err = %v, sheet calls = %d", songs, err, srv.artistCalls.Load())
 	}
@@ -200,7 +219,7 @@ func TestClient_ArtistNotOnTheHubIsEmptyWithoutASheetFetch(t *testing.T) {
 func TestClient_ASheetsOutageIsAnError(t *testing.T) {
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), nil)
 	srv.artistCode = http.StatusTooManyRequests
-	if _, err := srv.client(&fakeIndexCache{}).ArtistSongs(context.Background(), "Ken Carson"); err == nil {
+	if _, err := srv.client(t, &fakeIndexCache{}).ArtistSongs(context.Background(), "Ken Carson"); err == nil {
 		t.Error("a 429 from Sheets must surface as an error")
 	}
 }
@@ -209,7 +228,7 @@ func TestClient_ReadsTheUnreleasedTabWhateverItIsCalled(t *testing.T) {
 	for _, title := range []string{"Unreleased Discography", "💿Unreleased", "Tom's unreleased"} {
 		srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
 		srv.tabs = tabsBody("Released Discography", title, "Unsurfaced")
-		songs, err := srv.client(nil).ArtistSongs(context.Background(), "Ken Carson")
+		songs, err := srv.client(t, nil).ArtistSongs(context.Background(), "Ken Carson")
 		if err != nil || len(songs) != 4 {
 			t.Errorf("tab %q: songs = %d, err = %v, want the 4 full leaks", title, len(songs), err)
 		}
@@ -222,7 +241,7 @@ func TestClient_ReadsTheUnreleasedTabWhateverItIsCalled(t *testing.T) {
 func TestClient_PrefersTheTabNamedJustUnreleased(t *testing.T) {
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
 	srv.tabs = tabsBody("Unreleased (Alt)", "💿 Unreleased", "Released")
-	if _, err := srv.client(nil).ArtistSongs(context.Background(), "Ken Carson"); err != nil {
+	if _, err := srv.client(t, nil).ArtistSongs(context.Background(), "Ken Carson"); err != nil {
 		t.Fatal(err)
 	}
 	if got := srv.ranges(); len(got) == 0 || got[0] != quotedTab("💿 Unreleased") {
@@ -233,7 +252,7 @@ func TestClient_PrefersTheTabNamedJustUnreleased(t *testing.T) {
 func TestClient_ASheetWithoutAnUnreleasedTabIsEmptyWithoutAGridFetch(t *testing.T) {
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), nil)
 	srv.tabs = tabsBody("Fit Pics", "Remakes")
-	songs, err := srv.client(&fakeIndexCache{}).ArtistSongs(context.Background(), "Ken Carson")
+	songs, err := srv.client(t, &fakeIndexCache{}).ArtistSongs(context.Background(), "Ken Carson")
 	if err != nil || len(songs) != 0 || srv.artistCalls.Load() != 0 {
 		t.Errorf("songs = %v, err = %v, grid calls = %d, want none, no error, no grid fetch", songs, err, srv.artistCalls.Load())
 	}
@@ -242,17 +261,17 @@ func TestClient_ASheetWithoutAnUnreleasedTabIsEmptyWithoutAGridFetch(t *testing.
 func TestClient_ABadRequestForTheTabIsAnError(t *testing.T) {
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), nil)
 	srv.artistCode = http.StatusBadRequest
-	if _, err := srv.client(&fakeIndexCache{}).ArtistSongs(context.Background(), "Ken Carson"); err == nil {
+	if _, err := srv.client(t, &fakeIndexCache{}).ArtistSongs(context.Background(), "Ken Carson"); err == nil {
 		t.Error("a 400 on a tab that exists must surface, not read as an empty sheet")
 	}
 }
 
 func TestClient_ABrokenHubBodyIsAnError(t *testing.T) {
 	srv := newSheetsServer(t, []byte("{"), nil)
-	if _, err := srv.client(&fakeIndexCache{}).ArtistSongs(context.Background(), "Ken Carson"); err == nil {
+	if _, err := srv.client(t, &fakeIndexCache{}).ArtistSongs(context.Background(), "Ken Carson"); err == nil {
 		t.Error("a malformed hub body must surface as an error")
 	}
-	if _, err := srv.client(nil).Artists(context.Background()); err == nil {
+	if _, err := srv.client(t, nil).Artists(context.Background()); err == nil {
 		t.Error("a malformed hub body must fail Artists too")
 	}
 }
@@ -263,7 +282,7 @@ func TestNewClient_UsesItsOwnTimeoutWithoutTouchingTheSharedClient(t *testing.T)
 	shared := srv.httpClient()
 	shared.Timeout = 10 * time.Millisecond
 
-	songs, err := search.NewTrackersClient(shared, testKey, "hub", nil).ArtistSongs(context.Background(), "Ken Carson")
+	songs, err := newTrackersClient(t, shared, search.NoTrackerIndexCache{}).ArtistSongs(context.Background(), "Ken Carson")
 	if err != nil || len(songs) != 4 {
 		t.Errorf("ArtistSongs = %d songs, err %v; want the client's own timeout, not the shared 10ms", len(songs), err)
 	}
@@ -285,7 +304,7 @@ func offStreamingSheet(t *testing.T) []byte {
 func TestClient_AddsTheReleasedTabsOffStreamingSongs(t *testing.T) {
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
 	srv.released, srv.releasedCode = offStreamingSheet(t), http.StatusOK
-	songs, err := srv.client(nil).ArtistSongs(context.Background(), "Ken Carson")
+	songs, err := srv.client(t, nil).ArtistSongs(context.Background(), "Ken Carson")
 	if err != nil || len(songs) != 5 {
 		t.Fatalf("ArtistSongs = %d songs, err %v; want 4 unreleased and 1 off streaming", len(songs), err)
 	}
@@ -298,7 +317,7 @@ func TestClient_AddsTheReleasedTabsOffStreamingSongs(t *testing.T) {
 func TestClient_KeepsTheUnreleasedSongsWhenTheReleasedTabFails(t *testing.T) {
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
 	srv.released, srv.releasedCode = []byte(`{}`), http.StatusInternalServerError
-	songs, err := srv.client(nil).ArtistSongs(context.Background(), "Ken Carson")
+	songs, err := srv.client(t, nil).ArtistSongs(context.Background(), "Ken Carson")
 	if !errors.Is(err, search.ErrTrackerPartial) || len(songs) != 4 {
 		t.Errorf("ArtistSongs = %d songs, err %v; want the 4 unreleased songs and a partial error", len(songs), err)
 	}
@@ -307,7 +326,7 @@ func TestClient_KeepsTheUnreleasedSongsWhenTheReleasedTabFails(t *testing.T) {
 func TestClient_ReadsOnlyTheUnreleasedTabWhenThereIsNoReleasedTab(t *testing.T) {
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
 	srv.tabs = tabsBody("Unreleased", "Released [old]")
-	songs, err := srv.client(nil).ArtistSongs(context.Background(), "Ken Carson")
+	songs, err := srv.client(t, nil).ArtistSongs(context.Background(), "Ken Carson")
 	if err != nil || len(songs) != 4 || srv.artistCalls.Load() != 1 {
 		t.Errorf("ArtistSongs = %d songs, err %v, %d grid reads; want 4 songs from one read", len(songs), err, srv.artistCalls.Load())
 	}

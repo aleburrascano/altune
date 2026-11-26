@@ -54,7 +54,10 @@ func New(d connections.Deps) (*Discovery, error) {
 	if err := d.MissingHandles(); err != nil {
 		return nil, err
 	}
-	w := newWiring(d)
+	w, err := newWiring(d)
+	if err != nil {
+		return nil, err
+	}
 	t, s := w.table, w.stores
 	services, err := newHandlerServices(w)
 	if err != nil {
@@ -89,11 +92,17 @@ func New(d connections.Deps) (*Discovery, error) {
 	}, nil
 }
 
-func newWiring(d connections.Deps) wiring {
-	s := connections.NewStores(d)
-	t := newProviderTable(d.Providers, connections.NewClients(d), s)
+func newWiring(d connections.Deps) (wiring, error) {
+	s, err := connections.NewStores(d)
+	if err != nil {
+		return wiring{}, fmt.Errorf("build the stores: %w", err)
+	}
+	t, err := newProviderTable(d.Providers, connections.NewClients(d), s)
+	if err != nil {
+		return wiring{}, fmt.Errorf("build the provider table: %w", err)
+	}
 	t.log(d.Lifecycle, d.Logger)
-	return wiring{deps: d, table: t, stores: s, artwork: t.artworkChain()}
+	return wiring{deps: d, table: t, stores: s, artwork: t.artworkChain()}, nil
 }
 
 func (d *Discovery) RankingOnlySearch() *query.Service {

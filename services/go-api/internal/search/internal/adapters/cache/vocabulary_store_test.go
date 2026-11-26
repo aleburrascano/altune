@@ -31,7 +31,7 @@ func vocabMember(norm, term, kind string) string {
 func lowercaseNorm(s string) string { return strings.ToLower(s) }
 
 func TestVocabularyStore_NilClient_AddReturnsNil(t *testing.T) {
-	store := cache.NewVocabularyStore(nil, lowercaseNorm)
+	store := newVocabularyStore(t, nil, lowercaseNorm, cache.NoMetaphone)
 	err := store.Add(context.Background(), domain.SpellingHintsEntry{
 		Term: "test", Kind: "artist", Popularity: 1,
 	})
@@ -41,7 +41,7 @@ func TestVocabularyStore_NilClient_AddReturnsNil(t *testing.T) {
 }
 
 func TestVocabularyStore_NilClient_BulkAddReturnsNil(t *testing.T) {
-	store := cache.NewVocabularyStore(nil, lowercaseNorm)
+	store := newVocabularyStore(t, nil, lowercaseNorm, cache.NoMetaphone)
 	err := store.BulkAdd(context.Background(), []domain.SpellingHintsEntry{
 		{Term: "a", Kind: "track", Popularity: 1},
 	})
@@ -51,7 +51,7 @@ func TestVocabularyStore_NilClient_BulkAddReturnsNil(t *testing.T) {
 }
 
 func TestVocabularyStore_NilClient_SuggestByPrefixReturnsNil(t *testing.T) {
-	store := cache.NewVocabularyStore(nil, lowercaseNorm)
+	store := newVocabularyStore(t, nil, lowercaseNorm, cache.NoMetaphone)
 	results, err := store.SuggestByPrefix(context.Background(), "test", 10)
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
@@ -62,7 +62,7 @@ func TestVocabularyStore_NilClient_SuggestByPrefixReturnsNil(t *testing.T) {
 }
 
 func TestVocabularyStore_NilClient_FindClosestReturnsNil(t *testing.T) {
-	store := cache.NewVocabularyStore(nil, lowercaseNorm)
+	store := newVocabularyStore(t, nil, lowercaseNorm, cache.NoMetaphone)
 	results, err := store.FindClosest(context.Background(), "test", 10)
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
@@ -74,7 +74,7 @@ func TestVocabularyStore_NilClient_FindClosestReturnsNil(t *testing.T) {
 
 func TestVocabularyStore_Add_ThenSuggestByPrefix(t *testing.T) {
 	_, client := newRedis(t)
-	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	store := newVocabularyStore(t, client, lowercaseNorm, cache.NoMetaphone)
 	ctx := context.Background()
 
 	entry := domain.SpellingHintsEntry{
@@ -98,7 +98,7 @@ func TestVocabularyStore_Add_ThenSuggestByPrefix(t *testing.T) {
 
 func TestVocabularyStore_Add_StoresTheMemberFormat(t *testing.T) {
 	server, client := newRedis(t)
-	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	store := newVocabularyStore(t, client, lowercaseNorm, cache.NoMetaphone)
 
 	if err := store.Add(context.Background(), domain.SpellingHintsEntry{Term: "Megaman", Kind: "track", Popularity: 7}); err != nil {
 		t.Fatalf("Add: %v", err)
@@ -115,7 +115,7 @@ func TestVocabularyStore_Add_StoresTheMemberFormat(t *testing.T) {
 
 func TestVocabularyStore_SuggestByPrefix_SkipsMalformedMembers(t *testing.T) {
 	server, client := newRedis(t)
-	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	store := newVocabularyStore(t, client, lowercaseNorm, cache.NoMetaphone)
 	ctx := context.Background()
 	if err := store.Add(ctx, domain.SpellingHintsEntry{Term: "Megaman", Kind: "track", Popularity: 1}); err != nil {
 		t.Fatalf("Add: %v", err)
@@ -137,7 +137,7 @@ func TestVocabularyStore_SuggestByPrefix_SkipsMalformedMembers(t *testing.T) {
 
 func TestVocabularyStore_FindClosest_FuzzyMatch(t *testing.T) {
 	_, client := newRedis(t)
-	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	store := newVocabularyStore(t, client, lowercaseNorm, cache.NoMetaphone)
 	ctx := context.Background()
 
 	entry := domain.SpellingHintsEntry{
@@ -165,7 +165,7 @@ func TestVocabularyStore_FindClosest_FuzzyMatch(t *testing.T) {
 
 func TestVocabularyStore_FindClosest_SkipsEntriesWhoseBlobIsMissingOrCorrupt(t *testing.T) {
 	server, client := newRedis(t)
-	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	store := newVocabularyStore(t, client, lowercaseNorm, cache.NoMetaphone)
 	ctx := context.Background()
 	if err := store.BulkAdd(ctx, []domain.SpellingHintsEntry{
 		{Term: "Megaman", Kind: "track", Popularity: 3},
@@ -190,7 +190,7 @@ func TestVocabularyStore_FindClosest_SkipsEntriesWhoseBlobIsMissingOrCorrupt(t *
 
 func TestVocabularyStore_FindClosest_RanksByScoreAndHonoursTheLimit(t *testing.T) {
 	_, client := newRedis(t)
-	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	store := newVocabularyStore(t, client, lowercaseNorm, cache.NoMetaphone)
 	ctx := context.Background()
 	if err := store.BulkAdd(ctx, []domain.SpellingHintsEntry{
 		{Term: "megamxx", Kind: "track"},
@@ -214,7 +214,7 @@ func TestVocabularyStore_FindClosest_RanksByScoreAndHonoursTheLimit(t *testing.T
 
 func TestVocabularyStore_BulkAdd_AllRetrievable(t *testing.T) {
 	_, client := newRedis(t)
-	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	store := newVocabularyStore(t, client, lowercaseNorm, cache.NoMetaphone)
 	ctx := context.Background()
 
 	entries := make([]domain.SpellingHintsEntry, 100)
@@ -243,7 +243,7 @@ func TestVocabularyStore_BulkAdd_AllRetrievable(t *testing.T) {
 
 func TestVocabularyStore_EmptyPrefix_ReturnsByPopularity(t *testing.T) {
 	_, client := newRedis(t)
-	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	store := newVocabularyStore(t, client, lowercaseNorm, cache.NoMetaphone)
 	ctx := context.Background()
 
 	entries := []domain.SpellingHintsEntry{
@@ -270,7 +270,7 @@ func TestVocabularyStore_EmptyPrefix_ReturnsByPopularity(t *testing.T) {
 
 func TestVocabularyStore_FindClosest_NoTrigrams_Empty(t *testing.T) {
 	_, client := newRedis(t)
-	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	store := newVocabularyStore(t, client, lowercaseNorm, cache.NoMetaphone)
 
 	results, err := store.FindClosest(context.Background(), "", 5)
 	if err != nil {
@@ -283,7 +283,7 @@ func TestVocabularyStore_FindClosest_NoTrigrams_Empty(t *testing.T) {
 
 func TestVocabularyStore_PrefixResults_SortedByPopularity(t *testing.T) {
 	_, client := newRedis(t)
-	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	store := newVocabularyStore(t, client, lowercaseNorm, cache.NoMetaphone)
 	ctx := context.Background()
 
 	entries := []domain.SpellingHintsEntry{
@@ -328,7 +328,7 @@ func qaTrimMetaphone(norm string) string {
 }
 
 func TestVocabularyStore_NilClient_TrimReturnsNil(t *testing.T) {
-	store := cache.NewVocabularyStore(nil, lowercaseNorm)
+	store := newVocabularyStore(t, nil, lowercaseNorm, cache.NoMetaphone)
 	if err := store.Trim(context.Background(), 10); err != nil {
 		t.Fatalf("nil-client Trim: %v, want nil", err)
 	}
@@ -336,7 +336,7 @@ func TestVocabularyStore_NilClient_TrimReturnsNil(t *testing.T) {
 
 func TestVocabularyStore_Trim_EvictsAcrossAllKeyFamilies(t *testing.T) {
 	_, client := newRedis(t)
-	store := cache.NewVocabularyStore(client, lowercaseNorm, cache.WithMetaphone(qaTrimMetaphone))
+	store := newVocabularyStore(t, client, lowercaseNorm, qaTrimMetaphone)
 	ctx := context.Background()
 
 	victimA := "qatrimvictima"
@@ -376,7 +376,7 @@ func TestVocabularyStore_Trim_EvictsAcrossAllKeyFamilies(t *testing.T) {
 
 func TestVocabularyStore_Trim_NonPositiveBudgetKeepsEverything(t *testing.T) {
 	_, client := newRedis(t)
-	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	store := newVocabularyStore(t, client, lowercaseNorm, cache.NoMetaphone)
 	ctx := context.Background()
 	if err := store.Add(ctx, domain.SpellingHintsEntry{Term: "Keeper", Kind: "artist"}); err != nil {
 		t.Fatalf("Add: %v", err)
@@ -392,7 +392,7 @@ func TestVocabularyStore_Trim_NonPositiveBudgetKeepsEverything(t *testing.T) {
 
 func TestVocabularyStore_Trim_SkipsMalformedMembers(t *testing.T) {
 	server, client := newRedis(t)
-	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	store := newVocabularyStore(t, client, lowercaseNorm, cache.NoMetaphone)
 	ctx := context.Background()
 	if _, err := server.ZAdd(vocabTermsKey, -1, "malformed"); err != nil {
 		t.Fatalf("seed malformed: %v", err)
@@ -414,8 +414,8 @@ func TestVocabularyStore_WithMetaphone_PhoneticOnlyMatch(t *testing.T) {
 	_, client := newRedis(t)
 	ctx := context.Background()
 
-	plain := cache.NewVocabularyStore(client, lowercaseNorm)
-	phonetic := cache.NewVocabularyStore(client, lowercaseNorm, cache.WithMetaphone(qaTrimMetaphone))
+	plain := newVocabularyStore(t, client, lowercaseNorm, cache.NoMetaphone)
+	phonetic := newVocabularyStore(t, client, lowercaseNorm, qaTrimMetaphone)
 
 	if err := phonetic.Add(ctx, domain.SpellingHintsEntry{
 		Term: "vvvv", TermNorm: "vvvv", Kind: "artist", Popularity: 1,
@@ -490,7 +490,7 @@ func testTrimConcurrentReAdd(
 
 	victim, bumped, keeper := "qatrimracevictim", "qatrimracebumped", "qatrimracekeeper"
 
-	writer := cache.NewVocabularyStore(writerClient, lowercaseNorm, cache.WithMetaphone(qaTrimMetaphone))
+	writer := newVocabularyStore(t, writerClient, lowercaseNorm, qaTrimMetaphone)
 	if err := writer.BulkAdd(ctx, []domain.SpellingHintsEntry{
 		{Term: "QATrimRaceVictim", TermNorm: victim, Kind: "artist", Popularity: -3_000_000_000},
 		{Term: "QATrimRaceBumped", TermNorm: bumped, Kind: "artist", Popularity: -2_000_000_000},
@@ -508,7 +508,7 @@ func testTrimConcurrentReAdd(
 			t.Errorf("concurrent re-add: %v", err)
 		}
 	}})
-	trimmer := cache.NewVocabularyStore(trimClient, lowercaseNorm, cache.WithMetaphone(qaTrimMetaphone))
+	trimmer := newVocabularyStore(t, trimClient, lowercaseNorm, qaTrimMetaphone)
 
 	if err := trimmer.Trim(ctx, 1); err != nil {
 		t.Fatalf("Trim: %v", err)
@@ -537,6 +537,35 @@ func testTrimConcurrentReAdd(
 	}
 	if lex != terms {
 		t.Errorf("lex size %d != terms size %d: index families out of sync", lex, terms)
+	}
+}
+
+func newVocabularyStore(t testing.TB, client *goredis.Client, normalize cache.NormalizeFunc, metaphone cache.MetaphoneFunc, opts ...cache.VocabStoreOption) *cache.RedisVocabularyStore {
+	t.Helper()
+	store, err := cache.NewVocabularyStore(client, normalize, metaphone, opts...)
+	if err != nil {
+		t.Fatalf("cache.NewVocabularyStore: %v", err)
+	}
+	return store
+}
+
+func TestNewVocabularyStore_RefusesAMissingNormalizerOrMetaphone(t *testing.T) {
+	tests := []struct {
+		name      string
+		normalize cache.NormalizeFunc
+		metaphone cache.MetaphoneFunc
+	}{
+		{"normalizer", nil, cache.NoMetaphone},
+		{"metaphone", strings.ToLower, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store, err := cache.NewVocabularyStore(nil, tt.normalize, tt.metaphone)
+
+			if store != nil || !errors.Is(err, cache.ErrVocabularyCollaboratorRequired) {
+				t.Fatalf("got (%v, %v), want a refusal wrapping ErrVocabularyCollaboratorRequired", store, err)
+			}
+		})
 	}
 }
 
@@ -591,7 +620,7 @@ func vocabStoredPopularity(t *testing.T, client *goredis.Client, norm string, me
 
 func TestVocabularyStore_Add_DoesNotLowerChartPopularity(t *testing.T) {
 	_, client := newRedis(t)
-	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	store := newVocabularyStore(t, client, lowercaseNorm, cache.NoMetaphone)
 	ctx := context.Background()
 	member := vocabMember("popguard", "PopGuard", "artist")
 
@@ -620,7 +649,7 @@ func TestVocabularyStore_Add_DoesNotLowerChartPopularity(t *testing.T) {
 
 func TestVocabularyStore_Add_NewMemberWithZeroPopularityIsAdded(t *testing.T) {
 	_, client := newRedis(t)
-	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	store := newVocabularyStore(t, client, lowercaseNorm, cache.NoMetaphone)
 	ctx := context.Background()
 	member := vocabMember("zeropop", "ZeroPop", "artist")
 
@@ -635,7 +664,7 @@ func TestVocabularyStore_Add_NewMemberWithZeroPopularityIsAdded(t *testing.T) {
 
 func TestVocabularyStore_Add_SetsTheEntryTTL(t *testing.T) {
 	server, client := newRedis(t)
-	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	store := newVocabularyStore(t, client, lowercaseNorm, cache.NoMetaphone)
 	if err := store.Add(context.Background(), domain.SpellingHintsEntry{Term: "Megaman", Kind: "track"}); err != nil {
 		t.Fatalf("Add: %v", err)
 	}

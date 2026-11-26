@@ -8,5 +8,5 @@ import (
 )
 
 var Live = sync.OnceValue(func() http.RoundTripper {
-	return search.NewCountingTransport(outbound.NewLiveTransport(outbound.WithRetryRecorder(search.RecordRetry)))
+	return search.NewCountingTransport(outbound.NewLiveTransport(search.RecordRetry))
 })

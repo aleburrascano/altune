@@ -1054,7 +1054,7 @@ func TestService_PanicBelowResolveColdDegradesToPartial(t *testing.T) {
 	cache := search.NewFakeResultCache()
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
 		c.ResultCache = cache
-		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.WithArtworkLookup(&search.FakeArtworkLookup{}), searchtest.WithIdentityStore(panickingIdentityStore{}))
+		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.UseArtworkLookup(&search.FakeArtworkLookup{}), searchtest.UseIdentityStore(panickingIdentityStore{}))
 	})
 
 	const callers = 2
@@ -1215,7 +1215,7 @@ func TestService_SkipsEnrichWhenArtworkPresent(t *testing.T) {
 	withArt.ImageURL = "https://existing/art.jpg"
 	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{withArt}}
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
-		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.WithArtworkLookup(resolver))
+		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.UseArtworkLookup(resolver))
 	})
 
 	out := runSearch(t, svc, "humble")
@@ -1234,7 +1234,7 @@ func TestService_MBIDIndexAttachesMBIDForArtwork(t *testing.T) {
 	idx := &fakeMBIDIndex{mbid: "warm-mbid"}
 	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
-		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.WithArtworkLookup(resolver), searchtest.WithArtworkCache(&search.FakeArtworkCache{Store: map[string]string{}}), searchtest.WithMBIDIndex(idx))
+		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.UseArtworkLookup(resolver), searchtest.UseArtworkCache(&search.FakeArtworkCache{Store: map[string]string{}}), searchtest.UseMBIDIndex(idx))
 	})
 
 	runSearch(t, svc, "humble")
@@ -1258,7 +1258,7 @@ func TestService_IdentityStoreResolvesArtworkWhenMBAbsent(t *testing.T) {
 	store := &search.FakeIdentityStore{Mbid: "durable-mbid", Xref: map[search.ProviderKey]string{"discogs": "123"}}
 	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
-		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.WithArtworkLookup(resolver), searchtest.WithArtworkCache(&search.FakeArtworkCache{Store: map[string]string{}}), searchtest.WithIdentityStore(store))
+		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.UseArtworkLookup(resolver), searchtest.UseArtworkCache(&search.FakeArtworkCache{Store: map[string]string{}}), searchtest.UseIdentityStore(store))
 	})
 
 	out := runSearch(t, svc, "humble")
@@ -1282,7 +1282,7 @@ func TestService_BackgroundArtworkUsesTheDurableIdentity(t *testing.T) {
 	store := &search.FakeIdentityStore{Mbid: "durable-mbid", Xref: map[search.ProviderKey]string{"discogs": "123"}}
 	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
-		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.WithArtworkLookup(resolver), searchtest.WithArtworkCache(cache), searchtest.WithIdentityStore(store))
+		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.UseArtworkLookup(resolver), searchtest.UseArtworkCache(cache), searchtest.UseIdentityStore(store))
 	})
 
 	runSearch(t, svc, "humble")
@@ -1299,7 +1299,7 @@ func TestService_ArtworkCacheShortCircuits(t *testing.T) {
 	cache := &search.FakeArtworkCache{Store: map[string]string{"Humble": "https://art/cached.jpg"}}
 	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
-		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.WithArtworkLookup(resolver), searchtest.WithArtworkCache(cache))
+		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.UseArtworkLookup(resolver), searchtest.UseArtworkCache(cache))
 	})
 
 	out := runSearch(t, svc, "humble")
@@ -1316,7 +1316,7 @@ func TestFillArtwork_PanickingResolverIsContained(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
-		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.WithArtworkLookup(&panickingArtworkLookup{}))
+		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.UseArtworkLookup(&panickingArtworkLookup{}))
 	})
 
 	out := runSearch(t, svc, "humble")
@@ -1332,7 +1332,7 @@ func TestService_MissingArtworkIsFetchedAfterTheAnswer(t *testing.T) {
 	cache := &search.FakeArtworkCache{Store: map[string]string{}}
 	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
-		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.WithArtworkLookup(resolver), searchtest.WithArtworkCache(cache))
+		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.UseArtworkLookup(resolver), searchtest.UseArtworkCache(cache))
 	})
 
 	first := runSearch(t, svc, "humble")
@@ -1358,7 +1358,7 @@ func TestService_WithoutAnArtworkCacheNoLiveLookupRuns(t *testing.T) {
 	resolver := &search.FakeArtworkLookup{URL: "https://art/cover.jpg"}
 	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
-		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.WithArtworkLookup(resolver))
+		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.UseArtworkLookup(resolver))
 	})
 
 	runSearch(t, svc, "humble")

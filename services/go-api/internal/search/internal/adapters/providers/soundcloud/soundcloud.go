@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/providersearch"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -32,13 +33,26 @@ const (
 	scUserAgent          = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
 
-func NewSoundCloudAPIAdapter(client *http.Client, fallback searchFallback) *SoundCloudAPIAdapter {
+var ErrCollaboratorRequired = errors.New("soundcloud api adapter needs its http client and search fallback, pass NoFallback to switch the fallback off")
+
+var errNoFallback = errors.New("soundcloud search has no fallback")
+
+type NoFallback struct{}
+
+func (NoFallback) Search(context.Context, string, map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
+	return nil, errNoFallback
+}
+
+func NewSoundCloudAPIAdapter(client *http.Client, fallback searchFallback) (*SoundCloudAPIAdapter, error) {
+	if client == nil || fallback == nil {
+		return nil, ErrCollaboratorRequired
+	}
 	return &SoundCloudAPIAdapter{
 		client:   client,
 		resolver: newClientIDResolver(client),
 		fallback: fallback,
 		baseURL:  scAPIBaseURL,
-	}
+	}, nil
 }
 
 func (a *SoundCloudAPIAdapter) Name() domain.ProviderName { return domain.ProviderSoundCloud }

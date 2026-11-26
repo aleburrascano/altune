@@ -71,11 +71,34 @@ func newTransport(t *testing.T, base http.RoundTripper, opts retry.Options) *ret
 	if err != nil {
 		t.Fatal(err)
 	}
+	system := retry.SystemOptions()
+	if opts.Sleep == nil {
+		opts.Sleep = system.Sleep
+	}
+	if opts.Jitter == nil {
+		opts.Jitter = system.Jitter
+	}
+	if opts.OnRetry == nil {
+		opts.OnRetry = system.OnRetry
+	}
 	rt, err := retry.New(base, pacer, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return rt
+}
+
+func TestTransport_RefusesAMissingOption(t *testing.T) {
+	pacer, err := pacing.New(time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rt, err := retry.New(http.DefaultTransport, pacer, retry.Options{})
+
+	if rt != nil || !errors.Is(err, retry.ErrOptionsRequired) {
+		t.Fatalf("got (%v, %v), want a refusal wrapping ErrOptionsRequired", rt, err)
+	}
 }
 
 func recordingDelays(t *testing.T, base http.RoundTripper, rec *[]time.Duration) *retry.Transport {

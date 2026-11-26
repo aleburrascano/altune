@@ -38,14 +38,11 @@ func (s *RedisVocabularyStore) fuzzySearch(
 	}
 
 	var phoneticSet map[string]bool
-	if s.metaphone != nil {
-		code := s.metaphone(norm)
-		if code != "" {
-			phoneticSet = s.metaphoneCandidatesLogged(ctx, code)
-			for norm := range phoneticSet {
-				if _, exists := candidates[norm]; !exists {
-					candidates[norm] = 0
-				}
+	if code := s.metaphone(norm); code != "" {
+		phoneticSet = s.metaphoneCandidatesLogged(ctx, code)
+		for norm := range phoneticSet {
+			if _, exists := candidates[norm]; !exists {
+				candidates[norm] = 0
 			}
 		}
 	}

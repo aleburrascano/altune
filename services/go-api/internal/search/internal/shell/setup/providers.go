@@ -17,6 +17,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/theaudiodb"
 	"altune/go-api/internal/search/internal/adapters/providers/ytmusic"
 	"altune/go-api/internal/search/internal/core/ports"
+	"fmt"
 	"time"
 )
 
@@ -59,17 +60,25 @@ func (t *providerTable) addMusicBrainz(userAgent string, c connections.Clients) 
 	})
 }
 
-func (t *providerTable) addSoundCloud(c connections.Clients) {
-	adapter := soundcloud.NewSoundCloudAPIAdapter(c.ProviderCalls, nil)
+func (t *providerTable) addSoundCloud(c connections.Clients) error {
+	adapter, err := soundcloud.NewSoundCloudAPIAdapter(c.ProviderCalls, soundcloud.NoFallback{})
+	if err != nil {
+		return fmt.Errorf("build the soundcloud content adapter: %w", err)
+	}
+	searcher, err := soundcloud.NewSoundCloudAPIAdapter(c.ProviderCalls, soundcloud.NewSoundCloudAdapter())
+	if err != nil {
+		return fmt.Errorf("build the soundcloud search adapter: %w", err)
+	}
 	t.add(provider{
 		name:    rowSoundCloud,
 		id:      domain.ProviderSoundCloud,
-		search:  soundcloud.NewSoundCloudAPIAdapter(c.ProviderCalls, soundcloud.NewSoundCloudAdapter()),
+		search:  searcher,
 		artist:  adapter,
 		album:   adapter,
 		related: adapter,
 		artwork: []ports.ArtworkLookup{adapter},
 	})
+	return nil
 }
 
 func (t *providerTable) addYouTubeMusic(c connections.Clients) {
@@ -153,10 +162,15 @@ func (t *providerTable) addTheAudioDB(apiKey string, c connections.Clients) {
 	t.add(provider{name: rowTheAudioDB, id: domain.ProviderTheAudioDB, artwork: []ports.ArtworkLookup{adapter}})
 }
 
-func (t *providerTable) addTrackers(apiKey, hubSheetID string, c connections.Clients, st connections.Stores) {
+func (t *providerTable) addTrackers(apiKey, hubSheetID string, c connections.Clients, st connections.Stores) error {
 	if apiKey == "" {
 		t.add(switchedOff(rowTrackers, "GOOGLE_SHEETS_API_KEY is empty"))
-		return
+		return nil
 	}
-	t.add(provider{name: rowTrackers, unreleasedLists: fansheets.NewClient(c.ProviderCalls, apiKey, hubSheetID, st.TrackerIndex())})
+	client, err := fansheets.NewClient(c.ProviderCalls, apiKey, hubSheetID, st.TrackerIndex())
+	if err != nil {
+		return fmt.Errorf("build the tracker sheet client: %w", err)
+	}
+	t.add(provider{name: rowTrackers, unreleasedLists: client})
+	return nil
 }

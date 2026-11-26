@@ -2,6 +2,7 @@ package cache
 
 import (
 	"altune/go-api/internal/search/domain"
+	"errors"
 	"strings"
 	"time"
 
@@ -28,19 +29,28 @@ type RedisVocabularyStore struct {
 	metaphone MetaphoneFunc
 }
 
+var ErrVocabularyCollaboratorRequired = errors.New("vocabulary store needs its normalizer and metaphone, pass NoMetaphone to switch phonetic matching off")
+
+func NoMetaphone(string) string { return "" }
+
 func NewVocabularyStore(
 	client *goredis.Client,
 	normalize NormalizeFunc,
+	metaphone MetaphoneFunc,
 	opts ...VocabStoreOption,
-) *RedisVocabularyStore {
+) (*RedisVocabularyStore, error) {
+	if normalize == nil || metaphone == nil {
+		return nil, ErrVocabularyCollaboratorRequired
+	}
 	s := &RedisVocabularyStore{
 		redisJSON: newRedisJSON(client, nil),
 		normalize: normalize,
+		metaphone: metaphone,
 	}
 	for _, opt := range opts {
 		opt(s)
 	}
-	return s
+	return s, nil
 }
 
 type VocabStoreOption func(*RedisVocabularyStore)
@@ -49,25 +59,15 @@ func WithVocabSignal(sig *Signal) VocabStoreOption {
 	return func(s *RedisVocabularyStore) { s.signal = sig }
 }
 
-func WithMetaphone(fn MetaphoneFunc) VocabStoreOption {
-	return func(s *RedisVocabularyStore) { s.metaphone = fn }
-}
-
 func (s *RedisVocabularyStore) buildNorm(e domain.SpellingHintsEntry) string {
 	if e.TermNorm != "" {
 		return e.TermNorm
 	}
-	if s.normalize != nil {
-		return s.normalize(e.Term)
-	}
-	return strings.ToLower(e.Term)
+	return s.normalize(e.Term)
 }
 
 func (s *RedisVocabularyStore) normalizeTerm(term string) string {
-	if s.normalize != nil {
-		return s.normalize(term)
-	}
-	return strings.ToLower(term)
+	return s.normalize(term)
 }
 
 type vocabEntryData struct {
