@@ -12,12 +12,14 @@ function methodNamed(name) {
   if (!methods.has(name)) {
     methods.set(
       name,
-      jest.fn(async () => {
-        const failure = pendingFailures.get(name);
-        if (failure === undefined) return answers.get(name);
-        pendingFailures.delete(name);
-        throw failure;
-      }),
+      name === 'addEventListener'
+        ? jest.fn(() => ({ remove() {} }))
+        : jest.fn(async () => {
+            const failure = pendingFailures.get(name);
+            if (failure === undefined) return answers.get(name);
+            pendingFailures.delete(name);
+            throw failure;
+          }),
     );
   }
   return methods.get(name);
