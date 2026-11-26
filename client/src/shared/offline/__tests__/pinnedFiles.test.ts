@@ -1,5 +1,6 @@
 import * as FileSystem from 'expo-file-system';
 import { asTrackId, type TrackId } from '@shared/catalog';
+import { NetworkError } from '@shared/failure';
 
 import { expectType, type IsAssignable, type Not } from '@testing/typeAssertions';
 
@@ -547,6 +548,38 @@ describe('a pinned download in progress', () => {
 
     expect(pinnedFilesByTrackId()?.has('t1')).toBe(false);
     expect([...store.files.keys()]).toEqual([]);
+  });
+
+  it('rejects a stalled download as a timeout at the deadline and aborts the transfer', async () => {
+    jest.useFakeTimers();
+    const transfers: AbortSignal[] = [];
+    store.download = (_url, _dest, signal) => {
+      transfers.push(signal);
+      return new Promise<string>(() => undefined);
+    };
+    const outcome = downloadPinned(T1, T1_URL).catch((error: unknown) => error);
+
+    await jest.advanceTimersByTimeAsync(PIN_DOWNLOAD_TIMEOUT_MS - 1);
+    expect(transfers[0]?.aborted).toBe(false);
+    await jest.advanceTimersByTimeAsync(1);
+
+    const error = await outcome;
+    expect(error).toBeInstanceOf(NetworkError);
+    expect(error).toMatchObject({
+      failure: 'timeout',
+      message: `[offline] download timed out after ${PIN_DOWNLOAD_TIMEOUT_MS}ms`,
+    });
+    expect(transfers[0]?.aborted).toBe(true);
+  });
+
+  it('rejects a download that fails before the deadline as a transport failure that names the cause', async () => {
+    store.download = () => Promise.reject(new Error('connection reset'));
+
+    const error = await downloadPinned(T1, T1_URL).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(NetworkError);
+    expect(error).toMatchObject({ failure: 'transport' });
+    expect((error as Error).message).toContain('connection reset');
   });
 
   it('is never pinned by an adapter that keeps writing after its deadline expired', async () => {

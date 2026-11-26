@@ -124,7 +124,8 @@ describe('withNativeQueue — serialising native queue operations', () => {
       await expect(second).resolves.toBe('second');
     });
 
-    it('discards a late rejection from a timed-out op without an unhandled rejection', async () => {
+    it('warns about a late rejection from a timed-out op without an unhandled rejection', async () => {
+      const logged = recordLogs();
       const late = deferred<void>();
       const hung = withNativeQueue(() => late.promise);
       const hungOutcome = hung.catch((err: unknown) => err);
@@ -134,6 +135,21 @@ describe('withNativeQueue — serialising native queue operations', () => {
 
       late.reject(new Error('bridge finally failed'));
       await expect(withNativeQueue(async () => 'after')).resolves.toBe('after');
+
+      expect(logged.warnings[0]?.[0]).toBe(
+        '[playback] native queue operation failed after its deadline',
+      );
+      expect(logged.text()).toContain('bridge finally failed');
+    });
+
+    it('does not warn about a rejection that arrives before the deadline', async () => {
+      const logged = recordLogs();
+
+      await expect(
+        withNativeQueue(() => Promise.reject(new Error('failed in time'))),
+      ).rejects.toThrow('failed in time');
+
+      expect(logged.warnings).toEqual([]);
     });
 
     it('clears the deadline once an op settles in time', async () => {

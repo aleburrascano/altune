@@ -41,6 +41,48 @@ function isCancelled(external: AbortSignal | undefined): () => boolean {
   return () => external?.aborted === true;
 }
 
+export interface WithDeadlineOptions {
+  onExpire: () => Error;
+  onLate?: (error: unknown) => void;
+  signal?: AbortSignal;
+}
+
+function ignoreLateFailure(): void {}
+
+export function withDeadline<T>(
+  work: Promise<T>,
+  ms: number,
+  { onExpire, onLate = ignoreLateFailure, signal }: WithDeadlineOptions,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let expired = false;
+    const timer = setTimeout(() => {
+      expired = true;
+      reject(onExpire());
+    }, ms);
+    function stopTimer(): void {
+      clearTimeout(timer);
+    }
+    function settle(): void {
+      stopTimer();
+      signal?.removeEventListener('abort', stopTimer);
+    }
+    if (signal?.aborted === true) stopTimer();
+    else signal?.addEventListener('abort', stopTimer);
+    work.then(
+      (value) => {
+        settle();
+        resolve(value);
+      },
+      (error: unknown) => {
+        settle();
+        if (expired) onLate(error);
+        else resolve(work);
+      },
+    );
+  });
+}
+
 export function startDeadline(external: AbortSignal | undefined, ms: number): Deadline {
   const controller = new AbortController();
   const { timer, expired } = armTimer(controller, ms);

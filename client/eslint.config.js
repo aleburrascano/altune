@@ -147,11 +147,22 @@ const abortApisTheHermesPolyfillLacks = [
   },
 ];
 
+const DEADLINES_GO_THROUGH_WITH_DEADLINE =
+  'Use withDeadline(work, ms, { onExpire }) from @shared/timing instead of Promise.race: it clears its timer and hands a late failure to onLate (see client/src/README.md).';
+
+const syntaxBannedEverywhere = [
+  ...abortApisTheHermesPolyfillLacks,
+  {
+    selector: "CallExpression[callee.object.name='Promise'][callee.property.name='race']",
+    message: DEADLINES_GO_THROUGH_WITH_DEADLINE,
+  },
+];
+
 const noAbortApisTheHermesPolyfillLacks = {
   name: 'noAbortApisTheHermesPolyfillLacks',
   files: ['src/**/*.{ts,tsx}'],
   rules: {
-    'no-restricted-syntax': ['error', ...abortApisTheHermesPolyfillLacks],
+    'no-restricted-syntax': ['error', ...syntaxBannedEverywhere],
   },
 };
 
@@ -166,7 +177,7 @@ const noInlinePlatformBranchesInFeatureUi = {
   rules: {
     'no-restricted-syntax': [
       'error',
-      ...abortApisTheHermesPolyfillLacks,
+      ...syntaxBannedEverywhere,
       {
         selector: "MemberExpression[object.name='Platform'][property.name='OS']",
         message:
@@ -452,7 +463,7 @@ const jsxOnlyInView = {
   rules: {
     'no-restricted-syntax': [
       'error',
-      ...abortApisTheHermesPolyfillLacks,
+      ...syntaxBannedEverywhere,
       { selector: 'JSXElement', message: JSX_ONLY_IN_VIEW },
       { selector: 'JSXFragment', message: JSX_ONLY_IN_VIEW },
     ],

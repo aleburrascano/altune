@@ -7,7 +7,7 @@ import {
   type StoredFile,
 } from '@shared/files';
 import { NetworkError } from '@shared/failure';
-import { startDeadline } from '@shared/timing';
+import { withDeadline } from '@shared/timing';
 import { isSafeId, type TrackId } from '@shared/catalog';
 import { warn } from '@shared/log';
 import {
@@ -162,28 +162,29 @@ export function pinStorageFull(): boolean {
   return pinnedBytes() >= MAX_PINNED_BYTES || freeSpaceBelowReserve();
 }
 
-function rejectOnAbort(signal: AbortSignal): Promise<never> {
-  return new Promise((_resolve, reject) => {
-    signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
-  });
-}
-
 export async function downloadPinned(trackId: TrackId, url: string): Promise<string> {
   if (!isSafeId(trackId)) throw new Error('[offline] refused to pin an invalid track id');
   const dir = pinnedDir();
   const pinnedName = `${trackId}${extFromUrl(url)}`;
   const unfinished = dir.openFile(unfinishedName(pinnedName));
-  const deadline = startDeadline(undefined, PIN_DOWNLOAD_TIMEOUT_MS);
+  const download = new AbortController();
+  const timedOut = new NetworkError(
+    'timeout',
+    `[offline] download timed out after ${PIN_DOWNLOAD_TIMEOUT_MS}ms`,
+  );
   try {
-    await Promise.race([
-      fileStore.get().download(url, unfinished, deadline.signal),
-      rejectOnAbort(deadline.signal),
-    ]).catch((error: unknown) => {
-      throw deadline.expired()
-        ? new NetworkError(
-            'timeout',
-            `[offline] download timed out after ${PIN_DOWNLOAD_TIMEOUT_MS}ms`,
-          )
+    await withDeadline(
+      fileStore.get().download(url, unfinished, download.signal),
+      PIN_DOWNLOAD_TIMEOUT_MS,
+      {
+        onExpire: () => {
+          download.abort();
+          return timedOut;
+        },
+      },
+    ).catch((error: unknown) => {
+      throw error === timedOut
+        ? timedOut
         : new NetworkError('transport', `[offline] download failed: ${String(error)}`);
     });
     const pinned = dir.openFile(pinnedName);
@@ -193,7 +194,5 @@ export async function downloadPinned(trackId: TrackId, url: string): Promise<str
   } catch (error) {
     if (unfinished.exists && !tryDelete(unfinished)) forgetRunningTotal();
     throw error;
-  } finally {
-    deadline.release();
   }
 }

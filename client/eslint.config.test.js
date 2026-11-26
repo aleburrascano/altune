@@ -436,6 +436,30 @@ describe('module rules point at client/src/README.md', () => {
       1,
     ],
     [
+      'no-restricted-syntax',
+      'src/features/player/core/x.ts',
+      'export const f = (a: Promise<void>, b: Promise<void>) => Promise.race([a, b]);\n',
+      1,
+    ],
+    [
+      'no-restricted-syntax',
+      'src/shared/offline/shell/x.ts',
+      'export const f = (a: Promise<void>, b: Promise<void>) => Promise.race([a, b]);\n',
+      1,
+    ],
+    [
+      'no-restricted-syntax',
+      'src/features/player/view/x.ts',
+      'export const f = (a: Promise<void>, b: Promise<void>) => Promise.race([a, b]);\n',
+      1,
+    ],
+    [
+      'no-restricted-syntax',
+      'src/features/player/core/x.ts',
+      'export const f = (a: Promise<void>, b: Promise<void>) => Promise.all([a, b]);\n',
+      0,
+    ],
+    [
       'no-restricted-properties',
       'src/features/player/__tests__/x.test.ts',
       "jest.mock('expo-file-system');\n",

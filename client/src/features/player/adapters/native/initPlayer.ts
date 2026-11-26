@@ -1,6 +1,7 @@
 import TrackPlayer, { Capability } from 'react-native-track-player';
 
 import { warnPlayback } from '@features/player/domain/playbackError';
+import { withDeadline } from '@shared/timing';
 
 const PLAYER_SETUP_TIMEOUT_MS = 15_000;
 
@@ -27,19 +28,10 @@ export function createEnsurePlayerSetup(player: SetupPlayer): () => Promise<void
 export const ensurePlayerSetup = createEnsurePlayerSetup(TrackPlayer);
 
 function setupWithinBudget(player: SetupPlayer): Promise<void> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const pending = setup(player);
-  let hasTimedOut = false;
-  pending.catch((err: unknown) => {
-    if (hasTimedOut) warnPlayback('player setup failed after its deadline', {}, err);
+  return withDeadline(setup(player), PLAYER_SETUP_TIMEOUT_MS, {
+    onExpire: () => new PlayerSetupTimeoutError(PLAYER_SETUP_TIMEOUT_MS),
+    onLate: (err) => warnPlayback('player setup failed after its deadline', {}, err),
   });
-  const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      hasTimedOut = true;
-      reject(new PlayerSetupTimeoutError(PLAYER_SETUP_TIMEOUT_MS));
-    }, PLAYER_SETUP_TIMEOUT_MS);
-  });
-  return Promise.race([pending, deadline]).finally(() => clearTimeout(timer));
 }
 
 async function setup(player: SetupPlayer): Promise<void> {
