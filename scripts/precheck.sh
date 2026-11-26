@@ -341,22 +341,27 @@ if touches '^client/'; then
   m=client
   if need npx "mobile" && link_deps $m; then
     src=$(grep -E '^client/src/.*\.(ts|tsx)$' <<<"$changed" | sed 's#^client/##')
-    check "mobile typecheck" $m "${heavy[@]}" npx tsc --noEmit
     linted=$(grep -E '^client/.*\.(ts|tsx|js|jsx|mjs|cjs)$' <<<"$changed" | sed 's#^client/##')
-    [ -n "$linted" ] && check "mobile lint (changed files)" $m "${heavy[@]}" npx eslint $linted
-    check "mobile mechanical style (changed lines)" $m node scripts/lint-changed-lines.mjs "$base"
+    if [ $stage = commit ]; then
+      [ -n "$linted" ] && check "mobile lint (pending files, no type info)" $m env ESLINT_WITHOUT_TYPES=1 npx eslint $linted
+      check "mobile mechanical style (pending lines, no type info)" $m env ESLINT_WITHOUT_TYPES=1 node scripts/lint-changed-lines.mjs "$base"
+    else
+      check "mobile typecheck" $m "${heavy[@]}" npx tsc --noEmit
+      [ -n "$linted" ] && check "mobile lint (changed files)" $m "${heavy[@]}" npx eslint $linted
+      check "mobile mechanical style (changed lines)" $m node scripts/lint-changed-lines.mjs "$base"
+    fi
     check "mobile prettier (changed files)" $m node scripts/prettier-changed.mjs "$base"
     test_check "mobile script and rule tests" $m bash -c 'files=$(git ls-files "scripts/__tests__/*.test.mjs" "eslint/rules/__tests__/*.test.js"); [ -z "$files" ] || node --test $files'
     touches '^client/eslint' && test_check "mobile eslint config tests" $m "${heavy[@]}" node --test eslint.config.test.js
     [ -n "$src" ] && jest_check "mobile tests (related)" $m npx jest --ci --passWithNoTests --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$HOME/.cache/altune-ci/jest" --findRelatedTests $src
-    check "mobile fallow" $m npm run --silent fallow
-    check "mobile boundaries and duplication (changed files)" $m "${heavy[@]}" node scripts/fallow-changed.mjs "$base"
+    test_check "mobile fallow" $m npm run --silent fallow
+    test_check "mobile boundaries and duplication (changed files)" $m "${heavy[@]}" node scripts/fallow-changed.mjs "$base"
     if [ -n "$src" ] && [ "${CLIENT_MUTATE_RUNS_ELSEWHERE:-}" = 1 ]; then
       echo "SKIP  mobile mutation (changed lines): the mobile-mutation CI job runs it"
     elif [ -n "$src" ] && need jq "mobile mutation"; then
       test_check "mobile mutation (changed lines)" . "${heavy[@]}" bash scripts/ci/client-mutate.sh "$base"
     fi
-    check "mobile react-doctor" $m npm run --silent react-doctor
+    test_check "mobile react-doctor" $m npm run --silent react-doctor
   elif [ -n "$(command -v npx)" ]; then
     echo "SKIP  mobile: no node_modules here or in $main_tree"; missing=1
   fi

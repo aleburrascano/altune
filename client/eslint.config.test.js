@@ -44,7 +44,7 @@ describe('mobile eslint config bans comments in every file', () => {
   });
 });
 
-function diffScopedRuleIds(filePath, code) {
+function diffScopedRuleIds(filePath, code, extraEnv = {}) {
   const script = `
     const { ESLint } = require('eslint');
     let code = '';
@@ -56,10 +56,30 @@ function diffScopedRuleIds(filePath, code) {
   const out = require('node:child_process').execFileSync(
     process.execPath,
     ['-e', script, __dirname, filePath],
-    { input: code, env: { ...process.env, ESLINT_DIFF_SCOPED: '1' }, encoding: 'utf8' },
+    {
+      input: code,
+      env: { ...process.env, ESLINT_DIFF_SCOPED: '1', ...extraEnv },
+      encoding: 'utf8',
+    },
   );
   return JSON.parse(out);
 }
+
+describe('mobile eslint without type info (commit stage)', () => {
+  const path = 'src/shared/failure/core/errors.ts';
+  const code = 'export const data = 1;\nPromise.resolve(data);\n';
+
+  it('drops type-aware rules but keeps untyped ones', () => {
+    const rules = diffScopedRuleIds(path, code, { ESLINT_WITHOUT_TYPES: '1' });
+    assert.ok(!rules.includes('@typescript-eslint/no-floating-promises'));
+    assert.ok(rules.includes('id-match'));
+  });
+
+  it('reports the type-aware rule once type info is on', () => {
+    const rules = diffScopedRuleIds(path, code, { ESLINT_WITHOUT_TYPES: '0' });
+    assert.ok(rules.includes('@typescript-eslint/no-floating-promises'));
+  });
+});
 
 describe('mobile diff-scoped style rules', () => {
   const path = 'src/shared/failure/core/errors.ts';
