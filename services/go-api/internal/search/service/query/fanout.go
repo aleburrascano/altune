@@ -49,7 +49,7 @@ type fanOutRun struct {
 }
 
 func newFanOutRun(ctx context.Context, providers int) *fanOutRun {
-	callCtx, stop := context.WithCancel(context.WithoutCancel(ctx))
+	callCtx, stop := runloop.DetachCancelable(ctx)
 	if ctx.Err() != nil {
 		stop()
 	}

@@ -9,6 +9,10 @@ func Detach(ctx context.Context, budget time.Duration) (context.Context, context
 	return context.WithTimeout(context.WithoutCancel(ctx), budget)
 }
 
+func DetachCancelable(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithCancel(context.WithoutCancel(ctx))
+}
+
 func WaitWithin(ctx context.Context, wait func()) bool {
 	done := make(chan struct{})
 	go func() {
