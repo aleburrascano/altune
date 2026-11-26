@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/library/domain"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/redact"
 	"altune/go-api/internal/shared/tracklength"
@@ -23,12 +24,16 @@ type TrackStore interface {
 
 type LibraryTracks struct {
 	store TrackStore
+	now   clock.Func
 }
 
 var _ download.TrackLedgerPort = (*LibraryTracks)(nil)
 
-func NewLibraryTracks(store TrackStore) *LibraryTracks {
-	return &LibraryTracks{store: store}
+func NewLibraryTracks(store TrackStore, now clock.Func) *LibraryTracks {
+	if now == nil {
+		panic("downloadfromlibrary: NewLibraryTracks requires a clock")
+	}
+	return &LibraryTracks{store: store, now: now}
 }
 
 type illegalTransitionError struct {
@@ -216,7 +221,7 @@ func (l *LibraryTracks) RevertAt(ctx context.Context, snapshot download.TrackSna
 	if track.Version != snapshot.Version {
 		return fmt.Errorf("revert to pending: %w", library.ErrTrackVersionConflict)
 	}
-	if err := track.RevertToPending(); err != nil {
+	if err := track.RevertToPending(l.now); err != nil {
 		return fmt.Errorf("revert to pending: %w", translate(err))
 	}
 	if err := l.store.Update(ctx, track, snapshot.Version); err != nil {

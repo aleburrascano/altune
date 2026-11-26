@@ -12,6 +12,7 @@ import (
 	"errors"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -34,7 +35,7 @@ func newLedgerPool(t *testing.T) *pgxpool.Pool {
 
 func insertUnqueuedTrack(t *testing.T, pool *pgxpool.Pool) *domain.Track {
 	t.Helper()
-	track, err := domain.NewTrack(ids.NewUserId(uuid.New()), "Blinding Lights", "The Weeknd", "After Hours")
+	track, err := domain.NewTrack(ids.NewUserId(uuid.New()), "Blinding Lights", "The Weeknd", "After Hours", time.Now)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -75,7 +76,7 @@ func rowState(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId) (string,
 
 func TestTrackLedger_OnPostgresAReclaimedTrackRefusesTheOldOwnerAndAcceptsTheNew(t *testing.T) {
 	pool := newLedgerPool(t)
-	ledger := downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool))
+	ledger := downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now)
 	ctx := context.Background()
 	track := insertUnqueuedTrack(t, pool)
 
@@ -123,7 +124,7 @@ func TestTrackLedger_OnPostgresAClaimBetweenReadAndUpdateFencesOutTheWriter(t *t
 	held := reclaimTrack(t, pool, track.ID)
 	store := &claimDuringUpdateStore{PostgresTrackRepository: library.NewPostgresTrackRepository(pool), pool: pool, t: t}
 
-	err := downloadfromlibrary.NewLibraryTracks(store).Complete(context.Background(), track.ID, track.UserId, held, download.Completion{AudioRef: "old-owner-ref"})
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, track.UserId, held, download.Completion{AudioRef: "old-owner-ref"})
 
 	if !errors.Is(err, download.ErrLeaseLost) {
 		t.Fatalf("err = %v, want ErrLeaseLost once the version conflict re-reads the new owner's attempts", err)
@@ -147,7 +148,7 @@ var downloadStatusOf = map[download.TrackStatus]domain.DownloadStatus{
 
 func (l postgresLedger) AddTrack(t *testing.T, snapshot download.TrackSnapshot) {
 	t.Helper()
-	track, err := domain.NewTrack(snapshot.UserId, snapshot.Title, snapshot.Artist, snapshot.Album)
+	track, err := domain.NewTrack(snapshot.UserId, snapshot.Title, snapshot.Artist, snapshot.Album, time.Now)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -172,6 +173,6 @@ func (l postgresLedger) AddTrack(t *testing.T, snapshot download.TrackSnapshot) 
 func TestTrackLedger_OnPostgresMeetsTheLedgerContract(t *testing.T) {
 	store := library.NewPostgresTrackRepository(newLedgerPool(t))
 	downloadtest.LedgerContract(t, func(*testing.T) downloadtest.LedgerUnderTest {
-		return postgresLedger{LibraryTracks: downloadfromlibrary.NewLibraryTracks(store), store: store}
+		return postgresLedger{LibraryTracks: downloadfromlibrary.NewLibraryTracks(store, time.Now), store: store}
 	})
 }

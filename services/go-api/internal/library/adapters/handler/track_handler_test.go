@@ -728,7 +728,7 @@ func TestHandleCreateTrack_AnInsertStalledBehindAnotherWriterAnswersTemporarilyU
 
 func holdUncommittedTrack(t *testing.T, user ids.UserId, title, artist, album string) {
 	t.Helper()
-	track, err := library.NewTrack(user, title, artist, album)
+	track, err := library.NewTrack(user, title, artist, album, time.Now)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}

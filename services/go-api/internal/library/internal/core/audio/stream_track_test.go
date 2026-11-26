@@ -116,7 +116,7 @@ func TestStreamTrackService_Execute(t *testing.T) {
 			store := library.NewInMemoryAudioStore()
 			sched := &library.InMemoryScheduler{}
 			trackId := tt.setup(trRepo, store)
-			svc := library.NewStreamTrackService(trRepo, store, library.WithStreamScheduler(sched))
+			svc := library.NewStreamTrackService(trRepo, store, sched, library.NoopAudioStoreMetrics(), library.AlwaysEnabled)
 
 			out, err := svc.Execute(ctx, userId, trackId)
 
@@ -168,7 +168,7 @@ func TestStreamTrackService_RecoveryMetric(t *testing.T) {
 	store.ErrOnStream = errors.New("not found")
 	sched := &library.InMemoryScheduler{}
 	metrics := &library.InMemoryAudioStoreMetrics{}
-	svc := library.NewStreamTrackService(repo, store, library.WithStreamScheduler(sched), library.WithStreamMetrics(metrics))
+	svc := library.NewStreamTrackService(repo, store, sched, metrics, library.AlwaysEnabled)
 
 	if _, err := svc.Execute(ctx, userId, track.ID); !errors.Is(err, library.ErrAudioNotAvailable) {
 		t.Fatalf("error = %v, want ErrAudioNotAvailable", err)
@@ -187,7 +187,7 @@ func TestStreamTrackService_NoRecoveryMetricOnHealthyStream(t *testing.T) {
 	store := library.NewInMemoryAudioStore()
 	store.Seed("audio/ok.opus", []byte("data"))
 	metrics := &library.InMemoryAudioStoreMetrics{}
-	svc := library.NewStreamTrackService(repo, store, library.WithStreamMetrics(metrics))
+	svc := library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), metrics, library.AlwaysEnabled)
 
 	if _, err := svc.Execute(ctx, userId, track.ID); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -206,7 +206,7 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 		store := library.NewInMemoryAudioStore()
 		sched := &library.InMemoryScheduler{}
 		track := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
-		svc := library.NewStreamTrackService(repo, store, library.WithStreamScheduler(sched))
+		svc := library.NewStreamTrackService(repo, store, sched, library.NoopAudioStoreMetrics(), library.AlwaysEnabled)
 
 		if err := svc.RecoverIfMissing(ctx, userId, track.ID); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -226,7 +226,7 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 		store.Seed("audio/here.opus", []byte("data"))
 		sched := &library.InMemoryScheduler{}
 		track := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/here.opus")
-		svc := library.NewStreamTrackService(repo, store, library.WithStreamScheduler(sched))
+		svc := library.NewStreamTrackService(repo, store, sched, library.NoopAudioStoreMetrics(), library.AlwaysEnabled)
 
 		if err := svc.RecoverIfMissing(ctx, userId, track.ID); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -246,7 +246,7 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 		sched := &library.InMemoryScheduler{}
 		other := library.FixtureOtherUserId()
 		foreign := library.SeedReadyTrack(t, repo, other, "Theirs", "Artist", "Album", "audio/theirs.opus")
-		svc := library.NewStreamTrackService(repo, store, library.WithStreamScheduler(sched))
+		svc := library.NewStreamTrackService(repo, store, sched, library.NoopAudioStoreMetrics(), library.AlwaysEnabled)
 
 		for _, id := range []library.TrackId{library.NewTrackId(), foreign.ID} {
 			if err := svc.RecoverIfMissing(ctx, userId, id); !errors.Is(err, library.ErrTrackNotFound) {
@@ -263,7 +263,7 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 		store := library.NewInMemoryAudioStore()
 		sched := &library.InMemoryScheduler{}
 		track := library.SeedTrack(t, repo, userId, "Pending", "Artist", "Album")
-		svc := library.NewStreamTrackService(repo, store, library.WithStreamScheduler(sched))
+		svc := library.NewStreamTrackService(repo, store, sched, library.NoopAudioStoreMetrics(), library.AlwaysEnabled)
 
 		if err := svc.RecoverIfMissing(ctx, userId, track.ID); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -279,7 +279,7 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 		store.ErrOnExists = errors.New("storage down")
 		sched := &library.InMemoryScheduler{}
 		track := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/err.opus")
-		svc := library.NewStreamTrackService(repo, store, library.WithStreamScheduler(sched))
+		svc := library.NewStreamTrackService(repo, store, sched, library.NoopAudioStoreMetrics(), library.AlwaysEnabled)
 
 		if err := svc.RecoverIfMissing(ctx, userId, track.ID); err == nil {
 			t.Fatal("expected an error")
@@ -296,7 +296,7 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 		track := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
 		errUpdate := errors.New("db down")
 		repo.ErrOnUpdate = errUpdate
-		svc := library.NewStreamTrackService(repo, store, library.WithStreamScheduler(sched))
+		svc := library.NewStreamTrackService(repo, store, sched, library.NoopAudioStoreMetrics(), library.AlwaysEnabled)
 
 		err := svc.RecoverIfMissing(ctx, userId, track.ID)
 		if !errors.Is(err, errUpdate) {
@@ -312,7 +312,7 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 		store := library.NewInMemoryAudioStore()
 		sched := &library.InMemoryScheduler{Err: errors.New("queue full")}
 		track := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
-		svc := library.NewStreamTrackService(repo, store, library.WithStreamScheduler(sched))
+		svc := library.NewStreamTrackService(repo, store, sched, library.NoopAudioStoreMetrics(), library.AlwaysEnabled)
 
 		if err := svc.RecoverIfMissing(ctx, userId, track.ID); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -332,7 +332,7 @@ func TestStreamTrackService_ReacquireBoundedByTimeout(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
 	sched := &library.InMemoryStuckScheduler{}
 	track := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
-	svc := library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), library.WithStreamScheduler(sched))
+	svc := library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), sched, library.NoopAudioStoreMetrics(), library.AlwaysEnabled)
 
 	start := time.Now()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -343,4 +343,29 @@ func TestStreamTrackService_ReacquireBoundedByTimeout(t *testing.T) {
 
 func ptrStatus(s library.DownloadStatus) *library.DownloadStatus {
 	return &s
+}
+
+func TestNewStreamTrackService_RefusesAMissingCollaborator(t *testing.T) {
+	repo := library.NewInMemoryTrackRepo()
+	store := library.NewInMemoryAudioStore()
+	for name, build := range map[string]func(){
+		"no scheduler": func() {
+			library.NewStreamTrackService(repo, store, nil, library.NoopAudioStoreMetrics(), library.AlwaysEnabled)
+		},
+		"no metrics": func() {
+			library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), nil, library.AlwaysEnabled)
+		},
+		"no recovery switch": func() {
+			library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), nil)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatal("construction succeeded, want a panic at construction")
+				}
+			}()
+			build()
+		})
+	}
 }

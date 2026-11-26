@@ -189,7 +189,7 @@ func OrphanedAudioQueueContract(t *testing.T, newQueue func(t *testing.T) (ports
 		}
 		newTrack := func(userId ids.UserId, audioRef string) *domain.Track {
 			t.Helper()
-			track, err := domain.NewTrack(userId, "Title-"+uuid.NewString()[:8], "Artist-"+uuid.NewString()[:8], "Album")
+			track, err := domain.NewTrack(userId, "Title-"+uuid.NewString()[:8], "Artist-"+uuid.NewString()[:8], "Album", time.Now)
 			if err != nil {
 				t.Fatalf("NewTrack: %v", err)
 			}

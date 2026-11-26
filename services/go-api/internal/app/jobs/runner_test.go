@@ -614,10 +614,8 @@ func TestSwitch_TheStreamRecoveryKillSwitchSuppressesReschedule(t *testing.T) {
 	store := librarytest.NewAudioStore()
 	store.ErrOnStream = errors.New("not found")
 	sched := &librarytest.Scheduler{}
-	svc := library.NewStreamTrackService(repo, store,
-		library.WithStreamScheduler(sched),
-		library.WithStreamRecoverySwitch(r.Switch(jobs.StreamRecovery)))
-	track, err := library.NewTrack(user, "Track", "Artist", "Album")
+	svc := library.NewStreamTrackService(repo, store, sched, library.NoopAudioStoreMetrics(), r.Switch(jobs.StreamRecovery))
+	track, err := library.NewTrack(user, "Track", "Artist", "Album", time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -80,7 +80,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 	if err := validateAddTrackInput(input, s.now()); err != nil {
 		return nil, err
 	}
-	track, err := domain.NewTrack(userId, input.Title, input.Artist, input.Album)
+	track, err := domain.NewTrack(userId, input.Title, input.Artist, input.Album, s.now)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 	}
 	sources := input.CatalogSources
 	if input.SourceURL != nil {
-		sources = domain.WithSoundCloudURL(sources, *input.SourceURL)
+		sources = domain.AttachSoundCloudURL(sources, *input.SourceURL)
 	}
 	if err := track.SetCatalogIdentity(input.CatalogMBID, input.CatalogExplicit, sources); err != nil {
 		return nil, err

@@ -41,7 +41,7 @@ type CatalogSource struct {
 	URL        string `json:"url,omitempty"`
 }
 
-func WithSoundCloudURL(sources []CatalogSource, rawURL string) []CatalogSource {
+func AttachSoundCloudURL(sources []CatalogSource, rawURL string) []CatalogSource {
 	rawURL = strings.TrimSpace(rawURL)
 	if !isSoundCloudURL(rawURL) {
 		return sources

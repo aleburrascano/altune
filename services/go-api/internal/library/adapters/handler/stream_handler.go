@@ -137,12 +137,14 @@ type countedAudioBody struct {
 	stream  ports.AudioStream
 	read    int64
 	readErr error
+	failed  bool
 }
 
 func (b *countedAudioBody) Read(p []byte) (int, error) {
 	n, err := b.stream.Read(p)
 	b.read += int64(n)
-	if err != nil && !errors.Is(err, io.EOF) && b.readErr == nil {
+	if err != nil && !errors.Is(err, io.EOF) && !b.failed {
+		b.failed = true
 		b.readErr = err
 	}
 	return n, err

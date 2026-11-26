@@ -47,7 +47,7 @@ var (
 	ValidateFeaturedArtist    = domain.ValidateFeaturedArtist
 	ValidateOptionalTrackText = domain.ValidateOptionalTrackText
 	ValidateSourceURL         = domain.ValidateSourceURL
-	WithSoundCloudURL         = domain.WithSoundCloudURL
+	AttachSoundCloudURL       = domain.AttachSoundCloudURL
 )
 
 var (

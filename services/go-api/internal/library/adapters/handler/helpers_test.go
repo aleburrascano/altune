@@ -360,6 +360,6 @@ func failingRepoRoutes(err error) chi.Router {
 	router := newRouter()
 	router.Route("/tracks", func(r chi.Router) { r.Mount("/", tracks.Routes()) })
 	signer := &countingAudioStore{InMemoryAudioStore: library.NewInMemoryAudioStore()}
-	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, signer, time.Now), time.Now).Routes(router)
+	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, signer, time.Now, library.NoopAudioStoreMetrics()), time.Now).Routes(router)
 	return router
 }

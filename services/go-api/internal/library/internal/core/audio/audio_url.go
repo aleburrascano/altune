@@ -23,42 +23,34 @@ type ResolvedAudioURL struct {
 type AudioLinkService struct {
 	trackRepo ports.TrackBatchGetter
 	signer    ports.AudioLinkSigner
+	canSign   bool
 	metrics   ports.AudioStoreMetrics
 	now       clock.Func
 }
 
 var ErrClockRequired = errors.New("audio: the audio link service requires a clock")
 
-func NewAudioURLService(trackRepo ports.TrackBatchGetter, store ports.AudioStore, now clock.Func, opts ...func(*AudioLinkService)) (*AudioLinkService, error) {
+func NewAudioURLService(trackRepo ports.TrackBatchGetter, store ports.AudioStore, now clock.Func, metrics ports.AudioStoreMetrics) (*AudioLinkService, error) {
 	if now == nil {
 		return nil, ErrClockRequired
 	}
-	signer, _ := store.(ports.AudioLinkSigner)
-	s := &AudioLinkService{trackRepo: trackRepo, signer: signer, metrics: ports.NoopAudioStoreMetrics(), now: now}
-	for _, opt := range opts {
-		opt(s)
+	if metrics == nil {
+		panic("audio: NewAudioURLService requires metrics")
 	}
-	return s, nil
+	signer, canSign := store.(ports.AudioLinkSigner)
+	return &AudioLinkService{trackRepo: trackRepo, signer: signer, canSign: canSign, metrics: metrics, now: now}, nil
 }
 
-func MustNewAudioURLService(trackRepo ports.TrackBatchGetter, store ports.AudioStore, now clock.Func, opts ...func(*AudioLinkService)) *AudioLinkService {
-	s, err := NewAudioURLService(trackRepo, store, now, opts...)
+func MustNewAudioURLService(trackRepo ports.TrackBatchGetter, store ports.AudioStore, now clock.Func, metrics ports.AudioStoreMetrics) *AudioLinkService {
+	s, err := NewAudioURLService(trackRepo, store, now, metrics)
 	if err != nil {
 		panic(err)
 	}
 	return s
 }
 
-func WithAudioURLMetrics(m ports.AudioStoreMetrics) func(*AudioLinkService) {
-	return func(s *AudioLinkService) {
-		if m != nil {
-			s.metrics = m
-		}
-	}
-}
-
 func (s *AudioLinkService) Resolve(ctx context.Context, userId ids.UserId, trackIds []domain.TrackId) ([]ResolvedAudioURL, error) {
-	if s.signer == nil {
+	if !s.canSign {
 		return nil, nil
 	}
 

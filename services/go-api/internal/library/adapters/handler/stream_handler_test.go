@@ -20,8 +20,8 @@ import (
 	"github.com/google/uuid"
 )
 
-func streamOnlyRoute(repo *library.InMemoryTrackRepo, store library.AudioStore, opts ...func(*library.StreamTrackService)) chi.Router {
-	h := library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, opts...), time.Now)
+func streamOnlyRoute(repo *library.InMemoryTrackRepo, store library.AudioStore, scheduler library.AcquisitionScheduler) chi.Router {
+	h := library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, scheduler, library.NoopAudioStoreMetrics(), library.AlwaysEnabled), time.Now)
 	router := chi.NewRouter()
 	router.Use(asBearer)
 	router.Get("/tracks/{trackId}/stream", h.HandleStreamAudio)
@@ -36,7 +36,7 @@ func streamRoutesAt(store library.AudioStore, now func() time.Time) (*library.In
 	repo := library.NewInMemoryTrackRepo()
 	router := chi.NewRouter()
 	router.Use(asBearer)
-	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store), now).Routes(router)
+	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled), now).Routes(router)
 	return repo, router
 }
 
@@ -123,7 +123,7 @@ func TestHandleStreamAudio(t *testing.T) {
 			repo := library.NewInMemoryTrackRepo()
 			store := library.NewInMemoryAudioStore()
 			trackId := tt.setup(t, repo, store)
-			router := streamOnlyRoute(repo, store)
+			router := streamOnlyRoute(repo, store, library.NoopAcquisitionScheduler())
 
 			rec := request(t, router, http.MethodGet, "/tracks/"+trackId+"/stream", nil)
 
@@ -144,7 +144,7 @@ func TestHandleStreamAudio_MissingAudio_SchedulesReacquisition(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
 	sched := &library.InMemoryScheduler{}
 	track := seedReady(t, repo, "Gone", "audio/gone.opus")
-	router := streamOnlyRoute(repo, library.NewInMemoryAudioStore(), library.WithStreamScheduler(sched))
+	router := streamOnlyRoute(repo, library.NewInMemoryAudioStore(), sched)
 
 	rec := request(t, router, http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/stream", nil)
 
@@ -158,7 +158,7 @@ func TestHandleStreamAudio_MissingAudio_SchedulesReacquisition(t *testing.T) {
 }
 
 func TestHandleStreamAudio_NoAuth(t *testing.T) {
-	router := streamOnlyRoute(library.NewInMemoryTrackRepo(), library.NewInMemoryAudioStore())
+	router := streamOnlyRoute(library.NewInMemoryTrackRepo(), library.NewInMemoryAudioStore(), library.NoopAcquisitionScheduler())
 
 	rec := sendAnonymous(router, httptest.NewRequest(http.MethodGet, "/tracks/"+uuid.New().String()+"/stream", nil))
 
@@ -173,7 +173,7 @@ func TestHandleRecover(t *testing.T) {
 	gone := seedReady(t, repo, "Gone", "audio/gone.opus")
 	router := chi.NewRouter()
 	router.Use(asBearer)
-	svc := library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), library.WithStreamScheduler(sched))
+	svc := library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), sched, library.NoopAudioStoreMetrics(), library.AlwaysEnabled)
 	library.MustNewStreamHandler(svc, time.Now).Routes(router)
 
 	tests := []struct {
@@ -392,7 +392,7 @@ func serveAudioBehindRouteDeadline(t *testing.T, opts ...func(*library.StreamHan
 	r.Use(httpserver.WriteDeadline(audioRouteDeadline))
 	r.Use(httpserver.RequestLogger)
 	r.Use(asBearer)
-	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store), time.Now, opts...).Routes(r)
+	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled), time.Now, opts...).Routes(r)
 	srv := slowclient.NewServer(t, r)
 
 	path := "/tracks/" + track.ID.UUID().String() + "/audio"

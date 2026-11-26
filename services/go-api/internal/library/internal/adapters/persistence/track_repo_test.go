@@ -112,7 +112,7 @@ func TestPostgresTrackRepo_Add_DedupConflict(t *testing.T) {
 		t.Fatal("first Add() created = false, want true")
 	}
 
-	track2, err := library.NewTrack(userId, track1.Title, track1.Artist, track1.Album)
+	track2, err := library.NewTrack(userId, track1.Title, track1.Artist, track1.Album, time.Now)
 	if err != nil {
 		t.Fatalf("NewTrack for dedup: %v", err)
 	}
@@ -1161,12 +1161,12 @@ func TestPostgresTrackRepo_ARelabelOntoAnotherOfTheUsersTracksFailsAndLandsNothi
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
-	existing, err := library.NewTrack(userId, "It’s Only Love (classic version)", "Bryan Adams", "It’s Only Love")
+	existing, err := library.NewTrack(userId, "It’s Only Love (classic version)", "Bryan Adams", "It’s Only Love", time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	addAndLoadForRelabel(ctx, t, repo, pool, existing)
-	studio, err := library.NewTrack(userId, "It's Only Love", "Bryan Adams", "Reckless")
+	studio, err := library.NewTrack(userId, "It's Only Love", "Bryan Adams", "Reckless", time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1200,7 +1200,7 @@ func TestPostgresTrackRepo_AStaleRelabelWritesNoLabelColumns(t *testing.T) {
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
-	studio, err := library.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless")
+	studio, err := library.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless", time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1231,7 +1231,7 @@ func TestPostgresTrackRepo_ARelabelThatClearsYearISRCAndLengthStoresNulls(t *tes
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
-	studio, err := library.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless")
+	studio, err := library.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless", time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1273,7 +1273,7 @@ func TestPostgresTrackRepo_AReloadedRelabelledTrackDoesNotRewriteLabelsOnItsNext
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
-	studio, err := library.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless")
+	studio, err := library.NewTrack(userId, "It's Only Love "+uuid.New().String()[:8], "Bryan Adams", "Reckless", time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}

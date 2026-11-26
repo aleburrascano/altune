@@ -23,7 +23,7 @@ type playlistRepoWithTracks struct {
 
 func (r *playlistRepoWithTracks) SeedTrack(t *testing.T, userId ids.UserId) library.TrackId {
 	t.Helper()
-	track, err := library.NewTrack(userId, "Title-"+uuid.NewString()[:8], "Artist-"+uuid.NewString()[:8], "Album")
+	track, err := library.NewTrack(userId, "Title-"+uuid.NewString()[:8], "Artist-"+uuid.NewString()[:8], "Album", time.Now)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}

@@ -33,7 +33,7 @@ func newManualClock() *clocktest.Manual {
 
 func newTrackFeat(t *testing.T, userId ids.UserId, title string) *library.Track {
 	t.Helper()
-	track, err := library.NewTrack(userId, title, "Artist", "Album")
+	track, err := library.NewTrack(userId, title, "Artist", "Album", time.Now)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}

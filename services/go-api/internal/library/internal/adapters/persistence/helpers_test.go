@@ -13,7 +13,7 @@ import (
 
 func newTestTrackForDB(t *testing.T, userId sharedids.UserId) *library.Track {
 	t.Helper()
-	track, err := library.NewTrack(userId, "Title-"+uuid.New().String()[:8], "Artist-"+uuid.New().String()[:8], "Album")
+	track, err := library.NewTrack(userId, "Title-"+uuid.New().String()[:8], "Artist-"+uuid.New().String()[:8], "Album", time.Now)
 	if err != nil {
 		t.Fatalf("newTestTrackForDB: %v", err)
 	}
