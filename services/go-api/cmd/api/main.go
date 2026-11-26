@@ -28,32 +28,42 @@ func main() {
 	}
 	logRing := setupLogging(cfg.LogLevel)
 
-	if len(os.Args) < 2 {
-		runServer(cfg, logRing)
-		return
-	}
-
-	cmd, args := os.Args[1], os.Args[2:]
-	switch cmd {
-	case "serve":
-		runServer(cfg, logRing)
-	case "health-check":
-		commands.RunHealthCheck(cfg, healthCheckMode(cmd, args))
-	case "journey-check":
-		commands.RunJourneyCheck(cfg)
-	case "sweep-staging-audio":
-		commands.RunSweepStagingAudio(cfg, parseExecute(cmd, args))
-	default:
-		fmt.Fprintf(os.Stderr, "unknown command: %s\nUsage: api [serve|health-check|journey-check|sweep-staging-audio]\n", cmd)
+	if err := dispatch(cfg, logRing, os.Args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func runServer(cfg *config.Config, logRing *logging.RingBuffer) {
+func dispatch(cfg *config.Config, logRing *logging.RingBuffer, argv []string) error {
+	if len(argv) == 0 {
+		return runServer(cfg, logRing)
+	}
+	cmd, args := argv[0], argv[1:]
+	switch cmd {
+	case "serve":
+		return runServer(cfg, logRing)
+	case "health-check":
+		return reportCommand(commands.RunHealthCheck(cfg, healthCheckMode(cmd, args)))
+	case "journey-check":
+		return reportCommand(commands.RunJourneyCheck(cfg))
+	case "sweep-staging-audio":
+		return reportCommand(commands.RunSweepStagingAudio(cfg, parseExecute(cmd, args)))
+	default:
+		return fmt.Errorf("unknown command: %s\nUsage: api [serve|health-check|journey-check|sweep-staging-audio]", cmd)
+	}
+}
+
+func reportCommand(err error) error {
+	if err != nil {
+		return fmt.Errorf("ERROR: %w", err)
+	}
+	return nil
+}
+
+func runServer(cfg *config.Config, logRing *logging.RingBuffer) error {
 	shutdown, err := telemetry.Setup(context.Background(), telemetry.Service{Name: "altune-api", Version: app.BuildCommit(), Environment: cfg.Env}, os.Getenv)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "telemetry setup: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("telemetry setup: %w", err)
 	}
 	a := app.New(cfg, logRing)
 	runErr := a.Run(context.Background())
@@ -64,9 +74,9 @@ func runServer(cfg *config.Config, logRing *logging.RingBuffer) {
 		fmt.Fprintf(os.Stderr, "telemetry flush: %v\n", flushErr)
 	}
 	if runErr != nil {
-		fmt.Fprintf(os.Stderr, "server error: %v\n", runErr)
-		os.Exit(1)
+		return fmt.Errorf("server error: %w", runErr)
 	}
+	return nil
 }
 
 func parseExecute(name string, args []string) bool {

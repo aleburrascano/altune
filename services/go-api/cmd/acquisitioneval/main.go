@@ -78,8 +78,7 @@ func run(goldenDir, baselinePath string, updateBaseline bool) error {
 	for _, r := range regressions {
 		fmt.Fprintf(os.Stderr, "REGRESSION: %s\n", r)
 	}
-	os.Exit(1)
-	return nil
+	return fmt.Errorf("%d regressions against %s", len(regressions), baselinePath)
 }
 
 func subcommand(args []string) (name string, rest []string) {

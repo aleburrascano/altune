@@ -134,6 +134,7 @@ linters:
       rules:
         - name: indent-error-flow
         - name: superfluous-else
+        - name: deep-exit
     gocritic:
       enabled-tags:
         - diagnostic

@@ -11,8 +11,8 @@ import (
 	"log/slog"
 )
 
-func RunSweepStagingAudio(cfg *config.Config, execute bool) {
-	exitOnError(runSweepStagingAudio(cfg, execute))
+func RunSweepStagingAudio(cfg *config.Config, execute bool) error {
+	return runSweepStagingAudio(cfg, execute)
 }
 
 func runSweepStagingAudio(cfg *config.Config, execute bool) error {
