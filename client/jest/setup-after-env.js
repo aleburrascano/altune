@@ -57,7 +57,13 @@ const { ensureAppAuthClient } = require('./appAuthClient.js');
 
 beforeAll(ensureAppAuthClient);
 
+function fireFakeTimersBeforeStopping() {
+  if ('clock' in setTimeout) jest.runOnlyPendingTimers();
+  jest.useRealTimers();
+}
+
 async function stopTelemetryWork() {
+  fireFakeTimersBeforeStopping();
   __http.abortHanging();
   await require('../src/shared/telemetry').stopTelemetry();
   installStoppedTelemetry();
