@@ -21,6 +21,8 @@ var (
 	_ ports.AudioAgeLister = (*FilesystemAudioStore)(nil)
 )
 
+var errFilesystemCallPanicked = errors.New("filesystem call panicked")
+
 type FilesystemAudioStore struct {
 	baseDir   string
 	opTimeout time.Duration
@@ -285,8 +287,10 @@ func boundedFSCall[T any](ctx context.Context, gate *fsGate, op string, call fun
 	done := make(chan fsCallResult[T], 1)
 	background.Go(ctx, "catalog.filesystem_call_panic", func() {
 		defer gate.leave()
+		res := fsCallResult[T]{err: errFilesystemCallPanicked}
+		defer func() { done <- res }()
 		value, err := call()
-		done <- fsCallResult[T]{value: value, err: err}
+		res = fsCallResult[T]{value: value, err: err}
 	})
 
 	select {
