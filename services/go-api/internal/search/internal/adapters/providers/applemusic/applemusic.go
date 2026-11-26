@@ -31,6 +31,9 @@ const (
 )
 
 func NewAppleMusicAdapter(client *http.Client, now clock.Func) *AppleMusicAdapter {
+	if now == nil {
+		panic("applemusic.NewAppleMusicAdapter: a clock is required")
+	}
 	base := fmt.Sprintf("https://api.music.apple.com/v1/catalog/%s", appleMusicStorefront)
 	return &AppleMusicAdapter{
 		client:      client,

@@ -29,6 +29,9 @@ type PostgresEventStore struct {
 }
 
 func NewPostgresEventStore(pool *pgxpool.Pool, now clock.Func) *PostgresEventStore {
+	if now == nil {
+		panic("persistence.NewPostgresEventStore: a clock is required")
+	}
 	return &PostgresEventStore{pool: pool, now: now}
 }
 

@@ -30,6 +30,9 @@ func NewCachedResolver[T comparable](
 	valid func(T) bool,
 	now clock.Func,
 ) *CachedResolver[T] {
+	if now == nil {
+		panic("providerrequests.NewCachedResolver: a clock is required")
+	}
 	return &CachedResolver[T]{key: key, timeout: timeout, resolveFn: resolve, validFn: valid, now: now}
 }
 

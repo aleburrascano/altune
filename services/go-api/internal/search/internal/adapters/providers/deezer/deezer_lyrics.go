@@ -43,6 +43,9 @@ type DeezerLyricsAdapter struct {
 }
 
 func NewDeezerLyricsAdapter(client *http.Client, now clock.Func) *DeezerLyricsAdapter {
+	if now == nil {
+		panic("deezer.NewDeezerLyricsAdapter: a clock is required")
+	}
 	return &DeezerLyricsAdapter{
 		resolver: NewDeezerAdapter(client),
 		jwt:      newDeezerJWTResolver(client, now),

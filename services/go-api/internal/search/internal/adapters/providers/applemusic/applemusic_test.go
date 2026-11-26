@@ -447,3 +447,13 @@ func TestAlbumTracksLive_E2E(t *testing.T) {
 	}
 	t.Logf("apple Para'dies: %d tracks; first %q by %q", len(apTracks), apTracks[0].Title, apTracks[0].Subtitle)
 }
+
+func TestNewAppleMusicAdapter_PanicsOnANilClock(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("NewAppleMusicAdapter without a clock did not panic")
+		}
+	}()
+
+	applemusic.NewAppleMusicAdapter(http.DefaultClient, nil)
+}

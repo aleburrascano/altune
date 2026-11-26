@@ -169,3 +169,13 @@ func TestCachedResolver_RefreshesOnceTheExpiryPassesOnTheInjectedClock(t *testin
 		t.Errorf("resolved %d times after the expiry passed, want 2", got)
 	}
 }
+
+func TestNewCachedResolver_PanicsOnANilClock(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("NewCachedResolver without a clock did not panic")
+		}
+	}()
+
+	providerrequests.NewCachedResolver("k", time.Second, func(context.Context) (string, time.Time, error) { return "", time.Time{}, nil }, providerrequests.NonEmpty, nil)
+}

@@ -188,3 +188,13 @@ func TestDeezerLyricsAdapter_EmptyTrackIDReturnsEmpty(t *testing.T) {
 		t.Errorf("empty track id should return empty + nil, got %+v err=%v", lyrics, err)
 	}
 }
+
+func TestNewDeezerLyricsAdapter_PanicsOnANilClock(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("NewDeezerLyricsAdapter without a clock did not panic")
+		}
+	}()
+
+	deezer.NewDeezerLyricsAdapter(http.DefaultClient, nil)
+}

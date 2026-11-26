@@ -135,3 +135,13 @@ func TestPostgresEventStore_Append_StampsAnEventWithoutATimeFromTheInjectedClock
 		t.Errorf("occurred_at = %v, want %v from the injected clock", occurredAt, want)
 	}
 }
+
+func TestNewPostgresEventStore_PanicsOnANilClock(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("NewPostgresEventStore without a clock did not panic")
+		}
+	}()
+
+	persistence.NewPostgresEventStore(nil, nil)
+}
