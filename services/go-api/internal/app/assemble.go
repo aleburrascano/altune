@@ -116,7 +116,7 @@ func (a *App) wireFeatures(ctx context.Context, transport http.RoundTripper) (fe
 	}
 	a.keepSearches(disc)
 	a.startDiscoveryBackgroundJobs(ctx, disc)
-	cat, err := a.wireCatalog(ctx, a.eventTap, disc)
+	cat, err := a.wireCatalog(ctx, transport, a.eventTap, disc)
 	if err != nil {
 		return features{}, fmt.Errorf("catalog: %w", err)
 	}

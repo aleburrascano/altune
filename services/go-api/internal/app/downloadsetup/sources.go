@@ -1,7 +1,6 @@
 package downloadsetup
 
 import (
-	"altune/go-api/internal/app/providertransport"
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/youtubemusicapi"
@@ -28,10 +27,10 @@ func (t SourceOrder) All() []download.AudioSource {
 	return append(append([]download.AudioSource{}, t.First...), t.Fallback...)
 }
 
-func EnabledSources(ctx context.Context, cfg *config.Config, redis *goredis.Client) (SourceOrder, download.Verification, error) {
+func EnabledSources(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper) (SourceOrder, download.Verification, error) {
 	searcher := YtDlpSearcher(cfg)
 	tools := download.Verification{YtDlp: searcher.Available()}
-	tiers, err := sourcesFor(ctx, cfg, redis, searcher)
+	tiers, err := sourcesFor(ctx, cfg, redis, transport, searcher)
 	return tiers, tools, err
 }
 
@@ -60,7 +59,7 @@ func innerTubeClient(ctx context.Context, cfg *config.Config, redis *goredis.Cli
 	return &http.Client{Timeout: ytmSearchTimeout, Transport: budget.Transport(nil)}
 }
 
-func sourcesFor(ctx context.Context, cfg *config.Config, redis *goredis.Client, searcher *download.YouTubeAudioSearcher) (SourceOrder, error) {
+func sourcesFor(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper, searcher *download.YouTubeAudioSearcher) (SourceOrder, error) {
 	var tiers SourceOrder
 	if cfg.YtMusicEnabled {
 		songs, err := budgetedYTMSearchClient(ctx, cfg, redis)
@@ -77,7 +76,7 @@ func sourcesFor(ctx context.Context, cfg *config.Config, redis *goredis.Client, 
 		slog.InfoContext(ctx, "acquisition: yt-dlp source disabled via YTDLP_ENABLED")
 	}
 	if len(tiers.All()) > 0 {
-		tiers.First = append([]download.AudioSource{download.NewSource(searcher, download.WithPageReader(download.NewHTTPPageReader(providertransport.Live(), cfg.AcquisitionFileHostPageTimeout)))}, tiers.First...)
+		tiers.First = append([]download.AudioSource{download.NewSource(searcher, download.WithPageReader(download.NewHTTPPageReader(transport, cfg.AcquisitionFileHostPageTimeout)))}, tiers.First...)
 	}
 	return tiers, nil
 }

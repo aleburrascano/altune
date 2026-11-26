@@ -8,6 +8,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +22,7 @@ import (
 
 func liveTiers(t *testing.T, cfg *config.Config) (downloadsetup.SourceOrder, download.Verification) {
 	t.Helper()
-	tiers, tools, err := downloadsetup.EnabledSources(t.Context(), cfg, nil)
+	tiers, tools, err := downloadsetup.EnabledSources(t.Context(), cfg, nil, http.DefaultTransport)
 	if err != nil {
 		t.Fatalf("LiveTiers: %v", err)
 	}
@@ -198,6 +200,47 @@ func TestYtDlpSearcher_RecordsAJarsFirstBotCheckUnderTheConfiguredEnvironment(t 
 	}
 	if f := session.FirstSignInFailure; f == nil || f.Environment != "staging" || f.Run != "canary" {
 		t.Errorf("first sign-in failure = %+v, want the canary's, recorded under environment staging", f)
+	}
+}
+
+type recordingTransport struct {
+	urls []string
+}
+
+func (r *recordingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	r.urls = append(r.urls, req.URL.String())
+	body := "https://b.imgur.gg/abcde12345-song.mp3"
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Header:     http.Header{},
+		Request:    req,
+	}, nil
+}
+
+func TestLiveTiers_TheSavedLinkReadsFileHostPagesThroughTheInjectedTransport(t *testing.T) {
+	transport := &recordingTransport{}
+	tiers, _, err := downloadsetup.EnabledSources(t.Context(), &config.Config{YtMusicEnabled: true, AcquisitionFileHostPageTimeout: time.Second}, nil, transport)
+	if err != nil {
+		t.Fatalf("EnabledSources: %v", err)
+	}
+	link := tiers.First[0]
+	if link.Name() != download.SavedLinkSourceName {
+		t.Fatalf("first source = %s, want the saved link", link.Name())
+	}
+
+	candidates, err := link.Find(t.Context(), download.FindRequest{
+		Title:          "Song",
+		CatalogSources: []download.CatalogSource{{Provider: "imgurgg", ExternalID: "abcde12345"}},
+	})
+	if err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	if len(transport.urls) != 1 || transport.urls[0] != "https://imgur.gg/f/abcde12345" {
+		t.Errorf("requests through the injected transport = %v, want the one file host page", transport.urls)
+	}
+	if len(candidates) != 1 || candidates[0].URL != "https://b.imgur.gg/abcde12345-song.mp3" {
+		t.Errorf("candidates = %+v, want the file found on the page", candidates)
 	}
 }
 
