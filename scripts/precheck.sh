@@ -2,9 +2,14 @@
 set -uo pipefail
 
 stage=push
-case "${1:-}" in
-  --lint) stage=commit; shift ;;
-esac
+full=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --lint) stage=commit; shift ;;
+    --full) full=1; shift ;;
+    *) break ;;
+  esac
+done
 lint_only=0
 [ $stage = commit ] && lint_only=1
 
@@ -32,7 +37,7 @@ if [ $stage = push ] && [ "${PRECHECK_NO_CACHE:-}" != 1 ] && [ -z "$(git status 
       jq --version 2>/dev/null
       shellcheck --version 2>/dev/null
       date -u +%Y-%m-%d
-      echo "integration=${INTEGRATION:-} client_mutate_elsewhere=${CLIENT_MUTATE_RUNS_ELSEWHERE:-} lint_whole=${PRECHECK_LINT_WHOLE:-}"
+      echo "integration=${INTEGRATION:-} client_mutate_elsewhere=${CLIENT_MUTATE_RUNS_ELSEWHERE:-} full=$full"
     } | sha256sum | cut -d' ' -f1
   )
   if [ -f "$result_dir/$result_key" ]; then
@@ -190,13 +195,19 @@ if touches '^services/go-api/'; then
   m=services/go-api
   go_pin $m
   if need go "go-api" && need golangci-lint "go-api lint"; then
-    if [ $stage = commit ]; then
+    if [ $stage = commit ] || [ $full = 0 ]; then
       mapfile -t staged_go < <(grep -E "^$m/.*\.go\$" <<<"$changed" | sed "s#^$m/##")
       if [ ${#staged_go[@]} -gt 0 ]; then
         mapfile -t staged_pkgs < <(printf '%s\n' "${staged_go[@]}" | xargs -r -d '\n' -n1 dirname | sort -u | sed 's#^#./#')
-        check "go-api fast linters and format (pending packages)" $m env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --fast-only --new-from-rev=HEAD --allow-parallel-runners "${staged_pkgs[@]}"
-        check "go-api no comments (pending files)" $m go run ./scripts/lintcomments --all "${staged_go[@]}"
+        scoped_rev=$base
+        [ $stage = commit ] && scoped_rev=HEAD
+        check "go-api fast linters and format (changed packages)" $m env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --fast-only --new-from-rev="$scoped_rev" --allow-parallel-runners "${staged_pkgs[@]}"
+        check "go-api no comments (changed files)" $m go run ./scripts/lintcomments --all "${staged_go[@]}"
         check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
+      fi
+      if [ $stage = push ]; then
+        mapfile -t pkgs < <(go_pkgs $m)
+        [ ${#pkgs[@]} -gt 0 ] && test_check "go-api tests (race, changed packages)" $m "${heavy[@]}" go test -race -shuffle=on -count=1 "${pkgs[@]}"
       fi
     else
       affected=()
@@ -211,16 +222,7 @@ if touches '^services/go-api/'; then
       elif [ ${#affected[@]} -gt 0 ]; then
         check "go-api vet" $m "${heavy[@]}" go vet "${affected[@]}"
       fi
-      if [ $whole_module = 1 ] || [ "${PRECHECK_LINT_WHOLE:-}" = 1 ] || touches "^$m/\.golangci"; then
-        lint_scope=(./...)
-        lint_label="whole module"
-      else
-        lint_scope=("${affected[@]}")
-        lint_label="${#lint_scope[@]} package(s) and importers"
-      fi
-      if [ ${#lint_scope[@]} -gt 0 ]; then
-        check "go-api strict linters (new code, $lint_label)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --new-from-rev="$base" --allow-serial-runners "${lint_scope[@]}"
-      fi
+      check "go-api strict linters (new code, whole module)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --new-from-rev="$base" --allow-serial-runners ./...
       check "go-api no comments (whole tree)" $m go run ./scripts/lintcomments --all .
       check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
       mapfile -t pkgs < <(go_pkgs $m)
@@ -290,12 +292,15 @@ if touches '^services/overseer/'; then
   m=services/overseer
   go_pin $m
   if need go "overseer" && need golangci-lint "overseer lint"; then
-    if [ $stage = commit ]; then
+    if [ $stage = commit ] || [ $full = 0 ]; then
       mapfile -t staged_overseer < <(grep -E "^$m/.*\.go\$" <<<"$changed" | sed "s#^$m/##")
       if [ ${#staged_overseer[@]} -gt 0 ]; then
         mapfile -t staged_overseer_pkgs < <(printf '%s\n' "${staged_overseer[@]}" | xargs -r -d '\n' -n1 dirname | sort -u | sed 's#^#./#')
-        check "overseer fast linters and format (pending packages)" $m env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --fast-only --allow-parallel-runners "${staged_overseer_pkgs[@]}"
-        check "overseer no comments (pending files)" services/go-api go run ./scripts/lintcomments --all "${staged_overseer[@]/#/../overseer/}"
+        check "overseer fast linters and format (changed packages)" $m env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --fast-only --allow-parallel-runners "${staged_overseer_pkgs[@]}"
+        check "overseer no comments (changed files)" services/go-api go run ./scripts/lintcomments --all "${staged_overseer[@]/#/../overseer/}"
+      fi
+      if [ $stage = push ]; then
+        test_check "overseer tests (race)" $m "${heavy[@]}" env CGO_ENABLED=1 go test -race -shuffle=on -count=1 ./...
       fi
     else
       check "overseer build" $m "${heavy[@]}" go build ./...
@@ -408,7 +413,7 @@ fi
 
 finished=1
 if [ $failed = 1 ]; then
-  echo "precheck: red. Fix the FAIL lines, then rerun: bash scripts/precheck.sh $base_ref"
+  echo "precheck: red. Fix the FAIL lines, then rerun: bash scripts/precheck.sh $([ $full = 1 ] && echo '--full ')$base_ref"
   printf '%s\n' "${fail_summaries[@]}"
   exit 1
 fi

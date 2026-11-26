@@ -13,5 +13,5 @@ if [ "${GITHUB_REF:-}" = refs/heads/main ]; then
     base=$(git rev-parse --verify --quiet HEAD~1) || { echo "ci-precheck: there is no commit before this push to main, so nothing was checked" >&2; exit 2; }
   fi
 fi
-export PRECHECK_LINT_WHOLE=1 CLIENT_MUTATE_RUNS_ELSEWHERE=1
-exec bash scripts/precheck.sh "$base"
+export CLIENT_MUTATE_RUNS_ELSEWHERE=1
+exec bash scripts/precheck.sh --full "$base"

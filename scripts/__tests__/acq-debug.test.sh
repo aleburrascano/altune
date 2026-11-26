@@ -3,9 +3,16 @@ set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 FAILURES=0
+FIXTURES=()
+
+remove_fixtures() {
+    [ ${#FIXTURES[@]} -eq 0 ] || rm -rf "${FIXTURES[@]}"
+}
+trap remove_fixtures EXIT
 
 new_stub_bin() {
     WORK=$(mktemp -d)
+    FIXTURES+=("$WORK")
     mkdir -p "$WORK/bin"
     cat >"$WORK/bin/ssh" <<'STUBSSH'
 #!/usr/bin/env bash
