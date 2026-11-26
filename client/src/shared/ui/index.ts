@@ -43,6 +43,7 @@ export { asyncView } from '@shared/ui/core/async/asyncView';
 export { AsyncSection } from '@shared/ui/view/async/AsyncSection';
 export { countLabel, formatDuration } from '@shared/ui/core/format/displayFormat';
 export { tapFeedback } from '@shared/ui/shell/appTapFeedback';
+export { createExpoTapDevice, type HapticsLib } from '@shared/ui/adapters/expoTapDevice';
 export { createTapFeedback } from '@shared/ui/core/haptics/createTapFeedback';
 export type { TapDevice, TapFeedback } from '@shared/ui/ports/tapFeedback';
 export { TapFeedbackProvider } from '@shared/ui/view/haptics/TapFeedbackProvider';

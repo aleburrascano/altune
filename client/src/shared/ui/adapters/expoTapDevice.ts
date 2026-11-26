@@ -1,17 +1,32 @@
 import * as Haptics from 'expo-haptics';
 
+import { isWebPlatform } from '@shared/device';
 import type { TapDevice } from '@shared/ui/ports/tapFeedback';
 
-const IMPACT_STYLES = {
-  light: Haptics.ImpactFeedbackStyle.Light,
-  medium: Haptics.ImpactFeedbackStyle.Medium,
-} as const;
-
-export const expoTapDevice: TapDevice = {
-  impact: (style) => {
-    void Haptics.impactAsync(IMPACT_STYLES[style]);
-  },
-  selection: () => {
-    void Haptics.selectionAsync();
-  },
+export type HapticsLib<Style = unknown> = {
+  impactAsync: (style: Style) => Promise<void>;
+  selectionAsync: () => Promise<void>;
+  ImpactFeedbackStyle: { Light: Style; Medium: Style };
 };
+
+export function createExpoTapDevice<Style>(
+  haptics: HapticsLib<Style>,
+  isWeb: () => boolean,
+): TapDevice {
+  const impactStyles = {
+    light: haptics.ImpactFeedbackStyle.Light,
+    medium: haptics.ImpactFeedbackStyle.Medium,
+  } as const;
+  return {
+    impact: (style) => {
+      if (isWeb()) return;
+      void haptics.impactAsync(impactStyles[style]);
+    },
+    selection: () => {
+      if (isWeb()) return;
+      void haptics.selectionAsync();
+    },
+  };
+}
+
+export const expoTapDevice = createExpoTapDevice(Haptics, isWebPlatform);

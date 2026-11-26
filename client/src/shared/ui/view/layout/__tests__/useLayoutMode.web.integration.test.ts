@@ -13,6 +13,10 @@ function setWindowWidth(width: number): void {
 }
 
 describe('useWideWebLayout on web', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(document.documentElement, 'clientWidth');
+  });
+
   it('is wide on a wide window', () => {
     setWindowWidth(WIDE_LAYOUT_MIN_WIDTH);
 
