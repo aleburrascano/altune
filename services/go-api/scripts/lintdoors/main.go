@@ -14,13 +14,12 @@ import (
 	"strings"
 )
 
-const usage = "usage: go run ./scripts/lintdoors [--summary] [--exports] [<go-api dir>]\n  every module (internal/<module>, or internal/<group>/<module> for a grouping directory) has one door, its root package, and may have a second, <module>test; test support is any package whose name ends in test, and only _test.go files or other test-support packages import it; lists each outside import of any other package of a module and each other import of a test-support package, and exits 1 when there are any; --exports also lists each root identifier that no file outside the module uses (a name used only by its own module's root-package tests is unexported, a name its own subpackages or test door use must stay and those tests go through the real door; used means pkg.Name through a plain or aliased import, a dot import is not followed); --summary prints, per module, its door size, how much of it is used outside, and its open packages with their importers"
+const usage = "usage: go run ./scripts/lintdoors [--summary] [--exports] [<go-api dir>]\n  every module (internal/<module>, or internal/<group>/<module> for a grouping directory) has one door, its root package, and may have a second, <module>test; test support is any package whose name ends in test, and only _test.go files or other test-support packages import it; lists each import of a test-support package from production code, and exits 1 when there are any; --exports also lists each root identifier that no file outside the module uses (a name used only by its own module's root-package tests is unexported, a name its own subpackages or test door use must stay and those tests go through the real door; used means pkg.Name through a plain or aliased import, a dot import is not followed); --summary prints, per module, its door size and how much of it is used outside; side doors are checked by go-arch-lint (.go-arch-lint.doors.yml)"
 
 var groups = map[string]bool{"platform": true, "shared": true}
 
 const (
-	kindSideDoor = iota
-	kindTestSupport
+	kindTestSupport = iota
 	kindUnusedExport
 )
 
@@ -29,7 +28,6 @@ type violation struct {
 	line     int
 	pkg      string
 	module   string
-	sub      string
 	importer string
 	kind     int
 	col      int
@@ -97,14 +95,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 				say(stdout, "%s:%d:%d: %s is exported by module %s but no file outside it uses it; unexport it and let the module's own tests go through the real door\n", v.file, v.line, v.col, v.pkg, v.module)
 				continue
 			}
-			if v.kind == kindTestSupport {
-				say(stdout, "%s:%d: non-test code imports the test-support package %s; only _test.go files and other test-support packages may\n", v.file, v.line, v.pkg)
-				continue
-			}
-			say(stdout, "%s:%d: imports %s, a non-root package of module %s; import %s/internal/%s and move what is needed behind its root\n", v.file, v.line, v.pkg, v.module, s.modulePath, v.module)
+			say(stdout, "%s:%d: non-test code imports the test-support package %s; only _test.go files and other test-support packages may\n", v.file, v.line, v.pkg)
 		}
 	}
-	say(stdout, "imports through a module's side door, of test support from production, or unused root exports: %d\n", len(s.violations))
+	say(stdout, "test-support imports from production code and unused root exports: %d\n", len(s.violations))
 	if len(s.violations) > 0 {
 		return 1
 	}
@@ -262,7 +256,7 @@ func (s *scan) scanFile(file string) error {
 		if !s.modules[module] {
 			continue
 		}
-		v := violation{file: file, line: fset.Position(imp.Pos()).Line, pkg: target, module: module, sub: sub, importer: importer}
+		v := violation{file: file, line: fset.Position(imp.Pos()).Line, pkg: target, module: module, importer: importer}
 		switch {
 		case isTestSupport(target) && !isTest && !isTestSupport(importer):
 			v.kind = kindTestSupport
@@ -271,9 +265,6 @@ func (s *scan) scanFile(file string) error {
 			s.recordUse(f, imp, module, outsideFlag(isTest))
 		case sub == "" && importer != "internal/"+module:
 			s.recordUse(f, imp, module, usedInside)
-		case sub != "" && module != ownModule && !isTestSupport(target):
-			v.kind = kindSideDoor
-			s.violations = append(s.violations, v)
 		}
 	}
 	return nil
@@ -339,42 +330,14 @@ func printSummary(w io.Writer, s *scan) error {
 		if err != nil {
 			return err
 		}
-		open := map[string]map[string]int{}
 		testSupport := 0
 		for _, v := range s.violations {
-			if v.module != m {
-				continue
-			}
-			if v.kind == kindUnusedExport {
-				continue
-			}
-			if v.kind == kindTestSupport {
+			if v.module == m && v.kind == kindTestSupport {
 				testSupport++
-				continue
-			}
-			if open[v.sub] == nil {
-				open[v.sub] = map[string]int{}
-			}
-			open[v.sub][v.importer]++
-		}
-		say(w, "%s: %d exported at the root, %d used outside by production code, %d used outside only by tests, %d unused outside; %d open packages, %d production imports of test support\n",
-			m, d.exported, d.prod, d.tests, d.exported-d.prod-d.tests, len(open), testSupport)
-		subs := make([]string, 0, len(open))
-		for p := range open {
-			subs = append(subs, p)
-		}
-		sort.Strings(subs)
-		for _, p := range subs {
-			importers := make([]string, 0, len(open[p]))
-			for i := range open[p] {
-				importers = append(importers, i)
-			}
-			sort.Strings(importers)
-			say(w, "  %s\n", m+"/"+p)
-			for _, i := range importers {
-				say(w, "    %3d  %s\n", open[p][i], i)
 			}
 		}
+		say(w, "%s: %d exported at the root, %d used outside by production code, %d used outside only by tests, %d unused outside; %d production imports of test support\n",
+			m, d.exported, d.prod, d.tests, d.exported-d.prod-d.tests, testSupport)
 	}
 	return nil
 }

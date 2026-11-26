@@ -1,5 +1,9 @@
 version: "2"
 
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
 linters:
   default: none
   enable:
@@ -32,6 +36,7 @@ linters:
     - nilnesserr
     - durationcheck
     - spancheck
+    - depguard
 
   settings:
     exhaustive:
@@ -39,6 +44,59 @@ linters:
     rowserrcheck:
       packages:
         - github.com/jackc/pgx/v5
+    depguard:
+      rules:
+        layer:
+          list-mode: lax
+          files:
+            - "**/internal/**/core/**"
+            - "**/internal/**/service/**"
+            - "**/internal/**/domain/**"
+            - "**/internal/**/ports/**"
+            - "**/internal/**/shell/**"
+            - "!$test"
+          deny:
+            - pkg: os
+              desc: core, service, domain, ports and shell stay pure, so do I/O in an adapters package
+            - pkg: os/exec
+              desc: core, service, domain, ports and shell stay pure, so do I/O in an adapters package
+            - pkg: io/fs
+              desc: core, service, domain, ports and shell stay pure, so do I/O in an adapters package
+            - pkg: net
+              desc: core, service, domain, ports and shell stay pure, so do I/O in an adapters package
+            - pkg: net/http
+              desc: core, service, domain, ports and shell stay pure, so do I/O in an adapters package
+            - pkg: database/sql
+              desc: core, service, domain, ports and shell stay pure, so do I/O in an adapters package
+            - pkg: github.com/jackc/pgx
+              desc: core, service, domain, ports and shell stay pure, so do I/O in an adapters package
+            - pkg: github.com/redis
+              desc: core, service, domain, ports and shell stay pure, so do I/O in an adapters package
+        driver:
+          list-mode: lax
+          files:
+            - "**/internal/**"
+            - "**/cmd/**"
+            - "!$test"
+            - "!**/adapters/**"
+            - "!**/internal/shared/database/**"
+            - "!**/internal/shared/dbtest/**"
+            - "!**/cmd/**"
+            - "!**/internal/app/*.go"
+            - "!**/internal/app/downloadsetup/**"
+            - "!**/internal/app/shutdown/**"
+          deny:
+            - pkg: github.com/jackc/pgx
+              desc: the database driver is imported only in its home, an adapters package, shared/database, shared/dbtest or the composition root, so reach the database through one of them
+        random:
+          list-mode: lax
+          files:
+            - "$all"
+            - "!$test"
+            - "!**/internal/shared/random/**"
+          deny:
+            - pkg: math/rand
+              desc: math/rand is drawn only in its home, shared/random
     dupl:
       threshold: 150
     sloglint:

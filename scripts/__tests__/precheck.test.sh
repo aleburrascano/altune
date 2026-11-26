@@ -652,7 +652,7 @@ if [ -n "\${GO_RENDEZVOUS:-}" ] && { [ "\$1" = vet ] || [ "\$1" = test ]; }; the
 fi
 case "\$*" in
 "run golang.org/x/tools/cmd/deadcode@"*) printf "%s" "\${DEADCODE_STUB_OUT:-}"; exit "\${DEADCODE_STUB_RC:-0}" ;;
-"run ./scripts/lintcomments"*|"run ./scripts/lintnames"*|"run ./scripts/lintarch"*) exit 0 ;;
+"run ./scripts/lintcomments"*|"run ./scripts/lintnames"*) exit 0 ;;
 "test "*) if [ -n "\${GO_TEST_STUB_OUT:-}" ]; then printf "%b" "\$GO_TEST_STUB_OUT"; exit 1; fi; [ -n "\${GO_REAL:-}" ] || exit 0 ;;
 "vet "*|"build "*) [ -n "\${GO_REAL:-}" ] || exit 0 ;;
 esac
@@ -660,7 +660,8 @@ exec "$REAL_GO" "\$@"
 STUB
     printf '#!/usr/bin/env bash\nprintf "golangci-lint %%s\\n" "$*" >>"%s/tools.log"\nprintf "golangci-lint-cache %%s %%s\\n" "$1" "$GOLANGCI_LINT_CACHE" >>"%s/tools.log"\n' "$WORK" "$WORK" >"$WORK/bin/golangci-lint"
     printf '#!/usr/bin/env bash\nprintf "govulncheck %%s\\n" "$*" >>"%s/tools.log"\n' "$WORK" >"$WORK/bin/govulncheck"
-    chmod +x "$WORK/bin/go" "$WORK/bin/golangci-lint" "$WORK/bin/govulncheck"
+    printf '#!/usr/bin/env bash\nprintf "go-arch-lint %%s\\n" "$*" >>"%s/tools.log"\n' "$WORK" >"$WORK/bin/go-arch-lint"
+    chmod +x "$WORK/bin/go" "$WORK/bin/golangci-lint" "$WORK/bin/govulncheck" "$WORK/bin/go-arch-lint"
     mkdir -p "$WORK/repo/scripts/ci"
     cp "$HERE/ci/go-deadcode.sh" "$WORK/repo/scripts/ci/"
     (
@@ -988,7 +989,7 @@ expect_rc 0
 expect_log "golangci-lint run --config .golangci.strict.yml --allow-serial-runners ./..."
 forbid_log "--new-from-rev"
 expect_log "go run ./scripts/lintnames $(git -C "$WORK/repo" rev-list --max-parents=0 HEAD | tail -n 1)"
-expect_log_line "go run ./scripts/lintarch --rules role,edge,driver"
+expect_log_line "go-arch-lint check"
 
 CASE="a push (no --full) lints only the changed package with the fast linters against the merge base"
 new_repo
@@ -1002,7 +1003,7 @@ forbid_log "--allow-serial-runners"
 forbid_log "--new-from-rev=HEAD"
 expect_log "go run ./scripts/lintcomments --all internal/shared/s/s.go"
 expect_log "go run ./scripts/lintnames"
-expect_log_line "go run ./scripts/lintarch --rules role,edge,driver"
+expect_log_line "go-arch-lint check"
 
 expect_lint_args_exist() {
     local arg missing=""
