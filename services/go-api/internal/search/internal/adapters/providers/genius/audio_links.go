@@ -1,6 +1,6 @@
 package genius
 
-import "altune/go-api/internal/search/domain"
+import "altune/go-api/internal/search/internal/domain"
 
 func normalizeAudioLink(provider, rawURL string) (domain.AudioLink, bool) {
 	switch domain.AudioProvider(provider) {

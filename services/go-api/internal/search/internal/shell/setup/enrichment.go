@@ -1,9 +1,9 @@
 package setup
 
 import (
-	"altune/go-api/internal/search/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/cache"
 	"altune/go-api/internal/search/internal/adapters/connections"
+	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/core/details"
 	"altune/go-api/internal/search/internal/core/ports"
 	"fmt"

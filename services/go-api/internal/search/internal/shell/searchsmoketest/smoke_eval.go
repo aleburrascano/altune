@@ -1,8 +1,8 @@
 package searchsmoketest
 
 import (
-	domain "altune/go-api/internal/search/domain"
-	"altune/go-api/internal/search/service/query"
+	domain "altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/service/query"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"

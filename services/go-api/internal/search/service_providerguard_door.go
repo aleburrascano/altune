@@ -1,6 +1,6 @@
 package search
 
-import providercall "altune/go-api/internal/search/service/providerguard"
+import providercall "altune/go-api/internal/search/internal/service/providerguard"
 
 type (
 	CircuitAdmission     = providercall.Admission

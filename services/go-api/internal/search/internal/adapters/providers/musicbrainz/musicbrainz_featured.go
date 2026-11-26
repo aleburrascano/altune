@@ -1,7 +1,7 @@
 package musicbrainz
 
 import (
-	"altune/go-api/internal/search/domain"
+	"altune/go-api/internal/search/internal/domain"
 	"regexp"
 	"strings"
 )

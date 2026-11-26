@@ -5,9 +5,7 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/search"
-	"altune/go-api/internal/search/domain"
-	"altune/go-api/internal/search/searchtest"
-	searchquery "altune/go-api/internal/search/service/query"
+	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
@@ -34,23 +32,29 @@ const (
 )
 
 type countingProvider struct {
-	searchtest.FakeProvider
+	search.FakeProvider
 	searches atomic.Int32
 }
 
-func (p *countingProvider) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
+func (p *countingProvider) Search(ctx context.Context, query string, kinds map[search.ResultKind]bool) ([]search.SearchResult, error) {
 	p.searches.Add(1)
 	return p.FakeProvider.Search(ctx, query, kinds)
 }
 
-func searchFinding(t *testing.T, p *countingProvider) *searchquery.Service {
+func searchFinding(t *testing.T, p *countingProvider) *search.SearchService {
 	t.Helper()
-	p.Provider = domain.ProviderDeezer
-	p.Results = []domain.SearchResult{{
-		Kind: domain.ResultKindTrack, Title: unfoundTitle, Subtitle: unfoundArtist,
+	p.Provider = search.ProviderDeezer
+	p.Results = []search.SearchResult{{
+		Kind: search.ResultKindTrack, Title: unfoundTitle, Subtitle: unfoundArtist,
 		ISRC: unfoundISRC, RecordingMBID: searchOnlyMBID,
 	}}
-	return searchtest.NewSearchService(t, searchtest.NewTracker(t), []search.SearchProvider{p}, search.NewCircuitBreaker())
+	bg := &background.Tracker{}
+	t.Cleanup(bg.Wait)
+	svc, err := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), search.AbsentCollaborators())
+	if err != nil {
+		t.Fatalf("NewSearchService: %v", err)
+	}
+	return svc
 }
 
 type musicBrainzLog struct {

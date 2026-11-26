@@ -1,6 +1,6 @@
 package search
 
-import content "altune/go-api/internal/search/service/artistpage"
+import content "altune/go-api/internal/search/internal/service/artistpage"
 
 type (
 	AlbumFallback           = content.AlbumFallback

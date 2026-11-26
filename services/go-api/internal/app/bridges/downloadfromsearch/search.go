@@ -2,15 +2,14 @@ package downloadfromsearch
 
 import (
 	"altune/go-api/internal/download"
-	"altune/go-api/internal/search/domain"
-	"altune/go-api/internal/search/service/query"
+	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"fmt"
 )
 
 type searcher interface {
-	Execute(ctx context.Context, userId ids.UserId, query *domain.SearchQuery) (*query.SearchOutput, error)
+	Execute(ctx context.Context, userId ids.UserId, query *search.SearchQuery) (*search.SearchOutput, error)
 }
 
 type Search struct {
@@ -24,7 +23,7 @@ func NewSearch(s searcher) Search {
 }
 
 func (s Search) SearchRecordings(ctx context.Context, text string, limit int) ([]download.SearchedRecording, error) {
-	tracksOnly, err := domain.NewSearchQuery(text, domain.ResultKindSet{domain.ResultKindTrack: true}, limit)
+	tracksOnly, err := search.NewSearchQuery(text, search.ResultKindSet{search.ResultKindTrack: true}, limit)
 	if err != nil {
 		return nil, fmt.Errorf("build resolve query: %w", err)
 	}
@@ -35,10 +34,10 @@ func (s Search) SearchRecordings(ctx context.Context, text string, limit int) ([
 	return recordingsOf(out.Results), nil
 }
 
-func recordingsOf(results []domain.SearchResult) []download.SearchedRecording {
+func recordingsOf(results []search.SearchResult) []download.SearchedRecording {
 	var recordings []download.SearchedRecording
 	for _, res := range results {
-		if res.Kind != domain.ResultKindTrack {
+		if res.Kind != search.ResultKindTrack {
 			continue
 		}
 		recordings = append(recordings, download.SearchedRecording{
@@ -53,7 +52,7 @@ func recordingsOf(results []domain.SearchResult) []download.SearchedRecording {
 	return recordings
 }
 
-func sourcesOf(refs []domain.ProviderLink) []download.ProviderRef {
+func sourcesOf(refs []search.ProviderLink) []download.ProviderRef {
 	if len(refs) == 0 {
 		return nil
 	}
@@ -64,13 +63,13 @@ func sourcesOf(refs []domain.ProviderLink) []download.ProviderRef {
 	return sources
 }
 
-func providerOf(p domain.ProviderName) download.RecordingProvider {
+func providerOf(p search.ProviderName) download.RecordingProvider {
 	switch p {
-	case domain.ProviderYouTube:
+	case search.ProviderYouTube:
 		return download.ProviderYouTube
-	case domain.ProviderDeezer:
+	case search.ProviderDeezer:
 		return download.ProviderDeezer
-	case domain.ProviderSoundCloud:
+	case search.ProviderSoundCloud:
 		return download.ProviderSoundCloud
 	default:
 		return download.RecordingProvider(p.String())

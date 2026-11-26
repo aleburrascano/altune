@@ -1,7 +1,7 @@
 package fansheets
 
 import (
-	"altune/go-api/internal/search/domain"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/filelinks"
 	"net/url"
 	"slices"

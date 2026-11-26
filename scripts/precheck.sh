@@ -475,7 +475,7 @@ if touches '^services/overseer/'; then
   fi
 fi
 
-if [ $lint_only = 0 ] && touches '^services/go-api/internal/(shared/events/|search/domain/events\.go)' && need npx "mobile contract tests"; then
+if [ $lint_only = 0 ] && touches '^services/go-api/internal/(shared/events/|search/internal/domain/events\.go)' && need npx "mobile contract tests"; then
   if link_deps client; then
     par jest_check "mobile contract tests (go-api events changed)" client npx jest --ci --forceExit --watchman=false --cacheDirectory "$jest_cache" '\.contract\.test\.tsx?$'
   else

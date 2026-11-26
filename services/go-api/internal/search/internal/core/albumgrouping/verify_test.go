@@ -1,8 +1,8 @@
 package albumgrouping_test
 
 import (
-	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/core/albumgrouping"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/textnorm"
 	"fmt"
 	"testing"

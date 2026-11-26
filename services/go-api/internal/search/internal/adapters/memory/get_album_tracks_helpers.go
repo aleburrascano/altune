@@ -1,6 +1,6 @@
 package memory
 
-import "altune/go-api/internal/search/domain"
+import "altune/go-api/internal/search/internal/domain"
 
 func AlbumSearchResult(artist, deezerID string) domain.SearchResult {
 	return domain.SearchResult{

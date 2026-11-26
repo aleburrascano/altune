@@ -1,6 +1,6 @@
 package search
 
-import ownership "altune/go-api/internal/search/service/inlibrary"
+import ownership "altune/go-api/internal/search/internal/service/inlibrary"
 
 type (
 	OwnableItem                = ownership.OwnableItem

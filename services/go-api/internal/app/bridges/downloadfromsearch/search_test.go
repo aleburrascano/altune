@@ -3,8 +3,7 @@ package downloadfromsearch_test
 import (
 	"altune/go-api/internal/app/bridges/downloadfromsearch"
 	"altune/go-api/internal/download"
-	"altune/go-api/internal/search/domain"
-	"altune/go-api/internal/search/service/query"
+	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -14,19 +13,19 @@ import (
 )
 
 type recordingSearcher struct {
-	out   *query.SearchOutput
+	out   *search.SearchOutput
 	err   error
-	query *domain.SearchQuery
+	query *search.SearchQuery
 	user  ids.UserId
 }
 
-func (s *recordingSearcher) Execute(_ context.Context, user ids.UserId, query *domain.SearchQuery) (*query.SearchOutput, error) {
+func (s *recordingSearcher) Execute(_ context.Context, user ids.UserId, query *search.SearchQuery) (*search.SearchOutput, error) {
 	s.query, s.user = query, user
 	return s.out, s.err
 }
 
-func searching(results ...domain.SearchResult) *recordingSearcher {
-	return &recordingSearcher{out: &query.SearchOutput{Results: results}}
+func searching(results ...search.SearchResult) *recordingSearcher {
+	return &recordingSearcher{out: &search.SearchOutput{Results: results}}
 }
 
 func TestSearchRecordings_AsksDiscoveryForTracksAloneAsNoUser(t *testing.T) {
@@ -36,7 +35,7 @@ func TestSearchRecordings_AsksDiscoveryForTracksAloneAsNoUser(t *testing.T) {
 		t.Fatalf("SearchRecordings: %v", err)
 	}
 
-	want := domain.SearchQuery{Raw: "The Cure Boys Don't Cry", Kinds: domain.ResultKindSet{domain.ResultKindTrack: true}, Limit: 10}
+	want := search.SearchQuery{Raw: "The Cure Boys Don't Cry", Kinds: search.ResultKindSet{search.ResultKindTrack: true}, Limit: 10}
 	if searcher.query == nil || !reflect.DeepEqual(*searcher.query, want) {
 		t.Errorf("query = %+v, want %+v", searcher.query, want)
 	}
@@ -46,10 +45,10 @@ func TestSearchRecordings_AsksDiscoveryForTracksAloneAsNoUser(t *testing.T) {
 }
 
 func TestSearchRecordings_CarriesEveryFactOfATrackHit(t *testing.T) {
-	searcher := searching(domain.SearchResult{
-		Kind: domain.ResultKindTrack, Title: "Drinking in L.A.", Subtitle: "Bran Van 3000", ISRC: "CAA509814003",
+	searcher := searching(search.SearchResult{
+		Kind: search.ResultKindTrack, Title: "Drinking in L.A.", Subtitle: "Bran Van 3000", ISRC: "CAA509814003",
 		RecordingMBID: "remix-mbid", Duration: 236, Album: "Glee",
-		Sources: []domain.ProviderLink{{Provider: domain.ProviderYouTube, ExternalID: "vid", URL: "https://youtu.be/vid"}},
+		Sources: []search.ProviderLink{{Provider: search.ProviderYouTube, ExternalID: "vid", URL: "https://youtu.be/vid"}},
 	})
 
 	got, err := downloadfromsearch.NewSearch(searcher).SearchRecordings(context.Background(), "q", 10)
@@ -65,8 +64,8 @@ func TestSearchRecordings_CarriesEveryFactOfATrackHit(t *testing.T) {
 
 func TestSearchRecordings_KeepsOnlyTrackHits(t *testing.T) {
 	searcher := searching(
-		domain.SearchResult{Kind: domain.ResultKindAlbum, Title: "Album", ISRC: "CAA509814003"},
-		domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Track"},
+		search.SearchResult{Kind: search.ResultKindAlbum, Title: "Album", ISRC: "CAA509814003"},
+		search.SearchResult{Kind: search.ResultKindTrack, Title: "Track"},
 	)
 
 	got, err := downloadfromsearch.NewSearch(searcher).SearchRecordings(context.Background(), "q", 10)
@@ -77,11 +76,11 @@ func TestSearchRecordings_KeepsOnlyTrackHits(t *testing.T) {
 }
 
 func TestSearchRecordings_KeepsEveryDiscoveryProviderNameByteForByte(t *testing.T) {
-	var sources []domain.ProviderLink
-	for p := domain.ProviderUnknown; p <= domain.ProviderSpotify; p++ {
-		sources = append(sources, domain.ProviderLink{Provider: p, ExternalID: "id-" + p.String()})
+	var sources []search.ProviderLink
+	for p := search.ProviderUnknown; p <= search.ProviderSpotify; p++ {
+		sources = append(sources, search.ProviderLink{Provider: p, ExternalID: "id-" + p.String()})
 	}
-	searcher := searching(domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Song", Sources: sources})
+	searcher := searching(search.SearchResult{Kind: search.ResultKindTrack, Title: "Song", Sources: sources})
 
 	got, err := downloadfromsearch.NewSearch(searcher).SearchRecordings(context.Background(), "q", 10)
 
@@ -96,12 +95,12 @@ func TestSearchRecordings_KeepsEveryDiscoveryProviderNameByteForByte(t *testing.
 }
 
 func TestSearchRecordings_KeysSourcesByAcquisitionsProviderConstants(t *testing.T) {
-	searcher := searching(domain.SearchResult{
-		Kind: domain.ResultKindTrack, Title: "Song", Subtitle: "Artist",
-		Sources: []domain.ProviderLink{
-			{Provider: domain.ProviderYouTube, ExternalID: "vid123"},
-			{Provider: domain.ProviderDeezer, ExternalID: "3135556"},
-			{Provider: domain.ProviderSoundCloud, ExternalID: "999"},
+	searcher := searching(search.SearchResult{
+		Kind: search.ResultKindTrack, Title: "Song", Subtitle: "Artist",
+		Sources: []search.ProviderLink{
+			{Provider: search.ProviderYouTube, ExternalID: "vid123"},
+			{Provider: search.ProviderDeezer, ExternalID: "3135556"},
+			{Provider: search.ProviderSoundCloud, ExternalID: "999"},
 		},
 	})
 	resolver := download.MustNewRecordingResolver(download.RecordingResolverPorts{

@@ -1,6 +1,6 @@
 package search
 
-import vocabulary "altune/go-api/internal/search/service/vocabulary"
+import vocabulary "altune/go-api/internal/search/internal/service/vocabulary"
 
 type (
 	SuggestService              = vocabulary.SuggestService

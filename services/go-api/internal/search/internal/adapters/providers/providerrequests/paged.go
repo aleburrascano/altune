@@ -1,6 +1,6 @@
 package providerrequests
 
-import "altune/go-api/internal/search/domain"
+import "altune/go-api/internal/search/internal/domain"
 
 func FetchPaged[T any](
 	maxPages int,

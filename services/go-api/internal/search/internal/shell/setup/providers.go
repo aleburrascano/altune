@@ -1,7 +1,6 @@
 package setup
 
 import (
-	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/adapters/connections"
 	"altune/go-api/internal/search/internal/adapters/providers/applemusic"
 	"altune/go-api/internal/search/internal/adapters/providers/coverartarchive"
@@ -17,6 +16,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/theaudiodb"
 	"altune/go-api/internal/search/internal/adapters/providers/ytmusic"
 	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/random"
 	"fmt"

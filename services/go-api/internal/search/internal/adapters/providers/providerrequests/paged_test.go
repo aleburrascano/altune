@@ -1,8 +1,8 @@
 package providerrequests_test
 
 import (
-	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
+	"altune/go-api/internal/search/internal/domain"
 	"errors"
 	"testing"
 )

@@ -1,6 +1,6 @@
 package search
 
-import search "altune/go-api/internal/search/service/query"
+import search "altune/go-api/internal/search/internal/service/query"
 
 type (
 	SearchOption  = search.Option
