@@ -1,3 +1,5 @@
+SET LOCAL lock_timeout = '5s';
+
 CREATE TABLE IF NOT EXISTS acquisition_jobs (
     track_id       UUID PRIMARY KEY REFERENCES tracks (id) ON DELETE CASCADE,
     job_kind       TEXT NOT NULL DEFAULT 'acquire' CHECK (job_kind IN ('acquire', 'replace', 'upgrade')),
@@ -25,6 +27,13 @@ CREATE TABLE IF NOT EXISTS acquisition_upgrade_state (
 
 ALTER TABLE acquisition_jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE acquisition_upgrade_state ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'altune_app') THEN
+        GRANT SELECT, INSERT, UPDATE, DELETE ON acquisition_jobs, acquisition_upgrade_state TO altune_app;
+    END IF;
+END $$;
 
 CREATE OR REPLACE FUNCTION mirror_acquisition_job() RETURNS trigger AS $$
 BEGIN
