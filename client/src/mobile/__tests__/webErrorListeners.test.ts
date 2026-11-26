@@ -48,6 +48,16 @@ describe('chainWindowUncaughtErrors', () => {
     expect(onError).toHaveBeenCalledWith(new Error('Script error.'));
   });
 
+  it('names the event when it carries neither an error nor a message', () => {
+    const win = fakeWindow();
+    const onError = jest.fn();
+
+    chainWindowUncaughtErrors(win)(onError);
+    win.fire('error', {});
+
+    expect(onError).toHaveBeenCalledWith(new Error('window error'));
+  });
+
   it('does nothing where there is no window to listen on', () => {
     const onError = jest.fn();
 
@@ -84,7 +94,29 @@ describe('chainWindowUnhandledRejections', () => {
 });
 
 describe('runtimeWindow', () => {
+  const runtime = globalThis as { window?: unknown };
+  const original = runtime.window;
+
+  afterEach(() => {
+    runtime.window = original;
+  });
+
   it('finds no window where the runtime has none that can listen', () => {
+    runtime.window = {};
+
     expect(runtimeWindow()).toBeUndefined();
+  });
+
+  it('finds the window the browser provides and reports a rejection that reaches it', () => {
+    const win = fakeWindow();
+    runtime.window = win;
+    const onRejection = jest.fn();
+    const reason = new Error('browser dropped promise');
+
+    chainWindowUnhandledRejections(runtimeWindow())(onRejection);
+    win.fire('unhandledrejection', { reason });
+
+    expect(runtimeWindow()).toBe(win);
+    expect(onRejection).toHaveBeenCalledWith(reason);
   });
 });
