@@ -34,11 +34,9 @@ func (t *Tagger) Tag(ctx context.Context, filePath string, tags ports.TrackTags)
 		_ = os.Remove(tagged)
 		return fmt.Errorf("ffmpeg tag: %w (stderr: %s)", err, strings.TrimSpace(stderr))
 	}
-	if tags.ISRC != "" {
-		if err := embedISRC(tagged, tags.ISRC); err != nil {
-			_ = os.Remove(tagged)
-			return fmt.Errorf("embed isrc: %w", err)
-		}
+	if err := embedISRC(tagged, tags.ISRC); err != nil {
+		_ = os.Remove(tagged)
+		return fmt.Errorf("embed isrc: %w", err)
 	}
 	if err := os.Rename(tagged, filePath); err != nil {
 		_ = os.Remove(tagged)

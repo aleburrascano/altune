@@ -125,6 +125,17 @@ type inPlaceOutcome struct {
 	settled bool
 }
 
+func (r *Runner) recheckedGrade(ctx context.Context, track *ports.TrackSnapshot, stored inPlaceEvidence, current audioquality.Grade) (audioquality.Grade, bool, error) {
+	if !r.isUnchecked(track) {
+		return current, false, nil
+	}
+	checked, err := r.checkInPlace(ctx, track, stored)
+	if err != nil || checked.settled {
+		return current, true, err
+	}
+	return checked.grade, false, nil
+}
+
 func (r *Runner) checkInPlace(ctx context.Context, track *ports.TrackSnapshot, stored inPlaceEvidence) (inPlaceOutcome, error) {
 	if err := r.inPlace.check.waitForSlot(ctx); err != nil {
 		return inPlaceOutcome{}, err

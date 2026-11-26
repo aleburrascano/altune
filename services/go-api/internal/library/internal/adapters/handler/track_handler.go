@@ -234,7 +234,8 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 	}
 
 	status := http.StatusOK
-	if result.Created {
+	switch {
+	case result.Created:
 		status = http.StatusCreated
 		slog.InfoContext(r.Context(), "track.saved",
 			"track_id", result.Track.ID.String(),
@@ -242,7 +243,7 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 			"artist", result.Track.Artist,
 			"album", result.Track.Album,
 		)
-	} else {
+	default:
 		slog.InfoContext(r.Context(), "track.dedup_hit",
 			"track_id", result.Track.ID.String(),
 			"title", result.Track.Title,

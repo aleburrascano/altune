@@ -87,19 +87,12 @@ func CollectCandidatesReportingOutage(
 	allFailed func(firstErr error) error,
 ) (merged []AudioCandidate, outage, err error) {
 	positionByKey := make(map[string]int)
-	var firstErr, firstUnavailable error
-	failures := 0
+	var failed searchFailures
 
 	for i := 0; i < n; i++ {
 		candidates, err := run(i)
 		if err != nil {
-			failures++
-			if firstErr == nil {
-				firstErr = err
-			}
-			if firstUnavailable == nil && acqdomain.IsSourceUnavailable(err) {
-				firstUnavailable = err
-			}
+			failed.note(err)
 			onFailure(i, err)
 			continue
 		}
@@ -107,16 +100,32 @@ func CollectCandidatesReportingOutage(
 		merged = DedupeCandidatesBySourceKey(ctx, merged, candidates, positionByKey)
 	}
 
-	if failures == n && firstErr != nil {
-		return nil, firstUnavailable, allFailed(firstErr)
+	if failed.count == n && failed.first != nil {
+		return nil, failed.firstUnavailable, allFailed(failed.first)
 	}
-	if len(merged) == 0 && firstUnavailable != nil {
-		return nil, firstUnavailable, fmt.Errorf("no candidates and a source was unavailable: %w", firstUnavailable)
+	if len(merged) == 0 && failed.firstUnavailable != nil {
+		return nil, failed.firstUnavailable, fmt.Errorf("no candidates and a source was unavailable: %w", failed.firstUnavailable)
 	}
-	if len(merged) == 0 && firstErr != nil {
-		return nil, nil, degraded(firstErr)
+	if len(merged) == 0 && failed.first != nil {
+		return nil, nil, degraded(failed.first)
 	}
-	return merged, firstUnavailable, nil
+	return merged, failed.firstUnavailable, nil
+}
+
+type searchFailures struct {
+	count            int
+	first            error
+	firstUnavailable error
+}
+
+func (f *searchFailures) note(err error) {
+	f.count++
+	if f.first == nil {
+		f.first = err
+	}
+	if f.firstUnavailable == nil && acqdomain.IsSourceUnavailable(err) {
+		f.firstUnavailable = err
+	}
 }
 
 func degraded(err error) error {

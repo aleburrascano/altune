@@ -100,26 +100,33 @@ func (q *PostgresJobQueue) Enqueue(ctx context.Context, trackID ids.TrackId, kin
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
-	applied, err := q.applyEnqueue(ctx, trackID, kind, delay)
-	if err != nil {
+	applied, err := q.applyOrResolveEnqueue(ctx, trackID, kind, delay)
+	if err != nil || !applied {
 		return err
 	}
-	if !applied {
-		if applied, err = q.resolveRefusedEnqueue(ctx, trackID, kind, delay); err != nil || !applied {
-			return err
-		}
-	}
-	if err := q.requeuer.Requeue(ctx, trackID); err != nil {
-		slog.WarnContext(ctx, "acquisition.enqueue_requeue_failed",
-			"track_id", trackID.String(), "error", err)
-	} else {
-		q.clearNeedsPending(ctx, trackID)
-	}
+	q.requeueTrack(ctx, trackID)
 	if _, err := q.pool.Exec(ctx, "NOTIFY "+acquisitionJobChannel); err != nil {
 		slog.WarnContext(ctx, "acquisition.enqueue_notify_failed",
 			"track_id", trackID.String(), "error", err)
 	}
 	return nil
+}
+
+func (q *PostgresJobQueue) applyOrResolveEnqueue(ctx context.Context, trackID ids.TrackId, kind ports.JobKind, delay time.Duration) (bool, error) {
+	applied, err := q.applyEnqueue(ctx, trackID, kind, delay)
+	if err != nil || applied {
+		return applied, err
+	}
+	return q.resolveRefusedEnqueue(ctx, trackID, kind, delay)
+}
+
+func (q *PostgresJobQueue) requeueTrack(ctx context.Context, trackID ids.TrackId) {
+	if err := q.requeuer.Requeue(ctx, trackID); err != nil {
+		slog.WarnContext(ctx, "acquisition.enqueue_requeue_failed",
+			"track_id", trackID.String(), "error", err)
+		return
+	}
+	q.clearNeedsPending(ctx, trackID)
 }
 
 func (q *PostgresJobQueue) applyEnqueue(ctx context.Context, trackID ids.TrackId, kind ports.JobKind, delay time.Duration) (bool, error) {
@@ -259,14 +266,18 @@ func (q *PostgresJobQueue) claim(ctx context.Context, sql string, lease time.Dur
 		return job, nil
 	}
 	if err := q.requeuer.Requeue(ctx, job.TrackID); err != nil {
-		if releaseErr := q.releaseUnstarted(ctx, job); releaseErr != nil {
-			slog.WarnContext(ctx, "acquisition.claim_release_failed",
-				"track_id", job.TrackID.String(), "error", releaseErr)
-		}
+		q.giveBackClaim(ctx, job)
 		return ports.Job{}, fmt.Errorf("mark the claimed track pending: %w", err)
 	}
 	q.clearNeedsPending(ctx, job.TrackID)
 	return job, nil
+}
+
+func (q *PostgresJobQueue) giveBackClaim(ctx context.Context, job ports.Job) {
+	if err := q.releaseUnstarted(ctx, job); err != nil {
+		slog.WarnContext(ctx, "acquisition.claim_release_failed",
+			"track_id", job.TrackID.String(), "error", err)
+	}
 }
 
 func scanClaimedJob(row pgx.Row) (ports.Job, bool, error) {

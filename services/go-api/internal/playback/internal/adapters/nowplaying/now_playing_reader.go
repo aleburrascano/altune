@@ -2,6 +2,7 @@ package nowplaying
 
 import (
 	"altune/go-api/internal/playback/internal/core/ports"
+	"altune/go-api/internal/shared/breaker"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -81,17 +82,22 @@ func (r *NowPlayingReader) Lookup(
 		return nil, ports.ErrNowPlayingTrackNotFound
 	}
 	if err != nil {
-		if ctx.Err() == nil {
-			if isDependencyFailure(err) {
-				r.breaker.recordFailure(ctx, admission)
-			}
-			r.metrics.EnrichmentFailed()
-			if errors.Is(err, context.DeadlineExceeded) {
-				r.metrics.NowPlayingLookupTimedOut()
-			}
-		}
+		r.recordLookupFailure(ctx, admission, err)
 		return nil, fmt.Errorf("lookup now-playing track: %w", err)
 	}
 	r.breaker.recordSuccess(ctx, admission)
 	return track, nil
+}
+
+func (r *NowPlayingReader) recordLookupFailure(ctx context.Context, admission breaker.Admission, err error) {
+	if ctx.Err() != nil {
+		return
+	}
+	if isDependencyFailure(err) {
+		r.breaker.recordFailure(ctx, admission)
+	}
+	r.metrics.EnrichmentFailed()
+	if errors.Is(err, context.DeadlineExceeded) {
+		r.metrics.NowPlayingLookupTimedOut()
+	}
 }

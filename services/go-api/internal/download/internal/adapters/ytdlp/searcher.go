@@ -230,14 +230,19 @@ func (s *YouTubeAudioSearcher) SearchQueries(ctx context.Context, queries []stri
 	)
 }
 
-func (s *YouTubeAudioSearcher) authFlags(args []string, cookieFile string) []string {
-	if s.jsRuntime != "" {
-		prefix := []string{"--js-runtimes", s.jsRuntime}
-		if s.remoteComponents != "" {
-			prefix = append(prefix, "--remote-components", s.remoteComponents)
-		}
-		args = append(prefix, args...)
+func (s *YouTubeAudioSearcher) jsRuntimeFlags() []string {
+	if s.jsRuntime == "" {
+		return nil
 	}
+	flags := []string{"--js-runtimes", s.jsRuntime}
+	if s.remoteComponents != "" {
+		flags = append(flags, "--remote-components", s.remoteComponents)
+	}
+	return flags
+}
+
+func (s *YouTubeAudioSearcher) authFlags(args []string, cookieFile string) []string {
+	args = append(s.jsRuntimeFlags(), args...)
 	if s.potURL != "" {
 		args = append([]string{"--extractor-args", "youtubepot-bgutilhttp:base_url=" + s.potURL}, args...)
 	}

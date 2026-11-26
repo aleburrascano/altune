@@ -72,13 +72,13 @@ func (r *PostgresQueueStateRepository) runOp(
 		slog.ErrorContext(ctx, "playback.queue_state_op_failed",
 			"op", op, "user_id", userId.String(), "error", err)
 	}
-	if database.IsTransient(err) {
-		if !errors.Is(err, context.DeadlineExceeded) {
-			r.metrics.QueueStateOpFailedTransient()
-		}
-		return fmt.Errorf("%w: %w", ports.ErrQueueStateUnavailable, err)
+	if !database.IsTransient(err) {
+		return err
 	}
-	return err
+	if !errors.Is(err, context.DeadlineExceeded) {
+		r.metrics.QueueStateOpFailedTransient()
+	}
+	return fmt.Errorf("%w: %w", ports.ErrQueueStateUnavailable, err)
 }
 
 func (r *PostgresQueueStateRepository) Upsert(ctx context.Context, state *domain.QueueState) error {

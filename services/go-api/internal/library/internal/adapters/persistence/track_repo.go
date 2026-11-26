@@ -87,11 +87,7 @@ func (r *PostgresTrackRepository) addInTx(ctx context.Context, track *domain.Tra
 		return writeTrackFeatured(ctx, tx, track.UserId.UUID(), track.ID.UUID(), track.FeaturedArtists)
 	})
 	if errors.Is(err, errTrackAlreadyStored) {
-		existing, err := r.resolveConflictingTrack(ctx, track)
-		if errors.Is(err, domain.ErrTrackNotFound) {
-			return nil, false, nil
-		}
-		return existing, false, err
+		return r.storedConflict(ctx, track)
 	}
 	if err != nil {
 		return nil, false, err
@@ -453,15 +449,24 @@ func (r *PostgresTrackRepository) deleteTrackRow(ctx context.Context, id domain.
 	return true, ref, nil
 }
 
+func (r *PostgresTrackRepository) storedConflict(ctx context.Context, track *domain.Track) (*domain.Track, bool, error) {
+	existing, err := r.resolveConflictingTrack(ctx, track)
+	if errors.Is(err, domain.ErrTrackNotFound) {
+		return nil, false, nil
+	}
+	return existing, false, err
+}
+
 func (r *PostgresTrackRepository) resolveConflictingTrack(ctx context.Context, track *domain.Track) (*domain.Track, error) {
-	if track.IdempotencyKey != nil {
-		existing, err := r.GetByIdempotencyKey(ctx, track.UserId, *track.IdempotencyKey)
-		if err == nil {
-			return existing, nil
-		}
-		if !errors.Is(err, domain.ErrTrackNotFound) {
-			return nil, err
-		}
+	if track.IdempotencyKey == nil {
+		return r.GetByDedupKey(ctx, track.UserId, track.DedupKey)
+	}
+	existing, err := r.GetByIdempotencyKey(ctx, track.UserId, *track.IdempotencyKey)
+	if err == nil {
+		return existing, nil
+	}
+	if !errors.Is(err, domain.ErrTrackNotFound) {
+		return nil, err
 	}
 	return r.GetByDedupKey(ctx, track.UserId, track.DedupKey)
 }

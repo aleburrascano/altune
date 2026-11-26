@@ -119,15 +119,16 @@ func (a *App) wireAudioSources(
 		ytDlpAvailable: tools.YtDlp,
 		ytmCanary:      ytmCanary,
 	}
-	if len(sources.All()) > 0 && audioStore != nil {
-		deps, err := a.schedulerDeps(transport, tap, disc, staging, sources, tools)
-		if err != nil {
-			return audioSourcesStaging{}, err
-		}
-		staging.background = downloadsetup.NewScheduler(ctx, deps)
-		staging.scheduler = staging.background
-		staging.acquisitionOn = true
+	if len(sources.All()) == 0 || audioStore == nil {
+		return staging, nil
 	}
+	deps, err := a.schedulerDeps(transport, tap, disc, staging, sources, tools)
+	if err != nil {
+		return audioSourcesStaging{}, err
+	}
+	staging.background = downloadsetup.NewScheduler(ctx, deps)
+	staging.scheduler = staging.background
+	staging.acquisitionOn = true
 	return staging, nil
 }
 

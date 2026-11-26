@@ -142,10 +142,10 @@ func (s *FillFeaturedArtistsService) runPages(ctx context.Context, userId ids.Us
 			return stopReason(ctx, err)
 		}
 		tracks, total, err := s.trackRepo.ListForUser(ctx, userId, backfillPageSize, res.NextOffset)
+		if err != nil && isBudgetSpent(ctx) {
+			return errBackfillBudgetSpent
+		}
 		if err != nil {
-			if isBudgetSpent(ctx) {
-				return errBackfillBudgetSpent
-			}
 			return fmt.Errorf("list tracks for backfill: %w", err)
 		}
 		if err := s.backfillPage(ctx, userId, tracks, res); err != nil {

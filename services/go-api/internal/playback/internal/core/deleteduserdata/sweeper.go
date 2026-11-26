@@ -202,11 +202,12 @@ func (s *Sweeper) forgetAll(ctx context.Context, owners []ids.UserId) eraseOutco
 			outcome.unattempted = owners[i:]
 			return outcome
 		}
-		if err := s.queue.ForgetDeletedAccount(ctx, owner); err != nil {
-			if ctx.Err() != nil {
-				outcome.unattempted = owners[i:]
-				return outcome
-			}
+		err := s.queue.ForgetDeletedAccount(ctx, owner)
+		if err != nil && ctx.Err() != nil {
+			outcome.unattempted = owners[i:]
+			return outcome
+		}
+		if err != nil {
 			outcome.failures = append(outcome.failures, fmt.Errorf("forget deleted identity: %w", err))
 			outcome.failed = append(outcome.failed, owner)
 			continue

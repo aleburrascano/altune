@@ -113,18 +113,23 @@ func (r Report) Render() string {
 			c.Class, fmt.Sprintf("%d/%d", c.Passed, c.Total), c.Accuracy()*100)
 	}
 
-	if len(r.Failures) > 0 {
-		fmt.Fprintf(&b, "\n  Failures:\n")
-		for _, f := range r.Failures {
-			fmt.Fprintf(&b, "    [%s] %s\n        %s\n", f.Case.Class, f.Case.ID, f.Reason)
-			if f.Case.Note != "" {
-				fmt.Fprintf(&b, "        note: %s\n", f.Case.Note)
-			}
-		}
-	}
+	renderFailures(&b, r.Failures)
 	renderPending(&b, r.Pending)
 	b.WriteString("\n")
 	return b.String()
+}
+
+func renderFailures(b *strings.Builder, failures []Outcome) {
+	if len(failures) == 0 {
+		return
+	}
+	fmt.Fprintf(b, "\n  Failures:\n")
+	for _, f := range failures {
+		fmt.Fprintf(b, "    [%s] %s\n        %s\n", f.Case.Class, f.Case.ID, f.Reason)
+		if f.Case.Note != "" {
+			fmt.Fprintf(b, "        note: %s\n", f.Case.Note)
+		}
+	}
 }
 
 func renderPending(b *strings.Builder, pending []Outcome) {

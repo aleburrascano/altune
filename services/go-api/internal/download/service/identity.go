@@ -143,15 +143,21 @@ func findingOf(verdict audioverdict.Verdict, basis string, score, bitErrorRate f
 	return finding
 }
 
-func storedSourceOf(ctx context.Context, track *ports.TrackSnapshot) judgedSource {
-	var stored Evidence
-	if len(track.Evidence) > 0 {
-		if err := json.Unmarshal(track.Evidence, &stored); err != nil {
-			slog.ErrorContext(ctx, "acquisition.stored_evidence_unreadable",
-				"track_id", track.ID.String(), "error", redact.LogError(err))
-			stored = Evidence{}
-		}
+func storedEvidenceOf(ctx context.Context, track *ports.TrackSnapshot) Evidence {
+	if len(track.Evidence) == 0 {
+		return Evidence{}
 	}
+	var stored Evidence
+	if err := json.Unmarshal(track.Evidence, &stored); err != nil {
+		slog.ErrorContext(ctx, "acquisition.stored_evidence_unreadable",
+			"track_id", track.ID.String(), "error", redact.LogError(err))
+		return Evidence{}
+	}
+	return stored
+}
+
+func storedSourceOf(ctx context.Context, track *ports.TrackSnapshot) judgedSource {
+	stored := storedEvidenceOf(ctx, track)
 	kind := cmp.Or(stored.SourceKind, audioquality.FanUpload)
 	if track.AudioSourceURL == nil || *track.AudioSourceURL == "" {
 		kind = audioquality.UserUpload

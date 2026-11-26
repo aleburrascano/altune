@@ -299,13 +299,14 @@ func (r *TrackRepo) Requeue(_ context.Context, id domain.TrackId) error {
 			continue
 		}
 		failed := t.DownloadStatus == domain.AcquisitionFailed
-		if failed || (t.FailureReason != nil && *t.FailureReason != "") {
-			if failed {
-				t.DownloadStatus = domain.AcquisitionPending
-			}
-			t.FailureReason = nil
-			t.Version++
+		if !failed && (t.FailureReason == nil || *t.FailureReason == "") {
+			continue
 		}
+		if failed {
+			t.DownloadStatus = domain.AcquisitionPending
+		}
+		t.FailureReason = nil
+		t.Version++
 	}
 	return nil
 }

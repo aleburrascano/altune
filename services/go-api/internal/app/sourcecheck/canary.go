@@ -23,22 +23,28 @@ type Probes struct {
 	YtDlpEnabled   bool
 }
 
-func Checks(p Probes) []Check {
-	var checks []Check
-	if p.YtDlp != nil && p.YtDlpAvailable {
-		probe := func(source download.CanarySource) Check {
-			return Check{Name: source.Name, Run: func(ctx context.Context) error { return p.YtDlp.Canary(ctx, source) }}
-		}
-		if p.YtDlpEnabled {
-			checks = append(checks, probe(download.YouTubeCanary))
-		}
-		if p.YtMusicEnabled {
-			checks = append(checks, probe(download.YTMusicCanary))
-		}
-		if p.YtDlpEnabled {
-			checks = append(checks, probe(download.SoundCloudCanary))
-		}
+func ytDlpChecks(p Probes) []Check {
+	if p.YtDlp == nil || !p.YtDlpAvailable {
+		return nil
 	}
+	probe := func(source download.CanarySource) Check {
+		return Check{Name: source.Name, Run: func(ctx context.Context) error { return p.YtDlp.Canary(ctx, source) }}
+	}
+	var checks []Check
+	if p.YtDlpEnabled {
+		checks = append(checks, probe(download.YouTubeCanary))
+	}
+	if p.YtMusicEnabled {
+		checks = append(checks, probe(download.YTMusicCanary))
+	}
+	if p.YtDlpEnabled {
+		checks = append(checks, probe(download.SoundCloudCanary))
+	}
+	return checks
+}
+
+func Checks(p Probes) []Check {
+	checks := ytDlpChecks(p)
 	if p.YtMusicEnabled && p.InnerTube != nil {
 		checks = append(checks, Check{Name: string(download.YouTubeMusicSearchSourceName), Run: p.InnerTube.Canary})
 	}

@@ -156,9 +156,11 @@ func (l *LibraryTracks) settleUpgradeState(ctx context.Context, id ids.TrackId, 
 	if len(c.RejectedSourceKeys) == 0 && !reset {
 		return nil
 	}
-	if _, err := l.store.GetByID(ctx, id, userId); errors.Is(err, library.ErrTrackNotFound) {
+	_, err := l.store.GetByID(ctx, id, userId)
+	if errors.Is(err, library.ErrTrackNotFound) {
 		return download.ErrTrackNotFound
-	} else if err != nil {
+	}
+	if err != nil {
 		return fmt.Errorf("get track: %w", err)
 	}
 	if err := l.state.SettleAcquisition(ctx, id, fence, c.RejectedSourceKeys, reset); err != nil {
@@ -175,23 +177,33 @@ func complete(ctx context.Context, track *library.Track, c download.Completion) 
 	if err := settleAudio(track, c); err != nil {
 		return err
 	}
-	if c.Duration.Known() {
-		if err := track.SetDuration(c.Duration.Seconds()); err != nil {
-			return fmt.Errorf("set duration: %w", err)
-		}
+	if err := setMeasuredDuration(track, c.Duration); err != nil {
+		return err
 	}
 	recordMetadata(ctx, track, c)
-	if c.Relabel != nil {
-		if err := relabel(ctx, track, *c.Relabel); err != nil {
-			return err
-		}
+	if err := relabel(ctx, track, c.Relabel); err != nil {
+		return err
 	}
 	track.AdoptISRC(c.ISRC)
 	recordLengthCheck(ctx, track, c.Duration)
 	return nil
 }
 
-func relabel(ctx context.Context, track *library.Track, label download.TrackLabel) error {
+func setMeasuredDuration(track *library.Track, length tracklength.TrackLength) error {
+	if !length.Known() {
+		return nil
+	}
+	if err := track.SetDuration(length.Seconds()); err != nil {
+		return fmt.Errorf("set duration: %w", err)
+	}
+	return nil
+}
+
+func relabel(ctx context.Context, track *library.Track, given *download.TrackLabel) error {
+	if given == nil {
+		return nil
+	}
+	label := *given
 	oldMBID, oldTitle := "", track.Title
 	if track.CatalogMBID != nil {
 		oldMBID = *track.CatalogMBID
@@ -214,14 +226,15 @@ func recordLengthCheck(ctx context.Context, track *library.Track, measured track
 }
 
 func settleAudio(track *library.Track, c download.Completion) error {
-	if c.ReplaceAudio {
+	switch {
+	case c.ReplaceAudio:
 		if err := track.ReplaceAudio(c.AudioRef); err != nil {
 			return fmt.Errorf("replace audio: %w", err)
 		}
-		return nil
-	}
-	if err := track.MarkReady(c.AudioRef); err != nil {
-		return fmt.Errorf("mark ready: %w", err)
+	default:
+		if err := track.MarkReady(c.AudioRef); err != nil {
+			return fmt.Errorf("mark ready: %w", err)
+		}
 	}
 	return nil
 }
@@ -231,11 +244,12 @@ func recordMetadata(ctx context.Context, track *library.Track, c download.Comple
 	if c.SourceURL != "" {
 		track.SetAudioSource(c.SourceURL)
 	}
-	if c.Evidence != nil {
-		if err := track.SetAcquisitionConfidence(c.Confidence, c.Evidence); err != nil {
-			slog.WarnContext(ctx, "acquisition.confidence_rejected",
-				"track_id", track.ID.String(), "confidence", c.Confidence, "error", redact.LogError(err))
-		}
+	if c.Evidence == nil {
+		return
+	}
+	if err := track.SetAcquisitionConfidence(c.Confidence, c.Evidence); err != nil {
+		slog.WarnContext(ctx, "acquisition.confidence_rejected",
+			"track_id", track.ID.String(), "confidence", c.Confidence, "error", redact.LogError(err))
 	}
 }
 
@@ -295,16 +309,17 @@ func (l *LibraryTracks) attempt(ctx context.Context, id ids.TrackId, userId ids.
 }
 
 func (l *LibraryTracks) writeFenced(ctx context.Context, track *library.Track, expectedVersion int, fence download.ClaimNumber) error {
-	if err := l.store.UpdateFenced(ctx, track, expectedVersion, int(fence)); err != nil {
-		if errors.Is(err, library.ErrTrackVersionConflict) {
-			return err
-		}
-		if errors.Is(err, library.ErrTrackFenceSuperseded) {
-			return fmt.Errorf("%w: %w", download.ErrLeaseLost, err)
-		}
+	err := l.store.UpdateFenced(ctx, track, expectedVersion, int(fence))
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, library.ErrTrackVersionConflict):
+		return err
+	case errors.Is(err, library.ErrTrackFenceSuperseded):
+		return fmt.Errorf("%w: %w", download.ErrLeaseLost, err)
+	default:
 		return fmt.Errorf("update track: %w", err)
 	}
-	return nil
 }
 
 func leaseSuperseded(held download.ClaimNumber, current int) bool {

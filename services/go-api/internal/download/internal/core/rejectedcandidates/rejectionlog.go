@@ -53,9 +53,11 @@ func finalStages(entries []Entry) map[string]Stage {
 	final := make(map[string]Stage, len(entries))
 	for i, e := range entries {
 		key := candidateKey(i, e)
-		if e.Stage != NotAttempted {
+		_, seen := final[key]
+		switch {
+		case e.Stage != NotAttempted:
 			final[key] = e.Stage
-		} else if _, ok := final[key]; !ok {
+		case !seen:
 			final[key] = ""
 		}
 	}
