@@ -48,6 +48,34 @@ func TestDecodeJSON(t *testing.T) {
 	})
 }
 
+func TestIdempotencyKey(t *testing.T) {
+	tests := []struct {
+		name   string
+		header *string
+		want   *string
+	}{
+		{name: "absent header", header: nil, want: nil},
+		{name: "blank header", header: ptr("   "), want: nil},
+		{name: "trimmed key", header: ptr("  key-1 "), want: ptr("key-1")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/", nil)
+			if tt.header != nil {
+				req.Header.Set(httpserver.IdempotencyKeyHeader, *tt.header)
+			}
+
+			got := httpserver.IdempotencyKey(req)
+
+			if (got == nil) != (tt.want == nil) || (got != nil && *got != *tt.want) {
+				t.Fatalf("IdempotencyKey = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func ptr(s string) *string { return &s }
+
 func newRequestWithURLParam(name, value string) *http.Request {
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add(name, value)
