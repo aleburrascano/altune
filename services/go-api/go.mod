@@ -39,7 +39,6 @@ require (
 )
 
 require (
-	github.com/quasilyte/go-ruleguard/dsl v0.3.23 // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect
 	golang.org/x/mod v0.41.0 // indirect
 )
