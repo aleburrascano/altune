@@ -258,6 +258,9 @@ func (c *Config) validateTuning() error {
 	if c.PlaybackErasureScanTimeout <= 0 {
 		return fmt.Errorf("PLAYBACK_ERASURE_SCAN_TIMEOUT must be > 0, got %s", c.PlaybackErasureScanTimeout)
 	}
+	if c.PlaybackNowPlayingLookupTimeout <= 0 {
+		return fmt.Errorf("PLAYBACK_NOW_PLAYING_LOOKUP_TIMEOUT must be > 0, got %s", c.PlaybackNowPlayingLookupTimeout)
+	}
 	if c.AcquisitionFileHostPageTimeout <= 0 {
 		return fmt.Errorf("ACQUISITION_FILE_HOST_PAGE_TIMEOUT must be > 0, got %s", c.AcquisitionFileHostPageTimeout)
 	}

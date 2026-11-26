@@ -117,11 +117,9 @@ func holdTracksLocked(t *testing.T, pool *pgxpool.Pool) {
 }
 
 func TestPlayback_AWedgedCatalogFlagsTheResumeAndReachesOperatorLiveMetrics(t *testing.T) {
-	if testing.Short() {
-		t.Skip("waits out the 3s production now-playing lookup deadline")
-	}
 	pool := migratedDatabasePool(t)
 	f := newJWKSFixture(t)
+	f.cfg.PlaybackNowPlayingLookupTimeout = time.Nanosecond
 	run := assembleOn(t, f.cfg, pool, refuseEgress{})
 	h := run.assembly.Handler()
 	token := signedToken(t, f.key, f.operator)
