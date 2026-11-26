@@ -91,7 +91,7 @@ INSERT INTO acquisition_upgrade_state AS s (track_id, evidence, rejected_source_
 SELECT t.id,
 	jsonb_build_object('upgrade_tried_at', now(), 'upgrade_tries', $3::int),
 	CASE WHEN $2::text = '' THEN '{}'::text[] ELSE ARRAY[$2::text] END
-FROM tracks t WHERE t.id = $1 FOR UPDATE OF t
+FROM tracks t WHERE t.id = $1 FOR NO KEY UPDATE OF t
 ON CONFLICT (track_id) DO UPDATE SET
 	evidence = s.evidence || jsonb_build_object(
 		'upgrade_tried_at', now(),
@@ -127,7 +127,7 @@ SELECT t.id, jsonb_build_object(
 		'best_available_reason', $3::text,
 		'best_available_at', now(),
 		'upgrade_tries', 0)
-FROM tracks t WHERE t.id = $1 FOR UPDATE OF t
+FROM tracks t WHERE t.id = $1 FOR NO KEY UPDATE OF t
 ON CONFLICT (track_id) DO UPDATE SET
 	evidence = s.evidence || EXCLUDED.evidence`
 
@@ -148,7 +148,7 @@ SELECT t.id, jsonb_strip_nulls(jsonb_build_object(
 		'in_place_at', now(),
 		'in_place_basis', NULLIF($3::text, ''),
 		'in_place_bit_error_rate', NULLIF($4::float8, 0)))
-FROM tracks t WHERE t.id = $1 FOR UPDATE OF t
+FROM tracks t WHERE t.id = $1 FOR NO KEY UPDATE OF t
 ON CONFLICT (track_id) DO UPDATE SET
 	evidence = (s.evidence - 'in_place_failures') || EXCLUDED.evidence`
 
@@ -165,7 +165,7 @@ func (s *PostgresUpgradeStore) RecordInPlaceState(ctx context.Context, trackID i
 const noteInPlaceFailureSQL = `
 INSERT INTO acquisition_upgrade_state AS s (track_id, evidence)
 SELECT t.id, jsonb_build_object('upgrade_tried_at', now(), 'in_place_failures', 1)
-FROM tracks t WHERE t.id = $1 FOR UPDATE OF t
+FROM tracks t WHERE t.id = $1 FOR NO KEY UPDATE OF t
 ON CONFLICT (track_id) DO UPDATE SET
 	evidence = s.evidence || jsonb_build_object(
 		'upgrade_tried_at', now(),
@@ -202,7 +202,7 @@ func (s *PostgresUpgradeStore) State(ctx context.Context, trackID ids.TrackId) (
 	return snapshot, nil
 }
 
-const lockTrackSQL = `SELECT 1 FROM tracks WHERE id = $1 FOR UPDATE`
+const lockTrackSQL = `SELECT 1 FROM tracks WHERE id = $1 FOR NO KEY UPDATE`
 
 const ensureUpgradeStateSQL = `
 INSERT INTO acquisition_upgrade_state (track_id) SELECT id FROM tracks WHERE id = $1 ON CONFLICT (track_id) DO NOTHING`
