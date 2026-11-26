@@ -49,6 +49,59 @@ grep -qF "checks failed" "$WORK/out.log" || fail "a blocked push must say checks
 FACTORY_SANDBOX=1 run_hook "refs/heads/x $SHA refs/heads/x $ZERO"
 [ -s "$WORK/calls.log" ] || fail "no environment variable may turn the hook off: precheck must run with FACTORY_SANDBOX=1"
 
+G=$WORK/git
+export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+mkdir -p "$G/.husky" "$G/scripts/ci"
+cp "$HERE/.husky/pre-push" "$G/.husky/pre-push"
+cp "$HERE/scripts/ci/merge-result.sh" "$G/scripts/ci/merge-result.sh"
+cat >"$G/scripts/precheck.sh" <<STUB
+#!/usr/bin/env bash
+printf 'precheck in %s args %s main-file %s\n' "\$(basename "\$PWD")" "\$*" "\$([ -f from-main.txt ] && echo yes || echo no)" >>"$WORK/calls.log"
+exit 0
+STUB
+git -C "$G" init -q -b main
+printf 'a\n' >"$G/shared.txt"
+git -C "$G" add -A && git -C "$G" commit -qm base
+git -C "$G" remote add gitea "$WORK/none.git"
+git -C "$G" update-ref refs/remotes/gitea/main HEAD
+git -C "$G" checkout -q -b feature
+printf 'b\n' >"$G/feature.txt"
+git -C "$G" add -A && git -C "$G" commit -qm feature
+run_git_hook() {
+    : >"$WORK/calls.log"
+    (cd "$G" && printf '%s\n' "refs/heads/feature $(git rev-parse HEAD) refs/heads/feature $ZERO" | sh -e .husky/pre-push gitea url >"$WORK/out.log" 2>&1)
+    RC=$?
+}
+
+run_git_hook
+[ "$RC" = 0 ] || fail "a branch that already holds main passes (exit $RC)"
+grep -qF "precheck in git args --full gitea/main main-file no" "$WORK/calls.log" || fail "a branch that holds main is checked in place, against main: $(cat "$WORK/calls.log")"
+
+git -C "$G" checkout -q main
+printf 'new\n' >"$G/from-main.txt"
+git -C "$G" add -A && git -C "$G" commit -qm "main moves"
+git -C "$G" update-ref refs/remotes/gitea/main HEAD
+git -C "$G" checkout -q feature
+run_git_hook
+[ "$RC" = 0 ] || fail "a branch behind main that merges cleanly passes (exit $RC): $(cat "$WORK/out.log")"
+grep -qF "precheck in prepush-merge args --full gitea/main main-file yes" "$WORK/calls.log" || fail "a branch behind main is checked as merged with main, the tree CI checks: $(cat "$WORK/calls.log")"
+grep -qF "the merge result" "$WORK/out.log" || fail "the hook must say it checks the merge result: $(cat "$WORK/out.log")"
+[ "$(git -C "$G" rev-parse HEAD)" = "$(git -C "$G" rev-parse feature)" ] || fail "checking the merge result must not move the branch"
+[ -z "$(git -C "$G" status --porcelain)" ] || fail "checking the merge result must leave the checkout clean"
+
+git -C "$G" checkout -q main
+printf 'main edit\n' >"$G/shared.txt"
+git -C "$G" add -A && git -C "$G" commit -qm "main edits shared"
+git -C "$G" update-ref refs/remotes/gitea/main HEAD
+git -C "$G" checkout -q feature
+git -C "$G" reset -q --hard HEAD~0
+printf 'feature edit\n' >"$G/shared.txt"
+git -C "$G" add -A && git -C "$G" commit -qm "feature edits shared"
+run_git_hook
+[ "$RC" = 1 ] || fail "a branch that conflicts with main blocks the push (exit $RC)"
+grep -qF "does not merge with gitea/main" "$WORK/out.log" || fail "a conflicting branch must be told to rebase: $(cat "$WORK/out.log")"
+[ ! -s "$WORK/calls.log" ] || fail "a conflicting branch must not run precheck"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1

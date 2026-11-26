@@ -8,9 +8,30 @@ while read -r _ local_sha _ _; do
 done
 [ $pushing = 1 ] || exit 0
 
-echo "pre-push: checking this checkout (HEAD and the working tree) against the merge base, not the refs being pushed"
+clean_env() { env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE "$@"; }
+
+dir=.
+base=
+if [ -f scripts/ci/merge-result.sh ] && git rev-parse --git-dir >/dev/null 2>&1; then
+  if git remote get-url gitea >/dev/null 2>&1 && git rev-parse --verify --quiet gitea/main >/dev/null; then base=gitea/main; else base=origin/main; fi
+  if git rev-parse --verify --quiet "$base" >/dev/null && ! git merge-base --is-ancestor "$base" HEAD; then
+    merged=$(clean_env bash scripts/ci/merge-result.sh "$(pwd)" "$base" HEAD) || {
+      echo "❌ pre-push: this branch does not merge with $base, which is the tree CI checks. Rebase onto it (git fetch gitea main, then git rebase gitea/main), fix what conflicts, and push again."
+      exit 1
+    }
+    wt="$(git rev-parse --path-format=absolute --git-common-dir)/prepush-merge"
+    if [ -e "$wt/.git" ]; then
+      git -C "$wt" checkout -q --detach -f "$merged" && git -C "$wt" clean -qfd || exit 1
+    else
+      git worktree add -q --detach "$wt" "$merged" || exit 1
+    fi
+    dir=$wt
+    echo "pre-push: $base has moved on, so checking the merge result $(printf %.12s "$merged"), the tree CI checks, not this branch alone"
+  fi
+fi
+[ "$dir" != . ] || echo "pre-push: checking this checkout (HEAD and the working tree) against the merge base, not the refs being pushed"
 rc=0
-[ -f scripts/precheck.sh ] && { env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE CLIENT_MUTATE_RUNS_ELSEWHERE=1 bash scripts/precheck.sh || rc=$?; }
+[ -f "$dir/scripts/precheck.sh" ] && { (cd "$dir" && clean_env CLIENT_MUTATE_RUNS_ELSEWHERE=1 bash scripts/precheck.sh --full ${base:+"$base"}) || rc=$?; }
 case $rc in
   0) ;;
   3) echo "❌ pre-push: some checks could not run (see the SKIP line or the first line above). Fix what it names, then push again: install a missing tool (bash scripts/ci/go-tools.sh for golangci-lint and govulncheck, bash scripts/worktree-deps.sh client or the folder named for node dependencies, or the tool the SKIP line names), or fetch a missing base (git fetch gitea main)."; exit 1 ;;
