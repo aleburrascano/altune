@@ -29,7 +29,7 @@ func searching(results ...domain.SearchResult) *recordingSearcher {
 	return &recordingSearcher{out: &query.SearchOutput{Results: results}}
 }
 
-func TestSearchRecordings_AsksDiscoveryForTracksAloneAsNoUserAndSavesNoHistory(t *testing.T) {
+func TestSearchRecordings_AsksDiscoveryForTracksAloneAsNoUser(t *testing.T) {
 	searcher := searching()
 
 	if _, err := downloadfromsearch.NewSearch(searcher).SearchRecordings(context.Background(), "The Cure Boys Don't Cry", 10); err != nil {

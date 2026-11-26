@@ -34,6 +34,16 @@ func TestPolicy_CeilingSurvivesAnAttemptCountThatWouldOverflowAShift(t *testing.
 	}
 }
 
+func TestPolicy_CeilingNeverOverflowsPastACapNearTheLargestDuration(t *testing.T) {
+	huge := backoff.Policy{Base: time.Hour, Cap: time.Duration(1<<63 - 1)}
+
+	for attempt := 1; attempt <= 100; attempt++ {
+		if got := huge.Ceiling(attempt); got < time.Hour || got > huge.Cap {
+			t.Fatalf("Ceiling(%d) = %v, want within [1h, %v]", attempt, got, huge.Cap)
+		}
+	}
+}
+
 func TestPolicy_DelayAtSpansHalfTheCeilingToTheCeiling(t *testing.T) {
 	cases := map[string]struct {
 		unit float64

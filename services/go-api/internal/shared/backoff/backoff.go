@@ -13,6 +13,9 @@ type Policy struct {
 func (p Policy) Ceiling(attempt int) time.Duration {
 	d := p.Base
 	for i := 1; i < attempt && d < p.Cap; i++ {
+		if d > p.Cap/2 {
+			return p.Cap
+		}
 		d *= 2
 	}
 	return min(d, p.Cap)
