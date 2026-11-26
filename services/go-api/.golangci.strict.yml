@@ -134,8 +134,14 @@ linters:
       forbid:
         - pattern: ^http\.Error$
           msg: write the error through httpserver.HandleServiceError
-        - pattern: ^os\.(Getenv|LookupEnv|Environ)$
+        - pattern: ^os\.(Getenv|LookupEnv|Environ|ExpandEnv|Setenv|Unsetenv)$
           msg: read settings once in internal/shared/config and pass them in
+        - pattern: ^exec\.(Command|CommandContext)$
+          msg: start a child process through childprocess.Run (internal/shared/childprocess), which kills the whole process group on cancel and caps the output
+        - pattern: ^slog\.(Debug|Info|Warn|Error)$
+          msg: log with the request's context (slog.InfoContext(ctx, ...)) so the correlation id reaches the line
+        - pattern: ^slog\.SetDefault$
+          msg: install or swap the default logger through logging.Setup or logging.Swap (internal/shared/logging), the one home for logger configuration
         - pattern: ^recover$
           msg: recover a panic through background.SafeRun or background.RecoverContext (internal/shared/background), the one panic guard
         - pattern: ^sync\.WaitGroup$
@@ -164,7 +170,7 @@ linters:
         - unnamedResult
       settings:
         ruleguard:
-          rules: ${base-path}/_rules/outbound.rules
+          rules: ${base-path}/_rules/*.rules
 
   exclusions:
     generated: lax
@@ -207,6 +213,14 @@ linters:
       - path: /[^/]*test/
         linters:
           - contextcheck
+      - path: ^(internal/shared/childprocess/|scripts/)|/[^/]*test/
+        linters:
+          - forbidigo
+        text: 'use of `exec\.'
+      - path: ^internal/shared/logging/|/[^/]*test/
+        linters:
+          - forbidigo
+        text: 'use of `slog\.SetDefault`'
       - linters:
           - sloglint
         text: DiscardHandler

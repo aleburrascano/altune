@@ -7,8 +7,7 @@ import (
 
 func CaptureDetachedLogs(t TB) *logging.RingBuffer {
 	t.Helper()
-	prev := slog.Default()
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	t.Cleanup(logging.Swap(slog.Default()))
 	return logging.Setup("error")
 }
 

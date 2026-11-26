@@ -381,7 +381,7 @@ func (s *BackgroundAcquisitionScheduler) runClaimedJob(ctx context.Context, job 
 	jobCtx = s.withLeaseFence(jobCtx, job)
 
 	heartbeatDone := make(chan struct{})
-	go s.heartbeatLoop(jobCtx, job, cancelJob, heartbeatDone)
+	background.Go(jobCtx, "acquisition.heartbeat_panic", func() { s.heartbeatLoop(jobCtx, job, cancelJob, heartbeatDone) })
 
 	reportedCtx := s.startClaimedJob(jobCtx, job.TrackID, job)
 	jobErr := s.execClaimedJob(reportedCtx, job.TrackID, run, job)

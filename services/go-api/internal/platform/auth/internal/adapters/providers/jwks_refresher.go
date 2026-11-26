@@ -27,6 +27,8 @@ var ErrJWKSStale = errors.New("JWKS key set is stale")
 
 var errJWKSRefreshRecent = errors.New("JWKS refreshed recently")
 
+var errJWKSRefreshAborted = errors.New("JWKS refresh aborted before it finished")
+
 var ErrJWKSRefreshBackoff = errors.New("JWKS refresh backing off after failure")
 
 type jwksRefresher struct {
@@ -92,16 +94,20 @@ func (r *jwksRefresher) join(ctx context.Context, minAge time.Duration) (*jwksRe
 	}
 	r.inflight = &jwksRefreshCall{done: make(chan struct{})}
 	r.refreshing = true
-	go r.run(ctx, r.inflight)
-	return r.inflight, nil
+	call := r.inflight
+	background.Go(ctx, "auth.jwks_refresh_panic", func() { r.run(ctx, call) })
+	return call, nil
 }
 
 func (r *jwksRefresher) run(parent context.Context, call *jwksRefreshCall) {
 	ctx, cancel := background.Detach(parent, r.fetchTimeout)
 	defer cancel()
+	call.err = errJWKSRefreshAborted
+	defer func() {
+		r.settle(call)
+		close(call.done)
+	}()
 	call.err = r.fetch(ctx)
-	r.settle(call)
-	close(call.done)
 }
 
 func (r *jwksRefresher) settle(call *jwksRefreshCall) {

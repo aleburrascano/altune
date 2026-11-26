@@ -44,12 +44,12 @@ func (s *sharedResolver) join(ctx context.Context, key string, run func(context.
 	flightCtx, cancel := background.DetachCancelable(ctx)
 	f := &resolveFlight{cancel: cancel, done: make(chan struct{}), waiters: 1}
 	s.flights[key] = f
-	go func() {
+	background.Go(flightCtx, "search.resolve_flight_panic", func() {
 		defer close(f.done)
 		defer cancel()
+		defer s.forget(key, f)
 		f.result = run(flightCtx)
-		s.forget(key, f)
-	}()
+	})
 	return f
 }
 

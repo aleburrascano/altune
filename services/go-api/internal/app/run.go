@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/database"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -48,18 +49,27 @@ func (a *App) Run(ctx context.Context) error {
 	return serveErr
 }
 
+var errServerStopped = errors.New("http server goroutine ended before shutdown")
+
 func serve(ctx context.Context, httpServer *http.Server) error {
 	errCh := make(chan error, 1)
-	go func() {
+	listenDone := background.Go(ctx, "app.server_panic", func() {
 		slog.InfoContext(ctx, "server listening", "addr", httpServer.Addr)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			errCh <- err
 		}
-	}()
+	})
 
 	select {
 	case err := <-errCh:
 		return err
+	case <-listenDone:
+		select {
+		case err := <-errCh:
+			return err
+		default:
+			return errServerStopped
+		}
 	case <-ctx.Done():
 		slog.InfoContext(ctx, "shutting down")
 	}

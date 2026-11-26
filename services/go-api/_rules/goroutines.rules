@@ -1,0 +1,9 @@
+package gorules
+
+import "github.com/quasilyte/go-ruleguard/dsl"
+
+func bareGoroutines(m dsl.Matcher) {
+	m.Match(`go $f($*_)`).
+		Where(!m.File().PkgPath.Matches(`/shared/background(/|$)|test$`)).
+		Report("start a goroutine through background.Go (internal/shared/background), which recovers a panic and logs it with the request's context")
+}

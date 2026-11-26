@@ -3,6 +3,7 @@ package audiofiles
 import (
 	"altune/go-api/internal/library/internal/core/ports"
 	"altune/go-api/internal/library/internal/domain"
+	"altune/go-api/internal/shared/background"
 	"context"
 	"errors"
 	"fmt"
@@ -19,6 +20,8 @@ var (
 	_ ports.AudioStore     = (*FilesystemAudioStore)(nil)
 	_ ports.AudioAgeLister = (*FilesystemAudioStore)(nil)
 )
+
+var errFilesystemCallPanicked = errors.New("filesystem call panicked")
 
 type FilesystemAudioStore struct {
 	baseDir   string
@@ -282,18 +285,20 @@ func boundedFSCall[T any](ctx context.Context, gate *fsGate, op string, call fun
 	}
 
 	done := make(chan fsCallResult[T], 1)
-	go func() {
+	background.Go(ctx, "catalog.filesystem_call_panic", func() {
 		defer gate.leave()
+		res := fsCallResult[T]{err: errFilesystemCallPanicked}
+		defer func() { done <- res }()
 		value, err := call()
-		done <- fsCallResult[T]{value: value, err: err}
-	}()
+		res = fsCallResult[T]{value: value, err: err}
+	})
 
 	select {
 	case res := <-done:
 		return res.value, res.err
 	case <-ctx.Done():
 		if discard != nil {
-			go discardLateResult(done, discard)
+			background.Go(ctx, "catalog.filesystem_discard_panic", func() { discardLateResult(done, discard) })
 		}
 		return zero, fmt.Errorf("filesystem %s: %w", op, ctx.Err())
 	}
