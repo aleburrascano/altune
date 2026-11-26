@@ -38,7 +38,7 @@ type DownloadStep struct {
 	identifier      ports.AudioIdentifier
 	limiter         *ConcurrencyLimit
 	recordingLookup ports.RecordingLookup
-	factsCache      recordingFactsCache
+	factsCache      *recordingFactsCache
 	skips           ports.VerifySkipRecorder
 	width           int
 	floor           float64
@@ -54,7 +54,7 @@ func NewDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, id
 	requirePort("NewDownloadStep", "recording lookup", lookup == nil)
 	requirePort("NewDownloadStep", "prober", prober == nil)
 	requirePort("NewDownloadStep", "skip recorder", skips == nil)
-	s := &DownloadStep{fetcher: fetcher, workspace: requireWorkspace("NewDownloadStep", workspace), identifier: identifier, recordingLookup: lookup, prober: prober, skips: skips, width: prodVerifyWidth, candidateTimeout: DefaultCandidateTimeout, floor: defaultConfidenceFloor, cuts: audioverdict.DefaultCuts()}
+	s := &DownloadStep{fetcher: fetcher, workspace: requireWorkspace("NewDownloadStep", workspace), identifier: identifier, recordingLookup: lookup, factsCache: newRecordingFactsCache(time.Now), prober: prober, skips: skips, width: prodVerifyWidth, candidateTimeout: DefaultCandidateTimeout, floor: defaultConfidenceFloor, cuts: audioverdict.DefaultCuts()}
 	for _, opt := range opts {
 		opt(s)
 	}

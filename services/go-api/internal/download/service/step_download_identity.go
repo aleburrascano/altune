@@ -7,6 +7,7 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/internal/core/rejectedcandidates"
+	"altune/go-api/internal/shared/expiringcache"
 	"altune/go-api/internal/shared/redact"
 	"cmp"
 	"context"
@@ -14,8 +15,9 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 )
 
 type identification struct {
@@ -189,7 +191,7 @@ func sourceOf(ac *AcquisitionContext, candidate ports.AudioCandidate) judgedSour
 
 func (s *DownloadStep) classifyMatch(ctx context.Context, ac *AcquisitionContext, match ports.RecordingMatch, probed float64, source judgedSource) AudioVerdict {
 	input := judgeInput(ac, match.Results, probed, source)
-	input.Audio.RecordingFacts = versionFactsOf(ctx, &s.factsCache, s.recordingLookup, input)
+	input.Audio.RecordingFacts = versionFactsOf(ctx, s.factsCache, s.recordingLookup, input)
 	return AudioVerdictOf(audioverdict.Judge(input, s.cuts), match.Results)
 }
 
@@ -336,89 +338,50 @@ func currentFileRejection(ctx context.Context, ac *AcquisitionContext, candidate
 
 const maxVersionLookupsPerCandidate = 3
 
-type recordingFactsCache struct {
-	mu       sync.Mutex
-	entries  map[string]ports.RecordingFacts
-	missing  map[string]bool
-	inflight map[string]*inflightLookup
+const (
+	recordingFactsTTL = 10 * time.Minute
+	recordingFactsCap = 256
+)
+
+type recordedFacts struct {
+	facts ports.RecordingFacts
+	found bool
 }
 
-type inflightLookup struct {
-	done chan struct{}
+type recordingFactsCache struct {
+	memo   *expiringcache.Memo[string, recordedFacts]
+	flight singleflight.Group
+}
+
+func newRecordingFactsCache(now func() time.Time) *recordingFactsCache {
+	return &recordingFactsCache{memo: expiringcache.New[string, recordedFacts](recordingFactsTTL, recordingFactsCap, now)}
 }
 
 type recordingFetch func(ctx context.Context, mbid string) (ports.RecordingFacts, bool, error)
 
 func (c *recordingFactsCache) lookup(ctx context.Context, mbid string, fetch recordingFetch) (ports.RecordingFacts, bool, error) {
-	for {
-		facts, found, pending, leader := c.claim(mbid)
-		if pending == nil {
-			return facts, found, nil
+	if known, ok := c.memo.Get(mbid); ok {
+		return known.facts, known.found, nil
+	}
+	pending := c.flight.DoChan(mbid, func() (any, error) {
+		facts, found, err := fetch(ctx, mbid)
+		if err != nil {
+			return nil, err
 		}
-		if leader {
-			return c.fetchAndPublish(ctx, mbid, pending, fetch)
+		known := recordedFacts{facts: facts, found: found}
+		c.memo.Put(mbid, known)
+		return known, nil
+	})
+	select {
+	case <-ctx.Done():
+		return ports.RecordingFacts{}, false, ctx.Err()
+	case result := <-pending:
+		if result.Err != nil {
+			return ports.RecordingFacts{}, false, result.Err
 		}
-		select {
-		case <-pending.done:
-		case <-ctx.Done():
-			return ports.RecordingFacts{}, false, ctx.Err()
-		}
+		known := result.Val.(recordedFacts)
+		return known.facts, known.found, nil
 	}
-}
-
-func (c *recordingFactsCache) claim(mbid string) (facts ports.RecordingFacts, found bool, pending *inflightLookup, leader bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.missing[mbid] {
-		return ports.RecordingFacts{}, false, nil, false
-	}
-	if facts, found = c.entries[mbid]; found {
-		return facts, true, nil, false
-	}
-	if existing := c.inflight[mbid]; existing != nil {
-		return ports.RecordingFacts{}, false, existing, false
-	}
-	if c.inflight == nil {
-		c.inflight = make(map[string]*inflightLookup)
-	}
-	pending = &inflightLookup{done: make(chan struct{})}
-	c.inflight[mbid] = pending
-	return ports.RecordingFacts{}, false, pending, true
-}
-
-func (c *recordingFactsCache) fetchAndPublish(ctx context.Context, mbid string, pending *inflightLookup, fetch recordingFetch) (ports.RecordingFacts, bool, error) {
-	var (
-		facts    ports.RecordingFacts
-		found    bool
-		err      error
-		returned bool
-	)
-	defer func() {
-		c.mu.Lock()
-		if returned && err == nil {
-			c.store(mbid, facts, found)
-		}
-		delete(c.inflight, mbid)
-		c.mu.Unlock()
-		close(pending.done)
-	}()
-	facts, found, err = fetch(ctx, mbid)
-	returned = true
-	return facts, found, err
-}
-
-func (c *recordingFactsCache) store(mbid string, facts ports.RecordingFacts, found bool) {
-	if !found {
-		if c.missing == nil {
-			c.missing = make(map[string]bool)
-		}
-		c.missing[mbid] = true
-		return
-	}
-	if c.entries == nil {
-		c.entries = make(map[string]ports.RecordingFacts)
-	}
-	c.entries[mbid] = facts
 }
 
 func versionFactsOf(ctx context.Context, cache *recordingFactsCache, lookup ports.RecordingLookup, input audioverdict.Input) map[string]ports.RecordingFacts {
