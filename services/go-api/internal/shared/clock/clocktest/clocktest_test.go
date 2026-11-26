@@ -4,6 +4,9 @@ import (
 	"altune/go-api/internal/shared/clock/clocktest"
 	"context"
 	"errors"
+	"fmt"
+	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"testing/synctest"
@@ -269,7 +272,7 @@ func TestManualBlockUntil_ReturnsOnceEnoughSleepsTimersAndTickersAreWaiting(t *t
 		defer cancel()
 		returned := make(chan struct{})
 		go func() {
-			m.BlockUntil(3)
+			m.BlockUntil(t, 3)
 			close(returned)
 		}()
 
@@ -297,6 +300,37 @@ func TestManualBlockUntil_ReturnsAtOnceWhenEnoughAreAlreadyWaitingAndWorksOnAZer
 	var m clocktest.Manual
 	m.Ticker()(time.Second)
 
-	m.BlockUntil(1)
-	m.BlockUntil(0)
+	m.BlockUntil(t, 1)
+	m.BlockUntil(t, 0)
+}
+
+type recordingTB struct {
+	testing.TB
+	failure string
+}
+
+func (r *recordingTB) Helper() {}
+
+func (r *recordingTB) Fatalf(format string, args ...any) {
+	r.failure = fmt.Sprintf(format, args...)
+	runtime.Goexit()
+}
+
+func TestManualBlockUntil_FailsTheTestWhenTheWaitersNeverArrive(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		m := clocktest.NewManual(start)
+		m.Ticker()(time.Minute)
+		rec := &recordingTB{TB: t}
+		done := make(chan struct{})
+
+		go func() {
+			defer close(done)
+			m.BlockUntil(rec, 2)
+		}()
+		<-done
+
+		if !strings.Contains(rec.failure, "BlockUntil(2) saw 1 waiting") {
+			t.Fatalf("failure = %q, want BlockUntil to fail naming the 2 wanted and the 1 seen", rec.failure)
+		}
+	})
 }

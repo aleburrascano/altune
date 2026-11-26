@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"sync"
+	"testing"
 	"time"
 )
 
@@ -12,7 +13,7 @@ type Manual struct {
 	now     time.Time
 	waiters map[int]waiter
 	nextKey int
-	arrived *sync.Cond
+	arrived chan struct{}
 }
 
 type waiter struct {
@@ -37,19 +38,34 @@ func (m *Manual) Ticker() clock.TickerFunc {
 	return m.newTicker
 }
 
-func (m *Manual) BlockUntil(n int) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for len(m.waiters) < n {
-		m.arrivalsLocked().Wait()
+const blockUntilLimit = 10 * time.Second
+
+func (m *Manual) BlockUntil(t testing.TB, n int) {
+	t.Helper()
+	limit := time.After(blockUntilLimit)
+	for {
+		arrived, waiting := m.arrivals(n)
+		if arrived == nil {
+			return
+		}
+		select {
+		case <-arrived:
+		case <-limit:
+			t.Fatalf("clocktest: BlockUntil(%d) saw %d waiting after %s; the code under test never registered the rest", n, waiting, blockUntilLimit)
+		}
 	}
 }
 
-func (m *Manual) arrivalsLocked() *sync.Cond {
-	if m.arrived == nil {
-		m.arrived = sync.NewCond(&m.mu)
+func (m *Manual) arrivals(n int) (chan struct{}, int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.waiters) >= n {
+		return nil, len(m.waiters)
 	}
-	return m.arrived
+	if m.arrived == nil {
+		m.arrived = make(chan struct{})
+	}
+	return m.arrived, len(m.waiters)
 }
 
 func (m *Manual) Sleeping() int {
@@ -111,7 +127,10 @@ func (m *Manual) registerEvery(d, period time.Duration, fire func(time.Time)) in
 	key := m.nextKey
 	m.nextKey++
 	m.waiters[key] = waiter{wakeAt: m.now.Add(d), period: period, fire: fire}
-	m.arrivalsLocked().Broadcast()
+	if m.arrived != nil {
+		close(m.arrived)
+		m.arrived = nil
+	}
 	return key
 }
 
