@@ -190,12 +190,13 @@ describe('TrackDetailBody retry on an owned, failed track (#2852)', () => {
   });
 
   it('shows the pill as downloading once the retry is dispatched', async () => {
-    __http.hang(`POST /v1/tracks/${OWNED_TRACK_ID}/retry`);
+    const acceptRetry = __http.hold(`POST /v1/tracks/${OWNED_TRACK_ID}/retry`, { status: 202 });
     renderOwnedFailedDetail();
 
     await pressSave();
 
     await waitFor(() => expect(screen.getByLabelText(`${OWNED_TITLE} downloading`)).toBeTruthy());
+    await act(async () => acceptRetry());
   });
 });
 
@@ -264,7 +265,10 @@ describe('TrackDetailBody save tap guard', () => {
   });
 
   it('sends one save when the pill is tapped again while the first is still saving', async () => {
-    __http.hang('POST /v1/tracks');
+    const acceptSave = __http.hold('POST /v1/tracks', {
+      status: 200,
+      json: savedTrackResponse('pending'),
+    });
     renderDetail();
 
     await pressSave();
@@ -273,6 +277,7 @@ describe('TrackDetailBody save tap guard', () => {
     await pressSave();
 
     expect(__http.countFor('POST /v1/tracks')).toBe(1);
+    await act(async () => acceptSave());
   });
 });
 
