@@ -21,11 +21,6 @@ const downloadAwaitedBeforeCancelCheck = {
   rules: ['react-doctor/async-defer-await'],
 };
 
-const queueResumeCoalescesSequentially = {
-  files: ['src/features/player/adapters/native/useQueueResume.ts'],
-  rules: ['react-doctor/async-await-in-loop'],
-};
-
 const nativeTailDrainRebuildsInOrder = {
   files: ['src/features/player/adapters/native/rebuildNativeTail.ts'],
   rules: ['react-doctor/async-await-in-loop'],
@@ -39,11 +34,6 @@ const resetNativeRunsEvenWhenEmpty = {
 const moduleDoorsWaitForCallersToMoveOffInternals = {
   files: ['src/shared/*/index.ts'],
   rules: ['deslop/unused-file'],
-};
-
-const imageOnlyResolvesAssetSource = {
-  files: ['src/features/player/adapters/native/nativeTrack.ts'],
-  rules: ['react-doctor/rn-prefer-expo-image'],
 };
 
 const failureShownIsAnImpressionLogSyncedInEffect = {
@@ -68,11 +58,6 @@ const recordEventIsFireAndForgetAndReadsNoQueryCache = {
 
 const mediaSessionEffectsSyncTheBrowserMediaSession = {
   files: ['src/features/player/view/useMediaSession.ts'],
-  rules: ['react-doctor/no-event-handler'],
-};
-
-const rememberTrackSyncsNativeTrackPlayer = {
-  files: ['src/features/player/adapters/native/TrackPlayerPlaybackProvider.tsx'],
   rules: ['react-doctor/no-event-handler'],
 };
 
@@ -153,15 +138,12 @@ export default {
       pagingLoopsAwaitInOrder,
       sequentialByDesignAwaitInLoop,
       downloadAwaitedBeforeCancelCheck,
-      queueResumeCoalescesSequentially,
       nativeTailDrainRebuildsInOrder,
       resetNativeRunsEvenWhenEmpty,
-      imageOnlyResolvesAssetSource,
       moduleDoorsWaitForCallersToMoveOffInternals,
       failureShownIsAnImpressionLogSyncedInEffect,
       bannerChildrenOnlyPicksTelemetryMessage,
       mediaSessionEffectsSyncTheBrowserMediaSession,
-      rememberTrackSyncsNativeTrackPlayer,
       recordEventIsFireAndForgetAndReadsNoQueryCache,
       progressValueFollowsPlaybackPosition,
       closeGuardsClearOnlyOnceTheParentHasClosedTheSurface,

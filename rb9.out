@@ -1,0 +1,54 @@
+tsc=0
+● Validation Warning:
+
+  Unknown option "watchPlugins" with value ["/tmp/claude-1001/-home-ubuntu-projects/561efc57-46f0-4a03-83c6-d02127c86428/scratchpad/client-features/wt9/client/node_modules/jest-watch-typeahead/build/file_name_plugin/plugin.js", "/tmp/claude-1001/-home-ubuntu-projects/561efc57-46f0-4a03-83c6-d02127c86428/scratchpad/client-features/wt9/client/node_modules/jest-watch-typeahead/build/test_name_plugin/plugin.js"] was found.
+  This is probably a typing mistake. Fixing it will remove this message.
+
+  Configuration Documentation:
+  https://jestjs.io/docs/configuration
+
+Running one project: native
+PASS native src/features/player/adapters/native/__tests__/widgetSnapshot.test.ts (17.226 s)
+  startWidgetSnapshotPublisher while signed out
+    ✓ never publishes now playing for a queue change before anyone signs in (16 ms)
+  startWidgetSnapshotPublisher, from a caller
+    ✓ downloads the cover again when a track returns after another track replaced it (6 ms)
+    ✓ writes nothing on sign-out once unsubscribed (3 ms)
+    ✓ publishes the next track’s cover after a rejected cover write (10 ms)
+    ✓ publishes now playing again after signing back in (3 ms)
+    ✓ lets no pending cover overwrite the signed-out snapshot (3 ms)
+    ✓ keeps the final state of a burst of store updates (2 ms)
+    ✓ drops the previous cover when the next track has no artwork (2 ms)
+    ✓ removes its player event subscription when unsubscribed (2 ms)
+    ✓ writes nothing once unsubscribed, even for a publish still waiting on its cover (2 ms)
+    ✓ writes nothing for a queue change once unsubscribed (2 ms)
+    ✓ publishes exactly the pinned now-playing keys for repeat all, shuffle true (1 ms)
+    ✓ lets no pending player read overwrite the signed-out snapshot (2 ms)
+    ✓ publishes exactly the pinned now-playing keys for repeat off, shuffle false (4 ms)
+    ✓ publishes a numeric duration for a track whose length is not known yet (1 ms)
+    ✓ does not download a cover again for the next track sharing the same artwork (2 ms)
+    ✓ never leaves the first track’s slow cover on top of the second track’s (2 ms)
+    ✓ publishes exactly the pinned now-playing keys for repeat one, shuffle false (2 ms)
+    ✓ leaves no cover timeout running once stopped (5 ms)
+    ✓ keeps the signed-out snapshot when the queue and player change after sign-out (3 ms)
+    ✓ publishes exactly the pinned now-playing keys for repeat one, shuffle true (1 ms)
+    ✓ publishes signed-in with nothing playing for a queue loaded empty (2 ms)
+    ✓ keeps publishing the next track while a cover write never settles (2 ms)
+  startWidgetSnapshotPublisher
+    ✓ writes nothing when nothing changed, and downloads a cover once per artwork url (1 ms)
+    ✓ clears the snapshot to signed-out on sign-out (1 ms)
+    ✓ publishes the now-playing snapshot with source read from the store, and reloads the widget (2 ms)
+    ✓ keeps publishing with a null cover when the cover write is rejected (7 ms)
+    ✓ publishes a null cover for a track without artwork and skips the download (4 ms)
+    ✓ publishes signed-in with nothing playing for an empty queue (2 ms)
+    ✓ republishes with isPlaying when the player state changes (4 ms)
+
+A worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.
+Seed:        979153238
+Test Suites: 1 passed, 1 total
+Tests:       30 passed, 30 total
+Snapshots:   0 total
+Time:        18.307 s
+Ran all test suites matching /src\/features\/player\/adapters\/native\/__tests__\/widgetSnapshot.test.ts/i.
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+exit=0

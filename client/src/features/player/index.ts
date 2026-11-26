@@ -5,7 +5,7 @@ export { SleepTimerBridge } from '@features/player/view/SleepTimerBridge';
 export { MiniPlayer } from '@features/player/ui/MiniPlayer';
 export { PlayerBar } from '@features/player/ui/PlayerBar';
 export { FullPlayer } from '@features/player/ui/FullPlayer';
-export { LyricsSheet } from '@features/player/ui/LyricsSheet';
+export { LyricsSheet } from '@features/player/view/LyricsSheet';
 export { QueueSheet, QueueRow } from '@features/player/ui/QueueSheet';
 export {
   createStartPlaybackService,
@@ -184,4 +184,4 @@ export {
 } from '@features/player/web/playbackVolume';
 export { VolumeSlider } from '@features/player/view/web/VolumeSlider';
 export { WebPlaybackProvider } from '@features/player/view/web/WebPlaybackProvider';
-export { resolveSource } from '@features/player/web/webPresign';
+export { resolveSource } from '@features/player/view/web/webPresign';

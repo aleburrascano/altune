@@ -138,12 +138,14 @@ interface SingleFlightState {
 
 type SaveWork = () => Promise<void>;
 
+function drainWhileDirty(flight: SingleFlightState, work: SaveWork): Promise<void> {
+  flight.dirty = false;
+  return work().then(() => (flight.dirty ? drainWhileDirty(flight, work) : undefined));
+}
+
 async function drainSingleFlight(flight: SingleFlightState, work: SaveWork): Promise<void> {
   try {
-    do {
-      flight.dirty = false;
-      await work();
-    } while (flight.dirty);
+    await drainWhileDirty(flight, work);
   } finally {
     flight.inFlight = null;
   }

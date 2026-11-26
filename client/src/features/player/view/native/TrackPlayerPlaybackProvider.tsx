@@ -75,12 +75,9 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
   const currentQueueTrack = useQueueStore((s) => s.currentTrack());
 
   if (currentQueueTrack && currentQueueTrack !== syncedQueueTrack) {
+    native.rememberTrack(currentQueueTrack);
     setDisplayed({ track: currentQueueTrack, syncedQueueTrack: currentQueueTrack });
   }
-
-  useEffect(() => {
-    if (track) native.rememberTrack(track);
-  }, [native, track]);
 
   useEffect(() => onSignOut(() => setTrack(null)), [setTrack]);
 

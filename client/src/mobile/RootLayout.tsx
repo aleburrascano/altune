@@ -5,12 +5,13 @@ import {
   PlusJakartaSans_700Bold,
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { QueryClientProvider } from '@tanstack/react-query';
+import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState, type ReactNode } from 'react';
-import { Image, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -79,9 +80,7 @@ installAuthClient(
 );
 provideOfflinePort(httpOfflinePort);
 
-installArtworkPlaceholder(
-  () => Image.resolveAssetSource(require('@assets/artwork-placeholder.png')).uri,
-);
+installArtworkPlaceholder(() => Asset.fromModule(require('@assets/artwork-placeholder.png')).uri);
 startPlaybackService();
 
 registerSearchStateSignOutReset();
