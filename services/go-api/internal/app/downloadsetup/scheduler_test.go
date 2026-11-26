@@ -106,7 +106,7 @@ func acquireThroughPostgres(t *testing.T) (library.Track, string, download.Verif
 	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID()) })
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
 		Transport:  http.DefaultTransport,
-		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, AcquisitionUpgradeConcurrency: 1, MusicDir: musicDir},
+		Config:     &config.Config{Env: "test", AcquisitionDeezerPreviewTimeout: time.Second, AcquisitionDownloadConcurrency: 1, AcquisitionUpgradeConcurrency: 1, MusicDir: musicDir},
 		Pool:       pool,
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(repo, time.Now, upgradestatetest.New()),
@@ -156,7 +156,7 @@ func TestNewScheduler_RefusesAMissingTransport(t *testing.T) {
 		}
 	}()
 
-	downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{Config: &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1}})
+	downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{Config: &config.Config{Env: "test", AcquisitionDeezerPreviewTimeout: time.Second, AcquisitionDownloadConcurrency: 1}})
 
 	t.Fatal("NewScheduler built a scheduler without a transport")
 }
@@ -278,7 +278,7 @@ func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
 	trackRepo := library.NewPostgresTrackRepository(pool)
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
 		Transport:  http.DefaultTransport,
-		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, AcquisitionUpgradeConcurrency: 1, MusicDir: t.TempDir()},
+		Config:     &config.Config{Env: "test", AcquisitionDeezerPreviewTimeout: time.Second, AcquisitionDownloadConcurrency: 1, AcquisitionUpgradeConcurrency: 1, MusicDir: t.TempDir()},
 		Pool:       pool,
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(trackRepo, time.Now, upgradestatetest.New()),
@@ -370,7 +370,7 @@ func TestNewScheduler_AnUpgradeWorkerClaimsAndSettlesAnEnqueuedUpgrade(t *testin
 	pool := integrationPool(t)
 	userID, trackID := insertReadyTrackGradedC(t, pool)
 
-	cfg := &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, MusicDir: t.TempDir(), AcquisitionUpgradeConcurrency: 1, AcquisitionUpgradeMaxTries: 3}
+	cfg := &config.Config{Env: "test", AcquisitionDeezerPreviewTimeout: time.Second, AcquisitionDownloadConcurrency: 1, MusicDir: t.TempDir(), AcquisitionUpgradeConcurrency: 1, AcquisitionUpgradeMaxTries: 3}
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
 		Transport:  http.DefaultTransport,
 		Config:     cfg,
@@ -458,7 +458,7 @@ func TestNewScheduler_ShutdownCancelsAJobThatOutlivesTheConfiguredDrainBudget(t 
 	hang := sourceThatHangs{started: make(chan struct{}, 1)}
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
 		Transport:  http.DefaultTransport,
-		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, AcquisitionUpgradeConcurrency: 1, MusicDir: t.TempDir(), AcquisitionDrainBudgetSeconds: 1},
+		Config:     &config.Config{Env: "test", AcquisitionDeezerPreviewTimeout: time.Second, AcquisitionDownloadConcurrency: 1, AcquisitionUpgradeConcurrency: 1, MusicDir: t.TempDir(), AcquisitionDrainBudgetSeconds: 1},
 		Pool:       pool,
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(repo, time.Now, upgradestatetest.New()),
