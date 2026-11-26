@@ -28,11 +28,22 @@ CODE=$?
 grep -qF "other/b/thing_extra_test.go" <<<"$OUT" || fail "the finding should name the file: $OUT"
 if grep -qF "svc/a/unit_extra_test.go" <<<"$OUT"; then fail "a finding outside the checked directory should not be reported: $OUT"; fi
 
+OUT=$(bash scripts/test-home-tree.sh svc other 2>&1)
+CODE=$?
+[ "$CODE" = 1 ] || fail "findings in two directories given together should exit 1, got $CODE: $OUT"
+grep -qF "svc/a/unit_extra_test.go" <<<"$OUT" && grep -qF "other/b/thing_extra_test.go" <<<"$OUT" || fail "both directories' findings should be named: $OUT"
+
 git rm -q other/b/thing_extra_test.go
 git commit -qm fixed
 OUT=$(bash scripts/test-home-tree.sh other 2>&1)
 CODE=$?
 [ "$CODE" = 0 ] || fail "a directory at zero should exit 0 although another directory still has findings, got $CODE: $OUT"
+
+git clone -q --depth 1 "file://$WORK/repo" "$WORK/shallow"
+OUT=$(cd "$WORK/shallow" && bash scripts/test-home-tree.sh svc 2>&1)
+CODE=$?
+[ "$CODE" = 3 ] || fail "a shallow clone must not read as checked, want exit 3, got $CODE: $OUT"
+grep -qi "shallow" <<<"$OUT" || fail "the shallow clone message should say so: $OUT"
 
 [ "$FAILURES" = 0 ] && echo "test-home-tree.test.sh: all cases pass"
 exit "$FAILURES"

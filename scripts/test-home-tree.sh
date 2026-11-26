@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-dir=${1:?usage: test-home-tree.sh DIR}
+[ $# -ge 1 ] || { echo "usage: test-home-tree.sh DIR..." >&2; exit 2; }
 here=$(cd "$(dirname "$0")" && pwd)
+if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+  echo "test-home-tree: this clone is shallow, so the root commit is unknown and files added before the boundary would go unchecked; fetch the full history" >&2
+  exit 3
+fi
 root_commit=$(git rev-list --max-parents=0 HEAD | tail -n 1)
 
 status=0
@@ -12,10 +16,14 @@ if [ "$status" = 3 ]; then
   exit 3
 fi
 
-found=$(awk -v prefix="${dir%/}/" 'index($0, prefix) == 1' <<<"$out")
-if [ -n "$found" ]; then
-  printf '%s\n' "$found"
-  echo "test-home-tree: test files under $dir that are not their unit's first test file; rename or merge them into the unit's test file"
+found=
+for dir in "$@"; do
+  found+=$(awk -v prefix="${dir%/}/" 'index($0, prefix) == 1' <<<"$out")$'\n'
+done
+found=${found//$'\n\n'/$'\n'}
+if [ -n "${found//[$'\n']/}" ]; then
+  printf '%s' "$found"
+  echo "test-home-tree: test files under $* that do not live with their unit; name each for the source file it tests, or merge it into that unit's first test file"
   exit 1
 fi
 if [ "$status" != 0 ] && [ "$status" != 1 ]; then
@@ -23,4 +31,4 @@ if [ "$status" != 0 ] && [ "$status" != 1 ]; then
   echo "test-home-tree: test-home exited $status"
   exit "$status"
 fi
-echo "test-home-tree: every test file under $dir lives with its unit"
+echo "test-home-tree: every test file under $* lives with its unit"
