@@ -9,7 +9,6 @@ import (
 	"altune/go-api/internal/shared/config"
 	"context"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -27,7 +26,7 @@ func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*
 		transport = providertransport.Live()
 	}
 	deps := searchsettings.Deps(ctx, cfg, transport)
-	deps.Background = &sync.WaitGroup{}
+	deps.Background = &background.Tracker{}
 	deps.Tracker = h.Tracker
 	deps.Pool = h.Pool
 	return search.New(deps)

@@ -3,16 +3,16 @@ package unreleased_test
 import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/background"
 	"context"
 	"errors"
 	"slices"
-	"sync"
 	"testing"
 )
 
 func TestService_Warm_RecordsEachArtistOnce(t *testing.T) {
 	store := &search.FakeUnreleasedStore{}
-	var jobs sync.WaitGroup
+	var jobs background.Tracker
 	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, search.UnreleasedConfig{}, search.WithUnreleasedStore(store), search.WithUnreleasedLifecycle(context.Background(), &jobs)))
 
 	svc.Warm([]search.ArtistToRefresh{
@@ -30,7 +30,7 @@ func TestService_Warm_RecordsEachArtistOnce(t *testing.T) {
 
 func TestService_Warm_StoreErrorIsOnlyLogged(t *testing.T) {
 	store := &search.FakeUnreleasedStore{RecordErr: errors.New("db down")}
-	var jobs sync.WaitGroup
+	var jobs background.Tracker
 	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, search.UnreleasedConfig{}, search.WithUnreleasedStore(store), search.WithUnreleasedLifecycle(context.Background(), &jobs)))
 
 	svc.Warm([]search.ArtistToRefresh{{Provider: search.ProviderDeezer, ExternalID: "27", Name: "Drake"}})

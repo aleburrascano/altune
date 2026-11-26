@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -23,7 +22,7 @@ type Lookup struct {
 
 type Option func(*Service)
 
-func WithLifecycle(ctx context.Context, jobs *sync.WaitGroup) Option {
+func WithLifecycle(ctx context.Context, jobs *background.Tracker) Option {
 	return func(s *Service) {
 		s.lifecycle = ctx
 		s.jobs = jobs
@@ -67,12 +66,10 @@ func (s *Service) Warm(artists []ArtistToRefresh) {
 	if s.store == nil || len(artists) == 0 {
 		return
 	}
-	s.jobs.Add(1)
-	go s.runWarm(artists)
+	s.jobs.Track(func() { s.runWarm(artists) })
 }
 
 func (s *Service) runWarm(artists []ArtistToRefresh) {
-	defer s.jobs.Done()
 	ctx, cancel := context.WithTimeout(s.lifecycle, warmTimeout)
 	defer cancel()
 	defer background.RecoverContext(ctx, "unreleased.warm_panic")
@@ -150,13 +147,11 @@ func (s *Service) joinJob(key string, run func(context.Context) ([]domain.Unrele
 	}
 	j := &job{done: make(chan struct{})}
 	s.inflight[key] = j
-	s.jobs.Add(1)
-	go s.runJob(key, j, run)
+	s.jobs.Track(func() { s.runJob(key, j, run) })
 	return j
 }
 
 func (s *Service) runJob(key string, j *job, run func(context.Context) ([]domain.UnreleasedSong, error)) {
-	defer s.jobs.Done()
 	ctx := s.lifecycle
 	if s.cfg.JobTimeout > 0 {
 		var cancel context.CancelFunc

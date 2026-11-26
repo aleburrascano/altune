@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/searchtest"
 	apierror "altune/go-api/internal/shared/apierror"
+	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
@@ -1771,7 +1772,7 @@ func searchArtist(name, id string) search.SearchResult {
 func searchAsWarmUp(t *testing.T, store search.UnreleasedStore, results []search.SearchResult) *httptest.ResponseRecorder {
 	t.Helper()
 	bg := searchtest.NewTracker(t)
-	var jobs sync.WaitGroup
+	var jobs background.Tracker
 	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, search.UnreleasedConfig{},
 		search.WithUnreleasedStore(store), search.WithUnreleasedLifecycle(context.Background(), &jobs)))
 	p := &fakeSearchProvider{name: search.ProviderDeezer, results: results}

@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -30,19 +29,17 @@ func NewElection(pool *pgxpool.Pool) *leader.Election {
 
 type Runner struct {
 	loops    background.Tracker
-	wg       sync.WaitGroup
 	registry background.JobRegistry
 	election Election
 	starts   []background.NamedStart
 }
 
-func (r *Runner) Background() *sync.WaitGroup {
-	return &r.wg
+func (r *Runner) Background() *background.Tracker {
+	return &r.loops
 }
 
 func (r *Runner) Wait() {
 	r.loops.Wait()
-	r.wg.Wait()
 }
 
 func (r *Runner) Control(name Name) *background.JobControl {
