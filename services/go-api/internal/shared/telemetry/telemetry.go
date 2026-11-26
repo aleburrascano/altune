@@ -17,6 +17,6 @@ const (
 var (
 	Enabled         = otlp.Enabled
 	Setup           = otlp.Setup
-	Middleware      = otlp.Middleware
+	RequestSpan     = otlp.RequestSpan
 	NewClientEvents = otlp.NewClientEvents
 )

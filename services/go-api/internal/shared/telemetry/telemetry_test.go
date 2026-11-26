@@ -2,6 +2,7 @@ package telemetry_test
 
 import (
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/telemetry"
 	"context"
@@ -53,7 +54,7 @@ func TestADownCollectorNeitherFailsNorSlowsARequest(t *testing.T) {
 		t.Fatalf("Setup: %v", err)
 	}
 	router := chi.NewRouter()
-	router.Use(telemetry.Middleware(never))
+	router.Use(httpserver.ObserveRequests(clock.Now, telemetry.RequestSpan(never)))
 	router.Get("/health", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	start := time.Now()
 	for range 50 {
@@ -86,10 +87,10 @@ func recordSpans(t *testing.T) *tracetest.SpanRecorder {
 	return recorder
 }
 
-func TestMiddlewareNamesTheSpanByRouteAndRecordsTheApp(t *testing.T) {
+func TestRequestSpanNamesTheSpanByRouteAndRecordsTheApp(t *testing.T) {
 	recorder := recordSpans(t)
 	router := chi.NewRouter()
-	router.Use(telemetry.Middleware(never))
+	router.Use(httpserver.ObserveRequests(clock.Now, telemetry.RequestSpan(never)))
 	router.Get("/v1/tracks/{id}", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
 	req := httptest.NewRequest(http.MethodGet, "/v1/tracks/42?q=secret+search", nil)
 	req.Header.Set(telemetry.AppVersionHeader, "1.4.0+"+strings.Repeat("a", 100))
@@ -123,7 +124,7 @@ func TestMiddlewareNamesTheSpanByRouteAndRecordsTheApp(t *testing.T) {
 	}
 }
 
-func TestMiddlewareTagsTheSpanWithTheCorrelationIDWhenOneIsSet(t *testing.T) {
+func TestRequestSpanTagsTheSpanWithTheCorrelationIDWhenOneIsSet(t *testing.T) {
 	recorder := recordSpans(t)
 	router := chi.NewRouter()
 	router.Use(func(next http.Handler) http.Handler {
@@ -131,7 +132,7 @@ func TestMiddlewareTagsTheSpanWithTheCorrelationIDWhenOneIsSet(t *testing.T) {
 			next.ServeHTTP(w, r.WithContext(logging.ContextWithCorrelationID(r.Context(), "corr-abc")))
 		})
 	})
-	router.Use(telemetry.Middleware(never))
+	router.Use(httpserver.ObserveRequests(clock.Now, telemetry.RequestSpan(never)))
 	router.Get("/v1/ping", func(http.ResponseWriter, *http.Request) {})
 
 	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/ping", nil))
@@ -149,10 +150,10 @@ func TestMiddlewareTagsTheSpanWithTheCorrelationIDWhenOneIsSet(t *testing.T) {
 	}
 }
 
-func TestMiddlewareLeavesTheCorrelationAttributeOffWhenNoneIsSet(t *testing.T) {
+func TestRequestSpanLeavesTheCorrelationAttributeOffWhenNoneIsSet(t *testing.T) {
 	recorder := recordSpans(t)
 	router := chi.NewRouter()
-	router.Use(telemetry.Middleware(never))
+	router.Use(httpserver.ObserveRequests(clock.Now, telemetry.RequestSpan(never)))
 	router.Get("/v1/ping", func(http.ResponseWriter, *http.Request) {})
 
 	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/ping", nil))
@@ -164,10 +165,10 @@ func TestMiddlewareLeavesTheCorrelationAttributeOffWhenNoneIsSet(t *testing.T) {
 	}
 }
 
-func TestMiddlewareMarksServerErrorsAndUnmatchedRoutes(t *testing.T) {
+func TestRequestSpanMarksServerErrorsAndUnmatchedRoutes(t *testing.T) {
 	recorder := recordSpans(t)
 	router := chi.NewRouter()
-	router.Use(telemetry.Middleware(never))
+	router.Use(httpserver.ObserveRequests(clock.Now, telemetry.RequestSpan(never)))
 	router.Get("/boom", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusBadGateway) })
 	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/boom", nil))
 	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/nowhere/123", nil))
@@ -185,10 +186,10 @@ func TestMiddlewareMarksServerErrorsAndUnmatchedRoutes(t *testing.T) {
 
 func never(*http.Request) bool { return false }
 
-func TestMiddlewareSkipsTheRequestsItIsToldTo(t *testing.T) {
+func TestRequestSpanSkipsTheRequestsItIsToldTo(t *testing.T) {
 	recorder := recordSpans(t)
 	router := chi.NewRouter()
-	router.Use(telemetry.Middleware(func(r *http.Request) bool { return r.URL.Path == "/health" }))
+	router.Use(httpserver.ObserveRequests(clock.Now, telemetry.RequestSpan(func(r *http.Request) bool { return r.URL.Path == "/health" })))
 	router.Get("/health", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))

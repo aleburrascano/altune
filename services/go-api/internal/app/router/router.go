@@ -27,11 +27,13 @@ func New(s Settings) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(httpserver.CorrelationID)
-	r.Use(telemetry.Middleware(untraced))
-	r.Use(requestmetrics.Middleware(clock.Now, s.Latency.Observe))
+	r.Use(httpserver.ObserveRequests(clock.Now,
+		telemetry.RequestSpan(untraced),
+		requestmetrics.Observer(s.Latency.Observe),
+		httpserver.LogRequest,
+	))
 	r.Use(httpserver.WriteDeadline(clock.Now, s.WriteTimeout))
 	r.Use(v1RequestTimeout(s.RequestTimeout))
-	r.Use(httpserver.RequestLogger(clock.Now))
 	r.Use(httpserver.Recoverer)
 	r.Use(httpserver.MaxBodySize(maxBodyBytes))
 	r.Use(corsHandler(s))

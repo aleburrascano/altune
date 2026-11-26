@@ -3,6 +3,7 @@ package requestmetrics_test
 import (
 	"altune/go-api/internal/platform/requestmetrics"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
@@ -15,11 +16,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 )
 
 func routerRecordingWith(record func(string, time.Duration, int), status int) http.Handler {
-	return routerWith(requestmetrics.Middleware(clock.Now, record), status)
+	return routerWith(httpserver.ObserveRequests(clock.Now, requestmetrics.Observer(record)), status)
 }
 
 func routerWith(mw func(http.Handler) http.Handler, status int) http.Handler {
@@ -38,7 +38,7 @@ func serveTrack(h http.Handler) *httptest.ResponseRecorder {
 	return rec
 }
 
-func TestLatencyMiddleware_RecordPanicDoesNotFailRequest(t *testing.T) {
+func TestObserver_RecordPanicDoesNotFailRequest(t *testing.T) {
 	panicRec := func(string, time.Duration, int) { panic("boom") }
 
 	rec := serveTrack(routerRecordingWith(panicRec, http.StatusTeapot))
@@ -51,7 +51,7 @@ func TestLatencyMiddleware_RecordPanicDoesNotFailRequest(t *testing.T) {
 	}
 }
 
-func TestLatencyMiddleware_RecordPanicIsLoggedOnceWithTheRequestID(t *testing.T) {
+func TestObserver_RecordPanicIsLoggedOnceWithTheRequestID(t *testing.T) {
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	ring := logging.Setup("error")
@@ -78,7 +78,7 @@ func TestLatencyMiddleware_RecordPanicIsLoggedOnceWithTheRequestID(t *testing.T)
 	}
 }
 
-func TestLatencyMiddleware_RecordsRoutePattern(t *testing.T) {
+func TestObserver_RecordsRoutePattern(t *testing.T) {
 	var gotRoute atomic.Value
 	rec := func(route string, _ time.Duration, _ int) { gotRoute.Store(route) }
 
@@ -89,21 +89,21 @@ func TestLatencyMiddleware_RecordsRoutePattern(t *testing.T) {
 	}
 }
 
-func TestLatencyMiddleware_RecordsAnEmptyRouteOutsideARouter(t *testing.T) {
+func TestObserver_RecordsTheUnmatchedRouteOutsideARouter(t *testing.T) {
 	gotRoute := "unset"
 	rec := func(route string, _ time.Duration, _ int) { gotRoute = route }
-	h := requestmetrics.Middleware(clock.Now, rec)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	h := httpserver.ObserveRequests(clock.Now, requestmetrics.Observer(rec))(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
 	serveTrack(h)
 
-	if gotRoute != "" {
-		t.Fatalf("recorded route = %q, want empty when no router matched", gotRoute)
+	if gotRoute != "unmatched" {
+		t.Fatalf("recorded route = %q, want unmatched when no router matched", gotRoute)
 	}
 }
 
-func TestLatencyMiddleware_RecordsResponseStatus(t *testing.T) {
+func TestObserver_RecordsResponseStatus(t *testing.T) {
 	var gotStatus atomic.Int64
 	rec := func(_ string, _ time.Duration, status int) { gotStatus.Store(int64(status)) }
 
@@ -112,12 +112,6 @@ func TestLatencyMiddleware_RecordsResponseStatus(t *testing.T) {
 	if got := gotStatus.Load(); got != http.StatusServiceUnavailable {
 		t.Fatalf("recorded status = %d, want %d", got, http.StatusServiceUnavailable)
 	}
-}
-
-func wrapResponseWriterOnly(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(middleware.NewWrapResponseWriter(w, r.ProtoMajor), r)
-	})
 }
 
 const allocTrials = 40
@@ -130,24 +124,19 @@ func steadyStateAllocs(f func()) float64 {
 	return fewest
 }
 
-func TestLatencyMiddleware_RecordingIntoTheRegistryAllocatesNothingBeyondWrappingTheWriter(t *testing.T) {
-	recording := routerWith(requestmetrics.Middleware(clock.Now, requestmetrics.NewRegistry().Observe), http.StatusOK)
-	wrappingOnly := routerWith(wrapResponseWriterOnly, http.StatusOK)
+func capturingObserver(r *http.Request) (*http.Request, func(httpserver.Outcome)) {
+	return r, func(httpserver.Outcome) { _ = r }
+}
+
+func TestObserver_RecordingIntoTheRegistryAllocatesNothingBeyondTheMeasurement(t *testing.T) {
+	recording := routerWith(httpserver.ObserveRequests(clock.Now, requestmetrics.Observer(requestmetrics.NewRegistry().Observe)), http.StatusOK)
+	measuringOnly := routerWith(httpserver.ObserveRequests(clock.Now, capturingObserver), http.StatusOK)
 	serveTrack(recording)
 
 	withRegistry := steadyStateAllocs(func() { serveTrack(recording) })
-	withWrapOnly := steadyStateAllocs(func() { serveTrack(wrappingOnly) })
+	withoutRegistry := steadyStateAllocs(func() { serveTrack(measuringOnly) })
 
-	if withRegistry != withWrapOnly {
-		t.Fatalf("a request through the middleware recording into a registry = %v allocs, one that only wraps the writer = %v, want the same", withRegistry, withWrapOnly)
+	if withRegistry != withoutRegistry {
+		t.Fatalf("a request recorded into a registry = %v allocs, one that is only measured = %v, want the same", withRegistry, withoutRegistry)
 	}
-}
-
-func TestMiddleware_RefusesAMissingClock(t *testing.T) {
-	defer func() {
-		if msg, _ := recover().(string); !strings.Contains(msg, "requestmetrics.Middleware") {
-			t.Errorf("panic = %q, want a refusal naming requestmetrics.Middleware", msg)
-		}
-	}()
-	requestmetrics.Middleware(nil, func(string, time.Duration, int) {})
 }

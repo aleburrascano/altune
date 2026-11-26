@@ -14,6 +14,7 @@ import (
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/events/eventstest"
+	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"encoding/json"
@@ -296,7 +297,7 @@ func TestLive_CarriesProviderBreakerAndLatency(t *testing.T) {
 	defer pb.EnrichmentBreakerClosed()
 	const route = "/v1/live-snapshot-probe/{status}"
 	router := chi.NewRouter()
-	router.Use(requestmetrics.Middleware(clock.Now, s.Latency.Observe))
+	router.Use(httpserver.ObserveRequests(clock.Now, requestmetrics.Observer(s.Latency.Observe)))
 	router.Get(route, func(w http.ResponseWriter, r *http.Request) {
 		status, _ := strconv.Atoi(chi.URLParam(r, "status"))
 		w.WriteHeader(status)
