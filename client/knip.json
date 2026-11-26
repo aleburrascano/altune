@@ -10,7 +10,7 @@
     "eslint/rules/**/*.js",
     "targets/*/expo-target.config.js",
     "modules/*/index.ts",
-    "src/**/*.{android,ios,web,native}.{ts,tsx}",
+    "src/**/*.{android,ios,native}.{ts,tsx}",
     "src/features/player/adapters/PlaybackProvider.tsx",
     "src/features/player/domain/playsThroughTrackPlayer.ts",
     "src/features/signIn/hooks/useOAuth.ts",
