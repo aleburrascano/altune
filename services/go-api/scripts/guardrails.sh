@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-GOLANGCI_VERSION="v2.12.2"
+GOLANGCI_VERSION="v2.13.2"
 export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
 
 cd "$(dirname "$0")/.." || exit 1
