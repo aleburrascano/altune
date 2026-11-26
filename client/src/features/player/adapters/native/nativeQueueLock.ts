@@ -1,5 +1,4 @@
 import { warnPlayback } from '@features/player/domain/playbackError';
-import { warn } from '@shared/log';
 
 const NATIVE_QUEUE_OP_TIMEOUT_MS = 15_000;
 
@@ -26,7 +25,7 @@ function notifyTimeoutListeners(): void {
     try {
       listener();
     } catch (err) {
-      warn('[playback] native queue timeout listener failed', err);
+      warnPlayback('native queue timeout listener failed', {}, err);
     }
   }
 }

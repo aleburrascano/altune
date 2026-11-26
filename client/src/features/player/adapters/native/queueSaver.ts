@@ -140,15 +140,17 @@ type SaveWork = () => Promise<void>;
 
 function drainWhileDirty(flight: SingleFlightState, work: SaveWork): Promise<void> {
   flight.dirty = false;
-  return work().then(() => (flight.dirty ? drainWhileDirty(flight, work) : undefined));
+  return work().then(
+    () => (flight.dirty ? drainWhileDirty(flight, work) : releaseFlight(flight)),
+    (error: unknown) => {
+      releaseFlight(flight);
+      throw error;
+    },
+  );
 }
 
-async function drainSingleFlight(flight: SingleFlightState, work: SaveWork): Promise<void> {
-  try {
-    await drainWhileDirty(flight, work);
-  } finally {
-    flight.inFlight = null;
-  }
+function releaseFlight(flight: SingleFlightState): void {
+  flight.inFlight = null;
 }
 
 function requestSingleFlight(flight: SingleFlightState, work: () => Promise<void>): Promise<void> {
@@ -156,7 +158,7 @@ function requestSingleFlight(flight: SingleFlightState, work: () => Promise<void
     flight.dirty = true;
     return flight.inFlight;
   }
-  const running = drainSingleFlight(flight, work);
+  const running = drainWhileDirty(flight, work);
   flight.inFlight = running;
   return running;
 }

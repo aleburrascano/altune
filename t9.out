@@ -1,0 +1,69 @@
+● Validation Warning:
+
+  Unknown option "watchPlugins" with value ["/tmp/claude-1001/-home-ubuntu-projects/561efc57-46f0-4a03-83c6-d02127c86428/scratchpad/client-features/wt9/client/node_modules/jest-watch-typeahead/build/file_name_plugin/plugin.js", "/tmp/claude-1001/-home-ubuntu-projects/561efc57-46f0-4a03-83c6-d02127c86428/scratchpad/client-features/wt9/client/node_modules/jest-watch-typeahead/build/test_name_plugin/plugin.js"] was found.
+  This is probably a typing mistake. Fixing it will remove this message.
+
+  Configuration Documentation:
+  https://jestjs.io/docs/configuration
+
+Running one project: native
+  console.warn
+    [playback] native queue operation failed after its deadline { error: { kind: 'unknown', message: 'bridge finally failed' } }
+
+       6 |
+       7 | export function consoleLogger(sink: WarningSink = console): Logger {
+    >  8 |   return { warn: (message, ...details) => sink.warn(message, ...details) };
+         |                                                ^
+       9 | }
+      10 |
+      11 | let current: Logger = consoleLogger();
+
+      at Object.warn (src/shared/log/shell/log.ts:8:48)
+      at warn (src/shared/log/shell/log.ts:18:11)
+      at warnPlayback (src/features/player/domain/playbackError.ts:93:7)
+      at src/features/player/adapters/native/nativeQueueLock.ts:59:39
+
+  console.warn
+    [playback] native queue operation failed after its deadline {
+      error: { kind: 'unknown', message: 'Playback command timed out after 15s' }
+    }
+
+       6 |
+       7 | export function consoleLogger(sink: WarningSink = console): Logger {
+    >  8 |   return { warn: (message, ...details) => sink.warn(message, ...details) };
+         |                                                ^
+       9 | }
+      10 |
+      11 | let current: Logger = consoleLogger();
+
+      at Object.warn (src/shared/log/shell/log.ts:8:48)
+      at warn (src/shared/log/shell/log.ts:18:11)
+      at warnPlayback (src/features/player/domain/playbackError.ts:93:7)
+      at src/features/player/adapters/native/nativeQueueLock.ts:59:39
+
+PASS native src/features/player/__tests__/nativeQueueLock.test.ts (6.094 s)
+  withNativeQueue — serialising native queue operations
+    ✓ resolves each caller with its own operation result (1 ms)
+    ✓ holds the second operation until the first one settles (3 ms)
+    ✓ runs the next operation even after the previous one rejects (3 ms)
+    ✓ keeps a rejecting operation before the one queued behind it (1 ms)
+    when a native op never settles
+      ✓ discards a late rejection from a timed-out op without an unhandled rejection (78 ms)
+      ✓ times the hung op out and still runs the operation queued behind it (4 ms)
+      ✓ starts each op budget when it begins running, not when it was queued (5 ms)
+      ✓ clears the deadline once an op settles in time (2 ms)
+  withNativeQueue — fencing an op that outlived its deadline
+    ✓ logs a failing listener as a redacted failure, not the raw error, and still runs the next listener (3 ms)
+    ✓ does not run an unsubscribed listener (2 ms)
+    ✓ throws from the late fence, makes no further calls, then runs the next op and the listener once (8 ms)
+    ✓ lets the fence pass before the deadline (2 ms)
+
+A worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.
+Seed:        455787417
+Test Suites: 1 passed, 1 total
+Tests:       12 passed, 12 total
+Snapshots:   0 total
+Time:        7.194 s
+Ran all test suites matching /src\/features\/player\/__tests__\/nativeQueueLock.test.ts/i.
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+exit=0
