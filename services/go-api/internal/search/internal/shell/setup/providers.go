@@ -17,6 +17,8 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/theaudiodb"
 	"altune/go-api/internal/search/internal/adapters/providers/ytmusic"
 	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/random"
 	"fmt"
 	"time"
 )
@@ -82,12 +84,12 @@ func (t *providerTable) addSoundCloud(c connections.Clients) error {
 }
 
 func (t *providerTable) addYouTubeMusic(c connections.Clients) {
-	adapter := ytmusic.NewYouTubeMusicAdapter(c.Transport)
+	adapter := ytmusic.MustNewYouTubeMusicAdapter(c.Transport, clock.Sleep, random.Real)
 	t.add(provider{
 		name:    rowYouTube,
 		id:      domain.ProviderYouTube,
 		search:  adapter,
-		artwork: []ports.ArtworkLookup{ytmusic.NewYouTubeMusicArtworkLookup(c.Transport)},
+		artwork: []ports.ArtworkLookup{ytmusic.MustNewYouTubeMusicArtworkLookup(c.Transport, clock.Sleep, random.Real)},
 	})
 }
 

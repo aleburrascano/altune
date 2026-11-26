@@ -3,6 +3,8 @@ package artworkfallback_test
 import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
+	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/random"
 	"context"
 	"errors"
 	"fmt"
@@ -351,7 +353,7 @@ func TestChainedArtworkResolver_CoverArtArchiveStillAnswersResolveTaggedAlongsid
 func failingArtworkProviders(srv *httptest.Server) map[string]search.ArtworkLookup {
 	return map[string]search.ArtworkLookup{
 		"genius":     search.NewGeniusArtworkLookup(providertest.NewClient(srv.URL), "token"),
-		"ytmusic":    search.NewYouTubeMusicArtworkLookup(&providertest.RedirectTransport{TargetURL: srv.URL}),
+		"ytmusic":    search.MustNewYouTubeMusicArtworkLookup(&providertest.RedirectTransport{TargetURL: srv.URL}, clock.Sleep, random.Real),
 		"theaudiodb": search.NewTheAudioDBAdapter(providertest.NewClient(srv.URL), search.WithTheAudioDBAPIKey("k")),
 	}
 }

@@ -5,6 +5,8 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/adapters/providers/providersearch"
 	"altune/go-api/internal/shared/backoff"
+	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/random"
 	"context"
 	"errors"
 	"fmt"
@@ -24,7 +26,31 @@ func ytmHTTPClient(transport http.RoundTripper) *http.Client {
 	return &http.Client{Timeout: ytmusicTimeout, Transport: transport}
 }
 
-func ytmSearchRetry(ctx context.Context, client *http.Client, query string, filter ytmFilter) (*ytmResult, error) {
+var (
+	ErrSleeperRequired = errors.New("ytmusic: the adapter needs a sleeper")
+	ErrJitterRequired  = errors.New("ytmusic: the adapter needs a jitter source")
+)
+
+type challengePause struct {
+	sleep  clock.Sleeper
+	jitter random.Unit
+}
+
+func newChallengePause(constructor string, sleep clock.Sleeper, jitter random.Unit) (challengePause, error) {
+	switch {
+	case sleep == nil:
+		return challengePause{}, fmt.Errorf("%s: %w", constructor, ErrSleeperRequired)
+	case jitter == nil:
+		return challengePause{}, fmt.Errorf("%s: %w", constructor, ErrJitterRequired)
+	}
+	return challengePause{sleep: sleep, jitter: jitter}, nil
+}
+
+func (p challengePause) wait(ctx context.Context) error {
+	return p.sleep(ctx, ytmChallengeBackoff.DelayAt(1, p.jitter()))
+}
+
+func ytmSearchRetry(ctx context.Context, client *http.Client, pause challengePause, query string, filter ytmFilter) (*ytmResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -32,10 +58,8 @@ func ytmSearchRetry(ctx context.Context, client *http.Client, query string, filt
 	if !isAuthChallenge(err) {
 		return res, err
 	}
-	select {
-	case <-time.After(ytmChallengeBackoff.Delay(1)):
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	if err := pause.wait(ctx); err != nil {
+		return nil, err
 	}
 	return ytmSearch(ctx, client, query, filter)
 }
@@ -51,10 +75,23 @@ func isAuthChallenge(err error) bool {
 
 type YouTubeMusicAdapter struct {
 	client *http.Client
+	pause  challengePause
 }
 
-func NewYouTubeMusicAdapter(transport http.RoundTripper) *YouTubeMusicAdapter {
-	return &YouTubeMusicAdapter{client: ytmHTTPClient(transport)}
+func NewYouTubeMusicAdapter(transport http.RoundTripper, sleep clock.Sleeper, jitter random.Unit) (*YouTubeMusicAdapter, error) {
+	pause, err := newChallengePause("NewYouTubeMusicAdapter", sleep, jitter)
+	if err != nil {
+		return nil, err
+	}
+	return &YouTubeMusicAdapter{client: ytmHTTPClient(transport), pause: pause}, nil
+}
+
+func MustNewYouTubeMusicAdapter(transport http.RoundTripper, sleep clock.Sleeper, jitter random.Unit) *YouTubeMusicAdapter {
+	adapter, err := NewYouTubeMusicAdapter(transport, sleep, jitter)
+	if err != nil {
+		panic(err)
+	}
+	return adapter
 }
 
 func (a *YouTubeMusicAdapter) Name() domain.ProviderName { return domain.ProviderYouTube }
@@ -66,7 +103,7 @@ func (a *YouTubeMusicAdapter) SupportedKinds() map[domain.ResultKind]bool {
 }
 
 func (a *YouTubeMusicAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
-	result, err := ytmSearchRetry(ctx, a.client, query, ytmNoFilter)
+	result, err := ytmSearchRetry(ctx, a.client, a.pause, query, ytmNoFilter)
 	if errors.Is(err, errYTMUnexpectedShape) {
 		return nil, nil
 	}
@@ -99,7 +136,7 @@ func (a *YouTubeMusicAdapter) Search(ctx context.Context, query string, kinds ma
 }
 
 func (a *YouTubeMusicAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, artistName string) ([]domain.SearchResult, error) {
-	result, err := ytmSearchRetry(ctx, a.client, artistName, ytmAlbumFilter)
+	result, err := ytmSearchRetry(ctx, a.client, a.pause, artistName, ytmAlbumFilter)
 	if errors.Is(err, errYTMUnexpectedShape) {
 		return nil, nil
 	}
@@ -205,17 +242,30 @@ var ytThumbSizeRe = regexp.MustCompile(`w\d+-h\d+`)
 
 type YouTubeMusicArtworkLookup struct {
 	client *http.Client
+	pause  challengePause
 }
 
-func NewYouTubeMusicArtworkLookup(transport http.RoundTripper) *YouTubeMusicArtworkLookup {
-	return &YouTubeMusicArtworkLookup{client: ytmHTTPClient(transport)}
+func NewYouTubeMusicArtworkLookup(transport http.RoundTripper, sleep clock.Sleeper, jitter random.Unit) (*YouTubeMusicArtworkLookup, error) {
+	pause, err := newChallengePause("NewYouTubeMusicArtworkLookup", sleep, jitter)
+	if err != nil {
+		return nil, err
+	}
+	return &YouTubeMusicArtworkLookup{client: ytmHTTPClient(transport), pause: pause}, nil
+}
+
+func MustNewYouTubeMusicArtworkLookup(transport http.RoundTripper, sleep clock.Sleeper, jitter random.Unit) *YouTubeMusicArtworkLookup {
+	lookup, err := NewYouTubeMusicArtworkLookup(transport, sleep, jitter)
+	if err != nil {
+		panic(err)
+	}
+	return lookup
 }
 
 func (a *YouTubeMusicArtworkLookup) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, error) {
 	if kind != domain.ResultKindArtist || title == "" {
 		return "", nil
 	}
-	result, err := ytmSearchRetry(ctx, a.client, title, ytmArtistFilter)
+	result, err := ytmSearchRetry(ctx, a.client, a.pause, title, ytmArtistFilter)
 	if err != nil {
 		return providerrequests.ArtworkFailure(a.ArtworkSource(), err)
 	}
