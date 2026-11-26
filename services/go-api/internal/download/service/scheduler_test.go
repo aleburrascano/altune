@@ -1,7 +1,7 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/inmemoryqueue"
 	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/download/service/replacement"
@@ -35,7 +35,7 @@ type memJobQueue = inmemoryqueue.Queue
 
 func newMemJobQueue(wake chan<- struct{}) *memJobQueue { return inmemoryqueue.New(wake, time.Now) }
 
-type ledgerTrack = acquisitiontest.LedgerTrack
+type ledgerTrack = inmemoryledger.LedgerTrack
 
 func newLedgerTrack(userId ids.UserId, title, artist, album string) ledgerTrack {
 	title = strings.TrimSpace(title)
@@ -62,7 +62,7 @@ func makeFailed(track *ledgerTrack, reason string) {
 
 func useSource(track *ledgerTrack, url string) { track.AudioSourceURL = &url }
 
-func withCatalogLength(t *testing.T, ledger *acquisitiontest.Ledger, track ledgerTrack, seconds float64) ledgerTrack {
+func withCatalogLength(t *testing.T, ledger *inmemoryledger.Ledger, track ledgerTrack, seconds float64) ledgerTrack {
 	t.Helper()
 	track.CatalogDurationSeconds = &seconds
 	ledger.Seed(track)
@@ -75,7 +75,7 @@ func readyWith(ref string) func(*ledgerTrack) {
 	return func(track *ledgerTrack) { makeReady(track, ref) }
 }
 
-func committedTrack(t *testing.T, ledger *acquisitiontest.Ledger, id ids.TrackId) ledgerTrack {
+func committedTrack(t *testing.T, ledger *inmemoryledger.Ledger, id ids.TrackId) ledgerTrack {
 	t.Helper()
 	track, ok := ledger.Track(id)
 	if !ok {
@@ -87,7 +87,7 @@ func committedTrack(t *testing.T, ledger *acquisitiontest.Ledger, id ids.TrackId
 type emptyLedger struct{}
 
 func (emptyLedger) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*acqports.TrackSnapshot, error) {
-	return acquisitiontest.NewLedger().Get(ctx, id, userId)
+	return inmemoryledger.NewLedger().Get(ctx, id, userId)
 }
 
 func (emptyLedger) AudioRefInUse(context.Context, string, ids.TrackId) (bool, error) {
@@ -106,7 +106,7 @@ func (emptyLedger) RevertAt(context.Context, acqports.TrackSnapshot) error {
 	return acqports.ErrTrackNotFound
 }
 
-type liveCtxLedger struct{ *acquisitiontest.Ledger }
+type liveCtxLedger struct{ *inmemoryledger.Ledger }
 
 func (l liveCtxLedger) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*acqports.TrackSnapshot, error) {
 	if err := ctx.Err(); err != nil {
@@ -223,7 +223,7 @@ func (s *fakeAudioStore) Delete(_ context.Context, audioRef string) error {
 
 func TestBackgroundScheduler_Schedule(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		ledger := acquisitiontest.NewLedger()
+		ledger := inmemoryledger.NewLedger()
 		searcher := &fakeAudioSearcher{}
 		store := newFakeAudioStore()
 
@@ -245,7 +245,7 @@ func TestBackgroundScheduler_Schedule(t *testing.T) {
 
 func TestBackgroundScheduler_ScheduleMultiple_RespectsSemaphore(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		ledger := acquisitiontest.NewLedger()
+		ledger := inmemoryledger.NewLedger()
 		searcher := &fakeAudioSearcher{}
 		store := newFakeAudioStore()
 
@@ -275,7 +275,7 @@ func TestBackgroundScheduler_ScheduleMultiple_RespectsSemaphore(t *testing.T) {
 func TestBackgroundScheduler_ShutdownMidSearch_ReleasesTheJobForAnotherWorker(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
 	track := newLedgerTrack(userId, "Song", "Artist", "Album")
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	ledger.Seed(track)
 	source := newBlockingSource()
 	svc := newTestAcquireService(liveCtxLedger{ledger}, service.NewSourceRegistry(source), newFakeAudioStore())
@@ -301,7 +301,7 @@ func TestBackgroundScheduler_ShutdownMidSearch_ReleasesTheReplaceJobForAnotherWo
 	userId := ids.NewUserId(uuid.New())
 	track := newLedgerTrack(userId, "Song", "Artist", "Album")
 	useSource(&track, "https://www.youtube.com/watch?v=currentAAAA")
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	ledger.Seed(track)
 	source := newBlockingSource()
 	svc := newTestAcquireService(liveCtxLedger{ledger}, service.NewSourceRegistry(source), newFakeAudioStore())
@@ -332,7 +332,7 @@ func TestBackgroundScheduler_FailedJob_KeepsTheCookiePathOutOfTheReasonAndTheLog
 		logs := captureJSONLog(t)
 		userId := ids.NewUserId(uuid.New())
 		track := newLedgerTrack(userId, "Song", "Artist", "Album")
-		ledger := acquisitiontest.NewLedger()
+		ledger := inmemoryledger.NewLedger()
 		ledger.Seed(track)
 		leaking := &fakeAudioSearcher{searchErr: errors.New("yt-dlp exited 1: --cookies " + cookieJarPath + ": permission denied")}
 		svc := newTestAcquireService(ledger, fakeRegistry(leaking), newFakeAudioStore())
@@ -561,7 +561,7 @@ func TestBackgroundScheduler_ARetryWaitsOutAReplaceOnTheSameTrack(t *testing.T) 
 }
 
 func TestNewBackgroundAcquisitionScheduler_ReturnsNonNil(t *testing.T) {
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	searcher := &fakeAudioSearcher{}
 	store := newFakeAudioStore()
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
@@ -739,7 +739,7 @@ func TestBackgroundScheduler_StatusQueueDrainsAndCountsShutdownRejections(t *tes
 }
 
 type corrCapturingLedger struct {
-	*acquisitiontest.Ledger
+	*inmemoryledger.Ledger
 	mu     sync.Mutex
 	corrID string
 	seen   bool
@@ -755,7 +755,7 @@ func (r *corrCapturingLedger) Get(ctx context.Context, id ids.TrackId, userId id
 
 func TestBackgroundScheduler_ThreadsCorrelationIDIntoJobContext(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		ledger := &corrCapturingLedger{Ledger: acquisitiontest.NewLedger()}
+		ledger := &corrCapturingLedger{Ledger: inmemoryledger.NewLedger()}
 		svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 		scheduler := newTestScheduler(svc, 1, time.Now)
 		defer scheduler.Shutdown(context.Background())
@@ -795,7 +795,7 @@ func TestBackgroundScheduler_DispatchesToTheMatchingServiceEntryPoint(t *testing
 		t.Run(tc.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				userId := ids.NewUserId(uuid.New())
-				ledger := acquisitiontest.NewLedger()
+				ledger := inmemoryledger.NewLedger()
 				track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=oldoldoldol")
 				store := newFakeAudioStore()
 				store.stored["u/a/b/c.mp3"] = true
@@ -1306,7 +1306,7 @@ func wireFields(payload events.Payload) map[string]any {
 func TestSchedulerJobReporter_AStageIsRecordedOnTheJobWhenNoEventIsPublished(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		userId := ids.NewUserId(uuid.New())
-		ledger := acquisitiontest.NewLedger()
+		ledger := inmemoryledger.NewLedger()
 		track := queuedTrack(t, ledger, userId)
 		svc := newTestAcquireService(ledger, service.NewSourceRegistry(freshAudioSource{}), newFakeAudioStore())
 		s := newTestScheduler(svc, 1, time.Now, withTestSchedulerEvents(events.NoopPublisher()))
@@ -1417,7 +1417,7 @@ func (p *recordingPublisher) count(eventType events.EventType) int {
 }
 
 type holdOneLibraryTracks struct {
-	*acquisitiontest.Ledger
+	*inmemoryledger.Ledger
 	hold     ids.TrackId
 	holding  chan struct{}
 	release  chan struct{}
@@ -1432,7 +1432,7 @@ func (r *holdOneLibraryTracks) Get(ctx context.Context, id ids.TrackId, userId i
 	return r.Ledger.Get(ctx, id, userId)
 }
 
-func newPendingTrack(t *testing.T, userId ids.UserId, ledger *acquisitiontest.Ledger) ledgerTrack {
+func newPendingTrack(t *testing.T, userId ids.UserId, ledger *inmemoryledger.Ledger) ledgerTrack {
 	t.Helper()
 	track := newLedgerTrack(userId, "Song", "Artist", "Album")
 	ledger.Seed(track)
@@ -1453,7 +1453,7 @@ func claimableTracks(q *memJobQueue) map[string]struct{} {
 func TestBackgroundScheduler_ShutdownCancellation_LeavesTheQueuedJobUnclaimed(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		userId := ids.NewUserId(uuid.New())
-		base := acquisitiontest.NewLedger()
+		base := inmemoryledger.NewLedger()
 		running := newPendingTrack(t, userId, base)
 		queued := newPendingTrack(t, userId, base)
 
@@ -1501,7 +1501,7 @@ func TestBackgroundScheduler_ShutdownCancellation_LeavesTheQueuedJobUnclaimed(t 
 func TestBackgroundScheduler_ScheduleDuringShutdown_Refuses(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		userId := ids.NewUserId(uuid.New())
-		base := acquisitiontest.NewLedger()
+		base := inmemoryledger.NewLedger()
 		running := newPendingTrack(t, userId, base)
 		queued := newPendingTrack(t, userId, base)
 
@@ -1546,7 +1546,7 @@ func TestBackgroundScheduler_ScheduleDuringShutdown_Refuses(t *testing.T) {
 
 func TestAcquireTrackAudioService_RefuseQueued_AlreadySettledTrack_IsQuietNoOp(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := newLedgerTrack(userId, "Song", "Artist", "Album")
 	makeReady(&track, "audio/ref.mp3")
 	ledger.Seed(track)
@@ -1735,7 +1735,7 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 	t.Run("succeeded", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			recorder := newFakeOutcomeRecorder()
-			svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+			svc := newTestAcquireService(inmemoryledger.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 			scheduler := newTestScheduler(svc, 1, time.Now, withTestOutcomes(recorder))
 			defer scheduler.Shutdown(context.Background())
 			trackId := ids.NewTrackId()
@@ -1763,7 +1763,7 @@ func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
 			recorder := newFakeOutcomeRecorder()
 			userId := ids.NewUserId(uuid.New())
 			track := newLedgerTrack(userId, "Song", "Artist", "Album")
-			ledger := acquisitiontest.NewLedger()
+			ledger := inmemoryledger.NewLedger()
 			ledger.Seed(track)
 			leaking := &fakeAudioSearcher{searchErr: errors.New("boom")}
 			svc := newTestAcquireService(ledger, fakeRegistry(leaking), newFakeAudioStore())
@@ -1874,7 +1874,7 @@ func TestBackgroundScheduler_OutcomeRecorderFailure_DoesNotAffectTheJob(t *testi
 		synctest.Test(t, func(t *testing.T) {
 			recorder := newFakeOutcomeRecorder()
 			recorder.err = errors.New("outcome store unavailable")
-			svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+			svc := newTestAcquireService(inmemoryledger.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 			scheduler := newTestScheduler(svc, 1, time.Now, withTestOutcomes(recorder))
 			defer scheduler.Shutdown(context.Background())
 			trackId := ids.NewTrackId()
@@ -1933,7 +1933,7 @@ func TestBackgroundScheduler_OutcomeRecorderFailure_DoesNotAffectTheJob(t *testi
 func TestBackgroundScheduler_RecordOutcome_GivesTheRecorderAWorkingMargin(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		recorder := newFakeOutcomeRecorder()
-		svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+		svc := newTestAcquireService(inmemoryledger.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 		scheduler := newTestScheduler(svc, 1, time.Now, withTestOutcomes(recorder))
 		defer scheduler.Shutdown(context.Background())
 
@@ -2032,7 +2032,7 @@ func TestBackgroundScheduler_RecordOutcome_LogsWarnOnlyWhenRecordFails(t *testin
 			logs := captureJSONLogSync(t)
 			recorder := newFakeOutcomeRecorder()
 			recorder.err = errors.New("outcome store unavailable")
-			svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+			svc := newTestAcquireService(inmemoryledger.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 			scheduler := newTestScheduler(svc, 1, time.Now, withTestOutcomes(recorder))
 			defer scheduler.Shutdown(context.Background())
 
@@ -2053,7 +2053,7 @@ func TestBackgroundScheduler_RecordOutcome_LogsWarnOnlyWhenRecordFails(t *testin
 		synctest.Test(t, func(t *testing.T) {
 			logs := captureJSONLogSync(t)
 			recorder := newFakeOutcomeRecorder()
-			svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+			svc := newTestAcquireService(inmemoryledger.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 			scheduler := newTestScheduler(svc, 1, time.Now, withTestOutcomes(recorder))
 			defer scheduler.Shutdown(context.Background())
 
@@ -2093,7 +2093,7 @@ func TestBackgroundScheduler_ShutdownMidRun_RecordsTheOutcomeOnALiveContext(t *t
 	synctest.Test(t, func(t *testing.T) {
 		userId := ids.NewUserId(uuid.New())
 		track := newLedgerTrack(userId, "Song", "Artist", "Album")
-		ledger := acquisitiontest.NewLedger()
+		ledger := inmemoryledger.NewLedger()
 		ledger.Seed(track)
 		source := newBlockingSource()
 		recorder := newCtxAtRecordRecorder()
@@ -2126,7 +2126,7 @@ func TestBackgroundScheduler_ShutdownMidRun_RecordsTheOutcomeOnALiveContext(t *t
 func TestBackgroundScheduler_ShutdownBeforeStart_LeavesTheQueuedJobWithNoOutcome(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		userId := ids.NewUserId(uuid.New())
-		base := acquisitiontest.NewLedger()
+		base := inmemoryledger.NewLedger()
 		running := newPendingTrack(t, userId, base)
 		queued := newPendingTrack(t, userId, base)
 		ledger := &holdOneLibraryTracks{Ledger: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
@@ -2184,7 +2184,7 @@ func TestBackgroundScheduler_Shutdown_WaitsForTheInFlightOutcomeWrite(t *testing
 	synctest.Test(t, func(t *testing.T) {
 		recorder := newFakeOutcomeRecorder()
 		recorder.delay = 300 * time.Millisecond
-		svc := newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+		svc := newTestAcquireService(inmemoryledger.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 		scheduler := newTestScheduler(svc, 1, time.Now, withTestOutcomes(recorder))
 
 		start := time.Now()
@@ -2240,7 +2240,7 @@ func TestBackgroundScheduler_RecordedFailureReason_KeepsTheCookiePathOut(t *test
 	synctest.Test(t, func(t *testing.T) {
 		userId := ids.NewUserId(uuid.New())
 		track := newLedgerTrack(userId, "Song", "Artist", "Album")
-		ledger := acquisitiontest.NewLedger()
+		ledger := inmemoryledger.NewLedger()
 		ledger.Seed(track)
 		leaking := &fakeAudioSearcher{searchErr: errors.New("yt-dlp exited 1: --cookies " + cookieJarPath + ": permission denied")}
 		svc := newTestAcquireService(ledger, fakeRegistry(leaking), newFakeAudioStore())
@@ -2533,7 +2533,7 @@ func (q *releaseRecordingQueue) Release(ctx context.Context, trackID ids.TrackId
 
 func TestBackgroundScheduler_TransientFailure_ReleasesTheJobWithBackoffAndKeepsTheTrackPending(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := newPendingTrack(t, userId, ledger)
 	searcher := &fakeAudioSearcher{searchErr: &acqdomain.SourceUnavailableError{Source: "fake", Err: errors.New("http error 503")}}
 	pub := newRecordingPublisher()
@@ -2707,7 +2707,7 @@ func (q *conflictingQueue) Claim(ctx context.Context, lease time.Duration) (acqp
 
 func TestBackgroundScheduler_Schedule_RejectedSecondRequestKeepsTheQueuedJobsCorrelationID(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		ledger := &corrCapturingLedger{Ledger: acquisitiontest.NewLedger()}
+		ledger := &corrCapturingLedger{Ledger: inmemoryledger.NewLedger()}
 		svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 		queue := &conflictingQueue{memJobQueue: newMemJobQueue(make(chan struct{}, 1)), gate: make(chan struct{})}
 		scheduler := newTestScheduler(svc, 1, time.Now,
@@ -2868,7 +2868,7 @@ func scheduledOutcome(t *testing.T, source acqports.AudioSource) acqports.Acquis
 	track := pendingBlindingLights()
 	length := blindingLightsLength
 	track.CatalogDurationSeconds = &length
-	ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
+	ledger := inmemoryledger.NewLedger(inmemoryledger.LedgerTrack{TrackSnapshot: track})
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(source), newFakeAudioStore())
 	scheduler := newTestScheduler(svc, 1, time.Now, withTestOutcomes(recorder))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
@@ -3017,7 +3017,7 @@ func (u *committingUpgrader) ExecuteUpgrade(ctx context.Context, _ ids.UserId, _
 func TestBackgroundScheduler_AnUpgradeTakenOverByAReplaceDuringItsDownloadNeverCommits(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
 	track := newLedgerTrack(userId, "Song", "Artist", "Album")
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	ledger.Seed(track)
 	acq := &committingUpgrader{
 		step:      service.NewUpdateTrackStep(ledger, userId, track.ID),
@@ -3099,7 +3099,7 @@ func TestBackgroundScheduler_APanickedJobThatLostItsLeaseDoesNotFailTheTrack(t *
 	userId := ids.NewUserId(uuid.New())
 	track := newLedgerTrack(userId, "Song", "Artist", "Album")
 	track.ClaimNumber = 1000
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	ledger.Seed(track)
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 	job := acqports.Job{TrackID: track.ID, UserID: userId, ClaimNumber: 1, Run: service.MaxAcquisitionAttempts}
@@ -3232,7 +3232,7 @@ func TestBackgroundScheduler_AJobWhoseLeaseWasReclaimedLeavesTheTrackPending(t *
 		userId := ids.NewUserId(uuid.New())
 		track := newLedgerTrack(userId, "Song", "Artist", "Album")
 		track.ClaimNumber = 1000
-		ledger := acquisitiontest.NewLedger()
+		ledger := inmemoryledger.NewLedger()
 		ledger.Seed(track)
 		svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{searchErr: errors.New("boom")}), newFakeAudioStore())
 		scheduler := newTestScheduler(svc, 1, time.Now, withTestOutcomes(recorder))
@@ -3259,7 +3259,7 @@ func TestBackgroundScheduler_ALedgerRefusalForAStaleFenceRecordsCancelledNotFail
 		userId := ids.NewUserId(uuid.New())
 		track := newLedgerTrack(userId, "Song", "Artist", "Album")
 		track.ClaimNumber = 1000
-		ledger := acquisitiontest.NewLedger()
+		ledger := inmemoryledger.NewLedger()
 		ledger.Seed(track)
 		svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{searchErr: errors.New("boom")}), newFakeAudioStore())
 		scheduler := newTestScheduler(svc, 1, time.Now, withTestOutcomes(recorder))
@@ -3281,7 +3281,7 @@ func TestExecute_ALedgerRefusalForAStaleFenceSurfacesErrLeaseLostWithTheCause(t 
 	userId := ids.NewUserId(uuid.New())
 	track := newLedgerTrack(userId, "Song", "Artist", "Album")
 	track.ClaimNumber = 2
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	ledger.Seed(track)
 	cause := errors.New("boom")
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{searchErr: cause}), newFakeAudioStore())
@@ -3317,7 +3317,7 @@ func TestScheduler_OutcomeCarriesTheRunsConfidenceSourceAndLengths(t *testing.T)
 			synctest.Test(t, func(t *testing.T) {
 				recorder := newFakeOutcomeRecorder()
 				userId := ids.NewUserId(uuid.New())
-				ledger := acquisitiontest.NewLedger()
+				ledger := inmemoryledger.NewLedger()
 				track := queuedTrack(t, ledger, userId)
 				track = withCatalogLength(t, ledger, track, target)
 				svc := newTestAcquireService(ledger, fakeRegistry(tc.searcher), newFakeAudioStore(), withServiceProber(tc.prober))
@@ -3338,10 +3338,10 @@ func TestScheduler_OutcomeCarriesTheRunsConfidenceSourceAndLengths(t *testing.T)
 	}
 }
 
-func fencedPendingTrack(t *testing.T, fence int) (*acquisitiontest.Ledger, ledgerTrack) {
+func fencedPendingTrack(t *testing.T, fence int) (*inmemoryledger.Ledger, ledgerTrack) {
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := newLedgerTrack(userId, "Song", "Artist", "Album")
 	track.ClaimNumber = acqports.ClaimNumber(fence)
 	ledger.Seed(track)
@@ -3453,7 +3453,7 @@ func TestBackgroundScheduler_APanickedReplaceOrUpgradeThatLostItsLeaseLeavesTheT
 
 func TestBackgroundScheduler_APanickedUpgradeAtTheRunCapThatHoldsItsLeaseLeavesAReadyTrackReady(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := newLedgerTrack(userId, "Song", "Artist", "Album")
 	makeReady(&track, "audio/ref.mp3")
 	track.ClaimNumber = 7

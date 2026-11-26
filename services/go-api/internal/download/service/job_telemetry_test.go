@@ -1,7 +1,7 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
@@ -54,7 +54,7 @@ func scheduleAndFinishWith(t *testing.T, source ports.AudioSource, wiring servic
 		track := pendingBlindingLights()
 		length := blindingLightsLength
 		track.CatalogDurationSeconds = &length
-		ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
+		ledger := inmemoryledger.NewLedger(inmemoryledger.LedgerTrack{TrackSnapshot: track})
 		svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, scratchfiles.New(), wiring, noStages(), opts...)
 		progress := &progressStages{}
 		scheduler := newTestScheduler(svc, 1, time.Now, withTestSchedulerEvents(progress))

@@ -1,7 +1,7 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
@@ -75,14 +75,14 @@ func TestExecute_ReconcilesTheTracksStatusBeforeItSearches(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			track := acquisitiontest.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
+			track := inmemoryledger.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
 				ID: ids.NewTrackId(), UserId: ids.NewUserId(uuid.New()),
 				Title: "Song", Artist: "Artist", Album: "Album", Status: tt.status, AudioRef: tt.audioRef,
 			}}
 			if tt.status == ports.TrackFailed {
 				track.FailureReason = "download_failed"
 			}
-			ledger := acquisitiontest.NewLedger(track)
+			ledger := inmemoryledger.NewLedger(track)
 			ledger.FailWrites(tt.writeErr)
 			source := &reacquireSource{}
 			svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), tt.store,

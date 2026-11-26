@@ -1,7 +1,7 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/inmemoryqueue"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
@@ -52,17 +52,17 @@ type jobRunner interface {
 	RefuseQueued(ctx context.Context, userId ids.UserId, trackId ids.TrackId)
 }
 
-func runOneJob(t *testing.T, acquirer jobRunner, track acquisitiontest.LedgerTrack) jobOutcome {
+func runOneJob(t *testing.T, acquirer jobRunner, track inmemoryledger.LedgerTrack) jobOutcome {
 	t.Helper()
 	return scheduleOnce(t, acquirer, track, nil)
 }
 
-func runOneJobAs(t *testing.T, acquirer jobRunner, track acquisitiontest.LedgerTrack, run int) jobOutcome {
+func runOneJobAs(t *testing.T, acquirer jobRunner, track inmemoryledger.LedgerTrack, run int) jobOutcome {
 	t.Helper()
 	return scheduleOnce(t, acquirer, track, &run)
 }
 
-func scheduleOnce(t *testing.T, acquirer jobRunner, track acquisitiontest.LedgerTrack, run *int, opts ...any) jobOutcome {
+func scheduleOnce(t *testing.T, acquirer jobRunner, track inmemoryledger.LedgerTrack, run *int, opts ...any) jobOutcome {
 	t.Helper()
 	queue := &firstOutcomeQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), run: run, outcome: make(chan jobOutcome, 1)}
 	opts = append([]any{withTestQueue(queue)}, opts...)

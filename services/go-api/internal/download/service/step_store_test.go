@@ -1,7 +1,7 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/core/audiokey"
 	"altune/go-api/internal/download/internal/core/ports"
@@ -76,7 +76,7 @@ func (q *orphanLog) RecordOrphanedAudio(_ context.Context, o ports.OrphanedAudio
 }
 
 type refUsageLedger struct {
-	*acquisitiontest.Ledger
+	*inmemoryledger.Ledger
 	mu    sync.Mutex
 	calls int
 	usage func(call int) (bool, error)
@@ -94,7 +94,7 @@ func (l *refUsageLedger) AudioRefInUse(ctx context.Context, audioRef string, exc
 }
 
 type cancellingCompleteLedger struct {
-	*acquisitiontest.Ledger
+	*inmemoryledger.Ledger
 	cancel context.CancelFunc
 }
 
@@ -146,7 +146,7 @@ func (s topicSource) Find(context.Context, ports.FindRequest) ([]ports.AudioCand
 	}}, nil
 }
 
-func sourceFor(track acquisitiontest.LedgerTrack) *service.SourceRegistry {
+func sourceFor(track inmemoryledger.LedgerTrack) *service.SourceRegistry {
 	return service.NewSourceRegistry(topicSource{title: track.Title, artist: track.Artist})
 }
 
@@ -154,7 +154,7 @@ type storing struct {
 	t      *testing.T
 	ledger ports.LibraryTracks
 	store  ports.AudioWriter
-	track  acquisitiontest.LedgerTrack
+	track  inmemoryledger.LedgerTrack
 }
 
 func (s storing) execute(opts ...func(*service.AcquireTrackAudioService)) error {
@@ -168,28 +168,28 @@ func (s storing) executeStaged(stages service.StagePorts, opts ...func(*service.
 	return svc.Execute(context.Background(), s.track.UserId, s.track.ID)
 }
 
-func pending(title, artist, album string) acquisitiontest.LedgerTrack {
-	return acquisitiontest.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
+func pending(title, artist, album string) inmemoryledger.LedgerTrack {
+	return inmemoryledger.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
 		ID: ids.NewTrackId(), UserId: ids.NewUserId(uuid.New()),
 		Title: title, Artist: artist, Album: album, Status: ports.TrackPending,
 	}}
 }
 
-func refOf(track acquisitiontest.LedgerTrack, prefix string) string {
+func refOf(track inmemoryledger.LedgerTrack, prefix string) string {
 	return prefix + service.BuildAudioRef(service.TrackRef{
 		ID: track.ID.String(), UserID: track.UserId.String(),
 		Title: track.Title, Artist: track.Artist, Album: track.Album,
 	}, "audio.mp3")
 }
 
-func servedBy(track acquisitiontest.LedgerTrack, audioRef string) acquisitiontest.LedgerTrack {
+func servedBy(track inmemoryledger.LedgerTrack, audioRef string) inmemoryledger.LedgerTrack {
 	serving := pending(track.Title, track.Artist, track.Album)
 	serving.UserId = track.UserId
 	serving.Status, serving.AudioRef = ports.TrackReady, &audioRef
 	return serving
 }
 
-func storedRef(t *testing.T, ledger *acquisitiontest.Ledger, id ids.TrackId) string {
+func storedRef(t *testing.T, ledger *inmemoryledger.Ledger, id ids.TrackId) string {
 	t.Helper()
 	got, ok := ledger.Track(id)
 	if !ok || got.AudioRef == nil {
@@ -200,7 +200,7 @@ func storedRef(t *testing.T, ledger *acquisitiontest.Ledger, id ids.TrackId) str
 
 func TestStore_ANewTrackIsStoredAtItsCanonicalRef(t *testing.T) {
 	track := pending("Song Title", "Artist Name", "Album Name")
-	ledger, store := acquisitiontest.NewLedger(track), newRecordingStore()
+	ledger, store := inmemoryledger.NewLedger(track), newRecordingStore()
 
 	if err := (storing{t, ledger, store, track}).execute(); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -217,7 +217,7 @@ func TestStore_ANewTrackIsStoredAtItsCanonicalRef(t *testing.T) {
 
 func TestStore_TheKeyPrefixLeadsTheStoredRef(t *testing.T) {
 	track := pending("Song Title", "Artist Name", "Album Name")
-	ledger, store := acquisitiontest.NewLedger(track), newRecordingStore()
+	ledger, store := inmemoryledger.NewLedger(track), newRecordingStore()
 
 	if err := (storing{t, ledger, store, track}).execute(service.WithAcquireStoreKeyPrefix("staging/")); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -248,7 +248,7 @@ func TestStore_AReplaceStagesItsOwnPrefixedRef(t *testing.T) {
 
 func TestStore_AFileTheStoreCannotDecodeIsNeverStored(t *testing.T) {
 	track := pending("Song", "Artist", "Album")
-	ledger, store := acquisitiontest.NewLedger(track), newRecordingStore()
+	ledger, store := inmemoryledger.NewLedger(track), newRecordingStore()
 
 	err := (storing{t, ledger, store, track}).executeStaged(noStages(probedBy(&decodeFailingFromTheSecondCheck{}), deletingFrom(store)))
 
@@ -266,7 +266,7 @@ func TestStore_AFailedStoreWriteIsReportedAsTheStoreStep(t *testing.T) {
 	store := newRecordingStore()
 	store.storeErr = errors.New("storage unavailable")
 
-	err := (storing{t, acquisitiontest.NewLedger(track), store, track}).execute()
+	err := (storing{t, inmemoryledger.NewLedger(track), store, track}).execute()
 
 	var stepErr *service.StepError
 	if !errors.As(err, &stepErr) || stepErr.Step != "store" {
@@ -279,7 +279,7 @@ func TestStore_AFailedStoreWriteIsReportedAsTheStoreStep(t *testing.T) {
 
 func TestStore_ACancelledWriteSettlesTheTrackAsCancelled(t *testing.T) {
 	track := pending("Song", "Artist", "Album")
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	store := cancellingStore{objectStore: &objectStore{objects: map[string]string{}}, cancel: cancel}
@@ -329,7 +329,7 @@ func TestStore_NeverOverwritesAudioAnotherTrackServes(t *testing.T) {
 	track := pending("Halo", "Beyonce", "X")
 	canonical := refOf(track, "")
 	serving := servedBy(track, canonical)
-	ledger, store := acquisitiontest.NewLedger(track, serving), newRecordingStore(canonical)
+	ledger, store := inmemoryledger.NewLedger(track, serving), newRecordingStore(canonical)
 
 	if err := (storing{t, ledger, store, track}).execute(); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -348,7 +348,7 @@ func TestStore_KeepsTheCanonicalRefTheTrackAlreadyHolds(t *testing.T) {
 	track := pending("Halo", "Beyonce", "X")
 	canonical := refOf(track, "")
 	track.AudioRef = &canonical
-	ledger, store := acquisitiontest.NewLedger(track), newRecordingStore()
+	ledger, store := inmemoryledger.NewLedger(track), newRecordingStore()
 
 	if err := (storing{t, ledger, store, track}).execute(); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -362,7 +362,7 @@ func TestStore_KeepsTheCanonicalRefTheTrackAlreadyHolds(t *testing.T) {
 func TestStore_KeepsTheCanonicalRefWhenNoTrackHoldsIt(t *testing.T) {
 	track := pending("Halo", "Beyonce", "X")
 	canonical := refOf(track, "")
-	ledger, store := acquisitiontest.NewLedger(track), newRecordingStore(canonical)
+	ledger, store := inmemoryledger.NewLedger(track), newRecordingStore(canonical)
 
 	if err := (storing{t, ledger, store, track}).execute(); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -375,7 +375,7 @@ func TestStore_KeepsTheCanonicalRefWhenNoTrackHoldsIt(t *testing.T) {
 
 func TestStore_ScopesTheRefWhenUsageIsUnknown(t *testing.T) {
 	track := pending("Halo", "Beyonce", "X")
-	ledger := &refUsageLedger{Ledger: acquisitiontest.NewLedger(track), usage: func(int) (bool, error) {
+	ledger := &refUsageLedger{Ledger: inmemoryledger.NewLedger(track), usage: func(int) (bool, error) {
 		return false, errors.New("database unavailable")
 	}}
 
@@ -394,7 +394,7 @@ func TestStore_ScopesTheRefWhenAnotherTrackSharesItWithTheAcquiringTrack(t *test
 	canonical := refOf(track, "")
 	track.AudioRef = &canonical
 	serving := servedBy(track, canonical)
-	ledger, store := acquisitiontest.NewLedger(track, serving), newRecordingStore(canonical)
+	ledger, store := inmemoryledger.NewLedger(track, serving), newRecordingStore(canonical)
 
 	if err := (storing{t, ledger, store, track}).execute(); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -413,7 +413,7 @@ func TestStore_ScopesTheRefWhenAnAmpersandVariantServesTheCanonicalRef(t *testin
 	track := pending("Cecilia", "Simon & Garfunkel", "X")
 	canonical := refOf(track, "")
 	serving := servedBy(track, canonical)
-	ledger, store := acquisitiontest.NewLedger(track, serving), newRecordingStore(canonical)
+	ledger, store := inmemoryledger.NewLedger(track, serving), newRecordingStore(canonical)
 
 	if err := (storing{t, ledger, store, track}).execute(); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -432,7 +432,7 @@ func TestStore_ScopesThePrefixedRefAnotherTrackServes(t *testing.T) {
 	track := pending("Halo", "Beyonce", "X")
 	canonical := refOf(track, "staging/")
 	serving := servedBy(track, canonical)
-	ledger, store := acquisitiontest.NewLedger(track, serving), newRecordingStore(canonical)
+	ledger, store := inmemoryledger.NewLedger(track, serving), newRecordingStore(canonical)
 
 	if err := (storing{t, ledger, store, track}).execute(service.WithAcquireStoreKeyPrefix("staging/")); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -447,7 +447,7 @@ func TestStore_ScopesThePrefixedRefAnotherTrackServes(t *testing.T) {
 func TestStore_ARetryUnderACollisionReusesOneScopedRef(t *testing.T) {
 	track := pending("Halo", "Beyonce", "X")
 	canonical := refOf(track, "")
-	ledger, store := acquisitiontest.NewLedger(track, servedBy(track, canonical)), newRecordingStore(canonical)
+	ledger, store := inmemoryledger.NewLedger(track, servedBy(track, canonical)), newRecordingStore(canonical)
 	acquire := storing{t, ledger, store, track}
 
 	ledger.FailWrites(errors.New("database unavailable"))
@@ -473,7 +473,7 @@ func TestStore_ARetryUnderACollisionReusesOneScopedRef(t *testing.T) {
 
 func TestStore_AReplaceStagesItsOwnRefEvenWhenAnotherTrackServesTheCanonicalRef(t *testing.T) {
 	served := seedReadyTrack(t)
-	twin := servedBy(acquisitiontest.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
+	twin := servedBy(inmemoryledger.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
 		ID: ids.NewTrackId(), UserId: served.userID, Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours",
 	}}, served.originalRef)
 	served.ledger.Seed(twin)
@@ -493,7 +493,7 @@ func TestStore_AReplaceStagesItsOwnRefEvenWhenAnotherTrackServesTheCanonicalRef(
 
 func TestStoreRollback_DeletesTheAudioWhenTheCommitFails(t *testing.T) {
 	track := pending("Song", "Artist", "Album")
-	ledger, store := acquisitiontest.NewLedger(track), newRecordingStore()
+	ledger, store := inmemoryledger.NewLedger(track), newRecordingStore()
 	ledger.FailWrites(errors.New("database unavailable"))
 
 	if err := (storing{t, ledger, store, track}).execute(); err == nil {
@@ -530,7 +530,7 @@ func TestStoreRollback_DeletesAFreshlyStagedReplaceAndKeepsTheServedAudio(t *tes
 func TestStoreRollback_OfAScopedStoreDeletesItAndKeepsTheServedAudio(t *testing.T) {
 	track := pending("Halo", "Beyonce", "X")
 	canonical := refOf(track, "")
-	ledger, store := acquisitiontest.NewLedger(track, servedBy(track, canonical)), newRecordingStore(canonical)
+	ledger, store := inmemoryledger.NewLedger(track, servedBy(track, canonical)), newRecordingStore(canonical)
 	ledger.FailWrites(errors.New("database unavailable"))
 
 	if err := (storing{t, ledger, store, track}).execute(); err == nil {
@@ -547,7 +547,7 @@ func TestStoreRollback_OfAScopedStoreDeletesItAndKeepsTheServedAudio(t *testing.
 
 func TestStoreRollback_RetriesATransientDeleteFailure(t *testing.T) {
 	track := pending("Song", "Artist", "Album")
-	ledger, store := acquisitiontest.NewLedger(track), newRecordingStore()
+	ledger, store := inmemoryledger.NewLedger(track), newRecordingStore()
 	store.failDeletes = 2
 	ledger.FailWrites(errors.New("database unavailable"))
 
@@ -621,7 +621,7 @@ func (s *timingStore) Delete(ctx context.Context, audioRef string) error {
 
 func TestStoreRollback_SurfacesAPermanentDeleteFailureAndQueuesTheOrphan(t *testing.T) {
 	track := pending("Song", "Artist", "Album")
-	ledger, store, orphans := acquisitiontest.NewLedger(track), newRecordingStore(), &orphanLog{}
+	ledger, store, orphans := inmemoryledger.NewLedger(track), newRecordingStore(), &orphanLog{}
 	store.failDeletes = 1 << 30
 	ledger.FailWrites(errors.New("database unavailable"))
 
@@ -641,7 +641,7 @@ func TestStoreRollback_SurfacesAPermanentDeleteFailureAndQueuesTheOrphan(t *test
 
 func TestStoreRollback_KeepsAudioAnotherTrackStartedServingMeanwhile(t *testing.T) {
 	track := pending("Song", "Artist", "Album")
-	ledger := &refUsageLedger{Ledger: acquisitiontest.NewLedger(track), usage: func(call int) (bool, error) { return call > 1, nil }}
+	ledger := &refUsageLedger{Ledger: inmemoryledger.NewLedger(track), usage: func(call int) (bool, error) { return call > 1, nil }}
 	store := newRecordingStore()
 	ledger.FailWrites(errors.New("database unavailable"))
 
@@ -656,7 +656,7 @@ func TestStoreRollback_KeepsAudioAnotherTrackStartedServingMeanwhile(t *testing.
 
 func TestStoreRollback_KeepsAudioWhenTheReferenceCheckFails(t *testing.T) {
 	track := pending("Song", "Artist", "Album")
-	ledger := &refUsageLedger{Ledger: acquisitiontest.NewLedger(track), usage: func(call int) (bool, error) {
+	ledger := &refUsageLedger{Ledger: inmemoryledger.NewLedger(track), usage: func(call int) (bool, error) {
 		if call > 1 {
 			return false, errors.New("database unavailable")
 		}
@@ -678,7 +678,7 @@ func TestStoreRollback_DeletesTheAudioAfterTheJobContextIsCancelled(t *testing.T
 	track := pending("Song", "Artist", "Album")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	ledger := cancellingCompleteLedger{Ledger: acquisitiontest.NewLedger(track), cancel: cancel}
+	ledger := cancellingCompleteLedger{Ledger: inmemoryledger.NewLedger(track), cancel: cancel}
 	store := newRecordingStore()
 	svc := service.MustNewAcquireTrackAudioService(ledger, sourceFor(track), store,
 		scratchfiles.New(), noVerification(), noStages())

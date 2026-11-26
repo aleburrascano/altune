@@ -2,7 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download"
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
 	"altune/go-api/internal/download/internal/core/audioquality"
 	"altune/go-api/internal/download/internal/core/domain"
@@ -211,7 +211,7 @@ func TestScoreConfidence_AnUnknownVerdictScoresFromZeroToTheUnknownCap(t *testin
 	}
 }
 
-func storedISRCAndEvidence(t *testing.T, ledger *acquisitiontest.Ledger, id ids.TrackId) (string, service.Evidence) {
+func storedISRCAndEvidence(t *testing.T, ledger *inmemoryledger.Ledger, id ids.TrackId) (string, service.Evidence) {
 	t.Helper()
 	got, _ := ledger.Track(id)
 	var evidence service.Evidence

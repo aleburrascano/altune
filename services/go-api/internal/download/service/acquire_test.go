@@ -1,7 +1,7 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/savedlink"
 	"altune/go-api/internal/download/internal/core/audioquality"
 	"altune/go-api/internal/download/internal/core/ports"
@@ -61,7 +61,7 @@ func failureCodeOf(err error) downloadfailure.FailureCode {
 func TestAcquireTrackAudioService_Execute_ContextEndsMidSearch_SettlesOnDetachedContext(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
 	track := newLedgerTrack(userId, "Song", "Artist", "Album")
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	ledger.Seed(track)
 	source := newBlockingSource()
 	pub := newCtxRecordingPublisher()
@@ -90,7 +90,7 @@ func TestAcquireTrackAudioService_Execute_ContextEndsMidSearch_SettlesOnDetached
 	}
 }
 
-func seedTwinTrack(t *testing.T, ledger *acquisitiontest.Ledger, userId ids.UserId, audioRef string) ids.TrackId {
+func seedTwinTrack(t *testing.T, ledger *inmemoryledger.Ledger, userId ids.UserId, audioRef string) ids.TrackId {
 	t.Helper()
 	twin := newLedgerTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
 	makeReady(&twin, audioRef)
@@ -117,7 +117,7 @@ func TestExecuteReplace_KeepsSupersededAudioATwinTrackStillServes(t *testing.T) 
 }
 
 func TestAcquireTrackAudioService_Execute_TrackNotFound(t *testing.T) {
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	searcher := &fakeAudioSearcher{}
 	store := newFakeAudioStore()
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store)
@@ -137,7 +137,7 @@ func TestAcquireTrackAudioService_Execute_AlreadyReady_AudioExists(t *testing.T)
 	audioRef := "user/artist/album/song.mp3"
 	makeReady(&track, audioRef)
 
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	ledger.Seed(track)
 
 	store := newFakeAudioStore()
@@ -164,7 +164,7 @@ func TestAcquireTrackAudioService_Execute_AlreadyReady_AudioMissing(t *testing.T
 	audioRef := "user/artist/album/song.mp3"
 	makeReady(&track, audioRef)
 
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	ledger.Seed(track)
 
 	store := newFakeAudioStore()
@@ -185,7 +185,7 @@ func TestAcquireTrackAudioService_Execute_FailedStatus_RetriesToAcquire(t *testi
 	track := newLedgerTrack(userId, "Song", "Artist", "Album")
 	makeFailed(&track, "previous failure reason")
 
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	ledger.Seed(track)
 
 	store := newFakeAudioStore()
@@ -200,7 +200,7 @@ func TestAcquireTrackAudioService_Execute_FailedStatus_RetriesToAcquire(t *testi
 	}
 }
 
-func queuedTrack(t *testing.T, ledger *acquisitiontest.Ledger, userId ids.UserId) ledgerTrack {
+func queuedTrack(t *testing.T, ledger *inmemoryledger.Ledger, userId ids.UserId) ledgerTrack {
 	t.Helper()
 	track := newLedgerTrack(userId, "Fell In Love", "Lil Tecca", "")
 	ledger.Seed(track)
@@ -209,7 +209,7 @@ func queuedTrack(t *testing.T, ledger *acquisitiontest.Ledger, userId ids.UserId
 
 func TestExecute_AlwaysSearches(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := queuedTrack(t, ledger, userId)
 
 	searcher := &fakeAudioSearcher{}
@@ -230,7 +230,7 @@ func TestExecute_PublishesStartedEvent(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
 	track := newLedgerTrack(userId, "Song", "Artist", "Album")
 
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	ledger.Seed(track)
 
 	pub := newRecordingPublisher()
@@ -259,7 +259,7 @@ func TestExecute_WithoutConfiguredEventsDoesNotPanic(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			userId := ids.NewUserId(uuid.New())
 			track := newLedgerTrack(userId, "Song", "Artist", "Album")
-			ledger := acquisitiontest.NewLedger()
+			ledger := inmemoryledger.NewLedger()
 			ledger.Seed(track)
 			svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), opts...)
 
@@ -289,7 +289,7 @@ func TestExecute_FailureReasonResolvesToSpecificMessage(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			userId := ids.NewUserId(uuid.New())
 			track := newLedgerTrack(userId, "I've Been in Love Before", "Cutting Crew", "Broadcast")
-			ledger := acquisitiontest.NewLedger()
+			ledger := inmemoryledger.NewLedger()
 			ledger.Seed(track)
 			searcher := &fakeAudioSearcher{searchResults: tt.candidates}
 			svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore())
@@ -395,7 +395,7 @@ func TestResolveIdentity_PassesTrackMetadataToResolver(t *testing.T) {
 
 func TestExecute_WithoutResolverStillRuns(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := newLedgerTrack(userId, "Song", "Artist", "Album")
 	ledger.Seed(track)
 
@@ -410,7 +410,7 @@ func TestExecute_AnExistsCheckErrorOnAReadyTrackPreservesItsAudioRef(t *testing.
 	audioRef := "user/artist/album/song.mp3"
 	makeReady(&track, audioRef)
 
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	ledger.Seed(track)
 
 	store := newFakeAudioStore()
@@ -487,7 +487,7 @@ func trackRefOf(track ledgerTrack) service.TrackRef {
 	}
 }
 
-func seedReadyTrackWith(t *testing.T) (*acquisitiontest.Ledger, *bytesAudioStore, ids.UserId, ids.TrackId, string) {
+func seedReadyTrackWith(t *testing.T) (*inmemoryledger.Ledger, *bytesAudioStore, ids.UserId, ids.TrackId, string) {
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
 	track := newLedgerTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
@@ -495,7 +495,7 @@ func seedReadyTrackWith(t *testing.T) (*acquisitiontest.Ledger, *bytesAudioStore
 	makeReady(&track, originalRef)
 	useSource(&track, "https://www.youtube.com/watch?v=currentAAAA")
 
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 	store := &bytesAudioStore{objects: map[string]string{originalRef: "original bytes"}}
 	return ledger, store, userId, track.ID, originalRef
 }
@@ -562,7 +562,7 @@ func TestExecuteReplace_OldAudioDeleteFailureDoesNotUndoTheSwap(t *testing.T) {
 func TestExecute_FreshAcquisitionKeepsTheCanonicalRef(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
 	track := newLedgerTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 	store := &bytesAudioStore{objects: map[string]string{}}
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(newAudioSource{}), store)
 
@@ -577,7 +577,7 @@ func TestExecute_FreshAcquisitionKeepsTheCanonicalRef(t *testing.T) {
 	}
 }
 
-func readyTrackWithSource(t *testing.T, ledger *acquisitiontest.Ledger, userId ids.UserId, ref, source string) ledgerTrack {
+func readyTrackWithSource(t *testing.T, ledger *inmemoryledger.Ledger, userId ids.UserId, ref, source string) ledgerTrack {
 	t.Helper()
 	track := newLedgerTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
 	makeReady(&track, ref)
@@ -588,7 +588,7 @@ func readyTrackWithSource(t *testing.T, ledger *acquisitiontest.Ledger, userId i
 
 func TestExecuteReplace_ExcludesTheStoredSource(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrongwrong1")
 
 	store := newFakeAudioStore()
@@ -605,7 +605,7 @@ func TestExecuteReplace_ExcludesTheStoredSource(t *testing.T) {
 
 func TestExecuteReplace_FailureLeavesTheTrackReady(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrongwrong1")
 
 	store := newFakeAudioStore()
@@ -630,7 +630,7 @@ func TestExecuteReplace_FailureLeavesTheTrackReady(t *testing.T) {
 
 func TestExecute_NonReplaceStillSkipsAReadyTrack(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "")
 
 	store := newFakeAudioStore()
@@ -647,7 +647,7 @@ func TestExecute_NonReplaceStillSkipsAReadyTrack(t *testing.T) {
 
 func TestExecuteReplace_LegacyTrackSkipsTopRankedInsteadOfExcluding(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "")
 
 	store := newFakeAudioStore()
@@ -675,7 +675,7 @@ func (s *cancellingSource) Find(_ context.Context, _ ports.FindRequest) ([]ports
 func TestExecute_CancelledMidSearch_PersistsCancellation(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
 	track := newLedgerTrack(userId, "Song", "Artist", "Album")
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	ledger.Seed(track)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -689,7 +689,7 @@ func TestExecute_CancelledMidSearch_PersistsCancellation(t *testing.T) {
 	}
 }
 
-func seedTrackInRepo(t *testing.T, ledger *acquisitiontest.Ledger, userId ids.UserId, settle func(*ledgerTrack)) ledgerTrack {
+func seedTrackInRepo(t *testing.T, ledger *inmemoryledger.Ledger, userId ids.UserId, settle func(*ledgerTrack)) ledgerTrack {
 	t.Helper()
 	track := newLedgerTrack(userId, "Song", "Artist", "Album")
 	if settle != nil {
@@ -699,14 +699,14 @@ func seedTrackInRepo(t *testing.T, ledger *acquisitiontest.Ledger, userId ids.Us
 	return track
 }
 
-func storedTrack(t *testing.T, ledger *acquisitiontest.Ledger, track ledgerTrack) ledgerTrack {
+func storedTrack(t *testing.T, ledger *inmemoryledger.Ledger, track ledgerTrack) ledgerTrack {
 	t.Helper()
 	return committedTrack(t, ledger, track.ID)
 }
 
 func TestAcquire_StaleFailureDoesNotOverwriteReadyTrack(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := seedTrackInRepo(t, ledger, userId, readyWith("u/a/b/good.opus"))
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
@@ -723,7 +723,7 @@ func TestAcquire_StaleFailureDoesNotOverwriteReadyTrack(t *testing.T) {
 
 func TestAcquire_DuplicateFailureKeepsOriginalReason(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := seedTrackInRepo(t, ledger, userId, func(tr *ledgerTrack) {
 		makeFailed(tr, string(downloadfailure.FailureAcquisitionInterrupted))
 	})
@@ -739,7 +739,7 @@ func TestAcquire_DuplicateFailureKeepsOriginalReason(t *testing.T) {
 
 func TestAcquire_FailureOnPendingTrackStillMarksFailed(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := seedTrackInRepo(t, ledger, userId, nil)
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
@@ -797,10 +797,10 @@ func namedCandidate(url string) ports.AudioCandidate {
 	return ports.AudioCandidate{Title: "Lil Tecca - Fell In Love", URL: url, Source: "fake"}
 }
 
-func retryWith(t *testing.T, store ports.RejectionStore, urls ...string) (*fakeAudioSearcher, *acquisitiontest.Ledger, ids.TrackId) {
+func retryWith(t *testing.T, store ports.RejectionStore, urls ...string) (*fakeAudioSearcher, *inmemoryledger.Ledger, ids.TrackId) {
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := queuedTrack(t, ledger, userId)
 	searcher := &fakeAudioSearcher{downloadErr: errors.New("boom")}
 	for _, u := range urls {
@@ -836,7 +836,7 @@ func TestExecute_RetryAttemptsAPriorRejectionWhenItIsTheOnlyCandidate(t *testing
 
 func TestExecute_ASearchLengthRejectionIsNotRemembered(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := queuedTrack(t, ledger, userId)
 	track = withCatalogLength(t, ledger, track, 200)
 	audio := filepath.Join(t.TempDir(), "song.mp3")
@@ -872,7 +872,7 @@ const (
 func retryOnALength(t *testing.T, prior []ports.PriorRejection, urls ...string) (*fakeAudioSearcher, *fakeRejectionStore) {
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := queuedTrack(t, ledger, userId)
 	track = withCatalogLength(t, ledger, track, recordedLength)
 	searcher := &fakeAudioSearcher{downloadErr: errors.New("boom")}
@@ -934,7 +934,7 @@ func TestExecute_RecordsTheBasisWithEachLastingRejection(t *testing.T) {
 		t.Fatalf("write audio: %v", err)
 	}
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := queuedTrack(t, ledger, userId)
 	track = withCatalogLength(t, ledger, track, recordedLength)
 	searcher := &fakeAudioSearcher{searchResults: []ports.AudioCandidate{namedCandidate(otherURL)}, downloadPath: audio}
@@ -965,7 +965,7 @@ func TestExecute_FailingRejectionStoreNeverChangesTheOutcome(t *testing.T) {
 
 func TestExecuteReplace_ExcludesStoredKeysAndRejectedSourceKeys(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrongwrong1")
 	track.RejectedSourceKeys = []string{sourcekey.SourceKey("https://youtube.com/watch?v=earlier0000")}
 	ledger.Seed(track)
@@ -994,7 +994,7 @@ func executeOnAttempt(t *testing.T, searcher *fakeAudioSearcher, attempt int) (l
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
 	track := newLedgerTrack(userId, "Song", "Artist", "Album")
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	ledger.Seed(track)
 	pub := newRecordingPublisher()
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(), withServiceEvents(pub))
@@ -1086,7 +1086,7 @@ func acquireUnknownTopicWithFloor(t *testing.T, opts ...any) (ledgerTrack, error
 func acquireUnknownTopicIn(t *testing.T, ctx context.Context, opts ...any) (ledgerTrack, error) {
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := newLedgerTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
 	seconds := 200.0
 	track.StoredDurationSeconds = &seconds
@@ -1309,7 +1309,7 @@ func captureServiceLogs(t *testing.T) *strings.Builder {
 	return &out
 }
 
-func seedUnknownSourceTrack(t *testing.T, ledger *acquisitiontest.Ledger, userId ids.UserId, trackId ids.TrackId) {
+func seedUnknownSourceTrack(t *testing.T, ledger *inmemoryledger.Ledger, userId ids.UserId, trackId ids.TrackId) {
 	t.Helper()
 	row := committedTrack(t, ledger, trackId)
 	stored := 112.0
@@ -1609,7 +1609,7 @@ const (
 	prodOverCurrentSource  = "https://music.youtube.com/watch?v=NxTPVbk-FZQ"
 )
 
-func prodOverTrack(t *testing.T, ledger *acquisitiontest.Ledger, userId ids.UserId, settle func(*ledgerTrack)) ledgerTrack {
+func prodOverTrack(t *testing.T, ledger *inmemoryledger.Ledger, userId ids.UserId, settle func(*ledgerTrack)) ledgerTrack {
 	t.Helper()
 	track := newLedgerTrack(userId, "Over", "LUCKI", "Watch My Back")
 	settle(&track)
@@ -1638,7 +1638,7 @@ func TestExecute_ExcludesTheUsersRejectedSources(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			userId := ids.NewUserId(uuid.New())
-			ledger := acquisitiontest.NewLedger()
+			ledger := inmemoryledger.NewLedger()
 			track := prodOverTrack(t, ledger, userId, tt.settle)
 			searcher := &fakeAudioSearcher{searchResults: prodOverCandidates(), downloadErr: errors.New("boom")}
 			svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore())
@@ -1654,7 +1654,7 @@ func TestExecute_ExcludesTheUsersRejectedSources(t *testing.T) {
 
 func TestExecute_FailsRatherThanDownloadTheOnlyCandidateTheUserRejected(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := prodOverTrack(t, ledger, userId, func(*ledgerTrack) {})
 	searcher := &fakeAudioSearcher{searchResults: prodOverCandidates()[:1], downloadErr: errors.New("boom")}
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore())
@@ -1668,7 +1668,7 @@ func TestExecute_FailsRatherThanDownloadTheOnlyCandidateTheUserRejected(t *testi
 
 func TestExecuteReplace_StillExcludesTheUsersRejectedSourcesAndTheCurrentOne(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := prodOverTrack(t, ledger, userId, func(track *ledgerTrack) {
 		makeReady(track, "lucki/watch-my-back/over.mp3")
 		useSource(track, prodOverCurrentSource)
@@ -1712,7 +1712,7 @@ func TestExecute_AMissingFileTriesItsStoredSourceFirst(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			userId := ids.NewUserId(uuid.New())
-			ledger := acquisitiontest.NewLedger()
+			ledger := inmemoryledger.NewLedger()
 			track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", storedSource)
 			track.RejectedSourceKeys = tt.rejected
 			ledger.Seed(track)
@@ -1740,7 +1740,7 @@ func TestExecute_AMissingFileTriesItsStoredSourceFirst(t *testing.T) {
 func TestExecuteReplace_NeverOffersTheCurrentSourceAsTheKnownOne(t *testing.T) {
 	const storedSource = "https://music.youtube.com/watch?v=NxTPVbk-FZQ"
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", storedSource)
 	store := newFakeAudioStore()
 	store.stored["u/a/b/c.mp3"] = true
@@ -1758,7 +1758,7 @@ func TestExecuteReplace_NeverOffersTheCurrentSourceAsTheKnownOne(t *testing.T) {
 
 func TestExecuteReplace_NeverFetchesTheCurrentSourceAgainEvenWhenItRanksFirst(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	wrongURL := "https://youtube.com/watch?v=wrongwrong1"
 	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", wrongURL)
 	store := newFakeAudioStore()
@@ -1793,7 +1793,7 @@ func (lowConfidenceSource) Find(_ context.Context, _ ports.FindRequest) ([]ports
 func acquireLowConfidence(t *testing.T, opts ...any) (ledgerTrack, error) {
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := newLedgerTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
 	seconds := 200.0
 	track.StoredDurationSeconds = &seconds
@@ -1826,7 +1826,7 @@ func TestExecute_AConfiguredZeroFloorIsHonoured(t *testing.T) {
 func retryWithBasis(t *testing.T, catalogLength float64, identity ports.RecordingIdentity, prior []ports.PriorRejection, urls ...string) *fakeAudioSearcher {
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := queuedTrack(t, ledger, userId)
 	if catalogLength > 0 {
 		track = withCatalogLength(t, ledger, track, catalogLength)
@@ -1930,7 +1930,7 @@ func TestExecute_AStaleRejectionDoesNotReviveASourceRejectedOnTheSameBasis(t *te
 
 func TestExecuteReplace_RetriesAPriorRejectionJudgedOnAnotherLength(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrongwrong1")
 	track = withCatalogLength(t, ledger, track, 200)
 	store := newFakeAudioStore()
@@ -1969,7 +1969,7 @@ func executeAfterOwnTimeBudget(t *testing.T, attempt int) (ledgerTrack, *recordi
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
 	track := newLedgerTrack(userId, "Song", "Artist", "Album")
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	ledger.Seed(track)
 	pub := newRecordingPublisher()
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(stalledSource{}), newFakeAudioStore(), withServiceEvents(pub), service.WithAcquireTimeout(time.Millisecond))
@@ -2022,7 +2022,7 @@ func TestExecute_AnExpiredOwnTimeBudgetOnTheLastAttemptIsSourceUnavailable(t *te
 
 type replaceFixture struct {
 	svc    *service.AcquireTrackAudioService
-	ledger *acquisitiontest.Ledger
+	ledger *inmemoryledger.Ledger
 	track  ledgerTrack
 	store  *fakeAudioStore
 	pub    *recordingPublisher
@@ -2033,7 +2033,7 @@ type replaceFixture struct {
 func newReplaceFixture(t *testing.T, searcher *fakeAudioSearcher, attempt int) replaceFixture {
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrongwrong1")
 	store := newFakeAudioStore()
 	store.stored["u/a/b/c.mp3"] = true
@@ -2097,7 +2097,7 @@ func TestExecute_AWorkerThatLostItsLeaseDoesNotFailTheTrack(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
 	track := newLedgerTrack(userId, "Song", "Artist", "Album")
 	track.ClaimNumber = 2
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	ledger.Seed(track)
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
@@ -2112,7 +2112,7 @@ func TestExecute_AWorkerHoldingTheCurrentLeaseStillFailsTheTrack(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
 	track := newLedgerTrack(userId, "Song", "Artist", "Album")
 	track.ClaimNumber = 2
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	ledger.Seed(track)
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
@@ -2138,7 +2138,7 @@ func TestExecute_AWorkerThatLostItsLeaseCannotLandItsDownload(t *testing.T) {
 			userId := ids.NewUserId(uuid.New())
 			track := newLedgerTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
 			track.ClaimNumber = 2
-			ledger := acquisitiontest.NewLedger(track)
+			ledger := inmemoryledger.NewLedger(track)
 			store := &bytesAudioStore{objects: map[string]string{}}
 			svc := newTestAcquireService(ledger, service.NewSourceRegistry(newAudioSource{}), store)
 
@@ -2178,7 +2178,7 @@ func TestExecuteReplace_AWorkerThatLostItsLeaseLeavesTheServingAudioInPlace(t *t
 
 func TestExecute_TheSourceIsAskedWithTheCatalogFacts(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
-	ledger := acquisitiontest.NewLedger()
+	ledger := inmemoryledger.NewLedger()
 	explicit := true
 	sources := []ports.CatalogSource{
 		{Provider: "spotify", ExternalID: "4uLU6hMCjMI75M1A2tKUQC", URL: "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC"},
@@ -2449,7 +2449,7 @@ func (s *itsOnlyLoveSources) Fetch(_ context.Context, c ports.AudioCandidate, ou
 }
 
 type itsOnlyLoveTrack struct {
-	book    *acquisitiontest.Ledger
+	book    *inmemoryledger.Ledger
 	store   *bytesAudioStore
 	ledger  *completionRecordingLedger
 	userId  ids.UserId
@@ -2474,7 +2474,7 @@ func seedItsOnlyLove(t *testing.T, storedSeconds float64, sources []ports.Catalo
 		track.StoredDurationSeconds = &storedSeconds
 		store.objects[ref] = "stored bytes"
 	}
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 	return itsOnlyLoveTrack{book: ledger, store: store, ledger: &completionRecordingLedger{LibraryTracks: ledger}, userId: userId, trackId: track.ID, ref: ref}
 }
 

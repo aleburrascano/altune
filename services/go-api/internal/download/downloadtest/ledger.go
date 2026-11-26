@@ -1,6 +1,6 @@
 package downloadtest
 
-import fake "altune/go-api/internal/download/internal/adapters/acquisitiontest"
+import fake "altune/go-api/internal/download/internal/adapters/inmemoryledger"
 
 type (
 	Ledger      = fake.Ledger

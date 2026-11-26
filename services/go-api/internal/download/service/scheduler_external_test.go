@@ -1,7 +1,7 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/inmemoryqueue"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
@@ -214,8 +214,8 @@ func TestScheduler_AnAddRunsAtOnceWhileUpgradeWorkersAreIdle(t *testing.T) {
 
 func TestScheduler_ASelectOutageOnTheFinalRunIsNotRetried(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		track := acquisitiontest.LedgerTrack{TrackSnapshot: pendingBlindingLights()}
-		ledger := acquisitiontest.NewLedger(track)
+		track := inmemoryledger.LedgerTrack{TrackSnapshot: pendingBlindingLights()}
+		ledger := inmemoryledger.NewLedger(track)
 		svc := acquireService(ledger, service.NewSourceRegistry(throttled(), healthyButRejected()), &objectStore{objects: map[string]string{}})
 
 		outcome := runOneJobAs(t, svc, track, 3)

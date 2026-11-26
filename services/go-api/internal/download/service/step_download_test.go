@@ -1,7 +1,7 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/isrcwriteback"
 	"altune/go-api/internal/download/internal/core/musicbrainzmatch"
@@ -133,11 +133,11 @@ func TestConstructors_RefuseAMissingLedgerSourcesFetcherOrAudioStore(t *testing.
 			return err
 		},
 		"source registry": func() error {
-			_, err := service.NewAcquireTrackAudioService(acquisitiontest.NewLedger(), nil, newFakeAudioStore(), osWorkspace{}, noopVerification(), noopStages())
+			_, err := service.NewAcquireTrackAudioService(inmemoryledger.NewLedger(), nil, newFakeAudioStore(), osWorkspace{}, noopVerification(), noopStages())
 			return err
 		},
 		"audio store": func() error {
-			_, err := service.NewAcquireTrackAudioService(acquisitiontest.NewLedger(), service.NewSourceRegistry(), nil, osWorkspace{}, noopVerification(), noopStages())
+			_, err := service.NewAcquireTrackAudioService(inmemoryledger.NewLedger(), service.NewSourceRegistry(), nil, osWorkspace{}, noopVerification(), noopStages())
 			return err
 		},
 		"fetcher": func() error {

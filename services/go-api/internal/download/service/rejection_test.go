@@ -1,7 +1,7 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
@@ -79,7 +79,7 @@ func readyTrackRejecting(t *testing.T, sourceURL string, rejected ...string) ser
 	return served
 }
 
-func pendingSongBy(artist, title string) acquisitiontest.LedgerTrack {
+func pendingSongBy(artist, title string) inmemoryledger.LedgerTrack {
 	song := pendingSong()
 	song.Artist, song.Title = artist, title
 	return song
@@ -192,7 +192,7 @@ func TestSelect_DropsAndRecordsForeignLowIdentity(t *testing.T) {
 
 func TestExecute_PersistsRejectionSummaryInFailureReason(t *testing.T) {
 	song := pendingSongBy("Cutting Crew", "I've Been in Love Before")
-	ledger := acquisitiontest.NewLedger(song)
+	ledger := inmemoryledger.NewLedger(song)
 	source := &answeringSource{name: "ytdlp", found: []ports.AudioCandidate{{
 		Title:   "Completely Unrelated Cooking Show Full Episode Forty Seven Nonsense",
 		URL:     "https://www.youtube.com/watch?v=cookingAAAA",
@@ -213,7 +213,7 @@ func TestExecute_PersistsRejectionSummaryInFailureReason(t *testing.T) {
 func TestExecute_AttemptCapReportsUntriedCandidatesApart(t *testing.T) {
 	const attemptCap, untried = 8, 3
 	song := pendingSongBy("Cutting Crew", "I've Been in Love Before")
-	ledger := acquisitiontest.NewLedger(song)
+	ledger := inmemoryledger.NewLedger(song)
 	source := &offeringSource{fetchErr: errors.New("boom")}
 	for i := range attemptCap + untried {
 		source.found = append(source.found, ports.AudioCandidate{
@@ -240,7 +240,7 @@ func TestExecute_AnUnmeasuredLengthSkipCountsInTheSummaryButOnlyTheProbedRejecti
 	song := pendingSongBy("The Weeknd", "Blinding Lights")
 	catalogLength := 200.0
 	song.CatalogDurationSeconds = &catalogLength
-	ledger := acquisitiontest.NewLedger(song)
+	ledger := inmemoryledger.NewLedger(song)
 	offered := blindingLightsAt("https://www.youtube.com/watch?v=shortshort1", "https://www.youtube.com/watch?v=probedAAAAA")
 	offered[0].Duration = 30
 	short, probed := offered[0].URL, offered[1].URL

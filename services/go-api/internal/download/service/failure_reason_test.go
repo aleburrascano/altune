@@ -1,7 +1,7 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
@@ -109,18 +109,18 @@ func (s *answeringSource) Fetch(context.Context, ports.AudioCandidate, string) (
 	return ports.FetchedAudio{}, errors.New("nothing to fetch")
 }
 
-func pendingSong() acquisitiontest.LedgerTrack {
-	return acquisitiontest.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
+func pendingSong() inmemoryledger.LedgerTrack {
+	return inmemoryledger.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
 		ID: ids.NewTrackId(), UserId: ids.NewUserId(uuid.New()),
 		Title: "Song", Artist: "Artist", Album: "Album", Status: ports.TrackPending,
 	}}
 }
 
-func acquireService(ledger *acquisitiontest.Ledger, registry *service.SourceRegistry, store ports.AudioWriter) *service.AcquireTrackAudioService {
+func acquireService(ledger *inmemoryledger.Ledger, registry *service.SourceRegistry, store ports.AudioWriter) *service.AcquireTrackAudioService {
 	return service.MustNewAcquireTrackAudioService(ledger, registry, store, scratchfiles.New(), noVerification(), noStages(deletingFrom(store)))
 }
 
-func persistedCode(t *testing.T, ledger *acquisitiontest.Ledger, id ids.TrackId) downloadfailure.FailureCode {
+func persistedCode(t *testing.T, ledger *inmemoryledger.Ledger, id ids.TrackId) downloadfailure.FailureCode {
 	t.Helper()
 	got, ok := ledger.Track(id)
 	if !ok || got.Status != ports.TrackFailed {
@@ -158,7 +158,7 @@ func TestExecute_SourceThatCouldNotAnswer_IsNotReportedAsNoMatch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			track := pendingSong()
-			ledger := acquisitiontest.NewLedger(track)
+			ledger := inmemoryledger.NewLedger(track)
 			svc := acquireService(ledger, service.NewSourceRegistry(&answeringSource{name: "ytdlp", findErr: tt.searchErr}), &objectStore{objects: map[string]string{}})
 
 			_ = svc.Execute(context.Background(), track.UserId, track.ID)
@@ -172,7 +172,7 @@ func TestExecute_SourceThatCouldNotAnswer_IsNotReportedAsNoMatch(t *testing.T) {
 
 func TestExecute_AStoreThatFailsWithTheContextLiveKeepsTheStorageReason(t *testing.T) {
 	userID, trackID := ids.NewUserId(uuid.New()), ids.NewTrackId()
-	ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
+	ledger := inmemoryledger.NewLedger(inmemoryledger.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
 		ID: trackID, UserId: userID, Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours", Status: ports.TrackPending,
 	}})
 	store := &objectStore{objects: map[string]string{}, storeErr: errors.New("put object: connection reset")}
@@ -263,7 +263,7 @@ func brokenSearchBesideEmptyResults() *service.SourceRegistry {
 
 func TestExecute_AFirstTierOutageSurvivesAnEmptyFallback(t *testing.T) {
 	track := pendingSong()
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 	svc := acquireService(ledger, firstTierOutage(), &objectStore{objects: map[string]string{}})
 
 	execErr := svc.Execute(context.Background(), track.UserId, track.ID)
@@ -275,7 +275,7 @@ func TestExecute_AFirstTierOutageSurvivesAnEmptyFallback(t *testing.T) {
 
 func TestExecute_ABrokenSearchBesideEmptyResultsIsNotNoMatch(t *testing.T) {
 	track := pendingSong()
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 	svc := acquireService(ledger, brokenSearchBesideEmptyResults(), &objectStore{objects: map[string]string{}})
 
 	execErr := svc.Execute(context.Background(), track.UserId, track.ID)
@@ -291,7 +291,7 @@ func TestExecute_ABrokenSearchBesideEmptyResultsIsNotNoMatch(t *testing.T) {
 func TestScheduler_AFirstTierOutageOnAnEarlyRunIsReleasedForARetry(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		track := pendingSong()
-		ledger := acquisitiontest.NewLedger(track)
+		ledger := inmemoryledger.NewLedger(track)
 		svc := acquireService(ledger, firstTierOutage(), &objectStore{objects: map[string]string{}})
 
 		outcome := runOneJob(t, svc, track)
@@ -308,7 +308,7 @@ func TestScheduler_AFirstTierOutageOnAnEarlyRunIsReleasedForARetry(t *testing.T)
 func TestScheduler_ABrokenSearchIsSettledWithoutARetry(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		track := pendingSong()
-		ledger := acquisitiontest.NewLedger(track)
+		ledger := inmemoryledger.NewLedger(track)
 		svc := acquireService(ledger, brokenSearchBesideEmptyResults(), &objectStore{objects: map[string]string{}})
 
 		outcome := runOneJob(t, svc, track)
@@ -325,7 +325,7 @@ func TestScheduler_ABrokenSearchIsSettledWithoutARetry(t *testing.T) {
 func TestScheduler_AJobThatRunsOutItsOwnTimeIsRetried(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		track := pendingSong()
-		ledger := acquisitiontest.NewLedger(track)
+		ledger := inmemoryledger.NewLedger(track)
 		stalled := service.NewSourceRegistry(&answeringSource{name: "ytdlp", stall: true})
 		svc := acquireService(ledger, stalled, &objectStore{objects: map[string]string{}})
 

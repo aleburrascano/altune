@@ -1,7 +1,7 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/core/audioquality"
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
@@ -24,7 +24,7 @@ import (
 
 func TestExecute_MarksTheTrackReadyOnTheFileItStored(t *testing.T) {
 	track := pendingBlindingLights()
-	ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
+	ledger := inmemoryledger.NewLedger(inmemoryledger.LedgerTrack{TrackSnapshot: track})
 	store := &objectStore{objects: map[string]string{}}
 	svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(freshAudioSource{}), store,
 		scratchfiles.New(), noVerification(), noStages())
@@ -59,7 +59,7 @@ func TestExecuteReplace_SwapsTheServingFileForTheOneItStored(t *testing.T) {
 	}
 }
 
-type vanishingLedger struct{ *acquisitiontest.Ledger }
+type vanishingLedger struct{ *inmemoryledger.Ledger }
 
 func (vanishingLedger) Complete(context.Context, ids.TrackId, ids.UserId, ports.ClaimNumber, ports.Completion) error {
 	return ports.ErrTrackNotFound
@@ -67,7 +67,7 @@ func (vanishingLedger) Complete(context.Context, ids.TrackId, ids.UserId, ports.
 
 func TestExecute_ATrackGoneAtTheCommitFailsTheRunAsAcquisitionFailed(t *testing.T) {
 	track := pendingBlindingLights()
-	ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
+	ledger := inmemoryledger.NewLedger(inmemoryledger.LedgerTrack{TrackSnapshot: track})
 	svc := service.MustNewAcquireTrackAudioService(vanishingLedger{ledger}, service.NewSourceRegistry(freshAudioSource{}),
 		&objectStore{objects: map[string]string{}}, scratchfiles.New(), noVerification(), noStages())
 
@@ -103,8 +103,8 @@ func (p *progressRecorder) published() []string {
 }
 
 func TestScheduledRun_TellsTheClientWhenItReachesTheUpdateTrackStage(t *testing.T) {
-	track := acquisitiontest.LedgerTrack{TrackSnapshot: pendingBlindingLights()}
-	ledger := acquisitiontest.NewLedger(track)
+	track := inmemoryledger.LedgerTrack{TrackSnapshot: pendingBlindingLights()}
+	ledger := inmemoryledger.NewLedger(track)
 	svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(freshAudioSource{}),
 		&objectStore{objects: map[string]string{}}, scratchfiles.New(), noVerification(), noStages())
 	progress := &progressRecorder{}
@@ -162,7 +162,7 @@ func hardFingerprintOn(mbid string) *identifier {
 }
 
 type storedAcquisition struct {
-	track    acquisitiontest.LedgerTrack
+	track    inmemoryledger.LedgerTrack
 	evidence service.Evidence
 	keys     map[string]json.RawMessage
 }
