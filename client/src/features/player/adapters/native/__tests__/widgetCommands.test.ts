@@ -1,3 +1,4 @@
+import { nativeWidget } from '@testing/fakes/widget/nativeWidget';
 import { RepeatMode, State } from 'react-native-track-player';
 
 import { installPlaybackPort, startWidgetCommands } from '@features/player';
@@ -9,7 +10,6 @@ import { authClientOver } from '@testing/fakeAuthClient';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 
 const player = require('react-native-track-player').__player;
-const { __widget } = require('@modules/altune-widget');
 
 function libraryTrack(id: string): PlaybackTrack {
   return {
@@ -21,7 +21,7 @@ function libraryTrack(id: string): PlaybackTrack {
 }
 
 function sendWidgetCommand(command: string): Promise<void> {
-  __widget.send(command);
+  nativeWidget.send(command);
   return new Promise((resolve) => setImmediate(resolve));
 }
 
@@ -32,7 +32,7 @@ let restorePort: () => void;
 describe('startWidgetCommands', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    __widget.reset();
+    nativeWidget.reset();
     player.reset();
     useQueueStore.getState().clearQueue();
     useQueueStore.getState().setRepeatMode('off');
@@ -52,7 +52,7 @@ describe('startWidgetCommands', () => {
 
     expect(player.calls('pause')).toHaveLength(1);
     expect(player.calls('play')).toHaveLength(0);
-    expect(__widget.reloads()).toBe(1);
+    expect(nativeWidget.reloads()).toBe(1);
   });
 
   it('plays a paused player on play-pause', async () => {
@@ -68,7 +68,7 @@ describe('startWidgetCommands', () => {
     await sendWidgetCommand('next');
 
     expect(player.calls('skipToNext')).toHaveLength(1);
-    expect(__widget.reloads()).toBe(1);
+    expect(nativeWidget.reloads()).toBe(1);
   });
 
   it('toggles shuffle on shuffle', async () => {
@@ -79,7 +79,7 @@ describe('startWidgetCommands', () => {
     await sendWidgetCommand('shuffle');
 
     expect(useQueueStore.getState().shuffled).toBe(true);
-    expect(__widget.reloads()).toBe(1);
+    expect(nativeWidget.reloads()).toBe(1);
   });
 
   it('cycles the repeat mode and applies it to the player on repeat', async () => {
@@ -87,14 +87,14 @@ describe('startWidgetCommands', () => {
 
     expect(useQueueStore.getState().repeatMode).toBe('all');
     expect(player.calls('setRepeatMode')).toEqual([[RepeatMode.Queue]]);
-    expect(__widget.reloads()).toBe(1);
+    expect(nativeWidget.reloads()).toBe(1);
   });
 
   it('does nothing and does not throw for an unknown command', async () => {
     await expect(sendWidgetCommand('rewind')).resolves.toBeUndefined();
     await sendWidgetCommand('constructor');
 
-    expect(__widget.reloads()).toBe(0);
+    expect(nativeWidget.reloads()).toBe(0);
     expect(player.calls('play')).toHaveLength(0);
     expect(player.calls('pause')).toHaveLength(0);
   });
@@ -103,7 +103,7 @@ describe('startWidgetCommands', () => {
     await sendWidgetCommand('previous');
 
     expect(playPrevious).toHaveBeenCalledTimes(1);
-    expect(__widget.reloads()).toBe(1);
+    expect(nativeWidget.reloads()).toBe(1);
   });
 
   it('resolves auth before acting when a headless boot has not yet seen the session', async () => {
@@ -124,17 +124,17 @@ describe('startWidgetCommands', () => {
 
     expect(player.calls('play')).toHaveLength(0);
     expect(player.calls('skipToNext')).toHaveLength(0);
-    expect(__widget.reloads()).toBe(0);
+    expect(nativeWidget.reloads()).toBe(0);
   });
 
   it('subscribes before draining held commands and unsubscribes on cleanup', () => {
-    __widget.reset();
+    nativeWidget.reset();
     const stop = startWidgetCommands({ playPrevious });
 
-    expect(__widget.log()).toEqual(['subscribe', 'drain']);
+    expect(nativeWidget.operations()).toEqual(['subscribe', 'drain']);
 
     stop();
-    expect(__widget.log()).toEqual(['subscribe', 'drain', 'remove']);
+    expect(nativeWidget.operations()).toEqual(['subscribe', 'drain', 'remove']);
   });
 });
 
@@ -182,16 +182,15 @@ function bootHeadless(
   let boot!: HeadlessBoot;
   jest.isolateModules(() => {
     jest.requireActual('@shared/auth').installAuthClient(authClientOver({ getSession }));
-    const widget = jest.requireActual('@modules/altune-widget').__widget;
     const session = jest.requireActual('@shared/session');
     const playback = jest.requireActual('@shared/playback');
     const isolatedPlayer = jest.requireMock('react-native-track-player').__player;
-    widget.hold(...bufferedAtBoot);
+    nativeWidget.hold(...bufferedAtBoot);
     jest.requireActual('@features/player').startWidgetCommands({ playPrevious });
     boot = {
-      send: (command) => widget.send(command),
+      send: (command) => nativeWidget.send(command),
       calls: (method) => isolatedPlayer.calls(method),
-      reloads: () => widget.reloads(),
+      reloads: () => nativeWidget.reloads(),
       signOut: () => session.notifyIdentityChange(null),
       repeatMode: () => playback.useQueueStore.getState().repeatMode,
     };
@@ -204,7 +203,7 @@ describe('startWidgetCommands probe', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    __widget.reset();
+    nativeWidget.reset();
     player.reset();
     useQueueStore.getState().clearQueue();
     useQueueStore.getState().setRepeatMode('off');
@@ -219,21 +218,21 @@ describe('startWidgetCommands probe', () => {
   it('runs every command in a quick burst exactly once', async () => {
     startWidgetCommands({ playPrevious });
 
-    __widget.send('next');
-    __widget.send('previous');
-    __widget.send('next');
+    nativeWidget.send('next');
+    nativeWidget.send('previous');
+    nativeWidget.send('next');
     await settleMany();
 
     expect(player.calls('skipToNext')).toEqual([[], []]);
     expect(playPrevious).toHaveBeenCalledTimes(1);
-    expect(__widget.reloads()).toBe(BURST_COMMANDS);
+    expect(nativeWidget.reloads()).toBe(BURST_COMMANDS);
   });
 
   it('applies a burst of repeat taps to the player in the order they were tapped', async () => {
     startWidgetCommands({ playPrevious });
 
-    __widget.send('repeat');
-    __widget.send('repeat');
+    nativeWidget.send('repeat');
+    nativeWidget.send('repeat');
     await settleMany();
 
     expect(useQueueStore.getState().repeatMode).toBe('one');
@@ -279,7 +278,7 @@ describe('startWidgetCommands probe', () => {
       'Track c',
       'Track d',
     ]);
-    expect(__widget.reloads()).toBe(SHUFFLE_COMMANDS);
+    expect(nativeWidget.reloads()).toBe(SHUFFLE_COMMANDS);
   });
 
   it('shuffle replaces the native upcoming tracks with the reshuffled order', async () => {
@@ -375,7 +374,7 @@ describe('startWidgetCommands probe', () => {
     await sendWidgetCommand(' next');
 
     expect(player.calls('skipToNext')).toHaveLength(0);
-    expect(__widget.reloads()).toBe(0);
+    expect(nativeWidget.reloads()).toBe(0);
   });
 
   it('ignores a command named after an object prototype member', async () => {
@@ -385,7 +384,7 @@ describe('startWidgetCommands probe', () => {
     await sendWidgetCommand('__proto__');
     await sendWidgetCommand('hasOwnProperty');
 
-    expect(__widget.reloads()).toBe(0);
+    expect(nativeWidget.reloads()).toBe(0);
   });
 
   it('runs a command buffered before boot once auth resolves signed in', async () => {

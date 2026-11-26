@@ -17,10 +17,6 @@ const tsconfigAliases = Object.fromEntries(
   ]),
 );
 
-const nativeModuleDoubles = {
-  '^@modules/altune-widget$': '<rootDir>/jest/doubles/altune-widget.js',
-};
-
 const houseModuleNameMapper = {
   ...tsconfigAliases,
   '^expo/virtual/env$': '<rootDir>/jest/expo-virtual-env.js',
@@ -49,11 +45,7 @@ const nativeProject = {
   testPathIgnorePatterns: [...(preset.testPathIgnorePatterns ?? []), WEB_INTEGRATION_TESTS],
   setupFiles: [...(preset.setupFiles ?? []), '<rootDir>/jest/setup-env.js'],
   setupFilesAfterEnv: [...(preset.setupFilesAfterEnv ?? []), '<rootDir>/jest/setup-after-env.js'],
-  moduleNameMapper: {
-    ...nativeModuleDoubles,
-    ...(preset.moduleNameMapper ?? {}),
-    ...houseModuleNameMapper,
-  },
+  moduleNameMapper: { ...(preset.moduleNameMapper ?? {}), ...houseModuleNameMapper },
 };
 
 const webProject = {
@@ -72,7 +64,6 @@ const webProject = {
     '<rootDir>/jest/setup-after-env.js',
   ],
   moduleNameMapper: {
-    ...nativeModuleDoubles,
     ...(webPreset.moduleNameMapper ?? {}),
     ...houseModuleNameMapper,
     '^lucide-react-native$':
