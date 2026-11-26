@@ -8,7 +8,7 @@ import (
 )
 
 func TestDownloadLimiter_AcquireReturnsCtxErrWhenCancelledWhileFull(t *testing.T) {
-	limiter := download.NewDownloadLimiter(1)
+	limiter := download.MustLimitedTo(1)
 	if err := limiter.Acquire(context.Background()); err != nil {
 		t.Fatalf("first Acquire: %v", err)
 	}
@@ -21,7 +21,7 @@ func TestDownloadLimiter_AcquireReturnsCtxErrWhenCancelledWhileFull(t *testing.T
 }
 
 func TestDownloadLimiter_ReleaseFreesASlot(t *testing.T) {
-	limiter := download.NewDownloadLimiter(1)
+	limiter := download.MustLimitedTo(1)
 	if err := limiter.Acquire(context.Background()); err != nil {
 		t.Fatalf("first Acquire: %v", err)
 	}
@@ -32,10 +32,30 @@ func TestDownloadLimiter_ReleaseFreesASlot(t *testing.T) {
 	}
 }
 
-func TestDownloadLimiter_NilIsUnlimited(t *testing.T) {
-	var limiter *download.ConcurrencyLimit
-	if err := limiter.Acquire(context.Background()); err != nil {
-		t.Fatalf("nil limiter Acquire: %v", err)
+func TestDownloadLimiter_UnlimitedNeverBlocks(t *testing.T) {
+	limiter := download.Unlimited()
+
+	for range 100 {
+		if err := limiter.Acquire(context.Background()); err != nil {
+			t.Fatalf("Acquire on an unlimited limiter: %v", err)
+		}
 	}
 	limiter.Release()
+}
+
+func TestDownloadLimiter_ZeroValueRefusesToAcquire(t *testing.T) {
+	var limiter download.ConcurrencyLimit
+
+	if err := limiter.Acquire(context.Background()); !errors.Is(err, download.ErrLimitNotConfigured) {
+		t.Fatalf("zero limiter Acquire = %v, want ErrLimitNotConfigured", err)
+	}
+	limiter.Release()
+}
+
+func TestLimitedTo_RefusesALimitBelowOne(t *testing.T) {
+	for _, n := range []int{0, -3} {
+		if _, err := download.LimitedTo(n); !errors.Is(err, download.ErrLimitBelowOne) {
+			t.Errorf("LimitedTo(%d) error = %v, want ErrLimitBelowOne", n, err)
+		}
+	}
 }

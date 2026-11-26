@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -210,3 +211,7 @@ func TestCleanupTemp_WithoutTempDirRemovesFileParent(t *testing.T) {
 		t.Errorf("removed = %v, want exactly [%s]", got, file)
 	}
 }
+
+type failingRemoveWorkspace struct{ osWorkspace }
+
+func (failingRemoveWorkspace) Remove(string) error { return errors.New("directory is busy") }

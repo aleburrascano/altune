@@ -36,7 +36,7 @@ func NewScheduler(ctx context.Context, d Deps) *download.BackgroundAcquisitionSc
 	opts := storeOptions(d)
 	lookups, identifier, storedAudio := fingerprinting(ctx, &d)
 	opts = append(opts, pipelineOptions(d)...)
-	acquireSvc := download.NewAcquireTrackAudioService(
+	acquireSvc := download.MustNewAcquireTrackAudioService(
 		d.Ledger,
 		download.NewSourceRegistry(d.Sources.First...).WithFallback(d.Sources.Fallback...),
 		d.AudioStore,
@@ -49,22 +49,24 @@ func NewScheduler(ctx context.Context, d Deps) *download.BackgroundAcquisitionSc
 			Recordings:      d.Recording.Resolver,
 		},
 		download.StagePorts{
-			Prober:      prober,
-			Tagger:      download.NewFFmpegTagger(binpath.Resolve("ffmpeg", d.Config.FFmpegLocation), download.NewId3Tagger()),
-			Rejections:  download.NewPostgresRejectionStore(d.Pool),
-			StoredAudio: storedAudio,
-			Orphans:     downloadfromlibrary.NewOrphanedAudioRecorder(library.NewPostgresOrphanedAudioRepository(d.Pool)),
-			Skips:       skips,
+			Prober:        prober,
+			Tagger:        download.NewFFmpegTagger(binpath.Resolve("ffmpeg", d.Config.FFmpegLocation), download.NewId3Tagger()),
+			Rejections:    download.NewPostgresRejectionStore(d.Pool),
+			StoredAudio:   storedAudio,
+			Orphans:       downloadfromlibrary.NewOrphanedAudioRecorder(library.NewPostgresOrphanedAudioRepository(d.Pool)),
+			Skips:         skips,
+			Events:        d.Events,
+			DownloadLimit: download.MustLimitedTo(d.Config.AcquisitionDownloadConcurrency),
+			Observer:      download.NoObserver(),
 		},
 		opts...,
 	)
-	return download.NewBackgroundAcquisitionScheduler(acquireSvc, d.Config.AcquisitionConcurrency, time.Now, schedulerOptions(d, acquireSvc, skips, lookups)...)
+	return download.MustNewBackgroundAcquisitionScheduler(acquireSvc, d.Config.AcquisitionConcurrency, time.Now, schedulerPorts(d, acquireSvc, skips, lookups), schedulerOptions(d)...)
 }
 
 func storeOptions(d Deps) []acquireOption {
 	cfg := d.Config
 	return []acquireOption{
-		download.WithAcquireEvents(d.Events),
 		download.WithSupersededAudioGrace(cfg.AcquisitionSupersededAudioGrace),
 		download.WithAcquireStoreKeyPrefix(cfg.AudioKeyPrefix),
 	}
@@ -86,27 +88,34 @@ func fingerprinting(ctx context.Context, d *Deps) (*fingerprintstatus.HealthTrac
 func pipelineOptions(d Deps) []acquireOption {
 	cfg := d.Config
 	return []acquireOption{
-		download.WithDownloadLimiter(download.NewDownloadLimiter(cfg.AcquisitionDownloadConcurrency)),
 		download.WithAcquireConfidenceFloor(cfg.AcquisitionConfidenceFloor),
 		download.WithProvenMaxBitErrorRate(cfg.AcquisitionUpgradePreviewAMaxBER),
 	}
 }
 
-func schedulerOptions(d Deps, acquireSvc *download.AcquireTrackAudioService, skips *download.VerifySkipCounter, lookups *fingerprintstatus.HealthTracker) []func(*download.BackgroundAcquisitionScheduler) {
-	opts := []func(*download.BackgroundAcquisitionScheduler){
+func schedulerPorts(d Deps, acquireSvc *download.AcquireTrackAudioService, skips *download.VerifySkipCounter, lookups *fingerprintstatus.HealthTracker) download.SchedulerPorts {
+	wiring := download.SchedulerPorts{
+		Queue:               download.InMemoryQueue(),
+		Upgrades:            download.NoUpgradeLane(),
+		Notifier:            download.NoopJobNotifier(),
+		Outcomes:            download.NoopOutcomeRecorder(),
+		Events:              d.Events,
+		VerifySkips:         skips.Count,
+		FingerprintVerified: lookups.Verified,
+	}
+	if d.Pool != nil {
+		wiring.Queue = download.QueueOf(download.NewPostgresJobQueue(d.Pool))
+		wiring.Upgrades = upgradeLane(d.Config, d.Pool, d.Ledger, acquireSvc)
+		wiring.Notifier = download.NewPostgresJobNotifier(d.Pool)
+		wiring.Outcomes = download.NewPostgresOutcomeStore(d.Pool)
+	}
+	return wiring
+}
+
+func schedulerOptions(d Deps) []func(*download.BackgroundAcquisitionScheduler) {
+	return []func(*download.BackgroundAcquisitionScheduler){
 		download.WithSchedulerPaused(d.Config.AcquisitionPaused),
-		download.WithSchedulerEvents(d.Events),
 		download.WithVerificationStatus(d.Verification),
-		download.WithVerifySkipCount(skips.Count),
-		download.WithFingerprintVerified(lookups.Verified),
 		download.WithDrainBudget(time.Duration(d.Config.AcquisitionDrainBudgetSeconds) * time.Second),
 	}
-	if d.Pool == nil {
-		return opts
-	}
-	return append(opts,
-		upgradeLane(d.Config, d.Pool, d.Ledger, acquireSvc),
-		download.WithJobQueue(download.NewPostgresJobQueue(d.Pool)),
-		download.WithJobNotifier(download.NewPostgresJobNotifier(d.Pool)),
-		download.WithOutcomeRecorder(download.NewPostgresOutcomeStore(d.Pool)))
 }

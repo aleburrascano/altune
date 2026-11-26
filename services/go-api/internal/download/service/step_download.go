@@ -49,20 +49,27 @@ type DownloadStep struct {
 
 const ProdVerifyWidth = 2
 
-func NewDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, opts ...func(*DownloadStep)) *DownloadStep {
-	requirePort("NewDownloadStep", "identifier", identifier == nil)
-	requirePort("NewDownloadStep", "recording lookup", lookup == nil)
-	requirePort("NewDownloadStep", "prober", prober == nil)
-	requirePort("NewDownloadStep", "skip recorder", skips == nil)
-	s := &DownloadStep{fetcher: fetcher, workspace: requireWorkspace("NewDownloadStep", workspace), identifier: identifier, recordingLookup: lookup, factsCache: newRecordingFactsCache(time.Now), prober: prober, skips: skips, width: ProdVerifyWidth, candidateTimeout: DefaultCandidateTimeout, floor: defaultConfidenceFloor, cuts: audioverdict.DefaultCuts()}
+func NewDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, limit *ConcurrencyLimit, opts ...func(*DownloadStep)) (*DownloadStep, error) {
+	const owner = "NewDownloadStep"
+	if err := errors.Join(
+		missingPort(owner, "identifier", identifier == nil),
+		missingPort(owner, "recording lookup", lookup == nil),
+		missingPort(owner, "prober", prober == nil),
+		missingPort(owner, "skip recorder", skips == nil),
+		missingPort(owner, "download limit", limit == nil),
+		requireWorkspace(owner, workspace),
+	); err != nil {
+		return nil, err
+	}
+	return buildDownloadStep(fetcher, workspace, identifier, lookup, prober, skips, limit, opts...), nil
+}
+
+func buildDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, limit *ConcurrencyLimit, opts ...func(*DownloadStep)) *DownloadStep {
+	s := &DownloadStep{fetcher: fetcher, workspace: workspace, identifier: identifier, recordingLookup: lookup, factsCache: newRecordingFactsCache(time.Now), limiter: limit, prober: prober, skips: skips, width: ProdVerifyWidth, candidateTimeout: DefaultCandidateTimeout, floor: defaultConfidenceFloor, cuts: audioverdict.DefaultCuts()}
 	for _, opt := range opts {
 		opt(s)
 	}
 	return s
-}
-
-func WithStepDownloadLimiter(l *ConcurrencyLimit) func(*DownloadStep) {
-	return func(s *DownloadStep) { s.limiter = l }
 }
 
 func (s *DownloadStep) recordSkip(gate string) {
@@ -100,7 +107,7 @@ func (s *DownloadStep) settle(ctx context.Context, ac *AcquisitionContext, holds
 		return afterDownload{}, failures.noneAccepted(ctx)
 	}
 	if held.confidence < s.floor {
-		_ = holds.ws.Remove(held.tmpDir)
+		removeScratch(ctx, holds.ws, held.tmpDir)
 		return afterDownload{}, fmt.Errorf("best candidate confidence %.2f is below the floor %.2f: %w",
 			held.confidence, s.floor, ErrNoConfidentMatch)
 	}
@@ -164,7 +171,7 @@ func (h *holdBook) resolveAccepted(ctx context.Context, ac *AcquisitionContext, 
 	case h.muxed == nil:
 		h.muxed = &result
 	default:
-		_ = h.ws.Remove(result.tmpDir)
+		removeScratch(ctx, h.ws, result.tmpDir)
 	}
 	return afterDownload{}, false
 }
@@ -175,25 +182,25 @@ func (h *holdBook) chooseAgainstMuxed(ctx context.Context, ac *AcquisitionContex
 	if !gradeOf(ctx, ac, *muxed).Beats(gradeOf(ctx, ac, audioOnly)) {
 		winner, loser = audioOnly, *muxed
 	}
-	_ = h.ws.Remove(loser.tmpDir)
+	removeScratch(ctx, h.ws, loser.tmpDir)
 	return winner.keep(ctx, ac)
 }
 
 func gradeOf(ctx context.Context, ac *AcquisitionContext, a attempt) audioquality.Grade {
-	scratch := *ac
+	scratch := ac.snapshot()
 	a.applyTo(ctx, &scratch)
 	return scratch.CollectEvidence().Grade
 }
 
-func (h *holdBook) offer(candidate attempt) {
+func (h *holdBook) offer(ctx context.Context, candidate attempt) {
 	if candidate.status != attemptHeld {
 		return
 	}
 	if h.best != nil && !candidate.beats(*h.best) {
-		_ = h.ws.Remove(candidate.tmpDir)
+		removeScratch(ctx, h.ws, candidate.tmpDir)
 		return
 	}
-	h.discard()
+	h.discard(ctx)
 	h.best = &candidate
 }
 
@@ -203,13 +210,13 @@ func (h *holdBook) take() *attempt {
 	return best
 }
 
-func (h *holdBook) discard() {
+func (h *holdBook) discard(ctx context.Context) {
 	if h.muxed != nil {
-		_ = h.ws.Remove(h.muxed.tmpDir)
+		removeScratch(ctx, h.ws, h.muxed.tmpDir)
 		h.muxed = nil
 	}
 	if h.best != nil {
-		_ = h.ws.Remove(h.best.tmpDir)
+		removeScratch(ctx, h.ws, h.best.tmpDir)
 		h.best = nil
 	}
 }
@@ -336,7 +343,7 @@ func (s *DownloadStep) runAttempt(
 ) (result attempt) {
 	defer func() {
 		if result.status == attemptRejected {
-			_ = s.workspace.Remove(tmpDir)
+			removeScratch(ctx, s.workspace, tmpDir)
 		}
 	}()
 	result = s.attemptAudio(ctx, ac, candidate, tmpDir)
@@ -593,11 +600,11 @@ func decodeRejection(
 	}
 }
 
-func (s *DownloadStep) Rollback(_ context.Context, ac *AcquisitionContext) error {
+func (s *DownloadStep) Rollback(ctx context.Context, ac *AcquisitionContext) error {
 	if ac.TempDir != "" {
-		_ = s.workspace.Remove(ac.TempDir)
+		removeScratch(ctx, s.workspace, ac.TempDir)
 	} else if ac.TempPath != "" {
-		_ = s.workspace.Remove(ac.TempPath)
+		removeScratch(ctx, s.workspace, ac.TempPath)
 	}
 	return nil
 }

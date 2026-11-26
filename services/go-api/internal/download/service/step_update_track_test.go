@@ -26,7 +26,7 @@ func TestExecute_MarksTheTrackReadyOnTheFileItStored(t *testing.T) {
 	track := pendingBlindingLights()
 	ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
 	store := &objectStore{objects: map[string]string{}}
-	svc := service.NewAcquireTrackAudioService(ledger, service.NewSourceRegistry(freshAudioSource{}), store,
+	svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(freshAudioSource{}), store,
 		scratchfiles.New(), noVerification(), noStages())
 
 	err := svc.Execute(context.Background(), track.UserId, track.ID)
@@ -68,7 +68,7 @@ func (vanishingLedger) Complete(context.Context, ids.TrackId, ids.UserId, ports.
 func TestExecute_ATrackGoneAtTheCommitFailsTheRunAsAcquisitionFailed(t *testing.T) {
 	track := pendingBlindingLights()
 	ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
-	svc := service.NewAcquireTrackAudioService(vanishingLedger{ledger}, service.NewSourceRegistry(freshAudioSource{}),
+	svc := service.MustNewAcquireTrackAudioService(vanishingLedger{ledger}, service.NewSourceRegistry(freshAudioSource{}),
 		&objectStore{objects: map[string]string{}}, scratchfiles.New(), noVerification(), noStages())
 
 	err := svc.Execute(context.Background(), track.UserId, track.ID)
@@ -105,11 +105,11 @@ func (p *progressRecorder) published() []string {
 func TestScheduledRun_TellsTheClientWhenItReachesTheUpdateTrackStage(t *testing.T) {
 	track := acquisitiontest.LedgerTrack{TrackSnapshot: pendingBlindingLights()}
 	ledger := acquisitiontest.NewLedger(track)
-	svc := service.NewAcquireTrackAudioService(ledger, service.NewSourceRegistry(freshAudioSource{}),
+	svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(freshAudioSource{}),
 		&objectStore{objects: map[string]string{}}, scratchfiles.New(), noVerification(), noStages())
 	progress := &progressRecorder{}
 
-	outcome := scheduleOnce(t, svc, track, nil, service.WithSchedulerEvents(progress))
+	outcome := scheduleOnce(t, svc, track, nil, withTestSchedulerEvents(progress))
 
 	if !outcome.settled {
 		t.Fatalf("job outcome = %+v, want the run settled", outcome)
@@ -126,7 +126,7 @@ func TestReplaceGated_AnUnprobedFileGetsNoLengthRescue(t *testing.T) {
 		Title: "The Weeknd - Blinding Lights", URL: "https://www.youtube.com/watch?v=fanUploadAA",
 		Channel: "Some Fan", Kind: ports.KindUpload, Duration: 285, Categories: []string{"Music"},
 	}}}
-	svc := service.NewAcquireTrackAudioService(served.ledger, service.NewSourceRegistry(source), served.store,
+	svc := service.MustNewAcquireTrackAudioService(served.ledger, service.NewSourceRegistry(source), served.store,
 		scratchfiles.New(), resolving(&resolver{identity: ports.RecordingIdentity{MBID: recording, MBIDs: []string{recording}}},
 			verifiedBy(&identifier{match: ports.RecordingMatch{AcoustID: "ac-1", Results: []ports.AcoustIDResult{
 				{Score: 0.97, Recordings: []ports.LinkedRecording{{MBID: recording}}},

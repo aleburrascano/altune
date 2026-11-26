@@ -1,6 +1,9 @@
 package service
 
-import "altune/go-api/internal/download/internal/core/ports"
+import (
+	"altune/go-api/internal/download/internal/core/ports"
+	"errors"
+)
 
 type VerificationPorts struct {
 	Identifier      ports.AudioIdentifier
@@ -10,16 +13,12 @@ type VerificationPorts struct {
 	Recordings      ports.RecordingResolver
 }
 
-func (v VerificationPorts) require(owner string) {
-	requirePort(owner, "Identifier", v.Identifier == nil)
-	requirePort(owner, "RecordingLookup", v.RecordingLookup == nil)
-	requirePort(owner, "Rerecordings", v.Rerecordings == nil)
-	requirePort(owner, "Previews", v.Previews == nil)
-	requirePort(owner, "Recordings", v.Recordings == nil)
-}
-
-func requirePort(owner, name string, missing bool) {
-	if missing {
-		panic(owner + ": " + name + " is required; pass the explicit Noop when the wiring has none")
-	}
+func (v VerificationPorts) validate(owner string) error {
+	return errors.Join(
+		missingPort(owner, "Identifier", v.Identifier == nil),
+		missingPort(owner, "RecordingLookup", v.RecordingLookup == nil),
+		missingPort(owner, "Rerecordings", v.Rerecordings == nil),
+		missingPort(owner, "Previews", v.Previews == nil),
+		missingPort(owner, "Recordings", v.Recordings == nil),
+	)
 }

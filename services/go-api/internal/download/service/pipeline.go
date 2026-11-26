@@ -15,8 +15,10 @@ import (
 	"altune/go-api/internal/shared/redact"
 	sharedtracklength "altune/go-api/internal/shared/tracklength"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 )
 
@@ -280,6 +282,32 @@ type AcquisitionContext struct {
 	Relabel *ports.TrackLabel
 }
 
+func (ac *AcquisitionContext) snapshot() AcquisitionContext {
+	copied := *ac
+	copied.Track.CatalogSources = slices.Clone(ac.Track.CatalogSources)
+	copied.Identity.Sources = slices.Clone(ac.Identity.Sources)
+	copied.Identity.MBIDs = slices.Clone(ac.Identity.MBIDs)
+	copied.Candidates = slices.Clone(ac.Candidates)
+	copied.Ranked = slices.Clone(ac.Ranked)
+	copied.Selected = cloned(ac.Selected)
+	copied.Evidence.Qualifiers = slices.Clone(ac.Evidence.Qualifiers)
+	copied.Evidence.DurationDeltaSeconds = cloned(ac.Evidence.DurationDeltaSeconds)
+	copied.Rejections = slices.Clone(ac.Rejections)
+	copied.Attempted = slices.Clone(ac.Attempted)
+	copied.Replace.ExcludeKeys = slices.Clone(ac.Replace.ExcludeKeys)
+	copied.PriorRejections = slices.Clone(ac.PriorRejections)
+	copied.Relabel = cloned(ac.Relabel)
+	return copied
+}
+
+func cloned[T any](p *T) *T {
+	if p == nil {
+		return nil
+	}
+	value := *p
+	return &value
+}
+
 func (ac *AcquisitionContext) clearCandidates() {
 	ac.Candidates, ac.Ranked, ac.Selected = nil, nil, nil
 }
@@ -407,9 +435,8 @@ type TrackRef struct {
 }
 
 func (s *AcquireTrackAudioService) buildSteps(userId ids.UserId, trackId ids.TrackId) Pipeline {
-	return CoreSteps(s.sources, s.audioTagger, s.audioStore, s.audioProber, s.identifier, s.recordingLookup, s.verifySkips, s.orphans, s.ledger, s.workspace,
+	return buildCoreSteps(s.sources, s.audioTagger, s.audioStore, s.audioProber, s.identifier, s.recordingLookup, s.verifySkips, s.orphans, s.ledger, s.workspace, s.downloadLimiter,
 		[]func(*DownloadStep){
-			WithStepDownloadLimiter(s.downloadLimiter),
 			WithConfidenceFloor(s.confidenceFloor),
 			WithJudgeCuts(s.cuts),
 		},
@@ -429,14 +456,39 @@ func CoreSteps(
 	orphans ports.OrphanedAudioRecorder,
 	refs ports.AudioRefLookup,
 	workspace ports.ScratchFolder,
+	limit *ConcurrencyLimit,
+	downloadOpts []func(*DownloadStep),
+	storeOpts ...func(*StoreStep),
+) (Pipeline, error) {
+	download, downloadErr := NewDownloadStep(sources, workspace, identifier, lookup, prober, skips, limit, append([]func(*DownloadStep){WithVerifyWidth(ProdVerifyWidth)}, downloadOpts...)...)
+	tag, tagErr := NewTagStep(tagger)
+	stored, storeErr := NewStoreStep(store, workspace, prober, orphans, refs, storeOpts...)
+	if err := errors.Join(downloadErr, tagErr, storeErr); err != nil {
+		return Pipeline{}, err
+	}
+	return Pipeline{search: NewSearchStep(sources), selectBest: NewSelectStep(), download: download, tag: tag, store: stored}, nil
+}
+
+func buildCoreSteps(
+	sources *SourceRegistry,
+	tagger ports.AudioTagger,
+	store ports.AudioWriter,
+	prober ports.AudioProber,
+	identifier ports.AudioIdentifier,
+	lookup ports.RecordingLookup,
+	skips ports.VerifySkipRecorder,
+	orphans ports.OrphanedAudioRecorder,
+	refs ports.AudioRefLookup,
+	workspace ports.ScratchFolder,
+	limit *ConcurrencyLimit,
 	downloadOpts []func(*DownloadStep),
 	storeOpts ...func(*StoreStep),
 ) Pipeline {
 	return Pipeline{
 		search:     NewSearchStep(sources),
 		selectBest: NewSelectStep(),
-		download:   NewDownloadStep(sources, workspace, identifier, lookup, prober, skips, append([]func(*DownloadStep){WithVerifyWidth(ProdVerifyWidth)}, downloadOpts...)...),
-		tag:        NewTagStep(tagger),
-		store:      NewStoreStep(store, workspace, prober, orphans, refs, storeOpts...),
+		download:   buildDownloadStep(sources, workspace, identifier, lookup, prober, skips, limit, append([]func(*DownloadStep){WithVerifyWidth(ProdVerifyWidth)}, downloadOpts...)...),
+		tag:        &TagStep{tagger: tagger},
+		store:      buildStoreStep(store, workspace, prober, orphans, refs, storeOpts...),
 	}
 }

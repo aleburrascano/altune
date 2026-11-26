@@ -93,7 +93,7 @@ func acquireThroughPostgres(t *testing.T) (library.Track, string, download.Verif
 	}
 	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID()) })
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
-		Config:     &config.Config{Env: "test", MusicDir: musicDir},
+		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, MusicDir: musicDir},
 		Pool:       pool,
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(repo),
@@ -159,7 +159,7 @@ func TestNewScheduler_FetchedAudioPassesTheProbeAndDecodeGates(t *testing.T) {
 
 func TestNewScheduler_OneUserMayQueuePastTheOldGlobalDepth(t *testing.T) {
 	const concurrency = 2
-	s := newOfflineScheduler(t, &config.Config{MusicDir: t.TempDir(), AcquisitionConcurrency: concurrency}, fixtureTiers())
+	s := newOfflineScheduler(t, &config.Config{AcquisitionDownloadConcurrency: 1, MusicDir: t.TempDir(), AcquisitionConcurrency: concurrency}, fixtureTiers())
 
 	userA := ids.NewUserId(uuid.New())
 	const pastOldGlobalDepth = concurrency*4 + 5
@@ -173,7 +173,7 @@ func TestNewScheduler_OneUserMayQueuePastTheOldGlobalDepth(t *testing.T) {
 func TestNewScheduler_DoesNotCapAPrincipalsQueue(t *testing.T) {
 	const concurrency = 2
 	const principalCap = concurrency
-	s := newOfflineScheduler(t, &config.Config{MusicDir: t.TempDir(), AcquisitionConcurrency: concurrency}, fixtureTiers())
+	s := newOfflineScheduler(t, &config.Config{AcquisitionDownloadConcurrency: 1, MusicDir: t.TempDir(), AcquisitionConcurrency: concurrency}, fixtureTiers())
 
 	userA := ids.NewUserId(uuid.New())
 	for i := 0; i < principalCap+2; i++ {
@@ -187,7 +187,7 @@ func TestNewScheduler_DoesNotCapAPrincipalsQueue(t *testing.T) {
 }
 
 func TestNewScheduler_AcquisitionPausedStartsPaused(t *testing.T) {
-	s := newOfflineScheduler(t, &config.Config{MusicDir: t.TempDir(), AcquisitionPaused: true}, fixtureTiers())
+	s := newOfflineScheduler(t, &config.Config{AcquisitionDownloadConcurrency: 1, MusicDir: t.TempDir(), AcquisitionPaused: true}, fixtureTiers())
 
 	if !s.Status().Paused {
 		t.Fatal("Status().Paused = false straight out of NewScheduler, want true so no worker claims before the startup switches apply")
@@ -226,7 +226,7 @@ func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
 
 	trackRepo := library.NewPostgresTrackRepository(pool)
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
-		Config:     &config.Config{Env: "test", MusicDir: t.TempDir()},
+		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, MusicDir: t.TempDir()},
 		Pool:       pool,
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(trackRepo),
@@ -246,7 +246,7 @@ func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("no acquisition_outcomes row written for track %s within 5s (wiring must pass WithOutcomeRecorder with the Postgres store)", track.ID)
+			t.Fatalf("no acquisition_outcomes row written for track %s within 5s (wiring must set SchedulerPorts.Outcomes to the Postgres store)", track.ID)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -312,7 +312,7 @@ func TestNewScheduler_AnUpgradeWorkerClaimsAndSettlesAnEnqueuedUpgrade(t *testin
 	pool := integrationPool(t)
 	userID, trackID := insertReadyTrackGradedC(t, pool)
 
-	cfg := &config.Config{Env: "test", MusicDir: t.TempDir(), AcquisitionUpgradeConcurrency: 1, AcquisitionUpgradeMaxTries: 3}
+	cfg := &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, MusicDir: t.TempDir(), AcquisitionUpgradeConcurrency: 1, AcquisitionUpgradeMaxTries: 3}
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
 		Config:     cfg,
 		Pool:       pool,
@@ -358,7 +358,7 @@ func TestNewScheduler_ReportsFingerprintingReadyOnlyWithAnAcoustIDKey(t *testing
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := newOfflineScheduler(t, &config.Config{MusicDir: t.TempDir(), FFmpegLocation: binDir, AcoustIDAPIKey: tt.key}, fixtureTiers())
+			s := newOfflineScheduler(t, &config.Config{AcquisitionDownloadConcurrency: 1, MusicDir: t.TempDir(), FFmpegLocation: binDir, AcoustIDAPIKey: tt.key}, fixtureTiers())
 
 			if got := s.Status().Verification.Fpcalc; got != tt.want {
 				t.Errorf("Status().Verification.Fpcalc = %v with fpcalc installed and AcoustID key %q, want %v", got, tt.key, tt.want)
@@ -398,7 +398,7 @@ func TestNewScheduler_ShutdownCancelsAJobThatOutlivesTheConfiguredDrainBudget(t 
 	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID()) })
 	hang := sourceThatHangs{started: make(chan struct{}, 1)}
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
-		Config:     &config.Config{Env: "test", MusicDir: t.TempDir(), AcquisitionDrainBudgetSeconds: 1},
+		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, MusicDir: t.TempDir(), AcquisitionDrainBudgetSeconds: 1},
 		Pool:       pool,
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(repo),

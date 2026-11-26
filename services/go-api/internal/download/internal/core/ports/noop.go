@@ -53,6 +53,18 @@ func NoopAudioTagger() AudioTagger { return noopAudioTagger{} }
 
 func (noopAudioTagger) Tag(context.Context, string, TrackTags) error { return nil }
 
+type noopOutcomeRecorder struct{}
+
+func NoopOutcomeRecorder() OutcomeRecorder { return noopOutcomeRecorder{} }
+
+func (noopOutcomeRecorder) Record(context.Context, AcquisitionOutcome) error { return nil }
+
+type noopJobNotifier struct{}
+
+func NoopJobNotifier() JobNotifier { return noopJobNotifier{} }
+
+func (noopJobNotifier) Listen(context.Context, chan<- struct{}) {}
+
 type noopRejectionStore struct{}
 
 func NoopRejectionStore() RejectionStore { return noopRejectionStore{} }

@@ -90,7 +90,7 @@ func inPlaceChecker(w inPlaceWiring) *download.AcquireTrackAudioService {
 	if w.lookup != nil {
 		wiring.RecordingLookup = w.lookup
 	}
-	return download.NewAcquireTrackAudioService(nil, nil, storedAudio{}, download.NewTempWorkspace(), wiring, noStages(readingStoredFrom(storedAudio{})),
+	return download.MustNewAcquireTrackAudioService(nil, nil, storedAudio{}, download.NewTempWorkspace(), wiring, noStages(readingStoredFrom(storedAudio{})),
 		download.WithProvenMaxBitErrorRate(w.provenCut))
 }
 
@@ -361,7 +361,7 @@ func TestCheckInPlace_AFailedFingerprintIsAnErrorNotAnAnswer(t *testing.T) {
 }
 
 func TestCheckInPlace_WithoutAnIdentifierOrStoredAudioReaderItSaysSo(t *testing.T) {
-	svc := download.NewAcquireTrackAudioService(nil, nil, storedAudio{}, download.NewTempWorkspace(), noVerification(), noStages())
+	svc := download.MustNewAcquireTrackAudioService(nil, nil, storedAudio{}, download.NewTempWorkspace(), noVerification(), noStages())
 
 	finding, err := svc.CheckInPlace(context.Background(), inPlaceTrack())
 

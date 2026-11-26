@@ -18,9 +18,19 @@ type audioDeleter interface {
 
 type directDeleteOrphans struct{ store audioDeleter }
 
-func DirectDeleteOrphans(store audioDeleter) ports.OrphanedAudioRecorder {
-	requirePort("DirectDeleteOrphans", "audio store", store == nil)
-	return directDeleteOrphans{store: store}
+func DirectDeleteOrphans(store audioDeleter) (ports.OrphanedAudioRecorder, error) {
+	if err := missingPort("DirectDeleteOrphans", "audio store", store == nil); err != nil {
+		return nil, err
+	}
+	return directDeleteOrphans{store: store}, nil
+}
+
+func MustDirectDeleteOrphans(store audioDeleter) ports.OrphanedAudioRecorder {
+	recorder, err := DirectDeleteOrphans(store)
+	if err != nil {
+		panic(err)
+	}
+	return recorder
 }
 
 func (d directDeleteOrphans) RecordOrphanedAudio(ctx context.Context, orphan ports.OrphanedAudio) error {

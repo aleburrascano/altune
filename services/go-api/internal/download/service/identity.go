@@ -79,7 +79,7 @@ func (s *AcquireTrackAudioService) checkStoredFile(ctx context.Context, track *p
 	if err != nil {
 		return replacement.Finding{}, fmt.Errorf("create in-place dir: %w", err)
 	}
-	defer func() { _ = s.workspace.Remove(dir) }()
+	defer removeScratch(ctx, s.workspace, dir)
 	path, err := s.storedAudio.CopyStored(ctx, *track.AudioRef, dir)
 	if err != nil {
 		return replacement.Finding{}, fmt.Errorf("copy stored audio: %w", err)

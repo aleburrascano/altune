@@ -11,9 +11,11 @@ type TagStep struct {
 	tagger ports.AudioTagger
 }
 
-func NewTagStep(tagger ports.AudioTagger) *TagStep {
-	requirePort("NewTagStep", "tagger", tagger == nil)
-	return &TagStep{tagger: tagger}
+func NewTagStep(tagger ports.AudioTagger) (*TagStep, error) {
+	if err := missingPort("NewTagStep", "tagger", tagger == nil); err != nil {
+		return nil, err
+	}
+	return &TagStep{tagger: tagger}, nil
 }
 
 func (s *TagStep) Name() StepName { return stepNameTag }

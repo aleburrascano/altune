@@ -53,14 +53,16 @@ func NewAcquireTrackAudioService(
 	wiring VerificationPorts,
 	stages StagePorts,
 	opts ...func(*AcquireTrackAudioService),
-) *AcquireTrackAudioService {
-	wiring.require("NewAcquireTrackAudioService")
-	stages.require("NewAcquireTrackAudioService")
+) (*AcquireTrackAudioService, error) {
+	const owner = "NewAcquireTrackAudioService"
+	if err := errors.Join(wiring.validate(owner), stages.validate(owner), requireWorkspace(owner, workspace)); err != nil {
+		return nil, err
+	}
 	s := &AcquireTrackAudioService{
 		ledger:          ledger,
 		sources:         sources,
 		audioStore:      audioStore,
-		workspace:       requireWorkspace("NewAcquireTrackAudioService", workspace),
+		workspace:       workspace,
 		identifier:      wiring.Identifier,
 		recordingLookup: wiring.RecordingLookup,
 		rerecordings:    wiring.Rerecordings,
@@ -72,7 +74,9 @@ func NewAcquireTrackAudioService(
 		orphans:         stages.Orphans,
 		verifySkips:     stages.Skips,
 		recordings:      wiring.Recordings,
-		events:          events.NoopPublisher(),
+		events:          stages.Events,
+		downloadLimiter: stages.DownloadLimit,
+		contextObserver: stages.Observer,
 		cuts:            audioverdict.DefaultCuts(),
 
 		confidenceFloor: defaultConfidenceFloor,
@@ -81,27 +85,27 @@ func NewAcquireTrackAudioService(
 	for _, opt := range opts {
 		opt(s)
 	}
+	return s, nil
+}
+
+func MustNewAcquireTrackAudioService(
+	ledger ports.LibraryTracks,
+	sources *SourceRegistry,
+	audioStore ports.AudioWriter,
+	workspace ports.ScratchFolder,
+	wiring VerificationPorts,
+	stages StagePorts,
+	opts ...func(*AcquireTrackAudioService),
+) *AcquireTrackAudioService {
+	s, err := NewAcquireTrackAudioService(ledger, sources, audioStore, workspace, wiring, stages, opts...)
+	if err != nil {
+		panic(err)
+	}
 	return s
-}
-
-func WithDownloadLimiter(l *ConcurrencyLimit) func(*AcquireTrackAudioService) {
-	return func(s *AcquireTrackAudioService) { s.downloadLimiter = l }
-}
-
-func WithContextObserver(f func(*AcquisitionContext)) func(*AcquireTrackAudioService) {
-	return func(s *AcquireTrackAudioService) { s.contextObserver = f }
 }
 
 func WithAcquireConfidenceFloor(floor float64) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.confidenceFloor = floor }
-}
-
-func WithAcquireEvents(pub events.Publisher) func(*AcquireTrackAudioService) {
-	return func(s *AcquireTrackAudioService) {
-		if pub != nil {
-			s.events = pub
-		}
-	}
 }
 
 func WithAcquireTimeout(d time.Duration) func(*AcquireTrackAudioService) {
@@ -153,9 +157,7 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId ids.UserI
 }
 
 func (s *AcquireTrackAudioService) observe(ac *AcquisitionContext) {
-	if s.contextObserver != nil {
-		s.contextObserver(ac)
-	}
+	s.contextObserver(ac)
 }
 
 func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error {
@@ -284,7 +286,7 @@ func (s *AcquireTrackAudioService) takeRerecording(ctx context.Context, steps Pi
 }
 
 func (s *AcquireTrackAudioService) runRerecordingPass(ctx context.Context, steps Pipeline, ac *AcquisitionContext, label ports.TrackLabel) error {
-	pass := *ac
+	pass := ac.snapshot()
 	pass.retargetTo(label)
 	s.resolveIdentity(ctx, &pass)
 	if err := RunPipeline(ctx, steps, &pass); err != nil {

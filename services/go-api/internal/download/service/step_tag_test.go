@@ -57,7 +57,7 @@ func acquireStaged(t *testing.T, track ports.TrackSnapshot, source ports.AudioSo
 func acquireVerified(t *testing.T, track ports.TrackSnapshot, source ports.AudioSource, wiring service.VerificationPorts, stages service.StagePorts, opts ...func(*service.AcquireTrackAudioService)) (*acquisitiontest.Ledger, error) {
 	t.Helper()
 	ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
-	svc := service.NewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, scratchfiles.New(), wiring, stages, opts...)
+	svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, scratchfiles.New(), wiring, stages, opts...)
 	return ledger, svc.Execute(context.Background(), track.UserId, track.ID)
 }
 

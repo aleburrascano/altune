@@ -78,55 +78,119 @@ type BackgroundAcquisitionScheduler struct {
 	outcomes            ports.OutcomeRecorder
 	outcomeRecords      background.Tracker
 
-	upgrader       upgradeRunner
-	upgradeWorkers int
+	upgrades UpgradeLane
+}
+
+type QueueFactory func(wake chan<- struct{}, now clock.Func) ports.DownloadQueue
+
+func InMemoryQueue() QueueFactory {
+	return func(wake chan<- struct{}, now clock.Func) ports.DownloadQueue { return inmemoryqueue.New(wake, now) }
+}
+
+func QueueOf(queue ports.DownloadQueue) QueueFactory {
+	return func(chan<- struct{}, clock.Func) ports.DownloadQueue { return queue }
+}
+
+type UpgradeLane struct {
+	runner   upgradeRunner
+	workers  int
+	declared bool
+	none     bool
+}
+
+func UpgradeLaneOf(runner upgradeRunner, workers int) UpgradeLane {
+	return UpgradeLane{runner: runner, workers: workers, declared: true}
+}
+
+func NoUpgradeLane() UpgradeLane { return UpgradeLane{declared: true, none: true} }
+
+type SchedulerPorts struct {
+	Queue               QueueFactory
+	Upgrades            UpgradeLane
+	Notifier            ports.JobNotifier
+	Outcomes            ports.OutcomeRecorder
+	Events              events.Publisher
+	VerifySkips         func() uint64
+	FingerprintVerified func() bool
+}
+
+func (p SchedulerPorts) validate(owner string) error {
+	return errors.Join(
+		missingPort(owner, "Queue", p.Queue == nil),
+		missingPort(owner, "Upgrades", !p.Upgrades.declared),
+		missingPort(owner, "Upgrades runner", p.Upgrades.declared && !p.Upgrades.none && p.Upgrades.runner == nil),
+		missingPort(owner, "Notifier", p.Notifier == nil),
+		missingPort(owner, "Outcomes", p.Outcomes == nil),
+		missingPort(owner, "Events", p.Events == nil),
+		missingPort(owner, "VerifySkips", p.VerifySkips == nil),
+		missingPort(owner, "FingerprintVerified", p.FingerprintVerified == nil),
+	)
 }
 
 func NewBackgroundAcquisitionScheduler(
 	svc acquirer,
 	workers int,
 	now clock.Func,
+	wiring SchedulerPorts,
 	opts ...func(*BackgroundAcquisitionScheduler),
-) *BackgroundAcquisitionScheduler {
-	requirePort("NewBackgroundAcquisitionScheduler", "clock", now == nil)
+) (*BackgroundAcquisitionScheduler, error) {
+	const owner = "NewBackgroundAcquisitionScheduler"
+	if err := errors.Join(missingPort(owner, "clock", now == nil), wiring.validate(owner)); err != nil {
+		return nil, err
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &BackgroundAcquisitionScheduler{
-		svc:               svc,
-		pending:           newPendingTracker(),
-		workers:           max(workers, 1),
-		cancel:            cancel,
-		baseCtx:           ctx,
-		stop:              make(chan struct{}),
-		wake:              make(chan struct{}, 1),
-		lanes:             newLaneWakes(),
-		log:               newJobLog(now),
-		now:               now,
-		events:            events.NoopPublisher(),
-		leaseDuration:     defaultLeaseDuration,
-		heartbeatInterval: defaultHeartbeatInterval,
-		pollInterval:      defaultPollInterval,
-		drainBudget:       defaultDrainBudget,
+		svc:                 svc,
+		pending:             newPendingTracker(),
+		workers:             max(workers, 1),
+		cancel:              cancel,
+		baseCtx:             ctx,
+		stop:                make(chan struct{}),
+		wake:                make(chan struct{}, 1),
+		lanes:               newLaneWakes(),
+		log:                 newJobLog(now),
+		now:                 now,
+		upgrades:            wiring.Upgrades,
+		events:              wiring.Events,
+		notifier:            wiring.Notifier,
+		outcomes:            wiring.Outcomes,
+		skipCount:           wiring.VerifySkips,
+		fingerprintVerified: wiring.FingerprintVerified,
+		leaseDuration:       defaultLeaseDuration,
+		heartbeatInterval:   defaultHeartbeatInterval,
+		pollInterval:        defaultPollInterval,
+		drainBudget:         defaultDrainBudget,
 	}
 	for _, opt := range opts {
 		opt(s)
 	}
-	if s.queue == nil {
-		s.queue = inmemoryqueue.New(s.wake, s.now)
-	}
-	if s.notifier != nil {
-		s.runners.Track(func() { s.notifier.Listen(s.baseCtx, s.wake) })
-	}
+	s.queue = wiring.Queue(s.wake, s.now)
+	s.runners.Track(func() { s.notifier.Listen(s.baseCtx, s.wake) })
 	s.runners.Track(s.fanOutWakes)
 
 	for range s.workers {
 		s.runners.Track(func() { s.runWorker(s.claimJob, s.lanes.acquire) })
 	}
 	s.startUpgradeWorkers()
+	return s, nil
+}
+
+func MustNewBackgroundAcquisitionScheduler(
+	svc acquirer,
+	workers int,
+	now clock.Func,
+	wiring SchedulerPorts,
+	opts ...func(*BackgroundAcquisitionScheduler),
+) *BackgroundAcquisitionScheduler {
+	s, err := NewBackgroundAcquisitionScheduler(svc, workers, now, wiring, opts...)
+	if err != nil {
+		panic(err)
+	}
 	return s
 }
 
 func (s *BackgroundAcquisitionScheduler) startUpgradeWorkers() {
-	if s.upgrader == nil {
+	if s.upgrades.none {
 		return
 	}
 	queue, ok := s.queue.(ports.UpgradeJobQueue)
@@ -135,7 +199,7 @@ func (s *BackgroundAcquisitionScheduler) startUpgradeWorkers() {
 		return
 	}
 	claim := func() (<-chan struct{}, bool) { return s.claimFrom(queue.ClaimUpgrade) }
-	for range s.upgradeWorkers {
+	for range s.upgrades.workers {
 		s.runners.Track(func() { s.runWorker(claim, s.lanes.upgrade) })
 	}
 }
@@ -159,14 +223,11 @@ func (s *BackgroundAcquisitionScheduler) eventsFor(kind ports.JobKind) events.Pu
 
 func (s *BackgroundAcquisitionScheduler) verificationStatus() ports.Verification {
 	v := s.verification
-	v.FingerprintVerified = s.fingerprintVerified != nil && s.fingerprintVerified()
+	v.FingerprintVerified = s.fingerprintVerified()
 	return v
 }
 
 func (s *BackgroundAcquisitionScheduler) verifySkipped() uint64 {
-	if s.skipCount == nil {
-		return 0
-	}
 	return s.skipCount()
 }
 
@@ -279,7 +340,6 @@ func (s *BackgroundAcquisitionScheduler) idleWait(wake <-chan struct{}) bool {
 }
 
 func (s *BackgroundAcquisitionScheduler) runClaimedJob(job ports.Job) {
-	key := job.TrackID.String()
 	run := s.acquisitionRunFor(job.Kind)
 
 	jobCtx, cancelJob := s.jobContextFor(job)
@@ -289,8 +349,8 @@ func (s *BackgroundAcquisitionScheduler) runClaimedJob(job ports.Job) {
 	heartbeatDone := make(chan struct{})
 	go s.heartbeatLoop(jobCtx, job, cancelJob, heartbeatDone)
 
-	reportedCtx := s.startClaimedJob(jobCtx, key, job)
-	jobErr := s.execClaimedJob(reportedCtx, key, run, job)
+	reportedCtx := s.startClaimedJob(jobCtx, job.TrackID, job)
+	jobErr := s.execClaimedJob(reportedCtx, job.TrackID, run, job)
 	s.stopClaimedJob(cancelJob, heartbeatDone)
 
 	s.finishJob(finishContextOf(jobCtx), job, jobErr)
@@ -312,15 +372,15 @@ func (s *BackgroundAcquisitionScheduler) settleWithin(ctx context.Context, job p
 	return s.queue.Settle(queueCtx, job.TrackID, job.ClaimNumber)
 }
 
-func (s *BackgroundAcquisitionScheduler) startClaimedJob(jobCtx context.Context, key string, job ports.Job) context.Context {
+func (s *BackgroundAcquisitionScheduler) startClaimedJob(jobCtx context.Context, trackId ids.TrackId, job ports.Job) context.Context {
 	s.inflightCount.Add(1)
-	s.log.register(key, "")
-	s.log.markRunning(key)
-	s.log.update(key, func(r *ports.JobRecord) {
+	s.log.register(trackId, "")
+	s.log.markRunning(trackId)
+	s.log.update(trackId, func(r *ports.JobRecord) {
 		r.Kind = job.Kind
 		r.Run = job.Run
 	})
-	reporter := schedulerJobReporter{ctx: jobCtx, log: s.log, events: s.eventsFor(job.Kind), trackID: key, userId: job.UserID}
+	reporter := schedulerJobReporter{ctx: jobCtx, log: s.log, events: s.eventsFor(job.Kind), trackID: trackId, userId: job.UserID}
 	reporter.timing("queue", job.Waited)
 	return withJobReporter(jobCtx, reporter)
 }
@@ -336,7 +396,7 @@ func (s *BackgroundAcquisitionScheduler) acquisitionRunFor(kind ports.JobKind) a
 	case ports.JobKindReplace:
 		return s.svc.ExecuteReplace
 	case ports.JobKindUpgrade:
-		return s.upgrader.ExecuteUpgrade
+		return s.upgrades.runner.ExecuteUpgrade
 	default:
 		return s.svc.Execute
 	}
@@ -351,12 +411,12 @@ func (s *BackgroundAcquisitionScheduler) jobContextFor(job ports.Job) (context.C
 	return jobCtx, cancelJob
 }
 
-func (s *BackgroundAcquisitionScheduler) execClaimedJob(ctx context.Context, key string, run acquisitionRun, job ports.Job) error {
+func (s *BackgroundAcquisitionScheduler) execClaimedJob(ctx context.Context, trackId ids.TrackId, run acquisitionRun, job ports.Job) error {
 	var err error
-	if panicked := background.SafeRun(ctx, "acquisition_panic", func() { err = run(ctx, job.UserID, job.TrackID) }, "track_id", key); panicked != nil {
+	if panicked := background.SafeRun(ctx, "acquisition_panic", func() { err = run(ctx, job.UserID, job.TrackID) }, "track_id", trackId.String()); panicked != nil {
 		err = errJobPanicked
 	}
-	s.completeClaimedJob(ctx, key, err)
+	s.completeClaimedJob(ctx, trackId, err)
 	return err
 }
 
@@ -370,15 +430,15 @@ type jobCompletion struct {
 	attrs   []any
 }
 
-func (s *BackgroundAcquisitionScheduler) completeClaimedJob(ctx context.Context, key string, err error) {
-	defer background.RecoverContext(ctx, "acquisition.job_completion_panic", "track_id", key)
+func (s *BackgroundAcquisitionScheduler) completeClaimedJob(ctx context.Context, trackId ids.TrackId, err error) {
+	defer background.RecoverContext(ctx, "acquisition.job_completion_panic", "track_id", trackId.String())
 	done := s.classifyJob(ctx, err)
-	record := s.log.complete(key, done.state, done.reason)
+	record := s.log.complete(trackId, done.state, done.reason)
 	if done.state != ports.JobRetrying {
 		s.recordOutcome(ctx, record)
 	}
 	if done.message != "" {
-		slog.Log(ctx, done.level, done.message, append([]any{"track_id", key}, done.attrs...)...)
+		slog.Log(ctx, done.level, done.message, append([]any{"track_id", trackId.String()}, done.attrs...)...)
 	}
 }
 
@@ -408,7 +468,7 @@ func (s *BackgroundAcquisitionScheduler) classifyJob(ctx context.Context, err er
 }
 
 func (s *BackgroundAcquisitionScheduler) recordOutcome(ctx context.Context, record ports.JobRecord) {
-	if s.outcomes == nil || record.TrackID == "" {
+	if record.TrackID == "" {
 		return
 	}
 	var sourceHost string

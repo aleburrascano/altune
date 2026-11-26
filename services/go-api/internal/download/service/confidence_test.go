@@ -295,9 +295,10 @@ func TestExecute_DrinkingInLAWritesNoGuessedISRC(t *testing.T) {
 		Title: "Drinking in L.A.", URL: "https://www.youtube.com/watch?v=-_5yNLsZ5Pk", Channel: "Bran Van 3000 - Topic", Categories: []string{"Music"},
 	}}}
 	var resolved ports.RecordingIdentity
-	observe := service.WithContextObserver(func(ac *service.AcquisitionContext) { resolved = ac.Identity })
+	stages := noStages()
+	stages.Observer = func(ac *service.AcquisitionContext) { resolved = ac.Identity }
 
-	ledger, err := acquireVerified(t, track, source, resolving(recorded, noVerification()), noStages(), observe)
+	ledger, err := acquireVerified(t, track, source, resolving(recorded, noVerification()), stages)
 
 	requireReady(t, ledger, track.ID, err)
 	if resolved.ISRC != drinkingISRC {
