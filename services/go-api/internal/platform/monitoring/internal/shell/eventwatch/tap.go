@@ -33,7 +33,7 @@ type EventWatcher struct {
 
 var _ events.Publisher = (*EventWatcher)(nil)
 
-var ErrClockRequired = errors.New("eventtap: the tap requires a clock")
+var ErrClockRequired = errors.New("eventwatch: the tap requires a clock")
 
 func New(inner events.Publisher, now clock.Func) (*EventWatcher, error) {
 	if now == nil {
