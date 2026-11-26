@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/shared/testpoll"
 	"context"
 	"testing"
 	"time"
@@ -19,13 +20,7 @@ func TestContract_EvalMatchesFixture(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	meter.Start(ctx)
-	deadline := time.Now().Add(5 * time.Second)
-	for meter.Status().LastRun == nil {
-		if time.Now().After(deadline) {
-			t.Fatal("eval meter recorded no run within 5s")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	testpoll.Until(t, 5*time.Second, "the eval meter to record a run", func() bool { return meter.Status().LastRun != nil })
 
 	rec := serveRead(t, monitoring.Deps{Eval: meter}, "/eval")
 	assertMatchesFixture(t, "observe_eval.json", rec.Body.Bytes())

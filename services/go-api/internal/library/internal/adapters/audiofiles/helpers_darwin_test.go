@@ -1,6 +1,7 @@
 package audiofiles_test
 
 import (
+	"altune/go-api/internal/shared/testpoll"
 	"errors"
 	"os"
 	"path/filepath"
@@ -35,15 +36,16 @@ func releaseStalledReader(t *testing.T, path string) {
 }
 
 func openFifoWriter(path string, wait time.Duration) (*os.File, bool) {
-	deadline := time.Now().Add(wait)
-	for time.Now().Before(deadline) {
+	var writer *os.File
+	opened := testpoll.Within(wait, func() bool {
 		w, err := os.OpenFile(path, os.O_WRONLY|syscall.O_NONBLOCK, 0)
-		if err == nil {
-			return w, true
+		if err != nil {
+			return false
 		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	return nil, false
+		writer = w
+		return true
+	})
+	return writer, opened
 }
 
 func readerAppears(path string, within time.Duration) bool {
@@ -61,14 +63,10 @@ func lateReaderClosed(t *testing.T, path string) bool {
 		t.Fatalf("the late open never reached %s", path)
 	}
 	defer w.Close()
-	deadline := time.Now().Add(stallHangGuard)
-	for time.Now().Before(deadline) {
-		if _, err := w.Write([]byte{0}); errors.Is(err, syscall.EPIPE) {
-			return true
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	return false
+	return testpoll.Within(stallHangGuard, func() bool {
+		_, err := w.Write([]byte{0})
+		return errors.Is(err, syscall.EPIPE)
+	})
 }
 
 func otherFilesystemDir(t *testing.T, than string) string {

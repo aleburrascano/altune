@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
+	"altune/go-api/internal/shared/testpoll"
 	"bufio"
 	"context"
 	"errors"
@@ -21,6 +22,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
@@ -224,17 +226,17 @@ func TestSSEHandler_LastEventIDAtHighWaterMarkIsCaughtUp(t *testing.T) {
 
 func waitForLog(t *testing.T, ring *logging.RingBuffer, msg string) logging.CapturedRecord {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	var found logging.CapturedRecord
+	testpoll.Until(t, 2*time.Second, fmt.Sprintf("the %q log line", msg), func() bool {
 		for _, r := range ring.Snapshot() {
 			if r.Message == msg {
-				return r
+				found = r
+				return true
 			}
 		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("timed out waiting for %q log line", msg)
-	return logging.CapturedRecord{}
+		return false
+	})
+	return found
 }
 
 func TestSSEHandler_ConnectDisconnectLogsCarryCorrelationID(t *testing.T) {
@@ -622,29 +624,31 @@ func TestSSEHandler_WriteDeadlineUnblocksStalledClient(t *testing.T) {
 }
 
 func TestSSEHandler_ContextCancelStopsStream(t *testing.T) {
-	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
-	uid := ids.NewUserId(uuid.New())
-	h := handler.NewEventStreamHandler(bus, 0)
-	h.WithHeartbeat(time.Hour)
+	synctest.Test(t, func(t *testing.T) {
+		bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
+		uid := ids.NewUserId(uuid.New())
+		h := handler.NewEventStreamHandler(bus, 0)
+		h.WithHeartbeat(time.Hour)
 
-	ctx, cancel := context.WithCancel(requestuser.ContextWithUserID(context.Background(), uid))
-	r := httptest.NewRequest(http.MethodGet, "/v1/events", nil).WithContext(ctx)
-	w := httptest.NewRecorder()
+		ctx, cancel := context.WithCancel(requestuser.ContextWithUserID(context.Background(), uid))
+		r := httptest.NewRequest(http.MethodGet, "/v1/events", nil).WithContext(ctx)
+		w := httptest.NewRecorder()
 
-	done := make(chan struct{})
-	go func() {
-		h.ServeHTTP(w, r)
-		close(done)
-	}()
+		done := make(chan struct{})
+		go func() {
+			h.ServeHTTP(w, r)
+			close(done)
+		}()
 
-	time.Sleep(20 * time.Millisecond)
-	cancel()
+		synctest.Wait()
+		cancel()
 
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("handler did not return after context cancel: shutdown would block")
-	}
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Fatal("handler did not return after context cancel: shutdown would block")
+		}
+	})
 }
 
 func TestSSEHandler_DefaultPerUserCapRejectsNinthStreamWithAProblem(t *testing.T) {
@@ -761,16 +765,14 @@ func assertStreamsStillLive(t *testing.T, bus *events.InProcessBus, users []ids.
 
 func waitForSlotRelease(t *testing.T, url string) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	testpoll.Until(t, 2*time.Second, "closing an open stream to free a global slot", func() bool {
 		status, body := openUserStream(t, url, ids.NewUserId(uuid.New()))
 		if status == http.StatusOK {
-			return
+			return true
 		}
 		body.Close()
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatal("closing an open stream never freed a global slot")
+		return false
+	})
 }
 
 func serveSSEWithTokenExpiry(t *testing.T, h *handler.EventStreamHandler, uid ids.UserId, expiresAt time.Time) *httptest.Server {
@@ -844,26 +846,28 @@ func TestSSEHandler_StreamEndingAtTokenExpiryFreesItsSlot(t *testing.T) {
 }
 
 func TestShutdown_SSEStreamEndsOnShutdownSignal(t *testing.T) {
-	uid := ids.NewUserId(uuid.New())
-	done := make(chan struct{})
-	h := handler.NewEventStreamHandler(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), 0).WithShutdown(done)
-	h.WithHeartbeat(time.Hour)
-	r := httptest.NewRequest(http.MethodGet, "/v1/events", nil).
-		WithContext(requestuser.ContextWithUserID(context.Background(), uid))
+	synctest.Test(t, func(t *testing.T) {
+		uid := ids.NewUserId(uuid.New())
+		done := make(chan struct{})
+		h := handler.NewEventStreamHandler(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), 0).WithShutdown(done)
+		h.WithHeartbeat(time.Hour)
+		r := httptest.NewRequest(http.MethodGet, "/v1/events", nil).
+			WithContext(requestuser.ContextWithUserID(context.Background(), uid))
 
-	returned := make(chan struct{})
-	go func() {
-		h.ServeHTTP(httptest.NewRecorder(), r)
-		close(returned)
-	}()
-	time.Sleep(20 * time.Millisecond)
-	close(done)
+		returned := make(chan struct{})
+		go func() {
+			h.ServeHTTP(httptest.NewRecorder(), r)
+			close(returned)
+		}()
+		synctest.Wait()
+		close(done)
 
-	select {
-	case <-returned:
-	case <-time.After(2 * time.Second):
-		t.Fatal("stream did not end on shutdown signal")
-	}
+		select {
+		case <-returned:
+		case <-time.After(2 * time.Second):
+			t.Fatal("stream did not end on shutdown signal")
+		}
+	})
 }
 
 func TestSSEHandler_DroppedTailEventResyncsAtNextHeartbeat(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/platform/auth/internal/core/ports"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/random"
+	"altune/go-api/internal/shared/testpoll"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -180,13 +181,7 @@ func generateRSAKey(t *testing.T) *rsa.PrivateKey {
 
 func waitFor(t *testing.T, bound time.Duration, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(bound)
-	for !cond() {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out after %s waiting for %s", bound, what)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	testpoll.Until(t, bound, what, cond)
 }
 
 type rotatingJWKSServer struct {
@@ -505,12 +500,12 @@ func TestSupabaseJWTVerifier_UnprimedFailureBacksOffInsteadOfRetryingEveryReques
 
 func TestSupabaseJWTVerifier_CanceledCallerIsReleasedFromSharedFetch(t *testing.T) {
 	release := make(chan struct{})
-	server, _ := newCountingJWKSServer(t, time.Minute, release)
+	server, hits := newCountingJWKSServer(t, time.Minute, release)
 	t.Cleanup(func() { close(release) })
 	verifier := newVerifier(t, server.URL, time.Now, withJWKSFetchTimeout(2*time.Second))
 
 	go func() { _, _ = verifier.Verify(context.Background(), "any-token") }()
-	time.Sleep(100 * time.Millisecond)
+	waitFor(t, 10*time.Second, "the first fetch to reach the JWKS server", func() bool { return hits.Load() >= 1 })
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()

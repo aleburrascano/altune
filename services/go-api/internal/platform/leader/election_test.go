@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/platform/leader"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/testdb"
+	"altune/go-api/internal/shared/testpoll"
 	"bytes"
 	"context"
 	"errors"
@@ -520,7 +521,7 @@ func TestElection_ShutdownReleasesALockWonWhileItWasRunning(t *testing.T) {
 
 	budget, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	go func() { time.Sleep(100 * time.Millisecond); close(db.unblock) }()
+	go func() { <-budget.Done(); close(db.unblock) }()
 	e.Shutdown(budget)
 
 	if _, unlocked, released, _ := conn.state(); !unlocked || !released {
@@ -720,19 +721,14 @@ func terminateLockHolder(t *testing.T, admin *pgxpool.Pool) {
 	if err != nil || !killed {
 		t.Fatalf("could not terminate the lock-holding session (killed=%v): %v", killed, err)
 	}
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	testpoll.Until(t, 2*time.Second, "the advisory lock to be released after its session was terminated", func() bool {
 		var held bool
 		err := admin.QueryRow(context.Background(), `
 			select exists(select 1 from pg_locks
 			where locktype = 'advisory' and granted and objsubid = 1
 			  and ((classid::bigint << 32) | objid::bigint) = $1)`, testKey).Scan(&held)
-		if err == nil && !held {
-			return
-		}
-		time.Sleep(time.Millisecond)
-	}
-	t.Fatal("advisory lock still held after terminating its session")
+		return err == nil && !held
+	})
 }
 
 func TestElection_FailedPingIsLoggedWithCauseAndCounted(t *testing.T) {

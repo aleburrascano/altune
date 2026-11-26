@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -630,16 +631,18 @@ func TestAddTrackService_AcceptsValidRanges(t *testing.T) {
 }
 
 func TestAddTrackService_ScheduleBoundedByTimeout(t *testing.T) {
-	sched := &library.InMemoryStuckScheduler{}
-	svc := library.MustNewAddTrackService(library.NewInMemoryTrackRepo(), events.NoopPublisher(), sched, time.Now)
+	synctest.Test(t, func(t *testing.T) {
+		sched := &library.InMemoryStuckScheduler{}
+		svc := library.MustNewAddTrackService(library.NewInMemoryTrackRepo(), events.NoopPublisher(), sched, time.Now)
 
-	start := time.Now()
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() { time.Sleep(20 * time.Millisecond); cancel() }()
-	if _, err := svc.Execute(ctx, library.FixtureUserId(), library.AddTrackInput{Title: "T", Artist: "A", Album: "B"}); err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	library.AssertScheduleDeadline(t, sched, start, addTrackScheduleBound)
+		start := time.Now()
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() { time.Sleep(20 * time.Millisecond); cancel() }()
+		if _, err := svc.Execute(ctx, library.FixtureUserId(), library.AddTrackInput{Title: "T", Artist: "A", Album: "B"}); err != nil {
+			t.Fatalf("Execute: %v", err)
+		}
+		library.AssertScheduleDeadline(t, sched, start, addTrackScheduleBound)
+	})
 }
 
 func TestAddTrackService_ScheduleTimeoutFailsTrack(t *testing.T) {

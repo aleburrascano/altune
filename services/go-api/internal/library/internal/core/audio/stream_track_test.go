@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -328,17 +329,19 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 }
 
 func TestStreamTrackService_ReacquireBoundedByTimeout(t *testing.T) {
-	userId := library.FixtureUserId()
-	repo := library.NewInMemoryTrackRepo()
-	sched := &library.InMemoryStuckScheduler{}
-	track := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
-	svc := library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), sched, library.NoopAudioStoreMetrics(), library.AlwaysEnabled)
+	synctest.Test(t, func(t *testing.T) {
+		userId := library.FixtureUserId()
+		repo := library.NewInMemoryTrackRepo()
+		sched := &library.InMemoryStuckScheduler{}
+		track := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
+		svc := library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), sched, library.NoopAudioStoreMetrics(), library.AlwaysEnabled)
 
-	start := time.Now()
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() { time.Sleep(20 * time.Millisecond); cancel() }()
-	_ = svc.RecoverIfMissing(ctx, userId, track.ID)
-	library.AssertScheduleDeadline(t, sched, start, addTrackScheduleBound)
+		start := time.Now()
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() { time.Sleep(20 * time.Millisecond); cancel() }()
+		_ = svc.RecoverIfMissing(ctx, userId, track.ID)
+		library.AssertScheduleDeadline(t, sched, start, addTrackScheduleBound)
+	})
 }
 
 func ptrStatus(s library.DownloadStatus) *library.DownloadStatus {
