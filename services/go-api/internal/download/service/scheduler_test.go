@@ -2487,7 +2487,7 @@ func TestBackgroundScheduler_TheHeartbeatBeatsOnTheInjectedTicker(t *testing.T) 
 	}
 	<-acq.started
 
-	manual.BlockUntil(1)
+	manual.BlockUntil(t, 1)
 	manual.Advance(time.Hour)
 	select {
 	case <-queue.beats:
