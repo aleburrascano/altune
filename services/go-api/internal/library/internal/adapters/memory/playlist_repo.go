@@ -219,10 +219,15 @@ func (r *PlaylistRepo) AddTracks(_ context.Context, userId sharedids.UserId, pla
 		return nil, err
 	}
 	var added []domain.TrackId
+	keptTracks, keptAdded := len(p.Tracks), len(r.Added)
 	for _, id := range trackIds {
 		err := r.appendTrack(p, id)
 		if errors.Is(err, domain.ErrTrackAlreadyInPlaylist) {
 			continue
+		}
+		if errors.Is(err, domain.ErrPlaylistFull) {
+			p.Tracks, r.Added = p.Tracks[:keptTracks], r.Added[:keptAdded]
+			return nil, err
 		}
 		if err != nil {
 			return nil, err

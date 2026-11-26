@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/testdb"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -229,6 +230,27 @@ func TestPlaylist_AddTrack(t *testing.T) {
 		}
 		if !pl.UpdatedAt.Equal(addedBAt) {
 			t.Errorf("UpdatedAt = %v, want %v after AddTrack(B)", pl.UpdatedAt, addedBAt)
+		}
+	})
+
+	t.Run("takes the last slot then refuses with ErrPlaylistFull", func(t *testing.T) {
+		pl := newTestPlaylist(t)
+		for range library.MaxPlaylistTracks - 1 {
+			if err := pl.AddTrack(library.NewTrackId(), testPlaylistCreatedAt); err != nil {
+				t.Fatalf("AddTrack below the cap: %v", err)
+			}
+		}
+		if err := pl.AddTrack(library.NewTrackId(), testPlaylistCreatedAt); err != nil {
+			t.Fatalf("AddTrack into the last slot: %v", err)
+		}
+
+		err := pl.AddTrack(library.NewTrackId(), testPlaylistCreatedAt)
+
+		if !errors.Is(err, library.ErrPlaylistFull) {
+			t.Fatalf("AddTrack past the cap: err = %v, want ErrPlaylistFull", err)
+		}
+		if len(pl.Tracks) != library.MaxPlaylistTracks {
+			t.Errorf("tracks = %d, want %d", len(pl.Tracks), library.MaxPlaylistTracks)
 		}
 	})
 

@@ -77,6 +77,7 @@ const (
 	MaxCatalogSources             = domain.MaxCatalogSources
 	MaxLibraryPageSize            = domain.MaxLibraryPageSize
 	MaxLibrarySearchLength        = domain.MaxLibrarySearchLength
+	MaxPlaylistTracks             = domain.MaxPlaylistTracks
 	ProvenanceVerified            = domain.ProvenanceVerified
 	RoleFeatured                  = domain.RoleFeatured
 	SortAlphabetical              = domain.SortAlphabetical
