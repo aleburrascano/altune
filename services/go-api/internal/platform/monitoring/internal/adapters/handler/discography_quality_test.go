@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/shared/clock"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -31,7 +32,7 @@ func (s stubQualityReader) SuspectRate(context.Context, time.Time) (monitoring.D
 
 func query(r stubQualityReader) *httptest.ResponseRecorder {
 	router := chi.NewRouter()
-	monitoring.NewObserveHandler(monitoring.Deps{Discography: r}).Register(router)
+	monitoring.NewObserveHandler(clock.Now, monitoring.Deps{Discography: r}).Register(router)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/quality/discography", nil))
 	return rec

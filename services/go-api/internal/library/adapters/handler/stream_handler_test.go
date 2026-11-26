@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/slowclienttest"
@@ -400,7 +401,7 @@ func serveAudioBehindRouteDeadline(t *testing.T, routeDeadline time.Duration, op
 			next.ServeHTTP(w, req)
 		})
 	})
-	r.Use(httpserver.WriteDeadline(routeDeadline))
+	r.Use(httpserver.WriteDeadline(clock.Now, routeDeadline))
 	r.Use(httpserver.RequestLogger)
 	r.Use(asBearer)
 	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled), time.Now, opts...).Routes(r)

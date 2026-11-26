@@ -3,6 +3,7 @@ package handler_test
 import (
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/testpoll"
 	"context"
 	"testing"
@@ -17,7 +18,7 @@ func TestContract_EvalMatchesFixture(t *testing.T) {
 			Queries:  []monitoring.EvalMeterQueryResult{{Query: "q", Expect: "e", Passed: true, Position: 1}},
 		}, nil
 	}
-	meter, err := monitoring.NewEvalMeter(time.Hour, runner, background.EveryPassLeads)
+	meter, err := monitoring.NewEvalMeter(time.Hour, clock.Now, runner, background.EveryPassLeads)
 	if err != nil {
 		t.Fatal(err)
 	}

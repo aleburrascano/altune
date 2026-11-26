@@ -2,6 +2,7 @@ package sourcecheck
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"fmt"
 	"log/slog"
@@ -44,12 +45,15 @@ func Checks(p Probes) []Check {
 	return checks
 }
 
-func Run(ctx context.Context, checks []Check) error {
+func Run(ctx context.Context, now clock.Func, checks []Check) error {
+	if now == nil {
+		panic("sourcecheck.Run: a nil clock")
+	}
 	var dark []string
 	for _, check := range checks {
-		started := time.Now()
+		started := now()
 		err := check.Run(ctx)
-		logResult(ctx, check.Name, time.Since(started), err)
+		logResult(ctx, check.Name, now().Sub(started), err)
 		if err != nil {
 			dark = append(dark, fmt.Sprintf("%s (%q)", check.Name, err.Error()))
 		}

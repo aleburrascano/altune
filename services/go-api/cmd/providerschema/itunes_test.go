@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -35,7 +36,7 @@ func TestITunesSendsTheAdapterRequests(t *testing.T) {
 	}
 	for entity, c := range cases {
 		srv, seen := recordingServer(t, http.StatusOK, `{"resultCount":0,"results":[]}`)
-		raw, err := newITunesSource(srv.Client(), srv.URL, newIntervalGate(0)).Resource(context.Background(), entity, c.id)
+		raw, err := newITunesSource(srv.Client(), srv.URL, newIntervalGate(clock.Now, 0)).Resource(context.Background(), entity, c.id)
 		if err != nil || !strings.Contains(string(raw), "resultCount") {
 			t.Fatalf("%s: got %s, %v", entity, raw, err)
 		}
@@ -51,7 +52,7 @@ func TestITunesSendsTheAdapterRequests(t *testing.T) {
 
 func TestITunesPacesItsRequests(t *testing.T) {
 	srv, _ := recordingServer(t, http.StatusOK, `{"results":[]}`)
-	src := newITunesSource(srv.Client(), srv.URL, newIntervalGate(time.Hour))
+	src := newITunesSource(srv.Client(), srv.URL, newIntervalGate(clock.Now, time.Hour))
 	if _, err := src.Resource(context.Background(), "lookup_song", "1"); err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +65,7 @@ func TestITunesPacesItsRequests(t *testing.T) {
 
 func TestITunesFailsOnAnErrorStatus(t *testing.T) {
 	srv, _ := recordingServer(t, http.StatusForbidden, "")
-	if _, err := newITunesSource(srv.Client(), srv.URL, newIntervalGate(0)).Resource(context.Background(), "search_track", "x"); err == nil || !strings.Contains(err.Error(), "status 403") {
+	if _, err := newITunesSource(srv.Client(), srv.URL, newIntervalGate(clock.Now, 0)).Resource(context.Background(), "search_track", "x"); err == nil || !strings.Contains(err.Error(), "status 403") {
 		t.Fatalf("got %v", err)
 	}
 }

@@ -36,6 +36,7 @@ type Election struct {
 	db       LockStore
 	key      int64
 	interval time.Duration
+	now      clock.Func
 	newTimer clock.TimerFunc
 
 	mu        sync.RWMutex
@@ -52,9 +53,15 @@ type Election struct {
 	background.Background
 }
 
-var ErrTimerRequired = errors.New("leader: an election needs a timer")
+var (
+	ErrClockRequired = errors.New("leader: an election needs a clock")
+	ErrTimerRequired = errors.New("leader: an election needs a timer")
+)
 
-func NewElection(locks LockStore, key int64, interval time.Duration, newTimer clock.TimerFunc) (*Election, error) {
+func NewElection(locks LockStore, key int64, interval time.Duration, now clock.Func, newTimer clock.TimerFunc) (*Election, error) {
+	if now == nil {
+		return nil, fmt.Errorf("NewElection: %w", ErrClockRequired)
+	}
 	if newTimer == nil {
 		return nil, fmt.Errorf("NewElection: %w", ErrTimerRequired)
 	}
@@ -62,6 +69,7 @@ func NewElection(locks LockStore, key int64, interval time.Duration, newTimer cl
 		db:       locks,
 		key:      key,
 		interval: interval,
+		now:      now,
 		newTimer: newTimer,
 		won:      make(chan struct{}),
 	}, nil
@@ -172,7 +180,7 @@ func (e *Election) hold(conn LockSession) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.conn = conn
-	e.heldSince = time.Now()
+	e.heldSince = e.now()
 }
 
 func (e *Election) settleWindow() time.Duration {
@@ -181,7 +189,7 @@ func (e *Election) settleWindow() time.Duration {
 
 func (e *Election) settle(ctx context.Context) {
 	e.mu.Lock()
-	if e.conn == nil || e.term != nil || time.Since(e.heldSince) < e.settleWindow() {
+	if e.conn == nil || e.term != nil || e.now().Sub(e.heldSince) < e.settleWindow() {
 		e.mu.Unlock()
 		return
 	}

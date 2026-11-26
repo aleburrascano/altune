@@ -56,7 +56,7 @@ func innerTube(t *testing.T) *download.YouTubeMusicSearchClient {
 func TestRun_NilWhenEverySourceExtracts(t *testing.T) {
 	checks, probed := fakeChecks(nil, "youtube", "ytmusic", "soundcloud", "ytmsearch")
 
-	if err := sourcecheck.Run(context.Background(), checks); err != nil {
+	if err := sourcecheck.Run(context.Background(), clock.Now, checks); err != nil {
 		t.Fatalf("Run() = %v, want nil when every source is healthy", err)
 	}
 	if strings.Join(*probed, ",") != "youtube,ytmusic,soundcloud,ytmsearch" {
@@ -71,7 +71,7 @@ func TestRun_NamesEveryDarkSource(t *testing.T) {
 		"ytmsearch":  errors.New("search: HTTP 400"),
 	}, "youtube", "ytmusic", "soundcloud", "ytmsearch")
 
-	err := sourcecheck.Run(context.Background(), checks)
+	err := sourcecheck.Run(context.Background(), clock.Now, checks)
 
 	want := `sources dark: youtube ("Sign in to confirm you're not a bot"), soundcloud ("preview only"), ytmsearch ("search: HTTP 400")`
 	if err == nil || err.Error() != want {
@@ -86,7 +86,7 @@ func TestRun_LogsEachProbeWithItsOutcome(t *testing.T) {
 	logs := captureLogs(t)
 	checks, _ := fakeChecks(map[string]error{"youtube": errors.New("boom")}, "youtube", "ytmusic")
 
-	_ = sourcecheck.Run(context.Background(), checks)
+	_ = sourcecheck.Run(context.Background(), clock.Now, checks)
 
 	var lines []map[string]any
 	for _, raw := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
@@ -148,4 +148,13 @@ func TestChecks_ProbeInnerTubeWithoutYtDlp(t *testing.T) {
 	if got := sourcecheck.Checks(sourcecheck.Probes{InnerTube: innerTube(t), YtDlpEnabled: true}); len(got) != 0 {
 		t.Errorf("Checks with ytmusic disabled = %q, want none", checkNames(got))
 	}
+}
+
+func TestRun_RefusesAMissingClock(t *testing.T) {
+	defer func() {
+		if msg, _ := recover().(string); !strings.Contains(msg, "sourcecheck.Run") {
+			t.Errorf("panic = %q, want a refusal naming sourcecheck.Run", msg)
+		}
+	}()
+	_ = sourcecheck.Run(context.Background(), nil, nil)
 }

@@ -135,7 +135,7 @@ func assertPassesFollowTheTerm(t *testing.T, e *fakeElection, passes *atomic.Int
 }
 
 func TestTicker_HealthRecordsSuccessAndFailure(t *testing.T) {
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	var calls atomic.Int32
 	r.Ticker("rollup", time.Millisecond, func(context.Context) error {
 		if calls.Add(1)%2 == 0 {
@@ -154,7 +154,7 @@ func TestTicker_HealthRecordsSuccessAndFailure(t *testing.T) {
 }
 
 func TestTicker_RegistersTheJobBeforeLeadership(t *testing.T) {
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	r.Ticker("rollup", time.Hour, func(context.Context) error { return nil })
 
 	findHealth(t, &r, "rollup")
@@ -164,7 +164,7 @@ func TestTicker_RegistersTheJobBeforeLeadership(t *testing.T) {
 }
 
 func TestSetEnabled_TheKillSwitchShowsInHealth(t *testing.T) {
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	r.Control("paused")
 
 	if _, ok := r.SetEnabled("paused", false); !ok {
@@ -176,7 +176,7 @@ func TestSetEnabled_TheKillSwitchShowsInHealth(t *testing.T) {
 }
 
 func TestSetEnabled_AnUnknownJobRegistersNothing(t *testing.T) {
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 
 	if _, ok := r.SetEnabled("typo", false); ok {
 		t.Fatal("SetEnabled on an unregistered job reported ok")
@@ -187,7 +187,7 @@ func TestSetEnabled_AnUnknownJobRegistersNothing(t *testing.T) {
 }
 
 func TestTicker_KillSwitchStopsAndResumesTheJob(t *testing.T) {
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	var runs atomic.Int32
 	r.Ticker("sweep", time.Millisecond, func(context.Context) error {
 		runs.Add(1)
@@ -210,7 +210,7 @@ func TestTicker_KillSwitchStopsAndResumesTheJob(t *testing.T) {
 }
 
 func TestEveryInstance_RunsWithoutLeadershipAndHonoursItsKillSwitch(t *testing.T) {
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	lead(t, &r, &fakeElection{})
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -261,7 +261,7 @@ func assertWaitReturns(t *testing.T, waited <-chan struct{}) {
 }
 
 func TestWait_BlocksWhileAJobRunIsInFlight(t *testing.T) {
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	ctx, cancel := context.WithCancel(context.Background())
 	started := make(chan struct{})
 	release := make(chan struct{})
@@ -281,7 +281,7 @@ func TestWait_BlocksWhileAJobRunIsInFlight(t *testing.T) {
 }
 
 func TestWait_BlocksWhileTheSharedBackgroundGroupIsRunning(t *testing.T) {
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	release := make(chan struct{})
 	r.Background().Track(func() { <-release })
 	waited := waitAsync(&r)
@@ -293,7 +293,7 @@ func TestWait_BlocksWhileTheSharedBackgroundGroupIsRunning(t *testing.T) {
 
 func TestTicker_RecoversFromAPanickingJob(t *testing.T) {
 	logged := captureLogs(t)
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	var calls atomic.Int32
 	ran := make(chan struct{}, 8)
 	r.Ticker("explode", time.Millisecond, func(context.Context) error {
@@ -321,7 +321,7 @@ func TestTicker_RecoversFromAPanickingJob(t *testing.T) {
 }
 
 func TestTicker_AWedgedRunIsCanceledAndTheTickerRecovers(t *testing.T) {
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	var calls, successes atomic.Int32
 	wedgedErr := make(chan error, 1)
 	r.Ticker("wedged", 40*time.Millisecond, func(ctx context.Context) error {
@@ -347,7 +347,7 @@ func TestTicker_AWedgedRunIsCanceledAndTheTickerRecovers(t *testing.T) {
 
 func TestWhenLeader_APanickingStartDoesNotStopTheNext(t *testing.T) {
 	logged := captureLogs(t)
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	survived := make(chan struct{})
 	r.WhenLeader("panicky", func(context.Context) { panic("on-acquire boom") })
 	r.WhenLeader("survivor", func(context.Context) { close(survived) })
@@ -365,7 +365,7 @@ func TestWhenLeader_APanickingStartDoesNotStopTheNext(t *testing.T) {
 }
 
 func TestLead_StartsTheElectionAndKeepsIt(t *testing.T) {
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	if r.Election() != nil {
 		t.Fatal("a runner that never led has an election")
 	}
@@ -379,7 +379,7 @@ func TestLead_StartsTheElectionAndKeepsIt(t *testing.T) {
 }
 
 func TestLeaderContext_WithoutAnElectionEveryPassLeads(t *testing.T) {
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 
 	ctx, release, ok := r.LeaderContext(context.Background())
 
@@ -393,7 +393,7 @@ func TestLeaderContextFor_EachPassBindsTheJobAndAFreshRunID(t *testing.T) {
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	ring := logging.Setup("info")
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	scope := r.LeaderContextFor(jobs.AlertMonitor)
 
 	for _, msg := range []string{"first pass", "second pass"} {
@@ -420,7 +420,7 @@ func TestLeaderContextFor_EachPassBindsTheJobAndAFreshRunID(t *testing.T) {
 }
 
 func TestLeaderContextFor_APassWithoutTheTermIsRefused(t *testing.T) {
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	r.Lead(t.Context(), &fakeElection{})
 
 	ctx, release, ok := r.LeaderContextFor(jobs.EvalMeter)(context.Background())
@@ -432,7 +432,7 @@ func TestLeaderContextFor_APassWithoutTheTermIsRefused(t *testing.T) {
 
 func TestTicker_TheOldLeaderStopsAfterAHandoff(t *testing.T) {
 	oldE, newE := leading(), &fakeElection{}
-	oldRunner, newRunner := jobs.Runner{NewTicker: clock.NewTicker}, jobs.Runner{NewTicker: clock.NewTicker}
+	oldRunner, newRunner := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}, jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	var oldRuns, newRuns atomic.Int32
 	oldRunner.Ticker("metrics rollup", leaderLoopTick, func(context.Context) error { oldRuns.Add(1); return nil })
 	newRunner.Ticker("metrics rollup", leaderLoopTick, func(context.Context) error { newRuns.Add(1); return nil })
@@ -472,7 +472,7 @@ func TestTicker_AStaleLeadersWriteIsNotApplied(t *testing.T) {
 	started := make(chan struct{})
 	proceed := make(chan struct{})
 	staleErr := make(chan error, 1)
-	oldRunner, newRunner := jobs.Runner{NewTicker: clock.NewTicker}, jobs.Runner{NewTicker: clock.NewTicker}
+	oldRunner, newRunner := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}, jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	oldRunner.Ticker("metrics rollup", time.Hour, func(ctx context.Context) error {
 		close(started)
 		<-proceed
@@ -507,7 +507,7 @@ func TestTicker_AStaleLeadersWriteIsNotApplied(t *testing.T) {
 func TestTicker_RunsCanceledByLeadershipLossDoNotCountAsFailures(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		e := leading()
-		r := jobs.Runner{NewTicker: clock.NewTicker}
+		r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 		started := make(chan struct{}, 1)
 		r.Ticker("interrupted", time.Hour, func(ctx context.Context) error {
 			started <- struct{}{}
@@ -539,7 +539,7 @@ func TestTicker_RunsCanceledByLeadershipLossDoNotCountAsFailures(t *testing.T) {
 
 func TestLeaderContext_TheAlertMonitorEvaluatesOnlyDuringItsTerm(t *testing.T) {
 	e := leading()
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	lead(t, &r, e)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -562,13 +562,13 @@ func TestLeaderContext_TheAlertMonitorEvaluatesOnlyDuringItsTerm(t *testing.T) {
 
 func TestLeaderContext_TheEvalMeterRunsOnlyDuringItsTerm(t *testing.T) {
 	e := leading()
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	lead(t, &r, e)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	var runs atomic.Int32
-	meter, err := monitoring.NewEvalMeter(leaderLoopTick, func(context.Context) (monitoring.EvalMeterResult, error) {
+	meter, err := monitoring.NewEvalMeter(leaderLoopTick, clock.Now, func(context.Context) (monitoring.EvalMeterResult, error) {
 		runs.Add(1)
 		return monitoring.EvalMeterResult{}, nil
 	}, r.LeaderContext)
@@ -582,14 +582,14 @@ func TestLeaderContext_TheEvalMeterRunsOnlyDuringItsTerm(t *testing.T) {
 
 func TestLeaderContext_LosingTheTermCutsOffAnEvalMidRun(t *testing.T) {
 	e := leading()
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	lead(t, &r, e)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	started := make(chan struct{})
 	stoppedBecause := make(chan error, 1)
-	meter, err := monitoring.NewEvalMeter(time.Hour, func(runCtx context.Context) (monitoring.EvalMeterResult, error) {
+	meter, err := monitoring.NewEvalMeter(time.Hour, clock.Now, func(runCtx context.Context) (monitoring.EvalMeterResult, error) {
 		close(started)
 		<-runCtx.Done()
 		stoppedBecause <- context.Cause(runCtx)
@@ -615,7 +615,7 @@ func TestLeaderContext_LosingTheTermCutsOffAnEvalMidRun(t *testing.T) {
 
 func TestSwitch_TheStreamRecoveryKillSwitchSuppressesReschedule(t *testing.T) {
 	ctx := context.Background()
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	user := ids.NewUserId(uuid.New())
 	repo := librarytest.NewTrackRepo()
 	store := librarytest.NewAudioStore()
@@ -689,7 +689,7 @@ func TestNewElection_WinsTheBackgroundLockAndAnnouncesATwentyFiveSecondSettle(t 
 	slog.SetDefault(slog.New(won))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	election, err := jobs.NewElection(pool)
 	if err != nil {
 		t.Fatal(err)
@@ -727,7 +727,7 @@ type countedElection struct {
 func (c countedElection) Counters() leader.Counters { return c.counters }
 
 func TestLeaderCounters_ReportTheElectionsOwnCounters(t *testing.T) {
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 	if got := r.LeaderCounters(); got != (leader.Counters{}) {
 		t.Errorf("before leading, LeaderCounters = %+v, want zero", got)
 	}
@@ -741,7 +741,7 @@ func TestLeaderCounters_ReportTheElectionsOwnCounters(t *testing.T) {
 }
 
 func TestLeaderCounters_AnElectionThatKeepsNoCountersReportsZero(t *testing.T) {
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 
 	lead(t, &r, leading())
 
@@ -761,7 +761,7 @@ func registrationPanic(register func()) (msg string) {
 }
 
 func TestTicker_RefusesAJobTheTableRunsOnEveryInstance(t *testing.T) {
-	r := jobs.Runner{NewTicker: clock.NewTicker}
+	r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 
 	msg := registrationPanic(func() {
 		r.Ticker(jobs.BehavioralRankingRefresh, time.Hour, func(context.Context) error { return nil })
@@ -782,8 +782,13 @@ func TestRunner_RefusesToRegisterAJobWithoutATicker(t *testing.T) {
 		r.EveryInstance(context.Background(), jobs.BehavioralRankingRefresh, time.Hour, func(context.Context) error { return nil })
 	})
 
-	for name, msg := range map[string]string{"Ticker": tickerMsg, "EveryInstance": everyMsg} {
-		if !strings.Contains(msg, "NewTicker") {
+	noClock := jobs.Runner{NewTicker: clock.NewTicker}
+	noClockMsg := registrationPanic(func() {
+		noClock.Ticker("rollup", time.Hour, func(context.Context) error { return nil })
+	})
+
+	for name, msg := range map[string]string{"Ticker": tickerMsg, "EveryInstance": everyMsg, "Ticker without Now": noClockMsg} {
+		if !strings.Contains(msg, "Now and NewTicker") {
 			t.Errorf("%s without a ticker panic = %q, want a refusal naming NewTicker", name, msg)
 		}
 	}
@@ -797,7 +802,7 @@ func TestEveryInstance_RefusesEveryLeaderOnlyJob(t *testing.T) {
 	}
 	for _, name := range leaderOnly {
 		t.Run(string(name), func(t *testing.T) {
-			r := jobs.Runner{NewTicker: clock.NewTicker}
+			r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 			ctx, cancel := context.WithCancel(context.Background())
 			defer func() {
 				cancel()
@@ -827,7 +832,7 @@ func TestStartTicker_LogsThatTheJobStartedWithItsAttributes(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(string(tc.name), func(t *testing.T) {
 			logs := captureLogs(t)
-			r := jobs.Runner{NewTicker: clock.NewTicker}
+			r := jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker}
 
 			r.StartTicker(context.Background(), tc.name, time.Hour, func(context.Context) error { return nil }, tc.attrs...)
 

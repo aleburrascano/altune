@@ -2,6 +2,7 @@ package router
 
 import (
 	"altune/go-api/internal/platform/requestmetrics"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/telemetry"
 	"net/http"
@@ -27,8 +28,8 @@ func New(s Settings) *chi.Mux {
 
 	r.Use(httpserver.CorrelationID)
 	r.Use(telemetry.Middleware(untraced))
-	r.Use(requestmetrics.Middleware(s.Latency.Observe))
-	r.Use(httpserver.WriteDeadline(s.WriteTimeout))
+	r.Use(requestmetrics.Middleware(clock.Now, s.Latency.Observe))
+	r.Use(httpserver.WriteDeadline(clock.Now, s.WriteTimeout))
 	r.Use(v1RequestTimeout(s.RequestTimeout))
 	r.Use(httpserver.RequestLogger)
 	r.Use(httpserver.Recoverer)

@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
@@ -15,7 +16,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
@@ -110,8 +110,8 @@ func (a *App) compose(ctx context.Context, transport http.RoundTripper) (http.Ha
 }
 
 func (a *App) openEventBus() error {
-	a.eventBus = events.NewInProcessBus(time.Now, filepath.Join(os.TempDir(), eventIDFloorFile))
-	tap, err := monitoring.NewEventTap(a.eventBus, time.Now)
+	a.eventBus = events.NewInProcessBus(clock.Now, filepath.Join(os.TempDir(), eventIDFloorFile))
+	tap, err := monitoring.NewEventTap(a.eventBus, clock.Now)
 	if err != nil {
 		return fmt.Errorf("event tap: %w", err)
 	}

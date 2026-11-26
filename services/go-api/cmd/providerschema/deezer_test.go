@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"
 	"io"
@@ -47,7 +48,7 @@ func newDeezerFake(t *testing.T, reply string) (*deezerFake, liveSource) {
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
 	urls := deezerURLs{api: srv.URL, auth: srv.URL + "/login/anonymous?jo=p&rto=c&i=c", pipe: srv.URL + "/api"}
-	return fake, newDeezerSource(srv.Client(), urls, newIntervalGate(0))
+	return fake, newDeezerSource(srv.Client(), urls, newIntervalGate(clock.Now, 0))
 }
 
 func TestDeezerSendsTheAdaptersRESTRequests(t *testing.T) {
@@ -154,7 +155,7 @@ func TestDeezerLyricsFailsWhenTheLoginHasNoToken(t *testing.T) {
 		_, _ = w.Write([]byte(`{"jwt":" "}`))
 	}))
 	t.Cleanup(srv.Close)
-	src := newDeezerSource(srv.Client(), deezerURLs{api: srv.URL, auth: srv.URL, pipe: srv.URL}, newIntervalGate(0))
+	src := newDeezerSource(srv.Client(), deezerURLs{api: srv.URL, auth: srv.URL, pipe: srv.URL}, newIntervalGate(clock.Now, 0))
 	if _, err := src.Resource(context.Background(), "lyrics", "7"); err == nil || !strings.Contains(err.Error(), "no jwt") {
 		t.Fatalf("got %v", err)
 	}

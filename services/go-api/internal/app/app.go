@@ -52,7 +52,7 @@ func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
 		cfg:     cfg,
 		logRing: logRing,
 		latency: requestmetrics.NewRegistry(),
-		jobs:    jobs.Runner{NewTicker: clock.NewTicker},
+		jobs:    jobs.Runner{Now: clock.Now, NewTicker: clock.NewTicker},
 	}
 }
 

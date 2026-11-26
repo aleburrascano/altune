@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -30,7 +31,7 @@ func musicBrainzServer(t *testing.T, statuses ...int) (*httptest.Server, *[]musi
 }
 
 func testMusicBrainzSource(srv *httptest.Server) liveSource {
-	return newMusicBrainzSource(srv.Client(), srv.URL, newIntervalGate(0), time.Millisecond)
+	return newMusicBrainzSource(srv.Client(), srv.URL, newIntervalGate(clock.Now, 0), time.Millisecond)
 }
 
 func TestMusicBrainzSendsTheAdapterRequests(t *testing.T) {
@@ -94,7 +95,7 @@ func TestMusicBrainzStopsRetryingWhenTheContextEnds(t *testing.T) {
 	srv, _ := musicBrainzServer(t, http.StatusServiceUnavailable)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	if _, err := newMusicBrainzSource(srv.Client(), srv.URL, newIntervalGate(0), time.Hour).Resource(ctx, "artist", "a1"); err == nil {
+	if _, err := newMusicBrainzSource(srv.Client(), srv.URL, newIntervalGate(clock.Now, 0), time.Hour).Resource(ctx, "artist", "a1"); err == nil {
 		t.Fatal("want the context error")
 	}
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"
 	"errors"
@@ -60,7 +61,7 @@ func deezerProvider() provider {
 		decodedAs: decodedTypes(deezerEndpoints),
 		source: func(client *http.Client) (source, error) {
 			urls := deezerURLs{api: deezerAPIURL, auth: deezerAuthURL, pipe: deezerPipeURL}
-			return newDeezerSource(client, urls, newIntervalGate(deezerInterval)), nil
+			return newDeezerSource(client, urls, newIntervalGate(clock.Now, deezerInterval)), nil
 		},
 	}
 }

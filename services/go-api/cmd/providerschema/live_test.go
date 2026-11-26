@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"
 	"errors"
@@ -107,7 +108,7 @@ func TestFixtureNumbersWantsAPositiveNumberInEveryPart(t *testing.T) {
 }
 
 func TestIntervalGateSpacesCallsAndHonoursCancel(t *testing.T) {
-	gate := newIntervalGate(time.Hour)
+	gate := newIntervalGate(clock.Now, time.Hour)
 	if err := gate.wait(context.Background()); err != nil {
 		t.Fatal(err)
 	}

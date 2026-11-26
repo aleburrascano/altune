@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/events/eventstest"
 	"altune/go-api/internal/shared/ids"
@@ -56,7 +57,7 @@ func newSources(t *testing.T) sources {
 func served(t *testing.T, s livemetrics.Sources) []byte {
 	t.Helper()
 	r := chi.NewRouter()
-	monitoring.NewObserveHandler(monitoring.Deps{LiveMetrics: func() monitoring.LiveMetrics { return livemetrics.Live(s) }}).Register(r)
+	monitoring.NewObserveHandler(clock.Now, monitoring.Deps{LiveMetrics: func() monitoring.LiveMetrics { return livemetrics.Live(s) }}).Register(r)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics/live", nil))
 	if rec.Code != http.StatusOK {
@@ -293,7 +294,7 @@ func TestLive_CarriesProviderBreakerAndLatency(t *testing.T) {
 	defer pb.EnrichmentBreakerClosed()
 	const route = "/v1/live-snapshot-probe/{status}"
 	router := chi.NewRouter()
-	router.Use(requestmetrics.Middleware(s.Latency.Observe))
+	router.Use(requestmetrics.Middleware(clock.Now, s.Latency.Observe))
 	router.Get(route, func(w http.ResponseWriter, r *http.Request) {
 		status, _ := strconv.Atoi(chi.URLParam(r, "status"))
 		w.WriteHeader(status)

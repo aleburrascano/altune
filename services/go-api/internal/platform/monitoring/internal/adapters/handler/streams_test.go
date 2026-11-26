@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/events/eventstest"
 	"altune/go-api/internal/shared/httpserver"
@@ -61,11 +62,11 @@ func newStreamFixture(t *testing.T) streamFixture {
 }
 
 func streamRouter(deps monitoring.Deps, middlewares ...func(http.Handler) http.Handler) *chi.Mux {
-	return routerFor(monitoring.NewObserveHandler(deps), middlewares...)
+	return routerFor(monitoring.NewObserveHandler(clock.Now, deps), middlewares...)
 }
 
 func boundedRouter(deps monitoring.Deps, bounds monitoring.StreamBounds, middlewares ...func(http.Handler) http.Handler) *chi.Mux {
-	return routerFor(monitoring.NewObserveHandler(deps).WithStreamBounds(bounds), middlewares...)
+	return routerFor(monitoring.NewObserveHandler(clock.Now, deps).WithStreamBounds(bounds), middlewares...)
 }
 
 func routerFor(h *monitoring.Handler, middlewares ...func(http.Handler) http.Handler) *chi.Mux {
@@ -697,7 +698,7 @@ func TestStreams_NonPositiveBoundsKeepTheDefaults(t *testing.T) {
 func TestStreams_OutliveTheRouteWriteDeadline(t *testing.T) {
 	const routeDeadline = 150 * time.Millisecond
 	fx := newStreamFixture(t)
-	srv := httptest.NewServer(boundedRouter(fx.deps, idleBounds(10*time.Second, routeDeadline), httpserver.WriteDeadline(routeDeadline), httpserver.RequestLogger))
+	srv := httptest.NewServer(boundedRouter(fx.deps, idleBounds(10*time.Second, routeDeadline), httpserver.WriteDeadline(clock.Now, routeDeadline), httpserver.RequestLogger))
 	t.Cleanup(srv.Close)
 	emit := map[string]func(string){
 		"/events/stream": func(marker string) {

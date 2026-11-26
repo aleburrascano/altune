@@ -18,6 +18,7 @@ import (
 const maxAttempts = 3
 
 type Options struct {
+	Now     clock.Func
 	Sleep   func(context.Context, time.Duration) error
 	Jitter  func() float64
 	OnRetry func(host string)
@@ -26,6 +27,7 @@ type Options struct {
 type Transport struct {
 	base    http.RoundTripper
 	pacer   *pacing.Pacer
+	now     clock.Func
 	sleep   func(context.Context, time.Duration) error
 	jitter  func() float64
 	onRetry func(host string)
@@ -35,19 +37,19 @@ func New(base http.RoundTripper, pacer *pacing.Pacer, opts Options) (*Transport,
 	if pacer == nil {
 		return nil, ErrPacerRequired
 	}
-	if opts.Sleep == nil || opts.Jitter == nil || opts.OnRetry == nil {
+	if opts.Now == nil || opts.Sleep == nil || opts.Jitter == nil || opts.OnRetry == nil {
 		return nil, ErrOptionsRequired
 	}
-	return &Transport{base: base, pacer: pacer, sleep: opts.Sleep, jitter: opts.Jitter, onRetry: opts.OnRetry}, nil
+	return &Transport{base: base, pacer: pacer, now: opts.Now, sleep: opts.Sleep, jitter: opts.Jitter, onRetry: opts.OnRetry}, nil
 }
 
 var (
 	ErrPacerRequired   = errors.New("retry transport needs a pacer")
-	ErrOptionsRequired = errors.New("retry transport needs its sleep, jitter and retry recorder, start from SystemOptions")
+	ErrOptionsRequired = errors.New("retry transport needs its clock, sleep, jitter and retry recorder, start from SystemOptions")
 )
 
 func SystemOptions() Options {
-	return Options{Sleep: clock.Sleep, Jitter: random.Real, OnRetry: func(string) {}}
+	return Options{Now: clock.Now, Sleep: clock.Sleep, Jitter: random.Real, OnRetry: func(string) {}}
 }
 
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -93,7 +95,7 @@ func (t *Transport) attempt(req *http.Request, attempt, attempts int) (*http.Res
 		return nil, attemptResult{err: err, cause: retryCause{errorClass: transportErrorClass(err)}}, false
 	}
 	if attempt < attempts-1 && retryableStatus(resp.StatusCode) {
-		retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
+		retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"), t.now())
 		_ = resp.Body.Close()
 		failed := fmt.Errorf("upstream status %d", resp.StatusCode)
 		return nil, attemptResult{err: failed, retryAfter: retryAfter, cause: retryCause{status: resp.StatusCode}}, false

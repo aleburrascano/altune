@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"fmt"
 	"time"
@@ -29,7 +30,7 @@ func (a *App) startAlertMonitor(ctx context.Context) error {
 }
 
 func NewAlertMonitor(runner *jobs.Runner, notifier monitoring.AlertNotifier, interval time.Duration, conditions []monitoring.Condition) (*monitoring.AlertMonitor, error) {
-	monitor, err := monitoring.NewAlertMonitor(notifier, interval, time.Now, runner.LeaderContextFor(jobs.AlertMonitor), conditions...)
+	monitor, err := monitoring.NewAlertMonitor(notifier, interval, clock.Now, runner.LeaderContextFor(jobs.AlertMonitor), conditions...)
 	if err != nil {
 		return nil, fmt.Errorf("alert monitor: %w", err)
 	}
@@ -42,6 +43,6 @@ func (a *App) alertConditions(coverage alerts.CoverageEvents) ([]monitoring.Cond
 		Coverage:              coverage,
 		YouTubeSignedOutSince: downloadsetup.YtDlpSearcher(a.cfg).SignedOutSince,
 		Jobs:                  &a.jobs,
-		Clock:                 time.Now,
+		Clock:                 clock.Now,
 	})
 }

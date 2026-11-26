@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/platform/monitoring/internal/core/ports"
 	"altune/go-api/internal/platform/monitoring/internal/shell/eventwatch"
 	"altune/go-api/internal/platform/monitoring/service/searchqualitycheck"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"net/http"
 	"time"
@@ -27,13 +28,17 @@ type Deps struct {
 }
 
 type Handler struct {
+	now          clock.Func
 	deps         Deps
 	probeTimeout time.Duration
 	streams      StreamBounds
 }
 
-func NewObserveHandler(d Deps) *Handler {
-	return &Handler{deps: d, probeTimeout: defaultProbeTimeout, streams: DefaultStreamBounds()}
+func NewObserveHandler(now clock.Func, d Deps) *Handler {
+	if now == nil {
+		panic("handler.NewObserveHandler: a nil clock")
+	}
+	return &Handler{now: now, deps: d, probeTimeout: defaultProbeTimeout, streams: DefaultStreamBounds()}
 }
 
 func (h *Handler) WithStreamBounds(bounds StreamBounds) *Handler {

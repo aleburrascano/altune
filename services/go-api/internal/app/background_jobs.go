@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
 	"time"
@@ -51,14 +52,14 @@ const discographyPruneInterval = 24 * time.Hour
 
 func (a *App) startDiscographyPrune(ctx context.Context, pruner cleanupjobs.DiscoveryEventPruner) {
 	a.jobs.StartTicker(ctx, jobs.DiscographyEventPrune, discographyPruneInterval,
-		cleanupjobs.PruneDiscoveryEvents(pruner, time.Now), "interval", discographyPruneInterval.String())
+		cleanupjobs.PruneDiscoveryEvents(pruner, clock.Now), "interval", discographyPruneInterval.String())
 }
 
 const acquisitionPruneInterval = 24 * time.Hour
 
 func (a *App) startAcquisitionPrune(ctx context.Context, outcomes, rejections cleanupjobs.RetentionPruner) {
 	a.jobs.StartTicker(ctx, jobs.AcquisitionPrune, acquisitionPruneInterval,
-		cleanupjobs.PruneAcquisitionRows(outcomes, rejections, time.Now), "interval", acquisitionPruneInterval.String())
+		cleanupjobs.PruneAcquisitionRows(outcomes, rejections, clock.Now), "interval", acquisitionPruneInterval.String())
 }
 
 func (a *App) startVocabularyRefresh(vocabStore search.SpellingHintsStore, charts []search.ChartProvider) {
@@ -80,5 +81,5 @@ func (a *App) startUnreleasedRefresh(svc *search.UnreleasedService) {
 	if svc == nil {
 		return
 	}
-	a.startSimpleJob(jobs.UnreleasedRefresh, unreleasedRefreshInterval, cleanupjobs.RefreshDueUnreleased(svc, time.Now), "interval", unreleasedRefreshInterval.String())
+	a.startSimpleJob(jobs.UnreleasedRefresh, unreleasedRefreshInterval, cleanupjobs.RefreshDueUnreleased(svc, clock.Now), "interval", unreleasedRefreshInterval.String())
 }

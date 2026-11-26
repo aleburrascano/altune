@@ -50,7 +50,7 @@ func (h *Handler) serveDiscographyQuality(w http.ResponseWriter, r *http.Request
 		httpserver.WriteJSON(w, http.StatusOK, resp)
 		return
 	}
-	since := time.Now().UTC().AddDate(0, 0, -windowDays)
+	since := h.now.UTC().AddDate(0, 0, -windowDays)
 	queryCtx, cancel := context.WithTimeout(r.Context(), defaultQualityTimeout)
 	defer cancel()
 	result, err := queryDiscographyQuality(queryCtx, h.deps.Discography, since, groupBy, qualityLatestN)

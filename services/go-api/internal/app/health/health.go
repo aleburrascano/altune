@@ -29,25 +29,28 @@ type probeResult struct {
 	latencyMs int64
 }
 
-func Check(ctx context.Context, probes Probes, timeout time.Duration) monitoring.DependencyHealth {
-	db := probe(ctx, probes.DB, timeout)
-	redis := probe(ctx, probes.Redis, timeout)
-	auth := probe(ctx, probes.Auth, timeout)
+func Check(ctx context.Context, now clock.Func, probes Probes, timeout time.Duration) monitoring.DependencyHealth {
+	if now == nil {
+		panic("health.Check: a nil clock")
+	}
+	db := probe(ctx, now, probes.DB, timeout)
+	redis := probe(ctx, now, probes.Redis, timeout)
+	auth := probe(ctx, now, probes.Auth, timeout)
 	return monitoring.DependencyHealth{DB: db.status, Redis: redis.status, Auth: auth.status, Detail: monitoring.DependencyDetail{
 		DBLatencyMs: db.latencyMs, DBError: db.err, RedisLatencyMs: redis.latencyMs, RedisError: redis.err,
-		AuthLatencyMs: auth.latencyMs, AuthError: auth.err, CheckedAt: time.Now().UTC(),
+		AuthLatencyMs: auth.latencyMs, AuthError: auth.err, CheckedAt: now.UTC(),
 	}}
 }
 
-func probe(ctx context.Context, check func(context.Context) error, timeout time.Duration) probeResult {
+func probe(ctx context.Context, now clock.Func, check func(context.Context) error, timeout time.Duration) probeResult {
 	if check == nil {
 		return probeResult{status: monitoring.DepNotConfigured}
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	start := time.Now()
+	start := now()
 	err := check(ctx)
-	ms := time.Since(start).Milliseconds()
+	ms := now().Sub(start).Milliseconds()
 	if err != nil {
 		return probeResult{status: monitoring.DepDown, err: err.Error(), latencyMs: ms}
 	}

@@ -18,6 +18,17 @@ func TestFunc_UTCReadsTheClockInUTC(t *testing.T) {
 	}
 }
 
+func TestNow_IsAFuncThatReadsTheWallClock(t *testing.T) {
+	var now clock.Func = clock.Now
+
+	before := time.Now()
+	got := now()
+
+	if got.Before(before) || time.Since(got) < 0 {
+		t.Errorf("Now() = %v, want a reading taken after %v", got, before)
+	}
+}
+
 func TestFunc_AcceptsTimeNow(t *testing.T) {
 	var now clock.Func = time.Now
 

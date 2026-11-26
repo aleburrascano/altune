@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"time"
 )
 
 var ErrRetryRecorderRequired = errors.New("live transport needs a retry recorder, pass NoRetryRecorder to switch it off")
@@ -20,7 +19,7 @@ func NewLiveTransport(onRetry func(host string)) (http.RoundTripper, error) {
 	}
 	o := retry.SystemOptions()
 	o.OnRetry = onRetry
-	pacer, err := pacing.New(time.Now, clock.Sleep)
+	pacer, err := pacing.New(clock.Now, clock.Sleep)
 	if err != nil {
 		return nil, fmt.Errorf("build the live transport pacer: %w", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/platform/auth"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"fmt"
 
@@ -28,7 +29,7 @@ func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVe
 		Discography: monitoringfromsearch.NewDiscographyQualityReader(search.NewPostgresEventStore(a.pool)),
 		Shutdown:    a.lifecycleDone,
 	}
-	mountObserve(r, verifier, a.cfg.OverseerPrincipalID, monitoring.NewObserveHandler(deps))
+	mountObserve(r, verifier, a.cfg.OverseerPrincipalID, monitoring.NewObserveHandler(clock.Now, deps))
 	return nil
 }
 
@@ -45,7 +46,7 @@ func (a *App) startObserveSources(ctx context.Context, tap *monitoring.EventTap)
 }
 
 func NewEvalMeter(runner *jobs.Runner, run monitoring.EvalMeterRunner) (*monitoring.EvalMeter, error) {
-	meter, err := monitoring.NewEvalMeter(0, run, runner.LeaderContextFor(jobs.EvalMeter))
+	meter, err := monitoring.NewEvalMeter(0, clock.Now, run, runner.LeaderContextFor(jobs.EvalMeter))
 	if err != nil {
 		return nil, fmt.Errorf("eval meter: %w", err)
 	}

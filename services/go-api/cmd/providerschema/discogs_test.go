@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -23,7 +24,7 @@ func discogsServer(t *testing.T, status int) (*httptest.Server, *[]*http.Request
 
 func TestDiscogsSendsTheAdapterRequests(t *testing.T) {
 	srv, got := discogsServer(t, http.StatusOK)
-	src := newDiscogsSource(srv.Client(), srv.URL, "tok", newIntervalGate(0))
+	src := newDiscogsSource(srv.Client(), srv.URL, "tok", newIntervalGate(clock.Now, 0))
 	want := map[string]string{
 		"search_artist":   "/database/search?type=artist&q=Nia+Archives&per_page=5",
 		"artist":          "/artists/9824716",
@@ -49,7 +50,7 @@ func TestDiscogsSendsTheAdapterRequests(t *testing.T) {
 
 func TestDiscogsRejectsBadFixturesBeforeSending(t *testing.T) {
 	srv, got := discogsServer(t, http.StatusOK)
-	src := newDiscogsSource(srv.Client(), srv.URL, "tok", newIntervalGate(0))
+	src := newDiscogsSource(srv.Client(), srv.URL, "tok", newIntervalGate(clock.Now, 0))
 	for entity, id := range map[string]string{"artist": "nia", "artist_releases": "9824716", "artist_releases ": "x|1"} {
 		if _, err := src.Resource(context.Background(), strings.TrimSpace(entity), id); err == nil {
 			t.Errorf("%s %q: want an error", entity, id)
@@ -62,7 +63,7 @@ func TestDiscogsRejectsBadFixturesBeforeSending(t *testing.T) {
 
 func TestDiscogsFailsOnAnErrorStatusWithoutTheToken(t *testing.T) {
 	srv, _ := discogsServer(t, http.StatusTooManyRequests)
-	_, err := newDiscogsSource(srv.Client(), srv.URL, "secret", newIntervalGate(0)).Resource(context.Background(), "artist", "1")
+	_, err := newDiscogsSource(srv.Client(), srv.URL, "secret", newIntervalGate(clock.Now, 0)).Resource(context.Background(), "artist", "1")
 	if err == nil || !strings.Contains(err.Error(), "429") || strings.Contains(err.Error(), "secret") {
 		t.Fatalf("got %v", err)
 	}
@@ -70,7 +71,7 @@ func TestDiscogsFailsOnAnErrorStatusWithoutTheToken(t *testing.T) {
 
 func TestDiscogsPacesItsRequests(t *testing.T) {
 	srv, got := discogsServer(t, http.StatusOK)
-	src := newDiscogsSource(srv.Client(), srv.URL, "tok", newIntervalGate(50*time.Millisecond))
+	src := newDiscogsSource(srv.Client(), srv.URL, "tok", newIntervalGate(clock.Now, 50*time.Millisecond))
 	start := time.Now()
 	for range 3 {
 		if _, err := src.Resource(context.Background(), "artist", "1"); err != nil {

@@ -2,6 +2,7 @@ package background_test
 
 import (
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -39,7 +40,7 @@ func TestEvery_PanickingRunIsOneFailureAndLoopKeepsTicking(t *testing.T) {
 		clk := clocktest.NewManual(time.Now())
 
 		err := background.Every(ctx, &bg, time.Millisecond, clk.Ticker(), func() {
-			background.RunJob(ctx, jc, "explode", time.Second, func(context.Context) error {
+			background.RunJob(ctx, jc, clk.Func(), "explode", time.Second, func(context.Context) error {
 				if calls.Add(1) == 1 {
 					panic("boom")
 				}
@@ -116,7 +117,7 @@ func TestEvery_RunsAtAFixedRateEvenWhenARunIsSlow(t *testing.T) {
 func TestRunJob_OverBudgetIsCanceledAndCounted(t *testing.T) {
 	var jc background.JobControl
 	var cause error
-	background.RunJob(context.Background(), &jc, "wedged", 10*time.Millisecond, func(ctx context.Context) error {
+	background.RunJob(context.Background(), &jc, clock.Now, "wedged", 10*time.Millisecond, func(ctx context.Context) error {
 		<-ctx.Done()
 		cause = context.Cause(ctx)
 		return ctx.Err()
@@ -130,11 +131,27 @@ func TestRunJob_OverBudgetIsCanceledAndCounted(t *testing.T) {
 	}
 }
 
+func TestRunJob_RefusesAMissingClock(t *testing.T) {
+	var jc background.JobControl
+	var ran atomic.Bool
+
+	defer func() {
+		msg, _ := recover().(string)
+		if !strings.Contains(msg, "background.RunJob") || ran.Load() {
+			t.Errorf("panic = %q, ran = %v, want a refusal naming RunJob before the job runs", msg, ran.Load())
+		}
+	}()
+	background.RunJob(context.Background(), &jc, nil, "x", time.Second, func(context.Context) error {
+		ran.Store(true)
+		return nil
+	})
+}
+
 func TestRunJob_ParentCanceledIsNotAFailure(t *testing.T) {
 	var jobs background.JobRegistry
 	jc := jobs.Control("cut")
 	parent, cancel := context.WithCancel(context.Background())
-	background.RunJob(parent, jc, "cut", time.Minute, func(ctx context.Context) error {
+	background.RunJob(parent, jc, clock.Now, "cut", time.Minute, func(ctx context.Context) error {
 		cancel()
 		<-ctx.Done()
 		return ctx.Err()
@@ -228,7 +245,7 @@ func TestRunJob_PanicIsOneFailureLoggedWithTheJobAndItsContext(t *testing.T) {
 	var jc background.JobControl
 	ctx := logging.ContextWithCorrelationID(context.Background(), "corr-job-5")
 
-	background.RunJob(ctx, &jc, "explode", time.Second, func(context.Context) error { panic("boom") })
+	background.RunJob(ctx, &jc, clock.Now, "explode", time.Second, func(context.Context) error { panic("boom") })
 
 	if got := jc.ConsecutiveFailures(); got != 1 {
 		t.Errorf("ConsecutiveFailures = %d, want 1", got)
@@ -243,7 +260,7 @@ func TestRunJob_EveryLogInARunCarriesTheJobAndAFreshRunID(t *testing.T) {
 	ring := captureLogsAt(t, "info")
 	var jc background.JobControl
 	run := func(msg string) {
-		background.RunJob(context.Background(), &jc, "reconcile", time.Second, func(ctx context.Context) error {
+		background.RunJob(context.Background(), &jc, clock.Now, "reconcile", time.Second, func(ctx context.Context) error {
 			slog.InfoContext(ctx, msg)
 			return nil
 		})
@@ -267,7 +284,7 @@ func TestRunJob_TheBudgetWarningCarriesTheSameRunIDAsTheRunsOwnLogs(t *testing.T
 	ring := captureLogsAt(t, "info")
 	var jc background.JobControl
 
-	background.RunJob(context.Background(), &jc, "wedged", 10*time.Millisecond, func(ctx context.Context) error {
+	background.RunJob(context.Background(), &jc, clock.Now, "wedged", 10*time.Millisecond, func(ctx context.Context) error {
 		slog.InfoContext(ctx, "run started")
 		<-ctx.Done()
 		return ctx.Err()
@@ -277,5 +294,21 @@ func TestRunJob_TheBudgetWarningCarriesTheSameRunIDAsTheRunsOwnLogs(t *testing.T
 	warned := onlyRecord(t, ring, "background job run exceeded its budget; canceled")
 	if started.Attrs["run_id"] == "" || started.Attrs["run_id"] != warned.Attrs["run_id"] {
 		t.Errorf("run_id on the run's log %q and on the budget warning %q, want the same non-empty id", started.Attrs["run_id"], warned.Attrs["run_id"])
+	}
+}
+
+func TestRunJob_RecordsTheOutcomeAtTheGivenClocksTime(t *testing.T) {
+	at := time.Date(2031, 4, 5, 6, 7, 8, 0, time.UTC)
+	clk := clocktest.NewManual(at)
+	var jobs background.JobRegistry
+
+	background.RunJob(context.Background(), jobs.Control("ok"), clk.Func(), "ok", time.Minute, func(context.Context) error { return nil })
+	background.RunJob(context.Background(), jobs.Control("bad"), clk.Func(), "bad", time.Minute, func(context.Context) error { return errors.New("boom") })
+
+	if got := healthOf(t, &jobs, "ok").LastSuccess; !got.Equal(at) {
+		t.Errorf("LastSuccess = %v, want %v", got, at)
+	}
+	if got := healthOf(t, &jobs, "bad").LastFailure; !got.Equal(at) {
+		t.Errorf("LastFailure = %v, want %v", got, at)
 	}
 }

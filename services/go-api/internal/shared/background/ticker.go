@@ -33,7 +33,10 @@ func BindRun(ctx context.Context, name string) context.Context {
 	return logging.ContextWithJobRun(ctx, name, uuid.NewString())
 }
 
-func RunJob(parent context.Context, control *JobControl, name string, budget time.Duration, fn func(context.Context) error) {
+func RunJob(parent context.Context, control *JobControl, now clock.Func, name string, budget time.Duration, fn func(context.Context) error) {
+	if now == nil {
+		panic("background.RunJob: a nil clock")
+	}
 	jobCtx, cancel := context.WithTimeoutCause(parent, budget, ErrRunBudgetExceeded)
 	defer cancel()
 	jobCtx = BindRun(jobCtx, name)
@@ -51,7 +54,7 @@ func RunJob(parent context.Context, control *JobControl, name string, budget tim
 			"job", name, "cause", context.Cause(parent))
 		return
 	}
-	control.Record(err)
+	control.Record(now(), err)
 }
 
 func Every(ctx context.Context, bg *Tracker, interval time.Duration, newTicker clock.TickerFunc, run func()) error {

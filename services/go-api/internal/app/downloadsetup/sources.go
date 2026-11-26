@@ -33,7 +33,7 @@ func EnabledSources(ctx context.Context, cfg *config.Config, redis *goredis.Clie
 }
 
 func YtDlpSearcher(cfg *config.Config) *download.YouTubeAudioSearcher {
-	return download.MustNewYtDlpAudioSearcher(cfg.FFmpegLocation, cfg.YtDLPCookieFile, cfg.YtDLPJSRuntime, time.Now, clock.Sleep).
+	return download.MustNewYtDlpAudioSearcher(cfg.FFmpegLocation, cfg.YtDLPCookieFile, cfg.YtDLPJSRuntime, clock.Now, clock.Sleep).
 		WithRemoteComponents(cfg.YtDLPRemoteComponents).
 		WithPOTokenURL(cfg.YtDLPPOTokenURL).
 		WithEnvironment(cfg.Env)

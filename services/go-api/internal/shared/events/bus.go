@@ -110,7 +110,7 @@ func (b *InProcessBus) Publish(_ context.Context, userId ids.UserId, payload Pay
 		Type:      payload.EventType(),
 		UserID:    userId,
 		Payload:   payload,
-		Timestamp: time.Now().UTC(),
+		Timestamp: b.now().UTC(),
 	}
 
 	b.appendToRing(us, evt)

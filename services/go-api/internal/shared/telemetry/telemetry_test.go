@@ -1,6 +1,7 @@
 package telemetry_test
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/telemetry"
 	"context"
@@ -218,7 +219,7 @@ func attrMap(r log.Record) map[string]attribute.Value {
 func emitOne(t *testing.T, key string, e telemetry.ClientEvent) (log.Record, map[string]attribute.Value) {
 	t.Helper()
 	l := &recordingLogger{}
-	telemetry.NewClientEvents(key, l).Emit(context.Background(), e)
+	telemetry.NewClientEvents(clock.Now, key, l).Emit(context.Background(), e)
 	if len(l.records) != 1 {
 		t.Fatalf("records = %d, want 1", len(l.records))
 	}
@@ -288,4 +289,13 @@ func TestClientEvents_NoKeyNoUserAttribute(t *testing.T) {
 			t.Errorf("unexpected user attribute %s", k)
 		}
 	}
+}
+
+func TestNewClientEvents_RefusesAMissingClock(t *testing.T) {
+	defer func() {
+		if msg, _ := recover().(string); !strings.Contains(msg, "NewClientEvents") {
+			t.Errorf("panic = %q, want a refusal naming NewClientEvents", msg)
+		}
+	}()
+	telemetry.NewClientEvents(nil, "k", nil)
 }

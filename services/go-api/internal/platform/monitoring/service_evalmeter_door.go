@@ -11,6 +11,7 @@ type (
 
 var (
 	NewEvalMeter                   = evalmeter.New
+	ErrEvalMeterClockRequired      = evalmeter.ErrClockRequired
 	ErrEvalMeterRunnerRequired     = evalmeter.ErrRunnerRequired
 	ErrEvalMeterLeadershipRequired = evalmeter.ErrLeadershipRequired
 )

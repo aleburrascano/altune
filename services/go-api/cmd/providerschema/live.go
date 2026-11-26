@@ -139,20 +139,21 @@ func withoutURL(err error) error {
 
 type intervalGate struct {
 	mu   sync.Mutex
+	now  clock.Func
 	gap  time.Duration
 	next time.Time
 }
 
-func newIntervalGate(gap time.Duration) *intervalGate {
-	return &intervalGate{gap: gap}
+func newIntervalGate(now clock.Func, gap time.Duration) *intervalGate {
+	return &intervalGate{now: now, gap: gap}
 }
 
 func (gate *intervalGate) wait(ctx context.Context) error {
 	gate.mu.Lock()
 	defer gate.mu.Unlock()
-	if err := clock.Sleep(ctx, time.Until(gate.next)); err != nil {
+	if err := clock.Sleep(ctx, gate.next.Sub(gate.now())); err != nil {
 		return err
 	}
-	gate.next = time.Now().Add(gate.gap)
+	gate.next = gate.now().Add(gate.gap)
 	return nil
 }

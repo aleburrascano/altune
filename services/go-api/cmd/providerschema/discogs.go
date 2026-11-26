@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -35,7 +36,7 @@ func discogsProvider() provider {
 			if err != nil {
 				return nil, err
 			}
-			return newDiscogsSource(client, discogsBaseURL, token, newIntervalGate(discogsInterval)), nil
+			return newDiscogsSource(client, discogsBaseURL, token, newIntervalGate(clock.Now, discogsInterval)), nil
 		},
 	}
 }

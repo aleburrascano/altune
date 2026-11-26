@@ -64,7 +64,7 @@ func (h *StreamHandler) Routes(r chi.Router) {
 
 func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	w = httpserver.ExtendWriteDeadlineOnWrite(w, h.writeIdleTimeout)
+	w = httpserver.ExtendWriteDeadlineOnWrite(h.now, w, h.writeIdleTimeout)
 	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
 		return

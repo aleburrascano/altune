@@ -12,11 +12,11 @@ import (
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"time"
 )
 
 type catalogWiring struct {
@@ -72,7 +72,7 @@ func (a *App) wireCatalog(
 	tap *monitoring.EventTap,
 	disc *search.Discovery,
 ) (catalogWiring, error) {
-	download.SweepStaleTempDirs(download.NewTempWorkspace(), time.Now)
+	download.SweepStaleTempDirs(download.NewTempWorkspace(), clock.Now)
 
 	audio, err := a.wireAudioSources(ctx, transport, tap, disc)
 	if err != nil {
@@ -114,7 +114,7 @@ func (a *App) wireAudioSources(
 	staging := audioSourcesStaging{
 		audioStore:     audioStore,
 		trackRepo:      trackRepo,
-		ledger:         downloadfromlibrary.NewLibraryTracks(trackRepo, time.Now),
+		ledger:         downloadfromlibrary.NewLibraryTracks(trackRepo, clock.Now),
 		ytDlpSearcher:  downloadsetup.YtDlpSearcher(a.cfg),
 		ytDlpAvailable: tools.YtDlp,
 		ytmCanary:      ytmCanary,
@@ -152,15 +152,15 @@ func (a *App) wireCatalogServices(
 	audioStoreMetrics := library.NewExpvarAudioStoreMetrics()
 	library.SetDBCallMetrics(library.NewExpvarDBCallMetrics())
 
-	addTrackSvc, err := library.NewAddTrackService(catalogTrackRepo, tap, addTrackScheduler(audio.scheduler), time.Now)
+	addTrackSvc, err := library.NewAddTrackService(catalogTrackRepo, tap, addTrackScheduler(audio.scheduler), clock.Now)
 	if err != nil {
 		return catalogServicesStaging{}, fmt.Errorf("build the add-track service: %w", err)
 	}
-	playlistLifecycleSvc, err := library.NewPlaylistLifecycleService(playlistRepo, tap, time.Now)
+	playlistLifecycleSvc, err := library.NewPlaylistLifecycleService(playlistRepo, tap, clock.Now)
 	if err != nil {
 		return catalogServicesStaging{}, fmt.Errorf("build the playlist lifecycle service: %w", err)
 	}
-	playlistMembershipSvc, err := library.NewPlaylistMembershipService(playlistRepo, catalogTrackRepo, tap, time.Now)
+	playlistMembershipSvc, err := library.NewPlaylistMembershipService(playlistRepo, catalogTrackRepo, tap, clock.Now)
 	if err != nil {
 		return catalogServicesStaging{}, fmt.Errorf("build the playlist membership service: %w", err)
 	}
@@ -174,11 +174,11 @@ func (a *App) wireCatalogServices(
 		setTrackNumberSvc:     library.NewSetTrackNumberService(catalogTrackRepo),
 		playlistLifecycleSvc:  playlistLifecycleSvc,
 		playlistMembershipSvc: playlistMembershipSvc,
-		backfillFeaturedSvc:   library.MustNewBackfillFeaturedService(catalogTrackRepo, catalogTrackRepo, featuredBridge, time.Now),
+		backfillFeaturedSvc:   library.MustNewBackfillFeaturedService(catalogTrackRepo, catalogTrackRepo, featuredBridge, clock.Now),
 		listFeaturingSvc:      library.NewListFeaturingService(catalogTrackRepo),
 		getTrackStatusSvc:     library.NewGetTrackStatusService(catalogTrackRepo),
 		streamTrackSvc:        library.NewStreamTrackService(catalogTrackRepo, audio.audioStore, addTrackScheduler(audio.scheduler), audioStoreMetrics, a.jobs.Switch(jobs.StreamRecovery)),
-		audioURLSvc:           library.MustNewAudioURLService(catalogTrackRepo, audio.audioStore, time.Now, audioStoreMetrics),
+		audioURLSvc:           library.MustNewAudioURLService(catalogTrackRepo, audio.audioStore, clock.Now, audioStoreMetrics),
 	}, nil
 }
 
@@ -205,11 +205,11 @@ func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServices
 		audioStore:        audio.audioStore,
 		orphanedAudio:     svc.orphanedAudio,
 		setTrackNumberSvc: svc.setTrackNumberSvc,
-		trackHandler:      library.MustNewTrackHandler(svc.addTrackSvc, svc.listTracksSvc, svc.getTrackStatusSvc, svc.deleteTrackSvc, svc.setTrackNumberSvc, featuredArtistHandler, time.Now),
+		trackHandler:      library.MustNewTrackHandler(svc.addTrackSvc, svc.listTracksSvc, svc.getTrackStatusSvc, svc.deleteTrackSvc, svc.setTrackNumberSvc, featuredArtistHandler, clock.Now),
 		libraryHandler:    library.NewLibraryHandler(library.NewLibraryLensService(svc.catalogTrackRepo)),
-		playlistHandler:   library.MustNewPlaylistHandler(svc.playlistLifecycleSvc, svc.playlistMembershipSvc, time.Now),
-		streamHandler:     library.MustNewStreamHandler(svc.streamTrackSvc, time.Now),
-		audioURLHandler:   library.MustNewAudioURLHandler(svc.audioURLSvc, time.Now, library.WithPrefetchEnabled(a.cfg.AudioPrefetchEnabled)),
+		playlistHandler:   library.MustNewPlaylistHandler(svc.playlistLifecycleSvc, svc.playlistMembershipSvc, clock.Now),
+		streamHandler:     library.MustNewStreamHandler(svc.streamTrackSvc, clock.Now),
+		audioURLHandler:   library.MustNewAudioURLHandler(svc.audioURLSvc, clock.Now, library.WithPrefetchEnabled(a.cfg.AudioPrefetchEnabled)),
 		retryH:            retryH,
 		reacquireH:        reacquireH,
 		acquisitionOn:     audio.acquisitionOn,
