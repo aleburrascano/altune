@@ -1,5 +1,6 @@
 import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, notifyManager } from '@tanstack/react-query';
+import { act } from '@testing-library/react-native';
 
 import { AcquisitionPortProvider } from '@shared/acquisition';
 import type { AcquisitionPort } from '@shared/acquisition';
@@ -16,6 +17,13 @@ import { FeaturePorts, httpFeaturePorts, type FeaturePortSet } from '@/mobile';
 interface WrapperProps {
   children: React.ReactNode;
 }
+
+function deliverInsideAct(callback: () => void): void {
+  act(callback);
+}
+
+notifyManager.setNotifyFunction(deliverInsideAct);
+notifyManager.setBatchNotifyFunction(deliverInsideAct);
 
 export const idlePlayback = makeIdlePlayback();
 
