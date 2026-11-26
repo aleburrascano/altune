@@ -36,7 +36,7 @@ func rejectSubscription(w http.ResponseWriter, r *http.Request, stream string, e
 	httpserver.HandleServiceError(w, r, errStreamSubscriberLimit)
 }
 
-func streamSSE[T any](now clock.Func, w http.ResponseWriter, r *http.Request, ch <-chan T, bounds StreamBounds) {
+func streamSSE[T any](now clock.Func, newTicker clock.TickerFunc, w http.ResponseWriter, r *http.Request, ch <-chan T, bounds StreamBounds) {
 	if _, canFlush := w.(http.Flusher); !canFlush {
 		httpserver.HandleServiceError(w, r, errStreamingUnsupported)
 		return
@@ -52,7 +52,7 @@ func streamSSE[T any](now clock.Func, w http.ResponseWriter, r *http.Request, ch
 	defer cancel()
 	ctx, untilExpiry := requestuser.UntilTokenExpiry(ctx)
 	defer untilExpiry()
-	streamFrames(r.WithContext(ctx), w, rc, ch, bounds.Heartbeat)
+	streamFrames(newTicker, r.WithContext(ctx), w, rc, ch, bounds.Heartbeat)
 }
 
 func (h *Handler) untilShutdown(parent context.Context) (context.Context, context.CancelFunc) {
@@ -74,14 +74,14 @@ func setStreamHeaders(w http.ResponseWriter) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 }
 
-func streamFrames[T any](r *http.Request, w http.ResponseWriter, rc *http.ResponseController, ch <-chan T, every time.Duration) {
-	heartbeat := time.NewTicker(every)
-	defer heartbeat.Stop()
+func streamFrames[T any](newTicker clock.TickerFunc, r *http.Request, w http.ResponseWriter, rc *http.ResponseController, ch <-chan T, every time.Duration) {
+	beats, stop := newTicker(every)
+	defer stop()
 	for {
 		select {
 		case <-r.Context().Done():
 			return
-		case <-heartbeat.C:
+		case <-beats:
 			if err := writeFrame(w, rc, keepaliveFrame); err != nil {
 				return
 			}

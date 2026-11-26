@@ -50,15 +50,23 @@ func isLeader(e *leader.Election) bool {
 
 func newElection(t *testing.T, locks leader.LockStore, key int64, interval time.Duration) *leader.Election {
 	t.Helper()
-	e, err := leader.NewElection(locks, key, interval, clock.Now, clock.NewTimer)
+	e, err := leader.NewElection(locks, key, interval, clock.Now, clock.NewTimer, clock.NewTicker)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return e
 }
 
+func TestNewElection_RefusesAMissingTicker(t *testing.T) {
+	e, err := leader.NewElection(&store{}, testKey, singleTick, clock.Now, clock.NewTimer, nil)
+
+	if e != nil || !errors.Is(err, leader.ErrTickerRequired) || !strings.Contains(err.Error(), "NewElection") {
+		t.Fatalf("got (%v, %v), want a nil election and an error naming NewElection wrapping ErrTickerRequired", e, err)
+	}
+}
+
 func TestNewElection_RefusesAMissingClock(t *testing.T) {
-	e, err := leader.NewElection(&store{}, testKey, singleTick, nil, clock.NewTimer)
+	e, err := leader.NewElection(&store{}, testKey, singleTick, nil, clock.NewTimer, clock.NewTicker)
 
 	if e != nil || !errors.Is(err, leader.ErrClockRequired) || !strings.Contains(err.Error(), "NewElection") {
 		t.Fatalf("got (%v, %v), want a nil election and an error naming NewElection wrapping ErrClockRequired", e, err)
@@ -66,7 +74,7 @@ func TestNewElection_RefusesAMissingClock(t *testing.T) {
 }
 
 func TestNewElection_RefusesAMissingTimer(t *testing.T) {
-	e, err := leader.NewElection(&store{}, testKey, singleTick, clock.Now, nil)
+	e, err := leader.NewElection(&store{}, testKey, singleTick, clock.Now, nil, clock.NewTicker)
 
 	if e != nil || !errors.Is(err, leader.ErrTimerRequired) || !strings.Contains(err.Error(), "NewElection") {
 		t.Fatalf("got (%v, %v), want a nil election and an error naming NewElection wrapping ErrTimerRequired", e, err)

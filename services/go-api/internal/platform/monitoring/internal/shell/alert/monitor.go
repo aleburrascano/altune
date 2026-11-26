@@ -24,6 +24,7 @@ type Monitor struct {
 	logger      *slog.Logger
 	leadership  LeadershipScope
 	now         clock.Func
+	newTicker   clock.TickerFunc
 
 	resumes     atomic.Uint64
 	seenResumes uint64
@@ -85,14 +86,19 @@ var ErrInvalidInterval = errors.New("the interval must be positive")
 
 var ErrClockRequired = errors.New("the alert monitor requires a clock")
 
+var ErrTickerRequired = errors.New("the alert monitor requires a ticker")
+
 var ErrLeadershipRequired = errors.New("the alert monitor requires a leadership scope, pass background.EveryPassLeads to run on every pass")
 
-func NewMonitor(notifier ports.AlertNotifier, interval time.Duration, now clock.Func, leadership LeadershipScope, conditions ...domain.Condition) (*Monitor, error) {
+func NewMonitor(notifier ports.AlertNotifier, interval time.Duration, now clock.Func, newTicker clock.TickerFunc, leadership LeadershipScope, conditions ...domain.Condition) (*Monitor, error) {
 	if interval <= 0 {
 		return nil, ErrInvalidInterval
 	}
 	if now == nil {
 		return nil, ErrClockRequired
+	}
+	if newTicker == nil {
+		return nil, ErrTickerRequired
 	}
 	if leadership == nil {
 		return nil, ErrLeadershipRequired
@@ -101,6 +107,7 @@ func NewMonitor(notifier ports.AlertNotifier, interval time.Duration, now clock.
 		notifier:    notifier,
 		conditions:  conditions,
 		interval:    interval,
+		newTicker:   newTicker,
 		evalTimeout: defaultEvalTimeout,
 		logger:      slog.Default(),
 		leadership:  leadership,
@@ -115,13 +122,13 @@ func (m *Monitor) Start(ctx context.Context) {
 }
 
 func (m *Monitor) loop(ctx context.Context) {
-	ticker := time.NewTicker(m.interval)
-	defer ticker.Stop()
+	ticks, stop := m.newTicker(m.interval)
+	defer stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-ticks:
 			m.tick(ctx)
 		}
 	}

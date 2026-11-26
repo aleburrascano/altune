@@ -49,7 +49,7 @@ func budgetedYTMSearchClient(ctx context.Context, cfg *config.Config, redis *gor
 
 func innerTubeClient(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper) *http.Client {
 	settings := youtubemusicapi.Settings{MinInterval: cfg.YtmInnerTubeMinInterval, Cooldown: cfg.YtmInnerTubeCooldown}
-	budget, err := youtubemusicapi.NewBudget(redis, settings, clock.Sleep)
+	budget, err := youtubemusicapi.NewBudget(redis, settings, clock.Now, clock.Sleep)
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition: no shared InnerTube budget without redis, pacing through the shared outbound pacer only")
 		return &http.Client{Timeout: ytmSearchTimeout, Transport: transport}

@@ -546,7 +546,7 @@ func TestLeaderContext_TheAlertMonitorEvaluatesOnlyDuringItsTerm(t *testing.T) {
 	defer cancel()
 
 	var evaluations atomic.Int32
-	monitor, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, leaderLoopTick, time.Now, r.LeaderContext, monitoring.Condition{
+	monitor, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, leaderLoopTick, time.Now, clock.NewTicker, r.LeaderContext, monitoring.Condition{
 		Key: "dependency_down",
 		Eval: func(context.Context) *monitoring.Alert {
 			evaluations.Add(1)
@@ -569,7 +569,7 @@ func TestLeaderContext_TheEvalMeterRunsOnlyDuringItsTerm(t *testing.T) {
 	defer cancel()
 
 	var runs atomic.Int32
-	meter, err := monitoring.NewEvalMeter(leaderLoopTick, clock.Now, func(context.Context) (monitoring.EvalMeterResult, error) {
+	meter, err := monitoring.NewEvalMeter(leaderLoopTick, clock.Now, clock.NewTicker, func(context.Context) (monitoring.EvalMeterResult, error) {
 		runs.Add(1)
 		return monitoring.EvalMeterResult{}, nil
 	}, r.LeaderContext)
@@ -590,7 +590,7 @@ func TestLeaderContext_LosingTheTermCutsOffAnEvalMidRun(t *testing.T) {
 
 	started := make(chan struct{})
 	stoppedBecause := make(chan error, 1)
-	meter, err := monitoring.NewEvalMeter(time.Hour, clock.Now, func(runCtx context.Context) (monitoring.EvalMeterResult, error) {
+	meter, err := monitoring.NewEvalMeter(time.Hour, clock.Now, clock.NewTicker, func(runCtx context.Context) (monitoring.EvalMeterResult, error) {
 		close(started)
 		<-runCtx.Done()
 		stoppedBecause <- context.Cause(runCtx)

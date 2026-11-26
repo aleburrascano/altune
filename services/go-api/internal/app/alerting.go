@@ -30,7 +30,7 @@ func (a *App) startAlertMonitor(ctx context.Context) error {
 }
 
 func NewAlertMonitor(runner *jobs.Runner, notifier monitoring.AlertNotifier, interval time.Duration, conditions []monitoring.Condition) (*monitoring.AlertMonitor, error) {
-	monitor, err := monitoring.NewAlertMonitor(notifier, interval, clock.Now, runner.LeaderContextFor(jobs.AlertMonitor), conditions...)
+	monitor, err := monitoring.NewAlertMonitor(notifier, interval, clock.Now, clock.NewTicker, runner.LeaderContextFor(jobs.AlertMonitor), conditions...)
 	if err != nil {
 		return nil, fmt.Errorf("alert monitor: %w", err)
 	}

@@ -84,7 +84,7 @@ type evalStatus struct {
 func serveRead(t *testing.T, deps monitoring.Deps, path string) *httptest.ResponseRecorder {
 	t.Helper()
 	r := chi.NewRouter()
-	monitoring.NewObserveHandler(clock.Now, deps).Register(r)
+	monitoring.NewObserveHandler(clock.Now, clock.NewTicker, deps).Register(r)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 	return rec
@@ -119,7 +119,7 @@ func TestReadsMetricsLive_NilSourceAnswersEmptyObject(t *testing.T) {
 }
 
 func TestReadsEval_ServesTheMeterStatus(t *testing.T) {
-	meter, err := monitoring.NewEvalMeter(0, clock.Now, func(context.Context) (monitoring.EvalMeterResult, error) {
+	meter, err := monitoring.NewEvalMeter(0, clock.Now, clock.NewTicker, func(context.Context) (monitoring.EvalMeterResult, error) {
 		return monitoring.EvalMeterResult{}, nil
 	}, background.EveryPassLeads)
 	if err != nil {
@@ -404,7 +404,7 @@ func TestReadsQuality_WindowDaysIsClampedToTheMaximum(t *testing.T) {
 
 func TestReadsRoutes_NoPostRoute(t *testing.T) {
 	r := chi.NewRouter()
-	monitoring.NewObserveHandler(clock.Now, monitoring.Deps{}).Register(r)
+	monitoring.NewObserveHandler(clock.Now, clock.NewTicker, monitoring.Deps{}).Register(r)
 
 	for _, path := range []string{"/metrics/live", "/eval", "/acquisition", "/quality/discography"} {
 		rec := httptest.NewRecorder()

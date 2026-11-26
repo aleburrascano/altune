@@ -38,7 +38,7 @@ func newSources(t *testing.T) sources {
 	t.Helper()
 	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	tap := monitoring.MustNewEventTap(bus, time.Now)
-	alertMonitor, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, time.Second, time.Now, background.EveryPassLeads)
+	alertMonitor, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, time.Second, time.Now, clock.NewTicker, background.EveryPassLeads)
 	if err != nil {
 		t.Fatalf("NewAlertMonitor: %v", err)
 	}
@@ -59,7 +59,7 @@ func newSources(t *testing.T) sources {
 func served(t *testing.T, s livemetrics.Sources) []byte {
 	t.Helper()
 	r := chi.NewRouter()
-	monitoring.NewObserveHandler(clock.Now, monitoring.Deps{LiveMetrics: func() monitoring.LiveMetrics { return livemetrics.Live(s) }}).Register(r)
+	monitoring.NewObserveHandler(clock.Now, clock.NewTicker, monitoring.Deps{LiveMetrics: func() monitoring.LiveMetrics { return livemetrics.Live(s) }}).Register(r)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics/live", nil))
 	if rec.Code != http.StatusOK {

@@ -23,7 +23,7 @@ type Election interface {
 }
 
 func NewElection(locks leader.LockStore) (*leader.Election, error) {
-	return leader.NewElection(locks, backgroundLockKey, backgroundLockInterval, clock.Now, clock.NewTimer)
+	return leader.NewElection(locks, backgroundLockKey, backgroundLockInterval, clock.Now, clock.NewTimer, clock.NewTicker)
 }
 
 type Runner struct {

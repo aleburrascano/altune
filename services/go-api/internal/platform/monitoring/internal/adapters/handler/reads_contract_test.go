@@ -18,7 +18,7 @@ func TestContract_EvalMatchesFixture(t *testing.T) {
 			Queries:  []monitoring.EvalMeterQueryResult{{Query: "q", Expect: "e", Passed: true, Position: 1}},
 		}, nil
 	}
-	meter, err := monitoring.NewEvalMeter(time.Hour, clock.Now, runner, background.EveryPassLeads)
+	meter, err := monitoring.NewEvalMeter(time.Hour, clock.Now, clock.NewTicker, runner, background.EveryPassLeads)
 	if err != nil {
 		t.Fatal(err)
 	}

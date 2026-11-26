@@ -57,7 +57,7 @@ func TestHealth_ProbeRunsUnderADeadline(t *testing.T) {
 
 func TestHealth_StalledProbeIsReleasedWhenTheRequestEnds(t *testing.T) {
 	r := chi.NewRouter()
-	monitoring.NewObserveHandler(clock.Now, monitoring.Deps{Health: func(ctx context.Context) monitoring.DependencyHealth {
+	monitoring.NewObserveHandler(clock.Now, clock.NewTicker, monitoring.Deps{Health: func(ctx context.Context) monitoring.DependencyHealth {
 		<-ctx.Done()
 		return monitoring.DependencyHealth{DB: monitoring.DepDown}
 	}}).Register(r)
