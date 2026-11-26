@@ -6,7 +6,7 @@ import {
   reloadWidget,
   type WidgetCommandEvent,
 } from '@modules/altune-widget';
-import { withNativeQueue } from '@features/player/native/nativeQueueLock';
+import { withNativeQueue } from '@features/player/adapters/native/nativeQueueLock';
 import { reorderUpcomingNative } from '@features/player/adapters/native/rebuildNativeTail';
 import { reportingQueueFailure } from '@features/player/adapters/native/queueFailureReport';
 import { primeSignedInUser } from '@shared/auth';

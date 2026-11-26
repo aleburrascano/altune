@@ -22,7 +22,7 @@ import type {
 } from '@features/player/ports/nativePlayback';
 import { reorderUpcomingNative } from '@features/player/adapters/native/rebuildNativeTail';
 import { claimSessionReset } from '@features/player/domain/loadToken';
-import { withNativeQueue } from '@features/player/native/nativeQueueLock';
+import { withNativeQueue } from '@features/player/adapters/native/nativeQueueLock';
 import { msToSeconds } from '@features/player/domain/time';
 import { clearPlaybackError, reportLoadFailure } from '@features/player/core/playbackErrorStore';
 import {

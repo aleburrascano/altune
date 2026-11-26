@@ -1,7 +1,7 @@
 import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
 import { ensurePlayerSetup } from '@features/player/adapters/native/initPlayer';
-import { withNativeQueue, type Fence } from '@features/player/native/nativeQueueLock';
+import { withNativeQueue, type Fence } from '@features/player/adapters/native/nativeQueueLock';
 import {
   activeNativeTrackId,
   nativeTrackBuilder,

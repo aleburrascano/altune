@@ -24,7 +24,10 @@ import {
   prefetchNext,
 } from '@features/player/adapters/native/audioPrefetch';
 import { refreshUpcomingPresign } from '@features/player/adapters/native/loadNativeTrack';
-import { claimRecoveryAttempt, resetRecoveryBudget } from '@features/player/native/recoveryBudget';
+import {
+  claimRecoveryAttempt,
+  resetRecoveryBudget,
+} from '@features/player/adapters/native/recoveryBudget';
 import { claimSessionReset } from '@features/player/domain/loadToken';
 import {
   markPlayRequested,
@@ -35,8 +38,8 @@ import { startWidgetCommands } from '@features/player/adapters/native/widgetComm
 import { altuneWidgetBridge } from '@features/player/adapters/native/altuneWidgetBridge';
 import { createWidgetSnapshotPublisher } from '@features/player/adapters/native/widgetSnapshot';
 import type { WidgetBridge } from '@features/player/ports/widgetBridge';
-import { withNativeQueue } from '@features/player/native/nativeQueueLock';
-import { shouldApplyActiveIndex } from '@features/player/native/nativeSyncGuard';
+import { withNativeQueue } from '@features/player/adapters/native/nativeQueueLock';
+import { shouldApplyActiveIndex } from '@features/player/adapters/native/nativeSyncGuard';
 import { activeNativeTrackId } from '@features/player/adapters/native/nativeTrack';
 import {
   forgetAllSwaps,

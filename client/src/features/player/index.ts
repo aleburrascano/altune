@@ -54,7 +54,7 @@ export {
   NativeQueueTimeoutError,
   onNativeQueueTimeout,
   withNativeQueue,
-} from '@features/player/native/nativeQueueLock';
+} from '@features/player/adapters/native/nativeQueueLock';
 export {
   clearPlaybackError,
   reportLoadFailure,
@@ -93,7 +93,7 @@ export {
   beginNativeLoad,
   endNativeLoad,
   shouldApplyActiveIndex,
-} from '@features/player/native/nativeSyncGuard';
+} from '@features/player/adapters/native/nativeSyncGuard';
 export {
   classifyNativePlaybackError,
   classifyPlaybackFailure,
@@ -137,7 +137,10 @@ export {
   parseQueueState,
   toWireSource,
 } from '@features/player/domain/queueStateWire';
-export { claimRecoveryAttempt, resetRecoveryBudget } from '@features/player/native/recoveryBudget';
+export {
+  claimRecoveryAttempt,
+  resetRecoveryBudget,
+} from '@features/player/adapters/native/recoveryBudget';
 export { buildTrackPayload, hasCrossedListenThreshold } from '@features/player/domain/signals';
 export { TrackPlayerPlaybackProvider } from '@features/player/view/native/TrackPlayerPlaybackProvider';
 export { NativePlaybackProvider } from '@features/player/view/NativePlaybackProvider';

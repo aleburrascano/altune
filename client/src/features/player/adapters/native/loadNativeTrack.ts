@@ -8,7 +8,7 @@ import {
   onNativeQueueTimeout,
   withNativeQueue,
   type Fence,
-} from '@features/player/native/nativeQueueLock';
+} from '@features/player/adapters/native/nativeQueueLock';
 import {
   activeNativeTrackId,
   nativeTrackBuilder,
@@ -24,7 +24,7 @@ import {
   isStale,
   type LoadToken,
 } from '@features/player/domain/loadToken';
-import { beginNativeLoad, endNativeLoad } from '@features/player/native/nativeSyncGuard';
+import { beginNativeLoad, endNativeLoad } from '@features/player/adapters/native/nativeSyncGuard';
 import {
   NATIVE_QUEUE_WINDOW,
   markPresignedFrom,

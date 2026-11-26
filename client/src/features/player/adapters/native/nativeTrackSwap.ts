@@ -9,7 +9,7 @@ import {
   NativeQueueTimeoutError,
   withNativeQueue,
   type Fence,
-} from '@features/player/native/nativeQueueLock';
+} from '@features/player/adapters/native/nativeQueueLock';
 import { activeNativeTrackId, toNativeTrack } from '@features/player/adapters/native/nativeTrack';
 import { reportLoadFailure } from '@features/player/core/playbackErrorStore';
 import { recordPresignOutcome } from '@features/player/domain/playbackHealth';

@@ -5,7 +5,7 @@ import { ApiError } from '@shared/failure';
 import { reportClientError } from '@shared/telemetry';
 import { currentSessionEpoch, isSameSession } from '@shared/session';
 
-import { withNativeQueue } from '@features/player/native/nativeQueueLock';
+import { withNativeQueue } from '@features/player/adapters/native/nativeQueueLock';
 import { activeNativeTrackId } from '@features/player/adapters/native/nativeTrack';
 import { playbackPort } from '@features/player/ports/activePlaybackPort';
 import type { IsSkippable } from '@features/player/ports/nativePlayback';
