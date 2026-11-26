@@ -73,6 +73,13 @@ describe('mobile eslint without type info (commit stage)', () => {
     const rules = diffScopedRuleIds(path, code, { ESLINT_WITHOUT_TYPES: '1' });
     assert.ok(!rules.includes('@typescript-eslint/no-floating-promises'));
     assert.ok(rules.includes('id-match'));
+    const untypedTsRules = diffScopedRuleIds(
+      path,
+      'export const data = 1;\nnamespace Box {}\nexport const bang = [data][0]!;\n',
+      { ESLINT_WITHOUT_TYPES: '1' },
+    );
+    assert.ok(untypedTsRules.includes('@typescript-eslint/no-namespace'));
+    assert.ok(untypedTsRules.includes('@typescript-eslint/no-non-null-assertion'));
   });
 
   it('reports the type-aware rule once type info is on', () => {

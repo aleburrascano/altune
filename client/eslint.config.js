@@ -254,14 +254,12 @@ const mechanicalStyleEnforcedOnChangedCodeOnly =
           },
         },
         ...house.configs.recommended,
-        ...(WITHOUT_TYPE_INFO
-          ? []
-          : house.configs.typed.map((block) => ({
-              ...block,
-              files: typedLinting[0].files,
-              ignores: typedLinting[0].ignores,
-              languageOptions: typedLinting[0].languageOptions,
-            }))),
+        ...house.configs.typed.map((block) => ({
+          ...block,
+          files: typedLinting[0].files,
+          ignores: typedLinting[0].ignores,
+          languageOptions: typedLinting[0].languageOptions,
+        })),
       ].map(withoutTypeInfo)
     : [];
 
