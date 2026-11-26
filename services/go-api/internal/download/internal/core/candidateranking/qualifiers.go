@@ -25,7 +25,7 @@ var presentationMarkers = [][]string{
 func UnrequestedQualifiers(trackTitle, trackArtist, candidateTitle string) (veto, qualifiers []string) {
 	titleTokens := titlemarkers.Tokens(trackTitle)
 	artistTokens := titlemarkers.Tokens(trackArtist)
-	for _, entry := range titlemarkers.Matches(titlemarkers.Tokens(titlemarkers.WithoutFeatureCredits(candidateTitle))) {
+	for _, entry := range titlemarkers.Matches(titlemarkers.Tokens(titlemarkers.StripFeatureCredits(candidateTitle))) {
 		if entry.Benign() || entry.In(titleTokens) || entry.In(artistTokens) {
 			continue
 		}
@@ -68,7 +68,7 @@ func qualifierDistance(trackTitle, candidateTitle string) int {
 
 func distanceLabels(title string) []string {
 	labels := titlemarkers.RecordingLabels(title)
-	tokens := titlemarkers.Tokens(titlemarkers.WithoutFeatureCredits(title))
+	tokens := titlemarkers.Tokens(titlemarkers.StripFeatureCredits(title))
 	for rest := tokens; len(rest) > 0; {
 		marker := presentationMarkerAt(rest)
 		if marker == nil {
@@ -91,9 +91,9 @@ func presentationMarkerAt(tokens []string) []string {
 }
 
 func carriesUnrequestedRerecording(wantedTitle, candidateTitle string) bool {
-	if _, wanted := titlemarkers.WithoutRerecordingPhrases(titlemarkers.Tokens(wantedTitle)); wanted {
+	if _, wanted := titlemarkers.StripRerecordingPhrases(titlemarkers.Tokens(wantedTitle)); wanted {
 		return false
 	}
-	_, carried := titlemarkers.WithoutRerecordingPhrases(titlemarkers.Tokens(candidateTitle))
+	_, carried := titlemarkers.StripRerecordingPhrases(titlemarkers.Tokens(candidateTitle))
 	return carried
 }

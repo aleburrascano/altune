@@ -17,8 +17,8 @@ func TitleKey(title string) string {
 
 func TitleKeyWithStar(title, star string) string {
 	cleaned := starRunRe.ReplaceAllString(textnorm.Transliterate(unreleasedMarkerRe.ReplaceAllString(title, " ")), star)
-	tokens := titlemarkers.Tokens(titlemarkers.WithoutFeatureCredits(cleaned))
-	core := strings.Join(titlemarkers.WithoutVersionPhrases(tokens), " ")
+	tokens := titlemarkers.Tokens(titlemarkers.StripFeatureCredits(cleaned))
+	core := strings.Join(titlemarkers.StripVersionPhrases(tokens), " ")
 	labels := strings.Join(titlemarkers.RecordingLabels(cleaned), ",")
 	return core + "|" + labels
 }

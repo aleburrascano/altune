@@ -89,7 +89,7 @@ func TestGroupWaitReturnsAfterEveryTaskHasRun(t *testing.T) {
 
 func TestGroupPanickingTaskReachesWaitAsAnErrorAndSiblingsFinish(t *testing.T) {
 	ring := captureLogs(t)
-	ctx := logging.WithCorrelationID(context.Background(), "corr-fanout-1")
+	ctx := logging.ContextWithCorrelationID(context.Background(), "corr-fanout-1")
 	var finished atomic.Int32
 	g := parallel.New("test.fanout_task_panic", 2)
 	g.Go(ctx, func() { panic("provider exploded") })

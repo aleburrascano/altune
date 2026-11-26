@@ -89,7 +89,7 @@ func saveQueueOf(t *testing.T, svc *playback.QueueService, identities *identityS
 }
 
 func newSweep(repo *inMemoryQueueRepo, identities *identityStore) *playback.DeletedUserDataCleanup {
-	return playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now))
+	return playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), playback.NoopErasureSweepMetrics(), playback.NoopDeletedUserDataCleaner(), playback.DefaultSweepRunBudget)
 }
 
 func TestForgetDeletedIdentities_ErasesTheQueueStateOfADeletedAccount(t *testing.T) {
@@ -185,8 +185,7 @@ func TestForgetDeletedIdentities_FailedErasureStopsTheRun(t *testing.T) {
 	deleted := saveQueueOf(t, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), identities, "search:mac demarco")
 	identities.deleteAccount(deleted)
 	dbDown := errors.New("connection refused")
-	svc := playback.NewErasureSweeper(identities,
-		playback.MustNewQueueService(&undeletableQueueRepo{Err: dbDown}, &fakeNowPlaying{}, time.Now))
+	svc := playback.NewErasureSweeper(identities, playback.MustNewQueueService(&undeletableQueueRepo{Err: dbDown}, &fakeNowPlaying{}, time.Now), playback.NoopErasureSweepMetrics(), playback.NoopDeletedUserDataCleaner(), playback.DefaultSweepRunBudget)
 
 	forgotten, err := svc.Execute(context.Background())
 
@@ -261,7 +260,7 @@ func TestForgetDeletedIdentities_OneFailingOwnerDoesNotBlockTheRest(t *testing.T
 	}
 	dbDown := errors.New("connection refused")
 	repo.failing[failing] = dbDown
-	sweep := playback.NewErasureSweeper(identities, svc)
+	sweep := playback.NewErasureSweeper(identities, svc, playback.NoopErasureSweepMetrics(), playback.NoopDeletedUserDataCleaner(), playback.DefaultSweepRunBudget)
 
 	forgotten, err := sweep.Execute(context.Background())
 
@@ -283,8 +282,7 @@ func TestForgetDeletedIdentities_OneFailingOwnerDoesNotBlockTheRest(t *testing.T
 
 func TestForgetDeletedIdentities_EndlessScanStopsAtTheRunBudget(t *testing.T) {
 	listing := &endlessListing{owner: ids.NewUserId(uuid.New())}
-	sweep := playback.NewErasureSweeper(listing, playback.MustNewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{}, time.Now),
-		playback.WithSweepRunBudget(20*time.Millisecond))
+	sweep := playback.NewErasureSweeper(listing, playback.MustNewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{}, time.Now), playback.NoopErasureSweepMetrics(), playback.NoopDeletedUserDataCleaner(), 20*time.Millisecond)
 
 	started := time.Now()
 	_, err := sweep.Execute(context.Background())
@@ -345,8 +343,7 @@ func TestForgetDeletedIdentities_RunStopsAtItsDeadlineAndResumes(t *testing.T) {
 	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
 	owners := deletedOwnersInKeyOrder(t, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), identities, 2*ownerScanWindow+1)
-	sweep := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now),
-		playback.WithSweepRunBudget(stallingRunBudget))
+	sweep := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), playback.NoopErasureSweepMetrics(), playback.NoopDeletedUserDataCleaner(), stallingRunBudget)
 	identities.stallOnScan = 3
 
 	forgotten, _, err := runScans(sweep, identities)
@@ -375,8 +372,7 @@ func TestForgetDeletedIdentities_PermanentlyFailingOwnerDoesNotBlockTheTable(t *
 	repo := newFailingOwnersRepo()
 	identities := newIdentityStore(&repo.inMemoryQueueRepo)
 	owners := deletedOwnersInKeyOrder(t, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), identities, 2*ownerScanWindow+1)
-	sweep := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now),
-		playback.WithSweepRunBudget(stallingRunBudget))
+	sweep := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), playback.NoopErasureSweepMetrics(), playback.NoopDeletedUserDataCleaner(), stallingRunBudget)
 	dbDown := errors.New("connection refused")
 	repo.failing[owners[0]] = dbDown
 	identities.stallOnScan = 2
@@ -412,7 +408,7 @@ func TestForgetDeletedIdentities_RetriedOwnerLeavesTheRetrySetOnceErased(t *test
 	repo := newFailingOwnersRepo()
 	identities := newIdentityStore(&repo.inMemoryQueueRepo)
 	owners := deletedOwnersInKeyOrder(t, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), identities, 3)
-	sweep := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now))
+	sweep := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), playback.NoopErasureSweepMetrics(), playback.NoopDeletedUserDataCleaner(), playback.DefaultSweepRunBudget)
 	dbDown := errors.New("connection refused")
 	repo.failing[owners[1]] = dbDown
 
@@ -436,7 +432,7 @@ func TestForgetDeletedIdentities_FullRetrySetDropsAndCountsTheOverflow(t *testin
 	identities := newIdentityStore(&repo.inMemoryQueueRepo)
 	owners := deletedOwnersInKeyOrder(t, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), identities, maxRetryOwners+1)
 	spy := &sweepMetricsSpy{}
-	sweep := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), playback.WithErasureSweepMetrics(spy))
+	sweep := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), spy, playback.NoopDeletedUserDataCleaner(), playback.DefaultSweepRunBudget)
 	for _, owner := range owners {
 		repo.failing[owner] = errors.New("connection refused")
 	}
@@ -472,7 +468,7 @@ func TestForgetDeletedIdentities_IdleSweepIsCounted(t *testing.T) {
 	identities := newIdentityStore(repo)
 	identities.err = fmt.Errorf("query: %w", playback.ErrIdentityStoreUnavailable)
 	spy := &sweepMetricsSpy{}
-	svc := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), playback.WithErasureSweepMetrics(spy))
+	svc := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), spy, playback.NoopDeletedUserDataCleaner(), playback.DefaultSweepRunBudget)
 
 	if _, err := svc.Execute(context.Background()); !errors.Is(err, playback.ErrIdentityStoreUnavailable) {
 		t.Fatalf("Execute = %v, want ErrIdentityStoreUnavailable", err)
@@ -489,7 +485,7 @@ func TestForgetDeletedIdentities_ErasedAccountsAreCounted(t *testing.T) {
 	user := saveQueueOf(t, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), identities, "search:x")
 	identities.deleteAccount(user)
 	spy := &sweepMetricsSpy{}
-	svc := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), playback.WithErasureSweepMetrics(spy))
+	svc := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), spy, playback.NoopDeletedUserDataCleaner(), playback.DefaultSweepRunBudget)
 
 	if _, err := svc.Execute(context.Background()); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -505,7 +501,7 @@ func TestForgetDeletedIdentities_UnreadableIdentityStoreFailsTheRun(t *testing.T
 	identities := newIdentityStore(repo)
 	identities.err = fmt.Errorf("query: %w", playback.ErrIdentityStoreUnavailable)
 	spy := &sweepMetricsSpy{}
-	svc := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), playback.WithErasureSweepMetrics(spy))
+	svc := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), spy, playback.NoopDeletedUserDataCleaner(), playback.DefaultSweepRunBudget)
 
 	forgotten, err := svc.Execute(context.Background())
 
@@ -531,7 +527,7 @@ func TestForgetDeletedIdentities_ReapsWhenNoOwnerIsOrphaned(t *testing.T) {
 	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
 	reaper := &reaperSpy{}
-	svc := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), playback.WithErasedStateReaper(reaper))
+	svc := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), playback.NoopErasureSweepMetrics(), reaper, playback.DefaultSweepRunBudget)
 
 	if _, err := svc.Execute(context.Background()); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -547,7 +543,7 @@ func TestForgetDeletedIdentities_ReapsWhenIdentityStoreIsUnavailable(t *testing.
 	identities := newIdentityStore(repo)
 	identities.err = fmt.Errorf("query: %w", playback.ErrIdentityStoreUnavailable)
 	reaper := &reaperSpy{}
-	svc := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), playback.WithErasedStateReaper(reaper))
+	svc := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), playback.NoopErasureSweepMetrics(), reaper, playback.DefaultSweepRunBudget)
 
 	if _, err := svc.Execute(context.Background()); !errors.Is(err, playback.ErrIdentityStoreUnavailable) {
 		t.Fatalf("Execute = %v, want ErrIdentityStoreUnavailable", err)
@@ -564,8 +560,7 @@ func TestForgetDeletedIdentities_ReapFailureDoesNotStopTheErasure(t *testing.T) 
 	deleted := saveQueueOf(t, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), identities, "search:x")
 	identities.deleteAccount(deleted)
 	dbDown := errors.New("connection refused")
-	svc := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now),
-		playback.WithErasedStateReaper(&reaperSpy{err: dbDown}))
+	svc := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), playback.NoopErasureSweepMetrics(), &reaperSpy{err: dbDown}, playback.DefaultSweepRunBudget)
 
 	forgotten, err := svc.Execute(context.Background())
 
@@ -582,7 +577,7 @@ func TestForgetDeletedIdentities_OwnerScanDeadlineIsCounted(t *testing.T) {
 	identities := newIdentityStore(repo)
 	identities.err = fmt.Errorf("list owners without identity: %w", context.DeadlineExceeded)
 	spy := &sweepMetricsSpy{}
-	svc := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), playback.WithErasureSweepMetrics(spy))
+	svc := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), spy, playback.NoopDeletedUserDataCleaner(), playback.DefaultSweepRunBudget)
 
 	_, err := svc.Execute(context.Background())
 
@@ -599,7 +594,7 @@ func TestForgetDeletedIdentities_CancelledRunIsNotAScanTimeout(t *testing.T) {
 	identities := newIdentityStore(repo)
 	identities.err = context.DeadlineExceeded
 	spy := &sweepMetricsSpy{}
-	svc := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), playback.WithErasureSweepMetrics(spy))
+	svc := playback.NewErasureSweeper(identities, playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now), spy, playback.NoopDeletedUserDataCleaner(), playback.DefaultSweepRunBudget)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -632,5 +627,28 @@ func TestForgetDeletedIdentities_AuditRecordNamesTheSweepTrigger(t *testing.T) {
 	}
 	if out := logs.String(); strings.Contains(out, privateSourceId) {
 		t.Errorf("the audit trail leaks the PII it says was erased; logs=%s", out)
+	}
+}
+
+func TestNewErasureSweeper_RefusesAMissingCollaboratorOrBudget(t *testing.T) {
+	identities := &identityStore{queue: newInMemoryQueueRepo(), live: map[uuid.UUID]bool{}}
+	queues := playback.MustNewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{}, time.Now)
+	metrics := playback.NoopErasureSweepMetrics()
+	reaper := playback.NoopDeletedUserDataCleaner()
+	for name, build := range map[string]func(){
+		"no identity lister": func() { playback.NewErasureSweeper(nil, queues, metrics, reaper, time.Second) },
+		"no queue service":   func() { playback.NewErasureSweeper(identities, nil, metrics, reaper, time.Second) },
+		"no metrics":         func() { playback.NewErasureSweeper(identities, queues, nil, reaper, time.Second) },
+		"no reaper":          func() { playback.NewErasureSweeper(identities, queues, metrics, nil, time.Second) },
+		"no run budget":      func() { playback.NewErasureSweeper(identities, queues, metrics, reaper, 0) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatal("construction succeeded, want a panic at construction")
+				}
+			}()
+			build()
+		})
 	}
 }

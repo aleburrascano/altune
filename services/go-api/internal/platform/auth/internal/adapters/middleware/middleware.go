@@ -18,44 +18,22 @@ import (
 
 var ErrClockRequired = errors.New("middleware: the auth middleware requires a clock")
 
-func Middleware(verifier ports.TokenVerifier, now clock.Func, opts ...MiddlewareOption) (func(http.Handler) http.Handler, error) {
+func Middleware(verifier ports.TokenVerifier, now clock.Func, metrics ports.AuthMetrics, limits FailureLimits) (func(http.Handler) http.Handler, error) {
 	if now == nil {
 		return nil, ErrClockRequired
 	}
-	cfg := middlewareConfig{metrics: ports.NoopAuthMetrics(), limits: DefaultFailureLimits}
-	for _, opt := range opts {
-		opt(&cfg)
+	if verifier == nil || metrics == nil {
+		panic("middleware: the auth middleware requires a verifier and metrics")
 	}
-	return middleware(verifier, newFailureThrottle(cfg.limits, now), cfg.metrics), nil
+	return middleware(verifier, newFailureThrottle(limits.orDefaults(), now), metrics), nil
 }
 
-func MustMiddleware(verifier ports.TokenVerifier, now clock.Func, opts ...MiddlewareOption) func(http.Handler) http.Handler {
-	mw, err := Middleware(verifier, now, opts...)
+func MustMiddleware(verifier ports.TokenVerifier, now clock.Func, metrics ports.AuthMetrics, limits FailureLimits) func(http.Handler) http.Handler {
+	mw, err := Middleware(verifier, now, metrics, limits)
 	if err != nil {
 		panic(err)
 	}
 	return mw
-}
-
-type MiddlewareOption func(*middlewareConfig)
-
-type middlewareConfig struct {
-	metrics ports.AuthMetrics
-	limits  FailureLimits
-}
-
-func WithFailureLimits(limits FailureLimits) MiddlewareOption {
-	return func(c *middlewareConfig) {
-		c.limits = limits.orDefaults()
-	}
-}
-
-func WithMetrics(m ports.AuthMetrics) MiddlewareOption {
-	return func(c *middlewareConfig) {
-		if m != nil {
-			c.metrics = m
-		}
-	}
 }
 
 func middleware(verifier ports.TokenVerifier, throttle *failureThrottle, metrics ports.AuthMetrics) func(http.Handler) http.Handler {

@@ -14,7 +14,7 @@ import (
 
 func seedLibraryTrack(t *testing.T, repo *library.PostgresCatalogTrackRepository, userId ids.UserId, spec libraryTrackSpec) *library.Track {
 	t.Helper()
-	track, err := library.NewTrack(userId, spec.title, spec.artist, spec.album)
+	track, err := library.NewTrack(userId, spec.title, spec.artist, spec.album, time.Now)
 	if err != nil {
 		t.Fatalf("NewTrack(%q): %v", spec.title, err)
 	}

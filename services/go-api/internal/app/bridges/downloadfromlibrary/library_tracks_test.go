@@ -13,6 +13,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -79,7 +80,7 @@ func (s *fakeStore) AudioRefInUse(context.Context, string, domain.TrackId) (bool
 func newTrack(t *testing.T, version int) (*domain.Track, ids.UserId) {
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Title", "Artist", "Album")
+	track, err := domain.NewTrack(userId, "Title", "Artist", "Album", time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +97,7 @@ func (nothingStore) GetByID(context.Context, domain.TrackId, ids.UserId) (*domai
 }
 
 func TestGetReportsAStoreThatAnswersNothingAsErrTrackNotFound(t *testing.T) {
-	ledger := downloadfromlibrary.NewLibraryTracks(nothingStore{newFakeStore()})
+	ledger := downloadfromlibrary.NewLibraryTracks(nothingStore{newFakeStore()}, time.Now)
 
 	got, err := ledger.Get(context.Background(), ids.NewTrackId(), ids.NewUserId(uuid.New()))
 
@@ -112,7 +113,7 @@ func TestGetMapsFieldsAndReportsAMissingTrackAsErrTrackNotFound(t *testing.T) {
 	if err := track.MarkReady("ref-1"); err != nil {
 		t.Fatal(err)
 	}
-	ledger := downloadfromlibrary.NewLibraryTracks(newFakeStore(track))
+	ledger := downloadfromlibrary.NewLibraryTracks(newFakeStore(track), time.Now)
 
 	snap, err := ledger.Get(context.Background(), track.ID, userId)
 	if err != nil {
@@ -140,7 +141,7 @@ func TestGetMapsFieldsAndReportsAMissingTrackAsErrTrackNotFound(t *testing.T) {
 func TestCompleteMarksPendingTrackReady(t *testing.T) {
 	track, userId := newTrack(t, 4)
 	store := newFakeStore(track)
-	ledger := downloadfromlibrary.NewLibraryTracks(store)
+	ledger := downloadfromlibrary.NewLibraryTracks(store, time.Now)
 
 	err := ledger.Complete(context.Background(), track.ID, userId, 0, download.Completion{
 		AudioRef:           "ref-1",
@@ -184,7 +185,7 @@ func TestCompleteWithReplaceAudioReplacesReadyTrack(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := newFakeStore(track)
-	ledger := downloadfromlibrary.NewLibraryTracks(store)
+	ledger := downloadfromlibrary.NewLibraryTracks(store, time.Now)
 
 	if err := ledger.Complete(context.Background(), track.ID, userId, 0, download.Completion{AudioRef: "new-ref", ReplaceAudio: true}); err != nil {
 		t.Fatal(err)
@@ -201,7 +202,7 @@ func TestCompleteOnFailedTrackIsIllegalTransition(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := newFakeStore(track)
-	ledger := downloadfromlibrary.NewLibraryTracks(store)
+	ledger := downloadfromlibrary.NewLibraryTracks(store, time.Now)
 
 	err := ledger.Complete(context.Background(), track.ID, userId, 0, download.Completion{AudioRef: "ref", ReplaceAudio: true})
 	if !errors.Is(err, download.ErrIllegalTransition) {
@@ -225,7 +226,7 @@ func TestRevertAtUpdateConflictIsNotRetried(t *testing.T) {
 	}
 	store := newFakeStore(track)
 	store.conflicts = 1
-	ledger := downloadfromlibrary.NewLibraryTracks(store)
+	ledger := downloadfromlibrary.NewLibraryTracks(store, time.Now)
 
 	err := ledger.RevertAt(context.Background(), download.TrackSnapshot{ID: track.ID, UserId: userId, Version: 5})
 	if !errors.Is(err, librarydoor.ErrTrackVersionConflict) {
@@ -238,7 +239,7 @@ func TestRevertAtUpdateConflictIsNotRetried(t *testing.T) {
 
 func TestMissingTrackReturnsNotFound(t *testing.T) {
 	_, userId := newTrack(t, 1)
-	ledger := downloadfromlibrary.NewLibraryTracks(newFakeStore())
+	ledger := downloadfromlibrary.NewLibraryTracks(newFakeStore(), time.Now)
 
 	err := ledger.Fail(context.Background(), domain.NewTrackId(), userId, 0, "boom")
 	if !errors.Is(err, download.ErrTrackNotFound) {
@@ -248,7 +249,7 @@ func TestMissingTrackReturnsNotFound(t *testing.T) {
 
 func TestRevertAtMissingTrackReturnsNotFound(t *testing.T) {
 	_, userId := newTrack(t, 1)
-	ledger := downloadfromlibrary.NewLibraryTracks(newFakeStore())
+	ledger := downloadfromlibrary.NewLibraryTracks(newFakeStore(), time.Now)
 
 	err := ledger.RevertAt(context.Background(), download.TrackSnapshot{ID: domain.NewTrackId(), UserId: userId, Version: 1})
 	if !errors.Is(err, download.ErrTrackNotFound) {
@@ -259,7 +260,7 @@ func TestRevertAtMissingTrackReturnsNotFound(t *testing.T) {
 func TestFailTransition(t *testing.T) {
 	track, userId := newTrack(t, 1)
 	store := newFakeStore(track)
-	ledger := downloadfromlibrary.NewLibraryTracks(store)
+	ledger := downloadfromlibrary.NewLibraryTracks(store, time.Now)
 
 	if err := ledger.Fail(context.Background(), track.ID, userId, 0, "boom"); err != nil {
 		t.Fatal(err)
@@ -273,7 +274,7 @@ func TestVersionConflictIsRetried(t *testing.T) {
 	track, userId := newTrack(t, 2)
 	store := newFakeStore(track)
 	store.conflicts = 1
-	ledger := downloadfromlibrary.NewLibraryTracks(store)
+	ledger := downloadfromlibrary.NewLibraryTracks(store, time.Now)
 
 	if err := ledger.Fail(context.Background(), track.ID, userId, 0, "boom"); err != nil {
 		t.Fatal(err)
@@ -290,7 +291,7 @@ func TestVersionConflictExhaustsAttempts(t *testing.T) {
 	track, userId := newTrack(t, 2)
 	store := newFakeStore(track)
 	store.conflicts = 100
-	ledger := downloadfromlibrary.NewLibraryTracks(store)
+	ledger := downloadfromlibrary.NewLibraryTracks(store, time.Now)
 
 	err := ledger.Fail(context.Background(), track.ID, userId, 0, "boom")
 	if !errors.Is(err, librarydoor.ErrTrackVersionConflict) {
@@ -307,7 +308,7 @@ func TestRevertAtStaleVersionReturnsConflictWithoutRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := newFakeStore(track)
-	ledger := downloadfromlibrary.NewLibraryTracks(store)
+	ledger := downloadfromlibrary.NewLibraryTracks(store, time.Now)
 
 	err := ledger.RevertAt(context.Background(), download.TrackSnapshot{ID: track.ID, UserId: userId, Version: 4})
 	if !errors.Is(err, librarydoor.ErrTrackVersionConflict) {
@@ -324,7 +325,7 @@ func TestRevertAtRevertsAtSnapshotVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := newFakeStore(track)
-	ledger := downloadfromlibrary.NewLibraryTracks(store)
+	ledger := downloadfromlibrary.NewLibraryTracks(store, time.Now)
 
 	if err := ledger.RevertAt(context.Background(), download.TrackSnapshot{ID: track.ID, UserId: userId, Version: 5}); err != nil {
 		t.Fatal(err)
@@ -344,7 +345,7 @@ func completeWithAudioLength(t *testing.T, catalogSeconds, audioSeconds float64)
 		t.Fatal(err)
 	}
 	store := newFakeStore(track)
-	err := downloadfromlibrary.NewLibraryTracks(store).Complete(context.Background(), track.ID, userId, 0, download.Completion{AudioRef: "ref", Duration: trackLength(t, audioSeconds)})
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, userId, 0, download.Completion{AudioRef: "ref", Duration: trackLength(t, audioSeconds)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -368,7 +369,7 @@ func TestGetNeverAimsAtTheLastMeasuredFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	snap, err := downloadfromlibrary.NewLibraryTracks(newFakeStore(track)).Get(context.Background(), track.ID, userId)
+	snap, err := downloadfromlibrary.NewLibraryTracks(newFakeStore(track), time.Now).Get(context.Background(), track.ID, userId)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -401,7 +402,7 @@ func TestGetAimsADownloadAtTheCatalogLengthNotTheStoredFile(t *testing.T) {
 			if err := track.SetDuration(137); err != nil {
 				t.Fatal(err)
 			}
-			snap, err := downloadfromlibrary.NewLibraryTracks(newFakeStore(track)).Get(context.Background(), track.ID, userId)
+			snap, err := downloadfromlibrary.NewLibraryTracks(newFakeStore(track), time.Now).Get(context.Background(), track.ID, userId)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -461,7 +462,7 @@ func TestCompleteDoesNotFlagATrackWithoutACatalogLength(t *testing.T) {
 	track, userId := newTrack(t, 1)
 	store := newFakeStore(track)
 
-	err := downloadfromlibrary.NewLibraryTracks(store).Complete(context.Background(), track.ID, userId, 0, download.Completion{AudioRef: "ref", Duration: trackLength(t, 137)})
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, userId, 0, download.Completion{AudioRef: "ref", Duration: trackLength(t, 137)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -482,7 +483,7 @@ func TestCompleteClearsTheFlagWhenReplacementAudioMatches(t *testing.T) {
 	track.AudioLengthMismatch = true
 	store := newFakeStore(track)
 
-	err := downloadfromlibrary.NewLibraryTracks(store).Complete(context.Background(), track.ID, userId, 0, download.Completion{AudioRef: "new", ReplaceAudio: true, Duration: trackLength(t, 236)})
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, userId, 0, download.Completion{AudioRef: "new", ReplaceAudio: true, Duration: trackLength(t, 236)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -510,7 +511,7 @@ func TestCompletePersistsTheResolvedISRCOnlyWhenTheTrackHasNone(t *testing.T) {
 			track.ISRC = tt.have
 			store := newFakeStore(track)
 
-			err := downloadfromlibrary.NewLibraryTracks(store).Complete(context.Background(), track.ID, userId, 0, download.Completion{AudioRef: "ref", ISRC: tt.got})
+			err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, userId, 0, download.Completion{AudioRef: "ref", ISRC: tt.got})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -541,7 +542,7 @@ func TestGetExposesTheCatalogIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	snap, err := downloadfromlibrary.NewLibraryTracks(newFakeStore(track)).Get(context.Background(), track.ID, userId)
+	snap, err := downloadfromlibrary.NewLibraryTracks(newFakeStore(track), time.Now).Get(context.Background(), track.ID, userId)
 	if err != nil || snap == nil {
 		t.Fatalf("Get = %v, %v", snap, err)
 	}
@@ -564,7 +565,7 @@ func TestGetKeepsTheMeasuredFileLengthBesideTheCatalogLength(t *testing.T) {
 	measured, catalog := 112.0, 128.0
 	track.DurationSeconds = &measured
 	track.CatalogDurationSeconds = &catalog
-	ledger := downloadfromlibrary.NewLibraryTracks(newFakeStore(track))
+	ledger := downloadfromlibrary.NewLibraryTracks(newFakeStore(track), time.Now)
 
 	snap, err := ledger.Get(context.Background(), track.ID, userId)
 	if err != nil {
@@ -586,7 +587,7 @@ func TestGetExposesThePickedSourceURL(t *testing.T) {
 	const pick = "https://soundcloud.com/artist/track"
 	track.CatalogSources = []domain.CatalogSource{{Provider: "soundcloud", ExternalID: pick, URL: pick}}
 
-	snap, err := downloadfromlibrary.NewLibraryTracks(newFakeStore(track)).Get(context.Background(), track.ID, userId)
+	snap, err := downloadfromlibrary.NewLibraryTracks(newFakeStore(track), time.Now).Get(context.Background(), track.ID, userId)
 	if err != nil || snap == nil {
 		t.Fatalf("Get: %v, %v", snap, err)
 	}
@@ -600,7 +601,7 @@ func TestTrackLedger_CompleteWithAStaleFenceIsLeaseLost(t *testing.T) {
 	track, userId := newTrack(t, 4)
 	track.AcquisitionFence = 3
 	store := newFakeStore(track)
-	ledger := downloadfromlibrary.NewLibraryTracks(store)
+	ledger := downloadfromlibrary.NewLibraryTracks(store, time.Now)
 
 	err := ledger.Complete(context.Background(), track.ID, userId, 2, download.Completion{AudioRef: "ref-1"})
 
@@ -616,7 +617,7 @@ func TestTrackLedger_FailWithAStaleFenceIsLeaseLost(t *testing.T) {
 	track, userId := newTrack(t, 1)
 	track.AcquisitionFence = 3
 	store := newFakeStore(track)
-	ledger := downloadfromlibrary.NewLibraryTracks(store)
+	ledger := downloadfromlibrary.NewLibraryTracks(store, time.Now)
 
 	failErr := ledger.Fail(context.Background(), track.ID, userId, 2, "boom")
 
@@ -644,7 +645,7 @@ func TestTrackLedger_WritesThatOwnTheLeaseOrCarryNoFenceGoThrough(t *testing.T) 
 			track.AcquisitionFence = tc.trackedFence
 			store := newFakeStore(track)
 
-			err := downloadfromlibrary.NewLibraryTracks(store).Fail(context.Background(), track.ID, userId, tc.heldFence, "boom")
+			err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Fail(context.Background(), track.ID, userId, tc.heldFence, "boom")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -660,7 +661,7 @@ func TestTrackLedger_AClaimBetweenReadAndUpdateFencesOutTheWriter(t *testing.T) 
 	track.AcquisitionFence = 2
 	store := &reclaimingStore{fakeStore: newFakeStore(track)}
 
-	err := downloadfromlibrary.NewLibraryTracks(store).Complete(context.Background(), track.ID, userId, 2, download.Completion{AudioRef: "ref-1"})
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, userId, 2, download.Completion{AudioRef: "ref-1"})
 
 	if !errors.Is(err, download.ErrLeaseLost) {
 		t.Fatalf("err = %v, want ErrLeaseLost once the retry re-reads the new owner's fence", err)
@@ -695,7 +696,7 @@ func TestTrackLedger_AFenceAheadOfTheTracksIsAlsoLeaseLost(t *testing.T) {
 	track.AcquisitionFence = 3
 	store := newFakeStore(track)
 
-	err := downloadfromlibrary.NewLibraryTracks(store).Complete(context.Background(), track.ID, userId, 4, download.Completion{AudioRef: "ref-1"})
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, userId, 4, download.Completion{AudioRef: "ref-1"})
 
 	if !errors.Is(err, download.ErrLeaseLost) {
 		t.Fatalf("err = %v, want ErrLeaseLost: a fence that differs either way is not the owner", err)
@@ -713,7 +714,7 @@ func TestTrackLedger_AStaleReplaceKeepsTheTrackOnItsServingAudio(t *testing.T) {
 	track.AcquisitionFence = 3
 	store := newFakeStore(track)
 
-	err := downloadfromlibrary.NewLibraryTracks(store).Complete(context.Background(), track.ID, userId, 2, download.Completion{AudioRef: "new-ref", ReplaceAudio: true})
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, userId, 2, download.Completion{AudioRef: "new-ref", ReplaceAudio: true})
 
 	if !errors.Is(err, download.ErrLeaseLost) {
 		t.Fatalf("err = %v, want ErrLeaseLost", err)
@@ -742,7 +743,7 @@ func TestTrackLedger_CompleteWithoutAFenceOnEitherSideGoesThrough(t *testing.T) 
 			track.AcquisitionFence = tc.trackedFence
 			store := newFakeStore(track)
 
-			if err := downloadfromlibrary.NewLibraryTracks(store).Complete(context.Background(), track.ID, userId, tc.heldFence, download.Completion{AudioRef: "ref-1"}); err != nil {
+			if err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, userId, tc.heldFence, download.Completion{AudioRef: "ref-1"}); err != nil {
 				t.Fatal(err)
 			}
 			got := storedTrack(t, store, track.ID)
@@ -758,7 +759,7 @@ func TestTrackLedger_AClaimBetweenReadAndUpdateStopsTheOldOwnerFailingTheTrack(t
 	track.AcquisitionFence = 2
 	store := &reclaimingStore{fakeStore: newFakeStore(track)}
 
-	err := downloadfromlibrary.NewLibraryTracks(store).Fail(context.Background(), track.ID, userId, 2, "boom")
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Fail(context.Background(), track.ID, userId, 2, "boom")
 
 	if !errors.Is(err, download.ErrLeaseLost) {
 		t.Fatalf("err = %v, want ErrLeaseLost", err)
@@ -780,12 +781,40 @@ func TestTrackLedger_RevertAtIgnoresTheLease(t *testing.T) {
 	track.AcquisitionFence = 3
 	store := newFakeStore(track)
 
-	if err := downloadfromlibrary.NewLibraryTracks(store).RevertAt(context.Background(), download.TrackSnapshot{ID: track.ID, UserId: userId, Version: 5}); err != nil {
+	if err := downloadfromlibrary.NewLibraryTracks(store, time.Now).RevertAt(context.Background(), download.TrackSnapshot{ID: track.ID, UserId: userId, Version: 5}); err != nil {
 		t.Fatal(err)
 	}
 	if got := storedTrack(t, store, track.ID); got.DownloadStatus != domain.AcquisitionPending {
 		t.Errorf("status = %v, want pending", got.DownloadStatus)
 	}
+}
+
+func TestTrackLedger_RevertAtStartsTheAcquisitionAtTheInjectedClock(t *testing.T) {
+	track, userId := newTrack(t, 5)
+	if err := track.FailAcquisition("boom"); err != nil {
+		t.Fatal(err)
+	}
+	store := newFakeStore(track)
+	pinned := time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)
+
+	err := downloadfromlibrary.NewLibraryTracks(store, func() time.Time { return pinned }).RevertAt(context.Background(), download.TrackSnapshot{ID: track.ID, UserId: userId, Version: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := storedTrack(t, store, track.ID)
+	if got.AcquisitionStartedAt == nil || !got.AcquisitionStartedAt.Equal(pinned) {
+		t.Errorf("AcquisitionStartedAt = %v, want the injected %v", got.AcquisitionStartedAt, pinned)
+	}
+}
+
+func TestNewLibraryTracks_RefusesANilClock(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("construction without a clock succeeded, want a panic at construction")
+		}
+	}()
+
+	downloadfromlibrary.NewLibraryTracks(newFakeStore(), nil)
 }
 
 func goldenRelabel() *download.TrackLabel {
@@ -802,7 +831,7 @@ func goldenRelabel() *download.TrackLabel {
 func studioLabelledTrack(t *testing.T) (*domain.Track, ids.UserId) {
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "It's Only Love", "Bryan Adams", "Reckless")
+	track, err := domain.NewTrack(userId, "It's Only Love", "Bryan Adams", "Reckless", time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -816,7 +845,7 @@ func TestTrackLedger_CompleteWithARelabelStoresTheRecordingActuallyStored(t *tes
 	track, userId := studioLabelledTrack(t)
 	store := newFakeStore(track)
 
-	err := downloadfromlibrary.NewLibraryTracks(store).Complete(context.Background(), track.ID, userId, 0,
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, userId, 0,
 		download.Completion{AudioRef: "ref", Duration: trackLength(t, 194), ISRC: "IETLH2500023", Relabel: goldenRelabel()})
 	if err != nil {
 		t.Fatal(err)
@@ -850,7 +879,7 @@ func TestTrackLedger_CompleteWithoutARelabelKeepsTheTracksLabels(t *testing.T) {
 	track, userId := studioLabelledTrack(t)
 	store := newFakeStore(track)
 
-	err := downloadfromlibrary.NewLibraryTracks(store).Complete(context.Background(), track.ID, userId, 0,
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, userId, 0,
 		download.Completion{AudioRef: "ref", Duration: trackLength(t, 195), ISRC: "IETLH2500023"})
 	if err != nil {
 		t.Fatal(err)
@@ -872,7 +901,7 @@ func TestTrackLedger_ARefusedRelabelFailsTheCompletionAndWritesNothing(t *testin
 	label := goldenRelabel()
 	label.MBID = ""
 
-	err := downloadfromlibrary.NewLibraryTracks(store).Complete(context.Background(), track.ID, userId, 0,
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, userId, 0,
 		download.Completion{AudioRef: "ref", Duration: trackLength(t, 194), Relabel: label})
 
 	if err == nil {
@@ -888,7 +917,7 @@ func TestTrackLedger_ARelabelSurvivesAVersionConflictRetry(t *testing.T) {
 	store := newFakeStore(track)
 	store.conflicts = 1
 
-	err := downloadfromlibrary.NewLibraryTracks(store).Complete(context.Background(), track.ID, userId, 0,
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, userId, 0,
 		download.Completion{AudioRef: "ref", Duration: trackLength(t, 194), Relabel: goldenRelabel()})
 	if err != nil {
 		t.Fatal(err)
@@ -915,7 +944,7 @@ func TestTrackLedger_ARelabelChecksTheMeasuredLengthAgainstTheNewCatalogLength(t
 	label := goldenRelabel()
 	label.DurationSeconds = 400
 
-	err := downloadfromlibrary.NewLibraryTracks(store).Complete(context.Background(), track.ID, userId, 0,
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, userId, 0,
 		download.Completion{AudioRef: "ref", Duration: trackLength(t, 195), Relabel: label})
 	if err != nil {
 		t.Fatal(err)
@@ -932,7 +961,7 @@ func TestTrackLedger_ARelabelWithNoKnownLengthLeavesNothingToMismatch(t *testing
 	label := goldenRelabel()
 	label.DurationSeconds = 0
 
-	err := downloadfromlibrary.NewLibraryTracks(store).Complete(context.Background(), track.ID, userId, 0,
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, userId, 0,
 		download.Completion{AudioRef: "ref", Duration: trackLength(t, 60), Relabel: label})
 	if err != nil {
 		t.Fatal(err)
@@ -951,7 +980,7 @@ func TestTrackLedger_TheRelabelsISRCWinsOverTheCompletionsISRC(t *testing.T) {
 	track, userId := studioLabelledTrack(t)
 	store := newFakeStore(track)
 
-	err := downloadfromlibrary.NewLibraryTracks(store).Complete(context.Background(), track.ID, userId, 0,
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, userId, 0,
 		download.Completion{AudioRef: "ref", Duration: trackLength(t, 194), ISRC: "USAM18490008", Relabel: goldenRelabel()})
 	if err != nil {
 		t.Fatal(err)
@@ -968,7 +997,7 @@ func TestTrackLedger_ARelabelWithNoISRCTakesTheCompletionsResolvedISRC(t *testin
 	label := goldenRelabel()
 	label.ISRC = ""
 
-	err := downloadfromlibrary.NewLibraryTracks(store).Complete(context.Background(), track.ID, userId, 0,
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, userId, 0,
 		download.Completion{AudioRef: "ref", Duration: trackLength(t, 194), ISRC: "IETLH2500023", Relabel: label})
 	if err != nil {
 		t.Fatal(err)
@@ -986,7 +1015,7 @@ func TestTrackLedger_AReplaceOfAReadyTrackCanRelabelIt(t *testing.T) {
 	}
 	store := newFakeStore(track)
 
-	err := downloadfromlibrary.NewLibraryTracks(store).Complete(context.Background(), track.ID, userId, 0,
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, userId, 0,
 		download.Completion{AudioRef: "rerecording-ref", ReplaceAudio: true, Duration: trackLength(t, 194), Relabel: goldenRelabel()})
 	if err != nil {
 		t.Fatal(err)
@@ -1008,7 +1037,7 @@ func TestTrackLedger_AnIllegalReplaceWithARelabelWritesNoLabels(t *testing.T) {
 	}
 	store := newFakeStore(track)
 
-	err := downloadfromlibrary.NewLibraryTracks(store).Complete(context.Background(), track.ID, userId, 0,
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, userId, 0,
 		download.Completion{AudioRef: "ref", ReplaceAudio: true, Duration: trackLength(t, 194), Relabel: goldenRelabel()})
 	if !errors.Is(err, download.ErrIllegalTransition) {
 		t.Fatalf("want ErrIllegalTransition, got %v", err)

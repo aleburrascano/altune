@@ -18,7 +18,7 @@ func TestContract_EventFrameMatchesFixture(t *testing.T) {
 	conn := openStream(t, srv, "/events/stream")
 
 	marker := "contract-" + uuid.NewString()
-	fx.tap.Publish(withCorrelation("contract-corr"), ids.NewUserId(uuid.New()), eventstest.With(events.EventType(marker), map[string]any{"track_id": "trk-1"}))
+	fx.tap.Publish(withCorrelation("contract-corr"), ids.NewUserId(uuid.New()), eventstest.Fielded(events.EventType(marker), map[string]any{"track_id": "trk-1"}))
 
 	assertMatchesFixture(t, "observe_events_frame.json", []byte(conn.awaitData(t, marker)))
 }

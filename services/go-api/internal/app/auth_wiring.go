@@ -15,11 +15,12 @@ func newAuthVerifier(ctx context.Context, cfg *config.Config) (*auth.SupabaseJWT
 		cfg.SupabaseProjectURL,
 		cfg.SupabaseJWTAud,
 		time.Now,
-		auth.WithJWKSMetrics(auth.NewExpvarAuthMetrics()),
-		auth.WithTokenRevoker(auth.NoopTokenRevoker()),
+		auth.NewExpvarAuthMetrics(),
+		auth.NoopTokenRevoker(),
+		auth.DefaultJWKSSchedule(),
 	)
 }
 
 func authMiddleware(verifier auth.TokenVerifier) func(http.Handler) http.Handler {
-	return auth.MustMiddleware(verifier, time.Now, auth.WithMetrics(auth.NewExpvarAuthMetrics()))
+	return auth.MustMiddleware(verifier, time.Now, auth.NewExpvarAuthMetrics(), auth.DefaultFailureLimits)
 }

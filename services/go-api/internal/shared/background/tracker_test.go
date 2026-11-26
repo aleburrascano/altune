@@ -113,7 +113,7 @@ type launchedCtx struct {
 
 func TestLaunchWithin_RunsPastTheRequestUnderItsOwnBudget(t *testing.T) {
 	bg := newTracker(t, 1)
-	parent, cancel := context.WithCancel(logging.WithCorrelationID(context.Background(), "corr-bg-77"))
+	parent, cancel := context.WithCancel(logging.ContextWithCorrelationID(context.Background(), "corr-bg-77"))
 	seen := make(chan launchedCtx, 1)
 	before := time.Now()
 	mustLaunch(t, bg, parent, "telemetry.emit", 2*time.Second, func(ctx context.Context) {
@@ -138,7 +138,7 @@ func TestLaunchWithin_RunsPastTheRequestUnderItsOwnBudget(t *testing.T) {
 func TestLaunchWithin_APanicIsLoggedWithItsLabelAndTheTaskStillEnds(t *testing.T) {
 	ring := captureDetachedLogs(t)
 	bg := newTracker(t, 1)
-	ctx := logging.WithCorrelationID(context.Background(), "corr-bg-88")
+	ctx := logging.ContextWithCorrelationID(context.Background(), "corr-bg-88")
 	mustLaunch(t, bg, ctx, "vocab.ingest", time.Minute, func(context.Context) { panic("store exploded") })
 	if !drainWithin(t, bg, 5*time.Second) {
 		t.Fatal("Drain timed out: a panicking task must still end")
@@ -212,7 +212,7 @@ func TestLaunchWithin_ADroppedTaskIsLoggedAtWarnWithItsLabel(t *testing.T) {
 	release := make(chan struct{})
 	mustLaunch(t, bg, context.Background(), "slow", time.Minute, func(context.Context) { <-release })
 
-	bg.LaunchWithin(logging.WithCorrelationID(context.Background(), "corr-bg-99"), "artwork_fill", time.Minute, func(context.Context) {})
+	bg.LaunchWithin(logging.ContextWithCorrelationID(context.Background(), "corr-bg-99"), "artwork_fill", time.Minute, func(context.Context) {})
 
 	rec := onlyRecord(t, ring, "background.task_dropped")
 	if rec.Level != slog.LevelWarn.String() || rec.Attrs["label"] != "artwork_fill" || rec.Attrs["corr_id"] != "corr-bg-99" {

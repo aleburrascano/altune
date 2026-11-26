@@ -94,7 +94,7 @@ func ownerScanDeadline(opts ...func(*playback.PostgresDeletedIdentityRepository)
 
 func requestDeadline() time.Duration {
 	q := &deadlineQuerier{}
-	_ = playback.NewPostgresQueueStateRepository(q).DeleteForUser(context.Background(), testUser())
+	_ = playback.NewPostgresQueueStateRepository(q, playback.NoopQueueStateMetrics()).DeleteForUser(context.Background(), testUser())
 	return q.left
 }
 

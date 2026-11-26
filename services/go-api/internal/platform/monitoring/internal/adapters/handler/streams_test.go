@@ -162,7 +162,7 @@ func decodeFrame(t *testing.T, frame string) map[string]json.RawMessage {
 }
 
 func withCorrelation(id string) context.Context {
-	return logging.WithCorrelationID(context.Background(), id)
+	return logging.ContextWithCorrelationID(context.Background(), id)
 }
 
 func assertCode(t *testing.T, rec *httptest.ResponseRecorder, wantStatus int, wantCode string) {
@@ -196,7 +196,7 @@ func TestStreamEvents_ForwardsEachPublishedEventAsADataFrame(t *testing.T) {
 	conn := openStream(t, srv, "/events/stream")
 
 	marker := "event-" + uuid.NewString()
-	fx.tap.Publish(context.Background(), ids.NewUserId(uuid.New()), eventstest.With(events.EventType(marker), map[string]any{"track_id": "trk-1"}))
+	fx.tap.Publish(context.Background(), ids.NewUserId(uuid.New()), eventstest.Fielded(events.EventType(marker), map[string]any{"track_id": "trk-1"}))
 
 	fields := decodeFrame(t, conn.awaitData(t, marker))
 	if string(fields["type"]) != `"`+marker+`"` || string(fields["subject"]) != `"trk-1"` {
@@ -227,7 +227,7 @@ func TestStreamEvents_FrameCarriesTheUserDigestNeverTheRawID(t *testing.T) {
 	user := ids.NewUserId(uuid.New())
 
 	marker := "private-" + uuid.NewString()
-	fx.tap.Publish(context.Background(), user, eventstest.With(events.EventType(marker), map[string]any{"query": "my private query"}))
+	fx.tap.Publish(context.Background(), user, eventstest.Fielded(events.EventType(marker), map[string]any{"query": "my private query"}))
 
 	frame := conn.awaitData(t, marker)
 	if strings.Contains(frame, user.String()) || strings.Contains(frame, "my private query") {
@@ -713,7 +713,7 @@ func stallClients(tap *monitoring.EventTap) {
 	user := ids.NewUserId(uuid.New())
 	payload := map[string]any{"track_id": strings.Repeat("x", 16<<10)}
 	for i := 0; i < 4*eventFeedCeiling; i++ {
-		tap.Publish(context.Background(), user, eventstest.With("stall.filler", payload))
+		tap.Publish(context.Background(), user, eventstest.Fielded("stall.filler", payload))
 	}
 }
 

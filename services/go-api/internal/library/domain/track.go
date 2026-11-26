@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/downloadprovenance"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/tracklength"
@@ -127,7 +128,10 @@ func ValidateText(value, field string) error {
 	return nil
 }
 
-func NewTrack(userId ids.UserId, title, artist, album string) (*Track, error) {
+func NewTrack(userId ids.UserId, title, artist, album string, wallClock clock.Func) (*Track, error) {
+	if wallClock == nil {
+		return nil, ErrTrackTimestampClockRequired
+	}
 	title = strings.TrimSpace(title)
 	if err := validateTrackText(title, "title"); err != nil {
 		return nil, err
@@ -140,7 +144,7 @@ func NewTrack(userId ids.UserId, title, artist, album string) (*Track, error) {
 	if err := validateTrackText(resolved, "album"); err != nil {
 		return nil, err
 	}
-	now := time.Now().UTC()
+	now := wallClock.UTC()
 	return &Track{
 		ID:                   NewTrackId(),
 		UserId:               userId,
@@ -209,6 +213,8 @@ const (
 	ProvenanceCorroborated = downloadprovenance.ProvenanceCorroborated
 	ProvenanceBestEffort   = downloadprovenance.ProvenanceBestEffort
 )
+
+var ErrTrackTimestampClockRequired = errors.New("domain: a track needs a clock")
 
 var ErrIllegalAcquisitionTransition = errors.New("illegal acquisition status transition")
 
@@ -444,11 +450,14 @@ func (t *Track) FailAcquisition(reason string) error {
 	return t.MarkFailed(reason)
 }
 
-func (t *Track) RevertToPending() error {
+func (t *Track) RevertToPending(wallClock clock.Func) error {
+	if wallClock == nil {
+		return ErrTrackTimestampClockRequired
+	}
 	if t.DownloadStatus == AcquisitionPending {
 		return illegalTransition("revert to pending", t.DownloadStatus)
 	}
-	now := time.Now().UTC()
+	now := wallClock.UTC()
 	t.DownloadStatus = AcquisitionPending
 	t.AudioRef = nil
 	t.FailureReason = nil

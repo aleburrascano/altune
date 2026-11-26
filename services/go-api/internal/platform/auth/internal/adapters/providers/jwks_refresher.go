@@ -34,6 +34,7 @@ type jwksRefresher struct {
 
 	mu          sync.Mutex
 	inflight    *jwksRefreshCall
+	refreshing  bool
 	failures    int
 	notBefore   time.Time
 	lastErr     error
@@ -77,7 +78,7 @@ func (r *jwksRefresher) refresh(ctx context.Context, minAge time.Duration) error
 func (r *jwksRefresher) join(minAge time.Duration) (*jwksRefreshCall, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.inflight != nil {
+	if r.refreshing {
 		return r.inflight, nil
 	}
 	if r.now().Sub(r.lastSuccess) < minAge {
@@ -87,6 +88,7 @@ func (r *jwksRefresher) join(minAge time.Duration) (*jwksRefreshCall, error) {
 		return nil, fmt.Errorf("%w (retry in %s): %w", ErrJWKSRefreshBackoff, wait.Round(time.Millisecond), r.lastErr)
 	}
 	r.inflight = &jwksRefreshCall{done: make(chan struct{})}
+	r.refreshing = true
 	go r.run(r.inflight)
 	return r.inflight, nil
 }
@@ -103,6 +105,7 @@ func (r *jwksRefresher) settle(call *jwksRefreshCall) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.inflight = nil
+	r.refreshing = false
 	if call.err == nil {
 		r.failures, r.notBefore, r.lastErr, r.lastSuccess = 0, time.Time{}, nil, r.now()
 		return

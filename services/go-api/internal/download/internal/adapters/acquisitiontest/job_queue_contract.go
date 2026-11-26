@@ -264,7 +264,7 @@ func contractClaimPrefersTheUserWithNoLiveLease(t *testing.T, q JobQueueUnderTes
 
 func contractTheEnqueuingRequestsCorrelationIDTravelsWithEveryRunOfTheJob(t *testing.T, q JobQueueUnderTest) {
 	trackID := q.AddTrack(t, ids.NewUserId(uuid.New()))
-	ctx := logging.WithCorrelationID(context.Background(), "corr-contract")
+	ctx := logging.ContextWithCorrelationID(context.Background(), "corr-contract")
 	if err := q.Enqueue(ctx, trackID, ports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue: %v", err)
 	}
@@ -282,7 +282,7 @@ func contractTheEnqueuingRequestsCorrelationIDTravelsWithEveryRunOfTheJob(t *tes
 
 func contractAJobEnqueuedWithoutACorrelationIDClaimsWithNone(t *testing.T, q JobQueueUnderTest) {
 	trackID := q.AddTrack(t, ids.NewUserId(uuid.New()))
-	if err := q.Enqueue(logging.WithCorrelationID(context.Background(), "corr-old"), trackID, ports.JobKindAcquire, 0); err != nil {
+	if err := q.Enqueue(logging.ContextWithCorrelationID(context.Background(), "corr-old"), trackID, ports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue: %v", err)
 	}
 	first := claim(t, q)
@@ -299,7 +299,7 @@ func contractAJobEnqueuedWithoutACorrelationIDClaimsWithNone(t *testing.T, q Job
 func contractAnAcceptedSecondEnqueueOfTheSameKindTakesTheLatestRequestsCorrelationID(t *testing.T, q JobQueueUnderTest) {
 	trackID := q.AddTrack(t, ids.NewUserId(uuid.New()))
 	for _, id := range []string{"corr-first", "corr-latest"} {
-		if err := q.Enqueue(logging.WithCorrelationID(context.Background(), id), trackID, ports.JobKindAcquire, 0); err != nil {
+		if err := q.Enqueue(logging.ContextWithCorrelationID(context.Background(), id), trackID, ports.JobKindAcquire, 0); err != nil {
 			t.Fatalf("Enqueue under %s: %v", id, err)
 		}
 	}
@@ -311,12 +311,12 @@ func contractAnAcceptedSecondEnqueueOfTheSameKindTakesTheLatestRequestsCorrelati
 
 func contractARefusedEnqueueLeavesTheRunningJobsCorrelationIDAlone(t *testing.T, q JobQueueUnderTest) {
 	trackID := q.AddTrack(t, ids.NewUserId(uuid.New()))
-	if err := q.Enqueue(logging.WithCorrelationID(context.Background(), "corr-running"), trackID, ports.JobKindAcquire, 0); err != nil {
+	if err := q.Enqueue(logging.ContextWithCorrelationID(context.Background(), "corr-running"), trackID, ports.JobKindAcquire, 0); err != nil {
 		t.Fatalf("Enqueue: %v", err)
 	}
 	running := claim(t, q)
 
-	err := q.Enqueue(logging.WithCorrelationID(context.Background(), "corr-refused"), trackID, ports.JobKindReplace, 0)
+	err := q.Enqueue(logging.ContextWithCorrelationID(context.Background(), "corr-refused"), trackID, ports.JobKindReplace, 0)
 	if !errors.Is(err, acqdomain.ErrJobKindConflict) {
 		t.Fatalf("Enqueue of another kind over a live lease = %v, want ErrJobKindConflict", err)
 	}

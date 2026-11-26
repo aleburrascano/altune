@@ -71,7 +71,7 @@ func newOfflineScheduler(t *testing.T, cfg *config.Config, sources downloadsetup
 		Transport:  http.DefaultTransport,
 		Config:     cfg,
 		Events:     eventTap(t),
-		Ledger:     downloadfromlibrary.NewLibraryTracks(&fixtureTrackRepo{}),
+		Ledger:     downloadfromlibrary.NewLibraryTracks(&fixtureTrackRepo{}, time.Now),
 		AudioStore: library.NewFilesystemAudioStore(cfg.MusicDir),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    sources,
@@ -85,7 +85,7 @@ func acquireThroughPostgres(t *testing.T) (library.Track, string, download.Verif
 	pool := integrationPool(t)
 	musicDir := t.TempDir()
 	userID := ids.NewUserId(uuid.New())
-	track, err := library.NewTrack(userID, "Fixture Song", "Fixture Artist", "")
+	track, err := library.NewTrack(userID, "Fixture Song", "Fixture Artist", "", time.Now)
 	if err != nil || track.SetDuration(212) != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -99,7 +99,7 @@ func acquireThroughPostgres(t *testing.T) (library.Track, string, download.Verif
 		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, MusicDir: musicDir},
 		Pool:       pool,
 		Events:     eventTap(t),
-		Ledger:     downloadfromlibrary.NewLibraryTracks(repo),
+		Ledger:     downloadfromlibrary.NewLibraryTracks(repo, time.Now),
 		AudioStore: library.NewFilesystemAudioStore(musicDir),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    fixtureTiers(),
@@ -232,7 +232,7 @@ func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
 	pool := integrationPool(t)
 
 	userID := ids.NewUserId(uuid.New())
-	track, err := library.NewTrack(userID, "Song", "Artist", "Album")
+	track, err := library.NewTrack(userID, "Song", "Artist", "Album", time.Now)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -246,7 +246,7 @@ func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
 		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, MusicDir: t.TempDir()},
 		Pool:       pool,
 		Events:     eventTap(t),
-		Ledger:     downloadfromlibrary.NewLibraryTracks(trackRepo),
+		Ledger:     downloadfromlibrary.NewLibraryTracks(trackRepo, time.Now),
 		AudioStore: library.NewFilesystemAudioStore(t.TempDir()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    fixtureTiers(),
@@ -284,7 +284,7 @@ func (sourceWithNothing) Fetch(context.Context, download.AudioCandidate, string)
 func insertReadyTrackGradedC(t *testing.T, pool *pgxpool.Pool) (ids.UserId, ids.TrackId) {
 	t.Helper()
 	userID := ids.NewUserId(uuid.New())
-	track, err := library.NewTrack(userID, "Song", "Artist", "Album")
+	track, err := library.NewTrack(userID, "Song", "Artist", "Album", time.Now)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -335,7 +335,7 @@ func TestNewScheduler_AnUpgradeWorkerClaimsAndSettlesAnEnqueuedUpgrade(t *testin
 		Config:     cfg,
 		Pool:       pool,
 		Events:     eventTap(t),
-		Ledger:     downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool)),
+		Ledger:     downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now),
 		AudioStore: library.NewFilesystemAudioStore(cfg.MusicDir),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    downloadsetup.SourceOrder{First: []download.AudioSource{sourceWithNothing{}}},
@@ -405,7 +405,7 @@ func (sourceThatHangs) Fetch(context.Context, download.AudioCandidate, string) (
 func TestNewScheduler_ShutdownCancelsAJobThatOutlivesTheConfiguredDrainBudget(t *testing.T) {
 	pool := integrationPool(t)
 	userID := ids.NewUserId(uuid.New())
-	track, err := library.NewTrack(userID, "Hanging Song", "Artist", "")
+	track, err := library.NewTrack(userID, "Hanging Song", "Artist", "", time.Now)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -420,7 +420,7 @@ func TestNewScheduler_ShutdownCancelsAJobThatOutlivesTheConfiguredDrainBudget(t 
 		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, MusicDir: t.TempDir(), AcquisitionDrainBudgetSeconds: 1},
 		Pool:       pool,
 		Events:     eventTap(t),
-		Ledger:     downloadfromlibrary.NewLibraryTracks(repo),
+		Ledger:     downloadfromlibrary.NewLibraryTracks(repo, time.Now),
 		AudioStore: library.NewFilesystemAudioStore(t.TempDir()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    downloadsetup.SourceOrder{First: []download.AudioSource{hang}},

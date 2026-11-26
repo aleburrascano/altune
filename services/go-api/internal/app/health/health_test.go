@@ -280,7 +280,7 @@ func TestEndpoint_TheDetachedCheckKeepsTheRequestsCorrelationID(t *testing.T) {
 		seen = logging.CorrelationIDFromContext(ctx)
 		return monitoring.DependencyHealth{DB: monitoring.DepUp}
 	}, "v", time.Now)
-	ctx, cancel := context.WithCancel(logging.WithCorrelationID(context.Background(), "corr-health-1"))
+	ctx, cancel := context.WithCancel(logging.ContextWithCorrelationID(context.Background(), "corr-health-1"))
 	cancel()
 
 	endpoint.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/health", nil).WithContext(ctx))

@@ -759,7 +759,7 @@ func TestBackgroundScheduler_ThreadsCorrelationIDIntoJobContext(t *testing.T) {
 		defer scheduler.Shutdown(context.Background())
 
 		const wantCorrID = "corr-xyz-345"
-		ctx := logging.WithCorrelationID(context.Background(), wantCorrID)
+		ctx := logging.ContextWithCorrelationID(context.Background(), wantCorrID)
 		scheduler.Schedule(ctx, ids.NewUserId(uuid.New()), ids.NewTrackId(), "")
 
 		awaitIdle(t, scheduler)
@@ -2672,8 +2672,8 @@ func TestBackgroundScheduler_Schedule_RejectedSecondRequestKeepsTheQueuedJobsCor
 
 		userId := ids.NewUserId(uuid.New())
 		trackId := ids.NewTrackId()
-		first := logging.WithCorrelationID(context.Background(), "corr-first")
-		second := logging.WithCorrelationID(context.Background(), "corr-second")
+		first := logging.ContextWithCorrelationID(context.Background(), "corr-first")
+		second := logging.ContextWithCorrelationID(context.Background(), "corr-second")
 		if err := scheduler.Schedule(first, userId, trackId, ""); err != nil {
 			t.Fatalf("first schedule: %v", err)
 		}
@@ -3242,7 +3242,7 @@ func TestExecute_ALedgerRefusalForAStaleFenceSurfacesErrLeaseLostWithTheCause(t 
 	cause := errors.New("boom")
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{searchErr: cause}), newFakeAudioStore())
 
-	err := svc.Execute(service.WithJobRun(context.Background(), service.JobRun{Claim: 1}), userId, track.ID)
+	err := svc.Execute(service.ContextWithJobRun(context.Background(), service.JobRun{Claim: 1}), userId, track.ID)
 
 	if !errors.Is(err, acqdomain.ErrLeaseLost) || !errors.Is(err, cause) {
 		t.Errorf("err = %v, want both ErrLeaseLost and the pipeline's cause", err)

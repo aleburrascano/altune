@@ -107,7 +107,7 @@ func decodeProblem(t *testing.T, rec *httptest.ResponseRecorder) httpserver.Prob
 
 func requestWithCorrelationID(id string) *http.Request {
 	r := httptest.NewRequest(http.MethodPost, "/v1/favorites", nil)
-	return r.WithContext(logging.WithCorrelationID(r.Context(), id))
+	return r.WithContext(logging.ContextWithCorrelationID(r.Context(), id))
 }
 
 func TestHandleServiceError_AnswersACodedErrorWithAProblemCarryingTheCorrelationID(t *testing.T) {

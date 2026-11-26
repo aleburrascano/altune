@@ -114,7 +114,7 @@ func (a *App) wireAudioSources(
 	staging := audioSourcesStaging{
 		audioStore:     audioStore,
 		trackRepo:      trackRepo,
-		ledger:         downloadfromlibrary.NewLibraryTracks(trackRepo),
+		ledger:         downloadfromlibrary.NewLibraryTracks(trackRepo, time.Now),
 		ytDlpSearcher:  downloadsetup.YtDlpSearcher(a.cfg),
 		ytDlpAvailable: tools.YtDlp,
 		ytmCanary:      ytmCanary,
@@ -177,9 +177,8 @@ func (a *App) wireCatalogServices(
 		backfillFeaturedSvc:   library.MustNewBackfillFeaturedService(catalogTrackRepo, catalogTrackRepo, featuredBridge, time.Now),
 		listFeaturingSvc:      library.NewListFeaturingService(catalogTrackRepo),
 		getTrackStatusSvc:     library.NewGetTrackStatusService(catalogTrackRepo),
-		streamTrackSvc:        library.NewStreamTrackService(catalogTrackRepo, audio.audioStore, library.WithStreamScheduler(audio.scheduler), library.WithStreamMetrics(audioStoreMetrics), library.WithStreamRecoverySwitch(a.jobs.Switch(jobs.StreamRecovery))),
-		audioURLSvc: library.MustNewAudioURLService(catalogTrackRepo, audio.audioStore, time.Now,
-			library.WithAudioURLMetrics(audioStoreMetrics)),
+		streamTrackSvc:        library.NewStreamTrackService(catalogTrackRepo, audio.audioStore, addTrackScheduler(audio.scheduler), audioStoreMetrics, a.jobs.Switch(jobs.StreamRecovery)),
+		audioURLSvc:           library.MustNewAudioURLService(catalogTrackRepo, audio.audioStore, time.Now, audioStoreMetrics),
 	}, nil
 }
 

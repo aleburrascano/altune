@@ -170,7 +170,7 @@ func healthOf(t *testing.T, jobs *background.JobRegistry, name string) backgroun
 func TestRunJob_PanicIsOneFailureLoggedWithTheJobAndItsContext(t *testing.T) {
 	ring := captureDetachedLogs(t)
 	var jc background.JobControl
-	ctx := logging.WithCorrelationID(context.Background(), "corr-job-5")
+	ctx := logging.ContextWithCorrelationID(context.Background(), "corr-job-5")
 
 	background.RunJob(ctx, &jc, "explode", time.Second, func(context.Context) error { panic("boom") })
 

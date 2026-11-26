@@ -33,7 +33,7 @@ func newManualClock() *clocktest.Manual {
 
 func newTrackFeat(t *testing.T, userId ids.UserId, title string) *library.Track {
 	t.Helper()
-	track, err := library.NewTrack(userId, title, "Artist", "Album")
+	track, err := library.NewTrack(userId, title, "Artist", "Album", time.Now)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
@@ -798,7 +798,7 @@ func TestBackfill_TheDetachedWriteHasItsOwnBudgetAndKeepsTheRunsCorrelationID(t 
 		"Track 1": {library.NewFeaturedArtistIdentityOnly("Guest 1", "m1", 0)},
 	}}
 	svc := library.MustNewBackfillFeaturedService(repo, writes, resolver, time.Now)
-	ctx := logging.WithCorrelationID(context.Background(), "corr-backfill-9")
+	ctx := logging.ContextWithCorrelationID(context.Background(), "corr-backfill-9")
 
 	before := time.Now()
 	if _, err := svc.Execute(ctx, userId, 0); err != nil {

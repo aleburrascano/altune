@@ -27,7 +27,7 @@ func TestNewSupabaseJWTVerifier_RejectsPlaintextJWKSURL(t *testing.T) {
 		"test-project.supabase.co/jwks",
 	} {
 		t.Run(raw, func(t *testing.T) {
-			v, err := auth.NewSupabaseJWTVerifier(t.Context(), raw, testProjectURL, testAudience, time.Now)
+			v, err := auth.NewSupabaseJWTVerifier(t.Context(), raw, testProjectURL, testAudience, time.Now, auth.NoopAuthMetrics(), auth.NoopTokenRevoker(), auth.DefaultJWKSSchedule())
 			if err == nil || v != nil {
 				t.Fatalf("NewSupabaseJWTVerifier(%q) = %v, %v; want nil verifier and error", raw, v, err)
 			}
@@ -48,7 +48,7 @@ func TestNewSupabaseJWTVerifier_AllowsHTTPSAndLoopbackHTTP(t *testing.T) {
 		t.Run(raw, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
-			if v, err := auth.NewSupabaseJWTVerifier(ctx, raw, testProjectURL, testAudience, time.Now); err != nil || v == nil {
+			if v, err := auth.NewSupabaseJWTVerifier(ctx, raw, testProjectURL, testAudience, time.Now, auth.NoopAuthMetrics(), auth.NoopTokenRevoker(), auth.DefaultJWKSSchedule()); err != nil || v == nil {
 				t.Fatalf("NewSupabaseJWTVerifier(%q) = %v, %v; want a verifier", raw, v, err)
 			}
 		})
@@ -188,7 +188,7 @@ func TestSupabaseJWTVerifier_OversizedJWKSBodyKeepsCachedKeys(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	metrics := &countingAuthMetrics{}
-	verifier := newVerifier(t, server.URL, time.Now, auth.WithJWKSMetrics(metrics))
+	verifier := newVerifier(t, server.URL, time.Now, withJWKSMetrics(metrics))
 	known := f.validToken(t)
 	if _, err := verifier.Verify(t.Context(), known); err != nil {
 		t.Fatalf("Verify with the key set fetched at startup: %v", err)

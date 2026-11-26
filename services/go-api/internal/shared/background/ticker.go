@@ -26,7 +26,7 @@ func RunBudget(interval time.Duration) time.Duration {
 }
 
 func BindRun(ctx context.Context, name string) context.Context {
-	return logging.WithJobRun(ctx, name, uuid.NewString())
+	return logging.ContextWithJobRun(ctx, name, uuid.NewString())
 }
 
 func RunJob(parent context.Context, control *JobControl, name string, budget time.Duration, fn func(context.Context) error) {

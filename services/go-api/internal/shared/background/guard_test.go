@@ -12,7 +12,7 @@ import (
 
 func TestTry_PanicBecomesAPanicErrorAndOneErrorLogWithTheRequestID(t *testing.T) {
 	ring := captureDetachedLogs(t)
-	ctx := logging.WithCorrelationID(context.Background(), "corr-try-7")
+	ctx := logging.ContextWithCorrelationID(context.Background(), "corr-try-7")
 
 	err := background.SafeRun(ctx, "test.try_panic", func() { panic("adapter exploded") })
 

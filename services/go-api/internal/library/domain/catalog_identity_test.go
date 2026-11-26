@@ -111,7 +111,7 @@ func TestTrack_SetCatalogIdentity_RejectsBadMBID(t *testing.T) {
 	}
 }
 
-func TestWithSoundCloudURL(t *testing.T) {
+func TestAttachSoundCloudURL(t *testing.T) {
 	const pick = "https://soundcloud.com/artist/track"
 	tests := []struct {
 		name    string
@@ -150,7 +150,7 @@ func TestWithSoundCloudURL(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := library.WithSoundCloudURL(tt.sources, tt.url); !reflect.DeepEqual(got, tt.want) {
+			if got := library.AttachSoundCloudURL(tt.sources, tt.url); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("got %+v, want %+v", got, tt.want)
 			}
 		})

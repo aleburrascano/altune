@@ -76,7 +76,7 @@ func readLineBefore(t *testing.T, r *bufio.Reader, deadline <-chan time.Time) st
 func TestSSEHandler_CaughtUpReconnectStreamsLiveEvents(t *testing.T) {
 	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := ids.NewUserId(uuid.New())
-	bus.Publish(context.Background(), uid, eventstest.With("seed", map[string]any{"k": "v"}))
+	bus.Publish(context.Background(), uid, eventstest.Fielded("seed", map[string]any{"k": "v"}))
 
 	srv := newTestSSEServer(t, bus, uid, 50*time.Millisecond)
 
@@ -99,14 +99,14 @@ func TestSSEHandler_CaughtUpReconnectStreamsLiveEvents(t *testing.T) {
 	br := bufio.NewReader(resp.Body)
 	readUntil(t, br, func(l string) bool { return strings.HasPrefix(l, ":") })
 
-	bus.Publish(context.Background(), uid, eventstest.With("live", map[string]any{"hello": "world"}))
+	bus.Publish(context.Background(), uid, eventstest.Fielded("live", map[string]any{"hello": "world"}))
 	readUntil(t, br, func(l string) bool { return l == "event: live" })
 }
 
 func TestSSEHandler_ReplayGapEmitsResync(t *testing.T) {
 	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := ids.NewUserId(uuid.New())
-	bus.Publish(context.Background(), uid, eventstest.With("seed", map[string]any{"k": "v"}))
+	bus.Publish(context.Background(), uid, eventstest.Fielded("seed", map[string]any{"k": "v"}))
 
 	srv := newTestSSEServer(t, bus, uid, 50*time.Millisecond)
 
@@ -141,14 +141,14 @@ func TestSSEHandler_MarshalFailureEmitsResync(t *testing.T) {
 	br := bufio.NewReader(resp.Body)
 	readUntil(t, br, func(l string) bool { return strings.HasPrefix(l, ":") })
 
-	bus.Publish(context.Background(), uid, eventstest.With("unmarshalable", map[string]any{"bad": make(chan int)}))
+	bus.Publish(context.Background(), uid, eventstest.Fielded("unmarshalable", map[string]any{"bad": make(chan int)}))
 	readUntil(t, br, func(l string) bool { return l == "event: resync" })
 }
 
 func TestSSEHandler_MalformedLastEventIDEmitsResync(t *testing.T) {
 	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := ids.NewUserId(uuid.New())
-	bus.Publish(context.Background(), uid, eventstest.With("seed", map[string]any{"k": "v"}))
+	bus.Publish(context.Background(), uid, eventstest.Fielded("seed", map[string]any{"k": "v"}))
 
 	srv := newTestSSEServer(t, bus, uid, 50*time.Millisecond)
 
@@ -193,7 +193,7 @@ func TestSSEHandler_OutOfRangeLastEventIDResyncsAndStreamsLive(t *testing.T) {
 	readUntil(t, br, func(l string) bool { return l == "event: resync" })
 	readUntil(t, br, func(l string) bool { return l == ":ok" })
 
-	bus.Publish(context.Background(), uid, eventstest.With("live", map[string]any{"hello": "world"}))
+	bus.Publish(context.Background(), uid, eventstest.Fielded("live", map[string]any{"hello": "world"}))
 	readUntil(t, br, func(l string) bool { return l == "event: live" })
 }
 
@@ -248,7 +248,7 @@ func TestSSEHandler_ConnectDisconnectLogsCarryCorrelationID(t *testing.T) {
 	h := handler.NewEventStreamHandler(bus, 0)
 	h.WithHeartbeat(50 * time.Millisecond)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := logging.WithCorrelationID(requestuser.ContextWithUserID(r.Context(), uid), corrID)
+		ctx := logging.ContextWithCorrelationID(requestuser.ContextWithUserID(r.Context(), uid), corrID)
 		h.ServeHTTP(w, r.WithContext(ctx))
 	}))
 	defer srv.Close()
@@ -302,7 +302,7 @@ func TestSSEHandler_ResumeWithContiguousHistoryReplaysWithoutResync(t *testing.T
 	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := ids.NewUserId(uuid.New())
 	lastID := lastEventIDFor(t, bus, uid)
-	bus.Publish(context.Background(), uid, eventstest.With("missed", map[string]any{"k": "v"}))
+	bus.Publish(context.Background(), uid, eventstest.Fielded("missed", map[string]any{"k": "v"}))
 
 	br := resumeStream(t, newTestSSEServer(t, bus, uid, time.Hour), lastID)
 
@@ -321,7 +321,7 @@ func TestSSEHandler_ResumeFromBeforeTheRetainedHistoryResyncs(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := range moreEventsThanTheBusRetains {
-		bus.Publish(context.Background(), uid, eventstest.With("later", map[string]any{"i": i}))
+		bus.Publish(context.Background(), uid, eventstest.Fielded("later", map[string]any{"i": i}))
 	}
 
 	br := resumeStream(t, newTestSSEServer(t, bus, uid, time.Hour), strconv.FormatUint(seed-1, 10))
@@ -343,8 +343,8 @@ func TestSSEHandler_ConsecutiveLiveEventsArriveWithoutResync(t *testing.T) {
 	br := bufio.NewReader(resp.Body)
 	readUntil(t, br, func(l string) bool { return l == ":ok" })
 
-	bus.Publish(context.Background(), uid, eventstest.With("one", map[string]any{"k": "v"}))
-	bus.Publish(context.Background(), uid, eventstest.With("two", map[string]any{"k": "v"}))
+	bus.Publish(context.Background(), uid, eventstest.Fielded("one", map[string]any{"k": "v"}))
+	bus.Publish(context.Background(), uid, eventstest.Fielded("two", map[string]any{"k": "v"}))
 
 	if got := firstEventOf(t, br, "two"); got != "event: two" {
 		t.Fatalf("frame before the second live event = %q, want no resync between consecutive ids", got)
@@ -367,7 +367,7 @@ func TestSSEHandler_FirstLiveEventFromABusThatHadIssuedNothingIsNotAGap(t *testi
 	br := bufio.NewReader(resp.Body)
 	readUntil(t, br, func(l string) bool { return l == ":ok" })
 
-	real.Publish(context.Background(), uid, eventstest.With("first", map[string]any{"k": "v"}))
+	real.Publish(context.Background(), uid, eventstest.Fielded("first", map[string]any{"k": "v"}))
 
 	if got := firstEventOf(t, br, "first"); got != "event: first" {
 		t.Fatalf("first frame = %q, want the event without a resync when nothing was delivered before it", got)
@@ -383,7 +383,7 @@ type busWithGapPublish struct {
 func (b *busWithGapPublish) Replay(userId ids.UserId, afterID uint64) []events.Event {
 	snapshot := b.InProcessBus.Replay(userId, afterID)
 	b.once.Do(func() {
-		b.Publish(context.Background(), b.uid, eventstest.With("gap", map[string]any{"in": "window"}))
+		b.Publish(context.Background(), b.uid, eventstest.Fielded("gap", map[string]any{"in": "window"}))
 	})
 	return snapshot
 }
@@ -397,7 +397,7 @@ type busWithDupPublish struct {
 func (b *busWithDupPublish) Subscribe(userId ids.UserId) (<-chan events.Event, func()) {
 	ch, cancel := b.InProcessBus.Subscribe(userId)
 	b.once.Do(func() {
-		b.Publish(context.Background(), b.uid, eventstest.With("dup", map[string]any{"seen": "once"}))
+		b.Publish(context.Background(), b.uid, eventstest.Fielded("dup", map[string]any{"seen": "once"}))
 	})
 	return ch, cancel
 }
@@ -413,7 +413,7 @@ func (b *busWithOverflowingSubscriber) Subscribe(userId ids.UserId) (<-chan even
 	ch, cancel := b.InProcessBus.Subscribe(userId)
 	b.once.Do(func() {
 		for i := 0; i < b.burst; i++ {
-			b.Publish(context.Background(), b.uid, eventstest.With(events.EventType(fmt.Sprintf("burst-%d", i)), map[string]any{"i": i}))
+			b.Publish(context.Background(), b.uid, eventstest.Fielded(events.EventType(fmt.Sprintf("burst-%d", i)), map[string]any{"i": i}))
 		}
 	})
 	return ch, cancel
@@ -440,7 +440,7 @@ func TestSSEHandler_DroppedLiveEventsEmitResyncBeforeNextEvent(t *testing.T) {
 	lastBuffered := fmt.Sprintf("event: burst-%d", burstBufferedByBus-1)
 	readUntil(t, br, func(l string) bool { return l == lastBuffered })
 
-	real.Publish(context.Background(), uid, eventstest.With("after", map[string]any{"k": "v"}))
+	real.Publish(context.Background(), uid, eventstest.Fielded("after", map[string]any{"k": "v"}))
 
 	got := readUntil(t, br, func(l string) bool { return l == "event: resync" || l == "event: after" })
 	if strings.TrimRight(got, "\n") != "event: resync" {
@@ -452,7 +452,7 @@ func lastEventIDFor(t *testing.T, bus *events.InProcessBus, uid ids.UserId) stri
 	t.Helper()
 	ch, cancel := bus.Subscribe(uid)
 	defer cancel()
-	bus.Publish(context.Background(), uid, eventstest.With("seed", map[string]any{"k": "v"}))
+	bus.Publish(context.Background(), uid, eventstest.Fielded("seed", map[string]any{"k": "v"}))
 	return strconv.FormatUint((<-ch).ID, 10)
 }
 
@@ -512,7 +512,7 @@ func TestSSEHandler_ReplayLiveOverlapDedupesByID(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	real.Publish(context.Background(), uid, eventstest.With("after", map[string]any{"k": "v"}))
+	real.Publish(context.Background(), uid, eventstest.Fielded("after", map[string]any{"k": "v"}))
 
 	br := bufio.NewReader(resp.Body)
 	dupCount := 0
@@ -754,7 +754,7 @@ func openUserStream(t *testing.T, url string, uid ids.UserId) (int, io.ReadClose
 func assertStreamsStillLive(t *testing.T, bus *events.InProcessBus, users []ids.UserId, readers []*bufio.Reader) {
 	t.Helper()
 	for i, uid := range users {
-		bus.Publish(context.Background(), uid, eventstest.With("still_live", map[string]any{"i": i}))
+		bus.Publish(context.Background(), uid, eventstest.Fielded("still_live", map[string]any{"i": i}))
 		readUntil(t, readers[i], func(l string) bool { return l == "event: still_live" })
 	}
 }
@@ -898,7 +898,7 @@ func TestSSEHandler_CaughtUpClientGetsNoResyncAtHeartbeat(t *testing.T) {
 
 	br := bufio.NewReader(resp.Body)
 	readUntil(t, br, func(l string) bool { return l == ":ok" })
-	real.Publish(context.Background(), uid, eventstest.With("one", map[string]any{"k": "v"}))
+	real.Publish(context.Background(), uid, eventstest.Fielded("one", map[string]any{"k": "v"}))
 	readUntil(t, br, func(l string) bool { return l == "event: one" })
 
 	pings := 0
@@ -915,7 +915,7 @@ func TestSSEHandler_FreshConnectWithHistoryGetsNoResyncAtHeartbeat(t *testing.T)
 	real := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := ids.NewUserId(uuid.New())
 	for i := 0; i < 5; i++ {
-		real.Publish(context.Background(), uid, eventstest.With("old", map[string]any{"i": i}))
+		real.Publish(context.Background(), uid, eventstest.Fielded("old", map[string]any{"i": i}))
 	}
 	srv := newTestSSEServer(t, real, uid, 20*time.Millisecond)
 

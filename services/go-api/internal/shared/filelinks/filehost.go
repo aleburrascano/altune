@@ -6,8 +6,16 @@ import (
 	"strings"
 )
 
+type retrieval int
+
+const (
+	retrieveByDownloadLink retrieval = iota
+	retrieveByPageScrape
+)
+
 type host struct {
 	provider   string
+	retrieval  retrieval
 	hostnames  []string
 	pathID     *regexp.Regexp
 	validID    *regexp.Regexp
@@ -27,6 +35,7 @@ var krakenfilesID = regexp.MustCompile(`^[A-Za-z0-9]{10}$`)
 var hosts = []host{
 	{
 		provider:  "pixeldrain",
+		retrieval: retrieveByDownloadLink,
 		hostnames: []string{"pixeldrain.com"},
 		pathID:    regexp.MustCompile(`^/u/([^/]+)$`),
 		validID:   pixeldrainID,
@@ -35,6 +44,7 @@ var hosts = []host{
 	},
 	{
 		provider:  "pillows",
+		retrieval: retrieveByDownloadLink,
 		hostnames: []string{"pillows.su", "pillowcase.su"},
 		pathID:    regexp.MustCompile(`^/f/([^/]+)$`),
 		validID:   pillowsID,
@@ -43,6 +53,7 @@ var hosts = []host{
 	},
 	{
 		provider:  "imgurgg",
+		retrieval: retrieveByPageScrape,
 		hostnames: []string{"imgur.gg"},
 		pathID:    regexp.MustCompile(`^/f/([^/]+)$`),
 		validID:   imgurggID,
@@ -53,6 +64,7 @@ var hosts = []host{
 	},
 	{
 		provider:  "krakenfiles",
+		retrieval: retrieveByPageScrape,
 		hostnames: []string{"krakenfiles.com"},
 		pathID:    regexp.MustCompile(`^/view/([^/]+)/file\.html$`),
 		validID:   krakenfilesID,
@@ -115,7 +127,7 @@ func ValidID(provider, id string) bool {
 
 func DownloadURL(provider, id string) (string, bool) {
 	h, ok := lookup(provider)
-	if !ok || h.download == nil || !h.validID.MatchString(id) {
+	if !ok || h.retrieval != retrieveByDownloadLink || !h.validID.MatchString(id) {
 		return "", false
 	}
 	return h.download(id), true
@@ -128,7 +140,7 @@ type PageFile struct {
 
 func FileOnPage(provider, id string) (PageFile, bool) {
 	h, ok := lookup(provider)
-	if !ok || h.fileOnPage == nil || !h.validID.MatchString(id) {
+	if !ok || h.retrieval != retrieveByPageScrape || !h.validID.MatchString(id) {
 		return PageFile{}, false
 	}
 	return PageFile{PageURL: h.page(id), File: h.fileOnPage(id)}, true

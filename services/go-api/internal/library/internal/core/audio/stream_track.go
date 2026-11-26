@@ -29,45 +29,23 @@ type StreamTrackService struct {
 func NewStreamTrackService(
 	trackRepo ports.TrackReadWriter,
 	audioStore ports.AudioStore,
-	opts ...func(*StreamTrackService),
+	scheduler ports.AcquisitionScheduler,
+	metrics ports.AudioStoreMetrics,
+	recoveryEnabled func() bool,
 ) *StreamTrackService {
-	s := &StreamTrackService{
-		trackRepo:  trackRepo,
-		audioStore: audioStore,
-		scheduler:  ports.NoopAcquisitionScheduler(),
-		metrics:    ports.NoopAudioStoreMetrics(),
-
-		recoveryEnabled: func() bool { return true },
+	if scheduler == nil || metrics == nil || recoveryEnabled == nil {
+		panic("audio: NewStreamTrackService requires a scheduler, metrics and a recovery switch")
 	}
-	for _, opt := range opts {
-		opt(s)
-	}
-	return s
-}
-
-func WithStreamRecoverySwitch(enabled func() bool) func(*StreamTrackService) {
-	return func(s *StreamTrackService) {
-		if enabled != nil {
-			s.recoveryEnabled = enabled
-		}
+	return &StreamTrackService{
+		trackRepo:       trackRepo,
+		audioStore:      audioStore,
+		scheduler:       scheduler,
+		metrics:         metrics,
+		recoveryEnabled: recoveryEnabled,
 	}
 }
 
-func WithStreamScheduler(scheduler ports.AcquisitionScheduler) func(*StreamTrackService) {
-	return func(s *StreamTrackService) {
-		if scheduler != nil {
-			s.scheduler = scheduler
-		}
-	}
-}
-
-func WithStreamMetrics(m ports.AudioStoreMetrics) func(*StreamTrackService) {
-	return func(s *StreamTrackService) {
-		if m != nil {
-			s.metrics = m
-		}
-	}
-}
+func AlwaysEnabled() bool { return true }
 
 func (s *StreamTrackService) Execute(ctx context.Context, userId ids.UserId, trackId domain.TrackId) (*StreamOutput, error) {
 	dbStart := time.Now()

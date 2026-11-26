@@ -27,33 +27,17 @@ type CleanUpUnusedAudioService struct {
 func NewReconcileOrphanedAudioService(
 	queue ports.OrphanedAudioQueue,
 	audioStore ports.AudioStore,
-	opts ...func(*CleanUpUnusedAudioService),
+	metrics ports.AudioStoreMetrics,
+	sweepEnabled func() bool,
 ) *CleanUpUnusedAudioService {
-	s := &CleanUpUnusedAudioService{
+	if metrics == nil || sweepEnabled == nil {
+		panic("audio: NewReconcileOrphanedAudioService requires metrics and a sweep switch")
+	}
+	return &CleanUpUnusedAudioService{
 		queue:        queue,
 		audioStore:   audioStore,
-		metrics:      ports.NoopAudioStoreMetrics(),
-		sweepEnabled: func() bool { return true },
-	}
-	for _, opt := range opts {
-		opt(s)
-	}
-	return s
-}
-
-func WithReconcileSwitch(enabled func() bool) func(*CleanUpUnusedAudioService) {
-	return func(s *CleanUpUnusedAudioService) {
-		if enabled != nil {
-			s.sweepEnabled = enabled
-		}
-	}
-}
-
-func WithReconcileMetrics(m ports.AudioStoreMetrics) func(*CleanUpUnusedAudioService) {
-	return func(s *CleanUpUnusedAudioService) {
-		if m != nil {
-			s.metrics = m
-		}
+		metrics:      metrics,
+		sweepEnabled: sweepEnabled,
 	}
 }
 

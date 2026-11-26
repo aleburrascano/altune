@@ -25,7 +25,7 @@ type TrackRepositoryUnderTest interface {
 
 func contractTrack(t *testing.T, userId sharedids.UserId) *domain.Track {
 	t.Helper()
-	track, err := domain.NewTrack(userId, "Title-"+uuid.NewString()[:8], "Artist-"+uuid.NewString()[:8], "Album")
+	track, err := domain.NewTrack(userId, "Title-"+uuid.NewString()[:8], "Artist-"+uuid.NewString()[:8], "Album", time.Now)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
@@ -96,7 +96,7 @@ func TrackRepositoryContract(t *testing.T, newRepo func(t *testing.T) TrackRepos
 		first := contractTrack(t, userId)
 		contractAdd(t, repo, first)
 
-		second, err := domain.NewTrack(userId, first.Title, first.Artist, first.Album)
+		second, err := domain.NewTrack(userId, first.Title, first.Artist, first.Album, time.Now)
 		if err != nil {
 			t.Fatalf("NewTrack: %v", err)
 		}
@@ -405,7 +405,7 @@ func TrackRepositoryLibraryCapContract(t *testing.T, newRepo func(t *testing.T, 
 		for range libraryCap - 1 {
 			contractAdd(t, repo, contractTrack(t, userId))
 		}
-		replay, err := domain.NewTrack(userId, first.Title, first.Artist, first.Album)
+		replay, err := domain.NewTrack(userId, first.Title, first.Artist, first.Album, time.Now)
 		if err != nil {
 			t.Fatalf("NewTrack: %v", err)
 		}

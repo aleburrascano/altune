@@ -117,8 +117,9 @@ func copyFile(src, dst string) error {
 }
 
 type openedAudio struct {
-	file *os.File
-	size int64
+	file   *os.File
+	size   int64
+	opened bool
 }
 
 func (s *FilesystemAudioStore) Stream(ctx context.Context, audioRef string) (ports.AudioStream, int64, error) {
@@ -148,11 +149,11 @@ func openAudio(path string) (openedAudio, error) {
 		_ = file.Close()
 		return openedAudio{}, fmt.Errorf("stat audio %s: %w", path, err)
 	}
-	return openedAudio{file: file, size: stat.Size()}, nil
+	return openedAudio{file: file, size: stat.Size(), opened: true}, nil
 }
 
 func closeLateAudio(ctx context.Context, late openedAudio) {
-	if late.file == nil {
+	if !late.opened {
 		return
 	}
 	if err := late.file.Close(); err != nil {

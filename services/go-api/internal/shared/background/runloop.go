@@ -9,6 +9,7 @@ import (
 type Background struct {
 	mu      sync.Mutex
 	current *run
+	started bool
 	stopped bool
 
 	paused atomic.Bool
@@ -41,9 +42,10 @@ func (b *Background) Spawn(ctx context.Context, loop func(context.Context)) {
 func (b *Background) claim(cancel context.CancelFunc) *run {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.stopped || b.current != nil {
+	if b.stopped || b.started {
 		return nil
 	}
+	b.started = true
 	b.current = &run{cancel: cancel, done: make(chan struct{})}
 	return b.current
 }

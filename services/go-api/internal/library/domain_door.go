@@ -17,6 +17,7 @@ type (
 
 var (
 	ErrIllegalAcquisitionTransition = domain.ErrIllegalAcquisitionTransition
+	ErrTrackTimestampClockRequired  = domain.ErrTrackTimestampClockRequired
 	ErrLibraryFull                  = domain.ErrLibraryFull
 	ErrPlaylistFull                 = domain.ErrPlaylistFull
 	ErrStorageStalled               = domain.ErrStorageStalled
@@ -47,7 +48,7 @@ var (
 	ValidateFeaturedArtist    = domain.ValidateFeaturedArtist
 	ValidateOptionalTrackText = domain.ValidateOptionalTrackText
 	ValidateSourceURL         = domain.ValidateSourceURL
-	WithSoundCloudURL         = domain.WithSoundCloudURL
+	AttachSoundCloudURL       = domain.AttachSoundCloudURL
 )
 
 var (

@@ -49,53 +49,54 @@ type SupabaseJWTVerifier struct {
 	schedule jwksSchedule
 }
 
-type SupabaseJWTVerifierOption func(*SupabaseJWTVerifier)
+type JWKSSchedule struct {
+	FetchTimeout    time.Duration
+	RefreshInterval time.Duration
+	RefreshWindow   time.Duration
+}
 
-func WithJWKSMetrics(m ports.AuthMetrics) SupabaseJWTVerifierOption {
-	return func(v *SupabaseJWTVerifier) {
-		if m != nil {
-			v.metrics = m
-		}
+func DefaultJWKSSchedule() JWKSSchedule {
+	return JWKSSchedule{
+		FetchTimeout:    defaultJWKSFetchTimeout,
+		RefreshInterval: defaultJWKSRefreshInterval,
+		RefreshWindow:   defaultJWKSRefreshWindow,
 	}
 }
 
-func WithTokenRevoker(r ports.TokenRevoker) SupabaseJWTVerifierOption {
-	return func(v *SupabaseJWTVerifier) {
-		if r != nil {
-			v.revoker = r
-		}
+func (s JWKSSchedule) orDefaults() JWKSSchedule {
+	defaults := DefaultJWKSSchedule()
+	if s.FetchTimeout <= 0 {
+		s.FetchTimeout = defaults.FetchTimeout
 	}
-}
-
-func WithJWKSFetchTimeout(timeout time.Duration) SupabaseJWTVerifierOption {
-	return func(v *SupabaseJWTVerifier) {
-		if timeout > 0 {
-			v.schedule.fetchTimeout = timeout
-		}
+	if s.RefreshInterval <= 0 {
+		s.RefreshInterval = defaults.RefreshInterval
 	}
-}
-
-func WithJWKSBackgroundRefresh(interval, window time.Duration) SupabaseJWTVerifierOption {
-	return func(v *SupabaseJWTVerifier) {
-		if interval > 0 {
-			v.schedule.refreshInterval = interval
-		}
-		if window > 0 {
-			v.schedule.refreshWindow = window
-		}
+	if s.RefreshWindow <= 0 {
+		s.RefreshWindow = defaults.RefreshWindow
 	}
+	return s
 }
 
 var ErrJWKSClockRequired = errors.New("providers: the JWT verifier requires a clock")
 
-func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience string, now clock.Func, opts ...SupabaseJWTVerifierOption) (*SupabaseJWTVerifier, error) {
+func NewSupabaseJWTVerifier(
+	ctx context.Context,
+	jwksURL, projectURL, audience string,
+	now clock.Func,
+	metrics ports.AuthMetrics,
+	revoker ports.TokenRevoker,
+	schedule JWKSSchedule,
+) (*SupabaseJWTVerifier, error) {
 	if now == nil {
 		return nil, ErrJWKSClockRequired
+	}
+	if metrics == nil || revoker == nil {
+		panic("providers: NewSupabaseJWTVerifier requires metrics and a token revoker")
 	}
 	if err := requireSecureJWKSURL(jwksURL); err != nil {
 		return nil, err
 	}
-	v := newSupabaseJWTVerifier(jwksURL, projectURL, audience, now, opts)
+	v := newSupabaseJWTVerifier(jwksURL, projectURL, audience, now, metrics, revoker, schedule.orDefaults())
 	if err := v.registerJWKS(ctx); err != nil {
 		return nil, err
 	}
@@ -103,22 +104,25 @@ func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience s
 	return v, nil
 }
 
-func newSupabaseJWTVerifier(jwksURL, projectURL, audience string, now clock.Func, opts []SupabaseJWTVerifierOption) *SupabaseJWTVerifier {
+func newSupabaseJWTVerifier(
+	jwksURL, projectURL, audience string,
+	now clock.Func,
+	metrics ports.AuthMetrics,
+	revoker ports.TokenRevoker,
+	schedule JWKSSchedule,
+) *SupabaseJWTVerifier {
 	v := &SupabaseJWTVerifier{
 		jwksURL:  jwksURL,
 		issuer:   strings.TrimRight(projectURL, "/") + supabaseAuthPathSuffix,
 		audience: audience,
-		metrics:  ports.NoopAuthMetrics(),
-		revoker:  ports.NoopTokenRevoker(),
+		metrics:  metrics,
+		revoker:  revoker,
 		schedule: jwksSchedule{
 			now:             now,
-			fetchTimeout:    defaultJWKSFetchTimeout,
-			refreshInterval: defaultJWKSRefreshInterval,
-			refreshWindow:   defaultJWKSRefreshWindow,
+			fetchTimeout:    schedule.FetchTimeout,
+			refreshInterval: schedule.RefreshInterval,
+			refreshWindow:   schedule.RefreshWindow,
 		},
-	}
-	for _, opt := range opts {
-		opt(v)
 	}
 	v.refresher = newJWKSRefresher(v.forceRefresh, v.schedule.now, v.schedule.fetchTimeout)
 	return v

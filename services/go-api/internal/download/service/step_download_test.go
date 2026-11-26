@@ -1672,7 +1672,7 @@ func searchThenDownloadRejectingAll(t *testing.T, down findOnlySource) (context.
 		fetchErr:   errors.New("exit 1"),
 	}
 	registry := service.NewSourceRegistry(down, healthy)
-	ctx := service.WithJobRun(context.Background(), service.JobRun{Attempt: 1})
+	ctx := service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: 1})
 	ac := &service.AcquisitionContext{}
 	if _, err := service.NewSearchStep(registry).Execute(ctx, ac, service.PipelineStart{}); err != nil {
 		t.Fatalf("search: %v", err)
@@ -2025,7 +2025,7 @@ func TestDownloadStep_EveryCandidateTimingOutIsTransient(t *testing.T) {
 	if code := failureCodeOf(&service.StepError{Step: service.StepNameDownload, Err: err}); code != downloadfailure.FailureSourceUnavailable {
 		t.Fatalf("failure code = %s, want %s (err=%v)", code, downloadfailure.FailureSourceUnavailable, err)
 	}
-	if !service.WillRetry(service.WithJobRun(ctx, service.JobRun{Attempt: 1}), err) {
+	if !service.WillRetry(service.ContextWithJobRun(ctx, service.JobRun{Attempt: 1}), err) {
 		t.Fatalf("willRetry = false for %v", err)
 	}
 }

@@ -162,7 +162,7 @@ func TestNewTrack(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			track, err := library.NewTrack(userId, tt.title, tt.artist, tt.album)
+			track, err := library.NewTrack(userId, tt.title, tt.artist, tt.album, time.Now)
 			if tt.wantErr != "" {
 				if err == nil {
 					t.Fatalf("expected error %q, got nil", tt.wantErr)
@@ -213,7 +213,7 @@ func TestNewTrack_AcceptsAlbumAtCap(t *testing.T) {
 	t.Parallel()
 	album := strings.Repeat("c", 300)
 
-	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Track Title", "Artist Name", album)
+	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Track Title", "Artist Name", album, time.Now)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestNewTrack_StoresTrimmedTitleAndArtist(t *testing.T) {
 	t.Parallel()
 	userId := ids.NewUserId(uuid.New())
 
-	track, err := library.NewTrack(userId, "  Track Title  ", "\tArtist Name\n", "Album Name")
+	track, err := library.NewTrack(userId, "  Track Title  ", "\tArtist Name\n", "Album Name", time.Now)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -245,11 +245,11 @@ func TestNewTrack_CanonicalizesAlbumAndArtistForGrouping(t *testing.T) {
 	t.Parallel()
 	userId := ids.NewUserId(uuid.New())
 
-	clean, err := library.NewTrack(userId, "Halo", "Beyoncé", "I Am... Sasha Fierce")
+	clean, err := library.NewTrack(userId, "Halo", "Beyoncé", "I Am... Sasha Fierce", time.Now)
 	if err != nil {
 		t.Fatalf("NewTrack(clean): %v", err)
 	}
-	variant, err := library.NewTrack(userId, "Other Song", "  Beyoncé  ", "  I Am...   Sasha Fierce  ")
+	variant, err := library.NewTrack(userId, "Other Song", "  Beyoncé  ", "  I Am...   Sasha Fierce  ", time.Now)
 	if err != nil {
 		t.Fatalf("NewTrack(variant): %v", err)
 	}
@@ -268,7 +268,7 @@ func TestNewTrack_CanonicalizesAlbumAndArtistForGrouping(t *testing.T) {
 func TestSetAlbumArtist_Canonicalizes(t *testing.T) {
 	t.Parallel()
 	userId := ids.NewUserId(uuid.New())
-	track, err := library.NewTrack(userId, "Song", "Artist", "Album")
+	track, err := library.NewTrack(userId, "Song", "Artist", "Album", time.Now)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
@@ -448,7 +448,7 @@ func TestTrack_RevertToPending(t *testing.T) {
 		t.Fatalf("setup: MarkReady failed: %v", err)
 	}
 
-	if err := track.RevertToPending(); err != nil {
+	if err := track.RevertToPending(time.Now); err != nil {
 		t.Fatalf("RevertToPending: %v", err)
 	}
 
@@ -480,7 +480,7 @@ func TestTrack_SetAcquisitionConfidence(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Song", "Artist", "Album")
+			track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Song", "Artist", "Album", time.Now)
 			if err != nil {
 				t.Fatalf("NewTrack: %v", err)
 			}
@@ -560,7 +560,7 @@ func TestTrack_IsStreamable(t *testing.T) {
 func newTestTrack(t *testing.T) *library.Track {
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
-	track, err := library.NewTrack(userId, "Test Title", "Test Artist", "Test Album")
+	track, err := library.NewTrack(userId, "Test Title", "Test Artist", "Test Album", time.Now)
 	if err != nil {
 		t.Fatalf("newTestTrack: unexpected error: %v", err)
 	}
@@ -570,7 +570,7 @@ func newTestTrack(t *testing.T) *library.Track {
 func TestSetAlbum_KeepsTheDedupKeyInStep(t *testing.T) {
 	t.Parallel()
 	userId := ids.NewUserId(uuid.New())
-	track, err := library.NewTrack(userId, "Crook", "Raf Saperra", "Some Album")
+	track, err := library.NewTrack(userId, "Crook", "Raf Saperra", "Some Album", time.Now)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -625,7 +625,7 @@ func TestNulByteRefusedByEveryTextEntryPoint(t *testing.T) {
 	t.Parallel()
 	userId := ids.NewUserId(uuid.New())
 	newTrackErr := func(title, artist, album string) error {
-		_, err := library.NewTrack(userId, title, artist, album)
+		_, err := library.NewTrack(userId, title, artist, album, time.Now)
 		return err
 	}
 	tests := []struct {
@@ -699,7 +699,7 @@ func markerUserId(t *testing.T) ids.UserId {
 
 func TestNewTrack_SetsInFlightMarker(t *testing.T) {
 	t.Parallel()
-	track, err := library.NewTrack(markerUserId(t), "Title", "Artist", "Album")
+	track, err := library.NewTrack(markerUserId(t), "Title", "Artist", "Album", time.Now)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
@@ -716,7 +716,7 @@ func TestNewTrack_SetsInFlightMarker(t *testing.T) {
 
 func TestTrack_MarkReady_ClearsInFlightMarker(t *testing.T) {
 	t.Parallel()
-	track, err := library.NewTrack(markerUserId(t), "Title", "Artist", "Album")
+	track, err := library.NewTrack(markerUserId(t), "Title", "Artist", "Album", time.Now)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
@@ -730,7 +730,7 @@ func TestTrack_MarkReady_ClearsInFlightMarker(t *testing.T) {
 
 func TestTrack_MarkFailed_ClearsInFlightMarker(t *testing.T) {
 	t.Parallel()
-	track, err := library.NewTrack(markerUserId(t), "Title", "Artist", "Album")
+	track, err := library.NewTrack(markerUserId(t), "Title", "Artist", "Album", time.Now)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
@@ -744,7 +744,7 @@ func TestTrack_MarkFailed_ClearsInFlightMarker(t *testing.T) {
 
 func TestTrack_RevertToPending_RefreshesInFlightMarker(t *testing.T) {
 	t.Parallel()
-	track, err := library.NewTrack(markerUserId(t), "Title", "Artist", "Album")
+	track, err := library.NewTrack(markerUserId(t), "Title", "Artist", "Album", time.Now)
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
@@ -752,7 +752,7 @@ func TestTrack_RevertToPending_RefreshesInFlightMarker(t *testing.T) {
 		t.Fatalf("MarkFailed: %v", err)
 	}
 
-	if err := track.RevertToPending(); err != nil {
+	if err := track.RevertToPending(time.Now); err != nil {
 		t.Fatalf("RevertToPending: %v", err)
 	}
 
@@ -883,7 +883,7 @@ var transitions = map[string]func(*library.Track) error{
 	"ReplaceAudio":     func(tr *library.Track) error { return tr.ReplaceAudio("s3://bucket/other.opus") },
 	"MarkFailed":       func(tr *library.Track) error { return tr.MarkFailed("audio file missing from storage") },
 	"FailAcquisition":  func(tr *library.Track) error { return tr.FailAcquisition("no_match_found") },
-	"RevertToPending":  func(tr *library.Track) error { return tr.RevertToPending() },
+	"RevertToPending":  func(tr *library.Track) error { return tr.RevertToPending(time.Now) },
 }
 
 func TestTrack_IllegalAcquisitionTransitionsAreRefusedAndLeaveTheTrackUnchanged(t *testing.T) {
@@ -971,7 +971,7 @@ const reRecordingMBID = "25d68187-ee71-4f06-9e58-0b49d66bf8a8"
 
 func studioLabelledTrack(t *testing.T) *library.Track {
 	t.Helper()
-	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "It's Only Love", "Bryan Adams", "Reckless")
+	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "It's Only Love", "Bryan Adams", "Reckless", time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1078,7 +1078,7 @@ func TestTrack_ARelabelledTrackKeepsItsArtistAndDedupsLikeOneAddedUnderTheNewLab
 	if track.DedupKey == studioKey {
 		t.Error("DedupKey still names the studio recording after a relabel")
 	}
-	addedFresh, err := library.NewTrack(track.UserId, "It’s Only Love (classic version)", "Bryan Adams", "It’s Only Love")
+	addedFresh, err := library.NewTrack(track.UserId, "It’s Only Love (classic version)", "Bryan Adams", "It’s Only Love", time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1221,5 +1221,57 @@ func TestTrack_RecordAudioLengthLeavesTheFlagWhileEitherLengthIsUnknown(t *testi
 				}
 			})
 		}
+	}
+}
+
+func TestNewTrack_RefusesANilClock(t *testing.T) {
+	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Title", "Artist", "Album", nil)
+
+	if !errors.Is(err, library.ErrTrackTimestampClockRequired) || track != nil {
+		t.Fatalf("NewTrack(nil clock) = (%v, %v), want ErrTrackTimestampClockRequired and no track", track, err)
+	}
+}
+
+func TestRevertToPending_RefusesANilClock(t *testing.T) {
+	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Title", "Artist", "Album", time.Now)
+	if err != nil {
+		t.Fatalf("NewTrack: %v", err)
+	}
+	if err := track.MarkFailed("boom"); err != nil {
+		t.Fatalf("MarkFailed: %v", err)
+	}
+
+	if err := track.RevertToPending(nil); !errors.Is(err, library.ErrTrackTimestampClockRequired) {
+		t.Fatalf("RevertToPending(nil clock) = %v, want ErrTrackTimestampClockRequired", err)
+	}
+}
+
+func TestNewTrack_StampsAddedAtFromTheInjectedClock(t *testing.T) {
+	pinned := time.Date(2026, 11, 26, 10, 0, 0, 0, time.UTC)
+
+	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Title", "Artist", "Album", func() time.Time { return pinned })
+	if err != nil {
+		t.Fatalf("NewTrack: %v", err)
+	}
+	if !track.AddedAt.Equal(pinned) {
+		t.Errorf("AddedAt = %v, want the injected %v", track.AddedAt, pinned)
+	}
+}
+
+func TestRevertToPending_StampsTheStartFromTheInjectedClock(t *testing.T) {
+	pinned := time.Date(2026, 11, 26, 11, 0, 0, 0, time.UTC)
+	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Title", "Artist", "Album", time.Now)
+	if err != nil {
+		t.Fatalf("NewTrack: %v", err)
+	}
+	if err := track.MarkFailed("boom"); err != nil {
+		t.Fatalf("MarkFailed: %v", err)
+	}
+
+	if err := track.RevertToPending(func() time.Time { return pinned }); err != nil {
+		t.Fatalf("RevertToPending: %v", err)
+	}
+	if track.AcquisitionStartedAt == nil || !track.AcquisitionStartedAt.Equal(pinned) {
+		t.Errorf("AcquisitionStartedAt = %v, want the injected %v", track.AcquisitionStartedAt, pinned)
 	}
 }

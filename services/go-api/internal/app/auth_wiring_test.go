@@ -77,6 +77,7 @@ func newJWKSFixture(t *testing.T) jwksFixture {
 		BackgroundMaxInFlight:          64,
 
 		PlaybackNowPlayingLookupTimeout: 3 * time.Second,
+		PlaybackErasureScanTimeout:      30 * time.Second,
 	}}
 }
 

@@ -29,6 +29,12 @@ type ErasureSweepMetrics interface {
 	RetryOwnerDropped()
 }
 
+type noopDeletedUserDataCleaner struct{}
+
+func (noopDeletedUserDataCleaner) ReapErasedStates(context.Context) (int64, error) { return 0, nil }
+
+func NoopDeletedUserDataCleaner() DeletedUserDataCleaner { return noopDeletedUserDataCleaner{} }
+
 func NoopErasureSweepMetrics() ErasureSweepMetrics { return noopErasureSweepMetrics{} }
 
 type noopErasureSweepMetrics struct{}

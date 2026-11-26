@@ -10,7 +10,7 @@ import (
 )
 
 func TestDetach_OutlivesTheRequestAndKeepsItsCorrelationID(t *testing.T) {
-	request, cancelRequest := context.WithCancel(logging.WithCorrelationID(context.Background(), "corr-detach-1"))
+	request, cancelRequest := context.WithCancel(logging.ContextWithCorrelationID(context.Background(), "corr-detach-1"))
 	detached, cancel := background.Detach(request, time.Minute)
 	defer cancel()
 
@@ -52,7 +52,7 @@ func TestDetach_DeadlineIsTheBudgetNotTheRequests(t *testing.T) {
 }
 
 func TestDetachCancelable_KeepsTheRequestsValuesButNotItsCancellation(t *testing.T) {
-	request, cancelRequest := context.WithCancel(logging.WithCorrelationID(context.Background(), "corr-detach-2"))
+	request, cancelRequest := context.WithCancel(logging.ContextWithCorrelationID(context.Background(), "corr-detach-2"))
 	detached, cancel := background.DetachCancelable(request)
 	defer cancel()
 

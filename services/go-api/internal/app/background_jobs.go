@@ -22,9 +22,7 @@ func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue library.Orp
 		return
 	}
 	svc := library.NewReconcileOrphanedAudioService(queue, audioStore,
-		library.WithReconcileSwitch(a.jobs.Switch(jobs.OrphanedAudioReconcile)),
-		library.WithReconcileMetrics(library.NewExpvarAudioStoreMetrics()),
-	)
+		library.NewExpvarAudioStoreMetrics(), a.jobs.Switch(jobs.OrphanedAudioReconcile))
 	a.startSimpleJob(jobs.OrphanedAudioReconcile, orphanedAudioReconcileInterval, func(ctx context.Context) error {
 		_, err := svc.Execute(ctx)
 		return err

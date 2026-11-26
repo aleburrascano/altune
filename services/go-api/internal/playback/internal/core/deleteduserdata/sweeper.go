@@ -33,37 +33,28 @@ type Sweeper struct {
 	retryOwners []ids.UserId
 }
 
-type Option func(*Sweeper)
-
-func WithErasureSweepMetrics(m ports.ErasureSweepMetrics) Option {
-	return func(s *Sweeper) { s.metrics = m }
-}
-
-func WithErasedStateReaper(r ports.DeletedUserDataCleaner) Option {
-	return func(s *Sweeper) { s.reaper = r }
-}
-
-func WithSweepRunBudget(d time.Duration) Option {
-	return func(s *Sweeper) {
-		if d > 0 {
-			s.runBudget = d
-		}
+func NewSweeper(
+	identities ports.DeletedUserDataLister,
+	queues *queue.Service,
+	metrics ports.ErasureSweepMetrics,
+	reaper ports.DeletedUserDataCleaner,
+	runBudget time.Duration,
+) *Sweeper {
+	if identities == nil || queues == nil || metrics == nil || reaper == nil {
+		panic("deleteduserdata: NewSweeper requires the identity lister, queue service, metrics and reaper")
 	}
-}
-
-func NewSweeper(identities ports.DeletedUserDataLister, queues *queue.Service, opts ...Option) *Sweeper {
-	s := &Sweeper{
+	if runBudget <= 0 {
+		panic("deleteduserdata: NewSweeper requires a positive run budget")
+	}
+	return &Sweeper{
 		identities: identities,
 		queue:      queues,
-		metrics:    ports.NoopErasureSweepMetrics(),
+		metrics:    metrics,
+		reaper:     reaper,
 		scanWindow: ownerScanWindow,
-		runBudget:  DefaultSweepRunBudget,
+		runBudget:  runBudget,
 		retryCap:   maxRetryOwners,
 	}
-	for _, opt := range opts {
-		opt(s)
-	}
-	return s
 }
 
 type sweepRun struct {
@@ -194,9 +185,6 @@ func (s *Sweeper) recordOwnerScanTimeout(ctx context.Context, err error) {
 }
 
 func (s *Sweeper) reapErasedStates(ctx context.Context) error {
-	if s.reaper == nil {
-		return nil
-	}
 	reaped, err := s.reaper.ReapErasedStates(ctx)
 	if err != nil {
 		return fmt.Errorf("reap erased queue states: %w", err)

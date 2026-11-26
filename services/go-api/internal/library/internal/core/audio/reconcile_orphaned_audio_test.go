@@ -22,7 +22,11 @@ type orphanFixture struct {
 	sweep   *library.CleanUpUnusedAudioService
 }
 
-func newOrphanFixture(opts ...func(*library.CleanUpUnusedAudioService)) *orphanFixture {
+func newOrphanFixture() *orphanFixture {
+	return newOrphanFixtureWithSwitch(library.AlwaysEnabled)
+}
+
+func newOrphanFixtureWithSwitch(sweepEnabled func() bool) *orphanFixture {
 	repo := library.NewInMemoryTrackRepo()
 	store := library.NewInMemoryAudioStore()
 	queue := library.NewInMemoryOrphanedAudioQueue(repo)
@@ -33,7 +37,7 @@ func newOrphanFixture(opts ...func(*library.CleanUpUnusedAudioService)) *orphanF
 		queue:   queue,
 		metrics: metrics,
 		del:     library.NewDeleteTrackService(repo, store, events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, queue),
-		sweep:   library.NewReconcileOrphanedAudioService(queue, store, append(opts, library.WithReconcileMetrics(metrics))...),
+		sweep:   library.NewReconcileOrphanedAudioService(queue, store, metrics, sweepEnabled),
 	}
 }
 
@@ -297,7 +301,7 @@ func TestReconcileOrphanedAudio_FailedDeleteNamesTheStuckOrphan(t *testing.T) {
 }
 
 func TestReconcileOrphanedAudio_SwitchOffDeletesNothing(t *testing.T) {
-	f := newOrphanFixture(library.WithReconcileSwitch(func() bool { return false }))
+	f := newOrphanFixtureWithSwitch(func() bool { return false })
 	f.orphan(t, orphanRef)
 	f.store.ErrOnDelete = errors.New("delete must not be attempted")
 
@@ -330,7 +334,7 @@ func TestReconcileOrphanedAudio_AbortedRunLogsItsPartialCounts(t *testing.T) {
 	f := newOrphanFixture()
 	f.orphan(t, orphanRef)
 	f.orphan(t, unanswerableRef)
-	f.sweep = library.NewReconcileOrphanedAudioService(usageUnanswerableFor{f.queue, unanswerableRef}, f.store)
+	f.sweep = library.NewReconcileOrphanedAudioService(usageUnanswerableFor{f.queue, unanswerableRef}, f.store, library.NoopAudioStoreMetrics(), library.AlwaysEnabled)
 
 	if _, err := f.sweep.Execute(context.Background()); err == nil {
 		t.Fatal("sweep err = nil, want the usage-check failure surfaced")
@@ -340,4 +344,23 @@ func TestReconcileOrphanedAudio_AbortedRunLogsItsPartialCounts(t *testing.T) {
 		"deleted": "1",
 		"failed":  "0",
 	})
+}
+
+func TestNewReconcileOrphanedAudioService_RefusesAMissingCollaborator(t *testing.T) {
+	repo := library.NewInMemoryTrackRepo()
+	queue := library.NewInMemoryOrphanedAudioQueue(repo)
+	store := library.NewInMemoryAudioStore()
+	for name, build := range map[string]func(){
+		"no metrics":      func() { library.NewReconcileOrphanedAudioService(queue, store, nil, library.AlwaysEnabled) },
+		"no sweep switch": func() { library.NewReconcileOrphanedAudioService(queue, store, library.NoopAudioStoreMetrics(), nil) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatal("construction succeeded, want a panic at construction")
+				}
+			}()
+			build()
+		})
+	}
 }

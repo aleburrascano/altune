@@ -61,7 +61,7 @@ func TestPublish_EpochSeedsEventIDs(t *testing.T) {
 	ch, cancel := bus.Subscribe(user)
 	defer cancel()
 
-	bus.Publish(context.Background(), user, eventstest.With("first", map[string]any{"k": "v"}))
+	bus.Publish(context.Background(), user, eventstest.Fielded("first", map[string]any{"k": "v"}))
 	evt := <-ch
 
 	if evt.ID <= 1 {

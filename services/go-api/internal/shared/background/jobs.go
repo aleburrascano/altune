@@ -74,41 +74,32 @@ func nanosToTime(nanos int64) time.Time {
 }
 
 type JobRegistry struct {
-	mu   sync.Mutex
-	jobs map[string]*JobControl
+	jobs sync.Map
 }
 
 func (r *JobRegistry) Control(name string) *JobControl {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.jobs == nil {
-		r.jobs = make(map[string]*JobControl)
-	}
-	jc, ok := r.jobs[name]
-	if !ok {
-		jc = &JobControl{}
-		r.jobs[name] = jc
-	}
-	return jc
+	jc, _ := r.jobs.LoadOrStore(name, &JobControl{})
+	return jc.(*JobControl)
 }
 
 func (r *JobRegistry) SetEnabled(name string, enabled bool) (JobHealth, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	jc, ok := r.jobs[name]
+	stored, ok := r.jobs.Load(name)
 	if !ok {
 		return JobHealth{}, false
 	}
+	jc := stored.(*JobControl)
 	jc.SetEnabled(enabled)
 	return jc.snapshot(name), true
 }
 
 func (r *JobRegistry) Health() []JobHealth {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	out := make([]JobHealth, 0, len(r.jobs))
-	for name, jc := range r.jobs {
-		out = append(out, jc.snapshot(name))
+	var out []JobHealth
+	r.jobs.Range(func(name, stored any) bool {
+		out = append(out, stored.(*JobControl).snapshot(name.(string)))
+		return true
+	})
+	if out == nil {
+		out = []JobHealth{}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
