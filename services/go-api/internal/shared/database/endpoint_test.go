@@ -14,6 +14,9 @@ func TestParseEndpoint(t *testing.T) {
 		"sslmode=disable":    {"postgres://u:p@db.example.com/x?sslmode=disable", database.Endpoint{Host: "db.example.com"}},
 		"sslmode=prefer":     {"postgres://u:p@db.example.com/x?sslmode=prefer", database.Endpoint{Host: "db.example.com", RequiresTLS: true, FallsBackToPlaintext: true}},
 		"a loopback host":    {"postgres://u:p@127.0.0.1:5432/x?sslmode=disable", database.Endpoint{Host: "127.0.0.1"}},
+		"sslmode=allow":      {"postgres://u:p@db.example.com/x?sslmode=allow", database.Endpoint{Host: "db.example.com"}},
+		"no sslmode":         {"postgres://u:p@db.example.com/x", database.Endpoint{Host: "db.example.com", RequiresTLS: true, FallsBackToPlaintext: true}},
+		"verify-ca":          {"postgres://u:p@db.example.com/x?sslmode=verify-ca", database.Endpoint{Host: "db.example.com", RequiresTLS: true}},
 		"verify-full":        {"postgres://u:p@db.example.com/x?sslmode=verify-full", database.Endpoint{Host: "db.example.com", RequiresTLS: true}},
 		"a key=value string": {"host=db.example.com user=u sslmode=require", database.Endpoint{Host: "db.example.com", RequiresTLS: true}},
 	}
