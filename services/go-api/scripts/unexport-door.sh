@@ -5,10 +5,8 @@ usage="usage: scripts/unexport-door.sh <module>   e.g. search, or shared/backoff
   unexports every root identifier of internal/<module> that lintdoors --exports reports as unused outside the module, with gopls rename (references and tests follow), and exits 1 listing any name gopls refused"
 
 [ "$#" -eq 1 ] || { echo "$usage" >&2; exit 2; }
-module=$1
+module=${1%/}
 cd "$(dirname "$0")/.."
-
-[ -d "internal/$module" ] || { echo "unexport-door: internal/$module is not a directory; give a module such as search or shared/backoff" >&2; exit 2; }
 
 gopls_version=v0.20.0
 gopls=(go run "golang.org/x/tools/gopls@$gopls_version")
@@ -32,6 +30,11 @@ lowered() {
 tool=$(mktemp)
 trap 'rm -f "$tool"' EXIT
 go build -o "$tool" ./scripts/lintdoors || { echo "unexport-door: lintdoors does not build" >&2; exit 2; }
+modules=$("$tool" --summary . | grep -oE '^[a-z0-9/_-]+:' | tr -d ':') || true
+if ! grep -qxF "$module" <<<"$modules"; then
+  echo "unexport-door: $module is not a module; give one such as search or shared/backoff (modules: $(tr '\n' ' ' <<<"$modules"))" >&2
+  exit 2
+fi
 status=0
 output=$("$tool" --exports .) || status=$?
 if [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; then

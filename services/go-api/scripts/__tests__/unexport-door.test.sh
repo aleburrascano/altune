@@ -16,7 +16,8 @@ assert() {
   fi
 }
 
-mkdir -p "$work/api/scripts" "$work/api/internal/lib" "$work/api/internal/other" "$work/bin"
+mkdir -p "$work/api/scripts" "$work/api/internal/lib" "$work/api/internal/other" "$work/api/internal/shared/clock" "$work/bin"
+printf 'package clock\n' >"$work/api/internal/shared/clock/c.go"
 cp -r "$here/lintdoors" "$work/api/scripts/lintdoors"
 cp "$here/unexport-door.sh" "$work/api/scripts/unexport-door.sh"
 printf 'module example/api\n\ngo 1.26\n' >"$work/api/go.mod"
@@ -52,6 +53,20 @@ run bakoff >/dev/null
 code=$?
 set -e
 assert "a misspelled module exits 2" "2" "$code"
+
+for bad in plat shared shared/ nonesuch/x; do
+  set +e
+  run "$bad" >/dev/null
+  code=$?
+  set -e
+  assert "$bad is not a module, exit 2" "2" "$code"
+done
+
+set +e
+run lib/ >/dev/null
+code=$?
+set -e
+assert "a trailing slash is accepted for a module" "1" "$code"
 
 : >"$STUB_LOG"
 set +e
