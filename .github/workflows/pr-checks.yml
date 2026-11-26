@@ -113,7 +113,7 @@ jobs:
         working-directory: client
         env:
           NODE_OPTIONS: --max-old-space-size=3072
-        run: npx jest --ci --maxWorkers=2 --workerIdleMemoryLimit=1GB --testTimeout=30000
+        run: npx jest --ci --testTimeout=30000
 
   mobile-quality:
     needs: changes
