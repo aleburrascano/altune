@@ -40,16 +40,18 @@ var providerRateLimits = map[string]rate.Limit{
 	"imgur.gg":                   2,
 	"krakenfiles.com":            2,
 	"api.acoustid.org":           3,
+	"cdnt-preview.dzcdn.net":     1,
 	"www.youtube.com":            5,
 }
 
 const defaultProviderBurst = 4
 
 var providerBursts = map[string]int{
-	"musicbrainz.org":  1,
-	"api.discogs.com":  1,
-	"api.acoustid.org": 3,
-	"www.youtube.com":  1,
+	"musicbrainz.org":        1,
+	"api.discogs.com":        1,
+	"api.acoustid.org":       3,
+	"cdnt-preview.dzcdn.net": 1,
+	"www.youtube.com":        1,
 }
 
 const queueDepth = 3

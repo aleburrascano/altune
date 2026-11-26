@@ -88,7 +88,7 @@ func fingerprinting(ctx context.Context, d *Deps) (*fingerprintstatus.HealthTrac
 		slog.WarnContext(ctx, "acquisition: fingerprint verification disabled", "reason", "ACOUSTID_API_KEY is empty")
 		return fingerprintstatus.NewTracker(nil), download.NoopAudioIdentifier(), download.NoopStoredAudioReader()
 	}
-	identifier := download.MustNewChromaprintIdentifier(cfg.FFmpegLocation, cfg.AcoustIDAPIKey, &http.Client{Transport: d.Transport}, clock.Sleep)
+	identifier := download.MustNewChromaprintIdentifier(cfg.FFmpegLocation, cfg.AcoustIDAPIKey, &http.Client{Transport: d.Transport})
 	d.Verification.Fpcalc = identifier.Available()
 	lookups := fingerprintstatus.NewTracker(identifier)
 	slog.InfoContext(ctx, "acquisition: fingerprint verification wired", "fpcalc", d.Verification.Fpcalc)

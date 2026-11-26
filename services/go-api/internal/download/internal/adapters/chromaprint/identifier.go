@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/childprocess"
-	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/retrysafe"
 	"bytes"
 	"context"
@@ -34,8 +33,6 @@ const (
 	MinScore           = 0.85
 	defaultEndpoint    = "https://api.acoustid.org/v2/lookup"
 	lookupBodyCap      = 2 << 20
-	defaultRetryAfter  = time.Second
-	maxRetryAfter      = 5 * time.Second
 )
 
 var _ ports.AudioIdentifier = (*Identifier)(nil)
@@ -45,17 +42,11 @@ type Identifier struct {
 	apiKey   string
 	endpoint string
 	client   *http.Client
-	sleep    clock.Sleeper
 }
 
-var ErrSleeperRequired = errors.New("chromaprint: the identifier needs a sleeper")
-
-func NewIdentifier(binDir, apiKey string, client *http.Client, sleep clock.Sleeper) (*Identifier, error) {
+func NewIdentifier(binDir, apiKey string, client *http.Client) (*Identifier, error) {
 	if client == nil {
 		return nil, ErrClientRequired
-	}
-	if sleep == nil {
-		return nil, fmt.Errorf("NewIdentifier: %w", ErrSleeperRequired)
 	}
 	key := strings.TrimSpace(apiKey)
 	if key == "" {
@@ -69,12 +60,11 @@ func NewIdentifier(binDir, apiKey string, client *http.Client, sleep clock.Sleep
 		apiKey:   key,
 		endpoint: defaultEndpoint,
 		client:   &bounded,
-		sleep:    sleep,
 	}, nil
 }
 
-func MustNewIdentifier(binDir, apiKey string, client *http.Client, sleep clock.Sleeper) *Identifier {
-	i, err := NewIdentifier(binDir, apiKey, client, sleep)
+func MustNewIdentifier(binDir, apiKey string, client *http.Client) *Identifier {
+	i, err := NewIdentifier(binDir, apiKey, client)
 	if err != nil {
 		panic(err)
 	}
@@ -193,29 +183,6 @@ func (i *Identifier) lookup(ctx context.Context, fp fingerprint) (ports.Recordin
 }
 
 func (i *Identifier) send(ctx context.Context, endpoint string, form url.Values, label string) (*http.Response, error) {
-	resp, err := i.post(ctx, endpoint, form, label)
-	if err != nil || resp.StatusCode != http.StatusTooManyRequests {
-		return resp, err
-	}
-	wait := retryAfter(resp.Header.Get("Retry-After"))
-	_ = resp.Body.Close()
-
-	if err := i.sleep(ctx, wait); err != nil {
-		return nil, fmt.Errorf("%s: %w", label, err)
-	}
-
-	resp, err = i.post(ctx, endpoint, form, label)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode == http.StatusTooManyRequests {
-		_ = resp.Body.Close()
-		return nil, fmt.Errorf("%s: status %d: %w", label, resp.StatusCode, acqdomain.ErrIdentifyThrottled)
-	}
-	return resp, nil
-}
-
-func (i *Identifier) post(ctx context.Context, endpoint string, form url.Values, label string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(retrysafe.Mark(ctx), http.MethodPost, endpoint, bytes.NewBufferString(form.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("build %s request: %w", label, err)
@@ -225,15 +192,11 @@ func (i *Identifier) post(ctx context.Context, endpoint string, form url.Values,
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", label, err)
 	}
-	return resp, nil
-}
-
-func retryAfter(header string) time.Duration {
-	seconds, err := strconv.Atoi(strings.TrimSpace(header))
-	if err != nil || seconds < 0 {
-		return defaultRetryAfter
+	if resp.StatusCode == http.StatusTooManyRequests {
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("%s: status %d: %w", label, resp.StatusCode, acqdomain.ErrIdentifyThrottled)
 	}
-	return time.Duration(min(seconds, int(maxRetryAfter/time.Second))) * time.Second
+	return resp, nil
 }
 
 func matchOf(results []ports.AcoustIDResult) ports.RecordingMatch {
