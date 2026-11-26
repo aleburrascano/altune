@@ -10,10 +10,10 @@ done
 
 echo "pre-push: checking this checkout (HEAD and the working tree) against the merge base, not the refs being pushed"
 rc=0
-[ "${FACTORY_SANDBOX:-}" != 1 ] && [ -f scripts/precheck.sh ] && { env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE CLIENT_MUTATE_RUNS_ELSEWHERE=1 bash scripts/precheck.sh || rc=$?; }
+[ -f scripts/precheck.sh ] && { env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE CLIENT_MUTATE_RUNS_ELSEWHERE=1 bash scripts/precheck.sh || rc=$?; }
 case $rc in
   0) ;;
-  3) echo "⚠️  pre-push: some checks could not run here (see SKIP lines), CI will run them." ;;
+  3) echo "❌ pre-push: a tool or dependency is missing, so some checks could not run (see the SKIP lines above). Install it, then push again: bash scripts/ci/go-tools.sh for golangci-lint and govulncheck, bash scripts/worktree-deps.sh client (or the folder named) for node dependencies."; exit 1 ;;
   *) echo "❌ pre-push: checks failed. Fix the FAIL lines above and push again."; exit 1 ;;
 esac
 

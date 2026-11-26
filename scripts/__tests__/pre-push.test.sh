@@ -37,16 +37,16 @@ run_hook "(delete) $ZERO refs/heads/x $SHA"
 [ ! -s "$WORK/calls.log" ] || fail "a delete-only push must not run precheck"
 
 STUB_RC=3 run_hook "refs/heads/x $SHA refs/heads/x $ZERO"
-[ "$RC" = 0 ] || fail "exit 3 from precheck is a warning and the push goes on (exit $RC)"
-grep -qF "could not run here" "$WORK/out.log" || fail "exit 3 must say some checks could not run"
+[ "$RC" = 1 ] || fail "exit 3 from precheck means a tool is missing and blocks the push (exit $RC)"
+grep -qF "bash scripts/ci/go-tools.sh" "$WORK/out.log" || fail "exit 3 must say how to install what is missing: $(cat "$WORK/out.log")"
+grep -qF "worktree-deps.sh" "$WORK/out.log" || fail "exit 3 must name the dependency installer"
 
 STUB_RC=1 run_hook "refs/heads/x $SHA refs/heads/x $ZERO"
 [ "$RC" = 1 ] || fail "a failing precheck blocks the push (exit $RC)"
 grep -qF "checks failed" "$WORK/out.log" || fail "a blocked push must say checks failed"
 
 FACTORY_SANDBOX=1 run_hook "refs/heads/x $SHA refs/heads/x $ZERO"
-[ "$RC" = 0 ] || fail "FACTORY_SANDBOX=1 skips the checks (exit $RC)"
-[ ! -s "$WORK/calls.log" ] || fail "FACTORY_SANDBOX=1 must not run precheck"
+[ -s "$WORK/calls.log" ] || fail "no environment variable may turn the hook off: precheck must run with FACTORY_SANDBOX=1"
 
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
