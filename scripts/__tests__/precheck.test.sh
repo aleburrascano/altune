@@ -9,6 +9,10 @@ FIXTURES=()
 REPOS=0
 PRECHECK_ARGS=(--full)
 
+HEAVY_LOCK_DIR=$(mktemp -d)
+FIXTURES+=("$HEAVY_LOCK_DIR")
+export HEAVY_LOCK_DIR HEAVY_REMOTE=off
+
 stop_started_steps() {
     local fixture pid
     for fixture in "${FIXTURES[@]}"; do
@@ -649,7 +653,8 @@ fi
 case "\$*" in
 "run golang.org/x/tools/cmd/deadcode@"*) printf "%s" "\${DEADCODE_STUB_OUT:-}"; exit "\${DEADCODE_STUB_RC:-0}" ;;
 "run ./scripts/lintcomments"*|"run ./scripts/lintnames"*|"run ./scripts/lintarch"*) exit 0 ;;
-"test "*) if [ -n "\${GO_TEST_STUB_OUT:-}" ]; then printf "%b" "\$GO_TEST_STUB_OUT"; exit 1; fi ;;
+"test "*) if [ -n "\${GO_TEST_STUB_OUT:-}" ]; then printf "%b" "\$GO_TEST_STUB_OUT"; exit 1; fi; [ -n "\${GO_REAL:-}" ] || exit 0 ;;
+"vet "*|"build "*) [ -n "\${GO_REAL:-}" ] || exit 0 ;;
 esac
 exec "$REAL_GO" "\$@"
 STUB
@@ -1164,7 +1169,7 @@ add_go_fixture
     git rm -q services/go-api/internal/shared/s/s.go
     git commit -qm "delete s.go, which held S"
 )
-run_push_scoped
+GO_REAL=1 run_push_scoped
 expect_rc 1
 expect_out "FAIL  go-api vet (whole module"
 
@@ -1177,7 +1182,7 @@ add_go_fixture
     git add -A
     git commit -qm "break the signature of s.S"
 )
-run_push_scoped
+GO_REAL=1 run_push_scoped
 expect_rc 1
 expect_out "FAIL  go-api vet (whole module"
 expect_out "not enough arguments in call to s.S"
@@ -1229,7 +1234,7 @@ add_go_fixture
     git add -A
     git commit -qm "break x"
 )
-run_with_tools
+GO_REAL=1 run_with_tools
 expect_rc 1
 expect_out "FAIL  go-api vet"
 expect_log "vet altune/go-api/internal/search/adapters/x"
