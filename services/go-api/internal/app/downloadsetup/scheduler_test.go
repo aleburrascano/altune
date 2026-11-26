@@ -164,7 +164,7 @@ func TestNewScheduler_ZeroUpgradeWorkersBuildsNoUpgradeLaneInsteadOfPanicking(t 
 		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, MusicDir: musicDir},
 		Pool:       pool,
 		Events:     eventTap(t),
-		Ledger:     downloadfromlibrary.NewLibraryTracks(&fixtureTrackRepo{}),
+		Ledger:     downloadfromlibrary.NewLibraryTracks(&fixtureTrackRepo{}, time.Now),
 		AudioStore: library.NewFilesystemAudioStore(musicDir),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    fixtureTiers(),
