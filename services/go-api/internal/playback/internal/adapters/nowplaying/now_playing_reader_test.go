@@ -19,6 +19,7 @@ import (
 const (
 	enrichmentFailureThreshold = 5
 	enrichmentOpenDuration     = 30 * time.Second
+	enrichmentProbeLease       = 30 * time.Second
 	testLookupTimeout          = 50 * time.Millisecond
 )
 
@@ -558,6 +559,47 @@ func TestLookup_ProbeAbandonedByItsClientDoesNotWedgeBreaker(t *testing.T) {
 	}
 	if _, err := lookup(context.Background(), reader, user); err != nil {
 		t.Fatalf("expected breaker closed after the recovery probe succeeded, got err = %v", err)
+	}
+}
+
+func TestLookup_AProbeThatNeverSettlesLosesItsLeaseAfterThirtySeconds(t *testing.T) {
+	m := &recordingMetrics{}
+	clock := newTestClock()
+	catalog := &switchableSource{current: failingSource()}
+	reader := playback.NewNowPlayingReader(catalog, playback.WithNowPlayingMetrics(m),
+		playback.WithNowPlayingLookupTimeout(time.Minute), playback.WithNowPlayingClock(clock.read))
+	user := testUser()
+	for i := 0; i < enrichmentFailureThreshold; i++ {
+		_, _ = lookup(context.Background(), reader, user)
+	}
+	clock.advance(enrichmentOpenDuration + time.Second)
+
+	started, release := make(chan struct{}), make(chan struct{})
+	catalog.use(sourceFunc(func(context.Context) (*playback.NowPlayingTrack, error) {
+		close(started)
+		<-release
+		return &playback.NowPlayingTrack{}, nil
+	}))
+	probeDone := make(chan struct{})
+	go func() {
+		defer close(probeDone)
+		_, _ = lookup(context.Background(), reader, user)
+	}()
+	<-started
+	defer func() {
+		close(release)
+		<-probeDone
+	}()
+
+	catalog.use(healthySource())
+	clock.advance(enrichmentProbeLease)
+	if !rejected(reader, m, user) {
+		t.Fatal("a second probe was admitted at exactly the lease, want it refused while the first probe is in flight")
+	}
+
+	clock.advance(time.Nanosecond)
+	if _, err := lookup(context.Background(), reader, user); err != nil {
+		t.Fatalf("breaker still refusing after the probe lease expired: %v", err)
 	}
 }
 

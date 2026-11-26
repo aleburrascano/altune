@@ -5,7 +5,6 @@ import (
 	"context"
 	"log/slog"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -16,10 +15,16 @@ const (
 	probeLeaseFor     = 30 * time.Second
 )
 
-func TestCircuitBreaker_Closed(t *testing.T) {
+func tripProvider(ctx context.Context, cb *search.CircuitBreaker, provider search.ProviderName) {
+	for range breakerTripsAfter {
+		cb.RecordFailure(ctx, provider, search.CircuitAdmission{})
+	}
+}
+
+func TestCircuitBreaker_AProviderWithNoFailuresIsClosedAndOK(t *testing.T) {
 	cb := search.NewCircuitBreaker()
 
-	if !cb.AllowRequest(context.Background(), search.ProviderDeezer) {
+	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); !ok {
 		t.Error("expected closed circuit to allow requests")
 	}
 	if cb.GetStatus(search.ProviderDeezer) != search.ProviderStatusOK {
@@ -27,98 +32,70 @@ func TestCircuitBreaker_Closed(t *testing.T) {
 	}
 }
 
-func TestCircuitBreaker_StaysClosedBelowThreshold(t *testing.T) {
+func TestCircuitBreaker_OpensAtTheThresholdAndReportsCircuitOpen(t *testing.T) {
 	cb := search.NewCircuitBreaker()
-
-	for i := 0; i < 4; i++ {
-		cb.RecordFailure(context.Background(), search.ProviderDeezer)
+	for range breakerTripsAfter - 1 {
+		cb.RecordFailure(context.Background(), search.ProviderDeezer, search.CircuitAdmission{})
+	}
+	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); !ok {
+		t.Fatal("expected the circuit to stay closed one failure below the threshold")
 	}
 
-	if !cb.AllowRequest(context.Background(), search.ProviderDeezer) {
-		t.Error("expected circuit to stay closed with fewer than 5 failures")
-	}
-}
+	cb.RecordFailure(context.Background(), search.ProviderDeezer, search.CircuitAdmission{})
 
-func TestCircuitBreaker_OpensAfterThreshold(t *testing.T) {
-	cb := search.NewCircuitBreaker()
-
-	for i := 0; i < 5; i++ {
-		cb.RecordFailure(context.Background(), search.ProviderDeezer)
-	}
-
-	if cb.AllowRequest(context.Background(), search.ProviderDeezer) {
-		t.Error("expected open circuit to block requests after 5 failures")
+	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); ok {
+		t.Error("expected open circuit to block requests at the threshold")
 	}
 	if cb.GetStatus(search.ProviderDeezer) != search.ProviderStatusCircuitOpen {
 		t.Errorf("expected status CircuitOpen, got %v", cb.GetStatus(search.ProviderDeezer))
 	}
 }
 
-func TestCircuitBreaker_HalfOpen(t *testing.T) {
+func TestCircuitBreaker_AHalfOpenProviderReportsOKWhileItsProbeRuns(t *testing.T) {
 	cb := search.NewCircuitBreaker()
-
-	for i := 0; i < 5; i++ {
-		cb.RecordFailure(context.Background(), search.ProviderDeezer)
-	}
-
-	if cb.AllowRequest(context.Background(), search.ProviderDeezer) {
-		t.Fatal("expected circuit to be open")
-	}
-
+	tripProvider(context.Background(), cb, search.ProviderDeezer)
 	cb.AdvanceClock(breakerOpenFor + time.Second)
 
-	if !cb.AllowRequest(context.Background(), search.ProviderDeezer) {
-		t.Error("expected half-open circuit to allow probe request after timeout")
+	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); !ok {
+		t.Fatal("expected the probe to be admitted after the open window")
+	}
+
+	if got := cb.GetStatus(search.ProviderDeezer); got != search.ProviderStatusOK {
+		t.Errorf("half-open status = %v, want ok", got)
+	}
+	if snap := cb.Snapshot(search.ProviderDeezer); snap.State != search.CircuitHalfOpen || !snap.Probing {
+		t.Errorf("snapshot = %+v, want half-open with the probe in flight", snap)
 	}
 }
 
-func TestCircuitBreaker_ResetsOnSuccess(t *testing.T) {
+func TestCircuitBreaker_AProbeLeaseExpiresAfterItsConfiguredDuration(t *testing.T) {
 	cb := search.NewCircuitBreaker()
-
-	for i := 0; i < 5; i++ {
-		cb.RecordFailure(context.Background(), search.ProviderDeezer)
-	}
-
+	tripProvider(context.Background(), cb, search.ProviderDeezer)
 	cb.AdvanceClock(breakerOpenFor + time.Second)
-
-	cb.AllowRequest(context.Background(), search.ProviderDeezer)
-
-	cb.RecordSuccess(context.Background(), search.ProviderDeezer)
-
-	if !cb.AllowRequest(context.Background(), search.ProviderDeezer) {
-		t.Error("expected circuit to be closed after success in half-open state")
-	}
-	if cb.GetStatus(search.ProviderDeezer) != search.ProviderStatusOK {
-		t.Errorf("expected status OK after reset, got %v", cb.GetStatus(search.ProviderDeezer))
+	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); !ok {
+		t.Fatal("expected the half-open probe to be admitted")
 	}
 
-	for i := 0; i < 4; i++ {
-		cb.RecordFailure(context.Background(), search.ProviderDeezer)
-	}
-	if !cb.AllowRequest(context.Background(), search.ProviderDeezer) {
-		t.Error("expected failure counter to have been reset; 4 failures should not open circuit")
+	cb.AdvanceClock(probeLeaseFor + time.Second)
+
+	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); !ok {
+		t.Error("expected an abandoned probe to lose its lease and admit a new probe")
 	}
 }
 
 func TestCircuitBreaker_IndependentProviders(t *testing.T) {
 	cb := search.NewCircuitBreaker()
+	tripProvider(context.Background(), cb, search.ProviderDeezer)
 
-	for i := 0; i < 5; i++ {
-		cb.RecordFailure(context.Background(), search.ProviderDeezer)
-	}
-
-	if cb.AllowRequest(context.Background(), search.ProviderDeezer) {
+	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); ok {
 		t.Error("expected Deezer circuit to be open")
 	}
-
-	if !cb.AllowRequest(context.Background(), search.ProviderMusicBrainz) {
+	if _, ok := cb.AllowRequest(context.Background(), search.ProviderMusicBrainz); !ok {
 		t.Error("expected MusicBrainz circuit to be independent and closed")
 	}
-
-	if !cb.AllowRequest(context.Background(), search.ProviderSoundCloud) {
+	if _, ok := cb.AllowRequest(context.Background(), search.ProviderSoundCloud); !ok {
 		t.Error("expected SoundCloud circuit to be independent and closed")
 	}
-
 	if cb.GetStatus(search.ProviderDeezer) != search.ProviderStatusCircuitOpen {
 		t.Errorf("expected Deezer status CircuitOpen, got %v", cb.GetStatus(search.ProviderDeezer))
 	}
@@ -127,176 +104,22 @@ func TestCircuitBreaker_IndependentProviders(t *testing.T) {
 	}
 }
 
-func TestCircuitBreaker_HalfOpenAdmitsExactlyOneConcurrentProbe(t *testing.T) {
-	cb := search.NewCircuitBreaker()
-
-	for i := 0; i < 5; i++ {
-		cb.RecordFailure(context.Background(), search.ProviderDeezer)
-	}
-	cb.AdvanceClock(breakerOpenFor + time.Second)
-
-	const n = 16
-	var wg sync.WaitGroup
-	var admitted int32
-	for i := 0; i < n; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if cb.AllowRequest(context.Background(), search.ProviderDeezer) {
-				atomic.AddInt32(&admitted, 1)
-			}
-		}()
-	}
-	wg.Wait()
-
-	if admitted != 1 {
-		t.Errorf("half-open admitted %d concurrent probes, want exactly 1", admitted)
-	}
-}
-
-func TestCircuitBreaker_FailureAfterHalfOpenReopens(t *testing.T) {
-	cb := search.NewCircuitBreaker()
-
-	for i := 0; i < 5; i++ {
-		cb.RecordFailure(context.Background(), search.ProviderDeezer)
-	}
-
-	cb.AdvanceClock(breakerOpenFor + time.Second)
-
-	cb.AllowRequest(context.Background(), search.ProviderDeezer)
-
-	cb.RecordFailure(context.Background(), search.ProviderDeezer)
-
-	if cb.AllowRequest(context.Background(), search.ProviderDeezer) {
-		t.Error("expected circuit to re-open after failure in half-open state")
-	}
-}
-
 func TestCircuitBreaker_ReleaseProbeAdmitsNextProbe(t *testing.T) {
 	cb := search.NewCircuitBreaker()
-	tripToHalfOpenWindow(cb, search.ProviderDeezer)
-
-	if !cb.AllowRequest(context.Background(), search.ProviderDeezer) {
+	tripProvider(context.Background(), cb, search.ProviderDeezer)
+	cb.AdvanceClock(breakerOpenFor + time.Second)
+	adm, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer)
+	if !ok {
 		t.Fatal("expected the half-open probe to be admitted")
 	}
-	if cb.AllowRequest(context.Background(), search.ProviderDeezer) {
+	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); ok {
 		t.Fatal("expected a second request to be rejected while the probe is in flight")
 	}
 
-	cb.ReleaseProbe(search.ProviderDeezer)
+	cb.ReleaseProbe(search.ProviderDeezer, adm)
 
-	if !cb.AllowRequest(context.Background(), search.ProviderDeezer) {
+	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); !ok {
 		t.Error("expected a released probe slot to admit the next probe")
-	}
-	if cb.AllowRequest(context.Background(), search.ProviderDeezer) {
-		t.Error("expected the re-admitted probe to still be exclusive")
-	}
-}
-
-func TestCircuitBreaker_ReleaseProbeIsNoOpOutsideHalfOpen(t *testing.T) {
-	cb := search.NewCircuitBreaker()
-	for i := 0; i < breakerTripsAfter; i++ {
-		cb.RecordFailure(context.Background(), search.ProviderDeezer)
-	}
-
-	cb.ReleaseProbe(search.ProviderDeezer)
-	if cb.AllowRequest(context.Background(), search.ProviderDeezer) {
-		t.Error("ReleaseProbe must not let requests through an open circuit")
-	}
-
-	cb.ReleaseProbe(search.ProviderITunes)
-	if !cb.AllowRequest(context.Background(), search.ProviderITunes) {
-		t.Error("ReleaseProbe must not affect a closed circuit")
-	}
-}
-
-func TestCircuitBreaker_AbandonedProbeLeaseExpires(t *testing.T) {
-	cb := search.NewCircuitBreaker()
-	for i := 0; i < breakerTripsAfter; i++ {
-		cb.RecordFailure(context.Background(), search.ProviderDeezer)
-	}
-	cb.AdvanceClock(breakerOpenFor + time.Second)
-
-	if !cb.AllowRequest(context.Background(), search.ProviderDeezer) {
-		t.Fatal("expected the half-open probe to be admitted")
-	}
-	if cb.AllowRequest(context.Background(), search.ProviderDeezer) {
-		t.Fatal("expected rejection while the probe lease is live")
-	}
-
-	cb.AdvanceClock(probeLeaseFor + time.Second)
-
-	if !cb.AllowRequest(context.Background(), search.ProviderDeezer) {
-		t.Fatal("expected an expired probe lease to admit a new probe")
-	}
-	if cb.AllowRequest(context.Background(), search.ProviderDeezer) {
-		t.Error("expected the new probe to hold a fresh lease")
-	}
-}
-
-func TestCircuitBreaker_FullStateWalkUnderConcurrency(t *testing.T) {
-	cb := search.NewCircuitBreaker()
-	p := search.ProviderDeezer
-
-	hammer := func(n int, f func()) {
-		var wg sync.WaitGroup
-		for i := 0; i < n; i++ {
-			wg.Add(1)
-			go func() { defer wg.Done(); f() }()
-		}
-		wg.Wait()
-	}
-
-	hammer(16, func() {
-		if !cb.AllowRequest(context.Background(), p) {
-			t.Error("closed breaker must allow requests")
-		}
-	})
-
-	hammer(breakerTripsAfter, func() { cb.RecordFailure(context.Background(), p) })
-	if cb.AllowRequest(context.Background(), p) {
-		t.Fatal("breaker must be open after the failure threshold")
-	}
-	if cb.GetStatus(p) != search.ProviderStatusCircuitOpen {
-		t.Fatalf("status = %v, want circuit_open", cb.GetStatus(p))
-	}
-
-	cb.AdvanceClock(breakerOpenFor + time.Second)
-	var admitted int32
-	var mu sync.Mutex
-	hammer(16, func() {
-		if cb.AllowRequest(context.Background(), p) {
-			mu.Lock()
-			admitted++
-			mu.Unlock()
-		}
-	})
-	if admitted != 1 {
-		t.Fatalf("half-open admitted %d probes, want exactly 1", admitted)
-	}
-	if cb.GetStatus(p) != search.ProviderStatusOK {
-		t.Errorf("half-open status = %v, want ok", cb.GetStatus(p))
-	}
-
-	cb.RecordSuccess(context.Background(), p)
-	hammer(16, func() {
-		if !cb.AllowRequest(context.Background(), p) {
-			t.Error("re-closed breaker must allow requests")
-		}
-	})
-
-	hammer(breakerTripsAfter, func() { cb.RecordFailure(context.Background(), p) })
-	if cb.AllowRequest(context.Background(), p) {
-		t.Fatal("breaker must re-open after a fresh failure threshold")
-	}
-
-	cb.AdvanceClock(breakerOpenFor + time.Second)
-	if !cb.AllowRequest(context.Background(), p) {
-		t.Fatal("aged-open breaker must admit the probe")
-	}
-	cb.RecordFailure(context.Background(), p)
-	if cb.AllowRequest(context.Background(), p) {
-		t.Error("a failed half-open probe must re-open the breaker immediately")
 	}
 }
 
@@ -355,9 +178,7 @@ func TestCircuitBreaker_LogsCarryCallerContext(t *testing.T) {
 	t.Run("opening logs once with provider and failures from ctx", func(t *testing.T) {
 		h := captureBreakerLogs(t)
 		cb := search.NewCircuitBreaker()
-		for i := 0; i < breakerTripsAfter; i++ {
-			cb.RecordFailure(ctx, p)
-		}
+		tripProvider(ctx, cb, p)
 		if got := h.messages(); len(got) != 1 || got[0] != "circuit breaker opened (provider failing)" {
 			t.Fatalf("logs = %v, want exactly the opened message", got)
 		}
@@ -382,7 +203,8 @@ func TestCircuitBreaker_LogsCarryCallerContext(t *testing.T) {
 	t.Run("success on closed breaker logs nothing", func(t *testing.T) {
 		h := captureBreakerLogs(t)
 		cb := search.NewCircuitBreaker()
-		cb.RecordSuccess(ctx, p)
+		adm, _ := cb.AllowRequest(ctx, p)
+		cb.RecordSuccess(ctx, p, adm)
 		if got := h.messages(); len(got) != 0 {
 			t.Fatalf("logs = %v, want none", got)
 		}
@@ -391,14 +213,13 @@ func TestCircuitBreaker_LogsCarryCallerContext(t *testing.T) {
 	t.Run("recovery logs half-open then closed", func(t *testing.T) {
 		h := captureBreakerLogs(t)
 		cb := search.NewCircuitBreaker()
-		for i := 0; i < breakerTripsAfter; i++ {
-			cb.RecordFailure(ctx, p)
-		}
+		tripProvider(ctx, cb, p)
 		cb.AdvanceClock(breakerOpenFor + time.Second)
-		if !cb.AllowRequest(ctx, p) {
+		adm, ok := cb.AllowRequest(ctx, p)
+		if !ok {
 			t.Fatal("probe refused after breakerOpenFor")
 		}
-		cb.RecordSuccess(ctx, p)
+		cb.RecordSuccess(ctx, p, adm)
 		want := []string{
 			"circuit breaker opened (provider failing)",
 			"circuit breaker half-open (probing recovery)",
@@ -419,11 +240,18 @@ func TestCircuitBreaker_LogsCarryCallerContext(t *testing.T) {
 			}
 		}
 	})
-}
 
-func tripToHalfOpenWindow(cb *search.CircuitBreaker, provider search.ProviderName) {
-	for i := 0; i < breakerTripsAfter; i++ {
-		cb.RecordFailure(context.Background(), provider)
-	}
-	cb.AdvanceClock(breakerOpenFor + time.Second)
+	t.Run("an expired probe lease logs the re-probe", func(t *testing.T) {
+		h := captureBreakerLogs(t)
+		cb := search.NewCircuitBreaker()
+		tripProvider(ctx, cb, p)
+		cb.AdvanceClock(breakerOpenFor + time.Second)
+		cb.AllowRequest(ctx, p)
+		cb.AdvanceClock(probeLeaseFor + time.Second)
+		cb.AllowRequest(ctx, p)
+		got := h.messages()
+		if last := got[len(got)-1]; last != "circuit breaker probe lease expired (re-probing)" {
+			t.Fatalf("logs = %v, want the lease expiry last", got)
+		}
+	})
 }

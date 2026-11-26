@@ -71,7 +71,7 @@ func (r *NowPlayingReader) Lookup(
 	if err != nil {
 		if ctx.Err() == nil {
 			if isDependencyFailure(err) {
-				r.breaker.recordFailure(ctx)
+				r.breaker.recordFailure(ctx, admission)
 			}
 			r.metrics.EnrichmentFailed()
 			if errors.Is(err, context.DeadlineExceeded) {
