@@ -131,6 +131,19 @@ func TestRunDiffFlagsOnlyLinesAddedSinceBase(t *testing.T) {
 	}
 }
 
+func TestRunExitsTwoOnUnknownBaseRef(t *testing.T) {
+	dir := t.TempDir()
+	gitCmd(t, dir, "init")
+	t.Chdir(dir)
+
+	var stdout strings.Builder
+	code := run(t.Context(), []string{"nosuchref"}, &stdout)
+
+	if code != 2 || stdout.String() != "" {
+		t.Fatalf("exit = %d, output %q, want exit 2 and no output", code, stdout.String())
+	}
+}
+
 func writeFile(t *testing.T, dir, name, content string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
