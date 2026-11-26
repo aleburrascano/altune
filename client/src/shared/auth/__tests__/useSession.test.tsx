@@ -6,25 +6,17 @@ import * as FileSystem from 'expo-file-system';
 
 import { asTrackId, readyEntry, usePinnedStore } from '@shared/offline';
 
+import { authClientOver } from '@testing/fakeAuthClient';
+import { captureWarnings } from '@testing/fakes/log/inMemoryLogger';
+
 import {
   useSession,
-  supabase,
+  installAuthClient,
   clearSessionExpired,
   getSessionExpired,
   markSessionExpired,
   stampCredentials,
 } from '@shared/auth';
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
-
-type LooseAuth = {
-  getSession: () => Promise<unknown>;
-  onAuthStateChange: (cb: (event: AuthChangeEvent, session: Session | null) => void) => unknown;
-};
-
-function looseAuth(): LooseAuth {
-  return supabase.auth as LooseAuth;
-}
 
 const { __fs } = FileSystem as unknown as {
   __fs: { seedFile(uri: string, contents: string): void; allFiles(): Record<string, string> };
@@ -34,8 +26,9 @@ type Listener = (event: AuthChangeEvent, session: Session | null) => void;
 type Subscription = { listener: Listener; unsubscribe: jest.Mock; active: boolean };
 
 function installAuth() {
-  const getSession = jest.spyOn(looseAuth(), 'getSession');
-  const onAuthStateChange = jest.spyOn(looseAuth(), 'onAuthStateChange');
+  const getSession = jest.fn();
+  const onAuthStateChange = jest.fn();
+  installAuthClient(authClientOver({ getSession, onAuthStateChange }));
   const subscriptions: Subscription[] = [];
 
   onAuthStateChange.mockImplementation((cb: Listener) => {
@@ -146,18 +139,17 @@ function assertLocalDataIntact(
   expect(__fs.allFiles()[pinnedUri(trackId)]).toBe('audio-bytes');
 }
 
-let warn: jest.SpyInstance;
+let warn: jest.Mock;
 
 beforeEach(() => {
   jest.clearAllMocks();
-  warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  warn = captureWarnings();
   clearSessionExpired();
   usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
 });
 
 afterEach(() => {
   while (pendingUnmounts.length > 0) pendingUnmounts.pop()?.();
-  warn.mockRestore();
 });
 
 describe('Table: the identity-change branch across (seeded, previous, next)', () => {
@@ -649,11 +641,15 @@ describe('token refresh', () => {
 
   function installAuth(): (event: AuthChangeEvent, session: Session | null) => void {
     let listener: Listener | null = null;
-    jest.spyOn(looseAuth(), 'onAuthStateChange').mockImplementation((cb: Listener) => {
-      listener = cb;
-      return { data: { subscription: { unsubscribe: jest.fn() } } };
-    });
-    jest.spyOn(looseAuth(), 'getSession').mockReturnValue(new Promise<never>(() => {}));
+    installAuthClient(
+      authClientOver({
+        onAuthStateChange: (cb: Listener) => {
+          listener = cb;
+          return { data: { subscription: { unsubscribe: jest.fn() } } };
+        },
+        getSession: () => new Promise<never>(() => {}),
+      }),
+    );
     return (event, session) => {
       if (!listener) throw new Error('onAuthStateChange was never subscribed to');
       listener(event, session);

@@ -1,21 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 import { isSessionFetchFailure } from '@shared/failure';
-import { forgetPreviousUsersLocalData } from '@shared/auth/core/userLocalData';
 import { notifyIdentityChange } from '@shared/session';
 
+import { authSource, type AuthSession } from '@shared/auth/ports/authSource';
 import { renewSessionCredentials } from '@shared/auth/view/sessionExpired';
-import { supabase } from '@shared/auth/adapters/authActions';
+import { forgetPreviousUsersLocalData } from '@shared/auth/view/userLocalData';
 import { warn } from '@shared/log';
 
 export type SessionState =
-  { status: 'loading' } | { status: 'signed-in'; session: Session } | { status: 'signed-out' };
+  { status: 'loading' } | { status: 'signed-in'; session: AuthSession } | { status: 'signed-out' };
 
 function renewsTheSignedInUser(
-  event: AuthChangeEvent,
-  incoming: Session | null,
+  event: string,
+  incoming: AuthSession | null,
   signedInUserId: string | null,
 ): boolean {
   return (
@@ -32,7 +31,7 @@ export function useSession(): SessionState {
   useEffect(() => {
     let active = true;
 
-    function apply(incoming: Session | null): void {
+    function apply(incoming: AuthSession | null): void {
       if (!active) return;
       const session = incoming?.user != null ? incoming : null;
       const userId = session?.user.id ?? null;
@@ -45,7 +44,7 @@ export function useSession(): SessionState {
       setState(session ? { status: 'signed-in', session } : { status: 'signed-out' });
     }
 
-    void supabase.auth
+    void authSource()
       .getSession()
       .then(({ data }) => {
         apply(data.session);
@@ -58,7 +57,7 @@ export function useSession(): SessionState {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = authSource().onAuthStateChange((event, session) => {
       if (active && renewsTheSignedInUser(event, session, userIdRef.current)) {
         renewSessionCredentials();
       }

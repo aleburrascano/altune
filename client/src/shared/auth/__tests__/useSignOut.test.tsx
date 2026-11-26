@@ -2,25 +2,24 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act } from '@testing-library/react-native';
 
+import * as SecureStore from 'expo-secure-store';
+
 import { ApiError, NetworkError } from '@shared/failure';
 
-import { useSignOut } from '@shared/auth';
+import { installAuthClient, useSignOut } from '@shared/auth';
 import { onSignOut } from '@shared/session';
+import { authClientOver } from '@testing/fakeAuthClient';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 
 const mockSignOut = jest.fn();
+const SESSION_KEY = 'sb-fixture-auth-token';
 
-jest.mock('@supabase/supabase-js', () => ({
-  createClient() {
-    return {
-      auth: {
-        signOut(...args: unknown[]) {
-          return mockSignOut(...args);
-        },
-      },
-    };
-  },
-}));
+function installSignOutClient(): void {
+  installAuthClient({
+    ...authClientOver({ signOut: (...args: unknown[]) => mockSignOut(...args) }),
+    clearPersistedSession: () => SecureStore.deleteItemAsync(SESSION_KEY),
+  });
+}
 
 type SecureStoreDouble = {
   __secureStore: {
@@ -31,7 +30,6 @@ type SecureStoreDouble = {
 };
 
 const { __secureStore: secureStore } = jest.requireMock<SecureStoreDouble>('expo-secure-store');
-const SESSION_KEY = 'sb-fixture-auth-token';
 const STORED_SESSION = '{"access_token":"stored"}';
 
 function createWrapper(queryClient: QueryClient) {
@@ -50,6 +48,7 @@ function deferred<T>() {
 
 beforeEach(() => {
   mockSignOut.mockReset();
+  installSignOutClient();
   secureStore.seed(SESSION_KEY, STORED_SESSION);
   recordLogs();
 });
