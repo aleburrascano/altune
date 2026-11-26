@@ -3,9 +3,13 @@ package memory_test
 import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/library/internal/adapters/contract"
+	"altune/go-api/internal/library/internal/adapters/memory"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
+	"fmt"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -54,6 +58,35 @@ func fullPlaylistRepo(t *testing.T, userId ids.UserId, size int) (*library.InMem
 		t.Fatalf("Create: %v", err)
 	}
 	return repo, pl
+}
+
+type stoppingTB struct {
+	memory.TB
+	failure string
+}
+
+func (s *stoppingTB) Helper() {}
+
+func (s *stoppingTB) Fatalf(format string, args ...any) {
+	s.failure = fmt.Sprintf(format, args...)
+	runtime.Goexit()
+}
+
+func TestPlaylistRepoFake_SeedWithTracksFailsWhenATrackDoesNotFit(t *testing.T) {
+	userId := ids.NewUserId(uuid.New())
+	repo, pl := fullPlaylistRepo(t, userId, library.MaxPlaylistTracks)
+	tb := &stoppingTB{}
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		repo.SeedWithTracks(tb, pl, []*library.Track{{ID: library.NewTrackId()}})
+	}()
+	<-done
+
+	if !strings.Contains(tb.failure, "playlist is full") {
+		t.Fatalf("seed failure = %q, want it to report ErrPlaylistFull", tb.failure)
+	}
 }
 
 func TestPlaylistRepoFake_AddTrackRefusesPastTheCap(t *testing.T) {

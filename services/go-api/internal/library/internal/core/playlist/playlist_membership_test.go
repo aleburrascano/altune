@@ -938,7 +938,7 @@ func TestPlaylistMembershipService_PublishesMutationEvents(t *testing.T) {
 		track, _ := library.NewTrack(userId, "T", "A", "")
 		pl := library.SeedPlaylist(t, plRepo, userId, "PL")
 		_ = pl.AddTrack(track.ID, time.Now())
-		plRepo.SeedWithTracks(pl, []*library.Track{track})
+		plRepo.SeedWithTracks(t, pl, []*library.Track{track})
 		svc := library.NewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo(), library.WithPlaylistMembershipEvents(pub))
 
 		if err := svc.RemoveTrack(ctx, userId, pl.ID, track.ID); err != nil {
@@ -958,7 +958,7 @@ func TestPlaylistMembershipService_PublishesMutationEvents(t *testing.T) {
 		pl := library.SeedPlaylist(t, plRepo, userId, "PL")
 		_ = pl.AddTrack(t1.ID, time.Now())
 		_ = pl.AddTrack(t2.ID, time.Now())
-		plRepo.SeedWithTracks(pl, []*library.Track{t1, t2})
+		plRepo.SeedWithTracks(t, pl, []*library.Track{t1, t2})
 		svc := library.NewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo(), library.WithPlaylistMembershipEvents(pub))
 
 		if err := svc.Reorder(ctx, userId, pl.ID, []library.TrackId{t2.ID, t1.ID}); err != nil {

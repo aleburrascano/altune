@@ -251,7 +251,7 @@ func TestHandleGetPlaylist(t *testing.T) {
 			setup: func(t *testing.T, plRepo *library.InMemoryPlaylistRepo, trRepo *library.InMemoryTrackRepo) string {
 				pl := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "Rock")
 				track := library.SeedTrack(t, plRepo.Tracks, library.FixtureUserId(), "Track", "Artist", "Album")
-				plRepo.SeedWithTracks(pl, []*library.Track{track})
+				plRepo.SeedWithTracks(t, pl, []*library.Track{track})
 				return pl.ID.UUID().String()
 			},
 			wantStatus: http.StatusOK,
@@ -786,7 +786,7 @@ func TestHandleGetPlaylist_EncodesAfterHugeDurationsSubmitted(t *testing.T) {
 	}
 	plRepo := library.NewInMemoryPlaylistRepo()
 	pl := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "Long")
-	plRepo.SeedWithTracks(pl, stored)
+	plRepo.SeedWithTracks(t, pl, stored)
 	playlistRouter := playlistRoutes(plRepo, trRepo)
 
 	rec := request(t, playlistRouter, http.MethodGet, "/playlists/"+pl.ID.UUID().String(), nil)
@@ -864,7 +864,7 @@ func TestPlaylistWrites_LeaveReadsAndRemovalsUnthrottled(t *testing.T) {
 func TestHandleListPlaylists_ReportsEachPlaylistsTrackCount(t *testing.T) {
 	plRepo := library.NewInMemoryPlaylistRepo()
 	pl := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "Rock")
-	plRepo.SeedWithTracks(pl, []*library.Track{
+	plRepo.SeedWithTracks(t, pl, []*library.Track{
 		library.SeedTrack(t, plRepo.Tracks, library.FixtureUserId(), "One", "Artist", "Album"),
 		library.SeedTrack(t, plRepo.Tracks, library.FixtureUserId(), "Two", "Artist", "Album"),
 	})
@@ -900,7 +900,7 @@ func TestHandleGetPlaylist_SumsTheTrackDurations(t *testing.T) {
 	two := library.SeedTrack(t, plRepo.Tracks, library.FixtureUserId(), "Two", "Artist", "Album")
 	two.DurationSeconds = &second
 	untimed := library.SeedTrack(t, plRepo.Tracks, library.FixtureUserId(), "Untimed", "Artist", "Album")
-	plRepo.SeedWithTracks(pl, []*library.Track{one, two, untimed})
+	plRepo.SeedWithTracks(t, pl, []*library.Track{one, two, untimed})
 	router := playlistRoutes(plRepo, library.NewInMemoryTrackRepo())
 
 	rec := request(t, router, http.MethodGet, "/playlists/"+pl.ID.UUID().String(), nil)

@@ -196,7 +196,7 @@ func TestPlaylistLifecycleService_Get(t *testing.T) {
 			setup: func(repo *library.InMemoryPlaylistRepo) library.PlaylistId {
 				pl := library.SeedPlaylist(t, repo, userId, "Rock")
 				track, _ := library.NewTrack(userId, "Track", "Artist", "Album")
-				repo.SeedWithTracks(pl, []*library.Track{track})
+				repo.SeedWithTracks(t, pl, []*library.Track{track})
 				return pl.ID
 			},
 			wantTracks: 1,
