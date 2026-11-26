@@ -2,7 +2,7 @@
 
 ## Track acquisition states
 
-The states a saved Track can be in, and the domain method that moves it (`services/go-api/internal/catalog/domain/track.go`).
+The states a saved Track can be in, and the domain method that moves it (`services/go-api/internal/library/domain/track.go`).
 
 ```mermaid
 stateDiagram-v2

@@ -7,9 +7,9 @@ import (
 )
 
 type (
-	PgxQueueStateRepository      = persistence.PgxQueueStateRepository
-	QueueStateDB                 = persistence.QueueStateDB
-	PgxDeletedIdentityRepository = persistence.PgxDeletedIdentityRepository
+	PostgresQueueStateRepository      = persistence.PostgresQueueStateRepository
+	QueueStateDB                      = persistence.QueueStateDB
+	PostgresDeletedIdentityRepository = persistence.PostgresDeletedIdentityRepository
 )
 
 const RepeatAll = domain.RepeatAll

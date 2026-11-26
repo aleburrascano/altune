@@ -2,7 +2,7 @@ package alerts_test
 
 import (
 	"altune/go-api/internal/app/alerts"
-	"altune/go-api/internal/observe"
+	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/config"
 	"bytes"
 	"context"
@@ -23,8 +23,8 @@ func captureLogs(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-func isLogOnly(n observe.AlertNotifier) bool {
-	_, nop := n.(observe.NopNotifier)
+func isLogOnly(n monitoring.AlertNotifier) bool {
+	_, nop := n.(monitoring.NopNotifier)
 	return nop
 }
 
@@ -35,7 +35,7 @@ func TestNewNotifier_AWebhookURLSendsAlertsToThatWebhook(t *testing.T) {
 
 	n := alerts.NewNotifier(context.Background(), &config.Config{AlertWebhookURL: hook.URL})
 
-	if err := n.Notify(context.Background(), observe.Alert{Title: "t"}); err != nil {
+	if err := n.Notify(context.Background(), monitoring.Alert{Title: "t"}); err != nil {
 		t.Fatalf("Notify = %v, want nil", err)
 	}
 	if posts.Load() != 1 {
@@ -64,7 +64,7 @@ func TestNewNotifier_EmailWinsOverAWebhook(t *testing.T) {
 	n := alerts.NewNotifier(context.Background(), &config.Config{ResendAPIKey: "re_x", AlertEmailTo: "ops@example.com", AlertWebhookURL: hook.URL})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_ = n.Notify(ctx, observe.Alert{Title: "t"})
+	_ = n.Notify(ctx, monitoring.Alert{Title: "t"})
 
 	if isLogOnly(n) || posts.Load() != 0 {
 		t.Fatalf("log-only %v, webhook posts %d: want the email notifier, not the webhook", isLogOnly(n), posts.Load())

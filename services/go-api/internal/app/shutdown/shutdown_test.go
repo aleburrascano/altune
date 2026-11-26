@@ -2,9 +2,9 @@ package shutdown_test
 
 import (
 	"altune/go-api/internal/app/shutdown"
-	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/discovery/discoverytest"
-	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/ids"
 	"bytes"
 	"context"
 	"log/slog"
@@ -49,7 +49,7 @@ type gatedStore struct {
 	once    sync.Once
 }
 
-func (s *gatedStore) Append(ctx context.Context, _ discovery.InteractionEvent) error {
+func (s *gatedStore) Append(ctx context.Context, _ search.InteractionEvent) error {
 	s.once.Do(func() { close(s.entered) })
 	select {
 	case <-s.release:
@@ -59,16 +59,16 @@ func (s *gatedStore) Append(ctx context.Context, _ discovery.InteractionEvent) e
 }
 
 func TestDetachedTasksStep_DrainingTheTrackerWaitsForInFlightSearchWork(t *testing.T) {
-	bg := discoverytest.NewTracker(t)
+	bg := searchtest.NewTracker(t)
 	drain := func(ctx context.Context) { bg.Drain(ctx) }
 	store := &gatedStore{entered: make(chan struct{}), release: make(chan struct{})}
-	svc := discovery.NewSearchService(bg, nil, discovery.NewCircuitBreaker(), discovery.WithEventStore(store))
-	query, err := discovery.NewSearchQuery("humble", discovery.AllKinds(), 10)
+	svc := search.NewSearchService(bg, nil, search.NewCircuitBreaker(), search.WithEventStore(store))
+	query, err := search.NewSearchQuery("humble", search.AllKinds(), 10)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	_, _ = svc.Execute(ctx, shared.NewUserId(uuid.New()), query, false)
+	_, _ = svc.Execute(ctx, ids.NewUserId(uuid.New()), query, false)
 	<-store.entered
 
 	inFlight := runOne(shutdown.DetachedTasks, 50*time.Millisecond, drain)

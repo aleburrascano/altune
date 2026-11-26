@@ -1,11 +1,11 @@
 package httpuser
 
 import (
-	"altune/go-api/internal/shared/domain"
-	"altune/go-api/internal/shared/httputil"
-	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/apierror"
+	"altune/go-api/internal/shared/httpserver"
+	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/requestuser/internal/core/identity"
+	"altune/go-api/internal/shared/requestuser/internal/core/signedinuser"
 	"log/slog"
 	"net/http"
 )
@@ -15,8 +15,8 @@ const (
 	reasonMissing      = "missing"
 )
 
-func RequireUserID(w http.ResponseWriter, r *http.Request) (shared.UserId, bool) {
-	id, ok := identity.UserIDFromContext(r.Context())
+func RequireUserID(w http.ResponseWriter, r *http.Request) (ids.UserId, bool) {
+	id, ok := signedinuser.UserIDFromContext(r.Context())
 	if !ok {
 		slog.WarnContext(r.Context(), "auth.token_rejected",
 			"reason", reasonMissing,
@@ -25,8 +25,8 @@ func RequireUserID(w http.ResponseWriter, r *http.Request) (shared.UserId, bool)
 			logging.KeyPath, r.URL.Path,
 		)
 		w.Header().Set("WWW-Authenticate", "Bearer")
-		httputil.HandleServiceError(w, r, domain.NewError(domain.CodeAuthTokenMissing, detailAuthRequired))
-		return shared.UserId{}, false
+		httpserver.HandleServiceError(w, r, apierror.NewError(apierror.CodeAuthTokenMissing, detailAuthRequired))
+		return ids.UserId{}, false
 	}
 	return id, true
 }

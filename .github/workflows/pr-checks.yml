@@ -16,6 +16,11 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  GIT_CONFIG_COUNT: 1
+  GIT_CONFIG_KEY_0: diff.renameLimit
+  GIT_CONFIG_VALUE_0: 20000
+
 jobs:
   changes:
     runs-on: ubuntu-latest
@@ -87,7 +92,7 @@ jobs:
         env:
           INTEGRATION: "1"
         run: |
-          go test -count=1 -v -run 'TestPgxSearchHistoryRepo' ./internal/discovery/internal/adapters/persistence/ | grep -E '^--- PASS: TestPgxSearchHistoryRepo'
+          go test -count=1 -v -run 'TestPostgresSearchHistoryRepo' ./internal/search/internal/adapters/persistence/ | grep -E '^--- PASS: TestPostgresSearchHistoryRepo'
 
   mobile-tests:
     needs: changes

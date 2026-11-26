@@ -1,0 +1,400 @@
+package cache_test
+
+import (
+	"altune/go-api/internal/search/domain"
+	"altune/go-api/internal/search/internal/adapters/cache"
+	"context"
+	"fmt"
+	"slices"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	goredis "github.com/redis/go-redis/v9"
+)
+
+const (
+	trigramLookupCap     = 64
+	trigramSetReadCap    = 512
+	phoneticCandidateCap = 64
+	fuzzyPrefilterCap    = 256
+)
+
+type commandCounter struct {
+	mu            sync.Mutex
+	single        map[string]int
+	pipelines     int
+	pipelinedCmds map[string]int
+}
+
+func newCountingClient(t *testing.T) (*goredis.Client, *commandCounter) {
+	t.Helper()
+	counter := &commandCounter{single: map[string]int{}, pipelinedCmds: map[string]int{}}
+	client := goredis.NewClient(&goredis.Options{Addr: "127.0.0.1:1"})
+	client.AddHook(counter)
+	t.Cleanup(func() { _ = client.Close() })
+	return client, counter
+}
+
+func (c *commandCounter) DialHook(next goredis.DialHook) goredis.DialHook { return next }
+
+func (c *commandCounter) ProcessHook(_ goredis.ProcessHook) goredis.ProcessHook {
+	return func(_ context.Context, cmd goredis.Cmder) error {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.single[cmd.Name()]++
+		cmd.SetErr(goredis.Nil)
+		return goredis.Nil
+	}
+}
+
+func (c *commandCounter) ProcessPipelineHook(_ goredis.ProcessPipelineHook) goredis.ProcessPipelineHook {
+	return func(_ context.Context, cmds []goredis.Cmder) error {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		c.pipelines++
+		for _, cmd := range cmds {
+			c.pipelinedCmds[cmd.Name()]++
+		}
+		return nil
+	}
+}
+
+func TestFindClosest_OversizedQueryIssuesBoundedPipelinedTrigramLookups(t *testing.T) {
+	client, counter := newCountingClient(t)
+	store := cache.NewVocabularyStore(client, lowercaseNorm)
+
+	hostile := strings.Repeat("qwertyuiopasdfghjklz", 500)
+	if _, err := store.FindClosest(context.Background(), hostile, 5); err != nil {
+		t.Fatalf("FindClosest: %v", err)
+	}
+
+	if got := counter.single["smembers"]; got != 0 {
+		t.Errorf("unpipelined SMEMBERS round trips = %d, want 0 (whole-set reads are gone)", got)
+	}
+	if got := counter.pipelinedCmds["smembers"]; got != 0 {
+		t.Errorf("pipelined SMEMBERS = %d, want 0 (whole-set reads are gone)", got)
+	}
+	if counter.pipelines > 1 {
+		t.Errorf("pipelines = %d, want at most 1 for the trigram lookup", counter.pipelines)
+	}
+	if got := counter.pipelinedCmds["sscan"]; got == 0 || got > trigramLookupCap {
+		t.Errorf("pipelined SSCAN = %d, want 1..%d", got, trigramLookupCap)
+	}
+}
+
+type passthroughCounter struct {
+	mu        sync.Mutex
+	smembers  int
+	pipelines int
+}
+
+func (c *passthroughCounter) DialHook(next goredis.DialHook) goredis.DialHook { return next }
+
+func (c *passthroughCounter) ProcessHook(next goredis.ProcessHook) goredis.ProcessHook {
+	return func(ctx context.Context, cmd goredis.Cmder) error {
+		c.mu.Lock()
+		if cmd.Name() == "smembers" {
+			c.smembers++
+		}
+		c.mu.Unlock()
+		return next(ctx, cmd)
+	}
+}
+
+func (c *passthroughCounter) ProcessPipelineHook(next goredis.ProcessPipelineHook) goredis.ProcessPipelineHook {
+	return func(ctx context.Context, cmds []goredis.Cmder) error {
+		c.mu.Lock()
+		c.pipelines++
+		c.mu.Unlock()
+		return next(ctx, cmds)
+	}
+}
+
+func TestVocabularyStore_Redis_OversizedFuzzyQueryIsOneRoundTripAndStillMatches(t *testing.T) {
+	_, client := newRedis(t)
+	counter := &passthroughCounter{}
+	client.AddHook(counter)
+	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	ctx := context.Background()
+
+	term := "qaboundsmegaman"
+	if err := store.Add(ctx, domain.SpellingHintsEntry{Term: "QABoundsMegaman", TermNorm: term, Kind: "track", Popularity: 1}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	counter.pipelines = 0
+
+	if _, err := store.FindClosest(ctx, strings.Repeat("qwertyuiopasdfghjklz", 500), 5); err != nil {
+		t.Fatalf("FindClosest oversized: %v", err)
+	}
+	if counter.smembers != 0 || counter.pipelines != 1 {
+		t.Errorf("oversized query: smembers=%d pipelines=%d, want 0 and 1", counter.smembers, counter.pipelines)
+	}
+
+	got, err := store.FindClosest(ctx, "qaboundsmegamsn", 5)
+	if err != nil {
+		t.Fatalf("FindClosest typo: %v", err)
+	}
+	found := false
+	for _, e := range got {
+		found = found || e.TermNorm == term
+	}
+	if !found {
+		t.Errorf("typo lookup = %+v, want %q among the pipelined candidates", got, term)
+	}
+}
+
+type stubRedis struct {
+	mu          sync.Mutex
+	sets        map[string]map[string]bool
+	entries     map[string]string
+	calls       map[string]int
+	roundTrips  int
+	mgetKeys    int
+	scanned     int
+	scannedKeys []string
+}
+
+func newStubRedisClient(t *testing.T) (*goredis.Client, *stubRedis) {
+	t.Helper()
+	stub := &stubRedis{
+		sets:    map[string]map[string]bool{},
+		entries: map[string]string{},
+		calls:   map[string]int{},
+	}
+	client := goredis.NewClient(&goredis.Options{Addr: "127.0.0.1:1"})
+	client.AddHook(stub)
+	t.Cleanup(func() { _ = client.Close() })
+	return client, stub
+}
+
+func (s *stubRedis) DialHook(next goredis.DialHook) goredis.DialHook { return next }
+
+func (s *stubRedis) ProcessHook(_ goredis.ProcessHook) goredis.ProcessHook {
+	return func(_ context.Context, cmd goredis.Cmder) error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.roundTrips++
+		s.apply(cmd)
+		return nil
+	}
+}
+
+func (s *stubRedis) ProcessPipelineHook(_ goredis.ProcessPipelineHook) goredis.ProcessPipelineHook {
+	return func(_ context.Context, cmds []goredis.Cmder) error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.roundTrips++
+		for _, cmd := range cmds {
+			s.apply(cmd)
+		}
+		return nil
+	}
+}
+
+func (s *stubRedis) apply(cmd goredis.Cmder) {
+	args := cmd.Args()
+	s.calls[cmd.Name()]++
+	switch cmd.Name() {
+	case "sadd":
+		s.sadd(redisArg(args[1]), redisArg(args[2]))
+	case "set":
+		s.entries[redisArg(args[1])] = redisArg(args[2])
+	case "smembers":
+		s.replyMembers(cmd, redisArg(args[1]))
+	case "sscan":
+		s.replyScan(cmd, args)
+	case "mget":
+		s.replyEntries(cmd, args[1:])
+	case "get":
+		s.replyEntry(cmd, redisArg(args[1]))
+	}
+}
+
+func (s *stubRedis) sadd(key, member string) {
+	if s.sets[key] == nil {
+		s.sets[key] = map[string]bool{}
+	}
+	s.sets[key][member] = true
+}
+
+func (s *stubRedis) replyMembers(cmd goredis.Cmder, key string) {
+	reply, ok := cmd.(*goredis.StringSliceCmd)
+	if !ok {
+		return
+	}
+	members := make([]string, 0, len(s.sets[key]))
+	for member := range s.sets[key] {
+		members = append(members, member)
+	}
+	reply.SetVal(members)
+}
+
+func (s *stubRedis) replyEntries(cmd goredis.Cmder, keys []any) {
+	reply, ok := cmd.(*goredis.SliceCmd)
+	if !ok {
+		return
+	}
+	s.mgetKeys += len(keys)
+	values := make([]any, len(keys))
+	for i, key := range keys {
+		if blob, stored := s.entries[redisArg(key)]; stored {
+			values[i] = blob
+		}
+	}
+	reply.SetVal(values)
+}
+
+func (s *stubRedis) replyEntry(cmd goredis.Cmder, key string) {
+	reply, ok := cmd.(*goredis.StringCmd)
+	if !ok {
+		return
+	}
+	reply.SetVal(s.entries[key])
+}
+
+func (s *stubRedis) reset() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls = map[string]int{}
+	s.roundTrips = 0
+	s.mgetKeys = 0
+}
+
+func redisArg(v any) string {
+	switch arg := v.(type) {
+	case string:
+		return arg
+	case []byte:
+		return string(arg)
+	}
+	return fmt.Sprint(v)
+}
+
+const sharedTrigramVocabularySize = 20000
+
+func firstThreeRunes(term string) string {
+	runes := []rune(term)
+	if len(runes) < 3 {
+		return term
+	}
+	return string(runes[:3])
+}
+
+func seedSharedTrigramVocabulary(t *testing.T, store *cache.RedisVocabularyStore, target string) {
+	t.Helper()
+	entries := make([]domain.SpellingHintsEntry, 0, sharedTrigramVocabularySize+1)
+	entries = append(entries, vocabTrack(target))
+	for i := range sharedTrigramVocabularySize {
+		entries = append(entries, vocabTrack(fmt.Sprintf("the%05d", i)))
+	}
+	for chunk := range slices.Chunk(entries, 2000) {
+		if err := store.BulkAdd(context.Background(), chunk); err != nil {
+			t.Fatalf("BulkAdd: %v", err)
+		}
+	}
+}
+
+func vocabTrack(norm string) domain.SpellingHintsEntry {
+	return domain.SpellingHintsEntry{
+		Term:       norm,
+		TermNorm:   norm,
+		Kind:       domain.VocabKindTrack,
+		Popularity: 1,
+	}
+}
+
+func TestFindClosest_CommonTrigramLoadsBoundedCandidatesInThreeRoundTrips(t *testing.T) {
+	client, stub := newStubRedisClient(t)
+	store := cache.NewVocabularyStore(client, lowercaseNorm, cache.WithMetaphone(firstThreeRunes))
+	const target = "themesong"
+	seedSharedTrigramVocabulary(t, store, target)
+	stub.reset()
+
+	start := time.Now()
+	got, err := store.FindClosest(context.Background(), "themesonh", 5)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("FindClosest: %v", err)
+	}
+	if stub.roundTrips > 3 {
+		t.Errorf("round trips = %d, want at most 3 (trigram pipeline, phonetic set, one MGET)", stub.roundTrips)
+	}
+	if stub.calls["get"] != 0 {
+		t.Errorf("per-candidate GET = %d, want 0: survivors load in one MGET", stub.calls["get"])
+	}
+	loadCap := fuzzyPrefilterCap + phoneticCandidateCap
+	if stub.mgetKeys > loadCap {
+		t.Errorf("entries loaded = %d of %d sharing the trigram, want at most %d",
+			stub.mgetKeys, sharedTrigramVocabularySize, loadCap)
+	}
+	if elapsed > 2*time.Second {
+		t.Errorf("lookup took %s over %d candidates, want a bounded lookup", elapsed, sharedTrigramVocabularySize)
+	}
+	if len(got) == 0 || got[0].TermNorm != target {
+		t.Errorf("FindClosest = %+v, want %q first", got, target)
+	}
+}
+
+func TestFindClosest_ShortQueryLooksUpEveryTrigramInOrder(t *testing.T) {
+	client, stub := newStubRedisClient(t)
+	store := cache.NewVocabularyStore(client, lowercaseNorm)
+
+	if _, err := store.FindClosest(context.Background(), "megaman", 5); err != nil {
+		t.Fatalf("FindClosest: %v", err)
+	}
+
+	want := []string{
+		vocabTriPrefix + "meg", vocabTriPrefix + "ega", vocabTriPrefix + "gam",
+		vocabTriPrefix + "ama", vocabTriPrefix + "man",
+	}
+	if !slices.Equal(stub.scannedKeys, want) {
+		t.Errorf("scanned keys = %v, want every trigram of a short query in order %v", stub.scannedKeys, want)
+	}
+}
+
+func (s *stubRedis) replyScan(cmd goredis.Cmder, args []any) {
+	reply, ok := cmd.(*goredis.ScanCmd)
+	if !ok {
+		return
+	}
+	members := make([]string, 0, len(s.sets[redisArg(args[1])]))
+	for member := range s.sets[redisArg(args[1])] {
+		members = append(members, member)
+	}
+	sort.Strings(members)
+	offset, _ := strconv.Atoi(redisArg(args[2]))
+	count, _ := strconv.Atoi(redisArg(args[len(args)-1]))
+	end := min(offset+count, len(members))
+	next := uint64(end)
+	if end == len(members) {
+		next = 0
+	}
+	s.scanned += end - offset
+	s.scannedKeys = append(s.scannedKeys, redisArg(args[1]))
+	reply.SetVal(members[offset:end], next)
+}
+
+func TestFindClosest_HugeTrigramAndMetaphoneSetsAreReadUnderTheCap(t *testing.T) {
+	client, stub := newStubRedisClient(t)
+	store := cache.NewVocabularyStore(client, lowercaseNorm, cache.WithMetaphone(func(string) string { return "K" }))
+	huge := 10 * trigramSetReadCap
+	for i := 0; i < huge; i++ {
+		member := fmt.Sprintf("member%05d", i)
+		stub.sadd(vocabTriPrefix+"the", member)
+		stub.sadd(vocabMetaPrefix+"K", member)
+	}
+
+	if _, err := store.FindClosest(context.Background(), "the", 5); err != nil {
+		t.Fatalf("FindClosest: %v", err)
+	}
+
+	limit := trigramSetReadCap + phoneticCandidateCap
+	if stub.scanned > limit || stub.calls["smembers"] != 0 {
+		t.Errorf("members read = %d (smembers %d), want at most %d", stub.scanned, stub.calls["smembers"], limit)
+	}
+}

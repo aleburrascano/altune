@@ -89,7 +89,7 @@ function middlewareSource(): string {
 }
 
 function findMiddlewareSource(): string {
-  const authModule = path.join(REPO_ROOT!, 'services', 'go-api', 'internal', 'auth');
+  const authModule = path.join(REPO_ROOT!, 'services', 'go-api', 'internal', 'platform', 'auth');
   const sources = goSourcesUnder(authModule)
     .map((file) => fs.readFileSync(file, 'utf8'))
     .filter((source) => MIDDLEWARE_MARKER.test(source));
@@ -110,10 +110,10 @@ function apiClientSource(): string {
 }
 
 const REJECTION_CODES_DECLARATION = /\nvar rejectionCodes = [^{]*\{/;
-const RETURNED_DOMAIN_CODE = /return domain\.(Code\w+)/g;
-const DOMAIN_CODE_REFERENCE = /domain\.(Code\w+)/g;
+const RETURNED_DOMAIN_CODE = /return apierror\.(Code\w+)/g;
+const DOMAIN_CODE_REFERENCE = /apierror\.(Code\w+)/g;
 const REJECTION_REASON_KEY = /ports\.Reason\w+:/g;
-const NEW_ERROR_CODE_ARGUMENT = /domain\.NewError\(domain\.(Code\w+),/g;
+const NEW_ERROR_CODE_ARGUMENT = /apierror\.NewError\(apierror\.(Code\w+),/g;
 
 function goApiSource(...segments: string[]): string {
   return fs.readFileSync(
@@ -124,11 +124,11 @@ function goApiSource(...segments: string[]): string {
 
 function statusOfCode(codeName: string): number {
   const kind = new RegExp(`\\b${codeName}\\s*=\\s*code\\("[^"]+",\\s*(Kind\\w+),`).exec(
-    goApiSource('shared', 'domain', 'codes.go'),
+    goApiSource('shared', 'apierror', 'codes.go'),
   );
   expect(kind).not.toBeNull();
-  const status = new RegExp(`\\bdomain\\.${kind![1]}:\\s*(http\\.Status\\w+),`).exec(
-    goApiSource('shared', 'httputil', 'errors.go'),
+  const status = new RegExp(`\\bapierror\\.${kind![1]}:\\s*(http\\.Status\\w+),`).exec(
+    goApiSource('shared', 'httpserver', 'errors.go'),
   );
   expect(status).not.toBeNull();
   const value = GO_HTTP_STATUS_CONSTANTS[status![1]!];
@@ -158,14 +158,14 @@ function soleStatusOf(codeNames: string[]): number {
 
 function deriveRejectTokenStatus(source: string): number {
   expect(extractGoFuncBody(source, 'rejectToken')).toContain(
-    'httputil.HandleServiceError(w, r, domain.NewError(rejectionCode(reason),',
+    'httpserver.HandleServiceError(w, r, apierror.NewError(rejectionCode(reason),',
   );
   return soleStatusOf(rejectionCodeNames(source));
 }
 
 function deriveVerifierUnavailableStatus(source: string): number {
   const body = extractGoFuncBody(source, 'rejectVerifierUnavailable');
-  expect(body).toContain('httputil.HandleServiceError(w, r,');
+  expect(body).toContain('httpserver.HandleServiceError(w, r,');
   const codes = [...body.matchAll(NEW_ERROR_CODE_ARGUMENT)].map((m) => m[1]!);
   expect(codes.length).toBeGreaterThan(0);
   return soleStatusOf(codes);
@@ -183,7 +183,7 @@ function deriveMobileSessionExpiredStatus(source: string): number {
   return Number(constant![1]);
 }
 
-describe('cross-surface 401 contract, derived from the auth middleware under services/go-api/internal/auth at test time', () => {
+describe('cross-surface 401 contract, derived from the auth middleware under services/go-api/internal/platform/auth at test time', () => {
   it('finds the repo root to derive the contract from', () => {
     expect(REPO_ROOT).not.toBeNull();
   });
@@ -220,7 +220,7 @@ describe('cross-surface 401 contract, derived from the auth middleware under ser
 
     const challengeIdx = rejectTokenBody.indexOf('w.Header().Set("WWW-Authenticate", "Bearer")');
     expect(challengeIdx).toBeGreaterThan(-1);
-    expect(challengeIdx).toBeLessThan(rejectTokenBody.indexOf('httputil.HandleServiceError('));
+    expect(challengeIdx).toBeLessThan(rejectTokenBody.indexOf('httpserver.HandleServiceError('));
     expect(rejectVerifierUnavailableBody).not.toContain('WWW-Authenticate');
   });
 });

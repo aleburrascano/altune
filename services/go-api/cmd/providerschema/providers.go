@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/shared/providerschema"
+	"altune/go-api/internal/shared/providerfields"
 	"errors"
 	"fmt"
 	"net/http"
@@ -10,7 +10,7 @@ import (
 	"slices"
 )
 
-const adapterRoot = "services/go-api/internal/discovery/internal/adapters/providers/"
+const adapterRoot = "services/go-api/internal/search/internal/adapters/providers/"
 
 type provider struct {
 	adapter      string
@@ -62,7 +62,7 @@ func repoRoot() (string, error) {
 	}
 }
 
-func account(s providerschema.Schema, root string, p provider, update bool) ([]string, error) {
+func account(s providerfields.Schema, root string, p provider, update bool) ([]string, error) {
 	reads, err := p.reads(root, s)
 	if err != nil {
 		return nil, err
@@ -77,11 +77,11 @@ func account(s providerschema.Schema, root string, p provider, update bool) ([]s
 	return problems, nil
 }
 
-func (p provider) reads(root string, s providerschema.Schema) (map[string]providerschema.Reads, error) {
+func (p provider) reads(root string, s providerfields.Schema) (map[string]providerfields.Reads, error) {
 	if err := sameEntities(s, p); err != nil {
 		return nil, err
 	}
-	out := map[string]providerschema.Reads{}
+	out := map[string]providerfields.Reads{}
 	for name, typeName := range p.decodedAs {
 		reads, err := p.entityReads(root, name, typeName)
 		if err != nil {
@@ -92,9 +92,9 @@ func (p provider) reads(root string, s providerschema.Schema) (map[string]provid
 	return out, nil
 }
 
-func (p provider) entityReads(root, entity, typeName string) (providerschema.Reads, error) {
+func (p provider) entityReads(root, entity, typeName string) (providerfields.Reads, error) {
 	dirs := p.sourceDirs(root)
-	reads, err := providerschema.DecodedFields(dirs, typeName)
+	reads, err := providerfields.DecodedFields(dirs, typeName)
 	for _, raw := range p.decodedLater {
 		if err == nil && raw.entity == entity {
 			reads, err = raw.readThrough(reads, dirs)
@@ -111,15 +111,15 @@ func (p provider) sourceDirs(root string) []string {
 	return dirs
 }
 
-func (raw rawField) readThrough(reads providerschema.Reads, dirs []string) (providerschema.Reads, error) {
-	later, err := providerschema.DecodedFields(dirs, raw.decodedAs)
+func (raw rawField) readThrough(reads providerfields.Reads, dirs []string) (providerfields.Reads, error) {
+	later, err := providerfields.DecodedFields(dirs, raw.decodedAs)
 	if err != nil {
 		return reads, err
 	}
 	return reads.Graft(raw.path, later)
 }
 
-func sameEntities(s providerschema.Schema, p provider) error {
+func sameEntities(s providerfields.Schema, p provider) error {
 	inSchema, audited := sortedNames(s.Entities), sortedNames(p.decodedAs)
 	if !slices.Equal(inSchema, audited) {
 		return fmt.Errorf("the schema has entities %v but the adapter is audited for %v", inSchema, audited)

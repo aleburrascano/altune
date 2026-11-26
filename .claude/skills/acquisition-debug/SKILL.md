@@ -30,7 +30,7 @@ bash scripts/acq-debug.sh summary [days]      # status mix, failure codes, which
 bash scripts/acq-debug.sh track "<title|uuid>" # the row + that track's log lines
 ```
 
-Read `failure_reason` literally. `all N candidates rejected (7 download, 3 identity, …)` counts each judged candidate once (by source key, across both tiers) and why it died: `download` points to the source (step 1), `identity`/`duration` point to the matcher (`internal/acquisition/service/matching.go`), and a trailing `, M not tried` counts candidates never judged (attempt budget ran out or the source was dead), which are not rejections. The per-day "which source delivered" table shows when a source went dark: a source that vanishes from it is the outage start date.
+Read `failure_reason` literally. `all N candidates rejected (7 download, 3 identity, …)` counts each judged candidate once (by source key, across both tiers) and why it died: `download` points to the source (step 1), `identity`/`duration` point to the matcher (`internal/download/service/matching.go`), and a trailing `, M not tried` counts candidates never judged (attempt budget ran out or the source was dead), which are not rejections. The per-day "which source delivered" table shows when a source went dark: a source that vanishes from it is the outage start date.
 
 Done when: you can name the failing stage for the user's track.
 
@@ -54,7 +54,7 @@ A real failure worth keeping becomes a permanent eval case with:
 bash scripts/acq-debug.sh [--staging] capture "<title|uuid>"
 ```
 
-It pulls the track row plus its `candidate_evaluated` and `acquisition.rejection_summary` log lines and turns them into one `eval.Case` JSON object (`class: "RW"`), printed to stdout. It never commits or edits goldens: review the output, then add it under `services/go-api/internal/acquisition/internal/adapters/eval/goldens/` yourself.
+It pulls the track row plus its `candidate_evaluated` and `acquisition.rejection_summary` log lines and turns them into one `eval.Case` JSON object (`class: "RW"`), printed to stdout. It never commits or edits goldens: review the output, then add it under `services/go-api/internal/download/internal/adapters/qualitycheck/goldens/` yourself.
 
 To find tracks that were stored with an unrequested version (Instrumental, reaction, and other veto qualifiers):
 

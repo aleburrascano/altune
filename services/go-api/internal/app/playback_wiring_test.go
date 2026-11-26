@@ -51,7 +51,7 @@ func TestQueueRateLimit_TheConfigDefaultsMatchPlaybacksOwnLimit(t *testing.T) {
 		t.Fatalf("config.Load: %v", err)
 	}
 
-	got := playback.QueueStateRateLimit{Every: cfg.PlaybackQueueRateEvery, Burst: cfg.PlaybackQueueRateBurst}
+	got := playback.QueueSaveLimit{Every: cfg.PlaybackQueueRateEvery, Burst: cfg.PlaybackQueueRateBurst}
 	if got != playback.DefaultQueueStateRateLimit {
 		t.Errorf("default limit = %+v, want %+v", got, playback.DefaultQueueStateRateLimit)
 	}

@@ -2,11 +2,11 @@ package journey_test
 
 import (
 	"altune/go-api/cmd/api/commands/journey"
-	"altune/go-api/internal/acquisition"
-	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/download"
+	"altune/go-api/internal/search"
+	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/config"
-	shared "altune/go-api/internal/shared/kernel"
-	"altune/go-api/internal/shared/runloop"
+	"altune/go-api/internal/shared/ids"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -21,16 +21,16 @@ import (
 type fakeJourneySearcher struct {
 	results  int
 	err      error
-	gotUser  shared.UserId
+	gotUser  ids.UserId
 	gotSaved bool
 }
 
-func (f *fakeJourneySearcher) Execute(_ context.Context, userId shared.UserId, _ *discovery.SearchQuery, saveHistory bool) (*discovery.SearchOutput, error) {
+func (f *fakeJourneySearcher) Execute(_ context.Context, userId ids.UserId, _ *search.SearchQuery, saveHistory bool) (*search.SearchOutput, error) {
 	f.gotUser, f.gotSaved = userId, saveHistory
 	if f.err != nil {
 		return nil, f.err
 	}
-	return &discovery.SearchOutput{Results: make([]discovery.SearchResult, f.results)}, nil
+	return &search.SearchOutput{Results: make([]search.SearchResult, f.results)}, nil
 }
 
 type fakeJourneyDownloader struct {
@@ -41,16 +41,16 @@ type fakeJourneyDownloader struct {
 	gotOutDir string
 }
 
-func (f *fakeJourneyDownloader) Download(_ context.Context, url string, outDir string) (acquisition.FetchedAudio, error) {
+func (f *fakeJourneyDownloader) Download(_ context.Context, url string, outDir string) (download.FetchedAudio, error) {
 	f.called, f.gotURL, f.gotOutDir = true, url, outDir
 	if f.err != nil {
-		return acquisition.FetchedAudio{}, f.err
+		return download.FetchedAudio{}, f.err
 	}
 	path := filepath.Join(outDir, "canary.mp3")
 	if err := os.WriteFile(path, f.payload, 0o600); err != nil {
-		return acquisition.FetchedAudio{}, err
+		return download.FetchedAudio{}, err
 	}
-	return acquisition.FetchedAudio{Path: path}, nil
+	return download.FetchedAudio{Path: path}, nil
 }
 
 func TestRun(t *testing.T) {
@@ -119,8 +119,8 @@ func TestRunSearchesAsTheSystemUserWithoutSavingHistory(t *testing.T) {
 
 	_ = journey.Run(context.Background(), searcher, &fakeJourneyDownloader{payload: []byte("x")}, &bytes.Buffer{})
 
-	if searcher.gotUser != shared.SystemUserId() || searcher.gotSaved {
-		t.Errorf("Execute(user=%v, saveHistory=%v), want user=%v, saveHistory=false", searcher.gotUser, searcher.gotSaved, shared.SystemUserId())
+	if searcher.gotUser != ids.SystemUserId() || searcher.gotSaved {
+		t.Errorf("Execute(user=%v, saveHistory=%v), want user=%v, saveHistory=false", searcher.gotUser, searcher.gotSaved, ids.SystemUserId())
 	}
 }
 
@@ -130,7 +130,7 @@ type deadlineRecordingSearcher struct {
 	hasDeadline bool
 }
 
-func (d *deadlineRecordingSearcher) Execute(ctx context.Context, userId shared.UserId, query *discovery.SearchQuery, saveHistory bool) (*discovery.SearchOutput, error) {
+func (d *deadlineRecordingSearcher) Execute(ctx context.Context, userId ids.UserId, query *search.SearchQuery, saveHistory bool) (*search.SearchOutput, error) {
 	deadline, ok := ctx.Deadline()
 	d.hasDeadline, d.remaining = ok, time.Until(deadline)
 	return d.fakeJourneySearcher.Execute(ctx, userId, query, saveHistory)
@@ -163,8 +163,8 @@ func TestRunDownloadsTheYouTubeCanaryIntoARemovedTempDir(t *testing.T) {
 	} {
 		_ = journey.Run(context.Background(), &fakeJourneySearcher{results: 1}, downloader, &bytes.Buffer{})
 
-		if downloader.gotURL != acquisition.YouTubeCanary.URL {
-			t.Errorf("Download url = %q, want %q", downloader.gotURL, acquisition.YouTubeCanary.URL)
+		if downloader.gotURL != download.YouTubeCanary.URL {
+			t.Errorf("Download url = %q, want %q", downloader.gotURL, download.YouTubeCanary.URL)
 		}
 		if _, err := os.Stat(downloader.gotOutDir); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("temp dir %q still present after run (download err=%v): stat err = %v", downloader.gotOutDir, downloader.err, err)
@@ -194,8 +194,8 @@ func TestRunRedactsSecretsInASearchFailure(t *testing.T) {
 
 type missingFileDownloader struct{}
 
-func (missingFileDownloader) Download(_ context.Context, _ string, outDir string) (acquisition.FetchedAudio, error) {
-	return acquisition.FetchedAudio{Path: filepath.Join(outDir, "never-written.mp3")}, nil
+func (missingFileDownloader) Download(_ context.Context, _ string, outDir string) (download.FetchedAudio, error) {
+	return download.FetchedAudio{Path: filepath.Join(outDir, "never-written.mp3")}, nil
 }
 
 func TestRunFailsWhenTheDownloadReportsAFileThatIsNotThere(t *testing.T) {
@@ -221,14 +221,14 @@ func TestRankingOnlySearcherComesFromTheDiscoveryTable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RankingOnlySearcher: %v", err)
 	}
-	if _, ok := searcher.(*discovery.SearchService); !ok {
+	if _, ok := searcher.(*search.SearchService); !ok {
 		t.Errorf("searcher = %T, want the table's ranking-only search service", searcher)
 	}
 }
 
 func TestRankingOnlySearcherRefusesABackgroundCapBelowOne(t *testing.T) {
 	_, err := journey.RankingOnlySearcher(t.Context(), &config.Config{}, nil)
-	if !errors.Is(err, runloop.ErrTrackerLimit) {
+	if !errors.Is(err, background.ErrTrackerLimit) {
 		t.Fatalf("RankingOnlySearcher = %v, want runloop.ErrTrackerLimit", err)
 	}
 }

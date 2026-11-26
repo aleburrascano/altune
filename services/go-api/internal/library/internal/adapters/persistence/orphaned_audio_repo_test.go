@@ -1,0 +1,199 @@
+package persistence_test
+
+import (
+	"altune/go-api/internal/library"
+	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/testdb"
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+func orphanRefFor(userId ids.UserId) string {
+	return userId.String() + "/artist/album/title-" + uuid.NewString()[:8] + ".mp3"
+}
+
+func cleanupOrphan(t *testing.T, pool *pgxpool.Pool, audioRef string) {
+	t.Helper()
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM orphaned_audio WHERE audio_ref = $1`, audioRef)
+	})
+}
+
+func addTrackAt(t *testing.T, pool *pgxpool.Pool, userId ids.UserId, audioRef string) {
+	t.Helper()
+	track := newTestTrackForDB(t, userId)
+	if audioRef != "" {
+		if err := track.MarkReady(audioRef); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cleanupTrack(t, pool, track.ID, userId)
+	if _, _, err := library.NewPostgresTrackRepository(pool).Add(context.Background(), track); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+}
+
+func findOrphan(t *testing.T, repo *library.PostgresOrphanedAudioRepository, audioRef string) (library.OrphanedAudio, bool) {
+	t.Helper()
+	all, err := repo.ListOrphanedAudio(context.Background(), 10_000)
+	if err != nil {
+		t.Fatalf("ListOrphanedAudio: %v", err)
+	}
+	for _, o := range all {
+		if o.AudioRef == audioRef {
+			return o, true
+		}
+	}
+	return library.OrphanedAudio{}, false
+}
+
+func TestPostgresOrphanedAudioRepo_RecordMarkResolve(t *testing.T) {
+	pool := testdb.Pool(t)
+	repo := library.NewPostgresOrphanedAudioRepository(pool)
+	ctx := context.Background()
+	userId := ids.NewUserId(uuid.New())
+	trackId := library.NewTrackId()
+	ref := orphanRefFor(userId)
+	cleanupOrphan(t, pool, ref)
+
+	orphan := library.OrphanedAudio{AudioRef: ref, UserId: userId, TrackId: trackId}
+	if err := repo.RecordOrphanedAudio(ctx, orphan); err != nil {
+		t.Fatalf("RecordOrphanedAudio: %v", err)
+	}
+	got, ok := findOrphan(t, repo, ref)
+	if !ok || got.UserId != userId || got.TrackId != trackId || got.Attempts != 0 || got.RecordedAt.IsZero() {
+		t.Fatalf("recorded orphan = %+v (found %v), want owner, track, zero attempts, a timestamp", got, ok)
+	}
+
+	if err := repo.MarkOrphanedAudioAttempt(ctx, ref, "storage down"); err != nil {
+		t.Fatalf("MarkOrphanedAudioAttempt: %v", err)
+	}
+	if got, _ := findOrphan(t, repo, ref); got.Attempts != 1 {
+		t.Errorf("attempts after one failure = %d, want 1", got.Attempts)
+	}
+
+	if err := repo.RecordOrphanedAudio(ctx, orphan); err != nil {
+		t.Fatalf("re-record: %v", err)
+	}
+	if got, _ := findOrphan(t, repo, ref); got.Attempts != 0 {
+		t.Errorf("attempts after re-record = %d, want reset to 0", got.Attempts)
+	}
+
+	if err := repo.ResolveOrphanedAudio(ctx, ref); err != nil {
+		t.Fatalf("ResolveOrphanedAudio: %v", err)
+	}
+	if _, ok := findOrphan(t, repo, ref); ok {
+		t.Error("resolved orphan still listed")
+	}
+}
+
+func TestPostgresOrphanedAudioRepo_ListPutsAttemptedLast(t *testing.T) {
+	pool := testdb.Pool(t)
+	repo := library.NewPostgresOrphanedAudioRepository(pool)
+	ctx := context.Background()
+	userId := ids.NewUserId(uuid.New())
+	stuck, fresh := orphanRefFor(userId), orphanRefFor(userId)
+	for _, ref := range []string{stuck, fresh} {
+		cleanupOrphan(t, pool, ref)
+		if err := repo.RecordOrphanedAudio(ctx, library.OrphanedAudio{AudioRef: ref, UserId: userId, TrackId: library.NewTrackId()}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := repo.MarkOrphanedAudioAttempt(ctx, stuck, "storage down"); err != nil {
+		t.Fatal(err)
+	}
+	all, err := repo.ListOrphanedAudio(ctx, 10_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pos := map[string]int{}
+	for i, o := range all {
+		pos[o.AudioRef] = i
+	}
+	if pos[fresh] > pos[stuck] {
+		t.Errorf("never-attempted orphan listed at %d after the attempted one at %d", pos[fresh], pos[stuck])
+	}
+}
+
+func TestPostgresOrphanedAudioRepo_AudioUsage(t *testing.T) {
+	pool := testdb.Pool(t)
+	repo := library.NewPostgresOrphanedAudioRepository(pool)
+	ctx := context.Background()
+
+	usage := func(ref string, owner ids.UserId) library.AudioUsage {
+		t.Helper()
+		got, err := repo.AudioUsage(ctx, ref, owner)
+		if err != nil {
+			t.Fatalf("AudioUsage: %v", err)
+		}
+		return got
+	}
+
+	owner := ids.NewUserId(uuid.New())
+	ref := orphanRefFor(owner)
+	if got := usage(ref, owner); got != library.AudioUnused {
+		t.Errorf("unreferenced key usage = %v, want unused", got)
+	}
+
+	other := ids.NewUserId(uuid.New())
+	addTrackAt(t, pool, other, ref)
+	if got := usage(ref, owner); got != library.AudioReferenced {
+		t.Errorf("key referenced by another user's track usage = %v, want referenced", got)
+	}
+
+	busyOwner := ids.NewUserId(uuid.New())
+	busyRef := orphanRefFor(busyOwner)
+	addTrackAt(t, pool, busyOwner, "")
+	if got := usage(busyRef, busyOwner); got != library.AudioOwnerAcquiring {
+		t.Errorf("owner with a pending acquisition usage = %v, want owner acquiring", got)
+	}
+	if got := usage(busyRef, owner); got != library.AudioUnused {
+		t.Errorf("another user's pending acquisition blocked the key: usage = %v, want unused", got)
+	}
+
+	replaceRef := strings.TrimSuffix(ref, ".mp3") + ".replace-" + uuid.NewString() + ".mp3"
+	if got := usage(replaceRef, owner); got != library.AudioUnused {
+		t.Errorf("replace key usage = %v, want unused (only the canonical key is referenced)", got)
+	}
+}
+
+func TestPostgresOrphanedAudioRepo_MissingTableIsUnavailable(t *testing.T) {
+	admin := testdb.Pool(t)
+	ctx := context.Background()
+	schema := "orphan_nomig_" + strings.ReplaceAll(uuid.NewString()[:8], "-", "")
+	if _, err := admin.Exec(ctx, `CREATE SCHEMA `+schema); err != nil {
+		t.Fatalf("create schema: %v", err)
+	}
+	t.Cleanup(func() { _, _ = admin.Exec(context.Background(), `DROP SCHEMA `+schema+` CASCADE`) })
+
+	cfg, err := pgxpool.ParseConfig(testdb.DatabaseURL(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.ConnConfig.RuntimeParams["search_path"] = schema
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	repo := library.NewPostgresOrphanedAudioRepository(pool)
+
+	userId := ids.NewUserId(uuid.New())
+	orphan := library.OrphanedAudio{AudioRef: orphanRefFor(userId), UserId: userId, TrackId: library.NewTrackId()}
+	_, listErr := repo.ListOrphanedAudio(ctx, 10)
+	for name, err := range map[string]error{
+		"record":  repo.RecordOrphanedAudio(ctx, orphan),
+		"list":    listErr,
+		"resolve": repo.ResolveOrphanedAudio(ctx, orphan.AudioRef),
+		"mark":    repo.MarkOrphanedAudioAttempt(ctx, orphan.AudioRef, "x"),
+	} {
+		if !errors.Is(err, library.ErrOrphanedAudioQueueUnavailable) {
+			t.Errorf("%s err = %v, want ErrOrphanedAudioQueueUnavailable", name, err)
+		}
+	}
+}

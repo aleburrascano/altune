@@ -1,0 +1,93 @@
+package audio
+
+import (
+	"altune/go-api/internal/library/domain"
+	"altune/go-api/internal/library/internal/core/ports"
+	"altune/go-api/internal/shared/ids"
+	"context"
+	"log/slog"
+	"time"
+)
+
+const audioURLTTL = ports.MaxPresignTTL
+
+type ResolvedAudioURL struct {
+	TrackID   domain.TrackId
+	URL       string
+	Version   string
+	ExpiresAt time.Time
+}
+
+type AudioLinkService struct {
+	trackRepo ports.TrackBatchGetter
+	signer    ports.AudioLinkSigner
+	metrics   ports.AudioStoreMetrics
+	now       func() time.Time
+}
+
+func NewAudioURLService(trackRepo ports.TrackBatchGetter, store ports.AudioStore, opts ...func(*AudioLinkService)) *AudioLinkService {
+	signer, _ := store.(ports.AudioLinkSigner)
+	s := &AudioLinkService{trackRepo: trackRepo, signer: signer, metrics: ports.NoopAudioStoreMetrics(), now: time.Now}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+func WithAudioURLMetrics(m ports.AudioStoreMetrics) func(*AudioLinkService) {
+	return func(s *AudioLinkService) {
+		if m != nil {
+			s.metrics = m
+		}
+	}
+}
+
+func WithAudioURLClock(now func() time.Time) func(*AudioLinkService) {
+	return func(s *AudioLinkService) {
+		if now != nil {
+			s.now = now
+		}
+	}
+}
+
+func (s *AudioLinkService) Resolve(ctx context.Context, userId ids.UserId, trackIds []domain.TrackId) ([]ResolvedAudioURL, error) {
+	if s.signer == nil {
+		return nil, nil
+	}
+
+	dbStart := time.Now()
+	tracks, err := s.trackRepo.ListByIDs(ctx, userId, trackIds)
+	dbDuration := time.Since(dbStart)
+	if err != nil {
+		return nil, domain.WrapRepoError(ctx, "resolve audio urls", err)
+	}
+	byID := make(map[domain.TrackId]*domain.Track, len(tracks))
+	for _, t := range tracks {
+		byID[t.ID] = t
+	}
+
+	expiresAt := s.now().Add(audioURLTTL)
+	out := make([]ResolvedAudioURL, 0, len(trackIds))
+	presignStart := time.Now()
+	for _, id := range trackIds {
+		track := byID[id]
+		if track == nil || !track.IsStreamable() {
+			continue
+		}
+
+		url, err := s.signer.PresignGet(ctx, *track.AudioRef, audioURLTTL)
+		if err != nil {
+			s.metrics.PresignFailed()
+			slog.WarnContext(ctx, "audio_url.presign_failed", "track_id", id.String(), "error", err)
+			continue
+		}
+		out = append(out, ResolvedAudioURL{TrackID: id, URL: url, Version: track.AudioVersion, ExpiresAt: expiresAt})
+	}
+	slog.InfoContext(ctx, "audio_url.resolved",
+		"requested", len(trackIds),
+		"resolved", len(out),
+		"db_lookup_ms", dbDuration.Milliseconds(),
+		"presign_ms", time.Since(presignStart).Milliseconds(),
+	)
+	return out, nil
+}

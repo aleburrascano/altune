@@ -2,7 +2,7 @@ package database_test
 
 import (
 	"altune/go-api/internal/shared/database"
-	"altune/go-api/internal/shared/sharedtest"
+	"altune/go-api/internal/shared/testdb"
 	"context"
 	"errors"
 	"fmt"
@@ -115,7 +115,7 @@ func TestNewPool_RefusesAnEmptyURLAndABadURL(t *testing.T) {
 
 func openPool(t *testing.T, maxConns int) *pgxpool.Pool {
 	t.Helper()
-	pool, err := database.NewPool(context.Background(), sharedtest.DatabaseURL(t), maxConns)
+	pool, err := database.NewPool(context.Background(), testdb.DatabaseURL(t), maxConns)
 	if err != nil {
 		t.Fatalf("NewPool: %v", err)
 	}

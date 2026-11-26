@@ -1,0 +1,275 @@
+package youtubemusicapi_test
+
+import (
+	"altune/go-api/internal/shared/youtubemusicapi"
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/alicebob/miniredis/v2"
+	goredis "github.com/redis/go-redis/v9"
+)
+
+const (
+	budgetRedisKey = "ytminnertube:budget"
+	minIntervalVar = "YTM_INNERTUBE_MIN_INTERVAL"
+	cooldownVar    = "YTM_INNERTUBE_COOLDOWN"
+	redisURLVar    = "REDIS_URL"
+)
+
+func budgetOn(t *testing.T, server *miniredis.Miniredis, settings youtubemusicapi.Settings) *youtubemusicapi.Budget {
+	t.Helper()
+	client := goredis.NewClient(&goredis.Options{Addr: server.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	budget, err := youtubemusicapi.NewBudget(client, settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return budget
+}
+
+func TestBudget_TwoCallersShareOneBucket(t *testing.T) {
+	server := miniredis.RunT(t)
+	interval := 300 * time.Millisecond
+	app := budgetOn(t, server, youtubemusicapi.Settings{MinInterval: interval})
+	tool := budgetOn(t, server, youtubemusicapi.Settings{MinInterval: interval})
+
+	start := time.Now()
+	for _, caller := range []*youtubemusicapi.Budget{app, tool, app, tool} {
+		if err := caller.Wait(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if elapsed := time.Since(start); elapsed < 3*interval-50*time.Millisecond {
+		t.Fatalf("four calls from two callers took %v, want at least %v", elapsed, 3*interval)
+	}
+}
+
+func TestBudgetTransport_A403MakesTheNextCallWaitForTheCooldown(t *testing.T) {
+	forbidden := true
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if forbidden {
+			forbidden = false
+			w.WriteHeader(http.StatusForbidden)
+		}
+	}))
+	t.Cleanup(upstream.Close)
+	cooldown := 400 * time.Millisecond
+	budget := budgetOn(t, miniredis.RunT(t), youtubemusicapi.Settings{Cooldown: cooldown})
+	client := &http.Client{Transport: budget.Transport(nil)}
+
+	get := func() int {
+		resp, err := client.Get(upstream.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode
+	}
+	if status := get(); status != http.StatusForbidden {
+		t.Fatalf("first status %d, want 403", status)
+	}
+	start := time.Now()
+	get()
+	if elapsed := time.Since(start); elapsed < cooldown-50*time.Millisecond {
+		t.Fatalf("next call went out after %v, want at least %v", elapsed, cooldown)
+	}
+}
+
+func TestBudget_RefusesACallThatCannotBeServedBeforeItsDeadline(t *testing.T) {
+	budget := budgetOn(t, miniredis.RunT(t), youtubemusicapi.Settings{MinInterval: time.Minute})
+	if err := budget.Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := budget.Wait(ctx); !errors.Is(err, youtubemusicapi.ErrBudgetRefused) {
+		t.Fatalf("got %v, want ErrBudgetRefused", err)
+	}
+}
+
+func TestBudgetTransport_FailsClosedWhenRedisIsDown(t *testing.T) {
+	server := miniredis.RunT(t)
+	budget := budgetOn(t, server, youtubemusicapi.Settings{})
+	server.Close()
+	upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("the upstream was called without a budget")
+	}))
+	t.Cleanup(upstream.Close)
+	client := &http.Client{Transport: budget.Transport(nil)}
+	if resp, err := client.Get(upstream.URL); err == nil {
+		_ = resp.Body.Close()
+		t.Fatal("expected an error with redis down")
+	}
+}
+
+func TestSettingsFromEnv(t *testing.T) {
+	cases := []struct {
+		name    string
+		env     map[string]string
+		want    youtubemusicapi.Settings
+		wantErr bool
+	}{
+		{"defaults", nil, youtubemusicapi.Settings{MinInterval: youtubemusicapi.DefaultMinInterval, Cooldown: youtubemusicapi.DefaultCooldown}, false},
+		{"both set", map[string]string{minIntervalVar: "5s", cooldownVar: "1m"}, youtubemusicapi.Settings{MinInterval: 5 * time.Second, Cooldown: time.Minute}, false},
+		{"bad interval", map[string]string{minIntervalVar: "fast"}, youtubemusicapi.Settings{}, true},
+		{"negative cooldown", map[string]string{cooldownVar: "-1s"}, youtubemusicapi.Settings{}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := youtubemusicapi.SettingsFromEnv(func(k string) string { return tc.env[k] })
+			if (err != nil) != tc.wantErr || got != tc.want {
+				t.Fatalf("got %+v, %v", got, err)
+			}
+		})
+	}
+}
+
+func TestToolClient_RefusesToRunWithoutRedis(t *testing.T) {
+	_, _, err := youtubemusicapi.ToolClient(context.Background(), func(string) string { return "" })
+	if !errors.Is(err, youtubemusicapi.ErrNoRedisForTool) {
+		t.Fatalf("got %v, want ErrNoRedisForTool", err)
+	}
+}
+
+func TestToolClient_PacesThroughTheSharedBucket(t *testing.T) {
+	server := miniredis.RunT(t)
+	env := func(key string) string {
+		return map[string]string{redisURLVar: "redis://" + server.Addr(), minIntervalVar: "300ms"}[key]
+	}
+	client, settings, err := youtubemusicapi.ToolClient(context.Background(), env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	t.Cleanup(upstream.Close)
+	app := budgetOn(t, server, settings)
+	if err := app.Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	resp, err := client.Get(upstream.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp == nil {
+		t.Fatal("nil response without an error")
+	}
+	_ = resp.Body.Close()
+	if elapsed := time.Since(start); elapsed < 250*time.Millisecond {
+		t.Fatalf("tool call went out %v after the app's, want the shared 300ms spacing", elapsed)
+	}
+}
+
+func TestNewBudget_NeedsARedisClient(t *testing.T) {
+	if _, err := youtubemusicapi.NewBudget(nil, youtubemusicapi.Settings{}); err == nil {
+		t.Fatal("expected an error for a nil client")
+	}
+}
+
+func TestSettings_DescribeNamesTheSharedPaceAndCooldown(t *testing.T) {
+	got := youtubemusicapi.Settings{MinInterval: 2 * time.Second, Cooldown: 10 * time.Minute}.Describe()
+	want := "shared InnerTube budget: one call per 2s across the app and the tools, 10m0s cooldown after a 403"
+	if got != want {
+		t.Fatalf("Describe() = %q, want %q", got, want)
+	}
+}
+
+func TestBudget_RefusesASlotThatLeavesNoTimeForTheRequestWithoutReservingIt(t *testing.T) {
+	server := miniredis.RunT(t)
+	budget := budgetOn(t, server, youtubemusicapi.Settings{MinInterval: 9900 * time.Millisecond})
+	if err := budget.Wait(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	slotBefore, err := server.Get(budgetRedisKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := budget.Wait(ctx); !errors.Is(err, youtubemusicapi.ErrBudgetRefused) {
+		t.Fatalf("slot 9.9s out under a 10s deadline: got %v, want ErrBudgetRefused", err)
+	}
+	if slotAfter, _ := server.Get(budgetRedisKey); slotAfter != slotBefore {
+		t.Fatalf("refused call moved the next slot from %s to %s, want it left alone", slotBefore, slotAfter)
+	}
+}
+
+func TestBudgetTransport_TakesOneSlotWhenTheCallerReservedFirst(t *testing.T) {
+	const interval = 200 * time.Millisecond
+	cases := []struct {
+		name    string
+		reserve bool
+	}{
+		{name: "caller reserved first", reserve: true},
+		{name: "caller did not reserve", reserve: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := miniredis.RunT(t)
+			budget := budgetOn(t, server, youtubemusicapi.Settings{MinInterval: interval})
+			upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+			t.Cleanup(upstream.Close)
+			client := &http.Client{Transport: budget.Transport(nil)}
+			if err := budget.Wait(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			slotBefore := slotMillis(t, server)
+
+			ctx := context.Background()
+			if tc.reserve {
+				reserved, err := youtubemusicapi.ReserveSlot(ctx, client)
+				if err != nil {
+					t.Fatal(err)
+				}
+				ctx = reserved
+			}
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, upstream.URL, http.NoBody)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = resp.Body.Close()
+
+			if taken := slotMillis(t, server) - slotBefore; taken != interval.Milliseconds() {
+				t.Fatalf("the call advanced the next slot by %dms, want exactly one interval of %v", taken, interval)
+			}
+		})
+	}
+}
+
+func slotMillis(t *testing.T, server *miniredis.Miniredis) int64 {
+	t.Helper()
+	raw, err := server.Get(budgetRedisKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slot, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return slot
+}
+
+func TestBudget_CoolDownSucceedsOnALiveRedisAndNamesTheScriptWhenRedisIsDown(t *testing.T) {
+	server := miniredis.RunT(t)
+	budget := budgetOn(t, server, youtubemusicapi.Settings{Cooldown: time.Minute})
+
+	if err := budget.CoolDown(context.Background()); err != nil {
+		t.Fatalf("CoolDown on a live redis = %v, want nil", err)
+	}
+	server.Close()
+	err := budget.CoolDown(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "cooldown script") {
+		t.Fatalf("CoolDown with redis down = %v, want an error naming the cooldown script", err)
+	}
+}

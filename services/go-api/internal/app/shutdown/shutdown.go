@@ -1,7 +1,7 @@
 package shutdown
 
 import (
-	"altune/go-api/internal/shared/runloop"
+	"altune/go-api/internal/shared/background"
 	"context"
 	"log/slog"
 	"net/http"
@@ -127,7 +127,7 @@ func runStep(ctx context.Context, step Step, completed map[string]bool) Outcome 
 func stopWithin(component string, timeout time.Duration, stop func(context.Context)) Outcome {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	if runloop.WaitWithin(ctx, func() { stop(ctx) }) {
+	if background.WaitWithin(ctx, func() { stop(ctx) }) {
 		return Outcome{Component: component, Status: Completed, Budget: timeout}
 	}
 	slog.WarnContext(ctx, "component shutdown exceeded its budget",

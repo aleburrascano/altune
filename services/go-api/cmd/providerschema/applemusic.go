@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/shared/providerschema"
+	"altune/go-api/internal/shared/providerfields"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -56,17 +56,17 @@ func (apple *appleMusicSource) Resource(ctx context.Context, entity, id string) 
 	return apple.catalog.CatalogResource(ctx, endpoint.kind, id)
 }
 
-func (apple *appleMusicSource) Reference(ctx context.Context, entity string) (providerschema.Observed, error) {
+func (apple *appleMusicSource) Reference(ctx context.Context, entity string) (providerfields.Observed, error) {
 	endpoint, ok := appleMusicEndpoints[entity]
 	if !ok {
 		return nil, fmt.Errorf("apple music has no entity %q", entity)
 	}
-	into := providerschema.Observed{}
+	into := providerfields.Observed{}
 	err := apple.walk(ctx, "/documentation/applemusicapi/"+endpoint.kind, "", into, map[string]bool{})
 	return into, err
 }
 
-func (apple *appleMusicSource) walk(ctx context.Context, docPath, prefix string, into providerschema.Observed, open map[string]bool) error {
+func (apple *appleMusicSource) walk(ctx context.Context, docPath, prefix string, into providerfields.Observed, open map[string]bool) error {
 	if open[docPath] {
 		return nil
 	}
@@ -84,7 +84,7 @@ func (apple *appleMusicSource) walk(ctx context.Context, docPath, prefix string,
 	return nil
 }
 
-func (apple *appleMusicSource) walkProperty(ctx context.Context, page doccPage, property doccProperty, prefix string, into providerschema.Observed, open map[string]bool) error {
+func (apple *appleMusicSource) walkProperty(ctx context.Context, page doccPage, property doccProperty, prefix string, into providerfields.Observed, open map[string]bool) error {
 	path, text, link := prefix+property.Name, property.text(), property.link()
 	into[path] = doccKind(text, link)
 	if strings.HasPrefix(text, "[") {
@@ -100,7 +100,7 @@ func (apple *appleMusicSource) walkProperty(ctx context.Context, page doccPage, 
 	return apple.walkChild(ctx, child, path+".", into, open)
 }
 
-func (apple *appleMusicSource) walkChild(ctx context.Context, docPath, prefix string, into providerschema.Observed, open map[string]bool) error {
+func (apple *appleMusicSource) walkChild(ctx context.Context, docPath, prefix string, into providerfields.Observed, open map[string]bool) error {
 	page, err := apple.page(ctx, docPath)
 	if err != nil {
 		return err

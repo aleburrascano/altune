@@ -1,7 +1,7 @@
 package requestuser_test
 
 import (
-	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
 	"bytes"
 	"context"
@@ -18,7 +18,7 @@ import (
 
 func TestUserIDFromContext(t *testing.T) {
 	t.Run("present", func(t *testing.T) {
-		uid := shared.NewUserId(uuid.New())
+		uid := ids.NewUserId(uuid.New())
 		ctx := requestuser.ContextWithUserID(context.Background(), uid)
 
 		got, ok := requestuser.UserIDFromContext(ctx)
@@ -155,7 +155,7 @@ func requireMissingUserResponse(t *testing.T, rec *httptest.ResponseRecorder) {
 
 func TestRequireUserID(t *testing.T) {
 	t.Run("present", func(t *testing.T) {
-		uid := shared.NewUserId(uuid.New())
+		uid := ids.NewUserId(uuid.New())
 		ctx := requestuser.ContextWithUserID(context.Background(), uid)
 		req := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(ctx)
 		rec := httptest.NewRecorder()
@@ -233,7 +233,7 @@ func TestRequireUserID_AbsentLogsTheRejection(t *testing.T) {
 }
 
 func TestRequireUserID_PresentWritesNothing(t *testing.T) {
-	uid := shared.NewUserId(uuid.New())
+	uid := ids.NewUserId(uuid.New())
 	req := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(requestuser.ContextWithUserID(context.Background(), uid))
 	rec := httptest.NewRecorder()
 
@@ -256,7 +256,7 @@ func TestRequireUserID_ChangesBetweenTicks(t *testing.T) {
 	}
 	requireMissingUserResponse(t, first)
 
-	uid := shared.NewUserId(uuid.New())
+	uid := ids.NewUserId(uuid.New())
 	second := httptest.NewRecorder()
 	got, ok := requestuser.RequireUserID(second, base.WithContext(requestuser.ContextWithUserID(base.Context(), uid)))
 	if !ok || got.UUID() != uid.UUID() {

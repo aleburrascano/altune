@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/download"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -26,10 +26,10 @@ type captureTrackDump struct {
 	ISRC            string  `json:"isrc"`
 	AudioSourceURL  string  `json:"audio_source_url"`
 
-	CatalogDurationSeconds *float64                        `json:"catalog_duration_seconds"`
-	CatalogMBID            string                          `json:"catalog_mbid"`
-	CatalogExplicit        *bool                           `json:"catalog_explicit"`
-	CatalogSources         []acquisition.EvalCatalogSource `json:"catalog_sources"`
+	CatalogDurationSeconds *float64                     `json:"catalog_duration_seconds"`
+	CatalogMBID            string                       `json:"catalog_mbid"`
+	CatalogExplicit        *bool                        `json:"catalog_explicit"`
+	CatalogSources         []download.EvalCatalogSource `json:"catalog_sources"`
 }
 
 type captureDump struct {
@@ -90,19 +90,19 @@ func runCapture(args []string, stdin io.Reader, stdout io.Writer, now time.Time)
 	return 0
 }
 
-func captureCase(raw []byte, tier string, now time.Time) (acquisition.EvalCase, error) {
+func captureCase(raw []byte, tier string, now time.Time) (download.EvalCase, error) {
 	d, err := parseCaptureDump(raw)
 	if err != nil {
-		return acquisition.EvalCase{}, err
+		return download.EvalCase{}, err
 	}
 	sources, rejectionSummary, err := captureSources(d.Logs)
 	if err != nil {
-		return acquisition.EvalCase{}, err
+		return download.EvalCase{}, err
 	}
 	if len(sources) == 0 {
-		return acquisition.EvalCase{}, fmt.Errorf("no candidate_evaluated log lines in dump")
+		return download.EvalCase{}, fmt.Errorf("no candidate_evaluated log lines in dump")
 	}
-	return acquisition.EvalCase{
+	return download.EvalCase{
 		ID:      captureID(d.Track),
 		Class:   "RW",
 		Note:    captureNote(rejectionSummary, tier, now),
@@ -122,8 +122,8 @@ func parseCaptureDump(raw []byte) (captureDump, error) {
 	return d, nil
 }
 
-func captureTrack(t captureTrackDump) acquisition.EvalTrack {
-	return acquisition.EvalTrack{
+func captureTrack(t captureTrackDump) download.EvalTrack {
+	return download.EvalTrack{
 		Title:  t.Title,
 		Artist: t.Artist,
 		Album:  t.Album,
@@ -138,8 +138,8 @@ func captureTrack(t captureTrackDump) acquisition.EvalTrack {
 	}
 }
 
-func captureSources(logs []json.RawMessage) ([]acquisition.EvalSource, string, error) {
-	var sources []acquisition.EvalSource
+func captureSources(logs []json.RawMessage) ([]download.EvalSource, string, error) {
+	var sources []download.EvalSource
 	index := map[string]int{}
 	counter := map[string]int{}
 	var rejectionSummary string
@@ -161,19 +161,19 @@ func captureSources(logs []json.RawMessage) ([]acquisition.EvalSource, string, e
 	return sources, rejectionSummary, nil
 }
 
-func addCapturedCandidate(sources *[]acquisition.EvalSource, index, counter map[string]int, line captureLogLine) {
+func addCapturedCandidate(sources *[]download.EvalSource, index, counter map[string]int, line captureLogLine) {
 	name := string(line.Source)
 	if name == "" {
 		name = "unknown"
 	}
 	i, ok := index[name]
 	if !ok {
-		*sources = append(*sources, acquisition.EvalSource{Name: name})
+		*sources = append(*sources, download.EvalSource{Name: name})
 		i = len(*sources) - 1
 		index[name] = i
 	}
 	counter[name]++
-	(*sources)[i].Candidates = append((*sources)[i].Candidates, acquisition.EvalCandidate{
+	(*sources)[i].Candidates = append((*sources)[i].Candidates, download.EvalCandidate{
 		Title:     line.CandidateTitle,
 		URL:       fmt.Sprintf("captured:%s:%d", name, counter[name]),
 		Channel:   line.CandidateChannel,

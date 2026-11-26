@@ -10,6 +10,7 @@ lint_only=0
 
 root=$(git rev-parse --show-toplevel) || exit 3
 cd "$root" || exit 3
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=diff.renameLimit GIT_CONFIG_VALUE_0=20000
 lint_cache="$root/.cache/golangci-lint"
 default_base_ref() { git remote get-url gitea >/dev/null 2>&1 && git rev-parse --verify --quiet gitea/main >/dev/null && echo gitea/main || echo origin/main; }
 base_ref=${1:-$(default_base_ref)}
@@ -317,7 +318,7 @@ if touches '^services/overseer/'; then
   fi
 fi
 
-if [ $lint_only = 0 ] && touches '^services/go-api/internal/(shared/events/|discovery/domain/events\.go)' && need npx "mobile contract tests"; then
+if [ $lint_only = 0 ] && touches '^services/go-api/internal/(shared/events/|search/domain/events\.go)' && need npx "mobile contract tests"; then
   if link_deps client; then
     jest_check "mobile contract tests (go-api events changed)" client npx jest --ci --forceExit --watchman=false --cacheDirectory "$HOME/.cache/altune-ci/jest" '\.contract\.test\.tsx?$'
   else

@@ -13,9 +13,9 @@ const (
 	AlertMonitor             Name = "alert monitor"
 	OrphanedAudioReconcile   Name = "orphaned audio reconcile"
 	DiscographyEventPrune    Name = "discography event prune"
-	VocabularyRefresh        Name = "vocabulary refresh"
+	SpellingHintsRefresh     Name = "vocabulary refresh"
 	BehavioralRankingRefresh Name = "behavioral ranking refresh"
-	DeletedIdentityErasure   Name = "deleted identity erasure"
+	DeletedUserDataErasure   Name = "deleted identity erasure"
 	AcquisitionSourceCanary  Name = "acquisition source canary"
 	StreamRecovery           Name = "stream recovery"
 	AcquisitionPrune         Name = "acquisition prune"
@@ -33,9 +33,9 @@ type spec struct {
 var table = []spec{
 	{name: OrphanedAudioReconcile, alertable: true, switchable: true},
 	{name: DiscographyEventPrune, alertable: true, switchable: true},
-	{name: VocabularyRefresh, alertable: true, switchable: true},
+	{name: SpellingHintsRefresh, alertable: true, switchable: true},
 	{name: BehavioralRankingRefresh, alertable: true, switchable: true, everyInstance: true},
-	{name: DeletedIdentityErasure, alertable: true, switchable: false},
+	{name: DeletedUserDataErasure, alertable: true, switchable: false},
 	{name: AcquisitionSourceCanary, alertable: true, switchable: true},
 	{name: StreamRecovery, alertable: false, switchable: true},
 	{name: AcquisitionPrune, alertable: true, switchable: true},

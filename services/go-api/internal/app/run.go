@@ -1,7 +1,7 @@
 package app
 
 import (
-	"altune/go-api/internal/app/providerhttp"
+	"altune/go-api/internal/app/providertransport"
 	"altune/go-api/internal/app/server"
 	"altune/go-api/internal/app/shutdown"
 	"altune/go-api/internal/shared/database"
@@ -28,7 +28,7 @@ func (a *App) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	assembly, err := Assemble(ctx, a.cfg, Handles{Pool: pool, Redis: redisClient, Transport: providerhttp.Live(), Tracker: tracker, LogRing: a.logRing})
+	assembly, err := Assemble(ctx, a.cfg, Handles{Pool: pool, Redis: redisClient, Transport: providertransport.Live(), Tracker: tracker, LogRing: a.logRing})
 	if err != nil {
 		return err
 	}

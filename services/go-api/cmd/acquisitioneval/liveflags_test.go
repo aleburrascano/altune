@@ -1,14 +1,14 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/download"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
 )
 
-const ytmsearchTestdata = "../../internal/acquisition/internal/adapters/ytmsearch/testdata"
+const ytmsearchTestdata = "../../internal/download/internal/adapters/ytmsearch/testdata"
 
 func readTestdata(t *testing.T, name string) []byte {
 	t.Helper()
@@ -19,9 +19,9 @@ func readTestdata(t *testing.T, name string) []byte {
 	return raw
 }
 
-func luckiSongs(t *testing.T) []acquisition.YtmSong {
+func luckiSongs(t *testing.T) []download.YouTubeMusicSong {
 	t.Helper()
-	songs, err := acquisition.ParseYtmSongs(readTestdata(t, "search_lucki_2021_vibes.json"))
+	songs, err := download.ParseYtmSongs(readTestdata(t, "search_lucki_2021_vibes.json"))
 	if err != nil {
 		t.Fatalf("ParseSongs: %v", err)
 	}
@@ -37,80 +37,80 @@ func TestYoutubeFlags_AppliesTheStudyRules(t *testing.T) {
 	}{
 		"the official audio of the right upload raises nothing": {
 			track: liveTrack{Title: "remember them days", Artist: "SLAYR"},
-			src:   youtubeSource{VideoID: "XDC3uH1FSgw", Title: "remember them days", Author: "slayr - Topic", Type: acquisition.VideoTypeATV},
+			src:   youtubeSource{VideoID: "XDC3uH1FSgw", Title: "remember them days", Author: "slayr - Topic", Type: download.VideoTypeAudioOnly},
 			want:  []string{},
 		},
 		"an official music video is a music_video and a video_title": {
 			track: liveTrack{Title: "remember them days", Artist: "SLAYR"},
-			src:   youtubeSource{VideoID: "u4GAeAYGAqE", Title: "slayr - remember them days (OFFICIAL MUSIC VIDEO)", Author: "slayr", Type: acquisition.VideoTypeOMV},
+			src:   youtubeSource{VideoID: "u4GAeAYGAqE", Title: "slayr - remember them days (OFFICIAL MUSIC VIDEO)", Author: "slayr", Type: download.VideoTypeOfficialVideo},
 			want:  []string{"music_video(OMV)", "video_title"},
 		},
 		"a fan reupload of a user upload with a lyrics qualifier": {
 			track: liveTrack{Title: "Rollacoasta", Artist: "prettifun", Evidence: &liveEvidence{DurationDeltaSeconds: 2.1567}},
-			src:   youtubeSource{Title: "prettifun - Rollacoasta (lyrics in description)", Author: "music starz", Type: acquisition.VideoTypeUGC},
+			src:   youtubeSource{Title: "prettifun - Rollacoasta (lyrics in description)", Author: "music starz", Type: download.VideoTypeUserUpload},
 			want:  []string{"user_upload(UGC)", "fan_reupload_channel", "qualifier:lyrics"},
 		},
 		"a clean title on a fan channel is a clean_edit(title)": {
 			track: liveTrack{Title: "Starstruck", Artist: "LUCKI"},
-			src:   youtubeSource{Title: "LUCKI - Starstruck (Clean)", Author: "Rell", Type: acquisition.VideoTypeUGC},
+			src:   youtubeSource{Title: "LUCKI - Starstruck (Clean)", Author: "Rell", Type: download.VideoTypeUserUpload},
 			want:  []string{"user_upload(UGC)", "fan_reupload_channel", "qualifier:clean", "clean_edit(title)"},
 		},
 		"a VEVO channel is not a fan reupload": {
 			track: liveTrack{Title: "Song", Artist: "Somebody"},
-			src:   youtubeSource{Title: "Song", Author: "SomebodyVEVO", Type: acquisition.VideoTypeOMV},
+			src:   youtubeSource{Title: "Song", Author: "SomebodyVEVO", Type: download.VideoTypeOfficialVideo},
 			want:  []string{"music_video(OMV)"},
 		},
 		"an artist containing ft is not split inside the word": {
 			track: liveTrack{Title: "Around the World", Artist: "Daft Punk"},
-			src:   youtubeSource{Title: "Around the World", Author: "Dave Matthews Fan Uploads", Type: acquisition.VideoTypeUGC},
+			src:   youtubeSource{Title: "Around the World", Author: "Dave Matthews Fan Uploads", Type: download.VideoTypeUserUpload},
 			want:  []string{"user_upload(UGC)", "fan_reupload_channel"},
 		},
 		"an artist containing with is not split inside the word": {
 			track: liveTrack{Title: "Song", Artist: "Withers"},
-			src:   youtubeSource{Title: "Song", Author: "Other Users", Type: acquisition.VideoTypeUGC},
+			src:   youtubeSource{Title: "Song", Author: "Other Users", Type: download.VideoTypeUserUpload},
 			want:  []string{"user_upload(UGC)", "fan_reupload_channel"},
 		},
 		"an empty author never raises fan_reupload_channel": {
 			track: liveTrack{Title: "Song", Artist: "Somebody"},
-			src:   youtubeSource{Title: "Song", Author: "", Type: acquisition.VideoTypeATV},
+			src:   youtubeSource{Title: "Song", Author: "", Type: download.VideoTypeAudioOnly},
 			want:  []string{},
 		},
 		"a qualifier the track title asked for is not flagged": {
 			track: liveTrack{Title: "Song (Live)", Artist: "Somebody"},
-			src:   youtubeSource{Title: "Song (Live)", Author: "Somebody - Topic", Type: acquisition.VideoTypeATV},
+			src:   youtubeSource{Title: "Song (Live)", Author: "Somebody - Topic", Type: download.VideoTypeAudioOnly},
 			want:  []string{},
 		},
 		"the clean master is flagged when an explicit twin exists": {
 			track: luckiTrack,
-			src:   youtubeSource{VideoID: "88oFlVnMEsc", Title: "2021 Vibes", Author: "LUCKI - Topic", Type: acquisition.VideoTypeATV, Songs: luckiSongs(t)},
+			src:   youtubeSource{VideoID: "88oFlVnMEsc", Title: "2021 Vibes", Author: "LUCKI - Topic", Type: download.VideoTypeAudioOnly, Songs: luckiSongs(t)},
 			want:  []string{"clean_edit(explicit exists)"},
 		},
 		"the explicit master is not flagged": {
 			track: luckiTrack,
-			src:   youtubeSource{VideoID: "LMDLNLM6Ji8", Title: "2021 Vibes", Author: "LUCKI - Topic", Type: acquisition.VideoTypeATV, Songs: luckiSongs(t)},
+			src:   youtubeSource{VideoID: "LMDLNLM6Ji8", Title: "2021 Vibes", Author: "LUCKI - Topic", Type: download.VideoTypeAudioOnly, Songs: luckiSongs(t)},
 			want:  []string{},
 		},
 		"a stored id outside the search results is never a clean_edit": {
 			track: luckiTrack,
-			src:   youtubeSource{VideoID: "notInResult", Title: "2021 Vibes", Author: "LUCKI - Topic", Type: acquisition.VideoTypeATV, Songs: luckiSongs(t)},
+			src:   youtubeSource{VideoID: "notInResult", Title: "2021 Vibes", Author: "LUCKI - Topic", Type: download.VideoTypeAudioOnly, Songs: luckiSongs(t)},
 			want:  []string{},
 		},
 		"only the top five search results count": {
 			track: luckiTrack,
 			src: youtubeSource{
-				VideoID: "88oFlVnMEsc", Title: "2021 Vibes", Author: "LUCKI - Topic", Type: acquisition.VideoTypeATV,
+				VideoID: "88oFlVnMEsc", Title: "2021 Vibes", Author: "LUCKI - Topic", Type: download.VideoTypeAudioOnly,
 				Songs: append(luckiSongs(t)[:1:1], luckiSongs(t)[2:]...),
 			},
 			want: []string{},
 		},
 		"a duration delta beyond eight seconds is flagged with its rounded sign": {
 			track: liveTrack{Title: "Song", Artist: "Somebody", Evidence: &liveEvidence{DurationDeltaSeconds: -12.4}},
-			src:   youtubeSource{Title: "Song", Author: "Somebody - Topic", Type: acquisition.VideoTypeATV},
+			src:   youtubeSource{Title: "Song", Author: "Somebody - Topic", Type: download.VideoTypeAudioOnly},
 			want:  []string{"duration_delta:-12s"},
 		},
 		"a duration delta of exactly eight seconds is not flagged": {
 			track: liveTrack{Title: "Song", Artist: "Somebody", Evidence: &liveEvidence{DurationDeltaSeconds: 8}},
-			src:   youtubeSource{Title: "Song", Author: "Somebody - Topic", Type: acquisition.VideoTypeATV},
+			src:   youtubeSource{Title: "Song", Author: "Somebody - Topic", Type: download.VideoTypeAudioOnly},
 			want:  []string{},
 		},
 	}

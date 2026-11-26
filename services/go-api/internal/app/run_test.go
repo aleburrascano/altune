@@ -3,7 +3,7 @@ package app_test
 import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/sharedtest"
+	"altune/go-api/internal/shared/testdb"
 	"bytes"
 	"context"
 	"log/slog"
@@ -34,7 +34,7 @@ func TestRun_AnUnreachableDatabaseStopsStartup(t *testing.T) {
 }
 
 func TestRun_AFailedAssemblyStopsStartup(t *testing.T) {
-	sharedtest.RequireIntegration(t)
+	testdb.RequireIntegration(t)
 	cfg := jwksConfig(t)
 	cfg.DatabaseURL = os.Getenv("DATABASE_URL")
 	cfg.SupabaseJWTJWKSURL = "http://keys.example.com/jwks.json"
@@ -47,7 +47,7 @@ func TestRun_AFailedAssemblyStopsStartup(t *testing.T) {
 }
 
 func TestRun_APortAlreadyInUseIsReturnedInsteadOfServing(t *testing.T) {
-	sharedtest.RequireIntegration(t)
+	testdb.RequireIntegration(t)
 	taken, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)

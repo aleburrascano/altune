@@ -2,7 +2,7 @@ package stagingsweep_test
 
 import (
 	"altune/go-api/cmd/api/commands/stagingsweep"
-	"altune/go-api/internal/catalog"
+	"altune/go-api/internal/library"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"errors"
@@ -73,11 +73,11 @@ func newSweepFixture(t *testing.T, mtime time.Time, refs ...string) (*config.Con
 
 func runSweepFixture(t *testing.T, cfg *config.Config, refs *fakeRefLister, execute bool, now time.Time) stagingsweep.Tally {
 	t.Helper()
-	store, err := catalog.FromConfig(cfg, slog.Default())
+	store, err := library.NewAudioStoreFromConfig(cfg, slog.Default())
 	if err != nil {
 		t.Fatalf("storage.FromConfig: %v", err)
 	}
-	lister, ok := store.(catalog.AudioAgeLister)
+	lister, ok := store.(library.AudioAgeLister)
 	if !ok {
 		t.Fatal("store is not an AudioAgeLister")
 	}
@@ -187,7 +187,7 @@ func TestSweepStagingFollowsRefChangesBetweenCalls(t *testing.T) {
 	}
 }
 
-type refusingDeleteStore struct{ catalog.AudioStore }
+type refusingDeleteStore struct{ library.AudioStore }
 
 func (refusingDeleteStore) Delete(context.Context, string) error {
 	return errors.New("bucket refused the delete")
@@ -197,11 +197,11 @@ func TestSweepCountsADeleteTheStoreRefusesAsFailedAndKeepsTheObject(t *testing.T
 	const ref = "staging/a.mp3"
 	mtime := time.Now()
 	cfg, path := newSweepFixture(t, mtime, ref)
-	store, err := catalog.FromConfig(cfg, slog.Default())
+	store, err := library.NewAudioStoreFromConfig(cfg, slog.Default())
 	if err != nil {
 		t.Fatalf("storage.FromConfig: %v", err)
 	}
-	lister, ok := store.(catalog.AudioAgeLister)
+	lister, ok := store.(library.AudioAgeLister)
 	if !ok {
 		t.Fatal("store is not an AudioAgeLister")
 	}

@@ -2,7 +2,7 @@ package ports
 
 import (
 	"altune/go-api/internal/playback/internal/core/domain"
-	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
 )
@@ -14,8 +14,8 @@ var ErrQueueStateNotFound = errors.New("no stored queue state")
 type QueueStateRepository interface {
 	Upsert(ctx context.Context, state *domain.QueueState) error
 	UpdatePosition(ctx context.Context, position *domain.QueuePosition) error
-	GetForUser(ctx context.Context, userId shared.UserId) (*domain.QueueState, error)
-	DeleteForUser(ctx context.Context, userId shared.UserId) error
+	GetForUser(ctx context.Context, userId ids.UserId) (*domain.QueueState, error)
+	DeleteForUser(ctx context.Context, userId ids.UserId) error
 }
 
 type QueueStateMetrics interface {

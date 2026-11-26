@@ -3,9 +3,9 @@ package app_test
 import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/app/shutdown"
+	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/runloop"
-	"altune/go-api/internal/shared/sharedtest"
+	"altune/go-api/internal/shared/testdb"
 	"context"
 	"errors"
 	"net/http"
@@ -25,7 +25,7 @@ func (refuseEgress) RoundTrip(*http.Request) (*http.Response, error) {
 	return nil, errors.New("test transport: provider egress refused")
 }
 
-func testTracker(t *testing.T) *runloop.Tracker {
+func testTracker(t *testing.T) *background.Tracker {
 	t.Helper()
 	tracker, err := app.NewTracker(&config.Config{BackgroundMaxInFlight: 64})
 	if err != nil {
@@ -37,7 +37,7 @@ func testTracker(t *testing.T) *runloop.Tracker {
 
 func integrationPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	sharedtest.RequireIntegration(t)
+	testdb.RequireIntegration(t)
 	pool, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		t.Fatalf("connect: %v", err)

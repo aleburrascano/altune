@@ -2,7 +2,7 @@ package queue_test
 
 import (
 	"altune/go-api/internal/playback"
-	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/ids"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -48,7 +48,7 @@ func (r *inMemoryQueueRepo) UpdatePosition(_ context.Context, position *playback
 	return nil
 }
 
-func (r *inMemoryQueueRepo) GetForUser(_ context.Context, userId shared.UserId) (*playback.QueueState, error) {
+func (r *inMemoryQueueRepo) GetForUser(_ context.Context, userId ids.UserId) (*playback.QueueState, error) {
 	state, ok := r.States[userId.UUID()]
 	if !ok {
 		return nil, playback.ErrQueueStateNotFound
@@ -56,7 +56,7 @@ func (r *inMemoryQueueRepo) GetForUser(_ context.Context, userId shared.UserId) 
 	return state, nil
 }
 
-func (r *inMemoryQueueRepo) DeleteForUser(_ context.Context, userId shared.UserId) error {
+func (r *inMemoryQueueRepo) DeleteForUser(_ context.Context, userId ids.UserId) error {
 	delete(r.States, userId.UUID())
 	return nil
 }
@@ -65,15 +65,15 @@ func trk(name string) string {
 	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(name)).String()
 }
 
-func testUser() shared.UserId {
-	return shared.NewUserId(uuid.New())
+func testUser() ids.UserId {
+	return ids.NewUserId(uuid.New())
 }
 
 type fakeNowPlaying struct {
 	Tracks map[string]*playback.NowPlayingTrack
 }
 
-func (f *fakeNowPlaying) Lookup(_ context.Context, _ shared.UserId, trackId string) (*playback.NowPlayingTrack, error) {
+func (f *fakeNowPlaying) Lookup(_ context.Context, _ ids.UserId, trackId string) (*playback.NowPlayingTrack, error) {
 	track, ok := f.Tracks[trackId]
 	if !ok {
 		return nil, playback.ErrNowPlayingTrackNotFound
@@ -105,6 +105,6 @@ type undeletableQueueRepo struct {
 	Err error
 }
 
-func (r *undeletableQueueRepo) DeleteForUser(_ context.Context, _ shared.UserId) error {
+func (r *undeletableQueueRepo) DeleteForUser(_ context.Context, _ ids.UserId) error {
 	return r.Err
 }

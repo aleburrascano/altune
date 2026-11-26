@@ -1,11 +1,11 @@
 package app
 
 import (
-	"altune/go-api/internal/app/housekeeping"
+	"altune/go-api/internal/app/cleanupjobs"
 	"altune/go-api/internal/app/jobs"
-	"altune/go-api/internal/catalog"
-	"altune/go-api/internal/discovery"
+	"altune/go-api/internal/library"
 	"altune/go-api/internal/playback"
+	"altune/go-api/internal/search"
 	"context"
 	"errors"
 	"time"
@@ -17,13 +17,13 @@ func (a *App) startSimpleJob(name jobs.Name, interval time.Duration, run func(co
 
 const orphanedAudioReconcileInterval = 10 * time.Minute
 
-func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue catalog.OrphanedAudioQueue, audioStore catalog.AudioStore) {
+func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue library.OrphanedAudioQueue, audioStore library.AudioStore) {
 	if audioStore == nil {
 		return
 	}
-	svc := catalog.NewReconcileOrphanedAudioService(queue, audioStore,
-		catalog.WithReconcileSwitch(a.jobs.Switch(jobs.OrphanedAudioReconcile)),
-		catalog.WithReconcileMetrics(catalog.NewExpvarAudioStoreMetrics()),
+	svc := library.NewReconcileOrphanedAudioService(queue, audioStore,
+		library.WithReconcileSwitch(a.jobs.Switch(jobs.OrphanedAudioReconcile)),
+		library.WithReconcileMetrics(library.NewExpvarAudioStoreMetrics()),
 	)
 	a.startSimpleJob(jobs.OrphanedAudioReconcile, orphanedAudioReconcileInterval, func(ctx context.Context) error {
 		_, err := svc.Execute(ctx)
@@ -33,54 +33,54 @@ func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue catalog.Orp
 
 const deletedIdentityErasureInterval = time.Hour
 
-func (a *App) startDeletedIdentityErasure(ctx context.Context, svc *playback.ErasureSweeper) {
+func (a *App) startDeletedIdentityErasure(ctx context.Context, svc *playback.DeletedUserDataCleanup) {
 	discoveryErasers := a.discoveryDeletedIdentityErasers()
-	a.startSimpleJob(jobs.DeletedIdentityErasure, deletedIdentityErasureInterval, func(ctx context.Context) error {
+	a.startSimpleJob(jobs.DeletedUserDataErasure, deletedIdentityErasureInterval, func(ctx context.Context) error {
 		_, queueErr := svc.Execute(ctx)
-		return errors.Join(queueErr, housekeeping.EraseDiscoveryRowsOfDeletedIdentities(ctx, discoveryErasers))
+		return errors.Join(queueErr, cleanupjobs.EraseDiscoveryRowsOfDeletedIdentities(ctx, discoveryErasers))
 	}, "interval", deletedIdentityErasureInterval.String())
 }
 
-func (a *App) discoveryDeletedIdentityErasers() []discovery.DeletedIdentityEraser {
-	return []discovery.DeletedIdentityEraser{
-		discovery.NewPgxSearchHistoryRepository(a.pool),
-		discovery.NewPgxFavoritesRepository(a.pool),
-		discovery.NewPgxEventStore(a.pool),
+func (a *App) discoveryDeletedIdentityErasers() []search.DeletedUserDataEraser {
+	return []search.DeletedUserDataEraser{
+		search.NewPostgresSearchHistoryRepository(a.pool),
+		search.NewPostgresFavoritesRepository(a.pool),
+		search.NewPostgresEventStore(a.pool),
 	}
 }
 
 const discographyPruneInterval = 24 * time.Hour
 
-func (a *App) startDiscographyPrune(ctx context.Context, pruner housekeeping.DiscoveryEventPruner) {
+func (a *App) startDiscographyPrune(ctx context.Context, pruner cleanupjobs.DiscoveryEventPruner) {
 	a.jobs.StartTicker(ctx, jobs.DiscographyEventPrune, discographyPruneInterval,
-		housekeeping.PruneDiscoveryEvents(pruner), "interval", discographyPruneInterval.String())
+		cleanupjobs.PruneDiscoveryEvents(pruner), "interval", discographyPruneInterval.String())
 }
 
 const acquisitionPruneInterval = 24 * time.Hour
 
-func (a *App) startAcquisitionPrune(ctx context.Context, outcomes, rejections housekeeping.RetentionPruner) {
+func (a *App) startAcquisitionPrune(ctx context.Context, outcomes, rejections cleanupjobs.RetentionPruner) {
 	a.jobs.StartTicker(ctx, jobs.AcquisitionPrune, acquisitionPruneInterval,
-		housekeeping.PruneAcquisitionRows(outcomes, rejections), "interval", acquisitionPruneInterval.String())
+		cleanupjobs.PruneAcquisitionRows(outcomes, rejections), "interval", acquisitionPruneInterval.String())
 }
 
-func (a *App) startVocabularyRefresh(vocabStore discovery.VocabularyStore, charts []discovery.ChartProvider) {
+func (a *App) startVocabularyRefresh(vocabStore search.SpellingHintsStore, charts []search.ChartProvider) {
 	if vocabStore == nil || len(charts) == 0 {
 		return
 	}
 	const vocabRefreshInterval = 6 * time.Hour
-	a.vocabRefresh = discovery.NewVocabularyRefreshService(
+	a.vocabRefresh = search.NewVocabularyRefreshService(
 		charts, vocabStore, 50,
 	)
-	a.startSimpleJob(jobs.VocabularyRefresh, vocabRefreshInterval, func(ctx context.Context) error {
+	a.startSimpleJob(jobs.SpellingHintsRefresh, vocabRefreshInterval, func(ctx context.Context) error {
 		return a.vocabRefresh.RunOnce(ctx)
 	})
 }
 
 const unreleasedRefreshInterval = 30 * time.Minute
 
-func (a *App) startUnreleasedRefresh(svc *discovery.UnreleasedService) {
+func (a *App) startUnreleasedRefresh(svc *search.UnreleasedService) {
 	if svc == nil {
 		return
 	}
-	a.startSimpleJob(jobs.UnreleasedRefresh, unreleasedRefreshInterval, housekeeping.RefreshDueUnreleased(svc), "interval", unreleasedRefreshInterval.String())
+	a.startSimpleJob(jobs.UnreleasedRefresh, unreleasedRefreshInterval, cleanupjobs.RefreshDueUnreleased(svc), "interval", unreleasedRefreshInterval.String())
 }

@@ -2,13 +2,13 @@ package jobs_test
 
 import (
 	"altune/go-api/internal/app/jobs"
-	"altune/go-api/internal/catalog"
-	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/observe"
-	shared "altune/go-api/internal/shared/kernel"
-	"altune/go-api/internal/shared/leader"
-	"altune/go-api/internal/shared/runloop"
-	"altune/go-api/internal/shared/sharedtest"
+	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
+	"altune/go-api/internal/platform/leader"
+	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/testdb"
 	"bytes"
 	"context"
 	"errors"
@@ -104,7 +104,7 @@ func waitForAtLeast(t *testing.T, c *atomic.Int32, want int32) {
 	t.Fatalf("counter never reached %d (got %d)", want, c.Load())
 }
 
-func findHealth(t *testing.T, r *jobs.Runner, name string) runloop.JobHealth {
+func findHealth(t *testing.T, r *jobs.Runner, name string) background.JobHealth {
 	t.Helper()
 	for _, h := range r.Health() {
 		if h.Name == name {
@@ -112,7 +112,7 @@ func findHealth(t *testing.T, r *jobs.Runner, name string) runloop.JobHealth {
 		}
 	}
 	t.Fatalf("job %q not found in health snapshot", name)
-	return runloop.JobHealth{}
+	return background.JobHealth{}
 }
 
 func assertPassesFollowTheTerm(t *testing.T, e *fakeElection, passes *atomic.Int32) {
@@ -334,7 +334,7 @@ func TestTicker_AWedgedRunIsCanceledAndTheTickerRecovers(t *testing.T) {
 
 	waitForAtLeast(t, &successes, 1)
 
-	if cause := <-wedgedErr; !errors.Is(cause, runloop.ErrRunBudgetExceeded) {
+	if cause := <-wedgedErr; !errors.Is(cause, background.ErrRunBudgetExceeded) {
 		t.Fatalf("wedged run canceled with cause %v, want runloop.ErrRunBudgetExceeded", cause)
 	}
 	if h := findHealth(t, &r, "wedged"); h.Failures < 1 || h.LastFailure.IsZero() || h.LastSuccess.IsZero() {
@@ -501,14 +501,17 @@ func TestLeaderContext_TheAlertMonitorEvaluatesOnlyDuringItsTerm(t *testing.T) {
 	defer cancel()
 
 	var evaluations atomic.Int32
-	monitor := observe.NewAlertMonitor(observe.NopNotifier{}, leaderLoopTick, observe.Condition{
+	monitor, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, leaderLoopTick, monitoring.Condition{
 		Key: "dependency_down",
-		Eval: func(context.Context) *observe.Alert {
+		Eval: func(context.Context) *monitoring.Alert {
 			evaluations.Add(1)
 			return nil
 		},
-	}).WithLeadership(r.LeaderContext)
-	monitor.Start(ctx)
+	})
+	if err != nil {
+		t.Fatalf("NewAlertMonitor: %v", err)
+	}
+	monitor.WithLeadership(r.LeaderContext).Start(ctx)
 
 	assertPassesFollowTheTerm(t, e, &evaluations)
 }
@@ -521,9 +524,9 @@ func TestLeaderContext_TheEvalMeterRunsOnlyDuringItsTerm(t *testing.T) {
 	defer cancel()
 
 	var runs atomic.Int32
-	meter := observe.NewEvalMeter(leaderLoopTick, func(context.Context) (observe.EvalMeterResult, error) {
+	meter := monitoring.NewEvalMeter(leaderLoopTick, func(context.Context) (monitoring.EvalMeterResult, error) {
 		runs.Add(1)
-		return observe.EvalMeterResult{}, nil
+		return monitoring.EvalMeterResult{}, nil
 	}).WithLeadership(r.LeaderContext)
 	meter.Start(ctx)
 
@@ -539,11 +542,11 @@ func TestLeaderContext_LosingTheTermCutsOffAnEvalMidRun(t *testing.T) {
 
 	started := make(chan struct{})
 	stoppedBecause := make(chan error, 1)
-	meter := observe.NewEvalMeter(time.Hour, func(runCtx context.Context) (observe.EvalMeterResult, error) {
+	meter := monitoring.NewEvalMeter(time.Hour, func(runCtx context.Context) (monitoring.EvalMeterResult, error) {
 		close(started)
 		<-runCtx.Done()
 		stoppedBecause <- context.Cause(runCtx)
-		return observe.EvalMeterResult{}, runCtx.Err()
+		return monitoring.EvalMeterResult{}, runCtx.Err()
 	}).WithLeadership(r.LeaderContext)
 	meter.Start(ctx)
 	<-started
@@ -563,15 +566,15 @@ func TestLeaderContext_LosingTheTermCutsOffAnEvalMidRun(t *testing.T) {
 func TestSwitch_TheStreamRecoveryKillSwitchSuppressesReschedule(t *testing.T) {
 	ctx := context.Background()
 	var r jobs.Runner
-	user := shared.NewUserId(uuid.New())
-	repo := catalogtest.NewTrackRepo()
-	store := catalogtest.NewAudioStore()
+	user := ids.NewUserId(uuid.New())
+	repo := librarytest.NewTrackRepo()
+	store := librarytest.NewAudioStore()
 	store.ErrOnStream = errors.New("not found")
-	sched := &catalogtest.Scheduler{}
-	svc := catalog.NewStreamTrackService(repo, store,
-		catalog.WithStreamScheduler(sched),
-		catalog.WithStreamRecoverySwitch(r.Switch(jobs.StreamRecovery)))
-	track, err := catalog.NewTrack(user, "Track", "Artist", "Album")
+	sched := &librarytest.Scheduler{}
+	svc := library.NewStreamTrackService(repo, store,
+		library.WithStreamScheduler(sched),
+		library.WithStreamRecoverySwitch(r.Switch(jobs.StreamRecovery)))
+	track, err := library.NewTrack(user, "Track", "Artist", "Album")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -582,7 +585,7 @@ func TestSwitch_TheStreamRecoveryKillSwitchSuppressesReschedule(t *testing.T) {
 
 	r.SetEnabled(jobs.StreamRecovery, false)
 
-	if _, err := svc.Execute(ctx, user, track.ID); !errors.Is(err, catalog.ErrAudioTemporarilyUnavailable) {
+	if _, err := svc.Execute(ctx, user, track.ID); !errors.Is(err, library.ErrAudioTemporarilyUnavailable) {
 		t.Fatalf("disabled recovery stream err = %v, want ErrAudioTemporarilyUnavailable", err)
 	}
 	if err := svc.RecoverIfMissing(ctx, user, track.ID); err != nil {
@@ -591,7 +594,7 @@ func TestSwitch_TheStreamRecoveryKillSwitchSuppressesReschedule(t *testing.T) {
 	if len(sched.TrackIds) != 0 {
 		t.Fatalf("disabled stream recovery scheduled %d re-acquisitions", len(sched.TrackIds))
 	}
-	if got, _ := repo.GetByID(ctx, track.ID, user); got == nil || got.AcquisitionStatus != catalog.AcquisitionReady {
+	if got, _ := repo.GetByID(ctx, track.ID, user); got == nil || got.DownloadStatus != library.AcquisitionReady {
 		t.Fatalf("disabled stream recovery changed the track: %+v", got)
 	}
 	if h := findHealth(t, &r, string(jobs.StreamRecovery)); h.Enabled || h.Skipped != 2 {
@@ -600,7 +603,7 @@ func TestSwitch_TheStreamRecoveryKillSwitchSuppressesReschedule(t *testing.T) {
 
 	r.SetEnabled(jobs.StreamRecovery, true)
 
-	if _, err := svc.Execute(ctx, user, track.ID); !errors.Is(err, catalog.ErrAudioNotAvailable) {
+	if _, err := svc.Execute(ctx, user, track.ID); !errors.Is(err, library.ErrAudioNotAvailable) {
 		t.Fatalf("re-enabled recovery stream err = %v, want ErrAudioNotAvailable", err)
 	}
 	if len(sched.TrackIds) != 1 {
@@ -627,7 +630,7 @@ func (c lockWonRecords) WithAttrs([]slog.Attr) slog.Handler { return c }
 func (c lockWonRecords) WithGroup(string) slog.Handler { return c }
 
 func TestNewElection_WinsTheBackgroundLockAndAnnouncesATwentyFiveSecondSettle(t *testing.T) {
-	sharedtest.RequireIntegration(t)
+	testdb.RequireIntegration(t)
 	pool, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		t.Fatalf("connect: %v", err)
@@ -720,8 +723,8 @@ func TestTicker_RefusesAJobTheTableRunsOnEveryInstance(t *testing.T) {
 
 func TestEveryInstance_RefusesEveryLeaderOnlyJob(t *testing.T) {
 	leaderOnly := []jobs.Name{
-		jobs.OrphanedAudioReconcile, jobs.DiscographyEventPrune, jobs.VocabularyRefresh,
-		jobs.DeletedIdentityErasure, jobs.AcquisitionSourceCanary, jobs.StreamRecovery, jobs.AcquisitionPrune,
+		jobs.OrphanedAudioReconcile, jobs.DiscographyEventPrune, jobs.SpellingHintsRefresh,
+		jobs.DeletedUserDataErasure, jobs.AcquisitionSourceCanary, jobs.StreamRecovery, jobs.AcquisitionPrune,
 		jobs.AcquisitionUpgrade, jobs.UnreleasedRefresh, jobs.EvalMeter, jobs.AlertMonitor,
 	}
 	for _, name := range leaderOnly {
@@ -751,7 +754,7 @@ func TestStartTicker_LogsThatTheJobStartedWithItsAttributes(t *testing.T) {
 		want  string
 	}{
 		{jobs.OrphanedAudioReconcile, []any{"interval", "10m0s"}, `level=INFO msg="orphaned audio reconcile started" interval=10m0s` + "\n"},
-		{jobs.VocabularyRefresh, nil, `level=INFO msg="vocabulary refresh started"` + "\n"},
+		{jobs.SpellingHintsRefresh, nil, `level=INFO msg="vocabulary refresh started"` + "\n"},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.name), func(t *testing.T) {
@@ -772,7 +775,7 @@ func TestWarnOnFailure_LogsTheFailureAndReturnsIt(t *testing.T) {
 	logs := captureLogs(t)
 	boom := errors.New("boom")
 
-	err := jobs.WarnOnFailure(jobs.VocabularyRefresh, func(context.Context) error { return boom })(context.Background())
+	err := jobs.WarnOnFailure(jobs.SpellingHintsRefresh, func(context.Context) error { return boom })(context.Background())
 
 	if !errors.Is(err, boom) {
 		t.Errorf("err = %v, want the run's failure so the runner counts it", err)
@@ -785,7 +788,7 @@ func TestWarnOnFailure_LogsTheFailureAndReturnsIt(t *testing.T) {
 func TestWarnOnFailure_ASuccessLogsNothing(t *testing.T) {
 	logs := captureLogs(t)
 
-	err := jobs.WarnOnFailure(jobs.VocabularyRefresh, func(context.Context) error { return nil })(context.Background())
+	err := jobs.WarnOnFailure(jobs.SpellingHintsRefresh, func(context.Context) error { return nil })(context.Background())
 
 	if err != nil || logs.Len() != 0 {
 		t.Errorf("err = %v, logs = %q, want nil and nothing logged", err, logs.String())

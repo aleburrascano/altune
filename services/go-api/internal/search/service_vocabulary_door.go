@@ -1,0 +1,16 @@
+package search
+
+import vocabulary "altune/go-api/internal/search/service/vocabulary"
+
+type (
+	SuggestService              = vocabulary.SuggestService
+	SpellingHintsRefreshService = vocabulary.SpellingHintsRefreshService
+)
+
+var (
+	NewCorrectionService        = vocabulary.NewCorrectionService
+	NewSuggestService           = vocabulary.NewSuggestService
+	NewVocabularyRefreshService = vocabulary.NewVocabularyRefreshService
+)
+
+type CorrectionResult = vocabulary.CorrectionResult

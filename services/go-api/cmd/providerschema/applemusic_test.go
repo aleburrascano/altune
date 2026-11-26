@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/shared/providerschema"
+	"altune/go-api/internal/shared/providerfields"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -57,7 +57,7 @@ func TestAppleReferenceWalksNestedTypesAndStopsAtResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := providerschema.Observed{
+	want := providerfields.Observed{
 		"id": "string", "attributes": "object",
 		"attributes.durationInMillis": "number",
 		"attributes.genreNames":       "array", "attributes.genreNames[]": "string",

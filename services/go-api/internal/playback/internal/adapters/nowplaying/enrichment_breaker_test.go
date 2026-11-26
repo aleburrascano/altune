@@ -2,7 +2,7 @@ package nowplaying_test
 
 import (
 	"altune/go-api/internal/playback"
-	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/ids"
 	"bytes"
 	"context"
 	"errors"
@@ -55,7 +55,7 @@ var (
 
 type trackScript struct{}
 
-func (trackScript) NowPlayingTrack(_ context.Context, _ shared.UserId, id shared.TrackId) (*playback.NowPlayingTrack, error) {
+func (trackScript) NowPlayingTrack(_ context.Context, _ ids.UserId, id ids.TrackId) (*playback.NowPlayingTrack, error) {
 	switch id.String() {
 	case succeedingTrack:
 		return &playback.NowPlayingTrack{}, nil
@@ -69,7 +69,7 @@ func (trackScript) NowPlayingTrack(_ context.Context, _ shared.UserId, id shared
 type scriptedReader struct {
 	reader nowPlayingLookup
 	gauge  *breakerGauge
-	user   shared.UserId
+	user   ids.UserId
 }
 
 func newScriptedReader(clock func() time.Time) *scriptedReader {

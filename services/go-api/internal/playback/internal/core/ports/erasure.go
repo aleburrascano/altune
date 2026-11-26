@@ -1,7 +1,7 @@
 package ports
 
 import (
-	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
 )
@@ -9,16 +9,16 @@ import (
 var ErrIdentityStoreUnavailable = errors.New("identity store unavailable")
 
 type OwnerScanPage struct {
-	Orphaned []shared.UserId
-	Next     shared.UserId
+	Orphaned []ids.UserId
+	Next     ids.UserId
 	Done     bool
 }
 
-type DeletedIdentityLister interface {
-	ListOwnersWithoutIdentity(ctx context.Context, after shared.UserId, window int) (OwnerScanPage, error)
+type DeletedUserDataLister interface {
+	ListOwnersWithoutIdentity(ctx context.Context, after ids.UserId, window int) (OwnerScanPage, error)
 }
 
-type ErasedStateReaper interface {
+type DeletedUserDataCleaner interface {
 	ReapErasedStates(ctx context.Context) (int64, error)
 }
 

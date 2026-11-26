@@ -1,59 +1,59 @@
 package app
 
 import (
+	"altune/go-api/internal/app/bridges/monitoringfromdownload"
+	"altune/go-api/internal/app/bridges/monitoringfromsearch"
 	"altune/go-api/internal/app/jobs"
-	"altune/go-api/internal/app/observeacquisition"
-	"altune/go-api/internal/app/observediscovery"
-	"altune/go-api/internal/app/observemetrics"
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/observe"
+	"altune/go-api/internal/app/livemetrics"
+	"altune/go-api/internal/platform/auth"
+	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/search"
 	"context"
 
 	"github.com/go-chi/chi/v5"
 )
 
-func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVerifier, tap *observe.EventTap) {
+func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVerifier, tap *monitoring.EventTap) {
 	a.startObserveSources(ctx, tap)
-	deps := observe.Deps{
+	deps := monitoring.Deps{
 		Health:      a.dependencyHealth,
 		Logs:        a.logRing,
 		Events:      a.eventFeed,
 		Eval:        a.evalMeter,
 		Acquisition: a.observeAcquisition(),
 		LiveMetrics: a.liveMetrics,
-		Discography: observediscovery.NewDiscographyQualityReader(discovery.NewPgxEventStore(a.pool)),
+		Discography: monitoringfromsearch.NewDiscographyQualityReader(search.NewPostgresEventStore(a.pool)),
 		Shutdown:    a.lifecycleDone,
 	}
-	mountObserve(r, verifier, a.cfg.OverseerPrincipalID, observe.NewObserveHandler(deps))
+	mountObserve(r, verifier, a.cfg.OverseerPrincipalID, monitoring.NewObserveHandler(deps))
 }
 
-func (a *App) startObserveSources(ctx context.Context, tap *observe.EventTap) {
-	a.eventFeed = observe.NewEventFeed()
+func (a *App) startObserveSources(ctx context.Context, tap *monitoring.EventTap) {
+	a.eventFeed = monitoring.NewEventFeed()
 	a.eventFeed.Start(ctx, tap)
-	a.evalMeter = observe.NewEvalMeter(0, a.evalMeterRunner()).
+	a.evalMeter = monitoring.NewEvalMeter(0, a.evalMeterRunner()).
 		WithLeadership(a.jobs.LeaderContext)
 	a.jobs.WhenLeader(jobs.EvalMeter, a.evalMeter.Start)
 }
 
-func mountObserve(r chi.Router, verifier auth.TokenVerifier, principalID string, h *observe.Handler) {
+func mountObserve(r chi.Router, verifier auth.TokenVerifier, principalID string, h *monitoring.Handler) {
 	r.Route("/observe", func(or chi.Router) {
-		or.Use(observe.NoStoreAndNosniff)
+		or.Use(monitoring.NoStoreAndNosniff)
 		or.Use(authMiddleware(verifier))
-		or.Use(observe.Gate(principalID))
+		or.Use(monitoring.Gate(principalID))
 		h.Register(or)
 	})
 }
 
-func (a *App) observeAcquisition() observe.AcquisitionReader {
+func (a *App) observeAcquisition() monitoring.AcquisitionReader {
 	if a.scheduler == nil {
 		return nil
 	}
-	return observeacquisition.NewAcquisitionReader(a.scheduler)
+	return monitoringfromdownload.NewAcquisitionReader(a.scheduler)
 }
 
-func (a *App) liveMetrics() observe.LiveMetrics {
-	return observemetrics.Live(observemetrics.Sources{
+func (a *App) liveMetrics() monitoring.LiveMetrics {
+	return livemetrics.Live(livemetrics.Sources{
 		Latency:      a.latency,
 		Pool:         a.pool,
 		Redis:        a.redisClient,
@@ -66,6 +66,6 @@ func (a *App) liveMetrics() observe.LiveMetrics {
 	})
 }
 
-func (a *App) evalMeterRunner() observe.EvalMeterRunner {
-	return observediscovery.NewEvalMeterRunner(a.buildEvalRunner())
+func (a *App) evalMeterRunner() monitoring.EvalMeterRunner {
+	return monitoringfromsearch.NewEvalMeterRunner(a.buildEvalRunner())
 }

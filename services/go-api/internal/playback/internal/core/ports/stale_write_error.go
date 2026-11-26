@@ -1,9 +1,9 @@
 package ports
 
-import shareddomain "altune/go-api/internal/shared/domain"
+import apierror "altune/go-api/internal/shared/apierror"
 
-var ErrStaleQueueWrite error = shareddomain.NewError(shareddomain.CodePlaybackStaleQueueWrite,
+var ErrStaleQueueWrite error = apierror.NewError(apierror.CodePlaybackStaleQueueWrite,
 	"queue state not saved: a newer snapshot is already stored")
 
-var ErrQueuePositionMismatch error = shareddomain.NewError(shareddomain.CodePlaybackQueuePositionMismatch,
+var ErrQueuePositionMismatch error = apierror.NewError(apierror.CodePlaybackQueuePositionMismatch,
 	"queue position not saved: the stored queue does not hold that track at that index")

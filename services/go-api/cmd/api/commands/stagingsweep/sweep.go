@@ -1,7 +1,7 @@
 package stagingsweep
 
 import (
-	"altune/go-api/internal/catalog"
+	"altune/go-api/internal/library"
 	"context"
 	"fmt"
 	"time"
@@ -19,7 +19,7 @@ type Tally struct {
 	Failed         int
 }
 
-func Sweep(ctx context.Context, store catalog.AudioStore, lister catalog.AudioAgeLister, refs catalog.AudioRefPrefixLister, execute bool, now time.Time) (Tally, error) {
+func Sweep(ctx context.Context, store library.AudioStore, lister library.AudioAgeLister, refs library.AudioRefPrefixLister, execute bool, now time.Time) (Tally, error) {
 	objects, err := lister.ListWithAge(ctx, refPrefix)
 	if err != nil {
 		return Tally{}, fmt.Errorf("list staging objects: %w", err)
@@ -35,7 +35,7 @@ func Sweep(ctx context.Context, store catalog.AudioStore, lister catalog.AudioAg
 	return sweepObjects(ctx, store, objects, referenced, execute, now), nil
 }
 
-func sweepObjects(ctx context.Context, store catalog.AudioStore, objects []catalog.ObjectAge, referenced map[string]bool, execute bool, now time.Time) Tally {
+func sweepObjects(ctx context.Context, store library.AudioStore, objects []library.ObjectAge, referenced map[string]bool, execute bool, now time.Time) Tally {
 	var tally Tally
 	for _, obj := range objects {
 		age := now.Sub(obj.LastModified)
@@ -56,7 +56,7 @@ func sweepObjects(ctx context.Context, store catalog.AudioStore, objects []catal
 	return tally
 }
 
-func sweepObject(ctx context.Context, store catalog.AudioStore, obj catalog.ObjectAge, age time.Duration, execute bool) bool {
+func sweepObject(ctx context.Context, store library.AudioStore, obj library.ObjectAge, age time.Duration, execute bool) bool {
 	fmt.Printf("  %s (unreferenced, %s old)\n", obj.AudioRef, age.Round(time.Second))
 	if !execute {
 		return true

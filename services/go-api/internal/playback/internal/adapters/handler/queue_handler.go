@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/playback/internal/core/domain"
 	"altune/go-api/internal/playback/internal/core/ports"
 	"altune/go-api/internal/playback/internal/core/queue"
-	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"errors"
@@ -21,14 +21,14 @@ type QueueHandler struct {
 }
 
 type queueHandlerConfig struct {
-	rateLimit        QueueStateRateLimit
+	rateLimit        QueueSaveLimit
 	now              func() time.Time
 	rateLimitMetrics ports.RateLimitMetrics
 }
 
 type QueueHandlerOption func(*queueHandlerConfig)
 
-func WithQueueStateRateLimit(limit QueueStateRateLimit) QueueHandlerOption {
+func WithQueueSaveLimit(limit QueueSaveLimit) QueueHandlerOption {
 	return func(c *queueHandlerConfig) { c.rateLimit = limit }
 }
 
@@ -110,7 +110,7 @@ func (h *QueueHandler) handleSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body saveQueueRequest
-	if !httputil.DecodeJSON(w, r, &body) {
+	if !httpserver.DecodeJSON(w, r, &body) {
 		return
 	}
 
@@ -139,7 +139,7 @@ func (h *QueueHandler) handleSavePosition(w http.ResponseWriter, r *http.Request
 	}
 
 	var body saveQueuePositionRequest
-	if !httputil.DecodeJSON(w, r, &body) {
+	if !httpserver.DecodeJSON(w, r, &body) {
 		return
 	}
 
@@ -170,7 +170,7 @@ func (h *QueueHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	httputil.WriteJSON(w, http.StatusOK, toResponse(view))
+	httpserver.WriteJSON(w, http.StatusOK, toResponse(view))
 }
 
 func (h *QueueHandler) handleForget(w http.ResponseWriter, r *http.Request) {
@@ -196,7 +196,7 @@ func writeQueueError(w http.ResponseWriter, r *http.Request, err error) {
 		w.WriteHeader(statusClientClosedRequest)
 		return
 	}
-	httputil.HandleServiceError(w, r, err)
+	httpserver.HandleServiceError(w, r, err)
 }
 
 func toResponse(view *queue.ResumeView) queueStateResponse {

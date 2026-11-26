@@ -1,13 +1,13 @@
 package domain
 
 import (
-	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/ids"
 	"fmt"
 	"time"
 )
 
 type QueuePosition struct {
-	UserId         shared.UserId
+	UserId         ids.UserId
 	CurrentIdx     int
 	CurrentTrackId string
 	PositionMs     int64
@@ -15,7 +15,7 @@ type QueuePosition struct {
 }
 
 type QueuePositionInput struct {
-	UserId         shared.UserId
+	UserId         ids.UserId
 	CurrentIdx     int
 	CurrentTrackId string
 	PositionMs     int64

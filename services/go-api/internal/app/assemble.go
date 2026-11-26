@@ -3,12 +3,12 @@ package app
 import (
 	"altune/go-api/internal/app/jobs"
 	"altune/go-api/internal/app/shutdown"
-	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/observe"
+	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/search"
+	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/runloop"
 	"context"
 	"errors"
 	"fmt"
@@ -25,12 +25,12 @@ type Handles struct {
 	Pool      *pgxpool.Pool
 	Redis     *goredis.Client
 	Transport http.RoundTripper
-	Tracker   *runloop.Tracker
+	Tracker   *background.Tracker
 	LogRing   *logging.RingBuffer
 }
 
-func NewTracker(cfg *config.Config) (*runloop.Tracker, error) {
-	tracker, err := runloop.NewTracker(runloop.TrackerLimits{MaxInFlight: cfg.BackgroundMaxInFlight})
+func NewTracker(cfg *config.Config) (*background.Tracker, error) {
+	tracker, err := background.NewTracker(background.TrackerLimits{MaxInFlight: cfg.BackgroundMaxInFlight})
 	if err != nil {
 		return nil, fmt.Errorf("background tracker: %w", err)
 	}
@@ -89,7 +89,9 @@ func (a *App) compose(ctx context.Context, transport http.RoundTripper) (http.Ha
 		return nil, err
 	}
 	r := a.mountRoutes(verifier, f.catalog, f.playback.handler, f.discovery.Handler)
-	a.startAlertMonitor(ctx)
+	if err := a.startAlertMonitor(ctx); err != nil {
+		return nil, err
+	}
 	a.wireObserve(ctx, r, verifier, a.eventTap)
 	a.startCatalogJobs(ctx, f.catalog, f.playback)
 	a.jobs.Lead(ctx, jobs.NewElection(a.pool))
@@ -98,17 +100,17 @@ func (a *App) compose(ctx context.Context, transport http.RoundTripper) (http.Ha
 
 func (a *App) openEventBus() {
 	a.eventBus = events.NewInProcessBus(time.Now, filepath.Join(os.TempDir(), eventIDFloorFile))
-	a.eventTap = observe.NewEventTap(a.eventBus)
+	a.eventTap = monitoring.NewEventTap(a.eventBus)
 }
 
 type features struct {
-	discovery *discovery.Discovery
+	discovery *search.Discovery
 	catalog   catalogWiring
 	playback  playbackWiring
 }
 
 func (a *App) wireFeatures(ctx context.Context, transport http.RoundTripper) (features, error) {
-	disc, err := discovery.New(a.discoveryDeps(ctx, transport))
+	disc, err := search.New(a.discoveryDeps(ctx, transport))
 	if err != nil {
 		return features{}, fmt.Errorf("discovery: %w", err)
 	}

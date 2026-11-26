@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/shared/providerschema"
+	"altune/go-api/internal/shared/providerfields"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -22,8 +22,8 @@ type fetcher func(ctx context.Context, id string) (json.RawMessage, error)
 
 type liveSource map[string]fetcher
 
-func (liveSource) Reference(context.Context, string) (providerschema.Observed, error) {
-	return providerschema.Observed{}, nil
+func (liveSource) Reference(context.Context, string) (providerfields.Observed, error) {
+	return providerfields.Observed{}, nil
 }
 
 func (live liveSource) Resource(ctx context.Context, entity, id string) (json.RawMessage, error) {

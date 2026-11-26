@@ -2,7 +2,7 @@ package nowplaying_test
 
 import (
 	"altune/go-api/internal/playback"
-	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/ids"
 	"bytes"
 	"context"
 	"errors"
@@ -31,13 +31,13 @@ func captureLogs(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-func testUser() shared.UserId {
-	return shared.NewUserId(uuid.New())
+func testUser() ids.UserId {
+	return ids.NewUserId(uuid.New())
 }
 
 type sourceFunc func(ctx context.Context) (*playback.NowPlayingTrack, error)
 
-func (f sourceFunc) NowPlayingTrack(ctx context.Context, _ shared.UserId, _ shared.TrackId) (*playback.NowPlayingTrack, error) {
+func (f sourceFunc) NowPlayingTrack(ctx context.Context, _ ids.UserId, _ ids.TrackId) (*playback.NowPlayingTrack, error) {
 	return f(ctx)
 }
 
@@ -86,7 +86,7 @@ func (s *switchableSource) use(next playback.TrackSource) {
 	s.current = next
 }
 
-func (s *switchableSource) NowPlayingTrack(ctx context.Context, userId shared.UserId, id shared.TrackId) (*playback.NowPlayingTrack, error) {
+func (s *switchableSource) NowPlayingTrack(ctx context.Context, userId ids.UserId, id ids.TrackId) (*playback.NowPlayingTrack, error) {
 	s.mu.Lock()
 	current := s.current
 	s.mu.Unlock()
@@ -140,14 +140,14 @@ func (m *recordingMetrics) EnrichmentBreakerOpened()   { m.count(&m.breakerOpene
 func (m *recordingMetrics) EnrichmentBreakerClosed()   { m.count(&m.breakerClosed) }
 
 type nowPlayingLookup interface {
-	Lookup(ctx context.Context, userId shared.UserId, trackId string) (*playback.NowPlayingTrack, error)
+	Lookup(ctx context.Context, userId ids.UserId, trackId string) (*playback.NowPlayingTrack, error)
 }
 
-func lookup(ctx context.Context, reader nowPlayingLookup, user shared.UserId) (*playback.NowPlayingTrack, error) {
+func lookup(ctx context.Context, reader nowPlayingLookup, user ids.UserId) (*playback.NowPlayingTrack, error) {
 	return reader.Lookup(ctx, user, uuid.New().String())
 }
 
-func rejected(reader nowPlayingLookup, m *recordingMetrics, user shared.UserId) bool {
+func rejected(reader nowPlayingLookup, m *recordingMetrics, user ids.UserId) bool {
 	before := m.read(&m.breakerRejected)
 	_, _ = lookup(context.Background(), reader, user)
 	return m.read(&m.breakerRejected) > before
@@ -219,9 +219,9 @@ func TestLookup_ReturnsTheSourcesTrack(t *testing.T) {
 func TestLookup_PassesTheParsedIdAndUserToTheSource(t *testing.T) {
 	user := testUser()
 	id := uuid.New()
-	var gotUser shared.UserId
-	var gotId shared.TrackId
-	reader := playback.NewNowPlayingReader(trackSourceFunc(func(userId shared.UserId, trackId shared.TrackId) {
+	var gotUser ids.UserId
+	var gotId ids.TrackId
+	reader := playback.NewNowPlayingReader(trackSourceFunc(func(userId ids.UserId, trackId ids.TrackId) {
 		gotUser, gotId = userId, trackId
 	}))
 
@@ -233,9 +233,9 @@ func TestLookup_PassesTheParsedIdAndUserToTheSource(t *testing.T) {
 	}
 }
 
-type trackSourceFunc func(shared.UserId, shared.TrackId)
+type trackSourceFunc func(ids.UserId, ids.TrackId)
 
-func (f trackSourceFunc) NowPlayingTrack(_ context.Context, userId shared.UserId, id shared.TrackId) (*playback.NowPlayingTrack, error) {
+func (f trackSourceFunc) NowPlayingTrack(_ context.Context, userId ids.UserId, id ids.TrackId) (*playback.NowPlayingTrack, error) {
 	f(userId, id)
 	return &playback.NowPlayingTrack{}, nil
 }
@@ -433,7 +433,7 @@ func TestLookup_BreakerStaysOpenForItsWholeWindow(t *testing.T) {
 	}
 }
 
-func tripBreakerOpen(t *testing.T, reader nowPlayingLookup, user shared.UserId) {
+func tripBreakerOpen(t *testing.T, reader nowPlayingLookup, user ids.UserId) {
 	t.Helper()
 	for i := 0; i < enrichmentFailureThreshold; i++ {
 		if _, err := lookup(context.Background(), reader, user); err == nil {
@@ -576,7 +576,7 @@ type staleSuccessSource struct {
 	calls             int
 }
 
-func (s *staleSuccessSource) NowPlayingTrack(context.Context, shared.UserId, shared.TrackId) (*playback.NowPlayingTrack, error) {
+func (s *staleSuccessSource) NowPlayingTrack(context.Context, ids.UserId, ids.TrackId) (*playback.NowPlayingTrack, error) {
 	s.mu.Lock()
 	s.calls++
 	first := s.calls == 1

@@ -1,7 +1,7 @@
 package config
 
 import (
-	"altune/go-api/internal/shared/config/internal/adapters/fsprobe"
+	"altune/go-api/internal/shared/config/internal/adapters/dirprobe"
 	"altune/go-api/internal/shared/redis"
 	"errors"
 	"fmt"
@@ -337,7 +337,7 @@ func (c *Config) validateCookieFile() error {
 	if c.YtDLPCookieFile == "" {
 		return nil
 	}
-	if err := fsprobe.Readable(c.YtDLPCookieFile); err != nil {
+	if err := dirprobe.Readable(c.YtDLPCookieFile); err != nil {
 		return fmt.Errorf("YTDLP_COOKIE_FILE is not readable: %w", err)
 	}
 	return nil

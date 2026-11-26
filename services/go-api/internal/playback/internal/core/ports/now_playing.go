@@ -1,7 +1,7 @@
 package ports
 
 import (
-	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
 )
@@ -11,7 +11,7 @@ var ErrTrackSourceUnavailable = errors.New("now-playing track source unavailable
 var ErrNowPlayingTrackNotFound = errors.New("now-playing track not found")
 
 type TrackSource interface {
-	NowPlayingTrack(ctx context.Context, userId shared.UserId, id shared.TrackId) (*NowPlayingTrack, error)
+	NowPlayingTrack(ctx context.Context, userId ids.UserId, id ids.TrackId) (*NowPlayingTrack, error)
 }
 
 type NowPlayingTrack struct {
@@ -24,7 +24,7 @@ type NowPlayingTrack struct {
 }
 
 type NowPlayingReader interface {
-	Lookup(ctx context.Context, userId shared.UserId, trackId string) (*NowPlayingTrack, error)
+	Lookup(ctx context.Context, userId ids.UserId, trackId string) (*NowPlayingTrack, error)
 }
 
 type EnrichmentMetrics interface {

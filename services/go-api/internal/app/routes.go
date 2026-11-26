@@ -3,10 +3,10 @@ package app
 import (
 	"altune/go-api/internal/app/health"
 	"altune/go-api/internal/app/router"
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/eventstream"
+	"altune/go-api/internal/platform/auth"
+	"altune/go-api/internal/platform/eventstream"
 	"altune/go-api/internal/playback"
+	"altune/go-api/internal/search"
 	"net/http"
 	"time"
 
@@ -22,7 +22,7 @@ func (a *App) mountRoutes(
 	verifier auth.TokenVerifier,
 	cat catalogWiring,
 	queueHandler *playback.QueueHandler,
-	discoveryH *discovery.DiscoveryHandler,
+	discoveryH *search.DiscoveryHandler,
 ) *chi.Mux {
 	r := a.newRouter(apiWriteTimeout)
 
@@ -30,7 +30,7 @@ func (a *App) mountRoutes(
 
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(router.V1ResponseHeaders)
-		discoveryH.PublicRoutes(r, discovery.DefaultAuthFailureLimit)
+		discoveryH.PublicRoutes(r, search.DefaultAuthFailureLimit)
 
 		r.Group(func(r chi.Router) {
 			r.Use(authMiddleware(verifier))

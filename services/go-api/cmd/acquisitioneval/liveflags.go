@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/acquisition"
+	"altune/go-api/internal/download"
 	"fmt"
 	"math"
 	"regexp"
@@ -44,8 +44,8 @@ type youtubeSource struct {
 	VideoID string
 	Title   string
 	Author  string
-	Type    acquisition.YtmVideoType
-	Songs   []acquisition.YtmSong
+	Type    download.YouTubeMusicVideoType
+	Songs   []download.YouTubeMusicSong
 }
 
 func youtubeFlags(track liveTrack, src youtubeSource) []string {
@@ -68,11 +68,11 @@ func flagIf(condition bool, flag string) []string {
 	return nil
 }
 
-func videoTypeFlags(videoType acquisition.YtmVideoType) []string {
+func videoTypeFlags(videoType download.YouTubeMusicVideoType) []string {
 	switch videoType {
-	case acquisition.VideoTypeOMV:
+	case download.VideoTypeOfficialVideo:
 		return []string{"music_video(OMV)"}
-	case acquisition.VideoTypeUGC:
+	case download.VideoTypeUserUpload:
 		return []string{"user_upload(UGC)"}
 	}
 	return nil

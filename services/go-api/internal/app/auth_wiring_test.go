@@ -2,8 +2,8 @@ package app_test
 
 import (
 	"altune/go-api/internal/app"
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/observe"
+	"altune/go-api/internal/platform/auth"
+	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"crypto/rand"
@@ -174,8 +174,8 @@ func TestAuth_TheConfiguredVerifierAdmitsTheOperatorAndIsProbedForHealth(t *test
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("decode %s: %v", body, err)
 	}
-	if got.Auth != string(observe.DepUp) {
-		t.Errorf("auth dependency = %q, want %q: the verifier the routes use must also be probed for health", got.Auth, observe.DepUp)
+	if got.Auth != string(monitoring.DepUp) {
+		t.Errorf("auth dependency = %q, want %q: the verifier the routes use must also be probed for health", got.Auth, monitoring.DepUp)
 	}
 }
 

@@ -1,7 +1,7 @@
 package events
 
 import (
-	shared "altune/go-api/internal/shared/kernel"
+	"altune/go-api/internal/shared/ids"
 	"context"
 	"time"
 )
@@ -32,17 +32,17 @@ const (
 type Event struct {
 	ID        uint64         `json:"id"`
 	Type      EventType      `json:"type"`
-	UserID    shared.UserId  `json:"-"`
+	UserID    ids.UserId     `json:"-"`
 	Payload   map[string]any `json:"payload"`
 	Timestamp time.Time      `json:"timestamp"`
 }
 
 type Publisher interface {
-	Publish(ctx context.Context, userId shared.UserId, eventType EventType, payload map[string]any)
+	Publish(ctx context.Context, userId ids.UserId, eventType EventType, payload map[string]any)
 }
 
 func NoopPublisher() Publisher { return noopPublisher{} }
 
 type noopPublisher struct{}
 
-func (noopPublisher) Publish(context.Context, shared.UserId, EventType, map[string]any) {}
+func (noopPublisher) Publish(context.Context, ids.UserId, EventType, map[string]any) {}

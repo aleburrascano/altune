@@ -3,13 +3,13 @@ package app_test
 import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/app/jobs"
-	"altune/go-api/internal/shared/runloop"
+	"altune/go-api/internal/shared/background"
 	"strings"
 	"testing"
 	"time"
 )
 
-func jobHealth(t *testing.T, assembly *app.Assembly, name jobs.Name) runloop.JobHealth {
+func jobHealth(t *testing.T, assembly *app.Assembly, name jobs.Name) background.JobHealth {
 	t.Helper()
 	for _, h := range assembly.Jobs().Health() {
 		if h.Name == string(name) {
@@ -17,7 +17,7 @@ func jobHealth(t *testing.T, assembly *app.Assembly, name jobs.Name) runloop.Job
 		}
 	}
 	t.Fatalf("job %q not in the assembly's job health", name)
-	return runloop.JobHealth{}
+	return background.JobHealth{}
 }
 
 func TestStartupSwitches_AcquisitionPausedWithoutAnyScheduler(t *testing.T) {

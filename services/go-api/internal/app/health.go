@@ -2,7 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/app/health"
-	"altune/go-api/internal/observe"
+	"altune/go-api/internal/platform/monitoring"
 	"context"
 )
 
@@ -25,6 +25,6 @@ func (a *App) healthProbes() health.Probes {
 	return probes
 }
 
-func (a *App) dependencyHealth(ctx context.Context) observe.DependencyHealth {
+func (a *App) dependencyHealth(ctx context.Context) monitoring.DependencyHealth {
 	return health.Check(ctx, a.healthProbes(), health.DefaultProbeTimeout)
 }

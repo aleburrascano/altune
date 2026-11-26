@@ -2,8 +2,8 @@ package app_test
 
 import (
 	"altune/go-api/internal/app"
-	"altune/go-api/internal/observe"
-	"altune/go-api/internal/shared/reqmetrics"
+	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/platform/requestmetrics"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -193,9 +193,9 @@ func TestObserveAcquisition_AcquisitionPausedStartsTheSchedulerPaused(t *testing
 }
 
 type observedHealth struct {
-	DB     observe.DepStatus `json:"db"`
-	Redis  observe.DepStatus `json:"redis"`
-	Auth   observe.DepStatus `json:"auth"`
+	DB     monitoring.DepStatus `json:"db"`
+	Redis  monitoring.DepStatus `json:"redis"`
+	Auth   monitoring.DepStatus `json:"auth"`
 	Detail struct {
 		DBError    string `json:"db_error"`
 		RedisError string `json:"redis_error"`
@@ -233,7 +233,7 @@ func TestObserveHealth_ProbesTheAssembledDatabaseRedisAndAuth(t *testing.T) {
 
 	got := readObservedHealth(t, app.Handles{Pool: integrationPool(t), Redis: redisUp}, http.StatusOK)
 
-	if got.DB != observe.DepUp || got.Redis != observe.DepUp || got.Auth != observe.DepUp {
+	if got.DB != monitoring.DepUp || got.Redis != monitoring.DepUp || got.Auth != monitoring.DepUp {
 		t.Errorf("health = %+v, want db, redis and auth all ok", got)
 	}
 }
@@ -244,7 +244,7 @@ func TestObserveHealth_ReportsADownDatabaseAndRedisWithTheirOwnErrors(t *testing
 
 	got := readObservedHealth(t, app.Handles{Pool: unreachablePool(t), Redis: redisDown}, http.StatusServiceUnavailable)
 
-	if got.DB != observe.DepDown || got.Redis != observe.DepDown {
+	if got.DB != monitoring.DepDown || got.Redis != monitoring.DepDown {
 		t.Errorf("health = %+v, want db and redis down", got)
 	}
 	if got.Detail.DBError == "" || got.Detail.RedisError == "" || got.Detail.DBError == got.Detail.RedisError {
@@ -253,7 +253,7 @@ func TestObserveHealth_ReportsADownDatabaseAndRedisWithTheirOwnErrors(t *testing
 }
 
 func TestObserveHealth_WithoutRedisItIsNotConfigured(t *testing.T) {
-	if got := readObservedHealth(t, app.Handles{Pool: unreachablePool(t)}, http.StatusServiceUnavailable); got.Redis != observe.DepNotConfigured {
+	if got := readObservedHealth(t, app.Handles{Pool: unreachablePool(t)}, http.StatusServiceUnavailable); got.Redis != monitoring.DepNotConfigured {
 		t.Errorf("redis = %q without a Redis handle, want not_configured", got.Redis)
 	}
 }
@@ -272,7 +272,7 @@ func TestObserveLiveMetrics_CarriesTheLatencyTheAssembledRouterRecorded(t *testi
 		t.Fatalf("operator read of /observe/metrics/live = %d, want 200; body %s", code, body)
 	}
 	var got struct {
-		Latency reqmetrics.Snapshot `json:"latency"`
+		Latency requestmetrics.Snapshot `json:"latency"`
 	}
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("decode %s: %v", body, err)

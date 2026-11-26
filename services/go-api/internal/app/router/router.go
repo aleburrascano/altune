@@ -1,8 +1,8 @@
 package router
 
 import (
-	"altune/go-api/internal/shared/httputil"
-	"altune/go-api/internal/shared/reqmetrics"
+	"altune/go-api/internal/platform/requestmetrics"
+	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/telemetry"
 	"net/http"
 	"strings"
@@ -19,20 +19,20 @@ type Settings struct {
 	RequestTimeout time.Duration
 	CORSOrigins    []string
 	Development    bool
-	Latency        *reqmetrics.Registry
+	Latency        *requestmetrics.Registry
 }
 
 func New(s Settings) *chi.Mux {
 	r := chi.NewRouter()
 
-	r.Use(httputil.CorrelationID)
+	r.Use(httpserver.CorrelationID)
 	r.Use(telemetry.Middleware(untraced))
-	r.Use(reqmetrics.Middleware(s.Latency.Observe))
-	r.Use(httputil.WriteDeadline(s.WriteTimeout))
+	r.Use(requestmetrics.Middleware(s.Latency.Observe))
+	r.Use(httpserver.WriteDeadline(s.WriteTimeout))
 	r.Use(v1RequestTimeout(s.RequestTimeout))
-	r.Use(httputil.RequestLogger)
-	r.Use(httputil.Recoverer)
-	r.Use(httputil.MaxBodySize(maxBodyBytes))
+	r.Use(httpserver.RequestLogger)
+	r.Use(httpserver.Recoverer)
+	r.Use(httpserver.MaxBodySize(maxBodyBytes))
 	r.Use(corsHandler(s))
 	return r
 }
@@ -45,7 +45,7 @@ const (
 func corsHandler(s Settings) func(http.Handler) http.Handler {
 	headers := []string{
 		"Accept", "Authorization", "Content-Type", "Idempotency-Key",
-		httputil.CorrelationIDHeader, lastEventIDHeader,
+		httpserver.CorrelationIDHeader, lastEventIDHeader,
 		telemetry.AppVersionHeader, telemetry.PlatformHeader,
 	}
 	if s.Development {
@@ -55,7 +55,7 @@ func corsHandler(s Settings) func(http.Handler) http.Handler {
 		AllowedOrigins: s.CORSOrigins,
 		AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders: headers,
-		ExposedHeaders: []string{"Content-Length", httputil.CorrelationIDHeader, retryAfterHeader},
+		ExposedHeaders: []string{"Content-Length", httpserver.CorrelationIDHeader, retryAfterHeader},
 		MaxAge:         300,
 	})
 }
@@ -80,7 +80,7 @@ func isLongLivedRoute(r *http.Request) bool {
 }
 
 func v1RequestTimeout(d time.Duration) func(http.Handler) http.Handler {
-	bounded := httputil.RequestTimeout(d)
+	bounded := httpserver.RequestTimeout(d)
 	return func(next http.Handler) http.Handler {
 		withDeadline := bounded(next)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

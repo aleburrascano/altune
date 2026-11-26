@@ -178,7 +178,7 @@ needs a `/feature-spec` if a typeahead surface is ever wanted.
 
 Search + content (the original projection) and the new keyless artist-artwork resolver:
 
-- `services/go-api/internal/discovery/internal/adapters/providers/ytmusic/ytmusic.go` — `YouTubeMusicAdapter`
+- `services/go-api/internal/search/internal/adapters/providers/ytmusic/ytmusic.go` — `YouTubeMusicAdapter`
   (`Search` over track/video/album/artist; `GetArtistAlbums` / `GetArtistTopTracks`; the
   `fetchYTMusic` retry + `nextWithContext` context-bridge; mappers) **and**
   `YouTubeMusicArtworkResolver` (`Resolve` artist-only; `pickArtistArtwork` / `largestYTThumbnail` /
@@ -189,7 +189,7 @@ Search + content (the original projection) and the new keyless artist-artwork re
   All three are gated by `cfg.HasYouTubeMusic()` (`YTMUSIC_ENABLED`, default on). The internal API needs no key.
 - Tests: `ytmusic_test.go` covers the context-cancel guard, `mapYTMusicVideo`, and the new pure
   artwork helpers (`resizeYTThumbnail` table, `pickArtistArtwork` exact/fallback/empty cases, and the
-  artist-only no-op guard for non-artist kinds). Full `internal/discovery/...` suite green (600).
+  artist-only no-op guard for non-artist kinds). Full `internal/search/...` suite green (600).
 
 ## 8. Next steps
 

@@ -1,8 +1,8 @@
 package ports
 
 import (
-	shareddomain "altune/go-api/internal/shared/domain"
+	apierror "altune/go-api/internal/shared/apierror"
 	"time"
 )
 
-var ErrQueueStateUnavailable error = shareddomain.NewError(shareddomain.CodePlaybackUnavailable, "queue state temporarily unavailable").WithRetryAfter(time.Second)
+var ErrQueueStateUnavailable error = apierror.NewError(apierror.CodePlaybackUnavailable, "queue state temporarily unavailable").WithRetryAfter(time.Second)

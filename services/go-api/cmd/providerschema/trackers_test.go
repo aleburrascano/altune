@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/shared/providerschema"
+	"altune/go-api/internal/shared/providerfields"
 	"context"
 	"errors"
 	"net/http"
@@ -109,7 +109,7 @@ func TestTrackersReferenceWalksRefsAndArraysAndStopsCycles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := providerschema.Observed{
+	want := providerfields.Observed{
 		"spreadsheetId": "string", "sheets": "array", "locales": "array", "locales[]": "string",
 		"meta": "object", "extra": "unknown:any",
 		"sheets[].index": "number", "sheets[].hidden": "boolean", "sheets[].parent": "object",

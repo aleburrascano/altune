@@ -494,11 +494,11 @@ STUB
     (
         cd "$WORK/repo" || exit 1
         api=services/go-api
-        mkdir -p $api/internal/shared/s $api/internal/acq $api/internal/discovery/adapters/x $api/cmd/acquisitioneval
+        mkdir -p $api/internal/shared/s $api/internal/acq $api/internal/search/adapters/x $api/cmd/acquisitioneval
         printf 'module altune/go-api\n\ngo %s\n' "$GO_VERSION" >$api/go.mod
         printf 'package s\n\nfunc S() int { return 1 }\n' >$api/internal/shared/s/s.go
         printf 'package acq\n\nimport "altune/go-api/internal/shared/s"\n\nfunc A() int { return s.S() }\n' >$api/internal/acq/a.go
-        printf 'package x\n\nfunc X() int { return 1 }\n' >$api/internal/discovery/adapters/x/x.go
+        printf 'package x\n\nfunc X() int { return 1 }\n' >$api/internal/search/adapters/x/x.go
         printf 'package main\n\nimport "altune/go-api/internal/acq"\n\nfunc main() { _ = acq.A() }\n' >$api/cmd/acquisitioneval/main.go
     )
     commit_as_base
@@ -524,11 +524,11 @@ run_with_tools() {
 CASE="a go-api change in a package the selection gate does not import skips the gate, vets only that package, and still runs govulncheck"
 new_repo
 add_go_fixture
-edit_go_file internal/discovery/adapters/x/x.go
+edit_go_file internal/search/adapters/x/x.go
 run_with_tools
 forbid_log "run ./cmd/acquisitioneval"
 expect_log "govulncheck ./..."
-expect_log "vet altune/go-api/internal/discovery/adapters/x"
+expect_log "vet altune/go-api/internal/search/adapters/x"
 forbid_log "vet ./..."
 
 stage_go_file() {
@@ -542,7 +542,7 @@ stage_go_file() {
 CASE="--lint (the pre-commit hook) leaves govulncheck and vet to the push stage"
 new_repo
 add_go_fixture
-stage_go_file internal/discovery/adapters/x/x.go
+stage_go_file internal/search/adapters/x/x.go
 run_with_tools --lint
 forbid_log "govulncheck"
 forbid_log "vet "
@@ -554,7 +554,7 @@ new_repo
 add_go_fixture
 (
     cd "$WORK/repo" || exit 1
-    printf '\nvar edited = 1\n' >>services/go-api/internal/discovery/adapters/x/x.go
+    printf '\nvar edited = 1\n' >>services/go-api/internal/search/adapters/x/x.go
 )
 run_with_tools --lint
 expect_log "golangci-lint-cache run"
@@ -569,7 +569,7 @@ printf "// 'go-api'\n" >"$WORK/repo/client/src/shared/a/__tests__/aContract.test
 git -C "$WORK/repo" add -A
 git -C "$WORK/repo" commit -qm "client fixture and deps stub"
 git -C "$WORK/repo" update-ref refs/remotes/gitea/main HEAD
-stage_go_file internal/discovery/adapters/x/x.go
+stage_go_file internal/search/adapters/x/x.go
 : >"$WORK/deps.log"
 run_with_tools --lint
 [ ! -s "$WORK/deps.log" ] || fail "a Go-only commit must not call worktree-deps: $(cat "$WORK/deps.log")"
@@ -584,7 +584,7 @@ printf 'process.exit(1);\n' >"$WORK/repo/scripts/gate-parity.mjs"
 git -C "$WORK/repo" add -A
 git -C "$WORK/repo" commit -qm "deps stub"
 git -C "$WORK/repo" update-ref refs/remotes/gitea/main HEAD
-stage_go_file internal/discovery/adapters/x/x.go
+stage_go_file internal/search/adapters/x/x.go
 : >"$WORK/deps.log"
 run_with_tools --lint
 grep -qF "gate parity" "$WORK/out.log" && fail "gate parity must not run for a Go-only commit"
@@ -632,7 +632,7 @@ forbid_log "golangci-lint"
 CASE="a go-api change runs deadcode, which reports nothing"
 new_repo
 add_go_fixture
-edit_go_file internal/discovery/adapters/x/x.go
+edit_go_file internal/search/adapters/x/x.go
 run_with_tools
 expect_log "go run golang.org/x/tools/cmd/deadcode@v0.53.0 -test ./..."
 grep -q "FAIL  go-api deadcode" "$WORK/out.log" && fail "deadcode with no findings must pass"
@@ -640,7 +640,7 @@ grep -q "FAIL  go-api deadcode" "$WORK/out.log" && fail "deadcode with no findin
 CASE="a function deadcode finds fails the check and names it"
 new_repo
 add_go_fixture
-edit_go_file internal/discovery/adapters/x/x.go
+edit_go_file internal/search/adapters/x/x.go
 DEADCODE_STUB_OUT='x/x.go:5:6: unreachable func: Orphan' run_with_tools
 grep -q "FAIL  go-api deadcode" "$WORK/out.log" || fail "a deadcode finding must fail the check"
 grep -qF "unreachable func: Orphan" "$WORK/out.log" || fail "the failure must show the finding"
@@ -649,7 +649,7 @@ grep -qF "unreachable func: Orphan" "$WORK/out.log" || fail "the failure must sh
 CASE="a deadcode run that fails outright is not mistaken for a clean tree"
 new_repo
 add_go_fixture
-edit_go_file internal/discovery/adapters/x/x.go
+edit_go_file internal/search/adapters/x/x.go
 DEADCODE_STUB_RC=1 run_with_tools
 grep -q "FAIL  go-api deadcode" "$WORK/out.log" || fail "a tool failure must fail the check"
 grep -qF "so nothing was checked" "$WORK/out.log" || fail "the failure must say nothing was checked"
@@ -657,21 +657,21 @@ grep -qF "so nothing was checked" "$WORK/out.log" || fail "the failure must say 
 CASE="--lint (the pre-commit hook) leaves deadcode to CI"
 new_repo
 add_go_fixture
-edit_go_file internal/discovery/adapters/x/x.go
+edit_go_file internal/search/adapters/x/x.go
 run_with_tools --lint
 forbid_log "deadcode"
 
 CASE="without INTEGRATION=1 a go-api change skips the mutation step and names the job that runs it"
 new_repo
 add_go_fixture
-edit_go_file internal/discovery/adapters/x/x.go
+edit_go_file internal/search/adapters/x/x.go
 run_with_tools
 grep -qF "SKIP  go-api mutation (changed lines): integration tests cover lines here, so it needs INTEGRATION=1 and a database; the backend-tests CI job runs it" "$WORK/out.log" || fail "expected the mutation step to skip and name backend-tests"
 
 CASE="with INTEGRATION=1 a go-api change runs the mutation step"
 new_repo
 add_go_fixture
-edit_go_file internal/discovery/adapters/x/x.go
+edit_go_file internal/search/adapters/x/x.go
 INTEGRATION=1 run_with_tools
 grep -qE "^(ok|FAIL)  go-api mutation \(changed lines\)" "$WORK/out.log" || fail "expected the mutation step to run"
 
@@ -729,7 +729,7 @@ expect_log "--allow-serial-runners ./..."
 CASE="PRECHECK_LINT_WHOLE=1 lints the whole module for a one-package change"
 new_repo
 add_go_fixture
-edit_go_file internal/discovery/adapters/x/x.go
+edit_go_file internal/search/adapters/x/x.go
 PRECHECK_LINT_WHOLE=1 run_with_tools
 expect_log "--allow-serial-runners ./..."
 
@@ -768,14 +768,14 @@ new_repo
 add_go_fixture
 (
     cd "$WORK/repo" || exit 1
-    printf 'package x\n\nfunc broken( {\n' >services/go-api/internal/discovery/adapters/x/x.go
+    printf 'package x\n\nfunc broken( {\n' >services/go-api/internal/search/adapters/x/x.go
     git add -A
     git commit -qm "break x"
 )
 run_with_tools
 expect_rc 1
 expect_out "FAIL  go-api vet"
-expect_log "vet altune/go-api/internal/discovery/adapters/x"
+expect_log "vet altune/go-api/internal/search/adapters/x"
 
 CASE="an overseer change skips its govulncheck unless go.mod or go.sum changed"
 new_repo
@@ -848,7 +848,7 @@ add_mobile_stubs
 add_jest_stub
 add_contract_tests
 add_go_fixture
-edit_go_file internal/discovery/adapters/x/x.go
+edit_go_file internal/search/adapters/x/x.go
 run_with_tools
 expect_out "ok    mobile contract tests (go-api changed)"
 expect_npx "src/shared/a/__tests__/aContract.test.ts src/shared/b/__tests__/bContract.test.tsx"
@@ -861,7 +861,7 @@ add_mobile_stubs
 add_jest_stub
 add_contract_tests
 add_go_fixture
-edit_go_file internal/discovery/adapters/x/x.go
+edit_go_file internal/search/adapters/x/x.go
 STUB_JEST=fail run_with_tools
 expect_rc 1
 expect_out "FAIL  mobile contract tests (go-api changed)"
@@ -886,7 +886,7 @@ add_go_fixture
     printf 'export const a = 1;\n' >client/src/a.ts
 )
 commit_as_base
-edit_go_file internal/discovery/adapters/x/x.go
+edit_go_file internal/search/adapters/x/x.go
 run_with_tools
 expect_rc 1
 expect_out "FAIL  mobile contract tests (go-api changed): no client test file mentions 'go-api'"
@@ -896,22 +896,22 @@ new_repo
 add_go_fixture
 (
     cd "$WORK/repo" || exit 1
-    printf 'package x\n\nfunc Y() int { return 1 }\n' >services/go-api/internal/discovery/adapters/x/y.go
+    printf 'package x\n\nfunc Y() int { return 1 }\n' >services/go-api/internal/search/adapters/x/y.go
 )
 commit_as_base
 (
     cd "$WORK/repo" || exit 1
-    git rm -q services/go-api/internal/discovery/adapters/x/y.go
+    git rm -q services/go-api/internal/search/adapters/x/y.go
     git commit -qm "delete y"
 )
 run_with_tools
-expect_log "vet altune/go-api/internal/discovery/adapters/x"
-expect_log "test -race -shuffle=on -count=1 ./internal/discovery/adapters/x"
+expect_log "vet altune/go-api/internal/search/adapters/x"
+expect_log "test -race -shuffle=on -count=1 ./internal/search/adapters/x"
 
 CASE="every golangci-lint call runs with a cache inside the checkout"
 new_repo
 add_go_fixture
-stage_go_file internal/discovery/adapters/x/x.go
+stage_go_file internal/search/adapters/x/x.go
 run_with_tools --lint
 expect_log "golangci-lint-cache run $WORK/repo/.cache/golangci-lint"
 stray=$(grep "^golangci-lint-cache run " "$WORK/tools.log" | grep -vF " $WORK/repo/.cache/golangci-lint")

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/shared/providerschema"
+	"altune/go-api/internal/shared/providerfields"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -16,7 +16,7 @@ import (
 )
 
 type source interface {
-	Reference(ctx context.Context, entity string) (providerschema.Observed, error)
+	Reference(ctx context.Context, entity string) (providerfields.Observed, error)
 	Resource(ctx context.Context, entity, id string) (json.RawMessage, error)
 }
 
@@ -31,7 +31,7 @@ func main() {
 		os.Exit(2)
 	}
 	path := cmp.Or(*schema, schemaPath(root, *provider))
-	audit := func(s providerschema.Schema) (map[string]providerschema.Reads, error) { return p.reads(root, s) }
+	audit := func(s providerfields.Schema) (map[string]providerfields.Reads, error) { return p.reads(root, s) }
 	if err := refresh(context.Background(), src, path, audit, os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "providerschema:", err)
 		os.Exit(1)
@@ -56,17 +56,17 @@ func setup(name, envFile string) (provider, source, string, error) {
 	return p, src, root, err
 }
 
-type auditor func(s providerschema.Schema) (map[string]providerschema.Reads, error)
+type auditor func(s providerfields.Schema) (map[string]providerfields.Reads, error)
 
 func refresh(ctx context.Context, src source, path string, audit auditor, out io.Writer) error {
-	s, err := providerschema.Load(path)
+	s, err := providerfields.Load(path)
 	if err != nil {
 		return err
 	}
 	if err := fetchAndMerge(ctx, src, s, audit); err != nil {
 		return err
 	}
-	if err := providerschema.Save(path, s); err != nil {
+	if err := providerfields.Save(path, s); err != nil {
 		return err
 	}
 	for _, named := range inOrder(s.Entities) {
@@ -75,7 +75,7 @@ func refresh(ctx context.Context, src source, path string, audit auditor, out io
 	return nil
 }
 
-func fetchAndMerge(ctx context.Context, src source, s providerschema.Schema, audit auditor) error {
+func fetchAndMerge(ctx context.Context, src source, s providerfields.Schema, audit auditor) error {
 	reads, err := audit(s)
 	if err != nil {
 		return err
@@ -88,18 +88,18 @@ func fetchAndMerge(ctx context.Context, src source, s providerschema.Schema, aud
 	return nil
 }
 
-func refreshEntity(ctx context.Context, src source, name string, entity *providerschema.Entity, reads providerschema.Reads) error {
+func refreshEntity(ctx context.Context, src source, name string, entity *providerfields.Entity, reads providerfields.Reads) error {
 	reference, err := src.Reference(ctx, name)
 	if err != nil {
 		return fmt.Errorf("%s reference: %w", name, err)
 	}
-	live := providerschema.Observed{}
+	live := providerfields.Observed{}
 	for _, fixture := range entity.Fixtures {
 		raw, err := src.Resource(ctx, name, fixture.ID)
 		if err != nil {
 			return fmt.Errorf("%s fixture %s: %w", name, fixture.ID, err)
 		}
-		if err := providerschema.Observe(raw, live); err != nil {
+		if err := providerfields.Observe(raw, live); err != nil {
 			return fmt.Errorf("%s fixture %s: %w", name, fixture.ID, err)
 		}
 	}
@@ -108,7 +108,7 @@ func refreshEntity(ctx context.Context, src source, name string, entity *provide
 	return nil
 }
 
-func report(out io.Writer, name string, entity *providerschema.Entity) {
+func report(out io.Writer, name string, entity *providerfields.Entity) {
 	var c fieldCounts
 	for _, f := range entity.Fields {
 		c.add(f)
@@ -121,7 +121,7 @@ type fieldCounts struct {
 	referenceOnly, liveOnly, neverSent, byKey, open int
 }
 
-func (c *fieldCounts) add(f providerschema.Field) {
+func (c *fieldCounts) add(f providerfields.Field) {
 	c.addSeen(f.Seen)
 	if f.ByKey {
 		c.byKey++
@@ -135,14 +135,14 @@ func (c *fieldCounts) addSeen(seen []string) {
 	switch {
 	case len(seen) == 0:
 		c.neverSent++
-	case !slices.Contains(seen, providerschema.SeenLive):
+	case !slices.Contains(seen, providerfields.SeenLive):
 		c.referenceOnly++
-	case !slices.Contains(seen, providerschema.SeenReference):
+	case !slices.Contains(seen, providerfields.SeenReference):
 		c.liveOnly++
 	}
 }
 
-func lacksReason(f providerschema.Field) bool {
+func lacksReason(f providerfields.Field) bool {
 	if len(f.Seen) == 0 {
 		return f.Absent == ""
 	}
@@ -151,10 +151,10 @@ func lacksReason(f providerschema.Field) bool {
 
 type namedEntity struct {
 	name   string
-	entity *providerschema.Entity
+	entity *providerfields.Entity
 }
 
-func inOrder(entities map[string]*providerschema.Entity) []namedEntity {
+func inOrder(entities map[string]*providerfields.Entity) []namedEntity {
 	ordered := make([]namedEntity, 0, len(entities))
 	for name, entity := range entities {
 		ordered = append(ordered, namedEntity{name: name, entity: entity})

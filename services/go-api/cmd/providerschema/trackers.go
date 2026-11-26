@@ -1,7 +1,7 @@
 package main
 
 import (
-	"altune/go-api/internal/shared/providerschema"
+	"altune/go-api/internal/shared/providerfields"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -30,7 +30,7 @@ var trackersEndpoints = map[string]trackersEndpoint{
 
 func trackersProvider() provider {
 	return provider{
-		adapter:   adapterRoot + "trackers",
+		adapter:   adapterRoot + "fansheets",
 		decodedAs: decodedTypes(trackersEndpoints),
 		source: func(client *http.Client) (source, error) {
 			key := func() (string, error) { return envKey(trackersKeyEnv) }
@@ -81,7 +81,7 @@ func trackersTabsQuery(sheetID string) (string, url.Values, error) {
 	return sheetID, url.Values{"fields": {trackersTabsMask}}, nil
 }
 
-func (trackers *trackersSource) Reference(ctx context.Context, entity string) (providerschema.Observed, error) {
+func (trackers *trackersSource) Reference(ctx context.Context, entity string) (providerfields.Observed, error) {
 	if _, ok := trackersEndpoints[entity]; !ok {
 		return nil, fmt.Errorf("trackers has no entity %q", entity)
 	}
@@ -124,17 +124,17 @@ type discoverySchema struct {
 	Items      *discoverySchema           `json:"items"`
 }
 
-func (doc *discoveryDoc) response(resource, method string) (providerschema.Observed, error) {
+func (doc *discoveryDoc) response(resource, method string) (providerfields.Observed, error) {
 	root := doc.Resources[resource].Methods[method].Response.Ref
 	if _, ok := doc.Schemas[root]; !ok {
 		return nil, fmt.Errorf("sheets discovery document: %s.%s has no response schema", resource, method)
 	}
-	into := providerschema.Observed{}
+	into := providerfields.Observed{}
 	doc.walk(root, "", into, map[string]bool{})
 	return into, nil
 }
 
-func (doc *discoveryDoc) walk(name, prefix string, into providerschema.Observed, open map[string]bool) {
+func (doc *discoveryDoc) walk(name, prefix string, into providerfields.Observed, open map[string]bool) {
 	if open[name] {
 		return
 	}
@@ -145,7 +145,7 @@ func (doc *discoveryDoc) walk(name, prefix string, into providerschema.Observed,
 	}
 }
 
-func (doc *discoveryDoc) walkProperty(path string, property discoverySchema, into providerschema.Observed, open map[string]bool) {
+func (doc *discoveryDoc) walkProperty(path string, property discoverySchema, into providerfields.Observed, open map[string]bool) {
 	into[path] = discoveryKind(property)
 	switch {
 	case property.Ref != "":

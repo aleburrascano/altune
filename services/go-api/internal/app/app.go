@@ -1,17 +1,17 @@
 package app
 
 import (
-	"altune/go-api/internal/acquisition"
-	"altune/go-api/internal/app/canary"
 	"altune/go-api/internal/app/jobs"
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/discovery"
-	"altune/go-api/internal/observe"
+	"altune/go-api/internal/app/sourcecheck"
+	"altune/go-api/internal/download"
+	"altune/go-api/internal/platform/auth"
+	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/platform/requestmetrics"
+	"altune/go-api/internal/search"
+	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/reqmetrics"
-	"altune/go-api/internal/shared/runloop"
 	"context"
 	"fmt"
 	"log/slog"
@@ -28,28 +28,28 @@ type App struct {
 	dbPing        func(context.Context) error
 	redisClient   *goredis.Client
 	authVerifier  authHealthChecker
-	scheduler     *acquisition.BackgroundAcquisitionScheduler
-	vocabRefresh  *discovery.VocabularyRefreshService
-	evalSearch    *discovery.SearchService
+	scheduler     *download.BackgroundAcquisitionScheduler
+	vocabRefresh  *search.SpellingHintsRefreshService
+	evalSearch    *search.SearchService
 	eventBus      *events.InProcessBus
-	eventTap      *observe.EventTap
-	alertMonitor  *observe.AlertMonitor
+	eventTap      *monitoring.EventTap
+	alertMonitor  *monitoring.AlertMonitor
 	logRing       *logging.RingBuffer
-	latency       *reqmetrics.Registry
-	eventFeed     *observe.EventFeed
-	evalMeter     *observe.EvalMeter
+	latency       *requestmetrics.Registry
+	eventFeed     *monitoring.EventFeed
+	evalMeter     *monitoring.EvalMeter
 	lifecycleDone <-chan struct{}
 
 	jobs jobs.Runner
 
-	background *runloop.Tracker
+	background *background.Tracker
 }
 
 func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
 	return &App{
 		cfg:     cfg,
 		logRing: logRing,
-		latency: reqmetrics.NewRegistry(),
+		latency: requestmetrics.NewRegistry(),
 	}
 }
 
@@ -65,14 +65,14 @@ func (a *App) connectAuth(ctx context.Context) (auth.TokenVerifier, error) {
 func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback playbackWiring) {
 	a.startOrphanedAudioReconcile(ctx, cat.orphanedAudio, cat.audioStore)
 	a.startDeletedIdentityErasure(ctx, playback.forgetDeletedIdentities)
-	a.startSourceCanary(canary.Probes{
+	a.startSourceCanary(sourcecheck.Probes{
 		YtDlp: cat.ytDlpSearcher, YtDlpAvailable: cat.ytDlpAvailable, InnerTube: cat.ytmCanary,
 		YtMusicEnabled: a.cfg.YtMusicEnabled, YtDlpEnabled: a.cfg.YtDLPEnabled,
 	})
 	if a.pool != nil {
 		a.startAcquisitionPrune(ctx,
-			acquisition.NewPgxOutcomeStore(a.pool),
-			acquisition.NewPgxRejectionStore(a.pool))
+			download.NewPostgresOutcomeStore(a.pool),
+			download.NewPostgresRejectionStore(a.pool))
 	}
 	a.startAcquisitionUpgrade(ctx, cat.scheduler)
 }

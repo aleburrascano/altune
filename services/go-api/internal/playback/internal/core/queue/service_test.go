@@ -2,8 +2,8 @@ package queue_test
 
 import (
 	"altune/go-api/internal/playback"
-	shareddomain "altune/go-api/internal/shared/domain"
-	shared "altune/go-api/internal/shared/kernel"
+	apierror "altune/go-api/internal/shared/apierror"
+	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
 	"fmt"
@@ -21,7 +21,7 @@ type erroringNowPlaying struct {
 	err error
 }
 
-func (f *erroringNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*playback.NowPlayingTrack, error) {
+func (f *erroringNowPlaying) Lookup(_ context.Context, _ ids.UserId, _ string) (*playback.NowPlayingTrack, error) {
 	return nil, f.err
 }
 
@@ -270,8 +270,8 @@ func TestQueueService_Save_RejectsAMalformedSourceBeforeTheRepeatMode(t *testing
 
 	err := svc.Save(context.Background(), testUser(), playback.SaveQueueStateInput{RepeatMode: "sideways", LegacySourceId: "mixtape:7"})
 
-	var coded *shareddomain.CodedError
-	if !errors.As(err, &coded) || coded.Code() != shareddomain.CodePlaybackUnrecognizedSourceID {
+	var coded *apierror.CodedError
+	if !errors.As(err, &coded) || coded.Code() != apierror.CodePlaybackUnrecognizedSourceID {
 		t.Fatalf("Save = %v, want the source error to win over the repeat-mode error", err)
 	}
 	if len(repo.States) != 0 {
@@ -322,8 +322,8 @@ func TestQueueService_SavePosition_RejectsInvalidInputWithoutWriting(t *testing.
 		t.Run(tt.name, func(t *testing.T) {
 			svc := playback.NewQueueService(&panickingRepo{}, &fakeNowPlaying{})
 			err := svc.SavePosition(context.Background(), testUser(), tt.input)
-			var coded *shareddomain.CodedError
-			if !errors.As(err, &coded) || coded.Code().Kind() != shareddomain.KindInvalid {
+			var coded *apierror.CodedError
+			if !errors.As(err, &coded) || coded.Code().Kind() != apierror.KindInvalid {
 				t.Fatalf("SavePosition(%+v) = %v, want a validation error", tt.input, err)
 			}
 		})
@@ -484,7 +484,7 @@ type failingQueueRepo struct {
 	err error
 }
 
-func (r *failingQueueRepo) GetForUser(_ context.Context, _ shared.UserId) (*playback.QueueState, error) {
+func (r *failingQueueRepo) GetForUser(_ context.Context, _ ids.UserId) (*playback.QueueState, error) {
 	return nil, r.err
 }
 
@@ -530,7 +530,7 @@ type countingNowPlaying struct {
 	calls int
 }
 
-func (c *countingNowPlaying) Lookup(_ context.Context, _ shared.UserId, trackId string) (*playback.NowPlayingTrack, error) {
+func (c *countingNowPlaying) Lookup(_ context.Context, _ ids.UserId, trackId string) (*playback.NowPlayingTrack, error) {
 	c.calls++
 	return &playback.NowPlayingTrack{Id: trackId, Title: "Track " + trackId}, nil
 }

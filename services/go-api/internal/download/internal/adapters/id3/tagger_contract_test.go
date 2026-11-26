@@ -1,0 +1,115 @@
+package id3_test
+
+import (
+	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/adapters/id3"
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/bogem/id3v2/v2"
+)
+
+var _ download.AudioTagger = (*id3.Tagger)(nil)
+
+func TestTagger_SkipsNonMp3(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "track.m4a")
+	original := []byte("\x00\x00\x00\x1cftypM4A original bytes")
+	if err := os.WriteFile(file, original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := id3.NewTagger().Tag(context.Background(), file, download.TrackTags{Title: "T", Artist: "A"}); !errors.Is(err, id3.ErrUnsupportedContainer) {
+		t.Fatalf("Tag() = %v, want ErrUnsupportedContainer", err)
+	}
+
+	after, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(original) {
+		t.Error("m4a file was modified by the tagger; non-MP3 bytes must be left untouched")
+	}
+}
+
+func TestTagger_AnUnsupportedContainerIsAnError(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "track.opus")
+	original := []byte("OggS opus original bytes")
+	if err := os.WriteFile(file, original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := id3.NewTagger().Tag(context.Background(), file, download.TrackTags{Title: "T", Artist: "A"})
+	if !errors.Is(err, id3.ErrUnsupportedContainer) {
+		t.Fatalf("Tag() = %v, want ErrUnsupportedContainer", err)
+	}
+
+	after, readErr := os.ReadFile(file)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(after) != string(original) {
+		t.Error("opus file was modified by the tagger; untaggable bytes must be left untouched")
+	}
+}
+
+func TestTagger_BadPath_ReturnsError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "does-not-exist.mp3")
+	if err := id3.NewTagger().Tag(context.Background(), path, download.TrackTags{Title: "T", Artist: "A"}); err == nil {
+		t.Fatal("expected an error for a missing file, got nil")
+	}
+}
+
+func TestTagger_WritesTags(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "track.mp3")
+	if err := os.WriteFile(file, []byte{}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tags := download.TrackTags{
+		Title:  "Blinding Lights",
+		Artist: "The Weeknd",
+		Album:  "After Hours",
+		Year:   2020,
+		Genre:  "Pop",
+	}
+	if err := id3.NewTagger().Tag(context.Background(), file, tags); err != nil {
+		t.Fatalf("Tag error: %v", err)
+	}
+
+	tag, err := id3v2.Open(file, id3v2.Options{Parse: true})
+	if err != nil {
+		t.Fatalf("reopen tagged file: %v", err)
+	}
+	defer tag.Close()
+
+	if got := tag.Title(); got != "Blinding Lights" {
+		t.Errorf("title = %q, want %q", got, "Blinding Lights")
+	}
+	if got := tag.Artist(); got != "The Weeknd" {
+		t.Errorf("artist = %q, want %q", got, "The Weeknd")
+	}
+	if got := tag.Album(); got != "After Hours" {
+		t.Errorf("album = %q, want %q", got, "After Hours")
+	}
+}
+
+func TestTagger_WritesTheISRCFrame(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "track.mp3")
+	if err := os.WriteFile(file, []byte{}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := id3.NewTagger().Tag(context.Background(), file, download.TrackTags{Title: "T", Artist: "A", ISRC: "USRC17607839"}); err != nil {
+		t.Fatalf("Tag error: %v", err)
+	}
+	tag, err := id3v2.Open(file, id3v2.Options{Parse: true})
+	if err != nil {
+		t.Fatalf("reopen tagged file: %v", err)
+	}
+	defer tag.Close()
+	if got := tag.GetTextFrame("TSRC").Text; got != "USRC17607839" {
+		t.Errorf("TSRC = %q, want USRC17607839", got)
+	}
+}

@@ -1,8 +1,8 @@
 package jobs
 
 import (
-	"altune/go-api/internal/shared/leader"
-	"altune/go-api/internal/shared/runloop"
+	"altune/go-api/internal/platform/leader"
+	"altune/go-api/internal/shared/background"
 	"context"
 	"fmt"
 	"log/slog"
@@ -25,15 +25,15 @@ type Election interface {
 }
 
 func NewElection(pool *pgxpool.Pool) *leader.Election {
-	return leader.NewElection(leader.PoolLocks(pool), backgroundLockKey, backgroundLockInterval)
+	return leader.NewElection(leader.PostgresLocks(pool), backgroundLockKey, backgroundLockInterval)
 }
 
 type Runner struct {
-	loops    runloop.Tracker
+	loops    background.Tracker
 	wg       sync.WaitGroup
-	registry runloop.JobRegistry
+	registry background.JobRegistry
 	election Election
-	starts   []runloop.NamedStart
+	starts   []background.NamedStart
 }
 
 func (r *Runner) Background() *sync.WaitGroup {
@@ -45,7 +45,7 @@ func (r *Runner) Wait() {
 	r.wg.Wait()
 }
 
-func (r *Runner) Control(name Name) *runloop.JobControl {
+func (r *Runner) Control(name Name) *background.JobControl {
 	return r.registry.Control(string(name))
 }
 
@@ -53,16 +53,16 @@ func (r *Runner) Switch(name Name) func() bool {
 	return r.Control(name).Admit
 }
 
-func (r *Runner) SetEnabled(name Name, enabled bool) (runloop.JobHealth, bool) {
+func (r *Runner) SetEnabled(name Name, enabled bool) (background.JobHealth, bool) {
 	return r.registry.SetEnabled(string(name), enabled)
 }
 
-func (r *Runner) Health() []runloop.JobHealth {
+func (r *Runner) Health() []background.JobHealth {
 	return r.registry.Health()
 }
 
 func (r *Runner) WhenLeader(name Name, start func(context.Context)) {
-	r.starts = append(r.starts, runloop.NamedStart{Name: string(name), Start: start})
+	r.starts = append(r.starts, background.NamedStart{Name: string(name), Start: start})
 }
 
 func (r *Runner) Ticker(name Name, interval time.Duration, fn func(context.Context) error) {
@@ -72,7 +72,7 @@ func (r *Runner) Ticker(name Name, interval time.Duration, fn func(context.Conte
 	r.Control(name)
 	r.WhenLeader(name, func(ctx context.Context) {
 		run := r.newRun(name, interval)
-		runloop.Every(ctx, &r.loops, interval, func() { r.tickAsLeader(ctx, run, fn) })
+		background.Every(ctx, &r.loops, interval, func() { r.tickAsLeader(ctx, run, fn) })
 	})
 }
 
@@ -81,13 +81,13 @@ func (r *Runner) EveryInstance(ctx context.Context, name Name, interval time.Dur
 		panic(fmt.Sprintf("jobs: %q is leader-only, so it registers with Ticker; only a job the table marks everyInstance may use EveryInstance", name))
 	}
 	run := r.newRun(name, interval)
-	runloop.Every(ctx, &r.loops, interval, func() { r.tick(ctx, run, fn) })
+	background.Every(ctx, &r.loops, interval, func() { r.tick(ctx, run, fn) })
 }
 
 func (r *Runner) Lead(ctx context.Context, election Election) {
 	r.election = election
 	election.Start(ctx)
-	runloop.StartWhenLeader(ctx, &r.loops, election.Await, r.starts)
+	background.StartWhenLeader(ctx, &r.loops, election.Await, r.starts)
 }
 
 func (r *Runner) Election() Election {
@@ -103,26 +103,26 @@ func (r *Runner) LeaderCounters() leader.Counters {
 
 func (r *Runner) LeaderContext(ctx context.Context) (context.Context, context.CancelFunc, bool) {
 	if r.election == nil {
-		return runloop.EveryPassLeads(ctx)
+		return background.EveryPassLeads(ctx)
 	}
 	return r.election.LeaderContext(ctx)
 }
 
 type jobRun struct {
-	control *runloop.JobControl
+	control *background.JobControl
 	name    Name
 	budget  time.Duration
 }
 
 func (r *Runner) newRun(name Name, interval time.Duration) jobRun {
-	return jobRun{control: r.Control(name), name: name, budget: runloop.RunBudget(interval)}
+	return jobRun{control: r.Control(name), name: name, budget: background.RunBudget(interval)}
 }
 
 func (r *Runner) tick(ctx context.Context, run jobRun, fn func(context.Context) error) {
 	if !run.control.Admit() {
 		return
 	}
-	runloop.RunJob(ctx, run.control, string(run.name), run.budget, fn)
+	background.RunJob(ctx, run.control, string(run.name), run.budget, fn)
 }
 
 func (r *Runner) tickAsLeader(ctx context.Context, run jobRun, fn func(context.Context) error) {
@@ -134,7 +134,7 @@ func (r *Runner) tickAsLeader(ctx context.Context, run jobRun, fn func(context.C
 		return
 	}
 	defer release()
-	runloop.RunJob(leaderCtx, run.control, string(run.name), run.budget, fn)
+	background.RunJob(leaderCtx, run.control, string(run.name), run.budget, fn)
 }
 
 func (r *Runner) StartTicker(ctx context.Context, name Name, interval time.Duration, run func(context.Context) error, startedAttrs ...any) {

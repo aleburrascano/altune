@@ -2,7 +2,7 @@ package commands
 
 import (
 	"altune/go-api/cmd/api/commands/orphans"
-	"altune/go-api/internal/catalog"
+	"altune/go-api/internal/library"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"fmt"
@@ -21,10 +21,10 @@ func runHealthCheck(cfg *config.Config, fix bool) error {
 	}
 	defer pool.Close()
 
-	return healthCheck(ctx, cfg, catalog.NewPgxTrackRepository(pool), fix)
+	return healthCheck(ctx, cfg, library.NewPostgresTrackRepository(pool), fix)
 }
 
-func healthCheck(ctx context.Context, cfg *config.Config, repo *catalog.PgxTrackRepository, fix bool) error {
+func healthCheck(ctx context.Context, cfg *config.Config, repo *library.PostgresTrackRepository, fix bool) error {
 	tracks, err := repo.ListReadyAudioTracks(ctx)
 	if err != nil {
 		return err
@@ -32,7 +32,7 @@ func healthCheck(ctx context.Context, cfg *config.Config, repo *catalog.PgxTrack
 	totalChecked := len(tracks)
 	fmt.Printf("\nChecking %d tracks with status=ready...\n\n", totalChecked)
 
-	audioStore, err := catalog.FromConfig(cfg, slog.Default())
+	audioStore, err := library.NewAudioStoreFromConfig(cfg, slog.Default())
 	if err != nil {
 		return err
 	}
