@@ -1,11 +1,9 @@
-import { render } from '@testing-library/react-native';
+import { render, waitFor } from '@testing-library/react-native';
 
 import { signInTestUser } from '@testing/signInTestUser';
 import { Banner } from '@shared/ui';
 
 const { __http } = require('@testing/doubles/fetch.js');
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 type Sent = { type: string; payload: Record<string, unknown> };
 
@@ -36,8 +34,7 @@ describe('Banner failure_shown', () => {
         Something broke
       </Banner>,
     );
-    await settle();
-    expect(sent()).toHaveLength(1);
+    await waitFor(() => expect(sent()).toHaveLength(1));
     expect(sent()[0]).toMatchObject({
       type: 'failure_shown',
       payload: { surface: 'test.surface', message: 'Something broke' },
@@ -55,8 +52,7 @@ describe('Banner failure_shown', () => {
         Something broke
       </Banner>,
     );
-    await settle();
-    expect(sent()).toHaveLength(1);
+    await waitFor(() => expect(sent()).toHaveLength(1));
   });
 
   it('records again when the message changes', async () => {
@@ -70,8 +66,9 @@ describe('Banner failure_shown', () => {
         Second
       </Banner>,
     );
-    await settle();
-    expect(sent().map((event) => event.payload.message)).toEqual(['First', 'Second']);
+    await waitFor(() =>
+      expect(sent().map((event) => event.payload.message)).toEqual(['First', 'Second']),
+    );
   });
 
   it('caps the message at 200 characters', async () => {
@@ -80,7 +77,7 @@ describe('Banner failure_shown', () => {
         {'x'.repeat(250)}
       </Banner>,
     );
-    await settle();
+    await waitFor(() => expect(sent()).toHaveLength(1));
     expect(sent()[0]?.payload).toMatchObject({ message: 'x'.repeat(MESSAGE_CAP) });
   });
 

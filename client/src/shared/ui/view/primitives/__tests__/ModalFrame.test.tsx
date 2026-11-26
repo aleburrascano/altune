@@ -1,8 +1,11 @@
-import { Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { ModalFrame } from '@shared/ui';
+import { ModalFrame, type KeyboardAvoiding } from '@shared/ui';
 
-function renderFrame(variant: 'center' | 'sheet' | 'popover' = 'center') {
+function renderFrame(
+  variant: 'center' | 'sheet' | 'popover' = 'center',
+  keyboardAvoiding?: KeyboardAvoiding,
+) {
   const onClose = jest.fn();
   render(
     <ModalFrame
@@ -12,6 +15,7 @@ function renderFrame(variant: 'center' | 'sheet' | 'popover' = 'center') {
       closeLabel="Close test"
       testID="frame"
       variant={variant}
+      keyboardAvoiding={keyboardAvoiding}
     >
       <Text>content</Text>
     </ModalFrame>,
@@ -61,5 +65,20 @@ describe('ModalFrame', () => {
   it('exposes the keyboard-avoiding body under the testID suffix', () => {
     renderFrame('sheet');
     expect(screen.getByTestId('frame-keyboard')).toBeTruthy();
+  });
+
+  it('pads the keyboard-avoiding view when keyboard avoiding is padding', () => {
+    renderFrame('center', 'padding');
+    expect(StyleSheet.flatten(screen.getByTestId('frame-keyboard').props.style)).toHaveProperty(
+      'paddingBottom',
+      0,
+    );
+  });
+
+  it('leaves the keyboard-avoiding view unpadded when keyboard avoiding is none', () => {
+    renderFrame('center', 'none');
+    expect(StyleSheet.flatten(screen.getByTestId('frame-keyboard').props.style)).not.toHaveProperty(
+      'paddingBottom',
+    );
   });
 });

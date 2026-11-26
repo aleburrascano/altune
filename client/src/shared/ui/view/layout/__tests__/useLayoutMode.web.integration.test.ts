@@ -3,13 +3,20 @@ import { act, renderHook } from '@testing-library/react-native';
 import { WIDE_LAYOUT_MIN_WIDTH, useWideWebLayout } from '@shared/ui';
 
 function setWindowWidth(width: number): void {
-  jest.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(width);
+  Object.defineProperty(document.documentElement, 'clientWidth', {
+    configurable: true,
+    value: width,
+  });
   act(() => {
     window.dispatchEvent(new Event('resize'));
   });
 }
 
 describe('useWideWebLayout on web', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(document.documentElement, 'clientWidth');
+  });
+
   it('is wide on a wide window', () => {
     setWindowWidth(WIDE_LAYOUT_MIN_WIDTH);
 

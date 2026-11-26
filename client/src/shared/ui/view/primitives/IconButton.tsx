@@ -2,7 +2,8 @@ import type { ComponentType } from 'react';
 import { Pressable } from 'react-native';
 
 import { useTheme } from '@shared/ui/view/theme/useTheme';
-import { recordTap } from '@shared/ui/primitives/recordTap';
+import { recordUserAction } from '@shared/telemetry';
+import { tapAction } from '@shared/ui/core/telemetry/tapAction';
 
 export type IconButtonProps = {
   action: string;
@@ -32,7 +33,7 @@ export function IconButton({
     if (disabled) {
       return;
     }
-    recordTap(action, trackId);
+    recordUserAction(tapAction(action, trackId));
     onPress();
   };
   return (

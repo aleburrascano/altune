@@ -145,7 +145,6 @@ export default {
           'src/shared/device/core/webOrigin.ts',
           'src/shared/ui/view/a11y/announce.ts',
           'src/shared/ui/view/dialog/dialog.ts',
-          'src/shared/ui/haptics.ts',
           'src/shared/ui/view/keyboard/keyboard.ios.tsx',
           'src/shared/ui/view/keyboard/keyboard.tsx',
           'src/shared/ui/view/keyboard/keyboardAreas.tsx',

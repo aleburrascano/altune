@@ -8,12 +8,18 @@ import { useTheme } from '@shared/ui/view/theme/useTheme';
 
 type ModalVariant = 'center' | 'sheet' | 'popover';
 
+export type KeyboardAvoiding = 'padding' | 'none';
+
+const PLATFORM_KEYBOARD_AVOIDING: KeyboardAvoiding =
+  keyboardAvoidingBehavior === 'padding' ? 'padding' : 'none';
+
 type ModalFrameProps = {
   visible: boolean;
   onClose: () => void;
   closeAction: string;
   closeLabel?: string;
   variant?: ModalVariant;
+  keyboardAvoiding?: KeyboardAvoiding | undefined;
   testID?: string | undefined;
   children: ReactNode;
 };
@@ -56,22 +62,40 @@ function ModalBackdrop({ onClose, action, label, isDimmed }: ModalBackdropProps)
   return <Tappable action={action} style={style} onPress={onClose} {...a11y} />;
 }
 
-type ModalBodyProps = { variant: ModalVariant; testID?: string | undefined; children: ReactNode };
+type ModalBodyProps = {
+  variant: ModalVariant;
+  keyboardAvoiding?: KeyboardAvoiding | undefined;
+  testID?: string | undefined;
+  children: ReactNode;
+};
 
 type KeyboardProps = ComponentProps<typeof KeyboardAvoidingView>;
 
-function keyboardProps(variant: ModalVariant, testID: string | undefined): KeyboardProps {
+function keyboardProps(
+  variant: ModalVariant,
+  keyboardAvoiding: KeyboardAvoiding,
+  testID: string | undefined,
+): KeyboardProps {
   return {
     style: LAYOUT[variant],
-    behavior: keyboardAvoidingBehavior,
+    behavior: keyboardAvoiding === 'padding' ? 'padding' : undefined,
     pointerEvents: 'box-none',
     testID: testID == null ? undefined : `${testID}-keyboard`,
   };
 }
 
-function ModalBody({ variant, testID, children }: ModalBodyProps): ReactElement {
+function ModalBody({
+  variant,
+  keyboardAvoiding = PLATFORM_KEYBOARD_AVOIDING,
+  testID,
+  children,
+}: ModalBodyProps): ReactElement {
   const content = variant === 'center' ? <CenteredCard>{children}</CenteredCard> : children;
-  return <KeyboardAvoidingView {...keyboardProps(variant, testID)}>{content}</KeyboardAvoidingView>;
+  return (
+    <KeyboardAvoidingView {...keyboardProps(variant, keyboardAvoiding, testID)}>
+      {content}
+    </KeyboardAvoidingView>
+  );
 }
 
 type CenteredCardProps = { children: ReactNode };

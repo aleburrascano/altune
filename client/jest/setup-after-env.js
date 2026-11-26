@@ -6,6 +6,15 @@ const { fakeFetch, __http } = require('./doubles/fetch.js');
 
 global.fetch = fakeFetch;
 
+if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+  window.matchMedia = (query) => ({
+    matches: false,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  });
+}
+
 function freshTelemetry() {
   const telemetry = require('../src/shared/telemetry');
   const { createMemoryFileStore } = require('./fakes/files/inMemoryFileStore');

@@ -1,7 +1,7 @@
-import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import type { TabBarProps } from '@shared/ui/ports/tabBar';
 import { Text } from '@shared/ui/view/primitives/Text';
 import { spacing, opacity } from '@shared/ui/core/theme/tokens';
 import { useTheme } from '@shared/ui/view/theme/useTheme';
@@ -11,7 +11,7 @@ import {
   type TabRoute,
 } from '@shared/ui/view/navigation/tabRoutes';
 
-export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+export function TabBar({ state, descriptors, navigation }: TabBarProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
 

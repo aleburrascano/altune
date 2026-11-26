@@ -2,6 +2,8 @@ import { Text } from 'react-native';
 import { render, screen, within } from '@testing-library/react-native';
 import type { ReactTestRendererJSON } from 'react-test-renderer';
 
+import { setWindowWidth, WINDOW_WIDTH } from '@testing/setWindowWidth';
+
 import { CONTENT_MAX_WIDTH, Screen } from '@shared/ui';
 
 function singleChild(
@@ -17,20 +19,9 @@ function singleChild(
   return child;
 }
 
-let mockWindowWidth = 390;
-
-jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
-  __esModule: true,
-  default: () => ({ width: mockWindowWidth, height: 800, scale: 2, fontScale: 1 }),
-}));
-
-jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
-}));
-
 describe('Screen', () => {
   it('centers a max-width column around the children on a wide screen', () => {
-    mockWindowWidth = 1440;
+    setWindowWidth(WINDOW_WIDTH.desktop);
 
     const { toJSON } = render(
       <Screen testID="screen">
@@ -48,7 +39,7 @@ describe('Screen', () => {
   });
 
   it('renders its children inside the screen on a compact screen', () => {
-    mockWindowWidth = 390;
+    setWindowWidth(WINDOW_WIDTH.phone);
 
     render(
       <Screen testID="screen">

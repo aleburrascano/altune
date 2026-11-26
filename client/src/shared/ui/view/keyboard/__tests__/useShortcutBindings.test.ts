@@ -5,15 +5,7 @@ import { PlaybackContext } from '@shared/playback';
 import type { PlaybackContextValue } from '@shared/playback';
 import { makeIdlePlayback } from '@testing/factories';
 
-import { registerSearchFocus, useKeyboardShortcuts } from '@shared/ui';
-
-const FOCUS_REQUEST_TTL_MS = 5_000;
-
-const mockPush = jest.fn();
-
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush }),
-}));
+import { useShortcutBindings } from '@shared/ui';
 
 interface FakeWindow {
   readonly addEventListener: jest.Mock;
@@ -80,17 +72,19 @@ function wrapperFor(controls: PlaybackContextValue) {
   };
 }
 
+const focusSearch = jest.fn();
+
+beforeEach(() => {
+  focusSearch.mockClear();
+});
+
 function setup(win: FakeWindow, controls: PlaybackContextValue) {
-  return renderHook(() => useKeyboardShortcuts(controls, win as unknown as Window), {
+  return renderHook(() => useShortcutBindings(controls, win, focusSearch), {
     wrapper: wrapperFor(controls),
   });
 }
 
-beforeEach(() => {
-  mockPush.mockClear();
-});
-
-describe('useKeyboardShortcuts', () => {
+describe('useShortcutBindings', () => {
   it('attaches a single keydown listener and removes it on unmount', () => {
     const win = createFakeWindow();
     const { unmount } = setup(win, controlsFixture());
@@ -214,37 +208,9 @@ describe('useKeyboardShortcuts', () => {
 
     expect(controls.pause).not.toHaveBeenCalled();
   });
-
-  it('focuses the Discover search immediately when it is already registered', () => {
-    const win = createFakeWindow();
-    setup(win, controlsFixture());
-    const focus = jest.fn();
-    const unregister = registerSearchFocus(focus);
-
-    win.dispatch({ key: '/' });
-
-    expect(focus).toHaveBeenCalledTimes(1);
-    expect(mockPush).not.toHaveBeenCalled();
-    unregister();
-  });
-
-  it('navigates to Discover then focuses once it registers, when pressed elsewhere', () => {
-    const win = createFakeWindow();
-    setup(win, controlsFixture());
-
-    win.dispatch({ key: '/' });
-
-    expect(mockPush).toHaveBeenCalledWith('/discover');
-
-    const focus = jest.fn();
-    const unregister = registerSearchFocus(focus);
-
-    expect(focus).toHaveBeenCalledTimes(1);
-    unregister();
-  });
 });
 
-describe('useKeyboardShortcuts caller edges', () => {
+describe('useShortcutBindings caller edges', () => {
   it.each(['TEXTAREA', 'SELECT'])('ignores Space typed into a %s', (tagName) => {
     const win = createFakeWindow();
     const controls = controlsFixture({ status: 'playing' });
@@ -260,16 +226,39 @@ describe('useKeyboardShortcuts caller edges', () => {
   it('types a slash into an input instead of jumping to Discover search', () => {
     const win = createFakeWindow();
     setup(win, controlsFixture());
-    registerSearchFocus(jest.fn())();
-    const focus = jest.fn();
-    const unregister = registerSearchFocus(focus);
 
     const preventDefault = win.dispatch({ key: '/', target: { tagName: 'INPUT' } });
 
     expect(preventDefault).not.toHaveBeenCalled();
-    expect(focus).not.toHaveBeenCalled();
-    expect(mockPush).not.toHaveBeenCalled();
-    unregister();
+    expect(focusSearch).not.toHaveBeenCalled();
+  });
+
+  it('asks for the search to be focused on a slash outside a field', () => {
+    const win = createFakeWindow();
+    setup(win, controlsFixture());
+
+    win.dispatch({ key: '/' });
+
+    expect(focusSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks the latest focus callback after it changes between renders', () => {
+    const win = createFakeWindow();
+    const first = jest.fn();
+    const second = jest.fn();
+    let current = first;
+    const controls = controlsFixture();
+    const { rerender } = renderHook(() => useShortcutBindings(controls, win, current), {
+      wrapper: wrapperFor(controls),
+    });
+
+    current = second;
+    rerender({});
+    win.dispatch({ key: '/' });
+
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(first).not.toHaveBeenCalled();
+    expect(win.addEventListener).toHaveBeenCalledTimes(1);
   });
 
   it('leaves arrow keys to move the caret inside an input', () => {
@@ -313,24 +302,22 @@ describe('useKeyboardShortcuts caller edges', () => {
     expect(skip).not.toHaveBeenCalled();
     expect(slash).not.toHaveBeenCalled();
     expect(controls.skipNext).not.toHaveBeenCalled();
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(focusSearch).not.toHaveBeenCalled();
   });
 
   it('prevents the page from scrolling on the arrow and slash keys it handles', () => {
     const win = createFakeWindow();
     setup(win, controlsFixture());
-    const unregister = registerSearchFocus(jest.fn());
 
     expect(win.dispatch({ key: 'ArrowLeft' })).toHaveBeenCalledTimes(1);
     expect(win.dispatch({ key: 'ArrowRight', shiftKey: true })).toHaveBeenCalledTimes(1);
     expect(win.dispatch({ key: '/' })).toHaveBeenCalledTimes(1);
-    unregister();
   });
 
   it('toggles with the latest playback status after it changes', () => {
     const win = createFakeWindow();
     let current = controlsFixture({ status: 'paused' });
-    const { rerender } = renderHook(() => useKeyboardShortcuts(current, win as unknown as Window), {
+    const { rerender } = renderHook(() => useShortcutBindings(current, win, focusSearch), {
       wrapper: ({ children }: { children: ReactNode }) =>
         createElement(PlaybackContext.Provider, { value: current }, children),
     });
@@ -346,7 +333,7 @@ describe('useKeyboardShortcuts caller edges', () => {
   it('seeks from the latest position after playback advances', () => {
     const win = createFakeWindow();
     let current = controlsFixture({ positionMs: 30_000 });
-    const { rerender } = renderHook(() => useKeyboardShortcuts(current, win as unknown as Window), {
+    const { rerender } = renderHook(() => useShortcutBindings(current, win, focusSearch), {
       wrapper: ({ children }: { children: ReactNode }) =>
         createElement(PlaybackContext.Provider, { value: current }, children),
     });
@@ -361,7 +348,7 @@ describe('useKeyboardShortcuts caller edges', () => {
   it('keeps a single listener across rerenders', () => {
     const win = createFakeWindow();
     let current = controlsFixture({ positionMs: 30_000 });
-    const { rerender } = renderHook(() => useKeyboardShortcuts(current, win as unknown as Window), {
+    const { rerender } = renderHook(() => useShortcutBindings(current, win, focusSearch), {
       wrapper: ({ children }: { children: ReactNode }) =>
         createElement(PlaybackContext.Provider, { value: current }, children),
     });
@@ -375,41 +362,12 @@ describe('useKeyboardShortcuts caller edges', () => {
     );
   });
 
-  it('navigates to Discover again once the Discover search has unregistered', () => {
-    const win = createFakeWindow();
-    setup(win, controlsFixture());
-    const focus = jest.fn();
-    const unregister = registerSearchFocus(focus);
-    unregister();
-
-    win.dispatch({ key: '/' });
-
-    expect(focus).not.toHaveBeenCalled();
-    expect(mockPush).toHaveBeenCalledWith('/discover');
-    registerSearchFocus(jest.fn())();
-  });
-
-  it('focuses the Discover search only once after navigating to it', () => {
-    const win = createFakeWindow();
-    setup(win, controlsFixture());
-    win.dispatch({ key: '/' });
-
-    const first = jest.fn();
-    registerSearchFocus(first)();
-    const second = jest.fn();
-    const unregister = registerSearchFocus(second);
-
-    expect(first).toHaveBeenCalledTimes(1);
-    expect(second).not.toHaveBeenCalled();
-    unregister();
-  });
-
-  it('ignores a target whose addEventListener is not a function', () => {
+  it('ignores a target that cannot listen', () => {
     const controls = controlsFixture({ status: 'playing' });
     const removeEventListener = jest.fn();
-    const target = { addEventListener: 'nope', removeEventListener } as unknown as Window;
+    const target = { removeEventListener };
     expect(() =>
-      renderHook(() => useKeyboardShortcuts(controls, target), {
+      renderHook(() => useShortcutBindings(controls, target, focusSearch), {
         wrapper: wrapperFor(controls),
       }).unmount(),
     ).not.toThrow();
@@ -420,7 +378,7 @@ describe('useKeyboardShortcuts caller edges', () => {
     const controls = controlsFixture({ status: 'playing' });
     const target = {} as Window;
     expect(() =>
-      renderHook(() => useKeyboardShortcuts(controls, target), {
+      renderHook(() => useShortcutBindings(controls, target, focusSearch), {
         wrapper: wrapperFor(controls),
       }).unmount(),
     ).not.toThrow();
@@ -441,7 +399,7 @@ describe('useKeyboardShortcuts caller edges', () => {
     const a = controlsFixture({ status: 'paused' });
     const b = controlsFixture({ status: 'paused' });
     let current = a;
-    const { rerender } = renderHook(() => useKeyboardShortcuts(current, win as unknown as Window), {
+    const { rerender } = renderHook(() => useShortcutBindings(current, win, focusSearch), {
       wrapper: ({ children }: { children: ReactNode }) =>
         createElement(PlaybackContext.Provider, { value: current }, children),
     });
@@ -454,53 +412,5 @@ describe('useKeyboardShortcuts caller edges', () => {
     expect(win.removeEventListener).toHaveBeenCalledTimes(1);
     expect(b.resume).toHaveBeenCalledTimes(1);
     expect(a.resume).not.toHaveBeenCalled();
-  });
-
-  it('does not re-push while a navigation to Discover is already pending', () => {
-    const win = createFakeWindow();
-    setup(win, controlsFixture());
-
-    win.dispatch({ key: '/' });
-    win.dispatch({ key: '/' });
-
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    registerSearchFocus(jest.fn())();
-  });
-
-  it('clears the pending request when router.push throws, instead of leaving it to steal a later focus', () => {
-    const win = createFakeWindow();
-    setup(win, controlsFixture());
-    mockPush.mockImplementationOnce(() => {
-      throw new Error('navigation failed');
-    });
-
-    win.dispatch({ key: '/' });
-
-    const focus = jest.fn();
-    const unregister = registerSearchFocus(focus);
-
-    expect(focus).not.toHaveBeenCalled();
-    unregister();
-  });
-
-  it('a stale focus request expires and does not fire on a later unrelated Discover focus', () => {
-    jest.useFakeTimers();
-    try {
-      const win = createFakeWindow();
-      setup(win, controlsFixture());
-
-      win.dispatch({ key: '/' });
-      expect(mockPush).toHaveBeenCalledWith('/discover');
-
-      jest.advanceTimersByTime(FOCUS_REQUEST_TTL_MS);
-
-      const focus = jest.fn();
-      const unregister = registerSearchFocus(focus);
-
-      expect(focus).not.toHaveBeenCalled();
-      unregister();
-    } finally {
-      jest.useRealTimers();
-    }
   });
 });

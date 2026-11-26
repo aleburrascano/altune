@@ -1,8 +1,4 @@
-import { AccessibilityInfo } from 'react-native';
+import { createAnnounce } from '@shared/ui/view/a11y/createAnnounce';
+import { screenReader } from '@shared/ui/view/a11y/screenReader';
 
-export function announce(message: string): void {
-  if (message.length === 0) return;
-  void AccessibilityInfo.isScreenReaderEnabled().then((enabled) => {
-    if (enabled) AccessibilityInfo.announceForAccessibility(message);
-  });
-}
+export const announce = createAnnounce(screenReader);

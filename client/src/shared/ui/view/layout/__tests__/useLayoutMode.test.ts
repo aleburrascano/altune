@@ -1,4 +1,5 @@
 import { renderHook } from '@testing-library/react-native';
+import { setWindowWidth, WINDOW_WIDTH } from '@testing/setWindowWidth';
 
 import {
   CONTENT_MAX_WIDTH,
@@ -7,15 +8,8 @@ import {
   useWideWebLayout,
   type LayoutMode,
 } from '@shared/ui';
-let mockWindowWidth = 390;
-
-jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
-  __esModule: true,
-  default: () => ({ width: mockWindowWidth, height: 800, scale: 2, fontScale: 1 }),
-}));
-
 function layoutModeFor(width: number): LayoutMode {
-  mockWindowWidth = width;
+  setWindowWidth(width);
   return renderHook(() => useLayoutMode()).result.current;
 }
 
@@ -31,7 +25,7 @@ describe('layoutModeFor', () => {
 
 describe('useLayoutMode', () => {
   it('derives compact from the current window width', () => {
-    mockWindowWidth = 360;
+    setWindowWidth(WINDOW_WIDTH.smallPhone);
 
     const { result } = renderHook(() => useLayoutMode());
 
@@ -39,7 +33,7 @@ describe('useLayoutMode', () => {
   });
 
   it('derives wide from the current window width', () => {
-    mockWindowWidth = 1440;
+    setWindowWidth(WINDOW_WIDTH.desktop);
 
     const { result } = renderHook(() => useLayoutMode());
 
@@ -54,12 +48,12 @@ describe('CONTENT_MAX_WIDTH', () => {
 });
 
 afterEach(() => {
-  mockWindowWidth = 390;
+  setWindowWidth(WINDOW_WIDTH.phone);
 });
 
 describe('useWideWebLayout', () => {
   it('stays compact on a wide native window', () => {
-    mockWindowWidth = 1440;
+    setWindowWidth(WINDOW_WIDTH.desktop);
 
     const { result } = renderHook(() => useWideWebLayout());
 
