@@ -1,1 +1,1 @@
-export { SettingsScreen as default } from '@features/settings';
+export { SettingsRoute as default } from '@/mobile';

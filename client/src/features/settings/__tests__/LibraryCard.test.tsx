@@ -1,37 +1,30 @@
 import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { render, screen, fireEvent, within } from '@testing-library/react-native';
-import type { ReactNode } from 'react';
 
 import { signInTestUser } from '@testing/signInTestUser';
 import { LibraryCard } from '@features/settings';
-import { FeaturePorts, httpFeaturePorts } from '@/mobile';
+import { makeWrapper } from '@testing/makeWrapper';
+import { retryOptionsWithJitter } from '@features/settings/__tests__/retryFixtures';
 const { __http } = require('@testing/doubles/fetch.js');
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const BACKFILL_ROUTE = 'POST /v1/tracks/featured-backfill';
 
-function wrapper({ children }: { children: ReactNode }) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  return (
-    <QueryClientProvider client={client}>
-      <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
-    </QueryClientProvider>
-  );
-}
+let wrapper: ReturnType<typeof makeWrapper>;
+const retryOptions = retryOptionsWithJitter();
 
 const backfillRow = () => within(screen.getByTestId('settings-backfill-featured'));
 
 beforeEach(async () => {
+  wrapper = makeWrapper(
+    new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } }),
+  );
   await signInTestUser();
 });
 
 describe('LibraryCard', () => {
   it('renders the backfill row idle with the Run label', () => {
-    render(<LibraryCard />, { wrapper });
+    render(<LibraryCard retryOptions={retryOptions} />, { wrapper });
     expect(backfillRow().getByText('Resolve featured artists')).toBeTruthy();
     expect(backfillRow().getByText('Run')).toBeTruthy();
   });
@@ -40,7 +33,7 @@ describe('LibraryCard', () => {
     __http.reply(BACKFILL_ROUTE, {
       json: { updated: 2, scanned: 9, truncated: false, next_offset: 9 },
     });
-    render(<LibraryCard />, { wrapper });
+    render(<LibraryCard retryOptions={retryOptions} />, { wrapper });
 
     fireEvent.press(screen.getByTestId('settings-backfill-featured'));
 

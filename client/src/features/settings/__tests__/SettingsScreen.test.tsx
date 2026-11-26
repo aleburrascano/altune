@@ -1,5 +1,4 @@
-import type { ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 
 import { NetworkError } from '@shared/apiClient';
@@ -7,28 +6,19 @@ import { NetworkError } from '@shared/apiClient';
 import { signInTestUser } from '@testing/signInTestUser';
 
 import { SettingsScreen } from '@features/settings';
-import { FeaturePorts, httpFeaturePorts } from '@/mobile';
+import { makeWrapper } from '@testing/makeWrapper';
+import { retryOptionsWithJitter } from '@features/settings/__tests__/retryFixtures';
 const RETRY_BACKOFF_BASE_MS = 1_000;
 
 const { __http } = require('@testing/doubles/fetch.js');
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const BACKFILL_ROUTE = 'POST /v1/tracks/featured-backfill';
 const CLEAR_HISTORY_ROUTE = 'DELETE /v1/discovery/search-history';
 const HTTP_ACCEPTED = 202;
 const HTTP_UNAVAILABLE = 503;
 
-function wrapper({ children }: { children: ReactNode }) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  return (
-    <QueryClientProvider client={client}>
-      <FeaturePorts ports={httpFeaturePorts}>{children}</FeaturePorts>
-    </QueryClientProvider>
-  );
-}
+let wrapper: ReturnType<typeof makeWrapper>;
+const retryOptions = retryOptionsWithJitter();
 
 const FIVE_ATTEMPTS_OF_BACKOFF_MS = 31 * RETRY_BACKOFF_BASE_MS;
 
@@ -42,6 +32,9 @@ const backfillRow = () => within(screen.getByTestId('settings-backfill-featured'
 const historyRow = () => within(screen.getByTestId('settings-clear-search-history'));
 
 beforeEach(async () => {
+  wrapper = makeWrapper(
+    new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } }),
+  );
   jest.useFakeTimers();
   await signInTestUser();
   __http.replyAll({ status: HTTP_ACCEPTED });
@@ -54,7 +47,7 @@ afterEach(() => {
 describe('settings mutation failures', () => {
   it('backfill: a rejected run shows a failure state, not the idle Run label', async () => {
     __http.fail(BACKFILL_ROUTE, new NetworkError('timeout', 'request timed out'));
-    render(<SettingsScreen />, { wrapper });
+    render(<SettingsScreen retryOptions={retryOptions} />, { wrapper });
     expect(backfillRow().getByText('Run')).toBeTruthy();
 
     fireEvent.press(screen.getByTestId('settings-backfill-featured'));
@@ -74,7 +67,7 @@ describe('settings mutation failures', () => {
     __http.reply(BACKFILL_ROUTE, {
       json: { updated: 2, scanned: 9, truncated: false, next_offset: 9 },
     });
-    render(<SettingsScreen />, { wrapper });
+    render(<SettingsScreen retryOptions={retryOptions} />, { wrapper });
 
     fireEvent.press(screen.getByTestId('settings-backfill-featured'));
 
@@ -87,7 +80,7 @@ describe('settings mutation failures', () => {
     ['missing fields', {}],
   ])('backfill: a malformed response (%s) shows a sane fallback', async (_label, json) => {
     __http.reply(BACKFILL_ROUTE, { status: 200, json });
-    render(<SettingsScreen />, { wrapper });
+    render(<SettingsScreen retryOptions={retryOptions} />, { wrapper });
 
     fireEvent.press(screen.getByTestId('settings-backfill-featured'));
 
@@ -101,7 +94,7 @@ describe('settings mutation failures', () => {
       status: HTTP_UNAVAILABLE,
       json: { error: { code: 'unavailable', message: 'unavailable' } },
     });
-    render(<SettingsScreen />, { wrapper });
+    render(<SettingsScreen retryOptions={retryOptions} />, { wrapper });
 
     fireEvent.press(screen.getByTestId('settings-clear-search-history'));
     fireEvent.press(screen.getByTestId('settings-confirm-clear-history-confirm'));
@@ -116,7 +109,7 @@ describe('settings mutation failures', () => {
 
   it('clear history: a successful clear still shows Cleared with no failure copy', async () => {
     __http.reply(CLEAR_HISTORY_ROUTE, { status: 204 });
-    render(<SettingsScreen />, { wrapper });
+    render(<SettingsScreen retryOptions={retryOptions} />, { wrapper });
 
     fireEvent.press(screen.getByTestId('settings-clear-search-history'));
     fireEvent.press(screen.getByTestId('settings-confirm-clear-history-confirm'));

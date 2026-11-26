@@ -1,4 +1,4 @@
-export { SettingsScreen } from '@features/settings/ui/SettingsScreen';
+export { SettingsScreen } from '@features/settings/view/SettingsScreen';
 export {
   SettingsPortProvider,
   useSettingsPort,
@@ -24,6 +24,7 @@ export { failureCopyForAction } from '@features/settings/core/failureCopyForActi
 export { LibraryCard } from '@features/settings/view/LibraryCard';
 export type { DownloadStats } from '@features/settings/core/downloadStatsModel';
 export { OfflineDownloadsCard } from '@features/settings/view/OfflineDownloadsCard';
+export type { RetryOptions } from '@features/settings/view/retryOptions';
 export { useBackfillFeatured } from '@features/settings/view/useBackfillFeatured';
-export { accountEmail } from '@features/settings/shell/useAccountEmail';
+export { accountEmail } from '@features/settings/core/accountEmail';
 export { useSettingsClearSearchHistory } from '@features/settings/view/useSettingsClearSearchHistory';

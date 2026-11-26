@@ -4,6 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import type { BackfillFeaturedResult } from '@shared/apiClient';
 import { makeWrapper } from '@testing/makeWrapper';
+import { retryOptionsWithJitter } from '@features/settings/__tests__/retryFixtures';
 import { signInTestUser } from '@testing/signInTestUser';
 import {
   httpSettingsPort,
@@ -16,8 +17,6 @@ import type { SettingsPort } from '@features/settings';
 import { ApiError, NetworkError } from '@shared/apiClient';
 import { LONG_REQUEST_TIMEOUT_MS, REQUEST_TIMEOUT_MS } from '@shared/apiConfig';
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const BACKFILL_PATH = '/v1/tracks/featured-backfill';
 const SERVER_ERROR_STATUS = 500;
@@ -97,7 +96,7 @@ describe('useBackfillFeatured on the memory fake', () => {
       return React.createElement(Query, null, SettingsPortProvider({ port, children }));
     }
 
-    const { result } = renderHook(() => useBackfillFeatured(), { wrapper });
+    const { result } = renderHook(() => useBackfillFeatured(retryOptionsWithJitter()), { wrapper });
     act(() => {
       result.current.mutate();
     });
@@ -152,7 +151,7 @@ describe('httpSettingsPort on the wire', () => {
 
 describe('useBackfillFeatured on the HTTP port the composition root provides', () => {
   function startBackfill() {
-    const hook = renderHook(() => useBackfillFeatured(), {
+    const hook = renderHook(() => useBackfillFeatured(retryOptionsWithJitter()), {
       wrapper: makeWrapper(new QueryClient()),
     });
     act(() => {

@@ -4,10 +4,13 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { LONG_REQUEST_TIMEOUT_MS } from '@shared/apiConfig';
 import { ContractError, NetworkError } from '@shared/failure';
-import { supabase, useSession, useSignOut } from '@shared/auth';
+import { installAuthClient, useSession, useSignOut } from '@shared/auth';
 import { detailKeys, libraryKeys } from '@shared/query';
 
 import { makeWrapper } from '@testing/makeWrapper';
+import { ObservedQueryClient } from '@testing/observedQueryClient';
+import { scriptedAuth, type ScriptedAuth } from '@testing/scriptedAuth';
+import { retryOptionsWithJitter } from '@features/settings/__tests__/retryFixtures';
 import { useBackfillFeatured } from '@features/settings';
 
 const RETRY_BACKOFF_BASE_MS = 1_000;
@@ -34,11 +37,10 @@ function backfillQueries(): string[] {
     .map((r: WireRequest) => r.query);
 }
 
+const retryOptions = retryOptionsWithJitter();
+
 function signedIn() {
-  jest.spyOn(supabase.auth, 'getSession').mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  } as never);
+  scriptedAuth(installAuthClient, { access_token: 'tok' } as Session);
 }
 
 function deferred() {
@@ -60,7 +62,6 @@ function holdResponses(when: (url: string) => boolean) {
 
 afterEach(() => {
   global.fetch = fakeFetch;
-  jest.restoreAllMocks();
 });
 
 describe('settings mutations retry transient failures', () => {
@@ -77,7 +78,9 @@ describe('settings mutations retry transient failures', () => {
     __http.replyOnce(BACKFILL, BAD_GATEWAY);
     __http.replyOnce(BACKFILL, { json: page({ scanned: 2, updated: 1 }) });
 
-    const hook = renderHook(useBackfillFeatured, { wrapper: makeWrapper(new QueryClient()) });
+    const hook = renderHook(() => useBackfillFeatured(retryOptions), {
+      wrapper: makeWrapper(new QueryClient()),
+    });
     act(() => {
       hook.result.current.mutate();
     });
@@ -118,9 +121,10 @@ describe('the jittered retry backoff', () => {
     it.each(jitterSamples)(
       'reattempts at $dueMs ms when the jitter sample is $sample',
       async ({ sample, dueMs }) => {
-        jest.spyOn(Math, 'random').mockReturnValue(sample);
         const queryClient = new QueryClient();
-        const hook = renderHook(useBackfillFeatured, { wrapper: makeWrapper(queryClient) });
+        const hook = renderHook(() => useBackfillFeatured(retryOptionsWithJitter(sample)), {
+          wrapper: makeWrapper(queryClient),
+        });
         act(() => {
           hook.result.current.mutate();
         });
@@ -139,8 +143,6 @@ describe('the jittered retry backoff', () => {
 });
 
 describe('settings mutations racing a sign-out', () => {
-  type AuthCallback = (event: string, session: Session | null) => void;
-
   const USER_A = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' } as Session['user'];
   const USER_B = { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' } as Session['user'];
 
@@ -155,21 +157,13 @@ describe('settings mutations racing a sign-out', () => {
     } as Session;
   }
 
-  let authCallbacks: AuthCallback[] = [];
+  let auth: ScriptedAuth;
 
   async function bootAsUserA(queryClient: QueryClient) {
-    jest.spyOn(supabase.auth, 'getSession').mockResolvedValue({
-      data: { session: sessionFor(USER_A, 'token-a') },
-      error: null,
-    } as never);
-    jest.spyOn(supabase.auth, 'onAuthStateChange').mockImplementation(((cb: AuthCallback) => {
-      authCallbacks.push(cb);
-      return { data: { subscription: { unsubscribe: jest.fn() } } };
-    }) as never);
-    jest.spyOn(supabase.auth, 'signOut').mockImplementation((async () => {
-      authCallbacks.forEach((cb) => cb('SIGNED_OUT', null));
+    auth = scriptedAuth(installAuthClient, sessionFor(USER_A, 'token-a'), () => {
+      auth.emit('SIGNED_OUT', null);
       return { error: null };
-    }) as never);
+    });
     const session = renderHook(() => useSession(), { wrapper: makeWrapper(queryClient) });
     await waitFor(() => expect(session.result.current.status).toBe('signed-in'));
     return session;
@@ -181,30 +175,20 @@ describe('settings mutations racing a sign-out', () => {
       await signOut.result.current.signOut();
     });
     signOut.unmount();
-    const sessionOfB = sessionFor(USER_B, 'token-b');
-    jest
-      .spyOn(supabase.auth, 'getSession')
-      .mockResolvedValue({ data: { session: sessionOfB }, error: null } as never);
-    act(() => {
-      authCallbacks.forEach((cb) => cb('SIGNED_IN', sessionOfB));
-    });
+    auth.switchTo(sessionFor(USER_B, 'token-b'));
   }
 
   function isInvalidated(queryClient: QueryClient, key: readonly unknown[]): boolean | undefined {
     return queryClient.getQueryState(key)?.isInvalidated;
   }
 
-  beforeEach(() => {
-    authCallbacks = [];
-  });
-
   it("a backfill A started does not invalidate B's library cache when it resolves after the switch", async () => {
-    const queryClient = new QueryClient();
+    const queryClient = new ObservedQueryClient();
     const session = await bootAsUserA(queryClient);
     __http.replyOnce(BACKFILL, { json: page({ scanned: 10, updated: 3, next_offset: 10 }) });
     const release = holdResponses(() => true);
 
-    const backfill = renderHook(() => useBackfillFeatured(), {
+    const backfill = renderHook(() => useBackfillFeatured(retryOptions), {
       wrapper: makeWrapper(queryClient),
     });
     act(() => {
@@ -220,7 +204,7 @@ describe('settings mutations racing a sign-out', () => {
     queryClient.setQueryData(tracksKey, ['track-of-b']);
     queryClient.setQueryData(featuringKey, ['featuring-of-b']);
     queryClient.setQueryData(albumKey, ['album-track-of-b']);
-    const invalidate = jest.spyOn(queryClient, 'invalidateQueries');
+    queryClient.invalidated.length = 0;
 
     await act(async () => {
       release();
@@ -230,7 +214,7 @@ describe('settings mutations racing a sign-out', () => {
       await new Promise((r) => setTimeout(r, 0));
     });
 
-    expect(invalidate).not.toHaveBeenCalled();
+    expect(queryClient.invalidated).toEqual([]);
     expect(isInvalidated(queryClient, tracksKey)).toBe(false);
     expect(isInvalidated(queryClient, featuringKey)).toBe(false);
     expect(isInvalidated(queryClient, albumKey)).toBe(false);
@@ -252,7 +236,7 @@ describe('backfill over a library larger than one server call', () => {
     __http.replyOnce(BACKFILL, { json: page({ scanned: 40, updated: 1 }) });
     const releaseSecond = holdResponses((url) => url.includes('offset='));
 
-    const hook = renderHook(() => useBackfillFeatured(), {
+    const hook = renderHook(() => useBackfillFeatured(retryOptions), {
       wrapper: makeWrapper(new QueryClient()),
     });
     act(() => {
@@ -273,7 +257,7 @@ describe('backfill over a library larger than one server call', () => {
   it('fails instead of looping when next_offset does not advance', async () => {
     __http.reply(BACKFILL, { json: page({ scanned: 5, truncated: true, next_offset: 0 }) });
 
-    const hook = renderHook(() => useBackfillFeatured(), {
+    const hook = renderHook(() => useBackfillFeatured(retryOptions), {
       wrapper: makeWrapper(new QueryClient()),
     });
     act(() => {
@@ -290,7 +274,7 @@ describe('backfill over a library larger than one server call', () => {
     jest.useFakeTimers();
     __http.hang(BACKFILL);
 
-    const hook = renderHook(() => useBackfillFeatured(), {
+    const hook = renderHook(() => useBackfillFeatured(retryOptions), {
       wrapper: makeWrapper(new QueryClient()),
     });
     act(() => {

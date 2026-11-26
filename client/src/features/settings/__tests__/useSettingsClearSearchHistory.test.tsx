@@ -3,10 +3,13 @@ import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { ApiError } from '@shared/apiClient';
-import { supabase, useSession, useSignOut } from '@shared/auth';
+import { installAuthClient, useSession, useSignOut } from '@shared/auth';
 import { discoveryKeys, libraryKeys } from '@shared/query';
 
 import { makeWrapper } from '@testing/makeWrapper';
+import { ObservedQueryClient } from '@testing/observedQueryClient';
+import { scriptedAuth, type ScriptedAuth } from '@testing/scriptedAuth';
+import { retryOptionsWithJitter } from '@features/settings/__tests__/retryFixtures';
 import { useBackfillFeatured, useSettingsClearSearchHistory } from '@features/settings';
 const RETRY_BACKOFF_BASE_MS = 1_000;
 
@@ -28,11 +31,10 @@ function clearRequests(): WireRequest[] {
   return __http.requests.filter((r: WireRequest) => `${r.method} ${r.path}` === CLEAR);
 }
 
+const retryOptions = retryOptionsWithJitter();
+
 function signedIn() {
-  jest.spyOn(supabase.auth, 'getSession').mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  } as never);
+  scriptedAuth(installAuthClient, { access_token: 'tok' } as Session);
 }
 
 function deferred<T>() {
@@ -56,7 +58,6 @@ function holdResponses() {
 
 afterEach(() => {
   global.fetch = fakeFetch;
-  jest.restoreAllMocks();
 });
 
 describe('useSettingsClearSearchHistory racing an in-flight history fetch', () => {
@@ -74,7 +75,7 @@ describe('useSettingsClearSearchHistory racing an in-flight history fetch', () =
       .catch(() => undefined);
     __http.replyOnce(CLEAR, CLEARED);
 
-    const hook = renderHook(() => useSettingsClearSearchHistory(), {
+    const hook = renderHook(() => useSettingsClearSearchHistory(retryOptions), {
       wrapper: makeWrapper(queryClient),
     });
     act(() => {
@@ -108,7 +109,7 @@ describe('useSettingsClearSearchHistory when the clear fails', () => {
     });
     __http.reply(CLEAR, BAD_REQUEST);
 
-    const hook = renderHook(() => useSettingsClearSearchHistory(), {
+    const hook = renderHook(() => useSettingsClearSearchHistory(retryOptions), {
       wrapper: makeWrapper(queryClient),
     });
     act(() => {
@@ -127,7 +128,7 @@ describe('useSettingsClearSearchHistory when the clear fails', () => {
 
 describe('settings mutations retry transient failures', () => {
   function renderClear() {
-    const hook = renderHook(useSettingsClearSearchHistory, {
+    const hook = renderHook(() => useSettingsClearSearchHistory(retryOptions), {
       wrapper: makeWrapper(new QueryClient()),
     });
     act(() => {
@@ -198,11 +199,13 @@ describe('the jittered retry backoff', () => {
     it.each(jitterSamples)(
       'reattempts at $dueMs ms when the jitter sample is $sample',
       async ({ sample, dueMs }) => {
-        jest.spyOn(Math, 'random').mockReturnValue(sample);
         const queryClient = new QueryClient();
-        const hook = renderHook(useSettingsClearSearchHistory, {
-          wrapper: makeWrapper(queryClient),
-        });
+        const hook = renderHook(
+          () => useSettingsClearSearchHistory(retryOptionsWithJitter(sample)),
+          {
+            wrapper: makeWrapper(queryClient),
+          },
+        );
         act(() => {
           hook.result.current.mutate();
         });
@@ -221,8 +224,6 @@ describe('the jittered retry backoff', () => {
 });
 
 describe('settings mutations racing a sign-out', () => {
-  type AuthCallback = (event: string, session: Session | null) => void;
-
   const USER_A = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' } as Session['user'];
   const USER_B = { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' } as Session['user'];
 
@@ -237,21 +238,13 @@ describe('settings mutations racing a sign-out', () => {
     } as Session;
   }
 
-  let authCallbacks: AuthCallback[] = [];
+  let auth: ScriptedAuth;
 
   async function bootAsUserA(queryClient: QueryClient) {
-    jest.spyOn(supabase.auth, 'getSession').mockResolvedValue({
-      data: { session: sessionFor(USER_A, 'token-a') },
-      error: null,
-    } as never);
-    jest.spyOn(supabase.auth, 'onAuthStateChange').mockImplementation(((cb: AuthCallback) => {
-      authCallbacks.push(cb);
-      return { data: { subscription: { unsubscribe: jest.fn() } } };
-    }) as never);
-    jest.spyOn(supabase.auth, 'signOut').mockImplementation((async () => {
-      authCallbacks.forEach((cb) => cb('SIGNED_OUT', null));
+    auth = scriptedAuth(installAuthClient, sessionFor(USER_A, 'token-a'), () => {
+      auth.emit('SIGNED_OUT', null);
       return { error: null };
-    }) as never);
+    });
     const session = renderHook(() => useSession(), { wrapper: makeWrapper(queryClient) });
     await waitFor(() => expect(session.result.current.status).toBe('signed-in'));
     return session;
@@ -263,34 +256,24 @@ describe('settings mutations racing a sign-out', () => {
       await signOut.result.current.signOut();
     });
     signOut.unmount();
-    const sessionOfB = sessionFor(USER_B, 'token-b');
-    jest
-      .spyOn(supabase.auth, 'getSession')
-      .mockResolvedValue({ data: { session: sessionOfB }, error: null } as never);
-    act(() => {
-      authCallbacks.forEach((cb) => cb('SIGNED_IN', sessionOfB));
-    });
+    auth.switchTo(sessionFor(USER_B, 'token-b'));
   }
 
   function isInvalidated(queryClient: QueryClient, key: readonly unknown[]): boolean | undefined {
     return queryClient.getQueryState(key)?.isInvalidated;
   }
 
-  beforeEach(() => {
-    authCallbacks = [];
-  });
-
   afterEach(() => {
     jest.useRealTimers();
   });
 
   it("a failed clear-history A started does not invalidate B's search history", async () => {
-    const queryClient = new QueryClient();
+    const queryClient = new ObservedQueryClient();
     const session = await bootAsUserA(queryClient);
     __http.replyOnce(CLEAR, BAD_REQUEST);
     const release = holdResponses();
 
-    const clear = renderHook(() => useSettingsClearSearchHistory(), {
+    const clear = renderHook(() => useSettingsClearSearchHistory(retryOptions), {
       wrapper: makeWrapper(queryClient),
     });
     act(() => {
@@ -302,7 +285,7 @@ describe('settings mutations racing a sign-out', () => {
     await signOutThenSignInAsUserB(queryClient);
     const historyOfB = { items: [{ query: 'b searched this' }] };
     queryClient.setQueryData(discoveryKeys.history, historyOfB);
-    const invalidate = jest.spyOn(queryClient, 'invalidateQueries');
+    queryClient.invalidated.length = 0;
 
     await act(async () => {
       release();
@@ -312,7 +295,7 @@ describe('settings mutations racing a sign-out', () => {
       await new Promise((r) => setTimeout(r, 0));
     });
 
-    expect(invalidate).not.toHaveBeenCalled();
+    expect(queryClient.invalidated).toEqual([]);
     expect(isInvalidated(queryClient, discoveryKeys.history)).toBe(false);
     expect(queryClient.getQueryData(discoveryKeys.history)).toEqual(historyOfB);
 
@@ -325,7 +308,7 @@ describe('settings mutations racing a sign-out', () => {
     const session = await bootAsUserA(queryClient);
     __http.reply(CLEAR, BAD_GATEWAY);
 
-    const clear = renderHook(() => useSettingsClearSearchHistory(), {
+    const clear = renderHook(() => useSettingsClearSearchHistory(retryOptions), {
       wrapper: makeWrapper(queryClient),
     });
     act(() => {
@@ -356,7 +339,10 @@ describe('settings mutations racing a sign-out', () => {
     queryClient.setQueryData(discoveryKeys.history, { items: [{ query: 'a' }] });
 
     const hooks = renderHook(
-      () => ({ backfill: useBackfillFeatured(), clear: useSettingsClearSearchHistory() }),
+      () => ({
+        backfill: useBackfillFeatured(retryOptions),
+        clear: useSettingsClearSearchHistory(retryOptions),
+      }),
       { wrapper: makeWrapper(queryClient) },
     );
     act(() => {
