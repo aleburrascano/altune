@@ -38,7 +38,7 @@ const DISCOVERY_EVENT_TYPES: Record<DiscoveryEventType, true> = {
 };
 
 function isDiscoveryEventType(value: unknown): value is DiscoveryEventType {
-  return typeof value === 'string' && DISCOVERY_EVENT_TYPES[value as DiscoveryEventType] === true;
+  return typeof value === 'string' && Object.hasOwn(DISCOVERY_EVENT_TYPES, value);
 }
 
 function isPersistedEntry(e: unknown): e is OutboxEntry {
