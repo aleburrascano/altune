@@ -9,7 +9,7 @@ while read -r boundary; do
   rc=0
   git merge-base --is-ancestor "$boundary" HEAD || rc=$?
   case $rc in
-    0) echo "history-complete: this clone is shallow at ${boundary:0:12}, inside HEAD's history, so files added before it would go unchecked; run: git fetch --unshallow" >&2; exit 1 ;;
+    0) echo "history-complete: this clone is shallow at ${boundary:0:12}, inside HEAD's history, so files added before it would go unchecked; run: git fetch --unshallow REMOTE, with the remote that has this history (gitea)" >&2; exit 1 ;;
     1) ;;
     *) echo "history-complete: could not tell whether ${boundary:0:12} is in HEAD's history" >&2; exit 2 ;;
   esac
