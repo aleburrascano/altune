@@ -7,13 +7,27 @@ export type GlobalErrorHandlers = {
   setGlobalHandler: (onUncaught: ErrorHandler) => void;
 };
 
+export const noGlobalErrorHandlers: GlobalErrorHandlers = {
+  getGlobalHandler: () => () => undefined,
+  setGlobalHandler: () => undefined,
+};
+
+export function handlersOrNone(runtime: GlobalErrorHandlers | undefined): GlobalErrorHandlers {
+  return runtime ?? noGlobalErrorHandlers;
+}
+
+export function runtimeErrorHandlers(): GlobalErrorHandlers {
+  return handlersOrNone(ErrorUtils);
+}
+
 export function chainUncaughtErrorHandler(
-  onError: (error: unknown) => void,
-  handlers: GlobalErrorHandlers = ErrorUtils,
-): void {
-  const previousHandler = handlers.getGlobalHandler();
-  handlers.setGlobalHandler((error, isFatal) => {
-    onError(error);
-    previousHandler(error, isFatal);
-  });
+  handlers: GlobalErrorHandlers,
+): (onError: (error: unknown) => void) => void {
+  return (onError) => {
+    const previousHandler = handlers.getGlobalHandler();
+    handlers.setGlobalHandler((error, isFatal) => {
+      onError(error);
+      previousHandler(error, isFatal);
+    });
+  };
 }

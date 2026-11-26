@@ -1,4 +1,5 @@
 import type { FileStore, StoredDirectory, StoredFile } from '@shared/files';
+import { browserStorage } from '@/mobile/adapters/web/browserStorage';
 
 const KEY_PREFIX = 'altune:file:';
 const ROOT = 'localstorage://document';
@@ -154,13 +155,7 @@ class InMemoryStore implements KeyValueStore {
 }
 
 function resolveBrowserOrFallbackStorage(): KeyValueStore {
-  try {
-    return typeof window !== 'undefined' && window.localStorage
-      ? window.localStorage
-      : new InMemoryStore();
-  } catch {
-    return new InMemoryStore();
-  }
+  return browserStorage() ?? new InMemoryStore();
 }
 
 function onFirstUse(open: () => FileStore): () => FileStore {

@@ -17,14 +17,7 @@ function requiredEnv(value: string | undefined, name: string): string {
   return value;
 }
 
-function appConfig(): AuthClientConfig {
-  return {
-    url: process.env.EXPO_PUBLIC_SUPABASE_URL,
-    anonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
-  };
-}
-
-function appParts(): AuthClientParts {
+export function appAuthParts(): AuthClientParts {
   return { storage: createAuthStorage(), fetch: (input, init) => fetch(input, init) };
 }
 
@@ -47,10 +40,7 @@ function supabaseAuth(url: string, anonKey: string, parts: AuthClientParts): Aut
   return createClient(url, anonKey, { auth, global: transport }).auth;
 }
 
-export function createAuthClient(
-  config: AuthClientConfig = appConfig(),
-  parts: AuthClientParts = appParts(),
-): AuthClient {
+export function createAuthClient(config: AuthClientConfig, parts: AuthClientParts): AuthClient {
   const url = requiredEnv(config.url, 'EXPO_PUBLIC_SUPABASE_URL');
   const anonKey = requiredEnv(config.anonKey, 'EXPO_PUBLIC_SUPABASE_ANON_KEY');
   const storageKey = sessionStorageKey(url);

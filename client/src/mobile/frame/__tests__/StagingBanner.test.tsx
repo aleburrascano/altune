@@ -1,47 +1,21 @@
-import 'react-native-gesture-handler/jestSetup';
 import { render } from '@testing-library/react-native';
-import type { ComponentType, ReactNode } from 'react';
+import { Text } from 'react-native';
+import { renderRouter, screen } from 'expo-router/testing-library';
 
-import { supabase } from '@shared/auth';
+import { installAuthClient } from '@shared/auth';
 import { ThemeProvider } from '@shared/ui';
+import { authClientOver } from '@testing/fakeAuthClient';
 
-import { StagingBanner } from '@/mobile';
-
-jest.mock('expo-router', () => {
-  const { View } = require('react-native');
-  const Stack = ({ children }: { children?: ReactNode }) => <View>{children}</View>;
-  Stack.Screen = () => null;
-  return {
-    Stack,
-    useRouter: () => ({ replace: jest.fn(), push: jest.fn() }),
-    useSegments: () => [],
-  };
-});
-
-jest.mock('expo-font', () => ({ useFonts: () => [true, null] }));
+import { RootLayout, StagingBanner } from '@/mobile';
 
 const STAGING_URL = 'https://ijyjoyxhwmbmriwzazbx.supabase.co';
 const PROD_URL = 'https://ellvexundmgvbbfqbzau.supabase.co';
 const BANNER_TEXT = 'Staging. Everything here is wiped every night. Use altune.duckdns.org.';
 
-const originalUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-
-const { __http } = require('@testing/doubles/fetch.js');
-
-beforeEach(() => {
-  __http.replyAll({ status: 503 });
-  jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-});
-
-afterEach(() => {
-  process.env.EXPO_PUBLIC_SUPABASE_URL = originalUrl;
-});
-
-function renderBannerBuiltFor(supabaseUrl: string) {
-  process.env.EXPO_PUBLIC_SUPABASE_URL = supabaseUrl;
+function renderBannerBuiltFor(supabaseUrl: string | undefined) {
   return render(
     <ThemeProvider>
-      <StagingBanner />
+      <StagingBanner supabaseUrl={supabaseUrl} />
     </ThemeProvider>,
   );
 }
@@ -60,32 +34,33 @@ describe('StagingBanner', () => {
   });
 
   it('renders nothing on a build that sets no Supabase URL at all', () => {
-    delete process.env.EXPO_PUBLIC_SUPABASE_URL;
-
-    const { queryByText } = render(
-      <ThemeProvider>
-        <StagingBanner />
-      </ThemeProvider>,
-    );
+    const { queryByText } = renderBannerBuiltFor(undefined);
 
     expect(queryByText(BANNER_TEXT)).toBeNull();
   });
 });
 
 describe('the root layout on the staging build', () => {
-  it('shows the banner above the auth gate even while the gate shows a screen of its own', () => {
+  const originalUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+
+  afterEach(() => {
+    process.env.EXPO_PUBLIC_SUPABASE_URL = originalUrl;
+  });
+
+  it('shows the banner above the auth gate even while the gate shows a screen of its own', async () => {
     process.env.EXPO_PUBLIC_SUPABASE_URL = STAGING_URL;
-    jest.useFakeTimers();
-    jest.spyOn(supabase.auth, 'getSession').mockReturnValue(new Promise(() => undefined));
-    const RootLayout: ComponentType = require('@/app/_layout').default;
+    installAuthClient(
+      authClientOver({
+        getSession: () => new Promise(() => undefined),
+        onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => undefined } } }),
+      }),
+    );
 
-    const { getByText, getByTestId, toJSON, unmount } = render(<RootLayout />);
+    renderRouter({ _layout: RootLayout, index: () => <Text>home</Text> }, { initialUrl: '/' });
 
-    expect(getByText(BANNER_TEXT)).toBeTruthy();
-    expect(getByTestId('auth-splash')).toBeTruthy();
-    const tree = JSON.stringify(toJSON());
+    expect(await screen.findByText(BANNER_TEXT)).toBeTruthy();
+    expect(screen.getByTestId('auth-splash')).toBeTruthy();
+    const tree = JSON.stringify(screen.toJSON());
     expect(tree.indexOf(BANNER_TEXT)).toBeLessThan(tree.indexOf('auth-splash'));
-    unmount();
-    jest.useRealTimers();
   });
 });

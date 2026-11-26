@@ -6,12 +6,14 @@ const STAGING_SUPABASE_PROJECT_REF = 'ijyjoyxhwmbmriwzazbx';
 const STAGING_BANNER_COPY =
   'Staging. Everything here is wiped every night. Use altune.duckdns.org.';
 
-function isStagingBuild(): boolean {
-  return (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').includes(STAGING_SUPABASE_PROJECT_REF);
+function isStagingBuild(supabaseUrl: string | undefined): boolean {
+  return (supabaseUrl ?? '').includes(STAGING_SUPABASE_PROJECT_REF);
 }
 
-export function StagingBanner() {
-  return isStagingBuild() ? <StagingNotice /> : null;
+export type StagingBannerProps = { supabaseUrl: string | undefined };
+
+export function StagingBanner({ supabaseUrl }: StagingBannerProps) {
+  return isStagingBuild(supabaseUrl) ? <StagingNotice /> : null;
 }
 
 function StagingNotice() {

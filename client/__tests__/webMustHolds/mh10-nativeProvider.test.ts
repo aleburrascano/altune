@@ -1,16 +1,5 @@
 import type { ReactElement } from 'react';
 
-type SessionStorage = { setItem: (key: string, value: string) => Promise<void> };
-
-let capturedStorage: SessionStorage | undefined;
-
-jest.mock('@supabase/supabase-js', () => ({
-  createClient: (_url: string, _key: string, options: { auth: { storage: SessionStorage } }) => {
-    capturedStorage = options.auth.storage;
-    return {};
-  },
-}));
-
 function onPlatform<T>(os: string, load: () => T): T {
   let loaded: T | undefined;
   jest.isolateModules(() => {
@@ -47,13 +36,12 @@ describe('mh10: the playback provider and session store each platform selects', 
   });
 
   it.each(['ios', 'android'])('persists the native session in secure-store on %s', async (os) => {
-    const secureStore = onPlatform(os, () => {
-      capturedStorage = undefined;
-      require('@/mobile/authClient').createAuthClient();
-      return require('expo-secure-store').__secureStore;
-    });
+    const { storage, secureStore } = onPlatform(os, () => ({
+      storage: require('@/mobile/authClient').appAuthParts().storage,
+      secureStore: require('expo-secure-store').__secureStore,
+    }));
 
-    await capturedStorage?.setItem('sb-session', 'serialized-session');
+    await storage.setItem('sb-session', 'serialized-session');
 
     expect(secureStore.read('sb-session')).toBe('serialized-session');
   });

@@ -9,6 +9,8 @@ const mobileRoot = join(__dirname, '..');
 
 const SHARED_BY_PLATFORM_FILES = ['src/shared/ui/view/keyboard/keyboardAreas.tsx'];
 
+const ANDROID_VARIANTS_DOCTOR_CANNOT_RESOLVE = ['src/mobile/frame/platformExtras.android.tsx'];
+
 function overridesFor(rule: string): Override[] {
   const overrides = (doctorConfig as { ignore: { overrides: Override[] } }).ignore.overrides;
   return overrides.filter((override) => override.rules.includes(rule));
@@ -31,7 +33,7 @@ function defaultFilesOfPlatformPairs(directory: string): string[] {
 }
 
 describe('doctor.config', () => {
-  it('silences unused-export on the default file of every platform-split pair, on its .ios variant and on the implementation the platform files share', () => {
+  it('silences unused-export on the default file of every platform-split pair, on its .ios variant, on the android variant it cannot resolve and on the implementation the platform files share', () => {
     const silenced = overridesFor('deslop/unused-export').flatMap((override) => override.files);
 
     expect(silenced.sort()).toEqual(
@@ -39,6 +41,7 @@ describe('doctor.config', () => {
         ...new Set([
           ...defaultFilesOfPlatformPairs(join(mobileRoot, 'src')),
           ...SHARED_BY_PLATFORM_FILES,
+          ...ANDROID_VARIANTS_DOCTOR_CANNOT_RESOLVE,
         ]),
       ].sort(),
     );
