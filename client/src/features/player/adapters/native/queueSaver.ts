@@ -1,4 +1,3 @@
-import { useCallback, useEffect, useRef } from 'react';
 import TrackPlayer from 'react-native-track-player';
 
 import { useQueueStore, type QueueStore, trackKey } from '@shared/playback';
@@ -6,19 +5,15 @@ import { ApiError } from '@shared/failure';
 import { reportClientError } from '@shared/telemetry';
 import { currentSessionEpoch, isSameSession } from '@shared/session';
 
-import { restoreSavedQueue } from '@features/player/adapters/native/restoreSavedQueue';
 import { withNativeQueue } from '@features/player/native/nativeQueueLock';
 import { activeNativeTrackId } from '@features/player/adapters/native/nativeTrack';
-import { playbackPort } from '@features/player/shell/activePlaybackPort';
+import { playbackPort } from '@features/player/ports/activePlaybackPort';
+import type { IsSkippable } from '@features/player/ports/nativePlayback';
 import { toWireSource } from '@features/player/domain/queueStateWire';
 import { recordQueueSaveFailure } from '@features/player/domain/playbackHealth';
 import { savedQueueLists } from '@features/player/domain/queueSaveWindow';
 import { warnPlayback } from '@features/player/domain/playbackError';
 import { progressSecondsToRoundedMs } from '@features/player/domain/time';
-
-import { useAppStateChange } from '@shared/lifecycle';
-
-const SAVE_INTERVAL_MS = 15_000;
 
 async function currentPositionMsOrZero(): Promise<number> {
   try {
@@ -78,9 +73,7 @@ async function sendSave(s: QueueStore, positionMs: number): Promise<void> {
   });
 }
 
-async function readSaveSnapshot(
-  isSkippable: (state: QueueStore) => boolean,
-): Promise<ConsistentSnapshot | null> {
+async function readSaveSnapshot(isSkippable: IsSkippable): Promise<ConsistentSnapshot | null> {
   if (isSkippable(useQueueStore.getState())) return null;
   const epoch = currentSessionEpoch();
   const snapshot = await readConsistentSnapshot();
@@ -127,7 +120,7 @@ function sendSaveReportingFailure(s: ConsistentSnapshot, seen: FingerprintRef): 
 }
 
 async function saveOnce(
-  isSkippable: (state: QueueStore) => boolean,
+  isSkippable: IsSkippable,
   lastSaved: { current: SaveFingerprint | null },
   lastReported: FingerprintRef,
 ): Promise<void> {
@@ -171,43 +164,8 @@ function createSingleFlight(work: () => Promise<void>): () => Promise<void> {
   return () => requestSingleFlight(flight, work);
 }
 
-export function useQueueResume() {
-  const saveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const restoredRef = useRef(false);
-  const placeholderGenerationRef = useRef<number | null>(null);
-  const singleFlightRef = useRef<(() => Promise<void>) | null>(null);
-  const lastSavedRef = useRef<SaveFingerprint | null>(null);
-  const lastReportedRef = useRef<SaveFingerprint | null>(null);
-  const save = useCallback((): Promise<void> => {
-    const isSkippable = (state: QueueStore): boolean =>
-      state.tracks.length === 0 ||
-      placeholderGenerationRef.current === state.generation ||
-      state.currentTrack()?.source.kind !== 'library';
-    singleFlightRef.current ??= createSingleFlight(() =>
-      saveOnce(isSkippable, lastSavedRef, lastReportedRef),
-    );
-    return singleFlightRef.current();
-  }, []);
-
-  useEffect(() => {
-    if (restoredRef.current) return;
-    restoredRef.current = true;
-
-    void restoreSavedQueue((generation) => {
-      placeholderGenerationRef.current = generation;
-    });
-  }, []);
-
-  useEffect(() => {
-    saveTimerRef.current = setInterval(() => {
-      void save();
-    }, SAVE_INTERVAL_MS);
-    return () => {
-      if (saveTimerRef.current) clearInterval(saveTimerRef.current);
-    };
-  }, [save]);
-
-  useAppStateChange((state) => {
-    if (state === 'background' || state === 'inactive') void save();
-  });
+export function createQueueSaver(isSkippable: IsSkippable): () => Promise<void> {
+  const lastSaved: FingerprintRef = { current: null };
+  const lastReported: FingerprintRef = { current: null };
+  return createSingleFlight(() => saveOnce(isSkippable, lastSaved, lastReported));
 }

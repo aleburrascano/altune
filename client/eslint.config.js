@@ -109,7 +109,7 @@ const TEST_FILES = ['**/__tests__/**'];
 
 const FILES_WHERE_EXPO_GO_FORCES_CONDITIONAL_REQUIRE = [
   'src/features/player/adapters/startPlaybackService.ts',
-  'src/features/player/adapters/PlaybackProvider.tsx',
+  'src/features/player/view/PlaybackProvider.tsx',
 ];
 
 const PLATFORM_HOOKS_THAT_READ_BROWSER_GLOBALS = ['src/features/player/view/useMediaSession.ts'];

@@ -3,7 +3,7 @@ import { File } from 'expo-file-system';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback';
 import type { PlaybackTrack } from '@shared/playback';
 
-import { playbackPort } from '@features/player/shell/activePlaybackPort';
+import { playbackPort } from '@features/player/ports/activePlaybackPort';
 import { parseTrackId, type TrackId } from '@shared/catalog';
 import { extFromUrl } from '@shared/files';
 import {

@@ -13,10 +13,19 @@ import {
   resetPlaybackForSignOut,
   httpPlaybackPort,
   installPlaybackPort,
+  createPlaybackService,
+  prefetchNext,
+  wasSwappedToLocal,
+  type WidgetBridge,
 } from '@features/player';
-import { previewTrack, libraryTrackWithId } from '@features/player/__tests__/fixtures';
-import * as nativeTrackSwap from '@features/player/adapters/native/nativeTrackSwap';
+import {
+  previewTrack,
+  libraryTrackWithId,
+  cdnAudioUrls,
+} from '@features/player/__tests__/fixtures';
+import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
 import { signInTestUser } from '@testing/signInTestUser';
+import { freezeDate, type FrozenDate } from '@testing/freezeDate';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 const RESTART_THRESHOLD_MS = 3_000;
 const QUEUE_OUT_OF_SYNC_MESSAGE = 'The queue fell out of sync. Tap retry to reload it.';
@@ -199,7 +208,7 @@ describe('native PlaybackError handling', () => {
     const RECOVER_TRACK_2 = 'POST /v1/tracks/trk-2/audio/recover';
     const MANY_ERRORS = RECOVERY_ATTEMPTS_PER_TRACK + 6;
 
-    let now = 0;
+    let clock: FrozenDate;
 
     async function failPlaybackOnce(onError: PlaybackErrorHandler): Promise<void> {
       onError({ code: 'android-io-bad-http-status', message: 'Response code: 403' });
@@ -213,14 +222,13 @@ describe('native PlaybackError handling', () => {
     }
 
     beforeEach(() => {
-      now = Date.parse('2026-09-19T10:00:00Z');
-      jest.spyOn(Date, 'now').mockImplementation(() => now);
+      clock = freezeDate(Date.parse('2026-09-19T10:00:00Z'));
       __http.replyAll({ status: 204 });
       useQueueStore.getState().loadQueue([libraryTrackWithId('trk-1')], 0, null);
     });
 
     afterEach(async () => {
-      jest.restoreAllMocks();
+      jest.useRealTimers();
       await resetPlaybackForSignOut();
     });
 
@@ -248,7 +256,7 @@ describe('native PlaybackError handling', () => {
     it('keeps refusing while the track is still cooling down', async () => {
       const onError = await failPlayback(RECOVERY_ATTEMPTS_PER_TRACK);
 
-      now += RECOVERY_COOLDOWN_BASE_MS - 1;
+      clock.advance(RECOVERY_COOLDOWN_BASE_MS - 1);
       await failPlaybackOnce(onError);
 
       expect(__http.countFor(RECOVER_TRACK_1)).toBe(RECOVERY_ATTEMPTS_PER_TRACK);
@@ -257,7 +265,7 @@ describe('native PlaybackError handling', () => {
     it('gives the track one more attempt once its cooldown has passed', async () => {
       const onError = await failPlayback(RECOVERY_ATTEMPTS_PER_TRACK);
 
-      now += RECOVERY_COOLDOWN_BASE_MS;
+      clock.advance(RECOVERY_COOLDOWN_BASE_MS);
       await failPlaybackOnce(onError);
 
       expect(__http.countFor(RECOVER_TRACK_1)).toBe(RECOVERY_ATTEMPTS_PER_TRACK + 1);
@@ -265,10 +273,10 @@ describe('native PlaybackError handling', () => {
 
     it('doubles the cooldown each time a track spends another attempt', async () => {
       const onError = await failPlayback(RECOVERY_ATTEMPTS_PER_TRACK);
-      now += RECOVERY_COOLDOWN_BASE_MS;
+      clock.advance(RECOVERY_COOLDOWN_BASE_MS);
       await failPlaybackOnce(onError);
 
-      now += RECOVERY_COOLDOWN_BASE_MS;
+      clock.advance(RECOVERY_COOLDOWN_BASE_MS);
       await failPlaybackOnce(onError);
 
       expect(__http.countFor(RECOVER_TRACK_1)).toBe(RECOVERY_ATTEMPTS_PER_TRACK + 1);
@@ -542,14 +550,34 @@ describe('playbackService — handler rejections are reported, not left unhandle
   });
 
   it('reports a failed repair to streaming from a PlaybackError', async () => {
-    jest.spyOn(nativeTrackSwap, 'wasSwappedToLocal').mockReturnValue(true);
-    jest
-      .spyOn(nativeTrackSwap, 'repairActiveToStreaming')
-      .mockRejectedValue(new Error('headers unavailable'));
+    const [first, failing] = [libraryTrackWithId('trk-0'), libraryTrackWithId('trk-1')];
+    useQueueStore.getState().loadQueue([first, failing], 0, null);
+    const memory = createMemoryPlaybackPort({ audioUrls: cdnAudioUrls(['trk-1']) });
+    let streamingUnavailable = false;
+    const restorePort = installPlaybackPort({
+      ...memory,
+      fetchAudioUrls: (ids) =>
+        streamingUnavailable
+          ? Promise.reject(new Error('presign unavailable'))
+          : memory.fetchAudioUrls(ids),
+      audioRequestHeaders: () =>
+        streamingUnavailable
+          ? Promise.reject(new Error('headers unavailable'))
+          : memory.audioRequestHeaders(),
+    });
+    (TrackPlayer.getQueue as jest.Mock).mockResolvedValueOnce([
+      { id: trackKey(first) },
+      { id: trackKey(failing) },
+    ]);
+    await prefetchNext(0);
+    expect(wasSwappedToLocal(asTrackId('trk-1'))).toBe(true);
+    streamingUnavailable = true;
+    useQueueStore.getState().skipToIndex(1);
     const onError = await handlerFor(Event.PlaybackError);
 
     onError({ code: 'android-io-bad-http-status', message: 'Response code: 403' });
     await settle();
+    restorePort();
 
     expect(unhandled).toEqual([]);
     expect(recorded.warnings).toContainEqual([
@@ -608,10 +636,16 @@ describe('playbackService — handler rejections are reported, not left unhandle
 
 describe('the widget snapshot publisher the service starts at boot', () => {
   it('publishes the now-playing track to the widget once the service has booted', async () => {
-    const widget = jest.requireActual('@modules/altune-widget');
-    const writeSnapshot = jest.spyOn(widget, 'writeSnapshot').mockImplementation(() => undefined);
+    const snapshots: string[] = [];
+    const widget: WidgetBridge = {
+      writeSnapshot: (json) => {
+        snapshots.push(json);
+      },
+      writeCoverFromUrl: () => Promise.resolve(),
+      reloadWidget: () => undefined,
+    };
     notifyIdentityChange('user-1');
-    await playbackService();
+    await createPlaybackService({ widget })();
 
     useQueueStore
       .getState()
@@ -622,13 +656,12 @@ describe('the widget snapshot publisher the service starts at boot', () => {
       );
     await new Promise((resolve) => setImmediate(resolve));
 
-    const published = writeSnapshot.mock.calls.map(([json]) => JSON.parse(json as string));
+    const published = snapshots.map((json) => JSON.parse(json) as unknown);
     expect(published).toContainEqual(
       expect.objectContaining({
         signedIn: true,
         nowPlaying: expect.objectContaining({ title: 'Midnight City' }),
       }),
     );
-    writeSnapshot.mockRestore();
   });
 });

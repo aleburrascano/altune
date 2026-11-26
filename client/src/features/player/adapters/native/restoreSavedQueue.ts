@@ -2,8 +2,8 @@ import type { QueueStateResponse } from '@shared/apiClient';
 import type { TrackResponse } from '@shared/catalog';
 import { canPlay, orderedQueueTracks, useQueueStore } from '@shared/playback';
 import { loadNativeQueue } from '@features/player/adapters/native/loadNativeTrack';
-import { playbackPort } from '@features/player/shell/activePlaybackPort';
-import { reportLoadFailure } from '@features/player/view/usePlaybackErrorStore';
+import { playbackPort } from '@features/player/ports/activePlaybackPort';
+import { reportLoadFailure } from '@features/player/core/playbackErrorStore';
 import {
   rebuildOnFirstWorkingRungReportingCurrent,
   showSavedTrackWhileRehydrating,

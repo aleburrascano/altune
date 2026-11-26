@@ -1,13 +1,21 @@
+import type * as Device from '@shared/device';
+import type * as Player from '@features/player';
+
+function runtimeIn(executionEnvironment: string): Device.AppRuntime {
+  return {
+    manifestVersion: () => undefined,
+    declaredScheme: () => undefined,
+    executionEnvironment: () => executionEnvironment,
+    updates: () => ({ isEnabled: false, isEmbeddedLaunch: true, updateId: null }),
+  };
+}
+
 function loadIsExpoGo(executionEnvironment: string): boolean {
-  jest.resetModules();
   let isExpoGo: boolean | undefined;
   jest.isolateModules(() => {
-    jest.doMock('expo-constants', () => ({
-      __esModule: true,
-      default: { executionEnvironment },
-      ExecutionEnvironment: { Bare: 'bare', Standalone: 'standalone', StoreClient: 'storeClient' },
-    }));
-    ({ isExpoGo } = require('@features/player/domain/isExpoGo') as { isExpoGo: boolean });
+    const { installAppRuntime } = require('@shared/device') as typeof Device;
+    installAppRuntime(runtimeIn(executionEnvironment));
+    ({ isExpoGo } = require('@features/player') as typeof Player);
   });
   return isExpoGo as boolean;
 }

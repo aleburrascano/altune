@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useProgress } from 'react-native-track-player';
 
 import { useQueueStore } from '@shared/playback';
 import type { PlaybackTrack } from '@shared/playback';
@@ -7,6 +6,9 @@ import type { PlaybackTrack } from '@shared/playback';
 import { useIsForeground } from '@shared/lifecycle';
 
 import { progressSecondsToMs } from '@features/player/domain/time';
+import { useNativePlayback } from '@features/player/view/NativePlaybackProvider';
+
+const PROGRESS_INTERVAL_MS = 500;
 
 export interface PlaybackPosition {
   positionMs: number;
@@ -15,7 +17,7 @@ export interface PlaybackPosition {
 }
 
 export function usePlaybackPosition(track: PlaybackTrack | null): PlaybackPosition {
-  const progress = useProgress(500);
+  const progress = useNativePlayback().useProgress(PROGRESS_INTERVAL_MS);
   const isForeground = useIsForeground();
 
   const livePositionMs = progressSecondsToMs(progress.position);

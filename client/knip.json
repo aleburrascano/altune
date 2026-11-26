@@ -11,7 +11,7 @@
     "targets/*/expo-target.config.js",
     "modules/*/index.ts",
     "src/**/*.{android,ios,native}.{ts,tsx}",
-    "src/features/player/adapters/PlaybackProvider.tsx",
+    "src/features/player/view/PlaybackProvider.tsx",
     "src/features/player/domain/playsThroughTrackPlayer.ts",
     "src/features/signIn/hooks/useOAuth.ts",
     "src/features/signIn/ui/AuthCallbackScreen.tsx",

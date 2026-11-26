@@ -1,27 +1,54 @@
-import type * as InitPlayer from '@features/player/adapters/native/initPlayer';
+import { createEnsurePlayerSetup, type SetupPlayer } from '@features/player';
 
 const PLAYER_SETUP_TIMEOUT_MS = 15_000;
-
-const trackPlayerDouble = jest.requireMock('react-native-track-player');
-const { __player } = trackPlayerDouble;
-
-type InitPlayerModule = typeof InitPlayer;
-
-function freshInitPlayer(): InitPlayerModule {
-  let loaded: InitPlayerModule | undefined;
-  jest.isolateModules(() => {
-    jest.doMock('react-native-track-player', () => trackPlayerDouble);
-    loaded = require('@features/player/adapters/native/initPlayer');
-  });
-  if (!loaded) throw new Error('initPlayer did not load');
-  return loaded;
-}
-
-function hangNextSetupPlayer(): void {
-  trackPlayerDouble.default.setupPlayer.mockImplementationOnce(() => new Promise(() => {}));
-}
+const ATTEMPTS_AFTER_A_FAILURE = 2;
 
 const STILL_PENDING = 'still pending';
+
+interface FakePlayer {
+  player: SetupPlayer;
+  setupCalls: () => number;
+  updateCalls: () => number;
+  failNextSetup: (error: Error) => void;
+  hangNextSetup: () => void;
+}
+
+function fakePlayer(): FakePlayer {
+  let setups = 0;
+  let updates = 0;
+  let nextFailure: Error | null = null;
+  let shouldHang = false;
+  const player: SetupPlayer = {
+    setupPlayer: () => {
+      setups += 1;
+      if (shouldHang) {
+        shouldHang = false;
+        return new Promise<void>(() => undefined);
+      }
+      if (nextFailure) {
+        const failure = nextFailure;
+        nextFailure = null;
+        return Promise.reject(failure);
+      }
+      return Promise.resolve();
+    },
+    updateOptions: () => {
+      updates += 1;
+      return Promise.resolve();
+    },
+  };
+  return {
+    player,
+    setupCalls: () => setups,
+    updateCalls: () => updates,
+    failNextSetup: (error) => {
+      nextFailure = error;
+    },
+    hangNextSetup: () => {
+      shouldHang = true;
+    },
+  };
+}
 
 function settlementOf(promise: Promise<void>): () => unknown {
   let settlement: unknown = STILL_PENDING;
@@ -38,31 +65,44 @@ function settlementOf(promise: Promise<void>): () => unknown {
 
 describe('ensurePlayerSetup', () => {
   it('sets the player up only once across repeated successful calls', async () => {
-    const { ensurePlayerSetup } = freshInitPlayer();
+    const native = fakePlayer();
+    const ensurePlayerSetup = createEnsurePlayerSetup(native.player);
 
     await ensurePlayerSetup();
     await ensurePlayerSetup();
 
-    expect(__player.calls('setupPlayer')).toHaveLength(1);
+    expect(native.setupCalls()).toBe(1);
   });
 
   it('retries setup after a failed attempt instead of replaying the cached rejection', async () => {
-    const { ensurePlayerSetup } = freshInitPlayer();
-    __player.failNext('setupPlayer', new Error('native module not ready'));
+    const native = fakePlayer();
+    const ensurePlayerSetup = createEnsurePlayerSetup(native.player);
+    native.failNextSetup(new Error('native module not ready'));
 
     await expect(ensurePlayerSetup()).rejects.toThrow('native module not ready');
     await expect(ensurePlayerSetup()).resolves.toBeUndefined();
 
-    expect(__player.calls('setupPlayer')).toHaveLength(2);
-    expect(__player.calls('updateOptions')).toHaveLength(1);
+    expect(native.setupCalls()).toBe(ATTEMPTS_AFTER_A_FAILURE);
+    expect(native.updateCalls()).toBe(1);
   });
 
   it('shares one in-flight attempt between concurrent callers', async () => {
-    const { ensurePlayerSetup } = freshInitPlayer();
+    const native = fakePlayer();
+    const ensurePlayerSetup = createEnsurePlayerSetup(native.player);
 
     await Promise.all([ensurePlayerSetup(), ensurePlayerSetup()]);
 
-    expect(__player.calls('setupPlayer')).toHaveLength(1);
+    expect(native.setupCalls()).toBe(1);
+  });
+
+  it('keeps separate setups for separate players', async () => {
+    const first = fakePlayer();
+    const second = fakePlayer();
+
+    await createEnsurePlayerSetup(first.player)();
+    await createEnsurePlayerSetup(second.player)();
+
+    expect([first.setupCalls(), second.setupCalls()]).toEqual([1, 1]);
   });
 
   describe('when native setup never settles', () => {
@@ -70,8 +110,9 @@ describe('ensurePlayerSetup', () => {
     afterEach(() => jest.useRealTimers());
 
     it('rejects the caller once setup outlives its budget instead of waiting forever', async () => {
-      const { ensurePlayerSetup } = freshInitPlayer();
-      hangNextSetupPlayer();
+      const native = fakePlayer();
+      const ensurePlayerSetup = createEnsurePlayerSetup(native.player);
+      native.hangNextSetup();
 
       const settlement = settlementOf(ensurePlayerSetup());
 
@@ -83,20 +124,21 @@ describe('ensurePlayerSetup', () => {
     });
 
     it('starts a fresh attempt after a timed-out one instead of caching the hung call', async () => {
-      const { ensurePlayerSetup } = freshInitPlayer();
-      hangNextSetupPlayer();
+      const native = fakePlayer();
+      const ensurePlayerSetup = createEnsurePlayerSetup(native.player);
+      native.hangNextSetup();
       const timedOut = ensurePlayerSetup().catch((err: unknown) => err);
       await jest.advanceTimersByTimeAsync(PLAYER_SETUP_TIMEOUT_MS);
       await timedOut;
 
       await expect(ensurePlayerSetup()).resolves.toBeUndefined();
 
-      expect(__player.calls('setupPlayer')).toHaveLength(2);
-      expect(__player.calls('updateOptions')).toHaveLength(1);
+      expect(native.setupCalls()).toBe(ATTEMPTS_AFTER_A_FAILURE);
+      expect(native.updateCalls()).toBe(1);
     });
 
     it('clears the deadline once setup settles in time', async () => {
-      const { ensurePlayerSetup } = freshInitPlayer();
+      const ensurePlayerSetup = createEnsurePlayerSetup(fakePlayer().player);
 
       await ensurePlayerSetup();
 

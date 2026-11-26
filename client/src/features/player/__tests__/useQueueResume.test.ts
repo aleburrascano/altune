@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react-native';
+import { act, renderHook as renderHookBare } from '@testing-library/react-native';
 import TrackPlayer from 'react-native-track-player';
 
 import { signInTestUser } from '@testing/signInTestUser';
@@ -29,6 +29,12 @@ import {
   driveAppState,
   type AppStateDriver,
 } from '@testing/fakes/lifecycle/inMemoryAppStateSource';
+import { withNativePlayback } from '@features/player/__tests__/withNativePlayback';
+
+function renderHook<T>(callback: () => T) {
+  return renderHookBare(callback, { wrapper: withNativePlayback });
+}
+
 beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);
 });

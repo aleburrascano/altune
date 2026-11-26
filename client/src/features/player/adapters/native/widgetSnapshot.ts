@@ -1,10 +1,12 @@
 import TrackPlayer, { Event, State, type Progress } from 'react-native-track-player';
 
-import { reloadWidget, writeCoverFromUrl, writeSnapshot } from '@modules/altune-widget';
 import type { PlaybackTrack, QueueSource } from '@shared/playback';
 import { useQueueStore } from '@shared/playback';
 import { hasSignedInUser, onIdentityChange, onSignOut } from '@shared/session';
 import { warn } from '@shared/log';
+
+import { altuneWidgetBridge } from '@features/player/adapters/native/altuneWidgetBridge';
+import type { WidgetBridge } from '@features/player/ports/widgetBridge';
 
 const COVER_FILE_NAME = 'cover.jpg';
 
@@ -19,17 +21,23 @@ const SIGNED_OUT_JSON = JSON.stringify(SIGNED_OUT);
 
 const COVER_TIMEOUT_MS = 15_000;
 
-export function startWidgetSnapshotPublisher(): () => void {
-  const publisher = new SnapshotPublisher();
-  const unsubscribes = publisher.subscribe();
-  publisher.request();
+export function createWidgetSnapshotPublisher(widget: WidgetBridge): () => () => void {
   return () => {
-    publisher.stop();
-    unsubscribes.forEach((unsubscribe) => unsubscribe());
+    const publisher = new SnapshotPublisher(widget);
+    const unsubscribes = publisher.subscribe();
+    publisher.request();
+    return () => {
+      publisher.stop();
+      unsubscribes.forEach((unsubscribe) => unsubscribe());
+    };
   };
 }
 
+export const startWidgetSnapshotPublisher = createWidgetSnapshotPublisher(altuneWidgetBridge);
+
 class SnapshotPublisher {
+  constructor(private readonly widget: WidgetBridge) {}
+
   private stopped = false;
   private lastWrittenJson: string | null = null;
   private cover: CoverState | null = null;
@@ -113,7 +121,7 @@ class SnapshotPublisher {
 
   private writeUnlessSuperseded(attempt: CoverState): Promise<void> | void {
     if (this.isSuperseded(attempt)) return;
-    return writeCover(attempt.artworkUrl, this.coverTimeouts).then((written) => {
+    return writeCover(this.widget, attempt.artworkUrl, this.coverTimeouts).then((written) => {
       attempt.written = written;
     });
   }
@@ -129,9 +137,9 @@ class SnapshotPublisher {
 
   private writeIfChanged(json: string): void {
     if (this.stopped || json === this.lastWrittenJson) return;
-    writeSnapshot(json);
+    this.widget.writeSnapshot(json);
     this.lastWrittenJson = json;
-    reloadWidget();
+    this.widget.reloadWidget();
   }
 }
 
@@ -140,11 +148,12 @@ function isStillCurrent(artworkUrl: string): boolean {
 }
 
 function writeCover(
+  widget: WidgetBridge,
   artworkUrl: string,
   pending: Set<ReturnType<typeof setTimeout>>,
 ): Promise<boolean> {
   return withTimeout(
-    writeCoverFromUrl(artworkUrl, COVER_FILE_NAME),
+    widget.writeCoverFromUrl(artworkUrl, COVER_FILE_NAME),
     COVER_TIMEOUT_MS,
     pending,
   ).then(

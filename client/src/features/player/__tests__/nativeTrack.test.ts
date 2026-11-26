@@ -6,9 +6,13 @@ import {
   activeNativeTrackId,
   toNativeTrack,
   httpPlaybackPort,
+  installArtworkPlaceholder,
   installPlaybackPort,
 } from '@features/player';
 import { libraryTrack, previewTrack } from '@features/player/__tests__/fixtures';
+
+const PLACEHOLDER_URI = 'file:///assets/artwork-placeholder.png';
+
 beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);
 });
@@ -38,6 +42,14 @@ describe('toNativeTrack — identity and metadata', () => {
 
     expect(withoutArt.artwork).not.toBeNull();
     expect(withoutArt.artwork).not.toBe(withArt.artwork);
+  });
+
+  it('uses the placeholder the app installed when the track has no artwork', () => {
+    installArtworkPlaceholder(() => PLACEHOLDER_URI);
+
+    const native = toNativeTrack(libraryTrack({ artworkUrl: null }));
+
+    expect(native.artwork).toBe(PLACEHOLDER_URI);
   });
 });
 

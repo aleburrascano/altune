@@ -1,4 +1,3 @@
-import { Image } from 'react-native';
 import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
 import type { ResolvedAudioUrl } from '@shared/apiClient';
@@ -9,16 +8,13 @@ import {
   type TrackKey,
   isPlayablePreviewUrl,
 } from '@shared/playback';
-import { playbackPort } from '@features/player/shell/activePlaybackPort';
+import { playbackPort } from '@features/player/ports/activePlaybackPort';
+import { artworkPlaceholderUri } from '@features/player/ports/artworkPlaceholder';
 import { classifyPlaybackFailure, warnPlayback } from '@features/player/domain/playbackError';
 import { recordPresignOutcome } from '@features/player/domain/playbackHealth';
 import { libraryTrackId } from '@features/player/domain/playerStatus';
 import { MAX_PRESIGN } from '@features/player/domain/presignWindow';
 import { ContractError } from '@shared/failure';
-
-function artworkPlaceholder(): string {
-  return Image.resolveAssetSource(require('@assets/artwork-placeholder.png')).uri;
-}
 
 function playablePreviewUrl(previewUrl: string): string {
   if (!isPlayablePreviewUrl(previewUrl)) throw new ContractError('PreviewUrl', 'not an https url');
@@ -33,7 +29,7 @@ export function toNativeTrack(
     id: trackKey(track),
     title: track.title,
     artist: track.artist,
-    artwork: track.artworkUrl ?? artworkPlaceholder(),
+    artwork: track.artworkUrl ?? artworkPlaceholderUri(),
   };
   if (opts.streamUrl) return { ...base, url: opts.streamUrl };
   if (track.source.kind === 'preview') {

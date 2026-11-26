@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import { create } from 'zustand';
 
 import {
@@ -11,7 +10,6 @@ import {
 import {
   classifyPlaybackFailure,
   redactPlaybackErrorMessage,
-  type RedactedPlaybackFailure,
   warnPlayback,
 } from '@features/player/domain/playbackError';
 import { recordPlaybackFailure } from '@features/player/domain/playbackHealth';
@@ -53,14 +51,4 @@ export function reportLoadFailure(
 
 export function clearPlaybackError(): void {
   usePlaybackErrorStore.getState().clear();
-}
-
-export function usePlaybackErrorFor(key: TrackKey | null): RedactedPlaybackFailure | null {
-  const kind = usePlaybackErrorStore((s) => (key != null && s.key === key ? s.kind : null));
-  const message = usePlaybackErrorStore((s) => (key != null && s.key === key ? s.message : null));
-
-  return useMemo(
-    () => (kind !== null && message !== null ? { kind, message } : null),
-    [kind, message],
-  );
 }
