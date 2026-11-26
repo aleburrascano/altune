@@ -1522,8 +1522,7 @@ func TestContentBreaker_SearchTrippedProviderShortCircuitsContent(t *testing.T) 
 			provider: search.ProviderSoundCloud,
 			run: func(cb *search.CircuitBreaker, calls *atomic.Int32) (*search.ContentFetchResponse, error) {
 				p := &countingRelatedProvider{calls: calls}
-				svc := search.NewGetRelatedTracksService(map[string]search.RelatedTracksProvider{"soundcloud": p},
-					search.WithRelatedCircuitBreaker(cb))
+				svc := searchtest.NewRelatedTracksWithBreaker(t, map[string]search.RelatedTracksProvider{"soundcloud": p}, cb)
 				return svc.Execute(context.Background(), search.ProviderSoundCloud, "7", 10)
 			},
 		},
@@ -1608,8 +1607,7 @@ func TestContentBreaker_OnlyHealthFailuresCount(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cb := search.NewCircuitBreaker()
 			p := &search.FakeRelatedProvider{Err: tc.err}
-			svc := search.NewGetRelatedTracksService(map[string]search.RelatedTracksProvider{"soundcloud": p},
-				search.WithRelatedCircuitBreaker(cb))
+			svc := searchtest.NewRelatedTracksWithBreaker(t, map[string]search.RelatedTracksProvider{"soundcloud": p}, cb)
 			for range breakerTripsAfter * 2 {
 				_, _ = svc.Execute(context.Background(), search.ProviderSoundCloud, "bogus", 10)
 			}
@@ -1740,7 +1738,7 @@ func TestService_RepeatedSearch_ServesRelatedGroupsWithoutRefetching(t *testing.
 	albumProvider := &search.CountingAlbumTracksProvider{TracksByAlbum: tracksByAlbum}
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{&search.FakeProvider{Provider: search.ProviderDeezer, Results: organic}}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
 		c.ResultCache = search.NewFakeResultCache()
-		c.Related = search.NewFindRelatedService(querier, albumProvider, nil)
+		c.Related = searchtest.NewFindRelated(t, searchtest.RelatedLibrary(querier), searchtest.RelatedAlbumTracks(albumProvider))
 	})
 	user := search.NewUser()
 
@@ -1777,7 +1775,7 @@ func TestService_RepeatedSearch_KeepsRelatedLibraryMatchesPerUser(t *testing.T) 
 	}
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{&search.FakeProvider{Provider: search.ProviderDeezer, Results: organic}}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
 		c.ResultCache = search.NewFakeResultCache()
-		c.Related = search.NewFindRelatedService(querier, &search.CountingAlbumTracksProvider{TracksByAlbum: tracksByAlbum}, nil)
+		c.Related = searchtest.NewFindRelated(t, searchtest.RelatedLibrary(querier), searchtest.RelatedAlbumTracks(&search.CountingAlbumTracksProvider{TracksByAlbum: tracksByAlbum}))
 	})
 
 	searchAs(t, svc, owner, "humble")
@@ -1827,7 +1825,9 @@ func TestSearch_RelatedLibraryMatches_NeverLeakAnotherUsersLibrary(t *testing.T)
 	organic := search.DeezerTrack("Hit Single", "Band", 80)
 	organic.Album = album
 	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{organic}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Related = search.NewFindRelatedService(querier, nil, nil) })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
+		c.Related = searchtest.NewFindRelated(t, searchtest.RelatedLibrary(querier))
+	})
 
 	out, err := svc.Execute(context.Background(), userB, search.NewQuery(t, "hit single"))
 	if err != nil {

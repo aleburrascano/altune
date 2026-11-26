@@ -36,8 +36,8 @@ func albumFallback(deezer provider, breaker *providerguard.CircuitBreaker) (arti
 	return artistpage.NewSearchAlbumFallback(deezer.albumFallback, breaker)
 }
 
-func newRelatedService(t *providerTable, breaker *providerguard.CircuitBreaker) *related.GetRelatedTracksService {
-	return related.NewGetRelatedTracksService(t.relatedProviders(), related.WithRelatedCircuitBreaker(breaker))
+func newRelatedService(t *providerTable, breaker *providerguard.CircuitBreaker) (*related.GetRelatedTracksService, error) {
+	return related.NewGetRelatedTracksService(t.relatedProviders(), breaker)
 }
 
 func newArtistService(t *providerTable, s connections.Stores, breaker *providerguard.CircuitBreaker, bg *background.Tracker) (*artistpage.GetArtistContentService, error) {

@@ -119,6 +119,10 @@ func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 	if err != nil {
 		return handler.DiscoveryServices{}, fmt.Errorf("build the artist content service: %w", err)
 	}
+	relatedTracks, err := newRelatedService(t, breaker)
+	if err != nil {
+		return handler.DiscoveryServices{}, fmt.Errorf("build the related tracks service: %w", err)
+	}
 	return handler.DiscoveryServices{
 		Search:        search,
 		History:       history.NewListSearchHistoryService(s.History),
@@ -126,7 +130,7 @@ func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 		ClearHistory:  history.NewClearSearchHistoryService(s.History),
 		Album:         album,
 		Artist:        artist,
-		Related:       newRelatedService(t, breaker),
+		Related:       relatedTracks,
 		Enrich:        enrichment,
 		Suggest:       vocabulary.NewSuggestService(s.SpellingHints),
 		Event:         newEventService(w.deps.Activity, s),

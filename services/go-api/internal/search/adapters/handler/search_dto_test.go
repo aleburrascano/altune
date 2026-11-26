@@ -10,7 +10,7 @@ import (
 
 func servedItems(t *testing.T, results ...search.SearchResult) []json.RawMessage {
 	t.Helper()
-	router := buildRelatedRouter(&fakeRelatedTracksProvider{results: results})
+	router := buildRelatedRouter(t, &fakeRelatedTracksProvider{results: results})
 	rec := discServe(t, router, http.MethodGet, "/discovery/tracks/soundcloud/id-1/related", nil)
 	discAssertStatus(t, rec, http.StatusOK)
 	var body struct {

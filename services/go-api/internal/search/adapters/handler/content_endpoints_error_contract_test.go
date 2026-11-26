@@ -60,9 +60,9 @@ func errorContractRouter(t *testing.T) chi.Router {
 		Artist: searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{
 			search.ProviderITunes: timingOut, search.ProviderSoundCloud: healthy,
 		}, searchtest.ArtistBreaker(breaker)),
-		Related: search.NewGetRelatedTracksService(map[string]search.RelatedTracksProvider{
+		Related: searchtest.NewRelatedTracksWithBreaker(t, map[string]search.RelatedTracksProvider{
 			search.ProviderITunes.String(): timingOut, search.ProviderSoundCloud.String(): healthy,
-		}, search.WithRelatedCircuitBreaker(breaker)),
+		}, breaker),
 	})
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)

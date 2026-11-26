@@ -709,8 +709,8 @@ func (p *fakeRelatedTracksProvider) GetRelatedTracks(_ context.Context, _ search
 	return p.results, nil
 }
 
-func buildRelatedRouter(provider *fakeRelatedTracksProvider) chi.Router {
-	svc := search.NewGetRelatedTracksService(map[string]search.RelatedTracksProvider{
+func buildRelatedRouter(t testing.TB, provider *fakeRelatedTracksProvider) chi.Router {
+	svc := searchtest.NewRelatedTracks(t, map[string]search.RelatedTracksProvider{
 		"soundcloud": provider,
 	})
 	h := search.NewDiscoveryHandler(search.DiscoveryServices{Related: svc})
@@ -734,7 +734,7 @@ func TestHandleRelatedTracks(t *testing.T) {
 				},
 			},
 		}}
-		router := buildRelatedRouter(provider)
+		router := buildRelatedRouter(t, provider)
 
 		rec := discServe(t, router, http.MethodGet, "/discovery/tracks/soundcloud/12345/related", nil)
 		discAssertStatus(t, rec, http.StatusOK)
@@ -751,14 +751,14 @@ func TestHandleRelatedTracks(t *testing.T) {
 	})
 
 	t.Run("non-soundcloud provider returns 404 unserved", func(t *testing.T) {
-		router := buildRelatedRouter(&fakeRelatedTracksProvider{})
+		router := buildRelatedRouter(t, &fakeRelatedTracksProvider{})
 
 		rec := discServe(t, router, http.MethodGet, "/discovery/tracks/deezer/9/related", nil)
 		assertErrorCode(t, rec, http.StatusNotFound, "discovery.content_unserved")
 	})
 
 	t.Run("missing external id returns 400", func(t *testing.T) {
-		router := buildRelatedRouter(&fakeRelatedTracksProvider{})
+		router := buildRelatedRouter(t, &fakeRelatedTracksProvider{})
 
 		rec := discServe(t, router, http.MethodGet, "/discovery/tracks/soundcloud//related", nil)
 		if rec.Code != http.StatusBadRequest && rec.Code != http.StatusNotFound {

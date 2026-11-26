@@ -92,13 +92,30 @@ func planArtworkAndRelated(p *searchPlan, w wiring, breaker *providerguard.Circu
 	p.collaborators.Artwork = filler
 	p.choose("artwork")
 
-	similar := w.table.named(rowDeezer).similar
-	p.collaborators.Related = related.NewFindRelatedService(
-		persistence.NewPostgresRelationshipQuerier(w.stores.Pool), similar, similar,
-		related.WithFindRelatedCircuitBreaker(breaker),
-	)
+	findRelated, err := newFindRelatedService(w.table, w.stores, breaker)
+	if err != nil {
+		return fmt.Errorf("build the find related service: %w", err)
+	}
+	p.collaborators.Related = findRelated
 	p.choose("find_related")
 	return nil
+}
+
+func newFindRelatedService(t *providerTable, s connections.Stores, breaker *providerguard.CircuitBreaker) (*related.FindRelatedService, error) {
+	similar := t.named(rowDeezer).similar
+	library, err := related.LibraryMatches(persistence.NewPostgresRelationshipQuerier(s.Pool))
+	if err != nil {
+		return nil, fmt.Errorf("build the library matches source: %w", err)
+	}
+	albumTracks, err := related.AlbumTracksSource(similar, breaker)
+	if err != nil {
+		return nil, fmt.Errorf("build the album tracks source: %w", err)
+	}
+	artistAlbums, err := related.ArtistAlbumsSource(similar, breaker)
+	if err != nil {
+		return nil, fmt.Errorf("build the artist albums source: %w", err)
+	}
+	return related.NewFindRelatedService(library, albumTracks, artistAlbums)
 }
 
 func newArtworkFiller(w wiring) (*artwork.ArtworkFiller, error) {

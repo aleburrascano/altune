@@ -899,7 +899,7 @@ func TestSearch_RelatedGroupsReachTheWire(t *testing.T) {
 	})
 
 	t.Run("an artist's albums come back as a group with its items", func(t *testing.T) {
-		findRelated := search.NewFindRelatedService(nil, nil, stubContentProvider{provider: search.ProviderDeezer})
+		findRelated := searchtest.NewFindRelated(t, searchtest.RelatedArtistAlbums(stubContentProvider{provider: search.ProviderDeezer}))
 		router := searchOnlyRouter(searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{provider}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Related = findRelated }))
 
 		rec := discServe(t, router, http.MethodGet, "/discovery/search?q=nas&save_history=false", nil)

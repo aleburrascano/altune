@@ -195,7 +195,7 @@ func TestOwnershipGolden_ArtistEndpoints(t *testing.T) {
 }
 
 func TestOwnershipGolden_Related(t *testing.T) {
-	relatedSvc := search.NewGetRelatedTracksService(map[string]search.RelatedTracksProvider{
+	relatedSvc := searchtest.NewRelatedTracks(t, map[string]search.RelatedTracksProvider{
 		"soundcloud": &fakeRelatedTracksProvider{results: goldenTracks()},
 	})
 	router := goldenRouter(t, search.DiscoveryServices{Related: relatedSvc}, &recordingTrackNumberFiller{done: make(chan struct{})})

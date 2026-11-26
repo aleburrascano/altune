@@ -128,7 +128,7 @@ func TestContentEndpoints_NilServiceDegradedEnvelope(t *testing.T) {
 
 func TestHandleRelatedTracks_LimitClamping(t *testing.T) {
 	provider := &fakeRelatedTracksProvider{results: seedTracks(5)}
-	svc := search.NewGetRelatedTracksService(map[string]search.RelatedTracksProvider{
+	svc := searchtest.NewRelatedTracks(t, map[string]search.RelatedTracksProvider{
 		"soundcloud": provider,
 	})
 	h := search.NewDiscoveryHandler(search.DiscoveryServices{Related: svc})
