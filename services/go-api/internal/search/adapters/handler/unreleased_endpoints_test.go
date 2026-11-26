@@ -371,6 +371,37 @@ func unreleasedSearchRouter(t *testing.T, store *search.FakeUnreleasedStore) chi
 	return r
 }
 
+func noUnreleasedRouter(t *testing.T) chi.Router {
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Unreleased: search.NoUnreleased{}}), time.Now)
+	r := chi.NewRouter()
+	r.Use(discAsTestUser)
+	r.Mount("/discovery", h.Routes())
+	return r
+}
+
+func TestHandleArtistUnreleased_WithNoUnreleasedSourceIsAnEmptyList(t *testing.T) {
+	rec := discServe(t, noUnreleasedRouter(t), http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Don", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	got := decodeUnreleased(t, rec.Body.Bytes())
+	if len(got.Items) != 0 || got.Pending {
+		t.Errorf("body = %+v, want no items and not pending", got)
+	}
+}
+
+func TestHandleUnreleasedSearch_WithNoUnreleasedSourceIsAnEmptyList(t *testing.T) {
+	rec := discServe(t, noUnreleasedRouter(t), http.MethodGet, "/discovery/unreleased/search?q=cancun", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	var body search.UnreleasedSearchResponseDTO
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode %s: %v", rec.Body.Bytes(), err)
+	}
+	if len(body.Items) != 0 || !strings.Contains(rec.Body.String(), `"items":[]`) {
+		t.Errorf("body = %s, want an empty items list", rec.Body.String())
+	}
+}
+
 func TestHandleUnreleasedSearch_ReturnsHitsInStoreOrderWithTheirArtist(t *testing.T) {
 	carti := search.UnreleasedArtistKey{Provider: search.ProviderDeezer, ExternalID: "42"}
 	store := &search.FakeUnreleasedStore{Hits: []search.UnreleasedHit{
