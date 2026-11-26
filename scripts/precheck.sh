@@ -13,7 +13,7 @@ cd "$root" || exit 3
 lint_cache="$root/.cache/golangci-lint"
 default_base_ref() { git remote get-url gitea >/dev/null 2>&1 && git rev-parse --verify --quiet gitea/main >/dev/null && echo gitea/main || echo origin/main; }
 base_ref=${1:-$(default_base_ref)}
-base=$(git merge-base "$base_ref" HEAD) || { echo "precheck: no merge base with $base_ref"; exit 3; }
+base=$(git merge-base "$base_ref" HEAD) || { echo "precheck: no merge base with $base_ref. Fetch it with: git fetch ${base_ref%%/*} ${base_ref#*/}"; exit 3; }
 
 PATH="$PATH:$(go env GOPATH 2>/dev/null)/bin"
 

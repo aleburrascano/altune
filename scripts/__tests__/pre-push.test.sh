@@ -40,6 +40,7 @@ STUB_RC=3 run_hook "refs/heads/x $SHA refs/heads/x $ZERO"
 [ "$RC" = 1 ] || fail "exit 3 from precheck means a tool is missing and blocks the push (exit $RC)"
 grep -qF "bash scripts/ci/go-tools.sh" "$WORK/out.log" || fail "exit 3 must say how to install what is missing: $(cat "$WORK/out.log")"
 grep -qF "worktree-deps.sh" "$WORK/out.log" || fail "exit 3 must name the dependency installer"
+grep -qF "git fetch gitea main" "$WORK/out.log" || fail "exit 3 must also cover a missing base"
 
 STUB_RC=1 run_hook "refs/heads/x $SHA refs/heads/x $ZERO"
 [ "$RC" = 1 ] || fail "a failing precheck blocks the push (exit $RC)"

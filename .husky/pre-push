@@ -13,7 +13,7 @@ rc=0
 [ -f scripts/precheck.sh ] && { env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE CLIENT_MUTATE_RUNS_ELSEWHERE=1 bash scripts/precheck.sh || rc=$?; }
 case $rc in
   0) ;;
-  3) echo "❌ pre-push: a tool or dependency is missing, so some checks could not run (see the SKIP lines above). Install it, then push again: bash scripts/ci/go-tools.sh for golangci-lint and govulncheck, bash scripts/worktree-deps.sh client (or the folder named) for node dependencies."; exit 1 ;;
+  3) echo "❌ pre-push: some checks could not run (see the SKIP line or the first line above). Fix what it names, then push again: install a missing tool (bash scripts/ci/go-tools.sh for golangci-lint and govulncheck, bash scripts/worktree-deps.sh client or the folder named for node dependencies, or the tool the SKIP line names), or fetch a missing base (git fetch gitea main)."; exit 1 ;;
   *) echo "❌ pre-push: checks failed. Fix the FAIL lines above and push again."; exit 1 ;;
 esac
 
