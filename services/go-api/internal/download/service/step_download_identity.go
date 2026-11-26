@@ -189,7 +189,7 @@ func sourceOf(ac *AcquisitionContext, candidate ports.AudioCandidate) judgedSour
 
 func (s *DownloadStep) classifyMatch(ctx context.Context, ac *AcquisitionContext, match ports.RecordingMatch, probed float64, source judgedSource) AudioVerdict {
 	input := judgeInput(ac, match.Results, probed, source)
-	input.Audio.RecordingFacts = s.versionFacts(ctx, input)
+	input.Audio.RecordingFacts = versionFactsOf(ctx, &s.factsCache, s.recordingLookup, input)
 	return AudioVerdictOf(audioverdict.Judge(input, s.cuts), match.Results)
 }
 
@@ -421,19 +421,19 @@ func (c *recordingFactsCache) store(mbid string, facts ports.RecordingFacts, fou
 	c.entries[mbid] = facts
 }
 
-func (s *DownloadStep) versionFacts(ctx context.Context, input audioverdict.Input) map[string]ports.RecordingFacts {
+func versionFactsOf(ctx context.Context, cache *recordingFactsCache, lookup ports.RecordingLookup, input audioverdict.Input) map[string]ports.RecordingFacts {
 	facts := make(map[string]ports.RecordingFacts)
 	candidates := audioverdict.VersionLookupCandidates(input)
 	for _, mbid := range candidates[:min(len(candidates), maxVersionLookupsPerCandidate)] {
-		if recording, found := s.recordingFacts(ctx, mbid); found {
+		if recording, found := cachedRecordingFacts(ctx, cache, lookup, mbid); found {
 			facts[mbid] = recording
 		}
 	}
 	return facts
 }
 
-func (s *DownloadStep) recordingFacts(ctx context.Context, mbid string) (ports.RecordingFacts, bool) {
-	facts, found, err := s.factsCache.lookup(ctx, mbid, s.recordingLookup.RecordingByMBID)
+func cachedRecordingFacts(ctx context.Context, cache *recordingFactsCache, lookup ports.RecordingLookup, mbid string) (ports.RecordingFacts, bool) {
+	facts, found, err := cache.lookup(ctx, mbid, lookup.RecordingByMBID)
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.version_lookup_failed", "mbid", mbid, "error", redact.LogError(err))
 		return ports.RecordingFacts{}, false

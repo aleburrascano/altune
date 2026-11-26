@@ -120,7 +120,7 @@ func (s *AcquireTrackAudioService) fingerprintInto(ctx context.Context, ac *Acqu
 		return 0, fmt.Errorf("fingerprint the stored file: %w", err)
 	}
 	input.Audio.AcoustID = match.Results
-	input.Audio.RecordingFacts = NewDownloadStep(nil, s.workspace, s.identifier, s.recordingLookup, s.audioProber, s.verifySkips).versionFacts(ctx, *input)
+	input.Audio.RecordingFacts = versionFactsOf(ctx, &recordingFactsCache{}, s.recordingLookup, *input)
 	return topScore(match.Results), nil
 }
 
