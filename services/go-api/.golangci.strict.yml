@@ -179,6 +179,7 @@ linters:
       - path: internal/shared/httpserver/
         linters:
           - forbidigo
+        text: 'use of `(http\.\w+|recover)`'
       - path: (^internal/platform/outbound/|/[^/]*test/)
         linters:
           - forbidigo
