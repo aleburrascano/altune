@@ -187,9 +187,7 @@ func planRecording(p *searchPlan, w wiring) error {
 		p.collaborators.Behavior = scoring
 		p.choose("behavioral_ranking")
 	}
-	if w.deps.Activity != nil {
-		p.collaborators.Activity = w.deps.Activity
-		p.choose("activity")
-	}
+	p.collaborators.Activity = w.deps.Activity
+	p.choose("activity")
 	return nil
 }

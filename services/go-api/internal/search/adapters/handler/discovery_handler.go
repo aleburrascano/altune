@@ -1,11 +1,12 @@
 package handler
 
 import (
+	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/core/details"
 	"altune/go-api/internal/search/internal/core/favorites"
 	"altune/go-api/internal/search/internal/core/history"
+	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/service/artistpage"
-	"altune/go-api/internal/search/service/inlibrary"
 	"altune/go-api/internal/search/service/query"
 	"altune/go-api/internal/search/service/related"
 	"altune/go-api/internal/search/service/unreleased"
@@ -15,8 +16,11 @@ import (
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
 	"altune/go-api/internal/shared/telemetry"
+	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -30,16 +34,14 @@ type DiscoveryHandler struct {
 	albumSvc        *artistpage.GetAlbumTracksService
 	artistSvc       *artistpage.GetArtistContentService
 	relatedSvc      *related.GetRelatedTracksService
-	unreleasedSvc   *unreleased.Service
-	enrichSvc       *details.DetailsService
+	unreleasedSvc   UnreleasedReader
+	enrichSvc       Enricher
 	suggestSvc      *vocabulary.SuggestService
 	eventSvc        *useractivity.RecordEventService
 	favoritesSvc    *favorites.FavoritesService
-	clientEvents    *telemetry.ClientEvents
-
-	enrichers DetailEnrichers
-
-	ownership *inlibrary.OwnershipEnrichmentService
+	clientEvents    ClientEventSink
+	enrichers       DetailEnrichers
+	ownership       OwnershipStamper
 
 	searchLimiter    func(http.Handler) http.Handler
 	suggestLimiter   func(http.Handler) http.Handler
@@ -54,10 +56,31 @@ type DetailEnrichers struct {
 	Lyrics *details.LyricsService
 }
 
-func (h *DiscoveryHandler) WithDetailEnrichers(e DetailEnrichers) *DiscoveryHandler {
-	h.enrichers = e
-	return h
+type UnreleasedReader interface {
+	Search(ctx context.Context, query string) ([]ports.UnreleasedHit, error)
+	Lookup(ctx context.Context, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) (unreleased.Lookup, error)
+	Warm(artists []unreleased.ArtistToRefresh)
 }
+
+type NoUnreleased struct{}
+
+func (NoUnreleased) Search(context.Context, string) ([]ports.UnreleasedHit, error) {
+	return []ports.UnreleasedHit{}, nil
+}
+
+func (NoUnreleased) Lookup(context.Context, domain.ProviderName, string, string, map[domain.ProviderName]string) (unreleased.Lookup, error) {
+	return unreleased.Lookup{}, nil
+}
+
+func (NoUnreleased) Warm([]unreleased.ArtistToRefresh) {}
+
+type ClientEventSink interface {
+	Emit(ctx context.Context, event telemetry.ClientEvent)
+}
+
+type NoClientEvents struct{}
+
+func (NoClientEvents) Emit(context.Context, telemetry.ClientEvent) {}
 
 type DiscoveryServices struct {
 	Search        *query.Service
@@ -67,13 +90,51 @@ type DiscoveryServices struct {
 	Album         *artistpage.GetAlbumTracksService
 	Artist        *artistpage.GetArtistContentService
 	Related       *related.GetRelatedTracksService
-	Enrich        *details.DetailsService
+	Enrich        Enricher
 	Suggest       *vocabulary.SuggestService
 	Event         *useractivity.RecordEventService
 	Favorites     *favorites.FavoritesService
+	Unreleased    UnreleasedReader
+	Enrichers     DetailEnrichers
+	Ownership     OwnershipStamper
+	ClientEvents  ClientEventSink
 }
 
-var ErrClockRequired = errors.New("handler: the discovery handler requires a clock")
+var (
+	ErrClockRequired   = errors.New("handler: the discovery handler requires a clock")
+	ErrServiceRequired = errors.New("handler: the discovery handler requires every service")
+)
+
+func (s DiscoveryServices) missing() []string {
+	checks := []struct {
+		name    string
+		missing bool
+	}{
+		{"search", s.Search == nil},
+		{"history", s.History == nil},
+		{"record history", s.RecordHistory == nil},
+		{"clear history", s.ClearHistory == nil},
+		{"album", s.Album == nil},
+		{"artist", s.Artist == nil},
+		{"related", s.Related == nil},
+		{"enrich", s.Enrich == nil},
+		{"suggest", s.Suggest == nil},
+		{"event", s.Event == nil},
+		{"favorites", s.Favorites == nil},
+		{"unreleased", s.Unreleased == nil},
+		{"deezer enricher", s.Enrichers.Deezer == nil},
+		{"lyrics", s.Enrichers.Lyrics == nil},
+		{"ownership", s.Ownership == nil},
+		{"client events", s.ClientEvents == nil},
+	}
+	var names []string
+	for _, c := range checks {
+		if c.missing {
+			names = append(names, c.name)
+		}
+	}
+	return names
+}
 
 func (h *DiscoveryHandler) WithRateLimits(limits DiscoveryRateLimits) *DiscoveryHandler {
 	h.searchLimiter = newUserRateLimiter(limits.Search, h.now)
@@ -82,11 +143,6 @@ func (h *DiscoveryHandler) WithRateLimits(limits DiscoveryRateLimits) *Discovery
 	h.contentLimiter = newUserRateLimiter(limits.Content, h.now)
 	h.favoritesLimiter = newUserRateLimiter(limits.Favorites, h.now)
 	h.historyLimiter = newUserRateLimiter(limits.History, h.now)
-	return h
-}
-
-func (h *DiscoveryHandler) WithClientEvents(c *telemetry.ClientEvents) *DiscoveryHandler {
-	h.clientEvents = c
 	return h
 }
 
@@ -102,6 +158,9 @@ func NewDiscoveryHandler(svcs DiscoveryServices, now clock.Func) (*DiscoveryHand
 	if now == nil {
 		return nil, ErrClockRequired
 	}
+	if names := svcs.missing(); len(names) > 0 {
+		return nil, fmt.Errorf("%w: missing %s", ErrServiceRequired, strings.Join(names, ", "))
+	}
 	h := &DiscoveryHandler{
 		now:             now,
 		searchSvc:       svcs.Search,
@@ -115,6 +174,10 @@ func NewDiscoveryHandler(svcs DiscoveryServices, now clock.Func) (*DiscoveryHand
 		suggestSvc:      svcs.Suggest,
 		eventSvc:        svcs.Event,
 		favoritesSvc:    svcs.Favorites,
+		unreleasedSvc:   svcs.Unreleased,
+		enrichers:       svcs.Enrichers,
+		ownership:       svcs.Ownership,
+		clientEvents:    svcs.ClientEvents,
 	}
 	return h.WithRateLimits(DefaultDiscoveryRateLimits), nil
 }

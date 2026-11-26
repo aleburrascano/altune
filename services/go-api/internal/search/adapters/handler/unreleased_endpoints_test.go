@@ -16,9 +16,9 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func unreleasedRouter(genius *search.FakeGeniusSongCatalog, catalog []string) chi.Router {
+func unreleasedRouter(t *testing.T, genius *search.FakeGeniusSongCatalog, catalog []string) chi.Router {
 	svc := searchtest.MustUnreleased(search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{Titles: catalog}, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10}, searchtest.UnreleasedWiring(search.NoUnreleasedCache{})))
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{}, time.Now).WithUnreleased(svc)
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Unreleased: svc}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -35,7 +35,7 @@ func decodeUnreleased(t *testing.T, body []byte) search.UnreleasedResponseDTO {
 }
 
 func TestHandleArtistUnreleased_NoGeniusMatchIsAnEmptyList(t *testing.T) {
-	router := unreleasedRouter(&search.FakeGeniusSongCatalog{ArtistFound: false}, nil)
+	router := unreleasedRouter(t, &search.FakeGeniusSongCatalog{ArtistFound: false}, nil)
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/999/unreleased?name=Nobody", nil)
 
@@ -46,23 +46,9 @@ func TestHandleArtistUnreleased_NoGeniusMatchIsAnEmptyList(t *testing.T) {
 }
 
 func TestHandleArtistUnreleased_WithoutAnArtistNameIsAnEmptyList(t *testing.T) {
-	router := unreleasedRouter(&search.FakeGeniusSongCatalog{ArtistFound: true}, nil)
+	router := unreleasedRouter(t, &search.FakeGeniusSongCatalog{ArtistFound: true}, nil)
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/1/unreleased", nil)
-
-	discAssertStatus(t, rec, http.StatusOK)
-	if items := decodeUnreleased(t, rec.Body.Bytes()).Items; len(items) != 0 {
-		t.Errorf("items = %v, want none", items)
-	}
-}
-
-func TestHandleArtistUnreleased_ServiceNotConfiguredIsAnEmptyList(t *testing.T) {
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{}, time.Now)
-	r := chi.NewRouter()
-	r.Use(discAsTestUser)
-	r.Mount("/discovery", h.Routes())
-
-	rec := discServe(t, r, http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Don", nil)
 
 	discAssertStatus(t, rec, http.StatusOK)
 	if items := decodeUnreleased(t, rec.Body.Bytes()).Items; len(items) != 0 {
@@ -80,7 +66,7 @@ func TestHandleArtistUnreleased_ReturnsUnreleasedSongsWithTheAppShape(t *testing
 		},
 		MediaByID: map[int]bool{2: true},
 	}
-	router := unreleasedRouter(genius, []string{"Magnolia"})
+	router := unreleasedRouter(t, genius, []string{"Magnolia"})
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Playboi+Carti", nil)
 
@@ -99,7 +85,7 @@ func TestHandleArtistUnreleased_ReturnsUnreleasedSongsWithTheAppShape(t *testing
 }
 
 func TestHandleArtistUnreleased_UpstreamFailureIsAnError(t *testing.T) {
-	router := unreleasedRouter(&search.FakeGeniusSongCatalog{ArtistFound: true, Err: errors.New("genius unavailable")}, nil)
+	router := unreleasedRouter(t, &search.FakeGeniusSongCatalog{ArtistFound: true, Err: errors.New("genius unavailable")}, nil)
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Don", nil)
 
@@ -111,7 +97,7 @@ func TestHandleArtistUnreleased_UpstreamFailureIsAnError(t *testing.T) {
 func TestHandleArtistUnreleased_SlowJobAnswersPendingWithNoItems(t *testing.T) {
 	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: []search.UnreleasedSong{{GeniusID: 1, Title: "Leak"}}, Gate: make(chan struct{})}
 	svc := searchtest.MustUnreleased(search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{}, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, Wait: 10 * time.Millisecond}, searchtest.UnreleasedWiring(search.NoUnreleasedCache{})))
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{}, time.Now).WithUnreleased(svc)
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Unreleased: svc}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -129,7 +115,7 @@ func TestHandleArtistUnreleased_ReturnsOpenURLAndOpenHost(t *testing.T) {
 		ArtistID: 7, ArtistFound: true,
 		Songs: []search.UnreleasedSong{{GeniusID: 1, Title: "Cancun", OpenURL: "https://mega.nz/file/abc", OpenHost: "mega.nz"}},
 	}
-	rec := discServe(t, unreleasedRouter(genius, nil), http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Artist", nil)
+	rec := discServe(t, unreleasedRouter(t, genius, nil), http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Artist", nil)
 
 	discAssertStatus(t, rec, http.StatusOK)
 	if body := rec.Body.String(); !strings.Contains(body, `"open_url":"https://mega.nz/file/abc"`) || !strings.Contains(body, `"open_host":"mega.nz"`) {
@@ -148,7 +134,7 @@ func TestHandleArtistUnreleased_ReturnsAudioLinksAsAlwaysAnArray(t *testing.T) {
 			1: {HasMedia: true, AudioLinks: []search.AudioLink{{Provider: "soundcloud", URL: "https://soundcloud.com/a/b"}}},
 		},
 	}
-	router := unreleasedRouter(genius, nil)
+	router := unreleasedRouter(t, genius, nil)
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Artist", nil)
 
@@ -172,7 +158,7 @@ func ownedUnreleasedRouter(t *testing.T, reader goldenOwnershipReader) chi.Route
 		},
 	}
 	svc := searchtest.MustUnreleased(search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{}, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10}, searchtest.UnreleasedWiring(search.NoUnreleasedCache{})))
-	h := wireGoldenOwnership(t, search.MustNewDiscoveryHandler(search.DiscoveryServices{}, time.Now).WithUnreleased(svc), reader, search.AbsentTrackNumberFiller{})
+	h := wireGoldenOwnership(t, search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Unreleased: svc}), time.Now), reader, search.AbsentTrackNumberFiller{})
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -213,7 +199,7 @@ func TestHandleArtistUnreleased_TrackerOnlyItemHasNullGeniusFieldsOnTheWire(t *t
 		AudioLinks: []search.AudioLink{{Provider: "pixeldrain", ExternalID: "ozSpSjn7", URL: "https://pixeldrain.com/u/ozSpSjn7"}},
 	}}}
 	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10}, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedTrackers(trackers))))
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{}, time.Now).WithUnreleased(svc)
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Unreleased: svc}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -232,7 +218,7 @@ func TestHandleArtistUnreleased_QualityRankIsTheServersRankAndZeroWhenUnknown(t 
 		{GeniusID: 1, Title: "Ranked", Quality: "Lossless"},
 		{GeniusID: 2, Title: "Unranked"},
 	}}
-	rec := discServe(t, unreleasedRouter(genius, nil), http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Artist", nil)
+	rec := discServe(t, unreleasedRouter(t, genius, nil), http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Artist", nil)
 
 	discAssertStatus(t, rec, http.StatusOK)
 	var wire struct {
@@ -250,7 +236,7 @@ func TestHandleArtistUnreleased_QualityRankIsTheServersRankAndZeroWhenUnknown(t 
 
 func TestHandleArtistUnreleased_GeniusItemKeepsItsIDAndURLAndNullTrackerFields(t *testing.T) {
 	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: []search.UnreleasedSong{{GeniusID: 9, Title: "Leak", GeniusURL: "https://genius.com/l"}}}
-	rec := discServe(t, unreleasedRouter(genius, nil), http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Artist", nil)
+	rec := discServe(t, unreleasedRouter(t, genius, nil), http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Artist", nil)
 
 	discAssertStatus(t, rec, http.StatusOK)
 	item := decodeUnreleased(t, rec.Body.Bytes()).Items[0]
@@ -282,7 +268,7 @@ func TestHandleArtistUnreleased_StoreBuiltArtistAnswersFromTheStoreWithNoGeniusC
 	}}}
 	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: []search.UnreleasedSong{{GeniusID: 9, Title: "Other"}}}
 	svc := searchtest.MustUnreleased(search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{}, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10}, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store))))
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{}, time.Now).WithUnreleased(svc)
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Unreleased: svc}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -317,7 +303,7 @@ func TestHandleArtistUnreleased_OwnedVersionIsStampedByItsFullTitleNotTheBaseTit
 		search.OwnershipKey("Sports Car [V3]", "Carti"): {TrackID: "saved-v3", AcquisitionStatus: "ready"},
 		search.OwnershipKey("Other", "Carti"):           {TrackID: "streaming-other", AcquisitionStatus: "ready"},
 	}}
-	h := wireGoldenOwnership(t, search.MustNewDiscoveryHandler(search.DiscoveryServices{}, time.Now).WithUnreleased(svc), owned, search.AbsentTrackNumberFiller{})
+	h := wireGoldenOwnership(t, search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Unreleased: svc}), time.Now), owned, search.AbsentTrackNumberFiller{})
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
 	router.Mount("/discovery", h.Routes())
@@ -358,7 +344,7 @@ func TestHandleArtistUnreleased_BestVersionTitleIsTheServersPickedVersion(t *tes
 		},
 		DetailByID: map[int]search.GeniusSongDetail{1: {AudioLinks: link}},
 	}
-	router := unreleasedRouter(genius, nil)
+	router := unreleasedRouter(t, genius, nil)
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Carti", nil)
 
@@ -376,13 +362,44 @@ func TestHandleArtistUnreleased_BestVersionTitleIsTheServersPickedVersion(t *tes
 	}
 }
 
-func unreleasedSearchRouter(store *search.FakeUnreleasedStore) chi.Router {
+func unreleasedSearchRouter(t *testing.T, store *search.FakeUnreleasedStore) chi.Router {
 	svc := searchtest.MustUnreleased(search.NewUnreleasedService(&search.FakeGeniusSongCatalog{}, &search.ArtistCatalogTitles{}, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10}, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store))))
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{}, time.Now).WithUnreleased(svc)
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Unreleased: svc}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
 	return r
+}
+
+func noUnreleasedRouter(t *testing.T) chi.Router {
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Unreleased: search.NoUnreleased{}}), time.Now)
+	r := chi.NewRouter()
+	r.Use(discAsTestUser)
+	r.Mount("/discovery", h.Routes())
+	return r
+}
+
+func TestHandleArtistUnreleased_WithNoUnreleasedSourceIsAnEmptyList(t *testing.T) {
+	rec := discServe(t, noUnreleasedRouter(t), http.MethodGet, "/discovery/artists/deezer/1/unreleased?name=Don", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	got := decodeUnreleased(t, rec.Body.Bytes())
+	if len(got.Items) != 0 || got.Pending {
+		t.Errorf("body = %+v, want no items and not pending", got)
+	}
+}
+
+func TestHandleUnreleasedSearch_WithNoUnreleasedSourceIsAnEmptyList(t *testing.T) {
+	rec := discServe(t, noUnreleasedRouter(t), http.MethodGet, "/discovery/unreleased/search?q=cancun", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	var body search.UnreleasedSearchResponseDTO
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode %s: %v", rec.Body.Bytes(), err)
+	}
+	if len(body.Items) != 0 || !strings.Contains(rec.Body.String(), `"items":[]`) {
+		t.Errorf("body = %s, want an empty items list", rec.Body.String())
+	}
 }
 
 func TestHandleUnreleasedSearch_ReturnsHitsInStoreOrderWithTheirArtist(t *testing.T) {
@@ -392,7 +409,7 @@ func TestHandleUnreleasedSearch_ReturnsHitsInStoreOrderWithTheirArtist(t *testin
 		{Artist: search.UnreleasedArtistKey{Provider: search.ProviderDeezer, ExternalID: "7"}, ArtistName: "Don Toliver", Song: search.UnreleasedSong{GeniusID: 2, Title: "Cancun Remix"}},
 	}}
 
-	rec := discServe(t, unreleasedSearchRouter(store), http.MethodGet, "/discovery/unreleased/search?q=cancun", nil)
+	rec := discServe(t, unreleasedSearchRouter(t, store), http.MethodGet, "/discovery/unreleased/search?q=cancun", nil)
 
 	discAssertStatus(t, rec, http.StatusOK)
 	var body search.UnreleasedSearchResponseDTO
@@ -416,7 +433,7 @@ func TestHandleUnreleasedSearch_ReturnsHitsInStoreOrderWithTheirArtist(t *testin
 func TestHandleUnreleasedSearch_AOneCharacterQueryIsAnEmptyListAndSkipsTheStore(t *testing.T) {
 	store := &search.FakeUnreleasedStore{Hits: []search.UnreleasedHit{{ArtistName: "A", Song: search.UnreleasedSong{Title: "x"}}}}
 
-	rec := discServe(t, unreleasedSearchRouter(store), http.MethodGet, "/discovery/unreleased/search?q=x", nil)
+	rec := discServe(t, unreleasedSearchRouter(t, store), http.MethodGet, "/discovery/unreleased/search?q=x", nil)
 
 	discAssertStatus(t, rec, http.StatusOK)
 	if got := rec.Body.String(); got != "{\"items\":[]}\n" {
@@ -430,7 +447,7 @@ func TestHandleUnreleasedSearch_AOneCharacterQueryIsAnEmptyListAndSkipsTheStore(
 func TestHandleUnreleasedSearch_StoreFailureIsAnError(t *testing.T) {
 	store := &search.FakeUnreleasedStore{SearchErr: errors.New("db down")}
 
-	rec := discServe(t, unreleasedSearchRouter(store), http.MethodGet, "/discovery/unreleased/search?q=cancun", nil)
+	rec := discServe(t, unreleasedSearchRouter(t, store), http.MethodGet, "/discovery/unreleased/search?q=cancun", nil)
 
 	if rec.Code < 500 {
 		t.Errorf("status = %d, want a 5xx", rec.Code)
@@ -459,7 +476,7 @@ func TestArtistUnreleased_KnownIDsKeepValidEntriesAndSkipTheRest(t *testing.T) {
 		svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.UnreleasedConfig{}, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store))))
 		r := chi.NewRouter()
 		r.Use(discAsTestUser)
-		r.Mount("/discovery", search.MustNewDiscoveryHandler(search.DiscoveryServices{}, time.Now).WithUnreleased(svc).Routes())
+		r.Mount("/discovery", search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Unreleased: svc}), time.Now).Routes())
 
 		rec := discServe(t, r, http.MethodGet, "/discovery/artists/deezer/27/unreleased?name=Nas&ids="+url.QueryEscape(tc.ids), nil)
 

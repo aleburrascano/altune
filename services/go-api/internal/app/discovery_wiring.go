@@ -26,6 +26,8 @@ func NewEvalDiscovery(ctx context.Context, cfg *config.Config, h EvalHandles) (*
 	}
 	deps := searchsettings.Deps(ctx, cfg, h.Transport)
 	deps.Background = &background.Tracker{}
+	deps.Activity = search.NoActivityFeed{}
+	deps.ClientEvents = search.NoClientEvents{}
 	deps.Tracker = h.Tracker
 	deps.Pool = h.Pool
 	return search.New(deps)

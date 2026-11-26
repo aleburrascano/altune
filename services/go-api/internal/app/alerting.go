@@ -29,11 +29,11 @@ func (a *App) startAlertMonitor(ctx context.Context) error {
 }
 
 func NewAlertMonitor(runner *jobs.Runner, notifier monitoring.AlertNotifier, interval time.Duration, conditions []monitoring.Condition) (*monitoring.AlertMonitor, error) {
-	monitor, err := monitoring.NewAlertMonitor(notifier, interval, time.Now, conditions...)
+	monitor, err := monitoring.NewAlertMonitor(notifier, interval, time.Now, runner.LeaderContextFor(jobs.AlertMonitor), conditions...)
 	if err != nil {
 		return nil, fmt.Errorf("alert monitor: %w", err)
 	}
-	return monitor.WithLeadership(runner.LeaderContextFor(jobs.AlertMonitor)), nil
+	return monitor, nil
 }
 
 func (a *App) alertConditions(coverage alerts.CoverageEvents) ([]monitoring.Condition, error) {

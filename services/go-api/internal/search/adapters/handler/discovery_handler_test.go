@@ -188,14 +188,14 @@ func buildDiscoveryRouter(t *testing.T,
 		artistSvc = searchtest.NewArtistContent(t, artistProviders)
 	}
 
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{
 		Search:        searchSvc,
 		History:       historySvc,
 		RecordHistory: searchtest.NewHistoryRecorder(t, historyRepo),
 		ClearHistory:  clearHistorySvc,
 		Album:         albumSvc,
 		Artist:        artistSvc,
-	}, time.Now)
+	}), time.Now)
 
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
@@ -230,10 +230,10 @@ func (nopEventStore) Append(context.Context, search.InteractionEvent) error { re
 
 func TestHandleRecordEvent_ServiceValidation(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{
 		Search: searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker()),
 		Event:  searchtest.NewRecordEvent(t, nopEventStore{}),
-	}, time.Now)
+	}), time.Now)
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
 	router.Mount("/discovery", h.Routes())
@@ -631,8 +631,8 @@ func mustEnrichment(svc *search.DetailsService, err error) *search.DetailsServic
 	return svc
 }
 
-func buildEnrichmentRouter(svc *search.DetailsService) chi.Router {
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Enrich: svc}, time.Now)
+func buildEnrichmentRouter(t *testing.T, svc search.Enricher) chi.Router {
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Enrich: svc}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -652,7 +652,7 @@ func sampleAlbumEnrichment() search.MusicBrainzEnrichment {
 func TestHandleEnrichment(t *testing.T) {
 	t.Run("valid request returns enrichment DTO", func(t *testing.T) {
 		svc := mustEnrichment(search.NewEnrichmentService(&fakeMetadataEnricher{enrichment: sampleAlbumEnrichment()}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{}))
-		router := buildEnrichmentRouter(svc)
+		router := buildEnrichmentRouter(t, svc)
 
 		rec := discServe(t, router, http.MethodGet,
 			"/discovery/enrichment?kind=album&title=DAMN.&subtitle=Kendrick+Lamar", nil)
@@ -673,25 +673,25 @@ func TestHandleEnrichment(t *testing.T) {
 	})
 
 	t.Run("missing kind returns 400", func(t *testing.T) {
-		router := buildEnrichmentRouter(mustEnrichment(search.NewEnrichmentService(&fakeMetadataEnricher{}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{})))
+		router := buildEnrichmentRouter(t, mustEnrichment(search.NewEnrichmentService(&fakeMetadataEnricher{}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{})))
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?title=DAMN.", nil)
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})
 
 	t.Run("unknown kind returns 400", func(t *testing.T) {
-		router := buildEnrichmentRouter(mustEnrichment(search.NewEnrichmentService(&fakeMetadataEnricher{}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{})))
+		router := buildEnrichmentRouter(t, mustEnrichment(search.NewEnrichmentService(&fakeMetadataEnricher{}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{})))
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?kind=playlistx&title=X", nil)
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})
 
 	t.Run("blank title and no mbid returns 400", func(t *testing.T) {
-		router := buildEnrichmentRouter(mustEnrichment(search.NewEnrichmentService(&fakeMetadataEnricher{}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{})))
+		router := buildEnrichmentRouter(t, mustEnrichment(search.NewEnrichmentService(&fakeMetadataEnricher{}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{})))
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?kind=album", nil)
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})
 
-	t.Run("nil service returns 503 enrichment_unavailable", func(t *testing.T) {
-		router := buildEnrichmentRouter(nil)
+	t.Run("unconfigured enrichment returns 503 enrichment_unavailable", func(t *testing.T) {
+		router := buildEnrichmentRouter(t, search.UnconfiguredEnrichment{})
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?kind=album&title=X", nil)
 		assertErrorCode(t, rec, http.StatusServiceUnavailable, "enrichment_unavailable")
 	})
@@ -713,7 +713,7 @@ func buildRelatedRouter(t testing.TB, provider *fakeRelatedTracksProvider) chi.R
 	svc := searchtest.NewRelatedTracks(t, map[string]search.RelatedTracksProvider{
 		"soundcloud": provider,
 	})
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Related: svc}, time.Now)
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Related: svc}), time.Now)
 
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)

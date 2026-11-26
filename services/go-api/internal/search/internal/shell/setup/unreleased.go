@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"altune/go-api/internal/search/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/cache"
 	"altune/go-api/internal/search/internal/adapters/connections"
 	"altune/go-api/internal/search/internal/adapters/persistence"
@@ -12,14 +13,14 @@ import (
 )
 
 type unreleasedServices struct {
-	lookup  *unreleased.Service
+	lookup  handler.UnreleasedReader
 	refresh *unreleased.Service
 }
 
 func newUnreleasedServices(d connections.Deps, t *providerTable, s connections.Stores, artists *artistpage.GetArtistContentService) (unreleasedServices, error) {
 	songs, lists := t.named(rowGenius).unreleasedSongs, t.named(rowTrackers).unreleasedLists
 	if songs == nil && lists == nil {
-		return unreleasedServices{}, nil
+		return unreleasedServices{lookup: handler.NoUnreleased{}}, nil
 	}
 	var genius ports.GeniusSongCatalog = unreleased.NoGenius{}
 	if songs != nil {

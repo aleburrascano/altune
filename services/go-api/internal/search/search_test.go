@@ -394,7 +394,7 @@ func TestNew_RefusesDepsWithoutTheHandlesItNeeds(t *testing.T) {
 	if err == nil {
 		t.Fatal("New accepted deps with no transport, logger or lifecycle")
 	}
-	want := "discovery: deps are missing Lifecycle, Background, Tracker, Logger, Transport, CacheOps, ProviderTimeout, ChartTimeout"
+	want := "discovery: deps are missing Lifecycle, Background, Tracker, Logger, Activity, ClientEvents, Transport, CacheOps, ProviderTimeout, ChartTimeout"
 	if err.Error() != want {
 		t.Errorf("error = %q, want %q", err, want)
 	}
@@ -457,7 +457,7 @@ func TestNew_LogsTheSearchOptionsForAProdLikeConfig(t *testing.T) {
 	h.start()
 
 	assertLines(t, h.logLines("discovery.search"), []string{
-		`level=INFO msg=discovery.search options=history,deadline,artwork,find_related,event_store`,
+		`level=INFO msg=discovery.search options=history,deadline,artwork,find_related,event_store,activity`,
 	})
 }
 
@@ -471,7 +471,6 @@ func TestSearchSettings_EachSwitchAddsItsOptionOnlyWhenOn(t *testing.T) {
 		{"CrossKindProminence", func(h *harness) { h.deps.Search.CrossKindProminence = true }, "cross_kind_prominence"},
 		{"Exploration", func(h *harness) { h.deps.Search.Exploration, h.deps.Search.ExplorationRate = true, 0.1 }, "exploration"},
 		{"BehavioralRanking", func(h *harness) { h.deps.Search.BehavioralRanking = true }, "behavioral_ranking"},
-		{"Activity", func(h *harness) { h.deps.Activity = &activityRecorder{} }, "activity"},
 		{"Pool", func(h *harness) { h.deps.Pool = unreachablePool(h.t) }, "favorites"},
 		{"Redis", func(h *harness) {
 			h.deps.Redis = goredis.NewClient(&goredis.Options{Addr: miniredis.RunT(h.t).Addr()})
@@ -916,6 +915,8 @@ func newHarness(t *testing.T, providers search.ProviderSettings) *harness {
 		Tracker:         searchtest.NewTracker(t),
 		Logger:          slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{ReplaceAttr: dropTime})),
 		Transport:       transport,
+		Activity:        search.NoActivityFeed{},
+		ClientEvents:    search.NoClientEvents{},
 		ProviderTimeout: 10 * time.Second,
 		ChartTimeout:    15 * time.Second,
 		CacheOps:        new(expvar.Map),

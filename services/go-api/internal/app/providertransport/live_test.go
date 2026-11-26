@@ -12,7 +12,14 @@ import (
 )
 
 func TestLive_IsOneSharedTransport(t *testing.T) {
-	first, second := providertransport.Live(), providertransport.Live()
+	first, err := providertransport.Live()
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := providertransport.Live()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if first == nil {
 		t.Fatal("Live() = nil, want the live transport")
@@ -40,7 +47,12 @@ func TestLive_RefusesALoopbackUpstreamAndCountsTheCall(t *testing.T) {
 
 	before := providerCalls()
 
-	resp, err := (&http.Client{Transport: providertransport.Live()}).Get(upstream.URL)
+	transport, err := providertransport.Live()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := (&http.Client{Transport: transport}).Get(upstream.URL)
 	if err == nil {
 		_ = resp.Body.Close()
 		t.Fatal("a loopback upstream was fetched through the live provider transport")

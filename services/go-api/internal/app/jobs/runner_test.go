@@ -545,7 +545,7 @@ func TestLeaderContext_TheAlertMonitorEvaluatesOnlyDuringItsTerm(t *testing.T) {
 	defer cancel()
 
 	var evaluations atomic.Int32
-	monitor, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, leaderLoopTick, time.Now, monitoring.Condition{
+	monitor, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, leaderLoopTick, time.Now, r.LeaderContext, monitoring.Condition{
 		Key: "dependency_down",
 		Eval: func(context.Context) *monitoring.Alert {
 			evaluations.Add(1)
@@ -555,7 +555,7 @@ func TestLeaderContext_TheAlertMonitorEvaluatesOnlyDuringItsTerm(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewAlertMonitor: %v", err)
 	}
-	monitor.WithLeadership(r.LeaderContext).Start(ctx)
+	monitor.Start(ctx)
 
 	assertPassesFollowTheTerm(t, e, &evaluations)
 }
@@ -568,10 +568,13 @@ func TestLeaderContext_TheEvalMeterRunsOnlyDuringItsTerm(t *testing.T) {
 	defer cancel()
 
 	var runs atomic.Int32
-	meter := monitoring.NewEvalMeter(leaderLoopTick, func(context.Context) (monitoring.EvalMeterResult, error) {
+	meter, err := monitoring.NewEvalMeter(leaderLoopTick, func(context.Context) (monitoring.EvalMeterResult, error) {
 		runs.Add(1)
 		return monitoring.EvalMeterResult{}, nil
-	}).WithLeadership(r.LeaderContext)
+	}, r.LeaderContext)
+	if err != nil {
+		t.Fatalf("NewEvalMeter: %v", err)
+	}
 	meter.Start(ctx)
 
 	assertPassesFollowTheTerm(t, e, &runs)
@@ -586,12 +589,15 @@ func TestLeaderContext_LosingTheTermCutsOffAnEvalMidRun(t *testing.T) {
 
 	started := make(chan struct{})
 	stoppedBecause := make(chan error, 1)
-	meter := monitoring.NewEvalMeter(time.Hour, func(runCtx context.Context) (monitoring.EvalMeterResult, error) {
+	meter, err := monitoring.NewEvalMeter(time.Hour, func(runCtx context.Context) (monitoring.EvalMeterResult, error) {
 		close(started)
 		<-runCtx.Done()
 		stoppedBecause <- context.Cause(runCtx)
 		return monitoring.EvalMeterResult{}, runCtx.Err()
-	}).WithLeadership(r.LeaderContext)
+	}, r.LeaderContext)
+	if err != nil {
+		t.Fatalf("NewEvalMeter: %v", err)
+	}
 	meter.Start(ctx)
 	<-started
 

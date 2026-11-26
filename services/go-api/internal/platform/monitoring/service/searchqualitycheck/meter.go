@@ -47,7 +47,18 @@ type Meter struct {
 	background.Background
 }
 
-func New(interval time.Duration, runner Runner) *Meter {
+var (
+	ErrRunnerRequired     = errors.New("the eval meter requires a runner")
+	ErrLeadershipRequired = errors.New("the eval meter requires a leadership scope, pass background.EveryPassLeads to run on every pass")
+)
+
+func New(interval time.Duration, runner Runner, leadership LeadershipScope) (*Meter, error) {
+	if runner == nil {
+		return nil, ErrRunnerRequired
+	}
+	if leadership == nil {
+		return nil, ErrLeadershipRequired
+	}
 	if interval <= 0 {
 		interval = defaultInterval
 	}
@@ -55,22 +66,11 @@ func New(interval time.Duration, runner Runner) *Meter {
 		interval:   interval,
 		runTimeout: defaultRunTimeout,
 		runner:     runner,
-		leadership: background.EveryPassLeads,
-	}
-}
-
-func (m *Meter) WithLeadership(scope LeadershipScope) *Meter {
-	if scope == nil {
-		return m
-	}
-	m.leadership = scope
-	return m
+		leadership: leadership,
+	}, nil
 }
 
 func (m *Meter) Start(ctx context.Context) {
-	if m.runner == nil {
-		return
-	}
 	m.Spawn(ctx, m.loop)
 }
 

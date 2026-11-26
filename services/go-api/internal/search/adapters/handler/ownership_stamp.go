@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 )
@@ -28,21 +29,37 @@ func (h *DiscoveryHandler) writeContentFetch(
 	httpserver.WriteJSON(w, http.StatusOK, dto)
 }
 
-func (h *DiscoveryHandler) stampOwnership(ctx context.Context, userId ids.UserId, items []inlibrary.OwnableItem) {
-	if h.ownership != nil {
-		h.ownership.StampOwnership(ctx, userId, items)
+type OwnershipStamper interface {
+	StampOwnership(ctx context.Context, userId ids.UserId, items []inlibrary.OwnableItem)
+	EnrichAlbumTracks(ctx context.Context, userId ids.UserId, items []inlibrary.OwnableItem) <-chan struct{}
+}
+
+type NoOwnership struct{}
+
+func (NoOwnership) StampOwnership(context.Context, ids.UserId, []inlibrary.OwnableItem) {}
+
+func (NoOwnership) EnrichAlbumTracks(context.Context, ids.UserId, []inlibrary.OwnableItem) <-chan struct{} {
+	done := make(chan struct{})
+	close(done)
+	return done
+}
+
+var ErrOwnershipRequired = errors.New("handler: the ownership stamper is required, pass NoOwnership to switch it off")
+
+func (h *DiscoveryHandler) AttachOwnership(stamper OwnershipStamper) error {
+	if stamper == nil {
+		return ErrOwnershipRequired
 	}
+	h.ownership = stamper
+	return nil
+}
+
+func (h *DiscoveryHandler) stampOwnership(ctx context.Context, userId ids.UserId, items []inlibrary.OwnableItem) {
+	h.ownership.StampOwnership(ctx, userId, items)
 }
 
 func (h *DiscoveryHandler) enrichAlbumOwnership(ctx context.Context, userId ids.UserId, items []inlibrary.OwnableItem) {
-	if h.ownership != nil {
-		h.ownership.EnrichAlbumTracks(ctx, userId, items)
-	}
-}
-
-func (h *DiscoveryHandler) WithOwnershipEnrichment(svc *inlibrary.OwnershipEnrichmentService) *DiscoveryHandler {
-	h.ownership = svc
-	return h
+	_ = h.ownership.EnrichAlbumTracks(ctx, userId, items)
 }
 
 func ownableItems(slates ...[]SearchResultDTO) []inlibrary.OwnableItem {

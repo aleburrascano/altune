@@ -14,7 +14,6 @@ import (
 	"altune/go-api/internal/search/service/useractivity"
 	"altune/go-api/internal/search/service/vocabulary"
 	"context"
-	"errors"
 	"fmt"
 	"time"
 )
@@ -75,7 +74,7 @@ func New(d connections.Deps) (*Discovery, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build the featured artist resolver: %w", err)
 	}
-	discoveryHandler, err := newHandler(d, t, s, services, unreleasedServices.lookup)
+	discoveryHandler, err := newHandler(services, unreleasedServices.lookup)
 	if err != nil {
 		return nil, err
 	}
@@ -112,9 +111,13 @@ func (d *Discovery) RankingOnlySearch() *query.Service {
 func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 	breaker := providerguard.NewCircuitBreaker()
 	t, s := w.table, w.stores
-	enrichment, err := newEnrichmentService(t, s, w.artwork)
-	if err != nil && !errors.Is(err, errEnrichmentSwitchedOff) {
+	enrichment, err := newEnrichment(t, s, w.artwork)
+	if err != nil {
 		return handler.DiscoveryServices{}, fmt.Errorf("build the enrichment service: %w", err)
+	}
+	enrichers, err := newDetailEnrichers(t, s)
+	if err != nil {
+		return handler.DiscoveryServices{}, err
 	}
 	search, err := newSearchService(w, breaker)
 	if err != nil {
@@ -161,6 +164,9 @@ func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 		Artist:        artist,
 		Related:       relatedTracks,
 		Enrich:        enrichment,
+		Enrichers:     enrichers,
+		Ownership:     handler.NoOwnership{},
+		ClientEvents:  w.deps.ClientEvents,
 		Suggest:       vocabulary.NewSuggestService(s.SpellingHints),
 		Event:         eventService,
 		Favorites:     favoritesService,
@@ -168,22 +174,14 @@ func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 }
 
 func newEventService(activity ports.ActivityFeed, s connections.Stores) (*useractivity.RecordEventService, error) {
-	if activity == nil {
-		activity = useractivity.NoopActivityFeed{}
-	}
 	return useractivity.NewRecordEventService(s.Events, activity)
 }
 
-func newHandler(d connections.Deps, t *providerTable, s connections.Stores, services handler.DiscoveryServices, unreleasedLookup *unreleased.Service) (*handler.DiscoveryHandler, error) {
-	enrichers, err := newDetailEnrichers(t, s)
-	if err != nil {
-		return nil, err
-	}
+func newHandler(services handler.DiscoveryServices, unreleasedLookup handler.UnreleasedReader) (*handler.DiscoveryHandler, error) {
+	services.Unreleased = unreleasedLookup
 	h, err := handler.NewDiscoveryHandler(services, time.Now)
 	if err != nil {
 		return nil, fmt.Errorf("build the discovery handler: %w", err)
 	}
-	h.WithDetailEnrichers(enrichers)
-	h.WithUnreleased(unreleasedLookup)
-	return h.WithClientEvents(d.ClientEvents), nil
+	return h, nil
 }

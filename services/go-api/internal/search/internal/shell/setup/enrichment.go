@@ -6,16 +6,13 @@ import (
 	"altune/go-api/internal/search/internal/adapters/connections"
 	"altune/go-api/internal/search/internal/core/details"
 	"altune/go-api/internal/search/internal/core/ports"
-	"errors"
 	"fmt"
 )
 
-var errEnrichmentSwitchedOff = errors.New("enrichment is switched off: MusicBrainz is not configured")
-
-func newEnrichmentService(t *providerTable, s connections.Stores, artwork ports.TaggingArtworkLookup) (*details.DetailsService, error) {
+func newEnrichment(t *providerTable, s connections.Stores, artwork ports.TaggingArtworkLookup) (handler.Enricher, error) {
 	enricher := t.named(rowMusicBrainz).enrichment
 	if enricher == nil {
-		return nil, errEnrichmentSwitchedOff
+		return handler.UnconfiguredEnrichment{}, nil
 	}
 	enrichmentCache := cache.NewRedisEnrichmentCache(s.Redis, s.CacheOption())
 	return details.NewEnrichmentService(enricher, artwork, enrichmentCache, enrichmentCache)

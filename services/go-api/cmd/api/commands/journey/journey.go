@@ -42,7 +42,11 @@ func RankingOnlySearcher(ctx context.Context, cfg *config.Config, pool *pgxpool.
 	if err != nil {
 		return nil, err
 	}
-	disc, err := app.NewEvalDiscovery(ctx, cfg, app.EvalHandles{Pool: pool, Transport: providertransport.Live(), Tracker: tracker})
+	transport, err := providertransport.Live()
+	if err != nil {
+		return nil, err
+	}
+	disc, err := app.NewEvalDiscovery(ctx, cfg, app.EvalHandles{Pool: pool, Transport: transport, Tracker: tracker})
 	if err != nil {
 		return nil, err
 	}

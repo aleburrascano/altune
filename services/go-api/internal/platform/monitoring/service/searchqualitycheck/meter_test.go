@@ -2,6 +2,7 @@ package searchqualitycheck_test
 
 import (
 	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
@@ -64,9 +65,19 @@ func (r *runs) assertNoTickStarts(t *testing.T, why string) {
 	}
 }
 
-func newMeter(runner monitoring.EvalMeterRunner) (*monitoring.EvalMeter, *runs) {
+func mustMeter(t *testing.T, interval time.Duration, runner monitoring.EvalMeterRunner, scope background.OnlyWhileLeader) *monitoring.EvalMeter {
+	t.Helper()
+	m, err := monitoring.NewEvalMeter(interval, runner, scope)
+	if err != nil {
+		t.Fatalf("NewEvalMeter: %v", err)
+	}
+	return m
+}
+
+func newMeter(t *testing.T, runner monitoring.EvalMeterRunner) (*monitoring.EvalMeter, *runs) {
+	t.Helper()
 	r := &runs{begin: make(chan bool), ended: make(chan struct{}, 1)}
-	return monitoring.NewEvalMeter(time.Millisecond, runner).WithLeadership(r.scope), r
+	return mustMeter(t, time.Millisecond, runner, r.scope), r
 }
 
 func start(t *testing.T, m *monitoring.EvalMeter) {
@@ -81,7 +92,7 @@ func start(t *testing.T, m *monitoring.EvalMeter) {
 
 func steppedMeter(t *testing.T, runner monitoring.EvalMeterRunner) (*monitoring.EvalMeter, *runs) {
 	t.Helper()
-	m, r := newMeter(runner)
+	m, r := newMeter(t, runner)
 	start(t, m)
 	return m, r
 }
@@ -114,7 +125,7 @@ func meterAfterOneRun(t *testing.T, res monitoring.EvalMeterResult, err error) *
 
 func TestStatus_MarshalsEachStateAsItsWireString(t *testing.T) {
 	meters := map[string]*monitoring.EvalMeter{
-		"no_data":    monitoring.NewEvalMeter(0, returning(monitoring.EvalMeterResult{}, nil)),
+		"no_data":    mustMeter(t, 0, returning(monitoring.EvalMeterResult{}, nil), background.EveryPassLeads),
 		"ok":         meterAfterOneRun(t, monitoring.EvalMeterResult{Score: 0.9, Baseline: 0.8}, nil),
 		"regression": meterAfterOneRun(t, monitoring.EvalMeterResult{Score: 0.7, Baseline: 0.8, Regressed: true}, nil),
 		"error":      meterAfterOneRun(t, monitoring.EvalMeterResult{}, errors.New("provider unreachable")),
@@ -129,8 +140,7 @@ func TestStatus_MarshalsEachStateAsItsWireString(t *testing.T) {
 
 func TestMeter_IsAlwaysEnabled(t *testing.T) {
 	for name, m := range map[string]*monitoring.EvalMeter{
-		"without a runner": monitoring.NewEvalMeter(0, nil),
-		"with a runner":    monitoring.NewEvalMeter(0, returning(monitoring.EvalMeterResult{}, nil)),
+		"with a runner": mustMeter(t, 0, returning(monitoring.EvalMeterResult{}, nil), background.EveryPassLeads),
 	} {
 		if st := m.Status(); !st.Enabled || st.State == "disabled" {
 			t.Errorf("%s: status = %+v, want enabled and never disabled", name, st)
@@ -139,7 +149,7 @@ func TestMeter_IsAlwaysEnabled(t *testing.T) {
 }
 
 func TestMeter_NoDataBeforeFirstRun(t *testing.T) {
-	m := monitoring.NewEvalMeter(0, returning(monitoring.EvalMeterResult{}, nil))
+	m := mustMeter(t, 0, returning(monitoring.EvalMeterResult{}, nil), background.EveryPassLeads)
 	if st := m.Status(); st.State != "no_data" {
 		t.Fatalf("state = %q, want no_data before any run", st.State)
 	}
@@ -214,7 +224,7 @@ func TestMeter_RunnerRunsUnderAFiveMinuteDeadline(t *testing.T) {
 
 func TestMeter_PausedTickSkipsRun(t *testing.T) {
 	calls := 0
-	m, r := newMeter(func(context.Context) (monitoring.EvalMeterResult, error) {
+	m, r := newMeter(t, func(context.Context) (monitoring.EvalMeterResult, error) {
 		calls++
 		return monitoring.EvalMeterResult{Score: 0.9, Baseline: 0.8}, nil
 	})
@@ -326,5 +336,16 @@ func TestMeter_CancelledRunKeepsLastGoodResult(t *testing.T) {
 	st := m.Status()
 	if calls != 2 || st.State != "ok" || st.Error != "" || st.Score == nil || *st.Score != 0.81 {
 		t.Fatalf("calls = %d, status = %+v, want ok with the last good score after a cancelled run", calls, st)
+	}
+}
+
+func TestNewEvalMeter_RefusesAMissingRunnerOrLeadershipScope(t *testing.T) {
+	runner := returning(monitoring.EvalMeterResult{}, nil)
+
+	if _, err := monitoring.NewEvalMeter(0, nil, background.EveryPassLeads); !errors.Is(err, monitoring.ErrEvalMeterRunnerRequired) {
+		t.Errorf("nil runner: err = %v, want ErrEvalMeterRunnerRequired", err)
+	}
+	if _, err := monitoring.NewEvalMeter(0, runner, nil); !errors.Is(err, monitoring.ErrEvalMeterLeadershipRequired) {
+		t.Errorf("nil scope: err = %v, want ErrEvalMeterLeadershipRequired", err)
 	}
 }

@@ -35,7 +35,7 @@ func (r erroringFavoritesRepo) ListForUser(context.Context, ids.UserId) ([]searc
 
 func buildFavoritesRouter(t *testing.T, err error) chi.Router {
 	svc := searchtest.NewFavorites(t, erroringFavoritesRepo{err: err})
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Favorites: svc}, time.Now)
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Favorites: svc}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -131,9 +131,9 @@ func TestFavoritesEndpoints_ServiceErrorsUseTypedContract(t *testing.T) {
 }
 
 func buildFavoritesLimitedRouter(t *testing.T, limits search.DiscoveryRateLimits) chi.Router {
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{
+	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{
 		Favorites: searchtest.NewFavorites(t, erroringFavoritesRepo{}),
-	}, time.Now).WithRateLimits(limits)
+	}), time.Now).WithRateLimits(limits)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -154,9 +154,9 @@ func TestFavoritesRateLimit_WritesShareOneBudgetThenReject(t *testing.T) {
 }
 
 func TestFavoritesRateLimit_DefaultBudgetThenRejects(t *testing.T) {
-	router := buildFrozenDefaultLimitsRouter(search.DiscoveryServices{
+	router := buildFrozenDefaultLimitsRouter(searchtest.CompleteServices(t, search.DiscoveryServices{
 		Favorites: searchtest.NewFavorites(t, erroringFavoritesRepo{}),
-	})
+	}))
 	const body = `{"kind":"album","title":"DAMN.","subtitle":"Kendrick Lamar"}`
 
 	for i := range search.DefaultDiscoveryRateLimits.Favorites.Max {

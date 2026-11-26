@@ -1,7 +1,9 @@
 package connections_test
 
 import (
+	"altune/go-api/internal/search/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/connections"
+	"altune/go-api/internal/search/service/useractivity"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/queuetimeout"
 	"context"
@@ -20,6 +22,8 @@ func depsWithProviderTimeout(timeout time.Duration) connections.Deps {
 		Tracker:         &background.Tracker{},
 		Logger:          slog.Default(),
 		Transport:       http.DefaultTransport,
+		Activity:        useractivity.NoopActivityFeed{},
+		ClientEvents:    handler.NoClientEvents{},
 		CacheOps:        new(expvar.Map),
 		ProviderTimeout: timeout,
 		ChartTimeout:    time.Second,

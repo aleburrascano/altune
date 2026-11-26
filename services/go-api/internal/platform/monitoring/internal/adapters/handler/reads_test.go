@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/platform/monitoring"
+	"altune/go-api/internal/shared/background"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -117,7 +118,13 @@ func TestReadsMetricsLive_NilSourceAnswersEmptyObject(t *testing.T) {
 }
 
 func TestReadsEval_ServesTheMeterStatus(t *testing.T) {
-	rec := serveRead(t, monitoring.Deps{Eval: monitoring.NewEvalMeter(0, nil)}, "/eval")
+	meter, err := monitoring.NewEvalMeter(0, func(context.Context) (monitoring.EvalMeterResult, error) {
+		return monitoring.EvalMeterResult{}, nil
+	}, background.EveryPassLeads)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := serveRead(t, monitoring.Deps{Eval: meter}, "/eval")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())

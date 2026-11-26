@@ -9,4 +9,8 @@ type (
 	EvalMeterRunner      = evalmeter.Runner
 )
 
-var NewEvalMeter = evalmeter.New
+var (
+	NewEvalMeter                   = evalmeter.New
+	ErrEvalMeterRunnerRequired     = evalmeter.ErrRunnerRequired
+	ErrEvalMeterLeadershipRequired = evalmeter.ErrLeadershipRequired
+)

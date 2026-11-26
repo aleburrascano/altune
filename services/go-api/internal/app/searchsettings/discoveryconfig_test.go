@@ -120,10 +120,10 @@ func TestDeps_CarriesTheLifecycleTransportTimeoutsAndCacheCounters(t *testing.T)
 }
 
 func TestClientEvents_FollowTheTelemetryExportSetting(t *testing.T) {
-	if searchsettings.ClientEvents(&config.Config{}) != nil {
+	if _, off := searchsettings.ClientEvents(&config.Config{}).(search.NoClientEvents); !off {
 		t.Error("no OTLP endpoint, yet discovery got client events to export")
 	}
-	if searchsettings.ClientEvents(&config.Config{OTLPEndpoint: "https://otlp.example.com"}) == nil {
+	if _, off := searchsettings.ClientEvents(&config.Config{OTLPEndpoint: "https://otlp.example.com"}).(search.NoClientEvents); off {
 		t.Error("an OTLP endpoint, yet discovery got no client events")
 	}
 }

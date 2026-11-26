@@ -68,9 +68,9 @@ func unreleasedConfig(cfg *config.Config) search.UnreleasedConfig {
 	}
 }
 
-func ClientEvents(cfg *config.Config) *telemetry.ClientEvents {
+func ClientEvents(cfg *config.Config) search.ClientEventSink {
 	if !cfg.HasTelemetryExport() {
-		return nil
+		return search.NoClientEvents{}
 	}
 	return telemetry.NewClientEvents(cfg.TelemetryUserKey, otel.GetLoggerProvider().Logger(telemetry.ScopeName))
 }

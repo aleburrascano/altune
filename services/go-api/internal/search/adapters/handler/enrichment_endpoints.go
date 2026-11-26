@@ -12,6 +12,16 @@ import (
 	"strings"
 )
 
+type Enricher interface {
+	Execute(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (domain.MusicBrainzEnrichment, error)
+}
+
+type UnconfiguredEnrichment struct{}
+
+func (UnconfiguredEnrichment) Execute(context.Context, domain.ResultKind, string, string, string) (domain.MusicBrainzEnrichment, error) {
+	return domain.MusicBrainzEnrichment{}, apierror.NewError(apierror.CodeEnrichmentUnavailable, "enrichment is not configured")
+}
+
 func parseKindParam(w http.ResponseWriter, r *http.Request) (domain.ResultKind, bool) {
 	kindStr := strings.TrimSpace(r.URL.Query().Get("kind"))
 	if kindStr == "" {
@@ -29,19 +39,9 @@ func parseKindParam(w http.ResponseWriter, r *http.Request) (domain.ResultKind, 
 func withEnricher(
 	w http.ResponseWriter,
 	r *http.Request,
-	available bool,
-	empty func() any,
 	call func() (any, error),
 	operation string,
 ) {
-	if !available {
-		if empty == nil {
-			httpserver.HandleServiceError(w, r, apierror.NewError(apierror.CodeEnrichmentUnavailable, "enrichment is not configured"))
-			return
-		}
-		httpserver.WriteJSON(w, http.StatusOK, empty())
-		return
-	}
 	result, err := call()
 	if err != nil {
 		httpserver.HandleServiceError(w, r, fmt.Errorf("%s: %w", operation, err))
@@ -108,8 +108,7 @@ func (h *DiscoveryHandler) handleEnrichment(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	withEnricher(w, r, h.enrichSvc != nil,
-		nil,
+	withEnricher(w, r,
 		degradedCall(
 			func() (domain.MusicBrainzEnrichment, error) {
 				return h.enrichSvc.Execute(r.Context(), kind, title, subtitle, mbid)
@@ -182,9 +181,7 @@ func namedEnrichmentParams(w http.ResponseWriter, r *http.Request) (domain.Resul
 func serveNamedEnrichment[E, D any](
 	w http.ResponseWriter,
 	r *http.Request,
-	available bool,
 	exec func(ctx context.Context, kind domain.ResultKind, title, subtitle string) (E, error),
-	empty E,
 	toDTO func(E) D,
 	stamp func(*D, bool),
 	source string,
@@ -194,8 +191,7 @@ func serveNamedEnrichment[E, D any](
 		return
 	}
 
-	withEnricher(w, r, available,
-		func() any { return toDTO(empty) },
+	withEnricher(w, r,
 		degradedCall(
 			func() (E, error) { return exec(r.Context(), kind, title, subtitle) },
 			toDTO, stamp),
@@ -203,13 +199,7 @@ func serveNamedEnrichment[E, D any](
 }
 
 func (h *DiscoveryHandler) handleDeezerEnrichment(w http.ResponseWriter, r *http.Request) {
-	svc := h.enrichers.Deezer
-	var exec func(context.Context, domain.ResultKind, string, string) (domain.DeezerEnrichment, error)
-	if svc != nil {
-		exec = svc.Execute
-	}
-	serveNamedEnrichment(w, r, svc != nil, exec,
-		domain.EmptyDeezerEnrichment(), deezerEnrichmentToDTO,
+	serveNamedEnrichment(w, r, h.enrichers.Deezer.Execute, deezerEnrichmentToDTO,
 		func(d *DeezerEnrichmentResponseDTO, v bool) { d.Degraded = v },
 		"deezer")
 }
@@ -250,8 +240,7 @@ func (h *DiscoveryHandler) handleLyrics(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	withEnricher(w, r, h.enrichers.Lyrics != nil,
-		func() any { return lyricsToDTO(domain.EmptyDeezerLyrics()) },
+	withEnricher(w, r,
 		degradedCall(
 			func() (domain.DeezerLyrics, error) { return h.enrichers.Lyrics.Execute(r.Context(), title, subtitle) },
 			lyricsToDTO,

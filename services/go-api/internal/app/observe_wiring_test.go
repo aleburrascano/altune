@@ -233,11 +233,14 @@ func TestEvalMeter_ALogInsideAPassCarriesTheJobAndARunID(t *testing.T) {
 	ring := captureLeaderLoopLogs(t)
 	passed := make(chan struct{}, 1)
 	var runner jobs.Runner
-	meter := app.NewEvalMeter(&runner, func(ctx context.Context) (monitoring.EvalMeterResult, error) {
+	meter, err := app.NewEvalMeter(&runner, func(ctx context.Context) (monitoring.EvalMeterResult, error) {
 		slog.InfoContext(ctx, "eval pass line")
 		passed <- struct{}{}
 		return monitoring.EvalMeterResult{}, nil
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 

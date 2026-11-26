@@ -28,7 +28,11 @@ func (a *App) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	assembly, err := Assemble(ctx, a.cfg, Handles{Pool: pool, Redis: redisClient, Transport: providertransport.Live(), Tracker: tracker, LogRing: a.logRing})
+	transport, err := providertransport.Live()
+	if err != nil {
+		return err
+	}
+	assembly, err := Assemble(ctx, a.cfg, Handles{Pool: pool, Redis: redisClient, Transport: transport, Tracker: tracker, LogRing: a.logRing})
 	if err != nil {
 		return err
 	}
