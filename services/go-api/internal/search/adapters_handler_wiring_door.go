@@ -1,8 +1,8 @@
 package search
 
 import (
-	handler "altune/go-api/internal/search/adapters/handler"
-	useractivity "altune/go-api/internal/search/service/useractivity"
+	handler "altune/go-api/internal/search/internal/adapters/handler"
+	useractivity "altune/go-api/internal/search/internal/service/useractivity"
 )
 
 type (
