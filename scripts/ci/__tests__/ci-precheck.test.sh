@@ -21,6 +21,10 @@ first=$(g rev-parse HEAD)
 printf 'two\n' >"$repo/a.txt"
 g add -A
 g commit -qm two
+second=$(g rev-parse HEAD)
+printf 'three\n' >"$repo/a.txt"
+g add -A
+g commit -qm three
 g update-ref refs/remotes/origin/main "$first"
 
 run() { (cd "$repo" && env "$@" bash "$script" 2>&1); }
@@ -37,8 +41,8 @@ t() {
 
 t 0 "a pull request is checked against origin/main with the whole module linted" "args=origin/main lint_whole=1 mutate_elsewhere=1" GITHUB_REF=refs/pull/1/merge
 t 0 "a push to main is checked against the commit before the push" "args=$first lint_whole=1" GITHUB_REF=refs/heads/main BEFORE="$first"
-t 0 "a push to main with an all-zero before falls back to the parent commit" "args=$first lint_whole=1" GITHUB_REF=refs/heads/main BEFORE=0000000000000000000000000000000000000000
-t 0 "a push to main with an unknown before falls back to the parent commit" "args=$first lint_whole=1" GITHUB_REF=refs/heads/main BEFORE=1111111111111111111111111111111111111111
+t 0 "a push to main with an all-zero before falls back to the parent commit" "args=$second lint_whole=1" GITHUB_REF=refs/heads/main BEFORE=0000000000000000000000000000000000000000
+t 0 "a push to main with an unknown before falls back to the parent commit" "args=$second lint_whole=1" GITHUB_REF=refs/heads/main BEFORE=1111111111111111111111111111111111111111
 t 1 "a red precheck is a red run" "args=origin/main" GITHUB_REF=refs/pull/1/merge STUB_RC=1
 
 rm -rf "$repo/.git"
