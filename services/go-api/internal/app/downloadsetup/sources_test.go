@@ -23,6 +23,7 @@ import (
 
 func liveTiers(t *testing.T, cfg *config.Config) (downloadsetup.SourceOrder, download.Verification) {
 	t.Helper()
+	cfg.AcquisitionFileHostPageTimeout = time.Second
 	tiers, tools, err := downloadsetup.EnabledSources(t.Context(), cfg, nil, http.DefaultTransport)
 	if err != nil {
 		t.Fatalf("LiveTiers: %v", err)

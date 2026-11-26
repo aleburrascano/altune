@@ -2,10 +2,9 @@ package audiofiles
 
 import (
 	"altune/go-api/internal/library/internal/core/ports"
+	"altune/go-api/internal/platform/outbound"
 	"context"
 	"fmt"
-	"net"
-	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -47,14 +46,14 @@ func NewObjectStorageAudioStore(cfg ObjectStorageConfig) (*ObjectStorageAudioSto
 	}
 	host = strings.TrimRight(host, "/")
 
-	transport := &http.Transport{
-		DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
+	transport := outbound.NewTransport(outbound.TransportOptions{
+		DialTimeout:           10 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: 30 * time.Second,
 		IdleConnTimeout:       90 * time.Second,
 		MaxIdleConns:          10,
 		MaxIdleConnsPerHost:   10,
-	}
+	})
 
 	client, err := minio.New(host, &minio.Options{
 		Creds:     credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),

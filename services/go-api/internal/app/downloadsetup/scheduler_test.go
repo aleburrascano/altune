@@ -76,6 +76,7 @@ func eventTap(t *testing.T) *monitoring.EventTap {
 
 func newOfflineScheduler(t *testing.T, cfg *config.Config, sources downloadsetup.SourceOrder) *download.BackgroundAcquisitionScheduler {
 	t.Helper()
+	cfg.AcquisitionDeezerPreviewTimeout = time.Second
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
 		Transport:  http.DefaultTransport,
 		Config:     cfg,
@@ -170,7 +171,7 @@ func TestNewScheduler_ZeroUpgradeWorkersBuildsNoUpgradeLaneInsteadOfPanicking(t 
 
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
 		Transport:  http.DefaultTransport,
-		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, MusicDir: musicDir},
+		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, MusicDir: musicDir, AcquisitionDeezerPreviewTimeout: time.Second},
 		Pool:       pool,
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(&fixtureTrackRepo{}, time.Now, upgradestatetest.New()),

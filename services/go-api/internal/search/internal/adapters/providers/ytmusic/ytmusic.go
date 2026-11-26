@@ -1,6 +1,7 @@
 package ytmusic
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/adapters/providers/providersearch"
 	"altune/go-api/internal/search/internal/domain"
@@ -23,7 +24,7 @@ const ytmusicTimeout = 8 * time.Second
 var ytmChallengeBackoff = backoff.MustCapped(250*time.Millisecond, 250*time.Millisecond)
 
 func ytmHTTPClient(transport http.RoundTripper) *http.Client {
-	return &http.Client{Timeout: ytmusicTimeout, Transport: transport}
+	return outbound.MustNewClient(ytmusicTimeout, transport)
 }
 
 var (

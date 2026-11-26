@@ -2,6 +2,7 @@ package notifier
 
 import (
 	"altune/go-api/internal/platform/monitoring/internal/core/domain"
+	"altune/go-api/internal/platform/outbound"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -28,7 +29,7 @@ type EmailNotifier struct {
 }
 
 func NewEmailNotifier(apiKey, to string, transport http.RoundTripper) *EmailNotifier {
-	return &EmailNotifier{apiKey: apiKey, to: to, client: &http.Client{Timeout: emailTimeout, Transport: transport}}
+	return &EmailNotifier{apiKey: apiKey, to: to, client: outbound.MustNewClient(emailTimeout, transport)}
 }
 
 type resendEmail struct {

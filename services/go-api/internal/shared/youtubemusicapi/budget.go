@@ -1,6 +1,7 @@
 package youtubemusicapi
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"context"
@@ -26,6 +27,7 @@ const (
 	unlimitedWaitMillis  = -1
 	refusedWaitMillis    = -1
 	redisCommandDeadline = 3 * time.Second
+	toolClientTimeout    = 30 * time.Second
 	minRequestTime       = 3 * time.Second
 )
 
@@ -99,7 +101,7 @@ func ToolClient(ctx context.Context, env func(string) string) (*http.Client, Set
 	if err != nil {
 		return nil, Settings{}, err
 	}
-	return &http.Client{Transport: budget.Transport(nil)}, settings, nil
+	return outbound.MustNewClient(toolClientTimeout, budget.Transport(nil)), settings, nil
 }
 
 func (s Settings) Describe() string {
@@ -166,7 +168,7 @@ func (b *Budget) CoolDown(ctx context.Context) error {
 
 func (b *Budget) Transport(base http.RoundTripper) http.RoundTripper {
 	if base == nil {
-		base = http.DefaultTransport
+		base = outbound.DefaultTransport()
 	}
 	return budgetTransport{budget: b, base: base}
 }

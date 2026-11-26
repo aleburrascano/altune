@@ -1,6 +1,9 @@
 package connections
 
-import "net/http"
+import (
+	"altune/go-api/internal/platform/outbound"
+	"net/http"
+)
 
 type Clients struct {
 	ProviderCalls *http.Client
@@ -10,8 +13,8 @@ type Clients struct {
 
 func NewClients(d Deps) Clients {
 	return Clients{
-		ProviderCalls: &http.Client{Timeout: d.ProviderTimeout, Transport: d.Transport},
-		ChartCalls:    &http.Client{Timeout: d.ChartTimeout, Transport: d.Transport},
+		ProviderCalls: outbound.MustNewClient(d.ProviderTimeout, d.Transport),
+		ChartCalls:    outbound.MustNewClient(d.ChartTimeout, d.Transport),
 		Transport:     d.Transport,
 	}
 }
