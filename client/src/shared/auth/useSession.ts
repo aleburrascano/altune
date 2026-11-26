@@ -6,7 +6,7 @@ import { isSessionFetchFailure } from '@shared/failure';
 import { forgetPreviousUsersLocalData } from '@shared/auth/core/userLocalData';
 import { notifyIdentityChange } from '@shared/session';
 
-import { renewSessionCredentials } from '@shared/auth/core/sessionExpired';
+import { renewSessionCredentials } from '@shared/auth/view/sessionExpired';
 import { supabase } from '@shared/auth/adapters/authActions';
 import { warn } from '@shared/log';
 
