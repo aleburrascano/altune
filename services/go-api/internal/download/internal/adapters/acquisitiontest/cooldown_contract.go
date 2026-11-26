@@ -11,6 +11,7 @@ import (
 type CooldownUnderTest interface {
 	ports.CooldownStore
 	AddTrack(t *testing.T) ids.TrackId
+	PassCooldown(t *testing.T, d time.Duration)
 }
 
 const (
@@ -18,6 +19,8 @@ const (
 	shortCooldown    = 10 * time.Millisecond
 	pastShortWindow  = 25 * time.Millisecond
 )
+
+var neverReservedAt = time.Unix(1_700_000_000, 0).UTC()
 
 func reserve(t *testing.T, s CooldownUnderTest, id ids.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration) {
 	t.Helper()
@@ -68,7 +71,7 @@ func contractKindsAndTracksHaveTheirOwnCooldowns(t *testing.T, s CooldownUnderTe
 func contractTheCooldownEndsAndAdmitsAgainWithALaterTime(t *testing.T, s CooldownUnderTest) {
 	id := s.AddTrack(t)
 	first := wantAdmitted(t, s, id, ports.CooldownRetry, shortCooldown, "the first time")
-	time.Sleep(pastShortWindow)
+	s.PassCooldown(t, pastShortWindow)
 	second := wantAdmitted(t, s, id, ports.CooldownRetry, shortCooldown, "after the cooldown")
 	if !second.After(first) {
 		t.Errorf("second admission at %v, want it after the first at %v", second, first)
@@ -85,14 +88,14 @@ func contractReleasingTheCurrentReservationFreesTheSlot(t *testing.T, s Cooldown
 func contractReleasingAStaleReservationLeavesTheNewerOne(t *testing.T, s CooldownUnderTest) {
 	id := s.AddTrack(t)
 	stale := wantAdmitted(t, s, id, ports.CooldownRetry, shortCooldown, "the first time")
-	time.Sleep(pastShortWindow)
+	s.PassCooldown(t, pastShortWindow)
 	wantAdmitted(t, s, id, ports.CooldownRetry, shortCooldown, "after the cooldown")
 	release(t, s, id, ports.CooldownRetry, stale)
 	wantRefused(t, s, id, ports.CooldownRetry, contractCooldown, "after releasing the stale one")
 }
 
 func contractReleasingWhatWasNeverReservedIsNotAnError(t *testing.T, s CooldownUnderTest) {
-	release(t, s, s.AddTrack(t), ports.CooldownRetry, time.Now())
+	release(t, s, s.AddTrack(t), ports.CooldownRetry, neverReservedAt)
 }
 
 var cooldownCases = []struct {

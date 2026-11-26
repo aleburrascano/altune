@@ -2,6 +2,7 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/testdb"
@@ -587,9 +588,9 @@ func TestPostgresJobQueue_PanickedJobRowIsNotClaimableAgainImmediately(t *testin
 
 	deadline := time.Now().Add(5 * time.Second)
 	for acq.runs.Load() == 0 && time.Now().Before(deadline) {
-		time.Sleep(5 * time.Millisecond)
+		_ = clock.Sleep(context.Background(), 5*time.Millisecond)
 	}
-	time.Sleep(300 * time.Millisecond)
+	_ = clock.Sleep(context.Background(), 300*time.Millisecond)
 
 	if got := acq.runs.Load(); got != 1 {
 		t.Errorf("runs = %d, want 1 (a panicked job must back off, not be re-claimed)", got)
@@ -1047,7 +1048,7 @@ func TestPostgresJobQueue_APanickingReplaceAtTheRunCapIsNotClaimedAgain(t *testi
 
 	deadline := time.Now().Add(5 * time.Second)
 	for scheduledAvailableAt(t, pool, track.ID) != nil && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
+		_ = clock.Sleep(context.Background(), 10*time.Millisecond)
 	}
 
 	if at := scheduledAvailableAt(t, pool, track.ID); at != nil {
@@ -1079,9 +1080,9 @@ func TestPostgresJobQueue_APanickingReplaceBelowTheRunCapIsRetriedAfterItsBackof
 
 	deadline := time.Now().Add(5 * time.Second)
 	for acq.runs.Load() == 0 && time.Now().Before(deadline) {
-		time.Sleep(5 * time.Millisecond)
+		_ = clock.Sleep(context.Background(), 5*time.Millisecond)
 	}
-	time.Sleep(300 * time.Millisecond)
+	_ = clock.Sleep(context.Background(), 300*time.Millisecond)
 	scheduler.Shutdown(context.Background())
 
 	at := scheduledAvailableAt(t, pool, track.ID)
@@ -1165,5 +1166,6 @@ func integrationSchedulerPorts(queue download.DownloadQueue) download.SchedulerP
 		Events:              events.NoopPublisher(),
 		VerifySkips:         func() uint64 { return 0 },
 		FingerprintVerified: func() bool { return false },
+		Timer:               clock.NewTimer,
 	}
 }

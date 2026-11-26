@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/random"
 	"context"
 	"encoding/json"
 	"errors"
@@ -251,6 +252,7 @@ func noStages(store audioDeleter) download.StagePorts {
 		Observer:      download.NoObserver(),
 		Sleep:         clock.Sleep,
 		Now:           time.Now,
+		Unit:          random.Real,
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/download/service/replacement"
 	"altune/go-api/internal/download/sourcekey"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
@@ -3431,7 +3432,7 @@ func awaitIdle(t *testing.T, s *service.BackgroundAcquisitionScheduler) {
 		if s.Status().Pending == 0 {
 			return
 		}
-		time.Sleep(time.Second)
+		_ = clock.Sleep(context.Background(), time.Second)
 	}
 	t.Fatalf("scheduler still has %d pending jobs after %d simulated seconds, want idle", s.Status().Pending, rounds)
 }

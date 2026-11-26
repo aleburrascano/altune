@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/redact"
 	"cmp"
 	"context"
@@ -41,6 +42,7 @@ type AcquireTrackAudioService struct {
 	contextObserver func(*AcquisitionContext)
 	sleep           clock.Sleeper
 	now             clock.Func
+	unit            random.Unit
 	previews        ports.PreviewMatcher
 
 	cuts            audioverdict.Cuts
@@ -87,6 +89,7 @@ func NewAcquireTrackAudioService(
 		contextObserver: stages.Observer,
 		sleep:           stages.Sleep,
 		now:             stages.Now,
+		unit:            stages.Unit,
 		cuts:            audioverdict.DefaultCuts(),
 
 		confidenceFloor: defaultConfidenceFloor,

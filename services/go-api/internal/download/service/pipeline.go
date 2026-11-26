@@ -13,6 +13,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/downloadprovenance"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/redact"
 	sharedtracklength "altune/go-api/internal/shared/tracklength"
 	"context"
@@ -440,7 +441,7 @@ type TrackRef struct {
 }
 
 func (s *AcquireTrackAudioService) buildSteps(userId ids.UserId, trackId ids.TrackId) Pipeline {
-	return buildCoreSteps(s.sources, s.audioTagger, s.audioStore, s.audioProber, s.identifier, s.recordingLookup, s.verifySkips, s.orphans, s.ledger, s.sleep, s.now, s.workspace, s.downloadLimiter,
+	return buildCoreSteps(s.sources, s.audioTagger, s.audioStore, s.audioProber, s.identifier, s.recordingLookup, s.verifySkips, s.orphans, s.ledger, s.sleep, s.unit, s.now, s.workspace, s.downloadLimiter,
 		[]func(*DownloadStep){
 			WithConfidenceFloor(s.confidenceFloor),
 			WithJudgeCuts(s.cuts),
@@ -461,6 +462,7 @@ func CoreSteps(
 	orphans ports.OrphanedAudioRecorder,
 	refs ports.AudioRefLookup,
 	sleep clock.Sleeper,
+	unit random.Unit,
 	now clock.Func,
 	workspace ports.ScratchFolder,
 	limit *ConcurrencyLimit,
@@ -469,7 +471,7 @@ func CoreSteps(
 ) (Pipeline, error) {
 	download, downloadErr := NewDownloadStep(sources, workspace, identifier, lookup, prober, skips, limit, now, append([]func(*DownloadStep){WithVerifyWidth(ProdVerifyWidth)}, downloadOpts...)...)
 	tag, tagErr := NewTagStep(tagger)
-	stored, storeErr := NewStoreStep(store, workspace, prober, orphans, refs, sleep, storeOpts...)
+	stored, storeErr := NewStoreStep(store, workspace, prober, orphans, refs, sleep, unit, storeOpts...)
 	if err := errors.Join(downloadErr, tagErr, storeErr); err != nil {
 		return Pipeline{}, err
 	}
@@ -487,6 +489,7 @@ func buildCoreSteps(
 	orphans ports.OrphanedAudioRecorder,
 	refs ports.AudioRefLookup,
 	sleep clock.Sleeper,
+	unit random.Unit,
 	now clock.Func,
 	workspace ports.ScratchFolder,
 	limit *ConcurrencyLimit,
@@ -498,7 +501,7 @@ func buildCoreSteps(
 		selectBest: NewSelectStep(),
 		download:   buildDownloadStep(sources, workspace, identifier, lookup, prober, skips, limit, now, append([]func(*DownloadStep){WithVerifyWidth(ProdVerifyWidth)}, downloadOpts...)...),
 		tag:        &TagStep{tagger: tagger},
-		store:      buildStoreStep(store, workspace, prober, orphans, refs, sleep, storeOpts...),
+		store:      buildStoreStep(store, workspace, prober, orphans, refs, sleep, unit, storeOpts...),
 		finish:     endsAtStore,
 		now:        now,
 	}

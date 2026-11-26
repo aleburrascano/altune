@@ -66,6 +66,7 @@ type BackgroundAcquisitionScheduler struct {
 	leaseDuration     time.Duration
 	heartbeatInterval time.Duration
 	pollInterval      time.Duration
+	timer             clock.TimerFunc
 	drainBudget       time.Duration
 
 	inflightCount atomic.Int64
@@ -129,6 +130,7 @@ type SchedulerPorts struct {
 	Events              events.Publisher
 	VerifySkips         func() uint64
 	FingerprintVerified func() bool
+	Timer               clock.TimerFunc
 }
 
 func (p SchedulerPorts) validate(owner string) error {
@@ -140,6 +142,7 @@ func (p SchedulerPorts) validate(owner string) error {
 		missingPort(owner, "Events", p.Events == nil),
 		missingPort(owner, "VerifySkips", p.VerifySkips == nil),
 		missingPort(owner, "FingerprintVerified", p.FingerprintVerified == nil),
+		missingPort(owner, "Timer", p.Timer == nil),
 	)
 }
 
@@ -168,6 +171,7 @@ func NewBackgroundAcquisitionScheduler(
 		now:                 now,
 		upgrades:            wiring.Upgrades,
 		events:              wiring.Events,
+		timer:               wiring.Timer,
 		notifier:            wiring.Notifier,
 		outcomes:            wiring.Outcomes,
 		skipCount:           wiring.VerifySkips,
@@ -343,12 +347,12 @@ func notifyWake(wake chan<- struct{}) {
 }
 
 func (s *BackgroundAcquisitionScheduler) idleWait(wake <-chan struct{}) bool {
-	timer := time.NewTimer(s.pollInterval)
-	defer timer.Stop()
+	fires, stop := s.timer(s.pollInterval)
+	defer stop()
 	select {
 	case <-wake:
 		return true
-	case <-timer.C:
+	case <-fires:
 		return true
 	case <-s.stop:
 		return false

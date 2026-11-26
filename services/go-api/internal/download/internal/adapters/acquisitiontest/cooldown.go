@@ -2,8 +2,11 @@ package acquisitiontest
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -17,21 +20,28 @@ type cooldownKey struct {
 
 type CooldownStore struct {
 	mu         sync.Mutex
-	now        func() time.Time
+	now        clock.Func
 	admittedAt map[cooldownKey]time.Time
 	reserveErr error
 	releaseErr error
 	releases   int
 }
 
-func NewCooldownStore() *CooldownStore {
-	return &CooldownStore{now: time.Now, admittedAt: map[cooldownKey]time.Time{}}
+var ErrCooldownClockRequired = errors.New("the cooldown store needs a clock")
+
+func NewCooldownStore(now clock.Func) (*CooldownStore, error) {
+	if now == nil {
+		return nil, fmt.Errorf("NewCooldownStore: %w", ErrCooldownClockRequired)
+	}
+	return &CooldownStore{now: now, admittedAt: map[cooldownKey]time.Time{}}, nil
 }
 
-func (s *CooldownStore) SetClock(now func() time.Time) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.now = now
+func MustNewCooldownStore(now clock.Func) *CooldownStore {
+	s, err := NewCooldownStore(now)
+	if err != nil {
+		panic(err)
+	}
+	return s
 }
 
 func (s *CooldownStore) FailReserve(err error) {

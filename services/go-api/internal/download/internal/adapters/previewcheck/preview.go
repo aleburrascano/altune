@@ -90,6 +90,7 @@ func (f FpcalcPrinter) Print(ctx context.Context, audioPath string) ([]uint32, e
 type cooldown struct {
 	mu    sync.Mutex
 	until time.Time
+	now   clock.Func
 }
 
 func (c *cooldown) extendTo(deadline time.Time) {
@@ -103,7 +104,7 @@ func (c *cooldown) extendTo(deadline time.Time) {
 func (c *cooldown) remaining() time.Duration {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return time.Until(c.until)
+	return c.until.Sub(c.now())
 }
 
 type Previews struct {
@@ -113,19 +114,26 @@ type Previews struct {
 	pause   cooldown
 	printer RawFingerprint
 	sleep   clock.Sleeper
+	now     clock.Func
 }
 
-var ErrSleeperRequired = errors.New("previewcheck: the Deezer client needs a sleeper")
+var (
+	ErrSleeperRequired = errors.New("previewcheck: the Deezer client needs a sleeper")
+	ErrClockRequired   = errors.New("previewcheck: the Deezer client needs a clock")
+)
 
-func New(client *http.Client, baseURL string, printer RawFingerprint, sleep clock.Sleeper) (*Previews, error) {
+func New(client *http.Client, baseURL string, printer RawFingerprint, sleep clock.Sleeper, now clock.Func) (*Previews, error) {
 	if sleep == nil {
 		return nil, fmt.Errorf("NewDeezerPreview: %w", ErrSleeperRequired)
 	}
-	return &Previews{client: client, baseURL: baseURL, backoff: deezerPause, printer: printer, sleep: sleep}, nil
+	if now == nil {
+		return nil, fmt.Errorf("NewDeezerPreview: %w", ErrClockRequired)
+	}
+	return &Previews{client: client, baseURL: baseURL, backoff: deezerPause, printer: printer, sleep: sleep, now: now, pause: cooldown{now: now}}, nil
 }
 
-func MustNew(client *http.Client, baseURL string, printer RawFingerprint, sleep clock.Sleeper) *Previews {
-	previews, err := New(client, baseURL, printer, sleep)
+func MustNew(client *http.Client, baseURL string, printer RawFingerprint, sleep clock.Sleeper, now clock.Func) *Previews {
+	previews, err := New(client, baseURL, printer, sleep, now)
 	if err != nil {
 		panic(err)
 	}
@@ -226,7 +234,7 @@ func (d *Previews) get(ctx context.Context, target string, bodyCap int64, isThro
 		case err != nil:
 			return nil, err
 		case isThrottled(status, body):
-			d.pause.extendTo(time.Now().Add(d.backoff.Ceiling(attempt)))
+			d.pause.extendTo(d.now().Add(d.backoff.Ceiling(attempt)))
 		case status != http.StatusOK:
 			return nil, fmt.Errorf("deezer %s: status %d", target, status)
 		default:

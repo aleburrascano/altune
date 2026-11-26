@@ -13,6 +13,7 @@ import (
 	"altune/go-api/internal/shared/downloadprovenance"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/random"
 	"bytes"
 	"context"
 	"errors"
@@ -30,7 +31,7 @@ import (
 func coreStepsOver(sources *service.SourceRegistry, store *objectStore, workspace ports.ScratchFolder) service.Pipeline {
 	steps, err := service.CoreSteps(sources, ports.NoopAudioTagger(), store, ports.NoopAudioProber(),
 		ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopVerifySkipRecorder(),
-		service.MustDirectDeleteOrphans(store), ports.NoopAudioRefLookup(), clock.Sleep, time.Now, workspace, service.Unlimited(), nil)
+		service.MustDirectDeleteOrphans(store), ports.NoopAudioRefLookup(), clock.Sleep, random.Real, time.Now, workspace, service.Unlimited(), nil)
 	if err != nil {
 		panic(err)
 	}

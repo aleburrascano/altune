@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"encoding/json"
@@ -70,6 +71,7 @@ func Run(ctx context.Context, now clock.Func, kase Case) Outcome {
 		Observer:      func(ac *service.AcquisitionContext) { observed = ac },
 		Sleep:         clock.Sleep,
 		Now:           now,
+		Unit:          random.Real,
 	}
 	svc := service.MustNewAcquireTrackAudioService(ledger, p.registry(), p, scratchfiles.New(), wiring, stages)
 	runErr := executeFor(ctx, svc, kase, track)

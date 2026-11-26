@@ -11,6 +11,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/random"
 	"context"
 	"slices"
 	"sync"
@@ -117,6 +118,7 @@ func acquireUnfoundTrack(t *testing.T, disc *search.Discovery, catalogMBID *stri
 			Observer:      download.NoObserver(),
 			Sleep:         clock.Sleep,
 			Now:           time.Now,
+			Unit:          random.Real,
 		})
 
 	_ = svc.Execute(context.Background(), track.UserId, track.ID)

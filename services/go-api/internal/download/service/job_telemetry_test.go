@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -83,7 +84,9 @@ type timedSource struct {
 }
 
 func (s timedSource) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
-	time.Sleep(s.takes[candidate.URL])
+	if err := clock.Sleep(ctx, s.takes[candidate.URL]); err != nil {
+		return ports.FetchedAudio{}, err
+	}
 	return s.perURLSource.Fetch(ctx, candidate, outDir)
 }
 

@@ -2,7 +2,9 @@ package ytdlp_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/shared/clock"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -39,7 +41,7 @@ func findWithYtDlp(t *testing.T, s *download.YouTubeAudioSearcher) ([]download.A
 
 func find(t *testing.T) ([]download.AudioCandidate, error) {
 	t.Helper()
-	return findWithYtDlp(t, download.NewYtDlpAudioSearcher("", "", ""))
+	return findWithYtDlp(t, download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep))
 }
 
 func TestSource_Find_RunsEveryQueryEvenAfterEnoughCandidatesAreFound(t *testing.T) {
@@ -61,7 +63,7 @@ func TestSource_Find_RunsEveryQueryEvenAfterEnoughCandidatesAreFound(t *testing.
 func TestSource_Find_QueryFailureLogRedactsTheCookiePath(t *testing.T) {
 	logs := captureLogs(t)
 
-	if _, err := findWithYtDlp(t, download.NewYtDlpAudioSearcher("", secretCookiePath, "")); err == nil {
+	if _, err := findWithYtDlp(t, download.MustNewYtDlpAudioSearcher("", secretCookiePath, "", time.Now, clock.Sleep)); err == nil {
 		t.Fatal("every query failed, Find reported no error")
 	}
 
@@ -209,7 +211,7 @@ func soundCloudOnlySearch(flatDuration float64, inspect string) string {
 func findUnplayable(t *testing.T, flatDuration float64, inspect string) string {
 	t.Helper()
 	installYtDlp(t, soundCloudOnlySearch(flatDuration, inspect))
-	got, err := download.NewYtDlpSource(download.NewYtDlpAudioSearcher("", "", "")).
+	got, err := download.NewYtDlpSource(download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep)).
 		Find(context.Background(), download.FindRequest{Title: "Drinking in L.A.", Artist: "Bran Van 3000"})
 	if err != nil {
 		t.Fatalf("Find error: %v", err)
@@ -306,7 +308,7 @@ func inspectedURLs(t *testing.T, calls string) []string {
 func TestSource_Find_InspectsOnlySoundCloudURLsAndOncePerURL(t *testing.T) {
 	bothSources := `printf '%s\n%s\n' '{"title":"yt","webpage_url":"https://www.youtube.com/watch?v=aaaaaaaaaaa","duration":240}' '{"title":"sc","webpage_url":"` + soundCloudTrackURL + `","duration":240}'`
 	calls := installYtDlp(t, ytDlpByMode(bothSources, inspected(`{"duration":240}`), ""))
-	src := download.NewYtDlpSource(download.NewYtDlpAudioSearcher("", "", ""))
+	src := download.NewYtDlpSource(download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep))
 
 	for range 2 {
 		if _, err := src.Find(context.Background(), download.FindRequest{Title: "Drinking in L.A.", Artist: "Bran Van 3000"}); err != nil {
@@ -329,7 +331,7 @@ func soundCloudTracks(from, to int) []download.AudioCandidate {
 
 func TestMarkUnplayable_RemembersTheLatest500InspectionsAndForgetsTheOldest(t *testing.T) {
 	calls := installYtDlp(t, inspectedAs(`{"duration":240}`))
-	s := download.NewYtDlpAudioSearcher("", "", "")
+	s := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep)
 	mark := func(tracks []download.AudioCandidate) { s.MarkUnplayable(context.Background(), tracks) }
 
 	mark(soundCloudTracks(0, 0))
@@ -349,7 +351,7 @@ func TestMarkUnplayable_ReinspectsAURLOnceItsDayIsUp(t *testing.T) {
 	calls := installYtDlp(t, inspectedAs(`{"duration":240}`))
 	inspectedAt := time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)
 	now := inspectedAt
-	s := download.NewYtDlpAudioSearcher("", "", "").WithInspectionClock(func() time.Time { return now })
+	s := download.MustNewYtDlpAudioSearcher("", "", "", func() time.Time { return now }, clock.Sleep)
 	inspectionsAt := func(at time.Time) int {
 		now = at
 		s.MarkUnplayable(context.Background(), soundCloudTracks(0, 0))
@@ -365,14 +367,11 @@ func TestMarkUnplayable_ReinspectsAURLOnceItsDayIsUp(t *testing.T) {
 	}
 }
 
-func TestMarkUnplayable_ANilInspectionClockKeepsTheRealOne(t *testing.T) {
-	calls := installYtDlp(t, inspectedAs(`{"duration":240}`))
-	s := download.NewYtDlpAudioSearcher("", "", "").WithInspectionClock(nil)
-
-	s.MarkUnplayable(context.Background(), soundCloudTracks(0, 0))
-	s.MarkUnplayable(context.Background(), soundCloudTracks(0, 0))
-
-	if got := len(inspectedURLs(t, calls)); got != 1 {
-		t.Fatalf("inspections = %d, want the second served from the cache", got)
+func TestNewYtDlpAudioSearcher_RefusesAMissingClockOrSleeper(t *testing.T) {
+	if s, err := download.NewYtDlpAudioSearcher("", "", "", nil, clock.Sleep); s != nil || !errors.Is(err, download.ErrSearcherClockRequired) {
+		t.Errorf("nil clock: got (%v, %v), want ErrSearcherClockRequired", s, err)
+	}
+	if s, err := download.NewYtDlpAudioSearcher("", "", "", time.Now, nil); s != nil || !errors.Is(err, download.ErrSearcherSleeperRequired) {
+		t.Errorf("nil sleeper: got (%v, %v), want ErrSearcherSleeperRequired", s, err)
 	}
 }

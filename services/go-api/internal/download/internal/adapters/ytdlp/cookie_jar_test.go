@@ -2,6 +2,7 @@ package ytdlp_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/shared/clock"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -108,7 +109,7 @@ func canaryWith(jar string) error {
 }
 
 func canaryIn(environment, jar string) error {
-	return download.NewYtDlpAudioSearcher("", jar, "").WithEnvironment(environment).Canary(context.Background(), download.YouTubeCanary)
+	return download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep).WithEnvironment(environment).Canary(context.Background(), download.YouTubeCanary)
 }
 
 type runKind struct {
@@ -140,7 +141,7 @@ func TestCookieJar_EveryKindOfRunKeepsTheCookiesYtDlpRenewed(t *testing.T) {
 			jar := liveJar(t, signedInJar("old"))
 			ytDlpRenewing(t, signedInJar("new"), "exit 0")
 
-			kind.run(t, download.NewYtDlpAudioSearcher("", jar, ""))
+			kind.run(t, download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep))
 
 			if got := jarContents(t, jar); got != signedInJar("new") {
 				t.Errorf("live jar after a successful %s = %q, want the renewed cookies", kind.name, got)
@@ -156,7 +157,7 @@ func TestCookieJar_EveryKindOfRunRecordsItsFirstSignInFailure(t *testing.T) {
 			jar := liveJar(t, signedInJar("old"))
 			ytDlpFailing(t, botCheck)
 
-			kind.run(t, download.NewYtDlpAudioSearcher("", jar, ""))
+			kind.run(t, download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep))
 
 			records := firstSignInFailures(t, logs)
 			if len(records) != 1 || records[0]["run"] != kind.name {
@@ -637,7 +638,7 @@ func TestCookieJar_TheCopyYtDlpGetsLivesWhereTheTempSweeperReapsIt(t *testing.T)
 }
 
 func signedOutSince(jar string) (time.Time, bool) {
-	return download.NewYtDlpAudioSearcher("", jar, "").SignedOutSince(context.Background())
+	return download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep).SignedOutSince(context.Background())
 }
 
 func signedOutJar(t *testing.T) (jar string, since time.Time) {
@@ -659,7 +660,7 @@ func TestCookieJar_EveryKindOfRunThatHitsTheBotCheckMarksTheJarSignedOutFromThat
 			ytDlpFailing(t, botCheck)
 			before := time.Now()
 
-			kind.run(t, download.NewYtDlpAudioSearcher("", jar, ""))
+			kind.run(t, download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep))
 
 			since, signedOut := signedOutSince(jar)
 			if !signedOut || since.Before(before) || since.After(time.Now()) {
@@ -721,7 +722,7 @@ func TestCookieJar_AYouTubeRunThatSucceedsSignsTheJarBackIn(t *testing.T) {
 				jar, _ := signedOutJar(t)
 				succeed(t)
 
-				kind.run(t, download.NewYtDlpAudioSearcher("", jar, ""))
+				kind.run(t, download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep))
 
 				if since, signedOut := signedOutSince(jar); signedOut {
 					t.Errorf("still signed out since %v after a %s that succeeded", since, kind.name)
@@ -754,7 +755,7 @@ func TestCookieJar_ARunThatSucceedsOffYouTubeLeavesTheJarSignedOut(t *testing.T)
 				jar, first := signedOutJar(t)
 				succeed(t)
 
-				kind.run(t, download.NewYtDlpAudioSearcher("", jar, ""))
+				kind.run(t, download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep))
 
 				if since, signedOut := signedOutSince(jar); !signedOut || !since.Equal(first) {
 					t.Errorf("signed out since %v (%v) after a %s, want still signed out since %v", since, signedOut, kind.name, first)

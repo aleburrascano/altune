@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/random"
 	"context"
 	"errors"
 	"log/slog"
@@ -69,6 +70,7 @@ func NewScheduler(ctx context.Context, d Deps) *download.BackgroundAcquisitionSc
 			Observer:      download.NoObserver(),
 			Sleep:         clock.Sleep,
 			Now:           time.Now,
+			Unit:          random.Real,
 		},
 		opts...,
 	)
@@ -113,6 +115,7 @@ func schedulerPorts(d Deps, acquireSvc *download.AcquireTrackAudioService, skips
 		Events:              d.Events,
 		VerifySkips:         skips.Count,
 		FingerprintVerified: lookups.Verified,
+		Timer:               clock.NewTimer,
 	}
 	if d.Pool != nil {
 		wiring.Queue = download.QueueOf(download.NewPostgresJobQueue(d.Pool))

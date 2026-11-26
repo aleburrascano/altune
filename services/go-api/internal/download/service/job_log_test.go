@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"testing"
@@ -15,9 +16,8 @@ const acquireTakes = 2 * time.Second
 
 type slowAcquirer struct{}
 
-func (slowAcquirer) Execute(context.Context, ids.UserId, ids.TrackId) error {
-	time.Sleep(acquireTakes)
-	return nil
+func (slowAcquirer) Execute(ctx context.Context, _ ids.UserId, _ ids.TrackId) error {
+	return clock.Sleep(ctx, acquireTakes)
 }
 
 func (slowAcquirer) ExecuteReplace(context.Context, ids.UserId, ids.TrackId) error {

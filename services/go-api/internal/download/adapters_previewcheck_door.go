@@ -19,6 +19,7 @@ var (
 )
 
 var (
+	ErrDeezerClockRequired   = deezerpreview.ErrClockRequired
 	ErrDeezerSleeperRequired = deezerpreview.ErrSleeperRequired
 	ErrDeezerThrottled       = deezerpreview.ErrDeezerThrottled
 	ErrFileReachesCap        = deezerpreview.ErrFileReachesCap

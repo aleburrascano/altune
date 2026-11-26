@@ -1,6 +1,7 @@
 package ytdlp
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/redact"
 	"bytes"
 	"context"
@@ -54,6 +55,8 @@ type cookieLease struct {
 	path        string
 	snapshot    []byte
 	cleanup     func()
+	now         clock.Func
+	sleep       clock.Sleeper
 }
 
 type jarFile struct {
@@ -83,7 +86,7 @@ func (s *YouTubeAudioSearcher) SignedOutSince(ctx context.Context) (time.Time, b
 		return time.Time{}, false
 	}
 	var since *time.Time
-	err := cookieLease{live: s.cookieFile}.locked(ctx, func(current jarFile) error {
+	err := cookieLease{live: s.cookieFile, now: s.now, sleep: s.sleep}.locked(ctx, func(current jarFile) error {
 		since = loadSession(s.cookieFile).following(current).SignedOutSince
 		return nil
 	})
@@ -108,7 +111,7 @@ func (s *YouTubeAudioSearcher) leaseCookieJar(run, target string) (cookieLease, 
 	return cookieLease{
 		live: s.cookieFile, run: run, environment: s.environment,
 		youtube: isYouTubeTarget(target), installedAt: loadSession(s.cookieFile).following(live).InstalledAt,
-		path: path, snapshot: live.contents, cleanup: cleanup,
+		path: path, snapshot: live.contents, cleanup: cleanup, now: s.now, sleep: s.sleep,
 	}, nil
 }
 
@@ -181,7 +184,7 @@ func (l cookieLease) recordSignInFailure(ctx context.Context) error {
 		if !first && session.SignedOutSince != nil {
 			return nil
 		}
-		now := time.Now()
+		now := l.now()
 		if first {
 			session.FirstSignInFailure = l.signInFailure(session, now)
 		}
@@ -238,7 +241,7 @@ func (l cookieLease) underSessionLock(ctx context.Context, update func(jarSessio
 }
 
 func (l cookieLease) locked(ctx context.Context, update func(jarFile) error) error {
-	unlock, err := lockJar(ctx, l.live+cookieJarLockSuffix)
+	unlock, err := lockJar(ctx, l.sleep, l.live+cookieJarLockSuffix)
 	if err != nil {
 		return err
 	}
@@ -318,7 +321,7 @@ func replaceFile(path string, contents []byte, mode fs.FileMode) error {
 	return nil
 }
 
-func lockJar(ctx context.Context, path string) (unlock func(), err error) {
+func lockJar(ctx context.Context, sleep clock.Sleeper, path string) (unlock func(), err error) {
 	ctx, cancel := context.WithTimeout(ctx, lockWaitLimit)
 	defer cancel()
 	for {
@@ -326,10 +329,8 @@ func lockJar(ctx context.Context, path string) (unlock func(), err error) {
 		if !errors.Is(err, errJarBusy) {
 			return unlock, err
 		}
-		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("gave up waiting for the cookie jar lock: %w", ctx.Err())
-		case <-time.After(lockRetryInterval):
+		if err := sleep(ctx, lockRetryInterval); err != nil {
+			return nil, fmt.Errorf("gave up waiting for the cookie jar lock: %w", err)
 		}
 	}
 }

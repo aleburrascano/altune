@@ -2,6 +2,7 @@ package ytdlp_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"os"
 	"os/exec"
@@ -28,7 +29,7 @@ func TestYtDlpAudioSearcher_Search(t *testing.T) {
 		t.Fatalf("YTDLP_LIVE=1 but yt-dlp is not on PATH: %v", err)
 	}
 
-	searcher := download.NewYtDlpAudioSearcher("", "", "")
+	searcher := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -63,7 +64,7 @@ func downloadArgv(t *testing.T, s *download.YouTubeAudioSearcher, url string) []
 }
 
 func TestDownload_MaxFilesizeFlagIsTheDownloadedFileCap(t *testing.T) {
-	argv := downloadArgv(t, download.NewYtDlpAudioSearcher("", "", ""), youTubeWatchURL)
+	argv := downloadArgv(t, download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep), youTubeWatchURL)
 
 	if got := flagValue(t, argv, "--max-filesize"); got != "209715200" {
 		t.Fatalf("--max-filesize %q, want the 200 MiB downloaded-file cap", got)
@@ -72,7 +73,7 @@ func TestDownload_MaxFilesizeFlagIsTheDownloadedFileCap(t *testing.T) {
 
 func searchOneQuery(t *testing.T) ([]download.AudioCandidate, error) {
 	t.Helper()
-	return download.NewYtDlpAudioSearcher("", "", "").SearchQueries(context.Background(), []string{"q"})
+	return download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).SearchQueries(context.Background(), []string{"q"})
 }
 
 func TestSearch_OutputThatParsesToNothingIsAnError(t *testing.T) {
@@ -147,7 +148,7 @@ func TestSearch_ClassifiesASourceThatRefusedToAnswer(t *testing.T) {
 func TestYtDlpAudioSearcher_Download_MissingBinaryIsAnUnavailableSource(t *testing.T) {
 	withoutAnyBinaries(t)
 
-	_, err := download.NewYtDlpAudioSearcher("", "", "").Download(context.Background(), youTubeWatchURL, t.TempDir())
+	_, err := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).Download(context.Background(), youTubeWatchURL, t.TempDir())
 
 	if !isSourceUnavailable(err) {
 		t.Errorf("Download error = %v, want a missing yt-dlp to read as an unavailable source", err)
@@ -156,7 +157,7 @@ func TestYtDlpAudioSearcher_Download_MissingBinaryIsAnUnavailableSource(t *testi
 
 func TestYtDlpAudioSearcher_Search_EngineFailureLogRedactsTheCookiePath(t *testing.T) {
 	logs := captureLogs(t)
-	s := download.NewYtDlpAudioSearcher("", secretCookiePath, "")
+	s := download.MustNewYtDlpAudioSearcher("", secretCookiePath, "", time.Now, clock.Sleep)
 
 	if _, err := s.SearchQueries(context.Background(), []string{"q"}); err == nil {
 		t.Fatal("every engine failed, Search reported no error")
@@ -177,14 +178,14 @@ func TestYtDlpAudioSearcher_Search_EngineFailureLogRedactsTheCookiePath(t *testi
 }
 
 func TestNewYtDlpAudioSearcher_ReturnsNonNil(t *testing.T) {
-	if download.NewYtDlpAudioSearcher("", "", "") == nil {
+	if download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep) == nil {
 		t.Fatal("NewYtDlpAudioSearcher returned nil")
 	}
 }
 
 func TestNewYtDlpAudioSearcher_PassesItsConfigToYtDlp(t *testing.T) {
 	jar := cookieJar(t, "cookies.txt", "jar")
-	argv := downloadArgv(t, download.NewYtDlpAudioSearcher("/usr/bin/ffmpeg", jar, "deno"), youTubeWatchURL)
+	argv := downloadArgv(t, download.MustNewYtDlpAudioSearcher("/usr/bin/ffmpeg", jar, "deno", time.Now, clock.Sleep), youTubeWatchURL)
 
 	if !hasFlagValue(argv, "--ffmpeg-location", "/usr/bin/ffmpeg") {
 		t.Errorf("argv = %q, want --ffmpeg-location /usr/bin/ffmpeg", argv)
@@ -199,7 +200,7 @@ func TestNewYtDlpAudioSearcher_PassesItsConfigToYtDlp(t *testing.T) {
 
 func TestYtDlpAudioSearcher_Available_MissingBinary(t *testing.T) {
 	withoutAnyBinaries(t)
-	if download.NewYtDlpAudioSearcher("", "", "").Available() {
+	if download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).Available() {
 		t.Error("Available() = true for a missing yt-dlp binary, want false")
 	}
 }
@@ -207,7 +208,7 @@ func TestYtDlpAudioSearcher_Available_MissingBinary(t *testing.T) {
 func TestYtDlpAudioSearcher_Available_PresentBinary(t *testing.T) {
 	withoutAnyBinaries(t)
 	installYtDlp(t, "")
-	if !download.NewYtDlpAudioSearcher("", "", "").Available() {
+	if !download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).Available() {
 		t.Error("Available() = false for a present yt-dlp binary, want true")
 	}
 }
@@ -215,7 +216,7 @@ func TestYtDlpAudioSearcher_Available_PresentBinary(t *testing.T) {
 func TestYtDlpAudioSearcher_Search_QueriesBothEngines(t *testing.T) {
 	calls := installSearch(t, "emit 1")
 
-	got, err := download.NewYtDlpAudioSearcher("", "", "").SearchQueries(context.Background(), []string{"song artist"})
+	got, err := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).SearchQueries(context.Background(), []string{"song artist"})
 	if err != nil {
 		t.Fatalf("Search error: %v", err)
 	}
@@ -341,7 +342,7 @@ func TestYtDlpAudioSearcher_Download_ReturnsThePrintedFile(t *testing.T) {
 
 func TestDownload_TimeoutUnderLiveParentIsSourceUnavailable(t *testing.T) {
 	installYtDlp(t, "exec sleep 30")
-	s := download.NewYtDlpAudioSearcher("", "", "").WithDownloadTimeout(100 * time.Millisecond)
+	s := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).WithDownloadTimeout(100 * time.Millisecond)
 
 	_, err := s.Download(context.Background(), youTubeWatchURL, t.TempDir())
 
@@ -355,7 +356,7 @@ func TestDownload_ParentCancellationIsNotSourceUnavailable(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	_, err := download.NewYtDlpAudioSearcher("", "", "").Download(ctx, youTubeWatchURL, t.TempDir())
+	_, err := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).Download(ctx, youTubeWatchURL, t.TempDir())
 
 	if err == nil || isSourceUnavailable(err) {
 		t.Fatalf("Download err = %v, want a plain error", err)
@@ -409,7 +410,7 @@ func TestYtDlpAudioSearcher_Search_WorksAgainstAReadOnlyCookieJarAndRenewsIt(t *
 	jarWritingYtDlp(t, t.TempDir())
 	jar := readOnlyLiveJar(t)
 
-	got, err := download.NewYtDlpAudioSearcher("", jar, "").SearchQueries(context.Background(), []string{"song"})
+	got, err := download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep).SearchQueries(context.Background(), []string{"song"})
 	if err != nil {
 		t.Fatalf("search error: %v", err)
 	}
@@ -424,7 +425,7 @@ func TestYtDlpAudioSearcher_Download_WorksAgainstAReadOnlyCookieJarAndRenewsIt(t
 	jarWritingYtDlp(t, outDir)
 	jar := readOnlyLiveJar(t)
 
-	s := download.NewYtDlpAudioSearcher("", jar, "")
+	s := download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep)
 	if _, err := s.Download(context.Background(), "https://www.youtube.com/watch?v=aaaaaaaaaaa", outDir); err != nil {
 		t.Fatalf("download error: %v", err)
 	}
@@ -434,7 +435,7 @@ func TestYtDlpAudioSearcher_Download_WorksAgainstAReadOnlyCookieJarAndRenewsIt(t
 func TestYtDlpAudioSearcher_SearchQueries_MergesEveryQueryAndEngine(t *testing.T) {
 	installSearch(t, "emit 1")
 
-	got, err := download.NewYtDlpAudioSearcher("", "", "").SearchQueries(context.Background(), []string{"a", "b"})
+	got, err := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).SearchQueries(context.Background(), []string{"a", "b"})
 	if err != nil {
 		t.Fatalf("SearchQueries error: %v", err)
 	}
@@ -446,7 +447,7 @@ func TestYtDlpAudioSearcher_SearchQueries_MergesEveryQueryAndEngine(t *testing.T
 func TestYtDlpAudioSearcher_SearchQueries_AllQueriesUnavailableIsSourceUnavailable(t *testing.T) {
 	installSearch(t, "fail 'ERROR: HTTP Error 429: Too Many Requests'")
 
-	_, err := download.NewYtDlpAudioSearcher("", "", "").SearchQueries(context.Background(), []string{"a", "b"})
+	_, err := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).SearchQueries(context.Background(), []string{"a", "b"})
 
 	if !isSourceUnavailable(err) {
 		t.Fatalf("SearchQueries error = %v, want a source-unavailable error when every query and engine is unavailable", err)
@@ -457,7 +458,7 @@ func TestYtDlpAudioSearcher_DownloadPreview_RequestsOnlyTheLeadingSectionBeforeT
 	outDir := t.TempDir()
 	calls := installYtDlp(t, stubDownload(outDir))
 
-	if _, err := download.NewYtDlpAudioSearcher("", "", "").DownloadPreview(context.Background(), youTubeWatchURL, outDir, 130); err != nil {
+	if _, err := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).DownloadPreview(context.Background(), youTubeWatchURL, outDir, 130); err != nil {
 		t.Fatalf("DownloadPreview error: %v", err)
 	}
 
@@ -486,7 +487,7 @@ func TestYtDlpAudioSearcher_MarkUnplayable_SetsTheExactPersistedReasonStrings(t 
 			installYtDlp(t, inspectedAs(tc.inspection))
 			candidates := []download.AudioCandidate{{Title: "Drinking in L.A.", URL: soundCloudTrackURL, Duration: 240}}
 
-			download.NewYtDlpAudioSearcher("", "", "").MarkUnplayable(context.Background(), candidates)
+			download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).MarkUnplayable(context.Background(), candidates)
 
 			if got := candidates[0].Unplayable; got != tc.want {
 				t.Fatalf("Unplayable = %q, want %q", got, tc.want)
@@ -500,7 +501,7 @@ type panickingContext struct{ context.Context }
 func (panickingContext) Deadline() (time.Time, bool) { panic("deadline exploded") }
 
 func TestYtDlpAudioSearcher_SearchQueries_APanicInsideEverySearchIsAFailureNotAnEmptyAnswer(t *testing.T) {
-	candidates, err := download.NewYtDlpAudioSearcher("", "", "").
+	candidates, err := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).
 		SearchQueries(panickingContext{context.Background()}, []string{"Blinding Lights"})
 
 	if err == nil {
@@ -511,7 +512,7 @@ func TestYtDlpAudioSearcher_SearchQueries_APanicInsideEverySearchIsAFailureNotAn
 func TestYtDlpAudioSearcher_MarkUnplayable_APanicInsideAnInspectionLeavesTheCandidatePlayable(t *testing.T) {
 	candidates := []download.AudioCandidate{{Title: "Drinking in L.A.", URL: soundCloudTrackURL, Duration: 240}}
 
-	download.NewYtDlpAudioSearcher("", "", "").MarkUnplayable(panickingContext{context.Background()}, candidates)
+	download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).MarkUnplayable(panickingContext{context.Background()}, candidates)
 
 	if got := candidates[0].Unplayable; got != "" {
 		t.Errorf("Unplayable = %q, want it left empty", got)
@@ -553,7 +554,7 @@ func TestYtDlpAudioSearcher_SearchRedactsAndCapsStderr(t *testing.T) {
 
 func TestYtDlpAudioSearcher_DownloadRedactsAndCapsStderr(t *testing.T) {
 	installYtDlp(t, leakyStderr)
-	_, err := download.NewYtDlpAudioSearcher("", "", "").Download(context.Background(), "https://example.com/v", t.TempDir())
+	_, err := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).Download(context.Background(), "https://example.com/v", t.TempDir())
 	assertStderrEmbeddedSafely(t, failedError(t, err))
 }
 
@@ -562,7 +563,7 @@ func TestYtDlpAudioSearcher_InspectFailureLogCapsStderr(t *testing.T) {
 	logs := captureLogs(t)
 	candidates := []download.AudioCandidate{{URL: soundCloudTrackURL, Duration: 240}}
 
-	download.NewYtDlpAudioSearcher("", "", "").MarkUnplayable(context.Background(), candidates)
+	download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).MarkUnplayable(context.Background(), candidates)
 
 	logged := loggedErrors(t, logs, "acquisition.soundcloud_inspect_failed")
 	if len(logged) != 1 {
@@ -574,7 +575,7 @@ func TestYtDlpAudioSearcher_InspectFailureLogCapsStderr(t *testing.T) {
 func embeddedDownloadStderr(t *testing.T, stderr string) string {
 	t.Helper()
 	installYtDlp(t, "printf '%s' '"+stderr+"' >&2\nexit 1")
-	_, err := download.NewYtDlpAudioSearcher("", "", "").Download(context.Background(), youTubeWatchURL, t.TempDir())
+	_, err := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).Download(context.Background(), youTubeWatchURL, t.TempDir())
 	_, embedded, found := strings.Cut(failedError(t, err), "(stderr: ")
 	if !found {
 		t.Fatalf("Download error = %v, want an embedded stderr section", err)
@@ -650,7 +651,7 @@ func TestYtDlpAudioSearcher_RemoteComponentFlags_PerCaller(t *testing.T) {
 	for name, caller := range ytDlpCallers {
 		for _, tc := range cases {
 			t.Run(name+"/"+tc.name, func(t *testing.T) {
-				argv := recordedArgv(t, tc.with(download.NewYtDlpAudioSearcher("", "", "node")), caller)
+				argv := recordedArgv(t, tc.with(download.MustNewYtDlpAudioSearcher("", "", "node", time.Now, clock.Sleep)), caller)
 				if len(argv) < len(tc.want) || strings.Join(argv[:len(tc.want)], " ") != strings.Join(tc.want, " ") {
 					t.Fatalf("argv = %q, want it to start with %q", argv, tc.want)
 				}
@@ -665,7 +666,7 @@ func TestYtDlpAudioSearcher_RemoteComponentFlags_PerCaller(t *testing.T) {
 func TestYtDlpAudioSearcher_NoJSRuntimeEmitsNoComponentFlags(t *testing.T) {
 	for name, caller := range ytDlpCallers {
 		t.Run(name, func(t *testing.T) {
-			argv := recordedArgv(t, download.NewYtDlpAudioSearcher("", "", ""), caller)
+			argv := recordedArgv(t, download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep), caller)
 			if slices.Contains(argv, "--js-runtimes") || slices.Contains(argv, "--remote-components") {
 				t.Fatalf("argv = %q, want no runtime or component flags", argv)
 			}
@@ -702,7 +703,7 @@ func TestYtDlpAudioSearcher_Download_WithoutAFormatLineStillReturnsTheFile(t *te
 }
 
 func TestYtDlpAudioSearcher_Download_AsksForTheFormatOnlyOnceTheFileIsFinal(t *testing.T) {
-	argv := downloadArgv(t, download.NewYtDlpAudioSearcher("", "", ""), youTubeWatchURL)
+	argv := downloadArgv(t, download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep), youTubeWatchURL)
 
 	print, separator := slices.Index(argv, "--print"), slices.Index(argv, "--")
 	if print < 0 || print > separator || !strings.HasPrefix(argv[print+1], "after_move:altune-source-format:") {
@@ -714,7 +715,7 @@ func TestYtDlpAudioSearcher_POTokenURL_ReachesEveryCaller(t *testing.T) {
 	const potURL = "http://altune-pot:4416"
 	for name, caller := range ytDlpCallers {
 		t.Run(name, func(t *testing.T) {
-			argv := recordedArgv(t, download.NewYtDlpAudioSearcher("", "", "node").WithPOTokenURL(potURL), caller)
+			argv := recordedArgv(t, download.MustNewYtDlpAudioSearcher("", "", "node", time.Now, clock.Sleep).WithPOTokenURL(potURL), caller)
 			if !hasFlagValue(argv, "--extractor-args", "youtubepot-bgutilhttp:base_url="+potURL) {
 				t.Fatalf("argv = %q, want --extractor-args youtubepot-bgutilhttp:base_url=%s", argv, potURL)
 			}
@@ -725,7 +726,7 @@ func TestYtDlpAudioSearcher_POTokenURL_ReachesEveryCaller(t *testing.T) {
 func TestYtDlpAudioSearcher_NoPOTokenURLEmitsNoExtractorArgs(t *testing.T) {
 	for name, caller := range ytDlpCallers {
 		t.Run(name, func(t *testing.T) {
-			argv := recordedArgv(t, download.NewYtDlpAudioSearcher("", "", "node"), caller)
+			argv := recordedArgv(t, download.MustNewYtDlpAudioSearcher("", "", "node", time.Now, clock.Sleep), caller)
 			if strings.Contains(strings.Join(argv, " "), "youtubepot") {
 				t.Fatalf("argv = %q, want no token provider flag", argv)
 			}
@@ -748,7 +749,7 @@ func TestDownload_SendsYouTubeWatchLinksThroughYouTubeMusic(t *testing.T) {
 	}
 	for in, want := range cases {
 		t.Run(in, func(t *testing.T) {
-			argv := downloadArgv(t, download.NewYtDlpAudioSearcher("", "", ""), in)
+			argv := downloadArgv(t, download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep), in)
 			if got := argv[len(argv)-1]; got != want {
 				t.Errorf("Download(%q) fetched %q, want %q", in, got, want)
 			}
@@ -767,7 +768,7 @@ func TestYtDlpAudioSearcher_DownloadPreviewAndCanaryFetchYouTubeThroughYouTubeMu
 		"canary": ytDlpCallers["canary"],
 	} {
 		t.Run(name, func(t *testing.T) {
-			argv := recordedArgv(t, download.NewYtDlpAudioSearcher("", "", ""), caller)
+			argv := recordedArgv(t, download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep), caller)
 			last := argv[len(argv)-1]
 			if !strings.HasPrefix(last, "https://music.youtube.com/watch?v=") {
 				t.Fatalf("yt-dlp got %q, want a music.youtube.com watch URL", last)
@@ -777,7 +778,7 @@ func TestYtDlpAudioSearcher_DownloadPreviewAndCanaryFetchYouTubeThroughYouTubeMu
 }
 
 func TestYtDlpAudioSearcher_Download_AsksForAACIntoM4AWithAFixedEncodeBitrate(t *testing.T) {
-	argv := strings.Join(downloadArgv(t, download.NewYtDlpAudioSearcher("", "", ""), youTubeWatchURL), "\n")
+	argv := strings.Join(downloadArgv(t, download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep), youTubeWatchURL), "\n")
 	for _, want := range []string{
 		"-f\n140/bestaudio[ext=m4a]/bestaudio/",
 		"--audio-format\nm4a",
@@ -827,7 +828,7 @@ func previewWithScript(t *testing.T, body string) (string, error) {
 	t.Helper()
 	outDir := t.TempDir()
 	installYtDlp(t, strings.ReplaceAll(body, "OUT", outDir))
-	return download.NewYtDlpAudioSearcher("", "", "").DownloadPreview(context.Background(), youTubeWatchURL, outDir, 30)
+	return download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).DownloadPreview(context.Background(), youTubeWatchURL, outDir, 30)
 }
 
 func TestDownload_RejectsAPrintedPathThatClimbsOutOfTheOutputDir(t *testing.T) {
@@ -896,7 +897,7 @@ func TestDownloadPreview_ErrorsWhenNoPathIsPrinted(t *testing.T) {
 func TestDownload_ANonPositiveTimeoutKeepsTheDefault(t *testing.T) {
 	outDir := t.TempDir()
 	installYtDlp(t, stubDownload(outDir))
-	s := download.NewYtDlpAudioSearcher("", "", "").WithDownloadTimeout(0)
+	s := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).WithDownloadTimeout(0)
 
 	if _, err := s.Download(context.Background(), youTubeWatchURL, outDir); err != nil {
 		t.Fatalf("Download error = %v, want nil: a zero timeout must leave the default in place", err)
@@ -908,7 +909,7 @@ func TestDownload_UsesATempCopyOfTheCookieJarAndCleansItUp(t *testing.T) {
 	jar := cookieJar(t, "cookies.txt", liveJarContents)
 	capture := captureCookieJar(t, stubDownload(outDir))
 
-	if _, err := download.NewYtDlpAudioSearcher("", jar, "").Download(context.Background(), youTubeWatchURL, outDir); err != nil {
+	if _, err := download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep).Download(context.Background(), youTubeWatchURL, outDir); err != nil {
 		t.Fatalf("Download error = %v, want nil", err)
 	}
 
@@ -919,7 +920,7 @@ func TestMarkUnplayable_InspectionUsesATempCopyOfTheCookieJarAndCleansItUp(t *te
 	jar := cookieJar(t, "cookies.txt", liveJarContents)
 	capture := captureCookieJar(t, "echo '{\"duration\":240}'")
 
-	download.NewYtDlpAudioSearcher("", jar, "").MarkUnplayable(context.Background(),
+	download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep).MarkUnplayable(context.Background(),
 		[]download.AudioCandidate{{URL: soundCloudTrackURL, Duration: 240}})
 
 	capture.assertTempCopyUsedAndRemoved(t, jar)
@@ -929,7 +930,7 @@ func TestSearch_UsesATempCopyOfTheCookieJarAndCleansItUp(t *testing.T) {
 	jar := cookieJar(t, "cookies.txt", liveJarContents)
 	capture := captureCookieJar(t, "")
 
-	if _, err := download.NewYtDlpAudioSearcher("", jar, "").SearchQueries(context.Background(), []string{"q"}); err != nil {
+	if _, err := download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep).SearchQueries(context.Background(), []string{"q"}); err != nil {
 		t.Fatalf("SearchQueries error = %v, want nil", err)
 	}
 

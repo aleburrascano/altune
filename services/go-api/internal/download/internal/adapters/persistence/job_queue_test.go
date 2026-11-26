@@ -64,7 +64,7 @@ func TestPostgresJobNotifier_LogsWhenItCannotListen(t *testing.T) {
 
 	deadline := time.Now().Add(10 * time.Second)
 	for !strings.Contains(logs.String(), "acquisition.notifier_listen_failed") && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
+		_ = clock.Sleep(ctx, 10*time.Millisecond)
 	}
 	cancel()
 	<-done

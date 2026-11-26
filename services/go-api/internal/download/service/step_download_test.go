@@ -13,6 +13,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/downloadprovenance"
+	"altune/go-api/internal/shared/random"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -106,7 +107,7 @@ func TestConstructors_RefuseAMissingTempWorkspace(t *testing.T) {
 			return err
 		},
 		"NewStoreStep": func() error {
-			_, err := service.NewStoreStep(nil, nil, ports.NoopAudioProber(), service.MustDirectDeleteOrphans(discardingDeleter{}), ports.NoopAudioRefLookup(), clock.Sleep)
+			_, err := service.NewStoreStep(nil, nil, ports.NoopAudioProber(), service.MustDirectDeleteOrphans(discardingDeleter{}), ports.NoopAudioRefLookup(), clock.Sleep, random.Real)
 			return err
 		},
 		"NewAcquireTrackAudioService": func() error {
@@ -144,11 +145,19 @@ func TestConstructors_RefuseAMissingLedgerSourcesFetcherOrAudioStore(t *testing.
 			return err
 		},
 		"sleeper": func() error {
-			_, err := service.NewStoreStep(newFakeAudioStore(), osWorkspace{}, ports.NoopAudioProber(), service.MustDirectDeleteOrphans(discardingDeleter{}), ports.NoopAudioRefLookup(), nil)
+			_, err := service.NewStoreStep(newFakeAudioStore(), osWorkspace{}, ports.NoopAudioProber(), service.MustDirectDeleteOrphans(discardingDeleter{}), ports.NoopAudioRefLookup(), nil, random.Real)
+			return err
+		},
+		"jitter source": func() error {
+			_, err := service.NewStoreStep(newFakeAudioStore(), osWorkspace{}, ports.NoopAudioProber(), service.MustDirectDeleteOrphans(discardingDeleter{}), ports.NoopAudioRefLookup(), clock.Sleep, nil)
+			return err
+		},
+		"clock": func() error {
+			_, err := service.NewDownloadStep(&fileWritingSearcher{}, osWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), nil)
 			return err
 		},
 		"audio store step audio store": func() error {
-			_, err := service.NewStoreStep(nil, osWorkspace{}, ports.NoopAudioProber(), service.MustDirectDeleteOrphans(discardingDeleter{}), ports.NoopAudioRefLookup(), clock.Sleep)
+			_, err := service.NewStoreStep(nil, osWorkspace{}, ports.NoopAudioProber(), service.MustDirectDeleteOrphans(discardingDeleter{}), ports.NoopAudioRefLookup(), clock.Sleep, random.Real)
 			return err
 		},
 	}
@@ -220,9 +229,9 @@ func TestNewTagStep_RefusesAMissingTagger(t *testing.T) {
 }
 
 func TestNewStoreStep_RefusesAMissingCollaborator(t *testing.T) {
-	_, err := service.NewStoreStep(nil, osWorkspace{}, nil, nil, nil, nil)
+	_, err := service.NewStoreStep(nil, osWorkspace{}, nil, nil, nil, nil, nil)
 
-	for _, name := range []string{"prober", "orphan recorder", "audio ref lookup"} {
+	for _, name := range []string{"prober", "orphan recorder", "audio ref lookup", "sleeper", "jitter source"} {
 		if !errors.Is(err, service.ErrMissingCollaborator) || !strings.Contains(err.Error(), name) {
 			t.Errorf("error = %v, want ErrMissingCollaborator naming the %s", err, name)
 		}
@@ -238,7 +247,7 @@ func TestDirectDeleteOrphans_RefusesAMissingAudioStore(t *testing.T) {
 }
 
 func TestCoreSteps_RefuseAMissingCollaborator(t *testing.T) {
-	_, err := service.CoreSteps(service.NewSourceRegistry(), nil, nil, nil, nil, nil, nil, nil, nil, nil, time.Now, osWorkspace{}, nil, nil)
+	_, err := service.CoreSteps(service.NewSourceRegistry(), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, time.Now, osWorkspace{}, nil, nil)
 
 	for _, name := range []string{"identifier", "tagger", "prober", "download limit", "orphan recorder"} {
 		if !errors.Is(err, service.ErrMissingCollaborator) || !strings.Contains(err.Error(), name) {
@@ -1458,17 +1467,21 @@ type gatedFetcher struct {
 	dirs     map[string]string
 	gates    map[string]chan struct{}
 	started  chan string
+	finished chan string
 	inFlight atomic.Int32
 	peak     atomic.Int32
 }
 
 func newGatedFetcher(gates map[string]chan struct{}) *gatedFetcher {
-	return &gatedFetcher{dirs: map[string]string{}, gates: gates, started: make(chan string, 64)}
+	return &gatedFetcher{dirs: map[string]string{}, gates: gates, started: make(chan string, 64), finished: make(chan string, 64)}
 }
 
 func (f *gatedFetcher) Fetch(_ context.Context, c ports.AudioCandidate, outDir string) (ports.FetchedAudio, error) {
 	now := f.inFlight.Add(1)
-	defer f.inFlight.Add(-1)
+	defer func() {
+		f.inFlight.Add(-1)
+		f.finished <- c.URL
+	}()
 	for {
 		peak := f.peak.Load()
 		if now <= peak || f.peak.CompareAndSwap(peak, now) {
@@ -1505,9 +1518,7 @@ func TestDownloadStep_WindowedKeepsBestRankedAcceptedEvenWhenLowerRankFinishesFi
 	for range 2 {
 		<-fetcher.started
 	}
-	for fetcher.inFlight.Load() != 1 {
-		time.Sleep(time.Millisecond)
-	}
+	<-fetcher.finished
 	close(rank1Gate)
 
 	if err := <-done; err != nil {
@@ -2124,9 +2135,7 @@ func TestDownloadStep_WorkspaceWindowRemovesLoserAndKeepsWinnerUntilCleanup(t *t
 	for range 2 {
 		<-fetcher.started
 	}
-	for fetcher.inFlight.Load() != 1 {
-		time.Sleep(time.Millisecond)
-	}
+	<-fetcher.finished
 	close(rank1Gate)
 	if err := <-done; err != nil {
 		t.Fatalf("Execute error: %v", err)
@@ -2702,7 +2711,9 @@ type slowVersionLookup struct {
 }
 
 func (s *slowVersionLookup) RecordingByMBID(ctx context.Context, mbid string) (ports.RecordingFacts, bool, error) {
-	time.Sleep(s.delay)
+	if err := clock.Sleep(ctx, s.delay); err != nil {
+		return ports.RecordingFacts{}, false, err
+	}
 	return s.stubVersionLookup.RecordingByMBID(ctx, mbid)
 }
 
