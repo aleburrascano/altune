@@ -12,9 +12,10 @@ import (
 	"time"
 )
 
-const defaultEvalTimeout = 10 * time.Second
-
-type LeadershipScope = background.OnlyWhileLeader
+const (
+	defaultEvalTimeout = 10 * time.Second
+	passGapTolerance   = 2
+)
 
 type Monitor struct {
 	notifier    ports.AlertNotifier
@@ -22,12 +23,7 @@ type Monitor struct {
 	interval    time.Duration
 	evalTimeout time.Duration
 	logger      *slog.Logger
-	leadership  LeadershipScope
 	now         clock.Func
-	newTicker   clock.TickerFunc
-
-	resumes     atomic.Uint64
-	seenResumes uint64
 
 	firing map[string]bool
 	pages  map[string]domain.Alert
@@ -37,7 +33,6 @@ type Monitor struct {
 	notifyOKAt     atomic.Int64
 	notifyErrorAt  atomic.Int64
 	panics         atomic.Uint64
-	background.Background
 }
 
 type Status struct {
@@ -86,81 +81,37 @@ var ErrInvalidInterval = errors.New("the interval must be positive")
 
 var ErrClockRequired = errors.New("the alert monitor requires a clock")
 
-var ErrTickerRequired = errors.New("the alert monitor requires a ticker")
-
-var ErrLeadershipRequired = errors.New("the alert monitor requires a leadership scope, pass background.EveryPassLeads to run on every pass")
-
-func NewMonitor(notifier ports.AlertNotifier, interval time.Duration, now clock.Func, newTicker clock.TickerFunc, leadership LeadershipScope, conditions ...domain.Condition) (*Monitor, error) {
+func NewMonitor(notifier ports.AlertNotifier, interval time.Duration, now clock.Func, conditions ...domain.Condition) (*Monitor, error) {
 	if interval <= 0 {
 		return nil, ErrInvalidInterval
 	}
 	if now == nil {
 		return nil, ErrClockRequired
 	}
-	if newTicker == nil {
-		return nil, ErrTickerRequired
-	}
-	if leadership == nil {
-		return nil, ErrLeadershipRequired
-	}
 	return &Monitor{
 		notifier:    notifier,
 		conditions:  conditions,
 		interval:    interval,
-		newTicker:   newTicker,
 		evalTimeout: defaultEvalTimeout,
 		logger:      slog.Default(),
-		leadership:  leadership,
 		now:         now,
 		firing:      make(map[string]bool),
 		pages:       make(map[string]domain.Alert),
 	}, nil
 }
 
-func (m *Monitor) Start(ctx context.Context) {
-	m.Spawn(ctx, m.loop)
-}
-
-func (m *Monitor) loop(ctx context.Context) {
-	ticks, stop := m.newTicker(m.interval)
-	defer stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticks:
-			m.tick(ctx)
-		}
-	}
-}
-
-func (m *Monitor) tick(ctx context.Context) {
-	m.rearmAfterResume()
-	if m.Paused() {
-		return
-	}
-	termCtx, release, ok := m.leadership(ctx)
-	if !ok {
-		m.forgetIncidents()
-		return
-	}
-	defer release()
-	m.evaluate(termCtx)
+func (m *Monitor) Pass(ctx context.Context) error {
+	m.forgetIncidentsAfterGap()
+	m.evaluate(ctx)
 	m.lastPass.Store(m.now().UnixNano())
+	return nil
 }
 
-func (m *Monitor) Resume() {
-	m.resumes.Add(1)
-	m.Background.Resume()
-}
-
-func (m *Monitor) rearmAfterResume() {
-	resumes := m.resumes.Load()
-	if resumes == m.seenResumes {
-		return
+func (m *Monitor) forgetIncidentsAfterGap() {
+	last := m.lastPass.Load()
+	if last != 0 && m.now().Sub(time.Unix(0, last)) > passGapTolerance*m.interval {
+		m.forgetIncidents()
 	}
-	m.seenResumes = resumes
-	m.forgetIncidents()
 }
 
 func (m *Monitor) forgetIncidents() {
@@ -169,7 +120,7 @@ func (m *Monitor) forgetIncidents() {
 }
 
 func (m *Monitor) isPassAbandoned(ctx context.Context) bool {
-	return m.Paused() || ctx.Err() != nil
+	return ctx.Err() != nil
 }
 
 func (m *Monitor) evaluate(ctx context.Context) {

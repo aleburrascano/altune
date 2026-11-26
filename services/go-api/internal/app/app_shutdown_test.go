@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const allShutdownSteps = 7
+const allShutdownSteps = 5
 
 func byComponent(outcomes []shutdown.Outcome) map[string]shutdown.Outcome {
 	got := make(map[string]shutdown.Outcome, len(outcomes))
@@ -50,7 +50,7 @@ func TestAssemblyShutdown_ADetachedTaskHeldOpenTimesOutOnlyTheDetachedStep(t *te
 	if got[shutdown.DetachedTasks].Status != shutdown.TimedOut {
 		t.Errorf("%q = %v, want TimedOut: the held task is drained by the detached step", shutdown.DetachedTasks, got[shutdown.DetachedTasks].Status)
 	}
-	for _, name := range []string{shutdown.AlertMonitor, shutdown.EventFeed, shutdown.EvalMeter, shutdown.Scheduler, shutdown.Background, shutdown.LeaderElection} {
+	for _, name := range []string{shutdown.EventFeed, shutdown.Scheduler, shutdown.Background, shutdown.LeaderElection} {
 		if got[name].Status != shutdown.Completed {
 			t.Errorf("%q = %v, want Completed: it does not wait on detached tasks", name, got[name].Status)
 		}

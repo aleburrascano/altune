@@ -20,17 +20,17 @@ func (a *App) startAlertMonitor(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	monitor, err := NewAlertMonitor(&a.jobs, notifier, alertCheckInterval, conditions)
+	monitor, err := NewAlertMonitor(notifier, alertCheckInterval, conditions)
 	if err != nil {
 		return err
 	}
 	a.alertMonitor = monitor
-	a.jobs.WhenLeader(jobs.AlertMonitor, a.alertMonitor.Start)
+	a.jobs.Ticker(jobs.AlertMonitor, alertCheckInterval, monitor.Pass)
 	return nil
 }
 
-func NewAlertMonitor(runner *jobs.Runner, notifier monitoring.AlertNotifier, interval time.Duration, conditions []monitoring.Condition) (*monitoring.AlertMonitor, error) {
-	monitor, err := monitoring.NewAlertMonitor(notifier, interval, clock.Now, clock.NewTicker, runner.LeaderContextFor(jobs.AlertMonitor), conditions...)
+func NewAlertMonitor(notifier monitoring.AlertNotifier, interval time.Duration, conditions []monitoring.Condition) (*monitoring.AlertMonitor, error) {
+	monitor, err := monitoring.NewAlertMonitor(notifier, interval, clock.Now, conditions...)
 	if err != nil {
 		return nil, fmt.Errorf("alert monitor: %w", err)
 	}

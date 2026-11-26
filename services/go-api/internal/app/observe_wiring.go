@@ -42,12 +42,12 @@ func (a *App) startObserveSources(ctx context.Context, tap *monitoring.EventTap)
 		return err
 	}
 	a.evalMeter = meter
-	a.jobs.WhenLeader(jobs.EvalMeter, a.evalMeter.Start)
+	a.jobs.Ticker(jobs.EvalMeter, monitoring.EvalMeterInterval, meter.Pass)
 	return nil
 }
 
 func NewEvalMeter(runner *jobs.Runner, run monitoring.EvalMeterRunner) (*monitoring.EvalMeter, error) {
-	meter, err := monitoring.NewEvalMeter(0, clock.Now, clock.NewTicker, run, runner.LeaderContextFor(jobs.EvalMeter))
+	meter, err := monitoring.NewEvalMeter(clock.Now, run, runner.Control(jobs.EvalMeter).Disabled)
 	if err != nil {
 		return nil, fmt.Errorf("eval meter: %w", err)
 	}
