@@ -866,6 +866,22 @@ run_push_scoped
 expect_rc 0
 forbid_log "go vet"
 
+CASE="a push that only deletes a Go file still vets the module, so the importer it left broken fails"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    printf 'package s\n\nfunc Other() int { return 2 }\n' >services/go-api/internal/shared/s/t.go
+    git add -A
+    git commit -qm "give s a second file"
+    git update-ref refs/remotes/gitea/main HEAD
+    git rm -q services/go-api/internal/shared/s/s.go
+    git commit -qm "delete s.go, which held S"
+)
+run_push_scoped
+expect_rc 1
+expect_out "FAIL  go-api vet (whole module"
+
 CASE="a signature break with an unchanged importer fails the push, which the changed package's own tests cannot see"
 new_repo
 add_go_fixture

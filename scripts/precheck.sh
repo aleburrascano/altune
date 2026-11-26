@@ -240,7 +240,7 @@ if touches '^services/go-api/'; then
         check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
       fi
       if [ $stage = push ]; then
-        if [ ${#staged_go[@]} -gt 0 ] || touches "^$m/go\.(mod|sum)\$"; then
+        if touches "^$m/.*\.go\$|^$m/go\.(mod|sum)\$"; then
           check "go-api vet (whole module, so an importer a change broke fails here)" $m "${heavy[@]}" go vet ./...
         fi
         mapfile -t pkgs < <(go_pkgs $m)
