@@ -32,6 +32,18 @@ func TestLibraryHandler_NegativeOffsetRejected(t *testing.T) {
 	}
 }
 
+func TestLibraryHandler_UnparseableLimitOrOffsetRejected(t *testing.T) {
+	for _, query := range []string{"?limit=abc", "?offset=x"} {
+		t.Run(query, func(t *testing.T) {
+			router := libraryRoutes(library.NewInMemoryTrackRepo())
+
+			rec := request(t, router, http.MethodGet, "/library/albums"+query, nil)
+
+			assertStatus(t, rec, http.StatusBadRequest)
+		})
+	}
+}
+
 func TestLibraryHandler_ZeroAndPositiveOffsetStillServed(t *testing.T) {
 	for _, path := range []string{"/library/albums?offset=0", "/library/artists?offset=5"} {
 		t.Run(path, func(t *testing.T) {

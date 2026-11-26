@@ -55,7 +55,10 @@ func libraryQuery(r *http.Request) (domain.LibraryQuery, error) {
 	if err != nil {
 		return domain.LibraryQuery{}, err
 	}
-	limit, offset := pageBounds(r)
+	limit, offset, err := pageBounds(r)
+	if err != nil {
+		return domain.LibraryQuery{}, err
+	}
 	return domain.LibraryQuery{
 		Search: search,
 		Sort:   sort,
@@ -76,10 +79,28 @@ func librarySearchTerm(raw string) (string, error) {
 	return search, nil
 }
 
-func pageBounds(r *http.Request) (limit, offset int) {
-	limit, _ = strconv.Atoi(r.URL.Query().Get("limit"))
-	offset, _ = strconv.Atoi(r.URL.Query().Get("offset"))
-	return limit, offset
+func pageBounds(r *http.Request) (limit, offset int, err error) {
+	limit, err = optionalIntParam(r, "limit")
+	if err != nil {
+		return 0, 0, err
+	}
+	offset, err = optionalIntParam(r, "offset")
+	if err != nil {
+		return 0, 0, err
+	}
+	return limit, offset, nil
+}
+
+func optionalIntParam(r *http.Request, name string) (int, error) {
+	raw := r.URL.Query().Get(name)
+	if raw == "" {
+		return 0, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, domain.NewValidationError(name + " must be an integer")
+	}
+	return value, nil
 }
 
 func formatAddedAt(t time.Time) string {

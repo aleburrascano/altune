@@ -142,7 +142,6 @@ func TestHandleListPlaylistsServesOneWindow(t *testing.T) {
 		{name: "no limit serves the default page", query: "", wantItemsLen: 50},
 		{name: "limit and offset serve that window", query: "?limit=10&offset=55", wantItemsLen: 5},
 		{name: "an offset past the end serves nothing", query: "?offset=60", wantItemsLen: 0},
-		{name: "an unparseable limit falls back to the default page", query: "?limit=abc", wantItemsLen: 50},
 		{name: "a limit of zero falls back to the default page", query: "?limit=0", wantItemsLen: 50},
 	}
 
@@ -159,6 +158,18 @@ func TestHandleListPlaylistsServesOneWindow(t *testing.T) {
 			if len(body.Items) != tt.wantItemsLen {
 				t.Errorf("len(Items) = %d, want %d of %d seeded", len(body.Items), tt.wantItemsLen, seeded)
 			}
+		})
+	}
+}
+
+func TestHandleListPlaylistsRejectsAnUnparseableWindow(t *testing.T) {
+	for _, query := range []string{"?limit=abc", "?offset=1.5"} {
+		t.Run(query, func(t *testing.T) {
+			router := playlistRoutes(seededPlaylistRepo(t, 3), library.NewInMemoryTrackRepo())
+
+			rec := request(t, router, http.MethodGet, "/playlists"+query, nil)
+
+			assertStatus(t, rec, http.StatusBadRequest)
 		})
 	}
 }
