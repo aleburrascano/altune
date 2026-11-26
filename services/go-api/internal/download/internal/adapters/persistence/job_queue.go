@@ -51,7 +51,7 @@ func MustNewPostgresJobQueue(pool *pgxpool.Pool, requeuer ports.TrackRequeuer) *
 
 const ensureJobRowSQL = `INSERT INTO acquisition_jobs (track_id) SELECT id FROM tracks WHERE id = $1 FOR UPDATE ON CONFLICT (track_id) DO NOTHING`
 
-const claimableJobSQL = `(t.acquisition_status = 'pending' OR j.job_kind = 'replace' OR j.needs_pending)`
+const claimableJobSQL = `(t.acquisition_status = 'pending' OR j.job_kind = 'replace' OR (t.acquisition_status = 'failed' AND j.needs_pending))`
 
 const clearNeedsPendingSQL = `
 UPDATE acquisition_jobs j SET needs_pending = false
@@ -215,7 +215,7 @@ WITH candidate AS (
 			SELECT 1 FROM acquisition_jobs u JOIN tracks ut ON ut.id = u.track_id
 			WHERE u.available_at <= now()
 				AND u.job_kind <> 'upgrade'
-				AND (ut.acquisition_status = 'pending' OR u.job_kind = 'replace' OR u.needs_pending)
+				AND (ut.acquisition_status = 'pending' OR u.job_kind = 'replace' OR (ut.acquisition_status = 'failed' AND u.needs_pending))
 				AND (u.lease_until IS NULL OR u.lease_until < now())
 		)
 	ORDER BY j.available_at
