@@ -1,7 +1,7 @@
-import { appVersion } from '@shared/device';
+import { correlationIdOf } from '@shared/failure';
 
-import { enqueueCritical } from '@shared/telemetry/outbox';
-import type { EventPayload } from '@shared/telemetry/shell/recordEvent';
+import type { DiscoveryEvent, EventPayload } from '@shared/telemetry/core/discoveryEvent';
+import type { TelemetryClock } from '@shared/telemetry/ports/telemetry';
 
 const MAX_MESSAGE_LENGTH = 500;
 const MAX_STACK_LENGTH = 4_000;
@@ -9,8 +9,37 @@ const DEDUPE_WINDOW_MS = 60_000;
 const DEDUPE_STACK_HEAD_LENGTH = 200;
 const MAX_TRACKED_ERRORS = 50;
 
-export type ClientErrorSource =
+type ClientErrorSource =
   'uncaught' | 'unhandled_rejection' | 'boundary' | 'query' | 'mutation' | 'playback';
+
+export type ChainUncaughtErrors = (onError: (error: unknown) => void) => void;
+
+type ClientErrorReporterDeps = {
+  clock: TelemetryClock;
+  appVersion: () => string;
+  enqueueCritical: (event: DiscoveryEvent) => Promise<void>;
+};
+
+type ClientErrorPayload = EventPayload;
+
+type SeenError = {
+  windowStart: number;
+  suppressed: number;
+  payload: ClientErrorPayload;
+  flushTimer: ReturnType<typeof setTimeout> | undefined;
+};
+
+type Occurrence = { key: string; now: number; payload: ClientErrorPayload };
+
+type RejectionTrackingOptions = {
+  allRejections: boolean;
+  onUnhandled: (id: number, error: unknown) => void;
+  onHandled: (id: number) => void;
+};
+
+type HermesRuntime = {
+  enablePromiseRejectionTracker?: (options: RejectionTrackingOptions) => void;
+};
 
 function trimmed(value: string, maxLength: number): string {
   return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
@@ -23,17 +52,6 @@ function messageAndStackOf(error: unknown): { message: string; stack: string | u
   return { message: String(error), stack: undefined };
 }
 
-type ClientErrorPayload = EventPayload;
-
-type SeenError = {
-  windowStart: number;
-  suppressed: number;
-  payload: ClientErrorPayload;
-  flushTimer: ReturnType<typeof setTimeout> | undefined;
-};
-
-const seenErrors = new Map<string, SeenError>();
-
 function dedupeKey(source: ClientErrorSource, message: string, stack: string | undefined): string {
   return [
     source,
@@ -42,129 +60,124 @@ function dedupeKey(source: ClientErrorSource, message: string, stack: string | u
   ].join('\n');
 }
 
-function enqueueReport(payload: ClientErrorPayload, suppressedRepeats: number): void {
-  const withCount =
-    suppressedRepeats > 0 ? { ...payload, suppressed_repeats: suppressedRepeats } : payload;
-  void enqueueCritical({ type: 'client_error', payload: withCount });
-}
-
-function forgetError(key: string, seen: SeenError): void {
-  clearTimeout(seen.flushTimer);
-  seenErrors.delete(key);
-}
-
-function flushSuppressedRepeats(key: string, seen: SeenError): void {
-  forgetError(key, seen);
-  if (seen.suppressed > 0) enqueueReport(seen.payload, seen.suppressed);
-}
-
 function isInsideWindow(seen: SeenError, now: number): boolean {
   const elapsed = now - seen.windowStart;
   return elapsed >= 0 && elapsed < DEDUPE_WINDOW_MS;
 }
 
-function forgetExpiredErrors(now: number): void {
-  for (const [key, seen] of seenErrors) {
-    if (!isInsideWindow(seen, now)) flushSuppressedRepeats(key, seen);
-  }
-}
-
-function evictOneToMakeRoom(): void {
-  if (seenErrors.size < MAX_TRACKED_ERRORS) return;
-  const quietFirst = [...seenErrors].sort(
-    ([, a], [, b]) => Number(a.suppressed !== 0) - Number(b.suppressed !== 0),
-  );
-  for (const [key, seen] of quietFirst.slice(0, 1)) flushSuppressedRepeats(key, seen);
-}
-
-function flushWhenWindowEnds(key: string, seen: SeenError, now: number): void {
-  if (seen.flushTimer !== undefined) return;
-  const remaining = seen.windowStart + DEDUPE_WINDOW_MS - now;
-  seen.flushTimer = setTimeout(() => flushSuppressedRepeats(key, seen), remaining);
-}
-
-function countSuppressedRepeat(key: string, seen: SeenError, now: number): void {
-  seen.suppressed += 1;
-  flushWhenWindowEnds(key, seen, now);
-}
-
-type Occurrence = { key: string; now: number; payload: ClientErrorPayload };
-
-function startWindow({ key, now, payload }: Occurrence): void {
-  seenErrors.set(key, { windowStart: now, suppressed: 0, payload, flushTimer: undefined });
-}
-
-function reopenWindow(seen: SeenError | undefined, occurrence: Occurrence): number {
-  if (seen !== undefined) forgetError(occurrence.key, seen);
-  forgetExpiredErrors(occurrence.now);
-  if (seen === undefined) evictOneToMakeRoom();
-  startWindow(occurrence);
-  return seen?.suppressed ?? 0;
-}
-
-function suppressedRepeatsBefore(occurrence: Occurrence): number | undefined {
-  const seen = seenErrors.get(occurrence.key);
-  if (seen === undefined || !isInsideWindow(seen, occurrence.now)) {
-    return reopenWindow(seen, occurrence);
-  }
-  countSuppressedRepeat(occurrence.key, seen, occurrence.now);
-  return undefined;
-}
-
-function optionalPayloadFields(stack: string | undefined): ClientErrorPayload {
-  return stack === undefined ? {} : { stack: trimmed(stack, MAX_STACK_LENGTH) };
-}
-
-export function reportClientError(error: unknown, source: ClientErrorSource): void {
-  const { message, stack } = messageAndStackOf(error);
-  const payload = {
-    source,
-    message: trimmed(message, MAX_MESSAGE_LENGTH),
-    app_version: appVersion(),
-    ...optionalPayloadFields(stack),
+function optionalPayloadFields(error: unknown, stack: string | undefined): ClientErrorPayload {
+  const correlationId = correlationIdOf(error);
+  return {
+    ...(stack === undefined ? undefined : { stack: trimmed(stack, MAX_STACK_LENGTH) }),
+    ...(correlationId === undefined ? undefined : { correlation_id: correlationId }),
   };
-  const key = dedupeKey(source, message, stack);
-  const suppressedRepeats = suppressedRepeatsBefore({ key, now: Date.now(), payload });
-  if (suppressedRepeats === undefined) return;
-  enqueueReport(payload, suppressedRepeats);
 }
-
-let installed = false;
-
-type RejectionTrackingOptions = {
-  allRejections: boolean;
-  onUnhandled: (id: number, error: unknown) => void;
-  onHandled: (id: number) => void;
-};
-
-type HermesRuntime = {
-  enablePromiseRejectionTracker?: (options: RejectionTrackingOptions) => void;
-};
 
 function hermesRuntime(): HermesRuntime | undefined {
   return (globalThis as { HermesInternal?: HermesRuntime }).HermesInternal;
 }
 
-function trackUnhandledRejections(): void {
-  if (__DEV__) return;
-  hermesRuntime()?.enablePromiseRejectionTracker?.({
-    allRejections: true,
-    onUnhandled: (_id, error) => reportClientError(error, 'unhandled_rejection'),
-    onHandled: () => undefined,
-  });
-}
+export function createClientErrorReporter(deps: ClientErrorReporterDeps) {
+  const { clock, appVersion, enqueueCritical } = deps;
+  const seenErrors = new Map<string, SeenError>();
+  let installed = false;
 
-export type ChainUncaughtErrors = (onError: (error: unknown) => void) => void;
+  function enqueueReport(payload: ClientErrorPayload, suppressedRepeats: number): void {
+    const withCount =
+      suppressedRepeats > 0 ? { ...payload, suppressed_repeats: suppressedRepeats } : payload;
+    void enqueueCritical({ type: 'client_error', payload: withCount });
+  }
 
-export function installGlobalErrorReporting(chainUncaughtErrors: ChainUncaughtErrors): void {
-  if (installed) return;
-  installed = true;
-  chainUncaughtErrors((error) => reportClientError(error, 'uncaught'));
-  trackUnhandledRejections();
-}
+  function forgetError(key: string, seen: SeenError): void {
+    clearTimeout(seen.flushTimer);
+    seenErrors.delete(key);
+  }
 
-export function _resetGlobalErrorReportingForTest(): void {
-  installed = false;
-  seenErrors.forEach((seen) => clearTimeout(seen.flushTimer));
-  seenErrors.clear();
+  function flushSuppressedRepeats(key: string, seen: SeenError): void {
+    forgetError(key, seen);
+    if (seen.suppressed > 0) enqueueReport(seen.payload, seen.suppressed);
+  }
+
+  function forgetExpiredErrors(now: number): void {
+    for (const [key, seen] of seenErrors) {
+      if (!isInsideWindow(seen, now)) flushSuppressedRepeats(key, seen);
+    }
+  }
+
+  function evictOneToMakeRoom(): void {
+    if (seenErrors.size < MAX_TRACKED_ERRORS) return;
+    const quietFirst = [...seenErrors].sort(
+      ([, a], [, b]) => Number(a.suppressed !== 0) - Number(b.suppressed !== 0),
+    );
+    for (const [key, seen] of quietFirst.slice(0, 1)) flushSuppressedRepeats(key, seen);
+  }
+
+  function flushWhenWindowEnds(key: string, seen: SeenError, now: number): void {
+    if (seen.flushTimer !== undefined) return;
+    const remaining = seen.windowStart + DEDUPE_WINDOW_MS - now;
+    seen.flushTimer = setTimeout(() => flushSuppressedRepeats(key, seen), remaining);
+  }
+
+  function countSuppressedRepeat(key: string, seen: SeenError, now: number): void {
+    seen.suppressed += 1;
+    flushWhenWindowEnds(key, seen, now);
+  }
+
+  function startWindow({ key, now, payload }: Occurrence): void {
+    seenErrors.set(key, { windowStart: now, suppressed: 0, payload, flushTimer: undefined });
+  }
+
+  function reopenWindow(seen: SeenError | undefined, occurrence: Occurrence): number {
+    if (seen !== undefined) forgetError(occurrence.key, seen);
+    forgetExpiredErrors(occurrence.now);
+    if (seen === undefined) evictOneToMakeRoom();
+    startWindow(occurrence);
+    return seen?.suppressed ?? 0;
+  }
+
+  function suppressedRepeatsBefore(occurrence: Occurrence): number | undefined {
+    const seen = seenErrors.get(occurrence.key);
+    if (seen === undefined || !isInsideWindow(seen, occurrence.now)) {
+      return reopenWindow(seen, occurrence);
+    }
+    countSuppressedRepeat(occurrence.key, seen, occurrence.now);
+    return undefined;
+  }
+
+  function reportClientError(error: unknown, source: ClientErrorSource): void {
+    const { message, stack } = messageAndStackOf(error);
+    const payload = {
+      source,
+      message: trimmed(message, MAX_MESSAGE_LENGTH),
+      app_version: appVersion(),
+      ...optionalPayloadFields(error, stack),
+    };
+    const key = dedupeKey(source, message, stack);
+    const suppressedRepeats = suppressedRepeatsBefore({ key, now: clock.now(), payload });
+    if (suppressedRepeats === undefined) return;
+    enqueueReport(payload, suppressedRepeats);
+  }
+
+  function trackUnhandledRejections(): void {
+    if (__DEV__) return;
+    hermesRuntime()?.enablePromiseRejectionTracker?.({
+      allRejections: true,
+      onUnhandled: (_id, error) => reportClientError(error, 'unhandled_rejection'),
+      onHandled: () => undefined,
+    });
+  }
+
+  function installGlobalErrorReporting(chainUncaughtErrors: ChainUncaughtErrors): void {
+    if (installed) return;
+    installed = true;
+    chainUncaughtErrors((error) => reportClientError(error, 'uncaught'));
+    trackUnhandledRejections();
+  }
+
+  function dispose(): void {
+    seenErrors.forEach((seen) => clearTimeout(seen.flushTimer));
+    seenErrors.clear();
+  }
+
+  return { reportClientError, installGlobalErrorReporting, dispose };
 }

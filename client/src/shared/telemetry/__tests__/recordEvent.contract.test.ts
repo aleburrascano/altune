@@ -57,9 +57,10 @@ function listMobileSourceFiles(root: string): string[] {
 }
 
 const EVENTS_GO = 'internal/discovery/domain/events.go';
+const EVENT_TYPES_TS = path.join(TELEMETRY_SRC, 'core', 'discoveryEvent.ts');
 const RECORD_EVENT_TS = path.join(TELEMETRY_SRC, 'shell', 'recordEvent.ts');
-const OUTBOX_TS = path.join(TELEMETRY_SRC, 'shell', 'outboxEntries.ts');
-const SESSION_TS = path.join(TELEMETRY_SRC, 'eventSession.ts');
+const OUTBOX_TS = path.join(TELEMETRY_SRC, 'core', 'outboxEntries.ts');
+const SESSION_TS = path.join(TELEMETRY_SRC, 'shell', 'eventSession.ts');
 
 function deriveGoEventTypeNames(eventsSource: string): Map<string, string> {
   const block = extractBlock(eventsSource, 'var eventTypeNames = map[EventType]string{');
@@ -169,9 +170,11 @@ function deriveGoPayloadTypeConstraints(
   };
 }
 
+const SESSION_ID_STAMP = /payload:\s*\{[\s\S]*?(\w+):\s*sessionId\(\)/;
+
 function deriveSessionKeyWrittenByTelemetry(recordEventSource: string): string {
-  const m = recordEventSource.match(/payload:\s*\{[\s\S]*?(\w+):\s*getSessionId\(\)/);
-  if (!m) throw new Error('could not find the payload key telemetry stamps via getSessionId()');
+  const m = recordEventSource.match(SESSION_ID_STAMP);
+  if (!m) throw new Error('could not find the payload key telemetry stamps via the session id');
   return m[1]!;
 }
 
@@ -185,7 +188,7 @@ describe('event-name set: every DiscoveryEventType the mobile client declares is
   it('is a subset of the names in eventTypeNames, since search_performed is legitimately server-only', () => {
     const goNames = new Set(deriveGoEventTypeNames(readGoFile(EVENTS_GO)).values());
     const mobileNames = deriveMobileDiscoveryEventTypeUnion(
-      fs.readFileSync(RECORD_EVENT_TS, 'utf8'),
+      fs.readFileSync(EVENT_TYPES_TS, 'utf8'),
     );
 
     expect(goNames.size).toBeGreaterThan(0);
@@ -202,7 +205,7 @@ describe('client-submittable subset: every DiscoveryEventType the mobile client 
     const byIdent = deriveGoEventTypeNames(eventsSource);
     const submittable = deriveGoClientSubmittableNames(eventsSource, byIdent);
     const mobileNames = deriveMobileDiscoveryEventTypeUnion(
-      fs.readFileSync(RECORD_EVENT_TS, 'utf8'),
+      fs.readFileSync(EVENT_TYPES_TS, 'utf8'),
     );
 
     expect(submittable.size).toBeGreaterThan(0);
@@ -216,7 +219,7 @@ describe('client-submittable subset: every DiscoveryEventType the mobile client 
     const byIdent = deriveGoEventTypeNames(eventsSource);
     const submittable = deriveGoClientSubmittableNames(eventsSource, byIdent);
     const mobileNames = deriveMobileDiscoveryEventTypeUnion(
-      fs.readFileSync(RECORD_EVENT_TS, 'utf8'),
+      fs.readFileSync(EVENT_TYPES_TS, 'utf8'),
     );
 
     expect(submittable.size).toBeGreaterThan(0);
@@ -240,7 +243,7 @@ describe('envelope field names: every field the mobile client sends is one searc
     const goFields = deriveGoEnvelopeFieldNames(
       readGoFile('internal/discovery/adapters/handler/search_dto.go'),
     );
-    const mobileFields = deriveMobileEnvelopeFieldNames(fs.readFileSync(RECORD_EVENT_TS, 'utf8'));
+    const mobileFields = deriveMobileEnvelopeFieldNames(fs.readFileSync(EVENT_TYPES_TS, 'utf8'));
 
     expect(goFields.size).toBeGreaterThan(0);
     expect(mobileFields.size).toBeGreaterThan(0);
@@ -277,7 +280,7 @@ describe('payload value types: the key this slice writes into payload satisfies 
   });
 
   it('getSessionId() always returns a string, satisfying the derived constraint', () => {
-    expect(fs.readFileSync(SESSION_TS, 'utf8')).toContain('export function getSessionId');
+    expect(fs.readFileSync(SESSION_TS, 'utf8')).toContain('getSessionId()');
     for (let i = 0; i < 5; i += 1) {
       expect(typeof getSessionId()).toBe('string');
     }

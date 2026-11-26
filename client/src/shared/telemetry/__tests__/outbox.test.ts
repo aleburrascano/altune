@@ -1,21 +1,19 @@
-import * as Crypto from 'expo-crypto';
-
+import { warn } from '@shared/log';
 import { notifyIdentityChange, runSignOutCleanups } from '@shared/session';
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { followSignedInUser, type OutboxEntry, type DiscoveryEvent } from '@shared/telemetry';
-import * as outboxModule from '@shared/telemetry/outbox';
+import * as telemetryDoor from '@shared/telemetry';
 import {
-  enqueueCritical,
-  flushOutbox,
-  setOutboxOwner,
-  _resetOutboxForTest,
   capOutbox,
+  createAppTelemetry,
+  createOutboxStore,
   dedupeById,
   withEnvelope,
-  loadPersistedOutbox,
-  persistOutbox,
-  setOutboxFileStore,
+  type DiscoveryEvent,
+  type OutboxEntry,
+  type OutboxStore,
+  type Telemetry,
+  type TelemetryClock,
 } from '@shared/telemetry';
 import { createMemoryFileStore } from '@testing/fakes/files/inMemoryFileStore';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
@@ -26,7 +24,27 @@ import {
 
 const { fakeFetch, FakeResponse, __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
+let store: OutboxStore;
+let telemetry: Telemetry;
+const booted: Telemetry[] = [];
+
+function boot(clock: Partial<TelemetryClock> = {}): Telemetry {
+  telemetry = createAppTelemetry({ store, clock });
+  booted.push(telemetry);
+  return telemetry;
+}
+
+function enqueueCritical(entry: DiscoveryEvent): Promise<void> {
+  return telemetry.enqueueCritical(entry);
+}
+
+function flushOutbox(): Promise<void> {
+  return telemetry.flushOutbox();
+}
+
+function setOutboxOwner(userId: string | null): void {
+  telemetry.setOutboxOwner(userId);
+}
 
 type Reply = number | 'unreachable';
 type Responder = (entry: OutboxEntry) => Reply | Promise<Reply>;
@@ -131,12 +149,12 @@ function sentEntries(): OutboxEntry[] {
 }
 
 function lastPersisted(): readonly OutboxEntry[] {
-  return loadPersistedOutbox();
+  return store.load();
 }
 
 function restoreFromDisk(entries: OutboxEntry[]): void {
-  persistOutbox(entries);
-  _resetOutboxForTest({ restored: false });
+  store.save(entries);
+  boot();
 }
 
 let appState: AppStateDriver;
@@ -144,18 +162,17 @@ let appState: AppStateDriver;
 beforeEach(() => {
   jest.useFakeTimers();
   appState = driveAppState();
-  setOutboxFileStore(createMemoryFileStore());
-  _resetOutboxForTest();
-  resetServer();
   recordWarnings();
+  store = createOutboxStore(createMemoryFileStore(), { warn });
+  boot();
+  resetServer();
   global.fetch = fakeServerFetch;
   void signInTestUser();
 });
 
 afterEach(() => {
   jest.restoreAllMocks();
-  setOutboxFileStore();
-  _resetOutboxForTest();
+  booted.splice(0).forEach((instance) => instance.dispose());
   jest.useRealTimers();
 });
 
@@ -182,14 +199,11 @@ describe('Reducer: enqueueCritical', () => {
   });
 
   it('enqueuing an entry whose minted event_id collides with one already queued overwrites it rather than duplicating it', async () => {
-    const mintSpy = jest
-      .spyOn(Crypto, 'randomUUID')
-      .mockReturnValue('11111111-1111-4111-8111-111111111111');
+    boot({ newId: () => '11111111-1111-4111-8111-111111111111' });
     serverReplies(HTTP_UNAVAILABLE);
 
     await enqueueCritical(event({ search_id: 'first' }));
     await enqueueCritical(event({ search_id: 'second' }));
-    mintSpy.mockRestore();
 
     const persisted = lastPersisted();
     expect(persisted).toHaveLength(1);
@@ -402,9 +416,7 @@ describe('Concurrency: commit-after-send ordering', () => {
 
 describe('Idempotence: replaying the same event_id', () => {
   it('apply(apply(enqueueCritical)) equals apply(enqueueCritical) when the mint collides on the same event_id', async () => {
-    const mintSpy = jest
-      .spyOn(Crypto, 'randomUUID')
-      .mockReturnValue('22222222-2222-4222-8222-222222222222');
+    boot({ newId: () => '22222222-2222-4222-8222-222222222222' });
     serverReplies(HTTP_UNAVAILABLE);
 
     await enqueueCritical(event({ type: 'wrong_album', search_id: 'replay' }));
@@ -412,7 +424,6 @@ describe('Idempotence: replaying the same event_id', () => {
 
     await enqueueCritical(event({ type: 'wrong_album', search_id: 'replay' }));
     const afterTwice = lastPersisted();
-    mintSpy.mockRestore();
 
     expect(afterOnce).toHaveLength(1);
     expect(afterTwice).toHaveLength(1);
@@ -432,70 +443,37 @@ describe('Idempotence: flushing an already-drained queue', () => {
   });
 });
 
-interface FreshApp {
-  enqueueCritical: typeof enqueueCritical;
-  loadPersistedOutbox: typeof loadPersistedOutbox;
-  appState: AppStateDriver;
-}
-
-function bootFreshApp(): FreshApp {
-  let app!: FreshApp;
-  jest.isolateModules(() => {
-    const signIn = require('@testing/signInTestUser') as { signInTestUser: () => Promise<void> };
-    void signIn.signInTestUser();
-    const lifecycle = require('@testing/fakes/lifecycle/inMemoryAppStateSource') as {
-      driveAppState: typeof driveAppState;
-    };
-    const log = require('@testing/fakes/log/inMemoryLogger') as { recordLogs: typeof recordLogs };
-    log.recordLogs();
-    app = {
-      appState: lifecycle.driveAppState(),
-      enqueueCritical: (
-        require('@shared/telemetry/outbox') as { enqueueCritical: typeof enqueueCritical }
-      ).enqueueCritical,
-      loadPersistedOutbox: (
-        require('@shared/telemetry/outboxStore') as {
-          loadPersistedOutbox: typeof loadPersistedOutbox;
-        }
-      ).loadPersistedOutbox,
-    };
-  });
-  return app;
-}
-
 describe('Idempotence: a foreground transition arriving twice', () => {
   it('flushes on the first active transition and is a no-op on the second, back-to-back', async () => {
-    const app = bootFreshApp();
+    let now = Date.now();
+    boot({ now: () => now });
     serverReplies(HTTP_UNAVAILABLE);
 
-    await app.enqueueCritical(event({ search_id: 'q' }));
+    await enqueueCritical(event({ search_id: 'q' }));
     expect(sentEntries()).toHaveLength(1);
 
-    const realNow = Date.now();
-    const clock = jest.spyOn(Date, 'now').mockReturnValue(realNow + FLUSH_BACKOFF_CAP_MS);
+    now += FLUSH_BACKOFF_CAP_MS;
     serverReplies(HTTP_ACCEPTED);
-    app.appState.change('active');
+    appState.change('active');
     await settle();
 
     expect(sentEntries()).toHaveLength(SECOND_ATTEMPT);
-    expect(app.loadPersistedOutbox()).toEqual([]);
+    expect(store.load()).toEqual([]);
 
-    app.appState.change('active');
+    appState.change('active');
     await settle();
 
     expect(sentEntries()).toHaveLength(SECOND_ATTEMPT);
-    clock.mockRestore();
   });
 
   it('does not flush on a transition to background, inactive, or any status other than active', async () => {
-    const app = bootFreshApp();
     serverReplies(HTTP_UNAVAILABLE);
 
-    await app.enqueueCritical(event({ search_id: 'q' }));
+    await enqueueCritical(event({ search_id: 'q' }));
     const callsAfterEnqueue = sentEntries().length;
 
     for (const status of ['background', 'inactive', 'extension', 'unknown'] as const) {
-      app.appState.change(status);
+      appState.change(status);
       await settle();
     }
 
@@ -505,15 +483,14 @@ describe('Idempotence: a foreground transition arriving twice', () => {
 
 describe('Regression: repeated enqueueCritical calls must not accumulate AppState listeners', () => {
   it('registers exactly one AppState listener no matter how many times enqueueCritical runs', async () => {
-    const app = bootFreshApp();
     serverReplies(HTTP_UNAVAILABLE);
 
-    await app.enqueueCritical(event({ search_id: 'first' }));
-    const listenerCountAfterFirst = app.appState.listenerCount();
-    await app.enqueueCritical(event({ search_id: 'second' }));
-    await app.enqueueCritical(event({ search_id: 'third' }));
+    await enqueueCritical(event({ search_id: 'first' }));
+    const listenerCountAfterFirst = appState.listenerCount();
+    await enqueueCritical(event({ search_id: 'second' }));
+    await enqueueCritical(event({ search_id: 'third' }));
 
-    expect(app.appState.listenerCount()).toBe(listenerCountAfterFirst);
+    expect(appState.listenerCount()).toBe(listenerCountAfterFirst);
   });
 });
 
@@ -643,7 +620,7 @@ describe('Security: entries are owned by the user who queued them', () => {
   });
 
   it('while it follows the signed-in user, a new identity owns what it queues next, and it stops when told', async () => {
-    const stopFollowing = followSignedInUser();
+    const stopFollowing = telemetry.followSignedInUser();
     notifyIdentityChange('user-c');
     stopFollowing();
     notifyIdentityChange('user-d');
@@ -809,7 +786,7 @@ describe('Backoff: the flush loop retries on its own capped, jittered schedule',
   });
 
   it('doubles the wait on each consecutive failed pass and resets it after a clean pass', async () => {
-    const random = jest.spyOn(Math, 'random').mockReturnValue(0);
+    boot({ random: () => 0 });
     serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event({ search_id: 'a' }));
     expect(sentEntries()).toHaveLength(1);
@@ -835,7 +812,6 @@ describe('Backoff: the flush loop retries on its own capped, jittered schedule',
     expect(sentEntries()).toHaveLength(1);
     await jest.advanceTimersByTimeAsync(FLUSH_BACKOFF_BASE_MS / 2);
     expect(sentEntries()).toHaveLength(SECOND_ATTEMPT);
-    random.mockRestore();
   });
 
   it('sign-out cancels the pending retry, so the next account neither inherits the wait nor a stale timer', async () => {
@@ -873,7 +849,7 @@ describe('law: the flush backoff is exponential, jittered into [ceiling/2, ceili
   const TOP_JITTER = 0.999999;
 
   async function backoffAfterFailedPasses(passes: number, random: number): Promise<number> {
-    jest.spyOn(Math, 'random').mockReturnValue(random);
+    boot({ random: () => random });
     serverReplies(HTTP_UNAVAILABLE);
     await enqueueCritical(event());
     for (let pass = 1; pass < passes; pass += 1) await flushOutbox();
@@ -1082,13 +1058,12 @@ describe('outbox_flush_failed telemetry', () => {
   });
 });
 
-describe('outbox module surface', () => {
-  it('exposes the queue API and keeps its caps, backoff and helpers private', () => {
-    expect(Object.keys(outboxModule).sort()).toEqual([
-      '_resetOutboxForTest',
-      'enqueueCritical',
-      'flushOutbox',
-      'setOutboxOwner',
-    ]);
+describe('telemetry door surface', () => {
+  it('exposes the queue API and no reset, patch or private helpers', () => {
+    const exposed = Object.keys(telemetryDoor);
+    expect(exposed).toEqual(expect.arrayContaining(['enqueueCritical', 'flushOutbox']));
+    const privateNames =
+      /^_|BACKOFF|MAX_ENTRIES|flushBackoffMs|withOwner|setOutboxFileStore|installTelemetryClock/;
+    expect(exposed.filter((name) => privateNames.test(name))).toEqual([]);
   });
 });

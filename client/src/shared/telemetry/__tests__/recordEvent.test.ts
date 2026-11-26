@@ -6,8 +6,6 @@ import { signInTestUser } from '@testing/signInTestUser';
 import { recordEvent, type DiscoveryEvent, getSessionId } from '@shared/telemetry';
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
-
 function sentBody(): DiscoveryEvent {
   return JSON.parse(__http.last().body);
 }

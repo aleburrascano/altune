@@ -1,19 +1,26 @@
 import { Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import * as userTelemetry from '@shared/telemetry/userTelemetry';
+import { createAppTelemetry, installTelemetry, type DiscoveryEvent } from '@shared/telemetry';
 import { Tappable } from '@shared/ui';
 
-let record: jest.SpyInstance;
+let sent: DiscoveryEvent[];
+let order: string[];
+
+function recordSent(event: DiscoveryEvent): Promise<void> {
+  sent.push(event);
+  order.push('record');
+  return Promise.resolve();
+}
 
 beforeEach(() => {
-  record = jest.spyOn(userTelemetry, 'recordUserAction').mockImplementation(() => undefined);
+  sent = [];
+  order = [];
+  installTelemetry(createAppTelemetry({ send: recordSent }));
 });
 
 describe('Tappable', () => {
   it('records one tapped action with the track id, then calls onPress', () => {
-    const order: string[] = [];
-    record.mockImplementation(() => order.push('record'));
     const onPress = jest.fn(() => order.push('press'));
     render(
       <Tappable action="a.b" trackId="t1" onPress={onPress} testID="t">
@@ -21,8 +28,11 @@ describe('Tappable', () => {
       </Tappable>,
     );
     fireEvent.press(screen.getByTestId('t'));
-    expect(record).toHaveBeenCalledTimes(1);
-    expect(record).toHaveBeenCalledWith({ action: 'a.b', outcome: 'tapped', track_id: 't1' });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({
+      type: 'user_action',
+      payload: { action: 'a.b', outcome: 'tapped', track_id: 't1' },
+    });
     expect(order).toEqual(['record', 'press']);
   });
 
@@ -46,7 +56,7 @@ describe('Tappable', () => {
       </Tappable>,
     );
     fireEvent.press(screen.getByTestId('t'));
-    expect(record).not.toHaveBeenCalled();
+    expect(sent).toEqual([]);
     expect(onPress).not.toHaveBeenCalled();
   });
 });

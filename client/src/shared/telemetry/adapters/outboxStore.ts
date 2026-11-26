@@ -1,16 +1,15 @@
 import {
+  createFileStoreSlot,
   deleteDocument,
   readVersionedEntries,
   writeDocumentAtomically,
-  type SchemaSpec,
-  defaultFileStore,
-  createFileStoreSlot,
   type FileStore,
+  type SchemaSpec,
   type StoredDirectory,
 } from '@shared/files';
-import type { OutboxEntry } from '@shared/telemetry/shell/outboxEntries';
-import type { DiscoveryEventType } from '@shared/telemetry/shell/recordEvent';
-import { warn } from '@shared/log';
+import type { DiscoveryEventType } from '@shared/telemetry/core/discoveryEvent';
+import type { OutboxEntry } from '@shared/telemetry/core/outboxEntries';
+import type { OutboxStore, TelemetryLog } from '@shared/telemetry/ports/telemetry';
 
 const OUTBOX_DIR = 'telemetry';
 const OUTBOX_FILE = 'critical-outbox.json';
@@ -53,16 +52,6 @@ function isPersistedEntry(e: unknown): e is OutboxEntry {
   return typeof record['client_occurred_at'] === 'string';
 }
 
-const fileStore = createFileStoreSlot(defaultFileStore);
-
-export function setOutboxFileStore(store?: FileStore): void {
-  fileStore.set(store);
-}
-
-function outboxDir(): StoredDirectory {
-  return fileStore.ensureDir(OUTBOX_DIR);
-}
-
 const OUTBOX_SCHEMA_VERSION = 1;
 
 const OUTBOX_SCHEMA: SchemaSpec = {
@@ -70,36 +59,45 @@ const OUTBOX_SCHEMA: SchemaSpec = {
   migrations: [(bareArray) => ({ schemaVersion: 1, entries: bareArray })],
 };
 
-function parsePersistedEntries(entries: readonly unknown[]): OutboxEntry[] {
+function parsePersistedEntries(entries: readonly unknown[], log: TelemetryLog): OutboxEntry[] {
   const kept = entries.filter(isPersistedEntry);
   const dropped = entries.length - kept.length;
-  if (dropped > 0) warn(`[telemetry] dropped ${dropped} malformed outbox entries at load`);
+  if (dropped > 0) log.warn(`[telemetry] dropped ${dropped} malformed outbox entries at load`);
   return kept;
 }
 
-export function loadPersistedOutbox(): OutboxEntry[] {
-  const read = readVersionedEntries('[telemetry]', OUTBOX_FILE, outboxDir, OUTBOX_SCHEMA);
-  if (read.status !== 'read') return [];
-  if (!Array.isArray(read.entries)) {
-    warn(`[telemetry] ${OUTBOX_FILE} is not an outbox; treating it as empty`);
-    return [];
+export function createOutboxStore(files: FileStore, log: TelemetryLog): OutboxStore {
+  const slot = createFileStoreSlot(files);
+  function outboxDir(): StoredDirectory {
+    return slot.ensureDir(OUTBOX_DIR);
   }
-  return parsePersistedEntries(read.entries);
-}
 
-export function persistOutbox(entries: readonly OutboxEntry[]): void {
-  try {
-    const dir = outboxDir();
-    if (entries.length === 0) {
-      deleteDocument(dir, OUTBOX_FILE);
-      return;
+  function load(): OutboxEntry[] {
+    const read = readVersionedEntries('[telemetry]', OUTBOX_FILE, outboxDir, OUTBOX_SCHEMA);
+    if (read.status !== 'read') return [];
+    if (!Array.isArray(read.entries)) {
+      log.warn(`[telemetry] ${OUTBOX_FILE} is not an outbox; treating it as empty`);
+      return [];
     }
-    const document = { schemaVersion: OUTBOX_SCHEMA_VERSION, entries };
-    writeDocumentAtomically(dir, OUTBOX_FILE, JSON.stringify(document));
-  } catch (error) {
-    warn(
-      `[telemetry] failed to persist outbox (${entries.length} entries) to ${OUTBOX_FILE}; keeping in-memory only`,
-      error,
-    );
+    return parsePersistedEntries(read.entries, log);
   }
+
+  function save(entries: readonly OutboxEntry[]): void {
+    try {
+      const dir = outboxDir();
+      if (entries.length === 0) {
+        deleteDocument(dir, OUTBOX_FILE);
+        return;
+      }
+      const document = { schemaVersion: OUTBOX_SCHEMA_VERSION, entries };
+      writeDocumentAtomically(dir, OUTBOX_FILE, JSON.stringify(document));
+    } catch (error) {
+      log.warn(
+        `[telemetry] failed to persist outbox (${entries.length} entries) to ${OUTBOX_FILE}; keeping in-memory only`,
+        error,
+      );
+    }
+  }
+
+  return { load, save };
 }

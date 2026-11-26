@@ -12,8 +12,6 @@ const TRACKING_FAILED = '[discovery] event tracking failed';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
-
 function wrapper({ children }: { children: React.ReactNode }) {
   const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;

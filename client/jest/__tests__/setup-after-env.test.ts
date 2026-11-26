@@ -2,13 +2,12 @@ const { getConfig } = require('@testing-library/react-native/build/config');
 
 const { __http } = require('../doubles/fetch.js');
 const { supabase } = require('../../src/shared/auth');
+const { signInTestUser } = require('../signInTestUser');
+const { recordLogs } = require('../fakes/log/inMemoryLogger');
 
-beforeEach(() => {
-  jest.spyOn(supabase.auth, 'getSession').mockResolvedValue({
-    data: { session: { access_token: 'tok', user: { id: 'user-1' } } },
-    error: null,
-  });
-  jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+beforeEach(async () => {
+  recordLogs();
+  await signInTestUser();
 });
 
 describe('setup-after-env', () => {
@@ -21,7 +20,7 @@ describe('setup-after-env', () => {
   });
 
   describe('outbox reset between tests', () => {
-    const { enqueueCritical } = require('../../src/shared/telemetry/outbox');
+    const { enqueueCritical } = require('../../src/shared/telemetry');
 
     beforeAll(async () => {
       __http.fail('POST /v1/discovery/events');

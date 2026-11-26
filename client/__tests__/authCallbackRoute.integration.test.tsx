@@ -1,56 +1,75 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import * as Linking from 'expo-linking';
 import { Stack } from 'expo-router';
 import { Text } from 'react-native';
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import { act, renderRouter, screen } from 'expo-router/testing-library';
 
-import { supabase } from '@shared/auth';
+import { installAuthClient } from '@shared/auth';
+import { authClientOver } from '@testing/fakeAuthClient';
 
-import { AuthGate } from '@features/signIn/ui/AuthGate';
-import { useAuthDeepLink } from '@features/signIn/shell/useAuthDeepLink';
-import { clearRecoveryUnlock } from '@features/signIn/shell/passwordRecovery';
+import { useNavigator } from '@shared/navigation';
+import {
+  AuthGate,
+  clearRecoveryUnlock,
+  type LinkEvents,
+  startAppAuthDeepLinks,
+} from '@features/signIn';
 import IndexScreen from '@/app/index';
 import AuthCallbackRoute from '@/app/auth/callback';
 import AuthConfirmRoute from '@/app/auth/confirm';
 import AuthRecoveryRoute from '@/app/auth/recovery';
 
-jest.mock('decode-uri-component', () => ({
-  __esModule: true,
-  default: (s: string) => {
-    try {
-      return decodeURIComponent(s);
-    } catch {
-      return s;
-    }
-  },
-}));
-
-jest.mock('expo-linking', () => ({
-  getInitialURL: jest.fn(),
-  addEventListener: jest.fn(() => ({ remove: jest.fn() })),
-}));
-
 type AuthCallback = (event: string, session: unknown) => void;
+type Session = { access_token: string; user: { id: string } };
+type Verification = { data: { user: { id: string } }; error: null };
 
 const RN = require('react-native');
 const NATIVE_OS = 'ios';
+const SESSION: Session = { access_token: 'tok', user: { id: 'user-1' } };
+const VERIFIED: Verification = { data: { user: { id: 'user-1' } }, error: null };
+const SETTLE_TURNS = 4;
+const WARM_SETTLE_TURNS = 8;
 
 let client: QueryClient;
 let authCallbacks: AuthCallback[];
+let current: Session | null;
+let initialLink: string | null;
+let warmListeners: ((url: string) => void)[];
+let verifyOtp: jest.Mock;
+let exchangeCodeForSession: jest.Mock;
+
+const links: LinkEvents = {
+  initialUrl: async () => initialLink,
+  subscribeUrl: (listener) => {
+    warmListeners.push(listener);
+    return () => {};
+  },
+};
+
+function installFakeAuth(): void {
+  installAuthClient(
+    authClientOver({
+      getSession: async () => ({ data: { session: current }, error: null }),
+      onAuthStateChange: (cb: AuthCallback) => {
+        authCallbacks.push(cb);
+        return { data: { subscription: { unsubscribe: () => {} } } };
+      },
+      verifyOtp,
+      exchangeCodeForSession,
+    }),
+  );
+}
 
 beforeEach(() => {
   RN.Platform.OS = NATIVE_OS;
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  (Linking.getInitialURL as jest.Mock).mockReset().mockResolvedValue(null);
-  (Linking.addEventListener as jest.Mock).mockReset().mockReturnValue({ remove: jest.fn() });
   authCallbacks = [];
-  jest.spyOn(supabase.auth, 'onAuthStateChange').mockImplementation(((cb: AuthCallback) => {
-    authCallbacks.push(cb);
-    return { data: { subscription: { unsubscribe: jest.fn() } } };
-  }) as never);
-  jest.spyOn(supabase.auth, 'verifyOtp');
-  jest.spyOn(supabase.auth, 'exchangeCodeForSession');
+  warmListeners = [];
+  current = null;
+  initialLink = null;
+  verifyOtp = jest.fn().mockResolvedValue(VERIFIED);
+  exchangeCodeForSession = jest.fn().mockResolvedValue({ error: null });
+  installFakeAuth();
   act(() => clearRecoveryUnlock());
 });
 
@@ -64,7 +83,9 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 function AuthDeepLinkBridge() {
-  useAuthDeepLink();
+  const router = useNavigator();
+
+  useEffect(() => startAppAuthDeepLinks(links, router), [router]);
   return null;
 }
 
@@ -98,17 +119,11 @@ const ROUTES = {
 };
 
 function signedIn(): void {
-  jest.spyOn(supabase.auth, 'getSession').mockResolvedValue({
-    data: { session: { access_token: 'tok', user: { id: 'user-1' } } },
-    error: null,
-  } as never);
+  current = SESSION;
 }
 
 function signedOut(): void {
-  jest.spyOn(supabase.auth, 'getSession').mockResolvedValue({
-    data: { session: null },
-    error: null,
-  });
+  current = null;
 }
 
 describe('native auth deep-link routes never show the web error screen (#2991)', () => {
@@ -135,7 +150,7 @@ describe('native auth deep-link routes never show the web error screen (#2991)',
   });
 });
 
-async function settle(times = 4): Promise<void> {
+async function settle(times = SETTLE_TURNS): Promise<void> {
   for (let i = 0; i < times; i += 1) {
     await act(async () => {});
   }
@@ -144,36 +159,27 @@ async function settle(times = 4): Promise<void> {
 describe('the deep-link bridge survives AuthGate redirecting away mid-exchange (#2991)', () => {
   it('calls the exchange exactly once for a confirm link while signed out, even though the route redirects', async () => {
     signedOut();
-    (Linking.getInitialURL as jest.Mock).mockResolvedValue(
-      'altune://auth/confirm?token_hash=tok-1&type=signup',
-    );
-    jest.spyOn(supabase.auth, 'verifyOtp').mockResolvedValue({
-      data: { user: { id: 'user-1' } },
-      error: null,
-    } as never);
+    initialLink = 'altune://auth/confirm?token_hash=tok-1&type=signup';
 
     renderRouter(ROUTES, { initialUrl: '/auth/confirm', wrapper });
     await settle();
 
-    expect(supabase.auth.verifyOtp).toHaveBeenCalledTimes(1);
+    expect(verifyOtp).toHaveBeenCalledTimes(1);
   });
 
   it('completes the recovery exchange and ends on /reset-password, not clobbered by the / redirect', async () => {
     signedOut();
-    (Linking.getInitialURL as jest.Mock).mockResolvedValue(
-      'altune://auth/recovery?token_hash=tok-2&type=recovery',
-    );
-    jest.spyOn(supabase.auth, 'verifyOtp').mockImplementation((async () => {
+    initialLink = 'altune://auth/recovery?token_hash=tok-2&type=recovery';
+    verifyOtp.mockImplementation(async () => {
       signedIn();
-      const session = { access_token: 'tok', user: { id: 'user-1' } };
-      for (const handler of authCallbacks) handler('SIGNED_IN', session);
-      return { data: { user: { id: 'user-1' } }, error: null };
-    }) as never);
+      for (const handler of authCallbacks) handler('SIGNED_IN', SESSION);
+      return VERIFIED;
+    });
 
     const router = renderRouter(ROUTES, { initialUrl: '/auth/recovery', wrapper });
     await settle();
 
-    expect(supabase.auth.verifyOtp).toHaveBeenCalledTimes(1);
+    expect(verifyOtp).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId('invalid-recovery-link')).toBeNull();
     expect(screen.getByText('reset-password-screen')).toBeTruthy();
     expect(router.getPathname()).toBe('/reset-password');
@@ -181,35 +187,29 @@ describe('the deep-link bridge survives AuthGate redirecting away mid-exchange (
 
   it('exchanges the OAuth code exactly once for an /auth/callback link', async () => {
     signedOut();
-    (Linking.getInitialURL as jest.Mock).mockResolvedValue('altune://auth/callback?code=abc-123');
-    jest.spyOn(supabase.auth, 'exchangeCodeForSession').mockResolvedValue({ error: null } as never);
+    initialLink = 'altune://auth/callback?code=abc-123';
 
     renderRouter(ROUTES, { initialUrl: '/auth/callback', wrapper });
     await settle();
 
-    expect(supabase.auth.exchangeCodeForSession).toHaveBeenCalledTimes(1);
-    expect(supabase.auth.exchangeCodeForSession).toHaveBeenCalledWith('abc-123');
+    expect(exchangeCodeForSession).toHaveBeenCalledTimes(1);
+    expect(exchangeCodeForSession).toHaveBeenCalledWith('abc-123');
   });
 
   it('still hands a warm url event to the exchange after AuthGate has redirected away', async () => {
     signedOut();
-    let warmHandler: ((event: { url: string }) => void) | undefined;
-    (Linking.addEventListener as jest.Mock).mockImplementation((_type, handler) => {
-      warmHandler = handler;
-      return { remove: jest.fn() };
-    });
-    jest.spyOn(supabase.auth, 'verifyOtp').mockResolvedValue({
-      data: { user: { id: 'user-1' } },
-      error: null,
-    } as never);
 
     const router = renderRouter(ROUTES, { initialUrl: '/auth/confirm', wrapper });
-    await settle(8);
+    await settle(WARM_SETTLE_TURNS);
 
     expect(router.getPathname()).toBe('/sign-in');
-    act(() => warmHandler?.({ url: 'altune://auth/confirm?token_hash=tok-3&type=signup' }));
+    act(() => {
+      warmListeners.forEach((listener) =>
+        listener('altune://auth/confirm?token_hash=tok-3&type=signup'),
+      );
+    });
     await settle();
 
-    expect(supabase.auth.verifyOtp).toHaveBeenCalledTimes(1);
+    expect(verifyOtp).toHaveBeenCalledTimes(1);
   });
 });

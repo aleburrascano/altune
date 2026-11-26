@@ -20,9 +20,21 @@ import { installBuild } from '@shared/device';
 import { createQueryClient } from '@shared/query';
 import { createAuthClient } from '@/mobile/authClient';
 import { StagingBanner } from '@/mobile/frame/StagingBanner';
-import { AuthGate, AuthPortProvider, httpAuthPort, useAuthDeepLink } from '@features/signIn';
+import { useNavigator } from '@shared/navigation';
+import {
+  AuthGate,
+  AuthPortProvider,
+  httpAuthPort,
+  nativeLinkEvents,
+  startAppAuthDeepLinks,
+} from '@features/signIn';
 import { registerSearchStateSignOutReset } from '@features/discovery';
-import { followSignedInUser, installGlobalErrorReporting } from '@shared/telemetry';
+import {
+  createAppTelemetry,
+  followSignedInUser,
+  installGlobalErrorReporting,
+  installTelemetry,
+} from '@shared/telemetry';
 import { PlaybackProvider, SleepTimerBridge, startPlaybackService } from '@features/player';
 import { OfflineReconcileBridge, provideOfflinePort } from '@shared/offline';
 import {
@@ -51,6 +63,7 @@ registerSearchStateSignOutReset();
 
 void SplashScreen.preventAutoHideAsync();
 
+installTelemetry(createAppTelemetry());
 followSignedInUser();
 installGlobalErrorReporting(chainUncaughtErrorHandler);
 reportOtaLaunchFailures().catch((error: unknown) => {
@@ -58,7 +71,9 @@ reportOtaLaunchFailures().catch((error: unknown) => {
 });
 
 function AuthDeepLinkBridge() {
-  useAuthDeepLink();
+  const router = useNavigator();
+
+  useEffect(() => startAppAuthDeepLinks(nativeLinkEvents, router), [router]);
   return null;
 }
 

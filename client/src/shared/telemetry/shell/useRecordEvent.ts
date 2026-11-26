@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 
-import { recordEvent } from '@shared/telemetry/shell/recordEvent';
+import { recordEvent } from '@shared/telemetry/shell/currentTelemetry';
 import { warn } from '@shared/log';
 
 export function useRecordEvent() {

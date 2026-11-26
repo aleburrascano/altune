@@ -2,28 +2,16 @@ const { configure } = require('@testing-library/react-native');
 
 configure({ asyncUtilTimeout: 5000 });
 
-jest.mock(
-  'react-native-safe-area-context',
-  () => require('react-native-safe-area-context/jest/mock').default,
-);
-
-jest.mock('react-native-reanimated', () => ({
-  __esModule: true,
-  default: { View: jest.requireActual('react-native').View },
-  useAnimatedStyle: () => ({}),
-}));
-jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => ({
-  __esModule: true,
-  default: ({ children }) => children,
-}));
-
 const { fakeFetch, __http } = require('./doubles/fetch.js');
 
 global.fetch = fakeFetch;
 
-function resetOutbox() {
-  const outbox = require('../src/shared/telemetry/outbox');
-  if (typeof outbox._resetOutboxForTest === 'function') outbox._resetOutboxForTest();
+function installFreshTelemetry() {
+  const telemetry = require('../src/shared/telemetry');
+  const { createMemoryFileStore } = require('./fakes/files/inMemoryFileStore');
+  const { warn } = require('../src/shared/log');
+  const store = telemetry.createOutboxStore(createMemoryFileStore(), { warn });
+  telemetry.installTelemetry(telemetry.createAppTelemetry({ store }));
 }
 
 function resetLogger() {
@@ -38,6 +26,8 @@ const { ensureAppAuthClient } = require('./appAuthClient.js');
 
 beforeAll(ensureAppAuthClient);
 
+afterAll(installFreshTelemetry);
+
 beforeEach(() => {
   ensureAppAuthClient();
   resetLogger();
@@ -47,5 +37,5 @@ beforeEach(() => {
   require('expo-crypto').__crypto.reset();
   require('react-native-track-player').__player.reset();
   __http.reset();
-  resetOutbox();
+  installFreshTelemetry();
 });
