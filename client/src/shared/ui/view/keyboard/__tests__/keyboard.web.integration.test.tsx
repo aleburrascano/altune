@@ -1,5 +1,5 @@
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import { createRoot } from 'react-dom/client';
 import { Text, TextInput } from 'react-native';
 
 import {
@@ -9,15 +9,16 @@ import {
   dismissKeyboard,
 } from '@shared/ui';
 
-type Mounted = { container: HTMLElement; root: Root };
-
-const mounted: Mounted[] = [];
+const cleanups: (() => void)[] = [];
 
 function mount(element: React.ReactElement): HTMLElement {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
-  mounted.push({ container, root });
+  cleanups.push(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
   act(() => {
     root.render(element);
   });
@@ -25,10 +26,7 @@ function mount(element: React.ReactElement): HTMLElement {
 }
 
 afterEach(() => {
-  for (const { container, root } of mounted.splice(0)) {
-    act(() => root.unmount());
-    container.remove();
-  }
+  for (const cleanup of cleanups.splice(0)) cleanup();
 });
 
 function byTestId(container: HTMLElement, testID: string): HTMLElement {
