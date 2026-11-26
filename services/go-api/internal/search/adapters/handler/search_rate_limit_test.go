@@ -20,7 +20,7 @@ func TestNewDiscoveryHandler_RefusesANilClock(t *testing.T) {
 	h, err := search.NewDiscoveryHandler(search.DiscoveryServices{}, nil)
 
 	if !errors.Is(err, search.ErrDiscoveryClockRequired) || h != nil {
-		t.Fatalf("NewDiscoveryHandler(nil clock) =(%v, %v), want ErrDiscoveryClockRequired and no handler", h, err)
+		t.Fatalf("NewDiscoveryHandler(nil clock) = (%v, %v), want ErrDiscoveryClockRequired and no handler", h, err)
 	}
 }
 
