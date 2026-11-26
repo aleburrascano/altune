@@ -14,6 +14,10 @@ const { ensureAppAuthClient } = require('@testing/appAuthClient.js') as {
 
 const INDEX_URI = 'file:///document/offline/pinned.json';
 
+const hangingOfflinePort = {
+  fetchAudioUrls: () => new Promise<never>(() => undefined),
+};
+
 function loadFresh<T>(load: () => T): T {
   let loaded!: T;
   jest.isolateModules(() => {
@@ -35,9 +39,7 @@ describe('mh09: the pinned-store machinery never starts on web', () => {
         JSON.stringify({ old: { trackId: 'old', status: 'failed' } }),
       );
       const { usePinnedStore } = require('@shared/offline');
-      require('@shared/offline').provideOfflinePort(
-        require('@testing/apiClientPorts').apiClientOfflinePort,
-      );
+      require('@shared/offline').provideOfflinePort(hangingOfflinePort);
       const loaded = { ...usePinnedStore.getState().entries };
       usePinnedStore.getState().pin(asTrackId('t1'));
       return { loaded, afterPin: usePinnedStore.getState().entries.t1?.status };
@@ -71,9 +73,7 @@ describe('mh09: an acquisition completing never restarts a stale pin on web', ()
     return loadFresh(() => {
       const { usePinnedStore } = require('@shared/offline');
       const { applyServerEvent } = require('@shared/events/shell/applyServerEvent');
-      require('@shared/offline').provideOfflinePort(
-        require('@testing/apiClientPorts').apiClientOfflinePort,
-      );
+      require('@shared/offline').provideOfflinePort(hangingOfflinePort);
       const { QueryClient } = require('@tanstack/react-query');
       usePinnedStore.setState({
         entries: { t1: { trackId: asTrackId('t1'), status: 'ready', uri: 'file:///stale.mp3' } },
