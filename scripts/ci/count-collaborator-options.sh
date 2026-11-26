@@ -4,8 +4,9 @@ usage="usage: count-collaborator-options.sh [--check] [DIR...]
   Counts, per DIR (default: every directory under services/go-api/internal), in tracked non-test Go files:
     nil_guards    lines that compare a lower-case field to nil (x.dep == nil, x.dep != nil); a line is counted once, a field named err is ignored
     with_options  single-line With* functions whose first parameter type is not a scalar (a port, store, breaker, func or other collaborator)
-  A coarse count meant for owners to drive their directories to zero: it also counts a nil check on a field that is not a collaborator,
-  a named scalar type and a variadic scalar as hits. Untracked files are not read, so git add a new file first.
+  A coarse count meant for owners to drive their directories to zero: it also counts a nil check on a field that is not a collaborator
+  and an option taking a named scalar type; a variadic scalar is not counted, and generic or multi-line With* signatures are not read.
+  Untracked files are not read, so git add a new file first.
   DIR may be relative to the current directory. A DIR that is not a directory, or holds no tracked Go file, exits 2.
   --check exits 1 when any count is not zero."
 check=0
