@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-const nowPlayingLookupTimeout = 3 * time.Second
-
 type playbackWiring struct {
 	handler                 *playback.QueueHandler
 	forgetDeletedIdentities *playback.ErasureSweeper
@@ -19,7 +17,7 @@ type playbackWiring struct {
 func (a *App) wirePlayback(ctx context.Context, trackRepo *catalog.PgxTrackRepository) playbackWiring {
 	metrics := playback.NewExpvarPlaybackMetrics()
 	queueStateRepo := playback.NewPgxQueueStateRepository(a.pool, playback.WithQueueStateMetrics(metrics))
-	queueSvc := newQueueService(queueStateRepo, trackRepo, metrics)
+	queueSvc := newQueueService(queueStateRepo, trackRepo, metrics, a.cfg.PlaybackNowPlayingLookupTimeout)
 	return playbackWiring{
 		handler: newQueueHandler(queueSvc, metrics, queueRateLimit(a.cfg)),
 		forgetDeletedIdentities: playback.NewErasureSweeper(
@@ -39,10 +37,11 @@ func newQueueService(
 	queueStateRepo playback.QueueStateRepository,
 	trackRepo *catalog.PgxTrackRepository,
 	metrics playbackMetricsSink,
+	lookupTimeout time.Duration,
 ) *playback.QueueService {
 	nowPlayingReader := playback.NewNowPlayingReader(playbackcatalog.NewNowPlayingTracks(trackRepo),
 		playback.WithNowPlayingMetrics(metrics),
-		playback.WithNowPlayingLookupTimeout(nowPlayingLookupTimeout),
+		playback.WithNowPlayingLookupTimeout(lookupTimeout),
 		playback.WithNowPlayingClock(time.Now))
 	return playback.NewQueueService(queueStateRepo, nowPlayingReader)
 }

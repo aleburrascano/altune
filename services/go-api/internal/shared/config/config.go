@@ -125,6 +125,8 @@ type Config struct {
 
 	PlaybackErasureScanTimeout time.Duration `env:"PLAYBACK_ERASURE_SCAN_TIMEOUT" envDefault:"30s"`
 
+	PlaybackNowPlayingLookupTimeout time.Duration `env:"PLAYBACK_NOW_PLAYING_LOOKUP_TIMEOUT" envDefault:"3s"`
+
 	OverseerPrincipalID string `env:"OVERSEER_PRINCIPAL_ID"`
 
 	EvalMeterEnabled           bool    `env:"EVAL_METER_ENABLED" envDefault:"false"`
