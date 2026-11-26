@@ -381,7 +381,7 @@ if touches '^services/go-api/'; then
       check "go-api no comments (whole tree)" $m go run ./scripts/lintcomments --all .
       check "history is whole, so the whole-tree checks see every file" . bash scripts/history-complete.sh
       check "go-api no vague names (whole tree)" $m go run ./scripts/lintnames "$(git rev-list --max-parents=0 HEAD | tail -n 1)"
-      check "go-api architecture: every module has a role and imports only what its role may (whole tree)" $m go run ./scripts/lintarch --rules role,edge
+      check "go-api architecture: every module has a role and imports only what its role may (whole tree)" $m go run ./scripts/lintarch --rules role,edge,driver
       mapfile -t pkgs < <(go_pkgs $m)
       [ ${#pkgs[@]} -gt 0 ] && par go_test_check "go-api tests (race, changed packages)" $m "${heavy[@]}" go test -race -shuffle=on -count=1 "${pkgs[@]}"
       if [ ${#pkgs[@]} -gt 0 ] && [ "${INTEGRATION:-}" != 1 ]; then

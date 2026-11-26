@@ -979,7 +979,7 @@ expect_rc 0
 expect_log "golangci-lint run --config .golangci.strict.yml --allow-serial-runners ./..."
 forbid_log "--new-from-rev"
 expect_log "go run ./scripts/lintnames $(git -C "$WORK/repo" rev-list --max-parents=0 HEAD | tail -n 1)"
-expect_log "go run ./scripts/lintarch --rules role,edge"
+expect_log "go run ./scripts/lintarch --rules role,edge,driver"
 
 CASE="a push (no --full) lints only the changed package with the fast linters against the merge base"
 new_repo
