@@ -3,6 +3,7 @@ package query_test
 import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
 	"fmt"
@@ -318,7 +319,7 @@ func TestDeadline_AnswersWithoutTheSlowProvider(t *testing.T) {
 	fast := &search.CountingProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	slow := newLateProvider(search.ProviderSpotify, search.DeezerTrack("Humble", "Skrillex", 70))
 	slates := search.NewFakeResultCache()
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{fast, slow}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ResultCache = slates }, search.WithSearchDeadline(20*time.Millisecond))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{fast, slow}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ResultCache = slates }, search.WithSearchDeadline(20*time.Millisecond, clock.NewTimer))
 	t.Cleanup(func() { close(slow.release); bg.Wait() })
 
 	out := runSearch(t, svc, "humble")
@@ -342,7 +343,7 @@ func TestDeadline_LateAnswerServesTheNextSearch(t *testing.T) {
 	fast := &search.CountingProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	slow := newLateProvider(search.ProviderSpotify, search.DeezerTrack("Humble", "Skrillex", 70))
 	slates := search.NewFakeResultCache()
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{fast, slow}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ResultCache = slates; c.ProviderCache = newFakeProviderCache() }, search.WithSearchDeadline(20*time.Millisecond))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{fast, slow}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ResultCache = slates; c.ProviderCache = newFakeProviderCache() }, search.WithSearchDeadline(20*time.Millisecond, clock.NewTimer))
 
 	runSearch(t, svc, "humble")
 	close(slow.release)
@@ -363,7 +364,7 @@ func TestDeadline_LateAnswerServesTheNextSearch(t *testing.T) {
 func TestDeadline_WaitsPastItUntilSomethingArrives(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	slow := newLateProvider(search.ProviderSpotify, search.DeezerTrack("Humble", "Skrillex", 70))
-	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow}, search.NewCircuitBreaker(), search.WithSearchDeadline(time.Millisecond))
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow}, search.NewCircuitBreaker(), search.WithSearchDeadline(time.Millisecond, clock.NewTimer))
 	done := make(chan *search.SearchOutput, 1)
 	go func() { done <- runSearch(t, svc, "humble") }()
 	waitFor(t, slow.started, "the provider call to start")
@@ -388,7 +389,7 @@ func TestDeadline_WaitsPastItUntilSomethingArrives(t *testing.T) {
 func TestDeadline_CallerGoneBeforeTheAnswerStopsTheProviders(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	slow := newLateProvider(search.ProviderSpotify)
-	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow}, search.NewCircuitBreaker(), search.WithSearchDeadline(time.Second))
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow}, search.NewCircuitBreaker(), search.WithSearchDeadline(time.Second, clock.NewTimer))
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() { _, _ = svc.Execute(ctx, search.NewUser(), search.NewQuery(t, "dna")) }()
 	waitFor(t, slow.started, "the provider call to start")

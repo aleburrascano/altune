@@ -9,8 +9,10 @@ import (
 	"altune/go-api/internal/search/service/rank"
 	"altune/go-api/internal/search/service/vocabulary"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"errors"
@@ -133,22 +135,29 @@ func WithCrossKindProminence() Option {
 	}
 }
 
-func WithExploration(rate float64) Option {
+func WithExploration(rate float64, draw random.Unit) Option {
 	return func(c *serviceConfig) error {
 		if rate <= 0 {
 			return fmt.Errorf("%w: exploration rate must be positive, got %v", ErrInvalidOption, rate)
 		}
+		if draw == nil {
+			return fmt.Errorf("%w: WithExploration requires a random source", ErrInvalidOption)
+		}
 		c.ranking.ExplorationRate = rate
+		c.ranking.ExplorationDraw = draw
 		return nil
 	}
 }
 
-func WithSearchDeadline(d time.Duration) Option {
+func WithSearchDeadline(d time.Duration, newTimer clock.TimerFunc) Option {
 	return func(c *serviceConfig) error {
 		if d <= 0 {
 			return fmt.Errorf("%w: search deadline must be positive, got %s", ErrInvalidOption, d)
 		}
-		c.awaitDeadline = deadlineAfter(d)
+		if newTimer == nil {
+			return fmt.Errorf("%w: WithSearchDeadline requires a timer", ErrInvalidOption)
+		}
+		c.awaitDeadline = deadlineAfter(d, newTimer)
 		return nil
 	}
 }

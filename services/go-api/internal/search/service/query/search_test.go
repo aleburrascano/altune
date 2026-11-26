@@ -4,7 +4,10 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/random"
+	"altune/go-api/internal/shared/random/randomtest"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -289,7 +292,7 @@ func TestEmitSearchEvent_PayloadShape(t *testing.T) {
 		results = append(results, search.DeezerTrack("Humble Take "+string(rune('A'+i)), "Artist", float64(100-i)))
 	}
 	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: results}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store }, search.WithExploration(1.0))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store }, search.WithExploration(1.0, random.Real))
 
 	user := search.NewUser()
 	out, err := svc.Execute(context.Background(), user, search.NewQuery(t, "humble"))
@@ -429,7 +432,7 @@ func TestInspectSearch_BypassesResultCacheAndTruncates(t *testing.T) {
 
 func TestMaybeExplore_FewerThanTwoResultsNeverExplores(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	svc := searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(), search.WithExploration(1.0))
+	svc := searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(), search.WithExploration(1.0, random.Real))
 	one := []search.SearchResult{{Title: "solo"}}
 	if _, explored := svc.MaybeExplore(one); explored {
 		t.Error("a single result cannot be reordered — must not count as explored")
@@ -439,12 +442,45 @@ func TestMaybeExplore_FewerThanTwoResultsNeverExplores(t *testing.T) {
 	}
 }
 
+func TestMaybeExplore_ShufflesByTheGivenDrawsAndStaysPutWhenTheDrawMissesTheRate(t *testing.T) {
+	bg := searchtest.NewTracker(t)
+	three := []search.SearchResult{{Title: "a"}, {Title: "b"}, {Title: "c"}}
+	titles := func(rs []search.SearchResult) string {
+		var out string
+		for _, r := range rs {
+			out += r.Title
+		}
+		return out
+	}
+	cases := map[string]struct {
+		draws        random.Unit
+		wantExplored bool
+		wantOrder    string
+	}{
+		"a draw at or above the rate leaves the order": {randomtest.Fixed(0.5), false, "abc"},
+		"draws below the rate shuffle by them":         {randomtest.Sequence(0.1, 0.0, 0.0), true, "bca"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			svc := searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(), search.WithExploration(0.5, tc.draws))
+
+			got, explored := svc.MaybeExplore(three)
+
+			if explored != tc.wantExplored || titles(got) != tc.wantOrder {
+				t.Fatalf("MaybeExplore = (%s, %v), want (%s, %v)", titles(got), explored, tc.wantOrder, tc.wantExplored)
+			}
+		})
+	}
+}
+
 func TestOptions_OutOfRangeValuesAreRefused(t *testing.T) {
 	for name, opt := range map[string]search.SearchOption{
-		"zero exploration rate":     search.WithExploration(0),
-		"negative exploration rate": search.WithExploration(-0.5),
-		"zero deadline":             search.WithSearchDeadline(0),
-		"negative deadline":         search.WithSearchDeadline(-time.Second),
+		"zero exploration rate":     search.WithExploration(0, random.Real),
+		"negative exploration rate": search.WithExploration(-0.5, random.Real),
+		"exploration without draws": search.WithExploration(0.5, nil),
+		"deadline without a timer":  search.WithSearchDeadline(time.Second, nil),
+		"zero deadline":             search.WithSearchDeadline(0, clock.NewTimer),
+		"negative deadline":         search.WithSearchDeadline(-time.Second, clock.NewTimer),
 	} {
 		_, err := search.NewSearchService(searchtest.NewTracker(t), nil, search.NewCircuitBreaker(), search.AbsentCollaborators(), opt)
 		if !errors.Is(err, search.ErrSearchInvalidOption) {
@@ -807,7 +843,7 @@ func TestIngestVocabulary_UsesOrganicOrderNotExploredShuffle(t *testing.T) {
 		exploredTerms := capture(exploredStore)
 
 		organicSvc := newSvc(organicStore)
-		exploredSvc := newSvc(exploredStore, search.WithExploration(1.0))
+		exploredSvc := newSvc(exploredStore, search.WithExploration(1.0, random.Real))
 
 		runSearch(t, organicSvc, "humble")
 		bg.Wait()
@@ -834,7 +870,7 @@ func TestIngestVocabulary_UsesOrganicOrderNotExploredShuffle(t *testing.T) {
 
 func TestMaybeExplore_AlwaysExploresClonesAndKeepsMembers(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	svc := searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(), search.WithExploration(1.0))
+	svc := searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(), search.WithExploration(1.0, random.Real))
 	in := []search.SearchResult{{Title: "a"}, {Title: "b"}, {Title: "c"}}
 	out, explored := svc.MaybeExplore(in)
 
