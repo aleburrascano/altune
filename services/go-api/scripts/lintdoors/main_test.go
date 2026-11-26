@@ -110,6 +110,23 @@ func TestSummaryListsOpenPackagesTheirImportersAndTheRootsExports(t *testing.T) 
 	}
 }
 
+func TestAModuleWithoutARootPackageOpensEverySubpackageAndDotImportsCount(t *testing.T) {
+	dir := newTree(t)
+	writeFile(t, dir, "internal/kit/clock/clock.go", "package clock\n\nfunc Now() {}\n")
+	writeFile(t, dir, "internal/other/o.go", "package other\n\nimport . \"example/api/internal/kit/clock\"\n")
+
+	code, out, _ := lint(t, "--summary", dir)
+
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1; output:\n%s", code, out)
+	}
+	for _, want := range []string{"kit: 1 open non-root packages, 0 exported identifiers at the root", "kit/clock (1 exported identifiers)"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("summary missing %q:\n%s", want, out)
+		}
+	}
+}
+
 func TestCleanTreeExitsZero(t *testing.T) {
 	code, out, _ := lint(t, newTree(t))
 

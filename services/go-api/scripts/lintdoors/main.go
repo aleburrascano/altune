@@ -15,7 +15,7 @@ import (
 	"strings"
 )
 
-const usage = "usage: go run ./scripts/lintdoors [--summary] [<go-api dir>]\n  every internal/<module> has one door, its root package; lists each import from outside a module of one of its non-root packages and exits 1 when there are any; --summary prints, per module, its open packages with their importers and the exported identifiers of its root"
+const usage = "usage: go run ./scripts/lintdoors [--summary] [<go-api dir>]\n  every internal/<module> has one door, its root package; lists each import from outside a module of one of its non-root packages and exits 1 when there are any; --summary prints, per module, its open packages with their importers, and the exported identifiers of the root and of each open package"
 
 type violation struct {
 	file     string
