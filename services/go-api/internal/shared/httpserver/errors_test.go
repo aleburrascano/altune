@@ -299,17 +299,17 @@ func TestHandleServiceError_LogsAServerFaultOnceAtErrorWithItsCause(t *testing.T
 	}
 }
 
-func TestHandleServiceError_LogsAClientFaultAtDebugOnly(t *testing.T) {
+func TestHandleServiceError_LogsAClientFaultAtInfoOnly(t *testing.T) {
 	ring := captureLogs(t)
 
 	httpserver.HandleServiceError(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/v1/favorites", nil), apierror.NewError(apierror.CodeDiscoveryFavoritesFull, ""))
 
 	logged := onlyRecord(t, ring, "request.rejected")
-	if logged.Level != slog.LevelDebug.String() || logged.Attrs["status"] != "409" || logged.Attrs["code"] != "discovery.favorites_full" {
-		t.Errorf("request.rejected = %s %v, want DEBUG with status 409 and the code", logged.Level, logged.Attrs)
+	if logged.Level != slog.LevelInfo.String() || logged.Attrs["status"] != "409" || logged.Attrs["code"] != "discovery.favorites_full" {
+		t.Errorf("request.rejected = %s %v, want INFO with status 409 and the code", logged.Level, logged.Attrs)
 	}
 	if len(ring.Snapshot()) != 1 {
-		t.Errorf("records = %+v, want only the debug line", ring.Snapshot())
+		t.Errorf("records = %+v, want only the info line", ring.Snapshot())
 	}
 }
 

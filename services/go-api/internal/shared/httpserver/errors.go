@@ -102,7 +102,7 @@ func statusOf(kind apierror.Kind) int {
 }
 
 func logFailure(r *http.Request, p Problem, err error) {
-	level, message := slog.LevelDebug, "request.rejected"
+	level, message := slog.LevelInfo, "request.rejected"
 	switch {
 	case p.Code == apierror.CodeRequestTimeout.String():
 		level, message = slog.LevelWarn, "request.timed_out"
