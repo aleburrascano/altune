@@ -237,7 +237,6 @@ if touches '^services/go-api/'; then
       if [ ${#staged_go[@]} -gt 0 ]; then
         mapfile -t staged_pkgs < <(printf '%s\n' "${staged_go[@]}" | xargs -r -d '\n' -n1 dirname | sort -u | sed 's#^#./#')
         scoped_rev=$base
-        [ $stage = commit ] && scoped_rev=$base
         check "go-api fast linters and format (changed packages)" $m env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --fast-only --new-from-rev="$scoped_rev" --allow-parallel-runners "${staged_pkgs[@]}"
         check "go-api no comments (changed files)" $m go run ./scripts/lintcomments --all "${staged_go[@]}"
         check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
