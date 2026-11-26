@@ -2,6 +2,7 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/shared/events"
 	sharedids "altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/testdb"
 	"context"
@@ -1109,7 +1110,7 @@ func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *test
 
 	const n = 40
 	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, n)
-	svc := library.NewPlaylistMembershipService(library.NewPostgresPlaylistRepository(countedPool), library.NewPostgresTrackRepository(pool))
+	svc := library.NewPlaylistMembershipService(library.NewPostgresPlaylistRepository(countedPool), library.NewPostgresTrackRepository(pool), events.NoopPublisher(), time.Now)
 	trackRepo := library.NewPostgresTrackRepository(pool)
 
 	parent := t

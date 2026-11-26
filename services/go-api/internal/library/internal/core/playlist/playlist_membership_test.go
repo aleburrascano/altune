@@ -19,6 +19,31 @@ import (
 
 const playlistBatchCap = 500
 
+func TestNewPlaylistMembershipService_PanicsWithoutACollaborator(t *testing.T) {
+	repo := library.NewInMemoryPlaylistRepo()
+	tracks := library.NewInMemoryTrackRepo()
+	pub := events.NoopPublisher()
+	tests := []struct {
+		name string
+		make func()
+	}{
+		{"playlist repository", func() { library.NewPlaylistMembershipService(nil, tracks, pub, time.Now) }},
+		{"track lookup", func() { library.NewPlaylistMembershipService(repo, nil, pub, time.Now) }},
+		{"events", func() { library.NewPlaylistMembershipService(repo, tracks, nil, time.Now) }},
+		{"clock", func() { library.NewPlaylistMembershipService(repo, tracks, pub, nil) }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatalf("construction without %s did not panic", tt.name)
+				}
+			}()
+			tt.make()
+		})
+	}
+}
+
 func TestPlaylistMembershipService_AddTrack(t *testing.T) {
 	ctx := context.Background()
 	userId := library.FixtureUserId()
@@ -98,7 +123,7 @@ func TestPlaylistMembershipService_AddTrack(t *testing.T) {
 			plRepo := library.NewInMemoryPlaylistRepo()
 			trRepo := library.NewInMemoryTrackRepo()
 			playlistId, trackId := tt.setup(plRepo, trRepo)
-			svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+			svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 			err := svc.AddTrack(ctx, userId, playlistId, trackId)
 
@@ -129,7 +154,7 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 		pl := library.SeedPlaylist(t, plRepo, userId, "My Playlist")
 		first := library.SeedTrack(t, trRepo, userId, "First", "Artist", "Album")
 		second := library.SeedTrack(t, trRepo, userId, "Second", "Artist", "Album")
-		svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+		svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 		added, err := svc.AddTracks(ctx, userId, pl.ID, []library.TrackId{first.ID, second.ID})
 		if err != nil {
@@ -156,7 +181,7 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 		if err := pl.AddTrack(existing.ID, time.Now()); err != nil {
 			t.Fatalf("seed AddTrack: %v", err)
 		}
-		svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+		svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 		added, err := svc.AddTracks(ctx, userId, pl.ID, []library.TrackId{fresh.ID})
 		if err != nil {
@@ -180,7 +205,7 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 		if err := pl.AddTrack(existing.ID, time.Now()); err != nil {
 			t.Fatalf("seed AddTrack: %v", err)
 		}
-		svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+		svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 		added, err := svc.AddTracks(ctx, userId, pl.ID, []library.TrackId{existing.ID, fresh.ID})
 		if err != nil {
@@ -200,7 +225,7 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 		trRepo := library.NewInMemoryTrackRepo()
 		pl := library.SeedPlaylist(t, plRepo, userId, "My Playlist")
 		track := library.SeedTrack(t, trRepo, userId, "Repeated", "Artist", "Album")
-		svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+		svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 		added, err := svc.AddTracks(ctx, userId, pl.ID, []library.TrackId{track.ID, track.ID})
 		if err != nil {
@@ -216,7 +241,7 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 		trRepo := library.NewInMemoryTrackRepo()
 		pl := library.SeedPlaylist(t, plRepo, userId, "My Playlist")
 		owned := library.SeedTrack(t, trRepo, userId, "Owned", "Artist", "Album")
-		svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+		svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 		added, err := svc.AddTracks(ctx, userId, pl.ID, []library.TrackId{owned.ID, library.NewTrackId()})
 		if err != nil {
@@ -236,7 +261,7 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 		trRepo := library.NewInMemoryTrackRepo()
 		pl := library.SeedPlaylist(t, plRepo, userId, "My Playlist")
 		plRepo.ErrOnAddTracks = errRepo
-		svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+		svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 		added, err := svc.AddTracks(ctx, userId, pl.ID, []library.TrackId{library.NewTrackId()})
 		if err != nil {
@@ -250,7 +275,7 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 	t.Run("takes a batch at the cap and rejects one past it", func(t *testing.T) {
 		plRepo := library.NewInMemoryPlaylistRepo()
 		pl := library.SeedPlaylist(t, plRepo, userId, "My Playlist")
-		svc := library.NewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo())
+		svc := library.NewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo(), events.NoopPublisher(), time.Now)
 
 		assertBatchCap(t, func(ids []library.TrackId) error {
 			_, err := svc.AddTracks(ctx, userId, pl.ID, ids)
@@ -261,7 +286,7 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 	t.Run("playlist not found returns ErrPlaylistNotFound", func(t *testing.T) {
 		plRepo := library.NewInMemoryPlaylistRepo()
 		trRepo := library.NewInMemoryTrackRepo()
-		svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+		svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 		_, err := svc.AddTracks(ctx, userId, library.NewPlaylistId(), []library.TrackId{library.NewTrackId()})
 
@@ -276,7 +301,7 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 		pl := library.SeedPlaylist(t, plRepo, userId, "My Playlist")
 		track := library.SeedTrack(t, trRepo, userId, "Track", "Artist", "Album")
 		plRepo.ErrOnAddTracks = errRepo
-		svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+		svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 		_, err := svc.AddTracks(ctx, userId, pl.ID, []library.TrackId{track.ID})
 
@@ -291,7 +316,7 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 		pl := library.SeedPlaylist(t, plRepo, userId, "My Playlist")
 		track := library.SeedTrack(t, trRepo, userId, "Track", "Artist", "Album")
 		plRepo.ErrOnAddTracks = library.ErrTrackMissing
-		svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+		svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 		_, err := svc.AddTracks(ctx, userId, pl.ID, []library.TrackId{track.ID})
 
@@ -345,7 +370,7 @@ func TestPlaylistMembershipService_AddPastTheCap_SurfacesTheRefusalWhole(t *test
 		pl := library.SeedPlaylist(t, plRepo, userId, "My Playlist")
 		track := library.SeedTrack(t, trRepo, userId, "Track", "Artist", "Album")
 		plRepo.ErrOnAddTrack = library.ErrPlaylistFull
-		svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+		svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 		err := svc.AddTrack(ctx, userId, pl.ID, track.ID)
 
@@ -358,7 +383,7 @@ func TestPlaylistMembershipService_AddPastTheCap_SurfacesTheRefusalWhole(t *test
 		pl := library.SeedPlaylist(t, plRepo, userId, "My Playlist")
 		track := library.SeedTrack(t, trRepo, userId, "Track", "Artist", "Album")
 		plRepo.ErrOnAddTracks = library.ErrPlaylistFull
-		svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+		svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 		_, err := svc.AddTracks(ctx, userId, pl.ID, []library.TrackId{track.ID})
 
@@ -376,7 +401,7 @@ func TestPlaylistMembershipService_AddTrack_SurfacesTheDuplicateRefusalWhole(t *
 	if err := pl.AddTrack(track.ID, time.Now()); err != nil {
 		t.Fatalf("seed AddTrack: %v", err)
 	}
-	svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+	svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 	err := svc.AddTrack(ctx, userId, pl.ID, track.ID)
 
@@ -406,7 +431,7 @@ func TestPlaylistMembershipService_AddTracks_SendsEachRepeatedTrackOnce(t *testi
 	pl := library.SeedPlaylist(t, plRepo.InMemoryPlaylistRepo, userId, "My Playlist")
 	a := library.SeedTrack(t, trRepo, userId, "A", "Artist", "Album")
 	b := library.SeedTrack(t, trRepo, userId, "B", "Artist", "Album")
-	svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+	svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 	added, err := svc.AddTracks(ctx, userId, pl.ID, []library.TrackId{a.ID, b.ID, a.ID, b.ID})
 	if err != nil {
@@ -462,7 +487,7 @@ func TestPlaylistMembershipService_RemoveTrack(t *testing.T) {
 			plRepo := library.NewInMemoryPlaylistRepo()
 			trRepo := library.NewInMemoryTrackRepo()
 			playlistId, trackId := tt.setup(plRepo)
-			svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+			svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 			err := svc.RemoveTrack(ctx, userId, playlistId, trackId)
 
@@ -503,7 +528,7 @@ func TestPlaylistMembershipService_RemoveTracks(t *testing.T) {
 		trRepo := library.NewInMemoryTrackRepo()
 		first, second, third := library.NewTrackId(), library.NewTrackId(), library.NewTrackId()
 		pl := seedPlaylistWithTracks(t, plRepo, first, second, third)
-		svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+		svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 		removed, err := svc.RemoveTracks(ctx, userId, pl.ID, []library.TrackId{first, third})
 		if err != nil {
@@ -522,7 +547,7 @@ func TestPlaylistMembershipService_RemoveTracks(t *testing.T) {
 		trRepo := library.NewInMemoryTrackRepo()
 		first, second, third := library.NewTrackId(), library.NewTrackId(), library.NewTrackId()
 		pl := seedPlaylistWithTracks(t, plRepo, first, second, third)
-		svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+		svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 		if _, err := svc.RemoveTracks(ctx, userId, pl.ID, []library.TrackId{first}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -542,7 +567,7 @@ func TestPlaylistMembershipService_RemoveTracks(t *testing.T) {
 		trRepo := library.NewInMemoryTrackRepo()
 		member := library.NewTrackId()
 		pl := seedPlaylistWithTracks(t, plRepo, member)
-		svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+		svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 		removed, err := svc.RemoveTracks(ctx, userId, pl.ID, []library.TrackId{member, library.NewTrackId()})
 		if err != nil {
@@ -558,7 +583,7 @@ func TestPlaylistMembershipService_RemoveTracks(t *testing.T) {
 		trRepo := library.NewInMemoryTrackRepo()
 		member := library.NewTrackId()
 		pl := seedPlaylistWithTracks(t, plRepo, member)
-		svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+		svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 		removed, err := svc.RemoveTracks(ctx, userId, pl.ID, []library.TrackId{library.NewTrackId()})
 		if err != nil {
@@ -579,7 +604,7 @@ func TestPlaylistMembershipService_RemoveTracks(t *testing.T) {
 		pl := seedPlaylistWithTracks(t, plRepo, first, second)
 		plRepo.ErrOnGetWithTracks = errRepo
 		plRepo.ErrOnGetTrackOrder = errRepo
-		svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+		svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 		if _, err := svc.RemoveTracks(ctx, userId, pl.ID, []library.TrackId{first}); err != nil {
 			t.Fatalf("RemoveTracks: %v", err)
@@ -595,7 +620,7 @@ func TestPlaylistMembershipService_RemoveTracks(t *testing.T) {
 	t.Run("takes a batch at the cap and rejects one past it", func(t *testing.T) {
 		plRepo := library.NewInMemoryPlaylistRepo()
 		pl := library.SeedPlaylist(t, plRepo, userId, "My Playlist")
-		svc := library.NewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo())
+		svc := library.NewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo(), events.NoopPublisher(), time.Now)
 
 		assertBatchCap(t, func(ids []library.TrackId) error {
 			_, err := svc.RemoveTracks(ctx, userId, pl.ID, ids)
@@ -606,7 +631,7 @@ func TestPlaylistMembershipService_RemoveTracks(t *testing.T) {
 	t.Run("playlist not found returns ErrPlaylistNotFound", func(t *testing.T) {
 		plRepo := library.NewInMemoryPlaylistRepo()
 		trRepo := library.NewInMemoryTrackRepo()
-		svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+		svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 		_, err := svc.RemoveTracks(ctx, userId, library.NewPlaylistId(), []library.TrackId{library.NewTrackId()})
 
@@ -621,7 +646,7 @@ func TestPlaylistMembershipService_RemoveTracks(t *testing.T) {
 		member := library.NewTrackId()
 		pl := seedPlaylistWithTracks(t, plRepo, member)
 		plRepo.ErrOnRemoveTracks = errRepo
-		svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+		svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 		_, err := svc.RemoveTracks(ctx, userId, pl.ID, []library.TrackId{member})
 
@@ -678,7 +703,7 @@ func TestPlaylistMembershipService_Reorder(t *testing.T) {
 			plRepo := library.NewInMemoryPlaylistRepo()
 			trRepo := library.NewInMemoryTrackRepo()
 			playlistId, trackIds := tt.setup(plRepo)
-			svc := library.NewPlaylistMembershipService(plRepo, trRepo)
+			svc := library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now)
 
 			err := svc.Reorder(ctx, userId, playlistId, trackIds)
 
@@ -720,7 +745,7 @@ func TestPlaylistMembershipService_Reorder_RefusesAnOrderThatIsNotThePlaylist(t 
 					t.Fatalf("seed AddTrack: %v", err)
 				}
 			}
-			svc := library.NewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo())
+			svc := library.NewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo(), events.NoopPublisher(), time.Now)
 
 			err := svc.Reorder(ctx, userId, pl.ID, tc.order)
 
@@ -736,7 +761,7 @@ func TestPlaylistMembershipService_Reorder_RefusesAnOrderThatIsNotThePlaylist(t 
 }
 
 func TestPlaylistMembershipService_Reorder_AnUnknownPlaylistIsNotFoundWhateverTheOrder(t *testing.T) {
-	svc := library.NewPlaylistMembershipService(library.NewInMemoryPlaylistRepo(), library.NewInMemoryTrackRepo())
+	svc := library.NewPlaylistMembershipService(library.NewInMemoryPlaylistRepo(), library.NewInMemoryTrackRepo(), events.NoopPublisher(), time.Now)
 
 	err := svc.Reorder(context.Background(), library.FixtureUserId(), library.NewPlaylistId(), []library.TrackId{library.NewTrackId()})
 
@@ -777,7 +802,7 @@ func TestPlaylistMembershipService_Reorder_RefusesAPlanInvalidatedAfterTheRead(t
 	}
 	plRepo.Seed(pl)
 	racing := &playlistEditedAfterRead{InMemoryPlaylistRepo: plRepo, added: library.NewTrackId()}
-	svc := library.NewPlaylistMembershipService(racing, library.NewInMemoryTrackRepo())
+	svc := library.NewPlaylistMembershipService(racing, library.NewInMemoryTrackRepo(), events.NoopPublisher(), time.Now)
 
 	err := svc.Reorder(ctx, userId, pl.ID, []library.TrackId{third, second, first})
 
@@ -857,7 +882,7 @@ func TestPlaylistMembershipService_ForeignWriteRefusedBelowLoadCheck(t *testing.
 			}
 			own := library.SeedTrack(t, trRepo, attacker, "Attacker Track", "Artist", "Album")
 			pub := &recordingPublisher{}
-			svc := library.NewPlaylistMembershipService(ownerBlindReadRepo{plRepo}, trRepo, library.WithPlaylistMembershipEvents(pub))
+			svc := library.NewPlaylistMembershipService(ownerBlindReadRepo{plRepo}, trRepo, pub, time.Now)
 
 			err := tc.call(svc, pl.ID, members, own.ID)
 
@@ -884,7 +909,7 @@ func TestPlaylistMembershipService_RemoveTrack_LogsActorAndObject(t *testing.T) 
 		t.Fatalf("seed track: %v", err)
 	}
 
-	svc := library.NewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo())
+	svc := library.NewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo(), events.NoopPublisher(), time.Now)
 	if err := svc.RemoveTrack(context.Background(), userId, pl.ID, trackId); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -909,7 +934,7 @@ func TestPlaylistMembershipService_RemoveTracks_LogsActorAndObject(t *testing.T)
 	}
 	absent := library.NewTrackId()
 
-	svc := library.NewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo())
+	svc := library.NewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo(), events.NoopPublisher(), time.Now)
 	n, err := svc.RemoveTracks(context.Background(), userId, pl.ID, []library.TrackId{a, absent, b})
 	if err != nil || n != 2 {
 		t.Fatalf("RemoveTracks = %d, %v; want 2, nil", n, err)
@@ -939,7 +964,7 @@ func TestPlaylistMembershipService_PublishesMutationEvents(t *testing.T) {
 		pl := library.SeedPlaylist(t, plRepo, userId, "PL")
 		_ = pl.AddTrack(track.ID, time.Now())
 		plRepo.SeedWithTracks(t, pl, []*library.Track{track})
-		svc := library.NewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo(), library.WithPlaylistMembershipEvents(pub))
+		svc := library.NewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo(), pub, time.Now)
 
 		if err := svc.RemoveTrack(ctx, userId, pl.ID, track.ID); err != nil {
 			t.Fatalf("remove track: %v", err)
@@ -959,7 +984,7 @@ func TestPlaylistMembershipService_PublishesMutationEvents(t *testing.T) {
 		_ = pl.AddTrack(t1.ID, time.Now())
 		_ = pl.AddTrack(t2.ID, time.Now())
 		plRepo.SeedWithTracks(t, pl, []*library.Track{t1, t2})
-		svc := library.NewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo(), library.WithPlaylistMembershipEvents(pub))
+		svc := library.NewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo(), pub, time.Now)
 
 		if err := svc.Reorder(ctx, userId, pl.ID, []library.TrackId{t2.ID, t1.ID}); err != nil {
 			t.Fatalf("reorder: %v", err)
@@ -983,7 +1008,7 @@ func TestPlaylistMembershipService_PublishesMutationEvents(t *testing.T) {
 		a := library.SeedTrack(t, trRepo, userId, "A", "A", "")
 		pl := library.SeedPlaylist(t, plRepo, userId, "PL")
 		_ = pl.AddTrack(member.ID, time.Now())
-		svc := library.NewPlaylistMembershipService(plRepo, trRepo, library.WithPlaylistMembershipEvents(pub))
+		svc := library.NewPlaylistMembershipService(plRepo, trRepo, pub, time.Now)
 
 		if _, err := svc.AddTracks(ctx, userId, pl.ID, []library.TrackId{b.ID, member.ID, a.ID, b.ID}); err != nil {
 			t.Fatalf("add tracks: %v", err)
@@ -1003,7 +1028,7 @@ func TestPlaylistMembershipService_PublishesMutationEvents(t *testing.T) {
 		for _, id := range []library.TrackId{first, second, third} {
 			_ = pl.AddTrack(id, time.Now())
 		}
-		svc := library.NewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo(), library.WithPlaylistMembershipEvents(pub))
+		svc := library.NewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo(), pub, time.Now)
 
 		if _, err := svc.RemoveTracks(ctx, userId, pl.ID, []library.TrackId{third, library.NewTrackId(), first, third}); err != nil {
 			t.Fatalf("remove tracks: %v", err)
@@ -1022,7 +1047,7 @@ func TestPlaylistMembershipService_PublishesMutationEvents(t *testing.T) {
 		member := library.SeedTrack(t, trRepo, userId, "Member", "A", "")
 		pl := library.SeedPlaylist(t, plRepo, userId, "PL")
 		_ = pl.AddTrack(member.ID, time.Now())
-		svc := library.NewPlaylistMembershipService(plRepo, trRepo, library.WithPlaylistMembershipEvents(pub))
+		svc := library.NewPlaylistMembershipService(plRepo, trRepo, pub, time.Now)
 
 		_ = svc.AddTrack(ctx, userId, pl.ID, member.ID)
 		_, _ = svc.AddTracks(ctx, userId, pl.ID, []library.TrackId{member.ID})

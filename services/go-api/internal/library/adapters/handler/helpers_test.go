@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
 	"bytes"
@@ -37,11 +38,11 @@ type trackDeps struct {
 	backfill  *library.FillFeaturedArtistsService
 }
 
-func (d trackDeps) addOptions() []func(*library.AddTrackService) {
+func (d trackDeps) addScheduler() library.AcquisitionScheduler {
 	if d.scheduler == nil {
-		return nil
+		return &library.InMemoryScheduler{}
 	}
-	return []func(*library.AddTrackService){library.WithAcquisitionScheduler(d.scheduler)}
+	return d.scheduler
 }
 
 func (d trackDeps) backfillFor(repo *library.InMemoryTrackRepo) *library.FillFeaturedArtistsService {
@@ -69,10 +70,10 @@ func trackRoutesWith(repo *library.InMemoryTrackRepo, deps trackDeps, opts ...fu
 
 func mountTracks(router chi.Router, repo *library.InMemoryTrackRepo, deps trackDeps, opts ...func(*library.TrackHandler)) {
 	tracks := library.NewTrackHandler(
-		library.NewAddTrackService(repo, deps.addOptions()...),
+		library.NewAddTrackService(repo, events.NoopPublisher(), deps.addScheduler(), time.Now),
 		library.NewListTracksService(repo),
 		library.NewGetTrackStatusService(repo),
-		library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore()),
+		library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore(), events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo())),
 		library.NewSetTrackNumberService(repo),
 		library.NewFeaturedArtistHandler(deps.backfillFor(repo), library.NewListFeaturingService(repo)),
 		opts...,
@@ -88,8 +89,8 @@ func playlistRoutes(playlists *library.InMemoryPlaylistRepo, tracks *library.InM
 
 func mountPlaylists(router chi.Router, playlists *library.InMemoryPlaylistRepo, tracks *library.InMemoryTrackRepo, opts ...func(*library.PlaylistHandler)) {
 	h := library.NewPlaylistHandler(
-		library.NewPlaylistLifecycleService(playlists),
-		library.NewPlaylistMembershipService(playlists, tracks),
+		library.NewPlaylistLifecycleService(playlists, events.NoopPublisher(), time.Now),
+		library.NewPlaylistMembershipService(playlists, tracks, events.NoopPublisher(), time.Now),
 		opts...,
 	)
 	router.Mount("/playlists", h.Routes())
@@ -283,10 +284,10 @@ func (rig *writeRig) seedPlaylistAndTrack(t *testing.T, user ids.UserId) (librar
 func postgresTrackRoutes(pool *pgxpool.Pool) chi.Router {
 	repo := library.NewPostgresCatalogTrackRepository(pool)
 	tracks := library.NewTrackHandler(
-		library.NewAddTrackService(repo),
+		library.NewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now),
 		library.NewListTracksService(repo),
 		library.NewGetTrackStatusService(repo),
-		library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore()),
+		library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore(), events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo())),
 		library.NewSetTrackNumberService(repo),
 		library.NewFeaturedArtistHandler(
 			library.NewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{}),
@@ -353,10 +354,10 @@ func (r *failingTrackRepo) Delete(context.Context, library.TrackId, ids.UserId) 
 func failingRepoRoutes(err error) chi.Router {
 	repo := &failingTrackRepo{InMemoryTrackRepo: library.NewInMemoryTrackRepo(), err: err}
 	tracks := library.NewTrackHandler(
-		library.NewAddTrackService(repo),
+		library.NewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now),
 		library.NewListTracksService(repo),
 		library.NewGetTrackStatusService(repo),
-		library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore()),
+		library.NewDeleteTrackService(repo, library.NewInMemoryAudioStore(), events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo())),
 		library.NewSetTrackNumberService(repo),
 		library.NewFeaturedArtistHandler(
 			library.NewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{}),

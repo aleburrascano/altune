@@ -148,15 +148,15 @@ func (a *App) wireCatalogServices(
 		orphanedAudio:    orphanedAudio,
 		addTrackSvc: library.NewAddTrackService(
 			catalogTrackRepo,
-			library.WithAddTrackEvents(tap),
-			library.WithAcquisitionScheduler(audio.scheduler),
-			library.WithAddTrackClock(time.Now),
+			tap,
+			addTrackScheduler(audio.scheduler),
+			time.Now,
 		),
 		listTracksSvc:         library.NewListTracksService(catalogTrackRepo),
-		deleteTrackSvc:        library.NewDeleteTrackService(catalogTrackRepo, audio.audioStore, library.WithDeleteTrackEvents(tap), library.WithDeleteTrackMetrics(audioStoreMetrics), library.WithDeleteTrackOrphanQueue(orphanedAudio)),
+		deleteTrackSvc:        library.NewDeleteTrackService(catalogTrackRepo, audio.audioStore, tap, audioStoreMetrics, orphanedAudio),
 		setTrackNumberSvc:     library.NewSetTrackNumberService(catalogTrackRepo),
-		playlistLifecycleSvc:  library.NewPlaylistLifecycleService(playlistRepo, library.WithPlaylistLifecycleEvents(tap)),
-		playlistMembershipSvc: library.NewPlaylistMembershipService(playlistRepo, catalogTrackRepo, library.WithPlaylistMembershipEvents(tap)),
+		playlistLifecycleSvc:  library.NewPlaylistLifecycleService(playlistRepo, tap, time.Now),
+		playlistMembershipSvc: library.NewPlaylistMembershipService(playlistRepo, catalogTrackRepo, tap, time.Now),
 		backfillFeaturedSvc:   library.NewBackfillFeaturedService(catalogTrackRepo, catalogTrackRepo, featuredBridge, library.WithBackfillClock(time.Now)),
 		listFeaturingSvc:      library.NewListFeaturingService(catalogTrackRepo),
 		getTrackStatusSvc:     library.NewGetTrackStatusService(catalogTrackRepo),
@@ -164,6 +164,13 @@ func (a *App) wireCatalogServices(
 		audioURLSvc: library.NewAudioURLService(catalogTrackRepo, audio.audioStore,
 			library.WithAudioURLMetrics(audioStoreMetrics), library.WithAudioURLClock(time.Now)),
 	}
+}
+
+func addTrackScheduler(scheduler library.AcquisitionScheduler) library.AcquisitionScheduler {
+	if scheduler == nil {
+		return library.NoopAcquisitionScheduler()
+	}
+	return scheduler
 }
 
 func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServicesStaging) catalogWiring {

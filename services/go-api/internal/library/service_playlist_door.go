@@ -10,8 +10,6 @@ type (
 var (
 	NewPlaylistLifecycleService  = playlist.NewPlaylistLifecycleService
 	NewPlaylistMembershipService = playlist.NewPlaylistMembershipService
-	WithPlaylistLifecycleEvents  = playlist.WithPlaylistLifecycleEvents
-	WithPlaylistMembershipEvents = playlist.WithPlaylistMembershipEvents
 )
 
 var ErrTooManyPlaylists = playlist.ErrTooManyPlaylists

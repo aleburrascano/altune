@@ -13,6 +13,29 @@ import (
 
 const playlistCap = 1_000
 
+func TestNewPlaylistLifecycleService_PanicsWithoutACollaborator(t *testing.T) {
+	repo := library.NewInMemoryPlaylistRepo()
+	pub := events.NoopPublisher()
+	tests := []struct {
+		name string
+		make func()
+	}{
+		{"repository", func() { library.NewPlaylistLifecycleService(nil, pub, time.Now) }},
+		{"events", func() { library.NewPlaylistLifecycleService(repo, nil, time.Now) }},
+		{"clock", func() { library.NewPlaylistLifecycleService(repo, pub, nil) }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatalf("construction without %s did not panic", tt.name)
+				}
+			}()
+			tt.make()
+		})
+	}
+}
+
 func TestPlaylistLifecycleService_Create(t *testing.T) {
 	ctx := context.Background()
 	userId := library.FixtureUserId()
@@ -57,7 +80,7 @@ func TestPlaylistLifecycleService_Create(t *testing.T) {
 			if tt.setup != nil {
 				tt.setup(plRepo)
 			}
-			svc := library.NewPlaylistLifecycleService(plRepo)
+			svc := library.NewPlaylistLifecycleService(plRepo, events.NoopPublisher(), time.Now)
 
 			playlist, err := svc.Create(ctx, userId, tt.plName)
 
@@ -116,7 +139,7 @@ func TestPlaylistLifecycleService_Create_RejectsPastUserCap(t *testing.T) {
 	ctx := context.Background()
 	userId := library.FixtureUserId()
 	plRepo := newHeldPlaylistsRepo(userId, playlistCap)
-	svc := library.NewPlaylistLifecycleService(plRepo)
+	svc := library.NewPlaylistLifecycleService(plRepo, events.NoopPublisher(), time.Now)
 
 	playlist, err := svc.Create(ctx, userId, "One Too Many")
 
@@ -136,7 +159,7 @@ func TestPlaylistLifecycleService_Create_AllowsTheLastPlaylistUnderTheCap(t *tes
 	ctx := context.Background()
 	userId := library.FixtureUserId()
 	plRepo := newHeldPlaylistsRepo(userId, playlistCap-1)
-	svc := library.NewPlaylistLifecycleService(plRepo)
+	svc := library.NewPlaylistLifecycleService(plRepo, events.NoopPublisher(), time.Now)
 
 	playlist, err := svc.Create(ctx, userId, "The Last One")
 	if err != nil {
@@ -151,7 +174,7 @@ func TestPlaylistLifecycleService_Create_AllowsTheLastPlaylistUnderTheCap(t *tes
 func TestPlaylistLifecycleService_Create_CapCountsOnlyTheCallersPlaylists(t *testing.T) {
 	ctx := context.Background()
 	plRepo := newHeldPlaylistsRepo(library.FixtureOtherUserId(), playlistCap)
-	svc := library.NewPlaylistLifecycleService(plRepo)
+	svc := library.NewPlaylistLifecycleService(plRepo, events.NoopPublisher(), time.Now)
 
 	playlist, err := svc.Create(ctx, library.FixtureUserId(), "Mine")
 	if err != nil {
@@ -164,7 +187,7 @@ func TestPlaylistLifecycleService_Create_CapCountsOnlyTheCallersPlaylists(t *tes
 }
 
 func TestPlaylistLifecycleService_Create_StampsWallClockInUTC(t *testing.T) {
-	svc := library.NewPlaylistLifecycleService(library.NewInMemoryPlaylistRepo())
+	svc := library.NewPlaylistLifecycleService(library.NewInMemoryPlaylistRepo(), events.NoopPublisher(), time.Now)
 
 	before := time.Now()
 	pl, err := svc.Create(context.Background(), library.FixtureUserId(), "Clocked")
@@ -222,7 +245,7 @@ func TestPlaylistLifecycleService_Get(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			plRepo := library.NewInMemoryPlaylistRepo()
 			playlistId := tt.setup(plRepo)
-			svc := library.NewPlaylistLifecycleService(plRepo)
+			svc := library.NewPlaylistLifecycleService(plRepo, events.NoopPublisher(), time.Now)
 
 			playlist, tracks, err := svc.Get(ctx, userId, playlistId)
 
@@ -287,7 +310,7 @@ func TestPlaylistLifecycleService_Delete(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			plRepo := library.NewInMemoryPlaylistRepo()
 			playlistId := tt.setup(plRepo)
-			svc := library.NewPlaylistLifecycleService(plRepo)
+			svc := library.NewPlaylistLifecycleService(plRepo, events.NoopPublisher(), time.Now)
 
 			err := svc.Delete(ctx, userId, playlistId)
 
@@ -358,7 +381,7 @@ func TestPlaylistLifecycleService_Rename(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			plRepo := library.NewInMemoryPlaylistRepo()
 			playlistId := tt.setup(plRepo)
-			svc := library.NewPlaylistLifecycleService(plRepo)
+			svc := library.NewPlaylistLifecycleService(plRepo, events.NoopPublisher(), time.Now)
 
 			_, _, err := svc.Rename(ctx, userId, playlistId, tt.newName)
 
@@ -406,7 +429,7 @@ func TestPlaylistLifecycleService_Rename_RefusesAPlaylistDeletedAfterTheRead(t *
 	plRepo := library.NewInMemoryPlaylistRepo()
 	pl := library.SeedPlaylist(t, plRepo, userId, "Old Name")
 	pub := &library.InMemoryRecordingPublisher{}
-	svc := library.NewPlaylistLifecycleService(&playlistDeletedAfterRead{plRepo}, library.WithPlaylistLifecycleEvents(pub))
+	svc := library.NewPlaylistLifecycleService(&playlistDeletedAfterRead{plRepo}, pub, time.Now)
 
 	_, _, err := svc.Rename(ctx, userId, pl.ID, "New Name")
 
@@ -424,7 +447,7 @@ func TestPlaylistLifecycleService_Rename_PublishesTheNewName(t *testing.T) {
 	plRepo := library.NewInMemoryPlaylistRepo()
 	pl := library.SeedPlaylist(t, plRepo, userId, "Old")
 	pub := &library.InMemoryRecordingPublisher{}
-	svc := library.NewPlaylistLifecycleService(plRepo, library.WithPlaylistLifecycleEvents(pub))
+	svc := library.NewPlaylistLifecycleService(plRepo, pub, time.Now)
 
 	if _, _, err := svc.Rename(ctx, userId, pl.ID, "New Name"); err != nil {
 		t.Fatalf("rename: %v", err)

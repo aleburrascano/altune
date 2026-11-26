@@ -2,6 +2,7 @@ package track_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 type stubAdder struct{}
@@ -78,7 +80,7 @@ func TestServicesDependOnNarrowTrackPorts(t *testing.T) {
 	if err := library.NewDeleteTrackService(struct {
 		stubDeleter
 		stubAudioRefLookup
-	}{stubDeleter: stubDeleter{deleted: true}}, store).Execute(ctx, userId, library.NewTrackId()); err != nil {
+	}{stubDeleter: stubDeleter{deleted: true}}, store, events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo())).Execute(ctx, userId, library.NewTrackId()); err != nil {
 		t.Fatalf("DeleteTrack via deleter-only port: %v", err)
 	}
 	if _, err := library.NewSetTrackNumberService(struct {
@@ -92,7 +94,7 @@ func TestServicesDependOnNarrowTrackPorts(t *testing.T) {
 		stubAdder
 		stubCounter
 		stubUpdater
-	}{})
+	}{}, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now)
 	_ = library.NewAudioURLService(stubBatchGetter{}, store)
 	_ = library.NewBackfillFeaturedService(stubLister{}, nil, nil)
 	_ = library.NewStreamTrackService(struct {
@@ -102,7 +104,7 @@ func TestServicesDependOnNarrowTrackPorts(t *testing.T) {
 	_ = library.NewPlaylistMembershipService(library.NewInMemoryPlaylistRepo(), struct {
 		stubGetter
 		stubBatchGetter
-	}{})
+	}{}, events.NoopPublisher(), time.Now)
 }
 
 type featuringErrLister struct {
@@ -187,20 +189,20 @@ func TestPlaylistAndLibraryPaths_ClassifyTransientDBFailures(t *testing.T) {
 		{"playlist list", func(e error) error {
 			repo := library.NewInMemoryPlaylistRepo()
 			repo.ErrOnList = e
-			_, err := library.NewPlaylistLifecycleService(repo).List(ctx, userId, 10, 0)
+			_, err := library.NewPlaylistLifecycleService(repo, events.NoopPublisher(), time.Now).List(ctx, userId, 10, 0)
 			return err
 		}},
 		{"playlist get", func(e error) error {
 			repo := library.NewInMemoryPlaylistRepo()
 			repo.ErrOnGetWithTracks = e
-			_, _, err := library.NewPlaylistLifecycleService(repo).Get(ctx, userId, playlistId)
+			_, _, err := library.NewPlaylistLifecycleService(repo, events.NoopPublisher(), time.Now).Get(ctx, userId, playlistId)
 			return err
 		}},
 		{"playlist rename write", func(e error) error {
 			repo := library.NewInMemoryPlaylistRepo()
 			p := library.SeedPlaylist(t, repo, userId, "before")
 			repo.ErrOnUpdate = e
-			_, _, err := library.NewPlaylistLifecycleService(repo).Rename(ctx, userId, p.ID, "after")
+			_, _, err := library.NewPlaylistLifecycleService(repo, events.NoopPublisher(), time.Now).Rename(ctx, userId, p.ID, "after")
 			return err
 		}},
 		{"membership add track", func(e error) error {
@@ -209,12 +211,12 @@ func TestPlaylistAndLibraryPaths_ClassifyTransientDBFailures(t *testing.T) {
 			trRepo := library.NewInMemoryTrackRepo()
 			track := library.SeedTrack(t, trRepo, userId, "T", "A", "B")
 			plRepo.ErrOnAddTrack = e
-			return library.NewPlaylistMembershipService(plRepo, trRepo).AddTrack(ctx, userId, p.ID, track.ID)
+			return library.NewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now).AddTrack(ctx, userId, p.ID, track.ID)
 		}},
 		{"membership reorder", func(e error) error {
 			plRepo := library.NewInMemoryPlaylistRepo()
 			plRepo.ErrOnGetTrackOrder = e
-			return library.NewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo()).Reorder(ctx, userId, playlistId, nil)
+			return library.NewPlaylistMembershipService(plRepo, library.NewInMemoryTrackRepo(), events.NoopPublisher(), time.Now).Reorder(ctx, userId, playlistId, nil)
 		}},
 		{"library albums", func(e error) error {
 			_, err := library.NewLibraryLensService(lensErrRepo{err: e}).Albums(ctx, userId, library.LibraryQuery{})

@@ -54,41 +54,18 @@ type AddTrackService struct {
 	now       func() time.Time
 }
 
-func NewAddTrackService(trackRepo ports.TrackAddUpdater, opts ...func(*AddTrackService)) *AddTrackService {
-	s := &AddTrackService{
-		trackRepo: trackRepo,
-		events:    events.NoopPublisher(),
-		scheduler: ports.NoopAcquisitionScheduler(),
-		now:       time.Now,
+func NewAddTrackService(trackRepo ports.TrackAddUpdater, publisher events.Publisher, scheduler ports.AcquisitionScheduler, now func() time.Time) *AddTrackService {
+	switch {
+	case trackRepo == nil:
+		panic("track: NewAddTrackService requires a track repository")
+	case publisher == nil:
+		panic("track: NewAddTrackService requires an events publisher")
+	case scheduler == nil:
+		panic("track: NewAddTrackService requires an acquisition scheduler")
+	case now == nil:
+		panic("track: NewAddTrackService requires a clock")
 	}
-	for _, opt := range opts {
-		opt(s)
-	}
-	return s
-}
-
-func WithAddTrackClock(now func() time.Time) func(*AddTrackService) {
-	return func(s *AddTrackService) {
-		if now != nil {
-			s.now = now
-		}
-	}
-}
-
-func WithAddTrackEvents(pub events.Publisher) func(*AddTrackService) {
-	return func(s *AddTrackService) {
-		if pub != nil {
-			s.events = pub
-		}
-	}
-}
-
-func WithAcquisitionScheduler(scheduler ports.AcquisitionScheduler) func(*AddTrackService) {
-	return func(s *AddTrackService) {
-		if scheduler != nil {
-			s.scheduler = scheduler
-		}
-	}
+	return &AddTrackService{trackRepo: trackRepo, events: publisher, scheduler: scheduler, now: now}
 }
 
 func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input AddTrackInput) (*AddTrackOutput, error) {

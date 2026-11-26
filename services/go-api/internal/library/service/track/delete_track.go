@@ -23,36 +23,18 @@ type DeleteTrackService struct {
 
 const orphanRecordTimeout = 5 * time.Second
 
-func NewDeleteTrackService(trackRepo ports.TrackAudioDeleter, audioStore ports.AudioStore, opts ...func(*DeleteTrackService)) *DeleteTrackService {
-	s := &DeleteTrackService{trackRepo: trackRepo, audioStore: audioStore, events: events.NoopPublisher(), metrics: ports.NoopAudioStoreMetrics()}
-	for _, opt := range opts {
-		opt(s)
+func NewDeleteTrackService(trackRepo ports.TrackAudioDeleter, audioStore ports.AudioStore, publisher events.Publisher, metrics ports.AudioStoreMetrics, orphans ports.OrphanedAudioRecorder) *DeleteTrackService {
+	switch {
+	case trackRepo == nil:
+		panic("track: NewDeleteTrackService requires a track repository")
+	case publisher == nil:
+		panic("track: NewDeleteTrackService requires an events publisher")
+	case metrics == nil:
+		panic("track: NewDeleteTrackService requires audio store metrics")
+	case orphans == nil:
+		panic("track: NewDeleteTrackService requires an orphaned audio recorder")
 	}
-	return s
-}
-
-func WithDeleteTrackEvents(pub events.Publisher) func(*DeleteTrackService) {
-	return func(s *DeleteTrackService) {
-		if pub != nil {
-			s.events = pub
-		}
-	}
-}
-
-func WithDeleteTrackMetrics(m ports.AudioStoreMetrics) func(*DeleteTrackService) {
-	return func(s *DeleteTrackService) {
-		if m != nil {
-			s.metrics = m
-		}
-	}
-}
-
-func WithDeleteTrackOrphanQueue(q ports.OrphanedAudioRecorder) func(*DeleteTrackService) {
-	return func(s *DeleteTrackService) {
-		if q != nil {
-			s.orphans = q
-		}
-	}
+	return &DeleteTrackService{trackRepo: trackRepo, audioStore: audioStore, events: publisher, metrics: metrics, orphans: orphans}
 }
 
 func (s *DeleteTrackService) Execute(ctx context.Context, userId ids.UserId, trackId domain.TrackId) error {
