@@ -169,7 +169,7 @@ par_stop() {
   [ -z "$par_dir" ] || rm -rf "$par_dir"
 }
 
-trap 'par_stop; announce_abort; rm -f "$log"' EXIT
+trap 'exit_rc=$?; par_stop; abort_rc=${abort_rc:-$exit_rc}; announce_abort; rm -f "$log"' EXIT
 trap 'abort_rc=129; exit 129' HUP
 trap 'abort_rc=130; exit 130' INT
 trap 'abort_rc=143; exit 143' TERM

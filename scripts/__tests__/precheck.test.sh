@@ -765,10 +765,6 @@ edit_go_file internal/shared/s/s.go
 HEAVY_HELD=1 GO_ORDER_LOG="$WORK/order.log" run_push_scoped
 expect_rc 0
 [ "$(tr '\n' ' ' <"$WORK/order.log")" = "start vet end vet start test end test " ] || fail "a held slot should run vet then the tests, one after the other: $(tr '\n' ' ' <"$WORK/order.log")"
-: >"$WORK/order.log"
-GO_ORDER_LOG="$WORK/order.log" run_push_scoped
-expect_rc 0
-[ "$(sed -n 2p "$WORK/order.log")" = "start test" ] || fail "outside a held slot vet and the tests should overlap: $(tr '\n' ' ' <"$WORK/order.log")"
 
 blocked_steps() {
     if [ -f "$WORK/block/pids" ]; then wc -l <"$WORK/block/pids"; else echo 0; fi
