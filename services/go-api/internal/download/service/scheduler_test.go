@@ -3485,7 +3485,7 @@ func awaitIdle(t *testing.T, s *service.BackgroundAcquisitionScheduler) {
 }
 
 func TestNewBackgroundAcquisitionScheduler_RefusesAMissingClock(t *testing.T) {
-	_, err := service.NewBackgroundAcquisitionScheduler(outcomeAcquirer{}, 1, nil, testSchedulerPorts())
+	_, err := service.NewBackgroundAcquisitionScheduler(context.Background(), outcomeAcquirer{}, 1, nil, testSchedulerPorts())
 
 	if !errors.Is(err, service.ErrMissingCollaborator) || !strings.Contains(err.Error(), "clock") {
 		t.Errorf("error = %v, want ErrMissingCollaborator naming the clock", err)
@@ -3527,7 +3527,7 @@ func TestNewBackgroundAcquisitionScheduler_RefusesAMissingPort(t *testing.T) {
 			wiring := testSchedulerPorts()
 			drop(&wiring)
 
-			_, err := service.NewBackgroundAcquisitionScheduler(outcomeAcquirer{}, 1, time.Now, wiring)
+			_, err := service.NewBackgroundAcquisitionScheduler(context.Background(), outcomeAcquirer{}, 1, time.Now, wiring)
 
 			if !errors.Is(err, service.ErrMissingCollaborator) || !strings.Contains(err.Error(), field) {
 				t.Errorf("error = %v, want ErrMissingCollaborator naming %s", err, field)

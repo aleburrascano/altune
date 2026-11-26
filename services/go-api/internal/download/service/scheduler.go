@@ -150,6 +150,7 @@ func (p SchedulerPorts) validate(owner string) error {
 }
 
 func NewBackgroundAcquisitionScheduler(
+	parent context.Context,
 	svc acquirer,
 	workers int,
 	now clock.Func,
@@ -160,7 +161,7 @@ func NewBackgroundAcquisitionScheduler(
 	if err := errors.Join(missingPort(owner, "clock", now == nil), wiring.validate(owner)); err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := background.DetachCancelable(parent)
 	s := &BackgroundAcquisitionScheduler{
 		svc:                 svc,
 		pending:             newPendingTracker(),
@@ -200,13 +201,14 @@ func NewBackgroundAcquisitionScheduler(
 }
 
 func MustNewBackgroundAcquisitionScheduler(
+	parent context.Context,
 	svc acquirer,
 	workers int,
 	now clock.Func,
 	wiring SchedulerPorts,
 	opts ...func(*BackgroundAcquisitionScheduler),
 ) *BackgroundAcquisitionScheduler {
-	s, err := NewBackgroundAcquisitionScheduler(svc, workers, now, wiring, opts...)
+	s, err := NewBackgroundAcquisitionScheduler(parent, svc, workers, now, wiring, opts...)
 	if err != nil {
 		panic(err)
 	}
@@ -305,7 +307,7 @@ func (s *BackgroundAcquisitionScheduler) claimFrom(claim claimFunc) (<-chan stru
 	done := make(chan struct{})
 	s.jobs.Track(func() {
 		defer close(done)
-		s.runClaimedJob(job)
+		s.runClaimedJob(s.baseCtx, job)
 	})
 	return done, true
 }
@@ -363,10 +365,10 @@ func (s *BackgroundAcquisitionScheduler) idleWait(wake <-chan struct{}) bool {
 	}
 }
 
-func (s *BackgroundAcquisitionScheduler) runClaimedJob(job ports.Job) {
+func (s *BackgroundAcquisitionScheduler) runClaimedJob(ctx context.Context, job ports.Job) {
 	run := s.acquisitionRunFor(job.Kind)
 
-	jobCtx, cancelJob := s.jobContextFor(job)
+	jobCtx, cancelJob := s.jobContextFor(ctx, job)
 	defer cancelJob()
 	jobCtx = s.withLeaseFence(jobCtx, job)
 
@@ -377,11 +379,14 @@ func (s *BackgroundAcquisitionScheduler) runClaimedJob(job ports.Job) {
 	jobErr := s.execClaimedJob(reportedCtx, job.TrackID, run, job)
 	s.stopClaimedJob(cancelJob, heartbeatDone)
 
-	s.finishJob(finishContextOf(jobCtx), job, jobErr)
+	finishCtx, cancelFinish := s.finishContextOf(jobCtx)
+	defer cancelFinish()
+	s.finishJob(finishCtx, job, jobErr)
 }
 
-func finishContextOf(jobCtx context.Context) context.Context {
-	return logging.ContextWithCorrelationID(context.Background(), logging.CorrelationIDFromContext(jobCtx))
+func (s *BackgroundAcquisitionScheduler) finishContextOf(jobCtx context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := background.DetachCancelable(s.baseCtx)
+	return logging.ContextWithCorrelationID(ctx, logging.CorrelationIDFromContext(jobCtx)), cancel
 }
 
 func (s *BackgroundAcquisitionScheduler) releaseWithin(ctx context.Context, job ports.Job, delay time.Duration) error {
@@ -426,8 +431,8 @@ func (s *BackgroundAcquisitionScheduler) acquisitionRunFor(kind ports.JobKind) a
 	}
 }
 
-func (s *BackgroundAcquisitionScheduler) jobContextFor(job ports.Job) (context.Context, context.CancelFunc) {
-	jobCtx, cancelJob := context.WithCancel(s.baseCtx)
+func (s *BackgroundAcquisitionScheduler) jobContextFor(ctx context.Context, job ports.Job) (context.Context, context.CancelFunc) {
+	jobCtx, cancelJob := context.WithCancel(ctx)
 	jobCtx = withJobFence(withJobAttempt(withSchedulerOwnedJobContext(jobCtx), job.Run), job.ClaimNumber)
 	if job.CorrelationID != "" {
 		jobCtx = logging.ContextWithCorrelationID(jobCtx, job.CorrelationID)

@@ -50,7 +50,7 @@ func NewIdentifier(binDir, apiKey string, client *http.Client) (*Identifier, err
 	}
 	key := strings.TrimSpace(apiKey)
 	if key == "" {
-		slog.WarnContext(context.Background(), "chromaprint: AcoustID API key is empty or blank; "+
+		slog.Warn("chromaprint: AcoustID API key is empty or blank; " +
 			"audio fingerprint identification is disabled and every lookup will fail")
 	}
 	bounded := *client

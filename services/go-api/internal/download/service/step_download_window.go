@@ -89,18 +89,21 @@ func remainingAfter(ac *AcquisitionContext, rest []ports.AudioCandidate, started
 }
 
 func (s *DownloadStep) runWindow(ctx context.Context, ac *AcquisitionContext, window []ports.AudioCandidate) []attempt {
-	ctxs, cancels := windowContexts(ctx, len(window))
-	defer cancelAll(cancels)
+	slots := make([]windowSlot, len(window))
+	for i := range slots {
+		slots[i] = newWindowSlot(ctx)
+	}
+	defer cancelSlots(slots)
 
 	results := make([]attempt, len(window))
 	var mu sync.Mutex
 	g := parallel.New("acquisition.download_attempt_panic", len(window))
 	for rank := range window {
 		g.Go(ctx, func() {
-			results[rank] = s.guardedWindowAttempt(ctxs[rank], ac, window[rank])
+			results[rank] = s.guardedWindowAttempt(slots[rank].ctx, ac, window[rank])
 			if results[rank].status == attemptAccepted && !results[rank].muxed() {
 				mu.Lock()
-				cancelAll(cancels[rank+1:])
+				cancelSlots(slots[rank+1:])
 				mu.Unlock()
 			}
 		})
@@ -109,18 +112,19 @@ func (s *DownloadStep) runWindow(ctx context.Context, ac *AcquisitionContext, wi
 	return results
 }
 
-func windowContexts(ctx context.Context, n int) ([]context.Context, []context.CancelFunc) {
-	ctxs := make([]context.Context, n)
-	cancels := make([]context.CancelFunc, n)
-	for i := range n {
-		ctxs[i], cancels[i] = context.WithCancel(ctx)
-	}
-	return ctxs, cancels
+type windowSlot struct {
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
-func cancelAll(cancels []context.CancelFunc) {
-	for _, cancel := range cancels {
-		cancel()
+func newWindowSlot(parent context.Context) windowSlot {
+	ctx, cancel := context.WithCancel(parent)
+	return windowSlot{ctx: ctx, cancel: cancel}
+}
+
+func cancelSlots(slots []windowSlot) {
+	for _, slot := range slots {
+		slot.cancel()
 	}
 }
 

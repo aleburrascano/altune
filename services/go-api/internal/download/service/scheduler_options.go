@@ -51,12 +51,12 @@ func WithVerificationStatus(v ports.Verification) func(*BackgroundAcquisitionSch
 	return func(s *BackgroundAcquisitionScheduler) {
 		s.verification = v
 		if !v.ToolsPresent() {
-			slog.WarnContext(context.Background(), "acquisition.verification_degraded",
+			slog.Warn("acquisition.verification_degraded",
 				"ffprobe", v.Ffprobe, "ffmpeg", v.Ffmpeg, "fpcalc", v.Fpcalc, "yt_dlp", v.YtDlp,
 				"fingerprint_lookup", fingerprintLookupUnverified)
 			return
 		}
-		slog.InfoContext(context.Background(), "acquisition.verification_armed",
+		slog.Info("acquisition.verification_armed",
 			"fpcalc", v.Fpcalc, "fingerprint_lookup", fingerprintLookupUnverified)
 	}
 }
