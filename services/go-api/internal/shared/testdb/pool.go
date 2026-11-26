@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func DatabaseURL(t testing.TB) string {
+func DatabaseURLWithoutSchema(t testing.TB) string {
 	t.Helper()
 	RequireIntegration(t)
 	url := os.Getenv("DATABASE_URL")
@@ -18,6 +18,11 @@ func DatabaseURL(t testing.TB) string {
 		t.Fatal("INTEGRATION=1 needs DATABASE_URL pointing at a migrated Postgres (scripts/ci/postgres.sh starts one)")
 	}
 	return url
+}
+
+func DatabaseURL(t testing.TB) string {
+	t.Helper()
+	return requireSchemaURL(t, DatabaseURLWithoutSchema(t))
 }
 
 func Pool(t testing.TB) *pgxpool.Pool {

@@ -8,7 +8,6 @@ import (
 	"context"
 	"log/slog"
 	"net"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -36,7 +35,7 @@ func TestRun_AnUnreachableDatabaseStopsStartup(t *testing.T) {
 func TestRun_AFailedAssemblyStopsStartup(t *testing.T) {
 	testdb.RequireIntegration(t)
 	cfg := jwksConfig(t)
-	cfg.DatabaseURL = os.Getenv("DATABASE_URL")
+	cfg.DatabaseURL = testdb.DatabaseURL(t)
 	cfg.SupabaseJWTJWKSURL = "http://keys.example.com/jwks.json"
 
 	err := runUntilItReturns(t, cfg)
@@ -54,7 +53,7 @@ func TestRun_APortAlreadyInUseIsReturnedInsteadOfServing(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = taken.Close() })
 	cfg := jwksConfig(t)
-	cfg.DatabaseURL = os.Getenv("DATABASE_URL")
+	cfg.DatabaseURL = testdb.DatabaseURL(t)
 	cfg.Host = "127.0.0.1"
 	cfg.Port = taken.Addr().(*net.TCPAddr).Port
 
