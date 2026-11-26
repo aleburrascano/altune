@@ -25,14 +25,10 @@ const (
 	jobRetryFactor = 4
 )
 
-var jobRetryBackoff = backoff.Policy{
-	Base:   jobRetryBase,
-	Cap:    jobRetryBase * jobRetryFactor * jobRetryFactor,
-	Factor: jobRetryFactor,
-}
+var jobRetryBackoff = backoff.MustUncapped(jobRetryBase, backoff.WithFactor(jobRetryFactor))
 
 func retryBackoff(attempts int) time.Duration {
-	return jobRetryBackoff.Ceiling(attempts)
+	return jobRetryBackoff.Ceiling(min(attempts, maxAcquisitionAttempts))
 }
 
 func isTransientFailure(err error) bool {

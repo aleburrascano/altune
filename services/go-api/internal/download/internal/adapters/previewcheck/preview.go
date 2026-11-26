@@ -34,6 +34,8 @@ const (
 	previewFilePrefix = "deezerpreview-"
 )
 
+var deezerPause = backoff.MustCapped(deezerBackoff, deezerBackoff<<(deezerAttempts-1))
+
 var (
 	ErrDeezerThrottled = errors.New("deezer is still throttling after retries")
 	errNoResponse      = errors.New("the http client returned neither a response nor an error")
@@ -117,7 +119,7 @@ type Previews struct {
 func New(client *http.Client, baseURL string, requestsPerSecond float64, printer RawFingerprint) *Previews {
 	return &Previews{
 		client: client, baseURL: baseURL, limiter: rate.NewLimiter(rate.Limit(requestsPerSecond), 1),
-		backoff: backoff.Policy{Base: deezerBackoff, Cap: deezerBackoff << (deezerAttempts - 1)}, printer: printer,
+		backoff: deezerPause, printer: printer,
 	}
 }
 

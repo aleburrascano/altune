@@ -159,7 +159,7 @@ const (
 	backoffSpread = 0.2
 )
 
-var retryBackoff = backoff.Policy{Base: backoffBase, Cap: backoffBase << (maxAttempts - 2), Spread: backoffSpread}
+var retryBackoff = backoff.MustCapped(backoffBase, backoffBase<<(maxAttempts-2), backoff.WithSpread(backoffSpread))
 
 func (t *Transport) backoff(attempt int) time.Duration {
 	return retryBackoff.DelayAt(attempt, t.jitter())

@@ -173,6 +173,19 @@ func TestTransport_BackoffGrowsWithEachAttemptAndItsJitter(t *testing.T) {
 	}
 }
 
+func TestTransport_AnUpstreamThatNeverRecoversIsTriedThreeTimesWithEveryWaitPinned(t *testing.T) {
+	f := &fakeRT{steps: []fakeStep{{status: 503}}}
+	var delays []time.Duration
+	rt := retry.New(f, retry.Options{Sleep: recordingSleep(&delays), Jitter: func() float64 { return 0.5 }})
+
+	statusOf(t, rt, getReq(t))
+
+	want := []time.Duration{250 * time.Millisecond, 500 * time.Millisecond}
+	if f.calls != 3 || len(delays) != len(want) || delays[0] != want[0] || delays[1] != want[1] {
+		t.Errorf("calls = %d, delays = %v, want 3 calls and exactly the waits %v; a change to the attempt limit must change this test", f.calls, delays, want)
+	}
+}
+
 func TestTransport_DefaultJitterVariesTheBackoffWithinItsBound(t *testing.T) {
 	const base = 250 * time.Millisecond
 	spread := base / 5

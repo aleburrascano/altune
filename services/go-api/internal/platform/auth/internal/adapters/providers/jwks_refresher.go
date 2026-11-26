@@ -151,4 +151,4 @@ func (r *jwksRefresher) checkFresh() error {
 	return err
 }
 
-var jwksRefreshBackoff = backoff.Policy{Base: jwksRefreshBackoffBase, Cap: jwksRefreshBackoffCap}
+var jwksRefreshBackoff = backoff.MustCapped(jwksRefreshBackoffBase, jwksRefreshBackoffCap)

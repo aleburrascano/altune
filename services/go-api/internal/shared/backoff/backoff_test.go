@@ -2,11 +2,49 @@ package backoff_test
 
 import (
 	"altune/go-api/internal/shared/backoff"
+	"errors"
+	"math"
 	"testing"
 	"time"
 )
 
-var policy = backoff.Policy{Base: 100 * time.Millisecond, Cap: time.Second}
+var policy = backoff.MustCapped(100*time.Millisecond, time.Second)
+
+func TestCapped_RefusesAnythingThatCannotBeAWait(t *testing.T) {
+	cases := map[string]struct {
+		build func() (backoff.Policy, error)
+		want  error
+	}{
+		"zero cap":         {func() (backoff.Policy, error) { return backoff.Capped(time.Second, 0) }, backoff.ErrCapNotPositive},
+		"negative cap":     {func() (backoff.Policy, error) { return backoff.Capped(time.Second, -time.Second) }, backoff.ErrCapNotPositive},
+		"cap below base":   {func() (backoff.Policy, error) { return backoff.Capped(time.Minute, time.Second) }, backoff.ErrCapBelowBase},
+		"zero base":        {func() (backoff.Policy, error) { return backoff.Capped(0, time.Second) }, backoff.ErrBaseNotPositive},
+		"negative base":    {func() (backoff.Policy, error) { return backoff.Uncapped(-time.Second) }, backoff.ErrBaseNotPositive},
+		"factor of one":    {func() (backoff.Policy, error) { return backoff.Uncapped(time.Second, backoff.WithFactor(1)) }, backoff.ErrFactorBelowTwo},
+		"negative spread":  {func() (backoff.Policy, error) { return backoff.Uncapped(time.Second, backoff.WithSpread(-0.1)) }, backoff.ErrSpreadOutside},
+		"spread above one": {func() (backoff.Policy, error) { return backoff.Uncapped(time.Second, backoff.WithSpread(1.5)) }, backoff.ErrSpreadOutside},
+		"spread not a number": {func() (backoff.Policy, error) {
+			return backoff.Uncapped(time.Second, backoff.WithSpread(math.NaN()))
+		}, backoff.ErrSpreadOutside},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, err := tc.build(); !errors.Is(err, tc.want) {
+				t.Errorf("err = %v, want %v", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestMustCapped_PanicsOnABadPolicyAtStartup(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("MustCapped with a zero cap did not panic")
+		}
+	}()
+
+	backoff.MustCapped(time.Second, 0)
+}
 
 func TestPolicy_CeilingDoublesFromTheBaseAndStopsAtTheCap(t *testing.T) {
 	want := []time.Duration{
@@ -21,7 +59,7 @@ func TestPolicy_CeilingDoublesFromTheBaseAndStopsAtTheCap(t *testing.T) {
 }
 
 func TestPolicy_CeilingGrowsByTheFactorWhenOneIsSet(t *testing.T) {
-	quadrupling := backoff.Policy{Base: 30 * time.Second, Cap: 8 * time.Minute, Factor: 4}
+	quadrupling := backoff.MustCapped(30*time.Second, 8*time.Minute, backoff.WithFactor(4))
 	want := []time.Duration{30 * time.Second, 2 * time.Minute, 8 * time.Minute, 8 * time.Minute}
 	for i, w := range want {
 		if got := quadrupling.Ceiling(i + 1); got != w {
@@ -31,7 +69,7 @@ func TestPolicy_CeilingGrowsByTheFactorWhenOneIsSet(t *testing.T) {
 }
 
 func TestPolicy_DelayAtWithASpreadIsSymmetricAroundTheCeiling(t *testing.T) {
-	spread := backoff.Policy{Base: 250 * time.Millisecond, Cap: time.Second, Spread: 0.2}
+	spread := backoff.MustCapped(250*time.Millisecond, time.Second, backoff.WithSpread(0.2))
 	cases := []struct {
 		attempt int
 		unit    float64
@@ -46,6 +84,17 @@ func TestPolicy_DelayAtWithASpreadIsSymmetricAroundTheCeiling(t *testing.T) {
 		if got := spread.DelayAt(tc.attempt, tc.unit); got != tc.want {
 			t.Errorf("DelayAt(%d, %v) = %v, want %v", tc.attempt, tc.unit, got, tc.want)
 		}
+	}
+}
+
+func TestUncapped_GrowsWithoutALimitAndSaturatesInsteadOfOverflowing(t *testing.T) {
+	uncapped := backoff.MustUncapped(time.Second)
+
+	if got := uncapped.Ceiling(4); got != 8*time.Second {
+		t.Errorf("Ceiling(4) = %v, want 8s", got)
+	}
+	if got := uncapped.Ceiling(10_000); got <= 0 {
+		t.Errorf("Ceiling(10000) = %v, want a positive saturated wait", got)
 	}
 }
 
@@ -64,11 +113,11 @@ func TestPolicy_CeilingSurvivesAnAttemptCountThatWouldOverflowAShift(t *testing.
 }
 
 func TestPolicy_CeilingNeverOverflowsPastACapNearTheLargestDuration(t *testing.T) {
-	huge := backoff.Policy{Base: time.Hour, Cap: time.Duration(1<<63 - 1)}
+	huge := backoff.MustCapped(time.Hour, time.Duration(math.MaxInt64))
 
 	for attempt := 1; attempt <= 100; attempt++ {
-		if got := huge.Ceiling(attempt); got < time.Hour || got > huge.Cap {
-			t.Fatalf("Ceiling(%d) = %v, want within [1h, %v]", attempt, got, huge.Cap)
+		if got := huge.Ceiling(attempt); got < time.Hour || got > time.Duration(math.MaxInt64) {
+			t.Fatalf("Ceiling(%d) = %v, want within [1h, max]", attempt, got)
 		}
 	}
 }
