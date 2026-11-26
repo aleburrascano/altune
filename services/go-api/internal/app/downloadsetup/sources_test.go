@@ -264,7 +264,7 @@ func containsSource(list []download.SourceName, want download.SourceName) bool {
 }
 
 func TestCanaryYTMClient_BoundsEveryCall(t *testing.T) {
-	client, err := downloadsetup.CanaryYTMClient(&config.Config{}, nil, http.DefaultTransport)
+	client, err := downloadsetup.CanaryYTMClient(context.Background(), &config.Config{}, nil, http.DefaultTransport)
 	if err != nil {
 		t.Fatalf("CanaryYTMClient without redis: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestCanaryYTMClient_ACooldownAnotherInstanceRecordedInRedisHoldsItsSearches
 	if err := otherInstance.CoolDown(t.Context()); err != nil {
 		t.Fatalf("record the cooldown: %v", err)
 	}
-	client, err := downloadsetup.CanaryYTMClient(&config.Config{}, redis, http.DefaultTransport)
+	client, err := downloadsetup.CanaryYTMClient(context.Background(), &config.Config{}, redis, http.DefaultTransport)
 	if err != nil {
 		t.Fatalf("CanaryYTMClient with redis: %v", err)
 	}

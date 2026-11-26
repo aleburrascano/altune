@@ -92,7 +92,7 @@ func TestCatalog_ADBCallTimeoutReachesOperatorLiveMetrics(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		cancel()
-		assembly.Shutdown()
+		assembly.Shutdown(context.Background())
 	})
 	h, token := assembly.Handler(), signedToken(t, fixture.key, fixture.operator)
 

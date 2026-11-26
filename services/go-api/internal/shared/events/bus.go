@@ -56,10 +56,10 @@ func (b *InProcessBus) HighestIssuedID() uint64 { return b.highestIssuedID.Load(
 
 var _ Publisher = (*InProcessBus)(nil)
 
-func NewInProcessBus(now clock.Func, idFloorPath string) *InProcessBus {
+func NewInProcessBus(ctx context.Context, now clock.Func, idFloorPath string) *InProcessBus {
 	floor := idfloor.New(filefloor.New(idFloorPath))
 	b := &InProcessBus{ringCap: defaultRingSize, now: now, idFloor: floor}
-	b.highestIssuedID.Store(floor.ReserveAbove(uint64(now().UnixNano())))
+	b.highestIssuedID.Store(floor.ReserveAbove(ctx, uint64(now().UnixNano())))
 	return b
 }
 
@@ -100,12 +100,12 @@ func (b *InProcessBus) lockLiveUser(userId ids.UserId) *userState {
 	}
 }
 
-func (b *InProcessBus) Publish(_ context.Context, userId ids.UserId, payload Payload) {
+func (b *InProcessBus) Publish(ctx context.Context, userId ids.UserId, payload Payload) {
 	us := b.lockLiveUser(userId)
 
 	us.lastActive = b.now()
 	us.nextID++
-	b.recordIssuedID(us.nextID)
+	b.recordIssuedID(ctx, us.nextID)
 	evt := Event{
 		ID:        us.nextID,
 		Type:      payload.EventType(),
@@ -115,7 +115,7 @@ func (b *InProcessBus) Publish(_ context.Context, userId ids.UserId, payload Pay
 	}
 
 	b.appendToRing(us, evt)
-	b.fanOut(us, userId, evt)
+	b.fanOut(ctx, us, userId, evt)
 	us.mu.Unlock()
 }
 
@@ -127,32 +127,32 @@ func (b *InProcessBus) appendToRing(us *userState, evt Event) {
 	}
 }
 
-func (b *InProcessBus) fanOut(us *userState, userId ids.UserId, evt Event) {
+func (b *InProcessBus) fanOut(ctx context.Context, us *userState, userId ids.UserId, evt Event) {
 	for _, ch := range us.subscribers {
 		select {
 		case ch <- evt:
 		default:
-			b.recordDropForFullSubscriber(userId, evt.Type, evt.ID)
+			b.recordDropForFullSubscriber(ctx, userId, evt.Type, evt.ID)
 		}
 	}
 }
 
-func (b *InProcessBus) recordIssuedID(id uint64) {
+func (b *InProcessBus) recordIssuedID(ctx context.Context, id uint64) {
 	for {
 		cur := b.highestIssuedID.Load()
 		if id <= cur {
 			return
 		}
 		if b.highestIssuedID.CompareAndSwap(cur, id) {
-			b.idFloor.ReserveAbove(id)
+			b.idFloor.ReserveAbove(ctx, id)
 			return
 		}
 	}
 }
 
-func (b *InProcessBus) recordDropForFullSubscriber(userId ids.UserId, eventType EventType, eventID uint64) {
+func (b *InProcessBus) recordDropForFullSubscriber(ctx context.Context, userId ids.UserId, eventType EventType, eventID uint64) {
 	total := b.dropped.Add(1)
-	slog.WarnContext(context.Background(), "events.subscriber_dropped",
+	slog.WarnContext(ctx, "events.subscriber_dropped",
 		"user_id", userId.String(), "event_type", eventType,
 		"event_id", eventID, "dropped_total", total)
 }
@@ -200,7 +200,7 @@ func (b *InProcessBus) ResumeGapped(userId ids.UserId, afterID uint64) bool {
 	return afterID < us.firstID
 }
 
-func (b *InProcessBus) Replay(userId ids.UserId, afterID uint64) []Event {
+func (b *InProcessBus) Replay(ctx context.Context, userId ids.UserId, afterID uint64) []Event {
 	key := userId.String()
 	v, ok := b.users.Load(key)
 	if !ok {
@@ -220,7 +220,7 @@ func (b *InProcessBus) Replay(userId ids.UserId, afterID uint64) []Event {
 		start += b.ringCap
 	}
 
-	warnIfEventsWereEvictedBeforeResume(userId, afterID, us.ring[start].ID)
+	warnIfEventsWereEvictedBeforeResume(ctx, userId, afterID, us.ring[start].ID)
 
 	var result []Event
 	for i := 0; i < us.ringLen; i++ {
@@ -233,12 +233,12 @@ func (b *InProcessBus) Replay(userId ids.UserId, afterID uint64) []Event {
 	return result
 }
 
-func warnIfEventsWereEvictedBeforeResume(userId ids.UserId, afterID, oldestRetainedID uint64) {
+func warnIfEventsWereEvictedBeforeResume(ctx context.Context, userId ids.UserId, afterID, oldestRetainedID uint64) {
 	resumingFromBeginning := afterID == 0
 	if resumingFromBeginning || oldestRetainedID <= afterID+1 {
 		return
 	}
-	slog.WarnContext(context.Background(), "events.replay_gap",
+	slog.WarnContext(ctx, "events.replay_gap",
 		"user_id", userId.String(), "after_id", afterID,
 		"oldest_retained_id", oldestRetainedID, "lost", oldestRetainedID-afterID-1)
 }

@@ -92,7 +92,7 @@ func TestAssemble_ServesHealthStartsTheJobsAndShutsDownCleanly(t *testing.T) {
 	}
 
 	cancel()
-	outcomes := assembly.Shutdown()
+	outcomes := assembly.Shutdown(context.Background())
 
 	if len(outcomes) == 0 {
 		t.Fatal("Shutdown reported no components")
@@ -119,5 +119,5 @@ func TestAssemble_AnUnreachableDatabaseDegradesHealth(t *testing.T) {
 		t.Errorf("GET /health with an unreachable database = %d %s, want 503 degraded", rec.Code, rec.Body)
 	}
 	cancel()
-	assembly.Shutdown()
+	assembly.Shutdown(context.Background())
 }

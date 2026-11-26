@@ -654,6 +654,7 @@ case "\$*" in
 "run golang.org/x/tools/cmd/deadcode@"*) printf "%s" "\${DEADCODE_STUB_OUT:-}"; exit "\${DEADCODE_STUB_RC:-0}" ;;
 "run ./scripts/lintcomments"*|"run ./scripts/lintnames"*) exit 0 ;;
 "test "*) if [ -n "\${GO_TEST_STUB_OUT:-}" ]; then printf "%b" "\$GO_TEST_STUB_OUT"; exit 1; fi; [ -n "\${GO_REAL:-}" ] || exit 0 ;;
+"mod tidy"*) exit "\${GO_MOD_TIDY_STUB_RC:-0}" ;;
 "vet "*|"build "*) [ -n "\${GO_REAL:-}" ] || exit 0 ;;
 esac
 exec "$REAL_GO" "\$@"
@@ -1014,6 +1015,35 @@ edit_go_file internal/shared/s/s.go
 GO_ARCH_LINT_STUB_RC=1 run_push_scoped
 expect_rc 1
 expect_out "FAIL  go-api architecture"
+
+CASE="a change to go.sum is checked for tidiness and a dirty go.sum turns a push red"
+new_repo
+add_go_fixture
+(cd "$WORK/repo" && printf 'x v1 h1:y\n' >>services/go-api/go.sum && git add -A && git commit -qm "touch go.sum")
+run_push_scoped
+expect_rc 0
+expect_log "mod tidy -diff"
+GO_MOD_TIDY_STUB_RC=1 run_push_scoped
+expect_rc 1
+expect_out "FAIL  go-api go.mod and go.sum are tidy"
+
+CASE="--full, as CI runs it, checks a changed go.sum for tidiness and fails when it is not tidy"
+new_repo
+add_go_fixture
+(cd "$WORK/repo" && printf 'x v1 h1:y\n' >>services/go-api/go.sum && git add -A && git commit -qm "touch go.sum")
+run_with_tools
+expect_rc 0
+expect_log "mod tidy -diff"
+GO_MOD_TIDY_STUB_RC=1 run_with_tools
+expect_rc 1
+expect_out "FAIL  go-api go.mod and go.sum are tidy"
+
+CASE="a push that leaves go.mod and go.sum alone does not run go mod tidy"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+run_push_scoped
+forbid_log "mod tidy"
 
 expect_lint_args_exist() {
     local arg missing=""

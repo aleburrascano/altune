@@ -272,7 +272,7 @@ func (h *EventStreamHandler) replay(conn *sseConn, afterID uint64) (replayOutcom
 	if afterID > h.bus.HighestIssuedID() {
 		return h.resyncOutOfRange(conn, afterID)
 	}
-	replayed := h.bus.Replay(conn.userId, afterID)
+	replayed := h.bus.Replay(conn.ctx, conn.userId, afterID)
 	if h.bus.ResumeGapped(conn.userId, afterID) || replayGapped(replayed, afterID) {
 		return replayOutcome{dedupThroughID: afterID}, conn.writeResync()
 	}

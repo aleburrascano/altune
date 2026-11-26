@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/app/shutdown"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"bytes"
@@ -41,7 +42,40 @@ func outcomeOf(t *testing.T, outcomes []shutdown.Outcome, component string) shut
 }
 
 func runOne(component string, timeout time.Duration, stop func(context.Context)) shutdown.Outcome {
-	return shutdown.Run([]shutdown.Step{{Component: component, Timeout: timeout, Stop: stop}})[0]
+	return shutdown.Run(context.Background(), []shutdown.Step{{Component: component, Timeout: timeout, Stop: stop}})[0]
+}
+
+type ctxKey struct{}
+
+func TestRun_EachStopReceivesTheCallersContextValuesWithItsOwnDeadline(t *testing.T) {
+	parent := context.WithValue(context.Background(), ctxKey{}, "caller")
+	var got any
+	var hasDeadline bool
+
+	shutdown.Run(parent, []shutdown.Step{{Component: "x", Timeout: time.Second, Stop: func(ctx context.Context) {
+		got = ctx.Value(ctxKey{})
+		_, hasDeadline = ctx.Deadline()
+	}}})
+
+	if got != "caller" || !hasDeadline {
+		t.Fatalf("stop saw value %v and deadline %v, want the caller's value and a deadline", got, hasDeadline)
+	}
+}
+
+func TestRun_ADetachedContextLetsAStopFinishAfterTheSignalContextIsCancelled(t *testing.T) {
+	signalCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	detached, end := background.DetachCancelable(signalCtx)
+	defer end()
+	var finished bool
+
+	outcomes := shutdown.Run(detached, []shutdown.Step{{Component: "x", Timeout: time.Second, Stop: func(ctx context.Context) {
+		finished = ctx.Err() == nil
+	}}})
+
+	if outcomes[0].Status != shutdown.Completed || !finished {
+		t.Fatalf("outcome = %+v, finished = %v, want the stop to finish although the signal context was cancelled", outcomes[0], finished)
+	}
 }
 
 type gatedStore struct {
@@ -106,7 +140,7 @@ func TestStop_CallsTheComponentsShutdownOrNothingWhenAbsent(t *testing.T) {
 
 func TestRun_ATimeoutIsSurfacedDistinctlyFromACleanStop(t *testing.T) {
 	started := make(chan struct{})
-	outcomes := shutdown.Run([]shutdown.Step{
+	outcomes := shutdown.Run(context.Background(), []shutdown.Step{
 		{Component: "slow component", Timeout: 30 * time.Millisecond, Stop: func(ctx context.Context) {
 			close(started)
 			<-ctx.Done()
@@ -127,7 +161,7 @@ func TestRun_ATimeoutIsSurfacedDistinctlyFromACleanStop(t *testing.T) {
 func TestRun_EveryOutcomeReportsItsStepsPlannedBudgetEvenWhenTheStepIsSkipped(t *testing.T) {
 	release := make(chan struct{})
 	defer close(release)
-	outcomes := shutdown.Run(shutdown.Plan(shutdown.Components{
+	outcomes := shutdown.Run(context.Background(), shutdown.Plan(shutdown.Components{
 		Background:     func(context.Context) { <-release },
 		LeaderElection: shutdown.Stop(&countingStopper{}),
 	}, shutdown.Budgets{SchedulerSeconds: 20, BackgroundSeconds: 1, DetachedSeconds: 3}))
@@ -201,7 +235,7 @@ func TestPlan_StopsComponentsInThePinnedOrder(t *testing.T) {
 		"detached request tasks",
 	}
 
-	outcomes := shutdown.Run(shutdown.Plan(shutdown.Components{}, shutdown.Budgets{}))
+	outcomes := shutdown.Run(context.Background(), shutdown.Plan(shutdown.Components{}, shutdown.Budgets{}))
 
 	got := make([]string, 0, len(outcomes))
 	for _, o := range outcomes {
@@ -221,7 +255,7 @@ func TestPlan_RunsEachComponentsOwnStop(t *testing.T) {
 		return func(context.Context) { stopped = append(stopped, name) }
 	}
 
-	shutdown.Run(shutdown.Plan(shutdown.Components{
+	shutdown.Run(context.Background(), shutdown.Plan(shutdown.Components{
 		AlertMonitor:   stopper("alert monitor"),
 		EventFeed:      stopper("event feed"),
 		EvalMeter:      stopper("eval meter"),
@@ -340,7 +374,7 @@ func TestRun_ABackgroundDrainTimeoutKeepsTheLeaderLock(t *testing.T) {
 	defer close(release)
 	blocked := func(context.Context) { <-release }
 
-	outcomes := shutdown.Run(withBackgroundBudget(shutdown.Plan(shutdown.Components{
+	outcomes := shutdown.Run(context.Background(), withBackgroundBudget(shutdown.Plan(shutdown.Components{
 		Background:     blocked,
 		LeaderElection: shutdown.Stop(election),
 	}, shutdown.Budgets{}), 20*time.Millisecond))
@@ -360,7 +394,7 @@ func TestRun_ABackgroundDrainTimeoutKeepsTheLeaderLock(t *testing.T) {
 func TestRun_ACleanBackgroundDrainReleasesTheLeaderLock(t *testing.T) {
 	election := &countingStopper{}
 
-	outcomes := shutdown.Run(shutdown.Plan(shutdown.Components{
+	outcomes := shutdown.Run(context.Background(), shutdown.Plan(shutdown.Components{
 		Background:     func(context.Context) {},
 		LeaderElection: shutdown.Stop(election),
 	}, shutdown.Budgets{}))
@@ -390,7 +424,7 @@ func TestDrainServer_AHungHandlerIsClosedAfterTheDeadline(t *testing.T) {
 	<-started
 
 	returned := make(chan struct{})
-	go func() { shutdown.DrainServer(srv.Config, 50*time.Millisecond); close(returned) }()
+	go func() { shutdown.DrainServer(context.Background(), srv.Config, 50*time.Millisecond); close(returned) }()
 	select {
 	case <-returned:
 	case <-time.After(3 * time.Second):
@@ -410,7 +444,7 @@ func TestDrainServer_AnIdleServerStopsWithoutBeingForced(t *testing.T) {
 	logged := captureLogs(t, slog.LevelDebug)
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 
-	shutdown.DrainServer(srv.Config, time.Second)
+	shutdown.DrainServer(context.Background(), srv.Config, time.Second)
 
 	if got := logged.String(); got != "" {
 		t.Errorf("idle drain logged %q, want nothing", got)

@@ -216,7 +216,7 @@ func readObservedHealth(t *testing.T, handles app.Handles, wantCode int) observe
 	}
 	t.Cleanup(func() {
 		cancel()
-		assembly.Shutdown()
+		assembly.Shutdown(context.Background())
 	})
 	code, body := getAs(t, assembly.Handler(), "/observe/health", signedToken(t, f.key, f.operator))
 	if code != wantCode {

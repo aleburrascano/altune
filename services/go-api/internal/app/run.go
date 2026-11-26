@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/app/providertransport"
 	"altune/go-api/internal/app/server"
 	"altune/go-api/internal/app/shutdown"
+	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/database"
 	"context"
 	"fmt"
@@ -39,7 +40,9 @@ func (a *App) Run(ctx context.Context) error {
 	serveErr := serve(ctx, server.New(fmt.Sprintf("%s:%d", a.cfg.Host, a.cfg.Port), assembly.Handler()))
 	cancel()
 	slog.InfoContext(ctx, "waiting for background tasks")
-	outcomes := assembly.Shutdown()
+	shutdownCtx, endShutdown := background.DetachCancelable(ctx)
+	defer endShutdown()
+	outcomes := assembly.Shutdown(shutdownCtx)
 	shutdown.CloseDatastores(ctx, outcomes, shutdown.Datastores{Pool: pool, Redis: redisClient})
 	slog.InfoContext(ctx, "shutdown complete")
 	return serveErr
@@ -61,6 +64,8 @@ func serve(ctx context.Context, httpServer *http.Server) error {
 		slog.InfoContext(ctx, "shutting down")
 	}
 
-	shutdown.DrainServer(httpServer, shutdown.ServerDrainTimeout)
+	drainCtx, endDrain := background.DetachCancelable(ctx)
+	defer endDrain()
+	shutdown.DrainServer(drainCtx, httpServer, shutdown.ServerDrainTimeout)
 	return nil
 }

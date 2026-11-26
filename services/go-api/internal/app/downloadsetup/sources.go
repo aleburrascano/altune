@@ -43,8 +43,8 @@ func YtDlpSearcher(cfg *config.Config) *download.YouTubeAudioSearcher {
 		WithEnvironment(cfg.Env)
 }
 
-func CanaryYTMClient(cfg *config.Config, redis *goredis.Client, transport http.RoundTripper) (*download.YouTubeMusicSearchClient, error) {
-	return budgetedYTMSearchClient(context.Background(), cfg, redis, transport)
+func CanaryYTMClient(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper) (*download.YouTubeMusicSearchClient, error) {
+	return budgetedYTMSearchClient(ctx, cfg, redis, transport)
 }
 
 func budgetedYTMSearchClient(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper) (*download.YouTubeMusicSearchClient, error) {

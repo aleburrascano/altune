@@ -259,7 +259,7 @@ func (e *Election) Shutdown(ctx context.Context) {
 		slog.WarnContext(ctx, "leader.release_skipped", "key", e.key, "waited", shutdownLoopBudget.String())
 		return
 	}
-	releaseCtx, cancel := context.WithTimeout(context.Background(), shutdownReleaseBudget)
+	releaseCtx, cancel := background.Detach(ctx, shutdownReleaseBudget)
 	defer cancel()
 	e.release(releaseCtx)
 }

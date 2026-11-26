@@ -15,7 +15,7 @@ func RequestLogger(next http.Handler) http.Handler {
 		sw := newStatusWriter(w)
 		ctx, scope := withRequestScope(r.Context())
 		r = r.WithContext(ctx)
-		defer func() {
+		defer func(r *http.Request) {
 			attrs := []any{
 				logging.KeyMethod, r.Method,
 				logging.KeyPath, r.URL.Path,
@@ -28,7 +28,7 @@ func RequestLogger(next http.Handler) http.Handler {
 				attrs = append(attrs, logging.KeyUserID, userID)
 			}
 			slog.InfoContext(r.Context(), "request.complete", attrs...)
-		}()
+		}(r)
 		next.ServeHTTP(sw, r)
 	})
 }

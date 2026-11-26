@@ -58,7 +58,7 @@ func HandleServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	p := problemFor(r, err)
 	logFailure(r, p, err)
 	setRetryAfter(w.Header(), err)
-	writeProblem(w, p)
+	writeProblem(r.Context(), w, p)
 }
 
 func clientLeft(r *http.Request, err error) bool {
@@ -117,10 +117,10 @@ func logFailure(r *http.Request, p Problem, err error) {
 		logging.KeyError, err)
 }
 
-func writeProblem(w http.ResponseWriter, p Problem) {
+func writeProblem(ctx context.Context, w http.ResponseWriter, p Problem) {
 	body, err := json.Marshal(p)
 	if err != nil {
-		slog.Error("problem.encode_failed", logging.KeyStatus, p.Status, logging.KeyCode, p.Code, logging.KeyError, err)
+		slog.ErrorContext(ctx, "problem.encode_failed", logging.KeyStatus, p.Status, logging.KeyCode, p.Code, logging.KeyError, err)
 		w.WriteHeader(p.Status)
 		return
 	}

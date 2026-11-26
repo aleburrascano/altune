@@ -124,7 +124,7 @@ func assembledHandler(t *testing.T, cfg *config.Config) http.Handler {
 	}
 	t.Cleanup(func() {
 		cancel()
-		assembly.Shutdown()
+		assembly.Shutdown(context.Background())
 	})
 	return assembly.Handler()
 }

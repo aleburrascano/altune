@@ -67,7 +67,9 @@ func (s *Assembly) Handler() http.Handler { return s.handler }
 
 func (s *Assembly) Jobs() *jobs.Runner { return &s.app.jobs }
 
-func (s *Assembly) Shutdown() []shutdown.Outcome { return s.app.runShutdownSequence() }
+func (s *Assembly) Shutdown(ctx context.Context) []shutdown.Outcome {
+	return s.app.runShutdownSequence(ctx)
+}
 
 func (a *App) attach(ctx context.Context, h Handles) {
 	a.pool = h.Pool
@@ -85,7 +87,7 @@ func (a *App) compose(ctx context.Context, transport http.RoundTripper) (http.Ha
 	if err != nil {
 		return nil, err
 	}
-	if err := a.openEventBus(); err != nil {
+	if err := a.openEventBus(ctx); err != nil {
 		return nil, err
 	}
 	if err := a.applyDisabledJobs(ctx); err != nil {
@@ -111,8 +113,8 @@ func (a *App) compose(ctx context.Context, transport http.RoundTripper) (http.Ha
 	return r, nil
 }
 
-func (a *App) openEventBus() error {
-	a.eventBus = events.NewInProcessBus(clock.Now, filepath.Join(os.TempDir(), eventIDFloorFile))
+func (a *App) openEventBus(ctx context.Context) error {
+	a.eventBus = events.NewInProcessBus(ctx, clock.Now, filepath.Join(os.TempDir(), eventIDFloorFile))
 	tap, err := monitoring.NewEventTap(a.eventBus, clock.Now)
 	if err != nil {
 		return fmt.Errorf("event tap: %w", err)

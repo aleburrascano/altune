@@ -33,47 +33,47 @@ type Floor struct {
 
 func New(store Store) *Floor { return &Floor{store: store} }
 
-func (f *Floor) ReserveAbove(want uint64) uint64 {
+func (f *Floor) ReserveAbove(ctx context.Context, want uint64) uint64 {
 	if want < f.reserved.Load() {
 		return want
 	}
-	return f.reserveBlockFrom(want)
+	return f.reserveBlockFrom(ctx, want)
 }
 
-func (f *Floor) reserveBlockFrom(want uint64) uint64 {
+func (f *Floor) reserveBlockFrom(ctx context.Context, want uint64) uint64 {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if want < f.reserved.Load() {
 		return want
 	}
-	start := max(want, f.trustedCeiling(want))
+	start := max(want, f.trustedCeiling(ctx, want))
 	ceiling := start + idReservation
-	f.persistOrWarn(ceiling)
+	f.persistOrWarn(ctx, ceiling)
 	f.reserved.Store(ceiling)
 	return start
 }
 
-func (f *Floor) trustedCeiling(want uint64) uint64 {
-	ceiling := f.readCeiling()
+func (f *Floor) trustedCeiling(ctx context.Context, want uint64) uint64 {
+	ceiling := f.readCeiling(ctx)
 	if !isImplausiblyAhead(ceiling, want) {
 		return ceiling
 	}
-	slog.WarnContext(context.Background(), "events.id_floor_implausible", "path", f.store.Location(), "ceiling", ceiling, "want", want)
+	slog.WarnContext(ctx, "events.id_floor_implausible", "path", f.store.Location(), "ceiling", ceiling, "want", want)
 	return 0
 }
 
-func (f *Floor) readCeiling() uint64 {
+func (f *Floor) readCeiling(ctx context.Context) uint64 {
 	raw, err := f.store.Load()
 	if errors.Is(err, ErrNotFound) {
 		return 0
 	}
 	if err != nil {
-		slog.WarnContext(context.Background(), "events.id_floor_unreadable", "path", f.store.Location(), "error", err)
+		slog.WarnContext(ctx, "events.id_floor_unreadable", "path", f.store.Location(), "error", err)
 		return 0
 	}
 	ceiling, err := strconv.ParseUint(strings.TrimSpace(string(raw)), 10, 64)
 	if err != nil {
-		slog.WarnContext(context.Background(), "events.id_floor_corrupt", "path", f.store.Location(), "error", err)
+		slog.WarnContext(ctx, "events.id_floor_corrupt", "path", f.store.Location(), "error", err)
 		return 0
 	}
 	return ceiling
@@ -83,9 +83,9 @@ func isImplausiblyAhead(ceiling, want uint64) bool {
 	return ceiling > want && ceiling-want > maxFloorAhead
 }
 
-func (f *Floor) persistOrWarn(ceiling uint64) {
+func (f *Floor) persistOrWarn(ctx context.Context, ceiling uint64) {
 	if err := f.persist(ceiling); err != nil {
-		slog.WarnContext(context.Background(), "events.id_floor_unwritable", "path", f.store.Location(), "error", err)
+		slog.WarnContext(ctx, "events.id_floor_unwritable", "path", f.store.Location(), "error", err)
 	}
 }
 

@@ -140,7 +140,7 @@ func newSupabaseJWTVerifier(
 func (v *SupabaseJWTVerifier) registerJWKS(ctx context.Context) error {
 	cache := jwk.NewCache(ctx,
 		jwk.WithRefreshWindow(v.schedule.refreshWindow),
-		jwk.WithErrSink(jwksErrSink(v.onBackgroundRefreshError)),
+		jwk.WithErrSink(jwksErrSink(func(err error) { v.onBackgroundRefreshError(ctx, err) })),
 	)
 	httpClient, err := outbound.NewClient(v.schedule.fetchTimeout, cappedJWKSBodyTransport{base: outbound.DefaultTransport()})
 	if err != nil {
@@ -183,10 +183,10 @@ func (v *SupabaseJWTVerifier) onKeySetFetched(_ string, set jwk.Set) (jwk.Set, e
 	return set, nil
 }
 
-func (v *SupabaseJWTVerifier) onBackgroundRefreshError(err error) {
+func (v *SupabaseJWTVerifier) onBackgroundRefreshError(ctx context.Context, err error) {
 	v.metrics.JWKSFetchFailed()
 	failures, age := v.refresher.recordBackgroundFailure(err)
-	slog.WarnContext(context.Background(), "JWKS background refresh failed, serving last-known-good key set until it is older than stale_after, then rejecting tokens",
+	slog.WarnContext(ctx, "JWKS background refresh failed, serving last-known-good key set until it is older than stale_after, then rejecting tokens",
 		"error", err,
 		"consecutive_failures", failures,
 		"key_set_age", age.Round(time.Second).String(),

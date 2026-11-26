@@ -41,7 +41,7 @@ func TestAssemblyShutdown_ADetachedTaskHeldOpenTimesOutOnlyTheDetachedStep(t *te
 	}
 
 	cancel()
-	outcomes := assembly.Shutdown()
+	outcomes := assembly.Shutdown(context.Background())
 
 	if len(outcomes) != allShutdownSteps {
 		t.Fatalf("Shutdown reported %d steps, want %d", len(outcomes), allShutdownSteps)
@@ -77,7 +77,7 @@ func TestAssemblyShutdown_JobLoopsStillRunningTimeOutOnlyTheBackgroundStepAndKee
 		assembly.Jobs().Wait()
 	})
 
-	outcomes := assembly.Shutdown()
+	outcomes := assembly.Shutdown(context.Background())
 
 	if len(outcomes) != allShutdownSteps {
 		t.Fatalf("Shutdown reported %d steps, want %d", len(outcomes), allShutdownSteps)

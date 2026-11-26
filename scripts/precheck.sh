@@ -359,6 +359,9 @@ if touches '^services/go-api/'; then
         if touches "^$m/.*\.go\$|^$m/\.go-arch-lint\.yml\$" && need go-arch-lint "go-api architecture"; then
           check "go-api architecture: every module imports only what its role may (go-arch-lint)" $m go-arch-lint check
         fi
+        if touches "^$m/go\.(mod|sum)\$"; then
+          check "go-api go.mod and go.sum are tidy" $m go mod tidy -diff
+        fi
         if touches "^$m/.*\.go\$|^$m/go\.(mod|sum)\$"; then
           par check "go-api vet (whole module, so an importer a change broke fails here)" $m "${heavy[@]}" go vet ./...
         fi
@@ -375,6 +378,9 @@ if touches '^services/go-api/'; then
       else
         whole_module=0
         [ -n "$affected_out" ] && mapfile -t affected <<<"$affected_out"
+      fi
+      if touches "^$m/go\.(mod|sum)\$"; then
+        check "go-api go.mod and go.sum are tidy" $m go mod tidy -diff
       fi
       if [ $whole_module = 1 ]; then
         par check "go-api vet" $m "${heavy[@]}" go vet ./...

@@ -46,7 +46,7 @@ func assembleOn(t *testing.T, cfg *config.Config, pool *pgxpool.Pool, transport 
 	}
 	t.Cleanup(func() {
 		cancel()
-		assembly.Shutdown()
+		assembly.Shutdown(context.Background())
 	})
 	return assembledRun{assembly: assembly, logs: logs}
 }
