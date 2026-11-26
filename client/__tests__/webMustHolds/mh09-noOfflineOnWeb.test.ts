@@ -52,7 +52,7 @@ describe('mh09: an identity change never claims pinned downloads on web', () => 
   function ownerAfterSignIn(): string | null {
     return loadFresh(() => {
       require('@shared/offline');
-      require('@shared/session/signOutCleanup').notifyIdentityChange('user-a');
+      require('@shared/session').notifyIdentityChange('user-a');
       return require('@shared/offline').readOwner();
     });
   }

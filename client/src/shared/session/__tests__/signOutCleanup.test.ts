@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query';
 
-import type * as signOutCleanup from '@shared/session/signOutCleanup';
+import type * as signOutCleanup from '@shared/session';
 
 import {
   currentSessionEpoch,
@@ -195,7 +195,7 @@ describe('primeSignedInState', () => {
   function freshRegistry(): Registry {
     let registry!: Registry;
     jest.isolateModules(() => {
-      registry = jest.requireActual('@shared/session/signOutCleanup');
+      registry = jest.requireActual('@shared/session');
     });
     return registry;
   }
@@ -242,7 +242,7 @@ describe('primeSignedInState, after the first answer', () => {
   function freshRegistry(): typeof signOutCleanup {
     let registry!: typeof signOutCleanup;
     jest.isolateModules(() => {
-      registry = jest.requireActual('@shared/session/signOutCleanup');
+      registry = jest.requireActual('@shared/session');
     });
     return registry;
   }

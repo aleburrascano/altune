@@ -4,7 +4,7 @@ import type {
   UseMutationOptions,
 } from '@tanstack/react-query';
 
-import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
+import { currentSessionEpoch, isSameSession } from '@shared/session/shell/signOutCleanup';
 
 const startingSession = new WeakMap<MutationFunctionContext, number>();
 

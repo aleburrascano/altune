@@ -2,6 +2,7 @@ const enumProxy = new Proxy({}, { get: (_target, prop) => String(prop) });
 
 const methods = new Map();
 const pendingFailures = new Map();
+const answers = new Map();
 
 let playbackState = { state: undefined };
 let progress = { position: 0, duration: 0, buffered: 0 };
@@ -13,7 +14,7 @@ function methodNamed(name) {
       name,
       jest.fn(async () => {
         const failure = pendingFailures.get(name);
-        if (failure === undefined) return undefined;
+        if (failure === undefined) return answers.get(name);
         pendingFailures.delete(name);
         throw failure;
       }),
@@ -34,6 +35,7 @@ const __player = {
   reset() {
     for (const mock of methods.values()) mock.mockClear();
     pendingFailures.clear();
+    answers.clear();
     eventListeners.clear();
     playbackState = { state: undefined };
     progress = { position: 0, duration: 0, buffered: 0 };
@@ -41,6 +43,10 @@ const __player = {
 
   failNext(method, error) {
     pendingFailures.set(method, error ?? new Error(`injected ${method} failure`));
+  },
+
+  answer(method, value) {
+    answers.set(method, value);
   },
 
   setState(state) {

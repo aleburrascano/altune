@@ -3,7 +3,7 @@ export {
   guardedMutationOptions,
   onlyWhileTheStartingSessionLasts,
   pinStartingSession,
-} from '@shared/session/guardedMutation';
+} from '@shared/session/shell/guardedMutation';
 export {
   currentSessionEpoch,
   hasSignedInUser,
@@ -13,4 +13,4 @@ export {
   onSignOut,
   primeSignedInState,
   runSignOutCleanups,
-} from '@shared/session/signOutCleanup';
+} from '@shared/session/shell/signOutCleanup';
