@@ -4,9 +4,9 @@ import (
 	"altune/go-api/internal/library"
 	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/clock/clocktest"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"errors"
 	"fmt"
@@ -293,7 +293,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		if res != nil {
 			t.Fatalf("result = %+v, want nil for a rejected offset", res)
 		}
-		testdb.AssertValidationError(t, err)
+		dbtest.AssertValidationError(t, err)
 		if _, err := svc.Execute(ctx, userId, 0); err != nil {
 			t.Fatalf("a run refused before it started must leave the cooldown unspent, got %v", err)
 		}

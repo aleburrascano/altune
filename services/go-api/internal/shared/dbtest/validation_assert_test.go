@@ -1,8 +1,8 @@
-package testdb_test
+package dbtest_test
 
 import (
 	apierror "altune/go-api/internal/shared/apierror"
-	"altune/go-api/internal/shared/testdb"
+	"altune/go-api/internal/shared/dbtest"
 	"errors"
 	"fmt"
 	"runtime"
@@ -29,7 +29,7 @@ func assertValidation(t *testing.T, err error) (*apierror.CodedError, string) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		got = testdb.AssertValidationError(tb, err)
+		got = dbtest.AssertValidationError(tb, err)
 	}()
 	<-done
 	return got, tb.failure

@@ -93,7 +93,7 @@ linters:
         linters:
           - forbidigo
         text: 'use of `(recover|sync\.WaitGroup|context\.WithoutCancel)` forbidden'
-      - path: ^(internal/shared/(config|testdb)/|cmd/|scripts/)
+      - path: ^(internal/shared/(config|dbtest)/|cmd/|scripts/)
         linters:
           - forbidigo
         text: internal/shared/config

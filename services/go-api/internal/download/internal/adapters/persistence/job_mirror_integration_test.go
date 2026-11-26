@@ -4,8 +4,8 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/persistence"
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/dbtest"
 	sharedids "altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"encoding/json"
 	"slices"
@@ -39,7 +39,7 @@ func requireJobRowMirrorsTrack(t *testing.T, pool *pgxpool.Pool, id sharedids.Tr
 }
 
 func TestPostgresJobQueue_EveryQueueStepLeavesTheJobRowEqualToTheTrackColumns(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := download.NewPostgresJobQueue(pool)
 	ctx := context.Background()
@@ -75,7 +75,7 @@ func TestPostgresJobQueue_EveryQueueStepLeavesTheJobRowEqualToTheTrackColumns(t 
 }
 
 func TestPostgresJobQueue_ADeletedTrackTakesItsJobRowWithIt(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	ctx := context.Background()
 
@@ -109,7 +109,7 @@ func upgradeStateOf(t *testing.T, pool *pgxpool.Pool, id sharedids.TrackId) (map
 }
 
 func TestPostgresUpgradeStore_TheBookkeepingKeysAndRejectedSourcesAreMirroredButTheGradeIsNot(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := persistence.NewPostgresUpgradeStore(pool)
 	ctx := context.Background()

@@ -2,8 +2,8 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/playback"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"errors"
 	"slices"
@@ -24,8 +24,8 @@ type storedQueueRow struct {
 
 func readStoredRow(t *testing.T, row storedQueueRow) (*playback.QueueState, error) {
 	t.Helper()
-	testdb.RequireIntegration(t)
-	dbURL := testdb.DatabaseURL(t)
+	dbtest.RequireIntegration(t)
+	dbURL := dbtest.DatabaseURL(t)
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, dbURL)
 	if err != nil {

@@ -4,8 +4,8 @@ import (
 	"altune/go-api/internal/platform/leader"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/database"
-	"altune/go-api/internal/shared/testdb"
-	"altune/go-api/internal/shared/testpoll"
+	"altune/go-api/internal/shared/dbtest"
+	"altune/go-api/internal/shared/polltest"
 	"bytes"
 	"context"
 	"errors"
@@ -232,7 +232,7 @@ func runOneTick(t *testing.T, s *store) *leader.Election {
 }
 
 func TestElection_OnlyOneInstanceWins(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 
 	first := fastElection(t, pool, databaseInterval)
 	if !awaitLeader(first, 5*time.Second) {
@@ -246,7 +246,7 @@ func TestElection_OnlyOneInstanceWins(t *testing.T) {
 }
 
 func TestElection_SuccessorTakesOverAfterShutdown(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	ctx := context.Background()
 
 	outgoing := newElection(t, leader.AdaptLocks(database.NewAdvisoryLocks(pool).Acquire), testKey, databaseInterval)
@@ -268,7 +268,7 @@ func TestElection_SuccessorTakesOverAfterShutdown(t *testing.T) {
 }
 
 func TestElection_AwaitUnblocksOnAcquire(t *testing.T) {
-	e := fastElection(t, testdb.Pool(t), databaseInterval)
+	e := fastElection(t, dbtest.Pool(t), databaseInterval)
 
 	if !awaitLeader(e, 5*time.Second) {
 		t.Fatal("Await did not unblock after the lock was acquired")
@@ -276,7 +276,7 @@ func TestElection_AwaitUnblocksOnAcquire(t *testing.T) {
 }
 
 func TestElection_AwaitReturnsFalseWhenNeverLeader(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 
 	holder := fastElection(t, pool, databaseInterval)
 	if !awaitLeader(holder, 5*time.Second) {
@@ -669,13 +669,13 @@ func TestElection_ReleasedLeaderContextEndsOnlyThatJob(t *testing.T) {
 }
 
 func TestElection_SessionKilledMidJob_StaleWriteNotApplied(t *testing.T) {
-	admin := testdb.Pool(t)
+	admin := dbtest.Pool(t)
 	ctx := context.Background()
 	mustExec(t, admin, "create table if not exists leader_fencing_1016 (writer text not null)")
 	mustExec(t, admin, "truncate leader_fencing_1016")
 	t.Cleanup(func() { _, _ = admin.Exec(ctx, "drop table if exists leader_fencing_1016") })
 
-	a := fastElection(t, testdb.Pool(t), databaseInterval)
+	a := fastElection(t, dbtest.Pool(t), databaseInterval)
 	if !awaitLeader(a, 5*time.Second) {
 		t.Fatal("instance A never became leader")
 	}
@@ -687,7 +687,7 @@ func TestElection_SessionKilledMidJob_StaleWriteNotApplied(t *testing.T) {
 
 	terminateLockHolder(t, admin)
 
-	b := fastElection(t, testdb.Pool(t), databaseInterval)
+	b := fastElection(t, dbtest.Pool(t), databaseInterval)
 	if !awaitLeader(b, 5*time.Second) {
 		t.Fatal("instance B never took over after A's session died")
 	}
@@ -738,7 +738,7 @@ func terminateLockHolder(t *testing.T, admin *pgxpool.Pool) {
 	if err != nil || !killed {
 		t.Fatalf("could not terminate the lock-holding session (killed=%v): %v", killed, err)
 	}
-	testpoll.Until(t, 2*time.Second, "the advisory lock to be released after its session was terminated", func() bool {
+	polltest.Until(t, 2*time.Second, "the advisory lock to be released after its session was terminated", func() bool {
 		var held bool
 		err := admin.QueryRow(context.Background(), `
 			select exists(select 1 from pg_locks

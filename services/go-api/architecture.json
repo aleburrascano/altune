@@ -29,7 +29,7 @@
   "driver_imports": ["github.com/jackc/pgx/..."],
   "driver_homes": {
     "segments": ["adapters"],
-    "modules": ["shared/database", "shared/testdb"]
+    "modules": ["shared/database", "shared/dbtest"]
   },
   "driver_composition": {
     "dirs": ["cmd/...", "internal/app", "internal/app/downloadsetup", "internal/app/shutdown"],

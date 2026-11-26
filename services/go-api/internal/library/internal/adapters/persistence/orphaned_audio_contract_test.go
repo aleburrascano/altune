@@ -2,8 +2,8 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/library"
-	"altune/go-api/internal/library/internal/adapters/contract"
-	"altune/go-api/internal/shared/testdb"
+	"altune/go-api/internal/library/internal/adapters/contracttest"
+	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"testing"
 
@@ -22,8 +22,8 @@ func (q *cleaningOrphanQueue) RecordOrphanedAudio(ctx context.Context, orphan li
 }
 
 func TestPostgresOrphanedAudioRepo_Contract(t *testing.T) {
-	pool := testdb.Pool(t)
-	contract.OrphanedAudioQueueContract(t, func(t *testing.T) (library.OrphanedAudioQueue, func(*library.Track)) {
+	pool := dbtest.Pool(t)
+	contracttest.OrphanedAudioQueueContract(t, func(t *testing.T) (library.OrphanedAudioQueue, func(*library.Track)) {
 		seed := func(track *library.Track) {
 			t.Helper()
 			cleanupTrack(t, pool, track.ID, track.UserId)

@@ -2,8 +2,8 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/shared/dbtest"
 	sharedids "altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"bytes"
 	"context"
 	"slices"
@@ -16,7 +16,7 @@ import (
 )
 
 func TestPostgresTrackRepo_FeaturedArtistsRoundTrip(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
@@ -51,7 +51,7 @@ func TestPostgresTrackRepo_FeaturedArtistsRoundTrip(t *testing.T) {
 }
 
 func TestPostgresFeaturedArtistRepo_ReplaceFeaturedArtists_RefusesAnotherUsersTrackAndLeavesItsArtists(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresCatalogTrackRepository(pool)
 	ctx := context.Background()
 	owner, intruder := sharedids.NewUserId(uuid.New()), sharedids.NewUserId(uuid.New())
@@ -109,7 +109,7 @@ func cleanupFeaturedArtists(t *testing.T, pool *pgxpool.Pool, userId sharedids.U
 }
 
 func TestPostgresFeaturedArtistRepo_UnicodeEquivalentNamesShareRow(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
@@ -139,7 +139,7 @@ func TestPostgresFeaturedArtistRepo_UnicodeEquivalentNamesShareRow(t *testing.T)
 }
 
 func TestPostgresFeaturedArtistRepo_LegacyKeyRowStillMatches(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
@@ -211,7 +211,7 @@ func ascendingTrackIds(n int) []library.TrackId {
 
 func TestPostgresFeaturedArtistRepo_ListTracksFeaturing_StopsAtTheLibraryPageCap(t *testing.T) {
 	ctx := context.Background()
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	userId := sharedids.NewUserId(uuid.New())
 	cleanupFeaturedArtists(t, pool, userId)
 	ids := ascendingTrackIds(library.MaxLibraryPageSize + 1)
@@ -256,7 +256,7 @@ func featuringIds(tracks []*library.Track) []library.TrackId {
 
 func TestPostgresFeaturedArtistRepo_ListTracksFeaturing_LeavesOutAnotherUsersTracks(t *testing.T) {
 	ctx := context.Background()
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	owner, other := sharedids.NewUserId(uuid.New()), sharedids.NewUserId(uuid.New())
 	cleanupFeaturedArtists(t, pool, owner)
 	cleanupFeaturedArtists(t, pool, other)
@@ -275,7 +275,7 @@ func TestPostgresFeaturedArtistRepo_ListTracksFeaturing_LeavesOutAnotherUsersTra
 
 func TestPostgresFeaturedArtistRepo_ListTracksFeaturing_NewestAddedComesFirst(t *testing.T) {
 	ctx := context.Background()
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	userId := sharedids.NewUserId(uuid.New())
 	cleanupFeaturedArtists(t, pool, userId)
 	fa := library.FeaturedArtist{Name: "Ordered Guest", MBID: "mb-ordered-guest-" + uuid.NewString(), Role: library.RoleFeatured}

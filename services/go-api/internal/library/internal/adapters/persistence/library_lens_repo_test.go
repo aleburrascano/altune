@@ -2,8 +2,8 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"strconv"
 	"testing"
@@ -65,7 +65,7 @@ func assertOrder(t *testing.T, sort library.LibrarySort, got, want []string) {
 }
 
 func TestPostgresTrackRepo_ListFilteredForUser_SortOrder(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -109,7 +109,7 @@ func TestPostgresTrackRepo_ListFilteredForUser_SortOrder(t *testing.T) {
 }
 
 func TestPostgresTrackRepo_ListFilteredForUser_IlikeMatching(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -174,7 +174,7 @@ func albumsOf(gs []library.AlbumGroup) []string {
 }
 
 func TestPostgresTrackRepo_ListAlbumsForUser_SortOrder(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -215,7 +215,7 @@ func TestPostgresTrackRepo_ListAlbumsForUser_SortOrder(t *testing.T) {
 }
 
 func TestPostgresTrackRepo_ListAlbumsForUser_RespectsLimit(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -256,7 +256,7 @@ func TestPostgresTrackRepo_ListAlbumsForUser_RespectsLimit(t *testing.T) {
 }
 
 func TestPostgresTrackRepo_ListArtistsForUser_RespectsLimit(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -286,7 +286,7 @@ func TestPostgresTrackRepo_ListArtistsForUser_RespectsLimit(t *testing.T) {
 }
 
 func TestPostgresTrackRepo_ListAlbumsForUser_IlikeMatching(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -331,7 +331,7 @@ func TestPostgresTrackRepo_ListAlbumsForUser_IlikeMatching(t *testing.T) {
 }
 
 func TestPostgresTrackRepo_LibraryGrouping_CoalescesCanonicalVariants(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -382,7 +382,7 @@ func artistsOf(gs []library.ArtistGroup) []string {
 }
 
 func TestPostgresTrackRepo_ListArtistsForUser_SortOrder(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -422,7 +422,7 @@ func TestPostgresTrackRepo_ListArtistsForUser_SortOrder(t *testing.T) {
 }
 
 func TestPostgresTrackRepo_ListArtistsForUser_IlikeMatching(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -451,7 +451,7 @@ func TestPostgresTrackRepo_ListArtistsForUser_IlikeMatching(t *testing.T) {
 }
 
 func TestPostgresTrackRepo_ListFilteredForUser_TotalIsExactOnEveryPage(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -510,7 +510,7 @@ func tiedArtistNames() []string {
 }
 
 func TestPostgresTrackRepo_ListAlbumsForUser_PagesCoverEveryTiedGroupOnce(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -550,7 +550,7 @@ func TestPostgresTrackRepo_ListAlbumsForUser_PagesCoverEveryTiedGroupOnce(t *tes
 }
 
 func TestPostgresTrackRepo_ListArtistsForUser_PagesCoverEveryTiedGroupOnce(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresCatalogTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -587,7 +587,7 @@ func TestPostgresTrackRepo_ListArtistsForUser_PagesCoverEveryTiedGroupOnce(t *te
 }
 
 func TestPostgresTrackRepo_ListAlbumsForUser_GroupsACompilationByItsAlbumArtist(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresCatalogTrackRepository(pool)
 	userId := ids.NewUserId(uuid.New())
 	t.Cleanup(func() {

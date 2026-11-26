@@ -4,8 +4,8 @@ import (
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"errors"
 	"testing"
@@ -16,7 +16,7 @@ import (
 
 func favoritesRepoForUser(t *testing.T) (*pgxpool.Pool, *persistence.PostgresFavoritesRepository, ids.UserId) {
 	t.Helper()
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	userId := ids.NewUserId(uuid.New())
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM discovery_favorites WHERE user_id = $1`, userId.UUID())
@@ -55,7 +55,7 @@ func albumFavorite(title string) domain.Favorite {
 }
 
 func TestPostgresFavoritesRepo_AddRefusesANewRowAtThePerUserCap(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool, repo, userId := favoritesRepoForUser(t)
 	seedFavorites(t, pool, userId, ports.MaxFavoritesPerUser)
 
@@ -70,7 +70,7 @@ func TestPostgresFavoritesRepo_AddRefusesANewRowAtThePerUserCap(t *testing.T) {
 }
 
 func TestPostgresFavoritesRepo_AddUpdatesAnExistingRowAtTheCap(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool, repo, userId := favoritesRepoForUser(t)
 	ctx := context.Background()
 	fav := albumFavorite("kept")
@@ -95,7 +95,7 @@ func TestPostgresFavoritesRepo_AddUpdatesAnExistingRowAtTheCap(t *testing.T) {
 }
 
 func TestPostgresFavoritesRepo_AddBelowTheCapInserts(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool, repo, userId := favoritesRepoForUser(t)
 	seedFavorites(t, pool, userId, ports.MaxFavoritesPerUser-1)
 
@@ -108,7 +108,7 @@ func TestPostgresFavoritesRepo_AddBelowTheCapInserts(t *testing.T) {
 }
 
 func TestPostgresFavoritesRepo_ListForUserReadsAtMostTheCap(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool, repo, userId := favoritesRepoForUser(t)
 	seedFavorites(t, pool, userId, ports.MaxFavoritesPerUser+5)
 

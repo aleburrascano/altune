@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/app/shutdown"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/testdb"
+	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"errors"
 	"net/http"
@@ -36,8 +36,8 @@ func testTracker(t *testing.T) *background.Tracker {
 
 func integrationPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	testdb.RequireIntegration(t)
-	return testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	return dbtest.Pool(t)
 }
 
 func unreachablePool(t *testing.T) *pgxpool.Pool {

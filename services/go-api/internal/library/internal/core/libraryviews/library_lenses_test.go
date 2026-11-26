@@ -2,8 +2,8 @@ package libraryviews_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"strings"
 	"testing"
@@ -34,7 +34,7 @@ func TestLibraryLensService_RejectsNegativeOffset(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected a validation error for a negative offset")
 			}
-			testdb.AssertValidationError(t, err)
+			dbtest.AssertValidationError(t, err)
 			if !strings.Contains(err.Error(), "offset") {
 				t.Fatalf("error = %q, want it to mention %q", err.Error(), "offset")
 			}
@@ -50,7 +50,7 @@ func TestLibraryLensService_ArtistsRejectYearSort(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected a validation error for sort=year on artists")
 	}
-	testdb.AssertValidationError(t, err)
+	dbtest.AssertValidationError(t, err)
 }
 
 func TestLibraryLensService_ArtistsReportYearSortBeforeOffset(t *testing.T) {

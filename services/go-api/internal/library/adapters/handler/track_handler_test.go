@@ -2,9 +2,9 @@ package handler_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"encoding/json"
 	"errors"
@@ -712,7 +712,7 @@ func TestTrackRoutes_ARefusedCatalogDatabaseAnswersTemporarilyUnavailable(t *tes
 }
 
 func TestHandleCreateTrack_AnInsertStalledBehindAnotherWriterAnswersTemporarilyUnavailable(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	user := ids.NewUserId(uuid.New())
 	holdUncommittedTrack(t, user, "Held Title", "Held Artist", "Held Album")
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -732,7 +732,7 @@ func holdUncommittedTrack(t *testing.T, user ids.UserId, title, artist, album st
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
-	if _, err := testdb.Tx(t).Exec(context.Background(),
+	if _, err := dbtest.Tx(t).Exec(context.Background(),
 		`INSERT INTO tracks (id, user_id, title, artist, dedup_key, acquisition_status) VALUES ($1, $2, $3, $4, $5, 'pending')`,
 		track.ID.UUID(), user.UUID(), title, artist, track.DedupKey,
 	); err != nil {

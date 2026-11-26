@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/shared/testdb"
+	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"encoding/json"
 	"strconv"
@@ -18,7 +18,7 @@ import (
 
 func TestPostgresIdentityStore_RoundTrip(t *testing.T) {
 	ctx := context.Background()
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 
 	store := persistence.NewPostgresIdentityStore(pool)
 	mbid := "0a68f3b5-79c2-4f81-a7bc-ebc977602e86"
@@ -65,11 +65,11 @@ func (c *queryCounter) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryE
 func queryCountingPool(t *testing.T) (*pgxpool.Pool, *queryCounter) {
 	t.Helper()
 	counter := &queryCounter{}
-	return testdb.TracedPool(t, counter), counter
+	return dbtest.TracedPool(t, counter), counter
 }
 
 func TestPostgresIdentityStore_LookupByProviderIDsIsOneQuery(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool, counter := queryCountingPool(t)
 	ctx := context.Background()
 	store := persistence.NewPostgresIdentityStore(pool)
@@ -122,7 +122,7 @@ func TestPostgresIdentityStore_LookupByProviderIDsIsOneQuery(t *testing.T) {
 }
 
 func TestPostgresIdentityStore_LookupByProviderIDsKeysOnKind(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool, _ := queryCountingPool(t)
 	ctx := context.Background()
 	store := persistence.NewPostgresIdentityStore(pool)
@@ -149,7 +149,7 @@ const batchTestIDPrefix = "batch-1106-"
 
 func TestPostgresIdentityStore_LookupByProviderID_CorruptXrefWarnsAndKeepsHit(t *testing.T) {
 	ctx := context.Background()
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	_, _ = pool.Exec(ctx, `DELETE FROM entity_identity WHERE external_id = 'corrupt-xref-595'`)
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO entity_identity (provider, external_id, kind, mbid, xref) VALUES ('deezer', 'corrupt-xref-595', 'artist', 'mbid-c', '[1]')`); err != nil {
@@ -169,9 +169,9 @@ func TestPostgresIdentityStore_LookupByProviderID_CorruptXrefWarnsAndKeepsHit(t 
 }
 
 func TestPostgresIdentityStore_LookupByProviderIDs_CorruptXrefWarnsAndKeepsHit(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	ctx := context.Background()
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	_, _ = pool.Exec(ctx, `DELETE FROM entity_identity WHERE external_id = 'corrupt-xref-batch'`)
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO entity_identity (provider, external_id, kind, mbid, xref) VALUES ('deezer', 'corrupt-xref-batch', 'artist', 'mbid-1', '["not","a","map"]')`); err != nil {

@@ -1,7 +1,7 @@
-package testpoll_test
+package polltest_test
 
 import (
-	"altune/go-api/internal/shared/testpoll"
+	"altune/go-api/internal/shared/polltest"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -11,7 +11,7 @@ import (
 
 func TestWithinReturnsAsSoonAsTheConditionHolds(t *testing.T) {
 	var calls atomic.Int32
-	got := testpoll.Within(5*time.Second, func() bool { return calls.Add(1) >= 3 })
+	got := polltest.Within(5*time.Second, func() bool { return calls.Add(1) >= 3 })
 
 	if !got {
 		t.Fatal("Within = false, want true once the condition held")
@@ -23,7 +23,7 @@ func TestWithinReturnsAsSoonAsTheConditionHolds(t *testing.T) {
 
 func TestWithinChecksOnceBeforeWaiting(t *testing.T) {
 	start := time.Now()
-	if !testpoll.Within(time.Hour, func() bool { return true }) {
+	if !polltest.Within(time.Hour, func() bool { return true }) {
 		t.Fatal("Within = false for a condition that already holds")
 	}
 	if time.Since(start) > time.Second {
@@ -32,7 +32,7 @@ func TestWithinChecksOnceBeforeWaiting(t *testing.T) {
 }
 
 func TestWithinGivesTheFinalWordToTheConditionAtTheDeadline(t *testing.T) {
-	if testpoll.Within(30*time.Millisecond, func() bool { return false }) {
+	if polltest.Within(30*time.Millisecond, func() bool { return false }) {
 		t.Fatal("Within = true for a condition that never holds")
 	}
 }
@@ -53,7 +53,7 @@ func (r *recorder) Fatalf(format string, args ...any) {
 func TestUntilFailsNamingWhatItWaitedFor(t *testing.T) {
 	r := &recorder{TB: t}
 
-	testpoll.Until(r, 20*time.Millisecond, "the queue row to be locked", func() bool { return false })
+	polltest.Until(r, 20*time.Millisecond, "the queue row to be locked", func() bool { return false })
 
 	if !r.failed {
 		t.Fatal("Until did not fail for a condition that never holds")
@@ -64,5 +64,5 @@ func TestUntilFailsNamingWhatItWaitedFor(t *testing.T) {
 }
 
 func TestUntilPassesWhenTheConditionHolds(t *testing.T) {
-	testpoll.Until(t, time.Second, "an immediate condition", func() bool { return true })
+	polltest.Until(t, time.Second, "an immediate condition", func() bool { return true })
 }

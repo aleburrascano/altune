@@ -2,8 +2,8 @@ package track_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"errors"
 	"strings"
@@ -98,7 +98,7 @@ func TestListTracksService_RejectsNegativeOffset(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected a validation error for a negative offset, got nil (out=%+v)", out)
 	}
-	testdb.AssertValidationError(t, err)
+	dbtest.AssertValidationError(t, err)
 	if !strings.Contains(err.Error(), "offset") {
 		t.Fatalf("error = %q, want it to mention %q", err.Error(), "offset")
 	}

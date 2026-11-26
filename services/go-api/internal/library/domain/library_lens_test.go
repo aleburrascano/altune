@@ -2,7 +2,7 @@ package domain_test
 
 import (
 	"altune/go-api/internal/library"
-	"altune/go-api/internal/shared/testdb"
+	"altune/go-api/internal/shared/dbtest"
 	"strings"
 	"testing"
 )
@@ -103,7 +103,7 @@ func TestNormalizePage(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected a validation error, got limit = %d", limit)
 				}
-				testdb.AssertValidationError(t, err)
+				dbtest.AssertValidationError(t, err)
 				if !strings.Contains(err.Error(), "offset") {
 					t.Fatalf("error = %q, want it to mention %q", err.Error(), "offset")
 				}

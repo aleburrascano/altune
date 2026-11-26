@@ -1,4 +1,4 @@
-package contract
+package contracttest
 
 import (
 	"altune/go-api/internal/library/internal/core/ports"

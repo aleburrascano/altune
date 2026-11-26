@@ -2,18 +2,18 @@ package memory_test
 
 import (
 	"altune/go-api/internal/library"
-	"altune/go-api/internal/library/internal/adapters/contract"
+	"altune/go-api/internal/library/internal/adapters/contracttest"
 	"testing"
 )
 
 func TestTrackRepoFake_LibraryCapContract(t *testing.T) {
-	contract.TrackRepositoryLibraryCapContract(t, func(_ *testing.T, libraryCap int) contract.TrackRepositoryUnderTest {
+	contracttest.TrackRepositoryLibraryCapContract(t, func(_ *testing.T, libraryCap int) contracttest.TrackRepositoryUnderTest {
 		return library.NewInMemoryTrackRepo(library.WithInMemoryLibraryCap(libraryCap))
 	})
 }
 
 func TestTrackRepoFake_Contract(t *testing.T) {
-	contract.TrackRepositoryContract(t, func(*testing.T) contract.TrackRepositoryUnderTest {
+	contracttest.TrackRepositoryContract(t, func(*testing.T) contracttest.TrackRepositoryUnderTest {
 		return library.NewInMemoryTrackRepo()
 	})
 }

@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-const usage = "usage: go run ./scripts/lintdoors [--summary] [--exports] [<go-api dir>]\n  every module (internal/<module>, or internal/<group>/<module> for a grouping directory) has one door, its root package, and may have a second, <module>test, that only _test.go files import; lists each outside import of any other package of a module and each non-test import of a test-support package, and exits 1 when there are any; --exports also lists each root identifier that no file outside the module uses (a name used only by its own module's root-package tests is unexported, a name its own subpackages or test door use must stay and those tests go through the real door; used means pkg.Name through a plain or aliased import, a dot import is not followed); --summary prints, per module, its door size, how much of it is used outside, and its open packages with their importers"
+const usage = "usage: go run ./scripts/lintdoors [--summary] [--exports] [<go-api dir>]\n  every module (internal/<module>, or internal/<group>/<module> for a grouping directory) has one door, its root package, and may have a second, <module>test; test support is any package whose name ends in test, and only _test.go files or other test-support packages import it; lists each outside import of any other package of a module and each other import of a test-support package, and exits 1 when there are any; --exports also lists each root identifier that no file outside the module uses (a name used only by its own module's root-package tests is unexported, a name its own subpackages or test door use must stay and those tests go through the real door; used means pkg.Name through a plain or aliased import, a dot import is not followed); --summary prints, per module, its door size, how much of it is used outside, and its open packages with their importers"
 
 var groups = map[string]bool{"platform": true, "shared": true}
 
@@ -98,7 +98,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 				continue
 			}
 			if v.kind == kindTestSupport {
-				say(stdout, "%s:%d: non-test code imports the test-support package %s; only _test.go files may\n", v.file, v.line, v.pkg)
+				say(stdout, "%s:%d: non-test code imports the test-support package %s; only _test.go files and other test-support packages may\n", v.file, v.line, v.pkg)
 				continue
 			}
 			say(stdout, "%s:%d: imports %s, a non-root package of module %s; import %s/internal/%s and move what is needed behind its root\n", v.file, v.line, v.pkg, v.module, s.modulePath, v.module)
@@ -140,12 +140,8 @@ func lastSegment(p string) string {
 	return p[strings.LastIndex(p, "/")+1:]
 }
 
-func isTestSupport(module, sub string) bool {
-	if sub == "" {
-		name := lastSegment(module)
-		return strings.HasPrefix(name, "test") || strings.HasSuffix(name, "test")
-	}
-	return sub == lastSegment(module)+"test"
+func isTestSupport(dir string) bool {
+	return strings.HasSuffix(lastSegment(dir), "test")
 }
 
 func discoverModules(root string) (map[string]bool, error) {
@@ -268,14 +264,14 @@ func (s *scan) scanFile(file string) error {
 		}
 		v := violation{file: file, line: fset.Position(imp.Pos()).Line, pkg: target, module: module, sub: sub, importer: importer}
 		switch {
-		case isTestSupport(module, sub) && !isTest:
+		case isTestSupport(target) && !isTest && !isTestSupport(importer):
 			v.kind = kindTestSupport
 			s.violations = append(s.violations, v)
 		case sub == "" && module != ownModule:
 			s.recordUse(f, imp, module, outsideFlag(isTest))
 		case sub == "" && importer != "internal/"+module:
 			s.recordUse(f, imp, module, usedInside)
-		case sub != "" && module != ownModule && !isTestSupport(module, sub):
+		case sub != "" && module != ownModule && !isTestSupport(target):
 			v.kind = kindSideDoor
 			s.violations = append(s.violations, v)
 		}

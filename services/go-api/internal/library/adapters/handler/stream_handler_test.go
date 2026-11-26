@@ -5,8 +5,8 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/polltest"
 	"altune/go-api/internal/shared/slowclienttest"
-	"altune/go-api/internal/shared/testpoll"
 	"bytes"
 	"context"
 	"errors"
@@ -438,7 +438,7 @@ func TestHandleStreamAudio_SlowNetworkIsNotCutOffByRouteDeadline(t *testing.T) {
 	resp := srv.get()
 	defer func() { _ = resp.Body.Close() }()
 
-	testpoll.Until(t, 10*time.Second, "the handler to still be streaming past the route deadline", srv.runningPastDeadline)
+	polltest.Until(t, 10*time.Second, "the handler to still be streaming past the route deadline", srv.runningPastDeadline)
 
 	got := 0
 	buf := make([]byte, 32<<10)
@@ -460,7 +460,7 @@ func TestHandleStreamAudio_StalledClientIsCutOff(t *testing.T) {
 	resp := srv.get()
 	defer func() { _ = resp.Body.Close() }()
 
-	testpoll.Until(t, 10*time.Second, "the server to give up on the client that stopped reading", srv.handled)
+	polltest.Until(t, 10*time.Second, "the server to give up on the client that stopped reading", srv.handled)
 	body, err := io.ReadAll(resp.Body)
 	if err == nil && len(body) == audioSize {
 		t.Fatalf("stalled client still received the whole %d-byte body: no idle write deadline", audioSize)

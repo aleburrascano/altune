@@ -2,8 +2,8 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/shared/dbtest"
 	sharedids "altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"errors"
 	"fmt"
@@ -127,7 +127,7 @@ func TestPostgresPlaylistRepo_AddTrack_ACancelInsideItsTransactionIsNotTransient
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	userId := sharedids.NewUserId(uuid.New())
-	playlistId := seedPlaylistForDB(ctx, t, testdb.Pool(t), userId)
+	playlistId := seedPlaylistForDB(ctx, t, dbtest.Pool(t), userId)
 	pool, trace := tracedPool(t)
 	trace.afterNextQuery(cancel)
 

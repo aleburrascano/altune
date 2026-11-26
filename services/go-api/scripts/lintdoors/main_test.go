@@ -138,20 +138,23 @@ func TestTheTestDoorIsOnlyForTestFiles(t *testing.T) {
 		name, body string
 		want       int
 	}{
-		"another module's test file":        {"internal/other/o_test.go", "package other\n\nimport _ \"example/api/internal/lib/libtest\"\n", 0},
-		"another module's production":       {"internal/other/o.go", "package other\n\nimport _ \"example/api/internal/lib/libtest\"\n", 1},
-		"its own production code":           {"internal/lib/l2.go", "package lib\n\nimport _ \"example/api/internal/lib/libtest\"\n", 1},
-		"its own test file":                 {"internal/lib/l2_test.go", "package lib\n\nimport _ \"example/api/internal/lib/libtest\"\n", 0},
-		"a test-named module in a test":     {"internal/other/o_test.go", "package other\n\nimport _ \"example/api/internal/shared/testdb\"\n", 0},
-		"a test-suffixed module in a test":  {"internal/other/o_test.go", "package other\n\nimport _ \"example/api/internal/shared/slowclienttest\"\n", 0},
-		"a test-suffixed module in product": {"internal/other/o.go", "package other\n\nimport _ \"example/api/internal/shared/slowclienttest\"\n", 1},
-		"a test-named module in product":    {"internal/other/o.go", "package other\n\nimport _ \"example/api/internal/shared/testdb\"\n", 1},
+		"another module's test file":             {"internal/other/o_test.go", "package other\n\nimport _ \"example/api/internal/lib/libtest\"\n", 0},
+		"another module's production":            {"internal/other/o.go", "package other\n\nimport _ \"example/api/internal/lib/libtest\"\n", 1},
+		"its own production code":                {"internal/lib/l2.go", "package lib\n\nimport _ \"example/api/internal/lib/libtest\"\n", 1},
+		"its own test file":                      {"internal/lib/l2_test.go", "package lib\n\nimport _ \"example/api/internal/lib/libtest\"\n", 0},
+		"a test-prefixed module in product":      {"internal/other/o.go", "package other\n\nimport _ \"example/api/internal/shared/testdb\"\n", 0},
+		"a nested test package in a test":        {"internal/lib/l2_test.go", "package lib\n\nimport _ \"example/api/internal/lib/internal/adapters/contracttest\"\n", 0},
+		"a nested test package in product":       {"internal/lib/l2.go", "package lib\n\nimport _ \"example/api/internal/lib/internal/adapters/contracttest\"\n", 1},
+		"a nested one from another test package": {"internal/lib/libtest/t2.go", "package libtest\n\nimport _ \"example/api/internal/lib/internal/adapters/contracttest\"\n", 0},
+		"a test-suffixed module in a test":       {"internal/other/o_test.go", "package other\n\nimport _ \"example/api/internal/shared/slowclienttest\"\n", 0},
+		"a test-suffixed module in product":      {"internal/other/o.go", "package other\n\nimport _ \"example/api/internal/shared/slowclienttest\"\n", 1},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			dir := newTree(t)
 			writeFile(t, dir, "internal/lib/libtest/libtest.go", "package libtest\n")
 			writeFile(t, dir, "internal/shared/testdb/testdb.go", "package testdb\n")
+			writeFile(t, dir, "internal/lib/internal/adapters/contracttest/c.go", "package contracttest\n")
 			writeFile(t, dir, "internal/shared/slowclienttest/s.go", "package slowclienttest\n")
 			writeFile(t, dir, tc.name, tc.body)
 

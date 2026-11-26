@@ -2,8 +2,8 @@ package domain_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"altune/go-api/internal/shared/tracklength"
 	"encoding/json"
 	"errors"
@@ -684,7 +684,7 @@ func TestNulByteRefusedByEveryTextEntryPoint(t *testing.T) {
 			if err == nil || err.Error() != tt.want {
 				t.Fatalf("error for NUL input = %v, want %q", err, tt.want)
 			}
-			testdb.AssertValidationError(t, err)
+			dbtest.AssertValidationError(t, err)
 			if err := tt.validate("ab"); err != nil {
 				t.Errorf("same text without the NUL was rejected: %v", err)
 			}
@@ -804,7 +804,7 @@ func TestTrackSetDuration_RejectsUnstorableValues(t *testing.T) {
 
 			err := track.SetDuration(seconds)
 
-			testdb.AssertValidationError(t, err)
+			dbtest.AssertValidationError(t, err)
 			if track.DurationSeconds != nil {
 				t.Errorf("DurationSeconds = %v, want unset", *track.DurationSeconds)
 			}

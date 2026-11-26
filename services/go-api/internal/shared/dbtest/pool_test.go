@@ -1,7 +1,7 @@
-package testdb_test
+package dbtest_test
 
 import (
-	"altune/go-api/internal/shared/testdb"
+	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"fmt"
 	"os"
@@ -14,7 +14,7 @@ import (
 )
 
 func TestPool_ReachesTheIntegrationDatabase(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 
 	var got int
 	if err := pool.QueryRow(context.Background(), "SELECT 40 + 2").Scan(&got); err != nil || got != 42 {
@@ -23,7 +23,7 @@ func TestPool_ReachesTheIntegrationDatabase(t *testing.T) {
 }
 
 func TestTx_RollsBackWhatTheTestWroteWhenItEnds(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	ctx := context.Background()
 	table := pgx.Identifier{"sharedtest_tx_probe_" + uuid.NewString()[:8]}.Sanitize()
 	if _, err := pool.Exec(ctx, "CREATE TABLE "+table+" (id int)"); err != nil {
@@ -32,7 +32,7 @@ func TestTx_RollsBackWhatTheTestWroteWhenItEnds(t *testing.T) {
 	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), "DROP TABLE "+table) })
 
 	t.Run("writer", func(t *testing.T) {
-		tx := testdb.Tx(t)
+		tx := dbtest.Tx(t)
 		if _, err := tx.Exec(ctx, "INSERT INTO "+table+" VALUES (1)"); err != nil {
 			t.Fatalf("insert: %v", err)
 		}
@@ -49,14 +49,14 @@ func TestTx_RollsBackWhatTheTestWroteWhenItEnds(t *testing.T) {
 }
 
 func TestDatabaseURL_IsTheURLPoolConnectsTo(t *testing.T) {
-	url := testdb.DatabaseURL(t)
+	url := dbtest.DatabaseURL(t)
 
 	cfg, err := pgx.ParseConfig(url)
 	if err != nil {
 		t.Fatalf("parse DatabaseURL: %v", err)
 	}
 	var database string
-	if err := testdb.Pool(t).QueryRow(context.Background(), "SELECT current_database()").Scan(&database); err != nil || database != cfg.Database {
+	if err := dbtest.Pool(t).QueryRow(context.Background(), "SELECT current_database()").Scan(&database); err != nil || database != cfg.Database {
 		t.Fatalf("Pool's database = %q, %v, want %q from DatabaseURL", database, err, cfg.Database)
 	}
 }
@@ -72,7 +72,7 @@ func (c *countingTracer) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQuer
 
 func TestTracedPool_ReportsEveryQueryToTheTracer(t *testing.T) {
 	tracer := &countingTracer{}
-	pool := testdb.TracedPool(t, tracer)
+	pool := dbtest.TracedPool(t, tracer)
 
 	var got int
 	if err := pool.QueryRow(context.Background(), "SELECT 1").Scan(&got); err != nil || got != 1 {
@@ -84,7 +84,7 @@ func TestTracedPool_ReportsEveryQueryToTheTracer(t *testing.T) {
 }
 
 func TestPool_RowsAPackageWritesAreInvisibleToTheSharedDatabase(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	ctx := context.Background()
 	id := uuid.New()
 	if _, err := pool.Exec(ctx,
@@ -94,7 +94,7 @@ func TestPool_RowsAPackageWritesAreInvisibleToTheSharedDatabase(t *testing.T) {
 		t.Fatalf("insert a claimable track: %v", err)
 	}
 
-	shared, err := pgx.Connect(ctx, testdb.DatabaseURLWithoutSchema(t))
+	shared, err := pgx.Connect(ctx, dbtest.DatabaseURLWithoutSchema(t))
 	if err != nil {
 		t.Fatalf("connect to the shared database: %v", err)
 	}
@@ -120,7 +120,7 @@ func schemaExists(t *testing.T, conn *pgx.Conn, name string) bool {
 
 func TestPool_ANewPackageDropsTestSchemasOlderThanSixHoursAndKeepsRecentOnes(t *testing.T) {
 	ctx := context.Background()
-	shared, err := pgx.Connect(ctx, testdb.DatabaseURLWithoutSchema(t))
+	shared, err := pgx.Connect(ctx, dbtest.DatabaseURLWithoutSchema(t))
 	if err != nil {
 		t.Fatalf("connect to the shared database: %v", err)
 	}

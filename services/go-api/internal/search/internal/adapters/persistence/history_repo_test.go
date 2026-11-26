@@ -3,8 +3,8 @@ package persistence_test
 import (
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/dbtest"
 	sharedids "altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"testing"
 	"time"
@@ -13,7 +13,7 @@ import (
 )
 
 func TestPostgresSearchHistoryRepo_InsertAndListDistinctRecent(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := persistence.NewPostgresSearchHistoryRepository(pool)
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
@@ -80,7 +80,7 @@ func TestPostgresSearchHistoryRepo_InsertAndListDistinctRecent(t *testing.T) {
 }
 
 func TestPostgresSearchHistoryRepo_TrimToN(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := persistence.NewPostgresSearchHistoryRepository(pool)
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())

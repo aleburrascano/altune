@@ -6,8 +6,8 @@ import (
 	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/library/domain"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"errors"
 	"testing"
@@ -19,7 +19,7 @@ import (
 
 func newLedgerPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	return testdb.Pool(t)
+	return dbtest.Pool(t)
 }
 
 func insertUnqueuedTrack(t *testing.T, pool *pgxpool.Pool) *domain.Track {
