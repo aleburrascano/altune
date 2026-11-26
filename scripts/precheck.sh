@@ -63,10 +63,14 @@ fi
 touches() { grep -qE "$1" <<<"$changed"$'\n'"$deleted"; }
 
 main_tree=$(git worktree list --porcelain | awk '/^worktree /{print $2; exit}')
+declare -A deps_env=() deps_rc=()
 link_deps() {
-  local out
-  out=$(bash scripts/worktree-deps.sh "$1") || return 1
-  eval "$out"
+  if [ -z "${deps_rc[$1]:-}" ]; then
+    deps_rc[$1]=0
+    deps_env[$1]=$(bash scripts/worktree-deps.sh "$1") || deps_rc[$1]=1
+  fi
+  [ "${deps_rc[$1]}" = 0 ] || return 1
+  eval "${deps_env[$1]}"
 }
 
 heavy=()
@@ -99,9 +103,14 @@ par_ids=()
 par_pids=()
 
 par() {
+  if [ -n "${HEAVY_HELD:-}" ]; then
+    "$@"
+    return
+  fi
   local id=${#par_ids[@]}
   [ -n "$par_dir" ] || par_dir=$(mktemp -d)
   par_ids+=("$id")
+  printf '%s' "$2" >"$par_dir/$id.name"
   (
     log=$(mktemp)
     trap 'rm -f "$log"' EXIT
@@ -121,9 +130,11 @@ par_wait() {
     current_step="waiting for the steps running side by side"
     wait "${par_pids[$i]}" || true
     cat "$par_dir/$id.out"
+    : >"$par_dir/$id.shown"
     if [ ! -f "$par_dir/$id.failed" ]; then
       failed=1
-      record_fail "a step run side by side" 1 "it ended before it finished"
+      echo "FAIL  $(cat "$par_dir/$id.name") ended before it finished"
+      record_fail "$(cat "$par_dir/$id.name")" 1 "it ended before it finished"
       continue
     fi
     [ "$(cat "$par_dir/$id.failed")" = 1 ] && failed=1
@@ -142,14 +153,23 @@ stop_tree() {
 }
 
 par_stop() {
-  local pid
-  for pid in "${par_pids[@]}"; do
-    ! kill -0 "$pid" 2>/dev/null || stop_tree "$pid"
+  local i id running=()
+  for i in "${!par_ids[@]}"; do
+    id=${par_ids[$i]}
+    if [ -f "$par_dir/$id.failed" ]; then
+      [ -f "$par_dir/$id.shown" ] || cat "$par_dir/$id.out"
+    elif [ -f "$par_dir/$id.shown" ]; then
+      :
+    else
+      running+=("$(cat "$par_dir/$id.name")")
+      ! kill -0 "${par_pids[$i]}" 2>/dev/null || stop_tree "${par_pids[$i]}"
+    fi
   done
+  [ ${#running[@]} -eq 0 ] || printf 'still running when stopped: %s\n' "${running[@]}"
   [ -z "$par_dir" ] || rm -rf "$par_dir"
 }
 
-trap 'announce_abort; par_stop; rm -f "$log"' EXIT
+trap 'par_stop; announce_abort; rm -f "$log"' EXIT
 trap 'abort_rc=129; exit 129' HUP
 trap 'abort_rc=130; exit 130' INT
 trap 'abort_rc=143; exit 143' TERM

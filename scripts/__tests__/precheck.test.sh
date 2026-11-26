@@ -497,6 +497,16 @@ add_go_fixture() {
     cat >"$WORK/bin/go" <<STUB
 #!/usr/bin/env bash
 printf "go %s\\n" "\$*" >>"$WORK/tools.log"
+if [ -n "\${GO_ORDER_LOG:-}" ] && { [ "\$1" = vet ] || [ "\$1" = test ]; }; then
+    echo "start \$1" >>"\$GO_ORDER_LOG"
+    sleep 1
+    echo "end \$1" >>"\$GO_ORDER_LOG"
+    exit 0
+fi
+if [ -n "\${GO_BLOCK:-}" ] && { [ "\$1" = vet ] || [ "\$1" = test ]; }; then
+    echo \$\$ >>"\$GO_BLOCK/pids"
+    exec sleep 300
+fi
 if [ -n "\${GO_RENDEZVOUS:-}" ] && { [ "\$1" = vet ] || [ "\$1" = test ]; }; then
     : >"\$GO_RENDEZVOUS/\$1"
     for _ in \$(seq 600); do
@@ -746,6 +756,50 @@ GO_RENDEZVOUS="$WORK/rendezvous" run_push_scoped
 expect_rc 0
 expect_out "ok    go-api vet"
 expect_out "ok    go-api tests (race, changed packages)"
+
+CASE="inside a held heavy slot the steps run one at a time, not all at once"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+: >"$WORK/order.log"
+HEAVY_HELD=1 GO_ORDER_LOG="$WORK/order.log" run_push_scoped
+expect_rc 0
+[ "$(tr '\n' ' ' <"$WORK/order.log")" = "start vet end vet start test end test " ] || fail "a held slot should run vet then the tests, one after the other: $(tr '\n' ' ' <"$WORK/order.log")"
+: >"$WORK/order.log"
+GO_ORDER_LOG="$WORK/order.log" run_push_scoped
+expect_rc 0
+[ "$(sed -n 2p "$WORK/order.log")" = "start test" ] || fail "outside a held slot vet and the tests should overlap: $(tr '\n' ' ' <"$WORK/order.log")"
+
+blocked_steps() {
+    if [ -f "$WORK/block/pids" ]; then wc -l <"$WORK/block/pids"; else echo 0; fi
+}
+
+CASE="stopping a push stops the steps it started, and says which were still running"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+mkdir -p "$WORK/block"
+(
+    cd "$WORK/repo" || exit 1
+    HOME="$WORK/home" PATH="$WORK/bin:$PATH" GO_BLOCK="$WORK/block" setsid env --default-signal=INT bash scripts/precheck.sh >"$WORK/out.log" 2>&1 &
+    echo $! >"$WORK/precheck.pid"
+    wait $!
+    echo $? >"$WORK/precheck.rc"
+) &
+for _ in $(seq 300); do
+    [ -s "$WORK/precheck.pid" ] && [ "$(blocked_steps)" -ge 2 ] && break
+    sleep 0.1
+done
+[ "$(blocked_steps)" -ge 2 ] || fail "both blocked steps should have started"
+kill -TERM "$(cat "$WORK/precheck.pid")"
+for _ in $(seq 100); do [ -s "$WORK/precheck.rc" ] && break; sleep 0.1; done
+[ "$(cat "$WORK/precheck.rc" 2>/dev/null)" = 143 ] || fail "a stopped precheck should exit 143, got '$(cat "$WORK/precheck.rc" 2>/dev/null)'"
+sleep 1
+while read -r blocked; do
+    ! kill -0 "$blocked" 2>/dev/null || fail "step process $blocked was left running"
+done <"$WORK/block/pids"
+grep -qF "still running when stopped: go-api vet" "$WORK/out.log" || fail "the output should name the steps still running: $(tail -5 "$WORK/out.log")"
+grep -qF "still running when stopped: go-api tests (race, changed packages)" "$WORK/out.log" || fail "the output should name the tests step: $(tail -5 "$WORK/out.log")"
 
 CASE="a failing step run side by side is reported last, after the ok lines"
 new_repo
