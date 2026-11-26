@@ -56,7 +56,7 @@ func TestAssertValidationError_RefusesACodedErrorOfAnotherKind(t *testing.T) {
 func TestAssertValidationError_RefusesAnErrorThatIsNotCoded(t *testing.T) {
 	_, failure := assertValidation(t, errors.New("plain"))
 
-	if !strings.Contains(failure, "want a *shareddomain.CodedError") {
+	if !strings.Contains(failure, "want a *apierror.CodedError") {
 		t.Fatalf("failure %q, want it to name the coded error it expected", failure)
 	}
 }
