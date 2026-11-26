@@ -1,1 +1,1 @@
-export { LibraryScreen as default } from '@features/library';
+export { LibraryRoute as default } from '@/mobile';

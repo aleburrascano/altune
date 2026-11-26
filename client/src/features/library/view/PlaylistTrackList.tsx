@@ -7,7 +7,7 @@ import { usePlaylistPlayback } from '@features/library/view/usePlaylistPlayback'
 import { useRetryAcquisition } from '@features/library/view/useRetryAcquisition';
 import { usePlaylistTrackRemoval } from '@features/library/view/usePlaylistTrackRemoval';
 import type { TrackSelectionController } from '@features/library/view/useTrackSelection';
-import { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
+import { useLibraryNavigation } from '@features/library/view/useLibraryNavigation';
 import { listContent } from '@features/library/view/listContentStyles';
 import type { DetailActions, DetailProps } from '@features/library/view/playlistDetailTypes';
 import { PlaylistHero } from '@features/library/view/PlaylistHero';

@@ -1,3 +1,1 @@
-import { FeaturingScreen } from '@features/library';
-
-export default FeaturingScreen;
+export { FeaturingRoute as default } from '@/mobile';

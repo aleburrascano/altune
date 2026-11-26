@@ -2,7 +2,7 @@ import type { TrackResponse, PlaylistResponse } from '@shared/catalog';
 import type { usePlayback, useQueuePlayback } from '@shared/playback';
 import { showFailureAlert, type MenuAnchor } from '@shared/ui';
 import { useAlbumsView, useArtistsView } from '@features/library/view/useGroupViews';
-import type { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
+import type { useLibraryNavigation } from '@features/library/view/useLibraryNavigation';
 import type { PlaylistActionsState } from '@features/library/view/usePlaylistActions';
 import { usePlaylistsView } from '@features/library/view/usePlaylistsView';
 import type { useRetryAcquisition } from '@features/library/view/useRetryAcquisition';

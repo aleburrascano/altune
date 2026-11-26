@@ -1,14 +1,9 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
-import {
-  type PlaylistDetailResponse,
-  NO_PLAYLIST_ID,
-  parsePlaylistId,
-  type PlaylistId,
-} from '@shared/catalog';
+import type { PlaylistDetailResponse, PlaylistId } from '@shared/catalog';
+import type { Navigator } from '@shared/navigation';
 import { Screen, Skeleton, spacing, Button, Text } from '@shared/ui';
-import { goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
+import { goBackOrToLibrary } from '@features/library/core/libraryRoutes';
 import {
   useLoggedPlaylistDetailFailure,
   usePlaylistDetail,
@@ -21,8 +16,6 @@ import {
 import { describeError } from '@shared/failure';
 import { classifyLibraryError } from '@features/library/core/libraryFailure';
 
-type Router = ReturnType<typeof useRouter>;
-
 type ScreenQuery = {
   playlist: PlaylistDetailResponse | undefined;
   isLoading: boolean;
@@ -31,7 +24,7 @@ type ScreenQuery = {
   refetch: () => void;
 };
 
-type StatesProps = { router: Router; playlistId: PlaylistId; state: ScreenQuery };
+type StatesProps = { router: Navigator; playlistId: PlaylistId; state: ScreenQuery };
 
 function HeroSkeleton(): ReactElement {
   return (
@@ -52,25 +45,10 @@ function PlaylistDetailLoading({ onBack }: { onBack: () => void }): ReactElement
   );
 }
 
-function useRouteParamPlaylistId(): PlaylistId {
-  const params = useLocalSearchParams<{ id: string }>();
-  const parsedId = parsePlaylistId(params.id ?? '');
-  return parsedId.ok ? parsedId.id : NO_PLAYLIST_ID;
-}
-
 function usePlaylistScreenQuery(playlistId: PlaylistId): ScreenQuery {
   const { data: playlist, isLoading, isRefetching, error, refetch } = usePlaylistDetail(playlistId);
   useLoggedPlaylistDetailFailure(playlistId, error);
   return { playlist, isLoading, isRefetching, error, refetch: () => void refetch() };
-}
-
-function LibraryRedirect({ router }: { router: Router }): ReactElement {
-  router.replace('/library');
-  return (
-    <Screen>
-      <View />
-    </Screen>
-  );
 }
 
 type FailedProps = { state: ScreenQuery; onBack: () => void; onLibrary: () => void };
@@ -101,12 +79,14 @@ function PlaylistDetailStates(props: StatesProps): ReactElement {
   return <PlaylistDetailContent {...loadedProps(props, playlist)} />;
 }
 
-export function PlaylistDetailScreen(): ReactElement {
-  const router = useRouter();
-  const playlistId = useRouteParamPlaylistId();
+type PlaylistDetailScreenProps = { playlistId: PlaylistId; navigator: Navigator };
+
+export function PlaylistDetailScreen({
+  playlistId,
+  navigator,
+}: PlaylistDetailScreenProps): ReactElement {
   const state = usePlaylistScreenQuery(playlistId);
-  if (!playlistId) return <LibraryRedirect router={router} />;
-  return <PlaylistDetailStates router={router} playlistId={playlistId} state={state} />;
+  return <PlaylistDetailStates router={navigator} playlistId={playlistId} state={state} />;
 }
 
 const styles = StyleSheet.create({

@@ -2,7 +2,7 @@ import type { TrackId, TrackResponse } from '@shared/catalog';
 import { countLabel, confirmDestructive, showFailureAlert } from '@shared/ui';
 import type { useQueuePlayback } from '@shared/playback';
 import { useDeleteTrack, useDeleteTracks } from '@features/library/view/useDeleteTracks';
-import type { useLibraryNavigation } from '@features/library/hooks/useLibraryNavigation';
+import type { useLibraryNavigation } from '@features/library/view/useLibraryNavigation';
 import type { PlaylistActionsState } from '@features/library/view/usePlaylistActions';
 import {
   useTrackSelection,

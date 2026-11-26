@@ -1,9 +1,8 @@
-import { useLocalSearchParams, useRouter, useSegments } from 'expo-router';
 import { useMemo, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
 import type { FeaturedArtist, TrackResponse } from '@shared/catalog';
-import { detailHref } from '@shared/navigation';
+import { detailHref, type Navigator } from '@shared/navigation';
 import { trackToDiscoveryResult } from '@shared/catalog';
 import {
   asyncView,
@@ -23,27 +22,36 @@ import {
   usePlayback,
   useQueuePlayback,
 } from '@shared/playback';
-import { featuringDetailRoute, goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
+import { featuringDetailRoute, goBackOrToLibrary } from '@features/library/core/libraryRoutes';
 import { useDeleteTrack } from '@features/library/view/useDeleteTracks';
 import {
   useExploreArtist,
   parseDeezerIdParam,
   parseStringParam,
   useTracksFeaturing,
-} from '@features/library/hooks/useFeaturing';
+} from '@features/library/view/useFeaturing';
 import { useRetryAcquisition } from '@features/library/view/useRetryAcquisition';
 import { useTrackMenu } from '@features/library/view/useTrackMenu';
 import { classifyLibraryError, failureTail } from '@features/library/core/libraryFailure';
 import { TracksList } from '@features/library/view/TracksList';
 
-export function FeaturingScreen(): ReactElement {
-  const params = useLocalSearchParams<{
-    name?: string | string[];
-    mbid?: string | string[];
-    deezer_id?: string;
-  }>();
-  const router = useRouter();
-  const segments = useSegments();
+export type FeaturingParams = {
+  name?: string | string[] | undefined;
+  mbid?: string | string[] | undefined;
+  deezer_id?: string | undefined;
+};
+
+type FeaturingScreenProps = {
+  params: FeaturingParams;
+  segments: readonly string[];
+  navigator: Navigator;
+};
+
+export function FeaturingScreen({
+  params,
+  segments,
+  navigator: router,
+}: FeaturingScreenProps): ReactElement {
   const detailPath = featuringDetailRoute(segments);
 
   const fa: FeaturedArtist = useMemo(
@@ -68,7 +76,7 @@ export function FeaturingScreen(): ReactElement {
   const retryMutation = useRetryAcquisition('featuring');
   const playback = usePlayback();
   const queue = useQueuePlayback();
-  const { explore, exploring } = useExploreArtist();
+  const { explore, exploring } = useExploreArtist(router);
 
   const goBack = () => goBackOrToLibrary(router);
   const tracks = featuring?.items ?? [];

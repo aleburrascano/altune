@@ -1,5 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
+
+import type { Navigator } from '@shared/navigation';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import { AcquisitionPortProvider } from '@shared/acquisition';
@@ -37,11 +39,22 @@ function portRecordingInto(dialogs: RecordingDialogs): LibraryPort {
   };
 }
 
-jest.mock('expo-router', () => ({
-  useLocalSearchParams: () => ({ name: 'Guest Star' }),
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
-  useSegments: () => ['(tabs)', 'library', 'featuring'],
-}));
+type FeaturingProps = ComponentProps<typeof FeaturingScreen>;
+
+function featuringProps(overrides: Partial<FeaturingProps> = {}): FeaturingProps {
+  return {
+    params: { name: 'Guest Star' },
+    segments: ['(tabs)', 'library', 'featuring'],
+    navigator: recordingNavigator(),
+    ...overrides,
+  };
+}
+
+type RecordingNavigator = Navigator & { push: jest.Mock };
+
+function recordingNavigator(): RecordingNavigator {
+  return { push: jest.fn(), replace: jest.fn(), back: jest.fn(), canGoBack: () => false };
+}
 
 const SECRET = 'guest star unreleased bootleg';
 
@@ -88,7 +101,7 @@ async function tapExplore(): Promise<void> {
 describe('a failed "Explore artist" search', () => {
   it('logs the artist, the status and the failure class', async () => {
     mockSearchDiscovery.mockRejectedValue(new ApiError(503, SECRET, 'discovery_down', 'corr-7'));
-    render(<FeaturingScreen />, { wrapper });
+    render(<FeaturingScreen {...featuringProps()} />, { wrapper });
 
     await tapExplore();
 
@@ -102,7 +115,7 @@ describe('a failed "Explore artist" search', () => {
 
   it('tells the user the search failed instead of leaving the tap silent', async () => {
     mockSearchDiscovery.mockRejectedValue(new NetworkError('transport', `search ${SECRET} failed`));
-    render(<FeaturingScreen />, { wrapper });
+    render(<FeaturingScreen {...featuringProps()} />, { wrapper });
 
     await tapExplore();
 
@@ -116,7 +129,7 @@ describe('a failed "Explore artist" search', () => {
 
   it('asks the user to sign in again when the search is refused for auth', async () => {
     mockSearchDiscovery.mockRejectedValue(new ApiError(403, 'forbidden'));
-    render(<FeaturingScreen />, { wrapper });
+    render(<FeaturingScreen {...featuringProps()} />, { wrapper });
 
     await tapExplore();
 
@@ -129,7 +142,7 @@ describe('a failed "Explore artist" search', () => {
 
   it('offers the search again once the failed one has settled', async () => {
     mockSearchDiscovery.mockRejectedValue(new NetworkError('transport', 'offline'));
-    render(<FeaturingScreen />, { wrapper });
+    render(<FeaturingScreen {...featuringProps()} />, { wrapper });
 
     await tapExplore();
 
@@ -138,7 +151,7 @@ describe('a failed "Explore artist" search', () => {
 
   it('logs nothing and alerts nothing when the search answers', async () => {
     mockSearchDiscovery.mockResolvedValue({ results: [] });
-    render(<FeaturingScreen />, { wrapper });
+    render(<FeaturingScreen {...featuringProps()} />, { wrapper });
 
     await tapExplore();
 
@@ -158,7 +171,7 @@ describe('a failed "Explore artist" search', () => {
 describe('a failed featuring load', () => {
   it('logs the query key, the status and the failure class behind the generic copy', async () => {
     mockListTracksFeaturing.mockRejectedValue(new ApiError(500, SECRET, undefined, 'corr-9'));
-    render(<FeaturingScreen />, { wrapper });
+    render(<FeaturingScreen {...featuringProps()} />, { wrapper });
 
     await waitFor(() => expect(screen.getByText("Couldn't load tracks.")).toBeTruthy());
 
@@ -171,7 +184,7 @@ describe('a failed featuring load', () => {
 
   it('classifies an unreachable API as a network failure', async () => {
     mockListTracksFeaturing.mockRejectedValue(new NetworkError('transport', 'API unreachable'));
-    render(<FeaturingScreen />, { wrapper });
+    render(<FeaturingScreen {...featuringProps()} />, { wrapper });
 
     await waitFor(() =>
       expect(logs.warnings).toContainEqual([
@@ -182,7 +195,7 @@ describe('a failed featuring load', () => {
   });
 
   it('logs nothing while the load keeps answering', async () => {
-    render(<FeaturingScreen />, { wrapper });
+    render(<FeaturingScreen {...featuringProps()} />, { wrapper });
 
     await waitFor(() =>
       expect(mockListTracksFeaturing).toHaveBeenCalledWith(
@@ -192,10 +205,6 @@ describe('a failed featuring load', () => {
     expect(logs.warnings).toEqual([]);
   });
 });
-
-type PushOnlyRouter = { push: jest.Mock };
-
-type PushingRouter = { useRouter: () => PushOnlyRouter };
 
 type PushedHref = { pathname: string; params: { handoff: string } };
 
@@ -218,22 +227,17 @@ describe('the detail route under the library tab', () => {
     failure_reason: null,
   });
 
-  const router = jest.requireMock('expo-router') as PushingRouter;
-  const original = { ...router };
+  let navigator: ReturnType<typeof recordingNavigator>;
   let push: jest.Mock;
 
   beforeEach(() => {
-    push = jest.fn();
-    router.useRouter = () => ({ push });
-  });
-
-  afterEach(() => {
-    Object.assign(router, original);
+    navigator = recordingNavigator();
+    push = navigator.push;
   });
 
   it('opens a track at the library detail path, not the discover one', async () => {
     mockListTracksFeaturing.mockResolvedValue({ items: [pendingTrack] });
-    render(<FeaturingScreen />, { wrapper });
+    render(<FeaturingScreen {...featuringProps({ navigator })} />, { wrapper });
 
     const row = await screen.findByTestId(`library-row-${pendingTrack.id}`);
     fireEvent.press(row);
@@ -246,7 +250,7 @@ describe('the detail route under the library tab', () => {
 
   it('sends the explore search to the library detail path, not the discover one', async () => {
     mockSearchDiscovery.mockResolvedValue({ results: [{ kind: 'artist', title: 'Guest Star' }] });
-    render(<FeaturingScreen />, { wrapper });
+    render(<FeaturingScreen {...featuringProps({ navigator })} />, { wrapper });
 
     await tapExplore();
 
@@ -261,12 +265,7 @@ describe('the detail route under the library tab', () => {
 });
 
 describe('the featuring screen opened from the discover tab', () => {
-  const router = jest.requireMock('expo-router') as {
-    useRouter: () => { push: jest.Mock };
-    useSegments: () => string[];
-    useLocalSearchParams: () => { name: string };
-  };
-  const original = { ...router };
+  let navigator: ReturnType<typeof recordingNavigator>;
   let push: jest.Mock;
 
   const oddTrack = trackResponseFactory.build({
@@ -287,19 +286,18 @@ describe('the featuring screen opened from the discover tab', () => {
     failure_reason: null,
   });
 
-  beforeEach(() => {
-    push = jest.fn();
-    router.useRouter = () => ({ push });
-    router.useSegments = () => ['(tabs)', 'discover', 'featuring'];
-  });
+  const discoverTab = ['(tabs)', 'discover', 'featuring'];
 
-  afterEach(() => {
-    Object.assign(router, original);
+  beforeEach(() => {
+    navigator = recordingNavigator();
+    push = navigator.push;
   });
 
   it('opens a tapped track on the discover detail screen', async () => {
     mockListTracksFeaturing.mockResolvedValue({ items: [oddTrack] });
-    render(<FeaturingScreen />, { wrapper });
+    render(<FeaturingScreen {...featuringProps({ navigator, segments: discoverTab })} />, {
+      wrapper,
+    });
 
     fireEvent.press(await screen.findByTestId(`library-row-${oddTrack.id}`));
 
@@ -309,7 +307,9 @@ describe('the featuring screen opened from the discover tab', () => {
 
   it('hands the detail screen a track whose title has slashes, query and hash characters intact', async () => {
     mockListTracksFeaturing.mockResolvedValue({ items: [oddTrack] });
-    render(<FeaturingScreen />, { wrapper });
+    render(<FeaturingScreen {...featuringProps({ navigator, segments: discoverTab })} />, {
+      wrapper,
+    });
 
     fireEvent.press(await screen.findByTestId(`library-row-${oddTrack.id}`));
 
@@ -321,7 +321,9 @@ describe('the featuring screen opened from the discover tab', () => {
 
   it('sends the explore search result to the discover detail screen', async () => {
     mockSearchDiscovery.mockResolvedValue({ results: [{ kind: 'artist', title: 'Guest Star' }] });
-    render(<FeaturingScreen />, { wrapper });
+    render(<FeaturingScreen {...featuringProps({ navigator, segments: discoverTab })} />, {
+      wrapper,
+    });
 
     await tapExplore();
 
@@ -331,9 +333,13 @@ describe('the featuring screen opened from the discover tab', () => {
 
   it('searches for an artist name with special characters and opens it on the discover detail screen', async () => {
     const name = 'AC/DC & Friends? #1';
-    router.useLocalSearchParams = () => ({ name });
     mockSearchDiscovery.mockResolvedValue({ results: [{ kind: 'artist', title: name }] });
-    render(<FeaturingScreen />, { wrapper });
+    render(
+      <FeaturingScreen
+        {...featuringProps({ navigator, segments: discoverTab, params: { name } })}
+      />,
+      { wrapper },
+    );
 
     await tapExplore();
 
@@ -348,18 +354,13 @@ describe('the featuring screen opened from the discover tab', () => {
 });
 
 describe('featuring route params', () => {
-  const router = jest.requireMock('expo-router') as {
-    useLocalSearchParams: () => Record<string, unknown>;
-  };
-  const original = router.useLocalSearchParams;
-
-  afterEach(() => {
-    router.useLocalSearchParams = original;
-  });
-
   it('requests one value per param when the route repeats name and mbid', async () => {
-    router.useLocalSearchParams = () => ({ name: ['a', 'b'], mbid: ['x', 'y'] });
-    render(<FeaturingScreen />, { wrapper });
+    render(
+      <FeaturingScreen {...featuringProps({ params: { name: ['a', 'b'], mbid: ['x', 'y'] } })} />,
+      {
+        wrapper,
+      },
+    );
 
     await waitFor(() =>
       expect(mockListTracksFeaturing).toHaveBeenCalledWith({
@@ -371,8 +372,7 @@ describe('featuring route params', () => {
   });
 
   it('shows an incomplete-link state and no empty-name search when no param is usable', async () => {
-    router.useLocalSearchParams = () => ({});
-    render(<FeaturingScreen />, { wrapper });
+    render(<FeaturingScreen {...featuringProps({ params: {} })} />, { wrapper });
 
     expect(await screen.findByText(/link is incomplete/)).toBeTruthy();
     expect(screen.queryByTestId('featuring-explore')).toBeNull();
@@ -382,7 +382,7 @@ describe('featuring route params', () => {
 
   it('tells the user to sign in again when the load is refused with 401', async () => {
     mockListTracksFeaturing.mockRejectedValue(new ApiError(401, 'unauthorized'));
-    render(<FeaturingScreen />, { wrapper });
+    render(<FeaturingScreen {...featuringProps()} />, { wrapper });
 
     expect(
       await screen.findByText("Couldn't load tracks. Sign in again, then retry."),
@@ -391,7 +391,7 @@ describe('featuring route params', () => {
 
   it('keeps the plain retry copy when the load fails on the network', async () => {
     mockListTracksFeaturing.mockRejectedValue(new NetworkError('transport', 'offline'));
-    render(<FeaturingScreen />, { wrapper });
+    render(<FeaturingScreen {...featuringProps()} />, { wrapper });
 
     expect(await screen.findByText("Couldn't load tracks.")).toBeTruthy();
     expect(screen.getByText('Retry')).toBeTruthy();

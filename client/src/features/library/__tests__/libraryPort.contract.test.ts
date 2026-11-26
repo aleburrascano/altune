@@ -2,8 +2,7 @@ import { asTrackId } from '@shared/catalog';
 import type { ListTracksResponse, TrackResponse } from '@shared/catalog';
 import { createMemoryLibraryPort } from '@testing/fakes/library/inMemoryLibraryPort';
 import { track } from '@features/library/__tests__/trackMutationFixtures';
-import { httpLibraryPort } from '@features/library/adapters/http/httpLibraryPort';
-import type { LibraryPort } from '@features/library/ports/libraryPort';
+import { httpLibraryPort, type LibraryPort } from '@features/library';
 import { signInTestUser } from '@testing/signInTestUser';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');

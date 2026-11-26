@@ -1,6 +1,6 @@
-import { useRouter } from 'expo-router';
 import { View } from 'react-native';
 import type { PlaylistResponse } from '@shared/catalog';
+import type { Navigator } from '@shared/navigation';
 import {
   asyncView,
   Text,
@@ -30,10 +30,13 @@ function SidebarPlaylistLabel({ name, color }: { name: string; color: string }) 
   );
 }
 
-function SidebarPlaylistRow({ playlist }: { playlist: PlaylistResponse }) {
-  const router = useRouter();
+type RowProps = { playlist: PlaylistResponse; navigator: Navigator };
+
+function SidebarPlaylistRow({ playlist, navigator }: RowProps) {
   const theme = useTheme();
-  const onPress = () => router.push(`/library/playlist/${playlist.id}`);
+  function onPress(): void {
+    navigator.push(`/library/playlist/${playlist.id}`);
+  }
   const { pressableProps } = usePressableInteraction(sidebarItemStyle(theme, false));
   return (
     <Tappable {...sidebarPlaylistRowProps(playlist, onPress)} {...pressableProps}>
@@ -107,11 +110,13 @@ function SidebarPlaylistsErrorHint({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-function SidebarPlaylistRows({ playlists }: { playlists: PlaylistResponse[] }) {
+type RowsProps = { playlists: PlaylistResponse[]; navigator: Navigator };
+
+function SidebarPlaylistRows({ playlists, navigator }: RowsProps) {
   return (
     <View>
       {playlists.map((playlist) => (
-        <SidebarPlaylistRow key={playlist.id} playlist={playlist} />
+        <SidebarPlaylistRow key={playlist.id} playlist={playlist} navigator={navigator} />
       ))}
     </View>
   );
@@ -125,12 +130,14 @@ function sidebarPlaylistsView(
   return asyncView({ isLoading, isError: error != null, isEmpty: playlists.length === 0 });
 }
 
-export function SidebarPlaylists() {
+type SidebarPlaylistsProps = { navigator: Navigator };
+
+export function SidebarPlaylists({ navigator }: SidebarPlaylistsProps) {
   const { playlists, playlistsError, isLoadingPlaylists, refetchPlaylists } = usePlaylistActions();
   const view = sidebarPlaylistsView(playlists, isLoadingPlaylists, playlistsError);
 
   if (view === 'loading') return <SidebarPlaylistsLoadingHint />;
   if (view === 'error') return <SidebarPlaylistsErrorHint onRetry={refetchPlaylists} />;
   if (view === 'empty') return <SidebarPlaylistsEmptyHint />;
-  return <SidebarPlaylistRows playlists={playlists} />;
+  return <SidebarPlaylistRows playlists={playlists} navigator={navigator} />;
 }

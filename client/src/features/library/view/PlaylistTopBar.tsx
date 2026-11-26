@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { EllipsisVertical } from 'lucide-react-native';
 import { spacing, useTheme, IconButton, ContextMenu } from '@shared/ui';
-import { goBackOrToLibrary } from '@features/library/domain/libraryRoutes';
+import { goBackOrToLibrary } from '@features/library/core/libraryRoutes';
 import { useLibraryOffline } from '@features/library/view/useLibraryOffline';
 import {
   usePlaylistDelete,
