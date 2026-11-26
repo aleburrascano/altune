@@ -51,6 +51,9 @@ fi
 untracked() { [ $stage = commit ] || git ls-files --others --exclude-standard; }
 if [ $stage = commit ]; then
   base=$(git rev-parse HEAD) || { echo "precheck: no HEAD commit to compare the pending changes with"; exit 3; }
+  if merging=$(git rev-parse -q --verify MERGE_HEAD) && merge_base=$(git merge-base "$base_ref" "$merging"); then
+    base=$merge_base
+  fi
   changed=$(git -c core.quotePath=false diff --name-only --diff-filter=ACMR "$base" | sort -u)
   deleted=$(git -c core.quotePath=false diff --name-only --no-renames --diff-filter=D "$base")
 else
@@ -234,7 +237,6 @@ if touches '^services/go-api/'; then
       if [ ${#staged_go[@]} -gt 0 ]; then
         mapfile -t staged_pkgs < <(printf '%s\n' "${staged_go[@]}" | xargs -r -d '\n' -n1 dirname | sort -u | sed 's#^#./#')
         scoped_rev=$base
-        [ $stage = commit ] && scoped_rev=HEAD
         check "go-api fast linters and format (changed packages)" $m env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --fast-only --new-from-rev="$scoped_rev" --allow-parallel-runners "${staged_pkgs[@]}"
         check "go-api no comments (changed files)" $m go run ./scripts/lintcomments --all "${staged_go[@]}"
         check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
@@ -445,7 +447,7 @@ fi
 if [ -d services/go-api/scripts/nocomments ] && need go "nocomments"; then
   go_pin services/go-api
   if [ $stage = commit ]; then
-    check "no comments (pending changes)" services/go-api go run ./scripts/nocomments diff HEAD
+    check "no comments (pending changes)" services/go-api go run ./scripts/nocomments diff "$base"
   else
     check "no comments (whole tree)" services/go-api go run ./scripts/nocomments check ../..
   fi
