@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -24,7 +25,7 @@ type AudioURLHandler struct {
 
 func NewAudioURLHandler(svc *audioservice.AudioLinkService, now clock.Func, opts ...func(*AudioURLHandler)) (*AudioURLHandler, error) {
 	if now == nil {
-		return nil, ErrClockRequired
+		return nil, fmt.Errorf("NewAudioURLHandler: %w", ErrClockRequired)
 	}
 	h := &AudioURLHandler{svc: svc, prefetchEnabled: true, now: now}
 	for _, opt := range opts {

@@ -60,27 +60,28 @@ type audioRig struct {
 
 func TestHandlers_RefuseANilClock(t *testing.T) {
 	constructors := map[string]func() error{
-		"stream": func() error {
+		"NewStreamHandler": func() error {
 			_, err := library.NewStreamHandler(nil, nil)
 			return err
 		},
-		"audio urls": func() error {
+		"NewAudioURLHandler": func() error {
 			_, err := library.NewAudioURLHandler(nil, nil)
 			return err
 		},
-		"playlists": func() error {
+		"NewPlaylistHandler": func() error {
 			_, err := library.NewPlaylistHandler(nil, nil, nil)
 			return err
 		},
-		"tracks": func() error {
+		"NewTrackHandler": func() error {
 			_, err := library.NewTrackHandler(nil, nil, nil, nil, nil, nil, nil)
 			return err
 		},
 	}
 	for name, construct := range constructors {
 		t.Run(name, func(t *testing.T) {
-			if err := construct(); !errors.Is(err, library.ErrHandlerClockRequired) {
-				t.Fatalf("constructing with a nil clock = %v, want ErrHandlerClockRequired", err)
+			err := construct()
+			if !errors.Is(err, library.ErrHandlerClockRequired) || !strings.Contains(err.Error(), name) {
+				t.Fatalf("constructing with a nil clock = %v, want ErrHandlerClockRequired naming %s", err, name)
 			}
 		})
 	}

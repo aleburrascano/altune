@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -30,7 +31,7 @@ var ErrClockRequired = errors.New("handler: the handler requires a clock")
 
 func NewStreamHandler(svc *audioservice.StreamTrackService, now clock.Func, opts ...func(*StreamHandler)) (*StreamHandler, error) {
 	if now == nil {
-		return nil, ErrClockRequired
+		return nil, fmt.Errorf("NewStreamHandler: %w", ErrClockRequired)
 	}
 	h := &StreamHandler{svc: svc, writeIdleTimeout: audioWriteIdleTimeout, now: now}
 	for _, opt := range opts {

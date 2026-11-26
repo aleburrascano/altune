@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -22,7 +23,7 @@ type PlaylistHandler struct {
 
 func NewPlaylistHandler(lifecycle *playlistservice.PlaylistLifecycleService, membership *playlistservice.PlaylistMembershipService, now clock.Func, opts ...func(*PlaylistHandler)) (*PlaylistHandler, error) {
 	if now == nil {
-		return nil, ErrClockRequired
+		return nil, fmt.Errorf("NewPlaylistHandler: %w", ErrClockRequired)
 	}
 	h := &PlaylistHandler{
 		lifecycle:  lifecycle,

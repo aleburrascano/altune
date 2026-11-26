@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -36,7 +37,7 @@ func NewTrackHandler(
 	opts ...func(*TrackHandler),
 ) (*TrackHandler, error) {
 	if now == nil {
-		return nil, ErrClockRequired
+		return nil, fmt.Errorf("NewTrackHandler: %w", ErrClockRequired)
 	}
 	h := &TrackHandler{
 		addTrack:       addTrack,
