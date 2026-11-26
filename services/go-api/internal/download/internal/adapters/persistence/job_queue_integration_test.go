@@ -638,6 +638,27 @@ func TestPostgresJobQueue_ClaimPlanUsesScheduledAvailableAtIndex(t *testing.T) {
 		t.Fatalf("begin: %v", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `
+INSERT INTO tracks (id, user_id, title, artist, album, dedup_key, acquisition_status)
+SELECT gen_random_uuid(), gen_random_uuid(), 'plan seed', 'plan seed', 'plan seed', 'plan-seed-' || n, 'ready'
+FROM generate_series(1, 3000) AS n`); err != nil {
+		t.Fatalf("seed tracks: %v", err)
+	}
+	scheduled, err := tx.Exec(ctx, `
+UPDATE acquisition_jobs SET available_at = now() + interval '1 hour'
+WHERE track_id IN (SELECT id FROM tracks WHERE title = 'plan seed')`)
+	if err != nil {
+		t.Fatalf("schedule seeded jobs: %v", err)
+	}
+	if scheduled.RowsAffected() != 3000 {
+		t.Fatalf("scheduled %d seeded jobs, want 3000: the insert no longer creates a job row per track", scheduled.RowsAffected())
+	}
+	if _, err := tx.Exec(ctx, `ANALYZE acquisition_jobs`); err != nil {
+		t.Fatalf("analyze acquisition_jobs: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `ANALYZE tracks`); err != nil {
+		t.Fatalf("analyze tracks: %v", err)
+	}
 	if _, err := tx.Exec(ctx, `SET LOCAL enable_seqscan = off`); err != nil {
 		t.Fatalf("disable seqscan: %v", err)
 	}
