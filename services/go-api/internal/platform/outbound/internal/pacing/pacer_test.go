@@ -171,6 +171,29 @@ func TestPacer_QueuesUpToThreeIntervalsThenFailsFastWithTheQueueTimeout(t *testi
 	})
 }
 
+func TestPacer_TwoShedCallersBackToBackKeepNoSlotSoTheNextCallerWaitsOneInterval(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p := newPacer(t)
+		const host = "musicbrainz.org"
+		var queued sync.WaitGroup
+		for range 4 {
+			queued.Go(func() { waitOn(context.Background(), t, p, host) })
+		}
+		synctest.Wait()
+
+		first := waitOn(context.Background(), t, p, host)
+		second := waitOn(context.Background(), t, p, host)
+		queued.Wait()
+		next := waitOn(context.Background(), t, p, host)
+
+		assertQueueTimeout(t, first.err)
+		assertQueueTimeout(t, second.err)
+		if next.err != nil || next.elapsed != time.Second {
+			t.Errorf("the next caller waited %v (err %v), want exactly 1s because neither shed caller kept a slot", next.elapsed, next.err)
+		}
+	})
+}
+
 func TestPacer_ARetryWaitIsNeverShedByTheQueueCap(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		p := newPacer(t)
