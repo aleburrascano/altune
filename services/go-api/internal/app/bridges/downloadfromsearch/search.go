@@ -10,7 +10,7 @@ import (
 )
 
 type searcher interface {
-	Execute(ctx context.Context, userId ids.UserId, query *domain.SearchQuery, saveHistory bool) (*query.SearchOutput, error)
+	Execute(ctx context.Context, userId ids.UserId, query *domain.SearchQuery) (*query.SearchOutput, error)
 }
 
 type Search struct {
@@ -28,7 +28,7 @@ func (s Search) SearchRecordings(ctx context.Context, text string, limit int) ([
 	if err != nil {
 		return nil, fmt.Errorf("build resolve query: %w", err)
 	}
-	out, err := s.searcher.Execute(ctx, ids.UserId{}, tracksOnly, false)
+	out, err := s.searcher.Execute(ctx, ids.UserId{}, tracksOnly)
 	if err != nil || out == nil {
 		return nil, err
 	}

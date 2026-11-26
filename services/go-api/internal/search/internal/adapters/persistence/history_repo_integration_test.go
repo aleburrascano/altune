@@ -249,7 +249,7 @@ func TestClearSearchHistory_ASearchBeginningAfterTheEraseStillRecords(t *testing
 	}
 
 	history.NewRecordSearchHistoryService(persistence.NewPostgresSearchHistoryRepository(pool)).
-		Record(context.Background(), owner, query, "after erase", true, time.Now().UTC())
+		Record(context.Background(), owner, query, "after erase", time.Now().UTC())
 	appendOrFatal(t, persistence.NewPostgresEventStore(pool), domain.InteractionEvent{
 		UserId: owner, Type: domain.EventTypeSearchPerformed, OccurredAt: time.Now().UTC(),
 		QueryNorm: "after erase", SearchId: uuid.New().String(),

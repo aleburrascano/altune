@@ -179,7 +179,7 @@ func TestService_ProviderCache_KeyedByQueryAndKinds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Execute(context.Background(), search.NewUser(), tracksOnly, false); err != nil {
+	if _, err := svc.Execute(context.Background(), search.NewUser(), tracksOnly); err != nil {
 		t.Fatal(err)
 	}
 

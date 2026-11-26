@@ -31,7 +31,6 @@ type searcher interface {
 		ctx context.Context,
 		userId ids.UserId,
 		query *domain.SearchQuery,
-		saveHistory bool,
 	) (*query.SearchOutput, error)
 }
 
@@ -106,7 +105,7 @@ func evalQuery(
 	if err != nil {
 		return QueryResult{}, fmt.Errorf("eval query %q: %w", q, err)
 	}
-	out, err := svc.Execute(ctx, user, query, false)
+	out, err := svc.Execute(ctx, user, query)
 	if err != nil {
 		return QueryResult{}, fmt.Errorf("eval search %q: %w", q, err)
 	}

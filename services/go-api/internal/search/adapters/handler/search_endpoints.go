@@ -82,9 +82,9 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	saveHistory := true
+	execute := h.searchSvc.ExecutePageRecorded
 	if r.URL.Query().Get("save_history") == "false" {
-		saveHistory = false
+		execute = h.searchSvc.ExecutePage
 	}
 
 	continues, ok := parseContinuedSearchId(w, r)
@@ -98,7 +98,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	result, err := h.searchSvc.ExecutePage(r.Context(), userId, query, saveHistory, continues)
+	result, err := execute(r.Context(), userId, query, continues)
 	if err != nil {
 		httpserver.HandleServiceError(w, r, err)
 		return
