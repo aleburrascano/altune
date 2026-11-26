@@ -45,14 +45,18 @@ func New(base http.RoundTripper, opts Options) *Transport {
 }
 
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
+	attempts := 1
+	if mayRetry(req) {
+		attempts = maxAttempts
+	}
 	var last attemptResult
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for attempt := 0; attempt < attempts; attempt++ {
 		if attempt > 0 {
 			if err := t.prepareRetry(req, attempt, last); err != nil {
 				return nil, err
 			}
 		}
-		resp, result, done := t.attempt(req, attempt)
+		resp, result, done := t.attempt(req, attempt, attempts)
 		if done {
 			return resp, result.err
 		}
@@ -67,7 +71,7 @@ type attemptResult struct {
 	cause      retryCause
 }
 
-func (t *Transport) attempt(req *http.Request, attempt int) (*http.Response, attemptResult, bool) {
+func (t *Transport) attempt(req *http.Request, attempt, attempts int) (*http.Response, attemptResult, bool) {
 	if err := t.pacer.Wait(req); err != nil {
 		return nil, attemptResult{err: err}, true
 	}
@@ -78,7 +82,7 @@ func (t *Transport) attempt(req *http.Request, attempt int) (*http.Response, att
 		}
 		return nil, attemptResult{err: err, cause: retryCause{errorClass: transportErrorClass(err)}}, false
 	}
-	if attempt < maxAttempts-1 && retryableStatus(resp.StatusCode) {
+	if attempt < attempts-1 && retryableStatus(resp.StatusCode) {
 		retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
 		_ = resp.Body.Close()
 		failed := fmt.Errorf("upstream status %d", resp.StatusCode)

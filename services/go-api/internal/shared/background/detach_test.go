@@ -53,7 +53,7 @@ func TestDetach_DeadlineIsTheBudgetNotTheRequests(t *testing.T) {
 
 func TestDetachCancelable_KeepsTheRequestsValuesButNotItsCancellation(t *testing.T) {
 	request, cancelRequest := context.WithCancel(logging.WithCorrelationID(context.Background(), "corr-detach-2"))
-	detached, cancel := runloop.DetachCancelable(request)
+	detached, cancel := background.DetachCancelable(request)
 	defer cancel()
 
 	cancelRequest()
@@ -67,7 +67,7 @@ func TestDetachCancelable_KeepsTheRequestsValuesButNotItsCancellation(t *testing
 }
 
 func TestDetachCancelable_EndsWhenItsOwnCancelIsCalled(t *testing.T) {
-	detached, cancel := runloop.DetachCancelable(context.Background())
+	detached, cancel := background.DetachCancelable(context.Background())
 
 	cancel()
 
@@ -79,7 +79,7 @@ func TestDetachCancelable_EndsWhenItsOwnCancelIsCalled(t *testing.T) {
 func TestDetachCancelable_HasNoDeadline(t *testing.T) {
 	request, cancelRequest := context.WithTimeout(context.Background(), time.Minute)
 	defer cancelRequest()
-	detached, cancel := runloop.DetachCancelable(request)
+	detached, cancel := background.DetachCancelable(request)
 	defer cancel()
 
 	if deadline, ok := detached.Deadline(); ok {

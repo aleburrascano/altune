@@ -3,6 +3,7 @@ package providerrequests
 import (
 	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/shared/retrysafe"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -77,7 +78,7 @@ func NewHeadRequest(ctx context.Context, rawURL string, opts ...ReqOption) (*htt
 }
 
 func NewPostRequest(ctx context.Context, rawURL string, body io.Reader, opts ...ReqOption) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, body)
+	req, err := http.NewRequestWithContext(retrysafe.Mark(ctx), http.MethodPost, rawURL, body)
 	if err != nil {
 		return nil, fmt.Errorf("build the POST request: %w", err)
 	}

@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/childprocess"
+	"altune/go-api/internal/shared/retrysafe"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -208,7 +209,7 @@ func (i *Identifier) post(ctx context.Context, endpoint string, form url.Values,
 	if err := i.limiter.Wait(ctx); err != nil {
 		return nil, fmt.Errorf("%s: %w", label, err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewBufferString(form.Encode()))
+	req, err := http.NewRequestWithContext(retrysafe.Mark(ctx), http.MethodPost, endpoint, bytes.NewBufferString(form.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("build %s request: %w", label, err)
 	}
