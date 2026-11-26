@@ -122,15 +122,27 @@ test_check() {
 }
 
 go_test_failures() {
-  local failed_output
-  failed_output=$(grep -vE '^(ok|\?)[[:space:]]' "$log")
-  if [ -z "$failed_output" ]; then
+  local failures others
+  failures=$(awk '
+    race { print; if ($0 == "==================") race = 0; next }
+    pan && pan_lines < 40 { print; pan_lines++; next }
+    /^WARNING: DATA RACE/ { race = 1; print; next }
+    /^panic:/ { pan = 1; pan_lines = 1; print; next }
+    /^--- FAIL:/ { on = 1; print; next }
+    /^FAIL/ { on = 0; print; next }
+    on && /^[[:space:]]/ { print; next }
+    { on = 0 }
+  ' "$log")
+  if grep -qE '^(--- FAIL:|panic:|WARNING: DATA RACE)' <<<"$failures"; then
+    head -n 300 <<<"$failures"
+    echo "(only the failed tests and their output are shown; rerun the command above for the logs of passing tests)"
+    return
+  fi
+  others=$(grep -vE '^(ok|\?)[[:space:]]' "$log")
+  if [ -z "$others" ]; then
     log_tail
-  elif [ "$(wc -l <<<"$failed_output")" -gt 200 ]; then
-    head -n 200 <<<"$failed_output"
-    echo "(output of the failed packages cut at 200 lines; the full log is not kept)"
   else
-    echo "$failed_output"
+    head -n 200 <<<"$others"
   fi
 }
 

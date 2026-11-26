@@ -781,7 +781,8 @@ new_repo
 add_go_fixture
 edit_go_file internal/shared/s/s.go
 passing=$(for i in $(seq 1 80); do printf 'ok  \\taltune/go-api/internal/p%s\\t0.1s\\n' "$i"; done)
-GO_TEST_STUB_OUT="--- FAIL: TestFlaky (0.01s)\\n    flaky_test.go:12: boom\\nFAIL\\nFAIL\\taltune/go-api/internal/shared/s\\t11.4s\\n$passing" run_push_scoped
+noise=$(for i in $(seq 1 250); do printf 'time=now level=INFO msg="noise line %s"\\n' "$i"; done)
+GO_TEST_STUB_OUT="$noise\\n--- FAIL: TestFlaky (0.01s)\\n    flaky_test.go:12: boom\\nFAIL\\nFAIL\\taltune/go-api/internal/shared/s\\t11.4s\\n$passing" run_push_scoped
 expect_rc 1
 expect_out "--- FAIL: TestFlaky (0.01s)"
 expect_out "flaky_test.go:12: boom"
@@ -789,6 +790,17 @@ expect_out "FAIL	altune/go-api/internal/shared/s"
 last_lines=$(tail -n 8 "$WORK/out.log")
 grep -qF -- "--- FAIL: TestFlaky" <<<"$last_lines" || fail "the failed test is not among the last lines"
 ! grep -qF "altune/go-api/internal/p1	" "$WORK/out.log" || fail "output of passing packages was printed"
+! grep -qF "noise line 1\"" "$WORK/out.log" || fail "log noise from passing tests was printed"
+summary=$(sed -n '/^FAIL go-api tests (race, changed packages) (exit 1):/,$p' "$WORK/out.log" | sed -n '2p')
+[ "$summary" = "    --- FAIL: TestFlaky (0.01s)" ] || fail "the failure summary does not start with the failed test: '$summary'"
+
+CASE="a go test step that fails to build shows the compiler errors"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+GO_TEST_STUB_OUT="# altune/go-api/internal/shared/s\\ns.go:3:1: undefined: nope\\nFAIL\\taltune/go-api/internal/shared/s [build failed]\\n" run_push_scoped
+expect_rc 1
+expect_out "s.go:3:1: undefined: nope"
 
 add_test_home_stub() {
     mkdir -p "$WORK/bin" "$WORK/home"
