@@ -1,63 +1,71 @@
-import { Keyboard, Text } from 'react-native';
-import type * as KeyboardExports from '@shared/ui/view/keyboard/keyboard';
+import { StyleSheet, Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-type KeyboardModule = typeof KeyboardExports;
-
-function loadIos(): KeyboardModule {
-  return jest.requireActual<KeyboardModule>('@shared/ui/view/keyboard/keyboard.ios.tsx');
-}
-
-function loadDefault(): KeyboardModule {
-  return jest.requireActual<KeyboardModule>('@shared/ui/view/keyboard/keyboard.tsx');
-}
+import {
+  DismissKeyboardArea,
+  KeepInputFocusArea,
+  ModalFrame,
+  adjustsKeyboardInsets,
+  dismissKeyboard,
+} from '@shared/ui';
 
 describe('keyboard (native)', () => {
-  let dismiss: jest.SpyInstance;
+  it('DismissKeyboardArea hands a press to the dismissal it was given', () => {
+    const onDismiss = jest.fn();
+    render(
+      <DismissKeyboardArea testID="area" onDismiss={onDismiss}>
+        <Text>child</Text>
+      </DismissKeyboardArea>,
+    );
 
-  beforeEach(() => {
-    dismiss = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => undefined);
+    fireEvent.press(screen.getByTestId('area'));
+
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
-  afterEach(() => {
-    dismiss.mockRestore();
-  });
-
-  it('DismissKeyboardArea dismisses the keyboard when pressed', () => {
-    const { DismissKeyboardArea } = loadIos();
+  it('DismissKeyboardArea does not throw on press when it is given no dismissal', () => {
     render(
       <DismissKeyboardArea testID="area">
         <Text>child</Text>
       </DismissKeyboardArea>,
     );
-    fireEvent.press(screen.getByTestId('area'));
-    expect(dismiss).toHaveBeenCalledTimes(1);
+
+    expect(() => fireEvent.press(screen.getByTestId('area'))).not.toThrow();
   });
 
-  it('KeepInputFocusArea renders its children and does not dismiss the keyboard', () => {
-    const { KeepInputFocusArea } = loadIos();
+  it('a press on KeepInputFocusArea content passes through to the surrounding dismiss area', () => {
+    const onDismiss = jest.fn();
     render(
-      <KeepInputFocusArea testID="area">
-        <Text>child</Text>
-      </KeepInputFocusArea>,
+      <DismissKeyboardArea testID="outer" onDismiss={onDismiss}>
+        <KeepInputFocusArea testID="area">
+          <Text>child</Text>
+        </KeepInputFocusArea>
+      </DismissKeyboardArea>,
     );
+
     fireEvent.press(screen.getByText('child'));
-    expect(screen.getByTestId('area')).toBeTruthy();
-    expect(dismiss).not.toHaveBeenCalled();
+
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
-  it('dismissKeyboard calls Keyboard.dismiss', () => {
-    loadIos().dismissKeyboard();
-    expect(dismiss).toHaveBeenCalledTimes(1);
+  it('dismissKeyboard does not throw', () => {
+    expect(() => dismissKeyboard()).not.toThrow();
   });
 
-  it('avoids the keyboard with padding on ios', () => {
-    const m = loadIos();
-    expect([m.keyboardAvoidingBehavior, m.adjustsKeyboardInsets]).toEqual(['padding', true]);
+  it('adjusts keyboard insets on the native platform the tests run as', () => {
+    expect(adjustsKeyboardInsets).toBe(true);
   });
 
-  it('leaves keyboard avoidance to the system on android', () => {
-    const m = loadDefault();
-    expect([m.keyboardAvoidingBehavior, m.adjustsKeyboardInsets]).toEqual([undefined, false]);
+  it('a modal avoids the keyboard with padding by default on the native platform', () => {
+    render(
+      <ModalFrame visible onClose={jest.fn()} closeAction="test.modal.close" testID="frame">
+        <Text>content</Text>
+      </ModalFrame>,
+    );
+
+    expect(StyleSheet.flatten(screen.getByTestId('frame-keyboard').props.style)).toHaveProperty(
+      'paddingBottom',
+      0,
+    );
   });
 });

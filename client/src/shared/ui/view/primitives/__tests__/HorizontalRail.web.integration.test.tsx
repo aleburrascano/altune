@@ -2,7 +2,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Text } from 'react-native';
 
-import { HorizontalRail } from '@shared/ui/view/primitives/HorizontalRail.web';
+import { HorizontalRail } from '@shared/ui';
 
 const SCROLL_WIDTH = 500;
 const CLIENT_WIDTH = 200;
