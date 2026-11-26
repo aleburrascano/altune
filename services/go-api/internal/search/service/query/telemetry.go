@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/service/rank"
-	"altune/go-api/internal/search/service/useractivity"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -27,16 +26,10 @@ type SearchTelemetry struct {
 }
 
 func newSearchTelemetry(eventStore ports.EventStore, activity ports.ActivityFeed, bg *background.Tracker) *SearchTelemetry {
-	if activity == nil {
-		activity = useractivity.NoopActivityFeed{}
-	}
 	return &SearchTelemetry{eventStore: eventStore, activity: activity, bg: bg}
 }
 
 func (t *SearchTelemetry) emit(parentCtx context.Context, run searchRun, page firstPage, explorationRate float64) {
-	if t.eventStore == nil {
-		return
-	}
 	if err := ids.GuardNotSystem(run.userId); err != nil {
 		return
 	}

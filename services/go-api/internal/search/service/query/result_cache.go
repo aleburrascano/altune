@@ -17,7 +17,7 @@ func newSearchResultCache(cache ports.ResultCache, heldSlates ports.HeldResultsC
 }
 
 func (c *searchResultCache) enabled(queryNorm string) bool {
-	return c.cache != nil && queryNorm != ""
+	return queryNorm != ""
 }
 
 func (c *searchResultCache) get(
@@ -49,7 +49,7 @@ func (c *searchResultCache) heldSlate(
 	queryNorm string,
 	kinds domain.ResultKindSet,
 ) ([]domain.SearchResult, bool) {
-	if c.heldSlates == nil || searchId.IsZero() {
+	if searchId.IsZero() {
 		return nil, false
 	}
 	return c.heldSlates.Get(ctx, c.heldSlateKey(searchId, queryNorm, kinds))
@@ -62,7 +62,7 @@ func (c *searchResultCache) holdSlate(
 	kinds domain.ResultKindSet,
 	ranked []domain.SearchResult,
 ) {
-	if c.heldSlates == nil || searchId.IsZero() || len(ranked) == 0 {
+	if searchId.IsZero() || len(ranked) == 0 {
 		return
 	}
 	c.heldSlates.Set(ctx, c.heldSlateKey(searchId, queryNorm, kinds), ranked)

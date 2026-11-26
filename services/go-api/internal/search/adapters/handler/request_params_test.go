@@ -26,9 +26,7 @@ func paramValidationRouter(t *testing.T) chi.Router {
 	}
 	historyRepo := &fakeSearchHistoryRepo{}
 	h := search.NewDiscoveryHandler(search.DiscoveryServices{
-		Search: search.NewSearchService(bg,
-			[]search.SearchProvider{&fakeSearchProvider{name: search.ProviderDeezer}},
-			search.NewCircuitBreaker(), search.WithHistoryRepository(historyRepo)),
+		Search:       searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{&fakeSearchProvider{name: search.ProviderDeezer}}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.History = historyRepo }),
 		History:      search.NewListSearchHistoryService(historyRepo),
 		ClearHistory: search.NewClearSearchHistoryService(historyRepo),
 		Album:        search.NewGetAlbumTracksService(albumProviders),

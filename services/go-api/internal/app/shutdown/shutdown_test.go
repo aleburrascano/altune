@@ -62,7 +62,7 @@ func TestDetachedTasksStep_DrainingTheTrackerWaitsForInFlightSearchWork(t *testi
 	bg := searchtest.NewTracker(t)
 	drain := func(ctx context.Context) { bg.Drain(ctx) }
 	store := &gatedStore{entered: make(chan struct{}), release: make(chan struct{})}
-	svc := search.NewSearchService(bg, nil, search.NewCircuitBreaker(), search.WithEventStore(store))
+	svc := searchtest.NewSearchServiceWith(t, bg, nil, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store })
 	query, err := search.NewSearchQuery("humble", search.AllKinds(), 10)
 	if err != nil {
 		t.Fatal(err)

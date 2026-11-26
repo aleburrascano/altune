@@ -128,7 +128,7 @@ func TestOwnershipGolden_Search(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	provider := &fakeSearchProvider{name: search.ProviderDeezer, results: goldenTracks()}
 	router := goldenRouter(t, search.DiscoveryServices{
-		Search: search.NewSearchService(bg, []search.SearchProvider{provider}, search.NewCircuitBreaker()),
+		Search: searchtest.NewSearchService(t, bg, []search.SearchProvider{provider}, search.NewCircuitBreaker()),
 	}, &recordingTrackNumberFiller{done: make(chan struct{})})
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/search?q=song&save_history=false", nil)

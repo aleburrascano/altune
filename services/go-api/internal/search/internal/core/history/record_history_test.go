@@ -2,12 +2,19 @@ package history_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestRecordHistory_RefusesAMissingRepository(t *testing.T) {
+	if _, err := search.NewRecordSearchHistoryService(nil); !errors.Is(err, search.ErrHistoryCollaboratorRequired) {
+		t.Fatalf("err = %v, want ErrHistoryCollaboratorRequired", err)
+	}
+}
 
 func TestRecordHistory_InsertFailureLogsUserAndSearchFingerprint(t *testing.T) {
 	repo := &search.FakeHistoryWriter{
@@ -19,7 +26,7 @@ func TestRecordHistory_InsertFailureLogsUserAndSearchFingerprint(t *testing.T) {
 	const raw = "zqxj private diagnosis clinic"
 	ring := search.CaptureDetachedLogs(t)
 
-	search.NewRecordSearchHistoryService(repo).Record(context.Background(), user, search.NewQuery(t, raw), raw, time.Now())
+	searchtest.NewHistoryRecorder(t, repo).Record(context.Background(), user, search.NewQuery(t, raw), raw, time.Now())
 
 	rec := search.OnlyRecord(t, ring, "search.v2.history_persist_failed")
 	if rec.Attrs["user_id"] != user.String() {

@@ -170,11 +170,11 @@ func buildDiscoveryRouter(t *testing.T,
 	}
 
 	cb := search.NewCircuitBreaker()
-	var searchOpts []search.SearchOption
+	withHistory := func(*search.Collaborators) {}
 	if historyRepo != nil {
-		searchOpts = append(searchOpts, search.WithHistoryRepository(historyRepo))
+		withHistory = func(c *search.Collaborators) { c.History = historyRepo }
 	}
-	searchSvc := search.NewSearchService(bg, providers, cb, searchOpts...)
+	searchSvc := searchtest.NewSearchServiceWith(t, bg, providers, cb, withHistory)
 	historySvc := search.NewListSearchHistoryService(historyRepo)
 	clearHistorySvc := search.NewClearSearchHistoryService(historyRepo)
 
@@ -191,7 +191,7 @@ func buildDiscoveryRouter(t *testing.T,
 	h := search.NewDiscoveryHandler(search.DiscoveryServices{
 		Search:        searchSvc,
 		History:       historySvc,
-		RecordHistory: search.NewRecordSearchHistoryService(historyRepo),
+		RecordHistory: searchtest.NewHistoryRecorder(t, historyRepo),
 		ClearHistory:  clearHistorySvc,
 		Album:         albumSvc,
 		Artist:        artistSvc,
@@ -231,7 +231,7 @@ func (nopEventStore) Append(context.Context, search.InteractionEvent) error { re
 func TestHandleRecordEvent_ServiceValidation(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	h := search.NewDiscoveryHandler(search.DiscoveryServices{
-		Search: search.NewSearchService(bg, nil, search.NewCircuitBreaker()),
+		Search: searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker()),
 		Event:  search.NewRecordEventService(nopEventStore{}),
 	})
 	router := chi.NewRouter()

@@ -19,9 +19,6 @@ func (s *Service) lookupCorrection(ctx context.Context, raw string) *vocabulary.
 }
 
 func (s *Service) tryCorrection(ctx context.Context, query *domain.SearchQuery) (corrected, original string, results []domain.SearchResult, statuses []domain.ProviderSearchResponse) {
-	if s.correctionSvc == nil {
-		return "", "", nil, nil
-	}
 	result := s.lookupCorrection(ctx, query.Raw)
 	if result == nil {
 		return "", "", nil, nil

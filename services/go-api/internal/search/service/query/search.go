@@ -5,18 +5,19 @@ import (
 	"altune/go-api/internal/search/internal/core/favorites"
 	"altune/go-api/internal/search/internal/core/history"
 	"altune/go-api/internal/search/internal/core/ports"
-	"altune/go-api/internal/search/service/artwork"
 	"altune/go-api/internal/search/service/providerguard"
 	"altune/go-api/internal/search/service/rank"
-	"altune/go-api/internal/search/service/related"
 	"altune/go-api/internal/search/service/vocabulary"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -24,17 +25,17 @@ type Service struct {
 	providers      []ports.SearchProvider
 	circuitBreaker *providerguard.CircuitBreaker
 	providerCache  ports.ProviderResultCache
-	deadline       time.Duration
+	awaitDeadline  deadlineTimer
 
-	artwork        *artwork.ArtworkFiller
-	ranking        *rank.RankingExperiments
-	favorites      *favorites.FavoritesLifter
-	correctionSvc  *vocabulary.CorrectionService
-	findRelatedSvc *related.FindRelatedService
-	cache          *searchResultCache
-	history        *history.RecordSearchHistoryService
-	telemetry      *SearchTelemetry
-	vocab          *vocabulary.SpellingHintsIngestor
+	artwork       ArtworkFill
+	ranking       *rank.RankingExperiments
+	favorites     *favorites.FavoritesLifter
+	correctionSvc *vocabulary.CorrectionService
+	related       RelatedFinder
+	cache         *searchResultCache
+	history       *history.RecordSearchHistoryService
+	telemetry     *SearchTelemetry
+	vocab         *vocabulary.SpellingHintsIngestor
 
 	bg *background.Tracker
 
@@ -58,106 +59,106 @@ type SearchOutput struct {
 	Slate            BlendedSlate
 }
 
+type ArtworkFill interface {
+	Fill(ctx context.Context, results []domain.SearchResult) []domain.SearchResult
+}
+
+type RelatedFinder interface {
+	Execute(ctx context.Context, userId ids.UserId, organic []domain.SearchResult) []domain.RelatedGroup
+}
+
+type Collaborators struct {
+	Artwork       ArtworkFill
+	Related       RelatedFinder
+	History       ports.HistoryWriter
+	Vocabulary    ports.SpellingHintsStore
+	Events        ports.EventStore
+	Activity      ports.ActivityFeed
+	Favorites     ports.FavoritesRepository
+	ResultCache   ports.ResultCache
+	ProviderCache ports.ProviderResultCache
+	HeldSlates    ports.HeldResultsCache
+}
+
+var ErrCollaboratorRequired = errors.New("search service needs every collaborator, pass the absent adapter to switch one off")
+
+var ErrInvalidOption = errors.New("search service option is out of range")
+
+func (c Collaborators) missing(bg *background.Tracker, breaker *providerguard.CircuitBreaker) []string {
+	var missing []string
+	for _, check := range []struct {
+		name    string
+		missing bool
+	}{
+		{"tracker", bg == nil},
+		{"circuitBreaker", breaker == nil},
+		{"artwork", c.Artwork == nil},
+		{"related", c.Related == nil},
+		{"history", c.History == nil},
+		{"vocabulary", c.Vocabulary == nil},
+		{"events", c.Events == nil},
+		{"activity", c.Activity == nil},
+		{"favorites", c.Favorites == nil},
+		{"resultCache", c.ResultCache == nil},
+		{"providerCache", c.ProviderCache == nil},
+		{"heldSlates", c.HeldSlates == nil},
+	} {
+		if check.missing {
+			missing = append(missing, check.name)
+		}
+	}
+	return missing
+}
+
 type serviceConfig struct {
-	historyRepo    ports.HistoryWriter
-	vocabStore     ports.SpellingHintsStore
-	eventStore     ports.EventStore
-	activityFeed   ports.ActivityFeed
-	resultCache    ports.ResultCache
-	providerCache  ports.ProviderResultCache
-	heldSlateCache ports.HeldResultsCache
-	favoritesRepo  ports.FavoritesRepository
-
-	artworkResolver ports.TaggingArtworkLookup
-	artworkCache    ports.ArtworkCache
-	mbidIndex       ports.MBIDIndex
-	identityStore   ports.IdentityStore
-
-	findRelatedSvc *related.FindRelatedService
-
-	searchDeadline time.Duration
-
-	ranking rank.RankingConfig
+	awaitDeadline deadlineTimer
+	ranking       rank.RankingConfig
 }
 
-type Option func(*serviceConfig)
-
-func WithHistoryRepository(r ports.HistoryWriter) Option {
-	return func(c *serviceConfig) { c.historyRepo = r }
-}
-
-func WithVocabularyStore(v ports.SpellingHintsStore) Option {
-	return func(c *serviceConfig) { c.vocabStore = v }
-}
-
-func WithEventStore(e ports.EventStore) Option {
-	return func(c *serviceConfig) { c.eventStore = e }
-}
-
-func WithSearchActivityFeed(activity ports.ActivityFeed) Option {
-	return func(c *serviceConfig) { c.activityFeed = activity }
-}
-
-func WithArtworkLookup(r ports.TaggingArtworkLookup) Option {
-	return func(c *serviceConfig) { c.artworkResolver = r }
-}
-
-func WithArtworkCache(ac ports.ArtworkCache) Option {
-	return func(c *serviceConfig) { c.artworkCache = ac }
-}
-
-func WithMBIDIndex(idx ports.MBIDIndex) Option {
-	return func(c *serviceConfig) { c.mbidIndex = idx }
-}
-
-func WithIdentityStore(store ports.IdentityStore) Option {
-	return func(c *serviceConfig) { c.identityStore = store }
-}
-
-func WithFindRelatedService(r *related.FindRelatedService) Option {
-	return func(c *serviceConfig) { c.findRelatedSvc = r }
-}
-
-func WithResultCache(rc ports.ResultCache) Option {
-	return func(c *serviceConfig) { c.resultCache = rc }
-}
-
-func WithProviderResultCache(pc ports.ProviderResultCache) Option {
-	return func(c *serviceConfig) { c.providerCache = pc }
-}
-
-func WithSearchDeadline(d time.Duration) Option {
-	return func(c *serviceConfig) { c.searchDeadline = d }
-}
-
-func WithHeldSlateCache(hc ports.HeldResultsCache) Option {
-	return func(c *serviceConfig) { c.heldSlateCache = hc }
-}
-
-func WithFavorites(repo ports.FavoritesRepository) Option {
-	return func(c *serviceConfig) { c.favoritesRepo = repo }
-}
+type Option func(*serviceConfig) error
 
 func WithTailDemotion() Option {
-	return func(c *serviceConfig) { c.ranking.TailDemotion = true }
+	return func(c *serviceConfig) error {
+		c.ranking.TailDemotion = true
+		return nil
+	}
 }
 
 func WithCrossKindProminence() Option {
-	return func(c *serviceConfig) { c.ranking.CrossKindProminence = true }
+	return func(c *serviceConfig) error {
+		c.ranking.CrossKindProminence = true
+		return nil
+	}
 }
 
 func WithBehavioralRanking(consumer *rank.ListeningFeedback) Option {
-	return func(c *serviceConfig) {
+	return func(c *serviceConfig) error {
+		if consumer == nil {
+			return fmt.Errorf("%w: behavioral ranking needs its consumer", ErrInvalidOption)
+		}
 		c.ranking.BehavioralRanking = true
 		c.ranking.BehavioralConsumer = consumer
+		return nil
 	}
 }
 
 func WithExploration(rate float64) Option {
-	return func(c *serviceConfig) {
-		if rate > 0 {
-			c.ranking.ExplorationRate = rate
+	return func(c *serviceConfig) error {
+		if rate <= 0 {
+			return fmt.Errorf("%w: exploration rate must be positive, got %v", ErrInvalidOption, rate)
 		}
+		c.ranking.ExplorationRate = rate
+		return nil
+	}
+}
+
+func WithSearchDeadline(d time.Duration) Option {
+	return func(c *serviceConfig) error {
+		if d <= 0 {
+			return fmt.Errorf("%w: search deadline must be positive, got %s", ErrInvalidOption, d)
+		}
+		c.awaitDeadline = deadlineAfter(d)
+		return nil
 	}
 }
 
@@ -169,42 +170,53 @@ func (s *Service) CircuitBreaker() *providerguard.CircuitBreaker {
 	return s.circuitBreaker
 }
 
-func NewService(bg *background.Tracker, providers []ports.SearchProvider, circuitBreaker *providerguard.CircuitBreaker, opts ...Option) *Service {
-	var cfg serviceConfig
+func NewService(bg *background.Tracker, providers []ports.SearchProvider, circuitBreaker *providerguard.CircuitBreaker, c Collaborators, opts ...Option) (*Service, error) {
+	if missing := c.missing(bg, circuitBreaker); len(missing) > 0 {
+		return nil, fmt.Errorf("%w: %s", ErrCollaboratorRequired, strings.Join(missing, ", "))
+	}
+	cfg := serviceConfig{awaitDeadline: noDeadline}
 	for _, opt := range opts {
-		opt(&cfg)
+		if err := opt(&cfg); err != nil {
+			return nil, err
+		}
 	}
-	s := assembleService(providers, circuitBreaker, cfg, bg)
-	if cfg.vocabStore != nil {
-		s.correctionSvc = vocabulary.NewCorrectionService(cfg.vocabStore)
-	}
-	return s
+	return assembleService(providers, circuitBreaker, c, cfg, bg)
 }
 
-func (c serviceConfig) heldSlate() ports.HeldResultsCache {
-	if c.heldSlateCache == nil {
-		return c.resultCache
+func assembleService(providers []ports.SearchProvider, circuitBreaker *providerguard.CircuitBreaker, c Collaborators, cfg serviceConfig, bg *background.Tracker) (*Service, error) {
+	lifter, err := favorites.NewFavoritesLifter(c.Favorites)
+	if err != nil {
+		return nil, fmt.Errorf("favorites lifter: %w", err)
 	}
-	return c.heldSlateCache
-}
-
-func assembleService(providers []ports.SearchProvider, circuitBreaker *providerguard.CircuitBreaker, cfg serviceConfig, bg *background.Tracker) *Service {
+	recorder, err := history.NewRecordSearchHistoryService(c.History)
+	if err != nil {
+		return nil, fmt.Errorf("history recorder: %w", err)
+	}
+	correction, err := vocabulary.NewCorrectionService(c.Vocabulary)
+	if err != nil {
+		return nil, fmt.Errorf("correction: %w", err)
+	}
+	ingestor, err := vocabulary.NewVocabularyIngestor(c.Vocabulary, bg)
+	if err != nil {
+		return nil, fmt.Errorf("vocabulary ingestor: %w", err)
+	}
 	return &Service{
 		providers:      providers,
 		circuitBreaker: circuitBreaker,
-		providerCache:  cfg.providerCache,
-		deadline:       cfg.searchDeadline,
-		artwork:        artwork.NewArtworkFiller(cfg.artworkResolver, cfg.artworkCache, cfg.identityStore, cfg.mbidIndex),
+		providerCache:  c.ProviderCache,
+		awaitDeadline:  cfg.awaitDeadline,
+		artwork:        c.Artwork,
 		ranking:        rank.NewRankingExperiments(cfg.ranking, bg),
-		favorites:      favorites.NewFavoritesLifter(cfg.favoritesRepo),
-		findRelatedSvc: cfg.findRelatedSvc,
-		cache:          newSearchResultCache(cfg.resultCache, cfg.heldSlate()),
-		history:        history.NewRecordSearchHistoryService(cfg.historyRepo),
-		telemetry:      newSearchTelemetry(cfg.eventStore, cfg.activityFeed, bg),
-		vocab:          vocabulary.NewVocabularyIngestor(cfg.vocabStore, bg),
+		favorites:      lifter,
+		correctionSvc:  correction,
+		related:        c.Related,
+		cache:          newSearchResultCache(c.ResultCache, c.HeldSlates),
+		history:        recorder,
+		telemetry:      newSearchTelemetry(c.Events, c.Activity, bg),
+		vocab:          ingestor,
 		bg:             bg,
 		resolver:       newSharedResolver(),
-	}
+	}, nil
 }
 
 type searchRun struct {
@@ -286,8 +298,8 @@ func (s *Service) execute(
 
 	var relatedGroups []domain.RelatedGroup
 	relatedDone := timeStage(&stages.related)
-	if s.findRelatedSvc != nil && len(ranked) > 0 {
-		relatedGroups = s.findRelatedSvc.Execute(ctx, userId, ranked)
+	if len(ranked) > 0 {
+		relatedGroups = s.related.Execute(ctx, userId, ranked)
 	}
 	relatedDone()
 
@@ -478,7 +490,7 @@ func (s *Service) mergeRankEnrich(
 	rankDone()
 
 	artworkDone := timeStage(&stages.artwork)
-	ranked = s.artwork.Fill(ctx, ranked, s.bg)
+	ranked = s.artwork.Fill(ctx, ranked)
 	artworkDone()
 	return ranked
 }

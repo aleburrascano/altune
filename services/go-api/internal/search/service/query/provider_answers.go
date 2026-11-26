@@ -10,25 +10,26 @@ import (
 type providerAnswers struct {
 	cache ports.ProviderResultCache
 	key   string
+	keyed bool
 }
 
 func newProviderAnswers(cache ports.ProviderResultCache, searchQuery string, kinds domain.ResultKindSet) providerAnswers {
 	queryNorm := textnorm.NormalizeForMatch(searchQuery)
-	if cache == nil || queryNorm == "" {
-		return providerAnswers{}
+	if queryNorm == "" {
+		return providerAnswers{cache: cache}
 	}
-	return providerAnswers{cache: cache, key: queryNorm + "|" + kinds.Key()}
+	return providerAnswers{cache: cache, key: queryNorm + "|" + kinds.Key(), keyed: true}
 }
 
 func (a providerAnswers) get(ctx context.Context, provider domain.ProviderName) ([]domain.SearchResult, bool) {
-	if a.cache == nil {
+	if !a.keyed {
 		return nil, false
 	}
 	return a.cache.Get(ctx, provider, a.key)
 }
 
 func (a providerAnswers) set(ctx context.Context, provider domain.ProviderName, results []domain.SearchResult) {
-	if a.cache == nil {
+	if !a.keyed {
 		return
 	}
 	a.cache.Set(ctx, provider, a.key, results)

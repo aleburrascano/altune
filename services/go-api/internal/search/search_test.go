@@ -469,7 +469,7 @@ func TestSearchSettings_EachSwitchAddsItsOptionOnlyWhenOn(t *testing.T) {
 	}{
 		{"TailDemotion", func(h *harness) { h.deps.Search.TailDemotion = true }, "tail_demotion"},
 		{"CrossKindProminence", func(h *harness) { h.deps.Search.CrossKindProminence = true }, "cross_kind_prominence"},
-		{"Exploration", func(h *harness) { h.deps.Search.Exploration = true }, "exploration"},
+		{"Exploration", func(h *harness) { h.deps.Search.Exploration, h.deps.Search.ExplorationRate = true, 0.1 }, "exploration"},
 		{"BehavioralRanking", func(h *harness) { h.deps.Search.BehavioralRanking = true }, "behavioral_ranking"},
 		{"Activity", func(h *harness) { h.deps.Activity = &activityRecorder{} }, "activity"},
 		{"Pool", func(h *harness) { h.deps.Pool = unreachablePool(h.t) }, "favorites"},
@@ -984,7 +984,7 @@ func TestRankingOnlySearch_RanksWithoutDeadlineArtworkResultCachesOrRecording(t 
 	h.start().RankingOnlySearch()
 
 	assertLines(t, h.optionsLoggedAs("discovery.ranking_only_search"), []string{
-		"history", "tail_demotion", "cross_kind_prominence", "artwork_cache", "mbid_index", "vocabulary",
+		"history", "tail_demotion", "cross_kind_prominence", "vocabulary",
 	})
 }
 
