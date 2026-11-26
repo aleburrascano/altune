@@ -22,6 +22,9 @@ type ClearSearchHistoryService struct {
 var ErrClockRequired = errors.New("history: the service requires a clock")
 
 func NewClearSearchHistoryService(historyRepo ports.HistoryEraser, now clock.Func) (*ClearSearchHistoryService, error) {
+	if historyRepo == nil {
+		return nil, ErrCollaboratorRequired
+	}
 	if now == nil {
 		return nil, ErrClockRequired
 	}
@@ -37,9 +40,6 @@ func MustNewClearSearchHistoryService(historyRepo ports.HistoryEraser, now clock
 }
 
 func (s *ClearSearchHistoryService) Execute(ctx context.Context, userId ids.UserId) error {
-	if s.historyRepo == nil {
-		return nil
-	}
 	if err := s.historyRepo.EraseSearchTextForUser(ctx, userId); err != nil {
 		return fmt.Errorf("clear search history: %w", err)
 	}

@@ -22,7 +22,7 @@ func TestCoverage_BuildLogsHowManySongsArePlayableLinkOutOrSilent(t *testing.T) 
 		Songs:       list,
 		DetailByID:  map[int]search.GeniusSongDetail{1: {AudioLinks: link}, 2: {AudioLinks: link}},
 	}
-	svc := searchtest.MustUnreleased(search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 2, DetailConcurrency: 2}))
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{}, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 2, DetailConcurrency: 2}, searchtest.UnreleasedWiring(search.NoUnreleasedCache{})))
 	if _, err := svc.List(context.Background(), search.ProviderDeezer, "27", "Drake", nil); err != nil {
 		t.Fatalf("List: %v", err)
 	}

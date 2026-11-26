@@ -44,7 +44,9 @@ func newSearchService(w wiring, breaker *providerguard.CircuitBreaker) (*query.S
 	planResultCaches(p, w.deps.Search, w.stores)
 	planEnrichmentCaches(p, w.stores)
 	planVocabulary(p, w.stores)
-	planRecording(p, w)
+	if err := planRecording(p, w); err != nil {
+		return nil, err
+	}
 	return w.namedSearchService("discovery.search", p, breaker)
 }
 
@@ -174,14 +176,20 @@ func planVocabulary(p *searchPlan, s connections.Stores) {
 	p.choose("vocabulary")
 }
 
-func planRecording(p *searchPlan, w wiring) {
+func planRecording(p *searchPlan, w wiring) error {
 	p.collaborators.Events = w.stores.Events
 	p.choose("event_store")
 	if w.deps.Search.BehavioralRanking {
-		p.option("behavioral_ranking", query.WithBehavioralRanking(rank.NewSatisfactionConsumer(w.stores.Events)))
+		scoring, err := rank.NewBehavioralScoring(rank.NewSatisfactionConsumer(w.stores.Events))
+		if err != nil {
+			return fmt.Errorf("build behavioral ranking: %w", err)
+		}
+		p.collaborators.Behavior = scoring
+		p.choose("behavioral_ranking")
 	}
 	if w.deps.Activity != nil {
 		p.collaborators.Activity = w.deps.Activity
 		p.choose("activity")
 	}
+	return nil
 }

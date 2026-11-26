@@ -16,7 +16,6 @@ var (
 	ErrSearchCollaboratorRequired = search.ErrCollaboratorRequired
 	ErrSearchInvalidOption        = search.ErrInvalidOption
 	AbsentCollaborators           = search.AbsentCollaborators
-	WithBehavioralRanking         = search.WithBehavioralRanking
 	WithCrossKindProminence       = search.WithCrossKindProminence
 	WithExploration               = search.WithExploration
 	WithSearchDeadline            = search.WithSearchDeadline

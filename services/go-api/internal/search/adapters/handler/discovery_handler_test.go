@@ -175,8 +175,8 @@ func buildDiscoveryRouter(t *testing.T,
 		withHistory = func(c *search.Collaborators) { c.History = historyRepo }
 	}
 	searchSvc := searchtest.NewSearchServiceWith(t, bg, providers, cb, withHistory)
-	historySvc := search.NewListSearchHistoryService(historyRepo)
-	clearHistorySvc := search.MustNewClearSearchHistoryService(historyRepo, time.Now)
+	historySvc := searchtest.NewListHistory(t, historyRepo)
+	clearHistorySvc := searchtest.NewClearHistory(t, historyRepo)
 
 	var albumSvc *search.GetAlbumTracksService
 	if albumProviders != nil {
@@ -232,7 +232,7 @@ func TestHandleRecordEvent_ServiceValidation(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{
 		Search: searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker()),
-		Event:  search.NewRecordEventService(nopEventStore{}),
+		Event:  searchtest.NewRecordEvent(t, nopEventStore{}),
 	}, time.Now)
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
@@ -790,7 +790,7 @@ func rejectionCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 
 func TestPerUserGets_CarryNoStoreHeaders(t *testing.T) {
 	searchRouter := buildDiscoveryRouter(t, &fakeSearchProvider{name: search.ProviderDeezer}, &fakeSearchHistoryRepo{}, nil, nil)
-	favoritesRouter := buildFavoritesRouter(nil)
+	favoritesRouter := buildFavoritesRouter(t, nil)
 	tests := []struct {
 		name string
 		path string

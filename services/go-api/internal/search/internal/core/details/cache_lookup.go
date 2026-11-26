@@ -25,11 +25,9 @@ func CachedLookup[T any](
 	empty T,
 	fetch func(context.Context) (T, bool, error),
 ) (T, error) {
-	if nameKey == "" {
-		cache = nil
-	}
+	cacheable := nameKey != ""
 
-	if cache != nil {
+	if cacheable {
 		if cached, found, _ := cache.Get(ctx, nameKey); found {
 			return cached, nil
 		}
@@ -43,13 +41,13 @@ func CachedLookup[T any](
 		return empty, degraded(err)
 	}
 	if !found {
-		if cache != nil {
+		if cacheable {
 			_ = cache.SetNegative(ctx, nameKey)
 		}
 		return empty, nil
 	}
 
-	if cache != nil {
+	if cacheable {
 		_ = cache.Set(ctx, nameKey, value)
 	}
 	return value, nil

@@ -3,6 +3,7 @@ package query
 import (
 	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/service/artwork"
+	"altune/go-api/internal/search/service/rank"
 	"altune/go-api/internal/search/service/useractivity"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -79,5 +80,6 @@ func AbsentCollaborators() Collaborators {
 		ResultCache:   NoResultCache{},
 		ProviderCache: NoProviderResultCache{},
 		HeldSlates:    NoResultCache{},
+		Behavior:      rank.NoBehavioralScoring{},
 	}
 }

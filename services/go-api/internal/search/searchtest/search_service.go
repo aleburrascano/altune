@@ -37,19 +37,19 @@ type artworkParts struct {
 
 type ArtworkPart func(*artworkParts)
 
-func WithArtworkLookup(l ports.TaggingArtworkLookup) ArtworkPart {
+func UseArtworkLookup(l ports.TaggingArtworkLookup) ArtworkPart {
 	return func(p *artworkParts) { p.lookup = l }
 }
 
-func WithArtworkCache(c ports.ArtworkCache) ArtworkPart {
+func UseArtworkCache(c ports.ArtworkCache) ArtworkPart {
 	return func(p *artworkParts) { p.cache = c }
 }
 
-func WithIdentityStore(s ports.IdentityStore) ArtworkPart {
+func UseIdentityStore(s ports.IdentityStore) ArtworkPart {
 	return func(p *artworkParts) { p.identities = s }
 }
 
-func WithMBIDIndex(i ports.MBIDIndex) ArtworkPart {
+func UseMBIDIndex(i ports.MBIDIndex) ArtworkPart {
 	return func(p *artworkParts) { p.mbidIndex = i }
 }
 

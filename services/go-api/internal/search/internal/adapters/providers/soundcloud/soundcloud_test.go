@@ -39,11 +39,39 @@ func soundCloudSite(api http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func mustSoundCloudAPI(t testing.TB, client *http.Client, fallback searchFallback) *search.SoundCloudAPIAdapter {
+	t.Helper()
+	if fallback == nil {
+		fallback = search.NoSoundCloudFallback{}
+	}
+	adapter, err := search.NewSoundCloudAPIAdapter(client, fallback)
+	if err != nil {
+		t.Fatalf("search.NewSoundCloudAPIAdapter: %v", err)
+	}
+	return adapter
+}
+
+func TestNewSoundCloudAPIAdapter_RefusesAMissingCollaborator(t *testing.T) {
+	for name, build := range map[string]func() (*search.SoundCloudAPIAdapter, error){
+		"client": func() (*search.SoundCloudAPIAdapter, error) {
+			return search.NewSoundCloudAPIAdapter(nil, search.NoSoundCloudFallback{})
+		},
+		"fallback": func() (*search.SoundCloudAPIAdapter, error) {
+			return search.NewSoundCloudAPIAdapter(http.DefaultClient, nil)
+		},
+	} {
+		adapter, err := build()
+		if adapter != nil || !errors.Is(err, search.ErrSoundCloudCollaboratorRequired) {
+			t.Errorf("without %s: got (%v, %v), want a refusal wrapping ErrSoundCloudCollaboratorRequired", name, adapter, err)
+		}
+	}
+}
+
 func newSoundCloudAdapter(t *testing.T, site http.HandlerFunc, fallback searchFallback) *search.SoundCloudAPIAdapter {
 	t.Helper()
 	srv := httptest.NewServer(site)
 	t.Cleanup(srv.Close)
-	return search.NewSoundCloudAPIAdapter(providertest.NewClient(srv.URL), fallback)
+	return mustSoundCloudAPI(t, providertest.NewClient(srv.URL), fallback)
 }
 
 func scHomeDown(w http.ResponseWriter, _ *http.Request) {
@@ -190,14 +218,14 @@ func TestSoundCloud_GetArtistAlbums_resolvesBridgeHandle(t *testing.T) {
 }
 
 func TestSoundCloudAPIAdapter_Name(t *testing.T) {
-	a := search.NewSoundCloudAPIAdapter(http.DefaultClient, nil)
+	a := mustSoundCloudAPI(t, http.DefaultClient, search.NoSoundCloudFallback{})
 	if got := a.Name(); got != search.ProviderSoundCloud {
 		t.Errorf("Name() = %v, want %v", got, search.ProviderSoundCloud)
 	}
 }
 
 func TestSoundCloudAPIAdapter_SupportedKinds(t *testing.T) {
-	a := search.NewSoundCloudAPIAdapter(http.DefaultClient, nil)
+	a := mustSoundCloudAPI(t, http.DefaultClient, search.NoSoundCloudFallback{})
 	kinds := a.SupportedKinds()
 	if !kinds[search.ResultKindTrack] || !kinds[search.ResultKindAlbum] || !kinds[search.ResultKindArtist] {
 		t.Errorf("expected track+album+artist supported, got %+v", kinds)
@@ -205,14 +233,14 @@ func TestSoundCloudAPIAdapter_SupportedKinds(t *testing.T) {
 }
 
 func TestSoundCloudAPIAdapter_SearchTimeout(t *testing.T) {
-	a := search.NewSoundCloudAPIAdapter(http.DefaultClient, nil)
+	a := mustSoundCloudAPI(t, http.DefaultClient, search.NoSoundCloudFallback{})
 	if got := a.SearchTimeout(); got != 3*time.Second {
 		t.Errorf("SearchTimeout() = %v, want 3s", got)
 	}
 }
 
 func TestSoundCloudAPIAdapter_Search_NoKindsRequested(t *testing.T) {
-	a := search.NewSoundCloudAPIAdapter(http.DefaultClient, nil)
+	a := mustSoundCloudAPI(t, http.DefaultClient, search.NoSoundCloudFallback{})
 	results, err := a.Search(context.Background(), "q", map[search.ResultKind]bool{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1057,7 +1085,7 @@ func TestSoundCloudAPIAdapter_Resolve_AlreadyCancelledContextIsUnavailableNotAMi
 	}
 }
 
-func inMemorySoundCloudAdapter(site http.HandlerFunc) *search.SoundCloudAPIAdapter {
+func inMemorySoundCloudAdapter(t testing.TB, site http.HandlerFunc) *search.SoundCloudAPIAdapter {
 	client := &http.Client{Transport: providertest.FakeRoundTripper{Fn: func(r *http.Request) (*http.Response, error) {
 		rec := httptest.NewRecorder()
 		site(rec, r)
@@ -1065,7 +1093,7 @@ func inMemorySoundCloudAdapter(site http.HandlerFunc) *search.SoundCloudAPIAdapt
 		res.Request = r
 		return res, nil
 	}}}
-	return search.NewSoundCloudAPIAdapter(client, nil)
+	return mustSoundCloudAPI(t, client, search.NoSoundCloudFallback{})
 }
 
 func TestSoundCloudAPIAdapter_ConcurrentSearchesShareOneScrape(t *testing.T) {
@@ -1073,7 +1101,7 @@ func TestSoundCloudAPIAdapter_ConcurrentSearchesShareOneScrape(t *testing.T) {
 		const scraped = "abcdefabcdefabcdefabcdefabcdef12"
 		var homeHits, wrongID atomic.Int32
 		release := make(chan struct{})
-		a := inMemorySoundCloudAdapter(func(w http.ResponseWriter, r *http.Request) {
+		a := inMemorySoundCloudAdapter(t, func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case strings.HasSuffix(r.URL.Path, ".js"):
 				_, _ = w.Write([]byte(`client_id:"` + scraped + `"`))

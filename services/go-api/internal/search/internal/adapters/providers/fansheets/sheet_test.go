@@ -67,7 +67,7 @@ func trackerSongs(t *testing.T, tabs string, unreleased, released []byte) []sear
 	if released != nil {
 		srv.released, srv.releasedCode = released, http.StatusOK
 	}
-	songs, err := srv.client(nil).ArtistSongs(context.Background(), "Ken Carson")
+	songs, err := srv.client(t, nil).ArtistSongs(context.Background(), "Ken Carson")
 	if err != nil {
 		t.Fatalf("ArtistSongs: %v", err)
 	}

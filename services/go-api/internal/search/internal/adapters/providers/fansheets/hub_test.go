@@ -21,7 +21,7 @@ func readFixture(t *testing.T, name string) []byte {
 
 func TestHub_MapsArtistNameToTheSheetIDInItsHyperlink(t *testing.T) {
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
-	songs, err := srv.client(nil).ArtistSongs(context.Background(), "Ken Carson")
+	songs, err := srv.client(t, nil).ArtistSongs(context.Background(), "Ken Carson")
 	if err != nil || len(songs) == 0 || srv.artistCalls.Load() == 0 {
 		t.Errorf("ArtistSongs = %d songs, err %v, %d reads of sheet %s; want Ken Carson's sheet read", len(songs), err, srv.artistCalls.Load(), kenSheetID)
 	}
@@ -29,7 +29,7 @@ func TestHub_MapsArtistNameToTheSheetIDInItsHyperlink(t *testing.T) {
 
 func TestHub_SkipsLinksThatAreNotSheets(t *testing.T) {
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), nil)
-	names, err := srv.client(nil).Artists(context.Background())
+	names, err := srv.client(t, nil).Artists(context.Background())
 	if err != nil {
 		t.Fatalf("Artists: %v", err)
 	}

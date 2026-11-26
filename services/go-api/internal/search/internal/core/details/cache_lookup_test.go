@@ -129,17 +129,17 @@ func TestCachedLookup_EmptyNameKeyRunsUncached(t *testing.T) {
 	}
 }
 
-func TestCachedLookup_NilCacheRunsUncached(t *testing.T) {
+func TestCachedLookup_AnAbsentCacheRunsUncached(t *testing.T) {
 	calls := 0
 	fetch := countingFetch(&calls, "fresh", true, nil)
 
-	got, err := details.CachedLookup[string](context.Background(), nil, "daft punk", "", fetch)
+	got, err := details.CachedLookup[string](context.Background(), details.NoNameKeyedCache[string]{}, "daft punk", "", fetch)
 	if err != nil || got != "fresh" {
-		t.Fatalf("nil cache: got=%q err=%v", got, err)
+		t.Fatalf("absent cache: got=%q err=%v", got, err)
 	}
-	_, _ = details.CachedLookup[string](context.Background(), nil, "daft punk", "", fetch)
+	_, _ = details.CachedLookup[string](context.Background(), details.NoNameKeyedCache[string]{}, "daft punk", "", fetch)
 	if calls != 2 {
-		t.Errorf("nil cache must fetch every call, got %d calls", calls)
+		t.Errorf("absent cache must fetch every call, got %d calls", calls)
 	}
 }
 

@@ -65,7 +65,7 @@ func (c *commandCounter) ProcessPipelineHook(_ goredis.ProcessPipelineHook) gore
 
 func TestFindClosest_OversizedQueryIssuesBoundedPipelinedTrigramLookups(t *testing.T) {
 	client, counter := newCountingClient(t)
-	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	store := newVocabularyStore(t, client, lowercaseNorm, cache.NoMetaphone)
 
 	hostile := strings.Repeat("qwertyuiopasdfghjklz", 500)
 	if _, err := store.FindClosest(context.Background(), hostile, 5); err != nil {
@@ -118,7 +118,7 @@ func TestVocabularyStore_Redis_OversizedFuzzyQueryIsOneRoundTripAndStillMatches(
 	_, client := newRedis(t)
 	counter := &passthroughCounter{}
 	client.AddHook(counter)
-	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	store := newVocabularyStore(t, client, lowercaseNorm, cache.NoMetaphone)
 	ctx := context.Background()
 
 	term := "qaboundsmegaman"
@@ -309,7 +309,7 @@ func vocabTrack(norm string) domain.SpellingHintsEntry {
 
 func TestFindClosest_CommonTrigramLoadsBoundedCandidatesInThreeRoundTrips(t *testing.T) {
 	client, stub := newStubRedisClient(t)
-	store := cache.NewVocabularyStore(client, lowercaseNorm, cache.WithMetaphone(firstThreeRunes))
+	store := newVocabularyStore(t, client, lowercaseNorm, firstThreeRunes)
 	const target = "themesong"
 	seedSharedTrigramVocabulary(t, store, target)
 	stub.reset()
@@ -342,7 +342,7 @@ func TestFindClosest_CommonTrigramLoadsBoundedCandidatesInThreeRoundTrips(t *tes
 
 func TestFindClosest_ShortQueryLooksUpEveryTrigramInOrder(t *testing.T) {
 	client, stub := newStubRedisClient(t)
-	store := cache.NewVocabularyStore(client, lowercaseNorm)
+	store := newVocabularyStore(t, client, lowercaseNorm, cache.NoMetaphone)
 
 	if _, err := store.FindClosest(context.Background(), "megaman", 5); err != nil {
 		t.Fatalf("FindClosest: %v", err)
@@ -381,7 +381,7 @@ func (s *stubRedis) replyScan(cmd goredis.Cmder, args []any) {
 
 func TestFindClosest_HugeTrigramAndMetaphoneSetsAreReadUnderTheCap(t *testing.T) {
 	client, stub := newStubRedisClient(t)
-	store := cache.NewVocabularyStore(client, lowercaseNorm, cache.WithMetaphone(func(string) string { return "K" }))
+	store := newVocabularyStore(t, client, lowercaseNorm, func(string) string { return "K" })
 	huge := 10 * trigramSetReadCap
 	for i := 0; i < huge; i++ {
 		member := fmt.Sprintf("member%05d", i)

@@ -34,20 +34,20 @@ func New(base http.RoundTripper, pacer *pacing.Pacer, opts Options) (*Transport,
 	if pacer == nil {
 		return nil, ErrPacerRequired
 	}
-	t := &Transport{base: base, pacer: pacer, sleep: opts.Sleep, jitter: opts.Jitter, onRetry: opts.OnRetry}
-	if t.sleep == nil {
-		t.sleep = sleepOnTimer
+	if opts.Sleep == nil || opts.Jitter == nil || opts.OnRetry == nil {
+		return nil, ErrOptionsRequired
 	}
-	if t.jitter == nil {
-		t.jitter = rand.Float64
-	}
-	if t.onRetry == nil {
-		t.onRetry = func(string) {}
-	}
-	return t, nil
+	return &Transport{base: base, pacer: pacer, sleep: opts.Sleep, jitter: opts.Jitter, onRetry: opts.OnRetry}, nil
 }
 
-var ErrPacerRequired = errors.New("retry transport needs a pacer")
+var (
+	ErrPacerRequired   = errors.New("retry transport needs a pacer")
+	ErrOptionsRequired = errors.New("retry transport needs its sleep, jitter and retry recorder, start from SystemOptions")
+)
+
+func SystemOptions() Options {
+	return Options{Sleep: sleepOnTimer, Jitter: rand.Float64, OnRetry: func(string) {}}
+}
 
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	attempts := 1

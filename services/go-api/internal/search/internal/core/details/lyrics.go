@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/core/ports"
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 )
@@ -13,14 +14,22 @@ type LyricsService struct {
 	cache    ports.LyricsCache
 }
 
-func NewLyricsService(provider ports.LyricsProvider, cache ports.LyricsCache) *LyricsService {
-	return &LyricsService{provider: provider, cache: cache}
+func NewLyricsService(provider ports.LyricsProvider, cache ports.LyricsCache) (*LyricsService, error) {
+	for name, missing := range map[string]bool{
+		"lyrics provider": provider == nil,
+		"lyrics cache":    cache == nil,
+	} {
+		if missing {
+			return nil, fmt.Errorf("%w: %s is nil", ErrCollaboratorRequired, name)
+		}
+	}
+	return &LyricsService{provider: provider, cache: cache}, nil
 }
 
 func (s *LyricsService) Execute(ctx context.Context, title, subtitle string) (domain.DeezerLyrics, error) {
 	artist := strings.TrimSpace(subtitle)
 	track := strings.TrimSpace(title)
-	if s.provider == nil || track == "" {
+	if track == "" {
 		return domain.EmptyDeezerLyrics(), nil
 	}
 

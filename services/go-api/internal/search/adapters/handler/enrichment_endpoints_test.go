@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/httpserver"
 	"context"
 	"encoding/json"
@@ -147,13 +148,13 @@ func mbRouter(f *scriptedMBEnricher) (chi.Router, *int) {
 	return buildEnrichmentRouter(svc), &f.calls
 }
 
-func deezerRouter(f *scriptedDeezerEnricher) (chi.Router, *int) {
-	svc := search.NewDeezerEnrichmentService(f, newMemNameCache[search.DeezerEnrichment]())
+func deezerRouter(t *testing.T, f *scriptedDeezerEnricher) (chi.Router, *int) {
+	svc := searchtest.NewDeezerEnrichment(t, f, newMemNameCache[search.DeezerEnrichment]())
 	return buildEnrichersRouter(search.DetailEnrichers{Deezer: svc}), &f.calls
 }
 
-func lyricsRouter(f *scriptedLyricsProvider) (chi.Router, *int) {
-	svc := search.NewLyricsService(f, newMemNameCache[search.DeezerLyrics]())
+func lyricsRouter(t *testing.T, f *scriptedLyricsProvider) (chi.Router, *int) {
+	svc := searchtest.NewLyrics(t, f, newMemNameCache[search.DeezerLyrics]())
 	return buildEnrichersRouter(search.DetailEnrichers{Lyrics: svc}), &f.calls
 }
 
@@ -188,32 +189,34 @@ func TestEnrichmentEndpoints_TransientFailureIsDistinguishableFromNoData(t *test
 			path:  mbPath, wantDegraded: false, wantSecondCalls: 1,
 		},
 		{
-			name:  "deezer resolve error is degraded and retried",
-			build: func() (chi.Router, *int) { return deezerRouter(&scriptedDeezerEnricher{resolveErr: errProviderDown}) },
-			path:  deezerPath, wantDegraded: true, wantSecondCalls: 2,
+			name: "deezer resolve error is degraded and retried",
+			build: func() (chi.Router, *int) {
+				return deezerRouter(t, &scriptedDeezerEnricher{resolveErr: errProviderDown})
+			},
+			path: deezerPath, wantDegraded: true, wantSecondCalls: 2,
 		},
 		{
 			name: "deezer lookup error is degraded and retried",
 			build: func() (chi.Router, *int) {
-				return deezerRouter(&scriptedDeezerEnricher{id: "dz-1", lookupErr: errProviderDown})
+				return deezerRouter(t, &scriptedDeezerEnricher{id: "dz-1", lookupErr: errProviderDown})
 			},
 			path: deezerPath, wantDegraded: true, wantSecondCalls: 4,
 		},
 		{
 			name:  "deezer unresolved id is genuine empty and negative-cached",
-			build: func() (chi.Router, *int) { return deezerRouter(&scriptedDeezerEnricher{}) },
+			build: func() (chi.Router, *int) { return deezerRouter(t, &scriptedDeezerEnricher{}) },
 			path:  deezerPath, wantDegraded: false, wantSecondCalls: 1,
 		},
 		{
 			name: "lyrics lookup error is degraded and retried",
 			build: func() (chi.Router, *int) {
-				return lyricsRouter(&scriptedLyricsProvider{id: "t-1", lookupErr: errProviderDown})
+				return lyricsRouter(t, &scriptedLyricsProvider{id: "t-1", lookupErr: errProviderDown})
 			},
 			path: lyricsPath, wantDegraded: true, wantSecondCalls: 4,
 		},
 		{
 			name:  "lyrics unresolved track is genuine empty and negative-cached",
-			build: func() (chi.Router, *int) { return lyricsRouter(&scriptedLyricsProvider{}) },
+			build: func() (chi.Router, *int) { return lyricsRouter(t, &scriptedLyricsProvider{}) },
 			path:  lyricsPath, wantDegraded: false, wantSecondCalls: 1,
 		},
 	}
@@ -270,7 +273,7 @@ func TestHandleDeezerEnrichment(t *testing.T) {
 	t.Run("artist kind returns 200 empty (only track and album enrich)", func(t *testing.T) {
 		e := search.EmptyDeezerEnrichment()
 		e.BPM = 90
-		svc := search.NewDeezerEnrichmentService(&scriptedDeezerEnricher{id: "dz-1", found: &e}, nil)
+		svc := searchtest.NewDeezerEnrichment(t, &scriptedDeezerEnricher{id: "dz-1", found: &e}, search.NoNameKeyedCache[search.DeezerEnrichment]{})
 		router := buildEnrichersRouter(search.DetailEnrichers{Deezer: svc})
 
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/deezer?kind=artist&title=Nas", nil)
@@ -312,7 +315,7 @@ func TestHandleLyrics(t *testing.T) {
 		l.Writers = []string{"Nasir Jones"}
 		l.Copyright = "© 1994 Columbia"
 
-		svc := search.NewLyricsService(&scriptedLyricsProvider{id: "t-1", found: &l}, nil)
+		svc := searchtest.NewLyrics(t, &scriptedLyricsProvider{id: "t-1", found: &l}, search.NoNameKeyedCache[search.DeezerLyrics]{})
 		router := buildEnrichersRouter(search.DetailEnrichers{Lyrics: svc})
 
 		rec := discServe(t, router, http.MethodGet,
@@ -388,7 +391,7 @@ func TestEnrichmentEndpoints_NilCollectionsServeAsEmpty(t *testing.T) {
 
 func TestEnrichmentEndpoints_TypedProviderErrorStaysDegraded(t *testing.T) {
 	upstream := search.StatusError{Status: http.StatusNotFound}
-	router, _ := deezerRouter(&scriptedDeezerEnricher{resolveErr: upstream})
+	router, _ := deezerRouter(t, &scriptedDeezerEnricher{resolveErr: upstream})
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/deezer?kind=album&title=Illmatic&subtitle=Nas", nil)
 
@@ -429,13 +432,13 @@ type namedEnrichmentCase struct {
 	emptyFields []string
 }
 
-func namedEnrichmentCases() []namedEnrichmentCase {
+func namedEnrichmentCases(t *testing.T) []namedEnrichmentCase {
 	return []namedEnrichmentCase{
 		{
 			name: "deezer",
 			path: "/discovery/enrichment/deezer",
 			router: func(err error) chi.Router {
-				r, _ := deezerRouter(&scriptedDeezerEnricher{resolveErr: err})
+				r, _ := deezerRouter(t, &scriptedDeezerEnricher{resolveErr: err})
 				return r
 			},
 			emptyFields: []string{"genres"},
@@ -444,7 +447,7 @@ func namedEnrichmentCases() []namedEnrichmentCase {
 }
 
 func TestNamedEnrichmentEndpoints_SharedContract(t *testing.T) {
-	for _, tc := range namedEnrichmentCases() {
+	for _, tc := range namedEnrichmentCases(t) {
 		t.Run(tc.name+" missing title is 400", func(t *testing.T) {
 			rec := discServe(t, tc.router(nil), http.MethodGet, tc.path+"?kind=artist", nil)
 			discAssertStatus(t, rec, http.StatusBadRequest)

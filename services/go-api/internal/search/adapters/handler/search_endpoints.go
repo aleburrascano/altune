@@ -106,7 +106,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 
 	results := searchResultsToDTOs(result.Results)
 	topResult, sections := blendedSlateToDTOs(result.Slate)
-	h.ownership.StampOwnership(r.Context(), userId, ownershipTargets(results, topResult, sections))
+	h.stampOwnership(r.Context(), userId, ownershipTargets(results, topResult, sections))
 
 	if !anyProviderAnswered(result.ProviderStatuses) {
 		httpserver.HandleServiceError(w, r, errAllProvidersFailed)

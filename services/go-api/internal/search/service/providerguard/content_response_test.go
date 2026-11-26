@@ -26,7 +26,7 @@ func TestFetchProviderResults_ClassifiesFailureStatus(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			results, degraded := providerguard.FetchProviderResults(context.Background(), nil, domain.ProviderITunes, "id-1", "test.provider_failed",
+			results, degraded := providerguard.FetchProviderResults(context.Background(), providerguard.NewCircuitBreaker(), domain.ProviderITunes, "id-1", "test.provider_failed",
 				func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 					return nil, tc.err
 				})

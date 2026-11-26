@@ -16,6 +16,26 @@ import (
 	"github.com/google/uuid"
 )
 
+func TestNewRecordEventService_RefusesAMissingCollaborator(t *testing.T) {
+	tests := []struct {
+		name  string
+		store ports.EventStore
+		feed  ports.ActivityFeed
+	}{
+		{"event store", nil, useractivity.NoopActivityFeed{}},
+		{"activity feed", &searchtest.FakeEventStore{}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, err := useractivity.NewRecordEventService(tt.store, tt.feed)
+
+			if svc != nil || !errors.Is(err, useractivity.ErrCollaboratorRequired) {
+				t.Fatalf("got (%v, %v), want a refusal wrapping ErrCollaboratorRequired", svc, err)
+			}
+		})
+	}
+}
+
 const (
 	payloadByteCap = 8 << 10
 	payloadKeyCap  = 32
@@ -29,7 +49,7 @@ func (failingEventStore) Append(context.Context, domain.InteractionEvent) error 
 
 func TestRecordEventService_Execute_AppendsEvent(t *testing.T) {
 	store := &searchtest.FakeEventStore{}
-	svc := useractivity.NewRecordEventService(store)
+	svc := searchtest.NewRecordEvent(t, store)
 	userId := ids.NewUserId(uuid.New())
 
 	err := svc.Execute(context.Background(), userId, useractivity.RecordEventInput{
@@ -54,7 +74,7 @@ func TestRecordEventService_Execute_AppendsEvent(t *testing.T) {
 
 func TestRecordEventService_Execute_ThreadsSearchId(t *testing.T) {
 	store := &searchtest.FakeEventStore{}
-	svc := useractivity.NewRecordEventService(store)
+	svc := searchtest.NewRecordEvent(t, store)
 	userId := ids.NewUserId(uuid.New())
 	searchId := uuid.New().String()
 
@@ -78,7 +98,7 @@ func TestRecordEventService_Execute_ThreadsSearchId(t *testing.T) {
 
 func TestRecordEventService_Execute_RejectsUnknownType(t *testing.T) {
 	store := &searchtest.FakeEventStore{}
-	svc := useractivity.NewRecordEventService(store)
+	svc := searchtest.NewRecordEvent(t, store)
 
 	err := svc.Execute(context.Background(), ids.NewUserId(uuid.New()), useractivity.RecordEventInput{
 		Type: domain.EventTypeUnknown,
@@ -108,7 +128,7 @@ func assertRejected400(t *testing.T, store *searchtest.FakeEventStore, err error
 func TestRecordEventService_Execute_RejectsServerReservedTypes(t *testing.T) {
 	for _, typ := range []domain.EventType{domain.EventTypeSearchPerformed} {
 		store := &searchtest.FakeEventStore{}
-		svc := useractivity.NewRecordEventService(store)
+		svc := searchtest.NewRecordEvent(t, store)
 		err := svc.Execute(context.Background(), ids.NewUserId(uuid.New()), useractivity.RecordEventInput{Type: typ})
 		assertRejected400(t, store, err)
 	}
@@ -116,7 +136,7 @@ func TestRecordEventService_Execute_RejectsServerReservedTypes(t *testing.T) {
 
 func TestRecordEventService_Execute_AcceptsResultsShown(t *testing.T) {
 	store := &searchtest.FakeEventStore{}
-	svc := useractivity.NewRecordEventService(store)
+	svc := searchtest.NewRecordEvent(t, store)
 	err := svc.Execute(context.Background(), ids.NewUserId(uuid.New()), useractivity.RecordEventInput{
 		Type:    domain.EventTypeResultsShown,
 		Payload: map[string]any{"results": []any{}},
@@ -131,7 +151,7 @@ func TestRecordEventService_Execute_AcceptsResultsShown(t *testing.T) {
 
 func TestRecordEventService_Execute_RejectsNonNumericDwell(t *testing.T) {
 	store := &searchtest.FakeEventStore{}
-	svc := useractivity.NewRecordEventService(store)
+	svc := searchtest.NewRecordEvent(t, store)
 	err := svc.Execute(context.Background(), ids.NewUserId(uuid.New()), useractivity.RecordEventInput{
 		Type:    domain.EventTypeSkip,
 		Payload: map[string]any{"dwell_ms": "abc"},
@@ -141,7 +161,7 @@ func TestRecordEventService_Execute_RejectsNonNumericDwell(t *testing.T) {
 
 func TestRecordEventService_Execute_RejectsNonBooleanZeroResult(t *testing.T) {
 	store := &searchtest.FakeEventStore{}
-	svc := useractivity.NewRecordEventService(store)
+	svc := searchtest.NewRecordEvent(t, store)
 	err := svc.Execute(context.Background(), ids.NewUserId(uuid.New()), useractivity.RecordEventInput{
 		Type:    domain.EventTypePlay,
 		Payload: map[string]any{"zero_result": "false"},
@@ -152,7 +172,7 @@ func TestRecordEventService_Execute_RejectsNonBooleanZeroResult(t *testing.T) {
 func TestRecordEventService_Execute_RejectsNonStringSignatureAndSession(t *testing.T) {
 	for _, key := range []string{"result_signature", "session_id"} {
 		store := &searchtest.FakeEventStore{}
-		svc := useractivity.NewRecordEventService(store)
+		svc := searchtest.NewRecordEvent(t, store)
 		err := svc.Execute(context.Background(), ids.NewUserId(uuid.New()), useractivity.RecordEventInput{
 			Type:    domain.EventTypePlay,
 			Payload: map[string]any{key: 42.0},
@@ -163,7 +183,7 @@ func TestRecordEventService_Execute_RejectsNonStringSignatureAndSession(t *testi
 
 func TestRecordEventService_Execute_AcceptsWellTypedPayload(t *testing.T) {
 	store := &searchtest.FakeEventStore{}
-	svc := useractivity.NewRecordEventService(store)
+	svc := searchtest.NewRecordEvent(t, store)
 	err := svc.Execute(context.Background(), ids.NewUserId(uuid.New()), useractivity.RecordEventInput{
 		Type:    domain.EventTypeSkip,
 		Payload: map[string]any{"dwell_ms": 1500.0, "result_signature": "sig", "session_id": "s1"},
@@ -178,7 +198,7 @@ func TestRecordEventService_Execute_AcceptsWellTypedPayload(t *testing.T) {
 
 func TestRecordEventService_Execute_RejectsPayloadOverTheSizeCap(t *testing.T) {
 	store := &searchtest.FakeEventStore{}
-	svc := useractivity.NewRecordEventService(store)
+	svc := searchtest.NewRecordEvent(t, store)
 	err := svc.Execute(context.Background(), ids.NewUserId(uuid.New()), useractivity.RecordEventInput{
 		Type:    domain.EventTypePlay,
 		Payload: map[string]any{"junk": strings.Repeat("x", payloadByteCap+1)},
@@ -188,7 +208,7 @@ func TestRecordEventService_Execute_RejectsPayloadOverTheSizeCap(t *testing.T) {
 
 func TestRecordEventService_Execute_RejectsPayloadOverTheKeyCap(t *testing.T) {
 	store := &searchtest.FakeEventStore{}
-	svc := useractivity.NewRecordEventService(store)
+	svc := searchtest.NewRecordEvent(t, store)
 	payload := make(map[string]any, payloadKeyCap+1)
 	for i := range payloadKeyCap + 1 {
 		payload[fmt.Sprintf("k%d", i)] = 1.0
@@ -206,7 +226,7 @@ func TestRecordEventService_Execute_AcceptsPayloadAtTheKeyCap(t *testing.T) {
 	for i := range payloadKeyCap {
 		payload[fmt.Sprintf("k%d", i)] = 1.0
 	}
-	err := useractivity.NewRecordEventService(store).Execute(context.Background(), ids.NewUserId(uuid.New()), useractivity.RecordEventInput{
+	err := searchtest.NewRecordEvent(t, store).Execute(context.Background(), ids.NewUserId(uuid.New()), useractivity.RecordEventInput{
 		Type:    domain.EventTypePlay,
 		Payload: payload,
 	})
@@ -228,7 +248,7 @@ func TestRecordEventService_Execute_RejectsNULOrInvalidUTF8InPayloadStrings(t *t
 	for name, payload := range cases {
 		t.Run(name, func(t *testing.T) {
 			store := &searchtest.FakeEventStore{}
-			err := useractivity.NewRecordEventService(store).Execute(context.Background(), ids.NewUserId(uuid.New()), useractivity.RecordEventInput{
+			err := searchtest.NewRecordEvent(t, store).Execute(context.Background(), ids.NewUserId(uuid.New()), useractivity.RecordEventInput{
 				Type:    domain.EventTypePlay,
 				Payload: payload,
 			})
@@ -239,7 +259,7 @@ func TestRecordEventService_Execute_RejectsNULOrInvalidUTF8InPayloadStrings(t *t
 
 func TestRecordEventService_Execute_AcceptsPayloadUnderTheSizeCap(t *testing.T) {
 	store := &searchtest.FakeEventStore{}
-	svc := useractivity.NewRecordEventService(store)
+	svc := searchtest.NewRecordEvent(t, store)
 	err := svc.Execute(context.Background(), ids.NewUserId(uuid.New()), useractivity.RecordEventInput{
 		Type:    domain.EventTypePlay,
 		Payload: map[string]any{"junk": strings.Repeat("x", payloadByteCap-100)},
@@ -264,7 +284,7 @@ func TestRecordEventService_Execute_SizeCapCountsTheSerializedPayloadBytes(t *te
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			store := &searchtest.FakeEventStore{}
-			err := useractivity.NewRecordEventService(store).Execute(context.Background(), ids.NewUserId(uuid.New()), useractivity.RecordEventInput{
+			err := searchtest.NewRecordEvent(t, store).Execute(context.Background(), ids.NewUserId(uuid.New()), useractivity.RecordEventInput{
 				Type:    domain.EventTypePlay,
 				Payload: map[string]any{"junk": strings.Repeat("x", tc.bytes-envelope)},
 			})
@@ -280,7 +300,7 @@ func TestRecordEventService_Execute_SizeCapCountsTheSerializedPayloadBytes(t *te
 }
 
 func TestRecordEventService_Execute_WrapsStoreError(t *testing.T) {
-	svc := useractivity.NewRecordEventService(failingEventStore{})
+	svc := searchtest.NewRecordEvent(t, failingEventStore{})
 
 	err := svc.Execute(context.Background(), ids.NewUserId(uuid.New()), useractivity.RecordEventInput{
 		Type: domain.EventTypePlay,
@@ -305,7 +325,7 @@ var _ ports.ActivityFeed = (*searchtest.RecordingActivityFeed)(nil)
 func TestRecordEventService_EmitsActivityOnRecordedEvent(t *testing.T) {
 	store := &searchtest.FakeEventStore{}
 	feed := &searchtest.RecordingActivityFeed{}
-	svc := useractivity.NewRecordEventService(store, useractivity.WithRecordEventActivityFeed(feed))
+	svc := searchtest.NewRecordEventWithFeed(t, store, feed)
 
 	err := svc.Execute(context.Background(), ids.NewUserId(uuid.New()), useractivity.RecordEventInput{
 		Type:    domain.EventTypeLibraryAdd,
@@ -323,7 +343,7 @@ func TestRecordEventService_EmitsActivityOnRecordedEvent(t *testing.T) {
 
 func TestRecordEventService_SkipsActivityOnStoreFailure(t *testing.T) {
 	feed := &searchtest.RecordingActivityFeed{}
-	svc := useractivity.NewRecordEventService(failingEventStore{}, useractivity.WithRecordEventActivityFeed(feed))
+	svc := searchtest.NewRecordEventWithFeed(t, failingEventStore{}, feed)
 
 	err := svc.Execute(context.Background(), ids.NewUserId(uuid.New()), useractivity.RecordEventInput{
 		Type: domain.EventTypePlay,
@@ -338,7 +358,7 @@ func TestRecordEventService_SkipsActivityOnStoreFailure(t *testing.T) {
 
 func TestRecordEvent_NonClientSubmittableRenders400(t *testing.T) {
 	store := &searchtest.FakeEventStore{}
-	svc := useractivity.NewRecordEventService(store)
+	svc := searchtest.NewRecordEvent(t, store)
 
 	err := svc.Execute(context.Background(), searchtest.NewUser(), useractivity.RecordEventInput{
 		Type: domain.EventTypeSearchPerformed,
@@ -362,7 +382,7 @@ func TestRecordEventService_Execute_RequiresEventIdForAcquisitionUiAndClientErro
 	for _, eventType := range []domain.EventType{domain.EventTypeAcquisitionUi, domain.EventTypeClientError} {
 		t.Run(eventType.String(), func(t *testing.T) {
 			store := &searchtest.FakeEventStore{}
-			svc := useractivity.NewRecordEventService(store)
+			svc := searchtest.NewRecordEvent(t, store)
 
 			err := svc.Execute(context.Background(), ids.NewUserId(uuid.New()), useractivity.RecordEventInput{
 				Type:    eventType,

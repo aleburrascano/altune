@@ -78,6 +78,7 @@ type Collaborators struct {
 	ResultCache   ports.ResultCache
 	ProviderCache ports.ProviderResultCache
 	HeldSlates    ports.HeldResultsCache
+	Behavior      rank.BehavioralScorer
 }
 
 var ErrCollaboratorRequired = errors.New("search service needs every collaborator, pass the absent adapter to switch one off")
@@ -102,6 +103,7 @@ func (c Collaborators) missing(bg *background.Tracker, breaker *providerguard.Ci
 		{"resultCache", c.ResultCache == nil},
 		{"providerCache", c.ProviderCache == nil},
 		{"heldSlates", c.HeldSlates == nil},
+		{"behavior", c.Behavior == nil},
 	} {
 		if check.missing {
 			missing = append(missing, check.name)
@@ -127,17 +129,6 @@ func WithTailDemotion() Option {
 func WithCrossKindProminence() Option {
 	return func(c *serviceConfig) error {
 		c.ranking.CrossKindProminence = true
-		return nil
-	}
-}
-
-func WithBehavioralRanking(consumer *rank.ListeningFeedback) Option {
-	return func(c *serviceConfig) error {
-		if consumer == nil {
-			return fmt.Errorf("%w: behavioral ranking needs its consumer", ErrInvalidOption)
-		}
-		c.ranking.BehavioralRanking = true
-		c.ranking.BehavioralConsumer = consumer
 		return nil
 	}
 }
@@ -174,7 +165,7 @@ func NewService(bg *background.Tracker, providers []ports.SearchProvider, circui
 	if missing := c.missing(bg, circuitBreaker); len(missing) > 0 {
 		return nil, fmt.Errorf("%w: %s", ErrCollaboratorRequired, strings.Join(missing, ", "))
 	}
-	cfg := serviceConfig{awaitDeadline: noDeadline}
+	cfg := serviceConfig{awaitDeadline: noDeadline, ranking: rank.RankingConfig{Behavior: c.Behavior}}
 	for _, opt := range opts {
 		if err := opt(&cfg); err != nil {
 			return nil, err
@@ -200,13 +191,17 @@ func assembleService(providers []ports.SearchProvider, circuitBreaker *providerg
 	if err != nil {
 		return nil, fmt.Errorf("vocabulary ingestor: %w", err)
 	}
+	ranking, err := rank.NewRankingExperiments(cfg.ranking, bg)
+	if err != nil {
+		return nil, fmt.Errorf("ranking experiments: %w", err)
+	}
 	return &Service{
 		providers:      providers,
 		circuitBreaker: circuitBreaker,
 		providerCache:  c.ProviderCache,
 		awaitDeadline:  cfg.awaitDeadline,
 		artwork:        c.Artwork,
-		ranking:        rank.NewRankingExperiments(cfg.ranking, bg),
+		ranking:        ranking,
 		favorites:      lifter,
 		correctionSvc:  correction,
 		related:        c.Related,

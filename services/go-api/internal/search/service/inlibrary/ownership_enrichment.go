@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/songfields"
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 )
@@ -36,16 +37,27 @@ type OwnershipEnrichmentService struct {
 	bg           *background.Tracker
 }
 
+var ErrCollaboratorRequired = errors.New("ownership enrichment needs its background tracker, ownership reader and track number filler, pass the absent filler to switch filling off")
+
+type AbsentTrackNumberFiller struct{}
+
+func (AbsentTrackNumberFiller) FillTrackNumber(context.Context, ids.UserId, string, int) error {
+	return nil
+}
+
 func NewOwnershipEnrichmentService(
 	bg *background.Tracker,
 	ownership ports.OwnershipReader,
 	trackNumbers ports.TrackNumberFiller,
-) *OwnershipEnrichmentService {
+) (*OwnershipEnrichmentService, error) {
+	if bg == nil || ownership == nil || trackNumbers == nil {
+		return nil, ErrCollaboratorRequired
+	}
 	return &OwnershipEnrichmentService{
 		ownership:    ownership,
 		trackNumbers: trackNumbers,
 		bg:           bg,
-	}
+	}, nil
 }
 
 func (s *OwnershipEnrichmentService) StampOwnership(
@@ -61,10 +73,6 @@ func (s *OwnershipEnrichmentService) stampOwnedItems(
 	userId ids.UserId,
 	items []OwnableItem,
 ) map[string]ports.OwnedTrack {
-	if s == nil || s.ownership == nil {
-		return nil
-	}
-
 	owned, err := s.ownership.OwnedByTitleArtist(ctx, userId)
 	if err != nil {
 		slog.WarnContext(ctx, "ownership.lookup_failed", "error", err)
@@ -120,7 +128,7 @@ func (s *OwnershipEnrichmentService) fillTrackNumbers(
 	pending map[string]int,
 ) <-chan struct{} {
 	done := make(chan struct{})
-	if s == nil || s.trackNumbers == nil || len(pending) == 0 {
+	if len(pending) == 0 {
 		close(done)
 		return done
 	}

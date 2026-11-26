@@ -125,7 +125,7 @@ func TestContentRateLimit_OneBudgetSpansEveryContentRoute(t *testing.T) {
 
 func TestEventRateLimit_DefaultBudgetThenRejects(t *testing.T) {
 	router := buildFrozenDefaultLimitsRouter(
-		search.DiscoveryServices{Event: search.NewRecordEventService(&recordingEventStore{})},
+		search.DiscoveryServices{Event: searchtest.NewRecordEvent(t, &recordingEventStore{})},
 		httpserver.MaxBodySize(1<<20),
 	)
 	body := discJsonBody(t, map[string]any{"type": "play"}).String()
@@ -274,9 +274,9 @@ func TestUnmeteredUserRoutes_AreThrottledPerUser(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			historyRepo := &fakeSearchHistoryRepo{}
 			h := search.MustNewDiscoveryHandler(search.DiscoveryServices{
-				History:      search.NewListSearchHistoryService(historyRepo),
-				ClearHistory: search.MustNewClearSearchHistoryService(historyRepo, time.Now),
-				Favorites:    search.NewFavoritesService(erroringFavoritesRepo{}),
+				History:      searchtest.NewListHistory(t, historyRepo),
+				ClearHistory: searchtest.NewClearHistory(t, historyRepo),
+				Favorites:    searchtest.NewFavorites(t, erroringFavoritesRepo{}),
 			}, time.Now).WithRateLimits(search.DiscoveryRateLimits{
 				History:   search.RequestLimit{Max: 1, Window: time.Hour},
 				Favorites: search.RequestLimit{Max: 1, Window: time.Hour},

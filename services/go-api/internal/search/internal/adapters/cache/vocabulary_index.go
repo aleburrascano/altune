@@ -112,11 +112,8 @@ func addEntryIndexes(pipe goredis.Pipeliner, ctx context.Context, norm, member s
 	for _, tri := range spellingmatch.Trigrams(norm) {
 		pipe.SAdd(ctx, vocabTriPrefix+tri, norm)
 	}
-	if metaphone != nil {
-		code := metaphone(norm)
-		if code != "" {
-			pipe.SAdd(ctx, vocabMetaPrefix+code, norm)
-		}
+	if code := metaphone(norm); code != "" {
+		pipe.SAdd(ctx, vocabMetaPrefix+code, norm)
 	}
 }
 
@@ -176,10 +173,8 @@ func (s *RedisVocabularyStore) queueEvict(ctx context.Context, pipe goredis.Pipe
 	for _, tri := range spellingmatch.Trigrams(norm) {
 		pipe.SRem(ctx, vocabTriPrefix+tri, norm)
 	}
-	if s.metaphone != nil {
-		if code := s.metaphone(norm); code != "" {
-			pipe.SRem(ctx, vocabMetaPrefix+code, norm)
-		}
+	if code := s.metaphone(norm); code != "" {
+		pipe.SRem(ctx, vocabMetaPrefix+code, norm)
 	}
 	pipe.Del(ctx, vocabEntryPfx+norm)
 }

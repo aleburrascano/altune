@@ -33,8 +33,7 @@ type Service struct {
 	genius   ports.GeniusSongCatalog
 	trackers ports.TrackerSongs
 	catalog  ports.ArtistCatalogTitles
-	cache    ports.UnreleasedCache
-	store    ports.UnreleasedStore
+	storage  Storage
 	cfg      Config
 
 	lifecycle context.Context
@@ -72,33 +71,36 @@ func (NoGenius) SongDetail(context.Context, int) (domain.GeniusSongDetail, error
 	return domain.GeniusSongDetail{}, ErrSourceNotConfigured
 }
 
-func NewService(genius ports.GeniusSongCatalog, catalog ports.ArtistCatalogTitles, cache ports.UnreleasedCache, cfg Config, opts ...Option) (*Service, error) {
+type Wiring struct {
+	Trackers  ports.TrackerSongs
+	Storage   Storage
+	Lifecycle context.Context
+	Jobs      *background.Tracker
+}
+
+func NewService(genius ports.GeniusSongCatalog, catalog ports.ArtistCatalogTitles, cfg Config, w Wiring) (*Service, error) {
 	for name, missing := range map[string]bool{
-		"genius":  genius == nil,
-		"catalog": catalog == nil,
-		"cache":   cache == nil,
+		"genius":    genius == nil,
+		"catalog":   catalog == nil,
+		"trackers":  w.Trackers == nil,
+		"storage":   w.Storage == nil,
+		"lifecycle": w.Lifecycle == nil,
+		"jobs":      w.Jobs == nil,
 	} {
 		if missing {
 			return nil, fmt.Errorf("%w: %s is nil", ErrCollaboratorRequired, name)
 		}
 	}
-	s := &Service{
+	return &Service{
 		genius:    genius,
+		trackers:  w.Trackers,
 		catalog:   catalog,
-		cache:     cache,
+		storage:   w.Storage,
 		cfg:       cfg,
-		lifecycle: context.Background(),
-		jobs:      &background.Tracker{},
+		lifecycle: w.Lifecycle,
+		jobs:      w.Jobs,
 		inflight:  map[string]*job{},
-	}
-	for _, opt := range opts {
-		opt(s)
-	}
-	return s, nil
-}
-
-func WithStore(store ports.UnreleasedStore) Option {
-	return func(s *Service) { s.store = store }
+	}, nil
 }
 
 func (s *Service) Rebuild(ctx context.Context, key ports.UnreleasedArtistKey, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, error) {
@@ -107,11 +109,7 @@ func (s *Service) Rebuild(ctx context.Context, key ports.UnreleasedArtistKey, ar
 	if err != nil {
 		return nil, err
 	}
-	if s.store != nil {
-		if err := s.store.Write(ctx, key, songs, complete, startedAt, CurrentBuildVersion); err != nil {
-			slog.WarnContext(ctx, "unreleased.store_write_failed", "error", err)
-		}
-	}
+	s.storage.persist(ctx, key, songs, complete, startedAt)
 	return songs, nil
 }
 
@@ -120,21 +118,7 @@ func (s *Service) List(ctx context.Context, provider domain.ProviderName, extern
 	if artistName == "" {
 		return []domain.UnreleasedSong{}, nil
 	}
-	if s.store != nil {
-		return s.Rebuild(ctx, ports.UnreleasedArtistKey{Provider: provider, ExternalID: externalID}, artistName, known)
-	}
-	nameKey := textnorm.NormalizeForIdentity(artistName)
-	if songs, ok := s.cache.Get(ctx, provider, externalID, nameKey); ok {
-		return songs, nil
-	}
-	songs, complete, err := s.build(ctx, provider, externalID, artistName, known)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.cache.Set(ctx, provider, externalID, nameKey, songs, s.cacheTTL(songs, complete)); err != nil {
-		slog.WarnContext(ctx, "unreleased.cache_set_failed", "error", err)
-	}
-	return songs, nil
+	return s.storage.list(ctx, s, provider, externalID, artistName, known)
 }
 
 func (s *Service) cacheTTL(songs []domain.UnreleasedSong, complete bool) time.Duration {

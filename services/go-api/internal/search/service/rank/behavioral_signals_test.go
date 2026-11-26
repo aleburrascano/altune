@@ -24,7 +24,7 @@ func TestSatisfactionConsumer_RefreshPublishesScores(t *testing.T) {
 		{ResultSignature: "track|hello|adele", Score: 3},
 		{ResultSignature: "track|noise|ugc", Score: -2},
 	}}
-	ranking := rank.NewRankingExperiments(rank.RankingConfig{BehavioralRanking: true, BehavioralConsumer: rank.NewSatisfactionConsumer(store)}, nil)
+	ranking := newRanking(t, scoringFor(t, store))
 
 	if got := ranking.RankOptions().Behavioral; got != nil {
 		t.Fatalf("snapshot should be nil before first refresh, got %v", got)
@@ -39,10 +39,45 @@ func TestSatisfactionConsumer_RefreshPublishesScores(t *testing.T) {
 	}
 }
 
-func TestBehavioralRankingDisabled_SnapshotNil(t *testing.T) {
-	store := &fakeSignalStore{signals: []ports.BehavioralSignal{{ResultSignature: "x", Score: 9}}}
-	ranking := rank.NewRankingExperiments(rank.RankingConfig{}, nil)
-	ranking.BehavioralConsumer = rank.NewSatisfactionConsumer(store)
+func newRanking(t *testing.T, behavior rank.BehavioralScorer) *rank.RankingExperiments {
+	t.Helper()
+	ranking, err := rank.NewRankingExperiments(rank.RankingConfig{Behavior: behavior}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ranking
+}
+
+func scoringFor(t *testing.T, store ports.ListeningSignalStore) rank.BehavioralScorer {
+	t.Helper()
+	scoring, err := rank.NewBehavioralScoring(rank.NewSatisfactionConsumer(store))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return scoring
+}
+
+func TestRankingExperiments_RefuseAMissingBehavioralScorer(t *testing.T) {
+	ranking, err := rank.NewRankingExperiments(rank.RankingConfig{}, nil)
+
+	if ranking != nil || !errors.Is(err, rank.ErrBehaviorRequired) {
+		t.Fatalf("got (%v, %v), want a refusal wrapping ErrBehaviorRequired", ranking, err)
+	}
+}
+
+func TestNewBehavioralScoring_RefusesAMissingConsumer(t *testing.T) {
+	scoring, err := rank.NewBehavioralScoring(nil)
+
+	if scoring != nil || !errors.Is(err, rank.ErrBehavioralConsumerRequired) {
+		t.Fatalf("got (%v, %v), want a refusal wrapping ErrBehavioralConsumerRequired", scoring, err)
+	}
+}
+
+func TestBehavioralRankingOff_SnapshotNilAndRefreshIsInert(t *testing.T) {
+	ranking := newRanking(t, rank.NoBehavioralScoring{})
+	if err := ranking.RefreshBehavioralScores(context.Background()); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
 	if got := ranking.RankOptions().Behavioral; got != nil {
 		t.Errorf("snapshot must be nil when behavioral ranking is off, got %v", got)
 	}
@@ -66,16 +101,9 @@ func (f *mutableSignalStore) set(signals []ports.BehavioralSignal, err error) {
 	f.signals, f.err = signals, err
 }
 
-func TestRefreshBehavioralScores_NoConsumerIsNoop(t *testing.T) {
-	ranking := rank.NewRankingExperiments(rank.RankingConfig{}, nil)
-	if err := ranking.RefreshBehavioralScores(context.Background()); err != nil {
-		t.Fatalf("no-consumer refresh must be a nil no-op, got %v", err)
-	}
-}
-
 func TestRefreshBehavioralScores_ErrorKeepsLastSnapshot(t *testing.T) {
 	store := &mutableSignalStore{signals: []ports.BehavioralSignal{{ResultSignature: "sig", Score: 2}}}
-	ranking := rank.NewRankingExperiments(rank.RankingConfig{BehavioralRanking: true, BehavioralConsumer: rank.NewSatisfactionConsumer(store)}, nil)
+	ranking := newRanking(t, scoringFor(t, store))
 
 	if err := ranking.RefreshBehavioralScores(context.Background()); err != nil {
 		t.Fatal(err)

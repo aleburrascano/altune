@@ -3,22 +3,22 @@ package outbound
 import (
 	"altune/go-api/internal/platform/outbound/internal/pacing"
 	"altune/go-api/internal/platform/outbound/internal/retry"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 )
 
-type LiveOption func(*retry.Options)
+var ErrRetryRecorderRequired = errors.New("live transport needs a retry recorder, pass NoRetryRecorder to switch it off")
 
-func WithRetryRecorder(record func(host string)) LiveOption {
-	return func(o *retry.Options) { o.OnRetry = record }
-}
+func NoRetryRecorder(string) {}
 
-func NewLiveTransport(opts ...LiveOption) http.RoundTripper {
-	o := retry.Options{}
-	for _, opt := range opts {
-		opt(&o)
+func NewLiveTransport(onRetry func(host string)) http.RoundTripper {
+	if onRetry == nil {
+		return refusedTransport{err: ErrRetryRecorderRequired}
 	}
+	o := retry.SystemOptions()
+	o.OnRetry = onRetry
 	pacer, err := pacing.New(time.Now)
 	if err != nil {
 		return refusedTransport{err: fmt.Errorf("build the live transport pacer: %w", err)}

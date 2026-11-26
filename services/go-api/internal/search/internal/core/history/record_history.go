@@ -21,7 +21,7 @@ type RecordSearchHistoryService struct {
 	now         clock.Func
 }
 
-var ErrCollaboratorRequired = errors.New("history recorder needs its repository, pass the absent adapter to switch it off")
+var ErrCollaboratorRequired = errors.New("history services need their repository, pass the absent adapter to switch it off")
 
 func NewRecordSearchHistoryService(historyRepo ports.HistoryWriter, now clock.Func) (*RecordSearchHistoryService, error) {
 	if historyRepo == nil {

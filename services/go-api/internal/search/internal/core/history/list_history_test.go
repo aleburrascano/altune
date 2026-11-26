@@ -2,6 +2,7 @@ package history_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -34,7 +35,6 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 	tests := []struct {
 		name      string
 		repo      *search.FakeHistoryReader
-		nilRepo   bool
 		limit     int
 		wantCount int
 		wantErr   bool
@@ -82,13 +82,6 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 			wantErr:   false,
 		},
 		{
-			name:      "nil repo returns nil",
-			nilRepo:   true,
-			limit:     5,
-			wantCount: 0,
-			wantErr:   false,
-		},
-		{
 			name: "repo error propagates",
 			repo: &search.FakeHistoryReader{
 				ListDistinctFn: func(_ context.Context, _ ids.UserId, _ int) ([]*search.SearchHistoryEntry, error) {
@@ -102,12 +95,7 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var svc *search.ListSearchHistoryService
-			if tt.nilRepo {
-				svc = search.NewListSearchHistoryService(nil)
-			} else {
-				svc = search.NewListSearchHistoryService(tt.repo)
-			}
+			svc := searchtest.NewListHistory(t, tt.repo)
 
 			entries, err := svc.Execute(context.Background(), userID, tt.limit)
 
@@ -121,5 +109,13 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 				t.Errorf("expected %d entries, got %d", tt.wantCount, len(entries))
 			}
 		})
+	}
+}
+
+func TestListSearchHistoryService_RefusesAMissingRepository(t *testing.T) {
+	svc, err := search.NewListSearchHistoryService(nil)
+
+	if svc != nil || !errors.Is(err, search.ErrHistoryCollaboratorRequired) {
+		t.Fatalf("got (%v, %v), want a refusal wrapping ErrHistoryCollaboratorRequired", svc, err)
 	}
 }

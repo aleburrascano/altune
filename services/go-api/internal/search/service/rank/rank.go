@@ -15,6 +15,8 @@ const rrfK = 60
 
 type demoteFunc func(domain.SearchResult) bool
 
+func demoteNothing(domain.SearchResult) bool { return false }
+
 type scored struct {
 	result domain.SearchResult
 	key    resultorder.Key
@@ -27,7 +29,7 @@ type rankConfig struct {
 }
 
 func Rank(entities []Entity, queryNorm string) []domain.SearchResult {
-	return rankWith(entities, queryNorm, rankConfig{})
+	return rankWith(entities, queryNorm, RankOptions{}.config())
 }
 
 func rankWith(entities []Entity, queryNorm string, cfg rankConfig) []domain.SearchResult {
@@ -53,10 +55,7 @@ func rankScored(entities []Entity, queryNorm string, cfg rankConfig) []scored {
 	results := make([]scored, 0, len(eligible))
 	for _, e := range eligible {
 		r := e.Result
-		demoted := false
-		if cfg.demote != nil {
-			demoted = cfg.demote(r)
-		}
+		demoted := cfg.demote(r)
 		prominence := 0.0
 		if cfg.prominence {
 			prominence = prominenceOf(r)
@@ -187,7 +186,7 @@ type RankOptions struct {
 }
 
 func (o RankOptions) config() rankConfig {
-	cfg := rankConfig{behavioral: o.Behavioral, prominence: o.CrossKindProminence}
+	cfg := rankConfig{demote: demoteNothing, behavioral: o.Behavioral, prominence: o.CrossKindProminence}
 	if o.TailDemotion {
 		cfg.demote = isLowConfidenceTail
 	}

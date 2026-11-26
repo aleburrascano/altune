@@ -36,10 +36,21 @@ type Client struct {
 	index   ports.TrackerIndexCache
 }
 
-func NewClient(liveClient *http.Client, apiKey, hubSheetID string, index ports.TrackerIndexCache) *Client {
+type NoIndexCache struct{}
+
+func (NoIndexCache) Get(context.Context) (map[string]string, bool) { return nil, false }
+
+func (NoIndexCache) Set(context.Context, map[string]string, time.Duration) error { return nil }
+
+var ErrCollaboratorRequired = errors.New("tracker sheet client needs its http client and index cache")
+
+func NewClient(liveClient *http.Client, apiKey, hubSheetID string, index ports.TrackerIndexCache) (*Client, error) {
+	if liveClient == nil || index == nil {
+		return nil, ErrCollaboratorRequired
+	}
 	own := *liveClient
 	own.Timeout = requestTimeout
-	return &Client{http: &own, baseURL: sheetsBaseURL, apiKey: apiKey, hubID: hubSheetID, index: index}
+	return &Client{http: &own, baseURL: sheetsBaseURL, apiKey: apiKey, hubID: hubSheetID, index: index}, nil
 }
 
 func (c *Client) ArtistSongs(ctx context.Context, artistName string) ([]domain.UnreleasedSong, error) {
@@ -72,10 +83,8 @@ func (c *Client) Artists(ctx context.Context) ([]string, error) {
 }
 
 func (c *Client) hubIndex(ctx context.Context) (map[string]string, error) {
-	if c.index != nil {
-		if cached, ok := c.index.Get(ctx); ok {
-			return cached, nil
-		}
+	if cached, ok := c.index.Get(ctx); ok {
+		return cached, nil
 	}
 	body, err := c.fetch(ctx, c.hubID, gridQuery(hubRange))
 	if err != nil {
@@ -90,7 +99,7 @@ func (c *Client) hubIndex(ctx context.Context) (map[string]string, error) {
 }
 
 func (c *Client) storeIndex(ctx context.Context, index map[string]string) {
-	if c.index == nil || len(index) == 0 {
+	if len(index) == 0 {
 		return
 	}
 	if err := c.index.Set(ctx, index, hubIndexTTL); err != nil {

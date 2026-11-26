@@ -143,7 +143,7 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 			}
 			dto := contentFetchToDTO(resp)
 			if userId, hasUser := requestuser.UserIDFromContext(r.Context()); hasUser {
-				h.ownership.EnrichAlbumTracks(r.Context(), userId, albumTrackItems(albumTitle, dto.Items))
+				h.enrichAlbumOwnership(r.Context(), userId, albumTrackItems(albumTitle, dto.Items))
 			}
 			httpserver.WriteJSON(w, http.StatusOK, dto)
 		})
@@ -281,7 +281,7 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 				Albums:    contentFetchToDTO(albumsResp),
 			}
 			if userId, hasUser := requestuser.UserIDFromContext(r.Context()); hasUser {
-				h.ownership.StampOwnership(r.Context(), userId, ownableItems(dto.TopTracks.Items))
+				h.stampOwnership(r.Context(), userId, ownableItems(dto.TopTracks.Items))
 			}
 			httpserver.WriteJSON(w, http.StatusOK, dto)
 		})

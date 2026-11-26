@@ -13,7 +13,7 @@ import (
 func TestService_Warm_RecordsEachArtistOnce(t *testing.T) {
 	store := &search.FakeUnreleasedStore{}
 	var jobs background.Tracker
-	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, search.UnreleasedConfig{}, search.WithUnreleasedStore(store), search.WithUnreleasedLifecycle(context.Background(), &jobs)))
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.UnreleasedConfig{}, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store), searchtest.UnreleasedLifecycle(context.Background(), &jobs))))
 
 	svc.Warm([]search.ArtistToRefresh{
 		{Provider: search.ProviderDeezer, ExternalID: "27", Name: "Drake"},
@@ -31,7 +31,7 @@ func TestService_Warm_RecordsEachArtistOnce(t *testing.T) {
 func TestService_Warm_StoreErrorIsOnlyLogged(t *testing.T) {
 	store := &search.FakeUnreleasedStore{RecordErr: errors.New("db down")}
 	var jobs background.Tracker
-	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, search.UnreleasedConfig{}, search.WithUnreleasedStore(store), search.WithUnreleasedLifecycle(context.Background(), &jobs)))
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.UnreleasedConfig{}, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store), searchtest.UnreleasedLifecycle(context.Background(), &jobs))))
 
 	svc.Warm([]search.ArtistToRefresh{{Provider: search.ProviderDeezer, ExternalID: "27", Name: "Drake"}})
 	jobs.Wait()

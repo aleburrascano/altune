@@ -52,7 +52,7 @@ func recordedDueStore(due ...search.UnreleasedDueArtist) *dueStore {
 
 func refreshService(genius search.GeniusSongCatalog, store *dueStore) *search.UnreleasedService {
 	cfg := search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2, Wait: time.Second}
-	return searchtest.MustUnreleased(search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, cfg, search.WithUnreleasedStore(store)))
+	return searchtest.MustUnreleased(search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{}, cfg, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store))))
 }
 
 func TestService_RefreshDue_RebuildsExactlyTheArtistsDueReturns(t *testing.T) {

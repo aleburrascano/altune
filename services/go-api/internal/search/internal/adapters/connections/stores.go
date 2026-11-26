@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/search/internal/phonetics"
 	"altune/go-api/internal/shared/textnorm"
 	"expvar"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -23,16 +24,24 @@ type Stores struct {
 	Identities    ports.IdentityStore
 }
 
-func NewStores(d Deps) Stores {
+func NewStores(d Deps) (Stores, error) {
+	var vocabulary ports.SpellingHintsStore
+	if d.Redis != nil {
+		store, err := newVocabularyStore(d.Redis, d.CacheOps)
+		if err != nil {
+			return Stores{}, err
+		}
+		vocabulary = store
+	}
 	return Stores{
 		Pool:          d.Pool,
 		Redis:         d.Redis,
 		CacheOps:      d.CacheOps,
 		Events:        persistence.NewPostgresEventStore(d.Pool),
 		History:       persistence.NewPostgresSearchHistoryRepository(d.Pool),
-		SpellingHints: newVocabularyStore(d.Redis, d.CacheOps),
+		SpellingHints: vocabulary,
 		Identities:    identityStore(d),
-	}
+	}, nil
 }
 
 func identityStore(d Deps) ports.IdentityStore {
@@ -45,16 +54,17 @@ func identityStore(d Deps) ports.IdentityStore {
 	return cache.NewRedisIdentityStore(persistence.NewPostgresIdentityStore(d.Pool), d.Redis, cacheOption(d.CacheOps))
 }
 
-func newVocabularyStore(redis *goredis.Client, cacheOps *expvar.Map) ports.SpellingHintsStore {
-	if redis == nil {
-		return nil
-	}
-	return cache.NewVocabularyStore(
+func newVocabularyStore(redis *goredis.Client, cacheOps *expvar.Map) (ports.SpellingHintsStore, error) {
+	store, err := cache.NewVocabularyStore(
 		redis,
 		textnorm.NormalizeForMatch,
-		cache.WithMetaphone(phonetics.MetaphoneKey),
+		phonetics.MetaphoneKey,
 		cache.WithVocabSignal(cache.NewSignal(cacheOps, time.Now)),
 	)
+	if err != nil {
+		return nil, fmt.Errorf("build the vocabulary store: %w", err)
+	}
+	return store, nil
 }
 
 func (s Stores) CacheOption() cache.Option {

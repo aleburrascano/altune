@@ -54,7 +54,10 @@ func New(d connections.Deps) (*Discovery, error) {
 	if err := d.MissingHandles(); err != nil {
 		return nil, err
 	}
-	w := newWiring(d)
+	w, err := newWiring(d)
+	if err != nil {
+		return nil, err
+	}
 	t, s := w.table, w.stores
 	services, err := newHandlerServices(w)
 	if err != nil {
@@ -89,11 +92,17 @@ func New(d connections.Deps) (*Discovery, error) {
 	}, nil
 }
 
-func newWiring(d connections.Deps) wiring {
-	s := connections.NewStores(d)
-	t := newProviderTable(d.Providers, connections.NewClients(d), s)
+func newWiring(d connections.Deps) (wiring, error) {
+	s, err := connections.NewStores(d)
+	if err != nil {
+		return wiring{}, fmt.Errorf("build the stores: %w", err)
+	}
+	t, err := newProviderTable(d.Providers, connections.NewClients(d), s)
+	if err != nil {
+		return wiring{}, fmt.Errorf("build the provider table: %w", err)
+	}
 	t.log(d.Lifecycle, d.Logger)
-	return wiring{deps: d, table: t, stores: s, artwork: t.artworkChain()}
+	return wiring{deps: d, table: t, stores: s, artwork: t.artworkChain()}, nil
 }
 
 func (d *Discovery) RankingOnlySearch() *query.Service {
@@ -127,13 +136,25 @@ func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 	if err != nil {
 		return handler.DiscoveryServices{}, fmt.Errorf("build the related tracks service: %w", err)
 	}
+	listHistory, err := history.NewListSearchHistoryService(s.History)
+	if err != nil {
+		return handler.DiscoveryServices{}, fmt.Errorf("build the history list service: %w", err)
+	}
 	clearHistory, err := history.NewClearSearchHistoryService(s.History, time.Now)
 	if err != nil {
 		return handler.DiscoveryServices{}, fmt.Errorf("build the clear-history service: %w", err)
 	}
+	favoritesService, err := favorites.NewFavoritesService(persistence.NewPostgresFavoritesRepository(s.Pool))
+	if err != nil {
+		return handler.DiscoveryServices{}, fmt.Errorf("build the favorites service: %w", err)
+	}
+	eventService, err := newEventService(w.deps.Activity, s)
+	if err != nil {
+		return handler.DiscoveryServices{}, fmt.Errorf("build the event service: %w", err)
+	}
 	return handler.DiscoveryServices{
 		Search:        search,
-		History:       history.NewListSearchHistoryService(s.History),
+		History:       listHistory,
 		RecordHistory: recordHistory,
 		ClearHistory:  clearHistory,
 		Album:         album,
@@ -141,21 +162,28 @@ func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 		Related:       relatedTracks,
 		Enrich:        enrichment,
 		Suggest:       vocabulary.NewSuggestService(s.SpellingHints),
-		Event:         newEventService(w.deps.Activity, s),
-		Favorites:     favorites.NewFavoritesService(persistence.NewPostgresFavoritesRepository(s.Pool)),
+		Event:         eventService,
+		Favorites:     favoritesService,
 	}, nil
 }
 
-func newEventService(activity ports.ActivityFeed, s connections.Stores) *useractivity.RecordEventService {
-	return useractivity.NewRecordEventService(s.Events, useractivity.WithRecordEventActivityFeed(activity))
+func newEventService(activity ports.ActivityFeed, s connections.Stores) (*useractivity.RecordEventService, error) {
+	if activity == nil {
+		activity = useractivity.NoopActivityFeed{}
+	}
+	return useractivity.NewRecordEventService(s.Events, activity)
 }
 
 func newHandler(d connections.Deps, t *providerTable, s connections.Stores, services handler.DiscoveryServices, unreleasedLookup *unreleased.Service) (*handler.DiscoveryHandler, error) {
+	enrichers, err := newDetailEnrichers(t, s)
+	if err != nil {
+		return nil, err
+	}
 	h, err := handler.NewDiscoveryHandler(services, time.Now)
 	if err != nil {
 		return nil, fmt.Errorf("build the discovery handler: %w", err)
 	}
-	h.WithDetailEnrichers(newDetailEnrichers(t, s))
+	h.WithDetailEnrichers(enrichers)
 	h.WithUnreleased(unreleasedLookup)
 	return h.WithClientEvents(d.ClientEvents), nil
 }

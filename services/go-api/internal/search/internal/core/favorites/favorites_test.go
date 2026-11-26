@@ -147,7 +147,7 @@ func TestSearchLift_OneUsersFavoritesDoNotReorderTheCachedRankingOthersSee(t *te
 
 func TestFavoritesService_AddNormalizesKey(t *testing.T) {
 	repo := &search.FakeFavoritesRepo{}
-	svc := search.NewFavoritesService(repo)
+	svc := searchtest.NewFavorites(t, repo)
 
 	err := svc.Add(context.Background(), ids.UserId{}, search.Favorite{
 		Kind:  search.ResultKindArtist,
@@ -161,8 +161,16 @@ func TestFavoritesService_AddNormalizesKey(t *testing.T) {
 	}
 }
 
+func TestFavoritesService_RefusesAMissingRepository(t *testing.T) {
+	svc, err := search.NewFavoritesService(nil)
+
+	if svc != nil || !errors.Is(err, search.ErrFavoritesCollaboratorRequired) {
+		t.Fatalf("got (%v, %v), want a refusal wrapping ErrFavoritesCollaboratorRequired", svc, err)
+	}
+}
+
 func TestFavoritesService_AddRejectsEmptyTitle(t *testing.T) {
-	svc := search.NewFavoritesService(&search.FakeFavoritesRepo{})
+	svc := searchtest.NewFavorites(t, &search.FakeFavoritesRepo{})
 	if err := svc.Add(context.Background(), ids.UserId{}, search.Favorite{Kind: search.ResultKindArtist}); err == nil {
 		t.Error("expected an error for a favorite with no title")
 	}
@@ -182,7 +190,7 @@ func assertTypedError(t *testing.T, err error, wantKind apierror.Kind, wantCode 
 func assertRejectedWithoutWriting(t *testing.T, fav search.Favorite) {
 	t.Helper()
 	repo := &search.FakeFavoritesRepo{}
-	err := search.NewFavoritesService(repo).Add(context.Background(), ids.UserId{}, fav)
+	err := searchtest.NewFavorites(t, repo).Add(context.Background(), ids.UserId{}, fav)
 
 	assertTypedError(t, err, apierror.KindInvalid, "discovery.invalid_favorite")
 	if len(repo.Added) != 0 {
@@ -223,7 +231,7 @@ func TestFavoritesAdd_AcceptsFieldsAtTheirCaps(t *testing.T) {
 		ImageURL: "https://img.example/" + strings.Repeat("a", maxFavoriteImageURLBytes-len("https://img.example/")),
 	}
 
-	if err := search.NewFavoritesService(repo).Add(context.Background(), ids.UserId{}, fav); err != nil {
+	if err := searchtest.NewFavorites(t, repo).Add(context.Background(), ids.UserId{}, fav); err != nil {
 		t.Fatalf("Add at the caps: %v", err)
 	}
 	if len(repo.Added) != 1 {
@@ -251,7 +259,7 @@ func TestFavoritesAdd_StoresExactlyTheImageURLsSearchWouldShow(t *testing.T) {
 		t.Run(imageURL, func(t *testing.T) {
 			repo := &search.FakeFavoritesRepo{}
 			fav := search.Favorite{Kind: search.ResultKindAlbum, Title: "DAMN.", ImageURL: imageURL}
-			if err := search.NewFavoritesService(repo).Add(context.Background(), ids.UserId{}, fav); err != nil {
+			if err := searchtest.NewFavorites(t, repo).Add(context.Background(), ids.UserId{}, fav); err != nil {
 				t.Fatalf("Add rejected an image_url search shows: %v", err)
 			}
 		})
@@ -265,7 +273,7 @@ func TestFavoritesAdd_StoresExactlyTheImageURLsSearchWouldShow(t *testing.T) {
 
 func TestFavoritesRemove_OversizeTitleStillDeletes(t *testing.T) {
 	repo := &search.FakeFavoritesRepo{}
-	err := search.NewFavoritesService(repo).Remove(context.Background(), ids.UserId{},
+	err := searchtest.NewFavorites(t, repo).Remove(context.Background(), ids.UserId{},
 		search.ResultKindAlbum, strings.Repeat("a", maxFavoriteTextRunes+1), "")
 	if err != nil {
 		t.Fatalf("Remove: %v", err)
@@ -277,7 +285,7 @@ func TestFavoritesRemove_OversizeTitleStillDeletes(t *testing.T) {
 
 func TestFavoritesAdd_OverThePerUserCapIsATypedConflict(t *testing.T) {
 	repo := &search.FakeFavoritesRepo{Err: fmt.Errorf("insert favorite: %w", search.ErrFavoritesFull)}
-	err := search.NewFavoritesService(repo).Add(context.Background(), ids.UserId{},
+	err := searchtest.NewFavorites(t, repo).Add(context.Background(), ids.UserId{},
 		search.Favorite{Kind: search.ResultKindAlbum, Title: "DAMN.", Subtitle: "Kendrick Lamar"})
 
 	assertTypedError(t, err, apierror.KindConflict, "discovery.favorites_full")

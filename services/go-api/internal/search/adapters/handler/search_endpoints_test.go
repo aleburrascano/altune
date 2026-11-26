@@ -122,7 +122,7 @@ func TestHandleRecordEvent_LabelCriticalRequiresValidEventID(t *testing.T) {
 		for _, tc := range cases {
 			t.Run(eventType+"/"+tc.name, func(t *testing.T) {
 				store := &recordingEventStore{}
-				router := buildEventRouter(store)
+				router := buildEventRouter(t, store)
 				body := map[string]any{"type": eventType, "payload": map[string]any{"result_signature": "sig"}}
 				if tc.eventID != nil {
 					body["event_id"] = tc.eventID
@@ -144,7 +144,7 @@ func TestHandleRecordEvent_MalformedEventIDRejectedForEveryType(t *testing.T) {
 	for _, eventType := range []string{"play", "skip", "completed", "result_clicked", "results_shown", "playback_health"} {
 		t.Run(eventType, func(t *testing.T) {
 			store := &recordingEventStore{}
-			router := buildEventRouter(store)
+			router := buildEventRouter(t, store)
 			body := map[string]any{"type": eventType, "event_id": "not-a-uuid"}
 
 			rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
@@ -183,7 +183,7 @@ func TestHandleRecordEvent_AcceptsEveryRealClientShape(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			store := &recordingEventStore{}
-			router := buildEventRouter(store)
+			router := buildEventRouter(t, store)
 
 			rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, tc.body))
 
@@ -332,8 +332,8 @@ func buildSuggestRouter(vocab *fakeVocabStore) chi.Router {
 	return r
 }
 
-func buildEventRouter(store *recordingEventStore) chi.Router {
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Event: search.NewRecordEventService(store)}, time.Now)
+func buildEventRouter(t *testing.T, store *recordingEventStore) chi.Router {
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Event: searchtest.NewRecordEvent(t, store)}, time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Use(httpserver.MaxBodySize(1 << 20))
@@ -589,7 +589,7 @@ func TestHandleClearSearchHistory_NoAuthReturns401(t *testing.T) {
 }
 
 func TestHandleRecordEvent_StoreErrorReturns500(t *testing.T) {
-	router := buildEventRouter(&recordingEventStore{err: context.DeadlineExceeded})
+	router := buildEventRouter(t, &recordingEventStore{err: context.DeadlineExceeded})
 
 	body := map[string]any{"type": "play"}
 	rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
@@ -597,7 +597,7 @@ func TestHandleRecordEvent_StoreErrorReturns500(t *testing.T) {
 }
 
 func TestHandleRecordEvent_OversizedBodyReturns413(t *testing.T) {
-	router := buildEventRouter(&recordingEventStore{})
+	router := buildEventRouter(t, &recordingEventStore{})
 
 	oversized := `{"type":"play","query_norm":"` + strings.Repeat("a", 1<<20) + `"}`
 	rec := discServe(t, router, http.MethodPost, "/discovery/events", strings.NewReader(oversized))
@@ -607,7 +607,7 @@ func TestHandleRecordEvent_OversizedBodyReturns413(t *testing.T) {
 func TestHandleRecordEvent_ClientOccurredAt(t *testing.T) {
 	t.Run("valid RFC3339 is carried into the event", func(t *testing.T) {
 		store := &recordingEventStore{}
-		router := buildEventRouter(store)
+		router := buildEventRouter(t, store)
 
 		body := map[string]any{"type": "play", "client_occurred_at": "2026-07-24T10:00:00Z"}
 		rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
@@ -624,7 +624,7 @@ func TestHandleRecordEvent_ClientOccurredAt(t *testing.T) {
 
 	t.Run("malformed value is dropped, event still recorded", func(t *testing.T) {
 		store := &recordingEventStore{}
-		router := buildEventRouter(store)
+		router := buildEventRouter(t, store)
 
 		body := map[string]any{"type": "play", "client_occurred_at": "yesterday"}
 		rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
@@ -640,7 +640,7 @@ func TestHandleRecordEvent_ClientOccurredAt(t *testing.T) {
 }
 
 func TestHandleRecordEvent_ServerReservedTypes(t *testing.T) {
-	router := buildEventRouter(&recordingEventStore{})
+	router := buildEventRouter(t, &recordingEventStore{})
 
 	for _, reserved := range []string{"search_performed"} {
 		body := map[string]any{"type": reserved}
@@ -653,7 +653,7 @@ func TestHandleRecordEvent_ServerReservedTypes(t *testing.T) {
 
 func TestHandleRecordEvent_ResultsShownIsClientSubmittable(t *testing.T) {
 	store := &recordingEventStore{}
-	router := buildEventRouter(store)
+	router := buildEventRouter(t, store)
 
 	body := map[string]any{
 		"type":      "results_shown",
@@ -673,7 +673,7 @@ func TestHandleRecordEvent_ResultsShownIsClientSubmittable(t *testing.T) {
 
 func TestHandleRecordEvent_SearchFailedIsClientSubmittable(t *testing.T) {
 	store := &recordingEventStore{}
-	router := buildEventRouter(store)
+	router := buildEventRouter(t, store)
 
 	body := map[string]any{
 		"type":    "search_failed",
@@ -695,7 +695,7 @@ func TestHandleRecordEvent_SearchFailedIsClientSubmittable(t *testing.T) {
 
 func TestHandleRecordEvent_SearchDegradedIsClientSubmittable(t *testing.T) {
 	store := &recordingEventStore{}
-	router := buildEventRouter(store)
+	router := buildEventRouter(t, store)
 
 	body := map[string]any{
 		"type":       "search_degraded",
@@ -719,7 +719,7 @@ func TestHandleRecordEvent_SearchDegradedIsClientSubmittable(t *testing.T) {
 
 func TestHandleRecordEvent_PlaybackHealthIsClientSubmittable(t *testing.T) {
 	store := &recordingEventStore{}
-	router := buildEventRouter(store)
+	router := buildEventRouter(t, store)
 
 	body := map[string]any{
 		"type": "playback_health",
@@ -744,7 +744,7 @@ func TestHandleRecordEvent_PlaybackHealthIsClientSubmittable(t *testing.T) {
 
 func TestHandleRecordEvent_DetailHealthIsClientSubmittable(t *testing.T) {
 	store := &recordingEventStore{}
-	router := buildEventRouter(store)
+	router := buildEventRouter(t, store)
 
 	body := map[string]any{
 		"type": "detail_health",
@@ -771,7 +771,7 @@ func TestHandleRecordEvent_IgnoresClientQueryNorm(t *testing.T) {
 	for _, typ := range []string{"result_clicked", "play", "skip", "completed", "library_add", "wrong_album"} {
 		t.Run(typ, func(t *testing.T) {
 			store := &recordingEventStore{}
-			router := buildEventRouter(store)
+			router := buildEventRouter(t, store)
 			searchID := "6f1c1c1e-0000-4000-8000-000000000001"
 
 			body := map[string]any{
@@ -1315,7 +1315,7 @@ func eventBodyWithJunk(t *testing.T, junkBytes int) string {
 
 func TestRecordEvent_OversizedPayloadsAreNeverStored(t *testing.T) {
 	store := &recordingEventStore{}
-	router := buildEventRouter(store)
+	router := buildEventRouter(t, store)
 	body := eventBodyWithJunk(t, 900<<10)
 
 	for i := range 100 {
@@ -1331,7 +1331,7 @@ func TestRecordEvent_OversizedPayloadsAreNeverStored(t *testing.T) {
 }
 
 func TestRecordEvent_PayloadOverTheCapAnswersWithTheInvalidEventCode(t *testing.T) {
-	router := buildEventRouter(&recordingEventStore{})
+	router := buildEventRouter(t, &recordingEventStore{})
 
 	rec := discServe(t, router, http.MethodPost, "/discovery/events", strings.NewReader(eventBodyWithJunk(t, 16<<10)))
 
@@ -1339,7 +1339,7 @@ func TestRecordEvent_PayloadOverTheCapAnswersWithTheInvalidEventCode(t *testing.
 }
 
 func TestRecordEvent_BodyPastTheRouteCapIs413TooLarge(t *testing.T) {
-	router := buildEventRouter(&recordingEventStore{})
+	router := buildEventRouter(t, &recordingEventStore{})
 
 	rec := discServe(t, router, http.MethodPost, "/discovery/events", strings.NewReader(eventBodyWithJunk(t, 900<<10)))
 
@@ -1607,7 +1607,7 @@ func TestHandleRecordEvent_UserTelemetryEnvelopesAreAccepted(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			store := &recordingEventStore{}
-			router := buildEventRouter(store)
+			router := buildEventRouter(t, store)
 
 			rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, tc.body))
 
@@ -1637,7 +1637,7 @@ func TestHandleRecordEvent_NearMissUserTelemetryTypesAreRejected(t *testing.T) {
 	} {
 		t.Run(typ, func(t *testing.T) {
 			store := &recordingEventStore{}
-			router := buildEventRouter(store)
+			router := buildEventRouter(t, store)
 
 			rec := discServe(t, router, http.MethodPost, "/discovery/events",
 				discJsonBody(t, map[string]any{"type": typ, "payload": map[string]any{"session_id": "s-1"}}))
@@ -1683,8 +1683,8 @@ func (l *recordingLogger) Enabled(context.Context, log.EnabledParameters) bool {
 	return true
 }
 
-func buildClientEventRouter(logger *recordingLogger) chi.Router {
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Event: search.NewRecordEventService(&recordingEventStore{})}, time.Now).
+func buildClientEventRouter(t *testing.T, logger *recordingLogger) chi.Router {
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Event: searchtest.NewRecordEvent(t, &recordingEventStore{})}, time.Now).
 		WithClientEvents(telemetry.NewClientEvents("k", logger))
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
@@ -1708,7 +1708,7 @@ func serveClientEvent(t *testing.T, router chi.Router, analytics string) *httpte
 
 func TestHandleRecordEvent_ClientEventEmittedOnce(t *testing.T) {
 	logger := &recordingLogger{}
-	rec := serveClientEvent(t, buildClientEventRouter(logger), "")
+	rec := serveClientEvent(t, buildClientEventRouter(t, logger), "")
 	discAssertStatus(t, rec, http.StatusNoContent)
 	if len(logger.records) != 1 {
 		t.Fatalf("records = %d, want 1", len(logger.records))
@@ -1717,7 +1717,7 @@ func TestHandleRecordEvent_ClientEventEmittedOnce(t *testing.T) {
 
 func TestHandleRecordEvent_AnOldBuildThatSendsAnalyticsOffIsStillRecorded(t *testing.T) {
 	logger := &recordingLogger{}
-	rec := serveClientEvent(t, buildClientEventRouter(logger), "off")
+	rec := serveClientEvent(t, buildClientEventRouter(t, logger), "off")
 	discAssertStatus(t, rec, http.StatusNoContent)
 	if len(logger.records) != 1 {
 		t.Fatalf("records = %d, want 1: the server no longer honours an analytics opt-out", len(logger.records))
@@ -1726,7 +1726,7 @@ func TestHandleRecordEvent_AnOldBuildThatSendsAnalyticsOffIsStillRecorded(t *tes
 
 func TestHandleRecordEvent_ClientEventSkippedWhenStoreFails(t *testing.T) {
 	logger := &recordingLogger{}
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Event: search.NewRecordEventService(&recordingEventStore{err: context.DeadlineExceeded})}, time.Now).
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Event: searchtest.NewRecordEvent(t, &recordingEventStore{err: context.DeadlineExceeded})}, time.Now).
 		WithClientEvents(telemetry.NewClientEvents("k", logger))
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
@@ -1768,8 +1768,7 @@ func searchAsWarmUp(t *testing.T, store search.UnreleasedStore, results []search
 	t.Helper()
 	bg := searchtest.NewTracker(t)
 	var jobs background.Tracker
-	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, search.UnreleasedConfig{},
-		search.WithUnreleasedStore(store), search.WithUnreleasedLifecycle(context.Background(), &jobs)))
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.UnreleasedConfig{}, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store), searchtest.UnreleasedLifecycle(context.Background(), &jobs))))
 	p := &fakeSearchProvider{name: search.ProviderDeezer, results: results}
 	searchSvc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker())
 	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Search: searchSvc}, time.Now).WithUnreleased(svc)

@@ -10,8 +10,10 @@ import (
 	"slices"
 )
 
-func WithTrackers(trackers ports.TrackerSongs) Option {
-	return func(s *Service) { s.trackers = trackers }
+type NoTrackers struct{}
+
+func (NoTrackers) ArtistSongs(context.Context, string) ([]domain.UnreleasedSong, error) {
+	return nil, ErrSourceNotConfigured
 }
 
 type sourceResult struct {
@@ -24,10 +26,10 @@ type sourceResult struct {
 func (r sourceResult) answered() bool { return r.used && r.err == nil }
 
 func (s *Service) trackerResult(ctx context.Context, artistName string, catalogTitles []string) sourceResult {
-	if s.trackers == nil {
+	songs, err := s.trackers.ArtistSongs(ctx, artistName)
+	if errors.Is(err, ErrSourceNotConfigured) {
 		return sourceResult{complete: true}
 	}
-	songs, err := s.trackers.ArtistSongs(ctx, artistName)
 	if errors.Is(err, ports.ErrTrackerPartial) {
 		slog.WarnContext(ctx, "trackers.partial", "error", err)
 		return sourceResult{songs: withoutReleasedVersions(songs, catalogTitles), used: true}

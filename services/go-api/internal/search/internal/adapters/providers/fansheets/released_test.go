@@ -52,7 +52,7 @@ func TestReleasedTab_IsUnmappedWithoutAYesNoColumn(t *testing.T) {
 func TestReleasedTab_OnlyTheTabNamedReleasedIsRead(t *testing.T) {
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
 	srv.tabs = tabsBody("Released [old]", "💿 Unreleased", "📻 Released")
-	if _, err := srv.client(nil).ArtistSongs(context.Background(), "Ken Carson"); err != nil {
+	if _, err := srv.client(t, nil).ArtistSongs(context.Background(), "Ken Carson"); err != nil {
 		t.Fatal(err)
 	}
 	if got := srv.ranges(); !slices.Contains(got, quotedTab("📻 Released")) || slices.Contains(got, quotedTab("Released [old]")) {
@@ -61,7 +61,7 @@ func TestReleasedTab_OnlyTheTabNamedReleasedIsRead(t *testing.T) {
 
 	srv = newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
 	srv.tabs = tabsBody("Copy of Released", "Unreleased")
-	if _, err := srv.client(nil).ArtistSongs(context.Background(), "Ken Carson"); err != nil {
+	if _, err := srv.client(t, nil).ArtistSongs(context.Background(), "Ken Carson"); err != nil {
 		t.Fatal(err)
 	}
 	if got := srv.ranges(); !slices.Equal(got, []string{quotedTab("Unreleased")}) {

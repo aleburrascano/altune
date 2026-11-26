@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/shared/redact"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -48,12 +49,15 @@ func (a *SoundCloudAPIAdapter) Search(ctx context.Context, query string, kinds m
 
 func (a *SoundCloudAPIAdapter) searchTracksOrFallback(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
 	tracks, err := a.searchTracks(ctx, query)
-	if err == nil || a.fallback == nil || ctx.Err() != nil {
+	if err == nil || ctx.Err() != nil {
+		return tracks, err
+	}
+	fb, ferr := a.fallback.Search(ctx, query, kinds)
+	if errors.Is(ferr, errNoFallback) {
 		return tracks, err
 	}
 	slog.WarnContext(ctx, "soundcloud.apiv2_fallback",
 		logging.SearchTextAttr(query), "error", redact.Secrets(logging.ScrubSearchErr(err, query)))
-	fb, ferr := a.fallback.Search(ctx, query, kinds)
 	if ferr != nil {
 		return nil, err
 	}

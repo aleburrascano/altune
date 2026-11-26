@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/ids"
 	"net/http"
 	"net/http/httptest"
@@ -15,8 +16,8 @@ import (
 
 const validAuthFailureBody = `{"reason":"invalid_credentials","app_version":"1.2.3"}`
 
-func buildAuthFailureRouter(store *recordingEventStore, limit search.RequestLimit) chi.Router {
-	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Event: search.NewRecordEventService(store)}, time.Now)
+func buildAuthFailureRouter(t *testing.T, store *recordingEventStore, limit search.RequestLimit) chi.Router {
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Event: searchtest.NewRecordEvent(t, store)}, time.Now)
 	r := chi.NewRouter()
 	h.PublicRoutes(r, limit)
 	return r
@@ -32,7 +33,7 @@ func postAuthFailure(r chi.Router, body, remoteAddr string) *httptest.ResponseRe
 
 func TestAuthFailureEndpoint_RecordsAnonymousEvent(t *testing.T) {
 	store := &recordingEventStore{}
-	r := buildAuthFailureRouter(store, search.DefaultAuthFailureLimit)
+	r := buildAuthFailureRouter(t, store, search.DefaultAuthFailureLimit)
 
 	rec := postAuthFailure(r, validAuthFailureBody, "203.0.113.5:1000")
 
@@ -52,7 +53,7 @@ func TestAuthFailureEndpoint_RecordsAnonymousEvent(t *testing.T) {
 
 func TestAuthFailureEndpoint_RateLimitsPerClientIP(t *testing.T) {
 	store := &recordingEventStore{}
-	r := buildAuthFailureRouter(store, search.RequestLimit{Max: 2, Window: time.Minute})
+	r := buildAuthFailureRouter(t, store, search.RequestLimit{Max: 2, Window: time.Minute})
 
 	for range 2 {
 		discAssertStatus(t, postAuthFailure(r, validAuthFailureBody, "203.0.113.5:1000"), http.StatusNoContent)
@@ -84,7 +85,7 @@ func TestAuthFailureEndpoint_RejectsInvalidBodies(t *testing.T) {
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
 			store := &recordingEventStore{}
-			r := buildAuthFailureRouter(store, search.DefaultAuthFailureLimit)
+			r := buildAuthFailureRouter(t, store, search.DefaultAuthFailureLimit)
 
 			rec := postAuthFailure(r, body, "203.0.113.5:1000")
 
