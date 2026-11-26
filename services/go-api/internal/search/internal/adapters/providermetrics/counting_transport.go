@@ -1,6 +1,7 @@
 package providermetrics
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/search/internal/core/ports"
 	"errors"
 	"expvar"
@@ -127,7 +128,7 @@ func NewCountingTransport(base http.RoundTripper) *CountingTransport {
 func (t *CountingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	base := t.base
 	if base == nil {
-		base = http.DefaultTransport
+		base = outbound.DefaultTransport()
 	}
 	resp, err := base.RoundTrip(req)
 	if errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) {

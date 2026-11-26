@@ -77,6 +77,9 @@ func newJWKSFixture(t *testing.T) jwksFixture {
 		OverseerPrincipalID:            operator.String(),
 		BackgroundMaxInFlight:          64,
 
+		AcquisitionFileHostPageTimeout:  10 * time.Second,
+		AcquisitionDeezerPreviewTimeout: 20 * time.Second,
+
 		PlaybackNowPlayingLookupTimeout: 3 * time.Second,
 		PlaybackErasureScanTimeout:      30 * time.Second,
 	}}

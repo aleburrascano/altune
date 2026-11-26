@@ -1,6 +1,7 @@
 package savedlink
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"context"
 	"errors"
 	"fmt"
@@ -21,11 +22,9 @@ type HTTPPageReader struct {
 }
 
 func NewHTTPPageReader(transport http.RoundTripper, timeout time.Duration) *HTTPPageReader {
-	return &HTTPPageReader{client: &http.Client{
-		Transport:     transport,
-		Timeout:       timeout,
-		CheckRedirect: func(*http.Request, []*http.Request) error { return errRedirect },
-	}}
+	client := outbound.MustNewClient(timeout, transport)
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return errRedirect }
+	return &HTTPPageReader{client: client}
 }
 
 func (r *HTTPPageReader) ReadPage(ctx context.Context, pageURL string) ([]byte, error) {

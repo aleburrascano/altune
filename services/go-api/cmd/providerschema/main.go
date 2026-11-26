@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/shared/providerfields"
 	"cmp"
 	"context"
@@ -8,7 +9,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"slices"
 	"strings"
@@ -54,7 +54,11 @@ func setup(name, envFile string) (provider, source, string, error) {
 	if err != nil {
 		return provider{}, nil, "", err
 	}
-	src, err := p.source(&http.Client{Timeout: sourceFetchTimeout})
+	client, err := outbound.NewClient(sourceFetchTimeout, nil)
+	if err != nil {
+		return provider{}, nil, "", err
+	}
+	src, err := p.source(client)
 	return p, src, root, err
 }
 

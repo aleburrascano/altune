@@ -2,6 +2,7 @@ package notifier
 
 import (
 	"altune/go-api/internal/platform/monitoring/internal/core/domain"
+	"altune/go-api/internal/platform/outbound"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -31,7 +32,7 @@ type WebhookNotifier struct {
 }
 
 func NewWebhookNotifier(webhookURL string) *WebhookNotifier {
-	return &WebhookNotifier{url: webhookURL, client: &http.Client{Timeout: webhookTimeout}}
+	return &WebhookNotifier{url: webhookURL, client: outbound.MustNewClient(webhookTimeout, nil)}
 }
 
 type webhookPayload struct {

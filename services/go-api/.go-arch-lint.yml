@@ -52,6 +52,7 @@ components:
   shared_youtubemusicapi: { in: shared/youtubemusicapi/** }
   shared_ytdlprunner: { in: shared/ytdlprunner/** }
 commonComponents:
+  - platform_outbound
   - shared_apierror
   - shared_background
   - shared_backoff

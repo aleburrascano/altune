@@ -110,7 +110,7 @@ func runLiveCommand(args []string, stdout io.Writer, getenv func(string) string)
 		fmt.Fprintf(os.Stderr, "acquisitioneval: live: %v\n", err)
 		return liveUsageExitCode
 	}
-	budgeted, err := budgetedClient(context.Background(), getenv, stdout)
+	budgeted, err := budgetedClient(context.Background(), getenv, cfg.Timeout, stdout)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "acquisitioneval: live: %v\n", err)
 		return liveUsageExitCode
@@ -124,8 +124,8 @@ func runLiveCommand(args []string, stdout io.Writer, getenv func(string) string)
 	return runLive(args, stdout, client)
 }
 
-func budgetedClient(ctx context.Context, getenv func(string) string, out io.Writer) (*http.Client, error) {
-	budgeted, budget, err := youtubemusicapi.ToolClient(ctx, getenv)
+func budgetedClient(ctx context.Context, getenv func(string) string, timeout time.Duration, out io.Writer) (*http.Client, error) {
+	budgeted, budget, err := youtubemusicapi.ToolClient(ctx, getenv, timeout)
 	if err != nil {
 		return nil, err
 	}

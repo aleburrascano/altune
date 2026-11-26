@@ -11,7 +11,7 @@ import (
 func TestFanartTVSendsTheAdapterRequests(t *testing.T) {
 	var got *http.Request
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got = r.Clone(context.Background())
+		got = r.Clone(r.Context())
 		_, _ = w.Write([]byte(`{}`))
 	}))
 	t.Cleanup(srv.Close)

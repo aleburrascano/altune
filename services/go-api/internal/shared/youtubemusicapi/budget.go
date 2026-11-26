@@ -1,6 +1,7 @@
 package youtubemusicapi
 
 import (
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"context"
@@ -87,7 +88,10 @@ func SettingsFromEnv(env func(string) string) (Settings, error) {
 	return settings, nil
 }
 
-func ToolClient(ctx context.Context, env func(string) string) (*http.Client, Settings, error) {
+func ToolClient(ctx context.Context, env func(string) string, timeout time.Duration) (*http.Client, Settings, error) {
+	if timeout <= 0 {
+		return nil, Settings{}, outbound.ErrClientTimeoutRequired
+	}
 	settings, err := SettingsFromEnv(env)
 	if err != nil {
 		return nil, Settings{}, err
@@ -99,7 +103,11 @@ func ToolClient(ctx context.Context, env func(string) string) (*http.Client, Set
 	if err != nil {
 		return nil, Settings{}, err
 	}
-	return &http.Client{Transport: budget.Transport(nil)}, settings, nil
+	client, err := outbound.NewClient(timeout, budget.Transport(nil))
+	if err != nil {
+		return nil, Settings{}, err
+	}
+	return client, settings, nil
 }
 
 func (s Settings) Describe() string {
@@ -166,7 +174,7 @@ func (b *Budget) CoolDown(ctx context.Context) error {
 
 func (b *Budget) Transport(base http.RoundTripper) http.RoundTripper {
 	if base == nil {
-		base = http.DefaultTransport
+		base = outbound.DefaultTransport()
 	}
 	return budgetTransport{budget: b, base: base}
 }

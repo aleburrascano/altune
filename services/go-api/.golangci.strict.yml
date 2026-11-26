@@ -1,5 +1,9 @@
 version: "2"
 
+run:
+  build-tags:
+    - tools
+
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
@@ -37,8 +41,15 @@ linters:
     - durationcheck
     - spancheck
     - depguard
+    - importas
 
   settings:
+    importas:
+      no-unaliased: false
+      no-extra-aliases: false
+      alias:
+        - pkg: net/http
+          alias: http
     exhaustive:
       default-signifies-exhaustive: true
     rowserrcheck:
@@ -128,6 +139,8 @@ linters:
           msg: recover a panic through background.SafeRun or background.RecoverContext (internal/shared/background), the one panic guard
         - pattern: ^sync\.WaitGroup$
           msg: run a bounded fan-out through parallel.Limited (internal/shared/parallel), fire-and-forget work through background.Tracker, and wait with a deadline through background.WaitWithin (internal/shared/background)
+        - pattern: ^http\.(Get|Head|Post|PostForm|DefaultClient|DefaultTransport)$
+          msg: build a client with outbound.NewClient and take the shared transport from outbound.DefaultTransport (internal/platform/outbound), the one home for outbound HTTP
         - pattern: ^context\.WithoutCancel$
           msg: outlive a request through background.Detach(ctx, budget) (internal/shared/background), which keeps the request's values and sets its own deadline
     revive:
@@ -144,6 +157,9 @@ linters:
         - hugeParam
         - rangeValCopy
         - unnamedResult
+      settings:
+        ruleguard:
+          rules: ${base-path}/_rules/outbound.rules
 
   exclusions:
     generated: lax
@@ -161,6 +177,10 @@ linters:
       - path: internal/shared/httpserver/
         linters:
           - forbidigo
+      - path: (^internal/platform/outbound/|/[^/]*test/)
+        linters:
+          - forbidigo
+        text: 'use of `http\.'
       - path: internal/shared/(background|parallel)/
         linters:
           - forbidigo

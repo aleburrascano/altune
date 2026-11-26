@@ -20,6 +20,7 @@ esac
 [ "$(git -C "$(dirname "$abs")" rev-parse --show-toplevel 2>/dev/null)" = "$root" ] \
   || { echo "check-file: $1 belongs to another checkout; run that checkout's scripts/check-file.sh" >&2; exit 2; }
 cd "$root" || exit 3
+export GOFLAGS=-mod=readonly
 
 go_api=services/go-api
 work=$(mktemp -d) || exit 3

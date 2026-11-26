@@ -2,6 +2,7 @@ package providers
 
 import (
 	"altune/go-api/internal/platform/auth/internal/core/ports"
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/random"
@@ -9,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -142,11 +142,11 @@ func (v *SupabaseJWTVerifier) registerJWKS(ctx context.Context) error {
 		jwk.WithRefreshWindow(v.schedule.refreshWindow),
 		jwk.WithErrSink(jwksErrSink(v.onBackgroundRefreshError)),
 	)
-	httpClient := &http.Client{
-		Timeout:       v.schedule.fetchTimeout,
-		CheckRedirect: checkJWKSRedirect,
-		Transport:     cappedJWKSBodyTransport{base: http.DefaultTransport},
+	httpClient, err := outbound.NewClient(v.schedule.fetchTimeout, cappedJWKSBodyTransport{base: outbound.DefaultTransport()})
+	if err != nil {
+		return fmt.Errorf("build JWKS client: %w", err)
 	}
+	httpClient.CheckRedirect = checkJWKSRedirect
 	if err := cache.Register(v.jwksURL,
 		jwk.WithHTTPClient(httpClient),
 		jwk.WithRefreshInterval(v.schedule.refreshInterval),

@@ -2,6 +2,7 @@ package downloadsetup
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/platform/outbound"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/youtubemusicapi"
@@ -14,7 +15,10 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-const ytmSearchTimeout = 10 * time.Second
+const (
+	ytmSearchTimeout = 10 * time.Second
+	acoustIDTimeout  = 15 * time.Second
+)
 
 type SourceOrder struct {
 	First    []download.AudioSource
@@ -52,9 +56,9 @@ func innerTubeClient(ctx context.Context, cfg *config.Config, redis *goredis.Cli
 	budget, err := youtubemusicapi.NewBudget(redis, settings, clock.Now, clock.Sleep)
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition: no shared InnerTube budget without redis, pacing through the shared outbound pacer only")
-		return &http.Client{Timeout: ytmSearchTimeout, Transport: transport}
+		return outbound.MustNewClient(ytmSearchTimeout, transport)
 	}
-	return &http.Client{Timeout: ytmSearchTimeout, Transport: budget.Transport(transport)}
+	return outbound.MustNewClient(ytmSearchTimeout, budget.Transport(transport))
 }
 
 func sourcesFor(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper, searcher *download.YouTubeAudioSearcher) (SourceOrder, error) {
