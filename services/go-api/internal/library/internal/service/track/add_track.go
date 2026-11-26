@@ -84,10 +84,8 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 	if err != nil {
 		return nil, err
 	}
-	if input.DurationSeconds != nil {
-		if err := track.SetCatalogDuration(*input.DurationSeconds); err != nil {
-			return nil, err
-		}
+	if err := whenGiven(input.DurationSeconds, track.SetCatalogDuration); err != nil {
+		return nil, err
 	}
 	sources := input.CatalogSources
 	if input.SourceURL != nil {
@@ -108,32 +106,32 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 	track.IdempotencyKey = input.IdempotencyKey
 
 	stored, created, err := s.trackRepo.Add(ctx, track)
+	if errors.Is(err, domain.ErrLibraryFull) {
+		slog.WarnContext(ctx, "catalog.library_full", "user_id", userId.String(), "cap", domain.MaxTracksPerUser)
+		return nil, err
+	}
 	if err != nil {
-		if errors.Is(err, domain.ErrLibraryFull) {
-			slog.WarnContext(ctx, "catalog.library_full", "user_id", userId.String(), "cap", domain.MaxTracksPerUser)
-			return nil, err
-		}
 		return nil, domain.WrapRepoError(ctx, "add track", err)
 	}
 	if stored != nil {
 		track = stored
 	}
 
-	if created {
-		slog.InfoContext(ctx, "track added to library",
-			"track_id", track.ID.String(),
-			"user_id", userId.String(),
-		)
-		dto := TrackToDTO(track)
-		s.events.Publish(ctx, userId, events.TrackAddedToLibrary{TrackID: dto.ID, Track: dto})
-		sourceURL := ""
-		if input.SourceURL != nil {
-			sourceURL = *input.SourceURL
-		}
-		s.scheduleAcquisition(ctx, userId, track, sourceURL)
+	if !created {
+		return &AddTrackOutput{Track: track, Created: false}, nil
 	}
-
-	return &AddTrackOutput{Track: track, Created: created}, nil
+	slog.InfoContext(ctx, "track added to library",
+		"track_id", track.ID.String(),
+		"user_id", userId.String(),
+	)
+	dto := TrackToDTO(track)
+	s.events.Publish(ctx, userId, events.TrackAddedToLibrary{TrackID: dto.ID, Track: dto})
+	sourceURL := ""
+	if input.SourceURL != nil {
+		sourceURL = *input.SourceURL
+	}
+	s.scheduleAcquisition(ctx, userId, track, sourceURL)
+	return &AddTrackOutput{Track: track, Created: true}, nil
 }
 
 const ScheduleTimeout = 5 * time.Second
@@ -167,20 +165,35 @@ func (s *AddTrackService) scheduleAcquisition(ctx context.Context, userId ids.Us
 	})
 }
 
-func validateAddTrackInput(input AddTrackInput, now time.Time) error {
+func whenGiven[T any](value *T, apply func(T) error) error {
+	if value == nil {
+		return nil
+	}
+	return apply(*value)
+}
+
+func validateAddTrackNumbers(input AddTrackInput, now time.Time) error {
 	if input.TrackNumber != nil && *input.TrackNumber <= 0 {
 		return domain.NewValidationError("track_number must be positive")
 	}
 	if input.TrackNumber != nil && *input.TrackNumber > maxTrackNumber {
 		return domain.NewValidationError("track_number exceeds maximum (int4)")
 	}
-	if input.DurationSeconds != nil {
-		if _, err := domain.TrackLengthOf(*input.DurationSeconds); err != nil {
-			return err
-		}
+	if err := whenGiven(input.DurationSeconds, func(seconds float64) error {
+		_, err := domain.TrackLengthOf(seconds)
+		return err
+	}); err != nil {
+		return err
 	}
 	if input.Year != nil && !plausibleYear(*input.Year, now) {
 		return domain.NewValidationError("year is implausible")
+	}
+	return nil
+}
+
+func validateAddTrackInput(input AddTrackInput, now time.Time) error {
+	if err := validateAddTrackNumbers(input, now); err != nil {
+		return err
 	}
 	if err := validateAddTrackText(input); err != nil {
 		return err
@@ -194,10 +207,8 @@ func validateAddTrackInput(input AddTrackInput, now time.Time) error {
 	if err := validateCatalogIdentity(input); err != nil {
 		return err
 	}
-	if input.SourceURL != nil {
-		if err := domain.ValidateSourceURL(*input.SourceURL); err != nil {
-			return err
-		}
+	if err := whenGiven(input.SourceURL, domain.ValidateSourceURL); err != nil {
+		return err
 	}
 	if err := validateIdempotencyKey(input.IdempotencyKey); err != nil {
 		return err
@@ -206,10 +217,11 @@ func validateAddTrackInput(input AddTrackInput, now time.Time) error {
 }
 
 func validateCatalogIdentity(input AddTrackInput) error {
-	if input.CatalogMBID != nil {
-		if _, err := domain.NormalizeCatalogMBID(*input.CatalogMBID); err != nil {
-			return err
-		}
+	if err := whenGiven(input.CatalogMBID, func(mbid string) error {
+		_, err := domain.NormalizeCatalogMBID(mbid)
+		return err
+	}); err != nil {
+		return err
 	}
 	_, err := domain.NormalizeCatalogSources(input.CatalogSources)
 	return err

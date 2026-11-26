@@ -88,12 +88,15 @@ func shiftTable(mp4 []byte, table box, at int, delta uint32) error {
 	}
 	for i := range count {
 		entry := mp4[first+i*width:]
-		if width == 4 {
+		switch width {
+		case 4:
 			if offset := binary.BigEndian.Uint32(entry); int(offset) >= at {
 				binary.BigEndian.PutUint32(entry, offset+delta)
 			}
-		} else if offset := binary.BigEndian.Uint64(entry); int(offset) >= at {
-			binary.BigEndian.PutUint64(entry, offset+uint64(delta))
+		default:
+			if offset := binary.BigEndian.Uint64(entry); int(offset) >= at {
+				binary.BigEndian.PutUint64(entry, offset+uint64(delta))
+			}
 		}
 	}
 	return nil
@@ -154,6 +157,9 @@ func insertAt(mp4 []byte, at int, insert []byte) []byte {
 }
 
 func embedISRC(path, isrc string) error {
+	if isrc == "" {
+		return nil
+	}
 	mp4, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read the file to tag: %w", err)

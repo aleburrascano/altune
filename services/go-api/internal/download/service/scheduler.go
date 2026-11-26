@@ -278,10 +278,10 @@ func (s *BackgroundAcquisitionScheduler) runWorker(claim func() (<-chan struct{}
 			return
 		}
 		done, ok := s.nextJob(claim)
+		if !ok && !s.idleWait(wake) {
+			return
+		}
 		if !ok {
-			if !s.idleWait(wake) {
-				return
-			}
 			continue
 		}
 		notifyWake(wake)

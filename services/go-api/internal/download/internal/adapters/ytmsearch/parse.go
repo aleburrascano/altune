@@ -198,10 +198,11 @@ func bylineArtists(runs []node) []string {
 			artists = append(artists, run.at("text").text())
 		}
 	}
-	if len(artists) == 0 && len(runs) > 0 {
-		if first := runs[0].at("text").text(); first != "" && first != bylineSeparatorRunText {
-			artists = []string{first}
-		}
+	if len(artists) > 0 || len(runs) == 0 {
+		return artists
+	}
+	if first := runs[0].at("text").text(); first != "" && first != bylineSeparatorRunText {
+		return []string{first}
 	}
 	return artists
 }

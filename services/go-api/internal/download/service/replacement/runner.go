@@ -106,12 +106,9 @@ func (r *Runner) ExecuteUpgrade(ctx context.Context, userId ids.UserId, trackId 
 		slog.InfoContext(ctx, "acquisition.upgrade_skipped", "track_id", trackId.String())
 		return nil
 	}
-	if r.isUnchecked(track) {
-		checked, err := r.checkInPlace(ctx, track, stored)
-		if err != nil || checked.settled {
-			return err
-		}
-		current = checked.grade
+	current, settled, err := r.recheckedGrade(ctx, track, stored, current)
+	if err != nil || settled {
+		return err
 	}
 	if isUserUpload(track) {
 		slog.InfoContext(ctx, "acquisition.upgrade_skipped", "track_id", trackId.String())

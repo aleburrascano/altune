@@ -19,14 +19,20 @@ func CloseDatastores(ctx context.Context, outcomes []Outcome, ds Datastores) {
 		slog.WarnContext(ctx, "closing DB/Redis while components are still shutting down",
 			"components", strings.Join(unstopped, ", "))
 	}
-	if leadershipRetained(outcomes) {
+	switch {
+	case leadershipRetained(outcomes):
 		slog.ErrorContext(ctx, "leaving DB pool open so process exit releases the retained leader lock")
-	} else if ds.Pool != nil {
+	case ds.Pool != nil:
 		ds.Pool.Close()
 	}
-	if ds.Redis != nil {
-		if err := ds.Redis.Close(); err != nil {
-			slog.ErrorContext(ctx, "redis client close error", "error", err)
-		}
+	closeRedis(ctx, ds.Redis)
+}
+
+func closeRedis(ctx context.Context, client *goredis.Client) {
+	if client == nil {
+		return
+	}
+	if err := client.Close(); err != nil {
+		slog.ErrorContext(ctx, "redis client close error", "error", err)
 	}
 }

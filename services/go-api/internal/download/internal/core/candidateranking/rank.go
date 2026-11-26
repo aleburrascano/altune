@@ -70,9 +70,10 @@ func (b *buckets) placeUnresolved(track Track, e entry) (Refusal, bool) {
 		return qualifierRefusal(e.candidate, veto), false
 	}
 	e.isOtherVersion = len(qualifiers) > 0
-	if e.uploader == ChannelTopic {
+	switch e.uploader {
+	case ChannelTopic:
 		b.topic = append(b.topic, e)
-	} else {
+	default:
 		b.other = append(b.other, e)
 	}
 	return Refusal{}, true

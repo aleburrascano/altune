@@ -395,6 +395,13 @@ const (
 	RejectOtherVersionOffLengthFmt  = "other version %.0fs off the expected length"
 )
 
+func otherVersionLengthReason(evidence Evidence) string {
+	if evidence.DurationDeltaSeconds == nil {
+		return RejectOtherVersionLengthUnknown
+	}
+	return fmt.Sprintf(RejectOtherVersionOffLengthFmt, *evidence.DurationDeltaSeconds)
+}
+
 func judgeAttempt(ac *AcquisitionContext, candidate ports.AudioCandidate, filePath string, verified verificationResult) attempt {
 	evidence := ac.buildEvidence(candidate, verified)
 	result := attempt{
@@ -405,11 +412,7 @@ func judgeAttempt(ac *AcquisitionContext, candidate ports.AudioCandidate, filePa
 		otherVersion: len(evidence.Qualifiers) > 0,
 	}
 	if result.otherVersion && !tracklength.SameRecording(ac.ExpectedLength(), verified.probed.Seconds()) {
-		reason := RejectOtherVersionLengthUnknown
-		if evidence.DurationDeltaSeconds != nil {
-			reason = fmt.Sprintf(RejectOtherVersionOffLengthFmt, *evidence.DurationDeltaSeconds)
-		}
-		result.rejection = &downloadRejection{stage: rejectedcandidates.Duration, reason: reason}
+		result.rejection = &downloadRejection{stage: rejectedcandidates.Duration, reason: otherVersionLengthReason(evidence)}
 		return result
 	}
 	result.status = attemptAccepted
@@ -628,9 +631,10 @@ func decodeRejection(
 }
 
 func (s *DownloadStep) Rollback(ctx context.Context, ac *AcquisitionContext) error {
-	if ac.TempDir != "" {
+	switch {
+	case ac.TempDir != "":
 		removeScratch(ctx, s.workspace, ac.TempDir)
-	} else if ac.TempPath != "" {
+	case ac.TempPath != "":
 		removeScratch(ctx, s.workspace, ac.TempPath)
 	}
 	return nil

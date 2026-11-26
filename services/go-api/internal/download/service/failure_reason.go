@@ -69,11 +69,11 @@ func failureCode(err error) downloadfailure.FailureCode {
 		return downloadfailure.FailureNoConfidentMatch
 	}
 	var stepErr *StepError
-	if errors.As(err, &stepErr) {
-		if code, ok := reasonForStep(stepErr.Step); ok {
-			return code
-		}
+	if !errors.As(err, &stepErr) {
 		return downloadfailure.FailureAcquisitionFailed
+	}
+	if code, ok := reasonForStep(stepErr.Step); ok {
+		return code
 	}
 	return downloadfailure.FailureAcquisitionFailed
 }

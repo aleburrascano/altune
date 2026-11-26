@@ -68,22 +68,7 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId ids.UserId, tra
 	storageStart := s.now()
 	reader, size, err := s.audioStore.Stream(ctx, *loaded.AudioRef)
 	if err != nil {
-		slog.WarnContext(ctx, "stream.audio_missing",
-			"track_id", trackId.String(), "error", err)
-		if !s.recoveryEnabled() {
-			slog.WarnContext(ctx, "stream.recovery_disabled", "track_id", trackId.String())
-			return nil, domain.ErrAudioTemporarilyUnavailable
-		}
-		s.metrics.StreamRecoveryTriggered()
-		confirmedMissing, recErr := s.recoverMissingAudio(ctx, userId, loaded)
-		if recErr != nil {
-			slog.ErrorContext(ctx, "stream.recover_failed",
-				"track_id", trackId.String(), "error", recErr)
-		}
-		if confirmedMissing {
-			return nil, domain.ErrAudioNotAvailable
-		}
-		return nil, domain.ErrAudioTemporarilyUnavailable
+		return nil, s.audioOpenFailure(ctx, userId, loaded, err)
 	}
 
 	slog.InfoContext(ctx, "stream.opened",
@@ -93,6 +78,26 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId ids.UserId, tra
 	)
 
 	return &StreamOutput{Reader: reader, Size: size, Track: loaded}, nil
+}
+
+func (s *StreamTrackService) audioOpenFailure(ctx context.Context, userId ids.UserId, loaded *domain.Track, openErr error) error {
+	trackId := loaded.ID
+	slog.WarnContext(ctx, "stream.audio_missing",
+		"track_id", trackId.String(), "error", openErr)
+	if !s.recoveryEnabled() {
+		slog.WarnContext(ctx, "stream.recovery_disabled", "track_id", trackId.String())
+		return domain.ErrAudioTemporarilyUnavailable
+	}
+	s.metrics.StreamRecoveryTriggered()
+	confirmedMissing, recErr := s.recoverMissingAudio(ctx, userId, loaded)
+	if recErr != nil {
+		slog.ErrorContext(ctx, "stream.recover_failed",
+			"track_id", trackId.String(), "error", recErr)
+	}
+	if confirmedMissing {
+		return domain.ErrAudioNotAvailable
+	}
+	return domain.ErrAudioTemporarilyUnavailable
 }
 
 func (s *StreamTrackService) RecoverIfMissing(ctx context.Context, userId ids.UserId, trackId domain.TrackId) error {

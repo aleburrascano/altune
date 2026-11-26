@@ -60,13 +60,13 @@ func (p Policy) FileJudge(candidate ports.AudioCandidate) (FileJudge, bool) {
 
 func (j FileJudge) Judge(actual float64) (acceptable bool, heldAgainst float64) {
 	p, candidate := j.policy, j.candidate
-	if ownLength(candidate) {
-		if !SameRecording(candidate.Duration, actual) {
-			return false, candidate.Duration
-		}
-		return p.Expected() <= 0 || p.accepts(actual), p.Expected()
+	if !ownLength(candidate) {
+		return p.accepts(actual), p.Expected()
 	}
-	return p.accepts(actual), p.Expected()
+	if !SameRecording(candidate.Duration, actual) {
+		return false, candidate.Duration
+	}
+	return p.Expected() <= 0 || p.accepts(actual), p.Expected()
 }
 
 func ownLength(candidate ports.AudioCandidate) bool {

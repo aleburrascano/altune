@@ -52,27 +52,11 @@ func writeTrackFeatured(
 }
 
 func upsertFeaturedArtist(ctx context.Context, tx pgx.Tx, userID uuid.UUID, fa domain.FeaturedArtist) (uuid.UUID, error) {
-	var faID uuid.UUID
-	if keys := featuredIdentityKeys(fa); len(keys) > 1 {
-		err := tx.QueryRow(ctx,
-			`UPDATE featured_artists SET name = $3
-			WHERE id = (
-				SELECT id FROM featured_artists
-				WHERE user_id = $1 AND identity_key = ANY($2)
-				ORDER BY identity_key = $4 DESC
-				LIMIT 1
-			)
-			RETURNING id`,
-			userID, keys, fa.Name, fa.IdentityKey(),
-		).Scan(&faID)
-		if err == nil {
-			return faID, nil
-		}
-		if !errors.Is(err, pgx.ErrNoRows) {
-			return uuid.Nil, fmt.Errorf("upsert featured artist %q: %w", fa.Name, err)
-		}
+	faID, renamed, err := renameFeaturedArtistByAnyKey(ctx, tx, userID, fa)
+	if err != nil || renamed {
+		return faID, err
 	}
-	err := tx.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`INSERT INTO featured_artists (user_id, mbid, deezer_id, name, norm_name)
 		VALUES ($1,$2,$3,$4,$5)
 		ON CONFLICT (user_id, identity_key) DO UPDATE SET name = EXCLUDED.name
@@ -83,6 +67,32 @@ func upsertFeaturedArtist(ctx context.Context, tx pgx.Tx, userID uuid.UUID, fa d
 		return faID, fmt.Errorf("insert featured artist %q: %w", fa.Name, err)
 	}
 	return faID, nil
+}
+
+func renameFeaturedArtistByAnyKey(ctx context.Context, tx pgx.Tx, userID uuid.UUID, fa domain.FeaturedArtist) (uuid.UUID, bool, error) {
+	keys := featuredIdentityKeys(fa)
+	if len(keys) <= 1 {
+		return uuid.Nil, false, nil
+	}
+	var faID uuid.UUID
+	err := tx.QueryRow(ctx,
+		`UPDATE featured_artists SET name = $3
+		WHERE id = (
+			SELECT id FROM featured_artists
+			WHERE user_id = $1 AND identity_key = ANY($2)
+			ORDER BY identity_key = $4 DESC
+			LIMIT 1
+		)
+		RETURNING id`,
+		userID, keys, fa.Name, fa.IdentityKey(),
+	).Scan(&faID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, false, nil
+	}
+	if err != nil {
+		return uuid.Nil, false, fmt.Errorf("upsert featured artist %q: %w", fa.Name, err)
+	}
+	return faID, true, nil
 }
 
 func featuredIdentityKeys(fa domain.FeaturedArtist) []string {

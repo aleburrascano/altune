@@ -19,6 +19,20 @@ func NoRecording() RecordingWiring {
 	}
 }
 
+func searchOnlyRecording(none RecordingWiring, searcher Search) (RecordingWiring, error) {
+	resolver, err := download.NewRecordingResolver(download.RecordingResolverPorts{
+		Search:      searcher,
+		ISRC:        download.NoopISRCLookup(),
+		Recording:   download.NoopRecordingLookup(),
+		Rerecording: download.NoopRerecordingLookup(),
+	})
+	if err != nil {
+		return RecordingWiring{}, err
+	}
+	none.Resolver = resolver
+	return none, nil
+}
+
 func RecordingOptions(disc *search.Discovery) (RecordingWiring, error) {
 	none := NoRecording()
 	if disc.Search == nil {
@@ -26,17 +40,7 @@ func RecordingOptions(disc *search.Discovery) (RecordingWiring, error) {
 	}
 	searcher := NewSearch(disc.Search)
 	if disc.Recordings == nil {
-		resolver, err := download.NewRecordingResolver(download.RecordingResolverPorts{
-			Search:      searcher,
-			ISRC:        download.NoopISRCLookup(),
-			Recording:   download.NoopRecordingLookup(),
-			Rerecording: download.NoopRerecordingLookup(),
-		})
-		if err != nil {
-			return RecordingWiring{}, err
-		}
-		none.Resolver = resolver
-		return none, nil
+		return searchOnlyRecording(none, searcher)
 	}
 	recordings := NewRecordings(disc.Recordings)
 	resolver, err := download.NewRecordingResolver(download.RecordingResolverPorts{

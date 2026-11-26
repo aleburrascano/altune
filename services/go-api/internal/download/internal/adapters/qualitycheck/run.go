@@ -121,12 +121,13 @@ func seededTrack(newIDs ids.Source, kase Case) ports.TrackSnapshot {
 	if length := targetLength(t); length > 0 {
 		track.CatalogDurationSeconds, track.StoredDurationSeconds = &length, &length
 	}
-	if kase.Stored != nil {
-		ref := storedAudioRef
-		track.Status, track.AudioRef = ports.TrackReady, &ref
-		if length := kase.Stored.Duration; length > 0 {
-			track.StoredDurationSeconds = &length
-		}
+	if kase.Stored == nil {
+		return track
+	}
+	ref := storedAudioRef
+	track.Status, track.AudioRef = ports.TrackReady, &ref
+	if length := kase.Stored.Duration; length > 0 {
+		track.StoredDurationSeconds = &length
 	}
 	return track
 }
@@ -289,10 +290,10 @@ func judgeSaved(want *SavedExpectation, out Outcome) (string, bool) {
 }
 
 func judgeStored(kase Case, out Outcome) (bool, string) {
+	if !kase.hasCorrectCandidate() && out.Failed {
+		return true, "correctly acquired nothing"
+	}
 	if !kase.hasCorrectCandidate() {
-		if out.Failed {
-			return true, "correctly acquired nothing"
-		}
 		return false, "stored " + out.Stored + " when no candidate was the right recording"
 	}
 	if out.Failed {
@@ -356,10 +357,8 @@ func savedTrackOf(ledger *inmemoryledger.Ledger, id ids.TrackId) SavedTrack {
 	var evidence struct {
 		ISRCSource string `json:"isrc_source"`
 	}
-	if len(saved.Evidence) > 0 {
-		if err := json.Unmarshal(saved.Evidence, &evidence); err != nil {
-			evidence.ISRCSource = unreadableEvidence
-		}
+	if len(saved.Evidence) > 0 && json.Unmarshal(saved.Evidence, &evidence) != nil {
+		evidence.ISRCSource = unreadableEvidence
 	}
 	return SavedTrack{
 		ISRC:            derefOrZero(saved.ISRC),

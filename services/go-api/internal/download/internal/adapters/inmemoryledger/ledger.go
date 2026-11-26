@@ -94,10 +94,8 @@ func (l *Ledger) Complete(_ context.Context, id ids.TrackId, userId ids.UserId, 
 			return err
 		}
 		recordCompletion(track, c)
-		if c.Relabel != nil {
-			if err := relabel(track, *c.Relabel); err != nil {
-				return err
-			}
+		if err := relabel(track, c.Relabel); err != nil {
+			return err
 		}
 		adoptISRC(track, c.ISRC)
 		return nil
@@ -229,7 +227,11 @@ func adoptISRC(track *LedgerTrack, isrc string) {
 	}
 }
 
-func relabel(track *LedgerTrack, label ports.TrackLabel) error {
+func relabel(track *LedgerTrack, given *ports.TrackLabel) error {
+	if given == nil {
+		return nil
+	}
+	label := *given
 	title := strings.TrimSpace(label.Title)
 	if title == "" || label.MBID == "" {
 		return fmt.Errorf("relabel as recording %q titled %q: an MBID and a title are required", label.MBID, label.Title)

@@ -310,13 +310,21 @@ func (t *Track) SetCatalogDuration(seconds float64) error {
 	return nil
 }
 
+func (t *Track) setCatalogMBID(mbid *string) error {
+	if mbid == nil {
+		return nil
+	}
+	normalized, err := NormalizeCatalogMBID(*mbid)
+	if err != nil {
+		return err
+	}
+	t.CatalogMBID = &normalized
+	return nil
+}
+
 func (t *Track) SetCatalogIdentity(mbid *string, explicit *bool, sources []CatalogSource) error {
-	if mbid != nil {
-		normalized, err := NormalizeCatalogMBID(*mbid)
-		if err != nil {
-			return err
-		}
-		t.CatalogMBID = &normalized
+	if err := t.setCatalogMBID(mbid); err != nil {
+		return err
 	}
 	unique, err := NormalizeCatalogSources(sources)
 	if err != nil {

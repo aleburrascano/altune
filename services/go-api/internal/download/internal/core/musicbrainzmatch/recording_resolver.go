@@ -130,16 +130,16 @@ func (r *Resolver) anchorToISRC(ctx context.Context, q acqports.RecordingQuery, 
 	if len(recordings) == 0 {
 		return withReferenceSet(identity, identity.MBID, nil)
 	}
-	if isrcRegistersMBID(recordings, identity.MBID) {
-		identity.ReferenceDoubted = false
-		if lengthDisagrees {
-			slog.InfoContext(ctx, "acquisition.catalog_length_conflict",
-				"isrc", q.ISRC, "mbid", identity.MBID,
-				"catalog_seconds", q.Duration, "reference_seconds", identity.Duration)
-		}
-		return withReferenceSet(identity, identity.MBID, recordings)
+	if !isrcRegistersMBID(recordings, identity.MBID) {
+		return r.anchorToMismatchedISRC(ctx, q, identity, recordings)
 	}
-	return r.anchorToMismatchedISRC(ctx, q, identity, recordings)
+	identity.ReferenceDoubted = false
+	if lengthDisagrees {
+		slog.InfoContext(ctx, "acquisition.catalog_length_conflict",
+			"isrc", q.ISRC, "mbid", identity.MBID,
+			"catalog_seconds", q.Duration, "reference_seconds", identity.Duration)
+	}
+	return withReferenceSet(identity, identity.MBID, recordings)
 }
 
 func (r *Resolver) anchorToMismatchedISRC(ctx context.Context, q acqports.RecordingQuery, identity acqports.RecordingIdentity, recordings []acqports.ISRCRecording) acqports.RecordingIdentity {

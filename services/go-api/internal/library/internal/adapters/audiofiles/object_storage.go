@@ -38,9 +38,10 @@ type ObjectStorageConfig struct {
 func NewObjectStorageAudioStore(cfg ObjectStorageConfig) (*ObjectStorageAudioStore, error) {
 	secure := true
 	host := cfg.Endpoint
-	if strings.HasPrefix(host, "https://") {
+	switch {
+	case strings.HasPrefix(host, "https://"):
 		host = strings.TrimPrefix(host, "https://")
-	} else if strings.HasPrefix(host, "http://") {
+	case strings.HasPrefix(host, "http://"):
 		host = strings.TrimPrefix(host, "http://")
 		secure = false
 	}
@@ -72,14 +73,13 @@ func (s *ObjectStorageAudioStore) Exists(ctx context.Context, audioRef string) (
 	defer cancel()
 
 	_, err := s.client.StatObject(ctx, s.bucket, audioRef, minio.StatObjectOptions{})
-	if err != nil {
-		resp := minio.ToErrorResponse(err)
-		if resp.Code == "NoSuchKey" {
-			return false, nil
-		}
-		return false, fmt.Errorf("stat object %s: %w", audioRef, err)
+	if err == nil {
+		return true, nil
 	}
-	return true, nil
+	if minio.ToErrorResponse(err).Code == "NoSuchKey" {
+		return false, nil
+	}
+	return false, fmt.Errorf("stat object %s: %w", audioRef, err)
 }
 
 func (s *ObjectStorageAudioStore) List(ctx context.Context, prefix string) ([]string, error) {

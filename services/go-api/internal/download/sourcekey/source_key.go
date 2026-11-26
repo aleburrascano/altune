@@ -39,13 +39,13 @@ func SourceKey(rawURL string) string {
 		return hostlessKey(rawURL)
 	}
 	host := strings.ToLower(u.Hostname())
-	if youtubeHosts[host] {
-		if id := videoIDOnYouTubeHost(host, u); id != "" {
-			return "youtube:" + id
-		}
-		return ""
+	if !youtubeHosts[host] {
+		return otherHostKey(host, u)
 	}
-	return otherHostKey(host, u)
+	if id := videoIDOnYouTubeHost(host, u); id != "" {
+		return "youtube:" + id
+	}
+	return ""
 }
 
 var pathIdentifiedHosts = map[string]bool{

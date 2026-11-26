@@ -20,10 +20,7 @@ func (s *BackgroundAcquisitionScheduler) Shutdown(ctx context.Context) {
 
 	s.cancel()
 	if !drained {
-		drained = s.jobs.Drain(ctx)
-		if !drained {
-			slog.WarnContext(ctx, "acquisition scheduler drain timed out waiting for cancelled jobs to release")
-		}
+		drained = s.drainCancelledJobs(ctx)
 	}
 
 	s.waitRunners(ctx)
@@ -32,6 +29,14 @@ func (s *BackgroundAcquisitionScheduler) Shutdown(ctx context.Context) {
 		return
 	}
 	s.waitOutcomes(ctx)
+}
+
+func (s *BackgroundAcquisitionScheduler) drainCancelledJobs(ctx context.Context) bool {
+	if s.jobs.Drain(ctx) {
+		return true
+	}
+	slog.WarnContext(ctx, "acquisition scheduler drain timed out waiting for cancelled jobs to release")
+	return false
 }
 
 func (s *BackgroundAcquisitionScheduler) drainWithinBudget(ctx context.Context) bool {

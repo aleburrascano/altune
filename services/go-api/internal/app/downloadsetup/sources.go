@@ -63,18 +63,20 @@ func innerTubeClient(ctx context.Context, cfg *config.Config, redis *goredis.Cli
 
 func sourcesFor(ctx context.Context, cfg *config.Config, redis *goredis.Client, transport http.RoundTripper, searcher *download.YouTubeAudioSearcher) (SourceOrder, error) {
 	var tiers SourceOrder
-	if cfg.YtMusicEnabled {
+	switch {
+	case cfg.YtMusicEnabled:
 		songs, err := budgetedYTMSearchClient(ctx, cfg, redis, transport)
 		if err != nil {
 			return SourceOrder{}, fmt.Errorf("build the ytmusic search client: %w", err)
 		}
 		tiers.First = append(tiers.First, download.NewYtmSearchSource(songs, searcher), download.NewYtMusicSource(searcher, songs))
-	} else {
+	default:
 		slog.InfoContext(ctx, "acquisition: ytmusic source disabled via YTMUSIC_ENABLED")
 	}
-	if cfg.YtDLPEnabled {
+	switch {
+	case cfg.YtDLPEnabled:
 		tiers.Fallback = append(tiers.Fallback, download.NewYtDlpSource(searcher))
-	} else {
+	default:
 		slog.InfoContext(ctx, "acquisition: yt-dlp source disabled via YTDLP_ENABLED")
 	}
 	if len(tiers.All()) > 0 {

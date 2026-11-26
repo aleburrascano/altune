@@ -71,27 +71,34 @@ type UpgradeState interface {
 	SettleAcquisition(ctx context.Context, trackID ids.TrackId, fence ClaimNumber, rejectedSourceKeys []string, resetEvidence bool) error
 }
 
+func decodeJSONObject(raw json.RawMessage, what string) (map[string]json.RawMessage, error) {
+	object := map[string]json.RawMessage{}
+	if len(raw) == 0 {
+		return object, nil
+	}
+	if err := json.Unmarshal(raw, &object); err != nil {
+		return nil, fmt.Errorf("read %s: %w", what, err)
+	}
+	if object == nil {
+		object = map[string]json.RawMessage{}
+	}
+	return object, nil
+}
+
 func MergeUpgradeEvidence(trackEvidence, state json.RawMessage) (json.RawMessage, error) {
-	merged := map[string]json.RawMessage{}
-	if len(trackEvidence) > 0 {
-		if err := json.Unmarshal(trackEvidence, &merged); err != nil {
-			return nil, fmt.Errorf("read track evidence: %w", err)
-		}
-		if merged == nil {
-			merged = map[string]json.RawMessage{}
-		}
+	merged, err := decodeJSONObject(trackEvidence, "track evidence")
+	if err != nil {
+		return nil, err
 	}
 	for _, key := range UpgradeEvidenceKeys {
 		delete(merged, key)
 	}
-	if len(state) > 0 {
-		overlay := map[string]json.RawMessage{}
-		if err := json.Unmarshal(state, &overlay); err != nil {
-			return nil, fmt.Errorf("read upgrade state: %w", err)
-		}
-		for key, value := range overlay {
-			merged[key] = value
-		}
+	overlay, err := decodeJSONObject(state, "upgrade state")
+	if err != nil {
+		return nil, err
+	}
+	for key, value := range overlay {
+		merged[key] = value
 	}
 	if len(merged) == 0 && len(trackEvidence) == 0 {
 		return trackEvidence, nil

@@ -129,10 +129,11 @@ func preferredRerecording(details []acqports.RecordingDetail) acqports.Recording
 		return acqports.RecordingDetail{}
 	}
 	slices.SortStableFunc(ranked, func(a, b acqports.RecordingDetail) int {
-		if hasA, hasB := len(a.ISRCs) > 0, len(b.ISRCs) > 0; hasA != hasB {
-			if hasA {
-				return -1
-			}
+		hasA, hasB := len(a.ISRCs) > 0, len(b.ISRCs) > 0
+		if hasA && !hasB {
+			return -1
+		}
+		if hasB && !hasA {
 			return 1
 		}
 		return cmp.Compare(a.FirstReleaseDate, b.FirstReleaseDate)

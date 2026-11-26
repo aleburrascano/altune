@@ -266,10 +266,12 @@ func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId id
 	s.resolveIdentity(ctx, ac)
 	timeStage(ctx, "identity", identityStart, s.now)
 	steps := s.buildSteps(userId, trackId)
-	if err := RunPipeline(ctx, steps, ac); err != nil {
-		if failure := s.takeRerecording(ctx, steps, ac, err); failure != nil {
-			return failure
-		}
+	failure := RunPipeline(ctx, steps, ac)
+	if failure != nil {
+		failure = s.takeRerecording(ctx, steps, ac, failure)
+	}
+	if failure != nil {
+		return failure
 	}
 
 	jobReporterFrom(ctx).fetched(ac.SourceFormat)
@@ -287,15 +289,16 @@ func (s *AcquireTrackAudioService) takeRerecording(ctx context.Context, steps Pi
 	if !found {
 		return originalErr
 	}
-	if err := s.runRerecordingPass(ctx, steps, ac, label); err != nil {
-		logRerecordingTier(ctx, ac, originalMBID, label.MBID, "pass_failed", err)
-		if ctx.Err() != nil {
-			return err
-		}
-		return originalErr
+	err := s.runRerecordingPass(ctx, steps, ac, label)
+	if err == nil {
+		logRerecordingTier(ctx, ac, originalMBID, label.MBID, "taken", nil)
+		return nil
 	}
-	logRerecordingTier(ctx, ac, originalMBID, label.MBID, "taken", nil)
-	return nil
+	logRerecordingTier(ctx, ac, originalMBID, label.MBID, "pass_failed", err)
+	if ctx.Err() != nil {
+		return err
+	}
+	return originalErr
 }
 
 func (s *AcquireTrackAudioService) runRerecordingPass(ctx context.Context, steps Pipeline, ac *AcquisitionContext, label ports.TrackLabel) error {
