@@ -2860,3 +2860,14 @@ func TestDownloadStep_RefusesANilLimiter(t *testing.T) {
 
 	newTestDownloadStep(&fileWritingSearcher{}, service.WithStepDownloadLimiter(nil))
 }
+
+func TestDownloadStep_RollbackLogsAScratchFolderItCouldNotRemove(t *testing.T) {
+	logs := captureJSONLog(t)
+	step := service.NewDownloadStep(&fileWritingSearcher{}, failingRemoveWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder())
+
+	if err := step.Rollback(context.Background(), &service.AcquisitionContext{TempDir: "/tmp/altune-acquire-x"}); err != nil {
+		t.Fatalf("Rollback: %v, want nil", err)
+	}
+
+	findLogRecord(t, logs, "temp_cleanup_failed")
+}

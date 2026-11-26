@@ -53,7 +53,7 @@ func (f storedFileFingerprinter) identify(ctx context.Context, audioRef string, 
 	if err != nil {
 		return ports.RecordingMatch{}, fmt.Errorf("create stored-audio dir: %w", err)
 	}
-	defer func() { _ = f.workspace.Remove(dir) }()
+	defer removeScratch(ctx, f.workspace, dir)
 
 	path, err := f.reader.CopyStored(ctx, audioRef, dir)
 	if err != nil {

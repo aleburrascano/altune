@@ -13,7 +13,7 @@ import (
 func (s *DownloadStep) executeWindowed(ctx context.Context, ac *AcquisitionContext) (afterDownload, error) {
 	failures := downloadFailures{unavailable: ac.SearchUnavailable}
 	holds := holdBook{ws: s.workspace}
-	defer holds.discard()
+	defer holds.discard(ctx)
 	pending := ac.Ranked
 	used, windowIndex := 0, nextWindowIndex(ac.Attempted)
 
@@ -150,7 +150,7 @@ func mergeWindow(ctx context.Context, ws ports.ScratchFolder, ac *AcquisitionCon
 	won := false
 	for _, result := range results {
 		if won && result.status != attemptRejected {
-			_ = ws.Remove(result.tmpDir)
+			removeScratch(ctx, ws, result.tmpDir)
 			continue
 		}
 		if result.status == attemptAccepted {
@@ -159,7 +159,7 @@ func mergeWindow(ctx context.Context, ws ports.ScratchFolder, ac *AcquisitionCon
 		}
 		result.applyTo(ctx, ac)
 		failures.noteAttempt(result)
-		holds.offer(result)
+		holds.offer(ctx, result)
 	}
 	return downloaded, won
 }

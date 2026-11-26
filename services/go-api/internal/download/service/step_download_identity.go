@@ -119,7 +119,7 @@ func (s *DownloadStep) identifyPreview(
 	if err != nil {
 		return ports.RecordingMatch{}, fmt.Errorf("create preview dir: %w", err)
 	}
-	defer func() { _ = s.workspace.Remove(previewDir) }()
+	defer removeScratch(ctx, s.workspace, previewDir)
 
 	previewPath, err := s.fetchPreview(ctx, previewer, candidate, previewDir)
 	if err != nil {
