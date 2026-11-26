@@ -17,6 +17,7 @@ var (
 	MustDirectDeleteOrphans               = service.MustDirectDeleteOrphans
 	MustNewAcquireTrackAudioService       = service.MustNewAcquireTrackAudioService
 	MustNewBackgroundAcquisitionScheduler = service.MustNewBackgroundAcquisitionScheduler
+	NewProcessRoot                        = service.NewProcessRoot
 	InMemoryQueue                         = service.InMemoryQueue
 	QueueOf                               = service.QueueOf
 	MustUpgradeLaneOf                     = service.MustUpgradeLaneOf
@@ -35,5 +36,7 @@ var (
 )
 
 type SchedulerPorts = service.SchedulerPorts
+
+type ProcessRoot = service.ProcessRoot
 
 type UpgradeLane = service.UpgradeLane

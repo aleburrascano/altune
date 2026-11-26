@@ -44,13 +44,13 @@ type Identifier struct {
 	client   *http.Client
 }
 
-func NewIdentifier(binDir, apiKey string, client *http.Client) (*Identifier, error) {
+func NewIdentifier(ctx context.Context, binDir, apiKey string, client *http.Client) (*Identifier, error) {
 	if client == nil {
 		return nil, ErrClientRequired
 	}
 	key := strings.TrimSpace(apiKey)
 	if key == "" {
-		slog.Warn("chromaprint: AcoustID API key is empty or blank; " +
+		slog.WarnContext(ctx, "chromaprint: AcoustID API key is empty or blank; "+
 			"audio fingerprint identification is disabled and every lookup will fail")
 	}
 	bounded := *client
@@ -63,8 +63,8 @@ func NewIdentifier(binDir, apiKey string, client *http.Client) (*Identifier, err
 	}, nil
 }
 
-func MustNewIdentifier(binDir, apiKey string, client *http.Client) *Identifier {
-	i, err := NewIdentifier(binDir, apiKey, client)
+func MustNewIdentifier(ctx context.Context, binDir, apiKey string, client *http.Client) *Identifier {
+	i, err := NewIdentifier(ctx, binDir, apiKey, client)
 	if err != nil {
 		panic(err)
 	}

@@ -152,7 +152,7 @@ func (s *YouTubeAudioSearcher) runYtDlpInspect(ctx context.Context, trackURL str
 	inspectCtx, cancel := context.WithTimeout(ctx, inspectTimeout)
 	defer cancel()
 
-	cookies, err := s.leaseCookieJar("inspect", trackURL)
+	cookies, err := s.leaseCookieJar(ctx, "inspect", trackURL)
 	if err != nil {
 		return inspection{}, fmt.Errorf("yt-dlp inspect: copy cookie jar: %w", err)
 	}

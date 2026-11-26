@@ -21,7 +21,7 @@ type recordingWorkspace struct {
 func (r *recordingWorkspace) Create(string) (string, error) { return "", nil }
 func (r *recordingWorkspace) Remove(string) error           { return nil }
 func (r *recordingWorkspace) Size(string) (int64, error)    { return 0, nil }
-func (r *recordingWorkspace) SweepAbandoned(abandonedBefore time.Time) int {
+func (r *recordingWorkspace) SweepAbandoned(_ context.Context, abandonedBefore time.Time) int {
 	r.cutoffs = append(r.cutoffs, abandonedBefore)
 	return 0
 }
@@ -30,7 +30,7 @@ func TestSweepStaleTempDirsSweepsOnceWithLiveJobCutoff(t *testing.T) {
 	fake := &recordingWorkspace{}
 
 	before := time.Now()
-	service.SweepStaleTempDirs(fake, time.Now)
+	service.SweepStaleTempDirs(context.Background(), fake, time.Now)
 	after := time.Now()
 
 	if len(fake.cutoffs) != 1 {
@@ -45,7 +45,7 @@ func TestSweepStaleTempDirsSweepsOnceWithLiveJobCutoff(t *testing.T) {
 func TestSweepStaleTempDirsCutoffSparesJobsStillInsideAcquireTimeout(t *testing.T) {
 	fake := &recordingWorkspace{}
 
-	service.SweepStaleTempDirs(fake, time.Now)
+	service.SweepStaleTempDirs(context.Background(), fake, time.Now)
 
 	if len(fake.cutoffs) != 1 {
 		t.Fatalf("SweepAbandoned calls = %d, want 1", len(fake.cutoffs))
@@ -58,8 +58,8 @@ func TestSweepStaleTempDirsCutoffSparesJobsStillInsideAcquireTimeout(t *testing.
 func TestSweepStaleTempDirsRepeatedCallsNeverMoveCutoffBack(t *testing.T) {
 	fake := &recordingWorkspace{}
 
-	service.SweepStaleTempDirs(fake, time.Now)
-	service.SweepStaleTempDirs(fake, time.Now)
+	service.SweepStaleTempDirs(context.Background(), fake, time.Now)
+	service.SweepStaleTempDirs(context.Background(), fake, time.Now)
 
 	if len(fake.cutoffs) != 2 {
 		t.Fatalf("SweepAbandoned calls = %d, want 2", len(fake.cutoffs))
@@ -85,7 +85,7 @@ func (osWorkspace) Size(path string) (int64, error) {
 	return info.Size(), nil
 }
 
-func (osWorkspace) SweepAbandoned(time.Time) int { return 0 }
+func (osWorkspace) SweepAbandoned(context.Context, time.Time) int { return 0 }
 
 type callRecordingWorkspace struct {
 	inner ports.ScratchFolder
@@ -109,7 +109,9 @@ func (r *callRecordingWorkspace) Remove(path string) error {
 	return r.inner.Remove(path)
 }
 
-func (r *callRecordingWorkspace) SweepAbandoned(t time.Time) int { return r.inner.SweepAbandoned(t) }
+func (r *callRecordingWorkspace) SweepAbandoned(ctx context.Context, t time.Time) int {
+	return r.inner.SweepAbandoned(ctx, t)
+}
 
 func (r *callRecordingWorkspace) Size(path string) (int64, error) { return r.inner.Size(path) }
 

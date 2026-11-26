@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/core/ports"
 	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"os"
@@ -78,7 +79,7 @@ func TestRemoveMissingPathIsNil(t *testing.T) {
 
 func TestSweepAbandonedEmptyRootReturnsZero(t *testing.T) {
 	useTempRoot(t)
-	if got := newWorkspace().SweepAbandoned(time.Now().Add(-testMaxAge)); got != 0 {
+	if got := newWorkspace().SweepAbandoned(context.Background(), time.Now().Add(-testMaxAge)); got != 0 {
 		t.Errorf("SweepAbandoned on empty root = %d, want 0", got)
 	}
 }
@@ -88,7 +89,7 @@ func TestSweepAbandonedRemovesAgedKeepsFresh(t *testing.T) {
 	aged := agedDir(t, root, tempDirPrefix+"abandoned", testMaxAge+time.Hour)
 	fresh := agedDir(t, root, tempDirPrefix+"live", testMaxAge-time.Minute)
 
-	if got := newWorkspace().SweepAbandoned(time.Now().Add(-testMaxAge)); got != 1 {
+	if got := newWorkspace().SweepAbandoned(context.Background(), time.Now().Add(-testMaxAge)); got != 1 {
 		t.Errorf("SweepAbandoned = %d, want 1", got)
 	}
 	if _, err := os.Stat(aged); !os.IsNotExist(err) {
@@ -104,7 +105,7 @@ func TestSweepAbandonedRefusesLookAlikes(t *testing.T) {
 	foreignDir := agedDir(t, root, "unrelated-service-cache", testMaxAge+time.Hour)
 	namedFile := agedFile(t, root, tempDirPrefix+"notadir", testMaxAge+time.Hour)
 
-	if got := newWorkspace().SweepAbandoned(time.Now().Add(-testMaxAge)); got != 0 {
+	if got := newWorkspace().SweepAbandoned(context.Background(), time.Now().Add(-testMaxAge)); got != 0 {
 		t.Errorf("SweepAbandoned = %d, want 0", got)
 	}
 	for _, path := range []string{foreignDir, namedFile} {
@@ -120,14 +121,14 @@ func TestSweepAbandonedBetweenTicks(t *testing.T) {
 	dir := agedDir(t, root, tempDirPrefix+"job", time.Minute)
 	agedDir(t, root, tempDirPrefix+"old", testMaxAge+time.Hour)
 
-	if got := ws.SweepAbandoned(time.Now().Add(-testMaxAge)); got != 1 {
+	if got := ws.SweepAbandoned(context.Background(), time.Now().Add(-testMaxAge)); got != 1 {
 		t.Fatalf("first sweep = %d, want 1", got)
 	}
-	if got := ws.SweepAbandoned(time.Now().Add(-testMaxAge)); got != 0 {
+	if got := ws.SweepAbandoned(context.Background(), time.Now().Add(-testMaxAge)); got != 0 {
 		t.Errorf("second sweep right after = %d, want 0", got)
 	}
 	backdate(t, dir, testMaxAge+time.Hour)
-	if got := ws.SweepAbandoned(time.Now().Add(-testMaxAge)); got != 1 {
+	if got := ws.SweepAbandoned(context.Background(), time.Now().Add(-testMaxAge)); got != 1 {
 		t.Errorf("sweep after backdating = %d, want 1", got)
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
@@ -149,7 +150,7 @@ func TestSweepAbandonedLogsNothingWithoutStaleDirs(t *testing.T) {
 	agedDir(t, root, tempDirPrefix+"live", testMaxAge-time.Minute)
 	logs := captureJSONLogs(t)
 
-	newWorkspace().SweepAbandoned(time.Now().Add(-testMaxAge))
+	newWorkspace().SweepAbandoned(context.Background(), time.Now().Add(-testMaxAge))
 
 	if logs.Len() != 0 {
 		t.Errorf("sweep with no stale dirs logged:\n%s", logs.String())
@@ -161,7 +162,7 @@ func TestSweepAbandonedLogsTheSweptCount(t *testing.T) {
 	agedDir(t, root, tempDirPrefix+"old", testMaxAge+time.Hour)
 	logs := captureJSONLogs(t)
 
-	newWorkspace().SweepAbandoned(time.Now().Add(-testMaxAge))
+	newWorkspace().SweepAbandoned(context.Background(), time.Now().Add(-testMaxAge))
 
 	var record struct {
 		Level   string `json:"level"`

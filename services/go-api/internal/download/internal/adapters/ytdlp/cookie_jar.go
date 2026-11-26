@@ -87,7 +87,7 @@ func (s *YouTubeAudioSearcher) SignedOutSince(ctx context.Context) (time.Time, b
 	}
 	var since *time.Time
 	err := cookieLease{live: s.cookieFile, now: s.now, sleep: s.sleep}.locked(ctx, func(current jarFile) error {
-		since = loadSession(s.cookieFile).following(current).SignedOutSince
+		since = loadSession(ctx, s.cookieFile).following(current).SignedOutSince
 		return nil
 	})
 	if err != nil || since == nil {
@@ -96,7 +96,7 @@ func (s *YouTubeAudioSearcher) SignedOutSince(ctx context.Context) (time.Time, b
 	return *since, true
 }
 
-func (s *YouTubeAudioSearcher) leaseCookieJar(run, target string) (cookieLease, error) {
+func (s *YouTubeAudioSearcher) leaseCookieJar(ctx context.Context, run, target string) (cookieLease, error) {
 	if s.cookieFile == "" {
 		return cookieLease{cleanup: func() {}}, nil
 	}
@@ -110,7 +110,7 @@ func (s *YouTubeAudioSearcher) leaseCookieJar(run, target string) (cookieLease, 
 	}
 	return cookieLease{
 		live: s.cookieFile, run: run, environment: s.environment,
-		youtube: isYouTubeTarget(target), installedAt: loadSession(s.cookieFile).following(live).InstalledAt,
+		youtube: isYouTubeTarget(target), installedAt: loadSession(ctx, s.cookieFile).following(live).InstalledAt,
 		path: path, snapshot: live.contents, cleanup: cleanup, now: s.now, sleep: s.sleep,
 	}, nil
 }
@@ -166,7 +166,7 @@ func (l cookieLease) keepRenewedCookies(ctx context.Context) error {
 }
 
 func (l cookieLease) markSignedIn(ctx context.Context) error {
-	if !l.youtube || loadSession(l.live).SignedOutSince == nil {
+	if !l.youtube || loadSession(ctx, l.live).SignedOutSince == nil {
 		return nil
 	}
 	return l.underSessionLock(ctx, func(session jarSession) error {
@@ -226,13 +226,13 @@ func (l cookieLease) underLock(ctx context.Context, update func(jarFile, jarSess
 		if !bytes.Equal(current.contents, l.snapshot) {
 			return nil
 		}
-		return update(current, loadSession(l.live).following(current))
+		return update(current, loadSession(ctx, l.live).following(current))
 	})
 }
 
 func (l cookieLease) underSessionLock(ctx context.Context, update func(jarSession) error) error {
 	return l.locked(ctx, func(current jarFile) error {
-		session := loadSession(l.live).following(current)
+		session := loadSession(ctx, l.live).following(current)
 		if !session.InstalledAt.Equal(l.installedAt) {
 			return nil
 		}
@@ -270,14 +270,14 @@ func readJarFile(path string) (jarFile, error) {
 	return jarFile{contents: contents, mode: info.Mode().Perm(), modTime: info.ModTime()}, nil
 }
 
-func loadSession(live string) jarSession {
+func loadSession(ctx context.Context, live string) jarSession {
 	var session jarSession
 	raw, _ := os.ReadFile(live + cookieJarSessionSuffix)
 	if len(raw) == 0 {
 		return session
 	}
 	if err := json.Unmarshal(raw, &session); err != nil {
-		slog.Error("ytdlp.cookie_session_unreadable", "error", err)
+		slog.ErrorContext(ctx, "ytdlp.cookie_session_unreadable", "error", err)
 		return jarSession{}
 	}
 	return session

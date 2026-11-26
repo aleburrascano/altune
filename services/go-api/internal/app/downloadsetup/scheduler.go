@@ -75,7 +75,7 @@ func NewScheduler(ctx context.Context, d Deps) *download.BackgroundAcquisitionSc
 		},
 		opts...,
 	)
-	return download.MustNewBackgroundAcquisitionScheduler(ctx, acquireSvc, d.Config.AcquisitionConcurrency, clock.Now, schedulerPorts(d, acquireSvc, skips, lookups), schedulerOptions(d)...)
+	return download.MustNewBackgroundAcquisitionScheduler(download.NewProcessRoot(ctx), acquireSvc, d.Config.AcquisitionConcurrency, clock.Now, schedulerPorts(d, acquireSvc, skips, lookups), schedulerOptions(d)...)
 }
 
 func storeOptions(d Deps) []acquireOption {
@@ -92,7 +92,7 @@ func fingerprinting(ctx context.Context, d *Deps) (*fingerprintstatus.HealthTrac
 		slog.WarnContext(ctx, "acquisition: fingerprint verification disabled", "reason", "ACOUSTID_API_KEY is empty")
 		return fingerprintstatus.NewTracker(nil), download.NoopAudioIdentifier(), download.NoopStoredAudioReader()
 	}
-	identifier := download.MustNewChromaprintIdentifier(cfg.FFmpegLocation, cfg.AcoustIDAPIKey, outbound.MustNewClient(acoustIDTimeout, d.Transport))
+	identifier := download.MustNewChromaprintIdentifier(ctx, cfg.FFmpegLocation, cfg.AcoustIDAPIKey, outbound.MustNewClient(acoustIDTimeout, d.Transport))
 	d.Verification.Fpcalc = identifier.Available()
 	lookups := fingerprintstatus.NewTracker(identifier)
 	slog.InfoContext(ctx, "acquisition: fingerprint verification wired", "fpcalc", d.Verification.Fpcalc)

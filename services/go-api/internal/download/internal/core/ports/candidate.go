@@ -3,6 +3,7 @@ package ports
 import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/sourcekey"
+	"context"
 	"fmt"
 	"log/slog"
 )
@@ -41,11 +42,11 @@ func (c AudioCandidate) IsResolved() bool {
 	return c.Kind != "" && c.Kind != KindUpload
 }
 
-func DedupeCandidatesBySourceKey(merged, results []AudioCandidate, positionByKey map[string]int) []AudioCandidate {
+func DedupeCandidatesBySourceKey(ctx context.Context, merged, results []AudioCandidate, positionByKey map[string]int) []AudioCandidate {
 	for _, c := range results {
 		key := sourcekey.SourceKey(c.URL)
 		if key == "" {
-			slog.Warn("acquisition.candidate_dropped_no_source_key", "url", c.URL, "source", c.Source)
+			slog.WarnContext(ctx, "acquisition.candidate_dropped_no_source_key", "url", c.URL, "source", c.Source)
 			continue
 		}
 		merged = mergeCandidate(merged, c, key, positionByKey)
@@ -66,17 +67,19 @@ func mergeCandidate(merged []AudioCandidate, c AudioCandidate, key string, posit
 }
 
 func CollectCandidates(
+	ctx context.Context,
 	n int,
 	run func(i int) ([]AudioCandidate, error),
 	onSuccess func(i int, candidates []AudioCandidate),
 	onFailure func(i int, err error),
 	allFailed func(firstErr error) error,
 ) ([]AudioCandidate, error) {
-	merged, _, err := CollectCandidatesReportingOutage(n, run, onSuccess, onFailure, allFailed)
+	merged, _, err := CollectCandidatesReportingOutage(ctx, n, run, onSuccess, onFailure, allFailed)
 	return merged, err
 }
 
 func CollectCandidatesReportingOutage(
+	ctx context.Context,
 	n int,
 	run func(i int) ([]AudioCandidate, error),
 	onSuccess func(i int, candidates []AudioCandidate),
@@ -101,7 +104,7 @@ func CollectCandidatesReportingOutage(
 			continue
 		}
 		onSuccess(i, candidates)
-		merged = DedupeCandidatesBySourceKey(merged, candidates, positionByKey)
+		merged = DedupeCandidatesBySourceKey(ctx, merged, candidates, positionByKey)
 	}
 
 	if failures == n && firstErr != nil {

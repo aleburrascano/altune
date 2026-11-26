@@ -190,6 +190,7 @@ func (s *YouTubeAudioSearcher) runSearchPairs(ctx context.Context, queries []str
 
 func (s *YouTubeAudioSearcher) foldEngineOutcomes(ctx context.Context, query string, outcomes []pairOutcome) ([]ports.AudioCandidate, error) {
 	return ports.CollectCandidates(
+		ctx,
 		len(outcomes),
 		func(ei int) ([]ports.AudioCandidate, error) {
 			return outcomes[ei].candidates, outcomes[ei].err
@@ -212,6 +213,7 @@ func (s *YouTubeAudioSearcher) SearchQueries(ctx context.Context, queries []stri
 	outcomes := s.runSearchPairs(ctx, queries)
 
 	return ports.CollectCandidates(
+		ctx,
 		len(queries),
 		func(qi int) ([]ports.AudioCandidate, error) {
 			return s.foldEngineOutcomes(ctx, queries[qi], outcomes[qi])
@@ -256,7 +258,7 @@ func (s *YouTubeAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec st
 		"--",
 		searchSpec,
 	}
-	cookies, err := s.leaseCookieJar("search", searchSpec)
+	cookies, err := s.leaseCookieJar(ctx, "search", searchSpec)
 	if err != nil {
 		return nil, fmt.Errorf("yt-dlp search: copy cookie jar: %w", err)
 	}
@@ -351,7 +353,7 @@ func (s *YouTubeAudioSearcher) fetchAudio(
 	if s.ffmpegLocation != "" {
 		args = append([]string{"--ffmpeg-location", s.ffmpegLocation}, args...)
 	}
-	cookies, err := s.leaseCookieJar(run, url)
+	cookies, err := s.leaseCookieJar(ctx, run, url)
 	if err != nil {
 		return ports.FetchedAudio{}, fmt.Errorf("yt-dlp download: copy cookie jar: %w", err)
 	}

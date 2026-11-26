@@ -149,8 +149,12 @@ func (p SchedulerPorts) validate(owner string) error {
 	)
 }
 
+type ProcessRoot struct{ ctx context.Context }
+
+func NewProcessRoot(ctx context.Context) ProcessRoot { return ProcessRoot{ctx: ctx} }
+
 func NewBackgroundAcquisitionScheduler(
-	parent context.Context,
+	processRoot ProcessRoot,
 	svc acquirer,
 	workers int,
 	now clock.Func,
@@ -161,7 +165,7 @@ func NewBackgroundAcquisitionScheduler(
 	if err := errors.Join(missingPort(owner, "clock", now == nil), wiring.validate(owner)); err != nil {
 		return nil, err
 	}
-	ctx, cancel := background.DetachCancelable(parent)
+	ctx, cancel := background.DetachCancelable(processRoot.ctx)
 	s := &BackgroundAcquisitionScheduler{
 		svc:                 svc,
 		pending:             newPendingTracker(),
@@ -189,6 +193,7 @@ func NewBackgroundAcquisitionScheduler(
 	for _, opt := range opts {
 		opt(s)
 	}
+	logVerification(ctx, s.verification)
 	s.queue = wiring.Queue(s.wake, s.now)
 	s.runners.Track(func() { s.notifier.Listen(s.baseCtx, s.wake) })
 	s.runners.Track(s.fanOutWakes)
@@ -201,14 +206,14 @@ func NewBackgroundAcquisitionScheduler(
 }
 
 func MustNewBackgroundAcquisitionScheduler(
-	parent context.Context,
+	processRoot ProcessRoot,
 	svc acquirer,
 	workers int,
 	now clock.Func,
 	wiring SchedulerPorts,
 	opts ...func(*BackgroundAcquisitionScheduler),
 ) *BackgroundAcquisitionScheduler {
-	s, err := NewBackgroundAcquisitionScheduler(parent, svc, workers, now, wiring, opts...)
+	s, err := NewBackgroundAcquisitionScheduler(processRoot, svc, workers, now, wiring, opts...)
 	if err != nil {
 		panic(err)
 	}
