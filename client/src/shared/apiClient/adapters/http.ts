@@ -7,6 +7,7 @@ import {
   type CredentialStamp,
 } from '@shared/auth';
 import { CORRELATION_HEADER, newCorrelationId } from '@shared/apiClient/adapters/correlationId';
+import type { ApiErrorCode } from '@shared/failure';
 import { warn } from '@shared/log';
 import { startDeadline } from '@shared/timing';
 import type { Deadline } from '@shared/timing';
@@ -81,7 +82,7 @@ async function send(
   }
 }
 
-async function errorCode(response: Response): Promise<string | undefined> {
+async function errorCode(response: Response): Promise<ApiErrorCode | undefined> {
   try {
     return parseErrorBody(await response.json()).code;
   } catch {

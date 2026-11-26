@@ -16,6 +16,7 @@ import {
 const { __http } = require('@testing/doubles/fetch.js');
 
 const EVENTS_PATH = '/v1/discovery/events';
+const SERVICE_UNAVAILABLE = 503;
 
 type SentRequest = { path: string; body: string };
 type SentEvent = { type: string; payload: Record<string, unknown> };
@@ -92,7 +93,7 @@ describe('useAppMutation()', () => {
       useAppMutation({
         action: 'demo.save',
         mutationFn: async (_: void) => {
-          throw new ApiError(503, 'unavailable', 'x', 'corr-1');
+          throw new ApiError(SERVICE_UNAVAILABLE, 'unavailable', 'internal', 'corr-1');
         },
         onError,
       }),

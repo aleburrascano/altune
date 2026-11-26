@@ -1,9 +1,9 @@
-import { ApiError, NetworkError } from '@shared/failure';
+import { ApiError, NetworkError, type ApiErrorCode } from '@shared/failure';
 
 import { contentFailure, failFastOnSettledContentFailure } from '@features/detail';
 
 describe('isSettledContentFailure', () => {
-  it.each([
+  it.each<[number, ApiErrorCode]>([
     [404, 'discovery.content_unserved'],
     [504, 'discovery.provider_timeout'],
     [503, 'discovery.provider_rate_limited'],

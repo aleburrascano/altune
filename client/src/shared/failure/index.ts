@@ -1,4 +1,6 @@
 export { RETRY_TAIL, describeError } from '@shared/failure/core/describeError';
+export { API_ERROR_CODES, isApiErrorCode } from '@shared/failure/core/apiErrorCodes';
+export type { ApiErrorCode } from '@shared/failure/core/apiErrorCodes';
 export {
   ApiError,
   ContractError,

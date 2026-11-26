@@ -1,6 +1,6 @@
 import type { DefaultOptions } from '@tanstack/react-query';
 
-import { ApiError } from '@shared/failure';
+import { ApiError, type ApiErrorCode } from '@shared/failure';
 import type { DiscoveryProviderStatus } from '@shared/catalog';
 
 export const DETAIL_LIST_CAP = 100;
@@ -20,14 +20,17 @@ export function hasDegradedStatus(
   return response != null && response.status !== 'ok';
 }
 
-const CONTENT_UNSERVED_CODE = 'discovery.content_unserved';
-const PROVIDER_FAILURE_CODE_PREFIX = 'discovery.provider_';
+const SETTLED_CONTENT_CODES: ReadonlySet<ApiErrorCode> = new Set<ApiErrorCode>([
+  'discovery.content_unserved',
+  'discovery.provider_timeout',
+  'discovery.provider_rate_limited',
+  'discovery.provider_circuit_open',
+  'discovery.provider_error',
+]);
 
 function isSettledContentFailure(error: unknown): boolean {
   if (!(error instanceof ApiError) || error.code === undefined) return false;
-  return (
-    error.code === CONTENT_UNSERVED_CODE || error.code.startsWith(PROVIDER_FAILURE_CODE_PREFIX)
-  );
+  return SETTLED_CONTENT_CODES.has(error.code);
 }
 
 export type ContentFailure = 'settled' | 'transient';
