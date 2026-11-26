@@ -1,6 +1,6 @@
-package slowclient
+package slowclienttest
 
-import "altune/go-api/internal/shared/slowclient/internal/adapters/slowconn"
+import "altune/go-api/internal/shared/slowclienttest/internal/adapters/slowconn"
 
 var (
 	NewServer    = slowconn.NewServer

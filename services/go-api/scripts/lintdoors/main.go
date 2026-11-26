@@ -14,13 +14,14 @@ import (
 	"strings"
 )
 
-const usage = "usage: go run ./scripts/lintdoors [--summary] [<go-api dir>]\n  every module (internal/<module>, or internal/<group>/<module> for a grouping directory) has one door, its root package, and may have a second, <module>test, that only _test.go files import; lists each outside import of any other package of a module and each non-test import of a test-support package, and exits 1 when there are any; --summary prints, per module, its door size, how much of it is used outside, and its open packages with their importers"
+const usage = "usage: go run ./scripts/lintdoors [--summary] [--exports] [<go-api dir>]\n  every module (internal/<module>, or internal/<group>/<module> for a grouping directory) has one door, its root package, and may have a second, <module>test, that only _test.go files import; lists each outside import of any other package of a module and each non-test import of a test-support package, and exits 1 when there are any; --exports also lists each root identifier that no file outside the module uses (a name used only by its own module, tests included, is unexported and those tests go through the real door; used means pkg.Name through a plain or aliased import, a dot import is not followed); --summary prints, per module, its door size, how much of it is used outside, and its open packages with their importers"
 
 var groups = map[string]bool{"platform": true, "shared": true}
 
 const (
 	kindSideDoor = iota
 	kindTestSupport
+	kindUnusedExport
 )
 
 type violation struct {
@@ -31,6 +32,7 @@ type violation struct {
 	sub      string
 	importer string
 	kind     int
+	col      int
 }
 
 const (
@@ -57,11 +59,14 @@ func say(w io.Writer, format string, a ...any) {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	summary := false
+	exports := false
 	root := "."
 	for _, arg := range args {
 		switch {
 		case arg == "--summary":
 			summary = true
+		case arg == "--exports":
+			exports = true
 		case strings.HasPrefix(arg, "-"):
 			say(stderr, "%s\n", usage)
 			return 2
@@ -74,6 +79,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 		say(stderr, "lintdoors: %v\n", err)
 		return 2
 	}
+	if exports {
+		if err := s.addUnusedExports(); err != nil {
+			say(stderr, "lintdoors: %v\n", err)
+			return 2
+		}
+	}
 	if summary {
 		if err := printSummary(stdout, s); err != nil {
 			say(stderr, "lintdoors: %v\n", err)
@@ -81,6 +92,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 	} else {
 		for _, v := range s.violations {
+			if v.kind == kindUnusedExport {
+				say(stdout, "%s:%d:%d: %s is exported by module %s but no file outside it uses it; unexport it and let the module's own tests go through the real door\n", v.file, v.line, v.col, v.pkg, v.module)
+				continue
+			}
 			if v.kind == kindTestSupport {
 				say(stdout, "%s:%d: non-test code imports the test-support package %s; only _test.go files may\n", v.file, v.line, v.pkg)
 				continue
@@ -88,7 +103,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			say(stdout, "%s:%d: imports %s, a non-root package of module %s; import %s/internal/%s and move what is needed behind its root\n", v.file, v.line, v.pkg, v.module, s.modulePath, v.module)
 		}
 	}
-	say(stdout, "imports through a module's side door or of test support from production: %d\n", len(s.violations))
+	say(stdout, "imports through a module's side door, of test support from production, or unused root exports: %d\n", len(s.violations))
 	if len(s.violations) > 0 {
 		return 1
 	}
@@ -127,7 +142,7 @@ func lastSegment(p string) string {
 func isTestSupport(module, sub string) bool {
 	if sub == "" {
 		name := lastSegment(module)
-		return strings.HasPrefix(name, "test")
+		return strings.HasPrefix(name, "test") || strings.HasSuffix(name, "test")
 	}
 	return sub == lastSegment(module)+"test"
 }
@@ -222,7 +237,7 @@ func scanTree(root string) (*scan, error) {
 
 func (s *scan) scanFile(file string) error {
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, file, nil, parser.SkipObjectResolution)
+	f, err := parser.ParseFile(fset, file, nil, 0)
 	if err != nil {
 		return fmt.Errorf("parse %s: %w", file, err)
 	}
@@ -282,7 +297,7 @@ func (s *scan) recordUse(f *ast.File, imp *ast.ImportSpec, module string, isTest
 		if !ok || !sel.Sel.IsExported() {
 			return true
 		}
-		if id, ok := sel.X.(*ast.Ident); ok && id.Name == alias {
+		if id, ok := sel.X.(*ast.Ident); ok && id.Name == alias && id.Obj == nil {
 			s.used[module][sel.Sel.Name] |= flag
 		}
 		return true
@@ -328,6 +343,9 @@ func printSummary(w io.Writer, s *scan) error {
 			if v.module != m {
 				continue
 			}
+			if v.kind == kindUnusedExport {
+				continue
+			}
 			if v.kind == kindTestSupport {
 				testSupport++
 				continue
@@ -359,45 +377,81 @@ func printSummary(w io.Writer, s *scan) error {
 	return nil
 }
 
-func rootExports(dir string) (map[string]bool, error) {
+type declPos struct {
+	file      string
+	line, col int
+}
+
+func (s *scan) addUnusedExports() error {
+	modules := make([]string, 0, len(s.modules))
+	for m := range s.modules {
+		modules = append(modules, m)
+	}
+	sort.Strings(modules)
+	for _, m := range modules {
+		names, err := rootExports(filepath.Join(s.root, "internal", filepath.FromSlash(m)))
+		if err != nil {
+			return err
+		}
+		for name, pos := range names {
+			if s.used[m][name] == 0 {
+				s.violations = append(s.violations, violation{file: pos.file, line: pos.line, col: pos.col, pkg: name, module: m, kind: kindUnusedExport})
+			}
+		}
+	}
+	sort.Slice(s.violations, func(i, j int) bool {
+		a, b := s.violations[i], s.violations[j]
+		if a.file != b.file {
+			return a.file < b.file
+		}
+		return a.line < b.line
+	})
+	return nil
+}
+
+func rootExports(dir string) (map[string]declPos, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
-	names := map[string]bool{}
+	names := map[string]declPos{}
 	for _, e := range entries {
 		name := e.Name()
 		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
 			continue
 		}
-		f, err := parser.ParseFile(token.NewFileSet(), filepath.Join(dir, name), nil, parser.SkipObjectResolution)
+		file := filepath.Join(dir, name)
+		fset := token.NewFileSet()
+		f, err := parser.ParseFile(fset, file, nil, parser.SkipObjectResolution)
 		if err != nil {
-			return nil, fmt.Errorf("parse %s: %w", filepath.Join(dir, name), err)
+			return nil, fmt.Errorf("parse %s: %w", file, err)
 		}
-		collectExported(f, names)
+		collectExported(fset, file, f, names)
 	}
 	return names, nil
 }
 
-func collectExported(f *ast.File, names map[string]bool) {
+func collectExported(fset *token.FileSet, file string, f *ast.File, names map[string]declPos) {
+	add := func(id *ast.Ident) {
+		if id.IsExported() {
+			p := fset.Position(id.Pos())
+			names[id.Name] = declPos{file: file, line: p.Line, col: p.Column}
+		}
+	}
 	for _, decl := range f.Decls {
 		switch d := decl.(type) {
 		case *ast.FuncDecl:
-			if d.Recv == nil && d.Name.IsExported() {
-				names[d.Name.Name] = true
+			if d.Recv == nil {
+				add(d.Name)
 			}
 		case *ast.GenDecl:
 			for _, spec := range d.Specs {
 				switch sp := spec.(type) {
 				case *ast.TypeSpec:
-					if sp.Name.IsExported() {
-						names[sp.Name.Name] = true
-					}
+					add(sp.Name)
 				case *ast.ValueSpec:
 					for _, n := range sp.Names {
-						if n.IsExported() {
-							names[n.Name] = true
-						}
+						add(n)
 					}
 				}
 			}

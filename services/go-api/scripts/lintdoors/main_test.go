@@ -59,7 +59,7 @@ func TestImportOfANonRootPackageFromOutsideItsModuleIsFlagged(t *testing.T) {
 			if !strings.Contains(out, filepath.Join(dir, tc.name)+":") {
 				t.Fatalf("output does not name the file:\n%s", out)
 			}
-			if !strings.Contains(out, "production: 1") {
+			if !strings.Contains(out, "unused root exports: 1") {
 				t.Fatalf("output missing the count:\n%s", out)
 			}
 		})
@@ -138,23 +138,26 @@ func TestTheTestDoorIsOnlyForTestFiles(t *testing.T) {
 		name, body string
 		want       int
 	}{
-		"another module's test file":     {"internal/other/o_test.go", "package other\n\nimport _ \"example/api/internal/lib/libtest\"\n", 0},
-		"another module's production":    {"internal/other/o.go", "package other\n\nimport _ \"example/api/internal/lib/libtest\"\n", 1},
-		"its own production code":        {"internal/lib/l2.go", "package lib\n\nimport _ \"example/api/internal/lib/libtest\"\n", 1},
-		"its own test file":              {"internal/lib/l2_test.go", "package lib\n\nimport _ \"example/api/internal/lib/libtest\"\n", 0},
-		"a test-named module in a test":  {"internal/other/o_test.go", "package other\n\nimport _ \"example/api/internal/shared/testdb\"\n", 0},
-		"a test-named module in product": {"internal/other/o.go", "package other\n\nimport _ \"example/api/internal/shared/testdb\"\n", 1},
+		"another module's test file":        {"internal/other/o_test.go", "package other\n\nimport _ \"example/api/internal/lib/libtest\"\n", 0},
+		"another module's production":       {"internal/other/o.go", "package other\n\nimport _ \"example/api/internal/lib/libtest\"\n", 1},
+		"its own production code":           {"internal/lib/l2.go", "package lib\n\nimport _ \"example/api/internal/lib/libtest\"\n", 1},
+		"its own test file":                 {"internal/lib/l2_test.go", "package lib\n\nimport _ \"example/api/internal/lib/libtest\"\n", 0},
+		"a test-named module in a test":     {"internal/other/o_test.go", "package other\n\nimport _ \"example/api/internal/shared/testdb\"\n", 0},
+		"a test-suffixed module in a test":  {"internal/other/o_test.go", "package other\n\nimport _ \"example/api/internal/shared/slowclienttest\"\n", 0},
+		"a test-suffixed module in product": {"internal/other/o.go", "package other\n\nimport _ \"example/api/internal/shared/slowclienttest\"\n", 1},
+		"a test-named module in product":    {"internal/other/o.go", "package other\n\nimport _ \"example/api/internal/shared/testdb\"\n", 1},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			dir := newTree(t)
 			writeFile(t, dir, "internal/lib/libtest/libtest.go", "package libtest\n")
 			writeFile(t, dir, "internal/shared/testdb/testdb.go", "package testdb\n")
+			writeFile(t, dir, "internal/shared/slowclienttest/s.go", "package slowclienttest\n")
 			writeFile(t, dir, tc.name, tc.body)
 
 			code, out, _ := lint(t, dir)
 
-			if (code == 1) != (tc.want == 1) || !strings.Contains(out, "production: "+strconv.Itoa(tc.want)) {
+			if (code == 1) != (tc.want == 1) || !strings.Contains(out, "unused root exports: "+strconv.Itoa(tc.want)) {
 				t.Fatalf("exit = %d, want %d violations; output:\n%s", code, tc.want, out)
 			}
 		})
@@ -178,7 +181,7 @@ func TestSummaryCountsRootIdentifiersUsedOutsideTheModule(t *testing.T) {
 func TestCleanTreeExitsZero(t *testing.T) {
 	code, out, _ := lint(t, newTree(t))
 
-	if code != 0 || !strings.Contains(out, "production: 0") {
+	if code != 0 || !strings.Contains(out, "unused root exports: 0") {
 		t.Fatalf("exit = %d, output:\n%s", code, out)
 	}
 }
@@ -189,5 +192,44 @@ func TestBadInputExitsTwo(t *testing.T) {
 	}
 	if code, _, stderr := lint(t, t.TempDir()); code != 2 || !strings.Contains(stderr, "lintdoors:") {
 		t.Fatalf("no go.mod: exit = %d, stderr %q", code, stderr)
+	}
+}
+
+func TestAShadowedPackageNameIsNotAUse(t *testing.T) {
+	dir := newTree(t)
+	writeFile(t, dir, "internal/other/o.go", "package other\n\nimport \"example/api/internal/lib\"\n\nvar _ = lib.Open\n\nfunc f() {\n\tlib := struct{ Door int }{}\n\t_ = lib.Door\n}\n")
+
+	_, out, _ := lint(t, "--summary", dir)
+
+	want := "lib: 3 exported at the root, 1 used outside by production code, 0 used outside only by tests, 2 unused outside"
+	if !strings.Contains(out, want) {
+		t.Fatalf("missing %q:\n%s", want, out)
+	}
+}
+
+func TestExportsListsRootNamesNoFileOutsideTheModuleUses(t *testing.T) {
+	dir := newTree(t)
+	writeFile(t, dir, "internal/lib/lib_test.go", "package lib_test\n\nimport \"example/api/internal/lib\"\n\nvar _ = lib.Thing{}\n")
+	writeFile(t, dir, "internal/other/o_test.go", "package other\n\nimport \"example/api/internal/lib\"\n\nvar _ = lib.Open\n")
+
+	code, out, _ := lint(t, "--exports", dir)
+
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1:\n%s", code, out)
+	}
+	if !strings.Contains(out, filepath.Join(dir, "internal/lib/lib.go")+":3:7: Door is exported by module lib") {
+		t.Fatalf("Door is not listed with its position:\n%s", out)
+	}
+	if !strings.Contains(out, filepath.Join(dir, "internal/lib/lib.go")+":9:6: Thing is exported by module lib") {
+		t.Fatalf("a name only the module's own tests use is not listed:\n%s", out)
+	}
+	if strings.Contains(out, "Open is exported") {
+		t.Fatalf("a name another module's test uses must stay:\n%s", out)
+	}
+	if !strings.Contains(out, "unused root exports: 2") {
+		t.Fatalf("count missing:\n%s", out)
+	}
+	if code, _, _ := lint(t, dir); code != 0 {
+		t.Fatalf("without --exports the rule is off, exit = %d", code)
 	}
 }
