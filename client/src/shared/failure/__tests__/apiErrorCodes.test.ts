@@ -11,7 +11,7 @@ const CATALOG_RELATIVE_PATH = path.join(
   'apierror',
   'codes.go',
 );
-const GO_CATALOG_ENTRY = /\bcode\("([a-z_.]+)"/g;
+const GO_CATALOG_ENTRY = /\bcode\("([a-z0-9_.]+)"/g;
 const MAX_HOPS = 12;
 
 function findCatalog(): string | null {
@@ -34,7 +34,7 @@ describe('the ApiErrorCode union against the server catalog', () => {
   });
 
   it('lists exactly the codes the server can send', () => {
-    const source = fs.readFileSync(CATALOG_PATH!, 'utf8');
+    const source = CATALOG_PATH === null ? '' : fs.readFileSync(CATALOG_PATH, 'utf8');
     const serverCodes = [...source.matchAll(GO_CATALOG_ENTRY)].map((match) => match[1]);
 
     expect([...API_ERROR_CODES].sort()).toEqual([...serverCodes].sort());
