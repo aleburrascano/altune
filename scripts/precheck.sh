@@ -250,7 +250,8 @@ jest_failed_suites() {
       if (capturing) emit("  " path)
       next
     }
-    /^[[:space:]]*(PASS[[:space:]]|Summary of all failing tests|Test Suites:|Tests:|Snapshots?:|Snapshot Summary|Time:|Ran all test suites)/ { capturing = 0; next }
+    /^[[:space:]]*(PASS[[:space:]]|Summary of all failing tests)/ { capturing = 0; next }
+    /^(Test Suites:|Tests:|Snapshots?:|Snapshot Summary|Time:|Ran all test suites)/ { capturing = 0; next }
     /^[[:space:]]*● Console$/ { inconsole = 1; next }
     /^[[:space:]]*● / { inconsole = 0 }
     capturing && !inconsole && NF > 0 && !/^[[:space:]]+at / && !/^[[:space:]]*>?[[:space:]]*[0-9]*[[:space:]]*\|/ && count < 6 {
