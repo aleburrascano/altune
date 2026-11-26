@@ -4,6 +4,7 @@ import type { PlaybackTrack, QueueSource } from '@shared/playback';
 import { useQueueStore } from '@shared/playback';
 import { hasSignedInUser, onIdentityChange, onSignOut } from '@shared/session';
 import { warn } from '@shared/log';
+import { withDeadline } from '@shared/timing';
 
 import { altuneWidgetBridge } from '@features/player/adapters/native/altuneWidgetBridge';
 import type { WidgetBridge } from '@features/player/ports/widgetBridge';
@@ -20,6 +21,10 @@ const SIGNED_OUT = { signedIn: false };
 const SIGNED_OUT_JSON = JSON.stringify(SIGNED_OUT);
 
 const COVER_TIMEOUT_MS = 15_000;
+
+class CoverWriteTimeoutError extends Error {
+  override readonly name = 'CoverWriteTimeoutError';
+}
 
 export function createWidgetSnapshotPublisher(widget: WidgetBridge): () => () => void {
   return () => {
@@ -42,7 +47,7 @@ class SnapshotPublisher {
   private lastWrittenJson: string | null = null;
   private cover: CoverState | null = null;
   private coverWrites: Promise<unknown> = Promise.resolve();
-  private readonly coverTimeouts = new Set<ReturnType<typeof setTimeout>>();
+  private readonly stopController = new AbortController();
   private running = false;
   private requested = false;
 
@@ -70,8 +75,7 @@ class SnapshotPublisher {
 
   stop(): void {
     this.stopped = true;
-    this.coverTimeouts.forEach((timer) => clearTimeout(timer));
-    this.coverTimeouts.clear();
+    this.stopController.abort();
   }
 
   private publishWhileRequested(): Promise<void> {
@@ -121,9 +125,11 @@ class SnapshotPublisher {
 
   private writeUnlessSuperseded(attempt: CoverState): Promise<void> | void {
     if (this.isSuperseded(attempt)) return;
-    return writeCover(this.widget, attempt.artworkUrl, this.coverTimeouts).then((written) => {
-      attempt.written = written;
-    });
+    return writeCover(this.widget, attempt.artworkUrl, this.stopController.signal).then(
+      (written) => {
+        attempt.written = written;
+      },
+    );
   }
 
   private republishWhenWritten(attempt: CoverState): void {
@@ -150,35 +156,18 @@ function isStillCurrent(artworkUrl: string): boolean {
 function writeCover(
   widget: WidgetBridge,
   artworkUrl: string,
-  pending: Set<ReturnType<typeof setTimeout>>,
+  stopped: AbortSignal,
 ): Promise<boolean> {
-  return withTimeout(
-    widget.writeCoverFromUrl(artworkUrl, COVER_FILE_NAME),
-    COVER_TIMEOUT_MS,
-    pending,
-  ).then(
+  return withDeadline(widget.writeCoverFromUrl(artworkUrl, COVER_FILE_NAME), COVER_TIMEOUT_MS, {
+    onExpire: () => new CoverWriteTimeoutError(),
+    signal: stopped,
+  }).then(
     () => true,
     (error: unknown) => {
       warnPublishFailed(error);
       return false;
     },
   );
-}
-
-function withTimeout(
-  work: Promise<void>,
-  ms: number,
-  pending: Set<ReturnType<typeof setTimeout>>,
-): Promise<void> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timedOut = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error('cover write timed out')), ms);
-    pending.add(timer);
-  });
-  return Promise.race([work, timedOut]).finally(() => {
-    clearTimeout(timer);
-    if (timer !== undefined) pending.delete(timer);
-  });
 }
 
 function nowPlaying(track: PlaybackTrack, player: PlayerStatus, coverFileName: string | null) {

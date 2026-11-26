@@ -37,6 +37,7 @@ function lastSnapshot(): unknown {
 }
 
 const RESUME_POSITION_MS = 5000;
+const COVER_WRITE_TIMEOUT_MS = 15_000;
 
 let stop: () => void;
 let onPlaybackState: (event: unknown) => void;
@@ -434,6 +435,23 @@ describe('startWidgetSnapshotPublisher, from a caller', () => {
     await settle();
 
     expect(lastSnapshot()).toMatchObject({ nowPlaying: { title: 'Track 2', coverFileName: null } });
+  });
+
+  it('reports a cover write that never settles as timed out once its deadline passes', async () => {
+    const logged = recordLogs();
+    jest.useFakeTimers({ doNotFake: ['setImmediate'] });
+    try {
+      nativeWidget.coverWriterOnce(() => new Promise<void>(() => undefined));
+      useQueueStore.getState().loadQueue([track('1', ART_1)], 0, null);
+      await settle();
+      expect(logged.text()).not.toContain('CoverWriteTimeoutError');
+
+      await jest.advanceTimersByTimeAsync(COVER_WRITE_TIMEOUT_MS);
+
+      expect(logged.text()).toContain('[widget] snapshot publish failed: CoverWriteTimeoutError');
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('leaves no cover timeout running once stopped', async () => {

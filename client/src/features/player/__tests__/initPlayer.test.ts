@@ -1,4 +1,5 @@
 import { createEnsurePlayerSetup, type SetupPlayer } from '@features/player';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 
 const PLAYER_SETUP_TIMEOUT_MS = 15_000;
 const ATTEMPTS_AFTER_A_FAILURE = 2;
@@ -86,6 +87,17 @@ describe('ensurePlayerSetup', () => {
     expect(native.updateCalls()).toBe(1);
   });
 
+  it('does not warn about a setup that fails before its deadline', async () => {
+    const logged = recordLogs();
+    const native = fakePlayer();
+    const ensurePlayerSetup = createEnsurePlayerSetup(native.player);
+    native.failNextSetup(new Error('native module not ready'));
+
+    await expect(ensurePlayerSetup()).rejects.toThrow('native module not ready');
+
+    expect(logged.warnings).toEqual([]);
+  });
+
   it('shares one in-flight attempt between concurrent callers', async () => {
     const native = fakePlayer();
     const ensurePlayerSetup = createEnsurePlayerSetup(native.player);
@@ -135,6 +147,24 @@ describe('ensurePlayerSetup', () => {
 
       expect(native.setupCalls()).toBe(ATTEMPTS_AFTER_A_FAILURE);
       expect(native.updateCalls()).toBe(1);
+    });
+
+    it('warns about a setup that fails after its deadline, with the error', async () => {
+      const logged = recordLogs();
+      const late = Promise.withResolvers<void>();
+      const ensurePlayerSetup = createEnsurePlayerSetup({
+        setupPlayer: () => late.promise,
+        updateOptions: () => Promise.resolve(),
+      });
+      const timedOut = ensurePlayerSetup().catch((err: unknown) => err);
+      await jest.advanceTimersByTimeAsync(PLAYER_SETUP_TIMEOUT_MS);
+      await timedOut;
+
+      late.reject(new Error('native setup finally failed'));
+      await jest.advanceTimersByTimeAsync(0);
+
+      expect(logged.warnings[0]?.[0]).toBe('[playback] player setup failed after its deadline');
+      expect(logged.text()).toContain('native setup finally failed');
     });
 
     it('clears the deadline once setup settles in time', async () => {

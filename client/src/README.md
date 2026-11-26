@@ -17,12 +17,14 @@ Code for one platform is a platform file (`x.native.ts`, `x.web.ts`) beside the 
 
 Tests sit in a `__tests__/` folder. A test reaches its own module only through the door, other modules only through the doors its module may import, and helpers through `@testing/`. It hands the module its fakes through the module's `create*(deps)` door and never patches what the module imports: no `jest.mock`, `jest.doMock`, `jest.spyOn`, `jest.unstable_mockModule`, or their `vi.` forms. Each mutant Stryker makes on a changed line must fail one of the module's own tests.
 
+Work that must finish by a deadline goes through `withDeadline(work, ms, { onExpire })` from `@shared/timing`, never `Promise.race`. It owns the timer, clears it when the work settles, and hands a failure that comes after the deadline to `onLate`, so it is not lost.
+
 | Rule | Checked by |
 |---|---|
 | Module imports and doors | fallow, `client/fallow/modules.json` |
 | Part imports, every file in a part, no `fetch` outside adapters | fallow, `client/fallow/parts.json` |
 | No duplicated code | `fallow dupes` |
-| Packages and JSX per part, tests through doors, no patching, `process.env` | eslint, `client/eslint.config.js` |
+| Packages and JSX per part, tests through doors, no patching, `process.env`, no `Promise.race` | eslint, `client/eslint.config.js` |
 | Each changed line is tested | Stryker, `bash scripts/ci/client-mutate.sh <base>` |
 
 For now the fallow and eslint rules above check only the files a branch changes, because older code still breaks them: `node client/scripts/fallow-changed.mjs <base>` and eslint on the changed files. Until then `npm run lint` on the whole tree fails on the older code. `bash scripts/precheck.sh` runs every check.
