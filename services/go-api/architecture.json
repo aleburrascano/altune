@@ -1,0 +1,60 @@
+{
+  "roles": {
+    "download": "feature",
+    "library": "feature",
+    "playback": "feature",
+    "search": "feature",
+    "app": "app",
+    "platform": "platform",
+    "shared": "shared"
+  },
+  "groups": ["platform", "shared"],
+  "may_import": {
+    "feature": ["shared"],
+    "platform": ["shared"],
+    "shared": ["shared"],
+    "app": ["feature", "platform", "shared"]
+  },
+  "pure_layers": ["core", "service", "domain", "ports", "shell"],
+  "io_imports": [
+    "os",
+    "os/exec",
+    "io/fs",
+    "net",
+    "net/http/...",
+    "database/sql/...",
+    "github.com/jackc/pgx/...",
+    "github.com/redis/..."
+  ],
+  "driver_imports": ["github.com/jackc/pgx/..."],
+  "driver_homes": {
+    "segments": ["adapters"],
+    "modules": ["shared/database", "shared/testdb"]
+  },
+  "driver_composition": {
+    "dirs": ["cmd/...", "internal/app", "internal/app/downloadsetup", "internal/app/shutdown"],
+    "imports": ["github.com/jackc/pgx/v5/pgxpool"]
+  },
+  "table_owners": {
+    "tracks": "library",
+    "playlists": "library",
+    "playlist_tracks": "library",
+    "featured_artists": "library",
+    "track_featured_artists": "library",
+    "orphaned_audio": "library",
+    "track_identity": "library",
+    "track_metadata_changes": "library",
+    "track_length_fixes": "download",
+    "entity_identity": "search",
+    "acquisition_cooldowns": "download",
+    "acquisition_outcomes": "download",
+    "acquisition_rejections": "download",
+    "playback_queue_state": "playback",
+    "discovery_events": "search",
+    "discovery_favorites": "search",
+    "discovery_search_history": "search",
+    "discovery_search_history_cleared": "search",
+    "unreleased_artists": "search",
+    "unreleased_songs": "search"
+  }
+}
