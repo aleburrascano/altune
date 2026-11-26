@@ -346,7 +346,7 @@ func TestClient_WaitsForASharedBudgetSlotBeyondTheTimeout(t *testing.T) {
 	redisServer := miniredis.RunT(t)
 	redisClient := goredis.NewClient(&goredis.Options{Addr: redisServer.Addr()})
 	t.Cleanup(func() { _ = redisClient.Close() })
-	budget, err := youtubemusicapi.NewBudget(redisClient, youtubemusicapi.Settings{MinInterval: interval}, clock.Sleep)
+	budget, err := youtubemusicapi.NewBudget(redisClient, youtubemusicapi.Settings{MinInterval: interval}, clock.Now, clock.Sleep)
 	if err != nil {
 		t.Fatal(err)
 	}

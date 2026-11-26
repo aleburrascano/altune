@@ -62,11 +62,11 @@ func newStreamFixture(t *testing.T) streamFixture {
 }
 
 func streamRouter(deps monitoring.Deps, middlewares ...func(http.Handler) http.Handler) *chi.Mux {
-	return routerFor(monitoring.NewObserveHandler(clock.Now, deps), middlewares...)
+	return routerFor(monitoring.NewObserveHandler(clock.Now, clock.NewTicker, deps), middlewares...)
 }
 
 func boundedRouter(deps monitoring.Deps, bounds monitoring.StreamBounds, middlewares ...func(http.Handler) http.Handler) *chi.Mux {
-	return routerFor(monitoring.NewObserveHandler(clock.Now, deps).WithStreamBounds(bounds), middlewares...)
+	return routerFor(monitoring.NewObserveHandler(clock.Now, clock.NewTicker, deps).WithStreamBounds(bounds), middlewares...)
 }
 
 func routerFor(h *monitoring.Handler, middlewares ...func(http.Handler) http.Handler) *chi.Mux {

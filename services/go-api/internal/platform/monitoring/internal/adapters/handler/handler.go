@@ -29,16 +29,20 @@ type Deps struct {
 
 type Handler struct {
 	now          clock.Func
+	newTicker    clock.TickerFunc
 	deps         Deps
 	probeTimeout time.Duration
 	streams      StreamBounds
 }
 
-func NewObserveHandler(now clock.Func, d Deps) *Handler {
+func NewObserveHandler(now clock.Func, newTicker clock.TickerFunc, d Deps) *Handler {
 	if now == nil {
 		panic("handler.NewObserveHandler: a nil clock")
 	}
-	return &Handler{now: now, deps: d, probeTimeout: defaultProbeTimeout, streams: DefaultStreamBounds()}
+	if newTicker == nil {
+		panic("handler.NewObserveHandler: a nil ticker")
+	}
+	return &Handler{now: now, newTicker: newTicker, deps: d, probeTimeout: defaultProbeTimeout, streams: DefaultStreamBounds()}
 }
 
 func (h *Handler) WithStreamBounds(bounds StreamBounds) *Handler {

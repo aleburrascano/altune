@@ -27,6 +27,7 @@ const (
 
 type EventStreamHandler struct {
 	now          clock.Func
+	newTicker    clock.TickerFunc
 	bus          ports.EventSubscriber
 	heartbeat    time.Duration
 	writeTimeout time.Duration
@@ -34,15 +35,19 @@ type EventStreamHandler struct {
 	shutdown     <-chan struct{}
 }
 
-func NewEventStreamHandler(now clock.Func, bus ports.EventSubscriber, maxConnsTotal int) *EventStreamHandler {
+func NewEventStreamHandler(now clock.Func, newTicker clock.TickerFunc, bus ports.EventSubscriber, maxConnsTotal int) *EventStreamHandler {
 	if now == nil {
 		panic("handler.NewEventStreamHandler: a nil clock")
+	}
+	if newTicker == nil {
+		panic("handler.NewEventStreamHandler: a nil ticker")
 	}
 	if maxConnsTotal <= 0 {
 		maxConnsTotal = defaultMaxConnsTotal
 	}
 	return &EventStreamHandler{
 		now:          now,
+		newTicker:    newTicker,
 		bus:          bus,
 		heartbeat:    defaultHeartbeatInterval,
 		writeTimeout: defaultSSEWriteTimeout,
@@ -171,8 +176,8 @@ func (h *EventStreamHandler) releaseSlot(userId ids.UserId) {
 }
 
 func (h *EventStreamHandler) stream(ctx context.Context, conn *sseConn, ch <-chan events.Event, replayed replayOutcome) {
-	heartbeat := time.NewTicker(h.heartbeatInterval())
-	defer heartbeat.Stop()
+	beats, stopBeats := h.newTicker(h.heartbeatInterval())
+	defer stopBeats()
 
 	deliveredThroughID := h.startingID(conn, replayed)
 	for {
@@ -184,7 +189,7 @@ func (h *EventStreamHandler) stream(ctx context.Context, conn *sseConn, ch <-cha
 			logDisconnect(ctx, conn, "sse.disconnected")
 		case evt := <-ch:
 			deliveredThroughID, keepGoing = h.deliverLive(conn, evt, replayed.dedupThroughID, deliveredThroughID)
-		case <-heartbeat.C:
+		case <-beats:
 			deliveredThroughID, keepGoing = h.beat(conn, ch, deliveredThroughID)
 		}
 		if !keepGoing {

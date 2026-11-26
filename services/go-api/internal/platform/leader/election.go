@@ -33,11 +33,12 @@ type LockSession interface {
 }
 
 type Election struct {
-	db       LockStore
-	key      int64
-	interval time.Duration
-	now      clock.Func
-	newTimer clock.TimerFunc
+	db        LockStore
+	key       int64
+	interval  time.Duration
+	now       clock.Func
+	newTimer  clock.TimerFunc
+	newTicker clock.TickerFunc
 
 	mu        sync.RWMutex
 	conn      LockSession
@@ -54,24 +55,29 @@ type Election struct {
 }
 
 var (
-	ErrClockRequired = errors.New("leader: an election needs a clock")
-	ErrTimerRequired = errors.New("leader: an election needs a timer")
+	ErrClockRequired  = errors.New("leader: an election needs a clock")
+	ErrTimerRequired  = errors.New("leader: an election needs a timer")
+	ErrTickerRequired = errors.New("leader: an election needs a ticker")
 )
 
-func NewElection(locks LockStore, key int64, interval time.Duration, now clock.Func, newTimer clock.TimerFunc) (*Election, error) {
+func NewElection(locks LockStore, key int64, interval time.Duration, now clock.Func, newTimer clock.TimerFunc, newTicker clock.TickerFunc) (*Election, error) {
 	if now == nil {
 		return nil, fmt.Errorf("NewElection: %w", ErrClockRequired)
 	}
 	if newTimer == nil {
 		return nil, fmt.Errorf("NewElection: %w", ErrTimerRequired)
 	}
+	if newTicker == nil {
+		return nil, fmt.Errorf("NewElection: %w", ErrTickerRequired)
+	}
 	return &Election{
-		db:       locks,
-		key:      key,
-		interval: interval,
-		now:      now,
-		newTimer: newTimer,
-		won:      make(chan struct{}),
+		db:        locks,
+		key:       key,
+		interval:  interval,
+		now:       now,
+		newTimer:  newTimer,
+		newTicker: newTicker,
+		won:       make(chan struct{}),
 	}, nil
 }
 
@@ -109,13 +115,13 @@ func (e *Election) Start(ctx context.Context) {
 
 func (e *Election) loop(ctx context.Context) {
 	e.tick(ctx)
-	ticker := time.NewTicker(e.interval)
-	defer ticker.Stop()
+	ticks, stop := e.newTicker(e.interval)
+	defer stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-ticks:
 			e.tick(ctx)
 		}
 	}

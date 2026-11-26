@@ -27,7 +27,7 @@ func budgetOn(t *testing.T, server *miniredis.Miniredis, settings youtubemusicap
 	t.Helper()
 	client := goredis.NewClient(&goredis.Options{Addr: server.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
-	budget, err := youtubemusicapi.NewBudget(client, settings, clock.Sleep)
+	budget, err := youtubemusicapi.NewBudget(client, settings, clock.Now, clock.Sleep)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,8 +168,19 @@ func TestToolClient_PacesThroughTheSharedBucket(t *testing.T) {
 }
 
 func TestNewBudget_NeedsARedisClient(t *testing.T) {
-	if _, err := youtubemusicapi.NewBudget(nil, youtubemusicapi.Settings{}, clock.Sleep); err == nil {
+	if _, err := youtubemusicapi.NewBudget(nil, youtubemusicapi.Settings{}, clock.Now, clock.Sleep); err == nil {
 		t.Fatal("expected an error for a nil client")
+	}
+}
+
+func TestNewBudget_RefusesANilClock(t *testing.T) {
+	client := goredis.NewClient(&goredis.Options{Addr: miniredis.RunT(t).Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+
+	budget, err := youtubemusicapi.NewBudget(client, youtubemusicapi.Settings{}, nil, clock.Sleep)
+
+	if !errors.Is(err, youtubemusicapi.ErrClockRequired) || budget != nil || !strings.Contains(err.Error(), "NewBudget") {
+		t.Fatalf("NewBudget(nil clock) = (%v, %v), want ErrClockRequired naming the constructor and no budget", budget, err)
 	}
 }
 
@@ -177,7 +188,7 @@ func TestNewBudget_RefusesANilSleeper(t *testing.T) {
 	client := goredis.NewClient(&goredis.Options{Addr: miniredis.RunT(t).Addr()})
 	t.Cleanup(func() { _ = client.Close() })
 
-	budget, err := youtubemusicapi.NewBudget(client, youtubemusicapi.Settings{}, nil)
+	budget, err := youtubemusicapi.NewBudget(client, youtubemusicapi.Settings{}, clock.Now, nil)
 
 	if !errors.Is(err, youtubemusicapi.ErrSleeperRequired) || budget != nil {
 		t.Fatalf("NewBudget(nil sleeper) = (%v, %v), want ErrSleeperRequired and no budget", budget, err)
@@ -192,7 +203,7 @@ func TestBudget_WaitsThroughTheSleeperItWasGiven(t *testing.T) {
 	client := goredis.NewClient(&goredis.Options{Addr: server.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
 	var asked []time.Duration
-	budget, err := youtubemusicapi.NewBudget(client, youtubemusicapi.Settings{MinInterval: time.Hour}, func(_ context.Context, d time.Duration) error {
+	budget, err := youtubemusicapi.NewBudget(client, youtubemusicapi.Settings{MinInterval: time.Hour}, clock.Now, func(_ context.Context, d time.Duration) error {
 		asked = append(asked, d)
 		return nil
 	})

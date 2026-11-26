@@ -68,7 +68,7 @@ func (r *runs) assertNoTickStarts(t *testing.T, why string) {
 
 func mustMeter(t *testing.T, interval time.Duration, runner monitoring.EvalMeterRunner, scope background.OnlyWhileLeader) *monitoring.EvalMeter {
 	t.Helper()
-	m, err := monitoring.NewEvalMeter(interval, clock.Now, runner, scope)
+	m, err := monitoring.NewEvalMeter(interval, clock.Now, clock.NewTicker, runner, scope)
 	if err != nil {
 		t.Fatalf("NewEvalMeter: %v", err)
 	}
@@ -340,16 +340,24 @@ func TestMeter_CancelledRunKeepsLastGoodResult(t *testing.T) {
 	}
 }
 
+func TestNewEvalMeter_RefusesAMissingTicker(t *testing.T) {
+	_, err := monitoring.NewEvalMeter(0, clock.Now, nil, returning(monitoring.EvalMeterResult{}, nil), background.EveryPassLeads)
+
+	if !errors.Is(err, monitoring.ErrEvalMeterTickerRequired) {
+		t.Fatalf("err = %v, want ErrEvalMeterTickerRequired", err)
+	}
+}
+
 func TestNewEvalMeter_RefusesAMissingRunnerOrLeadershipScope(t *testing.T) {
 	runner := returning(monitoring.EvalMeterResult{}, nil)
 
-	if _, err := monitoring.NewEvalMeter(0, nil, runner, background.EveryPassLeads); !errors.Is(err, monitoring.ErrEvalMeterClockRequired) {
+	if _, err := monitoring.NewEvalMeter(0, nil, clock.NewTicker, runner, background.EveryPassLeads); !errors.Is(err, monitoring.ErrEvalMeterClockRequired) {
 		t.Errorf("nil clock: err = %v, want ErrEvalMeterClockRequired", err)
 	}
-	if _, err := monitoring.NewEvalMeter(0, clock.Now, nil, background.EveryPassLeads); !errors.Is(err, monitoring.ErrEvalMeterRunnerRequired) {
+	if _, err := monitoring.NewEvalMeter(0, clock.Now, clock.NewTicker, nil, background.EveryPassLeads); !errors.Is(err, monitoring.ErrEvalMeterRunnerRequired) {
 		t.Errorf("nil runner: err = %v, want ErrEvalMeterRunnerRequired", err)
 	}
-	if _, err := monitoring.NewEvalMeter(0, clock.Now, runner, nil); !errors.Is(err, monitoring.ErrEvalMeterLeadershipRequired) {
+	if _, err := monitoring.NewEvalMeter(0, clock.Now, clock.NewTicker, runner, nil); !errors.Is(err, monitoring.ErrEvalMeterLeadershipRequired) {
 		t.Errorf("nil scope: err = %v, want ErrEvalMeterLeadershipRequired", err)
 	}
 }

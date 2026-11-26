@@ -276,7 +276,7 @@ func TestCanaryYTMClient_BoundsEveryCall(t *testing.T) {
 func TestCanaryYTMClient_ACooldownAnotherInstanceRecordedInRedisHoldsItsSearches(t *testing.T) {
 	redis := goredis.NewClient(&goredis.Options{Addr: miniredis.RunT(t).Addr()})
 	t.Cleanup(func() { _ = redis.Close() })
-	otherInstance, err := youtubemusicapi.NewBudget(redis, youtubemusicapi.Settings{Cooldown: time.Hour}, clock.Sleep)
+	otherInstance, err := youtubemusicapi.NewBudget(redis, youtubemusicapi.Settings{Cooldown: time.Hour}, clock.Now, clock.Sleep)
 	if err != nil {
 		t.Fatalf("budget for the other instance: %v", err)
 	}

@@ -36,6 +36,7 @@ var (
 	ErrNoRedisForTool  = errors.New(redisURLVarName + " is not set: the shared InnerTube budget lives in Redis")
 	errBudgetNeedsHost = errors.New("ytminnertube: a budget needs a redis client")
 	ErrSleeperRequired = errors.New("ytminnertube: the budget requires a sleeper")
+	ErrClockRequired   = errors.New("ytminnertube: the budget requires a clock")
 )
 
 var reserveScript = goredis.NewScript(`
@@ -94,7 +95,7 @@ func ToolClient(ctx context.Context, env func(string) string) (*http.Client, Set
 	if env(redisURLVarName) == "" {
 		return nil, Settings{}, ErrNoRedisForTool
 	}
-	budget, err := NewBudget(sharedRedis.NewClient(ctx, env(redisURLVarName), toolRedisPoolSize), settings, clock.Sleep)
+	budget, err := NewBudget(sharedRedis.NewClient(ctx, env(redisURLVarName), toolRedisPoolSize), settings, clock.Now, clock.Sleep)
 	if err != nil {
 		return nil, Settings{}, err
 	}
@@ -108,17 +109,21 @@ func (s Settings) Describe() string {
 type Budget struct {
 	redis    *goredis.Client
 	settings Settings
+	now      clock.Func
 	sleep    clock.Sleeper
 }
 
-func NewBudget(client *goredis.Client, settings Settings, sleep clock.Sleeper) (*Budget, error) {
+func NewBudget(client *goredis.Client, settings Settings, now clock.Func, sleep clock.Sleeper) (*Budget, error) {
 	if client == nil {
 		return nil, errBudgetNeedsHost
+	}
+	if now == nil {
+		return nil, fmt.Errorf("NewBudget: %w", ErrClockRequired)
 	}
 	if sleep == nil {
 		return nil, fmt.Errorf("NewBudget: %w", ErrSleeperRequired)
 	}
-	return &Budget{redis: client, settings: settings, sleep: sleep}, nil
+	return &Budget{redis: client, settings: settings, now: now, sleep: sleep}, nil
 }
 
 func (b *Budget) Wait(ctx context.Context) error {
@@ -135,19 +140,19 @@ func (b *Budget) Wait(ctx context.Context) error {
 func (b *Budget) reserve(ctx context.Context) (int64, error) {
 	commandCtx, cancel := context.WithTimeout(ctx, redisCommandDeadline)
 	defer cancel()
-	reply, err := reserveScript.Run(commandCtx, b.redis, []string{budgetKey}, b.settings.MinInterval.Milliseconds(), maxWaitMillis(ctx)).Int64()
+	reply, err := reserveScript.Run(commandCtx, b.redis, []string{budgetKey}, b.settings.MinInterval.Milliseconds(), b.maxWaitMillis(ctx)).Int64()
 	if err != nil {
 		return 0, fmt.Errorf("run the reserve script: %w", err)
 	}
 	return reply, nil
 }
 
-func maxWaitMillis(ctx context.Context) int64 {
+func (b *Budget) maxWaitMillis(ctx context.Context) int64 {
 	deadline, ok := ctx.Deadline()
 	if !ok {
 		return unlimitedWaitMillis
 	}
-	return max((time.Until(deadline) - minRequestTime).Milliseconds(), 0)
+	return max((deadline.Sub(b.now()) - minRequestTime).Milliseconds(), 0)
 }
 
 func (b *Budget) CoolDown(ctx context.Context) error {

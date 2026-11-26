@@ -32,7 +32,7 @@ func (s stubQualityReader) SuspectRate(context.Context, time.Time) (monitoring.D
 
 func query(r stubQualityReader) *httptest.ResponseRecorder {
 	router := chi.NewRouter()
-	monitoring.NewObserveHandler(clock.Now, monitoring.Deps{Discography: r}).Register(router)
+	monitoring.NewObserveHandler(clock.Now, clock.NewTicker, monitoring.Deps{Discography: r}).Register(router)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/quality/discography", nil))
 	return rec

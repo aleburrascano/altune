@@ -49,7 +49,7 @@ func (a *App) mountRoutes(
 			r.Mount("/playlists", cat.playlistHandler.Routes())
 			r.Mount("/playback", queueHandler.Routes())
 			r.Mount("/discovery", discoveryH.Routes())
-			r.Handle("/events", eventstream.NewEventStreamHandler(clock.Now, a.eventBus, a.cfg.SSEMaxConns).WithShutdown(a.lifecycleDone))
+			r.Handle("/events", eventstream.NewEventStreamHandler(clock.Now, clock.NewTicker, a.eventBus, a.cfg.SSEMaxConns).WithShutdown(a.lifecycleDone))
 		})
 	})
 

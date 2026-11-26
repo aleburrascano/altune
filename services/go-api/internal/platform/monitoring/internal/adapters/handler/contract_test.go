@@ -31,7 +31,7 @@ func everyDependencyDown(context.Context) monitoring.DependencyHealth {
 func serveObserveHealth(t *testing.T, probe func(context.Context) monitoring.DependencyHealth) *httptest.ResponseRecorder {
 	t.Helper()
 	r := chi.NewRouter()
-	monitoring.NewObserveHandler(clock.Now, monitoring.Deps{Health: probe}).Register(r)
+	monitoring.NewObserveHandler(clock.Now, clock.NewTicker, monitoring.Deps{Health: probe}).Register(r)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
 	return rec
@@ -57,5 +57,14 @@ func TestNewObserveHandler_RefusesAMissingClock(t *testing.T) {
 			t.Errorf("panic = %q, want a refusal naming NewObserveHandler", msg)
 		}
 	}()
-	monitoring.NewObserveHandler(nil, monitoring.Deps{})
+	monitoring.NewObserveHandler(nil, clock.NewTicker, monitoring.Deps{})
+}
+
+func TestNewObserveHandler_RefusesAMissingTicker(t *testing.T) {
+	defer func() {
+		if msg, _ := recover().(string); !strings.Contains(msg, "nil ticker") {
+			t.Errorf("panic = %q, want a refusal naming the ticker", msg)
+		}
+	}()
+	monitoring.NewObserveHandler(clock.Now, nil, monitoring.Deps{})
 }

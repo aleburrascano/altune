@@ -111,7 +111,7 @@ func newDeadlineRouter(uid ids.UserId, sse *eventstream.EventStreamHandler, bulk
 
 func TestRouter_WriteDeadlineCutsOffSlowReaderOnNonSSERoute(t *testing.T) {
 	bulkErrs := make(chan error, 1)
-	sse := eventstream.NewEventStreamHandler(clock.Now, events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), 0)
+	sse := eventstream.NewEventStreamHandler(clock.Now, clock.NewTicker, events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), 0)
 	srv := slowclienttest.NewServer(t, newDeadlineRouter(ids.NewUserId(uuid.New()), sse, bulkErrs))
 
 	began := time.Now()
@@ -133,7 +133,7 @@ func TestRouter_WriteDeadlineCutsOffSlowReaderOnNonSSERoute(t *testing.T) {
 func TestRouter_SSEStreamOutlivesRouteWriteDeadline(t *testing.T) {
 	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := ids.NewUserId(uuid.New())
-	sse := eventstream.NewEventStreamHandler(clock.Now, bus, 0).WithHeartbeat(routeWriteDeadline / 3)
+	sse := eventstream.NewEventStreamHandler(clock.Now, clock.NewTicker, bus, 0).WithHeartbeat(routeWriteDeadline / 3)
 	srv := slowclienttest.NewServer(t, newDeadlineRouter(uid, sse, make(chan error, 1)))
 
 	conn, br := slowclienttest.Get(t, srv, "/v1/events", nil)
@@ -156,7 +156,7 @@ func TestRouter_SSEPerFrameDeadlineReachesConnection(t *testing.T) {
 
 	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := ids.NewUserId(uuid.New())
-	sse := eventstream.NewEventStreamHandler(clock.Now, bus, 0).WithWriteTimeout(routeWriteDeadline).WithHeartbeat(time.Hour)
+	sse := eventstream.NewEventStreamHandler(clock.Now, clock.NewTicker, bus, 0).WithWriteTimeout(routeWriteDeadline).WithHeartbeat(time.Hour)
 	done := make(chan struct{})
 	router := newDeadlineRouter(uid, sse, make(chan error, 1))
 	srv := slowclienttest.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

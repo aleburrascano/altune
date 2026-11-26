@@ -52,7 +52,7 @@ func (h *Handler) streamEvents(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	ctx, stop := h.untilShutdown(r.Context())
 	defer stop()
-	streamSSE(h.now, w, r.WithContext(ctx), ch, h.streams)
+	streamSSE(h.now, h.newTicker, w, r.WithContext(ctx), ch, h.streams)
 }
 
 func (h *Handler) hasLiveEventFeed() bool {
@@ -72,7 +72,7 @@ func (h *Handler) streamLogs(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	ctx, stop := h.untilShutdown(r.Context())
 	defer stop()
-	streamSSE(h.now, w, r.WithContext(ctx), ch, h.streams)
+	streamSSE(h.now, h.newTicker, w, r.WithContext(ctx), ch, h.streams)
 }
 
 type tapEventDTO struct {

@@ -32,7 +32,7 @@ func TestContract_MetricsLiveMatchesFixture(t *testing.T) {
 	latency := requestmetrics.NewRegistry()
 	latency.Observe("/v1/tracks/{trackId}", 5*time.Millisecond, 200)
 	r := chi.NewRouter()
-	monitoring.NewObserveHandler(clock.Now, monitoring.Deps{LiveMetrics: func() monitoring.LiveMetrics { return livemetrics.FeatureMetrics(latency) }}).Register(r)
+	monitoring.NewObserveHandler(clock.Now, clock.NewTicker, monitoring.Deps{LiveMetrics: func() monitoring.LiveMetrics { return livemetrics.FeatureMetrics(latency) }}).Register(r)
 	rec := httptest.NewRecorder()
 
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics/live", nil))

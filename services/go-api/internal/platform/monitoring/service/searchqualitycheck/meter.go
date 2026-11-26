@@ -37,6 +37,7 @@ type LeadershipScope = background.OnlyWhileLeader
 type Meter struct {
 	interval   time.Duration
 	now        clock.Func
+	newTicker  clock.TickerFunc
 	runTimeout time.Duration
 	runner     Runner
 	leadership LeadershipScope
@@ -51,13 +52,17 @@ type Meter struct {
 
 var (
 	ErrClockRequired      = errors.New("the eval meter requires a clock")
+	ErrTickerRequired     = errors.New("the eval meter requires a ticker")
 	ErrRunnerRequired     = errors.New("the eval meter requires a runner")
 	ErrLeadershipRequired = errors.New("the eval meter requires a leadership scope, pass background.EveryPassLeads to run on every pass")
 )
 
-func New(interval time.Duration, now clock.Func, runner Runner, leadership LeadershipScope) (*Meter, error) {
+func New(interval time.Duration, now clock.Func, newTicker clock.TickerFunc, runner Runner, leadership LeadershipScope) (*Meter, error) {
 	if now == nil {
 		return nil, ErrClockRequired
+	}
+	if newTicker == nil {
+		return nil, ErrTickerRequired
 	}
 	if runner == nil {
 		return nil, ErrRunnerRequired
@@ -71,6 +76,7 @@ func New(interval time.Duration, now clock.Func, runner Runner, leadership Leade
 	return &Meter{
 		interval:   interval,
 		now:        now,
+		newTicker:  newTicker,
 		runTimeout: defaultRunTimeout,
 		runner:     runner,
 		leadership: leadership,
@@ -82,14 +88,14 @@ func (m *Meter) Start(ctx context.Context) {
 }
 
 func (m *Meter) loop(ctx context.Context) {
-	ticker := time.NewTicker(m.interval)
-	defer ticker.Stop()
+	ticks, stop := m.newTicker(m.interval)
+	defer stop()
 	m.tick(ctx)
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-ticks:
 			m.tick(ctx)
 		}
 	}

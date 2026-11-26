@@ -3,6 +3,7 @@ package alert_test
 import (
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"bytes"
 	"context"
@@ -135,7 +136,7 @@ func newMonitor(t *testing.T, n monitoring.AlertNotifier, interval time.Duration
 
 func newMonitorUnder(t *testing.T, n monitoring.AlertNotifier, interval time.Duration, scope background.OnlyWhileLeader, conds ...monitoring.Condition) *monitoring.AlertMonitor {
 	t.Helper()
-	m, err := monitoring.NewAlertMonitor(n, interval, time.Now, scope, conds...)
+	m, err := monitoring.NewAlertMonitor(n, interval, time.Now, clock.NewTicker, scope, conds...)
 	if err != nil {
 		t.Fatalf("NewAlertMonitor(interval %v): %v", interval, err)
 	}
@@ -479,7 +480,7 @@ func TestMonitorStatus_NopNotifierIsReported(t *testing.T) {
 
 func TestNewAlertMonitor_RefusesAnIntervalThatIsNotPositive(t *testing.T) {
 	for _, interval := range []time.Duration{0, -time.Second} {
-		m, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, interval, time.Now, background.EveryPassLeads)
+		m, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, interval, time.Now, clock.NewTicker, background.EveryPassLeads)
 		if !errors.Is(err, monitoring.ErrInvalidInterval) {
 			t.Errorf("NewAlertMonitor(interval %v) error = %v, want ErrInvalidInterval", interval, err)
 		}
@@ -673,7 +674,7 @@ var monitorEpoch = time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
 func clockedMonitor(t *testing.T, n monitoring.AlertNotifier, clk *clocktest.Manual, conds ...monitoring.Condition) (*monitoring.AlertMonitor, *passes) {
 	t.Helper()
 	p := &passes{begin: make(chan bool), ended: make(chan struct{}, 1)}
-	m, err := monitoring.NewAlertMonitor(n, time.Millisecond, clk.Func(), p.scope, conds...)
+	m, err := monitoring.NewAlertMonitor(n, time.Millisecond, clk.Func(), clock.NewTicker, p.scope, conds...)
 	if err != nil {
 		t.Fatalf("NewAlertMonitor: %v", err)
 	}
@@ -716,7 +717,7 @@ func TestMonitorClock_StatusTimesFollowTheInjectedClock(t *testing.T) {
 }
 
 func TestNewMonitor_RefusesANilLeadershipScope(t *testing.T) {
-	m, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, time.Second, time.Now, nil)
+	m, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, time.Second, time.Now, clock.NewTicker, nil)
 
 	if !errors.Is(err, monitoring.ErrAlertLeadershipRequired) {
 		t.Fatalf("NewAlertMonitor(nil scope) error = %v, want ErrAlertLeadershipRequired", err)
@@ -726,8 +727,16 @@ func TestNewMonitor_RefusesANilLeadershipScope(t *testing.T) {
 	}
 }
 
+func TestNewMonitor_RefusesANilTicker(t *testing.T) {
+	m, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, time.Second, clock.Now, nil, background.EveryPassLeads)
+
+	if !errors.Is(err, monitoring.ErrAlertTickerRequired) || m != nil {
+		t.Fatalf("NewAlertMonitor(nil ticker) = (%v, %v), want ErrAlertTickerRequired and no monitor", m, err)
+	}
+}
+
 func TestNewMonitor_RefusesANilClock(t *testing.T) {
-	m, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, time.Second, nil, background.EveryPassLeads)
+	m, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, time.Second, nil, clock.NewTicker, background.EveryPassLeads)
 
 	if !errors.Is(err, monitoring.ErrAlertClockRequired) {
 		t.Fatalf("NewAlertMonitor(nil clock) error = %v, want ErrAlertClockRequired", err)
