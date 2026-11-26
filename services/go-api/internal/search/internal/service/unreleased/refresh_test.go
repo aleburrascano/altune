@@ -2,7 +2,7 @@ package unreleased_test
 
 import (
 	"altune/go-api/internal/search"
-	"altune/go-api/internal/search/internal/searchtest"
+	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
 	"slices"

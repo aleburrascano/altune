@@ -2,8 +2,8 @@ package providerguard_test
 
 import (
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/searchtest"
 	"altune/go-api/internal/search/internal/service/providerguard"
+	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
 	"testing"

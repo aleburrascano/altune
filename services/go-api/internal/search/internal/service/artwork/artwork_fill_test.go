@@ -3,8 +3,8 @@ package artwork_test
 import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/searchtest"
 	"altune/go-api/internal/search/internal/service/artwork"
+	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/textnorm"
 	"bytes"

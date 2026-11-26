@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/core/history"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/searchtest"
+	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/testdb"
 	"context"

@@ -2,8 +2,8 @@ package rank_test
 
 import (
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/searchtest"
 	"altune/go-api/internal/search/internal/service/rank"
+	"altune/go-api/internal/search/searchtest"
 	"slices"
 	"testing"
 )

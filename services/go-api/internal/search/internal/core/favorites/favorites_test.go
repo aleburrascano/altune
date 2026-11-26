@@ -2,7 +2,7 @@ package favorites_test
 
 import (
 	"altune/go-api/internal/search"
-	"altune/go-api/internal/search/internal/searchtest"
+	"altune/go-api/internal/search/searchtest"
 	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/ids"
 	"context"

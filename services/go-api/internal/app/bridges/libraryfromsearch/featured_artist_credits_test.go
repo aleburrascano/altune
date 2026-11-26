@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/app/bridges/libraryfromsearch"
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
 	"reflect"
@@ -33,10 +34,7 @@ func resolverOverCatalogCredits(t *testing.T, feats []library.FeaturedArtist, er
 	for _, f := range feats {
 		upstream = append(upstream, search.FeaturedArtist{Name: f.Name, MBID: f.MBID, DeezerID: f.DeezerID})
 	}
-	discovered, resolverErr := search.NewFeaturedArtistResolver(search.NoMBFeatured{}, fakeDeezerFeatured{feats: upstream, err: err})
-	if resolverErr != nil {
-		t.Fatal(resolverErr)
-	}
+	discovered := searchtest.NewFeaturedResolver(t, search.NoMBFeatured{}, fakeDeezerFeatured{feats: upstream, err: err})
 	return library.NewFeaturedArtistResolver(libraryfromsearch.NewFeaturedArtistCredits(discovered))
 }
 

@@ -3,9 +3,9 @@ package related_test
 import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/search/internal/searchtest"
 	"altune/go-api/internal/search/internal/service/providerguard"
 	"altune/go-api/internal/search/internal/service/related"
+	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"

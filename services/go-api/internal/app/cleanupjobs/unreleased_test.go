@@ -3,7 +3,7 @@ package cleanupjobs_test
 import (
 	"altune/go-api/internal/app/cleanupjobs"
 	"altune/go-api/internal/search"
-	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/search/searchtest"
 	"context"
 	"slices"
 	"testing"
@@ -22,27 +22,9 @@ func (l *limitRecordingStore) Due(_ context.Context, now time.Time, limit int) (
 	return nil, nil
 }
 
-func storedUnreleased(t *testing.T, store search.UnreleasedStore) *search.UnreleasedService {
-	t.Helper()
-	storage, err := search.NewUnreleasedStoredStorage(store)
-	if err != nil {
-		t.Fatalf("NewUnreleasedStoredStorage: %v", err)
-	}
-	svc, err := search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.UnreleasedConfig{}, search.UnreleasedWiring{
-		Trackers:  search.NoUnreleasedTrackers{},
-		Storage:   storage,
-		Lifecycle: context.Background(),
-		Jobs:      &background.Tracker{},
-	})
-	if err != nil {
-		t.Fatalf("NewUnreleasedService: %v", err)
-	}
-	return svc
-}
-
 func TestRefreshDueUnreleased_AsksForWhatIsDueAtTheClocksInstantInUTC(t *testing.T) {
 	store := &limitRecordingStore{}
-	svc := storedUnreleased(t, store)
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.UnreleasedConfig{}, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store))))
 
 	if err := cleanupjobs.RefreshDueUnreleased(svc, atTestNow)(context.Background()); err != nil {
 		t.Fatalf("run: %v", err)
@@ -55,7 +37,7 @@ func TestRefreshDueUnreleased_AsksForWhatIsDueAtTheClocksInstantInUTC(t *testing
 
 func TestRefreshDueUnreleased_EachRunAsksTheStoreForAtMostTwoArtists(t *testing.T) {
 	store := &limitRecordingStore{}
-	svc := storedUnreleased(t, store)
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.UnreleasedConfig{}, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store))))
 	if err := cleanupjobs.RefreshDueUnreleased(svc, atTestNow)(context.Background()); err != nil {
 		t.Fatalf("run: %v", err)
 	}

@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/search"
-	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
@@ -32,7 +32,7 @@ const (
 )
 
 type countingProvider struct {
-	search.FakeProvider
+	searchtest.FakeProvider
 	searches atomic.Int32
 }
 
@@ -48,13 +48,7 @@ func searchFinding(t *testing.T, p *countingProvider) *search.SearchService {
 		Kind: search.ResultKindTrack, Title: unfoundTitle, Subtitle: unfoundArtist,
 		ISRC: unfoundISRC, RecordingMBID: searchOnlyMBID,
 	}}
-	bg := &background.Tracker{}
-	t.Cleanup(bg.Wait)
-	svc, err := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), search.AbsentCollaborators())
-	if err != nil {
-		t.Fatalf("NewSearchService: %v", err)
-	}
-	return svc
+	return searchtest.NewSearchService(t, searchtest.NewTracker(t), []search.SearchProvider{p}, search.NewCircuitBreaker())
 }
 
 type musicBrainzLog struct {

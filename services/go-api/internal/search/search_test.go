@@ -2,7 +2,7 @@ package search_test
 
 import (
 	"altune/go-api/internal/search"
-	"altune/go-api/internal/search/internal/searchtest"
+	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
