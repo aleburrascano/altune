@@ -3,7 +3,7 @@ package app_test
 import (
 	"altune/go-api/internal/app"
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/testdb"
+	"altune/go-api/internal/shared/dbtest"
 	"bytes"
 	"context"
 	"log/slog"
@@ -33,9 +33,9 @@ func TestRun_AnUnreachableDatabaseStopsStartup(t *testing.T) {
 }
 
 func TestRun_AFailedAssemblyStopsStartup(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	cfg := jwksConfig(t)
-	cfg.DatabaseURL = testdb.DatabaseURL(t)
+	cfg.DatabaseURL = dbtest.DatabaseURL(t)
 	cfg.SupabaseJWTJWKSURL = "http://keys.example.com/jwks.json"
 
 	err := runUntilItReturns(t, cfg)
@@ -46,14 +46,14 @@ func TestRun_AFailedAssemblyStopsStartup(t *testing.T) {
 }
 
 func TestRun_APortAlreadyInUseIsReturnedInsteadOfServing(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	taken, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
 	t.Cleanup(func() { _ = taken.Close() })
 	cfg := jwksConfig(t)
-	cfg.DatabaseURL = testdb.DatabaseURL(t)
+	cfg.DatabaseURL = dbtest.DatabaseURL(t)
 	cfg.Host = "127.0.0.1"
 	cfg.Port = taken.Addr().(*net.TCPAddr).Port
 

@@ -7,8 +7,8 @@ import (
 	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"errors"
 	"sync"
@@ -22,8 +22,8 @@ import (
 
 func newPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	pool := testdb.Pool(t)
-	testdb.ExclusiveAcquisitionQueue(t, pool)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	return pool
 }
 
@@ -61,7 +61,7 @@ func (c contractPgxCooldowns) PassCooldown(t *testing.T, d time.Duration) {
 }
 
 func TestPostgresCooldownStore_Contract(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	acquisitiontest.CooldownContract(t, func(*testing.T) acquisitiontest.CooldownUnderTest {
 		return contractPgxCooldowns{PostgresCooldownStore: download.NewPostgresCooldownStore(pool), pool: pool}
@@ -69,8 +69,8 @@ func TestPostgresCooldownStore_Contract(t *testing.T) {
 }
 
 func TestPostgresCooldownStore_SurvivesRestart(t *testing.T) {
-	testdb.RequireIntegration(t)
-	first, second := newPool(t), testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	first, second := newPool(t), dbtest.Pool(t)
 	track := insertFailedTrack(t, first)
 	ctx := context.Background()
 
@@ -84,7 +84,7 @@ func TestPostgresCooldownStore_SurvivesRestart(t *testing.T) {
 }
 
 func TestPostgresCooldownStore_AdmitsAfterWindowAndReleasesOnlyItsOwn(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresCooldownStore(pool)
 	track := insertFailedTrack(t, pool)
@@ -121,7 +121,7 @@ func TestPostgresCooldownStore_AdmitsAfterWindowAndReleasesOnlyItsOwn(t *testing
 }
 
 func TestPostgresCooldownStore_ConcurrentReservesAdmitOne(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	track := insertFailedTrack(t, pool)
 	const racers = 16

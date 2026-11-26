@@ -2,7 +2,7 @@ package database_test
 
 import (
 	"altune/go-api/internal/shared/database"
-	"altune/go-api/internal/shared/testdb"
+	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"errors"
 	"testing"
@@ -14,7 +14,7 @@ import (
 )
 
 func TestReadOnly_RefusesWritesWhenSessionDefaultIsOff(t *testing.T) {
-	dbURL := testdb.DatabaseURL(t)
+	dbURL := dbtest.DatabaseURL(t)
 	ctx := context.Background()
 	cfg, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
@@ -50,7 +50,7 @@ func TestReadOnly_RefusesWritesWhenSessionDefaultIsOff(t *testing.T) {
 
 func probePool(t *testing.T) (context.Context, *pgxpool.Pool) {
 	t.Helper()
-	dbURL := testdb.DatabaseURL(t)
+	dbURL := dbtest.DatabaseURL(t)
 	ctx := context.Background()
 	cfg, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {

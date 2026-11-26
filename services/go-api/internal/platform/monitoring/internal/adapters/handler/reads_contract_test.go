@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
-	"altune/go-api/internal/shared/testpoll"
+	"altune/go-api/internal/shared/polltest"
 	"context"
 	"testing"
 	"time"
@@ -25,7 +25,7 @@ func TestContract_EvalMatchesFixture(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	meter.Start(ctx)
-	testpoll.Until(t, 5*time.Second, "the eval meter to record a run", func() bool { return meter.Status().LastRun != nil })
+	polltest.Until(t, 5*time.Second, "the eval meter to record a run", func() bool { return meter.Status().LastRun != nil })
 
 	rec := serveRead(t, monitoring.Deps{Eval: meter}, "/eval")
 	assertMatchesFixture(t, "observe_eval.json", rec.Body.Bytes())

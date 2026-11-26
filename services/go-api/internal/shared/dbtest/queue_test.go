@@ -1,7 +1,7 @@
-package testdb_test
+package dbtest_test
 
 import (
-	"altune/go-api/internal/shared/testdb"
+	"altune/go-api/internal/shared/dbtest"
 	"fmt"
 	"runtime"
 	"sync"
@@ -29,16 +29,16 @@ func (r *cleanupRecorder) finish() {
 }
 
 func TestExclusiveAcquisitionQueue_AnotherTestWaitsUntilTheHolderEnds(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	holder := &cleanupRecorder{TB: t}
-	testdb.ExclusiveAcquisitionQueue(holder, pool)
+	dbtest.ExclusiveAcquisitionQueue(holder, pool)
 	releaseHolder := sync.OnceFunc(holder.finish)
 
 	waiter := &cleanupRecorder{TB: t}
 	acquired := make(chan struct{})
 	go func() {
 		defer close(acquired)
-		testdb.ExclusiveAcquisitionQueue(waiter, pool)
+		dbtest.ExclusiveAcquisitionQueue(waiter, pool)
 	}()
 	t.Cleanup(func() {
 		releaseHolder()

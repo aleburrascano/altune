@@ -2,9 +2,9 @@ package track_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/events"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"errors"
 	"fmt"
@@ -410,7 +410,7 @@ func assertRejectedBeforePersistence(t *testing.T, input library.AddTrackInput, 
 	if err == nil {
 		t.Fatalf("expected a validation error, got nil (out=%+v)", out)
 	}
-	testdb.AssertValidationError(t, err)
+	dbtest.AssertValidationError(t, err)
 	if !strings.Contains(err.Error(), wantErr) {
 		t.Fatalf("error = %q, want it to mention %q", err.Error(), wantErr)
 	}
@@ -483,7 +483,7 @@ func TestAddTrackService_YearCeilingSitsOneYearPastTheClock(t *testing.T) {
 			_, err := svc.Execute(ctx, userId, input)
 
 			if tt.wantStored == 0 {
-				testdb.AssertValidationError(t, err)
+				dbtest.AssertValidationError(t, err)
 			} else if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -757,7 +757,7 @@ func TestAddTrackService_RejectsInvalidCatalogIdentity(t *testing.T) {
 
 			out, err := library.MustNewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now).Execute(context.Background(), library.FixtureUserId(), input)
 
-			testdb.AssertValidationError(t, err)
+			dbtest.AssertValidationError(t, err)
 			if out != nil || len(repo.Tracks) != 0 {
 				t.Fatalf("a refused save must not insert: out=%v stored=%d", out, len(repo.Tracks))
 			}

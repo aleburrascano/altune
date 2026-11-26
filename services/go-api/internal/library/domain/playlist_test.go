@@ -2,8 +2,8 @@ package domain_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"errors"
 	"strings"
 	"testing"
@@ -402,7 +402,7 @@ func TestPlaylist_Reorder(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for duplicate track, got nil")
 		}
-		testdb.AssertValidationError(t, err)
+		dbtest.AssertValidationError(t, err)
 		if len(pl.Tracks) != 2 {
 			t.Fatalf("expected tracks unchanged (2), got %d", len(pl.Tracks))
 		}

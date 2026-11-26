@@ -3,9 +3,9 @@ package persistence_test
 import (
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/clock/clocktest"
+	"altune/go-api/internal/shared/dbtest"
 	sharedids "altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
-	"altune/go-api/internal/shared/testpoll"
+	"altune/go-api/internal/shared/polltest"
 	"context"
 	"errors"
 	"reflect"
@@ -43,7 +43,7 @@ func (d *startSignalDB) QueryRow(ctx context.Context, sql string, args ...any) p
 
 func awaitWriteStarted(t *testing.T, d *startSignalDB) {
 	t.Helper()
-	testpoll.Until(t, 10*time.Second, "the delayed write to reach its connection pool", func() bool {
+	polltest.Until(t, 10*time.Second, "the delayed write to reach its connection pool", func() bool {
 		select {
 		case <-d.started:
 			return true
@@ -55,7 +55,7 @@ func awaitWriteStarted(t *testing.T, d *startSignalDB) {
 
 func awaitErasureOlderThan(t *testing.T, ctx context.Context, q playback.QueueStateDB, userId sharedids.UserId, age time.Duration) {
 	t.Helper()
-	testpoll.Until(t, age+10*time.Second, "the erasure to age past the grace", func() bool {
+	polltest.Until(t, age+10*time.Second, "the erasure to age past the grace", func() bool {
 		var older bool
 		err := q.QueryRow(ctx,
 			`SELECT COALESCE(clock_timestamp() > erased_at + $2::bigint * interval '1 microsecond', false)
@@ -66,7 +66,7 @@ func awaitErasureOlderThan(t *testing.T, ctx context.Context, q playback.QueueSt
 
 func singleConnPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	cfg, err := pgxpool.ParseConfig(testdb.DatabaseURL(t))
+	cfg, err := pgxpool.ParseConfig(dbtest.DatabaseURL(t))
 	if err != nil {
 		t.Fatalf("parse config: %v", err)
 	}
@@ -99,8 +99,8 @@ func stateAt(userId sharedids.UserId, positionMs int64, at time.Time) *playback.
 }
 
 func TestDeleteForUser_ErasesPersistedRow(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	repo := playback.NewPostgresQueueStateRepository(pool, playback.NoopQueueStateMetrics(), time.Now)
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
@@ -128,8 +128,8 @@ func TestDeleteForUser_ErasesPersistedRow(t *testing.T) {
 }
 
 func TestDeleteForUser_MissingRowIsNotAnError(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	repo := playback.NewPostgresQueueStateRepository(pool, playback.NoopQueueStateMetrics(), time.Now)
 
 	if err := repo.DeleteForUser(context.Background(), sharedids.NewUserId(uuid.New())); err != nil {
@@ -138,8 +138,8 @@ func TestDeleteForUser_MissingRowIsNotAnError(t *testing.T) {
 }
 
 func TestUpsert_OlderSnapshotDoesNotClobberNewer(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	repo := playback.NewPostgresQueueStateRepository(pool, playback.NoopQueueStateMetrics(), time.Now)
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
@@ -170,8 +170,8 @@ func TestUpsert_OlderSnapshotDoesNotClobberNewer(t *testing.T) {
 }
 
 func TestUpsert_NewerSnapshotStillApplies(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	repo := playback.NewPostgresQueueStateRepository(pool, playback.NoopQueueStateMetrics(), time.Now)
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
@@ -199,8 +199,8 @@ func TestUpsert_NewerSnapshotStillApplies(t *testing.T) {
 }
 
 func TestUpsert_FastInstanceClockDoesNotRejectLaterSave(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	repo := playback.NewPostgresQueueStateRepository(pool, playback.NoopQueueStateMetrics(), time.Now)
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
@@ -228,8 +228,8 @@ func TestUpsert_FastInstanceClockDoesNotRejectLaterSave(t *testing.T) {
 const delayedInPool = time.Hour
 
 func TestUpsert_SaveDelayedInPoolIsStillStale(t *testing.T) {
-	testdb.RequireIntegration(t)
-	wide := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	wide := dbtest.Pool(t)
 	narrow := singleConnPool(t)
 
 	ctx := context.Background()
@@ -273,8 +273,8 @@ func TestUpsert_SaveDelayedInPoolIsStillStale(t *testing.T) {
 }
 
 func TestUpsert_SaveDelayedPastAnErasureDoesNotResurrectIt(t *testing.T) {
-	testdb.RequireIntegration(t)
-	wide := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	wide := dbtest.Pool(t)
 	narrow := singleConnPool(t)
 
 	ctx := context.Background()
@@ -316,8 +316,8 @@ func TestUpsert_SaveDelayedPastAnErasureDoesNotResurrectIt(t *testing.T) {
 }
 
 func TestUpsert_SaveBlockedOnTheErasureLockDoesNotResurrectIt(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
 	dropQueueStateOnCleanup(t, pool, userId)
@@ -359,8 +359,8 @@ func TestUpsert_SaveBlockedOnTheErasureLockDoesNotResurrectIt(t *testing.T) {
 }
 
 func TestDeleteForUser_ReapsRowsErasedPastTheFenceWindow(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	ctx := context.Background()
 	longErased, erasingNow := sharedids.NewUserId(uuid.New()), sharedids.NewUserId(uuid.New())
 	dropQueueStateOnCleanup(t, pool, longErased)
@@ -390,8 +390,8 @@ func TestDeleteForUser_ReapsRowsErasedPastTheFenceWindow(t *testing.T) {
 }
 
 func TestUpsert_SaveHandledAfterAnErasureStillApplies(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	repo := playback.NewPostgresQueueStateRepository(pool, playback.NoopQueueStateMetrics(), time.Now)
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
@@ -420,8 +420,8 @@ func TestUpsert_SaveHandledAfterAnErasureStillApplies(t *testing.T) {
 }
 
 func TestUpdatePosition_DelayedPastAnErasureDoesNotRecreateTheRow(t *testing.T) {
-	testdb.RequireIntegration(t)
-	wide := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	wide := dbtest.Pool(t)
 	narrow := singleConnPool(t)
 
 	ctx := context.Background()
@@ -471,8 +471,8 @@ func TestUpdatePosition_DelayedPastAnErasureDoesNotRecreateTheRow(t *testing.T) 
 }
 
 func TestDeleteForUser_ErasedRowEqualsEmptyQueueState(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	repo := playback.NewPostgresQueueStateRepository(pool, playback.NoopQueueStateMetrics(), time.Now)
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
@@ -580,9 +580,9 @@ func cleanupUser(t *testing.T, q playback.QueueStateDB, userId sharedids.UserId)
 }
 
 func TestUpsert_UnchangedTrackListsAreNotRewritten(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	ctx := context.Background()
-	tx := testdb.Tx(t)
+	tx := dbtest.Tx(t)
 	repo := playback.NewPostgresQueueStateRepository(tx, playback.NoopQueueStateMetrics(), time.Now)
 	userId := sharedids.NewUserId(uuid.New())
 	trackIds := uuidTrackIds(maxQueueLength)
@@ -609,8 +609,8 @@ func TestUpsert_UnchangedTrackListsAreNotRewritten(t *testing.T) {
 }
 
 func TestUpsert_ChangedTrackListIsStillWritten(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	repo := playback.NewPostgresQueueStateRepository(pool, playback.NoopQueueStateMetrics(), time.Now)
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
@@ -646,9 +646,9 @@ func positionAt(t *testing.T, userId sharedids.UserId, idx int, trackId string, 
 }
 
 func TestUpdatePosition_WritesOnlyThePosition(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	ctx := context.Background()
-	tx := testdb.Tx(t)
+	tx := dbtest.Tx(t)
 	repo := playback.NewPostgresQueueStateRepository(tx, playback.NoopQueueStateMetrics(), time.Now)
 	userId := sharedids.NewUserId(uuid.New())
 	trackIds := uuidTrackIds(maxQueueLength)
@@ -678,8 +678,8 @@ func TestUpdatePosition_WritesOnlyThePosition(t *testing.T) {
 }
 
 func TestUpdatePosition_NeverOverwritesANewerFullQueue(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	repo := playback.NewPostgresQueueStateRepository(pool, playback.NoopQueueStateMetrics(), time.Now)
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
@@ -704,8 +704,8 @@ func TestUpdatePosition_NeverOverwritesANewerFullQueue(t *testing.T) {
 }
 
 func TestUpdatePosition_OrdersAgainstFullSavesBothWays(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	repo := playback.NewPostgresQueueStateRepository(pool, playback.NoopQueueStateMetrics(), time.Now)
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
@@ -734,8 +734,8 @@ func TestUpdatePosition_OrdersAgainstFullSavesBothWays(t *testing.T) {
 }
 
 func TestUpdatePosition_DoesNotLandOnADifferentQueue(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	repo := playback.NewPostgresQueueStateRepository(pool, playback.NoopQueueStateMetrics(), time.Now)
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
@@ -785,7 +785,7 @@ func uncommittedFullSave(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 
 func awaitBlockedQueueWriter(t *testing.T, ctx context.Context, q playback.QueueStateDB, blockedFor time.Duration) {
 	t.Helper()
-	testpoll.Until(t, blockedFor+2*time.Second, "a writer to wait on the queue row; the contended write was not reproduced", func() bool {
+	polltest.Until(t, blockedFor+2*time.Second, "a writer to wait on the queue row; the contended write was not reproduced", func() bool {
 		var blocked bool
 		if err := q.QueryRow(ctx,
 			`SELECT EXISTS (
@@ -802,8 +802,8 @@ func awaitBlockedQueueWriter(t *testing.T, ctx context.Context, q playback.Queue
 }
 
 func TestUpdatePosition_QueueReplacedDuringItsLockWaitTellsTheClientToResync(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	repo := playback.NewPostgresQueueStateRepository(pool, playback.NoopQueueStateMetrics(), time.Now)
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
@@ -830,8 +830,8 @@ func TestUpdatePosition_QueueReplacedDuringItsLockWaitTellsTheClientToResync(t *
 }
 
 func TestUpdatePosition_AppliesOverAFullSaveItWaitedOut(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	repo := playback.NewPostgresQueueStateRepository(pool, playback.NoopQueueStateMetrics(), time.Now)
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
@@ -859,12 +859,12 @@ func TestUpdatePosition_AppliesOverAFullSaveItWaitedOut(t *testing.T) {
 }
 
 func TestUpdatePosition_HandledBeforeTheFullSaveItWaitedOutStaysStale(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	const (
 		handledBeforeTheFullSave = 250 * time.Millisecond
 		lockHeldWhileItWaits     = time.Second
 	)
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := playback.NewPostgresQueueStateRepository(pool, playback.NoopQueueStateMetrics(), time.Now)
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
@@ -892,8 +892,8 @@ func TestUpdatePosition_HandledBeforeTheFullSaveItWaitedOutStaysStale(t *testing
 }
 
 func TestUpsert_SaveStampedWithinTheGraceAfterAnErasureIsRefused(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	repo := playback.NewPostgresQueueStateRepository(pool, playback.NoopQueueStateMetrics(), time.Now)
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())
@@ -920,8 +920,8 @@ func TestUpsert_SaveStampedWithinTheGraceAfterAnErasureIsRefused(t *testing.T) {
 }
 
 func TestReapErasedStates_DropsOnlyTombstonesPastTheFenceWindow(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	ctx := context.Background()
 	old, recent := sharedids.NewUserId(uuid.New()), sharedids.NewUserId(uuid.New())
 	dropQueueStateOnCleanup(t, pool, old)
@@ -956,8 +956,8 @@ func TestReapErasedStates_DropsOnlyTombstonesPastTheFenceWindow(t *testing.T) {
 }
 
 func TestUpdatePosition_MatchesALegacyNonCanonicalStoredId(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	repo := playback.NewPostgresQueueStateRepository(pool, playback.NoopQueueStateMetrics(), time.Now)
 	ctx := context.Background()
 	userId := sharedids.NewUserId(uuid.New())

@@ -2,8 +2,8 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"altune/go-api/internal/shared/tracklength"
 	"context"
 	"encoding/json"
@@ -19,7 +19,7 @@ import (
 )
 
 func TestPostgresTrackRepo_CountForUser_CountsOwnedRowsAndStopsAtTheBound(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -48,7 +48,7 @@ func TestPostgresTrackRepo_CountForUser_CountsOwnedRowsAndStopsAtTheBound(t *tes
 }
 
 func TestPostgresTrackRepo_AddAndGetByID(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -96,7 +96,7 @@ func TestPostgresTrackRepo_AddAndGetByID(t *testing.T) {
 }
 
 func TestPostgresTrackRepo_Add_DedupConflict(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -129,7 +129,7 @@ func TestPostgresTrackRepo_Add_DedupConflict(t *testing.T) {
 }
 
 func TestPostgresTrackRepo_ListForUser(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -173,7 +173,7 @@ func TestPostgresTrackRepo_ListForUser(t *testing.T) {
 }
 
 func TestPostgresTrackRepo_Update(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -209,7 +209,7 @@ func TestPostgresTrackRepo_Update(t *testing.T) {
 }
 
 func TestPostgresTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -264,7 +264,7 @@ func TestPostgresTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing
 }
 
 func TestPostgresTrackRepo_Update_SameColumnCASMiss(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -319,7 +319,7 @@ func TestPostgresTrackRepo_Update_SameColumnCASMiss(t *testing.T) {
 }
 
 func TestPostgresTrackRepo_Update_DeletedRowIsNotAConflict(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -352,7 +352,7 @@ func TestPostgresTrackRepo_Update_DeletedRowIsNotAConflict(t *testing.T) {
 }
 
 func TestPostgresTrackRepo_Delete(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -390,7 +390,7 @@ func TestPostgresTrackRepo_Delete(t *testing.T) {
 }
 
 func TestPostgresTrackRepo_Delete_CrossTenantIDOR(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	trackRepo := library.NewPostgresTrackRepository(pool)
 	playlistRepo := library.NewPostgresPlaylistRepository(pool)
 	ctx := context.Background()
@@ -469,7 +469,7 @@ func rawPlaylistPositions(t *testing.T, pool *pgxpool.Pool, playlistId library.P
 }
 
 func TestPostgresTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	trackRepo := library.NewPostgresTrackRepository(pool)
 	playlistRepo := library.NewPostgresPlaylistRepository(pool)
 	ctx := context.Background()
@@ -542,7 +542,7 @@ func TestPostgresTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
 }
 
 func TestPostgresTrackRepo_GetByID_NotFound(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -557,7 +557,7 @@ func TestPostgresTrackRepo_GetByID_NotFound(t *testing.T) {
 }
 
 func TestPostgresTrackRepo_GetByDedupAndIdempotencyKey_UnknownKeyIsNotFound(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -571,7 +571,7 @@ func TestPostgresTrackRepo_GetByDedupAndIdempotencyKey_UnknownKeyIsNotFound(t *t
 }
 
 func TestPostgresTrackRepo_ListForUser_TotalPastTheEnd(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -602,7 +602,7 @@ func keyed(t *testing.T, userId ids.UserId, key string) *library.Track {
 }
 
 func TestPostgresTrackRepo_ConcurrentAddSameKey(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -662,7 +662,7 @@ func TestPostgresTrackRepo_ConcurrentAddSameKey(t *testing.T) {
 
 func TestPostgresTrackRepo_ConcurrentAddsNeverPassTheLibraryCap(t *testing.T) {
 	const libraryCap, concurrent = 3, 12
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool, library.WithLibraryCap(libraryCap))
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -707,7 +707,7 @@ func TestPostgresTrackRepo_ConcurrentAddsNeverPassTheLibraryCap(t *testing.T) {
 }
 
 func TestPostgresTrackRepo_AddSameKeyAfterCommit(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -742,7 +742,7 @@ func TestPostgresTrackRepo_AddSameKeyAfterCommit(t *testing.T) {
 }
 
 func TestPostgresTrackRepo_Update_RoundTripsAcquisitionConfidenceAndEvidence(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -794,7 +794,7 @@ func countTracksForUser(ctx context.Context, t *testing.T, pool *pgxpool.Pool, u
 }
 
 func TestPostgresTrackRepo_Add_PendingRowIsClaimableWithoutEnqueue(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -840,7 +840,7 @@ func setAudioRef(ctx context.Context, t *testing.T, pool *pgxpool.Pool, id libra
 }
 
 func TestPostgresTrackRepo_ListReadyAudioTracks_ReturnsOnlyReadyTracksWithAudio(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -890,7 +890,7 @@ func TestPostgresTrackRepo_ListReadyAudioTracks_ReturnsOnlyReadyTracksWithAudio(
 }
 
 func TestPostgresTrackRepo_AudioRefsUnderPrefix_MatchesLiteralPrefixOnly(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -926,7 +926,7 @@ func TestPostgresTrackRepo_AudioRefsUnderPrefix_MatchesLiteralPrefixOnly(t *test
 }
 
 func TestPostgresTrackRepo_AudioRefsUnderPrefix_DropsRefsThatChangeAway(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -955,7 +955,7 @@ func TestPostgresTrackRepo_AudioRefsUnderPrefix_DropsRefsThatChangeAway(t *testi
 }
 
 func TestPostgresTrackRepo_UpdateKeepsISRCCatalogLengthAndLengthFlag(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -1006,7 +1006,7 @@ func TestPostgresTrackRepo_UpdateKeepsISRCCatalogLengthAndLengthFlag(t *testing.
 }
 
 func TestPostgresTrackRepo_RoundTripsTheCatalogIdentity(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -1053,7 +1053,7 @@ func TestPostgresTrackRepo_RoundTripsTheCatalogIdentity(t *testing.T) {
 }
 
 func TestPostgresTrackRepo_GetByIDCarriesTheAcquisitionLeaseGeneration(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -1092,7 +1092,7 @@ func TestPostgresTrackRepo_GetByIDCarriesTheAcquisitionLeaseGeneration(t *testin
 }
 
 func TestPostgresTrackRepo_UpdateOfARelabelledTrackPersistsTheSixLabelColumns(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -1156,7 +1156,7 @@ func addAndLoadForRelabel(ctx context.Context, t *testing.T, repo *library.Postg
 }
 
 func TestPostgresTrackRepo_ARelabelOntoAnotherOfTheUsersTracksFailsAndLandsNothing(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -1195,7 +1195,7 @@ func TestPostgresTrackRepo_ARelabelOntoAnotherOfTheUsersTracksFailsAndLandsNothi
 }
 
 func TestPostgresTrackRepo_AStaleRelabelWritesNoLabelColumns(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -1226,7 +1226,7 @@ func TestPostgresTrackRepo_AStaleRelabelWritesNoLabelColumns(t *testing.T) {
 }
 
 func TestPostgresTrackRepo_ARelabelThatClearsYearISRCAndLengthStoresNulls(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -1268,7 +1268,7 @@ func TestPostgresTrackRepo_ARelabelThatClearsYearISRCAndLengthStoresNulls(t *tes
 }
 
 func TestPostgresTrackRepo_AReloadedRelabelledTrackDoesNotRewriteLabelsOnItsNextWrite(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -1325,7 +1325,7 @@ type queryTrace struct {
 func tracedPool(t *testing.T) (*pgxpool.Pool, *queryTrace) {
 	t.Helper()
 	trace := &queryTrace{}
-	return testdb.TracedPool(t, trace), trace
+	return dbtest.TracedPool(t, trace), trace
 }
 
 func (q *queryTrace) afterNextQuery(f func()) {
@@ -1374,7 +1374,7 @@ const readyAudioPageSQL = "WHERE acquisition_status = 'ready' AND audio_ref IS N
 func TestPostgresTrackRepo_TrackListsStopAtTheirCeilingInLibraryPages(t *testing.T) {
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
-	seedBulkTracks(ctx, t, testdb.Pool(t), userId, trackListCeiling+1)
+	seedBulkTracks(ctx, t, dbtest.Pool(t), userId, trackListCeiling+1)
 	pool, trace := tracedPool(t)
 	repo := library.NewPostgresTrackRepository(pool)
 
@@ -1425,7 +1425,7 @@ func deleteOneTrack(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userI
 
 func TestPostgresTrackRepo_ListForUser_CountsOnlyWhenThePageCannotProveTheTotal(t *testing.T) {
 	ctx := context.Background()
-	plain := testdb.Pool(t)
+	plain := dbtest.Pool(t)
 	cases := []struct {
 		name                  string
 		seeded, limit, offset int
@@ -1465,7 +1465,7 @@ func TestPostgresTrackRepo_ListForUser_ReturnsTheCountsFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	userId := ids.NewUserId(uuid.New())
-	seedBulkTracks(ctx, t, testdb.Pool(t), userId, 60)
+	seedBulkTracks(ctx, t, dbtest.Pool(t), userId, 60)
 	pool, trace := tracedPool(t)
 	trace.afterNextQuery(cancel)
 

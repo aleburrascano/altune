@@ -3,8 +3,8 @@ package persistence_test
 import (
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"testing"
 	"time"
@@ -43,7 +43,7 @@ func matchTitles(ms []ports.RelatedTrackMatch) map[string]bool {
 }
 
 func TestPostgresRelationshipQuerier_FindRelated(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	q := persistence.NewPostgresRelationshipQuerier(pool)
 	ctx := context.Background()
 
@@ -90,7 +90,7 @@ func TestPostgresRelationshipQuerier_FindRelated(t *testing.T) {
 }
 
 func TestPostgresRelationshipQuerier_FindRelatedByAlbumArtist(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	q := persistence.NewPostgresRelationshipQuerier(pool)
 	ctx := context.Background()
 	user := uuid.New()
@@ -111,7 +111,7 @@ func TestPostgresRelationshipQuerier_FindRelatedByAlbumArtist(t *testing.T) {
 }
 
 func TestPostgresRelationshipQuerier_FindRelatedByAlbumArtist_CreditsTheAlbumArtistAndAnUnnamedArtistMatchesAll(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	q := persistence.NewPostgresRelationshipQuerier(pool)
 	ctx := context.Background()
 	user := uuid.New()

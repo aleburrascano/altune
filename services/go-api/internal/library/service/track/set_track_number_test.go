@@ -2,7 +2,7 @@ package track_test
 
 import (
 	"altune/go-api/internal/library"
-	"altune/go-api/internal/shared/testdb"
+	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"errors"
 	"strings"
@@ -26,7 +26,7 @@ func TestSetTrackNumberService(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected a validation error for an out-of-range track number")
 		}
-		testdb.AssertValidationError(t, err)
+		dbtest.AssertValidationError(t, err)
 		if !strings.Contains(err.Error(), "track_number") {
 			t.Fatalf("error = %q, want it to mention %q", err.Error(), "track_number")
 		}

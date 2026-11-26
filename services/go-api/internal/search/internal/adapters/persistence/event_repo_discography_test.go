@@ -4,8 +4,8 @@ import (
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"testing"
 	"time"
@@ -57,7 +57,7 @@ func discographyRefs(cases []ports.DiscographyCase) []string {
 }
 
 func TestPostgresEventStore_DiscographyQuality_WorstFirstAndRegroup(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
 	claimDiscographyObservations(t, pool)
 
@@ -93,7 +93,7 @@ func TestPostgresEventStore_DiscographyQuality_WorstFirstAndRegroup(t *testing.T
 }
 
 func TestPostgresEventStore_DiscographyQuality_IDAnchoredRanking(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
 	claimDiscographyObservations(t, pool)
 
@@ -116,7 +116,7 @@ func TestPostgresEventStore_DiscographyQuality_IDAnchoredRanking(t *testing.T) {
 
 func claimDiscographyObservations(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	testdb.ExclusiveDiscographyObservations(t, pool)
+	dbtest.ExclusiveDiscographyObservations(t, pool)
 	clearDiscographyObserved := func() {
 		_, _ = pool.Exec(context.Background(),
 			`DELETE FROM discovery_events WHERE event_type = 'discography_observed'`)
@@ -126,7 +126,7 @@ func claimDiscographyObservations(t *testing.T, pool *pgxpool.Pool) {
 }
 
 func TestPostgresEventStore_SuspectRate_WindowedRealOpens(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
 	claimDiscographyObservations(t, pool)
 
@@ -156,7 +156,7 @@ func clearSystemNonDiscographyEvents(t *testing.T, pool *pgxpool.Pool) {
 }
 
 func TestPostgresEventStore_SuspectRate_EvalRunLeavesNoSystemEvents(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	t.Run("eval run", TestPostgresEventStore_SuspectRate_EvalRunDoesNotMoveIt)
 
 	var left int
@@ -171,7 +171,7 @@ func TestPostgresEventStore_SuspectRate_EvalRunLeavesNoSystemEvents(t *testing.T
 }
 
 func TestPostgresEventStore_SuspectRate_EvalRunDoesNotMoveIt(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
 	t.Cleanup(func() { clearSystemNonDiscographyEvents(t, pool) })
 	claimDiscographyObservations(t, pool)
@@ -203,7 +203,7 @@ func TestPostgresEventStore_SuspectRate_EvalRunDoesNotMoveIt(t *testing.T) {
 }
 
 func TestPostgresEventStore_SuspectRate_EmptyWindowIsZero(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
 	claimDiscographyObservations(t, pool)
 
@@ -266,7 +266,7 @@ func remainingDiscographyRefs(t *testing.T, pool *pgxpool.Pool) map[string]bool 
 }
 
 func TestPostgresEventStore_PruneDiscographyObserved(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
 	claimDiscographyObservations(t, pool)
 
@@ -310,7 +310,7 @@ func TestPostgresEventStore_PruneDiscographyObserved(t *testing.T) {
 }
 
 func TestPostgresEventStore_PruneDiscographyObserved_Idempotent(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
 	claimDiscographyObservations(t, pool)
 

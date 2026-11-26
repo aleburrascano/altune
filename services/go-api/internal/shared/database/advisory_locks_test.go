@@ -2,16 +2,16 @@ package database_test
 
 import (
 	"altune/go-api/internal/shared/database"
-	"altune/go-api/internal/shared/testdb"
+	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"strings"
 	"testing"
 )
 
 func TestAdvisoryLocks_SessionLocksPingsUnlocksAndNamesWhatFailsOnceReleased(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	ctx := context.Background()
-	session, err := database.NewAdvisoryLocks(testdb.Pool(t)).Acquire(ctx)
+	session, err := database.NewAdvisoryLocks(dbtest.Pool(t)).Acquire(ctx)
 	if err != nil {
 		t.Fatalf("Acquire = %v", err)
 	}

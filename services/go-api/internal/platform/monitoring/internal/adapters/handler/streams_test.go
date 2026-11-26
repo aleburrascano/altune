@@ -8,9 +8,9 @@ import (
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/polltest"
 	"altune/go-api/internal/shared/requestuser"
 	"altune/go-api/internal/shared/slowclienttest"
-	"altune/go-api/internal/shared/testpoll"
 	"bufio"
 	"bytes"
 	"context"
@@ -748,7 +748,7 @@ func probeStream(t *testing.T, srv *httptest.Server) int {
 
 func slotReleasedWithin(t *testing.T, srv *httptest.Server, limit time.Duration) bool {
 	t.Helper()
-	return testpoll.Within(limit, func() bool { return probeStream(t, srv) == http.StatusOK })
+	return polltest.Within(limit, func() bool { return probeStream(t, srv) == http.StatusOK })
 }
 
 func TestStreams_StalledClientReleasesItsSlotAtTheWriteDeadline(t *testing.T) {

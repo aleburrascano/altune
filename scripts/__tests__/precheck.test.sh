@@ -9,6 +9,10 @@ FIXTURES=()
 REPOS=0
 PRECHECK_ARGS=(--full)
 
+HEAVY_LOCK_DIR=$(mktemp -d)
+FIXTURES+=("$HEAVY_LOCK_DIR")
+export HEAVY_LOCK_DIR HEAVY_REMOTE=off
+
 stop_started_steps() {
     local fixture pid
     for fixture in "${FIXTURES[@]}"; do
@@ -648,14 +652,16 @@ if [ -n "\${GO_RENDEZVOUS:-}" ] && { [ "\$1" = vet ] || [ "\$1" = test ]; }; the
 fi
 case "\$*" in
 "run golang.org/x/tools/cmd/deadcode@"*) printf "%s" "\${DEADCODE_STUB_OUT:-}"; exit "\${DEADCODE_STUB_RC:-0}" ;;
-"run ./scripts/lintcomments"*|"run ./scripts/lintnames"*|"run ./scripts/lintarch"*) exit 0 ;;
-"test "*) if [ -n "\${GO_TEST_STUB_OUT:-}" ]; then printf "%b" "\$GO_TEST_STUB_OUT"; exit 1; fi ;;
+"run ./scripts/lintcomments"*|"run ./scripts/lintnames"*) exit 0 ;;
+"test "*) if [ -n "\${GO_TEST_STUB_OUT:-}" ]; then printf "%b" "\$GO_TEST_STUB_OUT"; exit 1; fi; [ -n "\${GO_REAL:-}" ] || exit 0 ;;
+"vet "*|"build "*) [ -n "\${GO_REAL:-}" ] || exit 0 ;;
 esac
 exec "$REAL_GO" "\$@"
 STUB
     printf '#!/usr/bin/env bash\nprintf "golangci-lint %%s\\n" "$*" >>"%s/tools.log"\nprintf "golangci-lint-cache %%s %%s\\n" "$1" "$GOLANGCI_LINT_CACHE" >>"%s/tools.log"\n' "$WORK" "$WORK" >"$WORK/bin/golangci-lint"
     printf '#!/usr/bin/env bash\nprintf "govulncheck %%s\\n" "$*" >>"%s/tools.log"\n' "$WORK" >"$WORK/bin/govulncheck"
-    chmod +x "$WORK/bin/go" "$WORK/bin/golangci-lint" "$WORK/bin/govulncheck"
+    printf '#!/usr/bin/env bash\nprintf "go-arch-lint %%s\\n" "$*" >>"%s/tools.log"\nexit "${GO_ARCH_LINT_STUB_RC:-0}"\n' "$WORK" >"$WORK/bin/go-arch-lint"
+    chmod +x "$WORK/bin/go" "$WORK/bin/golangci-lint" "$WORK/bin/govulncheck" "$WORK/bin/go-arch-lint"
     mkdir -p "$WORK/repo/scripts/ci"
     cp "$HERE/ci/go-deadcode.sh" "$WORK/repo/scripts/ci/"
     (
@@ -720,6 +726,7 @@ forbid_log "govulncheck"
 forbid_log "vet "
 expect_log "golangci-lint-cache run"
 expect_log "--fast-only"
+! grep -qE '^golangci-lint run --config \.golangci\.strict\.yml --new-from-rev=' "$WORK/tools.log" || fail "the commit stage should lint with the fast linters only"
 
 CASE="--lint lints a Go edit that is not staged, as in git commit -a, where git hands the hook a temporary index"
 new_repo
@@ -983,9 +990,9 @@ expect_rc 0
 expect_log "golangci-lint run --config .golangci.strict.yml --allow-serial-runners ./..."
 forbid_log "--new-from-rev"
 expect_log "go run ./scripts/lintnames $(git -C "$WORK/repo" rev-list --max-parents=0 HEAD | tail -n 1)"
-expect_log_line "go run ./scripts/lintarch --rules role,edge,driver"
+expect_log_line "go-arch-lint check"
 
-CASE="a push (no --full) lints only the changed package with the fast linters against the merge base"
+CASE="a push (no --full) lints only the changed package, with the fast linters and then every linter, against the merge base"
 new_repo
 add_go_fixture
 edit_go_file internal/shared/s/s.go
@@ -993,11 +1000,20 @@ run_push_scoped
 expect_rc 0
 expect_log "golangci-lint run --config .golangci.strict.yml --fast-only --new-from-rev="
 expect_log "./internal/shared/s"
+grep -qE '^golangci-lint run --config \.golangci\.strict\.yml --new-from-rev=[0-9a-f]+ --allow-parallel-runners \./internal/shared/s$' "$WORK/tools.log" || fail "a push should run every linter on the changed package, as CI does"
 forbid_log "--allow-serial-runners"
 forbid_log "--new-from-rev=HEAD"
 expect_log "go run ./scripts/lintcomments --all internal/shared/s/s.go"
 expect_log "go run ./scripts/lintnames"
-expect_log_line "go run ./scripts/lintarch --rules role,edge,driver"
+expect_log_line "go-arch-lint check"
+
+CASE="a failing go-arch-lint check turns a push red"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+GO_ARCH_LINT_STUB_RC=1 run_push_scoped
+expect_rc 1
+expect_out "FAIL  go-api architecture"
 
 expect_lint_args_exist() {
     local arg missing=""
@@ -1164,7 +1180,7 @@ add_go_fixture
     git rm -q services/go-api/internal/shared/s/s.go
     git commit -qm "delete s.go, which held S"
 )
-run_push_scoped
+GO_REAL=1 run_push_scoped
 expect_rc 1
 expect_out "FAIL  go-api vet (whole module"
 
@@ -1177,7 +1193,7 @@ add_go_fixture
     git add -A
     git commit -qm "break the signature of s.S"
 )
-run_push_scoped
+GO_REAL=1 run_push_scoped
 expect_rc 1
 expect_out "FAIL  go-api vet (whole module"
 expect_out "not enough arguments in call to s.S"
@@ -1229,7 +1245,7 @@ add_go_fixture
     git add -A
     git commit -qm "break x"
 )
-run_with_tools
+GO_REAL=1 run_with_tools
 expect_rc 1
 expect_out "FAIL  go-api vet"
 expect_log "vet altune/go-api/internal/search/adapters/x"

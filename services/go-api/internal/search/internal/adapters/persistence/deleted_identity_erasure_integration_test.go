@@ -4,8 +4,8 @@ import (
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"errors"
 	"testing"
@@ -162,8 +162,8 @@ func sweepDeletedIdentities(t *testing.T, pool *pgxpool.Pool) int64 {
 }
 
 func TestDeletedIdentitySweep_ErasesAGoneAccountAndKeepsALiveOne(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	standUpIdentityStore(t, pool)
 	deleted := ids.NewUserId(uuid.New())
 	stillRegistered := ids.NewUserId(uuid.New())
@@ -187,8 +187,8 @@ func TestDeletedIdentitySweep_ErasesAGoneAccountAndKeepsALiveOne(t *testing.T) {
 }
 
 func TestDeletedIdentitySweep_KeepsTheSystemIdentitysServerEmittedRows(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	standUpIdentityStore(t, pool)
 	system := ids.SystemUserId()
 	deleted := ids.NewUserId(uuid.New())
@@ -211,8 +211,8 @@ func TestDeletedIdentitySweep_KeepsTheSystemIdentitysServerEmittedRows(t *testin
 }
 
 func TestDeletedIdentitySweep_AnEmptyIdentityStoreErasesNothing(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	standUpIdentityStore(t, pool)
 	owner := ids.NewUserId(uuid.New())
 	seedEveryDiscoveryTableFor(t, pool, owner)
@@ -229,8 +229,8 @@ func TestDeletedIdentitySweep_AnEmptyIdentityStoreErasesNothing(t *testing.T) {
 }
 
 func TestDeletedIdentitySweep_AnUnreadableIdentityStoreIsNotEveryAccountDeleted(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	var existing *string
 	if err := pool.QueryRow(context.Background(),
 		`SELECT to_regclass('auth.users')::text`).Scan(&existing); err != nil {
@@ -258,8 +258,8 @@ func TestDeletedIdentitySweep_AnUnreadableIdentityStoreIsNotEveryAccountDeleted(
 }
 
 func TestMigrations_NoTableKeepsPerUserSearchClicks(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 
 	var found *string
 	if err := pool.QueryRow(context.Background(),

@@ -2,9 +2,9 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/library"
-	"altune/go-api/internal/library/internal/adapters/contract"
+	"altune/go-api/internal/library/internal/adapters/contracttest"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"testing"
 
@@ -27,8 +27,8 @@ func (r *cleaningPlaylistRepo) SeedTrack(t *testing.T, userId ids.UserId) librar
 }
 
 func TestPostgresPlaylistRepo_Contract(t *testing.T) {
-	pool := testdb.Pool(t)
-	contract.PlaylistRepositoryContract(t, func(t *testing.T) contract.PlaylistRepositoryUnderTest {
+	pool := dbtest.Pool(t)
+	contracttest.PlaylistRepositoryContract(t, func(t *testing.T) contracttest.PlaylistRepositoryUnderTest {
 		return &cleaningPlaylistRepo{PostgresPlaylistRepository: library.NewPostgresPlaylistRepository(pool), t: t, pool: pool}
 	})
 }

@@ -4,8 +4,8 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/download/internal/adapters/persistence"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -26,7 +26,7 @@ func (q contractPgxJobQueue) ExpireLease(t *testing.T, trackID ids.TrackId) {
 }
 
 func TestPostgresJobQueue_Contract(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	acquisitiontest.JobQueueContract(t, func(*testing.T) acquisitiontest.JobQueueUnderTest {
 		return contractPgxJobQueue{PostgresJobQueue: download.NewPostgresJobQueue(pool), pool: pool}

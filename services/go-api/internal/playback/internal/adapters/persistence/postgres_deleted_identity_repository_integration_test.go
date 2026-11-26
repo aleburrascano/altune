@@ -2,8 +2,8 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/playback"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"testing"
 
@@ -14,7 +14,7 @@ import (
 func identityStoreTx(t *testing.T) pgx.Tx {
 	t.Helper()
 	ctx := context.Background()
-	tx := testdb.Tx(t)
+	tx := dbtest.Tx(t)
 
 	var existing *string
 	if err := tx.QueryRow(ctx, `SELECT to_regclass('auth.users')::text`).Scan(&existing); err != nil {
@@ -74,7 +74,7 @@ func contains(owners []ids.UserId, owner ids.UserId) bool {
 }
 
 func TestListOwnersWithoutIdentity_FindsOnlyOwnersWhoseAccountIsGone(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	tx := identityStoreTx(t)
 	repo := playback.NewPostgresDeletedIdentityRepository(tx)
 	deleted := ids.NewUserId(uuid.New())
@@ -94,7 +94,7 @@ func TestListOwnersWithoutIdentity_FindsOnlyOwnersWhoseAccountIsGone(t *testing.
 }
 
 func TestListOwnersWithoutIdentity_EmptyIdentityStoreOffersNoOne(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	tx := identityStoreTx(t)
 	repo := playback.NewPostgresDeletedIdentityRepository(tx)
 	storeQueueOf(t, tx, ids.NewUserId(uuid.New()))
@@ -107,7 +107,7 @@ func TestListOwnersWithoutIdentity_EmptyIdentityStoreOffersNoOne(t *testing.T) {
 }
 
 func TestListOwnersWithoutIdentity_PagesThroughOwnersInKeyOrder(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	tx := identityStoreTx(t)
 	repo := playback.NewPostgresDeletedIdentityRepository(tx)
 	if _, err := tx.Exec(context.Background(), `DELETE FROM playback_queue_state`); err != nil {

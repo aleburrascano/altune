@@ -1,4 +1,4 @@
-package testdb
+package dbtest
 
 import (
 	apierror "altune/go-api/internal/shared/apierror"

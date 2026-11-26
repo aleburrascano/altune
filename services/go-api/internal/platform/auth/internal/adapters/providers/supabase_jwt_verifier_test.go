@@ -4,8 +4,8 @@ import (
 	"altune/go-api/internal/platform/auth"
 	"altune/go-api/internal/platform/auth/internal/core/ports"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/polltest"
 	"altune/go-api/internal/shared/random"
-	"altune/go-api/internal/shared/testpoll"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -181,7 +181,7 @@ func generateRSAKey(t *testing.T) *rsa.PrivateKey {
 
 func waitFor(t *testing.T, bound time.Duration, what string, cond func() bool) {
 	t.Helper()
-	testpoll.Until(t, bound, what, cond)
+	polltest.Until(t, bound, what, cond)
 }
 
 type rotatingJWKSServer struct {

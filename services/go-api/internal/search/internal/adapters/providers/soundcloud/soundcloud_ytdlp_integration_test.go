@@ -2,7 +2,7 @@ package soundcloud_test
 
 import (
 	"altune/go-api/internal/search"
-	"altune/go-api/internal/shared/testdb"
+	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"os/exec"
 	"testing"
@@ -10,7 +10,7 @@ import (
 )
 
 func TestSoundCloudAdapter_Search_Integration(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
 		t.Skip("yt-dlp not installed, skipping integration test")
 	}

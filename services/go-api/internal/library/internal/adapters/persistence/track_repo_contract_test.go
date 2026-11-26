@@ -2,8 +2,8 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/library"
-	"altune/go-api/internal/library/internal/adapters/contract"
-	"altune/go-api/internal/shared/testdb"
+	"altune/go-api/internal/library/internal/adapters/contracttest"
+	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"testing"
 
@@ -22,16 +22,16 @@ func (r *cleaningTrackRepo) Add(ctx context.Context, track *library.Track) (*lib
 }
 
 func TestPostgresTrackRepo_LibraryCapContract(t *testing.T) {
-	pool := testdb.Pool(t)
-	contract.TrackRepositoryLibraryCapContract(t, func(t *testing.T, libraryCap int) contract.TrackRepositoryUnderTest {
+	pool := dbtest.Pool(t)
+	contracttest.TrackRepositoryLibraryCapContract(t, func(t *testing.T, libraryCap int) contracttest.TrackRepositoryUnderTest {
 		repo := library.NewPostgresTrackRepository(pool, library.WithLibraryCap(libraryCap))
 		return &cleaningTrackRepo{PostgresTrackRepository: repo, t: t, pool: pool}
 	})
 }
 
 func TestPostgresTrackRepo_Contract(t *testing.T) {
-	pool := testdb.Pool(t)
-	contract.TrackRepositoryContract(t, func(t *testing.T) contract.TrackRepositoryUnderTest {
+	pool := dbtest.Pool(t)
+	contracttest.TrackRepositoryContract(t, func(t *testing.T) contracttest.TrackRepositoryUnderTest {
 		return &cleaningTrackRepo{PostgresTrackRepository: library.NewPostgresTrackRepository(pool), t: t, pool: pool}
 	})
 }

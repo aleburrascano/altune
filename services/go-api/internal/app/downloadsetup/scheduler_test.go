@@ -8,9 +8,9 @@ import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	_ "embed"
 	"errors"
@@ -236,8 +236,8 @@ func TestNewScheduler_AcquisitionPausedStartsPaused(t *testing.T) {
 
 func integrationPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	pool := testdb.Pool(t)
-	testdb.ExclusiveAcquisitionQueue(t, pool)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	return pool
 }
 

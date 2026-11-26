@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/persistence"
 	"altune/go-api/internal/download/internal/core/ports"
-	"altune/go-api/internal/shared/testdb"
+	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"errors"
 	"testing"
@@ -23,7 +23,7 @@ func activeKeys(store *persistence.PostgresRejectionStore, ctx context.Context, 
 }
 
 func TestPostgresRejectionStore_ActiveReturnsTheRecordedBasis(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -57,7 +57,7 @@ func TestPostgresRejectionStore_ActiveReturnsTheRecordedBasis(t *testing.T) {
 }
 
 func TestPostgresRejectionStore_RecordThenActiveKeysReturnsRecordedKeys(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -81,7 +81,7 @@ func TestPostgresRejectionStore_RecordThenActiveKeysReturnsRecordedKeys(t *testi
 }
 
 func TestPostgresRejectionStore_RecordUpsertsOnTrackAndSourceKey(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -124,7 +124,7 @@ func TestPostgresRejectionStore_RecordUpsertsOnTrackAndSourceKey(t *testing.T) {
 }
 
 func TestPostgresRejectionStore_ActiveKeysExcludesKeysRejectedBeforeSince(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -151,7 +151,7 @@ func TestPostgresRejectionStore_ActiveKeysExcludesKeysRejectedBeforeSince(t *tes
 }
 
 func TestPostgresRejectionStore_RecordRejectsEmptyTrackID(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -165,7 +165,7 @@ func TestPostgresRejectionStore_RecordRejectsEmptyTrackID(t *testing.T) {
 }
 
 func TestPostgresRejectionStore_RecordRejectsEmptySourceKey(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -179,7 +179,7 @@ func TestPostgresRejectionStore_RecordRejectsEmptySourceKey(t *testing.T) {
 }
 
 func TestPostgresRejectionStore_RecordWithCancelledContextReturnsError(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -194,8 +194,8 @@ func TestPostgresRejectionStore_RecordWithCancelledContextReturnsError(t *testin
 }
 
 func TestPostgresRejectionStore_RecordOnClosedPoolReturnsError(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	pool.Close()
 
@@ -208,7 +208,7 @@ func TestPostgresRejectionStore_RecordOnClosedPoolReturnsError(t *testing.T) {
 }
 
 func TestPostgresRejectionStore_ReRecordingAStaleKeyMakesItActiveAgain(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -235,7 +235,7 @@ func TestPostgresRejectionStore_ReRecordingAStaleKeyMakesItActiveAgain(t *testin
 }
 
 func TestPostgresRejectionStore_ActiveKeysOnlyReturnsTheRequestedTracksKeys(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -260,7 +260,7 @@ func TestPostgresRejectionStore_ActiveKeysOnlyReturnsTheRequestedTracksKeys(t *t
 }
 
 func TestPostgresRejectionStore_ActiveKeysForATrackWithNoRejectionsIsEmpty(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 
@@ -274,7 +274,7 @@ func TestPostgresRejectionStore_ActiveKeysForATrackWithNoRejectionsIsEmpty(t *te
 }
 
 func TestPostgresRejectionStore_SourceKeyWithQuotesAndUnicodeRoundTripsVerbatim(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -297,7 +297,7 @@ func TestPostgresRejectionStore_SourceKeyWithQuotesAndUnicodeRoundTripsVerbatim(
 }
 
 func TestPostgresRejectionStore_ActiveKeysWithCancelledContextReturnsError(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -310,7 +310,7 @@ func TestPostgresRejectionStore_ActiveKeysWithCancelledContextReturnsError(t *te
 }
 
 func TestPostgresRejectionStore_RecordWithNoRecordsSucceeds(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 
@@ -320,7 +320,7 @@ func TestPostgresRejectionStore_RecordWithNoRecordsSucceeds(t *testing.T) {
 }
 
 func TestPostgresRejectionStore_RecordBatchWithOneInvalidRecordStoresNothing(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -343,7 +343,7 @@ func TestPostgresRejectionStore_RecordBatchWithOneInvalidRecordStoresNothing(t *
 }
 
 func TestPostgresRejectionStore_RecordWithDuplicateKeyInBatchKeepsLastAndStoresOthers(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -392,7 +392,7 @@ func TestPostgresRejectionStore_RecordWithDuplicateKeyInBatchKeepsLastAndStoresO
 }
 
 func TestPostgresRejectionStore_ConcurrentRecordsOfTheSameKeysAllSucceed(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -422,7 +422,7 @@ func TestPostgresRejectionStore_ConcurrentRecordsOfTheSameKeysAllSucceed(t *test
 }
 
 func TestPostgresRejectionStore_PruneDeletesRowsOlderThanRetentionAndKeepsNewer(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -455,7 +455,7 @@ func TestPostgresRejectionStore_PruneDeletesRowsOlderThanRetentionAndKeepsNewer(
 const storePruneBatch = 1000
 
 func TestPostgresRejectionStore_PruneRemovesMoreRowsThanOneBatch(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -483,7 +483,7 @@ func TestPostgresRejectionStore_PruneRemovesMoreRowsThanOneBatch(t *testing.T) {
 }
 
 func TestPostgresRejectionStore_ARejectionJudgedWithNoLengthOrMBIDKeepsAnEmptyBasisNotNone(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -508,7 +508,7 @@ func TestPostgresRejectionStore_ARejectionJudgedWithNoLengthOrMBIDKeepsAnEmptyBa
 }
 
 func TestPostgresRejectionStore_ReRecordingALegacyRowWritesItsBasis(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -536,7 +536,7 @@ func TestPostgresRejectionStore_ReRecordingALegacyRowWritesItsBasis(t *testing.T
 }
 
 func TestPostgresRejectionStore_ReRecordingOnANewBasisReplacesTheOldOne(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -564,7 +564,7 @@ func TestPostgresRejectionStore_ReRecordingOnANewBasisReplacesTheOldOne(t *testi
 }
 
 func TestPostgresRejectionStore_PruneRemovesRowsOfADeletedTrack(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -606,7 +606,7 @@ func countRejectionsOf(t *testing.T, store *persistence.PostgresRejectionStore, 
 }
 
 func TestPostgresRejectionStore_PruneKeepsARejectionStoredUnderTheUppercaseIDOfALiveTrack(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -628,7 +628,7 @@ func TestPostgresRejectionStore_PruneKeepsARejectionStoredUnderTheUppercaseIDOfA
 }
 
 func TestPostgresRejectionStore_PruneSucceedsWhenATrackIDIsNotAUUID(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -652,7 +652,7 @@ func TestPostgresRejectionStore_PruneSucceedsWhenATrackIDIsNotAUUID(t *testing.T
 }
 
 func TestPostgresRejectionStore_PruneKeepsRowsOfATrackDeletedAndRecreatedWithTheSameID(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -680,7 +680,7 @@ func TestPostgresRejectionStore_PruneKeepsRowsOfATrackDeletedAndRecreatedWithThe
 }
 
 func TestPostgresRejectionStore_PruneRemovesOrphansFillingExactlyTwoBatchesAndKeepsLiveRows(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
@@ -712,7 +712,7 @@ func TestPostgresRejectionStore_PruneRemovesOrphansFillingExactlyTwoBatchesAndKe
 }
 
 func TestPostgresRejectionStore_PruneCountsAnOrphanOlderThanRetentionOnce(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()

@@ -1,4 +1,4 @@
-package testdb
+package dbtest
 
 import (
 	"context"
@@ -104,7 +104,7 @@ func applyMigrations(ctx context.Context, conn *pgx.Conn) error {
 func migrationsDir() (string, error) {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
-		return "", fmt.Errorf("locate the migrations next to the testdb package")
+		return "", fmt.Errorf("locate the migrations next to the dbtest package")
 	}
 	return filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations"), nil
 }

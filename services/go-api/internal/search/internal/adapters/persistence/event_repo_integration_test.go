@@ -3,8 +3,8 @@ package persistence_test
 import (
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"fmt"
 	"testing"
@@ -36,8 +36,8 @@ func storedQueryNorm(t *testing.T, pool *pgxpool.Pool, userId ids.UserId, eventI
 }
 
 func TestPostgresEventStore_NonZeroNoClickQueries_IgnoresClientQueryNorm(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
 	ctx := context.Background()
 	honest := newEventTestUser(t, pool)
@@ -83,8 +83,8 @@ func TestPostgresEventStore_NonZeroNoClickQueries_IgnoresClientQueryNorm(t *test
 }
 
 func TestPostgresEventStore_Append_ResolvesClientQueryNormFromSearch(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
 	owner := newEventTestUser(t, pool)
 	other := newEventTestUser(t, pool)
@@ -156,8 +156,8 @@ func showResults(t *testing.T, store *persistence.PostgresEventStore, userId ids
 }
 
 func TestPostgresEventStore_SatisfactionSignals_RequiresShownResult(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -215,8 +215,8 @@ func TestPostgresEventStore_SatisfactionSignals_RequiresShownResult(t *testing.T
 }
 
 func TestPostgresEventStore_SatisfactionSignals(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
 	ctx := context.Background()
 
@@ -302,8 +302,8 @@ func TestPostgresEventStore_SatisfactionSignals(t *testing.T) {
 }
 
 func TestPostgresEventStore_ZeroResultQueries(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
 	ctx := context.Background()
 	userId := newEventTestUser(t, pool)
@@ -345,8 +345,8 @@ func TestPostgresEventStore_ZeroResultQueries(t *testing.T) {
 }
 
 func TestPostgresEventStore_ZeroResultTotal(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
 	ctx := context.Background()
 	userId := newEventTestUser(t, pool)
@@ -391,8 +391,8 @@ func TestPostgresEventStore_ZeroResultTotal(t *testing.T) {
 }
 
 func TestPostgresEventStore_NonZeroNoClickQueries(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
 	ctx := context.Background()
 	userId := newEventTestUser(t, pool)
@@ -444,8 +444,8 @@ func TestPostgresEventStore_NonZeroNoClickQueries(t *testing.T) {
 }
 
 func TestPostgresEventStore_AbandonedSearches(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
 	ctx := context.Background()
 
@@ -525,8 +525,8 @@ func TestPostgresEventStore_AbandonedSearches(t *testing.T) {
 }
 
 func TestPostgresEventStore_Append_EventIDDedupAndMalformedIDs(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
 	ctx := context.Background()
 

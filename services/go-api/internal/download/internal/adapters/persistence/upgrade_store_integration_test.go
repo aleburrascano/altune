@@ -5,8 +5,8 @@ import (
 	"altune/go-api/internal/download/internal/adapters/persistence"
 	"altune/go-api/internal/download/internal/core/audioquality"
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/dbtest"
 	sharedids "altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"fmt"
 	"slices"
@@ -70,7 +70,7 @@ func candidatesAmong(t *testing.T, store *persistence.PostgresUpgradeStore, sele
 }
 
 func TestPostgresUpgradeStore_CandidatesAreWorstGradeFirstAndNeverTheGradeA(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 
@@ -89,7 +89,7 @@ func TestPostgresUpgradeStore_CandidatesAreWorstGradeFirstAndNeverTheGradeA(t *t
 }
 
 func TestPostgresUpgradeStore_ATrackWithNoGradeIsPickedAsGradeD(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 
@@ -103,7 +103,7 @@ func TestPostgresUpgradeStore_ATrackWithNoGradeIsPickedAsGradeD(t *testing.T) {
 }
 
 func TestPostgresUpgradeStore_AUserUploadIsNeverACandidate(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 
@@ -126,7 +126,7 @@ func uploadsIncluded() ports.UpgradeSelection {
 }
 
 func TestPostgresUpgradeStore_UnverifiedUserUploadsAreCandidatesOnlyWhenAsked(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 
@@ -144,7 +144,7 @@ func TestPostgresUpgradeStore_UnverifiedUserUploadsAreCandidatesOnlyWhenAsked(t 
 }
 
 func TestPostgresUpgradeStore_AGradeAUserTrackIsNeverACandidate(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 
@@ -185,7 +185,7 @@ func readEvidence(t *testing.T, pool *pgxpool.Pool, id sharedids.TrackId) record
 }
 
 func TestPostgresUpgradeStore_RecordInPlaceWritesTheVerdictAndGradeAndKeepsTheRestOfTheEvidence(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","verdict":"unknown","channel":"topic"}`, sourceURL: sourceURL("art")})
@@ -204,7 +204,7 @@ func TestPostgresUpgradeStore_RecordInPlaceWritesTheVerdictAndGradeAndKeepsTheRe
 }
 
 func TestPostgresUpgradeStore_RecordInPlaceWithNoGradeOrVerdictOnlyStampsTheGeneration(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","verdict":"unknown"}`, sourceURL: sourceURL("art")})
@@ -220,7 +220,7 @@ func TestPostgresUpgradeStore_RecordInPlaceWithNoGradeOrVerdictOnlyStampsTheGene
 }
 
 func TestPostgresUpgradeStore_RecordInPlaceFlagsAMismatchedUserUploadWithoutRegrading(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D")})
@@ -238,7 +238,7 @@ func TestPostgresUpgradeStore_RecordInPlaceFlagsAMismatchedUserUploadWithoutRegr
 }
 
 func TestPostgresUpgradeStore_RecordInPlaceNeverLowersTheStoredGrade(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("C"), sourceURL: sourceURL("art")})
@@ -266,7 +266,7 @@ func TestPostgresUpgradeStore_RecordInPlaceNeverLowersTheStoredGrade(t *testing.
 }
 
 func TestPostgresUpgradeStore_RecordInPlaceLowersTheGradeOnlyForAContradictionThatStands(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("C"), sourceURL: sourceURL("art")})
@@ -284,7 +284,7 @@ func TestPostgresUpgradeStore_RecordInPlaceLowersTheGradeOnlyForAContradictionTh
 }
 
 func TestPostgresUpgradeStore_NoteInPlaceFailureCountsAndMakesTheTrackWaitItsTurn(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("C"), sourceURL: sourceURL("art")})
@@ -307,7 +307,7 @@ func TestPostgresUpgradeStore_NoteInPlaceFailureCountsAndMakesTheTrackWaitItsTur
 }
 
 func TestPostgresUpgradeStore_RecordInPlaceIgnoresAFileThatChangedMeanwhile(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("C"), sourceURL: sourceURL("art")})
@@ -323,7 +323,7 @@ func TestPostgresUpgradeStore_RecordInPlaceIgnoresAFileThatChangedMeanwhile(t *t
 }
 
 func TestPostgresUpgradeStore_AFileThatIsNotReadyIsNeverACandidate(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 
@@ -338,7 +338,7 @@ func TestPostgresUpgradeStore_AFileThatIsNotReadyIsNeverACandidate(t *testing.T)
 }
 
 func TestPostgresUpgradeStore_ATrackGivenUpOnWaitsForTheNextGeneration(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("stuck")})
@@ -366,7 +366,7 @@ func TestPostgresUpgradeStore_ATrackGivenUpOnWaitsForTheNextGeneration(t *testin
 }
 
 func TestPostgresUpgradeStore_ATrackTriedRecentlyWaitsBeforeItsNextTry(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 	tried := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("F"), sourceURL: sourceURL("tried")})
@@ -382,7 +382,7 @@ func TestPostgresUpgradeStore_ATrackTriedRecentlyWaitsBeforeItsNextTry(t *testin
 }
 
 func TestPostgresUpgradeStore_NoCandidatesWhileTheUpgradeQueueIsFull(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 	queued := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("F"), sourceURL: sourceURL("queued")})
@@ -399,7 +399,7 @@ func TestPostgresUpgradeStore_NoCandidatesWhileTheUpgradeQueueIsFull(t *testing.
 }
 
 func TestPostgresUpgradeStore_NoteAttemptCountsTriesAndRemembersTheRejectedSource(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("current")})
@@ -435,7 +435,7 @@ func TestPostgresUpgradeStore_NoteAttemptCountsTriesAndRemembersTheRejectedSourc
 }
 
 func TestPostgresUpgradeStore_RejectedSourceKeysKeepTheNewestTwentyFive(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("current")})
@@ -461,7 +461,7 @@ func judgedEvidenceOf(g string, inPlaceGeneration int) string {
 }
 
 func TestPostgresUpgradeStore_ATrackGradedBestAvailableIsNeverACandidate(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 
@@ -478,7 +478,7 @@ func TestPostgresUpgradeStore_ATrackGradedBestAvailableIsNeverACandidate(t *test
 }
 
 func TestPostgresUpgradeStore_AGradeATrackIsACandidateOnlyWhenNotYetJudgedThisGenerationAndAsked(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 
@@ -496,7 +496,7 @@ func TestPostgresUpgradeStore_AGradeATrackIsACandidateOnlyWhenNotYetJudgedThisGe
 }
 
 func TestPostgresUpgradeStore_RecordInPlaceNeverReplacesAStoredBestAvailableGrade(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("best_available"), sourceURL: sourceURL("leak")})
@@ -513,7 +513,7 @@ func TestPostgresUpgradeStore_RecordInPlaceNeverReplacesAStoredBestAvailableGrad
 }
 
 func TestPostgresUpgradeStore_RecordInPlaceLowersAWrongLengthGradeAToB(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("A"), sourceURL: sourceURL("art")})
@@ -535,7 +535,7 @@ func TestPostgresUpgradeStore_RecordInPlaceLowersAWrongLengthGradeAToB(t *testin
 }
 
 func TestPostgresUpgradeStore_RecordInPlaceClearsTheFailureCountSoANewGenerationStartsFresh(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","in_place_failures":2}`, sourceURL: sourceURL("art")})
@@ -551,7 +551,7 @@ func TestPostgresUpgradeStore_RecordInPlaceClearsTheFailureCountSoANewGeneration
 }
 
 func TestPostgresUpgradeStore_RecordInPlaceClearsAStaleAcoustIDScoreOnAPreviewVerdict(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","acoustid_score":0.9}`, sourceURL: sourceURL("art")})
@@ -568,7 +568,7 @@ func TestPostgresUpgradeStore_RecordInPlaceClearsAStaleAcoustIDScoreOnAPreviewVe
 }
 
 func TestUpgradeStore_Candidates_LowBitrateRescue(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresUpgradeStore(pool)
 

@@ -1,0 +1,140 @@
+version: 3
+workdir: internal
+allow:
+  deepScan: false
+components:
+  app: { in: app/** }
+  download: { in: download/** }
+  library: { in: library/** }
+  platform_auth: { in: platform/auth/** }
+  platform_eventstream: { in: platform/eventstream/** }
+  platform_leader: { in: platform/leader/** }
+  platform_monitoring: { in: platform/monitoring/** }
+  platform_outbound: { in: platform/outbound/** }
+  platform_requestmetrics: { in: platform/requestmetrics/** }
+  playback: { in: playback/** }
+  search: { in: search/** }
+  shared_apierror: { in: shared/apierror/** }
+  shared_background: { in: shared/background/** }
+  shared_backoff: { in: shared/backoff/** }
+  shared_binpath: { in: shared/binpath/** }
+  shared_breaker: { in: shared/breaker/** }
+  shared_childprocess: { in: shared/childprocess/** }
+  shared_clock: { in: shared/clock/** }
+  shared_collabcheck: { in: shared/collabcheck/** }
+  shared_config: { in: shared/config/** }
+  shared_database: { in: shared/database/** }
+  shared_dbtest: { in: shared/dbtest/** }
+  shared_downloadfailure: { in: shared/downloadfailure/** }
+  shared_downloadprovenance: { in: shared/downloadprovenance/** }
+  shared_events: { in: shared/events/** }
+  shared_expiringcache: { in: shared/expiringcache/** }
+  shared_filelinks: { in: shared/filelinks/** }
+  shared_httpserver: { in: shared/httpserver/** }
+  shared_ids: { in: shared/ids/** }
+  shared_jsoncontract: { in: shared/jsoncontract/** }
+  shared_logging: { in: shared/logging/** }
+  shared_parallel: { in: shared/parallel/** }
+  shared_polltest: { in: shared/polltest/** }
+  shared_providerfields: { in: shared/providerfields/** }
+  shared_queuetimeout: { in: shared/queuetimeout/** }
+  shared_random: { in: shared/random/** }
+  shared_redact: { in: shared/redact/** }
+  shared_redis: { in: shared/redis/** }
+  shared_requestuser: { in: shared/requestuser/** }
+  shared_retrysafe: { in: shared/retrysafe/** }
+  shared_slowclienttest: { in: shared/slowclienttest/** }
+  shared_songfields: { in: shared/songfields/** }
+  shared_telemetry: { in: shared/telemetry/** }
+  shared_textnorm: { in: shared/textnorm/** }
+  shared_titlemarkers: { in: shared/titlemarkers/** }
+  shared_tracklength: { in: shared/tracklength/** }
+  shared_youtubemusicapi: { in: shared/youtubemusicapi/** }
+  shared_ytdlprunner: { in: shared/ytdlprunner/** }
+commonComponents:
+  - shared_apierror
+  - shared_background
+  - shared_backoff
+  - shared_binpath
+  - shared_breaker
+  - shared_childprocess
+  - shared_clock
+  - shared_collabcheck
+  - shared_config
+  - shared_database
+  - shared_dbtest
+  - shared_downloadfailure
+  - shared_downloadprovenance
+  - shared_events
+  - shared_expiringcache
+  - shared_filelinks
+  - shared_httpserver
+  - shared_ids
+  - shared_jsoncontract
+  - shared_logging
+  - shared_parallel
+  - shared_polltest
+  - shared_providerfields
+  - shared_queuetimeout
+  - shared_random
+  - shared_redact
+  - shared_redis
+  - shared_requestuser
+  - shared_retrysafe
+  - shared_slowclienttest
+  - shared_songfields
+  - shared_telemetry
+  - shared_textnorm
+  - shared_titlemarkers
+  - shared_tracklength
+  - shared_youtubemusicapi
+  - shared_ytdlprunner
+deps:
+  app: { anyVendorDeps: true, mayDependOn: [app, download, library, platform_auth, platform_eventstream, platform_leader, platform_monitoring, platform_outbound, platform_requestmetrics, playback, search] }
+  download: { anyVendorDeps: true, mayDependOn: [download] }
+  library: { anyVendorDeps: true, mayDependOn: [library] }
+  platform_auth: { anyVendorDeps: true, mayDependOn: [platform_auth] }
+  platform_eventstream: { anyVendorDeps: true, mayDependOn: [platform_eventstream] }
+  platform_leader: { anyVendorDeps: true, mayDependOn: [platform_leader] }
+  platform_monitoring: { anyVendorDeps: true, mayDependOn: [platform_monitoring] }
+  platform_outbound: { anyVendorDeps: true, mayDependOn: [platform_outbound] }
+  platform_requestmetrics: { anyVendorDeps: true, mayDependOn: [platform_requestmetrics] }
+  playback: { anyVendorDeps: true, mayDependOn: [playback] }
+  search: { anyVendorDeps: true, mayDependOn: [search] }
+  shared_apierror: { anyVendorDeps: true, mayDependOn: [] }
+  shared_background: { anyVendorDeps: true, mayDependOn: [] }
+  shared_backoff: { anyVendorDeps: true, mayDependOn: [] }
+  shared_binpath: { anyVendorDeps: true, mayDependOn: [] }
+  shared_breaker: { anyVendorDeps: true, mayDependOn: [] }
+  shared_childprocess: { anyVendorDeps: true, mayDependOn: [] }
+  shared_clock: { anyVendorDeps: true, mayDependOn: [] }
+  shared_collabcheck: { anyVendorDeps: true, mayDependOn: [] }
+  shared_config: { anyVendorDeps: true, mayDependOn: [] }
+  shared_database: { anyVendorDeps: true, mayDependOn: [] }
+  shared_dbtest: { anyVendorDeps: true, mayDependOn: [] }
+  shared_downloadfailure: { anyVendorDeps: true, mayDependOn: [] }
+  shared_downloadprovenance: { anyVendorDeps: true, mayDependOn: [] }
+  shared_events: { anyVendorDeps: true, mayDependOn: [] }
+  shared_expiringcache: { anyVendorDeps: true, mayDependOn: [] }
+  shared_filelinks: { anyVendorDeps: true, mayDependOn: [] }
+  shared_httpserver: { anyVendorDeps: true, mayDependOn: [] }
+  shared_ids: { anyVendorDeps: true, mayDependOn: [] }
+  shared_jsoncontract: { anyVendorDeps: true, mayDependOn: [] }
+  shared_logging: { anyVendorDeps: true, mayDependOn: [] }
+  shared_parallel: { anyVendorDeps: true, mayDependOn: [] }
+  shared_polltest: { anyVendorDeps: true, mayDependOn: [] }
+  shared_providerfields: { anyVendorDeps: true, mayDependOn: [] }
+  shared_queuetimeout: { anyVendorDeps: true, mayDependOn: [] }
+  shared_random: { anyVendorDeps: true, mayDependOn: [] }
+  shared_redact: { anyVendorDeps: true, mayDependOn: [] }
+  shared_redis: { anyVendorDeps: true, mayDependOn: [] }
+  shared_requestuser: { anyVendorDeps: true, mayDependOn: [] }
+  shared_retrysafe: { anyVendorDeps: true, mayDependOn: [] }
+  shared_slowclienttest: { anyVendorDeps: true, mayDependOn: [] }
+  shared_songfields: { anyVendorDeps: true, mayDependOn: [] }
+  shared_telemetry: { anyVendorDeps: true, mayDependOn: [] }
+  shared_textnorm: { anyVendorDeps: true, mayDependOn: [] }
+  shared_titlemarkers: { anyVendorDeps: true, mayDependOn: [] }
+  shared_tracklength: { anyVendorDeps: true, mayDependOn: [] }
+  shared_youtubemusicapi: { anyVendorDeps: true, mayDependOn: [] }
+  shared_ytdlprunner: { anyVendorDeps: true, mayDependOn: [] }

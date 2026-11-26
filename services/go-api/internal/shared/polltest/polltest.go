@@ -1,4 +1,4 @@
-package testpoll
+package polltest
 
 import (
 	"context"

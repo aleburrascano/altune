@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
-	"altune/go-api/internal/shared/testdb"
+	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"testing"
 	"time"
@@ -48,14 +48,14 @@ func (p postgresUnreleasedUnderContract) NewUnrecordedArtist(*testing.T) ports.U
 }
 
 func TestPostgresUnreleasedStore_KeepsTheStoreContract(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	memory.UnreleasedStoreContract(t, func(*testing.T) memory.UnreleasedStoreUnderTest {
 		return postgresUnreleasedUnderContract{PostgresUnreleasedStore: persistence.NewPostgresUnreleasedStore(pool), pool: pool}
 	})
 }
 
 func TestUnreleasedStoreWrite(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresUnreleasedStore(pool)
 	ctx := context.Background()
 	key := newUnreleasedArtist(t, pool, store)
@@ -92,7 +92,7 @@ func TestUnreleasedStoreWrite(t *testing.T) {
 }
 
 func TestUnreleasedStoreDue(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresUnreleasedStore(pool)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -142,7 +142,7 @@ func TestUnreleasedStoreDue(t *testing.T) {
 }
 
 func TestUnreleasedStoreBuildVersion(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresUnreleasedStore(pool)
 	ctx := context.Background()
 	key := newUnreleasedArtist(t, pool, store)
@@ -179,7 +179,7 @@ func unreleasedSearchKeys(t *testing.T, pool *pgxpool.Pool, key ports.Unreleased
 }
 
 func TestUnreleasedSearch_RanksBySimilarityAndMatchesTyposAndAccents(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresUnreleasedStore(pool)
 	ctx := context.Background()
 	key := newUnreleasedArtist(t, pool, store)

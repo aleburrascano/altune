@@ -2,7 +2,7 @@ package memory_test
 
 import (
 	"altune/go-api/internal/library"
-	"altune/go-api/internal/library/internal/adapters/contract"
+	"altune/go-api/internal/library/internal/adapters/contracttest"
 	"altune/go-api/internal/library/internal/adapters/memory"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -34,7 +34,7 @@ func (r *playlistRepoWithTracks) SeedTrack(t *testing.T, userId ids.UserId) libr
 }
 
 func TestPlaylistRepoFake_Contract(t *testing.T) {
-	contract.PlaylistRepositoryContract(t, func(*testing.T) contract.PlaylistRepositoryUnderTest {
+	contracttest.PlaylistRepositoryContract(t, func(*testing.T) contracttest.PlaylistRepositoryUnderTest {
 		tracks := library.NewInMemoryTrackRepo()
 		repo := library.NewInMemoryPlaylistRepo()
 		repo.Tracks = tracks

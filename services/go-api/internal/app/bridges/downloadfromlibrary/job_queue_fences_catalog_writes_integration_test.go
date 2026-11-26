@@ -3,8 +3,8 @@ package downloadfromlibrary_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"errors"
 	"sync"
@@ -17,8 +17,8 @@ import (
 
 func newPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	pool := testdb.Pool(t)
-	testdb.ExclusiveAcquisitionQueue(t, pool)
+	pool := dbtest.Pool(t)
+	dbtest.ExclusiveAcquisitionQueue(t, pool)
 	return pool
 }
 
@@ -86,7 +86,7 @@ func acquisitionStatus(t *testing.T, pool *pgxpool.Pool, trackID ids.TrackId) st
 }
 
 func TestPostgresJobQueue_EnqueueMakesAStaleCatalogWriteConflict(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := download.NewPostgresJobQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
@@ -112,7 +112,7 @@ func TestPostgresJobQueue_EnqueueMakesAStaleCatalogWriteConflict(t *testing.T) {
 }
 
 func TestPostgresJobQueue_ClaimMakesAStaleCatalogWriteConflict(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := download.NewPostgresJobQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
@@ -135,7 +135,7 @@ func TestPostgresJobQueue_ClaimMakesAStaleCatalogWriteConflict(t *testing.T) {
 }
 
 func TestPostgresJobQueue_RetryBetweenAudioMissingLoadAndWriteLeavesTheTrackPendingAndClaimable(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := download.NewPostgresJobQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
@@ -171,7 +171,7 @@ func TestPostgresJobQueue_RetryBetweenAudioMissingLoadAndWriteLeavesTheTrackPend
 }
 
 func TestPostgresJobQueue_ReplaceEnqueueMakesAStaleCatalogWriteConflict(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := download.NewPostgresJobQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
@@ -199,7 +199,7 @@ func TestPostgresJobQueue_ReplaceEnqueueMakesAStaleCatalogWriteConflict(t *testi
 }
 
 func TestPostgresJobQueue_SecondEnqueueMakesAWriterLoadedBetweenTheTwoConflict(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := download.NewPostgresJobQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
@@ -223,7 +223,7 @@ func TestPostgresJobQueue_SecondEnqueueMakesAWriterLoadedBetweenTheTwoConflict(t
 }
 
 func TestPostgresJobQueue_ReclaimOfALapsedLeaseMakesAStaleCatalogWriteConflict(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := download.NewPostgresJobQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
@@ -249,7 +249,7 @@ func TestPostgresJobQueue_ReclaimOfALapsedLeaseMakesAStaleCatalogWriteConflict(t
 }
 
 func TestPostgresJobQueue_ClaimOfAReplaceJobMakesAStaleCatalogWriteConflict(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := download.NewPostgresJobQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
@@ -274,7 +274,7 @@ func TestPostgresJobQueue_ClaimOfAReplaceJobMakesAStaleCatalogWriteConflict(t *t
 }
 
 func TestPostgresJobQueue_CatalogWriteThatRereadsAfterEnqueueAndClaimLands(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := download.NewPostgresJobQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
@@ -311,7 +311,7 @@ func TestPostgresJobQueue_CatalogWriteThatRereadsAfterEnqueueAndClaimLands(t *te
 }
 
 func TestPostgresJobQueue_EnqueueRacingAStaleCatalogWriteAlwaysEndsPending(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := download.NewPostgresJobQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
@@ -354,7 +354,7 @@ func TestPostgresJobQueue_EnqueueRacingAStaleCatalogWriteAlwaysEndsPending(t *te
 }
 
 func TestPostgresJobQueue_ClaimRacingAStaleCatalogWriteKeepsTheStartTime(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := download.NewPostgresJobQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
@@ -398,7 +398,7 @@ func TestPostgresJobQueue_ClaimRacingAStaleCatalogWriteKeepsTheStartTime(t *test
 }
 
 func TestPostgresJobQueue_HeartbeatReleaseAndSettleLeaveACatalogWriteLoadedDuringTheRunValid(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := download.NewPostgresJobQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)

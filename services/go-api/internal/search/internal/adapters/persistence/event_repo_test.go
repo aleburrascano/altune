@@ -3,8 +3,8 @@ package persistence_test
 import (
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/testdb"
 	"context"
 	"encoding/json"
 	"testing"
@@ -13,7 +13,7 @@ import (
 )
 
 func TestPostgresEventStore_AppendAndRead(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
@@ -67,7 +67,7 @@ func TestPostgresEventStore_AppendAndRead(t *testing.T) {
 }
 
 func TestPostgresEventStore_NilPayloadAndQuery(t *testing.T) {
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresEventStore(pool)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())

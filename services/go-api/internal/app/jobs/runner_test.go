@@ -9,9 +9,9 @@ import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/database"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/testdb"
 	"bytes"
 	"context"
 	"errors"
@@ -677,8 +677,8 @@ func (c lockWonRecords) WithAttrs([]slog.Attr) slog.Handler { return c }
 func (c lockWonRecords) WithGroup(string) slog.Handler { return c }
 
 func TestNewElection_WinsTheBackgroundLockAndAnnouncesATwentyFiveSecondSettle(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	won := make(lockWonRecords, 1)
 	prev := slog.Default()
 	slog.SetDefault(slog.New(won))

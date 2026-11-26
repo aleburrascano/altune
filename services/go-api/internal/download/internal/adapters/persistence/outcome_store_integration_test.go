@@ -3,7 +3,7 @@ package persistence_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/core/ports"
-	"altune/go-api/internal/shared/testdb"
+	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"errors"
 	"strings"
@@ -47,7 +47,7 @@ func queryOutcomeRows(t *testing.T, pool *pgxpool.Pool, trackID string) []outcom
 }
 
 func TestPostgresOutcomeStore_RecordsFieldsAndServerTimestamp(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresOutcomeStore(pool)
 	ctx := context.Background()
@@ -82,7 +82,7 @@ func TestPostgresOutcomeStore_RecordsFieldsAndServerTimestamp(t *testing.T) {
 }
 
 func TestPostgresOutcomeStore_RecordInsertsOneRowPerCall(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresOutcomeStore(pool)
 	ctx := context.Background()
@@ -101,7 +101,7 @@ func TestPostgresOutcomeStore_RecordInsertsOneRowPerCall(t *testing.T) {
 }
 
 func TestPostgresOutcomeStore_RejectsOutcomeOutsideTheThreeStates(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresOutcomeStore(pool)
 	ctx := context.Background()
@@ -119,7 +119,7 @@ func TestPostgresOutcomeStore_RejectsOutcomeOutsideTheThreeStates(t *testing.T) 
 }
 
 func TestPostgresOutcomeStore_RejectsNearMissOutcomeSpellings(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresOutcomeStore(pool)
 	ctx := context.Background()
@@ -136,7 +136,7 @@ func TestPostgresOutcomeStore_RejectsNearMissOutcomeSpellings(t *testing.T) {
 }
 
 func TestPostgresOutcomeStore_StoresLongAndHostileReasonVerbatim(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresOutcomeStore(pool)
 	ctx := context.Background()
@@ -159,7 +159,7 @@ func TestPostgresOutcomeStore_StoresLongAndHostileReasonVerbatim(t *testing.T) {
 }
 
 func TestPostgresOutcomeStore_StoresElapsedAtZeroAndInt64Max(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresOutcomeStore(pool)
 	ctx := context.Background()
@@ -177,7 +177,7 @@ func TestPostgresOutcomeStore_StoresElapsedAtZeroAndInt64Max(t *testing.T) {
 }
 
 func TestPostgresOutcomeStore_CancelledContextReturnsErrorAndWritesNothing(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresOutcomeStore(pool)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -194,8 +194,8 @@ func TestPostgresOutcomeStore_CancelledContextReturnsErrorAndWritesNothing(t *te
 }
 
 func TestPostgresOutcomeStore_ClosedPoolReturnsError(t *testing.T) {
-	testdb.RequireIntegration(t)
-	pool := testdb.Pool(t)
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
 	store := download.NewPostgresOutcomeStore(pool)
 	pool.Close()
 
@@ -206,7 +206,7 @@ func TestPostgresOutcomeStore_ClosedPoolReturnsError(t *testing.T) {
 }
 
 func TestPostgresOutcomeStore_RejectsNegativeElapsedMs(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresOutcomeStore(pool)
 	ctx := context.Background()
@@ -224,7 +224,7 @@ func TestPostgresOutcomeStore_RejectsNegativeElapsedMs(t *testing.T) {
 }
 
 func TestPostgresOutcomeStore_RejectsEmptyTrackID(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresOutcomeStore(pool)
 	ctx := context.Background()
@@ -241,7 +241,7 @@ func TestPostgresOutcomeStore_RejectsEmptyTrackID(t *testing.T) {
 }
 
 func TestPostgresOutcomeStore_ConcurrentRecordsEachLandOneRow(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresOutcomeStore(pool)
 	ctx := context.Background()
@@ -270,7 +270,7 @@ func TestPostgresOutcomeStore_ConcurrentRecordsEachLandOneRow(t *testing.T) {
 }
 
 func TestPostgresOutcomeStore_PruneDeletesOutcomesOlderThanRetentionAndKeepsNewer(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresOutcomeStore(pool)
 	ctx := context.Background()
@@ -301,7 +301,7 @@ func TestPostgresOutcomeStore_PruneDeletesOutcomesOlderThanRetentionAndKeepsNewe
 }
 
 func TestPostgresOutcomeStore_RecordsStageTimesAndFileFacts(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresOutcomeStore(pool)
 	trackID := uuid.NewString()
@@ -340,7 +340,7 @@ func TestPostgresOutcomeStore_RecordsStageTimesAndFileFacts(t *testing.T) {
 }
 
 func TestPostgresOutcomeStore_RecordsJobKindRunProvenanceAndLengths(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresOutcomeStore(pool)
 	ctx := context.Background()
@@ -381,7 +381,7 @@ func TestPostgresOutcomeStore_RecordsJobKindRunProvenanceAndLengths(t *testing.T
 }
 
 func TestPostgresOutcomeStore_PruneRemovesRowsOfADeletedTrack(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresOutcomeStore(pool)
 	ctx := context.Background()
@@ -413,7 +413,7 @@ func TestPostgresOutcomeStore_PruneRemovesRowsOfADeletedTrack(t *testing.T) {
 }
 
 func TestPostgresOutcomeStore_PruneKeepsAnOutcomeStoredUnderTheUppercaseIDOfALiveTrack(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresOutcomeStore(pool)
 	ctx := context.Background()
@@ -435,7 +435,7 @@ func TestPostgresOutcomeStore_PruneKeepsAnOutcomeStoredUnderTheUppercaseIDOfALiv
 }
 
 func TestPostgresOutcomeStore_PruneSucceedsWhenATrackIDIsNotAUUID(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresOutcomeStore(pool)
 	ctx := context.Background()
@@ -456,7 +456,7 @@ func TestPostgresOutcomeStore_PruneSucceedsWhenATrackIDIsNotAUUID(t *testing.T) 
 }
 
 func TestPostgresOutcomeStore_PruneKeepsRowsOfATrackDeletedAndRecreatedWithTheSameID(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresOutcomeStore(pool)
 	ctx := context.Background()
@@ -484,7 +484,7 @@ func TestPostgresOutcomeStore_PruneKeepsRowsOfATrackDeletedAndRecreatedWithTheSa
 }
 
 func TestPostgresOutcomeStore_PruneRemovesOrphansFillingExactlyTwoBatchesAndKeepsLiveRows(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresOutcomeStore(pool)
 	ctx := context.Background()
@@ -516,7 +516,7 @@ func TestPostgresOutcomeStore_PruneRemovesOrphansFillingExactlyTwoBatchesAndKeep
 }
 
 func TestPostgresOutcomeStore_PruneCountsAnOrphanOlderThanRetentionOnce(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := download.NewPostgresOutcomeStore(pool)
 	ctx := context.Background()

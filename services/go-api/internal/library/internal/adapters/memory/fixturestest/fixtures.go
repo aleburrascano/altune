@@ -1,7 +1,8 @@
-package memory
+package fixturestest
 
 import (
 	"altune/go-api/internal/library/domain"
+	"altune/go-api/internal/library/internal/adapters/memory"
 	"altune/go-api/internal/shared/ids"
 	"time"
 
@@ -16,7 +17,7 @@ func OtherUserId() ids.UserId {
 	return ids.NewUserId(uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
 }
 
-func SeedTrack(t TB, repo *TrackRepo, userId ids.UserId, title, artist, album string) *domain.Track {
+func SeedTrack(t memory.TB, repo *memory.TrackRepo, userId ids.UserId, title, artist, album string) *domain.Track {
 	t.Helper()
 	track, err := domain.NewTrack(userId, title, artist, album, time.Now)
 	if err != nil {
@@ -26,7 +27,7 @@ func SeedTrack(t TB, repo *TrackRepo, userId ids.UserId, title, artist, album st
 	return track
 }
 
-func SeedReadyTrack(t TB, repo *TrackRepo, userId ids.UserId, title, artist, album, audioRef string) *domain.Track {
+func SeedReadyTrack(t memory.TB, repo *memory.TrackRepo, userId ids.UserId, title, artist, album, audioRef string) *domain.Track {
 	t.Helper()
 	track := SeedTrack(t, repo, userId, title, artist, album)
 	if err := track.MarkReady(audioRef); err != nil {
@@ -35,7 +36,7 @@ func SeedReadyTrack(t TB, repo *TrackRepo, userId ids.UserId, title, artist, alb
 	return track
 }
 
-func SeedPlaylist(t TB, repo *PlaylistRepo, userId ids.UserId, name string) *domain.Playlist {
+func SeedPlaylist(t memory.TB, repo *memory.PlaylistRepo, userId ids.UserId, name string) *domain.Playlist {
 	t.Helper()
 	playlist, err := domain.NewPlaylist(userId, name, time.Now())
 	if err != nil {

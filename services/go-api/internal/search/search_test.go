@@ -4,9 +4,9 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
-	"altune/go-api/internal/shared/testdb"
 	"bytes"
 	"context"
 	"expvar"
@@ -579,7 +579,7 @@ func TestSearch_NeverAsksMusicBrainzEvenWithItsUserAgentSet(t *testing.T) {
 func TestSearch_ActivityHearsOfEachStoredSearch(t *testing.T) {
 	feed := &activityRecorder{}
 	h := newHarness(t, everyProviderOff())
-	h.deps.Pool = testdb.Pool(t)
+	h.deps.Pool = dbtest.Pool(t)
 	h.deps.Activity = feed
 	disc := h.start()
 
@@ -755,7 +755,7 @@ func anchoredArtistContent(t *testing.T) []string {
 
 func storedIdentityHarness(t *testing.T, providers search.ProviderSettings) *harness {
 	t.Helper()
-	pool := testdb.Pool(t)
+	pool := dbtest.Pool(t)
 	ctx := context.Background()
 	forget := func() {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM entity_identity WHERE provider = 'deezer' AND external_id = '1' AND kind = 'artist'`)
