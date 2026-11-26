@@ -9,7 +9,6 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -229,39 +228,5 @@ func TestRankingOnlySearcherRefusesABackgroundCapBelowOne(t *testing.T) {
 	_, err := journey.RankingOnlySearcher(t.Context(), &config.Config{}, nil)
 	if !errors.Is(err, background.ErrTrackerLimit) {
 		t.Fatalf("RankingOnlySearcher = %v, want runloop.ErrTrackerLimit", err)
-	}
-}
-
-func TestDownloaderForDownloadsWithTheLiveJarAndRecordsItsBotCheckUnderTheConfiguredEnvironment(t *testing.T) {
-	bin := t.TempDir()
-	if err := os.WriteFile(filepath.Join(bin, "yt-dlp"), []byte("#!/bin/sh\necho \"ERROR: [youtube] x: Sign in to confirm you're not a bot.\" >&2\nexit 1\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	jar := filepath.Join(t.TempDir(), "cookies.txt")
-	if err := os.WriteFile(jar, []byte("# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t1999999999\tLOGIN_INFO\tl\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err := journey.DownloaderFor(&config.Config{YtDLPCookieFile: jar, Env: "production"}).Download(context.Background(), "https://youtube.com/watch?v=1", t.TempDir())
-
-	if err == nil {
-		t.Fatal("Download() = nil, want the bot check's failure")
-	}
-	raw, readErr := os.ReadFile(jar + ".session.json")
-	if readErr != nil {
-		t.Fatalf("session file next to the live jar: %v", readErr)
-	}
-	var session struct {
-		FirstSignInFailure *struct {
-			Environment string `json:"environment"`
-			Run         string `json:"run"`
-		} `json:"first_signin_failure"`
-	}
-	if err := json.Unmarshal(raw, &session); err != nil {
-		t.Fatalf("session file %q: %v", raw, err)
-	}
-	if f := session.FirstSignInFailure; f == nil || f.Environment != "production" || f.Run != "download" {
-		t.Errorf("first sign-in failure = %+v, want the download's, recorded under environment production", f)
 	}
 }

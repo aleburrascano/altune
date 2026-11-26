@@ -10,6 +10,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -111,6 +112,60 @@ func TestLiveTiers_ReportWhetherYtDlpIsInstalled(t *testing.T) {
 				t.Errorf("sources %v, want the yt-dlp source wired whether or not the binary is found", names)
 			}
 		})
+	}
+}
+
+func TestYtDlpSearcher_PassesTheConfiguredRemoteComponentsToYtDlp(t *testing.T) {
+	bin := t.TempDir()
+	argv := filepath.Join(t.TempDir(), "argv.txt")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + argv + "\nexit 1\n"
+	if err := os.WriteFile(filepath.Join(bin, "yt-dlp"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	_, _ = downloadsetup.YtDlpSearcher(&config.Config{YtDLPJSRuntime: "node", YtDLPRemoteComponents: "ejs:npm"}).Download(context.Background(), "https://youtube.com/watch?v=1", t.TempDir())
+
+	raw, err := os.ReadFile(argv)
+	if err != nil {
+		t.Fatalf("the fake yt-dlp never ran: %v", err)
+	}
+	if !strings.Contains(string(raw), "--remote-components\nejs:npm\n") {
+		t.Errorf("yt-dlp argv = %q, want --remote-components ejs:npm from the configuration", raw)
+	}
+}
+
+func TestYtDlpSearcher_RecordsADownloadsBotCheckUnderTheConfiguredEnvironment(t *testing.T) {
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "yt-dlp"), []byte("#!/bin/sh\necho \"ERROR: [youtube] x: Sign in to confirm you're not a bot.\" >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	jar := filepath.Join(t.TempDir(), "cookies.txt")
+	if err := os.WriteFile(jar, []byte("# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t1999999999\tLOGIN_INFO\tl\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := downloadsetup.YtDlpSearcher(&config.Config{YtDLPCookieFile: jar, Env: "production"}).Download(context.Background(), "https://youtube.com/watch?v=1", t.TempDir())
+
+	if err == nil {
+		t.Fatal("Download() = nil, want the bot check's failure")
+	}
+	raw, readErr := os.ReadFile(jar + ".session.json")
+	if readErr != nil {
+		t.Fatalf("session file next to the live jar: %v", readErr)
+	}
+	var session struct {
+		FirstSignInFailure *struct {
+			Environment string `json:"environment"`
+			Run         string `json:"run"`
+		} `json:"first_signin_failure"`
+	}
+	if err := json.Unmarshal(raw, &session); err != nil {
+		t.Fatalf("session file %q: %v", raw, err)
+	}
+	if f := session.FirstSignInFailure; f == nil || f.Environment != "production" || f.Run != "download" {
+		t.Errorf("first sign-in failure = %+v, want the download's, recorded under environment production", f)
 	}
 }
 
