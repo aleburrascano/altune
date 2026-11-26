@@ -19,6 +19,7 @@ const maxAttempts = 5
 type TrackStore interface {
 	GetByID(ctx context.Context, id domain.TrackId, userId ids.UserId) (*domain.Track, error)
 	Update(ctx context.Context, track *domain.Track, expectedVersion int) error
+	UpdateFenced(ctx context.Context, track *domain.Track, expectedVersion, fence int) error
 	AudioRefInUse(ctx context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error)
 	Requeue(ctx context.Context, id domain.TrackId) error
 }
@@ -261,13 +262,16 @@ func (l *LibraryTracks) attempt(ctx context.Context, id ids.TrackId, userId ids.
 	if err := mutate(track); err != nil {
 		return translate(err)
 	}
-	return l.write(ctx, track, expectedVersion)
+	return l.writeFenced(ctx, track, expectedVersion, fence)
 }
 
-func (l *LibraryTracks) write(ctx context.Context, track *domain.Track, expectedVersion int) error {
-	if err := l.store.Update(ctx, track, expectedVersion); err != nil {
+func (l *LibraryTracks) writeFenced(ctx context.Context, track *domain.Track, expectedVersion int, fence download.ClaimNumber) error {
+	if err := l.store.UpdateFenced(ctx, track, expectedVersion, int(fence)); err != nil {
 		if errors.Is(err, library.ErrTrackVersionConflict) {
 			return err
+		}
+		if errors.Is(err, library.ErrTrackFenceSuperseded) {
+			return fmt.Errorf("%w: %w", download.ErrLeaseLost, err)
 		}
 		return fmt.Errorf("update track: %w", err)
 	}

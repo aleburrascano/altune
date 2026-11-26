@@ -413,6 +413,33 @@ func (f *flakyRequeuer) Requeue(ctx context.Context, id ids.TrackId) error {
 	return f.inner.Requeue(ctx, id)
 }
 
+func TestPostgresJobQueue_ARefusedTrackMarkedFailedByTheCatalogIsNotClaimed(t *testing.T) {
+	testdb.RequireIntegration(t)
+	pool := newPool(t)
+	queue := newQueue(pool)
+	repo := library.NewPostgresTrackRepository(pool)
+	ctx := context.Background()
+
+	track := insertPendingTrack(t, pool, time.Now().Add(-time.Minute))
+	loaded, err := repo.GetByID(ctx, track.ID, track.UserId)
+	if err != nil {
+		t.Fatalf("GetByID = %v", err)
+	}
+	if err := loaded.MarkFailed("acquisition_refused"); err != nil {
+		t.Fatalf("MarkFailed = %v", err)
+	}
+	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
+		t.Fatalf("Update = %v", err)
+	}
+
+	if _, err := queue.Claim(ctx, time.Minute); !errors.Is(err, download.ErrNoJobAvailable) {
+		t.Fatalf("Claim of a track the catalog failed = %v, want ErrNoJobAvailable", err)
+	}
+	if got := acquisitionStatus(t, pool, track.ID); got != "failed" {
+		t.Errorf("status = %q, want failed", got)
+	}
+}
+
 func jobRowExists(t *testing.T, pool *pgxpool.Pool, id ids.TrackId) bool {
 	t.Helper()
 	var n int
@@ -473,6 +500,52 @@ func TestPostgresJobQueue_ClaimWhoseStatusFlipFailsReleasesTheJob(t *testing.T) 
 	}
 	if leased {
 		t.Error("the job is still leased after the failed claim, want it released")
+	}
+
+	requeuer.fail.Store(false)
+	if _, err := pool.Exec(ctx, `UPDATE acquisition_jobs SET available_at = now() - interval '1 second' WHERE track_id = $1`, snap.ID.UUID()); err != nil {
+		t.Fatalf("make the job due: %v", err)
+	}
+	job, err := queue.Claim(ctx, time.Minute)
+	if err != nil {
+		t.Fatalf("Claim after the outage = %v, want the job", err)
+	}
+	if job.Run != 1 {
+		t.Errorf("Run = %d after claims that never started, want 1 (the retry cap counts only real runs)", job.Run)
+	}
+}
+
+func TestPostgresJobQueue_EnqueueClearsALeftoverFailureReasonThroughTheLedger(t *testing.T) {
+	testdb.RequireIntegration(t)
+	pool := newPool(t)
+	queue := newQueue(pool)
+	ctx := context.Background()
+
+	cases := []struct {
+		name  string
+		track func() ids.TrackId
+		run   func(ids.TrackId) error
+	}{
+		{"replace on a ready track", func() ids.TrackId { return insertReadyTrack(t, pool).ID }, func(id ids.TrackId) error { return queue.Enqueue(ctx, id, download.JobKindReplace, 0) }},
+		{"acquire on a failed track", func() ids.TrackId { return insertFailedTrack(t, pool).ID }, func(id ids.TrackId) error { return queue.Enqueue(ctx, id, download.JobKindAcquire, 0) }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			id := tc.track()
+			if _, err := pool.Exec(ctx, `UPDATE tracks SET failure_reason = 'old failure' WHERE id = $1`, id.UUID()); err != nil {
+				t.Fatalf("seed a leftover reason: %v", err)
+			}
+			if err := tc.run(id); err != nil {
+				t.Fatalf("Enqueue = %v", err)
+			}
+			var reason *string
+			if err := pool.QueryRow(ctx, `SELECT failure_reason FROM tracks WHERE id = $1`, id.UUID()).Scan(&reason); err != nil {
+				t.Fatalf("read reason: %v", err)
+			}
+			if reason != nil && *reason != "" {
+				t.Errorf("failure_reason = %q after the enqueue, want it cleared", *reason)
+			}
+		})
 	}
 }
 

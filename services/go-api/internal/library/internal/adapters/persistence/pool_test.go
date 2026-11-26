@@ -539,6 +539,9 @@ func trackRepoMethods(f repoFixture) []repoCall {
 		{"PostgresTrackRepository.ListReadyAudioTracks", func(ctx context.Context, p *pgxpool.Pool) error {
 			return errOf(repo(p).ListReadyAudioTracks(ctx))
 		}},
+		{"PostgresTrackRepository.UpdateFenced", func(ctx context.Context, p *pgxpool.Pool) error {
+			return repo(p).UpdateFenced(ctx, tr, tr.Version, 1)
+		}},
 		{"PostgresTrackRepository.Requeue", func(ctx context.Context, p *pgxpool.Pool) error {
 			return repo(p).Requeue(ctx, tr.ID)
 		}},

@@ -1,5 +1,7 @@
 SET LOCAL lock_timeout = '5s';
 
+ALTER TABLE acquisition_jobs ADD COLUMN IF NOT EXISTS needs_pending BOOLEAN NOT NULL DEFAULT false;
+
 CREATE OR REPLACE FUNCTION mirror_acquisition_job() RETURNS trigger AS $$
 BEGIN
     IF TG_OP = 'UPDATE' AND EXISTS (

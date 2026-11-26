@@ -283,19 +283,34 @@ func updateStatement(track *domain.Track, expectedVersion int) (string, []any) {
 }
 
 func (r *PostgresTrackRepository) Update(ctx context.Context, track *domain.Track, expectedVersion int) error {
+	return r.update(ctx, track, expectedVersion, 0)
+}
+
+func (r *PostgresTrackRepository) UpdateFenced(ctx context.Context, track *domain.Track, expectedVersion, fence int) error {
+	return r.update(ctx, track, expectedVersion, fence)
+}
+
+const fenceClause = ` AND ($%d::int = 0 OR acquisition_attempts = 0 OR acquisition_attempts = $%d)`
+
+func (r *PostgresTrackRepository) update(ctx context.Context, track *domain.Track, expectedVersion, fence int) error {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
 	set, args := updateStatement(track, expectedVersion)
+	where := `id = $1 AND user_id = $2 AND version = $16`
+	if fence > 0 {
+		args = append(args, fence)
+		where += fmt.Sprintf(fenceClause, len(args), len(args))
+	}
 	var newVersion int
 	err := r.pool.QueryRow(ctx,
 		`UPDATE tracks SET `+set+`
-		WHERE id = $1 AND user_id = $2 AND version = $16
+		WHERE `+where+`
 		RETURNING version`,
 		args...,
 	).Scan(&newVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return r.classifyFailedCAS(ctx, track, expectedVersion)
+		return r.classifyFailedCAS(ctx, track, expectedVersion, fence)
 	}
 	if err != nil {
 		return classifyDBError(err)
@@ -304,17 +319,21 @@ func (r *PostgresTrackRepository) Update(ctx context.Context, track *domain.Trac
 	return nil
 }
 
-func (r *PostgresTrackRepository) classifyFailedCAS(ctx context.Context, track *domain.Track, expectedVersion int) error {
-	var currentVersion int
+func (r *PostgresTrackRepository) classifyFailedCAS(ctx context.Context, track *domain.Track, expectedVersion, fence int) error {
+	var currentVersion, currentFence int
 	err := r.pool.QueryRow(ctx,
-		`SELECT version FROM tracks WHERE id = $1 AND user_id = $2`,
+		`SELECT version, acquisition_attempts FROM tracks WHERE id = $1 AND user_id = $2`,
 		track.ID.UUID(), track.UserId.UUID(),
-	).Scan(&currentVersion)
+	).Scan(&currentVersion, &currentFence)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("track %s not found or was deleted", track.ID.String())
 	}
 	if err != nil {
 		return classifyDBError(err)
+	}
+	if fence > 0 && currentFence > 0 && currentFence != fence {
+		return fmt.Errorf("%w: track %s held by attempt %d, caller holds %d",
+			ports.ErrTrackFenceSuperseded, track.ID.String(), currentFence, fence)
 	}
 	return fmt.Errorf("%w: track %s expected version %d, found %d",
 		ports.ErrTrackVersionConflict, track.ID.String(), expectedVersion, currentVersion)
@@ -325,8 +344,12 @@ func (r *PostgresTrackRepository) Requeue(ctx context.Context, id domain.TrackId
 	defer cancel()
 
 	if _, err := r.pool.Exec(ctx,
-		`UPDATE tracks SET acquisition_status = 'pending', failure_reason = NULL, acquisition_started_at = now(), version = version + 1
-		 WHERE id = $1 AND acquisition_status = 'failed'`,
+		`UPDATE tracks SET
+			acquisition_status = CASE WHEN acquisition_status = 'failed' THEN 'pending' ELSE acquisition_status END,
+			acquisition_started_at = CASE WHEN acquisition_status = 'failed' THEN now() ELSE acquisition_started_at END,
+			failure_reason = '',
+			version = version + 1
+		 WHERE id = $1 AND (acquisition_status = 'failed' OR COALESCE(failure_reason, '') <> '')`,
 		id.UUID(),
 	); err != nil {
 		return classifyDBError(fmt.Errorf("requeue track %s: %w", id.String(), err))

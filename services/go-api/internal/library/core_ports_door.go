@@ -29,6 +29,7 @@ var (
 	ErrPlaylistNotOwned             = ports.ErrPlaylistNotOwned
 	ErrTrackMissing                 = ports.ErrTrackMissing
 	ErrTrackVersionConflict         = ports.ErrTrackVersionConflict
+	ErrTrackFenceSuperseded         = ports.ErrTrackFenceSuperseded
 )
 
 type (

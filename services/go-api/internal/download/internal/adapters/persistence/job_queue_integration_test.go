@@ -1181,8 +1181,12 @@ type tracksRequeuer struct {
 
 func (r tracksRequeuer) Requeue(ctx context.Context, id ids.TrackId) error {
 	if _, err := r.pool.Exec(ctx,
-		`UPDATE tracks SET acquisition_status = 'pending', failure_reason = NULL, acquisition_started_at = now(), version = version + 1
-		 WHERE id = $1 AND acquisition_status = 'failed'`, id.UUID()); err != nil {
+		`UPDATE tracks SET
+			acquisition_status = CASE WHEN acquisition_status = 'failed' THEN 'pending' ELSE acquisition_status END,
+			acquisition_started_at = CASE WHEN acquisition_status = 'failed' THEN now() ELSE acquisition_started_at END,
+			failure_reason = '',
+			version = version + 1
+		 WHERE id = $1 AND (acquisition_status = 'failed' OR COALESCE(failure_reason, '') <> '')`, id.UUID()); err != nil {
 		return fmt.Errorf("requeue track %s: %w", id, err)
 	}
 	return nil

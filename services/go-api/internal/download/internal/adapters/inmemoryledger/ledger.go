@@ -138,10 +138,13 @@ func (l *Ledger) Requeue(_ context.Context, id ids.TrackId) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	track, ok := l.tracks[id]
-	if !ok || track.Status != ports.TrackFailed {
+	if !ok || (track.Status != ports.TrackFailed && track.FailureReason == "") {
 		return nil
 	}
-	track.Status, track.FailureReason = ports.TrackPending, ""
+	if track.Status == ports.TrackFailed {
+		track.Status = ports.TrackPending
+	}
+	track.FailureReason = ""
 	return l.write(track)
 }
 
