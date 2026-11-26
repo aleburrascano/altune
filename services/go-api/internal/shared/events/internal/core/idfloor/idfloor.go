@@ -3,10 +3,7 @@ package idfloor
 import (
 	"context"
 	"errors"
-	"fmt"
-	"io/fs"
 	"log/slog"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,13 +17,21 @@ const (
 	maxFloorAhead = uint64(10 * 365 * 24 * time.Hour)
 )
 
+var ErrNotFound = errors.New("id floor: nothing stored yet")
+
+type Store interface {
+	Load() ([]byte, error)
+	Save(raw []byte) error
+	Location() string
+}
+
 type Floor struct {
-	path     string
+	store    Store
 	mu       sync.Mutex
 	reserved atomic.Uint64
 }
 
-func New(path string) *Floor { return &Floor{path: path} }
+func New(store Store) *Floor { return &Floor{store: store} }
 
 func (f *Floor) ReserveAbove(want uint64) uint64 {
 	if want < f.reserved.Load() {
@@ -53,22 +58,22 @@ func (f *Floor) trustedCeiling(want uint64) uint64 {
 	if !isImplausiblyAhead(ceiling, want) {
 		return ceiling
 	}
-	slog.WarnContext(context.Background(), "events.id_floor_implausible", "path", f.path, "ceiling", ceiling, "want", want)
+	slog.WarnContext(context.Background(), "events.id_floor_implausible", "path", f.store.Location(), "ceiling", ceiling, "want", want)
 	return 0
 }
 
 func (f *Floor) readCeiling() uint64 {
-	raw, err := os.ReadFile(f.path)
-	if errors.Is(err, fs.ErrNotExist) {
+	raw, err := f.store.Load()
+	if errors.Is(err, ErrNotFound) {
 		return 0
 	}
 	if err != nil {
-		slog.WarnContext(context.Background(), "events.id_floor_unreadable", "path", f.path, "error", err)
+		slog.WarnContext(context.Background(), "events.id_floor_unreadable", "path", f.store.Location(), "error", err)
 		return 0
 	}
 	ceiling, err := strconv.ParseUint(strings.TrimSpace(string(raw)), 10, 64)
 	if err != nil {
-		slog.WarnContext(context.Background(), "events.id_floor_corrupt", "path", f.path, "error", err)
+		slog.WarnContext(context.Background(), "events.id_floor_corrupt", "path", f.store.Location(), "error", err)
 		return 0
 	}
 	return ceiling
@@ -80,17 +85,10 @@ func isImplausiblyAhead(ceiling, want uint64) bool {
 
 func (f *Floor) persistOrWarn(ceiling uint64) {
 	if err := f.persist(ceiling); err != nil {
-		slog.WarnContext(context.Background(), "events.id_floor_unwritable", "path", f.path, "error", err)
+		slog.WarnContext(context.Background(), "events.id_floor_unwritable", "path", f.store.Location(), "error", err)
 	}
 }
 
 func (f *Floor) persist(ceiling uint64) error {
-	tmp := f.path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(strconv.FormatUint(ceiling, 10)), 0o600); err != nil {
-		return fmt.Errorf("write %s: %w", tmp, err)
-	}
-	if err := os.Rename(tmp, f.path); err != nil {
-		return fmt.Errorf("replace %s: %w", f.path, err)
-	}
-	return nil
+	return f.store.Save([]byte(strconv.FormatUint(ceiling, 10)))
 }
