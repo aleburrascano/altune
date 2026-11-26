@@ -135,6 +135,7 @@ go_test_failures() {
   ' "$log")
   if grep -qE '^(--- FAIL:|panic:|WARNING: DATA RACE)' <<<"$failures"; then
     head -n 300 <<<"$failures"
+    [ "$(wc -l <<<"$failures")" -le 300 ] || echo "(cut at 300 lines)"
     echo "(only the failed tests and their output are shown; rerun the command above for the logs of passing tests)"
     return
   fi
@@ -143,6 +144,7 @@ go_test_failures() {
     log_tail
   else
     head -n 200 <<<"$others"
+    [ "$(wc -l <<<"$others")" -le 200 ] || echo "(cut at 200 lines; rerun the command above for the rest)"
   fi
 }
 
