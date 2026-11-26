@@ -6,12 +6,22 @@ const { fakeFetch, __http } = require('./doubles/fetch.js');
 
 global.fetch = fakeFetch;
 
-function installFreshTelemetry() {
+function freshTelemetry() {
   const telemetry = require('../src/shared/telemetry');
   const { createMemoryFileStore } = require('./fakes/files/inMemoryFileStore');
   const { warn } = require('../src/shared/log');
   const store = telemetry.createOutboxStore(createMemoryFileStore(), { warn });
-  telemetry.installTelemetry(telemetry.createAppTelemetry({ store }));
+  return telemetry.createAppTelemetry({ store });
+}
+
+function installFreshTelemetry() {
+  require('../src/shared/telemetry').installTelemetry(freshTelemetry());
+}
+
+function installStoppedTelemetry() {
+  const stopped = freshTelemetry();
+  stopped.dispose();
+  require('../src/shared/telemetry').installTelemetry(stopped);
 }
 
 function resetLogger() {
@@ -26,7 +36,9 @@ const { ensureAppAuthClient } = require('./appAuthClient.js');
 
 beforeAll(ensureAppAuthClient);
 
-afterAll(installFreshTelemetry);
+afterEach(installStoppedTelemetry);
+
+afterAll(installStoppedTelemetry);
 
 beforeEach(() => {
   ensureAppAuthClient();
