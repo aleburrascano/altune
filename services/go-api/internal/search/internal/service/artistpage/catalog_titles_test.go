@@ -2,6 +2,9 @@ package artistpage_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/service/artistpage"
 	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
@@ -10,8 +13,8 @@ import (
 )
 
 func TestGetArtistContentService_CatalogTitles_CoversTopTracksAndAlbums(t *testing.T) {
-	svc := searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{
-		search.ProviderDeezer: &search.FakeArtistContentProvider{
+	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
+		search.ProviderDeezer: &memory.ArtistContentProvider{
 			TopTracks: []search.SearchResult{{Kind: search.ResultKindTrack, Title: "Magnolia", Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "t1"}}}},
 			Albums:    []search.SearchResult{{Kind: search.ResultKindAlbum, Title: "Whole Lotta Red", Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a1"}}}},
 		},
@@ -30,7 +33,7 @@ func TestGetArtistContentService_CatalogTitles_CoversTopTracksAndAlbums(t *testi
 }
 
 type tracklistProvider struct {
-	*search.FakeArtistContentProvider
+	*memory.ArtistContentProvider
 	tracklists map[string][]search.SearchResult
 	failing    map[string]bool
 }
@@ -42,13 +45,13 @@ func (p *tracklistProvider) GetAlbumTracks(_ context.Context, _ search.ProviderN
 	return p.tracklists[albumID], nil
 }
 
-func tracklistService(t testing.TB, failing map[string]bool) *search.GetArtistContentService {
-	return searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{search.ProviderDeezer: newTracklistProvider(failing)})
+func tracklistService(t testing.TB, failing map[string]bool) *artistpage.GetArtistContentService {
+	return searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{search.ProviderDeezer: newTracklistProvider(failing)})
 }
 
 func newTracklistProvider(failing map[string]bool) *tracklistProvider {
 	return &tracklistProvider{
-		FakeArtistContentProvider: &search.FakeArtistContentProvider{
+		ArtistContentProvider: &memory.ArtistContentProvider{
 			Albums: []search.SearchResult{
 				{Kind: search.ResultKindAlbum, Title: "Heaven or Hell", Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a1"}}},
 				{Kind: search.ResultKindAlbum, Title: "Life of a Don", Sources: []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "a2"}}},
@@ -76,7 +79,7 @@ func TestGetArtistContentService_CatalogTitles_IncludesEveryAlbumTracklist(t *te
 
 func TestGetArtistContentService_CatalogTitles_FailedTracklistIsPartialButKeepsTheRest(t *testing.T) {
 	titles, err := tracklistService(t, map[string]bool{"a1": true}).CatalogTitles(context.Background(), search.ProviderDeezer, "artist-1", nil)
-	if !errors.Is(err, search.ErrPartialCatalog) {
+	if !errors.Is(err, ports.ErrPartialCatalog) {
 		t.Fatalf("err = %v, want ErrPartialCatalog", err)
 	}
 	if !slices.Contains(titles, "Deep Cut Two") || slices.Contains(titles, "Deep Cut One") {
@@ -98,11 +101,11 @@ func (p *panickingTracklistProvider) GetAlbumTracks(ctx context.Context, provide
 
 func TestGetArtistContentService_CatalogTitles_PanickingTracklistIsPartialNotACrash(t *testing.T) {
 	provider := &panickingTracklistProvider{tracklistProvider: newTracklistProvider(nil), panicsOn: "a1"}
-	svc := searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{search.ProviderDeezer: provider})
+	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{search.ProviderDeezer: provider})
 
 	titles, err := svc.CatalogTitles(context.Background(), search.ProviderDeezer, "artist-1", nil)
 
-	if !errors.Is(err, search.ErrPartialCatalog) {
+	if !errors.Is(err, ports.ErrPartialCatalog) {
 		t.Fatalf("err = %v, want ErrPartialCatalog", err)
 	}
 	if !slices.Contains(titles, "Deep Cut Two") || slices.Contains(titles, "Deep Cut One") {

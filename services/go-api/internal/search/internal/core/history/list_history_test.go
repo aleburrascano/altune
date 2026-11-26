@@ -1,7 +1,9 @@
 package history_test
 
 import (
-	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/core/history"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -15,7 +17,7 @@ import (
 func TestListSearchHistoryService_Execute(t *testing.T) {
 	userID := ids.NewUserId(uuid.New())
 
-	fixedEntries := []*search.SearchHistoryEntry{
+	fixedEntries := []*domain.SearchHistoryEntry{
 		{
 			ID:         ids.NewEntityId(),
 			UserId:     userID,
@@ -34,15 +36,15 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		repo      *search.FakeHistoryReader
+		repo      *memory.FakeHistoryReader
 		limit     int
 		wantCount int
 		wantErr   bool
 	}{
 		{
 			name: "happy path returns entries",
-			repo: &search.FakeHistoryReader{
-				ListDistinctFn: func(_ context.Context, _ ids.UserId, limit int) ([]*search.SearchHistoryEntry, error) {
+			repo: &memory.FakeHistoryReader{
+				ListDistinctFn: func(_ context.Context, _ ids.UserId, limit int) ([]*domain.SearchHistoryEntry, error) {
 					if limit != 5 {
 						t.Errorf("expected limit 5, got %d", limit)
 					}
@@ -55,8 +57,8 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 		},
 		{
 			name: "zero limit defaults to 10",
-			repo: &search.FakeHistoryReader{
-				ListDistinctFn: func(_ context.Context, _ ids.UserId, limit int) ([]*search.SearchHistoryEntry, error) {
+			repo: &memory.FakeHistoryReader{
+				ListDistinctFn: func(_ context.Context, _ ids.UserId, limit int) ([]*domain.SearchHistoryEntry, error) {
 					if limit != 10 {
 						t.Errorf("expected default limit 10, got %d", limit)
 					}
@@ -69,8 +71,8 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 		},
 		{
 			name: "negative limit defaults to 10",
-			repo: &search.FakeHistoryReader{
-				ListDistinctFn: func(_ context.Context, _ ids.UserId, limit int) ([]*search.SearchHistoryEntry, error) {
+			repo: &memory.FakeHistoryReader{
+				ListDistinctFn: func(_ context.Context, _ ids.UserId, limit int) ([]*domain.SearchHistoryEntry, error) {
 					if limit != 10 {
 						t.Errorf("expected default limit 10 for negative input, got %d", limit)
 					}
@@ -83,8 +85,8 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 		},
 		{
 			name: "repo error propagates",
-			repo: &search.FakeHistoryReader{
-				ListDistinctFn: func(_ context.Context, _ ids.UserId, _ int) ([]*search.SearchHistoryEntry, error) {
+			repo: &memory.FakeHistoryReader{
+				ListDistinctFn: func(_ context.Context, _ ids.UserId, _ int) ([]*domain.SearchHistoryEntry, error) {
 					return nil, errors.New("db unavailable")
 				},
 			},
@@ -113,9 +115,9 @@ func TestListSearchHistoryService_Execute(t *testing.T) {
 }
 
 func TestListSearchHistoryService_RefusesAMissingRepository(t *testing.T) {
-	svc, err := search.NewListSearchHistoryService(nil)
+	svc, err := history.NewListSearchHistoryService(nil)
 
-	if svc != nil || !errors.Is(err, search.ErrHistoryCollaboratorRequired) {
+	if svc != nil || !errors.Is(err, history.ErrCollaboratorRequired) {
 		t.Fatalf("got (%v, %v), want a refusal wrapping ErrHistoryCollaboratorRequired", svc, err)
 	}
 }

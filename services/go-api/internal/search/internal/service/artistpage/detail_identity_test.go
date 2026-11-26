@@ -2,6 +2,10 @@ package artistpage_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/service/artistpage"
 	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
@@ -30,12 +34,12 @@ func (p artistContentFuncs) GetArtistAlbums(ctx context.Context, provider search
 	return p.albums(ctx, provider, id)
 }
 
-func topTrackLookups(t *testing.T, store search.IdentityStore, known map[search.ProviderName]string) map[search.ProviderName][]string {
+func topTrackLookups(t *testing.T, store ports.IdentityStore, known map[search.ProviderName]string) map[search.ProviderName][]string {
 	t.Helper()
 	var mu sync.Mutex
 	asked := map[search.ProviderName][]string{}
-	providers := map[search.ProviderName]search.ArtistContentProvider{}
-	for _, name := range []search.ProviderName{search.ProviderDeezer, search.ProviderSpotify, search.ProviderAppleMusic} {
+	providers := map[search.ProviderName]ports.ArtistContentProvider{}
+	for _, name := range []search.ProviderName{search.ProviderDeezer, search.ProviderSpotify, domain.ProviderAppleMusic} {
 		providers[name] = artistContentFuncs{topTracks: func(_ context.Context, provider search.ProviderName, id string) ([]search.SearchResult, error) {
 			mu.Lock()
 			defer mu.Unlock()
@@ -69,9 +73,9 @@ func assertAsked(t *testing.T, asked map[search.ProviderName][]string, want map[
 }
 
 func TestGetTopTracks_BridgedArtistFansOutToEveryBridgedIdPlusTheSeed(t *testing.T) {
-	store := &search.FakeIdentityStore{
+	store := &memory.FakeIdentityStore{
 		Mbid: "mbid-che",
-		Xref: map[search.ProviderKey]string{
+		Xref: map[domain.ProviderKey]string{
 			"spotify":    "spot-che",
 			"applemusic": "apple-che",
 		},
@@ -80,25 +84,25 @@ func TestGetTopTracks_BridgedArtistFansOutToEveryBridgedIdPlusTheSeed(t *testing
 	assertAsked(t, topTrackLookups(t, store, nil), map[search.ProviderName]string{
 		search.ProviderDeezer:     "deezer-che",
 		search.ProviderSpotify:    "spot-che",
-		search.ProviderAppleMusic: "apple-che",
+		domain.ProviderAppleMusic: "apple-che",
 	})
 }
 
 func TestGetTopTracks_StoreMissAsksOnlyTheSeedProvider(t *testing.T) {
-	assertAsked(t, topTrackLookups(t, &search.FakeIdentityStore{}, nil), map[search.ProviderName]string{
+	assertAsked(t, topTrackLookups(t, &memory.FakeIdentityStore{}, nil), map[search.ProviderName]string{
 		search.ProviderDeezer: "deezer-che",
 	})
 }
 
 func TestGetTopTracks_AppleMusicSharesTheITunesId(t *testing.T) {
-	store := &search.FakeIdentityStore{
+	store := &memory.FakeIdentityStore{
 		Mbid: "mbid-x",
-		Xref: map[search.ProviderKey]string{"itunes": "it1"},
+		Xref: map[domain.ProviderKey]string{"itunes": "it1"},
 	}
 
 	assertAsked(t, topTrackLookups(t, store, nil), map[search.ProviderName]string{
 		search.ProviderDeezer:     "deezer-che",
-		search.ProviderAppleMusic: "it1",
+		domain.ProviderAppleMusic: "it1",
 	})
 }
 
@@ -114,7 +118,7 @@ func TestGetTopTracks_NoIdentityStoreAsksTheSeedAndTheCallersKnownIds(t *testing
 func TestSeedPathIdentity_ServesTheIdentityPathOnlyWithKnownIDs(t *testing.T) {
 	ctx := context.Background()
 
-	identity, serves := search.SeedPathIdentity{}.Identify(ctx, search.ProviderDeezer, "dz-che", nil)
+	identity, serves := artistpage.SeedPathIdentity{}.Identify(ctx, search.ProviderDeezer, "dz-che", nil)
 	if serves {
 		t.Error("serves = true without known IDs, want the seed path")
 	}
@@ -123,7 +127,7 @@ func TestSeedPathIdentity_ServesTheIdentityPathOnlyWithKnownIDs(t *testing.T) {
 	}
 
 	known := map[search.ProviderName]string{search.ProviderSpotify: "sp-che", search.ProviderDeezer: "other"}
-	identity, serves = search.SeedPathIdentity{}.Identify(ctx, search.ProviderDeezer, "dz-che", known)
+	identity, serves = artistpage.SeedPathIdentity{}.Identify(ctx, search.ProviderDeezer, "dz-che", known)
 	if !serves {
 		t.Error("serves = false with known IDs, want the identity path")
 	}
@@ -134,11 +138,11 @@ func TestSeedPathIdentity_ServesTheIdentityPathOnlyWithKnownIDs(t *testing.T) {
 
 func TestStoreIdentity_AlwaysServesTheIdentityPath(t *testing.T) {
 	ctx := context.Background()
-	hit, err := search.NewStoreIdentity(&search.FakeIdentityStore{Mbid: "mbid-che", Xref: map[search.ProviderKey]string{"spotify": "sp-che"}})
+	hit, err := artistpage.NewStoreIdentity(&memory.FakeIdentityStore{Mbid: "mbid-che", Xref: map[domain.ProviderKey]string{"spotify": "sp-che"}})
 	if err != nil {
 		t.Fatalf("NewStoreIdentity: %v", err)
 	}
-	miss, err := search.NewStoreIdentity(&search.FakeIdentityStore{})
+	miss, err := artistpage.NewStoreIdentity(&memory.FakeIdentityStore{})
 	if err != nil {
 		t.Fatalf("NewStoreIdentity: %v", err)
 	}
@@ -160,9 +164,9 @@ func TestStoreIdentity_AlwaysServesTheIdentityPath(t *testing.T) {
 }
 
 func TestNewStoreIdentity_RefusesAMissingStore(t *testing.T) {
-	identity, err := search.NewStoreIdentity(nil)
+	identity, err := artistpage.NewStoreIdentity(nil)
 
-	if !errors.Is(err, search.ErrArtistPageCollaboratorRequired) || identity != nil {
+	if !errors.Is(err, artistpage.ErrCollaboratorRequired) || identity != nil {
 		t.Fatalf("identity = %v, err = %v, want ErrArtistPageCollaboratorRequired", identity, err)
 	}
 	if !strings.Contains(err.Error(), "identity store") {

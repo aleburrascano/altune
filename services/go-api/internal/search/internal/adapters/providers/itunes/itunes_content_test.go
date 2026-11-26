@@ -2,7 +2,9 @@ package itunes_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/providers/itunes"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
+	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -26,8 +28,8 @@ func TestITunesAdapter_GetArtistTopTracks(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := search.NewITunesAdapter(providertest.NewClient(server.URL))
-	tracks, err := adapter.GetArtistTopTracks(context.Background(), search.ProviderITunes, "42")
+	adapter := itunes.NewITunesAdapter(providertest.NewClient(server.URL))
+	tracks, err := adapter.GetArtistTopTracks(context.Background(), domain.ProviderITunes, "42")
 	if err != nil {
 		t.Fatalf("GetArtistTopTracks: %v", err)
 	}

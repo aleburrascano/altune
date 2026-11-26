@@ -1,7 +1,8 @@
 package history_test
 
 import (
-	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/core/history"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/ids"
@@ -18,13 +19,13 @@ func TestClearSearchHistoryService_Execute(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		repo       *search.FakeHistoryEraser
+		repo       *memory.FakeHistoryEraser
 		wantErr    bool
 		wantCalled bool
 	}{
 		{
 			name: "happy path deletes for user",
-			repo: &search.FakeHistoryEraser{
+			repo: &memory.FakeHistoryEraser{
 				EraseFn: func(_ context.Context, gotUser ids.UserId) error {
 					if gotUser != userID {
 						t.Errorf("expected user %v, got %v", userID, gotUser)
@@ -37,7 +38,7 @@ func TestClearSearchHistoryService_Execute(t *testing.T) {
 		},
 		{
 			name: "repo error propagates",
-			repo: &search.FakeHistoryEraser{
+			repo: &memory.FakeHistoryEraser{
 				EraseFn: func(_ context.Context, _ ids.UserId) error {
 					return errors.New("db unavailable")
 				},
@@ -73,33 +74,33 @@ func TestClearSearchHistoryService_Execute(t *testing.T) {
 }
 
 func TestNewClearSearchHistoryService_RefusesANilClock(t *testing.T) {
-	svc, err := search.NewClearSearchHistoryService(&search.FakeHistoryEraser{}, nil)
+	svc, err := history.NewClearSearchHistoryService(&memory.FakeHistoryEraser{}, nil)
 
-	if !errors.Is(err, search.ErrHistoryClockRequired) || svc != nil {
+	if !errors.Is(err, history.ErrClockRequired) || svc != nil {
 		t.Fatalf("NewClearSearchHistoryService(nil clock) = (%v, %v), want ErrHistoryClockRequired and no service", svc, err)
 	}
 }
 
 func TestNewClearSearchHistoryService_RefusesAMissingRepository(t *testing.T) {
-	svc, err := search.NewClearSearchHistoryService(nil, time.Now)
+	svc, err := history.NewClearSearchHistoryService(nil, time.Now)
 
-	if svc != nil || !errors.Is(err, search.ErrHistoryCollaboratorRequired) {
+	if svc != nil || !errors.Is(err, history.ErrCollaboratorRequired) {
 		t.Fatalf("got (%v, %v), want a refusal wrapping ErrHistoryCollaboratorRequired", svc, err)
 	}
 }
 
 func TestClearSearchHistory_AuditLineCarriesTheInjectedTime(t *testing.T) {
 	at := time.Date(2026, 7, 8, 9, 10, 11, 0, time.UTC)
-	ring := search.CaptureDetachedLogs(t)
-	svc := search.MustNewClearSearchHistoryService(&search.FakeHistoryEraser{
+	ring := memory.CaptureDetachedLogs(t)
+	svc := history.MustNewClearSearchHistoryService(&memory.FakeHistoryEraser{
 		EraseFn: func(context.Context, ids.UserId) error { return nil },
 	}, clocktest.NewManual(at).Func())
 
-	if err := svc.Execute(context.Background(), search.NewUser()); err != nil {
+	if err := svc.Execute(context.Background(), memory.NewUser()); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	rec := search.OnlyRecord(t, ring, "discovery.search_history_cleared")
+	rec := memory.OnlyRecord(t, ring, "discovery.search_history_cleared")
 	if rec.Attrs["at"] != "2026-07-08 09:10:11 +0000 UTC" {
 		t.Errorf("audit line at = %q, want the injected time in UTC", rec.Attrs["at"])
 	}

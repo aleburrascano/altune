@@ -2,6 +2,12 @@ package handler_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/handler"
+	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/core/details"
+	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/service/artistpage"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
@@ -63,12 +69,12 @@ func (p *fakeSearchProvider) SupportedKinds() map[search.ResultKind]bool {
 }
 
 type fakeSearchHistoryRepo struct {
-	entries   []*search.SearchHistoryEntry
+	entries   []*domain.SearchHistoryEntry
 	err       error
 	lastLimit int
 }
 
-func (r *fakeSearchHistoryRepo) Insert(_ context.Context, entry *search.SearchHistoryEntry) error {
+func (r *fakeSearchHistoryRepo) Insert(_ context.Context, entry *domain.SearchHistoryEntry) error {
 	if r.err != nil {
 		return r.err
 	}
@@ -80,7 +86,7 @@ func (r *fakeSearchHistoryRepo) TrimToN(_ context.Context, _ ids.UserId, _ int) 
 	return nil
 }
 
-func (r *fakeSearchHistoryRepo) ListDistinctRecent(_ context.Context, _ ids.UserId, limit int) ([]*search.SearchHistoryEntry, error) {
+func (r *fakeSearchHistoryRepo) ListDistinctRecent(_ context.Context, _ ids.UserId, limit int) ([]*domain.SearchHistoryEntry, error) {
 	r.lastLimit = limit
 	if r.err != nil {
 		return nil, r.err
@@ -160,8 +166,8 @@ func discAssertProblem(t *testing.T, rec *httptest.ResponseRecorder) {
 func buildDiscoveryRouter(t *testing.T,
 	searchProvider *fakeSearchProvider,
 	historyRepo *fakeSearchHistoryRepo,
-	albumProviders map[search.ProviderName]search.AlbumContentProvider,
-	artistProviders map[search.ProviderName]search.ArtistContentProvider,
+	albumProviders map[search.ProviderName]ports.AlbumContentProvider,
+	artistProviders map[search.ProviderName]ports.ArtistContentProvider,
 ) chi.Router {
 	bg := searchtest.NewTracker(t)
 	var providers []search.SearchProvider
@@ -178,17 +184,17 @@ func buildDiscoveryRouter(t *testing.T,
 	historySvc := searchtest.NewListHistory(t, historyRepo)
 	clearHistorySvc := searchtest.NewClearHistory(t, historyRepo)
 
-	var albumSvc *search.GetAlbumTracksService
+	var albumSvc *artistpage.GetAlbumTracksService
 	if albumProviders != nil {
 		albumSvc = searchtest.NewAlbumTracks(t, albumProviders)
 	}
 
-	var artistSvc *search.GetArtistContentService
+	var artistSvc *artistpage.GetArtistContentService
 	if artistProviders != nil {
 		artistSvc = searchtest.NewArtistContent(t, artistProviders)
 	}
 
-	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{
+	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
 		Search:        searchSvc,
 		History:       historySvc,
 		RecordHistory: searchtest.NewHistoryRecorder(t, historyRepo),
@@ -230,7 +236,7 @@ func (nopEventStore) Append(context.Context, search.InteractionEvent) error { re
 
 func TestHandleRecordEvent_ServiceValidation(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{
+	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
 		Search: searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker()),
 		Event:  searchtest.NewRecordEvent(t, nopEventStore{}),
 	}), time.Now)
@@ -272,7 +278,7 @@ func TestHandleSearch(t *testing.T) {
 					Kind:       search.ResultKindTrack,
 					Title:      "Test Song",
 					Subtitle:   "Test Artist",
-					Confidence: search.ConfidenceLow,
+					Confidence: domain.ConfidenceLow,
 					Sources: []search.ProviderLink{
 						{Provider: search.ProviderDeezer, ExternalID: "123", URL: "https://deezer.com/123"},
 					},
@@ -313,7 +319,7 @@ func TestHandleSearch(t *testing.T) {
 
 			if tt.wantStatus == http.StatusOK {
 				discAssertJSON(t, rec)
-				var resp search.DiscoverySearchResponse
+				var resp handler.DiscoverySearchResponse
 				discDecodeJSON(t, rec, &resp)
 				if resp.Query == "" {
 					t.Error("expected non-empty query in response")
@@ -346,7 +352,7 @@ func TestHandleSearch_ResponseShape(t *testing.T) {
 				Title:      "Shape Test",
 				Subtitle:   "Shape Artist",
 				ImageURL:   "https://img.example.com/art.jpg",
-				Confidence: search.ConfidenceHigh,
+				Confidence: domain.ConfidenceHigh,
 				Sources: []search.ProviderLink{
 					{Provider: search.ProviderDeezer, ExternalID: "456", URL: "https://deezer.com/456"},
 				},
@@ -395,7 +401,7 @@ func TestHandleSearchHistory(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			historyRepo := &fakeSearchHistoryRepo{}
 			for i := 0; i < tt.seedEntries; i++ {
-				historyRepo.entries = append(historyRepo.entries, &search.SearchHistoryEntry{
+				historyRepo.entries = append(historyRepo.entries, &domain.SearchHistoryEntry{
 					ID:         ids.NewEntityId(),
 					UserId:     discTestUserId,
 					Query:      "test query",
@@ -410,7 +416,7 @@ func TestHandleSearchHistory(t *testing.T) {
 			discAssertStatus(t, rec, tt.wantStatus)
 			discAssertJSON(t, rec)
 
-			var resp httpserver.List[search.SearchHistoryItemDTO]
+			var resp httpserver.List[handler.SearchHistoryItemDTO]
 			discDecodeJSON(t, rec, &resp)
 			if len(resp.Items) != tt.wantItemsLen {
 				t.Errorf("len(Items) = %d, want %d", len(resp.Items), tt.wantItemsLen)
@@ -425,7 +431,7 @@ func TestHandleSearchHistory(t *testing.T) {
 func TestHandleClearSearchHistory(t *testing.T) {
 	historyRepo := &fakeSearchHistoryRepo{}
 	for i := 0; i < 3; i++ {
-		historyRepo.entries = append(historyRepo.entries, &search.SearchHistoryEntry{
+		historyRepo.entries = append(historyRepo.entries, &domain.SearchHistoryEntry{
 			ID:         ids.NewEntityId(),
 			UserId:     discTestUserId,
 			Query:      "test query",
@@ -444,7 +450,7 @@ func TestHandleClearSearchHistory(t *testing.T) {
 
 	getRec := discServe(t, router, http.MethodGet, "/discovery/search-history?limit=10", nil)
 	discAssertStatus(t, getRec, http.StatusOK)
-	var resp httpserver.List[search.SearchHistoryItemDTO]
+	var resp httpserver.List[handler.SearchHistoryItemDTO]
 	discDecodeJSON(t, getRec, &resp)
 	if len(resp.Items) != 0 {
 		t.Errorf("expected 0 items after clear, got %d", len(resp.Items))
@@ -455,18 +461,18 @@ func TestHandleAlbumTracks(t *testing.T) {
 	tests := []struct {
 		name       string
 		path       string
-		albumProv  *search.FakeAlbumContentProvider
+		albumProv  *memory.AlbumContentProvider
 		wantStatus int
 	}{
 		{
 			name: "valid request returns OK with items",
 			path: "/discovery/albums/deezer/12345/tracks",
-			albumProv: &search.FakeAlbumContentProvider{
+			albumProv: &memory.AlbumContentProvider{
 				Results: []search.SearchResult{
 					{
 						Kind:       search.ResultKindTrack,
 						Title:      "Album Track 1",
-						Confidence: search.ConfidenceLow,
+						Confidence: domain.ConfidenceLow,
 						Sources: []search.ProviderLink{
 							{Provider: search.ProviderDeezer, ExternalID: "t1", URL: "https://deezer.com/t1"},
 						},
@@ -478,14 +484,14 @@ func TestHandleAlbumTracks(t *testing.T) {
 		{
 			name:       "unknown provider returns 400",
 			path:       "/discovery/albums/unknown_provider/12345/tracks",
-			albumProv:  &search.FakeAlbumContentProvider{Results: []search.SearchResult{}},
+			albumProv:  &memory.AlbumContentProvider{Results: []search.SearchResult{}},
 			wantStatus: http.StatusBadRequest,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			albumProviders := map[search.ProviderName]search.AlbumContentProvider{
+			albumProviders := map[search.ProviderName]ports.AlbumContentProvider{
 				search.ProviderDeezer: tt.albumProv,
 			}
 			router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, albumProviders, nil)
@@ -500,7 +506,7 @@ func TestHandleAlbumTracks(t *testing.T) {
 			}
 
 			if tt.wantStatus == http.StatusOK {
-				var resp search.ContentFetchResponseDTO
+				var resp handler.ContentFetchResponseDTO
 				discDecodeJSON(t, rec, &resp)
 				if resp.Provider == "" {
 					t.Error("expected non-empty provider_name in response")
@@ -514,18 +520,18 @@ func TestHandleArtistTopTracks(t *testing.T) {
 	tests := []struct {
 		name       string
 		path       string
-		artistProv *search.FakeArtistContentProvider
+		artistProv *memory.ArtistContentProvider
 		wantStatus int
 	}{
 		{
 			name: "valid request returns OK",
 			path: "/discovery/artists/deezer/789/top-tracks",
-			artistProv: &search.FakeArtistContentProvider{
+			artistProv: &memory.ArtistContentProvider{
 				TopTracks: []search.SearchResult{
 					{
 						Kind:       search.ResultKindTrack,
 						Title:      "Top Song",
-						Confidence: search.ConfidenceLow,
+						Confidence: domain.ConfidenceLow,
 						Sources: []search.ProviderLink{
 							{Provider: search.ProviderDeezer, ExternalID: "t1", URL: "https://deezer.com/t1"},
 						},
@@ -537,14 +543,14 @@ func TestHandleArtistTopTracks(t *testing.T) {
 		{
 			name:       "unknown provider returns 400",
 			path:       "/discovery/artists/unknown/789/top-tracks",
-			artistProv: &search.FakeArtistContentProvider{},
+			artistProv: &memory.ArtistContentProvider{},
 			wantStatus: http.StatusBadRequest,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			artistProviders := map[search.ProviderName]search.ArtistContentProvider{
+			artistProviders := map[search.ProviderName]ports.ArtistContentProvider{
 				search.ProviderDeezer: tt.artistProv,
 			}
 			router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
@@ -565,18 +571,18 @@ func TestHandleArtistAlbums(t *testing.T) {
 	tests := []struct {
 		name       string
 		path       string
-		artistProv *search.FakeArtistContentProvider
+		artistProv *memory.ArtistContentProvider
 		wantStatus int
 	}{
 		{
 			name: "valid request returns OK",
 			path: "/discovery/artists/deezer/789/albums",
-			artistProv: &search.FakeArtistContentProvider{
+			artistProv: &memory.ArtistContentProvider{
 				Albums: []search.SearchResult{
 					{
 						Kind:       search.ResultKindAlbum,
 						Title:      "Greatest Hits",
-						Confidence: search.ConfidenceLow,
+						Confidence: domain.ConfidenceLow,
 						Sources: []search.ProviderLink{
 							{Provider: search.ProviderDeezer, ExternalID: "a1", URL: "https://deezer.com/a1"},
 						},
@@ -588,14 +594,14 @@ func TestHandleArtistAlbums(t *testing.T) {
 		{
 			name:       "unknown provider returns 400",
 			path:       "/discovery/artists/unknown/789/albums",
-			artistProv: &search.FakeArtistContentProvider{},
+			artistProv: &memory.ArtistContentProvider{},
 			wantStatus: http.StatusBadRequest,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			artistProviders := map[search.ProviderName]search.ArtistContentProvider{
+			artistProviders := map[search.ProviderName]ports.ArtistContentProvider{
 				search.ProviderDeezer: tt.artistProv,
 			}
 			router := buildDiscoveryRouter(t, nil, &fakeSearchHistoryRepo{}, nil, artistProviders)
@@ -613,34 +619,34 @@ func TestHandleArtistAlbums(t *testing.T) {
 }
 
 type fakeMetadataEnricher struct {
-	enrichment search.MusicBrainzEnrichment
+	enrichment domain.MusicBrainzEnrichment
 }
 
 func (f *fakeMetadataEnricher) ResolveMBID(_ context.Context, _ search.ResultKind, _, _ string) (string, error) {
 	return "resolved-mbid", nil
 }
 
-func (f *fakeMetadataEnricher) Lookup(_ context.Context, _ search.ResultKind, _ string) (search.MusicBrainzEnrichment, error) {
+func (f *fakeMetadataEnricher) Lookup(_ context.Context, _ search.ResultKind, _ string) (domain.MusicBrainzEnrichment, error) {
 	return f.enrichment, nil
 }
 
-func mustEnrichment(svc *search.DetailsService, err error) *search.DetailsService {
+func mustEnrichment(svc *details.DetailsService, err error) *details.DetailsService {
 	if err != nil {
 		panic(err)
 	}
 	return svc
 }
 
-func buildEnrichmentRouter(t *testing.T, svc search.Enricher) chi.Router {
-	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Enrich: svc}), time.Now)
+func buildEnrichmentRouter(t *testing.T, svc handler.Enricher) chi.Router {
+	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Enrich: svc}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
 	return r
 }
 
-func sampleAlbumEnrichment() search.MusicBrainzEnrichment {
-	e := search.EmptyEnrichment()
+func sampleAlbumEnrichment() domain.MusicBrainzEnrichment {
+	e := domain.EmptyEnrichment()
 	e.MBID = "resolved-mbid"
 	e.Genres = []string{"conscious hip hop", "hip hop"}
 	e.Year = 2017
@@ -651,7 +657,7 @@ func sampleAlbumEnrichment() search.MusicBrainzEnrichment {
 
 func TestHandleEnrichment(t *testing.T) {
 	t.Run("valid request returns enrichment DTO", func(t *testing.T) {
-		svc := mustEnrichment(search.NewEnrichmentService(&fakeMetadataEnricher{enrichment: sampleAlbumEnrichment()}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{}))
+		svc := mustEnrichment(details.NewEnrichmentService(&fakeMetadataEnricher{enrichment: sampleAlbumEnrichment()}, details.NoArtwork{}, details.NoEnrichmentCache{}, details.NoMBIDIndex{}))
 		router := buildEnrichmentRouter(t, svc)
 
 		rec := discServe(t, router, http.MethodGet,
@@ -659,7 +665,7 @@ func TestHandleEnrichment(t *testing.T) {
 		discAssertStatus(t, rec, http.StatusOK)
 		discAssertJSON(t, rec)
 
-		var resp search.EnrichmentResponseDTO
+		var resp handler.EnrichmentResponseDTO
 		discDecodeJSON(t, rec, &resp)
 		if resp.Year != 2017 || resp.PrimaryType != "Album" {
 			t.Errorf("unexpected DTO: %+v", resp)
@@ -673,25 +679,25 @@ func TestHandleEnrichment(t *testing.T) {
 	})
 
 	t.Run("missing kind returns 400", func(t *testing.T) {
-		router := buildEnrichmentRouter(t, mustEnrichment(search.NewEnrichmentService(&fakeMetadataEnricher{}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{})))
+		router := buildEnrichmentRouter(t, mustEnrichment(details.NewEnrichmentService(&fakeMetadataEnricher{}, details.NoArtwork{}, details.NoEnrichmentCache{}, details.NoMBIDIndex{})))
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?title=DAMN.", nil)
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})
 
 	t.Run("unknown kind returns 400", func(t *testing.T) {
-		router := buildEnrichmentRouter(t, mustEnrichment(search.NewEnrichmentService(&fakeMetadataEnricher{}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{})))
+		router := buildEnrichmentRouter(t, mustEnrichment(details.NewEnrichmentService(&fakeMetadataEnricher{}, details.NoArtwork{}, details.NoEnrichmentCache{}, details.NoMBIDIndex{})))
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?kind=playlistx&title=X", nil)
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})
 
 	t.Run("blank title and no mbid returns 400", func(t *testing.T) {
-		router := buildEnrichmentRouter(t, mustEnrichment(search.NewEnrichmentService(&fakeMetadataEnricher{}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{})))
+		router := buildEnrichmentRouter(t, mustEnrichment(details.NewEnrichmentService(&fakeMetadataEnricher{}, details.NoArtwork{}, details.NoEnrichmentCache{}, details.NoMBIDIndex{})))
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?kind=album", nil)
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})
 
 	t.Run("unconfigured enrichment returns 503 enrichment_unavailable", func(t *testing.T) {
-		router := buildEnrichmentRouter(t, search.UnconfiguredEnrichment{})
+		router := buildEnrichmentRouter(t, handler.UnconfiguredEnrichment{})
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?kind=album&title=X", nil)
 		assertErrorCode(t, rec, http.StatusServiceUnavailable, "enrichment_unavailable")
 	})
@@ -710,10 +716,10 @@ func (p *fakeRelatedTracksProvider) GetRelatedTracks(_ context.Context, _ search
 }
 
 func buildRelatedRouter(t testing.TB, provider *fakeRelatedTracksProvider) chi.Router {
-	svc := searchtest.NewRelatedTracks(t, map[string]search.RelatedTracksProvider{
+	svc := searchtest.NewRelatedTracks(t, map[string]ports.RelatedTracksProvider{
 		"soundcloud": provider,
 	})
-	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Related: svc}), time.Now)
+	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Related: svc}), time.Now)
 
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
@@ -728,7 +734,7 @@ func TestHandleRelatedTracks(t *testing.T) {
 				Kind:       search.ResultKindTrack,
 				Title:      "Fell In Love",
 				Subtitle:   "Lil Tecca",
-				Confidence: search.ConfidenceLow,
+				Confidence: domain.ConfidenceLow,
 				Sources: []search.ProviderLink{
 					{Provider: search.ProviderSoundCloud, ExternalID: "555", URL: "https://soundcloud.com/x/fil"},
 				},
@@ -740,7 +746,7 @@ func TestHandleRelatedTracks(t *testing.T) {
 		discAssertStatus(t, rec, http.StatusOK)
 		discAssertJSON(t, rec)
 
-		var resp search.ContentFetchResponseDTO
+		var resp handler.ContentFetchResponseDTO
 		discDecodeJSON(t, rec, &resp)
 		if resp.Status != "ok" {
 			t.Errorf("status = %q, want ok", resp.Status)

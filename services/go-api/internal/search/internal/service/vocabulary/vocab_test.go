@@ -2,6 +2,8 @@ package vocabulary_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
@@ -18,27 +20,27 @@ const (
 
 type ingestedSearch struct {
 	shown   []search.SearchResult
-	entries []search.SpellingHintsEntry
+	entries []domain.SpellingHintsEntry
 }
 
 func searchAndIngest(t *testing.T, query string, kinds map[search.ResultKind]bool, results ...search.SearchResult) ingestedSearch {
 	t.Helper()
 	bg := searchtest.NewTracker(t)
 	var mu sync.Mutex
-	var entries []search.SpellingHintsEntry
-	store := &search.FakeVocabularyStore{AddFn: func(e search.SpellingHintsEntry) error {
+	var entries []domain.SpellingHintsEntry
+	store := &memory.FakeVocabularyStore{AddFn: func(e domain.SpellingHintsEntry) error {
 		mu.Lock()
 		defer mu.Unlock()
 		entries = append(entries, e)
 		return nil
 	}}
-	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: results}
+	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: results}
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Vocabulary = store })
 	q, err := search.NewSearchQuery(query, kinds, everyResultOnOnePage)
 	if err != nil {
 		t.Fatalf("NewSearchQuery: %v", err)
 	}
-	out, err := svc.Execute(context.Background(), search.NewUser(), q)
+	out, err := svc.Execute(context.Background(), memory.NewUser(), q)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -66,7 +68,7 @@ func allKinds() map[search.ResultKind]bool {
 	}
 }
 
-func entryFor(t *testing.T, entries []search.SpellingHintsEntry, term string) search.SpellingHintsEntry {
+func entryFor(t *testing.T, entries []domain.SpellingHintsEntry, term string) domain.SpellingHintsEntry {
 	t.Helper()
 	for _, e := range entries {
 		if e.Term == term {
@@ -74,24 +76,24 @@ func entryFor(t *testing.T, entries []search.SpellingHintsEntry, term string) se
 		}
 	}
 	t.Fatalf("no vocabulary entry for %q in %+v", term, entries)
-	return search.SpellingHintsEntry{}
+	return domain.SpellingHintsEntry{}
 }
 
 func TestSearchIngest_MapsEachShownResultToVocabularyEntries(t *testing.T) {
 	got := searchAndIngest(t, "drake", allKinds(),
 		deezerResult(search.ResultKindArtist, "Drake", "", 90),
-		search.DeezerTrack("Hotline Bling", "Drake", 80),
-		search.DeezerAlbum("Scorpion", "Drake", 70),
+		memory.DeezerTrack("Hotline Bling", "Drake", 80),
+		memory.DeezerAlbum("Scorpion", "Drake", 70),
 	)
 
 	if len(got.entries) != 4 {
 		t.Fatalf("want 4 entries, got %d: %+v", len(got.entries), got.entries)
 	}
-	want := []search.SpellingHintsEntry{
-		{Term: "Drake", TermNorm: "drake", Kind: search.VocabKindArtist, Popularity: 90},
-		{Term: "Hotline Bling - Drake", TermNorm: "hotline bling drake", Kind: search.VocabKindTrack, Popularity: 80},
-		{Term: "Drake", TermNorm: "drake", Kind: search.VocabKindArtist, Popularity: 80},
-		{Term: "Scorpion - Drake", TermNorm: "scorpion drake", Kind: search.VocabKindAlbum, Popularity: 70},
+	want := []domain.SpellingHintsEntry{
+		{Term: "Drake", TermNorm: "drake", Kind: domain.VocabKindArtist, Popularity: 90},
+		{Term: "Hotline Bling - Drake", TermNorm: "hotline bling drake", Kind: domain.VocabKindTrack, Popularity: 80},
+		{Term: "Drake", TermNorm: "drake", Kind: domain.VocabKindArtist, Popularity: 80},
+		{Term: "Scorpion - Drake", TermNorm: "scorpion drake", Kind: domain.VocabKindAlbum, Popularity: 70},
 	}
 	for _, w := range want {
 		if !slices.Contains(got.entries, w) {
@@ -99,19 +101,19 @@ func TestSearchIngest_MapsEachShownResultToVocabularyEntries(t *testing.T) {
 		}
 	}
 	for _, e := range got.entries {
-		if e.Kind == search.VocabKindQuery || e.Term == "drake" {
+		if e.Kind == domain.VocabKindQuery || e.Term == "drake" {
 			t.Errorf("the raw query must not be ingested, got %+v", e)
 		}
 	}
 }
 
 func TestSearchIngest_AResultOfAnotherKindIsIngestedAsAQuery(t *testing.T) {
-	got := searchAndIngest(t, "chill mix", map[search.ResultKind]bool{search.ResultKindPlaylist: true},
-		deezerResult(search.ResultKindPlaylist, "Chill Mix", "", 0),
+	got := searchAndIngest(t, "chill mix", map[search.ResultKind]bool{domain.ResultKindPlaylist: true},
+		deezerResult(domain.ResultKindPlaylist, "Chill Mix", "", 0),
 	)
 
-	if e := entryFor(t, got.entries, "Chill Mix"); e.Kind != search.VocabKindQuery {
-		t.Errorf("playlist entry kind = %q, want %q", e.Kind, search.VocabKindQuery)
+	if e := entryFor(t, got.entries, "Chill Mix"); e.Kind != domain.VocabKindQuery {
+		t.Errorf("playlist entry kind = %q, want %q", e.Kind, domain.VocabKindQuery)
 	}
 }
 
@@ -163,10 +165,10 @@ func TestSearchIngest_FewerResultsThanTheTopAreAllIngested(t *testing.T) {
 	}
 }
 
-func searchWithVocabularyStore(t *testing.T, store *search.FakeVocabularyStore) {
+func searchWithVocabularyStore(t *testing.T, store *memory.FakeVocabularyStore) {
 	t.Helper()
 	bg := searchtest.NewTracker(t)
-	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{
+	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{
 		deezerResult(search.ResultKindArtist, "Drake", "", 90),
 	}}
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Vocabulary = store })
@@ -174,7 +176,7 @@ func searchWithVocabularyStore(t *testing.T, store *search.FakeVocabularyStore) 
 	if err != nil {
 		t.Fatalf("NewSearchQuery: %v", err)
 	}
-	if _, err := svc.Execute(context.Background(), search.NewUser(), q); err != nil {
+	if _, err := svc.Execute(context.Background(), memory.NewUser(), q); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	bg.Wait()
@@ -185,7 +187,7 @@ func TestSearchIngest_AFailedAddIsLoggedAndASuccessfulOneIsNot(t *testing.T) {
 
 	t.Run("failing store", func(t *testing.T) {
 		logs := searchtest.CaptureLogs(t)
-		searchWithVocabularyStore(t, &search.FakeVocabularyStore{AddFn: func(search.SpellingHintsEntry) error { return errors.New("store down") }})
+		searchWithVocabularyStore(t, &memory.FakeVocabularyStore{AddFn: func(domain.SpellingHintsEntry) error { return errors.New("store down") }})
 
 		if !strings.Contains(logs.String(), failed) {
 			t.Errorf("logs = %s, want a vocab_ingest_failed warning", logs)
@@ -193,7 +195,7 @@ func TestSearchIngest_AFailedAddIsLoggedAndASuccessfulOneIsNot(t *testing.T) {
 	})
 	t.Run("working store", func(t *testing.T) {
 		logs := searchtest.CaptureLogs(t)
-		searchWithVocabularyStore(t, &search.FakeVocabularyStore{AddFn: func(search.SpellingHintsEntry) error { return nil }})
+		searchWithVocabularyStore(t, &memory.FakeVocabularyStore{AddFn: func(domain.SpellingHintsEntry) error { return nil }})
 
 		if strings.Contains(logs.String(), failed) {
 			t.Errorf("logs = %s, want no vocab_ingest_failed warning", logs)

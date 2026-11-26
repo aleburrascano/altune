@@ -3,6 +3,8 @@ package soundcloud_test
 import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
+	"altune/go-api/internal/search/internal/adapters/providers/soundcloud"
+	"altune/go-api/internal/search/internal/domain"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -42,10 +44,10 @@ func TestProviderContracts(t *testing.T) {
 
 func TestArtworkSourceTags(t *testing.T) {
 	tests := []struct {
-		got  search.ProviderKey
+		got  domain.ProviderKey
 		want string
 	}{
-		{(&search.SoundCloudAPIAdapter{}).ArtworkSource(), "soundcloud"},
+		{(&soundcloud.SoundCloudAPIAdapter{}).ArtworkSource(), "soundcloud"},
 	}
 	for _, tt := range tests {
 		if tt.got.String() != tt.want {

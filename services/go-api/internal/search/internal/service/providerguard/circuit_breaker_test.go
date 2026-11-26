@@ -2,6 +2,8 @@ package providerguard_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/service/providerguard"
 	"context"
 	"log/slog"
 	"sync"
@@ -15,9 +17,9 @@ const (
 	probeLeaseFor     = 30 * time.Second
 )
 
-func tripProvider(ctx context.Context, cb *search.CircuitBreaker, provider search.ProviderName) {
+func tripProvider(ctx context.Context, cb *providerguard.CircuitBreaker, provider search.ProviderName) {
 	for range breakerTripsAfter {
-		cb.RecordFailure(ctx, provider, search.CircuitAdmission{})
+		cb.RecordFailure(ctx, provider, providerguard.Admission{})
 	}
 }
 
@@ -27,7 +29,7 @@ func TestCircuitBreaker_AProviderWithNoFailuresIsClosedAndOK(t *testing.T) {
 	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); !ok {
 		t.Error("expected closed circuit to allow requests")
 	}
-	if cb.GetStatus(search.ProviderDeezer) != search.ProviderStatusOK {
+	if cb.GetStatus(search.ProviderDeezer) != domain.ProviderStatusOK {
 		t.Errorf("expected status OK, got %v", cb.GetStatus(search.ProviderDeezer))
 	}
 }
@@ -35,18 +37,18 @@ func TestCircuitBreaker_AProviderWithNoFailuresIsClosedAndOK(t *testing.T) {
 func TestCircuitBreaker_OpensAtTheThresholdAndReportsCircuitOpen(t *testing.T) {
 	cb := search.NewCircuitBreaker()
 	for range breakerTripsAfter - 1 {
-		cb.RecordFailure(context.Background(), search.ProviderDeezer, search.CircuitAdmission{})
+		cb.RecordFailure(context.Background(), search.ProviderDeezer, providerguard.Admission{})
 	}
 	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); !ok {
 		t.Fatal("expected the circuit to stay closed one failure below the threshold")
 	}
 
-	cb.RecordFailure(context.Background(), search.ProviderDeezer, search.CircuitAdmission{})
+	cb.RecordFailure(context.Background(), search.ProviderDeezer, providerguard.Admission{})
 
 	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); ok {
 		t.Error("expected open circuit to block requests at the threshold")
 	}
-	if cb.GetStatus(search.ProviderDeezer) != search.ProviderStatusCircuitOpen {
+	if cb.GetStatus(search.ProviderDeezer) != domain.ProviderStatusCircuitOpen {
 		t.Errorf("expected status CircuitOpen, got %v", cb.GetStatus(search.ProviderDeezer))
 	}
 }
@@ -60,10 +62,10 @@ func TestCircuitBreaker_AHalfOpenProviderReportsOKWhileItsProbeRuns(t *testing.T
 		t.Fatal("expected the probe to be admitted after the open window")
 	}
 
-	if got := cb.GetStatus(search.ProviderDeezer); got != search.ProviderStatusOK {
+	if got := cb.GetStatus(search.ProviderDeezer); got != domain.ProviderStatusOK {
 		t.Errorf("half-open status = %v, want ok", got)
 	}
-	if snap := cb.Snapshot(search.ProviderDeezer); snap.State != search.CircuitHalfOpen || !snap.Probing {
+	if snap := cb.Snapshot(search.ProviderDeezer); snap.State != providerguard.CircuitHalfOpen || !snap.Probing {
 		t.Errorf("snapshot = %+v, want half-open with the probe in flight", snap)
 	}
 }
@@ -90,17 +92,17 @@ func TestCircuitBreaker_IndependentProviders(t *testing.T) {
 	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); ok {
 		t.Error("expected Deezer circuit to be open")
 	}
-	if _, ok := cb.AllowRequest(context.Background(), search.ProviderMusicBrainz); !ok {
+	if _, ok := cb.AllowRequest(context.Background(), domain.ProviderMusicBrainz); !ok {
 		t.Error("expected MusicBrainz circuit to be independent and closed")
 	}
 	if _, ok := cb.AllowRequest(context.Background(), search.ProviderSoundCloud); !ok {
 		t.Error("expected SoundCloud circuit to be independent and closed")
 	}
-	if cb.GetStatus(search.ProviderDeezer) != search.ProviderStatusCircuitOpen {
+	if cb.GetStatus(search.ProviderDeezer) != domain.ProviderStatusCircuitOpen {
 		t.Errorf("expected Deezer status CircuitOpen, got %v", cb.GetStatus(search.ProviderDeezer))
 	}
-	if cb.GetStatus(search.ProviderMusicBrainz) != search.ProviderStatusOK {
-		t.Errorf("expected MusicBrainz status OK, got %v", cb.GetStatus(search.ProviderMusicBrainz))
+	if cb.GetStatus(domain.ProviderMusicBrainz) != domain.ProviderStatusOK {
+		t.Errorf("expected MusicBrainz status OK, got %v", cb.GetStatus(domain.ProviderMusicBrainz))
 	}
 }
 

@@ -2,6 +2,7 @@ package soundcloud_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/providers/soundcloud"
 	"altune/go-api/internal/shared/dbtest"
 	"context"
 	"os/exec"
@@ -15,7 +16,7 @@ func TestSoundCloudAdapter_Search_Integration(t *testing.T) {
 		t.Skip("yt-dlp not installed, skipping integration test")
 	}
 
-	adapter := search.NewSoundCloudAdapter()
+	adapter := soundcloud.NewSoundCloudAdapter()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 

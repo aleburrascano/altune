@@ -2,6 +2,9 @@ package unreleased_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
 	"bytes"
 	"context"
@@ -12,24 +15,24 @@ import (
 	"testing"
 )
 
-func pixeldrainLink(id string) search.AudioLink {
-	return search.AudioLink{Provider: "pixeldrain", ExternalID: id, URL: "https://pixeldrain.com/u/" + id}
+func pixeldrainLink(id string) domain.AudioLink {
+	return domain.AudioLink{Provider: "pixeldrain", ExternalID: id, URL: "https://pixeldrain.com/u/" + id}
 }
 
-func trackerSong(title, id string) search.UnreleasedSong {
-	return search.UnreleasedSong{Title: title, Quality: "High Quality", TrackerKey: "ken:" + id, AudioLinks: []search.AudioLink{pixeldrainLink(id)}}
+func trackerSong(title, id string) domain.UnreleasedSong {
+	return domain.UnreleasedSong{Title: title, Quality: "High Quality", TrackerKey: "ken:" + id, AudioLinks: []domain.AudioLink{pixeldrainLink(id)}}
 }
 
-func listWith(t *testing.T, genius *search.FakeGeniusSongCatalog, trackers *search.TrackerSongs, cache search.UnreleasedCache) ([]search.UnreleasedSong, error) {
+func listWith(t *testing.T, genius *memory.GeniusSongCatalog, trackers *memory.TrackerSongs, cache ports.UnreleasedCache) ([]domain.UnreleasedSong, error) {
 	t.Helper()
 	if cache == nil {
 		cache = search.NoUnreleasedCache{}
 	}
-	svc := searchtest.MustUnreleased(search.NewUnreleasedService(geniusPort(genius), &search.ArtistCatalogTitles{}, cachedConfig, searchtest.UnreleasedWiring(cache, searchtest.UnreleasedTrackers(trackers))))
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(geniusPort(genius), &searchtest.ArtistCatalogTitles{}, cachedConfig, searchtest.UnreleasedWiring(cache, searchtest.UnreleasedTrackers(trackers))))
 	return svc.List(context.Background(), search.ProviderDeezer, "1", "Ken Carson", nil)
 }
 
-func geniusPort(g *search.FakeGeniusSongCatalog) search.GeniusSongCatalog {
+func geniusPort(g *memory.GeniusSongCatalog) ports.GeniusSongCatalog {
 	if g == nil {
 		return search.NoUnreleasedGenius{}
 	}
@@ -37,8 +40,8 @@ func geniusPort(g *search.FakeGeniusSongCatalog) search.GeniusSongCatalog {
 }
 
 func TestService_List_TrackerSongMergesIntoTheGeniusSongWithTheSameTitle(t *testing.T) {
-	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Loot")}
-	trackers := &search.TrackerSongs{Songs: []search.UnreleasedSong{trackerSong("⭐ Loot", "lootaaaa")}}
+	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("Loot")}
+	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("⭐ Loot", "lootaaaa")}}
 	got, err := listWith(t, genius, trackers, nil)
 	if err != nil || len(got) != 1 {
 		t.Fatalf("got %v, err %v, want one merged item", titlesOf(got), err)
@@ -49,8 +52,8 @@ func TestService_List_TrackerSongMergesIntoTheGeniusSongWithTheSameTitle(t *test
 }
 
 func TestService_List_TrackerSongNeverMergesIntoAnotherVersion(t *testing.T) {
-	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Dream", "Dream [V1]")}
-	trackers := &search.TrackerSongs{Songs: []search.UnreleasedSong{trackerSong("Dream [V2]", "dreamv2a")}}
+	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("Dream", "Dream [V1]")}
+	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Dream [V2]", "dreamv2a")}}
 	got, err := listWith(t, genius, trackers, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -65,8 +68,8 @@ func TestService_List_TrackerSongNeverMergesIntoAnotherVersion(t *testing.T) {
 }
 
 func TestService_List_TrackerSongsDoNotUseUpDetailLookups(t *testing.T) {
-	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("A")}
-	trackers := &search.TrackerSongs{Songs: []search.UnreleasedSong{trackerSong("B", "bbbbbbbb"), trackerSong("C", "cccccccc")}}
+	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("A")}
+	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("B", "bbbbbbbb"), trackerSong("C", "cccccccc")}}
 	if _, err := listWith(t, genius, trackers, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -76,24 +79,24 @@ func TestService_List_TrackerSongsDoNotUseUpDetailLookups(t *testing.T) {
 }
 
 func TestService_List_ReleasedTrackerSongIsHidden(t *testing.T) {
-	trackers := &search.TrackerSongs{Songs: []search.UnreleasedSong{trackerSong("Magnolia", "magnolia"), trackerSong("Dream [V2]", "dreamv2a")}}
-	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{Titles: []string{"Magnolia"}}, cachedConfig, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedTrackers(trackers))))
+	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Magnolia", "magnolia"), trackerSong("Dream [V2]", "dreamv2a")}}
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &searchtest.ArtistCatalogTitles{Titles: []string{"Magnolia"}}, cachedConfig, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedTrackers(trackers))))
 	got, err := svc.List(context.Background(), search.ProviderDeezer, "1", "Ken Carson", nil)
 	if err != nil || !slices.Equal(titlesOf(got), []string{"Dream [V2]"}) {
 		t.Errorf("got %v, err %v, want only the unreleased tracker song", titlesOf(got), err)
 	}
 }
 
-func versionedTrackerSong(title string, versions ...search.UnreleasedVersion) search.UnreleasedSong {
-	return search.UnreleasedSong{Title: title, TrackerKey: "ken:" + title, Versions: versions}
+func versionedTrackerSong(title string, versions ...domain.UnreleasedVersion) domain.UnreleasedSong {
+	return domain.UnreleasedSong{Title: title, TrackerKey: "ken:" + title, Versions: versions}
 }
 
 func TestService_List_ReleasedSongKeepsItsTaggedTrackerVersions(t *testing.T) {
 	sportsCar := versionedTrackerSong("Sports Car",
-		search.UnreleasedVersion{Title: "Sports Car", Quality: "Lossless"},
-		search.UnreleasedVersion{Title: "Sports Car [V3]", Label: "V3", Quality: "High Quality"})
-	trackers := &search.TrackerSongs{Songs: []search.UnreleasedSong{sportsCar, trackerSong("Magnolia", "magnolia")}}
-	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{Titles: []string{"Sports Car", "Magnolia"}}, cachedConfig, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedTrackers(trackers))))
+		domain.UnreleasedVersion{Title: "Sports Car", Quality: "Lossless"},
+		domain.UnreleasedVersion{Title: "Sports Car [V3]", Label: "V3", Quality: "High Quality"})
+	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{sportsCar, trackerSong("Magnolia", "magnolia")}}
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &searchtest.ArtistCatalogTitles{Titles: []string{"Sports Car", "Magnolia"}}, cachedConfig, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedTrackers(trackers))))
 	got, err := svc.List(context.Background(), search.ProviderDeezer, "1", "Ken Carson", nil)
 	if err != nil || len(got) != 1 || got[0].Title != "Sports Car" {
 		t.Fatalf("got %v, err %v, want only Sports Car", titlesOf(got), err)
@@ -105,9 +108,9 @@ func TestService_List_ReleasedSongKeepsItsTaggedTrackerVersions(t *testing.T) {
 }
 
 func TestService_List_CatalogMatchDropsASongWhoseVersionsAreAllUntagged(t *testing.T) {
-	song := versionedTrackerSong("Sports Car", search.UnreleasedVersion{Title: "Sports Car"})
-	trackers := &search.TrackerSongs{Songs: []search.UnreleasedSong{song}}
-	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{Titles: []string{"Sports Car"}}, cachedConfig, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedTrackers(trackers))))
+	song := versionedTrackerSong("Sports Car", domain.UnreleasedVersion{Title: "Sports Car"})
+	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{song}}
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &searchtest.ArtistCatalogTitles{Titles: []string{"Sports Car"}}, cachedConfig, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedTrackers(trackers))))
 	got, err := svc.List(context.Background(), search.ProviderDeezer, "1", "Ken Carson", nil)
 	if err != nil || len(got) != 0 {
 		t.Errorf("got %v, err %v, want nothing", titlesOf(got), err)
@@ -126,8 +129,8 @@ func captureLogs(t *testing.T) *bytes.Buffer {
 func TestService_List_TrackerFailureKeepsTheGeniusListAndGetsTheShortTTL(t *testing.T) {
 	logs := captureLogs(t)
 	cache := newMemoryCache()
-	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
-	got, err := listWith(t, genius, &search.TrackerSongs{Err: errors.New("sheets 503")}, cache)
+	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
+	got, err := listWith(t, genius, &memory.TrackerSongs{Err: errors.New("sheets 503")}, cache)
 	if err != nil || !slices.Equal(titlesOf(got), []string{"Leak"}) {
 		t.Fatalf("got %v, err %v, want the genius-only list", titlesOf(got), err)
 	}
@@ -141,8 +144,8 @@ func TestService_List_TrackerFailureKeepsTheGeniusListAndGetsTheShortTTL(t *test
 
 func TestService_List_GeniusFailureKeepsTheTrackerList(t *testing.T) {
 	cache := newMemoryCache()
-	genius := &search.FakeGeniusSongCatalog{Err: errors.New("genius 401")}
-	trackers := &search.TrackerSongs{Songs: []search.UnreleasedSong{trackerSong("Dream [V2]", "dreamv2a")}}
+	genius := &memory.GeniusSongCatalog{Err: errors.New("genius 401")}
+	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Dream [V2]", "dreamv2a")}}
 	got, err := listWith(t, genius, trackers, cache)
 	if err != nil || !slices.Equal(titlesOf(got), []string{"Dream [V2]"}) {
 		t.Fatalf("got %v, err %v, want the tracker-only list", titlesOf(got), err)
@@ -154,8 +157,8 @@ func TestService_List_GeniusFailureKeepsTheTrackerList(t *testing.T) {
 
 func TestService_List_GeniusNotFoundKeepsTheTrackerListAtTheLongTTL(t *testing.T) {
 	cache := newMemoryCache()
-	trackers := &search.TrackerSongs{Songs: []search.UnreleasedSong{trackerSong("Dream [V2]", "dreamv2a")}}
-	got, err := listWith(t, &search.FakeGeniusSongCatalog{ArtistFound: false}, trackers, cache)
+	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Dream [V2]", "dreamv2a")}}
+	got, err := listWith(t, &memory.GeniusSongCatalog{ArtistFound: false}, trackers, cache)
 	if err != nil || len(got) != 1 {
 		t.Fatalf("got %v, err %v", titlesOf(got), err)
 	}
@@ -166,7 +169,7 @@ func TestService_List_GeniusNotFoundKeepsTheTrackerListAtTheLongTTL(t *testing.T
 
 func TestService_List_NoGeniusPortYieldsTrackerSongsWithAShortTTL(t *testing.T) {
 	cache := newMemoryCache()
-	trackers := &search.TrackerSongs{Songs: []search.UnreleasedSong{trackerSong("Dream [V2]", "dreamv2a")}}
+	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Dream [V2]", "dreamv2a")}}
 	got, err := listWith(t, nil, trackers, cache)
 	if err != nil || !slices.Equal(titlesOf(got), []string{"Dream [V2]"}) {
 		t.Fatalf("got %v, err %v, want the tracker-only list", titlesOf(got), err)
@@ -177,8 +180,8 @@ func TestService_List_NoGeniusPortYieldsTrackerSongsWithAShortTTL(t *testing.T) 
 }
 
 func TestService_List_BothSourcesFailingIsAnError(t *testing.T) {
-	genius := &search.FakeGeniusSongCatalog{Err: errors.New("genius down")}
-	if _, err := listWith(t, genius, &search.TrackerSongs{Err: errors.New("sheets down")}, nil); err == nil {
+	genius := &memory.GeniusSongCatalog{Err: errors.New("genius down")}
+	if _, err := listWith(t, genius, &memory.TrackerSongs{Err: errors.New("sheets down")}, nil); err == nil {
 		t.Error("List succeeded with both sources failing")
 	}
 }
@@ -186,15 +189,15 @@ func TestService_List_BothSourcesFailingIsAnError(t *testing.T) {
 func TestService_List_CancelledJobIsAnErrorEvenWithTrackerSongs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	trackers := &search.TrackerSongs{Songs: []search.UnreleasedSong{trackerSong("Dream [V2]", "dreamv2a")}}
-	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, cachedConfig, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedTrackers(trackers))))
+	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Dream [V2]", "dreamv2a")}}
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &searchtest.ArtistCatalogTitles{}, cachedConfig, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedTrackers(trackers))))
 	if _, err := svc.List(ctx, search.ProviderDeezer, "1", "Ken Carson", nil); !errors.Is(err, context.Canceled) {
 		t.Errorf("err = %v, want context.Canceled", err)
 	}
 }
 
 func TestService_List_APartTrackerReadKeepsItsSongsButCachesShort(t *testing.T) {
-	trackers := &search.TrackerSongs{Songs: []search.UnreleasedSong{trackerSong("Loot", "lootaaaa")}, Err: search.ErrTrackerPartial}
+	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Loot", "lootaaaa")}, Err: ports.ErrTrackerPartial}
 	cache := newMemoryCache()
 	got, err := listWith(t, nil, trackers, cache)
 	if err != nil || len(got) != 1 {
@@ -208,20 +211,20 @@ func TestService_List_APartTrackerReadKeepsItsSongsButCachesShort(t *testing.T) 
 }
 
 func TestService_List_AnOffStreamingTrackerSongKeepsTheGeniusQuality(t *testing.T) {
-	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Loot")}
+	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("Loot")}
 	genius.Songs[0].Quality = "CDQ"
-	tracked := search.UnreleasedSong{Title: "Loot", TrackerKey: "ken:loot", OffStreaming: true}
-	got, err := listWith(t, genius, &search.TrackerSongs{Songs: []search.UnreleasedSong{tracked}}, nil)
+	tracked := domain.UnreleasedSong{Title: "Loot", TrackerKey: "ken:loot", OffStreaming: true}
+	got, err := listWith(t, genius, &memory.TrackerSongs{Songs: []domain.UnreleasedSong{tracked}}, nil)
 	if err != nil || len(got) != 1 || got[0].Quality != "CDQ" || !got[0].OffStreaming {
 		t.Errorf("got %+v, err %v; want CDQ kept and the off-streaming flag", got, err)
 	}
 }
 
 func TestService_List_ALinkOutTrackerRowLeavesHasMediaFalseAndCarriesOpenURL(t *testing.T) {
-	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Loot")}
+	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("Loot")}
 	hasMedia := false
-	linkOut := search.UnreleasedSong{Title: "Loot", TrackerKey: "ken:loot", HasMedia: &hasMedia, OpenURL: "https://mega.nz/file/abc", OpenHost: "mega.nz"}
-	got, err := listWith(t, genius, &search.TrackerSongs{Songs: []search.UnreleasedSong{linkOut}}, nil)
+	linkOut := domain.UnreleasedSong{Title: "Loot", TrackerKey: "ken:loot", HasMedia: &hasMedia, OpenURL: "https://mega.nz/file/abc", OpenHost: "mega.nz"}
+	got, err := listWith(t, genius, &memory.TrackerSongs{Songs: []domain.UnreleasedSong{linkOut}}, nil)
 	if err != nil || len(got) != 1 {
 		t.Fatalf("got %v, err %v, want one merged item", titlesOf(got), err)
 	}
@@ -231,9 +234,9 @@ func TestService_List_ALinkOutTrackerRowLeavesHasMediaFalseAndCarriesOpenURL(t *
 }
 
 func TestService_List_GeniusSongJoinsTheTrackerSongWithTheSameBaseTitle(t *testing.T) {
-	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("tragic")}
+	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("tragic")}
 	genius.Songs[0].GeniusURL = "https://genius.com/tragic"
-	trackers := &search.TrackerSongs{Songs: []search.UnreleasedSong{trackerSong("tragic [V1]", "tragicaa")}}
+	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("tragic [V1]", "tragicaa")}}
 	got, err := listWith(t, genius, trackers, nil)
 	if err != nil || len(got) != 1 {
 		t.Fatalf("got %v, err %v, want one joined song", titlesOf(got), err)
@@ -248,8 +251,8 @@ func TestService_List_GeniusSongJoinsTheTrackerSongWithTheSameBaseTitle(t *testi
 }
 
 func TestService_List_GeniusLabelledSongStaysApartFromTheTrackerSong(t *testing.T) {
-	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("tragic (Live from SNL)", "tragic (Remix)")}
-	trackers := &search.TrackerSongs{Songs: []search.UnreleasedSong{trackerSong("tragic", "tragicaa")}}
+	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("tragic (Live from SNL)", "tragic (Remix)")}
+	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("tragic", "tragicaa")}}
 	got, err := listWith(t, genius, trackers, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -264,8 +267,8 @@ func TestService_List_GeniusLabelledSongStaysApartFromTheTrackerSong(t *testing.
 }
 
 func TestService_List_TwoGeniusSongsWithOneTitleBothTakeTheTrackerFile(t *testing.T) {
-	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Loot", "Loot")}
-	trackers := &search.TrackerSongs{Songs: []search.UnreleasedSong{trackerSong("Loot", "lootaaaa")}}
+	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("Loot", "Loot")}
+	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Loot", "lootaaaa")}}
 	got, err := listWith(t, genius, trackers, nil)
 	if err != nil || len(got) != 2 {
 		t.Fatalf("got %v, err %v, want two songs", titlesOf(got), err)
@@ -278,10 +281,10 @@ func TestService_List_TwoGeniusSongsWithOneTitleBothTakeTheTrackerFile(t *testin
 }
 
 func TestService_List_GeniusSongWithTheExactTrackerTitleKeepsTheTrackerVersions(t *testing.T) {
-	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Me")}
+	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("Me")}
 	tracked := trackerSong("Me", "meaaaaaa")
-	tracked.Versions = []search.UnreleasedVersion{{Title: "Me [V1]", Label: "V1"}, {Title: "Me [V2]", Label: "V2"}}
-	got, err := listWith(t, genius, &search.TrackerSongs{Songs: []search.UnreleasedSong{tracked}}, nil)
+	tracked.Versions = []domain.UnreleasedVersion{{Title: "Me [V1]", Label: "V1"}, {Title: "Me [V2]", Label: "V2"}}
+	got, err := listWith(t, genius, &memory.TrackerSongs{Songs: []domain.UnreleasedSong{tracked}}, nil)
 	if err != nil || len(got) != 1 {
 		t.Fatalf("got %v, err %v, want one joined song", titlesOf(got), err)
 	}
@@ -291,8 +294,8 @@ func TestService_List_GeniusSongWithTheExactTrackerTitleKeepsTheTrackerVersions(
 }
 
 func TestService_List_DemoGeniusSongJoinsItsBaseTrackSongAsAVersion(t *testing.T) {
-	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("greedy (Demo 1)", "Greedy (Live)", "Borrow me (Voice memo)")}
-	trackers := &search.TrackerSongs{Songs: []search.UnreleasedSong{trackerSong("Greedy", "greedyaa"), trackerSong("Borrow me", "borrowaa")}}
+	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("greedy (Demo 1)", "Greedy (Live)", "Borrow me (Voice memo)")}
+	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Greedy", "greedyaa"), trackerSong("Borrow me", "borrowaa")}}
 	got, err := listWith(t, genius, trackers, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -314,29 +317,29 @@ func TestService_List_DemoGeniusSongJoinsItsBaseTrackSongAsAVersion(t *testing.T
 }
 
 func TestService_List_DemoGeniusSongJoinsTheGeniusBaseSong(t *testing.T) {
-	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("bedroom (demo)", "bedroom")}
-	got, err := listWith(t, genius, &search.TrackerSongs{}, nil)
+	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("bedroom (demo)", "bedroom")}
+	got, err := listWith(t, genius, &memory.TrackerSongs{}, nil)
 	if err != nil || len(got) != 1 || got[0].Title != "bedroom" || len(got[0].Versions) != 2 {
 		t.Fatalf("got %+v, err %v, want one bedroom card with two versions", got, err)
 	}
 }
 
 func TestService_List_DemoWithoutABaseSongStaysItsOwnCard(t *testing.T) {
-	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("lonely (Demo)")}
-	got, err := listWith(t, genius, &search.TrackerSongs{}, nil)
+	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("lonely (Demo)")}
+	got, err := listWith(t, genius, &memory.TrackerSongs{}, nil)
 	if err != nil || len(got) != 1 || got[0].Title != "lonely (Demo)" {
 		t.Fatalf("got %v, err %v, want the demo kept", titlesOf(got), err)
 	}
 }
 
-func mergedTitles(t *testing.T, geniusTitles []string, trackerTitles ...string) []search.UnreleasedSong {
+func mergedTitles(t *testing.T, geniusTitles []string, trackerTitles ...string) []domain.UnreleasedSong {
 	t.Helper()
-	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs(geniusTitles...)}
-	tracked := make([]search.UnreleasedSong, 0, len(trackerTitles))
+	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs(geniusTitles...)}
+	tracked := make([]domain.UnreleasedSong, 0, len(trackerTitles))
 	for i, title := range trackerTitles {
 		tracked = append(tracked, trackerSong(title, "id"+string(rune('a'+i))))
 	}
-	got, err := listWith(t, genius, &search.TrackerSongs{Songs: tracked}, nil)
+	got, err := listWith(t, genius, &memory.TrackerSongs{Songs: tracked}, nil)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -392,13 +395,13 @@ func TestService_List_NearMatchSkipsAnAmbiguousCandidate(t *testing.T) {
 
 func TestService_List_NonTrackPagesAreDroppedAndCounted(t *testing.T) {
 	logs := captureLogs(t)
-	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs(
+	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs(
 		"Miss Possessive Tour Setlist (2024)",
 		"End Credits",
 		"Tour Dates",
 		"Setlist",
 	)}
-	trackers := &search.TrackerSongs{Songs: []search.UnreleasedSong{trackerSong("Setlist [V1]", "s1")}}
+	trackers := &memory.TrackerSongs{Songs: []domain.UnreleasedSong{trackerSong("Setlist [V1]", "s1")}}
 
 	got, err := listWith(t, genius, trackers, nil)
 	if err != nil {

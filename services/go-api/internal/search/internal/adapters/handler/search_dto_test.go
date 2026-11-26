@@ -2,6 +2,9 @@ package handler_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/handler"
+	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/service/rank"
 	"bytes"
 	"encoding/json"
 	"net/http"
@@ -23,9 +26,9 @@ func servedItems(t *testing.T, results ...search.SearchResult) []json.RawMessage
 	return body.Items
 }
 
-func servedItem(t *testing.T, result search.SearchResult) search.SearchResultDTO {
+func servedItem(t *testing.T, result search.SearchResult) handler.SearchResultDTO {
 	t.Helper()
-	var dto search.SearchResultDTO
+	var dto handler.SearchResultDTO
 	if err := json.Unmarshal(servedItems(t, result)[0], &dto); err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +58,7 @@ func TestSearchResultToDTO_typedRecordTypeAndTierKeepWireBytes(t *testing.T) {
 	}
 	am := search.SearchResult{
 		Kind: search.ResultKindAlbum, Title: "Blue", Subtitle: "Band", UPC: "123", TrackCount: 5, RecordType: "album",
-		Sources: []search.ProviderLink{{Provider: search.ProviderAppleMusic, ExternalID: "2"}},
+		Sources: []search.ProviderLink{{Provider: domain.ProviderAppleMusic, ExternalID: "2"}},
 		Extras:  map[string]any{"upc": "123"},
 	}
 	solo := search.SearchResult{
@@ -69,15 +72,15 @@ func TestSearchResultToDTO_typedRecordTypeAndTierKeepWireBytes(t *testing.T) {
 	}
 	dup := search.SearchResult{
 		Kind: search.ResultKindArtist, Title: "Band", Popularity: 1, ArtistMBID: "m1",
-		ResolutionTier: search.StampResolutionTier(search.EntityResolutionISRC),
+		ResolutionTier: domain.StampResolutionTier(domain.EntityResolutionISRC),
 		Sources:        []search.ProviderLink{{Provider: search.ProviderSpotify, ExternalID: "5"}},
 	}
 
 	results := make([]search.SearchResult, 0, 3)
-	for _, e := range search.RankMerge([][]search.SearchResult{{dz, solo}, {am}}) {
+	for _, e := range rank.Merge([][]search.SearchResult{{dz, solo}, {am}}) {
 		results = append(results, e.Result)
 	}
-	results = append(results, search.RankCollapseArtistDuplicates([]search.SearchResult{primary, dup})...)
+	results = append(results, rank.CollapseArtistDuplicates([]search.SearchResult{primary, dup})...)
 
 	got, err := json.Marshal(servedItems(t, results...))
 	if err != nil {
@@ -136,14 +139,14 @@ func TestSearchResultToDTO_AMergedCleanEditSendsExplicitFalseOnTheWire(t *testin
 	clean := search.SearchResult{
 		Kind: search.ResultKindTrack, Title: "Been Waiting!", Subtitle: "Autumn!", ISRC: "QM42K1903228", Duration: 123,
 		Sources:  []search.ProviderLink{{Provider: search.ProviderDeezer, ExternalID: "642332252"}},
-		Explicit: search.BoolPtr(false),
+		Explicit: domain.BoolPtr(false),
 	}
 	unknown := search.SearchResult{
 		Kind: search.ResultKindTrack, Title: "Been Waiting!", Subtitle: "Autumn!", ISRC: "QM42K1903228", Duration: 123,
 		Sources: []search.ProviderLink{{Provider: search.ProviderSpotify, ExternalID: "s1"}},
 	}
 	for i, groups := range [][][]search.SearchResult{{{clean}, {unknown}}, {{unknown}, {clean}}} {
-		entities := search.RankMerge(groups)
+		entities := rank.Merge(groups)
 		if len(entities) != 1 {
 			t.Fatalf("order %d: got %d entities, want one merged track", i, len(entities))
 		}

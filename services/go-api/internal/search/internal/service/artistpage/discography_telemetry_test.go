@@ -2,6 +2,9 @@ package artistpage_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/service/artistpage"
 	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
@@ -45,8 +48,8 @@ func (s *recordingEventStore) next(t *testing.T) search.InteractionEvent {
 	}
 }
 
-func albumsFrom(albums map[search.ProviderName][]search.SearchResult) map[search.ProviderName]search.ArtistContentProvider {
-	providers := make(map[search.ProviderName]search.ArtistContentProvider, len(albums))
+func albumsFrom(albums map[search.ProviderName][]search.SearchResult) map[search.ProviderName]ports.ArtistContentProvider {
+	providers := make(map[search.ProviderName]ports.ArtistContentProvider, len(albums))
 	for name, served := range albums {
 		providers[name] = artistContentFuncs{
 			albums: func(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
@@ -78,10 +81,10 @@ func TestNoDiscographyObserver_LeavesTheAlbumsAnswerUnchanged(t *testing.T) {
 			catalogAlbum(search.ProviderSpotify, "sp-a", "Fully Loaded"),
 			catalogAlbum(search.ProviderSpotify, "sp-b", "Sundown"),
 		},
-		search.ProviderMusicBrainz: {catalogAlbum(search.ProviderMusicBrainz, "mb-a", "Fully Loaded")},
+		domain.ProviderMusicBrainz: {catalogAlbum(domain.ProviderMusicBrainz, "mb-a", "Fully Loaded")},
 	}
-	known := map[search.ProviderName]string{search.ProviderSpotify: "sp-che", search.ProviderMusicBrainz: "mb-che"}
-	fetch := func(svc *search.GetArtistContentService) []string {
+	known := map[search.ProviderName]string{search.ProviderSpotify: "sp-che", domain.ProviderMusicBrainz: "mb-che"}
+	fetch := func(svc *artistpage.GetArtistContentService) []string {
 		resp, err := svc.GetAlbums(context.Background(), search.ProviderSpotify, "abc123", known, 50)
 		if err != nil {
 			t.Fatalf("GetAlbums: %v", err)
@@ -96,7 +99,7 @@ func TestNoDiscographyObserver_LeavesTheAlbumsAnswerUnchanged(t *testing.T) {
 
 	observed := fetch(searchtest.NewArtistContent(t, albumsFrom(albums), searchtest.ArtistEvents(store, searchtest.NewTracker(t))))
 	store.next(t)
-	silent, err := search.NewGetArtistContentService(albumsFrom(albums), search.SeedPathIdentity{}, search.NoAnchoring{}, search.NoDiscographyObserver{}, search.NewCircuitBreaker())
+	silent, err := artistpage.NewGetArtistContentService(albumsFrom(albums), artistpage.SeedPathIdentity{}, artistpage.NoAnchoring{}, artistpage.NoDiscographyObserver{}, search.NewCircuitBreaker())
 	if err != nil {
 		t.Fatalf("NewGetArtistContentService: %v", err)
 	}
@@ -117,12 +120,12 @@ func TestDiscographyEmit_PayloadShapeAndNoUserID(t *testing.T) {
 			catalogAlbum(search.ProviderSpotify, "sp-a", "Fully Loaded"),
 			catalogAlbum(search.ProviderSpotify, "sp-b", "Sundown"),
 		},
-		search.ProviderMusicBrainz: {
-			catalogAlbum(search.ProviderMusicBrainz, "mb-a", "Fully Loaded"),
+		domain.ProviderMusicBrainz: {
+			catalogAlbum(domain.ProviderMusicBrainz, "mb-a", "Fully Loaded"),
 		},
 	})
 
-	if ev.Type != search.EventTypeDiscographyObserved {
+	if ev.Type != domain.EventTypeDiscographyObserved {
 		t.Fatalf("event type = %v, want discography_observed", ev.Type)
 	}
 	if !ev.UserId.IsSystem() {
@@ -168,8 +171,8 @@ func TestDiscographyEmit_ReleasesFromTheIdentityFanOutAreNeverSuspects(t *testin
 		search.ProviderDeezer: {
 			catalogAlbum(search.ProviderDeezer, "dz-b", "Closer to God"),
 		},
-		search.ProviderMusicBrainz: {
-			catalogAlbum(search.ProviderMusicBrainz, "mb-c", "Sundown"),
+		domain.ProviderMusicBrainz: {
+			catalogAlbum(domain.ProviderMusicBrainz, "mb-c", "Sundown"),
 		},
 	})
 
@@ -221,7 +224,7 @@ func TestDiscographyEmit_BestEffortContainsPanic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetAlbums error = %v, want nil (emit must never fail the response)", err)
 	}
-	if resp.Status != search.ProviderStatusOK || len(resp.Items) == 0 {
+	if resp.Status != domain.ProviderStatusOK || len(resp.Items) == 0 {
 		t.Fatalf("status = %s, items = %d, want ok with the merged discography intact", resp.Status, len(resp.Items))
 	}
 	select {

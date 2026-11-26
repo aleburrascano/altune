@@ -1,7 +1,9 @@
 package history_test
 
 import (
-	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/core/history"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"context"
@@ -12,24 +14,24 @@ import (
 )
 
 func TestRecordHistory_RefusesAMissingRepository(t *testing.T) {
-	if _, err := search.NewRecordSearchHistoryService(nil, time.Now); !errors.Is(err, search.ErrHistoryCollaboratorRequired) {
+	if _, err := history.NewRecordSearchHistoryService(nil, time.Now); !errors.Is(err, history.ErrCollaboratorRequired) {
 		t.Fatalf("err = %v, want ErrHistoryCollaboratorRequired", err)
 	}
 }
 
 func TestRecordHistory_InsertFailureLogsUserAndSearchFingerprint(t *testing.T) {
-	repo := &search.FakeHistoryWriter{
-		InsertFn: func(context.Context, *search.SearchHistoryEntry) error {
+	repo := &memory.FakeHistoryWriter{
+		InsertFn: func(context.Context, *domain.SearchHistoryEntry) error {
 			return errors.New("db down")
 		},
 	}
-	user := search.NewUser()
+	user := memory.NewUser()
 	const raw = "zqxj private diagnosis clinic"
-	ring := search.CaptureDetachedLogs(t)
+	ring := memory.CaptureDetachedLogs(t)
 
-	searchtest.NewHistoryRecorder(t, repo).Record(context.Background(), user, search.NewQuery(t, raw), raw, time.Now())
+	searchtest.NewHistoryRecorder(t, repo).Record(context.Background(), user, memory.NewQuery(t, raw), raw, time.Now())
 
-	rec := search.OnlyRecord(t, ring, "search.v2.history_persist_failed")
+	rec := memory.OnlyRecord(t, ring, "search.v2.history_persist_failed")
 	if rec.Attrs["user_id"] != user.String() {
 		t.Errorf("user_id = %q, want %q: the line must name whose history was lost", rec.Attrs["user_id"], user.String())
 	}
@@ -46,15 +48,15 @@ func TestRecordHistory_InsertFailureLogsUserAndSearchFingerprint(t *testing.T) {
 func TestRecordSubmitted_StampsTheEntryWithTheInjectedClockInUTC(t *testing.T) {
 	at := time.Date(2026, 7, 8, 9, 10, 11, 0, time.FixedZone("plus2", 2*60*60))
 	var got time.Time
-	repo := &search.FakeHistoryWriter{
-		InsertFn: func(_ context.Context, e *search.SearchHistoryEntry) error {
+	repo := &memory.FakeHistoryWriter{
+		InsertFn: func(_ context.Context, e *domain.SearchHistoryEntry) error {
 			got = e.ExecutedAt
 			return nil
 		},
 	}
-	svc := search.MustNewRecordSearchHistoryService(repo, clocktest.NewManual(at).Func())
+	svc := history.MustNewRecordSearchHistoryService(repo, clocktest.NewManual(at).Func())
 
-	if err := svc.RecordSubmitted(context.Background(), search.NewUser(), "some query"); err != nil {
+	if err := svc.RecordSubmitted(context.Background(), memory.NewUser(), "some query"); err != nil {
 		t.Fatalf("RecordSubmitted: %v", err)
 	}
 
@@ -64,9 +66,9 @@ func TestRecordSubmitted_StampsTheEntryWithTheInjectedClockInUTC(t *testing.T) {
 }
 
 func TestNewRecordSearchHistoryService_RefusesANilClock(t *testing.T) {
-	svc, err := search.NewRecordSearchHistoryService(&search.FakeHistoryWriter{}, nil)
+	svc, err := history.NewRecordSearchHistoryService(&memory.FakeHistoryWriter{}, nil)
 
-	if !errors.Is(err, search.ErrHistoryClockRequired) || svc != nil {
+	if !errors.Is(err, history.ErrClockRequired) || svc != nil {
 		t.Fatalf("NewRecordSearchHistoryService(nil clock) = (%v, %v), want ErrHistoryClockRequired and no service", svc, err)
 	}
 }

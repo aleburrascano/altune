@@ -2,7 +2,9 @@ package providersearch_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/providers/providersearch"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
+	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"errors"
 	"fmt"
@@ -13,9 +15,9 @@ import (
 
 func TestSearchAcrossKinds_DoesNotLogQueryText(t *testing.T) {
 	buf := providertest.CaptureDefaultLog(t)
-	all := search.ProviderSearchAllKinds()
+	all := providersearch.AllSearchKinds()
 
-	_, _ = search.ProviderSearchAcrossKinds(context.Background(), "deezer", providertest.SensitiveQuery, all, all,
+	_, _ = providersearch.SearchAcrossKinds(context.Background(), "deezer", providertest.SensitiveQuery, all, all,
 		func(_ context.Context, _ search.ResultKind) ([]search.SearchResult, error) {
 			return nil, fmt.Errorf("get \"https://api.example/search?q=%s\": timeout", url.QueryEscape(providertest.SensitiveQuery))
 		})
@@ -28,9 +30,9 @@ func TestSearchAcrossKinds_DoesNotLogQueryText(t *testing.T) {
 }
 
 func TestSearchAcrossKinds_OneFailedKindKeepsTheRestAndSaysWhichFailed(t *testing.T) {
-	all := search.ProviderSearchAllKinds()
+	all := providersearch.AllSearchKinds()
 
-	got, err := search.ProviderSearchAcrossKinds(context.Background(), "deezer", "humble", all, all,
+	got, err := providersearch.SearchAcrossKinds(context.Background(), "deezer", "humble", all, all,
 		func(_ context.Context, kind search.ResultKind) ([]search.SearchResult, error) {
 			if kind == search.ResultKindAlbum {
 				return nil, context.DeadlineExceeded
@@ -41,7 +43,7 @@ func TestSearchAcrossKinds_OneFailedKindKeepsTheRestAndSaysWhichFailed(t *testin
 	if len(got) != 2 {
 		t.Fatalf("results = %d, want the 2 kinds that answered", len(got))
 	}
-	var partial *search.PartialKindsError
+	var partial *domain.PartialKindsError
 	if !errors.As(err, &partial) {
 		t.Fatalf("err = %v, want a PartialKindsError", err)
 	}
@@ -54,14 +56,14 @@ func TestSearchAcrossKinds_OneFailedKindKeepsTheRestAndSaysWhichFailed(t *testin
 }
 
 func TestSearchAcrossKinds_AllKindsFailedIsAPlainError(t *testing.T) {
-	all := search.ProviderSearchAllKinds()
+	all := providersearch.AllSearchKinds()
 
-	_, err := search.ProviderSearchAcrossKinds(context.Background(), "deezer", "humble", all, all,
+	_, err := providersearch.SearchAcrossKinds(context.Background(), "deezer", "humble", all, all,
 		func(context.Context, search.ResultKind) ([]search.SearchResult, error) {
 			return nil, errors.New("down")
 		})
 
-	var partial *search.PartialKindsError
+	var partial *domain.PartialKindsError
 	if err == nil || errors.As(err, &partial) {
 		t.Fatalf("err = %v, want a plain failure when nothing answered", err)
 	}

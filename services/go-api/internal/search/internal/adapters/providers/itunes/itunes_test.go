@@ -2,7 +2,10 @@ package itunes_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/providers/itunes"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
+	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/queuetimeout"
 	"context"
 	"errors"
@@ -38,7 +41,7 @@ func TestITunesAdapter_Search_Tracks(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := search.NewITunesAdapter(providertest.NewClient(server.URL))
+	adapter := itunes.NewITunesAdapter(providertest.NewClient(server.URL))
 	results, err := adapter.Search(context.Background(), "stairway to heaven", map[search.ResultKind]bool{
 		search.ResultKindTrack: true,
 	})
@@ -62,14 +65,14 @@ func TestITunesAdapter_Search_Tracks(t *testing.T) {
 	if !strings.Contains(r.ImageURL, "600x600") {
 		t.Errorf("imageURL should contain 600x600, got %q", r.ImageURL)
 	}
-	if r.Confidence != search.ConfidenceLow {
-		t.Errorf("confidence: got %v, want %v", r.Confidence, search.ConfidenceLow)
+	if r.Confidence != domain.ConfidenceLow {
+		t.Errorf("confidence: got %v, want %v", r.Confidence, domain.ConfidenceLow)
 	}
 	if len(r.Sources) != 1 {
 		t.Fatalf("expected 1 source, got %d", len(r.Sources))
 	}
-	if r.Sources[0].Provider != search.ProviderITunes {
-		t.Errorf("source provider: got %v, want %v", r.Sources[0].Provider, search.ProviderITunes)
+	if r.Sources[0].Provider != domain.ProviderITunes {
+		t.Errorf("source provider: got %v, want %v", r.Sources[0].Provider, domain.ProviderITunes)
 	}
 	if r.Sources[0].ExternalID != "456789" {
 		t.Errorf("source externalID: got %q, want %q", r.Sources[0].ExternalID, "456789")
@@ -105,7 +108,7 @@ func TestITunesAdapter_Search_Artists(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := search.NewITunesAdapter(providertest.NewClient(server.URL))
+	adapter := itunes.NewITunesAdapter(providertest.NewClient(server.URL))
 	results, err := adapter.Search(context.Background(), "pink floyd", map[search.ResultKind]bool{
 		search.ResultKindArtist: true,
 	})
@@ -138,7 +141,7 @@ func TestITunesAdapter_Resolve_HighRes(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := search.NewITunesAdapter(providertest.NewClient(server.URL))
+	adapter := itunes.NewITunesAdapter(providertest.NewClient(server.URL))
 	art, err := adapter.Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -161,8 +164,8 @@ func TestITunesAdapter_GetArtistAlbums(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := search.NewITunesAdapter(providertest.NewClient(server.URL))
-	results, err := adapter.GetArtistAlbums(context.Background(), search.ProviderITunes, "368183298")
+	adapter := itunes.NewITunesAdapter(providertest.NewClient(server.URL))
+	results, err := adapter.GetArtistAlbums(context.Background(), domain.ProviderITunes, "368183298")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)
 	}
@@ -197,8 +200,8 @@ func TestITunesAdapter_GetAlbumTracks(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := search.NewITunesAdapter(providertest.NewClient(server.URL))
-	results, err := adapter.GetAlbumTracks(context.Background(), search.ProviderITunes, "1440881722")
+	adapter := itunes.NewITunesAdapter(providertest.NewClient(server.URL))
+	results, err := adapter.GetAlbumTracks(context.Background(), domain.ProviderITunes, "1440881722")
 	if err != nil {
 		t.Fatalf("GetAlbumTracks: %v", err)
 	}
@@ -222,7 +225,7 @@ func TestITunesAdapter_Search_HTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := search.NewITunesAdapter(providertest.NewClient(server.URL))
+	adapter := itunes.NewITunesAdapter(providertest.NewClient(server.URL))
 	results, err := adapter.Search(context.Background(), "anything", map[search.ResultKind]bool{
 		search.ResultKindTrack: true,
 	})
@@ -243,7 +246,7 @@ func TestStripAlbumTypeSuffix(t *testing.T) {
 		"Single Ladies":                        "Single Ladies",
 	}
 	for in, want := range cases {
-		if got := search.ITunesStripAlbumTypeSuffix(in); got != want {
+		if got := itunes.StripAlbumTypeSuffix(in); got != want {
 			t.Errorf("stripAlbumTypeSuffix(%q) = %q, want %q", in, got, want)
 		}
 	}
@@ -255,9 +258,9 @@ func TestITunesAdapter_Resolve_500IsArtworkUnavailable(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := search.NewITunesAdapter(providertest.NewClient(server.URL))
+	adapter := itunes.NewITunesAdapter(providertest.NewClient(server.URL))
 	art, err := adapter.Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, search.ErrArtworkUnavailable) {
+	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on HTTP 500 = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -268,11 +271,11 @@ func TestITunesAdapter_Resolve_ContextCancelledBeforeTheRequestIsArtworkUnavaila
 	}))
 	defer server.Close()
 
-	adapter := search.NewITunesAdapter(providertest.NewClient(server.URL))
+	adapter := itunes.NewITunesAdapter(providertest.NewClient(server.URL))
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	art, err := adapter.Resolve(ctx, search.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, search.ErrArtworkUnavailable) {
+	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("Resolve with a cancelled context = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -283,8 +286,8 @@ func TestITunesAdapter_Resolve_RateLimitIsArtworkUnavailable(t *testing.T) {
 	}))
 	defer server.Close()
 
-	art, err := search.NewITunesAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, search.ErrArtworkUnavailable) {
+	art, err := itunes.NewITunesAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on HTTP 429 = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -295,8 +298,8 @@ func TestITunesAdapter_Resolve_ForbiddenIsArtworkUnavailable(t *testing.T) {
 	}))
 	defer server.Close()
 
-	art, err := search.NewITunesAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, search.ErrArtworkUnavailable) {
+	art, err := itunes.NewITunesAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on HTTP 403 = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -307,7 +310,7 @@ func TestITunesAdapter_Resolve_BadRequestIsAVerifiedMiss(t *testing.T) {
 	}))
 	defer server.Close()
 
-	art, err := search.NewITunesAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	art, err := itunes.NewITunesAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
 	if art != "" || err != nil {
 		t.Errorf("Resolve on HTTP 400 = (%q, %v), want (\"\", nil)", art, err)
 	}
@@ -320,7 +323,7 @@ func TestITunesAdapter_Resolve_NoResultsIsAVerifiedMiss(t *testing.T) {
 	}))
 	defer server.Close()
 
-	art, err := search.NewITunesAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Nothing", "Nobody", "")
+	art, err := itunes.NewITunesAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Nothing", "Nobody", "")
 	if art != "" || err != nil {
 		t.Errorf("Resolve with no results = (%q, %v), want (\"\", nil)", art, err)
 	}
@@ -333,8 +336,8 @@ func TestITunesAdapter_Resolve_MalformedBodyIsArtworkUnavailable(t *testing.T) {
 	}))
 	defer server.Close()
 
-	art, err := search.NewITunesAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, search.ErrArtworkUnavailable) {
+	art, err := itunes.NewITunesAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on a truncated body = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -344,8 +347,8 @@ func TestITunesAdapter_Resolve_TransportErrorIsArtworkUnavailable(t *testing.T) 
 	serverURL := server.URL
 	server.Close()
 
-	art, err := search.NewITunesAdapter(providertest.NewClient(serverURL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, search.ErrArtworkUnavailable) {
+	art, err := itunes.NewITunesAdapter(providertest.NewClient(serverURL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("Resolve against an unreachable host = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }
@@ -356,7 +359,7 @@ func TestITunesAdapter_Resolve_CancelledContextKeepsTheCause(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := search.NewITunesAdapter(providertest.NewClient(server.URL)).Resolve(ctx, search.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	_, err := itunes.NewITunesAdapter(providertest.NewClient(server.URL)).Resolve(ctx, search.ResultKindAlbum, "Discovery", "Daft Punk", "")
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("err = %v, want context.Canceled kept in the chain", err)
 	}
@@ -368,7 +371,7 @@ func TestITunesAdapter_Resolve_FailureNamesITunes(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := search.NewITunesAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	_, err := itunes.NewITunesAdapter(providertest.NewClient(server.URL)).Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
 	if err == nil || !strings.Contains(err.Error(), "itunes") {
 		t.Errorf("err = %v, want a failure that names itunes", err)
 	}
@@ -378,7 +381,7 @@ func TestAdapterNames(t *testing.T) {
 	tests := []struct {
 		got, want search.ProviderName
 	}{
-		{(&search.ITunesAdapter{}).Name(), search.ProviderITunes},
+		{(&itunes.ITunesAdapter{}).Name(), domain.ProviderITunes},
 	}
 	for _, tt := range tests {
 		if tt.got != tt.want {
@@ -393,7 +396,7 @@ func TestAdapterSearchTimeouts(t *testing.T) {
 		got  time.Duration
 		want time.Duration
 	}{
-		{"itunes", (&search.ITunesAdapter{}).SearchTimeout(), 4 * time.Second},
+		{"itunes", (&itunes.ITunesAdapter{}).SearchTimeout(), 4 * time.Second},
 	}
 	for _, tt := range tests {
 		if tt.got != tt.want {
@@ -404,10 +407,10 @@ func TestAdapterSearchTimeouts(t *testing.T) {
 
 func TestArtworkSourceTags(t *testing.T) {
 	tests := []struct {
-		got  search.ProviderKey
+		got  domain.ProviderKey
 		want string
 	}{
-		{(&search.ITunesAdapter{}).ArtworkSource(), "itunes"},
+		{(&itunes.ITunesAdapter{}).ArtworkSource(), "itunes"},
 	}
 	for _, tt := range tests {
 		if tt.got.String() != tt.want {
@@ -417,9 +420,9 @@ func TestArtworkSourceTags(t *testing.T) {
 }
 
 func albumTracksLookup(client *http.Client) func(context.Context) error {
-	adapter := search.NewITunesAdapter(client)
+	adapter := itunes.NewITunesAdapter(client)
 	return func(ctx context.Context) error {
-		_, err := adapter.GetAlbumTracks(ctx, search.ProviderITunes, "1")
+		_, err := adapter.GetAlbumTracks(ctx, domain.ProviderITunes, "1")
 		return err
 	}
 }
@@ -456,7 +459,7 @@ func TestITunesAdapter_PassesATransportQueueTimeoutThroughClassified(t *testing.
 
 	err := lookup(context.Background())
 
-	if !errors.Is(err, search.ErrProviderRateLimitQueueTimeout) || !errors.Is(err, context.DeadlineExceeded) {
+	if !errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v, want the shed to stay a queue timeout and a DeadlineExceeded", err)
 	}
 }

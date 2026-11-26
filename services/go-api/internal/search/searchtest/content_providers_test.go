@@ -2,6 +2,7 @@ package searchtest_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"context"
 	"errors"
 	"sync"
@@ -9,7 +10,7 @@ import (
 )
 
 func TestAlbumContentProvider_ZeroValueReturnsNothing(t *testing.T) {
-	got, err := (&search.FakeAlbumContentProvider{}).GetAlbumTracks(context.Background(), search.ProviderDeezer, "1")
+	got, err := (&memory.AlbumContentProvider{}).GetAlbumTracks(context.Background(), search.ProviderDeezer, "1")
 
 	if got != nil || err != nil {
 		t.Fatalf("got (%v, %v), want (nil, nil)", got, err)
@@ -18,7 +19,7 @@ func TestAlbumContentProvider_ZeroValueReturnsNothing(t *testing.T) {
 
 func TestAlbumContentProvider_ReturnsCannedResults(t *testing.T) {
 	want := []search.SearchResult{{Title: "a"}}
-	p := &search.FakeAlbumContentProvider{Results: want}
+	p := &memory.AlbumContentProvider{Results: want}
 
 	got, err := p.GetAlbumTracks(context.Background(), search.ProviderDeezer, "1")
 
@@ -28,7 +29,7 @@ func TestAlbumContentProvider_ReturnsCannedResults(t *testing.T) {
 }
 
 func TestAlbumContentProvider_FuncOverrideWinsOverCannedResults(t *testing.T) {
-	p := &search.FakeAlbumContentProvider{
+	p := &memory.AlbumContentProvider{
 		Results: []search.SearchResult{{Title: "canned"}},
 		GetAlbumTracksFn: func(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
 			return []search.SearchResult{{Title: "override"}}, nil
@@ -44,7 +45,7 @@ func TestAlbumContentProvider_FuncOverrideWinsOverCannedResults(t *testing.T) {
 
 func TestAlbumContentProvider_ErrorSetBetweenCallsFailsOnlyTheSecond(t *testing.T) {
 	boom := errors.New("boom")
-	p := &search.FakeAlbumContentProvider{Results: []search.SearchResult{{Title: "a"}}}
+	p := &memory.AlbumContentProvider{Results: []search.SearchResult{{Title: "a"}}}
 
 	_, first := p.GetAlbumTracks(context.Background(), search.ProviderDeezer, "1")
 	p.Err = boom
@@ -56,7 +57,7 @@ func TestAlbumContentProvider_ErrorSetBetweenCallsFailsOnlyTheSecond(t *testing.
 }
 
 func TestArtworkResolver_CountsConcurrentCallsExactly(t *testing.T) {
-	r := &search.FakeArtworkLookup{URL: "u"}
+	r := &memory.ArtworkLookup{URL: "u"}
 	if r.Calls() != 0 {
 		t.Fatalf("calls before use = %d, want 0", r.Calls())
 	}

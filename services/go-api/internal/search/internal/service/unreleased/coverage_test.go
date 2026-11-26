@@ -2,6 +2,8 @@ package unreleased_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
 	"context"
 	"strings"
@@ -16,13 +18,13 @@ func TestCoverage_BuildLogsHowManySongsArePlayableLinkOutOrSilent(t *testing.T) 
 	}
 	list[2].OpenURL = "https://mega.nz/file/x"
 	list[2].OpenHost = "mega.nz"
-	link := []search.AudioLink{{Provider: search.AudioProviderYouTube, ExternalID: "v", URL: "https://youtu.be/v"}}
-	genius := &search.FakeGeniusSongCatalog{
+	link := []domain.AudioLink{{Provider: domain.AudioProviderYouTube, ExternalID: "v", URL: "https://youtu.be/v"}}
+	genius := &memory.GeniusSongCatalog{
 		ArtistFound: true,
 		Songs:       list,
-		DetailByID:  map[int]search.GeniusSongDetail{1: {AudioLinks: link}, 2: {AudioLinks: link}},
+		DetailByID:  map[int]domain.GeniusSongDetail{1: {AudioLinks: link}, 2: {AudioLinks: link}},
 	}
-	svc := searchtest.MustUnreleased(search.NewUnreleasedService(genius, &search.ArtistCatalogTitles{}, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 2, DetailConcurrency: 2}, searchtest.UnreleasedWiring(search.NoUnreleasedCache{})))
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(genius, &searchtest.ArtistCatalogTitles{}, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 2, DetailConcurrency: 2}, searchtest.UnreleasedWiring(search.NoUnreleasedCache{})))
 	if _, err := svc.List(context.Background(), search.ProviderDeezer, "27", "Drake", nil); err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -39,8 +41,8 @@ func TestCoverage_BuildLogsHowManySongsArePlayableLinkOutOrSilent(t *testing.T) 
 
 func TestCoverage_StoreRebuildLogsOneEvent(t *testing.T) {
 	logs := captureLogs(t)
-	store := &search.FakeUnreleasedStore{}
-	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
+	store := &searchtest.UnreleasedStore{}
+	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
 	if _, err := storeService(genius, store).Rebuild(context.Background(), drakeKey, "Drake", nil); err != nil {
 		t.Fatalf("Rebuild: %v", err)
 	}
@@ -52,10 +54,10 @@ func TestCoverage_StoreRebuildLogsOneEvent(t *testing.T) {
 func TestCoverage_EventCarriesTheTotalNumberOfVersions(t *testing.T) {
 	logs := captureLogs(t)
 	list := songs("A", "B")
-	list[0].Versions = []search.UnreleasedVersion{{Title: "A [V1]"}, {Title: "A [V2]"}, {Title: "A [V3]"}}
-	list[1].Versions = []search.UnreleasedVersion{{Title: "B [V1]"}, {Title: "B (Demo)"}}
-	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: list}
-	if _, err := storeService(genius, &search.FakeUnreleasedStore{}).Rebuild(context.Background(), drakeKey, "Drake", nil); err != nil {
+	list[0].Versions = []domain.UnreleasedVersion{{Title: "A [V1]"}, {Title: "A [V2]"}, {Title: "A [V3]"}}
+	list[1].Versions = []domain.UnreleasedVersion{{Title: "B [V1]"}, {Title: "B (Demo)"}}
+	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: list}
+	if _, err := storeService(genius, &searchtest.UnreleasedStore{}).Rebuild(context.Background(), drakeKey, "Drake", nil); err != nil {
 		t.Fatalf("Rebuild: %v", err)
 	}
 	out := logs.String()

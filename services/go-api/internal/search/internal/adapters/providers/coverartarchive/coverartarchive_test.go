@@ -2,7 +2,10 @@ package coverartarchive_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/providers/coverartarchive"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
+	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"errors"
 	"net/http"
@@ -19,7 +22,7 @@ func TestCoverArtArchiveResolver_Resolve(t *testing.T) {
 		}))
 		defer server.Close()
 
-		r := search.NewCoverArtArchiveResolver(providertest.NewClient(server.URL))
+		r := coverartarchive.NewCoverArtArchiveResolver(providertest.NewClient(server.URL))
 		url, err := r.Resolve(context.Background(), search.ResultKindAlbum, "OK Computer", "Radiohead", "")
 		if err != nil || url != "" {
 			t.Errorf("Resolve = (%q, %v), want (\"\", nil)", url, err)
@@ -33,7 +36,7 @@ func TestCoverArtArchiveResolver_Resolve(t *testing.T) {
 		}))
 		defer server.Close()
 
-		r := search.NewCoverArtArchiveResolver(providertest.NewClient(server.URL))
+		r := coverartarchive.NewCoverArtArchiveResolver(providertest.NewClient(server.URL))
 		url, err := r.Resolve(context.Background(), search.ResultKindArtist, "Radiohead", "", "mbid-1")
 		if err != nil || url != "" {
 			t.Errorf("Resolve = (%q, %v), want (\"\", nil)", url, err)
@@ -53,7 +56,7 @@ func TestCoverArtArchiveResolver_Resolve(t *testing.T) {
 		}))
 		defer server.Close()
 
-		r := search.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
+		r := coverartarchive.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
 		url, err := r.Resolve(context.Background(), search.ResultKindAlbum, "OK Computer", "Radiohead", "rg-1")
 		if err != nil {
 			t.Fatalf("Resolve: %v", err)
@@ -69,7 +72,7 @@ func TestCoverArtArchiveResolver_Resolve(t *testing.T) {
 		}))
 		defer server.Close()
 
-		r := search.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
+		r := coverartarchive.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
 		url, err := r.Resolve(context.Background(), search.ResultKindAlbum, "OK Computer", "Radiohead", "rg-1")
 		if err != nil {
 			t.Fatalf("Resolve: %v", err)
@@ -85,7 +88,7 @@ func TestCoverArtArchiveResolver_Resolve(t *testing.T) {
 		}))
 		defer server.Close()
 
-		r := search.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
+		r := coverartarchive.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
 		url, err := r.Resolve(context.Background(), search.ResultKindAlbum, "X", "Y", "rg-miss")
 		if err != nil || url != "" {
 			t.Errorf("Resolve on 404 = (%q, %v), want (\"\", nil)", url, err)
@@ -98,9 +101,9 @@ func TestCoverArtArchiveResolver_Resolve(t *testing.T) {
 		}))
 		defer server.Close()
 
-		r := search.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
+		r := coverartarchive.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
 		url, err := r.Resolve(context.Background(), search.ResultKindAlbum, "X", "Y", "rg-1")
-		if !errors.Is(err, search.ErrArtworkUnavailable) || url != "" {
+		if !errors.Is(err, ports.ErrArtworkUnavailable) || url != "" {
 			t.Errorf("Resolve on 500 = (%q, %v), want (\"\", ErrArtworkUnavailable) — the chain degrades", url, err)
 		}
 	})
@@ -116,9 +119,9 @@ func TestCoverArtArchiveIdentityResolver_ResolveByIdentity(t *testing.T) {
 		}))
 		defer server.Close()
 
-		r := search.NewCoverArtArchiveIdentityResolver(search.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL)))
+		r := coverartarchive.NewCoverArtArchiveIdentityResolver(coverartarchive.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL)))
 		url, err := r.ResolveByIdentity(context.Background(), search.ResultKindAlbum,
-			search.ArtworkIdentity{MBID: "rg-1"})
+			ports.ArtworkIdentity{MBID: "rg-1"})
 		if err != nil {
 			t.Fatalf("ResolveByIdentity: %v", err)
 		}
@@ -134,8 +137,8 @@ func TestCoverArtArchiveIdentityResolver_ResolveByIdentity(t *testing.T) {
 		}))
 		defer server.Close()
 
-		r := search.NewCoverArtArchiveIdentityResolver(search.NewCoverArtArchiveResolver(providertest.NewClient(server.URL)))
-		url, err := r.ResolveByIdentity(context.Background(), search.ResultKindAlbum, search.ArtworkIdentity{})
+		r := coverartarchive.NewCoverArtArchiveIdentityResolver(coverartarchive.NewCoverArtArchiveResolver(providertest.NewClient(server.URL)))
+		url, err := r.ResolveByIdentity(context.Background(), search.ResultKindAlbum, ports.ArtworkIdentity{})
 		if err != nil || url != "" {
 			t.Errorf("ResolveByIdentity = (%q, %v), want (\"\", nil)", url, err)
 		}
@@ -148,9 +151,9 @@ func TestCoverArtArchiveIdentityResolver_ResolveByIdentity(t *testing.T) {
 		}))
 		defer server.Close()
 
-		r := search.NewCoverArtArchiveIdentityResolver(search.NewCoverArtArchiveResolver(providertest.NewClient(server.URL)))
+		r := coverartarchive.NewCoverArtArchiveIdentityResolver(coverartarchive.NewCoverArtArchiveResolver(providertest.NewClient(server.URL)))
 		url, err := r.ResolveByIdentity(context.Background(), search.ResultKindArtist,
-			search.ArtworkIdentity{MBID: "mbid-1"})
+			ports.ArtworkIdentity{MBID: "mbid-1"})
 		if err != nil || url != "" {
 			t.Errorf("ResolveByIdentity = (%q, %v), want (\"\", nil)", url, err)
 		}
@@ -158,14 +161,14 @@ func TestCoverArtArchiveIdentityResolver_ResolveByIdentity(t *testing.T) {
 }
 
 func TestCoverArtArchiveResolver_ArtworkSource(t *testing.T) {
-	if (&search.CoverArtArchiveResolver{}).ArtworkSource() != "coverartarchive" {
+	if (&coverartarchive.CoverArtArchiveResolver{}).ArtworkSource() != "coverartarchive" {
 		t.Error("ArtworkSource mismatch")
 	}
 }
 
 func TestCoverArtArchiveResolver_EscapesMBIDInRequestURL(t *testing.T) {
 	var got *http.Request
-	r := search.NewCoverArtArchiveResolver(providertest.CapturingClient(&got))
+	r := coverartarchive.NewCoverArtArchiveResolver(providertest.CapturingClient(&got))
 	if _, err := r.Resolve(context.Background(), search.ResultKindAlbum, "X", "Y", providertest.HostileMBID); err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -190,12 +193,12 @@ func TestCoverArtArchiveResolver_ServerErrorIsArtworkUnavailable(t *testing.T) {
 	}))
 	defer server.Close()
 
-	r := search.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
+	r := coverartarchive.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
 	url, err := r.Resolve(context.Background(), search.ResultKindAlbum, "X", "Y", "rg-1")
 	if url != "" {
 		t.Errorf("url = %q, want empty on a 503", url)
 	}
-	if !errors.Is(err, search.ErrArtworkUnavailable) {
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkUnavailable)", err)
 	}
 }
@@ -206,7 +209,7 @@ func TestCoverArtArchiveResolver_BadRequestIsAVerifiedMiss(t *testing.T) {
 	}))
 	defer server.Close()
 
-	r := search.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
+	r := coverartarchive.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
 	url, err := r.Resolve(context.Background(), search.ResultKindAlbum, "X", "Y", "not-a-uuid")
 	if err != nil || url != "" {
 		t.Errorf("Resolve on 400 = (%q, %v), want (\"\", nil)", url, err)
@@ -220,12 +223,12 @@ func TestCoverArtArchiveResolver_TransportErrorIsArtworkUnavailable(t *testing.T
 	serverURL := server.URL
 	server.Close()
 
-	r := search.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(serverURL))
+	r := coverartarchive.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(serverURL))
 	url, err := r.Resolve(context.Background(), search.ResultKindAlbum, "X", "Y", "rg-1")
 	if url != "" {
 		t.Errorf("url = %q, want empty when the provider is unreachable", url)
 	}
-	if !errors.Is(err, search.ErrArtworkUnavailable) {
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkUnavailable)", err)
 	}
 }
@@ -236,9 +239,9 @@ func TestCoverArtArchiveResolver_RateLimitIsArtworkUnavailable(t *testing.T) {
 	}))
 	defer server.Close()
 
-	r := search.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
+	r := coverartarchive.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
 	url, err := r.Resolve(context.Background(), search.ResultKindAlbum, "X", "Y", "rg-1")
-	if url != "" || !errors.Is(err, search.ErrArtworkUnavailable) {
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on 429 = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -252,12 +255,12 @@ func TestCoverArtArchiveResolver_CancelledContextIsUnavailableAndKeepsTheCause(t
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	r := search.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
+	r := coverartarchive.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
 	url, err := r.Resolve(ctx, search.ResultKindAlbum, "X", "Y", "rg-1")
 	if url != "" {
 		t.Errorf("url = %q, want empty on a cancelled lookup", url)
 	}
-	if !errors.Is(err, search.ErrArtworkUnavailable) {
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkUnavailable)", err)
 	}
 	if !errors.Is(err, context.Canceled) {
@@ -271,7 +274,7 @@ func TestCoverArtArchiveResolver_FailureNamesItsSource(t *testing.T) {
 	}))
 	defer server.Close()
 
-	r := search.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
+	r := coverartarchive.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(server.URL))
 	_, err := r.Resolve(context.Background(), search.ResultKindAlbum, "X", "Y", "rg-1")
 	if err == nil || !strings.Contains(err.Error(), "coverartarchive") {
 		t.Errorf("err = %v, want a failure that names coverartarchive", err)
@@ -280,10 +283,10 @@ func TestCoverArtArchiveResolver_FailureNamesItsSource(t *testing.T) {
 
 func TestArtworkSourceTags(t *testing.T) {
 	tests := []struct {
-		got  search.ProviderKey
+		got  domain.ProviderKey
 		want string
 	}{
-		{(&search.CoverArtArchiveResolver{}).ArtworkSource(), "coverartarchive"},
+		{(&coverartarchive.CoverArtArchiveResolver{}).ArtworkSource(), "coverartarchive"},
 	}
 	for _, tt := range tests {
 		if tt.got.String() != tt.want {

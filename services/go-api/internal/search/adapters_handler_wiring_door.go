@@ -6,12 +6,7 @@ import (
 )
 
 type (
-	ClientEventSink        = handler.ClientEventSink
-	Enricher               = handler.Enricher
-	NoActivityFeed         = useractivity.NoopActivityFeed
-	NoClientEvents         = handler.NoClientEvents
-	NoOwnership            = handler.NoOwnership
-	NoUnreleased           = handler.NoUnreleased
-	OwnershipStamper       = handler.OwnershipStamper
-	UnconfiguredEnrichment = handler.UnconfiguredEnrichment
+	ClientEventSink = handler.ClientEventSink
+	NoActivityFeed  = useractivity.NoopActivityFeed
+	NoClientEvents  = handler.NoClientEvents
 )

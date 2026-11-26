@@ -2,6 +2,7 @@ package soundcloud_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/providers/soundcloud"
 	"context"
 	"net/http"
 	"os"
@@ -13,7 +14,7 @@ func TestSoundCloudDiscographyLive(t *testing.T) {
 	if os.Getenv("SC_LIVE") != "1" {
 		t.Skip("set SC_LIVE=1")
 	}
-	a := mustSoundCloudAPI(t, &http.Client{Timeout: 20 * time.Second}, search.NoSoundCloudFallback{})
+	a := mustSoundCloudAPI(t, &http.Client{Timeout: 20 * time.Second}, soundcloud.NoFallback{})
 	ctx := context.Background()
 
 	albums, err := a.GetArtistAlbums(ctx, search.ProviderSoundCloud, "che")
@@ -47,7 +48,7 @@ func TestSoundCloudAlbumTracksLive(t *testing.T) {
 	if os.Getenv("SC_LIVE") != "1" {
 		t.Skip("set SC_LIVE=1")
 	}
-	a := mustSoundCloudAPI(t, &http.Client{Timeout: 20 * time.Second}, search.NoSoundCloudFallback{})
+	a := mustSoundCloudAPI(t, &http.Client{Timeout: 20 * time.Second}, soundcloud.NoFallback{})
 	ctx := context.Background()
 
 	albums, err := a.GetArtistAlbums(ctx, search.ProviderSoundCloud, "che")

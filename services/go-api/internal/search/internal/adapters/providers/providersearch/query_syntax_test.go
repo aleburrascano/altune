@@ -1,7 +1,7 @@
 package providersearch_test
 
 import (
-	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/providers/providersearch"
 	"testing"
 )
 
@@ -29,7 +29,7 @@ func TestMBLuceneEscape(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := search.ProviderSearchMbLuceneEscape(tt.in); got != tt.want {
+			if got := providersearch.MbLuceneEscape(tt.in); got != tt.want {
 				t.Errorf("MbLuceneEscape(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
@@ -50,7 +50,7 @@ func TestDslQuote(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := search.ProviderSearchDslQuote(tt.phrase); got != tt.want {
+			if got := providersearch.DslQuote(tt.phrase); got != tt.want {
 				t.Errorf("DslQuote(%q) = %q, want %q", tt.phrase, got, tt.want)
 			}
 		})
@@ -68,7 +68,7 @@ func TestParseListeners(t *testing.T) {
 		{"n/a", 0},
 	}
 	for _, tt := range tests {
-		if got := search.ProviderSearchParseListeners(tt.in); got != tt.want {
+		if got := providersearch.ParseListeners(tt.in); got != tt.want {
 			t.Errorf("parseListeners(%q) = %d, want %d", tt.in, got, tt.want)
 		}
 	}

@@ -3,6 +3,7 @@ package soundcloud_test
 import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
+	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"errors"
 	"net/http"
@@ -73,7 +74,7 @@ func TestSoundCloudSearch_FailedAlbumsMakeThePartialVisible(t *testing.T) {
 	a := newTestSoundCloudAPI(t, api, nil)
 	_, err := a.Search(context.Background(), "humble", providertest.AllKinds())
 
-	var partial *search.PartialKindsError
+	var partial *domain.PartialKindsError
 	if !errors.As(err, &partial) {
 		t.Fatalf("err = %v, want a PartialKindsError for the failed album search", err)
 	}
