@@ -129,7 +129,10 @@ function syncActionHandlers(
   latest: { current: PlaybackContextValue },
 ): (() => void) | undefined {
   if (!session) return undefined;
-  if (stopped) return void clearActionHandlers(session, actionEntries(latest));
+  if (stopped) {
+    clearActionHandlers(session, actionEntries(latest));
+    return undefined;
+  }
   return registerActionHandlers(session, actionEntries(latest));
 }
 

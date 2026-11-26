@@ -109,7 +109,7 @@ function historyStatus({ history, clearHistory }: HistoryParts): HistoryStatus {
 function historyActions(parts: HistoryParts): HistoryActions {
   return {
     onTap: (item: SearchHistoryItem): void => parts.onSuggestionSelect(item.query),
-    onRetry: (): void => void parts.history.refetch(),
+    onRetry: (): void => parts.history.refetch(),
     onClear: parts.clearHistory.clear,
   };
 }
@@ -167,7 +167,7 @@ export function useDiscoverLogic(): DiscoverLogic {
   useDegradedSearchTelemetry(searchData, resultsIncomplete);
 
   const onRetry = (): void => {
-    void refetch();
+    refetch();
   };
 
   return {

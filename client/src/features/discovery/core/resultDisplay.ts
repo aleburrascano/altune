@@ -11,9 +11,12 @@ export function kindLabel(kind: DiscoveryKind, opts?: { plural?: boolean }): str
   return KIND_LABELS[kind][opts?.plural ? 1 : 0];
 }
 
-export function resultKey(result: DiscoveryResult, index: number): string {
-  const source = result.sources[0];
-  return `${result.kind}-${source?.provider ?? 'x'}-${source?.external_id || `${result.title}-${index}`}`;
+export function resultKey(item: DiscoveryResult, index: number): string {
+  const source = item.sources[0];
+  const externalId = source?.external_id;
+  const idPart =
+    externalId === undefined || externalId === '' ? `${item.title}-${index}` : externalId;
+  return `${item.kind}-${source?.provider ?? 'x'}-${idPart}`;
 }
 
 export function resultSecondaryLine(result: DiscoveryResult): string {

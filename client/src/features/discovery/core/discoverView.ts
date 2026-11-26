@@ -26,7 +26,7 @@ function asyncViewForState(state: DiscoverHookState): AsyncView {
   return asyncView({
     isLoading: state.isLoading && state.data === undefined,
     isError: state.error != null && state.data === undefined,
-    isEmpty: state.data !== undefined && state.data.results.length === 0,
+    isEmpty: state.data?.results.length === 0,
   });
 }
 

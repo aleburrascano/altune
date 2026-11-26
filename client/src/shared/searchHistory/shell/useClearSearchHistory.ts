@@ -7,7 +7,7 @@ import type { DiscoverySearchHistoryResponse } from '@shared/catalog';
 import { guardedMutationOptions } from '@shared/session';
 type ClearSearchHistoryOptions = {
   action: string;
-  retryOptions: Pick<UseMutationOptions<void, Error, void>, 'retry' | 'retryDelay'>;
+  retryOptions: Pick<UseMutationOptions<void, Error>, 'retry' | 'retryDelay'>;
 };
 
 function emptyHistory(queryClient: QueryClient) {

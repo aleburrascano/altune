@@ -34,7 +34,8 @@ function matchesRoute(pathname: string, candidate: string): boolean {
 export function pageTitleFor(pathname: string, playlistName?: string | null): string {
   if (pathname.startsWith(PLAYLIST_PATH_PREFIX)) {
     const trimmedName = playlistName?.trim();
-    return titleFor(trimmedName ? trimmedName : GENERIC_PLAYLIST_TITLE);
+    const hasName = trimmedName !== undefined && trimmedName !== '';
+    return titleFor(hasName ? trimmedName : GENERIC_PLAYLIST_TITLE);
   }
 
   const route = TAB_ROUTES.find((candidate) => matchesRoute(pathname, candidate));

@@ -18,9 +18,9 @@ export function Row({ children, leading, trailing, style, testID }: RowProps) {
       testID={testID}
       style={[{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }, style]}
     >
-      {leading != null ? leading : null}
+      {leading ?? null}
       <View style={{ flex: 1 }}>{children}</View>
-      {trailing != null ? trailing : null}
+      {trailing ?? null}
     </View>
   );
 }
