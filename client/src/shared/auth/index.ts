@@ -18,6 +18,7 @@ export {
   clearSessionExpired,
   getSessionExpired,
   renewSessionCredentials,
+  subscribeSessionExpired,
 } from '@shared/auth/core/sessionExpired';
 export type { CredentialStamp } from '@shared/auth/core/sessionExpired';
 export { useSessionExpired } from '@shared/auth/view/sessionExpired';

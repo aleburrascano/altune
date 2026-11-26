@@ -85,6 +85,34 @@ describe('mobile eslint keeps view out of core', () => {
     });
   }
 
+  for (const source of ['./view/Row', '../view', '../../features/library/view/Row']) {
+    it(`reports the relative import ${source} from core/`, async () => {
+      const messages = await restrictedImportMessages(
+        corePath,
+        `import { x } from '${source}';\nexport const y = x;\n`,
+      );
+      assert.strictEqual(
+        messages.filter((message) => /never imports view/.test(message)).length,
+        1,
+      );
+    });
+  }
+
+  for (const source of [
+    '@shared/auth/viewModel',
+    '@shared/preview/core/x',
+    './viewHelpers',
+    '../core/review',
+  ]) {
+    it(`does not report ${source}, which only looks like view/`, async () => {
+      const messages = await restrictedImportMessages(
+        corePath,
+        `import { x } from '${source}';\nexport const y = x;\n`,
+      );
+      assert.ok(!messages.some((message) => /never imports view/.test(message)));
+    });
+  }
+
   it('allows view/ to import core/', async () => {
     const messages = await restrictedImportMessages(
       'src/shared/failure/view/Banner.ts',

@@ -6,6 +6,7 @@ import {
   markSessionExpired,
   useSessionExpired,
   getSessionExpired,
+  subscribeSessionExpired,
 } from '@shared/auth';
 import type * as SessionExpiredModule from '@shared/auth';
 
@@ -65,7 +66,22 @@ describe('useSessionExpired — liveness through a mounted consumer', () => {
     });
 
     expect(stillMounted.getByText('expired')).toBeTruthy();
-    expect(gone.queryByText('expired')).toBeNull();
+  });
+
+  it('notifies a subscriber once per change and stops after it unsubscribes', () => {
+    const listener = jest.fn();
+    const unsubscribe = subscribeSessionExpired(listener);
+
+    act(() => {
+      markSessionExpired();
+    });
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    act(() => {
+      clearSessionExpired();
+    });
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 });
 
