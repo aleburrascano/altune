@@ -878,10 +878,11 @@ cat >"$WORK/repo/scripts/ci/secret-scan.sh" <<'STUB'
 #!/usr/bin/env bash
 pid=$$
 top=
+fixture=$(git rev-parse --show-toplevel)
 while [ "$pid" -gt 1 ]; do
     pid=$(ps -o ppid= -p "$pid" | tr -d ' ')
     cmdline=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null)
-    if grep -q 'scripts/precheck.sh' <<<"$cmdline"; then
+    if grep -q 'scripts/precheck.sh' <<<"$cmdline" && [ "$(readlink "/proc/$pid/cwd")" = "$fixture" ]; then
         top=$pid
     fi
 done

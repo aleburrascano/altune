@@ -5,20 +5,27 @@ usage="usage: secret-scan.sh BASE_REF | --pending   run in the repo; fails when 
 gitleaks=github.com/zricethezav/gitleaks/v8@v8.30.1
 root=$(git rev-parse --show-toplevel)
 if [ "$1" = --pending ]; then
-  scope=(--pre-commit)
+  scopes=("--pre-commit --staged" "--pre-commit")
   label="the uncommitted changes"
 else
   base=$1
   git rev-parse --verify --quiet "$base^{commit}" >/dev/null || { echo "secret-scan: $base is not a commit here, so nothing was checked" >&2; exit 2; }
-  scope=(--log-opts="$base..HEAD")
+  scopes=("--log-opts=$base..HEAD")
   label="$base..HEAD"
 fi
-report=$(mktemp)
-trap 'rm -f "$report"' EXIT
-if ! go run "$gitleaks" git "$root" "${scope[@]}" --config "$root/.gitleaks.toml" --redact=100 --no-banner --log-level error --exit-code 0 --report-format json --report-path "$report" >/dev/null; then
-  echo "secret-scan: go run $gitleaks failed, so nothing was checked" >&2
-  exit 2
-fi
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+n=0
+for scope in "${scopes[@]}"; do
+  n=$((n + 1))
+  read -r -a scope_args <<<"$scope"
+  if ! go run "$gitleaks" git "$root" "${scope_args[@]}" --config "$root/.gitleaks.toml" --redact=100 --no-banner --log-level error --exit-code 0 --report-format json --report-path "$work/$n.json" >/dev/null; then
+    echo "secret-scan: go run $gitleaks failed, so nothing was checked" >&2
+    exit 2
+  fi
+done
+report=$work/all.json
+jq -s 'add' "$work"/[0-9]*.json >"$report"
 count=$(jq length "$report")
 if [ "$count" != 0 ]; then
   echo "secret-scan: $count possible secret(s) added in $label (values hidden):" >&2
