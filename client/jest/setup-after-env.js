@@ -45,9 +45,15 @@ const { ensureAppAuthClient } = require('./appAuthClient.js');
 
 beforeAll(ensureAppAuthClient);
 
-afterEach(installStoppedTelemetry);
+async function stopTelemetryWork() {
+  __http.abortHanging();
+  await require('../src/shared/telemetry').stopTelemetry();
+  installStoppedTelemetry();
+}
 
-afterAll(installStoppedTelemetry);
+afterEach(stopTelemetryWork);
+
+afterAll(stopTelemetryWork);
 
 beforeEach(() => {
   ensureAppAuthClient();

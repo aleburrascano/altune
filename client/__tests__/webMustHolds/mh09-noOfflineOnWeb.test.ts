@@ -19,6 +19,10 @@ function loadFresh<T>(load: () => T): T {
   jest.isolateModules(() => {
     ensureAppAuthClient();
     loaded = load();
+    const { createAppTelemetry, installTelemetry } = require('@shared/telemetry');
+    const stopped = createAppTelemetry();
+    stopped.dispose();
+    installTelemetry(stopped);
   });
   return loaded;
 }

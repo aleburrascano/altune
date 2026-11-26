@@ -72,6 +72,7 @@ export function createOutbox(deps: OutboxDeps) {
   let owner: string | null = null;
   let disposed = false;
   const unsubscribes: (() => void)[] = [];
+  const flushes = new Set<Promise<void>>();
 
   function capCritical(entries: readonly OutboxEntry[]): OutboxEntry[] {
     const capped = capOutbox(entries, MAX_ENTRIES, MAX_DIAGNOSTIC_ENTRIES);
@@ -176,7 +177,13 @@ export function createOutbox(deps: OutboxDeps) {
     return queue.some((e) => e.event_id === entry.event_id) && ownedByCurrentUser(entry);
   }
 
-  async function flushOutbox(): Promise<void> {
+  function flushOutbox(): Promise<void> {
+    const run = flushPass();
+    flushes.add(run);
+    return run.finally(() => flushes.delete(run));
+  }
+
+  async function flushPass(): Promise<void> {
     ensureRestored();
     if (isDisposed() || flushing || queue.length === 0) return;
     flushing = true;
@@ -247,5 +254,9 @@ export function createOutbox(deps: OutboxDeps) {
     unsubscribes.splice(0).forEach((unsubscribe) => unsubscribe());
   }
 
-  return { enqueueCritical, flushOutbox, setOwner, dispose };
+  async function settled(): Promise<void> {
+    await Promise.allSettled([...flushes]);
+  }
+
+  return { enqueueCritical, flushOutbox, setOwner, dispose, settled };
 }

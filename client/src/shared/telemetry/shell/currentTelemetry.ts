@@ -13,6 +13,10 @@ export function installTelemetry(next: Telemetry): void {
   installed = next;
 }
 
+export async function stopTelemetry(): Promise<void> {
+  await installed?.stop();
+}
+
 export function recordEvent(...args: Parameters<Telemetry['recordEvent']>) {
   return current().recordEvent(...args);
 }

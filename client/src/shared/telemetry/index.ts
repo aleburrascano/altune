@@ -9,6 +9,7 @@ export {
   recordEvent,
   recordFailureShown,
   recordUserAction,
+  stopTelemetry,
 } from '@shared/telemetry/shell/currentTelemetry';
 export { createTelemetry } from '@shared/telemetry/shell/telemetry';
 export type { Telemetry } from '@shared/telemetry/shell/telemetry';
