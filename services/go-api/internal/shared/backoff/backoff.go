@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"math/rand/v2"
 	"time"
 )
 
@@ -112,8 +111,4 @@ func (p Policy) DelayAt(attempt int, unit float64) time.Duration {
 	}
 	half := ceiling / 2
 	return half + time.Duration(unit*float64(ceiling-half))
-}
-
-func (p Policy) Delay(attempt int) time.Duration {
-	return p.DelayAt(attempt, rand.Float64())
 }

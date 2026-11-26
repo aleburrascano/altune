@@ -149,12 +149,13 @@ func TestPolicy_DelayAtSpansHalfTheCeilingToTheCeiling(t *testing.T) {
 	}
 }
 
-func TestPolicy_DelayStaysWithinEqualJitterBounds(t *testing.T) {
+func TestPolicy_DelayAtStaysWithinEqualJitterBounds(t *testing.T) {
 	for attempt := 1; attempt <= 8; attempt++ {
 		ceiling := policy.Ceiling(attempt)
-		for range 200 {
-			if got := policy.Delay(attempt); got < ceiling/2 || got > ceiling {
-				t.Fatalf("Delay(%d) = %v, want within [%v, %v]", attempt, got, ceiling/2, ceiling)
+		for step := range 200 {
+			unit := float64(step) / 200
+			if got := policy.DelayAt(attempt, unit); got < ceiling/2 || got > ceiling {
+				t.Fatalf("DelayAt(%d, %v) = %v, want within [%v, %v]", attempt, unit, got, ceiling/2, ceiling)
 			}
 		}
 	}
