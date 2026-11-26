@@ -13,9 +13,32 @@ cd "$root" || exit 3
 lint_cache="$root/.cache/golangci-lint"
 default_base_ref() { git remote get-url gitea >/dev/null 2>&1 && git rev-parse --verify --quiet gitea/main >/dev/null && echo gitea/main || echo origin/main; }
 base_ref=${1:-$(default_base_ref)}
-base=$(git merge-base "$base_ref" HEAD) || { echo "precheck: no merge base with $base_ref"; exit 3; }
+base=$(git merge-base "$base_ref" HEAD) || { echo "precheck: no merge base with $base_ref. Fetch it with: git fetch ${base_ref%%/*} ${base_ref#*/}"; exit 3; }
 
 PATH="$PATH:$(go env GOPATH 2>/dev/null)/bin"
+
+result_dir="$root/.cache/precheck"
+result_key=
+if [ $stage = push ] && [ "${PRECHECK_NO_CACHE:-}" != 1 ] && [ -z "$(git status --porcelain)" ]; then
+  result_key=$(
+    {
+      git rev-parse 'HEAD^{tree}'
+      echo "$base"
+      git rev-parse "$base_ref"
+      go version 2>/dev/null
+      golangci-lint --version 2>/dev/null
+      node --version 2>/dev/null
+      jq --version 2>/dev/null
+      shellcheck --version 2>/dev/null
+      date -u +%Y-%m-%d
+      echo "integration=${INTEGRATION:-} client_mutate_elsewhere=${CLIENT_MUTATE_RUNS_ELSEWHERE:-} lint_whole=${PRECHECK_LINT_WHOLE:-}"
+    } | sha256sum | cut -d' ' -f1
+  )
+  if [ -f "$result_dir/$result_key" ]; then
+    echo "precheck: green, already proven for this exact tree, base and tool versions ($(cat "$result_dir/$result_key")); rerun with PRECHECK_NO_CACHE=1 to force"
+    exit 0
+  fi
+fi
 
 untracked() { [ $stage = commit ] || git ls-files --others --exclude-standard; }
 if [ $stage = commit ]; then
@@ -187,7 +210,16 @@ if touches '^services/go-api/'; then
       elif [ ${#affected[@]} -gt 0 ]; then
         check "go-api vet" $m "${heavy[@]}" go vet "${affected[@]}"
       fi
-      check "go-api strict linters (new code)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --new-from-rev="$base" --allow-serial-runners
+      if [ $whole_module = 1 ] || [ "${PRECHECK_LINT_WHOLE:-}" = 1 ] || touches "^$m/\.golangci"; then
+        lint_scope=(./...)
+        lint_label="whole module"
+      else
+        lint_scope=("${affected[@]}")
+        lint_label="${#lint_scope[@]} package(s) and importers"
+      fi
+      if [ ${#lint_scope[@]} -gt 0 ]; then
+        check "go-api strict linters (new code, $lint_label)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --new-from-rev="$base" --allow-serial-runners "${lint_scope[@]}"
+      fi
       check "go-api no comments (whole tree)" $m go run ./scripts/lintcomments --all .
       check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
       mapfile -t pkgs < <(go_pkgs $m)
@@ -376,4 +408,8 @@ if [ $failed = 1 ]; then
 fi
 [ $missing = 1 ] && { echo "precheck: incomplete, see SKIP lines"; exit 3; }
 [ $lint_only = 1 ] && { echo "precheck: lint green, tests left to CI"; exit 0; }
+if [ -n "$result_key" ]; then
+  { mkdir -p "$result_dir" && date -u +"green at %Y-%m-%dT%H:%M:%SZ" >"$result_dir/$result_key"; } \
+    || echo "precheck: could not record this green run in $result_dir, so the next push will rerun it"
+fi
 echo "precheck: green"
