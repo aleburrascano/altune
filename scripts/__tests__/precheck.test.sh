@@ -640,6 +640,34 @@ expect_log "govulncheck ./..."
 expect_log "vet ./..."
 expect_log "run ./cmd/acquisitioneval"
 
+CASE="a go-api change lints the changed package and its importers, not ./..."
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+run_with_tools
+expect_log "golangci-lint run --config .golangci.strict.yml --new-from-rev="
+expect_log "altune/go-api/internal/shared/s altune/go-api/internal/acq altune/go-api/cmd/acquisitioneval"
+forbid_log "--allow-serial-runners ./..."
+
+CASE="a change to go.mod lints the whole module"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    printf '\nexclude example.invalid/none v1.0.0\n' >>services/go-api/go.mod
+    git add -A
+    git commit -qm "touch go.mod"
+)
+run_with_tools
+expect_log "--allow-serial-runners ./..."
+
+CASE="PRECHECK_LINT_WHOLE=1 lints the whole module for a one-package change"
+new_repo
+add_go_fixture
+edit_go_file internal/discovery/adapters/x/x.go
+PRECHECK_LINT_WHOLE=1 run_with_tools
+expect_log "--allow-serial-runners ./..."
+
 CASE="a change to go.sum runs govulncheck"
 new_repo
 add_go_fixture
@@ -893,6 +921,65 @@ run_with_tools --lint
 [ "$RC" != 0 ] || fail "a killed precheck must exit non-zero"
 [ "$(tail -n 1 "$WORK/out.log")" = "FAIL precheck itself (exit $RC): died during secret scan (pending changes)" ] \
     || fail "the last line does not name the step it died in: $(tail -n 12 "$WORK/out.log" | tr '\n' '|')"
+
+CASE="a green full precheck is remembered for the same tree, so a second run does not run the tools"
+new_repo
+printf '.cache/\n' >"$WORK/repo/.gitignore"
+commit_as_base
+add_plain_file
+run_with_tools
+expect_rc 0
+expect_out "precheck: green"
+: >"$WORK/tools.log"
+run_with_tools
+expect_rc 0
+expect_out "already proven for this exact tree"
+[ ! -s "$WORK/tools.log" ] || fail "a cached green must not run any tool: $(cat "$WORK/tools.log")"
+
+CASE="PRECHECK_NO_CACHE=1 reruns everything"
+new_repo
+printf '.cache/\n' >"$WORK/repo/.gitignore"
+commit_as_base
+add_plain_file
+run_with_tools
+PRECHECK_NO_CACHE=1 run_with_tools
+expect_out "precheck: green"
+grep -qF "already proven" "$WORK/out.log" && fail "PRECHECK_NO_CACHE=1 must not use the cache"
+
+CASE="a red precheck is never remembered"
+new_repo
+printf '.cache/\n' >"$WORK/repo/.gitignore"
+commit_as_base
+add_plain_file
+SECRET_SCAN_STUB_RC=1 run_with_tools
+expect_rc 1
+run_with_tools
+grep -qF "already proven" "$WORK/out.log" && fail "a red run must not be cached"
+
+CASE="a different tree is not served from the cache"
+new_repo
+printf '.cache/\n' >"$WORK/repo/.gitignore"
+commit_as_base
+add_plain_file
+run_with_tools
+(
+    cd "$WORK/repo" || exit 1
+    printf 'more\n' >>added.txt
+    git add -A
+    git commit -qm "change the tree"
+)
+run_with_tools
+grep -qF "already proven" "$WORK/out.log" && fail "a changed tree must rerun the checks"
+
+CASE="uncommitted changes are never served from the cache"
+new_repo
+printf '.cache/\n' >"$WORK/repo/.gitignore"
+commit_as_base
+add_plain_file
+run_with_tools
+printf 'dirty\n' >>"$WORK/repo/added.txt"
+run_with_tools
+grep -qF "already proven" "$WORK/out.log" && fail "a dirty tree must rerun the checks"
 
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"

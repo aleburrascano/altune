@@ -1,0 +1,20 @@
+#!/usr/bin/env sh
+
+pushing=0
+while read -r _ local_sha _ _; do
+  case $local_sha in
+    0000000000000000000000000000000000000000) ;;
+    *) pushing=1 ;;
+  esac
+done
+[ $pushing = 1 ] || exit 0
+
+rc=0
+[ "${FACTORY_SANDBOX:-}" != 1 ] && [ -f scripts/precheck.sh ] && { env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE CLIENT_MUTATE_RUNS_ELSEWHERE=1 bash scripts/precheck.sh || rc=$?; }
+case $rc in
+  0) ;;
+  3) echo "⚠️  pre-push: some checks could not run here (see SKIP lines), CI will run them." ;;
+  *) echo "❌ pre-push: checks failed. Fix the FAIL lines above and push again."; exit 1 ;;
+esac
+
+exit 0
