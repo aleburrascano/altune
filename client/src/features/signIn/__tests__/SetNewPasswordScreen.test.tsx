@@ -1,19 +1,26 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { Alert } from 'react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { renderRouter } from 'expo-router/testing-library';
+import { Text } from 'react-native';
 
 import { SetNewPasswordScreen } from '@features/signIn';
-import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
-const mockReplace = jest.fn();
+import {
+  authPortWrapper,
+  createSupabaseAuthMock,
+} from '@features/signIn/__tests__/testUtils/authTestUtils';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+import { recordDialogs, type RecordedDialogs } from '@testing/recordDialogs';
 
-jest.mock('expo-router', () => ({ useRouter: () => ({ replace: mockReplace }) }));
+const ROUTES = {
+  index: SetNewPasswordScreen,
+  library: () => <Text>library-screen</Text>,
+};
 
 const { updateUser, signOut } = createSupabaseAuthMock('updateUser', 'signOut');
 
-let alertSpy: jest.SpyInstance;
+let dialogs: RecordedDialogs;
 
 beforeEach(() => {
-  mockReplace.mockReset();
-  alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  dialogs = recordDialogs();
   updateUser.mockResolvedValue({ data: { user: {} }, error: null });
   signOut.mockResolvedValue({ error: null });
 });
@@ -26,36 +33,35 @@ function submitNewPassword(): void {
 
 describe('SetNewPasswordScreen', () => {
   it('warns that other devices may still be signed in, then routes to the library', async () => {
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
     signOut.mockResolvedValue({ error: { name: 'AuthApiError', status: 500, message: 'down' } });
-    render(<SetNewPasswordScreen />);
+    const router = renderRouter(ROUTES, { wrapper: authPortWrapper() });
 
     submitNewPassword();
 
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/library'));
-    expect(alertSpy).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.stringContaining('may still be signed in'),
-    );
+    await waitFor(() => expect(router.getPathname()).toBe('/library'));
+    expect(dialogs.alerts).toEqual([
+      [expect.any(String), expect.stringContaining('may still be signed in')],
+    ]);
   });
 
   it('routes without a warning when the other sessions were revoked', async () => {
-    render(<SetNewPasswordScreen />);
+    const router = renderRouter(ROUTES, { wrapper: authPortWrapper() });
 
     submitNewPassword();
 
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/library'));
+    await waitFor(() => expect(router.getPathname()).toBe('/library'));
     expect(updateUser).toHaveBeenCalledWith({ password: 'Hunter2!pass' });
-    expect(alertSpy).not.toHaveBeenCalled();
+    expect(dialogs.alerts).toEqual([]);
   });
 
   it('does not route before the update finishes', async () => {
     updateUser.mockReturnValue(new Promise(() => undefined));
-    render(<SetNewPasswordScreen />);
+    const router = renderRouter(ROUTES, { wrapper: authPortWrapper() });
 
     submitNewPassword();
 
     await waitFor(() => expect(updateUser).toHaveBeenCalledTimes(1));
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(router.getPathname()).toBe('/');
   });
 });

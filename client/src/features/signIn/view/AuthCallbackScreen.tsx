@@ -1,6 +1,7 @@
-import { Redirect } from 'expo-router';
 import { type ReactElement } from 'react';
 
+import { AppRedirect } from '@shared/navigation';
+
 export function AuthCallbackScreen(): ReactElement {
-  return <Redirect href="/" />;
+  return <AppRedirect href="/" />;
 }

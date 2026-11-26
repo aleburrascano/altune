@@ -1,6 +1,7 @@
 import { renderHook, act } from '@testing-library/react-native';
 
 import { useAsyncAuthAction } from '@features/signIn';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 
 const AUTH_ACTION_TIMEOUT_MS = 20_000;
 
@@ -74,11 +75,7 @@ function deferredAttempt(): {
 
 describe('useAsyncAuthAction: rejecting a duplicate submit at the hook (#1643)', () => {
   beforeEach(() => {
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
+    recordLogs();
   });
 
   it('reaches the SDK once when a second press lands before the first settles', async () => {
@@ -181,14 +178,10 @@ async function stateAfterRejectionWith(thrown: unknown): Promise<Result> {
 }
 
 describe('useAsyncAuthAction: what an unknown failure leaves behind (#1647)', () => {
-  let warn: jest.SpyInstance;
+  let logs: RecordedLogs;
 
   beforeEach(() => {
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    warn.mockRestore();
+    logs = recordLogs();
   });
 
   it("logs the thrown error's name and message, which the unknown reason alone drops", async () => {
@@ -199,26 +192,24 @@ describe('useAsyncAuthAction: what an unknown failure leaves behind (#1647)', ()
     const state = await stateAfterRejectionWith(rejected);
 
     expect(state).toEqual({ kind: 'error', reason: 'unknown' });
-    expect(warn).toHaveBeenCalledWith(UNRECOGNIZED_FAILURE_LOG, {
-      name: 'AuthApiError',
-      message: 'Database error granting user',
-    });
+    expect(logs.warnings).toEqual([
+      [UNRECOGNIZED_FAILURE_LOG, { name: 'AuthApiError', message: 'Database error granting user' }],
+    ]);
   });
 
   it('logs nothing for a failure the network reason already names', async () => {
     const state = await stateAfterRejectionWith(new Error('Network request failed'));
 
     expect(state).toEqual({ kind: 'error', reason: 'network' });
-    expect(warn).not.toHaveBeenCalled();
+    expect(logs.warnings).toEqual([]);
   });
 
   it('names the type of a thrown non-Error rather than spelling the value out', async () => {
     const state = await stateAfterRejectionWith('token_hash=super-secret-hash');
 
     expect(state).toEqual({ kind: 'error', reason: 'unknown' });
-    expect(warn).toHaveBeenCalledWith(UNRECOGNIZED_FAILURE_LOG, {
-      name: 'string',
-      message: 'a non-Error value was thrown',
-    });
+    expect(logs.warnings).toEqual([
+      [UNRECOGNIZED_FAILURE_LOG, { name: 'string', message: 'a non-Error value was thrown' }],
+    ]);
   });
 });

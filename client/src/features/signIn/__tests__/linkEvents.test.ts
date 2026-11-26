@@ -1,48 +1,81 @@
-import * as Linking from 'expo-linking';
+import { createLinkEvents, type LinkingSource, type UrlEvent } from '@features/signIn';
+import { setPlatformOS } from '@testing/setPlatformOS';
 
-import { initialUrl, subscribeUrl } from '@features/signIn';
+type UrlHandler = (event: UrlEvent) => void;
 
-jest.mock('expo-linking', () => ({
-  getInitialURL: jest.fn(),
-  addEventListener: jest.fn(),
-}));
+interface FakeLinking {
+  linking: LinkingSource;
+  deliver(url: string): void;
+  subscriptions(): number;
+}
 
-const getInitialURL = Linking.getInitialURL as unknown as jest.Mock;
-const addEventListener = Linking.addEventListener as unknown as jest.Mock;
+function fakeLinking(launchUrl: string | null): FakeLinking {
+  const handlers = new Set<UrlHandler>();
+  return {
+    linking: {
+      getInitialURL: () => Promise.resolve(launchUrl),
+      addEventListener: (_type, handler) => {
+        handlers.add(handler);
+        return { remove: () => handlers.delete(handler) };
+      },
+    },
+    deliver: (url) => handlers.forEach((handler) => handler({ url })),
+    subscriptions: () => handlers.size,
+  };
+}
 
-describe('linkEvents', () => {
+describe('linkEvents on native', () => {
   beforeEach(() => {
-    getInitialURL.mockReset();
-    addEventListener.mockReset();
+    setPlatformOS('ios');
   });
 
   it('resolves the URL the app was launched with', async () => {
-    getInitialURL.mockResolvedValue('altune://auth/callback?code=abc');
+    const { linking } = fakeLinking('altune://auth/callback?code=abc');
 
-    await expect(initialUrl()).resolves.toBe('altune://auth/callback?code=abc');
+    await expect(createLinkEvents(linking).initialUrl()).resolves.toBe(
+      'altune://auth/callback?code=abc',
+    );
   });
 
   it('hands each delivered url event to the listener as a bare string', () => {
-    addEventListener.mockReturnValue({ remove: jest.fn() });
+    const { linking, deliver } = fakeLinking(null);
     const listener = jest.fn();
 
-    subscribeUrl(listener);
-    const [event, handler] = addEventListener.mock.calls[0] as [
-      string,
-      (e: { url: string }) => void,
-    ];
-    handler({ url: 'altune://auth/callback?code=native-event' });
+    createLinkEvents(linking).subscribeUrl(listener);
+    deliver('altune://auth/callback?code=native-event');
 
-    expect(event).toBe('url');
     expect(listener).toHaveBeenCalledWith('altune://auth/callback?code=native-event');
   });
 
   it('returns an unsubscribe that removes the subscription', () => {
-    const remove = jest.fn();
-    addEventListener.mockReturnValue({ remove });
+    const { linking, deliver, subscriptions } = fakeLinking(null);
+    const listener = jest.fn();
 
-    subscribeUrl(jest.fn())();
+    createLinkEvents(linking).subscribeUrl(listener)();
+    deliver('altune://auth/callback?code=late');
 
-    expect(remove).toHaveBeenCalledTimes(1);
+    expect(subscriptions()).toBe(0);
+    expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe('linkEvents on web', () => {
+  afterEach(() => {
+    setPlatformOS('ios');
+  });
+
+  it('reports no launch url and subscribes to nothing, leaving the page url to the route', async () => {
+    setPlatformOS('web');
+    const { linking, deliver, subscriptions } = fakeLinking('altune://auth/callback?code=abc');
+    const listener = jest.fn();
+
+    const events = createLinkEvents(linking);
+    const stop = events.subscribeUrl(listener);
+    deliver('altune://auth/callback?code=web');
+
+    await expect(events.initialUrl()).resolves.toBeNull();
+    expect(subscriptions()).toBe(0);
+    expect(listener).not.toHaveBeenCalled();
+    stop();
   });
 });

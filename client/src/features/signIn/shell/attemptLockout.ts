@@ -1,4 +1,9 @@
 import { monotonicNow } from '@shared/timing';
+import type {
+  AttemptLockout,
+  LockedOut,
+  LockoutAction,
+} from '@features/signIn/ports/attemptLockout';
 
 const LOCKOUT_AFTER_FAILURES = 5;
 
@@ -7,8 +12,6 @@ const LOCKOUT_BASE_MS = 15_000;
 const FAILURE_RUN_MEMORY_MS = 300_000;
 
 const MAX_TRACKED_ACCOUNTS = 64;
-
-export type LockoutAction = 'sign-in' | 'reset-request';
 
 type FailureRun = { count: number; lastFailureAt: number; lastFailureTick: number };
 
@@ -91,8 +94,6 @@ export function clearFailedAttempts(action: LockoutAction, email: string): void 
   runsByAccount.delete(accountKey(action, email));
 }
 
-type LockedOut = { kind: 'error'; reason: 'too_many_attempts' };
-
 const LOCKED_OUT: LockedOut = { kind: 'error', reason: 'too_many_attempts' };
 
 export function lockoutOnRepeatedFailure<
@@ -131,3 +132,5 @@ function settleRun<R extends { kind: string }>(
 export function _resetLockoutsForTest(): void {
   runsByAccount.clear();
 }
+
+export const attemptLockout: AttemptLockout = { guard: lockoutOnRepeatedFailure };

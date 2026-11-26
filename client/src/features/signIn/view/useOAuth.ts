@@ -1,9 +1,8 @@
 import { NetworkError } from '@shared/failure';
-import { authIntentClient, startOAuth, withAuthDeadline } from '@shared/auth';
+import { startOAuth, withAuthDeadline } from '@shared/auth';
 import { useNavigator } from '@shared/navigation';
 import { authRedirectUrl } from '@features/signIn/core/authRedirect';
-import { completeAuthIntent, type AuthRouter } from '@features/signIn/adapters/completeAuthIntent';
-import { dismissAuthSession, openAuthSession } from '@features/signIn/adapters/native/authBrowser';
+import type { AuthIntents, AuthRouter } from '@features/signIn/ports/authIntents';
 import {
   failureReason,
   OAUTH_BROWSER_TIMEOUT_MS,
@@ -13,10 +12,16 @@ import {
   type OAuthProvider,
 } from '@features/signIn/core/oauthResult';
 import { parseAuthLink } from '@features/signIn/core/parseAuthLink';
-import { useAuthPort } from '@features/signIn/view/AuthPortProvider';
+import {
+  useAuthBrowser,
+  useAuthIntents,
+  useAuthPort,
+} from '@features/signIn/view/AuthPortProvider';
+import type { AuthBrowser } from '@features/signIn/ports/authBrowser';
 import type { AuthPort } from '@features/signIn/ports/authPort';
 
 import { useOAuthFlow } from '@features/signIn/view/useOAuthFlow';
+import { isPresent } from '@features/signIn/core/isPresent';
 
 type AuthorizationRequest = { kind: 'authorization_url'; url: string } | OAuthFailure;
 
@@ -28,31 +33,36 @@ async function requestAuthorizationUrl(provider: OAuthProvider): Promise<Authori
     }),
   );
   if (error) return { kind: 'error', reason: failureReason(error) };
-  if (!data?.url) return { kind: 'error', reason: 'unknown' };
+  if (!isPresent(data.url)) return { kind: 'error', reason: 'unknown' };
   return { kind: 'authorization_url', url: data.url };
 }
 
-async function redirectFromBrowser(authorizationUrl: string): Promise<string | null> {
-  let session: Awaited<ReturnType<typeof openAuthSession>>;
+async function redirectFromBrowser(
+  browser: AuthBrowser,
+  authorizationUrl: string,
+): Promise<string | null> {
+  let session: Awaited<ReturnType<AuthBrowser['openAuthSession']>>;
   try {
     session = await withAuthDeadline(
-      openAuthSession(authorizationUrl, authRedirectUrl('callback')),
+      browser.openAuthSession(authorizationUrl, authRedirectUrl('callback')),
       OAUTH_BROWSER_TIMEOUT_MS,
     );
   } catch (err) {
     if (err instanceof NetworkError && err.failure === 'timeout') {
-      dismissAuthSession();
+      browser.dismissAuthSession();
       return null;
     }
     throw err;
   }
-  return session.type === 'success' && session.url ? session.url : null;
+  return session.type === 'success' && isPresent(session.url) ? session.url : null;
 }
 
-async function exchangeRedirect(redirectUrl: string, router: AuthRouter): Promise<OAuthOutcome> {
-  const outcome = await withAuthDeadline(
-    completeAuthIntent(parseAuthLink(redirectUrl), router, authIntentClient()),
-  );
+async function exchangeRedirect(
+  intents: AuthIntents,
+  redirectUrl: string,
+  router: AuthRouter,
+): Promise<OAuthOutcome> {
+  const outcome = await withAuthDeadline(intents.complete(parseAuthLink(redirectUrl), router));
   const exchanged = outcome.kind === 'success' || outcome.kind === 'deduped';
   if (exchanged) return { kind: 'ok' };
   const reason =
@@ -61,19 +71,26 @@ async function exchangeRedirect(redirectUrl: string, router: AuthRouter): Promis
 }
 
 async function authorizeAndExchange(
+  browser: AuthBrowser,
+  intents: AuthIntents,
   provider: OAuthProvider,
   router: AuthRouter,
 ): Promise<OAuthOutcome> {
   const authorization = await requestAuthorizationUrl(provider);
   if (authorization.kind !== 'authorization_url') return authorization;
-  const redirectUrl = await redirectFromBrowser(authorization.url);
-  if (!redirectUrl) return { kind: 'cancelled' };
-  return exchangeRedirect(redirectUrl, router);
+  const redirectUrl = await redirectFromBrowser(browser, authorization.url);
+  if (!isPresent(redirectUrl)) return { kind: 'cancelled' };
+  return exchangeRedirect(intents, redirectUrl, router);
 }
 
-async function attemptSignIn(provider: OAuthProvider, router: AuthRouter): Promise<OAuthOutcome> {
+async function attemptSignIn(
+  browser: AuthBrowser,
+  intents: AuthIntents,
+  provider: OAuthProvider,
+  router: AuthRouter,
+): Promise<OAuthOutcome> {
   try {
-    return await authorizeAndExchange(provider, router);
+    return await authorizeAndExchange(browser, intents, provider, router);
   } catch (err) {
     return thrownFailure(err);
   }
@@ -81,10 +98,12 @@ async function attemptSignIn(provider: OAuthProvider, router: AuthRouter): Promi
 
 async function signInOutcome(
   authPort: AuthPort,
+  browser: AuthBrowser,
+  intents: AuthIntents,
   provider: OAuthProvider,
   router: AuthRouter,
 ): Promise<OAuthOutcome> {
-  const outcome = await attemptSignIn(provider, router);
+  const outcome = await attemptSignIn(browser, intents, provider, router);
   if (outcome.kind === 'error') authPort.reportSignInFailure(outcome.reason);
   return outcome;
 }
@@ -92,5 +111,7 @@ async function signInOutcome(
 export function useOAuth() {
   const navigator = useNavigator();
   const authPort = useAuthPort();
-  return useOAuthFlow((provider) => signInOutcome(authPort, provider, navigator));
+  const browser = useAuthBrowser();
+  const intents = useAuthIntents();
+  return useOAuthFlow((provider) => signInOutcome(authPort, browser, intents, provider, navigator));
 }

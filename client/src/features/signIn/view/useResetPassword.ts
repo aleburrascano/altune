@@ -1,6 +1,7 @@
+import { warn } from '@shared/log';
 import { requestPasswordReset } from '@shared/auth';
 
-import { lockoutOnRepeatedFailure } from '@features/signIn/shell/attemptLockout';
+import { useAttemptLockout } from '@features/signIn/view/AuthPortProvider';
 import {
   classifyAuthError,
   type SupabaseAuthErrorLike,
@@ -9,7 +10,7 @@ import {
 } from '@features/signIn/core/authError';
 import { authRedirectUrl } from '@features/signIn/core/authRedirect';
 
-import { useAsyncAuthAction } from '@features/signIn/shell/useAsyncAuthAction';
+import { useAsyncAuthAction } from '@features/signIn/view/useAsyncAuthAction';
 
 type ResetRequestResult =
   | { kind: 'idle' }
@@ -29,13 +30,14 @@ async function requestReset(email: string) {
 }
 
 function failure(error: SupabaseAuthErrorLike) {
-  console.warn('[auth] password reset request failed', supabaseErrorDetail(error));
+  warn('[auth] password reset request failed', supabaseErrorDetail(error));
   return { kind: 'error', reason: classifyAuthError(error) } as const;
 }
 
 export function useResetPassword() {
+  const lockout = useAttemptLockout();
   const { state, run } = useAsyncAuthAction<ResetRequestResult, [string]>(
-    lockoutOnRepeatedFailure(
+    lockout.guard(
       'reset-request',
       requestReset,
       (outcome) => outcome.kind === 'error' && outcome.reason === 'unknown',

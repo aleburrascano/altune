@@ -1,5 +1,7 @@
 export type { Href } from '@shared/navigation/adapters/expoRouterNavigator';
 export {
+  AppLink,
+  AppRedirect,
   useRouteSegments,
   useScreenFocusEffect,
 } from '@shared/navigation/adapters/expoRouterNavigator';

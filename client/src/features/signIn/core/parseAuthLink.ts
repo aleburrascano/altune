@@ -1,4 +1,5 @@
 import { appLinkHost, type AuthLinkHost, LINK_PATH } from '@features/signIn/core/authRedirect';
+import { isPresent } from '@features/signIn/core/isPresent';
 
 const MAX_URL_LENGTH = 4096;
 const MAX_PARAM_PAIRS = 64;
@@ -64,8 +65,8 @@ function matchedPrefixLength(url: string, { scheme, origin }: AuthLinkHost): num
   if (url.slice(0, scheme.length).toLowerCase() === scheme) {
     return scheme.length;
   }
-  const originPrefix = origin ? `${origin}/` : null;
-  return originPrefix && url.startsWith(originPrefix) ? originPrefix.length : null;
+  const originPrefix = isPresent(origin) ? `${origin}/` : null;
+  return originPrefix !== null && url.startsWith(originPrefix) ? originPrefix.length : null;
 }
 
 function endOrLength(index: number, length: number): number {

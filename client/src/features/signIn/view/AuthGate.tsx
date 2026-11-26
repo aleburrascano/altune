@@ -1,25 +1,23 @@
-import { Redirect, useSegments } from 'expo-router';
-
 import { useSessionExpired, useSession } from '@shared/auth';
+import { AppRedirect, useRouteSegments } from '@shared/navigation';
 import { Text, Wordmark } from '@shared/ui';
 import { useRecoveryUnlocked } from '@features/signIn/view/useRecoveryUnlocked';
-import {
-  RESET_PASSWORD_ROUTE_SEGMENT,
-  recoveryUnlock,
-} from '@features/signIn/shell/passwordRecovery';
+import { RESET_PASSWORD_ROUTE_SEGMENT } from '@features/signIn/core/authIntent';
+import { useRecoveryUnlock } from '@features/signIn/view/AuthPortProvider';
 
 import {
   AuthFullScreenNotice,
   InvalidRecoveryLinkNotice,
   SessionExpiredNotice,
-} from '@features/signIn/ui/AuthNotices';
+} from '@features/signIn/view/AuthNotices';
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const session = useSession();
+  const recovery = useRecoveryUnlock();
   const sessionExpired = useSessionExpired();
   const signedInUserId = session.status === 'signed-in' ? session.session.user.id : null;
-  const recoveryUnlocked = useRecoveryUnlocked(recoveryUnlock, signedInUserId);
-  const segments = useSegments();
+  const recoveryUnlocked = useRecoveryUnlocked(recovery, signedInUserId);
+  const segments = useRouteSegments();
   const inAuthGroup = segments[0] === '(auth)';
   const onRecoveryRoute = segments[0] === RESET_PASSWORD_ROUTE_SEGMENT;
   const onAuthCallbackRoute = segments[0] === 'auth';
@@ -33,7 +31,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   if (session.status === 'signed-out' && !inAuthGroup && !onAuthCallbackRoute) {
-    return <Redirect href="/sign-in" />;
+    return <AppRedirect href="/sign-in" />;
   }
 
   if (session.status === 'signed-in' && sessionExpired && !inAuthGroup) {
@@ -41,7 +39,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   if (session.status === 'signed-in' && inAuthGroup) {
-    return <Redirect href="/library" />;
+    return <AppRedirect href="/library" />;
   }
 
   return <>{children}</>;

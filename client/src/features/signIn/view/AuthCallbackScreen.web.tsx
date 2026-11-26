@@ -1,20 +1,19 @@
-import { useRouter } from 'expo-router';
 import { useEffect, useState, type ReactElement } from 'react';
 
-import { authIntentClient } from '@shared/auth';
+import { warn } from '@shared/log';
 import { NetworkError } from '@shared/failure';
+import { useNavigator } from '@shared/navigation';
 import { Text } from '@shared/ui';
 
-import {
-  type AuthIntentResult,
-  type AuthRouter,
-  completeAuthIntent,
-} from '@features/signIn/adapters/completeAuthIntent';
+import type { AuthIntentResult } from '@features/signIn/core/authIntent';
+import type { AuthIntents, AuthRouter } from '@features/signIn/ports/authIntents';
+import { useAuthIntents } from '@features/signIn/view/AuthPortProvider';
 import { thrownErrorDetail } from '@features/signIn/core/authError';
 import { type AuthLinkIntent, parseAuthLink } from '@features/signIn/core/parseAuthLink';
 
-import { AuthFullScreenNotice } from '@features/signIn/ui/AuthNotices';
-import { BackToSignInLink } from '@features/signIn/ui/BackToSignInLink';
+import { AuthFullScreenNotice } from '@features/signIn/view/AuthNotices';
+import { BackToSignInLink } from '@features/signIn/view/BackToSignInLink';
+import { isPresent } from '@features/signIn/core/isPresent';
 
 type FailureState = 'refused' | 'unreachable';
 type Failure = (state: FailureState) => void;
@@ -45,26 +44,33 @@ function navigateToLanding(intent: AuthLinkIntent, router: AuthRouter): 'ok' {
 
 function reportRefusal(kind: AuthLinkIntent['kind'], outcome: AuthIntentResult): void {
   if (outcome.kind !== 'failure') return;
-  console.warn('[auth] web callback exchange failed', {
+  warn('[auth] web callback exchange failed', {
     intent: kind,
     cause: outcome.cause,
     error: outcome.error,
   });
 }
 
-async function exchangeUrl(url: string, router: AuthRouter): Promise<'ok' | 'refused'> {
+async function exchangeUrl(
+  intents: AuthIntents,
+  url: string,
+  router: AuthRouter,
+): Promise<'ok' | 'refused'> {
   const intent = parseAuthLink(url);
-  const outcome = await completeAuthIntent(intent, router, authIntentClient());
+  const outcome = await intents.complete(intent, router);
   if (landed(outcome)) return navigateToLanding(intent, router);
   reportRefusal(intent.kind, outcome);
   return 'refused';
 }
 
-async function completeCallback(router: AuthRouter): Promise<'ok' | 'refused'> {
+async function completeCallback(
+  intents: AuthIntents,
+  router: AuthRouter,
+): Promise<'ok' | 'refused'> {
   const url = currentUrl();
   stripCredentialsFromUrl();
-  if (url) return exchangeUrl(url, router);
-  console.warn('[auth] web callback has no url to read');
+  if (isPresent(url)) return exchangeUrl(intents, url, router);
+  warn('[auth] web callback has no url to read');
   return 'refused';
 }
 
@@ -73,13 +79,17 @@ function failureStateFor(err: unknown): FailureState {
 }
 
 function reportThrown(err: unknown): void {
-  console.warn('[auth] web callback exchange threw', thrownErrorDetail(err));
+  warn('[auth] web callback exchange threw', thrownErrorDetail(err));
 }
 
-function onMountCompleteCallback(router: AuthRouter, onFailure: Failure): () => void {
+function onMountCompleteCallback(
+  intents: AuthIntents,
+  router: AuthRouter,
+  onFailure: Failure,
+): () => void {
   let active = true;
   const fail = (state: FailureState): void => (active ? onFailure(state) : undefined);
-  completeCallback(router)
+  completeCallback(intents, router)
     .then((outcome) => (outcome === 'refused' ? fail('refused') : undefined))
     .catch((err: unknown) => (reportThrown(err), fail(failureStateFor(err))));
   return () => {
@@ -88,8 +98,9 @@ function onMountCompleteCallback(router: AuthRouter, onFailure: Failure): () => 
 }
 
 function useAuthCallbackState(router: AuthRouter): ScreenState {
+  const intents = useAuthIntents();
   const [state, setState] = useState<ScreenState>('pending');
-  useEffect(() => onMountCompleteCallback(router, setState), [router]);
+  useEffect(() => onMountCompleteCallback(intents, router, setState), [intents, router]);
   return state;
 }
 
@@ -135,7 +146,7 @@ function AuthCallbackError({ state }: { state: FailureState }): ReactElement {
 }
 
 export function AuthCallbackScreen(): ReactElement {
-  const router = useRouter();
+  const router = useNavigator();
   const state = useAuthCallbackState(router);
   return state === 'pending' ? <AuthCallbackPending /> : <AuthCallbackError state={state} />;
 }

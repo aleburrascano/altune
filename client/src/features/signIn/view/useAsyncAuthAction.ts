@@ -1,12 +1,13 @@
 import { useRef, useState } from 'react';
 
+import { warn } from '@shared/log';
 import { isNetworkError } from '@shared/failure';
 
 import { withAuthDeadline } from '@shared/auth';
 import { thrownErrorDetail } from '@features/signIn/core/authError';
 
 function reportUnrecognizedFailure(err: unknown): void {
-  console.warn('[auth] an auth action failed for an unrecognized reason', thrownErrorDetail(err));
+  warn('[auth] an auth action failed for an unrecognized reason', thrownErrorDetail(err));
 }
 
 type ThrownAuthFailure = { kind: 'error'; reason: 'network' | 'unknown' };

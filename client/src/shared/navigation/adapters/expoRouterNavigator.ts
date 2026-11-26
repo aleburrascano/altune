@@ -1,6 +1,7 @@
 import { useFocusEffect, useRouter, useSegments } from 'expo-router';
 
 export type { Href } from 'expo-router';
+export { Link as AppLink, Redirect as AppRedirect } from 'expo-router';
 
 export function useExpoRouter(): ReturnType<typeof useRouter> {
   return useRouter();

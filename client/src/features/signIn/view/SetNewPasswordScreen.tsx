@@ -1,10 +1,10 @@
-import { useRouter } from 'expo-router';
 import { useEffect, useState, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { useNavigator } from '@shared/navigation';
 import { Button, showFailureAlert, Text, spacing, AuthHeroLayout } from '@shared/ui';
-import { useUpdatePassword } from '@features/signIn/shell/useUpdatePassword';
-import { clearRecoveryUnlock } from '@features/signIn/shell/passwordRecovery';
+import { useUpdatePassword } from '@features/signIn/view/useUpdatePassword';
+import { useRecoveryUnlock } from '@features/signIn/view/AuthPortProvider';
 import { PASSWORD_REQUIREMENTS_HINT, newPasswordFormState } from '@features/signIn/core/validation';
 import { AuthErrorBanner } from '@features/signIn/view/AuthErrorBanner';
 import { FieldError, NewPasswordField } from '@features/signIn/view/AuthFields';
@@ -15,7 +15,8 @@ const OTHERS_NOT_REVOKED_MESSAGE =
 const GENERIC_ERROR = "Couldn't update your password. Please try again.";
 
 export function SetNewPasswordScreen(): ReactElement {
-  const router = useRouter();
+  const router = useNavigator();
+  const recovery = useRecoveryUnlock();
   const { state, updatePassword } = useUpdatePassword();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -31,10 +32,10 @@ export function SetNewPasswordScreen(): ReactElement {
           message: OTHERS_NOT_REVOKED_MESSAGE,
         });
       }
-      clearRecoveryUnlock();
+      recovery.clear();
       router.replace('/library');
     }
-  }, [state, router]);
+  }, [state, router, recovery]);
 
   return (
     <AuthHeroLayout testID="set-new-password-screen">

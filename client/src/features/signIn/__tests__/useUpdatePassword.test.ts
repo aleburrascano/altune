@@ -5,6 +5,7 @@ import {
   createSupabaseAuthMock,
   runAsyncAuthHook,
 } from '@features/signIn/__tests__/testUtils/authTestUtils';
+import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 const { updateUser, signOut } = createSupabaseAuthMock('updateUser', 'signOut');
 
 const updatePassword = () =>
@@ -97,16 +98,15 @@ describe('useUpdatePassword: mapping the resolved { error } of updateUser', () =
 });
 
 describe('useUpdatePassword: the other-session revoke after a committed change', () => {
-  let warn: jest.SpyInstance;
+  let logs: RecordedLogs;
 
   beforeEach(() => {
     updateUser.mockResolvedValue({ data: { user: {} }, error: null });
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    logs = recordLogs();
   });
 
   afterEach(() => {
     jest.useRealTimers();
-    warn.mockRestore();
   });
 
   const REVOKE_TIMEOUT_MS = 5_000;
@@ -131,10 +131,13 @@ describe('useUpdatePassword: the other-session revoke after a committed change',
 
     await updateWithStalledRevoke();
 
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('revoking'), {
-      name: 'NetworkError',
-      message: expect.stringContaining('timeout'),
-    });
+    expect(logs.warnings).toContainEqual([
+      expect.stringContaining('revoking'),
+      {
+        name: 'NetworkError',
+        message: expect.stringContaining('timeout'),
+      },
+    ]);
   });
 
   it('logs only the projected fields of a resolved revoke error', async () => {
@@ -145,12 +148,15 @@ describe('useUpdatePassword: the other-session revoke after a committed change',
     await updatePassword();
     await act(async () => undefined);
 
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('revoking'), {
-      name: 'AuthApiError',
-      code: 'boom',
-      status: 500,
-      message: 'nope',
-    });
+    expect(logs.warnings).toContainEqual([
+      expect.stringContaining('revoking'),
+      {
+        name: 'AuthApiError',
+        code: 'boom',
+        status: 500,
+        message: 'nope',
+      },
+    ]);
   });
 
   it('logs a thrown revoke without the raw value', async () => {
@@ -159,10 +165,13 @@ describe('useUpdatePassword: the other-session revoke after a committed change',
     await updatePassword();
     await act(async () => undefined);
 
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('revoking'), {
-      name: 'object',
-      message: 'a non-Error value was thrown',
-    });
+    expect(logs.warnings).toContainEqual([
+      expect.stringContaining('revoking'),
+      {
+        name: 'object',
+        message: 'a non-Error value was thrown',
+      },
+    ]);
   });
 });
 
@@ -226,16 +235,11 @@ describe('a server rate limit', () => {
 });
 
 describe('useUpdatePassword: reporting whether the other sessions were revoked', () => {
-  let warn: jest.SpyInstance;
   const REVOKE_FAILED = { error: { name: 'AuthApiError', status: 500, message: 'boom' } };
 
   beforeEach(() => {
     updateUser.mockResolvedValue({ data: { user: {} }, error: null });
-    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    warn.mockRestore();
+    recordLogs();
   });
 
   it('reports othersRevoked true when both calls succeed', async () => {
@@ -267,7 +271,7 @@ describe('useUpdatePassword: reporting whether the other sessions were revoked',
 
 describe('useUpdatePassword: failure logging', () => {
   it('warns with the projected detail and no password', async () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const logs = recordLogs();
     updateUser.mockResolvedValue({
       data: { user: null },
       error: { name: 'AuthApiError', status: 400, code: 'bad', message: 'Nope' },
@@ -275,13 +279,15 @@ describe('useUpdatePassword: failure logging', () => {
 
     await updatePassword();
 
-    expect(warn).toHaveBeenCalledWith('[auth] password update failed', {
-      name: 'AuthApiError',
-      code: 'bad',
-      status: 400,
-      message: 'Nope',
-    });
-    expect(JSON.stringify(warn.mock.calls)).not.toContain('new-password');
-    warn.mockRestore();
+    expect(logs.warnings).toContainEqual([
+      '[auth] password update failed',
+      {
+        name: 'AuthApiError',
+        code: 'bad',
+        status: 400,
+        message: 'Nope',
+      },
+    ]);
+    expect(logs.text()).not.toContain('new-password');
   });
 });

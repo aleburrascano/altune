@@ -1,6 +1,5 @@
 import { createMemoryAuthPort } from '@features/signIn/__tests__/memoryAuthPort';
-import type { AuthPort } from '@features/signIn';
-import { httpAuthPort } from '@features/signIn/adapters/http/httpAuthPort';
+import { httpAuthPort, type AuthPort } from '@features/signIn';
 
 const { __http, fakeFetch } = require('@testing/doubles/fetch.js');
 

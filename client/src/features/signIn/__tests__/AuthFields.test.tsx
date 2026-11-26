@@ -1,13 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
-import type { ReactNode } from 'react';
-
+import { fireEvent, screen } from '@testing-library/react-native';
+import { renderRouter } from 'expo-router/testing-library';
 import { SetNewPasswordScreen, SignUpScreen } from '@features/signIn';
 import { authPortWrapper } from '@features/signIn/__tests__/testUtils/authTestUtils';
-jest.mock('expo-router', () => ({
-  useRouter: () => ({ replace: jest.fn(), push: jest.fn(), back: jest.fn() }),
-  Link: ({ children }: { children: ReactNode }) => children,
-}));
-
 const offersAGeneratedPassword = {
   secureTextEntry: true,
   autoCapitalize: 'none',
@@ -23,7 +17,7 @@ function inputProps(testID: string) {
 
 describe('the new-password fields share one autofill contract', () => {
   it('offers a generated password on the sign-up password field', () => {
-    render(<SignUpScreen />, { wrapper: authPortWrapper() });
+    renderRouter({ index: SignUpScreen }, { wrapper: authPortWrapper() });
 
     expect(inputProps('password-input')).toEqual({
       ...offersAGeneratedPassword,
@@ -33,7 +27,7 @@ describe('the new-password fields share one autofill contract', () => {
   });
 
   it('offers a generated password on the sign-up confirm field', () => {
-    render(<SignUpScreen />, { wrapper: authPortWrapper() });
+    renderRouter({ index: SignUpScreen }, { wrapper: authPortWrapper() });
 
     expect(inputProps('confirm-input')).toEqual({
       ...offersAGeneratedPassword,
@@ -43,7 +37,7 @@ describe('the new-password fields share one autofill contract', () => {
   });
 
   it('offers a generated password on the reset screen password field', () => {
-    render(<SetNewPasswordScreen />);
+    renderRouter({ index: SetNewPasswordScreen }, { wrapper: authPortWrapper() });
 
     expect(inputProps('password-input')).toEqual({
       ...offersAGeneratedPassword,
@@ -53,7 +47,7 @@ describe('the new-password fields share one autofill contract', () => {
   });
 
   it('offers a generated password on the reset screen confirm field', () => {
-    render(<SetNewPasswordScreen />);
+    renderRouter({ index: SetNewPasswordScreen }, { wrapper: authPortWrapper() });
 
     expect(inputProps('confirm-input')).toEqual({
       ...offersAGeneratedPassword,
@@ -63,7 +57,7 @@ describe('the new-password fields share one autofill contract', () => {
   });
 
   it('reports what was typed back to the screen holding the value', () => {
-    render(<SetNewPasswordScreen />);
+    renderRouter({ index: SetNewPasswordScreen }, { wrapper: authPortWrapper() });
 
     fireEvent.changeText(screen.getByTestId('password-input'), 'correct horse battery');
 

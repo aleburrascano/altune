@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 import Svg, { Path } from 'react-native-svg';
 
 import { Tappable, Text, radius, spacing, useTheme } from '@shared/ui';
-import { useOAuth } from '@features/signIn/hooks/useOAuth';
+import { useOAuth } from '@features/signIn/view/useOAuth';
 import { AuthErrorBanner } from '@features/signIn/view/AuthErrorBanner';
 
 const DEFAULT_LOGO_SIZE = 16;
