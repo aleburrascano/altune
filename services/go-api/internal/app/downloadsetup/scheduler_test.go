@@ -2,6 +2,7 @@ package downloadsetup_test
 
 import (
 	"altune/go-api/internal/app/bridges/downloadfromlibrary"
+	"altune/go-api/internal/app/bridges/downloadfromsearch"
 	"altune/go-api/internal/app/downloadsetup"
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/library"
@@ -70,6 +71,7 @@ func newOfflineScheduler(t *testing.T, cfg *config.Config, sources downloadsetup
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(&fixtureTrackRepo{}),
 		AudioStore: library.NewFilesystemAudioStore(cfg.MusicDir),
+		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    sources,
 	})
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
@@ -78,7 +80,6 @@ func newOfflineScheduler(t *testing.T, cfg *config.Config, sources downloadsetup
 
 func acquireThroughPostgres(t *testing.T) (library.Track, string, download.Verification) {
 	t.Helper()
-	testdb.RequireIntegration(t)
 	pool := integrationPool(t)
 	musicDir := t.TempDir()
 	userID := ids.NewUserId(uuid.New())
@@ -97,6 +98,7 @@ func acquireThroughPostgres(t *testing.T) (library.Track, string, download.Verif
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(repo),
 		AudioStore: library.NewFilesystemAudioStore(musicDir),
+		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    fixtureTiers(),
 	})
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
@@ -194,15 +196,8 @@ func TestNewScheduler_AcquisitionPausedStartsPaused(t *testing.T) {
 
 func integrationPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
-	pool, err := pgxpool.New(context.Background(), dbURL)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
+	pool := testdb.Pool(t)
+	testdb.ExclusiveAcquisitionQueue(t, pool)
 	return pool
 }
 
@@ -218,7 +213,6 @@ func countAcquisitionOutcomeRows(t *testing.T, pool *pgxpool.Pool, trackID strin
 }
 
 func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
-	testdb.RequireIntegration(t)
 	pool := integrationPool(t)
 
 	userID := ids.NewUserId(uuid.New())
@@ -237,6 +231,7 @@ func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(trackRepo),
 		AudioStore: library.NewFilesystemAudioStore(t.TempDir()),
+		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    fixtureTiers(),
 	})
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
@@ -284,7 +279,7 @@ func insertReadyTrackGradedC(t *testing.T, pool *pgxpool.Pool) (ids.UserId, ids.
 	})
 	if _, err := pool.Exec(context.Background(), `
 UPDATE tracks SET acquisition_status = 'ready', audio_ref = 'stored.mp3',
-	audio_source_url = 'https://www.youtube.com/watch?v=stored', acquisition_available_at = NULL,
+	audio_source_url = 'https://www.youtube.com/watch?v=storedvid01', acquisition_available_at = NULL,
 	acquisition_evidence = '{"grade": "C", "in_place_generation": 2}'
 WHERE id = $1`, track.ID.UUID()); err != nil {
 		t.Fatalf("mark ready graded C: %v", err)
@@ -314,7 +309,6 @@ FROM tracks WHERE id = $1`, trackID.UUID()).Scan(&s.Kind, &s.Queued, &s.Leased, 
 }
 
 func TestNewScheduler_AnUpgradeWorkerClaimsAndSettlesAnEnqueuedUpgrade(t *testing.T) {
-	testdb.RequireIntegration(t)
 	pool := integrationPool(t)
 	userID, trackID := insertReadyTrackGradedC(t, pool)
 
@@ -325,6 +319,7 @@ func TestNewScheduler_AnUpgradeWorkerClaimsAndSettlesAnEnqueuedUpgrade(t *testin
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool)),
 		AudioStore: library.NewFilesystemAudioStore(cfg.MusicDir),
+		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    downloadsetup.SourceOrder{First: []download.AudioSource{sourceWithNothing{}}},
 	})
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
@@ -390,7 +385,6 @@ func (sourceThatHangs) Fetch(context.Context, download.AudioCandidate, string) (
 }
 
 func TestNewScheduler_ShutdownCancelsAJobThatOutlivesTheConfiguredDrainBudget(t *testing.T) {
-	testdb.RequireIntegration(t)
 	pool := integrationPool(t)
 	userID := ids.NewUserId(uuid.New())
 	track, err := library.NewTrack(userID, "Hanging Song", "Artist", "")
@@ -409,6 +403,7 @@ func TestNewScheduler_ShutdownCancelsAJobThatOutlivesTheConfiguredDrainBudget(t 
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(repo),
 		AudioStore: library.NewFilesystemAudioStore(t.TempDir()),
+		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    downloadsetup.SourceOrder{First: []download.AudioSource{hang}},
 	})
 	var shutdown sync.Once

@@ -26,7 +26,10 @@ const (
 	defaultDrainBudget       = 60 * time.Second
 )
 
-const outcomeRecordTimeout = 2 * time.Second
+const (
+	outcomeRecordTimeout = 2 * time.Second
+	queueCallBudget      = 10 * time.Second
+)
 
 type acquirer interface {
 	Execute(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error
@@ -43,8 +46,6 @@ type BackgroundAcquisitionScheduler struct {
 	pending *pendingTracker
 	jobs    background.Tracker
 	runners background.Tracker
-
-	corrIDs sync.Map
 
 	workers int
 
@@ -278,7 +279,7 @@ func (s *BackgroundAcquisitionScheduler) runClaimedJob(job ports.Job) {
 	key := job.TrackID.String()
 	run := s.acquisitionRunFor(job.Kind)
 
-	jobCtx, cancelJob := s.jobContextFor(key, job)
+	jobCtx, cancelJob := s.jobContextFor(job)
 	defer cancelJob()
 	jobCtx = s.withLeaseFence(jobCtx, job)
 
@@ -289,7 +290,23 @@ func (s *BackgroundAcquisitionScheduler) runClaimedJob(job ports.Job) {
 	jobErr := s.execClaimedJob(reportedCtx, key, run, job)
 	s.stopClaimedJob(cancelJob, heartbeatDone)
 
-	s.finishJob(job, jobErr)
+	s.finishJob(finishContextOf(jobCtx), job, jobErr)
+}
+
+func finishContextOf(jobCtx context.Context) context.Context {
+	return logging.WithCorrelationID(context.Background(), logging.CorrelationIDFromContext(jobCtx))
+}
+
+func (s *BackgroundAcquisitionScheduler) releaseWithin(ctx context.Context, job ports.Job, delay time.Duration) error {
+	queueCtx, cancel := background.Detach(ctx, queueCallBudget)
+	defer cancel()
+	return s.queue.Release(queueCtx, job.TrackID, job.ClaimNumber, delay)
+}
+
+func (s *BackgroundAcquisitionScheduler) settleWithin(ctx context.Context, job ports.Job) error {
+	queueCtx, cancel := background.Detach(ctx, queueCallBudget)
+	defer cancel()
+	return s.queue.Settle(queueCtx, job.TrackID, job.ClaimNumber)
 }
 
 func (s *BackgroundAcquisitionScheduler) startClaimedJob(jobCtx context.Context, key string, job ports.Job) context.Context {
@@ -322,11 +339,11 @@ func (s *BackgroundAcquisitionScheduler) acquisitionRunFor(kind ports.JobKind) a
 	}
 }
 
-func (s *BackgroundAcquisitionScheduler) jobContextFor(key string, job ports.Job) (context.Context, context.CancelFunc) {
+func (s *BackgroundAcquisitionScheduler) jobContextFor(job ports.Job) (context.Context, context.CancelFunc) {
 	jobCtx, cancelJob := context.WithCancel(s.baseCtx)
 	jobCtx = withJobFence(withJobAttempt(withSchedulerOwnedJobContext(jobCtx), job.Run), job.ClaimNumber)
-	if corrID, ok := s.corrIDs.LoadAndDelete(key); ok {
-		jobCtx = logging.WithCorrelationID(jobCtx, corrID.(string))
+	if job.CorrelationID != "" {
+		jobCtx = logging.WithCorrelationID(jobCtx, job.CorrelationID)
 	}
 	return jobCtx, cancelJob
 }
@@ -427,52 +444,47 @@ var errJobPanicked = errors.New("acquisition job panicked")
 
 type acquisitionRun func(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error
 
-func (s *BackgroundAcquisitionScheduler) finishJob(job ports.Job, jobErr error) {
+func (s *BackgroundAcquisitionScheduler) finishJob(ctx context.Context, job ports.Job, jobErr error) {
 	defer s.pending.untrack(job.TrackID.String())
 
 	if s.baseCtx.Err() != nil {
-		err := s.queue.Release(context.Background(), job.TrackID, job.ClaimNumber, 0)
-		s.logQueueOutcome("release", job.TrackID, err)
+		s.logQueueOutcome(ctx, "release", job.TrackID, s.releaseWithin(ctx, job, 0))
 		return
 	}
 	if errors.Is(jobErr, errJobPanicked) {
-		s.releasePanickedJob(job)
+		s.releasePanickedJob(ctx, job)
 		return
 	}
 	if errors.Is(jobErr, ErrAcquisitionRetryable) {
-		err := s.queue.Release(context.Background(), job.TrackID, job.ClaimNumber, retryBackoff(job.Run))
-		s.logQueueOutcome("release", job.TrackID, err)
+		s.logQueueOutcome(ctx, "release", job.TrackID, s.releaseWithin(ctx, job, retryBackoff(job.Run)))
 		return
 	}
-	err := s.queue.Settle(context.Background(), job.TrackID, job.ClaimNumber)
-	s.logQueueOutcome("settle", job.TrackID, err)
+	s.logQueueOutcome(ctx, "settle", job.TrackID, s.settleWithin(ctx, job))
 }
 
-func (s *BackgroundAcquisitionScheduler) releasePanickedJob(job ports.Job) {
+func (s *BackgroundAcquisitionScheduler) releasePanickedJob(ctx context.Context, job ports.Job) {
 	if job.Run >= maxAcquisitionAttempts {
-		s.refuseQueuedRecovering(job)
-		err := s.queue.Settle(context.Background(), job.TrackID, job.ClaimNumber)
-		s.logQueueOutcome("settle", job.TrackID, err)
+		s.refuseQueuedRecovering(ctx, job)
+		s.logQueueOutcome(ctx, "settle", job.TrackID, s.settleWithin(ctx, job))
 		return
 	}
-	err := s.queue.Release(context.Background(), job.TrackID, job.ClaimNumber, retryBackoff(job.Run))
-	s.logQueueOutcome("release", job.TrackID, err)
+	s.logQueueOutcome(ctx, "release", job.TrackID, s.releaseWithin(ctx, job, retryBackoff(job.Run)))
 }
 
-func (s *BackgroundAcquisitionScheduler) refuseQueuedRecovering(job ports.Job) {
-	defer background.RecoverContext(s.baseCtx, "acquisition_panic_fail_track", "track_id", job.TrackID.String())
-	s.svc.RefuseQueued(withJobFence(context.Background(), job.ClaimNumber), job.UserID, job.TrackID)
+func (s *BackgroundAcquisitionScheduler) refuseQueuedRecovering(ctx context.Context, job ports.Job) {
+	defer background.RecoverContext(ctx, "acquisition_panic_fail_track", "track_id", job.TrackID.String())
+	s.svc.RefuseQueued(withJobFence(ctx, job.ClaimNumber), job.UserID, job.TrackID)
 }
 
-func (s *BackgroundAcquisitionScheduler) logQueueOutcome(op string, trackID ids.TrackId, err error) {
+func (s *BackgroundAcquisitionScheduler) logQueueOutcome(ctx context.Context, op string, trackID ids.TrackId, err error) {
 	if err == nil {
 		return
 	}
 	if errors.Is(err, acqdomain.ErrLeaseLost) {
-		slog.WarnContext(s.baseCtx, "acquisition."+op+"_lease_lost", "track_id", trackID.String())
+		slog.WarnContext(ctx, "acquisition."+op+"_lease_lost", "track_id", trackID.String())
 		return
 	}
-	slog.ErrorContext(s.baseCtx, "acquisition."+op+"_failed", "track_id", trackID.String(), "error", err)
+	slog.ErrorContext(ctx, "acquisition."+op+"_failed", "track_id", trackID.String(), "error", err)
 }
 
 func hostOf(rawURL string) string {

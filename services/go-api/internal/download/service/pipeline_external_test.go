@@ -21,7 +21,7 @@ func TestExecute_APanickingStepIsLoggedAndReportedAsThatStep(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	ring := logging.Setup("error")
 
-	_, err := acquireWith(t, pendingBlindingLights(), freshAudioSource{}, service.WithAudioTagger(panickingTagger{}))
+	_, err := acquireStaged(t, pendingBlindingLights(), freshAudioSource{}, noStages(taggedBy(panickingTagger{})))
 
 	var stepErr *service.StepError
 	if !errors.As(err, &stepErr) || stepErr.Step != "tag" {

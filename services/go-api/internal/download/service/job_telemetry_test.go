@@ -43,14 +43,18 @@ type finishedJob struct {
 
 func scheduleAndFinish(t *testing.T, source ports.AudioSource, opts ...func(*service.AcquireTrackAudioService)) finishedJob {
 	t.Helper()
+	return scheduleAndFinishWith(t, source, noVerification(), opts...)
+}
+
+func scheduleAndFinishWith(t *testing.T, source ports.AudioSource, wiring service.VerificationPorts, opts ...func(*service.AcquireTrackAudioService)) finishedJob {
+	t.Helper()
 	var job finishedJob
 	synctest.Test(t, func(t *testing.T) {
 		track := pendingBlindingLights()
 		length := blindingLightsLength
 		track.CatalogDurationSeconds = &length
 		ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
-		opts = append([]func(*service.AcquireTrackAudioService){service.WithAcquireTempWorkspace(scratchfiles.New())}, opts...)
-		svc := service.NewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, opts...)
+		svc := service.NewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, scratchfiles.New(), wiring, noStages(), opts...)
 		progress := &progressStages{}
 		scheduler := service.NewBackgroundAcquisitionScheduler(svc, 1, service.WithSchedulerEvents(progress))
 		defer scheduler.Shutdown(context.Background())
@@ -145,8 +149,7 @@ func TestStatus_AJobSumsTheTimeOfEveryFetchAndReportsTheFormatAndFileItStored(t 
 func TestStatus_AJobReportsTheStoredCandidateAsItsSource(t *testing.T) {
 	source := perURLSource{found: blindingLightsAt(failingRank1URL, storedRank2URL), broken: map[string]bool{failingRank1URL: true}}
 
-	job := scheduleAndFinish(t, source,
-		service.WithRecordingResolver(resolvedTo(blindingLightsRecording)), service.WithAudioIdentifier(&identifier{}))
+	job := scheduleAndFinishWith(t, source, resolving(resolvedTo(blindingLightsRecording), verifiedBy(&identifier{})))
 
 	if job.record.State != ports.JobSucceeded || job.record.ResolvedSource != storedRank2URL {
 		t.Errorf("job = %v from %q, want succeeded from the stored rank-2 candidate %q", job.record.State, job.record.ResolvedSource, storedRank2URL)

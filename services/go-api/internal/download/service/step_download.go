@@ -49,38 +49,24 @@ type DownloadStep struct {
 
 const prodVerifyWidth = 2
 
-func NewDownloadStep(fetcher candidateFetcher, opts ...func(*DownloadStep)) *DownloadStep {
-	s := &DownloadStep{fetcher: fetcher, width: prodVerifyWidth, candidateTimeout: DefaultCandidateTimeout, floor: defaultConfidenceFloor, cuts: audioverdict.DefaultCuts()}
+func NewDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, opts ...func(*DownloadStep)) *DownloadStep {
+	requirePort("NewDownloadStep", "identifier", identifier == nil)
+	requirePort("NewDownloadStep", "recording lookup", lookup == nil)
+	requirePort("NewDownloadStep", "prober", prober == nil)
+	requirePort("NewDownloadStep", "skip recorder", skips == nil)
+	s := &DownloadStep{fetcher: fetcher, workspace: requireWorkspace("NewDownloadStep", workspace), identifier: identifier, recordingLookup: lookup, prober: prober, skips: skips, width: prodVerifyWidth, candidateTimeout: DefaultCandidateTimeout, floor: defaultConfidenceFloor, cuts: audioverdict.DefaultCuts()}
 	for _, opt := range opts {
 		opt(s)
 	}
 	return s
 }
 
-func WithDownloadProber(p ports.AudioProber) func(*DownloadStep) {
-	return func(s *DownloadStep) { s.prober = p }
-}
-
-func WithDownloadIdentifier(i ports.AudioIdentifier) func(*DownloadStep) {
-	return func(s *DownloadStep) { s.identifier = i }
-}
-
 func WithStepDownloadLimiter(l *ConcurrencyLimit) func(*DownloadStep) {
 	return func(s *DownloadStep) { s.limiter = l }
 }
 
-func WithStepTempWorkspace(w ports.ScratchFolder) func(*DownloadStep) {
-	return func(s *DownloadStep) { s.workspace = w }
-}
-
-func WithStepVerifySkips(r ports.VerifySkipRecorder) func(*DownloadStep) {
-	return func(s *DownloadStep) { s.skips = r }
-}
-
 func (s *DownloadStep) recordSkip(gate string) {
-	if s.skips != nil {
-		s.skips.RecordVerifySkip(gate)
-	}
+	s.skips.RecordVerifySkip(gate)
 }
 
 func WithJudgeCuts(cuts audioverdict.Cuts) func(*DownloadStep) {
@@ -102,9 +88,6 @@ func WithConfidenceFloor(floor float64) func(*DownloadStep) {
 func (s *DownloadStep) Name() StepName { return stepNameDownload }
 
 func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterSelect) (afterDownload, error) {
-	if s.workspace == nil {
-		return afterDownload{}, ErrNoTempWorkspace
-	}
 	return s.executeWindowed(ctx, ac)
 }
 
@@ -515,9 +498,6 @@ func (s *DownloadStep) verifyDuration(
 	candidate ports.AudioCandidate,
 	filePath string,
 ) (bool, sharedtracklength.TrackLength, *downloadRejection) {
-	if s.prober == nil {
-		return false, sharedtracklength.TrackLength{}, nil
-	}
 	judge, known := ac.lengths().FileJudge(candidate)
 	if !known {
 		s.recordSkip(ports.SkipNoDuration)
@@ -539,7 +519,7 @@ func (s *DownloadStep) probeDuration(
 		err = lengthErr
 	}
 	switch {
-	case err != nil && ctx.Err() != nil:
+	case err != nil && (ctx.Err() != nil || errors.Is(err, ports.ErrNoAudioProber)):
 		return false, sharedtracklength.TrackLength{}, nil
 	case err != nil:
 		slog.WarnContext(ctx, "acquisition.probe_failed_accepting",
@@ -583,9 +563,6 @@ func (s *DownloadStep) verifyDecodable(
 	candidate ports.AudioCandidate,
 	filePath string,
 ) *downloadRejection {
-	if s.prober == nil {
-		return nil
-	}
 	err := s.prober.ValidateDecodable(ctx, filePath)
 	if err == nil {
 		return nil

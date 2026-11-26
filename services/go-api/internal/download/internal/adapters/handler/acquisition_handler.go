@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -56,13 +57,13 @@ func (c acquisitionCommand) resolveTrack(w http.ResponseWriter, r *http.Request,
 
 func (c acquisitionCommand) loadTrack(w http.ResponseWriter, r *http.Request, userId ids.UserId, trackId ids.TrackId) (*ports.TrackSnapshot, bool) {
 	track, err := c.trackRepo.Get(r.Context(), trackId, userId)
+	if errors.Is(err, ports.ErrTrackNotFound) {
+		httpserver.HandleServiceError(w, r, apierror.NewError(apierror.CodeCatalogTrackNotFound, "track not found"))
+		return nil, false
+	}
 	if err != nil {
 		slog.ErrorContext(r.Context(), c.logMsg, "error", err, "track_id", trackId.String())
 		httpserver.HandleServiceError(w, r, err)
-		return nil, false
-	}
-	if track == nil {
-		httpserver.HandleServiceError(w, r, apierror.NewError(apierror.CodeCatalogTrackNotFound, "track not found"))
 		return nil, false
 	}
 	return track, true

@@ -20,7 +20,7 @@ func blindingLightsRef() service.TrackRef {
 func TestSelectStep_Execute(t *testing.T) {
 	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{{
 		Title: "Blinding Lights", Channel: "The Weeknd - Topic", Duration: 200,
-		URL: "https://youtube.com/watch?v=topic1", Categories: []string{"Music"}, ViewCount: 10_000_000,
+		URL: "https://youtube.com/watch?v=topic111111", Categories: []string{"Music"}, ViewCount: 10_000_000,
 	}}}
 	ac := &service.AcquisitionContext{Track: blindingLightsRef()}
 
@@ -29,15 +29,15 @@ func TestSelectStep_Execute(t *testing.T) {
 	if step := failedStep(t, err).Step; step == "search" || step == "select" {
 		t.Fatalf("err = %v, want the pipeline past select", err)
 	}
-	if ac.Selected == nil || ac.Selected.URL != "https://youtube.com/watch?v=topic1" {
-		t.Errorf("Selected = %+v, want %q", ac.Selected, "https://youtube.com/watch?v=topic1")
+	if ac.Selected == nil || ac.Selected.URL != "https://youtube.com/watch?v=topic111111" {
+		t.Errorf("Selected = %+v, want %q", ac.Selected, "https://youtube.com/watch?v=topic111111")
 	}
 }
 
 func TestSelectStep_Execute_AllCandidatesBelowThreshold(t *testing.T) {
 	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{{
 		Title: "Cooking Tutorial Episode 47", Channel: "CookingChannel", Duration: 200,
-		URL: "https://youtube.com/watch?v=cook1", Categories: []string{"Howto & Style"}, ViewCount: 50_000,
+		URL: "https://youtube.com/watch?v=cook1111111", Categories: []string{"Howto & Style"}, ViewCount: 50_000,
 	}}}
 
 	err := runPipeline(context.Background(), service.NewSourceRegistry(source), &service.AcquisitionContext{Track: blindingLightsRef()})

@@ -177,10 +177,6 @@ func TestCleanupTemp_WithoutTempDirRemovesOnlyTheFile(t *testing.T) {
 	}
 }
 
-func TestCleanupTemp_WithoutAWorkspaceRemovesNothingAndDoesNotPanic(t *testing.T) {
-	service.CleanupTemp(context.Background(), nil, &service.AcquisitionContext{TempPath: "/x/track.mp3", TempDir: "/x"})
-}
-
 func TestCleanupTemp_EmptyTempPathRemovesNothing(t *testing.T) {
 	ws := newCallRecordingWorkspace()
 

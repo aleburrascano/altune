@@ -14,7 +14,9 @@ import (
 	"time"
 )
 
-const rollbackDeleteTries = 3
+const (
+	rollbackDeleteTries = 3
+)
 
 var rollbackDeleteBackoff = backoff.MustCapped(100*time.Millisecond, time.Second)
 
@@ -32,9 +34,16 @@ type StoreStep struct {
 	workspace   ports.ScratchFolder
 }
 
-func NewStoreStep(audioStore ports.AudioWriter, opts ...func(*StoreStep)) *StoreStep {
+func NewStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder, prober ports.AudioProber, orphans ports.OrphanedAudioRecorder, refs ports.AudioRefLookup, opts ...func(*StoreStep)) *StoreStep {
+	requirePort("NewStoreStep", "prober", prober == nil)
+	requirePort("NewStoreStep", "orphan recorder", orphans == nil)
+	requirePort("NewStoreStep", "audio ref lookup", refs == nil)
 	s := &StoreStep{
 		audioStore:  audioStore,
+		workspace:   requireWorkspace("NewStoreStep", workspace),
+		prober:      prober,
+		orphans:     orphans,
+		trackRefs:   refs,
 		attemptID:   ids.RandomID,
 		deleteTries: rollbackDeleteTries,
 		sleep:       time.Sleep,
@@ -45,22 +54,15 @@ func NewStoreStep(audioStore ports.AudioWriter, opts ...func(*StoreStep)) *Store
 	return s
 }
 
-func WithStoreProber(p ports.AudioProber) func(*StoreStep) {
-	return func(s *StoreStep) { s.prober = p }
-}
-
-func WithStoreAudioRefGuard(refs ports.AudioRefLookup, ownTrackID ids.TrackId) func(*StoreStep) {
+func WithStoreOwner(userID ids.UserId, ownTrackID ids.TrackId) func(*StoreStep) {
 	return func(s *StoreStep) {
-		s.trackRefs = refs
+		s.userID = userID
 		s.ownTrackID = ownTrackID
 	}
 }
 
-func WithStoreOrphanQueue(q ports.OrphanedAudioRecorder, userID ids.UserId) func(*StoreStep) {
-	return func(s *StoreStep) {
-		s.orphans = q
-		s.userID = userID
-	}
+func WithStoreSleep(sleep func(time.Duration)) func(*StoreStep) {
+	return func(s *StoreStep) { s.sleep = sleep }
 }
 
 func WithStoreKeyPrefix(prefix string) func(*StoreStep) {
@@ -70,10 +72,8 @@ func WithStoreKeyPrefix(prefix string) func(*StoreStep) {
 func (s *StoreStep) Name() StepName { return stepNameStore }
 
 func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, tagged afterTag) (afterStore, error) {
-	if s.prober != nil {
-		if err := s.prober.ValidateDecodable(ctx, ac.TempPath); err != nil {
-			return afterStore{}, withCancellation(ctx, fmt.Errorf("final audio failed decode validation: %w", err))
-		}
+	if err := s.prober.ValidateDecodable(ctx, ac.TempPath); err != nil {
+		return afterStore{}, withCancellation(ctx, fmt.Errorf("final audio failed decode validation: %w", err))
 	}
 
 	audioRef := s.refFor(ctx, ac)
@@ -101,17 +101,10 @@ func (s *StoreStep) refFor(ctx context.Context, ac *AcquisitionContext) string {
 
 func (s *StoreStep) storedFileAt(path string) ports.StoredFile {
 	file := ports.StoredFile{Codec: strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), ".")}
-	if s.workspace == nil {
-		return file
-	}
 	if size, err := s.workspace.Size(path); err == nil {
 		file.Bytes = size
 	}
 	return file
-}
-
-func WithStoreWorkspace(w ports.ScratchFolder) func(*StoreStep) {
-	return func(s *StoreStep) { s.workspace = w }
 }
 
 func (s *StoreStep) Rollback(ctx context.Context, ac *AcquisitionContext) error {
@@ -139,9 +132,6 @@ func (s *StoreStep) stillServesATrack(ctx context.Context, ac *AcquisitionContex
 }
 
 func (s *StoreStep) sharedWithAnotherTrack(ctx context.Context, audioRef string) bool {
-	if s.trackRefs == nil {
-		return false
-	}
 	inUse, err := s.trackRefs.AudioRefInUse(ctx, audioRef, s.ownTrackID)
 	if err != nil {
 		slog.ErrorContext(ctx, "acquisition.audio_usage_unknown",

@@ -5,22 +5,38 @@ import (
 	"altune/go-api/internal/search"
 )
 
-func RecordingOptions(disc *search.Discovery) []func(*download.AcquireTrackAudioService) {
+type RecordingWiring struct {
+	Resolver     download.RecordingResolverPort
+	Lookup       download.RecordingLookup
+	Rerecordings download.RerecordingFinder
+}
+
+func NoRecording() RecordingWiring {
+	return RecordingWiring{
+		Resolver:     download.NoopRecordingResolver(),
+		Lookup:       download.NoopRecordingLookup(),
+		Rerecordings: download.NoopRerecordingFinder(),
+	}
+}
+
+func RecordingOptions(disc *search.Discovery) RecordingWiring {
+	none := NoRecording()
 	if disc.Search == nil {
-		return nil
+		return none
 	}
 	searcher := NewSearch(disc.Search)
 	if disc.Recordings == nil {
-		return []func(*download.AcquireTrackAudioService){download.WithRecordingResolver(download.NewRecordingResolver(searcher))}
+		none.Resolver = download.NewRecordingResolver(searcher)
+		return none
 	}
 	recordings := NewRecordings(disc.Recordings)
 	resolver := download.NewRecordingResolver(searcher,
 		download.WithISRCLookup(recordings),
 		download.WithRerecordingLookup(recordings),
 		download.WithRecordingLookup(recordings))
-	return []func(*download.AcquireTrackAudioService){
-		download.WithRecordingResolver(resolver),
-		download.WithAcquireRecordingLookup(resolver),
-		download.WithRerecordingFinder(resolver),
+	return RecordingWiring{
+		Resolver:     resolver,
+		Lookup:       resolver,
+		Rerecordings: resolver,
 	}
 }

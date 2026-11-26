@@ -3,6 +3,7 @@ package service
 import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/background"
 	"context"
 	"errors"
 	"log/slog"
@@ -19,7 +20,7 @@ func (s *BackgroundAcquisitionScheduler) heartbeatLoop(ctx context.Context, job 
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if !s.sendHeartbeat(job, &lastSuccess) {
+			if !s.sendHeartbeat(ctx, job, &lastSuccess) {
 				cancelJob()
 				return
 			}
@@ -27,20 +28,22 @@ func (s *BackgroundAcquisitionScheduler) heartbeatLoop(ctx context.Context, job 
 	}
 }
 
-func (s *BackgroundAcquisitionScheduler) sendHeartbeat(job ports.Job, lastSuccess *time.Time) bool {
-	err := s.queue.Heartbeat(context.Background(), job.TrackID, job.ClaimNumber, s.leaseDuration)
+func (s *BackgroundAcquisitionScheduler) sendHeartbeat(jobCtx context.Context, job ports.Job, lastSuccess *time.Time) bool {
+	ctx, cancel := background.Detach(jobCtx, queueCallBudget)
+	defer cancel()
+	err := s.queue.Heartbeat(ctx, job.TrackID, job.ClaimNumber, s.leaseDuration)
 	if err == nil {
 		*lastSuccess = s.now()
 		return true
 	}
 	if errors.Is(err, acqdomain.ErrLeaseLost) {
-		slog.WarnContext(s.baseCtx, "acquisition.lease_lost", "track_id", job.TrackID.String())
+		slog.WarnContext(ctx, "acquisition.lease_lost", "track_id", job.TrackID.String())
 		return false
 	}
 	if s.now().Sub(*lastSuccess) >= s.leaseDuration {
-		slog.ErrorContext(s.baseCtx, "acquisition.heartbeat_lease_expired", "track_id", job.TrackID.String(), "error", err)
+		slog.ErrorContext(ctx, "acquisition.heartbeat_lease_expired", "track_id", job.TrackID.String(), "error", err)
 		return false
 	}
-	slog.ErrorContext(s.baseCtx, "acquisition.heartbeat_failed", "track_id", job.TrackID.String(), "error", err)
+	slog.ErrorContext(ctx, "acquisition.heartbeat_failed", "track_id", job.TrackID.String(), "error", err)
 	return true
 }

@@ -74,7 +74,7 @@ func strongHit(songs []Song, req ports.FindRequest) (Song, bool) {
 	var best Song
 	found := false
 	for _, song := range songs[:min(len(songs), topResults)] {
-		if !matches(song, req) {
+		if !sourcekey.IsYouTubeVideoID(song.VideoID) || !matches(song, req) {
 			continue
 		}
 		if !found || better(song, best, req) {

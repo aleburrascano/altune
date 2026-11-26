@@ -2,6 +2,7 @@ package downloadsetup
 
 import (
 	"altune/go-api/internal/app/bridges/downloadfromlibrary"
+	"altune/go-api/internal/app/bridges/downloadfromsearch"
 	"altune/go-api/internal/app/fingerprintstatus"
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/library"
@@ -19,7 +20,7 @@ type Deps struct {
 	Config       *config.Config
 	Pool         *pgxpool.Pool
 	Events       *monitoring.EventTap
-	Recording    []func(*download.AcquireTrackAudioService)
+	Recording    downloadfromsearch.RecordingWiring
 	Ledger       download.TrackLedgerPort
 	AudioStore   library.AudioStore
 	Sources      SourceOrder
@@ -32,44 +33,54 @@ func NewScheduler(ctx context.Context, d Deps) *download.BackgroundAcquisitionSc
 	skips := &download.VerifySkipCounter{}
 	prober := download.NewFfprobeProber(d.Config.FFmpegLocation, download.WithSkipRecorder(skips))
 	d.Verification.Ffprobe, d.Verification.Ffmpeg = prober.Available()
-	opts := storeOptions(d, download.WithAudioProber(prober), skips)
-	opts = append(opts, d.Recording...)
-	lookups, fingerprinting := fingerprintOptions(ctx, d.Config, &d.Verification)
-	opts = append(opts, fingerprinting...)
+	opts := storeOptions(d)
+	lookups, identifier, storedAudio := fingerprinting(ctx, &d)
 	opts = append(opts, pipelineOptions(d)...)
 	acquireSvc := download.NewAcquireTrackAudioService(
 		d.Ledger,
 		download.NewSourceRegistry(d.Sources.First...).WithFallback(d.Sources.Fallback...),
 		d.AudioStore,
+		download.NewTempWorkspace(),
+		download.VerificationPorts{
+			Identifier:      identifier,
+			RecordingLookup: d.Recording.Lookup,
+			Rerecordings:    d.Recording.Rerecordings,
+			Previews:        upgradePreviewMatcher(d.Config),
+			Recordings:      d.Recording.Resolver,
+		},
+		download.StagePorts{
+			Prober:      prober,
+			Tagger:      download.NewFFmpegTagger(binpath.Resolve("ffmpeg", d.Config.FFmpegLocation), download.NewId3Tagger()),
+			Rejections:  download.NewPostgresRejectionStore(d.Pool),
+			StoredAudio: storedAudio,
+			Orphans:     downloadfromlibrary.NewOrphanedAudioRecorder(library.NewPostgresOrphanedAudioRepository(d.Pool)),
+			Skips:       skips,
+		},
 		opts...,
 	)
 	return download.NewBackgroundAcquisitionScheduler(acquireSvc, d.Config.AcquisitionConcurrency, schedulerOptions(d, acquireSvc, skips, lookups)...)
 }
 
-func storeOptions(d Deps, probing acquireOption, skips *download.VerifySkipCounter) []acquireOption {
+func storeOptions(d Deps) []acquireOption {
 	cfg := d.Config
 	return []acquireOption{
 		download.WithAcquireEvents(d.Events),
-		download.WithAcquireOrphanQueue(downloadfromlibrary.NewOrphanedAudioRecorder(library.NewPostgresOrphanedAudioRepository(d.Pool))),
 		download.WithSupersededAudioGrace(cfg.AcquisitionSupersededAudioGrace),
-		probing,
-		download.WithVerifySkips(skips),
-		download.WithAudioTagger(download.NewFFmpegTagger(binpath.Resolve("ffmpeg", cfg.FFmpegLocation), download.NewId3Tagger())),
 		download.WithAcquireStoreKeyPrefix(cfg.AudioKeyPrefix),
-		download.WithRejectionStore(download.NewPostgresRejectionStore(d.Pool)),
 	}
 }
 
-func fingerprintOptions(ctx context.Context, cfg *config.Config, verification *download.Verification) (*fingerprintstatus.HealthTracker, []acquireOption) {
+func fingerprinting(ctx context.Context, d *Deps) (*fingerprintstatus.HealthTracker, download.AudioIdentifier, download.StoredAudioReader) {
+	cfg := d.Config
 	if cfg.AcoustIDAPIKey == "" {
 		slog.WarnContext(ctx, "acquisition: fingerprint verification disabled", "reason", "ACOUSTID_API_KEY is empty")
-		return fingerprintstatus.NewTracker(nil), nil
+		return fingerprintstatus.NewTracker(nil), download.NoopAudioIdentifier(), download.NoopStoredAudioReader()
 	}
 	identifier := download.NewChromaprintIdentifier(cfg.FFmpegLocation, cfg.AcoustIDAPIKey)
-	verification.Fpcalc = identifier.Available()
+	d.Verification.Fpcalc = identifier.Available()
 	lookups := fingerprintstatus.NewTracker(identifier)
-	slog.InfoContext(ctx, "acquisition: fingerprint verification wired", "fpcalc", verification.Fpcalc)
-	return lookups, []acquireOption{download.WithAudioIdentifier(lookups)}
+	slog.InfoContext(ctx, "acquisition: fingerprint verification wired", "fpcalc", d.Verification.Fpcalc)
+	return lookups, lookups, downloadfromlibrary.NewStoredAudioReader(d.AudioStore)
 }
 
 func pipelineOptions(d Deps) []acquireOption {
@@ -77,9 +88,7 @@ func pipelineOptions(d Deps) []acquireOption {
 	return []acquireOption{
 		download.WithDownloadLimiter(download.NewDownloadLimiter(cfg.AcquisitionDownloadConcurrency)),
 		download.WithAcquireConfidenceFloor(cfg.AcquisitionConfidenceFloor),
-		download.WithAcquireTempWorkspace(download.NewTempWorkspace()),
-		download.WithStoredAudioReader(downloadfromlibrary.NewStoredAudioReader(d.AudioStore)),
-		download.WithPreviewMatcher(upgradePreviewMatcher(cfg), cfg.AcquisitionUpgradePreviewAMaxBER),
+		download.WithProvenMaxBitErrorRate(cfg.AcquisitionUpgradePreviewAMaxBER),
 	}
 }
 

@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
@@ -323,7 +324,7 @@ func (r *stubResolver) Resolve(_ context.Context, q ports.RecordingQuery) (ports
 func serviceWithResolver(r ports.RecordingResolver) *AcquireTrackAudioService {
 	return newTestAcquireService(
 		acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(),
-		WithRecordingResolver(r),
+		withServiceResolver(r),
 	)
 }
 
@@ -401,8 +402,8 @@ func TestResolveIdentity_WithAnIdentifierNeverAsksForACluster(t *testing.T) {
 	identifier := &stubIdentifier{}
 	svc := newTestAcquireService(
 		acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(),
-		WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mbid-1"}}),
-		WithAudioIdentifier(identifier),
+		withServiceResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mbid-1"}}),
+		withServiceIdentifier(identifier),
 	)
 	ac := &AcquisitionContext{Track: TrackRef{Title: "T", Artist: "A"}}
 
@@ -616,7 +617,7 @@ func readyTrackWithSource(t *testing.T, ledger *acquisitiontest.Ledger, userId i
 func TestExecuteReplace_ExcludesTheStoredSource(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
 	ledger := acquisitiontest.NewLedger()
-	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrong")
+	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrongwrong1")
 
 	store := newFakeAudioStore()
 	store.stored["u/a/b/c.mp3"] = true
@@ -633,7 +634,7 @@ func TestExecuteReplace_ExcludesTheStoredSource(t *testing.T) {
 func TestExecuteReplace_FailureLeavesTheTrackReady(t *testing.T) {
 	userId := ids.NewUserId(uuid.New())
 	ledger := acquisitiontest.NewLedger()
-	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrong")
+	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrongwrong1")
 
 	store := newFakeAudioStore()
 	store.stored["u/a/b/c.mp3"] = true
@@ -834,7 +835,7 @@ func retryWith(t *testing.T, store ports.RejectionStore, urls ...string) (*fakeA
 	for _, u := range urls {
 		searcher.searchResults = append(searcher.searchResults, namedCandidate(u))
 	}
-	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(), WithRejectionStore(store))
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(), withServiceRejections(store))
 	_ = svc.Execute(context.Background(), userId, track.ID)
 	return searcher, ledger, track.ID
 }
@@ -877,7 +878,7 @@ func TestExecute_ASearchLengthRejectionIsNotRemembered(t *testing.T) {
 	searcher := &fakeAudioSearcher{searchResults: []ports.AudioCandidate{short, downloaded}, downloadPath: audio}
 	store := &fakeRejectionStore{}
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(),
-		WithRejectionStore(store), WithAudioProber(&queueProber{durations: []float64{30}}))
+		withServiceRejections(store), withServiceProber(&queueProber{durations: []float64{30}}))
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
 
@@ -909,7 +910,7 @@ func retryOnALength(t *testing.T, prior []ports.PriorRejection, urls ...string) 
 	}
 	store := &fakeRejectionStore{active: prior}
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(),
-		WithRejectionStore(store), WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: runMBID}}))
+		withServiceRejections(store), withServiceResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: runMBID}}))
 	_ = svc.Execute(context.Background(), userId, track.ID)
 	return searcher, store
 }
@@ -968,7 +969,7 @@ func TestExecute_RecordsTheBasisWithEachLastingRejection(t *testing.T) {
 	searcher := &fakeAudioSearcher{searchResults: []ports.AudioCandidate{namedCandidate(otherURL)}, downloadPath: audio}
 	store := &fakeRejectionStore{}
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(),
-		WithRejectionStore(store), WithAudioProber(&queueProber{durations: []float64{30}}), WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: runMBID}}))
+		withServiceRejections(store), withServiceProber(&queueProber{durations: []float64{30}}), withServiceResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: runMBID}}))
 
 	_ = svc.Execute(context.Background(), userId, track.ID)
 
@@ -1005,7 +1006,7 @@ func TestExecuteReplace_ExcludesStoredKeysAndRejectedSourceKeys(t *testing.T) {
 	}
 	searcher := &fakeAudioSearcher{searchResults: results, downloadErr: errors.New("boom")}
 	rejections := &fakeRejectionStore{active: priorRejectionsOnTheRunsBasis(drmURL)}
-	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store, WithRejectionStore(rejections))
+	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store, withServiceRejections(rejections))
 
 	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
 
@@ -1122,8 +1123,8 @@ func acquireUnknownTopicIn(t *testing.T, ctx context.Context, opts ...func(*Acqu
 	svc := newTestAcquireService(ledger, NewSourceRegistry(unknownTopicSource{}),
 		&bytesAudioStore{objects: map[string]string{}},
 		append([]func(*AcquireTrackAudioService){
-			WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding"}}),
-			WithAudioIdentifier(&stubIdentifier{}),
+			withServiceResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding"}}),
+			withServiceIdentifier(&stubIdentifier{}),
 		}, opts...)...)
 	err := svc.Execute(ctx, userId, track.ID)
 	return storedTrack(t, ledger, track), err
@@ -1292,7 +1293,7 @@ func TestConfigureReplaceExclusion_UnknownSourceExcludesNoCandidateBeforeDownloa
 
 func TestConfigureReplaceExclusion_KnownSourceIgnoresLength(t *testing.T) {
 	stored, oldRef := 112.0, "audio/old.m4a"
-	source := "https://www.youtube.com/watch?v=known"
+	source := "https://www.youtube.com/watch?v=knownknown1"
 	track := &ports.TrackSnapshot{AudioRef: &oldRef, AudioSourceURL: &source, StoredDurationSeconds: &stored}
 	ac := &AcquisitionContext{}
 
@@ -1374,7 +1375,7 @@ func TestExecuteReplace_TheStoredLengthIsNotTheTarget(t *testing.T) {
 	ledger.Seed(row)
 	resolver := &stubResolver{identity: ports.RecordingIdentity{MBID: "e7ca1ccd-65cf-43e3-9964-ffb5a0479077", Duration: 128}}
 	source := &lengthRecordingSource{}
-	svc := newTestAcquireService(ledger, NewSourceRegistry(source), store, WithRecordingResolver(resolver))
+	svc := newTestAcquireService(ledger, NewSourceRegistry(source), store, withServiceResolver(resolver))
 
 	_ = svc.ExecuteReplace(context.Background(), userId, trackId)
 
@@ -1467,7 +1468,7 @@ func TestExecuteReplace_FingerprintsTheStoredFileOnce(t *testing.T) {
 			identifier := &contentRecordingIdentifier{storedID: "acoustid-of-the-stored-file"}
 			logs := captureLogs(t)
 			svc := newTestAcquireService(ledger, NewSourceRegistry(newAudioSource{}), store,
-				WithAudioIdentifier(identifier), WithStoredAudioReader(storedBytesReader{store: store}))
+				withServiceIdentifier(identifier), withServiceStoredAudio(storedBytesReader{store: store}))
 
 			if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
 				t.Fatalf("ExecuteReplace: %v", err)
@@ -1491,7 +1492,7 @@ func TestExecuteReplace_AFailedStoredCopyIsLoggedAndTheReplaceStillRuns(t *testi
 	identifier := &contentRecordingIdentifier{storedID: "never-recorded"}
 	logs := captureLogs(t)
 	svc := newTestAcquireService(ledger, NewSourceRegistry(newAudioSource{}), store,
-		WithAudioIdentifier(identifier), WithStoredAudioReader(storedBytesReader{store: store, err: errors.New("object storage unavailable")}))
+		withServiceIdentifier(identifier), withServiceStoredAudio(storedBytesReader{store: store, err: errors.New("object storage unavailable")}))
 
 	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
 		t.Fatalf("ExecuteReplace: %v, want the replace to carry on without the stored fingerprint", err)
@@ -1519,9 +1520,9 @@ func TestExecuteReplace_TheStoredCopyWorkspaceIsRemovedWhateverTheOutcome(t *tes
 			ledger, store, userId, trackId, _ := seedReadyTrack(t)
 			seedUnknownSourceTrack(t, ledger, userId, trackId)
 			ws := newCallRecordingWorkspace()
-			svc := NewAcquireTrackAudioService(ledger, NewSourceRegistry(newAudioSource{}), store,
-				WithAcquireTempWorkspace(ws), WithAudioIdentifier(&contentRecordingIdentifier{}),
-				WithStoredAudioReader(storedBytesReader{store: store, err: copyErr}))
+			svc := NewAcquireTrackAudioService(ledger, NewSourceRegistry(newAudioSource{}), store, ws, noopVerification(), noopStages(),
+				withServiceIdentifier(&contentRecordingIdentifier{}),
+				withServiceStoredAudio(storedBytesReader{store: store, err: copyErr}))
 
 			if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
 				t.Fatalf("ExecuteReplace: %v", err)
@@ -1598,9 +1599,9 @@ func replaceOfAnUnknownSource(t *testing.T, source *uploadsByBytesSource, identi
 	ledger, store, userId, trackId, _ := seedReadyTrack(t)
 	seedUnknownSourceTrack(t, ledger, userId, trackId)
 	resolver := &stubResolver{identity: ports.RecordingIdentity{MBID: recordingMBID, Duration: 112}}
-	options := []func(*AcquireTrackAudioService){WithRecordingResolver(resolver), WithAudioIdentifier(identifier)}
+	options := []func(*AcquireTrackAudioService){withServiceResolver(resolver), withServiceIdentifier(identifier)}
 	if readerFor != nil {
-		options = append(options, WithStoredAudioReader(readerFor(store)))
+		options = append(options, withServiceStoredAudio(readerFor(store)))
 	}
 	svc := newTestAcquireService(ledger, NewSourceRegistry(source), store, options...)
 	return store, svc.ExecuteReplace(context.Background(), userId, trackId)
@@ -1698,8 +1699,8 @@ func TestExecuteReplace_AnOutageWithOnlyTheCurrentFileLeftIsSourceUnavailableAnd
 		"the current file again": {AcoustID: "acoustid-of-the-stored-file", MBIDs: []string{recordingMBID}},
 	}}
 	svc := newTestAcquireService(ledger, NewSourceRegistry(outageSource(), healthy), store,
-		WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: recordingMBID, Duration: 112}}),
-		WithAudioIdentifier(identifier), WithStoredAudioReader(storedBytesReader{store: store}), WithRejectionStore(rejections))
+		withServiceResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: recordingMBID, Duration: 112}}),
+		withServiceIdentifier(identifier), withServiceStoredAudio(storedBytesReader{store: store}), withServiceRejections(rejections))
 
 	err := svc.ExecuteReplace(context.Background(), userId, trackId)
 
@@ -1724,7 +1725,7 @@ func TestExecuteReplace_TheCurrentFileIsFoundWithoutAResolvedRecording(t *testin
 		"another upload":         {AcoustID: "acoustid-of-another-upload"},
 	}}
 	svc := newTestAcquireService(ledger, NewSourceRegistry(source), store,
-		WithRecordingResolver(&stubResolver{}), WithAudioIdentifier(identifier), WithStoredAudioReader(storedBytesReader{store: store}))
+		withServiceResolver(&stubResolver{}), withServiceIdentifier(identifier), withServiceStoredAudio(storedBytesReader{store: store}))
 
 	err := svc.ExecuteReplace(context.Background(), userId, trackId)
 	if err != nil {
@@ -1932,8 +1933,8 @@ func acquireLowConfidence(t *testing.T, opts ...func(*AcquireTrackAudioService))
 	svc := newTestAcquireService(ledger, NewSourceRegistry(lowConfidenceSource{}),
 		&bytesAudioStore{objects: map[string]string{}},
 		append([]func(*AcquireTrackAudioService){
-			WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding"}}),
-			WithAudioIdentifier(&stubIdentifier{}),
+			withServiceResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding"}}),
+			withServiceIdentifier(&stubIdentifier{}),
 		}, opts...)...)
 	err := svc.Execute(context.Background(), userId, track.ID)
 	return storedTrack(t, ledger, track), err
@@ -1967,7 +1968,7 @@ func retryWithBasis(t *testing.T, catalogLength float64, identity ports.Recordin
 		searcher.searchResults = append(searcher.searchResults, namedCandidate(u))
 	}
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(),
-		WithRejectionStore(&fakeRejectionStore{active: prior}), WithRecordingResolver(&stubResolver{identity: identity}))
+		withServiceRejections(&fakeRejectionStore{active: prior}), withServiceResolver(&stubResolver{identity: identity}))
 	_ = svc.Execute(context.Background(), userId, track.ID)
 	return searcher
 }
@@ -2073,7 +2074,7 @@ func TestExecuteReplace_RetriesAPriorRejectionJudgedOnAnotherLength(t *testing.T
 	searcher := &fakeAudioSearcher{searchResults: results, downloadErr: errors.New("boom")}
 	rejections := &fakeRejectionStore{active: priorRejectionOn(drmURL, &ports.RejectionBasis{ExpectedSeconds: 150, ReferenceMBID: runMBID})}
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store,
-		WithRejectionStore(rejections), WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: runMBID}}))
+		withServiceRejections(rejections), withServiceResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: runMBID}}))
 
 	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
 
@@ -2166,7 +2167,7 @@ func newReplaceFixture(t *testing.T, searcher *fakeAudioSearcher, attempt int) r
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
 	ledger := acquisitiontest.NewLedger()
-	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrong")
+	track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=wrongwrong1")
 	store := newFakeAudioStore()
 	store.stored["u/a/b/c.mp3"] = true
 	pub := newRecordingPublisher()
@@ -2387,8 +2388,8 @@ func TestReplaceGated_AMuxedFallbackIsSwappedForTheAudioOnlyStreamOfTheSameSourc
 	book, store, userId, trackId, originalRef := seedReadyTrack(t)
 	ledger := &completionRecordingLedger{LibraryTracks: book}
 	svc := newTestAcquireService(ledger, NewSourceRegistry(audioOnlyOfTheStoredSource{}), store,
-		WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding", MBIDs: []string{"mb-blinding"}}}),
-		WithAudioIdentifier(&stubIdentifier{match: inPlaceMatch(ports.LinkedRecording{MBID: "mb-blinding", Title: "Blinding Lights", Artists: []string{"The Weeknd"}})}),
+		withServiceResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding", MBIDs: []string{"mb-blinding"}}}),
+		withServiceIdentifier(&stubIdentifier{match: inPlaceMatch(ports.LinkedRecording{MBID: "mb-blinding", Title: "Blinding Lights", Artists: []string{"The Weeknd"}})}),
 	)
 	track, err := ledger.Get(context.Background(), trackId, userId)
 	if err != nil || track == nil {
@@ -2440,9 +2441,9 @@ func TestReplaceGated_AFileThatFitsTheCatalogLengthReplacesAStoredEditAtTheSameG
 	book, store, userId, trackId, originalRef := seedReadyTrack(t)
 	ledger := &completionRecordingLedger{LibraryTracks: book}
 	svc := newTestAcquireService(ledger, NewSourceRegistry(fullLengthAlbumCut{}), store,
-		WithAudioProber(&queueProber{durations: []float64{285, 285, 285}}),
-		WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding", MBIDs: []string{"mb-blinding"}}}),
-		WithAudioIdentifier(&stubIdentifier{match: inPlaceMatch(ports.LinkedRecording{MBID: "mb-blinding", Title: "Blinding Lights", Artists: []string{"The Weeknd"}})}),
+		withServiceProber(&queueProber{durations: []float64{285, 285, 285}}),
+		withServiceResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding", MBIDs: []string{"mb-blinding"}}}),
+		withServiceIdentifier(&stubIdentifier{match: inPlaceMatch(ports.LinkedRecording{MBID: "mb-blinding", Title: "Blinding Lights", Artists: []string{"The Weeknd"}})}),
 	)
 	track, err := ledger.Get(context.Background(), trackId, userId)
 	if err != nil || track == nil {
@@ -2477,9 +2478,9 @@ func TestReplaceGated_ASameGradeFileIsRefusedWhenTheLengthRescueDoesNotHold(t *t
 			book, store, userId, trackId, originalRef := seedReadyTrack(t)
 			ledger := &completionRecordingLedger{LibraryTracks: book}
 			svc := newTestAcquireService(ledger, NewSourceRegistry(fullLengthAlbumCut{}), store,
-				WithRecordingResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding", MBIDs: []string{"mb-blinding"}}}),
-				WithAudioIdentifier(&stubIdentifier{match: inPlaceMatch(ports.LinkedRecording{MBID: "mb-blinding", Title: "Blinding Lights", Artists: []string{"The Weeknd"}})}),
-				WithAudioProber(&queueProber{durations: []float64{285, 285, 285}}),
+				withServiceResolver(&stubResolver{identity: ports.RecordingIdentity{MBID: "mb-blinding", MBIDs: []string{"mb-blinding"}}}),
+				withServiceIdentifier(&stubIdentifier{match: inPlaceMatch(ports.LinkedRecording{MBID: "mb-blinding", Title: "Blinding Lights", Artists: []string{"The Weeknd"}})}),
+				withServiceProber(&queueProber{durations: []float64{285, 285, 285}}),
 			)
 			track, err := ledger.Get(context.Background(), trackId, userId)
 			if err != nil || track == nil {
@@ -2612,9 +2613,9 @@ func seedItsOnlyLove(t *testing.T, storedSeconds float64, sources []ports.Catalo
 
 func (f itsOnlyLoveTrack) service(sources *itsOnlyLoveSources, finder ports.RerecordingFinder) *AcquireTrackAudioService {
 	return newTestAcquireService(f.ledger, NewSourceRegistry(sources), f.store,
-		WithRecordingResolver(pinnedRecordingResolver{}),
-		WithAudioIdentifier(&stubIdentifier{}),
-		WithRerecordingFinder(finder))
+		withServiceResolver(pinnedRecordingResolver{}),
+		withServiceIdentifier(&stubIdentifier{}),
+		withServiceRerecordings(finder))
 }
 
 func (f itsOnlyLoveTrack) row() ledgerTrack {
@@ -2847,7 +2848,7 @@ func TestRerecording_EachPassRemembersItsRejectionsOnItsOwnBasis(t *testing.T) {
 		golden := seedItsOnlyLove(t, 0, nil)
 		rejections := &fakeRejectionStore{}
 		svc := golden.service(sources, findsGoldenRerecording())
-		WithRejectionStore(rejections)(svc)
+		withServiceRejections(rejections)(svc)
 
 		_ = svc.Execute(withJobAttempt(context.Background(), maxAcquisitionAttempts), golden.userId, golden.trackId)
 
@@ -2886,9 +2887,9 @@ func TestRerecording_AnOutageOnOneSourceWithNoMatchOnTheOthersTakesNoRerecording
 	outage := &probeOriginalOutageSource{}
 	others := &itsOnlyLoveSources{}
 	svc := newTestAcquireService(golden.ledger, NewSourceRegistry(outage, others), golden.store,
-		WithRecordingResolver(pinnedRecordingResolver{}),
-		WithAudioIdentifier(&stubIdentifier{}),
-		WithRerecordingFinder(finder))
+		withServiceResolver(pinnedRecordingResolver{}),
+		withServiceIdentifier(&stubIdentifier{}),
+		withServiceRerecordings(finder))
 
 	_ = svc.Execute(withJobAttempt(context.Background(), maxAcquisitionAttempts), golden.userId, golden.trackId)
 
@@ -2950,9 +2951,9 @@ func TestRerecording_AnOriginalWhoseSoundCloudPinFailsToDownloadNeverAsksForARer
 	sources := &itsOnlyLoveSources{}
 	finder := findsGoldenRerecording()
 	svc := newTestAcquireService(golden.ledger, NewSourceRegistry(savedlink.NewSource(failingPinDownloads{}), sources), golden.store,
-		WithRecordingResolver(pinnedRecordingResolver{}),
-		WithAudioIdentifier(&stubIdentifier{}),
-		WithRerecordingFinder(finder))
+		withServiceResolver(pinnedRecordingResolver{}),
+		withServiceIdentifier(&stubIdentifier{}),
+		withServiceRerecordings(finder))
 
 	err := svc.Execute(withJobAttempt(context.Background(), maxAcquisitionAttempts), golden.userId, golden.trackId)
 
@@ -3008,9 +3009,9 @@ func TestRerecording_AJobCancelledDuringTheFirstPassNeverAsksForARerecording(t *
 	defer cancel()
 	sources := probeCancellingSource{&itsOnlyLoveSources{}, cancel}
 	svc := newTestAcquireService(golden.ledger, NewSourceRegistry(sources), golden.store,
-		WithRecordingResolver(pinnedRecordingResolver{}),
-		WithAudioIdentifier(&stubIdentifier{}),
-		WithRerecordingFinder(finder))
+		withServiceResolver(pinnedRecordingResolver{}),
+		withServiceIdentifier(&stubIdentifier{}),
+		withServiceRerecordings(finder))
 
 	_ = svc.Execute(ctx, golden.userId, golden.trackId)
 
@@ -3026,7 +3027,7 @@ func TestRerecording_TheRerecordingIsTaggedAndStoredUnderItsOwnLabels(t *testing
 	golden := seedItsOnlyLove(t, 0, nil)
 	var tags ports.TrackTags
 	svc := golden.service(&itsOnlyLoveSources{}, findsGoldenRerecording())
-	WithAudioTagger(&recordingTagger{tags: &tags})(svc)
+	withServiceTagger(&recordingTagger{tags: &tags})(svc)
 
 	if err := svc.Execute(context.Background(), golden.userId, golden.trackId); err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -3053,30 +3054,32 @@ func (s probeBlockingRerecordingSource) Find(ctx context.Context, req ports.Find
 }
 
 func TestRerecording_ASecondPassThatRunsOutOfTimeFailsAsATimeout(t *testing.T) {
-	golden := seedItsOnlyLove(t, 292, nil)
-	sources := probeBlockingRerecordingSource{&itsOnlyLoveSources{}}
-	svc := newTestAcquireService(golden.ledger, NewSourceRegistry(sources), golden.store,
-		WithRecordingResolver(pinnedRecordingResolver{}),
-		WithAudioIdentifier(&stubIdentifier{}),
-		WithRerecordingFinder(findsGoldenRerecording()))
-	ctx, cancel := context.WithTimeout(withJobAttempt(context.Background(), maxAcquisitionAttempts), 3*time.Second)
-	defer cancel()
+	synctest.Test(t, func(t *testing.T) {
+		golden := seedItsOnlyLove(t, 292, nil)
+		sources := probeBlockingRerecordingSource{&itsOnlyLoveSources{}}
+		svc := newTestAcquireService(golden.ledger, NewSourceRegistry(sources), golden.store,
+			withServiceResolver(pinnedRecordingResolver{}),
+			withServiceIdentifier(&stubIdentifier{}),
+			withServiceRerecordings(findsGoldenRerecording()))
+		ctx, cancel := context.WithTimeout(withJobAttempt(context.Background(), maxAcquisitionAttempts), 3*time.Second)
+		defer cancel()
 
-	err := svc.ExecuteReplace(ctx, golden.userId, golden.trackId)
+		err := svc.ExecuteReplace(ctx, golden.userId, golden.trackId)
 
-	reached := false
-	for _, req := range sources.requests {
-		reached = reached || req.Title == goldenRerecording().Title
-	}
-	if !reached {
-		t.Fatalf("requests = %+v, want the deadline to land in the re-recording pass", sources.requests)
-	}
-	if got := failureCode(err); got != downloadfailure.FailureAcquisitionCancelled && got != downloadfailure.FailureSourceUnavailable {
-		t.Errorf("failure code = %q (%v), want a timeout, not the original's no_confident_match", got, err)
-	}
-	if row := golden.row(); row.AudioRef == nil || *row.AudioRef != golden.ref || row.Title != "It's Only Love" {
-		t.Errorf("track = %q on %v, want the stored file and labels kept", row.Title, row.AudioRef)
-	}
+		reached := false
+		for _, req := range sources.requests {
+			reached = reached || req.Title == goldenRerecording().Title
+		}
+		if !reached {
+			t.Fatalf("requests = %+v, want the deadline to land in the re-recording pass", sources.requests)
+		}
+		if got := failureCode(err); got != downloadfailure.FailureAcquisitionCancelled && got != downloadfailure.FailureSourceUnavailable {
+			t.Errorf("failure code = %q (%v), want a timeout, not the original's no_confident_match", got, err)
+		}
+		if row := golden.row(); row.AudioRef == nil || *row.AudioRef != golden.ref || row.Title != "It's Only Love" {
+			t.Errorf("track = %q on %v, want the stored file and labels kept", row.Title, row.AudioRef)
+		}
+	})
 }
 
 func TestMergeSourceKeys_KeepsTheFirstOfEachKeyAndDropsEmpty(t *testing.T) {
@@ -3147,13 +3150,82 @@ func newTestAcquireService(
 	audioStore ports.AudioWriter,
 	opts ...func(*AcquireTrackAudioService),
 ) *AcquireTrackAudioService {
-	opts = append([]func(*AcquireTrackAudioService){WithAcquireTempWorkspace(osWorkspace{})}, opts...)
-	return NewAcquireTrackAudioService(ledger, sources, audioStore, opts...)
+	stages := noopStages()
+	stages.Orphans = DirectDeleteOrphans(audioStore)
+	return NewAcquireTrackAudioService(ledger, sources, audioStore, osWorkspace{}, noopVerification(), stages, opts...)
+}
+
+type discardingDeleter struct{}
+
+func (discardingDeleter) Delete(context.Context, string) error { return nil }
+
+func noopStages() StagePorts {
+	return StagePorts{
+		Prober:      ports.NoopAudioProber(),
+		Tagger:      ports.NoopAudioTagger(),
+		Rejections:  ports.NoopRejectionStore(),
+		StoredAudio: ports.NoopStoredAudioReader(),
+		Orphans:     DirectDeleteOrphans(discardingDeleter{}),
+		Skips:       ports.NoopVerifySkipRecorder(),
+	}
+}
+
+func withServiceResolver(r ports.RecordingResolver) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.recordings = r }
+}
+
+func withServiceProber(p ports.AudioProber) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.audioProber = p }
+}
+
+func withServiceTagger(t ports.AudioTagger) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.audioTagger = t }
+}
+
+func withServiceRejections(r ports.RejectionStore) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.rejections = r }
+}
+
+func withServiceStoredAudio(r ports.StoredAudioReader) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.storedAudio = r }
+}
+
+func noopVerification() VerificationPorts {
+	return VerificationPorts{
+		Identifier:      ports.NoopAudioIdentifier(),
+		RecordingLookup: ports.NoopRecordingLookup(),
+		Rerecordings:    ports.NoopRerecordingFinder(),
+		Previews:        ports.NoopPreviewMatcher(),
+		Recordings:      ports.NoopRecordingResolver(),
+	}
+}
+
+func withServiceIdentifier(i ports.AudioIdentifier) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.identifier = i }
+}
+
+func withServiceRerecordings(f ports.RerecordingFinder) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.rerecordings = f }
 }
 
 func newTestDownloadStep(fetcher candidateFetcher, opts ...func(*DownloadStep)) *DownloadStep {
-	opts = append([]func(*DownloadStep){WithStepTempWorkspace(osWorkspace{})}, opts...)
-	return NewDownloadStep(fetcher, opts...)
+	return NewDownloadStep(fetcher, osWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), opts...)
+}
+
+func withTestProber(p ports.AudioProber) func(*DownloadStep) {
+	return func(s *DownloadStep) { s.prober = p }
+}
+
+func withTestSkips(r ports.VerifySkipRecorder) func(*DownloadStep) {
+	return func(s *DownloadStep) { s.skips = r }
+}
+
+func withTestIdentifier(i ports.AudioIdentifier) func(*DownloadStep) {
+	return func(s *DownloadStep) { s.identifier = i }
+}
+
+func withTestLookup(l ports.RecordingLookup) func(*DownloadStep) {
+	return func(s *DownloadStep) { s.recordingLookup = l }
 }
 
 type callRecordingWorkspace struct {

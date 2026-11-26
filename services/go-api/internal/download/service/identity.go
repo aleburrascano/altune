@@ -56,19 +56,24 @@ const (
 	verdictPreview = "preview"
 )
 
-func WithPreviewMatcher(m ports.PreviewMatcher, provenMaxBitErrorRate float64) func(*AcquireTrackAudioService) {
+func WithProvenMaxBitErrorRate(provenMaxBitErrorRate float64) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) {
-		s.previews = m
 		s.cuts = audioverdict.CutsWithProvenMax(provenMaxBitErrorRate)
 	}
 }
 
 func (s *AcquireTrackAudioService) CheckInPlace(ctx context.Context, track *ports.TrackSnapshot) (replacement.Finding, error) {
-	if s.storedAudio == nil || s.identifier == nil || track.AudioRef == nil {
+	if track.AudioRef == nil {
 		return replacement.Finding{}, ErrInPlaceUnavailable
 	}
-	ac := &AcquisitionContext{Track: buildTrackRef(track)}
-	s.resolveIdentity(ctx, ac)
+	finding, err := s.checkStoredFile(ctx, track)
+	if errors.Is(err, ports.ErrNoStoredAudioReader) || errors.Is(err, ports.ErrNoAudioIdentifier) {
+		return replacement.Finding{}, ErrInPlaceUnavailable
+	}
+	return finding, err
+}
+
+func (s *AcquireTrackAudioService) checkStoredFile(ctx context.Context, track *ports.TrackSnapshot) (replacement.Finding, error) {
 	dir, err := s.workspace.Create("in-place-*")
 	if err != nil {
 		return replacement.Finding{}, fmt.Errorf("create in-place dir: %w", err)
@@ -78,11 +83,13 @@ func (s *AcquireTrackAudioService) CheckInPlace(ctx context.Context, track *port
 	if err != nil {
 		return replacement.Finding{}, fmt.Errorf("copy stored audio: %w", err)
 	}
+	ac := &AcquisitionContext{Track: buildTrackRef(track)}
+	s.resolveIdentity(ctx, ac)
 	return s.judgeInPlace(ctx, ac, track, path)
 }
 
 func (s *AcquireTrackAudioService) judgeInPlace(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, path string) (replacement.Finding, error) {
-	input := judgeInput(ac, nil, deref(track.StoredDurationSeconds), storedSourceOf(track))
+	input := judgeInput(ac, nil, deref(track.StoredDurationSeconds), storedSourceOf(ctx, track))
 	score, err := s.fingerprintInto(ctx, ac, &input, path)
 	if err != nil {
 		return replacement.Finding{}, err
@@ -113,7 +120,7 @@ func (s *AcquireTrackAudioService) fingerprintInto(ctx context.Context, ac *Acqu
 		return 0, fmt.Errorf("fingerprint the stored file: %w", err)
 	}
 	input.Audio.AcoustID = match.Results
-	input.Audio.RecordingFacts = NewDownloadStep(nil, WithRecordingLookup(s.recordingLookup)).versionFacts(ctx, *input)
+	input.Audio.RecordingFacts = NewDownloadStep(nil, s.workspace, s.identifier, s.recordingLookup, s.audioProber, s.verifySkips).versionFacts(ctx, *input)
 	return topScore(match.Results), nil
 }
 
@@ -136,9 +143,15 @@ func findingOf(verdict audioverdict.Verdict, basis string, score, bitErrorRate f
 	return finding
 }
 
-func storedSourceOf(track *ports.TrackSnapshot) judgedSource {
+func storedSourceOf(ctx context.Context, track *ports.TrackSnapshot) judgedSource {
 	var stored Evidence
-	_ = json.Unmarshal(track.Evidence, &stored)
+	if len(track.Evidence) > 0 {
+		if err := json.Unmarshal(track.Evidence, &stored); err != nil {
+			slog.ErrorContext(ctx, "acquisition.stored_evidence_unreadable",
+				"track_id", track.ID.String(), "error", redact.LogError(err))
+			stored = Evidence{}
+		}
+	}
 	kind := cmp.Or(stored.SourceKind, audioquality.FanUpload)
 	if track.AudioSourceURL == nil || *track.AudioSourceURL == "" {
 		kind = audioquality.UserUpload
@@ -148,7 +161,7 @@ func storedSourceOf(track *ports.TrackSnapshot) judgedSource {
 
 func (s *AcquireTrackAudioService) previewInPlace(ctx context.Context, track *ports.TrackSnapshot, path string) *audioverdict.Preview {
 	target := previewTargetOf(track)
-	if s.previews == nil || (target == ports.PreviewTarget{}) {
+	if target == (ports.PreviewTarget{}) {
 		return nil
 	}
 	comparison, err := s.previews.MatchesPreview(ctx, path, target)

@@ -53,15 +53,31 @@ func NewAcquireTrackAudioService(
 	ledger ports.LibraryTracks,
 	sources *SourceRegistry,
 	audioStore ports.AudioWriter,
+	workspace ports.ScratchFolder,
+	wiring VerificationPorts,
+	stages StagePorts,
 	opts ...func(*AcquireTrackAudioService),
 ) *AcquireTrackAudioService {
+	wiring.require("NewAcquireTrackAudioService")
+	stages.require("NewAcquireTrackAudioService")
 	s := &AcquireTrackAudioService{
-		ledger:     ledger,
-		sources:    sources,
-		audioStore: audioStore,
-		recordings: ports.NoopRecordingResolver(),
-		events:     events.NoopPublisher(),
-		cuts:       audioverdict.DefaultCuts(),
+		ledger:          ledger,
+		sources:         sources,
+		audioStore:      audioStore,
+		workspace:       requireWorkspace("NewAcquireTrackAudioService", workspace),
+		identifier:      wiring.Identifier,
+		recordingLookup: wiring.RecordingLookup,
+		rerecordings:    wiring.Rerecordings,
+		previews:        wiring.Previews,
+		audioProber:     stages.Prober,
+		audioTagger:     stages.Tagger,
+		rejections:      stages.Rejections,
+		storedAudio:     stages.StoredAudio,
+		orphans:         stages.Orphans,
+		verifySkips:     stages.Skips,
+		recordings:      wiring.Recordings,
+		events:          events.NoopPublisher(),
+		cuts:            audioverdict.DefaultCuts(),
 
 		confidenceFloor: defaultConfidenceFloor,
 		acquireTimeout:  AcquireTimeout,
@@ -76,28 +92,12 @@ func WithDownloadLimiter(l *ConcurrencyLimit) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.downloadLimiter = l }
 }
 
-func WithAcquireRecordingLookup(l ports.RecordingLookup) func(*AcquireTrackAudioService) {
-	return func(s *AcquireTrackAudioService) { s.recordingLookup = l }
-}
-
-func WithAcquireTempWorkspace(w ports.ScratchFolder) func(*AcquireTrackAudioService) {
-	return func(s *AcquireTrackAudioService) { s.workspace = w }
-}
-
-func WithStoredAudioReader(r ports.StoredAudioReader) func(*AcquireTrackAudioService) {
-	return func(s *AcquireTrackAudioService) { s.storedAudio = r }
-}
-
 func WithContextObserver(f func(*AcquisitionContext)) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.contextObserver = f }
 }
 
 func WithAcquireConfidenceFloor(floor float64) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.confidenceFloor = floor }
-}
-
-func WithVerifySkips(r ports.VerifySkipRecorder) func(*AcquireTrackAudioService) {
-	return func(s *AcquireTrackAudioService) { s.verifySkips = r }
 }
 
 func WithAcquireEvents(pub events.Publisher) func(*AcquireTrackAudioService) {
@@ -108,44 +108,12 @@ func WithAcquireEvents(pub events.Publisher) func(*AcquireTrackAudioService) {
 	}
 }
 
-func WithAcquireOrphanQueue(q ports.OrphanedAudioRecorder) func(*AcquireTrackAudioService) {
-	return func(s *AcquireTrackAudioService) { s.orphans = q }
-}
-
 func WithSupersededAudioGrace(d time.Duration) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.supersededGrace = d }
 }
 
-func WithRecordingResolver(r ports.RecordingResolver) func(*AcquireTrackAudioService) {
-	return func(s *AcquireTrackAudioService) {
-		if r != nil {
-			s.recordings = r
-		}
-	}
-}
-
-func WithRerecordingFinder(f ports.RerecordingFinder) func(*AcquireTrackAudioService) {
-	return func(s *AcquireTrackAudioService) { s.rerecordings = f }
-}
-
-func WithAudioProber(p ports.AudioProber) func(*AcquireTrackAudioService) {
-	return func(s *AcquireTrackAudioService) { s.audioProber = p }
-}
-
-func WithAudioTagger(t ports.AudioTagger) func(*AcquireTrackAudioService) {
-	return func(s *AcquireTrackAudioService) { s.audioTagger = t }
-}
-
-func WithAudioIdentifier(i ports.AudioIdentifier) func(*AcquireTrackAudioService) {
-	return func(s *AcquireTrackAudioService) { s.identifier = i }
-}
-
 func WithAcquireStoreKeyPrefix(prefix string) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.storeKeyPrefix = prefix }
-}
-
-func WithRejectionStore(r ports.RejectionStore) func(*AcquireTrackAudioService) {
-	return func(s *AcquireTrackAudioService) { s.rejections = r }
 }
 
 const AcquireTimeout = 10 * time.Minute
@@ -264,7 +232,7 @@ func (s *AcquireTrackAudioService) ReplaceGated(ctx context.Context, userId ids.
 func (s *AcquireTrackAudioService) forUpgradeSweep() *AcquireTrackAudioService {
 	sweep := *s
 	sweep.events = events.NoopPublisher()
-	sweep.rerecordings = nil
+	sweep.rerecordings = ports.NoopRerecordingFinder()
 	return &sweep
 }
 
@@ -312,18 +280,10 @@ func (s *AcquireTrackAudioService) deleteSupersededAudio(ctx context.Context, us
 	if s.servedByAnotherTrack(delCtx, trackId, old) {
 		return
 	}
-	if s.orphans != nil {
-		s.queueSupersededAudio(ctx, userId, trackId, old)
-		return
-	}
-	if err := s.audioStore.Delete(delCtx, old); err != nil {
-		slog.ErrorContext(ctx, "acquisition.replace_orphaned_old_audio",
-			"track_id", trackId.String(), "audio_ref", old, "error", redact.LogError(err))
-		recordOrphanedAudio(ctx, s.orphans, userId, trackId, old)
-	}
+	s.releaseSupersededAudio(delCtx, userId, trackId, old)
 }
 
-func (s *AcquireTrackAudioService) queueSupersededAudio(ctx context.Context, userId ids.UserId, trackId ids.TrackId, old string) {
+func (s *AcquireTrackAudioService) releaseSupersededAudio(ctx context.Context, userId ids.UserId, trackId ids.TrackId, old string) {
 	err := queueOrphanedAudio(ctx, s.orphans, ports.OrphanedAudio{
 		AudioRef:  old,
 		UserId:    userId,
@@ -333,7 +293,7 @@ func (s *AcquireTrackAudioService) queueSupersededAudio(ctx context.Context, use
 	if err != nil {
 		return
 	}
-	slog.InfoContext(ctx, "acquisition.replace_superseded_audio_queued",
+	slog.InfoContext(ctx, "acquisition.replace_superseded_audio_released",
 		"track_id", trackId.String(), "audio_ref", old, "grace", s.supersededGrace.String())
 }
 
@@ -353,12 +313,12 @@ func (s *AcquireTrackAudioService) servedByAnotherTrack(ctx context.Context, tra
 
 func (s *AcquireTrackAudioService) loadTrack(ctx context.Context, userId ids.UserId, trackId ids.TrackId) (*ports.TrackSnapshot, bool, error) {
 	track, err := s.ledger.Get(ctx, trackId, userId)
-	if err != nil {
-		return nil, false, fmt.Errorf("get track: %w", err)
-	}
-	if track == nil {
+	if errors.Is(err, ports.ErrTrackNotFound) {
 		slog.WarnContext(ctx, "acquire_track_not_found", "track_id", trackId.String())
 		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("get track: %w", err)
 	}
 	return track, true, nil
 }
@@ -422,20 +382,20 @@ func (s *AcquireTrackAudioService) takeRerecording(ctx context.Context, steps Pi
 }
 
 func (s *AcquireTrackAudioService) runRerecordingPass(ctx context.Context, steps Pipeline, ac *AcquisitionContext, label ports.TrackLabel) error {
-	original := *ac
-	ac.retargetTo(label)
-	s.resolveIdentity(ctx, ac)
-	if err := RunPipeline(ctx, steps, ac); err != nil {
-		*ac = original
+	pass := *ac
+	pass.retargetTo(label)
+	s.resolveIdentity(ctx, &pass)
+	if err := RunPipeline(ctx, steps, &pass); err != nil {
 		return err
 	}
-	s.recordRejections(ctx, &original)
-	ac.Rejections = ac.Rejections[len(original.Rejections):]
+	s.recordRejections(ctx, ac)
+	pass.Rejections = pass.Rejections[len(ac.Rejections):]
+	*ac = pass
 	return nil
 }
 
 func (s *AcquireTrackAudioService) mayTakeRerecording(ctx context.Context, ac *AcquisitionContext, err error) bool {
-	return s.rerecordings != nil && noSourceHasIt(err) && ctx.Err() == nil && ac.Replace.allowsRerecording()
+	return noSourceHasIt(err) && ctx.Err() == nil && ac.Replace.allowsRerecording()
 }
 
 func (s *AcquireTrackAudioService) findRerecording(ctx context.Context, ac *AcquisitionContext, originalMBID string) (ports.TrackLabel, bool) {
@@ -482,7 +442,7 @@ func reportDecision(ctx context.Context, ac *AcquisitionContext) {
 func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, track *ports.TrackSnapshot, trackId ids.TrackId) error {
 	ac.Replace.PreservedRef = deref(track.AudioRef)
 	ac.Track.AudioSourceURL = ""
-	if !ac.Replace.Gate.RefetchesCurrentSource() {
+	if !ac.refetchesCurrentSource() {
 		ac.Replace.ExcludeKeys = mergeSourceKeys(
 			ac.Replace.ExcludeKeys,
 			sourceKey(deref(track.AudioSourceURL)),
@@ -669,11 +629,11 @@ func (s *AcquireTrackAudioService) fingerprintStoredFile(ctx context.Context, ac
 	if track.AudioSourceURL != nil || track.AudioRef == nil {
 		return
 	}
-	if s.storedAudio == nil || s.identifier == nil {
+	match, err := s.identifyStored(ctx, *track.AudioRef, deref(track.StoredDurationSeconds))
+	if errors.Is(err, ports.ErrNoStoredAudioReader) || errors.Is(err, ports.ErrNoAudioIdentifier) {
 		warnCurrentFileUnidentified(ctx, trackId, "no stored-audio reader or identifier is wired")
 		return
 	}
-	match, err := s.identifyStored(ctx, *track.AudioRef, deref(track.StoredDurationSeconds))
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.replace_current_file_fingerprint_failed",
 			"track_id", trackId.String(), "audio_ref", *track.AudioRef, "error", redact.LogError(err))
@@ -697,9 +657,6 @@ func warnCurrentFileUnidentified(ctx context.Context, trackId ids.TrackId, reaso
 }
 
 func (s *AcquireTrackAudioService) identifyStored(ctx context.Context, audioRef string, durationHint float64) (ports.RecordingMatch, error) {
-	if s.workspace == nil {
-		return ports.RecordingMatch{}, ErrNoTempWorkspace
-	}
 	dir, err := s.workspace.Create("stored-*")
 	if err != nil {
 		return ports.RecordingMatch{}, fmt.Errorf("create stored-audio dir: %w", err)

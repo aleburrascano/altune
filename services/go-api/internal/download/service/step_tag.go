@@ -11,15 +11,14 @@ type TagStep struct {
 	tagger ports.AudioTagger
 }
 
-func NewTagStep(tagger ports.AudioTagger) *TagStep { return &TagStep{tagger: tagger} }
+func NewTagStep(tagger ports.AudioTagger) *TagStep {
+	requirePort("NewTagStep", "tagger", tagger == nil)
+	return &TagStep{tagger: tagger}
+}
 
 func (s *TagStep) Name() StepName { return stepNameTag }
 
 func (s *TagStep) Execute(ctx context.Context, ac *AcquisitionContext, downloaded afterDownload) (afterTag, error) {
-	if s.tagger == nil {
-		return afterTag(downloaded), nil
-	}
-
 	isrc, _ := ac.provenISRC()
 	tags := ports.TrackTags{
 		Title:       ac.Track.Title,

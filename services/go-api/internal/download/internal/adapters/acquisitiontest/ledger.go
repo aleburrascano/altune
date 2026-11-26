@@ -71,7 +71,7 @@ func (l *Ledger) Get(_ context.Context, id ids.TrackId, userId ids.UserId) (*por
 	defer l.mu.Unlock()
 	track, ok := l.tracks[id]
 	if !ok || track.UserId != userId {
-		return nil, nil
+		return nil, ports.ErrTrackNotFound
 	}
 	snapshot := withStreamable(copyTrack(track)).TrackSnapshot
 	return &snapshot, nil
@@ -164,7 +164,7 @@ func settleAudio(track *LedgerTrack, c ports.Completion) error {
 	if c.AudioRef == "" {
 		return errors.New("audio_ref required for ready status")
 	}
-	streamable := track.Status == ports.TrackReady && track.AudioRef != nil
+	streamable := isStreamable(track.TrackSnapshot)
 	if c.ReplaceAudio && !streamable {
 		return illegalTransition("replace audio", track.Status)
 	}
@@ -284,7 +284,11 @@ func clonePointer[T any](p *T) *T {
 	return &v
 }
 
+func isStreamable(track ports.TrackSnapshot) bool {
+	return track.Status == ports.TrackReady && track.AudioRef != nil
+}
+
 func withStreamable(track LedgerTrack) LedgerTrack {
-	track.Streamable = track.Status == ports.TrackReady && track.AudioRef != nil
+	track.Streamable = isStreamable(track.TrackSnapshot)
 	return track
 }

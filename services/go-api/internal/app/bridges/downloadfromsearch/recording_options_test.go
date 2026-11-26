@@ -94,7 +94,22 @@ func acquireUnfoundTrack(t *testing.T, disc *search.Discovery, catalogMBID *stri
 		Title: unfoundTitle, Artist: unfoundArtist, ISRC: &isrc, CatalogMBID: catalogMBID, Status: download.TrackPending,
 	}
 	ledger := downloadtest.NewLedger(downloadtest.LedgerTrack{TrackSnapshot: track})
-	svc := download.NewAcquireTrackAudioService(ledger, download.NewSourceRegistry(), nil, downloadfromsearch.RecordingOptions(disc)...)
+	recording := downloadfromsearch.RecordingOptions(disc)
+	svc := download.NewAcquireTrackAudioService(ledger, download.NewSourceRegistry(), nil, download.NewTempWorkspace(),
+		download.VerificationPorts{
+			Identifier:      download.NoopAudioIdentifier(),
+			RecordingLookup: recording.Lookup,
+			Rerecordings:    recording.Rerecordings,
+			Previews:        download.NoopPreviewMatcher(),
+			Recordings:      recording.Resolver,
+		}, download.StagePorts{
+			Prober:      download.NoopAudioProber(),
+			Tagger:      download.NoopAudioTagger(),
+			Rejections:  download.NoopRejectionStore(),
+			StoredAudio: download.NoopStoredAudioReader(),
+			Orphans:     download.DirectDeleteOrphans(deletedNothing{}),
+			Skips:       download.NoopVerifySkipRecorder(),
+		})
 
 	_ = svc.Execute(context.Background(), track.UserId, track.ID)
 
@@ -103,6 +118,10 @@ func acquireUnfoundTrack(t *testing.T, disc *search.Discovery, catalogMBID *stri
 		t.Fatalf("after a run with no audio source the track is %+v, %v; want it failed", got, err)
 	}
 }
+
+type deletedNothing struct{}
+
+func (deletedNothing) Delete(context.Context, string) error { return nil }
 
 func TestRecordingOptions_WithSearchAndMusicBrainzTheRunAnchorsTheISRCAndLooksForARerecordingOfTheSearchHit(t *testing.T) {
 	provider := &countingProvider{}

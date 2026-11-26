@@ -68,11 +68,11 @@ func TestLedger_GetReturnsTheSeededTrackToItsOwnerOnly(t *testing.T) {
 	if err != nil || got == nil || got.Title != "Blinding Lights" || !got.Streamable || got.Version != 0 {
 		t.Fatalf("Get = %+v, %v, want the seeded ready track, streamable at version 0", got, err)
 	}
-	if other, err := ledger.Get(context.Background(), track.ID, ids.NewUserId(uuid.New())); other != nil || err != nil {
-		t.Errorf("Get as another user = %+v, %v, want nothing", other, err)
+	if other, err := ledger.Get(context.Background(), track.ID, ids.NewUserId(uuid.New())); other != nil || !errors.Is(err, ports.ErrTrackNotFound) {
+		t.Errorf("Get as another user = %+v, %v, want ErrTrackNotFound", other, err)
 	}
-	if missing, err := ledger.Get(context.Background(), ids.NewTrackId(), track.UserId); missing != nil || err != nil {
-		t.Errorf("Get of an unknown track = %+v, %v, want nothing", missing, err)
+	if missing, err := ledger.Get(context.Background(), ids.NewTrackId(), track.UserId); missing != nil || !errors.Is(err, ports.ErrTrackNotFound) {
+		t.Errorf("Get of an unknown track = %+v, %v, want ErrTrackNotFound", missing, err)
 	}
 }
 

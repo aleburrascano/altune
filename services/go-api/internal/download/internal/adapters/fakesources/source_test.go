@@ -155,7 +155,7 @@ func TestFind_FixtureCandidatesAreShapedLikeProd(t *testing.T) {
 	req := download.FindRequest{Title: "Song", Artist: "Artist", Album: "Album", Duration: 179.6}
 
 	art := findOne(t, download.NewArtTrackSource(fixtureClip), req)
-	wantArt := prodArtTrack(t, req, download.YouTubeMusicSong{Type: download.VideoTypeAudioOnly, Title: "Song", Artists: []string{"Artist"}, Album: "Album", DurationSeconds: 180})
+	wantArt := prodArtTrack(t, req, download.YouTubeMusicSong{VideoID: "dQw4w9WgXcQ", Type: download.VideoTypeAudioOnly, Title: "Song", Artists: []string{"Artist"}, Album: "Album", DurationSeconds: 180})
 	wantArt.URL = download.ArtTrackURL
 	if !reflect.DeepEqual(art, wantArt) {
 		t.Fatalf("art track %+v, want %+v", art, wantArt)

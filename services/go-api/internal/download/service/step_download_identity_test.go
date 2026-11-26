@@ -62,9 +62,8 @@ func acquireIdentifiedAs(t *testing.T, results []download.AcoustIDResult) {
 		Title: "Boys Don't Cry", Artist: "The Cure", Album: "Three Imaginary Boys", Status: download.TrackPending,
 	}
 	svc := download.NewAcquireTrackAudioService(&pendingLedger{track: track}, download.NewSourceRegistry(topicUpload{}), storedAudio{},
-		download.WithAcquireTempWorkspace(download.NewTempWorkspace()),
-		download.WithRecordingResolver(resolvedTo("mbid-a")),
-		download.WithAudioIdentifier(&identifier{match: download.RecordingMatch{AcoustID: "ac-1", Results: results}}))
+		download.NewTempWorkspace(),
+		resolving(resolvedTo("mbid-a"), verifiedBy(&identifier{match: download.RecordingMatch{AcoustID: "ac-1", Results: results}})), noStages())
 
 	_ = svc.Execute(context.Background(), track.UserId, track.ID)
 }

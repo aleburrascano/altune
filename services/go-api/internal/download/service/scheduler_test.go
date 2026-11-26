@@ -18,6 +18,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
@@ -792,7 +793,7 @@ func TestBackgroundScheduler_DispatchesToTheMatchingServiceEntryPoint(t *testing
 		t.Run(tc.name, func(t *testing.T) {
 			userId := ids.NewUserId(uuid.New())
 			ledger := acquisitiontest.NewLedger()
-			track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=old")
+			track := readyTrackWithSource(t, ledger, userId, "u/a/b/c.mp3", "https://youtube.com/watch?v=oldoldoldol")
 			store := newFakeAudioStore()
 			store.stored["u/a/b/c.mp3"] = true
 			searcher := &fakeAudioSearcher{}
@@ -1017,7 +1018,7 @@ func TestBackgroundScheduler_Schedule_PanickingJobAtTheAttemptCapFailsTheTrack(t
 	})
 	job := acqports.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), Run: maxAcquisitionAttempts}
 
-	scheduler.releasePanickedJob(job)
+	scheduler.releasePanickedJob(context.Background(), job)
 
 	if got := acq.refused.Load(); got != 1 {
 		t.Errorf("track failed %d times, want 1", got)
@@ -1033,7 +1034,7 @@ func TestBackgroundScheduler_Schedule_PanickingJobWithOldClaimsButFreshRunIsRetr
 	})
 	job := acqports.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), ClaimNumber: acqports.ClaimNumber(maxAcquisitionAttempts + 4), Run: 1}
 
-	scheduler.releasePanickedJob(job)
+	scheduler.releasePanickedJob(context.Background(), job)
 
 	if got := acq.refused.Load(); got != 0 {
 		t.Errorf("track failed %d times, want 0 (first panic of a fresh run keeps its budget)", got)
@@ -1049,7 +1050,7 @@ func TestBackgroundScheduler_Schedule_PanickingJobAtTheRunCapFailsTheTrack(t *te
 	})
 	job := acqports.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), ClaimNumber: acqports.ClaimNumber(maxAcquisitionAttempts + 4), Run: maxAcquisitionAttempts}
 
-	scheduler.releasePanickedJob(job)
+	scheduler.releasePanickedJob(context.Background(), job)
 
 	if got := acq.refused.Load(); got != 1 {
 		t.Errorf("track failed %d times, want 1", got)
@@ -1135,34 +1136,34 @@ func TestBackgroundScheduler_RuntimeKillSwitchTogglesAdmission(t *testing.T) {
 }
 
 func TestBackgroundScheduler_ResumeClaimsWithoutWaitingAPollInterval(t *testing.T) {
-	acq := &startedAcquirer{started: make(chan struct{}, 1), release: make(chan struct{})}
-	scheduler := NewBackgroundAcquisitionScheduler(acq, 1, WithPollInterval(10*time.Second))
-	t.Cleanup(func() {
-		close(acq.release)
-		scheduler.Shutdown(context.Background())
+	synctest.Test(t, func(t *testing.T) {
+		acq := &startedAcquirer{started: make(chan struct{}, 1), release: make(chan struct{})}
+		scheduler := NewBackgroundAcquisitionScheduler(acq, 1, WithPollInterval(10*time.Second))
+		defer scheduler.Shutdown(context.Background())
+		defer close(acq.release)
+
+		scheduler.Pause()
+		user := ids.NewUserId(uuid.New())
+		if err := scheduler.Schedule(context.Background(), user, ids.NewTrackId(), ""); !errors.Is(err, acqdomain.ErrAcquisitionPaused) {
+			t.Fatalf("schedule while paused = %v, want ErrAcquisitionPaused", err)
+		}
+		time.Sleep(50 * time.Millisecond)
+		select {
+		case <-acq.started:
+			t.Fatal("acquirer started while paused, want no execution")
+		default:
+		}
+
+		scheduler.Resume()
+		if err := scheduler.Schedule(context.Background(), user, ids.NewTrackId(), ""); err != nil {
+			t.Fatalf("schedule after Resume = %v, want nil", err)
+		}
+		select {
+		case <-acq.started:
+		case <-time.After(time.Second):
+			t.Fatal("acquirer not started within 1s of Resume, want a wake well under the 10s poll interval")
+		}
 	})
-
-	scheduler.Pause()
-	user := ids.NewUserId(uuid.New())
-	if err := scheduler.Schedule(context.Background(), user, ids.NewTrackId(), ""); !errors.Is(err, acqdomain.ErrAcquisitionPaused) {
-		t.Fatalf("schedule while paused = %v, want ErrAcquisitionPaused", err)
-	}
-	time.Sleep(50 * time.Millisecond)
-	select {
-	case <-acq.started:
-		t.Fatal("acquirer started while paused, want no execution")
-	default:
-	}
-
-	scheduler.Resume()
-	if err := scheduler.Schedule(context.Background(), user, ids.NewTrackId(), ""); err != nil {
-		t.Fatalf("schedule after Resume = %v, want nil", err)
-	}
-	select {
-	case <-acq.started:
-	case <-time.After(time.Second):
-		t.Fatal("acquirer not started within 1s of Resume, want a wake well under the 10s poll interval")
-	}
 }
 
 func TestBackgroundScheduler_PauseLeavesInflightRunning(t *testing.T) {
@@ -1409,90 +1410,94 @@ func claimableTracks(q *memJobQueue) map[string]struct{} {
 }
 
 func TestBackgroundScheduler_ShutdownCancellation_LeavesTheQueuedJobUnclaimed(t *testing.T) {
-	userId := ids.NewUserId(uuid.New())
-	base := acquisitiontest.NewLedger()
-	running := newPendingTrack(t, userId, base)
-	queued := newPendingTrack(t, userId, base)
+	synctest.Test(t, func(t *testing.T) {
+		userId := ids.NewUserId(uuid.New())
+		base := acquisitiontest.NewLedger()
+		running := newPendingTrack(t, userId, base)
+		queued := newPendingTrack(t, userId, base)
 
-	ledger := &holdOneLibraryTracks{Ledger: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
-	pub := newRecordingPublisher()
-	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
-	scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithDrainBudget(10*time.Millisecond))
-	t.Cleanup(func() {
-		close(ledger.release)
-		scheduler.Shutdown(context.Background())
+		ledger := &holdOneLibraryTracks{Ledger: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
+		pub := newRecordingPublisher()
+		svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
+		scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithDrainBudget(10*time.Millisecond))
+		t.Cleanup(func() {
+			close(ledger.release)
+			scheduler.Shutdown(context.Background())
+		})
+
+		if err := scheduler.Schedule(context.Background(), userId, running.ID, ""); err != nil {
+			t.Fatalf("first Schedule = %v, want nil", err)
+		}
+		<-ledger.holding
+
+		if err := scheduler.Schedule(context.Background(), userId, queued.ID, ""); err != nil {
+			t.Fatalf("second Schedule = %v, want nil (admitted, waiting for a slot)", err)
+		}
+
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer shutdownCancel()
+		scheduler.Shutdown(shutdownCtx)
+
+		if _, settled := settledJob(scheduler, queued.ID.String()); settled {
+			t.Fatal("queued job was claimed by shutdown, want left untouched in the queue")
+		}
+
+		mq, ok := scheduler.queue.(*memJobQueue)
+		if !ok {
+			t.Fatal("scheduler queue is not a *memJobQueue")
+		}
+		if _, ok := claimableTracks(mq)[queued.ID.String()]; !ok {
+			t.Error("queued job missing from the queue after shutdown, want still enqueued for the next worker")
+		}
+
+		stored := committedTrack(t, base, queued.ID)
+		if stored.Status != acqports.TrackPending {
+			t.Errorf("queued track status = %v, want %v (untouched by shutdown)", stored.Status, acqports.TrackPending)
+		}
+		if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
+			t.Errorf("track_acquisition_failed publishes = %d, want 0", got)
+		}
 	})
-
-	if err := scheduler.Schedule(context.Background(), userId, running.ID, ""); err != nil {
-		t.Fatalf("first Schedule = %v, want nil", err)
-	}
-	<-ledger.holding
-
-	if err := scheduler.Schedule(context.Background(), userId, queued.ID, ""); err != nil {
-		t.Fatalf("second Schedule = %v, want nil (admitted, waiting for a slot)", err)
-	}
-
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	defer shutdownCancel()
-	scheduler.Shutdown(shutdownCtx)
-
-	if _, settled := settledJob(scheduler, queued.ID.String()); settled {
-		t.Fatal("queued job was claimed by shutdown, want left untouched in the queue")
-	}
-
-	mq, ok := scheduler.queue.(*memJobQueue)
-	if !ok {
-		t.Fatal("scheduler queue is not a *memJobQueue")
-	}
-	if _, ok := claimableTracks(mq)[queued.ID.String()]; !ok {
-		t.Error("queued job missing from the queue after shutdown, want still enqueued for the next worker")
-	}
-
-	stored := committedTrack(t, base, queued.ID)
-	if stored.Status != acqports.TrackPending {
-		t.Errorf("queued track status = %v, want %v (untouched by shutdown)", stored.Status, acqports.TrackPending)
-	}
-	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
-		t.Errorf("track_acquisition_failed publishes = %d, want 0", got)
-	}
 }
 
 func TestBackgroundScheduler_ScheduleDuringShutdown_Refuses(t *testing.T) {
-	userId := ids.NewUserId(uuid.New())
-	base := acquisitiontest.NewLedger()
-	running := newPendingTrack(t, userId, base)
-	queued := newPendingTrack(t, userId, base)
+	synctest.Test(t, func(t *testing.T) {
+		userId := ids.NewUserId(uuid.New())
+		base := acquisitiontest.NewLedger()
+		running := newPendingTrack(t, userId, base)
+		queued := newPendingTrack(t, userId, base)
 
-	ledger := &holdOneLibraryTracks{Ledger: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
-	pub := newRecordingPublisher()
-	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
-	scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithDrainBudget(10*time.Millisecond))
-	t.Cleanup(func() {
-		close(ledger.release)
-		scheduler.Shutdown(context.Background())
+		ledger := &holdOneLibraryTracks{Ledger: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
+		pub := newRecordingPublisher()
+		svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
+		scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithDrainBudget(10*time.Millisecond))
+		t.Cleanup(func() {
+			close(ledger.release)
+			scheduler.Shutdown(context.Background())
+		})
+
+		if err := scheduler.Schedule(context.Background(), userId, running.ID, ""); err != nil {
+			t.Fatalf("first Schedule = %v, want nil", err)
+		}
+		<-ledger.holding
+		scheduler.closed.Store(true)
+
+		if err := scheduler.Schedule(context.Background(), userId, queued.ID, ""); !errors.Is(err, acqdomain.ErrSchedulerShutdown) {
+			t.Errorf("Schedule once admission is closed = %v, want ErrSchedulerShutdown", err)
+		}
+
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer shutdownCancel()
+		scheduler.Shutdown(shutdownCtx)
+
+		stored := committedTrack(t, base, queued.ID)
+		if stored.Status != acqports.TrackPending {
+			t.Errorf("refused track status = %v, want %v (untouched)", stored.Status, acqports.TrackPending)
+		}
+		if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
+			t.Errorf("track_acquisition_failed publishes = %d, want 0", got)
+		}
 	})
-
-	if err := scheduler.Schedule(context.Background(), userId, running.ID, ""); err != nil {
-		t.Fatalf("first Schedule = %v, want nil", err)
-	}
-	<-ledger.holding
-	scheduler.closed.Store(true)
-
-	if err := scheduler.Schedule(context.Background(), userId, queued.ID, ""); !errors.Is(err, acqdomain.ErrSchedulerShutdown) {
-		t.Errorf("Schedule once admission is closed = %v, want ErrSchedulerShutdown", err)
-	}
-
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	defer shutdownCancel()
-	scheduler.Shutdown(shutdownCtx)
-
-	stored := committedTrack(t, base, queued.ID)
-	if stored.Status != acqports.TrackPending {
-		t.Errorf("refused track status = %v, want %v (untouched)", stored.Status, acqports.TrackPending)
-	}
-	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
-		t.Errorf("track_acquisition_failed publishes = %d, want 0", got)
-	}
 }
 
 func TestAcquireTrackAudioService_RefuseQueued_AlreadySettledTrack_IsQuietNoOp(t *testing.T) {
@@ -2056,52 +2061,54 @@ func TestBackgroundScheduler_ShutdownMidRun_RecordsTheOutcomeOnALiveContext(t *t
 }
 
 func TestBackgroundScheduler_ShutdownBeforeStart_LeavesTheQueuedJobWithNoOutcome(t *testing.T) {
-	userId := ids.NewUserId(uuid.New())
-	base := acquisitiontest.NewLedger()
-	running := newPendingTrack(t, userId, base)
-	queued := newPendingTrack(t, userId, base)
-	ledger := &holdOneLibraryTracks{Ledger: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
-	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
-	recorder := newCtxAtRecordRecorder()
-	scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithOutcomeRecorder(recorder), WithDrainBudget(10*time.Millisecond))
-	var released sync.Once
-	release := func() {
-		released.Do(func() { close(ledger.release) })
-		awaitIdle(t, scheduler)
-	}
-	t.Cleanup(release)
+	synctest.Test(t, func(t *testing.T) {
+		userId := ids.NewUserId(uuid.New())
+		base := acquisitiontest.NewLedger()
+		running := newPendingTrack(t, userId, base)
+		queued := newPendingTrack(t, userId, base)
+		ledger := &holdOneLibraryTracks{Ledger: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
+		svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+		recorder := newCtxAtRecordRecorder()
+		scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithOutcomeRecorder(recorder), WithDrainBudget(10*time.Millisecond))
+		var released sync.Once
+		release := func() {
+			released.Do(func() { close(ledger.release) })
+			awaitIdle(t, scheduler)
+		}
+		t.Cleanup(release)
 
-	if err := scheduler.Schedule(context.Background(), userId, running.ID, ""); err != nil {
-		t.Fatalf("first schedule: %v", err)
-	}
-	<-ledger.holding
-	if err := scheduler.Schedule(context.Background(), userId, queued.ID, ""); err != nil {
-		t.Fatalf("second schedule: %v", err)
-	}
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	defer cancel()
-	scheduler.Shutdown(shutdownCtx)
-	release()
+		if err := scheduler.Schedule(context.Background(), userId, running.ID, ""); err != nil {
+			t.Fatalf("first schedule: %v", err)
+		}
+		<-ledger.holding
+		if err := scheduler.Schedule(context.Background(), userId, queued.ID, ""); err != nil {
+			t.Fatalf("second schedule: %v", err)
+		}
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		scheduler.Shutdown(shutdownCtx)
+		release()
 
-	only := awaitOutcome(t, recorder.calls)
-	if only.TrackID != running.ID.String() {
-		t.Fatalf("recorded track = %q, want the running track %q (the queued job was never claimed)", only.TrackID, running.ID.String())
-	}
-	if only.Outcome != acqports.JobCancelled {
-		t.Errorf("outcome = %q, want %q", only.Outcome, acqports.JobCancelled)
-	}
-	if only.Reason != "shutdown" {
-		t.Errorf("reason = %q, want %q", only.Reason, "shutdown")
-	}
-	if ctxErr := <-recorder.ctxErrs; ctxErr != nil {
-		t.Errorf("Record's context was already done (%v), want a live context", ctxErr)
-	}
+		only := awaitOutcome(t, recorder.calls)
+		if only.TrackID != running.ID.String() {
+			t.Fatalf("recorded track = %q, want the running track %q (the queued job was never claimed)", only.TrackID, running.ID.String())
+		}
+		if only.Outcome != acqports.JobCancelled {
+			t.Errorf("outcome = %q, want %q", only.Outcome, acqports.JobCancelled)
+		}
+		if only.Reason != "shutdown" {
+			t.Errorf("reason = %q, want %q", only.Reason, "shutdown")
+		}
+		if ctxErr := <-recorder.ctxErrs; ctxErr != nil {
+			t.Errorf("Record's context was already done (%v), want a live context", ctxErr)
+		}
 
-	select {
-	case extra := <-recorder.calls:
-		t.Fatalf("recorder received a call for the never-claimed queued job %+v, want none", extra)
-	case <-time.After(50 * time.Millisecond):
-	}
+		select {
+		case extra := <-recorder.calls:
+			t.Fatalf("recorder received a call for the never-claimed queued job %+v, want none", extra)
+		case <-time.After(50 * time.Millisecond):
+		}
+	})
 }
 
 func TestBackgroundScheduler_Shutdown_WaitsForTheInFlightOutcomeWrite(t *testing.T) {
@@ -2557,28 +2564,6 @@ func (q *conflictingQueue) Claim(ctx context.Context, lease time.Duration) (acqp
 	}
 }
 
-func countCorrIDs(s *BackgroundAcquisitionScheduler) int {
-	n := 0
-	s.corrIDs.Range(func(_, _ any) bool { n++; return true })
-	return n
-}
-
-func TestBackgroundScheduler_Schedule_RejectedEnqueueLeavesNoCorrelationID(t *testing.T) {
-	queue := &conflictingQueue{memJobQueue: newMemJobQueue(make(chan struct{}, 1)), rejectAll: true, gate: make(chan struct{})}
-	scheduler := NewBackgroundAcquisitionScheduler(&stubAcquirer{}, 1, WithJobQueue(queue))
-	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
-
-	ctx := logging.WithCorrelationID(context.Background(), "corr-rejected")
-	err := scheduler.Schedule(ctx, ids.NewUserId(uuid.New()), ids.NewTrackId(), "")
-
-	if !errors.Is(err, acqdomain.ErrTrackJobInFlight) {
-		t.Fatalf("schedule = %v, want ErrTrackJobInFlight", err)
-	}
-	if got := countCorrIDs(scheduler); got != 0 {
-		t.Errorf("correlation ids retained after a rejected enqueue = %d, want 0", got)
-	}
-}
-
 func TestBackgroundScheduler_Schedule_RejectedSecondRequestKeepsTheQueuedJobsCorrelationID(t *testing.T) {
 	ledger := &corrCapturingLedger{Ledger: acquisitiontest.NewLedger()}
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
@@ -2917,7 +2902,7 @@ func TestBackgroundScheduler_APanickingReplaceAtTheRunCapIsSettled(t *testing.T)
 	})
 	job := acqports.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), Kind: acqports.JobKindReplace, Run: maxAcquisitionAttempts}
 
-	scheduler.releasePanickedJob(job)
+	scheduler.releasePanickedJob(context.Background(), job)
 
 	if got := queue.released.Load(); got != 0 {
 		t.Errorf("released %d times, want 0: a released replace stays claimable on a ready track", got)
@@ -2963,7 +2948,7 @@ func panickedJobOutcome(t *testing.T, job acqports.Job) (*panickingAcquirer, *pa
 	job.TrackID = ids.NewTrackId()
 	job.UserID = ids.NewUserId(uuid.New())
 
-	scheduler.releasePanickedJob(job)
+	scheduler.releasePanickedJob(context.Background(), job)
 
 	return acq, queue
 }
@@ -3008,7 +2993,7 @@ func TestBackgroundScheduler_APanickedJobThatLostItsLeaseDoesNotFailTheTrack(t *
 	})
 	job := acqports.Job{TrackID: track.ID, UserID: userId, ClaimNumber: 1, Run: maxAcquisitionAttempts}
 
-	scheduler.releasePanickedJob(job)
+	scheduler.releasePanickedJob(context.Background(), job)
 
 	if got := committedTrack(t, ledger, track.ID).Status; got != acqports.TrackPending {
 		t.Errorf("status = %v, want pending: the panicked job no longer holds the lease", got)
@@ -3229,7 +3214,7 @@ func TestScheduler_OutcomeCarriesTheRunsConfidenceSourceAndLengths(t *testing.T)
 			ledger := acquisitiontest.NewLedger()
 			track := pendingTrack(t, ledger, userId)
 			track = withCatalogLength(t, ledger, track, target)
-			svc := newTestAcquireService(ledger, fakeRegistry(tc.searcher), newFakeAudioStore(), WithAudioProber(tc.prober))
+			svc := newTestAcquireService(ledger, fakeRegistry(tc.searcher), newFakeAudioStore(), withServiceProber(tc.prober))
 			scheduler := NewBackgroundAcquisitionScheduler(svc, 1, WithOutcomeRecorder(recorder))
 			t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
@@ -3265,7 +3250,7 @@ func panicThroughTheLedger(t *testing.T, store acqports.LibraryTracks, job acqpo
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
-	scheduler.releasePanickedJob(job)
+	scheduler.releasePanickedJob(context.Background(), job)
 	return queue, pub
 }
 

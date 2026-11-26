@@ -4,7 +4,6 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/ids"
-	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"log/slog"
@@ -36,7 +35,7 @@ func (s *BackgroundAcquisitionScheduler) enqueue(ctx context.Context, userId ids
 
 	key := trackId.String()
 	alreadyTracked := s.pending.track(key)
-	s.primeEnqueue(ctx, trackId, userId, key, alreadyTracked)
+	s.primeEnqueue(trackId, userId)
 
 	if err := s.queue.Enqueue(ctx, trackId, kind, 0); err != nil {
 		return s.handleEnqueueError(ctx, key, trackId, kind, alreadyTracked, err)
@@ -48,12 +47,9 @@ type userRememberer interface {
 	RememberUser(trackId ids.TrackId, userId ids.UserId)
 }
 
-func (s *BackgroundAcquisitionScheduler) primeEnqueue(ctx context.Context, trackId ids.TrackId, userId ids.UserId, key string, alreadyTracked bool) {
+func (s *BackgroundAcquisitionScheduler) primeEnqueue(trackId ids.TrackId, userId ids.UserId) {
 	if r, ok := s.queue.(userRememberer); ok {
 		r.RememberUser(trackId, userId)
-	}
-	if corrID := logging.CorrelationIDFromContext(ctx); corrID != "" && !alreadyTracked {
-		s.corrIDs.Store(key, corrID)
 	}
 }
 
@@ -68,7 +64,6 @@ func (s *BackgroundAcquisitionScheduler) finishEnqueue(ctx context.Context, trac
 func (s *BackgroundAcquisitionScheduler) handleEnqueueError(ctx context.Context, key string, trackId ids.TrackId, kind ports.JobKind, alreadyTracked bool, err error) error {
 	if !alreadyTracked {
 		s.pending.untrack(key)
-		s.corrIDs.Delete(key)
 	}
 	if errors.Is(err, acqdomain.ErrJobKindConflict) {
 		s.rejected.Add(1)

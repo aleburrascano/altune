@@ -47,18 +47,27 @@ func Run(ctx context.Context, kase Case) Outcome {
 
 	var observed *service.AcquisitionContext
 	opts := []func(*service.AcquireTrackAudioService){
-		service.WithAudioProber(p),
-		service.WithAudioIdentifier(p),
-		service.WithRecordingResolver(resolverFor(kase)),
-		service.WithAcquireRecordingLookup(recordedLookups(kase.Recordings)),
-		service.WithAcquireTempWorkspace(scratchfiles.New()),
-		service.WithStoredAudioReader(p),
 		service.WithContextObserver(func(ac *service.AcquisitionContext) { observed = ac }),
 	}
-	if kase.Rerecording != nil {
-		opts = append(opts, service.WithRerecordingFinder(recordedRerecording{*kase.Rerecording}))
+	wiring := service.VerificationPorts{
+		Identifier:      p,
+		RecordingLookup: recordedLookups(kase.Recordings),
+		Rerecordings:    ports.NoopRerecordingFinder(),
+		Previews:        ports.NoopPreviewMatcher(),
+		Recordings:      resolverFor(kase),
 	}
-	svc := service.NewAcquireTrackAudioService(ledger, p.registry(), p, opts...)
+	if kase.Rerecording != nil {
+		wiring.Rerecordings = recordedRerecording{*kase.Rerecording}
+	}
+	stages := service.StagePorts{
+		Prober:      p,
+		Tagger:      ports.NoopAudioTagger(),
+		Rejections:  ports.NoopRejectionStore(),
+		StoredAudio: p,
+		Orphans:     service.DirectDeleteOrphans(p),
+		Skips:       ports.NoopVerifySkipRecorder(),
+	}
+	svc := service.NewAcquireTrackAudioService(ledger, p.registry(), p, scratchfiles.New(), wiring, stages, opts...)
 	runErr := executeFor(ctx, svc, kase, track)
 	if observed == nil && runErr == nil {
 		runErr = errors.New("eval: the service never started an acquisition")

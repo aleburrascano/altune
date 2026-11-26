@@ -104,6 +104,71 @@ func seedReadyTrack(t *testing.T) servedTrack {
 }
 
 func (r servedTrack) service(opts ...func(*service.AcquireTrackAudioService)) *service.AcquireTrackAudioService {
-	opts = append([]func(*service.AcquireTrackAudioService){service.WithAcquireTempWorkspace(scratchfiles.New())}, opts...)
-	return service.NewAcquireTrackAudioService(r.ledger, service.NewSourceRegistry(freshAudioSource{}), r.store, opts...)
+	return r.serviceStaged(noStages(deletingFrom(r.store)), opts...)
+}
+
+type audioDeleter interface {
+	Delete(ctx context.Context, audioRef string) error
+}
+
+func deletingFrom(store audioDeleter) stageMod {
+	return func(s *service.StagePorts) { s.Orphans = service.DirectDeleteOrphans(store) }
+}
+
+func (r servedTrack) serviceStaged(stages service.StagePorts, opts ...func(*service.AcquireTrackAudioService)) *service.AcquireTrackAudioService {
+	return service.NewAcquireTrackAudioService(r.ledger, service.NewSourceRegistry(freshAudioSource{}), r.store, scratchfiles.New(), noVerification(), stages, opts...)
+}
+
+type stageMod func(*service.StagePorts)
+
+func noStages(mods ...stageMod) service.StagePorts {
+	stages := service.StagePorts{
+		Prober:      ports.NoopAudioProber(),
+		Tagger:      ports.NoopAudioTagger(),
+		Rejections:  ports.NoopRejectionStore(),
+		StoredAudio: ports.NoopStoredAudioReader(),
+		Orphans:     service.DirectDeleteOrphans(&objectStore{objects: map[string]string{}}),
+		Skips:       ports.NoopVerifySkipRecorder(),
+	}
+	for _, mod := range mods {
+		mod(&stages)
+	}
+	return stages
+}
+
+func probedBy(p ports.AudioProber) stageMod { return func(s *service.StagePorts) { s.Prober = p } }
+
+func taggedBy(t ports.AudioTagger) stageMod { return func(s *service.StagePorts) { s.Tagger = t } }
+
+func rejectingInto(r ports.RejectionStore) stageMod {
+	return func(s *service.StagePorts) { s.Rejections = r }
+}
+
+func readingStoredFrom(r ports.StoredAudioReader) stageMod {
+	return func(s *service.StagePorts) { s.StoredAudio = r }
+}
+
+func orphaningInto(q ports.OrphanedAudioRecorder) stageMod {
+	return func(s *service.StagePorts) { s.Orphans = q }
+}
+
+func noVerification() service.VerificationPorts {
+	return service.VerificationPorts{
+		Identifier:      ports.NoopAudioIdentifier(),
+		RecordingLookup: ports.NoopRecordingLookup(),
+		Rerecordings:    ports.NoopRerecordingFinder(),
+		Previews:        ports.NoopPreviewMatcher(),
+		Recordings:      ports.NoopRecordingResolver(),
+	}
+}
+
+func verifiedBy(identifier ports.AudioIdentifier) service.VerificationPorts {
+	wiring := noVerification()
+	wiring.Identifier = identifier
+	return wiring
+}
+
+func resolving(resolver ports.RecordingResolver, wiring service.VerificationPorts) service.VerificationPorts {
+	wiring.Recordings = resolver
+	return wiring
 }

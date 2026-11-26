@@ -21,6 +21,8 @@ type Job struct {
 	Run         int
 	ClaimNumber ClaimNumber
 	Waited      time.Duration
+
+	CorrelationID string
 }
 
 type ClaimNumber int

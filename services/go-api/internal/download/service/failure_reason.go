@@ -11,7 +11,9 @@ import (
 	"time"
 )
 
-const maxAcquisitionAttempts = 3
+const (
+	maxAcquisitionAttempts = 3
+)
 
 var (
 	ErrAcquisitionRetryable = errors.New("acquisition failed transiently, job released for retry")

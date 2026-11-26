@@ -86,7 +86,7 @@ func TestExecute_ReconcilesTheTracksStatusBeforeItSearches(t *testing.T) {
 			ledger.FailWrites(tt.writeErr)
 			source := &reacquireSource{}
 			svc := service.NewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), tt.store,
-				service.WithAcquireTempWorkspace(scratchfiles.New()))
+				scratchfiles.New(), noVerification(), noStages())
 
 			err := svc.Execute(context.Background(), track.UserId, track.ID)
 

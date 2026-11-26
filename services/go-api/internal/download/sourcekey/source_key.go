@@ -34,22 +34,35 @@ func YouTubeMusicWatchURL(videoID string) string {
 }
 
 func SourceKey(rawURL string) string {
-	if id := youtubeVideoID(rawURL); id != "" {
-		return "youtube:" + id
-	}
-	return normalizedURLKey(rawURL)
-}
-
-func youtubeVideoID(rawURL string) string {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil {
-		return ""
+	if err != nil || u.Hostname() == "" {
+		return hostlessKey(rawURL)
 	}
 	host := strings.ToLower(u.Hostname())
-	if !youtubeHosts[host] {
+	if youtubeHosts[host] {
+		if id := videoIDOnYouTubeHost(host, u); id != "" {
+			return "youtube:" + id
+		}
 		return ""
 	}
-	return videoIDOnYouTubeHost(host, u)
+	return otherHostKey(host, u)
+}
+
+var pathIdentifiedHosts = map[string]bool{
+	"soundcloud.com":     true,
+	"api.soundcloud.com": true,
+}
+
+func otherHostKey(host string, u *url.URL) string {
+	host = strings.TrimPrefix(strings.TrimPrefix(host, "www."), "m.")
+	path := strings.TrimSuffix(u.EscapedPath(), "/")
+	if pathIdentifiedHosts[host] {
+		return strings.ToLower(host + path)
+	}
+	if query := u.Query().Encode(); query != "" {
+		return host + path + "?" + query
+	}
+	return host + path
 }
 
 func videoIDOnYouTubeHost(host string, u *url.URL) string {
@@ -72,15 +85,8 @@ func videoID(candidateID string) string {
 	return candidateID
 }
 
-func normalizedURLKey(rawURL string) string {
+func hostlessKey(rawURL string) string {
 	key := strings.ToLower(strings.TrimSpace(rawURL))
-	if i := strings.IndexByte(key, '?'); i >= 0 {
-		key = key[:i]
-	}
-	key = strings.TrimPrefix(key, "https://")
-	key = strings.TrimPrefix(key, "http://")
-	key = strings.TrimPrefix(key, "www.")
-	key = strings.TrimPrefix(key, "m.")
-	key = strings.TrimSuffix(key, "/")
-	return key
+	key = strings.TrimPrefix(strings.TrimPrefix(key, "www."), "m.")
+	return strings.TrimSuffix(key, "/")
 }

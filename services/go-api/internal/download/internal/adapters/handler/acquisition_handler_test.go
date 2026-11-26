@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -422,6 +423,28 @@ func buildRetryRouter(trackRepo *acquisitiontest.Ledger, scheduler *retryFakeSch
 	r.Use(signedInAs(retryTestUserId))
 	r.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
 	return r
+}
+
+type unreachableLedger struct{ *acquisitiontest.Ledger }
+
+func (unreachableLedger) Get(context.Context, ids.TrackId, ids.UserId) (*download.TrackSnapshot, error) {
+	return nil, errors.New("database unavailable")
+}
+
+func TestHandleRetryAcquisition_ALedgerFailureIsA500AndSchedulesNothing(t *testing.T) {
+	track := failedTrack(retryTestUserId)
+	scheduler := &retryFakeScheduler{}
+	h := download.NewRetryHandler(unreachableLedger{acquisitiontest.NewLedger(track)}, scheduler, download.NewRetryAdmission(acquisitiontest.NewCooldownStore()))
+	router := chi.NewRouter()
+	router.Use(signedInAs(retryTestUserId))
+	router.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
+
+	rec := retryServe(t, router, http.MethodPost, "/tracks/"+track.ID.UUID().String()+"/retry")
+
+	retryAssertStatus(t, rec, http.StatusInternalServerError)
+	if len(scheduler.scheduled) != 0 {
+		t.Errorf("scheduled = %d, want none when the track could not be read", len(scheduler.scheduled))
+	}
 }
 
 func TestHandleRetryAcquisition(t *testing.T) {

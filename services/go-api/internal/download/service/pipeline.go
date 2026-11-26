@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/download/internal/core/audioquality"
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/judgeshadow"
 	"altune/go-api/internal/download/internal/core/ports"
@@ -310,6 +311,14 @@ func (ac *AcquisitionContext) retargetTo(label ports.TrackLabel) {
 	ac.Relabel = &label
 }
 
+func (ac *AcquisitionContext) refetchesCurrentSource() bool {
+	return ac.Replace.Gate.RefetchesCurrentSource()
+}
+
+func (ac *AcquisitionContext) admitFetched(fetched audioquality.Grade) error {
+	return ac.Replace.Gate.AdmitFetched(fetched, ac.SourceFormat, ac.ProbedDuration.Seconds())
+}
+
 type AttemptedCandidate struct {
 	URL    string
 	Window int
@@ -415,16 +424,13 @@ type TrackRef struct {
 }
 
 func (s *AcquireTrackAudioService) buildSteps(userId ids.UserId, trackId ids.TrackId) Pipeline {
-	return CoreSteps(s.sources, s.audioTagger, s.audioStore, s.audioProber, s.identifier, s.workspace,
+	return CoreSteps(s.sources, s.audioTagger, s.audioStore, s.audioProber, s.identifier, s.recordingLookup, s.verifySkips, s.orphans, s.ledger, s.workspace,
 		[]func(*DownloadStep){
 			WithStepDownloadLimiter(s.downloadLimiter),
-			WithRecordingLookup(s.recordingLookup),
 			WithConfidenceFloor(s.confidenceFloor),
-			WithStepVerifySkips(s.verifySkips),
 			WithJudgeCuts(s.cuts),
 		},
-		WithStoreAudioRefGuard(s.ledger, trackId),
-		WithStoreOrphanQueue(s.orphans, userId),
+		WithStoreOwner(userId, trackId),
 		WithStoreKeyPrefix(s.storeKeyPrefix)).
 		withUpdateTrack(NewUpdateTrackStep(s.ledger, userId, trackId))
 }
@@ -435,6 +441,10 @@ func CoreSteps(
 	store ports.AudioWriter,
 	prober ports.AudioProber,
 	identifier ports.AudioIdentifier,
+	lookup ports.RecordingLookup,
+	skips ports.VerifySkipRecorder,
+	orphans ports.OrphanedAudioRecorder,
+	refs ports.AudioRefLookup,
 	workspace ports.ScratchFolder,
 	downloadOpts []func(*DownloadStep),
 	storeOpts ...func(*StoreStep),
@@ -442,8 +452,8 @@ func CoreSteps(
 	return Pipeline{
 		search:     NewSearchStep(sources),
 		selectBest: NewSelectStep(),
-		download:   NewDownloadStep(sources, append([]func(*DownloadStep){WithDownloadProber(prober), WithDownloadIdentifier(identifier), WithVerifyWidth(prodVerifyWidth), WithStepTempWorkspace(workspace)}, downloadOpts...)...),
+		download:   NewDownloadStep(sources, workspace, identifier, lookup, prober, skips, append([]func(*DownloadStep){WithVerifyWidth(prodVerifyWidth)}, downloadOpts...)...),
 		tag:        NewTagStep(tagger),
-		store:      NewStoreStep(store, append([]func(*StoreStep){WithStoreProber(prober), WithStoreWorkspace(workspace)}, storeOpts...)...),
+		store:      NewStoreStep(store, workspace, prober, orphans, refs, storeOpts...),
 	}
 }

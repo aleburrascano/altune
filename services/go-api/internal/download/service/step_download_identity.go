@@ -25,7 +25,7 @@ type identification struct {
 
 func (s *DownloadStep) previewer(ac *AcquisitionContext, candidate ports.AudioCandidate) (ports.PreviewFetcher, bool) {
 	source, ok := s.fetcher.(previewSource)
-	if !ok || s.identifier == nil || ac.Identity.MBID == "" {
+	if !ok || ac.Identity.MBID == "" {
 		return nil, false
 	}
 	return source.PreviewFetcherFor(candidate)
@@ -78,7 +78,7 @@ func (s *DownloadStep) noteIdentifyFailure(
 	defaultEvent string,
 	gate string,
 ) {
-	if ctx.Err() != nil {
+	if ctx.Err() != nil || errors.Is(err, ports.ErrNoAudioIdentifier) {
 		return
 	}
 	slog.WarnContext(ctx, identifyFailureEvent(err, defaultEvent),
@@ -155,7 +155,7 @@ func (s *DownloadStep) identify(
 	filePath string,
 	result *verificationResult,
 ) *downloadRejection {
-	if s.identifier == nil || (ac.Identity.MBID == "" && ac.Replace.StoredAcoustID == "") {
+	if ac.Identity.MBID == "" && ac.Replace.StoredAcoustID == "" {
 		return nil
 	}
 
@@ -421,15 +421,8 @@ func (c *recordingFactsCache) store(mbid string, facts ports.RecordingFacts, fou
 	c.entries[mbid] = facts
 }
 
-func WithRecordingLookup(l ports.RecordingLookup) func(*DownloadStep) {
-	return func(s *DownloadStep) { s.recordingLookup = l }
-}
-
 func (s *DownloadStep) versionFacts(ctx context.Context, input audioverdict.Input) map[string]ports.RecordingFacts {
 	facts := make(map[string]ports.RecordingFacts)
-	if s.recordingLookup == nil {
-		return facts
-	}
 	candidates := audioverdict.VersionLookupCandidates(input)
 	for _, mbid := range candidates[:min(len(candidates), maxVersionLookupsPerCandidate)] {
 		if recording, found := s.recordingFacts(ctx, mbid); found {

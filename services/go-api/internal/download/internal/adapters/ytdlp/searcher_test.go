@@ -89,14 +89,14 @@ func TestSearch_OutputThatParsesToNothingIsAnError(t *testing.T) {
 }
 
 func TestSearch_MixedOutputKeepsGoodEntriesAndLogsSkipped(t *testing.T) {
-	installSearch(t, `printf '%s\ngarbage\n%s\n' '{"title":"Good","webpage_url":"https://youtube.com/watch?v=1","duration":12}' '{"title":"No URL"}'`)
+	installSearch(t, `printf '%s\ngarbage\n%s\n' '{"title":"Good","webpage_url":"https://youtube.com/watch?v=aaaaaaaaaaa","duration":12}' '{"title":"No URL"}'`)
 	logs := captureLogs(t)
 
 	got, err := searchOneQuery(t)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(got) != 1 || got[0].URL != "https://youtube.com/watch?v=1" {
+	if len(got) != 1 || got[0].URL != "https://youtube.com/watch?v=aaaaaaaaaaa" {
 		t.Fatalf("candidates = %+v, want only the parsable entry with a URL", got)
 	}
 	logged := logs.String()
@@ -807,14 +807,14 @@ func TestYtDlpAudioSearcher_Download_RejectsWhenNoM4AIsProduced(t *testing.T) {
 }
 
 func TestSearch_ASearchResultIsAnUpload(t *testing.T) {
-	installSearch(t, `echo '{"title":"Bruno Mars - Finesse","webpage_url":"https://www.youtube.com/watch?v=x","duration":185,"channel":"Bruno Mars","categories":["Music"],"view_count":42}'`)
+	installSearch(t, `echo '{"title":"Bruno Mars - Finesse","webpage_url":"https://www.youtube.com/watch?v=aaaaaaaaaaa","duration":185,"channel":"Bruno Mars","categories":["Music"],"view_count":42}'`)
 
 	got, err := searchOneQuery(t)
 	if err != nil || len(got) != 1 {
 		t.Fatalf("Search = %+v, %v, want the one entry", got, err)
 	}
 	want := download.AudioCandidate{
-		Title: "Bruno Mars - Finesse", Duration: 185, URL: "https://www.youtube.com/watch?v=x",
+		Title: "Bruno Mars - Finesse", Duration: 185, URL: "https://www.youtube.com/watch?v=aaaaaaaaaaa",
 		Channel: "Bruno Mars", Categories: []string{"Music"}, ViewCount: 42, Kind: download.KindUpload,
 	}
 	if c := got[0]; c.Title != want.Title || c.Duration != want.Duration || c.URL != want.URL || c.Channel != want.Channel ||

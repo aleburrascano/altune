@@ -26,6 +26,12 @@ import (
 	"time"
 )
 
+func coreStepsOver(sources *service.SourceRegistry, store *objectStore, workspace ports.ScratchFolder) service.Pipeline {
+	return service.CoreSteps(sources, ports.NoopAudioTagger(), store, ports.NoopAudioProber(),
+		ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopVerifySkipRecorder(),
+		service.DirectDeleteOrphans(store), ports.NoopAudioRefLookup(), workspace, nil)
+}
+
 func TestSelect_SymbolOnlyArtistDoesNotRescueUnrelatedCandidate(t *testing.T) {
 	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{{
 		Title:   "Completely Unrelated Cooking Show Full Episode Forty Seven Nonsense",
@@ -201,7 +207,7 @@ func TestRunPipeline_FallbackWindowsContinueTheFirstTiersCount(t *testing.T) {
 		WithFallback(tierSource{name: "fallback", url: fallback})
 	ac := &service.AcquisitionContext{Track: service.TrackRef{ID: "t1", Title: "Blinding Lights", Artist: "The Weeknd", CatalogDuration: 200}}
 	workspace := scratchfiles.New()
-	steps := service.CoreSteps(registry, nil, &objectStore{objects: map[string]string{}}, nil, nil, workspace, nil)
+	steps := coreStepsOver(registry, &objectStore{objects: map[string]string{}}, workspace)
 
 	if err := service.RunPipeline(context.Background(), steps, ac); err != nil {
 		t.Fatalf("RunPipeline: %v", err)
@@ -219,7 +225,7 @@ func TestRunPipeline_PlainFailureDeletesTheStoredAudioAndQueuesNothing(t *testin
 	ledger, store, queue := acquisitiontest.NewLedger(track), newRecordingStore(), &recordingOrphanQueue{}
 	ledger.FailWrites(errors.New("database unavailable"))
 
-	err := storing{t, ledger, store, track}.execute(service.WithAcquireOrphanQueue(queue))
+	err := storing{t, ledger, store, track}.executeStaged(noStages(orphaningInto(queue)))
 
 	if err == nil {
 		t.Fatal("Execute succeeded, want the failed commit")
@@ -258,7 +264,7 @@ func runJobWaitingOnItsCommit(t *testing.T, leaseLost bool) storedAndOrphaned {
 		track := pending("Song", "Artist", "Album")
 		store, orphans := newRecordingStore(), &recordingOrphanQueue{}
 		svc := service.NewAcquireTrackAudioService(waitingCommitLedger{acquisitiontest.NewLedger(track)}, sourceFor(track), store,
-			service.WithAcquireTempWorkspace(scratchfiles.New()), service.WithAcquireOrphanQueue(orphans))
+			scratchfiles.New(), noVerification(), noStages(orphaningInto(orphans)))
 		opts := []func(*service.BackgroundAcquisitionScheduler){}
 		queue := &firstOutcomeQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), outcome: make(chan jobOutcome, 1)}
 		if leaseLost {
@@ -302,7 +308,7 @@ func TestRunPipeline_ElapsedAcquireDeadlineStillDeletesTheStoredAudio(t *testing
 
 func TestCoreSteps_StopAfterStore(t *testing.T) {
 	workspace, store := scratchfiles.New(), &objectStore{objects: map[string]string{}}
-	steps := service.CoreSteps(service.NewSourceRegistry(tierSource{name: "only", url: "https://example.com/a"}), nil, store, nil, nil, workspace, nil)
+	steps := coreStepsOver(service.NewSourceRegistry(tierSource{name: "only", url: "https://example.com/a"}), store, workspace)
 	ac := &service.AcquisitionContext{Track: service.TrackRef{
 		ID: "t1", UserID: "u1", Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours", CatalogDuration: 200,
 	}}
@@ -401,7 +407,7 @@ func TestRunPipeline_ACancelledJobStopsBeforeTheNextStage(t *testing.T) {
 	defer cancel()
 	store := newRecordingStore()
 	svc := service.NewAcquireTrackAudioService(acquisitiontest.NewLedger(track), sourceFor(track), store,
-		service.WithAcquireTempWorkspace(scratchfiles.New()), service.WithAudioTagger(cancellingTagger{cancel}))
+		scratchfiles.New(), noVerification(), noStages(taggedBy(cancellingTagger{cancel})))
 
 	err := svc.Execute(ctx, track.UserId, track.ID)
 
@@ -474,7 +480,7 @@ func shadowedRun(t *testing.T, source finesseSource) (*service.AcquisitionContex
 	t.Helper()
 	ring := captureLogs(t)
 	workspace := scratchfiles.New()
-	steps := service.CoreSteps(service.NewSourceRegistry(source), nil, &objectStore{objects: map[string]string{}}, nil, nil, workspace, nil)
+	steps := coreStepsOver(service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, workspace)
 	ac := &service.AcquisitionContext{Track: service.TrackRef{
 		ID: "track-1", UserID: "u1", Title: "Finesse", Artist: "Bruno Mars", Album: "24K Magic", CatalogDuration: 191,
 	}}
@@ -585,7 +591,7 @@ func TestRunPipeline_APanicInsideTheShadowJudgeIsLoggedAndTheRunStillSucceeds(t 
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	workspace := scratchfiles.New()
 	source := finesseSource{candidates: []ports.AudioCandidate{finesseOn(finesseAlbumURL, "24K Magic")}}
-	steps := service.CoreSteps(service.NewSourceRegistry(source), nil, &objectStore{objects: map[string]string{}}, nil, nil, workspace, nil)
+	steps := coreStepsOver(service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, workspace)
 	ac := &service.AcquisitionContext{Track: service.TrackRef{
 		ID: "track-1", UserID: "u1", Title: "Finesse", Artist: "Bruno Mars", Album: "24K Magic", CatalogDuration: 191,
 	}}

@@ -115,15 +115,15 @@ func TestStage_NamesStoredInAcquisitionRejectionsStayStable(t *testing.T) {
 
 func TestLasting_KeepsFingerprintAndDropsTransientStages(t *testing.T) {
 	entries := []rejectedcandidates.Entry{
-		{URL: "https://youtube.com/watch?v=a", Stage: rejectedcandidates.Fingerprint, Reason: "other version"},
-		{URL: "https://youtube.com/watch?v=b", Stage: rejectedcandidates.Download, Reason: "download failed"},
-		{URL: "https://youtube.com/watch?v=c", Stage: rejectedcandidates.NotAttempted, Reason: "skipped"},
+		{URL: "https://youtube.com/watch?v=aaaaaaaaaaa", Stage: rejectedcandidates.Fingerprint, Reason: "other version"},
+		{URL: "https://youtube.com/watch?v=bbbbbbbbbbb", Stage: rejectedcandidates.Download, Reason: "download failed"},
+		{URL: "https://youtube.com/watch?v=ccccccccccc", Stage: rejectedcandidates.NotAttempted, Reason: "skipped"},
 	}
 
 	recs := rejectedcandidates.Lasting(entries, "t1", ports.RejectionBasis{})
 
 	if len(recs) != 1 || recs[0].Reason != "fingerprint" || recs[0].TrackID != "t1" ||
-		recs[0].SourceKey != sourcekey.SourceKey("https://youtube.com/watch?v=a") || recs[0].Detail != "other version" {
+		recs[0].SourceKey != sourcekey.SourceKey("https://youtube.com/watch?v=aaaaaaaaaaa") || recs[0].Detail != "other version" {
 		t.Errorf("records = %+v, want only the fingerprint rejection", recs)
 	}
 }
@@ -131,7 +131,7 @@ func TestLasting_KeepsFingerprintAndDropsTransientStages(t *testing.T) {
 func TestLasting_CarriesTheRunsBasis(t *testing.T) {
 	basis := ports.RejectionBasis{ExpectedSeconds: 322, ReferenceMBID: "mbid-1"}
 
-	recs := rejectedcandidates.Lasting([]rejectedcandidates.Entry{{URL: "https://youtube.com/watch?v=a", Stage: rejectedcandidates.Duration, Reason: "too short"}}, "t1", basis)
+	recs := rejectedcandidates.Lasting([]rejectedcandidates.Entry{{URL: "https://youtube.com/watch?v=aaaaaaaaaaa", Stage: rejectedcandidates.Duration, Reason: "too short"}}, "t1", basis)
 
 	if len(recs) != 1 || recs[0].Basis != basis {
 		t.Errorf("records = %+v, want one carrying basis %+v", recs, basis)
@@ -140,13 +140,13 @@ func TestLasting_CarriesTheRunsBasis(t *testing.T) {
 
 func TestLasting_DropsAnUnmeasuredDuration(t *testing.T) {
 	entries := []rejectedcandidates.Entry{
-		{URL: "https://youtube.com/watch?v=a", Stage: rejectedcandidates.Duration, Reason: "search duration 30s vs expected 200s", Unmeasured: true},
-		{URL: "https://youtube.com/watch?v=b", Stage: rejectedcandidates.Duration, Reason: "duration 30s vs expected 200s"},
+		{URL: "https://youtube.com/watch?v=aaaaaaaaaaa", Stage: rejectedcandidates.Duration, Reason: "search duration 30s vs expected 200s", Unmeasured: true},
+		{URL: "https://youtube.com/watch?v=bbbbbbbbbbb", Stage: rejectedcandidates.Duration, Reason: "duration 30s vs expected 200s"},
 	}
 
 	recs := rejectedcandidates.Lasting(entries, "t1", ports.RejectionBasis{})
 
-	if len(recs) != 1 || recs[0].SourceKey != sourcekey.SourceKey("https://youtube.com/watch?v=b") {
+	if len(recs) != 1 || recs[0].SourceKey != sourcekey.SourceKey("https://youtube.com/watch?v=bbbbbbbbbbb") {
 		t.Errorf("records = %+v, want only the measured duration rejection", recs)
 	}
 }

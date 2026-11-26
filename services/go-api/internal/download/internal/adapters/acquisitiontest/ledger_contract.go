@@ -59,11 +59,11 @@ func contractGetFindsATrackOnlyForItsOwner(t *testing.T, l LedgerUnderTest) {
 	if got := ownersView(t, l, track); got.ID != track.ID || got.UserId != track.UserId {
 		t.Errorf("Get as the owner = %+v, want track %v of user %v", got, track.ID, track.UserId)
 	}
-	if got, err := l.Get(context.Background(), track.ID, someoneElse()); got != nil || err != nil {
-		t.Errorf("Get as another user = %+v, %v; want nil, nil, exactly as for a missing track", got, err)
+	if got, err := l.Get(context.Background(), track.ID, someoneElse()); got != nil || !errors.Is(err, ports.ErrTrackNotFound) {
+		t.Errorf("Get as another user = %+v, %v; want ErrTrackNotFound, exactly as for a missing track", got, err)
 	}
-	if got, err := l.Get(context.Background(), ids.NewTrackId(), track.UserId); got != nil || err != nil {
-		t.Errorf("Get of a missing track = %+v, %v; want nil, nil", got, err)
+	if got, err := l.Get(context.Background(), ids.NewTrackId(), track.UserId); got != nil || !errors.Is(err, ports.ErrTrackNotFound) {
+		t.Errorf("Get of a missing track = %+v, %v; want ErrTrackNotFound", got, err)
 	}
 }
 

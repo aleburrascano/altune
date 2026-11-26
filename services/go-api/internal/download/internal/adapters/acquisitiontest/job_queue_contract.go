@@ -4,6 +4,7 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"testing"
@@ -261,6 +262,73 @@ func contractClaimPrefersTheUserWithNoLiveLease(t *testing.T, q JobQueueUnderTes
 	}
 }
 
+func contractTheEnqueuingRequestsCorrelationIDTravelsWithEveryRunOfTheJob(t *testing.T, q JobQueueUnderTest) {
+	trackID := q.AddTrack(t, ids.NewUserId(uuid.New()))
+	ctx := logging.WithCorrelationID(context.Background(), "corr-contract")
+	if err := q.Enqueue(ctx, trackID, ports.JobKindAcquire, 0); err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+
+	first := claim(t, q)
+	if err := q.Release(context.Background(), trackID, first.ClaimNumber, 0); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+	second := claim(t, q)
+
+	if first.CorrelationID != "corr-contract" || second.CorrelationID != "corr-contract" {
+		t.Errorf("correlation ids on the first and the retried claim = %q, %q, want %q on both", first.CorrelationID, second.CorrelationID, "corr-contract")
+	}
+}
+
+func contractAJobEnqueuedWithoutACorrelationIDClaimsWithNone(t *testing.T, q JobQueueUnderTest) {
+	trackID := q.AddTrack(t, ids.NewUserId(uuid.New()))
+	if err := q.Enqueue(logging.WithCorrelationID(context.Background(), "corr-old"), trackID, ports.JobKindAcquire, 0); err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+	first := claim(t, q)
+	if err := q.Settle(context.Background(), trackID, first.ClaimNumber); err != nil {
+		t.Fatalf("Settle: %v", err)
+	}
+	enqueue(t, q, trackID, ports.JobKindAcquire)
+
+	if got := claim(t, q).CorrelationID; got != "" {
+		t.Errorf("correlation id on a job enqueued without one = %q, want none: the earlier request's id must not label this one", got)
+	}
+}
+
+func contractAnAcceptedSecondEnqueueOfTheSameKindTakesTheLatestRequestsCorrelationID(t *testing.T, q JobQueueUnderTest) {
+	trackID := q.AddTrack(t, ids.NewUserId(uuid.New()))
+	for _, id := range []string{"corr-first", "corr-latest"} {
+		if err := q.Enqueue(logging.WithCorrelationID(context.Background(), id), trackID, ports.JobKindAcquire, 0); err != nil {
+			t.Fatalf("Enqueue under %s: %v", id, err)
+		}
+	}
+
+	if got := claim(t, q).CorrelationID; got != "corr-latest" {
+		t.Errorf("correlation id after two accepted enqueues = %q, want the latest request's %q", got, "corr-latest")
+	}
+}
+
+func contractARefusedEnqueueLeavesTheRunningJobsCorrelationIDAlone(t *testing.T, q JobQueueUnderTest) {
+	trackID := q.AddTrack(t, ids.NewUserId(uuid.New()))
+	if err := q.Enqueue(logging.WithCorrelationID(context.Background(), "corr-running"), trackID, ports.JobKindAcquire, 0); err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+	running := claim(t, q)
+
+	err := q.Enqueue(logging.WithCorrelationID(context.Background(), "corr-refused"), trackID, ports.JobKindReplace, 0)
+	if !errors.Is(err, acqdomain.ErrJobKindConflict) {
+		t.Fatalf("Enqueue of another kind over a live lease = %v, want ErrJobKindConflict", err)
+	}
+	if err := q.Release(context.Background(), trackID, running.ClaimNumber, 0); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+
+	if got := claim(t, q).CorrelationID; got != "corr-running" {
+		t.Errorf("correlation id after a refused enqueue = %q, want the running job's %q", got, "corr-running")
+	}
+}
+
 var contractCases = []struct {
 	name string
 	run  func(t *testing.T, q JobQueueUnderTest)
@@ -281,6 +349,10 @@ var contractCases = []struct {
 	{"an enqueue over a lapsed lease fences out the stale worker and keeps the new job", contractAnEnqueueOverALapsedLeaseFencesOutTheStaleWorkerAndKeepsTheNewJob},
 	{"a stale settle after prior claims and a re-enqueue is lease lost", contractAStaleSettleAfterPriorClaimsAndAReenqueueIsLeaseLost},
 	{"claim prefers the user with no live lease", contractClaimPrefersTheUserWithNoLiveLease},
+	{"the enqueuing request's correlation id travels with every run of the job", contractTheEnqueuingRequestsCorrelationIDTravelsWithEveryRunOfTheJob},
+	{"a job enqueued without a correlation id claims with none", contractAJobEnqueuedWithoutACorrelationIDClaimsWithNone},
+	{"an accepted second enqueue of the same kind takes the latest request's correlation id", contractAnAcceptedSecondEnqueueOfTheSameKindTakesTheLatestRequestsCorrelationID},
+	{"a refused enqueue leaves the running job's correlation id alone", contractARefusedEnqueueLeavesTheRunningJobsCorrelationIDAlone},
 }
 
 func JobQueueContract(t *testing.T, newQueue func(t *testing.T) JobQueueUnderTest) {

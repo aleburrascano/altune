@@ -3,6 +3,7 @@ package downloadfromlibrary_test
 import (
 	"altune/go-api/internal/app/bridges/downloadfromlibrary"
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/library/domain"
 	"altune/go-api/internal/shared/ids"
@@ -131,4 +132,46 @@ func TestTrackLedger_OnPostgresAClaimBetweenReadAndUpdateFencesOutTheWriter(t *t
 	if status != "pending" || audioRef != nil {
 		t.Errorf("row = %s %v, want pending with no audio_ref", status, audioRef)
 	}
+}
+
+type postgresLedger struct {
+	*downloadfromlibrary.LibraryTracks
+	store *library.PostgresTrackRepository
+}
+
+var downloadStatusOf = map[download.TrackStatus]domain.DownloadStatus{
+	download.TrackPending: domain.AcquisitionPending,
+	download.TrackReady:   domain.AcquisitionReady,
+	download.TrackFailed:  domain.AcquisitionFailed,
+}
+
+func (l postgresLedger) AddTrack(t *testing.T, snapshot download.TrackSnapshot) {
+	t.Helper()
+	track, err := domain.NewTrack(snapshot.UserId, snapshot.Title, snapshot.Artist, snapshot.Album)
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	track.ID = snapshot.ID
+	status, known := downloadStatusOf[snapshot.Status]
+	if !known {
+		t.Fatalf("no library status is mapped for download status %v", snapshot.Status)
+	}
+	track.DownloadStatus = status
+	track.AudioRef = snapshot.AudioRef
+	track.DurationSeconds = snapshot.StoredDurationSeconds
+	if _, created, err := l.store.Add(context.Background(), track); err != nil || !created {
+		t.Fatalf("Add = created %v, %v; want the track stored", created, err)
+	}
+	t.Cleanup(func() {
+		if _, _, err := l.store.Delete(context.Background(), track.ID, track.UserId); err != nil {
+			t.Errorf("cleanup Delete = %v", err)
+		}
+	})
+}
+
+func TestTrackLedger_OnPostgresMeetsTheLedgerContract(t *testing.T) {
+	store := library.NewPostgresTrackRepository(newLedgerPool(t))
+	downloadtest.LedgerContract(t, func(*testing.T) downloadtest.LedgerUnderTest {
+		return postgresLedger{LibraryTracks: downloadfromlibrary.NewLibraryTracks(store), store: store}
+	})
 }

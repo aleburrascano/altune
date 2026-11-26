@@ -112,7 +112,7 @@ func TestExecuteReplace_SeedsExclusionsFromMemoryAndTheCurrentSource(t *testing.
 		"https://www.youtube.com/watch?v=freshAAAAAA",
 	)}
 	svc := service.NewAcquireTrackAudioService(track.ledger, service.NewSourceRegistry(source), track.store,
-		service.WithAcquireTempWorkspace(scratchfiles.New()))
+		scratchfiles.New(), noVerification(), noStages())
 
 	_ = svc.ExecuteReplace(context.Background(), track.userID, track.trackID)
 
@@ -247,8 +247,7 @@ func TestExecute_AnUnmeasuredLengthSkipCountsInTheSummaryButOnlyTheProbedRejecti
 	source := &offeringSource{found: offered}
 	remembered := &rememberedRejections{}
 	svc := service.NewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}},
-		service.WithAcquireTempWorkspace(scratchfiles.New()), service.WithRejectionStore(remembered),
-		service.WithAudioProber(lengthProber(30)), service.WithRecordingResolver(resolvedTo(mbid)))
+		scratchfiles.New(), resolving(resolvedTo(mbid), noVerification()), noStages(rejectingInto(remembered), probedBy(lengthProber(30))))
 
 	_ = svc.Execute(context.Background(), song.UserId, song.ID)
 

@@ -8,12 +8,14 @@ import (
 	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"io"
 	"log/slog"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -384,6 +386,236 @@ func TestScheduler_ShutdownWaitsForAnInFlightJobToFinishAndDoesNotCancelIt(t *te
 		}
 		if status := scheduler.Status(); status.Succeeded != 1 || status.Failed != 0 {
 			t.Errorf("succeeded = %d, failed = %d, want the job to finish normally (1, 0), not be cancelled", status.Succeeded, status.Failed)
+		}
+	})
+}
+
+type queueCall struct {
+	corrID      string
+	hasDeadline bool
+	live        bool
+}
+
+func callOf(ctx context.Context) queueCall {
+	_, hasDeadline := ctx.Deadline()
+	return queueCall{corrID: logging.CorrelationIDFromContext(ctx), hasDeadline: hasDeadline, live: ctx.Err() == nil}
+}
+
+type callRecordingQueue struct {
+	*inmemoryqueue.Queue
+	mu         sync.Mutex
+	settles    []queueCall
+	heartbeats []queueCall
+	releases   []queueCall
+	releasedCh chan queueCall
+	settledCh  chan queueCall
+	beatCh     chan queueCall
+}
+
+func signal(ch chan queueCall, call queueCall) {
+	select {
+	case ch <- call:
+	default:
+	}
+}
+
+func (q *callRecordingQueue) Release(ctx context.Context, trackID ids.TrackId, fence ports.ClaimNumber, delay time.Duration) error {
+	call := callOf(ctx)
+	q.mu.Lock()
+	q.releases = append(q.releases, call)
+	q.mu.Unlock()
+	signal(q.releasedCh, call)
+	return q.Queue.Release(ctx, trackID, fence, delay)
+}
+
+func (q *callRecordingQueue) released() []queueCall {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return append([]queueCall(nil), q.releases...)
+}
+
+type alwaysPanickingAcquirer struct {
+	runs    atomic.Int32
+	refused atomic.Int32
+}
+
+func (a *alwaysPanickingAcquirer) Execute(context.Context, ids.UserId, ids.TrackId) error {
+	a.runs.Add(1)
+	panic("boom")
+}
+
+func (a *alwaysPanickingAcquirer) ExecuteReplace(ctx context.Context, user ids.UserId, track ids.TrackId) error {
+	return a.Execute(ctx, user, track)
+}
+
+func (a *alwaysPanickingAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {
+	a.refused.Add(1)
+}
+
+func TestScheduler_ATrackThatKeepsPanickingIsRefusedAndSettledWithinABudgetAtTheAttemptCap(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		queue := &callRecordingQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), settledCh: make(chan queueCall, 1)}
+		acquirer := &alwaysPanickingAcquirer{}
+		scheduler := service.NewBackgroundAcquisitionScheduler(acquirer, 1, service.WithJobQueue(queue))
+		defer scheduler.Shutdown(context.Background())
+
+		if err := scheduler.Schedule(context.Background(), ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
+			t.Fatalf("Schedule = %v, want nil", err)
+		}
+		<-queue.settledCh
+
+		settles, _ := queue.calls()
+		want := queueCall{hasDeadline: true, live: true}
+		if len(settles) != 1 || settles[0] != want {
+			t.Fatalf("settle calls = %+v after %d runs, want exactly one %+v", settles, acquirer.runs.Load(), want)
+		}
+		if got := acquirer.refused.Load(); got != 1 {
+			t.Errorf("track refused %d times, want once when the attempt cap is reached", got)
+		}
+		if got, retries := acquirer.runs.Load(), len(queue.released()); int(got) != retries+1 {
+			t.Errorf("%d runs and %d releases, want every run but the last released for another try", got, retries)
+		}
+	})
+}
+
+func TestScheduler_TheQueueReleaseOfARetryableJobCarriesTheCorrelationIDAndABudget(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		queue := &callRecordingQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), releasedCh: make(chan queueCall, 1)}
+		scheduler := service.NewBackgroundAcquisitionScheduler(retryingAcquirer{}, 1, service.WithJobQueue(queue))
+		defer scheduler.Shutdown(context.Background())
+		ctx := logging.WithCorrelationID(context.Background(), "corr-release")
+
+		if err := scheduler.Schedule(ctx, ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
+			t.Fatalf("Schedule = %v, want nil", err)
+		}
+
+		got := <-queue.releasedCh
+		want := queueCall{corrID: "corr-release", hasDeadline: true, live: true}
+		if got != want {
+			t.Fatalf("first release call = %+v, want %+v", got, want)
+		}
+	})
+}
+
+func (q *callRecordingQueue) Settle(ctx context.Context, trackID ids.TrackId, fence ports.ClaimNumber) error {
+	call := callOf(ctx)
+	q.mu.Lock()
+	q.settles = append(q.settles, call)
+	q.mu.Unlock()
+	signal(q.settledCh, call)
+	return q.Queue.Settle(ctx, trackID, fence)
+}
+
+func (q *callRecordingQueue) Heartbeat(ctx context.Context, trackID ids.TrackId, fence ports.ClaimNumber, lease time.Duration) error {
+	call := callOf(ctx)
+	q.mu.Lock()
+	q.heartbeats = append(q.heartbeats, call)
+	q.mu.Unlock()
+	signal(q.beatCh, call)
+	return q.Queue.Heartbeat(ctx, trackID, fence, lease)
+}
+
+func (q *callRecordingQueue) calls() (settles, heartbeats []queueCall) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return append([]queueCall(nil), q.settles...), append([]queueCall(nil), q.heartbeats...)
+}
+
+func TestScheduler_TheQueueSettleCarriesTheCorrelationIDAndABudget(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		queue := &callRecordingQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), settledCh: make(chan queueCall, 1)}
+		scheduler := service.NewBackgroundAcquisitionScheduler(&recordingAcquirer{}, 1, service.WithJobQueue(queue))
+		defer scheduler.Shutdown(context.Background())
+		ctx := logging.WithCorrelationID(context.Background(), "corr-settle")
+
+		if err := scheduler.Schedule(ctx, ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
+			t.Fatalf("Schedule = %v, want nil", err)
+		}
+		<-queue.settledCh
+
+		settles, _ := queue.calls()
+		want := queueCall{corrID: "corr-settle", hasDeadline: true, live: true}
+		if len(settles) != 1 || settles[0] != want {
+			t.Fatalf("settle calls = %+v, want one %+v: the call keeps the request's correlation id and has its own budget", settles, want)
+		}
+	})
+}
+
+func TestScheduler_TheHeartbeatCarriesTheCorrelationIDAndABudget(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		queue := &callRecordingQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), beatCh: make(chan queueCall, 8)}
+		acquirer := &holdingAcquirer{release: make(chan struct{})}
+		scheduler := service.NewBackgroundAcquisitionScheduler(acquirer, 1,
+			service.WithJobQueue(queue), service.WithHeartbeatInterval(time.Second))
+		defer scheduler.Shutdown(context.Background())
+		defer close(acquirer.release)
+		ctx := logging.WithCorrelationID(context.Background(), "corr-beat")
+
+		if err := scheduler.Schedule(ctx, ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
+			t.Fatalf("Schedule = %v, want nil", err)
+		}
+		for range 3 {
+			<-queue.beatCh
+		}
+
+		_, beats := queue.calls()
+		want := queueCall{corrID: "corr-beat", hasDeadline: true, live: true}
+		if len(beats) == 0 {
+			t.Fatal("no heartbeat reached the queue")
+		}
+		for _, beat := range beats {
+			if beat != want {
+				t.Fatalf("heartbeat call = %+v, want %+v", beat, want)
+			}
+		}
+	})
+}
+
+type correlationNotingAcquirer struct {
+	mu       sync.Mutex
+	corrIDs  []string
+	retries  int
+	finished chan struct{}
+}
+
+func (a *correlationNotingAcquirer) Execute(ctx context.Context, _ ids.UserId, _ ids.TrackId) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.corrIDs = append(a.corrIDs, logging.CorrelationIDFromContext(ctx))
+	if len(a.corrIDs) <= a.retries {
+		return service.ErrAcquisitionRetryable
+	}
+	close(a.finished)
+	return nil
+}
+
+func (a *correlationNotingAcquirer) ExecuteReplace(ctx context.Context, user ids.UserId, track ids.TrackId) error {
+	return a.Execute(ctx, user, track)
+}
+
+func (a *correlationNotingAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {}
+
+func (a *correlationNotingAcquirer) seen() []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return slices.Clone(a.corrIDs)
+}
+
+func TestScheduler_EveryRetryOfAJobRunsUnderTheRequestsCorrelationID(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		acquirer := &correlationNotingAcquirer{retries: 2, finished: make(chan struct{})}
+		scheduler := service.NewBackgroundAcquisitionScheduler(acquirer, 1)
+		defer scheduler.Shutdown(context.Background())
+		ctx := logging.WithCorrelationID(context.Background(), "corr-retries")
+
+		if err := scheduler.Schedule(ctx, ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
+			t.Fatalf("Schedule = %v, want nil", err)
+		}
+		<-acquirer.finished
+
+		want := []string{"corr-retries", "corr-retries", "corr-retries"}
+		if got := acquirer.seen(); !slices.Equal(got, want) {
+			t.Fatalf("correlation ids seen by the runs = %q, want %q: a retry must stay tied to its request", got, want)
 		}
 	})
 }

@@ -4,6 +4,7 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/sourcekey"
 	"fmt"
+	"log/slog"
 )
 
 const (
@@ -42,16 +43,17 @@ func (c AudioCandidate) IsResolved() bool {
 
 func DedupeCandidatesBySourceKey(merged, results []AudioCandidate, positionByKey map[string]int) []AudioCandidate {
 	for _, c := range results {
-		if c.URL == "" {
+		key := sourcekey.SourceKey(c.URL)
+		if key == "" {
+			slog.Warn("acquisition.candidate_dropped_no_source_key", "url", c.URL, "source", c.Source)
 			continue
 		}
-		merged = mergeCandidate(merged, c, positionByKey)
+		merged = mergeCandidate(merged, c, key, positionByKey)
 	}
 	return merged
 }
 
-func mergeCandidate(merged []AudioCandidate, c AudioCandidate, positionByKey map[string]int) []AudioCandidate {
-	key := sourcekey.SourceKey(c.URL)
+func mergeCandidate(merged []AudioCandidate, c AudioCandidate, key string, positionByKey map[string]int) []AudioCandidate {
 	position, isDuplicate := positionByKey[key]
 	if !isDuplicate {
 		positionByKey[key] = len(merged)

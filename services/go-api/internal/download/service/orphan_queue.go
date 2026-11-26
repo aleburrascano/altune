@@ -12,10 +12,22 @@ import (
 
 const orphanRecordTimeout = 5 * time.Second
 
+type audioDeleter interface {
+	Delete(ctx context.Context, audioRef string) error
+}
+
+type directDeleteOrphans struct{ store audioDeleter }
+
+func DirectDeleteOrphans(store audioDeleter) ports.OrphanedAudioRecorder {
+	requirePort("DirectDeleteOrphans", "audio store", store == nil)
+	return directDeleteOrphans{store: store}
+}
+
+func (d directDeleteOrphans) RecordOrphanedAudio(ctx context.Context, orphan ports.OrphanedAudio) error {
+	return d.store.Delete(ctx, orphan.AudioRef)
+}
+
 func recordOrphanedAudio(ctx context.Context, q ports.OrphanedAudioRecorder, userId ids.UserId, trackId ids.TrackId, audioRef string) {
-	if q == nil {
-		return
-	}
 	_ = queueOrphanedAudio(ctx, q, ports.OrphanedAudio{AudioRef: audioRef, UserId: userId, TrackId: trackId})
 }
 

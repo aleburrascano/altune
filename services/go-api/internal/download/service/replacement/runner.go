@@ -70,16 +70,16 @@ func (o outcome) countsAsTry() bool { return o == keptCurrent || o == noBetterSo
 
 func (r *Runner) ExecuteUpgrade(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error {
 	track, err := r.ledger.Get(ctx, trackId, userId)
-	if err != nil {
-		return fmt.Errorf("get track: %w", err)
-	}
-	if track == nil {
+	if errors.Is(err, ports.ErrTrackNotFound) {
 		slog.WarnContext(ctx, "acquisition.upgrade_track_not_found", "track_id", trackId.String())
 		return nil
 	}
+	if err != nil {
+		return fmt.Errorf("get track: %w", err)
+	}
 	stored := inPlaceEvidenceOf(track.Evidence)
 	current := stored.Grade
-	if !isPlayableFile(track) || r.isSettled(track, current, stored.format()) {
+	if !track.Streamable || r.isSettled(track, current, stored.format()) {
 		slog.InfoContext(ctx, "acquisition.upgrade_skipped", "track_id", trackId.String())
 		return nil
 	}
@@ -161,10 +161,6 @@ func (r *Runner) isSettled(track *ports.TrackSnapshot, current audioquality.Grad
 		return !r.isUnchecked(track) && !stored.IsLowBitrate(r.cfg.LowBitrateFloorKbps)
 	}
 	return false
-}
-
-func isPlayableFile(track *ports.TrackSnapshot) bool {
-	return track.Status == ports.TrackReady && track.AudioRef != nil
 }
 
 func secondsOf(seconds *float64) float64 {

@@ -87,7 +87,25 @@ func newTrack(t *testing.T, version int) (*domain.Track, ids.UserId) {
 	return track, userId
 }
 
-func TestGetMapsFieldsAndReturnsNilWhenMissing(t *testing.T) {
+type nothingStore struct{ *fakeStore }
+
+func (nothingStore) GetByID(context.Context, domain.TrackId, ids.UserId) (*domain.Track, error) {
+	var none *domain.Track
+	var noError error
+	return none, noError
+}
+
+func TestGetReportsAStoreThatAnswersNothingAsErrTrackNotFound(t *testing.T) {
+	ledger := downloadfromlibrary.NewLibraryTracks(nothingStore{newFakeStore()})
+
+	got, err := ledger.Get(context.Background(), ids.NewTrackId(), ids.NewUserId(uuid.New()))
+
+	if got != nil || !errors.Is(err, download.ErrTrackNotFound) {
+		t.Fatalf("Get = %+v, %v; want ErrTrackNotFound and no snapshot", got, err)
+	}
+}
+
+func TestGetMapsFieldsAndReportsAMissingTrackAsErrTrackNotFound(t *testing.T) {
 	track, userId := newTrack(t, 3)
 	isrc := "USRC17607839"
 	track.ISRC = &isrc
@@ -114,8 +132,8 @@ func TestGetMapsFieldsAndReturnsNilWhenMissing(t *testing.T) {
 	}
 
 	missing, err := ledger.Get(context.Background(), domain.NewTrackId(), userId)
-	if err != nil || missing != nil {
-		t.Fatalf("want nil, nil for missing track, got %v, %v", missing, err)
+	if !errors.Is(err, download.ErrTrackNotFound) || missing != nil {
+		t.Fatalf("want ErrTrackNotFound for a missing track, got %v, %v", missing, err)
 	}
 }
 
@@ -234,7 +252,7 @@ func TestRevertAtMissingTrackReturnsNotFound(t *testing.T) {
 
 	err := ledger.RevertAt(context.Background(), download.TrackSnapshot{ID: domain.NewTrackId(), UserId: userId, Version: 1})
 	if !errors.Is(err, download.ErrTrackNotFound) {
-		t.Fatalf("want acquisition.ErrTrackNotFound, got %v", err)
+		t.Fatalf("want download.ErrTrackNotFound, got %v", err)
 	}
 }
 

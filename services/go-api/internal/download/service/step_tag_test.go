@@ -46,9 +46,18 @@ func pendingBlindingLights() ports.TrackSnapshot {
 
 func acquireWith(t *testing.T, track ports.TrackSnapshot, source ports.AudioSource, opts ...func(*service.AcquireTrackAudioService)) (*acquisitiontest.Ledger, error) {
 	t.Helper()
+	return acquireVerified(t, track, source, noVerification(), noStages(), opts...)
+}
+
+func acquireStaged(t *testing.T, track ports.TrackSnapshot, source ports.AudioSource, stages service.StagePorts, opts ...func(*service.AcquireTrackAudioService)) (*acquisitiontest.Ledger, error) {
+	t.Helper()
+	return acquireVerified(t, track, source, noVerification(), stages, opts...)
+}
+
+func acquireVerified(t *testing.T, track ports.TrackSnapshot, source ports.AudioSource, wiring service.VerificationPorts, stages service.StagePorts, opts ...func(*service.AcquireTrackAudioService)) (*acquisitiontest.Ledger, error) {
+	t.Helper()
 	ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
-	opts = append([]func(*service.AcquireTrackAudioService){service.WithAcquireTempWorkspace(scratchfiles.New())}, opts...)
-	svc := service.NewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, opts...)
+	svc := service.NewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, scratchfiles.New(), wiring, stages, opts...)
 	return ledger, svc.Execute(context.Background(), track.UserId, track.ID)
 }
 
@@ -72,7 +81,7 @@ func TestExecute_ADownloadWithoutAFileFailsTheAcquisitionAndIsNeverTagged(t *tes
 	tagger := &recordingTagger{}
 	track := pendingBlindingLights()
 
-	ledger, err := acquireWith(t, track, pathlessSource{}, service.WithAudioTagger(tagger))
+	ledger, err := acquireStaged(t, track, pathlessSource{}, noStages(taggedBy(tagger)))
 
 	if err == nil || !strings.Contains(err.Error(), "fetcher returned no file") {
 		t.Fatalf("Execute = %v, want the download to fail because the fetcher returned no file", err)
@@ -96,7 +105,7 @@ func TestExecute_WithoutATaggerTheTrackIsStillAcquired(t *testing.T) {
 func TestExecute_ATaggingFailureIsSwallowed(t *testing.T) {
 	track := pendingBlindingLights()
 
-	ledger, err := acquireWith(t, track, freshAudioSource{}, service.WithAudioTagger(&recordingTagger{err: errors.New("boom")}))
+	ledger, err := acquireStaged(t, track, freshAudioSource{}, noStages(taggedBy(&recordingTagger{err: errors.New("boom")})))
 
 	requireReady(t, ledger, track.ID, err)
 }
@@ -106,7 +115,7 @@ func TestExecute_TheTaggingFailureLogRedactsHostPaths(t *testing.T) {
 	tagger := &recordingTagger{err: errors.New("open /run/secrets/altune/yt_cookies.txt: permission denied")}
 	track := pendingBlindingLights()
 
-	ledger, err := acquireWith(t, track, freshAudioSource{}, service.WithAudioTagger(tagger))
+	ledger, err := acquireStaged(t, track, freshAudioSource{}, noStages(taggedBy(tagger)))
 
 	requireReady(t, ledger, track.ID, err)
 	logged := logs.String()
@@ -127,7 +136,7 @@ func TestExecute_TagsTheDownloadedFileWithTheTracksMetadata(t *testing.T) {
 	track.AlbumArtist, track.Genre, track.Year, track.TrackNumber = &albumArtist, &genre, &year, &number
 	tagger := &recordingTagger{}
 
-	ledger, err := acquireWith(t, track, freshAudioSource{}, service.WithAudioTagger(tagger))
+	ledger, err := acquireStaged(t, track, freshAudioSource{}, noStages(taggedBy(tagger)))
 
 	requireReady(t, ledger, track.ID, err)
 	paths, tags := tagger.calls()
@@ -158,7 +167,7 @@ func TestExecute_EmbedsOnlyTheProvenISRC(t *testing.T) {
 		track.CatalogMBID = tc.catalogMBID
 		tagger := &recordingTagger{}
 
-		ledger, err := acquireWith(t, track, freshAudioSource{}, service.WithAudioTagger(tagger), service.WithRecordingResolver(resolved))
+		ledger, err := acquireVerified(t, track, freshAudioSource{}, resolving(resolved, noVerification()), noStages(taggedBy(tagger)))
 
 		requireReady(t, ledger, track.ID, err)
 		if _, tags := tagger.calls(); len(tags) != 1 || tags[0].ISRC != tc.want {

@@ -47,7 +47,7 @@ func (s *searchSource) seen() []ports.FindRequest {
 }
 
 func runPipeline(ctx context.Context, registry *service.SourceRegistry, ac *service.AcquisitionContext) error {
-	steps := service.CoreSteps(registry, nil, &objectStore{objects: map[string]string{}}, nil, nil, scratchfiles.New(), nil)
+	steps := coreStepsOver(registry, &objectStore{objects: map[string]string{}}, scratchfiles.New())
 	return service.RunPipeline(ctx, steps, ac)
 }
 
@@ -135,7 +135,7 @@ func TestSearchStep_Execute_SearchError_NoCandidates(t *testing.T) {
 
 func TestSearchStep_Execute_DeduplicatesByURL(t *testing.T) {
 	source := &searchSource{name: "ytdlp", found: []ports.AudioCandidate{
-		{Title: "Artist - Song", Duration: 200, URL: "https://youtube.com/watch?v=same", Channel: "ArtistVEVO", Categories: []string{"Music"}},
+		{Title: "Artist - Song", Duration: 200, URL: "https://youtube.com/watch?v=sameSameSam", Channel: "ArtistVEVO", Categories: []string{"Music"}},
 	}}
 	ac := &service.AcquisitionContext{Track: service.TrackRef{Title: "Song", Artist: "Artist", Album: "Album", ISRC: "US1234567890"}}
 

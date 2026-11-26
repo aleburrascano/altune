@@ -255,15 +255,17 @@ func TestExecute_WritesBackOnlyAProvenISRCAndStoresWhereItCameFrom(t *testing.T)
 			track := pendingBlindingLights()
 			length := catalogLength
 			track.ISRC, track.CatalogMBID, track.CatalogDurationSeconds = tt.catalogISRC, tt.catalogMBID, &length
-			opts := []func(*service.AcquireTrackAudioService){service.WithRecordingResolver(&resolver{identity: tt.identity})}
+			wiring := noVerification()
 			if tt.identifier != nil {
-				opts = append(opts, service.WithAudioIdentifier(tt.identifier))
+				wiring = verifiedBy(tt.identifier)
 			}
+			wiring = resolving(&resolver{identity: tt.identity}, wiring)
+			stages := noStages()
 			if tt.probed > 0 {
-				opts = append(opts, service.WithAudioProber(lengthProber(tt.probed)))
+				stages = noStages(probedBy(lengthProber(tt.probed)))
 			}
 
-			ledger, err := acquireWith(t, track, freshAudioSource{}, opts...)
+			ledger, err := acquireVerified(t, track, freshAudioSource{}, wiring, stages)
 
 			requireReady(t, ledger, track.ID, err)
 			isrc, evidence := storedISRCAndEvidence(t, ledger, track.ID)
@@ -295,7 +297,7 @@ func TestExecute_DrinkingInLAWritesNoGuessedISRC(t *testing.T) {
 	var resolved ports.RecordingIdentity
 	observe := service.WithContextObserver(func(ac *service.AcquisitionContext) { resolved = ac.Identity })
 
-	ledger, err := acquireWith(t, track, source, service.WithRecordingResolver(recorded), observe)
+	ledger, err := acquireVerified(t, track, source, resolving(recorded, noVerification()), noStages(), observe)
 
 	requireReady(t, ledger, track.ID, err)
 	if resolved.ISRC != drinkingISRC {

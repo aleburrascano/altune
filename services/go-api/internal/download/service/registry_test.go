@@ -48,6 +48,22 @@ func resolvedCandidate(url string) ports.AudioCandidate {
 	return c
 }
 
+func TestSourceRegistry_DropsACandidateWhoseYouTubeURLHasNoValidVideoID(t *testing.T) {
+	source := &stubSource{name: "ytdlp", found: []ports.AudioCandidate{
+		candidate("https://music.youtube.com/watch?v=short"),
+		candidate("https://music.youtube.com/watch?v=aaaaaaaaaaa"),
+		candidate("https://music.youtube.com/watch?v=bbbbbbbbbbb"),
+	}}
+
+	got, err := service.NewSourceRegistry(source).Find(context.Background(), ports.FindRequest{})
+	if err != nil {
+		t.Fatalf("Find returned error: %v", err)
+	}
+	if len(got) != 2 || got[0].URL != "https://music.youtube.com/watch?v=aaaaaaaaaaa" || got[1].URL != "https://music.youtube.com/watch?v=bbbbbbbbbbb" {
+		t.Errorf("Find = %v, want only the two candidates with a valid video id, kept apart", got)
+	}
+}
+
 func TestSourceRegistry_NewFiltersNilSources(t *testing.T) {
 	reg := service.NewSourceRegistry(nil, &stubSource{name: "a", found: []ports.AudioCandidate{candidate("u1")}}, nil)
 	got, err := reg.Find(context.Background(), ports.FindRequest{})
@@ -356,7 +372,7 @@ func fetchedAt(path string, err error) (ports.FetchedAudio, error) {
 }
 
 func TestSourceRegistry_AResolvedFirstTierHitSkipsTheFallback(t *testing.T) {
-	first := &stubSource{name: "ytmsearch", found: []ports.AudioCandidate{resolvedCandidate("https://music.youtube.com/watch?v=abc")}}
+	first := &stubSource{name: "ytmsearch", found: []ports.AudioCandidate{resolvedCandidate("https://music.youtube.com/watch?v=abcabcabcab")}}
 	fallback := &stubSource{name: "ytdlp", found: []ports.AudioCandidate{candidate("u1")}}
 	reg := service.NewSourceRegistry(first).WithFallback(fallback)
 
@@ -409,7 +425,7 @@ func TestSourceRegistry_FetchReachesFallbackSources(t *testing.T) {
 }
 
 func TestSourceRegistry_TheKindDecidesTheFallback(t *testing.T) {
-	artTrack := candidate("https://music.youtube.com/watch?v=abc")
+	artTrack := candidate("https://music.youtube.com/watch?v=abcabcabcab")
 	artTrack.Kind = ports.KindArtTrack
 	upload := candidate("https://www.youtube.com/watch?v=def")
 	upload.Kind = ports.KindUpload

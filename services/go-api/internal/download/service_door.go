@@ -8,6 +8,8 @@ type (
 	ConfidenceEvidence             = service.Evidence
 	TrackRef                       = service.TrackRef
 	VerdictKind                    = service.VerdictKind
+	StagePorts                     = service.StagePorts
+	VerificationPorts              = service.VerificationPorts
 	VerifySkipCounter              = service.VerifySkipCounter
 )
 
@@ -24,35 +26,25 @@ var (
 	NewSourceRegistry                 = service.NewSourceRegistry
 	ScoreConfidence                   = service.ScoreConfidence
 	SourceKindOf                      = service.SourceKindOf
+	DirectDeleteOrphans               = service.DirectDeleteOrphans
 	SweepStaleTempDirs                = service.SweepStaleTempDirs
 	UploaderSourceKind                = service.UploaderSourceKind
 	WithAcquireConfidenceFloor        = service.WithAcquireConfidenceFloor
 	WithAcquireEvents                 = service.WithAcquireEvents
-	WithAcquireOrphanQueue            = service.WithAcquireOrphanQueue
-	WithAcquireRecordingLookup        = service.WithAcquireRecordingLookup
 	WithAcquireStoreKeyPrefix         = service.WithAcquireStoreKeyPrefix
-	WithAcquireTempWorkspace          = service.WithAcquireTempWorkspace
-	WithAudioIdentifier               = service.WithAudioIdentifier
-	WithAudioProber                   = service.WithAudioProber
-	WithAudioTagger                   = service.WithAudioTagger
 	WithDownloadLimiter               = service.WithDownloadLimiter
 	WithDrainBudget                   = service.WithDrainBudget
 	WithFingerprintVerified           = service.WithFingerprintVerified
 	WithJobNotifier                   = service.WithJobNotifier
 	WithJobQueue                      = service.WithJobQueue
 	WithOutcomeRecorder               = service.WithOutcomeRecorder
-	WithPreviewMatcher                = service.WithPreviewMatcher
-	WithRecordingResolver             = service.WithRecordingResolver
-	WithRejectionStore                = service.WithRejectionStore
-	WithRerecordingFinder             = service.WithRerecordingFinder
+	WithProvenMaxBitErrorRate         = service.WithProvenMaxBitErrorRate
 	WithSchedulerEvents               = service.WithSchedulerEvents
 	WithSchedulerPaused               = service.WithSchedulerPaused
-	WithStoredAudioReader             = service.WithStoredAudioReader
 	WithSupersededAudioGrace          = service.WithSupersededAudioGrace
 	WithUpgradeLane                   = service.WithUpgradeLane
 	WithVerificationStatus            = service.WithVerificationStatus
 	WithVerifySkipCount               = service.WithVerifySkipCount
-	WithVerifySkips                   = service.WithVerifySkips
 )
 
 type ConcurrencyLimit = service.ConcurrencyLimit

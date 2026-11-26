@@ -174,8 +174,10 @@ func (r *recordedClientEvents) OnEmit(_ context.Context, rec *sdklog.Record) err
 }
 
 func (r *recordedClientEvents) Enabled(context.Context, sdklog.EnabledParameters) bool { return true }
-func (r *recordedClientEvents) Shutdown(context.Context) error                         { return nil }
-func (r *recordedClientEvents) ForceFlush(context.Context) error                       { return nil }
+
+func (r *recordedClientEvents) Shutdown(context.Context) error { return nil }
+
+func (r *recordedClientEvents) ForceFlush(context.Context) error { return nil }
 
 func (r *recordedClientEvents) exported(eventID string) bool {
 	r.mu.Lock()

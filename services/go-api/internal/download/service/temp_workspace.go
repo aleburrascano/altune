@@ -3,21 +3,25 @@ package service
 import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"context"
-	"errors"
 	"log/slog"
 	"time"
 )
 
-var ErrNoTempWorkspace = errors.New("no temp workspace configured")
-
 const maxLiveTempAge = AcquireTimeout + 15*time.Minute
+
+func requireWorkspace(owner string, ws ports.ScratchFolder) ports.ScratchFolder {
+	if ws == nil {
+		panic(owner + ": a temp workspace is required")
+	}
+	return ws
+}
 
 func SweepStaleTempDirs(ws ports.ScratchFolder) {
 	ws.SweepAbandoned(time.Now().Add(-maxLiveTempAge))
 }
 
 func CleanupTemp(ctx context.Context, ws ports.ScratchFolder, ac *AcquisitionContext) {
-	if ws == nil || ac.TempPath == "" {
+	if ac.TempPath == "" {
 		return
 	}
 	path := ac.TempDir

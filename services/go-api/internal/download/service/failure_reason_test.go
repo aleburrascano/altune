@@ -56,9 +56,9 @@ func TestStepName_IsTheOneItsFailureCodeIsKeyedOn(t *testing.T) {
 	}{
 		{service.NewSearchStep(nil), "search", downloadfailure.FailureNoMatchFound},
 		{service.NewSelectStep(), "select", downloadfailure.FailureNoMatchFound},
-		{service.NewDownloadStep(nil), "download", downloadfailure.FailureDownloadFailed},
-		{service.NewTagStep(nil), "tag", downloadfailure.FailureAcquisitionFailed},
-		{service.NewStoreStep(nil), "store", downloadfailure.FailureStorageFailed},
+		{service.NewDownloadStep(nil, scratchfiles.New(), ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder()), "download", downloadfailure.FailureDownloadFailed},
+		{service.NewTagStep(ports.NoopAudioTagger()), "tag", downloadfailure.FailureAcquisitionFailed},
+		{service.NewStoreStep(nil, scratchfiles.New(), ports.NoopAudioProber(), service.DirectDeleteOrphans(&objectStore{objects: map[string]string{}}), ports.NoopAudioRefLookup()), "store", downloadfailure.FailureStorageFailed},
 		{service.NewUpdateTrackStep(nil, ids.UserId{}, ids.TrackId{}), "update_track", downloadfailure.FailureAcquisitionFailed},
 	}
 
@@ -117,7 +117,7 @@ func pendingSong() acquisitiontest.LedgerTrack {
 }
 
 func acquireService(ledger *acquisitiontest.Ledger, registry *service.SourceRegistry, store ports.AudioWriter) *service.AcquireTrackAudioService {
-	return service.NewAcquireTrackAudioService(ledger, registry, store, service.WithAcquireTempWorkspace(scratchfiles.New()))
+	return service.NewAcquireTrackAudioService(ledger, registry, store, scratchfiles.New(), noVerification(), noStages(deletingFrom(store)))
 }
 
 func persistedCode(t *testing.T, ledger *acquisitiontest.Ledger, id ids.TrackId) downloadfailure.FailureCode {

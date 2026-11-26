@@ -1,0 +1,96 @@
+package ports
+
+import (
+	"altune/go-api/internal/shared/ids"
+	"context"
+	"errors"
+	"time"
+)
+
+var (
+	ErrNoAudioIdentifier   = errors.New("no audio identifier is wired")
+	ErrNoAudioProber       = errors.New("no audio prober is wired")
+	ErrNoStoredAudioReader = errors.New("no stored-audio reader is wired")
+)
+
+type noopAudioIdentifier struct{}
+
+func NoopAudioIdentifier() AudioIdentifier { return noopAudioIdentifier{} }
+
+func (noopAudioIdentifier) Identify(context.Context, string, float64) (RecordingMatch, error) {
+	return RecordingMatch{}, ErrNoAudioIdentifier
+}
+
+type noopRecordingLookup struct{}
+
+func NoopRecordingLookup() RecordingLookup { return noopRecordingLookup{} }
+
+func (noopRecordingLookup) RecordingByMBID(context.Context, string) (RecordingFacts, bool, error) {
+	return RecordingFacts{}, false, nil
+}
+
+type noopRerecordingFinder struct{}
+
+func NoopRerecordingFinder() RerecordingFinder { return noopRerecordingFinder{} }
+
+func (noopRerecordingFinder) FindRerecording(context.Context, RerecordingQuery) (TrackLabel, bool, error) {
+	return TrackLabel{}, false, nil
+}
+
+type noopAudioProber struct{}
+
+func NoopAudioProber() AudioProber { return noopAudioProber{} }
+
+func (noopAudioProber) ProbeDuration(context.Context, string) (float64, error) {
+	return 0, ErrNoAudioProber
+}
+
+func (noopAudioProber) ValidateDecodable(context.Context, string) error { return nil }
+
+type noopAudioTagger struct{}
+
+func NoopAudioTagger() AudioTagger { return noopAudioTagger{} }
+
+func (noopAudioTagger) Tag(context.Context, string, TrackTags) error { return nil }
+
+type noopRejectionStore struct{}
+
+func NoopRejectionStore() RejectionStore { return noopRejectionStore{} }
+
+func (noopRejectionStore) Record(context.Context, []CandidateRejectionRecord) error { return nil }
+
+func (noopRejectionStore) Active(context.Context, string, time.Time) ([]PriorRejection, error) {
+	return nil, nil
+}
+
+type noopStoredAudioReader struct{}
+
+func NoopStoredAudioReader() StoredAudioReader { return noopStoredAudioReader{} }
+
+func (noopStoredAudioReader) CopyStored(context.Context, string, string) (string, error) {
+	return "", ErrNoStoredAudioReader
+}
+
+type noopAudioRefLookup struct{}
+
+func NoopAudioRefLookup() AudioRefLookup { return noopAudioRefLookup{} }
+
+func (noopAudioRefLookup) AudioRefInUse(context.Context, string, ids.TrackId) (bool, error) {
+	return false, nil
+}
+
+type noopVerifySkipRecorder struct{}
+
+func NoopVerifySkipRecorder() VerifySkipRecorder { return noopVerifySkipRecorder{} }
+
+func (noopVerifySkipRecorder) RecordVerifySkip(string) {}
+
+const previewMatcherNotWired = "no preview matcher is wired"
+
+type noopPreviewMatcher struct{}
+
+func NoopPreviewMatcher() PreviewMatcher { return noopPreviewMatcher{} }
+
+func (noopPreviewMatcher) MatchesPreview(context.Context, string, PreviewTarget) (PreviewComparison, error) {
+	return PreviewComparison{Unavailable: previewMatcherNotWired}, nil
+}

@@ -60,6 +60,19 @@ func TestSource_AStrongArtTrackHitIsOneResolvedCandidate(t *testing.T) {
 	}
 }
 
+func TestSource_AHitWithoutAValidVideoIDIsNeverTheCandidate(t *testing.T) {
+	songs := []download.YouTubeMusicSong{
+		atv("short", "2021 Vibes", []string{"LUCKI"}, 125, true),
+		atv("LMDLNLM6Ji8", "2021 Vibes", []string{"LUCKI"}, 125, true),
+	}
+
+	got := find(t, songs, vibesRequest)
+
+	if len(got) != 1 || got[0].URL != "https://music.youtube.com/watch?v=LMDLNLM6Ji8" {
+		t.Errorf("candidates = %+v, want only the hit with a valid video id", got)
+	}
+}
+
 func TestSource_NoCandidateUnlessEveryCheckPasses(t *testing.T) {
 	cases := map[string]download.YouTubeMusicSong{
 		"music video":        {VideoID: "u4GAeAYGAqE", Title: "2021 Vibes", Artists: []string{"LUCKI"}, DurationSeconds: 125, Type: download.VideoTypeOfficialVideo},

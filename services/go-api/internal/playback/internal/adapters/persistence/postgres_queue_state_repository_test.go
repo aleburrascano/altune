@@ -100,8 +100,8 @@ type corruptRow struct {
 }
 
 func (r corruptRow) Scan(dest ...any) error {
-	*(dest[0].(*[]string)) = r.trackIds
-	*(dest[4].(*string)) = r.repeatMode
+	*dest[0].(*[]string) = r.trackIds
+	*dest[4].(*string) = r.repeatMode
 	return nil
 }
 
@@ -491,14 +491,14 @@ func (r storeRow) Scan(dest ...any) error {
 	if !r.ok {
 		return pgx.ErrNoRows
 	}
-	*(dest[0].(*[]string)) = r.row.trackIds
-	*(dest[1].(*int)) = r.row.currentIdx
-	*(dest[2].(*int64)) = r.row.positionMs
-	*(dest[3].(*bool)) = r.row.shuffled
-	*(dest[4].(*string)) = r.row.repeatMode
-	*(dest[5].(*string)) = r.row.sourceId
-	*(dest[6].(*[]string)) = r.row.naturalOrder
-	*(dest[7].(*time.Time)) = r.row.updatedAt
+	*dest[0].(*[]string) = r.row.trackIds
+	*dest[1].(*int) = r.row.currentIdx
+	*dest[2].(*int64) = r.row.positionMs
+	*dest[3].(*bool) = r.row.shuffled
+	*dest[4].(*string) = r.row.repeatMode
+	*dest[5].(*string) = r.row.sourceId
+	*dest[6].(*[]string) = r.row.naturalOrder
+	*dest[7].(*time.Time) = r.row.updatedAt
 	return nil
 }
 

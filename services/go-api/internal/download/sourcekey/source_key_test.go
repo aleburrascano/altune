@@ -290,6 +290,50 @@ func TestSourceKey_GivesNoSharedYouTubeKeyToEmptyOrMalformedInput(t *testing.T) 
 	}
 }
 
+func TestSourceKey_RejectsAYouTubeURLWhoseVideoIDIsNotValid(t *testing.T) {
+	inputs := []string{
+		"https://www.youtube.com/watch?v=short",
+		"https://music.youtube.com/watch?v=aaaaaaaaaaaa",
+		"https://music.youtube.com/watch?v=aaaaaaaaaa!",
+		"https://youtu.be/short",
+		"https://www.youtube.com/shorts/short",
+		"https://www.youtube.com/playlist?list=PLaaaaaaaaaaa",
+		"https://www.youtube.com/watch",
+	}
+	for _, raw := range inputs {
+		if got := download.SourceKey(raw); got != "" {
+			t.Errorf("acquisition.SourceKey(%q) = %q, want no key: a YouTube URL without a valid video id is not a candidate", raw, got)
+		}
+	}
+}
+
+func TestSourceKey_KeepsTwoDifferentItemsOnAQueryIdentifiedHostApart(t *testing.T) {
+	first := download.SourceKey("https://media.example.org/play?item=4821&utm_source=a")
+	second := download.SourceKey("https://media.example.org/play?item=9034&utm_source=a")
+
+	if first == "" || first == second {
+		t.Errorf("keys = %q and %q, want two distinct keys for two different items", first, second)
+	}
+}
+
+func TestSourceKey_KeepsTwoSchemelessItemsApartByTheirQuery(t *testing.T) {
+	first := download.SourceKey("youtube.com/watch?v=album")
+	second := download.SourceKey("youtube.com/watch?v=single")
+
+	if first == "" || first == second {
+		t.Errorf("keys = %q and %q, want two distinct keys even without a scheme", first, second)
+	}
+}
+
+func TestSourceKey_TreatsTheSameQueryInAnyOrderAsOneItem(t *testing.T) {
+	a := download.SourceKey("https://media.example.org/play?item=4821&disc=2")
+	b := download.SourceKey("https://MEDIA.example.org/play/?disc=2&item=4821")
+
+	if a != b {
+		t.Errorf("keys = %q and %q, want one key for one item", a, b)
+	}
+}
+
 func TestSourceKey_CollapsesAnUppercaseMobileSoundCloudHost(t *testing.T) {
 	tests := []struct{ in, want string }{
 		{"https://M.SOUNDCLOUD.COM/Artist/Song", "soundcloud.com/artist/song"},

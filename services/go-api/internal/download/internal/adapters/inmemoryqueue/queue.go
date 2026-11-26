@@ -4,6 +4,7 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"cmp"
 	"context"
 	"fmt"
@@ -28,6 +29,8 @@ type job struct {
 	run         int
 	leased      bool
 	reenqueued  bool
+
+	correlationID string
 }
 
 var (
@@ -55,7 +58,7 @@ func (q *Queue) RememberUser(trackID ids.TrackId, userID ids.UserId) {
 	q.pendingUsers[trackID] = userID
 }
 
-func (q *Queue) Enqueue(_ context.Context, trackID ids.TrackId, kind ports.JobKind, delay time.Duration) error {
+func (q *Queue) Enqueue(ctx context.Context, trackID ids.TrackId, kind ports.JobKind, delay time.Duration) error {
 	q.mu.Lock()
 	if existing, queued := q.jobs[trackID]; queued && kind == ports.JobKindUpgrade && existing.kind != ports.JobKindUpgrade {
 		q.mu.Unlock()
@@ -63,9 +66,11 @@ func (q *Queue) Enqueue(_ context.Context, trackID ids.TrackId, kind ports.JobKi
 	}
 	j := q.jobOrNew(trackID)
 	availableAt := q.now().Add(delay)
-	if held, err := q.enqueueLive(j, kind, availableAt); held {
+	correlationID := logging.CorrelationIDFromContext(ctx)
+	if held, err := q.enqueueLive(j, kind, availableAt, correlationID); held {
 		return err
 	}
+	j.correlationID = correlationID
 	j.requeue(kind, availableAt)
 	q.mu.Unlock()
 	notifyWake(q.wake)
@@ -94,7 +99,7 @@ func (q *Queue) jobOrNew(trackID ids.TrackId) *job {
 	return j
 }
 
-func (q *Queue) enqueueLive(j *job, kind ports.JobKind, availableAt time.Time) (held bool, err error) {
+func (q *Queue) enqueueLive(j *job, kind ports.JobKind, availableAt time.Time, correlationID string) (held bool, err error) {
 	if !j.leased || !q.now().Before(j.leaseUntil) {
 		return false, nil
 	}
@@ -108,6 +113,7 @@ func (q *Queue) enqueueLive(j *job, kind ports.JobKind, availableAt time.Time) (
 	}
 	j.reenqueued = true
 	j.run = 0
+	j.correlationID = correlationID
 	j.availableAt = availableAt
 	q.mu.Unlock()
 	notifyWake(q.wake)
@@ -146,7 +152,7 @@ func (q *Queue) claimMatching(lease time.Duration, match func(*job) bool) (ports
 	best.reenqueued = false
 	return ports.Job{
 		TrackID: bestID, UserID: best.userID, Kind: best.kind, Run: best.run, ClaimNumber: ports.ClaimNumber(best.fence),
-		Waited: max(now.Sub(best.availableAt), 0),
+		Waited: max(now.Sub(best.availableAt), 0), CorrelationID: best.correlationID,
 	}, nil
 }
 

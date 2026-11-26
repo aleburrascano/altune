@@ -4,6 +4,7 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -51,6 +52,7 @@ SET acquisition_status = CASE
 			ELSE 0
 		END,
 	acquisition_run_attempts = 0,
+	acquisition_correlation_id = NULLIF($4, ''),
 	failure_reason = '',
 	version = version + 1
 WHERE id = $1
@@ -92,7 +94,7 @@ func (q *PostgresJobQueue) Enqueue(ctx context.Context, trackID ids.TrackId, kin
 }
 
 func (q *PostgresJobQueue) applyEnqueue(ctx context.Context, trackID ids.TrackId, kind ports.JobKind, delay time.Duration) (bool, error) {
-	tag, err := q.pool.Exec(ctx, enqueueJobSQL, trackID.UUID(), string(kind), delay.Seconds())
+	tag, err := q.pool.Exec(ctx, enqueueJobSQL, trackID.UUID(), string(kind), delay.Seconds(), logging.CorrelationIDFromContext(ctx))
 	if err != nil {
 		return false, fmt.Errorf("enqueue acquisition job: %w", err)
 	}
@@ -199,7 +201,8 @@ SET acquisition_lease_until = now() + make_interval(secs => $1),
 FROM candidate
 WHERE tracks.id = candidate.id
 RETURNING tracks.id, tracks.user_id, tracks.acquisition_job_kind, tracks.acquisition_attempts, tracks.acquisition_run_attempts,
-	GREATEST(EXTRACT(EPOCH FROM now() - tracks.acquisition_available_at), 0)::float8`
+	GREATEST(EXTRACT(EPOCH FROM now() - tracks.acquisition_available_at), 0)::float8,
+	tracks.acquisition_correlation_id`
 
 func (q *PostgresJobQueue) Claim(ctx context.Context, lease time.Duration) (ports.Job, error) {
 	return q.claim(ctx, claimJobSQL, lease)
@@ -231,19 +234,27 @@ func scanClaimedJob(row pgx.Row) (ports.Job, error) {
 		attempts int
 		run      int
 		waited   float64
+		corrID   *string
 	)
-	if err := scanTrackClaim(row, &trackID, &userID, &kind, &attempts, &run, &waited); err != nil {
+	if err := scanTrackClaim(row, &trackID, &userID, &kind, &attempts, &run, &waited, &corrID); err != nil {
 		return ports.Job{}, err
 	}
 	return ports.Job{
 		TrackID: trackID, UserID: userID, Kind: ports.JobKind(kind), Run: run, ClaimNumber: ports.ClaimNumber(attempts),
-		Waited: time.Duration(waited * float64(time.Second)),
+		Waited: time.Duration(waited * float64(time.Second)), CorrelationID: storedCorrelationID(corrID),
 	}, nil
 }
 
-func scanTrackClaim(row pgx.Row, trackID *ids.TrackId, userID *ids.UserId, kind *string, attempts, run *int, waited *float64) error {
+func storedCorrelationID(stored *string) string {
+	if stored == nil {
+		return ""
+	}
+	return *stored
+}
+
+func scanTrackClaim(row pgx.Row, trackID *ids.TrackId, userID *ids.UserId, kind *string, attempts, run *int, waited *float64, corrID **string) error {
 	var rawTrackID, rawUserID uuid.UUID
-	if err := row.Scan(&rawTrackID, &rawUserID, kind, attempts, run, waited); err != nil {
+	if err := row.Scan(&rawTrackID, &rawUserID, kind, attempts, run, waited, corrID); err != nil {
 		return fmt.Errorf("scan track claim: %w", err)
 	}
 	*trackID = ids.TrackIdFromUUID(rawTrackID)

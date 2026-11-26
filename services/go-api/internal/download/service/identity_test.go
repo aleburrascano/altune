@@ -69,8 +69,8 @@ type inPlaceWiring struct {
 	identifier download.AudioIdentifier
 	resolver   *resolver
 	previews   download.PreviewMatcher
+	lookup     download.RecordingLookup
 	provenCut  float64
-	extra      []func(*download.AcquireTrackAudioService)
 }
 
 func inPlaceChecker(w inPlaceWiring) *download.AcquireTrackAudioService {
@@ -80,14 +80,18 @@ func inPlaceChecker(w inPlaceWiring) *download.AcquireTrackAudioService {
 	if w.provenCut == 0 {
 		w.provenCut = 0.10
 	}
-	opts := []func(*download.AcquireTrackAudioService){
-		download.WithAcquireTempWorkspace(download.NewTempWorkspace()),
-		download.WithRecordingResolver(w.resolver),
-		download.WithAudioIdentifier(w.identifier),
-		download.WithStoredAudioReader(storedAudio{}),
-		download.WithPreviewMatcher(w.previews, w.provenCut),
+	wiring := resolving(w.resolver, noVerification())
+	if w.identifier != nil {
+		wiring.Identifier = w.identifier
 	}
-	return download.NewAcquireTrackAudioService(nil, nil, storedAudio{}, append(opts, w.extra...)...)
+	if w.previews != nil {
+		wiring.Previews = w.previews
+	}
+	if w.lookup != nil {
+		wiring.RecordingLookup = w.lookup
+	}
+	return download.NewAcquireTrackAudioService(nil, nil, storedAudio{}, download.NewTempWorkspace(), wiring, noStages(readingStoredFrom(storedAudio{})),
+		download.WithProvenMaxBitErrorRate(w.provenCut))
 }
 
 func inPlaceTrack() *download.TrackSnapshot {
@@ -107,7 +111,7 @@ func pinnedInPlaceTrack() *download.TrackSnapshot {
 }
 
 func fromSource(track *download.TrackSnapshot, evidence string) *download.TrackSnapshot {
-	url := "https://music.youtube.com/watch?v=art"
+	url := "https://music.youtube.com/watch?v=artAAAAAAAA"
 	track.AudioSourceURL = &url
 	track.Evidence = []byte(evidence)
 	return track
@@ -209,7 +213,7 @@ func TestCheckInPlace_AFileTheFingerprintLinksToTheBoundRecordingMatches(t *test
 func TestCheckInPlace_AFileTheFingerprintLinksToAnotherVersionContradicts(t *testing.T) {
 	wiring := inPlaceWiring{
 		identifier: identifiedAs(otherRecording("live-mbid", "Boys Don't Cry (Live)")),
-		extra:      []func(*download.AcquireTrackAudioService){download.WithAcquireRecordingLookup(liveVersionLookup())},
+		lookup:     liveVersionLookup(),
 	}
 	live := fromSource(inPlaceTrack(), `{"source_kind":"art_track","source_title":"Boys Don't Cry (Live)"}`)
 
@@ -217,6 +221,29 @@ func TestCheckInPlace_AFileTheFingerprintLinksToAnotherVersionContradicts(t *tes
 
 	if finding.Fingerprint != download.Contradicts || finding.Verdict != string(download.VerdictContradicted) || !finding.Lowers {
 		t.Errorf("finding = %+v, want the other version to contradict", finding)
+	}
+}
+
+func TestCheckInPlace_UnreadableStoredEvidenceJudgesLikeNoEvidence(t *testing.T) {
+	wiring := func() inPlaceWiring {
+		return inPlaceWiring{
+			identifier: identifiedAs(otherRecording("live-mbid", "Boys Don't Cry (Live)")),
+			lookup:     liveVersionLookup(),
+		}
+	}
+
+	logs := captureLogs(t)
+	track := fromSource(inPlaceTrack(), `{"source_kind":"art_track","source_title":"Boys Don't Cry (Live)","pipeline_generation":"x"}`)
+
+	unreadable := checkInPlace(t, wiring(), track)
+	absent := checkInPlace(t, wiring(), fromSource(inPlaceTrack(), ``))
+
+	if unreadable != absent {
+		t.Errorf("unreadable evidence gave %+v, want the same finding as absent evidence %+v: nothing it half-decoded may be used", unreadable, absent)
+	}
+	records := recordsNamed(logs, "acquisition.stored_evidence_unreadable")
+	if len(records) != 1 || records[0].Level != "ERROR" || records[0].Attrs["track_id"] != track.ID.String() {
+		t.Errorf("records = %+v, want one ERROR acquisition.stored_evidence_unreadable naming track %s", records, track.ID)
 	}
 }
 
@@ -273,7 +300,7 @@ func TestCheckInPlace_AContradictionStandsOnlyWhenThePreviewDoesNotMatchEither(t
 			wiring := inPlaceWiring{
 				identifier: identifiedAs(otherRecording("live-mbid", "Boys Don't Cry (Live)")),
 				previews:   previews,
-				extra:      []func(*download.AcquireTrackAudioService){download.WithAcquireRecordingLookup(liveVersionLookup())},
+				lookup:     liveVersionLookup(),
 			}
 			live := fromSource(inPlaceTrack(), `{"source_kind":"art_track","source_title":"Boys Don't Cry (Live)"}`)
 
@@ -334,7 +361,7 @@ func TestCheckInPlace_AFailedFingerprintIsAnErrorNotAnAnswer(t *testing.T) {
 }
 
 func TestCheckInPlace_WithoutAnIdentifierOrStoredAudioReaderItSaysSo(t *testing.T) {
-	svc := download.NewAcquireTrackAudioService(nil, nil, storedAudio{}, download.WithAcquireTempWorkspace(download.NewTempWorkspace()))
+	svc := download.NewAcquireTrackAudioService(nil, nil, storedAudio{}, download.NewTempWorkspace(), noVerification(), noStages())
 
 	finding, err := svc.CheckInPlace(context.Background(), inPlaceTrack())
 

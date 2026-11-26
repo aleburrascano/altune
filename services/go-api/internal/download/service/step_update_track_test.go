@@ -27,7 +27,7 @@ func TestExecute_MarksTheTrackReadyOnTheFileItStored(t *testing.T) {
 	ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
 	store := &objectStore{objects: map[string]string{}}
 	svc := service.NewAcquireTrackAudioService(ledger, service.NewSourceRegistry(freshAudioSource{}), store,
-		service.WithAcquireTempWorkspace(scratchfiles.New()))
+		scratchfiles.New(), noVerification(), noStages())
 
 	err := svc.Execute(context.Background(), track.UserId, track.ID)
 
@@ -69,7 +69,7 @@ func TestExecute_ATrackGoneAtTheCommitFailsTheRunAsAcquisitionFailed(t *testing.
 	track := pendingBlindingLights()
 	ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
 	svc := service.NewAcquireTrackAudioService(vanishingLedger{ledger}, service.NewSourceRegistry(freshAudioSource{}),
-		&objectStore{objects: map[string]string{}}, service.WithAcquireTempWorkspace(scratchfiles.New()))
+		&objectStore{objects: map[string]string{}}, scratchfiles.New(), noVerification(), noStages())
 
 	err := svc.Execute(context.Background(), track.UserId, track.ID)
 
@@ -106,7 +106,7 @@ func TestScheduledRun_TellsTheClientWhenItReachesTheUpdateTrackStage(t *testing.
 	track := acquisitiontest.LedgerTrack{TrackSnapshot: pendingBlindingLights()}
 	ledger := acquisitiontest.NewLedger(track)
 	svc := service.NewAcquireTrackAudioService(ledger, service.NewSourceRegistry(freshAudioSource{}),
-		&objectStore{objects: map[string]string{}}, service.WithAcquireTempWorkspace(scratchfiles.New()))
+		&objectStore{objects: map[string]string{}}, scratchfiles.New(), noVerification(), noStages())
 	progress := &progressRecorder{}
 
 	outcome := scheduleOnce(t, svc, track, nil, service.WithSchedulerEvents(progress))
@@ -127,11 +127,10 @@ func TestReplaceGated_AnUnprobedFileGetsNoLengthRescue(t *testing.T) {
 		Channel: "Some Fan", Kind: ports.KindUpload, Duration: 285, Categories: []string{"Music"},
 	}}}
 	svc := service.NewAcquireTrackAudioService(served.ledger, service.NewSourceRegistry(source), served.store,
-		service.WithAcquireTempWorkspace(scratchfiles.New()),
-		service.WithRecordingResolver(&resolver{identity: ports.RecordingIdentity{MBID: recording, MBIDs: []string{recording}}}),
-		service.WithAudioIdentifier(&identifier{match: ports.RecordingMatch{AcoustID: "ac-1", Results: []ports.AcoustIDResult{
-			{Score: 0.97, Recordings: []ports.LinkedRecording{{MBID: recording}}},
-		}}}))
+		scratchfiles.New(), resolving(&resolver{identity: ports.RecordingIdentity{MBID: recording, MBIDs: []string{recording}}},
+			verifiedBy(&identifier{match: ports.RecordingMatch{AcoustID: "ac-1", Results: []ports.AcoustIDResult{
+				{Score: 0.97, Recordings: []ports.LinkedRecording{{MBID: recording}}},
+			}}})), noStages(deletingFrom(served.store)))
 	snapshot, err := served.ledger.Get(context.Background(), served.trackID, served.userID)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
@@ -170,10 +169,15 @@ type storedAcquisition struct {
 
 func acquireStoring(t *testing.T, candidate ports.AudioCandidate, opts ...func(*service.AcquireTrackAudioService)) storedAcquisition {
 	t.Helper()
+	return acquireStoringVerified(t, candidate, noVerification(), opts...)
+}
+
+func acquireStoringVerified(t *testing.T, candidate ports.AudioCandidate, wiring service.VerificationPorts, opts ...func(*service.AcquireTrackAudioService)) storedAcquisition {
+	t.Helper()
 	track := pendingBlindingLights()
 	length := blindingLightsLength
 	track.CatalogDurationSeconds = &length
-	ledger, err := acquireWith(t, track, &offeringSource{found: []ports.AudioCandidate{candidate}}, opts...)
+	ledger, err := acquireVerified(t, track, &offeringSource{found: []ports.AudioCandidate{candidate}}, wiring, noStages(), opts...)
 	requireReady(t, ledger, track.ID, err)
 	got, _ := ledger.Track(track.ID)
 	stored := storedAcquisition{track: got}
@@ -197,8 +201,8 @@ func TestExecute_StoresTheVerdictScoreSourceTitleAndTheirConfidence(t *testing.T
 	candidate := blindingLightsBy("The Weeknd - Topic", ports.KindUpload)
 	candidate.Title = "The Weeknd - Blinding Lights (Official Audio)"
 
-	stored := acquireStoring(t, candidate,
-		service.WithRecordingResolver(resolvedTo(blindingLightsRecording)), service.WithAudioIdentifier(hardFingerprintOn(blindingLightsRecording)))
+	stored := acquireStoringVerified(t, candidate,
+		resolving(resolvedTo(blindingLightsRecording), verifiedBy(hardFingerprintOn(blindingLightsRecording))))
 
 	if e := stored.evidence; e.Verdict != "hard" || e.AcoustIDScore != 0.97 || e.SourceTitle != candidate.Title {
 		t.Errorf("evidence = %+v, want verdict hard, acoustid_score 0.97 and the source title %q", e, candidate.Title)
@@ -229,12 +233,12 @@ func TestExecute_StoresTheSourceKindGenerationAndGradePerKind(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			candidate := blindingLightsBy(tc.channel, tc.kind)
 			candidate.ObservedOMV = tc.omv
-			opts := []func(*service.AcquireTrackAudioService){service.WithRecordingResolver(resolvedTo(blindingLightsRecording))}
+			wiring := noVerification()
 			if tc.identifier != nil {
-				opts = append(opts, service.WithAudioIdentifier(tc.identifier))
+				wiring = verifiedBy(tc.identifier)
 			}
 
-			e := acquireStoring(t, candidate, opts...).evidence
+			e := acquireStoringVerified(t, candidate, resolving(resolvedTo(blindingLightsRecording), wiring)).evidence
 
 			if e.SourceKind != tc.wantKind || e.Grade != tc.wantGrade || e.PipelineGeneration != audioquality.PipelineGeneration {
 				t.Errorf("source_kind=%q grade=%q generation=%d, want %q %q %d", e.SourceKind, e.Grade, e.PipelineGeneration, tc.wantKind, tc.wantGrade, audioquality.PipelineGeneration)
@@ -246,8 +250,8 @@ func TestExecute_StoresTheSourceKindGenerationAndGradePerKind(t *testing.T) {
 func TestExecute_ADoubtedReferenceNeverGradesA(t *testing.T) {
 	identity := ports.RecordingIdentity{MBID: blindingLightsRecording, MBIDs: []string{blindingLightsRecording}, ReferenceDoubted: true}
 
-	e := acquireStoring(t, blindingLightsBy("The Weeknd - Topic", ports.KindArtTrack),
-		service.WithRecordingResolver(&resolver{identity: identity}), service.WithAudioIdentifier(hardFingerprintOn(blindingLightsRecording))).evidence
+	e := acquireStoringVerified(t, blindingLightsBy("The Weeknd - Topic", ports.KindArtTrack),
+		resolving(&resolver{identity: identity}, verifiedBy(hardFingerprintOn(blindingLightsRecording)))).evidence
 
 	if e.Grade != audioquality.B {
 		t.Errorf("grade = %q, want B: a fingerprint on a doubted reference never proves the recording", e.Grade)
@@ -293,40 +297,45 @@ func (s perURLSource) Fetch(_ context.Context, candidate ports.AudioCandidate, o
 func TestExecute_StoresTheSourceURLOfTheFileItKept(t *testing.T) {
 	const first, second = "https://www.youtube.com/watch?v=firstAAAAAA", "https://www.youtube.com/watch?v=secondAAAAA"
 	muxed := ports.SourceFormat{ID: ports.MuxedFallbackFormatID}
-	fingerprinted := service.WithAudioIdentifier(hardFingerprintOn(blindingLightsRecording))
+	fingerprinted := verifiedBy(hardFingerprintOn(blindingLightsRecording))
 	cases := []struct {
 		name       string
 		firstTitle string
 		formats    map[string]ports.SourceFormat
 		broken     map[string]bool
-		opts       []func(*service.AcquireTrackAudioService)
+		wiring     service.VerificationPorts
+		stages     []stageMod
 		want       string
 	}{
 		{
 			"a tagged, fingerprint-proven file beside one that failed to fetch", "", nil,
 			map[string]bool{first: true},
-			[]func(*service.AcquireTrackAudioService){fingerprinted, service.WithAudioTagger(&recordingTagger{})},
+			fingerprinted,
+			[]stageMod{taggedBy(&recordingTagger{})},
 			second,
 		},
-		{"an unproven file beside one that failed to fetch", "", nil, map[string]bool{first: true}, nil, second},
+		{"an unproven file beside one that failed to fetch", "", nil, map[string]bool{first: true}, noVerification(), nil, second},
 		{
 			"a fingerprinted other version on length, held as best effort when nothing better came", "The Weeknd - Blinding Lights (Radio Edit)", nil,
 			map[string]bool{second: true},
-			[]func(*service.AcquireTrackAudioService){fingerprinted, service.WithAudioProber(lengthProber(blindingLightsLength))},
+			fingerprinted,
+			[]stageMod{probedBy(lengthProber(blindingLightsLength))},
 			first,
 		},
 		{
 			"a muxed file when nothing better came", "",
 			map[string]ports.SourceFormat{first: muxed},
 			map[string]bool{second: true},
-			[]func(*service.AcquireTrackAudioService){fingerprinted},
+			fingerprinted,
+			nil,
 			first,
 		},
 		{
 			"an audio-only file chosen over a muxed one", "",
 			map[string]ports.SourceFormat{first: muxed},
 			nil,
-			[]func(*service.AcquireTrackAudioService){fingerprinted},
+			fingerprinted,
+			nil,
 			second,
 		},
 	}
@@ -337,12 +346,11 @@ func TestExecute_StoresTheSourceURLOfTheFileItKept(t *testing.T) {
 			if tc.firstTitle != "" {
 				found[0].Title = tc.firstTitle
 			}
-			opts := append([]func(*service.AcquireTrackAudioService){service.WithRecordingResolver(resolvedTo(blindingLightsRecording))}, tc.opts...)
 			track := pendingBlindingLights()
 			length := blindingLightsLength
 			track.CatalogDurationSeconds = &length
 
-			ledger, err := acquireWith(t, track, perURLSource{found: found, formats: tc.formats, broken: tc.broken}, opts...)
+			ledger, err := acquireVerified(t, track, perURLSource{found: found, formats: tc.formats, broken: tc.broken}, resolving(resolvedTo(blindingLightsRecording), tc.wiring), noStages(tc.stages...))
 
 			requireReady(t, ledger, track.ID, err)
 			if got, _ := ledger.Track(track.ID); got.AudioSourceURL == nil || *got.AudioSourceURL != tc.want {

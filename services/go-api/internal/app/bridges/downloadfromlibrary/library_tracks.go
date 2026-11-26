@@ -57,13 +57,13 @@ func (l *LibraryTracks) AudioRefInUse(ctx context.Context, audioRef string, excl
 func (l *LibraryTracks) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*download.TrackSnapshot, error) {
 	track, err := l.store.GetByID(ctx, id, userId)
 	if errors.Is(err, domain.ErrTrackNotFound) {
-		track, err = nil, nil
+		return nil, download.ErrTrackNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
 	if track == nil {
-		return nil, nil
+		return nil, download.ErrTrackNotFound
 	}
 	return snapshotOf(track), nil
 }
