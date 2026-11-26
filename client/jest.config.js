@@ -20,6 +20,10 @@ const tsconfigAliases = Object.fromEntries(
 const houseModuleNameMapper = {
   ...tsconfigAliases,
   '^expo/virtual/env$': '<rootDir>/jest/expo-virtual-env.js',
+  '^react-native-safe-area-context$': '<rootDir>/jest/doubles/react-native-safe-area-context.js',
+  '^react-native-reanimated$': '<rootDir>/jest/doubles/react-native-reanimated.js',
+  '^react-native-gesture-handler/ReanimatedSwipeable$':
+    '<rootDir>/jest/doubles/reanimated-swipeable.js',
 };
 
 const ESM_ONLY_DEPENDENCIES = 'decode-uri-component';

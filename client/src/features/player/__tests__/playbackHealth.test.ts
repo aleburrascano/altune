@@ -1,4 +1,4 @@
-import { act } from '@testing-library/react-native';
+import { act, waitFor } from '@testing-library/react-native';
 import TrackPlayer, { Event } from 'react-native-track-player';
 
 import { useQueueStore, trackKey } from '@shared/playback';
@@ -67,17 +67,25 @@ async function settleRequests(): Promise<void> {
   });
 }
 
-async function sentPayloads(): Promise<Record<string, unknown>[]> {
+type SentRequest = { path: string; body: string };
+const TWO_REQUESTS = 2;
+
+function healthRequests(): SentRequest[] {
+  return (__http.requests as SentRequest[]).filter(
+    (request) => request.path === '/v1/discovery/events',
+  );
+}
+
+async function sentPayloads(expected = 1): Promise<Record<string, unknown>[]> {
   await settleRequests();
-  return (__http.requests as { path: string; body: string }[])
-    .filter((request) => request.path === '/v1/discovery/events')
-    .map((request) => {
-      const event = JSON.parse(request.body) as { type: string; payload?: Record<string, unknown> };
-      expect(event.type).toBe('playback_health');
-      const counts = { ...event.payload };
-      delete counts.session_id;
-      return counts;
-    });
+  await waitFor(() => expect(healthRequests().length).toBeGreaterThanOrEqual(expected));
+  return healthRequests().map((request) => {
+    const event = JSON.parse(request.body) as { type: string; payload?: Record<string, unknown> };
+    expect(event.type).toBe('playback_health');
+    const counts = { ...event.payload };
+    delete counts.session_id;
+    return counts;
+  });
 }
 
 beforeEach(async () => {
@@ -165,14 +173,14 @@ describe('playback health metric', () => {
   it('sends one aggregate event per batch, not one per outcome', async () => {
     for (let i = 0; i < PLAYBACK_HEALTH_BATCH * 2 + 3; i++) recordPresignOutcome(i % 5 !== 0);
 
-    const payloads = await sentPayloads();
+    const payloads = await sentPayloads(TWO_REQUESTS);
     expect(payloads).toHaveLength(2);
     expect(payloads[0]).toMatchObject({ presign_ok: 20, presign_failed: 5 });
   });
 
   it('flushes the partial batch when the app goes to the background', async () => {
     recordPresignOutcome(false);
-    expect(await sentPayloads()).toEqual([]);
+    expect(await sentPayloads(0)).toEqual([]);
 
     app.change('background');
 
@@ -181,7 +189,7 @@ describe('playback health metric', () => {
 
   it('sends nothing when there is nothing to report, and swallows a failed send', async () => {
     flushPlaybackHealth();
-    expect(await sentPayloads()).toEqual([]);
+    expect(await sentPayloads(0)).toEqual([]);
 
     __http.reset();
     __http.fail(HEALTH_ROUTE);

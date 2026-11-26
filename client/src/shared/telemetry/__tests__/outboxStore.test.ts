@@ -1,12 +1,12 @@
 import * as FileSystem from 'expo-file-system';
 
-import { loadPersistedOutbox, persistOutbox, setOutboxFileStore } from '@shared/telemetry';
-import { type StoredDirectory } from '@shared/files';
+import { createOutboxStore, type OutboxEntry, type OutboxStore } from '@shared/telemetry';
+import { defaultFileStore, type FileStore, type StoredDirectory } from '@shared/files';
+import { warn as logWarn } from '@shared/log';
 import {
   createMemoryFileStore,
   type MemoryFileStore,
 } from '@testing/fakes/files/inMemoryFileStore';
-import type { OutboxEntry } from '@shared/telemetry';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
 
 const OUTBOX_SCHEMA_VERSION = 1;
@@ -24,6 +24,24 @@ const { __fs } = FileSystem as unknown as {
 };
 
 const OUTBOX_FILE_URI = 'file:///document/telemetry/critical-outbox.json';
+
+let outbox: OutboxStore;
+
+function useFileStore(files: FileStore): void {
+  outbox = createOutboxStore(files, { warn: logWarn });
+}
+
+beforeEach(() => {
+  useFileStore(defaultFileStore);
+});
+
+function loadPersistedOutbox(): OutboxEntry[] {
+  return outbox.load();
+}
+
+function persistOutbox(entries: readonly OutboxEntry[]): void {
+  outbox.save(entries);
+}
 
 function entry(overrides: Partial<OutboxEntry> = {}): OutboxEntry {
   return {
@@ -402,11 +420,7 @@ describe('an injected FileStore scopes the persisted outbox to it', () => {
 
   beforeEach(() => {
     store = createMemoryFileStore();
-    setOutboxFileStore(store);
-  });
-
-  afterEach(() => {
-    setOutboxFileStore();
+    useFileStore(store);
   });
 
   it('persists to and loads from the injected store, leaving the device mock untouched', () => {
@@ -446,12 +460,8 @@ describe('durability', () => {
 
   beforeEach(() => {
     store = createMemoryFileStore();
-    setOutboxFileStore(store);
+    useFileStore(store);
     warn = recordLogs();
-  });
-
-  afterEach(() => {
-    setOutboxFileStore();
   });
 
   function warnings(): string[] {

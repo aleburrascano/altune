@@ -1,7 +1,9 @@
 import fc from 'fast-check';
 
-import type * as AppStateFake from '@testing/fakes/lifecycle/inMemoryAppStateSource';
-import * as SessionNamespace from '@shared/telemetry/eventSession';
+import { runSignOutCleanups } from '@shared/session';
+import * as telemetryDoor from '@shared/telemetry';
+import { createAppTelemetry } from '@shared/telemetry';
+import { driveAppState } from '@testing/fakes/lifecycle/inMemoryAppStateSource';
 
 const SESSION_INACTIVITY_MS = 1_800_000;
 const SESSION_ID_SHAPE = /^[0-9a-z]+-[0-9a-z]{1,8}$/;
@@ -25,14 +27,10 @@ function fakeClock(initialNow: number) {
 }
 
 function loadFreshSession(initialNow: number) {
-  jest.resetModules();
-  const {
-    driveAppState,
-  }: typeof AppStateFake = require('@testing/fakes/lifecycle/inMemoryAppStateSource');
   const appState = driveAppState('active');
-  const rawSession: typeof SessionNamespace = require('@shared/telemetry/eventSession');
   const clock = fakeClock(initialNow);
-  const session = { getSessionId: () => rawSession.getSessionId(clock.now, clock.monotonic) };
+  const telemetry = createAppTelemetry({ clock: { now: clock.now, tick: clock.monotonic } });
+  const session = { getSessionId: () => telemetry.getSessionId() };
 
   session.getSessionId();
   return { session, appState, clock };
@@ -102,12 +100,13 @@ describe('law: a rotated session id prefixes the base36 time of the rotation, an
 describe('getSessionId — the AppState listener is registered exactly once', () => {
   it('subscribes once no matter how many times getSessionId() runs', () => {
     const { session, appState } = loadFreshSession(1000);
+    const afterFirstRead = appState.listenerCount();
 
     session.getSessionId();
     session.getSessionId();
     session.getSessionId();
 
-    expect(appState.listenerCount()).toBe(1);
+    expect(appState.listenerCount()).toBe(afterFirstRead);
   });
 });
 
@@ -311,14 +310,18 @@ describe('a wall-clock jump neither triggers nor suppresses a rotation', () => {
     const before = session.getSessionId();
     expect(session.getSessionId()).toBe(before);
 
-    require('@shared/session/signOutCleanup').runSignOutCleanups();
+    runSignOutCleanups();
 
     expect(session.getSessionId()).not.toBe(before);
   });
 });
 
-describe('eventSession module surface', () => {
-  it('exposes only getSessionId, keeping the inactivity window and rotation private', () => {
-    expect(Object.keys(SessionNamespace)).toEqual(['getSessionId']);
+const PRIVATE_SESSION_NAMES = /INACTIVITY|resetSession|makeSessionId/;
+
+describe('telemetry door surface for the session id', () => {
+  it('exposes getSessionId, keeping the inactivity window and rotation private', () => {
+    const exposed = Object.keys(telemetryDoor);
+    expect(exposed).toContain('getSessionId');
+    expect(exposed.filter((name) => PRIVATE_SESSION_NAMES.test(name))).toEqual([]);
   });
 });

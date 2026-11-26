@@ -5,14 +5,12 @@ import { recordFailureShown, recordUserAction } from '@shared/telemetry';
 const { __http } = require('@testing/doubles/fetch.js');
 const SecureStore = require('expo-secure-store');
 
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
-
 function sentBody(): { type: string; payload: Record<string, unknown> } {
   return JSON.parse(__http.last().body);
 }
 
 async function settle(): Promise<void> {
-  for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  await new Promise<void>((resolve) => setImmediate(resolve));
 }
 
 beforeEach(async () => {

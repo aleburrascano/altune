@@ -25,11 +25,12 @@ import type * as AuthDoor from '@shared/auth';
 import type * as SessionDoor from '@shared/session';
 import { runSignOutCleanups } from '@shared/session';
 import {
+  createAppTelemetry,
   enqueueCritical,
   flushOutbox,
   followSignedInUser,
   getSessionId,
-  _resetOutboxForTest,
+  installTelemetry,
 } from '@shared/telemetry';
 import { TrackSaveControl, useResolvedOwnedTrack } from '@features/detail';
 import {
@@ -72,16 +73,17 @@ function bootSignedIn(initial: Session | null, signOut?: SignOutOutcome): Script
   return scriptedAuth(installAuthClient, initial, signOut);
 }
 
-followSignedInUser();
+function startOutboxOverDevice(): void {
+  installTelemetry(createAppTelemetry());
+  followSignedInUser();
+}
 
 beforeEach(() => {
-  _resetOutboxForTest();
+  startOutboxOverDevice();
   act(() => {
     useTrackStatusStore.getState().reset();
   });
 });
-
-afterEach(() => _resetOutboxForTest());
 
 describe('cross-account acquisition-status leak on a shared device', () => {
   it('after A saves a track and B signs in, useOwnedTrack no longer resolves A save status for a shared identity', async () => {
@@ -421,13 +423,10 @@ describe('acquisition and telemetry state across an account switch', () => {
   }
 
   beforeEach(() => {
-    _resetOutboxForTest();
     act(() => {
       useDownloadStore.getState().reset();
     });
   });
-
-  afterEach(() => _resetOutboxForTest());
 
   describe('account switch clears acquisition and telemetry state', () => {
     it("drops A's in-progress download and A's in-flight critical telemetry before B's session", async () => {
@@ -492,7 +491,7 @@ describe('acquisition and telemetry state across an account switch', () => {
           },
         ]),
       );
-      _resetOutboxForTest({ restored: false });
+      startOutboxOverDevice();
 
       __http.reply(EVENTS, { status: 202 });
       const session = bootWith(sessionFor(USER_B, 'token-b'));

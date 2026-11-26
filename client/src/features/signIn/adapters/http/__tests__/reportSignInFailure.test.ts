@@ -1,7 +1,7 @@
 import { apiBase } from '@shared/apiConfig';
 import { appVersion } from '@shared/device';
 import { setLogger } from '@shared/log';
-import { _resetOutboxForTest, flushOutbox } from '@shared/telemetry';
+import { flushOutbox } from '@shared/telemetry';
 
 import { reportSignInFailure, thrownErrorDetail } from '@features/signIn';
 import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
@@ -15,7 +15,6 @@ beforeEach(() => {
   fetchMock.mockReset().mockResolvedValue({ status: 204 });
   global.fetch = fetchMock as unknown as typeof fetch;
   getSession.mockResolvedValue({ data: { session: { access_token: 'tok' } }, error: null });
-  _resetOutboxForTest();
 });
 
 afterEach(() => {

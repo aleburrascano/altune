@@ -1,15 +1,10 @@
 import { apiFetch } from '@shared/apiClient';
 import { signInTestUser } from '@testing/signInTestUser';
-import {
-  _resetGlobalErrorReportingForTest,
-  installGlobalErrorReporting,
-  reportClientError,
-} from '@shared/telemetry';
+import { ApiError } from '@shared/failure';
+import { createAppTelemetry, type Telemetry } from '@shared/telemetry';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 
 const { __http } = require('@testing/doubles/fetch.js');
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 const chainUncaughtErrors = jest.fn<void, [(error: unknown) => void]>();
 
@@ -17,15 +12,21 @@ const mockEnableRejectionTracking = jest.fn();
 const globalWithHermes = globalThis as unknown as { HermesInternal?: unknown; __DEV__: boolean };
 const devMode = globalWithHermes.__DEV__;
 
-let mockExpoConfig: { version?: string } | undefined = { version: '1.2.3' };
-jest.mock('expo-constants', () => ({
-  __esModule: true,
-  default: {
-    get expoConfig() {
-      return mockExpoConfig;
-    },
-  },
-}));
+const START = 1_000_000;
+const HTTP_SERVER_ERROR = 500;
+let now = START;
+let configuredVersion: string | undefined = '1.2.3';
+let telemetry: Telemetry;
+
+function reportClientError(error: unknown, source: Parameters<Telemetry['reportClientError']>[1]) {
+  telemetry.reportClientError(error, source);
+}
+
+function installGlobalErrorReporting(
+  chain: Parameters<Telemetry['installGlobalErrorReporting']>[0],
+) {
+  telemetry.installGlobalErrorReporting(chain);
+}
 
 type DeliveredEvent = { type: string; payload: Record<string, unknown> };
 
@@ -66,15 +67,16 @@ beforeEach(async () => {
   mockEnableRejectionTracking.mockReset();
   globalWithHermes.HermesInternal = { enablePromiseRejectionTracker: mockEnableRejectionTracking };
   globalWithHermes.__DEV__ = false;
-  mockExpoConfig = { version: '1.2.3' };
-  _resetGlobalErrorReportingForTest();
-});
-
-afterAll(() => {
-  _resetGlobalErrorReportingForTest();
+  configuredVersion = '1.2.3';
+  now = START;
+  telemetry = createAppTelemetry({
+    clock: { now: () => now },
+    appVersion: () => configuredVersion ?? 'dev',
+  });
 });
 
 afterEach(() => {
+  telemetry.dispose();
   delete globalWithHermes.HermesInternal;
   globalWithHermes.__DEV__ = devMode;
 });
@@ -110,6 +112,23 @@ describe('reportClientError', () => {
     expect('stack' in payload).toBe(false);
   });
 
+  it('carries the correlation id of a failed request so the report joins the server log', async () => {
+    reportClientError(
+      new ApiError(HTTP_SERVER_ERROR, 'server error', undefined, 'abc123'),
+      'query',
+    );
+
+    await settle();
+    expect(lastPayload()['correlation_id']).toBe('abc123');
+  });
+
+  it('leaves correlation_id out when the error has none', async () => {
+    reportClientError(new Error('boom'), 'uncaught');
+
+    await settle();
+    expect('correlation_id' in lastPayload()).toBe(false);
+  });
+
   it('carries the configured app version', async () => {
     reportClientError(new Error('boom'), 'uncaught');
 
@@ -118,7 +137,7 @@ describe('reportClientError', () => {
   });
 
   it('falls back to "dev" when no app version is configured', async () => {
-    mockExpoConfig = undefined;
+    configuredVersion = undefined;
 
     reportClientError(new Error('boom'), 'uncaught');
 
@@ -129,16 +148,6 @@ describe('reportClientError', () => {
 
 describe('reportClientError dedupe', () => {
   const WINDOW_MS = 60_000;
-  let now = 1_000_000;
-
-  beforeEach(() => {
-    now = 1_000_000;
-    jest.spyOn(Date, 'now').mockImplementation(() => now);
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
 
   it('enqueues one client_error for the same error repeated inside the window', async () => {
     const error = new Error('render loop');

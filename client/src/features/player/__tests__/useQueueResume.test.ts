@@ -12,7 +12,6 @@ import type { AcquisitionStatus, TrackResponse } from '@shared/catalog';
 import { orderedQueueTracks, useQueueStore, trackKey, type PlaybackTrack } from '@shared/playback';
 import { runSignOutCleanups } from '@shared/session';
 import { ApiError, NetworkError } from '@shared/failure';
-import { _resetGlobalErrorReportingForTest } from '@shared/telemetry';
 
 import {
   useQueueResume,
@@ -1264,7 +1263,6 @@ describe('a queue save the server rejects as a client fault', () => {
   }
 
   beforeEach(() => {
-    _resetGlobalErrorReportingForTest();
     app = driveAppState();
     recordLogs();
     (getQueueState as jest.Mock).mockReset().mockResolvedValue({

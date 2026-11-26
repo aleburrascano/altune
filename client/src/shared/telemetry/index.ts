@@ -1,31 +1,28 @@
 export {
   installGlobalErrorReporting,
   reportClientError,
-  _resetGlobalErrorReportingForTest,
-} from '@shared/telemetry/shell/clientErrorReporting';
+  enqueueCritical,
+  flushOutbox,
+  followSignedInUser,
+  getSessionId,
+  installTelemetry,
+  recordEvent,
+  recordFailureShown,
+  recordUserAction,
+} from '@shared/telemetry/shell/currentTelemetry';
+export { createTelemetry } from '@shared/telemetry/shell/telemetry';
+export type { Telemetry } from '@shared/telemetry/shell/telemetry';
+export { createAppTelemetry } from '@shared/telemetry/shell/appTelemetry';
+export { createOutboxStore } from '@shared/telemetry/adapters/outboxStore';
 export type { ChainUncaughtErrors } from '@shared/telemetry/shell/clientErrorReporting';
 export { HEALTH_BATCH, createHealthTally } from '@shared/telemetry/shell/healthTally';
-export { followSignedInUser } from '@shared/telemetry/shell/outboxOwner';
-export {
-  enqueueCritical,
-  setOutboxOwner,
-  _resetOutboxForTest,
-  flushOutbox,
-} from '@shared/telemetry/outbox';
-export { recordEvent } from '@shared/telemetry/shell/recordEvent';
 export type {
   EventPayload,
   DiscoveryEvent,
   DiscoveryEventType,
-} from '@shared/telemetry/shell/recordEvent';
+} from '@shared/telemetry/core/discoveryEvent';
+export type { UserActionPayload } from '@shared/telemetry/shell/userTelemetry';
+export type { OutboxEntry } from '@shared/telemetry/core/outboxEntries';
+export { capOutbox, dedupeById, withEnvelope } from '@shared/telemetry/core/outboxEntries';
 export { useRecordEvent } from '@shared/telemetry/shell/useRecordEvent';
-export { recordFailureShown, recordUserAction } from '@shared/telemetry/userTelemetry';
-export type { UserActionPayload } from '@shared/telemetry/userTelemetry';
-export { getSessionId } from '@shared/telemetry/eventSession';
-export type { OutboxEntry } from '@shared/telemetry/shell/outboxEntries';
-export { capOutbox, dedupeById, withEnvelope } from '@shared/telemetry/shell/outboxEntries';
-export {
-  loadPersistedOutbox,
-  persistOutbox,
-  setOutboxFileStore,
-} from '@shared/telemetry/outboxStore';
+export type { OutboxStore, TelemetryClock, TelemetryDeps } from '@shared/telemetry/ports/telemetry';

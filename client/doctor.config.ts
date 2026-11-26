@@ -11,7 +11,7 @@ const sequentialByDesignAwaitInLoop = {
   files: [
     'src/shared/offline/shell/pinnedDownloadWorker.ts',
     'src/shared/offline/state/pinnedStore.ts',
-    'src/shared/telemetry/outbox.ts',
+    'src/shared/telemetry/shell/outbox.ts',
   ],
   rules: ['react-doctor/async-await-in-loop'],
 };
@@ -136,7 +136,6 @@ export default {
         files: [
           'src/mobile/frame/platformExtras.tsx',
           'src/mobile/deviceFileStore.ts',
-          'src/features/signIn/shell/useAuthDeepLink.ts',
           'src/features/signIn/hooks/useOAuth.ts',
           'src/features/signIn/ui/AuthCallbackScreen.tsx',
           'src/features/player/adapters/PlaybackProvider.tsx',

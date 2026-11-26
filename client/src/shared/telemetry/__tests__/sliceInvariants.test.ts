@@ -1,13 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { warn } from '@shared/log';
 import { createMemoryFileStore } from '@testing/fakes/files/inMemoryFileStore';
-import {
-  enqueueCritical,
-  withEnvelope,
-  loadPersistedOutbox,
-  setOutboxFileStore,
-} from '@shared/telemetry';
+import { createAppTelemetry, createOutboxStore, withEnvelope } from '@shared/telemetry';
 import type { DiscoveryEvent } from '@shared/telemetry';
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -17,6 +13,7 @@ const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 const SRC_ROOT = path.resolve(__dirname, '..', '..', '..');
 const TELEMETRY_DIR = path.join(SRC_ROOT, 'shared', 'telemetry');
 const FEATURES_DIR = path.join(SRC_ROOT, 'features');
+const PREDICTABLE_RANDOM = 0.5;
 const APP_DIR = path.join(SRC_ROOT, 'app');
 
 function listSourceFiles(dir: string): string[] {
@@ -149,11 +146,6 @@ describe('no console.log in this slice', () => {
 });
 
 describe('security: no auth material reaches this slice or the disk it writes to', () => {
-  afterEach(() => {
-    jest.restoreAllMocks();
-    setOutboxFileStore();
-  });
-
   it('no file in shared/telemetry imports expo-secure-store, a Supabase client, or reads an access token', () => {
     const offenders: string[] = [];
     for (const file of listSourceFiles(TELEMETRY_DIR)) {
@@ -191,14 +183,15 @@ describe('security: no auth material reaches this slice or the disk it writes to
   });
 
   it('the outbox event id is a v4 uuid, unpredictable to an observer of Math.random (#1774)', async () => {
-    setOutboxFileStore(createMemoryFileStore());
+    const store = createOutboxStore(createMemoryFileStore(), { warn });
+    const telemetry = createAppTelemetry({ store, clock: { random: () => PREDICTABLE_RANDOM } });
     __http.fail('POST /v1/discovery/events');
-    jest.spyOn(Math, 'random').mockReturnValue(0.5);
 
-    await enqueueCritical({ type: 'library_add' });
-    await enqueueCritical({ type: 'library_add' });
-    const ids = loadPersistedOutbox().map((entry) => entry.event_id);
+    await telemetry.enqueueCritical({ type: 'library_add' });
+    await telemetry.enqueueCritical({ type: 'library_add' });
+    const ids = store.load().map((entry) => entry.event_id);
 
+    telemetry.dispose();
     expect(new Set(ids).size).toBe(EVENTS_ENQUEUED);
     for (const id of ids) expect(id).toMatch(UUID_V4);
   });

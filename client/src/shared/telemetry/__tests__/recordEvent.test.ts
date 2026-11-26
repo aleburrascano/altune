@@ -3,10 +3,13 @@ import * as SecureStore from 'expo-secure-store';
 
 import { signInTestUser } from '@testing/signInTestUser';
 
-import { recordEvent, type DiscoveryEvent, getSessionId } from '@shared/telemetry';
+import {
+  createAppTelemetry,
+  recordEvent,
+  type DiscoveryEvent,
+  getSessionId,
+} from '@shared/telemetry';
 const { __http } = require('@testing/doubles/fetch.js');
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
 
 function sentBody(): DiscoveryEvent {
   return JSON.parse(__http.last().body);
@@ -171,5 +174,25 @@ describe('recordEvent(): failure injection — the one I/O call site, apiFetch',
 
     await expect(recordEvent({ type: 'play' })).rejects.toBeInstanceOf(ApiError);
     expect(__http.requests.length).toBe(0);
+  });
+});
+
+describe('recordEvent(): a failure while stamping the session never throws into the caller', () => {
+  it('rejects instead of throwing when the app state cannot be read', async () => {
+    const telemetry = createAppTelemetry({
+      appState: {
+        isActive: () => {
+          throw new Error('app state is gone');
+        },
+        subscribe: () => () => {},
+      },
+    });
+
+    let outcome: Promise<void> | undefined;
+    expect(() => {
+      outcome = telemetry.recordEvent({ type: 'play' });
+    }).not.toThrow();
+    await expect(outcome).rejects.toThrow('app state is gone');
+    telemetry.dispose();
   });
 });

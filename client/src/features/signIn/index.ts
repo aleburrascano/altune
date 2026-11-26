@@ -1,7 +1,11 @@
 import { AuthCallbackScreen } from '@features/signIn/ui/AuthCallbackScreen';
-import { useAuthDeepLink } from '@features/signIn/shell/useAuthDeepLink';
-
-export { AuthCallbackScreen, useAuthDeepLink };
+export { AuthCallbackScreen };
+export {
+  initialUrl,
+  nativeLinkEvents,
+  subscribeUrl,
+} from '@features/signIn/adapters/native/linkEvents';
+export { startAppAuthDeepLinks } from '@features/signIn/shell/authDeepLinks';
 export { AuthGate } from '@features/signIn/ui/AuthGate';
 export { ForgotPasswordScreen } from '@features/signIn/view/ForgotPasswordScreen';
 export { SetNewPasswordScreen } from '@features/signIn/ui/SetNewPasswordScreen';
@@ -41,7 +45,8 @@ export { InvalidRecoveryLinkNotice, SessionExpiredNotice } from '@features/signI
 export type { AuthPort } from '@features/signIn/ports/authPort';
 export type { AuthLinkIntent } from '@features/signIn/core/parseAuthLink';
 export { parseAuthLink } from '@features/signIn/core/parseAuthLink';
-export { initialUrl, subscribeUrl } from '@features/signIn/adapters/native/linkEvents';
+export { startAuthDeepLinks } from '@features/signIn/shell/authDeepLinks';
+export type { LinkEvents } from '@features/signIn/ports/linkEvents';
 export { OAuthButtons } from '@features/signIn/view/OAuthButtons';
 export { authRedirectUrl, schemePrefix } from '@features/signIn/core/authRedirect';
 export type { AuthLinkHost } from '@features/signIn/core/authRedirect';

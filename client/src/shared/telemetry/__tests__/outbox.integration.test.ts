@@ -1,11 +1,9 @@
-import type * as AppStateFake from '@testing/fakes/lifecycle/inMemoryAppStateSource';
-import type * as OutboxNamespace from '@shared/telemetry/outbox';
-import type { OutboxEntry, DiscoveryEvent } from '@shared/telemetry';
+import { createAppTelemetry, type DiscoveryEvent, type OutboxEntry } from '@shared/telemetry';
+import { driveAppState } from '@testing/fakes/lifecycle/inMemoryAppStateSource';
+import { signInTestUser } from '@testing/signInTestUser';
+
 const { __http } = require('@testing/doubles/fetch.js');
 
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
-
-type OutboxModule = typeof OutboxNamespace;
 type FailureKind = 'write' | 'read' | 'delete' | 'download' | 'createDirectory' | 'list';
 
 interface FakeFsDouble {
@@ -23,35 +21,25 @@ function currentFs(): FakeFsDouble {
   return (require('expo-file-system') as { __fs: FakeFsDouble }).__fs;
 }
 
-function configureSession(): void {
-  const { signInTestUser } = require('@testing/signInTestUser') as {
-    signInTestUser: () => Promise<void>;
-  };
+const booted: ReturnType<typeof createAppTelemetry>[] = [];
+
+function bootApp() {
   void signInTestUser();
+  driveAppState();
+  const app = createAppTelemetry();
+  booted.push(app);
+  return app;
 }
 
-const booted: OutboxModule[] = [];
-
-function bootApp(): OutboxModule {
-  configureSession();
-  (
-    require('@testing/fakes/lifecycle/inMemoryAppStateSource') as typeof AppStateFake
-  ).driveAppState();
-  const outbox = require('@shared/telemetry/outbox') as OutboxModule;
-  booted.push(outbox);
-  return outbox;
-}
+afterEach(() => {
+  booted.splice(0).forEach((app) => app.dispose());
+});
 
 function coldDisk(): FakeFsDouble {
-  const snapshot = currentFs().allFiles();
-  jest.resetModules();
-  const fs = currentFs();
-  for (const [uri, contents] of Object.entries(snapshot)) fs.seedFile(uri, contents);
-  return fs;
+  return currentFs();
 }
 
-function restartApp(): OutboxModule {
-  coldDisk();
+function restartApp() {
   return bootApp();
 }
 
@@ -76,14 +64,6 @@ function requestBody(index: number): OutboxEntry {
   return JSON.parse(String(deliveryRequests()[index]!.body)) as OutboxEntry;
 }
 
-beforeEach(() => {
-  jest.resetModules();
-});
-
-afterEach(() => {
-  booted.splice(0).forEach((outbox) => outbox._resetOutboxForTest());
-});
-
 describe('cold restart reads the queue from disk, not from memory', () => {
   it('restores whatever the disk file holds at boot time, even when it differs from what was queued before the restart', async () => {
     const outbox1 = bootApp();
@@ -91,9 +71,7 @@ describe('cold restart reads the queue from disk, not from memory', () => {
     await outbox1.enqueueCritical(libraryAdd('trk-in-memory-before-restart'));
     expect(readOutboxFile()).toHaveLength(1);
 
-    jest.resetModules();
-    const fs = currentFs();
-    fs.seedFile(
+    currentFs().seedFile(
       OUTBOX_URI,
       JSON.stringify([
         {
