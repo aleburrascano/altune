@@ -1,4 +1,5 @@
 import { NativeQueueTimeoutError, onNativeQueueTimeout, withNativeQueue } from '@features/player';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 
 const NATIVE_QUEUE_OP_TIMEOUT_MS = 15_000;
 
@@ -181,6 +182,30 @@ describe('withNativeQueue — fencing an op that outlived its deadline', () => {
     });
 
     expect(result).toBe('in time');
+  });
+
+  it('logs a failing listener as a redacted failure, not the raw error, and still runs the next listener', async () => {
+    const logs = recordLogs();
+    const next = jest.fn();
+    const unsubscribeFailing = onNativeQueueTimeout(() => {
+      throw new Error('listener secret');
+    });
+    const unsubscribeNext = onNativeQueueTimeout(next);
+
+    const hung = withNativeQueue(() => new Promise<void>(() => {}));
+    const hungOutcome = hung.catch((err: unknown) => err);
+    await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
+    await hungOutcome;
+    unsubscribeFailing();
+    unsubscribeNext();
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(logs.warnings).toEqual([
+      [
+        '[playback] native queue timeout listener failed',
+        { error: { kind: 'unknown', message: 'listener secret' } },
+      ],
+    ]);
   });
 
   it('does not run an unsubscribed listener', async () => {

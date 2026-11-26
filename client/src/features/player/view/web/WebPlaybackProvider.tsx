@@ -12,7 +12,7 @@ import {
   markRecovered,
   reportMediaError,
   stopPlayer,
-} from '@features/player/web/webLoad';
+} from '@features/player/view/web/webLoad';
 import {
   createWebAudioPlayer,
   IDLE_PLAYBACK,
@@ -20,7 +20,7 @@ import {
   type WebAudioPlayer,
   type WebPlayback,
 } from '@features/player/view/web/webPlayer';
-import { createWebControls } from '@features/player/web/createWebControls';
+import { createWebControls } from '@features/player/view/web/createWebControls';
 import { bindAudioVolume } from '@features/player/web/playbackVolume';
 import { secondsToMs } from '@features/player/domain/time';
 

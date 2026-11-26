@@ -1,9 +1,26 @@
 import { httpPlaybackPort } from '@features/player/adapters/http/httpPlaybackPort';
 import { playsThroughTrackPlayer } from '@features/player/domain/playsThroughTrackPlayer';
-import { installPlaybackPort } from '@features/player/shell/activePlaybackPort';
+import { installPlaybackPort } from '@features/player/ports/activePlaybackPort';
+import type { PlaybackPort } from '@features/player/ports/playbackPort';
 
-export function startPlaybackService(): void {
-  installPlaybackPort(httpPlaybackPort);
-  if (!playsThroughTrackPlayer) return;
-  require('@features/player/adapters/native/playbackService').registerPlaybackService();
+export interface StartPlaybackServiceDeps {
+  port: PlaybackPort;
+  playsThroughTrackPlayer: boolean;
+  registerPlaybackService: () => void;
 }
+
+export function createStartPlaybackService(deps: StartPlaybackServiceDeps): () => void {
+  return () => {
+    installPlaybackPort(deps.port);
+    if (!deps.playsThroughTrackPlayer) return;
+    deps.registerPlaybackService();
+  };
+}
+
+export const startPlaybackService = createStartPlaybackService({
+  port: httpPlaybackPort,
+  playsThroughTrackPlayer,
+  registerPlaybackService: () => {
+    require('@features/player/adapters/native/playbackService').registerPlaybackService();
+  },
+});

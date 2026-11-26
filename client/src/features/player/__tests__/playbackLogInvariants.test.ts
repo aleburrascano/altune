@@ -101,13 +101,25 @@ describe('warnPlayback', () => {
   });
 });
 
+const TYPESCRIPT_FILE_PATTERN = /\.tsx?$/;
+
+function isTypeScriptFile(name: string): boolean {
+  return TYPESCRIPT_FILE_PATTERN.test(name);
+}
+
+function sourceFilesUnder(dir: string): string[] {
+  const found: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory() && entry.name !== '__tests__') found.push(...sourceFilesUnder(path));
+    else if (isTypeScriptFile(entry.name)) found.push(path);
+  }
+  return found;
+}
+
 describe('source guard', () => {
   const root = join(__dirname, '..');
-  const files = [root, join(root, 'hooks')].flatMap((dir) =>
-    readdirSync(dir)
-      .filter((f) => /\.tsx?$/.test(f))
-      .map((f) => join(dir, f)),
-  );
+  const files = sourceFilesUnder(root);
 
   it('never passes a raw caught error to a warning', () => {
     const offenders: string[] = [];

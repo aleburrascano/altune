@@ -16,11 +16,15 @@ import {
   loadNativeQueue,
   loadNativeTrack,
 } from '@features/player/adapters/native/loadNativeTrack';
+import type {
+  NativePlaybackActions,
+  SetDisplayedTrack,
+} from '@features/player/ports/nativePlayback';
 import { reorderUpcomingNative } from '@features/player/adapters/native/rebuildNativeTail';
 import { claimSessionReset } from '@features/player/domain/loadToken';
-import { withNativeQueue } from '@features/player/native/nativeQueueLock';
+import { withNativeQueue } from '@features/player/adapters/native/nativeQueueLock';
 import { msToSeconds } from '@features/player/domain/time';
-import { clearPlaybackError, reportLoadFailure } from '@features/player/view/usePlaybackErrorStore';
+import { clearPlaybackError, reportLoadFailure } from '@features/player/core/playbackErrorStore';
 import {
   isIndexOutOfBounds,
   reportingQueueFailure,
@@ -28,14 +32,6 @@ import {
 import { redactedPlaybackFailure, warnPlayback } from '@features/player/domain/playbackError';
 import { markPlayRequested } from '@features/player/adapters/native/playStartTiming';
 import { warn } from '@shared/log';
-
-export interface NativePlaybackActions {
-  controls: PlaybackControls;
-  syncIsPlaying: (isPlaying: boolean) => void;
-  rememberTrack: (track: PlaybackTrack) => void;
-}
-
-type SetDisplayedTrack = (track: PlaybackTrack | null) => void;
 
 interface PlaybackMemory {
   lastPlayedTrack: PlaybackTrack | null;

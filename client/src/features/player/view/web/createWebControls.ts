@@ -7,10 +7,10 @@ import {
   playAudio,
   represignAndResume,
   stopPlayer,
-} from '@features/player/web/webLoad';
+} from '@features/player/view/web/webLoad';
 import { msToSeconds, secondsToMs } from '@features/player/domain/time';
 import { isSourceStale, type WebAudioPlayer } from '@features/player/view/web/webPlayer';
-import { prefetchNextTrack } from '@features/player/web/webPresign';
+import { prefetchNextTrack } from '@features/player/view/web/webPresign';
 
 function resumeAudio(player: WebAudioPlayer): void {
   if (player.audio.src === '') return;

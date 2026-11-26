@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react-native';
+import { act, renderHook as renderHookBare } from '@testing-library/react-native';
 
 import { useQueueStore } from '@shared/playback';
 import type { PlaybackTrack } from '@shared/playback';
@@ -9,7 +9,13 @@ import {
   type AppStateDriver,
 } from '@testing/fakes/lifecycle/inMemoryAppStateSource';
 
+import { withNativePlayback } from '@features/player/__tests__/withNativePlayback';
+
 const { __player } = jest.requireMock('react-native-track-player');
+
+function renderHook<T>(callback: () => T) {
+  return renderHookBare(callback, { wrapper: withNativePlayback });
+}
 
 let app: AppStateDriver;
 

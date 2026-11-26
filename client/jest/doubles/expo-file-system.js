@@ -13,6 +13,10 @@ const pendingFailures = {
 
 const pendingProgress = [];
 
+const oneShotDownloads = [];
+const downloadLog = [];
+let persistentDownload;
+
 const DEFAULT_AVAILABLE_DISK_SPACE = 64 * 1024 ** 3;
 let availableDiskSpace = DEFAULT_AVAILABLE_DISK_SPACE;
 
@@ -134,12 +138,19 @@ class File {
   }
 
   static async downloadFileAsync(url, dest, options) {
+    downloadLog.push({ url, uri: dest.uri });
     takeFailure('download', dest.uri);
-    if (options?.signal?.aborted) throw new Error('AbortError: download aborted');
-    for (const progress of pendingProgress.splice(0)) options?.onProgress?.(progress);
-    fileContents.set(dest.uri, `downloaded:${url}`);
-    return fileFromUri(dest.uri);
+    const scripted = oneShotDownloads.shift() ?? persistentDownload;
+    if (scripted !== undefined) return scripted(url, dest, options);
+    return completeDownload(url, dest, options);
   }
+}
+
+async function completeDownload(url, dest, options) {
+  if (options?.signal?.aborted) throw new Error('AbortError: download aborted');
+  for (const progress of pendingProgress.splice(0)) options?.onProgress?.(progress);
+  fileContents.set(dest.uri, `downloaded:${url}`);
+  return fileFromUri(dest.uri);
 }
 
 function fileFromUri(uri) {
@@ -159,7 +170,24 @@ const __fs = {
       pendingUris[kind] = undefined;
     }
     pendingProgress.length = 0;
+    oneShotDownloads.length = 0;
+    downloadLog.length = 0;
+    persistentDownload = undefined;
     availableDiskSpace = DEFAULT_AVAILABLE_DISK_SPACE;
+  },
+
+  scriptNextDownload(download) {
+    oneShotDownloads.push(download);
+  },
+
+  scriptDownloads(download) {
+    persistentDownload = download;
+  },
+
+  completeDownload,
+
+  downloads() {
+    return [...downloadLog];
   },
 
   setAvailableDiskSpace(bytes) {

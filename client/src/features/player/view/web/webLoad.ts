@@ -15,7 +15,11 @@ import {
   type SourceOutcome,
   type WebAudioPlayer,
 } from '@features/player/view/web/webPlayer';
-import { prefetchNextTrack, resolveSource, takeNextPresign } from '@features/player/web/webPresign';
+import {
+  prefetchNextTrack,
+  resolveSource,
+  takeNextPresign,
+} from '@features/player/view/web/webPresign';
 
 const MEDIA_ERR_NETWORK = 2;
 const MEDIA_ERR_DECODE = 3;

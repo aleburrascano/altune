@@ -5,11 +5,12 @@ import {
   PlusJakartaSans_700Bold,
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { QueryClientProvider } from '@tanstack/react-query';
+import { Asset } from 'expo-asset';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -39,7 +40,14 @@ import {
   installGlobalErrorReporting,
   installTelemetry,
 } from '@shared/telemetry';
-import { PlaybackProvider, SleepTimerBridge, startPlaybackService } from '@features/player';
+import {
+  installArtworkPlaceholder,
+  NativePlaybackProvider,
+  PlaybackProvider,
+  SleepTimerBridge,
+  startPlaybackService,
+  trackPlayerPlayback,
+} from '@features/player';
 import { OfflineReconcileBridge, provideOfflinePort, usePinnedStore } from '@shared/offline';
 import {
   useWideWebLayout,
@@ -76,6 +84,12 @@ installAuthClient(
 );
 provideOfflinePort(httpOfflinePort);
 
+function artworkPlaceholderUri(): string {
+  const asset = Asset.fromModule(require('@assets/artwork-placeholder.png'));
+  return asset.localUri ?? asset.uri;
+}
+
+installArtworkPlaceholder(artworkPlaceholderUri);
 startPlaybackService();
 
 registerSearchStateSignOutReset();
@@ -115,6 +129,18 @@ function playerScreenOptions(isWideWeb: boolean) {
         animation: 'slide_from_bottom' as const,
         gestureEnabled: true,
       };
+}
+
+interface PlayerProvidersProps {
+  children: ReactNode;
+}
+
+function PlayerProviders({ children }: PlayerProvidersProps) {
+  return (
+    <NativePlaybackProvider port={trackPlayerPlayback}>
+      <PlaybackProvider>{children}</PlaybackProvider>
+    </NativePlaybackProvider>
+  );
 }
 
 export default function RootLayout() {
@@ -163,7 +189,7 @@ export default function RootLayout() {
                   <AuthGate>
                     <ServerEventsBridge />
                     <ScreenViewsBridge />
-                    <PlaybackProvider>
+                    <PlayerProviders>
                       <SleepTimerBridge />
                       <ConnectedOfflineReconcile />
                       <PlaybackShortcuts />
@@ -182,7 +208,7 @@ export default function RootLayout() {
                           </Stack>
                         </AppChrome>
                       </ScreenBoundary>
-                    </PlaybackProvider>
+                    </PlayerProviders>
                   </AuthGate>
                 </SafeAreaProvider>
               </ThemeProvider>

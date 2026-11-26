@@ -15,7 +15,7 @@ import {
 } from '@shared/playback';
 import { registerAudioCacheInvalidator } from '@shared/acquisition';
 import { parseTrackId } from '@shared/catalog';
-import { playbackPort } from '@features/player/shell/activePlaybackPort';
+import { playbackPort } from '@features/player/ports/activePlaybackPort';
 import { primeSignedInUser } from '@shared/auth';
 import { hasSignedInUser, onSignOut } from '@shared/session';
 import {
@@ -24,7 +24,10 @@ import {
   prefetchNext,
 } from '@features/player/adapters/native/audioPrefetch';
 import { refreshUpcomingPresign } from '@features/player/adapters/native/loadNativeTrack';
-import { claimRecoveryAttempt, resetRecoveryBudget } from '@features/player/native/recoveryBudget';
+import {
+  claimRecoveryAttempt,
+  resetRecoveryBudget,
+} from '@features/player/adapters/native/recoveryBudget';
 import { claimSessionReset } from '@features/player/domain/loadToken';
 import {
   markPlayRequested,
@@ -32,9 +35,11 @@ import {
   resetPlayStartTiming,
 } from '@features/player/adapters/native/playStartTiming';
 import { startWidgetCommands } from '@features/player/adapters/native/widgetCommands';
-import { startWidgetSnapshotPublisher } from '@features/player/adapters/native/widgetSnapshot';
-import { withNativeQueue } from '@features/player/native/nativeQueueLock';
-import { shouldApplyActiveIndex } from '@features/player/native/nativeSyncGuard';
+import { altuneWidgetBridge } from '@features/player/adapters/native/altuneWidgetBridge';
+import { createWidgetSnapshotPublisher } from '@features/player/adapters/native/widgetSnapshot';
+import type { WidgetBridge } from '@features/player/ports/widgetBridge';
+import { withNativeQueue } from '@features/player/adapters/native/nativeQueueLock';
+import { shouldApplyActiveIndex } from '@features/player/adapters/native/nativeSyncGuard';
 import { activeNativeTrackId } from '@features/player/adapters/native/nativeTrack';
 import {
   forgetAllSwaps,
@@ -46,10 +51,7 @@ import {
   redactedPlaybackFailure,
   redactPlaybackErrorMessage,
 } from '@features/player/domain/playbackError';
-import {
-  clearPlaybackError,
-  reportPlaybackError,
-} from '@features/player/view/usePlaybackErrorStore';
+import { clearPlaybackError, reportPlaybackError } from '@features/player/core/playbackErrorStore';
 import {
   recordAudioRecoveryFailure,
   recordPlaybackFailure,
@@ -192,11 +194,21 @@ function evictCachedIfParsable(trackId: string): void {
   if (parsed.ok) evictCached(parsed.id);
 }
 
-export async function playbackService() {
+export interface PlaybackServiceDeps {
+  widget: WidgetBridge;
+}
+
+export function createPlaybackService(deps: PlaybackServiceDeps): () => Promise<void> {
+  return () => bootPlaybackService(createWidgetSnapshotPublisher(deps.widget));
+}
+
+export const playbackService = createPlaybackService({ widget: altuneWidgetBridge });
+
+async function bootPlaybackService(startSnapshotPublisher: () => () => void): Promise<void> {
   registerAudioCacheInvalidator(evictCachedIfParsable);
   void primeSignedInUser();
   startWidgetCommands({ playPrevious: playPreviousRemotely });
-  startWidgetSnapshotPublisher();
+  startSnapshotPublisher();
 
   TrackPlayer.addEventListener(Event.RemoteDuck, handleRemoteDuck);
 

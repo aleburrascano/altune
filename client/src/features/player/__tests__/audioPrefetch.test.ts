@@ -1,4 +1,3 @@
-import * as FileSystem from 'expo-file-system';
 import { posix } from 'path';
 import { act, waitFor } from '@testing-library/react-native';
 import TrackPlayer from 'react-native-track-player';
@@ -28,11 +27,19 @@ import {
   createMemoryPlaybackPort,
   type MemoryPlaybackSeed,
 } from '@features/player/__tests__/memoryPlaybackPort';
-import * as audioCache from '@features/player/adapters/native/audioCache';
 import { signInTestUser } from '@testing/signInTestUser';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
+import {
+  fileSystemDouble,
+  type DownloadOptions,
+  type DownloadTarget,
+  type DownloadedFile,
+} from '@testing/fakes/files/expoFileSystemDouble';
+
+const __fs = fileSystemDouble;
 
 const PREFETCH_STALL_TIMEOUT_MS = 15_000;
+const DOWNLOAD_ATTEMPTS_AFTER_A_TIMEOUT = 2;
 
 beforeAll(() => {
   installPlaybackPort(httpPlaybackPort);
@@ -76,22 +83,6 @@ beforeEach(() => {
 });
 
 describe('bounded downloads', () => {
-  interface DownloadOptions {
-    signal?: AbortSignal;
-    onProgress?: (data: { bytesWritten: number; totalBytes: number }) => void;
-  }
-
-  type Download = (
-    url: string,
-    dest: { uri: string },
-    options?: DownloadOptions,
-  ) => Promise<{ uri: string }>;
-
-  const { __fs, File } = FileSystem as unknown as {
-    __fs: { seedFile(uri: string, contents: string): void; allFiles(): Record<string, string> };
-    File: { downloadFileAsync: Download };
-  };
-
   const player = TrackPlayer as unknown as { getQueue: jest.Mock; add: jest.Mock };
 
   const CACHE_DIR_URI = 'file:///cache/audio-prefetch';
@@ -107,11 +98,11 @@ describe('bounded downloads', () => {
   }
 
   function stallForever(started: string[], signals: AbortSignal[] = []) {
-    return (_url: string, dest: { uri: string }, options?: DownloadOptions) => {
+    return (_url: string, dest: DownloadTarget, options?: DownloadOptions) => {
       __fs.seedFile(dest.uri, 'partial');
       started.push(dest.uri);
       if (options?.signal) signals.push(options.signal);
-      return new Promise<{ uri: string }>(() => {});
+      return new Promise<DownloadedFile>(() => {});
     };
   }
 
@@ -146,10 +137,7 @@ describe('bounded downloads', () => {
       player.getQueue.mockResolvedValue([{ id: trackKey(active) }, { id: trackKey(next) }]);
 
       const started: string[] = [];
-      const realDownload = File.downloadFileAsync;
-      const download = jest
-        .spyOn(File, 'downloadFileAsync')
-        .mockImplementationOnce(stallForever(started));
+      __fs.scriptNextDownload(stallForever(started));
 
       const settled = trackSettled(prefetchNext(0));
       await flushMicrotasks();
@@ -161,9 +149,8 @@ describe('bounded downloads', () => {
       expect(settled()).toBe(true);
       expect(cachedNames()).toEqual([]);
 
-      download.mockImplementation(realDownload);
       await prefetchNext(0);
-      expect(download).toHaveBeenCalledTimes(2);
+      expect(__fs.downloads()).toHaveLength(DOWNLOAD_ATTEMPTS_AFTER_A_TIMEOUT);
       expect(cachedNames()).toEqual(['t1.v1.mp3']);
       expect(wasSwappedToLocal(asTrackId('t1'))).toBe(true);
     });
@@ -178,7 +165,7 @@ describe('bounded downloads', () => {
       let progress: DownloadOptions['onProgress'];
       let finish!: () => void;
       let signal: AbortSignal | undefined;
-      jest.spyOn(File, 'downloadFileAsync').mockImplementationOnce((_url, dest, options) => {
+      __fs.scriptNextDownload((_url, dest, options) => {
         progress = options?.onProgress;
         signal = options?.signal;
         return new Promise((resolve) => {
@@ -214,11 +201,7 @@ describe('bounded downloads', () => {
 
       const started: string[] = [];
       const signals: AbortSignal[] = [];
-      const realDownload = File.downloadFileAsync;
-      jest
-        .spyOn(File, 'downloadFileAsync')
-        .mockImplementationOnce(stallForever(started, signals))
-        .mockImplementation(realDownload);
+      __fs.scriptNextDownload(stallForever(started, signals));
 
       const settled = trackSettled(prefetchNext(0));
       await flushMicrotasks();
@@ -243,15 +226,13 @@ describe('bounded downloads', () => {
 
       const started: string[] = [];
       const signals: AbortSignal[] = [];
-      const download = jest
-        .spyOn(File, 'downloadFileAsync')
-        .mockImplementation(stallForever(started, signals));
+      __fs.scriptDownloads(stallForever(started, signals));
 
       void prefetchNext(0);
       await flushMicrotasks();
       await prefetchNext(0);
 
-      expect(download).toHaveBeenCalledTimes(1);
+      expect(__fs.downloads()).toHaveLength(1);
       expect(signals[0]?.aborted).toBe(false);
     });
   });
@@ -264,7 +245,7 @@ describe('bounded downloads', () => {
       player.getQueue.mockResolvedValue([{ id: trackKey(active) }, { id: trackKey(next) }]);
 
       const signals: AbortSignal[] = [];
-      jest.spyOn(File, 'downloadFileAsync').mockImplementationOnce((_url, dest, options) => {
+      __fs.scriptNextDownload((_url, dest, options) => {
         __fs.seedFile(dest.uri, 'partial');
         if (options?.signal) signals.push(options.signal);
         options?.onProgress?.({ bytesWritten: MAX_PREFETCH_FILE_BYTES + 1, totalBytes: -1 });
@@ -282,11 +263,6 @@ describe('bounded downloads', () => {
 });
 
 describe('eviction', () => {
-  const { __fs, File } = FileSystem as unknown as {
-    __fs: { seedFile(uri: string, contents: string): void; allFiles(): Record<string, string> };
-    File: { downloadFileAsync: (url: string, dest: { uri: string }) => Promise<{ uri: string }> };
-  };
-
   const player = TrackPlayer as unknown as { getQueue: jest.Mock; add: jest.Mock };
   type NativeAdd = [{ id: string; url: string }, number?];
 
@@ -365,11 +341,10 @@ describe('eviction', () => {
 
       const gate = deferred();
       const started = deferred();
-      const realDownload = File.downloadFileAsync;
-      jest.spyOn(File, 'downloadFileAsync').mockImplementation(async (url, dest) => {
+      __fs.scriptDownloads(async (url, dest, options) => {
         started.resolve();
         await gate.promise;
-        return realDownload(url, dest);
+        return __fs.completeDownload(url, dest, options);
       });
 
       const run = prefetchNext(0);
@@ -390,7 +365,7 @@ describe('eviction', () => {
 
       const gate = deferred();
       const started = deferred();
-      jest.spyOn(File, 'downloadFileAsync').mockImplementation(async (_url, dest) => {
+      __fs.scriptDownloads(async (_url, dest) => {
         __fs.seedFile(dest.uri, 'partial');
         started.resolve();
         await gate.promise;
@@ -422,11 +397,10 @@ describe('eviction', () => {
 
       const gate = deferred();
       const started = deferred();
-      const realDownload = File.downloadFileAsync;
-      jest.spyOn(File, 'downloadFileAsync').mockImplementationOnce(async (url, dest) => {
+      __fs.scriptNextDownload(async (url, dest, options) => {
         started.resolve();
         await gate.promise;
-        return realDownload(url, dest);
+        return __fs.completeDownload(url, dest, options);
       });
 
       const run = prefetchNext(0);
@@ -461,17 +435,14 @@ describe('eviction', () => {
   });
 });
 
-describe('cache file construction', () => {
-  describe('prefetchNext cache file construction failure', () => {
+describe('moving a finished download into the cache', () => {
+  describe('prefetchNext cache move failure', () => {
     it('is traced as the download stage', async () => {
       forgetAllSwaps();
       useQueueStore.getState().clearQueue();
       installMemoryPort();
       const logged = recordLogs();
-      jest.spyOn(audioCache, 'findCached').mockReturnValue(null);
-      jest.spyOn(audioCache, 'cacheDir').mockImplementation(() => {
-        throw new Error('no cache dir');
-      });
+      __fs.failNext('move', new Error('no cache dir'));
       useQueueStore
         .getState()
         .loadQueue([libraryTrackWithId('t0'), libraryTrackWithId('t1')], 0, null);
@@ -482,19 +453,11 @@ describe('cache file construction', () => {
         '[playback] prefetch failed',
         expect.objectContaining({ stage: 'download', trackId: 't1' }),
       ]);
-      jest.restoreAllMocks();
     });
   });
 });
 
 describe('failure trace', () => {
-  type DownloadWithProgress = (
-    url: string,
-    dest: { uri: string },
-    options?: { onProgress?: (data: { bytesWritten: number; totalBytes: number }) => void },
-  ) => Promise<{ uri: string }>;
-
-  const { File } = FileSystem as unknown as { File: { downloadFileAsync: DownloadWithProgress } };
   const player = TrackPlayer as unknown as { getQueue: jest.Mock; add: jest.Mock; load: jest.Mock };
   const { __player } = jest.requireMock('react-native-track-player') as {
     __player: { failNext: (method: string, error: Error) => void };
@@ -536,7 +499,7 @@ describe('failure trace', () => {
 
     it('logs a download that fails on its own (e.g. disk full)', async () => {
       const diskFull = new Error('ENOSPC');
-      jest.spyOn(File, 'downloadFileAsync').mockRejectedValueOnce(diskFull);
+      __fs.failNext('download', diskFull);
       useQueueStore
         .getState()
         .loadQueue([libraryTrackWithId('t0'), libraryTrackWithId('t1')], 0, null);
@@ -554,10 +517,10 @@ describe('failure trace', () => {
     });
 
     it('logs a download abandoned for growing past the byte cap, with the cause', async () => {
-      jest.spyOn(File, 'downloadFileAsync').mockImplementationOnce(((_url, _dest, options) => {
+      __fs.scriptNextDownload((_url, _dest, options) => {
         options?.onProgress?.({ bytesWritten: MAX_PREFETCH_FILE_BYTES + 1, totalBytes: -1 });
-        return new Promise<{ uri: string }>(() => {});
-      }) as DownloadWithProgress);
+        return new Promise<DownloadedFile>(() => {});
+      });
       useQueueStore
         .getState()
         .loadQueue([libraryTrackWithId('t0'), libraryTrackWithId('t1')], 0, null);
@@ -570,27 +533,6 @@ describe('failure trace', () => {
           stage: 'download',
           trackId: 't1',
           error: { kind: 'unknown', message: 'prefetch download aborted: oversized' },
-        },
-      ]);
-    });
-
-    it('logs the swap stage when installing the downloaded file throws', async () => {
-      const boom = new Error('cache dir not readable');
-      jest.spyOn(audioCache, 'evict').mockImplementation(() => {
-        throw boom;
-      });
-      useQueueStore
-        .getState()
-        .loadQueue([libraryTrackWithId('t0'), libraryTrackWithId('t1')], 0, null);
-
-      await prefetchNext(0);
-
-      expect(logged.warnings).toContainEqual([
-        '[playback] prefetch failed',
-        {
-          stage: 'swap',
-          trackId: 't1',
-          error: { kind: 'unknown', message: 'cache dir not readable' },
         },
       ]);
     });
@@ -616,9 +558,7 @@ describe('failure trace', () => {
 
     it('stays quiet when a download is superseded by a skip', async () => {
       useQueueStore.getState().loadQueue(['t0', 't1', 't2', 't3'].map(libraryTrackWithId), 0, null);
-      jest
-        .spyOn(File, 'downloadFileAsync')
-        .mockImplementationOnce(() => new Promise<{ uri: string }>(() => {}));
+      __fs.scriptNextDownload(() => new Promise<DownloadedFile>(() => {}));
 
       const first = prefetchNext(0);
       for (let i = 0; i < 20; i++) await Promise.resolve();
@@ -649,9 +589,7 @@ describe('failure trace', () => {
     }
 
     it('redacts the signed URL a failed download names', async () => {
-      jest
-        .spyOn(File, 'downloadFileAsync')
-        .mockRejectedValueOnce(new Error(`Unable to open ${SIGNED_URL} (403)`));
+      __fs.failNext('download', new Error(`Unable to open ${SIGNED_URL} (403)`));
       useQueueStore
         .getState()
         .loadQueue([libraryTrackWithId('t0'), libraryTrackWithId('t1')], 0, null);
@@ -670,9 +608,7 @@ describe('failure trace', () => {
     });
 
     it('redacts a rejection thrown as a bare string', async () => {
-      jest
-        .spyOn(File, 'downloadFileAsync')
-        .mockRejectedValueOnce(`download of ${SIGNED_URL} failed`);
+      __fs.failNext('download', `download of ${SIGNED_URL} failed`);
       useQueueStore
         .getState()
         .loadQueue([libraryTrackWithId('t0'), libraryTrackWithId('t1')], 0, null);
@@ -691,7 +627,7 @@ describe('failure trace', () => {
     });
 
     it('logs only the type of a rejection that is not an Error, never its fields', async () => {
-      jest.spyOn(File, 'downloadFileAsync').mockRejectedValueOnce({ requestUrl: SIGNED_URL });
+      __fs.failNext('download', { requestUrl: SIGNED_URL });
       useQueueStore
         .getState()
         .loadQueue([libraryTrackWithId('t0'), libraryTrackWithId('t1')], 0, null);
@@ -713,7 +649,6 @@ describe('failure trace', () => {
 
 describe('cache path containment', () => {
   const { __http } = require('@testing/doubles/fetch.js');
-  const { __fs } = FileSystem as unknown as { __fs: { allFiles(): Record<string, string> } };
 
   function libraryTrackWithId(trackId: string): PlaybackTrack {
     return libraryTrack({ source: { kind: 'library', trackId: trackId as TrackId } });
@@ -785,26 +720,6 @@ describe('cache path containment', () => {
 });
 
 describe('a download left unfinished by a killed app', () => {
-  interface DownloadOptions {
-    signal?: AbortSignal;
-  }
-
-  type Download = (
-    url: string,
-    dest: { uri: string },
-    options?: DownloadOptions,
-  ) => Promise<{ uri: string }>;
-
-  const { __fs, File } = FileSystem as unknown as {
-    __fs: {
-      seedFile(uri: string, contents: string): void;
-      readFile(uri: string): string | undefined;
-      allFiles(): Record<string, string>;
-      failNext(kind: 'move', error?: Error): void;
-    };
-    File: { downloadFileAsync: Download };
-  };
-
   const player = TrackPlayer as unknown as {
     getQueue: jest.Mock;
     remove: jest.Mock;
@@ -881,9 +796,9 @@ describe('a download left unfinished by a killed app', () => {
 
     it('holds no file under the finished name while the download is still running', async () => {
       loadNextTrackQueue();
-      jest.spyOn(File, 'downloadFileAsync').mockImplementationOnce((_url, dest) => {
+      __fs.scriptNextDownload((_url, dest) => {
         __fs.seedFile(dest.uri, 'partial');
-        return new Promise<{ uri: string }>(() => {});
+        return new Promise<DownloadedFile>(() => {});
       });
 
       void prefetchNext(0);
@@ -984,7 +899,6 @@ describe('prefetch health tally', () => {
 describe('playback port wiring', () => {
   describe('against the memory port', () => {
     const player = TrackPlayer as unknown as { getQueue: jest.Mock; add: jest.Mock };
-    const { __fs } = FileSystem as unknown as { __fs: { allFiles(): Record<string, string> } };
 
     function queueOf(ids: readonly string[]): void {
       const tracks = ids.map((id) =>

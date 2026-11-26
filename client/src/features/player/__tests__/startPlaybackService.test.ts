@@ -1,30 +1,64 @@
-const FLAG = '@features/player/domain/playsThroughTrackPlayer';
-const SERVICE = '@features/player/adapters/native/playbackService';
+import {
+  createStartPlaybackService,
+  installPlaybackPort,
+  playbackPort,
+  type PlaybackPort,
+} from '@features/player';
+import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
 
-function run(flag: boolean) {
-  const register = jest.fn();
-  const factory = jest.fn(() => ({ registerPlaybackService: register }));
-  jest.isolateModules(() => {
-    jest.doMock(FLAG, () => ({ playsThroughTrackPlayer: flag }));
-    jest.doMock(SERVICE, factory);
-    require('@features/player/adapters/startPlaybackService').startPlaybackService();
-  });
-  return { register, factory };
+const STARTS = 2;
+
+function memoryPort(): PlaybackPort {
+  return createMemoryPlaybackPort({});
 }
 
+function start(playsThroughTrackPlayer: boolean) {
+  const register = jest.fn();
+  const port = memoryPort();
+  createStartPlaybackService({
+    port,
+    playsThroughTrackPlayer,
+    registerPlaybackService: register,
+  })();
+  return { register, port };
+}
+
+let restorePort: () => void;
+
+beforeEach(() => {
+  restorePort = installPlaybackPort(memoryPort());
+});
+
+afterEach(() => {
+  restorePort();
+});
+
 describe('startPlaybackService', () => {
-  it('registers the service once when the flag is true', () => {
-    expect(run(true).register).toHaveBeenCalledTimes(1);
+  it('registers the service once when playback goes through the track player', () => {
+    expect(start(true).register).toHaveBeenCalledTimes(1);
   });
 
-  it('does nothing and never loads the service when the flag is false', () => {
-    const { register, factory } = run(false);
-    expect(register).not.toHaveBeenCalled();
-    expect(factory).not.toHaveBeenCalled();
+  it('never registers the service when playback does not go through the track player', () => {
+    expect(start(false).register).not.toHaveBeenCalled();
   });
 
-  it('follows the flag across fresh module registries', () => {
-    expect(run(true).register).toHaveBeenCalledTimes(1);
-    expect(run(false).register).toHaveBeenCalledTimes(0);
+  it.each([true, false])('installs its port for callers when the flag is %s', (flag) => {
+    const { port } = start(flag);
+
+    expect(playbackPort()).toBe(port);
+  });
+
+  it('registers once per start, so a later start registers again', () => {
+    const register = jest.fn();
+    const startIt = createStartPlaybackService({
+      port: memoryPort(),
+      playsThroughTrackPlayer: true,
+      registerPlaybackService: register,
+    });
+
+    startIt();
+    startIt();
+
+    expect(register).toHaveBeenCalledTimes(STARTS);
   });
 });

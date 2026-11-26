@@ -11,19 +11,24 @@ class PlayerSetupTimeoutError extends Error {
   }
 }
 
-let setupPromise: Promise<void> | null = null;
+export type SetupPlayer = Pick<typeof TrackPlayer, 'setupPlayer' | 'updateOptions'>;
 
-export function ensurePlayerSetup(): Promise<void> {
-  setupPromise ??= setupWithinBudget().catch((error: unknown) => {
-    setupPromise = null;
-    throw error;
-  });
-  return setupPromise;
+export function createEnsurePlayerSetup(player: SetupPlayer): () => Promise<void> {
+  let setupPromise: Promise<void> | null = null;
+  return () => {
+    setupPromise ??= setupWithinBudget(player).catch((error: unknown) => {
+      setupPromise = null;
+      throw error;
+    });
+    return setupPromise;
+  };
 }
 
-function setupWithinBudget(): Promise<void> {
+export const ensurePlayerSetup = createEnsurePlayerSetup(TrackPlayer);
+
+function setupWithinBudget(player: SetupPlayer): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const pending = setup();
+  const pending = setup(player);
   let hasTimedOut = false;
   pending.catch((err: unknown) => {
     if (hasTimedOut) warnPlayback('player setup failed after its deadline', {}, err);
@@ -37,9 +42,9 @@ function setupWithinBudget(): Promise<void> {
   return Promise.race([pending, deadline]).finally(() => clearTimeout(timer));
 }
 
-async function setup(): Promise<void> {
-  await TrackPlayer.setupPlayer({ autoHandleInterruptions: true });
-  await TrackPlayer.updateOptions({
+async function setup(player: SetupPlayer): Promise<void> {
+  await player.setupPlayer({ autoHandleInterruptions: true });
+  await player.updateOptions({
     capabilities: [
       Capability.Play,
       Capability.Pause,

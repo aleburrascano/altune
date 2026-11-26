@@ -7,11 +7,11 @@ import {
   type ListRenderItemInfo,
   type PressableProps,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useNavigator } from '@shared/navigation';
 import { withFeaturing } from '@shared/catalog';
 import { usePlayback } from '@shared/playback';
 import { Text, Tappable, Skeleton, useReduceMotion, spacing, doubled } from '@shared/ui';
-import { useLyrics } from '@features/player/hooks/useLyrics';
+import { useLyrics } from '@features/player/view/useLyrics';
 import { activeLineIndex, _lyricsView } from '@features/player/domain/lyricsSync';
 import {
   SheetHeader,
@@ -25,7 +25,7 @@ const SCROLL_LEAD_PX = 140;
 type SyncedLine = NonNullable<ReturnType<typeof useLyrics>['data']>['synced_lines'][number];
 
 export function LyricsSheet(): ReactElement {
-  const router = useRouter();
+  const navigator = useNavigator();
   const reduceMotion = useReduceMotion();
   const { track, positionMs, seekTo } = usePlayback();
 
@@ -61,7 +61,7 @@ export function LyricsSheet(): ReactElement {
 
   return (
     <SheetScreen testID="lyrics-sheet">
-      <SheetHeader onClose={() => router.back()} closeLabel="Close lyrics">
+      <SheetHeader onClose={() => navigator.back()} closeLabel="Close lyrics">
         <SheetHeaderCenter>
           <Text variant="title" numberOfLines={1}>
             {track?.title ?? 'Lyrics'}

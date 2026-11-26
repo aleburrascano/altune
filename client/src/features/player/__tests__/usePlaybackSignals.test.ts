@@ -9,6 +9,7 @@ import type { PlaybackTrack } from '@shared/playback';
 
 import { usePlaybackSignals } from '@features/player';
 import { previewTrack } from '@features/player/__tests__/fixtures';
+import { withNativePlayback } from '@features/player/__tests__/withNativePlayback';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const EVENTS_ROUTE = 'POST /v1/discovery/events';
@@ -20,7 +21,11 @@ interface WrapperProps {
 
 function wrapper({ children }: WrapperProps) {
   const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
-  return React.createElement(QueryClientProvider, { client: queryClient }, children);
+  return React.createElement(
+    QueryClientProvider,
+    { client: queryClient },
+    withNativePlayback({ children }),
+  );
 }
 
 const { __player } = jest.requireMock('react-native-track-player');

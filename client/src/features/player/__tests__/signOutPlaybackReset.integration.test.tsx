@@ -1,15 +1,16 @@
 import React from 'react';
-import type { Session } from '@supabase/supabase-js';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-import * as FileSystem from 'expo-file-system';
 import TrackPlayer, { Event } from 'react-native-track-player';
 import { asTrackId } from '@shared/catalog';
-import { useSession, supabase } from '@shared/auth';
+import { installAuthClient, useSession } from '@shared/auth';
 import { useQueueStore, usePlayback } from '@shared/playback';
 import {
   prefetchNext,
+  NativePlaybackProvider,
   TrackPlayerPlaybackProvider,
+  trackPlayerPlayback,
   registerPlaybackService,
   playbackService,
   installPlaybackPort,
@@ -17,9 +18,9 @@ import {
 import { libraryTrack } from '@features/player/__tests__/fixtures';
 import { createMemoryPlaybackPort } from '@features/player/__tests__/memoryPlaybackPort';
 import { recordLogs, type RecordedLogs } from '@testing/fakes/log/inMemoryLogger';
+import { fileSystemDouble } from '@testing/fakes/files/expoFileSystemDouble';
+import { scriptedAuth, type ScriptedAuth } from '@testing/scriptedAuth';
 const { __player } = jest.requireMock('react-native-track-player');
-
-type AuthCallback = (event: string, session: Session | null) => void;
 
 const USER_A = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' } as Session['user'];
 const USER_B = { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' } as Session['user'];
@@ -37,16 +38,10 @@ function sessionFor(user: Session['user']): Session {
   } as Session;
 }
 
-let authCallbacks: AuthCallback[] = [];
+let auth: ScriptedAuth;
 
 async function bootSession(initial: Session | null) {
-  jest
-    .spyOn(supabase.auth, 'getSession')
-    .mockResolvedValue({ data: { session: initial }, error: null } as never);
-  jest.spyOn(supabase.auth, 'onAuthStateChange').mockImplementation(((cb: AuthCallback) => {
-    authCallbacks.push(cb);
-    return { data: { subscription: { unsubscribe: jest.fn() } } };
-  }) as never);
+  auth = scriptedAuth(installAuthClient, initial);
   const queryClient = new QueryClient();
   const hook = renderHook(() => useSession(), {
     wrapper: ({ children }: { children: React.ReactNode }) => (
@@ -57,10 +52,8 @@ async function bootSession(initial: Session | null) {
   return hook;
 }
 
-function emitAuth(event: string, session: Session | null): void {
-  act(() => {
-    authCallbacks.forEach((cb) => cb(event, session));
-  });
+function emitAuth(event: AuthChangeEvent, session: Session | null): void {
+  auth.emit(event, session);
 }
 
 function remoteHandler(event: string): (data?: unknown) => void {
@@ -78,8 +71,6 @@ async function flushNativeQueue(): Promise<void> {
 }
 
 beforeEach(() => {
-  authCallbacks = [];
-  jest.restoreAllMocks();
   act(() => {
     useQueueStore.getState().clearQueue();
   });
@@ -130,7 +121,9 @@ describe('sign-out resets the previous user playback (#827)', () => {
     const player = renderHook(() => usePlayback().track, {
       wrapper: ({ children }: { children: React.ReactNode }) => (
         <QueryClientProvider client={new QueryClient()}>
-          <TrackPlayerPlaybackProvider>{children}</TrackPlayerPlaybackProvider>
+          <NativePlaybackProvider port={trackPlayerPlayback}>
+            <TrackPlayerPlaybackProvider>{children}</TrackPlayerPlaybackProvider>
+          </NativePlaybackProvider>
         </QueryClientProvider>
       ),
     });
@@ -226,13 +219,7 @@ describe("A's prefetched audio leaves the device with A (#1722)", () => {
   const CACHE_DIR_URI = 'file:///cache/audio-prefetch';
   const NEXT_ID = 'trk-of-a-2';
 
-  const { __fs, File } = FileSystem as unknown as {
-    __fs: { seedFile(uri: string, contents: string): void; allFiles(): Record<string, string> };
-    File: {
-      new (uri: string): { uri: string };
-      downloadFileAsync: (url: string, dest: { uri: string }) => Promise<{ uri: string }>;
-    };
-  };
+  const __fs = fileSystemDouble;
 
   function cachedNames(): string[] {
     return Object.keys(__fs.allFiles())
@@ -303,11 +290,11 @@ describe("A's prefetched audio leaves the device with A (#1722)", () => {
     });
     const started = deferred();
     const finishes = deferred();
-    jest.spyOn(File, 'downloadFileAsync').mockImplementation(async (_url, dest) => {
+    __fs.scriptNextDownload(async (_url, dest) => {
       started.resolve();
       await finishes.promise;
       __fs.seedFile(dest.uri, "A's audio");
-      return new File(dest.uri);
+      return { uri: dest.uri };
     });
 
     const prefetch = prefetchNext(0);

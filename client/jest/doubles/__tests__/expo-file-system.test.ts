@@ -79,6 +79,52 @@ describe('filesystem double', () => {
     expect(dir.list()).toHaveLength(1);
   });
 
+  describe('scripted downloads', () => {
+    const URL = 'https://cdn.example/t1.mp3';
+
+    it('writes the downloaded marker by default and logs the call', async () => {
+      const dest = new File(Paths.cache, 't1.mp3');
+
+      await File.downloadFileAsync(URL, dest);
+
+      expect(__fs.readFile(dest.uri)).toBe(`downloaded:${URL}`);
+      expect(__fs.downloads()).toEqual([{ url: URL, uri: dest.uri }]);
+    });
+
+    it('runs a one-shot script for the next call only', async () => {
+      const dest = new File(Paths.cache, 't1.mp3');
+      __fs.scriptNextDownload(() => Promise.reject(new Error('scripted failure')));
+
+      await expect(File.downloadFileAsync(URL, dest)).rejects.toThrow('scripted failure');
+      await File.downloadFileAsync(URL, dest);
+
+      expect(dest.exists).toBe(true);
+    });
+
+    it('runs a persistent script until it is cleared, and hands over the default', async () => {
+      const dest = new File(Paths.cache, 't1.mp3');
+      __fs.scriptDownloads((url: string, target: File, options?: object) =>
+        __fs.completeDownload(`wrapped:${url}`, target, options),
+      );
+
+      await File.downloadFileAsync(URL, dest);
+      expect(__fs.readFile(dest.uri)).toBe(`downloaded:wrapped:${URL}`);
+
+      __fs.scriptDownloads(undefined);
+      await File.downloadFileAsync(URL, dest);
+      expect(__fs.readFile(dest.uri)).toBe(`downloaded:${URL}`);
+    });
+
+    it('forgets scripts and the call log on reset', async () => {
+      __fs.scriptDownloads(() => Promise.reject(new Error('left over')));
+      __fs.reset();
+
+      await File.downloadFileAsync(URL, new File(Paths.cache, 't1.mp3'));
+
+      expect(__fs.downloads()).toHaveLength(1);
+    });
+  });
+
   it('resets between tests', () => {
     expect(Object.keys(__fs.allFiles())).toHaveLength(0);
   });

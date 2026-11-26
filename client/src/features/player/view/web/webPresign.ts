@@ -1,4 +1,4 @@
-import { playbackPort } from '@features/player/shell/activePlaybackPort';
+import { playbackPort } from '@features/player/ports/activePlaybackPort';
 import {
   isPlayablePreviewUrl,
   orderedQueueTracks,
