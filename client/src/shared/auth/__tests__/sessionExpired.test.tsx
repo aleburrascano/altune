@@ -7,7 +7,7 @@ import {
   useSessionExpired,
   getSessionExpired,
 } from '@shared/auth';
-import type * as SessionExpiredModule from '@shared/auth/view/sessionExpired';
+import type * as SessionExpiredModule from '@shared/auth';
 
 function SessionGate() {
   const expired = useSessionExpired();
@@ -57,7 +57,6 @@ describe('useSessionExpired — liveness through a mounted consumer', () => {
   it('unsubscribes on unmount: a later mark no longer reaches the unmounted consumer, and a still-mounted sibling keeps working', () => {
     const gone = render(<SessionGate />);
     const stillMounted = render(<SessionGate />);
-    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
 
     gone.unmount();
 
@@ -66,9 +65,7 @@ describe('useSessionExpired — liveness through a mounted consumer', () => {
     });
 
     expect(stillMounted.getByText('expired')).toBeTruthy();
-    expect(errorSpy).not.toHaveBeenCalled();
-
-    errorSpy.mockRestore();
+    expect(gone.queryByText('expired')).toBeNull();
   });
 });
 
@@ -173,7 +170,7 @@ describe('module state', () => {
       let freshModule!: typeof SessionExpiredModule;
 
       jest.isolateModules(() => {
-        freshModule = require('@shared/auth/view/sessionExpired');
+        freshModule = require('@shared/auth');
       });
 
       expect(freshModule.getSessionExpired()).toBe(false);

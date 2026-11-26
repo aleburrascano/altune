@@ -375,19 +375,36 @@ const uiFrameworkOnlyInView = {
   message: `Only view/ imports the UI framework. ${READ_THE_RULES}`,
 };
 
+const plainPartPatterns = [
+  uiFrameworkOnlyInView,
+  {
+    regex: importsNoneOf([...PROJECT_IMPORTS, ...UI_PACKAGES, ...PURE_PACKAGES]),
+    message: `core/, shell/ and ports/ import no package but ${PURE_PACKAGES.join(' and ')}: I/O belongs in adapters/. ${READ_THE_RULES}`,
+  },
+];
+
 const plainPartsImportOnlyPurePackages = {
   name: 'plainPartsImportOnlyPurePackages',
   files: ['core', 'shell', 'ports'].flatMap(partFiles),
+  ignores: TEST_FILES,
+  rules: {
+    'no-restricted-imports': ['error', { patterns: plainPartPatterns }],
+  },
+};
+
+const coreNeverImportsView = {
+  name: 'coreNeverImportsView',
+  files: partFiles('core'),
   ignores: TEST_FILES,
   rules: {
     'no-restricted-imports': [
       'error',
       {
         patterns: [
-          uiFrameworkOnlyInView,
+          ...plainPartPatterns,
           {
-            regex: importsNoneOf([...PROJECT_IMPORTS, ...UI_PACKAGES, ...PURE_PACKAGES]),
-            message: `core/, shell/ and ports/ import no package but ${PURE_PACKAGES.join(' and ')}: I/O belongs in adapters/. ${READ_THE_RULES}`,
+            regex: '^(?:(?:@features|@shared)/[^/]+|\\.{1,2}(?:/.*)?)/view(?:/|$)',
+            message: `core/ never imports view/: it is plain logic with no React. Move what core needs out of view/ into core/, and let view/ import it. ${READ_THE_RULES}`,
           },
         ],
       },
@@ -541,6 +558,7 @@ module.exports = [
   noRawStyleNumbers,
   noTestCodeInApp,
   plainPartsImportOnlyPurePackages,
+  coreNeverImportsView,
   viewImportsOnlyTheUiFramework,
   adaptersDrawNothing,
   jsxOnlyInView,
