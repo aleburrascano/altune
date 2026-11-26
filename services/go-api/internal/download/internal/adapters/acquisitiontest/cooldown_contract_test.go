@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/ids"
+	"errors"
 	"testing"
 	"time"
 )
@@ -22,4 +23,12 @@ func TestCooldownStore_KeepsTheCooldownContract(t *testing.T) {
 		manual := clocktest.NewManual(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
 		return trackedCooldowns{CooldownStore: acquisitiontest.MustNewCooldownStore(manual.Func()), clock: manual}
 	})
+}
+
+func TestNewCooldownStore_RefusesAMissingClock(t *testing.T) {
+	store, err := acquisitiontest.NewCooldownStore(nil)
+
+	if store != nil || !errors.Is(err, acquisitiontest.ErrCooldownClockRequired) {
+		t.Fatalf("got (%v, %v), want no store and ErrCooldownClockRequired", store, err)
+	}
 }

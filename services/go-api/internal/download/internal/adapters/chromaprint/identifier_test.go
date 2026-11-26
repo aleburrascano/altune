@@ -2,6 +2,7 @@ package chromaprint_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/shared/retrysafe"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -60,6 +61,28 @@ func TestNewIdentifier_SendsLookupsThroughTheClientItWasGiven(t *testing.T) {
 
 	if through != 1 {
 		t.Errorf("requests through the supplied client = %d, want 1", through)
+	}
+}
+
+func TestIdentify_MarksTheLookupPostRetrySafeSoTheTransportMayRetryIt(t *testing.T) {
+	srv := lookupServerServing(`{"status":"ok","results":[]}`)
+	defer srv.Close()
+	var marked bool
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		marked = retrysafe.Marked(r.Context())
+		return http.DefaultTransport.RoundTrip(r)
+	})}
+	id, err := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key", client)
+	if err != nil {
+		t.Fatalf("NewChromaprintIdentifier: %v", err)
+	}
+
+	if _, err := id.WithEndpoint(srv.URL).Identify(context.Background(), "/tmp/full.mp3", 0); err != nil {
+		t.Fatalf("Identify: %v", err)
+	}
+
+	if !marked {
+		t.Error("the lookup POST was not marked retry-safe, so the transport would never retry a throttled answer")
 	}
 }
 

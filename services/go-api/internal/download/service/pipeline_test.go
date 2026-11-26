@@ -615,43 +615,70 @@ func TestRunPipeline_APanicInsideTheShadowJudgeIsLoggedAndTheRunStillSucceeds(t 
 	}
 }
 
+func withSpareCapacity[T any](values ...T) []T {
+	out := make([]T, len(values), len(values)+4)
+	copy(out, values)
+	return out
+}
+
 func TestAcquisitionContext_ASnapshotSharesNoSliceOrPointerWithTheOriginal(t *testing.T) {
-	spare := func(values ...string) []string {
-		out := make([]string, len(values), len(values)+4)
-		copy(out, values)
-		return out
-	}
+	delta := 1.5
 	original := &service.AcquisitionContext{
-		Identity:   ports.RecordingIdentity{MBIDs: spare("mb-1", "mb-2")},
-		Candidates: append(make([]ports.AudioCandidate, 0, 4), ports.AudioCandidate{URL: "https://example.test/a"}),
-		Ranked:     append(make([]ports.AudioCandidate, 0, 4), ports.AudioCandidate{URL: "https://example.test/b"}),
-		Selected:   &ports.AudioCandidate{URL: "https://example.test/c"},
-		Attempted:  append(make([]service.AttemptedCandidate, 0, 4), service.AttemptedCandidate{URL: "https://example.test/d", Window: 1}),
+		Track:           service.TrackRef{CatalogSources: withSpareCapacity(ports.CatalogSource{ExternalID: "catalog"})},
+		Identity:        ports.RecordingIdentity{MBIDs: withSpareCapacity("mb-1", "mb-2"), Sources: withSpareCapacity(ports.ProviderRef{ExternalID: "ref"})},
+		Candidates:      withSpareCapacity(ports.AudioCandidate{URL: "https://example.test/a"}),
+		Ranked:          withSpareCapacity(ports.AudioCandidate{URL: "https://example.test/b"}),
+		Selected:        &ports.AudioCandidate{URL: "https://example.test/c"},
+		Attempted:       withSpareCapacity(service.AttemptedCandidate{URL: "https://example.test/d", Window: 1}),
+		Evidence:        service.Evidence{Qualifiers: withSpareCapacity("live"), DurationDeltaSeconds: &delta},
+		Rejections:      withSpareCapacity(rejectedcandidates.Entry{URL: "https://example.test/e"}),
+		Replace:         service.ReplaceState{ExcludeKeys: withSpareCapacity("key-1")},
+		PriorRejections: withSpareCapacity(ports.PriorRejection{SourceKey: "prior"}),
+		Relabel:         &ports.TrackLabel{Title: "relabel"},
 	}
 
 	pass := original.Snapshot()
+	pass.Track.CatalogSources[0].ExternalID = "changed"
+	pass.Track.CatalogSources = append(pass.Track.CatalogSources, ports.CatalogSource{})
 	pass.Identity.MBIDs[0] = "changed"
 	pass.Identity.MBIDs = append(pass.Identity.MBIDs, "extra")
+	pass.Identity.Sources[0].ExternalID = "changed"
+	pass.Identity.Sources = append(pass.Identity.Sources, ports.ProviderRef{})
 	pass.Candidates[0].URL = "changed"
 	pass.Candidates = append(pass.Candidates, ports.AudioCandidate{URL: "extra"})
 	pass.Ranked[0].URL = "changed"
 	pass.Selected.URL = "changed"
 	pass.Attempted[0].Window = 99
 	pass.Attempted = append(pass.Attempted, service.AttemptedCandidate{URL: "extra"})
+	pass.Evidence.Qualifiers[0] = "changed"
+	pass.Evidence.Qualifiers = append(pass.Evidence.Qualifiers, "extra")
+	*pass.Evidence.DurationDeltaSeconds = 99
+	pass.Rejections[0].URL = "changed"
+	pass.Rejections = append(pass.Rejections, rejectedcandidates.Entry{URL: "extra"})
+	pass.Replace.ExcludeKeys[0] = "changed"
+	pass.Replace.ExcludeKeys = append(pass.Replace.ExcludeKeys, "extra")
+	pass.PriorRejections[0].SourceKey = "changed"
+	pass.PriorRejections = append(pass.PriorRejections, ports.PriorRejection{})
+	pass.Relabel.Title = "changed"
 
-	if !slices.Equal(original.Identity.MBIDs, []string{"mb-1", "mb-2"}) {
-		t.Errorf("MBIDs = %v, want the original untouched", original.Identity.MBIDs)
+	checks := map[string]bool{
+		"Track.CatalogSources":          len(original.Track.CatalogSources) == 1 && original.Track.CatalogSources[0].ExternalID == "catalog",
+		"Identity.MBIDs":                slices.Equal(original.Identity.MBIDs, []string{"mb-1", "mb-2"}),
+		"Identity.Sources":              len(original.Identity.Sources) == 1 && original.Identity.Sources[0].ExternalID == "ref",
+		"Candidates":                    len(original.Candidates) == 1 && original.Candidates[0].URL == "https://example.test/a",
+		"Ranked":                        original.Ranked[0].URL == "https://example.test/b",
+		"Selected":                      original.Selected.URL == "https://example.test/c",
+		"Attempted":                     len(original.Attempted) == 1 && original.Attempted[0].Window == 1,
+		"Evidence.Qualifiers":           slices.Equal(original.Evidence.Qualifiers, []string{"live"}),
+		"Evidence.DurationDeltaSeconds": *original.Evidence.DurationDeltaSeconds == 1.5,
+		"Rejections":                    len(original.Rejections) == 1 && original.Rejections[0].URL == "https://example.test/e",
+		"Replace.ExcludeKeys":           slices.Equal(original.Replace.ExcludeKeys, []string{"key-1"}),
+		"PriorRejections":               len(original.PriorRejections) == 1 && original.PriorRejections[0].SourceKey == "prior",
+		"Relabel":                       original.Relabel.Title == "relabel",
 	}
-	if len(original.Candidates) != 1 || original.Candidates[0].URL != "https://example.test/a" {
-		t.Errorf("Candidates = %+v, want the original untouched", original.Candidates)
-	}
-	if original.Ranked[0].URL != "https://example.test/b" {
-		t.Errorf("Ranked = %+v, want the original untouched", original.Ranked)
-	}
-	if original.Selected.URL != "https://example.test/c" {
-		t.Errorf("Selected = %+v, want the original untouched", original.Selected)
-	}
-	if len(original.Attempted) != 1 || original.Attempted[0].Window != 1 {
-		t.Errorf("Attempted = %+v, want the original untouched", original.Attempted)
+	for field, untouched := range checks {
+		if !untouched {
+			t.Errorf("%s was changed through the snapshot, want the original untouched", field)
+		}
 	}
 }
