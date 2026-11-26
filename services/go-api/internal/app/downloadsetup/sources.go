@@ -2,6 +2,7 @@ package downloadsetup
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/youtubemusicapi"
 	"context"
@@ -51,7 +52,7 @@ func budgetedYTMSearchClient(ctx context.Context, cfg *config.Config, redis *gor
 
 func innerTubeClient(ctx context.Context, cfg *config.Config, redis *goredis.Client) *http.Client {
 	settings := youtubemusicapi.Settings{MinInterval: cfg.YtmInnerTubeMinInterval, Cooldown: cfg.YtmInnerTubeCooldown}
-	budget, err := youtubemusicapi.NewBudget(redis, settings)
+	budget, err := youtubemusicapi.NewBudget(redis, settings, clock.Sleep)
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition: no shared InnerTube budget without redis, pacing in-process only")
 		return &http.Client{Timeout: ytmSearchTimeout}

@@ -1,6 +1,7 @@
 package youtubemusicapi_test
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/youtubemusicapi"
 	"context"
 	"errors"
@@ -26,7 +27,7 @@ func budgetOn(t *testing.T, server *miniredis.Miniredis, settings youtubemusicap
 	t.Helper()
 	client := goredis.NewClient(&goredis.Options{Addr: server.Addr()})
 	t.Cleanup(func() { _ = client.Close() })
-	budget, err := youtubemusicapi.NewBudget(client, settings)
+	budget, err := youtubemusicapi.NewBudget(client, settings, clock.Sleep)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,8 +168,46 @@ func TestToolClient_PacesThroughTheSharedBucket(t *testing.T) {
 }
 
 func TestNewBudget_NeedsARedisClient(t *testing.T) {
-	if _, err := youtubemusicapi.NewBudget(nil, youtubemusicapi.Settings{}); err == nil {
+	if _, err := youtubemusicapi.NewBudget(nil, youtubemusicapi.Settings{}, clock.Sleep); err == nil {
 		t.Fatal("expected an error for a nil client")
+	}
+}
+
+func TestNewBudget_RefusesANilSleeper(t *testing.T) {
+	client := goredis.NewClient(&goredis.Options{Addr: miniredis.RunT(t).Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+
+	budget, err := youtubemusicapi.NewBudget(client, youtubemusicapi.Settings{}, nil)
+
+	if !errors.Is(err, youtubemusicapi.ErrSleeperRequired) || budget != nil {
+		t.Fatalf("NewBudget(nil sleeper) = (%v, %v), want ErrSleeperRequired and no budget", budget, err)
+	}
+	if !strings.Contains(err.Error(), "NewBudget") {
+		t.Fatalf("error %q does not name the constructor", err)
+	}
+}
+
+func TestBudget_WaitsThroughTheSleeperItWasGiven(t *testing.T) {
+	server := miniredis.RunT(t)
+	client := goredis.NewClient(&goredis.Options{Addr: server.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	var asked []time.Duration
+	budget, err := youtubemusicapi.NewBudget(client, youtubemusicapi.Settings{MinInterval: time.Hour}, func(_ context.Context, d time.Duration) error {
+		asked = append(asked, d)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for range 2 {
+		if err := budget.Wait(t.Context()); err != nil {
+			t.Fatalf("Wait: %v", err)
+		}
+	}
+
+	if len(asked) != 2 || asked[0] != 0 || asked[1] <= 0 {
+		t.Fatalf("the sleeper was asked for %v, want a zero wait then a positive one", asked)
 	}
 }
 
