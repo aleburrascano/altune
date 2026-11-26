@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/shared/breaker"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -40,7 +41,7 @@ func (r *recorder) kinds() []breaker.Kind {
 func newBreaker() (*breaker.Breaker, *clocktest.Manual, *recorder) {
 	clk := clocktest.NewManual(time.Unix(1_700_000_000, 0))
 	rec := &recorder{}
-	b := breaker.New(breaker.Config{Threshold: threshold, OpenFor: openFor, ProbeLease: lease, Now: clk.Now, OnChange: rec.record})
+	b := breaker.MustNew(breaker.Config{Threshold: threshold, OpenFor: openFor, ProbeLease: lease, Now: clk.Now, OnChange: rec.record})
 	return b, clk, rec
 }
 
@@ -338,7 +339,7 @@ func TestBreaker_AFailureFromAProbeThatLostItsLeaseStillReopens(t *testing.T) {
 }
 
 func TestBreaker_AThresholdBelowOneCountsAsOne(t *testing.T) {
-	b := breaker.New(breaker.Config{Threshold: 0, OpenFor: openFor, ProbeLease: lease})
+	b := breaker.MustNew(breaker.Config{Threshold: 0, OpenFor: openFor, ProbeLease: lease, Now: time.Now})
 
 	b.Failure(context.Background(), breaker.Admission{})
 
@@ -347,12 +348,11 @@ func TestBreaker_AThresholdBelowOneCountsAsOne(t *testing.T) {
 	}
 }
 
-func TestBreaker_TheZeroClockIsTheWallClock(t *testing.T) {
-	b := breaker.New(breaker.Config{Threshold: 1, OpenFor: time.Hour, ProbeLease: time.Hour})
-	b.Failure(context.Background(), breaker.Admission{})
+func TestNew_RefusesAConfigWithoutAClock(t *testing.T) {
+	b, err := breaker.New(breaker.Config{Threshold: 1, OpenFor: time.Hour, ProbeLease: time.Hour})
 
-	if _, ok := b.Allow(context.Background()); ok {
-		t.Error("a breaker without a clock admitted a caller inside its open window")
+	if !errors.Is(err, breaker.ErrClockRequired) || b != nil {
+		t.Fatalf("New(no clock) = (%v, %v), want ErrClockRequired and no breaker", b, err)
 	}
 }
 

@@ -20,7 +20,7 @@ type enrichmentBreaker struct {
 }
 
 func newEnrichmentBreaker(metrics ports.EnrichmentMetrics, now clock.Func) *enrichmentBreaker {
-	return &enrichmentBreaker{b: breaker.New(breaker.Config{
+	return &enrichmentBreaker{b: breaker.MustNew(breaker.Config{
 		Threshold:  enrichmentFailureThreshold,
 		OpenFor:    enrichmentOpenDuration,
 		ProbeLease: enrichmentProbeLease,

@@ -5,7 +5,9 @@ import middleware "altune/go-api/internal/platform/auth/internal/adapters/middle
 type FailureLimits = middleware.FailureLimits
 
 var (
-	Middleware        = middleware.Middleware
-	WithFailureLimits = middleware.WithFailureLimits
-	WithMetrics       = middleware.WithMetrics
+	ErrMiddlewareClockRequired = middleware.ErrClockRequired
+	Middleware                 = middleware.Middleware
+	MustMiddleware             = middleware.MustMiddleware
+	WithFailureLimits          = middleware.WithFailureLimits
+	WithMetrics                = middleware.WithMetrics
 )

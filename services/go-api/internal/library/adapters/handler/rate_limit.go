@@ -32,5 +32,5 @@ func newWriteRateLimiter(limit httpserver.RateLimit, now clock.Func) rateLimitMi
 }
 
 func newUserRateLimiter(limit httpserver.RateLimit, now clock.Func, refused error) rateLimitMiddleware {
-	return httpserver.NewUserRateLimiter(limit, now).Middleware(httpserver.UserKey(requestuser.UserIDFromContext), refused, nil)
+	return httpserver.MustNewUserRateLimiter(limit, now).Middleware(httpserver.UserKey(requestuser.UserIDFromContext), refused, nil)
 }

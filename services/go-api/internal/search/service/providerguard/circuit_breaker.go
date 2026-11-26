@@ -74,7 +74,7 @@ func (cb *CircuitBreaker) circuit(provider domain.ProviderName) *breaker.Breaker
 
 	b, ok := cb.circuits[provider]
 	if !ok {
-		b = breaker.New(breaker.Config{
+		b = breaker.MustNew(breaker.Config{
 			Threshold:  FailureThreshold,
 			OpenFor:    OpenDuration,
 			ProbeLease: probeLease,

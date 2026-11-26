@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
+	"errors"
 	"net/http"
 	"sync"
 	"time"
@@ -34,19 +35,29 @@ type UserRateLimiter struct {
 	rotatedAt time.Time
 }
 
-func NewUserRateLimiter(limit RateLimit, now clock.Func) *UserRateLimiter {
+var ErrClockRequired = errors.New("httpserver: the rate limiter requires a clock")
+
+func NewUserRateLimiter(limit RateLimit, now clock.Func) (*UserRateLimiter, error) {
+	if now == nil {
+		return nil, ErrClockRequired
+	}
 	if limit.Burst < 1 {
 		limit.Burst = 1
-	}
-	if now == nil {
-		now = time.Now
 	}
 	return &UserRateLimiter{
 		limit:   limit,
 		now:     now,
 		active:  make(map[string]*rate.Limiter),
 		cooling: make(map[string]*rate.Limiter),
+	}, nil
+}
+
+func MustNewUserRateLimiter(limit RateLimit, now clock.Func) *UserRateLimiter {
+	l, err := NewUserRateLimiter(limit, now)
+	if err != nil {
+		panic(err)
 	}
+	return l
 }
 
 func (l *UserRateLimiter) idleTTL() time.Duration {

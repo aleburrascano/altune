@@ -21,5 +21,5 @@ func newAuthVerifier(ctx context.Context, cfg *config.Config) (*auth.SupabaseJWT
 }
 
 func authMiddleware(verifier auth.TokenVerifier) func(http.Handler) http.Handler {
-	return auth.Middleware(verifier, auth.WithMetrics(auth.NewExpvarAuthMetrics()))
+	return auth.MustMiddleware(verifier, time.Now, auth.WithMetrics(auth.NewExpvarAuthMetrics()))
 }

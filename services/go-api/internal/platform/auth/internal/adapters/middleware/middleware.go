@@ -3,6 +3,7 @@ package middleware
 import (
 	"altune/go-api/internal/platform/auth/internal/core/ports"
 	"altune/go-api/internal/shared/apierror"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
@@ -15,12 +16,25 @@ import (
 	"time"
 )
 
-func Middleware(verifier ports.TokenVerifier, opts ...MiddlewareOption) func(http.Handler) http.Handler {
-	cfg := middlewareConfig{metrics: ports.NoopAuthMetrics(), limits: DefaultFailureLimits, now: time.Now}
+var ErrClockRequired = errors.New("middleware: the auth middleware requires a clock")
+
+func Middleware(verifier ports.TokenVerifier, now clock.Func, opts ...MiddlewareOption) (func(http.Handler) http.Handler, error) {
+	if now == nil {
+		return nil, ErrClockRequired
+	}
+	cfg := middlewareConfig{metrics: ports.NoopAuthMetrics(), limits: DefaultFailureLimits}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	return middleware(verifier, newFailureThrottle(cfg.limits, cfg.now), cfg.metrics)
+	return middleware(verifier, newFailureThrottle(cfg.limits, now), cfg.metrics), nil
+}
+
+func MustMiddleware(verifier ports.TokenVerifier, now clock.Func, opts ...MiddlewareOption) func(http.Handler) http.Handler {
+	mw, err := Middleware(verifier, now, opts...)
+	if err != nil {
+		panic(err)
+	}
+	return mw
 }
 
 type MiddlewareOption func(*middlewareConfig)
@@ -28,15 +42,11 @@ type MiddlewareOption func(*middlewareConfig)
 type middlewareConfig struct {
 	metrics ports.AuthMetrics
 	limits  FailureLimits
-	now     func() time.Time
 }
 
-func WithFailureLimits(limits FailureLimits, now func() time.Time) MiddlewareOption {
+func WithFailureLimits(limits FailureLimits) MiddlewareOption {
 	return func(c *middlewareConfig) {
 		c.limits = limits.orDefaults()
-		if now != nil {
-			c.now = now
-		}
 	}
 }
 
