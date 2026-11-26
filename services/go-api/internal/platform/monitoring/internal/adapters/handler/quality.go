@@ -2,7 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/platform/monitoring/internal/core/ports"
-	shareddomain "altune/go-api/internal/shared/apierror"
+	"altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/httpserver"
 	"context"
 	"net/http"
@@ -81,7 +81,7 @@ func parseWindowDays(raw string) (int, error) {
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil || n <= 0 {
-		return 0, shareddomain.NewError(shareddomain.CodeObserveInvalidWindowDays, "window_days must be a positive integer")
+		return 0, apierror.NewError(apierror.CodeObserveInvalidWindowDays, "window_days must be a positive integer")
 	}
 	return min(n, maxQualityWindowDays), nil
 }

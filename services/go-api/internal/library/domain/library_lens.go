@@ -1,7 +1,7 @@
 package domain
 
 import (
-	shareddomain "altune/go-api/internal/shared/apierror"
+	"altune/go-api/internal/shared/apierror"
 	"strings"
 	"time"
 )
@@ -40,7 +40,7 @@ const MaxLibraryPageSize = 2000
 
 const MaxTracksPerUser = 50_000
 
-var ErrLibraryFull = shareddomain.NewError(shareddomain.CodeCatalogLibraryFull, "library is full")
+var ErrLibraryFull = apierror.NewError(apierror.CodeCatalogLibraryFull, "library is full")
 
 const MaxLibrarySearchLength = maxTrackTextLength
 

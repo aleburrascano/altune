@@ -74,6 +74,8 @@ func newJWKSFixture(t *testing.T) jwksFixture {
 		SupabaseJWTAud:        "authenticated",
 		OverseerPrincipalID:   operator.String(),
 		BackgroundMaxInFlight: 64,
+
+		PlaybackNowPlayingLookupTimeout: 3 * time.Second,
 	}}
 }
 
