@@ -2,6 +2,7 @@ package providers
 
 import (
 	"altune/go-api/internal/shared/backoff"
+	"altune/go-api/internal/shared/random"
 	"context"
 	"errors"
 	"fmt"
@@ -30,6 +31,7 @@ var ErrJWKSRefreshBackoff = errors.New("JWKS refresh backing off after failure")
 type jwksRefresher struct {
 	fetch        func(context.Context) error
 	now          func() time.Time
+	jitter       random.Unit
 	fetchTimeout time.Duration
 
 	mu          sync.Mutex
@@ -50,8 +52,8 @@ type jwksRefreshCall struct {
 	err  error
 }
 
-func newJWKSRefresher(fetch func(context.Context) error, now func() time.Time, fetchTimeout time.Duration) *jwksRefresher {
-	return &jwksRefresher{fetch: fetch, now: now, fetchTimeout: fetchTimeout}
+func newJWKSRefresher(fetch func(context.Context) error, now func() time.Time, jitter random.Unit, fetchTimeout time.Duration) *jwksRefresher {
+	return &jwksRefresher{fetch: fetch, now: now, jitter: jitter, fetchTimeout: fetchTimeout}
 }
 
 func (r *jwksRefresher) Refresh(ctx context.Context) error {
@@ -112,7 +114,7 @@ func (r *jwksRefresher) settle(call *jwksRefreshCall) {
 	}
 	r.failures++
 	r.lastErr = call.err
-	r.notBefore = r.now().Add(jwksRefreshBackoff.Delay(r.failures))
+	r.notBefore = r.now().Add(jwksRefreshBackoff.DelayAt(r.failures, r.jitter()))
 }
 
 func (r *jwksRefresher) recordKeySet() {

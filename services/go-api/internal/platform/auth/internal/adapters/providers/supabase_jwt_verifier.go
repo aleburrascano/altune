@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/platform/auth/internal/core/ports"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/random"
 	"context"
 	"errors"
 	"fmt"
@@ -77,12 +78,16 @@ func (s JWKSSchedule) orDefaults() JWKSSchedule {
 	return s
 }
 
-var ErrJWKSClockRequired = errors.New("providers: the JWT verifier requires a clock")
+var (
+	ErrJWKSClockRequired  = errors.New("providers: the JWT verifier requires a clock")
+	ErrJWKSJitterRequired = errors.New("providers: the JWT verifier requires a jitter source")
+)
 
 func NewSupabaseJWTVerifier(
 	ctx context.Context,
 	jwksURL, projectURL, audience string,
 	now clock.Func,
+	jitter random.Unit,
 	metrics ports.AuthMetrics,
 	revoker ports.TokenRevoker,
 	schedule JWKSSchedule,
@@ -90,13 +95,16 @@ func NewSupabaseJWTVerifier(
 	if now == nil {
 		return nil, ErrJWKSClockRequired
 	}
+	if jitter == nil {
+		return nil, fmt.Errorf("NewSupabaseJWTVerifier: %w", ErrJWKSJitterRequired)
+	}
 	if metrics == nil || revoker == nil {
 		panic("providers: NewSupabaseJWTVerifier requires metrics and a token revoker")
 	}
 	if err := requireSecureJWKSURL(jwksURL); err != nil {
 		return nil, err
 	}
-	v := newSupabaseJWTVerifier(jwksURL, projectURL, audience, now, metrics, revoker, schedule.orDefaults())
+	v := newSupabaseJWTVerifier(jwksURL, projectURL, audience, now, jitter, metrics, revoker, schedule.orDefaults())
 	if err := v.registerJWKS(ctx); err != nil {
 		return nil, err
 	}
@@ -107,6 +115,7 @@ func NewSupabaseJWTVerifier(
 func newSupabaseJWTVerifier(
 	jwksURL, projectURL, audience string,
 	now clock.Func,
+	jitter random.Unit,
 	metrics ports.AuthMetrics,
 	revoker ports.TokenRevoker,
 	schedule JWKSSchedule,
@@ -124,7 +133,7 @@ func newSupabaseJWTVerifier(
 			refreshWindow:   schedule.RefreshWindow,
 		},
 	}
-	v.refresher = newJWKSRefresher(v.forceRefresh, v.schedule.now, v.schedule.fetchTimeout)
+	v.refresher = newJWKSRefresher(v.forceRefresh, v.schedule.now, jitter, v.schedule.fetchTimeout)
 	return v
 }
 

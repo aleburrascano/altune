@@ -3,6 +3,7 @@ package app
 import (
 	"altune/go-api/internal/platform/auth"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/random"
 	"context"
 	"net/http"
 	"time"
@@ -14,7 +15,7 @@ func newAuthVerifier(ctx context.Context, cfg *config.Config) (*auth.SupabaseJWT
 		cfg.SupabaseJWTJWKSURL,
 		cfg.SupabaseProjectURL,
 		cfg.SupabaseJWTAud,
-		time.Now,
+		time.Now, random.Real,
 		auth.NewExpvarAuthMetrics(),
 		auth.NoopTokenRevoker(),
 		auth.DefaultJWKSSchedule(),
