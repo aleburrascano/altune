@@ -16,14 +16,7 @@ import (
 )
 
 type (
-	ClientEventSink                  = handler.ClientEventSink
-	Enricher                         = handler.Enricher
 	ContentFetchResponseDTO          = handler.ContentFetchResponseDTO
-	NoClientEvents                   = handler.NoClientEvents
-	NoOwnership                      = handler.NoOwnership
-	NoUnreleased                     = handler.NoUnreleased
-	OwnershipStamper                 = handler.OwnershipStamper
-	UnconfiguredEnrichment           = handler.UnconfiguredEnrichment
 	Contributor                      = domain.Contributor
 	DeezerEnrichment                 = domain.DeezerEnrichment
 	DeezerEnrichmentResponseDTO      = handler.DeezerEnrichmentResponseDTO

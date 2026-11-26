@@ -7,11 +7,9 @@ import (
 	content "altune/go-api/internal/search/service/artistpage"
 	providercall "altune/go-api/internal/search/service/providerguard"
 	unreleased "altune/go-api/internal/search/service/unreleased"
-	useractivity "altune/go-api/internal/search/service/useractivity"
 )
 
 type (
-	NoActivityFeed               = useractivity.NoopActivityFeed
 	ArtistCatalogTitles          = memory.ArtistCatalogTitles
 	CountingAlbumTracksProvider  = memory.CountingAlbumTracksProvider
 	CountingProvider             = memory.CountingProvider
