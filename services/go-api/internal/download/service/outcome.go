@@ -72,9 +72,9 @@ func (o outcomeReporter) reportReplaceFailure(ctx context.Context, userId ids.Us
 	reason := rejectionAwareReason(ctx, trackId, err, ac)
 	settleCtx, cancel := settleContext(ctx)
 	defer cancel()
-	o.events.Publish(settleCtx, userId, events.TypeTrackReplaceFailed, map[string]any{
-		"track_id": trackId.String(),
-		"reason":   reason,
+	o.events.Publish(settleCtx, userId, events.TrackReplaceFailed{
+		TrackID: trackId.String(),
+		Reason:  reason,
 	})
 	return err
 }
@@ -110,9 +110,9 @@ func (o outcomeReporter) reportAcquireFailure(ctx context.Context, userId ids.Us
 	if persistErr := o.failTrack(settleCtx, trackId, userId, reason); errors.Is(persistErr, acqdomain.ErrLeaseLost) {
 		return errors.Join(err, persistErr)
 	}
-	o.events.Publish(settleCtx, userId, events.TypeTrackAcquisitionFailed, map[string]any{
-		"track_id": trackId.String(),
-		"reason":   reason,
+	o.events.Publish(settleCtx, userId, events.TrackAcquisitionFailed{
+		TrackID: trackId.String(),
+		Reason:  reason,
 	})
 	return err
 }
@@ -133,9 +133,9 @@ func (o outcomeReporter) completed(ctx context.Context, userId ids.UserId, track
 		"user_id", userId.String(),
 		"audio_ref", audioRef,
 	)
-	o.events.Publish(ctx, userId, events.TypeTrackAcquisitionCompleted, map[string]any{
-		"track_id":  trackId.String(),
-		"audio_ref": audioRef,
+	o.events.Publish(ctx, userId, events.TrackAcquisitionCompleted{
+		TrackID:  trackId.String(),
+		AudioRef: audioRef,
 	})
 }
 
@@ -169,8 +169,8 @@ func (o outcomeReporter) refuseQueued(ctx context.Context, userId ids.UserId, tr
 	if !o.markFailed(settleCtx, trackId, userId, string(downloadfailure.FailureAcquisitionRefused)) {
 		return
 	}
-	o.events.Publish(settleCtx, userId, events.TypeTrackAcquisitionFailed, map[string]any{
-		"track_id": trackId.String(),
-		"reason":   string(downloadfailure.FailureAcquisitionRefused),
+	o.events.Publish(settleCtx, userId, events.TrackAcquisitionFailed{
+		TrackID: trackId.String(),
+		Reason:  string(downloadfailure.FailureAcquisitionRefused),
 	})
 }
