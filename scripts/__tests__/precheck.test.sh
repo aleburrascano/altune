@@ -948,6 +948,38 @@ expect_rc 1
 expect_out "FAIL  go-api vet"
 expect_log "vet altune/go-api/internal/search/adapters/x"
 
+CASE="--lint on a merge commit of main into a go-api branch checks what the branch changes, not what main brought in"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p services/overseer client/src
+    printf 'module altune/overseer\n\ngo %s\n' "$GO_VERSION" >services/overseer/go.mod
+    printf 'package main\n\nfunc main() {}\n' >services/overseer/main.go
+    printf 'export const x = 1;\n' >client/src/x.ts
+)
+commit_as_base
+(
+    cd "$WORK/repo" || exit 1
+    git checkout -qb feature
+    printf '\nvar edited = 1\n' >>services/go-api/internal/shared/s/s.go
+    git add -A
+    git commit -qm "branch edit"
+    git checkout -q main
+    printf '\nvar edited = 1\n' >>services/overseer/main.go
+    printf 'export const y = 2;\n' >>client/src/x.ts
+    git add -A
+    git commit -qm "main moved on"
+    git update-ref refs/remotes/gitea/main HEAD
+    git checkout -q feature
+    git merge --no-commit --no-ff main >/dev/null 2>&1
+)
+run_with_tools --lint
+expect_rc 0
+expect_out "go-api"
+forbid_out "overseer"
+forbid_out "mobile"
+
 CASE="an overseer change skips its govulncheck unless go.mod or go.sum changed"
 new_repo
 add_go_fixture
