@@ -207,7 +207,7 @@ func (s *evalSource) Fetch(ctx context.Context, c ports.AudioCandidate, outDir s
 	return evalFetcher{shared: s.shared}.Download(ctx, c.URL, outDir)
 }
 
-func (p *casePorts) Download(_ context.Context, url string, outDir string) (string, error) {
+func (p *casePorts) Download(_ context.Context, url, outDir string) (string, error) {
 	cand, ok := p.kase.candidateByURL(url)
 	if !ok {
 		return "", fmt.Errorf("eval: no golden candidate for url %q", url)
@@ -282,7 +282,7 @@ func (c copiedIdentity) Resolve(context.Context, ports.RecordingQuery) (ports.Re
 
 func (p *casePorts) Exists(_ context.Context, _ string) (bool, error) { return false, nil }
 
-func (p *casePorts) Store(_ context.Context, _ string, audioRef string) error {
+func (p *casePorts) Store(_ context.Context, _, audioRef string) error {
 	p.storedRefs = append(p.storedRefs, audioRef)
 	return nil
 }

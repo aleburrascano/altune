@@ -738,7 +738,7 @@ func TestAcquire_StaleFailureDoesNotOverwriteReadyTrack(t *testing.T) {
 	track := seedTrackInRepo(t, ledger, userId, readyWith("u/a/b/good.opus"))
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
-	svc.markFailed(context.Background(), track.ID, userId, "download_failed")
+	svc.outcomes().markFailed(context.Background(), track.ID, userId, "download_failed")
 
 	got := storedTrack(t, ledger, track)
 	if got.Status != ports.TrackReady {
@@ -757,7 +757,7 @@ func TestAcquire_DuplicateFailureKeepsOriginalReason(t *testing.T) {
 	})
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
-	svc.markFailed(context.Background(), track.ID, userId, "download_failed")
+	svc.outcomes().markFailed(context.Background(), track.ID, userId, "download_failed")
 
 	got := storedTrack(t, ledger, track)
 	if got.FailureReason != string(downloadfailure.FailureAcquisitionInterrupted) {
@@ -771,7 +771,7 @@ func TestAcquire_FailureOnPendingTrackStillMarksFailed(t *testing.T) {
 	track := seedTrackInRepo(t, ledger, userId, nil)
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
-	svc.markFailed(context.Background(), track.ID, userId, "download_failed")
+	svc.outcomes().markFailed(context.Background(), track.ID, userId, "download_failed")
 
 	got := storedTrack(t, ledger, track)
 	if got.Status != ports.TrackFailed {

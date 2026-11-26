@@ -16,10 +16,10 @@ import (
 )
 
 func (s *AcquireTrackAudioService) resolveIdentity(ctx context.Context, ac *AcquisitionContext) {
-	ResolveIdentity(ctx, s.recordings, s.identifier, ac)
+	ResolveIdentity(ctx, s.recordings, ac)
 }
 
-func ResolveIdentity(ctx context.Context, recordings ports.RecordingResolver, _ ports.AudioIdentifier, ac *AcquisitionContext) {
+func ResolveIdentity(ctx context.Context, recordings ports.RecordingResolver, ac *AcquisitionContext) {
 	identity, err := recordings.Resolve(ctx, ports.RecordingQuery{
 		Title:    ac.Track.Title,
 		Artist:   ac.Track.Artist,
@@ -120,7 +120,7 @@ func (s *AcquireTrackAudioService) fingerprintInto(ctx context.Context, ac *Acqu
 		return 0, fmt.Errorf("fingerprint the stored file: %w", err)
 	}
 	input.Audio.AcoustID = match.Results
-	input.Audio.RecordingFacts = NewDownloadStep(nil, s.workspace, s.identifier, s.recordingLookup, s.audioProber, s.verifySkips).versionFacts(ctx, *input)
+	input.Audio.RecordingFacts = versionFactsOf(ctx, &recordingFactsCache{}, s.recordingLookup, *input)
 	return topScore(match.Results), nil
 }
 

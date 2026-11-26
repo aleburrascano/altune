@@ -82,7 +82,7 @@ func CollectCandidatesReportingOutage(
 	onSuccess func(i int, candidates []AudioCandidate),
 	onFailure func(i int, err error),
 	allFailed func(firstErr error) error,
-) (merged []AudioCandidate, outage error, err error) {
+) (merged []AudioCandidate, outage, err error) {
 	positionByKey := make(map[string]int)
 	var firstErr, firstUnavailable error
 	failures := 0

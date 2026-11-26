@@ -60,7 +60,7 @@ func (p *FfprobeProber) recordSkip(gate string) {
 	}
 }
 
-func (p *FfprobeProber) Available() (ffprobe bool, ffmpeg bool) {
+func (p *FfprobeProber) Available() (ffprobe, ffmpeg bool) {
 	return binpath.Runnable(p.ffprobe), binpath.Runnable(p.ffmpeg)
 }
 
