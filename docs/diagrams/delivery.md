@@ -15,7 +15,7 @@ flowchart TD
 
     subgraph ghgate [PR gate · GitHub pr-checks]
         ghtests["pr-checks · backend-tests<br/>migrations · INTEGRATION=1 go test -race · mutation on changed lines"]
-        ghprecheck["pr-checks · precheck<br/>scripts/precheck.sh origin/main"]
+        ghprecheck["pr-checks · precheck<br/>scripts/ci/ci-precheck.sh · whole go-api module linted"]
     end
 
     precheck --> shape
@@ -24,7 +24,7 @@ flowchart TD
     ghtests -->|green| main
     ghprecheck -->|green| main
     shape -->|green| main(["merge to main<br/>no merge queue"])
-    main --> ci["GitHub pr-checks on push to main<br/>backend · overseer · mobile jobs for the paths that changed"]
+    main --> ci["GitHub pr-checks on push to main<br/>precheck against the commit before the push · backend · overseer · mobile jobs for the paths that changed"]
 
     dispatch(["deploy.yml · workflow_dispatch only<br/>run by hand on a main commit"])
 

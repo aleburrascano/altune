@@ -10,8 +10,8 @@ defaults:
     shell: bash
 
 concurrency:
-  group: pr-checks-${{ github.ref }}
-  cancel-in-progress: true
+  group: pr-checks-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -146,7 +146,6 @@ jobs:
         run: '"$(go env GOPATH)/bin/actionlint" -config-file .github/actionlint.yaml .github/workflows/*.yml .gitea/workflows/*.yml'
 
   precheck:
-    if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -177,10 +176,10 @@ jobs:
           pnpm install --frozen-lockfile
           npm ci --prefix client
           npm ci --prefix services/overseer/web
-      - name: precheck
+      - name: precheck, whole go-api module linted
         env:
-          CLIENT_MUTATE_RUNS_ELSEWHERE: "1"
-        run: bash scripts/precheck.sh origin/main
+          BEFORE: ${{ github.event.before }}
+        run: bash scripts/ci/ci-precheck.sh
 
   pr-checks:
     needs: [changes, backend-tests, mobile-tests, mobile-quality, workflow-lint, precheck]
