@@ -153,7 +153,7 @@ func (i *Identifier) lookup(ctx context.Context, fp fingerprint) (ports.Recordin
 	if err != nil {
 		return ports.RecordingMatch{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return ports.RecordingMatch{}, fmt.Errorf("acoustid lookup: status %d", resp.StatusCode)
@@ -184,7 +184,7 @@ func (i *Identifier) send(ctx context.Context, endpoint string, form url.Values,
 		return resp, err
 	}
 	wait := retryAfter(resp.Header.Get("Retry-After"))
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	timer := time.NewTimer(wait)
 	defer timer.Stop()
@@ -199,7 +199,7 @@ func (i *Identifier) send(ctx context.Context, endpoint string, form url.Values,
 		return nil, err
 	}
 	if resp.StatusCode == http.StatusTooManyRequests {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, fmt.Errorf("%s: status %d: %w", label, resp.StatusCode, acqdomain.ErrIdentifyThrottled)
 	}
 	return resp, nil

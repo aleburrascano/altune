@@ -28,7 +28,7 @@ func (t *Tagger) Tag(ctx context.Context, filePath string, tags ports.TrackTags)
 	if err != nil {
 		return fmt.Errorf("open for tagging: %w", err)
 	}
-	defer tag.Close()
+	defer func() { _ = tag.Close() }()
 
 	tag.SetDefaultEncoding(id3v2.EncodingUTF8)
 	tag.SetVersion(4)
