@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	maxAcquisitionAttempts = 3
+	MaxAcquisitionAttempts = 3
 )
 
 var (
@@ -30,7 +30,7 @@ const (
 var jobRetryBackoff = backoff.MustUncapped(jobRetryBase, backoff.WithFactor(jobRetryFactor))
 
 func retryBackoff(attempts int) time.Duration {
-	return jobRetryBackoff.Ceiling(min(attempts, maxAcquisitionAttempts))
+	return jobRetryBackoff.Ceiling(min(attempts, MaxAcquisitionAttempts))
 }
 
 func isTransientFailure(err error) bool {
@@ -113,7 +113,7 @@ func reasonForStep(step StepName) (downloadfailure.FailureCode, bool) {
 	switch step {
 	case stepNameSearch, stepNameSelect:
 		return downloadfailure.FailureNoMatchFound, true
-	case stepNameDownload:
+	case StepNameDownload:
 		return downloadfailure.FailureDownloadFailed, true
 	case stepNameStore:
 		return downloadfailure.FailureStorageFailed, true

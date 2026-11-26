@@ -16,6 +16,7 @@ func (s *BackgroundAcquisitionScheduler) Status() ports.Status {
 	pending, oldestAge, depthKnown := s.pendingDepth()
 	return ports.Status{
 		InFlight:         int(s.inflightCount.Load()),
+		Pending:          s.pending.size(),
 		Succeeded:        succeeded,
 		Failed:           failed,
 		Rejected:         s.rejected.Load(),

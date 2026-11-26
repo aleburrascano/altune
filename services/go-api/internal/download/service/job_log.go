@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const recentJobCap = 20
+const RecentJobCap = 20
 
 type jobLog struct {
 	mu        sync.Mutex
@@ -73,8 +73,8 @@ func (l *jobLog) complete(trackID string, state ports.JobState, reason string) p
 	j.Reason = reason
 	j.ElapsedMs = time.Since(j.ScheduledAt).Milliseconds()
 	l.recent = append(l.recent, *j)
-	if len(l.recent) > recentJobCap {
-		l.recent = l.recent[len(l.recent)-recentJobCap:]
+	if len(l.recent) > RecentJobCap {
+		l.recent = l.recent[len(l.recent)-RecentJobCap:]
 	}
 	return *j
 }

@@ -27,7 +27,7 @@ const (
 )
 
 const (
-	outcomeRecordTimeout = 2 * time.Second
+	OutcomeRecordTimeout = 2 * time.Second
 	queueCallBudget      = 10 * time.Second
 )
 
@@ -84,8 +84,10 @@ type BackgroundAcquisitionScheduler struct {
 func NewBackgroundAcquisitionScheduler(
 	svc acquirer,
 	workers int,
+	now func() time.Time,
 	opts ...func(*BackgroundAcquisitionScheduler),
 ) *BackgroundAcquisitionScheduler {
+	requirePort("NewBackgroundAcquisitionScheduler", "clock", now == nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &BackgroundAcquisitionScheduler{
 		svc:               svc,
@@ -97,7 +99,7 @@ func NewBackgroundAcquisitionScheduler(
 		wake:              make(chan struct{}, 1),
 		lanes:             newLaneWakes(),
 		log:               newJobLog(),
-		now:               time.Now,
+		now:               now,
 		events:            events.NoopPublisher(),
 		leaseDuration:     defaultLeaseDuration,
 		heartbeatInterval: defaultHeartbeatInterval,
@@ -357,7 +359,7 @@ func (s *BackgroundAcquisitionScheduler) execClaimedJob(ctx context.Context, key
 	return err
 }
 
-const leaseLostReason = "lease_lost"
+const LeaseLostReason = "lease_lost"
 
 type jobCompletion struct {
 	state   ports.JobState
@@ -379,7 +381,7 @@ func (s *BackgroundAcquisitionScheduler) completeClaimedJob(ctx context.Context,
 	}
 }
 
-var leaseLost = jobCompletion{state: ports.JobCancelled, reason: leaseLostReason, level: slog.LevelWarn, message: "background acquisition cancelled after lease loss"}
+var leaseLost = jobCompletion{state: ports.JobCancelled, reason: LeaseLostReason, level: slog.LevelWarn, message: "background acquisition cancelled after lease loss"}
 
 func (s *BackgroundAcquisitionScheduler) classifyJob(ctx context.Context, err error) jobCompletion {
 	switch {
@@ -413,7 +415,7 @@ func (s *BackgroundAcquisitionScheduler) recordOutcome(ctx context.Context, reco
 		sourceHost = hostOf(record.ResolvedSource)
 	}
 	s.outcomeRecords.Track(func() {
-		recCtx, cancel := background.Detach(ctx, outcomeRecordTimeout)
+		recCtx, cancel := background.Detach(ctx, OutcomeRecordTimeout)
 		defer cancel()
 		err := s.outcomes.Record(recCtx, ports.AcquisitionOutcome{
 			TrackID:    record.TrackID,
@@ -463,7 +465,7 @@ func (s *BackgroundAcquisitionScheduler) finishJob(ctx context.Context, job port
 }
 
 func (s *BackgroundAcquisitionScheduler) releasePanickedJob(ctx context.Context, job ports.Job) {
-	if job.Run >= maxAcquisitionAttempts {
+	if job.Run >= MaxAcquisitionAttempts {
 		s.refuseQueuedRecovering(ctx, job)
 		s.logQueueOutcome(ctx, "settle", job.TrackID, s.settleWithin(ctx, job))
 		return

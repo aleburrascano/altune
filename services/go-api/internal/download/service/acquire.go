@@ -104,6 +104,10 @@ func WithAcquireEvents(pub events.Publisher) func(*AcquireTrackAudioService) {
 	}
 }
 
+func WithAcquireTimeout(d time.Duration) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.acquireTimeout = d }
+}
+
 func WithSupersededAudioGrace(d time.Duration) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.supersededGrace = d }
 }
@@ -162,7 +166,7 @@ func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId id
 	if err != nil || !found {
 		return err
 	}
-	_, err = s.replaceLoaded(ctx, jobCtx, userId, track, replacement.ReplacementGate{}, willRetry)
+	_, err = s.replaceLoaded(ctx, jobCtx, userId, track, replacement.ReplacementGate{}, WillRetry)
 	return err
 }
 
@@ -185,7 +189,7 @@ func attemptOf(ac *AcquisitionContext, err error) replacement.Attempt {
 	attempt := replacement.Attempt{NoSource: err != nil && foundNoSource(err)}
 	if ac != nil && ac.Selected != nil {
 		attempt.SourceKey = sourceKey(ac.Selected.URL)
-		attempt.Grade = ac.collectEvidence().Grade
+		attempt.Grade = ac.CollectEvidence().Grade
 	}
 	return attempt
 }

@@ -6,55 +6,60 @@ import (
 	"errors"
 )
 
-type jobRun struct {
-	attempt           int
-	claim             ports.ClaimNumber
-	schedulerOwned    bool
+type JobRun struct {
+	Attempt           int
+	Claim             ports.ClaimNumber
+	SchedulerOwned    bool
 	rollbackHandedOff bool
 }
 
 type jobRunKey struct{}
 
-func jobRunFrom(ctx context.Context) jobRun {
+func jobRunFrom(ctx context.Context) JobRun {
 	if ctx == nil {
-		return jobRun{}
+		return JobRun{}
 	}
-	run, _ := ctx.Value(jobRunKey{}).(jobRun)
+	run, _ := ctx.Value(jobRunKey{}).(JobRun)
 	return run
 }
 
-func withJobRun(ctx context.Context, change func(*jobRun)) context.Context {
+func WithJobRun(ctx context.Context, run JobRun) context.Context {
+	run.rollbackHandedOff = jobRunFrom(ctx).rollbackHandedOff
+	return context.WithValue(ctx, jobRunKey{}, run)
+}
+
+func withJobRun(ctx context.Context, change func(*JobRun)) context.Context {
 	run := jobRunFrom(ctx)
 	change(&run)
 	return context.WithValue(ctx, jobRunKey{}, run)
 }
 
 func withSchedulerOwnedJobContext(ctx context.Context) context.Context {
-	return withJobRun(ctx, func(r *jobRun) { r.schedulerOwned = true })
+	return withJobRun(ctx, func(r *JobRun) { r.SchedulerOwned = true })
 }
 
 func withJobAttempt(ctx context.Context, attempt int) context.Context {
-	return withJobRun(ctx, func(r *jobRun) { r.attempt = attempt })
+	return withJobRun(ctx, func(r *JobRun) { r.Attempt = attempt })
 }
 
 func withJobFence(ctx context.Context, fence ports.ClaimNumber) context.Context {
-	return withJobRun(ctx, func(r *jobRun) { r.claim = fence })
+	return withJobRun(ctx, func(r *JobRun) { r.Claim = fence })
 }
 
 func withRollbackHandedOver(ctx context.Context) context.Context {
-	return withJobRun(ctx, func(r *jobRun) { r.rollbackHandedOff = true })
+	return withJobRun(ctx, func(r *JobRun) { r.rollbackHandedOff = true })
 }
 
-func jobAttemptFrom(ctx context.Context) int { return jobRunFrom(ctx).attempt }
+func jobAttemptFrom(ctx context.Context) int { return jobRunFrom(ctx).Attempt }
 
-func jobFenceFrom(ctx context.Context) ports.ClaimNumber { return jobRunFrom(ctx).claim }
+func jobFenceFrom(ctx context.Context) ports.ClaimNumber { return jobRunFrom(ctx).Claim }
 
 func rollbackHandedOver(ctx context.Context) bool { return jobRunFrom(ctx).rollbackHandedOff }
 
 func schedulerCancelledJobContext(ctx context.Context) bool {
-	return jobRunFrom(ctx).schedulerOwned && ctx.Err() != nil
+	return jobRunFrom(ctx).SchedulerOwned && ctx.Err() != nil
 }
 
 func schedulerHandedOver(ctx context.Context) bool {
-	return jobRunFrom(ctx).schedulerOwned && errors.Is(ctx.Err(), context.Canceled)
+	return jobRunFrom(ctx).SchedulerOwned && errors.Is(ctx.Err(), context.Canceled)
 }

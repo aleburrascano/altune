@@ -86,7 +86,7 @@ func (a *holdingAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId)
 func TestScheduler_ABurstOfAddsStartsOnEveryIdleAcquireWorker(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		acquirer := &holdingAcquirer{release: make(chan struct{})}
-		scheduler := download.NewBackgroundAcquisitionScheduler(acquirer, 4)
+		scheduler := download.NewBackgroundAcquisitionScheduler(acquirer, 4, time.Now)
 		defer scheduler.Shutdown(context.Background())
 		defer close(acquirer.release)
 		user := ids.NewUserId(uuid.New())
@@ -108,7 +108,7 @@ func TestScheduler_ABurstOfAddsStartsOnEveryIdleAcquireWorker(t *testing.T) {
 func TestScheduler_ResumeRunsAJobThatWaitedWhilePaused(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		acquirer := &holdingAcquirer{release: make(chan struct{})}
-		scheduler := download.NewBackgroundAcquisitionScheduler(acquirer, 1)
+		scheduler := download.NewBackgroundAcquisitionScheduler(acquirer, 1, time.Now)
 		defer scheduler.Shutdown(context.Background())
 		user := ids.NewUserId(uuid.New())
 		running, waiting := ids.NewTrackId(), ids.NewTrackId()
@@ -139,7 +139,7 @@ func TestScheduler_ResumeRunsAJobThatWaitedWhilePaused(t *testing.T) {
 func TestScheduler_ResumeStartsTheWholeBacklogOnEveryIdleWorker(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		acquirer := &holdingAcquirer{release: make(chan struct{})}
-		scheduler := download.NewBackgroundAcquisitionScheduler(acquirer, 4)
+		scheduler := download.NewBackgroundAcquisitionScheduler(acquirer, 4, time.Now)
 		defer scheduler.Shutdown(context.Background())
 		defer close(acquirer.release)
 		user := ids.NewUserId(uuid.New())
@@ -172,7 +172,7 @@ func TestScheduler_ResumeStartsTheWholeBacklogOnEveryIdleWorker(t *testing.T) {
 func TestScheduler_AnUpgradeRunsAtOnceWhileAcquireWorkersAreIdle(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		upgrader := &recordingUpgrader{}
-		scheduler := download.NewBackgroundAcquisitionScheduler(&recordingAcquirer{}, 4,
+		scheduler := download.NewBackgroundAcquisitionScheduler(&recordingAcquirer{}, 4, time.Now,
 			download.WithUpgradeLane(upgrader, 1))
 		defer scheduler.Shutdown(context.Background())
 		user := ids.NewUserId(uuid.New())
@@ -194,7 +194,7 @@ func TestScheduler_AnUpgradeRunsAtOnceWhileAcquireWorkersAreIdle(t *testing.T) {
 func TestScheduler_AnAddRunsAtOnceWhileUpgradeWorkersAreIdle(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		acquirer := &recordingAcquirer{}
-		scheduler := download.NewBackgroundAcquisitionScheduler(acquirer, 1,
+		scheduler := download.NewBackgroundAcquisitionScheduler(acquirer, 1, time.Now,
 			download.WithUpgradeLane(&recordingUpgrader{}, 4))
 		defer scheduler.Shutdown(context.Background())
 		user := ids.NewUserId(uuid.New())
@@ -259,7 +259,7 @@ func TestScheduler_AJobWhoseCompletionPanicsAfterItIsRecordedIsRecordedOnce(t *t
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	slog.SetDefault(slog.New(panicOnMessage{Handler: slog.NewTextHandler(io.Discard, nil), message: "background acquisition failed"}))
 	queue := &firstOutcomeQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), outcome: make(chan jobOutcome, 1)}
-	scheduler := service.NewBackgroundAcquisitionScheduler(failingAcquirer{}, 1, service.WithJobQueue(queue))
+	scheduler := service.NewBackgroundAcquisitionScheduler(failingAcquirer{}, 1, time.Now, service.WithJobQueue(queue))
 	defer scheduler.Shutdown(context.Background())
 	trackID := ids.NewTrackId()
 
@@ -316,7 +316,7 @@ func logsOfOneJob(t *testing.T, acquirer interface {
 	var records []slog.Record
 	slog.SetDefault(slog.New(capturedLogs{mu: &sync.Mutex{}, records: &records}))
 	queue := &firstOutcomeQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), outcome: make(chan jobOutcome, 1)}
-	scheduler := service.NewBackgroundAcquisitionScheduler(acquirer, 1, service.WithJobQueue(queue))
+	scheduler := service.NewBackgroundAcquisitionScheduler(acquirer, 1, time.Now, service.WithJobQueue(queue))
 	if err := scheduler.Schedule(context.Background(), ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
 		t.Fatalf("Schedule = %v, want nil", err)
 	}
@@ -359,7 +359,7 @@ func TestScheduler_ASucceededJobLogsNoCompletionRecord(t *testing.T) {
 func TestScheduler_ShutdownWaitsForAnInFlightJobToFinishAndDoesNotCancelIt(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		acquirer := &holdingAcquirer{release: make(chan struct{})}
-		scheduler := download.NewBackgroundAcquisitionScheduler(acquirer, 1)
+		scheduler := download.NewBackgroundAcquisitionScheduler(acquirer, 1, time.Now)
 		if err := scheduler.Schedule(context.Background(), ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
 			t.Fatalf("Schedule = %v, want nil", err)
 		}
@@ -456,7 +456,7 @@ func TestScheduler_ATrackThatKeepsPanickingIsRefusedAndSettledWithinABudgetAtThe
 	synctest.Test(t, func(t *testing.T) {
 		queue := &callRecordingQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), settledCh: make(chan queueCall, 1)}
 		acquirer := &alwaysPanickingAcquirer{}
-		scheduler := service.NewBackgroundAcquisitionScheduler(acquirer, 1, service.WithJobQueue(queue))
+		scheduler := service.NewBackgroundAcquisitionScheduler(acquirer, 1, time.Now, service.WithJobQueue(queue))
 		defer scheduler.Shutdown(context.Background())
 
 		if err := scheduler.Schedule(context.Background(), ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
@@ -481,7 +481,7 @@ func TestScheduler_ATrackThatKeepsPanickingIsRefusedAndSettledWithinABudgetAtThe
 func TestScheduler_TheQueueReleaseOfARetryableJobCarriesTheCorrelationIDAndABudget(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		queue := &callRecordingQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), releasedCh: make(chan queueCall, 1)}
-		scheduler := service.NewBackgroundAcquisitionScheduler(retryingAcquirer{}, 1, service.WithJobQueue(queue))
+		scheduler := service.NewBackgroundAcquisitionScheduler(retryingAcquirer{}, 1, time.Now, service.WithJobQueue(queue))
 		defer scheduler.Shutdown(context.Background())
 		ctx := logging.WithCorrelationID(context.Background(), "corr-release")
 
@@ -524,7 +524,7 @@ func (q *callRecordingQueue) calls() (settles, heartbeats []queueCall) {
 func TestScheduler_TheQueueSettleCarriesTheCorrelationIDAndABudget(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		queue := &callRecordingQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), settledCh: make(chan queueCall, 1)}
-		scheduler := service.NewBackgroundAcquisitionScheduler(&recordingAcquirer{}, 1, service.WithJobQueue(queue))
+		scheduler := service.NewBackgroundAcquisitionScheduler(&recordingAcquirer{}, 1, time.Now, service.WithJobQueue(queue))
 		defer scheduler.Shutdown(context.Background())
 		ctx := logging.WithCorrelationID(context.Background(), "corr-settle")
 
@@ -545,7 +545,7 @@ func TestScheduler_TheHeartbeatCarriesTheCorrelationIDAndABudget(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		queue := &callRecordingQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), beatCh: make(chan queueCall, 8)}
 		acquirer := &holdingAcquirer{release: make(chan struct{})}
-		scheduler := service.NewBackgroundAcquisitionScheduler(acquirer, 1,
+		scheduler := service.NewBackgroundAcquisitionScheduler(acquirer, 1, time.Now,
 			service.WithJobQueue(queue), service.WithHeartbeatInterval(time.Second))
 		defer scheduler.Shutdown(context.Background())
 		defer close(acquirer.release)
@@ -604,7 +604,7 @@ func (a *correlationNotingAcquirer) seen() []string {
 func TestScheduler_EveryRetryOfAJobRunsUnderTheRequestsCorrelationID(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		acquirer := &correlationNotingAcquirer{retries: 2, finished: make(chan struct{})}
-		scheduler := service.NewBackgroundAcquisitionScheduler(acquirer, 1)
+		scheduler := service.NewBackgroundAcquisitionScheduler(acquirer, 1, time.Now)
 		defer scheduler.Shutdown(context.Background())
 		ctx := logging.WithCorrelationID(context.Background(), "corr-retries")
 

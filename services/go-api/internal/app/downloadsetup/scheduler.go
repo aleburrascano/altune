@@ -58,7 +58,7 @@ func NewScheduler(ctx context.Context, d Deps) *download.BackgroundAcquisitionSc
 		},
 		opts...,
 	)
-	return download.NewBackgroundAcquisitionScheduler(acquireSvc, d.Config.AcquisitionConcurrency, schedulerOptions(d, acquireSvc, skips, lookups)...)
+	return download.NewBackgroundAcquisitionScheduler(acquireSvc, d.Config.AcquisitionConcurrency, time.Now, schedulerOptions(d, acquireSvc, skips, lookups)...)
 }
 
 func storeOptions(d Deps) []acquireOption {

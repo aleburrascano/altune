@@ -56,7 +56,7 @@ func scheduleAndFinishWith(t *testing.T, source ports.AudioSource, wiring servic
 		ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
 		svc := service.NewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, scratchfiles.New(), wiring, noStages(), opts...)
 		progress := &progressStages{}
-		scheduler := service.NewBackgroundAcquisitionScheduler(svc, 1, service.WithSchedulerEvents(progress))
+		scheduler := service.NewBackgroundAcquisitionScheduler(svc, 1, time.Now, service.WithSchedulerEvents(progress))
 		defer scheduler.Shutdown(context.Background())
 		if err := scheduler.Schedule(context.Background(), track.UserId, track.ID, ""); err != nil {
 			t.Fatalf("Schedule = %v, want nil", err)
