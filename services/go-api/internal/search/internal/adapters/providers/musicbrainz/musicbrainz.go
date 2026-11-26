@@ -22,7 +22,6 @@ const musicbrainzAPIBaseURL = "https://musicbrainz.org/ws/2"
 type MusicBrainzAdapter struct {
 	client    *http.Client
 	userAgent string
-	limiter   *providerrequests.MinIntervalLimiter
 
 	identityMemo *expiringcache.Memo[string, *ports.ArtistIdentity]
 	releaseMemo  *expiringcache.Memo[string, []mbReleaseGroup]
@@ -33,7 +32,6 @@ func NewMusicBrainzAdapter(client *http.Client, userAgent string) *MusicBrainzAd
 	return &MusicBrainzAdapter{
 		client:       client,
 		userAgent:    userAgent,
-		limiter:      providerrequests.NewMinIntervalLimiter(time.Second),
 		identityMemo: newMBMemo[*ports.ArtistIdentity](),
 		releaseMemo:  newMBMemo[[]mbReleaseGroup](),
 	}
@@ -79,9 +77,6 @@ func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind 
 		u += "&inc=isrcs"
 	}
 
-	if err := a.limiter.Wait(ctx); err != nil {
-		return nil, err
-	}
 	status, rawBody, err := providerrequests.GetBytes(ctx, a.client, u,
 		providerrequests.WithHeader("User-Agent", a.userAgent),
 		providerrequests.WithHeader("Accept", "application/json"))
@@ -282,9 +277,6 @@ type mbReleaseGroup struct {
 }
 
 func (a *MusicBrainzAdapter) getJSON(ctx context.Context, u string, out any) error {
-	if err := a.limiter.Wait(ctx); err != nil {
-		return err
-	}
 	return providerrequests.GetJSON(ctx, a.client, u, out,
 		providerrequests.WithHeader("User-Agent", a.userAgent),
 		providerrequests.WithHeader("Accept", "application/json"))

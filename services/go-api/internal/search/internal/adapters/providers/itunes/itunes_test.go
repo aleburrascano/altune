@@ -3,12 +3,16 @@ package itunes_test
 import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
+	"altune/go-api/internal/shared/queuetimeout"
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -258,9 +262,9 @@ func TestITunesAdapter_Resolve_500IsArtworkUnavailable(t *testing.T) {
 	}
 }
 
-func TestITunesAdapter_Resolve_ContextCancelledBeforeLimiterAdmitsIsArtworkUnavailable(t *testing.T) {
+func TestITunesAdapter_Resolve_ContextCancelledBeforeTheRequestIsArtworkUnavailable(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatal("should not reach the network once the limiter rejects a cancelled context")
+		t.Fatal("should not reach the network for a cancelled context")
 	}))
 	defer server.Close()
 
@@ -412,66 +416,47 @@ func TestArtworkSourceTags(t *testing.T) {
 	}
 }
 
-func limitedLookup(t *testing.T) func(context.Context) error {
-	t.Helper()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"results":[]}`))
-	}))
-	t.Cleanup(server.Close)
-	adapter := search.NewITunesAdapter(providertest.NewClient(server.URL))
+func albumTracksLookup(client *http.Client) func(context.Context) error {
+	adapter := search.NewITunesAdapter(client)
 	return func(ctx context.Context) error {
 		_, err := adapter.GetAlbumTracks(ctx, search.ProviderITunes, "1")
 		return err
 	}
 }
 
-const itunesBurst = 4
+func TestITunesAdapter_PacesNothingItself(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		lookup := albumTracksLookup(&http.Client{Transport: providertest.FakeRoundTripper{Fn: func(r *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": {"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`{"results":[]}`)),
+				Request:    r,
+			}, nil
+		}}})
+		start := time.Now()
 
-func TestITunesLimiterAllowsBurst(t *testing.T) {
-	lookup := limitedLookup(t)
-	start := time.Now()
-	for i := 0; i < itunesBurst; i++ {
-		if err := lookup(context.Background()); err != nil {
-			t.Fatalf("burst call %d: %v", i, err)
+		for i := range 10 {
+			if err := lookup(context.Background()); err != nil {
+				t.Fatalf("lookup %d: %v", i+1, err)
+			}
 		}
-	}
-	if elapsed := time.Since(start); elapsed > 100*time.Millisecond {
-		t.Errorf("burst of %d took %v, want immediate", itunesBurst, elapsed)
-	}
+
+		if elapsed := time.Since(start); elapsed != 0 {
+			t.Fatalf("ten back-to-back lookups took %v, want no wait of the adapter's own because the transport paces the host", elapsed)
+		}
+	})
 }
 
-func TestProviderLimiterBurstShedsBeyondQueueDepth(t *testing.T) {
-	const callers = 20
-	cases := []struct {
-		name  string
-		wait  func(context.Context) error
-		burst int
-	}{
-		{"itunes", limitedLookup(t), itunesBurst},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := providertest.FireBurst(t, tc.wait, callers, 300*time.Millisecond)
+func TestITunesAdapter_PassesATransportQueueTimeoutThroughClassified(t *testing.T) {
+	shed := fmt.Errorf("%w: %w", queuetimeout.Err, context.DeadlineExceeded)
+	lookup := albumTracksLookup(&http.Client{Transport: providertest.FakeRoundTripper{Fn: func(*http.Request) (*http.Response, error) {
+		return nil, shed
+	}}})
 
-			admitted, shed := 0, 0
-			for _, r := range got {
-				switch {
-				case r.Err == nil:
-					admitted++
-				case errors.Is(r.Err, search.ErrProviderRateLimitQueueTimeout):
-					shed++
-				default:
-					t.Errorf("caller got %v, want nil or a queue-timeout shed", r.Err)
-				}
-			}
-			if admitted != tc.burst {
-				t.Errorf("admitted at once = %d, want the burst of %d", admitted, tc.burst)
-			}
-			if want := callers - tc.burst - search.ProviderHTTPQueueDepth; shed != want {
-				t.Errorf("shed within 300ms = %d, want %d (callers %d - burst %d - queue depth %d)",
-					shed, want, callers, tc.burst, search.ProviderHTTPQueueDepth)
-			}
-		})
+	err := lookup(context.Background())
+
+	if !errors.Is(err, search.ErrProviderRateLimitQueueTimeout) || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want the shed to stay a queue timeout and a DeadlineExceeded", err)
 	}
 }

@@ -19,9 +19,6 @@ func (a *MusicBrainzAdapter) RecordingByMBID(ctx context.Context, mbid string) (
 		return ports.MusicBrainzRecording{}, false, nil
 	}
 	u := fmt.Sprintf(musicbrainzAPIBaseURL+"/recording/%s?inc=isrcs+artist-credits&fmt=json", url.PathEscape(mbid))
-	if err := a.limiter.Wait(ctx); err != nil {
-		return ports.MusicBrainzRecording{}, false, err
-	}
 	status, rawBody, err := providerrequests.GetBytes(ctx, a.client, u,
 		providerrequests.WithHeader("User-Agent", a.userAgent),
 		providerrequests.WithHeader("Accept", "application/json"))

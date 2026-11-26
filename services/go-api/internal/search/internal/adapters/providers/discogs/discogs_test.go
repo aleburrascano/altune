@@ -4,9 +4,11 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
 	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/shared/queuetimeout"
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -309,40 +311,6 @@ func TestDiscogsAdapter_ResolveByIdentity(t *testing.T) {
 			t.Errorf("(%q, %v), want (\"\", ErrArtworkUnavailable) — the chain degrades", url, err)
 		}
 	})
-}
-
-func limitedLookup(t *testing.T) func(context.Context) error {
-	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, `{"id": 38, "images": []}`)
-	}))
-	t.Cleanup(srv.Close)
-	adapter := newTestDiscogsAdapter(srv)
-	id := search.ArtworkIdentity{ExternalIDs: map[search.ProviderKey]string{"discogs": "38"}}
-	return func(ctx context.Context) error {
-		_, err := adapter.ResolveByIdentity(ctx, search.ResultKindArtist, id)
-		return err
-	}
-}
-
-func TestDiscogsAdapter_rateLimit_spacesConsecutiveCalls(t *testing.T) {
-	lookup := limitedLookup(t)
-
-	start := time.Now()
-	if err := lookup(context.Background()); err != nil {
-		t.Fatalf("first lookup: %v", err)
-	}
-	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
-		t.Errorf("first call blocked %v, want no wait for the limiter's 1s interval", elapsed)
-	}
-
-	start = time.Now()
-	if err := lookup(context.Background()); err != nil {
-		t.Fatalf("second lookup: %v", err)
-	}
-	if elapsed := time.Since(start); elapsed < 700*time.Millisecond {
-		t.Errorf("second call blocked only %v, want ~1s spacing", elapsed)
-	}
 }
 
 func TestDiscogsAdapter_ArtworkSource(t *testing.T) {
@@ -650,30 +618,36 @@ func inMemoryLookup() func(context.Context) error {
 	}
 }
 
-func TestProviderLimiterBurstShedsBeyondQueueDepth(t *testing.T) {
+func TestDiscogsAdapter_PacesNothingItself(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		const callers, burst = 20, 1
-		got := providertest.FireBurst(t, inMemoryLookup(), callers, 300*time.Millisecond)
+		lookup := inMemoryLookup()
+		start := time.Now()
 
-		admitted, shed := 0, 0
-		for _, r := range got {
-			switch {
-			case r.Err == nil:
-				admitted++
-			case errors.Is(r.Err, search.ErrProviderRateLimitQueueTimeout):
-				shed++
-			default:
-				t.Errorf("caller got %v, want nil or a queue-timeout shed", r.Err)
+		for i := range 5 {
+			if err := lookup(context.Background()); err != nil {
+				t.Fatalf("lookup %d: %v", i+1, err)
 			}
 		}
-		if admitted != burst {
-			t.Errorf("admitted at once = %d, want the burst of %d", admitted, burst)
-		}
-		if want := callers - burst - search.ProviderHTTPQueueDepth; shed != want {
-			t.Errorf("shed within 300ms = %d, want %d (callers %d - burst %d - queue depth %d)",
-				shed, want, callers, burst, search.ProviderHTTPQueueDepth)
+
+		if elapsed := time.Since(start); elapsed != 0 {
+			t.Fatalf("five back-to-back lookups took %v, want no wait of the adapter's own because the transport paces the host", elapsed)
 		}
 	})
+}
+
+func TestDiscogsAdapter_PassesATransportQueueTimeoutThroughClassified(t *testing.T) {
+	shed := fmt.Errorf("%w: %w", queuetimeout.Err, context.DeadlineExceeded)
+	client := &http.Client{Transport: providertest.FakeRoundTripper{Fn: func(*http.Request) (*http.Response, error) {
+		return nil, shed
+	}}}
+	adapter := search.NewDiscogsAdapter(client, "test-token", "altune-test/1.0")
+	id := search.ArtworkIdentity{ExternalIDs: map[search.ProviderKey]string{"discogs": "38"}}
+
+	_, err := adapter.ResolveByIdentity(context.Background(), search.ResultKindArtist, id)
+
+	if !errors.Is(err, search.ErrProviderRateLimitQueueTimeout) || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want the shed to stay a queue timeout and a DeadlineExceeded", err)
+	}
 }
 
 func TestChainedArtworkResolver_DiscogsIdentityOn500IsDegradedAndUnavailable(t *testing.T) {

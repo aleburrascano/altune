@@ -2,7 +2,6 @@ package providertest
 
 import (
 	"altune/go-api/internal/search/domain"
-	"altune/go-api/internal/shared/parallel"
 	"bytes"
 	"context"
 	"io"
@@ -190,46 +189,6 @@ func AlbumKinds() map[domain.ResultKind]bool {
 
 func ArtistKinds() map[domain.ResultKind]bool {
 	return map[domain.ResultKind]bool{domain.ResultKindArtist: true}
-}
-
-type BurstResult struct {
-	Err     error
-	Elapsed time.Duration
-}
-
-func FireBurst(t *testing.T, wait func(context.Context) error, n int, window time.Duration) []BurstResult {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	results := make(chan BurstResult, n)
-	burst := parallel.New("providertest.burst_panic", n)
-	start := time.Now()
-	for i := 0; i < n; i++ {
-		burst.Go(ctx, func() {
-			err := wait(ctx)
-			results <- BurstResult{Err: err, Elapsed: time.Since(start)}
-		})
-	}
-	done := collectBurst(results, n, window)
-	cancel()
-	if err := burst.Wait(); err != nil {
-		t.Fatalf("a burst caller panicked: %v", err)
-	}
-	return done
-}
-
-func collectBurst(results <-chan BurstResult, n int, window time.Duration) []BurstResult {
-	timer := time.NewTimer(window)
-	defer timer.Stop()
-	var done []BurstResult
-	for len(done) < n {
-		select {
-		case r := <-results:
-			done = append(done, r)
-		case <-timer.C:
-			return done
-		}
-	}
-	return done
 }
 
 type Contract struct {

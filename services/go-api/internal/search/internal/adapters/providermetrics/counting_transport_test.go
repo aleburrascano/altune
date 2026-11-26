@@ -71,6 +71,7 @@ func TestCountsPerProviderAndOutcome(t *testing.T) {
 		{"amazon 5xx error", "https://music.amazon.com/x", 503, nil, "amazonmusic", search.ProviderMetricsOutcomes{Error: 1}},
 		{"youtube transport error", "https://music.youtube.com/x", 0, errors.New("dial fail"), "youtube", search.ProviderMetricsOutcomes{Error: 1}},
 		{"musicbrainz 2xx ok", "https://musicbrainz.org/ws/2/x", 200, nil, "musicbrainz", search.ProviderMetricsOutcomes{OK: 1}},
+		{"a request shed by the pacing queue never reached the provider", "https://musicbrainz.org/ws/2/x", 0, search.ErrProviderRateLimitQueueTimeout, "musicbrainz", search.ProviderMetricsOutcomes{}},
 		{"lastfm 2xx ok", "https://ws.audioscrobbler.com/2.0/", 200, nil, "lastfm", search.ProviderMetricsOutcomes{OK: 1}},
 		{"lastfm image cdn host is lastfm", "https://lastfm.freetls.fastly.net/i/u/300x300/x.jpg", 200, nil, "lastfm", search.ProviderMetricsOutcomes{OK: 1}},
 		{"another tenant of the same cdn is other", "https://deezer.freetls.fastly.net/x.jpg", 200, nil, "other", search.ProviderMetricsOutcomes{OK: 1}},

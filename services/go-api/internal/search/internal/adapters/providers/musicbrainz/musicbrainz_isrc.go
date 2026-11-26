@@ -17,9 +17,6 @@ func (a *MusicBrainzAdapter) RecordingsByISRC(ctx context.Context, isrc string) 
 		return nil, nil
 	}
 	u := fmt.Sprintf(musicbrainzAPIBaseURL+"/isrc/%s?fmt=json", url.PathEscape(isrc))
-	if err := a.limiter.Wait(ctx); err != nil {
-		return nil, err
-	}
 	status, rawBody, err := providerrequests.GetBytes(ctx, a.client, u,
 		providerrequests.WithHeader("User-Agent", a.userAgent),
 		providerrequests.WithHeader("Accept", "application/json"))
