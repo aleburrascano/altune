@@ -11,17 +11,17 @@ type AdvisoryLocks struct{ pool *pgxpool.Pool }
 
 func NewAdvisoryLocks(pool *pgxpool.Pool) *AdvisoryLocks { return &AdvisoryLocks{pool: pool} }
 
-func (l *AdvisoryLocks) Acquire(ctx context.Context) (*LockSession, error) {
+func (l *AdvisoryLocks) Acquire(ctx context.Context) (*AdvisorySession, error) {
 	conn, err := l.pool.Acquire(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("acquire a connection for the advisory lock: %w", err)
 	}
-	return &LockSession{conn: conn}, nil
+	return &AdvisorySession{conn: conn}, nil
 }
 
-type LockSession struct{ conn *pgxpool.Conn }
+type AdvisorySession struct{ conn *pgxpool.Conn }
 
-func (s *LockSession) TryAdvisoryLock(ctx context.Context, key int64) (bool, error) {
+func (s *AdvisorySession) TryAdvisoryLock(ctx context.Context, key int64) (bool, error) {
 	var won bool
 	err := s.conn.QueryRow(ctx, "select pg_try_advisory_lock($1)", key).Scan(&won)
 	if err != nil {
@@ -30,14 +30,14 @@ func (s *LockSession) TryAdvisoryLock(ctx context.Context, key int64) (bool, err
 	return won, nil
 }
 
-func (s *LockSession) Ping(ctx context.Context) error {
+func (s *AdvisorySession) Ping(ctx context.Context) error {
 	if err := s.conn.Ping(ctx); err != nil {
 		return fmt.Errorf("ping the lock connection: %w", err)
 	}
 	return nil
 }
 
-func (s *LockSession) AdvisoryUnlock(ctx context.Context, key int64) error {
+func (s *AdvisorySession) AdvisoryUnlock(ctx context.Context, key int64) error {
 	_, err := s.conn.Exec(ctx, "select pg_advisory_unlock($1)", key)
 	if err != nil {
 		return fmt.Errorf("advisory unlock %d: %w", key, err)
@@ -45,4 +45,4 @@ func (s *LockSession) AdvisoryUnlock(ctx context.Context, key int64) error {
 	return nil
 }
 
-func (s *LockSession) Release() { s.conn.Release() }
+func (s *AdvisorySession) Release() { s.conn.Release() }
