@@ -789,6 +789,34 @@ func TestTrackLedger_RevertAtIgnoresTheLease(t *testing.T) {
 	}
 }
 
+func TestTrackLedger_RevertAtStartsTheAcquisitionAtTheInjectedClock(t *testing.T) {
+	track, userId := newTrack(t, 5)
+	if err := track.FailAcquisition("boom"); err != nil {
+		t.Fatal(err)
+	}
+	store := newFakeStore(track)
+	pinned := time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)
+
+	err := downloadfromlibrary.NewLibraryTracks(store, func() time.Time { return pinned }).RevertAt(context.Background(), download.TrackSnapshot{ID: track.ID, UserId: userId, Version: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := storedTrack(t, store, track.ID)
+	if got.AcquisitionStartedAt == nil || !got.AcquisitionStartedAt.Equal(pinned) {
+		t.Errorf("AcquisitionStartedAt = %v, want the injected %v", got.AcquisitionStartedAt, pinned)
+	}
+}
+
+func TestNewLibraryTracks_RefusesANilClock(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("construction without a clock succeeded, want a panic at construction")
+		}
+	}()
+
+	downloadfromlibrary.NewLibraryTracks(newFakeStore(), nil)
+}
+
 func goldenRelabel() *download.TrackLabel {
 	return &download.TrackLabel{
 		MBID:            "25d68187-ee71-4f06-9e58-0b49d66bf8a8",

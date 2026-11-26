@@ -26,7 +26,7 @@ func TestLabels_RealLibraryTitles(t *testing.T) {
 	}
 }
 
-func TestWithoutVersionPhrases_KeepsTitleWords(t *testing.T) {
+func TestStripVersionPhrases_KeepsTitleWords(t *testing.T) {
 	cases := map[string]string{
 		"Devil In A New Dress":      "devil in a new dress",
 		"Cake By The Ocean":         "cake by the ocean",
@@ -44,7 +44,7 @@ func TestWithoutVersionPhrases_KeepsTitleWords(t *testing.T) {
 	}
 }
 
-func TestWithoutRerecordingPhrases(t *testing.T) {
+func TestStripRerecordingPhrases(t *testing.T) {
 	cases := []struct {
 		title string
 		want  string
@@ -198,7 +198,7 @@ func TestTags_EqualComparesPartAndLabels(t *testing.T) {
 	}
 }
 
-func TestWithoutRerecordingPhrases_LoneWordsAndEmptyInputAreNotAPhrase(t *testing.T) {
+func TestStripRerecordingPhrases_LoneWordsAndEmptyInputAreNotAPhrase(t *testing.T) {
 	cases := []struct {
 		title string
 		want  string
@@ -262,7 +262,7 @@ func TestBaseTitle_FoldsADecimalVersionTag(t *testing.T) {
 	}
 }
 
-func TestWithoutRerecordingPhrases_FoldsCaseAndCurlyApostrophe(t *testing.T) {
+func TestStripRerecordingPhrases_FoldsCaseAndCurlyApostrophe(t *testing.T) {
 	for title, want := range map[string]string{
 		"Love Story (Taylor’s Version)": "love story",
 		"LOVE STORY (TAYLOR'S VERSION)": "love story",
