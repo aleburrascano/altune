@@ -161,7 +161,7 @@ func TestNewScheduler_TheFirstTierArtTrackIsTheStoredSource(t *testing.T) {
 }
 
 func TestNewScheduler_FetchedAudioPassesTheProbeAndDecodeGates(t *testing.T) {
-	if ffprobe, ffmpeg := download.NewFfprobeProber(os.Getenv("FFMPEG_LOCATION")).Available(); !ffprobe || !ffmpeg {
+	if ffprobe, ffmpeg := download.MustNewFfprobeProber(os.Getenv("FFMPEG_LOCATION"), download.NoopVerifySkipRecorder()).Available(); !ffprobe || !ffmpeg {
 		t.Skip("ffprobe/ffmpeg not installed")
 	}
 

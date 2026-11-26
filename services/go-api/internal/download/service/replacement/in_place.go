@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -94,10 +95,21 @@ func (c *inPlaceCheck) record(ctx context.Context, trackID ids.TrackId, record p
 	return c.recorder.RecordInPlace(ctx, trackID, record)
 }
 
-func (r *Runner) WithInPlaceCheck(checker InPlaceChecker, recorder ports.InPlaceStore, perHour int) *Runner {
+var ErrMissingInPlacePort = errors.New("replacement: an in-place check needs a checker and a recorder")
+
+type InPlace struct {
+	check   *inPlaceCheck
+	enabled bool
+}
+
+func NoInPlaceCheck() InPlace { return InPlace{} }
+
+func InPlaceCheckOf(checker InPlaceChecker, recorder ports.InPlaceStore, perHour int) (InPlace, error) {
+	if checker == nil || recorder == nil {
+		return InPlace{}, ErrMissingInPlacePort
+	}
 	every := time.Hour / time.Duration(max(perHour, 1))
-	r.inPlace = &inPlaceCheck{checker: checker, recorder: recorder, pacer: &pacer{every: every}}
-	return r
+	return InPlace{check: &inPlaceCheck{checker: checker, recorder: recorder, pacer: &pacer{every: every}}, enabled: true}, nil
 }
 
 func isUserUpload(track *ports.TrackSnapshot) bool {
@@ -105,7 +117,7 @@ func isUserUpload(track *ports.TrackSnapshot) bool {
 }
 
 func (r *Runner) isUnchecked(track *ports.TrackSnapshot) bool {
-	return r.inPlace != nil && inPlaceEvidenceOf(track.Evidence).InPlaceGeneration < audioquality.PipelineGeneration
+	return r.inPlace.enabled && inPlaceEvidenceOf(track.Evidence).InPlaceGeneration < audioquality.PipelineGeneration
 }
 
 type inPlaceOutcome struct {
@@ -114,10 +126,10 @@ type inPlaceOutcome struct {
 }
 
 func (r *Runner) checkInPlace(ctx context.Context, track *ports.TrackSnapshot, stored inPlaceEvidence) (inPlaceOutcome, error) {
-	if err := r.inPlace.waitForSlot(ctx); err != nil {
+	if err := r.inPlace.check.waitForSlot(ctx); err != nil {
 		return inPlaceOutcome{}, err
 	}
-	finding, err := r.inPlace.check(ctx, track)
+	finding, err := r.inPlace.check.check(ctx, track)
 	if err != nil {
 		return r.failedCheck(ctx, track, stored, err)
 	}
@@ -127,7 +139,7 @@ func (r *Runner) checkInPlace(ctx context.Context, track *ports.TrackSnapshot, s
 const maxInPlaceFailures = 3
 
 func (r *Runner) failedCheck(ctx context.Context, track *ports.TrackSnapshot, stored inPlaceEvidence, checkErr error) (inPlaceOutcome, error) {
-	failures, err := r.inPlace.noteFailure(ctx, track.ID)
+	failures, err := r.inPlace.check.noteFailure(ctx, track.ID)
 	if err != nil {
 		slog.ErrorContext(ctx, "acquisition.upgrade_in_place_failure_unrecorded",
 			"track_id", track.ID.String(), "error", redact.LogError(err))
@@ -193,7 +205,7 @@ func userUploadVerdict(record ports.InPlaceRecord, finding Finding) ports.InPlac
 }
 
 func (r *Runner) recordInPlace(ctx context.Context, track *ports.TrackSnapshot, record ports.InPlaceRecord) error {
-	recorded, err := r.inPlace.record(ctx, track.ID, record)
+	recorded, err := r.inPlace.check.record(ctx, track.ID, record)
 	if err != nil {
 		return fmt.Errorf("record in-place verdict of track %s: %w", track.ID, err)
 	}

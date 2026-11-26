@@ -76,7 +76,7 @@ func itsOnlyLoveWork() *stubRerecordingLookup {
 
 func findRerecording(t *testing.T, authority *stubRerecordingLookup) (download.TrackLabel, bool) {
 	t.Helper()
-	resolver := download.NewRecordingResolver(nil, download.WithRerecordingLookup(authority))
+	resolver := newResolver(t, download.NoopRecordingSearch(), lookups{rerecording: authority})
 	label, found, err := resolver.FindRerecording(context.Background(), download.RerecordingQuery{OriginalMBID: itsOnlyLove})
 	if err != nil {
 		t.Fatalf("FindRerecording: %v", err)
@@ -160,7 +160,7 @@ func TestFindRerecording_NoneWhenNoOtherRecordingIsALabelledLaterStudioRerecordi
 }
 
 func TestFindRerecording_NoneWithoutARerecordingLookup(t *testing.T) {
-	resolver := download.NewRecordingResolver(nil)
+	resolver := newResolver(t, download.NoopRecordingSearch(), lookups{})
 
 	label, found, err := resolver.FindRerecording(context.Background(), download.RerecordingQuery{OriginalMBID: itsOnlyLove})
 
@@ -256,7 +256,7 @@ func TestFindRerecording_MusicBrainzErrorsAreReturned(t *testing.T) {
 		"original detail": originalFails, "work recordings": workFails, "candidate detail": candidateFails,
 	} {
 		t.Run(name, func(t *testing.T) {
-			resolver := download.NewRecordingResolver(nil, download.WithRerecordingLookup(authority))
+			resolver := newResolver(t, download.NoopRecordingSearch(), lookups{rerecording: authority})
 			_, found, err := resolver.FindRerecording(context.Background(), download.RerecordingQuery{OriginalMBID: itsOnlyLove})
 			if !errors.Is(err, boom) || found {
 				t.Fatalf("FindRerecording = found %v, err %v; want the MusicBrainz error", found, err)

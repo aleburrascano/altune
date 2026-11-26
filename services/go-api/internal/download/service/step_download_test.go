@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/isrcwriteback"
 	"altune/go-api/internal/download/internal/core/musicbrainzmatch"
@@ -118,6 +119,40 @@ func TestConstructors_RefuseAMissingTempWorkspace(t *testing.T) {
 
 			if !errors.Is(err, service.ErrMissingCollaborator) || !strings.Contains(err.Error(), name) || !strings.Contains(err.Error(), "workspace") {
 				t.Errorf("%s error = %v, want ErrMissingCollaborator naming the constructor and the workspace", name, err)
+			}
+		})
+	}
+}
+
+func TestConstructors_RefuseAMissingLedgerSourcesFetcherOrAudioStore(t *testing.T) {
+	cases := map[string]func() error{
+		"ledger": func() error {
+			_, err := service.NewAcquireTrackAudioService(nil, service.NewSourceRegistry(), newFakeAudioStore(), osWorkspace{}, noopVerification(), noopStages())
+			return err
+		},
+		"source registry": func() error {
+			_, err := service.NewAcquireTrackAudioService(acquisitiontest.NewLedger(), nil, newFakeAudioStore(), osWorkspace{}, noopVerification(), noopStages())
+			return err
+		},
+		"audio store": func() error {
+			_, err := service.NewAcquireTrackAudioService(acquisitiontest.NewLedger(), service.NewSourceRegistry(), nil, osWorkspace{}, noopVerification(), noopStages())
+			return err
+		},
+		"fetcher": func() error {
+			_, err := service.NewDownloadStep(nil, osWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited())
+			return err
+		},
+		"audio store step audio store": func() error {
+			_, err := service.NewStoreStep(nil, osWorkspace{}, ports.NoopAudioProber(), service.MustDirectDeleteOrphans(discardingDeleter{}), ports.NoopAudioRefLookup())
+			return err
+		},
+	}
+	for name, build := range cases {
+		t.Run(name, func(t *testing.T) {
+			err := build()
+
+			if !errors.Is(err, service.ErrMissingCollaborator) || !strings.Contains(err.Error(), strings.TrimSuffix(name, " step audio store")) {
+				t.Errorf("error = %v, want ErrMissingCollaborator naming %q", err, name)
 			}
 		})
 	}

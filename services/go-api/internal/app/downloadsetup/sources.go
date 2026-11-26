@@ -74,7 +74,7 @@ func sourcesFor(ctx context.Context, cfg *config.Config, redis *goredis.Client, 
 		slog.InfoContext(ctx, "acquisition: yt-dlp source disabled via YTDLP_ENABLED")
 	}
 	if len(tiers.All()) > 0 {
-		tiers.First = append([]download.AudioSource{download.NewSource(searcher, download.WithPageReader(download.NewHTTPPageReader(transport, cfg.AcquisitionFileHostPageTimeout)))}, tiers.First...)
+		tiers.First = append([]download.AudioSource{download.MustNewSource(searcher, download.NewHTTPPageReader(transport, cfg.AcquisitionFileHostPageTimeout))}, tiers.First...)
 	}
 	return tiers, nil
 }

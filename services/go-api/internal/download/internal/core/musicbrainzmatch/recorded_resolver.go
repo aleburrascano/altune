@@ -7,20 +7,31 @@ import (
 )
 
 func NewRecorded(hits []ports.SearchedRecording, isrcRecordings []ports.ISRCRecording, pinned *ports.RecordingFacts) *Resolver {
-	return New(recordedSearch(hits),
-		WithISRCLookup(recordedISRCLookup(isrcRecordings)),
-		WithRecordingLookup(recordedLookup{pinned: pinned}))
+	return MustNew(Ports{
+		Search:      recordedSearch(hits),
+		ISRC:        recordedISRCLookup(isrcRecordings),
+		Recording:   recordedLookupOf(pinned),
+		Rerecording: ports.NoopRerecordingLookup(),
+	})
 }
 
 type recordedLookup struct {
-	pinned *ports.RecordingFacts
+	facts ports.RecordingFacts
+	has   bool
+}
+
+func recordedLookupOf(pinned *ports.RecordingFacts) recordedLookup {
+	if pinned == nil {
+		return recordedLookup{}
+	}
+	return recordedLookup{facts: *pinned, has: true}
 }
 
 func (l recordedLookup) RecordingByMBID(_ context.Context, mbid string) (ports.RecordingFacts, bool, error) {
-	if l.pinned == nil || l.pinned.MBID != mbid {
+	if !l.has || l.facts.MBID != mbid {
 		return ports.RecordingFacts{}, false, nil
 	}
-	return *l.pinned, true, nil
+	return l.facts, true, nil
 }
 
 type recordedSearch []ports.SearchedRecording

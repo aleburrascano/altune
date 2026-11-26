@@ -30,11 +30,13 @@ var (
 	MustNewAcquireTrackAudioService       = service.MustNewAcquireTrackAudioService
 	MustNewBackgroundAcquisitionScheduler = service.MustNewBackgroundAcquisitionScheduler
 	ErrLimitBelowOne                      = service.ErrLimitBelowOne
+	ErrUpgradeWorkersBelowOne             = service.ErrUpgradeWorkersBelowOne
 	ErrLimitNotConfigured                 = service.ErrLimitNotConfigured
 	ErrMissingCollaborator                = service.ErrMissingCollaborator
 	InMemoryQueue                         = service.InMemoryQueue
 	QueueOf                               = service.QueueOf
 	UpgradeLaneOf                         = service.UpgradeLaneOf
+	MustUpgradeLaneOf                     = service.MustUpgradeLaneOf
 	NoUpgradeLane                         = service.NoUpgradeLane
 	NoObserver                            = service.NoObserver
 	LimitedTo                             = service.LimitedTo

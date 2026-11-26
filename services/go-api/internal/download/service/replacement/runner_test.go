@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -107,6 +108,7 @@ func (p *publisher) Publish(context.Context, ids.UserId, events.Payload) {
 }
 
 type world struct {
+	t        *testing.T
 	tracks   *acquisitiontest.Ledger
 	audio    *audioStore
 	source   *source
@@ -128,6 +130,7 @@ func seed(t *testing.T, stored download.Grade) *world {
 		Confidence: 0.5,
 	}
 	return &world{
+		t:        t,
 		tracks:   acquisitiontest.NewLedger(track),
 		audio:    &audioStore{objects: map[string]string{originalRef: "original bytes"}},
 		source:   &source{},
@@ -152,7 +155,7 @@ func (l unstreamableLedger) Get(ctx context.Context, id ids.TrackId, userId ids.
 func TestRunner_TrustsTheLedgersStreamableAndSkipsAFileItCallsUnplayable(t *testing.T) {
 	w := seed(t, download.GradeB)
 	replacer := &gateRecorder{}
-	runner := download.NewUpgradeRunner(unstreamableLedger{w.tracks}, replacer, w.upgrades, download.UpgradeConfig{MaxTries: 3})
+	runner := newRunner(t, unstreamableLedger{w.tracks}, replacer, w.upgrades, download.UpgradeConfig{MaxTries: 3})
 
 	if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
@@ -184,10 +187,49 @@ func (w *world) runner(cfg download.UpgradeConfig) *download.UpgradeRunner {
 }
 
 func (w *world) runnerPublishingTo(cfg download.UpgradeConfig, pub events.Publisher) *download.UpgradeRunner {
+	return w.runnerChecking(cfg, pub, func(*download.AcquireTrackAudioService) download.UpgradeInPlace { return download.NoInPlaceCheck() })
+}
+
+func (w *world) runnerChecking(cfg download.UpgradeConfig, pub events.Publisher, inPlace func(*download.AcquireTrackAudioService) download.UpgradeInPlace) *download.UpgradeRunner {
 	stages := noStages(w.audio)
 	stages.Events = pub
 	svc := download.MustNewAcquireTrackAudioService(w.tracks, download.NewSourceRegistry(w.source), w.audio, download.NewTempWorkspace(), noVerification(), stages)
-	return download.NewUpgradeRunner(w.tracks, svc, w.upgrades, cfg)
+	runner, err := download.NewUpgradeRunner(w.tracks, svc, w.upgrades, cfg, inPlace(svc))
+	if err != nil {
+		w.t.Fatalf("NewUpgradeRunner: %v", err)
+	}
+	return runner
+}
+
+func newRunner(t testing.TB, ledger download.TrackLedgerPort, replacer download.UpgradeReplacer, store download.UpgradeStorePort, cfg download.UpgradeConfig) *download.UpgradeRunner {
+	t.Helper()
+	runner, err := download.NewUpgradeRunner(ledger, replacer, store, cfg, download.NoInPlaceCheck())
+	if err != nil {
+		t.Fatalf("NewUpgradeRunner: %v", err)
+	}
+	return runner
+}
+
+func TestNewUpgradeRunner_RefusesEachMissingPort(t *testing.T) {
+	w := seed(t, download.GradeB)
+	cases := map[string]func() (*download.UpgradeRunner, error){
+		"ledger": func() (*download.UpgradeRunner, error) {
+			return download.NewUpgradeRunner(nil, &gateRecorder{}, w.upgrades, download.UpgradeConfig{}, download.NoInPlaceCheck())
+		},
+		"replacer": func() (*download.UpgradeRunner, error) {
+			return download.NewUpgradeRunner(w.tracks, nil, w.upgrades, download.UpgradeConfig{}, download.NoInPlaceCheck())
+		},
+		"store": func() (*download.UpgradeRunner, error) {
+			return download.NewUpgradeRunner(w.tracks, &gateRecorder{}, nil, download.UpgradeConfig{}, download.NoInPlaceCheck())
+		},
+	}
+	for name, build := range cases {
+		runner, err := build()
+
+		if !errors.Is(err, download.ErrMissingRunnerPort) || !strings.Contains(err.Error(), name) || runner != nil {
+			t.Errorf("%s: got (%v, %v), want a nil runner and ErrMissingRunnerPort naming it", name, runner, err)
+		}
+	}
 }
 
 type audioDeleter interface {
@@ -424,7 +466,7 @@ func TestRunner_AFailedGiveUpStillSettlesTheKeptFile(t *testing.T) {
 	w := seed(t, download.GradeD)
 	store := &failingGiveUpStore{}
 	svc := download.MustNewAcquireTrackAudioService(w.tracks, download.NewSourceRegistry(w.source), w.audio, download.NewTempWorkspace(), noVerification(), noStages(w.audio))
-	runner := download.NewUpgradeRunner(w.tracks, svc, store, download.UpgradeConfig{MaxTries: 1})
+	runner := newRunner(t, w.tracks, svc, store, download.UpgradeConfig{MaxTries: 1})
 
 	err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId)
 
@@ -462,7 +504,7 @@ func TestRunner_ALowBitrateFileAtAIsNotSettled(t *testing.T) {
 			w := seed(t, download.GradeA)
 			w.storedEvidence(fmt.Sprintf(tc.evidence, download.PipelineGeneration))
 			replacer := &gateRecorder{}
-			runner := download.NewUpgradeRunner(w.tracks, replacer, w.upgrades, download.UpgradeConfig{MaxTries: 3, LowBitrateFloorKbps: 112})
+			runner := newRunner(t, w.tracks, replacer, w.upgrades, download.UpgradeConfig{MaxTries: 3, LowBitrateFloorKbps: 112})
 
 			if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
 				t.Fatalf("ExecuteUpgrade: %v", err)
@@ -485,7 +527,7 @@ func TestRunner_TheGateCarriesTheCatalogAndStoredLengths(t *testing.T) {
 	w := seed(t, download.GradeB)
 	w.storedLengths(285, 231)
 	replacer := &gateRecorder{}
-	runner := download.NewUpgradeRunner(w.tracks, replacer, w.upgrades, download.UpgradeConfig{MaxTries: 3})
+	runner := newRunner(t, w.tracks, replacer, w.upgrades, download.UpgradeConfig{MaxTries: 3})
 
 	if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
@@ -501,7 +543,7 @@ func TestRunner_ALowBitrateGateAlsoCarriesTheCatalogAndStoredLengths(t *testing.
 	w.storedEvidence(fmt.Sprintf(`{"grade":"A","source_format_id":"18","source_kbps":96,"in_place_generation":%d}`, download.PipelineGeneration))
 	w.storedLengths(195, 292)
 	replacer := &gateRecorder{}
-	runner := download.NewUpgradeRunner(w.tracks, replacer, w.upgrades, download.UpgradeConfig{MaxTries: 3, LowBitrateFloorKbps: 112})
+	runner := newRunner(t, w.tracks, replacer, w.upgrades, download.UpgradeConfig{MaxTries: 3, LowBitrateFloorKbps: 112})
 
 	if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
@@ -519,7 +561,7 @@ func TestRunner_ALowBitrateGateAlsoCarriesTheCatalogAndStoredLengths(t *testing.
 func TestRunner_ATrackWithNoKnownLengthsGetsAGateWithTheLengthRescueOff(t *testing.T) {
 	w := seed(t, download.GradeB)
 	replacer := &gateRecorder{}
-	runner := download.NewUpgradeRunner(w.tracks, replacer, w.upgrades, download.UpgradeConfig{MaxTries: 3})
+	runner := newRunner(t, w.tracks, replacer, w.upgrades, download.UpgradeConfig{MaxTries: 3})
 
 	if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)

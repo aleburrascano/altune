@@ -55,8 +55,8 @@ func (s *CooldownStore) Releases() int {
 func (s *CooldownStore) Reserve(_ context.Context, trackID ids.TrackId, kind ports.CooldownKind, cooldown time.Duration) (time.Time, bool, time.Duration, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.reserveErr != nil {
-		return time.Time{}, false, 0, s.reserveErr
+	if err := s.reserveErr; err != nil {
+		return time.Time{}, false, 0, err
 	}
 	now, key := s.now(), cooldownKey{track: trackID, kind: kind}
 	if last, held := s.admittedAt[key]; held && now.Sub(last) < cooldown {
@@ -73,8 +73,8 @@ func (s *CooldownStore) Release(ctx context.Context, trackID ids.TrackId, kind p
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if s.releaseErr != nil {
-		return s.releaseErr
+	if err := s.releaseErr; err != nil {
+		return err
 	}
 	key := cooldownKey{track: trackID, kind: kind}
 	if last, held := s.admittedAt[key]; held && last.Equal(at) {

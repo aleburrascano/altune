@@ -11,16 +11,24 @@ var (
 	ErrLimitBelowOne      = errors.New("download limit must allow at least one download")
 )
 
+type limitMode int
+
+const (
+	limitUnset limitMode = iota
+	limitCapped
+	limitUncapped
+)
+
 type ConcurrencyLimit struct {
-	slots     chan struct{}
-	unlimited bool
+	slots chan struct{}
+	mode  limitMode
 }
 
 func LimitedTo(n int) (*ConcurrencyLimit, error) {
 	if n < 1 {
 		return nil, fmt.Errorf("%w: got %d", ErrLimitBelowOne, n)
 	}
-	return &ConcurrencyLimit{slots: make(chan struct{}, n)}, nil
+	return &ConcurrencyLimit{slots: make(chan struct{}, n), mode: limitCapped}, nil
 }
 
 func MustLimitedTo(n int) *ConcurrencyLimit {
@@ -31,25 +39,26 @@ func MustLimitedTo(n int) *ConcurrencyLimit {
 	return limit
 }
 
-func Unlimited() *ConcurrencyLimit { return &ConcurrencyLimit{unlimited: true} }
+func Unlimited() *ConcurrencyLimit { return &ConcurrencyLimit{mode: limitUncapped} }
 
 func (l *ConcurrencyLimit) Acquire(ctx context.Context) error {
-	if l.unlimited {
+	switch l.mode {
+	case limitUncapped:
 		return nil
-	}
-	if l.slots == nil {
+	case limitCapped:
+		select {
+		case l.slots <- struct{}{}:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	default:
 		return ErrLimitNotConfigured
-	}
-	select {
-	case l.slots <- struct{}{}:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
 	}
 }
 
 func (l *ConcurrencyLimit) Release() {
-	if l.unlimited || l.slots == nil {
+	if l.mode != limitCapped {
 		return
 	}
 	<-l.slots

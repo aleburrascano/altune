@@ -55,7 +55,12 @@ func NewAcquireTrackAudioService(
 	opts ...func(*AcquireTrackAudioService),
 ) (*AcquireTrackAudioService, error) {
 	const owner = "NewAcquireTrackAudioService"
-	if err := errors.Join(wiring.validate(owner), stages.validate(owner), requireWorkspace(owner, workspace)); err != nil {
+	if err := errors.Join(
+		missingPort(owner, "ledger", ledger == nil),
+		missingPort(owner, "source registry", sources == nil),
+		missingPort(owner, "audio store", audioStore == nil),
+		wiring.validate(owner), stages.validate(owner), requireWorkspace(owner, workspace),
+	); err != nil {
 		return nil, err
 	}
 	s := &AcquireTrackAudioService{

@@ -45,7 +45,7 @@ func capturedLog(t *testing.T) *bytes.Buffer {
 }
 
 func TestFind_EmitsThePickedSoundCloudUpload(t *testing.T) {
-	src := download.NewSource(&recordingFetcher{})
+	src := newSource(t, &recordingFetcher{}, download.NoPageReader())
 
 	got, err := src.Find(context.Background(), requestPinning(
 		download.CatalogSource{Provider: "youtube", ExternalID: "hAx6mYeC6pY", URL: "https://music.youtube.com/watch?v=hAx6mYeC6pY"},
@@ -87,7 +87,7 @@ func TestFind_ASoundCloudPinWithoutAUsableURLIsSkippedAndLogged(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			logs := capturedLog(t)
 
-			got, err := download.NewSource(&recordingFetcher{}).Find(context.Background(),
+			got, err := newSource(t, &recordingFetcher{}, download.NoPageReader()).Find(context.Background(),
 				requestPinning(download.CatalogSource{Provider: "soundcloud", ExternalID: "1", URL: tt.url}))
 
 			if err != nil || len(got) != 0 {
@@ -103,7 +103,7 @@ func TestFind_ASoundCloudPinWithoutAUsableURLIsSkippedAndLogged(t *testing.T) {
 func TestFetch_DownloadsThePickedURL(t *testing.T) {
 	fetcher := &recordingFetcher{}
 
-	fetched, err := download.NewSource(fetcher).Fetch(context.Background(), download.AudioCandidate{URL: pickedUpload}, "/tmp/out")
+	fetched, err := newSource(t, fetcher, download.NoPageReader()).Fetch(context.Background(), download.AudioCandidate{URL: pickedUpload}, "/tmp/out")
 
 	if err != nil || fetcher.gotURL != pickedUpload || fetched.Path != "/tmp/out/track.mp3" {
 		t.Errorf("Fetch = %+v, %v; downloaded %q", fetched, err, fetcher.gotURL)
@@ -111,14 +111,41 @@ func TestFetch_DownloadsThePickedURL(t *testing.T) {
 }
 
 func TestName(t *testing.T) {
-	if got := download.NewSource(nil).Name(); got != download.SavedLinkSourceName {
+	if got := newSource(t, &recordingFetcher{}, download.NoPageReader()).Name(); got != download.SavedLinkSourceName {
 		t.Errorf("Name() = %q, want %q", got, download.SavedLinkSourceName)
 	}
 }
 
+func TestNewSource_RefusesAMissingFetcherOrPageReader(t *testing.T) {
+	if src, err := download.NewSource(nil, download.NoPageReader()); !errors.Is(err, download.ErrSavedLinkFetcherRequired) || src != nil {
+		t.Errorf("nil fetcher: got (%v, %v), want ErrSavedLinkFetcherRequired", src, err)
+	}
+	if src, err := download.NewSource(&recordingFetcher{}, nil); !errors.Is(err, download.ErrSavedLinkPageReaderRequired) || src != nil {
+		t.Errorf("nil page reader: got (%v, %v), want ErrSavedLinkPageReaderRequired", src, err)
+	}
+}
+
+type fetchesAudio interface {
+	Download(ctx context.Context, url, outDir string) (download.FetchedAudio, error)
+	MarkUnplayable(ctx context.Context, candidates []download.AudioCandidate)
+}
+
+type readsPages interface {
+	ReadPage(ctx context.Context, pageURL string) ([]byte, error)
+}
+
+func newSource(t testing.TB, fetcher fetchesAudio, pages readsPages) *download.SavedLinkSource {
+	t.Helper()
+	src, err := download.NewSource(fetcher, pages)
+	if err != nil {
+		t.Fatalf("NewSource: %v", err)
+	}
+	return src
+}
+
 func TestFind_EmitsTheKnownSource(t *testing.T) {
 	const known = "https://music.youtube.com/watch?v=NxTPVbk-FZQ"
-	src := download.NewSource(&recordingFetcher{})
+	src := newSource(t, &recordingFetcher{}, download.NoPageReader())
 	req := requestPinning()
 	req.KnownSourceURL = known
 
@@ -167,7 +194,7 @@ func (f *inspectingFetcher) MarkUnplayable(_ context.Context, candidates []downl
 
 func findPinned(t *testing.T, f *inspectingFetcher) []download.AudioCandidate {
 	t.Helper()
-	got, err := download.NewSource(f).Find(context.Background(), requestPinning(
+	got, err := newSource(t, f, download.NoPageReader()).Find(context.Background(), requestPinning(
 		download.CatalogSource{Provider: "soundcloud", URL: pickedUpload}))
 	if err != nil || len(got) != 1 {
 		t.Fatalf("Find = %v, %v; want one candidate", got, err)
@@ -200,7 +227,7 @@ func TestFind_KeepsAPinPlayableWhenInspectionFails(t *testing.T) {
 }
 
 func TestFind_RebuildsAPixeldrainPinFromItsFileID(t *testing.T) {
-	src := download.NewSource(&recordingFetcher{})
+	src := newSource(t, &recordingFetcher{}, download.NoPageReader())
 
 	got, err := src.Find(context.Background(), requestPinning(
 		download.CatalogSource{Provider: "pixeldrain", ExternalID: "ozSpSjn7", URL: "https://evil.example/x"},
@@ -213,7 +240,7 @@ func TestFind_RebuildsAPixeldrainPinFromItsFileID(t *testing.T) {
 }
 
 func TestFind_PrefersThePixeldrainFileOverASoundCloudPin(t *testing.T) {
-	src := download.NewSource(&recordingFetcher{})
+	src := newSource(t, &recordingFetcher{}, download.NoPageReader())
 
 	got, _ := src.Find(context.Background(), requestPinning(
 		download.CatalogSource{Provider: "soundcloud", ExternalID: "1", URL: pickedUpload},
@@ -226,7 +253,7 @@ func TestFind_PrefersThePixeldrainFileOverASoundCloudPin(t *testing.T) {
 }
 
 func TestFind_DropsAMalformedPixeldrainID(t *testing.T) {
-	src := download.NewSource(&recordingFetcher{})
+	src := newSource(t, &recordingFetcher{}, download.NoPageReader())
 
 	got, _ := src.Find(context.Background(), requestPinning(
 		download.CatalogSource{Provider: "pixeldrain", ExternalID: "../etc"},
@@ -242,7 +269,7 @@ func TestFind_RebuildsEveryFileHostPinFromItsID(t *testing.T) {
 		"https://api.pillows.su/api/download/84310b5d2c21df85e4570aec299d1ead": {Provider: "pillows", ExternalID: "84310b5d2c21df85e4570aec299d1ead", URL: "https://evil.example/x"},
 	}
 	for want, pin := range cases {
-		got, err := download.NewSource(&recordingFetcher{}).Find(context.Background(), requestPinning(pin))
+		got, err := newSource(t, &recordingFetcher{}, download.NoPageReader()).Find(context.Background(), requestPinning(pin))
 		if err != nil || len(got) != 1 || got[0].URL != want {
 			t.Errorf("Find(%s) = %+v, %v; want one pin at %s", pin.Provider, got, err, want)
 		}
@@ -262,7 +289,7 @@ func (f *fakePages) ReadPage(_ context.Context, pageURL string) ([]byte, error) 
 
 func TestFind_ResolvesAnImgurggPinToItsCDNFile(t *testing.T) {
 	pages := &fakePages{body: `<a href="https://evil.example/0Q3ydhk-a.mp3"></a><audio src="https://b.imgur.gg/0Q3ydhk-Got_A_New_One.mp3">`}
-	got, err := download.NewSource(&recordingFetcher{}, download.WithPageReader(pages)).Find(context.Background(), requestPinning(
+	got, err := newSource(t, &recordingFetcher{}, pages).Find(context.Background(), requestPinning(
 		download.CatalogSource{Provider: "imgurgg", ExternalID: "0Q3ydhk", URL: "https://evil.example/x"},
 	))
 	want := "https://b.imgur.gg/0Q3ydhk-Got_A_New_One.mp3"
@@ -273,9 +300,9 @@ func TestFind_ResolvesAnImgurggPinToItsCDNFile(t *testing.T) {
 
 func TestFind_DropsAnImgurggPinWhosePageHasNoCDNFile(t *testing.T) {
 	for name, src := range map[string]*download.SavedLinkSource{
-		"foreign file": download.NewSource(&recordingFetcher{}, download.WithPageReader(&fakePages{body: `<audio src="https://evil.example/0Q3ydhk-a.mp3">`})),
-		"page error":   download.NewSource(&recordingFetcher{}, download.WithPageReader(&fakePages{err: errors.New("down")})),
-		"no reader":    download.NewSource(&recordingFetcher{}),
+		"foreign file": newSource(t, &recordingFetcher{}, &fakePages{body: `<audio src="https://evil.example/0Q3ydhk-a.mp3">`}),
+		"page error":   newSource(t, &recordingFetcher{}, &fakePages{err: errors.New("down")}),
+		"no reader":    newSource(t, &recordingFetcher{}, download.NoPageReader()),
 	} {
 		got, _ := src.Find(context.Background(), requestPinning(download.CatalogSource{Provider: "imgurgg", ExternalID: "0Q3ydhk"}))
 		if len(got) != 0 {

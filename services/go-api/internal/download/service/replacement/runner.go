@@ -37,11 +37,34 @@ type Runner struct {
 	replacer Replacer
 	store    ports.UpgradeStore
 	cfg      Config
-	inPlace  *inPlaceCheck
+	inPlace  InPlace
 }
 
-func NewRunner(ledger ports.LibraryTracks, replacer Replacer, store ports.UpgradeStore, cfg Config) *Runner {
-	return &Runner{ledger: ledger, replacer: replacer, store: store, cfg: cfg}
+var ErrMissingRunnerPort = errors.New("replacement: a required runner port is missing")
+
+func NewRunner(ledger ports.LibraryTracks, replacer Replacer, store ports.UpgradeStore, cfg Config, inPlace InPlace) (*Runner, error) {
+	missing := []struct {
+		name string
+		gone bool
+	}{
+		{"ledger", ledger == nil},
+		{"replacer", replacer == nil},
+		{"store", store == nil},
+	}
+	for _, port := range missing {
+		if port.gone {
+			return nil, fmt.Errorf("%w: %s", ErrMissingRunnerPort, port.name)
+		}
+	}
+	return &Runner{ledger: ledger, replacer: replacer, store: store, cfg: cfg, inPlace: inPlace}, nil
+}
+
+func MustNewRunner(ledger ports.LibraryTracks, replacer Replacer, store ports.UpgradeStore, cfg Config, inPlace InPlace) *Runner {
+	r, err := NewRunner(ledger, replacer, store, cfg, inPlace)
+	if err != nil {
+		panic(err)
+	}
+	return r
 }
 
 type outcome string

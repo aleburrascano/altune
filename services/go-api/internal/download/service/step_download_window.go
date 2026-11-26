@@ -11,7 +11,7 @@ import (
 )
 
 func (s *DownloadStep) executeWindowed(ctx context.Context, ac *AcquisitionContext) (afterDownload, error) {
-	failures := downloadFailures{unavailable: ac.SearchUnavailable}
+	failures := newDownloadFailures(ac.SearchUnavailable)
 	holds := holdBook{ws: s.workspace}
 	defer holds.discard(ctx)
 	pending := ac.Ranked

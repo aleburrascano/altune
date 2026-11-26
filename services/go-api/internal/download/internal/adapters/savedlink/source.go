@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/filelinks"
 	"context"
+	"errors"
 	"log/slog"
 	"net/url"
 	"strings"
@@ -30,19 +31,35 @@ type Source struct {
 	pages   pageReader
 }
 
-type Option func(*Source)
+var (
+	ErrFetcherRequired    = errors.New("savedlink: an audio fetcher is required")
+	ErrPageReaderRequired = errors.New("savedlink: a page reader is required")
+	ErrNoPageReader       = errors.New("savedlink: no page reader is wired")
+)
 
-func WithPageReader(pages pageReader) Option {
-	return func(s *Source) { s.pages = pages }
+func NewSource(fetcher audioFetcher, pages pageReader) (*Source, error) {
+	if fetcher == nil {
+		return nil, ErrFetcherRequired
+	}
+	if pages == nil {
+		return nil, ErrPageReaderRequired
+	}
+	return &Source{fetcher: fetcher, pages: pages}, nil
 }
 
-func NewSource(fetcher audioFetcher, opts ...Option) *Source {
-	s := &Source{fetcher: fetcher}
-	for _, opt := range opts {
-		opt(s)
+func MustNewSource(fetcher audioFetcher, pages pageReader) *Source {
+	s, err := NewSource(fetcher, pages)
+	if err != nil {
+		panic(err)
 	}
 	return s
 }
+
+type noPageReader struct{}
+
+func NoPageReader() pageReader { return noPageReader{} }
+
+func (noPageReader) ReadPage(context.Context, string) ([]byte, error) { return nil, ErrNoPageReader }
 
 func (s *Source) Name() acqdomain.SourceName { return SourceName }
 
@@ -80,7 +97,7 @@ func (s *Source) fileURL(ctx context.Context, pin ports.CatalogSource) (string, 
 		return download, true
 	}
 	page, ok := filelinks.FileOnPage(pin.Provider, pin.ExternalID)
-	if !ok || s.pages == nil {
+	if !ok {
 		return "", false
 	}
 	body, err := s.pages.ReadPage(ctx, page.PageURL)

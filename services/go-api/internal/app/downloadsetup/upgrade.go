@@ -11,13 +11,16 @@ import (
 
 func upgradeLane(cfg *config.Config, pool *pgxpool.Pool, ledger download.TrackLedgerPort, svc *download.AcquireTrackAudioService) download.UpgradeLane {
 	store := download.NewPostgresUpgradeStore(pool)
-	runner := download.NewUpgradeRunner(ledger, svc, store,
+	inPlace, err := download.InPlaceCheckOf(svc, store, cfg.AcquisitionUpgradeVerifyPerHour)
+	if err != nil {
+		panic(err)
+	}
+	runner := download.MustNewUpgradeRunner(ledger, svc, store,
 		download.UpgradeConfig{
 			MaxTries:            cfg.AcquisitionUpgradeMaxTries,
 			LowBitrateFloorKbps: cfg.AcquisitionLowBitrateFloorKbps,
-		}).
-		WithInPlaceCheck(svc, store, cfg.AcquisitionUpgradeVerifyPerHour)
-	return download.UpgradeLaneOf(runner, cfg.AcquisitionUpgradeConcurrency)
+		}, inPlace)
+	return download.MustUpgradeLaneOf(runner, cfg.AcquisitionUpgradeConcurrency)
 }
 
 func upgradePreviewMatcher(cfg *config.Config, transport http.RoundTripper) download.PreviewMatcher {

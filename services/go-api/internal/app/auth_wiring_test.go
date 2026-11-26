@@ -70,6 +70,7 @@ func newJWKSFixture(t *testing.T) jwksFixture {
 	return jwksFixture{key: key, operator: operator, jwks: srv, keysDown: keysDown, cfg: &config.Config{
 		MusicDir:                       t.TempDir(),
 		AcquisitionDownloadConcurrency: 1,
+		AcquisitionUpgradeConcurrency:  1,
 		SupabaseJWTJWKSURL:             srv.URL,
 		SupabaseProjectURL:             "https://p.supabase.co",
 		SupabaseJWTAud:                 "authenticated",

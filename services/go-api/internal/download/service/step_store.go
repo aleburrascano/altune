@@ -37,6 +37,7 @@ type StoreStep struct {
 func NewStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder, prober ports.AudioProber, orphans ports.OrphanedAudioRecorder, refs ports.AudioRefLookup, opts ...func(*StoreStep)) (*StoreStep, error) {
 	const owner = "NewStoreStep"
 	if err := errors.Join(
+		missingPort(owner, "audio store", audioStore == nil),
 		missingPort(owner, "prober", prober == nil),
 		missingPort(owner, "orphan recorder", orphans == nil),
 		missingPort(owner, "audio ref lookup", refs == nil),
@@ -154,14 +155,22 @@ func (s *StoreStep) deleteWithRetry(ctx context.Context, audioRef string) error 
 		}
 		slog.WarnContext(ctx, "acquisition.rollback_delete_retrying",
 			"audio_ref", audioRef, "attempt", attempt, "error", err)
-		if ctx.Err() != nil {
+		if attempt == s.deleteTries || !waitOut(ctx, rollbackDeleteBackoff.Delay(attempt)) {
 			break
-		}
-		if attempt < s.deleteTries {
-			time.Sleep(rollbackDeleteBackoff.Delay(attempt))
 		}
 	}
 	slog.ErrorContext(ctx, "orphaned audio file after rollback",
 		"audio_ref", audioRef, "error", err)
 	return fmt.Errorf("rollback delete audio %q: %w", audioRef, err)
+}
+
+func waitOut(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }

@@ -64,18 +64,27 @@ type finalStage[In, Out any] interface {
 }
 
 type Pipeline struct {
-	search      stage[PipelineStart, afterSearch]
-	selectBest  stage[afterSearch, AfterSelect]
-	download    stage[AfterSelect, afterDownload]
-	tag         stage[afterDownload, afterTag]
-	store       stage[afterTag, AfterStore]
-	updateTrack finalStage[AfterStore, afterUpdate]
+	search     stage[PipelineStart, afterSearch]
+	selectBest stage[afterSearch, AfterSelect]
+	download   stage[AfterSelect, afterDownload]
+	tag        stage[afterDownload, afterTag]
+	store      stage[afterTag, AfterStore]
+	finish     func(ctx context.Context, run *pipelineRun, stored AfterStore) error
 }
 
+func endsAtStore(context.Context, *pipelineRun, AfterStore) error { return nil }
+
 func (p Pipeline) withUpdateTrack(s finalStage[AfterStore, afterUpdate]) Pipeline {
-	p.updateTrack = s
+	p.finish = func(ctx context.Context, run *pipelineRun, stored AfterStore) error {
+		_, err := execStage(ctx, run, s, stored)
+		return err
+	}
 	return p
 }
+
+type pendingStep struct{}
+
+func (pendingStep) Name() StepName { return stepNamePipeline }
 
 type StepError struct {
 	Step StepName
@@ -93,7 +102,7 @@ type pipelineRun struct {
 }
 
 func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) error {
-	run := &pipelineRun{ac: ac, reporter: jobReporterFrom(ctx)}
+	run := &pipelineRun{ac: ac, reporter: jobReporterFrom(ctx), current: pendingStep{}}
 	var err error
 	panicked := background.SafeRun(ctx, "acquisition.pipeline_panic", func() { err = runStages(ctx, run, p) },
 		"step", run, "track_id", ac.Track.ID)
@@ -105,9 +114,6 @@ func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) error 
 }
 
 func (run *pipelineRun) currentStep() StepName {
-	if run.current == nil {
-		return stepNamePipeline
-	}
 	return run.current.Name()
 }
 
@@ -129,11 +135,7 @@ func runStages(ctx context.Context, run *pipelineRun, p Pipeline) error {
 	if err != nil {
 		return err
 	}
-	if p.updateTrack == nil {
-		return nil
-	}
-	_, err = execStage(ctx, run, p.updateTrack, stored)
-	return err
+	return p.finish(ctx, run, stored)
 }
 
 func logShadowJudge(ctx context.Context, ac *AcquisitionContext, downloadErr error) {
@@ -466,7 +468,7 @@ func CoreSteps(
 	if err := errors.Join(downloadErr, tagErr, storeErr); err != nil {
 		return Pipeline{}, err
 	}
-	return Pipeline{search: NewSearchStep(sources), selectBest: NewSelectStep(), download: download, tag: tag, store: stored}, nil
+	return Pipeline{search: NewSearchStep(sources), selectBest: NewSelectStep(), download: download, tag: tag, store: stored, finish: endsAtStore}, nil
 }
 
 func buildCoreSteps(
@@ -490,5 +492,6 @@ func buildCoreSteps(
 		download:   buildDownloadStep(sources, workspace, identifier, lookup, prober, skips, limit, append([]func(*DownloadStep){WithVerifyWidth(ProdVerifyWidth)}, downloadOpts...)...),
 		tag:        &TagStep{tagger: tagger},
 		store:      buildStoreStep(store, workspace, prober, orphans, refs, storeOpts...),
+		finish:     endsAtStore,
 	}
 }

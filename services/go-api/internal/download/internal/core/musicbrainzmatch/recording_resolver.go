@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 	"altune/go-api/internal/shared/titlemarkers"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -21,6 +22,15 @@ var (
 	_ acqports.RecordingLookup   = (*Resolver)(nil)
 )
 
+var ErrMissingPort = errors.New("musicbrainzmatch: a required port is missing")
+
+type Ports struct {
+	Search      acqports.RecordingSearch
+	ISRC        acqports.ISRCLookup
+	Recording   acqports.RecordingLookup
+	Rerecording acqports.RerecordingLookup
+}
+
 type Resolver struct {
 	search      acqports.RecordingSearch
 	isrc        acqports.ISRCLookup
@@ -28,26 +38,33 @@ type Resolver struct {
 	rerecording acqports.RerecordingLookup
 }
 
-func New(search acqports.RecordingSearch, opts ...func(*Resolver)) *Resolver {
-	r := &Resolver{search: search}
-	for _, opt := range opts {
-		opt(r)
+func New(p Ports) (*Resolver, error) {
+	missing := []struct {
+		name string
+		gone bool
+	}{
+		{"Search", p.Search == nil},
+		{"ISRC", p.ISRC == nil},
+		{"Recording", p.Recording == nil},
+		{"Rerecording", p.Rerecording == nil},
+	}
+	for _, port := range missing {
+		if port.gone {
+			return nil, fmt.Errorf("%w: Ports.%s", ErrMissingPort, port.name)
+		}
+	}
+	return &Resolver{search: p.Search, isrc: p.ISRC, lookup: p.Recording, rerecording: p.Rerecording}, nil
+}
+
+func MustNew(p Ports) *Resolver {
+	r, err := New(p)
+	if err != nil {
+		panic(err)
 	}
 	return r
 }
 
-func WithISRCLookup(a acqports.ISRCLookup) func(*Resolver) {
-	return func(r *Resolver) { r.isrc = a }
-}
-
-func WithRecordingLookup(l acqports.RecordingLookup) func(*Resolver) {
-	return func(r *Resolver) { r.lookup = l }
-}
-
 func (r *Resolver) RecordingByMBID(ctx context.Context, mbid string) (acqports.RecordingFacts, bool, error) {
-	if r.lookup == nil {
-		return acqports.RecordingFacts{}, false, nil
-	}
 	return r.lookup.RecordingByMBID(ctx, mbid)
 }
 
@@ -195,7 +212,7 @@ func referenceSet(mbid string, recordings []acqports.ISRCRecording) []string {
 }
 
 func (r *Resolver) isrcRecordings(ctx context.Context, isrc string) []acqports.ISRCRecording {
-	if r.isrc == nil || isrc == "" {
+	if isrc == "" {
 		return nil
 	}
 	recordings, err := r.isrc.RecordingsByISRC(ctx, isrc)
@@ -238,7 +255,7 @@ func closestRecording(recordings []acqports.ISRCRecording, want float64) (acqpor
 }
 
 func (r *Resolver) resolveFromSearch(ctx context.Context, q acqports.RecordingQuery) (acqports.RecordingIdentity, error) {
-	if r.search == nil || q.Title == "" || q.Artist == "" {
+	if q.Title == "" || q.Artist == "" {
 		return acqports.RecordingIdentity{}, nil
 	}
 	results, err := r.searchTracks(ctx, q)
