@@ -266,6 +266,10 @@ jest_failures() {
   if [ "$last_rc" = 124 ] || [ "$last_rc" = 137 ]; then
     echo "jest did not exit within ${jest_limit}s and was killed (raise PRECHECK_JEST_TIMEOUT if the suite is just slow)"
   fi
+  if grep -qF 'JavaScript heap out of memory' "$log"; then
+    echo "a jest worker ran out of memory (the V8 heap limit, about 2 GB on chudbox). Jest reports that kill as 'terminated by another process: signal=SIGTERM'; nothing outside jest sent it."
+    echo "client/jest.config.js caps this with workerIdleMemoryLimit: rebase onto main if your branch lacks it. If it has it, one suite allocates more than the cap between checks: run the suites named below alone."
+  fi
   local names suites
   names=$(sed -E 's/\x1b\[[0-9;]*m//g' "$log" | grep -E '^[[:space:]]*● ' | grep -vE '● Console$' | sed -E 's/^[[:space:]]+//' | awk '!seen[$0]++')
   suites=$(jest_failed_suites)

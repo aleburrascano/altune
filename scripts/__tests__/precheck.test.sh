@@ -365,6 +365,19 @@ case "${STUB_JEST:-pass}" in
         echo "Test Suites: 120 failed, 259 passed, 379 total"
         exit 1
         ;;
+    oom)
+        echo "<--- Last few GCs --->"
+        echo ""
+        echo "[2761164:0x34366000]   378837 ms: Scavenge 1969.2 (2019.6) -> 1960.9 (2051.5) MB, pooled: 0 MB, 13.46 / 0.00 ms  allocation failure;"
+        echo "FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory"
+        echo "FAIL native src/__tests__/killed.test.ts"
+        echo "  ● Test suite failed to run"
+        echo ""
+        echo "    A jest worker process (pid=2761164) was terminated by another process: signal=SIGTERM, exitCode=null. Operating system logs may contain more information on why this occurred."
+        echo "Test Suites: 1 failed, 378 passed, 379 total"
+        echo "Tests:       5943 passed, 5943 total"
+        exit 1
+        ;;
     hang) exec sleep 60 ;;
 esac
 exit 0
@@ -441,6 +454,20 @@ grep -qF "logged before the error" <<<"$suites_block" && fail "console output is
 grep -qF "import { thing }" <<<"$suites_block" && fail "code frame lines are not part of a suite's error"
 grep -qF "fine.test.ts" "$WORK/out.log" && fail "passing suites are not listed"
 grep -qF "at frame 1 (node_modules/z.js" "$WORK/out.log" && fail "the suite's error should drop stack frames"
+grep -qF "ran out of memory" "$WORK/out.log" && fail "a failure that is not an out-of-memory kill should not say a worker ran out of memory"
+
+CASE="a jest worker killed by its own heap limit is named as out of memory, not left as a SIGTERM from outside"
+new_repo
+add_mobile_stubs
+add_jest_stub
+mobile_src_change
+STUB_JEST=oom NPX_LOG="$WORK/npx.log" run_script_with_stubs
+expect_rc 1
+expect_out "FAIL  mobile tests (related)"
+expect_out "a jest worker ran out of memory"
+expect_out "nothing outside jest sent it"
+expect_out "workerIdleMemoryLimit"
+expect_out "src/__tests__/killed.test.ts"
 
 CASE="a jest run where many suites fail to run cuts the failed suites list instead of printing all of it"
 new_repo
