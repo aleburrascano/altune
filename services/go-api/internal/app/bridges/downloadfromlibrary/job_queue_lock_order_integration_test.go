@@ -3,8 +3,8 @@ package downloadfromlibrary_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/library"
-	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/dbtest"
+	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
 	"sync"

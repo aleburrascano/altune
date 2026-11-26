@@ -414,7 +414,7 @@ func (f *flakyRequeuer) Requeue(ctx context.Context, id ids.TrackId) error {
 }
 
 func TestPostgresJobQueue_ARefusedTrackMarkedFailedByTheCatalogIsNotClaimed(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := newQueue(pool)
 	repo := library.NewPostgresTrackRepository(pool)
@@ -516,7 +516,7 @@ func TestPostgresJobQueue_ClaimWhoseStatusFlipFailsReleasesTheJob(t *testing.T) 
 }
 
 func TestPostgresJobQueue_EnqueueClearsALeftoverFailureReasonThroughTheLedger(t *testing.T) {
-	testdb.RequireIntegration(t)
+	dbtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := newQueue(pool)
 	ctx := context.Background()
