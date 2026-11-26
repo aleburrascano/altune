@@ -1,9 +1,9 @@
 package memory_test
 
 import (
-	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"strconv"
 	"sync/atomic"

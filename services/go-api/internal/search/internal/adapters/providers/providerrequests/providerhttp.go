@@ -1,8 +1,8 @@
 package providerrequests
 
 import (
-	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/retrysafe"
 	"bytes"
 	"context"

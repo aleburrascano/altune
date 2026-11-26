@@ -1,12 +1,12 @@
 package search
 
 import (
-	domain "altune/go-api/internal/search/domain"
 	memory "altune/go-api/internal/search/internal/adapters/memory"
 	ports "altune/go-api/internal/search/internal/core/ports"
-	content "altune/go-api/internal/search/service/artistpage"
-	providercall "altune/go-api/internal/search/service/providerguard"
-	unreleased "altune/go-api/internal/search/service/unreleased"
+	domain "altune/go-api/internal/search/internal/domain"
+	content "altune/go-api/internal/search/internal/service/artistpage"
+	providercall "altune/go-api/internal/search/internal/service/providerguard"
+	unreleased "altune/go-api/internal/search/internal/service/unreleased"
 )
 
 type (

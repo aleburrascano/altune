@@ -1,10 +1,10 @@
 package persistence_test
 
 import (
-	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/testdb"
 	"context"
 	"testing"

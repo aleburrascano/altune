@@ -1,8 +1,7 @@
 package search
 
 import (
-	handler "altune/go-api/internal/search/adapters/handler"
-	domain "altune/go-api/internal/search/domain"
+	handler "altune/go-api/internal/search/internal/adapters/handler"
 	providermetrics "altune/go-api/internal/search/internal/adapters/providermetrics"
 	artworkchain "altune/go-api/internal/search/internal/adapters/providers/artworkfallback"
 	itunes "altune/go-api/internal/search/internal/adapters/providers/itunes"
@@ -11,8 +10,9 @@ import (
 	soundcloud "altune/go-api/internal/search/internal/adapters/providers/soundcloud"
 	enrich "altune/go-api/internal/search/internal/core/details"
 	ports "altune/go-api/internal/search/internal/core/ports"
-	rank "altune/go-api/internal/search/service/rank"
-	unreleased "altune/go-api/internal/search/service/unreleased"
+	domain "altune/go-api/internal/search/internal/domain"
+	rank "altune/go-api/internal/search/internal/service/rank"
+	unreleased "altune/go-api/internal/search/internal/service/unreleased"
 )
 
 type (

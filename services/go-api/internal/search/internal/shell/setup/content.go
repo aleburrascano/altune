@@ -2,9 +2,9 @@ package setup
 
 import (
 	"altune/go-api/internal/search/internal/adapters/connections"
-	"altune/go-api/internal/search/service/artistpage"
-	"altune/go-api/internal/search/service/providerguard"
-	"altune/go-api/internal/search/service/related"
+	"altune/go-api/internal/search/internal/service/artistpage"
+	"altune/go-api/internal/search/internal/service/providerguard"
+	"altune/go-api/internal/search/internal/service/related"
 	"altune/go-api/internal/shared/background"
 	"fmt"
 )

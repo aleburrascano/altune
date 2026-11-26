@@ -1,8 +1,8 @@
 package spotify
 
 import (
-	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/redact"
 	"bytes"
 	"context"

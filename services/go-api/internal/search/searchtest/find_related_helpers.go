@@ -3,8 +3,8 @@ package searchtest
 import (
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/core/ports"
-	"altune/go-api/internal/search/service/providerguard"
-	"altune/go-api/internal/search/service/related"
+	"altune/go-api/internal/search/internal/service/providerguard"
+	"altune/go-api/internal/search/internal/service/related"
 	"testing"
 )
 

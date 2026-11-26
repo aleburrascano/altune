@@ -1,7 +1,7 @@
 package persistence
 
 import (
-	"altune/go-api/internal/search/domain"
+	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"fmt"
 	"time"

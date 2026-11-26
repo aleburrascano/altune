@@ -1,8 +1,8 @@
 package artworkfallback
 
 import (
-	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"errors"
 	"fmt"

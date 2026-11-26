@@ -1,7 +1,7 @@
 package providertest
 
 import (
-	"altune/go-api/internal/search/domain"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/clock"
 	"bytes"
 	"context"

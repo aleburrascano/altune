@@ -3,7 +3,7 @@ package searchtest
 import (
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/core/ports"
-	"altune/go-api/internal/search/service/unreleased"
+	"altune/go-api/internal/search/internal/service/unreleased"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"context"

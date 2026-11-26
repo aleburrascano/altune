@@ -1,6 +1,6 @@
 package memory
 
-import "altune/go-api/internal/search/domain"
+import "altune/go-api/internal/search/internal/domain"
 
 func WithPop(r domain.SearchResult, pop float64) domain.SearchResult {
 	r.Popularity = pop

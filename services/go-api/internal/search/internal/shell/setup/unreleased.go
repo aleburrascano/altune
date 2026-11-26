@@ -1,13 +1,13 @@
 package setup
 
 import (
-	"altune/go-api/internal/search/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/cache"
 	"altune/go-api/internal/search/internal/adapters/connections"
+	"altune/go-api/internal/search/internal/adapters/handler"
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/core/ports"
-	"altune/go-api/internal/search/service/artistpage"
-	"altune/go-api/internal/search/service/unreleased"
+	"altune/go-api/internal/search/internal/service/artistpage"
+	"altune/go-api/internal/search/internal/service/unreleased"
 	"altune/go-api/internal/shared/clock"
 	"fmt"
 )

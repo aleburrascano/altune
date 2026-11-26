@@ -1,6 +1,6 @@
 package search
 
-import handler "altune/go-api/internal/search/adapters/handler"
+import handler "altune/go-api/internal/search/internal/adapters/handler"
 
 type (
 	DetailEnrichers   = handler.DetailEnrichers

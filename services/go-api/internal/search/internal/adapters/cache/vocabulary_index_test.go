@@ -1,8 +1,8 @@
 package cache_test
 
 import (
-	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/adapters/cache"
+	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"net"
 	"strings"

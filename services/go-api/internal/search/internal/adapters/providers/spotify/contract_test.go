@@ -1,9 +1,9 @@
 package spotify_test
 
 import (
-	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
 	"altune/go-api/internal/search/internal/adapters/providers/spotify"
+	"altune/go-api/internal/search/internal/domain"
 	"net/http"
 	"net/http/httptest"
 	"testing"

@@ -2,7 +2,7 @@ package searchtest
 
 import (
 	"altune/go-api/internal/search/internal/core/ports"
-	"altune/go-api/internal/search/service/inlibrary"
+	"altune/go-api/internal/search/internal/service/inlibrary"
 	"altune/go-api/internal/shared/background"
 	"testing"
 )

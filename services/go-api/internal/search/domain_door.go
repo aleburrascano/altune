@@ -1,6 +1,6 @@
 package search
 
-import domain "altune/go-api/internal/search/domain"
+import domain "altune/go-api/internal/search/internal/domain"
 
 type (
 	InteractionEvent      = domain.InteractionEvent
@@ -8,6 +8,7 @@ type (
 	ProviderKey           = domain.ProviderKey
 	ProviderName          = domain.ProviderName
 	ResultKind            = domain.ResultKind
+	ResultKindSet         = domain.ResultKindSet
 	SearchQuery           = domain.SearchQuery
 	SearchResult          = domain.SearchResult
 	ProviderLink          = domain.ProviderLink

@@ -1,10 +1,10 @@
 package applemusic
 
 import (
-	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/adapters/providers/itunes"
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/adapters/providers/providersearch"
+	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"fmt"
 	"net/http"

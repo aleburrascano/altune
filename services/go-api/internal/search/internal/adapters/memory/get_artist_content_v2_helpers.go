@@ -1,6 +1,6 @@
 package memory
 
-import "altune/go-api/internal/search/domain"
+import "altune/go-api/internal/search/internal/domain"
 
 func TrackFrom(provider domain.ProviderName, id, title, artist string) domain.SearchResult {
 	return domain.SearchResult{
