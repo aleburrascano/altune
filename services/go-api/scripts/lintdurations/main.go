@@ -41,16 +41,24 @@ func say(w io.Writer, format string, a ...any) {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	summary := false
-	if len(args) > 0 && args[0] == "--summary" {
-		summary = true
-		args = args[1:]
+	var dirs []string
+	for _, arg := range args {
+		switch {
+		case arg == "--summary":
+			summary = true
+		case strings.HasPrefix(arg, "-"):
+			say(stderr, "%s\n", usage)
+			return 2
+		default:
+			dirs = append(dirs, arg)
+		}
 	}
-	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
+	if len(dirs) == 0 {
 		say(stderr, "%s\n", usage)
 		return 2
 	}
 	var found []violation
-	for _, dir := range args {
+	for _, dir := range dirs {
 		hits, err := scanDir(dir)
 		if err != nil {
 			say(stderr, "lintdurations: %v\n", err)
@@ -88,13 +96,17 @@ func printSummary(w io.Writer, found []violation) {
 }
 
 func scanDir(root string) ([]violation, error) {
+	resolved, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return nil, err
+	}
 	var found []violation
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(resolved, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() {
-			if skippedDirs[d.Name()] {
+			if path != resolved && skippedDirs[d.Name()] {
 				return filepath.SkipDir
 			}
 			return nil
@@ -118,6 +130,11 @@ func scanFile(path string) ([]violation, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
+	pkg, ok := timeImportName(file)
+	if !ok {
+		return nil, nil
+	}
+	c := checker{pkg: pkg}
 	var found []violation
 	for _, decl := range file.Decls {
 		ast.Inspect(decl, func(n ast.Node) bool {
@@ -125,7 +142,7 @@ func scanFile(path string) ([]violation, error) {
 			case *ast.GenDecl:
 				return v.Tok != token.CONST
 			case *ast.BinaryExpr:
-				if v.Op == token.MUL && isLiteralTimesUnit(v) {
+				if v.Op == token.MUL && c.isNumberTimesUnit(v) {
 					found = append(found, violation{path, fset.Position(v.Pos()).Line})
 				}
 			}
@@ -135,36 +152,74 @@ func scanFile(path string) ([]violation, error) {
 	return found, nil
 }
 
-func isLiteralTimesUnit(bin *ast.BinaryExpr) bool {
-	return (isNumber(bin.X) && isUnit(bin.Y)) || (isNumber(bin.Y) && isUnit(bin.X))
+func timeImportName(file *ast.File) (string, bool) {
+	for _, imp := range file.Imports {
+		if imp.Path.Value != `"time"` {
+			continue
+		}
+		switch {
+		case imp.Name == nil:
+			return "time", true
+		case imp.Name.Name == "_":
+			return "", false
+		default:
+			return imp.Name.Name, true
+		}
+	}
+	return "", false
 }
 
-func isNumber(e ast.Expr) bool {
+var numericTypes = map[string]bool{
+	"int": true, "int8": true, "int16": true, "int32": true, "int64": true,
+	"uint": true, "uint8": true, "uint16": true, "uint32": true, "uint64": true,
+	"float32": true, "float64": true,
+}
+
+type checker struct {
+	pkg string
+}
+
+func (c checker) isNumberTimesUnit(bin *ast.BinaryExpr) bool {
+	return (c.isNumber(bin.X) && c.isUnit(bin.Y)) || (c.isNumber(bin.Y) && c.isUnit(bin.X))
+}
+
+func (c checker) isNumber(e ast.Expr) bool {
 	switch v := e.(type) {
 	case *ast.BasicLit:
 		return v.Kind == token.INT || v.Kind == token.FLOAT
 	case *ast.ParenExpr:
-		return isNumber(v.X)
+		return c.isNumber(v.X)
+	case *ast.UnaryExpr:
+		return (v.Op == token.SUB || v.Op == token.ADD) && c.isNumber(v.X)
+	case *ast.BinaryExpr:
+		return c.isNumber(v.X) && c.isNumber(v.Y)
 	case *ast.CallExpr:
-		return isTimeSelector(v.Fun, "Duration") && len(v.Args) == 1 && isNumber(v.Args[0])
+		return len(v.Args) == 1 && c.isNumericConversion(v.Fun) && c.isNumber(v.Args[0])
 	}
 	return false
 }
 
-func isUnit(e ast.Expr) bool {
-	if p, ok := e.(*ast.ParenExpr); ok {
-		return isUnit(p.X)
+func (c checker) isNumericConversion(fun ast.Expr) bool {
+	if id, ok := fun.(*ast.Ident); ok {
+		return numericTypes[id.Name]
 	}
-	return isTimeSelector(e, "")
+	return c.isTimeSelector(fun, "Duration")
 }
 
-func isTimeSelector(e ast.Expr, name string) bool {
+func (c checker) isUnit(e ast.Expr) bool {
+	if p, ok := e.(*ast.ParenExpr); ok {
+		return c.isUnit(p.X)
+	}
+	return c.isTimeSelector(e, "")
+}
+
+func (c checker) isTimeSelector(e ast.Expr, name string) bool {
 	sel, ok := e.(*ast.SelectorExpr)
 	if !ok {
 		return false
 	}
 	pkg, ok := sel.X.(*ast.Ident)
-	if !ok || pkg.Name != "time" {
+	if !ok || pkg.Name != c.pkg {
 		return false
 	}
 	if name != "" {

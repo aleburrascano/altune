@@ -33,6 +33,12 @@ func TestInlineLiteralsAreFlaggedWithFileAndLine(t *testing.T) {
 		"inside a function":    "package p\n\nimport \"time\"\n\nfunc f() time.Duration {\n\treturn 30 * time.Millisecond\n}\n",
 		"converted number":     "package p\n\nimport \"time\"\n\nvar d = time.Duration(3) * time.Hour\n",
 		"parenthesised number": "package p\n\nimport \"time\"\n\nvar d = (4) * time.Second\n",
+		"days":                 "package p\n\nimport \"time\"\n\nfunc g(time.Duration) {}\n\nfunc f() { g(30 * 24 * time.Hour) }\n",
+		"negative":             "package p\n\nimport \"time\"\n\nvar d = -5 * time.Second\n",
+		"sum in parentheses":   "package p\n\nimport \"time\"\n\nvar d = (1 + 2) * time.Second\n",
+		"arithmetic converted": "package p\n\nimport \"time\"\n\nvar d = time.Duration(2*3) * time.Second\n",
+		"typed literal":        "package p\n\nimport \"time\"\n\nvar d = time.Duration(int64(5)) * time.Second\n",
+		"aliased import":       "package p\n\nimport t \"time\"\n\nvar d = 5 * t.Second\n",
 		"in a call argument":   "package p\n\nimport \"time\"\n\nfunc g(time.Duration) {}\n\nfunc f() { g(10 * time.Second) }\n",
 	}
 	for name, body := range cases {
@@ -64,6 +70,8 @@ func TestAcceptedFormsPass(t *testing.T) {
 		"unit alone":               "package p\n\nimport \"time\"\n\nvar d = time.Second\n",
 		"number times a number":    "package p\n\nvar n = 5 * 3\n",
 		"another package's Second": "package p\n\nimport \"x/clock\"\n\nvar d = 5 * clock.Second\n",
+		"local named time":         "package p\n\nvar time = struct{ Second int }{1}\n\nvar d = 5 * time.Second\n",
+		"variable arithmetic":      "package p\n\nimport \"time\"\n\nfunc f(n int) time.Duration { return time.Duration(n*24) * time.Hour }\n",
 	}
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -137,5 +145,29 @@ func TestUsageAndUnreadableInput(t *testing.T) {
 	writeFile(t, dir, "broken.go", "package p\n\nfunc (\n")
 	if code, _, stderr := lint(t, dir); code != 2 || !strings.Contains(stderr, "parse") {
 		t.Fatalf("unparsable file: exit = %d, stderr %q, want 2 and a parse message", code, stderr)
+	}
+}
+
+func TestSymlinkedRootAndFlagOrder(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "real/a.go", "package p\n\nimport \"time\"\n\nvar d = 5 * time.Second\n")
+	if err := os.Symlink(filepath.Join(dir, "real"), filepath.Join(dir, "link")); err != nil {
+		t.Fatal(err)
+	}
+
+	if code, out, _ := lint(t, filepath.Join(dir, "link")); code != 1 {
+		t.Fatalf("symlinked root: exit = %d, want 1; output:\n%s", code, out)
+	}
+	if code, out, _ := lint(t, filepath.Join(dir, "real"), "--summary"); code != 1 || strings.Contains(out, "a.go:") {
+		t.Fatalf("--summary after the directory: exit = %d, output:\n%s", code, out)
+	}
+}
+
+func TestAnExplicitTestdataRootIsScanned(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "testdata")
+	writeFile(t, dir, "a.go", "package p\n\nimport \"time\"\n\nvar d = 5 * time.Second\n")
+
+	if code, out, _ := lint(t, dir); code != 1 {
+		t.Fatalf("exit = %d, want 1; output:\n%s", code, out)
 	}
 }
