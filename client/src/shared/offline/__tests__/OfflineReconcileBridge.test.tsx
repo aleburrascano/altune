@@ -13,7 +13,10 @@ import { signInTestUser } from '@testing/signInTestUser';
 
 provideOfflinePort(apiClientOfflinePort);
 
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
+function ConnectedBridge() {
+  const reconcile = usePinnedStore((s) => s.reconcile);
+  return <OfflineReconcileBridge reconcile={reconcile} />;
+}
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -54,7 +57,7 @@ beforeEach(async () => {
 
 describe('OfflineReconcileBridge', () => {
   it('renders nothing', () => {
-    const { toJSON } = render(<OfflineReconcileBridge />);
+    const { toJSON } = render(<ConnectedBridge />);
 
     expect(toJSON()).toBeNull();
   });
@@ -70,7 +73,7 @@ describe('OfflineReconcileBridge', () => {
       uri: 'gone',
     });
 
-    render(<OfflineReconcileBridge />);
+    render(<ConnectedBridge />);
 
     expect(usePinnedStore.getState().entries['stale']).toBeUndefined();
   });
@@ -81,7 +84,7 @@ describe('OfflineReconcileBridge', () => {
       isWorking: true,
     });
 
-    render(<OfflineReconcileBridge />);
+    render(<ConnectedBridge />);
     expect(usePinnedStore.getState().entries['flaky']).toEqual({
       trackId: 'flaky',
       status: 'queued',
@@ -103,9 +106,9 @@ describe('OfflineReconcileBridge', () => {
     const reconcileSpy = jest.fn(realReconcile);
     usePinnedStore.setState({ reconcile: reconcileSpy });
 
-    const { rerender } = render(<OfflineReconcileBridge />);
-    rerender(<OfflineReconcileBridge />);
-    rerender(<OfflineReconcileBridge />);
+    const { rerender } = render(<ConnectedBridge />);
+    rerender(<ConnectedBridge />);
+    rerender(<ConnectedBridge />);
 
     expect(reconcileSpy).toHaveBeenCalledTimes(1);
 
@@ -121,11 +124,11 @@ describe('OfflineReconcileBridge', () => {
       isWorking: true,
     });
 
-    const { unmount } = render(<OfflineReconcileBridge />);
+    const { unmount } = render(<ConnectedBridge />);
     const afterFirst = usePinnedStore.getState().entries['healthy'];
     unmount();
 
-    render(<OfflineReconcileBridge />);
+    render(<ConnectedBridge />);
     const afterSecond = usePinnedStore.getState().entries['healthy'];
 
     expect(afterSecond).toEqual(afterFirst);

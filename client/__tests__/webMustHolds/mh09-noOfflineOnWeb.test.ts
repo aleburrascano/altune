@@ -30,8 +30,8 @@ describe('mh09: the pinned-store machinery never starts on web', () => {
         INDEX_URI,
         JSON.stringify({ old: { trackId: 'old', status: 'failed' } }),
       );
-      const { usePinnedStore } = require('@shared/offline/state/pinnedStore');
-      require('@shared/offline/state/pinnedStore').provideOfflinePort(
+      const { usePinnedStore } = require('@shared/offline');
+      require('@shared/offline').provideOfflinePort(
         require('@testing/apiClientPorts').apiClientOfflinePort,
       );
       const loaded = { ...usePinnedStore.getState().entries };
@@ -51,9 +51,9 @@ describe('mh09: the pinned-store machinery never starts on web', () => {
 describe('mh09: an identity change never claims pinned downloads on web', () => {
   function ownerAfterSignIn(): string | null {
     return loadFresh(() => {
-      require('@shared/offline/state/pinnedStore');
+      require('@shared/offline');
       require('@shared/session/signOutCleanup').notifyIdentityChange('user-a');
-      return require('@shared/offline/state/pinnedIndex').readOwner();
+      return require('@shared/offline').readOwner();
     });
   }
 
@@ -65,9 +65,9 @@ describe('mh09: an identity change never claims pinned downloads on web', () => 
 describe('mh09: an acquisition completing never restarts a stale pin on web', () => {
   function statusAfterCompletion(): string | undefined {
     return loadFresh(() => {
-      const { usePinnedStore } = require('@shared/offline/state/pinnedStore');
+      const { usePinnedStore } = require('@shared/offline');
       const { applyServerEvent } = require('@shared/events/shell/applyServerEvent');
-      require('@shared/offline/state/pinnedStore').provideOfflinePort(
+      require('@shared/offline').provideOfflinePort(
         require('@testing/apiClientPorts').apiClientOfflinePort,
       );
       const { QueryClient } = require('@tanstack/react-query');
@@ -94,13 +94,18 @@ describe('mh09: an acquisition completing never restarts a stale pin on web', ()
 });
 
 describe('mh09: the reconcile bridge does nothing on web', () => {
+  function ConnectedBridge() {
+    const reconcile = usePinnedStore((state) => state.reconcile);
+    return React.createElement(OfflineReconcileBridge, { reconcile });
+  }
+
   function statusAfterMount(): string | undefined {
     usePinnedStore.setState({
       entries: { t1: { trackId: asTrackId('t1'), status: 'ready', uri: 'file:///missing.mp3' } },
       queue: [],
       isWorking: true,
     });
-    render(React.createElement(OfflineReconcileBridge));
+    render(React.createElement(ConnectedBridge));
     return usePinnedStore.getState().entries.t1?.status;
   }
 

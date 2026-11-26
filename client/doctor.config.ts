@@ -10,7 +10,7 @@ const pagingLoopsAwaitInOrder = {
 const sequentialByDesignAwaitInLoop = {
   files: [
     'src/shared/offline/shell/pinnedDownloadWorker.ts',
-    'src/shared/offline/state/pinnedStore.ts',
+    'src/shared/offline/shell/pinnedStore.ts',
     'src/shared/telemetry/shell/outbox.ts',
   ],
   rules: ['react-doctor/async-await-in-loop'],

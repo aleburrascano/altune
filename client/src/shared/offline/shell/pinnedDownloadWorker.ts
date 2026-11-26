@@ -8,19 +8,18 @@ import {
   deletePinned,
   downloadPinned,
   pinStorageFull,
-  unsignedUrl,
   withPinnedBytesCached,
-} from '@shared/offline/state/pinnedFiles';
+} from '@shared/offline/shell/pinnedFiles';
+import { unsignedUrl } from '@shared/offline/core/pinnedNames';
 import type { OfflinePort } from '@shared/offline/ports/offlinePort';
 import {
   type PinnedEntry,
   downloadingEntry,
   failedEntry,
-  flushIndex,
   readyEntry,
-  scheduleSaveIndex,
   tagChangedEntries,
-} from '@shared/offline/state/pinnedIndex';
+} from '@shared/offline/core/pinnedEntry';
+import { flushIndex, scheduleSaveIndex } from '@shared/offline/shell/pinnedIndex';
 import { warn } from '@shared/log';
 
 type QueueState = {
@@ -32,23 +31,35 @@ type QueueState = {
 type Setter = (partial: Partial<QueueState> | ((s: QueueState) => Partial<QueueState>)) => void;
 type Getter = () => QueueState;
 
-export async function runDownloadQueue(set: Setter, get: Getter, port: OfflinePort): Promise<void> {
+export type Random = () => number;
+
+export async function runDownloadQueue(
+  set: Setter,
+  get: Getter,
+  port: OfflinePort,
+  random: Random,
+): Promise<void> {
   if (get().isWorking) return;
   set({ isWorking: true });
   try {
-    await withPinnedBytesCached(() => drainQueue(set, get, port));
+    await withPinnedBytesCached(() => drainQueue(set, get, port, random));
   } finally {
     set({ isWorking: false });
     flushIndex();
   }
 }
 
-async function drainQueue(set: Setter, get: Getter, port: OfflinePort): Promise<void> {
+async function drainQueue(
+  set: Setter,
+  get: Getter,
+  port: OfflinePort,
+  random: Random,
+): Promise<void> {
   for (;;) {
     const trackId = get().queue[0];
     if (trackId === undefined) break;
     set((s) => ({ queue: s.queue.slice(1) }));
-    await downloadOne(trackId, set, get, port);
+    await downloadOne(trackId, set, get, port, random);
   }
 }
 
@@ -62,9 +73,9 @@ function markEntry(set: Setter, trackId: TrackId, entry: PinnedEntry): void {
   });
 }
 
-function jobFor(trackId: TrackId, get: Getter, port: OfflinePort): DownloadJob {
+function jobFor(trackId: TrackId, get: Getter, port: OfflinePort, random: Random): DownloadJob {
   const isStillDownloading = (): boolean => get().entries[trackId]?.status === 'downloading';
-  return { trackId, isStillDownloading, port };
+  return { trackId, isStillDownloading, port, random };
 }
 
 function settledEntry(trackId: TrackId, outcome: Attempt): PinnedEntry {
@@ -85,10 +96,11 @@ async function downloadOne(
   set: Setter,
   get: Getter,
   port: OfflinePort,
+  random: Random,
 ): Promise<void> {
   if (get().entries[trackId] === undefined) return;
   markEntry(set, trackId, downloadingEntry(trackId));
-  await settleDownload(set, jobFor(trackId, get, port));
+  await settleDownload(set, jobFor(trackId, get, port, random));
 }
 
 const MAX_DOWNLOAD_ATTEMPTS = 3;
@@ -98,9 +110,9 @@ function downloadBackoffMs(retry: number, random: number): number {
   return equalJitterMs(DOWNLOAD_RETRY_BASE_MS, Infinity, retry - 1, random);
 }
 
-function retryDelayMs(error: unknown, attemptNumber: number): number | null {
+function retryDelayMs(error: unknown, attemptNumber: number, random: Random): number | null {
   if (attemptNumber >= MAX_DOWNLOAD_ATTEMPTS || !isRetryable(error)) return null;
-  return downloadBackoffMs(attemptNumber, Math.random());
+  return downloadBackoffMs(attemptNumber, random());
 }
 
 function stillDownloadingAfter(ms: number, isStillDownloading: () => boolean): Promise<boolean> {
@@ -132,12 +144,13 @@ type DownloadJob = {
   trackId: TrackId;
   isStillDownloading: () => boolean;
   port: OfflinePort;
+  random: Random;
 };
 
 async function downloadWithRetries(job: DownloadJob, attemptNumber = 1): Promise<Attempt> {
   const outcome = await attemptDownload(job);
   if (outcome.ok) return outcome;
-  const retryIn = retryDelayMs(outcome.error, attemptNumber);
+  const retryIn = retryDelayMs(outcome.error, attemptNumber, job.random);
   warnAttemptFailed(job.trackId, outcome, retryIn);
   if (retryIn === null) return outcome;
   if (!(await stillDownloadingAfter(retryIn, job.isStillDownloading))) return outcome;

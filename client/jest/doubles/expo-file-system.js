@@ -32,10 +32,15 @@ function resolve(base, name) {
   return name === undefined ? uriOf(base) : `${uriOf(base)}/${name}`;
 }
 
-function takeFailure(kind) {
+const pendingUris = {};
+
+function takeFailure(kind, uri) {
   const failure = pendingFailures[kind];
   if (failure === null) return;
+  const onlyUri = pendingUris[kind];
+  if (onlyUri !== undefined && onlyUri !== uri) return;
   pendingFailures[kind] = null;
+  pendingUris[kind] = undefined;
   throw failure;
 }
 
@@ -61,7 +66,7 @@ class Directory {
   }
 
   create(options) {
-    takeFailure('createDirectory');
+    takeFailure('createDirectory', this.uri);
     if (directories.has(this.uri) && options?.idempotent !== true) {
       throw new Error(`ERR_DIRECTORY_EXISTS: directory already exists, ${this.uri}`);
     }
@@ -69,7 +74,7 @@ class Directory {
   }
 
   delete() {
-    takeFailure('delete');
+    takeFailure('delete', this.uri);
     directories.delete(this.uri);
     for (const uri of [...fileContents.keys()]) {
       if (uri.startsWith(`${this.uri}/`)) fileContents.delete(uri);
@@ -77,7 +82,7 @@ class Directory {
   }
 
   list() {
-    takeFailure('list');
+    takeFailure('list', this.uri);
     if (!this.exists) throw new Error(`ENOENT: no such directory, ${this.uri}`);
     return childUris(this.uri).map((uri) =>
       fileContents.has(uri) ? fileFromUri(uri) : directoryFromUri(uri),
@@ -100,24 +105,24 @@ class File {
   }
 
   textSync() {
-    takeFailure('read');
+    takeFailure('read', this.uri);
     const contents = fileContents.get(this.uri);
     if (contents === undefined) throw new Error(`ENOENT: no such file, ${this.uri}`);
     return contents;
   }
 
   write(contents) {
-    takeFailure('write');
+    takeFailure('write', this.uri);
     fileContents.set(this.uri, String(contents));
   }
 
   delete() {
-    takeFailure('delete');
+    takeFailure('delete', this.uri);
     fileContents.delete(this.uri);
   }
 
   moveSync(destination, options) {
-    takeFailure('move');
+    takeFailure('move', this.uri);
     const contents = fileContents.get(this.uri);
     if (contents === undefined) throw new Error(`ENOENT: no such file, ${this.uri}`);
     if (fileContents.has(destination.uri) && options?.overwrite !== true) {
@@ -129,7 +134,7 @@ class File {
   }
 
   static async downloadFileAsync(url, dest, options) {
-    takeFailure('download');
+    takeFailure('download', this.uri);
     if (options?.signal?.aborted) throw new Error('AbortError: download aborted');
     for (const progress of pendingProgress.splice(0)) options?.onProgress?.(progress);
     fileContents.set(dest.uri, `downloaded:${url}`);
@@ -149,7 +154,10 @@ const __fs = {
   reset() {
     fileContents.clear();
     directories.clear();
-    for (const kind of Object.keys(pendingFailures)) pendingFailures[kind] = null;
+    for (const kind of Object.keys(pendingFailures)) {
+      pendingFailures[kind] = null;
+      pendingUris[kind] = undefined;
+    }
     pendingProgress.length = 0;
     availableDiskSpace = DEFAULT_AVAILABLE_DISK_SPACE;
   },
@@ -180,13 +188,14 @@ const __fs = {
     pendingProgress.push(...progress);
   },
 
-  failNext(kind, error) {
+  failNext(kind, error, uri) {
     if (!(kind in pendingFailures)) {
       throw new Error(
         `unknown failure kind "${kind}" — expected one of ${Object.keys(pendingFailures).join(', ')}`,
       );
     }
     pendingFailures[kind] = error ?? new Error(`injected ${kind} failure`);
+    pendingUris[kind] = uri;
   },
 };
 
