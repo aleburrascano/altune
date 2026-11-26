@@ -658,7 +658,7 @@ case "\$*" in
 esac
 exec "$REAL_GO" "\$@"
 STUB
-    printf '#!/usr/bin/env bash\nprintf "golangci-lint %%s\\n" "$*" >>"%s/tools.log"\nprintf "golangci-lint-cache %%s %%s\\n" "$1" "$GOLANGCI_LINT_CACHE" >>"%s/tools.log"\n' "$WORK" "$WORK" >"$WORK/bin/golangci-lint"
+    printf '#!/usr/bin/env bash\nprintf "golangci-lint %%s\\n" "$*" >>"%s/tools.log"\nprintf "golangci-lint-cache %%s %%s\\n" "$1" "$GOLANGCI_LINT_CACHE" >>"%s/tools.log"\nprintf "golangci-lint-goflags %%s\\n" "${GOFLAGS:-}" >>"%s/tools.log"\n' "$WORK" "$WORK" "$WORK" >"$WORK/bin/golangci-lint"
     printf '#!/usr/bin/env bash\nprintf "govulncheck %%s\\n" "$*" >>"%s/tools.log"\n' "$WORK" >"$WORK/bin/govulncheck"
     printf '#!/usr/bin/env bash\nprintf "go-arch-lint %%s\\n" "$*" >>"%s/tools.log"\nexit "${GO_ARCH_LINT_STUB_RC:-0}"\n' "$WORK" >"$WORK/bin/go-arch-lint"
     chmod +x "$WORK/bin/go" "$WORK/bin/golangci-lint" "$WORK/bin/govulncheck" "$WORK/bin/go-arch-lint"
@@ -1468,6 +1468,14 @@ run_with_tools --lint
 expect_log "golangci-lint-cache run $WORK/repo/.cache/golangci-lint"
 stray=$(grep "^golangci-lint-cache run " "$WORK/tools.log" | grep -vF " $WORK/repo/.cache/golangci-lint")
 [ -z "$stray" ] || fail "a golangci-lint call ran outside the checkout cache"
+
+CASE="golangci-lint runs with -mod=readonly, as in CI, so a run that would edit go.mod fails here"
+new_repo
+add_go_fixture
+stage_go_file internal/search/adapters/x/x.go
+GOFLAGS= run_with_tools --lint
+expect_log "golangci-lint-goflags -mod=readonly"
+! grep -q '^golangci-lint-goflags $' "$WORK/tools.log" || fail "a golangci-lint call ran without -mod=readonly"
 
 CASE="every change is scanned for secrets from the merge base to HEAD"
 new_repo

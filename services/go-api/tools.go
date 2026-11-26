@@ -1,3 +1,3 @@
-package ruleguarddsl
+package tools
 
 import _ "github.com/quasilyte/go-ruleguard/dsl"
