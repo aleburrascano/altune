@@ -14,6 +14,8 @@ type ClientErrorSource =
 
 export type ChainUncaughtErrors = (onError: (error: unknown) => void) => void;
 
+export type ChainUnhandledRejections = (onRejection: (reason: unknown) => void) => void;
+
 type ClientErrorReporterDeps = {
   clock: TelemetryClock;
   appVersion: () => string;
@@ -158,20 +160,24 @@ export function createClientErrorReporter(deps: ClientErrorReporterDeps) {
     enqueueReport(payload, suppressedRepeats);
   }
 
-  function trackUnhandledRejections(): void {
+  function trackUnhandledRejections(chainUnhandledRejections: ChainUnhandledRejections): void {
     if (__DEV__) return;
     hermesRuntime()?.enablePromiseRejectionTracker?.({
       allRejections: true,
       onUnhandled: (_id, error) => reportClientError(error, 'unhandled_rejection'),
       onHandled: () => undefined,
     });
+    chainUnhandledRejections((reason) => reportClientError(reason, 'unhandled_rejection'));
   }
 
-  function installGlobalErrorReporting(chainUncaughtErrors: ChainUncaughtErrors): void {
+  function installGlobalErrorReporting(
+    chainUncaughtErrors: ChainUncaughtErrors,
+    chainUnhandledRejections: ChainUnhandledRejections,
+  ): void {
     if (installed) return;
     installed = true;
     chainUncaughtErrors((error) => reportClientError(error, 'uncaught'));
-    trackUnhandledRejections();
+    trackUnhandledRejections(chainUnhandledRejections);
   }
 
   function dispose(): void {

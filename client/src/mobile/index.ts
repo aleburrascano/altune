@@ -20,6 +20,12 @@ export {
   runtimeErrorHandlers,
 } from '@/mobile/uncaughtErrors';
 export type { GlobalErrorHandlers } from '@/mobile/uncaughtErrors';
+export {
+  chainWindowUncaughtErrors,
+  chainWindowUnhandledRejections,
+  runtimeWindow,
+} from '@/mobile/webErrorListeners';
+export type { WindowEvents } from '@/mobile/webErrorListeners';
 export { AppChrome } from '@/mobile/frame/AppChrome';
 export { DetailRoute } from '@/mobile/routes/DetailRoute';
 export { UnreleasedRoute } from '@/mobile/routes/UnreleasedRoute';

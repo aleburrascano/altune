@@ -7,6 +7,7 @@ import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 const { __http } = require('@testing/doubles/fetch.js');
 
 const chainUncaughtErrors = jest.fn<void, [(error: unknown) => void]>();
+const chainUnhandledRejections = jest.fn<void, [(reason: unknown) => void]>();
 
 const mockEnableRejectionTracking = jest.fn();
 const globalWithHermes = globalThis as unknown as { HermesInternal?: unknown; __DEV__: boolean };
@@ -24,8 +25,9 @@ function reportClientError(error: unknown, source: Parameters<Telemetry['reportC
 
 function installGlobalErrorReporting(
   chain: Parameters<Telemetry['installGlobalErrorReporting']>[0],
+  rejections: Parameters<Telemetry['installGlobalErrorReporting']>[1],
 ) {
-  telemetry.installGlobalErrorReporting(chain);
+  telemetry.installGlobalErrorReporting(chain, rejections);
 }
 
 type DeliveredEvent = { type: string; payload: Record<string, unknown> };
@@ -64,6 +66,7 @@ beforeEach(async () => {
   __http.replyAll({ status: 202 });
   await signInTestUser();
   chainUncaughtErrors.mockReset();
+  chainUnhandledRejections.mockReset();
   mockEnableRejectionTracking.mockReset();
   globalWithHermes.HermesInternal = { enablePromiseRejectionTracker: mockEnableRejectionTracking };
   globalWithHermes.__DEV__ = false;
@@ -312,15 +315,15 @@ describe('reportClientError dedupe', () => {
 
 describe('installGlobalErrorReporting', () => {
   it('wires the global handler and rejection tracking exactly once', () => {
-    installGlobalErrorReporting(chainUncaughtErrors);
-    installGlobalErrorReporting(chainUncaughtErrors);
+    installGlobalErrorReporting(chainUncaughtErrors, chainUnhandledRejections);
+    installGlobalErrorReporting(chainUncaughtErrors, chainUnhandledRejections);
 
     expect(chainUncaughtErrors).toHaveBeenCalledTimes(1);
     expect(mockEnableRejectionTracking).toHaveBeenCalledTimes(1);
   });
 
   it('reports an uncaught error', async () => {
-    installGlobalErrorReporting(chainUncaughtErrors);
+    installGlobalErrorReporting(chainUncaughtErrors, chainUnhandledRejections);
     const onUncaught = chainUncaughtErrors.mock.calls[0]?.[0];
 
     onUncaught?.(new Error('native crash'));
@@ -330,7 +333,7 @@ describe('installGlobalErrorReporting', () => {
   });
 
   it('reports an unhandled rejection', async () => {
-    installGlobalErrorReporting(chainUncaughtErrors);
+    installGlobalErrorReporting(chainUncaughtErrors, chainUnhandledRejections);
     const onUnhandled = mockEnableRejectionTracking.mock.calls[0]?.[0]?.onUnhandled as (
       id: number,
       error: unknown,
@@ -342,8 +345,20 @@ describe('installGlobalErrorReporting', () => {
     expect(lastPayload()['source']).toBe('unhandled_rejection');
   });
 
+  it('reports an unhandled rejection the platform delivers through its own listener', async () => {
+    delete globalWithHermes.HermesInternal;
+    installGlobalErrorReporting(chainUncaughtErrors, chainUnhandledRejections);
+    const onRejection = chainUnhandledRejections.mock.calls[0]?.[0];
+
+    onRejection?.(new Error('web dropped promise'));
+
+    await settle();
+    expect(lastPayload()['source']).toBe('unhandled_rejection');
+    expect(lastPayload()['message']).toBe('web dropped promise');
+  });
+
   it('reports nothing when a rejection is handled late', async () => {
-    installGlobalErrorReporting(chainUncaughtErrors);
+    installGlobalErrorReporting(chainUncaughtErrors, chainUnhandledRejections);
     const onHandled = mockEnableRejectionTracking.mock.calls[0]?.[0]?.onHandled as (
       id: number,
     ) => void;
@@ -357,16 +372,19 @@ describe('installGlobalErrorReporting', () => {
   it('leaves dev builds on the built-in rejection warnings', () => {
     globalWithHermes.__DEV__ = true;
 
-    installGlobalErrorReporting(chainUncaughtErrors);
+    installGlobalErrorReporting(chainUncaughtErrors, chainUnhandledRejections);
 
     expect(mockEnableRejectionTracking).not.toHaveBeenCalled();
+    expect(chainUnhandledRejections).not.toHaveBeenCalled();
     expect(chainUncaughtErrors).toHaveBeenCalledTimes(1);
   });
 
   it('skips rejection tracking when the runtime is not Hermes', () => {
     delete globalWithHermes.HermesInternal;
 
-    expect(() => installGlobalErrorReporting(chainUncaughtErrors)).not.toThrow();
+    expect(() =>
+      installGlobalErrorReporting(chainUncaughtErrors, chainUnhandledRejections),
+    ).not.toThrow();
     expect(chainUncaughtErrors).toHaveBeenCalledTimes(1);
   });
 });
