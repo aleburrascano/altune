@@ -17,13 +17,21 @@ func (a *App) startAlertMonitor(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	monitor, err := monitoring.NewAlertMonitor(notifier, 30*time.Second, time.Now, conditions...)
+	monitor, err := NewAlertMonitor(&a.jobs, notifier, 30*time.Second, conditions)
 	if err != nil {
-		return fmt.Errorf("alert monitor: %w", err)
+		return err
 	}
-	a.alertMonitor = monitor.WithLeadership(a.jobs.LeaderContextFor(jobs.AlertMonitor))
+	a.alertMonitor = monitor
 	a.jobs.WhenLeader(jobs.AlertMonitor, a.alertMonitor.Start)
 	return nil
+}
+
+func NewAlertMonitor(runner *jobs.Runner, notifier monitoring.AlertNotifier, interval time.Duration, conditions []monitoring.Condition) (*monitoring.AlertMonitor, error) {
+	monitor, err := monitoring.NewAlertMonitor(notifier, interval, time.Now, conditions...)
+	if err != nil {
+		return nil, fmt.Errorf("alert monitor: %w", err)
+	}
+	return monitor.WithLeadership(runner.LeaderContextFor(jobs.AlertMonitor)), nil
 }
 
 func (a *App) alertConditions(coverage alerts.CoverageEvents) ([]monitoring.Condition, error) {

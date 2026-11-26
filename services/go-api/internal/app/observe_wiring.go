@@ -31,9 +31,12 @@ func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVe
 func (a *App) startObserveSources(ctx context.Context, tap *monitoring.EventTap) {
 	a.eventFeed = monitoring.NewEventFeed()
 	a.eventFeed.Start(ctx, tap)
-	a.evalMeter = monitoring.NewEvalMeter(0, a.evalMeterRunner()).
-		WithLeadership(a.jobs.LeaderContextFor(jobs.EvalMeter))
+	a.evalMeter = NewEvalMeter(&a.jobs, a.evalMeterRunner())
 	a.jobs.WhenLeader(jobs.EvalMeter, a.evalMeter.Start)
+}
+
+func NewEvalMeter(runner *jobs.Runner, run monitoring.EvalMeterRunner) *monitoring.EvalMeter {
+	return monitoring.NewEvalMeter(0, run).WithLeadership(runner.LeaderContextFor(jobs.EvalMeter))
 }
 
 func mountObserve(r chi.Router, verifier auth.TokenVerifier, principalID string, h *monitoring.Handler) {
