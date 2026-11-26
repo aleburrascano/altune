@@ -12,6 +12,7 @@ type Manual struct {
 	now     time.Time
 	waiters map[int]waiter
 	nextKey int
+	arrived *sync.Cond
 }
 
 type waiter struct {
@@ -34,6 +35,21 @@ func (m *Manual) Timer() clock.TimerFunc {
 
 func (m *Manual) Ticker() clock.TickerFunc {
 	return m.newTicker
+}
+
+func (m *Manual) BlockUntil(n int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for len(m.waiters) < n {
+		m.arrivalsLocked().Wait()
+	}
+}
+
+func (m *Manual) arrivalsLocked() *sync.Cond {
+	if m.arrived == nil {
+		m.arrived = sync.NewCond(&m.mu)
+	}
+	return m.arrived
 }
 
 func (m *Manual) Sleeping() int {
@@ -95,6 +111,7 @@ func (m *Manual) registerEvery(d, period time.Duration, fire func(time.Time)) in
 	key := m.nextKey
 	m.nextKey++
 	m.waiters[key] = waiter{wakeAt: m.now.Add(d), period: period, fire: fire}
+	m.arrivalsLocked().Broadcast()
 	return key
 }
 
