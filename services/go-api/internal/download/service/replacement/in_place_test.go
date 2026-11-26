@@ -3,6 +3,7 @@ package replacement_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -11,6 +12,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 )
 
 const verifyPerHour = 3600
@@ -62,7 +64,7 @@ func (w *world) storedEvidence(evidence string) {
 
 func (w *world) checkedRunner(cfg download.UpgradeConfig, checker download.InPlaceChecker, recorder download.InPlaceStore) *download.UpgradeRunner {
 	return w.runnerChecking(cfg, events.NoopPublisher(), func(*download.AcquireTrackAudioService) download.UpgradeInPlace {
-		inPlace, err := download.InPlaceCheckOf(checker, recorder, verifyPerHour)
+		inPlace, err := download.InPlaceCheckOf(checker, recorder, verifyPerHour, time.Now, clock.Sleep)
 		if err != nil {
 			w.t.Fatalf("InPlaceCheckOf: %v", err)
 		}
@@ -71,11 +73,17 @@ func (w *world) checkedRunner(cfg download.UpgradeConfig, checker download.InPla
 }
 
 func TestInPlaceCheckOf_RefusesAMissingCheckerOrRecorder(t *testing.T) {
-	if _, err := download.InPlaceCheckOf(nil, &recordingInPlaceStore{}, verifyPerHour); !errors.Is(err, download.ErrMissingInPlacePort) {
+	if _, err := download.InPlaceCheckOf(nil, &recordingInPlaceStore{}, verifyPerHour, time.Now, clock.Sleep); !errors.Is(err, download.ErrMissingInPlacePort) {
 		t.Errorf("nil checker: err = %v, want ErrMissingInPlacePort", err)
 	}
-	if _, err := download.InPlaceCheckOf(&fixedChecker{}, nil, verifyPerHour); !errors.Is(err, download.ErrMissingInPlacePort) {
+	if _, err := download.InPlaceCheckOf(&fixedChecker{}, nil, verifyPerHour, time.Now, clock.Sleep); !errors.Is(err, download.ErrMissingInPlacePort) {
 		t.Errorf("nil recorder: err = %v, want ErrMissingInPlacePort", err)
+	}
+	if _, err := download.InPlaceCheckOf(&fixedChecker{}, &recordingInPlaceStore{}, verifyPerHour, nil, clock.Sleep); !errors.Is(err, download.ErrMissingInPlacePort) {
+		t.Errorf("nil clock: err = %v, want ErrMissingInPlacePort", err)
+	}
+	if _, err := download.InPlaceCheckOf(&fixedChecker{}, &recordingInPlaceStore{}, verifyPerHour, time.Now, nil); !errors.Is(err, download.ErrMissingInPlacePort) {
+		t.Errorf("nil sleeper: err = %v, want ErrMissingInPlacePort", err)
 	}
 }
 

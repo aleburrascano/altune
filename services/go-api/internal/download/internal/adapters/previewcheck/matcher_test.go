@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -15,10 +14,14 @@ import (
 )
 
 func randomItems(seed uint64, count int) []uint32 {
-	source := rand.New(rand.NewPCG(seed, seed))
+	state := seed
 	items := make([]uint32, count)
 	for i := range items {
-		items[i] = source.Uint32()
+		state += 0x9e3779b97f4a7c15
+		mixed := state
+		mixed = (mixed ^ (mixed >> 30)) * 0xbf58476d1ce4e5b9
+		mixed = (mixed ^ (mixed >> 27)) * 0x94d049bb133111eb
+		items[i] = uint32((mixed ^ (mixed >> 31)) >> 32)
 	}
 	return items
 }
@@ -55,7 +58,7 @@ func deezerServing(t *testing.T, trackBody func(server string) string) *httptest
 }
 
 func matcherFor(server *httptest.Server, prints download.RawFingerprint) download.PreviewMatcher {
-	return download.NewPreviewMatcher(download.MustNewDeezerPreview(server.Client(), server.URL, prints, clock.Sleep), prints, download.DefaultMatchMaxBitErrorRate)
+	return download.NewPreviewMatcher(download.MustNewDeezerPreview(server.Client(), server.URL, prints, clock.Sleep, time.Now), prints, download.DefaultMatchMaxBitErrorRate)
 }
 
 func previewTrackBody(server string) string {

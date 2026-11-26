@@ -3,6 +3,7 @@ package persistence_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/testdb"
 	"context"
@@ -49,6 +50,13 @@ func (c contractPgxCooldowns) AddTrack(t *testing.T) ids.TrackId {
 	return insertFailedTrack(t, c.pool).ID
 }
 
+func (c contractPgxCooldowns) PassCooldown(t *testing.T, d time.Duration) {
+	t.Helper()
+	if err := clock.Sleep(context.Background(), d); err != nil {
+		t.Fatalf("wait out the cooldown: %v", err)
+	}
+}
+
 func TestPostgresCooldownStore_Contract(t *testing.T) {
 	testdb.RequireIntegration(t)
 	pool := newPool(t)
@@ -86,7 +94,9 @@ func TestPostgresCooldownStore_AdmitsAfterWindowAndReleasesOnlyItsOwn(t *testing
 	if _, ok, _, _ := store.Reserve(ctx, track.ID, download.CooldownReacquire, time.Minute); !ok {
 		t.Error("reacquire Reserve blocked by a retry admission; kinds must be independent")
 	}
-	time.Sleep(20 * time.Millisecond)
+	if err := clock.Sleep(ctx, 20*time.Millisecond); err != nil {
+		t.Fatalf("wait out the cooldown: %v", err)
+	}
 	newer, ok, _, err := store.Reserve(ctx, track.ID, download.CooldownRetry, 10*time.Millisecond)
 	if err != nil || !ok {
 		t.Fatalf("Reserve after window = %v, %v; want ok", ok, err)

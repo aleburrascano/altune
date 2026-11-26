@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -16,6 +17,7 @@ type supersededAudio struct {
 	ledger  ports.LibraryTracks
 	orphans ports.OrphanedAudioRecorder
 	grace   time.Duration
+	now     clock.Func
 }
 
 func (a supersededAudio) release(ctx context.Context, userId ids.UserId, trackId ids.TrackId, ac *AcquisitionContext) {
@@ -36,7 +38,7 @@ func (a supersededAudio) handToRecorder(ctx context.Context, userId ids.UserId, 
 		AudioRef:  old,
 		UserId:    userId,
 		TrackId:   trackId,
-		NotBefore: time.Now().Add(a.grace),
+		NotBefore: a.now().Add(a.grace),
 	})
 	if err != nil {
 		return

@@ -2,6 +2,7 @@ package ytdlp_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 var searchSpec = regexp.MustCompile(`^\w+search\d*:(.+)$`)
@@ -28,7 +30,7 @@ func fakeYtDlpLoggingArgs(t *testing.T) string {
 func searchedQueries(t *testing.T, req download.FindRequest) []string {
 	t.Helper()
 	log := fakeYtDlpLoggingArgs(t)
-	source := download.NewYtDlpSource(download.NewYtDlpAudioSearcher("", "", ""))
+	source := download.NewYtDlpSource(download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep))
 	if _, err := source.Find(context.Background(), req); err != nil {
 		t.Fatalf("Find: %v", err)
 	}

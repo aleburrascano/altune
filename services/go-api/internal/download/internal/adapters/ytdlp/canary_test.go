@@ -2,6 +2,7 @@ package ytdlp_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
 	"os"
@@ -24,7 +25,7 @@ func TestCanary_UsesATempCopyOfTheCookieJarAndCleansItUp(t *testing.T) {
 	jar := cookieJar(t, "cookies.txt", liveJarContents)
 	capture := captureCookieJar(t, "echo '212'")
 
-	if err := download.NewYtDlpAudioSearcher("", jar, "").Canary(context.Background(), download.YouTubeCanary); err != nil {
+	if err := download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep).Canary(context.Background(), download.YouTubeCanary); err != nil {
 		t.Fatalf("Canary() = %v, want nil", err)
 	}
 
@@ -33,7 +34,7 @@ func TestCanary_UsesATempCopyOfTheCookieJarAndCleansItUp(t *testing.T) {
 
 func TestCanary_CarriesTheSameAuthFlagsAsSearchAndDownload(t *testing.T) {
 	calls := captureCookieJar(t, "echo '212'").calls
-	s := download.NewYtDlpAudioSearcher("", cookieJar(t, "cookies.txt", "jar"), "deno")
+	s := download.MustNewYtDlpAudioSearcher("", cookieJar(t, "cookies.txt", "jar"), "deno", time.Now, clock.Sleep)
 
 	if err := s.Canary(context.Background(), download.YouTubeCanary); err != nil {
 		t.Fatalf("Canary() = %v, want nil", err)
@@ -50,7 +51,7 @@ func TestCanary_CarriesTheSameAuthFlagsAsSearchAndDownload(t *testing.T) {
 func TestCanary_OkWhenYtDlpReportsADuration(t *testing.T) {
 	installYtDlp(t, "echo '212'")
 
-	if err := download.NewYtDlpAudioSearcher("", "", "").Canary(context.Background(), download.YouTubeCanary); err != nil {
+	if err := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).Canary(context.Background(), download.YouTubeCanary); err != nil {
 		t.Fatalf("Canary() = %v, want nil", err)
 	}
 }
@@ -58,7 +59,7 @@ func TestCanary_OkWhenYtDlpReportsADuration(t *testing.T) {
 func TestCanary_SoundCloudExactPreviewDurationIsDark(t *testing.T) {
 	installYtDlp(t, "echo '30'")
 
-	err := download.NewYtDlpAudioSearcher("", "", "").Canary(context.Background(), download.SoundCloudCanary)
+	err := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).Canary(context.Background(), download.SoundCloudCanary)
 	if err == nil {
 		t.Fatal("Canary() = nil, want an error for a Go+ preview duration")
 	}
@@ -70,7 +71,7 @@ func TestCanary_SoundCloudExactPreviewDurationIsDark(t *testing.T) {
 func TestCanary_ThirtySecondsFromYouTubeIsNotAPreview(t *testing.T) {
 	installYtDlp(t, "echo '30'")
 
-	if err := download.NewYtDlpAudioSearcher("", "", "").Canary(context.Background(), download.YouTubeCanary); err != nil {
+	if err := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).Canary(context.Background(), download.YouTubeCanary); err != nil {
 		t.Fatalf("Canary() = %v, want nil: a 30s YouTube video is not a SoundCloud preview", err)
 	}
 }
@@ -79,7 +80,7 @@ func TestCanary_ErrorIsTheTrimmedRedactedFirstStderrLine(t *testing.T) {
 	installYtDlp(t, "echo \"ERROR: Sign in to confirm you're not a bot\" >&2\n"+
 		"echo 'second line, should be dropped' >&2\n"+
 		"exit 1")
-	s := download.NewYtDlpAudioSearcher("", cookieJar(t, "cookies.txt", "jar"), "")
+	s := download.MustNewYtDlpAudioSearcher("", cookieJar(t, "cookies.txt", "jar"), "", time.Now, clock.Sleep)
 
 	err := s.Canary(context.Background(), download.YouTubeCanary)
 	if err == nil {
@@ -96,7 +97,7 @@ func TestCanary_ErrorIsTheTrimmedRedactedFirstStderrLine(t *testing.T) {
 func TestCanary_ErrorRedactsTheCookieJarPath(t *testing.T) {
 	installYtDlp(t, "echo \"ERROR: unable to open --cookies $2\" >&2\nexit 1")
 	jar := cookieJar(t, "very-secret-cookies.txt", "jar")
-	s := download.NewYtDlpAudioSearcher("", jar, "")
+	s := download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep)
 
 	err := s.Canary(context.Background(), download.YouTubeCanary)
 	if err == nil {
@@ -109,7 +110,7 @@ func TestCanary_ErrorRedactsTheCookieJarPath(t *testing.T) {
 
 func TestCanary_UnreadableCookieJarErrorRedactsItsPath(t *testing.T) {
 	jar := filepath.Join("/srv", "private-jar", "cookies.txt")
-	s := download.NewYtDlpAudioSearcher("", jar, "")
+	s := download.MustNewYtDlpAudioSearcher("", jar, "", time.Now, clock.Sleep)
 
 	err := s.Canary(context.Background(), download.YouTubeCanary)
 	if err == nil {
@@ -122,7 +123,7 @@ func TestCanary_UnreadableCookieJarErrorRedactsItsPath(t *testing.T) {
 
 func TestCanary_TimesOutRatherThanHangingForever(t *testing.T) {
 	installYtDlp(t, "exec sleep 30")
-	s := download.NewYtDlpAudioSearcher("", "", "").WithCanaryTimeout(100 * time.Millisecond)
+	s := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).WithCanaryTimeout(100 * time.Millisecond)
 
 	err := s.Canary(context.Background(), download.YouTubeCanary)
 
@@ -140,7 +141,7 @@ func downloadFormat(t *testing.T) string {
 	t.Helper()
 	outDir := t.TempDir()
 	calls := installYtDlp(t, stubDownload(outDir))
-	if _, err := download.NewYtDlpAudioSearcher("", "", "").Download(context.Background(), youTubeWatchURL, outDir); err != nil {
+	if _, err := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).Download(context.Background(), youTubeWatchURL, outDir); err != nil {
 		t.Fatalf("Download() = %v, want nil", err)
 	}
 	return formatAsked(t, calls)
@@ -149,7 +150,7 @@ func downloadFormat(t *testing.T) string {
 func canaryFormat(t *testing.T, source download.CanarySource) string {
 	t.Helper()
 	calls := installYtDlp(t, "echo '212'")
-	if err := download.NewYtDlpAudioSearcher("", "", "").Canary(context.Background(), source); err != nil {
+	if err := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).Canary(context.Background(), source); err != nil {
 		t.Fatalf("Canary(%s) = %v, want nil", source.Name, err)
 	}
 	return formatAsked(t, calls)
@@ -179,7 +180,7 @@ func videoOnlyYtDlp(t *testing.T) {
 func TestCanary_YTMusicIsDarkWhenOnlyVideoFormatsAreOffered(t *testing.T) {
 	videoOnlyYtDlp(t)
 
-	if err := download.NewYtDlpAudioSearcher("", "", "").Canary(context.Background(), download.YTMusicCanary); err == nil {
+	if err := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).Canary(context.Background(), download.YTMusicCanary); err == nil {
 		t.Fatal("Canary(ytmusic) = nil, want dark when no audio-only format is offered")
 	}
 }
@@ -187,7 +188,7 @@ func TestCanary_YTMusicIsDarkWhenOnlyVideoFormatsAreOffered(t *testing.T) {
 func TestCanary_YouTubeStaysOkOnVideoFormatsBecauseDownloadsStillWork(t *testing.T) {
 	videoOnlyYtDlp(t)
 
-	if err := download.NewYtDlpAudioSearcher("", "", "").Canary(context.Background(), download.YouTubeCanary); err != nil {
+	if err := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).Canary(context.Background(), download.YouTubeCanary); err != nil {
 		t.Fatalf("Canary(youtube) = %v, want nil", err)
 	}
 }
@@ -207,7 +208,7 @@ func TestCanary_SoundCloudPreviewUsesTheInspectionSlack(t *testing.T) {
 		t.Run(tc.reported, func(t *testing.T) {
 			installYtDlp(t, "echo '"+tc.reported+"'")
 
-			err := download.NewYtDlpAudioSearcher("", "", "").Canary(context.Background(), download.SoundCloudCanary)
+			err := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).Canary(context.Background(), download.SoundCloudCanary)
 
 			if tc.wantDark && (err == nil || err.Error() != "preview only") {
 				t.Fatalf("Canary() = %v, want preview only for %s s", err, tc.reported)
@@ -224,7 +225,7 @@ func TestCanary_ParentCancelIsNotATimeout(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	time.AfterFunc(100*time.Millisecond, cancel)
 
-	err := download.NewYtDlpAudioSearcher("", "", "").Canary(ctx, download.SoundCloudCanary)
+	err := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).Canary(ctx, download.SoundCloudCanary)
 
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Canary() = %v, want context.Canceled", err)
@@ -247,7 +248,7 @@ func TestCanary_YTMusicAsksForTheAudioOnlyPrefixOfTheDownloadSelector(t *testing
 
 func TestCanary_ANonPositiveTimeoutKeepsTheDefault(t *testing.T) {
 	installYtDlp(t, "echo '212'")
-	s := download.NewYtDlpAudioSearcher("", "", "").WithCanaryTimeout(0)
+	s := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).WithCanaryTimeout(0)
 
 	if err := s.Canary(context.Background(), download.YouTubeCanary); err != nil {
 		t.Fatalf("Canary() = %v, want nil: a zero timeout must leave the default in place", err)

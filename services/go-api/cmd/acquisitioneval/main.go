@@ -48,7 +48,7 @@ func run(goldenDir, baselinePath string, updateBaseline bool) error {
 		return fmt.Errorf("no golden cases found")
 	}
 
-	report := download.SummarizeEval(download.RunAllEvalCases(context.Background(), cases))
+	report := download.SummarizeEval(download.RunAllEvalCases(context.Background(), time.Now, cases))
 	fmt.Print(report.Render())
 
 	if updateBaseline {

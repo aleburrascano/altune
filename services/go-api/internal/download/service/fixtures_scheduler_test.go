@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/download/internal/adapters/inmemoryqueue"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -84,6 +85,7 @@ func testSchedulerPorts() service.SchedulerPorts {
 		Events:              events.NoopPublisher(),
 		VerifySkips:         func() uint64 { return 0 },
 		FingerprintVerified: func() bool { return false },
+		Timer:               clock.NewTimer,
 	}
 }
 

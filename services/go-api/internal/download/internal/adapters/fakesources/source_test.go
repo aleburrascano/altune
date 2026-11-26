@@ -2,6 +2,7 @@ package fakesources_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"
 	"math"
@@ -12,6 +13,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 const (
@@ -143,7 +145,7 @@ func fakeYtDlpPrinting(t *testing.T, entry map[string]any) {
 func prodUpload(t *testing.T, req download.FindRequest, entry map[string]any) download.AudioCandidate {
 	t.Helper()
 	fakeYtDlpPrinting(t, entry)
-	source := download.NewYtDlpSource(download.NewYtDlpAudioSearcher("", "", ""))
+	source := download.NewYtDlpSource(download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep))
 	found, err := source.Find(context.Background(), req)
 	if err != nil || len(found) == 0 {
 		t.Fatalf("yt-dlp source found %v err %v, want a candidate", found, err)

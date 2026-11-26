@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/internal/core/rejectedcandidates"
 	"altune/go-api/internal/download/internal/core/tracklength"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/redact"
 	sharedtracklength "altune/go-api/internal/shared/tracklength"
 	"context"
@@ -39,6 +40,7 @@ type DownloadStep struct {
 	limiter         *ConcurrencyLimit
 	recordingLookup ports.RecordingLookup
 	factsCache      *recordingFactsCache
+	now             clock.Func
 	skips           ports.VerifySkipRecorder
 	width           int
 	floor           float64
@@ -49,7 +51,7 @@ type DownloadStep struct {
 
 const ProdVerifyWidth = 2
 
-func NewDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, limit *ConcurrencyLimit, opts ...func(*DownloadStep)) (*DownloadStep, error) {
+func NewDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, limit *ConcurrencyLimit, now clock.Func, opts ...func(*DownloadStep)) (*DownloadStep, error) {
 	const owner = "NewDownloadStep"
 	if err := errors.Join(
 		missingPort(owner, "fetcher", fetcher == nil),
@@ -58,15 +60,16 @@ func NewDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, id
 		missingPort(owner, "prober", prober == nil),
 		missingPort(owner, "skip recorder", skips == nil),
 		missingPort(owner, "download limit", limit == nil),
+		missingPort(owner, "clock", now == nil),
 		requireWorkspace(owner, workspace),
 	); err != nil {
 		return nil, err
 	}
-	return buildDownloadStep(fetcher, workspace, identifier, lookup, prober, skips, limit, opts...), nil
+	return buildDownloadStep(fetcher, workspace, identifier, lookup, prober, skips, limit, now, opts...), nil
 }
 
-func buildDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, limit *ConcurrencyLimit, opts ...func(*DownloadStep)) *DownloadStep {
-	s := &DownloadStep{fetcher: fetcher, workspace: workspace, identifier: identifier, recordingLookup: lookup, factsCache: newRecordingFactsCache(time.Now), limiter: limit, prober: prober, skips: skips, width: ProdVerifyWidth, candidateTimeout: DefaultCandidateTimeout, floor: defaultConfidenceFloor, cuts: audioverdict.DefaultCuts()}
+func buildDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, limit *ConcurrencyLimit, now clock.Func, opts ...func(*DownloadStep)) *DownloadStep {
+	s := &DownloadStep{fetcher: fetcher, workspace: workspace, identifier: identifier, recordingLookup: lookup, now: now, factsCache: newRecordingFactsCache(now), limiter: limit, prober: prober, skips: skips, width: ProdVerifyWidth, candidateTimeout: DefaultCandidateTimeout, floor: defaultConfidenceFloor, cuts: audioverdict.DefaultCuts()}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -195,7 +198,7 @@ func (h *holdBook) chooseAgainstMuxed(ctx context.Context, ac *AcquisitionContex
 }
 
 func gradeOf(ctx context.Context, ac *AcquisitionContext, a attempt) audioquality.Grade {
-	scratch := ac.snapshot()
+	scratch := ac.Snapshot()
 	a.applyTo(ctx, &scratch)
 	return scratch.CollectEvidence().Grade
 }
@@ -422,18 +425,18 @@ func (s *DownloadStep) fetchFull(
 	candidate ports.AudioCandidate,
 	tmpDir string,
 ) (ports.FetchedAudio, *downloadRejection) {
-	queued := time.Now()
+	queued := s.now()
 	if err := s.limiter.Acquire(ctx); err != nil {
 		return ports.FetchedAudio{}, &downloadRejection{stage: rejectedcandidates.Download, reason: "download failed", err: err}
 	}
 	defer s.limiter.Release()
-	timeStage(ctx, "download.queue", queued)
+	timeStage(ctx, "download.queue", queued, s.now)
 
 	fetchCtx, cancel := context.WithTimeout(ctx, s.candidateTimeout)
 	defer cancel()
-	fetchStart := time.Now()
+	fetchStart := s.now()
 	fetched, err := s.fetcher.Fetch(fetchCtx, candidate, tmpDir)
-	timeStage(ctx, "download.full", fetchStart)
+	timeStage(ctx, "download.full", fetchStart, s.now)
 	if err != nil {
 		err = candidateTimedOut(ctx, fetchCtx, candidate, err)
 		slog.WarnContext(ctx, "acquisition.candidate_download_failed",

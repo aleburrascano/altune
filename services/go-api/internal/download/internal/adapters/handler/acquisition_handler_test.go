@@ -3,6 +3,7 @@ package handler_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
@@ -47,9 +48,8 @@ func TestHandleRetryAcquisition_CooldownRetryAfterIsTimeLeft(t *testing.T) {
 	repo := acquisitiontest.NewLedger()
 	track := failedTrack(retryTestUserId)
 	repo.Seed(track)
-	store := acquisitiontest.NewCooldownStore()
-	clock := time.Now()
-	store.SetClock(func() time.Time { return clock })
+	manual := clocktest.NewManual(time.Now())
+	store := acquisitiontest.MustNewCooldownStore(manual.Func())
 	h := download.NewRetryHandler(repo, &retryFakeScheduler{}, download.NewRetryAdmission(store))
 	router := chi.NewRouter()
 	router.Use(signedInAs(retryTestUserId))
@@ -57,7 +57,7 @@ func TestHandleRetryAcquisition_CooldownRetryAfterIsTimeLeft(t *testing.T) {
 	path := "/tracks/" + track.ID.UUID().String() + "/retry"
 
 	retryAssertStatus(t, retryServe(t, router, http.MethodPost, path), http.StatusAccepted)
-	clock = clock.Add(45*time.Second + 500*time.Millisecond)
+	manual.Advance(45*time.Second + 500*time.Millisecond)
 
 	rec := retryServe(t, router, http.MethodPost, path)
 	assertCooldownActive(t, rec)
@@ -215,7 +215,7 @@ func (s *reacquireFakeScheduler) ScheduleReplace(_ context.Context, _ ids.UserId
 }
 
 func buildReacquireRouter(trackRepo *acquisitiontest.Ledger, scheduler *reacquireFakeScheduler) chi.Router {
-	h := download.NewReacquireHandler(trackRepo, scheduler, download.NewReacquireAdmission(acquisitiontest.NewCooldownStore()))
+	h := download.NewReacquireHandler(trackRepo, scheduler, download.NewReacquireAdmission(acquisitiontest.MustNewCooldownStore(time.Now)))
 	r := chi.NewRouter()
 	r.Use(signedInAs(reacquireTestUserId))
 	r.Post("/tracks/{trackId}/reacquire", h.HandleReacquire)
@@ -418,7 +418,7 @@ func retryAssertStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
 }
 
 func buildRetryRouter(trackRepo *acquisitiontest.Ledger, scheduler *retryFakeScheduler) chi.Router {
-	h := download.NewRetryHandler(trackRepo, scheduler, download.NewRetryAdmission(acquisitiontest.NewCooldownStore()))
+	h := download.NewRetryHandler(trackRepo, scheduler, download.NewRetryAdmission(acquisitiontest.MustNewCooldownStore(time.Now)))
 	r := chi.NewRouter()
 	r.Use(signedInAs(retryTestUserId))
 	r.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
@@ -434,7 +434,7 @@ func (unreachableLedger) Get(context.Context, ids.TrackId, ids.UserId) (*downloa
 func TestHandleRetryAcquisition_ALedgerFailureIsA500AndSchedulesNothing(t *testing.T) {
 	track := failedTrack(retryTestUserId)
 	scheduler := &retryFakeScheduler{}
-	h := download.NewRetryHandler(unreachableLedger{acquisitiontest.NewLedger(track)}, scheduler, download.NewRetryAdmission(acquisitiontest.NewCooldownStore()))
+	h := download.NewRetryHandler(unreachableLedger{acquisitiontest.NewLedger(track)}, scheduler, download.NewRetryAdmission(acquisitiontest.MustNewCooldownStore(time.Now)))
 	router := chi.NewRouter()
 	router.Use(signedInAs(retryTestUserId))
 	router.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)
@@ -573,7 +573,7 @@ func TestHandlers_AnotherUsersTrackIsAnsweredExactlyLikeAMissingOne(t *testing.T
 			owner, intruder := ids.NewUserId(uuid.New()), ids.NewUserId(uuid.New())
 			track := route.actionable(owner)
 			ledger := acquisitiontest.NewLedger(track)
-			cooldowns := acquisitiontest.NewCooldownStore()
+			cooldowns := acquisitiontest.MustNewCooldownStore(time.Now)
 			asIntruder, intruderScheduled := route.mount(ledger, cooldowns, intruder)
 
 			missing := retryServe(t, asIntruder, http.MethodPost, "/tracks/"+uuid.New().String()+route.path)

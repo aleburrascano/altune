@@ -9,11 +9,12 @@ type (
 )
 
 var (
-	NewFfprobeProber      = ytdlp.NewFfprobeProber
-	MustNewFfprobeProber  = ytdlp.MustNewFfprobeProber
-	NewYtDlpSource        = ytdlp.NewSource
-	NewYtDlpAudioSearcher = ytdlp.NewYtDlpAudioSearcher
-	WithDecodeTimeout     = ytdlp.WithDecodeTimeout
+	NewFfprobeProber          = ytdlp.NewFfprobeProber
+	MustNewFfprobeProber      = ytdlp.MustNewFfprobeProber
+	NewYtDlpSource            = ytdlp.NewSource
+	NewYtDlpAudioSearcher     = ytdlp.NewYtDlpAudioSearcher
+	MustNewYtDlpAudioSearcher = ytdlp.MustNewYtDlpAudioSearcher
+	WithDecodeTimeout         = ytdlp.WithDecodeTimeout
 )
 
 var (
@@ -23,5 +24,10 @@ var (
 )
 
 var ErrSkipRecorderRequired = ytdlp.ErrSkipRecorderRequired
+
+var (
+	ErrSearcherClockRequired   = ytdlp.ErrSearcherClockRequired
+	ErrSearcherSleeperRequired = ytdlp.ErrSearcherSleeperRequired
+)
 
 const YtDlpSourceName = ytdlp.SourceName

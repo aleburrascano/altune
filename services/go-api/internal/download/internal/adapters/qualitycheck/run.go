@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"encoding/json"
@@ -42,7 +43,7 @@ type Outcome struct {
 	Saved            SavedTrack
 }
 
-func Run(ctx context.Context, kase Case) Outcome {
+func Run(ctx context.Context, now clock.Func, kase Case) Outcome {
 	p := newCasePorts(kase)
 	track := seededTrack(kase)
 	ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
@@ -69,6 +70,8 @@ func Run(ctx context.Context, kase Case) Outcome {
 		DownloadLimit: service.Unlimited(),
 		Observer:      func(ac *service.AcquisitionContext) { observed = ac },
 		Sleep:         clock.Sleep,
+		Now:           now,
+		Unit:          random.Real,
 	}
 	svc := service.MustNewAcquireTrackAudioService(ledger, p.registry(), p, scratchfiles.New(), wiring, stages)
 	runErr := executeFor(ctx, svc, kase, track)
@@ -230,10 +233,10 @@ func downloadSeconds(kase Case, attempted []service.AttemptedCandidate) float64 
 	return total
 }
 
-func RunAll(ctx context.Context, cases []Case) []Outcome {
+func RunAll(ctx context.Context, now clock.Func, cases []Case) []Outcome {
 	outcomes := make([]Outcome, 0, len(cases))
 	for _, kase := range cases {
-		outcomes = append(outcomes, Run(ctx, kase))
+		outcomes = append(outcomes, Run(ctx, now, kase))
 	}
 	return outcomes
 }

@@ -2,7 +2,7 @@ package chromaprint_test
 
 import (
 	"altune/go-api/internal/download"
-	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/retrysafe"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -24,7 +24,7 @@ import (
 
 func newIdentifier(t *testing.T, binDir, apiKey string) *download.ChromaprintIdentifier {
 	t.Helper()
-	id, err := download.NewChromaprintIdentifier(binDir, apiKey, &http.Client{}, clock.Sleep)
+	id, err := download.NewChromaprintIdentifier(binDir, apiKey, &http.Client{})
 	if err != nil {
 		t.Fatalf("NewChromaprintIdentifier: %v", err)
 	}
@@ -32,21 +32,13 @@ func newIdentifier(t *testing.T, binDir, apiKey string) *download.ChromaprintIde
 }
 
 func TestNewIdentifier_RefusesANilClient(t *testing.T) {
-	id, err := download.NewChromaprintIdentifier(t.TempDir(), "key", nil, clock.Sleep)
+	id, err := download.NewChromaprintIdentifier(t.TempDir(), "key", nil)
 
 	if !errors.Is(err, download.ErrChromaprintClientRequired) {
 		t.Fatalf("err = %v, want ErrChromaprintClientRequired", err)
 	}
 	if id != nil {
 		t.Errorf("identifier = %v, want nil beside the error", id)
-	}
-}
-
-func TestNewIdentifier_RefusesAMissingSleeper(t *testing.T) {
-	id, err := download.NewChromaprintIdentifier(t.TempDir(), "key", &http.Client{}, nil)
-
-	if id != nil || !errors.Is(err, download.ErrChromaprintSleeperRequired) || !strings.Contains(err.Error(), "NewIdentifier") {
-		t.Fatalf("got (%v, %v), want a nil identifier and an error naming the constructor wrapping ErrChromaprintSleeperRequired", id, err)
 	}
 }
 
@@ -58,7 +50,7 @@ func TestNewIdentifier_SendsLookupsThroughTheClientItWasGiven(t *testing.T) {
 		through++
 		return http.DefaultTransport.RoundTrip(r)
 	})}
-	id, err := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key", client, clock.Sleep)
+	id, err := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key", client)
 	if err != nil {
 		t.Fatalf("NewChromaprintIdentifier: %v", err)
 	}
@@ -69,6 +61,28 @@ func TestNewIdentifier_SendsLookupsThroughTheClientItWasGiven(t *testing.T) {
 
 	if through != 1 {
 		t.Errorf("requests through the supplied client = %d, want 1", through)
+	}
+}
+
+func TestIdentify_MarksTheLookupPostRetrySafeSoTheTransportMayRetryIt(t *testing.T) {
+	srv := lookupServerServing(`{"status":"ok","results":[]}`)
+	defer srv.Close()
+	var marked bool
+	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		marked = retrysafe.Marked(r.Context())
+		return http.DefaultTransport.RoundTrip(r)
+	})}
+	id, err := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key", client)
+	if err != nil {
+		t.Fatalf("NewChromaprintIdentifier: %v", err)
+	}
+
+	if _, err := id.WithEndpoint(srv.URL).Identify(context.Background(), "/tmp/full.mp3", 0); err != nil {
+		t.Fatalf("Identify: %v", err)
+	}
+
+	if !marked {
+		t.Error("the lookup POST was not marked retry-safe, so the transport would never retry a throttled answer")
 	}
 }
 
@@ -685,7 +699,7 @@ func throttlingServer(t *testing.T, throttled int, okBody string) (*httptest.Ser
 
 const throttleMatchBody = `{"status":"ok","results":[{"id":"ac-1","score":0.97,"recordings":[{"id":"mb-1"}]}]}`
 
-func TestIdentify_TwoThrottledAnswersSurfaceErrIdentifyThrottled(t *testing.T) {
+func TestIdentify_AThrottledAnswerSurfacesErrIdentifyThrottledWithoutAnAdapterRetry(t *testing.T) {
 	srv, hits := throttlingServer(t, 2, throttleMatchBody)
 	id := newIdentifier(t, fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
 
@@ -694,21 +708,8 @@ func TestIdentify_TwoThrottledAnswersSurfaceErrIdentifyThrottled(t *testing.T) {
 	if !errors.Is(err, download.ErrIdentifyThrottled) {
 		t.Fatalf("err = %v, want ErrIdentifyThrottled", err)
 	}
-	if *hits != 2 {
-		t.Errorf("hits = %d, want 2 (one retry)", *hits)
-	}
-}
-
-func TestIdentify_ThrottledOnceThenOKReturnsTheMatch(t *testing.T) {
-	srv, _ := throttlingServer(t, 1, throttleMatchBody)
-	id := newIdentifier(t, fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
-
-	match, err := id.Identify(context.Background(), "/tmp/a.mp3", 0)
-	if err != nil {
-		t.Fatalf("Identify: %v", err)
-	}
-	if match.AcoustID != "ac-1" {
-		t.Errorf("AcoustID = %q, want ac-1", match.AcoustID)
+	if *hits != 1 {
+		t.Errorf("hits = %d, want 1: retrying a throttled call belongs to the transport", *hits)
 	}
 }
 
@@ -728,78 +729,6 @@ func TestIdentify_NoMatchIsZeroMatchAndServerErrorIsNotThrottled(t *testing.T) {
 	_, err = id.Identify(context.Background(), "/tmp/a.mp3", 0)
 	if err == nil || errors.Is(err, download.ErrIdentifyThrottled) {
 		t.Errorf("500 err = %v, want a non-throttled error", err)
-	}
-}
-
-func TestLookup_ContextCancelAbortsTheRetryAfterWait(t *testing.T) {
-	var hits int
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		hits++
-		w.Header().Set("Retry-After", "5")
-		w.WriteHeader(http.StatusTooManyRequests)
-	}))
-	defer srv.Close()
-	id := newIdentifier(t, fakeFpcalcDir(t, 100), "real-key").WithEndpoint(srv.URL)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	start := time.Now()
-	_, err := id.Identify(ctx, "/tmp/full.mp3", 0)
-
-	if !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, download.ErrIdentifyThrottled) {
-		t.Errorf("err = %v, want the context error", err)
-	}
-	if hits != 1 {
-		t.Errorf("hits = %d, want 1: the throttled request and no retry", hits)
-	}
-	if time.Since(start) > 4*time.Second {
-		t.Errorf("took %v, want the wait aborted by ctx", time.Since(start))
-	}
-}
-
-func TestRetryAfter_ParsesSecondsCapsAtFiveAndDefaultsToOne(t *testing.T) {
-	type outcome struct {
-		header string
-		gap    time.Duration
-		err    error
-	}
-	cases := map[string]time.Duration{
-		"2": 2 * time.Second, "60": 5 * time.Second, "": time.Second, "soon": time.Second, "0": 0,
-		"10000000000": 5 * time.Second, "18446744073": 5 * time.Second,
-	}
-	results := make(chan outcome, len(cases))
-	for header := range cases {
-		var throttledAt time.Time
-		var gap time.Duration
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			if throttledAt.IsZero() {
-				throttledAt = time.Now()
-				w.Header().Set("Retry-After", header)
-				w.WriteHeader(http.StatusTooManyRequests)
-				return
-			}
-			gap = time.Since(throttledAt)
-			_, _ = w.Write([]byte(throttleMatchBody))
-		}))
-		t.Cleanup(srv.Close)
-		id := newIdentifier(t, fakeFpcalcDir(t, 130), "real-key").WithEndpoint(srv.URL)
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-			defer cancel()
-			_, err := id.Identify(ctx, "/tmp/a.mp3", 0)
-			results <- outcome{header: header, gap: gap, err: err}
-		}()
-	}
-	for range cases {
-		got := <-results
-		want := cases[got.header]
-		if got.err != nil {
-			t.Errorf("Retry-After %q: %v, want a retry after %v", got.header, got.err, want)
-			continue
-		}
-		if got.gap < want || got.gap > want+500*time.Millisecond {
-			t.Errorf("Retry-After %q: retried after %v, want %v", got.header, got.gap, want)
-		}
 	}
 }
 

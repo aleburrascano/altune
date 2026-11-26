@@ -2,6 +2,7 @@ package ytdlp_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/shared/clock"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 const youTubeWatchURL = "https://youtube.com/watch?v=1"
@@ -158,7 +160,7 @@ func downloadWithScript(t *testing.T, body string) (download.FetchedAudio, error
 	t.Helper()
 	outDir := t.TempDir()
 	installYtDlp(t, strings.ReplaceAll(body, "OUT", outDir))
-	return download.NewYtDlpAudioSearcher("", "", "").Download(context.Background(), youTubeWatchURL, outDir)
+	return download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep).Download(context.Background(), youTubeWatchURL, outDir)
 }
 
 func stubDownload(outDir string) string {

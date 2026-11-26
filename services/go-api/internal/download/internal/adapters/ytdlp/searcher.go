@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/childprocess"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/expiringcache"
 	"altune/go-api/internal/shared/parallel"
 	"altune/go-api/internal/shared/redact"
@@ -50,7 +51,8 @@ type YouTubeAudioSearcher struct {
 	remoteComponents string
 	potURL           string
 	inspections      *expiringcache.Memo[string, inspection]
-	inspectionNow    func() time.Time
+	now              clock.Func
+	sleep            clock.Sleeper
 	searchTimeout    time.Duration
 	downloadTimeout  time.Duration
 	previewTimeout   time.Duration
@@ -88,27 +90,47 @@ func (s *YouTubeAudioSearcher) WithCanaryTimeout(timeout time.Duration) *YouTube
 	return s
 }
 
-func (s *YouTubeAudioSearcher) WithInspectionClock(now func() time.Time) *YouTubeAudioSearcher {
-	if now != nil {
-		s.inspectionNow = now
-	}
-	return s
-}
+var (
+	ErrSearcherClockRequired   = errors.New("the yt-dlp searcher needs a clock")
+	ErrSearcherSleeperRequired = errors.New("the yt-dlp searcher needs a sleeper")
+)
 
-func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string) *YouTubeAudioSearcher {
+func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string, now clock.Func, sleep clock.Sleeper) (*YouTubeAudioSearcher, error) {
+	if err := errors.Join(
+		requirePort(now == nil, "NewYtDlpAudioSearcher", ErrSearcherClockRequired),
+		requirePort(sleep == nil, "NewYtDlpAudioSearcher", ErrSearcherSleeperRequired),
+	); err != nil {
+		return nil, err
+	}
 	s := &YouTubeAudioSearcher{
 		ffmpegLocation:   ffmpegLocation,
 		cookieFile:       cookieFile,
 		jsRuntime:        jsRuntime,
 		remoteComponents: defaultRemoteComponents,
-		inspectionNow:    time.Now,
+		now:              now,
+		sleep:            sleep,
 		searchTimeout:    searchTimeout,
 		downloadTimeout:  downloadTimeout,
 		previewTimeout:   previewTimeout,
 		canaryTimeout:    canaryTimeout,
 	}
-	s.inspections = expiringcache.New[string, inspection](inspectCacheTTL, inspectCacheMax, func() time.Time { return s.inspectionNow() })
+	s.inspections = expiringcache.New[string, inspection](inspectCacheTTL, inspectCacheMax, now)
+	return s, nil
+}
+
+func MustNewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string, now clock.Func, sleep clock.Sleeper) *YouTubeAudioSearcher {
+	s, err := NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime, now, sleep)
+	if err != nil {
+		panic(err)
+	}
 	return s
+}
+
+func requirePort(missing bool, owner string, err error) error {
+	if !missing {
+		return nil
+	}
+	return fmt.Errorf("%s: %w", owner, err)
 }
 
 const maxEmbeddedStderrBytes = 2048

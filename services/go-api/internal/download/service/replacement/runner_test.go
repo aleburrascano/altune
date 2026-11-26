@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/random"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -249,6 +251,8 @@ func noStages(store audioDeleter) download.StagePorts {
 		DownloadLimit: download.Unlimited(),
 		Observer:      download.NoObserver(),
 		Sleep:         clock.Sleep,
+		Now:           time.Now,
+		Unit:          random.Real,
 	}
 }
 

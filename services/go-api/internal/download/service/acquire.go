@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/redact"
 	"cmp"
 	"context"
@@ -40,6 +41,8 @@ type AcquireTrackAudioService struct {
 	storedAudio     ports.StoredAudioReader
 	contextObserver func(*AcquisitionContext)
 	sleep           clock.Sleeper
+	now             clock.Func
+	unit            random.Unit
 	previews        ports.PreviewMatcher
 
 	cuts            audioverdict.Cuts
@@ -85,6 +88,8 @@ func NewAcquireTrackAudioService(
 		downloadLimiter: stages.DownloadLimit,
 		contextObserver: stages.Observer,
 		sleep:           stages.Sleep,
+		now:             stages.Now,
+		unit:            stages.Unit,
 		cuts:            audioverdict.DefaultCuts(),
 
 		confidenceFloor: defaultConfidenceFloor,
@@ -135,7 +140,7 @@ func (s *AcquireTrackAudioService) outcomes() outcomeReporter {
 }
 
 func (s *AcquireTrackAudioService) supersededAudio() supersededAudio {
-	return supersededAudio{ledger: s.ledger, orphans: s.orphans, grace: s.supersededGrace}
+	return supersededAudio{ledger: s.ledger, orphans: s.orphans, grace: s.supersededGrace, now: s.now}
 }
 
 func (s *AcquireTrackAudioService) storedFiles() storedFileFingerprinter {
@@ -257,9 +262,9 @@ func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, userId 
 func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId ids.UserId, trackId ids.TrackId, ac *AcquisitionContext) error {
 	defer s.recordRejections(ctx, ac)
 	defer reportDecision(ctx, ac)
-	identityStart := time.Now()
+	identityStart := s.now()
 	s.resolveIdentity(ctx, ac)
-	timeStage(ctx, "identity", identityStart)
+	timeStage(ctx, "identity", identityStart, s.now)
 	steps := s.buildSteps(userId, trackId)
 	if err := RunPipeline(ctx, steps, ac); err != nil {
 		if failure := s.takeRerecording(ctx, steps, ac, err); failure != nil {
@@ -294,7 +299,7 @@ func (s *AcquireTrackAudioService) takeRerecording(ctx context.Context, steps Pi
 }
 
 func (s *AcquireTrackAudioService) runRerecordingPass(ctx context.Context, steps Pipeline, ac *AcquisitionContext, label ports.TrackLabel) error {
-	pass := ac.snapshot()
+	pass := ac.Snapshot()
 	pass.retargetTo(label)
 	s.resolveIdentity(ctx, &pass)
 	if err := RunPipeline(ctx, steps, &pass); err != nil {

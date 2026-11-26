@@ -12,6 +12,7 @@ import (
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/random"
 	"context"
 	"encoding/json"
 	"errors"
@@ -3057,6 +3058,8 @@ func noopStages() service.StagePorts {
 		DownloadLimit: service.Unlimited(),
 		Observer:      service.NoObserver(),
 		Sleep:         clock.Sleep,
+		Now:           time.Now,
+		Unit:          random.Real,
 	}
 }
 
@@ -3232,7 +3235,7 @@ func outageSource() findOnlySource {
 }
 
 func mustNewDownloadStep(fetcher fetcherPort, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, limit *service.ConcurrencyLimit, opts ...func(*service.DownloadStep)) *service.DownloadStep {
-	step, err := service.NewDownloadStep(fetcher, workspace, identifier, lookup, prober, skips, limit, opts...)
+	step, err := service.NewDownloadStep(fetcher, workspace, identifier, lookup, prober, skips, limit, time.Now, opts...)
 	if err != nil {
 		panic(err)
 	}
@@ -3240,7 +3243,7 @@ func mustNewDownloadStep(fetcher fetcherPort, workspace ports.ScratchFolder, ide
 }
 
 func mustNewStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder, prober ports.AudioProber, orphans ports.OrphanedAudioRecorder, refs ports.AudioRefLookup, opts ...func(*service.StoreStep)) *service.StoreStep {
-	step, err := service.NewStoreStep(audioStore, workspace, prober, orphans, refs, clock.Sleep, opts...)
+	step, err := service.NewStoreStep(audioStore, workspace, prober, orphans, refs, clock.Sleep, random.Real, opts...)
 	if err != nil {
 		panic(err)
 	}

@@ -9,11 +9,13 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/random"
 	"context"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -135,6 +137,8 @@ func noStages(mods ...stageMod) service.StagePorts {
 		DownloadLimit: service.Unlimited(),
 		Observer:      service.NoObserver(),
 		Sleep:         clock.Sleep,
+		Now:           time.Now,
+		Unit:          random.Real,
 	}
 	for _, mod := range mods {
 		mod(&stages)

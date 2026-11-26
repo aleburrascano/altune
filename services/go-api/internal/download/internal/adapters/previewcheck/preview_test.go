@@ -90,13 +90,21 @@ type previewSource interface {
 }
 
 func (s *deezerStub) serve() previewSource {
-	return download.MustNewDeezerPreview(&http.Client{Transport: s}, deezer, fixedPrinter{print: []uint32{7, 8, 9}}, clock.Sleep)
+	return download.MustNewDeezerPreview(&http.Client{Transport: s}, deezer, fixedPrinter{print: []uint32{7, 8, 9}}, clock.Sleep, time.Now)
+}
+
+func TestNewDeezerPreview_RefusesAMissingClock(t *testing.T) {
+	previews, err := download.NewDeezerPreview(&http.Client{}, deezer, fixedPrinter{}, clock.Sleep, nil)
+
+	if previews != nil || !errors.Is(err, download.ErrDeezerClockRequired) || !strings.Contains(err.Error(), "NewDeezerPreview") {
+		t.Fatalf("got (%v, %v), want a nil client and an error naming NewDeezerPreview wrapping ErrDeezerClockRequired", previews, err)
+	}
 }
 
 const trackJSON = `{"id":132201194,"title":"outside","isrc":"USSM11607554","preview":"` + deezer + `/preview.mp3"}`
 
 func TestNewDeezerPreview_RefusesAMissingSleeper(t *testing.T) {
-	previews, err := download.NewDeezerPreview(&http.Client{}, deezer, fixedPrinter{}, nil)
+	previews, err := download.NewDeezerPreview(&http.Client{}, deezer, fixedPrinter{}, nil, time.Now)
 
 	if previews != nil || !errors.Is(err, download.ErrDeezerSleeperRequired) || !strings.Contains(err.Error(), "NewDeezerPreview") {
 		t.Fatalf("got (%v, %v), want a nil client and an error naming NewDeezerPreview wrapping ErrDeezerSleeperRequired", previews, err)
@@ -200,7 +208,7 @@ func TestDeezerPreviews_GivesUpAfterFiveAttemptsWhenQuotaNeverLifts(t *testing.T
 func TestDeezerPreviews_AnHTTP429BacksOffLikeAQuotaError(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		stub := &throttlingOnce{deezerStub: deezerStub{trackBody: func(int) string { return noPreview }}}
-		previews := download.MustNewDeezerPreview(&http.Client{Transport: stub}, deezer, fixedPrinter{}, clock.Sleep)
+		previews := download.MustNewDeezerPreview(&http.Client{Transport: stub}, deezer, fixedPrinter{}, clock.Sleep, time.Now)
 		started := time.Now()
 
 		clip, err := previews.Clip(context.Background(), download.DeezerPreviewTarget{ISRC: "USSM11607554"})

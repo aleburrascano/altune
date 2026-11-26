@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"log/slog"
@@ -14,8 +15,8 @@ func requireWorkspace(owner string, ws ports.ScratchFolder) error {
 	return missingPort(owner, "workspace", ws == nil)
 }
 
-func SweepStaleTempDirs(ws ports.ScratchFolder) {
-	ws.SweepAbandoned(time.Now().Add(-maxLiveTempAge))
+func SweepStaleTempDirs(ws ports.ScratchFolder, now clock.Func) {
+	ws.SweepAbandoned(now().Add(-maxLiveTempAge))
 }
 
 func CleanupTemp(ctx context.Context, ws ports.ScratchFolder, ac *AcquisitionContext) {

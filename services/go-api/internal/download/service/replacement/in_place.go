@@ -3,6 +3,7 @@ package replacement
 import (
 	"altune/go-api/internal/download/internal/core/audioquality"
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/downloadprovenance"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/redact"
@@ -55,24 +56,23 @@ type pacer struct {
 	mu    sync.Mutex
 	next  time.Time
 	every time.Duration
+	now   clock.Func
+	sleep clock.Sleeper
 }
 
 func (p *pacer) wait(ctx context.Context) error {
 	p.mu.Lock()
-	turn := time.Now()
+	now := p.now()
+	turn := now
 	if p.next.After(turn) {
 		turn = p.next
 	}
 	p.next = turn.Add(p.every)
 	p.mu.Unlock()
-	timer := time.NewTimer(time.Until(turn))
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return fmt.Errorf("wait for an in-place check slot: %w", ctx.Err())
-	case <-timer.C:
-		return nil
+	if err := p.sleep(ctx, turn.Sub(now)); err != nil {
+		return fmt.Errorf("wait for an in-place check slot: %w", err)
 	}
+	return nil
 }
 
 type inPlaceCheck struct {
@@ -95,7 +95,7 @@ func (c *inPlaceCheck) record(ctx context.Context, trackID ids.TrackId, record p
 	return c.recorder.RecordInPlace(ctx, trackID, record)
 }
 
-var ErrMissingInPlacePort = errors.New("replacement: an in-place check needs a checker and a recorder")
+var ErrMissingInPlacePort = errors.New("replacement: an in-place check needs a checker, a recorder, a clock and a sleeper")
 
 type InPlace struct {
 	check   *inPlaceCheck
@@ -104,12 +104,12 @@ type InPlace struct {
 
 func NoInPlaceCheck() InPlace { return InPlace{} }
 
-func InPlaceCheckOf(checker InPlaceChecker, recorder ports.InPlaceStore, perHour int) (InPlace, error) {
-	if checker == nil || recorder == nil {
+func InPlaceCheckOf(checker InPlaceChecker, recorder ports.InPlaceStore, perHour int, now clock.Func, sleep clock.Sleeper) (InPlace, error) {
+	if checker == nil || recorder == nil || now == nil || sleep == nil {
 		return InPlace{}, ErrMissingInPlacePort
 	}
 	every := time.Hour / time.Duration(max(perHour, 1))
-	return InPlace{check: &inPlaceCheck{checker: checker, recorder: recorder, pacer: &pacer{every: every}}, enabled: true}, nil
+	return InPlace{check: &inPlaceCheck{checker: checker, recorder: recorder, pacer: &pacer{every: every, now: now, sleep: sleep}}, enabled: true}, nil
 }
 
 func isUserUpload(track *ports.TrackSnapshot) bool {

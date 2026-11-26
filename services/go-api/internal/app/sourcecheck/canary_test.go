@@ -3,6 +3,7 @@ package sourcecheck_test
 import (
 	"altune/go-api/internal/app/sourcecheck"
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/shared/clock"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -116,7 +117,7 @@ func TestRun_LogsEachProbeWithItsOutcome(t *testing.T) {
 }
 
 func TestChecks_OnlyProbeEnabledSources(t *testing.T) {
-	searcher := download.NewYtDlpAudioSearcher("", "", "")
+	searcher := download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep)
 	tests := []struct {
 		ytMusic, ytDlp bool
 		want           string
@@ -135,7 +136,7 @@ func TestChecks_OnlyProbeEnabledSources(t *testing.T) {
 }
 
 func TestChecks_ProbeInnerTubeWithoutYtDlp(t *testing.T) {
-	for _, searcher := range []*download.YouTubeAudioSearcher{nil, download.NewYtDlpAudioSearcher("", "", "")} {
+	for _, searcher := range []*download.YouTubeAudioSearcher{nil, download.MustNewYtDlpAudioSearcher("", "", "", time.Now, clock.Sleep)} {
 		got := checkNames(sourcecheck.Checks(sourcecheck.Probes{YtDlp: searcher, InnerTube: innerTube(t), YtMusicEnabled: true, YtDlpEnabled: true}))
 		if got != "ytmsearch" {
 			t.Errorf("Checks(searcher=%v, unavailable) = %q, want only ytmsearch", searcher != nil, got)

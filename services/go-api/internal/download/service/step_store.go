@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/backoff"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
@@ -20,7 +21,12 @@ const (
 	rollbackDeleteTries = 3
 )
 
-var rollbackDeleteBackoff = backoff.MustCapped(100*time.Millisecond, time.Second)
+const (
+	rollbackDeleteBackoffBase  = 100 * time.Millisecond
+	rollbackDeleteBackoffLimit = time.Second
+)
+
+var rollbackDeleteBackoff = backoff.MustCapped(rollbackDeleteBackoffBase, rollbackDeleteBackoffLimit)
 
 type StoreStep struct {
 	audioStore  ports.AudioWriter
@@ -34,9 +40,10 @@ type StoreStep struct {
 	deleteTries int
 	workspace   ports.ScratchFolder
 	sleep       clock.Sleeper
+	unit        random.Unit
 }
 
-func NewStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder, prober ports.AudioProber, orphans ports.OrphanedAudioRecorder, refs ports.AudioRefLookup, sleep clock.Sleeper, opts ...func(*StoreStep)) (*StoreStep, error) {
+func NewStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder, prober ports.AudioProber, orphans ports.OrphanedAudioRecorder, refs ports.AudioRefLookup, sleep clock.Sleeper, unit random.Unit, opts ...func(*StoreStep)) (*StoreStep, error) {
 	const owner = "NewStoreStep"
 	if err := errors.Join(
 		missingPort(owner, "audio store", audioStore == nil),
@@ -44,14 +51,15 @@ func NewStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder, p
 		missingPort(owner, "orphan recorder", orphans == nil),
 		missingPort(owner, "audio ref lookup", refs == nil),
 		missingPort(owner, "sleeper", sleep == nil),
+		missingPort(owner, "jitter source", unit == nil),
 		requireWorkspace(owner, workspace),
 	); err != nil {
 		return nil, err
 	}
-	return buildStoreStep(audioStore, workspace, prober, orphans, refs, sleep, opts...), nil
+	return buildStoreStep(audioStore, workspace, prober, orphans, refs, sleep, unit, opts...), nil
 }
 
-func buildStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder, prober ports.AudioProber, orphans ports.OrphanedAudioRecorder, refs ports.AudioRefLookup, sleep clock.Sleeper, opts ...func(*StoreStep)) *StoreStep {
+func buildStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder, prober ports.AudioProber, orphans ports.OrphanedAudioRecorder, refs ports.AudioRefLookup, sleep clock.Sleeper, unit random.Unit, opts ...func(*StoreStep)) *StoreStep {
 	s := &StoreStep{
 		audioStore:  audioStore,
 		workspace:   workspace,
@@ -61,6 +69,7 @@ func buildStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder,
 		attemptID:   ids.RandomID,
 		deleteTries: rollbackDeleteTries,
 		sleep:       sleep,
+		unit:        unit,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -159,7 +168,7 @@ func (s *StoreStep) deleteWithRetry(ctx context.Context, audioRef string) error 
 		}
 		slog.WarnContext(ctx, "acquisition.rollback_delete_retrying",
 			"audio_ref", audioRef, "attempt", attempt, "error", err)
-		if attempt == s.deleteTries || s.sleep(ctx, rollbackDeleteBackoff.Delay(attempt)) != nil {
+		if attempt == s.deleteTries || s.sleep(ctx, rollbackDeleteBackoff.DelayAt(attempt, s.unit())) != nil {
 			break
 		}
 	}
