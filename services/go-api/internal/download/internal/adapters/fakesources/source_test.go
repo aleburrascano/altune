@@ -2,6 +2,7 @@ package fakesources_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"
@@ -162,7 +163,7 @@ func TestFind_FixtureCandidatesAreShapedLikeProd(t *testing.T) {
 	if !reflect.DeepEqual(art, wantArt) {
 		t.Fatalf("art track %+v, want %+v", art, wantArt)
 	}
-	if art.Kind != download.KindArtTrack || !art.IsResolved() || art.Channel != "" {
+	if art.Kind != ports.KindArtTrack || !art.IsResolved() || art.Channel != "" {
 		t.Fatalf("art track %+v must be a resolved art_track with no channel", art)
 	}
 
@@ -171,7 +172,7 @@ func TestFind_FixtureCandidatesAreShapedLikeProd(t *testing.T) {
 	if !reflect.DeepEqual(upload, wantUpload) {
 		t.Fatalf("upload %+v, want %+v", upload, wantUpload)
 	}
-	if upload.Kind != download.KindUpload || upload.IsResolved() || upload.Channel == "" || upload.Channel == req.Artist {
+	if upload.Kind != ports.KindUpload || upload.IsResolved() || upload.Channel == "" || upload.Channel == req.Artist {
 		t.Fatalf("upload %+v must be an unresolved upload from a neutral channel", upload)
 	}
 	if download.NewArtTrackSource(fixtureClip).Name() == download.NewUploadSource(fixtureClip).Name() || art.URL == upload.URL {

@@ -2,6 +2,7 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/testdb"
 	"context"
 	"errors"
@@ -51,7 +52,7 @@ func TestPostgresOutcomeStore_RecordsFieldsAndServerTimestamp(t *testing.T) {
 	store := download.NewPostgresOutcomeStore(pool)
 	ctx := context.Background()
 
-	cases := []download.AcquisitionOutcome{
+	cases := []ports.AcquisitionOutcome{
 		{TrackID: uuid.NewString(), Outcome: "succeeded", Reason: "", ElapsedMs: 1200},
 		{TrackID: uuid.NewString(), Outcome: "failed", Reason: "no_match_found", ElapsedMs: 340},
 		{TrackID: uuid.NewString(), Outcome: "cancelled", Reason: "user-cancelled", ElapsedMs: 15},
@@ -88,7 +89,7 @@ func TestPostgresOutcomeStore_RecordInsertsOneRowPerCall(t *testing.T) {
 	trackID := uuid.NewString()
 
 	for i := 0; i < 3; i++ {
-		if err := store.Record(ctx, download.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: int64(i)}); err != nil {
+		if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: int64(i)}); err != nil {
 			t.Fatalf("Record #%d = %v, want nil", i, err)
 		}
 	}
@@ -106,7 +107,7 @@ func TestPostgresOutcomeStore_RejectsOutcomeOutsideTheThreeStates(t *testing.T) 
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
-	err := store.Record(ctx, download.AcquisitionOutcome{TrackID: trackID, Outcome: "queued", ElapsedMs: 5})
+	err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "queued", ElapsedMs: 5})
 	if err == nil {
 		t.Fatal("Record with an unrecognised outcome = nil, want an error from the CHECK constraint")
 	}
@@ -125,7 +126,7 @@ func TestPostgresOutcomeStore_RejectsNearMissOutcomeSpellings(t *testing.T) {
 
 	for _, outcome := range []string{"", "Succeeded", "FAILED", "canceled", " succeeded", "succeeded "} {
 		trackID := uuid.NewString()
-		if err := store.Record(ctx, download.AcquisitionOutcome{TrackID: trackID, Outcome: download.JobState(outcome), ElapsedMs: 1}); err == nil {
+		if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: ports.JobState(outcome), ElapsedMs: 1}); err == nil {
 			t.Errorf("Record(outcome=%q) = nil, want an error", outcome)
 		}
 		if rows := queryOutcomeRows(t, pool, trackID); len(rows) != 0 {
@@ -144,7 +145,7 @@ func TestPostgresOutcomeStore_StoresLongAndHostileReasonVerbatim(t *testing.T) {
 	hostile := "it's \"quoted\"'); DROP TABLE acquisition_outcomes; -- 曲 🎵 \\n\t"
 	for _, reason := range []string{long, hostile} {
 		trackID := uuid.NewString()
-		if err := store.Record(ctx, download.AcquisitionOutcome{TrackID: trackID, Outcome: "failed", Reason: reason, ElapsedMs: 7}); err != nil {
+		if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "failed", Reason: reason, ElapsedMs: 7}); err != nil {
 			t.Fatalf("Record(reason of %d bytes) = %v, want nil", len(reason), err)
 		}
 		rows := queryOutcomeRows(t, pool, trackID)
@@ -165,7 +166,7 @@ func TestPostgresOutcomeStore_StoresElapsedAtZeroAndInt64Max(t *testing.T) {
 
 	for _, elapsed := range []int64{0, 9223372036854775807} {
 		trackID := uuid.NewString()
-		if err := store.Record(ctx, download.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: elapsed}); err != nil {
+		if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: elapsed}); err != nil {
 			t.Fatalf("Record(elapsedMs=%d) = %v, want nil", elapsed, err)
 		}
 		rows := queryOutcomeRows(t, pool, trackID)
@@ -183,7 +184,7 @@ func TestPostgresOutcomeStore_CancelledContextReturnsErrorAndWritesNothing(t *te
 	cancel()
 	trackID := uuid.NewString()
 
-	err := store.Record(ctx, download.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: 3})
+	err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: 3})
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("Record with a cancelled context = %v, want an error wrapping context.Canceled", err)
 	}
@@ -198,7 +199,7 @@ func TestPostgresOutcomeStore_ClosedPoolReturnsError(t *testing.T) {
 	store := download.NewPostgresOutcomeStore(pool)
 	pool.Close()
 
-	err := store.Record(context.Background(), download.AcquisitionOutcome{TrackID: uuid.NewString(), Outcome: "failed", ElapsedMs: 1})
+	err := store.Record(context.Background(), ports.AcquisitionOutcome{TrackID: uuid.NewString(), Outcome: "failed", ElapsedMs: 1})
 	if err == nil {
 		t.Error("Record on a closed pool = nil, want an error")
 	}
@@ -211,7 +212,7 @@ func TestPostgresOutcomeStore_RejectsNegativeElapsedMs(t *testing.T) {
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
-	err := store.Record(ctx, download.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: -1})
+	err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: -1})
 	if err == nil {
 		t.Fatal("Record with elapsedMs=-1 = nil, want an error from the CHECK constraint")
 	}
@@ -228,7 +229,7 @@ func TestPostgresOutcomeStore_RejectsEmptyTrackID(t *testing.T) {
 	store := download.NewPostgresOutcomeStore(pool)
 	ctx := context.Background()
 
-	err := store.Record(ctx, download.AcquisitionOutcome{TrackID: "", Outcome: "succeeded", ElapsedMs: 1})
+	err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: "", Outcome: "succeeded", ElapsedMs: 1})
 	if err == nil {
 		t.Fatal("Record with an empty TrackID = nil, want an error from the CHECK constraint")
 	}
@@ -252,7 +253,7 @@ func TestPostgresOutcomeStore_ConcurrentRecordsEachLandOneRow(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			errs <- store.Record(ctx, download.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: int64(i)})
+			errs <- store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: int64(i)})
 		}(i)
 	}
 	wg.Wait()
@@ -305,12 +306,12 @@ func TestPostgresOutcomeStore_RecordsStageTimesAndFileFacts(t *testing.T) {
 	store := download.NewPostgresOutcomeStore(pool)
 	trackID := uuid.NewString()
 
-	err := store.Record(context.Background(), download.AcquisitionOutcome{
+	err := store.Record(context.Background(), ports.AcquisitionOutcome{
 		TrackID: trackID, Outcome: "succeeded", ElapsedMs: 9000,
 		StageMs:    map[string]int64{"search": 800, "download.preview": 4100},
 		SourceHost: "music.youtube.com",
-		Source:     download.SourceFormat{ID: "18", Codec: "mp4a.40.2"},
-		Stored:     download.StoredFile{Bytes: 7_340_032, Codec: "mp3"},
+		Source:     ports.SourceFormat{ID: "18", Codec: "mp4a.40.2"},
+		Stored:     ports.StoredFile{Bytes: 7_340_032, Codec: "mp3"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -346,14 +347,14 @@ func TestPostgresOutcomeStore_RecordsJobKindRunProvenanceAndLengths(t *testing.T
 	full := uuid.NewString()
 	bare := uuid.NewString()
 
-	err := store.Record(ctx, download.AcquisitionOutcome{
+	err := store.Record(ctx, ports.AcquisitionOutcome{
 		TrackID: full, Outcome: "succeeded", Kind: download.JobKindReplace, Run: 2, Provenance: "corroborated",
 		Confidence: 0.87, SourceKey: "yt:abc", TargetSeconds: 215.5, MeasuredSeconds: 214.9,
 	})
 	if err != nil {
 		t.Fatalf("Record full = %v, want nil", err)
 	}
-	if err := store.Record(ctx, download.AcquisitionOutcome{TrackID: bare, Outcome: "failed"}); err != nil {
+	if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: bare, Outcome: "failed"}); err != nil {
 		t.Fatalf("Record bare = %v, want nil", err)
 	}
 
@@ -387,7 +388,7 @@ func TestPostgresOutcomeStore_PruneRemovesRowsOfADeletedTrack(t *testing.T) {
 	kept := insertFailedTrack(t, pool).ID.UUID().String()
 	deleted := insertFailedTrack(t, pool).ID.UUID().String()
 	for _, trackID := range []string{kept, deleted} {
-		if err := store.Record(ctx, download.AcquisitionOutcome{TrackID: trackID, Outcome: "failed", ElapsedMs: 10}); err != nil {
+		if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "failed", ElapsedMs: 10}); err != nil {
 			t.Fatalf("Record(...) = %v, want nil", err)
 		}
 	}
@@ -440,7 +441,7 @@ func TestPostgresOutcomeStore_PruneSucceedsWhenATrackIDIsNotAUUID(t *testing.T) 
 	ctx := context.Background()
 	live := insertFailedTrack(t, pool).ID.UUID().String()
 	for _, trackID := range []string{"not-a-uuid-" + uuid.NewString(), live} {
-		if err := store.Record(ctx, download.AcquisitionOutcome{TrackID: trackID, Outcome: "failed", ElapsedMs: 10}); err != nil {
+		if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "failed", ElapsedMs: 10}); err != nil {
 			t.Fatalf("Record(...) = %v, want nil", err)
 		}
 	}
@@ -461,7 +462,7 @@ func TestPostgresOutcomeStore_PruneKeepsRowsOfATrackDeletedAndRecreatedWithTheSa
 	ctx := context.Background()
 	track := insertFailedTrack(t, pool)
 	trackID := track.ID.UUID().String()
-	if err := store.Record(ctx, download.AcquisitionOutcome{TrackID: trackID, Outcome: "failed", ElapsedMs: 10}); err != nil {
+	if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "failed", ElapsedMs: 10}); err != nil {
 		t.Fatalf("Record(...) = %v, want nil", err)
 	}
 	if _, err := pool.Exec(ctx, `DELETE FROM tracks WHERE id = $1`, track.ID.UUID()); err != nil {

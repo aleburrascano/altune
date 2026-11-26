@@ -4,6 +4,8 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/download/internal/adapters/inmemoryqueue"
+	"altune/go-api/internal/download/internal/core/domain"
+	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -21,14 +23,14 @@ func newQueue() (*inmemoryqueue.Queue, *clocktest.Manual) {
 	return inmemoryqueue.New(nil, c.Now), c
 }
 
-func enqueue(t *testing.T, q *inmemoryqueue.Queue, trackID ids.TrackId, kind download.JobKind, delay time.Duration) {
+func enqueue(t *testing.T, q *inmemoryqueue.Queue, trackID ids.TrackId, kind ports.JobKind, delay time.Duration) {
 	t.Helper()
 	if err := q.Enqueue(context.Background(), trackID, kind, delay); err != nil {
 		t.Fatalf("Enqueue %s: %v", kind, err)
 	}
 }
 
-func claim(t *testing.T, q *inmemoryqueue.Queue) download.Job {
+func claim(t *testing.T, q *inmemoryqueue.Queue) ports.Job {
 	t.Helper()
 	job, err := q.Claim(context.Background(), lease)
 	if err != nil {
@@ -37,7 +39,7 @@ func claim(t *testing.T, q *inmemoryqueue.Queue) download.Job {
 	return job
 }
 
-func claimUpgrade(t *testing.T, q *inmemoryqueue.Queue) download.Job {
+func claimUpgrade(t *testing.T, q *inmemoryqueue.Queue) ports.Job {
 	t.Helper()
 	job, err := q.ClaimUpgrade(context.Background(), lease)
 	if err != nil {
@@ -98,7 +100,7 @@ func TestQueue_AReEnqueueAfterPriorClaimsStartsANewRunAndAdvancesTheFence(t *tes
 	ctx := context.Background()
 	trackID := ids.NewTrackId()
 	enqueue(t, q, trackID, download.JobKindAcquire, 0)
-	var stale download.Job
+	var stale ports.Job
 	for range 3 {
 		stale = claim(t, q)
 		c.Advance(2 * lease)
@@ -335,7 +337,7 @@ func TestQueue_UserAddsKeepPriorityOverUpgrades(t *testing.T) {
 	q, _ := newQueue()
 	ctx := context.Background()
 	upgrading, added := ids.NewTrackId(), ids.NewTrackId()
-	enqueue(t, q, upgrading, download.JobKindUpgrade, 0)
+	enqueue(t, q, upgrading, ports.JobKindUpgrade, 0)
 	enqueue(t, q, added, download.JobKindAcquire, 0)
 
 	wantNoUpgradeToClaim(t, q, "while a user add waits")
@@ -349,7 +351,7 @@ func TestQueue_UserAddsKeepPriorityOverUpgrades(t *testing.T) {
 	}
 
 	upgrade := claimUpgrade(t, q)
-	if upgrade.TrackID != upgrading || upgrade.Kind != download.JobKindUpgrade {
+	if upgrade.TrackID != upgrading || upgrade.Kind != ports.JobKindUpgrade {
 		t.Fatalf("ClaimUpgrade = %+v, want the upgrade once no user add waits", upgrade)
 	}
 }
@@ -357,9 +359,9 @@ func TestQueue_UserAddsKeepPriorityOverUpgrades(t *testing.T) {
 func TestQueue_ClaimUpgradeSkipsUpgradesThatAreDelayedOrLeased(t *testing.T) {
 	q, c := newQueue()
 	delayed, running := ids.NewTrackId(), ids.NewTrackId()
-	enqueue(t, q, running, download.JobKindUpgrade, 0)
+	enqueue(t, q, running, ports.JobKindUpgrade, 0)
 	claimUpgrade(t, q)
-	enqueue(t, q, delayed, download.JobKindUpgrade, time.Second)
+	enqueue(t, q, delayed, ports.JobKindUpgrade, time.Second)
 
 	wantNoUpgradeToClaim(t, q, "with one upgrade leased and one delayed")
 
@@ -373,7 +375,7 @@ func TestQueue_AUserJobThatIsNotDueYetDoesNotHoldBackUpgrades(t *testing.T) {
 	q, _ := newQueue()
 	upgrading := ids.NewTrackId()
 	enqueue(t, q, ids.NewTrackId(), download.JobKindAcquire, time.Hour)
-	enqueue(t, q, upgrading, download.JobKindUpgrade, 0)
+	enqueue(t, q, upgrading, ports.JobKindUpgrade, 0)
 
 	if got := claimUpgrade(t, q); got.TrackID != upgrading {
 		t.Errorf("ClaimUpgrade = %s, want %s while the only user job is delayed", got.TrackID, upgrading)
@@ -411,7 +413,7 @@ func TestQueue_PendingDepthLeavesOutALiveLeaseButCountsALapsedOne(t *testing.T) 
 
 func TestQueue_UpgradesAreNotCountedInTheUserQueueDepth(t *testing.T) {
 	q, _ := newQueue()
-	enqueue(t, q, ids.NewTrackId(), download.JobKindUpgrade, 0)
+	enqueue(t, q, ids.NewTrackId(), ports.JobKindUpgrade, 0)
 
 	wantDepth(t, q, 0, 0)
 }
@@ -422,7 +424,7 @@ func TestQueue_AnUpgradeNeverOverwritesAQueuedUserJob(t *testing.T) {
 	trackID := ids.NewTrackId()
 	enqueue(t, q, trackID, download.JobKindReplace, 0)
 
-	if err := q.Enqueue(ctx, trackID, download.JobKindUpgrade, 0); !errors.Is(err, download.ErrJobKindConflict) {
+	if err := q.Enqueue(ctx, trackID, ports.JobKindUpgrade, 0); !errors.Is(err, domain.ErrJobKindConflict) {
 		t.Fatalf("Enqueue upgrade over a queued replace = %v, want ErrJobKindConflict", err)
 	}
 
@@ -435,9 +437,9 @@ func TestQueue_AnUpgradeNeverOverwritesAQueuedUserJob(t *testing.T) {
 func TestQueue_AnUpgradeOverAQueuedUpgradeIsAccepted(t *testing.T) {
 	q, _ := newQueue()
 	trackID := ids.NewTrackId()
-	enqueue(t, q, trackID, download.JobKindUpgrade, 0)
+	enqueue(t, q, trackID, ports.JobKindUpgrade, 0)
 
-	enqueue(t, q, trackID, download.JobKindUpgrade, 0)
+	enqueue(t, q, trackID, ports.JobKindUpgrade, 0)
 
 	if got := claimUpgrade(t, q); got.TrackID != trackID {
 		t.Errorf("ClaimUpgrade = %+v, want %s", got, trackID)
@@ -448,10 +450,10 @@ func TestQueue_AnUpgradeOverARunningUpgradeKeepsTheLease(t *testing.T) {
 	q, _ := newQueue()
 	ctx := context.Background()
 	trackID := ids.NewTrackId()
-	enqueue(t, q, trackID, download.JobKindUpgrade, 0)
+	enqueue(t, q, trackID, ports.JobKindUpgrade, 0)
 	running := claimUpgrade(t, q)
 
-	enqueue(t, q, trackID, download.JobKindUpgrade, 0)
+	enqueue(t, q, trackID, ports.JobKindUpgrade, 0)
 
 	if err := q.VerifyLease(ctx, trackID, running.ClaimNumber); err != nil {
 		t.Errorf("VerifyLease after a second upgrade enqueue = %v, want the running upgrade's lease kept", err)
@@ -462,7 +464,7 @@ func TestQueue_AUserJobTakesOverARunningUpgrade(t *testing.T) {
 	q, _ := newQueue()
 	ctx := context.Background()
 	trackID := ids.NewTrackId()
-	enqueue(t, q, trackID, download.JobKindUpgrade, 0)
+	enqueue(t, q, trackID, ports.JobKindUpgrade, 0)
 	upgrade := claimUpgrade(t, q)
 
 	if err := q.Enqueue(ctx, trackID, download.JobKindReplace, 0); err != nil {
@@ -484,7 +486,7 @@ func TestQueue_VerifyLeaseHoldsOnlyForTheCurrentFenceOfALiveLease(t *testing.T) 
 	if err := q.VerifyLease(ctx, trackID, 1); !errors.Is(err, download.ErrLeaseLost) {
 		t.Fatalf("VerifyLease before any enqueue = %v, want ErrLeaseLost", err)
 	}
-	enqueue(t, q, trackID, download.JobKindUpgrade, 0)
+	enqueue(t, q, trackID, ports.JobKindUpgrade, 0)
 	if err := q.VerifyLease(ctx, trackID, 1); !errors.Is(err, download.ErrLeaseLost) {
 		t.Fatalf("VerifyLease before the claim = %v, want ErrLeaseLost", err)
 	}

@@ -2,6 +2,7 @@ package scratchfiles_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/ports"
 	"bytes"
 	"encoding/json"
 	"log/slog"
@@ -16,7 +17,7 @@ const testMaxAge = time.Hour
 
 const tempDirPrefix = "altune-acquire-"
 
-func newWorkspace() download.ScratchFolder { return download.NewTempWorkspace() }
+func newWorkspace() ports.ScratchFolder { return download.NewTempWorkspace() }
 
 func TestCreateNamesDirUnderTempRoot(t *testing.T) {
 	useTempRoot(t)

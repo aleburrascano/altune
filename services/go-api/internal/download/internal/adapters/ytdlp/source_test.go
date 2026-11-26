@@ -2,6 +2,7 @@ package ytdlp_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/adapters/ytdlp"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
@@ -368,10 +369,10 @@ func TestMarkUnplayable_ReinspectsAURLOnceItsDayIsUp(t *testing.T) {
 }
 
 func TestNewYtDlpAudioSearcher_RefusesAMissingClockOrSleeper(t *testing.T) {
-	if s, err := download.NewYtDlpAudioSearcher("", "", "", nil, clock.Sleep); s != nil || !errors.Is(err, download.ErrSearcherClockRequired) {
+	if s, err := ytdlp.NewYtDlpAudioSearcher("", "", "", nil, clock.Sleep); s != nil || !errors.Is(err, ytdlp.ErrSearcherClockRequired) {
 		t.Errorf("nil clock: got (%v, %v), want ErrSearcherClockRequired", s, err)
 	}
-	if s, err := download.NewYtDlpAudioSearcher("", "", "", time.Now, nil); s != nil || !errors.Is(err, download.ErrSearcherSleeperRequired) {
+	if s, err := ytdlp.NewYtDlpAudioSearcher("", "", "", time.Now, nil); s != nil || !errors.Is(err, ytdlp.ErrSearcherSleeperRequired) {
 		t.Errorf("nil sleeper: got (%v, %v), want ErrSearcherSleeperRequired", s, err)
 	}
 }

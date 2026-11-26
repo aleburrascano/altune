@@ -2,6 +2,9 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/domain"
+	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
@@ -444,7 +447,7 @@ func TestPostgresJobQueue_EnqueueOnLiveLeaseOfDifferentKindConflicts(t *testing.
 		t.Fatalf("Claim = %v", err)
 	}
 
-	if err := queue.Enqueue(ctx, track.ID, download.JobKindReplace, 0); !errors.Is(err, download.ErrJobKindConflict) {
+	if err := queue.Enqueue(ctx, track.ID, download.JobKindReplace, 0); !errors.Is(err, domain.ErrJobKindConflict) {
 		t.Errorf("Enqueue replace over a running acquire = %v, want ErrJobKindConflict", err)
 	}
 }
@@ -556,7 +559,7 @@ func TestPostgresJobQueue_SecondReplaceEnqueueWhileLeasedIsANoop(t *testing.T) {
 		t.Fatalf("Claim = %v", err)
 	}
 
-	if err := queue.Enqueue(ctx, track.ID, download.JobKindAcquire, 0); !errors.Is(err, download.ErrJobKindConflict) {
+	if err := queue.Enqueue(ctx, track.ID, download.JobKindAcquire, 0); !errors.Is(err, domain.ErrJobKindConflict) {
 		t.Errorf("Enqueue of another kind while a replace is leased = %v, want ErrJobKindConflict", err)
 	}
 }
@@ -581,7 +584,7 @@ func TestPostgresJobQueue_PanickedJobRowIsNotClaimableAgainImmediately(t *testin
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
 	acq := &panickingAcquirer{}
 	scheduler := download.MustNewBackgroundAcquisitionScheduler(acq, 1, time.Now, integrationSchedulerPorts(queue),
-		download.WithPollInterval(5*time.Millisecond))
+		service.WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -696,7 +699,7 @@ func TestPostgresJobQueue_ReEnqueueAfterPriorClaimsStartsANewRunAndAdvancesTheFe
 	ctx := context.Background()
 
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
-	var stale download.Job
+	var stale ports.Job
 	for i := 0; i < 3; i++ {
 		job, err := queue.Claim(ctx, time.Minute)
 		if err != nil {
@@ -866,7 +869,7 @@ func TestPostgresJobQueue_AnUpgradeKeepsTheTrackReadyWhileItIsQueued(t *testing.
 	queue := download.NewPostgresJobQueue(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("keep")})
 
-	if err := queue.Enqueue(context.Background(), id, download.JobKindUpgrade, 0); err != nil {
+	if err := queue.Enqueue(context.Background(), id, ports.JobKindUpgrade, 0); err != nil {
 		t.Fatalf("Enqueue upgrade = %v, want nil", err)
 	}
 
@@ -885,7 +888,7 @@ func TestPostgresJobQueue_AnUpgradeIsNeverQueuedForATrackWithoutAPlayableFile(t 
 	queue := download.NewPostgresJobQueue(pool)
 	track := insertPendingTrack(t, pool, time.Now().Add(time.Hour))
 
-	err := queue.Enqueue(context.Background(), track.ID, download.JobKindUpgrade, 0)
+	err := queue.Enqueue(context.Background(), track.ID, ports.JobKindUpgrade, 0)
 
 	if err == nil {
 		t.Fatal("Enqueue upgrade on a pending track = nil, want it refused")
@@ -894,7 +897,7 @@ func TestPostgresJobQueue_AnUpgradeIsNeverQueuedForATrackWithoutAPlayableFile(t 
 	if err := pool.QueryRow(context.Background(), `SELECT acquisition_job_kind FROM tracks WHERE id = $1`, track.ID.UUID()).Scan(&kind); err != nil {
 		t.Fatalf("read kind: %v", err)
 	}
-	if kind == string(download.JobKindUpgrade) {
+	if kind == string(ports.JobKindUpgrade) {
 		t.Error("the refused enqueue still marked the track as an upgrade job")
 	}
 }
@@ -905,7 +908,7 @@ func TestPostgresJobQueue_UserAddsKeepPriorityOverUpgrades(t *testing.T) {
 	queue := download.NewPostgresJobQueue(pool)
 	ctx := context.Background()
 	upgrading := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("F"), sourceURL: sourceURL("up")})
-	if err := queue.Enqueue(ctx, upgrading, download.JobKindUpgrade, 0); err != nil {
+	if err := queue.Enqueue(ctx, upgrading, ports.JobKindUpgrade, 0); err != nil {
 		t.Fatalf("Enqueue upgrade = %v", err)
 	}
 	added := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
@@ -934,7 +937,7 @@ func TestPostgresJobQueue_UserAddsKeepPriorityOverUpgrades(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ClaimUpgrade once no user add waits = %v, want the upgrade", err)
 	}
-	if upgrade.TrackID != upgrading || upgrade.Kind != download.JobKindUpgrade {
+	if upgrade.TrackID != upgrading || upgrade.Kind != ports.JobKindUpgrade {
 		t.Errorf("ClaimUpgrade returned %+v, want the upgrade of %s", upgrade, upgrading)
 	}
 }
@@ -949,9 +952,9 @@ func TestPostgresJobQueue_AnUpgradeNeverOverwritesAQueuedUserReplace(t *testing.
 		t.Fatalf("Enqueue replace = %v", err)
 	}
 
-	err := queue.Enqueue(ctx, id, download.JobKindUpgrade, 0)
+	err := queue.Enqueue(ctx, id, ports.JobKindUpgrade, 0)
 
-	if !errors.Is(err, download.ErrJobKindConflict) {
+	if !errors.Is(err, domain.ErrJobKindConflict) {
 		t.Fatalf("Enqueue upgrade over a queued replace = %v, want ErrJobKindConflict", err)
 	}
 	var kind string
@@ -970,7 +973,7 @@ func TestPostgresJobQueue_AUserReplaceTakesOverARunningUpgrade(t *testing.T) {
 	queue := download.NewPostgresJobQueue(pool)
 	ctx := context.Background()
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("running")})
-	if err := queue.Enqueue(ctx, id, download.JobKindUpgrade, 0); err != nil {
+	if err := queue.Enqueue(ctx, id, ports.JobKindUpgrade, 0); err != nil {
 		t.Fatalf("Enqueue upgrade = %v", err)
 	}
 	upgrade, err := queue.ClaimUpgrade(ctx, time.Minute)
@@ -997,7 +1000,7 @@ func TestPostgresJobQueue_AnUpgradeLosesItsLeaseTheMomentAReplaceTakesOver(t *te
 	queue := download.NewPostgresJobQueue(pool)
 	ctx := context.Background()
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("running")})
-	if err := queue.Enqueue(ctx, id, download.JobKindUpgrade, 0); err != nil {
+	if err := queue.Enqueue(ctx, id, ports.JobKindUpgrade, 0); err != nil {
 		t.Fatalf("Enqueue upgrade = %v", err)
 	}
 	upgrade, err := queue.ClaimUpgrade(ctx, time.Minute)
@@ -1041,7 +1044,7 @@ func TestPostgresJobQueue_APanickingReplaceAtTheRunCapIsNotClaimedAgain(t *testi
 	}
 	acq := &panickingAcquirer{}
 	scheduler := download.MustNewBackgroundAcquisitionScheduler(acq, 1, time.Now, integrationSchedulerPorts(queue),
-		download.WithPollInterval(5*time.Millisecond))
+		service.WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -1073,7 +1076,7 @@ func TestPostgresJobQueue_APanickingReplaceBelowTheRunCapIsRetriedAfterItsBackof
 	}
 	acq := &panickingAcquirer{}
 	scheduler := download.MustNewBackgroundAcquisitionScheduler(acq, 1, time.Now, integrationSchedulerPorts(queue),
-		download.WithPollInterval(5*time.Millisecond))
+		service.WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -1157,7 +1160,7 @@ func TestPostgresJobQueue_SettledReplaceLeavesNoJobKindBehind(t *testing.T) {
 	}
 }
 
-func integrationSchedulerPorts(queue download.DownloadQueue) download.SchedulerPorts {
+func integrationSchedulerPorts(queue ports.DownloadQueue) download.SchedulerPorts {
 	return download.SchedulerPorts{
 		Queue:               download.QueueOf(queue),
 		Upgrades:            download.NoUpgradeLane(),

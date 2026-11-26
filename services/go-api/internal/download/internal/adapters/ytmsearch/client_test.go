@@ -2,6 +2,8 @@ package ytmsearch_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/adapters/ytmsearch"
+	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/youtubemusicapi"
 	"context"
@@ -23,7 +25,7 @@ import (
 const songsFilter = "EgWKAQIIAWoMEA4QChADEAQQCRAF"
 
 func isSourceUnavailable(err error) bool {
-	var unavailable *download.SourceUnavailableError
+	var unavailable *domain.SourceUnavailableError
 	return errors.As(err, &unavailable)
 }
 
@@ -74,9 +76,9 @@ func TestNewYtmSearch_RefusesWithoutAnHTTPClientOrATimeout(t *testing.T) {
 		cfg  download.YouTubeMusicSearchConfig
 		want error
 	}{
-		"no HTTP client": {download.YouTubeMusicSearchConfig{Timeout: time.Second}, download.ErrYtmSearchHTTPRequired},
-		"no timeout":     {download.YouTubeMusicSearchConfig{HTTP: &http.Client{}}, download.ErrYtmSearchTimeoutRequired},
-		"negative":       {download.YouTubeMusicSearchConfig{HTTP: &http.Client{}, Timeout: -time.Second}, download.ErrYtmSearchTimeoutRequired},
+		"no HTTP client": {download.YouTubeMusicSearchConfig{Timeout: time.Second}, ytmsearch.ErrHTTPRequired},
+		"no timeout":     {download.YouTubeMusicSearchConfig{HTTP: &http.Client{}}, ytmsearch.ErrTimeoutRequired},
+		"negative":       {download.YouTubeMusicSearchConfig{HTTP: &http.Client{}, Timeout: -time.Second}, ytmsearch.ErrTimeoutRequired},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -252,7 +254,7 @@ func TestClient_AnOutageNamesYtmsearchAsTheUnavailableSource(t *testing.T) {
 		_, watchErr := client.Watch(context.Background(), "XDC3uH1FSgw")
 
 		for name, err := range map[string]error{"SearchSongs": searchErr, "Watch": watchErr} {
-			var unavailable *download.SourceUnavailableError
+			var unavailable *domain.SourceUnavailableError
 			if !errors.As(err, &unavailable) || unavailable.Source != download.SourceName("ytmsearch") {
 				t.Errorf("status %d: %s err = %v, want SourceUnavailableError{Source: ytmsearch}", status, name, err)
 			}

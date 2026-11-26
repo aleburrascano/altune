@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/service"
 	"context"
 	"errors"
 	"testing"
@@ -44,9 +45,9 @@ func TestDownloadLimiter_UnlimitedNeverBlocks(t *testing.T) {
 }
 
 func TestDownloadLimiter_ZeroValueRefusesToAcquire(t *testing.T) {
-	var limiter download.ConcurrencyLimit
+	var limiter service.ConcurrencyLimit
 
-	if err := limiter.Acquire(context.Background()); !errors.Is(err, download.ErrLimitNotConfigured) {
+	if err := limiter.Acquire(context.Background()); !errors.Is(err, service.ErrLimitNotConfigured) {
 		t.Fatalf("zero limiter Acquire = %v, want ErrLimitNotConfigured", err)
 	}
 	limiter.Release()
@@ -54,7 +55,7 @@ func TestDownloadLimiter_ZeroValueRefusesToAcquire(t *testing.T) {
 
 func TestLimitedTo_RefusesALimitBelowOne(t *testing.T) {
 	for _, n := range []int{0, -3} {
-		if _, err := download.LimitedTo(n); !errors.Is(err, download.ErrLimitBelowOne) {
+		if _, err := service.LimitedTo(n); !errors.Is(err, service.ErrLimitBelowOne) {
 			t.Errorf("LimitedTo(%d) error = %v, want ErrLimitBelowOne", n, err)
 		}
 	}

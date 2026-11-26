@@ -3,6 +3,7 @@ package handler_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
@@ -104,7 +105,7 @@ func retryAfterSeconds(t *testing.T, header string) int {
 
 func TestHandleRetryAcquisition_ShuttingDownSurfaces503AndKeepsCooldown(t *testing.T) {
 	repo := acquisitiontest.NewLedger()
-	scheduler := &retryFakeScheduler{err: download.ErrSchedulerShutdown}
+	scheduler := &retryFakeScheduler{err: domain.ErrSchedulerShutdown}
 	track := failedTrack(retryTestUserId)
 	repo.Seed(track)
 	router := buildRetryRouter(repo, scheduler)
@@ -122,7 +123,7 @@ func TestHandleRetryAcquisition_ShuttingDownSurfaces503AndKeepsCooldown(t *testi
 
 func TestHandleReacquire_ShuttingDownSurfaces503AndKeepsCooldown(t *testing.T) {
 	repo := acquisitiontest.NewLedger()
-	scheduler := &reacquireFakeScheduler{err: download.ErrSchedulerShutdown}
+	scheduler := &reacquireFakeScheduler{err: domain.ErrSchedulerShutdown}
 	track := readyTrack(reacquireTestUserId)
 	repo.Seed(track)
 	router := buildReacquireRouter(repo, scheduler)

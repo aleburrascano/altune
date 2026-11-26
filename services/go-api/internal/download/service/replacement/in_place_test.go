@@ -3,6 +3,9 @@ package replacement_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/core/audioquality"
+	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/service/replacement"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
@@ -18,19 +21,19 @@ import (
 const verifyPerHour = 3600
 
 type fixedChecker struct {
-	finding download.UpgradeFinding
+	finding replacement.Finding
 	err     error
 	calls   int
 }
 
-func (c *fixedChecker) CheckInPlace(context.Context, *download.TrackSnapshot) (download.UpgradeFinding, error) {
+func (c *fixedChecker) CheckInPlace(context.Context, *download.TrackSnapshot) (replacement.Finding, error) {
 	c.calls++
 	return c.finding, c.err
 }
 
 type recordingInPlaceStore struct {
 	mu       sync.Mutex
-	records  []download.InPlaceRecord
+	records  []ports.InPlaceRecord
 	failures int
 }
 
@@ -41,7 +44,7 @@ func (s *recordingInPlaceStore) NoteInPlaceFailure(context.Context, ids.TrackId)
 	return s.failures, nil
 }
 
-func (s *recordingInPlaceStore) RecordInPlace(_ context.Context, _ ids.TrackId, record download.InPlaceRecord) (bool, error) {
+func (s *recordingInPlaceStore) RecordInPlace(_ context.Context, _ ids.TrackId, record ports.InPlaceRecord) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.records = append(s.records, record)
@@ -49,21 +52,21 @@ func (s *recordingInPlaceStore) RecordInPlace(_ context.Context, _ ids.TrackId, 
 }
 
 var (
-	hardMatch  = download.UpgradeFinding{Verdict: "hard", Fingerprint: download.Matches, Basis: "acoustid", Score: 0.97}
-	otherTake  = download.UpgradeFinding{Verdict: "other_version", Fingerprint: download.Contradicts, Basis: "acoustid", Score: 0.93}
-	wrongSong  = download.UpgradeFinding{Verdict: "different_song", Fingerprint: download.FingerprintUnsupported, Basis: "acoustid", Score: 0.9}
-	noAnswer   = download.UpgradeFinding{}
-	softMatch  = download.UpgradeFinding{Verdict: "soft", Fingerprint: download.Approximates, Basis: "acoustid", Score: 0.9}
-	previewHit = download.UpgradeFinding{Verdict: "preview", Fingerprint: download.Matches, Basis: "preview", BitErrorRate: 0.06}
-	looseHit   = download.UpgradeFinding{Verdict: "preview", Fingerprint: download.Approximates, Basis: "preview", BitErrorRate: 0.15}
+	hardMatch  = replacement.Finding{Verdict: "hard", Fingerprint: audioquality.Matches, Basis: "acoustid", Score: 0.97}
+	otherTake  = replacement.Finding{Verdict: "other_version", Fingerprint: audioquality.Contradicts, Basis: "acoustid", Score: 0.93}
+	wrongSong  = replacement.Finding{Verdict: "different_song", Fingerprint: audioquality.Unsupported, Basis: "acoustid", Score: 0.9}
+	noAnswer   = replacement.Finding{}
+	softMatch  = replacement.Finding{Verdict: "soft", Fingerprint: audioquality.Approximates, Basis: "acoustid", Score: 0.9}
+	previewHit = replacement.Finding{Verdict: "preview", Fingerprint: audioquality.Matches, Basis: "preview", BitErrorRate: 0.06}
+	looseHit   = replacement.Finding{Verdict: "preview", Fingerprint: audioquality.Approximates, Basis: "preview", BitErrorRate: 0.15}
 )
 
 func (w *world) storedEvidence(evidence string) {
 	w.edit(func(track *acquisitiontest.LedgerTrack) { track.Evidence = json.RawMessage(evidence) })
 }
 
-func (w *world) checkedRunner(cfg download.UpgradeConfig, checker download.InPlaceChecker, recorder download.InPlaceStore) *download.UpgradeRunner {
-	return w.runnerChecking(cfg, events.NoopPublisher(), func(*download.AcquireTrackAudioService) download.UpgradeInPlace {
+func (w *world) checkedRunner(cfg download.UpgradeConfig, checker replacement.InPlaceChecker, recorder ports.InPlaceStore) *replacement.Runner {
+	return w.runnerChecking(cfg, events.NoopPublisher(), func(*download.AcquireTrackAudioService) replacement.InPlace {
 		inPlace, err := download.InPlaceCheckOf(checker, recorder, verifyPerHour, time.Now, clock.Sleep)
 		if err != nil {
 			w.t.Fatalf("InPlaceCheckOf: %v", err)
@@ -73,34 +76,34 @@ func (w *world) checkedRunner(cfg download.UpgradeConfig, checker download.InPla
 }
 
 func TestInPlaceCheckOf_RefusesAMissingCheckerOrRecorder(t *testing.T) {
-	if _, err := download.InPlaceCheckOf(nil, &recordingInPlaceStore{}, verifyPerHour, time.Now, clock.Sleep); !errors.Is(err, download.ErrMissingInPlacePort) {
+	if _, err := download.InPlaceCheckOf(nil, &recordingInPlaceStore{}, verifyPerHour, time.Now, clock.Sleep); !errors.Is(err, replacement.ErrMissingInPlacePort) {
 		t.Errorf("nil checker: err = %v, want ErrMissingInPlacePort", err)
 	}
-	if _, err := download.InPlaceCheckOf(&fixedChecker{}, nil, verifyPerHour, time.Now, clock.Sleep); !errors.Is(err, download.ErrMissingInPlacePort) {
+	if _, err := download.InPlaceCheckOf(&fixedChecker{}, nil, verifyPerHour, time.Now, clock.Sleep); !errors.Is(err, replacement.ErrMissingInPlacePort) {
 		t.Errorf("nil recorder: err = %v, want ErrMissingInPlacePort", err)
 	}
-	if _, err := download.InPlaceCheckOf(&fixedChecker{}, &recordingInPlaceStore{}, verifyPerHour, nil, clock.Sleep); !errors.Is(err, download.ErrMissingInPlacePort) {
+	if _, err := download.InPlaceCheckOf(&fixedChecker{}, &recordingInPlaceStore{}, verifyPerHour, nil, clock.Sleep); !errors.Is(err, replacement.ErrMissingInPlacePort) {
 		t.Errorf("nil clock: err = %v, want ErrMissingInPlacePort", err)
 	}
-	if _, err := download.InPlaceCheckOf(&fixedChecker{}, &recordingInPlaceStore{}, verifyPerHour, time.Now, nil); !errors.Is(err, download.ErrMissingInPlacePort) {
+	if _, err := download.InPlaceCheckOf(&fixedChecker{}, &recordingInPlaceStore{}, verifyPerHour, time.Now, nil); !errors.Is(err, replacement.ErrMissingInPlacePort) {
 		t.Errorf("nil sleeper: err = %v, want ErrMissingInPlacePort", err)
 	}
 }
 
-func evidenceFor(g download.Grade, kind download.SourceKind) string {
+func evidenceFor(g audioquality.Grade, kind audioquality.SourceKind) string {
 	return fmt.Sprintf(`{"grade":%q,"source_kind":%q,"pipeline_generation":1}`, g, kind)
 }
 
 func TestRunner_AnArtTrackGradedCWithAMatchingFingerprintBecomesAWithNoDownload(t *testing.T) {
-	w := seed(t, download.GradeC)
-	w.storedEvidence(evidenceFor(download.GradeC, download.ArtTrack))
+	w := seed(t, audioquality.C)
+	w.storedEvidence(evidenceFor(audioquality.C, audioquality.ArtTrack))
 	recorder := &recordingInPlaceStore{}
 
 	err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: hardMatch}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId)
 	if err != nil {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
-	want := download.InPlaceRecord{AudioRef: originalRef, Generation: download.PipelineGeneration, Verdict: "hard", Basis: "acoustid", Score: 0.97, Grade: "A"}
+	want := ports.InPlaceRecord{AudioRef: originalRef, Generation: audioquality.PipelineGeneration, Verdict: "hard", Basis: "acoustid", Score: 0.97, Grade: "A"}
 	if len(recorder.records) != 1 || recorder.records[0] != want {
 		t.Errorf("records = %+v, want exactly %+v", recorder.records, want)
 	}
@@ -113,8 +116,8 @@ func TestRunner_AnArtTrackGradedCWithAMatchingFingerprintBecomesAWithNoDownload(
 }
 
 func TestRunner_APreviewMatchProvesTheFileAsWellAsAFingerprint(t *testing.T) {
-	w := seed(t, download.GradeD)
-	w.storedEvidence(evidenceFor(download.GradeD, download.ArtTrack))
+	w := seed(t, audioquality.D)
+	w.storedEvidence(evidenceFor(audioquality.D, audioquality.ArtTrack))
 	recorder := &recordingInPlaceStore{}
 
 	if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: previewHit}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil {
@@ -130,8 +133,8 @@ func TestRunner_APreviewMatchProvesTheFileAsWellAsAFingerprint(t *testing.T) {
 }
 
 func TestRunner_AMismatchRecordsTheVerdictThenFallsThroughToReacquire(t *testing.T) {
-	w := seed(t, download.GradeC)
-	w.storedEvidence(evidenceFor(download.GradeC, download.ArtTrack))
+	w := seed(t, audioquality.C)
+	w.storedEvidence(evidenceFor(audioquality.C, audioquality.ArtTrack))
 	recorder := &recordingInPlaceStore{}
 
 	err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: otherTake}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId)
@@ -150,15 +153,15 @@ func TestRunner_AMismatchRecordsTheVerdictThenFallsThroughToReacquire(t *testing
 }
 
 func TestRunner_AFingerprintThatNeverAnswersFallsThroughToReacquireWithoutChangingTheGrade(t *testing.T) {
-	w := seed(t, download.GradeC)
-	w.storedEvidence(evidenceFor(download.GradeC, download.ArtTrack))
+	w := seed(t, audioquality.C)
+	w.storedEvidence(evidenceFor(audioquality.C, audioquality.ArtTrack))
 	recorder := &recordingInPlaceStore{}
 
-	if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: noAnswer}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, download.ErrUpgradeKept) {
+	if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: noAnswer}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, replacement.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
-	if len(recorder.records) != 1 || recorder.records[0].Grade != "" || recorder.records[0].Generation != download.PipelineGeneration {
+	if len(recorder.records) != 1 || recorder.records[0].Grade != "" || recorder.records[0].Generation != audioquality.PipelineGeneration {
 		t.Errorf("records = %+v, want the generation stamped and the grade left alone", recorder.records)
 	}
 	if w.source.finds != 1 {
@@ -167,11 +170,11 @@ func TestRunner_AFingerprintThatNeverAnswersFallsThroughToReacquireWithoutChangi
 }
 
 func TestRunner_AMatchOnAnUnofficialSourceIsBAndStillLooksForAnOfficialOne(t *testing.T) {
-	w := seed(t, download.GradeC)
-	w.storedEvidence(evidenceFor(download.GradeC, download.FanUpload))
+	w := seed(t, audioquality.C)
+	w.storedEvidence(evidenceFor(audioquality.C, audioquality.FanUpload))
 	recorder := &recordingInPlaceStore{}
 
-	if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: hardMatch}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, download.ErrUpgradeKept) {
+	if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: hardMatch}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, replacement.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -184,11 +187,11 @@ func TestRunner_AMatchOnAnUnofficialSourceIsBAndStillLooksForAnOfficialOne(t *te
 }
 
 func TestRunner_ATrackCheckedThisGenerationIsNotCheckedAgain(t *testing.T) {
-	w := seed(t, download.GradeC)
-	w.storedEvidence(fmt.Sprintf(`{"grade":"C","source_kind":"art_track","in_place_generation":%d}`, download.PipelineGeneration))
+	w := seed(t, audioquality.C)
+	w.storedEvidence(fmt.Sprintf(`{"grade":"C","source_kind":"art_track","in_place_generation":%d}`, audioquality.PipelineGeneration))
 	checker := &fixedChecker{finding: hardMatch}
 
-	if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, checker, &recordingInPlaceStore{}).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, download.ErrUpgradeKept) {
+	if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, checker, &recordingInPlaceStore{}).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, replacement.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -198,7 +201,7 @@ func TestRunner_ATrackCheckedThisGenerationIsNotCheckedAgain(t *testing.T) {
 }
 
 func TestRunner_AUserUploadThatMatchesIsGradedAUserAndNeverReplaced(t *testing.T) {
-	w := seed(t, download.GradeD)
+	w := seed(t, audioquality.D)
 	w.asUserUpload()
 	recorder := &recordingInPlaceStore{}
 
@@ -215,9 +218,9 @@ func TestRunner_AUserUploadThatMatchesIsGradedAUserAndNeverReplaced(t *testing.T
 }
 
 func TestRunner_AUserUploadThatDoesNotMatchIsFlaggedAndNeverReplaced(t *testing.T) {
-	for name, finding := range map[string]download.UpgradeFinding{"another version": otherTake, "another song": wrongSong} {
+	for name, finding := range map[string]replacement.Finding{"another version": otherTake, "another song": wrongSong} {
 		t.Run(name, func(t *testing.T) {
-			w := seed(t, download.GradeD)
+			w := seed(t, audioquality.D)
 			w.asUserUpload()
 			recorder := &recordingInPlaceStore{}
 
@@ -236,9 +239,9 @@ func TestRunner_AUserUploadThatDoesNotMatchIsFlaggedAndNeverReplaced(t *testing.
 }
 
 func TestRunner_AUserUploadWithNoAnswerOrOnlyASoftOneIsNeitherGradedNorFlagged(t *testing.T) {
-	for name, finding := range map[string]download.UpgradeFinding{"no answer": noAnswer, "soft": softMatch} {
+	for name, finding := range map[string]replacement.Finding{"no answer": noAnswer, "soft": softMatch} {
 		t.Run(name, func(t *testing.T) {
-			w := seed(t, download.GradeD)
+			w := seed(t, audioquality.D)
 			w.asUserUpload()
 			recorder := &recordingInPlaceStore{}
 
@@ -257,8 +260,8 @@ func TestRunner_AUserUploadWithNoAnswerOrOnlyASoftOneIsNeitherGradedNorFlagged(t
 }
 
 func TestRunner_ACheckThatFailsRecordsNothingAndReportsTheError(t *testing.T) {
-	w := seed(t, download.GradeC)
-	w.storedEvidence(evidenceFor(download.GradeC, download.ArtTrack))
+	w := seed(t, audioquality.C)
+	w.storedEvidence(evidenceFor(audioquality.C, audioquality.ArtTrack))
 	recorder := &recordingInPlaceStore{}
 	acoustIDDown := errors.New("acoustid unreachable")
 
@@ -276,8 +279,8 @@ func TestRunner_ACheckThatFailsRecordsNothingAndReportsTheError(t *testing.T) {
 }
 
 func TestRunner_AfterThreeFailedChecksTheTrackFallsThroughToReacquire(t *testing.T) {
-	w := seed(t, download.GradeC)
-	w.storedEvidence(evidenceFor(download.GradeC, download.ArtTrack))
+	w := seed(t, audioquality.C)
+	w.storedEvidence(evidenceFor(audioquality.C, audioquality.ArtTrack))
 	recorder := &recordingInPlaceStore{}
 	runner := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{err: errors.New("fpcalc cannot decode")}, recorder)
 
@@ -289,24 +292,24 @@ func TestRunner_AfterThreeFailedChecksTheTrackFallsThroughToReacquire(t *testing
 	if w.source.finds != 0 {
 		t.Fatalf("sources searched %d times before the third failure, want 0", w.source.finds)
 	}
-	if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, download.ErrUpgradeKept) {
+	if err := runner.ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, replacement.ErrKept) {
 		t.Fatalf("third try: %v", err)
 	}
 
 	if w.source.finds != 1 {
 		t.Errorf("sources searched %d times, want 1 once the check has failed three times", w.source.finds)
 	}
-	if len(recorder.records) != 1 || recorder.records[0].Generation != download.PipelineGeneration || recorder.records[0].Grade != "" {
+	if len(recorder.records) != 1 || recorder.records[0].Generation != audioquality.PipelineGeneration || recorder.records[0].Grade != "" {
 		t.Errorf("records = %+v, want the generation stamped so the check is not repeated", recorder.records)
 	}
 }
 
 func TestRunner_APreviewMatchAboveTheOfficialCutGradesBAndStillLooksForABetterSource(t *testing.T) {
-	w := seed(t, download.GradeD)
-	w.storedEvidence(evidenceFor(download.GradeD, download.ArtTrack))
+	w := seed(t, audioquality.D)
+	w.storedEvidence(evidenceFor(audioquality.D, audioquality.ArtTrack))
 	recorder := &recordingInPlaceStore{}
 
-	if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: looseHit}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, download.ErrUpgradeKept) {
+	if err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: looseHit}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId); err != nil && !errors.Is(err, replacement.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 
@@ -318,13 +321,13 @@ func TestRunner_APreviewMatchAboveTheOfficialCutGradesBAndStillLooksForABetterSo
 	}
 }
 
-func judgedEvidence(g download.Grade, inPlaceGeneration int) string {
+func judgedEvidence(g audioquality.Grade, inPlaceGeneration int) string {
 	return fmt.Sprintf(`{"grade":%q,"source_kind":"art_track","in_place_generation":%d}`, g, inPlaceGeneration)
 }
 
 func TestRunner_ATrackGradedBestAvailableIsNeitherCheckedNorReplaced(t *testing.T) {
-	w := seed(t, download.GradeBestAvailable)
-	w.storedEvidence(judgedEvidence(download.GradeBestAvailable, 0))
+	w := seed(t, audioquality.BestAvailable)
+	w.storedEvidence(judgedEvidence(audioquality.BestAvailable, 0))
 	checker := &fixedChecker{finding: otherTake}
 	recorder := &recordingInPlaceStore{}
 
@@ -339,8 +342,8 @@ func TestRunner_ATrackGradedBestAvailableIsNeitherCheckedNorReplaced(t *testing.
 }
 
 func TestRunner_AGradeATrackNotYetCheckedThisGenerationIsCheckedAndKeptWhenNothingStandsAgainstIt(t *testing.T) {
-	w := seed(t, download.GradeA)
-	w.storedEvidence(judgedEvidence(download.GradeA, 0))
+	w := seed(t, audioquality.A)
+	w.storedEvidence(judgedEvidence(audioquality.A, 0))
 	checker := &fixedChecker{finding: noAnswer}
 	recorder := &recordingInPlaceStore{}
 
@@ -349,14 +352,14 @@ func TestRunner_AGradeATrackNotYetCheckedThisGenerationIsCheckedAndKeptWhenNothi
 	if err != nil || checker.calls != 1 || w.source.finds != 0 {
 		t.Errorf("err = %v, checks = %d, searches = %d, want one check and no re-acquire: unknown changes nothing", err, checker.calls, w.source.finds)
 	}
-	if len(recorder.records) != 1 || recorder.records[0].Grade != "" || recorder.records[0].Generation != download.PipelineGeneration {
+	if len(recorder.records) != 1 || recorder.records[0].Grade != "" || recorder.records[0].Generation != audioquality.PipelineGeneration {
 		t.Errorf("records = %+v, want the generation stamped and the grade left alone", recorder.records)
 	}
 }
 
 func TestRunner_AGradeATrackCheckedThisGenerationIsSkipped(t *testing.T) {
-	w := seed(t, download.GradeA)
-	w.storedEvidence(judgedEvidence(download.GradeA, download.PipelineGeneration))
+	w := seed(t, audioquality.A)
+	w.storedEvidence(judgedEvidence(audioquality.A, audioquality.PipelineGeneration))
 	checker := &fixedChecker{finding: otherTake}
 
 	err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, checker, &recordingInPlaceStore{}).ExecuteUpgrade(context.Background(), w.userId, w.trackId)
@@ -367,14 +370,14 @@ func TestRunner_AGradeATrackCheckedThisGenerationIsSkipped(t *testing.T) {
 }
 
 func TestRunner_AWrongLengthGradeAIsLoweredAndReacquired(t *testing.T) {
-	w := seed(t, download.GradeA)
-	w.storedEvidence(judgedEvidence(download.GradeA, 0))
-	wrongLength := download.UpgradeFinding{Verdict: "hard", Fingerprint: download.Approximates, Basis: "acoustid", Score: 0.97, Lowers: true}
+	w := seed(t, audioquality.A)
+	w.storedEvidence(judgedEvidence(audioquality.A, 0))
+	wrongLength := replacement.Finding{Verdict: "hard", Fingerprint: audioquality.Approximates, Basis: "acoustid", Score: 0.97, Lowers: true}
 	recorder := &recordingInPlaceStore{}
 
 	err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: wrongLength}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId)
 
-	if err != nil && !errors.Is(err, download.ErrUpgradeKept) {
+	if err != nil && !errors.Is(err, replacement.ErrKept) {
 		t.Fatalf("ExecuteUpgrade: %v", err)
 	}
 	if len(recorder.records) != 1 || recorder.records[0].Grade != "B" || !recorder.records[0].MayLower {
@@ -386,8 +389,8 @@ func TestRunner_AWrongLengthGradeAIsLoweredAndReacquired(t *testing.T) {
 }
 
 func TestRunner_AProvenButNotLoweringFindingNeverLowersAStoredGrade(t *testing.T) {
-	w := seed(t, download.GradeA)
-	w.storedEvidence(judgedEvidence(download.GradeA, 0))
+	w := seed(t, audioquality.A)
+	w.storedEvidence(judgedEvidence(audioquality.A, 0))
 	recorder := &recordingInPlaceStore{}
 
 	err := w.checkedRunner(download.UpgradeConfig{MaxTries: 3}, &fixedChecker{finding: softMatch}, recorder).ExecuteUpgrade(context.Background(), w.userId, w.trackId)

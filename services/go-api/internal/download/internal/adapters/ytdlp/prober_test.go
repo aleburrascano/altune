@@ -2,6 +2,7 @@ package ytdlp_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/adapters/ytdlp"
 	"context"
 	"errors"
 	"os"
@@ -30,9 +31,9 @@ func refusingFfmpegDir(t *testing.T, stderr string) string {
 
 type skipRecorder interface{ RecordVerifySkip(gate string) }
 
-func newProber(t testing.TB, ffmpegLocation string, skips skipRecorder, opts ...func(*download.FfprobeProber)) *download.FfprobeProber {
+func newProber(t testing.TB, ffmpegLocation string, skips skipRecorder, opts ...func(*ytdlp.FfprobeProber)) *ytdlp.FfprobeProber {
 	t.Helper()
-	p, err := download.NewFfprobeProber(ffmpegLocation, skips, opts...)
+	p, err := ytdlp.NewFfprobeProber(ffmpegLocation, skips, opts...)
 	if err != nil {
 		t.Fatalf("NewFfprobeProber: %v", err)
 	}
@@ -40,9 +41,9 @@ func newProber(t testing.TB, ffmpegLocation string, skips skipRecorder, opts ...
 }
 
 func TestNewFfprobeProber_RefusesAMissingSkipRecorder(t *testing.T) {
-	p, err := download.NewFfprobeProber(t.TempDir(), nil)
+	p, err := ytdlp.NewFfprobeProber(t.TempDir(), nil)
 
-	if !errors.Is(err, download.ErrSkipRecorderRequired) || p != nil {
+	if !errors.Is(err, ytdlp.ErrSkipRecorderRequired) || p != nil {
 		t.Fatalf("got (%v, %v), want a nil prober and ErrSkipRecorderRequired", p, err)
 	}
 }
@@ -55,7 +56,7 @@ func missingFfmpeg(t *testing.T) string {
 
 func TestFfprobeProber_ValidateDecodable_AcceptsADecodeThatOutranItsDeadline(t *testing.T) {
 	logs := captureLogs(t)
-	p := newProber(t, fakeFfmpegDir(t, "#!/bin/sh\nsleep 30\n"), download.NoopVerifySkipRecorder(), download.WithDecodeTimeout(100*time.Millisecond))
+	p := newProber(t, fakeFfmpegDir(t, "#!/bin/sh\nsleep 30\n"), download.NoopVerifySkipRecorder(), ytdlp.WithDecodeTimeout(100*time.Millisecond))
 
 	err := p.ValidateDecodable(context.Background(), decodedFile)
 	if err != nil {
@@ -139,7 +140,7 @@ func (r *gateRecorder) RecordVerifySkip(gate string) { r.gates = append(r.gates,
 
 func TestFfprobeProber_ValidateDecodable_RecordsADecodeTimeoutSkip(t *testing.T) {
 	rec := &gateRecorder{}
-	p := newProber(t, fakeFfmpegDir(t, "#!/bin/sh\nsleep 30\n"), rec, download.WithDecodeTimeout(100*time.Millisecond))
+	p := newProber(t, fakeFfmpegDir(t, "#!/bin/sh\nsleep 30\n"), rec, ytdlp.WithDecodeTimeout(100*time.Millisecond))
 
 	if err := p.ValidateDecodable(context.Background(), decodedFile); err != nil {
 		t.Fatalf("ValidateDecodable() = %v, want nil", err)
@@ -196,7 +197,7 @@ func TestFfprobeProber_ValidateDecodable_LeavesAShortDiagnosticAndCapsLongASCII(
 
 func TestFfprobeProber_ValidateDecodable_ANonPositiveTimeoutKeepsTheDefault(t *testing.T) {
 	rec := &gateRecorder{}
-	p := newProber(t, fakeFfmpegDir(t, "#!/bin/sh\nexit 0\n"), rec, download.WithDecodeTimeout(0))
+	p := newProber(t, fakeFfmpegDir(t, "#!/bin/sh\nexit 0\n"), rec, ytdlp.WithDecodeTimeout(0))
 
 	if err := p.ValidateDecodable(context.Background(), decodedFile); err != nil {
 		t.Fatalf("ValidateDecodable() = %v, want nil", err)

@@ -2,6 +2,9 @@ package replacement_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/audioquality"
+	"altune/go-api/internal/download/internal/core/domain"
+	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -13,12 +16,12 @@ import (
 
 type pickingStore struct {
 	upgradeStore
-	picks     []download.UpgradeCandidate
+	picks     []ports.UpgradeCandidate
 	pickErr   error
-	selection download.UpgradeSelection
+	selection ports.UpgradeSelection
 }
 
-func (s *pickingStore) Candidates(_ context.Context, selection download.UpgradeSelection) ([]download.UpgradeCandidate, error) {
+func (s *pickingStore) Candidates(_ context.Context, selection ports.UpgradeSelection) ([]ports.UpgradeCandidate, error) {
 	s.selection = selection
 	return s.picks, s.pickErr
 }
@@ -35,7 +38,7 @@ func (r *recordingScheduler) ScheduleUpgrade(_ context.Context, _ ids.UserId, tr
 
 func TestPlanner_SchedulesThePickedTrackForTheCurrentGeneration(t *testing.T) {
 	trackId := ids.NewTrackId()
-	store := &pickingStore{picks: []download.UpgradeCandidate{{TrackID: trackId, UserID: ids.NewUserId(uuid.New()), Grade: "F"}}}
+	store := &pickingStore{picks: []ports.UpgradeCandidate{{TrackID: trackId, UserID: ids.NewUserId(uuid.New()), Grade: "F"}}}
 	scheduler := &recordingScheduler{}
 
 	if err := download.NewReplacementPlanner(store, scheduler, 2, 6*time.Hour).PlanNext(context.Background()); err != nil {
@@ -45,7 +48,7 @@ func TestPlanner_SchedulesThePickedTrackForTheCurrentGeneration(t *testing.T) {
 	if len(scheduler.scheduled) != 1 || scheduler.scheduled[0] != trackId {
 		t.Errorf("scheduled = %v, want the picked track", scheduler.scheduled)
 	}
-	want := download.UpgradeSelection{Limit: 1, Generation: download.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2}
+	want := ports.UpgradeSelection{Limit: 1, Generation: audioquality.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2}
 	if store.selection != want {
 		t.Errorf("selection = %+v, want %+v", store.selection, want)
 	}
@@ -58,7 +61,7 @@ func TestPlanner_CheckingUploadsAsksTheStoreForUnverifiedUserUploadsToo(t *testi
 		t.Fatalf("PlanNext: %v", err)
 	}
 
-	want := download.UpgradeSelection{Limit: 1, Generation: download.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2, CheckInPlace: true}
+	want := ports.UpgradeSelection{Limit: 1, Generation: audioquality.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2, CheckInPlace: true}
 	if store.selection != want {
 		t.Errorf("selection = %+v, want %+v", store.selection, want)
 	}
@@ -83,15 +86,15 @@ func TestPlanner_ReportsAFailedPickOrSchedule(t *testing.T) {
 	}
 
 	scheduleErr := errors.New("paused")
-	picks := &pickingStore{picks: []download.UpgradeCandidate{{TrackID: ids.NewTrackId()}}}
+	picks := &pickingStore{picks: []ports.UpgradeCandidate{{TrackID: ids.NewTrackId()}}}
 	if err := download.NewReplacementPlanner(picks, &recordingScheduler{err: scheduleErr}, 1, time.Hour).PlanNext(context.Background()); !errors.Is(err, scheduleErr) {
 		t.Errorf("PlanNext with a failing schedule = %v, want the schedule error", err)
 	}
 }
 
 func TestPlanner_ASchedulerThatIsPausedIsNotAnError(t *testing.T) {
-	picks := &pickingStore{picks: []download.UpgradeCandidate{{TrackID: ids.NewTrackId()}}}
-	scheduler := &recordingScheduler{err: download.ErrAcquisitionPaused}
+	picks := &pickingStore{picks: []ports.UpgradeCandidate{{TrackID: ids.NewTrackId()}}}
+	scheduler := &recordingScheduler{err: domain.ErrAcquisitionPaused}
 
 	if err := download.NewReplacementPlanner(picks, scheduler, 1, time.Hour).PlanNext(context.Background()); err != nil {
 		t.Errorf("PlanNext while paused = %v, want nil: a paused lane is not a failing job", err)
@@ -108,8 +111,8 @@ func TestInterval_SpreadsTheHourlyBudgetEvenly(t *testing.T) {
 }
 
 func TestPlanner_ATrackWithAJobInFlightIsSkippedNotAFailure(t *testing.T) {
-	picks := &pickingStore{picks: []download.UpgradeCandidate{{TrackID: ids.NewTrackId()}}}
-	scheduler := &recordingScheduler{err: download.ErrTrackJobInFlight}
+	picks := &pickingStore{picks: []ports.UpgradeCandidate{{TrackID: ids.NewTrackId()}}}
+	scheduler := &recordingScheduler{err: domain.ErrTrackJobInFlight}
 
 	if err := download.NewReplacementPlanner(picks, scheduler, 1, time.Hour).PlanNext(context.Background()); err != nil {
 		t.Errorf("PlanNext with a job in flight = %v, want nil: the batch goes on", err)
@@ -123,7 +126,7 @@ func TestPlanner_RescuingLowBitrateAsksTheStoreForTheFloor(t *testing.T) {
 		t.Fatalf("PlanNext: %v", err)
 	}
 
-	want := download.UpgradeSelection{Limit: 1, Generation: download.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2, LowBitrateFloorKbps: 112}
+	want := ports.UpgradeSelection{Limit: 1, Generation: audioquality.PipelineGeneration, RetryAfter: 6 * time.Hour, MaxQueued: 2, LowBitrateFloorKbps: 112}
 	if store.selection != want {
 		t.Errorf("selection = %+v, want %+v", store.selection, want)
 	}

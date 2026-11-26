@@ -2,6 +2,7 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/adapters/persistence"
 	"altune/go-api/internal/shared/clock"
 	"bytes"
 	"context"
@@ -38,9 +39,9 @@ func (b *lockedBuffer) String() string {
 }
 
 func TestPostgresJobNotifier_RefusesAMissingSleeper(t *testing.T) {
-	notifier, err := download.NewPostgresJobNotifier(nil, nil)
+	notifier, err := persistence.NewPostgresJobNotifier(nil, nil)
 
-	if notifier != nil || !errors.Is(err, download.ErrNotifierSleeperRequired) || !strings.Contains(err.Error(), "NewPostgresJobNotifier") {
+	if notifier != nil || !errors.Is(err, persistence.ErrNotifierSleeperRequired) || !strings.Contains(err.Error(), "NewPostgresJobNotifier") {
 		t.Fatalf("got (%v, %v), want a nil notifier and an error naming the constructor wrapping ErrNotifierSleeperRequired", notifier, err)
 	}
 }

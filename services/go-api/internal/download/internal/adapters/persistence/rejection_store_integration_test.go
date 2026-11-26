@@ -2,6 +2,8 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/adapters/persistence"
+	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/testdb"
 	"context"
 	"errors"
@@ -11,7 +13,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func activeKeys(store *download.PostgresRejectionStore, ctx context.Context, trackID string, since time.Time) ([]string, error) {
+func activeKeys(store *persistence.PostgresRejectionStore, ctx context.Context, trackID string, since time.Time) ([]string, error) {
 	prior, err := store.Active(ctx, trackID, since)
 	keys := make([]string, len(prior))
 	for i, p := range prior {
@@ -26,14 +28,14 @@ func TestPostgresRejectionStore_ActiveReturnsTheRecordedBasis(t *testing.T) {
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
-	basis := download.RejectionBasis{ExpectedSeconds: 322.5, ReferenceMBID: "mbid-1"}
+	basis := ports.RejectionBasis{ExpectedSeconds: 322.5, ReferenceMBID: "mbid-1"}
 
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO acquisition_rejections (track_id, source_key, reason, rejected_at) VALUES ($1, 'legacy', 'duration', now())`,
 		trackID); err != nil {
 		t.Fatalf("seed legacy rejection: %v", err)
 	}
-	if err := store.Record(ctx, []download.CandidateRejectionRecord{
+	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: "with-basis", Reason: "duration", Basis: basis},
 	}); err != nil {
 		t.Fatalf("Record(...) = %v, want nil", err)
@@ -61,7 +63,7 @@ func TestPostgresRejectionStore_RecordThenActiveKeysReturnsRecordedKeys(t *testi
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
-	err := store.Record(ctx, []download.CandidateRejectionRecord{
+	err := store.Record(ctx, []ports.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: "source-a", Reason: "no_match", Detail: "bad hash"},
 		{TrackID: trackID, SourceKey: "source-b", Reason: "checksum_mismatch"},
 	})
@@ -85,12 +87,12 @@ func TestPostgresRejectionStore_RecordUpsertsOnTrackAndSourceKey(t *testing.T) {
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
-	if err := store.Record(ctx, []download.CandidateRejectionRecord{
+	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: "source-a", Reason: "no_match", Detail: "first"},
 	}); err != nil {
 		t.Fatalf("first Record(...) = %v, want nil", err)
 	}
-	if err := store.Record(ctx, []download.CandidateRejectionRecord{
+	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: "source-a", Reason: "checksum_mismatch", Detail: "second"},
 	}); err != nil {
 		t.Fatalf("second Record(...) = %v, want nil", err)
@@ -133,7 +135,7 @@ func TestPostgresRejectionStore_ActiveKeysExcludesKeysRejectedBeforeSince(t *tes
 		trackID, "stale-source", "no_match"); err != nil {
 		t.Fatalf("seed stale rejection: %v", err)
 	}
-	if err := store.Record(ctx, []download.CandidateRejectionRecord{
+	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: "fresh-source", Reason: "no_match"},
 	}); err != nil {
 		t.Fatalf("Record(...) = %v, want nil", err)
@@ -154,7 +156,7 @@ func TestPostgresRejectionStore_RecordRejectsEmptyTrackID(t *testing.T) {
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 
-	err := store.Record(ctx, []download.CandidateRejectionRecord{
+	err := store.Record(ctx, []ports.CandidateRejectionRecord{
 		{TrackID: "", SourceKey: "source-a", Reason: "no_match"},
 	})
 	if err == nil {
@@ -168,7 +170,7 @@ func TestPostgresRejectionStore_RecordRejectsEmptySourceKey(t *testing.T) {
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 
-	err := store.Record(ctx, []download.CandidateRejectionRecord{
+	err := store.Record(ctx, []ports.CandidateRejectionRecord{
 		{TrackID: uuid.NewString(), SourceKey: "", Reason: "no_match"},
 	})
 	if err == nil {
@@ -183,7 +185,7 @@ func TestPostgresRejectionStore_RecordWithCancelledContextReturnsError(t *testin
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err := store.Record(ctx, []download.CandidateRejectionRecord{
+	err := store.Record(ctx, []ports.CandidateRejectionRecord{
 		{TrackID: uuid.NewString(), SourceKey: "source-a", Reason: "no_match"},
 	})
 	if !errors.Is(err, context.Canceled) {
@@ -197,7 +199,7 @@ func TestPostgresRejectionStore_RecordOnClosedPoolReturnsError(t *testing.T) {
 	store := download.NewPostgresRejectionStore(pool)
 	pool.Close()
 
-	err := store.Record(context.Background(), []download.CandidateRejectionRecord{
+	err := store.Record(context.Background(), []ports.CandidateRejectionRecord{
 		{TrackID: uuid.NewString(), SourceKey: "source-a", Reason: "no_match"},
 	})
 	if err == nil {
@@ -217,7 +219,7 @@ func TestPostgresRejectionStore_ReRecordingAStaleKeyMakesItActiveAgain(t *testin
 		trackID, "soundcloud.com/bran-van-3000/drinking-in-l-a-3", "no_match"); err != nil {
 		t.Fatalf("seed stale rejection: %v", err)
 	}
-	if err := store.Record(ctx, []download.CandidateRejectionRecord{
+	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: "soundcloud.com/bran-van-3000/drinking-in-l-a-3", Reason: "drm"},
 	}); err != nil {
 		t.Fatalf("Record(...) = %v, want nil", err)
@@ -240,7 +242,7 @@ func TestPostgresRejectionStore_ActiveKeysOnlyReturnsTheRequestedTracksKeys(t *t
 	trackA := uuid.NewString()
 	trackB := uuid.NewString()
 
-	if err := store.Record(ctx, []download.CandidateRejectionRecord{
+	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
 		{TrackID: trackA, SourceKey: "shared-source", Reason: "drm"},
 		{TrackID: trackB, SourceKey: "shared-source", Reason: "no_match"},
 		{TrackID: trackB, SourceKey: "only-b-source", Reason: "no_match"},
@@ -279,7 +281,7 @@ func TestPostgresRejectionStore_SourceKeyWithQuotesAndUnicodeRoundTripsVerbatim(
 	trackID := uuid.NewString()
 	hostile := `https://example.com/watch?v=x'); DROP TABLE acquisition_rejections;-- "Beyoncé" ☃`
 
-	if err := store.Record(ctx, []download.CandidateRejectionRecord{
+	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: hostile, Reason: "qualifier", Detail: `it's "live"`},
 	}); err != nil {
 		t.Fatalf("Record(...) = %v, want nil", err)
@@ -324,7 +326,7 @@ func TestPostgresRejectionStore_RecordBatchWithOneInvalidRecordStoresNothing(t *
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
-	err := store.Record(ctx, []download.CandidateRejectionRecord{
+	err := store.Record(ctx, []ports.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: "valid-source", Reason: "no_match"},
 		{TrackID: trackID, SourceKey: "", Reason: "no_match"},
 	})
@@ -347,7 +349,7 @@ func TestPostgresRejectionStore_RecordWithDuplicateKeyInBatchKeepsLastAndStoresO
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
-	err := store.Record(ctx, []download.CandidateRejectionRecord{
+	err := store.Record(ctx, []ports.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: "source-a", Reason: "no_match", Detail: "first pass"},
 		{TrackID: trackID, SourceKey: "source-b", Reason: "drm"},
 		{TrackID: trackID, SourceKey: "source-a", Reason: "checksum_mismatch", Detail: "second pass"},
@@ -399,7 +401,7 @@ func TestPostgresRejectionStore_ConcurrentRecordsOfTheSameKeysAllSucceed(t *test
 	errs := make(chan error, 8)
 	for i := 0; i < 8; i++ {
 		go func() {
-			errs <- store.Record(ctx, []download.CandidateRejectionRecord{
+			errs <- store.Record(ctx, []ports.CandidateRejectionRecord{
 				{TrackID: trackID, SourceKey: "source-a", Reason: "no_match"},
 				{TrackID: trackID, SourceKey: "source-b", Reason: "drm"},
 			})
@@ -487,8 +489,8 @@ func TestPostgresRejectionStore_ARejectionJudgedWithNoLengthOrMBIDKeepsAnEmptyBa
 	ctx := context.Background()
 	trackID := uuid.NewString()
 
-	if err := store.Record(ctx, []download.CandidateRejectionRecord{
-		{TrackID: trackID, SourceKey: "unknown-length", Reason: "identity", Basis: download.RejectionBasis{}},
+	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
+		{TrackID: trackID, SourceKey: "unknown-length", Reason: "identity", Basis: ports.RejectionBasis{}},
 	}); err != nil {
 		t.Fatalf("Record(...) = %v, want nil", err)
 	}
@@ -500,7 +502,7 @@ func TestPostgresRejectionStore_ARejectionJudgedWithNoLengthOrMBIDKeepsAnEmptyBa
 	if len(prior) != 1 {
 		t.Fatalf("Active(...) = %+v, want one rejection", prior)
 	}
-	if prior[0].Basis == nil || *prior[0].Basis != (download.RejectionBasis{}) {
+	if prior[0].Basis == nil || *prior[0].Basis != (ports.RejectionBasis{}) {
 		t.Errorf("basis = %v, want a recorded basis of 0s and no MBID, not the nil of a legacy row", prior[0].Basis)
 	}
 }
@@ -511,14 +513,14 @@ func TestPostgresRejectionStore_ReRecordingALegacyRowWritesItsBasis(t *testing.T
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
-	basis := download.RejectionBasis{ExpectedSeconds: 201, ReferenceMBID: "mbid-now"}
+	basis := ports.RejectionBasis{ExpectedSeconds: 201, ReferenceMBID: "mbid-now"}
 
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO acquisition_rejections (track_id, source_key, reason, rejected_at) VALUES ($1, 'legacy', 'duration', now() - interval '2 days')`,
 		trackID); err != nil {
 		t.Fatalf("seed legacy rejection: %v", err)
 	}
-	if err := store.Record(ctx, []download.CandidateRejectionRecord{
+	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: "legacy", Reason: "duration", Basis: basis},
 	}); err != nil {
 		t.Fatalf("Record(...) = %v, want nil", err)
@@ -539,14 +541,14 @@ func TestPostgresRejectionStore_ReRecordingOnANewBasisReplacesTheOldOne(t *testi
 	store := download.NewPostgresRejectionStore(pool)
 	ctx := context.Background()
 	trackID := uuid.NewString()
-	newer := download.RejectionBasis{ExpectedSeconds: 0, ReferenceMBID: ""}
+	newer := ports.RejectionBasis{ExpectedSeconds: 0, ReferenceMBID: ""}
 
-	if err := store.Record(ctx, []download.CandidateRejectionRecord{
-		{TrackID: trackID, SourceKey: "source-a", Reason: "duration", Basis: download.RejectionBasis{ExpectedSeconds: 150, ReferenceMBID: "mbid-old"}},
+	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
+		{TrackID: trackID, SourceKey: "source-a", Reason: "duration", Basis: ports.RejectionBasis{ExpectedSeconds: 150, ReferenceMBID: "mbid-old"}},
 	}); err != nil {
 		t.Fatalf("first Record(...) = %v, want nil", err)
 	}
-	if err := store.Record(ctx, []download.CandidateRejectionRecord{
+	if err := store.Record(ctx, []ports.CandidateRejectionRecord{
 		{TrackID: trackID, SourceKey: "source-a", Reason: "fingerprint", Basis: newer},
 	}); err != nil {
 		t.Fatalf("second Record(...) = %v, want nil", err)
@@ -569,7 +571,7 @@ func TestPostgresRejectionStore_PruneRemovesRowsOfADeletedTrack(t *testing.T) {
 	kept := insertFailedTrack(t, pool).ID.UUID().String()
 	deleted := insertFailedTrack(t, pool).ID.UUID().String()
 	for _, trackID := range []string{kept, deleted} {
-		if err := store.Record(ctx, []download.CandidateRejectionRecord{{TrackID: trackID, SourceKey: "source-a", Reason: "no_match"}}); err != nil {
+		if err := store.Record(ctx, []ports.CandidateRejectionRecord{{TrackID: trackID, SourceKey: "source-a", Reason: "no_match"}}); err != nil {
 			t.Fatalf("Record(...) = %v, want nil", err)
 		}
 	}
@@ -594,7 +596,7 @@ func TestPostgresRejectionStore_PruneRemovesRowsOfADeletedTrack(t *testing.T) {
 	}
 }
 
-func countRejectionsOf(t *testing.T, store *download.PostgresRejectionStore, trackID string) int {
+func countRejectionsOf(t *testing.T, store *persistence.PostgresRejectionStore, trackID string) int {
 	t.Helper()
 	keys, err := activeKeys(store, context.Background(), trackID, time.Now().Add(-10*365*24*time.Hour))
 	if err != nil {
@@ -656,7 +658,7 @@ func TestPostgresRejectionStore_PruneKeepsRowsOfATrackDeletedAndRecreatedWithThe
 	ctx := context.Background()
 	track := insertFailedTrack(t, pool)
 	trackID := track.ID.UUID().String()
-	if err := store.Record(ctx, []download.CandidateRejectionRecord{{TrackID: trackID, SourceKey: "source-a", Reason: "no_match"}}); err != nil {
+	if err := store.Record(ctx, []ports.CandidateRejectionRecord{{TrackID: trackID, SourceKey: "source-a", Reason: "no_match"}}); err != nil {
 		t.Fatalf("Record(...) = %v, want nil", err)
 	}
 	if _, err := pool.Exec(ctx, `DELETE FROM tracks WHERE id = $1`, track.ID.UUID()); err != nil {

@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/ids"
 	"bufio"
 	"bytes"
@@ -55,7 +56,7 @@ func (topicUpload) Fetch(_ context.Context, _ download.AudioCandidate, outDir st
 	return download.FetchedAudio{Path: path}, os.WriteFile(path, []byte("downloaded bytes"), 0o600)
 }
 
-func acquireIdentifiedAs(t *testing.T, results []download.AcoustIDResult) {
+func acquireIdentifiedAs(t *testing.T, results []ports.AcoustIDResult) {
 	t.Helper()
 	track := download.TrackSnapshot{
 		ID: ids.NewTrackId(), UserId: ids.NewUserId(uuid.New()),
@@ -101,8 +102,8 @@ func loggedVerdictResults(t *testing.T, buf *bytes.Buffer) []loggedResult {
 func TestExecute_TheAudioVerdictLogCarriesTheAcoustIDResults(t *testing.T) {
 	buf := captureLog(t)
 
-	acquireIdentifiedAs(t, []download.AcoustIDResult{
-		{Score: 0.97, Recordings: []download.LinkedRecording{{MBID: "mbid-a"}, {MBID: "mbid-b"}}},
+	acquireIdentifiedAs(t, []ports.AcoustIDResult{
+		{Score: 0.97, Recordings: []ports.LinkedRecording{{MBID: "mbid-a"}, {MBID: "mbid-b"}}},
 		{Score: 0.41},
 	})
 
@@ -117,10 +118,10 @@ func TestExecute_TheAudioVerdictLogCarriesTheAcoustIDResults(t *testing.T) {
 
 func TestExecute_TheAudioVerdictLogCapsTheResultsAndTheirRecordings(t *testing.T) {
 	buf := captureLog(t)
-	recordings := make([]download.LinkedRecording, loggedCap+3)
-	results := make([]download.AcoustIDResult, loggedCap+3)
+	recordings := make([]ports.LinkedRecording, loggedCap+3)
+	results := make([]ports.AcoustIDResult, loggedCap+3)
 	for i := range results {
-		results[i] = download.AcoustIDResult{Score: 0.5, Recordings: recordings}
+		results[i] = ports.AcoustIDResult{Score: 0.5, Recordings: recordings}
 	}
 
 	acquireIdentifiedAs(t, results)

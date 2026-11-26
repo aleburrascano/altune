@@ -2,6 +2,7 @@ package sourcekey_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/sourcekey"
 	"context"
 	"strings"
 	"testing"
@@ -29,7 +30,7 @@ func TestYouTubeMusicWatchURL_KeysAsTheVideo(t *testing.T) {
 	if url != "https://music.youtube.com/watch?v="+id {
 		t.Fatalf("watch URL for %q = %q", id, url)
 	}
-	if got := download.SourceKey(url); got != "youtube:"+id {
+	if got := sourcekey.SourceKey(url); got != "youtube:"+id {
 		t.Fatalf("SourceKey(%q) = %q, want %q", url, got, "youtube:"+id)
 	}
 }
@@ -67,15 +68,15 @@ func TestSourceKey_CollapsesTheSameYouTubeVideo(t *testing.T) {
 
 	want := "youtube:dQw4w9WgXcQ"
 	for _, raw := range same {
-		if got := download.SourceKey(raw); got != want {
+		if got := sourcekey.SourceKey(raw); got != want {
 			t.Errorf("acquisition.SourceKey(%q) = %q, want %q — the same video under two spellings must exclude as one", raw, got, want)
 		}
 	}
 }
 
 func TestSourceKey_DistinguishesDifferentVideos(t *testing.T) {
-	a := download.SourceKey("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-	b := download.SourceKey("https://www.youtube.com/watch?v=aaaaaaaaaaa")
+	a := sourcekey.SourceKey("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+	b := sourcekey.SourceKey("https://www.youtube.com/watch?v=aaaaaaaaaaa")
 	if a == b {
 		t.Errorf("distinct videos collapsed to %q", a)
 	}
@@ -90,7 +91,7 @@ func TestSourceKey_RefusesAVideoIDFromALookalikeHost(t *testing.T) {
 	}
 
 	for _, raw := range imposters {
-		got := download.SourceKey(raw)
+		got := sourcekey.SourceKey(raw)
 		if strings.HasPrefix(got, "youtube:") {
 			t.Errorf("acquisition.SourceKey(%q) = %q, want a key of its own — a lookalike host must not take a video's identity", raw, got)
 		}
@@ -105,7 +106,7 @@ func TestSourceKey_NormalizesNonYouTubeURLs(t *testing.T) {
 		{"yt:master", "yt:master"},
 	}
 	for _, tt := range tests {
-		if got := download.SourceKey(tt.in); got != tt.want {
+		if got := sourcekey.SourceKey(tt.in); got != tt.want {
 			t.Errorf("acquisition.SourceKey(%q) = %q, want %q", tt.in, got, tt.want)
 		}
 	}
@@ -132,7 +133,7 @@ func TestSourceKey_CollapsesEveryURLSpellingOfOneUpload(t *testing.T) {
 	}
 	for _, tt := range tests {
 		for _, raw := range tt.in {
-			if got := download.SourceKey(raw); got != tt.want {
+			if got := sourcekey.SourceKey(raw); got != tt.want {
 				t.Errorf("%s: acquisition.SourceKey(%q) = %q, want %q", tt.name, raw, got, tt.want)
 			}
 		}
@@ -165,7 +166,7 @@ func TestSourceKey_CollapsesYouTubeSpellingsWithCaseQueryAndFragment(t *testing.
 
 	want := "youtube:dQw4w9WgXcQ"
 	for _, raw := range same {
-		if got := download.SourceKey(raw); got != want {
+		if got := sourcekey.SourceKey(raw); got != want {
 			t.Errorf("acquisition.SourceKey(%q) = %q, want %q", raw, got, want)
 		}
 	}
@@ -181,7 +182,7 @@ func TestSourceKey_KeepsDifferentVideosApartAcrossNewSpellings(t *testing.T) {
 		{"https://m.soundcloud.com/artist/sets/song", "https://soundcloud.com/artist/song"},
 	}
 	for _, p := range pairs {
-		if a, b := download.SourceKey(p[0]), download.SourceKey(p[1]); a == b {
+		if a, b := sourcekey.SourceKey(p[0]), sourcekey.SourceKey(p[1]); a == b {
 			t.Errorf("acquisition.SourceKey(%q) and acquisition.SourceKey(%q) both = %q, want distinct keys", p[0], p[1], a)
 		}
 	}
@@ -208,7 +209,7 @@ func TestSourceKey_RefusesAVideoIDFromALookalikeOfTheNewHostsAndPaths(t *testing
 		"https://www.youtube.com.:443@evil.test/live/dQw4w9WgXcQ",
 	}
 	for _, raw := range imposters {
-		if got := download.SourceKey(raw); strings.HasPrefix(got, "youtube:") {
+		if got := sourcekey.SourceKey(raw); strings.HasPrefix(got, "youtube:") {
 			t.Errorf("acquisition.SourceKey(%q) = %q, want a key that is not a YouTube video key", raw, got)
 		}
 	}
@@ -227,7 +228,7 @@ func TestSourceKey_KeepsALookalikeSoundCloudHostOffTheSoundCloudKey(t *testing.T
 		"https://sоundcloud.com/artist/song",
 	}
 	for _, raw := range imposters {
-		got := download.SourceKey(raw)
+		got := sourcekey.SourceKey(raw)
 		if got == want || strings.HasPrefix(got, "soundcloud.com/") {
 			t.Errorf("acquisition.SourceKey(%q) = %q, want a key that is not a soundcloud.com key", raw, got)
 		}
@@ -255,7 +256,7 @@ func TestSourceKey_CollapsesMobileSoundCloudSpellingsOfOneUpload(t *testing.T) {
 	}
 	for _, tt := range tests {
 		for _, raw := range tt.in {
-			if got := download.SourceKey(raw); got != tt.want {
+			if got := sourcekey.SourceKey(raw); got != tt.want {
 				t.Errorf("acquisition.SourceKey(%q) = %q, want %q", raw, got, tt.want)
 			}
 		}
@@ -281,11 +282,11 @@ func TestSourceKey_GivesNoSharedYouTubeKeyToEmptyOrMalformedInput(t *testing.T) 
 		"https://www.youtube.com/shorts/%00%00",
 	}
 	for _, raw := range inputs {
-		if got := download.SourceKey(raw); got == "youtube:" || got == "youtube:live" || got == "youtube:shorts" || got == "youtube:embed" {
+		if got := sourcekey.SourceKey(raw); got == "youtube:" || got == "youtube:live" || got == "youtube:shorts" || got == "youtube:embed" {
 			t.Errorf("acquisition.SourceKey(%q) = %q, want no YouTube key without a video id", raw, got)
 		}
 	}
-	if got := download.SourceKey(""); got != "" {
+	if got := sourcekey.SourceKey(""); got != "" {
 		t.Errorf("acquisition.SourceKey(\"\") = %q, want empty", got)
 	}
 }
@@ -301,15 +302,15 @@ func TestSourceKey_RejectsAYouTubeURLWhoseVideoIDIsNotValid(t *testing.T) {
 		"https://www.youtube.com/watch",
 	}
 	for _, raw := range inputs {
-		if got := download.SourceKey(raw); got != "" {
+		if got := sourcekey.SourceKey(raw); got != "" {
 			t.Errorf("acquisition.SourceKey(%q) = %q, want no key: a YouTube URL without a valid video id is not a candidate", raw, got)
 		}
 	}
 }
 
 func TestSourceKey_KeepsTwoDifferentItemsOnAQueryIdentifiedHostApart(t *testing.T) {
-	first := download.SourceKey("https://media.example.org/play?item=4821&utm_source=a")
-	second := download.SourceKey("https://media.example.org/play?item=9034&utm_source=a")
+	first := sourcekey.SourceKey("https://media.example.org/play?item=4821&utm_source=a")
+	second := sourcekey.SourceKey("https://media.example.org/play?item=9034&utm_source=a")
 
 	if first == "" || first == second {
 		t.Errorf("keys = %q and %q, want two distinct keys for two different items", first, second)
@@ -317,8 +318,8 @@ func TestSourceKey_KeepsTwoDifferentItemsOnAQueryIdentifiedHostApart(t *testing.
 }
 
 func TestSourceKey_KeepsTwoSchemelessItemsApartByTheirQuery(t *testing.T) {
-	first := download.SourceKey("youtube.com/watch?v=album")
-	second := download.SourceKey("youtube.com/watch?v=single")
+	first := sourcekey.SourceKey("youtube.com/watch?v=album")
+	second := sourcekey.SourceKey("youtube.com/watch?v=single")
 
 	if first == "" || first == second {
 		t.Errorf("keys = %q and %q, want two distinct keys even without a scheme", first, second)
@@ -326,8 +327,8 @@ func TestSourceKey_KeepsTwoSchemelessItemsApartByTheirQuery(t *testing.T) {
 }
 
 func TestSourceKey_TreatsTheSameQueryInAnyOrderAsOneItem(t *testing.T) {
-	a := download.SourceKey("https://media.example.org/play?item=4821&disc=2")
-	b := download.SourceKey("https://MEDIA.example.org/play/?disc=2&item=4821")
+	a := sourcekey.SourceKey("https://media.example.org/play?item=4821&disc=2")
+	b := sourcekey.SourceKey("https://MEDIA.example.org/play/?disc=2&item=4821")
 
 	if a != b {
 		t.Errorf("keys = %q and %q, want one key for one item", a, b)
@@ -340,7 +341,7 @@ func TestSourceKey_CollapsesAnUppercaseMobileSoundCloudHost(t *testing.T) {
 		{"https://M.SoundCloud.com/Artist/Sets/Album/", "soundcloud.com/artist/sets/album"},
 	}
 	for _, tt := range tests {
-		if got := download.SourceKey(tt.in); got != tt.want {
+		if got := sourcekey.SourceKey(tt.in); got != tt.want {
 			t.Errorf("acquisition.SourceKey(%q) = %q, want %q", tt.in, got, tt.want)
 		}
 	}

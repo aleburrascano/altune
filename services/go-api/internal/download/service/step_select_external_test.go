@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"os"
@@ -36,7 +37,7 @@ func TestSelect_RanksArtTracksByTheResolvedLengthWhenTheTrackHasNone(t *testing.
 	artTrack := func(url string, duration float64) download.AudioCandidate {
 		return download.AudioCandidate{
 			Title: "Phone (Interlude)", URL: url, Duration: duration,
-			Artists: []string{"SLAYR"}, Album: "Phone", Kind: download.KindArtTrack,
+			Artists: []string{"SLAYR"}, Album: "Phone", Kind: ports.KindArtTrack,
 		}
 	}
 	source := &artTracks{found: []download.AudioCandidate{
@@ -49,7 +50,7 @@ func TestSelect_RanksArtTracksByTheResolvedLengthWhenTheTrackHasNone(t *testing.
 	}
 	svc := download.MustNewAcquireTrackAudioService(&pendingLedger{track: track}, download.NewSourceRegistry(source), storedAudio{},
 		download.NewTempWorkspace(),
-		resolving(&resolver{identity: download.RecordingIdentity{Duration: 128}}, noVerification()), noStages())
+		resolving(&resolver{identity: ports.RecordingIdentity{Duration: 128}}, noVerification()), noStages())
 
 	_ = svc.Execute(context.Background(), track.UserId, track.ID)
 

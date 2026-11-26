@@ -2,6 +2,7 @@ package previewcheck_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/adapters/previewcheck"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
@@ -86,7 +87,7 @@ func (s *deezerStub) times() []time.Time {
 }
 
 type previewSource interface {
-	Clip(ctx context.Context, identity download.DeezerPreviewTarget) (download.PreviewClip, error)
+	Clip(ctx context.Context, identity previewcheck.Target) (previewcheck.Clip, error)
 }
 
 func (s *deezerStub) serve() previewSource {
@@ -94,9 +95,9 @@ func (s *deezerStub) serve() previewSource {
 }
 
 func TestNewDeezerPreview_RefusesAMissingClock(t *testing.T) {
-	previews, err := download.NewDeezerPreview(&http.Client{}, deezer, fixedPrinter{}, clock.Sleep, nil)
+	previews, err := previewcheck.New(&http.Client{}, deezer, fixedPrinter{}, clock.Sleep, nil)
 
-	if previews != nil || !errors.Is(err, download.ErrDeezerClockRequired) || !strings.Contains(err.Error(), "NewDeezerPreview") {
+	if previews != nil || !errors.Is(err, previewcheck.ErrClockRequired) || !strings.Contains(err.Error(), "NewDeezerPreview") {
 		t.Fatalf("got (%v, %v), want a nil client and an error naming NewDeezerPreview wrapping ErrDeezerClockRequired", previews, err)
 	}
 }
@@ -104,9 +105,9 @@ func TestNewDeezerPreview_RefusesAMissingClock(t *testing.T) {
 const trackJSON = `{"id":132201194,"title":"outside","isrc":"USSM11607554","preview":"` + deezer + `/preview.mp3"}`
 
 func TestNewDeezerPreview_RefusesAMissingSleeper(t *testing.T) {
-	previews, err := download.NewDeezerPreview(&http.Client{}, deezer, fixedPrinter{}, nil, time.Now)
+	previews, err := previewcheck.New(&http.Client{}, deezer, fixedPrinter{}, nil, time.Now)
 
-	if previews != nil || !errors.Is(err, download.ErrDeezerSleeperRequired) || !strings.Contains(err.Error(), "NewDeezerPreview") {
+	if previews != nil || !errors.Is(err, previewcheck.ErrSleeperRequired) || !strings.Contains(err.Error(), "NewDeezerPreview") {
 		t.Fatalf("got (%v, %v), want a nil client and an error naming NewDeezerPreview wrapping ErrDeezerSleeperRequired", previews, err)
 	}
 }
@@ -114,7 +115,7 @@ func TestNewDeezerPreview_RefusesAMissingSleeper(t *testing.T) {
 func TestDeezerPreviews_FetchesAndFingerprintsThePreviewOfTheBoundISRC(t *testing.T) {
 	stub := &deezerStub{trackBody: func(int) string { return trackJSON }}
 
-	clip, err := stub.serve().Clip(context.Background(), download.DeezerPreviewTarget{ISRC: "ussm1-16-07554", DeezerTrackID: "999"})
+	clip, err := stub.serve().Clip(context.Background(), previewcheck.Target{ISRC: "ussm1-16-07554", DeezerTrackID: "999"})
 	if err != nil {
 		t.Fatalf("Clip: %v", err)
 	}
@@ -129,7 +130,7 @@ func TestDeezerPreviews_FetchesAndFingerprintsThePreviewOfTheBoundISRC(t *testin
 func TestDeezerPreviews_FallsBackToTheDeezerTrackIDWithoutAnISRC(t *testing.T) {
 	stub := &deezerStub{trackBody: func(int) string { return trackJSON }}
 
-	if _, err := stub.serve().Clip(context.Background(), download.DeezerPreviewTarget{DeezerTrackID: "132201194"}); err != nil {
+	if _, err := stub.serve().Clip(context.Background(), previewcheck.Target{DeezerTrackID: "132201194"}); err != nil {
 		t.Fatalf("Clip: %v", err)
 	}
 
@@ -141,13 +142,13 @@ func TestDeezerPreviews_FallsBackToTheDeezerTrackIDWithoutAnISRC(t *testing.T) {
 func TestDeezerPreviews_SaysWhyThereIsNoPreview(t *testing.T) {
 	tests := []struct {
 		name     string
-		identity download.DeezerPreviewTarget
+		identity previewcheck.Target
 		body     string
 		want     string
 	}{
-		{"no ISRC and no deezer id", download.DeezerPreviewTarget{}, "", "no ISRC or Deezer track id to look a preview up by"},
-		{"deezer does not know the ISRC", download.DeezerPreviewTarget{ISRC: "USSM11607554"}, `{"error":{"type":"DataException","message":"no data","code":800}}`, "deezer does not know this track"},
-		{"deezer knows the track but has no preview", download.DeezerPreviewTarget{ISRC: "USSM11607554"}, `{"id":1,"title":"outside","preview":""}`, "deezer has no preview for this track"},
+		{"no ISRC and no deezer id", previewcheck.Target{}, "", "no ISRC or Deezer track id to look a preview up by"},
+		{"deezer does not know the ISRC", previewcheck.Target{ISRC: "USSM11607554"}, `{"error":{"type":"DataException","message":"no data","code":800}}`, "deezer does not know this track"},
+		{"deezer knows the track but has no preview", previewcheck.Target{ISRC: "USSM11607554"}, `{"id":1,"title":"outside","preview":""}`, "deezer has no preview for this track"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -172,7 +173,7 @@ func TestDeezerPreviews_BacksOffTenSecondsThenTwentyOnQuotaErrorsAndThenSucceeds
 		}}
 		started := time.Now()
 
-		clip, err := stub.serve().Clip(context.Background(), download.DeezerPreviewTarget{ISRC: "USSM11607554"})
+		clip, err := stub.serve().Clip(context.Background(), previewcheck.Target{ISRC: "USSM11607554"})
 
 		if err != nil || clip.DeezerTrackID != "132201194" {
 			t.Fatalf("clip = %+v, err = %v, want the track after two quota errors", clip, err)
@@ -194,9 +195,9 @@ func TestDeezerPreviews_GivesUpAfterFiveAttemptsWhenQuotaNeverLifts(t *testing.T
 	synctest.Test(t, func(t *testing.T) {
 		stub := &deezerStub{trackBody: func(int) string { return `{"error":{"code":4}}` }}
 
-		_, err := stub.serve().Clip(context.Background(), download.DeezerPreviewTarget{ISRC: "USSM11607554"})
+		_, err := stub.serve().Clip(context.Background(), previewcheck.Target{ISRC: "USSM11607554"})
 
-		if !errors.Is(err, download.ErrDeezerThrottled) {
+		if !errors.Is(err, previewcheck.ErrDeezerThrottled) {
 			t.Errorf("err = %v, want ErrDeezerThrottled", err)
 		}
 		if paths := stub.paths(); len(paths) != 5 {
@@ -211,7 +212,7 @@ func TestDeezerPreviews_AnHTTP429BacksOffLikeAQuotaError(t *testing.T) {
 		previews := download.MustNewDeezerPreview(&http.Client{Transport: stub}, deezer, fixedPrinter{}, clock.Sleep, time.Now)
 		started := time.Now()
 
-		clip, err := previews.Clip(context.Background(), download.DeezerPreviewTarget{ISRC: "USSM11607554"})
+		clip, err := previews.Clip(context.Background(), previewcheck.Target{ISRC: "USSM11607554"})
 
 		if err != nil || clip.Unavailable == "" {
 			t.Fatalf("clip = %+v, err = %v, want the answer after one 429", clip, err)
@@ -248,11 +249,11 @@ func TestDeezerPreviews_HoldsEveryRequestWhileAnotherCallerIsBackingOff(t *testi
 		backingOff := make(chan struct{})
 		go func() {
 			defer close(backingOff)
-			_, _ = previews.Clip(context.Background(), download.DeezerPreviewTarget{ISRC: "USSM11607554"})
+			_, _ = previews.Clip(context.Background(), previewcheck.Target{ISRC: "USSM11607554"})
 		}()
 		time.Sleep(time.Second)
 
-		_, _ = previews.Clip(context.Background(), download.DeezerPreviewTarget{DeezerTrackID: "7"})
+		_, _ = previews.Clip(context.Background(), previewcheck.Target{DeezerTrackID: "7"})
 
 		<-backingOff
 		if paths := stub.paths(); len(paths) != 3 {
@@ -280,7 +281,7 @@ func TestFpcalcPrinter_RefusesAnEmptyOrFailedFingerprint(t *testing.T) {
 	empty := writeFakeFpcalc(t, "#!/bin/sh\nprintf '{\"duration\": 30, \"fingerprint\": []}'\n")
 	failing := writeFakeFpcalc(t, fpcalcFails)
 
-	if _, err := download.NewFpcalcPrinter(empty).Print(context.Background(), os.DevNull); !errors.Is(err, download.ErrEmptyPrint) {
+	if _, err := download.NewFpcalcPrinter(empty).Print(context.Background(), os.DevNull); !errors.Is(err, previewcheck.ErrEmptyPrint) {
 		t.Errorf("empty err = %v, want ErrEmptyPrint", err)
 	}
 	if _, err := download.NewFpcalcPrinter(failing).Print(context.Background(), os.DevNull); err == nil {

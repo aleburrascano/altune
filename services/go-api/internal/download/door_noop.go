@@ -6,7 +6,6 @@ var (
 	NoopAudioIdentifier    = ports.NoopAudioIdentifier
 	NoopAudioProber        = ports.NoopAudioProber
 	NoopAudioTagger        = ports.NoopAudioTagger
-	NoopAudioRefLookup     = ports.NoopAudioRefLookup
 	NoopPreviewMatcher     = ports.NoopPreviewMatcher
 	NoopJobNotifier        = ports.NoopJobNotifier
 	NoopOutcomeRecorder    = ports.NoopOutcomeRecorder

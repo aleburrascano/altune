@@ -3,6 +3,11 @@ package service_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/core/audioquality"
+	"altune/go-api/internal/download/internal/core/domain"
+	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/service"
+	"altune/go-api/internal/download/service/replacement"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -17,38 +22,38 @@ const (
 	inPlaceRef        = "u/the cure/boys dont cry.mp3"
 )
 
-func identifiedAs(recordings ...download.LinkedRecording) *identifier {
+func identifiedAs(recordings ...ports.LinkedRecording) *identifier {
 	return &identifier{match: download.RecordingMatch{
 		AcoustID: "ac-1",
-		Results:  []download.AcoustIDResult{{ID: "ac-1", Score: 0.97, Recordings: recordings}},
+		Results:  []ports.AcoustIDResult{{ID: "ac-1", Score: 0.97, Recordings: recordings}},
 	}}
 }
 
-func boysDontCry(mbid string) download.LinkedRecording {
-	return download.LinkedRecording{MBID: mbid, Title: "Boys Don't Cry", Artists: []string{"The Cure"}}
+func boysDontCry(mbid string) ports.LinkedRecording {
+	return ports.LinkedRecording{MBID: mbid, Title: "Boys Don't Cry", Artists: []string{"The Cure"}}
 }
 
-func otherRecording(mbid, title string) download.LinkedRecording {
-	return download.LinkedRecording{MBID: mbid, Title: title, Artists: []string{"The Cure"}}
+func otherRecording(mbid, title string) ports.LinkedRecording {
+	return ports.LinkedRecording{MBID: mbid, Title: title, Artists: []string{"The Cure"}}
 }
 
 type previewMatcher struct {
-	comparison download.PreviewComparison
+	comparison ports.PreviewComparison
 	err        error
-	targets    []download.PreviewTarget
+	targets    []ports.PreviewTarget
 }
 
-func (m *previewMatcher) MatchesPreview(_ context.Context, _ string, target download.PreviewTarget) (download.PreviewComparison, error) {
+func (m *previewMatcher) MatchesPreview(_ context.Context, _ string, target ports.PreviewTarget) (ports.PreviewComparison, error) {
 	m.targets = append(m.targets, target)
 	return m.comparison, m.err
 }
 
 func previewAt(bitErrorRate float64) *previewMatcher {
-	return &previewMatcher{comparison: download.PreviewComparison{Matched: true, BitErrorRate: bitErrorRate, OverlapSeconds: 29}}
+	return &previewMatcher{comparison: ports.PreviewComparison{Matched: true, BitErrorRate: bitErrorRate, OverlapSeconds: 29}}
 }
 
 func judgedPreview(bitErrorRate float64) *previewMatcher {
-	return &previewMatcher{comparison: download.PreviewComparison{Matched: bitErrorRate <= 0.18, BitErrorRate: bitErrorRate, OverlapSeconds: 29}}
+	return &previewMatcher{comparison: ports.PreviewComparison{Matched: bitErrorRate <= 0.18, BitErrorRate: bitErrorRate, OverlapSeconds: 29}}
 }
 
 type versionLookup struct {
@@ -118,7 +123,7 @@ func fromSource(track *download.TrackSnapshot, evidence string) *download.TrackS
 	return track
 }
 
-func checkInPlace(t *testing.T, w inPlaceWiring, track *download.TrackSnapshot) download.UpgradeFinding {
+func checkInPlace(t *testing.T, w inPlaceWiring, track *download.TrackSnapshot) replacement.Finding {
 	t.Helper()
 	finding, err := inPlaceChecker(w).CheckInPlace(context.Background(), track)
 	if err != nil {
@@ -128,7 +133,7 @@ func checkInPlace(t *testing.T, w inPlaceWiring, track *download.TrackSnapshot) 
 }
 
 func TestRecordingIdentity_SourceFor(t *testing.T) {
-	id := download.RecordingIdentity{Sources: []download.ProviderRef{
+	id := ports.RecordingIdentity{Sources: []download.ProviderRef{
 		{Provider: "deezer", ExternalID: "123"},
 		{Provider: "youtube", ExternalID: "abc"},
 	}}
@@ -144,7 +149,7 @@ func TestRecordingIdentity_SourceFor(t *testing.T) {
 func TestCheckInPlace_APinTheResolverKnowsNothingAboutIsStillTheFingerprintReference(t *testing.T) {
 	finding := checkInPlace(t, inPlaceWiring{identifier: identifiedAs(boysDontCry(pinnedBoysDontCry)), resolver: &resolver{}}, pinnedInPlaceTrack())
 
-	if finding.Fingerprint != download.Matches || finding.Basis != "acoustid" {
+	if finding.Fingerprint != audioquality.Matches || finding.Basis != "acoustid" {
 		t.Errorf("finding = %+v, want the catalog pin to be the recording the fingerprint matches", finding)
 	}
 }
@@ -152,7 +157,7 @@ func TestCheckInPlace_APinTheResolverKnowsNothingAboutIsStillTheFingerprintRefer
 func TestCheckInPlace_ThePinIsTheOnlyReferenceWhenTheResolverKnowsNothing(t *testing.T) {
 	finding := checkInPlace(t, inPlaceWiring{identifier: identifiedAs(boysDontCry("isrc-sibling")), resolver: &resolver{}}, pinnedInPlaceTrack())
 
-	if finding.Fingerprint == download.Matches {
+	if finding.Fingerprint == audioquality.Matches {
 		t.Errorf("finding = %+v, want a recording other than the pin not to match", finding)
 	}
 }
@@ -162,18 +167,18 @@ func TestCheckInPlace_APinSurvivesAResolverFailure(t *testing.T) {
 
 	finding := checkInPlace(t, wiring, pinnedInPlaceTrack())
 
-	if finding.Fingerprint != download.Matches {
+	if finding.Fingerprint != audioquality.Matches {
 		t.Errorf("finding = %+v, want the pin to stand despite the failed resolve", finding)
 	}
 }
 
 func TestCheckInPlace_AResolvedPinnedIdentityIsAdoptedWithItsSiblings(t *testing.T) {
-	resolved := download.RecordingIdentity{MBID: pinnedBoysDontCry, MBIDs: []string{pinnedBoysDontCry, "isrc-sibling"}, Duration: 157.306}
+	resolved := ports.RecordingIdentity{MBID: pinnedBoysDontCry, MBIDs: []string{pinnedBoysDontCry, "isrc-sibling"}, Duration: 157.306}
 	wiring := inPlaceWiring{identifier: identifiedAs(boysDontCry("isrc-sibling")), resolver: &resolver{identity: resolved}}
 
 	finding := checkInPlace(t, wiring, pinnedInPlaceTrack())
 
-	if finding.Fingerprint != download.Matches {
+	if finding.Fingerprint != audioquality.Matches {
 		t.Errorf("finding = %+v, want the resolver's sibling recording to count as the track", finding)
 	}
 }
@@ -203,7 +208,7 @@ func TestCheckInPlace_AFileTheFingerprintLinksToTheBoundRecordingMatches(t *test
 
 	finding := checkInPlace(t, inPlaceWiring{identifier: identifiedAs(boysDontCry(pinnedBoysDontCry)), previews: previews}, inPlaceTrack())
 
-	if finding.Fingerprint != download.Matches || finding.Verdict != string(download.VerdictHard) || finding.Basis != "acoustid" || finding.Score != 0.97 {
+	if finding.Fingerprint != audioquality.Matches || finding.Verdict != string(service.VerdictHard) || finding.Basis != "acoustid" || finding.Score != 0.97 {
 		t.Errorf("finding = %+v, want a hard acoustid match at 0.97", finding)
 	}
 	if len(previews.targets) != 0 {
@@ -220,7 +225,7 @@ func TestCheckInPlace_AFileTheFingerprintLinksToAnotherVersionContradicts(t *tes
 
 	finding := checkInPlace(t, wiring, live)
 
-	if finding.Fingerprint != download.Contradicts || finding.Verdict != string(download.VerdictContradicted) || !finding.Lowers {
+	if finding.Fingerprint != audioquality.Contradicts || finding.Verdict != string(service.VerdictContradicted) || !finding.Lowers {
 		t.Errorf("finding = %+v, want the other version to contradict", finding)
 	}
 }
@@ -253,10 +258,10 @@ func TestCheckInPlace_WithNoAcoustIDAnswerThePreviewComparisonDecides(t *testing
 
 	finding := checkInPlace(t, inPlaceWiring{identifier: &identifier{}, previews: previews}, inPlaceTrack())
 
-	if finding.Fingerprint != download.Matches || finding.Basis != "preview" || finding.Verdict != "preview" || finding.BitErrorRate != 0.05 {
+	if finding.Fingerprint != audioquality.Matches || finding.Basis != "preview" || finding.Verdict != "preview" || finding.BitErrorRate != 0.05 {
 		t.Errorf("finding = %+v, want a match on the preview basis with the preview verdict and the bit error rate", finding)
 	}
-	want := download.PreviewTarget{ISRC: "GBAAA8000001", DeezerTrackID: "913"}
+	want := ports.PreviewTarget{ISRC: "GBAAA8000001", DeezerTrackID: "913"}
 	if len(previews.targets) != 1 || previews.targets[0] != want {
 		t.Errorf("preview targets = %+v, want the track's ISRC and Deezer id %+v", previews.targets, want)
 	}
@@ -265,18 +270,18 @@ func TestCheckInPlace_WithNoAcoustIDAnswerThePreviewComparisonDecides(t *testing
 func TestCheckInPlace_APreviewMatchAboveTheOfficialCutOnlyApproximates(t *testing.T) {
 	finding := checkInPlace(t, inPlaceWiring{identifier: &identifier{}, previews: previewAt(0.15)}, inPlaceTrack())
 
-	if finding.Fingerprint != download.Approximates || finding.Verdict != "preview" {
+	if finding.Fingerprint != audioquality.Approximates || finding.Verdict != "preview" {
 		t.Errorf("finding = %+v, want a loose preview match to approximate", finding)
 	}
 }
 
 func TestCheckInPlace_APreviewMatchOnADoubtedReferenceOnlyApproximates(t *testing.T) {
-	doubted := download.RecordingIdentity{MBID: pinnedBoysDontCry, MBIDs: []string{pinnedBoysDontCry}, ReferenceDoubted: true}
+	doubted := ports.RecordingIdentity{MBID: pinnedBoysDontCry, MBIDs: []string{pinnedBoysDontCry}, ReferenceDoubted: true}
 	wiring := inPlaceWiring{identifier: &identifier{}, resolver: &resolver{identity: doubted}, previews: previewAt(0.05)}
 
 	finding := checkInPlace(t, wiring, inPlaceTrack())
 
-	if finding.Fingerprint != download.Approximates {
+	if finding.Fingerprint != audioquality.Approximates {
 		t.Errorf("finding = %+v, want a doubted reference to cap the preview at approximate", finding)
 	}
 }
@@ -286,15 +291,15 @@ func TestCheckInPlace_AContradictingAcoustIDAnswerWithAMatchingPreviewProvesNoth
 
 	finding := checkInPlace(t, wiring, inPlaceTrack())
 
-	if finding.Fingerprint != download.Matches || finding.Verdict != "preview" {
+	if finding.Fingerprint != audioquality.Matches || finding.Verdict != "preview" {
 		t.Errorf("finding = %+v, want the matching preview to outweigh the contradicting AcoustID answer", finding)
 	}
 }
 
 func TestCheckInPlace_AContradictionStandsOnlyWhenThePreviewDoesNotMatchEither(t *testing.T) {
 	cases := map[string]*previewMatcher{
-		"the preview is another song": {comparison: download.PreviewComparison{BitErrorRate: 0.5, OverlapSeconds: 29}},
-		"deezer has no preview":       {comparison: download.PreviewComparison{Unavailable: "deezer has no preview for this track"}},
+		"the preview is another song": {comparison: ports.PreviewComparison{BitErrorRate: 0.5, OverlapSeconds: 29}},
+		"deezer has no preview":       {comparison: ports.PreviewComparison{Unavailable: "deezer has no preview for this track"}},
 	}
 	for name, previews := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -305,7 +310,7 @@ func TestCheckInPlace_AContradictionStandsOnlyWhenThePreviewDoesNotMatchEither(t
 			}
 			live := fromSource(inPlaceTrack(), `{"source_kind":"art_track","source_title":"Boys Don't Cry (Live)"}`)
 
-			if finding := checkInPlace(t, wiring, live); finding.Fingerprint != download.Contradicts {
+			if finding := checkInPlace(t, wiring, live); finding.Fingerprint != audioquality.Contradicts {
 				t.Errorf("finding = %+v, want the contradiction to stand", finding)
 			}
 		})
@@ -317,17 +322,17 @@ func TestCheckInPlace_ADifferentSongAnswerWithAMatchingPreviewIsNotAMismatch(t *
 
 	finding := checkInPlace(t, wiring, inPlaceTrack())
 
-	if finding.Fingerprint != download.Matches || finding.Basis != "preview" {
+	if finding.Fingerprint != audioquality.Matches || finding.Basis != "preview" {
 		t.Errorf("finding = %+v, want the preview match to settle it", finding)
 	}
 }
 
 func TestCheckInPlace_APreviewThatDoesNotMatchOrCannotBeFetchedLeavesTheFileUnanswered(t *testing.T) {
 	cases := map[string]*previewMatcher{
-		"the preview is another song": {comparison: download.PreviewComparison{BitErrorRate: 0.5}},
-		"deezer has no preview":       {comparison: download.PreviewComparison{Unavailable: "deezer has no preview for this track"}},
+		"the preview is another song": {comparison: ports.PreviewComparison{BitErrorRate: 0.5}},
+		"deezer has no preview":       {comparison: ports.PreviewComparison{Unavailable: "deezer has no preview for this track"}},
 		"deezer is down":              {err: errors.New("deezer unreachable")},
-		"an unavailable preview whatever it reports": {comparison: download.PreviewComparison{
+		"an unavailable preview whatever it reports": {comparison: ports.PreviewComparison{
 			Unavailable: "deezer has no preview for this track", Matched: true, BitErrorRate: 0.02, OverlapSeconds: 29,
 		}},
 	}
@@ -342,7 +347,7 @@ func TestCheckInPlace_APreviewThatDoesNotMatchOrCannotBeFetchedLeavesTheFileUnan
 
 func TestCheckInPlace_ATrackWithNoBoundRecordingIsOnlyComparedByPreview(t *testing.T) {
 	fingerprints := identifiedAs(boysDontCry(pinnedBoysDontCry))
-	wiring := inPlaceWiring{identifier: fingerprints, resolver: resolvedTo(""), previews: &previewMatcher{comparison: download.PreviewComparison{Matched: true, OverlapSeconds: 29}}}
+	wiring := inPlaceWiring{identifier: fingerprints, resolver: resolvedTo(""), previews: &previewMatcher{comparison: ports.PreviewComparison{Matched: true, OverlapSeconds: 29}}}
 
 	finding := checkInPlace(t, wiring, inPlaceTrack())
 
@@ -366,7 +371,7 @@ func TestCheckInPlace_WithoutAnIdentifierOrStoredAudioReaderItSaysSo(t *testing.
 
 	finding, err := svc.CheckInPlace(context.Background(), inPlaceTrack())
 
-	if !errors.Is(err, download.ErrInPlaceUnavailable) || finding.Answered() {
+	if !errors.Is(err, service.ErrInPlaceUnavailable) || finding.Answered() {
 		t.Errorf("CheckInPlace = %+v, %v, want ErrInPlaceUnavailable", finding, err)
 	}
 }
@@ -374,10 +379,10 @@ func TestCheckInPlace_WithoutAnIdentifierOrStoredAudioReaderItSaysSo(t *testing.
 func TestCheckInPlace_APreviewAtTheProvenCutGradesAOnAnOfficialSourceAndBOnAFanUpload(t *testing.T) {
 	cases := map[string]struct {
 		evidence string
-		want     download.FingerprintResult
+		want     audioquality.FingerprintResult
 	}{
-		"art track":  {`{"source_kind":"art_track"}`, download.Matches},
-		"fan upload": {`{"source_kind":"fan_upload"}`, download.Approximates},
+		"art track":  {`{"source_kind":"art_track"}`, audioquality.Matches},
+		"fan upload": {`{"source_kind":"fan_upload"}`, audioquality.Approximates},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -391,7 +396,7 @@ func TestCheckInPlace_APreviewAtTheProvenCutGradesAOnAnOfficialSourceAndBOnAFanU
 }
 
 func TestCheckInPlace_TheProvenCutIsTheOneTheServiceWasGiven(t *testing.T) {
-	cases := map[float64]download.FingerprintResult{0.15: download.Matches, 0.10: download.Approximates}
+	cases := map[float64]audioquality.FingerprintResult{0.15: audioquality.Matches, 0.10: audioquality.Approximates}
 	for provenCut, want := range cases {
 		t.Run(fmt.Sprint(provenCut), func(t *testing.T) {
 			wiring := inPlaceWiring{identifier: &identifier{}, previews: judgedPreview(0.12), provenCut: provenCut}
@@ -430,7 +435,7 @@ func TestCheckInPlace_AContradictionNeedsASecondIndependentSource(t *testing.T) 
 
 			finding := checkInPlace(t, wiring, fromSource(inPlaceTrack(), tc.evidence))
 
-			if contradicted := finding.Fingerprint == download.Contradicts && finding.Lowers; contradicted != tc.want {
+			if contradicted := finding.Fingerprint == audioquality.Contradicts && finding.Lowers; contradicted != tc.want {
 				t.Errorf("finding = %+v, want contradicted = %v", finding, tc.want)
 			}
 		})
@@ -444,13 +449,13 @@ func TestCheckInPlace_AWrongLengthFileTheFingerprintProvesLowersTheGradeBelowA(t
 
 	finding := checkInPlace(t, inPlaceWiring{identifier: identifiedAs(boysDontCry(pinnedBoysDontCry))}, track)
 
-	if finding.Fingerprint != download.Approximates || !finding.Lowers {
+	if finding.Fingerprint != audioquality.Approximates || !finding.Lowers {
 		t.Errorf("finding = %+v, want a proven file of the wrong length to approximate and lower the stored grade", finding)
 	}
 }
 
 func TestCheckInPlace_APreviewOverlapUnderTheMinimumIsNoPreview(t *testing.T) {
-	short := &previewMatcher{comparison: download.PreviewComparison{Matched: true, BitErrorRate: 0.02, OverlapSeconds: 8}}
+	short := &previewMatcher{comparison: ports.PreviewComparison{Matched: true, BitErrorRate: 0.02, OverlapSeconds: 8}}
 
 	if finding := checkInPlace(t, inPlaceWiring{identifier: &identifier{}, previews: short}, inPlaceTrack()); finding.Answered() {
 		t.Errorf("finding = %+v, want no answer from a preview that overlaps too little", finding)
@@ -458,11 +463,11 @@ func TestCheckInPlace_APreviewOverlapUnderTheMinimumIsNoPreview(t *testing.T) {
 }
 
 func TestCheckInPlace_AnEmptyFingerprintStillFallsBackToThePreviewComparison(t *testing.T) {
-	empty := &identifier{err: fmt.Errorf("stored.mp3: %w", download.ErrEmptyFingerprint)}
+	empty := &identifier{err: fmt.Errorf("stored.mp3: %w", domain.ErrEmptyFingerprint)}
 
 	finding := checkInPlace(t, inPlaceWiring{identifier: empty, previews: previewAt(0.05)}, inPlaceTrack())
 
-	if finding.Fingerprint != download.Matches || finding.Basis != "preview" {
+	if finding.Fingerprint != audioquality.Matches || finding.Basis != "preview" {
 		t.Errorf("finding = %+v, want the preview comparison to decide", finding)
 	}
 }

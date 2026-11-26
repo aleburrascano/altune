@@ -2,6 +2,9 @@ package chromaprint_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/adapters/chromaprint"
+	"altune/go-api/internal/download/internal/core/domain"
+	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/retrysafe"
 	"bytes"
 	"context"
@@ -22,9 +25,9 @@ import (
 	"time"
 )
 
-func newIdentifier(t *testing.T, binDir, apiKey string) *download.ChromaprintIdentifier {
+func newIdentifier(t *testing.T, binDir, apiKey string) *chromaprint.Identifier {
 	t.Helper()
-	id, err := download.NewChromaprintIdentifier(binDir, apiKey, &http.Client{})
+	id, err := chromaprint.NewIdentifier(binDir, apiKey, &http.Client{})
 	if err != nil {
 		t.Fatalf("NewChromaprintIdentifier: %v", err)
 	}
@@ -32,9 +35,9 @@ func newIdentifier(t *testing.T, binDir, apiKey string) *download.ChromaprintIde
 }
 
 func TestNewIdentifier_RefusesANilClient(t *testing.T) {
-	id, err := download.NewChromaprintIdentifier(t.TempDir(), "key", nil)
+	id, err := chromaprint.NewIdentifier(t.TempDir(), "key", nil)
 
-	if !errors.Is(err, download.ErrChromaprintClientRequired) {
+	if !errors.Is(err, chromaprint.ErrClientRequired) {
 		t.Fatalf("err = %v, want ErrChromaprintClientRequired", err)
 	}
 	if id != nil {
@@ -50,7 +53,7 @@ func TestNewIdentifier_SendsLookupsThroughTheClientItWasGiven(t *testing.T) {
 		through++
 		return http.DefaultTransport.RoundTrip(r)
 	})}
-	id, err := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key", client)
+	id, err := chromaprint.NewIdentifier(fakeFpcalcDir(t, 100), "real-key", client)
 	if err != nil {
 		t.Fatalf("NewChromaprintIdentifier: %v", err)
 	}
@@ -72,7 +75,7 @@ func TestIdentify_MarksTheLookupPostRetrySafeSoTheTransportMayRetryIt(t *testing
 		marked = retrysafe.Marked(r.Context())
 		return http.DefaultTransport.RoundTrip(r)
 	})}
-	id, err := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key", client)
+	id, err := chromaprint.NewIdentifier(fakeFpcalcDir(t, 100), "real-key", client)
 	if err != nil {
 		t.Fatalf("NewChromaprintIdentifier: %v", err)
 	}
@@ -271,7 +274,7 @@ func TestLookup_EmptyKeyReturnsError(t *testing.T) {
 
 	_, err := id.Identify(context.Background(), "/tmp/full.mp3", 0)
 
-	if !errors.Is(err, download.ErrChromaprintMissingAPIKey) {
+	if !errors.Is(err, chromaprint.ErrMissingAPIKey) {
 		t.Fatalf("Identify with empty key err = %v, want ErrChromaprintMissingAPIKey", err)
 	}
 	if hits != 0 {
@@ -397,7 +400,7 @@ func TestIdentify_ReturnsEveryResultAboveTheScoreFloorWithLinkedRecordings(t *te
 		t.Errorf("Results order = [%s %s], want [ac-top ac-second]", match.Results[0].ID, match.Results[1].ID)
 	}
 	got := match.Results[0].Recordings[0]
-	want := download.LinkedRecording{MBID: "mb-top", Title: "Song One", Artists: []string{"Artist A"}, Duration: 236}
+	want := ports.LinkedRecording{MBID: "mb-top", Title: "Song One", Artists: []string{"Artist A"}, Duration: 236}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("linked recording = %+v, want %+v", got, want)
 	}
@@ -420,7 +423,7 @@ func TestIdentify_CarriesReleaseGroupsOnLinkedRecordings(t *testing.T) {
 	}
 
 	recs := match.Results[0].Recordings
-	want := []download.ReleaseGroup{
+	want := []ports.ReleaseGroup{
 		{MBID: "rg-1", Title: "Song Live", Type: "Album", SecondaryTypes: []string{"Live", "Compilation"}},
 		{MBID: "rg-2", Title: "Song", Type: "Single"},
 	}
@@ -773,7 +776,7 @@ func TestIdentify_EmptyFingerprintIsAnError(t *testing.T) {
 
 	_, err := id.Identify(context.Background(), "/tmp/broken.mp3", 0)
 
-	if !errors.Is(err, download.ErrEmptyFingerprint) {
+	if !errors.Is(err, domain.ErrEmptyFingerprint) {
 		t.Fatalf("err = %v, want ErrEmptyFingerprint", err)
 	}
 	if hits != 0 {

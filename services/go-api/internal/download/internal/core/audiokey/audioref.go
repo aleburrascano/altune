@@ -37,10 +37,6 @@ func BuildLegacy(names Names, tempPath string) string {
 	return build(names, tempPath, sanitizePathComponent)
 }
 
-func BuildLegacyUncapped(names Names, tempPath string) string {
-	return build(names, tempPath, sanitizePathComponentUncapped)
-}
-
 func build(names Names, tempPath string, segment func(string) string) string {
 	artist := segment(names.Artist)
 	album := names.Album

@@ -13,7 +13,6 @@ type (
 	RecordingSearch       = ports.RecordingSearch
 	RerecordingLookup     = ports.RerecordingLookup
 	RerecordingFinder     = ports.RerecordingFinder
-	RerecordingQuery      = ports.RerecordingQuery
 	SearchedRecording     = ports.SearchedRecording
 	StoredAudioReader     = ports.StoredAudioReader
 	WorkRecording         = ports.WorkRecording

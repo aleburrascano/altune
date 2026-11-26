@@ -1,7 +1,7 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -41,7 +41,7 @@ func TestStatus_ARunningJobReportsTheTimeSinceItWasScheduled(t *testing.T) {
 		time.Sleep(3 * time.Second)
 
 		active := scheduler.Status().ActiveJobs
-		if len(active) != 1 || active[0].TrackID != track.String() || active[0].State != download.JobRunning {
+		if len(active) != 1 || active[0].TrackID != track.String() || active[0].State != ports.JobRunning {
 			t.Fatalf("ActiveJobs = %+v, want the running job of %s", active, track)
 		}
 		if got := active[0].ElapsedMs; got != 3000 {
@@ -63,7 +63,7 @@ func TestStatus_AFinishedJobReportsHowLongItRan(t *testing.T) {
 		synctest.Wait()
 
 		status := scheduler.Status()
-		if len(status.Recent) != 1 || status.Recent[0].TrackID != track.String() || status.Recent[0].State != download.JobSucceeded {
+		if len(status.Recent) != 1 || status.Recent[0].TrackID != track.String() || status.Recent[0].State != ports.JobSucceeded {
 			t.Fatalf("Recent = %+v, want the succeeded job of %s", status.Recent, track)
 		}
 		if got := status.Recent[0].ElapsedMs; got != acquireTakes.Milliseconds() {
