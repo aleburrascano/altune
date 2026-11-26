@@ -7,6 +7,8 @@ type Override = { files: string[]; rules: string[] };
 
 const mobileRoot = join(__dirname, '..');
 
+const SHARED_BY_PLATFORM_FILES = ['src/shared/ui/view/keyboard/keyboardAreas.tsx'];
+
 function overridesFor(rule: string): Override[] {
   const overrides = (doctorConfig as { ignore: { overrides: Override[] } }).ignore.overrides;
   return overrides.filter((override) => override.rules.includes(rule));
@@ -29,11 +31,16 @@ function defaultFilesOfPlatformPairs(directory: string): string[] {
 }
 
 describe('doctor.config', () => {
-  it('silences unused-export on the default file of every platform-split pair and on its .ios variant', () => {
+  it('silences unused-export on the default file of every platform-split pair, on its .ios variant and on the implementation the platform files share', () => {
     const silenced = overridesFor('deslop/unused-export').flatMap((override) => override.files);
 
     expect(silenced.sort()).toEqual(
-      [...new Set(defaultFilesOfPlatformPairs(join(mobileRoot, 'src')))].sort(),
+      [
+        ...new Set([
+          ...defaultFilesOfPlatformPairs(join(mobileRoot, 'src')),
+          ...SHARED_BY_PLATFORM_FILES,
+        ]),
+      ].sort(),
     );
   });
 
