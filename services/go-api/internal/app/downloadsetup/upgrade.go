@@ -11,7 +11,7 @@ import (
 
 const deezerPreviewRate = 1.0
 
-func upgradeLane(cfg *config.Config, pool *pgxpool.Pool, ledger download.TrackLedgerPort, svc *download.AcquireTrackAudioService) func(*download.BackgroundAcquisitionScheduler) {
+func upgradeLane(cfg *config.Config, pool *pgxpool.Pool, ledger download.TrackLedgerPort, svc *download.AcquireTrackAudioService) download.UpgradeLane {
 	store := download.NewPostgresUpgradeStore(pool)
 	runner := download.NewUpgradeRunner(ledger, svc, store,
 		download.UpgradeConfig{
@@ -19,7 +19,7 @@ func upgradeLane(cfg *config.Config, pool *pgxpool.Pool, ledger download.TrackLe
 			LowBitrateFloorKbps: cfg.AcquisitionLowBitrateFloorKbps,
 		}).
 		WithInPlaceCheck(svc, store, cfg.AcquisitionUpgradeVerifyPerHour)
-	return download.WithUpgradeLane(runner, cfg.AcquisitionUpgradeConcurrency)
+	return download.UpgradeLaneOf(runner, cfg.AcquisitionUpgradeConcurrency)
 }
 
 func upgradePreviewMatcher(cfg *config.Config) download.PreviewMatcher {

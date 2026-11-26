@@ -1,7 +1,6 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/download/internal/adapters/inmemoryqueue"
 	"altune/go-api/internal/download/internal/core/ports"
@@ -173,7 +172,7 @@ func TestScheduler_AnUpgradeRunsAtOnceWhileAcquireWorkersAreIdle(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		upgrader := &recordingUpgrader{}
 		scheduler := newTestScheduler(&recordingAcquirer{}, 4, time.Now,
-			download.WithUpgradeLane(upgrader, 1))
+			withTestUpgrades(upgrader, 1))
 		defer scheduler.Shutdown(context.Background())
 		user := ids.NewUserId(uuid.New())
 
@@ -195,7 +194,7 @@ func TestScheduler_AnAddRunsAtOnceWhileUpgradeWorkersAreIdle(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		acquirer := &recordingAcquirer{}
 		scheduler := newTestScheduler(acquirer, 1, time.Now,
-			download.WithUpgradeLane(&recordingUpgrader{}, 4))
+			withTestUpgrades(&recordingUpgrader{}, 4))
 		defer scheduler.Shutdown(context.Background())
 		user := ids.NewUserId(uuid.New())
 
@@ -259,7 +258,7 @@ func TestScheduler_AJobWhoseCompletionPanicsAfterItIsRecordedIsRecordedOnce(t *t
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	slog.SetDefault(slog.New(panicOnMessage{Handler: slog.NewTextHandler(io.Discard, nil), message: "background acquisition failed"}))
 	queue := &firstOutcomeQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), outcome: make(chan jobOutcome, 1)}
-	scheduler := newTestScheduler(failingAcquirer{}, 1, time.Now, service.WithJobQueue(queue))
+	scheduler := newTestScheduler(failingAcquirer{}, 1, time.Now, withTestQueue(queue))
 	defer scheduler.Shutdown(context.Background())
 	trackID := ids.NewTrackId()
 
@@ -316,7 +315,7 @@ func logsOfOneJob(t *testing.T, acquirer interface {
 	var records []slog.Record
 	slog.SetDefault(slog.New(capturedLogs{mu: &sync.Mutex{}, records: &records}))
 	queue := &firstOutcomeQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), outcome: make(chan jobOutcome, 1)}
-	scheduler := newTestScheduler(acquirer, 1, time.Now, service.WithJobQueue(queue))
+	scheduler := newTestScheduler(acquirer, 1, time.Now, withTestQueue(queue))
 	if err := scheduler.Schedule(context.Background(), ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
 		t.Fatalf("Schedule = %v, want nil", err)
 	}
@@ -458,7 +457,7 @@ func TestScheduler_ATrackThatKeepsPanickingIsRefusedAndSettledWithinABudgetAtThe
 	synctest.Test(t, func(t *testing.T) {
 		queue := &callRecordingQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), settledCh: make(chan queueCall, 1)}
 		acquirer := &alwaysPanickingAcquirer{}
-		scheduler := newTestScheduler(acquirer, 1, time.Now, service.WithJobQueue(queue))
+		scheduler := newTestScheduler(acquirer, 1, time.Now, withTestQueue(queue))
 		defer scheduler.Shutdown(context.Background())
 
 		ctx := logging.WithCorrelationID(context.Background(), "corr-panic-cap")
@@ -487,7 +486,7 @@ func TestScheduler_ATrackThatKeepsPanickingIsRefusedAndSettledWithinABudgetAtThe
 func TestScheduler_TheQueueReleaseOfARetryableJobCarriesTheCorrelationIDAndABudget(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		queue := &callRecordingQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), releasedCh: make(chan queueCall, 1)}
-		scheduler := newTestScheduler(retryingAcquirer{}, 1, time.Now, service.WithJobQueue(queue))
+		scheduler := newTestScheduler(retryingAcquirer{}, 1, time.Now, withTestQueue(queue))
 		defer scheduler.Shutdown(context.Background())
 		ctx := logging.WithCorrelationID(context.Background(), "corr-release")
 
@@ -530,7 +529,7 @@ func (q *callRecordingQueue) calls() (settles, heartbeats []queueCall) {
 func TestScheduler_TheQueueSettleCarriesTheCorrelationIDAndABudget(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		queue := &callRecordingQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), settledCh: make(chan queueCall, 1)}
-		scheduler := newTestScheduler(&recordingAcquirer{}, 1, time.Now, service.WithJobQueue(queue))
+		scheduler := newTestScheduler(&recordingAcquirer{}, 1, time.Now, withTestQueue(queue))
 		defer scheduler.Shutdown(context.Background())
 		ctx := logging.WithCorrelationID(context.Background(), "corr-settle")
 
@@ -552,7 +551,7 @@ func TestScheduler_TheHeartbeatCarriesTheCorrelationIDAndABudget(t *testing.T) {
 		queue := &callRecordingQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), beatCh: make(chan queueCall, 8)}
 		acquirer := &holdingAcquirer{release: make(chan struct{})}
 		scheduler := newTestScheduler(acquirer, 1, time.Now,
-			service.WithJobQueue(queue), service.WithHeartbeatInterval(time.Second))
+			withTestQueue(queue), service.WithHeartbeatInterval(time.Second))
 		defer scheduler.Shutdown(context.Background())
 		defer close(acquirer.release)
 		ctx := logging.WithCorrelationID(context.Background(), "corr-beat")

@@ -10,6 +10,7 @@ type (
 	AudioSource       = ports.AudioSource
 	AudioTagger       = ports.AudioTagger
 	CatalogSource     = ports.CatalogSource
+	DownloadQueue     = ports.DownloadQueue
 	FetchedAudio      = ports.FetchedAudio
 	JobKind           = ports.JobKind
 	JobRecord         = ports.JobRecord

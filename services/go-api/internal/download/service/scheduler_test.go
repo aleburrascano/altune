@@ -385,7 +385,7 @@ func scheduleWhileShuttingDown(t *testing.T) (accepted []string, settled map[str
 	var queueAhead atomic.Int64
 	queue := inmemoryqueue.New(make(chan struct{}, 1), func() time.Time { return time.Now().Add(time.Duration(queueAhead.Load())) })
 	scheduler := newTestScheduler(svc, 4, time.Now,
-		service.WithJobQueue(queue), service.WithPollInterval(time.Millisecond))
+		withTestQueue(queue), service.WithPollInterval(time.Millisecond))
 	userId := ids.NewUserId(uuid.New())
 
 	var mu sync.Mutex
@@ -1064,9 +1064,9 @@ func panicOnClaim(t *testing.T, acq jobRunner, job acqports.Job) *scriptedClaimQ
 	t.Helper()
 	queue := newScriptedClaimQueue(job)
 	scheduler := newTestScheduler(panicsAfterClaim{jobRunner: acq}, 1, time.Now,
-		service.WithJobQueue(queue),
+		withTestQueue(queue),
 		service.WithPollInterval(time.Millisecond),
-		service.WithUpgradeLane(panickingUpgrader{}, 1))
+		withTestUpgrades(panickingUpgrader{}, 1))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 	queue.awaitLeaving(t)
 	return queue
@@ -1084,7 +1084,7 @@ func TestBackgroundScheduler_Schedule_PanickingJobIsNotReclaimedWithinAPoll(t *t
 		wake := make(chan struct{}, 1)
 		queue := settleKeepsPendingQueue{newMemJobQueue(wake)}
 		scheduler := newTestScheduler(acq, 1, time.Now,
-			service.WithJobQueue(queue), service.WithPollInterval(5*time.Millisecond))
+			withTestQueue(queue), service.WithPollInterval(5*time.Millisecond))
 		defer scheduler.Shutdown(context.Background())
 
 		if err := scheduler.Schedule(context.Background(), ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
@@ -1451,7 +1451,7 @@ func TestBackgroundScheduler_ShutdownCancellation_LeavesTheQueuedJobUnclaimed(t 
 		pub := newRecordingPublisher()
 		svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), withServiceEvents(pub))
 		queue := newMemJobQueue(make(chan struct{}, 1))
-		scheduler := newTestScheduler(svc, 1, time.Now, service.WithJobQueue(queue), service.WithDrainBudget(10*time.Millisecond))
+		scheduler := newTestScheduler(svc, 1, time.Now, withTestQueue(queue), service.WithDrainBudget(10*time.Millisecond))
 		t.Cleanup(func() {
 			close(ledger.release)
 			scheduler.Shutdown(context.Background())
@@ -2411,7 +2411,7 @@ func TestBackgroundScheduler_HeartbeatFailuresOutlastingTheLease_CancelsTheJob(t
 	wake := make(chan struct{}, 1)
 	queue := &flakyHeartbeatQueue{memJobQueue: newMemJobQueue(wake), heartbeatErr: errors.New("db blip")}
 	scheduler := newTestScheduler(acq, 1, time.Now,
-		service.WithJobQueue(queue),
+		withTestQueue(queue),
 		service.WithHeartbeatInterval(5*time.Millisecond),
 		service.WithLeaseDuration(20*time.Millisecond),
 	)
@@ -2483,7 +2483,7 @@ func TestBackgroundScheduler_TransientFailure_ReleasesTheJobWithBackoffAndKeepsT
 	queue := &releaseRecordingQueue{memJobQueue: newMemJobQueue(wake), releases: make(chan releaseRecord, 1)}
 	queue.RememberUser(track.ID, userId)
 	scheduler := newTestScheduler(svc, 1, time.Now,
-		service.WithJobQueue(queue), service.WithPollInterval(5*time.Millisecond))
+		withTestQueue(queue), service.WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
 	if err := scheduler.Schedule(context.Background(), userId, track.ID, ""); err != nil {
@@ -2573,7 +2573,7 @@ func (gatedAcquirer) RefuseQueued(context.Context, ids.UserId, ids.TrackId) {}
 func TestSchedulerStatus_QueueDepthIsThePendingBacklogNotInFlight(t *testing.T) {
 	queue := backlogQueue{memJobQueue: newMemJobQueue(make(chan struct{}, 1)), pending: 5, oldestAge: 90 * time.Second}
 	acq := gatedAcquirer{running: make(chan struct{}, 2), release: make(chan struct{})}
-	s := newTestScheduler(acq, 2, time.Now, service.WithJobQueue(queue), service.WithPollInterval(time.Millisecond))
+	s := newTestScheduler(acq, 2, time.Now, withTestQueue(queue), service.WithPollInterval(time.Millisecond))
 	t.Cleanup(func() { s.Shutdown(context.Background()) })
 	t.Cleanup(func() { close(acq.release) })
 	userId := ids.NewUserId(uuid.New())
@@ -2605,7 +2605,7 @@ func (failingDepthQueue) PendingDepth(context.Context) (int, time.Duration, erro
 }
 
 func TestSchedulerStatus_QueueDepthKnownFalseWhenDepthReadFails(t *testing.T) {
-	s := newTestScheduler(nil, 2, time.Now, service.WithJobQueue(failingDepthQueue{newMemJobQueue(nil)}))
+	s := newTestScheduler(nil, 2, time.Now, withTestQueue(failingDepthQueue{newMemJobQueue(nil)}))
 	t.Cleanup(func() { s.Shutdown(context.Background()) })
 
 	if got := s.Status(); got.QueueDepthKnown {
@@ -2615,7 +2615,7 @@ func TestSchedulerStatus_QueueDepthKnownFalseWhenDepthReadFails(t *testing.T) {
 
 func TestSchedulerStatus_QueueDepthKnownTrueWhenDepthReadSucceeds(t *testing.T) {
 	queue := backlogQueue{memJobQueue: newMemJobQueue(nil)}
-	s := newTestScheduler(nil, 2, time.Now, service.WithJobQueue(queue))
+	s := newTestScheduler(nil, 2, time.Now, withTestQueue(queue))
 	t.Cleanup(func() { s.Shutdown(context.Background()) })
 
 	if got := s.Status(); !got.QueueDepthKnown {
@@ -2652,7 +2652,7 @@ func TestBackgroundScheduler_Schedule_RejectedSecondRequestKeepsTheQueuedJobsCor
 		svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 		queue := &conflictingQueue{memJobQueue: newMemJobQueue(make(chan struct{}, 1)), gate: make(chan struct{})}
 		scheduler := newTestScheduler(svc, 1, time.Now,
-			service.WithJobQueue(queue), service.WithPollInterval(5*time.Millisecond))
+			withTestQueue(queue), service.WithPollInterval(5*time.Millisecond))
 		defer scheduler.Shutdown(context.Background())
 
 		userId := ids.NewUserId(uuid.New())
@@ -2685,7 +2685,7 @@ func TestBackgroundScheduler_Schedule_RunsTheJobWhenTheSchedulerClockIsAnHourAhe
 		acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}
 		close(acq.release)
 		scheduler := newTestScheduler(acq, 1, func() time.Time { return time.Now().Add(time.Hour) },
-			service.WithJobQueue(newMemJobQueue(make(chan struct{}, 1))),
+			withTestQueue(newMemJobQueue(make(chan struct{}, 1))),
 			service.WithPollInterval(time.Millisecond))
 		defer scheduler.Shutdown(context.Background())
 		trackID := ids.NewTrackId()
@@ -2755,7 +2755,7 @@ func TestBackgroundScheduler_StartedPausedNeverClaimsASeededJobUntilResume(t *te
 	probe := newWakeProbe()
 	acq := &stubAcquirer{}
 	scheduler := newTestScheduler(acq, 1, time.Now,
-		service.WithJobQueue(queue),
+		withTestQueue(queue),
 		service.WithPollInterval(time.Hour),
 		withTestNotifier(probe),
 		service.WithSchedulerPaused(true))
@@ -2792,7 +2792,7 @@ func TestBackgroundScheduler_AClaimedJobRecordsItsQueueWait(t *testing.T) {
 		job := acqports.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), Waited: 3 * time.Second}
 		queue := newScriptedClaimQueue(job)
 		scheduler := newTestScheduler(outcomeAcquirer{}, 1, time.Now,
-			service.WithJobQueue(queue), service.WithPollInterval(time.Millisecond))
+			withTestQueue(queue), service.WithPollInterval(time.Millisecond))
 		defer scheduler.Shutdown(context.Background())
 
 		recent := awaitRecent(t, scheduler)
@@ -2872,7 +2872,7 @@ func TestBackgroundScheduler_UpgradeJobsRunOnTheUpgradeLaneAfterEveryWaitingUser
 		acq := &orderedAcquirer{releaseFirst: make(chan struct{}), firstStarted: make(chan struct{})}
 		scheduler := newTestScheduler(acq, 1, time.Now,
 			service.WithPollInterval(5*time.Millisecond),
-			service.WithUpgradeLane(acq, 1))
+			withTestUpgrades(acq, 1))
 		var releaseOnce sync.Once
 		release := func() { releaseOnce.Do(func() { close(acq.releaseFirst) }) }
 		t.Cleanup(func() {
@@ -2919,7 +2919,7 @@ func TestBackgroundScheduler_AKeptUpgradeIsRecordedAsKeptNotAsSuccessOrFailure(t
 	scheduler := newTestScheduler(acq, 1, time.Now,
 		service.WithPollInterval(5*time.Millisecond),
 		withTestOutcomes(recorder),
-		service.WithUpgradeLane(acq, 1))
+		withTestUpgrades(acq, 1))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
 	if err := scheduler.ScheduleUpgrade(context.Background(), ids.NewUserId(uuid.New()), ids.NewTrackId()); err != nil {
@@ -2966,7 +2966,7 @@ func TestBackgroundScheduler_AnUpgradeTakenOverByAReplaceDuringItsDownloadNeverC
 	}
 	scheduler := newTestScheduler(acq, 2, time.Now,
 		service.WithPollInterval(5*time.Millisecond),
-		service.WithUpgradeLane(acq, 1))
+		withTestUpgrades(acq, 1))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 	ctx := context.Background()
 	if err := scheduler.ScheduleUpgrade(ctx, userId, track.ID); err != nil {
@@ -3127,7 +3127,7 @@ func TestBackgroundScheduler_ALeaseLostJobRecordsCancelled(t *testing.T) {
 	acq := &ctxCapturingAcquirer{started: make(chan struct{}), release: make(chan struct{})}
 	queue := &flakyHeartbeatQueue{memJobQueue: newMemJobQueue(make(chan struct{}, 1)), heartbeatErr: acqdomain.ErrLeaseLost}
 	scheduler := newTestScheduler(acq, 1, time.Now,
-		service.WithJobQueue(queue),
+		withTestQueue(queue),
 		service.WithHeartbeatInterval(5*time.Millisecond),
 		service.WithPollInterval(5*time.Millisecond),
 		withTestOutcomes(recorder),
@@ -3155,7 +3155,7 @@ func TestScheduler_OutcomeCarriesJobKindAndRun(t *testing.T) {
 	job := acqports.Job{TrackID: ids.NewTrackId(), UserID: ids.NewUserId(uuid.New()), Kind: acqports.JobKindReplace, Run: 2}
 	queue := newScriptedClaimQueue(job)
 	scheduler := newTestScheduler(outcomeAcquirer{}, 1, time.Now,
-		service.WithJobQueue(queue), service.WithPollInterval(time.Millisecond), withTestOutcomes(recorder))
+		withTestQueue(queue), service.WithPollInterval(time.Millisecond), withTestOutcomes(recorder))
 	t.Cleanup(func() { scheduler.Shutdown(context.Background()) })
 
 	got := assertExactlyOneOutcome(t, recorder.calls)
@@ -3425,6 +3425,8 @@ func TestNewBackgroundAcquisitionScheduler_RefusesAMissingClock(t *testing.T) {
 
 func TestNewBackgroundAcquisitionScheduler_RefusesAMissingPort(t *testing.T) {
 	cases := map[string]func(*service.SchedulerPorts){
+		"Queue":               func(p *service.SchedulerPorts) { p.Queue = nil },
+		"Upgrades":            func(p *service.SchedulerPorts) { p.Upgrades = service.UpgradeLane{} },
 		"Notifier":            func(p *service.SchedulerPorts) { p.Notifier = nil },
 		"Outcomes":            func(p *service.SchedulerPorts) { p.Outcomes = nil },
 		"Events":              func(p *service.SchedulerPorts) { p.Events = nil },
@@ -3442,13 +3444,5 @@ func TestNewBackgroundAcquisitionScheduler_RefusesAMissingPort(t *testing.T) {
 				t.Errorf("error = %v, want ErrMissingCollaborator naming %s", err, field)
 			}
 		})
-	}
-}
-
-func TestNewBackgroundAcquisitionScheduler_RefusesANilJobQueue(t *testing.T) {
-	_, err := service.NewBackgroundAcquisitionScheduler(outcomeAcquirer{}, 1, time.Now, testSchedulerPorts(), service.WithJobQueue(nil))
-
-	if !errors.Is(err, service.ErrMissingCollaborator) {
-		t.Errorf("error = %v, want ErrMissingCollaborator", err)
 	}
 }

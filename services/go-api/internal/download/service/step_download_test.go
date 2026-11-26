@@ -155,6 +155,7 @@ func TestConstructors_RefuseAMissingStagePort(t *testing.T) {
 		"Skips":         func(p *service.StagePorts) { p.Skips = nil },
 		"Events":        func(p *service.StagePorts) { p.Events = nil },
 		"DownloadLimit": func(p *service.StagePorts) { p.DownloadLimit = nil },
+		"Observer":      func(p *service.StagePorts) { p.Observer = nil },
 	}
 	for field, drop := range cases {
 		t.Run(field, func(t *testing.T) {

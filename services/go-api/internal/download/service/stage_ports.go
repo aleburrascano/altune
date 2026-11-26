@@ -15,7 +15,10 @@ type StagePorts struct {
 	Skips         ports.VerifySkipRecorder
 	Events        events.Publisher
 	DownloadLimit *ConcurrencyLimit
+	Observer      func(*AcquisitionContext)
 }
+
+func NoObserver() func(*AcquisitionContext) { return func(*AcquisitionContext) {} }
 
 func (p StagePorts) validate(owner string) error {
 	return errors.Join(
@@ -27,5 +30,6 @@ func (p StagePorts) validate(owner string) error {
 		missingPort(owner, "Skips", p.Skips == nil),
 		missingPort(owner, "Events", p.Events == nil),
 		missingPort(owner, "DownloadLimit", p.DownloadLimit == nil),
+		missingPort(owner, "Observer", p.Observer == nil),
 	)
 }

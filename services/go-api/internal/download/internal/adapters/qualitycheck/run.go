@@ -47,9 +47,6 @@ func Run(ctx context.Context, kase Case) Outcome {
 	ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
 
 	var observed *service.AcquisitionContext
-	opts := []func(*service.AcquireTrackAudioService){
-		service.WithContextObserver(func(ac *service.AcquisitionContext) { observed = ac }),
-	}
 	wiring := service.VerificationPorts{
 		Identifier:      p,
 		RecordingLookup: recordedLookups(kase.Recordings),
@@ -69,8 +66,9 @@ func Run(ctx context.Context, kase Case) Outcome {
 		Skips:         ports.NoopVerifySkipRecorder(),
 		Events:        events.NoopPublisher(),
 		DownloadLimit: service.Unlimited(),
+		Observer:      func(ac *service.AcquisitionContext) { observed = ac },
 	}
-	svc := service.MustNewAcquireTrackAudioService(ledger, p.registry(), p, scratchfiles.New(), wiring, stages, opts...)
+	svc := service.MustNewAcquireTrackAudioService(ledger, p.registry(), p, scratchfiles.New(), wiring, stages)
 	runErr := executeFor(ctx, svc, kase, track)
 	if observed == nil && runErr == nil {
 		runErr = errors.New("eval: the service never started an acquisition")

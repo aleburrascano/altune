@@ -132,6 +132,7 @@ func noStages(mods ...stageMod) service.StagePorts {
 		Skips:         ports.NoopVerifySkipRecorder(),
 		Events:        events.NoopPublisher(),
 		DownloadLimit: service.Unlimited(),
+		Observer:      service.NoObserver(),
 	}
 	for _, mod := range mods {
 		mod(&stages)

@@ -3028,6 +3028,7 @@ func noopStages() service.StagePorts {
 		Skips:         ports.NoopVerifySkipRecorder(),
 		Events:        events.NoopPublisher(),
 		DownloadLimit: service.Unlimited(),
+		Observer:      service.NoObserver(),
 	}
 }
 
@@ -3200,12 +3201,4 @@ func (r *creationRecordingWorkspace) liveDirs() []string {
 
 func outageSource() findOnlySource {
 	return findOnlySource{name: "down", err: &acqdomain.SourceUnavailableError{Source: "down", Err: errors.New("429")}}
-}
-
-func TestAcquireOptions_RefuseANilContextObserver(t *testing.T) {
-	_, err := service.NewAcquireTrackAudioService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), osWorkspace{}, noopVerification(), noopStages(), service.WithContextObserver(nil))
-
-	if !errors.Is(err, service.ErrMissingCollaborator) {
-		t.Errorf("error = %v, want ErrMissingCollaborator", err)
-	}
 }

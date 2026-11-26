@@ -78,12 +78,36 @@ type BackgroundAcquisitionScheduler struct {
 	outcomes            ports.OutcomeRecorder
 	outcomeRecords      background.Tracker
 
-	setupErr       error
-	upgrader       upgradeRunner
-	upgradeWorkers int
+	setupErr error
+	upgrades UpgradeLane
 }
 
+type QueueFactory func(wake chan<- struct{}, now clock.Func) ports.DownloadQueue
+
+func InMemoryQueue() QueueFactory {
+	return func(wake chan<- struct{}, now clock.Func) ports.DownloadQueue { return inmemoryqueue.New(wake, now) }
+}
+
+func QueueOf(queue ports.DownloadQueue) QueueFactory {
+	return func(chan<- struct{}, clock.Func) ports.DownloadQueue { return queue }
+}
+
+type UpgradeLane struct {
+	runner   upgradeRunner
+	workers  int
+	declared bool
+	none     bool
+}
+
+func UpgradeLaneOf(runner upgradeRunner, workers int) UpgradeLane {
+	return UpgradeLane{runner: runner, workers: workers, declared: true}
+}
+
+func NoUpgradeLane() UpgradeLane { return UpgradeLane{declared: true, none: true} }
+
 type SchedulerPorts struct {
+	Queue               QueueFactory
+	Upgrades            UpgradeLane
 	Notifier            ports.JobNotifier
 	Outcomes            ports.OutcomeRecorder
 	Events              events.Publisher
@@ -93,6 +117,9 @@ type SchedulerPorts struct {
 
 func (p SchedulerPorts) validate(owner string) error {
 	return errors.Join(
+		missingPort(owner, "Queue", p.Queue == nil),
+		missingPort(owner, "Upgrades", !p.Upgrades.declared),
+		missingPort(owner, "Upgrades runner", p.Upgrades.declared && !p.Upgrades.none && p.Upgrades.runner == nil),
 		missingPort(owner, "Notifier", p.Notifier == nil),
 		missingPort(owner, "Outcomes", p.Outcomes == nil),
 		missingPort(owner, "Events", p.Events == nil),
@@ -124,6 +151,7 @@ func NewBackgroundAcquisitionScheduler(
 		lanes:               newLaneWakes(),
 		log:                 newJobLog(now),
 		now:                 now,
+		upgrades:            wiring.Upgrades,
 		events:              wiring.Events,
 		notifier:            wiring.Notifier,
 		outcomes:            wiring.Outcomes,
@@ -141,9 +169,7 @@ func NewBackgroundAcquisitionScheduler(
 		cancel()
 		return nil, s.setupErr
 	}
-	if s.queue == nil {
-		s.queue = inmemoryqueue.New(s.wake, s.now)
-	}
+	s.queue = wiring.Queue(s.wake, s.now)
 	s.runners.Track(func() { s.notifier.Listen(s.baseCtx, s.wake) })
 	s.runners.Track(s.fanOutWakes)
 
@@ -169,7 +195,7 @@ func MustNewBackgroundAcquisitionScheduler(
 }
 
 func (s *BackgroundAcquisitionScheduler) startUpgradeWorkers() {
-	if s.upgrader == nil {
+	if s.upgrades.none {
 		return
 	}
 	queue, ok := s.queue.(ports.UpgradeJobQueue)
@@ -178,7 +204,7 @@ func (s *BackgroundAcquisitionScheduler) startUpgradeWorkers() {
 		return
 	}
 	claim := func() (<-chan struct{}, bool) { return s.claimFrom(queue.ClaimUpgrade) }
-	for range s.upgradeWorkers {
+	for range s.upgrades.workers {
 		s.runners.Track(func() { s.runWorker(claim, s.lanes.upgrade) })
 	}
 }
@@ -375,7 +401,7 @@ func (s *BackgroundAcquisitionScheduler) acquisitionRunFor(kind ports.JobKind) a
 	case ports.JobKindReplace:
 		return s.svc.ExecuteReplace
 	case ports.JobKindUpgrade:
-		return s.upgrader.ExecuteUpgrade
+		return s.upgrades.runner.ExecuteUpgrade
 	default:
 		return s.svc.Execute
 	}

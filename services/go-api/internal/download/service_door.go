@@ -32,6 +32,11 @@ var (
 	ErrLimitBelowOne                      = service.ErrLimitBelowOne
 	ErrLimitNotConfigured                 = service.ErrLimitNotConfigured
 	ErrMissingCollaborator                = service.ErrMissingCollaborator
+	InMemoryQueue                         = service.InMemoryQueue
+	QueueOf                               = service.QueueOf
+	UpgradeLaneOf                         = service.UpgradeLaneOf
+	NoUpgradeLane                         = service.NoUpgradeLane
+	NoObserver                            = service.NoObserver
 	LimitedTo                             = service.LimitedTo
 	MustLimitedTo                         = service.MustLimitedTo
 	Unlimited                             = service.Unlimited
@@ -40,17 +45,17 @@ var (
 	WithAcquireConfidenceFloor            = service.WithAcquireConfidenceFloor
 	WithAcquireStoreKeyPrefix             = service.WithAcquireStoreKeyPrefix
 	WithDrainBudget                       = service.WithDrainBudget
-	WithJobQueue                          = service.WithJobQueue
 	WithProvenMaxBitErrorRate             = service.WithProvenMaxBitErrorRate
 	WithSchedulerPaused                   = service.WithSchedulerPaused
 	WithSupersededAudioGrace              = service.WithSupersededAudioGrace
-	WithUpgradeLane                       = service.WithUpgradeLane
 	WithVerificationStatus                = service.WithVerificationStatus
 )
 
 type ConcurrencyLimit = service.ConcurrencyLimit
 
 type SchedulerPorts = service.SchedulerPorts
+
+type UpgradeLane = service.UpgradeLane
 
 const (
 	VerdictContradicted  = service.VerdictContradicted

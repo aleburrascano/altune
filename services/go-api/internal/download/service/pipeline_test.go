@@ -272,9 +272,9 @@ func runJobWaitingOnItsCommit(t *testing.T, leaseLost bool) storedAndOrphaned {
 		opts := []any{}
 		queue := &firstOutcomeQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), outcome: make(chan jobOutcome, 1)}
 		if leaseLost {
-			opts = append(opts, service.WithJobQueue(lostLeaseQueue{queue}), service.WithHeartbeatInterval(time.Second))
+			opts = append(opts, withTestQueue(lostLeaseQueue{queue}), service.WithHeartbeatInterval(time.Second))
 		} else {
-			opts = append(opts, service.WithJobQueue(queue))
+			opts = append(opts, withTestQueue(queue))
 		}
 		scheduler := newTestScheduler(svc, 1, time.Now, opts...)
 		defer scheduler.Shutdown(context.Background())

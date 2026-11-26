@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
@@ -560,25 +561,37 @@ func TestStoreRollback_RetriesATransientDeleteFailure(t *testing.T) {
 }
 
 func TestStoreRollback_WaitsLongerBeforeEachRetryOfTheDelete(t *testing.T) {
-	store := newRecordingStore()
-	store.failDeletes = 1 << 30
-	var waits []time.Duration
-	step := service.MustNewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), service.MustDirectDeleteOrphans(store), ports.NoopAudioRefLookup(), service.WithStoreSleep(func(d time.Duration) { waits = append(waits, d) }))
+	synctest.Test(t, func(t *testing.T) {
+		store := &timingStore{recordingStore: newRecordingStore()}
+		store.failDeletes = 1 << 30
+		step := service.MustNewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), service.MustDirectDeleteOrphans(store), ports.NoopAudioRefLookup())
 
-	err := step.Rollback(context.Background(), &service.AcquisitionContext{AudioRef: "u/song.mp3"})
+		err := step.Rollback(context.Background(), &service.AcquisitionContext{AudioRef: "u/song.mp3"})
 
-	if err == nil {
-		t.Fatal("Rollback succeeded, want the permanent delete failure")
-	}
-	ceilings := []time.Duration{100 * time.Millisecond, 200 * time.Millisecond}
-	if len(waits) != len(ceilings) {
-		t.Fatalf("waits = %v, want %d retries", waits, len(ceilings))
-	}
-	for i, ceiling := range ceilings {
-		if waits[i] < ceiling/2 || waits[i] > ceiling {
-			t.Errorf("wait %d = %v, want within [%v, %v]", i+1, waits[i], ceiling/2, ceiling)
+		if err == nil {
+			t.Fatal("Rollback succeeded, want the permanent delete failure")
 		}
-	}
+		ceilings := []time.Duration{100 * time.Millisecond, 200 * time.Millisecond}
+		if len(store.at) < len(ceilings)+1 {
+			t.Fatalf("delete attempts = %d, want at least %d (the first try and one per retry)", len(store.at), len(ceilings)+1)
+		}
+		for i, ceiling := range ceilings {
+			wait := store.at[i+1].Sub(store.at[i])
+			if wait < ceiling/2 || wait > ceiling {
+				t.Errorf("wait %d = %v, want within [%v, %v]", i+1, wait, ceiling/2, ceiling)
+			}
+		}
+	})
+}
+
+type timingStore struct {
+	*recordingStore
+	at []time.Time
+}
+
+func (s *timingStore) Delete(ctx context.Context, audioRef string) error {
+	s.at = append(s.at, time.Now())
+	return s.recordingStore.Delete(ctx, audioRef)
 }
 
 func TestStoreRollback_SurfacesAPermanentDeleteFailureAndQueuesTheOrphan(t *testing.T) {

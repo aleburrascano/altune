@@ -579,8 +579,8 @@ func TestPostgresJobQueue_PanickedJobRowIsNotClaimableAgainImmediately(t *testin
 	queue := download.NewPostgresJobQueue(pool)
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
 	acq := &panickingAcquirer{}
-	scheduler := download.MustNewBackgroundAcquisitionScheduler(acq, 1, time.Now, integrationSchedulerPorts(),
-		download.WithJobQueue(queue), download.WithPollInterval(5*time.Millisecond))
+	scheduler := download.MustNewBackgroundAcquisitionScheduler(acq, 1, time.Now, integrationSchedulerPorts(queue),
+		download.WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -1039,8 +1039,8 @@ func TestPostgresJobQueue_APanickingReplaceAtTheRunCapIsNotClaimedAgain(t *testi
 		t.Fatalf("set run attempts: %v", err)
 	}
 	acq := &panickingAcquirer{}
-	scheduler := download.MustNewBackgroundAcquisitionScheduler(acq, 1, time.Now, integrationSchedulerPorts(),
-		download.WithJobQueue(queue), download.WithPollInterval(5*time.Millisecond))
+	scheduler := download.MustNewBackgroundAcquisitionScheduler(acq, 1, time.Now, integrationSchedulerPorts(queue),
+		download.WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -1071,8 +1071,8 @@ func TestPostgresJobQueue_APanickingReplaceBelowTheRunCapIsRetriedAfterItsBackof
 		t.Fatalf("Enqueue = %v", err)
 	}
 	acq := &panickingAcquirer{}
-	scheduler := download.MustNewBackgroundAcquisitionScheduler(acq, 1, time.Now, integrationSchedulerPorts(),
-		download.WithJobQueue(queue), download.WithPollInterval(5*time.Millisecond))
+	scheduler := download.MustNewBackgroundAcquisitionScheduler(acq, 1, time.Now, integrationSchedulerPorts(queue),
+		download.WithPollInterval(5*time.Millisecond))
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -1156,8 +1156,10 @@ func TestPostgresJobQueue_SettledReplaceLeavesNoJobKindBehind(t *testing.T) {
 	}
 }
 
-func integrationSchedulerPorts() download.SchedulerPorts {
+func integrationSchedulerPorts(queue download.DownloadQueue) download.SchedulerPorts {
 	return download.SchedulerPorts{
+		Queue:               download.QueueOf(queue),
+		Upgrades:            download.NoUpgradeLane(),
 		Notifier:            download.NoopJobNotifier(),
 		Outcomes:            download.NoopOutcomeRecorder(),
 		Events:              events.NoopPublisher(),

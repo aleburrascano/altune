@@ -31,7 +31,6 @@ type StoreStep struct {
 	userID      ids.UserId
 	keyPrefix   string
 	deleteTries int
-	sleep       func(time.Duration)
 	workspace   ports.ScratchFolder
 }
 
@@ -65,7 +64,6 @@ func buildStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder,
 		trackRefs:   refs,
 		attemptID:   ids.RandomID,
 		deleteTries: rollbackDeleteTries,
-		sleep:       time.Sleep,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -78,10 +76,6 @@ func WithStoreOwner(userID ids.UserId, ownTrackID ids.TrackId) func(*StoreStep) 
 		s.userID = userID
 		s.ownTrackID = ownTrackID
 	}
-}
-
-func WithStoreSleep(sleep func(time.Duration)) func(*StoreStep) {
-	return func(s *StoreStep) { s.sleep = sleep }
 }
 
 func WithStoreKeyPrefix(prefix string) func(*StoreStep) {
@@ -172,7 +166,7 @@ func (s *StoreStep) deleteWithRetry(ctx context.Context, audioRef string) error 
 			break
 		}
 		if attempt < s.deleteTries {
-			s.sleep(rollbackDeleteBackoff.Delay(attempt))
+			time.Sleep(rollbackDeleteBackoff.Delay(attempt))
 		}
 	}
 	slog.ErrorContext(ctx, "orphaned audio file after rollback",

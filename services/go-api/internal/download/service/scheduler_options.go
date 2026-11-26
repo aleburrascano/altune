@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/ids"
 	"context"
-	"errors"
 	"log/slog"
 	"sync/atomic"
 	"time"
@@ -12,16 +11,6 @@ import (
 
 func WithSchedulerPaused(paused bool) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) { s.paused.Store(paused) }
-}
-
-func WithJobQueue(q ports.DownloadQueue) func(*BackgroundAcquisitionScheduler) {
-	return func(s *BackgroundAcquisitionScheduler) {
-		if q == nil {
-			s.setupErr = errors.Join(s.setupErr, missingPort("WithJobQueue", "queue", true))
-			return
-		}
-		s.queue = q
-	}
 }
 
 func WithDrainBudget(d time.Duration) func(*BackgroundAcquisitionScheduler) {
@@ -74,13 +63,6 @@ func WithVerificationStatus(v ports.Verification) func(*BackgroundAcquisitionSch
 
 type upgradeRunner interface {
 	ExecuteUpgrade(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error
-}
-
-func WithUpgradeLane(runner upgradeRunner, workers int) func(*BackgroundAcquisitionScheduler) {
-	return func(s *BackgroundAcquisitionScheduler) {
-		s.upgrader = runner
-		s.upgradeWorkers = workers
-	}
 }
 
 type VerifySkipCounter struct{ n atomic.Uint64 }

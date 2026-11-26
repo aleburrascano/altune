@@ -57,10 +57,11 @@ func NewScheduler(ctx context.Context, d Deps) *download.BackgroundAcquisitionSc
 			Skips:         skips,
 			Events:        d.Events,
 			DownloadLimit: download.MustLimitedTo(d.Config.AcquisitionDownloadConcurrency),
+			Observer:      download.NoObserver(),
 		},
 		opts...,
 	)
-	return download.MustNewBackgroundAcquisitionScheduler(acquireSvc, d.Config.AcquisitionConcurrency, time.Now, schedulerPorts(d, skips, lookups), schedulerOptions(d, acquireSvc)...)
+	return download.MustNewBackgroundAcquisitionScheduler(acquireSvc, d.Config.AcquisitionConcurrency, time.Now, schedulerPorts(d, acquireSvc, skips, lookups), schedulerOptions(d)...)
 }
 
 func storeOptions(d Deps) []acquireOption {
@@ -92,8 +93,10 @@ func pipelineOptions(d Deps) []acquireOption {
 	}
 }
 
-func schedulerPorts(d Deps, skips *download.VerifySkipCounter, lookups *fingerprintstatus.HealthTracker) download.SchedulerPorts {
+func schedulerPorts(d Deps, acquireSvc *download.AcquireTrackAudioService, skips *download.VerifySkipCounter, lookups *fingerprintstatus.HealthTracker) download.SchedulerPorts {
 	wiring := download.SchedulerPorts{
+		Queue:               download.InMemoryQueue(),
+		Upgrades:            download.NoUpgradeLane(),
 		Notifier:            download.NoopJobNotifier(),
 		Outcomes:            download.NoopOutcomeRecorder(),
 		Events:              d.Events,
@@ -101,22 +104,18 @@ func schedulerPorts(d Deps, skips *download.VerifySkipCounter, lookups *fingerpr
 		FingerprintVerified: lookups.Verified,
 	}
 	if d.Pool != nil {
+		wiring.Queue = download.QueueOf(download.NewPostgresJobQueue(d.Pool))
+		wiring.Upgrades = upgradeLane(d.Config, d.Pool, d.Ledger, acquireSvc)
 		wiring.Notifier = download.NewPostgresJobNotifier(d.Pool)
 		wiring.Outcomes = download.NewPostgresOutcomeStore(d.Pool)
 	}
 	return wiring
 }
 
-func schedulerOptions(d Deps, acquireSvc *download.AcquireTrackAudioService) []func(*download.BackgroundAcquisitionScheduler) {
-	opts := []func(*download.BackgroundAcquisitionScheduler){
+func schedulerOptions(d Deps) []func(*download.BackgroundAcquisitionScheduler) {
+	return []func(*download.BackgroundAcquisitionScheduler){
 		download.WithSchedulerPaused(d.Config.AcquisitionPaused),
 		download.WithVerificationStatus(d.Verification),
 		download.WithDrainBudget(time.Duration(d.Config.AcquisitionDrainBudgetSeconds) * time.Second),
 	}
-	if d.Pool == nil {
-		return opts
-	}
-	return append(opts,
-		upgradeLane(d.Config, d.Pool, d.Ledger, acquireSvc),
-		download.WithJobQueue(download.NewPostgresJobQueue(d.Pool)))
 }

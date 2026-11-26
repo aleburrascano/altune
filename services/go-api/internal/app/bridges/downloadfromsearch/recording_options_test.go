@@ -112,6 +112,7 @@ func acquireUnfoundTrack(t *testing.T, disc *search.Discovery, catalogMBID *stri
 			Skips:         download.NoopVerifySkipRecorder(),
 			Events:        events.NoopPublisher(),
 			DownloadLimit: download.Unlimited(),
+			Observer:      download.NoObserver(),
 		})
 
 	_ = svc.Execute(context.Background(), track.UserId, track.ID)

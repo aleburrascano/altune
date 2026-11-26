@@ -64,7 +64,7 @@ func runOneJobAs(t *testing.T, acquirer jobRunner, track acquisitiontest.LedgerT
 func scheduleOnce(t *testing.T, acquirer jobRunner, track acquisitiontest.LedgerTrack, run *int, opts ...any) jobOutcome {
 	t.Helper()
 	queue := &firstOutcomeQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), run: run, outcome: make(chan jobOutcome, 1)}
-	opts = append([]any{service.WithJobQueue(queue)}, opts...)
+	opts = append([]any{withTestQueue(queue)}, opts...)
 	scheduler := newTestScheduler(acquirer, 1, time.Now, opts...)
 	defer scheduler.Shutdown(context.Background())
 	if err := scheduler.Schedule(context.Background(), track.UserId, track.ID, ""); err != nil {
@@ -77,6 +77,8 @@ type schedulerPortsOption func(*service.SchedulerPorts)
 
 func testSchedulerPorts() service.SchedulerPorts {
 	return service.SchedulerPorts{
+		Queue:               service.InMemoryQueue(),
+		Upgrades:            service.NoUpgradeLane(),
 		Notifier:            ports.NoopJobNotifier(),
 		Outcomes:            ports.NoopOutcomeRecorder(),
 		Events:              events.NoopPublisher(),
@@ -118,4 +120,16 @@ func withTestVerification(skips func() uint64, fingerprinted func() bool) schedu
 		wiring.VerifySkips = skips
 		wiring.FingerprintVerified = fingerprinted
 	}
+}
+
+func withTestQueue(q ports.DownloadQueue) schedulerPortsOption {
+	return func(wiring *service.SchedulerPorts) { wiring.Queue = service.QueueOf(q) }
+}
+
+func withTestUpgrades(runner upgradeRunner, workers int) schedulerPortsOption {
+	return func(wiring *service.SchedulerPorts) { wiring.Upgrades = service.UpgradeLaneOf(runner, workers) }
+}
+
+type upgradeRunner interface {
+	ExecuteUpgrade(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error
 }

@@ -204,6 +204,7 @@ func noStages(store audioDeleter) download.StagePorts {
 		Skips:         download.NoopVerifySkipRecorder(),
 		Events:        events.NoopPublisher(),
 		DownloadLimit: download.Unlimited(),
+		Observer:      download.NoObserver(),
 	}
 }
 

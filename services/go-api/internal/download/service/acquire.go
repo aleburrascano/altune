@@ -43,7 +43,6 @@ type AcquireTrackAudioService struct {
 	cuts            audioverdict.Cuts
 	acquireTimeout  time.Duration
 	supersededGrace time.Duration
-	setupErr        error
 }
 
 func NewAcquireTrackAudioService(
@@ -77,7 +76,7 @@ func NewAcquireTrackAudioService(
 		recordings:      wiring.Recordings,
 		events:          stages.Events,
 		downloadLimiter: stages.DownloadLimit,
-		contextObserver: func(*AcquisitionContext) {},
+		contextObserver: stages.Observer,
 		cuts:            audioverdict.DefaultCuts(),
 
 		confidenceFloor: defaultConfidenceFloor,
@@ -85,9 +84,6 @@ func NewAcquireTrackAudioService(
 	}
 	for _, opt := range opts {
 		opt(s)
-	}
-	if s.setupErr != nil {
-		return nil, s.setupErr
 	}
 	return s, nil
 }
@@ -106,16 +102,6 @@ func MustNewAcquireTrackAudioService(
 		panic(err)
 	}
 	return s
-}
-
-func WithContextObserver(f func(*AcquisitionContext)) func(*AcquireTrackAudioService) {
-	return func(s *AcquireTrackAudioService) {
-		if f == nil {
-			s.setupErr = errors.Join(s.setupErr, missingPort("WithContextObserver", "observer", true))
-			return
-		}
-		s.contextObserver = f
-	}
 }
 
 func WithAcquireConfidenceFloor(floor float64) func(*AcquireTrackAudioService) {
