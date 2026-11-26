@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -507,6 +508,43 @@ func TestTransport_RetriesA429OnAPacedProviderHost(t *testing.T) {
 
 		if status != 200 || f.calls != 2 {
 			t.Fatalf("status=%d calls=%d, want 200 after 2 calls", status, f.calls)
+		}
+	})
+}
+
+type firstCallFailsRT struct{ calls atomic.Int32 }
+
+func (f *firstCallFailsRT) RoundTrip(r *http.Request) (*http.Response, error) {
+	status := http.StatusOK
+	if f.calls.Add(1) == 1 {
+		status = http.StatusServiceUnavailable
+	}
+	return &http.Response{StatusCode: status, Body: http.NoBody, Request: r}, nil
+}
+
+func TestTransport_ARetryOnABoundedQueueHostWaitsInsteadOfBeingShed(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const callers = 4
+		rt := retry.New(&firstCallFailsRT{}, retry.Options{})
+		statuses := make([]int, callers)
+		errs := make([]error, callers)
+		var wg sync.WaitGroup
+		for i := range callers {
+			wg.Go(func() {
+				resp, err := rt.RoundTrip(musicBrainzReq(t))
+				if err == nil {
+					statuses[i] = resp.StatusCode
+					resp.Body.Close()
+				}
+				errs[i] = err
+			})
+		}
+		wg.Wait()
+
+		for i := range callers {
+			if errs[i] != nil || statuses[i] != http.StatusOK {
+				t.Errorf("caller %d: status=%d err=%v, want its retry to wait for a slot and succeed", i, statuses[i], errs[i])
+			}
 		}
 	})
 }

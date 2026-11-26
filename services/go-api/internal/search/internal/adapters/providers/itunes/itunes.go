@@ -14,21 +14,12 @@ import (
 const itunesAPIBaseURL = "https://itunes.apple.com"
 
 type ITunesAdapter struct {
-	client  *http.Client
-	limiter *providerrequests.MinIntervalLimiter
+	client *http.Client
 }
 
 func NewITunesAdapter(client *http.Client) *ITunesAdapter {
-	return &ITunesAdapter{
-		client:  client,
-		limiter: providerrequests.NewRateLimiter(itunesEmitInterval, itunesBurst, providerrequests.ProviderQueueDepth),
-	}
+	return &ITunesAdapter{client: client}
 }
-
-const (
-	itunesEmitInterval = 4 * time.Second
-	itunesBurst        = 4
-)
 
 const itunesUserAgent = "Altune/1.0 (music manager; self-hosted)"
 
@@ -166,8 +157,5 @@ type itunesItem struct {
 }
 
 func (a *ITunesAdapter) getJSON(ctx context.Context, u string, dst any) error {
-	if err := a.limiter.Wait(ctx); err != nil {
-		return err
-	}
 	return providerrequests.GetJSON(ctx, a.client, u, dst, providerrequests.WithHeader("User-Agent", itunesUserAgent))
 }

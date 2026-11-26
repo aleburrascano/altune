@@ -13,14 +13,12 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 )
 
 type DiscogsAdapter struct {
 	client    *http.Client
 	token     string
 	userAgent string
-	limiter   *providerrequests.MinIntervalLimiter
 }
 
 func NewDiscogsAdapter(client *http.Client, token, userAgent string) *DiscogsAdapter {
@@ -28,7 +26,6 @@ func NewDiscogsAdapter(client *http.Client, token, userAgent string) *DiscogsAda
 		client:    client,
 		token:     token,
 		userAgent: userAgent,
-		limiter:   providerrequests.NewMinIntervalLimiter(time.Second),
 	}
 }
 
@@ -253,9 +250,6 @@ func (a *DiscogsAdapter) fetchArtistReleases(ctx context.Context, artistID, perP
 }
 
 func (a *DiscogsAdapter) doGet(ctx context.Context, rawURL string) ([]byte, error) {
-	if err := a.limiter.Wait(ctx); err != nil {
-		return nil, err
-	}
 	status, body, err := providerrequests.GetBytes(ctx, a.client, rawURL,
 		providerrequests.WithHeader("Authorization", "Discogs token="+a.token),
 		providerrequests.WithHeader("User-Agent", a.userAgent))

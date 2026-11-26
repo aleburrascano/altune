@@ -3,11 +3,13 @@ package musicbrainz_test
 import (
 	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/adapters/providers/musicbrainz"
-	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
 	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/shared/queuetimeout"
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,6 +18,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -272,20 +275,6 @@ func TestMusicBrainzAdapter_ReleaseGroupTitles_paginates(t *testing.T) {
 	}
 }
 
-func recordingArrivals(t *testing.T) (*httptest.Server, *[]time.Time) {
-	t.Helper()
-	var mu sync.Mutex
-	var arrivals []time.Time
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		mu.Lock()
-		arrivals = append(arrivals, time.Now())
-		mu.Unlock()
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	t.Cleanup(server.Close)
-	return server, &arrivals
-}
-
 func lookupRecording(a *musicbrainz.MusicBrainzAdapter) func(context.Context) error {
 	return func(ctx context.Context) error {
 		_, _, err := a.RecordingByMBID(ctx, "rec-1")
@@ -293,45 +282,42 @@ func lookupRecording(a *musicbrainz.MusicBrainzAdapter) func(context.Context) er
 	}
 }
 
-func TestMusicBrainzAdapter_rateLimit_cancelledCallersStillReserveOneSecondSlots(t *testing.T) {
-	server, arrivals := recordingArrivals(t)
-	lookup := lookupRecording(musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "test"))
-	cancelled, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	start := time.Now()
-	for range 2 {
-		if err := lookup(cancelled); !errors.Is(err, context.Canceled) {
-			t.Fatalf("cancelled lookup err = %v, want context.Canceled", err)
-		}
-	}
-	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
-		t.Errorf("cancelled-ctx callers blocked %v, want prompt return", elapsed)
-	}
-	if err := lookup(context.Background()); err != nil {
-		t.Fatalf("live lookup: %v", err)
-	}
-	if len(*arrivals) != 1 {
-		t.Fatalf("server saw %d requests, want only the live one", len(*arrivals))
-	}
-	if got := (*arrivals)[0].Sub(start); got < 1900*time.Millisecond || got > 3*time.Second {
-		t.Errorf("live request reached MusicBrainz after %v, want ~2s (the two cancelled callers held the slots 1s apart)", got)
-	}
+func notFoundClient() *http.Client {
+	return &http.Client{Transport: providertest.FakeRoundTripper{Fn: func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusNotFound,
+			Body:       io.NopCloser(strings.NewReader(`{}`)),
+			Header:     make(http.Header),
+			Request:    r,
+		}, nil
+	}}}
 }
 
-func TestMusicBrainzAdapter_rateLimit_ctxCancelAbortsWait(t *testing.T) {
-	server, _ := recordingArrivals(t)
-	lookup := lookupRecording(musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "test"))
-	if err := lookup(context.Background()); err != nil {
-		t.Fatalf("first lookup: %v", err)
-	}
+func TestMusicBrainzAdapter_PacesNothingItself(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		lookup := lookupRecording(musicbrainz.NewMusicBrainzAdapter(notFoundClient(), "test"))
+		start := time.Now()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	start := time.Now()
-	_ = lookup(ctx)
-	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
-		t.Errorf("rateLimit blocked %v after ctx cancel, want prompt return", elapsed)
+		for range 5 {
+			_ = lookup(context.Background())
+		}
+
+		if elapsed := time.Since(start); elapsed != 0 {
+			t.Fatalf("five back-to-back lookups took %v, want no wait of the adapter's own because the transport paces the host", elapsed)
+		}
+	})
+}
+
+func TestMusicBrainzAdapter_PassesATransportQueueTimeoutThroughClassified(t *testing.T) {
+	shed := fmt.Errorf("%w: %w", queuetimeout.Err, context.DeadlineExceeded)
+	client := &http.Client{Transport: providertest.FakeRoundTripper{Fn: func(*http.Request) (*http.Response, error) {
+		return nil, shed
+	}}}
+
+	err := lookupRecording(musicbrainz.NewMusicBrainzAdapter(client, "test"))(context.Background())
+
+	if !errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want the shed to stay a queue timeout and a DeadlineExceeded", err)
 	}
 }
 
@@ -771,58 +757,6 @@ func TestMusicBrainzAdapter_SearchStructured_escapesTrackAndAlbumBranches(t *tes
 	}
 	if _, got := structuredQuerySent(t, "Sunn O)))", "Bye Bye Bye", domain.ResultKindAlbum); got != `artist:"Sunn O\)\)\)" AND release:"Bye Bye Bye"` {
 		t.Errorf("album branch = %q, want unbalanced parens backslash-escaped", got)
-	}
-}
-
-func TestMusicBrainzAdapter_rateLimit_expiredOnArrivalIsNotQueueTimeout(t *testing.T) {
-	server, arrivals := recordingArrivals(t)
-	lookup := lookupRecording(musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "test"))
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
-	defer cancel()
-
-	err := lookup(ctx)
-
-	if !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) {
-		t.Fatalf("want plain DeadlineExceeded, got %v", err)
-	}
-	if len(*arrivals) != 0 {
-		t.Errorf("server saw %d requests, want none for an expired caller", len(*arrivals))
-	}
-}
-
-func TestProviderLimiterBurstShedsBeyondQueueDepth(t *testing.T) {
-	const callers = 20
-	burstServer, _ := recordingArrivals(t)
-	cases := []struct {
-		name  string
-		wait  func(context.Context) error
-		burst int
-	}{
-		{"musicbrainz", lookupRecording(musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(burstServer.URL), "ua")), 1},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := providertest.FireBurst(t, tc.wait, callers, 300*time.Millisecond)
-
-			admitted, shed := 0, 0
-			for _, r := range got {
-				switch {
-				case r.Err == nil:
-					admitted++
-				case errors.Is(r.Err, ports.ErrProviderRateLimitQueueTimeout):
-					shed++
-				default:
-					t.Errorf("caller got %v, want nil or a queue-timeout shed", r.Err)
-				}
-			}
-			if admitted != tc.burst {
-				t.Errorf("admitted at once = %d, want the burst of %d", admitted, tc.burst)
-			}
-			if want := callers - tc.burst - providerrequests.ProviderQueueDepth; shed != want {
-				t.Errorf("shed within 300ms = %d, want %d (callers %d - burst %d - queue depth %d)",
-					shed, want, callers, tc.burst, providerrequests.ProviderQueueDepth)
-			}
-		})
 	}
 }
 

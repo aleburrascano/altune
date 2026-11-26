@@ -2,12 +2,12 @@ package ports
 
 import (
 	"altune/go-api/internal/search/domain"
+	"altune/go-api/internal/shared/queuetimeout"
 	"context"
-	"errors"
 	"time"
 )
 
-var ErrProviderRateLimitQueueTimeout = errors.New("provider rate-limit queue timeout")
+var ErrProviderRateLimitQueueTimeout = queuetimeout.Err
 
 type SearchProvider interface {
 	Name() domain.ProviderName

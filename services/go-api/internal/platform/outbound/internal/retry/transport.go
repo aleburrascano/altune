@@ -72,7 +72,11 @@ type attemptResult struct {
 }
 
 func (t *Transport) attempt(req *http.Request, attempt, attempts int) (*http.Response, attemptResult, bool) {
-	if err := t.pacer.Wait(req); err != nil {
+	pace := t.pacer.Wait
+	if attempt > 0 {
+		pace = t.pacer.WaitRetry
+	}
+	if err := pace(req); err != nil {
 		return nil, attemptResult{err: err}, true
 	}
 	resp, err := t.base.RoundTrip(req)

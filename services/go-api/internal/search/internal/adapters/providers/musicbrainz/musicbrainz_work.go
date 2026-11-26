@@ -46,9 +46,6 @@ type mbRecordingDetailResponse struct {
 }
 
 func (a *MusicBrainzAdapter) getMB(ctx context.Context, what, path string) (int, []byte, error) {
-	if err := a.limiter.Wait(ctx); err != nil {
-		return 0, nil, err
-	}
 	status, rawBody, err := providerrequests.GetBytes(ctx, a.client, musicbrainzAPIBaseURL+path,
 		providerrequests.WithHeader("User-Agent", a.userAgent),
 		providerrequests.WithHeader("Accept", "application/json"))

@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/service/unreleased"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/queuetimeout"
 	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"expvar"
@@ -86,8 +87,11 @@ func (d Deps) MissingHandles() error {
 			missing = append(missing, handle.name)
 		}
 	}
-	if len(missing) == 0 {
-		return nil
+	if len(missing) > 0 {
+		return fmt.Errorf("discovery: deps are missing %s", strings.Join(missing, ", "))
 	}
-	return fmt.Errorf("discovery: deps are missing %s", strings.Join(missing, ", "))
+	if d.ProviderTimeout <= queuetimeout.MaxWait {
+		return fmt.Errorf("discovery: ProviderTimeout %v must exceed the longest rate-limit queue wait %v", d.ProviderTimeout, queuetimeout.MaxWait)
+	}
+	return nil
 }
