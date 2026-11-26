@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/isrcwriteback"
 	"altune/go-api/internal/download/internal/core/musicbrainzmatch"
@@ -9,6 +10,7 @@ import (
 	length "altune/go-api/internal/download/internal/core/tracklength"
 	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/download/sourcekey"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/downloadprovenance"
 	"bytes"
@@ -104,7 +106,7 @@ func TestConstructors_RefuseAMissingTempWorkspace(t *testing.T) {
 			return err
 		},
 		"NewStoreStep": func() error {
-			_, err := service.NewStoreStep(nil, nil, ports.NoopAudioProber(), service.MustDirectDeleteOrphans(discardingDeleter{}), ports.NoopAudioRefLookup())
+			_, err := service.NewStoreStep(nil, nil, ports.NoopAudioProber(), service.MustDirectDeleteOrphans(discardingDeleter{}), ports.NoopAudioRefLookup(), clock.Sleep)
 			return err
 		},
 		"NewAcquireTrackAudioService": func() error {
@@ -118,6 +120,44 @@ func TestConstructors_RefuseAMissingTempWorkspace(t *testing.T) {
 
 			if !errors.Is(err, service.ErrMissingCollaborator) || !strings.Contains(err.Error(), name) || !strings.Contains(err.Error(), "workspace") {
 				t.Errorf("%s error = %v, want ErrMissingCollaborator naming the constructor and the workspace", name, err)
+			}
+		})
+	}
+}
+
+func TestConstructors_RefuseAMissingLedgerSourcesFetcherOrAudioStore(t *testing.T) {
+	cases := map[string]func() error{
+		"ledger": func() error {
+			_, err := service.NewAcquireTrackAudioService(nil, service.NewSourceRegistry(), newFakeAudioStore(), osWorkspace{}, noopVerification(), noopStages())
+			return err
+		},
+		"source registry": func() error {
+			_, err := service.NewAcquireTrackAudioService(acquisitiontest.NewLedger(), nil, newFakeAudioStore(), osWorkspace{}, noopVerification(), noopStages())
+			return err
+		},
+		"audio store": func() error {
+			_, err := service.NewAcquireTrackAudioService(acquisitiontest.NewLedger(), service.NewSourceRegistry(), nil, osWorkspace{}, noopVerification(), noopStages())
+			return err
+		},
+		"fetcher": func() error {
+			_, err := service.NewDownloadStep(nil, osWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited())
+			return err
+		},
+		"sleeper": func() error {
+			_, err := service.NewStoreStep(newFakeAudioStore(), osWorkspace{}, ports.NoopAudioProber(), service.MustDirectDeleteOrphans(discardingDeleter{}), ports.NoopAudioRefLookup(), nil)
+			return err
+		},
+		"audio store step audio store": func() error {
+			_, err := service.NewStoreStep(nil, osWorkspace{}, ports.NoopAudioProber(), service.MustDirectDeleteOrphans(discardingDeleter{}), ports.NoopAudioRefLookup(), clock.Sleep)
+			return err
+		},
+	}
+	for name, build := range cases {
+		t.Run(name, func(t *testing.T) {
+			err := build()
+
+			if !errors.Is(err, service.ErrMissingCollaborator) || !strings.Contains(err.Error(), strings.TrimSuffix(name, " step audio store")) {
+				t.Errorf("error = %v, want ErrMissingCollaborator naming %q", err, name)
 			}
 		})
 	}
@@ -180,7 +220,7 @@ func TestNewTagStep_RefusesAMissingTagger(t *testing.T) {
 }
 
 func TestNewStoreStep_RefusesAMissingCollaborator(t *testing.T) {
-	_, err := service.NewStoreStep(nil, osWorkspace{}, nil, nil, nil)
+	_, err := service.NewStoreStep(nil, osWorkspace{}, nil, nil, nil, nil)
 
 	for _, name := range []string{"prober", "orphan recorder", "audio ref lookup"} {
 		if !errors.Is(err, service.ErrMissingCollaborator) || !strings.Contains(err.Error(), name) {
@@ -198,7 +238,7 @@ func TestDirectDeleteOrphans_RefusesAMissingAudioStore(t *testing.T) {
 }
 
 func TestCoreSteps_RefuseAMissingCollaborator(t *testing.T) {
-	_, err := service.CoreSteps(service.NewSourceRegistry(), nil, nil, nil, nil, nil, nil, nil, nil, osWorkspace{}, nil, nil)
+	_, err := service.CoreSteps(service.NewSourceRegistry(), nil, nil, nil, nil, nil, nil, nil, nil, nil, osWorkspace{}, nil, nil)
 
 	for _, name := range []string{"identifier", "tagger", "prober", "download limit", "orphan recorder"} {
 		if !errors.Is(err, service.ErrMissingCollaborator) || !strings.Contains(err.Error(), name) {

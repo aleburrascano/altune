@@ -152,8 +152,8 @@ func (l *Ledger) update(id ids.TrackId, userId ids.UserId, fence ports.ClaimNumb
 }
 
 func (l *Ledger) write(track LedgerTrack) error {
-	if l.writeErr != nil {
-		return fmt.Errorf("update track: %w", l.writeErr)
+	if err := l.writeErr; err != nil {
+		return fmt.Errorf("update track: %w", err)
 	}
 	track.Version++
 	l.tracks[track.ID] = track

@@ -28,6 +28,25 @@ func refusingFfmpegDir(t *testing.T, stderr string) string {
 	return fakeFfmpegDir(t, "#!/bin/sh\nprintf '%s\\n' '"+stderr+"' >&2\nexit 1\n")
 }
 
+type skipRecorder interface{ RecordVerifySkip(gate string) }
+
+func newProber(t testing.TB, ffmpegLocation string, skips skipRecorder, opts ...func(*download.FfprobeProber)) *download.FfprobeProber {
+	t.Helper()
+	p, err := download.NewFfprobeProber(ffmpegLocation, skips, opts...)
+	if err != nil {
+		t.Fatalf("NewFfprobeProber: %v", err)
+	}
+	return p
+}
+
+func TestNewFfprobeProber_RefusesAMissingSkipRecorder(t *testing.T) {
+	p, err := download.NewFfprobeProber(t.TempDir(), nil)
+
+	if !errors.Is(err, download.ErrSkipRecorderRequired) || p != nil {
+		t.Fatalf("got (%v, %v), want a nil prober and ErrSkipRecorderRequired", p, err)
+	}
+}
+
 func missingFfmpeg(t *testing.T) string {
 	t.Helper()
 	withoutAnyBinaries(t)
@@ -36,7 +55,7 @@ func missingFfmpeg(t *testing.T) string {
 
 func TestFfprobeProber_ValidateDecodable_AcceptsADecodeThatOutranItsDeadline(t *testing.T) {
 	logs := captureLogs(t)
-	p := download.NewFfprobeProber(fakeFfmpegDir(t, "#!/bin/sh\nsleep 30\n"), download.WithDecodeTimeout(100*time.Millisecond))
+	p := newProber(t, fakeFfmpegDir(t, "#!/bin/sh\nsleep 30\n"), download.NoopVerifySkipRecorder(), download.WithDecodeTimeout(100*time.Millisecond))
 
 	err := p.ValidateDecodable(context.Background(), decodedFile)
 	if err != nil {
@@ -49,7 +68,7 @@ func TestFfprobeProber_ValidateDecodable_AcceptsADecodeThatOutranItsDeadline(t *
 
 func TestFfprobeProber_ValidateDecodable_WarnsWhenTheDecoderCannotStart(t *testing.T) {
 	logs := captureLogs(t)
-	p := download.NewFfprobeProber(missingFfmpeg(t))
+	p := newProber(t, missingFfmpeg(t), download.NoopVerifySkipRecorder())
 
 	err := p.ValidateDecodable(context.Background(), decodedFile)
 	if err != nil {
@@ -74,7 +93,7 @@ func unrunnableFfmpegOutsideTheTempDir(t *testing.T) string {
 func TestFfprobeProber_ValidateDecodable_MasksTheHostBinPathWhenTheDecoderCannotStart(t *testing.T) {
 	logs := captureLogs(t)
 	binDir := unrunnableFfmpegOutsideTheTempDir(t)
-	p := download.NewFfprobeProber(binDir)
+	p := newProber(t, binDir, download.NoopVerifySkipRecorder())
 
 	err := p.ValidateDecodable(context.Background(), decodedFile)
 	if err != nil {
@@ -90,7 +109,7 @@ func TestFfprobeProber_ValidateDecodable_MasksTheHostBinPathWhenTheDecoderCannot
 }
 
 func TestFfprobeProber_ValidateDecodable_ReportsWhatTheDecoderRefused(t *testing.T) {
-	p := download.NewFfprobeProber(refusingFfmpegDir(t, "Invalid data found when processing input"))
+	p := newProber(t, refusingFfmpegDir(t, "Invalid data found when processing input"), download.NoopVerifySkipRecorder())
 
 	err := p.ValidateDecodable(context.Background(), decodedFile)
 
@@ -103,7 +122,7 @@ func TestFfprobeProber_ValidateDecodable_ReportsWhatTheDecoderRefused(t *testing
 }
 
 func TestFfprobeProber_ValidateDecodable_PropagatesACancelledCaller(t *testing.T) {
-	p := download.NewFfprobeProber(fakeFfmpegDir(t, "#!/bin/sh\nsleep 30\n"))
+	p := newProber(t, fakeFfmpegDir(t, "#!/bin/sh\nsleep 30\n"), download.NoopVerifySkipRecorder())
 	ctx, cancel := context.WithCancel(context.Background())
 	time.AfterFunc(50*time.Millisecond, cancel)
 
@@ -120,8 +139,7 @@ func (r *gateRecorder) RecordVerifySkip(gate string) { r.gates = append(r.gates,
 
 func TestFfprobeProber_ValidateDecodable_RecordsADecodeTimeoutSkip(t *testing.T) {
 	rec := &gateRecorder{}
-	p := download.NewFfprobeProber(fakeFfmpegDir(t, "#!/bin/sh\nsleep 30\n"),
-		download.WithDecodeTimeout(100*time.Millisecond), download.WithSkipRecorder(rec))
+	p := newProber(t, fakeFfmpegDir(t, "#!/bin/sh\nsleep 30\n"), rec, download.WithDecodeTimeout(100*time.Millisecond))
 
 	if err := p.ValidateDecodable(context.Background(), decodedFile); err != nil {
 		t.Fatalf("ValidateDecodable() = %v, want nil", err)
@@ -133,7 +151,7 @@ func TestFfprobeProber_ValidateDecodable_RecordsADecodeTimeoutSkip(t *testing.T)
 
 func TestFfprobeProber_ValidateDecodable_RecordsADecoderUnavailableSkip(t *testing.T) {
 	rec := &gateRecorder{}
-	p := download.NewFfprobeProber(missingFfmpeg(t), download.WithSkipRecorder(rec))
+	p := newProber(t, missingFfmpeg(t), rec)
 
 	if err := p.ValidateDecodable(context.Background(), decodedFile); err != nil {
 		t.Fatalf("ValidateDecodable() = %v, want nil", err)
@@ -145,7 +163,7 @@ func TestFfprobeProber_ValidateDecodable_RecordsADecoderUnavailableSkip(t *testi
 
 func decoderDiagnostic(t *testing.T, stderr string) string {
 	t.Helper()
-	err := download.NewFfprobeProber(refusingFfmpegDir(t, stderr)).ValidateDecodable(context.Background(), decodedFile)
+	err := newProber(t, refusingFfmpegDir(t, stderr), download.NoopVerifySkipRecorder()).ValidateDecodable(context.Background(), decodedFile)
 	if err == nil {
 		t.Fatal("ValidateDecodable() = nil, want the decoder's refusal")
 	}
@@ -178,8 +196,7 @@ func TestFfprobeProber_ValidateDecodable_LeavesAShortDiagnosticAndCapsLongASCII(
 
 func TestFfprobeProber_ValidateDecodable_ANonPositiveTimeoutKeepsTheDefault(t *testing.T) {
 	rec := &gateRecorder{}
-	p := download.NewFfprobeProber(fakeFfmpegDir(t, "#!/bin/sh\nexit 0\n"),
-		download.WithDecodeTimeout(0), download.WithSkipRecorder(rec))
+	p := newProber(t, fakeFfmpegDir(t, "#!/bin/sh\nexit 0\n"), rec, download.WithDecodeTimeout(0))
 
 	if err := p.ValidateDecodable(context.Background(), decodedFile); err != nil {
 		t.Fatalf("ValidateDecodable() = %v, want nil", err)

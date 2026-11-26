@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -90,7 +91,7 @@ func inPlaceChecker(w inPlaceWiring) *download.AcquireTrackAudioService {
 	if w.lookup != nil {
 		wiring.RecordingLookup = w.lookup
 	}
-	return download.MustNewAcquireTrackAudioService(nil, nil, storedAudio{}, download.NewTempWorkspace(), wiring, noStages(readingStoredFrom(storedAudio{})),
+	return download.MustNewAcquireTrackAudioService(acquisitiontest.NewLedger(), download.NewSourceRegistry(), storedAudio{}, download.NewTempWorkspace(), wiring, noStages(readingStoredFrom(storedAudio{})),
 		download.WithProvenMaxBitErrorRate(w.provenCut))
 }
 
@@ -361,7 +362,7 @@ func TestCheckInPlace_AFailedFingerprintIsAnErrorNotAnAnswer(t *testing.T) {
 }
 
 func TestCheckInPlace_WithoutAnIdentifierOrStoredAudioReaderItSaysSo(t *testing.T) {
-	svc := download.MustNewAcquireTrackAudioService(nil, nil, storedAudio{}, download.NewTempWorkspace(), noVerification(), noStages())
+	svc := download.MustNewAcquireTrackAudioService(acquisitiontest.NewLedger(), download.NewSourceRegistry(), storedAudio{}, download.NewTempWorkspace(), noVerification(), noStages())
 
 	finding, err := svc.CheckInPlace(context.Background(), inPlaceTrack())
 

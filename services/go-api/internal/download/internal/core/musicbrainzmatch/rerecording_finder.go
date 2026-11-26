@@ -19,14 +19,7 @@ const (
 
 var _ acqports.RerecordingFinder = (*Resolver)(nil)
 
-func WithRerecordingLookup(a acqports.RerecordingLookup) func(*Resolver) {
-	return func(r *Resolver) { r.rerecording = a }
-}
-
 func (r *Resolver) FindRerecording(ctx context.Context, q acqports.RerecordingQuery) (acqports.TrackLabel, bool, error) {
-	if r.rerecording == nil {
-		return acqports.TrackLabel{}, false, nil
-	}
 	original, found, err := r.rerecording.RecordingDetail(ctx, q.OriginalMBID)
 	if err != nil {
 		return acqports.TrackLabel{}, false, fmt.Errorf("rerecording original %s: %w", q.OriginalMBID, err)

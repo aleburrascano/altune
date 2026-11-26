@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/searchtest"
 	searchquery "altune/go-api/internal/search/service/query"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -96,7 +97,7 @@ func acquireUnfoundTrack(t *testing.T, disc *search.Discovery, catalogMBID *stri
 	}
 	ledger := downloadtest.NewLedger(downloadtest.LedgerTrack{TrackSnapshot: track})
 	recording := downloadfromsearch.RecordingOptions(disc)
-	svc := download.MustNewAcquireTrackAudioService(ledger, download.NewSourceRegistry(), nil, download.NewTempWorkspace(),
+	svc := download.MustNewAcquireTrackAudioService(ledger, download.NewSourceRegistry(), discardingStore{}, download.NewTempWorkspace(),
 		download.VerificationPorts{
 			Identifier:      download.NoopAudioIdentifier(),
 			RecordingLookup: recording.Lookup,
@@ -113,6 +114,7 @@ func acquireUnfoundTrack(t *testing.T, disc *search.Discovery, catalogMBID *stri
 			Events:        events.NoopPublisher(),
 			DownloadLimit: download.Unlimited(),
 			Observer:      download.NoObserver(),
+			Sleep:         clock.Sleep,
 		})
 
 	_ = svc.Execute(context.Background(), track.UserId, track.ID)
@@ -175,3 +177,9 @@ func TestRecordingOptions_WithoutSearchMusicBrainzIsNeverAsked(t *testing.T) {
 		t.Errorf("MusicBrainz was asked %q, want nothing: without discovery search there are no recording options", asked)
 	}
 }
+
+type discardingStore struct{}
+
+func (discardingStore) Exists(context.Context, string) (bool, error) { return false, nil }
+func (discardingStore) Store(context.Context, string, string) error  { return nil }
+func (discardingStore) Delete(context.Context, string) error         { return nil }

@@ -40,7 +40,7 @@ func NewScheduler(ctx context.Context, d Deps) *download.BackgroundAcquisitionSc
 		panic(ErrTransportRequired)
 	}
 	skips := &download.VerifySkipCounter{}
-	prober := download.NewFfprobeProber(d.Config.FFmpegLocation, download.WithSkipRecorder(skips))
+	prober := download.MustNewFfprobeProber(d.Config.FFmpegLocation, skips)
 	d.Verification.Ffprobe, d.Verification.Ffmpeg = prober.Available()
 	opts := storeOptions(d)
 	lookups, identifier, storedAudio := fingerprinting(ctx, &d)
@@ -67,6 +67,7 @@ func NewScheduler(ctx context.Context, d Deps) *download.BackgroundAcquisitionSc
 			Events:        d.Events,
 			DownloadLimit: download.MustLimitedTo(d.Config.AcquisitionDownloadConcurrency),
 			Observer:      download.NoObserver(),
+			Sleep:         clock.Sleep,
 		},
 		opts...,
 	)

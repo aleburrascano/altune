@@ -52,6 +52,7 @@ const ProdVerifyWidth = 2
 func NewDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, limit *ConcurrencyLimit, opts ...func(*DownloadStep)) (*DownloadStep, error) {
 	const owner = "NewDownloadStep"
 	if err := errors.Join(
+		missingPort(owner, "fetcher", fetcher == nil),
 		missingPort(owner, "identifier", identifier == nil),
 		missingPort(owner, "recording lookup", lookup == nil),
 		missingPort(owner, "prober", prober == nil),
@@ -99,11 +100,11 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ Af
 }
 
 func (s *DownloadStep) settle(ctx context.Context, ac *AcquisitionContext, holds *holdBook, failures *downloadFailures) (afterDownload, error) {
-	if muxed := holds.takeMuxed(); muxed != nil {
+	if muxed, ok := holds.takeMuxed(); ok {
 		return muxed.keep(ctx, ac), nil
 	}
-	held := holds.take()
-	if held == nil {
+	held, ok := holds.take()
+	if !ok {
 		return afterDownload{}, failures.noneAccepted(ctx)
 	}
 	if held.confidence < s.floor {
@@ -140,15 +141,22 @@ type attempt struct {
 
 func (a attempt) muxed() bool { return a.format.ID == ports.MuxedFallbackFormatID }
 
+type heldAttempt struct {
+	attempt attempt
+	held    bool
+}
+
+func holding(a attempt) heldAttempt { return heldAttempt{attempt: a, held: true} }
+
 type holdBook struct {
 	ws         ports.ScratchFolder
-	best       *attempt
-	muxed      *attempt
+	best       heldAttempt
+	muxed      heldAttempt
 	retryGiven bool
 }
 
 func (h *holdBook) muxedRetrySpent() bool {
-	if h.muxed == nil {
+	if !h.muxed.held {
 		return false
 	}
 	spent := h.retryGiven
@@ -156,20 +164,20 @@ func (h *holdBook) muxedRetrySpent() bool {
 	return spent
 }
 
-func (h *holdBook) takeMuxed() *attempt {
+func (h *holdBook) takeMuxed() (attempt, bool) {
 	muxed := h.muxed
-	h.muxed = nil
-	return muxed
+	h.muxed = heldAttempt{}
+	return muxed.attempt, muxed.held
 }
 
 func (h *holdBook) resolveAccepted(ctx context.Context, ac *AcquisitionContext, result attempt) (afterDownload, bool) {
 	switch {
-	case !result.muxed() && h.muxed == nil:
+	case !result.muxed() && !h.muxed.held:
 		return result.keep(ctx, ac), true
 	case !result.muxed():
 		return h.chooseAgainstMuxed(ctx, ac, result), true
-	case h.muxed == nil:
-		h.muxed = &result
+	case !h.muxed.held:
+		h.muxed = holding(result)
 	default:
 		removeScratch(ctx, h.ws, result.tmpDir)
 	}
@@ -177,10 +185,10 @@ func (h *holdBook) resolveAccepted(ctx context.Context, ac *AcquisitionContext, 
 }
 
 func (h *holdBook) chooseAgainstMuxed(ctx context.Context, ac *AcquisitionContext, audioOnly attempt) afterDownload {
-	muxed := h.takeMuxed()
-	winner, loser := *muxed, audioOnly
-	if !gradeOf(ctx, ac, *muxed).Beats(gradeOf(ctx, ac, audioOnly)) {
-		winner, loser = audioOnly, *muxed
+	muxed, _ := h.takeMuxed()
+	winner, loser := muxed, audioOnly
+	if !gradeOf(ctx, ac, muxed).Beats(gradeOf(ctx, ac, audioOnly)) {
+		winner, loser = audioOnly, muxed
 	}
 	removeScratch(ctx, h.ws, loser.tmpDir)
 	return winner.keep(ctx, ac)
@@ -196,28 +204,28 @@ func (h *holdBook) offer(ctx context.Context, candidate attempt) {
 	if candidate.status != attemptHeld {
 		return
 	}
-	if h.best != nil && !candidate.beats(*h.best) {
+	if h.best.held && !candidate.beats(h.best.attempt) {
 		removeScratch(ctx, h.ws, candidate.tmpDir)
 		return
 	}
 	h.discard(ctx)
-	h.best = &candidate
+	h.best = holding(candidate)
 }
 
-func (h *holdBook) take() *attempt {
+func (h *holdBook) take() (attempt, bool) {
 	best := h.best
-	h.best = nil
-	return best
+	h.best = heldAttempt{}
+	return best.attempt, best.held
 }
 
 func (h *holdBook) discard(ctx context.Context) {
-	if h.muxed != nil {
-		removeScratch(ctx, h.ws, h.muxed.tmpDir)
-		h.muxed = nil
+	if h.muxed.held {
+		removeScratch(ctx, h.ws, h.muxed.attempt.tmpDir)
+		h.muxed = heldAttempt{}
 	}
-	if h.best != nil {
-		removeScratch(ctx, h.ws, h.best.tmpDir)
-		h.best = nil
+	if h.best.held {
+		removeScratch(ctx, h.ws, h.best.attempt.tmpDir)
+		h.best = heldAttempt{}
 	}
 }
 
@@ -229,8 +237,22 @@ func (a attempt) beats(other attempt) bool {
 }
 
 type downloadFailures struct {
-	last, unavailable error
+	searchUnavailable error
+	noted             []error
 	deadSources       map[acqdomain.SourceName]bool
+}
+
+func newDownloadFailures(searchUnavailable error) downloadFailures {
+	return downloadFailures{searchUnavailable: searchUnavailable, deadSources: map[acqdomain.SourceName]bool{}}
+}
+
+func (f *downloadFailures) unavailable() error {
+	for i := len(f.noted) - 1; i >= 0; i-- {
+		if acqdomain.IsSourceUnavailable(f.noted[i]) {
+			return f.noted[i]
+		}
+	}
+	return f.searchUnavailable
 }
 
 func (f *downloadFailures) noteAttempt(result attempt) {
@@ -238,9 +260,6 @@ func (f *downloadFailures) noteAttempt(result attempt) {
 	f.note(err)
 	if !acqdomain.IsSourceUnavailable(err) || result.candidate.Source == "" {
 		return
-	}
-	if f.deadSources == nil {
-		f.deadSources = map[acqdomain.SourceName]bool{}
 	}
 	f.deadSources[result.candidate.Source] = true
 }
@@ -258,29 +277,27 @@ func (f *downloadFailures) note(err error) {
 	if err == nil {
 		return
 	}
-	f.last = err
-	if acqdomain.IsSourceUnavailable(err) {
-		f.unavailable = err
-	}
+	f.noted = append(f.noted, err)
 }
 
 func (f *downloadFailures) noneAccepted(ctx context.Context) error {
-	if f.last == nil && f.unavailable == nil {
+	if len(f.noted) == 0 && f.unavailable() == nil {
 		return fmt.Errorf("no candidate produced acceptable audio: %w", ErrNoConfidentMatch)
 	}
 	return f.result(ctx)
 }
 
 func (f *downloadFailures) result(ctx context.Context) error {
-	if f.last == nil && f.unavailable != nil {
-		return withCancellation(ctx, fmt.Errorf("no candidate produced acceptable audio: %w", f.unavailable))
+	unavailable := f.unavailable()
+	if len(f.noted) == 0 && unavailable != nil {
+		return withCancellation(ctx, fmt.Errorf("no candidate produced acceptable audio: %w", unavailable))
 	}
-	if f.last == nil {
+	if len(f.noted) == 0 {
 		return fmt.Errorf("no candidate produced acceptable audio")
 	}
-	last := f.last
-	if f.unavailable != nil && !acqdomain.IsSourceUnavailable(last) {
-		last = fmt.Errorf("%w (last failure: %w)", f.unavailable, last)
+	last := f.noted[len(f.noted)-1]
+	if unavailable != nil && !acqdomain.IsSourceUnavailable(last) {
+		last = fmt.Errorf("%w (last failure: %w)", unavailable, last)
 	}
 	return withCancellation(ctx, fmt.Errorf("no candidate produced acceptable audio: %w", last))
 }
@@ -304,17 +321,10 @@ func recordImplausibleDuration(ctx context.Context, ac *AcquisitionContext, cand
 	)
 }
 
-func (a attempt) err() error {
-	if a.rejection == nil {
-		return nil
-	}
-	return a.rejection.err
-}
+func (a attempt) err() error { return a.rejection.failure() }
 
 func (a attempt) applyTo(ctx context.Context, ac *AcquisitionContext) {
-	if a.rejection != nil {
-		ac.recordRejection(a.candidate.URL, a.candidate.Title, a.candidate.Source, a.rejection.stage, a.rejection.reason)
-	}
+	a.rejection.record(ac, a.candidate)
 	if a.status != attemptAccepted {
 		return
 	}
@@ -462,6 +472,20 @@ type downloadRejection struct {
 	stage  rejectedcandidates.Stage
 	reason string
 	err    error
+}
+
+func (r *downloadRejection) failure() error {
+	if r == nil {
+		return nil
+	}
+	return r.err
+}
+
+func (r *downloadRejection) record(ac *AcquisitionContext, candidate ports.AudioCandidate) {
+	if r == nil {
+		return
+	}
+	ac.recordRejection(candidate.URL, candidate.Title, candidate.Source, r.stage, r.reason)
 }
 
 func (s *DownloadStep) verify(

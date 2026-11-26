@@ -584,6 +584,31 @@ func TestStoreRollback_WaitsLongerBeforeEachRetryOfTheDelete(t *testing.T) {
 	})
 }
 
+func TestStoreRollback_StopsWaitingBetweenDeleteRetriesWhenTheContextIsCancelled(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		store := &timingStore{recordingStore: newRecordingStore()}
+		store.failDeletes = 1 << 30
+		step := mustNewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), service.MustDirectDeleteOrphans(store), ports.NoopAudioRefLookup())
+		ctx, cancel := context.WithCancel(context.Background())
+		time.AfterFunc(10*time.Millisecond, cancel)
+		start := time.Now()
+
+		err := step.Rollback(ctx, &service.AcquisitionContext{AudioRef: "u/song.mp3"})
+
+		if err == nil {
+			t.Fatal("Rollback succeeded, want the delete failure")
+		}
+		if waited := time.Since(start); waited > 50*time.Millisecond {
+			t.Errorf("Rollback took %v after a cancel at 10ms, want it to stop waiting at once", waited)
+		}
+		for i, at := range store.at {
+			if at.Sub(start) > 10*time.Millisecond {
+				t.Errorf("delete attempt %d ran %v after the start, want none after the cancel at 10ms", i+1, at.Sub(start))
+			}
+		}
+	})
+}
+
 type timingStore struct {
 	*recordingStore
 	at []time.Time

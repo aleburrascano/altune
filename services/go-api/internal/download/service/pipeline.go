@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/download/internal/core/tracklength"
 	"altune/go-api/internal/download/service/replacement"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/downloadprovenance"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/redact"
@@ -64,18 +65,27 @@ type finalStage[In, Out any] interface {
 }
 
 type Pipeline struct {
-	search      stage[PipelineStart, afterSearch]
-	selectBest  stage[afterSearch, AfterSelect]
-	download    stage[AfterSelect, afterDownload]
-	tag         stage[afterDownload, afterTag]
-	store       stage[afterTag, AfterStore]
-	updateTrack finalStage[AfterStore, afterUpdate]
+	search     stage[PipelineStart, afterSearch]
+	selectBest stage[afterSearch, AfterSelect]
+	download   stage[AfterSelect, afterDownload]
+	tag        stage[afterDownload, afterTag]
+	store      stage[afterTag, AfterStore]
+	finish     func(ctx context.Context, run *pipelineRun, stored AfterStore) error
 }
 
+func endsAtStore(context.Context, *pipelineRun, AfterStore) error { return nil }
+
 func (p Pipeline) withUpdateTrack(s finalStage[AfterStore, afterUpdate]) Pipeline {
-	p.updateTrack = s
+	p.finish = func(ctx context.Context, run *pipelineRun, stored AfterStore) error {
+		_, err := execStage(ctx, run, s, stored)
+		return err
+	}
 	return p
 }
+
+type pendingStep struct{}
+
+func (pendingStep) Name() StepName { return stepNamePipeline }
 
 type StepError struct {
 	Step StepName
@@ -93,7 +103,7 @@ type pipelineRun struct {
 }
 
 func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) error {
-	run := &pipelineRun{ac: ac, reporter: jobReporterFrom(ctx)}
+	run := &pipelineRun{ac: ac, reporter: jobReporterFrom(ctx), current: pendingStep{}}
 	var err error
 	panicked := background.SafeRun(ctx, "acquisition.pipeline_panic", func() { err = runStages(ctx, run, p) },
 		"step", run, "track_id", ac.Track.ID)
@@ -105,9 +115,6 @@ func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) error 
 }
 
 func (run *pipelineRun) currentStep() StepName {
-	if run.current == nil {
-		return stepNamePipeline
-	}
 	return run.current.Name()
 }
 
@@ -129,11 +136,7 @@ func runStages(ctx context.Context, run *pipelineRun, p Pipeline) error {
 	if err != nil {
 		return err
 	}
-	if p.updateTrack == nil {
-		return nil
-	}
-	_, err = execStage(ctx, run, p.updateTrack, stored)
-	return err
+	return p.finish(ctx, run, stored)
 }
 
 func logShadowJudge(ctx context.Context, ac *AcquisitionContext, downloadErr error) {
@@ -435,7 +438,7 @@ type TrackRef struct {
 }
 
 func (s *AcquireTrackAudioService) buildSteps(userId ids.UserId, trackId ids.TrackId) Pipeline {
-	return buildCoreSteps(s.sources, s.audioTagger, s.audioStore, s.audioProber, s.identifier, s.recordingLookup, s.verifySkips, s.orphans, s.ledger, s.workspace, s.downloadLimiter,
+	return buildCoreSteps(s.sources, s.audioTagger, s.audioStore, s.audioProber, s.identifier, s.recordingLookup, s.verifySkips, s.orphans, s.ledger, s.sleep, s.workspace, s.downloadLimiter,
 		[]func(*DownloadStep){
 			WithConfidenceFloor(s.confidenceFloor),
 			WithJudgeCuts(s.cuts),
@@ -455,6 +458,7 @@ func CoreSteps(
 	skips ports.VerifySkipRecorder,
 	orphans ports.OrphanedAudioRecorder,
 	refs ports.AudioRefLookup,
+	sleep clock.Sleeper,
 	workspace ports.ScratchFolder,
 	limit *ConcurrencyLimit,
 	downloadOpts []func(*DownloadStep),
@@ -462,11 +466,11 @@ func CoreSteps(
 ) (Pipeline, error) {
 	download, downloadErr := NewDownloadStep(sources, workspace, identifier, lookup, prober, skips, limit, append([]func(*DownloadStep){WithVerifyWidth(ProdVerifyWidth)}, downloadOpts...)...)
 	tag, tagErr := NewTagStep(tagger)
-	stored, storeErr := NewStoreStep(store, workspace, prober, orphans, refs, storeOpts...)
+	stored, storeErr := NewStoreStep(store, workspace, prober, orphans, refs, sleep, storeOpts...)
 	if err := errors.Join(downloadErr, tagErr, storeErr); err != nil {
 		return Pipeline{}, err
 	}
-	return Pipeline{search: NewSearchStep(sources), selectBest: NewSelectStep(), download: download, tag: tag, store: stored}, nil
+	return Pipeline{search: NewSearchStep(sources), selectBest: NewSelectStep(), download: download, tag: tag, store: stored, finish: endsAtStore}, nil
 }
 
 func buildCoreSteps(
@@ -479,6 +483,7 @@ func buildCoreSteps(
 	skips ports.VerifySkipRecorder,
 	orphans ports.OrphanedAudioRecorder,
 	refs ports.AudioRefLookup,
+	sleep clock.Sleeper,
 	workspace ports.ScratchFolder,
 	limit *ConcurrencyLimit,
 	downloadOpts []func(*DownloadStep),
@@ -489,6 +494,7 @@ func buildCoreSteps(
 		selectBest: NewSelectStep(),
 		download:   buildDownloadStep(sources, workspace, identifier, lookup, prober, skips, limit, append([]func(*DownloadStep){WithVerifyWidth(ProdVerifyWidth)}, downloadOpts...)...),
 		tag:        &TagStep{tagger: tagger},
-		store:      buildStoreStep(store, workspace, prober, orphans, refs, storeOpts...),
+		store:      buildStoreStep(store, workspace, prober, orphans, refs, sleep, storeOpts...),
+		finish:     endsAtStore,
 	}
 }

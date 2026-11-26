@@ -6,6 +6,7 @@ import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -133,6 +134,7 @@ func noStages(mods ...stageMod) service.StagePorts {
 		Events:        events.NoopPublisher(),
 		DownloadLimit: service.Unlimited(),
 		Observer:      service.NoObserver(),
+		Sleep:         clock.Sleep,
 	}
 	for _, mod := range mods {
 		mod(&stages)

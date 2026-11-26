@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"errors"
 )
@@ -16,6 +17,7 @@ type StagePorts struct {
 	Events        events.Publisher
 	DownloadLimit *ConcurrencyLimit
 	Observer      func(*AcquisitionContext)
+	Sleep         clock.Sleeper
 }
 
 func NoObserver() func(*AcquisitionContext) { return func(*AcquisitionContext) {} }
@@ -31,5 +33,6 @@ func (p StagePorts) validate(owner string) error {
 		missingPort(owner, "Events", p.Events == nil),
 		missingPort(owner, "DownloadLimit", p.DownloadLimit == nil),
 		missingPort(owner, "Observer", p.Observer == nil),
+		missingPort(owner, "Sleep", p.Sleep == nil),
 	)
 }

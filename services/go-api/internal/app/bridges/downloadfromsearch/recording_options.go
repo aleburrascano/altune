@@ -26,14 +26,21 @@ func RecordingOptions(disc *search.Discovery) RecordingWiring {
 	}
 	searcher := NewSearch(disc.Search)
 	if disc.Recordings == nil {
-		none.Resolver = download.NewRecordingResolver(searcher)
+		none.Resolver = download.MustNewRecordingResolver(download.RecordingResolverPorts{
+			Search:      searcher,
+			ISRC:        download.NoopISRCLookup(),
+			Recording:   download.NoopRecordingLookup(),
+			Rerecording: download.NoopRerecordingLookup(),
+		})
 		return none
 	}
 	recordings := NewRecordings(disc.Recordings)
-	resolver := download.NewRecordingResolver(searcher,
-		download.WithISRCLookup(recordings),
-		download.WithRerecordingLookup(recordings),
-		download.WithRecordingLookup(recordings))
+	resolver := download.MustNewRecordingResolver(download.RecordingResolverPorts{
+		Search:      searcher,
+		ISRC:        recordings,
+		Recording:   recordings,
+		Rerecording: recordings,
+	})
 	return RecordingWiring{
 		Resolver:     resolver,
 		Lookup:       resolver,

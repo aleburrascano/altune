@@ -13,6 +13,7 @@ import (
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"sync"
@@ -98,8 +99,24 @@ type UpgradeLane struct {
 	none     bool
 }
 
-func UpgradeLaneOf(runner upgradeRunner, workers int) UpgradeLane {
-	return UpgradeLane{runner: runner, workers: workers, declared: true}
+var ErrUpgradeWorkersBelowOne = errors.New("an upgrade lane needs at least one worker")
+
+func UpgradeLaneOf(runner upgradeRunner, workers int) (UpgradeLane, error) {
+	if err := missingPort("UpgradeLaneOf", "runner", runner == nil); err != nil {
+		return UpgradeLane{}, err
+	}
+	if workers < 1 {
+		return UpgradeLane{}, fmt.Errorf("UpgradeLaneOf: %w: got %d", ErrUpgradeWorkersBelowOne, workers)
+	}
+	return UpgradeLane{runner: runner, workers: workers, declared: true}, nil
+}
+
+func MustUpgradeLaneOf(runner upgradeRunner, workers int) UpgradeLane {
+	lane, err := UpgradeLaneOf(runner, workers)
+	if err != nil {
+		panic(err)
+	}
+	return lane
 }
 
 func NoUpgradeLane() UpgradeLane { return UpgradeLane{declared: true, none: true} }
@@ -118,7 +135,6 @@ func (p SchedulerPorts) validate(owner string) error {
 	return errors.Join(
 		missingPort(owner, "Queue", p.Queue == nil),
 		missingPort(owner, "Upgrades", !p.Upgrades.declared),
-		missingPort(owner, "Upgrades runner", p.Upgrades.declared && !p.Upgrades.none && p.Upgrades.runner == nil),
 		missingPort(owner, "Notifier", p.Notifier == nil),
 		missingPort(owner, "Outcomes", p.Outcomes == nil),
 		missingPort(owner, "Events", p.Events == nil),

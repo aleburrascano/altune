@@ -3,6 +3,7 @@ package replacement_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"encoding/json"
@@ -60,7 +61,22 @@ func (w *world) storedEvidence(evidence string) {
 }
 
 func (w *world) checkedRunner(cfg download.UpgradeConfig, checker download.InPlaceChecker, recorder download.InPlaceStore) *download.UpgradeRunner {
-	return w.runner(cfg).WithInPlaceCheck(checker, recorder, verifyPerHour)
+	return w.runnerChecking(cfg, events.NoopPublisher(), func(*download.AcquireTrackAudioService) download.UpgradeInPlace {
+		inPlace, err := download.InPlaceCheckOf(checker, recorder, verifyPerHour)
+		if err != nil {
+			w.t.Fatalf("InPlaceCheckOf: %v", err)
+		}
+		return inPlace
+	})
+}
+
+func TestInPlaceCheckOf_RefusesAMissingCheckerOrRecorder(t *testing.T) {
+	if _, err := download.InPlaceCheckOf(nil, &recordingInPlaceStore{}, verifyPerHour); !errors.Is(err, download.ErrMissingInPlacePort) {
+		t.Errorf("nil checker: err = %v, want ErrMissingInPlacePort", err)
+	}
+	if _, err := download.InPlaceCheckOf(&fixedChecker{}, nil, verifyPerHour); !errors.Is(err, download.ErrMissingInPlacePort) {
+		t.Errorf("nil recorder: err = %v, want ErrMissingInPlacePort", err)
+	}
 }
 
 func evidenceFor(g download.Grade, kind download.SourceKind) string {

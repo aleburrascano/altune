@@ -127,7 +127,7 @@ func withTestQueue(q ports.DownloadQueue) schedulerPortsOption {
 }
 
 func withTestUpgrades(runner upgradeRunner, workers int) schedulerPortsOption {
-	return func(wiring *service.SchedulerPorts) { wiring.Upgrades = service.UpgradeLaneOf(runner, workers) }
+	return func(wiring *service.SchedulerPorts) { wiring.Upgrades = service.MustUpgradeLaneOf(runner, workers) }
 }
 
 type upgradeRunner interface {

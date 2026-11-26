@@ -3444,14 +3444,21 @@ func TestNewBackgroundAcquisitionScheduler_RefusesAMissingClock(t *testing.T) {
 	}
 }
 
-func TestNewBackgroundAcquisitionScheduler_RefusesADeclaredUpgradeLaneWithoutARunner(t *testing.T) {
-	wiring := testSchedulerPorts()
-	wiring.Upgrades = service.UpgradeLaneOf(nil, 2)
+func TestUpgradeLaneOf_RefusesAMissingRunner(t *testing.T) {
+	_, err := service.UpgradeLaneOf(nil, 2)
 
-	_, err := service.NewBackgroundAcquisitionScheduler(outcomeAcquirer{}, 1, time.Now, wiring)
+	if !errors.Is(err, service.ErrMissingCollaborator) || !strings.Contains(err.Error(), "runner") {
+		t.Errorf("error = %v, want ErrMissingCollaborator naming the runner", err)
+	}
+}
 
-	if !errors.Is(err, service.ErrMissingCollaborator) || !strings.Contains(err.Error(), "Upgrades runner") {
-		t.Errorf("error = %v, want ErrMissingCollaborator naming the upgrade runner", err)
+func TestUpgradeLaneOf_RefusesALaneWithoutAWorker(t *testing.T) {
+	for _, workers := range []int{0, -1} {
+		_, err := service.UpgradeLaneOf(panickingUpgrader{}, workers)
+
+		if !errors.Is(err, service.ErrUpgradeWorkersBelowOne) {
+			t.Errorf("workers %d: error = %v, want ErrUpgradeWorkersBelowOne", workers, err)
+		}
 	}
 }
 

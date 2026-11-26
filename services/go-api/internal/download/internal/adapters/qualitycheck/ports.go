@@ -25,9 +25,6 @@ type simClock struct {
 func (c *simClock) recordSearch(fallbackTier bool, seconds float64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.search == nil {
-		c.search = make(map[bool]float64)
-	}
 	c.search[fallbackTier] = max(c.search[fallbackTier], seconds)
 }
 
@@ -46,7 +43,7 @@ type casePorts struct {
 }
 
 func newCasePorts(kase Case) *casePorts {
-	return &casePorts{kase: kase, byPath: make(map[string]Candidate), clock: &simClock{}}
+	return &casePorts{kase: kase, byPath: make(map[string]Candidate), clock: &simClock{search: make(map[bool]float64)}}
 }
 
 var prodFallbackTier = map[string]bool{string(ytdlp.SourceName): true}
@@ -140,7 +137,11 @@ func (s *evalSource) Find(ctx context.Context, req ports.FindRequest) ([]ports.A
 	case adapterYTMusic:
 		return s.pinnedVideos(ctx, req)
 	case adapterCatalogPin:
-		return savedlink.NewSource(uninspectedPins{}).Find(ctx, req)
+		source, err := savedlink.NewSource(uninspectedPins{}, savedlink.NoPageReader())
+		if err != nil {
+			return nil, fmt.Errorf("build the saved-link source: %w", err)
+		}
+		return source.Find(ctx, req)
 	}
 	variants := queryVariantsFor(req)
 	out := make([]ports.AudioCandidate, 0, len(s.spec.Candidates))

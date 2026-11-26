@@ -96,7 +96,7 @@ func acquireThroughPostgres(t *testing.T) (library.Track, string, download.Verif
 	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID()) })
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
 		Transport:  http.DefaultTransport,
-		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, MusicDir: musicDir},
+		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, AcquisitionUpgradeConcurrency: 1, MusicDir: musicDir},
 		Pool:       pool,
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(repo, time.Now),
@@ -151,6 +151,30 @@ func TestNewScheduler_RefusesAMissingTransport(t *testing.T) {
 	t.Fatal("NewScheduler built a scheduler without a transport")
 }
 
+func TestNewScheduler_ZeroUpgradeWorkersBuildsNoUpgradeLaneInsteadOfPanicking(t *testing.T) {
+	pool, err := pgxpool.New(t.Context(), "postgres://nobody:none@127.0.0.1:1/none")
+	if err != nil {
+		t.Fatalf("lazy pool: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	musicDir := t.TempDir()
+
+	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
+		Transport:  http.DefaultTransport,
+		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, MusicDir: musicDir},
+		Pool:       pool,
+		Events:     eventTap(t),
+		Ledger:     downloadfromlibrary.NewLibraryTracks(&fixtureTrackRepo{}, time.Now),
+		AudioStore: library.NewFilesystemAudioStore(musicDir),
+		Recording:  downloadfromsearch.NoRecording(),
+		Sources:    fixtureTiers(),
+	})
+
+	if scheduler == nil {
+		t.Fatal("NewScheduler returned no scheduler")
+	}
+}
+
 func TestNewScheduler_TheFirstTierArtTrackIsTheStoredSource(t *testing.T) {
 	track, musicDir, _ := acquireThroughPostgres(t)
 
@@ -161,7 +185,7 @@ func TestNewScheduler_TheFirstTierArtTrackIsTheStoredSource(t *testing.T) {
 }
 
 func TestNewScheduler_FetchedAudioPassesTheProbeAndDecodeGates(t *testing.T) {
-	if ffprobe, ffmpeg := download.NewFfprobeProber(os.Getenv("FFMPEG_LOCATION")).Available(); !ffprobe || !ffmpeg {
+	if ffprobe, ffmpeg := download.MustNewFfprobeProber(os.Getenv("FFMPEG_LOCATION"), download.NoopVerifySkipRecorder()).Available(); !ffprobe || !ffmpeg {
 		t.Skip("ffprobe/ffmpeg not installed")
 	}
 
@@ -239,11 +263,12 @@ func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
 	if _, _, err := library.NewPostgresTrackRepository(pool).Add(context.Background(), track); err != nil {
 		t.Fatalf("insert track: %v", err)
 	}
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID()) })
 
 	trackRepo := library.NewPostgresTrackRepository(pool)
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
 		Transport:  http.DefaultTransport,
-		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, MusicDir: t.TempDir()},
+		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, AcquisitionUpgradeConcurrency: 1, MusicDir: t.TempDir()},
 		Pool:       pool,
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(trackRepo, time.Now),
@@ -417,7 +442,7 @@ func TestNewScheduler_ShutdownCancelsAJobThatOutlivesTheConfiguredDrainBudget(t 
 	hang := sourceThatHangs{started: make(chan struct{}, 1)}
 	scheduler := downloadsetup.NewScheduler(t.Context(), downloadsetup.Deps{
 		Transport:  http.DefaultTransport,
-		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, MusicDir: t.TempDir(), AcquisitionDrainBudgetSeconds: 1},
+		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, AcquisitionUpgradeConcurrency: 1, MusicDir: t.TempDir(), AcquisitionDrainBudgetSeconds: 1},
 		Pool:       pool,
 		Events:     eventTap(t),
 		Ledger:     downloadfromlibrary.NewLibraryTracks(repo, time.Now),

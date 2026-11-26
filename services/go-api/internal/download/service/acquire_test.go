@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/download/service/replacement"
 	"altune/go-api/internal/download/sourcekey"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
@@ -18,6 +19,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -1718,7 +1720,7 @@ func TestExecute_AMissingFileTriesItsStoredSourceFirst(t *testing.T) {
 				found = append(found, ports.AudioCandidate{Title: "Blinding Lights", URL: u, Channel: "The Weeknd", Artists: []string{"The Weeknd"}, Kind: ports.KindArtTrack, Source: "fake"})
 			}
 			searcher := &fakeAudioSearcher{searchResults: found, downloadErr: errors.New("boom")}
-			registry := service.NewSourceRegistry(savedlink.NewSource(searcherDownloads{searcher}), searcher)
+			registry := service.NewSourceRegistry(savedlink.MustNewSource(searcherDownloads{searcher}, savedlink.NoPageReader()), searcher)
 			svc := newTestAcquireService(ledger, registry, newFakeAudioStore())
 
 			_ = svc.Execute(context.Background(), userId, track.ID)
@@ -1743,7 +1745,7 @@ func TestExecuteReplace_NeverOffersTheCurrentSourceAsTheKnownOne(t *testing.T) {
 	store.stored["u/a/b/c.mp3"] = true
 	rival := ports.AudioCandidate{Title: "Blinding Lights", URL: "https://music.youtube.com/watch?v=aaaaaaaaaaa", Kind: ports.KindArtTrack, Artists: []string{"The Weeknd"}, Source: "fake"}
 	searcher := &fakeAudioSearcher{searchResults: []ports.AudioCandidate{rival}, downloadErr: errors.New("boom")}
-	registry := service.NewSourceRegistry(savedlink.NewSource(searcherDownloads{searcher}), searcher)
+	registry := service.NewSourceRegistry(savedlink.MustNewSource(searcherDownloads{searcher}, savedlink.NoPageReader()), searcher)
 	svc := newTestAcquireService(ledger, registry, store)
 
 	_ = svc.ExecuteReplace(context.Background(), userId, track.ID)
@@ -2730,6 +2732,31 @@ func TestRerecording_EachPassRemembersItsRejectionsOnItsOwnBasis(t *testing.T) {
 	}
 }
 
+func TestRerecording_AFailedSecondPassLeavesTheOriginalsRecordsAsIfNoSecondPassRan(t *testing.T) {
+	recordedWith := func(finder *stubRerecordingFinder) []ports.CandidateRejectionRecord {
+		golden := seedItsOnlyLove(t, 0, nil)
+		rejections := &fakeRejectionStore{}
+		svc := golden.service(&itsOnlyLoveSources{rerecordingBroken: true}, finder, withServiceRejections(rejections))
+
+		_ = svc.Execute(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
+
+		records := slices.Clone(rejections.recorded)
+		for i := range records {
+			records[i].TrackID = ""
+		}
+		return records
+	}
+
+	withSecondPass, withoutSecondPass := recordedWith(findsGoldenRerecording()), recordedWith(&stubRerecordingFinder{})
+
+	if len(withoutSecondPass) == 0 {
+		t.Fatal("the original pass recorded no rejection, so the comparison proves nothing")
+	}
+	if !reflect.DeepEqual(withSecondPass, withoutSecondPass) {
+		t.Errorf("records after a failed second pass = %+v, want exactly the original's %+v", withSecondPass, withoutSecondPass)
+	}
+}
+
 type probeOriginalOutageSource struct{ requests []ports.FindRequest }
 
 func (*probeOriginalOutageSource) Name() acqdomain.SourceName { return "probe-outage" }
@@ -2815,7 +2842,7 @@ func TestRerecording_AnOriginalWhoseSoundCloudPinFailsToDownloadNeverAsksForARer
 	golden := seedItsOnlyLove(t, 0, pins)
 	sources := &itsOnlyLoveSources{}
 	finder := findsGoldenRerecording()
-	svc := newTestAcquireService(golden.ledger, service.NewSourceRegistry(savedlink.NewSource(failingPinDownloads{}), sources), golden.store,
+	svc := newTestAcquireService(golden.ledger, service.NewSourceRegistry(savedlink.MustNewSource(failingPinDownloads{}, savedlink.NoPageReader()), sources), golden.store,
 		withServiceResolver(pinnedRecordingResolver{}),
 		withServiceIdentifier(&stubIdentifier{}),
 		withServiceRerecordings(finder))
@@ -3029,6 +3056,7 @@ func noopStages() service.StagePorts {
 		Events:        events.NoopPublisher(),
 		DownloadLimit: service.Unlimited(),
 		Observer:      service.NoObserver(),
+		Sleep:         clock.Sleep,
 	}
 }
 
@@ -3212,7 +3240,7 @@ func mustNewDownloadStep(fetcher fetcherPort, workspace ports.ScratchFolder, ide
 }
 
 func mustNewStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder, prober ports.AudioProber, orphans ports.OrphanedAudioRecorder, refs ports.AudioRefLookup, opts ...func(*service.StoreStep)) *service.StoreStep {
-	step, err := service.NewStoreStep(audioStore, workspace, prober, orphans, refs, opts...)
+	step, err := service.NewStoreStep(audioStore, workspace, prober, orphans, refs, clock.Sleep, opts...)
 	if err != nil {
 		panic(err)
 	}

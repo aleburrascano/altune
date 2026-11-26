@@ -30,10 +30,6 @@ type FfprobeProber struct {
 	skips         ports.VerifySkipRecorder
 }
 
-func WithSkipRecorder(r ports.VerifySkipRecorder) func(*FfprobeProber) {
-	return func(p *FfprobeProber) { p.skips = r }
-}
-
 func WithDecodeTimeout(timeout time.Duration) func(*FfprobeProber) {
 	return func(p *FfprobeProber) {
 		if timeout > 0 {
@@ -42,22 +38,34 @@ func WithDecodeTimeout(timeout time.Duration) func(*FfprobeProber) {
 	}
 }
 
-func NewFfprobeProber(ffmpegLocation string, opts ...func(*FfprobeProber)) *FfprobeProber {
+var ErrSkipRecorderRequired = errors.New("ytdlp: a verify-skip recorder is required")
+
+func NewFfprobeProber(ffmpegLocation string, skips ports.VerifySkipRecorder, opts ...func(*FfprobeProber)) (*FfprobeProber, error) {
+	if skips == nil {
+		return nil, ErrSkipRecorderRequired
+	}
 	p := &FfprobeProber{
 		ffprobe:       binpath.Resolve("ffprobe", ffmpegLocation),
 		ffmpeg:        binpath.Resolve("ffmpeg", ffmpegLocation),
 		decodeTimeout: defaultDecodeTimeout,
+		skips:         skips,
 	}
 	for _, opt := range opts {
 		opt(p)
+	}
+	return p, nil
+}
+
+func MustNewFfprobeProber(ffmpegLocation string, skips ports.VerifySkipRecorder, opts ...func(*FfprobeProber)) *FfprobeProber {
+	p, err := NewFfprobeProber(ffmpegLocation, skips, opts...)
+	if err != nil {
+		panic(err)
 	}
 	return p
 }
 
 func (p *FfprobeProber) recordSkip(gate string) {
-	if p.skips != nil {
-		p.skips.RecordVerifySkip(gate)
-	}
+	p.skips.RecordVerifySkip(gate)
 }
 
 func (p *FfprobeProber) Available() (ffprobe, ffmpeg bool) {

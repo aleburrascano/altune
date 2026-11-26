@@ -29,6 +29,34 @@ func (noopRecordingLookup) RecordingByMBID(context.Context, string) (RecordingFa
 	return RecordingFacts{}, false, nil
 }
 
+type noopRecordingSearch struct{}
+
+func NoopRecordingSearch() RecordingSearch { return noopRecordingSearch{} }
+
+func (noopRecordingSearch) SearchRecordings(context.Context, string, int) ([]SearchedRecording, error) {
+	return nil, nil
+}
+
+type noopISRCLookup struct{}
+
+func NoopISRCLookup() ISRCLookup { return noopISRCLookup{} }
+
+func (noopISRCLookup) RecordingsByISRC(context.Context, string) ([]ISRCRecording, error) {
+	return nil, nil
+}
+
+type noopRerecordingLookup struct{}
+
+func NoopRerecordingLookup() RerecordingLookup { return noopRerecordingLookup{} }
+
+func (noopRerecordingLookup) WorkRecordings(context.Context, string) ([]WorkRecording, error) {
+	return nil, nil
+}
+
+func (noopRerecordingLookup) RecordingDetail(context.Context, string) (RecordingDetail, bool, error) {
+	return RecordingDetail{}, false, nil
+}
+
 type noopRerecordingFinder struct{}
 
 func NoopRerecordingFinder() RerecordingFinder { return noopRerecordingFinder{} }

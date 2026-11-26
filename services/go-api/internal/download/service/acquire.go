@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/internal/core/tracklength"
 	"altune/go-api/internal/download/service/replacement"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/redact"
@@ -38,6 +39,7 @@ type AcquireTrackAudioService struct {
 	workspace       ports.ScratchFolder
 	storedAudio     ports.StoredAudioReader
 	contextObserver func(*AcquisitionContext)
+	sleep           clock.Sleeper
 	previews        ports.PreviewMatcher
 
 	cuts            audioverdict.Cuts
@@ -55,7 +57,12 @@ func NewAcquireTrackAudioService(
 	opts ...func(*AcquireTrackAudioService),
 ) (*AcquireTrackAudioService, error) {
 	const owner = "NewAcquireTrackAudioService"
-	if err := errors.Join(wiring.validate(owner), stages.validate(owner), requireWorkspace(owner, workspace)); err != nil {
+	if err := errors.Join(
+		missingPort(owner, "ledger", ledger == nil),
+		missingPort(owner, "source registry", sources == nil),
+		missingPort(owner, "audio store", audioStore == nil),
+		wiring.validate(owner), stages.validate(owner), requireWorkspace(owner, workspace),
+	); err != nil {
 		return nil, err
 	}
 	s := &AcquireTrackAudioService{
@@ -77,6 +84,7 @@ func NewAcquireTrackAudioService(
 		events:          stages.Events,
 		downloadLimiter: stages.DownloadLimit,
 		contextObserver: stages.Observer,
+		sleep:           stages.Sleep,
 		cuts:            audioverdict.DefaultCuts(),
 
 		confidenceFloor: defaultConfidenceFloor,
