@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-const usage = "usage: go run ./scripts/lintdoors [--summary] [--exports] [<go-api dir>]\n  every module (internal/<module>, or internal/<group>/<module> for a grouping directory) has one door, its root package, and may have a second, <module>test, that only _test.go files import; lists each outside import of any other package of a module and each non-test import of a test-support package, and exits 1 when there are any; --exports also lists each root identifier that no file outside the module uses (a name used only by its own module, tests included, is unexported and those tests go through the real door; used means pkg.Name through a plain or aliased import, a dot import is not followed); --summary prints, per module, its door size, how much of it is used outside, and its open packages with their importers"
+const usage = "usage: go run ./scripts/lintdoors [--summary] [--exports] [<go-api dir>]\n  every module (internal/<module>, or internal/<group>/<module> for a grouping directory) has one door, its root package, and may have a second, <module>test, that only _test.go files import; lists each outside import of any other package of a module and each non-test import of a test-support package, and exits 1 when there are any; --exports also lists each root identifier that no file outside the module uses (a name used only by its own module's root-package tests is unexported, a name its own subpackages or test door use must stay and those tests go through the real door; used means pkg.Name through a plain or aliased import, a dot import is not followed); --summary prints, per module, its door size, how much of it is used outside, and its open packages with their importers"
 
 var groups = map[string]bool{"platform": true, "shared": true}
 
@@ -38,6 +38,7 @@ type violation struct {
 const (
 	usedByProduction = 1
 	usedByTests      = 2
+	usedInside       = 4
 )
 
 type scan struct {
@@ -271,7 +272,9 @@ func (s *scan) scanFile(file string) error {
 			v.kind = kindTestSupport
 			s.violations = append(s.violations, v)
 		case sub == "" && module != ownModule:
-			s.recordUse(f, imp, module, isTest)
+			s.recordUse(f, imp, module, outsideFlag(isTest))
+		case sub == "" && importer != "internal/"+module:
+			s.recordUse(f, imp, module, usedInside)
 		case sub != "" && module != ownModule && !isTestSupport(module, sub):
 			v.kind = kindSideDoor
 			s.violations = append(s.violations, v)
@@ -280,17 +283,20 @@ func (s *scan) scanFile(file string) error {
 	return nil
 }
 
-func (s *scan) recordUse(f *ast.File, imp *ast.ImportSpec, module string, isTest bool) {
+func outsideFlag(isTest bool) int {
+	if isTest {
+		return usedByTests
+	}
+	return usedByProduction
+}
+
+func (s *scan) recordUse(f *ast.File, imp *ast.ImportSpec, module string, flag int) {
 	alias := s.pkgNames[module]
 	if imp.Name != nil {
 		alias = imp.Name.Name
 	}
 	if alias == "" || alias == "_" || alias == "." {
 		return
-	}
-	flag := usedByProduction
-	if isTest {
-		flag = usedByTests
 	}
 	ast.Inspect(f, func(n ast.Node) bool {
 		sel, ok := n.(*ast.SelectorExpr)
@@ -316,7 +322,7 @@ func (s *scan) doorOf(module string) (door, error) {
 	}
 	d := door{exported: len(names)}
 	for name := range names {
-		switch s.used[module][name] {
+		switch s.used[module][name] &^ usedInside {
 		case usedByProduction, usedByProduction | usedByTests:
 			d.prod++
 		case usedByTests:
@@ -404,7 +410,10 @@ func (s *scan) addUnusedExports() error {
 		if a.file != b.file {
 			return a.file < b.file
 		}
-		return a.line < b.line
+		if a.line != b.line {
+			return a.line < b.line
+		}
+		return a.col < b.col
 	})
 	return nil
 }

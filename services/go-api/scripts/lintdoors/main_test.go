@@ -233,3 +233,17 @@ func TestExportsListsRootNamesNoFileOutsideTheModuleUses(t *testing.T) {
 		t.Fatalf("without --exports the rule is off, exit = %d", code)
 	}
 }
+
+func TestExportsKeepsNamesTheModulesOwnSubpackagesAndTestDoorUse(t *testing.T) {
+	dir := newTree(t)
+	writeFile(t, dir, "internal/lib/libtest/libtest.go", "package libtest\n\nimport \"example/api/internal/lib\"\n\nvar _ = lib.Door\n")
+
+	_, out, _ := lint(t, "--exports", dir)
+
+	if strings.Contains(out, "Door is exported") {
+		t.Fatalf("Door is used by the module's own test door and must stay exported:\n%s", out)
+	}
+	if !strings.Contains(out, "Open is exported") {
+		t.Fatalf("Open is used by nobody and must be listed:\n%s", out)
+	}
+}
