@@ -2,6 +2,7 @@ import * as React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react-native';
 import { asTrackId } from '@shared/catalog';
+import { transientRetryOptions } from '@shared/query';
 import { applyServerEvent } from '@shared/events';
 import { notifyIdentityChange } from '@shared/session';
 import { OfflineReconcileBridge, readOwner, usePinnedStore } from '@shared/offline';
@@ -86,7 +87,7 @@ describe('mh09: the settings screen omits the offline downloads card on web', ()
         React.createElement(
           FeaturePorts,
           { ports: httpFeaturePorts },
-          React.createElement(SettingsScreen),
+          React.createElement(SettingsScreen, { retryOptions: transientRetryOptions }),
         ),
       ),
     );

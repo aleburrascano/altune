@@ -2,7 +2,8 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import type { BackfillFeaturedResult } from '@shared/apiClient';
 import { guardedMutationOptions } from '@shared/session';
-import { detailKeys, libraryKeys, useAppMutation, transientRetryOptions } from '@shared/query';
+import { detailKeys, libraryKeys, useAppMutation } from '@shared/query';
+import type { RetryOptions } from '@features/settings/view/retryOptions';
 import { ContractError, NetworkError } from '@shared/failure';
 import { useSettingsPort } from '@features/settings/view/SettingsPortProvider';
 import type { SettingsPort } from '@features/settings/ports/settingsPort';
@@ -28,12 +29,16 @@ function backfillWholeLibrary(port: SettingsPort) {
   return backfillFrom(port, 0, { scanned: 0, updated: 0, truncated: true, nextOffset: 0 });
 }
 
-function retryTransientExceptTimeout(count: number, error: unknown): boolean {
+function retryTransientExceptTimeout(
+  retryOptions: RetryOptions,
+  count: number,
+  error: unknown,
+): boolean {
   const isTimeout = error instanceof NetworkError && error.failure === 'timeout';
-  return !isTimeout && transientRetryOptions.retry(count, error);
+  return !isTimeout && retryOptions.retry(count, error);
 }
 
-export function useBackfillFeatured() {
+export function useBackfillFeatured(retryOptions: RetryOptions) {
   const queryClient = useQueryClient();
   const port = useSettingsPort();
   return useAppMutation({
@@ -46,7 +51,8 @@ export function useBackfillFeatured() {
         void queryClient.invalidateQueries({ queryKey: detailKeys.albumTracksPrefix });
       },
     }),
-    ...transientRetryOptions,
-    retry: retryTransientExceptTimeout,
+    ...retryOptions,
+    retry: (count: number, error: unknown) =>
+      retryTransientExceptTimeout(retryOptions, count, error),
   });
 }

@@ -6,7 +6,8 @@ import { appVersionLabel } from '@shared/device';
 import { Screen, Text, spacing, useTheme } from '@shared/ui';
 import { useSignOut } from '@shared/auth';
 import { offlineDownloadsSupported } from '@shared/offline';
-import { useAccountEmail } from '@features/settings/shell/useAccountEmail';
+import type { RetryOptions } from '@features/settings/view/retryOptions';
+import { useAccountEmail } from '@features/settings/view/useAccountEmail';
 import { useSettingsClearSearchHistory } from '@features/settings/view/useSettingsClearSearchHistory';
 import { useDownloadStats, useRemoveDownloads } from '@features/settings/view/useDownloads';
 import { AppearanceCard } from '@features/settings/view/AppearanceCard';
@@ -15,11 +16,13 @@ import { LibraryCard } from '@features/settings/view/LibraryCard';
 import { OfflineDownloadsCard } from '@features/settings/view/OfflineDownloadsCard';
 import { SettingsCard, SettingsRow } from '@features/settings/view/SettingsCard';
 
-export function SettingsScreen(): ReactElement {
+type SettingsScreenProps = { retryOptions: RetryOptions };
+
+export function SettingsScreen({ retryOptions }: SettingsScreenProps): ReactElement {
   const theme = useTheme();
   const email = useAccountEmail();
   const { state: signOutState, signOut } = useSignOut();
-  const clearHistory = useSettingsClearSearchHistory();
+  const clearHistory = useSettingsClearSearchHistory(retryOptions);
   const stats = useDownloadStats();
   const downloads = useRemoveDownloads(stats);
 
@@ -46,7 +49,7 @@ export function SettingsScreen(): ReactElement {
 
         {offlineDownloadsSupported && <OfflineDownloadsCard stats={stats} />}
 
-        <LibraryCard />
+        <LibraryCard retryOptions={retryOptions} />
 
         <DangerZoneCard
           downloads={downloads}

@@ -7,13 +7,16 @@ import {
   backfillActionTone,
   backfillDetail,
 } from '@features/settings/core/backfillStatus';
+import type { RetryOptions } from '@features/settings/view/retryOptions';
 import { useBackfillFeatured } from '@features/settings/view/useBackfillFeatured';
 import { SettingsCard, SettingsRow } from '@features/settings/view/SettingsCard';
 
 type Backfill = ReturnType<typeof useBackfillFeatured>;
 
-export function LibraryCard(): ReactElement {
-  const backfill = useBackfillFeatured();
+type LibraryCardProps = { retryOptions: RetryOptions };
+
+export function LibraryCard({ retryOptions }: LibraryCardProps): ReactElement {
+  const backfill = useBackfillFeatured(retryOptions);
   return (
     <SettingsCard label="Library">
       <SettingsRow {...libraryRowProps(backfill)} />

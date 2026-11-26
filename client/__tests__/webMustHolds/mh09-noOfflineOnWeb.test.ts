@@ -1,7 +1,12 @@
 import * as React from 'react';
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react-native';
 import { asTrackId } from '@shared/catalog';
+import { OfflineReconcileBridge, usePinnedStore } from '@shared/offline';
+import { transientRetryOptions } from '@shared/query';
+import { FeaturePorts } from '@/mobile/wiring/FeaturePorts';
+import { httpFeaturePorts } from '@/mobile/wiring/httpFeaturePorts';
+import { SettingsScreen } from '@features/settings';
 
 const { ensureAppAuthClient } = require('@testing/appAuthClient.js') as {
   ensureAppAuthClient: () => void;
@@ -9,31 +14,18 @@ const { ensureAppAuthClient } = require('@testing/appAuthClient.js') as {
 
 const INDEX_URI = 'file:///document/offline/pinned.json';
 
-const sharedReact = jest.requireActual('react');
-const sharedReactNative = jest.requireActual('react-native');
-const sharedReactQuery = jest.requireActual('@tanstack/react-query');
-
-function onPlatform<T>(os: 'ios', load: () => T): T {
-  const originalOs = sharedReactNative.Platform.OS;
+function loadFresh<T>(load: () => T): T {
   let loaded!: T;
-  try {
-    jest.isolateModules(() => {
-      jest.doMock('react', () => sharedReact);
-      jest.doMock('react-native', () => sharedReactNative);
-      jest.doMock('@tanstack/react-query', () => sharedReactQuery);
-      sharedReactNative.Platform.OS = os;
-      ensureAppAuthClient();
-      loaded = load();
-    });
-  } finally {
-    sharedReactNative.Platform.OS = originalOs;
-  }
+  jest.isolateModules(() => {
+    ensureAppAuthClient();
+    loaded = load();
+  });
   return loaded;
 }
 
 describe('mh09: the pinned-store machinery never starts on web', () => {
-  function pinOn(os: 'ios') {
-    return onPlatform(os, () => {
+  function pinOn() {
+    return loadFresh(() => {
       require('expo-file-system').__fs.seedFile(
         INDEX_URI,
         JSON.stringify({ old: { trackId: 'old', status: 'failed' } }),
@@ -49,7 +41,7 @@ describe('mh09: the pinned-store machinery never starts on web', () => {
   }
 
   it('loads the pinned index and runs the download queue on native, unaffected', () => {
-    const { loaded, afterPin } = pinOn('ios');
+    const { loaded, afterPin } = pinOn();
 
     expect(Object.keys(loaded)).toEqual(['old']);
     expect(afterPin).toBe('downloading');
@@ -57,8 +49,8 @@ describe('mh09: the pinned-store machinery never starts on web', () => {
 });
 
 describe('mh09: an identity change never claims pinned downloads on web', () => {
-  function ownerAfterSignIn(os: 'ios'): string | null {
-    return onPlatform(os, () => {
+  function ownerAfterSignIn(): string | null {
+    return loadFresh(() => {
       require('@shared/offline/state/pinnedStore');
       require('@shared/session/signOutCleanup').notifyIdentityChange('user-a');
       return require('@shared/offline/state/pinnedIndex').readOwner();
@@ -66,13 +58,13 @@ describe('mh09: an identity change never claims pinned downloads on web', () => 
   }
 
   it('claims pinned downloads for a signed-in user on native, unaffected', () => {
-    expect(ownerAfterSignIn('ios')).toBe('user-a');
+    expect(ownerAfterSignIn()).toBe('user-a');
   });
 });
 
 describe('mh09: an acquisition completing never restarts a stale pin on web', () => {
-  function statusAfterCompletion(os: 'ios'): string | undefined {
-    return onPlatform(os, () => {
+  function statusAfterCompletion(): string | undefined {
+    return loadFresh(() => {
       const { usePinnedStore } = require('@shared/offline/state/pinnedStore');
       const { applyServerEvent } = require('@shared/events/shell/applyServerEvent');
       require('@shared/offline/state/pinnedStore').provideOfflinePort(
@@ -97,17 +89,12 @@ describe('mh09: an acquisition completing never restarts a stale pin on web', ()
   }
 
   it('re-queues the stale download on native, unaffected', () => {
-    expect(statusAfterCompletion('ios')).toBe('downloading');
+    expect(statusAfterCompletion()).toBe('downloading');
   });
 });
 
 describe('mh09: the reconcile bridge does nothing on web', () => {
-  function statusAfterMountOn(os: 'ios'): string | undefined {
-    const { usePinnedStore, OfflineReconcileBridge } = onPlatform(os, () => ({
-      usePinnedStore: require('@shared/offline/state/pinnedStore').usePinnedStore,
-      OfflineReconcileBridge: require('@shared/offline/view/OfflineReconcileBridge')
-        .OfflineReconcileBridge,
-    }));
+  function statusAfterMount(): string | undefined {
     usePinnedStore.setState({
       entries: { t1: { trackId: asTrackId('t1'), status: 'ready', uri: 'file:///missing.mp3' } },
       queue: [],
@@ -118,21 +105,12 @@ describe('mh09: the reconcile bridge does nothing on web', () => {
   }
 
   it('drops a ready entry whose file is missing on native, unaffected', () => {
-    expect(statusAfterMountOn('ios')).toBeUndefined();
+    expect(statusAfterMount()).toBeUndefined();
   });
 });
 
 describe('mh09: the settings screen omits the offline downloads card on web', () => {
-  function hasDownloadsCardOn(os: 'ios'): boolean {
-    const { QueryClientProvider, FeaturePorts, httpFeaturePorts, SettingsScreen } = onPlatform(
-      os,
-      () => ({
-        QueryClientProvider: require('@tanstack/react-query').QueryClientProvider,
-        FeaturePorts: require('@/mobile/wiring/FeaturePorts').FeaturePorts,
-        httpFeaturePorts: require('@/mobile/wiring/httpFeaturePorts').httpFeaturePorts,
-        SettingsScreen: require('@features/settings/ui/SettingsScreen').SettingsScreen,
-      }),
-    );
+  function hasDownloadsCard(): boolean {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });
@@ -143,7 +121,7 @@ describe('mh09: the settings screen omits the offline downloads card on web', ()
         React.createElement(
           FeaturePorts,
           { ports: httpFeaturePorts },
-          React.createElement(SettingsScreen),
+          React.createElement(SettingsScreen, { retryOptions: transientRetryOptions }),
         ),
       ),
     );
@@ -151,6 +129,6 @@ describe('mh09: the settings screen omits the offline downloads card on web', ()
   }
 
   it('renders the offline downloads card on native, unaffected', () => {
-    expect(hasDownloadsCardOn('ios')).toBe(true);
+    expect(hasDownloadsCard()).toBe(true);
   });
 });
