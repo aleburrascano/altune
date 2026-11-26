@@ -24,6 +24,8 @@ echo "$*" >> "$WORK/git.log"
 case " $* " in
   *" ls-remote "*) cat "$WORK/remote.txt" ;;
   *" rev-parse "*) echo "$HEAD_SHA" ;;
+  *" cat-file "*) [ -z "${NO_MERGE_SCRIPT:-}" ] || exit 1 ;;
+  *" show "*) printf '%s\n' "$MERGE_SCRIPT" ;;
 esac
 exit 0
 STUB
@@ -31,7 +33,7 @@ chmod +x "$work/curl" "$work/gh" "$work/git"
 
 run() {
   : > "$work/posts.log"; : > "$work/git.log"
-  PATH="$work:$PATH" WORK="$work" HEAD_SHA=abc123 BRIDGE_GIT="$work/bridge.git" \
+  PATH="$work:$PATH" WORK="$work" HEAD_SHA=abc123 MERGE_SCRIPT=${MERGE_SCRIPT:-'echo abc123'} BRIDGE_GIT="$work/bridge.git" \
     GITEA_API=http://gitea/api/v1 GITEA_TOKEN=t REPO=o/r MIRROR_KEY=/k GITHUB_REMOTE=git@github.com:o/r.git \
     bash "$script" >"$work/out" 2>&1; got=$?
 }
@@ -65,10 +67,39 @@ echo '{"check_runs":[{"id":2,"name":"pr-checks","status":"completed","conclusion
 run
 check "failure posts failure" "1" "$(posted failure)"
 
-echo '[{"id":9,"context":"github / pr-checks","status":"failure"},{"id":3,"context":"github / pr-checks","status":"pending"}]' > "$work/statuses.json"
+echo '[{"id":9,"context":"github / pr-checks","status":"failure","description":"pr-checks failed on github"},{"id":3,"context":"github / pr-checks","status":"pending"}]' > "$work/statuses.json"
 run
 check "unchanged state posts nothing" "0" "$(wc -l < "$work/posts.log")"
 
+echo '[]' > "$work/statuses.json"
+echo '{"check_runs":[{"id":2,"name":"pr-checks","status":"completed","conclusion":"success"}]}' > "$work/checks.json"
+echo '[{"number":7}]' > "$work/pulls.json"
+printf 'oldsha\trefs/heads/pr/7\n' > "$work/remote.txt"
+MERGE_SCRIPT='echo def456' run
+grep -q 'push -q --force git@github.com:o/r.git def456:refs/heads/pr/7' "$work/git.log" || { echo "FAIL merge result not pushed to the pr branch"; fail=1; }
+grep -q 'statuses/abc123' "$work/posts.log" || { echo "FAIL status for a merge result not posted to the pr head"; fail=1; }
+grep -q 'statuses/def456' "$work/posts.log" && { echo "FAIL status posted to the merge commit, which is not the pr head"; fail=1; }
+
+MERGE_SCRIPT='echo "conflict in x" >&2; exit 1' run
+check "conflict exits 0" "0" "$got"
+check "conflict posts failure" "1" "$(posted failure)"
+grep -qF '"description":"update your branch onto main"' "$work/posts.log" || { echo "FAIL conflict does not say to update the branch onto main"; fail=1; }
+grep -q 'statuses/abc123' "$work/posts.log" || { echo "FAIL conflict status not posted to the pr head"; fail=1; }
+check "conflict pushes nothing" "0" "$(grep -c ' push ' "$work/git.log")"
+
+echo '[{"id":4,"context":"github / pr-checks","status":"failure","description":"update your branch onto main"}]' > "$work/statuses.json"
+MERGE_SCRIPT='exit 1' run
+check "an unchanged conflict posts nothing" "0" "$(wc -l < "$work/posts.log")"
+
+NO_MERGE_SCRIPT=1 MERGE_SCRIPT='exit 2' run
+check "before main has the merge script the head is pushed as it is" "0" "$got"
+grep -q 'push -q --force git@github.com:o/r.git abc123:refs/heads/pr/7' "$work/git.log" || { echo "FAIL without a merge script on main the head was not pushed"; fail=1; }
+
+MERGE_SCRIPT='exit 2' run
+check "a merge that cannot be built fails the run" "1" "$got"
+check "a merge that cannot be built posts nothing" "0" "$(wc -l < "$work/posts.log")"
+
+echo '[]' > "$work/statuses.json"
 echo '[]' > "$work/pulls.json"
 printf 'abc123\trefs/heads/pr/7\n' > "$work/remote.txt"
 run

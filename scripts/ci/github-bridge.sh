@@ -50,6 +50,7 @@ to_state() {
 
 describe() {
   case $1 in
+    conflict) echo "update your branch onto main" ;;
     success) echo "pr-checks passed on github" ;;
     failure) echo "pr-checks failed on github" ;;
     *) echo "pr-checks pending on github" ;;
@@ -59,29 +60,49 @@ describe() {
 latest_state() {
   local body
   body=$(gitea "$GITEA_API/repos/$REPO/commits/$1/statuses?limit=50") || return 1
-  jq -r --arg c "$CONTEXT" '[.[] | select(.context == $c)] | sort_by(.id) | last | .status // .state // ""' <<<"$body"
+  jq -r --arg c "$CONTEXT" '[.[] | select(.context == $c)] | sort_by(.id) | last | if . == null then "" else "\(.status // .state)|\(.description // "")" end' <<<"$body"
 }
 
 post_status() {
-  local sha=$1 state=$2 url=$3 payload
-  payload=$(jq -nc --arg s "$state" --arg c "$CONTEXT" --arg u "$url" --arg d "$(describe "$state")" \
+  local sha=$1 state=$2 url=$3 note=${4:-$state} payload
+  payload=$(jq -nc --arg s "$state" --arg c "$CONTEXT" --arg u "$url" --arg d "$(describe "$note")" \
     '{state: $s, context: $c, description: $d} + (if $u == "" then {} else {target_url: $u} end)')
   gitea -X POST -H 'Content-Type: application/json' -d "$payload" "$GITEA_API/repos/$REPO/statuses/$sha" >/dev/null
 }
 
+merge_result() {
+  if ! bridge_git cat-file -e main:scripts/ci/merge-result.sh 2>/dev/null; then
+    echo "main has no scripts/ci/merge-result.sh yet, so the pr head is checked as it is" >&2
+    echo "$1"
+    return 0
+  fi
+  bridge_git show main:scripts/ci/merge-result.sh | bash -s -- "$BRIDGE_GIT" main "$1"
+}
+
 bridge_pr() {
-  local n=$1 sha run state url last
-  sha=$(fetch_head "$n") || { echo "pr $n: fetch failed" >&2; return 1; }
+  local n=$1 head sha run state note url last rc=0
+  head=$(fetch_head "$n") || { echo "pr $n: fetch failed" >&2; return 1; }
+  sha=$(merge_result "$head") || rc=$?
+  case $rc in
+    0) ;;
+    1)
+      last=$(latest_state "$head") || { echo "pr $n: statuses failed" >&2; return 1; }
+      [ "$last" = "failure|$(describe conflict)" ] && return 0
+      post_status "$head" failure "" conflict || { echo "pr $n: status post failed" >&2; return 1; }
+      echo "pr $n: conflicts with main"
+      return 0 ;;
+    *) echo "pr $n: building the merge result failed" >&2; return 1 ;;
+  esac
   if [ "${remote[$n]:-}" != "$sha" ]; then
     github_git push -q --force "$GITHUB_REMOTE" "$sha:refs/heads/pr/$n" || { echo "pr $n: push failed" >&2; return 1; }
-    echo "pr $n: pushed ${sha:0:12}"
+    echo "pr $n: pushed ${sha:0:12} (${head:0:12} merged into main)"
   fi
   run=$(check_run "$sha") || { echo "pr $n: check-runs failed" >&2; return 1; }
   state=$(to_state "$run") || { echo "pr $n: unreadable check run" >&2; return 1; }
   url=$(jq -r '.html_url // ""' <<<"$run")
-  last=$(latest_state "$sha") || { echo "pr $n: statuses failed" >&2; return 1; }
-  [ "$last" = "$state" ] && return 0
-  post_status "$sha" "$state" "$url" || { echo "pr $n: status post failed" >&2; return 1; }
+  last=$(latest_state "$head") || { echo "pr $n: statuses failed" >&2; return 1; }
+  [ "$last" = "$state|$(describe "$state")" ] && return 0
+  post_status "$head" "$state" "$url" || { echo "pr $n: status post failed" >&2; return 1; }
   echo "pr $n: $state"
 }
 

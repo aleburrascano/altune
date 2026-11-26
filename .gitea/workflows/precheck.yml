@@ -27,7 +27,8 @@ jobs:
           repo=${ALTUNE_REPO:?the runner sets ALTUNE_REPO to its checkout}
           fetch() { git -C "$repo" fetch -q gitea "+refs/heads/$BASE:refs/remotes/gitea/$BASE" "+refs/pull/$PR/head:refs/remotes/gitea/pr/$PR"; }
           fetch || { sleep 5; fetch; } || { sleep 5; fetch; }
-          setup=$(git -C "$repo" show "gitea/pr/$PR:scripts/ci/step-worktree.sh")
-          . /dev/stdin "gitea/$BASE" "gitea/pr/$PR" . services/overseer/web <<<"$setup"
+          merged=$(git -C "$repo" show "gitea/pr/$PR:scripts/ci/merge-result.sh" | bash -s -- "$repo" "gitea/$BASE" "gitea/pr/$PR")
+          setup=$(git -C "$repo" show "$merged:scripts/ci/step-worktree.sh")
+          . /dev/stdin "gitea/$BASE" "$merged" . services/overseer/web <<<"$setup"
           bash scripts/ci/secret-scan.sh "gitea/$BASE"
           GITEA_URL="$SERVER_URL" GITEA_TOKEN="$PR_SHAPE_TOKEN" bash scripts/ci/pr-shape.sh "$PR"
