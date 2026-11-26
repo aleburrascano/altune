@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/download/sourcekey"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/textnorm"
@@ -67,6 +68,7 @@ func Run(ctx context.Context, kase Case) Outcome {
 		Events:        events.NoopPublisher(),
 		DownloadLimit: service.Unlimited(),
 		Observer:      func(ac *service.AcquisitionContext) { observed = ac },
+		Sleep:         clock.Sleep,
 	}
 	svc := service.MustNewAcquireTrackAudioService(ledger, p.registry(), p, scratchfiles.New(), wiring, stages)
 	runErr := executeFor(ctx, svc, kase, track)
@@ -185,7 +187,7 @@ func searchHitsFor(res *Resolution) []ports.SearchedRecording {
 	return hits
 }
 
-func outcomeOf(kase Case, ac *service.AcquisitionContext, runErr error, clock *simClock, saved SavedTrack) Outcome {
+func outcomeOf(kase Case, ac *service.AcquisitionContext, runErr error, sim *simClock, saved SavedTrack) Outcome {
 	if ac == nil {
 		ac = &service.AcquisitionContext{}
 	}
@@ -193,7 +195,7 @@ func outcomeOf(kase Case, ac *service.AcquisitionContext, runErr error, clock *s
 		Case:             kase,
 		Failed:           runErr != nil,
 		Pending:          kase.isPending(),
-		SimulatedSeconds: clock.searchSeconds() + downloadSeconds(kase, ac.Attempted),
+		SimulatedSeconds: sim.searchSeconds() + downloadSeconds(kase, ac.Attempted),
 		Attempts:         len(ac.Attempted),
 		Saved:            saved,
 	}

@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/platform/monitoring"
 	"altune/go-api/internal/shared/binpath"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"errors"
@@ -66,6 +67,7 @@ func NewScheduler(ctx context.Context, d Deps) *download.BackgroundAcquisitionSc
 			Events:        d.Events,
 			DownloadLimit: download.MustLimitedTo(d.Config.AcquisitionDownloadConcurrency),
 			Observer:      download.NoObserver(),
+			Sleep:         clock.Sleep,
 		},
 		opts...,
 	)

@@ -3,6 +3,7 @@ package replacement_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -247,6 +248,7 @@ func noStages(store audioDeleter) download.StagePorts {
 		Events:        events.NoopPublisher(),
 		DownloadLimit: download.Unlimited(),
 		Observer:      download.NoObserver(),
+		Sleep:         clock.Sleep,
 	}
 }
 

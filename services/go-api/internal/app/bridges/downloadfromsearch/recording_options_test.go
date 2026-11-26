@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/searchtest"
 	searchquery "altune/go-api/internal/search/service/query"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -113,6 +114,7 @@ func acquireUnfoundTrack(t *testing.T, disc *search.Discovery, catalogMBID *stri
 			Events:        events.NoopPublisher(),
 			DownloadLimit: download.Unlimited(),
 			Observer:      download.NoObserver(),
+			Sleep:         clock.Sleep,
 		})
 
 	_ = svc.Execute(context.Background(), track.UserId, track.ID)

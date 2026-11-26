@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/download/service"
 	"altune/go-api/internal/download/service/replacement"
 	"altune/go-api/internal/download/sourcekey"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
@@ -3055,6 +3056,7 @@ func noopStages() service.StagePorts {
 		Events:        events.NoopPublisher(),
 		DownloadLimit: service.Unlimited(),
 		Observer:      service.NoObserver(),
+		Sleep:         clock.Sleep,
 	}
 }
 
@@ -3238,7 +3240,7 @@ func mustNewDownloadStep(fetcher fetcherPort, workspace ports.ScratchFolder, ide
 }
 
 func mustNewStoreStep(audioStore ports.AudioWriter, workspace ports.ScratchFolder, prober ports.AudioProber, orphans ports.OrphanedAudioRecorder, refs ports.AudioRefLookup, opts ...func(*service.StoreStep)) *service.StoreStep {
-	step, err := service.NewStoreStep(audioStore, workspace, prober, orphans, refs, opts...)
+	step, err := service.NewStoreStep(audioStore, workspace, prober, orphans, refs, clock.Sleep, opts...)
 	if err != nil {
 		panic(err)
 	}
