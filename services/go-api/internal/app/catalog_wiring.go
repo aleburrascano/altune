@@ -17,8 +17,6 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
-
-	"github.com/go-chi/chi/v5"
 )
 
 type catalogWiring struct {
@@ -31,7 +29,8 @@ type catalogWiring struct {
 	playlistHandler   *library.PlaylistHandler
 	streamHandler     *library.StreamHandler
 	audioURLHandler   *library.AudioURLHandler
-	acquisitionRoutes func(chi.Router)
+	retryH            *download.RetryHandler
+	reacquireH        *download.ReacquireHandler
 	acquisitionOn     bool
 	ytDlpSearcher     *download.YouTubeAudioSearcher
 	ytDlpAvailable    bool
@@ -191,20 +190,15 @@ func addTrackScheduler(scheduler library.AcquisitionScheduler) library.Acquisiti
 	return scheduler
 }
 
-func noAcquisitionRoutes(chi.Router) {}
-
 func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServicesStaging) catalogWiring {
 	featuredArtistHandler := library.NewFeaturedArtistHandler(svc.backfillFeaturedSvc, svc.listFeaturingSvc)
 
-	acquisitionRoutes := noAcquisitionRoutes
+	var retryH *download.RetryHandler
+	var reacquireH *download.ReacquireHandler
 	if audio.acquisitionOn {
 		cooldowns := download.NewPostgresCooldownStore(a.pool)
-		retryH := download.NewRetryHandler(audio.ledger, audio.scheduler, download.NewRetryAdmission(cooldowns))
-		reacquireH := download.NewReacquireHandler(audio.ledger, audio.background, download.NewReacquireAdmission(cooldowns))
-		acquisitionRoutes = func(r chi.Router) {
-			r.Post("/tracks/{trackId}/reacquire", reacquireH.HandleReacquire)
-			r.Post("/tracks/{trackId}/retry", retryH.HandleRetryAcquisition)
-		}
+		retryH = download.NewRetryHandler(audio.ledger, audio.scheduler, download.NewRetryAdmission(cooldowns))
+		reacquireH = download.NewReacquireHandler(audio.ledger, audio.background, download.NewReacquireAdmission(cooldowns))
 	}
 
 	return catalogWiring{
@@ -217,7 +211,8 @@ func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServices
 		playlistHandler:   library.MustNewPlaylistHandler(svc.playlistLifecycleSvc, svc.playlistMembershipSvc, time.Now),
 		streamHandler:     library.MustNewStreamHandler(svc.streamTrackSvc, time.Now),
 		audioURLHandler:   library.MustNewAudioURLHandler(svc.audioURLSvc, time.Now, library.WithPrefetchEnabled(a.cfg.AudioPrefetchEnabled)),
-		acquisitionRoutes: acquisitionRoutes,
+		retryH:            retryH,
+		reacquireH:        reacquireH,
 		acquisitionOn:     audio.acquisitionOn,
 		ytDlpSearcher:     audio.ytDlpSearcher,
 		ytDlpAvailable:    audio.ytDlpAvailable,
