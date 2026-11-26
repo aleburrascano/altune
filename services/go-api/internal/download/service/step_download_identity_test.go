@@ -37,6 +37,10 @@ func (l *pendingLedger) Fail(context.Context, ids.TrackId, ids.UserId, download.
 
 func (l *pendingLedger) RevertAt(context.Context, download.TrackSnapshot) error { return nil }
 
+func (l *pendingLedger) Requeue(context.Context, ids.TrackId) error {
+	return nil
+}
+
 func (l *pendingLedger) AudioRefInUse(context.Context, string, ids.TrackId) (bool, error) {
 	return false, nil
 }

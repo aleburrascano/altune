@@ -49,10 +49,18 @@ func (r *fixtureTrackRepo) GetByID(_ context.Context, _ library.TrackId, _ ids.U
 	return r.track, nil
 }
 
+func (r *fixtureTrackRepo) UpdateFenced(ctx context.Context, track *library.Track, expectedVersion, _ int) error {
+	return r.Update(ctx, track, expectedVersion)
+}
+
 func (r *fixtureTrackRepo) Update(_ context.Context, track *library.Track, _ int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.track = track
+	return nil
+}
+
+func (r *fixtureTrackRepo) Requeue(context.Context, library.TrackId) error {
 	return nil
 }
 

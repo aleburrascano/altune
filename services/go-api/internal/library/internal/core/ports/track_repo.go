@@ -7,7 +7,10 @@ import (
 	"errors"
 )
 
-var ErrTrackVersionConflict = errors.New("track version conflict")
+var (
+	ErrTrackVersionConflict = errors.New("track version conflict")
+	ErrTrackFenceSuperseded = errors.New("track claimed by a newer acquisition attempt")
+)
 
 type TrackAdder interface {
 	Add(ctx context.Context, track *domain.Track) (stored *domain.Track, created bool, err error)

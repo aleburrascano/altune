@@ -75,8 +75,13 @@ type Completion struct {
 	Relabel            *TrackLabel
 }
 
+type TrackRequeuer interface {
+	Requeue(ctx context.Context, id ids.TrackId) error
+}
+
 type LibraryTracks interface {
 	AudioRefLookup
+	TrackRequeuer
 	Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*TrackSnapshot, error)
 	Complete(ctx context.Context, id ids.TrackId, userId ids.UserId, fence ClaimNumber, c Completion) error
 	Fail(ctx context.Context, id ids.TrackId, userId ids.UserId, fence ClaimNumber, reason string) error

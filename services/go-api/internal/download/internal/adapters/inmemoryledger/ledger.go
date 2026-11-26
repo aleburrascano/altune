@@ -134,6 +134,20 @@ func (l *Ledger) RevertAt(_ context.Context, snapshot ports.TrackSnapshot) error
 	return l.write(track)
 }
 
+func (l *Ledger) Requeue(_ context.Context, id ids.TrackId) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	track, ok := l.tracks[id]
+	if !ok || (track.Status != ports.TrackFailed && track.FailureReason == "") {
+		return nil
+	}
+	if track.Status == ports.TrackFailed {
+		track.Status = ports.TrackPending
+	}
+	track.FailureReason = ""
+	return l.write(track)
+}
+
 func (l *Ledger) update(id ids.TrackId, userId ids.UserId, fence ports.ClaimNumber, mutate func(*LedgerTrack) error) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()

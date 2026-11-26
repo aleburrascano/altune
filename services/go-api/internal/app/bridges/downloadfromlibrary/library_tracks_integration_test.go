@@ -45,7 +45,7 @@ func reclaimTrack(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId) down
 	t.Helper()
 	var attempts int
 	if err := pool.QueryRow(context.Background(),
-		`UPDATE tracks SET acquisition_attempts = acquisition_attempts + 1, version = version + 1 WHERE id = $1 RETURNING acquisition_attempts`,
+		`UPDATE acquisition_jobs SET attempts = attempts + 1 WHERE track_id = $1 RETURNING attempts`,
 		trackID.UUID()).Scan(&attempts); err != nil {
 		t.Fatalf("reclaim: %v", err)
 	}
@@ -99,12 +99,12 @@ type claimDuringUpdateStore struct {
 	claimed bool
 }
 
-func (s *claimDuringUpdateStore) Update(ctx context.Context, track *domain.Track, expectedVersion int) error {
+func (s *claimDuringUpdateStore) UpdateFenced(ctx context.Context, track *domain.Track, expectedVersion, fence int) error {
 	if !s.claimed {
 		s.claimed = true
 		reclaimTrack(s.t, s.pool, track.ID)
 	}
-	return s.PostgresTrackRepository.Update(ctx, track, expectedVersion)
+	return s.PostgresTrackRepository.UpdateFenced(ctx, track, expectedVersion, fence)
 }
 
 func TestTrackLedger_OnPostgresAClaimBetweenReadAndUpdateFencesOutTheWriter(t *testing.T) {
@@ -116,7 +116,7 @@ func TestTrackLedger_OnPostgresAClaimBetweenReadAndUpdateFencesOutTheWriter(t *t
 	err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, track.UserId, held, download.Completion{AudioRef: "old-owner-ref"})
 
 	if !errors.Is(err, download.ErrLeaseLost) {
-		t.Fatalf("err = %v, want ErrLeaseLost once the version conflict re-reads the new owner's attempts", err)
+		t.Fatalf("err = %v, want ErrLeaseLost from the fenced write", err)
 	}
 	status, audioRef, _ := rowState(t, pool, track.ID)
 	if status != "pending" || audioRef != nil {

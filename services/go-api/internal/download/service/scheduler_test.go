@@ -90,6 +90,10 @@ func (emptyLedger) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (
 	return inmemoryledger.NewLedger().Get(ctx, id, userId)
 }
 
+func (emptyLedger) Requeue(context.Context, ids.TrackId) error {
+	return nil
+}
+
 func (emptyLedger) AudioRefInUse(context.Context, string, ids.TrackId) (bool, error) {
 	return false, nil
 }

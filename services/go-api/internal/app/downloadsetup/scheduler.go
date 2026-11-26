@@ -119,7 +119,7 @@ func schedulerPorts(d Deps, acquireSvc *download.AcquireTrackAudioService, skips
 		Ticker:              clock.NewTicker,
 	}
 	if d.Pool != nil {
-		wiring.Queue = download.QueueOf(download.NewPostgresJobQueue(d.Pool))
+		wiring.Queue = download.QueueOf(download.MustNewPostgresJobQueue(d.Pool, d.Ledger))
 		wiring.Upgrades = upgradeLane(d.Config, d.Pool, d.Ledger, acquireSvc)
 		wiring.Notifier = download.MustNewPostgresJobNotifier(d.Pool, clock.Sleep)
 		wiring.Outcomes = download.NewPostgresOutcomeStore(d.Pool)

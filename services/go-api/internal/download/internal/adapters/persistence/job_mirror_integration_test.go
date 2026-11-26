@@ -41,7 +41,7 @@ func requireJobRowMirrorsTrack(t *testing.T, pool *pgxpool.Pool, id sharedids.Tr
 func TestPostgresJobQueue_EveryQueueStepLeavesTheJobRowEqualToTheTrackColumns(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
-	queue := download.NewPostgresJobQueue(pool)
+	queue := download.MustNewPostgresJobQueue(pool, tracksRequeuer{pool: pool})
 	ctx := context.Background()
 
 	track := insertFailedTrack(t, pool)

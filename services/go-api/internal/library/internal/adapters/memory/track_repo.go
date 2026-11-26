@@ -293,6 +293,27 @@ func (r *TrackRepo) Update(_ context.Context, track *domain.Track, expectedVersi
 	return nil
 }
 
+func (r *TrackRepo) Requeue(_ context.Context, id domain.TrackId) error {
+	for _, t := range r.Tracks {
+		if t.ID != id {
+			continue
+		}
+		failed := t.DownloadStatus == domain.AcquisitionFailed
+		if failed || (t.FailureReason != nil && *t.FailureReason != "") {
+			if failed {
+				t.DownloadStatus = domain.AcquisitionPending
+			}
+			t.FailureReason = nil
+			t.Version++
+		}
+	}
+	return nil
+}
+
+func (r *TrackRepo) UpdateFenced(ctx context.Context, track *domain.Track, expectedVersion, _ int) error {
+	return r.Update(ctx, track, expectedVersion)
+}
+
 func (r *TrackRepo) SetTrackNumber(_ context.Context, id domain.TrackId, userId sharedids.UserId, n int) (bool, error) {
 	t, ok := r.Tracks[id.String()]
 	if !ok || t.UserId != userId || t.TrackNumber != nil {

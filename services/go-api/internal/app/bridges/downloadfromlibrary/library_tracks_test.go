@@ -54,6 +54,13 @@ func (s *fakeStore) GetByID(_ context.Context, id domain.TrackId, userId ids.Use
 	return &cp, nil
 }
 
+func (s *fakeStore) UpdateFenced(ctx context.Context, track *domain.Track, expectedVersion, fence int) error {
+	if cur, ok := s.tracks[track.ID]; ok && cur != nil && fence > 0 && cur.AcquisitionFence > 0 && cur.AcquisitionFence != fence {
+		return librarydoor.ErrTrackFenceSuperseded
+	}
+	return s.Update(ctx, track, expectedVersion)
+}
+
 func (s *fakeStore) Update(_ context.Context, track *domain.Track, expectedVersion int) error {
 	s.updates = append(s.updates, expectedVersion)
 	if s.conflicts > 0 {
@@ -70,6 +77,10 @@ func (s *fakeStore) Update(_ context.Context, track *domain.Track, expectedVersi
 	cp := *track
 	cp.Version = expectedVersion + 1
 	s.tracks[track.ID] = &cp
+	return nil
+}
+
+func (s *fakeStore) Requeue(context.Context, domain.TrackId) error {
 	return nil
 }
 
@@ -664,7 +675,7 @@ func TestTrackLedger_AClaimBetweenReadAndUpdateFencesOutTheWriter(t *testing.T) 
 	err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, userId, 2, download.Completion{AudioRef: "ref-1"})
 
 	if !errors.Is(err, download.ErrLeaseLost) {
-		t.Fatalf("err = %v, want ErrLeaseLost once the retry re-reads the new owner's fence", err)
+		t.Fatalf("err = %v, want ErrLeaseLost from the fenced write", err)
 	}
 	if got := storedTrack(t, store.fakeStore, track.ID); got.DownloadStatus != domain.AcquisitionPending {
 		t.Errorf("status = %v, want pending", got.DownloadStatus)
@@ -676,7 +687,7 @@ type reclaimingStore struct {
 	reclaimed bool
 }
 
-func (s *reclaimingStore) Update(ctx context.Context, track *domain.Track, expectedVersion int) error {
+func (s *reclaimingStore) UpdateFenced(ctx context.Context, track *domain.Track, expectedVersion, fence int) error {
 	if !s.reclaimed {
 		s.reclaimed = true
 		stored, ok := s.tracks[track.ID]
@@ -685,10 +696,9 @@ func (s *reclaimingStore) Update(ctx context.Context, track *domain.Track, expec
 		}
 		current := *stored
 		current.AcquisitionFence++
-		current.Version++
 		s.tracks[track.ID] = &current
 	}
-	return s.fakeStore.Update(ctx, track, expectedVersion)
+	return s.fakeStore.UpdateFenced(ctx, track, expectedVersion, fence)
 }
 
 func TestTrackLedger_AFenceAheadOfTheTracksIsAlsoLeaseLost(t *testing.T) {
