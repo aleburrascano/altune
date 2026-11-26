@@ -1,9 +1,11 @@
 package background
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -13,6 +15,8 @@ import (
 const runBudgetFraction = 2
 
 const backgroundJobPanic = "background_job.panic"
+
+var ErrTickerRequired = errors.New("a repeating job needs a ticker")
 
 var ErrRunBudgetExceeded = errors.New("background job run exceeded its budget")
 
@@ -50,20 +54,24 @@ func RunJob(parent context.Context, control *JobControl, name string, budget tim
 	control.Record(err)
 }
 
-func Every(ctx context.Context, bg *Tracker, interval time.Duration, run func()) {
+func Every(ctx context.Context, bg *Tracker, interval time.Duration, newTicker clock.TickerFunc, run func()) error {
+	if newTicker == nil {
+		return fmt.Errorf("background.Every: %w", ErrTickerRequired)
+	}
 	bg.Track(func() {
 		run()
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
+		ticks, stop := newTicker(interval)
+		defer stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
+			case <-ticks:
 				run()
 			}
 		}
 	})
+	return nil
 }
 
 func StartWhenLeader(ctx context.Context, bg *Tracker, await func(context.Context) bool, starts []NamedStart) {

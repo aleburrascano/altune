@@ -79,6 +79,28 @@ func TestNewTimer_FiresAfterTheDurationAndStopPreventsIt(t *testing.T) {
 	})
 }
 
+func TestNewTicker_TicksAtAFixedRateUntilStopped(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var newTicker clock.TickerFunc = clock.NewTicker
+		start := time.Now()
+		ticks, stop := newTicker(time.Second)
+
+		first := <-ticks
+		second := <-ticks
+		stop()
+
+		if first.Sub(start) != time.Second || second.Sub(start) != 2*time.Second {
+			t.Fatalf("ticks at %v and %v, want 1s and 2s", first.Sub(start), second.Sub(start))
+		}
+		time.Sleep(3 * time.Second)
+		select {
+		case <-ticks:
+			t.Fatal("a stopped ticker ticked")
+		default:
+		}
+	})
+}
+
 func TestSleep_SatisfiesSleeper(t *testing.T) {
 	var sleep clock.Sleeper = clock.Sleep
 

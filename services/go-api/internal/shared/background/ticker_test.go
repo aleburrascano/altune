@@ -2,12 +2,15 @@ package background_test
 
 import (
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -26,36 +29,88 @@ func TestRunBudget(t *testing.T) {
 }
 
 func TestEvery_PanickingRunIsOneFailureAndLoopKeepsTicking(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	var bg background.Tracker
-	var jobs background.JobRegistry
-	jc := jobs.Control("explode")
-	var calls atomic.Int32
-	ran := make(chan struct{}, 8)
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		var bg background.Tracker
+		var jobs background.JobRegistry
+		jc := jobs.Control("explode")
+		var calls atomic.Int32
+		clk := clocktest.NewManual(time.Now())
 
-	background.Every(ctx, &bg, time.Millisecond, func() {
-		background.RunJob(ctx, jc, "explode", time.Second, func(context.Context) error {
-			n := calls.Add(1)
-			ran <- struct{}{}
-			if n == 1 {
-				panic("boom")
-			}
-			return nil
+		err := background.Every(ctx, &bg, time.Millisecond, clk.Ticker(), func() {
+			background.RunJob(ctx, jc, "explode", time.Second, func(context.Context) error {
+				if calls.Add(1) == 1 {
+					panic("boom")
+				}
+				return nil
+			})
 		})
-	})
+		synctest.Wait()
+		clk.Advance(time.Millisecond)
+		synctest.Wait()
+		cancel()
+		bg.Wait()
 
-	<-ran
-	<-ran
-	cancel()
+		if err != nil {
+			t.Fatalf("Every = %v, want nil", err)
+		}
+		if got := healthOf(t, &jobs, "explode").Failures; got != 1 {
+			t.Errorf("failures = %d, want 1", got)
+		}
+		if calls.Load() != 2 {
+			t.Errorf("loop ran %d times, want 2: once at start, once after the panic on the next tick", calls.Load())
+		}
+	})
+}
+
+func TestEvery_RefusesAMissingTicker(t *testing.T) {
+	var bg background.Tracker
+	var ran atomic.Bool
+
+	err := background.Every(context.Background(), &bg, time.Second, nil, func() { ran.Store(true) })
 	bg.Wait()
 
-	if got := healthOf(t, &jobs, "explode").Failures; got != 1 {
-		t.Errorf("failures = %d, want 1", got)
+	if !errors.Is(err, background.ErrTickerRequired) || !strings.Contains(err.Error(), "background.Every") {
+		t.Errorf("Every(nil ticker) = %v, want ErrTickerRequired naming Every", err)
 	}
-	if calls.Load() < 2 {
-		t.Errorf("loop ran %d times, want it to keep ticking after the panic", calls.Load())
+	if ran.Load() {
+		t.Error("the job ran without a ticker")
 	}
+}
+
+func TestEvery_RunsAtAFixedRateEvenWhenARunIsSlow(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		var bg background.Tracker
+		clk := clocktest.NewManual(time.Now())
+		var starts []time.Time
+
+		err := background.Every(ctx, &bg, 10*time.Second, clk.Ticker(), func() {
+			starts = append(starts, clk.Now())
+			if len(starts) == 2 {
+				clk.Advance(4 * time.Second)
+			}
+		})
+		synctest.Wait()
+		clk.Advance(10 * time.Second)
+		synctest.Wait()
+		clk.Advance(6 * time.Second)
+		synctest.Wait()
+		cancel()
+		bg.Wait()
+
+		if err != nil {
+			t.Fatalf("Every = %v, want nil", err)
+		}
+		if len(starts) != 3 {
+			t.Fatalf("runs = %d, want 3 (start, 10s, 20s)", len(starts))
+		}
+		if got := starts[2].Sub(starts[0]); got != 20*time.Second {
+			t.Errorf("third run %v after the first, want 20s: a slow run must not push the schedule", got)
+		}
+	})
 }
 
 func TestRunJob_OverBudgetIsCanceledAndCounted(t *testing.T) {
@@ -94,38 +149,39 @@ func TestRunJob_ParentCanceledIsNotAFailure(t *testing.T) {
 }
 
 func TestEvery_JobDisabledBetweenTicksIsSkipped(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	var bg background.Tracker
-	var jobs background.JobRegistry
-	jc := jobs.Control("j")
-	var runs, ticks atomic.Int32
-	firstDone := make(chan struct{})
-	secondTick := make(chan struct{})
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		var bg background.Tracker
+		var jobs background.JobRegistry
+		jc := jobs.Control("j")
+		var runs atomic.Int32
+		clk := clocktest.NewManual(time.Now())
 
-	background.Every(ctx, &bg, time.Millisecond, func() {
-		n := ticks.Add(1)
-		if jc.Admit() {
-			runs.Add(1)
-			jc.DisableIfEnabled()
-			close(firstDone)
+		err := background.Every(ctx, &bg, time.Millisecond, clk.Ticker(), func() {
+			if jc.Admit() {
+				runs.Add(1)
+				jc.DisableIfEnabled()
+			}
+		})
+		synctest.Wait()
+		clk.Advance(time.Millisecond)
+		synctest.Wait()
+		clk.Advance(time.Millisecond)
+		synctest.Wait()
+		cancel()
+		bg.Wait()
+
+		if err != nil {
+			t.Fatalf("Every = %v, want nil", err)
 		}
-		if n == 3 {
-			close(secondTick)
+		if got := runs.Load(); got != 1 {
+			t.Errorf("runs = %d, want 1: later ticks must be skipped once disabled", got)
+		}
+		if got := healthOf(t, &jobs, "j").Skipped; got < 1 {
+			t.Errorf("Skipped = %d, want at least 1", got)
 		}
 	})
-
-	<-firstDone
-	<-secondTick
-	cancel()
-	bg.Wait()
-
-	if got := runs.Load(); got != 1 {
-		t.Errorf("runs = %d, want 1: later ticks must be skipped once disabled", got)
-	}
-	if got := healthOf(t, &jobs, "j").Skipped; got < 1 {
-		t.Errorf("Skipped = %d, want at least 1", got)
-	}
 }
 
 func TestStartWhenLeader_AwaitFalseStartsNothing(t *testing.T) {

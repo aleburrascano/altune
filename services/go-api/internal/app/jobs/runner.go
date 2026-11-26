@@ -29,6 +29,8 @@ func NewElection(pool *pgxpool.Pool) (*leader.Election, error) {
 }
 
 type Runner struct {
+	NewTicker clock.TickerFunc
+
 	loops    background.Tracker
 	registry background.JobRegistry
 	election Election
@@ -68,10 +70,13 @@ func (r *Runner) Ticker(name Name, interval time.Duration, fn func(context.Conte
 	if runsOnEveryInstance(name) {
 		panic(fmt.Sprintf("jobs: %q runs on every instance, so it registers with EveryInstance, not the leader-only Ticker", name))
 	}
+	r.requireTicker(name)
 	r.Control(name)
 	r.WhenLeader(name, func(ctx context.Context) {
 		run := r.newRun(name, interval)
-		background.Every(ctx, &r.loops, interval, func() { r.tickAsLeader(ctx, run, fn) })
+		if err := background.Every(ctx, &r.loops, interval, r.NewTicker, func() { r.tickAsLeader(ctx, run, fn) }); err != nil {
+			slog.ErrorContext(ctx, "job not started", "job", string(name), "error", err)
+		}
 	})
 }
 
@@ -79,8 +84,17 @@ func (r *Runner) EveryInstance(ctx context.Context, name Name, interval time.Dur
 	if !runsOnEveryInstance(name) {
 		panic(fmt.Sprintf("jobs: %q is leader-only, so it registers with Ticker; only a job the table marks everyInstance may use EveryInstance", name))
 	}
+	r.requireTicker(name)
 	run := r.newRun(name, interval)
-	background.Every(ctx, &r.loops, interval, func() { r.tick(ctx, run, fn) })
+	if err := background.Every(ctx, &r.loops, interval, r.NewTicker, func() { r.tick(ctx, run, fn) }); err != nil {
+		panic(fmt.Sprintf("jobs: %q: %v", name, err))
+	}
+}
+
+func (r *Runner) requireTicker(name Name) {
+	if r.NewTicker == nil {
+		panic(fmt.Sprintf("jobs: %q needs the Runner's NewTicker set before it registers", name))
+	}
 }
 
 func (r *Runner) Lead(ctx context.Context, election Election) {

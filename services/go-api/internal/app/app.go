@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/platform/requestmetrics"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
@@ -51,6 +52,7 @@ func New(cfg *config.Config, logRing *logging.RingBuffer) *App {
 		cfg:     cfg,
 		logRing: logRing,
 		latency: requestmetrics.NewRegistry(),
+		jobs:    jobs.Runner{NewTicker: clock.NewTicker},
 	}
 }
 
