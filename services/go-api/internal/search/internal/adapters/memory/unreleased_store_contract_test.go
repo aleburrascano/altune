@@ -2,6 +2,7 @@ package memory_test
 
 import (
 	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/adapters/memory/memorytest"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"context"
@@ -28,7 +29,7 @@ func (r *recordedArtists) NewRecordedArtist(t *testing.T) ports.UnreleasedArtist
 }
 
 func TestUnreleasedStore_KeepsTheStoreContract(t *testing.T) {
-	memory.UnreleasedStoreContract(t, func(*testing.T) memory.UnreleasedStoreUnderTest {
+	memorytest.UnreleasedStoreContract(t, func(*testing.T) memorytest.UnreleasedStoreUnderTest {
 		return &recordedArtists{UnreleasedStore: &memory.UnreleasedStore{}}
 	})
 }

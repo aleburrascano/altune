@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/search/internal/service/artistpage"
 	"altune/go-api/internal/search/internal/service/providerguard"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/clock"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -434,7 +435,7 @@ func completeAlbumTracksArgs() albumTracksArgs {
 		providers: map[search.ProviderName]ports.AlbumContentProvider{},
 		featured:  artistpage.NoFeaturedEnrichment{},
 		fallback:  artistpage.NoAlbumFallback{},
-		breaker:   search.NewCircuitBreaker(),
+		breaker:   search.NewCircuitBreaker(clock.Now),
 	}
 }
 
@@ -463,7 +464,7 @@ func TestNewGetAlbumTracksService_RefusesEveryMissingCollaborator(t *testing.T) 
 			svc, err := args.build()
 
 			if !errors.Is(err, artistpage.ErrCollaboratorRequired) || svc != nil {
-				t.Fatalf("svc = %v, err = %v, want ErrArtistPageCollaboratorRequired and no service", svc, err)
+				t.Fatalf("svc = %v, err = %v, want artistpage.ErrCollaboratorRequired and no service", svc, err)
 			}
 			if !strings.Contains(err.Error(), tc.named) {
 				t.Errorf("err = %q, want it to name %q", err, tc.named)
@@ -473,22 +474,22 @@ func TestNewGetAlbumTracksService_RefusesEveryMissingCollaborator(t *testing.T) 
 }
 
 func TestNewAlbumCollaborators_RefuseTheirOwnMissingParts(t *testing.T) {
-	if _, err := artistpage.NewDeezerFeaturedEnrichment(nil, search.NewCircuitBreaker()); !errors.Is(err, artistpage.ErrCollaboratorRequired) || !strings.Contains(err.Error(), "featured lookup") {
-		t.Errorf("enrichment without a lookup: err = %v, want ErrArtistPageCollaboratorRequired naming the featured lookup", err)
+	if _, err := artistpage.NewDeezerFeaturedEnrichment(nil, search.NewCircuitBreaker(clock.Now)); !errors.Is(err, artistpage.ErrCollaboratorRequired) || !strings.Contains(err.Error(), "featured lookup") {
+		t.Errorf("enrichment without a lookup: err = %v, want artistpage.ErrCollaboratorRequired naming the featured lookup", err)
 	}
 	if _, err := artistpage.NewDeezerFeaturedEnrichment(fakeTrackFeatured{}, nil); !errors.Is(err, artistpage.ErrCollaboratorRequired) || !strings.Contains(err.Error(), "circuit breaker") {
-		t.Errorf("enrichment without a breaker: err = %v, want ErrArtistPageCollaboratorRequired naming the circuit breaker", err)
+		t.Errorf("enrichment without a breaker: err = %v, want artistpage.ErrCollaboratorRequired naming the circuit breaker", err)
 	}
-	if _, err := artistpage.NewSearchAlbumFallback(nil, search.NewCircuitBreaker()); !errors.Is(err, artistpage.ErrCollaboratorRequired) || !strings.Contains(err.Error(), "search provider") {
-		t.Errorf("fallback without a searcher: err = %v, want ErrArtistPageCollaboratorRequired naming the search provider", err)
+	if _, err := artistpage.NewSearchAlbumFallback(nil, search.NewCircuitBreaker(clock.Now)); !errors.Is(err, artistpage.ErrCollaboratorRequired) || !strings.Contains(err.Error(), "search provider") {
+		t.Errorf("fallback without a searcher: err = %v, want artistpage.ErrCollaboratorRequired naming the search provider", err)
 	}
 	if _, err := artistpage.NewSearchAlbumFallback(&fakeAlbumSearcher{}, nil); !errors.Is(err, artistpage.ErrCollaboratorRequired) || !strings.Contains(err.Error(), "circuit breaker") {
-		t.Errorf("fallback without a breaker: err = %v, want ErrArtistPageCollaboratorRequired naming the circuit breaker", err)
+		t.Errorf("fallback without a breaker: err = %v, want artistpage.ErrCollaboratorRequired naming the circuit breaker", err)
 	}
 }
 
 func TestNoFeaturedEnrichment_ServesTheTracksAsTheyAreAndLeavesTheBreakerUntouched(t *testing.T) {
-	breaker := search.NewCircuitBreaker()
+	breaker := search.NewCircuitBreaker(clock.Now)
 	before := breaker.Snapshot(search.ProviderDeezer)
 	deezer := &memory.AlbumContentProvider{Results: []search.SearchResult{deezerTrackFeat("1", "Singapore"), deezerTrackFeat("2", "Lose It")}}
 	svc, err := artistpage.NewGetAlbumTracksService(
@@ -529,7 +530,7 @@ func TestNoAlbumFallback_ReturnsTheDegradedPrimaryAnswer(t *testing.T) {
 			},
 			search.ProviderDeezer: deezer,
 		},
-		artistpage.NoFeaturedEnrichment{}, artistpage.NoAlbumFallback{}, search.NewCircuitBreaker())
+		artistpage.NoFeaturedEnrichment{}, artistpage.NoAlbumFallback{}, search.NewCircuitBreaker(clock.Now))
 	if err != nil {
 		t.Fatalf("NewGetAlbumTracksService: %v", err)
 	}

@@ -95,7 +95,7 @@ func ArtworkVerifiedMissHandlers() map[string]http.HandlerFunc {
 
 func CancelMidRequestServer(t *testing.T) (*httptest.Server, context.Context) {
 	t.Helper()
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
 		cancel()
@@ -138,8 +138,6 @@ type FakeRoundTripper struct {
 }
 
 func (f FakeRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) { return f.Fn(r) }
-
-var FarFuture = time.Now().Add(24 * time.Hour)
 
 const HostileMBID = "a/b?c#d"
 

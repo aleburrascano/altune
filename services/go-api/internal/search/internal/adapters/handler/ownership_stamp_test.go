@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service/artistpage"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"net/http"
@@ -136,7 +137,7 @@ func TestOwnershipGolden_Search(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	provider := &fakeSearchProvider{name: search.ProviderDeezer, results: goldenTracks()}
 	router := goldenRouter(t, searchtest.CompleteServices(t, handler.DiscoveryServices{
-		Search: searchtest.NewSearchService(t, bg, []search.SearchProvider{provider}, search.NewCircuitBreaker()),
+		Search: searchtest.NewSearchService(t, bg, []search.SearchProvider{provider}, search.NewCircuitBreaker(clock.Now)),
 	}), &recordingTrackNumberFiller{done: make(chan struct{})})
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/search?q=song&save_history=false", nil)

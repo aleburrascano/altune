@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service/providerguard"
 	"altune/go-api/internal/search/internal/service/vocabulary"
+	"altune/go-api/internal/shared/clock"
 	"testing"
 )
 
@@ -14,7 +15,7 @@ func CompleteServices(t testing.TB, given handler.DiscoveryServices) handler.Dis
 	t.Helper()
 	s := given
 	if s.Search == nil {
-		s.Search = NewSearchService(t, NewTracker(t), nil, providerguard.NewCircuitBreaker())
+		s.Search = NewSearchService(t, NewTracker(t), nil, providerguard.NewCircuitBreaker(clock.Now))
 	}
 	if s.History == nil {
 		s.History = NewListHistory(t, &memory.FakeHistoryReader{})

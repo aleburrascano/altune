@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/service/providerguard"
 	"altune/go-api/internal/search/internal/service/related"
+	"altune/go-api/internal/shared/clock"
 	"testing"
 )
 
@@ -12,7 +13,7 @@ type FakeRelatedProvider = memory.FakeRelatedProvider
 
 func NewRelatedTracks(t testing.TB, providers map[string]ports.RelatedTracksProvider) *related.GetRelatedTracksService {
 	t.Helper()
-	return NewRelatedTracksWithBreaker(t, providers, providerguard.NewCircuitBreaker())
+	return NewRelatedTracksWithBreaker(t, providers, providerguard.NewCircuitBreaker(clock.Now))
 }
 
 func NewRelatedTracksWithBreaker(t testing.TB, providers map[string]ports.RelatedTracksProvider, breaker *providerguard.CircuitBreaker) *related.GetRelatedTracksService {

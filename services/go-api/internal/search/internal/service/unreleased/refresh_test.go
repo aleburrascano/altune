@@ -52,16 +52,16 @@ func recordedDueStore(due ...search.UnreleasedDueArtist) *dueStore {
 	return store
 }
 
-func refreshService(genius ports.GeniusSongCatalog, store *dueStore) *search.UnreleasedService {
+func refreshService(t *testing.T, genius ports.GeniusSongCatalog, store *dueStore) *search.UnreleasedService {
 	cfg := search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10, DetailConcurrency: 2, Wait: time.Second}
-	return searchtest.MustUnreleased(search.NewUnreleasedService(genius, &searchtest.ArtistCatalogTitles{}, cfg, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store))))
+	return searchtest.MustUnreleased(search.NewUnreleasedService(genius, &searchtest.ArtistCatalogTitles{}, cfg, searchtest.UnreleasedWiring(t, search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store))))
 }
 
 func TestService_RefreshDue_RebuildsExactlyTheArtistsDueReturns(t *testing.T) {
 	store := recordedDueStore(dueArtist("1", "Drake"), dueArtist("2", "Future"))
 	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-	if err := refreshService(genius, store).RefreshDue(context.Background(), now, 2); err != nil {
+	if err := refreshService(t, genius, store).RefreshDue(context.Background(), now, 2); err != nil {
 		t.Fatalf("RefreshDue: %v", err)
 	}
 	if store.gotLimit != 2 || !store.gotNow.Equal(now) {
@@ -79,7 +79,7 @@ func TestService_RefreshDue_AFailedRebuildDoesNotStopTheNextArtist(t *testing.T)
 	logs := captureLogs(t)
 	store := recordedDueStore(dueArtist("1", "Drake"), dueArtist("2", "Future"))
 	genius := &failingForName{GeniusSongCatalog: memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}, failName: "Drake"}
-	if err := refreshService(genius, store).RefreshDue(context.Background(), time.Now(), 2); err != nil {
+	if err := refreshService(t, genius, store).RefreshDue(context.Background(), time.Now(), 2); err != nil {
 		t.Fatalf("RefreshDue: %v", err)
 	}
 	writes := store.Writes()
@@ -94,7 +94,7 @@ func TestService_RefreshDue_AFailedRebuildDoesNotStopTheNextArtist(t *testing.T)
 func TestService_RefreshDue_ADueQueryFailureIsReturnedAndBuildsNothing(t *testing.T) {
 	store := &dueStore{err: errors.New("db down"), due: []search.UnreleasedDueArtist{dueArtist("1", "Drake")}}
 	genius := &memory.GeniusSongCatalog{ArtistFound: true}
-	if err := refreshService(genius, store).RefreshDue(context.Background(), time.Now(), 2); err == nil {
+	if err := refreshService(t, genius, store).RefreshDue(context.Background(), time.Now(), 2); err == nil {
 		t.Fatal("RefreshDue returned nil, want the Due error")
 	}
 	if len(genius.SearchedFor) != 0 {
@@ -105,7 +105,7 @@ func TestService_RefreshDue_ADueQueryFailureIsReturnedAndBuildsNothing(t *testin
 func TestService_RefreshDue_NeverRebuildsMoreThanTheLimitEvenIfTheStoreReturnsMore(t *testing.T) {
 	store := &dueStore{due: []search.UnreleasedDueArtist{dueArtist("1", "Drake"), dueArtist("2", "Future"), dueArtist("3", "Kanye")}}
 	genius := &memory.GeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
-	if err := refreshService(genius, store).RefreshDue(context.Background(), time.Now(), 2); err != nil {
+	if err := refreshService(t, genius, store).RefreshDue(context.Background(), time.Now(), 2); err != nil {
 		t.Fatalf("RefreshDue: %v", err)
 	}
 	if !slices.Equal(genius.SearchedFor, []string{"Drake", "Future"}) {

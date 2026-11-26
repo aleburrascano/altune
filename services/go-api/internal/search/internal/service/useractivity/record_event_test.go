@@ -6,12 +6,15 @@ import (
 	"altune/go-api/internal/search/internal/service/useractivity"
 	"altune/go-api/internal/search/searchtest"
 	apierror "altune/go-api/internal/shared/apierror"
+	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -27,7 +30,7 @@ func TestNewRecordEventService_RefusesAMissingCollaborator(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc, err := useractivity.NewRecordEventService(tt.store, tt.feed)
+			svc, err := useractivity.NewRecordEventService(tt.store, tt.feed, clock.Now)
 
 			if svc != nil || !errors.Is(err, useractivity.ErrCollaboratorRequired) {
 				t.Fatalf("got (%v, %v), want a refusal wrapping ErrCollaboratorRequired", svc, err)
@@ -404,5 +407,42 @@ func TestRecordEventService_Execute_RequiresEventIdForAcquisitionUiAndClientErro
 				t.Fatalf("Execute with an event_id: %v", err)
 			}
 		})
+	}
+}
+
+func TestNewRecordEventService_RefusesANilClock(t *testing.T) {
+	svc, err := useractivity.NewRecordEventService(&searchtest.FakeEventStore{}, useractivity.NoopActivityFeed{}, nil)
+
+	if svc != nil || !errors.Is(err, useractivity.ErrCollaboratorRequired) {
+		t.Fatalf("got (%v, %v), want a refusal wrapping ErrCollaboratorRequired", svc, err)
+	}
+}
+
+func TestRecordEventService_StampsEventsFromTheInjectedClock(t *testing.T) {
+	start := time.Date(2026, time.March, 4, 10, 30, 0, 0, time.UTC)
+	manual := clocktest.NewManual(start)
+	store := &searchtest.FakeEventStore{}
+	svc, err := useractivity.NewRecordEventService(store, useractivity.NoopActivityFeed{}, manual.Func())
+	if err != nil {
+		t.Fatalf("NewRecordEventService: %v", err)
+	}
+
+	if err := svc.Execute(t.Context(), ids.NewUserId(uuid.New()), useractivity.RecordEventInput{Type: domain.EventTypePlay}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	manual.Advance(90 * time.Second)
+	if err := svc.RecordAnonymousAuthFailure(t.Context(), "expired", "1.2.3"); err != nil {
+		t.Fatalf("RecordAnonymousAuthFailure: %v", err)
+	}
+
+	events := store.Recorded()
+	if len(events) != 2 {
+		t.Fatalf("want 2 events, got %d", len(events))
+	}
+	if !events[0].OccurredAt.Equal(start) {
+		t.Errorf("first event OccurredAt = %v, want %v", events[0].OccurredAt, start)
+	}
+	if want := start.Add(90 * time.Second); !events[1].OccurredAt.Equal(want) {
+		t.Errorf("auth failure OccurredAt = %v, want %v", events[1].OccurredAt, want)
 	}
 }

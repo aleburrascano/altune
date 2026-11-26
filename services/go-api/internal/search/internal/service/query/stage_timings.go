@@ -10,9 +10,9 @@ type stageTimings struct {
 	related   time.Duration
 }
 
-func timeStage(into *time.Duration) func() {
-	start := time.Now()
-	return func() { *into = time.Since(start) }
+func (s *Service) timeStage(into *time.Duration) func() {
+	start := s.now()
+	return func() { *into = s.now().Sub(start) }
 }
 
 func (t stageTimings) logAttrs(total time.Duration) []any {

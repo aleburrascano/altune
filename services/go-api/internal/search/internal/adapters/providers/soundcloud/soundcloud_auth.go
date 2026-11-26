@@ -2,6 +2,7 @@ package soundcloud
 
 import (
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
 	"fmt"
@@ -25,9 +26,9 @@ type clientIDResolver struct {
 	siteURL string
 }
 
-func newClientIDResolver(client *http.Client) *clientIDResolver {
+func newClientIDResolver(client *http.Client, now clock.Func) *clientIDResolver {
 	r := &clientIDResolver{client: client, siteURL: scSiteURL}
-	r.CachedResolver = providerrequests.NewCachedResolver("client_id", scResolveTimeout, r.resolve, providerrequests.NonEmpty)
+	r.CachedResolver = providerrequests.NewCachedResolver("client_id", scResolveTimeout, r.resolve, providerrequests.NonEmpty, now)
 	return r
 }
 

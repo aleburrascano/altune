@@ -4,6 +4,8 @@ import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service/providerguard"
+	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/clock/clocktest"
 	"context"
 	"log/slog"
 	"sync"
@@ -24,7 +26,7 @@ func tripProvider(ctx context.Context, cb *providerguard.CircuitBreaker, provide
 }
 
 func TestCircuitBreaker_AProviderWithNoFailuresIsClosedAndOK(t *testing.T) {
-	cb := search.NewCircuitBreaker()
+	cb := search.NewCircuitBreaker(clock.Now)
 
 	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); !ok {
 		t.Error("expected closed circuit to allow requests")
@@ -35,7 +37,7 @@ func TestCircuitBreaker_AProviderWithNoFailuresIsClosedAndOK(t *testing.T) {
 }
 
 func TestCircuitBreaker_OpensAtTheThresholdAndReportsCircuitOpen(t *testing.T) {
-	cb := search.NewCircuitBreaker()
+	cb := search.NewCircuitBreaker(clock.Now)
 	for range breakerTripsAfter - 1 {
 		cb.RecordFailure(context.Background(), search.ProviderDeezer, providerguard.Admission{})
 	}
@@ -54,7 +56,7 @@ func TestCircuitBreaker_OpensAtTheThresholdAndReportsCircuitOpen(t *testing.T) {
 }
 
 func TestCircuitBreaker_AHalfOpenProviderReportsOKWhileItsProbeRuns(t *testing.T) {
-	cb := search.NewCircuitBreaker()
+	cb := search.NewCircuitBreaker(clock.Now)
 	tripProvider(context.Background(), cb, search.ProviderDeezer)
 	cb.AdvanceClock(breakerOpenFor + time.Second)
 
@@ -71,7 +73,7 @@ func TestCircuitBreaker_AHalfOpenProviderReportsOKWhileItsProbeRuns(t *testing.T
 }
 
 func TestCircuitBreaker_AProbeLeaseExpiresAfterItsConfiguredDuration(t *testing.T) {
-	cb := search.NewCircuitBreaker()
+	cb := search.NewCircuitBreaker(clock.Now)
 	tripProvider(context.Background(), cb, search.ProviderDeezer)
 	cb.AdvanceClock(breakerOpenFor + time.Second)
 	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); !ok {
@@ -86,7 +88,7 @@ func TestCircuitBreaker_AProbeLeaseExpiresAfterItsConfiguredDuration(t *testing.
 }
 
 func TestCircuitBreaker_IndependentProviders(t *testing.T) {
-	cb := search.NewCircuitBreaker()
+	cb := search.NewCircuitBreaker(clock.Now)
 	tripProvider(context.Background(), cb, search.ProviderDeezer)
 
 	if _, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer); ok {
@@ -107,7 +109,7 @@ func TestCircuitBreaker_IndependentProviders(t *testing.T) {
 }
 
 func TestCircuitBreaker_ReleaseProbeAdmitsNextProbe(t *testing.T) {
-	cb := search.NewCircuitBreaker()
+	cb := search.NewCircuitBreaker(clock.Now)
 	tripProvider(context.Background(), cb, search.ProviderDeezer)
 	cb.AdvanceClock(breakerOpenFor + time.Second)
 	adm, ok := cb.AllowRequest(context.Background(), search.ProviderDeezer)
@@ -179,7 +181,7 @@ func TestCircuitBreaker_LogsCarryCallerContext(t *testing.T) {
 
 	t.Run("opening logs once with provider and failures from ctx", func(t *testing.T) {
 		h := captureBreakerLogs(t)
-		cb := search.NewCircuitBreaker()
+		cb := search.NewCircuitBreaker(clock.Now)
 		tripProvider(ctx, cb, p)
 		if got := h.messages(); len(got) != 1 || got[0] != "circuit breaker opened (provider failing)" {
 			t.Fatalf("logs = %v, want exactly the opened message", got)
@@ -195,7 +197,7 @@ func TestCircuitBreaker_LogsCarryCallerContext(t *testing.T) {
 
 	t.Run("no failures logs nothing", func(t *testing.T) {
 		h := captureBreakerLogs(t)
-		cb := search.NewCircuitBreaker()
+		cb := search.NewCircuitBreaker(clock.Now)
 		cb.AllowRequest(ctx, p)
 		if got := h.messages(); len(got) != 0 {
 			t.Fatalf("logs = %v, want none", got)
@@ -204,7 +206,7 @@ func TestCircuitBreaker_LogsCarryCallerContext(t *testing.T) {
 
 	t.Run("success on closed breaker logs nothing", func(t *testing.T) {
 		h := captureBreakerLogs(t)
-		cb := search.NewCircuitBreaker()
+		cb := search.NewCircuitBreaker(clock.Now)
 		adm, _ := cb.AllowRequest(ctx, p)
 		cb.RecordSuccess(ctx, p, adm)
 		if got := h.messages(); len(got) != 0 {
@@ -214,7 +216,7 @@ func TestCircuitBreaker_LogsCarryCallerContext(t *testing.T) {
 
 	t.Run("recovery logs half-open then closed", func(t *testing.T) {
 		h := captureBreakerLogs(t)
-		cb := search.NewCircuitBreaker()
+		cb := search.NewCircuitBreaker(clock.Now)
 		tripProvider(ctx, cb, p)
 		cb.AdvanceClock(breakerOpenFor + time.Second)
 		adm, ok := cb.AllowRequest(ctx, p)
@@ -245,7 +247,7 @@ func TestCircuitBreaker_LogsCarryCallerContext(t *testing.T) {
 
 	t.Run("an expired probe lease logs the re-probe", func(t *testing.T) {
 		h := captureBreakerLogs(t)
-		cb := search.NewCircuitBreaker()
+		cb := search.NewCircuitBreaker(clock.Now)
 		tripProvider(ctx, cb, p)
 		cb.AdvanceClock(breakerOpenFor + time.Second)
 		cb.AllowRequest(ctx, p)
@@ -256,4 +258,29 @@ func TestCircuitBreaker_LogsCarryCallerContext(t *testing.T) {
 			t.Fatalf("logs = %v, want the lease expiry last", got)
 		}
 	})
+}
+
+func TestNewCircuitBreaker_PanicsOnANilClock(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("NewCircuitBreaker(nil) did not panic")
+		}
+	}()
+
+	search.NewCircuitBreaker(nil)
+}
+
+func TestCircuitBreaker_ReopensForProbingOnTheInjectedClock(t *testing.T) {
+	manual := clocktest.NewManual(time.Date(2026, time.March, 4, 10, 0, 0, 0, time.UTC))
+	cb := search.NewCircuitBreaker(manual.Func())
+	tripProvider(t.Context(), cb, domain.ProviderDeezer)
+	if _, ok := cb.AllowRequest(t.Context(), domain.ProviderDeezer); ok {
+		t.Fatal("an open circuit admitted a request")
+	}
+
+	manual.Advance(breakerOpenFor + time.Second)
+
+	if _, ok := cb.AllowRequest(t.Context(), domain.ProviderDeezer); !ok {
+		t.Error("the circuit stayed closed to probes after the open window passed on the injected clock")
+	}
 }

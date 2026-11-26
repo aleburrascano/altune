@@ -44,7 +44,7 @@ func (a *App) discoveryDeletedIdentityErasers() []search.DeletedUserDataEraser {
 	return []search.DeletedUserDataEraser{
 		search.NewPostgresSearchHistoryRepository(a.pool),
 		search.NewPostgresFavoritesRepository(a.pool),
-		search.NewPostgresEventStore(a.pool),
+		search.NewPostgresEventStore(a.pool, clock.Now),
 	}
 }
 

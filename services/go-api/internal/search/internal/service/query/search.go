@@ -39,7 +39,8 @@ type Service struct {
 	telemetry     *SearchTelemetry
 	vocab         *vocabulary.SpellingHintsIngestor
 
-	bg *background.Tracker
+	bg  *background.Tracker
+	now clock.Func
 
 	resolver *sharedResolver
 }
@@ -84,6 +85,7 @@ type Collaborators struct {
 
 	ExplorationDraw random.Unit
 	DeadlineTimer   clock.TimerFunc
+	Now             clock.Func
 }
 
 var ErrCollaboratorRequired = errors.New("search service needs every collaborator, pass the absent adapter to switch one off")
@@ -111,6 +113,7 @@ func (c Collaborators) missing(bg *background.Tracker, breaker *providerguard.Ci
 		{"behavior", c.Behavior == nil},
 		{"explorationDraw", c.ExplorationDraw == nil},
 		{"deadlineTimer", c.DeadlineTimer == nil},
+		{"now", c.Now == nil},
 	} {
 		if check.missing {
 			missing = append(missing, check.name)
@@ -190,7 +193,7 @@ func assembleService(providers []ports.SearchProvider, circuitBreaker *providerg
 	if err != nil {
 		return nil, fmt.Errorf("favorites lifter: %w", err)
 	}
-	recorder, err := history.NewRecordSearchHistoryService(c.History, time.Now)
+	recorder, err := history.NewRecordSearchHistoryService(c.History, c.Now)
 	if err != nil {
 		return nil, fmt.Errorf("history recorder: %w", err)
 	}
@@ -221,6 +224,7 @@ func assembleService(providers []ports.SearchProvider, circuitBreaker *providerg
 		telemetry:      newSearchTelemetry(c.Events, c.Activity, bg),
 		vocab:          ingestor,
 		bg:             bg,
+		now:            c.Now,
 		resolver:       newSharedResolver(),
 	}, nil
 }
@@ -282,7 +286,7 @@ func (s *Service) execute(
 	mode historyMode,
 	continues ids.EntityId,
 ) (*SearchOutput, error) {
-	startedAt := time.Now().UTC()
+	startedAt := s.now().UTC()
 	searchQuery := domain.SearchText(query.Raw)
 	queryNorm := textnorm.NormalizeForMatch(searchQuery)
 
@@ -298,12 +302,12 @@ func (s *Service) execute(
 		startedAt: startedAt,
 	}
 	stages := resolution.stages
-	favoritesDone := timeStage(&stages.favorites)
+	favoritesDone := s.timeStage(&stages.favorites)
 	ranked := s.favorites.Lift(ctx, userId, resolution.ranked)
 	favoritesDone()
 
 	var relatedGroups []domain.RelatedGroup
-	relatedDone := timeStage(&stages.related)
+	relatedDone := s.timeStage(&stages.related)
 	if len(ranked) > 0 {
 		relatedGroups = s.related.Execute(ctx, userId, ranked)
 	}
@@ -330,7 +334,7 @@ func (s *Service) execute(
 			fullSlate: fullSlate,
 			related:   relatedGroups,
 			explored:  explored,
-			timing:    searchTiming{stages: stages, total: time.Since(startedAt), cached: resolution.cached, partial: resolution.partial},
+			timing:    searchTiming{stages: stages, total: s.now().Sub(startedAt), cached: resolution.cached, partial: resolution.partial},
 		})
 	}
 
@@ -345,7 +349,7 @@ func (s *Service) execute(
 		"offset", query.Offset,
 		"total", total,
 		"tail_noise_top5", rank.TailNoiseInTopK(shown, 5),
-	}, stages.logAttrs(time.Since(startedAt))...)...)
+	}, stages.logAttrs(s.now().Sub(startedAt))...)...)
 
 	return &SearchOutput{
 		SearchId:         run.searchId,
@@ -420,7 +424,7 @@ func (s *Service) resolveCold(
 	searchQuery, queryNorm string,
 ) rankedResolution {
 	var stages stageTimings
-	fanOutDone := timeStage(&stages.fanOut)
+	fanOutDone := s.timeStage(&stages.fanOut)
 	perProvider, statuses := s.fanOut(ctx, searchQuery, query.Kinds)
 	fanOutDone()
 	resolution := rankedResolution{
@@ -487,7 +491,7 @@ func (s *Service) mergeRankEnrich(
 	queryNorm string,
 	stages *stageTimings,
 ) []domain.SearchResult {
-	rankDone := timeStage(&stages.rank)
+	rankDone := s.timeStage(&stages.rank)
 	ranked := rank.RankPipelineWith(perProvider, queryNorm, s.ranking.RankOptions())
 
 	for i := range ranked {
@@ -495,7 +499,7 @@ func (s *Service) mergeRankEnrich(
 	}
 	rankDone()
 
-	artworkDone := timeStage(&stages.artwork)
+	artworkDone := s.timeStage(&stages.artwork)
 	ranked = s.artwork.Fill(ctx, ranked)
 	artworkDone()
 	return ranked

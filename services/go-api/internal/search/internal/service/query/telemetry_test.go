@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
 	"strings"
@@ -16,7 +17,7 @@ func TestService_EmitsSearchTelemetryV2(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	store := &memory.FakeEventStore{}
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Events = store })
 
 	runSearch(t, svc, "humble")
 	bg.Wait()
@@ -50,7 +51,7 @@ func TestService_SearchTelemetryCarriesStageTimes(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	store := &memory.FakeEventStore{}
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}, Delay: 30 * time.Millisecond}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Events = store })
 
 	runSearch(t, svc, "humble")
 	bg.Wait()
@@ -76,7 +77,7 @@ func TestService_TelemetryFailureDoesNotSurface(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	store := &memory.FakeEventStore{Err: errors.New("db down")}
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Events = store })
 
 	out, err := svc.Execute(context.Background(), memory.NewUser(), memory.NewQuery(t, "humble"))
 	bg.Wait()
@@ -92,7 +93,7 @@ func TestService_TelemetryFailureDoesNotSurface(t *testing.T) {
 func TestService_NoEventStoreNoEmit(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker())
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now))
 	runSearch(t, svc, "humble")
 	bg.Wait()
 }
@@ -105,7 +106,7 @@ func TestService_SearchTelemetryRecordsShownSignatures(t *testing.T) {
 		memory.DeezerTrack("Humble Pie", "Other Artist", 60),
 		memory.DeezerTrack("Humble Beginnings", "Third Artist", 40),
 	}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Events = store })
 	q, err := search.NewSearchQuery("humble", map[search.ResultKind]bool{search.ResultKindTrack: true}, 1)
 	if err != nil {
 		t.Fatal(err)
@@ -151,7 +152,7 @@ func TestSearchTelemetry_DroppedEventLogsSearchAndUser(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	store := &memory.FakeEventStore{Err: errors.New("db down")}
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Events = store })
 	user := memory.NewUser()
 	ring := memory.CaptureDetachedLogs(t)
 

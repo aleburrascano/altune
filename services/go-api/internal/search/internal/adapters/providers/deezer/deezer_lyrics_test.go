@@ -3,6 +3,7 @@ package deezer_test
 import (
 	"altune/go-api/internal/search/internal/adapters/providers/deezer"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -41,7 +42,7 @@ func TestDeezerLyricsAdapter_ResolveAndLookup(t *testing.T) {
 	var jwtHits, pipeHits int32
 	server := deezerLyricsServer(&jwtHits, &pipeHits)
 	defer server.Close()
-	adapter := deezer.NewDeezerLyricsAdapter(providertest.NewClient(server.URL))
+	adapter := deezer.NewDeezerLyricsAdapter(providertest.NewClient(server.URL), clock.Now)
 
 	id, err := adapter.ResolveTrackID(context.Background(), "Adele", "Hello")
 	if err != nil {
@@ -77,7 +78,7 @@ func TestDeezerLyricsAdapter_JWTCachedAcrossLookups(t *testing.T) {
 	var jwtHits, pipeHits int32
 	server := deezerLyricsServer(&jwtHits, &pipeHits)
 	defer server.Close()
-	adapter := deezer.NewDeezerLyricsAdapter(providertest.NewClient(server.URL))
+	adapter := deezer.NewDeezerLyricsAdapter(providertest.NewClient(server.URL), clock.Now)
 
 	for range 3 {
 		if _, err := adapter.Lookup(context.Background(), "3135556"); err != nil {
@@ -114,7 +115,7 @@ func TestDeezerLyricsAdapter_SelfHealsOn401(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	adapter := deezer.NewDeezerLyricsAdapter(providertest.NewClient(server.URL))
+	adapter := deezer.NewDeezerLyricsAdapter(providertest.NewClient(server.URL), clock.Now)
 
 	lyrics, err := adapter.Lookup(context.Background(), "1")
 	if err != nil {
@@ -141,7 +142,7 @@ func TestDeezerLyricsAdapter_NoLyricsIsEmptyNotError(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	adapter := deezer.NewDeezerLyricsAdapter(providertest.NewClient(server.URL))
+	adapter := deezer.NewDeezerLyricsAdapter(providertest.NewClient(server.URL), clock.Now)
 
 	lyrics, err := adapter.Lookup(context.Background(), "1")
 	if err != nil {
@@ -170,7 +171,7 @@ func TestDeezerLyricsAdapter_OversizedJWTBodyIsRejected(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := deezer.NewDeezerLyricsAdapter(providertest.NewClient(server.URL)).Lookup(context.Background(), "1")
+	_, err := deezer.NewDeezerLyricsAdapter(providertest.NewClient(server.URL), clock.Now).Lookup(context.Background(), "1")
 	if err == nil {
 		t.Fatalf("Lookup took a jwt off a %d-byte body; want the body capped at %d and the decode rejected",
 			len(oversized), bodyCap)
@@ -181,7 +182,7 @@ func TestDeezerLyricsAdapter_OversizedJWTBodyIsRejected(t *testing.T) {
 }
 
 func TestDeezerLyricsAdapter_EmptyTrackIDReturnsEmpty(t *testing.T) {
-	adapter := deezer.NewDeezerLyricsAdapter(providertest.NewClient("http://unused"))
+	adapter := deezer.NewDeezerLyricsAdapter(providertest.NewClient("http://unused"), clock.Now)
 	lyrics, err := adapter.Lookup(context.Background(), "")
 	if err != nil || !lyrics.IsZero() {
 		t.Errorf("empty track id should return empty + nil, got %+v err=%v", lyrics, err)

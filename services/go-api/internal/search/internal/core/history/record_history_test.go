@@ -15,7 +15,7 @@ import (
 
 func TestRecordHistory_RefusesAMissingRepository(t *testing.T) {
 	if _, err := history.NewRecordSearchHistoryService(nil, time.Now); !errors.Is(err, history.ErrCollaboratorRequired) {
-		t.Fatalf("err = %v, want ErrHistoryCollaboratorRequired", err)
+		t.Fatalf("err = %v, want history.ErrCollaboratorRequired", err)
 	}
 }
 
@@ -69,6 +69,6 @@ func TestNewRecordSearchHistoryService_RefusesANilClock(t *testing.T) {
 	svc, err := history.NewRecordSearchHistoryService(&memory.FakeHistoryWriter{}, nil)
 
 	if !errors.Is(err, history.ErrClockRequired) || svc != nil {
-		t.Fatalf("NewRecordSearchHistoryService(nil clock) = (%v, %v), want ErrHistoryClockRequired and no service", svc, err)
+		t.Fatalf("NewRecordSearchHistoryService(nil clock) = (%v, %v), want history.ErrClockRequired and no service", svc, err)
 	}
 }

@@ -189,8 +189,8 @@ func (s *Service) searchProvider(
 	res, err := providerguard.RunAdmitted(ctx, call,
 		func(err error) error { return searchBreakerOutcome(provCtx, err) },
 		func() ([]domain.SearchResult, error) {
-			start := time.Now()
-			defer func() { latencyMs = time.Since(start).Milliseconds() }()
+			start := s.now()
+			defer func() { latencyMs = s.now().Sub(start).Milliseconds() }()
 			return p.Search(provCtx, searchQuery, kinds)
 		})
 

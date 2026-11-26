@@ -4,13 +4,14 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service/providerguard"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
 	"testing"
 )
 
 func TestRunAdmitted_SettlesWithMappedOutcome(t *testing.T) {
-	cb := providerguard.NewCircuitBreaker()
+	cb := providerguard.NewCircuitBreaker(clock.Now)
 	c, ok := providerguard.AdmitProviderCall(context.Background(), cb, domain.ProviderDeezer)
 	if !ok {
 		t.Fatal("fresh breaker refused a call")
@@ -29,7 +30,7 @@ func TestRunAdmitted_SettlesWithMappedOutcome(t *testing.T) {
 }
 
 func TestRunAdmitted_PanicRecordsOneFailureAndPropagates(t *testing.T) {
-	cb := providerguard.NewCircuitBreaker()
+	cb := providerguard.NewCircuitBreaker(clock.Now)
 	c, _ := providerguard.AdmitProviderCall(context.Background(), cb, domain.ProviderDeezer)
 	func() {
 		defer func() {

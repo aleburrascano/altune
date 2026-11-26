@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/search/internal/service/unreleased"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
+	"context"
 	"net/http"
 )
 
@@ -183,12 +184,12 @@ func nonEmpty(s string) *string {
 
 func (h *DiscoveryHandler) handleArtistUnreleased(w http.ResponseWriter, r *http.Request) {
 	withProvider(w, r,
-		func(pn domain.ProviderName, provider, externalID string) {
+		func(ctx context.Context, pn domain.ProviderName, provider, externalID string) {
 			name, ok := textParam(w, r, "name")
 			if !ok {
 				return
 			}
-			found, err := h.unreleasedSvc.Lookup(r.Context(), pn, externalID, name, knownIDsParam(r))
+			found, err := h.unreleasedSvc.Lookup(ctx, pn, externalID, name, knownIDsParam(r))
 			if err != nil {
 				failContentFetch(w, r, err, "get artist unreleased failed", provider, externalID)
 				return

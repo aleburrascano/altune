@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/providersearch"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/expiringcache"
 	"context"
 	"encoding/json"
@@ -28,17 +29,20 @@ type MusicBrainzAdapter struct {
 	releaseSF    singleflight.Group
 }
 
-func NewMusicBrainzAdapter(client *http.Client, userAgent string) *MusicBrainzAdapter {
+func NewMusicBrainzAdapter(client *http.Client, userAgent string, now clock.Func) *MusicBrainzAdapter {
+	if now == nil {
+		panic("musicbrainz.NewMusicBrainzAdapter: a clock is required")
+	}
 	return &MusicBrainzAdapter{
 		client:       client,
 		userAgent:    userAgent,
-		identityMemo: newMBMemo[*ports.ArtistIdentity](),
-		releaseMemo:  newMBMemo[[]mbReleaseGroup](),
+		identityMemo: newMBMemo[*ports.ArtistIdentity](now),
+		releaseMemo:  newMBMemo[[]mbReleaseGroup](now),
 	}
 }
 
-func newMBMemo[V any]() *expiringcache.Memo[string, V] {
-	return expiringcache.New[string, V](6*time.Hour, 2048, time.Now)
+func newMBMemo[V any](now clock.Func) *expiringcache.Memo[string, V] {
+	return expiringcache.New[string, V](6*time.Hour, 2048, now)
 }
 
 func (a *MusicBrainzAdapter) Name() domain.ProviderName { return domain.ProviderMusicBrainz }

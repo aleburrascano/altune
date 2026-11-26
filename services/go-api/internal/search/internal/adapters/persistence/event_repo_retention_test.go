@@ -3,6 +3,7 @@ package persistence_test
 import (
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -97,7 +98,7 @@ func TestRetentionPolicy_NamesEveryEventTypeButDiscographyObserved(t *testing.T)
 
 func TestPostgresEventStore_PruneEvents_PerTypeWindow(t *testing.T) {
 	pool := dbtest.Pool(t)
-	store := persistence.NewPostgresEventStore(pool)
+	store := persistence.NewPostgresEventStore(pool, clock.Now)
 	now := time.Now().UTC()
 
 	for _, ret := range retentionPolicy {
@@ -125,7 +126,7 @@ func TestPostgresEventStore_PruneEvents_PerTypeWindow(t *testing.T) {
 
 func TestPostgresEventStore_PruneEvents_LeavesDiscographyObserved(t *testing.T) {
 	pool := dbtest.Pool(t)
-	store := persistence.NewPostgresEventStore(pool)
+	store := persistence.NewPostgresEventStore(pool, clock.Now)
 	dbtest.ExclusiveDiscographyObservations(t, pool)
 	owner := newEventOwner(t, pool)
 
@@ -143,7 +144,7 @@ func TestPostgresEventStore_PruneEvents_LeavesDiscographyObserved(t *testing.T) 
 
 func TestPostgresEventStore_PruneEvents_UserTelemetryFollowsHealthRetention(t *testing.T) {
 	pool := dbtest.Pool(t)
-	store := persistence.NewPostgresEventStore(pool)
+	store := persistence.NewPostgresEventStore(pool, clock.Now)
 	now := time.Now().UTC()
 	types := []domain.EventType{
 		domain.EventTypePlaybackHealth, domain.EventTypeUserAction, domain.EventTypeFailureShown,

@@ -4,8 +4,8 @@ import (
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/core/history"
 	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/shared/clock"
 	"testing"
-	"time"
 )
 
 type (
@@ -16,7 +16,7 @@ type (
 
 func NewClearHistory(t testing.TB, eraser ports.HistoryEraser) *history.ClearSearchHistoryService {
 	t.Helper()
-	svc, err := history.NewClearSearchHistoryService(eraser, time.Now)
+	svc, err := history.NewClearSearchHistoryService(eraser, clock.Now)
 	if err != nil {
 		t.Fatalf("history.NewClearSearchHistoryService: %v", err)
 	}

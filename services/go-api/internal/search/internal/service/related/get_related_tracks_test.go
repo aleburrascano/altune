@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/search/internal/service/providerguard"
 	"altune/go-api/internal/search/internal/service/related"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
 	"strings"
@@ -25,14 +26,14 @@ func TestNewGetRelatedTracksService_RefusesAMissingCollaborator(t *testing.T) {
 		breaker   *providerguard.CircuitBreaker
 		missing   string
 	}{
-		{"no providers", nil, search.NewCircuitBreaker(), "providers"},
+		{"no providers", nil, search.NewCircuitBreaker(clock.Now), "providers"},
 		{"no breaker", map[string]ports.RelatedTracksProvider{}, nil, "breaker"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			svc, err := related.NewGetRelatedTracksService(tc.providers, tc.breaker)
 			if !errors.Is(err, related.ErrCollaboratorRequired) || svc != nil || !strings.Contains(err.Error(), tc.missing) {
-				t.Errorf("svc = %v, err = %v; want nil and ErrRelatedCollaboratorRequired naming %q", svc, err, tc.missing)
+				t.Errorf("svc = %v, err = %v; want nil and related.ErrCollaboratorRequired naming %q", svc, err, tc.missing)
 			}
 		})
 	}

@@ -3,6 +3,7 @@ package persistence_test
 import (
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -16,7 +17,7 @@ import (
 
 func performSearch(t *testing.T, store *persistence.PostgresEventStore, userId ids.UserId, queryNorm, searchID string) {
 	t.Helper()
-	appendOrFatal(t, store, domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 		UserId: userId, Type: domain.EventTypeSearchPerformed,
 		QueryNorm: queryNorm, SearchId: searchID,
 		Payload: map[string]any{"zero_result": false},
@@ -38,10 +39,10 @@ func storedQueryNorm(t *testing.T, pool *pgxpool.Pool, userId ids.UserId, eventI
 func TestPostgresEventStore_NonZeroNoClickQueries_IgnoresClientQueryNorm(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
-	store := persistence.NewPostgresEventStore(pool)
+	store := persistence.NewPostgresEventStore(pool, clock.Now)
 	ctx := context.Background()
-	honest := newEventTestUser(t, pool)
-	attacker := newEventTestUser(t, pool)
+	honest := newEventTestUser(t.Context(), t, pool)
+	attacker := newEventTestUser(t.Context(), t, pool)
 
 	suffix := uuid.New().String()[:8]
 	qAnswered := "qn answered " + suffix
@@ -49,7 +50,7 @@ func TestPostgresEventStore_NonZeroNoClickQueries_IgnoresClientQueryNorm(t *test
 	answeredSearch := uuid.New().String()
 
 	performSearch(t, store, honest, qAnswered, answeredSearch)
-	appendOrFatal(t, store, domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 		UserId: honest, Type: domain.EventTypeResultClicked,
 		SearchId: answeredSearch, QueryNorm: "garbled " + suffix,
 		Payload: map[string]any{"result_signature": "s"},
@@ -59,7 +60,7 @@ func TestPostgresEventStore_NonZeroNoClickQueries_IgnoresClientQueryNorm(t *test
 	attackerSearch := uuid.New().String()
 	performSearch(t, store, attacker, "qn attacker own "+suffix, attackerSearch)
 	for _, searchID := range []string{"", attackerSearch} {
-		appendOrFatal(t, store, domain.InteractionEvent{
+		appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 			UserId: attacker, Type: domain.EventTypeResultClicked,
 			SearchId: searchID, QueryNorm: qTarget,
 			Payload: map[string]any{"result_signature": "s"},
@@ -85,9 +86,9 @@ func TestPostgresEventStore_NonZeroNoClickQueries_IgnoresClientQueryNorm(t *test
 func TestPostgresEventStore_Append_ResolvesClientQueryNormFromSearch(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
-	store := persistence.NewPostgresEventStore(pool)
-	owner := newEventTestUser(t, pool)
-	other := newEventTestUser(t, pool)
+	store := persistence.NewPostgresEventStore(pool, clock.Now)
+	owner := newEventTestUser(t.Context(), t, pool)
+	other := newEventTestUser(t.Context(), t, pool)
 
 	suffix := uuid.New().String()[:8]
 	canonical := "qn canonical " + suffix
@@ -108,7 +109,7 @@ func TestPostgresEventStore_Append_ResolvesClientQueryNormFromSearch(t *testing.
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			eventID := uuid.New().String()
-			appendOrFatal(t, store, domain.InteractionEvent{
+			appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 				UserId: tc.userId, Type: domain.EventTypePlay,
 				SearchId: tc.searchID, EventId: eventID, QueryNorm: "forged " + suffix,
 			})
@@ -127,18 +128,18 @@ func deref(s *string) string {
 	return *s
 }
 
-func appendOrFatal(t *testing.T, store *persistence.PostgresEventStore, ev domain.InteractionEvent) {
+func appendOrFatal(ctx context.Context, t *testing.T, store *persistence.PostgresEventStore, ev domain.InteractionEvent) {
 	t.Helper()
-	if err := store.Append(context.Background(), ev); err != nil {
+	if err := store.Append(ctx, ev); err != nil {
 		t.Fatalf("Append(%s): %v", ev.Type.String(), err)
 	}
 }
 
-func newEventTestUser(t *testing.T, pool *pgxpool.Pool) ids.UserId {
+func newEventTestUser(ctx context.Context, t *testing.T, pool *pgxpool.Pool) ids.UserId {
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(),
+		_, _ = pool.Exec(context.WithoutCancel(ctx),
 			`DELETE FROM discovery_events WHERE user_id = $1`, userId.UUID())
 	})
 	return userId
@@ -146,7 +147,7 @@ func newEventTestUser(t *testing.T, pool *pgxpool.Pool) ids.UserId {
 
 func showResults(t *testing.T, store *persistence.PostgresEventStore, userId ids.UserId, occurredAt time.Time, sigs ...string) {
 	t.Helper()
-	appendOrFatal(t, store, domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 		OccurredAt: occurredAt,
 		UserId:     userId, Type: domain.EventTypeSearchPerformed,
 		SearchId:  uuid.New().String(),
@@ -158,14 +159,14 @@ func showResults(t *testing.T, store *persistence.PostgresEventStore, userId ids
 func TestPostgresEventStore_SatisfactionSignals_RequiresShownResult(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
-	store := persistence.NewPostgresEventStore(pool)
+	store := persistence.NewPostgresEventStore(pool, clock.Now)
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	attacker := newEventTestUser(t, pool)
-	viewer := newEventTestUser(t, pool)
-	stale := newEventTestUser(t, pool)
-	honest := newEventTestUser(t, pool)
+	attacker := newEventTestUser(t.Context(), t, pool)
+	viewer := newEventTestUser(t.Context(), t, pool)
+	stale := newEventTestUser(t.Context(), t, pool)
+	honest := newEventTestUser(t.Context(), t, pool)
 
 	suffix := uuid.New().String()[:8]
 	sigForged := "track|forged title " + suffix + "|forged artist"
@@ -174,26 +175,26 @@ func TestPostgresEventStore_SatisfactionSignals_RequiresShownResult(t *testing.T
 	showResults(t, store, viewer, now, "track|other "+suffix+"|x")
 	showResults(t, store, attacker, now, sigLegit)
 	for _, typ := range []domain.EventType{domain.EventTypePlay, domain.EventTypeCompleted} {
-		appendOrFatal(t, store, domain.InteractionEvent{
+		appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 			UserId: attacker, Type: typ,
 			Payload: map[string]any{"result_signature": sigForged},
 		})
 	}
 	showResults(t, store, viewer, now, sigForged)
-	appendOrFatal(t, store, domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 		UserId: attacker, Type: domain.EventTypePlay,
 		Payload: map[string]any{"result_signature": sigForged},
 	})
 
 	const shownResultWindow = 24 * time.Hour
 	showResults(t, store, stale, now.Add(-shownResultWindow-time.Hour), sigForged)
-	appendOrFatal(t, store, domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 		UserId: stale, Type: domain.EventTypePlay,
 		Payload: map[string]any{"result_signature": sigForged},
 	})
 
 	showResults(t, store, honest, now.Add(-time.Minute), sigLegit)
-	appendOrFatal(t, store, domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 		UserId: honest, Type: domain.EventTypeCompleted,
 		Payload: map[string]any{"result_signature": sigLegit},
 	})
@@ -217,12 +218,12 @@ func TestPostgresEventStore_SatisfactionSignals_RequiresShownResult(t *testing.T
 func TestPostgresEventStore_SatisfactionSignals(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
-	store := persistence.NewPostgresEventStore(pool)
+	store := persistence.NewPostgresEventStore(pool, clock.Now)
 	ctx := context.Background()
 
-	userA := newEventTestUser(t, pool)
-	userB := newEventTestUser(t, pool)
-	userC := newEventTestUser(t, pool)
+	userA := newEventTestUser(t.Context(), t, pool)
+	userB := newEventTestUser(t.Context(), t, pool)
+	userC := newEventTestUser(t.Context(), t, pool)
 
 	suffix := uuid.New().String()[:8]
 	sigCapped := "sig-cap-" + suffix
@@ -236,26 +237,26 @@ func TestPostgresEventStore_SatisfactionSignals(t *testing.T) {
 	showResults(t, store, userC, shownAt, sigZeroNet)
 
 	for range 10 {
-		appendOrFatal(t, store, domain.InteractionEvent{
+		appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 			UserId: userA, Type: domain.EventTypePlay,
 			Payload: map[string]any{"result_signature": sigCapped},
 		})
 	}
 
-	appendOrFatal(t, store, domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 		UserId: userA, Type: domain.EventTypePlay,
 		Payload: map[string]any{"result_signature": sigMixed},
 	})
-	appendOrFatal(t, store, domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 		UserId: userA, Type: domain.EventTypeCompleted,
 		Payload: map[string]any{"result_signature": sigMixed},
 	})
-	appendOrFatal(t, store, domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 		UserId: userB, Type: domain.EventTypeSkip,
 		Payload: map[string]any{"result_signature": sigMixed, "dwell_ms": 1500},
 	})
 
-	appendOrFatal(t, store, domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 		UserId: userB, Type: domain.EventTypePlay,
 		Payload: map[string]any{"result_signature": sigPoisoned},
 	})
@@ -264,16 +265,16 @@ func TestPostgresEventStore_SatisfactionSignals(t *testing.T) {
 		if dwell != nil {
 			payload["dwell_ms"] = dwell
 		}
-		appendOrFatal(t, store, domain.InteractionEvent{
+		appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 			UserId: userB, Type: domain.EventTypeSkip, Payload: payload,
 		})
 	}
 
-	appendOrFatal(t, store, domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 		UserId: userC, Type: domain.EventTypePlay,
 		Payload: map[string]any{"result_signature": sigZeroNet},
 	})
-	appendOrFatal(t, store, domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 		UserId: userC, Type: domain.EventTypeSkip,
 		Payload: map[string]any{"result_signature": sigZeroNet, "dwell_ms": 100},
 	})
@@ -304,9 +305,9 @@ func TestPostgresEventStore_SatisfactionSignals(t *testing.T) {
 func TestPostgresEventStore_ZeroResultQueries(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
-	store := persistence.NewPostgresEventStore(pool)
+	store := persistence.NewPostgresEventStore(pool, clock.Now)
 	ctx := context.Background()
-	userId := newEventTestUser(t, pool)
+	userId := newEventTestUser(t.Context(), t, pool)
 
 	suffix := uuid.New().String()[:8]
 	qHit := "qa zero hit " + suffix
@@ -315,7 +316,7 @@ func TestPostgresEventStore_ZeroResultQueries(t *testing.T) {
 	qFalse := "qa zero false " + suffix
 
 	search := func(queryNorm string, payload map[string]any) {
-		appendOrFatal(t, store, domain.InteractionEvent{
+		appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 			UserId: userId, Type: domain.EventTypeSearchPerformed,
 			QueryNorm: queryNorm, Payload: payload,
 		})
@@ -347,15 +348,15 @@ func TestPostgresEventStore_ZeroResultQueries(t *testing.T) {
 func TestPostgresEventStore_ZeroResultTotal(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
-	store := persistence.NewPostgresEventStore(pool)
+	store := persistence.NewPostgresEventStore(pool, clock.Now)
 	ctx := context.Background()
-	userId := newEventTestUser(t, pool)
+	userId := newEventTestUser(t.Context(), t, pool)
 
 	suffix := uuid.New().String()[:8]
 	since := time.Now().UTC().Add(-time.Minute)
 
 	search := func(queryNorm string, payload map[string]any) {
-		appendOrFatal(t, store, domain.InteractionEvent{
+		appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 			UserId: userId, Type: domain.EventTypeSearchPerformed,
 			QueryNorm: queryNorm, Payload: payload,
 		})
@@ -393,9 +394,9 @@ func TestPostgresEventStore_ZeroResultTotal(t *testing.T) {
 func TestPostgresEventStore_NonZeroNoClickQueries(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
-	store := persistence.NewPostgresEventStore(pool)
+	store := persistence.NewPostgresEventStore(pool, clock.Now)
 	ctx := context.Background()
-	userId := newEventTestUser(t, pool)
+	userId := newEventTestUser(t.Context(), t, pool)
 
 	suffix := uuid.New().String()[:8]
 	qNoClick := "qa noclick " + suffix
@@ -403,24 +404,24 @@ func TestPostgresEventStore_NonZeroNoClickQueries(t *testing.T) {
 	qZero := "qa noclick zero " + suffix
 	qPoison := "qa noclick poison " + suffix
 
-	appendOrFatal(t, store, domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 		UserId: userId, Type: domain.EventTypeSearchPerformed,
 		QueryNorm: qNoClick, Payload: map[string]any{"zero_result": false},
 	})
 	clickedSearchID := uuid.New().String()
-	appendOrFatal(t, store, domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 		UserId: userId, Type: domain.EventTypeSearchPerformed, SearchId: clickedSearchID,
 		QueryNorm: qClicked, Payload: map[string]any{"zero_result": false},
 	})
-	appendOrFatal(t, store, domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 		UserId: userId, Type: domain.EventTypeResultClicked, SearchId: clickedSearchID,
 		Payload: map[string]any{"result_signature": "s"},
 	})
-	appendOrFatal(t, store, domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 		UserId: userId, Type: domain.EventTypeSearchPerformed,
 		QueryNorm: qZero, Payload: map[string]any{"zero_result": true},
 	})
-	appendOrFatal(t, store, domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 		UserId: userId, Type: domain.EventTypeSearchPerformed,
 		QueryNorm: qPoison, Payload: map[string]any{"zero_result": "nope"},
 	})
@@ -446,51 +447,51 @@ func TestPostgresEventStore_NonZeroNoClickQueries(t *testing.T) {
 func TestPostgresEventStore_AbandonedSearches(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
-	store := persistence.NewPostgresEventStore(pool)
+	store := persistence.NewPostgresEventStore(pool, clock.Now)
 	ctx := context.Background()
 
 	suffix := uuid.New().String()[:8]
 	base := time.Now().UTC().Add(-10 * time.Minute)
 
 	search := func(userId ids.UserId, queryNorm, searchID string, at time.Time) {
-		appendOrFatal(t, store, domain.InteractionEvent{
+		appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 			UserId: userId, Type: domain.EventTypeSearchPerformed,
 			QueryNorm: queryNorm, SearchId: searchID, OccurredAt: at,
 		})
 	}
 
-	userA := newEventTestUser(t, pool)
+	userA := newEventTestUser(t.Context(), t, pool)
 	qAband := "qa aband " + suffix
 	search(userA, qAband, "", base)
 	search(userA, "zz retry one "+suffix, "", base.Add(30*time.Second))
 
-	userB := newEventTestUser(t, pool)
+	userB := newEventTestUser(t.Context(), t, pool)
 	q59 := "qa aband 59s " + suffix
 	search(userB, q59, "", base)
 	search(userB, "zz retry two "+suffix, "", base.Add(59*time.Second))
 
-	userC := newEventTestUser(t, pool)
+	userC := newEventTestUser(t.Context(), t, pool)
 	q61 := "qa aband 61s " + suffix
 	search(userC, q61, "", base)
 	search(userC, "zz retry three "+suffix, "", base.Add(61*time.Second))
 
-	userD := newEventTestUser(t, pool)
+	userD := newEventTestUser(t.Context(), t, pool)
 	qClicked := "qa aband clicked " + suffix
 	clickedSearchID := uuid.New().String()
 	search(userD, qClicked, clickedSearchID, base)
-	appendOrFatal(t, store, domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 		UserId: userD, Type: domain.EventTypeResultClicked, SearchId: clickedSearchID,
 		OccurredAt: base.Add(5 * time.Second),
 		Payload:    map[string]any{"result_signature": "s"},
 	})
 	search(userD, "zz retry four "+suffix, "", base.Add(30*time.Second))
 
-	userE, userF := newEventTestUser(t, pool), newEventTestUser(t, pool)
+	userE, userF := newEventTestUser(t.Context(), t, pool), newEventTestUser(t.Context(), t, pool)
 	qAlone := "qa aband alone " + suffix
 	search(userE, qAlone, "", base)
 	search(userF, "qa aband other user "+suffix, "", base.Add(10*time.Second))
 
-	userG := newEventTestUser(t, pool)
+	userG := newEventTestUser(t.Context(), t, pool)
 	qTyping := "qa aband typ " + suffix[:4]
 	search(userG, qTyping, "", base)
 	search(userG, qTyping+suffix[4:], "", base.Add(2*time.Second))
@@ -527,7 +528,7 @@ func TestPostgresEventStore_AbandonedSearches(t *testing.T) {
 func TestPostgresEventStore_Append_EventIDDedupAndMalformedIDs(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := dbtest.Pool(t)
-	store := persistence.NewPostgresEventStore(pool)
+	store := persistence.NewPostgresEventStore(pool, clock.Now)
 	ctx := context.Background()
 
 	countRows := func(t *testing.T, userId ids.UserId) int {
@@ -542,29 +543,29 @@ func TestPostgresEventStore_Append_EventIDDedupAndMalformedIDs(t *testing.T) {
 	}
 
 	t.Run("valid event_id dedups the retry", func(t *testing.T) {
-		userId := newEventTestUser(t, pool)
+		userId := newEventTestUser(t.Context(), t, pool)
 		eventID := uuid.New().String()
 		ev := domain.InteractionEvent{
 			UserId: userId, Type: domain.EventTypeLibraryAdd, EventId: eventID,
 			Payload: map[string]any{"result_signature": "sig-dedup"},
 		}
-		appendOrFatal(t, store, ev)
-		appendOrFatal(t, store, ev)
+		appendOrFatal(t.Context(), t, store, ev)
+		appendOrFatal(t.Context(), t, store, ev)
 		if n := countRows(t, userId); n != 1 {
 			t.Errorf("rows after retried critical event = %d, want 1 (ON CONFLICT no-op)", n)
 		}
 	})
 
 	t.Run("another user's identical event_id still inserts", func(t *testing.T) {
-		replayer := newEventTestUser(t, pool)
-		victim := newEventTestUser(t, pool)
+		replayer := newEventTestUser(t.Context(), t, pool)
+		victim := newEventTestUser(t.Context(), t, pool)
 		eventID := uuid.New().String()
 
-		appendOrFatal(t, store, domain.InteractionEvent{
+		appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 			UserId: replayer, Type: domain.EventTypeLibraryAdd, EventId: eventID,
 			Payload: map[string]any{"result_signature": "sig-replayed"},
 		})
-		appendOrFatal(t, store, domain.InteractionEvent{
+		appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 			UserId: victim, Type: domain.EventTypeLibraryAdd, EventId: eventID,
 			Payload: map[string]any{"result_signature": "sig-own"},
 		})
@@ -575,12 +576,12 @@ func TestPostgresEventStore_Append_EventIDDedupAndMalformedIDs(t *testing.T) {
 	})
 
 	t.Run("malformed event_id inserts without dedup", func(t *testing.T) {
-		userId := newEventTestUser(t, pool)
+		userId := newEventTestUser(ctx, t, pool)
 		ev := domain.InteractionEvent{
 			UserId: userId, Type: domain.EventTypeLibraryAdd, EventId: "not-a-uuid",
 		}
-		appendOrFatal(t, store, ev)
-		appendOrFatal(t, store, ev)
+		appendOrFatal(ctx, t, store, ev)
+		appendOrFatal(ctx, t, store, ev)
 		if n := countRows(t, userId); n != 2 {
 			t.Errorf("rows = %d, want 2 (unparseable event_id → NULL, no dedup)", n)
 		}
@@ -597,8 +598,8 @@ func TestPostgresEventStore_Append_EventIDDedupAndMalformedIDs(t *testing.T) {
 	})
 
 	t.Run("malformed search_id persists as NULL", func(t *testing.T) {
-		userId := newEventTestUser(t, pool)
-		appendOrFatal(t, store, domain.InteractionEvent{
+		userId := newEventTestUser(ctx, t, pool)
+		appendOrFatal(ctx, t, store, domain.InteractionEvent{
 			UserId: userId, Type: domain.EventTypePlay, SearchId: "bogus-not-a-uuid",
 		})
 		var searchID *uuid.UUID

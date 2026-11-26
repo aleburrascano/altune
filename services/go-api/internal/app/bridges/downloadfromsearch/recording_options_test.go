@@ -48,7 +48,7 @@ func searchFinding(t *testing.T, p *countingProvider) *search.SearchService {
 		Kind: search.ResultKindTrack, Title: unfoundTitle, Subtitle: unfoundArtist,
 		ISRC: unfoundISRC, RecordingMBID: searchOnlyMBID,
 	}}
-	return searchtest.NewSearchService(t, searchtest.NewTracker(t), []search.SearchProvider{p}, search.NewCircuitBreaker())
+	return searchtest.NewSearchService(t, searchtest.NewTracker(t), []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now))
 }
 
 type musicBrainzLog struct {

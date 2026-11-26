@@ -2,6 +2,7 @@ package applemusic
 
 import (
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -30,13 +31,13 @@ type appleMusicTokenResolver struct {
 	bundleBaseURL string
 }
 
-func newAppleMusicTokenResolver(client *http.Client) *appleMusicTokenResolver {
+func newAppleMusicTokenResolver(client *http.Client, now clock.Func) *appleMusicTokenResolver {
 	r := &appleMusicTokenResolver{
 		client:        client,
 		siteURL:       appleMusicSiteURL,
 		bundleBaseURL: "https://music.apple.com/",
 	}
-	r.CachedResolver = providerrequests.NewCachedResolver("token", appleMusicResolveTimeout, r.resolve, providerrequests.NonEmpty)
+	r.CachedResolver = providerrequests.NewCachedResolver("token", appleMusicResolveTimeout, r.resolve, providerrequests.NonEmpty, now)
 	return r
 }
 

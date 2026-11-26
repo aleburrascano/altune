@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/applemusic"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -47,7 +48,7 @@ func newAppleMusicSite(t *testing.T, api http.HandlerFunc, tokens ...string) app
 		}
 	}))
 	t.Cleanup(srv.Close)
-	return appleMusicSite{adapter: applemusic.NewAppleMusicAdapter(providertest.NewClient(srv.URL)), scrapes: scrapes}
+	return appleMusicSite{adapter: applemusic.NewAppleMusicAdapter(providertest.NewClient(srv.URL), clock.Now), scrapes: scrapes}
 }
 
 func newTestAppleMusicAdapter(t *testing.T, api http.HandlerFunc) *applemusic.AppleMusicAdapter {
@@ -306,7 +307,7 @@ func TestAppleMusicAdapter_bundleWithoutATokenFailsBeforeTheAPI(t *testing.T) {
 }
 
 func TestAppleMusicAdapter_Name(t *testing.T) {
-	a := applemusic.NewAppleMusicAdapter(http.DefaultClient)
+	a := applemusic.NewAppleMusicAdapter(http.DefaultClient, clock.Now)
 	if got := a.Name(); got != domain.ProviderAppleMusic {
 		t.Errorf("Name() = %v, want %v", got, domain.ProviderAppleMusic)
 	}
@@ -436,7 +437,7 @@ func TestAlbumTracksLive_E2E(t *testing.T) {
 	ctx := context.Background()
 	client := &http.Client{Timeout: 15 * time.Second}
 
-	ap := applemusic.NewAppleMusicAdapter(client)
+	ap := applemusic.NewAppleMusicAdapter(client, clock.Now)
 	apTracks, err := ap.GetAlbumTracks(ctx, domain.ProviderAppleMusic, "1895185526")
 	if err != nil {
 		t.Fatalf("apple GetAlbumTracks: %v", err)

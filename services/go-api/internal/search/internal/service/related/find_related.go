@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/expiringcache"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/parallel"
@@ -32,7 +33,10 @@ type FindRelatedService struct {
 	memo      *expiringcache.Memo[relatedMemoKey, []domain.SearchResult]
 }
 
-func NewFindRelatedService(sources ...LookupSource) (*FindRelatedService, error) {
+func NewFindRelatedService(now clock.Func, sources ...LookupSource) (*FindRelatedService, error) {
+	if now == nil {
+		return nil, fmt.Errorf("%w: a clock is nil", ErrCollaboratorRequired)
+	}
 	byKind := make(map[domain.ResultKind][]LookupSource, len(sources))
 	perResult := 0
 	for i, source := range sources {
@@ -46,7 +50,7 @@ func NewFindRelatedService(sources ...LookupSource) (*FindRelatedService, error)
 	return &FindRelatedService{
 		sources:   byKind,
 		perResult: perResult,
-		memo:      expiringcache.New[relatedMemoKey, []domain.SearchResult](relatedMemoTTL, relatedMemoMaxEntries, time.Now),
+		memo:      expiringcache.New[relatedMemoKey, []domain.SearchResult](relatedMemoTTL, relatedMemoMaxEntries, now),
 	}, nil
 }
 

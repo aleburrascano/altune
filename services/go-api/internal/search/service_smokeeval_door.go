@@ -1,6 +1,6 @@
 package search
 
-import smokeeval "altune/go-api/internal/search/internal/shell/searchsmoketest"
+import smokeeval "altune/go-api/internal/search/internal/shell/smokeeval"
 
 type (
 	SmokeQueryResult = smokeeval.QueryResult

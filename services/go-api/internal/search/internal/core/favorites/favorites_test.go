@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
 	apierror "altune/go-api/internal/shared/apierror"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -54,7 +55,7 @@ func rankedWithFavorites(t *testing.T, repo *memory.FakeFavoritesRepo, results [
 	t.Helper()
 	bg := searchtest.NewTracker(t)
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: results}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Favorites = repo })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Favorites = repo })
 	return searchFor(t, svc, memory.NewUser())
 }
 
@@ -141,7 +142,7 @@ func TestSearchLift_OneUsersFavoritesDoNotReorderTheCachedRankingOthersSee(t *te
 	bg := searchtest.NewTracker(t)
 	repo := favoritesRepoOf(memory.FavoriteOf(search.ResultKindArtist, "Don Toliver", ""))
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: threeNoIdeaTracks()}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Favorites = repo; c.ResultCache = memory.NewFakeResultCache() })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Favorites = repo; c.ResultCache = memory.NewFakeResultCache() })
 
 	unlifted := []string{"Cover Band", "Some DJ", "Don Toliver"}
 	assertOrder(t, searchFor(t, svc, ids.SystemUserId()), unlifted)
@@ -169,7 +170,7 @@ func TestFavoritesService_RefusesAMissingRepository(t *testing.T) {
 	svc, err := favoritespkg.NewFavoritesService(nil)
 
 	if svc != nil || !errors.Is(err, favoritespkg.ErrCollaboratorRequired) {
-		t.Fatalf("got (%v, %v), want a refusal wrapping ErrFavoritesCollaboratorRequired", svc, err)
+		t.Fatalf("got (%v, %v), want a refusal wrapping favorites.ErrCollaboratorRequired", svc, err)
 	}
 }
 
@@ -297,6 +298,6 @@ func TestFavoritesAdd_OverThePerUserCapIsATypedConflict(t *testing.T) {
 
 func TestFavoritesLifter_RefusesAMissingRepository(t *testing.T) {
 	if _, err := favoritespkg.NewFavoritesLifter(nil); !errors.Is(err, favoritespkg.ErrCollaboratorRequired) {
-		t.Fatalf("err = %v, want ErrFavoritesCollaboratorRequired", err)
+		t.Fatalf("err = %v, want favorites.ErrCollaboratorRequired", err)
 	}
 }

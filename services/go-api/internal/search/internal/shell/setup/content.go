@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/search/internal/service/providerguard"
 	"altune/go-api/internal/search/internal/service/related"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"fmt"
 )
 
@@ -49,7 +50,7 @@ func newArtistService(t *providerTable, s connections.Stores, breaker *providerg
 	if err != nil {
 		return nil, err
 	}
-	telemetry, err := artistpage.NewDiscographyTelemetry(s.Events, bg)
+	telemetry, err := artistpage.NewDiscographyTelemetry(s.Events, bg, clock.Now)
 	if err != nil {
 		return nil, fmt.Errorf("build the discography telemetry: %w", err)
 	}

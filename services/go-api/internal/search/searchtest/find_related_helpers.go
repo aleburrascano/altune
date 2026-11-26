@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/service/providerguard"
 	"altune/go-api/internal/search/internal/service/related"
+	"altune/go-api/internal/shared/clock"
 	"testing"
 )
 
@@ -65,7 +66,7 @@ func RelatedBreaker(breaker *providerguard.CircuitBreaker) FindRelatedPart {
 
 func NewFindRelated(t testing.TB, parts ...FindRelatedPart) *related.FindRelatedService {
 	t.Helper()
-	p := findRelatedParts{breaker: providerguard.NewCircuitBreaker()}
+	p := findRelatedParts{breaker: providerguard.NewCircuitBreaker(clock.Now)}
 	for _, part := range parts {
 		part(&p)
 	}
@@ -73,7 +74,7 @@ func NewFindRelated(t testing.TB, parts ...FindRelatedPart) *related.FindRelated
 	for _, build := range p.sources {
 		sources = append(sources, build(t, p.breaker))
 	}
-	svc, err := related.NewFindRelatedService(sources...)
+	svc, err := related.NewFindRelatedService(clock.Now, sources...)
 	if err != nil {
 		t.Fatalf("related.NewFindRelatedService: %v", err)
 	}

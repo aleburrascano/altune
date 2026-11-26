@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/search/internal/service/artistpage"
 	"altune/go-api/internal/search/internal/service/providerguard"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"testing"
 )
 
@@ -37,7 +38,7 @@ func ArtistBreaker(breaker *providerguard.CircuitBreaker) ArtistContentPart {
 
 func NewArtistContent(t testing.TB, providers map[domain.ProviderName]ports.ArtistContentProvider, parts ...ArtistContentPart) *artistpage.GetArtistContentService {
 	t.Helper()
-	p := artistContentParts{breaker: providerguard.NewCircuitBreaker()}
+	p := artistContentParts{breaker: providerguard.NewCircuitBreaker(clock.Now)}
 	for _, part := range parts {
 		part(&p)
 	}
@@ -59,7 +60,7 @@ func NewArtistContent(t testing.TB, providers map[domain.ProviderName]ports.Arti
 	}
 	var observer artistpage.DiscographyObserver = artistpage.NoDiscographyObserver{}
 	if p.events != nil {
-		telemetry, err := artistpage.NewDiscographyTelemetry(p.events, p.tracker)
+		telemetry, err := artistpage.NewDiscographyTelemetry(p.events, p.tracker, clock.Now)
 		if err != nil {
 			t.Fatalf("artistpage.NewDiscographyTelemetry: %v", err)
 		}
@@ -94,7 +95,7 @@ func AlbumBreaker(breaker *providerguard.CircuitBreaker) AlbumTracksPart {
 
 func NewAlbumTracks(t testing.TB, providers map[domain.ProviderName]ports.AlbumContentProvider, parts ...AlbumTracksPart) *artistpage.GetAlbumTracksService {
 	t.Helper()
-	p := albumTracksParts{breaker: providerguard.NewCircuitBreaker()}
+	p := albumTracksParts{breaker: providerguard.NewCircuitBreaker(clock.Now)}
 	for _, part := range parts {
 		part(&p)
 	}

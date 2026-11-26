@@ -37,11 +37,13 @@ type Service struct {
 	storage  Storage
 	cfg      Config
 	newTimer clock.TimerFunc
+	now      clock.Func
 
-	lifecycle context.Context
-	jobs      *background.Tracker
-	mu        sync.Mutex
-	inflight  map[string]*job
+	lifecycle           context.Context
+	cancelWithLifecycle func(cancel context.CancelFunc) (stop func() bool)
+	jobs                *background.Tracker
+	mu                  sync.Mutex
+	inflight            map[string]*job
 }
 
 var (
@@ -79,6 +81,7 @@ type Wiring struct {
 	Lifecycle context.Context
 	Jobs      *background.Tracker
 	Timer     clock.TimerFunc
+	Now       clock.Func
 }
 
 func NewService(genius ports.GeniusSongCatalog, catalog ports.ArtistCatalogTitles, cfg Config, w Wiring) (*Service, error) {
@@ -89,6 +92,7 @@ func NewService(genius ports.GeniusSongCatalog, catalog ports.ArtistCatalogTitle
 		"storage":   w.Storage == nil,
 		"lifecycle": w.Lifecycle == nil,
 		"jobs":      w.Jobs == nil,
+		"now":       w.Now == nil,
 	} {
 		if missing {
 			return nil, fmt.Errorf("%w: %s is nil", ErrCollaboratorRequired, name)
@@ -100,18 +104,22 @@ func NewService(genius ports.GeniusSongCatalog, catalog ports.ArtistCatalogTitle
 	return &Service{
 		genius:    genius,
 		newTimer:  w.Timer,
+		now:       w.Now,
 		trackers:  w.Trackers,
 		catalog:   catalog,
 		storage:   w.Storage,
 		cfg:       cfg,
 		lifecycle: w.Lifecycle,
-		jobs:      w.Jobs,
-		inflight:  map[string]*job{},
+		cancelWithLifecycle: func(cancel context.CancelFunc) func() bool {
+			return context.AfterFunc(w.Lifecycle, cancel)
+		},
+		jobs:     w.Jobs,
+		inflight: map[string]*job{},
 	}, nil
 }
 
 func (s *Service) Rebuild(ctx context.Context, key ports.UnreleasedArtistKey, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, error) {
-	startedAt := time.Now()
+	startedAt := s.now()
 	songs, complete, err := s.build(ctx, key.Provider, key.ExternalID, strings.TrimSpace(artistName), known)
 	if err != nil {
 		return nil, err

@@ -77,7 +77,7 @@ func TestNewClearSearchHistoryService_RefusesANilClock(t *testing.T) {
 	svc, err := history.NewClearSearchHistoryService(&memory.FakeHistoryEraser{}, nil)
 
 	if !errors.Is(err, history.ErrClockRequired) || svc != nil {
-		t.Fatalf("NewClearSearchHistoryService(nil clock) = (%v, %v), want ErrHistoryClockRequired and no service", svc, err)
+		t.Fatalf("NewClearSearchHistoryService(nil clock) = (%v, %v), want history.ErrClockRequired and no service", svc, err)
 	}
 }
 
@@ -85,7 +85,7 @@ func TestNewClearSearchHistoryService_RefusesAMissingRepository(t *testing.T) {
 	svc, err := history.NewClearSearchHistoryService(nil, time.Now)
 
 	if svc != nil || !errors.Is(err, history.ErrCollaboratorRequired) {
-		t.Fatalf("got (%v, %v), want a refusal wrapping ErrHistoryCollaboratorRequired", svc, err)
+		t.Fatalf("got (%v, %v), want a refusal wrapping history.ErrCollaboratorRequired", svc, err)
 	}
 }
 

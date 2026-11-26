@@ -39,10 +39,10 @@ func parseKindParam(w http.ResponseWriter, r *http.Request) (domain.ResultKind, 
 func withEnricher(
 	w http.ResponseWriter,
 	r *http.Request,
-	call func() (any, error),
+	call func(ctx context.Context) (any, error),
 	operation string,
 ) {
-	result, err := call()
+	result, err := call(r.Context())
 	if err != nil {
 		httpserver.HandleServiceError(w, r, fmt.Errorf("%s: %w", operation, err))
 		return
@@ -69,9 +69,9 @@ func splitDegraded(err error) (bool, error) {
 	return false, err
 }
 
-func degradedCall[E, D any](exec func() (E, error), toDTO func(E) D, stamp func(*D, bool)) func() (any, error) {
-	return func() (any, error) {
-		e, err := exec()
+func degradedCall[E, D any](exec func(context.Context) (E, error), toDTO func(E) D, stamp func(*D, bool)) func(context.Context) (any, error) {
+	return func(ctx context.Context) (any, error) {
+		e, err := exec(ctx)
 		degraded, err := splitDegraded(err)
 		if err != nil {
 			return nil, err
@@ -110,8 +110,8 @@ func (h *DiscoveryHandler) handleEnrichment(w http.ResponseWriter, r *http.Reque
 
 	withEnricher(w, r,
 		degradedCall(
-			func() (domain.MusicBrainzEnrichment, error) {
-				return h.enrichSvc.Execute(r.Context(), kind, title, subtitle, mbid)
+			func(ctx context.Context) (domain.MusicBrainzEnrichment, error) {
+				return h.enrichSvc.Execute(ctx, kind, title, subtitle, mbid)
 			},
 			enrichmentToDTO,
 			func(d *EnrichmentResponseDTO, v bool) { d.Degraded = v }),
@@ -193,7 +193,7 @@ func serveNamedEnrichment[E, D any](
 
 	withEnricher(w, r,
 		degradedCall(
-			func() (E, error) { return exec(r.Context(), kind, title, subtitle) },
+			func(ctx context.Context) (E, error) { return exec(ctx, kind, title, subtitle) },
 			toDTO, stamp),
 		fmt.Sprintf("%s enrichment of %s %q", source, kind, title))
 }
@@ -242,7 +242,9 @@ func (h *DiscoveryHandler) handleLyrics(w http.ResponseWriter, r *http.Request) 
 
 	withEnricher(w, r,
 		degradedCall(
-			func() (domain.DeezerLyrics, error) { return h.enrichers.Lyrics.Execute(r.Context(), title, subtitle) },
+			func(ctx context.Context) (domain.DeezerLyrics, error) {
+				return h.enrichers.Lyrics.Execute(ctx, title, subtitle)
+			},
 			lyricsToDTO,
 			func(d *LyricsResponseDTO, v bool) { d.Degraded = v }),
 		fmt.Sprintf("fetch lyrics for %q", title))

@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/core/history"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -114,7 +115,7 @@ func TestPostgresSearchHistoryRepo_ListDistinctRecent_LimitBoundary(t *testing.T
 
 func newClearHistoryTestUser(t *testing.T, pool *pgxpool.Pool) ids.UserId {
 	t.Helper()
-	owner := newEventTestUser(t, pool)
+	owner := newEventTestUser(t.Context(), t, pool)
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(),
 			`DELETE FROM discovery_search_history WHERE user_id = $1`, owner.UUID())
@@ -124,10 +125,10 @@ func newClearHistoryTestUser(t *testing.T, pool *pgxpool.Pool) ids.UserId {
 
 func seedSearchTextOf(t *testing.T, pool *pgxpool.Pool, owner ids.UserId, queryNorm string) string {
 	t.Helper()
-	store := persistence.NewPostgresEventStore(pool)
+	store := persistence.NewPostgresEventStore(pool, clock.Now)
 	searchID := uuid.New().String()
 	performSearch(t, store, owner, queryNorm, searchID)
-	appendOrFatal(t, store, domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, store, domain.InteractionEvent{
 		UserId: owner, Type: domain.EventTypeResultClicked, SearchId: searchID,
 		Payload: map[string]any{domain.PayloadKeyResultSignature: "sig " + queryNorm},
 	})
@@ -195,7 +196,7 @@ func TestClearSearchHistory_ALateEventCannotRestoreTheErasedText(t *testing.T) {
 	searchID := seedSearchTextOf(t, pool, owner, queryNorm)
 	clearSearchHistoryOf(t, pool, owner)
 
-	appendOrFatal(t, persistence.NewPostgresEventStore(pool), domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, persistence.NewPostgresEventStore(pool, clock.Now), domain.InteractionEvent{
 		UserId: owner, Type: domain.EventTypePlay, SearchId: searchID,
 		QueryNorm: queryNorm,
 		Payload:   map[string]any{domain.PayloadKeyResultSignature: "sig " + suffix},
@@ -228,7 +229,7 @@ func TestClearSearchHistory_ALateSearchPerformedEventKeepsNoSearchText(t *testin
 	began := time.Now().UTC().Add(-time.Second)
 
 	clearSearchHistoryOf(t, pool, owner)
-	appendOrFatal(t, persistence.NewPostgresEventStore(pool), domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, persistence.NewPostgresEventStore(pool, clock.Now), domain.InteractionEvent{
 		UserId: owner, Type: domain.EventTypeSearchPerformed, OccurredAt: began,
 		QueryNorm: "late event " + uuid.New().String()[:8], SearchId: uuid.New().String(),
 		Payload: map[string]any{"zero_result": false},
@@ -254,7 +255,7 @@ func TestClearSearchHistory_ASearchBeginningAfterTheEraseStillRecords(t *testing
 		t.Fatalf("NewRecordSearchHistoryService: %v", err)
 	}
 	recorder.Record(context.Background(), owner, query, "after erase", time.Now().UTC())
-	appendOrFatal(t, persistence.NewPostgresEventStore(pool), domain.InteractionEvent{
+	appendOrFatal(t.Context(), t, persistence.NewPostgresEventStore(pool, clock.Now), domain.InteractionEvent{
 		UserId: owner, Type: domain.EventTypeSearchPerformed, OccurredAt: time.Now().UTC(),
 		QueryNorm: "after erase", SearchId: uuid.New().String(),
 		Payload: map[string]any{"zero_result": false},
@@ -322,7 +323,7 @@ func TestClearSearchHistory_AnInsertRacingAnOpenEraseLeavesNoSearchText(t *testi
 		})
 	}()
 	go func() {
-		written <- persistence.NewPostgresEventStore(pool).Append(ctx, domain.InteractionEvent{
+		written <- persistence.NewPostgresEventStore(pool, clock.Now).Append(ctx, domain.InteractionEvent{
 			UserId: owner, Type: domain.EventTypeSearchPerformed, OccurredAt: began,
 			QueryNorm: "racing " + suffix, SearchId: uuid.New().String(),
 			Payload: map[string]any{"zero_result": false},

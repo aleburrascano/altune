@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/clock"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -41,10 +42,10 @@ type DeezerLyricsAdapter struct {
 	client   *http.Client
 }
 
-func NewDeezerLyricsAdapter(client *http.Client) *DeezerLyricsAdapter {
+func NewDeezerLyricsAdapter(client *http.Client, now clock.Func) *DeezerLyricsAdapter {
 	return &DeezerLyricsAdapter{
 		resolver: NewDeezerAdapter(client),
-		jwt:      newDeezerJWTResolver(client),
+		jwt:      newDeezerJWTResolver(client, now),
 		client:   client,
 	}
 }
@@ -169,9 +170,9 @@ type deezerJWTResolver struct {
 	authURL string
 }
 
-func newDeezerJWTResolver(client *http.Client) *deezerJWTResolver {
+func newDeezerJWTResolver(client *http.Client, now clock.Func) *deezerJWTResolver {
 	r := &deezerJWTResolver{client: client, authURL: deezerAuthAnonymousURL}
-	r.CachedResolver = providerrequests.NewCachedResolver("anon_jwt", deezerJWTResolveTimeout, r.resolve, providerrequests.NonEmpty)
+	r.CachedResolver = providerrequests.NewCachedResolver("anon_jwt", deezerJWTResolveTimeout, r.resolve, providerrequests.NonEmpty, now)
 	return r
 }
 

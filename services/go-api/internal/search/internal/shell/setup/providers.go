@@ -20,7 +20,6 @@ import (
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/random"
 	"fmt"
-	"time"
 )
 
 func (t *providerTable) addDeezer(c connections.Clients) {
@@ -36,13 +35,13 @@ func (t *providerTable) addDeezer(c connections.Clients) {
 		charts:        deezer.NewDeezerAdapter(c.ChartCalls),
 		deezerDetails: adapter,
 		trackFeatured: adapter,
-		lyrics:        deezer.NewDeezerLyricsAdapter(c.ProviderCalls),
+		lyrics:        deezer.NewDeezerLyricsAdapter(c.ProviderCalls, clock.Now),
 		similar:       adapter,
 	})
 }
 
 func (t *providerTable) addAppleMusic(c connections.Clients) {
-	adapter := applemusic.NewAppleMusicAdapter(c.ProviderCalls)
+	adapter := applemusic.NewAppleMusicAdapter(c.ProviderCalls, clock.Now)
 	t.add(provider{name: rowAppleMusic, id: domain.ProviderAppleMusic, search: adapter, artist: adapter, album: adapter})
 }
 
@@ -51,7 +50,7 @@ func (t *providerTable) addMusicBrainz(userAgent string, c connections.Clients) 
 		t.add(switchedOff(rowMusicBrainz, "MUSICBRAINZ_USER_AGENT is empty"))
 		return
 	}
-	adapter := musicbrainz.NewMusicBrainzAdapter(c.ProviderCalls, userAgent)
+	adapter := musicbrainz.NewMusicBrainzAdapter(c.ProviderCalls, userAgent, clock.Now)
 	t.add(provider{
 		name:           rowMusicBrainz,
 		id:             domain.ProviderMusicBrainz,
@@ -63,11 +62,11 @@ func (t *providerTable) addMusicBrainz(userAgent string, c connections.Clients) 
 }
 
 func (t *providerTable) addSoundCloud(c connections.Clients) error {
-	adapter, err := soundcloud.NewSoundCloudAPIAdapter(c.ProviderCalls, soundcloud.NoFallback{})
+	adapter, err := soundcloud.NewSoundCloudAPIAdapter(c.ProviderCalls, soundcloud.NoFallback{}, clock.Now)
 	if err != nil {
 		return fmt.Errorf("build the soundcloud content adapter: %w", err)
 	}
-	searcher, err := soundcloud.NewSoundCloudAPIAdapter(c.ProviderCalls, soundcloud.NewSoundCloudAdapter())
+	searcher, err := soundcloud.NewSoundCloudAPIAdapter(c.ProviderCalls, soundcloud.NewSoundCloudAdapter(), clock.Now)
 	if err != nil {
 		return fmt.Errorf("build the soundcloud search adapter: %w", err)
 	}
@@ -94,7 +93,7 @@ func (t *providerTable) addYouTubeMusic(c connections.Clients) {
 }
 
 func (t *providerTable) addSpotify(c connections.Clients) {
-	adapter := spotify.NewSpotifyAdapter(c.ProviderCalls, time.Now)
+	adapter := spotify.NewSpotifyAdapter(c.ProviderCalls, clock.Now)
 	t.add(provider{
 		name:    rowSpotify,
 		id:      domain.ProviderSpotify,

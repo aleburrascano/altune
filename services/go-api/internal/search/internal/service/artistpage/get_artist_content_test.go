@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/search/internal/service/artistpage"
 	"altune/go-api/internal/search/internal/service/providerguard"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/clock"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -440,7 +441,7 @@ func TestIdentityFanOut_NoFailureWarnWhenCallerCancels(t *testing.T) {
 }
 
 func TestIdentityFanOut_NoFailureWarnForCircuitOpenSkip(t *testing.T) {
-	cb := search.NewCircuitBreaker()
+	cb := search.NewCircuitBreaker(clock.Now)
 	tripCircuit(t, cb, search.ProviderSpotify)
 	svc := identityFanOutWithErr(t, func(search.ProviderName) error { return nil }, searchtest.ArtistBreaker(cb))
 	buf := memory.CaptureProductionLogs(t)
@@ -538,7 +539,7 @@ func TestIdentityFanOut_AllProvidersAnsweredIsNotPartial(t *testing.T) {
 }
 
 func TestIdentityFanOut_CircuitOpenProviderReportsPartial(t *testing.T) {
-	cb := search.NewCircuitBreaker()
+	cb := search.NewCircuitBreaker(clock.Now)
 	tripCircuit(t, cb, search.ProviderSpotify)
 	svc := identityFanOut(t, func(search.ProviderName) bool { return false }, searchtest.ArtistBreaker(cb))
 
@@ -563,7 +564,7 @@ func TestIdentityFanOut_ProviderWithoutIDDoesNotMakePartial(t *testing.T) {
 			return nil, memory.ErrUpstreamDown
 		},
 	}
-	cb := search.NewCircuitBreaker()
+	cb := search.NewCircuitBreaker(clock.Now)
 	tripCircuit(t, cb, search.ProviderYouTube)
 	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
 		search.ProviderDeezer:  answer,
@@ -900,7 +901,7 @@ func completeArtistContentArgs() artistContentArgs {
 		identity:    artistpage.SeedPathIdentity{},
 		anchoring:   artistpage.NoAnchoring{},
 		discography: artistpage.NoDiscographyObserver{},
-		breaker:     search.NewCircuitBreaker(),
+		breaker:     search.NewCircuitBreaker(clock.Now),
 	}
 }
 
@@ -930,7 +931,7 @@ func TestNewGetArtistContentService_RefusesEveryMissingCollaborator(t *testing.T
 			svc, err := args.build()
 
 			if !errors.Is(err, artistpage.ErrCollaboratorRequired) || svc != nil {
-				t.Fatalf("svc = %v, err = %v, want ErrArtistPageCollaboratorRequired and no service", svc, err)
+				t.Fatalf("svc = %v, err = %v, want artistpage.ErrCollaboratorRequired and no service", svc, err)
 			}
 			if !strings.Contains(err.Error(), tc.named) {
 				t.Errorf("err = %q, want it to name %q", err, tc.named)
@@ -941,19 +942,19 @@ func TestNewGetArtistContentService_RefusesEveryMissingCollaborator(t *testing.T
 
 func TestNewMusicBrainzAnchoring_RefusesEveryMissingCollaborator(t *testing.T) {
 	if _, err := artistpage.NewMusicBrainzAnchoring(stubMBAnchor{}, nil); !errors.Is(err, artistpage.ErrCollaboratorRequired) || !strings.Contains(err.Error(), "circuit breaker") {
-		t.Errorf("without a breaker: err = %v, want ErrArtistPageCollaboratorRequired naming the circuit breaker", err)
+		t.Errorf("without a breaker: err = %v, want artistpage.ErrCollaboratorRequired naming the circuit breaker", err)
 	}
-	if _, err := artistpage.NewMusicBrainzAnchoring(nil, search.NewCircuitBreaker()); !errors.Is(err, artistpage.ErrCollaboratorRequired) || !strings.Contains(err.Error(), "discography anchor") {
-		t.Errorf("without an anchor: err = %v, want ErrArtistPageCollaboratorRequired naming the discography anchor", err)
+	if _, err := artistpage.NewMusicBrainzAnchoring(nil, search.NewCircuitBreaker(clock.Now)); !errors.Is(err, artistpage.ErrCollaboratorRequired) || !strings.Contains(err.Error(), "discography anchor") {
+		t.Errorf("without an anchor: err = %v, want artistpage.ErrCollaboratorRequired naming the discography anchor", err)
 	}
 }
 
 func TestNewDiscographyTelemetry_RefusesEveryMissingCollaborator(t *testing.T) {
-	if _, err := artistpage.NewDiscographyTelemetry(nil, searchtest.NewTracker(t)); !errors.Is(err, artistpage.ErrCollaboratorRequired) || !strings.Contains(err.Error(), "event store") {
-		t.Errorf("without an event store: err = %v, want ErrArtistPageCollaboratorRequired naming the event store", err)
+	if _, err := artistpage.NewDiscographyTelemetry(nil, searchtest.NewTracker(t), clock.Now); !errors.Is(err, artistpage.ErrCollaboratorRequired) || !strings.Contains(err.Error(), "event store") {
+		t.Errorf("without an event store: err = %v, want artistpage.ErrCollaboratorRequired naming the event store", err)
 	}
-	if _, err := artistpage.NewDiscographyTelemetry(&searchtest.FakeEventStore{}, nil); !errors.Is(err, artistpage.ErrCollaboratorRequired) || !strings.Contains(err.Error(), "background tracker") {
-		t.Errorf("without a tracker: err = %v, want ErrArtistPageCollaboratorRequired naming the background tracker", err)
+	if _, err := artistpage.NewDiscographyTelemetry(&searchtest.FakeEventStore{}, nil, clock.Now); !errors.Is(err, artistpage.ErrCollaboratorRequired) || !strings.Contains(err.Error(), "background tracker") {
+		t.Errorf("without a tracker: err = %v, want artistpage.ErrCollaboratorRequired naming the background tracker", err)
 	}
 }
 
@@ -970,7 +971,7 @@ func TestNoAnchoring_LeavesTheAnswerAndTheBreakerUntouched(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStoreIdentity: %v", err)
 	}
-	breaker := search.NewCircuitBreaker()
+	breaker := search.NewCircuitBreaker(clock.Now)
 	before := breaker.Snapshot(domain.ProviderMusicBrainz)
 	svc, err := artistpage.NewGetArtistContentService(
 		map[search.ProviderName]ports.ArtistContentProvider{search.ProviderDeezer: deezer},
@@ -1038,7 +1039,7 @@ func anchorFailedRecords(t *testing.T, buf *bytes.Buffer) []map[string]any {
 func TestGetAlbums_v2_anchorErrorShipsUnfilteredAlbumsAsPartialWithOneWarn(t *testing.T) {
 	const secret = "0123456789abcdef0123456789abcdef"
 	leaky := &url.Error{Op: "Get", URL: "https://musicbrainz.org/ws/2/?api_key=" + secret, Err: errors.New("connection refused")}
-	openBreaker := search.NewCircuitBreaker()
+	openBreaker := search.NewCircuitBreaker(clock.Now)
 	for range breakerTripsAfter {
 		openBreaker.RecordFailure(context.Background(), domain.ProviderMusicBrainz, providerguard.Admission{})
 	}
@@ -1202,7 +1203,7 @@ func TestGetAlbums_v2_anchorTimeoutWhileCallerStillWaitingIsPartialWithOneWarn(t
 
 func TestGetAlbums_v2_openBreakerAndFailingAnchorWarnOnce(t *testing.T) {
 	buf := memory.CaptureProductionLogs(t)
-	openBreaker := search.NewCircuitBreaker()
+	openBreaker := search.NewCircuitBreaker(clock.Now)
 	for range breakerTripsAfter {
 		openBreaker.RecordFailure(context.Background(), domain.ProviderMusicBrainz, providerguard.Admission{})
 	}
@@ -1224,7 +1225,7 @@ func TestGetAlbums_v2_openBreakerAndFailingAnchorWarnOnce(t *testing.T) {
 
 func TestGetAlbums_v2_openBreakerAfterCallerLeftIsSilent(t *testing.T) {
 	buf := memory.CaptureProductionLogs(t)
-	openBreaker := search.NewCircuitBreaker()
+	openBreaker := search.NewCircuitBreaker(clock.Now)
 	for range breakerTripsAfter {
 		openBreaker.RecordFailure(context.Background(), domain.ProviderMusicBrainz, providerguard.Admission{})
 	}

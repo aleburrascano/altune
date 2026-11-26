@@ -44,7 +44,7 @@ func NewSignal(ops *expvar.Map, now clock.Func) *Signal {
 }
 
 func newDefaultSignal() *Signal {
-	return NewSignal(new(expvar.Map).Init(), time.Now)
+	return NewSignal(new(expvar.Map).Init(), clock.Now)
 }
 
 type Option func(*redisJSON)

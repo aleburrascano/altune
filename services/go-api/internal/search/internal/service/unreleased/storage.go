@@ -51,7 +51,7 @@ func (c cachedStorage) lookup(ctx context.Context, s *Service, provider domain.P
 	if songs, ok := c.cache.Get(ctx, provider, externalID, nameKey); ok {
 		return Lookup{Songs: songs}, nil
 	}
-	j := s.joinJob(fmt.Sprintf("%s:%s:%s", provider.Key(), externalID, nameKey), func(jobCtx context.Context) ([]domain.UnreleasedSong, error) {
+	j := s.joinJob(ctx, fmt.Sprintf("%s:%s:%s", provider.Key(), externalID, nameKey), func(jobCtx context.Context) ([]domain.UnreleasedSong, error) {
 		return s.List(jobCtx, provider, externalID, artistName, known)
 	})
 	return s.awaitJob(ctx, j)
@@ -93,7 +93,7 @@ func (st storedStorage) lookup(ctx context.Context, s *Service, provider domain.
 	if built && version >= CurrentBuildVersion {
 		return Lookup{Songs: nonNil(songs)}, nil
 	}
-	j := s.joinJob(jobKey, func(jobCtx context.Context) ([]domain.UnreleasedSong, error) {
+	j := s.joinJob(ctx, jobKey, func(jobCtx context.Context) ([]domain.UnreleasedSong, error) {
 		return s.Rebuild(jobCtx, key, artistName, known)
 	})
 	if built {

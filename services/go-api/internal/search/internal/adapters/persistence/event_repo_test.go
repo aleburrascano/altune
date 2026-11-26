@@ -3,18 +3,21 @@ package persistence_test
 import (
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
 
 func TestPostgresEventStore_AppendAndRead(t *testing.T) {
 	pool := dbtest.Pool(t)
-	store := persistence.NewPostgresEventStore(pool)
+	store := persistence.NewPostgresEventStore(pool, clock.Now)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -68,7 +71,7 @@ func TestPostgresEventStore_AppendAndRead(t *testing.T) {
 
 func TestPostgresEventStore_NilPayloadAndQuery(t *testing.T) {
 	pool := dbtest.Pool(t)
-	store := persistence.NewPostgresEventStore(pool)
+	store := persistence.NewPostgresEventStore(pool, clock.Now)
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 
@@ -107,5 +110,28 @@ func TestPostgresEventStore_NilPayloadAndQuery(t *testing.T) {
 	}
 	if string(payload) != "{}" {
 		t.Errorf("payload = %q, want {}", string(payload))
+	}
+}
+
+func TestPostgresEventStore_Append_StampsAnEventWithoutATimeFromTheInjectedClock(t *testing.T) {
+	dbtest.RequireIntegration(t)
+	pool := dbtest.Pool(t)
+	manual := clocktest.NewManual(time.Date(2026, time.March, 4, 10, 0, 0, 0, time.UTC))
+	store := persistence.NewPostgresEventStore(pool, manual.Func())
+	userId := ids.NewUserId(uuid.New())
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.WithoutCancel(t.Context()), `DELETE FROM discovery_events WHERE user_id = $1`, userId.UUID())
+	})
+
+	if err := store.Append(t.Context(), domain.InteractionEvent{UserId: userId, Type: domain.EventTypePlay}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	var occurredAt time.Time
+	if err := pool.QueryRow(t.Context(), `SELECT occurred_at FROM discovery_events WHERE user_id = $1`, userId.UUID()).Scan(&occurredAt); err != nil {
+		t.Fatalf("read occurred_at: %v", err)
+	}
+	if want := manual.Now(); !occurredAt.Equal(want) {
+		t.Errorf("occurred_at = %v, want %v from the injected clock", occurredAt, want)
 	}
 }

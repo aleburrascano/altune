@@ -16,7 +16,7 @@ const alertCheckInterval = 30 * time.Second
 
 func (a *App) startAlertMonitor(ctx context.Context) error {
 	notifier := alerts.NewNotifier(ctx, a.cfg)
-	conditions, err := a.alertConditions(search.NewPostgresEventStore(a.pool))
+	conditions, err := a.alertConditions(search.NewPostgresEventStore(a.pool, clock.Now))
 	if err != nil {
 		return err
 	}

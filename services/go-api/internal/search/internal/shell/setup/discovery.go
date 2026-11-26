@@ -13,6 +13,7 @@ import (
 	"altune/go-api/internal/search/internal/service/unreleased"
 	"altune/go-api/internal/search/internal/service/useractivity"
 	"altune/go-api/internal/search/internal/service/vocabulary"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"fmt"
 	"time"
@@ -109,7 +110,7 @@ func (d *Discovery) RankingOnlySearch() *query.Service {
 }
 
 func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
-	breaker := providerguard.NewCircuitBreaker()
+	breaker := providerguard.NewCircuitBreaker(clock.Now)
 	t, s := w.table, w.stores
 	enrichment, err := newEnrichment(t, s, w.artwork)
 	if err != nil {
@@ -123,7 +124,7 @@ func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 	if err != nil {
 		return handler.DiscoveryServices{}, err
 	}
-	recordHistory, err := history.NewRecordSearchHistoryService(s.History, time.Now)
+	recordHistory, err := history.NewRecordSearchHistoryService(s.History, clock.Now)
 	if err != nil {
 		return handler.DiscoveryServices{}, fmt.Errorf("build the history recorder: %w", err)
 	}
@@ -143,7 +144,7 @@ func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 	if err != nil {
 		return handler.DiscoveryServices{}, fmt.Errorf("build the history list service: %w", err)
 	}
-	clearHistory, err := history.NewClearSearchHistoryService(s.History, time.Now)
+	clearHistory, err := history.NewClearSearchHistoryService(s.History, clock.Now)
 	if err != nil {
 		return handler.DiscoveryServices{}, fmt.Errorf("build the clear-history service: %w", err)
 	}
@@ -174,12 +175,12 @@ func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 }
 
 func newEventService(activity ports.ActivityFeed, s connections.Stores) (*useractivity.RecordEventService, error) {
-	return useractivity.NewRecordEventService(s.Events, activity)
+	return useractivity.NewRecordEventService(s.Events, activity, clock.Now)
 }
 
 func newHandler(services handler.DiscoveryServices, unreleasedLookup handler.UnreleasedReader) (*handler.DiscoveryHandler, error) {
 	services.Unreleased = unreleasedLookup
-	h, err := handler.NewDiscoveryHandler(services, time.Now)
+	h, err := handler.NewDiscoveryHandler(services, clock.Now)
 	if err != nil {
 		return nil, fmt.Errorf("build the discovery handler: %w", err)
 	}

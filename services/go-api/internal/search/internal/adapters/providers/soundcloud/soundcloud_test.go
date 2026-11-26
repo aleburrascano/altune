@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/theaudiodb"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
 	"fmt"
@@ -50,7 +51,7 @@ func mustSoundCloudAPI(t testing.TB, client *http.Client, fallback searchFallbac
 	if fallback == nil {
 		fallback = soundcloud.NoFallback{}
 	}
-	adapter, err := soundcloud.NewSoundCloudAPIAdapter(client, fallback)
+	adapter, err := soundcloud.NewSoundCloudAPIAdapter(client, fallback, clock.Now)
 	if err != nil {
 		t.Fatalf("soundcloud.NewSoundCloudAPIAdapter: %v", err)
 	}
@@ -60,15 +61,18 @@ func mustSoundCloudAPI(t testing.TB, client *http.Client, fallback searchFallbac
 func TestNewSoundCloudAPIAdapter_RefusesAMissingCollaborator(t *testing.T) {
 	for name, build := range map[string]func() (*soundcloud.SoundCloudAPIAdapter, error){
 		"client": func() (*soundcloud.SoundCloudAPIAdapter, error) {
-			return soundcloud.NewSoundCloudAPIAdapter(nil, soundcloud.NoFallback{})
+			return soundcloud.NewSoundCloudAPIAdapter(nil, soundcloud.NoFallback{}, clock.Now)
 		},
 		"fallback": func() (*soundcloud.SoundCloudAPIAdapter, error) {
-			return soundcloud.NewSoundCloudAPIAdapter(http.DefaultClient, nil)
+			return soundcloud.NewSoundCloudAPIAdapter(http.DefaultClient, nil, clock.Now)
+		},
+		"clock": func() (*soundcloud.SoundCloudAPIAdapter, error) {
+			return soundcloud.NewSoundCloudAPIAdapter(http.DefaultClient, soundcloud.NoFallback{}, nil)
 		},
 	} {
 		adapter, err := build()
 		if adapter != nil || !errors.Is(err, soundcloud.ErrCollaboratorRequired) {
-			t.Errorf("without %s: got (%v, %v), want a refusal wrapping ErrSoundCloudCollaboratorRequired", name, adapter, err)
+			t.Errorf("without %s: got (%v, %v), want a refusal wrapping soundcloud.ErrCollaboratorRequired", name, adapter, err)
 		}
 	}
 }
