@@ -10,7 +10,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
@@ -38,12 +37,7 @@ func testTracker(t *testing.T) *background.Tracker {
 func integrationPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	testdb.RequireIntegration(t)
-	pool, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	return pool
+	return testdb.Pool(t)
 }
 
 func unreachablePool(t *testing.T) *pgxpool.Pool {

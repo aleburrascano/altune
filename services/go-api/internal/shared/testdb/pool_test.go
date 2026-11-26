@@ -3,7 +3,11 @@ package testdb_test
 import (
 	"altune/go-api/internal/shared/testdb"
 	"context"
+	"fmt"
+	"os"
+	"os/exec"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -76,5 +80,74 @@ func TestTracedPool_ReportsEveryQueryToTheTracer(t *testing.T) {
 	}
 	if tracer.started != 1 {
 		t.Fatalf("tracer saw %d queries, want 1", tracer.started)
+	}
+}
+
+func TestPool_RowsAPackageWritesAreInvisibleToTheSharedDatabase(t *testing.T) {
+	pool := testdb.Pool(t)
+	ctx := context.Background()
+	id := uuid.New()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO tracks (id, user_id, title, artist, dedup_key, acquisition_status, acquisition_available_at)
+		 VALUES ($1, $2, 'isolation probe', 'probe', $3, 'pending', now())`,
+		id, uuid.New(), uuid.NewString()); err != nil {
+		t.Fatalf("insert a claimable track: %v", err)
+	}
+
+	shared, err := pgx.Connect(ctx, testdb.DatabaseURLWithoutSchema(t))
+	if err != nil {
+		t.Fatalf("connect to the shared database: %v", err)
+	}
+	t.Cleanup(func() { _ = shared.Close(context.Background()) })
+
+	var seen int
+	if err := shared.QueryRow(ctx, `SELECT count(*) FROM tracks WHERE id = $1`, id).Scan(&seen); err != nil {
+		t.Fatalf("look for the track in the shared schema: %v", err)
+	}
+	if seen != 0 {
+		t.Errorf("the shared database sees %d rows a test package wrote, want 0", seen)
+	}
+}
+
+func schemaExists(t *testing.T, conn *pgx.Conn, name string) bool {
+	t.Helper()
+	var found bool
+	if err := conn.QueryRow(context.Background(), `SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = $1)`, name).Scan(&found); err != nil {
+		t.Fatalf("look for schema %s: %v", name, err)
+	}
+	return found
+}
+
+func TestPool_ANewPackageDropsTestSchemasOlderThanSixHoursAndKeepsRecentOnes(t *testing.T) {
+	ctx := context.Background()
+	shared, err := pgx.Connect(ctx, testdb.DatabaseURLWithoutSchema(t))
+	if err != nil {
+		t.Fatalf("connect to the shared database: %v", err)
+	}
+	t.Cleanup(func() { _ = shared.Close(context.Background()) })
+
+	stale := fmt.Sprintf("testdb_%d_1", time.Now().Add(-7*time.Hour).Unix())
+	recent := fmt.Sprintf("testdb_%d_2", time.Now().Add(-time.Hour).Unix())
+	for _, name := range []string{stale, recent} {
+		if _, err := shared.Exec(ctx, "CREATE SCHEMA "+pgx.Identifier{name}.Sanitize()); err != nil {
+			t.Fatalf("create schema %s: %v", name, err)
+		}
+	}
+	t.Cleanup(func() {
+		for _, name := range []string{stale, recent} {
+			_, _ = shared.Exec(context.Background(), "DROP SCHEMA IF EXISTS "+pgx.Identifier{name}.Sanitize()+" CASCADE")
+		}
+	})
+
+	probe := exec.Command(os.Args[0], "-test.run=^TestPool_ReachesTheIntegrationDatabase$")
+	if out, err := probe.CombinedOutput(); err != nil {
+		t.Fatalf("a fresh test process failed: %v\n%s", err, out)
+	}
+
+	if schemaExists(t, shared, stale) {
+		t.Errorf("schema %s is older than six hours and survived a new package's setup", stale)
+	}
+	if !schemaExists(t, shared, recent) {
+		t.Errorf("schema %s is recent and was dropped", recent)
 	}
 }

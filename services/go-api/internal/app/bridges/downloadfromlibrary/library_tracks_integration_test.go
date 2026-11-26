@@ -10,7 +10,6 @@ import (
 	"altune/go-api/internal/shared/testdb"
 	"context"
 	"errors"
-	"os"
 	"testing"
 	"time"
 
@@ -20,17 +19,7 @@ import (
 
 func newLedgerPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	testdb.RequireIntegration(t)
-	dbURL := os.Getenv("DATABASE_URL")
-	if dbURL == "" {
-		t.Skip("DATABASE_URL not set, skipping integration test")
-	}
-	pool, err := pgxpool.New(context.Background(), dbURL)
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	return pool
+	return testdb.Pool(t)
 }
 
 func insertUnqueuedTrack(t *testing.T, pool *pgxpool.Pool) *domain.Track {

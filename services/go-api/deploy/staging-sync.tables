@@ -12,6 +12,8 @@ acquisition_cooldowns child tracks track_id
 acquisition_rejections child tracks track_id
 entity_identity global
 orphaned_audio reset
+acquisition_jobs skip mirrored from tracks by trigger; rows return when tracks is synced
+acquisition_upgrade_state skip mirrored from tracks by trigger; rows return when tracks is synced
 acquisition_outcomes skip staging-local telemetry, bigserial id
 schema_migrations skip owned by the migration runner
 track_metadata_changes skip reconcile change log, staging-local; undo targets the db it ran on

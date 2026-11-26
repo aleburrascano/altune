@@ -156,6 +156,8 @@ test_app_rights() {
     as_migrator -c "CREATE TABLE later_table (id int PRIMARY KEY)"
     check "a table created after the grants is writable by the app role" "1" \
         "$(as_app -c 'INSERT INTO later_table VALUES (1); SELECT count(*) FROM later_table' | tail -1)"
+    check "a track the app role writes is mirrored into the job table" "1" \
+        "$(as_app -c "INSERT INTO tracks (user_id, title, artist, dedup_key) VALUES (gen_random_uuid(), 't', 'a', 'mirror-probe'); SELECT count(*) FROM acquisition_jobs WHERE track_id = (SELECT id FROM tracks WHERE dedup_key = 'mirror-probe')" | tail -1)"
     check "the app role reads user ids through the view" "11111111-1111-1111-1111-111111111111" \
         "$(as_app -c 'SELECT id FROM public.auth_user_ids')"
     check "the view exposes no email column" "ERROR" "$(as_app -c 'SELECT email FROM public.auth_user_ids' | cut -d: -f1 | head -1)"

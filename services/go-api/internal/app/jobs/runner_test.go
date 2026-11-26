@@ -17,7 +17,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -26,7 +25,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const leaderLoopTick = time.Millisecond
@@ -680,11 +678,7 @@ func (c lockWonRecords) WithGroup(string) slog.Handler { return c }
 
 func TestNewElection_WinsTheBackgroundLockAndAnnouncesATwentyFiveSecondSettle(t *testing.T) {
 	testdb.RequireIntegration(t)
-	pool, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"))
-	if err != nil {
-		t.Fatalf("connect: %v", err)
-	}
-	t.Cleanup(pool.Close)
+	pool := testdb.Pool(t)
 	won := make(lockWonRecords, 1)
 	prev := slog.Default()
 	slog.SetDefault(slog.New(won))
