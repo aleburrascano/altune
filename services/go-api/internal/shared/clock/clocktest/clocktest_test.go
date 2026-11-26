@@ -76,6 +76,20 @@ func TestManualSleeper_ACanceledContextEndsTheSleepAndLeavesNoWaiter(t *testing.
 	})
 }
 
+func TestManualSleeper_WorksOnAZeroValueManual(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var m clocktest.Manual
+		done := sleepInBackground(context.Background(), &m, time.Second)
+		synctest.Wait()
+
+		m.Advance(time.Second)
+
+		if err := <-done; err != nil {
+			t.Fatalf("sleep on a zero-value Manual = %v, want nil", err)
+		}
+	})
+}
+
 func TestManualSleeper_ANonPositiveDurationReturnsAtOnce(t *testing.T) {
 	m := clocktest.NewManual(start)
 

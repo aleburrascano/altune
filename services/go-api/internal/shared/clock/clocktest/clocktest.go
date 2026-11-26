@@ -38,6 +38,9 @@ func (m *Manual) sleep(ctx context.Context, d time.Duration) error {
 		return ctx.Err()
 	}
 	m.mu.Lock()
+	if m.sleeps == nil {
+		m.sleeps = map[int]sleep{}
+	}
 	key := m.nextKey
 	m.nextKey++
 	wake := make(chan struct{})

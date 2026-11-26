@@ -3,6 +3,7 @@ package randomtest
 import (
 	"altune/go-api/internal/shared/random"
 	"fmt"
+	"slices"
 	"sync"
 )
 
@@ -15,6 +16,7 @@ func Sequence(values ...float64) random.Unit {
 			panic(fmt.Sprintf("randomtest: %v is outside [0, 1)", v))
 		}
 	}
+	values = slices.Clone(values)
 	var mu sync.Mutex
 	next := 0
 	return func() float64 {

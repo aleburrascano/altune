@@ -19,6 +19,17 @@ func TestSequence_ReturnsEachValueInOrderThenRepeatsTheLast(t *testing.T) {
 	}
 }
 
+func TestSequence_IsNotChangedByTheCallersLaterEditsToTheSlice(t *testing.T) {
+	values := []float64{0.1, 0.2}
+	unit := randomtest.Sequence(values...)
+
+	values[0] = 5
+
+	if got := unit(); got != 0.1 {
+		t.Fatalf("first draw = %v, want 0.1 as given", got)
+	}
+}
+
 func TestFixed_ReturnsTheSameValueEveryTime(t *testing.T) {
 	unit := randomtest.Fixed(0.25)
 
