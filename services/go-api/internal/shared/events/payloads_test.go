@@ -3,6 +3,7 @@ package events_test
 import (
 	"altune/go-api/internal/shared/events"
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -102,7 +103,5 @@ func jsonEqual(t *testing.T, a, b string) bool {
 	if err := json.Unmarshal([]byte(b), &y); err != nil {
 		t.Fatalf("unmarshal %s: %v", b, err)
 	}
-	ab, _ := json.Marshal(x)
-	bb, _ := json.Marshal(y)
-	return string(ab) == string(bb)
+	return reflect.DeepEqual(x, y)
 }

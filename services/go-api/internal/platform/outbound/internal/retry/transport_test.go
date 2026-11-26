@@ -381,7 +381,7 @@ func postReq(t *testing.T, ctx context.Context, method string) *http.Request {
 	return req
 }
 
-func TestTransport_APostWithoutSafeToRetryIsSentOnceOnA503(t *testing.T) {
+func TestTransport_APostUnmarkedIsSentOnceOnA503(t *testing.T) {
 	f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
 
 	got := statusOf(t, recordingDelays(f, &[]time.Duration{}), postReq(t, context.Background(), http.MethodPost))
@@ -391,7 +391,7 @@ func TestTransport_APostWithoutSafeToRetryIsSentOnceOnA503(t *testing.T) {
 	}
 }
 
-func TestTransport_APostWithoutSafeToRetryIsSentOnceAfterATransportError(t *testing.T) {
+func TestTransport_APostUnmarkedIsSentOnceAfterATransportError(t *testing.T) {
 	f := &fakeRT{steps: []fakeStep{{err: errors.New("connection reset")}, {status: 200}}}
 
 	resp, err := recordingDelays(f, &[]time.Duration{}).RoundTrip(postReq(t, context.Background(), http.MethodPost))
@@ -404,7 +404,7 @@ func TestTransport_APostWithoutSafeToRetryIsSentOnceAfterATransportError(t *test
 	}
 }
 
-func TestTransport_APostMarkedSafeToRetryIsRetriedOnA503(t *testing.T) {
+func TestTransport_APostMarkedIsRetriedOnA503(t *testing.T) {
 	f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
 
 	got := statusOf(t, recordingDelays(f, &[]time.Duration{}), postReq(t, retrysafe.Mark(context.Background()), http.MethodPost))
@@ -426,7 +426,7 @@ func TestTransport_IdempotentMethodsAreRetriedWithoutAMark(t *testing.T) {
 	}
 }
 
-func TestTransport_APatchWithoutSafeToRetryIsSentOnce(t *testing.T) {
+func TestTransport_APatchUnmarkedIsSentOnce(t *testing.T) {
 	f := &fakeRT{steps: []fakeStep{{status: 503}, {status: 200}}}
 
 	statusOf(t, recordingDelays(f, &[]time.Duration{}), postReq(t, context.Background(), http.MethodPatch))
