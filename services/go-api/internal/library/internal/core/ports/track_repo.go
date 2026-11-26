@@ -78,7 +78,6 @@ type TrackNumberFiller interface {
 
 type TrackAddUpdater interface {
 	TrackAdder
-	TrackCounter
 	TrackUpdater
 }
 

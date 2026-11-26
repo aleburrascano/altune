@@ -90,9 +90,6 @@ func (s *DeleteTrackService) reportOrphanedAudio(ctx context.Context, userId ids
 }
 
 func (s *DeleteTrackService) recordOrphan(ctx context.Context, userId ids.UserId, trackId domain.TrackId, audioRef string) bool {
-	if s.orphans == nil {
-		return false
-	}
 	recordCtx, cancel := background.Detach(ctx, orphanRecordTimeout)
 	defer cancel()
 	err := s.orphans.RecordOrphanedAudio(recordCtx, ports.OrphanedAudio{AudioRef: audioRef, UserId: userId, TrackId: trackId})
