@@ -4,10 +4,12 @@ import (
 	"altune/go-api/internal/library/domain"
 	audioservice "altune/go-api/internal/library/internal/core/audio"
 	"altune/go-api/internal/library/internal/core/ports"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -21,25 +23,30 @@ const audioWriteIdleTimeout = 30 * time.Second
 type StreamHandler struct {
 	svc              *audioservice.StreamTrackService
 	writeIdleTimeout time.Duration
-	now              func() time.Time
+	now              clock.Func
 	limiter          rateLimitMiddleware
 }
 
-func NewStreamHandler(svc *audioservice.StreamTrackService, opts ...func(*StreamHandler)) *StreamHandler {
-	h := &StreamHandler{svc: svc, writeIdleTimeout: audioWriteIdleTimeout, now: time.Now}
+var ErrClockRequired = errors.New("handler: the handler requires a clock")
+
+func NewStreamHandler(svc *audioservice.StreamTrackService, now clock.Func, opts ...func(*StreamHandler)) (*StreamHandler, error) {
+	if now == nil {
+		return nil, fmt.Errorf("NewStreamHandler: %w", ErrClockRequired)
+	}
+	h := &StreamHandler{svc: svc, writeIdleTimeout: audioWriteIdleTimeout, now: now}
 	for _, opt := range opts {
 		opt(h)
 	}
 	h.limiter = newAudioRateLimiter(streamRateLimit, h.now)
-	return h
+	return h, nil
 }
 
-func WithStreamLimiterClock(now func() time.Time) func(*StreamHandler) {
-	return func(h *StreamHandler) {
-		if now != nil {
-			h.now = now
-		}
+func MustNewStreamHandler(svc *audioservice.StreamTrackService, now clock.Func, opts ...func(*StreamHandler)) *StreamHandler {
+	h, err := NewStreamHandler(svc, now, opts...)
+	if err != nil {
+		panic(err)
 	}
+	return h
 }
 
 func WithStreamWriteIdleTimeout(idle time.Duration) func(*StreamHandler) {

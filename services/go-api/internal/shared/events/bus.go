@@ -1,6 +1,7 @@
 package events
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events/internal/core/idfloor"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -44,7 +45,7 @@ type InProcessBus struct {
 	ringCap         int
 	highestIssuedID atomic.Uint64
 	dropped         atomic.Uint64
-	now             func() time.Time
+	now             clock.Func
 	idFloor         *idfloor.Floor
 }
 
@@ -54,7 +55,7 @@ func (b *InProcessBus) HighestIssuedID() uint64 { return b.highestIssuedID.Load(
 
 var _ Publisher = (*InProcessBus)(nil)
 
-func NewInProcessBus(now func() time.Time, idFloorPath string) *InProcessBus {
+func NewInProcessBus(now clock.Func, idFloorPath string) *InProcessBus {
 	floor := idfloor.New(idFloorPath)
 	b := &InProcessBus{ringCap: defaultRingSize, now: now, idFloor: floor}
 	b.highestIssuedID.Store(floor.ReserveAbove(uint64(now().UnixNano())))

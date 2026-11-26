@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/search/service/vocabulary"
 	"altune/go-api/internal/shared/background"
 	"testing"
+	"time"
 )
 
 func NewSearchService(t testing.TB, bg *background.Tracker, providers []ports.SearchProvider, breaker *providerguard.CircuitBreaker, opts ...query.Option) *query.Service {
@@ -87,7 +88,7 @@ func NewCorrection(t testing.TB, vocab ports.SpellingHintsReader) *vocabulary.Co
 
 func NewHistoryRecorder(t testing.TB, repo ports.HistoryWriter) *history.RecordSearchHistoryService {
 	t.Helper()
-	svc, err := history.NewRecordSearchHistoryService(repo)
+	svc, err := history.NewRecordSearchHistoryService(repo, time.Now)
 	if err != nil {
 		t.Fatalf("history.NewRecordSearchHistoryService: %v", err)
 	}

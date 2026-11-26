@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,10 +16,17 @@ import (
 	"github.com/google/uuid"
 )
 
+func TestNewDiscoveryHandler_RefusesANilClock(t *testing.T) {
+	h, err := search.NewDiscoveryHandler(search.DiscoveryServices{}, nil)
+
+	if !errors.Is(err, search.ErrDiscoveryClockRequired) || h != nil {
+		t.Fatalf("NewDiscoveryHandler(nil clock) = (%v, %v), want ErrDiscoveryClockRequired and no handler", h, err)
+	}
+}
+
 func buildFrozenDefaultLimitsRouter(services search.DiscoveryServices, middlewares ...func(http.Handler) http.Handler) chi.Router {
 	frozen := time.Unix(1_700_000_000, 0)
-	h := search.NewDiscoveryHandler(services).
-		WithRateLimitsAt(search.DefaultDiscoveryRateLimits, func() time.Time { return frozen })
+	h := search.MustNewDiscoveryHandler(services, func() time.Time { return frozen })
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Use(middlewares...)
@@ -134,10 +142,10 @@ func TestEventRateLimit_DefaultBudgetThenRejects(t *testing.T) {
 
 func TestSearchRateLimit_BudgetsArePerUserAndPerRoute(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	h := search.NewDiscoveryHandler(search.DiscoveryServices{
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{
 		Search:  searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker()),
 		Suggest: search.NewSuggestService(&fakeVocabStore{}),
-	}).WithRateLimits(search.DiscoveryRateLimits{
+	}, time.Now).WithRateLimits(search.DiscoveryRateLimits{
 		Search:  search.RequestLimit{Max: 2, Window: time.Hour},
 		Suggest: search.RequestLimit{Max: 2, Window: time.Hour},
 	})
@@ -157,7 +165,7 @@ func TestSearchRateLimit_BudgetsArePerUserAndPerRoute(t *testing.T) {
 }
 
 func TestSearchRateLimit_UnauthenticatedStillGets401(t *testing.T) {
-	h := search.NewDiscoveryHandler(search.DiscoveryServices{}).WithRateLimits(search.DiscoveryRateLimits{
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{}, time.Now).WithRateLimits(search.DiscoveryRateLimits{
 		Search:  search.RequestLimit{Max: 0, Window: time.Hour},
 		Suggest: search.RequestLimit{Max: 0, Window: time.Hour},
 	})
@@ -170,9 +178,9 @@ func TestSearchRateLimit_UnauthenticatedStillGets401(t *testing.T) {
 func TestRequestLimit_BucketAdmitsBurstThenRefillsAtTheWindowRate(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	now := time.Unix(1_700_000_000, 0)
-	h := search.NewDiscoveryHandler(search.DiscoveryServices{
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{
 		Search: searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker()),
-	}).WithRateLimitsAt(search.DiscoveryRateLimits{Search: search.RequestLimit{Max: 2, Window: time.Minute}}, func() time.Time { return now })
+	}, func() time.Time { return now }).WithRateLimits(search.DiscoveryRateLimits{Search: search.RequestLimit{Max: 2, Window: time.Minute}})
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -221,9 +229,9 @@ var discAsTokenUser = signedInAs(func(token string) ids.UserId {
 
 func buildRateLimitedRouter(t *testing.T, limits search.DiscoveryRateLimits) chi.Router {
 	bg := searchtest.NewTracker(t)
-	h := search.NewDiscoveryHandler(search.DiscoveryServices{
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{
 		Search: searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker()),
-	}).WithRateLimits(limits)
+	}, time.Now).WithRateLimits(limits)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -265,11 +273,11 @@ func TestUnmeteredUserRoutes_AreThrottledPerUser(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			historyRepo := &fakeSearchHistoryRepo{}
-			h := search.NewDiscoveryHandler(search.DiscoveryServices{
+			h := search.MustNewDiscoveryHandler(search.DiscoveryServices{
 				History:      search.NewListSearchHistoryService(historyRepo),
-				ClearHistory: search.NewClearSearchHistoryService(historyRepo),
+				ClearHistory: search.MustNewClearSearchHistoryService(historyRepo, time.Now),
 				Favorites:    search.NewFavoritesService(erroringFavoritesRepo{}),
-			}).WithRateLimits(search.DiscoveryRateLimits{
+			}, time.Now).WithRateLimits(search.DiscoveryRateLimits{
 				History:   search.RequestLimit{Max: 1, Window: time.Hour},
 				Favorites: search.RequestLimit{Max: 1, Window: time.Hour},
 			})
@@ -299,9 +307,9 @@ func TestUnmeteredUserRoutes_AreThrottledPerUser(t *testing.T) {
 func TestSearchRateLimit_AdmitsAgainAfterWindowResets(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	now := time.Unix(1_700_000_000, 0)
-	h := search.NewDiscoveryHandler(search.DiscoveryServices{
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{
 		Search: searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker()),
-	}).WithRateLimitsAt(search.DiscoveryRateLimits{Search: search.RequestLimit{Max: 1, Window: time.Minute}}, func() time.Time { return now })
+	}, func() time.Time { return now }).WithRateLimits(search.DiscoveryRateLimits{Search: search.RequestLimit{Max: 1, Window: time.Minute}})
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())

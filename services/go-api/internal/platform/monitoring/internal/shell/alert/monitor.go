@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/platform/monitoring/internal/core/domain"
 	"altune/go-api/internal/platform/monitoring/internal/core/ports"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
 	"log/slog"
@@ -22,6 +23,7 @@ type Monitor struct {
 	evalTimeout time.Duration
 	logger      *slog.Logger
 	leadership  LeadershipScope
+	now         clock.Func
 
 	resumes     atomic.Uint64
 	seenResumes uint64
@@ -81,9 +83,14 @@ func (m *Monitor) notifierKind() string {
 
 var ErrInvalidInterval = errors.New("the interval must be positive")
 
-func NewMonitor(notifier ports.AlertNotifier, interval time.Duration, conditions ...domain.Condition) (*Monitor, error) {
+var ErrClockRequired = errors.New("the alert monitor requires a clock")
+
+func NewMonitor(notifier ports.AlertNotifier, interval time.Duration, now clock.Func, conditions ...domain.Condition) (*Monitor, error) {
 	if interval <= 0 {
 		return nil, ErrInvalidInterval
+	}
+	if now == nil {
+		return nil, ErrClockRequired
 	}
 	return &Monitor{
 		notifier:    notifier,
@@ -92,6 +99,7 @@ func NewMonitor(notifier ports.AlertNotifier, interval time.Duration, conditions
 		evalTimeout: defaultEvalTimeout,
 		logger:      slog.Default(),
 		leadership:  background.EveryPassLeads,
+		now:         now,
 		firing:      make(map[string]bool),
 		pages:       make(map[string]domain.Alert),
 	}, nil
@@ -134,7 +142,7 @@ func (m *Monitor) tick(ctx context.Context) {
 	}
 	defer release()
 	m.evaluate(termCtx)
-	m.lastPass.Store(time.Now().UnixNano())
+	m.lastPass.Store(m.now().UnixNano())
 }
 
 func (m *Monitor) Resume() {
@@ -204,13 +212,13 @@ func (m *Monitor) raise(ctx context.Context, key string, fired domain.Alert) {
 	}
 	if err := m.notifier.Notify(ctx, m.pageFor(key, fired)); err != nil {
 		m.notifyFailures.Add(1)
-		m.notifyErrorAt.Store(time.Now().UnixNano())
+		m.notifyErrorAt.Store(m.now().UnixNano())
 		m.logger.ErrorContext(ctx, "alert.notify_failed", "key", key, "error", err)
 		return
 	}
 	m.notifyFailures.Store(0)
 	if m.notifierKind() != notifierKindNop {
-		m.notifyOKAt.Store(time.Now().UnixNano())
+		m.notifyOKAt.Store(m.now().UnixNano())
 	}
 	m.logger.InfoContext(ctx, "alert.fired", "key", key, "severity", int(fired.Severity), "notifier", m.notifierKind())
 	m.firing[key] = true
@@ -220,7 +228,7 @@ func (m *Monitor) pageFor(key string, fired domain.Alert) domain.Alert {
 	if page, ok := m.pages[key]; ok {
 		return page
 	}
-	fired.Key, fired.FiredAt = key, time.Now()
+	fired.Key, fired.FiredAt = key, m.now()
 	m.pages[key] = fired
 	return fired
 }

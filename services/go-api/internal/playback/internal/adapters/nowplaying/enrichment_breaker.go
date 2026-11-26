@@ -3,6 +3,7 @@ package nowplaying
 import (
 	"altune/go-api/internal/playback/internal/core/ports"
 	"altune/go-api/internal/shared/breaker"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"log/slog"
 	"time"
@@ -18,8 +19,8 @@ type enrichmentBreaker struct {
 	b *breaker.Breaker
 }
 
-func newEnrichmentBreaker(metrics ports.EnrichmentMetrics, now func() time.Time) *enrichmentBreaker {
-	return &enrichmentBreaker{b: breaker.New(breaker.Config{
+func newEnrichmentBreaker(metrics ports.EnrichmentMetrics, now clock.Func) *enrichmentBreaker {
+	return &enrichmentBreaker{b: breaker.MustNew(breaker.Config{
 		Threshold:  enrichmentFailureThreshold,
 		OpenFor:    enrichmentOpenDuration,
 		ProbeLease: enrichmentProbeLease,

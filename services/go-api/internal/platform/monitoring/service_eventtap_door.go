@@ -10,6 +10,8 @@ type (
 var (
 	ErrFeedStopped        = eventtap.ErrFeedStopped
 	ErrTooManySubscribers = eventtap.ErrTooManySubscribers
+	ErrTapClockRequired   = eventtap.ErrClockRequired
 	NewEventTap           = eventtap.New
+	MustNewEventTap       = eventtap.MustNew
 	NewEventFeed          = eventtap.NewFeed
 )

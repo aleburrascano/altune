@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -246,7 +247,7 @@ func TestEnrichmentEndpoints_TransientFailureIsDistinguishableFromNoData(t *test
 }
 
 func buildEnrichersRouter(e search.DetailEnrichers) chi.Router {
-	h := search.NewDiscoveryHandler(search.DiscoveryServices{}).WithDetailEnrichers(e)
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{}, time.Now).WithDetailEnrichers(e)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -405,7 +406,7 @@ func TestEnrichmentRoutes_NoIdentityIs401(t *testing.T) {
 		"/discovery/enrichment/deezer?kind=track&title=X",
 		"/discovery/lyrics?title=X&artist=Y",
 	}
-	router := unauthenticatedDiscoveryRouter(search.NewDiscoveryHandler(search.DiscoveryServices{}))
+	router := unauthenticatedDiscoveryRouter(search.MustNewDiscoveryHandler(search.DiscoveryServices{}, time.Now))
 	for _, path := range paths {
 		t.Run(path, func(t *testing.T) {
 			discAssertStatus(t, discServeNoAuth(t, router, http.MethodGet, path), http.StatusUnauthorized)

@@ -7,3 +7,5 @@ type AlertMonitor = alert.Monitor
 var NewAlertMonitor = alert.NewMonitor
 
 var ErrInvalidInterval = alert.ErrInvalidInterval
+
+var ErrAlertClockRequired = alert.ErrClockRequired

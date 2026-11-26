@@ -152,7 +152,7 @@ func storedSearchTextsOf(t *testing.T, pool *pgxpool.Pool, owner ids.UserId) []s
 
 func clearSearchHistoryOf(t *testing.T, pool *pgxpool.Pool, owner ids.UserId) {
 	t.Helper()
-	svc := history.NewClearSearchHistoryService(persistence.NewPostgresSearchHistoryRepository(pool))
+	svc := history.MustNewClearSearchHistoryService(persistence.NewPostgresSearchHistoryRepository(pool), time.Now)
 	if err := svc.Execute(context.Background(), owner); err != nil {
 		t.Fatalf("ClearSearchHistoryService.Execute: %v", err)
 	}
@@ -248,7 +248,7 @@ func TestClearSearchHistory_ASearchBeginningAfterTheEraseStillRecords(t *testing
 		t.Fatalf("NewSearchQuery: %v", err)
 	}
 
-	recorder, err := history.NewRecordSearchHistoryService(persistence.NewPostgresSearchHistoryRepository(pool))
+	recorder, err := history.NewRecordSearchHistoryService(persistence.NewPostgresSearchHistoryRepository(pool), time.Now)
 	if err != nil {
 		t.Fatalf("NewRecordSearchHistoryService: %v", err)
 	}

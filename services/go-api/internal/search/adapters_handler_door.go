@@ -8,6 +8,10 @@ type (
 	DiscoveryServices = handler.DiscoveryServices
 )
 
-var NewDiscoveryHandler = handler.NewDiscoveryHandler
+var (
+	ErrDiscoveryClockRequired = handler.ErrClockRequired
+	MustNewDiscoveryHandler   = handler.MustNewDiscoveryHandler
+	NewDiscoveryHandler       = handler.NewDiscoveryHandler
+)
 
 var DefaultAuthFailureLimit = handler.DefaultAuthFailureLimit

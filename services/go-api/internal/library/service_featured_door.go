@@ -8,12 +8,13 @@ type (
 )
 
 var (
-	NewBackfillFeaturedService = featured.NewBackfillFeaturedService
-	NewFeaturedArtistResolver  = featured.NewFeaturedArtistResolver
-	NewListFeaturingService    = featured.NewListFeaturingService
-	WithBackfillClock          = featured.WithBackfillClock
-	WithBackfillItemTimeout    = featured.WithBackfillItemTimeout
-	WithBackfillTimeBudget     = featured.WithBackfillTimeBudget
+	ErrBackfillClockRequired       = featured.ErrClockRequired
+	MustNewBackfillFeaturedService = featured.MustNewBackfillFeaturedService
+	NewBackfillFeaturedService     = featured.NewBackfillFeaturedService
+	NewFeaturedArtistResolver      = featured.NewFeaturedArtistResolver
+	NewListFeaturingService        = featured.NewListFeaturingService
+	WithBackfillItemTimeout        = featured.WithBackfillItemTimeout
+	WithBackfillTimeBudget         = featured.WithBackfillTimeBudget
 )
 
 var (

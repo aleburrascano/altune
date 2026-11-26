@@ -93,7 +93,7 @@ func goldenAlbumPageTracks() []search.SearchResult {
 }
 
 func goldenRouter(t *testing.T, svcs search.DiscoveryServices, filler search.TrackNumberFiller) chi.Router {
-	h := wireGoldenOwnership(t, search.NewDiscoveryHandler(svcs), goldenOwned(), filler)
+	h := wireGoldenOwnership(t, search.MustNewDiscoveryHandler(svcs, time.Now), goldenOwned(), filler)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())

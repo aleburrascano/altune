@@ -3,6 +3,7 @@ package spotify
 import (
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/adapters/providers/spotify/totp"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -33,10 +34,10 @@ func (s *spotifySession) validAt(now time.Time) bool {
 type spotifyTokenResolver struct {
 	*providerrequests.CachedResolver[*spotifySession]
 	client *http.Client
-	now    func() time.Time
+	now    clock.Func
 }
 
-func newSpotifyTokenResolver(client *http.Client, now func() time.Time) *spotifyTokenResolver {
+func newSpotifyTokenResolver(client *http.Client, now clock.Func) *spotifyTokenResolver {
 	r := &spotifyTokenResolver{client: client, now: now}
 	r.CachedResolver = providerrequests.NewCachedResolver("session", spotifyResolveTimeout, r.resolve, r.usable)
 	return r

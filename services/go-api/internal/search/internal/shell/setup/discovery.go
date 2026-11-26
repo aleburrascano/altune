@@ -72,8 +72,12 @@ func New(d connections.Deps) (*Discovery, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build the featured artist resolver: %w", err)
 	}
+	discoveryHandler, err := newHandler(d, t, s, services, unreleasedServices.lookup)
+	if err != nil {
+		return nil, err
+	}
 	return &Discovery{
-		Handler:           newHandler(d, t, s, services, unreleasedServices.lookup),
+		Handler:           discoveryHandler,
 		Search:            services.Search,
 		FeaturedArtists:   featuredArtists,
 		Recordings:        t.named(rowMusicBrainz).recordings,
@@ -107,7 +111,7 @@ func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 	if err != nil {
 		return handler.DiscoveryServices{}, err
 	}
-	recordHistory, err := history.NewRecordSearchHistoryService(s.History)
+	recordHistory, err := history.NewRecordSearchHistoryService(s.History, time.Now)
 	if err != nil {
 		return handler.DiscoveryServices{}, fmt.Errorf("build the history recorder: %w", err)
 	}
@@ -123,11 +127,15 @@ func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 	if err != nil {
 		return handler.DiscoveryServices{}, fmt.Errorf("build the related tracks service: %w", err)
 	}
+	clearHistory, err := history.NewClearSearchHistoryService(s.History, time.Now)
+	if err != nil {
+		return handler.DiscoveryServices{}, fmt.Errorf("build the clear-history service: %w", err)
+	}
 	return handler.DiscoveryServices{
 		Search:        search,
 		History:       history.NewListSearchHistoryService(s.History),
 		RecordHistory: recordHistory,
-		ClearHistory:  history.NewClearSearchHistoryService(s.History),
+		ClearHistory:  clearHistory,
 		Album:         album,
 		Artist:        artist,
 		Related:       relatedTracks,
@@ -142,9 +150,12 @@ func newEventService(activity ports.ActivityFeed, s connections.Stores) *useract
 	return useractivity.NewRecordEventService(s.Events, useractivity.WithRecordEventActivityFeed(activity))
 }
 
-func newHandler(d connections.Deps, t *providerTable, s connections.Stores, services handler.DiscoveryServices, unreleasedLookup *unreleased.Service) *handler.DiscoveryHandler {
-	h := handler.NewDiscoveryHandler(services)
+func newHandler(d connections.Deps, t *providerTable, s connections.Stores, services handler.DiscoveryServices, unreleasedLookup *unreleased.Service) (*handler.DiscoveryHandler, error) {
+	h, err := handler.NewDiscoveryHandler(services, time.Now)
+	if err != nil {
+		return nil, fmt.Errorf("build the discovery handler: %w", err)
+	}
 	h.WithDetailEnrichers(newDetailEnrichers(t, s))
 	h.WithUnreleased(unreleasedLookup)
-	return h.WithClientEvents(d.ClientEvents)
+	return h.WithClientEvents(d.ClientEvents), nil
 }

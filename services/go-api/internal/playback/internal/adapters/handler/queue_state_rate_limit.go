@@ -19,5 +19,5 @@ var DefaultQueueStateRateLimit = QueueSaveLimit{
 }
 
 func newUserRateLimiter(limit QueueSaveLimit, now func() time.Time, metrics ports.RateLimitMetrics) func(http.Handler) http.Handler {
-	return httpserver.NewUserRateLimiter(limit, now).Middleware(httpserver.UserKey(requestuser.UserIDFromContext), errQueueRateLimited, metrics.QueueStateRateLimited)
+	return httpserver.MustNewUserRateLimiter(limit, now).Middleware(httpserver.UserKey(requestuser.UserIDFromContext), errQueueRateLimited, metrics.QueueStateRateLimited)
 }

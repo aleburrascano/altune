@@ -32,7 +32,7 @@ func allowedRun(l *httpserver.UserRateLimiter, key string, requests int) []bool 
 }
 
 func TestUserRateLimiter_AdmitsTheBurstThenRefusesWithTheRefillWait(t *testing.T) {
-	l := httpserver.NewUserRateLimiter(httpserver.RateLimit{Every: 10 * time.Second, Burst: 2}, newLimiterClock().now)
+	l := httpserver.MustNewUserRateLimiter(httpserver.RateLimit{Every: 10 * time.Second, Burst: 2}, newLimiterClock().now)
 
 	first, firstWait := l.Allow("user")
 	second, _ := l.Allow("user")
@@ -48,7 +48,7 @@ func TestUserRateLimiter_AdmitsTheBurstThenRefusesWithTheRefillWait(t *testing.T
 
 func TestUserRateLimiter_ARefusalSpendsNoToken(t *testing.T) {
 	clock := newLimiterClock()
-	l := httpserver.NewUserRateLimiter(httpserver.RateLimit{Every: 10 * time.Second, Burst: 1}, clock.now)
+	l := httpserver.MustNewUserRateLimiter(httpserver.RateLimit{Every: 10 * time.Second, Burst: 1}, clock.now)
 	l.Allow("user")
 	for range 5 {
 		l.Allow("user")
@@ -62,7 +62,7 @@ func TestUserRateLimiter_ARefusalSpendsNoToken(t *testing.T) {
 }
 
 func TestUserRateLimiter_KeepsEachKeysBudgetApart(t *testing.T) {
-	l := httpserver.NewUserRateLimiter(httpserver.RateLimit{Every: time.Hour, Burst: 1}, newLimiterClock().now)
+	l := httpserver.MustNewUserRateLimiter(httpserver.RateLimit{Every: time.Hour, Burst: 1}, newLimiterClock().now)
 	l.Allow("a")
 
 	if allowed, _ := l.Allow("b"); !allowed {
@@ -72,7 +72,7 @@ func TestUserRateLimiter_KeepsEachKeysBudgetApart(t *testing.T) {
 
 func TestUserRateLimiter_KeepsBucketsThatAreStillSpent(t *testing.T) {
 	clock := newLimiterClock()
-	l := httpserver.NewUserRateLimiter(httpserver.RateLimit{Every: time.Minute, Burst: 1}, clock.now)
+	l := httpserver.MustNewUserRateLimiter(httpserver.RateLimit{Every: time.Minute, Burst: 1}, clock.now)
 
 	l.Allow("other")
 	clock.advance(50 * time.Second)
@@ -87,7 +87,7 @@ func TestUserRateLimiter_KeepsBucketsThatAreStillSpent(t *testing.T) {
 
 func TestUserRateLimiter_ReclaimsNoBucketBeforeItCouldHaveRefilled(t *testing.T) {
 	clock := newLimiterClock()
-	l := httpserver.NewUserRateLimiter(httpserver.RateLimit{Every: time.Minute, Burst: 2}, clock.now)
+	l := httpserver.MustNewUserRateLimiter(httpserver.RateLimit{Every: time.Minute, Burst: 2}, clock.now)
 	allowedRun(l, "spender", 2)
 
 	for range 2 {
@@ -102,7 +102,7 @@ func TestUserRateLimiter_ReclaimsNoBucketBeforeItCouldHaveRefilled(t *testing.T)
 }
 
 func TestUserRateLimiter_ZeroBurstStillAdmitsOne(t *testing.T) {
-	l := httpserver.NewUserRateLimiter(httpserver.RateLimit{Every: time.Hour}, nil)
+	l := httpserver.MustNewUserRateLimiter(httpserver.RateLimit{Every: time.Hour}, time.Now)
 
 	if allowed, _ := l.Allow("user"); !allowed {
 		t.Fatal("a zero burst must be raised to one admitted request")
@@ -112,14 +112,11 @@ func TestUserRateLimiter_ZeroBurstStillAdmitsOne(t *testing.T) {
 	}
 }
 
-func TestUserRateLimiter_ANilClockReadsTheWallClock(t *testing.T) {
-	l := httpserver.NewUserRateLimiter(httpserver.RateLimit{Every: time.Hour, Burst: 1}, nil)
-	l.Allow("user")
+func TestNewUserRateLimiter_RefusesANilClock(t *testing.T) {
+	l, err := httpserver.NewUserRateLimiter(httpserver.RateLimit{Every: time.Hour, Burst: 1}, nil)
 
-	_, wait := l.Allow("user")
-
-	if wait <= 59*time.Minute || wait > time.Hour {
-		t.Fatalf("wait = %v, want just under an hour measured on the wall clock", wait)
+	if !errors.Is(err, httpserver.ErrClockRequired) || l != nil {
+		t.Fatalf("NewUserRateLimiter(nil clock) = (%v, %v), want ErrClockRequired and no limiter", l, err)
 	}
 }
 
@@ -135,7 +132,7 @@ func TestUserRateLimiter_ReclaimsIdleBucketsWithinTwoIdlePeriods(t *testing.T) {
 	limit := httpserver.RateLimit{Every: time.Second, Burst: 2}
 	idlePeriod := limit.Every * time.Duration(limit.Burst)
 	clock := newLimiterClock()
-	l := httpserver.NewUserRateLimiter(limit, clock.now)
+	l := httpserver.MustNewUserRateLimiter(limit, clock.now)
 	l.Allow("fresh")
 	empty := heapInUse()
 	for range idleBuckets {
@@ -162,7 +159,7 @@ func TestUserRateLimiter_ReclaimsIdleBucketsWithinTwoIdlePeriods(t *testing.T) {
 func rotatingCallDuration(idleBuckets int) time.Duration {
 	limit := httpserver.RateLimit{Every: time.Second, Burst: 2}
 	clock := newLimiterClock()
-	l := httpserver.NewUserRateLimiter(limit, clock.now)
+	l := httpserver.MustNewUserRateLimiter(limit, clock.now)
 	l.Allow("caller")
 	for i := range idleBuckets {
 		l.Allow(strconv.Itoa(i))
@@ -192,7 +189,7 @@ func TestUserRateLimiter_ReclaimingIdleBucketsDoesNotStallTheCaller(t *testing.T
 
 func TestUserRateLimiter_MiddlewareRefusesWithRetryAfter(t *testing.T) {
 	clock := newLimiterClock()
-	l := httpserver.NewUserRateLimiter(httpserver.RateLimit{Every: 2 * time.Second, Burst: 1}, clock.now)
+	l := httpserver.MustNewUserRateLimiter(httpserver.RateLimit{Every: 2 * time.Second, Burst: 1}, clock.now)
 	refusals := 0
 	handler := l.Middleware(func(*http.Request) (string, bool) { return "user", true },
 		errors.New("refused"), func() { refusals++ })(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -213,7 +210,7 @@ func TestUserRateLimiter_MiddlewareRefusesWithRetryAfter(t *testing.T) {
 }
 
 func TestUserRateLimiter_MiddlewareRefusesWithoutARefusalHook(t *testing.T) {
-	l := httpserver.NewUserRateLimiter(httpserver.RateLimit{Every: time.Hour, Burst: 1}, newLimiterClock().now)
+	l := httpserver.MustNewUserRateLimiter(httpserver.RateLimit{Every: time.Hour, Burst: 1}, newLimiterClock().now)
 	handler := l.Middleware(func(*http.Request) (string, bool) { return "user", true }, errors.New("refused"), nil)(
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
 
@@ -245,7 +242,7 @@ func TestUserKey_ReadsTheUserFromTheRequestContext(t *testing.T) {
 }
 
 func TestUserRateLimiter_MiddlewarePassesAnonymousRequests(t *testing.T) {
-	l := httpserver.NewUserRateLimiter(httpserver.RateLimit{Every: time.Hour, Burst: 1}, nil)
+	l := httpserver.MustNewUserRateLimiter(httpserver.RateLimit{Every: time.Hour, Burst: 1}, time.Now)
 	handler := l.Middleware(func(*http.Request) (string, bool) { return "", false }, errors.New("refused"), nil)(
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
 

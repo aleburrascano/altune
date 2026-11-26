@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -25,14 +26,14 @@ func paramValidationRouter(t *testing.T) chi.Router {
 		search.ProviderDeezer: &search.FakeArtistContentProvider{Albums: seedTracks(3)},
 	}
 	historyRepo := &fakeSearchHistoryRepo{}
-	h := search.NewDiscoveryHandler(search.DiscoveryServices{
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{
 		Search:       searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{&fakeSearchProvider{name: search.ProviderDeezer}}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.History = historyRepo }),
 		History:      search.NewListSearchHistoryService(historyRepo),
-		ClearHistory: search.NewClearSearchHistoryService(historyRepo),
+		ClearHistory: search.MustNewClearSearchHistoryService(historyRepo, time.Now),
 		Album:        searchtest.NewAlbumTracks(t, albumProviders),
 		Artist:       searchtest.NewArtistContent(t, artistProviders),
 		Enrich:       mustEnrichment(search.NewEnrichmentService(&fakeMetadataEnricher{}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{})),
-	})
+	}, time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())

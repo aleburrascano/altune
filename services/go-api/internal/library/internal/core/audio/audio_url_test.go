@@ -46,7 +46,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		ready := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 		pending := library.SeedTrack(t, repo, userId, "Pending", "Artist", "Album")
-		svc := library.NewAudioURLService(repo, newRecordingSigner())
+		svc := library.MustNewAudioURLService(repo, newRecordingSigner(), time.Now)
 
 		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID, pending.ID, library.NewTrackId()})
 		if err != nil {
@@ -75,7 +75,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 	t.Run("a re-acquired track resolves under a new version so a cached client copy stops matching", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		ready := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
-		svc := library.NewAudioURLService(repo, newRecordingSigner())
+		svc := library.MustNewAudioURLService(repo, newRecordingSigner(), time.Now)
 
 		before, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID})
 		if err != nil {
@@ -108,7 +108,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		if err := repo.Update(ctx, ready, ready.Version); err != nil {
 			t.Fatalf("update: %v", err)
 		}
-		svc := library.NewAudioURLService(repo, newRecordingSigner())
+		svc := library.MustNewAudioURLService(repo, newRecordingSigner(), time.Now)
 
 		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID})
 		if err != nil {
@@ -125,7 +125,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 	t.Run("a failed track lookup surfaces the error instead of an empty result", func(t *testing.T) {
 		errLookup := errors.New("track lookup down")
 		repo := failingTrackLister{InMemoryTrackRepo: library.NewInMemoryTrackRepo(), err: errLookup}
-		svc := library.NewAudioURLService(repo, newRecordingSigner())
+		svc := library.MustNewAudioURLService(repo, newRecordingSigner(), time.Now)
 
 		out, err := svc.Resolve(ctx, userId, []library.TrackId{library.NewTrackId()})
 
@@ -140,7 +140,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 	t.Run("no signer returns nothing (client proxies)", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		ready := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
-		svc := library.NewAudioURLService(repo, library.NewInMemoryAudioStore())
+		svc := library.MustNewAudioURLService(repo, library.NewInMemoryAudioStore(), time.Now)
 
 		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID})
 		if err != nil {
@@ -157,7 +157,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		metrics := &library.InMemoryAudioStoreMetrics{}
 		signer := newRecordingSigner()
 		signer.err = errors.New("boom")
-		svc := library.NewAudioURLService(repo, signer, library.WithAudioURLMetrics(metrics))
+		svc := library.MustNewAudioURLService(repo, signer, time.Now, library.WithAudioURLMetrics(metrics))
 
 		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID})
 		if err != nil {
@@ -176,7 +176,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		ready := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 		pinned := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
 		signer := newRecordingSigner()
-		svc := library.NewAudioURLService(repo, signer, library.WithAudioURLClock(func() time.Time { return pinned }))
+		svc := library.MustNewAudioURLService(repo, signer, func() time.Time { return pinned })
 
 		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID})
 		if err != nil {
@@ -191,20 +191,10 @@ func TestAudioURLService_Resolve(t *testing.T) {
 	})
 }
 
-func TestAudioURLService_ANilClockKeepsTheWallClock(t *testing.T) {
-	repo := library.NewInMemoryTrackRepo()
-	userId := library.FixtureUserId()
-	ready := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
-	svc := library.NewAudioURLService(repo, newRecordingSigner(), library.WithAudioURLClock(nil))
+func TestNewAudioURLService_RefusesANilClock(t *testing.T) {
+	svc, err := library.NewAudioURLService(library.NewInMemoryTrackRepo(), newRecordingSigner(), nil)
 
-	before := time.Now()
-	out, err := svc.Resolve(context.Background(), userId, []library.TrackId{ready.ID})
-	after := time.Now()
-
-	if err != nil || len(out) != 1 {
-		t.Fatalf("Resolve = %+v, %v; want one url", out, err)
-	}
-	if got := out[0].ExpiresAt; got.Before(before.Add(audioURLLifetime)) || got.After(after.Add(audioURLLifetime)) {
-		t.Errorf("expires_at = %v, want one hour past the wall clock (%v to %v)", got, before, after)
+	if !errors.Is(err, library.ErrAudioClockRequired) || svc != nil {
+		t.Fatalf("NewAudioURLService(nil clock) = (%v, %v), want ErrAudioClockRequired and no service", svc, err)
 	}
 }

@@ -11,16 +11,18 @@ import (
 	"altune/go-api/internal/search/service/unreleased"
 	"altune/go-api/internal/search/service/useractivity"
 	"altune/go-api/internal/search/service/vocabulary"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
 	"altune/go-api/internal/shared/telemetry"
+	"errors"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 )
 
 type DiscoveryHandler struct {
+	now             clock.Func
 	searchSvc       *query.Service
 	historySvc      *history.ListSearchHistoryService
 	recordHistory   *history.RecordSearchHistoryService
@@ -71,17 +73,15 @@ type DiscoveryServices struct {
 	Favorites     *favorites.FavoritesService
 }
 
-func (h *DiscoveryHandler) WithRateLimits(limits DiscoveryRateLimits) *DiscoveryHandler {
-	return h.WithRateLimitsAt(limits, time.Now)
-}
+var ErrClockRequired = errors.New("handler: the discovery handler requires a clock")
 
-func (h *DiscoveryHandler) WithRateLimitsAt(limits DiscoveryRateLimits, now func() time.Time) *DiscoveryHandler {
-	h.searchLimiter = newUserRateLimiter(limits.Search, now)
-	h.suggestLimiter = newUserRateLimiter(limits.Suggest, now)
-	h.eventLimiter = newUserRateLimiter(limits.Events, now)
-	h.contentLimiter = newUserRateLimiter(limits.Content, now)
-	h.favoritesLimiter = newUserRateLimiter(limits.Favorites, now)
-	h.historyLimiter = newUserRateLimiter(limits.History, now)
+func (h *DiscoveryHandler) WithRateLimits(limits DiscoveryRateLimits) *DiscoveryHandler {
+	h.searchLimiter = newUserRateLimiter(limits.Search, h.now)
+	h.suggestLimiter = newUserRateLimiter(limits.Suggest, h.now)
+	h.eventLimiter = newUserRateLimiter(limits.Events, h.now)
+	h.contentLimiter = newUserRateLimiter(limits.Content, h.now)
+	h.favoritesLimiter = newUserRateLimiter(limits.Favorites, h.now)
+	h.historyLimiter = newUserRateLimiter(limits.History, h.now)
 	return h
 }
 
@@ -90,8 +90,20 @@ func (h *DiscoveryHandler) WithClientEvents(c *telemetry.ClientEvents) *Discover
 	return h
 }
 
-func NewDiscoveryHandler(svcs DiscoveryServices) *DiscoveryHandler {
+func MustNewDiscoveryHandler(svcs DiscoveryServices, now clock.Func) *DiscoveryHandler {
+	h, err := NewDiscoveryHandler(svcs, now)
+	if err != nil {
+		panic(err)
+	}
+	return h
+}
+
+func NewDiscoveryHandler(svcs DiscoveryServices, now clock.Func) (*DiscoveryHandler, error) {
+	if now == nil {
+		return nil, ErrClockRequired
+	}
 	h := &DiscoveryHandler{
+		now:             now,
 		searchSvc:       svcs.Search,
 		historySvc:      svcs.History,
 		recordHistory:   svcs.RecordHistory,
@@ -104,7 +116,7 @@ func NewDiscoveryHandler(svcs DiscoveryServices) *DiscoveryHandler {
 		eventSvc:        svcs.Event,
 		favoritesSvc:    svcs.Favorites,
 	}
-	return h.WithRateLimits(DefaultDiscoveryRateLimits)
+	return h.WithRateLimits(DefaultDiscoveryRateLimits), nil
 }
 
 const maxEventBodyBytes = 32 << 10

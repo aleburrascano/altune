@@ -34,7 +34,7 @@ func (r erroringFavoritesRepo) ListForUser(context.Context, ids.UserId) ([]searc
 
 func buildFavoritesRouter(err error) chi.Router {
 	svc := search.NewFavoritesService(erroringFavoritesRepo{err: err})
-	h := search.NewDiscoveryHandler(search.DiscoveryServices{Favorites: svc})
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Favorites: svc}, time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -130,9 +130,9 @@ func TestFavoritesEndpoints_ServiceErrorsUseTypedContract(t *testing.T) {
 }
 
 func buildFavoritesLimitedRouter(limits search.DiscoveryRateLimits) chi.Router {
-	h := search.NewDiscoveryHandler(search.DiscoveryServices{
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{
 		Favorites: search.NewFavoritesService(erroringFavoritesRepo{}),
-	}).WithRateLimits(limits)
+	}, time.Now).WithRateLimits(limits)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())

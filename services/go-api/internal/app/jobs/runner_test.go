@@ -502,7 +502,7 @@ func TestLeaderContext_TheAlertMonitorEvaluatesOnlyDuringItsTerm(t *testing.T) {
 	defer cancel()
 
 	var evaluations atomic.Int32
-	monitor, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, leaderLoopTick, monitoring.Condition{
+	monitor, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, leaderLoopTick, time.Now, monitoring.Condition{
 		Key: "dependency_down",
 		Eval: func(context.Context) *monitoring.Alert {
 			evaluations.Add(1)

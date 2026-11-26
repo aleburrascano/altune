@@ -3,8 +3,10 @@ package handler
 import (
 	"altune/go-api/internal/library/domain"
 	playlistservice "altune/go-api/internal/library/internal/core/playlist"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -19,25 +21,28 @@ type PlaylistHandler struct {
 	writeLimiter rateLimitMiddleware
 }
 
-func NewPlaylistHandler(lifecycle *playlistservice.PlaylistLifecycleService, membership *playlistservice.PlaylistMembershipService, opts ...func(*PlaylistHandler)) *PlaylistHandler {
+func NewPlaylistHandler(lifecycle *playlistservice.PlaylistLifecycleService, membership *playlistservice.PlaylistMembershipService, now clock.Func, opts ...func(*PlaylistHandler)) (*PlaylistHandler, error) {
+	if now == nil {
+		return nil, fmt.Errorf("NewPlaylistHandler: %w", ErrClockRequired)
+	}
 	h := &PlaylistHandler{
 		lifecycle:  lifecycle,
 		membership: membership,
-		now:        time.Now,
+		now:        now,
 	}
 	for _, opt := range opts {
 		opt(h)
 	}
 	h.writeLimiter = newWriteRateLimiter(playlistWriteRateLimit, h.now)
-	return h
+	return h, nil
 }
 
-func WithPlaylistWriteLimiterClock(now func() time.Time) func(*PlaylistHandler) {
-	return func(h *PlaylistHandler) {
-		if now != nil {
-			h.now = now
-		}
+func MustNewPlaylistHandler(lifecycle *playlistservice.PlaylistLifecycleService, membership *playlistservice.PlaylistMembershipService, now clock.Func, opts ...func(*PlaylistHandler)) *PlaylistHandler {
+	h, err := NewPlaylistHandler(lifecycle, membership, now, opts...)
+	if err != nil {
+		panic(err)
 	}
+	return h
 }
 
 func (h *PlaylistHandler) Routes() chi.Router {

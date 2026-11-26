@@ -1,7 +1,9 @@
 package breaker
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"context"
+	"errors"
 	"sync"
 	"time"
 )
@@ -32,7 +34,7 @@ type Config struct {
 	Threshold  int
 	OpenFor    time.Duration
 	ProbeLease time.Duration
-	Now        func() time.Time
+	Now        clock.Func
 	OnChange   func(ctx context.Context, c Change)
 }
 
@@ -60,12 +62,22 @@ type Breaker struct {
 	probeSeq       uint64
 }
 
-func New(cfg Config) *Breaker {
-	cfg.Threshold = max(cfg.Threshold, 1)
+var ErrClockRequired = errors.New("breaker: the breaker requires a clock")
+
+func New(cfg Config) (*Breaker, error) {
 	if cfg.Now == nil {
-		cfg.Now = time.Now
+		return nil, ErrClockRequired
 	}
-	return &Breaker{cfg: cfg}
+	cfg.Threshold = max(cfg.Threshold, 1)
+	return &Breaker{cfg: cfg}, nil
+}
+
+func MustNew(cfg Config) *Breaker {
+	b, err := New(cfg)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 func (b *Breaker) Allow(ctx context.Context) (Admission, bool) {

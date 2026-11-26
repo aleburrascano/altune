@@ -61,7 +61,7 @@ func (r *fixtureTrackRepo) AudioRefInUse(_ context.Context, _ string, _ library.
 
 func eventTap(t *testing.T) *monitoring.EventTap {
 	t.Helper()
-	return monitoring.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
+	return monitoring.MustNewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
 }
 
 func newOfflineScheduler(t *testing.T, cfg *config.Config, sources downloadsetup.SourceOrder) *download.BackgroundAcquisitionScheduler {

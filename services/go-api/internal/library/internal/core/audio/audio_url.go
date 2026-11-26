@@ -3,8 +3,10 @@ package audio
 import (
 	"altune/go-api/internal/library/domain"
 	"altune/go-api/internal/library/internal/core/ports"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 )
@@ -22,14 +24,27 @@ type AudioLinkService struct {
 	trackRepo ports.TrackBatchGetter
 	signer    ports.AudioLinkSigner
 	metrics   ports.AudioStoreMetrics
-	now       func() time.Time
+	now       clock.Func
 }
 
-func NewAudioURLService(trackRepo ports.TrackBatchGetter, store ports.AudioStore, opts ...func(*AudioLinkService)) *AudioLinkService {
+var ErrClockRequired = errors.New("audio: the audio link service requires a clock")
+
+func NewAudioURLService(trackRepo ports.TrackBatchGetter, store ports.AudioStore, now clock.Func, opts ...func(*AudioLinkService)) (*AudioLinkService, error) {
+	if now == nil {
+		return nil, ErrClockRequired
+	}
 	signer, _ := store.(ports.AudioLinkSigner)
-	s := &AudioLinkService{trackRepo: trackRepo, signer: signer, metrics: ports.NoopAudioStoreMetrics(), now: time.Now}
+	s := &AudioLinkService{trackRepo: trackRepo, signer: signer, metrics: ports.NoopAudioStoreMetrics(), now: now}
 	for _, opt := range opts {
 		opt(s)
+	}
+	return s, nil
+}
+
+func MustNewAudioURLService(trackRepo ports.TrackBatchGetter, store ports.AudioStore, now clock.Func, opts ...func(*AudioLinkService)) *AudioLinkService {
+	s, err := NewAudioURLService(trackRepo, store, now, opts...)
+	if err != nil {
+		panic(err)
 	}
 	return s
 }
@@ -38,14 +53,6 @@ func WithAudioURLMetrics(m ports.AudioStoreMetrics) func(*AudioLinkService) {
 	return func(s *AudioLinkService) {
 		if m != nil {
 			s.metrics = m
-		}
-	}
-}
-
-func WithAudioURLClock(now func() time.Time) func(*AudioLinkService) {
-	return func(s *AudioLinkService) {
-		if now != nil {
-			s.now = now
 		}
 	}
 }

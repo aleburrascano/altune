@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -131,7 +132,7 @@ func TestHandleRelatedTracks_LimitClamping(t *testing.T) {
 	svc := searchtest.NewRelatedTracks(t, map[string]search.RelatedTracksProvider{
 		"soundcloud": provider,
 	})
-	h := search.NewDiscoveryHandler(search.DiscoveryServices{Related: svc})
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Related: svc}, time.Now)
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
 	router.Mount("/discovery", h.Routes())
@@ -194,7 +195,7 @@ func identityContentRouter(t testing.TB, down map[search.ProviderName]bool) chi.
 		xref[pn.Key()] = "id-" + pn.String()
 	}
 	svc := searchtest.NewArtistContent(t, providers, searchtest.ArtistIdentities(stubIdentityStore{xref: xref}))
-	h := search.NewDiscoveryHandler(search.DiscoveryServices{Artist: svc})
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Artist: svc}, time.Now)
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
 	router.Mount("/discovery", h.Routes())
@@ -322,11 +323,11 @@ func unauthenticatedDiscoveryRouter(h *search.DiscoveryHandler) chi.Router {
 
 func TestHandleArtistContent_NoIdentityIs401AndSkipsService(t *testing.T) {
 	provider := &countingArtistContentProvider{}
-	h := search.NewDiscoveryHandler(search.DiscoveryServices{
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{
 		Artist: searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{
 			search.ProviderDeezer: provider,
 		}),
-	})
+	}, time.Now)
 
 	rec := discServeNoAuth(t, unauthenticatedDiscoveryRouter(h), http.MethodGet, "/discovery/artists/deezer/1/content")
 
@@ -343,7 +344,7 @@ func TestContentRoutes_NoIdentityIs401(t *testing.T) {
 		"/discovery/artists/deezer/1/albums",
 		"/discovery/tracks/deezer/1/related",
 	}
-	router := unauthenticatedDiscoveryRouter(search.NewDiscoveryHandler(search.DiscoveryServices{}))
+	router := unauthenticatedDiscoveryRouter(search.MustNewDiscoveryHandler(search.DiscoveryServices{}, time.Now))
 	for _, path := range paths {
 		t.Run(path, func(t *testing.T) {
 			discAssertStatus(t, discServeNoAuth(t, router, http.MethodGet, path), http.StatusUnauthorized)
@@ -369,7 +370,7 @@ func TestArtistContentEndpoints_AskTheProvidersTheSearchCardKnows(t *testing.T) 
 	})
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
-	router.Mount("/discovery", search.NewDiscoveryHandler(search.DiscoveryServices{Artist: svc}).Routes())
+	router.Mount("/discovery", search.MustNewDiscoveryHandler(search.DiscoveryServices{Artist: svc}, time.Now).Routes())
 
 	for _, path := range []string{"content", "albums", "top-tracks"} {
 		asked = map[string]bool{}
@@ -388,7 +389,7 @@ func TestArtistContentEndpoints_IgnoreTheArtistName(t *testing.T) {
 	})
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
-	router.Mount("/discovery", search.NewDiscoveryHandler(search.DiscoveryServices{Artist: svc}).Routes())
+	router.Mount("/discovery", search.MustNewDiscoveryHandler(search.DiscoveryServices{Artist: svc}, time.Now).Routes())
 
 	for _, path := range []string{"content", "albums", "top-tracks"} {
 		rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/d1/"+path+"?name="+strings.Repeat("a", 5000), nil)
@@ -410,7 +411,7 @@ func TestAlbumTracks_ServesLongAlbumsWholeAndPassesTheCardIDs(t *testing.T) {
 	})
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
-	router.Mount("/discovery", search.NewDiscoveryHandler(search.DiscoveryServices{Album: svc}).Routes())
+	router.Mount("/discovery", search.MustNewDiscoveryHandler(search.DiscoveryServices{Album: svc}, time.Now).Routes())
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/albums/deezer/d1/tracks?ids=spotify:sp1", nil)
 
@@ -449,7 +450,7 @@ func TestHandleArtistAlbums_LimitClamping(t *testing.T) {
 			})
 			router := chi.NewRouter()
 			router.Use(discAsTestUser)
-			router.Mount("/discovery", search.NewDiscoveryHandler(search.DiscoveryServices{Artist: svc}).Routes())
+			router.Mount("/discovery", search.MustNewDiscoveryHandler(search.DiscoveryServices{Artist: svc}, time.Now).Routes())
 
 			rec := discServe(t, router, http.MethodGet, "/discovery/artists/deezer/1/albums"+c.query, nil)
 

@@ -11,10 +11,10 @@ var (
 	ErrJWKSBodyTooLarge       = providers.ErrJWKSBodyTooLarge
 	ErrJWKSEmptyKeySet        = providers.ErrJWKSEmptyKeySet
 	ErrJWKSRefreshBackoff     = providers.ErrJWKSRefreshBackoff
+	ErrJWKSClockRequired      = providers.ErrJWKSClockRequired
 	ErrJWKSStale              = providers.ErrJWKSStale
 	NewSupabaseJWTVerifier    = providers.NewSupabaseJWTVerifier
 	WithJWKSBackgroundRefresh = providers.WithJWKSBackgroundRefresh
-	WithJWKSClock             = providers.WithJWKSClock
 	WithJWKSFetchTimeout      = providers.WithJWKSFetchTimeout
 	WithJWKSMetrics           = providers.WithJWKSMetrics
 	WithTokenRevoker          = providers.WithTokenRevoker
