@@ -1,7 +1,7 @@
 package persistence_test
 
 import (
-	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/adapters/memory/memorytest"
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
@@ -14,14 +14,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func newUnreleasedArtist(t *testing.T, pool *pgxpool.Pool, store *persistence.PostgresUnreleasedStore) ports.UnreleasedArtistKey {
+func newUnreleasedArtist(ctx context.Context, t *testing.T, pool *pgxpool.Pool, store *persistence.PostgresUnreleasedStore) ports.UnreleasedArtistKey {
 	t.Helper()
 	key := ports.UnreleasedArtistKey{Provider: domain.ProviderDeezer, ExternalID: "it-" + uuid.NewString()}
-	if err := store.Record(context.Background(), key, "Artist "+key.ExternalID, map[domain.ProviderName]string{domain.ProviderMusicBrainz: "mb"}); err != nil {
+	if err := store.Record(ctx, key, "Artist "+key.ExternalID, map[domain.ProviderName]string{domain.ProviderMusicBrainz: "mb"}); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM unreleased_artists WHERE provider = $1 AND external_id = $2`, key.Provider.String(), key.ExternalID)
+		_, _ = pool.Exec(context.WithoutCancel(ctx), `DELETE FROM unreleased_artists WHERE provider = $1 AND external_id = $2`, key.Provider.String(), key.ExternalID)
 	})
 	return key
 }
@@ -40,7 +40,7 @@ type postgresUnreleasedUnderContract struct {
 }
 
 func (p postgresUnreleasedUnderContract) NewRecordedArtist(t *testing.T) ports.UnreleasedArtistKey {
-	return newUnreleasedArtist(t, p.pool, p.PostgresUnreleasedStore)
+	return newUnreleasedArtist(t.Context(), t, p.pool, p.PostgresUnreleasedStore)
 }
 
 func (p postgresUnreleasedUnderContract) NewUnrecordedArtist(*testing.T) ports.UnreleasedArtistKey {
@@ -49,7 +49,7 @@ func (p postgresUnreleasedUnderContract) NewUnrecordedArtist(*testing.T) ports.U
 
 func TestPostgresUnreleasedStore_KeepsTheStoreContract(t *testing.T) {
 	pool := dbtest.Pool(t)
-	memory.UnreleasedStoreContract(t, func(*testing.T) memory.UnreleasedStoreUnderTest {
+	memorytest.UnreleasedStoreContract(t, func(*testing.T) memorytest.UnreleasedStoreUnderTest {
 		return postgresUnreleasedUnderContract{PostgresUnreleasedStore: persistence.NewPostgresUnreleasedStore(pool), pool: pool}
 	})
 }
@@ -58,7 +58,7 @@ func TestUnreleasedStoreWrite(t *testing.T) {
 	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresUnreleasedStore(pool)
 	ctx := context.Background()
-	key := newUnreleasedArtist(t, pool, store)
+	key := newUnreleasedArtist(t.Context(), t, pool, store)
 
 	if _, _, built, _, err := store.Read(ctx, key); err != nil || built {
 		t.Fatalf("Read before any write: built=%v err=%v", built, err)
@@ -102,7 +102,7 @@ func TestUnreleasedStoreDue(t *testing.T) {
 	}
 
 	seed := func(attempted time.Time, built *time.Time, complete bool, songCount int, requested time.Time) ports.UnreleasedArtistKey {
-		key := newUnreleasedArtist(t, pool, store)
+		key := newUnreleasedArtist(ctx, t, pool, store)
 		if _, err := pool.Exec(ctx,
 			`UPDATE unreleased_artists SET attempted_at = $3, built_at = $4, complete = $5, song_count = $6, last_requested_at = $7
 			 WHERE provider = $1 AND external_id = $2`,
@@ -145,7 +145,7 @@ func TestUnreleasedStoreBuildVersion(t *testing.T) {
 	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresUnreleasedStore(pool)
 	ctx := context.Background()
-	key := newUnreleasedArtist(t, pool, store)
+	key := newUnreleasedArtist(t.Context(), t, pool, store)
 
 	t0 := time.Now().Add(-time.Hour).UTC().Truncate(time.Microsecond)
 	if err := store.Write(ctx, key, []domain.UnreleasedSong{{Title: "A"}}, true, t0, 3); err != nil {
@@ -182,7 +182,7 @@ func TestUnreleasedSearch_RanksBySimilarityAndMatchesTyposAndAccents(t *testing.
 	pool := dbtest.Pool(t)
 	store := persistence.NewPostgresUnreleasedStore(pool)
 	ctx := context.Background()
-	key := newUnreleasedArtist(t, pool, store)
+	key := newUnreleasedArtist(t.Context(), t, pool, store)
 	songs := []domain.UnreleasedSong{
 		{Title: "Magnolia Sessions Extended", Quality: "lossless"},
 		{Title: "Magnólia"},

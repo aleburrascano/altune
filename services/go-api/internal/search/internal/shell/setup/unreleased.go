@@ -40,6 +40,7 @@ func newUnreleasedServices(d connections.Deps, t *providerTable, s connections.S
 		Lifecycle: d.Lifecycle,
 		Jobs:      d.Background,
 		Timer:     clock.NewTimer,
+		Now:       clock.Now,
 	})
 	if err != nil {
 		return unreleasedServices{}, fmt.Errorf("build the unreleased service: %w", err)

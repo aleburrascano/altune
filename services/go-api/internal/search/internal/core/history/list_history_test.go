@@ -118,6 +118,6 @@ func TestListSearchHistoryService_RefusesAMissingRepository(t *testing.T) {
 	svc, err := history.NewListSearchHistoryService(nil)
 
 	if svc != nil || !errors.Is(err, history.ErrCollaboratorRequired) {
-		t.Fatalf("got (%v, %v), want a refusal wrapping ErrHistoryCollaboratorRequired", svc, err)
+		t.Fatalf("got (%v, %v), want a refusal wrapping history.ErrCollaboratorRequired", svc, err)
 	}
 }

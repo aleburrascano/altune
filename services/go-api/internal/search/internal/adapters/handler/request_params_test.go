@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/clock"
 	"net/http"
 	"net/url"
 	"strings"
@@ -32,7 +33,7 @@ func paramValidationRouter(t *testing.T) chi.Router {
 	}
 	historyRepo := &fakeSearchHistoryRepo{}
 	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
-		Search:       searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{&fakeSearchProvider{name: search.ProviderDeezer}}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.History = historyRepo }),
+		Search:       searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{&fakeSearchProvider{name: search.ProviderDeezer}}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.History = historyRepo }),
 		History:      searchtest.NewListHistory(t, historyRepo),
 		ClearHistory: searchtest.NewClearHistory(t, historyRepo),
 		Album:        searchtest.NewAlbumTracks(t, albumProviders),

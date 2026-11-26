@@ -167,7 +167,7 @@ func TestNewStoreIdentity_RefusesAMissingStore(t *testing.T) {
 	identity, err := artistpage.NewStoreIdentity(nil)
 
 	if !errors.Is(err, artistpage.ErrCollaboratorRequired) || identity != nil {
-		t.Fatalf("identity = %v, err = %v, want ErrArtistPageCollaboratorRequired", identity, err)
+		t.Fatalf("identity = %v, err = %v, want artistpage.ErrCollaboratorRequired", identity, err)
 	}
 	if !strings.Contains(err.Error(), "identity store") {
 		t.Errorf("err = %q, want it to name the identity store", err)

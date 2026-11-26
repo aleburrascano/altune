@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/adapters/providers/providersearch"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"
 	"errors"
@@ -43,13 +44,13 @@ func (NoFallback) Search(context.Context, string, map[domain.ResultKind]bool) ([
 	return nil, errNoFallback
 }
 
-func NewSoundCloudAPIAdapter(client *http.Client, fallback searchFallback) (*SoundCloudAPIAdapter, error) {
-	if client == nil || fallback == nil {
+func NewSoundCloudAPIAdapter(client *http.Client, fallback searchFallback, now clock.Func) (*SoundCloudAPIAdapter, error) {
+	if client == nil || fallback == nil || now == nil {
 		return nil, ErrCollaboratorRequired
 	}
 	return &SoundCloudAPIAdapter{
 		client:   client,
-		resolver: newClientIDResolver(client),
+		resolver: newClientIDResolver(client, now),
 		fallback: fallback,
 		baseURL:  scAPIBaseURL,
 	}, nil

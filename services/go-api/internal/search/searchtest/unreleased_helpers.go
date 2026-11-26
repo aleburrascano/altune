@@ -7,11 +7,13 @@ import (
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"context"
+	"testing"
 )
 
 type UnreleasedPart func(*unreleased.Wiring)
 
-func UnreleasedWiring(cache ports.UnreleasedCache, parts ...UnreleasedPart) unreleased.Wiring {
+func UnreleasedWiring(t testing.TB, cache ports.UnreleasedCache, parts ...UnreleasedPart) unreleased.Wiring {
+	t.Helper()
 	storage, err := unreleased.NewCachedStorage(cache)
 	if err != nil {
 		panic(err)
@@ -19,9 +21,10 @@ func UnreleasedWiring(cache ports.UnreleasedCache, parts ...UnreleasedPart) unre
 	w := unreleased.Wiring{
 		Trackers:  unreleased.NoTrackers{},
 		Storage:   storage,
-		Lifecycle: context.Background(),
+		Lifecycle: t.Context(),
 		Jobs:      &background.Tracker{},
 		Timer:     clock.NewTimer,
+		Now:       clock.Now,
 	}
 	for _, part := range parts {
 		part(&w)

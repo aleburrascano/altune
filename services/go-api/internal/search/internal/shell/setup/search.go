@@ -10,6 +10,7 @@ import (
 	"altune/go-api/internal/search/internal/service/query"
 	"altune/go-api/internal/search/internal/service/rank"
 	"altune/go-api/internal/search/internal/service/related"
+	"altune/go-api/internal/shared/clock"
 	"fmt"
 	"strings"
 )
@@ -54,7 +55,7 @@ func newRankingOnlySearchService(w wiring) (*query.Service, error) {
 	p := newSearchPlan()
 	planRanking(p, w.deps.Search, w.stores)
 	planVocabulary(p, w.stores)
-	return w.namedSearchService("discovery.ranking_only_search", p, providerguard.NewCircuitBreaker())
+	return w.namedSearchService("discovery.ranking_only_search", p, providerguard.NewCircuitBreaker(clock.Now))
 }
 
 func (w wiring) namedSearchService(message string, p *searchPlan, breaker *providerguard.CircuitBreaker) (*query.Service, error) {
@@ -117,7 +118,7 @@ func newFindRelatedService(t *providerTable, s connections.Stores, breaker *prov
 	if err != nil {
 		return nil, fmt.Errorf("build the artist albums source: %w", err)
 	}
-	return related.NewFindRelatedService(library, albumTracks, artistAlbums)
+	return related.NewFindRelatedService(clock.Now, library, albumTracks, artistAlbums)
 }
 
 func newArtworkFiller(w wiring) (*artwork.ArtworkFiller, error) {
@@ -180,7 +181,7 @@ func planRecording(p *searchPlan, w wiring) error {
 	p.collaborators.Events = w.stores.Events
 	p.choose("event_store")
 	if w.deps.Search.BehavioralRanking {
-		scoring, err := rank.NewBehavioralScoring(rank.NewSatisfactionConsumer(w.stores.Events))
+		scoring, err := rank.NewBehavioralScoring(rank.NewSatisfactionConsumer(w.stores.Events), clock.Now)
 		if err != nil {
 			return fmt.Errorf("build behavioral ranking: %w", err)
 		}

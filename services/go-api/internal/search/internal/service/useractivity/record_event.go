@@ -3,6 +3,7 @@ package useractivity
 import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"encoding/json"
@@ -15,15 +16,16 @@ import (
 type RecordEventService struct {
 	eventStore ports.EventStore
 	activity   ports.ActivityFeed
+	now        clock.Func
 }
 
-var ErrCollaboratorRequired = errors.New("record event service needs its event store and activity feed, pass the noop feed to switch it off")
+var ErrCollaboratorRequired = errors.New("record event service needs its event store, activity feed and clock, pass the noop feed to switch the feed off")
 
-func NewRecordEventService(eventStore ports.EventStore, activity ports.ActivityFeed) (*RecordEventService, error) {
-	if eventStore == nil || activity == nil {
+func NewRecordEventService(eventStore ports.EventStore, activity ports.ActivityFeed, now clock.Func) (*RecordEventService, error) {
+	if eventStore == nil || activity == nil || now == nil {
 		return nil, ErrCollaboratorRequired
 	}
-	return &RecordEventService{eventStore: eventStore, activity: activity}, nil
+	return &RecordEventService{eventStore: eventStore, activity: activity, now: now}, nil
 }
 
 type NoopActivityFeed struct{}
@@ -131,7 +133,7 @@ func validateEventID(t domain.EventType, eventID string) error {
 
 func (s *RecordEventService) RecordAnonymousAuthFailure(ctx context.Context, reason, appVersion string) error {
 	event := domain.InteractionEvent{
-		OccurredAt: time.Now().UTC(),
+		OccurredAt: s.now().UTC(),
 		UserId:     ids.AnonymousUserId(),
 		Type:       domain.EventTypeAuthFailed,
 		Payload:    map[string]any{"reason": reason, "app_version": appVersion},
@@ -161,7 +163,7 @@ func (s *RecordEventService) Execute(ctx context.Context, userId ids.UserId, inp
 	}
 
 	event := domain.InteractionEvent{
-		OccurredAt:       time.Now().UTC(),
+		OccurredAt:       s.now().UTC(),
 		UserId:           userId,
 		Type:             input.Type,
 		SearchId:         input.SearchId,

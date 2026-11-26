@@ -3,6 +3,7 @@ package persistence
 import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -24,10 +25,14 @@ var (
 
 type PostgresEventStore struct {
 	pool *pgxpool.Pool
+	now  clock.Func
 }
 
-func NewPostgresEventStore(pool *pgxpool.Pool) *PostgresEventStore {
-	return &PostgresEventStore{pool: pool}
+func NewPostgresEventStore(pool *pgxpool.Pool, now clock.Func) *PostgresEventStore {
+	if now == nil {
+		panic("persistence.NewPostgresEventStore: a clock is required")
+	}
+	return &PostgresEventStore{pool: pool, now: now}
 }
 
 const appendEventSQL = `INSERT INTO discovery_events
@@ -89,7 +94,7 @@ func (r *PostgresEventStore) Append(ctx context.Context, event domain.Interactio
 
 	occurredAt := event.OccurredAt
 	if occurredAt.IsZero() {
-		occurredAt = time.Now().UTC()
+		occurredAt = r.now().UTC()
 	}
 
 	err = execUnderSearchTextLock(ctx, r.pool, event.UserId.UUID(), appendEventSQL,

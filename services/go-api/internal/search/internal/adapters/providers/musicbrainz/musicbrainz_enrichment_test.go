@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/musicbrainz"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -22,7 +23,7 @@ func mbServer(t *testing.T, handler http.HandlerFunc) *musicbrainz.MusicBrainzAd
 		Timeout:   2 * time.Second,
 		Transport: &providertest.RewriteTransport{Base: srv.URL},
 	}
-	return musicbrainz.NewMusicBrainzAdapter(client, "AltuneTest/1.0 ( test@altune )")
+	return musicbrainz.NewMusicBrainzAdapter(client, "AltuneTest/1.0 ( test@altune )", clock.Now)
 }
 
 const kendrickArtistLookup = `{
@@ -215,7 +216,7 @@ func TestMusicBrainzAdapter_ResolveMBID_track(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0", clock.Now)
 	mbid, err := adapter.ResolveMBID(context.Background(), search.ResultKindTrack, "Paranoid Android", "Radiohead")
 	if err != nil {
 		t.Fatalf("ResolveMBID: %v", err)

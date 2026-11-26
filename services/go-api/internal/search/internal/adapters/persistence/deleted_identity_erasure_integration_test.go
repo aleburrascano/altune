@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -115,7 +116,7 @@ func seedEveryDiscoveryTableFor(t *testing.T, pool *pgxpool.Pool, owner ids.User
 		t.Fatalf("seed favorite: %v", err)
 	}
 
-	events := persistence.NewPostgresEventStore(pool)
+	events := persistence.NewPostgresEventStore(pool, clock.Now)
 	if err := events.Append(ctx, domain.InteractionEvent{
 		OccurredAt: time.Now().UTC(),
 		UserId:     owner,
@@ -144,7 +145,7 @@ func deletedIdentityErasers(pool *pgxpool.Pool) []ports.DeletedUserDataEraser {
 	return []ports.DeletedUserDataEraser{
 		persistence.NewPostgresSearchHistoryRepository(pool),
 		persistence.NewPostgresFavoritesRepository(pool),
-		persistence.NewPostgresEventStore(pool),
+		persistence.NewPostgresEventStore(pool, clock.Now),
 	}
 }
 

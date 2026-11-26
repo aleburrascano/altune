@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"log/slog"
@@ -24,16 +25,18 @@ func (NoDiscographyObserver) emit(context.Context, string, []albumgrouping.Merge
 type DiscographyTelemetry struct {
 	eventStore ports.EventStore
 	bg         *background.Tracker
+	now        clock.Func
 }
 
-func NewDiscographyTelemetry(eventStore ports.EventStore, bg *background.Tracker) (*DiscographyTelemetry, error) {
+func NewDiscographyTelemetry(eventStore ports.EventStore, bg *background.Tracker, now clock.Func) (*DiscographyTelemetry, error) {
 	if err := requireCollaborators("the discography telemetry",
 		collaborator{"an event store", eventStore == nil},
 		collaborator{"a background tracker", bg == nil},
+		collaborator{"a clock", now == nil},
 	); err != nil {
 		return nil, err
 	}
-	return &DiscographyTelemetry{eventStore: eventStore, bg: bg}, nil
+	return &DiscographyTelemetry{eventStore: eventStore, bg: bg, now: now}, nil
 }
 
 func (t *DiscographyTelemetry) emit(parentCtx context.Context, artistRef string, merged []albumgrouping.MergedRelease) {
@@ -41,7 +44,7 @@ func (t *DiscographyTelemetry) emit(parentCtx context.Context, artistRef string,
 	if !ok {
 		return
 	}
-	occurredAt := time.Now().UTC()
+	occurredAt := t.now().UTC()
 	t.bg.LaunchWithin(parentCtx, "discography.telemetry.emit", emitTimeout, func(ctx context.Context) {
 		t.append(ctx, occurredAt, payload)
 	})

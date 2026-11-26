@@ -3,6 +3,7 @@ package musicbrainz_test
 import (
 	"altune/go-api/internal/search/internal/adapters/providers/musicbrainz"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
 	"net/http"
@@ -26,7 +27,7 @@ func TestMusicBrainzAdapter_ReleaseGroupTitles_LeaderCancelDoesNotFailWaiters(t 
 			mbReleaseGroupJSON("rg-1", "OK Computer", "Radiohead", "mbid-rh") + `]}`))
 	}))
 	defer server.Close()
-	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0", clock.Now)
 
 	leaderCtx, cancelLeader := context.WithCancel(context.Background())
 	leaderErr := make(chan error, 1)
@@ -80,7 +81,7 @@ func TestMusicBrainzAdapter_ReleaseGroupTitles(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0", clock.Now)
 	titles, err := adapter.ReleaseGroupTitles(context.Background(), "mbid-rh")
 	if err != nil {
 		t.Fatalf("ReleaseGroupTitles: %v", err)
@@ -102,7 +103,7 @@ func TestMusicBrainzAdapter_ReleaseGroupTitles_laterPageFailureIsNotACompleteAnc
 	}))
 	defer server.Close()
 
-	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0", clock.Now)
 	titles, err := adapter.ReleaseGroupTitles(context.Background(), "mbid-rh")
 	if err == nil {
 		t.Fatalf("ReleaseGroupTitles = %v, nil; want an error so a truncated title set is not taken as the anchor", titles)

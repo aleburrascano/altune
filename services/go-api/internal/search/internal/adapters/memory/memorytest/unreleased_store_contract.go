@@ -1,9 +1,8 @@
-package memory
+package memorytest
 
 import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
-	"context"
 	"slices"
 	"testing"
 	"time"
@@ -40,7 +39,7 @@ func titlesOf(songs []domain.UnreleasedSong) []string {
 
 func readOrFail(t *testing.T, s UnreleasedStoreUnderTest, key ports.UnreleasedArtistKey) (songs []domain.UnreleasedSong, complete, built bool, version int) {
 	t.Helper()
-	songs, complete, built, version, err := s.Read(context.Background(), key)
+	songs, complete, built, version, err := s.Read(t.Context(), key)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
@@ -53,13 +52,13 @@ func writeOrFail(t *testing.T, s UnreleasedStoreUnderTest, key ports.UnreleasedA
 	for i, title := range titles {
 		songs[i] = domain.UnreleasedSong{Title: title}
 	}
-	if err := s.Write(context.Background(), key, songs, complete, startedAt, version); err != nil {
+	if err := s.Write(t.Context(), key, songs, complete, startedAt, version); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
 }
 
 func contractBuildStart() time.Time {
-	return time.Now().Add(-time.Hour).UTC().Truncate(time.Microsecond)
+	return time.Date(2026, time.March, 1, 12, 0, 0, 0, time.UTC)
 }
 
 func contractRecordedArtistIsNotBuilt(t *testing.T, s UnreleasedStoreUnderTest) {
@@ -124,7 +123,7 @@ func contractRecordAgainKeepsTheBuild(t *testing.T, s UnreleasedStoreUnderTest) 
 	key := s.NewRecordedArtist(t)
 	writeOrFail(t, s, key, []string{"A"}, true, contractBuildStart(), 1)
 
-	if err := s.Record(context.Background(), key, "Renamed", map[domain.ProviderName]string{domain.ProviderMusicBrainz: "mb2"}); err != nil {
+	if err := s.Record(t.Context(), key, "Renamed", map[domain.ProviderName]string{domain.ProviderMusicBrainz: "mb2"}); err != nil {
 		t.Fatalf("Record again: %v", err)
 	}
 

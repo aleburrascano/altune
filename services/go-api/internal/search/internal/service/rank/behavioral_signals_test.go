@@ -3,6 +3,8 @@ package rank_test
 import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/service/rank"
+	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/clock/clocktest"
 	"context"
 	"errors"
 	"sync"
@@ -50,7 +52,7 @@ func newRanking(t *testing.T, behavior rank.BehavioralScorer) *rank.RankingExper
 
 func scoringFor(t *testing.T, store ports.ListeningSignalStore) rank.BehavioralScorer {
 	t.Helper()
-	scoring, err := rank.NewBehavioralScoring(rank.NewSatisfactionConsumer(store))
+	scoring, err := rank.NewBehavioralScoring(rank.NewSatisfactionConsumer(store), clock.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +68,7 @@ func TestRankingExperiments_RefuseAMissingBehavioralScorer(t *testing.T) {
 }
 
 func TestNewBehavioralScoring_RefusesAMissingConsumer(t *testing.T) {
-	scoring, err := rank.NewBehavioralScoring(nil)
+	scoring, err := rank.NewBehavioralScoring(nil, clock.Now)
 
 	if scoring != nil || !errors.Is(err, rank.ErrBehavioralConsumerRequired) {
 		t.Fatalf("got (%v, %v), want a refusal wrapping ErrBehavioralConsumerRequired", scoring, err)
@@ -114,5 +116,37 @@ func TestRefreshBehavioralScores_ErrorKeepsLastSnapshot(t *testing.T) {
 	}
 	if got := ranking.RankOptions().Behavioral; got["sig"] != 2 {
 		t.Errorf("snapshot after failed refresh = %v, want the last good map kept", got)
+	}
+}
+
+type sinceRecordingStore struct{ since time.Time }
+
+func (s *sinceRecordingStore) SatisfactionSignals(_ context.Context, since time.Time) ([]ports.BehavioralSignal, error) {
+	s.since = since
+	return nil, nil
+}
+
+func TestNewBehavioralScoring_RefusesANilClock(t *testing.T) {
+	scoring, err := rank.NewBehavioralScoring(rank.NewSatisfactionConsumer(&fakeSignalStore{}), nil)
+
+	if scoring != nil || !errors.Is(err, rank.ErrBehavioralConsumerRequired) {
+		t.Fatalf("got (%v, %v), want a refusal wrapping ErrBehavioralConsumerRequired", scoring, err)
+	}
+}
+
+func TestBehavioralScoring_ReadsTheLookbackWindowFromTheInjectedClock(t *testing.T) {
+	now := time.Date(2026, time.March, 4, 10, 0, 0, 0, time.UTC)
+	store := &sinceRecordingStore{}
+	scoring, err := rank.NewBehavioralScoring(rank.NewSatisfactionConsumer(store), clocktest.NewManual(now).Func())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := scoring.Refresh(t.Context()); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+
+	if want := now.Add(-30 * 24 * time.Hour); !store.since.Equal(want) {
+		t.Errorf("since = %v, want %v, thirty days before the injected clock", store.since, want)
 	}
 }

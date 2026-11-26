@@ -34,7 +34,7 @@ func TestUnreleasedStore_SongsRoundTripEveryField(t *testing.T) {
 	}
 	for name, want := range cases {
 		t.Run(name, func(t *testing.T) {
-			key := newUnreleasedArtist(t, pool, store)
+			key := newUnreleasedArtist(ctx, t, pool, store)
 			if err := store.Write(ctx, key, []domain.UnreleasedSong{want}, true, time.Now().UTC(), 1); err != nil {
 				t.Fatalf("Write: %v", err)
 			}
@@ -56,7 +56,7 @@ func TestUnreleasedStore_DueReturnsTheRecordedKnownIDs(t *testing.T) {
 	if _, err := pool.Exec(ctx, `UPDATE unreleased_artists SET last_requested_at = now() - interval '60 days'`); err != nil {
 		t.Fatalf("park existing artists: %v", err)
 	}
-	key := newUnreleasedArtist(t, pool, store)
+	key := newUnreleasedArtist(t.Context(), t, pool, store)
 	want := map[domain.ProviderName]string{domain.ProviderDeezer: "d1", domain.ProviderMusicBrainz: "mb1"}
 	if err := store.Record(ctx, key, "Known IDs", want); err != nil {
 		t.Fatalf("Record: %v", err)

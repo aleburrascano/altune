@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"encoding/json"
 	"errors"
@@ -44,7 +45,7 @@ func (p timingOutContentProvider) GetRelatedTracks(context.Context, search.Provi
 
 func errorContractRouter(t *testing.T) chi.Router {
 	t.Helper()
-	breaker := search.NewCircuitBreaker()
+	breaker := search.NewCircuitBreaker(clock.Now)
 	for i := 0; ; i++ {
 		adm, ok := breaker.AllowRequest(context.Background(), search.ProviderSoundCloud)
 		if !ok {

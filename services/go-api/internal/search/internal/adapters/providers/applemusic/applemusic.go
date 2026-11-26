@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/adapters/providers/providersearch"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"fmt"
 	"net/http"
@@ -29,11 +30,14 @@ const (
 	appleMusicArtworkSize   = 1000
 )
 
-func NewAppleMusicAdapter(client *http.Client) *AppleMusicAdapter {
+func NewAppleMusicAdapter(client *http.Client, now clock.Func) *AppleMusicAdapter {
+	if now == nil {
+		panic("applemusic.NewAppleMusicAdapter: a clock is required")
+	}
 	base := fmt.Sprintf("https://api.music.apple.com/v1/catalog/%s", appleMusicStorefront)
 	return &AppleMusicAdapter{
 		client:      client,
-		resolver:    newAppleMusicTokenResolver(client),
+		resolver:    newAppleMusicTokenResolver(client, now),
 		searchURL:   base + "/search",
 		catalogBase: base,
 	}

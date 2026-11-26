@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/musicbrainz"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/clock"
 	"net/http/httptest"
 	"testing"
 )
@@ -15,7 +16,7 @@ func TestProviderContracts(t *testing.T) {
 			Name:   "musicbrainz recording",
 			Golden: "contract_musicbrainz_recording.json",
 			Search: func(t *testing.T, srv *httptest.Server) ([]search.SearchResult, error) {
-				return musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(srv.URL), "altune-test/1.0").SearchStructured(t.Context(), "radiohead", "paranoid android", providertest.TrackKinds())
+				return musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(srv.URL), "altune-test/1.0", clock.Now).SearchStructured(t.Context(), "radiohead", "paranoid android", providertest.TrackKinds())
 			},
 			Required: func(t *testing.T, r search.SearchResult) {
 				if r.ISRC == "" {
@@ -30,7 +31,7 @@ func TestProviderContracts(t *testing.T) {
 			Name:   "musicbrainz artist",
 			Golden: "contract_musicbrainz_artist.json",
 			Search: func(t *testing.T, srv *httptest.Server) ([]search.SearchResult, error) {
-				return musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(srv.URL), "altune-test/1.0").SearchStructured(t.Context(), "radiohead", "", providertest.ArtistKinds())
+				return musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(srv.URL), "altune-test/1.0", clock.Now).SearchStructured(t.Context(), "radiohead", "", providertest.ArtistKinds())
 			},
 			Required: func(t *testing.T, r search.SearchResult) {
 				if r.ArtistMBID == "" {

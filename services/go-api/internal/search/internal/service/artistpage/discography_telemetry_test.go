@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service/artistpage"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
 	"slices"
@@ -99,7 +100,7 @@ func TestNoDiscographyObserver_LeavesTheAlbumsAnswerUnchanged(t *testing.T) {
 
 	observed := fetch(searchtest.NewArtistContent(t, albumsFrom(albums), searchtest.ArtistEvents(store, searchtest.NewTracker(t))))
 	store.next(t)
-	silent, err := artistpage.NewGetArtistContentService(albumsFrom(albums), artistpage.SeedPathIdentity{}, artistpage.NoAnchoring{}, artistpage.NoDiscographyObserver{}, search.NewCircuitBreaker())
+	silent, err := artistpage.NewGetArtistContentService(albumsFrom(albums), artistpage.SeedPathIdentity{}, artistpage.NoAnchoring{}, artistpage.NoDiscographyObserver{}, search.NewCircuitBreaker(clock.Now))
 	if err != nil {
 		t.Fatalf("NewGetArtistContentService: %v", err)
 	}
@@ -249,5 +250,13 @@ func assertPayloadInt(t *testing.T, payload map[string]any, key string, want int
 	}
 	if got != want {
 		t.Errorf("payload[%q] = %d, want %d", key, got, want)
+	}
+}
+
+func TestNewDiscographyTelemetry_RefusesANilClock(t *testing.T) {
+	_, err := artistpage.NewDiscographyTelemetry(&searchtest.FakeEventStore{}, searchtest.NewTracker(t), nil)
+
+	if !errors.Is(err, artistpage.ErrCollaboratorRequired) || !strings.Contains(err.Error(), "clock") {
+		t.Errorf("without a clock: err = %v, want artistpage.ErrCollaboratorRequired naming the clock", err)
 	}
 }

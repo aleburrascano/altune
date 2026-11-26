@@ -80,7 +80,7 @@ func (s *Service) awaitJob(ctx context.Context, j *job) (Lookup, error) {
 	}
 }
 
-func (s *Service) joinJob(key string, run func(context.Context) ([]domain.UnreleasedSong, error)) *job {
+func (s *Service) joinJob(ctx context.Context, key string, run func(context.Context) ([]domain.UnreleasedSong, error)) *job {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if running, ok := s.inflight[key]; ok {
@@ -88,16 +88,18 @@ func (s *Service) joinJob(key string, run func(context.Context) ([]domain.Unrele
 	}
 	j := &job{done: make(chan struct{})}
 	s.inflight[key] = j
-	s.jobs.Track(func() { s.runJob(key, j, run) })
+	s.jobs.Track(func() { s.runJob(ctx, key, j, run) })
 	return j
 }
 
-func (s *Service) runJob(key string, j *job, run func(context.Context) ([]domain.UnreleasedSong, error)) {
-	ctx := s.lifecycle
+func (s *Service) runJob(requestCtx context.Context, key string, j *job, run func(context.Context) ([]domain.UnreleasedSong, error)) {
+	ctx, cancel := background.DetachCancelable(requestCtx)
+	defer cancel()
+	defer s.cancelWithLifecycle(cancel)()
 	if s.cfg.JobTimeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, s.cfg.JobTimeout)
-		defer cancel()
+		var cancelTimeout context.CancelFunc
+		ctx, cancelTimeout = context.WithTimeout(ctx, s.cfg.JobTimeout)
+		defer cancelTimeout()
 	}
 	defer func() {
 		s.mu.Lock()

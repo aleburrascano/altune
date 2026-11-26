@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
 	"slices"
@@ -35,7 +36,7 @@ func searchAndIngest(t *testing.T, query string, kinds map[search.ResultKind]boo
 		return nil
 	}}
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: results}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Vocabulary = store })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = store })
 	q, err := search.NewSearchQuery(query, kinds, everyResultOnOnePage)
 	if err != nil {
 		t.Fatalf("NewSearchQuery: %v", err)
@@ -171,7 +172,7 @@ func searchWithVocabularyStore(t *testing.T, store *memory.FakeVocabularyStore) 
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{
 		deezerResult(search.ResultKindArtist, "Drake", "", 90),
 	}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Vocabulary = store })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = store })
 	q, err := search.NewSearchQuery("drake", allKinds(), everyResultOnOnePage)
 	if err != nil {
 		t.Fatalf("NewSearchQuery: %v", err)

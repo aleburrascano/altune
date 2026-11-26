@@ -2,6 +2,7 @@ package providerrequests
 
 import (
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"sync"
 	"time"
@@ -14,6 +15,7 @@ type CachedResolver[T comparable] struct {
 	timeout   time.Duration
 	resolveFn func(context.Context) (T, time.Time, error)
 	validFn   func(T) bool
+	now       clock.Func
 
 	mu     sync.Mutex
 	sf     singleflight.Group
@@ -26,8 +28,12 @@ func NewCachedResolver[T comparable](
 	timeout time.Duration,
 	resolve func(context.Context) (T, time.Time, error),
 	valid func(T) bool,
+	now clock.Func,
 ) *CachedResolver[T] {
-	return &CachedResolver[T]{key: key, timeout: timeout, resolveFn: resolve, validFn: valid}
+	if now == nil {
+		panic("providerrequests.NewCachedResolver: a clock is required")
+	}
+	return &CachedResolver[T]{key: key, timeout: timeout, resolveFn: resolve, validFn: valid, now: now}
 }
 
 func (r *CachedResolver[T]) Get(ctx context.Context) (T, error) {
@@ -75,7 +81,7 @@ func waitOrGiveUp[T any](ctx context.Context, ch <-chan singleflight.Result) (T,
 }
 
 func (r *CachedResolver[T]) fresh(cached T, expiry time.Time) bool {
-	return r.validFn(cached) && (expiry.IsZero() || time.Now().Before(expiry))
+	return r.validFn(cached) && (expiry.IsZero() || r.now().Before(expiry))
 }
 
 func (r *CachedResolver[T]) Invalidate(failed T) {

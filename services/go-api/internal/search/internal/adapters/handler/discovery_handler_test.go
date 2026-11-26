@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service/artistpage"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
@@ -175,7 +176,7 @@ func buildDiscoveryRouter(t *testing.T,
 		providers = append(providers, searchProvider)
 	}
 
-	cb := search.NewCircuitBreaker()
+	cb := search.NewCircuitBreaker(clock.Now)
 	withHistory := func(*search.Collaborators) {}
 	if historyRepo != nil {
 		withHistory = func(c *search.Collaborators) { c.History = historyRepo }
@@ -237,7 +238,7 @@ func (nopEventStore) Append(context.Context, search.InteractionEvent) error { re
 func TestHandleRecordEvent_ServiceValidation(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
-		Search: searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker()),
+		Search: searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(clock.Now)),
 		Event:  searchtest.NewRecordEvent(t, nopEventStore{}),
 	}), time.Now)
 	router := chi.NewRouter()

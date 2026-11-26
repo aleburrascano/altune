@@ -153,7 +153,7 @@ func TestNewFeaturedArtistResolver_RefusesAMissingSource(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			resolver, err := artistpage.NewFeaturedArtistResolver(tc.mb, tc.deezer)
 			if !errors.Is(err, artistpage.ErrCollaboratorRequired) || resolver != nil {
-				t.Fatalf("resolver = %v, err = %v, want ErrArtistPageCollaboratorRequired", resolver, err)
+				t.Fatalf("resolver = %v, err = %v, want artistpage.ErrCollaboratorRequired", resolver, err)
 			}
 			if !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("err = %q, want it to name %q", err, tc.want)

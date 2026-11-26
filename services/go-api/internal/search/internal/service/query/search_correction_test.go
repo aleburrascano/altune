@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
 	"strings"
@@ -29,7 +30,7 @@ func TestService_Execute_ZeroResultsTriggersCorrection(t *testing.T) {
 			"humble": {memory.DeezerTrack("HUMBLE.", "Kendrick Lamar", 80)},
 		},
 	}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Vocabulary = humbleVocab() })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = humbleVocab() })
 
 	out := runSearch(t, svc, "humbel")
 	bg.Wait()
@@ -54,7 +55,7 @@ func TestService_Execute_CorrectedResultsNeverCached(t *testing.T) {
 		},
 	}
 	cache := memory.NewFakeResultCache()
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Vocabulary = humbleVocab(); c.ResultCache = cache })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = humbleVocab(); c.ResultCache = cache })
 
 	out := runSearch(t, svc, "humbel")
 	bg.Wait()
@@ -116,7 +117,7 @@ func TestService_Execute_CorrectionKeepsFirstPassProviderFailure(t *testing.T) {
 			"humble": {memory.Track("HUMBLE.", "Kendrick Lamar", domain.ProviderITunes, nil)},
 		},
 	}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{failsOriginal, healthy}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Vocabulary = humbleVocab() })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{failsOriginal, healthy}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = humbleVocab() })
 
 	out := runSearch(t, svc, "humbel")
 	bg.Wait()
@@ -142,7 +143,7 @@ func TestService_Execute_TotalOutageSkipsCorrection(t *testing.T) {
 	deezer := &memory.CountingProvider{Provider: search.ProviderDeezer, Err: outage}
 	itunes := &memory.CountingProvider{Provider: domain.ProviderITunes, Err: outage}
 	vocab := humbleVocab()
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{deezer, itunes}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Vocabulary = vocab })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{deezer, itunes}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = vocab })
 
 	out := runSearch(t, svc, "humbel")
 	bg.Wait()
@@ -166,7 +167,7 @@ func TestService_Execute_NoCorrectionKeepsFanOutStatuses(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	failing := &memory.FakeProvider{Provider: search.ProviderDeezer, Err: errors.New("boom")}
 	empty := &memory.QueryFakeProvider{Provider: domain.ProviderITunes}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{failing, empty}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Vocabulary = &memory.FakeVocabularyStore{} })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{failing, empty}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = &memory.FakeVocabularyStore{} })
 
 	out := runSearch(t, svc, "humbel")
 	bg.Wait()
@@ -191,7 +192,7 @@ func TestService_Execute_ResultsDoNotTriggerCorrection(t *testing.T) {
 			"humble": {memory.DeezerTrack("HUMBLE.", "Kendrick Lamar", 80)},
 		},
 	}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Vocabulary = store })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = store })
 
 	out := runSearch(t, svc, "humble")
 	bg.Wait()
@@ -211,7 +212,7 @@ func TestService_Execute_NoCorrectionCandidateReturnsEmpty(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	store := &memory.FakeVocabularyStore{}
 	p := &memory.QueryFakeProvider{Provider: search.ProviderDeezer}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Vocabulary = store })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = store })
 
 	out := runSearch(t, svc, "humbel")
 	bg.Wait()
@@ -227,7 +228,7 @@ func TestService_Execute_NoCorrectionCandidateReturnsEmpty(t *testing.T) {
 func TestService_Execute_CorrectedSearchAlsoEmptyReturnsEmpty(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	p := &memory.QueryFakeProvider{Provider: search.ProviderDeezer}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Vocabulary = humbleVocab() })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = humbleVocab() })
 
 	out := runSearch(t, svc, "humbel")
 	bg.Wait()
@@ -251,7 +252,7 @@ func TestService_Execute_ExactVocabMatchNotCorrected(t *testing.T) {
 		},
 	}
 	p := &memory.QueryFakeProvider{Provider: search.ProviderDeezer}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Vocabulary = store })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = store })
 
 	out := runSearch(t, svc, "humble")
 	bg.Wait()
@@ -275,7 +276,7 @@ func TestService_Correcting_DoesNotLogRawQueryText(t *testing.T) {
 			"humble": {memory.DeezerTrack("HUMBLE.", "Kendrick Lamar", 80)},
 		},
 	}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Vocabulary = humbleVocab() })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = humbleVocab() })
 	runSearch(t, svc, raw)
 	bg.Wait()
 
@@ -334,7 +335,7 @@ func TestService_Execute_CorrectionRunsUnderADeadline(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	vocab := &memory.CtxRecordingVocab{}
 	empty := &memory.FakeProvider{Provider: search.ProviderDeezer}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{empty}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Vocabulary = &deadlineRecordingVocab{rec: vocab} })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{empty}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = &deadlineRecordingVocab{rec: vocab} })
 	query, err := search.NewSearchQuery("kendrik lamar", map[search.ResultKind]bool{search.ResultKindArtist: true}, 10)
 	if err != nil {
 		t.Fatalf("NewSearchQuery: %v", err)

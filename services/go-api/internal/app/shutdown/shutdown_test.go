@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/app/shutdown"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"bytes"
 	"context"
@@ -62,7 +63,7 @@ func TestDetachedTasksStep_DrainingTheTrackerWaitsForInFlightSearchWork(t *testi
 	bg := searchtest.NewTracker(t)
 	drain := func(ctx context.Context) { bg.Drain(ctx) }
 	store := &gatedStore{entered: make(chan struct{}), release: make(chan struct{})}
-	svc := searchtest.NewSearchServiceWith(t, bg, nil, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store })
+	svc := searchtest.NewSearchServiceWith(t, bg, nil, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Events = store })
 	query, err := search.NewSearchQuery("humble", search.AllKinds(), 10)
 	if err != nil {
 		t.Fatal(err)

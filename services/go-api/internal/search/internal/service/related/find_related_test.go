@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/search/internal/service/providerguard"
 	"altune/go-api/internal/search/internal/service/related"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"
@@ -620,7 +621,7 @@ func relatedAlbumTrackQuery() []domain.SearchResult {
 }
 
 func TestFindRelated_OpenDeezerBreakerSkipsProviderCall(t *testing.T) {
-	cb := providerguard.NewCircuitBreaker()
+	cb := providerguard.NewCircuitBreaker(clock.Now)
 	for range providerguard.FailureThreshold {
 		cb.RecordFailure(context.Background(), domain.ProviderDeezer, providerguard.Admission{})
 	}
@@ -635,7 +636,7 @@ func TestFindRelated_OpenDeezerBreakerSkipsProviderCall(t *testing.T) {
 }
 
 func TestFindRelated_DeezerFailureRecordsOnSharedBreaker(t *testing.T) {
-	cb := providerguard.NewCircuitBreaker()
+	cb := providerguard.NewCircuitBreaker(clock.Now)
 	provider := &breakerProbeAlbumProvider{err: context.DeadlineExceeded}
 	svc := searchtest.NewFindRelated(t, searchtest.RelatedAlbumTracks(provider), searchtest.RelatedBreaker(cb))
 
@@ -726,7 +727,7 @@ func TestFindRelated_RepeatedQueryIsServedFromTheMemo(t *testing.T) {
 }
 
 func TestFindRelatedConstructors_RefuseAMissingCollaborator(t *testing.T) {
-	breaker := providerguard.NewCircuitBreaker()
+	breaker := providerguard.NewCircuitBreaker(clock.Now)
 	cases := []struct {
 		name    string
 		missing string
@@ -760,7 +761,7 @@ func TestFindRelatedConstructors_RefuseAMissingCollaborator(t *testing.T) {
 		if err != nil {
 			t.Fatalf("LibraryMatches: %v", err)
 		}
-		svc, err := related.NewFindRelatedService(library, nil)
+		svc, err := related.NewFindRelatedService(clock.Now, library, nil)
 		if !errors.Is(err, related.ErrCollaboratorRequired) || svc != nil || !strings.Contains(err.Error(), "source 1") {
 			t.Errorf("svc = %v, err = %v; want nil and ErrCollaboratorRequired naming source 1", svc, err)
 		}
@@ -844,5 +845,13 @@ func TestFindRelatedSources_ASubsetDispatchesExactlyTheLookupsPresent(t *testing
 				t.Errorf("lookups (library, albums, artists) = %v, want %v", gotCalls, wantCalls)
 			}
 		})
+	}
+}
+
+func TestNewFindRelatedService_RefusesANilClock(t *testing.T) {
+	svc, err := related.NewFindRelatedService(nil)
+
+	if svc != nil || !errors.Is(err, related.ErrCollaboratorRequired) {
+		t.Fatalf("got (%v, %v), want a refusal wrapping ErrCollaboratorRequired", svc, err)
 	}
 }

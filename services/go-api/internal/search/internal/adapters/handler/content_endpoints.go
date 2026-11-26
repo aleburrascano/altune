@@ -73,7 +73,7 @@ func failContentFetch(w http.ResponseWriter, r *http.Request, err error, operati
 func withProvider(
 	w http.ResponseWriter,
 	r *http.Request,
-	call func(pn domain.ProviderName, provider, externalID string),
+	call func(ctx context.Context, pn domain.ProviderName, provider, externalID string),
 ) {
 	provider := chi.URLParam(r, "provider")
 	pn, parseErr := domain.ParseProviderName(provider)
@@ -85,14 +85,14 @@ func withProvider(
 	if !ok {
 		return
 	}
-	call(pn, provider, externalID)
+	call(r.Context(), pn, provider, externalID)
 }
 
 const maxAlbumTracks = 250
 
 func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Request) {
 	withProvider(w, r,
-		func(pn domain.ProviderName, provider, externalID string) {
+		func(ctx context.Context, pn domain.ProviderName, provider, externalID string) {
 			limit, ok := parseLimit(w, r, "limit", maxAlbumTracks, maxAlbumTracks, clampToMax)
 			if !ok {
 				return
@@ -110,7 +110,7 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 				return
 			}
 
-			resp, err := h.albumSvc.ExecuteRequest(r.Context(), artistpage.AlbumTracksRequest{
+			resp, err := h.albumSvc.ExecuteRequest(ctx, artistpage.AlbumTracksRequest{
 				Provider:              pn,
 				ExternalID:            externalID,
 				Title:                 albumTitle,
@@ -129,8 +129,8 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 				return
 			}
 			dto := contentFetchToDTO(resp)
-			if userId, hasUser := requestuser.UserIDFromContext(r.Context()); hasUser {
-				h.enrichAlbumOwnership(r.Context(), userId, albumTrackItems(albumTitle, dto.Items))
+			if userId, hasUser := requestuser.UserIDFromContext(ctx); hasUser {
+				h.enrichAlbumOwnership(ctx, userId, albumTrackItems(albumTitle, dto.Items))
 			}
 			httpserver.WriteJSON(w, http.StatusOK, dto)
 		})
@@ -138,14 +138,14 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 
 func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.Request) {
 	withProvider(w, r,
-		func(pn domain.ProviderName, provider, externalID string) {
+		func(ctx context.Context, pn domain.ProviderName, provider, externalID string) {
 			limit, ok := parseLimit(w, r, "limit", 5, 50, clampToMax)
 			if !ok {
 				return
 			}
 			known := knownIDsParam(r)
 
-			resp, err := h.artistSvc.GetTopTracks(r.Context(), pn, externalID, known, limit)
+			resp, err := h.artistSvc.GetTopTracks(ctx, pn, externalID, known, limit)
 			if err != nil {
 				failContentFetch(w, r, err, "get artist top tracks", provider, externalID)
 				return
@@ -157,14 +157,14 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 
 func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Request) {
 	withProvider(w, r,
-		func(pn domain.ProviderName, provider, externalID string) {
+		func(ctx context.Context, pn domain.ProviderName, provider, externalID string) {
 			limit, ok := parseLimit(w, r, "limit", 50, 100, clampToMax)
 			if !ok {
 				return
 			}
 			known := knownIDsParam(r)
 
-			resp, err := h.artistSvc.GetAlbums(r.Context(), pn, externalID, known, limit)
+			resp, err := h.artistSvc.GetAlbums(ctx, pn, externalID, known, limit)
 			if err != nil {
 				failContentFetch(w, r, err, "get artist albums", provider, externalID)
 				return
@@ -176,13 +176,13 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 
 func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Request) {
 	withProvider(w, r,
-		func(pn domain.ProviderName, provider, externalID string) {
+		func(ctx context.Context, pn domain.ProviderName, provider, externalID string) {
 			limit, ok := parseLimit(w, r, "limit", 20, 50, clampToMax)
 			if !ok {
 				return
 			}
 
-			resp, err := h.relatedSvc.Execute(r.Context(), pn, externalID, limit)
+			resp, err := h.relatedSvc.Execute(ctx, pn, externalID, limit)
 			if err != nil {
 				failContentFetch(w, r, err, "get related tracks", provider, externalID)
 				return
@@ -237,7 +237,7 @@ func fetchContentPart(
 
 func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Request) {
 	withProvider(w, r,
-		func(pn domain.ProviderName, provider, externalID string) {
+		func(ctx context.Context, pn domain.ProviderName, provider, externalID string) {
 			known := knownIDsParam(r)
 			tracksLimit, ok := parseLimit(w, r, "tracks_limit", 5, 50, clampToMax)
 			if !ok {
@@ -249,7 +249,7 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 			}
 
 			tracksResp, albumsResp, tracksErr, albumsErr := h.fetchTopTracksAndAlbums(
-				r.Context(), pn, externalID, known, tracksLimit, albumsLimit)
+				ctx, pn, externalID, known, tracksLimit, albumsLimit)
 			if tracksErr != nil || albumsErr != nil {
 				failContentFetch(w, r, errors.Join(tracksErr, albumsErr), "get artist content", provider, externalID)
 				return
@@ -263,8 +263,8 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 				TopTracks: contentFetchToDTO(tracksResp),
 				Albums:    contentFetchToDTO(albumsResp),
 			}
-			if userId, hasUser := requestuser.UserIDFromContext(r.Context()); hasUser {
-				h.stampOwnership(r.Context(), userId, ownableItems(dto.TopTracks.Items))
+			if userId, hasUser := requestuser.UserIDFromContext(ctx); hasUser {
+				h.stampOwnership(ctx, userId, ownableItems(dto.TopTracks.Items))
 			}
 			httpserver.WriteJSON(w, http.StatusOK, dto)
 		})

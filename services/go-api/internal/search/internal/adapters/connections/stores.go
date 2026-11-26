@@ -5,10 +5,10 @@ import (
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/internal/phonetics"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/textnorm"
 	"expvar"
 	"fmt"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"
@@ -37,7 +37,7 @@ func NewStores(d Deps) (Stores, error) {
 		Pool:          d.Pool,
 		Redis:         d.Redis,
 		CacheOps:      d.CacheOps,
-		Events:        persistence.NewPostgresEventStore(d.Pool),
+		Events:        persistence.NewPostgresEventStore(d.Pool, clock.Now),
 		History:       persistence.NewPostgresSearchHistoryRepository(d.Pool),
 		SpellingHints: vocabulary,
 		Identities:    identityStore(d),
@@ -59,7 +59,7 @@ func newVocabularyStore(redis *goredis.Client, cacheOps *expvar.Map) (ports.Spel
 		redis,
 		textnorm.NormalizeForMatch,
 		phonetics.MetaphoneKey,
-		cache.WithVocabSignal(cache.NewSignal(cacheOps, time.Now)),
+		cache.WithVocabSignal(cache.NewSignal(cacheOps, clock.Now)),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("build the vocabulary store: %w", err)
@@ -72,7 +72,7 @@ func (s Stores) CacheOption() cache.Option {
 }
 
 func cacheOption(cacheOps *expvar.Map) cache.Option {
-	return cache.WithSignal(cache.NewSignal(cacheOps, time.Now))
+	return cache.WithSignal(cache.NewSignal(cacheOps, clock.Now))
 }
 
 func (s Stores) TrackerIndex() *cache.RedisTrackerIndexCache {

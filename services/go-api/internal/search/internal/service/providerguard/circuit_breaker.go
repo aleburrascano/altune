@@ -3,6 +3,7 @@ package providerguard
 import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/breaker"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"log/slog"
 	"sync"
@@ -29,16 +30,15 @@ const (
 
 type CircuitBreaker struct {
 	mu       sync.Mutex
-	now      func() time.Time
+	now      clock.Func
 	skew     atomic.Int64
 	circuits map[domain.ProviderName]*breaker.Breaker
 }
 
-func NewCircuitBreaker() *CircuitBreaker {
-	return newCircuitBreaker(time.Now)
-}
-
-func newCircuitBreaker(now func() time.Time) *CircuitBreaker {
+func NewCircuitBreaker(now clock.Func) *CircuitBreaker {
+	if now == nil {
+		panic("providerguard.NewCircuitBreaker: a clock is required")
+	}
 	return &CircuitBreaker{
 		now:      now,
 		circuits: make(map[domain.ProviderName]*breaker.Breaker),

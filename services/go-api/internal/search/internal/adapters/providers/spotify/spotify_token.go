@@ -39,7 +39,7 @@ type spotifyTokenResolver struct {
 
 func newSpotifyTokenResolver(client *http.Client, now clock.Func) *spotifyTokenResolver {
 	r := &spotifyTokenResolver{client: client, now: now}
-	r.CachedResolver = providerrequests.NewCachedResolver("session", spotifyResolveTimeout, r.resolve, r.usable)
+	r.CachedResolver = providerrequests.NewCachedResolver("session", spotifyResolveTimeout, r.resolve, r.usable, now)
 	return r
 }
 

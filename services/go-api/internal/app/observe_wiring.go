@@ -27,7 +27,7 @@ func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVe
 		Eval:        a.evalMeter,
 		Acquisition: a.observeAcquisition(),
 		LiveMetrics: a.liveMetrics,
-		Discography: monitoringfromsearch.NewDiscographyQualityReader(search.NewPostgresEventStore(a.pool)),
+		Discography: monitoringfromsearch.NewDiscographyQualityReader(search.NewPostgresEventStore(a.pool, clock.Now)),
 		Shutdown:    a.lifecycleDone,
 	}
 	mountObserve(r, verifier, a.cfg.OverseerPrincipalID, monitoring.NewObserveHandler(clock.Now, clock.NewTicker, deps))

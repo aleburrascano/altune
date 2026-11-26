@@ -2,6 +2,7 @@ package rank
 
 import (
 	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
 	"log/slog"
@@ -39,19 +40,20 @@ func (NoBehavioralScoring) Snapshot() map[string]float64 { return nil }
 type listeningScoring struct {
 	consumer *ListeningFeedback
 	scores   atomic.Pointer[map[string]float64]
+	now      clock.Func
 }
 
-func NewBehavioralScoring(consumer *ListeningFeedback) (BehavioralScorer, error) {
-	if consumer == nil {
+func NewBehavioralScoring(consumer *ListeningFeedback, now clock.Func) (BehavioralScorer, error) {
+	if consumer == nil || now == nil {
 		return nil, ErrBehavioralConsumerRequired
 	}
-	return &listeningScoring{consumer: consumer}, nil
+	return &listeningScoring{consumer: consumer, now: now}, nil
 }
 
-var ErrBehavioralConsumerRequired = errors.New("behavioral scoring needs its listening feedback consumer")
+var ErrBehavioralConsumerRequired = errors.New("behavioral scoring needs its listening feedback consumer and clock")
 
 func (l *listeningScoring) Refresh(ctx context.Context) error {
-	signals, err := l.consumer.Signals(ctx, time.Now().UTC().Add(-behavioralLookback))
+	signals, err := l.consumer.Signals(ctx, l.now().UTC().Add(-behavioralLookback))
 	if err != nil {
 		return err
 	}

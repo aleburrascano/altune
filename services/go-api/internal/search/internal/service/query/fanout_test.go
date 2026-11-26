@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/search/internal/service/providerguard"
 	"altune/go-api/internal/search/internal/service/query"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
 	"fmt"
@@ -36,7 +37,7 @@ func TestFanOut_PerProviderTimeoutOverride(t *testing.T) {
 		Provider: search.ProviderDeezer, Delay: 80 * time.Millisecond,
 		Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)},
 	}
-	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow, normal}, search.NewCircuitBreaker())
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow, normal}, search.NewCircuitBreaker(clock.Now))
 
 	results, statuses := inspect(t, svc, context.Background())
 
@@ -57,7 +58,7 @@ func TestFanOut_TimeoutRecordsBreakerFailure(t *testing.T) {
 		FakeProvider: memory.FakeProvider{Provider: domain.ProviderITunes, Delay: 80 * time.Millisecond},
 		timeout:      10 * time.Millisecond,
 	}
-	cb := search.NewCircuitBreaker()
+	cb := search.NewCircuitBreaker(clock.Now)
 	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow}, cb)
 
 	inspect(t, svc, context.Background())
@@ -78,7 +79,7 @@ func TestFanOut_OpenBreakerSkipsProviderEntirely(t *testing.T) {
 		Provider: search.ProviderDeezer,
 		Results:  []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)},
 	}
-	cb := search.NewCircuitBreaker()
+	cb := search.NewCircuitBreaker(clock.Now)
 	openBreaker(t, cb, domain.ProviderITunes)
 	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{skipped, good}, cb)
 
@@ -115,7 +116,7 @@ func TestFanOut_ManyProvidersDeterministicSlotOrder(t *testing.T) {
 			},
 		}
 	}
-	svc := searchtest.NewSearchService(t, bg, providers, search.NewCircuitBreaker())
+	svc := searchtest.NewSearchService(t, bg, providers, search.NewCircuitBreaker(clock.Now))
 
 	results, statuses := inspect(t, svc, context.Background())
 
@@ -173,7 +174,7 @@ func TestFanOut_BreakerCountsOnlyHealthFailures(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cb := search.NewCircuitBreaker()
+			cb := search.NewCircuitBreaker(clock.Now)
 			svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{&memory.FakeProvider{Provider: domain.ProviderITunes, Err: tc.err}}, cb)
 
 			_, statuses := inspect(t, svc, context.Background())
@@ -190,7 +191,7 @@ func TestFanOut_BreakerCountsOnlyHealthFailures(t *testing.T) {
 
 func TestFanOut_QueueShedReportsTimeout(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{&memory.FakeProvider{Provider: domain.ProviderITunes, Err: errQueueShed}}, search.NewCircuitBreaker())
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{&memory.FakeProvider{Provider: domain.ProviderITunes, Err: errQueueShed}}, search.NewCircuitBreaker(clock.Now))
 
 	_, statuses := inspect(t, svc, context.Background())
 
@@ -201,7 +202,7 @@ func TestFanOut_QueueShedReportsTimeout(t *testing.T) {
 
 func TestFanOut_QueueShedProbeReleasesSlot(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	cb := search.NewCircuitBreaker()
+	cb := search.NewCircuitBreaker(clock.Now)
 	tripToHalfOpenWindow(t, cb, domain.ProviderITunes)
 	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{&memory.FakeProvider{Provider: domain.ProviderITunes, Err: errQueueShed}}, cb)
 
@@ -226,7 +227,7 @@ func (p *ignoresCtxProvider) Search(ctx context.Context, _ string, _ map[search.
 
 func TestFanOut_BudgetCutOffUnclassifiedErrorStillCounts(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	cb := search.NewCircuitBreaker()
+	cb := search.NewCircuitBreaker(clock.Now)
 	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{&ignoresCtxProvider{memory.FakeProvider{Provider: domain.ProviderITunes}}}, cb)
 
 	inspect(t, svc, context.Background())
@@ -248,7 +249,7 @@ func (p *partialKindsProvider) Search(ctx context.Context, q string, kinds map[s
 func TestFanOut_PartialKindsKeepResultsButAreNeverCached(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	p := &partialKindsProvider{memory.CountingProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}}
-	breaker := search.NewCircuitBreaker()
+	breaker := search.NewCircuitBreaker(clock.Now)
 	slates := memory.NewFakeResultCache()
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, breaker, func(c *search.Collaborators) { c.ResultCache = slates; c.ProviderCache = newFakeProviderCache() })
 
@@ -323,7 +324,7 @@ func TestDeadline_AnswersWithoutTheSlowProvider(t *testing.T) {
 	fast := &memory.CountingProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	slow := newLateProvider(search.ProviderSpotify, memory.DeezerTrack("Humble", "Skrillex", 70))
 	slates := memory.NewFakeResultCache()
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{fast, slow}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ResultCache = slates }, query.WithSearchDeadline(20*time.Millisecond))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{fast, slow}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.ResultCache = slates }, query.WithSearchDeadline(20*time.Millisecond))
 	t.Cleanup(func() { close(slow.release); bg.Wait() })
 
 	out := runSearch(t, svc, "humble")
@@ -347,7 +348,7 @@ func TestDeadline_LateAnswerServesTheNextSearch(t *testing.T) {
 	fast := &memory.CountingProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	slow := newLateProvider(search.ProviderSpotify, memory.DeezerTrack("Humble", "Skrillex", 70))
 	slates := memory.NewFakeResultCache()
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{fast, slow}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ResultCache = slates; c.ProviderCache = newFakeProviderCache() }, query.WithSearchDeadline(20*time.Millisecond))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{fast, slow}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.ResultCache = slates; c.ProviderCache = newFakeProviderCache() }, query.WithSearchDeadline(20*time.Millisecond))
 
 	runSearch(t, svc, "humble")
 	close(slow.release)
@@ -368,7 +369,7 @@ func TestDeadline_LateAnswerServesTheNextSearch(t *testing.T) {
 func TestDeadline_WaitsPastItUntilSomethingArrives(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	slow := newLateProvider(search.ProviderSpotify, memory.DeezerTrack("Humble", "Skrillex", 70))
-	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow}, search.NewCircuitBreaker(), query.WithSearchDeadline(time.Millisecond))
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow}, search.NewCircuitBreaker(clock.Now), query.WithSearchDeadline(time.Millisecond))
 	done := make(chan *search.SearchOutput, 1)
 	go func() { done <- runSearch(t, svc, "humble") }()
 	waitFor(t, slow.started, "the provider call to start")
@@ -393,7 +394,7 @@ func TestDeadline_WaitsPastItUntilSomethingArrives(t *testing.T) {
 func TestDeadline_CallerGoneBeforeTheAnswerStopsTheProviders(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	slow := newLateProvider(search.ProviderSpotify)
-	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow}, search.NewCircuitBreaker(), query.WithSearchDeadline(time.Second))
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow}, search.NewCircuitBreaker(clock.Now), query.WithSearchDeadline(time.Second))
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() { _, _ = svc.Execute(ctx, memory.NewUser(), memory.NewQuery(t, "dna")) }()
 	waitFor(t, slow.started, "the provider call to start")
@@ -412,7 +413,7 @@ func tripToHalfOpenWindow(t *testing.T, cb *providerguard.CircuitBreaker, provid
 
 func TestFanOut_CanceledHalfOpenProbeDoesNotBlackholeProvider(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	cb := search.NewCircuitBreaker()
+	cb := search.NewCircuitBreaker(clock.Now)
 	tripToHalfOpenWindow(t, cb, search.ProviderDeezer)
 
 	p := &memory.FakeProvider{

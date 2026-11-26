@@ -144,7 +144,7 @@ func TestNewClient_RefusesAMissingIndexCache(t *testing.T) {
 	client, err := fansheets.NewClient(http.DefaultClient, testKey, "hub", nil)
 
 	if client != nil || !errors.Is(err, fansheets.ErrCollaboratorRequired) {
-		t.Fatalf("got (%v, %v), want a refusal wrapping ErrTrackersCollaboratorRequired", client, err)
+		t.Fatalf("got (%v, %v), want a refusal wrapping fansheets.ErrCollaboratorRequired", client, err)
 	}
 }
 

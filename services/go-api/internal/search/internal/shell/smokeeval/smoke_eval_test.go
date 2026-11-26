@@ -1,8 +1,9 @@
-package searchsmoketest_test
+package smokeeval_test
 
 import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -103,7 +104,7 @@ func runSmokeEvalRecording(t *testing.T, user ids.UserId) int {
 	t.Helper()
 	bg := searchtest.NewTracker(t)
 	store := &recordingEventStore{}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{stubSearchProvider{}}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{stubSearchProvider{}}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Events = store })
 	if _, err := search.RunSmokeEval(context.Background(), svc, user); err != nil {
 		t.Fatalf("Run: %v", err)
 	}

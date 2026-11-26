@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/internal/service/providerguard"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
 	"fmt"
@@ -26,7 +27,7 @@ func TestFetchProviderResults_ClassifiesFailureStatus(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			results, degraded := providerguard.FetchProviderResults(context.Background(), providerguard.NewCircuitBreaker(), domain.ProviderITunes, "id-1", "test.provider_failed",
+			results, degraded := providerguard.FetchProviderResults(context.Background(), providerguard.NewCircuitBreaker(clock.Now), domain.ProviderITunes, "id-1", "test.provider_failed",
 				func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 					return nil, tc.err
 				})

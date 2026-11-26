@@ -11,6 +11,8 @@ import (
 	"altune/go-api/internal/search/internal/service/vocabulary"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/random/randomtest"
@@ -56,7 +58,7 @@ func TestService_EndToEnd_MergesAndRanks(t *testing.T) {
 	p1 := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{trackP1, album}}
 	p2 := &memory.FakeProvider{Provider: domain.ProviderITunes, Results: []search.SearchResult{trackP2}}
 
-	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p1, p2}, search.NewCircuitBreaker())
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p1, p2}, search.NewCircuitBreaker(clock.Now))
 	out := runSearch(t, svc, "humble")
 
 	if len(out.Results) != 2 {
@@ -78,7 +80,7 @@ func TestService_PartialOnProviderError(t *testing.T) {
 	good := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	bad := &memory.FakeProvider{Provider: domain.ProviderITunes, Err: errors.New("boom")}
 
-	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{good, bad}, search.NewCircuitBreaker())
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{good, bad}, search.NewCircuitBreaker(clock.Now))
 	out := runSearch(t, svc, "humble")
 
 	if !out.Partial {
@@ -95,7 +97,7 @@ func TestService_RanksExactTitleFirst(t *testing.T) {
 	partial := memory.DeezerTrack("Humble Beginnings", "Someone Else", 99)
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{partial, exact}}
 
-	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker())
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now))
 	out := runSearch(t, svc, "humble")
 
 	if len(out.Results) == 0 || out.Results[0].Title != "HUMBLE." {
@@ -106,7 +108,7 @@ func TestService_RanksExactTitleFirst(t *testing.T) {
 func TestFanOut_CanceledParentDoesNotRecordBreakerFailure(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Delay: 50 * time.Millisecond}
-	cb := search.NewCircuitBreaker()
+	cb := search.NewCircuitBreaker(clock.Now)
 	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, cb)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -138,7 +140,7 @@ func TestService_PanickingProviderDoesNotKillSearch(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	good := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	bad := &panickingProvider{name: domain.ProviderITunes}
-	cb := search.NewCircuitBreaker()
+	cb := search.NewCircuitBreaker(clock.Now)
 	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{good, bad}, cb)
 
 	out := runSearch(t, svc, "humble")
@@ -171,7 +173,7 @@ func TestService_LimitTruncates(t *testing.T) {
 		results = append(results, memory.DeezerTrack("Song", "Artist "+string(rune('A'+i)), float64(50-i)))
 	}
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: results}
-	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker())
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now))
 
 	q, err := search.NewSearchQuery("song", map[search.ResultKind]bool{search.ResultKindTrack: true}, 3)
 	if err != nil {
@@ -201,7 +203,7 @@ func TestPersistHistory_SavesEntryAndTrimsToRing(t *testing.T) {
 		},
 	}
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.History = repo })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.History = repo })
 
 	user := memory.NewUser()
 	if _, err := svc.ExecuteRecorded(context.Background(), user, memory.NewQuery(t, "  Humble  ")); err != nil {
@@ -227,7 +229,7 @@ func TestPersistHistory_SkippedWhenNotRequested(t *testing.T) {
 		},
 	}
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.History = repo })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.History = repo })
 	runSearch(t, svc, "humble")
 }
 
@@ -244,7 +246,7 @@ func TestPersistHistory_InsertFailureToleratedAndSkipsTrim(t *testing.T) {
 		},
 	}
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.History = repo })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.History = repo })
 
 	out, err := svc.ExecuteRecorded(context.Background(), memory.NewUser(), memory.NewQuery(t, "humble"))
 	if err != nil {
@@ -266,7 +268,7 @@ func TestPersistHistory_TrimFailureTolerated(t *testing.T) {
 		},
 	}
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.History = repo })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.History = repo })
 
 	if _, err := svc.ExecuteRecorded(context.Background(), memory.NewUser(), memory.NewQuery(t, "humble")); err != nil {
 		t.Fatalf("a trim failure must never fail the search: %v", err)
@@ -277,7 +279,7 @@ func TestLaunchBackground_PanicRecovered(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	store := &memory.PanickingEventStore{}
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Events = store })
 
 	out := runSearch(t, svc, "humble")
 	bg.Wait()
@@ -298,7 +300,7 @@ func TestEmitSearchEvent_PayloadShape(t *testing.T) {
 		results = append(results, memory.DeezerTrack("Humble Take "+string(rune('A'+i)), "Artist", float64(100-i)))
 	}
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: results}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store }, querypkg.WithExploration(1.0))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Events = store }, querypkg.WithExploration(1.0))
 
 	user := memory.NewUser()
 	out, err := svc.Execute(context.Background(), user, memory.NewQuery(t, "humble"))
@@ -352,7 +354,7 @@ func TestEmitSearchEvent_ZeroResultPayload(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	store := &memory.FakeEventStore{}
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: nil}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Events = store })
 
 	runSearch(t, svc, "zxqv")
 	bg.Wait()
@@ -383,7 +385,7 @@ func TestRankVariantsForEval_WithAndWithoutReshape(t *testing.T) {
 		memory.DeezerTrack("Humble Five", "Other Artist", 50),
 	}
 	p := &memory.CountingProvider{Provider: search.ProviderDeezer, Results: results}
-	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker())
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now))
 
 	with, without := svc.RankVariantsForEval(context.Background(), memory.NewQuery(t, "humble"))
 
@@ -415,7 +417,7 @@ func TestInspectSearch_BypassesResultCacheAndTruncates(t *testing.T) {
 	}
 	p := &memory.CountingProvider{Provider: search.ProviderDeezer, Results: results}
 	cache := memory.NewFakeResultCache()
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ResultCache = cache })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.ResultCache = cache })
 
 	runSearch(t, svc, "humble")
 	if p.Calls != 1 || cache.Sets != 1 {
@@ -438,7 +440,7 @@ func TestInspectSearch_BypassesResultCacheAndTruncates(t *testing.T) {
 
 func TestMaybeExplore_FewerThanTwoResultsNeverExplores(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	svc := searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(), querypkg.WithExploration(1.0))
+	svc := searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(clock.Now), querypkg.WithExploration(1.0))
 	one := []search.SearchResult{{Title: "solo"}}
 	if _, explored := svc.MaybeExplore(one); explored {
 		t.Error("a single result cannot be reordered — must not count as explored")
@@ -468,7 +470,7 @@ func TestMaybeExplore_ShufflesByTheGivenDrawsAndStaysPutWhenTheDrawMissesTheRate
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			svc := searchtest.NewSearchServiceWith(t, bg, nil, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ExplorationDraw = tc.draws }, querypkg.WithExploration(0.5))
+			svc := searchtest.NewSearchServiceWith(t, bg, nil, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.ExplorationDraw = tc.draws }, querypkg.WithExploration(0.5))
 
 			got, explored := svc.MaybeExplore(three)
 
@@ -486,16 +488,16 @@ func TestOptions_OutOfRangeValuesAreRefused(t *testing.T) {
 		"zero deadline":             querypkg.WithSearchDeadline(0),
 		"negative deadline":         querypkg.WithSearchDeadline(-time.Second),
 	} {
-		_, err := querypkg.NewService(searchtest.NewTracker(t), nil, search.NewCircuitBreaker(), querypkg.AbsentCollaborators(), opt)
+		_, err := querypkg.NewService(searchtest.NewTracker(t), nil, search.NewCircuitBreaker(clock.Now), querypkg.AbsentCollaborators(), opt)
 		if !errors.Is(err, querypkg.ErrInvalidOption) {
-			t.Errorf("%s: err = %v, want ErrSearchInvalidOption", name, err)
+			t.Errorf("%s: err = %v, want query.ErrInvalidOption", name, err)
 		}
 	}
 }
 
 func TestNewService_RefusesEveryMissingCollaborator(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	cb := search.NewCircuitBreaker()
+	cb := search.NewCircuitBreaker(clock.Now)
 	for name, build := range map[string]func() (*search.SearchService, error){
 		"tracker": func() (*search.SearchService, error) {
 			return querypkg.NewService(nil, nil, cb, querypkg.AbsentCollaborators())
@@ -516,10 +518,11 @@ func TestNewService_RefusesEveryMissingCollaborator(t *testing.T) {
 		"behavior":        withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Behavior = nil }),
 		"explorationDraw": withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.ExplorationDraw = nil }),
 		"deadlineTimer":   withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.DeadlineTimer = nil }),
+		"now":             withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Now = nil }),
 	} {
 		svc, err := build()
 		if !errors.Is(err, querypkg.ErrCollaboratorRequired) || svc != nil {
-			t.Errorf("without %s: svc, err = %v, %v, want ErrSearchCollaboratorRequired", name, svc, err)
+			t.Errorf("without %s: svc, err = %v, %v, want query.ErrCollaboratorRequired", name, svc, err)
 			continue
 		}
 		if !strings.Contains(err.Error(), name) {
@@ -539,7 +542,7 @@ func withoutCollaborator(bg *background.Tracker, cb *providerguard.CircuitBreake
 func TestNewService_AllAbsentCollaboratorsServeASearchUnchanged(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 90)}}
-	svc, err := querypkg.NewService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), querypkg.AbsentCollaborators())
+	svc, err := querypkg.NewService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), querypkg.AbsentCollaborators())
 	if err != nil {
 		t.Fatalf("NewSearchService: %v", err)
 	}
@@ -552,7 +555,7 @@ func TestNewService_AllAbsentCollaboratorsServeASearchUnchanged(t *testing.T) {
 func rankedArtists(t *testing.T, providers []search.SearchProvider, opts ...querypkg.Option) []string {
 	t.Helper()
 	bg := searchtest.NewTracker(t)
-	return memory.Subtitles(runSearch(t, searchtest.NewSearchService(t, bg, providers, search.NewCircuitBreaker(), opts...), "humble").Results)
+	return memory.Subtitles(runSearch(t, searchtest.NewSearchService(t, bg, providers, search.NewCircuitBreaker(clock.Now), opts...), "humble").Results)
 }
 
 func TestWithTailDemotion_RanksAnUnidentifiedSoundCloudTrackLast(t *testing.T) {
@@ -621,7 +624,7 @@ func pagingService(t *testing.T, slates ...[]search.SearchResult) (*search.Searc
 	bg := searchtest.NewTracker(t)
 	drifting := &driftingProvider{name: search.ProviderDeezer, slates: slates}
 	down := &memory.CountingProvider{Provider: domain.ProviderITunes, Err: errors.New("upstream down")}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{drifting, down}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{drifting, down}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) {
 		cache := memory.NewFakeResultCache()
 		c.ResultCache, c.HeldSlates = cache, cache
 	})
@@ -734,7 +737,7 @@ func TestService_Execute_DoesNotLogQueryText(t *testing.T) {
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{
 		memory.Track("Clinic", "Someone", search.ProviderDeezer, nil),
 	}}
-	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker())
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now))
 	runSearch(t, svc, raw)
 
 	logged := buf.String()
@@ -800,7 +803,7 @@ func runExecuteAs(
 		},
 	}
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: results}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store; c.Favorites = favs; c.History = history })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Events = store; c.Favorites = favs; c.History = history })
 	if _, err := svc.ExecuteRecorded(context.Background(), user, memory.NewQuery(t, "humble")); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -810,7 +813,7 @@ func runExecuteAs(
 
 func TestMaybeExplore_DisabledIsInert(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	svc := searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker())
+	svc := searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(clock.Now))
 	in := []search.SearchResult{{Title: "a"}, {Title: "b"}, {Title: "c"}}
 	out, explored := svc.MaybeExplore(in)
 	if explored {
@@ -829,7 +832,7 @@ func TestIngestVocabulary_UsesOrganicOrderNotExploredShuffle(t *testing.T) {
 	}
 	newSvc := func(store *memory.FakeVocabularyStore, opts ...querypkg.Option) *search.SearchService {
 		p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: results}
-		return searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Vocabulary = store }, opts...)
+		return searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = store }, opts...)
 	}
 	capture := func(store *memory.FakeVocabularyStore) *[]string {
 		var mu sync.Mutex
@@ -876,7 +879,7 @@ func TestIngestVocabulary_UsesOrganicOrderNotExploredShuffle(t *testing.T) {
 
 func TestMaybeExplore_AlwaysExploresClonesAndKeepsMembers(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	svc := searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(), querypkg.WithExploration(1.0))
+	svc := searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker(clock.Now), querypkg.WithExploration(1.0))
 	in := []search.SearchResult{{Title: "a"}, {Title: "b"}, {Title: "c"}}
 	out, explored := svc.MaybeExplore(in)
 
@@ -901,7 +904,7 @@ func expiringSlateService(t *testing.T, slates ...[]search.SearchResult) (*searc
 	drifting := &driftingProvider{name: search.ProviderDeezer, slates: slates}
 	down := &memory.CountingProvider{Provider: domain.ProviderITunes, Err: errors.New("upstream down")}
 	heldCache := memory.NewFakeResultCache()
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{drifting, down}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ResultCache = memory.NewFakeResultCache(); c.HeldSlates = heldCache })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{drifting, down}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.ResultCache = memory.NewFakeResultCache(); c.HeldSlates = heldCache })
 	return svc, drifting, heldCache
 }
 
@@ -953,7 +956,7 @@ func TestService_SearchEmitsActivityWithoutQueryText(t *testing.T) {
 	store := &memory.FakeEventStore{}
 	feed := &memory.RecordingActivityFeed{}
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Alright", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store; c.Activity = feed })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Events = store; c.Activity = feed })
 
 	runSearch(t, svc, "alright")
 	bg.Wait()
@@ -966,7 +969,7 @@ func TestService_SearchEmitsActivityWithoutQueryText(t *testing.T) {
 func TestService_ExecutePageReportsWhetherTheSlateCameFromCache(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	p := &memory.CountingProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ResultCache = memory.NewFakeResultCache() })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.ResultCache = memory.NewFakeResultCache() })
 	userId := memory.NewUser()
 
 	fresh := searchPage(t, svc, userId, "humble", 0, 5, ids.EntityId{})
@@ -1015,7 +1018,7 @@ func newCollapseService(t *testing.T, release chan struct{}) (*search.SearchServ
 		FakeProvider: memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}},
 		release:      release,
 	}
-	return searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker()), p
+	return searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now)), p
 }
 
 func TestService_Search_ColdStampedeSharesOneFanOut(t *testing.T) {
@@ -1094,7 +1097,7 @@ func TestService_PanicBelowResolveColdDegradesToPartial(t *testing.T) {
 		Delay:    150 * time.Millisecond,
 	}
 	cache := memory.NewFakeResultCache()
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) {
 		c.ResultCache = cache
 		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.UseArtworkLookup(&memory.ArtworkLookup{}), searchtest.UseIdentityStore(panickingIdentityStore{}))
 	})
@@ -1184,7 +1187,7 @@ func waitFor(t *testing.T, ch <-chan struct{}, what string) {
 func TestService_Search_LastCallerCancelStopsProviderCalls(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	p := newStopObservingProvider()
-	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker())
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now))
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
@@ -1229,7 +1232,7 @@ func TestService_Search_LogsHowLongEachStageTook(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	buf := memory.CaptureLogs(t)
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}, Delay: 30 * time.Millisecond}
-	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker())
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now))
 
 	runSearch(t, svc, "humble")
 
@@ -1256,7 +1259,7 @@ func TestService_SkipsEnrichWhenArtworkPresent(t *testing.T) {
 	withArt := memory.DeezerTrack("Humble", "Kendrick Lamar", 80)
 	withArt.ImageURL = "https://existing/art.jpg"
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{withArt}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) {
 		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.UseArtworkLookup(resolver))
 	})
 
@@ -1275,7 +1278,7 @@ func TestService_MBIDIndexAttachesMBIDForArtwork(t *testing.T) {
 	resolver := &capturingArtworkLookup{url: "https://caa/hd.jpg"}
 	idx := &fakeMBIDIndex{mbid: "warm-mbid"}
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) {
 		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.UseArtworkLookup(resolver), searchtest.UseArtworkCache(&memory.FakeArtworkCache{Store: map[string]string{}}), searchtest.UseMBIDIndex(idx))
 	})
 
@@ -1299,7 +1302,7 @@ func TestService_IdentityStoreResolvesArtworkWhenMBAbsent(t *testing.T) {
 	resolver := &capturingArtworkLookup{url: "https://caa/right-face.jpg"}
 	store := &memory.FakeIdentityStore{Mbid: "durable-mbid", Xref: map[domain.ProviderKey]string{"discogs": "123"}}
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) {
 		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.UseArtworkLookup(resolver), searchtest.UseArtworkCache(&memory.FakeArtworkCache{Store: map[string]string{}}), searchtest.UseIdentityStore(store))
 	})
 
@@ -1323,7 +1326,7 @@ func TestService_BackgroundArtworkUsesTheDurableIdentity(t *testing.T) {
 	cache := &memory.FakeArtworkCache{Store: map[string]string{}}
 	store := &memory.FakeIdentityStore{Mbid: "durable-mbid", Xref: map[domain.ProviderKey]string{"discogs": "123"}}
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) {
 		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.UseArtworkLookup(resolver), searchtest.UseArtworkCache(cache), searchtest.UseIdentityStore(store))
 	})
 
@@ -1340,7 +1343,7 @@ func TestService_ArtworkCacheShortCircuits(t *testing.T) {
 	resolver := &memory.ArtworkLookup{URL: "https://art/resolved.jpg"}
 	cache := &memory.FakeArtworkCache{Store: map[string]string{"Humble": "https://art/cached.jpg"}}
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) {
 		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.UseArtworkLookup(resolver), searchtest.UseArtworkCache(cache))
 	})
 
@@ -1357,7 +1360,7 @@ func TestService_ArtworkCacheShortCircuits(t *testing.T) {
 func TestFillArtwork_PanickingResolverIsContained(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) {
 		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.UseArtworkLookup(&panickingArtworkLookup{}))
 	})
 
@@ -1373,7 +1376,7 @@ func TestService_MissingArtworkIsFetchedAfterTheAnswer(t *testing.T) {
 	resolver := &gatedArtworkLookup{url: "https://caa/cover.jpg", release: make(chan struct{})}
 	cache := &memory.FakeArtworkCache{Store: map[string]string{}}
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) {
 		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.UseArtworkLookup(resolver), searchtest.UseArtworkCache(cache))
 	})
 
@@ -1399,7 +1402,7 @@ func TestService_WithoutAnArtworkCacheNoLiveLookupRuns(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	resolver := &memory.ArtworkLookup{URL: "https://art/cover.jpg"}
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) {
 		c.Artwork = searchtest.NewArtworkFill(t, bg, searchtest.UseArtworkLookup(resolver))
 	})
 
@@ -1571,7 +1574,7 @@ func TestContentBreaker_SearchTrippedProviderShortCircuitsContent(t *testing.T) 
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cb := search.NewCircuitBreaker()
+			cb := search.NewCircuitBreaker(clock.Now)
 			tripViaSearch(t, cb, tc.provider)
 
 			var calls atomic.Int32
@@ -1590,7 +1593,7 @@ func TestContentBreaker_SearchTrippedProviderShortCircuitsContent(t *testing.T) 
 }
 
 func TestContentBreaker_SingleProviderOpenCircuitReportsCircuitOpen(t *testing.T) {
-	cb := search.NewCircuitBreaker()
+	cb := search.NewCircuitBreaker(clock.Now)
 	tripViaSearch(t, cb, search.ProviderDeezer)
 	svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
 		search.ProviderDeezer: &memory.ArtistContentProvider{},
@@ -1607,7 +1610,7 @@ func TestContentBreaker_SingleProviderOpenCircuitReportsCircuitOpen(t *testing.T
 
 func TestContentBreaker_ContentFailuresTripSearch(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	cb := search.NewCircuitBreaker()
+	cb := search.NewCircuitBreaker(clock.Now)
 	var contentCalls atomic.Int32
 	p := &memory.ArtistContentProvider{GetTopTracksFn: func(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
 		contentCalls.Add(1)
@@ -1647,7 +1650,7 @@ func TestContentBreaker_OnlyHealthFailuresCount(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cb := search.NewCircuitBreaker()
+			cb := search.NewCircuitBreaker(clock.Now)
 			p := &memory.FakeRelatedProvider{Err: tc.err}
 			svc := searchtest.NewRelatedTracksWithBreaker(t, map[string]ports.RelatedTracksProvider{"soundcloud": p}, cb)
 			for range breakerTripsAfter * 2 {
@@ -1676,7 +1679,7 @@ func TestContentBreaker_HalfOpenProbeOutcomes(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cb := search.NewCircuitBreaker()
+			cb := search.NewCircuitBreaker(clock.Now)
 			tripToHalfOpenWindow(t, cb, search.ProviderDeezer)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -1736,7 +1739,7 @@ func TestContentBreaker_PersistentAuthAndBadPayloadTripBreaker(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cb := search.NewCircuitBreaker()
+			cb := search.NewCircuitBreaker(clock.Now)
 			p := &memory.ArtistContentProvider{GetTopTracksFn: func(context.Context, search.ProviderName, string) ([]search.SearchResult, error) {
 				return nil, tc.err
 			}}
@@ -1778,7 +1781,7 @@ func TestService_RepeatedSearch_ServesRelatedGroupsWithoutRefetching(t *testing.
 	organic, tracksByAlbum := relatedSearchFixture()
 	querier := &memory.CountingRelationshipQuerier{}
 	albumProvider := &memory.CountingAlbumTracksProvider{TracksByAlbum: tracksByAlbum}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{&memory.FakeProvider{Provider: search.ProviderDeezer, Results: organic}}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{&memory.FakeProvider{Provider: search.ProviderDeezer, Results: organic}}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) {
 		c.ResultCache = memory.NewFakeResultCache()
 		c.Related = searchtest.NewFindRelated(t, searchtest.RelatedLibrary(querier), searchtest.RelatedAlbumTracks(albumProvider))
 	})
@@ -1815,7 +1818,7 @@ func TestService_RepeatedSearch_KeepsRelatedLibraryMatchesPerUser(t *testing.T) 
 			other: {{Title: "Other Library Track", Artist: "Artist 0", Album: "Album 0"}},
 		},
 	}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{&memory.FakeProvider{Provider: search.ProviderDeezer, Results: organic}}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{&memory.FakeProvider{Provider: search.ProviderDeezer, Results: organic}}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) {
 		c.ResultCache = memory.NewFakeResultCache()
 		c.Related = searchtest.NewFindRelated(t, searchtest.RelatedLibrary(querier), searchtest.RelatedAlbumTracks(&memory.CountingAlbumTracksProvider{TracksByAlbum: tracksByAlbum}))
 	})
@@ -1867,7 +1870,7 @@ func TestSearch_RelatedLibraryMatches_NeverLeakAnotherUsersLibrary(t *testing.T)
 	organic := memory.DeezerTrack("Hit Single", "Band", 80)
 	organic.Album = album
 	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{organic}}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) {
 		c.Related = searchtest.NewFindRelated(t, searchtest.RelatedLibrary(querier))
 	})
 
@@ -1924,7 +1927,7 @@ func TestSearch_RawQueryIsNeverSuggestedToAnotherUser(t *testing.T) {
 			private: {memory.DeezerTrack("Elm Street", "Jane Band", 60)},
 		},
 	}
-	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Vocabulary = store })
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(clock.Now), func(c *search.Collaborators) { c.Vocabulary = store })
 
 	runSearch(t, svc, private)
 	bg.Wait()
@@ -1978,4 +1981,36 @@ func suggestedNorms(t *testing.T, suggest *vocabulary.SuggestService, partial st
 		norms = append(norms, e.TermNorm)
 	}
 	return norms
+}
+
+type clockAdvancingProvider struct {
+	manual *clocktest.Manual
+	took   time.Duration
+}
+
+func (p *clockAdvancingProvider) Name() domain.ProviderName { return domain.ProviderDeezer }
+
+func (p *clockAdvancingProvider) SupportedKinds() map[domain.ResultKind]bool {
+	return map[domain.ResultKind]bool{domain.ResultKindTrack: true}
+}
+
+func (p *clockAdvancingProvider) Search(context.Context, string, map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
+	p.manual.Advance(p.took)
+	return []domain.SearchResult{memory.Track("Humble", "Kendrick Lamar", domain.ProviderDeezer, nil)}, nil
+}
+
+func TestService_MeasuresProviderLatencyOnTheInjectedClock(t *testing.T) {
+	manual := clocktest.NewManual(time.Date(2026, time.March, 4, 10, 0, 0, 0, time.UTC))
+	provider := &clockAdvancingProvider{manual: manual, took: 40 * time.Millisecond}
+	svc := searchtest.NewSearchServiceWith(t, searchtest.NewTracker(t), []ports.SearchProvider{provider}, search.NewCircuitBreaker(manual.Func()),
+		func(c *querypkg.Collaborators) { c.Now = manual.Func() })
+
+	out := runSearch(t, svc, "humble")
+
+	if len(out.ProviderStatuses) != 1 {
+		t.Fatalf("want 1 provider status, got %d", len(out.ProviderStatuses))
+	}
+	if got := out.ProviderStatuses[0].LatencyMs; got != 40 {
+		t.Errorf("LatencyMs = %d, want 40 from the injected clock", got)
+	}
 }

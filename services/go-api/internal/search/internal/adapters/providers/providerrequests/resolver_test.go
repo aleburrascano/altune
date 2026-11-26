@@ -2,6 +2,8 @@ package providerrequests_test
 
 import (
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
+	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/clock/clocktest"
 	"context"
 	"errors"
 	"net/http"
@@ -22,7 +24,7 @@ func TestCachedResolver_waiterHonoursOwnDeadline(t *testing.T) {
 			case <-ctx.Done():
 				return "", time.Time{}, ctx.Err()
 			}
-		}, providerrequests.NonEmpty)
+		}, providerrequests.NonEmpty, clock.Now)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
@@ -58,7 +60,7 @@ func newRetryTestResolver() *providerrequests.CachedResolver[string] {
 	return providerrequests.NewCachedResolver("", 0,
 		func(context.Context) (string, time.Time, error) {
 			return strings.Repeat("c", int(n.Add(1))), time.Time{}, nil
-		}, providerrequests.NonEmpty)
+		}, providerrequests.NonEmpty, clock.Now)
 }
 
 func TestWithAuthRetry_authFailureAfterRefreshIsPersistent(t *testing.T) {
@@ -137,4 +139,43 @@ func TestCachedResolver_concurrentStaleInvalidatesKeepTheFreshValue(t *testing.T
 	if got, err := r.Get(context.Background()); err != nil || got != fresh {
 		t.Fatalf("after concurrent stale invalidates got %q, %v; want the cached %q without a new resolve", got, err, fresh)
 	}
+}
+
+func TestCachedResolver_RefreshesOnceTheExpiryPassesOnTheInjectedClock(t *testing.T) {
+	start := time.Date(2026, time.March, 4, 10, 0, 0, 0, time.UTC)
+	manual := clocktest.NewManual(start)
+	var resolved atomic.Int32
+	r := providerrequests.NewCachedResolver("k", time.Second,
+		func(context.Context) (string, time.Time, error) {
+			resolved.Add(1)
+			return "tok", manual.Now().Add(time.Hour), nil
+		}, providerrequests.NonEmpty, manual.Func())
+
+	for range 2 {
+		if _, err := r.Get(t.Context()); err != nil {
+			t.Fatalf("Get: %v", err)
+		}
+	}
+	if got := resolved.Load(); got != 1 {
+		t.Fatalf("resolved %d times before the expiry, want 1", got)
+	}
+
+	manual.Advance(2 * time.Hour)
+	if _, err := r.Get(t.Context()); err != nil {
+		t.Fatalf("Get after expiry: %v", err)
+	}
+
+	if got := resolved.Load(); got != 2 {
+		t.Errorf("resolved %d times after the expiry passed, want 2", got)
+	}
+}
+
+func TestNewCachedResolver_PanicsOnANilClock(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("NewCachedResolver without a clock did not panic")
+		}
+	}()
+
+	providerrequests.NewCachedResolver("k", time.Second, func(context.Context) (string, time.Time, error) { return "", time.Time{}, nil }, providerrequests.NonEmpty, nil)
 }
