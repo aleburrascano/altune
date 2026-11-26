@@ -26,21 +26,26 @@ type StreamHandler struct {
 	limiter          rateLimitMiddleware
 }
 
-func NewStreamHandler(svc *audioservice.StreamTrackService, opts ...func(*StreamHandler)) *StreamHandler {
-	h := &StreamHandler{svc: svc, writeIdleTimeout: audioWriteIdleTimeout, now: time.Now}
+var ErrClockRequired = errors.New("handler: the handler requires a clock")
+
+func NewStreamHandler(svc *audioservice.StreamTrackService, now clock.Func, opts ...func(*StreamHandler)) (*StreamHandler, error) {
+	if now == nil {
+		return nil, ErrClockRequired
+	}
+	h := &StreamHandler{svc: svc, writeIdleTimeout: audioWriteIdleTimeout, now: now}
 	for _, opt := range opts {
 		opt(h)
 	}
 	h.limiter = newAudioRateLimiter(streamRateLimit, h.now)
-	return h
+	return h, nil
 }
 
-func WithStreamLimiterClock(now clock.Func) func(*StreamHandler) {
-	return func(h *StreamHandler) {
-		if now != nil {
-			h.now = now
-		}
+func MustNewStreamHandler(svc *audioservice.StreamTrackService, now clock.Func, opts ...func(*StreamHandler)) *StreamHandler {
+	h, err := NewStreamHandler(svc, now, opts...)
+	if err != nil {
+		panic(err)
 	}
+	return h
 }
 
 func WithStreamWriteIdleTimeout(idle time.Duration) func(*StreamHandler) {

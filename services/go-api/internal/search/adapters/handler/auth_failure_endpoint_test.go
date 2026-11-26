@@ -16,7 +16,7 @@ import (
 const validAuthFailureBody = `{"reason":"invalid_credentials","app_version":"1.2.3"}`
 
 func buildAuthFailureRouter(store *recordingEventStore, limit search.RequestLimit) chi.Router {
-	h := search.NewDiscoveryHandler(search.DiscoveryServices{Event: search.NewRecordEventService(store)})
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Event: search.NewRecordEventService(store)}, time.Now)
 	r := chi.NewRouter()
 	h.PublicRoutes(r, limit)
 	return r

@@ -22,21 +22,24 @@ type AudioURLHandler struct {
 	limiter         rateLimitMiddleware
 }
 
-func NewAudioURLHandler(svc *audioservice.AudioLinkService, opts ...func(*AudioURLHandler)) *AudioURLHandler {
-	h := &AudioURLHandler{svc: svc, prefetchEnabled: true, now: time.Now}
+func NewAudioURLHandler(svc *audioservice.AudioLinkService, now clock.Func, opts ...func(*AudioURLHandler)) (*AudioURLHandler, error) {
+	if now == nil {
+		return nil, ErrClockRequired
+	}
+	h := &AudioURLHandler{svc: svc, prefetchEnabled: true, now: now}
 	for _, opt := range opts {
 		opt(h)
 	}
 	h.limiter = newAudioRateLimiter(audioURLRateLimit, h.now)
-	return h
+	return h, nil
 }
 
-func WithAudioURLLimiterClock(now clock.Func) func(*AudioURLHandler) {
-	return func(h *AudioURLHandler) {
-		if now != nil {
-			h.now = now
-		}
+func MustNewAudioURLHandler(svc *audioservice.AudioLinkService, now clock.Func, opts ...func(*AudioURLHandler)) *AudioURLHandler {
+	h, err := NewAudioURLHandler(svc, now, opts...)
+	if err != nil {
+		panic(err)
 	}
+	return h
 }
 
 func WithPrefetchEnabled(enabled bool) func(*AudioURLHandler) {

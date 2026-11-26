@@ -15,12 +15,11 @@ import (
 )
 
 func trackRoutes(addTrack *library.AddTrackService, repo *library.InMemoryTrackRepo) http.Handler {
-	return library.NewTrackHandler(
+	return library.MustNewTrackHandler(
 		addTrack,
 		library.NewListTracksService(repo),
 		nil, nil, nil,
-		library.NewFeaturedArtistHandler(nil, nil),
-	).Routes()
+		library.NewFeaturedArtistHandler(nil, nil), time.Now).Routes()
 }
 
 func serveAs(routes http.Handler, userId ids.UserId, method, body string) (int, []byte) {

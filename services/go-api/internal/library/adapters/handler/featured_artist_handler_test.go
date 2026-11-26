@@ -103,7 +103,7 @@ func TestHandleBackfillFeatured_LogsTheFailedRunsProgressOnceAtError(t *testing.
 
 	repo := &listFailsAfterFirstPage{InMemoryTrackRepo: library.NewInMemoryTrackRepo()}
 	seedTracks(t, repo.InMemoryTrackRepo, "Song")
-	router := trackRoutesWith(repo.InMemoryTrackRepo, trackDeps{backfill: library.NewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{})})
+	router := trackRoutesWith(repo.InMemoryTrackRepo, trackDeps{backfill: library.MustNewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{}, time.Now)})
 
 	rec := request(t, router, http.MethodPost, "/tracks/featured-backfill", nil)
 
@@ -180,7 +180,7 @@ func (r *stallsAfterFirstResolver) Resolve(ctx context.Context, _, _ string) ([]
 func TestHandleBackfillFeatured_AnswersWithinTheBudgetAndResumesWithoutCooldown(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
 	seedTracks(t, repo, "One", "Two", "Three")
-	backfill := library.NewBackfillFeaturedService(repo, repo, &stallsAfterFirstResolver{}, library.WithBackfillTimeBudget(50*time.Millisecond))
+	backfill := library.MustNewBackfillFeaturedService(repo, repo, &stallsAfterFirstResolver{}, time.Now, library.WithBackfillTimeBudget(50*time.Millisecond))
 	router := trackRoutesWith(repo, trackDeps{backfill: backfill})
 
 	start := time.Now()

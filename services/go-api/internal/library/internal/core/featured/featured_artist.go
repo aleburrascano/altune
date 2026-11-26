@@ -42,30 +42,42 @@ func WithBackfillItemTimeout(timeout time.Duration) BackfillOption {
 	}
 }
 
-func WithBackfillClock(now clock.Func) BackfillOption {
-	return func(s *FillFeaturedArtistsService) {
-		if now != nil {
-			s.admission.now = now
-		}
-	}
-}
+var ErrClockRequired = errors.New("featured: the backfill service requires a clock")
 
 func NewBackfillFeaturedService(
 	trackRepo ports.TrackLister,
 	featuredRepo ports.FeaturedArtistRepository,
 	resolver ports.FeaturedArtistResolver,
+	now clock.Func,
 	opts ...BackfillOption,
-) *FillFeaturedArtistsService {
+) (*FillFeaturedArtistsService, error) {
+	if now == nil {
+		return nil, ErrClockRequired
+	}
 	s := &FillFeaturedArtistsService{
 		trackRepo:    trackRepo,
 		featuredRepo: featuredRepo,
 		resolver:     resolver,
-		admission:    newBackfillAdmission(backfillCooldown, time.Now),
+		admission:    newBackfillAdmission(backfillCooldown, now),
 		itemTimeout:  backfillItemTimeout,
 		timeBudget:   backfillTimeBudget,
 	}
 	for _, opt := range opts {
 		opt(s)
+	}
+	return s, nil
+}
+
+func MustNewBackfillFeaturedService(
+	trackRepo ports.TrackLister,
+	featuredRepo ports.FeaturedArtistRepository,
+	resolver ports.FeaturedArtistResolver,
+	now clock.Func,
+	opts ...BackfillOption,
+) *FillFeaturedArtistsService {
+	s, err := NewBackfillFeaturedService(trackRepo, featuredRepo, resolver, now, opts...)
+	if err != nil {
+		panic(err)
 	}
 	return s
 }

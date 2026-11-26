@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwk"
 )
@@ -26,7 +27,7 @@ func TestNewSupabaseJWTVerifier_RejectsPlaintextJWKSURL(t *testing.T) {
 		"test-project.supabase.co/jwks",
 	} {
 		t.Run(raw, func(t *testing.T) {
-			v, err := auth.NewSupabaseJWTVerifier(t.Context(), raw, testProjectURL, testAudience)
+			v, err := auth.NewSupabaseJWTVerifier(t.Context(), raw, testProjectURL, testAudience, time.Now)
 			if err == nil || v != nil {
 				t.Fatalf("NewSupabaseJWTVerifier(%q) = %v, %v; want nil verifier and error", raw, v, err)
 			}
@@ -47,7 +48,7 @@ func TestNewSupabaseJWTVerifier_AllowsHTTPSAndLoopbackHTTP(t *testing.T) {
 		t.Run(raw, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
-			if v, err := auth.NewSupabaseJWTVerifier(ctx, raw, testProjectURL, testAudience); err != nil || v == nil {
+			if v, err := auth.NewSupabaseJWTVerifier(ctx, raw, testProjectURL, testAudience, time.Now); err != nil || v == nil {
 				t.Fatalf("NewSupabaseJWTVerifier(%q) = %v, %v; want a verifier", raw, v, err)
 			}
 		})
@@ -67,7 +68,7 @@ func redirectingServer(t *testing.T, target func(*http.Request) string) (*httpte
 
 func TestJWKSRedirect_RefusesPlaintextDowngrade(t *testing.T) {
 	server, _ := redirectingServer(t, func(*http.Request) string { return "http://attacker.example/jwks" })
-	verifier := newVerifier(t, server.URL)
+	verifier := newVerifier(t, server.URL, time.Now)
 
 	_, err := verifier.Verify(t.Context(), "any-token")
 
@@ -78,7 +79,7 @@ func TestJWKSRedirect_RefusesPlaintextDowngrade(t *testing.T) {
 func TestJWKSRedirect_FollowsASecureTarget(t *testing.T) {
 	f := newTestJWTFixture(t)
 	server, _ := redirectingServer(t, func(*http.Request) string { return f.jwksServer.URL })
-	verifier := newVerifier(t, server.URL)
+	verifier := newVerifier(t, server.URL, time.Now)
 
 	if _, err := verifier.Verify(t.Context(), f.validToken(t)); err != nil {
 		t.Fatalf("Verify through a redirect to a secure JWKS host: %v", err)
@@ -87,7 +88,7 @@ func TestJWKSRedirect_FollowsASecureTarget(t *testing.T) {
 
 func TestJWKSRedirect_ChainIsBounded(t *testing.T) {
 	server, hits := redirectingServer(t, func(r *http.Request) string { return "http://" + r.Host + r.URL.Path + "x" })
-	verifier := newVerifier(t, server.URL+"/")
+	verifier := newVerifier(t, server.URL+"/", time.Now)
 	hits.Store(0)
 
 	_, err := verifier.Verify(t.Context(), "any-token")
@@ -140,7 +141,7 @@ func TestCappedJWKSBody_ReadsUpToTheCapAndFailsPastIt(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f, _ := newRotatingFixture(t)
-			verifier := newVerifier(t, servingJWKS(t, paddedKeySet(t, f, tc.size), false))
+			verifier := newVerifier(t, servingJWKS(t, paddedKeySet(t, f, tc.size), false), time.Now)
 
 			_, err := verifier.Verify(t.Context(), f.validToken(t))
 
@@ -164,7 +165,7 @@ func TestCappedJWKSBodyTransport_CapsDecompressedBytes(t *testing.T) {
 	if err := zw.Close(); err != nil {
 		t.Fatalf("close compressed body: %v", err)
 	}
-	verifier := newVerifier(t, servingJWKS(t, compressed.Bytes(), true))
+	verifier := newVerifier(t, servingJWKS(t, compressed.Bytes(), true), time.Now)
 
 	_, err := verifier.Verify(t.Context(), f.validToken(t))
 
@@ -187,7 +188,7 @@ func TestSupabaseJWTVerifier_OversizedJWKSBodyKeepsCachedKeys(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	metrics := &countingAuthMetrics{}
-	verifier := newVerifier(t, server.URL, auth.WithJWKSMetrics(metrics))
+	verifier := newVerifier(t, server.URL, time.Now, auth.WithJWKSMetrics(metrics))
 	known := f.validToken(t)
 	if _, err := verifier.Verify(t.Context(), known); err != nil {
 		t.Fatalf("Verify with the key set fetched at startup: %v", err)

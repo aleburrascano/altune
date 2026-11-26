@@ -21,18 +21,22 @@ import (
 )
 
 func streamOnlyRoute(repo *library.InMemoryTrackRepo, store library.AudioStore, opts ...func(*library.StreamTrackService)) chi.Router {
-	h := library.NewStreamHandler(library.NewStreamTrackService(repo, store, opts...))
+	h := library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, opts...), time.Now)
 	router := chi.NewRouter()
 	router.Use(asBearer)
 	router.Get("/tracks/{trackId}/stream", h.HandleStreamAudio)
 	return router
 }
 
-func streamRoutes(store library.AudioStore, opts ...func(*library.StreamHandler)) (*library.InMemoryTrackRepo, chi.Router) {
+func streamRoutes(store library.AudioStore) (*library.InMemoryTrackRepo, chi.Router) {
+	return streamRoutesAt(store, time.Now)
+}
+
+func streamRoutesAt(store library.AudioStore, now func() time.Time) (*library.InMemoryTrackRepo, chi.Router) {
 	repo := library.NewInMemoryTrackRepo()
 	router := chi.NewRouter()
 	router.Use(asBearer)
-	library.NewStreamHandler(library.NewStreamTrackService(repo, store), opts...).Routes(router)
+	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store), now).Routes(router)
 	return repo, router
 }
 
@@ -170,7 +174,7 @@ func TestHandleRecover(t *testing.T) {
 	router := chi.NewRouter()
 	router.Use(asBearer)
 	svc := library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), library.WithStreamScheduler(sched))
-	library.NewStreamHandler(svc).Routes(router)
+	library.MustNewStreamHandler(svc, time.Now).Routes(router)
 
 	tests := []struct {
 		name       string
@@ -206,7 +210,7 @@ func (s *probeCountingStore) Exists(ctx context.Context, audioRef string) (bool,
 func TestHandleRecover_FloodFromOnePrincipalIsThrottled(t *testing.T) {
 	clock := newFakeClock()
 	store := &probeCountingStore{InMemoryAudioStore: library.NewInMemoryAudioStore()}
-	repo, router := streamRoutes(store, library.WithStreamLimiterClock(clock.now))
+	repo, router := streamRoutesAt(store, clock.now)
 	track := seedReady(t, repo, "Track", "audio/present.opus")
 	store.Seed("audio/present.opus", []byte("fake-audio-data"))
 	path := "/tracks/" + track.ID.UUID().String() + "/audio/recover"
@@ -388,7 +392,7 @@ func serveAudioBehindRouteDeadline(t *testing.T, opts ...func(*library.StreamHan
 	r.Use(httpserver.WriteDeadline(audioRouteDeadline))
 	r.Use(httpserver.RequestLogger)
 	r.Use(asBearer)
-	library.NewStreamHandler(library.NewStreamTrackService(repo, store), opts...).Routes(r)
+	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store), time.Now, opts...).Routes(r)
 	srv := slowclient.NewServer(t, r)
 
 	path := "/tracks/" + track.ID.UUID().String() + "/audio"

@@ -55,7 +55,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 			"Track A": {library.NewFeaturedArtistIdentityOnly("Guest", "m1", 0)},
 		}}
 		clock := newManualClock()
-		svc := library.NewBackfillFeaturedService(repo, repo, resolver, library.WithBackfillClock(clock.Now))
+		svc := library.MustNewBackfillFeaturedService(repo, repo, resolver, clock.Now)
 
 		res, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
@@ -81,7 +81,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 	t.Run("per-track resolver error is skipped, not fatal", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		repo.Seed(newTrackFeat(t, userId, "X"))
-		svc := library.NewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{Err: errors.New("provider down")})
+		svc := library.MustNewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{Err: errors.New("provider down")}, time.Now)
 		res, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
 			t.Fatalf("expected nil error, got %v", err)
@@ -94,7 +94,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 	t.Run("resolver error is counted as failed", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		repo.Seed(newTrackFeat(t, userId, "X"))
-		svc := library.NewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{Err: errors.New("provider down")})
+		svc := library.MustNewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{Err: errors.New("provider down")}, time.Now)
 		res, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
 			t.Fatalf("expected nil error, got %v", err)
@@ -123,7 +123,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 			"Track 2": {library.NewFeaturedArtistIdentityOnly("Guest 2", "m2", 0)},
 			"Track 3": {library.NewFeaturedArtistIdentityOnly("Guest 3", "m3", 0)},
 		}}
-		svc := library.NewBackfillFeaturedService(repo, repo, resolver)
+		svc := library.MustNewBackfillFeaturedService(repo, repo, resolver, time.Now)
 
 		res, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
@@ -149,7 +149,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 			page[i] = newTrackFeat(t, userId, "Untagged")
 		}
 		repo := &unboundedTrackRepo{InMemoryTrackRepo: library.NewInMemoryTrackRepo(), page: page}
-		svc := library.NewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{})
+		svc := library.MustNewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{}, time.Now)
 
 		res, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
@@ -180,7 +180,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		repo.Seed(t1)
 		repo.Seed(t2)
 		resolver := &cancelingResolver{cancelOn: "Track 1", cancel: cancel}
-		svc := library.NewBackfillFeaturedService(repo, repo, resolver)
+		svc := library.MustNewBackfillFeaturedService(repo, repo, resolver, time.Now)
 
 		res, err := svc.Execute(cctx, userId, 0)
 		if !errors.Is(err, context.Canceled) {
@@ -200,7 +200,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		}
 		repo := &orderedTrackRepo{InMemoryTrackRepo: library.NewInMemoryTrackRepo(), order: tracks}
 		resolver := &cancelingResolver{cancelOn: "Track 1", cancel: cancel}
-		svc := library.NewBackfillFeaturedService(repo, repo, resolver)
+		svc := library.MustNewBackfillFeaturedService(repo, repo, resolver, time.Now)
 
 		res, err := svc.Execute(cctx, userId, 0)
 		if !errors.Is(err, context.Canceled) {
@@ -217,7 +217,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 			newTrackFeat(t, userId, "Fine"),
 		}}
 		resolver := &hangingResolver{hangOn: "Hangs"}
-		svc := library.NewBackfillFeaturedService(repo, repo, resolver, library.WithBackfillItemTimeout(20*time.Millisecond))
+		svc := library.MustNewBackfillFeaturedService(repo, repo, resolver, time.Now, library.WithBackfillItemTimeout(20*time.Millisecond))
 
 		start := time.Now()
 		res, err := svc.Execute(ctx, userId, 0)
@@ -239,7 +239,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		release := make(chan struct{})
 		entered := make(chan struct{})
 		repo := &orderedTrackRepo{InMemoryTrackRepo: library.NewInMemoryTrackRepo(), order: []*library.Track{newTrackFeat(t, userId, "T")}}
-		svc := library.NewBackfillFeaturedService(repo, repo, &blockingResolver{entered: entered, release: release})
+		svc := library.MustNewBackfillFeaturedService(repo, repo, &blockingResolver{entered: entered, release: release}, time.Now)
 
 		done := make(chan error, 1)
 		go func() {
@@ -265,7 +265,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		repo.Seed(newTrackFeat(t, userId, "T"))
 		clock := newManualClock()
-		svc := library.NewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{}, library.WithBackfillClock(clock.Now))
+		svc := library.MustNewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{}, clock.Now)
 
 		if _, err := svc.Execute(ctx, userId, 0); err != nil {
 			t.Fatalf("first run: %v", err)
@@ -287,7 +287,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 	t.Run("a negative offset is refused without spending the cooldown", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		repo.Seed(newTrackFeat(t, userId, "T"))
-		svc := library.NewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{})
+		svc := library.MustNewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{}, time.Now)
 
 		res, err := svc.Execute(ctx, userId, -1)
 		if res != nil {
@@ -302,7 +302,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 	t.Run("canceled run still starts the cooldown", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
 		repo.Seed(newTrackFeat(t, userId, "T"))
-		svc := library.NewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{})
+		svc := library.MustNewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{}, time.Now)
 		cctx, cancel := context.WithCancel(ctx)
 		cancel()
 
@@ -327,7 +327,7 @@ func TestBackfill_LibraryOverCap_ReportsTruncated(t *testing.T) {
 		pastTheCap: {library.NewFeaturedArtistIdentityOnly("Guest", "m1", 0)},
 	}}
 	clock := newManualClock()
-	svc := library.NewBackfillFeaturedService(repo, repo, resolver, library.WithBackfillClock(clock.Now))
+	svc := library.MustNewBackfillFeaturedService(repo, repo, resolver, clock.Now)
 
 	first, err := svc.Execute(ctx, userId, 0)
 	if err != nil {
@@ -505,7 +505,7 @@ func TestBackfill_TimeBudgetSpent_TruncatesAndSkipsCooldown(t *testing.T) {
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 	repo := newNumberedTrackRepo(t, userId, 3)
-	svc := library.NewBackfillFeaturedService(repo, repo, &stallsAfterFirstResolver{}, library.WithBackfillTimeBudget(50*time.Millisecond))
+	svc := library.MustNewBackfillFeaturedService(repo, repo, &stallsAfterFirstResolver{}, time.Now, library.WithBackfillTimeBudget(50*time.Millisecond))
 
 	start := time.Now()
 	res, err := svc.Execute(ctx, userId, 0)
@@ -541,7 +541,7 @@ func TestBackfill_TimeBudgetSpentInsideListing_TruncatesAndSkipsCooldown(t *test
 	ctx := context.Background()
 	userId := ids.NewUserId(uuid.New())
 	repo := &stallingListRepo{InMemoryTrackRepo: library.NewInMemoryTrackRepo()}
-	svc := library.NewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{}, library.WithBackfillTimeBudget(50*time.Millisecond))
+	svc := library.MustNewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{}, time.Now, library.WithBackfillTimeBudget(50*time.Millisecond))
 
 	res, err := svc.Execute(ctx, userId, 7)
 	if err != nil {
@@ -693,13 +693,13 @@ func TestBackfill_BoundsEachLookupAndTheWholeRun(t *testing.T) {
 		build func(*deadlineRecordingRepo, *deadlineRecordingResolver) *library.FillFeaturedArtistsService
 	}{
 		{"defaults", func(repo *deadlineRecordingRepo, res *deadlineRecordingResolver) *library.FillFeaturedArtistsService {
-			return library.NewBackfillFeaturedService(repo, repo, res)
+			return library.MustNewBackfillFeaturedService(repo, repo, res, time.Now)
 		}},
 		{"zero overrides keep the defaults", func(repo *deadlineRecordingRepo, res *deadlineRecordingResolver) *library.FillFeaturedArtistsService {
-			return library.NewBackfillFeaturedService(repo, repo, res, library.WithBackfillItemTimeout(0), library.WithBackfillTimeBudget(0))
+			return library.MustNewBackfillFeaturedService(repo, repo, res, time.Now, library.WithBackfillItemTimeout(0), library.WithBackfillTimeBudget(0))
 		}},
 		{"negative overrides keep the defaults", func(repo *deadlineRecordingRepo, res *deadlineRecordingResolver) *library.FillFeaturedArtistsService {
-			return library.NewBackfillFeaturedService(repo, repo, res, library.WithBackfillItemTimeout(-time.Second), library.WithBackfillTimeBudget(-time.Second))
+			return library.MustNewBackfillFeaturedService(repo, repo, res, time.Now, library.WithBackfillItemTimeout(-time.Second), library.WithBackfillTimeBudget(-time.Second))
 		}},
 	}
 	for _, tc := range cases {
@@ -721,18 +721,13 @@ func TestBackfill_BoundsEachLookupAndTheWholeRun(t *testing.T) {
 	}
 }
 
-func TestBackfill_ANilClockKeepsTheWallClock(t *testing.T) {
-	ctx := context.Background()
-	userId := library.FixtureUserId()
+func TestNewBackfillFeaturedService_RefusesANilClock(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
-	repo.Seed(newTrackFeat(t, userId, "T"))
-	svc := library.NewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{}, library.WithBackfillClock(nil))
 
-	if _, err := svc.Execute(ctx, userId, 0); err != nil {
-		t.Fatalf("first run: %v", err)
-	}
-	if _, err := svc.Execute(ctx, userId, 0); !errors.Is(err, library.ErrBackfillCoolingDown) {
-		t.Fatalf("an immediate rerun = %v, want ErrBackfillCoolingDown on the wall clock", err)
+	svc, err := library.NewBackfillFeaturedService(repo, repo, library.InMemoryFeaturedResolver{}, nil)
+
+	if !errors.Is(err, library.ErrBackfillClockRequired) || svc != nil {
+		t.Fatalf("NewBackfillFeaturedService(nil clock) = (%v, %v), want ErrBackfillClockRequired and no service", svc, err)
 	}
 }
 
@@ -763,7 +758,7 @@ func TestBackfill_ARunCanceledDuringAWriteStillLandsThatWrite(t *testing.T) {
 		"Track 1": {library.NewFeaturedArtistIdentityOnly("Guest 1", "m1", 0)},
 		"Track 2": {library.NewFeaturedArtistIdentityOnly("Guest 2", "m2", 0)},
 	}}
-	svc := library.NewBackfillFeaturedService(repo, writes, resolver)
+	svc := library.MustNewBackfillFeaturedService(repo, writes, resolver, time.Now)
 
 	res, err := svc.Execute(runCtx, userId, 0)
 
@@ -802,7 +797,7 @@ func TestBackfill_TheDetachedWriteHasItsOwnBudgetAndKeepsTheRunsCorrelationID(t 
 	resolver := library.InMemoryFeaturedResolver{ByTitle: map[string][]library.FeaturedArtist{
 		"Track 1": {library.NewFeaturedArtistIdentityOnly("Guest 1", "m1", 0)},
 	}}
-	svc := library.NewBackfillFeaturedService(repo, writes, resolver)
+	svc := library.MustNewBackfillFeaturedService(repo, writes, resolver, time.Now)
 	ctx := logging.WithCorrelationID(context.Background(), "corr-backfill-9")
 
 	before := time.Now()

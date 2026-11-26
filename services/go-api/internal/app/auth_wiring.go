@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/shared/config"
 	"context"
 	"net/http"
+	"time"
 )
 
 func newAuthVerifier(ctx context.Context, cfg *config.Config) (*auth.SupabaseJWTVerifier, error) {
@@ -13,6 +14,7 @@ func newAuthVerifier(ctx context.Context, cfg *config.Config) (*auth.SupabaseJWT
 		cfg.SupabaseJWTJWKSURL,
 		cfg.SupabaseProjectURL,
 		cfg.SupabaseJWTAud,
+		time.Now,
 		auth.WithJWKSMetrics(auth.NewExpvarAuthMetrics()),
 		auth.WithTokenRevoker(auth.NoopTokenRevoker()),
 	)

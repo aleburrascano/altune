@@ -5,6 +5,7 @@ import (
 	sharedids "altune/go-api/internal/shared/ids"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -57,13 +58,48 @@ type audioRig struct {
 	repo   *library.InMemoryTrackRepo
 }
 
-func newAudioRig(streamOpts []func(*library.StreamHandler), urlOpts []func(*library.AudioURLHandler)) *audioRig {
+func TestHandlers_RefuseANilClock(t *testing.T) {
+	constructors := map[string]func() error{
+		"stream": func() error {
+			_, err := library.NewStreamHandler(nil, nil)
+			return err
+		},
+		"audio urls": func() error {
+			_, err := library.NewAudioURLHandler(nil, nil)
+			return err
+		},
+		"playlists": func() error {
+			_, err := library.NewPlaylistHandler(nil, nil, nil)
+			return err
+		},
+		"tracks": func() error {
+			_, err := library.NewTrackHandler(nil, nil, nil, nil, nil, nil, nil)
+			return err
+		},
+	}
+	for name, construct := range constructors {
+		t.Run(name, func(t *testing.T) {
+			if err := construct(); !errors.Is(err, library.ErrHandlerClockRequired) {
+				t.Fatalf("constructing with a nil clock = %v, want ErrHandlerClockRequired", err)
+			}
+		})
+	}
+}
+
+func firstClock(clocks []func() time.Time) func() time.Time {
+	if len(clocks) == 0 {
+		return time.Now
+	}
+	return clocks[0]
+}
+
+func newAudioRig(now func() time.Time) *audioRig {
 	repo := library.NewInMemoryTrackRepo()
 	store := &countingAudioStore{InMemoryAudioStore: library.NewInMemoryAudioStore()}
 	r := chi.NewRouter()
 	r.Use(asBearer)
-	library.NewStreamHandler(library.NewStreamTrackService(repo, store), streamOpts...).Routes(r)
-	library.NewAudioURLHandler(library.NewAudioURLService(repo, store), urlOpts...).Routes(r)
+	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store), now).Routes(r)
+	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, store, now), now).Routes(r)
 	return &audioRig{router: r, store: store, repo: repo}
 }
 
@@ -103,10 +139,7 @@ func assertAudioThrottled(t *testing.T, rec *httptest.ResponseRecorder, wantRetr
 
 func TestAudioRateLimit_IsPerPrincipalAndPerEndpoint(t *testing.T) {
 	clock := newFakeClock()
-	rig := newAudioRig(
-		[]func(*library.StreamHandler){library.WithStreamLimiterClock(clock.now)},
-		[]func(*library.AudioURLHandler){library.WithAudioURLLimiterClock(clock.now)},
-	)
+	rig := newAudioRig(clock.now)
 	noisy, quiet := sharedids.NewUserId(uuid.New()), sharedids.NewUserId(uuid.New())
 	noisyTrack := rig.seedTracks(t, noisy, 1)[0]
 	quietTrack := rig.seedTracks(t, quiet, 1)[0]
@@ -125,7 +158,7 @@ func TestAudioRateLimit_IsPerPrincipalAndPerEndpoint(t *testing.T) {
 }
 
 func TestAudioRateLimit_UnauthenticatedStillGets401(t *testing.T) {
-	rig := newAudioRig(nil, nil)
+	rig := newAudioRig(time.Now)
 
 	stream := sendAnonymous(rig.router, httptest.NewRequest(http.MethodGet, "/tracks/"+uuid.NewString()+"/audio", nil))
 	resolve := sendAnonymous(rig.router, httptest.NewRequest(http.MethodPost, "/audio-urls", strings.NewReader(`{"track_ids":[]}`)))
@@ -137,10 +170,7 @@ func TestAudioRateLimit_UnauthenticatedStillGets401(t *testing.T) {
 
 func TestAudioRateLimit_DefaultsAdmitRealClientTraffic(t *testing.T) {
 	clock := newFakeClock()
-	rig := newAudioRig(
-		[]func(*library.StreamHandler){library.WithStreamLimiterClock(clock.now)},
-		[]func(*library.AudioURLHandler){library.WithAudioURLLimiterClock(clock.now)},
-	)
+	rig := newAudioRig(clock.now)
 	user := sharedids.NewUserId(uuid.New())
 	tracks := rig.seedTracks(t, user, 200)
 
@@ -195,10 +225,7 @@ func TestAudioRateLimit_DefaultsAdmitRealClientTraffic(t *testing.T) {
 
 func TestWriteRateLimits_DefaultsAdmitRealClientTraffic(t *testing.T) {
 	clock := newFakeClock()
-	rig := newWriteRig(
-		[]func(*library.TrackHandler){library.WithTrackWriteLimiterClock(clock.now)},
-		[]func(*library.PlaylistHandler){library.WithPlaylistWriteLimiterClock(clock.now)},
-	)
+	rig := newWriteRig(clock.now)
 	user := sharedids.NewUserId(uuid.New())
 	playlist := library.SeedPlaylist(t, rig.playlists, user, "Seeded")
 	track := library.SeedTrack(t, rig.tracks, user, "Seeded Track", "Artist", "Album")
@@ -231,11 +258,7 @@ type endpointProbe struct {
 }
 
 func openStream(t *testing.T, clocks ...func() time.Time) endpointProbe {
-	var opts []func(*library.StreamHandler)
-	for _, clock := range clocks {
-		opts = append(opts, library.WithStreamLimiterClock(clock))
-	}
-	rig := newAudioRig(opts, nil)
+	rig := newAudioRig(firstClock(clocks))
 	track := rig.seedTracks(t, library.FixtureUserId(), 1)[0]
 	return endpointProbe{
 		hit:     func(int) *httptest.ResponseRecorder { return rig.stream(library.FixtureUserId(), track, "bytes=0-1") },
@@ -244,11 +267,7 @@ func openStream(t *testing.T, clocks ...func() time.Time) endpointProbe {
 }
 
 func openAudioURLs(t *testing.T, clocks ...func() time.Time) endpointProbe {
-	var opts []func(*library.AudioURLHandler)
-	for _, clock := range clocks {
-		opts = append(opts, library.WithAudioURLLimiterClock(clock))
-	}
-	rig := newAudioRig(nil, opts)
+	rig := newAudioRig(firstClock(clocks))
 	track := rig.seedTracks(t, library.FixtureUserId(), 1)[0]
 	return endpointProbe{
 		hit:     func(int) *httptest.ResponseRecorder { return rig.resolve(library.FixtureUserId(), track) },
@@ -257,11 +276,7 @@ func openAudioURLs(t *testing.T, clocks ...func() time.Time) endpointProbe {
 }
 
 func openTrackWrites(t *testing.T, clocks ...func() time.Time) endpointProbe {
-	var opts []func(*library.TrackHandler)
-	for _, clock := range clocks {
-		opts = append(opts, library.WithTrackWriteLimiterClock(clock))
-	}
-	rig := newWriteRig(opts, nil)
+	rig := newWriteRig(firstClock(clocks))
 	return endpointProbe{
 		hit: func(i int) *httptest.ResponseRecorder {
 			return rig.createTrack(t, library.FixtureUserId(), fmt.Sprintf("Track %d", i))
@@ -271,11 +286,7 @@ func openTrackWrites(t *testing.T, clocks ...func() time.Time) endpointProbe {
 }
 
 func openPlaylistWrites(t *testing.T, clocks ...func() time.Time) endpointProbe {
-	var opts []func(*library.PlaylistHandler)
-	for _, clock := range clocks {
-		opts = append(opts, library.WithPlaylistWriteLimiterClock(clock))
-	}
-	rig := newWriteRig(nil, opts)
+	rig := newWriteRig(firstClock(clocks))
 	return endpointProbe{
 		hit: func(i int) *httptest.ResponseRecorder {
 			return rig.createPlaylist(t, library.FixtureUserId(), fmt.Sprintf("Playlist %d", i))

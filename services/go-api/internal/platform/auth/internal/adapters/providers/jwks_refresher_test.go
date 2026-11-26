@@ -12,8 +12,7 @@ func TestJWKSRefresher_ForcedFetchStaysBoundedOnceTheVerifierContextEnds(t *test
 	server, _ := newCountingJWKSServer(t, 0, nil)
 	clock := &testClock{}
 	ctx, cancel := context.WithCancel(context.Background())
-	verifier, err := auth.NewSupabaseJWTVerifier(ctx, server.URL, testProjectURL, testAudience,
-		auth.WithJWKSClock(clock.now), auth.WithJWKSFetchTimeout(200*time.Millisecond))
+	verifier, err := auth.NewSupabaseJWTVerifier(ctx, server.URL, testProjectURL, testAudience, clock.now, auth.WithJWKSFetchTimeout(200*time.Millisecond))
 	if err != nil {
 		t.Fatalf("create verifier: %v", err)
 	}
@@ -36,7 +35,7 @@ func TestJWKSRefresher_BackoffDoublesToCapWithinEqualJitter(t *testing.T) {
 	f, jwks := newRotatingFixture(t)
 	jwks.down.Store(true)
 	clock := &testClock{}
-	verifier := newVerifier(t, f.jwksServer.URL, auth.WithJWKSClock(clock.now))
+	verifier := newVerifier(t, f.jwksServer.URL, clock.now)
 	jwks.hits.Store(0)
 
 	steps := []time.Duration{time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second}
@@ -65,7 +64,7 @@ func TestJWKSRefresher_BackoffResetsToBaseAfterSuccess(t *testing.T) {
 	f, jwks := newRotatingFixture(t)
 	jwks.down.Store(true)
 	clock := &testClock{}
-	verifier := newVerifier(t, f.jwksServer.URL, auth.WithJWKSClock(clock.now))
+	verifier := newVerifier(t, f.jwksServer.URL, clock.now)
 	for range 6 {
 		_, _ = verifier.Verify(t.Context(), "any-token")
 		clock.advance(backoffCap)

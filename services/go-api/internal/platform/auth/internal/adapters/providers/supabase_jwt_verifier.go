@@ -67,14 +67,6 @@ func WithTokenRevoker(r ports.TokenRevoker) SupabaseJWTVerifierOption {
 	}
 }
 
-func WithJWKSClock(now clock.Func) SupabaseJWTVerifierOption {
-	return func(v *SupabaseJWTVerifier) {
-		if now != nil {
-			v.schedule.now = now
-		}
-	}
-}
-
 func WithJWKSFetchTimeout(timeout time.Duration) SupabaseJWTVerifierOption {
 	return func(v *SupabaseJWTVerifier) {
 		if timeout > 0 {
@@ -94,11 +86,16 @@ func WithJWKSBackgroundRefresh(interval, window time.Duration) SupabaseJWTVerifi
 	}
 }
 
-func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience string, opts ...SupabaseJWTVerifierOption) (*SupabaseJWTVerifier, error) {
+var ErrJWKSClockRequired = errors.New("providers: the JWT verifier requires a clock")
+
+func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience string, now clock.Func, opts ...SupabaseJWTVerifierOption) (*SupabaseJWTVerifier, error) {
+	if now == nil {
+		return nil, ErrJWKSClockRequired
+	}
 	if err := requireSecureJWKSURL(jwksURL); err != nil {
 		return nil, err
 	}
-	v := newSupabaseJWTVerifier(jwksURL, projectURL, audience, opts)
+	v := newSupabaseJWTVerifier(jwksURL, projectURL, audience, now, opts)
 	if err := v.registerJWKS(ctx); err != nil {
 		return nil, err
 	}
@@ -106,7 +103,7 @@ func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience s
 	return v, nil
 }
 
-func newSupabaseJWTVerifier(jwksURL, projectURL, audience string, opts []SupabaseJWTVerifierOption) *SupabaseJWTVerifier {
+func newSupabaseJWTVerifier(jwksURL, projectURL, audience string, now clock.Func, opts []SupabaseJWTVerifierOption) *SupabaseJWTVerifier {
 	v := &SupabaseJWTVerifier{
 		jwksURL:  jwksURL,
 		issuer:   strings.TrimRight(projectURL, "/") + supabaseAuthPathSuffix,
@@ -114,7 +111,7 @@ func newSupabaseJWTVerifier(jwksURL, projectURL, audience string, opts []Supabas
 		metrics:  ports.NoopAuthMetrics(),
 		revoker:  ports.NoopTokenRevoker(),
 		schedule: jwksSchedule{
-			now:             time.Now,
+			now:             now,
 			fetchTimeout:    defaultJWKSFetchTimeout,
 			refreshInterval: defaultJWKSRefreshInterval,
 			refreshWindow:   defaultJWKSRefreshWindow,

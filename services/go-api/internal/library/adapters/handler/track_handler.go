@@ -3,6 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/library/domain"
 	trackservice "altune/go-api/internal/library/service/track"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
 	"log/slog"
@@ -31,8 +32,12 @@ func NewTrackHandler(
 	deleteTrack *trackservice.DeleteTrackService,
 	setTrackNumber *trackservice.SetTrackNumberService,
 	featuredArtist *FeaturedArtistHandler,
+	now clock.Func,
 	opts ...func(*TrackHandler),
-) *TrackHandler {
+) (*TrackHandler, error) {
+	if now == nil {
+		return nil, ErrClockRequired
+	}
 	h := &TrackHandler{
 		addTrack:       addTrack,
 		listTracks:     listTracks,
@@ -40,21 +45,30 @@ func NewTrackHandler(
 		deleteTrack:    deleteTrack,
 		setTrackNumber: setTrackNumber,
 		featuredArtist: featuredArtist,
-		now:            time.Now,
+		now:            now,
 	}
 	for _, opt := range opts {
 		opt(h)
 	}
 	h.writeLimiter = newWriteRateLimiter(trackWriteRateLimit, h.now)
-	return h
+	return h, nil
 }
 
-func WithTrackWriteLimiterClock(now func() time.Time) func(*TrackHandler) {
-	return func(h *TrackHandler) {
-		if now != nil {
-			h.now = now
-		}
+func MustNewTrackHandler(
+	addTrack *trackservice.AddTrackService,
+	listTracks *trackservice.ListTracksService,
+	getTrackStatus *trackservice.GetTrackStatusService,
+	deleteTrack *trackservice.DeleteTrackService,
+	setTrackNumber *trackservice.SetTrackNumberService,
+	featuredArtist *FeaturedArtistHandler,
+	now clock.Func,
+	opts ...func(*TrackHandler),
+) *TrackHandler {
+	h, err := NewTrackHandler(addTrack, listTracks, getTrackStatus, deleteTrack, setTrackNumber, featuredArtist, now, opts...)
+	if err != nil {
+		panic(err)
 	}
+	return h
 }
 
 func (h *TrackHandler) Routes() chi.Router {

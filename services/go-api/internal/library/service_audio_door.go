@@ -8,10 +8,11 @@ type (
 )
 
 var (
+	ErrAudioClockRequired            = audio.ErrClockRequired
+	MustNewAudioURLService           = audio.MustNewAudioURLService
 	NewAudioURLService               = audio.NewAudioURLService
 	NewReconcileOrphanedAudioService = audio.NewReconcileOrphanedAudioService
 	NewStreamTrackService            = audio.NewStreamTrackService
-	WithAudioURLClock                = audio.WithAudioURLClock
 	WithAudioURLMetrics              = audio.WithAudioURLMetrics
 	WithReconcileMetrics             = audio.WithReconcileMetrics
 	WithReconcileSwitch              = audio.WithReconcileSwitch

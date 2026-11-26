@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -53,7 +54,7 @@ func errorContractRouter(t *testing.T) chi.Router {
 	}
 	timingOut := timingOutContentProvider{}
 	healthy := stubContentProvider{provider: search.ProviderSoundCloud}
-	h := search.NewDiscoveryHandler(search.DiscoveryServices{
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{
 		Album: searchtest.NewAlbumTracks(t, map[search.ProviderName]search.AlbumContentProvider{
 			search.ProviderITunes: timingOut, search.ProviderSoundCloud: healthy,
 		}, searchtest.AlbumBreaker(breaker)),
@@ -63,7 +64,7 @@ func errorContractRouter(t *testing.T) chi.Router {
 		Related: searchtest.NewRelatedTracksWithBreaker(t, map[string]search.RelatedTracksProvider{
 			search.ProviderITunes.String(): timingOut, search.ProviderSoundCloud.String(): healthy,
 		}, breaker),
-	})
+	}, time.Now)
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
 	router.Mount("/discovery", h.Routes())
@@ -185,11 +186,11 @@ func TestArtistContent_OutcomeFollowsBothHalves(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			h := search.NewDiscoveryHandler(search.DiscoveryServices{
+			h := search.MustNewDiscoveryHandler(search.DiscoveryServices{
 				Artist: searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{
 					search.ProviderDeezer: scriptedArtistProvider{tracksErr: tc.tracksErr, albumsErr: tc.albumsErr},
 				}),
-			})
+			}, time.Now)
 			router := chi.NewRouter()
 			router.Use(discAsTestUser)
 			router.Mount("/discovery", h.Routes())

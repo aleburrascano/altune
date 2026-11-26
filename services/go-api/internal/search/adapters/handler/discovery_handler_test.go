@@ -188,14 +188,14 @@ func buildDiscoveryRouter(t *testing.T,
 		artistSvc = searchtest.NewArtistContent(t, artistProviders)
 	}
 
-	h := search.NewDiscoveryHandler(search.DiscoveryServices{
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{
 		Search:        searchSvc,
 		History:       historySvc,
 		RecordHistory: searchtest.NewHistoryRecorder(t, historyRepo),
 		ClearHistory:  clearHistorySvc,
 		Album:         albumSvc,
 		Artist:        artistSvc,
-	})
+	}, time.Now)
 
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
@@ -230,10 +230,10 @@ func (nopEventStore) Append(context.Context, search.InteractionEvent) error { re
 
 func TestHandleRecordEvent_ServiceValidation(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	h := search.NewDiscoveryHandler(search.DiscoveryServices{
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{
 		Search: searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker()),
 		Event:  search.NewRecordEventService(nopEventStore{}),
-	})
+	}, time.Now)
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
 	router.Mount("/discovery", h.Routes())
@@ -632,7 +632,7 @@ func mustEnrichment(svc *search.DetailsService, err error) *search.DetailsServic
 }
 
 func buildEnrichmentRouter(svc *search.DetailsService) chi.Router {
-	h := search.NewDiscoveryHandler(search.DiscoveryServices{Enrich: svc})
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Enrich: svc}, time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -713,7 +713,7 @@ func buildRelatedRouter(t testing.TB, provider *fakeRelatedTracksProvider) chi.R
 	svc := searchtest.NewRelatedTracks(t, map[string]search.RelatedTracksProvider{
 		"soundcloud": provider,
 	})
-	h := search.NewDiscoveryHandler(search.DiscoveryServices{Related: svc})
+	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{Related: svc}, time.Now)
 
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
