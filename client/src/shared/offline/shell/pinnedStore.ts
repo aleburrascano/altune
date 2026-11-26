@@ -186,7 +186,7 @@ type PinnedState = {
   reconcile: () => void;
 };
 
-export type PinnedStore = UseBoundStore<StoreApi<PinnedState>>;
+type PinnedStore = UseBoundStore<StoreApi<PinnedState>>;
 
 export type OfflineDeps = { now: () => number; random: () => number };
 
