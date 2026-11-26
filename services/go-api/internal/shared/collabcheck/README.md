@@ -1,6 +1,6 @@
 # collabcheck
 
-`collabcheck` is the exact, type-aware check for lexicon 3715 lines 23 and 24. It is a `go/analysis` pass, run as `go run ./cmd/collabcheck ./...` from `services/go-api`, and it replaces the coarse counting script `scripts/ci/count-collaborator-options.sh` as the proof that a directory is at zero.
+`collabcheck` is the type-aware check for lexicon 3715 lines 23 and 24. It is a `go/analysis` pass, run as `go run ./cmd/collabcheck ./...` from `services/go-api`, and it is the proof that a directory is at zero in place of the coarse counting script `scripts/ci/count-collaborator-options.sh`. It does not see fields set only by constructors that return an interface, nor a nil check written as a `switch` case or on a copy of the field.
 
 It reports two things, in non-test files only:
 
