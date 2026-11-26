@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/backoff"
 	"altune/go-api/internal/shared/random"
 	"context"
@@ -65,7 +66,7 @@ func (r *jwksRefresher) RefreshIfStale(ctx context.Context) error {
 }
 
 func (r *jwksRefresher) refresh(ctx context.Context, minAge time.Duration) error {
-	call, err := r.join(minAge)
+	call, err := r.join(ctx, minAge)
 	if err != nil {
 		return err
 	}
@@ -77,7 +78,7 @@ func (r *jwksRefresher) refresh(ctx context.Context, minAge time.Duration) error
 	}
 }
 
-func (r *jwksRefresher) join(minAge time.Duration) (*jwksRefreshCall, error) {
+func (r *jwksRefresher) join(ctx context.Context, minAge time.Duration) (*jwksRefreshCall, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.refreshing {
@@ -91,12 +92,12 @@ func (r *jwksRefresher) join(minAge time.Duration) (*jwksRefreshCall, error) {
 	}
 	r.inflight = &jwksRefreshCall{done: make(chan struct{})}
 	r.refreshing = true
-	go r.run(r.inflight)
+	go r.run(ctx, r.inflight)
 	return r.inflight, nil
 }
 
-func (r *jwksRefresher) run(call *jwksRefreshCall) {
-	ctx, cancel := context.WithTimeout(context.Background(), r.fetchTimeout)
+func (r *jwksRefresher) run(parent context.Context, call *jwksRefreshCall) {
+	ctx, cancel := background.Detach(parent, r.fetchTimeout)
 	defer cancel()
 	call.err = r.fetch(ctx)
 	r.settle(call)

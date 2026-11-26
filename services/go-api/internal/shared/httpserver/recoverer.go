@@ -13,7 +13,7 @@ import (
 func Recoverer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sw := newStatusWriter(w)
-		defer func() {
+		defer func(r *http.Request) {
 			rec := recover()
 			if rec == nil {
 				return
@@ -28,9 +28,9 @@ func Recoverer(next http.Handler) http.Handler {
 				logging.KeyStack, string(debug.Stack()),
 			)
 			if !sw.hasWrittenHeader {
-				writeProblem(sw, newProblem(r, apierror.CodeInternal, internalServerErrorDetail))
+				writeProblem(r.Context(), sw, newProblem(r, apierror.CodeInternal, internalServerErrorDetail))
 			}
-		}()
+		}(r)
 		next.ServeHTTP(sw, r)
 	})
 }

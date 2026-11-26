@@ -23,7 +23,7 @@ const (
 func startFeed(t *testing.T) (*monitoring.EventFeed, *monitoring.EventTap, context.CancelFunc) {
 	t.Helper()
 	f := monitoring.NewEventFeed()
-	tp := monitoring.MustNewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
+	tp := monitoring.MustNewEventTap(events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
 	ctx, stop := context.WithCancel(context.Background())
 	f.Start(ctx, tp)
 	t.Cleanup(func() {
@@ -165,7 +165,7 @@ func TestFeed_AvailableOnlyWhileDraining(t *testing.T) {
 	})
 
 	t.Run("tap already has a subscriber", func(t *testing.T) {
-		tp := monitoring.MustNewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
+		tp := monitoring.MustNewEventTap(events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
 		_, releaseTap, err := tp.SubscribeAll()
 		if err != nil {
 			t.Fatalf("occupy the tap: %v", err)

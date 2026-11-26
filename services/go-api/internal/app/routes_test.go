@@ -36,7 +36,7 @@ func assembledRouter(t *testing.T, cfg *config.Config, pool *pgxpool.Pool) *chi.
 	}
 	t.Cleanup(func() {
 		cancel()
-		assembly.Shutdown()
+		assembly.Shutdown(context.Background())
 	})
 	mux, ok := assembly.Handler().(*chi.Mux)
 	if !ok {

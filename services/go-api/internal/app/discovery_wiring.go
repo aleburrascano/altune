@@ -47,11 +47,11 @@ func (a *App) discoveryDeps(ctx context.Context, transport http.RoundTripper) se
 const behavioralRankingRefreshInterval = 30 * time.Minute
 
 func (a *App) startDiscoveryBackgroundJobs(ctx context.Context, disc *search.Discovery) {
-	a.startUnreleasedRefresh(disc.UnreleasedRefresh)
+	a.startUnreleasedRefresh(ctx, disc.UnreleasedRefresh)
 	if a.cfg.BehavioralRankingEnabled {
 		a.jobs.EveryInstance(ctx, jobs.BehavioralRankingRefresh, behavioralRankingRefreshInterval,
 			jobs.WarnOnFailure(jobs.BehavioralRankingRefresh, disc.Search.RefreshBehavioralScores))
 	}
 	a.startDiscographyPrune(ctx, disc.Events)
-	a.startVocabularyRefresh(disc.SpellingHints, disc.Charts)
+	a.startVocabularyRefresh(ctx, disc.SpellingHints, disc.Charts)
 }

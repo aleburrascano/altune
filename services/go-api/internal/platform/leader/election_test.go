@@ -137,6 +137,8 @@ type session struct {
 	pingErr              error
 	pingWaitsForDeadline bool
 	unlockCtxErr         error
+	unlockBudget         time.Duration
+	unlockValue          any
 	unlockAttempted      bool
 	unlocked             bool
 	released             bool
@@ -173,6 +175,10 @@ func (s *session) AdvisoryUnlock(ctx context.Context, _ int64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.unlockAttempted = true
+	if deadline, ok := ctx.Deadline(); ok {
+		s.unlockBudget = time.Until(deadline)
+	}
+	s.unlockValue = ctx.Value(budgetKey{})
 	if err := ctx.Err(); err != nil {
 		s.unlockCtxErr = err
 		return err
@@ -372,6 +378,32 @@ func TestElection_CountsWinsAndTermEnds(t *testing.T) {
 
 	if c := e.Counters(); c.Wins != 1 || c.TermEnds != 1 || c.HoldsLost != 1 {
 		t.Errorf("counters = %+v, want one win followed by one lost hold that ended the term", c)
+	}
+}
+
+type budgetKey struct{}
+
+func TestElection_ShutdownReleaseKeepsItsFullBudgetAndTheCallersValues(t *testing.T) {
+	conn := newSession()
+	e := newElection(t, storeOf(conn), testKey, singleTick)
+	e.Start(context.Background())
+	conn.locked.wait(t, 2*time.Second, "winning the lock")
+	parent, cancel := context.WithTimeout(context.WithValue(context.Background(), budgetKey{}, "caller"), time.Nanosecond)
+	defer cancel()
+
+	e.Shutdown(parent)
+
+	conn.mu.Lock()
+	budget, value, unlockErr := conn.unlockBudget, conn.unlockValue, conn.unlockCtxErr
+	conn.mu.Unlock()
+	if unlockErr != nil {
+		t.Fatalf("release ran on an expired context: %v", unlockErr)
+	}
+	if budget < 4*time.Second || budget > 5*time.Second {
+		t.Fatalf("release budget = %v, want about the full 5s shutdownReleaseBudget", budget)
+	}
+	if value != "caller" {
+		t.Fatalf("release context value = %v, want the caller's value", value)
 	}
 }
 

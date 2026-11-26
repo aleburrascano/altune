@@ -19,7 +19,7 @@ import (
 const tapBufferSize = 256
 
 func TestSubscribeAll_CapturesNeverSeenUser(t *testing.T) {
-	tp := monitoring.MustNewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
+	tp := monitoring.MustNewEventTap(events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
 	tap, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -43,7 +43,7 @@ func TestSubscribeAll_CapturesNeverSeenUser(t *testing.T) {
 }
 
 func TestPublish_StampsCorrelationIDFromContext(t *testing.T) {
-	tp := monitoring.MustNewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
+	tp := monitoring.MustNewEventTap(events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
 	tap, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -64,7 +64,7 @@ func TestPublish_StampsCorrelationIDFromContext(t *testing.T) {
 }
 
 func TestPublish_ContextWithoutCorrelationIDYieldsEmptyCorrID(t *testing.T) {
-	tp := monitoring.MustNewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
+	tp := monitoring.MustNewEventTap(events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
 	tap, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -84,7 +84,7 @@ func TestPublish_ContextWithoutCorrelationIDYieldsEmptyCorrID(t *testing.T) {
 }
 
 func TestSubscribeAll_SingleConsumer(t *testing.T) {
-	tp := monitoring.MustNewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
+	tp := monitoring.MustNewEventTap(events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
 	_, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("first SubscribeAll: %v", err)
@@ -97,7 +97,7 @@ func TestSubscribeAll_SingleConsumer(t *testing.T) {
 }
 
 func TestSubscribeAll_SlowConsumerDropsNotBlocks(t *testing.T) {
-	tp := monitoring.MustNewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
+	tp := monitoring.MustNewEventTap(events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
 	_, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -114,7 +114,7 @@ func TestSubscribeAll_SlowConsumerDropsNotBlocks(t *testing.T) {
 }
 
 func TestTap_ReleasedAfterCancel(t *testing.T) {
-	tp := monitoring.MustNewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
+	tp := monitoring.MustNewEventTap(events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
 	_, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -128,7 +128,7 @@ func TestTap_ReleasedAfterCancel(t *testing.T) {
 }
 
 func TestPublish_SubjectOmitsUserAuthoredText(t *testing.T) {
-	tp := monitoring.MustNewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
+	tp := monitoring.MustNewEventTap(events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor")), time.Now)
 	tap, cancel, err := tp.SubscribeAll()
 	if err != nil {
 		t.Fatalf("SubscribeAll: %v", err)
@@ -144,7 +144,7 @@ func TestPublish_SubjectOmitsUserAuthoredText(t *testing.T) {
 }
 
 func TestTap_EmitReachesSubscriberWithoutTouchingInnerPublisher(t *testing.T) {
-	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
+	bus := events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	tp := monitoring.MustNewEventTap(bus, time.Now)
 	ch, cancel, err := tp.SubscribeAll()
 	if err != nil {
@@ -177,7 +177,7 @@ func TestTap_EmitReachesSubscriberWithoutTouchingInnerPublisher(t *testing.T) {
 
 func newTap(t *testing.T, now func() time.Time) *monitoring.EventTap {
 	t.Helper()
-	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
+	bus := events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	return monitoring.MustNewEventTap(bus, now)
 }
 
@@ -216,7 +216,7 @@ func TestTapClock_ActivityEventCarriesTheInjectedTime(t *testing.T) {
 }
 
 func TestNewEventTap_RefusesANilClock(t *testing.T) {
-	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
+	bus := events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 
 	tp, err := monitoring.NewEventTap(bus, nil)
 

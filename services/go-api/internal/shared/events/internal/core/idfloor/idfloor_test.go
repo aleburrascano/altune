@@ -103,7 +103,7 @@ func (h *warnRecorder) only(t *testing.T, want string) {
 func TestReserveAbove_WithNothingStored_StartsAtTheWallClockAndPersistsAReservation(t *testing.T) {
 	store := &memoryStore{}
 
-	got := idfloor.New(store).ReserveAbove(wallClock)
+	got := idfloor.New(store).ReserveAbove(context.Background(), wallClock)
 
 	if got != wallClock {
 		t.Fatalf("ReserveAbove = %d, want the wall clock %d when nothing was persisted", got, wallClock)
@@ -117,7 +117,7 @@ func TestReserveAbove_WithAFloorAboveTheWallClock_StartsAtTheFloor(t *testing.T)
 	const persisted = wallClock
 	store := storeHolding(strconv.FormatUint(persisted, 10))
 
-	got := idfloor.New(store).ReserveAbove(persisted - uint64(time.Hour))
+	got := idfloor.New(store).ReserveAbove(context.Background(), persisted-uint64(time.Hour))
 
 	if got != persisted {
 		t.Fatalf("ReserveAbove = %d, want the persisted ceiling %d after a backward clock jump", got, persisted)
@@ -128,7 +128,7 @@ func TestReserveAbove_TrustsAFloorExactlyTenYearsAhead(t *testing.T) {
 	edge := wallClock + maxFloorAhead
 	store := storeHolding(strconv.FormatUint(edge, 10))
 
-	if got := idfloor.New(store).ReserveAbove(wallClock); got != edge {
+	if got := idfloor.New(store).ReserveAbove(context.Background(), wallClock); got != edge {
 		t.Fatalf("ReserveAbove = %d, want the floor %d: only a floor more than ten years ahead is implausible", got, edge)
 	}
 }
@@ -136,10 +136,10 @@ func TestReserveAbove_TrustsAFloorExactlyTenYearsAhead(t *testing.T) {
 func TestReserveAbove_WithinTheReservedBlock_DoesNotRewriteTheStore(t *testing.T) {
 	store := &memoryStore{}
 	floor := idfloor.New(store)
-	start := floor.ReserveAbove(wallClock)
+	start := floor.ReserveAbove(context.Background(), wallClock)
 	reserved := store.ceiling(t)
 
-	if got := floor.ReserveAbove(start + 1); got != start+1 {
+	if got := floor.ReserveAbove(context.Background(), start+1); got != start+1 {
 		t.Fatalf("ReserveAbove = %d, want the asked-for id %d inside the reserved block", got, start+1)
 	}
 
@@ -151,10 +151,10 @@ func TestReserveAbove_WithinTheReservedBlock_DoesNotRewriteTheStore(t *testing.T
 func TestReserveAbove_AtTheReservedCeiling_RaisesTheCeiling(t *testing.T) {
 	store := &memoryStore{}
 	floor := idfloor.New(store)
-	start := floor.ReserveAbove(wallClock)
+	start := floor.ReserveAbove(context.Background(), wallClock)
 	ceiling := start + reservation
 
-	floor.ReserveAbove(ceiling)
+	floor.ReserveAbove(context.Background(), ceiling)
 
 	if got := store.ceiling(t); got <= ceiling {
 		t.Fatalf("ceiling = %d after issuing %d, want a ceiling above every issued id", got, ceiling)
@@ -164,10 +164,10 @@ func TestReserveAbove_AtTheReservedCeiling_RaisesTheCeiling(t *testing.T) {
 func TestReserveAbove_PastTheReservedBlock_RaisesTheCeiling(t *testing.T) {
 	store := &memoryStore{}
 	floor := idfloor.New(store)
-	start := floor.ReserveAbove(wallClock)
+	start := floor.ReserveAbove(context.Background(), wallClock)
 	outgrown := start + reservation + 1
 
-	floor.ReserveAbove(outgrown)
+	floor.ReserveAbove(context.Background(), outgrown)
 
 	if got := store.ceiling(t); got <= outgrown {
 		t.Fatalf("ceiling = %d after issuing %d, want a ceiling above every issued id", got, outgrown)
@@ -186,7 +186,7 @@ func TestReserveAbove_WithAnUnusableStoredFloor_FallsBackToTheWallClock(t *testi
 		t.Run(name, func(t *testing.T) {
 			warnings := captureWarnings(t)
 
-			got := idfloor.New(storeHolding(tc.contents)).ReserveAbove(wallClock)
+			got := idfloor.New(storeHolding(tc.contents)).ReserveAbove(context.Background(), wallClock)
 
 			if got != wallClock {
 				t.Fatalf("ReserveAbove = %d, want the wall clock %d for an unusable floor", got, wallClock)
@@ -200,7 +200,7 @@ func TestReserveAbove_WithAnUnreadableStore_FallsBackToTheWallClockAndWarns(t *t
 	warnings := captureWarnings(t)
 	store := &memoryStore{loadErr: errors.New("permission denied"), saveErr: errors.New("read-only")}
 
-	if got := idfloor.New(store).ReserveAbove(wallClock); got != wallClock {
+	if got := idfloor.New(store).ReserveAbove(context.Background(), wallClock); got != wallClock {
 		t.Fatalf("ReserveAbove = %d, want the wall clock %d", got, wallClock)
 	}
 	warnings.mu.Lock()
@@ -214,7 +214,7 @@ func TestReserveAbove_WhenTheFloorCannotBeSaved_StillIssuesAndWarns(t *testing.T
 	warnings := captureWarnings(t)
 	store := &memoryStore{saveErr: errors.New("disk full")}
 
-	if got := idfloor.New(store).ReserveAbove(wallClock); got != wallClock {
+	if got := idfloor.New(store).ReserveAbove(context.Background(), wallClock); got != wallClock {
 		t.Fatalf("ReserveAbove = %d, want the wall clock %d", got, wallClock)
 	}
 	warnings.only(t, "events.id_floor_unwritable")

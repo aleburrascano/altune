@@ -107,7 +107,7 @@ func (a *App) wireAudioSources(
 	if err != nil {
 		return audioSourcesStaging{}, err
 	}
-	ytmCanary, err := downloadsetup.CanaryYTMClient(a.cfg, a.redisClient, transport)
+	ytmCanary, err := downloadsetup.CanaryYTMClient(ctx, a.cfg, a.redisClient, transport)
 	if err != nil {
 		return audioSourcesStaging{}, fmt.Errorf("build the ytmusic canary client: %w", err)
 	}

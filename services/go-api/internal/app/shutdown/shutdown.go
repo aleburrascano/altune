@@ -101,8 +101,7 @@ func cappedDrain(budgetSeconds int, limit time.Duration) time.Duration {
 	return min(time.Duration(budgetSeconds)*time.Second, limit)
 }
 
-func Run(plan []Step) []Outcome {
-	ctx := context.Background()
+func Run(ctx context.Context, plan []Step) []Outcome {
 	outcomes := make([]Outcome, 0, len(plan))
 	completed := make(map[string]bool, len(plan))
 	for _, step := range plan {
@@ -121,11 +120,11 @@ func runStep(ctx context.Context, step Step, completed map[string]bool) Outcome 
 	if step.Stop == nil {
 		return Outcome{Component: step.Component, Status: Completed, Budget: step.Timeout}
 	}
-	return stopWithin(step.Component, step.Timeout, step.Stop)
+	return stopWithin(ctx, step.Component, step.Timeout, step.Stop)
 }
 
-func stopWithin(component string, timeout time.Duration, stop func(context.Context)) Outcome {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+func stopWithin(parent context.Context, component string, timeout time.Duration, stop func(context.Context)) Outcome {
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	if background.WaitWithin(ctx, func() { stop(ctx) }) {
 		return Outcome{Component: component, Status: Completed, Budget: timeout}
@@ -154,8 +153,8 @@ func leadershipRetained(outcomes []Outcome) bool {
 	return false
 }
 
-func DrainServer(server *http.Server, timeout time.Duration) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+func DrainServer(parent context.Context, server *http.Server, timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	err := server.Shutdown(ctx)
 	if err == nil {

@@ -36,7 +36,7 @@ type sources struct {
 
 func newSources(t *testing.T) sources {
 	t.Helper()
-	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
+	bus := events.NewInProcessBus(context.Background(), time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	tap := monitoring.MustNewEventTap(bus, time.Now)
 	alertMonitor, err := monitoring.NewAlertMonitor(monitoring.NopNotifier{}, time.Second, time.Now, clock.NewTicker, background.EveryPassLeads)
 	if err != nil {

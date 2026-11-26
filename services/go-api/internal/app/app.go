@@ -68,7 +68,7 @@ func (a *App) connectAuth(ctx context.Context) (auth.TokenVerifier, error) {
 func (a *App) startCatalogJobs(ctx context.Context, cat catalogWiring, playback playbackWiring) {
 	a.startOrphanedAudioReconcile(ctx, cat.orphanedAudio, cat.audioStore)
 	a.startDeletedIdentityErasure(ctx, playback.forgetDeletedIdentities)
-	a.startSourceCanary(sourcecheck.Probes{
+	a.startSourceCanary(ctx, sourcecheck.Probes{
 		YtDlp: cat.ytDlpSearcher, YtDlpAvailable: cat.ytDlpAvailable, InnerTube: cat.ytmCanary,
 		YtMusicEnabled: a.cfg.YtMusicEnabled, YtDlpEnabled: a.cfg.YtDLPEnabled,
 	})
