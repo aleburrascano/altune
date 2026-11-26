@@ -660,7 +660,7 @@ exec "$REAL_GO" "\$@"
 STUB
     printf '#!/usr/bin/env bash\nprintf "golangci-lint %%s\\n" "$*" >>"%s/tools.log"\nprintf "golangci-lint-cache %%s %%s\\n" "$1" "$GOLANGCI_LINT_CACHE" >>"%s/tools.log"\n' "$WORK" "$WORK" >"$WORK/bin/golangci-lint"
     printf '#!/usr/bin/env bash\nprintf "govulncheck %%s\\n" "$*" >>"%s/tools.log"\n' "$WORK" >"$WORK/bin/govulncheck"
-    printf '#!/usr/bin/env bash\nprintf "go-arch-lint %%s\\n" "$*" >>"%s/tools.log"\n' "$WORK" >"$WORK/bin/go-arch-lint"
+    printf '#!/usr/bin/env bash\nprintf "go-arch-lint %%s\\n" "$*" >>"%s/tools.log"\nexit "${GO_ARCH_LINT_STUB_RC:-0}"\n' "$WORK" >"$WORK/bin/go-arch-lint"
     chmod +x "$WORK/bin/go" "$WORK/bin/golangci-lint" "$WORK/bin/govulncheck" "$WORK/bin/go-arch-lint"
     mkdir -p "$WORK/repo/scripts/ci"
     cp "$HERE/ci/go-deadcode.sh" "$WORK/repo/scripts/ci/"
@@ -1006,6 +1006,14 @@ forbid_log "--new-from-rev=HEAD"
 expect_log "go run ./scripts/lintcomments --all internal/shared/s/s.go"
 expect_log "go run ./scripts/lintnames"
 expect_log_line "go-arch-lint check"
+
+CASE="a failing go-arch-lint check turns a push red"
+new_repo
+add_go_fixture
+edit_go_file internal/shared/s/s.go
+GO_ARCH_LINT_STUB_RC=1 run_push_scoped
+expect_rc 1
+expect_out "FAIL  go-api architecture"
 
 expect_lint_args_exist() {
     local arg missing=""

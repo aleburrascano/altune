@@ -88,6 +88,19 @@ linters:
           deny:
             - pkg: github.com/jackc/pgx
               desc: the database driver is imported only in its home, an adapters package, shared/database, shared/dbtest or the composition root, so reach the database through one of them
+        composition:
+          list-mode: lax
+          files:
+            - "**/cmd/**"
+            - "**/internal/app/*.go"
+            - "**/internal/app/downloadsetup/**"
+            - "**/internal/app/shutdown/**"
+            - "!$test"
+          allow:
+            - github.com/jackc/pgx/v5/pgxpool
+          deny:
+            - pkg: github.com/jackc/pgx
+              desc: the composition root, its home for the driver, names only the pool type pgxpool, so reach everything else through shared/database
         random:
           list-mode: lax
           files:
