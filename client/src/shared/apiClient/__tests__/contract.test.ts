@@ -172,9 +172,30 @@ function expectListEnvelope(tsLines: Map<string, string>, itemType: string): voi
 }
 
 const MOUNT_HANDLER_FILES: Record<string, string[]> = {
-  'cat.trackHandler': ['internal', 'library', 'internal', 'adapters', 'handler', 'track_handler.go'],
-  'cat.libraryHandler': ['internal', 'library', 'internal', 'adapters', 'handler', 'library_handler.go'],
-  'cat.playlistHandler': ['internal', 'library', 'internal', 'adapters', 'handler', 'playlist_handler.go'],
+  'cat.trackHandler': [
+    'internal',
+    'library',
+    'internal',
+    'adapters',
+    'handler',
+    'track_handler.go',
+  ],
+  'cat.libraryHandler': [
+    'internal',
+    'library',
+    'internal',
+    'adapters',
+    'handler',
+    'library_handler.go',
+  ],
+  'cat.playlistHandler': [
+    'internal',
+    'library',
+    'internal',
+    'adapters',
+    'handler',
+    'playlist_handler.go',
+  ],
   get queueHandler() {
     return path
       .relative(GO_API_ROOT!, playbackGoFileDeclaring(QUEUE_HANDLER_ROUTES_DECLARATION))
@@ -185,8 +206,22 @@ const MOUNT_HANDLER_FILES: Record<string, string[]> = {
 
 const SHARED_ROUTER_HANDLER_FILES: Record<string, string[]> = {
   streamHandler: ['internal', 'library', 'internal', 'adapters', 'handler', 'stream_handler.go'],
-  audioURLHandler: ['internal', 'library', 'internal', 'adapters', 'handler', 'audio_url_handler.go'],
-  featuredArtist: ['internal', 'library', 'internal', 'adapters', 'handler', 'featured_artist_handler.go'],
+  audioURLHandler: [
+    'internal',
+    'library',
+    'internal',
+    'adapters',
+    'handler',
+    'audio_url_handler.go',
+  ],
+  featuredArtist: [
+    'internal',
+    'library',
+    'internal',
+    'adapters',
+    'handler',
+    'featured_artist_handler.go',
+  ],
 };
 
 function joinPath(prefix: string, sub: string): string {
