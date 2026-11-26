@@ -566,8 +566,7 @@ func TestLookup_AProbeThatNeverSettlesLosesItsLeaseAfterThirtySeconds(t *testing
 	m := &recordingMetrics{}
 	clock := newTestClock()
 	catalog := &switchableSource{current: failingSource()}
-	reader := playback.NewNowPlayingReader(catalog, playback.WithNowPlayingMetrics(m),
-		playback.WithNowPlayingLookupTimeout(time.Minute), playback.WithNowPlayingClock(clock.read))
+	reader := playback.NewNowPlayingReader(catalog, m, clock.read, time.Minute)
 	user := testUser()
 	for i := 0; i < enrichmentFailureThreshold; i++ {
 		_, _ = lookup(context.Background(), reader, user)
