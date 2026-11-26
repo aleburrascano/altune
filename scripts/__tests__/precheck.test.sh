@@ -41,6 +41,7 @@ new_repo() {
     cp "$HERE/precheck.sh" "$WORK/repo/scripts/"
     mkdir -p "$WORK/repo/scripts/ci"
     printf '#!/usr/bin/env bash\nprintf "secret-scan %%s\\n" "$*" >>"%s/tools.log"\nexit "${SECRET_SCAN_STUB_RC:-0}"\n' "$WORK" >"$WORK/repo/scripts/ci/secret-scan.sh"
+    printf '#!/usr/bin/env bash\nprintf "vuln-scan %%s\\n" "$*" >>"%s/tools.log"\nexit "${VULN_SCAN_STUB_RC:-0}"\n' "$WORK" >"$WORK/repo/scripts/ci/vuln-scan.sh"
     printf '#!/usr/bin/env bash\nexit 0\n' >"$WORK/repo/scripts/test-home-tree.sh"
     printf '#!/usr/bin/env bash\nexit "${HISTORY_STUB_RC:-0}"\n' >"$WORK/repo/scripts/history-complete.sh"
     (
@@ -1514,6 +1515,40 @@ add_plain_file
 run_with_tools
 expect_log "secret-scan $(git -C "$WORK/repo" rev-parse gitea/main)"
 expect_out "ok    secret scan (commits since base)"
+
+CASE="a changed lockfile or go.sum is scanned for known vulnerabilities with osv-scanner"
+new_repo
+commit_as_base
+(
+    cd "$WORK/repo" || exit 1
+    mkdir -p services/go-api
+    printf 'x\n' >services/go-api/go.sum
+    git add services/go-api/go.sum
+    git commit -qm "bump a dependency"
+)
+run_with_tools
+expect_log "vuln-scan --osv"
+expect_out "ok    dependency scan (osv-scanner)"
+
+CASE="a vulnerable dependency fails precheck"
+new_repo
+commit_as_base
+(
+    cd "$WORK/repo" || exit 1
+    printf 'x\n' >pnpm-lock.yaml
+    git add pnpm-lock.yaml
+    git commit -qm "bump a dependency"
+)
+VULN_SCAN_STUB_RC=1 run_with_tools
+expect_out "FAIL  dependency scan (osv-scanner)"
+[ "$RC" != 0 ] || fail "an osv-scanner finding must make precheck exit non-zero"
+
+CASE="a change that touches no dependency file runs no osv-scanner scan"
+new_repo
+commit_as_base
+add_plain_file
+run_with_tools
+forbid_log "vuln-scan"
 
 CASE="a secret found in the range fails precheck"
 new_repo
