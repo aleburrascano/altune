@@ -69,6 +69,9 @@ const typedLinting = [
       '@typescript-eslint/prefer-includes': 'error',
       '@typescript-eslint/prefer-string-starts-ends-with': 'error',
       'react-hooks/void-use-memo': 'error',
+      '@typescript-eslint/prefer-nullish-coalescing': 'error',
+      '@typescript-eslint/prefer-regexp-exec': 'error',
+      '@typescript-eslint/no-unnecessary-type-parameters': 'error',
     },
   },
 ];

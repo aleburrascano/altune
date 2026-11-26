@@ -52,7 +52,7 @@ function ChipBody({ label, selected = false, icon }: ChipBase) {
   const { backgroundColor, tone } = useChipColors(selected);
   return (
     <View style={[bodyStyle, { backgroundColor }]}>
-      {icon != null ? icon : null}
+      {icon ?? null}
       <ChipLabel label={label} tone={tone} />
     </View>
   );

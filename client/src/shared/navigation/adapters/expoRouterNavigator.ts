@@ -10,6 +10,6 @@ export function useRouteSegments(): string[] {
   return useSegments();
 }
 
-export function useScreenFocusEffect(effect: () => void | (() => void)): void {
+export function useScreenFocusEffect(effect: Parameters<typeof useFocusEffect>[0]): void {
   useFocusEffect(effect);
 }

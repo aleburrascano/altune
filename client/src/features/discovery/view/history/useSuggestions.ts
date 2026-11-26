@@ -24,7 +24,7 @@ export function visibleSuggestions(
   return response.suggestions;
 }
 
-export function useAutocompleteSuggestions(inputValue: string, canShow: boolean = true) {
+export function useAutocompleteSuggestions(inputValue: string, canShow = true) {
   const typedQuery = normalizeQuery(inputValue).toLowerCase();
   const debouncedQuery = useSettledValue(typedQuery, SUGGEST_DEBOUNCE_MS);
   const isSettled = debouncedQuery === typedQuery;

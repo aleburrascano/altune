@@ -35,7 +35,7 @@ export interface CachedQueries {
 
 export interface EventCache {
   invalidateQueries(filters: CacheFilters): Promise<void>;
-  getQueryData<T>(queryKey: CacheKey): T | undefined;
+  getQueryData(queryKey: CacheKey): unknown;
   setQueryData<T>(queryKey: CacheKey, updater: CacheUpdater<T>): unknown;
   getQueriesData<T>(filters: CacheFilters): [CacheKey, T | undefined][];
   setQueriesData<T>(filters: CacheFilters, updater: CacheUpdater<T>): unknown;

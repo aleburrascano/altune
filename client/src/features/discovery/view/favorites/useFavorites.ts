@@ -51,10 +51,7 @@ function targetKey(target: FavoriteTarget): string {
 }
 
 function isCached(current: FavoritesResponse | undefined, target: FavoriteTarget): boolean {
-  return (
-    current !== undefined &&
-    current.items.some((f) => entryKey(f.kind, f.key) === targetKey(target))
-  );
+  return current?.items.some((f) => entryKey(f.kind, f.key) === targetKey(target)) ?? false;
 }
 
 export function useFavorites(): FavoritesApi {

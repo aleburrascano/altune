@@ -73,7 +73,8 @@ export function removeTracksFromPlaylistCache(
 ): void {
   const removedIds = new Set(trackIds);
   if (removedIds.size === 0) return;
-  const before = cache.getQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId));
+  const before = cache.getQueryData(playlistKeys.detail(playlistId)) as
+    PlaylistDetailResponse | undefined;
   dropTracksFromDetail(cache, playlistId, removedIds);
   if (!before) {
     reviseTrackCountEverywhere(cache, playlistId, (count) => Math.max(0, count - removedIds.size));
