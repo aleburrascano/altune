@@ -175,8 +175,8 @@ func buildDiscoveryRouter(t *testing.T,
 		withHistory = func(c *search.Collaborators) { c.History = historyRepo }
 	}
 	searchSvc := searchtest.NewSearchServiceWith(t, bg, providers, cb, withHistory)
-	historySvc := search.NewListSearchHistoryService(historyRepo)
-	clearHistorySvc := search.MustNewClearSearchHistoryService(historyRepo, time.Now)
+	historySvc := searchtest.NewListHistory(t, historyRepo)
+	clearHistorySvc := searchtest.NewClearHistory(t, historyRepo)
 
 	var albumSvc *search.GetAlbumTracksService
 	if albumProviders != nil {
@@ -790,7 +790,7 @@ func rejectionCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 
 func TestPerUserGets_CarryNoStoreHeaders(t *testing.T) {
 	searchRouter := buildDiscoveryRouter(t, &fakeSearchProvider{name: search.ProviderDeezer}, &fakeSearchHistoryRepo{}, nil, nil)
-	favoritesRouter := buildFavoritesRouter(nil)
+	favoritesRouter := buildFavoritesRouter(t, nil)
 	tests := []struct {
 		name string
 		path string

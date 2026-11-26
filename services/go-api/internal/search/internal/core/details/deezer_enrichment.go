@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/core/ports"
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 )
@@ -16,8 +17,16 @@ type DeezerEnrichmentService struct {
 func NewDeezerEnrichmentService(
 	enricher ports.DeezerEnricher,
 	cache ports.DeezerEnrichmentCache,
-) *DeezerEnrichmentService {
-	return &DeezerEnrichmentService{enricher: enricher, cache: cache}
+) (*DeezerEnrichmentService, error) {
+	for name, missing := range map[string]bool{
+		"deezer enricher": enricher == nil,
+		"deezer cache":    cache == nil,
+	} {
+		if missing {
+			return nil, fmt.Errorf("%w: %s is nil", ErrCollaboratorRequired, name)
+		}
+	}
+	return &DeezerEnrichmentService{enricher: enricher, cache: cache}, nil
 }
 
 func (s *DeezerEnrichmentService) Execute(
@@ -30,7 +39,7 @@ func (s *DeezerEnrichmentService) Execute(
 	}
 	artist := strings.TrimSpace(subtitle)
 	entityTitle := strings.TrimSpace(title)
-	if s.enricher == nil || entityTitle == "" {
+	if entityTitle == "" {
 		return domain.EmptyDeezerEnrichment(), nil
 	}
 

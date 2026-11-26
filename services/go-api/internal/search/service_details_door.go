@@ -7,6 +7,8 @@ type (
 	NoArtwork         = enrich.NoArtwork
 	NoEnrichmentCache = enrich.NoEnrichmentCache
 	NoMBIDIndex       = enrich.NoMBIDIndex
+
+	NoNameKeyedCache[T any] = enrich.NoNameKeyedCache[T]
 )
 
 var (

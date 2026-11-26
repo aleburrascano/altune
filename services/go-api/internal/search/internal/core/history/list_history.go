@@ -11,14 +11,14 @@ type ListSearchHistoryService struct {
 	historyRepo ports.HistoryReader
 }
 
-func NewListSearchHistoryService(historyRepo ports.HistoryReader) *ListSearchHistoryService {
-	return &ListSearchHistoryService{historyRepo: historyRepo}
+func NewListSearchHistoryService(historyRepo ports.HistoryReader) (*ListSearchHistoryService, error) {
+	if historyRepo == nil {
+		return nil, ErrCollaboratorRequired
+	}
+	return &ListSearchHistoryService{historyRepo: historyRepo}, nil
 }
 
 func (s *ListSearchHistoryService) Execute(ctx context.Context, userId ids.UserId, limit int) ([]*domain.SearchHistoryEntry, error) {
-	if s.historyRepo == nil {
-		return nil, nil
-	}
 	if limit <= 0 {
 		limit = 10
 	}

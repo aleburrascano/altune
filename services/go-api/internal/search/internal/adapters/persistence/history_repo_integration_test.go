@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/core/history"
+	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/testdb"
 	"context"
@@ -152,7 +153,7 @@ func storedSearchTextsOf(t *testing.T, pool *pgxpool.Pool, owner ids.UserId) []s
 
 func clearSearchHistoryOf(t *testing.T, pool *pgxpool.Pool, owner ids.UserId) {
 	t.Helper()
-	svc := history.MustNewClearSearchHistoryService(persistence.NewPostgresSearchHistoryRepository(pool), time.Now)
+	svc := searchtest.NewClearHistory(t, persistence.NewPostgresSearchHistoryRepository(pool))
 	if err := svc.Execute(context.Background(), owner); err != nil {
 		t.Fatalf("ClearSearchHistoryService.Execute: %v", err)
 	}

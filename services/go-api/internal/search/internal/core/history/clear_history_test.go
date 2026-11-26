@@ -2,6 +2,7 @@ package history_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -18,7 +19,6 @@ func TestClearSearchHistoryService_Execute(t *testing.T) {
 	tests := []struct {
 		name       string
 		repo       *search.FakeHistoryEraser
-		nilRepo    bool
 		wantErr    bool
 		wantCalled bool
 	}{
@@ -36,11 +36,6 @@ func TestClearSearchHistoryService_Execute(t *testing.T) {
 			wantCalled: true,
 		},
 		{
-			name:    "nil repo is a no-op",
-			nilRepo: true,
-			wantErr: false,
-		},
-		{
 			name: "repo error propagates",
 			repo: &search.FakeHistoryEraser{
 				EraseFn: func(_ context.Context, _ ids.UserId) error {
@@ -54,18 +49,13 @@ func TestClearSearchHistoryService_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var svc *search.ClearSearchHistoryService
 			var called bool
-			if tt.nilRepo {
-				svc = search.MustNewClearSearchHistoryService(nil, time.Now)
-			} else {
-				inner := tt.repo.EraseFn
-				tt.repo.EraseFn = func(ctx context.Context, u ids.UserId) error {
-					called = true
-					return inner(ctx, u)
-				}
-				svc = search.MustNewClearSearchHistoryService(tt.repo, time.Now)
+			inner := tt.repo.EraseFn
+			tt.repo.EraseFn = func(ctx context.Context, u ids.UserId) error {
+				called = true
+				return inner(ctx, u)
 			}
+			svc := searchtest.NewClearHistory(t, tt.repo)
 
 			err := svc.Execute(context.Background(), userID)
 
@@ -87,6 +77,14 @@ func TestNewClearSearchHistoryService_RefusesANilClock(t *testing.T) {
 
 	if !errors.Is(err, search.ErrHistoryClockRequired) || svc != nil {
 		t.Fatalf("NewClearSearchHistoryService(nil clock) = (%v, %v), want ErrHistoryClockRequired and no service", svc, err)
+	}
+}
+
+func TestNewClearSearchHistoryService_RefusesAMissingRepository(t *testing.T) {
+	svc, err := search.NewClearSearchHistoryService(nil, time.Now)
+
+	if svc != nil || !errors.Is(err, search.ErrHistoryCollaboratorRequired) {
+		t.Fatalf("got (%v, %v), want a refusal wrapping ErrHistoryCollaboratorRequired", svc, err)
 	}
 }
 

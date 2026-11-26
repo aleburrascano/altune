@@ -127,13 +127,21 @@ func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 	if err != nil {
 		return handler.DiscoveryServices{}, fmt.Errorf("build the related tracks service: %w", err)
 	}
+	listHistory, err := history.NewListSearchHistoryService(s.History)
+	if err != nil {
+		return handler.DiscoveryServices{}, fmt.Errorf("build the history list service: %w", err)
+	}
 	clearHistory, err := history.NewClearSearchHistoryService(s.History, time.Now)
 	if err != nil {
 		return handler.DiscoveryServices{}, fmt.Errorf("build the clear-history service: %w", err)
 	}
+	favoritesService, err := favorites.NewFavoritesService(persistence.NewPostgresFavoritesRepository(s.Pool))
+	if err != nil {
+		return handler.DiscoveryServices{}, fmt.Errorf("build the favorites service: %w", err)
+	}
 	return handler.DiscoveryServices{
 		Search:        search,
-		History:       history.NewListSearchHistoryService(s.History),
+		History:       listHistory,
 		RecordHistory: recordHistory,
 		ClearHistory:  clearHistory,
 		Album:         album,
@@ -142,7 +150,7 @@ func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 		Enrich:        enrichment,
 		Suggest:       vocabulary.NewSuggestService(s.SpellingHints),
 		Event:         newEventService(w.deps.Activity, s),
-		Favorites:     favorites.NewFavoritesService(persistence.NewPostgresFavoritesRepository(s.Pool)),
+		Favorites:     favoritesService,
 	}, nil
 }
 
@@ -151,11 +159,15 @@ func newEventService(activity ports.ActivityFeed, s connections.Stores) *useract
 }
 
 func newHandler(d connections.Deps, t *providerTable, s connections.Stores, services handler.DiscoveryServices, unreleasedLookup *unreleased.Service) (*handler.DiscoveryHandler, error) {
+	enrichers, err := newDetailEnrichers(t, s)
+	if err != nil {
+		return nil, err
+	}
 	h, err := handler.NewDiscoveryHandler(services, time.Now)
 	if err != nil {
 		return nil, fmt.Errorf("build the discovery handler: %w", err)
 	}
-	h.WithDetailEnrichers(newDetailEnrichers(t, s))
+	h.WithDetailEnrichers(enrichers)
 	h.WithUnreleased(unreleasedLookup)
 	return h.WithClientEvents(d.ClientEvents), nil
 }

@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/search/internal/core/details"
 	"altune/go-api/internal/search/internal/core/ports"
 	"errors"
+	"fmt"
 )
 
 var errEnrichmentSwitchedOff = errors.New("enrichment is switched off: MusicBrainz is not configured")
@@ -20,10 +21,15 @@ func newEnrichmentService(t *providerTable, s connections.Stores, artwork ports.
 	return details.NewEnrichmentService(enricher, artwork, enrichmentCache, enrichmentCache)
 }
 
-func newDetailEnrichers(t *providerTable, s connections.Stores) handler.DetailEnrichers {
+func newDetailEnrichers(t *providerTable, s connections.Stores) (handler.DetailEnrichers, error) {
 	deezer := t.named(rowDeezer)
-	return handler.DetailEnrichers{
-		Deezer: details.NewDeezerEnrichmentService(deezer.deezerDetails, cache.NewRedisDeezerEnrichmentCache(s.Redis, s.CacheOption())),
-		Lyrics: details.NewLyricsService(deezer.lyrics, cache.NewRedisDeezerLyricsCache(s.Redis, s.CacheOption())),
+	deezerEnrichment, err := details.NewDeezerEnrichmentService(deezer.deezerDetails, cache.NewRedisDeezerEnrichmentCache(s.Redis, s.CacheOption()))
+	if err != nil {
+		return handler.DetailEnrichers{}, fmt.Errorf("build the deezer enrichment service: %w", err)
 	}
+	lyrics, err := details.NewLyricsService(deezer.lyrics, cache.NewRedisDeezerLyricsCache(s.Redis, s.CacheOption()))
+	if err != nil {
+		return handler.DetailEnrichers{}, fmt.Errorf("build the lyrics service: %w", err)
+	}
+	return handler.DetailEnrichers{Deezer: deezerEnrichment, Lyrics: lyrics}, nil
 }

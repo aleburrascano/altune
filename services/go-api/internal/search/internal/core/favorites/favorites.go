@@ -53,14 +53,14 @@ type FavoritesService struct {
 	repo ports.FavoritesRepository
 }
 
-func NewFavoritesService(repo ports.FavoritesRepository) *FavoritesService {
-	return &FavoritesService{repo: repo}
+func NewFavoritesService(repo ports.FavoritesRepository) (*FavoritesService, error) {
+	if repo == nil {
+		return nil, ErrCollaboratorRequired
+	}
+	return &FavoritesService{repo: repo}, nil
 }
 
 func (s *FavoritesService) Add(ctx context.Context, userId ids.UserId, fav domain.Favorite) error {
-	if s.repo == nil {
-		return nil
-	}
 	if err := validateFavoriteText(fav.Title, fav.Subtitle); err != nil {
 		return err
 	}
@@ -82,9 +82,6 @@ func (s *FavoritesService) Add(ctx context.Context, userId ids.UserId, fav domai
 }
 
 func (s *FavoritesService) Remove(ctx context.Context, userId ids.UserId, kind domain.ResultKind, title, subtitle string) error {
-	if s.repo == nil {
-		return nil
-	}
 	if err := s.repo.Remove(ctx, userId, kind, domain.FavoriteKey(kind, title, subtitle)); err != nil {
 		return fmt.Errorf("remove favorite: %w", err)
 	}
@@ -92,9 +89,6 @@ func (s *FavoritesService) Remove(ctx context.Context, userId ids.UserId, kind d
 }
 
 func (s *FavoritesService) List(ctx context.Context, userId ids.UserId) ([]domain.Favorite, error) {
-	if s.repo == nil {
-		return nil, nil
-	}
 	favorites, err := s.repo.ListForUser(ctx, userId)
 	if err != nil {
 		return nil, fmt.Errorf("list favorites: %w", err)
@@ -129,7 +123,7 @@ type FavoritesLifter struct {
 	repo ports.FavoritesRepository
 }
 
-var ErrCollaboratorRequired = errors.New("favorites lifter needs its repository, pass the absent adapter to switch it off")
+var ErrCollaboratorRequired = errors.New("favorites services need their repository, pass the absent adapter to switch it off")
 
 func NewFavoritesLifter(repo ports.FavoritesRepository) (*FavoritesLifter, error) {
 	if repo == nil {
