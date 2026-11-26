@@ -8,8 +8,12 @@ type (
 )
 
 var (
-	NewPlaylistLifecycleService  = playlist.NewPlaylistLifecycleService
-	NewPlaylistMembershipService = playlist.NewPlaylistMembershipService
+	ErrPlaylistClockRequired         = playlist.ErrClockRequired
+	ErrPlaylistCollaboratorRequired  = playlist.ErrCollaboratorRequired
+	MustNewPlaylistLifecycleService  = playlist.MustNewPlaylistLifecycleService
+	MustNewPlaylistMembershipService = playlist.MustNewPlaylistMembershipService
+	NewPlaylistLifecycleService      = playlist.NewPlaylistLifecycleService
+	NewPlaylistMembershipService     = playlist.NewPlaylistMembershipService
 )
 
 var ErrTooManyPlaylists = playlist.ErrTooManyPlaylists

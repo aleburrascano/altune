@@ -277,22 +277,25 @@ func TestSetup_RingBufferEvictsByTheInjectedClockNotTheWallClock(t *testing.T) {
 	}
 }
 
-func TestRingBufferClockIsRequired(t *testing.T) {
-	tests := map[string]func(){
-		"NewRingBuffer": func() { logging.NewRingBuffer(4, nil) },
-		"WithClock":     func() { logging.WithClock(nil) },
-	}
-	for name, build := range tests {
-		t.Run(name, func(t *testing.T) {
-			defer func() {
-				if recover() == nil {
-					t.Fatal("a nil clock was accepted, want a panic at construction")
-				}
-			}()
+func TestNewRingBuffer_RefusesANilClock(t *testing.T) {
+	ring, err := logging.NewRingBuffer(4, nil)
 
-			build()
-		})
+	if !errors.Is(err, logging.ErrClockRequired) || ring != nil {
+		t.Fatalf("NewRingBuffer(nil clock) = (%v, %v), want ErrClockRequired and no buffer", ring, err)
 	}
+	if !strings.Contains(err.Error(), "NewRingBuffer") {
+		t.Fatalf("error %q does not name the constructor", err)
+	}
+}
+
+func TestWithClock_PanicsOnANilClock(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("a nil clock was accepted, want a panic at construction")
+		}
+	}()
+
+	logging.WithClock(nil)
 }
 
 func TestRingBuffer_KeepsARecordExactlyAtTheRetentionEdge(t *testing.T) {

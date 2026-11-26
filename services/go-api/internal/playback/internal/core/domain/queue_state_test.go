@@ -49,7 +49,7 @@ func TestNewQueueState_Validation(t *testing.T) {
 }
 
 func TestResume_WithNothingStoredIsAnEmptyQueue(t *testing.T) {
-	state, err := playback.NewQueueService(&storeSpy{}, nil, time.Now).Resume(context.Background(), testUser())
+	state, err := playback.MustNewQueueService(&storeSpy{}, nil, time.Now).Resume(context.Background(), testUser())
 	if err != nil {
 		t.Fatalf("Resume: %v", err)
 	}

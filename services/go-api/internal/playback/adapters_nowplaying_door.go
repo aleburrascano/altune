@@ -8,8 +8,14 @@ import (
 type TrackSource = ports.TrackSource
 
 var (
-	ErrTrackSourceUnavailable  = ports.ErrTrackSourceUnavailable
-	ErrNowPlayingTrackNotFound = ports.ErrNowPlayingTrackNotFound
+	ErrNowPlayingClockRequired        = nowplaying.ErrClockRequired
+	ErrNowPlayingCollaboratorRequired = nowplaying.ErrCollaboratorRequired
+	ErrNowPlayingInvalidTimeout       = nowplaying.ErrInvalidTimeout
+	ErrTrackSourceUnavailable         = ports.ErrTrackSourceUnavailable
+	ErrNowPlayingTrackNotFound        = ports.ErrNowPlayingTrackNotFound
 )
 
-var NewNowPlayingReader = nowplaying.NewNowPlayingReader
+var (
+	MustNewNowPlayingReader = nowplaying.MustNewNowPlayingReader
+	NewNowPlayingReader     = nowplaying.NewNowPlayingReader
+)

@@ -69,8 +69,11 @@ func (s *Assembly) Shutdown() []shutdown.Outcome { return s.app.runShutdownSeque
 
 func (a *App) attach(ctx context.Context, h Handles) {
 	a.pool = h.Pool
-	a.dbPing = h.Pool.Ping
+	a.probes.DB = h.Pool.Ping
 	a.redisClient = h.Redis
+	if h.Redis != nil {
+		a.probes.Redis = func(ctx context.Context) error { return h.Redis.Ping(ctx).Err() }
+	}
 	a.background = h.Tracker
 	a.lifecycleDone = ctx.Done()
 }
@@ -128,10 +131,14 @@ func (a *App) wireFeatures(ctx context.Context, transport http.RoundTripper) (fe
 		return features{}, fmt.Errorf("catalog: %w", err)
 	}
 	a.scheduler = cat.scheduler
+	a.acquisitionOn = cat.acquisitionOn
 	if err := a.applyStartupSwitches(ctx); err != nil {
 		return features{}, fmt.Errorf("startup switches: %w", err)
 	}
-	playback := a.wirePlayback(ctx, cat.trackRepo)
+	playback, err := a.wirePlayback(ctx, cat.trackRepo)
+	if err != nil {
+		return features{}, fmt.Errorf("playback: %w", err)
+	}
 	disc.Handler.WithOwnershipEnrichment(newOwnershipEnrichment(cat, a.background))
 	return features{discovery: disc, catalog: cat, playback: playback}, nil
 }

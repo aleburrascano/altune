@@ -55,13 +55,13 @@ func (s *storeSpy) DeleteForUser(context.Context, ids.UserId) error {
 
 func saveQueue(in playback.SaveQueueStateInput) (*playback.QueueState, error) {
 	store := &storeSpy{}
-	err := playback.NewQueueService(store, nil, time.Now).Save(context.Background(), testUser(), in)
+	err := playback.MustNewQueueService(store, nil, time.Now).Save(context.Background(), testUser(), in)
 	return store.saved, err
 }
 
 func savePosition(in playback.SaveQueuePositionInput) (*playback.QueuePosition, error) {
 	store := &storeSpy{}
-	err := playback.NewQueueService(store, nil, time.Now).SavePosition(context.Background(), testUser(), in)
+	err := playback.MustNewQueueService(store, nil, time.Now).SavePosition(context.Background(), testUser(), in)
 	return store.position, err
 }
 

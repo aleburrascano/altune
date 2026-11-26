@@ -2,6 +2,7 @@ package logging
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,9 +41,19 @@ type RingBuffer struct {
 
 func (rb *RingBuffer) Dropped() uint64 { return rb.dropped.Load() }
 
-func NewRingBuffer(capacity int, now func() time.Time) *RingBuffer {
+var ErrClockRequired = errors.New("logging: the ring buffer requires a clock")
+
+func MustNewRingBuffer(capacity int, now func() time.Time) *RingBuffer {
+	rb, err := NewRingBuffer(capacity, now)
+	if err != nil {
+		panic(err)
+	}
+	return rb
+}
+
+func NewRingBuffer(capacity int, now func() time.Time) (*RingBuffer, error) {
 	if now == nil {
-		panic("logging: NewRingBuffer requires a clock")
+		return nil, fmt.Errorf("NewRingBuffer: %w", ErrClockRequired)
 	}
 	if capacity < 1 {
 		capacity = 1
@@ -54,7 +65,7 @@ func NewRingBuffer(capacity int, now func() time.Time) *RingBuffer {
 		now:        now,
 		subs:       make(map[int]chan CapturedRecord),
 		maxSubs:    MaxSubscribers,
-	}
+	}, nil
 }
 
 func (rb *RingBuffer) append(rec CapturedRecord) {

@@ -21,20 +21,32 @@ type NowPlayingReader struct {
 	timeout time.Duration
 }
 
-func NewNowPlayingReader(tracks ports.TrackSource, metrics ports.EnrichmentMetrics, now func() time.Time, lookupTimeout time.Duration) *NowPlayingReader {
-	if tracks == nil {
-		panic("nowplaying: NewNowPlayingReader requires a track source")
+var (
+	ErrCollaboratorRequired = errors.New("nowplaying: a required collaborator is missing")
+	ErrClockRequired        = errors.New("nowplaying: the reader requires a clock")
+	ErrInvalidTimeout       = errors.New("nowplaying: the lookup timeout must be positive")
+)
+
+func NewNowPlayingReader(tracks ports.TrackSource, metrics ports.EnrichmentMetrics, now func() time.Time, lookupTimeout time.Duration) (*NowPlayingReader, error) {
+	switch {
+	case tracks == nil:
+		return nil, fmt.Errorf("NewNowPlayingReader: the track source: %w", ErrCollaboratorRequired)
+	case metrics == nil:
+		return nil, fmt.Errorf("NewNowPlayingReader: the enrichment metrics: %w", ErrCollaboratorRequired)
+	case now == nil:
+		return nil, fmt.Errorf("NewNowPlayingReader: %w", ErrClockRequired)
+	case lookupTimeout <= 0:
+		return nil, fmt.Errorf("NewNowPlayingReader: %w", ErrInvalidTimeout)
 	}
-	if metrics == nil {
-		panic("nowplaying: NewNowPlayingReader requires enrichment metrics")
+	return &NowPlayingReader{tracks: tracks, breaker: newEnrichmentBreaker(metrics, now), metrics: metrics, timeout: lookupTimeout}, nil
+}
+
+func MustNewNowPlayingReader(tracks ports.TrackSource, metrics ports.EnrichmentMetrics, now func() time.Time, lookupTimeout time.Duration) *NowPlayingReader {
+	r, err := NewNowPlayingReader(tracks, metrics, now, lookupTimeout)
+	if err != nil {
+		panic(err)
 	}
-	if now == nil {
-		panic("nowplaying: NewNowPlayingReader requires a clock")
-	}
-	if lookupTimeout <= 0 {
-		panic("nowplaying: NewNowPlayingReader requires a positive lookup timeout")
-	}
-	return &NowPlayingReader{tracks: tracks, breaker: newEnrichmentBreaker(metrics, now), metrics: metrics, timeout: lookupTimeout}
+	return r
 }
 
 func isDependencyFailure(err error) bool {
