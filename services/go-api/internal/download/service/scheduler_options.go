@@ -50,6 +50,7 @@ const fingerprintLookupUnverified = "unverified until the first successful looku
 func WithVerificationStatus(v ports.Verification) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) {
 		s.verification = v
+		s.verificationGiven = true
 	}
 }
 

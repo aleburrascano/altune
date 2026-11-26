@@ -74,6 +74,7 @@ type BackgroundAcquisitionScheduler struct {
 	rejected      atomic.Uint64
 
 	verification        ports.Verification
+	verificationGiven   bool
 	skipCount           func() uint64
 	fingerprintVerified func() bool
 	log                 *jobLog
@@ -193,7 +194,9 @@ func NewBackgroundAcquisitionScheduler(
 	for _, opt := range opts {
 		opt(s)
 	}
-	logVerification(ctx, s.verification)
+	if s.verificationGiven {
+		logVerification(ctx, s.verification)
+	}
 	s.queue = wiring.Queue(s.wake, s.now)
 	s.runners.Track(func() { s.notifier.Listen(s.baseCtx, s.wake) })
 	s.runners.Track(s.fanOutWakes)
