@@ -13,11 +13,9 @@ import (
 	"strings"
 )
 
-const usage = "usage: go run ./scripts/lintsleeps [--summary] <dir>...\n  lists every time.Sleep call in the go files under each dir that is not inside a synctest.Test or synctest.Run callback, and exits 1 when there are any; internal/shared/clock, which wraps the real sleep, is exempt; --summary prints only the count per directory"
+const usage = "usage: go run ./scripts/lintsleeps [--summary] <dir>...\n  lists every time.Sleep call in the go files under each dir that is not inside a synctest.Test or synctest.Run callback, and exits 1 when there are any; --summary prints only the count per directory"
 
 var skippedDirs = map[string]bool{"vendor": true, "testdata": true, "node_modules": true}
-
-const exemptDir = "internal/shared/clock"
 
 type violation struct {
 	path string
@@ -88,14 +86,6 @@ func printSummary(w io.Writer, found []violation) {
 	}
 }
 
-func isExempt(path string) bool {
-	abs, err := filepath.Abs(filepath.Dir(path))
-	if err != nil {
-		return false
-	}
-	return strings.Contains(filepath.ToSlash(abs)+"/", "/"+exemptDir+"/")
-}
-
 func scanDir(root string) ([]violation, error) {
 	resolved, err := filepath.EvalSymlinks(root)
 	if err != nil {
@@ -112,7 +102,7 @@ func scanDir(root string) ([]violation, error) {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(path, ".go") || isExempt(path) {
+		if !strings.HasSuffix(path, ".go") {
 			return nil
 		}
 		hits, err := scanFile(path)

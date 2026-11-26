@@ -94,15 +94,14 @@ func TestNotATimeSleepPasses(t *testing.T) {
 	}
 }
 
-func TestTheClockPackageIsExempt(t *testing.T) {
+func TestTheClockPackageGetsNoException(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "internal/shared/clock/sleeper.go", "package clock\n\nimport \"time\"\n\nfunc Sleep(d time.Duration) { time.Sleep(d) }\n")
-	writeFile(t, dir, "internal/shared/clockwork/other.go", "package other\n\nimport \"time\"\n\nfunc f() { time.Sleep(1) }\n")
 
 	code, out, _ := lint(t, dir)
 
-	if code != 1 || !strings.Contains(out, "clockwork") || strings.Contains(out, "clock/sleeper.go") {
-		t.Fatalf("exit = %d, want 1 naming only clockwork; output:\n%s", code, out)
+	if code != 1 || !strings.Contains(out, "clock/sleeper.go") {
+		t.Fatalf("exit = %d, want 1 naming the clock package; output:\n%s", code, out)
 	}
 }
 
@@ -141,15 +140,5 @@ func TestUsageAndUnreadableInput(t *testing.T) {
 	writeFile(t, dir, "broken.go", "package p\n\nfunc (\n")
 	if code, _, stderr := lint(t, dir); code != 2 || !strings.Contains(stderr, "parse") {
 		t.Fatalf("unparsable file: exit = %d, stderr %q, want 2 and a parse message", code, stderr)
-	}
-}
-
-func TestTheClockPackageIsExemptFromAnyWorkingDirectory(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, dir, "internal/shared/clock/sleeper.go", "package clock\n\nimport \"time\"\n\nfunc Sleep(d time.Duration) { time.Sleep(d) }\n")
-	t.Chdir(filepath.Join(dir, "internal/shared"))
-
-	if code, out, _ := lint(t, "clock"); code != 0 {
-		t.Fatalf("exit = %d, want 0; output:\n%s", code, out)
 	}
 }
