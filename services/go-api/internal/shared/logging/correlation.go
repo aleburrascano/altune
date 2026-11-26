@@ -9,7 +9,7 @@ import (
 
 type correlationIDKey struct{}
 
-func WithCorrelationID(ctx context.Context, id string) context.Context {
+func ContextWithCorrelationID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, correlationIDKey{}, id)
 }
 
@@ -25,7 +25,7 @@ type jobRun struct {
 	runID string
 }
 
-func WithJobRun(ctx context.Context, job, runID string) context.Context {
+func ContextWithJobRun(ctx context.Context, job, runID string) context.Context {
 	return context.WithValue(ctx, jobRunKey{}, jobRun{job: job, runID: runID})
 }
 

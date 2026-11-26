@@ -357,7 +357,7 @@ func (s *BackgroundAcquisitionScheduler) runClaimedJob(job ports.Job) {
 }
 
 func finishContextOf(jobCtx context.Context) context.Context {
-	return logging.WithCorrelationID(context.Background(), logging.CorrelationIDFromContext(jobCtx))
+	return logging.ContextWithCorrelationID(context.Background(), logging.CorrelationIDFromContext(jobCtx))
 }
 
 func (s *BackgroundAcquisitionScheduler) releaseWithin(ctx context.Context, job ports.Job, delay time.Duration) error {
@@ -406,7 +406,7 @@ func (s *BackgroundAcquisitionScheduler) jobContextFor(job ports.Job) (context.C
 	jobCtx, cancelJob := context.WithCancel(s.baseCtx)
 	jobCtx = withJobFence(withJobAttempt(withSchedulerOwnedJobContext(jobCtx), job.Run), job.ClaimNumber)
 	if job.CorrelationID != "" {
-		jobCtx = logging.WithCorrelationID(jobCtx, job.CorrelationID)
+		jobCtx = logging.ContextWithCorrelationID(jobCtx, job.CorrelationID)
 	}
 	return jobCtx, cancelJob
 }

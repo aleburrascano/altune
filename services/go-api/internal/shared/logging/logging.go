@@ -7,25 +7,19 @@ import (
 	"time"
 )
 
-type SetupOption func(*setupConfig)
-
-type setupConfig struct {
-	now func() time.Time
+func Setup(logLevel string) *RingBuffer {
+	return install(logLevel, jsonHandler, time.Now)
 }
 
-func WithClock(now func() time.Time) SetupOption {
+func SetupWithClock(logLevel string, now func() time.Time) *RingBuffer {
 	if now == nil {
-		panic("logging: WithClock requires a clock")
+		panic("logging: SetupWithClock requires a clock")
 	}
-	return func(c *setupConfig) { c.now = now }
+	return install(logLevel, jsonHandler, now)
 }
 
-func Setup(logLevel string, opts ...SetupOption) *RingBuffer {
-	return install(logLevel, jsonHandler, opts)
-}
-
-func SetupDevelopment(logLevel string, opts ...SetupOption) *RingBuffer {
-	return install(logLevel, prettyHandlerFor, opts)
+func SetupDevelopment(logLevel string) *RingBuffer {
+	return install(logLevel, prettyHandlerFor, time.Now)
 }
 
 func jsonHandler(level slog.Level) slog.Handler {
@@ -43,14 +37,10 @@ func prettyHandlerFor(level slog.Level) slog.Handler {
 	}
 }
 
-func install(logLevel string, newBase func(slog.Level) slog.Handler, opts []SetupOption) *RingBuffer {
-	cfg := setupConfig{now: time.Now}
-	for _, opt := range opts {
-		opt(&cfg)
-	}
+func install(logLevel string, newBase func(slog.Level) slog.Handler, now func() time.Time) *RingBuffer {
 	base := newBase(parseLevel(logLevel))
 
-	ring := MustNewRingBuffer(logRingCapacity, cfg.now)
+	ring := MustNewRingBuffer(logRingCapacity, now)
 	slog.SetDefault(slog.New(newCorrelationHandler(newRingHandler(base, ring))))
 	return ring
 }

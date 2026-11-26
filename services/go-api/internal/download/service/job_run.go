@@ -23,7 +23,7 @@ func jobRunFrom(ctx context.Context) JobRun {
 	return run
 }
 
-func WithJobRun(ctx context.Context, run JobRun) context.Context {
+func ContextWithJobRun(ctx context.Context, run JobRun) context.Context {
 	run.rollbackHandedOff = jobRunFrom(ctx).rollbackHandedOff
 	return context.WithValue(ctx, jobRunKey{}, run)
 }

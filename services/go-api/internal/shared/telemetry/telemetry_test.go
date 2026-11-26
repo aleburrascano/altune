@@ -127,7 +127,7 @@ func TestMiddlewareTagsTheSpanWithTheCorrelationIDWhenOneIsSet(t *testing.T) {
 	router := chi.NewRouter()
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r.WithContext(logging.WithCorrelationID(r.Context(), "corr-abc")))
+			next.ServeHTTP(w, r.WithContext(logging.ContextWithCorrelationID(r.Context(), "corr-abc")))
 		})
 	})
 	router.Use(telemetry.Middleware(never))

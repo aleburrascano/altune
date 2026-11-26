@@ -15,7 +15,7 @@ func TestCorrelationHandler_StampsEveryContextLog(t *testing.T) {
 	defer slog.SetDefault(prev)
 	ring := logging.Setup("debug")
 
-	ctx := logging.WithCorrelationID(context.Background(), "corr-xyz789")
+	ctx := logging.ContextWithCorrelationID(context.Background(), "corr-xyz789")
 	slog.InfoContext(ctx, "deep.domain.event", "detail", "v")
 
 	found := false
@@ -53,7 +53,7 @@ func TestCorrelationHandler_NoIDLeavesRecordUntagged(t *testing.T) {
 
 func TestCorrelationHandler_StampsTheJobRunAndKeepsAnExplicitJob(t *testing.T) {
 	logger, _, out := setupLogger(t, "info", false)
-	ctx := logging.WithJobRun(context.Background(), "reconcile", "run-1")
+	ctx := logging.ContextWithJobRun(context.Background(), "reconcile", "run-1")
 
 	logger.InfoContext(ctx, "stamped")
 	logger.InfoContext(ctx, "explicit", "job", "other")
@@ -72,7 +72,7 @@ func TestCorrelationHandler_StampsTheJobRunAndKeepsAnExplicitJob(t *testing.T) {
 
 func TestCorrelationHandler_DoesNotDuplicate(t *testing.T) {
 	logger, _, out := setupLogger(t, "info", false)
-	ctx := logging.WithCorrelationID(context.Background(), "from-ctx")
+	ctx := logging.ContextWithCorrelationID(context.Background(), "from-ctx")
 
 	logger.InfoContext(ctx, "msg", "corr_id", "explicit")
 
@@ -84,7 +84,7 @@ func TestCorrelationHandler_DoesNotDuplicate(t *testing.T) {
 
 func TestCorrelationHandler_StampsLogsThroughDerivedLoggers(t *testing.T) {
 	logger, ring := newCaptureLogger(t)
-	ctx := logging.WithCorrelationID(context.Background(), "derived-corr")
+	ctx := logging.ContextWithCorrelationID(context.Background(), "derived-corr")
 
 	logger.With("k", "v").InfoContext(ctx, "derived")
 
@@ -95,7 +95,7 @@ func TestCorrelationHandler_StampsLogsThroughDerivedLoggers(t *testing.T) {
 }
 
 func TestCorrelationAttr_CarriesContextID(t *testing.T) {
-	ctx := logging.WithCorrelationID(context.Background(), "corr-abc123")
+	ctx := logging.ContextWithCorrelationID(context.Background(), "corr-abc123")
 
 	got := logging.CorrelationAttr(ctx)
 
@@ -172,7 +172,7 @@ func TestCorrelationHandler_LeavesTraceIDOffOutsideASpan(t *testing.T) {
 
 func TestCorrelationHandler_StampsTraceAndCorrelationIDsTogether(t *testing.T) {
 	logger, ring := newCaptureLogger(t)
-	ctx := logging.WithCorrelationID(contextInSpan(t), "corr-both")
+	ctx := logging.ContextWithCorrelationID(contextInSpan(t), "corr-both")
 
 	logger.InfoContext(ctx, "both.ids")
 

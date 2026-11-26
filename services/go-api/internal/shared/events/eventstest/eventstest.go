@@ -14,7 +14,7 @@ func Named(name events.EventType) Event {
 	return Event{Name: name}
 }
 
-func With(name events.EventType, fields map[string]any) Event {
+func Fielded(name events.EventType, fields map[string]any) Event {
 	return Event{Name: name, Fields: fields}
 }
 

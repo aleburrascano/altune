@@ -27,7 +27,7 @@ func TestSubscribeAll_CapturesNeverSeenUser(t *testing.T) {
 	defer cancel()
 
 	freshUser := ids.NewUserId(uuid.New())
-	tp.Publish(context.Background(), freshUser, eventstest.With("track_added", map[string]any{"track_id": "secret"}))
+	tp.Publish(context.Background(), freshUser, eventstest.Fielded("track_added", map[string]any{"track_id": "secret"}))
 
 	select {
 	case evt := <-tap:
@@ -50,7 +50,7 @@ func TestPublish_StampsCorrelationIDFromContext(t *testing.T) {
 	}
 	defer cancel()
 
-	ctx := logging.WithCorrelationID(context.Background(), "req-abc123")
+	ctx := logging.ContextWithCorrelationID(context.Background(), "req-abc123")
 	tp.Publish(ctx, ids.NewUserId(uuid.New()), eventstest.Named("track_added"))
 
 	select {
@@ -135,7 +135,7 @@ func TestPublish_SubjectOmitsUserAuthoredText(t *testing.T) {
 	}
 	defer cancel()
 
-	tp.Publish(context.Background(), ids.NewUserId(uuid.New()), eventstest.With("playlist_created", map[string]any{"name": "my private playlist", "title": "a title"}))
+	tp.Publish(context.Background(), ids.NewUserId(uuid.New()), eventstest.Fielded("playlist_created", map[string]any{"name": "my private playlist", "title": "a title"}))
 
 	evt := <-tap
 	if evt.Subject != "" {

@@ -38,8 +38,8 @@ func TestWithoutVersionPhrases_KeepsTitleWords(t *testing.T) {
 		"Pt. 2 (Live in the Booth)": "pt 2",
 	}
 	for title, want := range cases {
-		if got := strings.Join(titlemarkers.WithoutVersionPhrases(titlemarkers.Tokens(title)), " "); got != want {
-			t.Errorf("WithoutVersionPhrases(%q) = %q, want %q", title, got, want)
+		if got := strings.Join(titlemarkers.StripVersionPhrases(titlemarkers.Tokens(title)), " "); got != want {
+			t.Errorf("StripVersionPhrases(%q) = %q, want %q", title, got, want)
 		}
 	}
 }
@@ -59,9 +59,9 @@ func TestWithoutRerecordingPhrases(t *testing.T) {
 		{"Cold Heart (PNAU Remix)", "cold heart pnau remix", false},
 	}
 	for _, c := range cases {
-		kept, found := titlemarkers.WithoutRerecordingPhrases(titlemarkers.Tokens(c.title))
+		kept, found := titlemarkers.StripRerecordingPhrases(titlemarkers.Tokens(c.title))
 		if got := strings.Join(kept, " "); got != c.want || found != c.found {
-			t.Errorf("WithoutRerecordingPhrases(%q) = %q, %v; want %q, %v", c.title, got, found, c.want, c.found)
+			t.Errorf("StripRerecordingPhrases(%q) = %q, %v; want %q, %v", c.title, got, found, c.want, c.found)
 		}
 	}
 }
@@ -213,9 +213,9 @@ func TestWithoutRerecordingPhrases_LoneWordsAndEmptyInputAreNotAPhrase(t *testin
 		{"Song (Album Version)", "song album version"},
 	}
 	for _, c := range cases {
-		kept, found := titlemarkers.WithoutRerecordingPhrases(titlemarkers.Tokens(c.title))
+		kept, found := titlemarkers.StripRerecordingPhrases(titlemarkers.Tokens(c.title))
 		if got := strings.Join(kept, " "); got != c.want || found {
-			t.Errorf("WithoutRerecordingPhrases(%q) = %q, %v; want %q, false", c.title, got, found, c.want)
+			t.Errorf("StripRerecordingPhrases(%q) = %q, %v; want %q, false", c.title, got, found, c.want)
 		}
 	}
 }
@@ -270,9 +270,9 @@ func TestWithoutRerecordingPhrases_FoldsCaseAndCurlyApostrophe(t *testing.T) {
 		"Song (Classic Version) [Live]": "song live",
 		"Song - Re-Recorded Version":    "song version",
 	} {
-		kept, found := titlemarkers.WithoutRerecordingPhrases(titlemarkers.Tokens(title))
+		kept, found := titlemarkers.StripRerecordingPhrases(titlemarkers.Tokens(title))
 		if got := strings.Join(kept, " "); got != want || !found {
-			t.Errorf("WithoutRerecordingPhrases(%q) = %q, %v; want %q, true", title, got, found, want)
+			t.Errorf("StripRerecordingPhrases(%q) = %q, %v; want %q, true", title, got, found, want)
 		}
 	}
 }

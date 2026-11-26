@@ -460,7 +460,7 @@ func TestScheduler_ATrackThatKeepsPanickingIsRefusedAndSettledWithinABudgetAtThe
 		scheduler := newTestScheduler(acquirer, 1, time.Now, withTestQueue(queue))
 		defer scheduler.Shutdown(context.Background())
 
-		ctx := logging.WithCorrelationID(context.Background(), "corr-panic-cap")
+		ctx := logging.ContextWithCorrelationID(context.Background(), "corr-panic-cap")
 		if err := scheduler.Schedule(ctx, ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
 			t.Fatalf("Schedule = %v, want nil", err)
 		}
@@ -488,7 +488,7 @@ func TestScheduler_TheQueueReleaseOfARetryableJobCarriesTheCorrelationIDAndABudg
 		queue := &callRecordingQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), releasedCh: make(chan queueCall, 1)}
 		scheduler := newTestScheduler(retryingAcquirer{}, 1, time.Now, withTestQueue(queue))
 		defer scheduler.Shutdown(context.Background())
-		ctx := logging.WithCorrelationID(context.Background(), "corr-release")
+		ctx := logging.ContextWithCorrelationID(context.Background(), "corr-release")
 
 		if err := scheduler.Schedule(ctx, ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
 			t.Fatalf("Schedule = %v, want nil", err)
@@ -531,7 +531,7 @@ func TestScheduler_TheQueueSettleCarriesTheCorrelationIDAndABudget(t *testing.T)
 		queue := &callRecordingQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), settledCh: make(chan queueCall, 1)}
 		scheduler := newTestScheduler(&recordingAcquirer{}, 1, time.Now, withTestQueue(queue))
 		defer scheduler.Shutdown(context.Background())
-		ctx := logging.WithCorrelationID(context.Background(), "corr-settle")
+		ctx := logging.ContextWithCorrelationID(context.Background(), "corr-settle")
 
 		if err := scheduler.Schedule(ctx, ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
 			t.Fatalf("Schedule = %v, want nil", err)
@@ -554,7 +554,7 @@ func TestScheduler_TheHeartbeatCarriesTheCorrelationIDAndABudget(t *testing.T) {
 			withTestQueue(queue), service.WithHeartbeatInterval(time.Second))
 		defer scheduler.Shutdown(context.Background())
 		defer close(acquirer.release)
-		ctx := logging.WithCorrelationID(context.Background(), "corr-beat")
+		ctx := logging.ContextWithCorrelationID(context.Background(), "corr-beat")
 
 		if err := scheduler.Schedule(ctx, ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
 			t.Fatalf("Schedule = %v, want nil", err)
@@ -611,7 +611,7 @@ func TestScheduler_EveryRetryOfAJobRunsUnderTheRequestsCorrelationID(t *testing.
 		acquirer := &correlationNotingAcquirer{retries: 2, finished: make(chan struct{})}
 		scheduler := newTestScheduler(acquirer, 1, time.Now)
 		defer scheduler.Shutdown(context.Background())
-		ctx := logging.WithCorrelationID(context.Background(), "corr-retries")
+		ctx := logging.ContextWithCorrelationID(context.Background(), "corr-retries")
 
 		if err := scheduler.Schedule(ctx, ids.NewUserId(uuid.New()), ids.NewTrackId(), ""); err != nil {
 			t.Fatalf("Schedule = %v, want nil", err)

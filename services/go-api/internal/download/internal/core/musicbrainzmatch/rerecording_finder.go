@@ -59,7 +59,7 @@ func (r *Resolver) rerecordingOf(ctx context.Context, original acqports.Recordin
 }
 
 func labelledRerecordings(original acqports.RecordingDetail, work []acqports.WorkRecording) []acqports.WorkRecording {
-	songTitle := titlemarkers.WithoutVersionPhrases(titlemarkers.Tokens(original.Title))
+	songTitle := titlemarkers.StripVersionPhrases(titlemarkers.Tokens(original.Title))
 	var kept []acqports.WorkRecording
 	for _, rec := range work {
 		if rec.MBID == original.MBID || rec.Live || !sameLeadArtist(rec.ArtistIDs, original.ArtistIDs) {
@@ -77,15 +77,15 @@ func sameLeadArtist(a, b []string) bool {
 }
 
 func rerecordingSongTitle(rec acqports.WorkRecording) ([]string, bool) {
-	title, inTitle := titlemarkers.WithoutRerecordingPhrases(titlemarkers.Tokens(rec.Title))
-	disambiguation, inDisambiguation := titlemarkers.WithoutRerecordingPhrases(titlemarkers.Tokens(rec.Disambiguation))
+	title, inTitle := titlemarkers.StripRerecordingPhrases(titlemarkers.Tokens(rec.Title))
+	disambiguation, inDisambiguation := titlemarkers.StripRerecordingPhrases(titlemarkers.Tokens(rec.Disambiguation))
 	if !inTitle && !inDisambiguation {
 		return nil, false
 	}
 	if vetoed(title) || vetoed(disambiguation) {
 		return nil, false
 	}
-	return titlemarkers.WithoutVersionPhrases(title), true
+	return titlemarkers.StripVersionPhrases(title), true
 }
 
 func vetoed(tokens []string) bool {

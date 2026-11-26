@@ -265,7 +265,7 @@ func TestSetup_RingBufferEvictsByTheInjectedClockNotTheWallClock(t *testing.T) {
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	now := time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC)
-	ring := logging.Setup("info", logging.WithClock(func() time.Time { return now }))
+	ring := logging.SetupWithClock("info", func() time.Time { return now })
 
 	slog.Info("old")
 	now = now.Add(30*time.Minute + time.Nanosecond)
@@ -288,14 +288,14 @@ func TestNewRingBuffer_RefusesANilClock(t *testing.T) {
 	}
 }
 
-func TestWithClock_PanicsOnANilClock(t *testing.T) {
+func TestSetupWithClock_PanicsOnANilClock(t *testing.T) {
 	defer func() {
 		if recover() == nil {
 			t.Fatal("a nil clock was accepted, want a panic at construction")
 		}
 	}()
 
-	logging.WithClock(nil)
+	logging.SetupWithClock("info", nil)
 }
 
 func TestRingBuffer_KeepsARecordExactlyAtTheRetentionEdge(t *testing.T) {

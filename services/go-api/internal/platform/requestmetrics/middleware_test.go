@@ -56,7 +56,7 @@ func TestLatencyMiddleware_RecordPanicIsLoggedOnceWithTheRequestID(t *testing.T)
 	ring := logging.Setup("error")
 	panicRec := func(string, time.Duration, int) { panic("histogram exploded") }
 	req := httptest.NewRequest(http.MethodGet, "/v1/tracks/42", nil)
-	req = req.WithContext(logging.WithCorrelationID(context.Background(), "corr-reqm-3"))
+	req = req.WithContext(logging.ContextWithCorrelationID(context.Background(), "corr-reqm-3"))
 
 	routerRecordingWith(panicRec, http.StatusOK).ServeHTTP(httptest.NewRecorder(), req)
 

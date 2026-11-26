@@ -18,7 +18,7 @@ func CorrelationID(next http.Handler) http.Handler {
 		if id == "" {
 			id = uuid.New().String()[:8]
 		}
-		ctx := logging.WithCorrelationID(r.Context(), id)
+		ctx := logging.ContextWithCorrelationID(r.Context(), id)
 		w.Header().Set(CorrelationIDHeader, id)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

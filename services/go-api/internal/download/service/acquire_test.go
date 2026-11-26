@@ -995,7 +995,7 @@ func executeOnAttempt(t *testing.T, searcher *fakeAudioSearcher, attempt int) (l
 	ledger.Seed(track)
 	pub := newRecordingPublisher()
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), newFakeAudioStore(), withServiceEvents(pub))
-	ctx := service.WithJobRun(context.Background(), service.JobRun{Attempt: attempt, SchedulerOwned: true})
+	ctx := service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: attempt, SchedulerOwned: true})
 
 	execErr := svc.Execute(ctx, userId, track.ID)
 
@@ -1970,7 +1970,7 @@ func executeAfterOwnTimeBudget(t *testing.T, attempt int) (ledgerTrack, *recordi
 	ledger.Seed(track)
 	pub := newRecordingPublisher()
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(stalledSource{}), newFakeAudioStore(), withServiceEvents(pub), service.WithAcquireTimeout(time.Millisecond))
-	ctx := service.WithJobRun(context.Background(), service.JobRun{Attempt: attempt, SchedulerOwned: true})
+	ctx := service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: attempt, SchedulerOwned: true})
 
 	execErr := svc.Execute(ctx, userId, track.ID)
 
@@ -2036,7 +2036,7 @@ func newReplaceFixture(t *testing.T, searcher *fakeAudioSearcher, attempt int) r
 	store.stored["u/a/b/c.mp3"] = true
 	pub := newRecordingPublisher()
 	svc := newTestAcquireService(ledger, fakeRegistry(searcher), store, withServiceEvents(pub))
-	ctx := service.WithJobRun(context.Background(), service.JobRun{Attempt: attempt, SchedulerOwned: true})
+	ctx := service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: attempt, SchedulerOwned: true})
 	return replaceFixture{svc: svc, ledger: ledger, track: track, store: store, pub: pub, userId: userId, ctx: ctx}
 }
 
@@ -2098,7 +2098,7 @@ func TestExecute_AWorkerThatLostItsLeaseDoesNotFailTheTrack(t *testing.T) {
 	ledger.Seed(track)
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
-	_ = svc.Execute(service.WithJobRun(context.Background(), service.JobRun{Claim: 1}), userId, track.ID)
+	_ = svc.Execute(service.ContextWithJobRun(context.Background(), service.JobRun{Claim: 1}), userId, track.ID)
 
 	if got := committedTrack(t, ledger, track.ID).Status; got != ports.TrackPending {
 		t.Errorf("status = %v, want pending: the new lease owner is still downloading", got)
@@ -2113,7 +2113,7 @@ func TestExecute_AWorkerHoldingTheCurrentLeaseStillFailsTheTrack(t *testing.T) {
 	ledger.Seed(track)
 	svc := newTestAcquireService(ledger, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
-	_ = svc.Execute(service.WithJobRun(context.Background(), service.JobRun{Claim: 2}), userId, track.ID)
+	_ = svc.Execute(service.ContextWithJobRun(context.Background(), service.JobRun{Claim: 2}), userId, track.ID)
 
 	if got := committedTrack(t, ledger, track.ID).Status; got != ports.TrackFailed {
 		t.Errorf("status = %v, want failed", got)
@@ -2139,7 +2139,7 @@ func TestExecute_AWorkerThatLostItsLeaseCannotLandItsDownload(t *testing.T) {
 			store := &bytesAudioStore{objects: map[string]string{}}
 			svc := newTestAcquireService(ledger, service.NewSourceRegistry(newAudioSource{}), store)
 
-			_ = svc.Execute(service.WithJobRun(context.Background(), service.JobRun{Claim: tc.held}), userId, track.ID)
+			_ = svc.Execute(service.ContextWithJobRun(context.Background(), service.JobRun{Claim: tc.held}), userId, track.ID)
 
 			row := committedTrack(t, ledger, track.ID)
 			if row.Status != tc.wantStatus {
@@ -2162,7 +2162,7 @@ func TestExecuteReplace_AWorkerThatLostItsLeaseLeavesTheServingAudioInPlace(t *t
 	ledger.Seed(row)
 	svc := newTestAcquireService(ledger, service.NewSourceRegistry(newAudioSource{}), store)
 
-	_ = svc.ExecuteReplace(service.WithJobRun(context.Background(), service.JobRun{Claim: 1}), userId, trackId)
+	_ = svc.ExecuteReplace(service.ContextWithJobRun(context.Background(), service.JobRun{Claim: 1}), userId, trackId)
 
 	got := committedTrack(t, ledger, trackId)
 	if got.Status != ports.TrackReady || got.AudioRef == nil || *got.AudioRef != originalRef {
@@ -2564,7 +2564,7 @@ func TestRerecording_AFailedRerecordingTierKeepsTheOriginalFailure(t *testing.T)
 		t.Run(tc.name, func(t *testing.T) {
 			golden := seedItsOnlyLove(t, 0, nil)
 
-			err := golden.service(tc.sources, tc.finder).Execute(service.WithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
+			err := golden.service(tc.sources, tc.finder).Execute(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
 
 			if got := failureCodeOf(err); got != tc.wantCode {
 				t.Errorf("failure code = %q (%v), want %q", got, err, tc.wantCode)
@@ -2588,7 +2588,7 @@ func TestRerecording_AReplaceOfAFittingOriginalTakesNoRerecording(t *testing.T) 
 	golden := seedItsOnlyLove(t, 195, nil)
 	finder := findsGoldenRerecording()
 
-	err := golden.service(&itsOnlyLoveSources{}, finder).ExecuteReplace(service.WithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
+	err := golden.service(&itsOnlyLoveSources{}, finder).ExecuteReplace(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
 
 	if got := failureCodeOf(err); got != downloadfailure.FailureNoConfidentMatch {
 		t.Errorf("failure code = %q (%v), want no_confident_match", got, err)
@@ -2620,7 +2620,7 @@ func TestRerecording_AReplaceOfAFileWhoseLengthIsUnknownTakesNoRerecording(t *te
 			golden.book.Seed(row)
 			finder := findsGoldenRerecording()
 
-			err := golden.service(&itsOnlyLoveSources{}, finder).ExecuteReplace(service.WithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
+			err := golden.service(&itsOnlyLoveSources{}, finder).ExecuteReplace(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
 
 			if got := failureCodeOf(err); got != downloadfailure.FailureNoConfidentMatch {
 				t.Errorf("failure code = %q (%v), want no_confident_match from the search, not an earlier failure", got, err)
@@ -2715,7 +2715,7 @@ func TestRerecording_EachPassRemembersItsRejectionsOnItsOwnBasis(t *testing.T) {
 		rejections := &fakeRejectionStore{}
 		svc := golden.service(sources, findsGoldenRerecording(), withServiceRejections(rejections))
 
-		_ = svc.Execute(service.WithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
+		_ = svc.Execute(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
 
 		var drm []ports.CandidateRejectionRecord
 		for _, rec := range rejections.recorded {
@@ -2756,7 +2756,7 @@ func TestRerecording_AnOutageOnOneSourceWithNoMatchOnTheOthersTakesNoRerecording
 		withServiceIdentifier(&stubIdentifier{}),
 		withServiceRerecordings(finder))
 
-	_ = svc.Execute(service.WithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
+	_ = svc.Execute(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
 
 	if len(finder.queries) != 0 {
 		t.Errorf("finder queries = %+v, want none after a source outage", finder.queries)
@@ -2778,7 +2778,7 @@ func TestRerecording_AReplaceWhoseRerecordingDownloadFailsLeavesTheTrackAsItWas(
 	svc := golden.service(sources, finder)
 
 	for run := 1; run <= 2; run++ {
-		err := svc.ExecuteReplace(service.WithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
+		err := svc.ExecuteReplace(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
 
 		if got := failureCodeOf(err); got != downloadfailure.FailureNoConfidentMatch {
 			t.Errorf("run %d: failure code = %q (%v), want no_confident_match", run, got, err)
@@ -2820,7 +2820,7 @@ func TestRerecording_AnOriginalWhoseSoundCloudPinFailsToDownloadNeverAsksForARer
 		withServiceIdentifier(&stubIdentifier{}),
 		withServiceRerecordings(finder))
 
-	err := svc.Execute(service.WithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
+	err := svc.Execute(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
 
 	if got := failureCodeOf(err); got != downloadfailure.FailureDownloadFailed {
 		t.Errorf("failure code = %q (%v), want the original's download_failed kept", got, err)
@@ -2841,7 +2841,7 @@ func TestRerecording_ALabelNamingTheTrackItselfRunsNoSecondPass(t *testing.T) {
 	golden.book.Seed(row)
 	sources := &itsOnlyLoveSources{}
 
-	err := golden.service(sources, findsGoldenRerecording()).Execute(service.WithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
+	err := golden.service(sources, findsGoldenRerecording()).Execute(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), golden.userId, golden.trackId)
 
 	if got := failureCodeOf(err); got != downloadfailure.FailureNoConfidentMatch {
 		t.Errorf("failure code = %q (%v), want no_confident_match", got, err)
@@ -2870,7 +2870,7 @@ func (s probeCancellingSource) Find(ctx context.Context, req ports.FindRequest) 
 func TestRerecording_AJobCancelledDuringTheFirstPassNeverAsksForARerecording(t *testing.T) {
 	golden := seedItsOnlyLove(t, 0, nil)
 	finder := findsGoldenRerecording()
-	ctx, cancel := context.WithCancel(service.WithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}))
+	ctx, cancel := context.WithCancel(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}))
 	defer cancel()
 	sources := probeCancellingSource{&itsOnlyLoveSources{}, cancel}
 	svc := newTestAcquireService(golden.ledger, service.NewSourceRegistry(sources), golden.store,
@@ -2925,7 +2925,7 @@ func TestRerecording_ASecondPassThatRunsOutOfTimeFailsAsATimeout(t *testing.T) {
 			withServiceResolver(pinnedRecordingResolver{}),
 			withServiceIdentifier(&stubIdentifier{}),
 			withServiceRerecordings(findsGoldenRerecording()))
-		ctx, cancel := context.WithTimeout(service.WithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), 3*time.Second)
+		ctx, cancel := context.WithTimeout(service.ContextWithJobRun(context.Background(), service.JobRun{Attempt: service.MaxAcquisitionAttempts}), 3*time.Second)
 		defer cancel()
 
 		err := svc.ExecuteReplace(ctx, golden.userId, golden.trackId)

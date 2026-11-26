@@ -14,8 +14,8 @@ type Tags struct {
 }
 
 func ParseTags(title string) Tags {
-	numbered, tokens := withoutVersionNumbers(Tokens(WithoutFeatureCredits(title)))
-	return Tags{Part: partNumber(WithoutVersionPhrases(tokens)), Labels: withVersionNumbers(RecordingLabels(title), numbered)}
+	numbered, tokens := withoutVersionNumbers(Tokens(StripFeatureCredits(title)))
+	return Tags{Part: partNumber(StripVersionPhrases(tokens)), Labels: withVersionNumbers(RecordingLabels(title), numbered)}
 }
 
 const (
@@ -188,7 +188,7 @@ var FeaturedCredit = regexp.MustCompile(`(?i)\b(?:featuring|feat|ft)\.?\s+([^()\
 
 var titleSeparatorRe = regexp.MustCompile(`\s+[\p{Pd}\x{2212}|/]\s+`)
 
-func WithoutFeatureCredits(title string) string {
+func StripFeatureCredits(title string) string {
 	pieces := titleSeparatorRe.Split(textnorm.NFKC(title), -1)
 	for i, piece := range pieces {
 		pieces[i] = FeaturedCredit.ReplaceAllString(piece, "")
@@ -255,7 +255,7 @@ func AppendLabel(labels []string, label string) []string {
 }
 
 func Labels(title string) []string {
-	tokens := Tokens(WithoutFeatureCredits(title))
+	tokens := Tokens(StripFeatureCredits(title))
 	var labels []string
 	for _, entry := range Matches(tokens) {
 		if !entry.Benign() {
@@ -286,7 +286,7 @@ func versionPhraseAt(tokens []string, pos int) int {
 	return longest
 }
 
-func WithoutVersionPhrases(tokens []string) []string {
+func StripVersionPhrases(tokens []string) []string {
 	var kept []string
 	for pos := 0; pos < len(tokens); {
 		if n := versionPhraseAt(tokens, pos); n > 0 {
@@ -316,7 +316,7 @@ func rerecordingPhraseAt(tokens []string, pos int) int {
 	return 0
 }
 
-func WithoutRerecordingPhrases(tokens []string) (kept []string, found bool) {
+func StripRerecordingPhrases(tokens []string) (kept []string, found bool) {
 	for pos := 0; pos < len(tokens); {
 		if n := rerecordingPhraseAt(tokens, pos); n > 0 {
 			found = true

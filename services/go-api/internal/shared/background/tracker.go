@@ -25,7 +25,8 @@ type Tracker struct {
 	wg       sync.WaitGroup
 	mu       sync.Mutex
 	draining bool
-	slots    chan struct{}
+	inflight int
+	limit    int
 	dropped  atomic.Uint64
 }
 
@@ -33,7 +34,7 @@ func NewTracker(limits TrackerLimits) (*Tracker, error) {
 	if limits.MaxInFlight < 1 {
 		return nil, fmt.Errorf("%w, got %d", ErrTrackerLimit, limits.MaxInFlight)
 	}
-	return &Tracker{slots: make(chan struct{}, limits.MaxInFlight)}, nil
+	return &Tracker{limit: limits.MaxInFlight}, nil
 }
 
 func (r *Tracker) Track(fn func()) {
@@ -94,20 +95,16 @@ func (r *Tracker) admit() bool {
 }
 
 func (r *Tracker) takeSlot() bool {
-	if r.slots == nil {
-		return true
-	}
-	select {
-	case r.slots <- struct{}{}:
-		return true
-	default:
+	if r.limit > 0 && r.inflight >= r.limit {
 		return false
 	}
+	r.inflight++
+	return true
 }
 
 func (r *Tracker) release() {
-	if r.slots != nil {
-		<-r.slots
-	}
+	r.mu.Lock()
+	r.inflight--
+	r.mu.Unlock()
 	r.wg.Done()
 }
