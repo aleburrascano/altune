@@ -3,6 +3,7 @@ package persistence
 import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -333,21 +334,33 @@ func (q *PostgresJobQueue) Settle(ctx context.Context, trackID ids.TrackId, fenc
 const notifierReconnectDelay = time.Second
 
 type PostgresJobNotifier struct {
-	pool *pgxpool.Pool
+	pool  *pgxpool.Pool
+	sleep clock.Sleeper
 }
 
 var _ ports.JobNotifier = (*PostgresJobNotifier)(nil)
 
-func NewPostgresJobNotifier(pool *pgxpool.Pool) *PostgresJobNotifier {
-	return &PostgresJobNotifier{pool: pool}
+var ErrNotifierSleeperRequired = errors.New("job notifier needs a sleeper")
+
+func NewPostgresJobNotifier(pool *pgxpool.Pool, sleep clock.Sleeper) (*PostgresJobNotifier, error) {
+	if sleep == nil {
+		return nil, fmt.Errorf("NewPostgresJobNotifier: %w", ErrNotifierSleeperRequired)
+	}
+	return &PostgresJobNotifier{pool: pool, sleep: sleep}, nil
+}
+
+func MustNewPostgresJobNotifier(pool *pgxpool.Pool, sleep clock.Sleeper) *PostgresJobNotifier {
+	notifier, err := NewPostgresJobNotifier(pool, sleep)
+	if err != nil {
+		panic(err)
+	}
+	return notifier
 }
 
 func (n *PostgresJobNotifier) Listen(ctx context.Context, wake chan<- struct{}) {
 	for ctx.Err() == nil {
 		n.listenOnce(ctx, wake)
-		select {
-		case <-time.After(notifierReconnectDelay):
-		case <-ctx.Done():
+		if n.sleep(ctx, notifierReconnectDelay) != nil {
 			return
 		}
 	}

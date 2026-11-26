@@ -66,9 +66,9 @@ func (s *Service) runWarm(store ports.UnreleasedStore, artists []ArtistToRefresh
 func (s *Service) awaitJob(ctx context.Context, j *job) (Lookup, error) {
 	var deadline <-chan time.Time
 	if s.cfg.Wait > 0 {
-		timer := time.NewTimer(s.cfg.Wait)
-		defer timer.Stop()
-		deadline = timer.C
+		fires, stop := s.newTimer(s.cfg.Wait)
+		defer stop()
+		deadline = fires
 	}
 	select {
 	case <-j.done:

@@ -2,6 +2,7 @@ package memory
 
 import (
 	"altune/go-api/internal/search/domain"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"sync/atomic"
@@ -21,10 +22,8 @@ func (p *FakeProvider) Name() domain.ProviderName { return p.Provider }
 
 func (p *FakeProvider) Search(ctx context.Context, _ string, _ map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
 	if p.Delay > 0 {
-		select {
-		case <-time.After(p.Delay):
-		case <-ctx.Done():
-			return nil, ctx.Err()
+		if err := clock.Sleep(ctx, p.Delay); err != nil {
+			return nil, err
 		}
 	}
 	return p.Results, p.Err

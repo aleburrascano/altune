@@ -9,8 +9,10 @@ import (
 	"altune/go-api/internal/search/service/rank"
 	"altune/go-api/internal/search/service/vocabulary"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/random"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"errors"
@@ -79,6 +81,9 @@ type Collaborators struct {
 	ProviderCache ports.ProviderResultCache
 	HeldSlates    ports.HeldResultsCache
 	Behavior      rank.BehavioralScorer
+
+	ExplorationDraw random.Unit
+	DeadlineTimer   clock.TimerFunc
 }
 
 var ErrCollaboratorRequired = errors.New("search service needs every collaborator, pass the absent adapter to switch one off")
@@ -104,6 +109,8 @@ func (c Collaborators) missing(bg *background.Tracker, breaker *providerguard.Ci
 		{"providerCache", c.ProviderCache == nil},
 		{"heldSlates", c.HeldSlates == nil},
 		{"behavior", c.Behavior == nil},
+		{"explorationDraw", c.ExplorationDraw == nil},
+		{"deadlineTimer", c.DeadlineTimer == nil},
 	} {
 		if check.missing {
 			missing = append(missing, check.name)
@@ -114,6 +121,7 @@ func (c Collaborators) missing(bg *background.Tracker, breaker *providerguard.Ci
 
 type serviceConfig struct {
 	awaitDeadline deadlineTimer
+	deadline      time.Duration
 	ranking       rank.RankingConfig
 }
 
@@ -148,7 +156,7 @@ func WithSearchDeadline(d time.Duration) Option {
 		if d <= 0 {
 			return fmt.Errorf("%w: search deadline must be positive, got %s", ErrInvalidOption, d)
 		}
-		c.awaitDeadline = deadlineAfter(d)
+		c.deadline = d
 		return nil
 	}
 }
@@ -165,11 +173,14 @@ func NewService(bg *background.Tracker, providers []ports.SearchProvider, circui
 	if missing := c.missing(bg, circuitBreaker); len(missing) > 0 {
 		return nil, fmt.Errorf("%w: %s", ErrCollaboratorRequired, strings.Join(missing, ", "))
 	}
-	cfg := serviceConfig{awaitDeadline: noDeadline, ranking: rank.RankingConfig{Behavior: c.Behavior}}
+	cfg := serviceConfig{awaitDeadline: noDeadline, ranking: rank.RankingConfig{Behavior: c.Behavior, ExplorationDraw: c.ExplorationDraw}}
 	for _, opt := range opts {
 		if err := opt(&cfg); err != nil {
 			return nil, err
 		}
+	}
+	if cfg.deadline > 0 {
+		cfg.awaitDeadline = deadlineAfter(cfg.deadline, c.DeadlineTimer)
 	}
 	return assembleService(providers, circuitBreaker, c, cfg, bg)
 }

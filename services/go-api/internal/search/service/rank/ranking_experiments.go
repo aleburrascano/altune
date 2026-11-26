@@ -3,8 +3,8 @@ package rank
 import (
 	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/random"
 	"errors"
-	"math/rand/v2"
 	"slices"
 )
 
@@ -13,6 +13,7 @@ type RankingConfig struct {
 	CrossKindProminence bool
 	Behavior            BehavioralScorer
 	ExplorationRate     float64
+	ExplorationDraw     random.Unit
 }
 
 type RankingExperiments struct {
@@ -23,6 +24,7 @@ type RankingExperiments struct {
 	behavior BehavioralScorer
 
 	ExplorationRate float64
+	explorationDraw random.Unit
 
 	bg *background.Tracker
 }
@@ -38,6 +40,7 @@ func NewRankingExperiments(cfg RankingConfig, bg *background.Tracker) (*RankingE
 		CrossKindProminence: cfg.CrossKindProminence,
 		behavior:            cfg.Behavior,
 		ExplorationRate:     cfg.ExplorationRate,
+		explorationDraw:     cfg.ExplorationDraw,
 		bg:                  bg,
 	}, nil
 }
@@ -54,10 +57,13 @@ func (r *RankingExperiments) MaybeExplore(ranked []domain.SearchResult) ([]domai
 	if r.ExplorationRate <= 0 || len(ranked) < 2 {
 		return ranked, false
 	}
-	if rand.Float64() >= r.ExplorationRate {
+	if r.explorationDraw() >= r.ExplorationRate {
 		return ranked, false
 	}
 	out := slices.Clone(ranked)
-	rand.Shuffle(len(out), func(i, j int) { out[i], out[j] = out[j], out[i] })
+	for i := len(out) - 1; i > 0; i-- {
+		j := min(int(r.explorationDraw()*float64(i+1)), i)
+		out[i], out[j] = out[j], out[i]
+	}
 	return out, true
 }

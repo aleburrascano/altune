@@ -683,7 +683,10 @@ func TestNewElection_WinsTheBackgroundLockAndAnnouncesATwentyFiveSecondSettle(t 
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	var r jobs.Runner
-	election := jobs.NewElection(pool)
+	election, err := jobs.NewElection(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(func() {
 		cancel()

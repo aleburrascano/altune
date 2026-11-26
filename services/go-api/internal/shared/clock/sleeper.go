@@ -20,3 +20,10 @@ func Sleep(ctx context.Context, d time.Duration) error {
 		return ctx.Err()
 	}
 }
+
+type TimerFunc func(d time.Duration) (fires <-chan time.Time, stop func() bool)
+
+func NewTimer(d time.Duration) (<-chan time.Time, func() bool) {
+	timer := time.NewTimer(d)
+	return timer.C, timer.Stop
+}

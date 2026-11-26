@@ -5,6 +5,8 @@ import (
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/random"
+	"altune/go-api/internal/shared/random/randomtest"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -439,6 +441,37 @@ func TestMaybeExplore_FewerThanTwoResultsNeverExplores(t *testing.T) {
 	}
 }
 
+func TestMaybeExplore_ShufflesByTheGivenDrawsAndStaysPutWhenTheDrawMissesTheRate(t *testing.T) {
+	bg := searchtest.NewTracker(t)
+	three := []search.SearchResult{{Title: "a"}, {Title: "b"}, {Title: "c"}}
+	titles := func(rs []search.SearchResult) string {
+		var out string
+		for _, r := range rs {
+			out += r.Title
+		}
+		return out
+	}
+	cases := map[string]struct {
+		draws        random.Unit
+		wantExplored bool
+		wantOrder    string
+	}{
+		"a draw at or above the rate leaves the order": {randomtest.Fixed(0.5), false, "abc"},
+		"draws below the rate shuffle by them":         {randomtest.Sequence(0.1, 0.0, 0.0), true, "bca"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			svc := searchtest.NewSearchServiceWith(t, bg, nil, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ExplorationDraw = tc.draws }, search.WithExploration(0.5))
+
+			got, explored := svc.MaybeExplore(three)
+
+			if explored != tc.wantExplored || titles(got) != tc.wantOrder {
+				t.Fatalf("MaybeExplore = (%s, %v), want (%s, %v)", titles(got), explored, tc.wantOrder, tc.wantExplored)
+			}
+		})
+	}
+}
+
 func TestOptions_OutOfRangeValuesAreRefused(t *testing.T) {
 	for name, opt := range map[string]search.SearchOption{
 		"zero exploration rate":     search.WithExploration(0),
@@ -463,17 +496,19 @@ func TestNewService_RefusesEveryMissingCollaborator(t *testing.T) {
 		"circuitBreaker": func() (*search.SearchService, error) {
 			return search.NewSearchService(bg, nil, nil, search.AbsentCollaborators())
 		},
-		"artwork":       withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Artwork = nil }),
-		"related":       withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Related = nil }),
-		"history":       withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.History = nil }),
-		"vocabulary":    withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Vocabulary = nil }),
-		"events":        withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Events = nil }),
-		"activity":      withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Activity = nil }),
-		"favorites":     withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Favorites = nil }),
-		"resultCache":   withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.ResultCache = nil }),
-		"providerCache": withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.ProviderCache = nil }),
-		"heldSlates":    withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.HeldSlates = nil }),
-		"behavior":      withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Behavior = nil }),
+		"artwork":         withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Artwork = nil }),
+		"related":         withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Related = nil }),
+		"history":         withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.History = nil }),
+		"vocabulary":      withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Vocabulary = nil }),
+		"events":          withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Events = nil }),
+		"activity":        withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Activity = nil }),
+		"favorites":       withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Favorites = nil }),
+		"resultCache":     withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.ResultCache = nil }),
+		"providerCache":   withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.ProviderCache = nil }),
+		"heldSlates":      withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.HeldSlates = nil }),
+		"behavior":        withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Behavior = nil }),
+		"explorationDraw": withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.ExplorationDraw = nil }),
+		"deadlineTimer":   withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.DeadlineTimer = nil }),
 	} {
 		svc, err := build()
 		if !errors.Is(err, search.ErrSearchCollaboratorRequired) || svc != nil {

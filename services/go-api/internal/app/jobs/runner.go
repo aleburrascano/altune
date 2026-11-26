@@ -3,6 +3,7 @@ package jobs
 import (
 	"altune/go-api/internal/platform/leader"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"fmt"
 	"log/slog"
@@ -23,8 +24,8 @@ type Election interface {
 	Shutdown(context.Context)
 }
 
-func NewElection(pool *pgxpool.Pool) *leader.Election {
-	return leader.NewElection(leader.PostgresLocks(pool), backgroundLockKey, backgroundLockInterval)
+func NewElection(pool *pgxpool.Pool) (*leader.Election, error) {
+	return leader.NewElection(leader.PostgresLocks(pool), backgroundLockKey, backgroundLockInterval, clock.NewTimer)
 }
 
 type Runner struct {

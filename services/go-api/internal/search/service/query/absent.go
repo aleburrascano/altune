@@ -5,7 +5,9 @@ import (
 	"altune/go-api/internal/search/service/artwork"
 	"altune/go-api/internal/search/service/rank"
 	"altune/go-api/internal/search/service/useractivity"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/random"
 	"context"
 )
 
@@ -81,5 +83,8 @@ func AbsentCollaborators() Collaborators {
 		ProviderCache: NoProviderResultCache{},
 		HeldSlates:    NoResultCache{},
 		Behavior:      rank.NoBehavioralScoring{},
+
+		ExplorationDraw: random.Real,
+		DeadlineTimer:   clock.NewTimer,
 	}
 }

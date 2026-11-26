@@ -1,6 +1,7 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/providerfields"
 	"bytes"
 	"context"
@@ -149,20 +150,9 @@ func newIntervalGate(gap time.Duration) *intervalGate {
 func (gate *intervalGate) wait(ctx context.Context) error {
 	gate.mu.Lock()
 	defer gate.mu.Unlock()
-	if err := pause(ctx, time.Until(gate.next)); err != nil {
+	if err := clock.Sleep(ctx, time.Until(gate.next)); err != nil {
 		return err
 	}
 	gate.next = time.Now().Add(gate.gap)
 	return nil
-}
-
-func pause(ctx context.Context, d time.Duration) error {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
 }

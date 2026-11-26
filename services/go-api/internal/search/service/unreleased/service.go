@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/parallel"
 	"altune/go-api/internal/shared/textnorm"
 	"cmp"
@@ -35,6 +36,7 @@ type Service struct {
 	catalog  ports.ArtistCatalogTitles
 	storage  Storage
 	cfg      Config
+	newTimer clock.TimerFunc
 
 	lifecycle context.Context
 	jobs      *background.Tracker
@@ -76,6 +78,7 @@ type Wiring struct {
 	Storage   Storage
 	Lifecycle context.Context
 	Jobs      *background.Tracker
+	Timer     clock.TimerFunc
 }
 
 func NewService(genius ports.GeniusSongCatalog, catalog ports.ArtistCatalogTitles, cfg Config, w Wiring) (*Service, error) {
@@ -91,8 +94,12 @@ func NewService(genius ports.GeniusSongCatalog, catalog ports.ArtistCatalogTitle
 			return nil, fmt.Errorf("%w: %s is nil", ErrCollaboratorRequired, name)
 		}
 	}
+	if cfg.Wait > 0 && w.Timer == nil {
+		return nil, fmt.Errorf("%w: a Wait needs a timer", ErrCollaboratorRequired)
+	}
 	return &Service{
 		genius:    genius,
+		newTimer:  w.Timer,
 		trackers:  w.Trackers,
 		catalog:   catalog,
 		storage:   w.Storage,

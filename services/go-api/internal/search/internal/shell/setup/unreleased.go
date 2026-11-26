@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/service/artistpage"
 	"altune/go-api/internal/search/service/unreleased"
+	"altune/go-api/internal/shared/clock"
 	"fmt"
 )
 
@@ -37,6 +38,7 @@ func newUnreleasedServices(d connections.Deps, t *providerTable, s connections.S
 		Storage:   storage,
 		Lifecycle: d.Lifecycle,
 		Jobs:      d.Background,
+		Timer:     clock.NewTimer,
 	})
 	if err != nil {
 		return unreleasedServices{}, fmt.Errorf("build the unreleased service: %w", err)

@@ -66,6 +66,7 @@ type hostLimiter struct {
 	mu           sync.Mutex
 	limiter      *rate.Limiter
 	now          clock.Func
+	sleep        clock.Sleeper
 	boundedQueue bool
 	maxWait      time.Duration
 }
@@ -73,16 +74,23 @@ type hostLimiter struct {
 type Pacer struct {
 	mu       sync.Mutex
 	now      clock.Func
+	sleep    clock.Sleeper
 	limiters map[string]*hostLimiter
 }
 
-var ErrClockRequired = errors.New("pacer needs a clock")
+var (
+	ErrClockRequired   = errors.New("pacer needs a clock")
+	ErrSleeperRequired = errors.New("pacer needs a sleeper")
+)
 
-func New(now clock.Func) (*Pacer, error) {
+func New(now clock.Func, sleep clock.Sleeper) (*Pacer, error) {
 	if now == nil {
 		return nil, ErrClockRequired
 	}
-	return &Pacer{now: now, limiters: map[string]*hostLimiter{}}, nil
+	if sleep == nil {
+		return nil, fmt.Errorf("pacing.New: %w", ErrSleeperRequired)
+	}
+	return &Pacer{now: now, sleep: sleep, limiters: map[string]*hostLimiter{}}, nil
 }
 
 func (p *Pacer) Wait(req *http.Request) error {
@@ -124,18 +132,14 @@ func (l *hostLimiter) await(ctx context.Context, limit time.Duration, shed error
 	if err != nil || delay == 0 {
 		return err
 	}
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-		return nil
-	case <-ctx.Done():
+	if err := l.sleep(ctx, delay); err != nil {
 		l.release(reservation)
-		if errors.Is(shed, errQueueTimeout) && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		if errors.Is(shed, errQueueTimeout) && errors.Is(err, context.DeadlineExceeded) {
 			return errQueueTimeout
 		}
-		return ctx.Err()
+		return err
 	}
+	return nil
 }
 
 func (l *hostLimiter) admit(ctx context.Context, limit time.Duration, shed error) (*rate.Reservation, time.Duration, error) {
@@ -173,15 +177,15 @@ func (p *Pacer) limiter(host string) *hostLimiter {
 	}
 	var l *hostLimiter
 	if lim, ok := providerRateLimits[host]; ok {
-		l = newHostLimiter(lim, providerBurst(host), boundedQueueHosts[host], p.now)
+		l = newHostLimiter(lim, providerBurst(host), boundedQueueHosts[host], p.now, p.sleep)
 	}
 	p.limiters[host] = l
 	return l
 }
 
-func newHostLimiter(lim rate.Limit, burst int, boundedQueue bool, now clock.Func) *hostLimiter {
+func newHostLimiter(lim rate.Limit, burst int, boundedQueue bool, now clock.Func, sleep clock.Sleeper) *hostLimiter {
 	interval := time.Duration(float64(time.Second) / float64(lim))
-	return &hostLimiter{limiter: rate.NewLimiter(lim, burst), now: now, boundedQueue: boundedQueue, maxWait: min(queueDepth*interval, queuetimeout.MaxWait)}
+	return &hostLimiter{limiter: rate.NewLimiter(lim, burst), now: now, sleep: sleep, boundedQueue: boundedQueue, maxWait: min(queueDepth*interval, queuetimeout.MaxWait)}
 }
 
 func providerBurst(host string) int {

@@ -2,8 +2,10 @@ package leader
 
 import (
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -34,6 +36,7 @@ type Election struct {
 	db       LockStore
 	key      int64
 	interval time.Duration
+	newTimer clock.TimerFunc
 
 	mu        sync.RWMutex
 	conn      LockSession
@@ -49,13 +52,19 @@ type Election struct {
 	background.Background
 }
 
-func NewElection(locks LockStore, key int64, interval time.Duration) *Election {
+var ErrTimerRequired = errors.New("leader: an election needs a timer")
+
+func NewElection(locks LockStore, key int64, interval time.Duration, newTimer clock.TimerFunc) (*Election, error) {
+	if newTimer == nil {
+		return nil, fmt.Errorf("NewElection: %w", ErrTimerRequired)
+	}
 	return &Election{
 		db:       locks,
 		key:      key,
 		interval: interval,
+		newTimer: newTimer,
 		won:      make(chan struct{}),
-	}
+	}, nil
 }
 
 func (e *Election) Counters() Counters {
@@ -245,10 +254,12 @@ func (e *Election) loopExited(within time.Duration) bool {
 	if e.loopDone == nil {
 		return true
 	}
+	expired, stop := e.newTimer(within)
+	defer stop()
 	select {
 	case <-e.loopDone:
 		return true
-	case <-time.After(within):
+	case <-expired:
 		return false
 	}
 }

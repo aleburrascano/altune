@@ -648,6 +648,9 @@ func TestNewUnreleasedService_RefusesAMissingCollaborator(t *testing.T) {
 		"jobs": func() (*search.UnreleasedService, error) {
 			return search.NewUnreleasedService(genius, catalog, search.UnreleasedConfig{}, wiringWithout(func(w *search.UnreleasedWiring) { w.Jobs = nil }))
 		},
+		"timer": func() (*search.UnreleasedService, error) {
+			return search.NewUnreleasedService(genius, catalog, search.UnreleasedConfig{Wait: time.Second}, wiringWithout(func(w *search.UnreleasedWiring) { w.Timer = nil }))
+		},
 	}
 	for missing, build := range cases {
 		t.Run(missing, func(t *testing.T) {

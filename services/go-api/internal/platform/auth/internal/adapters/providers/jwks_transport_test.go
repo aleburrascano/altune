@@ -2,6 +2,7 @@ package providers_test
 
 import (
 	"altune/go-api/internal/platform/auth"
+	"altune/go-api/internal/shared/random"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -27,7 +28,7 @@ func TestNewSupabaseJWTVerifier_RejectsPlaintextJWKSURL(t *testing.T) {
 		"test-project.supabase.co/jwks",
 	} {
 		t.Run(raw, func(t *testing.T) {
-			v, err := auth.NewSupabaseJWTVerifier(t.Context(), raw, testProjectURL, testAudience, time.Now, auth.NoopAuthMetrics(), auth.NoopTokenRevoker(), auth.DefaultJWKSSchedule())
+			v, err := auth.NewSupabaseJWTVerifier(t.Context(), raw, testProjectURL, testAudience, time.Now, random.Real, auth.NoopAuthMetrics(), auth.NoopTokenRevoker(), auth.DefaultJWKSSchedule())
 			if err == nil || v != nil {
 				t.Fatalf("NewSupabaseJWTVerifier(%q) = %v, %v; want nil verifier and error", raw, v, err)
 			}
@@ -48,7 +49,7 @@ func TestNewSupabaseJWTVerifier_AllowsHTTPSAndLoopbackHTTP(t *testing.T) {
 		t.Run(raw, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
-			if v, err := auth.NewSupabaseJWTVerifier(ctx, raw, testProjectURL, testAudience, time.Now, auth.NoopAuthMetrics(), auth.NoopTokenRevoker(), auth.DefaultJWKSSchedule()); err != nil || v == nil {
+			if v, err := auth.NewSupabaseJWTVerifier(ctx, raw, testProjectURL, testAudience, time.Now, random.Real, auth.NoopAuthMetrics(), auth.NoopTokenRevoker(), auth.DefaultJWKSSchedule()); err != nil || v == nil {
 				t.Fatalf("NewSupabaseJWTVerifier(%q) = %v, %v; want a verifier", raw, v, err)
 			}
 		})

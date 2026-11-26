@@ -99,7 +99,11 @@ func (a *App) compose(ctx context.Context, transport http.RoundTripper) (http.Ha
 	}
 	a.wireObserve(ctx, r, verifier, a.eventTap)
 	a.startCatalogJobs(ctx, f.catalog, f.playback)
-	a.jobs.Lead(ctx, jobs.NewElection(a.pool))
+	election, err := jobs.NewElection(a.pool)
+	if err != nil {
+		return nil, fmt.Errorf("background election: %w", err)
+	}
+	a.jobs.Lead(ctx, election)
 	return r, nil
 }
 

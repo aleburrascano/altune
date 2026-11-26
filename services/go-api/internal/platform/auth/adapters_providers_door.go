@@ -13,6 +13,7 @@ var (
 	ErrJWKSEmptyKeySet     = providers.ErrJWKSEmptyKeySet
 	ErrJWKSRefreshBackoff  = providers.ErrJWKSRefreshBackoff
 	ErrJWKSClockRequired   = providers.ErrJWKSClockRequired
+	ErrJWKSJitterRequired  = providers.ErrJWKSJitterRequired
 	ErrJWKSStale           = providers.ErrJWKSStale
 	NewSupabaseJWTVerifier = providers.NewSupabaseJWTVerifier
 )

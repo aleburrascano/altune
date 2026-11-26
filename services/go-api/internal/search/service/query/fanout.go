@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/service/providerguard"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
@@ -155,10 +156,9 @@ func noDeadline() (<-chan time.Time, func() bool) {
 	return nil, func() bool { return false }
 }
 
-func deadlineAfter(d time.Duration) deadlineTimer {
+func deadlineAfter(d time.Duration, newTimer clock.TimerFunc) deadlineTimer {
 	return func() (<-chan time.Time, func() bool) {
-		timer := time.NewTimer(d)
-		return timer.C, timer.Stop
+		return newTimer(d)
 	}
 }
 

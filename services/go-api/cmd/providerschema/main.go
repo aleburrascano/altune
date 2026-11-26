@@ -15,6 +15,8 @@ import (
 	"time"
 )
 
+const sourceFetchTimeout = 30 * time.Second
+
 type source interface {
 	Reference(ctx context.Context, entity string) (providerfields.Observed, error)
 	Resource(ctx context.Context, entity, id string) (json.RawMessage, error)
@@ -52,7 +54,7 @@ func setup(name, envFile string) (provider, source, string, error) {
 	if err != nil {
 		return provider{}, nil, "", err
 	}
-	src, err := p.source(&http.Client{Timeout: 30 * time.Second})
+	src, err := p.source(&http.Client{Timeout: sourceFetchTimeout})
 	return p, src, root, err
 }
 

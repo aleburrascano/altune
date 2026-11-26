@@ -2,6 +2,7 @@ package chromaprint_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/shared/clock"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -23,7 +24,7 @@ import (
 
 func newIdentifier(t *testing.T, binDir, apiKey string) *download.ChromaprintIdentifier {
 	t.Helper()
-	id, err := download.NewChromaprintIdentifier(binDir, apiKey, &http.Client{})
+	id, err := download.NewChromaprintIdentifier(binDir, apiKey, &http.Client{}, clock.Sleep)
 	if err != nil {
 		t.Fatalf("NewChromaprintIdentifier: %v", err)
 	}
@@ -31,13 +32,21 @@ func newIdentifier(t *testing.T, binDir, apiKey string) *download.ChromaprintIde
 }
 
 func TestNewIdentifier_RefusesANilClient(t *testing.T) {
-	id, err := download.NewChromaprintIdentifier(t.TempDir(), "key", nil)
+	id, err := download.NewChromaprintIdentifier(t.TempDir(), "key", nil, clock.Sleep)
 
 	if !errors.Is(err, download.ErrChromaprintClientRequired) {
 		t.Fatalf("err = %v, want ErrChromaprintClientRequired", err)
 	}
 	if id != nil {
 		t.Errorf("identifier = %v, want nil beside the error", id)
+	}
+}
+
+func TestNewIdentifier_RefusesAMissingSleeper(t *testing.T) {
+	id, err := download.NewChromaprintIdentifier(t.TempDir(), "key", &http.Client{}, nil)
+
+	if id != nil || !errors.Is(err, download.ErrChromaprintSleeperRequired) || !strings.Contains(err.Error(), "NewIdentifier") {
+		t.Fatalf("got (%v, %v), want a nil identifier and an error naming the constructor wrapping ErrChromaprintSleeperRequired", id, err)
 	}
 }
 
@@ -49,7 +58,7 @@ func TestNewIdentifier_SendsLookupsThroughTheClientItWasGiven(t *testing.T) {
 		through++
 		return http.DefaultTransport.RoundTrip(r)
 	})}
-	id, err := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key", client)
+	id, err := download.NewChromaprintIdentifier(fakeFpcalcDir(t, 100), "real-key", client, clock.Sleep)
 	if err != nil {
 		t.Fatalf("NewChromaprintIdentifier: %v", err)
 	}
