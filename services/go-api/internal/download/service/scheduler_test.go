@@ -1299,8 +1299,7 @@ func wireFields(payload events.Payload) map[string]any {
 
 func TestSchedulerJobReporter_StageWithoutConfiguredEventsDoesNotPanic(t *testing.T) {
 	for name, opts := range map[string][]func(*service.BackgroundAcquisitionScheduler){
-		"no events option":  nil,
-		"nil events option": {service.WithSchedulerEvents(nil)},
+		"no events option": nil,
 	} {
 		t.Run(name, func(t *testing.T) {
 			userId := ids.NewUserId(uuid.New())
@@ -2366,8 +2365,8 @@ func TestBackgroundScheduler_DedupedSchedule_ReplaysAndRecordsBothOutcomes(t *te
 	}
 }
 
-func TestBackgroundScheduler_NilOutcomeRecorder_LeavesTheJobUntouched(t *testing.T) {
-	scheduler := service.NewBackgroundAcquisitionScheduler(&stubAcquirer{}, 1, time.Now, service.WithOutcomeRecorder(nil))
+func TestBackgroundScheduler_WithoutAnOutcomeRecorder_LeavesTheJobUntouched(t *testing.T) {
+	scheduler := service.NewBackgroundAcquisitionScheduler(&stubAcquirer{}, 1, time.Now)
 	t.Cleanup(func() {
 		scheduler.Shutdown(context.Background())
 	})
@@ -3437,4 +3436,29 @@ func TestNewBackgroundAcquisitionScheduler_RefusesAMissingClock(t *testing.T) {
 	}()
 
 	service.NewBackgroundAcquisitionScheduler(outcomeAcquirer{}, 1, nil)
+}
+
+func TestSchedulerOptions_RefuseANilCollaborator(t *testing.T) {
+	options := map[string]func(*service.BackgroundAcquisitionScheduler){
+		"scheduler events":     service.WithSchedulerEvents(nil),
+		"job queue":            service.WithJobQueue(nil),
+		"job notifier":         service.WithJobNotifier(nil),
+		"outcome recorder":     service.WithOutcomeRecorder(nil),
+		"verify skip count":    service.WithVerifySkipCount(nil),
+		"fingerprint verified": service.WithFingerprintVerified(nil),
+	}
+	for name, option := range options {
+		t.Run(name, func(t *testing.T) {
+			defer expectRefusal(t)
+
+			service.NewBackgroundAcquisitionScheduler(outcomeAcquirer{}, 1, time.Now, option).Shutdown(t.Context())
+		})
+	}
+}
+
+func expectRefusal(t *testing.T) {
+	t.Helper()
+	if recover() == nil {
+		t.Error("a nil collaborator was accepted, want a refusal at construction")
+	}
 }

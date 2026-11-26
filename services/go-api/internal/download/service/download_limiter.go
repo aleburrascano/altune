@@ -11,7 +11,7 @@ func NewDownloadLimiter(n int) *ConcurrencyLimit {
 }
 
 func (l *ConcurrencyLimit) Acquire(ctx context.Context) error {
-	if l == nil {
+	if l.slots == nil {
 		return nil
 	}
 	select {
@@ -23,7 +23,7 @@ func (l *ConcurrencyLimit) Acquire(ctx context.Context) error {
 }
 
 func (l *ConcurrencyLimit) Release() {
-	if l == nil {
+	if l.slots == nil {
 		return
 	}
 	<-l.slots

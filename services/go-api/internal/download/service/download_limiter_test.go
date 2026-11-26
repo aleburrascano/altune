@@ -32,10 +32,10 @@ func TestDownloadLimiter_ReleaseFreesASlot(t *testing.T) {
 	}
 }
 
-func TestDownloadLimiter_NilIsUnlimited(t *testing.T) {
-	var limiter *download.ConcurrencyLimit
+func TestDownloadLimiter_ZeroValueIsUnlimited(t *testing.T) {
+	var limiter download.ConcurrencyLimit
 	if err := limiter.Acquire(context.Background()); err != nil {
-		t.Fatalf("nil limiter Acquire: %v", err)
+		t.Fatalf("zero limiter Acquire: %v", err)
 	}
 	limiter.Release()
 }

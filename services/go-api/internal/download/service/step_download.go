@@ -54,7 +54,7 @@ func NewDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, id
 	requirePort("NewDownloadStep", "recording lookup", lookup == nil)
 	requirePort("NewDownloadStep", "prober", prober == nil)
 	requirePort("NewDownloadStep", "skip recorder", skips == nil)
-	s := &DownloadStep{fetcher: fetcher, workspace: requireWorkspace("NewDownloadStep", workspace), identifier: identifier, recordingLookup: lookup, factsCache: newRecordingFactsCache(time.Now), prober: prober, skips: skips, width: ProdVerifyWidth, candidateTimeout: DefaultCandidateTimeout, floor: defaultConfidenceFloor, cuts: audioverdict.DefaultCuts()}
+	s := &DownloadStep{fetcher: fetcher, workspace: requireWorkspace("NewDownloadStep", workspace), identifier: identifier, recordingLookup: lookup, factsCache: newRecordingFactsCache(time.Now), limiter: &ConcurrencyLimit{}, prober: prober, skips: skips, width: ProdVerifyWidth, candidateTimeout: DefaultCandidateTimeout, floor: defaultConfidenceFloor, cuts: audioverdict.DefaultCuts()}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -62,7 +62,10 @@ func NewDownloadStep(fetcher candidateFetcher, workspace ports.ScratchFolder, id
 }
 
 func WithStepDownloadLimiter(l *ConcurrencyLimit) func(*DownloadStep) {
-	return func(s *DownloadStep) { s.limiter = l }
+	return func(s *DownloadStep) {
+		requirePort("WithStepDownloadLimiter", "limiter", l == nil)
+		s.limiter = l
+	}
 }
 
 func (s *DownloadStep) recordSkip(gate string) {

@@ -2854,3 +2854,9 @@ func TestResolvedIdentity_StandingInTheDarkCatalogLengthConflictReachesTheReader
 		t.Errorf("proven ISRC = (%q, %q), want (%q, fingerprint): with the catalog's own ISRC set aside, the surviving recording on the undoubted reference proves it", got, source, isrc)
 	}
 }
+
+func TestDownloadStep_RefusesANilLimiter(t *testing.T) {
+	defer expectRefusal(t)
+
+	newTestDownloadStep(&fileWritingSearcher{}, service.WithStepDownloadLimiter(nil))
+}

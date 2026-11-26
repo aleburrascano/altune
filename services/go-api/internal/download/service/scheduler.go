@@ -91,21 +91,25 @@ func NewBackgroundAcquisitionScheduler(
 	requirePort("NewBackgroundAcquisitionScheduler", "clock", now == nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &BackgroundAcquisitionScheduler{
-		svc:               svc,
-		pending:           newPendingTracker(),
-		workers:           max(workers, 1),
-		cancel:            cancel,
-		baseCtx:           ctx,
-		stop:              make(chan struct{}),
-		wake:              make(chan struct{}, 1),
-		lanes:             newLaneWakes(),
-		log:               newJobLog(now),
-		now:               now,
-		events:            events.NoopPublisher(),
-		leaseDuration:     defaultLeaseDuration,
-		heartbeatInterval: defaultHeartbeatInterval,
-		pollInterval:      defaultPollInterval,
-		drainBudget:       defaultDrainBudget,
+		svc:                 svc,
+		pending:             newPendingTracker(),
+		workers:             max(workers, 1),
+		cancel:              cancel,
+		baseCtx:             ctx,
+		stop:                make(chan struct{}),
+		wake:                make(chan struct{}, 1),
+		lanes:               newLaneWakes(),
+		log:                 newJobLog(now),
+		now:                 now,
+		events:              events.NoopPublisher(),
+		notifier:            ports.NoopJobNotifier(),
+		outcomes:            ports.NoopOutcomeRecorder(),
+		skipCount:           func() uint64 { return 0 },
+		fingerprintVerified: func() bool { return false },
+		leaseDuration:       defaultLeaseDuration,
+		heartbeatInterval:   defaultHeartbeatInterval,
+		pollInterval:        defaultPollInterval,
+		drainBudget:         defaultDrainBudget,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -113,9 +117,7 @@ func NewBackgroundAcquisitionScheduler(
 	if s.queue == nil {
 		s.queue = inmemoryqueue.New(s.wake, s.now)
 	}
-	if s.notifier != nil {
-		s.runners.Track(func() { s.notifier.Listen(s.baseCtx, s.wake) })
-	}
+	s.runners.Track(func() { s.notifier.Listen(s.baseCtx, s.wake) })
 	s.runners.Track(s.fanOutWakes)
 
 	for range s.workers {
@@ -159,14 +161,11 @@ func (s *BackgroundAcquisitionScheduler) eventsFor(kind ports.JobKind) events.Pu
 
 func (s *BackgroundAcquisitionScheduler) verificationStatus() ports.Verification {
 	v := s.verification
-	v.FingerprintVerified = s.fingerprintVerified != nil && s.fingerprintVerified()
+	v.FingerprintVerified = s.fingerprintVerified()
 	return v
 }
 
 func (s *BackgroundAcquisitionScheduler) verifySkipped() uint64 {
-	if s.skipCount == nil {
-		return 0
-	}
 	return s.skipCount()
 }
 
@@ -408,7 +407,7 @@ func (s *BackgroundAcquisitionScheduler) classifyJob(ctx context.Context, err er
 }
 
 func (s *BackgroundAcquisitionScheduler) recordOutcome(ctx context.Context, record ports.JobRecord) {
-	if s.outcomes == nil || record.TrackID == "" {
+	if record.TrackID == "" {
 		return
 	}
 	var sourceHost string

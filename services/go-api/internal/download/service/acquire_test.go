@@ -251,8 +251,7 @@ func TestExecute_PublishesStartedEvent(t *testing.T) {
 
 func TestExecute_WithoutConfiguredEventsDoesNotPanic(t *testing.T) {
 	for name, opts := range map[string][]any{
-		"no events option":  nil,
-		"nil events option": {service.WithAcquireEvents(nil)},
+		"no events option": nil,
 	} {
 		t.Run(name, func(t *testing.T) {
 			userId := ids.NewUserId(uuid.New())
@@ -3189,4 +3188,19 @@ func (r *creationRecordingWorkspace) liveDirs() []string {
 
 func outageSource() findOnlySource {
 	return findOnlySource{name: "down", err: &acqdomain.SourceUnavailableError{Source: "down", Err: errors.New("429")}}
+}
+
+func TestAcquireOptions_RefuseANilCollaborator(t *testing.T) {
+	options := map[string]func(*service.AcquireTrackAudioService){
+		"acquire events":   service.WithAcquireEvents(nil),
+		"download limiter": service.WithDownloadLimiter(nil),
+		"context observer": service.WithContextObserver(nil),
+	}
+	for name, option := range options {
+		t.Run(name, func(t *testing.T) {
+			defer expectRefusal(t)
+
+			newTestAcquireService(acquisitiontest.NewLedger(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), option)
+		})
+	}
 }

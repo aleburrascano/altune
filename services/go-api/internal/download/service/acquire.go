@@ -73,6 +73,8 @@ func NewAcquireTrackAudioService(
 		verifySkips:     stages.Skips,
 		recordings:      wiring.Recordings,
 		events:          events.NoopPublisher(),
+		downloadLimiter: &ConcurrencyLimit{},
+		contextObserver: func(*AcquisitionContext) {},
 		cuts:            audioverdict.DefaultCuts(),
 
 		confidenceFloor: defaultConfidenceFloor,
@@ -85,11 +87,17 @@ func NewAcquireTrackAudioService(
 }
 
 func WithDownloadLimiter(l *ConcurrencyLimit) func(*AcquireTrackAudioService) {
-	return func(s *AcquireTrackAudioService) { s.downloadLimiter = l }
+	return func(s *AcquireTrackAudioService) {
+		requirePort("WithDownloadLimiter", "limiter", l == nil)
+		s.downloadLimiter = l
+	}
 }
 
 func WithContextObserver(f func(*AcquisitionContext)) func(*AcquireTrackAudioService) {
-	return func(s *AcquireTrackAudioService) { s.contextObserver = f }
+	return func(s *AcquireTrackAudioService) {
+		requirePort("WithContextObserver", "observer", f == nil)
+		s.contextObserver = f
+	}
 }
 
 func WithAcquireConfidenceFloor(floor float64) func(*AcquireTrackAudioService) {
@@ -98,9 +106,8 @@ func WithAcquireConfidenceFloor(floor float64) func(*AcquireTrackAudioService) {
 
 func WithAcquireEvents(pub events.Publisher) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) {
-		if pub != nil {
-			s.events = pub
-		}
+		requirePort("WithAcquireEvents", "publisher", pub == nil)
+		s.events = pub
 	}
 }
 
@@ -153,9 +160,7 @@ func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId ids.UserI
 }
 
 func (s *AcquireTrackAudioService) observe(ac *AcquisitionContext) {
-	if s.contextObserver != nil {
-		s.contextObserver(ac)
-	}
+	s.contextObserver(ac)
 }
 
 func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId ids.UserId, trackId ids.TrackId) error {
