@@ -94,7 +94,62 @@ announce_abort() {
   [ ${#fail_summaries[@]} -eq 0 ] || printf '%s\n' "${fail_summaries[@]}"
   echo "FAIL precheck itself (exit $rc): died during $current_step"
 }
-trap 'announce_abort; rm -f "$log"' EXIT
+par_dir=
+par_ids=()
+par_pids=()
+
+par() {
+  local id=${#par_ids[@]}
+  [ -n "$par_dir" ] || par_dir=$(mktemp -d)
+  par_ids+=("$id")
+  (
+    log=$(mktemp)
+    trap 'rm -f "$log"' EXIT
+    failed=0
+    fail_summaries=()
+    "$@"
+    [ ${#fail_summaries[@]} -eq 0 ] || printf '%s\0' "${fail_summaries[@]}" >"$par_dir/$id.summaries"
+    printf '%s' "$failed" >"$par_dir/$id.failed"
+  ) >"$par_dir/$id.out" 2>&1 &
+  par_pids+=($!)
+}
+
+par_wait() {
+  local i id summary
+  for i in "${!par_ids[@]}"; do
+    id=${par_ids[$i]}
+    current_step="waiting for the steps running side by side"
+    wait "${par_pids[$i]}" || true
+    cat "$par_dir/$id.out"
+    if [ ! -f "$par_dir/$id.failed" ]; then
+      failed=1
+      record_fail "a step run side by side" 1 "it ended before it finished"
+      continue
+    fi
+    [ "$(cat "$par_dir/$id.failed")" = 1 ] && failed=1
+    if [ -f "$par_dir/$id.summaries" ]; then
+      while IFS= read -r -d '' summary; do fail_summaries+=("$summary"); done <"$par_dir/$id.summaries"
+    fi
+  done
+  par_ids=()
+  par_pids=()
+}
+
+stop_tree() {
+  local child
+  for child in $(ps -o pid= --ppid "$1" 2>/dev/null); do stop_tree "$child"; done
+  kill "$1" 2>/dev/null || true
+}
+
+par_stop() {
+  local pid
+  for pid in "${par_pids[@]}"; do
+    ! kill -0 "$pid" 2>/dev/null || stop_tree "$pid"
+  done
+  [ -z "$par_dir" ] || rm -rf "$par_dir"
+}
+
+trap 'announce_abort; par_stop; rm -f "$log"' EXIT
 trap 'abort_rc=129; exit 129' HUP
 trap 'abort_rc=130; exit 130' INT
 trap 'abort_rc=143; exit 143' TERM
@@ -243,10 +298,10 @@ if touches '^services/go-api/'; then
       fi
       if [ $stage = push ]; then
         if touches "^$m/.*\.go\$|^$m/go\.(mod|sum)\$"; then
-          check "go-api vet (whole module, so an importer a change broke fails here)" $m "${heavy[@]}" go vet ./...
+          par check "go-api vet (whole module, so an importer a change broke fails here)" $m "${heavy[@]}" go vet ./...
         fi
         mapfile -t pkgs < <(go_pkgs $m)
-        [ ${#pkgs[@]} -gt 0 ] && go_test_check "go-api tests (race, changed packages)" $m "${heavy[@]}" go test -race -shuffle=on -count=1 "${pkgs[@]}"
+        [ ${#pkgs[@]} -gt 0 ] && par go_test_check "go-api tests (race, changed packages)" $m "${heavy[@]}" go test -race -shuffle=on -count=1 "${pkgs[@]}"
       fi
     else
       affected=()
@@ -257,15 +312,15 @@ if touches '^services/go-api/'; then
         [ -n "$affected_out" ] && mapfile -t affected <<<"$affected_out"
       fi
       if [ $whole_module = 1 ]; then
-        check "go-api vet" $m "${heavy[@]}" go vet ./...
+        par check "go-api vet" $m "${heavy[@]}" go vet ./...
       elif [ ${#affected[@]} -gt 0 ]; then
-        check "go-api vet" $m "${heavy[@]}" go vet "${affected[@]}"
+        par check "go-api vet" $m "${heavy[@]}" go vet "${affected[@]}"
       fi
-      check "go-api strict linters (new code, whole module)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --new-from-rev="$base" --allow-serial-runners ./...
+      par check "go-api strict linters (new code, whole module)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --new-from-rev="$base" --allow-serial-runners ./...
       check "go-api no comments (whole tree)" $m go run ./scripts/lintcomments --all .
       check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
       mapfile -t pkgs < <(go_pkgs $m)
-      [ ${#pkgs[@]} -gt 0 ] && go_test_check "go-api tests (race, changed packages)" $m "${heavy[@]}" go test -race -shuffle=on -count=1 "${pkgs[@]}"
+      [ ${#pkgs[@]} -gt 0 ] && par go_test_check "go-api tests (race, changed packages)" $m "${heavy[@]}" go test -race -shuffle=on -count=1 "${pkgs[@]}"
       if [ ${#pkgs[@]} -gt 0 ] && [ "${INTEGRATION:-}" != 1 ]; then
         echo "SKIP  go-api mutation (changed lines): integration tests cover lines here, so it needs INTEGRATION=1 and a database; the backend-tests CI job runs it"
       elif [ ${#pkgs[@]} -gt 0 ] && need jq "go-api mutation"; then
@@ -325,9 +380,9 @@ if touches '^services/supabase/'; then
   test_check "supabase auth config self-tests" . bash services/supabase/__tests__/supabase-auth.test.sh
 fi
 
-if touches '^(docs/features/[^/]+/notes\.md|services/go-api/internal/app/)' && need go "capability notes"; then
+if touches '^(docs/features/[^/]+/notes\.md|services/go-api/internal/app/)' && need go "capability notes" && ! { [ $lint_only = 0 ] && [[ " ${pkgs[*]:-} " == *" ./internal/app "* ]]; }; then
   go_pin services/go-api
-  go_test_check "capability notes name mounted routes" services/go-api "${heavy[@]}" go test -count=1 ./internal/app -run TestCapabilityNotes_NameMountedRoutes
+  par go_test_check "capability notes name mounted routes" services/go-api "${heavy[@]}" go test -count=1 ./internal/app -run TestCapabilityNotes_NameMountedRoutes
 fi
 
 if touches '^services/overseer/'; then
@@ -367,7 +422,7 @@ fi
 
 if [ $lint_only = 0 ] && touches '^services/go-api/internal/(shared/events/|search/domain/events\.go)' && need npx "mobile contract tests"; then
   if link_deps client; then
-    jest_check "mobile contract tests (go-api events changed)" client npx jest --ci --forceExit --watchman=false --cacheDirectory "$jest_cache" '\.contract\.test\.tsx?$'
+    par jest_check "mobile contract tests (go-api events changed)" client npx jest --ci --forceExit --watchman=false --cacheDirectory "$jest_cache" '\.contract\.test\.tsx?$'
   else
     echo "SKIP  mobile contract tests: no node_modules here or in $main_tree"; missing=1
   fi
@@ -378,7 +433,7 @@ if [ $lint_only = 0 ] && touches '^services/go-api/' && [ -d client/src ] && nee
   if [ -z "$contract_tests" ]; then
     echo "FAIL  mobile contract tests (go-api changed): no client test file mentions 'go-api'"; record_fail "mobile contract tests (go-api changed)" 1 "no client test file mentions 'go-api'"; failed=1
   elif link_deps client; then
-    jest_check "mobile contract tests (go-api changed)" client npx jest --ci --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$jest_cache" $contract_tests
+    par jest_check "mobile contract tests (go-api changed)" client npx jest --ci --forceExit --watchman=false --testTimeout=30000 --cacheDirectory "$jest_cache" $contract_tests
   else
     echo "SKIP  mobile contract tests: no node_modules here or in $main_tree"; missing=1
   fi
@@ -453,6 +508,7 @@ if [ -d services/go-api/scripts/nocomments ] && need go "nocomments"; then
   fi
 fi
 
+par_wait
 finished=1
 if [ $failed = 1 ]; then
   echo "precheck: red. Fix the FAIL lines, then rerun: bash scripts/precheck.sh $([ $full = 1 ] && echo '--full ')$base_ref"
