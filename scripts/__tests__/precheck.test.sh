@@ -207,7 +207,12 @@ expect_npx() {
     grep -qF -- "$1" "$WORK/npx.log" 2>/dev/null || fail "expected npx call to include '$1'"
 }
 
-CASE="mobile related tests keep the jest cache under HOME, not the /tmp tmpfs"
+expect_jest_cache_in_checkout() {
+    expect_npx "--cacheDirectory ../.cache/jest"
+    ! grep -qE -- '--cacheDirectory /' "$WORK/npx.log" 2>/dev/null || fail "jest got an absolute cache directory, which keeps heavy.sh from running it on a remote slot"
+}
+
+CASE="mobile related tests keep the jest cache inside the checkout, so heavy.sh can run them remotely"
 new_repo
 add_mobile_stubs
 (
@@ -219,7 +224,7 @@ add_mobile_stubs
 )
 run_script_with_stubs
 expect_npx "--findRelatedTests"
-expect_npx "--cacheDirectory $WORK/home/.cache/altune-ci/jest"
+expect_jest_cache_in_checkout
 
 CASE="a changed client script outside src is linted too"
 new_repo
@@ -234,7 +239,7 @@ add_mobile_stubs
 run_script_with_stubs
 expect_npx "eslint scripts/tool.mjs"
 
-CASE="mobile contract tests run by kind and keep the jest cache under HOME, not the /tmp tmpfs"
+CASE="mobile contract tests run by kind and keep the jest cache inside the checkout"
 new_repo
 add_mobile_stubs
 (
@@ -246,7 +251,7 @@ add_mobile_stubs
 )
 run_script_with_stubs
 expect_npx "\\.contract\\.test\\.tsx?\$"
-expect_npx "--cacheDirectory $WORK/home/.cache/altune-ci/jest"
+expect_jest_cache_in_checkout
 
 add_gate_parity_stub() {
     (
