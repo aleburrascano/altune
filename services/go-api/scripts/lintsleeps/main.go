@@ -89,7 +89,11 @@ func printSummary(w io.Writer, found []violation) {
 }
 
 func isExempt(path string) bool {
-	return strings.Contains("/"+filepath.ToSlash(filepath.Dir(path))+"/", "/"+exemptDir+"/")
+	abs, err := filepath.Abs(filepath.Dir(path))
+	if err != nil {
+		return false
+	}
+	return strings.Contains(filepath.ToSlash(abs)+"/", "/"+exemptDir+"/")
 }
 
 func scanDir(root string) ([]violation, error) {
@@ -153,12 +157,12 @@ func scanFile(path string) ([]violation, error) {
 	var walk func(n ast.Node)
 	walk = func(n ast.Node) {
 		ast.Inspect(n, func(m ast.Node) bool {
-			call, ok := m.(*ast.CallExpr)
-			if !ok {
+			if isSelector(m, timePkg, "Sleep") {
+				found = append(found, violation{path, fset.Position(m.Pos()).Line})
 				return true
 			}
-			if isSelector(call.Fun, timePkg, "Sleep") {
-				found = append(found, violation{path, fset.Position(call.Pos()).Line})
+			call, ok := m.(*ast.CallExpr)
+			if !ok {
 				return true
 			}
 			if synctestPkg != "" && (isSelector(call.Fun, synctestPkg, "Test") || isSelector(call.Fun, synctestPkg, "Run")) {
@@ -176,7 +180,7 @@ func scanFile(path string) ([]violation, error) {
 	return found, nil
 }
 
-func isSelector(e ast.Expr, pkg, name string) bool {
+func isSelector(e ast.Node, pkg, name string) bool {
 	sel, ok := e.(*ast.SelectorExpr)
 	if !ok {
 		return false

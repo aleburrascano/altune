@@ -31,6 +31,7 @@ func TestSleepOutsideABubbleIsFlaggedWithFileAndLine(t *testing.T) {
 		"plain test":             {"a_test.go", "package p\n\nimport (\n\t\"testing\"\n\t\"time\"\n)\n\nfunc TestX(t *testing.T) { time.Sleep(time.Second) }\n"},
 		"aliased time import":    {"a_test.go", "package p\n\nimport t \"time\"\n\nfunc f() { t.Sleep(1) }\n"},
 		"next to a bubble":       {"a_test.go", "package p\n\nimport (\n\t\"testing\"\n\t\"testing/synctest\"\n\t\"time\"\n)\n\nfunc TestX(t *testing.T) {\n\tsynctest.Test(t, func(t *testing.T) {})\n\ttime.Sleep(1)\n}\n"},
+		"sleep as a value":       {"a_test.go", "package p\n\nimport \"time\"\n\nfunc f() { g := time.Sleep; g(1) }\n"},
 		"sleep in a helper":      {"a_test.go", "package p\n\nimport \"time\"\n\nfunc wait() { time.Sleep(1) }\n"},
 		"named function as body": {"a_test.go", "package p\n\nimport (\n\t\"testing\"\n\t\"testing/synctest\"\n\t\"time\"\n)\n\nfunc body(t *testing.T) { time.Sleep(1) }\n\nfunc TestX(t *testing.T) { synctest.Test(t, body) }\n"},
 	}
@@ -140,5 +141,15 @@ func TestUsageAndUnreadableInput(t *testing.T) {
 	writeFile(t, dir, "broken.go", "package p\n\nfunc (\n")
 	if code, _, stderr := lint(t, dir); code != 2 || !strings.Contains(stderr, "parse") {
 		t.Fatalf("unparsable file: exit = %d, stderr %q, want 2 and a parse message", code, stderr)
+	}
+}
+
+func TestTheClockPackageIsExemptFromAnyWorkingDirectory(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "internal/shared/clock/sleeper.go", "package clock\n\nimport \"time\"\n\nfunc Sleep(d time.Duration) { time.Sleep(d) }\n")
+	t.Chdir(filepath.Join(dir, "internal/shared"))
+
+	if code, out, _ := lint(t, "clock"); code != 0 {
+		t.Fatalf("exit = %d, want 0; output:\n%s", code, out)
 	}
 }
