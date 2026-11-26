@@ -9,6 +9,7 @@ import (
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
 	"altune/go-api/internal/shared/slowclient"
+	"altune/go-api/internal/shared/testpoll"
 	"bufio"
 	"bytes"
 	"context"
@@ -640,6 +641,24 @@ func idleBounds(idle, heartbeat time.Duration) monitoring.StreamBounds {
 	})
 }
 
+func awaitKeepalives(t *testing.T, conn *sseConn, want int) {
+	t.Helper()
+	deadline := time.After(streamWait)
+	for seen := 0; seen < want; {
+		select {
+		case line, open := <-conn.lines:
+			if !open {
+				t.Fatalf("stream closed after %d of %d keepalives", seen, want)
+			}
+			if line == ": keepalive" {
+				seen++
+			}
+		case <-deadline:
+			t.Fatalf("saw %d of %d keepalives within %s", seen, want, streamWait)
+		}
+	}
+}
+
 func TestStreams_IdleStreamEmitsKeepalives(t *testing.T) {
 	const heartbeat = 150 * time.Millisecond
 	fx := newStreamFixture(t)
@@ -678,7 +697,7 @@ func TestStreams_NonPositiveBoundsKeepTheDefaults(t *testing.T) {
 func TestStreams_OutliveTheRouteWriteDeadline(t *testing.T) {
 	const routeDeadline = 150 * time.Millisecond
 	fx := newStreamFixture(t)
-	srv := httptest.NewServer(streamRouter(fx.deps, httpserver.WriteDeadline(routeDeadline), httpserver.RequestLogger))
+	srv := httptest.NewServer(boundedRouter(fx.deps, idleBounds(10*time.Second, routeDeadline), httpserver.WriteDeadline(routeDeadline), httpserver.RequestLogger))
 	t.Cleanup(srv.Close)
 	emit := map[string]func(string){
 		"/events/stream": func(marker string) {
@@ -689,7 +708,7 @@ func TestStreams_OutliveTheRouteWriteDeadline(t *testing.T) {
 	for _, path := range observeStreamPaths {
 		t.Run(path, func(t *testing.T) {
 			conn := openStream(t, srv, path)
-			time.Sleep(3 * routeDeadline)
+			awaitKeepalives(t, conn, 4)
 
 			marker := "late-" + uuid.NewString()
 			emit[path](marker)
@@ -728,14 +747,7 @@ func probeStream(t *testing.T, srv *httptest.Server) int {
 
 func slotReleasedWithin(t *testing.T, srv *httptest.Server, limit time.Duration) bool {
 	t.Helper()
-	deadline := time.Now().Add(limit)
-	for time.Now().Before(deadline) {
-		if probeStream(t, srv) == http.StatusOK {
-			return true
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	return false
+	return testpoll.Within(limit, func() bool { return probeStream(t, srv) == http.StatusOK })
 }
 
 func TestStreams_StalledClientReleasesItsSlotAtTheWriteDeadline(t *testing.T) {

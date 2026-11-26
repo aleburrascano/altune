@@ -4,16 +4,64 @@ import (
 	"altune/go-api/internal/playback"
 	sharedids "altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/testdb"
+	"altune/go-api/internal/shared/testpoll"
 	"context"
 	"errors"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+type startSignalDB struct {
+	playback.QueueStateDB
+	started chan struct{}
+	once    sync.Once
+}
+
+func newStartSignalDB(db playback.QueueStateDB) *startSignalDB {
+	return &startSignalDB{QueueStateDB: db, started: make(chan struct{})}
+}
+
+func (d *startSignalDB) signal() { d.once.Do(func() { close(d.started) }) }
+
+func (d *startSignalDB) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	d.signal()
+	return d.QueueStateDB.Exec(ctx, sql, args...)
+}
+
+func (d *startSignalDB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	d.signal()
+	return d.QueueStateDB.QueryRow(ctx, sql, args...)
+}
+
+func awaitWriteStarted(t *testing.T, d *startSignalDB) {
+	t.Helper()
+	testpoll.Until(t, 10*time.Second, "the delayed write to reach its connection pool", func() bool {
+		select {
+		case <-d.started:
+			return true
+		default:
+			return false
+		}
+	})
+}
+
+func awaitErasureOlderThan(t *testing.T, ctx context.Context, q playback.QueueStateDB, userId sharedids.UserId, age time.Duration) {
+	t.Helper()
+	testpoll.Until(t, age+10*time.Second, "the erasure to age past the grace", func() bool {
+		var older bool
+		err := q.QueryRow(ctx,
+			`SELECT COALESCE(clock_timestamp() > erased_at + $2::bigint * interval '1 microsecond', false)
+			   FROM playback_queue_state WHERE user_id = $1`, userId.UUID(), age.Microseconds()).Scan(&older)
+		return err == nil && older
+	})
+}
 
 func singleConnPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
@@ -190,14 +238,16 @@ func TestUpsert_SaveDelayedInPoolIsStillStale(t *testing.T) {
 		t.Fatalf("acquire: %v", err)
 	}
 
-	older := stateAt(userId, 60000, time.Now())
+	olderAt := time.Now()
+	older := stateAt(userId, 60000, olderAt)
 	done := make(chan error, 1)
+	delayed := newStartSignalDB(narrow)
 	go func() {
-		done <- playback.NewPostgresQueueStateRepository(narrow, playback.NoopQueueStateMetrics()).Upsert(ctx, older)
+		done <- playback.NewPostgresQueueStateRepository(delayed, playback.NoopQueueStateMetrics()).Upsert(ctx, older)
 	}()
 
-	time.Sleep(300 * time.Millisecond)
-	newerErr := playback.NewPostgresQueueStateRepository(wide, playback.NoopQueueStateMetrics()).Upsert(ctx, stateAt(userId, 65000, time.Now()))
+	awaitWriteStarted(t, delayed)
+	newerErr := playback.NewPostgresQueueStateRepository(wide, playback.NoopQueueStateMetrics()).Upsert(ctx, stateAt(userId, 65000, olderAt.Add(time.Millisecond)))
 	held.Release()
 	if newerErr != nil {
 		t.Fatalf("Upsert(newer): %v", newerErr)
@@ -234,11 +284,12 @@ func TestUpsert_SaveDelayedPastAnErasureDoesNotResurrectIt(t *testing.T) {
 
 	inFlight := stateAt(userId, 65000, time.Now())
 	done := make(chan error, 1)
+	delayed := newStartSignalDB(narrow)
 	go func() {
-		done <- playback.NewPostgresQueueStateRepository(narrow, playback.NoopQueueStateMetrics()).Upsert(ctx, inFlight)
+		done <- playback.NewPostgresQueueStateRepository(delayed, playback.NoopQueueStateMetrics()).Upsert(ctx, inFlight)
 	}()
 
-	time.Sleep(300 * time.Millisecond)
+	awaitWriteStarted(t, delayed)
 	forgetErr := playback.NewPostgresQueueStateRepository(wide, playback.NoopQueueStateMetrics()).DeleteForUser(ctx, userId)
 	held.Release()
 	if forgetErr != nil {
@@ -282,7 +333,7 @@ func TestUpsert_SaveBlockedOnTheErasureLockDoesNotResurrectIt(t *testing.T) {
 	go func() {
 		done <- playback.NewPostgresQueueStateRepository(pool, playback.NoopQueueStateMetrics()).Upsert(ctx, inFlight)
 	}()
-	awaitBlockedQueueWriter(t, ctx, pool)
+	awaitBlockedQueueWriter(t, ctx, pool, 0)
 
 	if err := erasure.Commit(ctx); err != nil {
 		t.Fatalf("commit the erasure: %v", err)
@@ -346,7 +397,7 @@ func TestUpsert_SaveHandledAfterAnErasureStillApplies(t *testing.T) {
 	if err := repo.DeleteForUser(ctx, userId); err != nil {
 		t.Fatalf("DeleteForUser: %v", err)
 	}
-	time.Sleep(defaultQueueStateOpTimeout + 500*time.Millisecond)
+	awaitErasureOlderThan(t, ctx, pool, userId, defaultQueueStateOpTimeout)
 
 	if err := repo.Upsert(ctx, stateAt(userId, 1000, time.Now())); err != nil {
 		t.Fatalf("Upsert(handled after the erasure) = %v, want nil; erasure is not a lockout", err)
@@ -388,11 +439,12 @@ func TestUpdatePosition_DelayedPastAnErasureDoesNotRecreateTheRow(t *testing.T) 
 	}
 
 	done := make(chan error, 1)
+	delayed := newStartSignalDB(narrow)
 	go func() {
-		done <- playback.NewPostgresQueueStateRepository(narrow, playback.NoopQueueStateMetrics()).UpdatePosition(ctx, position)
+		done <- playback.NewPostgresQueueStateRepository(delayed, playback.NoopQueueStateMetrics()).UpdatePosition(ctx, position)
 	}()
 
-	time.Sleep(300 * time.Millisecond)
+	awaitWriteStarted(t, delayed)
 	forgetErr := playback.NewPostgresQueueStateRepository(wide, playback.NoopQueueStateMetrics()).DeleteForUser(ctx, userId)
 	held.Release()
 	if forgetErr != nil {
@@ -724,10 +776,9 @@ func uncommittedFullSave(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 	}
 }
 
-func awaitBlockedQueueWriter(t *testing.T, ctx context.Context, q playback.QueueStateDB) {
+func awaitBlockedQueueWriter(t *testing.T, ctx context.Context, q playback.QueueStateDB, blockedFor time.Duration) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
+	testpoll.Until(t, blockedFor+2*time.Second, "a writer to wait on the queue row; the contended write was not reproduced", func() bool {
 		var blocked bool
 		if err := q.QueryRow(ctx,
 			`SELECT EXISTS (
@@ -735,15 +786,12 @@ func awaitBlockedQueueWriter(t *testing.T, ctx context.Context, q playback.Queue
 			   WHERE pid <> pg_backend_pid()
 			     AND wait_event_type = 'Lock'
 			     AND query LIKE '%playback_queue_state%'
-			 )`).Scan(&blocked); err != nil {
+			     AND clock_timestamp() - query_start >= $1::bigint * interval '1 microsecond'
+			 )`, blockedFor.Microseconds()).Scan(&blocked); err != nil {
 			t.Fatalf("read pg_stat_activity: %v", err)
 		}
-		if blocked {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("no writer ever waited on the queue row; the contended write was not reproduced")
+		return blocked
+	})
 }
 
 func TestUpdatePosition_QueueReplacedDuringItsLockWaitTellsTheClientToResync(t *testing.T) {
@@ -762,7 +810,7 @@ func TestUpdatePosition_QueueReplacedDuringItsLockWaitTellsTheClientToResync(t *
 
 	raced := make(chan error, 1)
 	go func() { raced <- repo.UpdatePosition(ctx, measuredOnTheOldQueue) }()
-	awaitBlockedQueueWriter(t, ctx, pool)
+	awaitBlockedQueueWriter(t, ctx, pool, 0)
 	commitReplacement()
 
 	if err := <-raced; !errors.Is(err, playback.ErrQueuePositionMismatch) {
@@ -791,7 +839,7 @@ func TestUpdatePosition_AppliesOverAFullSaveItWaitedOut(t *testing.T) {
 
 	raced := make(chan error, 1)
 	go func() { raced <- repo.UpdatePosition(ctx, position) }()
-	awaitBlockedQueueWriter(t, ctx, pool)
+	awaitBlockedQueueWriter(t, ctx, pool, 0)
 	commitSameQueue()
 
 	if err := <-raced; err != nil {
@@ -824,8 +872,7 @@ func TestUpdatePosition_HandledBeforeTheFullSaveItWaitedOutStaysStale(t *testing
 
 	raced := make(chan error, 1)
 	go func() { raced <- repo.UpdatePosition(ctx, olderPosition) }()
-	awaitBlockedQueueWriter(t, ctx, pool)
-	time.Sleep(lockHeldWhileItWaits)
+	awaitBlockedQueueWriter(t, ctx, pool, lockHeldWhileItWaits)
 	commitNewerFull()
 
 	if err := <-raced; !errors.Is(err, playback.ErrStaleQueueWrite) {

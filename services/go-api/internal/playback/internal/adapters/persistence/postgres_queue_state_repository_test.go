@@ -18,6 +18,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
@@ -317,16 +318,18 @@ func boundHandlingAge(t *testing.T, state *playback.QueueState) driver.Valuer {
 }
 
 func TestHandlingAge_MeasuredWhenEncodedNotWhenBound(t *testing.T) {
-	age := boundHandlingAge(t, emptyQueueState(testUser()))
-	time.Sleep(20 * time.Millisecond)
+	synctest.Test(t, func(t *testing.T) {
+		age := boundHandlingAge(t, emptyQueueState(testUser()))
+		time.Sleep(20 * time.Millisecond)
 
-	v, err := age.Value()
-	if err != nil {
-		t.Fatalf("Value: %v", err)
-	}
-	if got := v.(int64); got < (20 * time.Millisecond).Microseconds() {
-		t.Fatalf("age = %dµs, want >= 20000µs; time waiting before encoding (e.g. for a pooled connection) must count", got)
-	}
+		v, err := age.Value()
+		if err != nil {
+			t.Fatalf("Value: %v", err)
+		}
+		if got := v.(int64); got < (20 * time.Millisecond).Microseconds() {
+			t.Fatalf("age = %dµs, want >= 20000µs; time waiting before encoding (e.g. for a pooled connection) must count", got)
+		}
+	})
 }
 
 func TestHandlingAge_FutureStampClampsToZero(t *testing.T) {

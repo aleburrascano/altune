@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/slowclient"
+	"altune/go-api/internal/shared/testpoll"
 	"bytes"
 	"context"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -377,11 +379,11 @@ func TestHandleStreamAudio_FramesPrivateAudio(t *testing.T) {
 }
 
 const (
-	audioRouteDeadline = 150 * time.Millisecond
+	audioRouteDeadline = time.Millisecond
 	audioSize          = 2 << 20
 )
 
-func serveAudioBehindRouteDeadline(t *testing.T, opts ...func(*library.StreamHandler)) (get func() *http.Response) {
+func serveAudioBehindRouteDeadline(t *testing.T, routeDeadline time.Duration, opts ...func(*library.StreamHandler)) audioServer {
 	t.Helper()
 	repo := library.NewInMemoryTrackRepo()
 	store := library.NewInMemoryAudioStore()
@@ -389,7 +391,16 @@ func serveAudioBehindRouteDeadline(t *testing.T, opts ...func(*library.StreamHan
 	store.Seed("audio/long.opus", bytes.Repeat([]byte{0xAB}, audioSize))
 
 	r := chi.NewRouter()
-	r.Use(httpserver.WriteDeadline(audioRouteDeadline))
+	var finished atomic.Int32
+	var startedAt atomic.Int64
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			startedAt.CompareAndSwap(0, time.Now().UnixNano())
+			defer finished.Add(1)
+			next.ServeHTTP(w, req)
+		})
+	})
+	r.Use(httpserver.WriteDeadline(routeDeadline))
 	r.Use(httpserver.RequestLogger)
 	r.Use(asBearer)
 	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled), time.Now, opts...).Routes(r)
@@ -397,7 +408,7 @@ func serveAudioBehindRouteDeadline(t *testing.T, opts ...func(*library.StreamHan
 
 	path := "/tracks/" + track.ID.UUID().String() + "/audio"
 	auth := http.Header{"Authorization": {"Bearer " + library.FixtureUserId().String()}}
-	return func() *http.Response {
+	get := func() *http.Response {
 		conn, br := slowclient.Get(t, srv, path, auth)
 		resp := slowclient.ReadResponse(t, conn, br)
 		if resp.StatusCode != http.StatusOK {
@@ -405,14 +416,29 @@ func serveAudioBehindRouteDeadline(t *testing.T, opts ...func(*library.StreamHan
 		}
 		return resp
 	}
+	return audioServer{
+		get:     get,
+		handled: func() bool { return finished.Load() > 0 },
+		runningPastDeadline: func() bool {
+			began := startedAt.Load()
+			return began != 0 && finished.Load() == 0 && time.Since(time.Unix(0, began)) > routeDeadline
+		},
+	}
+}
+
+type audioServer struct {
+	get                 func() *http.Response
+	handled             func() bool
+	runningPastDeadline func() bool
 }
 
 func TestHandleStreamAudio_SlowNetworkIsNotCutOffByRouteDeadline(t *testing.T) {
-	get := serveAudioBehindRouteDeadline(t, library.WithStreamWriteIdleTimeout(time.Second))
-	resp := get()
+	srv := serveAudioBehindRouteDeadline(t, audioRouteDeadline, library.WithStreamWriteIdleTimeout(time.Second))
+	resp := srv.get()
 	defer func() { _ = resp.Body.Close() }()
 
-	began := time.Now()
+	testpoll.Until(t, 10*time.Second, "the handler to still be streaming past the route deadline", srv.runningPastDeadline)
+
 	got := 0
 	buf := make([]byte, 32<<10)
 	for {
@@ -421,24 +447,19 @@ func TestHandleStreamAudio_SlowNetworkIsNotCutOffByRouteDeadline(t *testing.T) {
 		if err != nil {
 			break
 		}
-		time.Sleep(20 * time.Millisecond)
 	}
-	elapsed := time.Since(began)
 	if got != audioSize {
-		t.Fatalf("received %d of %d bytes after %s: slow download was cut off", got, audioSize, elapsed)
-	}
-	if elapsed <= 3*audioRouteDeadline {
-		t.Fatalf("download took %s, not well past the %s route deadline, so it proves nothing", elapsed, audioRouteDeadline)
+		t.Fatalf("received %d of %d bytes: the download was cut off at the route deadline", got, audioSize)
 	}
 }
 
 func TestHandleStreamAudio_StalledClientIsCutOff(t *testing.T) {
 	const idle = 150 * time.Millisecond
-	get := serveAudioBehindRouteDeadline(t, library.WithStreamWriteIdleTimeout(idle))
-	resp := get()
+	srv := serveAudioBehindRouteDeadline(t, audioRouteDeadline, library.WithStreamWriteIdleTimeout(idle))
+	resp := srv.get()
 	defer func() { _ = resp.Body.Close() }()
 
-	time.Sleep(10 * idle)
+	testpoll.Until(t, 10*time.Second, "the server to give up on the client that stopped reading", srv.handled)
 	body, err := io.ReadAll(resp.Body)
 	if err == nil && len(body) == audioSize {
 		t.Fatalf("stalled client still received the whole %d-byte body: no idle write deadline", audioSize)
@@ -448,8 +469,8 @@ func TestHandleStreamAudio_StalledClientIsCutOff(t *testing.T) {
 func TestHandleStreamAudio_ANonPositiveIdleTimeoutKeepsTheDefault(t *testing.T) {
 	for _, idle := range []time.Duration{0, -time.Second} {
 		t.Run(idle.String(), func(t *testing.T) {
-			get := serveAudioBehindRouteDeadline(t, library.WithStreamWriteIdleTimeout(idle))
-			resp := get()
+			srv := serveAudioBehindRouteDeadline(t, audioRouteDeadline, library.WithStreamWriteIdleTimeout(idle))
+			resp := srv.get()
 			defer func() { _ = resp.Body.Close() }()
 
 			body, err := io.ReadAll(resp.Body)
