@@ -840,17 +840,61 @@ run_script gitea/main --full
 expect_rc 2
 expect_out "usage:"
 
-CASE="a push (no --full) tests the changed packages and runs no vet, govulncheck, deadcode or selection gate"
+CASE="a push (no --full) vets the whole module and tests the changed packages, with no govulncheck, deadcode or selection gate"
 new_repo
 add_go_fixture
 edit_go_file internal/shared/s/s.go
 run_push_scoped
 expect_rc 0
+expect_out "go-api vet (whole module"
 expect_out "go-api tests (race, changed packages)"
+expect_log "go vet ./..."
 forbid_log "govulncheck"
-forbid_log "go vet"
 forbid_log "deadcode"
 forbid_log "acquisitioneval"
+
+CASE="a push (no --full) of a change with no Go file in go-api does not vet the module"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    printf 'notes\n' >services/go-api/NOTES.md
+    git add -A
+    git commit -qm "notes"
+)
+run_push_scoped
+expect_rc 0
+forbid_log "go vet"
+
+CASE="a push that only deletes a Go file still vets the module, so the importer it left broken fails"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    printf 'package s\n\nfunc Other() int { return 2 }\n' >services/go-api/internal/shared/s/t.go
+    git add -A
+    git commit -qm "give s a second file"
+    git update-ref refs/remotes/gitea/main HEAD
+    git rm -q services/go-api/internal/shared/s/s.go
+    git commit -qm "delete s.go, which held S"
+)
+run_push_scoped
+expect_rc 1
+expect_out "FAIL  go-api vet (whole module"
+
+CASE="a signature break with an unchanged importer fails the push, which the changed package's own tests cannot see"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    printf 'package s\n\nfunc S(extra int) int { return extra }\n' >services/go-api/internal/shared/s/s.go
+    git add -A
+    git commit -qm "break the signature of s.S"
+)
+run_push_scoped
+expect_rc 1
+expect_out "FAIL  go-api vet (whole module"
+expect_out "not enough arguments in call to s.S"
 
 CASE="--full lints the whole module for a one-package change"
 new_repo
