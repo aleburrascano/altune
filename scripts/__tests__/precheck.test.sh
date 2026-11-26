@@ -826,6 +826,53 @@ expect_log "npm run --silent fallow"
 expect_out "mobile boundaries and duplication (changed files)"
 expect_out "mobile mutation (changed lines)"
 
+expect_no_npx() {
+    ! grep -qF -- "$1" "$WORK/npx.log" 2>/dev/null || fail "expected no npx call to include '$1'"
+}
+
+stage_client_change() {
+    add_mobile_stubs
+    add_npm_stub
+    printf '#!/usr/bin/env bash\nprintf "npx types=%%s %%s\\n" "${ESLINT_WITHOUT_TYPES:-unset}" "$*" >>"%s/npx.log"\n' "$WORK" >"$WORK/bin/npx"
+    (
+        cd "$WORK/repo" || exit 1
+        mkdir -p client/src
+        printf 'export const x = 1;\n' >client/src/x.ts
+        git add -A
+    )
+}
+
+CASE="a client-only commit lints staged files without type info and runs no heavy client check"
+new_repo
+stage_client_change
+run_script_with_stubs --lint
+expect_npx "types=1 eslint src/x.ts"
+expect_out "mobile lint (pending files, no type info)"
+expect_out "mobile mechanical style (pending lines, no type info)"
+expect_out "mobile prettier (changed files)"
+expect_out "ESLINT_WITHOUT_TYPES=1 node scripts/lint-changed-lines.mjs"
+expect_no_npx "tsc"
+expect_no_npx "jest"
+! grep -qF "npm run" "$WORK/tools.log" 2>/dev/null || fail "a client commit ran fallow or react-doctor"
+! grep -qE "fallow|react-doctor|typecheck|mutation" "$WORK/out.log" || fail "a client commit mentioned a push-stage check: $(grep -E 'fallow|react-doctor|typecheck|mutation' "$WORK/out.log" | head -n 1)"
+
+CASE="a client push runs type-aware lint, typecheck, fallow and react-doctor"
+new_repo
+stage_client_change
+(
+    cd "$WORK/repo" || exit 1
+    git commit -qm "client change"
+)
+run_script_with_stubs
+expect_npx "types=unset eslint src/x.ts"
+expect_npx "tsc --noEmit"
+expect_out "mobile typecheck"
+expect_out "mobile lint (changed files)"
+expect_out "mobile mechanical style (changed lines)"
+expect_out "mobile boundaries and duplication (changed files)"
+expect_log "npm run --silent react-doctor"
+expect_log "npm run --silent fallow"
+
 CASE="a CI job that runs client mutation itself skips it in precheck"
 CLIENT_MUTATE_RUNS_ELSEWHERE=1 run_script_with_stubs
 expect_out "SKIP  mobile mutation (changed lines): the mobile-mutation CI job runs it"

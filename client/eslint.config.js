@@ -76,6 +76,32 @@ const typedLinting = [
   },
 ];
 
+const WITHOUT_TYPE_INFO = process.env.ESLINT_WITHOUT_TYPES === '1';
+
+const needsTypeInfo = (ruleName) => {
+  const prefix = '@typescript-eslint/';
+  return (
+    ruleName.startsWith(prefix) &&
+    tsPlugin.rules[ruleName.slice(prefix.length)]?.meta.docs.requiresTypeChecking === true
+  );
+};
+
+const withoutTypeInfo = (block) => {
+  if (!WITHOUT_TYPE_INFO) return block;
+  const { projectService, ...parserOptions } = block.languageOptions?.parserOptions ?? {};
+  return {
+    ...block,
+    ...(block.languageOptions && {
+      languageOptions: { ...block.languageOptions, parserOptions },
+    }),
+    ...(block.rules && {
+      rules: Object.fromEntries(
+        Object.entries(block.rules).filter(([name]) => !needsTypeInfo(name)),
+      ),
+    }),
+  };
+};
+
 const TEST_FILES = ['**/__tests__/**'];
 
 const FILES_WHERE_EXPO_GO_FORCES_CONDITIONAL_REQUIRE = [
@@ -234,7 +260,7 @@ const mechanicalStyleEnforcedOnChangedCodeOnly =
           ignores: typedLinting[0].ignores,
           languageOptions: typedLinting[0].languageOptions,
         })),
-      ]
+      ].map(withoutTypeInfo)
     : [];
 
 const localPlugin = {
@@ -485,7 +511,7 @@ const warningsAreErrors = (block) => {
 
 const styleRulesConfig = [
   ...expoConfig.map(warningsAreErrors),
-  ...typedLinting,
+  ...typedLinting.map(withoutTypeInfo),
   typeScriptPluginRegisteredDirectlyRatherThanViaExpoConfig,
   {
     rules: {
