@@ -14,7 +14,7 @@ func discogsServer(t *testing.T, status int) (*httptest.Server, *[]*http.Request
 	t.Helper()
 	var got []*http.Request
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got = append(got, r.Clone(context.Background()))
+		got = append(got, r.Clone(r.Context()))
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(`{}`))
 	}))
