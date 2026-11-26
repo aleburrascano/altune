@@ -16,8 +16,8 @@ const (
 	HealthCheckFix
 )
 
-func RunHealthCheck(cfg *config.Config, mode HealthCheckMode) {
-	exitOnError(runHealthCheck(cfg, mode))
+func RunHealthCheck(cfg *config.Config, mode HealthCheckMode) error {
+	return runHealthCheck(cfg, mode)
 }
 
 func runHealthCheck(cfg *config.Config, mode HealthCheckMode) error {

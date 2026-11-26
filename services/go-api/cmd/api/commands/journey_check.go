@@ -8,8 +8,8 @@ import (
 	"os"
 )
 
-func RunJourneyCheck(cfg *config.Config) {
-	exitOnError(runJourneyCheckWithConfig(cfg))
+func RunJourneyCheck(cfg *config.Config) error {
+	return runJourneyCheckWithConfig(cfg)
 }
 
 func runJourneyCheckWithConfig(cfg *config.Config) error {

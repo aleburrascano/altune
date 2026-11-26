@@ -6,18 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-func exitOnError(err error) {
-	if err != nil {
-		fmt.Printf("ERROR: %v\n", err)
-		os.Exit(1)
-	}
-}
 
 func openPool(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
 	if cfg.DatabaseURL == "" {
