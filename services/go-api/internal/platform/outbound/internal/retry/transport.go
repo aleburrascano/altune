@@ -30,8 +30,11 @@ type Transport struct {
 	onRetry func(host string)
 }
 
-func New(base http.RoundTripper, opts Options) *Transport {
-	t := &Transport{base: base, pacer: pacing.New(), sleep: opts.Sleep, jitter: opts.Jitter, onRetry: opts.OnRetry}
+func New(base http.RoundTripper, pacer *pacing.Pacer, opts Options) (*Transport, error) {
+	if pacer == nil {
+		return nil, ErrPacerRequired
+	}
+	t := &Transport{base: base, pacer: pacer, sleep: opts.Sleep, jitter: opts.Jitter, onRetry: opts.OnRetry}
 	if t.sleep == nil {
 		t.sleep = sleepOnTimer
 	}
@@ -41,8 +44,10 @@ func New(base http.RoundTripper, opts Options) *Transport {
 	if t.onRetry == nil {
 		t.onRetry = func(string) {}
 	}
-	return t
+	return t, nil
 }
+
+var ErrPacerRequired = errors.New("retry transport needs a pacer")
 
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	attempts := 1
