@@ -234,22 +234,31 @@ jest_limit=${PRECHECK_JEST_TIMEOUT:-1800}
 jest_cache=../.cache/jest
 
 jest_failed_suites() {
-  sed -E 's/\x1b\[[0-9;]*m//g' "$log" | awk '
-    /^FAIL / {
+  sed -E 's/\x1b\[[0-9;]*m//g' "$log" | awk -v limit=200 '
+    function emit(text) {
+      if (shown >= limit) { cut = 1; return }
+      print text
+      shown++
+    }
+    /^[[:space:]]*FAIL[[:space:]]/ {
       path = $2
+      for (i = 2; i <= NF; i++) if ($i ~ /\.(test|spec)\.[cm]?[jt]sx?$/) { path = $i; break }
       capturing = !(path in seen)
       seen[path] = 1
       count = 0
-      if (capturing) print "  " path
+      inconsole = 0
+      if (capturing) emit("  " path)
       next
     }
-    /^(PASS |Summary of all failing tests|Test Suites:)/ { capturing = 0; next }
-    /^[[:space:]]*● Console$/ { capturing = 0; next }
-    capturing && NF > 0 && !/^[[:space:]]+at / && count < 6 {
+    /^[[:space:]]*(PASS[[:space:]]|Summary of all failing tests|Test Suites:|Tests:|Snapshots?:|Snapshot Summary|Time:|Ran all test suites)/ { capturing = 0; next }
+    /^[[:space:]]*● Console$/ { inconsole = 1; next }
+    /^[[:space:]]*● / { inconsole = 0 }
+    capturing && !inconsole && NF > 0 && !/^[[:space:]]+at / && !/^[[:space:]]*>?[[:space:]]*[0-9]*[[:space:]]*\|/ && count < 6 {
       sub(/^[[:space:]]+/, "")
-      print "      " $0
+      emit("      " $0)
       count++
-    }'
+    }
+    END { if (cut) print "  (list cut at " limit " lines; more suites failed than are shown)" }'
 }
 
 jest_failures() {
