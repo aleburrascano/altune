@@ -286,10 +286,16 @@ func storedForm(value string) string {
 	return strings.TrimSuffix(strings.TrimPrefix(stored, "playlist:"), ":")
 }
 
-func readableOverJSON(value string) string {
-	raw, _ := json.Marshal(value)
+func readableOverJSON(t *testing.T, value string) string {
+	t.Helper()
+	raw, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal %q: %v", value, err)
+	}
 	var out string
-	_ = json.Unmarshal(raw, &out)
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal %s: %v", raw, err)
+	}
 	return out
 }
 
@@ -303,7 +309,7 @@ func assertReadMatchesNetURL(t *testing.T, encoded string) {
 		}
 		return
 	}
-	if got == nil || got.Query != readableOverJSON(want) {
+	if got == nil || got.Query != readableOverJSON(t, want) {
 		t.Fatalf("search:%s read as %+v, net/url decodes %q", encoded, got, want)
 	}
 }

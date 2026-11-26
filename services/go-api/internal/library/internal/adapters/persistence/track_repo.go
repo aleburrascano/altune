@@ -84,8 +84,12 @@ const insertTrackSQL = `INSERT INTO tracks (
 	RETURNING id`
 
 func insertTrack(ctx context.Context, tx pgx.Tx, track *domain.Track) error {
+	sources, err := catalogSourcesJSON(track.CatalogSources)
+	if err != nil {
+		return fmt.Errorf("insert track %s: %w", track.ID.UUID(), err)
+	}
 	var returnedID uuid.UUID
-	err := tx.QueryRow(ctx, insertTrackSQL,
+	err = tx.QueryRow(ctx, insertTrackSQL,
 		track.ID.UUID(), track.UserId.UUID(),
 		track.Title, track.Artist, track.Album, track.DurationSeconds,
 		track.AddedAt, track.ArtworkURL, track.DownloadStatus.String(), track.DedupKey,
@@ -93,7 +97,7 @@ func insertTrack(ctx context.Context, tx pgx.Tx, track *domain.Track) error {
 		track.ISRC, track.AudioRef, track.FailureReason, track.AcquisitionProvenance, track.AudioSourceURL,
 		track.RejectedSourceKeys, track.AudioVersion, track.AcquisitionStartedAt, track.IdempotencyKey,
 		track.ConfidenceScore, track.EvidenceJSON, track.CatalogDurationSeconds,
-		track.CatalogMBID, track.CatalogExplicit, catalogSourcesJSON(track.CatalogSources),
+		track.CatalogMBID, track.CatalogExplicit, sources,
 	).Scan(&returnedID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errTrackAlreadyStored
@@ -652,12 +656,15 @@ func pageTotal(ctx context.Context, pool *pgxpool.Pool, limit, offset, got int, 
 	return total, nil
 }
 
-func catalogSourcesJSON(sources []domain.CatalogSource) []byte {
+func catalogSourcesJSON(sources []domain.CatalogSource) ([]byte, error) {
 	if len(sources) == 0 {
-		return []byte("[]")
+		return []byte("[]"), nil
 	}
-	encoded, _ := json.Marshal(sources)
-	return encoded
+	encoded, err := json.Marshal(sources)
+	if err != nil {
+		return nil, fmt.Errorf("encode catalog_sources: %w", err)
+	}
+	return encoded, nil
 }
 
 func decodeCatalogSources(raw []byte) ([]domain.CatalogSource, error) {

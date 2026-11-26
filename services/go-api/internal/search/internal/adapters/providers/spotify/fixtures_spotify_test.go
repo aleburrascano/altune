@@ -86,8 +86,13 @@ func serveTokens(t *testing.T, e tokenEndpoints) *tokenServer {
 }
 
 func writeJSON(w http.ResponseWriter, body any) {
+	encoded, err := json.Marshal(body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(body)
+	_, _ = w.Write(encoded)
 }
 
 func serverTimeIs(serverTime int64) http.HandlerFunc {

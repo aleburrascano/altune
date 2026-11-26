@@ -214,8 +214,13 @@ func (s *rotatingJWKSServer) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	body, err := json.Marshal(*s.keySet.Load())
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(*s.keySet.Load())
+	_, _ = w.Write(body)
 }
 
 func (s *rotatingJWKSServer) rotate(t *testing.T, pub *rsa.PublicKey, kid string) {

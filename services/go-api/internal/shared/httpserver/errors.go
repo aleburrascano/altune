@@ -118,7 +118,12 @@ func logFailure(r *http.Request, p Problem, err error) {
 }
 
 func writeProblem(w http.ResponseWriter, p Problem) {
-	body, _ := json.Marshal(p)
+	body, err := json.Marshal(p)
+	if err != nil {
+		slog.Error("problem.encode_failed", logging.KeyStatus, p.Status, logging.KeyCode, p.Code, logging.KeyError, err)
+		w.WriteHeader(p.Status)
+		return
+	}
 	w.Header().Set("Content-Type", problemContentType)
 	w.WriteHeader(p.Status)
 	_, _ = w.Write(append(body, '\n'))

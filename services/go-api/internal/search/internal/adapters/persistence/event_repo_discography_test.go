@@ -7,7 +7,6 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/testdb"
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -74,9 +73,6 @@ func TestPostgresEventStore_DiscographyQuality_WorstFirstAndRegroup(t *testing.T
 	if err != nil {
 		t.Fatalf("DiscographyQuality(artist): %v", err)
 	}
-	if b, _ := json.Marshal(byArtist); true {
-		t.Logf("by=artist -> %s", b)
-	}
 	if len(byArtist) != 3 {
 		t.Fatalf("cases = %d, want 3 (latest-per-artist)", len(byArtist))
 	}
@@ -90,9 +86,6 @@ func TestPostgresEventStore_DiscographyQuality_WorstFirstAndRegroup(t *testing.T
 	byProvider, err := store.DiscographyQuality(context.Background(), since, ports.GroupByProvider, 200)
 	if err != nil {
 		t.Fatalf("DiscographyQuality(provider): %v", err)
-	}
-	if b, _ := json.Marshal(byProvider); true {
-		t.Logf("by=provider -> %s", b)
 	}
 	if got, want := discographyRefs(byProvider), []string{"spotify:worst", "deezer:mid", "spotify:clean"}; !sameOrder(got, want) {
 		t.Fatalf("by=provider order = %v, want %v", got, want)
@@ -112,9 +105,6 @@ func TestPostgresEventStore_DiscographyQuality_IDAnchoredRanking(t *testing.T) {
 	cases, err := store.DiscographyQuality(context.Background(), since, ports.GroupByArtist, 200)
 	if err != nil {
 		t.Fatalf("DiscographyQuality: %v", err)
-	}
-	if b, _ := json.Marshal(cases); true {
-		t.Logf("id-anchored order -> %s", b)
 	}
 	if got, want := discographyRefs(cases), []string{"deezer:no-id", "spotify:id-verified"}; !sameOrder(got, want) {
 		t.Fatalf("id-anchored order = %v, want %v (no-id artist first; id-verified single-provider is not a top suspect)", got, want)
