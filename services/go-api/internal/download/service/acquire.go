@@ -289,7 +289,7 @@ func (s *AcquireTrackAudioService) takeRerecording(ctx context.Context, steps Pi
 }
 
 func (s *AcquireTrackAudioService) runRerecordingPass(ctx context.Context, steps Pipeline, ac *AcquisitionContext, label ports.TrackLabel) error {
-	pass := *ac
+	pass := ac.snapshot()
 	pass.retargetTo(label)
 	s.resolveIdentity(ctx, &pass)
 	if err := RunPipeline(ctx, steps, &pass); err != nil {

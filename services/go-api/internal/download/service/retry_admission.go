@@ -14,6 +14,8 @@ import (
 const (
 	RetryCooldown     = 60 * time.Second
 	ReacquireCooldown = 60 * time.Second
+
+	minRetryAfter = time.Second
 )
 
 type cooldownRefusedError struct {
@@ -22,7 +24,7 @@ type cooldownRefusedError struct {
 
 func (e cooldownRefusedError) Error() string             { return acqdomain.ErrCooldownActive.Error() }
 func (e cooldownRefusedError) Unwrap() error             { return acqdomain.ErrCooldownActive }
-func (e cooldownRefusedError) RetryAfter() time.Duration { return max(e.wait, time.Second) }
+func (e cooldownRefusedError) RetryAfter() time.Duration { return max(e.wait, minRetryAfter) }
 
 const releaseTimeout = 5 * time.Second
 

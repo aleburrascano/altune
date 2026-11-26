@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 )
 
@@ -278,6 +279,32 @@ type AcquisitionContext struct {
 	PriorRejections []ports.PriorRejection
 
 	Relabel *ports.TrackLabel
+}
+
+func (ac *AcquisitionContext) snapshot() AcquisitionContext {
+	copied := *ac
+	copied.Track.CatalogSources = slices.Clone(ac.Track.CatalogSources)
+	copied.Identity.Sources = slices.Clone(ac.Identity.Sources)
+	copied.Identity.MBIDs = slices.Clone(ac.Identity.MBIDs)
+	copied.Candidates = slices.Clone(ac.Candidates)
+	copied.Ranked = slices.Clone(ac.Ranked)
+	copied.Selected = cloned(ac.Selected)
+	copied.Evidence.Qualifiers = slices.Clone(ac.Evidence.Qualifiers)
+	copied.Evidence.DurationDeltaSeconds = cloned(ac.Evidence.DurationDeltaSeconds)
+	copied.Rejections = slices.Clone(ac.Rejections)
+	copied.Attempted = slices.Clone(ac.Attempted)
+	copied.Replace.ExcludeKeys = slices.Clone(ac.Replace.ExcludeKeys)
+	copied.PriorRejections = slices.Clone(ac.PriorRejections)
+	copied.Relabel = cloned(ac.Relabel)
+	return copied
+}
+
+func cloned[T any](p *T) *T {
+	if p == nil {
+		return nil
+	}
+	value := *p
+	return &value
 }
 
 func (ac *AcquisitionContext) clearCandidates() {
