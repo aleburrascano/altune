@@ -44,7 +44,7 @@ func readStoredRow(t *testing.T, row storedQueueRow) (*playback.QueueState, erro
 		user.UUID(), row.trackIds, row.currentIdx, row.shuffled, row.naturalOrder, row.updatedAt); err != nil {
 		t.Fatalf("store row: %v", err)
 	}
-	return playback.NewPostgresQueueStateRepository(pool, playback.NoopQueueStateMetrics()).GetForUser(ctx, user)
+	return playback.NewPostgresQueueStateRepository(pool, playback.NoopQueueStateMetrics(), time.Now).GetForUser(ctx, user)
 }
 
 func TestGetForUser_StoredRowWithCurrentIdxPastEndIsCorrupt(t *testing.T) {
