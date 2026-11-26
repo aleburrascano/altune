@@ -59,7 +59,6 @@ beforeAll(ensureAppAuthClient);
 
 function fireFakeTimersBeforeStopping() {
   if ('clock' in setTimeout) jest.runOnlyPendingTimers();
-  jest.useRealTimers();
 }
 
 async function stopTelemetryWork() {
