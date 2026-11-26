@@ -8,6 +8,8 @@ import {
 } from '@features/library';
 import { asTrackId, type TrackId } from '@shared/catalog';
 
+const CONFLICT = 409;
+
 describe('classifyLibraryError — one boundary, typed errors only', () => {
   it.each([
     [new NetworkError('timeout', 'timed out'), 'network'],
@@ -21,7 +23,7 @@ describe('classifyLibraryError — one boundary, typed errors only', () => {
     [new ApiError(500, 'internal'), 'server'],
     [new ApiError(503, 'unavailable'), 'server'],
     [new ContractError('GET /v1/tracks', 'bad shape'), 'server'],
-    [new ApiError(409, 'conflict'), 'unknown'],
+    [new ApiError(CONFLICT, 'conflict'), 'unknown'],
     [new ApiError(400, 'bad request'), 'unknown'],
     [null, 'unknown'],
     ['boom', 'unknown'],
@@ -100,7 +102,7 @@ describe('logTrackMutationFailure carries triage fields and nothing the error dr
   });
 
   it('logs status, code, failure class and correlation id for an ApiError', () => {
-    const error = new ApiError(409, 'conflict', 'track_locked', 'corr-1');
+    const error = new ApiError(CONFLICT, 'conflict', 'catalog.track_already_in_playlist', 'corr-1');
 
     logTrackMutationFailure(warn, 'delete track', deleteEndpoint, trackId, error);
 
@@ -108,7 +110,7 @@ describe('logTrackMutationFailure carries triage fields and nothing the error dr
       trackId: 't1',
       endpoint: 'DELETE /v1/tracks/t1',
       status: 409,
-      code: 'track_locked',
+      code: 'catalog.track_already_in_playlist',
       failure: 'unknown',
       correlationId: 'corr-1',
     });

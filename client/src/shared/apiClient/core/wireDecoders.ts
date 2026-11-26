@@ -1,8 +1,8 @@
-import { ContractError } from '@shared/failure';
+import { ContractError, isApiErrorCode, type ApiErrorCode } from '@shared/failure';
 
 export type ApiErrorBody = {
   detail?: string;
-  code?: string;
+  code?: ApiErrorCode;
 };
 
 export function asRecord(value: unknown, at: string): Record<string, unknown> {
@@ -87,7 +87,8 @@ function optionalString(record: Record<string, unknown>, key: string): string | 
 export function parseErrorBody(value: unknown): ApiErrorBody {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return {};
   const record = value as Record<string, unknown>;
-  const code = optionalString(record, 'code');
+  const rawCode = record['code'];
+  const code = isApiErrorCode(rawCode) ? rawCode : undefined;
   const detail = optionalString(record, 'detail');
   return {
     ...(code !== undefined ? { code } : {}),

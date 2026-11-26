@@ -573,7 +573,7 @@ describe('failure logging', () => {
     it('logs method, endpoint, status and error code for a non-2xx response (a failed add-tracks-to-playlist)', async () => {
       __http.reply('POST /v1/playlists/p1/tracks', {
         status: 409,
-        json: { code: 'playlist_full', detail: 'Road Trip Mix is full' },
+        json: { code: 'catalog.playlist_full', detail: 'Road Trip Mix is full' },
       });
 
       await expect(
@@ -591,7 +591,7 @@ describe('failure logging', () => {
           path: '/v1/playlists/p1/tracks',
           correlationId: expect.any(String),
           status: 409,
-          code: 'playlist_full',
+          code: 'catalog.playlist_full',
         },
       ]);
     });

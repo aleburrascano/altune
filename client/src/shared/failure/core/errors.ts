@@ -1,3 +1,5 @@
+import type { ApiErrorCode } from '@shared/failure/core/apiErrorCodes';
+
 export const HTTP_UNAUTHORIZED = 401;
 
 export function isServerFaultStatus(status: number): boolean {
@@ -8,7 +10,7 @@ export class ApiError extends Error {
   constructor(
     public readonly status: number,
     message: string,
-    public readonly code?: string,
+    public readonly code?: ApiErrorCode,
     public readonly correlationId?: string,
   ) {
     super(message);

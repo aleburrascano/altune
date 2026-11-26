@@ -93,6 +93,12 @@ describe('parseErrorBody — lenient extraction of the machine-readable error co
     expect(parseErrorBody([1, 2])).toEqual({});
   });
 
+  it('drops a code the client does not know, keeping the detail, so a newer server never types a bogus code', () => {
+    expect(parseErrorBody({ detail: 'new rule', code: 'catalog.not_yet_in_this_build' })).toEqual({
+      detail: 'new rule',
+    });
+  });
+
   it('ignores a non-string code or detail rather than throwing, unlike the strict narrowers', () => {
     expect(parseErrorBody({ code: 42, detail: true })).toEqual({});
   });

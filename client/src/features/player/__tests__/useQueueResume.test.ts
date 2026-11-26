@@ -1319,7 +1319,7 @@ describe('a queue save the server rejects as a client fault', () => {
   });
 
   it('does not report a 5xx', async () => {
-    await saveRejectedWith(new ApiError(SERVICE_UNAVAILABLE, 'down', 'server.unavailable'));
+    await saveRejectedWith(new ApiError(SERVICE_UNAVAILABLE, 'down', 'playback.unavailable'));
 
     expect(saveQueueState).toHaveBeenCalledTimes(1);
     expect(await reportedMessages()).toEqual([]);
@@ -1334,7 +1334,7 @@ describe('a queue save the server rejects as a client fault', () => {
 
   it('does not report an expired session', async () => {
     const unauthorized = 401;
-    await saveRejectedWith(new ApiError(unauthorized, 'expired', 'auth.expired'));
+    await saveRejectedWith(new ApiError(unauthorized, 'expired', 'auth.token_expired'));
 
     expect(saveQueueState).toHaveBeenCalledTimes(1);
     expect(await reportedMessages()).toEqual([]);
@@ -1342,7 +1342,7 @@ describe('a queue save the server rejects as a client fault', () => {
 
   it('does not report throttling', async () => {
     const tooManyRequests = 429;
-    await saveRejectedWith(new ApiError(tooManyRequests, 'slow down', 'rate.limited'));
+    await saveRejectedWith(new ApiError(tooManyRequests, 'slow down', 'playback.rate_limited'));
 
     expect(saveQueueState).toHaveBeenCalledTimes(1);
     expect(await reportedMessages()).toEqual([]);

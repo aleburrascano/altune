@@ -17,6 +17,7 @@ import { createMemoryPlaylistsPort } from '@testing/fakes/playlists/inMemoryPlay
 
 const playlistsPort = createMemoryPlaylistsPort();
 const SECRET = 'daft punk discovery bootleg';
+const SERVICE_UNAVAILABLE = 503;
 
 type FailingMethod = 'getTracks' | 'getLibraryAlbums' | 'getLibraryArtists';
 
@@ -60,7 +61,10 @@ describe.each([
   ['artists', useLibraryArtists, 'getLibraryArtists'],
 ] as const)('a failed useLibrary%s load', (chip, useHook, method) => {
   it('logs the chip, its sort, the status and the failure class', async () => {
-    const port = failingPort(method, new ApiError(503, SECRET, 'library_unavailable', 'corr-1'));
+    const port = failingPort(
+      method,
+      new ApiError(SERVICE_UNAVAILABLE, SECRET, 'catalog.temporarily_unavailable', 'corr-1'),
+    );
     const { result } = renderHook(() => useHook('', 'az', true), { wrapper: wrapperFor(port) });
 
     await waitFor(() => expect(result.current.error).not.toBeNull());
@@ -69,7 +73,7 @@ describe.each([
       sort: 'az',
       isSearching: false,
       status: 503,
-      code: 'library_unavailable',
+      code: 'catalog.temporarily_unavailable',
       failure: 'server',
       correlationId: 'corr-1',
     });

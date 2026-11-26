@@ -57,6 +57,7 @@ function recordingNavigator(): RecordingNavigator {
 }
 
 const SECRET = 'guest star unreleased bootleg';
+const SERVICE_UNAVAILABLE = 503;
 
 let client: QueryClient;
 let logs: RecordedLogs;
@@ -100,7 +101,9 @@ async function tapExplore(): Promise<void> {
 
 describe('a failed "Explore artist" search', () => {
   it('logs the artist, the status and the failure class', async () => {
-    mockSearchDiscovery.mockRejectedValue(new ApiError(503, SECRET, 'discovery_down', 'corr-7'));
+    mockSearchDiscovery.mockRejectedValue(
+      new ApiError(SERVICE_UNAVAILABLE, SECRET, 'discovery.all_providers_failed', 'corr-7'),
+    );
     render(<FeaturingScreen {...featuringProps()} />, { wrapper });
 
     await tapExplore();
@@ -108,7 +111,12 @@ describe('a failed "Explore artist" search', () => {
     await waitFor(() =>
       expect(logs.warnings).toContainEqual([
         '[library] featuring explore search failed',
-        { status: 503, code: 'discovery_down', failure: 'server', correlationId: 'corr-7' },
+        {
+          status: 503,
+          code: 'discovery.all_providers_failed',
+          failure: 'server',
+          correlationId: 'corr-7',
+        },
       ]),
     );
   });
