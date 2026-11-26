@@ -180,7 +180,7 @@ const MOUNT_HANDLER_FILES: Record<string, string[]> = {
       .relative(GO_API_ROOT!, playbackGoFileDeclaring(QUEUE_HANDLER_ROUTES_DECLARATION))
       .split(path.sep);
   },
-  discoveryH: ['internal', 'search', 'adapters', 'handler', 'discovery_handler.go'],
+  discoveryH: ['internal', 'search', 'internal', 'adapters', 'handler', 'discovery_handler.go'],
 };
 
 const SHARED_ROUTER_HANDLER_FILES: Record<string, string[]> = {
