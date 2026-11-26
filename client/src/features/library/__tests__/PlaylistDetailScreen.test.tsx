@@ -122,7 +122,7 @@ describe('PlaylistDetailScreen — a failed load', () => {
   it('logs the playlist, the status and the failure class without the server message', async () => {
     __http.reply('GET /v1/playlists/p1', {
       status: 500,
-      json: { message: SERVER_MESSAGE, code: 'playlist_unavailable' },
+      json: { message: SERVER_MESSAGE, code: 'catalog.temporarily_unavailable' },
     });
 
     const screen = render(<PlaylistDetailScreen playlistId={PLAYLIST_ID} navigator={navigator} />, {
@@ -136,7 +136,7 @@ describe('PlaylistDetailScreen — a failed load', () => {
         expect.objectContaining({
           playlistId: 'p1',
           status: 500,
-          code: 'playlist_unavailable',
+          code: 'catalog.temporarily_unavailable',
           failure: 'server',
         }),
       ],
