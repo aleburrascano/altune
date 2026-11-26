@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/search/internal/core/albumgrouping"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/service/providerguard"
-	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/parallel"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -16,56 +15,44 @@ import (
 )
 
 type GetArtistContentService struct {
-	providers            map[domain.ProviderName]ports.ArtistContentProvider
-	identityStore        ports.IdentityStore
-	mbAnchor             ports.MusicBrainzDiscographyAnchor
-	breaker              *providerguard.CircuitBreaker
-	discographyTelemetry *DiscographyTelemetry
+	providers   map[domain.ProviderName]ports.ArtistContentProvider
+	identity    ArtistIdentity
+	anchoring   Anchoring
+	discography DiscographyObserver
+	breaker     *providerguard.CircuitBreaker
 }
 
 func NewGetArtistContentService(
 	providers map[domain.ProviderName]ports.ArtistContentProvider,
-	opts ...ArtistContentOption,
-) *GetArtistContentService {
-	s := &GetArtistContentService{providers: providers}
-	for _, opt := range opts {
-		opt(s)
+	identity ArtistIdentity,
+	anchoring Anchoring,
+	discography DiscographyObserver,
+	breaker *providerguard.CircuitBreaker,
+) (*GetArtistContentService, error) {
+	if err := requireCollaborators("the artist content service",
+		collaborator{"providers", providers == nil},
+		collaborator{"an artist identity", identity == nil},
+		collaborator{"an anchoring strategy", anchoring == nil},
+		collaborator{"a discography observer", discography == nil},
+		collaborator{"a circuit breaker", breaker == nil},
+	); err != nil {
+		return nil, err
 	}
-	return s
-}
-
-type ArtistContentOption func(*GetArtistContentService)
-
-func WithContentIdentityStore(store ports.IdentityStore) ArtistContentOption {
-	return func(s *GetArtistContentService) { s.identityStore = store }
-}
-
-func WithContentCircuitBreaker(cb *providerguard.CircuitBreaker) ArtistContentOption {
-	return func(s *GetArtistContentService) { s.breaker = cb }
-}
-
-func WithMBAnchor(anchor ports.MusicBrainzDiscographyAnchor) ArtistContentOption {
-	return func(s *GetArtistContentService) { s.mbAnchor = anchor }
-}
-
-func WithContentEventStore(eventStore ports.EventStore, bg *background.Tracker) ArtistContentOption {
-	return func(s *GetArtistContentService) {
-		if eventStore != nil {
-			s.discographyTelemetry = newDiscographyTelemetry(eventStore, bg)
-		}
-	}
+	return &GetArtistContentService{
+		providers:   providers,
+		identity:    identity,
+		anchoring:   anchoring,
+		discography: discography,
+		breaker:     breaker,
+	}, nil
 }
 
 func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName domain.ProviderName, externalID string, known map[domain.ProviderName]string, limit int) (*providerguard.ContentFetchResponse, error) {
-	if s.usesIdentity(known) {
-		tracks, partial := s.v2TopTracks(ctx, s.artistIdentity(ctx, providerName, externalID, known))
+	if identity, serves := s.identity.Identify(ctx, providerName, externalID, known); serves {
+		tracks, partial := s.v2TopTracks(ctx, identity)
 		return s.identityAnswer(providerName, tracks, partial, limit), nil
 	}
 	return s.seedTopTracks(ctx, providerName, externalID, limit), nil
-}
-
-func (s *GetArtistContentService) usesIdentity(known map[domain.ProviderName]string) bool {
-	return s.identityStore != nil || len(known) > 0
 }
 
 func (s *GetArtistContentService) identityAnswer(providerName domain.ProviderName, items []domain.SearchResult, partial bool, limit int) *providerguard.ContentFetchResponse {
@@ -196,8 +183,7 @@ func fanOutFailureAttr(callerCtx context.Context, provider domain.ProviderName, 
 }
 
 func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName domain.ProviderName, externalID string, known map[domain.ProviderName]string, limit int) (*providerguard.ContentFetchResponse, error) {
-	if s.usesIdentity(known) {
-		identity := s.artistIdentity(ctx, providerName, externalID, known)
+	if identity, serves := s.identity.Identify(ctx, providerName, externalID, known); serves {
 		albums, partial := s.v2Albums(ctx, identity, albumgrouping.SourceKey(providerName, externalID))
 		return s.identityAnswer(providerName, albums, partial, limit), nil
 	}

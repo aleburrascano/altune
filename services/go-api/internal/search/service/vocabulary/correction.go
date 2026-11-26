@@ -25,8 +25,11 @@ type CorrectionService struct {
 	vocab ports.SpellingHintsReader
 }
 
-func NewCorrectionService(vocab ports.SpellingHintsReader) *CorrectionService {
-	return &CorrectionService{vocab: vocab}
+func NewCorrectionService(vocab ports.SpellingHintsReader) (*CorrectionService, error) {
+	if vocab == nil {
+		return nil, ErrCollaboratorRequired
+	}
+	return &CorrectionService{vocab: vocab}, nil
 }
 
 type CorrectionResult struct {
@@ -35,9 +38,6 @@ type CorrectionResult struct {
 }
 
 func (s *CorrectionService) Correct(ctx context.Context, query string) *CorrectionResult {
-	if s.vocab == nil {
-		return nil
-	}
 	norm := textnorm.NormalizeForMatch(query)
 	if !correctable(norm) {
 		return nil
@@ -46,9 +46,6 @@ func (s *CorrectionService) Correct(ctx context.Context, query string) *Correcti
 }
 
 func (s *CorrectionService) CorrectAggressive(ctx context.Context, query string) *CorrectionResult {
-	if s.vocab == nil {
-		return nil
-	}
 	norm := textnorm.NormalizeForMatch(query)
 	if !correctable(norm) {
 		return nil

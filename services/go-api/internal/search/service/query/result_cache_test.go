@@ -14,7 +14,7 @@ func TestService_ResultCache_HitSkipsProvidersAndIsCrossUser(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	p := &search.CountingProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	cache := search.NewFakeResultCache()
-	svc := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), search.WithResultCache(cache))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ResultCache = cache })
 
 	out1 := runSearch(t, svc, "humble")
 	if p.Calls != 1 {
@@ -46,7 +46,7 @@ func TestService_ResultCache_SymbolOnlyQueriesBypassCache(t *testing.T) {
 		},
 	}
 	cache := search.NewFakeResultCache()
-	svc := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), search.WithResultCache(cache))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ResultCache = cache })
 
 	out1 := runSearch(t, svc, "!!!")
 	out2 := runSearch(t, svc, "†††")
@@ -67,7 +67,7 @@ func TestService_ResultCache_PartialNotCached(t *testing.T) {
 	good := &search.CountingProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	bad := &search.CountingProvider{Provider: search.ProviderITunes, Err: errors.New("boom")}
 	cache := search.NewFakeResultCache()
-	svc := search.NewSearchService(bg, []search.SearchProvider{good, bad}, search.NewCircuitBreaker(), search.WithResultCache(cache))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{good, bad}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ResultCache = cache })
 
 	out := runSearch(t, svc, "humble")
 	if !out.Partial {
@@ -105,7 +105,7 @@ func (c *fakeProviderCache) Set(_ context.Context, provider search.ProviderName,
 func TestService_ProviderCache_ReusesEachProvidersAnswer(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	p := &search.CountingProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), search.WithProviderResultCache(newFakeProviderCache()))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ProviderCache = newFakeProviderCache() })
 
 	runSearch(t, svc, "humble")
 	out := runSearch(t, svc, "humble")
@@ -125,7 +125,7 @@ func TestService_ProviderCache_OnlyTheFailedProviderIsAskedAgain(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	good := &search.CountingProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	bad := &search.CountingProvider{Provider: search.ProviderITunes, Err: errors.New("boom")}
-	svc := search.NewSearchService(bg, []search.SearchProvider{good, bad}, search.NewCircuitBreaker(), search.WithProviderResultCache(newFakeProviderCache()))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{good, bad}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ProviderCache = newFakeProviderCache() })
 
 	runSearch(t, svc, "humble")
 	runSearch(t, svc, "humble")
@@ -141,7 +141,7 @@ func TestService_ProviderCache_OnlyTheFailedProviderIsAskedAgain(t *testing.T) {
 func TestService_ProviderCache_EmptyAnswerIsCached(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	p := &search.CountingProvider{Provider: search.ProviderDeezer}
-	svc := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), search.WithProviderResultCache(newFakeProviderCache()))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ProviderCache = newFakeProviderCache() })
 
 	runSearch(t, svc, "qwzxv")
 	runSearch(t, svc, "qwzxv")
@@ -155,7 +155,7 @@ func TestService_ProviderCache_ServesWhileBreakerIsOpen(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	p := &search.CountingProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	breaker := search.NewCircuitBreaker()
-	svc := search.NewSearchService(bg, []search.SearchProvider{p}, breaker, search.WithProviderResultCache(newFakeProviderCache()))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, breaker, func(c *search.Collaborators) { c.ProviderCache = newFakeProviderCache() })
 
 	runSearch(t, svc, "humble")
 	openBreaker(t, breaker, search.ProviderDeezer)
@@ -170,7 +170,7 @@ func TestService_ProviderCache_ServesWhileBreakerIsOpen(t *testing.T) {
 func TestService_ProviderCache_KeyedByQueryAndKinds(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	p := &search.CountingProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), search.WithProviderResultCache(newFakeProviderCache()))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ProviderCache = newFakeProviderCache() })
 
 	runSearch(t, svc, "humble")
 	runSearch(t, svc, "  HUMBLE ")
@@ -192,7 +192,7 @@ func TestService_ProviderCache_SymbolOnlyQueriesBypassIt(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	p := &search.CountingProvider{Provider: search.ProviderDeezer}
 	cache := newFakeProviderCache()
-	svc := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), search.WithProviderResultCache(cache))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ProviderCache = cache })
 
 	runSearch(t, svc, "!!!")
 	runSearch(t, svc, "†††")
@@ -205,7 +205,7 @@ func TestService_ProviderCache_SymbolOnlyQueriesBypassIt(t *testing.T) {
 func TestInspectSearch_BypassesProviderCache(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	p := &search.CountingProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
-	svc := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), search.WithProviderResultCache(newFakeProviderCache()))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ProviderCache = newFakeProviderCache() })
 
 	runSearch(t, svc, "humble")
 	q, err := search.NewSearchQuery("humble", search.AllKinds(), 10)

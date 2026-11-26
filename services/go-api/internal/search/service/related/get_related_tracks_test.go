@@ -2,13 +2,35 @@ package related_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
 func relatedTrack(title string) search.SearchResult {
 	return search.SearchResult{Kind: search.ResultKindTrack, Title: title}
+}
+
+func TestNewGetRelatedTracksService_RefusesAMissingCollaborator(t *testing.T) {
+	cases := []struct {
+		name      string
+		providers map[string]search.RelatedTracksProvider
+		breaker   *search.CircuitBreaker
+		missing   string
+	}{
+		{"no providers", nil, search.NewCircuitBreaker(), "providers"},
+		{"no breaker", map[string]search.RelatedTracksProvider{}, nil, "breaker"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, err := search.NewGetRelatedTracksService(tc.providers, tc.breaker)
+			if !errors.Is(err, search.ErrRelatedCollaboratorRequired) || svc != nil || !strings.Contains(err.Error(), tc.missing) {
+				t.Errorf("svc = %v, err = %v; want nil and ErrRelatedCollaboratorRequired naming %q", svc, err, tc.missing)
+			}
+		})
+	}
 }
 
 func TestGetRelatedTracksService_Execute(t *testing.T) {
@@ -60,7 +82,7 @@ func TestGetRelatedTracksService_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := search.NewGetRelatedTracksService(map[string]search.RelatedTracksProvider{
+			svc := searchtest.NewRelatedTracks(t, map[string]search.RelatedTracksProvider{
 				"soundcloud": tt.fake,
 			})
 

@@ -129,8 +129,13 @@ type FavoritesLifter struct {
 	repo ports.FavoritesRepository
 }
 
-func NewFavoritesLifter(repo ports.FavoritesRepository) *FavoritesLifter {
-	return &FavoritesLifter{repo: repo}
+var ErrCollaboratorRequired = errors.New("favorites lifter needs its repository, pass the absent adapter to switch it off")
+
+func NewFavoritesLifter(repo ports.FavoritesRepository) (*FavoritesLifter, error) {
+	if repo == nil {
+		return nil, ErrCollaboratorRequired
+	}
+	return &FavoritesLifter{repo: repo}, nil
 }
 
 func (s *FavoritesLifter) Lift(
@@ -138,7 +143,7 @@ func (s *FavoritesLifter) Lift(
 	userId ids.UserId,
 	ranked []domain.SearchResult,
 ) []domain.SearchResult {
-	if s.repo == nil || len(ranked) < 2 {
+	if len(ranked) < 2 {
 		return ranked
 	}
 	if err := ids.GuardNotSystem(userId); err != nil {

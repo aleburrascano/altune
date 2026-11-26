@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/app/bridges/libraryfromsearch"
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
 	"reflect"
@@ -28,12 +29,12 @@ func (f fakeDeezerFeatured) LookupTrackFeatured(_ context.Context, trackID strin
 	return f.feats, nil
 }
 
-func resolverOverCatalogCredits(_ *testing.T, feats []library.FeaturedArtist, err error) library.FeaturedArtistResolver {
+func resolverOverCatalogCredits(t *testing.T, feats []library.FeaturedArtist, err error) library.FeaturedArtistResolver {
 	upstream := make([]search.FeaturedArtist, 0, len(feats))
 	for _, f := range feats {
 		upstream = append(upstream, search.FeaturedArtist{Name: f.Name, MBID: f.MBID, DeezerID: f.DeezerID})
 	}
-	discovered := search.NewFeaturedArtistResolver(nil, fakeDeezerFeatured{feats: upstream, err: err})
+	discovered := searchtest.NewFeaturedResolver(t, search.NoMBFeatured{}, fakeDeezerFeatured{feats: upstream, err: err})
 	return library.NewFeaturedArtistResolver(libraryfromsearch.NewFeaturedArtistCredits(discovered))
 }
 

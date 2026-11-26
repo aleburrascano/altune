@@ -20,7 +20,7 @@ func resolveArtistIdentity(
 	identity := ResolvedArtistIdentity{
 		ProviderIDs: map[domain.ProviderName]string{provider: externalID},
 	}
-	if store == nil || externalID == "" {
+	if externalID == "" {
 		return identity, false
 	}
 
@@ -41,19 +41,41 @@ func resolveArtistIdentity(
 	return identity, true
 }
 
-func (s *GetArtistContentService) artistIdentity(
-	ctx context.Context,
-	provider domain.ProviderName,
-	externalID string,
-	known map[domain.ProviderName]string,
-) ResolvedArtistIdentity {
-	identity, _ := resolveArtistIdentity(ctx, s.identityStore, provider, externalID)
+type ArtistIdentity interface {
+	Identify(ctx context.Context, provider domain.ProviderName, externalID string, known map[domain.ProviderName]string) (identity ResolvedArtistIdentity, servesIdentityPath bool)
+}
+
+type StoreIdentity struct {
+	store ports.IdentityStore
+}
+
+func NewStoreIdentity(store ports.IdentityStore) (*StoreIdentity, error) {
+	if err := requireCollaborators("the store identity", collaborator{"an identity store", store == nil}); err != nil {
+		return nil, err
+	}
+	return &StoreIdentity{store: store}, nil
+}
+
+func (i *StoreIdentity) Identify(ctx context.Context, provider domain.ProviderName, externalID string, known map[domain.ProviderName]string) (ResolvedArtistIdentity, bool) {
+	identity, _ := resolveArtistIdentity(ctx, i.store, provider, externalID)
+	mergeKnownIDs(identity, known)
+	return identity, true
+}
+
+type SeedPathIdentity struct{}
+
+func (SeedPathIdentity) Identify(_ context.Context, provider domain.ProviderName, externalID string, known map[domain.ProviderName]string) (ResolvedArtistIdentity, bool) {
+	identity := ResolvedArtistIdentity{ProviderIDs: map[domain.ProviderName]string{provider: externalID}}
+	mergeKnownIDs(identity, known)
+	return identity, len(known) > 0
+}
+
+func mergeKnownIDs(identity ResolvedArtistIdentity, known map[domain.ProviderName]string) {
 	for name, id := range known {
 		if identity.ProviderIDs[name] == "" && id != "" {
 			identity.ProviderIDs[name] = id
 		}
 	}
-	return identity
 }
 
 var catalogProviders = []domain.ProviderName{

@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
@@ -18,8 +19,13 @@ type RecordSearchHistoryService struct {
 	HistoryRepo ports.HistoryWriter
 }
 
-func NewRecordSearchHistoryService(historyRepo ports.HistoryWriter) *RecordSearchHistoryService {
-	return &RecordSearchHistoryService{HistoryRepo: historyRepo}
+var ErrCollaboratorRequired = errors.New("history recorder needs its repository, pass the absent adapter to switch it off")
+
+func NewRecordSearchHistoryService(historyRepo ports.HistoryWriter) (*RecordSearchHistoryService, error) {
+	if historyRepo == nil {
+		return nil, ErrCollaboratorRequired
+	}
+	return &RecordSearchHistoryService{HistoryRepo: historyRepo}, nil
 }
 
 func (s *RecordSearchHistoryService) Record(
@@ -29,9 +35,6 @@ func (s *RecordSearchHistoryService) Record(
 	queryNorm string,
 	startedAt time.Time,
 ) {
-	if s.HistoryRepo == nil {
-		return
-	}
 	if err := ids.GuardNotSystem(userId); err != nil {
 		return
 	}

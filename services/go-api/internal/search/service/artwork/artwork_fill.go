@@ -10,6 +10,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"maps"
 	"slices"
@@ -24,11 +25,39 @@ const (
 	emptyArtHash           = "d41d8cd98f00b204e9800998ecf8427e"
 )
 
+var ErrCollaboratorRequired = errors.New("artwork filler needs every collaborator, pass the absent adapter to switch one off")
+
 type ArtworkFiller struct {
 	resolver      ports.TaggingArtworkLookup
 	cache         ports.ArtworkCache
 	identityStore identityLookup
 	mbidIndex     ports.MBIDIndex
+	bg            *background.Tracker
+	live          liveStage
+}
+
+type liveStage interface {
+	launch(ctx context.Context, a *ArtworkFiller, filled []domain.SearchResult, live []liveArtworkJob, jobs []int)
+}
+
+type backgroundLive struct{}
+
+func (backgroundLive) launch(ctx context.Context, a *ArtworkFiller, filled []domain.SearchResult, live []liveArtworkJob, jobs []int) {
+	results := slices.Clone(filled)
+	a.bg.LaunchWithin(ctx, "artwork_fill", artworkFillTimeout, func(bgCtx context.Context) {
+		a.resolveJobs(bgCtx, results, live, jobs)
+	})
+}
+
+type noLive struct{}
+
+func (noLive) launch(context.Context, *ArtworkFiller, []domain.SearchResult, []liveArtworkJob, []int) {
+}
+
+type NoFill struct{}
+
+func (NoFill) Fill(_ context.Context, results []domain.SearchResult) []domain.SearchResult {
+	return results
 }
 
 type identityLookup interface {
@@ -40,13 +69,40 @@ func NewArtworkFiller(
 	cache ports.ArtworkCache,
 	identityStore ports.IdentityStore,
 	mbidIndex ports.MBIDIndex,
-) *ArtworkFiller {
-	return &ArtworkFiller{resolver: resolver, cache: cache, identityStore: identityStore, mbidIndex: mbidIndex}
+	bg *background.Tracker,
+) (*ArtworkFiller, error) {
+	return newFiller(resolver, cache, identityStore, mbidIndex, bg, backgroundLive{})
 }
 
-func (a *ArtworkFiller) Fill(ctx context.Context, results []domain.SearchResult, bg *background.Tracker) []domain.SearchResult {
+func NewPendingFiller(identityStore ports.IdentityStore, bg *background.Tracker) (*ArtworkFiller, error) {
+	return newFiller(NoLookup{}, NoCache{}, identityStore, NoMBIDIndex{}, bg, noLive{})
+}
+
+func newFiller(
+	resolver ports.TaggingArtworkLookup,
+	cache ports.ArtworkCache,
+	identityStore ports.IdentityStore,
+	mbidIndex ports.MBIDIndex,
+	bg *background.Tracker,
+	live liveStage,
+) (*ArtworkFiller, error) {
+	for name, missing := range map[string]bool{
+		"resolver":      resolver == nil,
+		"cache":         cache == nil,
+		"identityStore": identityStore == nil,
+		"mbidIndex":     mbidIndex == nil,
+		"tracker":       bg == nil,
+	} {
+		if missing {
+			return nil, fmt.Errorf("%w: %s", ErrCollaboratorRequired, name)
+		}
+	}
+	return &ArtworkFiller{resolver: resolver, cache: cache, identityStore: identityStore, mbidIndex: mbidIndex, bg: bg, live: live}, nil
+}
+
+func (a *ArtworkFiller) Fill(ctx context.Context, results []domain.SearchResult) []domain.SearchResult {
 	limit := min(artworkFillLimit, len(results))
-	if a.resolver == nil || limit == 0 {
+	if limit == 0 {
 		return results
 	}
 
@@ -56,7 +112,7 @@ func (a *ArtworkFiller) Fill(ctx context.Context, results []domain.SearchResult,
 	top := results[:limit]
 	filler := a.withPrefetchedIdentities(fillCtx, top)
 	filled, live := filler.fillFromCache(ctx, fillCtx, top)
-	filler.resolveLater(ctx, bg, filled, live)
+	filler.resolveLater(ctx, filled, live)
 	return append(filled, results[limit:]...)
 }
 
@@ -71,15 +127,12 @@ func (a *ArtworkFiller) fillFromCache(ctx, fillCtx context.Context, top []domain
 	return filled, live
 }
 
-func (a *ArtworkFiller) resolveLater(ctx context.Context, bg *background.Tracker, filled []domain.SearchResult, live []liveArtworkJob) {
+func (a *ArtworkFiller) resolveLater(ctx context.Context, filled []domain.SearchResult, live []liveArtworkJob) {
 	jobs := liveArtworkJobs(live)
-	if a.cache == nil || bg == nil || len(jobs) == 0 {
+	if len(jobs) == 0 {
 		return
 	}
-	results := slices.Clone(filled)
-	bg.LaunchWithin(ctx, "artwork_fill", artworkFillTimeout, func(bgCtx context.Context) {
-		a.resolveJobs(bgCtx, results, live, jobs)
-	})
+	a.live.launch(ctx, a, filled, live, jobs)
 }
 
 func liveArtworkJobs(live []liveArtworkJob) []int {
@@ -184,7 +237,7 @@ func (a *ArtworkFiller) lookupMBID(ctx context.Context, result *domain.SearchRes
 }
 
 func (a *ArtworkFiller) lookupDurableIdentity(ctx context.Context, result *domain.SearchResult) string {
-	if a.identityStore == nil || !needsDurableIdentity(*result) {
+	if !needsDurableIdentity(*result) {
 		return ""
 	}
 	ref := durableIdentityRef(*result)
@@ -202,9 +255,6 @@ func (a *ArtworkFiller) lookupDurableIdentity(ctx context.Context, result *domai
 }
 
 func (a *ArtworkFiller) lookupMBIDIndex(ctx context.Context, result domain.SearchResult) string {
-	if a.mbidIndex == nil {
-		return ""
-	}
 	mbid, ok := a.mbidIndex.LookupMBID(ctx, result.Kind, textnorm.NameKey(result.Title, result.Subtitle))
 	if !ok {
 		return ""
@@ -213,9 +263,6 @@ func (a *ArtworkFiller) lookupMBIDIndex(ctx context.Context, result domain.Searc
 }
 
 func (a *ArtworkFiller) lookupArtworkCache(ctx context.Context, result *domain.SearchResult, mbid string) (path domain.ArtworkPath, settled bool) {
-	if a.cache == nil {
-		return "", false
-	}
 	cachedURL, cachedSource, found, _ := a.cache.Get(ctx, result.Kind, result.Title, result.Subtitle, mbid)
 	if !found {
 		return "", false

@@ -33,7 +33,7 @@ func searchAndIngest(t *testing.T, query string, kinds map[search.ResultKind]boo
 		return nil
 	}}
 	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: results}
-	svc := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), search.WithVocabularyStore(store))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Vocabulary = store })
 	q, err := search.NewSearchQuery(query, kinds, everyResultOnOnePage)
 	if err != nil {
 		t.Fatalf("NewSearchQuery: %v", err)
@@ -169,7 +169,7 @@ func searchWithVocabularyStore(t *testing.T, store *search.FakeVocabularyStore) 
 	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{
 		deezerResult(search.ResultKindArtist, "Drake", "", 90),
 	}}
-	svc := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), search.WithVocabularyStore(store))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Vocabulary = store })
 	q, err := search.NewSearchQuery("drake", allKinds(), everyResultOnOnePage)
 	if err != nil {
 		t.Fatalf("NewSearchQuery: %v", err)

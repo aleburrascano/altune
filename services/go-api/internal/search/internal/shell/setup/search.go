@@ -5,147 +5,183 @@ import (
 	"altune/go-api/internal/search/internal/adapters/connections"
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/service/artwork"
 	"altune/go-api/internal/search/service/providerguard"
 	"altune/go-api/internal/search/service/query"
 	"altune/go-api/internal/search/service/rank"
 	"altune/go-api/internal/search/service/related"
+	"fmt"
 	"strings"
 )
 
-type searchOption struct {
-	name   string
-	option query.Option
+type searchPlan struct {
+	collaborators query.Collaborators
+	options       []query.Option
+	chosen        []string
 }
 
-func newSearchService(w wiring, breaker *providerguard.CircuitBreaker) *query.Service {
-	named := append(unrecordedOptions(w, breaker), recordingOptions(w.deps, w.stores)...)
-	return w.namedSearchService("discovery.search", named, breaker)
+func newSearchPlan() *searchPlan {
+	return &searchPlan{collaborators: query.AbsentCollaborators()}
 }
 
-func newRankingOnlySearchService(w wiring) *query.Service {
-	named := rankingOptions(w.deps.Search, w.stores)
-	named = append(named, enrichmentCacheOptions(w.stores)...)
-	named = append(named, vocabularyOptions(w.stores)...)
-	return w.namedSearchService("discovery.ranking_only_search", named, providerguard.NewCircuitBreaker())
+func (p *searchPlan) choose(name string) {
+	p.chosen = append(p.chosen, name)
 }
 
-func (w wiring) namedSearchService(message string, named []searchOption, breaker *providerguard.CircuitBreaker) *query.Service {
-	w.deps.Logger.InfoContext(w.deps.Lifecycle, message, "options", searchOptionNames(named))
-	return query.NewService(w.deps.Tracker, w.table.searchProviders(), breaker, searchOptions(named)...)
+func (p *searchPlan) option(name string, opt query.Option) {
+	p.options = append(p.options, opt)
+	p.choose(name)
 }
 
-func unrecordedOptions(w wiring, breaker *providerguard.CircuitBreaker) []searchOption {
-	named := rankingOptions(w.deps.Search, w.stores)
-	named = append(named, explorationAndDeadlineOptions(w.deps.Search)...)
-	named = append(named, artworkAndRelatedOptions(w.table, w.stores, w.artwork, breaker)...)
-	named = append(named, identityOptions(w.stores)...)
-	named = append(named, resultCacheOptions(w.deps.Search, w.stores)...)
-	named = append(named, enrichmentCacheOptions(w.stores)...)
-	return append(named, vocabularyOptions(w.stores)...)
-}
-
-func recordingOptions(d connections.Deps, s connections.Stores) []searchOption {
-	return append(eventOptions(d.Search, s), activityOptions(d.Activity)...)
-}
-
-func searchOptionNames(named []searchOption) string {
-	names := make([]string, len(named))
-	for i, o := range named {
-		names[i] = o.name
+func newSearchService(w wiring, breaker *providerguard.CircuitBreaker) (*query.Service, error) {
+	p := newSearchPlan()
+	planRanking(p, w.deps.Search, w.stores)
+	planExplorationAndDeadline(p, w.deps.Search)
+	if err := planArtworkAndRelated(p, w, breaker); err != nil {
+		return nil, err
 	}
-	return strings.Join(names, ",")
+	planIdentityAndFavorites(p, w.stores)
+	planResultCaches(p, w.deps.Search, w.stores)
+	planEnrichmentCaches(p, w.stores)
+	planVocabulary(p, w.stores)
+	planRecording(p, w)
+	return w.namedSearchService("discovery.search", p, breaker)
 }
 
-func searchOptions(named []searchOption) []query.Option {
-	opts := make([]query.Option, len(named))
-	for i, o := range named {
-		opts[i] = o.option
+func newRankingOnlySearchService(w wiring) (*query.Service, error) {
+	p := newSearchPlan()
+	planRanking(p, w.deps.Search, w.stores)
+	planVocabulary(p, w.stores)
+	return w.namedSearchService("discovery.ranking_only_search", p, providerguard.NewCircuitBreaker())
+}
+
+func (w wiring) namedSearchService(message string, p *searchPlan, breaker *providerguard.CircuitBreaker) (*query.Service, error) {
+	w.deps.Logger.InfoContext(w.deps.Lifecycle, message, "options", strings.Join(p.chosen, ","))
+	svc, err := query.NewService(w.deps.Tracker, w.table.searchProviders(), breaker, p.collaborators, p.options...)
+	if err != nil {
+		return nil, fmt.Errorf("build %s: %w", message, err)
 	}
-	return opts
+	return svc, nil
 }
 
-func rankingOptions(settings connections.SearchSettings, s connections.Stores) []searchOption {
-	named := []searchOption{{"history", query.WithHistoryRepository(s.History)}}
+func planRanking(p *searchPlan, settings connections.SearchSettings, s connections.Stores) {
+	p.collaborators.History = s.History
+	p.choose("history")
 	if settings.TailDemotion {
-		named = append(named, searchOption{"tail_demotion", query.WithTailDemotion()})
+		p.option("tail_demotion", query.WithTailDemotion())
 	}
 	if settings.CrossKindProminence {
-		named = append(named, searchOption{"cross_kind_prominence", query.WithCrossKindProminence()})
+		p.option("cross_kind_prominence", query.WithCrossKindProminence())
 	}
-	return named
 }
 
-func explorationAndDeadlineOptions(settings connections.SearchSettings) []searchOption {
-	var named []searchOption
-	if settings.Exploration {
-		named = append(named, searchOption{"exploration", query.WithExploration(settings.ExplorationRate)})
+func planExplorationAndDeadline(p *searchPlan, settings connections.SearchSettings) {
+	if settings.Exploration && settings.ExplorationRate > 0 {
+		p.option("exploration", query.WithExploration(settings.ExplorationRate))
 	}
-	return append(named, searchOption{"deadline", query.WithSearchDeadline(settings.Deadline)})
+	if settings.Deadline > 0 {
+		p.option("deadline", query.WithSearchDeadline(settings.Deadline))
+	}
 }
 
-func artworkAndRelatedOptions(t *providerTable, s connections.Stores, artwork ports.TaggingArtworkLookup, breaker *providerguard.CircuitBreaker) []searchOption {
+func planArtworkAndRelated(p *searchPlan, w wiring, breaker *providerguard.CircuitBreaker) error {
+	filler, err := newArtworkFiller(w)
+	if err != nil {
+		return fmt.Errorf("build the artwork filler: %w", err)
+	}
+	p.collaborators.Artwork = filler
+	p.choose("artwork")
+
+	findRelated, err := newFindRelatedService(w.table, w.stores, breaker)
+	if err != nil {
+		return fmt.Errorf("build the find related service: %w", err)
+	}
+	p.collaborators.Related = findRelated
+	p.choose("find_related")
+	return nil
+}
+
+func newFindRelatedService(t *providerTable, s connections.Stores, breaker *providerguard.CircuitBreaker) (*related.FindRelatedService, error) {
 	similar := t.named(rowDeezer).similar
-	findRelated := related.NewFindRelatedService(
-		persistence.NewPostgresRelationshipQuerier(s.Pool), similar, similar,
-		related.WithFindRelatedCircuitBreaker(breaker),
-	)
-	return []searchOption{
-		{"artwork", query.WithArtworkLookup(artwork)},
-		{"find_related", query.WithFindRelatedService(findRelated)},
+	library, err := related.LibraryMatches(persistence.NewPostgresRelationshipQuerier(s.Pool))
+	if err != nil {
+		return nil, fmt.Errorf("build the library matches source: %w", err)
 	}
+	albumTracks, err := related.AlbumTracksSource(similar, breaker)
+	if err != nil {
+		return nil, fmt.Errorf("build the album tracks source: %w", err)
+	}
+	artistAlbums, err := related.ArtistAlbumsSource(similar, breaker)
+	if err != nil {
+		return nil, fmt.Errorf("build the artist albums source: %w", err)
+	}
+	return related.NewFindRelatedService(library, albumTracks, artistAlbums)
 }
 
-func identityOptions(s connections.Stores) []searchOption {
-	var named []searchOption
+func newArtworkFiller(w wiring) (*artwork.ArtworkFiller, error) {
+	s := w.stores
+	var identities ports.IdentityStore = artwork.NoIdentities{}
+	if s.Identities != nil {
+		identities = s.Identities
+	}
+	if s.Redis == nil {
+		return artwork.NewPendingFiller(identities, w.deps.Tracker)
+	}
+	return artwork.NewArtworkFiller(
+		w.artwork,
+		cache.NewRedisArtworkCache(s.Redis, s.CacheOption()),
+		identities,
+		cache.NewRedisEnrichmentCache(s.Redis, s.CacheOption()),
+		w.deps.Tracker,
+	)
+}
+
+func planIdentityAndFavorites(p *searchPlan, s connections.Stores) {
 	if s.Pool != nil {
-		named = append(named, searchOption{"favorites", query.WithFavorites(persistence.NewPostgresFavoritesRepository(s.Pool))})
+		p.collaborators.Favorites = persistence.NewPostgresFavoritesRepository(s.Pool)
+		p.choose("favorites")
 	}
 	if s.Identities != nil {
-		named = append(named, searchOption{"identity_store", query.WithIdentityStore(s.Identities)})
+		p.choose("identity_store")
 	}
-	return named
 }
 
-func resultCacheOptions(settings connections.SearchSettings, s connections.Stores) []searchOption {
+func planResultCaches(p *searchPlan, settings connections.SearchSettings, s connections.Stores) {
 	if s.Redis == nil {
-		return nil
+		return
 	}
-	return []searchOption{
-		{"result_cache", query.WithResultCache(cache.NewRedisResultCache(s.Redis, s.CacheOption()))},
-		{"provider_result_cache", query.WithProviderResultCache(cache.NewRedisProviderResultCache(s.Redis, settings.ProviderCacheTTL, s.CacheOption()))},
-		{"held_slate_cache", query.WithHeldSlateCache(cache.NewRedisHeldSlateCache(s.Redis, s.CacheOption()))},
-	}
+	p.collaborators.ResultCache = cache.NewRedisResultCache(s.Redis, s.CacheOption())
+	p.choose("result_cache")
+	p.collaborators.ProviderCache = cache.NewRedisProviderResultCache(s.Redis, settings.ProviderCacheTTL, s.CacheOption())
+	p.choose("provider_result_cache")
+	p.collaborators.HeldSlates = cache.NewRedisHeldSlateCache(s.Redis, s.CacheOption())
+	p.choose("held_slate_cache")
 }
 
-func enrichmentCacheOptions(s connections.Stores) []searchOption {
+func planEnrichmentCaches(p *searchPlan, s connections.Stores) {
 	if s.Redis == nil {
-		return nil
+		return
 	}
-	enrichmentCache := cache.NewRedisEnrichmentCache(s.Redis, s.CacheOption())
-	return []searchOption{
-		{"artwork_cache", query.WithArtworkCache(cache.NewRedisArtworkCache(s.Redis, s.CacheOption()))},
-		{"mbid_index", query.WithMBIDIndex(enrichmentCache)},
-	}
+	p.choose("artwork_cache")
+	p.choose("mbid_index")
 }
 
-func vocabularyOptions(s connections.Stores) []searchOption {
+func planVocabulary(p *searchPlan, s connections.Stores) {
 	if s.SpellingHints == nil {
-		return nil
+		return
 	}
-	return []searchOption{{"vocabulary", query.WithVocabularyStore(s.SpellingHints)}}
+	p.collaborators.Vocabulary = s.SpellingHints
+	p.choose("vocabulary")
 }
 
-func eventOptions(settings connections.SearchSettings, s connections.Stores) []searchOption {
-	named := []searchOption{{"event_store", query.WithEventStore(s.Events)}}
-	if settings.BehavioralRanking {
-		named = append(named, searchOption{"behavioral_ranking", query.WithBehavioralRanking(rank.NewSatisfactionConsumer(s.Events))})
+func planRecording(p *searchPlan, w wiring) {
+	p.collaborators.Events = w.stores.Events
+	p.choose("event_store")
+	if w.deps.Search.BehavioralRanking {
+		p.option("behavioral_ranking", query.WithBehavioralRanking(rank.NewSatisfactionConsumer(w.stores.Events)))
 	}
-	return named
-}
-
-func activityOptions(activity ports.ActivityFeed) []searchOption {
-	if activity == nil {
-		return nil
+	if w.deps.Activity != nil {
+		p.collaborators.Activity = w.deps.Activity
+		p.choose("activity")
 	}
-	return []searchOption{{"activity", query.WithSearchActivityFeed(activity)}}
 }

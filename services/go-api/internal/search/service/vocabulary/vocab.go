@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 )
@@ -21,12 +22,17 @@ type SpellingHintsIngestor struct {
 	bg         *background.Tracker
 }
 
-func NewVocabularyIngestor(vocabStore ports.SpellingHintsStore, bg *background.Tracker) *SpellingHintsIngestor {
-	return &SpellingHintsIngestor{vocabStore: vocabStore, bg: bg}
+var ErrCollaboratorRequired = errors.New("vocabulary services need every collaborator, pass the absent adapter to switch one off")
+
+func NewVocabularyIngestor(vocabStore ports.SpellingHintsStore, bg *background.Tracker) (*SpellingHintsIngestor, error) {
+	if vocabStore == nil || bg == nil {
+		return nil, ErrCollaboratorRequired
+	}
+	return &SpellingHintsIngestor{vocabStore: vocabStore, bg: bg}, nil
 }
 
 func (v *SpellingHintsIngestor) Ingest(parentCtx context.Context, results []domain.SearchResult) {
-	if v.vocabStore == nil || len(results) == 0 {
+	if len(results) == 0 {
 		return
 	}
 	entries := buildVocabEntries(results)

@@ -103,11 +103,7 @@ func runSmokeEvalRecording(t *testing.T, user ids.UserId) int {
 	t.Helper()
 	bg := searchtest.NewTracker(t)
 	store := &recordingEventStore{}
-	svc := search.NewSearchService(bg,
-		[]search.SearchProvider{stubSearchProvider{}},
-		search.NewCircuitBreaker(),
-		search.WithEventStore(store),
-	)
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{stubSearchProvider{}}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store })
 	if _, err := search.RunSmokeEval(context.Background(), svc, user); err != nil {
 		t.Fatalf("Run: %v", err)
 	}

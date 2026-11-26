@@ -8,9 +8,11 @@ type (
 )
 
 var (
-	NewCorrectionService        = vocabulary.NewCorrectionService
-	NewSuggestService           = vocabulary.NewSuggestService
-	NewVocabularyRefreshService = vocabulary.NewVocabularyRefreshService
+	NewCorrectionService              = vocabulary.NewCorrectionService
+	NewVocabularyIngestor             = vocabulary.NewVocabularyIngestor
+	ErrVocabularyCollaboratorRequired = vocabulary.ErrCollaboratorRequired
+	NewSuggestService                 = vocabulary.NewSuggestService
+	NewVocabularyRefreshService       = vocabulary.NewVocabularyRefreshService
 )
 
 type CorrectionResult = vocabulary.CorrectionResult

@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/search/service/artwork"
+	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/textnorm"
 	"bytes"
 	"context"
@@ -22,12 +23,86 @@ const (
 	placeholderArtHash = "d41d8cd98f00b204e9800998ecf8427e"
 )
 
-func fillAndSettle(t *testing.T, f *artwork.ArtworkFiller, results ...domain.SearchResult) []domain.SearchResult {
+func fillAndSettle(t *testing.T, bg *background.Tracker, f *artwork.ArtworkFiller, results ...domain.SearchResult) []domain.SearchResult {
 	t.Helper()
-	bg := searchtest.NewTracker(t)
-	got := f.Fill(context.Background(), results, bg)
+	got := f.Fill(context.Background(), results)
 	bg.Wait()
 	return got
+}
+
+func newFiller(t *testing.T, bg *background.Tracker, resolver ports.TaggingArtworkLookup, cache ports.ArtworkCache) *artwork.ArtworkFiller {
+	t.Helper()
+	f, err := artwork.NewArtworkFiller(resolver, cache, artwork.NoIdentities{}, artwork.NoMBIDIndex{}, bg)
+	if err != nil {
+		t.Fatalf("NewArtworkFiller: %v", err)
+	}
+	return f
+}
+
+func newPendingFiller(t *testing.T, bg *background.Tracker, store ports.IdentityStore) *artwork.ArtworkFiller {
+	t.Helper()
+	f, err := artwork.NewPendingFiller(store, bg)
+	if err != nil {
+		t.Fatalf("NewPendingFiller: %v", err)
+	}
+	return f
+}
+
+func TestArtworkFiller_RefusesEveryMissingCollaborator(t *testing.T) {
+	bg := searchtest.NewTracker(t)
+	var (
+		lookup     ports.TaggingArtworkLookup = artwork.NoLookup{}
+		cache      ports.ArtworkCache         = artwork.NoCache{}
+		identities ports.IdentityStore        = artwork.NoIdentities{}
+		index      ports.MBIDIndex            = artwork.NoMBIDIndex{}
+	)
+	for name, build := range map[string]func() error{
+		"resolver":      func() error { _, err := artwork.NewArtworkFiller(nil, cache, identities, index, bg); return err },
+		"cache":         func() error { _, err := artwork.NewArtworkFiller(lookup, nil, identities, index, bg); return err },
+		"identityStore": func() error { _, err := artwork.NewArtworkFiller(lookup, cache, nil, index, bg); return err },
+		"mbidIndex":     func() error { _, err := artwork.NewArtworkFiller(lookup, cache, identities, nil, bg); return err },
+		"tracker":       func() error { _, err := artwork.NewArtworkFiller(lookup, cache, identities, index, nil); return err },
+		"pending store": func() error { _, err := artwork.NewPendingFiller(nil, bg); return err },
+	} {
+		if err := build(); !errors.Is(err, artwork.ErrCollaboratorRequired) {
+			t.Errorf("without %s: err = %v, want ErrCollaboratorRequired", name, err)
+		}
+	}
+}
+
+func TestNoFill_ReturnsTheResultsUntouched(t *testing.T) {
+	in := []domain.SearchResult{{Kind: domain.ResultKindTrack, Title: "Humble"}}
+	got := artwork.NoFill{}.Fill(context.Background(), in)
+	if len(got) != 1 || got[0].ArtworkPath != "" {
+		t.Fatalf("NoFill = %+v, want the input untouched", got)
+	}
+}
+
+func TestPendingFiller_MarksArtworkPendingAndNeverResolvesLive(t *testing.T) {
+	track := domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar"}
+	liveRan := func(build func(*background.Tracker) *artwork.ArtworkFiller) (domain.ArtworkPath, bool) {
+		var logs bytes.Buffer
+		prev := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+		t.Cleanup(func() { slog.SetDefault(prev) })
+		bg := searchtest.NewTracker(t)
+		got := fillAndSettle(t, bg, build(bg), track)
+		return got[0].ArtworkPath, strings.Contains(logs.String(), "artwork.enriched")
+	}
+
+	path, ran := liveRan(func(bg *background.Tracker) *artwork.ArtworkFiller {
+		return newPendingFiller(t, bg, artwork.NoIdentities{})
+	})
+	if path != domain.ArtworkPathPending || ran {
+		t.Errorf("pending filler: path = %q, live resolution ran = %v, want pending and no live resolution", path, ran)
+	}
+
+	_, ran = liveRan(func(bg *background.Tracker) *artwork.ArtworkFiller {
+		return newFiller(t, bg, artwork.NoLookup{}, artwork.NoCache{})
+	})
+	if !ran {
+		t.Error("control: the live filler never reached live resolution, so the pending assertion above proves nothing")
+	}
 }
 
 func TestArtworkFiller_OutageLeavesTheCacheOpenForTheNextFill(t *testing.T) {
@@ -35,7 +110,8 @@ func TestArtworkFiller_OutageLeavesTheCacheOpenForTheNextFill(t *testing.T) {
 	cache := &searchtest.FakeArtworkCache{Store: map[string]string{}}
 	outage := &scriptedResolver{log: &stageLog{}, outage: errors.New("coverartarchive 503")}
 
-	fillAndSettle(t, artwork.NewArtworkFiller(outage, cache, nil, nil), track)
+	bg := searchtest.NewTracker(t)
+	fillAndSettle(t, bg, newFiller(t, bg, outage, cache), track)
 
 	if want := []string{"resolve.name:"}; !reflect.DeepEqual(outage.log.calls, want) {
 		t.Fatalf("resolver calls during the outage = %q, want %q", outage.log.calls, want)
@@ -45,8 +121,8 @@ func TestArtworkFiller_OutageLeavesTheCacheOpenForTheNextFill(t *testing.T) {
 	}
 
 	recovered := &scriptedResolver{log: &stageLog{}, nameURL: "https://caa/cover.jpg"}
-	fillAndSettle(t, artwork.NewArtworkFiller(recovered, cache, nil, nil), track)
-	afterRecovery := fillAndSettle(t, artwork.NewArtworkFiller(recovered, cache, nil, nil), track)
+	fillAndSettle(t, bg, newFiller(t, bg, recovered, cache), track)
+	afterRecovery := fillAndSettle(t, bg, newFiller(t, bg, recovered, cache), track)
 
 	if afterRecovery[0].ImageURL != "https://caa/cover.jpg" || afterRecovery[0].ArtworkPath != domain.ArtworkPathCache {
 		t.Errorf("after recovery = (%q, %q), want the resolved cover served from the cache", afterRecovery[0].ImageURL, afterRecovery[0].ArtworkPath)
@@ -68,7 +144,8 @@ func TestArtworkFiller_AFailedCacheWriteIsLogged(t *testing.T) {
 	cache := &failingArtworkCache{scriptedArtworkCache{log: &stageLog{}}}
 	resolver := &scriptedResolver{log: &stageLog{}, nameURL: "https://caa/cover.jpg"}
 
-	fillAndSettle(t, artwork.NewArtworkFiller(resolver, cache, nil, nil), track)
+	bg := searchtest.NewTracker(t)
+	fillAndSettle(t, bg, newFiller(t, bg, resolver, cache), track)
 
 	if want := []string{"resolve.name:"}; !reflect.DeepEqual(resolver.log.calls, want) {
 		t.Fatalf("resolver calls = %q, want %q", resolver.log.calls, want)
@@ -144,9 +221,10 @@ func assertDurableXrefApplied(t *testing.T, got []domain.SearchResult) {
 
 func TestArtworkFiller_BatchesDurableIdentityLookups(t *testing.T) {
 	store := &batchingIdentityStore{}
-	f := artwork.NewArtworkFiller(&searchtest.ArtworkLookup{}, nil, store, nil)
+	bg := searchtest.NewTracker(t)
+	f := newPendingFiller(t, bg, store)
 
-	got := f.Fill(context.Background(), fiftyArtlessResults(), nil)
+	got := f.Fill(context.Background(), fiftyArtlessResults())
 
 	if store.batchCalls != 1 {
 		t.Errorf("batch lookups = %d, want 1 for a %d-result slate", store.batchCalls, slateLimit)
@@ -162,12 +240,13 @@ func TestArtworkFiller_BatchesDurableIdentityLookups(t *testing.T) {
 
 func TestArtworkFiller_BatchSkipsResultsThatNeedNoDurableLookup(t *testing.T) {
 	store := &batchingIdentityStore{}
-	f := artwork.NewArtworkFiller(&searchtest.ArtworkLookup{}, nil, store, nil)
+	bg := searchtest.NewTracker(t)
+	f := newPendingFiller(t, bg, store)
 	results := fiftyArtlessResults()[:3]
 	results[0].ImageURL = "https://provider/art.jpg"
 	results[1].Xref = map[domain.ProviderKey]string{"spotify": "s1"}
 
-	f.Fill(context.Background(), results, nil)
+	f.Fill(context.Background(), results)
 
 	want := []ports.IdentityRef{{Kind: domain.ResultKindTrack, Provider: domain.ProviderDeezer.Key(), ExternalID: "2"}}
 	if len(store.batchRefs) != 1 || store.batchRefs[0] != want[0] {
@@ -180,9 +259,10 @@ func TestArtworkFiller_BatchSkipsResultsThatNeedNoDurableLookup(t *testing.T) {
 
 func TestArtworkFiller_FallsBackToPerResultLookupWithoutBatch(t *testing.T) {
 	store := &countingIdentityStore{}
-	f := artwork.NewArtworkFiller(&searchtest.ArtworkLookup{}, nil, store, nil)
+	bg := searchtest.NewTracker(t)
+	f := newPendingFiller(t, bg, store)
 
-	got := f.Fill(context.Background(), fiftyArtlessResults(), nil)
+	got := f.Fill(context.Background(), fiftyArtlessResults())
 
 	if store.singleCalls != slateLimit {
 		t.Errorf("per-result lookups = %d, want %d for a non-batching store", store.singleCalls, slateLimit)
@@ -483,19 +563,25 @@ func TestArtworkFiller_FillStageCascade(t *testing.T) {
 
 			var store ports.IdentityStore = tc.st.durable
 			var index ports.MBIDIndex = tc.st.index
-			var cache ports.ArtworkCache = tc.st.cache
 			if tc.noDurable {
-				store = nil
+				store = artwork.NoIdentities{}
 			}
 			if tc.noIndex {
-				index = nil
+				index = artwork.NoMBIDIndex{}
 			}
+			bg := searchtest.NewTracker(t)
+			var f *artwork.ArtworkFiller
 			if tc.noCache {
-				cache = nil
+				f = newPendingFiller(t, bg, store)
+			} else {
+				var err error
+				f, err = artwork.NewArtworkFiller(&tc.st.live, tc.st.cache, store, index, bg)
+				if err != nil {
+					t.Fatalf("NewArtworkFiller: %v", err)
+				}
 			}
-			f := artwork.NewArtworkFiller(&tc.st.live, cache, store, index)
 
-			got := fillAndSettle(t, f, tc.in)[0]
+			got := fillAndSettle(t, bg, f, tc.in)[0]
 
 			if path := got.ArtworkPath; path != domain.ArtworkPath(tc.wantPath) {
 				t.Errorf("ArtworkPath = %q, want %q", path, tc.wantPath)

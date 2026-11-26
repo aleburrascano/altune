@@ -50,7 +50,7 @@ func rankedWithFavorites(t *testing.T, repo *search.FakeFavoritesRepo, results [
 	t.Helper()
 	bg := searchtest.NewTracker(t)
 	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: results}
-	svc := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), search.WithFavorites(repo))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Favorites = repo })
 	return searchFor(t, svc, search.NewUser())
 }
 
@@ -137,8 +137,7 @@ func TestSearchLift_OneUsersFavoritesDoNotReorderTheCachedRankingOthersSee(t *te
 	bg := searchtest.NewTracker(t)
 	repo := favoritesRepoOf(search.FavoriteOf(search.ResultKindArtist, "Don Toliver", ""))
 	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: threeNoIdeaTracks()}
-	svc := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(),
-		search.WithFavorites(repo), search.WithResultCache(search.NewFakeResultCache()))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Favorites = repo; c.ResultCache = search.NewFakeResultCache() })
 
 	unlifted := []string{"Cover Band", "Some DJ", "Don Toliver"}
 	assertOrder(t, searchFor(t, svc, ids.SystemUserId()), unlifted)
@@ -282,4 +281,10 @@ func TestFavoritesAdd_OverThePerUserCapIsATypedConflict(t *testing.T) {
 		search.Favorite{Kind: search.ResultKindAlbum, Title: "DAMN.", Subtitle: "Kendrick Lamar"})
 
 	assertTypedError(t, err, apierror.KindConflict, "discovery.favorites_full")
+}
+
+func TestFavoritesLifter_RefusesAMissingRepository(t *testing.T) {
+	if _, err := search.NewFavoritesLifter(nil); !errors.Is(err, search.ErrFavoritesCollaboratorRequired) {
+		t.Fatalf("err = %v, want ErrFavoritesCollaboratorRequired", err)
+	}
 }

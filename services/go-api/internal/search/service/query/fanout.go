@@ -130,7 +130,7 @@ func (s *Service) callProvider(run *fanOutRun, slot int, call providerguard.Brea
 }
 
 func (s *Service) collectArrivals(run *fanOutRun) {
-	deadline, stopTimer := s.deadlineTimer()
+	deadline, stopTimer := s.awaitDeadline()
 	defer stopTimer()
 	pastDeadline := false
 
@@ -149,12 +149,17 @@ func (s *Service) collectArrivals(run *fanOutRun) {
 	}
 }
 
-func (s *Service) deadlineTimer() (<-chan time.Time, func() bool) {
-	if s.deadline <= 0 {
-		return nil, func() bool { return false }
+type deadlineTimer func() (<-chan time.Time, func() bool)
+
+func noDeadline() (<-chan time.Time, func() bool) {
+	return nil, func() bool { return false }
+}
+
+func deadlineAfter(d time.Duration) deadlineTimer {
+	return func() (<-chan time.Time, func() bool) {
+		timer := time.NewTimer(d)
+		return timer.C, timer.Stop
 	}
-	timer := time.NewTimer(s.deadline)
-	return timer.C, timer.Stop
 }
 
 func anyAnswer(results [][]domain.SearchResult, statuses []domain.ProviderSearchResponse) bool {

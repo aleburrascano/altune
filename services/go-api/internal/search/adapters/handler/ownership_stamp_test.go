@@ -128,7 +128,7 @@ func TestOwnershipGolden_Search(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	provider := &fakeSearchProvider{name: search.ProviderDeezer, results: goldenTracks()}
 	router := goldenRouter(t, search.DiscoveryServices{
-		Search: search.NewSearchService(bg, []search.SearchProvider{provider}, search.NewCircuitBreaker()),
+		Search: searchtest.NewSearchService(t, bg, []search.SearchProvider{provider}, search.NewCircuitBreaker()),
 	}, &recordingTrackNumberFiller{done: make(chan struct{})})
 
 	rec := discServe(t, router, http.MethodGet, "/discovery/search?q=song&save_history=false", nil)
@@ -137,7 +137,7 @@ func TestOwnershipGolden_Search(t *testing.T) {
 }
 
 func TestOwnershipGolden_AlbumTracksStampsAndFills(t *testing.T) {
-	albumSvc := search.NewGetAlbumTracksService(map[search.ProviderName]search.AlbumContentProvider{
+	albumSvc := searchtest.NewAlbumTracks(t, map[search.ProviderName]search.AlbumContentProvider{
 		search.ProviderDeezer: &search.FakeAlbumContentProvider{Results: goldenAlbumPageTracks()},
 	})
 	filler := &recordingTrackNumberFiller{done: make(chan struct{}), want: 1}
@@ -161,8 +161,8 @@ func TestOwnershipGolden_AlbumTracksStampsAndFills(t *testing.T) {
 	}
 }
 
-func goldenArtistSvc() *search.GetArtistContentService {
-	return search.NewGetArtistContentService(map[search.ProviderName]search.ArtistContentProvider{
+func goldenArtistSvc(t testing.TB) *search.GetArtistContentService {
+	return searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{
 		search.ProviderDeezer: &search.FakeArtistContentProvider{TopTracks: goldenTracks(), Albums: goldenTracks()},
 	})
 }
@@ -178,7 +178,7 @@ func TestOwnershipGolden_ArtistEndpoints(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			filler := &recordingTrackNumberFiller{done: make(chan struct{})}
-			router := goldenRouter(t, search.DiscoveryServices{Artist: goldenArtistSvc()}, filler)
+			router := goldenRouter(t, search.DiscoveryServices{Artist: goldenArtistSvc(t)}, filler)
 
 			rec := discServe(t, router, http.MethodGet, tc.path, nil)
 			discAssertStatus(t, rec, http.StatusOK)
@@ -195,7 +195,7 @@ func TestOwnershipGolden_ArtistEndpoints(t *testing.T) {
 }
 
 func TestOwnershipGolden_Related(t *testing.T) {
-	relatedSvc := search.NewGetRelatedTracksService(map[string]search.RelatedTracksProvider{
+	relatedSvc := searchtest.NewRelatedTracks(t, map[string]search.RelatedTracksProvider{
 		"soundcloud": &fakeRelatedTracksProvider{results: goldenTracks()},
 	})
 	router := goldenRouter(t, search.DiscoveryServices{Related: relatedSvc}, &recordingTrackNumberFiller{done: make(chan struct{})})

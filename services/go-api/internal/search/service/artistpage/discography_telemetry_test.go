@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -64,11 +65,50 @@ func observeDiscography(t *testing.T, albums map[search.ProviderName][]search.Se
 		known[name] = name.String() + "-che"
 	}
 	store := newRecordingEventStore()
-	svc := search.NewGetArtistContentService(albumsFrom(albums), search.WithContentEventStore(store, bg))
+	svc := searchtest.NewArtistContent(t, albumsFrom(albums), searchtest.ArtistEvents(store, bg))
 	if _, err := svc.GetAlbums(context.Background(), search.ProviderSpotify, "abc123", known, 50); err != nil {
 		t.Fatalf("GetAlbums: %v", err)
 	}
 	return store.next(t)
+}
+
+func TestNoDiscographyObserver_LeavesTheAlbumsAnswerUnchanged(t *testing.T) {
+	albums := map[search.ProviderName][]search.SearchResult{
+		search.ProviderSpotify: {
+			catalogAlbum(search.ProviderSpotify, "sp-a", "Fully Loaded"),
+			catalogAlbum(search.ProviderSpotify, "sp-b", "Sundown"),
+		},
+		search.ProviderMusicBrainz: {catalogAlbum(search.ProviderMusicBrainz, "mb-a", "Fully Loaded")},
+	}
+	known := map[search.ProviderName]string{search.ProviderSpotify: "sp-che", search.ProviderMusicBrainz: "mb-che"}
+	fetch := func(svc *search.GetArtistContentService) []string {
+		resp, err := svc.GetAlbums(context.Background(), search.ProviderSpotify, "abc123", known, 50)
+		if err != nil {
+			t.Fatalf("GetAlbums: %v", err)
+		}
+		titles := make([]string, 0, len(resp.Items))
+		for _, item := range resp.Items {
+			titles = append(titles, item.Title)
+		}
+		return titles
+	}
+	store := newRecordingEventStore()
+
+	observed := fetch(searchtest.NewArtistContent(t, albumsFrom(albums), searchtest.ArtistEvents(store, searchtest.NewTracker(t))))
+	store.next(t)
+	silent, err := search.NewGetArtistContentService(albumsFrom(albums), search.SeedPathIdentity{}, search.NoAnchoring{}, search.NoDiscographyObserver{}, search.NewCircuitBreaker())
+	if err != nil {
+		t.Fatalf("NewGetArtistContentService: %v", err)
+	}
+
+	if got := fetch(silent); !slices.Equal(got, observed) {
+		t.Errorf("titles with NoDiscographyObserver = %v, want %v as with telemetry", got, observed)
+	}
+	select {
+	case ev := <-store.events:
+		t.Errorf("event %+v recorded, want none beyond the telemetry service's own", ev)
+	case <-time.After(50 * time.Millisecond):
+	}
 }
 
 func TestDiscographyEmit_PayloadShapeAndNoUserID(t *testing.T) {
@@ -146,7 +186,7 @@ func discographyEmitLogs(t *testing.T, appendErr error) string {
 	albums := map[search.ProviderName][]search.SearchResult{
 		search.ProviderSpotify: {catalogAlbum(search.ProviderSpotify, "sp-a", "Fully Loaded")},
 	}
-	svc := search.NewGetArtistContentService(albumsFrom(albums), search.WithContentEventStore(store, bg))
+	svc := searchtest.NewArtistContent(t, albumsFrom(albums), searchtest.ArtistEvents(store, bg))
 	if _, err := svc.GetAlbums(context.Background(), search.ProviderSpotify, "abc123", map[search.ProviderName]string{search.ProviderSpotify: "sp-che"}, 50); err != nil {
 		t.Fatalf("GetAlbums: %v", err)
 	}
@@ -175,7 +215,7 @@ func (s panickingEventStore) Append(context.Context, search.InteractionEvent) er
 func TestDiscographyEmit_BestEffortContainsPanic(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	store := panickingEventStore{asked: make(chan struct{})}
-	svc := identityFanOut(func(search.ProviderName) bool { return false }, search.WithContentEventStore(store, bg))
+	svc := identityFanOut(t, func(search.ProviderName) bool { return false }, searchtest.ArtistEvents(store, bg))
 
 	resp, err := svc.GetAlbums(context.Background(), search.ProviderDeezer, "id-deezer", nil, 50)
 	if err != nil {
@@ -192,7 +232,7 @@ func TestDiscographyEmit_BestEffortContainsPanic(t *testing.T) {
 }
 
 func TestDiscographyEmit_NoEventStoreStillServesAlbums(t *testing.T) {
-	svc := identityFanOut(func(search.ProviderName) bool { return false })
+	svc := identityFanOut(t, func(search.ProviderName) bool { return false })
 	if _, err := svc.GetAlbums(context.Background(), search.ProviderDeezer, "id-deezer", nil, 50); err != nil {
 		t.Fatalf("GetAlbums error = %v, want nil", err)
 	}

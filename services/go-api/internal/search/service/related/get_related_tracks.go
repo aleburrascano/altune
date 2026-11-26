@@ -12,18 +12,14 @@ type GetRelatedTracksService struct {
 	breaker   *providerguard.CircuitBreaker
 }
 
-type RelatedTracksOption func(*GetRelatedTracksService)
-
-func WithRelatedCircuitBreaker(cb *providerguard.CircuitBreaker) RelatedTracksOption {
-	return func(s *GetRelatedTracksService) { s.breaker = cb }
-}
-
-func NewGetRelatedTracksService(providers map[string]ports.RelatedTracksProvider, opts ...RelatedTracksOption) *GetRelatedTracksService {
-	s := &GetRelatedTracksService{providers: providers}
-	for _, opt := range opts {
-		opt(s)
+func NewGetRelatedTracksService(providers map[string]ports.RelatedTracksProvider, breaker *providerguard.CircuitBreaker) (*GetRelatedTracksService, error) {
+	if providers == nil {
+		return nil, required("providers")
 	}
-	return s
+	if breaker == nil {
+		return nil, required("breaker")
+	}
+	return &GetRelatedTracksService{providers: providers, breaker: breaker}, nil
 }
 
 func (s *GetRelatedTracksService) Execute(ctx context.Context, providerName domain.ProviderName, externalID string, limit int) (*providerguard.ContentFetchResponse, error) {

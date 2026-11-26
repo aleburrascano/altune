@@ -31,7 +31,7 @@ func TestFanOut_PerProviderTimeoutOverride(t *testing.T) {
 		Provider: search.ProviderDeezer, Delay: 80 * time.Millisecond,
 		Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)},
 	}
-	svc := search.NewSearchService(bg, []search.SearchProvider{slow, normal}, search.NewCircuitBreaker())
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow, normal}, search.NewCircuitBreaker())
 
 	results, statuses := inspect(t, svc, context.Background())
 
@@ -53,7 +53,7 @@ func TestFanOut_TimeoutRecordsBreakerFailure(t *testing.T) {
 		timeout:      10 * time.Millisecond,
 	}
 	cb := search.NewCircuitBreaker()
-	svc := search.NewSearchService(bg, []search.SearchProvider{slow}, cb)
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow}, cb)
 
 	inspect(t, svc, context.Background())
 
@@ -75,7 +75,7 @@ func TestFanOut_OpenBreakerSkipsProviderEntirely(t *testing.T) {
 	}
 	cb := search.NewCircuitBreaker()
 	openBreaker(t, cb, search.ProviderITunes)
-	svc := search.NewSearchService(bg, []search.SearchProvider{skipped, good}, cb)
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{skipped, good}, cb)
 
 	results, statuses := inspect(t, svc, context.Background())
 
@@ -110,7 +110,7 @@ func TestFanOut_ManyProvidersDeterministicSlotOrder(t *testing.T) {
 			},
 		}
 	}
-	svc := search.NewSearchService(bg, providers, search.NewCircuitBreaker())
+	svc := searchtest.NewSearchService(t, bg, providers, search.NewCircuitBreaker())
 
 	results, statuses := inspect(t, svc, context.Background())
 
@@ -169,7 +169,7 @@ func TestFanOut_BreakerCountsOnlyHealthFailures(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cb := search.NewCircuitBreaker()
-			svc := search.NewSearchService(bg, []search.SearchProvider{&search.FakeProvider{Provider: search.ProviderITunes, Err: tc.err}}, cb)
+			svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{&search.FakeProvider{Provider: search.ProviderITunes, Err: tc.err}}, cb)
 
 			_, statuses := inspect(t, svc, context.Background())
 
@@ -185,7 +185,7 @@ func TestFanOut_BreakerCountsOnlyHealthFailures(t *testing.T) {
 
 func TestFanOut_QueueShedReportsTimeout(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	svc := search.NewSearchService(bg, []search.SearchProvider{&search.FakeProvider{Provider: search.ProviderITunes, Err: errQueueShed}}, search.NewCircuitBreaker())
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{&search.FakeProvider{Provider: search.ProviderITunes, Err: errQueueShed}}, search.NewCircuitBreaker())
 
 	_, statuses := inspect(t, svc, context.Background())
 
@@ -198,7 +198,7 @@ func TestFanOut_QueueShedProbeReleasesSlot(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	cb := search.NewCircuitBreaker()
 	tripToHalfOpenWindow(t, cb, search.ProviderITunes)
-	svc := search.NewSearchService(bg, []search.SearchProvider{&search.FakeProvider{Provider: search.ProviderITunes, Err: errQueueShed}}, cb)
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{&search.FakeProvider{Provider: search.ProviderITunes, Err: errQueueShed}}, cb)
 
 	_, statuses := inspect(t, svc, context.Background())
 
@@ -222,7 +222,7 @@ func (p *ignoresCtxProvider) Search(ctx context.Context, _ string, _ map[search.
 func TestFanOut_BudgetCutOffUnclassifiedErrorStillCounts(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	cb := search.NewCircuitBreaker()
-	svc := search.NewSearchService(bg, []search.SearchProvider{&ignoresCtxProvider{search.FakeProvider{Provider: search.ProviderITunes}}}, cb)
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{&ignoresCtxProvider{search.FakeProvider{Provider: search.ProviderITunes}}}, cb)
 
 	inspect(t, svc, context.Background())
 
@@ -245,8 +245,7 @@ func TestFanOut_PartialKindsKeepResultsButAreNeverCached(t *testing.T) {
 	p := &partialKindsProvider{search.CountingProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}}
 	breaker := search.NewCircuitBreaker()
 	slates := search.NewFakeResultCache()
-	svc := search.NewSearchService(bg, []search.SearchProvider{p}, breaker,
-		search.WithResultCache(slates), search.WithProviderResultCache(newFakeProviderCache()))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, breaker, func(c *search.Collaborators) { c.ResultCache = slates; c.ProviderCache = newFakeProviderCache() })
 
 	out := runSearch(t, svc, "humble")
 	runSearch(t, svc, "humble")
@@ -319,8 +318,7 @@ func TestDeadline_AnswersWithoutTheSlowProvider(t *testing.T) {
 	fast := &search.CountingProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	slow := newLateProvider(search.ProviderSpotify, search.DeezerTrack("Humble", "Skrillex", 70))
 	slates := search.NewFakeResultCache()
-	svc := search.NewSearchService(bg, []search.SearchProvider{fast, slow}, search.NewCircuitBreaker(),
-		search.WithSearchDeadline(20*time.Millisecond), search.WithResultCache(slates))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{fast, slow}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ResultCache = slates }, search.WithSearchDeadline(20*time.Millisecond))
 	t.Cleanup(func() { close(slow.release); bg.Wait() })
 
 	out := runSearch(t, svc, "humble")
@@ -344,8 +342,7 @@ func TestDeadline_LateAnswerServesTheNextSearch(t *testing.T) {
 	fast := &search.CountingProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	slow := newLateProvider(search.ProviderSpotify, search.DeezerTrack("Humble", "Skrillex", 70))
 	slates := search.NewFakeResultCache()
-	svc := search.NewSearchService(bg, []search.SearchProvider{fast, slow}, search.NewCircuitBreaker(),
-		search.WithSearchDeadline(20*time.Millisecond), search.WithResultCache(slates), search.WithProviderResultCache(newFakeProviderCache()))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{fast, slow}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.ResultCache = slates; c.ProviderCache = newFakeProviderCache() }, search.WithSearchDeadline(20*time.Millisecond))
 
 	runSearch(t, svc, "humble")
 	close(slow.release)
@@ -366,7 +363,7 @@ func TestDeadline_LateAnswerServesTheNextSearch(t *testing.T) {
 func TestDeadline_WaitsPastItUntilSomethingArrives(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	slow := newLateProvider(search.ProviderSpotify, search.DeezerTrack("Humble", "Skrillex", 70))
-	svc := search.NewSearchService(bg, []search.SearchProvider{slow}, search.NewCircuitBreaker(), search.WithSearchDeadline(time.Millisecond))
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow}, search.NewCircuitBreaker(), search.WithSearchDeadline(time.Millisecond))
 	done := make(chan *search.SearchOutput, 1)
 	go func() { done <- runSearch(t, svc, "humble") }()
 	waitFor(t, slow.started, "the provider call to start")
@@ -391,7 +388,7 @@ func TestDeadline_WaitsPastItUntilSomethingArrives(t *testing.T) {
 func TestDeadline_CallerGoneBeforeTheAnswerStopsTheProviders(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	slow := newLateProvider(search.ProviderSpotify)
-	svc := search.NewSearchService(bg, []search.SearchProvider{slow}, search.NewCircuitBreaker(), search.WithSearchDeadline(time.Second))
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{slow}, search.NewCircuitBreaker(), search.WithSearchDeadline(time.Second))
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() { _, _ = svc.Execute(ctx, search.NewUser(), search.NewQuery(t, "dna")) }()
 	waitFor(t, slow.started, "the provider call to start")
@@ -418,7 +415,7 @@ func TestFanOut_CanceledHalfOpenProbeDoesNotBlackholeProvider(t *testing.T) {
 		Delay:    time.Minute,
 		Results:  []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)},
 	}
-	svc := search.NewSearchService(bg, []search.SearchProvider{p}, cb)
+	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, cb)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

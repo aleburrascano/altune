@@ -40,7 +40,7 @@ type Discovery struct {
 	SpellingHints     ports.SpellingHintsStore
 	UnreleasedRefresh *unreleased.Service
 	Events            EventRetention
-	wiring            wiring
+	rankingOnly       *query.Service
 }
 
 type wiring struct {
@@ -64,16 +64,24 @@ func New(d connections.Deps) (*Discovery, error) {
 	if err != nil {
 		return nil, err
 	}
+	rankingOnly, err := newRankingOnlySearchService(w)
+	if err != nil {
+		return nil, err
+	}
+	featuredArtists, err := newFeaturedArtists(t)
+	if err != nil {
+		return nil, fmt.Errorf("build the featured artist resolver: %w", err)
+	}
 	return &Discovery{
 		Handler:           newHandler(d, t, s, services, unreleasedServices.lookup),
 		Search:            services.Search,
-		FeaturedArtists:   newFeaturedArtists(t),
+		FeaturedArtists:   featuredArtists,
 		Recordings:        t.named(rowMusicBrainz).recordings,
 		Charts:            t.chartProviders(),
 		SpellingHints:     s.SpellingHints,
 		UnreleasedRefresh: unreleasedServices.refresh,
 		Events:            s.Events,
-		wiring:            w,
+		rankingOnly:       rankingOnly,
 	}, nil
 }
 
@@ -85,7 +93,7 @@ func newWiring(d connections.Deps) wiring {
 }
 
 func (d *Discovery) RankingOnlySearch() *query.Service {
-	return newRankingOnlySearchService(d.wiring)
+	return d.rankingOnly
 }
 
 func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
@@ -95,14 +103,34 @@ func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 	if err != nil && !errors.Is(err, errEnrichmentSwitchedOff) {
 		return handler.DiscoveryServices{}, fmt.Errorf("build the enrichment service: %w", err)
 	}
+	search, err := newSearchService(w, breaker)
+	if err != nil {
+		return handler.DiscoveryServices{}, err
+	}
+	recordHistory, err := history.NewRecordSearchHistoryService(s.History)
+	if err != nil {
+		return handler.DiscoveryServices{}, fmt.Errorf("build the history recorder: %w", err)
+	}
+	album, err := newAlbumService(t, breaker)
+	if err != nil {
+		return handler.DiscoveryServices{}, fmt.Errorf("build the album tracks service: %w", err)
+	}
+	artist, err := newArtistService(t, s, breaker, w.deps.Tracker)
+	if err != nil {
+		return handler.DiscoveryServices{}, fmt.Errorf("build the artist content service: %w", err)
+	}
+	relatedTracks, err := newRelatedService(t, breaker)
+	if err != nil {
+		return handler.DiscoveryServices{}, fmt.Errorf("build the related tracks service: %w", err)
+	}
 	return handler.DiscoveryServices{
-		Search:        newSearchService(w, breaker),
+		Search:        search,
 		History:       history.NewListSearchHistoryService(s.History),
-		RecordHistory: history.NewRecordSearchHistoryService(s.History),
+		RecordHistory: recordHistory,
 		ClearHistory:  history.NewClearSearchHistoryService(s.History),
-		Album:         newAlbumService(t, breaker),
-		Artist:        newArtistService(t, s, breaker, w.deps.Tracker),
-		Related:       newRelatedService(t, breaker),
+		Album:         album,
+		Artist:        artist,
+		Related:       relatedTracks,
 		Enrich:        enrichment,
 		Suggest:       vocabulary.NewSuggestService(s.SpellingHints),
 		Event:         newEventService(w.deps.Activity, s),

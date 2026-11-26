@@ -3,20 +3,18 @@ package related
 import (
 	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/core/ports"
-	"altune/go-api/internal/search/service/providerguard"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/expiringcache"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/parallel"
 	"altune/go-api/internal/shared/songfields"
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
 )
-
-const lookupsPerResult = 2
 
 const (
 	relatedTimeout     = 2 * time.Second
@@ -29,35 +27,27 @@ const (
 )
 
 type FindRelatedService struct {
-	querier        ports.RelationshipQuerier
-	albumProvider  ports.AlbumContentProvider
-	artistProvider ports.ArtistContentProvider
-	memo           *expiringcache.Memo[relatedMemoKey, []domain.SearchResult]
-	breaker        *providerguard.CircuitBreaker
+	sources   map[domain.ResultKind][]LookupSource
+	perResult int
+	memo      *expiringcache.Memo[relatedMemoKey, []domain.SearchResult]
 }
 
-type FindRelatedOption func(*FindRelatedService)
-
-func WithFindRelatedCircuitBreaker(cb *providerguard.CircuitBreaker) FindRelatedOption {
-	return func(s *FindRelatedService) { s.breaker = cb }
-}
-
-func NewFindRelatedService(
-	querier ports.RelationshipQuerier,
-	albumProvider ports.AlbumContentProvider,
-	artistProvider ports.ArtistContentProvider,
-	opts ...FindRelatedOption,
-) *FindRelatedService {
-	s := &FindRelatedService{
-		querier:        querier,
-		albumProvider:  albumProvider,
-		artistProvider: artistProvider,
-		memo:           expiringcache.New[relatedMemoKey, []domain.SearchResult](relatedMemoTTL, relatedMemoMaxEntries, time.Now),
+func NewFindRelatedService(sources ...LookupSource) (*FindRelatedService, error) {
+	byKind := make(map[domain.ResultKind][]LookupSource, len(sources))
+	perResult := 0
+	for i, source := range sources {
+		if source == nil {
+			return nil, fmt.Errorf("%w: source %d is nil", ErrCollaboratorRequired, i)
+		}
+		kind := source.resultKind()
+		byKind[kind] = append(byKind[kind], source)
+		perResult = max(perResult, len(byKind[kind]))
 	}
-	for _, opt := range opts {
-		opt(s)
-	}
-	return s
+	return &FindRelatedService{
+		sources:   byKind,
+		perResult: perResult,
+		memo:      expiringcache.New[relatedMemoKey, []domain.SearchResult](relatedMemoTTL, relatedMemoMaxEntries, time.Now),
+	}, nil
 }
 
 func (s *FindRelatedService) Execute(
@@ -73,15 +63,10 @@ func (s *FindRelatedService) Execute(
 		return nil
 	}
 
-	fan := &relatedFanOut{ctx: ctx, lookups: parallel.New("related.lookup", lookupsPerResult*topN)}
+	fan := &relatedFanOut{ctx: ctx, lookups: parallel.New("related.lookup", s.perResult*topN), memo: s.memo}
 	for _, result := range organicResults[:topN] {
-		switch result.Kind {
-		case domain.ResultKindTrack:
-			s.dispatchLibraryMatches(fan, userId, result)
-			s.dispatchAlbumTracks(fan, result)
-		case domain.ResultKindArtist:
-			s.dispatchArtistAlbums(fan, result)
-		case domain.ResultKindUnknown, domain.ResultKindAlbum, domain.ResultKindPlaylist:
+		for _, source := range s.sources[result.Kind] {
+			source.dispatch(fan, userId, result)
 		}
 	}
 	groups := dedupRelatedAgainstOrganic(fan.wait(), organicResults)
@@ -90,93 +75,19 @@ func (s *FindRelatedService) Execute(
 	return groups
 }
 
-func (s *FindRelatedService) dispatchLibraryMatches(fan *relatedFanOut, userId ids.UserId, result domain.SearchResult) {
-	album := result.Album
-	if album == "" || s.querier == nil {
-		return
-	}
-	lookup := libraryMatchesLookup(userId, result)
-	if s.serveMemoized(fan, lookup) {
-		return
-	}
-	fan.fetchRelatedGroup(lookup, func(ctx context.Context) ([]domain.SearchResult, error) {
-		matches, err := s.querier.FindRelatedByAlbumArtist(ctx, userId, album, result.Subtitle, relatedPerGroup)
-		if err != nil {
-			slog.DebugContext(ctx, "related.library_lookup_failed", "error", err)
-			return nil, err
-		}
-		return s.memoize(lookup, matchesToSearchResults(matches)), nil
-	})
-}
-
-func (s *FindRelatedService) dispatchAlbumTracks(fan *relatedFanOut, result domain.SearchResult) {
-	albumID := result.DeezerAlbumID
-	if albumID == "" || s.albumProvider == nil {
-		return
-	}
-	lookup := albumTracksLookup(albumID, result)
-	if s.serveMemoized(fan, lookup) {
-		return
-	}
-	if !fan.reserveProviderCall() {
-		return
-	}
-	fan.fetchRelatedGroup(lookup, func(ctx context.Context) ([]domain.SearchResult, error) {
-		tracks, err := providerguard.GuardedFetch(ctx, s.breaker, domain.CanonicalContentProvider, func() ([]domain.SearchResult, error) {
-			return s.albumProvider.GetAlbumTracks(ctx, domain.CanonicalContentProvider, albumID)
-		})
-		if providerguard.IsPartialResult(err) {
-			return truncateRelated(tracks), nil
-		}
-		if err != nil {
-			return nil, err
-		}
-		return s.memoize(lookup, truncateRelated(tracks)), nil
-	})
-}
-
-func (s *FindRelatedService) dispatchArtistAlbums(fan *relatedFanOut, result domain.SearchResult) {
-	if s.artistProvider == nil {
-		return
-	}
-	artistID := extractDeezerID(result)
-	if artistID == "" {
-		return
-	}
-	lookup := artistAlbumsLookup(artistID, result)
-	if s.serveMemoized(fan, lookup) {
-		return
-	}
-	if !fan.reserveProviderCall() {
-		return
-	}
-	fan.fetchRelatedGroup(lookup, func(ctx context.Context) ([]domain.SearchResult, error) {
-		albums, err := providerguard.GuardedFetch(ctx, s.breaker, domain.CanonicalContentProvider, func() ([]domain.SearchResult, error) {
-			return s.artistProvider.GetArtistAlbums(ctx, domain.CanonicalContentProvider, artistID)
-		})
-		if providerguard.IsPartialResult(err) {
-			return truncateRelated(albums), nil
-		}
-		if err != nil {
-			return nil, err
-		}
-		return s.memoize(lookup, truncateRelated(albums)), nil
-	})
-}
-
-func (s *FindRelatedService) memoize(lookup relatedGroupLookup, items []domain.SearchResult) []domain.SearchResult {
-	s.memo.Put(lookup.memoKey(), items)
+func (f *relatedFanOut) memoize(lookup relatedGroupLookup, items []domain.SearchResult) []domain.SearchResult {
+	f.memo.Put(lookup.memoKey(), items)
 	return items
 }
 
-func (s *FindRelatedService) serveMemoized(fan *relatedFanOut, lookup relatedGroupLookup) bool {
-	items, memoized := s.memo.Get(lookup.memoKey())
+func (f *relatedFanOut) serveMemoized(lookup relatedGroupLookup) bool {
+	items, memoized := f.memo.Get(lookup.memoKey())
 	if !memoized {
 		return false
 	}
-	fan.memoHits++
+	f.memoHits++
 	if len(items) > 0 {
-		fan.addGroup(lookup, items)
+		f.addGroup(lookup, items)
 	}
 	return true
 }
@@ -184,6 +95,7 @@ func (s *FindRelatedService) serveMemoized(fan *relatedFanOut, lookup relatedGro
 type relatedFanOut struct {
 	ctx           context.Context
 	lookups       *parallel.Limited
+	memo          *expiringcache.Memo[relatedMemoKey, []domain.SearchResult]
 	mu            sync.Mutex
 	groups        []domain.RelatedGroup
 	providerCalls atomic.Int32

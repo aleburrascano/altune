@@ -886,7 +886,7 @@ func TestSearch_RelatedGroupsReachTheWire(t *testing.T) {
 	provider := &fakeSearchProvider{name: search.ProviderDeezer, results: []search.SearchResult{artist}}
 
 	t.Run("no related groups leaves the key absent", func(t *testing.T) {
-		router := searchOnlyRouter(search.NewSearchService(bg, []search.SearchProvider{provider}, search.NewCircuitBreaker()))
+		router := searchOnlyRouter(searchtest.NewSearchService(t, bg, []search.SearchProvider{provider}, search.NewCircuitBreaker()))
 
 		rec := discServe(t, router, http.MethodGet, "/discovery/search?q=nas&save_history=false", nil)
 
@@ -899,9 +899,8 @@ func TestSearch_RelatedGroupsReachTheWire(t *testing.T) {
 	})
 
 	t.Run("an artist's albums come back as a group with its items", func(t *testing.T) {
-		findRelated := search.NewFindRelatedService(nil, nil, stubContentProvider{provider: search.ProviderDeezer})
-		router := searchOnlyRouter(search.NewSearchService(bg, []search.SearchProvider{provider}, search.NewCircuitBreaker(),
-			search.WithFindRelatedService(findRelated)))
+		findRelated := searchtest.NewFindRelated(t, searchtest.RelatedArtistAlbums(stubContentProvider{provider: search.ProviderDeezer}))
+		router := searchOnlyRouter(searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{provider}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Related = findRelated }))
 
 		rec := discServe(t, router, http.MethodGet, "/discovery/search?q=nas&save_history=false", nil)
 
@@ -942,7 +941,7 @@ func TestSearch_OutcomeFollowsTheProviders(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			router := searchOnlyRouter(search.NewSearchService(bg, c.providers, search.NewCircuitBreaker()))
+			router := searchOnlyRouter(searchtest.NewSearchService(t, bg, c.providers, search.NewCircuitBreaker()))
 
 			rec := discServe(t, router, http.MethodGet, "/discovery/search?q=hello&save_history=false", nil)
 
@@ -1016,7 +1015,7 @@ func (s *recordingVocabStore) written() []string {
 
 func buildQueryCapRouter(t *testing.T, p search.SearchProvider, vocab search.SpellingHintsStore) chi.Router {
 	bg := searchtest.NewTracker(t)
-	svc := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), search.WithVocabularyStore(vocab))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Vocabulary = vocab })
 	h := search.NewDiscoveryHandler(search.DiscoveryServices{Search: svc})
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
@@ -1106,8 +1105,7 @@ func buildQueryNormRouter(t *testing.T, history *fakeSearchHistoryRepo) chi.Rout
 			},
 		}},
 	}
-	svc := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(),
-		search.WithHistoryRepository(history))
+	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.History = history })
 	h := search.NewDiscoveryHandler(search.DiscoveryServices{Search: svc})
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
@@ -1504,11 +1502,10 @@ func searchSlate(prefix string, n int) []search.SearchResult {
 func pagingRouter(t *testing.T, provider search.SearchProvider) chi.Router {
 	bg := searchtest.NewTracker(t)
 	down := &fakeSearchProvider{name: search.ProviderITunes, err: context.DeadlineExceeded}
-	searchSvc := search.NewSearchService(bg,
-		[]search.SearchProvider{provider, down},
-		search.NewCircuitBreaker(),
-		search.WithResultCache(&mapResultCache{entries: map[string][]search.SearchResult{}}),
-	)
+	searchSvc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{provider, down}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
+		cache := &mapResultCache{entries: map[string][]search.SearchResult{}}
+		c.ResultCache, c.HeldSlates = cache, cache
+	})
 	h := search.NewDiscoveryHandler(search.DiscoveryServices{Search: searchSvc})
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
@@ -1658,11 +1655,9 @@ func TestHandleRecordEvent_NearMissUserTelemetryTypesAreRejected(t *testing.T) {
 func TestHandleSearch_CacheHitReflectsTheResultCache(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	provider := &fakeSearchProvider{name: search.ProviderDeezer, results: searchSlate("c-", 3)}
-	searchSvc := search.NewSearchService(bg,
-		[]search.SearchProvider{provider},
-		search.NewCircuitBreaker(),
-		search.WithResultCache(&mapResultCache{entries: map[string][]search.SearchResult{}}),
-	)
+	searchSvc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{provider}, search.NewCircuitBreaker(), func(c *search.Collaborators) {
+		c.ResultCache = &mapResultCache{entries: map[string][]search.SearchResult{}}
+	})
 	h := search.NewDiscoveryHandler(search.DiscoveryServices{Search: searchSvc})
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)
@@ -1776,7 +1771,7 @@ func searchAsWarmUp(t *testing.T, store search.UnreleasedStore, results []search
 	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.NoUnreleasedCache{}, search.UnreleasedConfig{},
 		search.WithUnreleasedStore(store), search.WithUnreleasedLifecycle(context.Background(), &jobs)))
 	p := &fakeSearchProvider{name: search.ProviderDeezer, results: results}
-	searchSvc := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker())
+	searchSvc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker())
 	h := search.NewDiscoveryHandler(search.DiscoveryServices{Search: searchSvc}).WithUnreleased(svc)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
