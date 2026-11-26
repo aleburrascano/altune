@@ -1779,6 +1779,8 @@ func TestEmbedded_TheCatalogLengthGoldenIsWhatProdsAdaptersEmit(t *testing.T) {
 			if cand.Resolved || cand.Channel != "" {
 				t.Errorf("upload %+v is not what ytdlp emits for a SoundCloud result", cand)
 			}
+		case ports.KindPinnedVideo, ports.KindCatalogPin:
+			fallthrough
 		default:
 			t.Errorf("candidate %q has kind %q: prod's ytmusic emits nothing for this resolution", cand.URL, cand.Kind)
 		}

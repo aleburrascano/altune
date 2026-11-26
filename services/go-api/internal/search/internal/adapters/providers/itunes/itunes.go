@@ -62,9 +62,10 @@ func itunesEntity(kind domain.ResultKind) string {
 		return "album"
 	case domain.ResultKindArtist:
 		return "musicArtist"
-	default:
+	case domain.ResultKindUnknown, domain.ResultKindPlaylist:
 		return "song"
 	}
+	return "song"
 }
 
 func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResult {
@@ -124,9 +125,10 @@ func itunesSourceRef(item itunesItem, kind domain.ResultKind) (id, sourceURL str
 		return fmt.Sprintf("%d", item.CollectionID), item.CollectionViewURL
 	case domain.ResultKindArtist:
 		return fmt.Sprintf("%d", item.ArtistID), item.ArtistViewURL
-	default:
+	case domain.ResultKindUnknown, domain.ResultKindTrack, domain.ResultKindPlaylist:
 		return fmt.Sprintf("%d", item.TrackID), item.TrackViewURL
 	}
+	return fmt.Sprintf("%d", item.TrackID), item.TrackViewURL
 }
 
 type itunesResponse struct {

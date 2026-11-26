@@ -34,9 +34,10 @@ func ScoreConfidence(e Evidence, trackSeconds float64) float64 {
 		return fingerprintConfidence(hardConfidence, e.AcoustIDScore)
 	case VerdictSoft:
 		return fingerprintConfidence(softConfidence, e.AcoustIDScore)
-	default:
+	case VerdictOtherVersion, VerdictDifferentSong, VerdictUnknown, VerdictContradicted:
 		return unknownConfidence(e, trackSeconds)
 	}
+	return unknownConfidence(e, trackSeconds)
 }
 
 func fingerprintConfidence(base, score float64) float64 {
@@ -138,9 +139,10 @@ func SourceKindOf(c ports.AudioCandidate, channelClass string) audioquality.Sour
 		return officialVideoKind(c)
 	case ports.KindUpload:
 		return uploadSourceKind(channelClass)
-	default:
+	case ports.KindCatalogPin:
 		return audioquality.FanUpload
 	}
+	return audioquality.FanUpload
 }
 
 func officialVideoKind(c ports.AudioCandidate) audioquality.SourceKind {
@@ -171,9 +173,10 @@ func FingerprintOf(verdict VerdictKind) audioquality.FingerprintResult {
 		return audioquality.Contradicts
 	case VerdictDifferentSong:
 		return audioquality.Unsupported
-	default:
+	case VerdictUnknown:
 		return audioquality.Silent
 	}
+	return audioquality.Silent
 }
 
 func (ac *AcquisitionContext) CollectEvidence() Evidence {

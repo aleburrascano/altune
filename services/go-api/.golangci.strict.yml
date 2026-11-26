@@ -52,7 +52,8 @@ linters:
         - pkg: net/http
           alias: http
     exhaustive:
-      default-signifies-exhaustive: true
+      default-signifies-exhaustive: false
+      ignore-enum-types: '^github\.com/tdewolff/parse/v2/(css|js)\.TokenType$'
     rowserrcheck:
       packages:
         - github.com/jackc/pgx/v5

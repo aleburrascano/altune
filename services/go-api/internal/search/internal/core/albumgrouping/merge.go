@@ -268,9 +268,10 @@ func NormalizeRecordType(m MergedRelease) domain.RecordType {
 		return domain.RecordTypeSingle
 	case domain.RecordTypeEP:
 		return domain.RecordTypeEP
-	default:
+	case domain.RecordTypeUnknown, domain.RecordTypeAlbum, domain.RecordTypeCompilation:
 		return domain.RecordTypeAlbum
 	}
+	return domain.RecordTypeAlbum
 }
 
 func KeepRelease(m MergedRelease) bool {

@@ -52,6 +52,8 @@ func (l *ConcurrencyLimit) Acquire(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		}
+	case limitUnset:
+		return ErrLimitNotConfigured
 	default:
 		return ErrLimitNotConfigured
 	}

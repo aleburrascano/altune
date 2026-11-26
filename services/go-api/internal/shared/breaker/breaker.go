@@ -100,9 +100,10 @@ func (b *Breaker) Allow(ctx context.Context) (Admission, bool) {
 			b.notify(ctx, Change{Kind: LeaseExpired})
 		}
 		return b.admitProbe(), true
-	default:
+	case Closed:
 		return Admission{generation: b.generation}, true
 	}
+	return Admission{generation: b.generation}, true
 }
 
 func (b *Breaker) Success(ctx context.Context, adm Admission) {

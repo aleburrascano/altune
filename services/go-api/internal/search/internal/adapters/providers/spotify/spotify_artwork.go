@@ -57,9 +57,10 @@ func spotifyURLSegment(kind domain.ResultKind) string {
 		return "album"
 	case domain.ResultKindTrack:
 		return "track"
-	default:
+	case domain.ResultKindUnknown, domain.ResultKindPlaylist:
 		return ""
 	}
+	return ""
 }
 
 func upgradeSpotifyImageSize(url string) string {

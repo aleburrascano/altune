@@ -82,18 +82,33 @@ func foundNoSource(err error) bool {
 	switch failureCode(err) {
 	case downloadfailure.FailureNoMatchFound, downloadfailure.FailureNoConfidentMatch, downloadfailure.FailureDownloadFailed:
 		return true
-	default:
+	case downloadfailure.FailureSourceUnavailable,
+		downloadfailure.FailureStorageFailed,
+		downloadfailure.FailureAcquisitionCancelled,
+		downloadfailure.FailureAcquisitionFailed,
+		downloadfailure.FailureYtdlpError,
+		downloadfailure.FailureAcquisitionInterrupted,
+		downloadfailure.FailureAcquisitionRefused:
 		return false
 	}
+	return false
 }
 
 func noSourceHasIt(err error) bool {
 	switch failureCode(err) {
 	case downloadfailure.FailureNoMatchFound, downloadfailure.FailureNoConfidentMatch:
 		return true
-	default:
+	case downloadfailure.FailureSourceUnavailable,
+		downloadfailure.FailureDownloadFailed,
+		downloadfailure.FailureStorageFailed,
+		downloadfailure.FailureAcquisitionCancelled,
+		downloadfailure.FailureAcquisitionFailed,
+		downloadfailure.FailureYtdlpError,
+		downloadfailure.FailureAcquisitionInterrupted,
+		downloadfailure.FailureAcquisitionRefused:
 		return false
 	}
+	return false
 }
 
 func isCancellation(err error) bool {
@@ -117,7 +132,8 @@ func reasonForStep(step StepName) (downloadfailure.FailureCode, bool) {
 		return downloadfailure.FailureDownloadFailed, true
 	case stepNameStore:
 		return downloadfailure.FailureStorageFailed, true
-	default:
+	case stepNameTag, stepNameUpdateTrack, stepNamePipeline:
 		return "", false
 	}
+	return "", false
 }

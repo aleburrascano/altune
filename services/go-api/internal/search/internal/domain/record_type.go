@@ -20,9 +20,10 @@ func ParseRecordType(s string) RecordType {
 		return RecordTypeEP
 	case RecordTypeCompilation:
 		return RecordTypeCompilation
-	default:
+	case RecordTypeUnknown:
 		return RecordTypeUnknown
 	}
+	return RecordTypeUnknown
 }
 
 func (rt RecordType) Rank() int {
@@ -31,7 +32,8 @@ func (rt RecordType) Rank() int {
 		return 2
 	case RecordTypeAlbum:
 		return 1
-	default:
+	case RecordTypeUnknown:
 		return 0
 	}
+	return 0
 }
