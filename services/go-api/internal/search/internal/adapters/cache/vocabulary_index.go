@@ -102,7 +102,7 @@ func encodeEntryData(entry domain.SpellingHintsEntry) ([]byte, error) {
 		Popularity: entry.Popularity,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("encode vocabulary entry: %w", err)
+		return nil, fmt.Errorf("encode vocabulary entry %q: %w", entry.Term, err)
 	}
 	return encoded, nil
 }
