@@ -68,6 +68,7 @@ export function createEventSession({ clock, appState, onSignOut }: EventSessionD
   );
 
   function getSessionId(): string {
+    if (disposed) return state.sessionId;
     ensureForegroundRotation();
     touch();
     return state.sessionId;

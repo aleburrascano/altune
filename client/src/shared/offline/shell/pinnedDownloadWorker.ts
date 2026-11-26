@@ -33,16 +33,19 @@ type Getter = () => QueueState;
 
 export type Random = () => number;
 
+type Stopped = () => boolean;
+
 export async function runDownloadQueue(
   set: Setter,
   get: Getter,
   port: OfflinePort,
   random: Random,
+  stopped: Stopped,
 ): Promise<void> {
   if (get().isWorking) return;
   set({ isWorking: true });
   try {
-    await withPinnedBytesCached(() => drainQueue(set, get, port, random));
+    await withPinnedBytesCached(() => drainQueue(set, get, port, random, stopped));
   } finally {
     set({ isWorking: false });
     flushIndex();
@@ -54,12 +57,13 @@ async function drainQueue(
   get: Getter,
   port: OfflinePort,
   random: Random,
+  stopped: Stopped,
 ): Promise<void> {
   for (;;) {
     const trackId = get().queue[0];
-    if (trackId === undefined) break;
+    if (trackId === undefined || stopped()) break;
     set((s) => ({ queue: s.queue.slice(1) }));
-    await downloadOne(trackId, set, get, port, random);
+    await downloadOne(trackId, set, get, port, random, stopped);
   }
 }
 
@@ -73,9 +77,17 @@ function markEntry(set: Setter, trackId: TrackId, entry: PinnedEntry): void {
   });
 }
 
-function jobFor(trackId: TrackId, get: Getter, port: OfflinePort, random: Random): DownloadJob {
-  const isStillDownloading = (): boolean => get().entries[trackId]?.status === 'downloading';
-  return { trackId, isStillDownloading, port, random };
+function jobFor(
+  trackId: TrackId,
+  get: Getter,
+  port: OfflinePort,
+  random: Random,
+  stopped: Stopped,
+): DownloadJob {
+  function isStillDownloading(): boolean {
+    return !stopped() && get().entries[trackId]?.status === 'downloading';
+  }
+  return { trackId, isStillDownloading, port, random, stopped };
 }
 
 function settledEntry(trackId: TrackId, outcome: Attempt): PinnedEntry {
@@ -84,6 +96,7 @@ function settledEntry(trackId: TrackId, outcome: Attempt): PinnedEntry {
 
 async function settleDownload(set: Setter, job: DownloadJob): Promise<void> {
   const outcome = await downloadWithRetries(job);
+  if (job.stopped()) return;
   if (!job.isStillDownloading()) {
     deletePinned(job.trackId);
     return;
@@ -97,10 +110,11 @@ async function downloadOne(
   get: Getter,
   port: OfflinePort,
   random: Random,
+  stopped: Stopped,
 ): Promise<void> {
   if (get().entries[trackId] === undefined) return;
   markEntry(set, trackId, downloadingEntry(trackId));
-  await settleDownload(set, jobFor(trackId, get, port, random));
+  await settleDownload(set, jobFor(trackId, get, port, random, stopped));
 }
 
 const MAX_DOWNLOAD_ATTEMPTS = 3;
@@ -145,11 +159,12 @@ type DownloadJob = {
   isStillDownloading: () => boolean;
   port: OfflinePort;
   random: Random;
+  stopped: Stopped;
 };
 
 async function downloadWithRetries(job: DownloadJob, attemptNumber = 1): Promise<Attempt> {
   const outcome = await attemptDownload(job);
-  if (outcome.ok) return outcome;
+  if (outcome.ok || job.stopped()) return outcome;
   const retryIn = retryDelayMs(outcome.error, attemptNumber, job.random);
   warnAttemptFailed(job.trackId, outcome, retryIn);
   if (retryIn === null) return outcome;

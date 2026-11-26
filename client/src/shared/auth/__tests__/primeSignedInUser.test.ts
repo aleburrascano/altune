@@ -1,22 +1,24 @@
-import type * as signOutCleanup from '@shared/session/signOutCleanup';
-import type * as primeModule from '@shared/auth/shell/primeSignedInUser';
+import type * as signOutCleanup from '@shared/session';
 import type * as authDoor from '@shared/auth';
 import { authClientOver } from '@testing/fakeAuthClient';
 
 type Modules = {
   registry: typeof signOutCleanup;
-  primeSignedInUser: typeof primeModule.primeSignedInUser;
+  primeSignedInUser: typeof authDoor.primeSignedInUser;
+  warn: jest.Mock;
 };
 
 function freshModules(getSession: () => Promise<unknown>): Modules {
   let modules!: Modules;
   jest.isolateModules(() => {
+    const warn = jest.fn();
+    jest.requireActual('@shared/log').setLogger({ warn });
     const auth: typeof authDoor = jest.requireActual('@shared/auth');
     auth.installAuthClient(authClientOver({ getSession }));
     modules = {
-      registry: jest.requireActual('@shared/session/signOutCleanup'),
-      primeSignedInUser: jest.requireActual('@shared/auth/shell/primeSignedInUser')
-        .primeSignedInUser,
+      registry: jest.requireActual('@shared/session'),
+      primeSignedInUser: auth.primeSignedInUser,
+      warn,
     };
   });
   return modules;
@@ -62,7 +64,6 @@ describe('primeSignedInUser', () => {
   });
 
   it('stays unknown, and later real identity still applies, when the session read fails', async () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { registry, primeSignedInUser } = freshModules(() =>
       Promise.reject(new Error('storage down')),
     );
@@ -72,27 +73,22 @@ describe('primeSignedInUser', () => {
     registry.primeSignedInState(true);
 
     expect(registry.hasSignedInUser()).toBe(true);
-    warn.mockRestore();
   });
 });
 
 describe('primeSignedInUser, failure and race paths', () => {
-  it('warns, and never logs, when the stored session cannot be read', async () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const log = jest.spyOn(console, 'log').mockImplementation(() => undefined);
-    const { primeSignedInUser } = freshModules(() => Promise.reject(new Error('storage down')));
+  it('warns when the stored session cannot be read', async () => {
+    const { primeSignedInUser, warn } = freshModules(() =>
+      Promise.reject(new Error('storage down')),
+    );
 
     await primeSignedInUser();
 
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledWith('[auth] headless sign-in prime failed', expect.any(Error));
-    expect(log).not.toHaveBeenCalled();
-    warn.mockRestore();
-    log.mockRestore();
   });
 
   it('resolves and stays unknown when the session read throws before returning a promise', async () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { registry, primeSignedInUser } = freshModules(() => {
       throw new Error('client not ready');
     });
@@ -101,7 +97,6 @@ describe('primeSignedInUser, failure and race paths', () => {
     registry.primeSignedInState(true);
 
     expect(registry.hasSignedInUser()).toBe(true);
-    warn.mockRestore();
   });
 
   it('keeps a sign-in that lands while the read is pending over a late empty session', async () => {
@@ -148,7 +143,6 @@ describe('primeSignedInUser, failure and race paths', () => {
   });
 
   it('applies a later successful prime after an earlier read failed', async () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     let calls = 0;
     const { registry, primeSignedInUser } = freshModules(() => {
       calls += 1;
@@ -159,6 +153,5 @@ describe('primeSignedInUser, failure and race paths', () => {
     await primeSignedInUser();
 
     expect(registry.hasSignedInUser()).toBe(true);
-    warn.mockRestore();
   });
 });

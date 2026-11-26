@@ -1,3 +1,4 @@
+import { nativeWidget } from '@testing/fakes/widget/nativeWidget';
 import TrackPlayer, { Event, State } from 'react-native-track-player';
 
 import { startWidgetSnapshotPublisher } from '@features/player';
@@ -5,15 +6,7 @@ import { asTrackId } from '@shared/catalog';
 import type { PlaybackTrack } from '@shared/playback';
 import { useQueueStore } from '@shared/playback';
 import { notifyIdentityChange, runSignOutCleanups } from '@shared/session';
-import { reloadWidget, writeCoverFromUrl, writeSnapshot } from '@modules/altune-widget';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
-
-jest.mock('@supabase/supabase-js', () => require('@testing/doubles/supabase-js.js'));
-jest.mock('@modules/altune-widget', () => ({
-  writeSnapshot: jest.fn(),
-  writeCoverFromUrl: jest.fn(() => Promise.resolve()),
-  reloadWidget: jest.fn(),
-}));
 
 const player = require('react-native-track-player').__player;
 
@@ -32,7 +25,11 @@ function settle(): Promise<void> {
 }
 
 function writtenSnapshots(): unknown[] {
-  return jest.mocked(writeSnapshot).mock.calls.map(([json]) => JSON.parse(json));
+  return nativeWidget.snapshots();
+}
+
+function coverUrlsWritten(): string[] {
+  return nativeWidget.coverWrites().map(([url]) => url);
 }
 
 function lastSnapshot(): unknown {
@@ -47,6 +44,7 @@ let onPlaybackState: (event: unknown) => void;
 describe('startWidgetSnapshotPublisher', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
+    nativeWidget.reset();
     useQueueStore.getState().clearQueue();
     player.reset();
     jest.mocked(TrackPlayer.getPlaybackState).mockResolvedValue({ state: State.Paused });
@@ -61,6 +59,7 @@ describe('startWidgetSnapshotPublisher', () => {
       .calls('addEventListener')
       .find(([event]: [unknown]) => event === Event.PlaybackState)[1];
     jest.clearAllMocks();
+    nativeWidget.forgetWrites();
   });
 
   afterEach(() => {
@@ -89,8 +88,8 @@ describe('startWidgetSnapshotPublisher', () => {
         coverFileName: 'cover.jpg',
       },
     });
-    expect(writeCoverFromUrl).toHaveBeenCalledWith('https://art/1.jpg', 'cover.jpg');
-    expect(reloadWidget).toHaveBeenCalledTimes(writtenSnapshots().length);
+    expect(nativeWidget.coverWrites()).toContainEqual(['https://art/1.jpg', 'cover.jpg']);
+    expect(nativeWidget.reloads()).toBe(writtenSnapshots().length);
   });
 
   it('republishes with isPlaying when the player state changes', async () => {
@@ -113,7 +112,7 @@ describe('startWidgetSnapshotPublisher', () => {
     await settle();
 
     expect(writtenSnapshots()).toHaveLength(writes);
-    expect(writeCoverFromUrl).toHaveBeenCalledTimes(1);
+    expect(nativeWidget.coverWrites()).toHaveLength(1);
   });
 
   it('publishes a null cover for a track without artwork and skips the download', async () => {
@@ -121,12 +120,12 @@ describe('startWidgetSnapshotPublisher', () => {
     await settle();
 
     expect(lastSnapshot()).toMatchObject({ nowPlaying: { source: null, coverFileName: null } });
-    expect(writeCoverFromUrl).not.toHaveBeenCalled();
+    expect(nativeWidget.coverWrites()).toEqual([]);
   });
 
   it('keeps publishing with a null cover when the cover write is rejected', async () => {
     recordLogs();
-    jest.mocked(writeCoverFromUrl).mockRejectedValueOnce(new Error('encode failed'));
+    nativeWidget.coverWriterOnce(() => Promise.reject(new Error('encode failed')));
 
     useQueueStore.getState().loadQueue([track('1', 'https://art/1.jpg')], 0, { kind: 'library' });
     await settle();
@@ -151,7 +150,7 @@ describe('startWidgetSnapshotPublisher', () => {
     await settle();
 
     expect(writtenSnapshots()).toContainEqual({ signedIn: false });
-    expect(reloadWidget).toHaveBeenCalledTimes(writtenSnapshots().length);
+    expect(nativeWidget.reloads()).toBe(writtenSnapshots().length);
   });
 });
 
@@ -188,7 +187,7 @@ describe('startWidgetSnapshotPublisher, from a caller', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    jest.mocked(writeCoverFromUrl).mockImplementation(() => Promise.resolve());
+    nativeWidget.reset();
     useQueueStore.getState().clearQueue();
     useQueueStore.getState().setRepeatMode('off');
     useQueueStore.getState().setShuffled(false);
@@ -210,11 +209,11 @@ describe('startWidgetSnapshotPublisher, from a caller', () => {
       .mocked(TrackPlayer.addEventListener)
       .mock.results.map((result) => (result.value as { remove: jest.Mock }).remove);
     jest.clearAllMocks();
+    nativeWidget.forgetWrites();
   });
 
   afterEach(() => {
     stopPublisher();
-    jest.mocked(writeCoverFromUrl).mockImplementation(() => Promise.resolve());
   });
 
   it.each([
@@ -270,7 +269,7 @@ describe('startWidgetSnapshotPublisher, from a caller', () => {
   it('never leaves the first track’s slow cover on top of the second track’s', async () => {
     const slowFirst = deferred();
     const finished: string[] = [];
-    jest.mocked(writeCoverFromUrl).mockImplementation((url: string) => {
+    nativeWidget.coverWriter((url) => {
       if (url === ART_1) {
         return slowFirst.promise.then(() => {
           finished.push(url);
@@ -305,11 +304,7 @@ describe('startWidgetSnapshotPublisher, from a caller', () => {
     useQueueStore.getState().skipToNext();
     await settle();
 
-    expect(jest.mocked(writeCoverFromUrl).mock.calls.map(([url]) => url)).toEqual([
-      ART_1,
-      ART_2,
-      ART_1,
-    ]);
+    expect(coverUrlsWritten()).toEqual([ART_1, ART_2, ART_1]);
   });
 
   it('does not download a cover again for the next track sharing the same artwork', async () => {
@@ -318,7 +313,7 @@ describe('startWidgetSnapshotPublisher, from a caller', () => {
     useQueueStore.getState().skipToNext();
     await settle();
 
-    expect(writeCoverFromUrl).toHaveBeenCalledTimes(1);
+    expect(nativeWidget.coverWrites()).toHaveLength(1);
     expect(lastSnapshot()).toMatchObject({
       nowPlaying: { title: 'Track 2', coverFileName: 'cover.jpg' },
     });
@@ -337,7 +332,7 @@ describe('startWidgetSnapshotPublisher, from a caller', () => {
 
   it('publishes the next track’s cover after a rejected cover write', async () => {
     recordLogs();
-    jest.mocked(writeCoverFromUrl).mockRejectedValueOnce(new Error('encode failed'));
+    nativeWidget.coverWriterOnce(() => Promise.reject(new Error('encode failed')));
 
     useQueueStore.getState().loadQueue([track('1', ART_1), track('2', ART_2)], 0, null);
     await settle();
@@ -360,7 +355,7 @@ describe('startWidgetSnapshotPublisher, from a caller', () => {
 
   it('lets no pending cover overwrite the signed-out snapshot', async () => {
     const slowCover = deferred();
-    jest.mocked(writeCoverFromUrl).mockReturnValue(slowCover.promise);
+    nativeWidget.coverWriter(() => slowCover.promise);
 
     useQueueStore.getState().loadQueue([track('1', ART_1)], 0, null);
     await settle();
@@ -420,20 +415,19 @@ describe('startWidgetSnapshotPublisher, from a caller', () => {
   it('writes nothing for a queue change once unsubscribed', async () => {
     useQueueStore.getState().loadQueue([track('1', null), track('2', ART_2)], 0, null);
     await settle();
-    jest.mocked(writeSnapshot).mockClear();
-    jest.mocked(reloadWidget).mockClear();
+    nativeWidget.forgetWrites();
 
     stopPublisher();
     useQueueStore.getState().skipToNext();
     await settle();
 
-    expect(writeSnapshot).not.toHaveBeenCalled();
-    expect(writeCoverFromUrl).not.toHaveBeenCalled();
-    expect(reloadWidget).not.toHaveBeenCalled();
+    expect(writtenSnapshots()).toEqual([]);
+    expect(nativeWidget.coverWrites()).toEqual([]);
+    expect(nativeWidget.reloads()).toBe(0);
   });
 
   it('keeps publishing the next track while a cover write never settles', async () => {
-    jest.mocked(writeCoverFromUrl).mockReturnValueOnce(new Promise<void>(() => undefined));
+    nativeWidget.coverWriterOnce(() => new Promise<void>(() => undefined));
     useQueueStore.getState().loadQueue([track('1', ART_1), track('2', null)], 0, null);
     await settle();
     useQueueStore.getState().skipToNext();
@@ -442,21 +436,34 @@ describe('startWidgetSnapshotPublisher, from a caller', () => {
     expect(lastSnapshot()).toMatchObject({ nowPlaying: { title: 'Track 2', coverFileName: null } });
   });
 
+  it('leaves no cover timeout running once stopped', async () => {
+    jest.useFakeTimers({ doNotFake: ['setImmediate'] });
+    try {
+      nativeWidget.coverWriterOnce(() => new Promise<void>(() => undefined));
+      useQueueStore.getState().loadQueue([track('1', ART_1)], 0, null);
+      await settle();
+      stopPublisher();
+
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('writes nothing once unsubscribed, even for a publish still waiting on its cover', async () => {
     const slowCover = deferred();
-    jest.mocked(writeCoverFromUrl).mockReturnValueOnce(slowCover.promise);
+    nativeWidget.coverWriterOnce(() => slowCover.promise);
     useQueueStore.getState().loadQueue([track('1', ART_1)], 0, null);
     await settle();
-    jest.mocked(writeSnapshot).mockClear();
-    jest.mocked(reloadWidget).mockClear();
+    nativeWidget.forgetWrites();
 
     stopPublisher();
     slowCover.resolve();
     await settle();
     await settle();
 
-    expect(writeSnapshot).not.toHaveBeenCalled();
-    expect(reloadWidget).not.toHaveBeenCalled();
+    expect(writtenSnapshots()).toEqual([]);
+    expect(nativeWidget.reloads()).toBe(0);
   });
 
   it('writes nothing on sign-out once unsubscribed', async () => {
@@ -464,7 +471,7 @@ describe('startWidgetSnapshotPublisher, from a caller', () => {
     signOut();
     await settle();
 
-    expect(writeSnapshot).not.toHaveBeenCalled();
+    expect(writtenSnapshots()).toEqual([]);
   });
 
   it('removes its player event subscription when unsubscribed', () => {
@@ -496,6 +503,7 @@ describe('startWidgetSnapshotPublisher while signed out', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    nativeWidget.reset();
     useQueueStore.getState().clearQueue();
     player.reset();
     jest.mocked(TrackPlayer.getPlaybackState).mockResolvedValue({ state: State.Paused });

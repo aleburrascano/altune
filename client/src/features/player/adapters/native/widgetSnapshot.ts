@@ -34,6 +34,7 @@ class SnapshotPublisher {
   private lastWrittenJson: string | null = null;
   private cover: CoverState | null = null;
   private coverWrites: Promise<unknown> = Promise.resolve();
+  private readonly coverTimeouts = new Set<ReturnType<typeof setTimeout>>();
   private running = false;
   private requested = false;
 
@@ -61,6 +62,8 @@ class SnapshotPublisher {
 
   stop(): void {
     this.stopped = true;
+    this.coverTimeouts.forEach((timer) => clearTimeout(timer));
+    this.coverTimeouts.clear();
   }
 
   private publishWhileRequested(): Promise<void> {
@@ -110,7 +113,7 @@ class SnapshotPublisher {
 
   private writeUnlessSuperseded(attempt: CoverState): Promise<void> | void {
     if (this.isSuperseded(attempt)) return;
-    return writeCover(attempt.artworkUrl).then((written) => {
+    return writeCover(attempt.artworkUrl, this.coverTimeouts).then((written) => {
       attempt.written = written;
     });
   }
@@ -136,8 +139,15 @@ function isStillCurrent(artworkUrl: string): boolean {
   return hasSignedInUser() && useQueueStore.getState().currentTrack()?.artworkUrl === artworkUrl;
 }
 
-function writeCover(artworkUrl: string): Promise<boolean> {
-  return withTimeout(writeCoverFromUrl(artworkUrl, COVER_FILE_NAME), COVER_TIMEOUT_MS).then(
+function writeCover(
+  artworkUrl: string,
+  pending: Set<ReturnType<typeof setTimeout>>,
+): Promise<boolean> {
+  return withTimeout(
+    writeCoverFromUrl(artworkUrl, COVER_FILE_NAME),
+    COVER_TIMEOUT_MS,
+    pending,
+  ).then(
     () => true,
     (error: unknown) => {
       warnPublishFailed(error);
@@ -146,12 +156,20 @@ function writeCover(artworkUrl: string): Promise<boolean> {
   );
 }
 
-function withTimeout(work: Promise<void>, ms: number): Promise<void> {
+function withTimeout(
+  work: Promise<void>,
+  ms: number,
+  pending: Set<ReturnType<typeof setTimeout>>,
+): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timedOut = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error('cover write timed out')), ms);
+    pending.add(timer);
   });
-  return Promise.race([work, timedOut]).finally(() => clearTimeout(timer));
+  return Promise.race([work, timedOut]).finally(() => {
+    clearTimeout(timer);
+    if (timer !== undefined) pending.delete(timer);
+  });
 }
 
 function nowPlaying(track: PlaybackTrack, player: PlayerStatus, coverFileName: string | null) {

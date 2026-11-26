@@ -47,6 +47,7 @@ function normalize(response) {
 
 const requests = [];
 const rules = [];
+const hanging = new Set();
 let fallback = null;
 
 function matches(rule, method, path) {
@@ -92,8 +93,10 @@ async function fakeFetch(url, init = {}) {
 
   if (rule.hang === true) {
     return new Promise((_resolve, reject) => {
+      const giveUp = () => reject(abortError());
+      hanging.add(giveUp);
       if (signal == null) return;
-      signal.addEventListener('abort', () => reject(abortError()), { once: true });
+      signal.addEventListener('abort', giveUp, { once: true });
     });
   }
 
@@ -105,6 +108,11 @@ async function fakeFetch(url, init = {}) {
 }
 
 const __http = {
+  abortHanging() {
+    for (const giveUp of hanging) giveUp();
+    hanging.clear();
+  },
+
   reset() {
     requests.length = 0;
     rules.length = 0;

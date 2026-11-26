@@ -28,9 +28,9 @@ function installFreshTelemetry() {
 }
 
 function installStoppedTelemetry() {
-  const stopped = freshTelemetry();
-  stopped.dispose();
-  require('../src/shared/telemetry').installTelemetry(stopped);
+  const StoppedTelemetry = freshTelemetry();
+  StoppedTelemetry.dispose();
+  require('../src/shared/telemetry').installTelemetry(StoppedTelemetry);
 }
 
 function resetLogger() {
@@ -45,9 +45,21 @@ const { ensureAppAuthClient } = require('./appAuthClient.js');
 
 beforeAll(ensureAppAuthClient);
 
-afterEach(installStoppedTelemetry);
+async function stopTelemetryWork() {
+  __http.abortHanging();
+  await require('../src/shared/telemetry').stopTelemetry();
+  installStoppedTelemetry();
+}
 
-afterAll(installStoppedTelemetry);
+function stopOfflineWork() {
+  require('../src/shared/offline').stopOffline();
+}
+
+afterEach(stopTelemetryWork);
+
+afterAll(stopTelemetryWork);
+
+afterAll(stopOfflineWork);
 
 beforeEach(() => {
   ensureAppAuthClient();
