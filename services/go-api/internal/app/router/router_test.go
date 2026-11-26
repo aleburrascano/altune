@@ -9,7 +9,7 @@ import (
 	"altune/go-api/internal/shared/events/eventstest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/slowclient"
+	"altune/go-api/internal/shared/slowclienttest"
 	"bufio"
 	"bytes"
 	"context"
@@ -111,10 +111,10 @@ func newDeadlineRouter(uid ids.UserId, sse *eventstream.EventStreamHandler, bulk
 func TestRouter_WriteDeadlineCutsOffSlowReaderOnNonSSERoute(t *testing.T) {
 	bulkErrs := make(chan error, 1)
 	sse := eventstream.NewEventStreamHandler(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")), 0)
-	srv := slowclient.NewServer(t, newDeadlineRouter(ids.NewUserId(uuid.New()), sse, bulkErrs))
+	srv := slowclienttest.NewServer(t, newDeadlineRouter(ids.NewUserId(uuid.New()), sse, bulkErrs))
 
 	began := time.Now()
-	slowclient.Get(t, srv, "/v1/bulk", nil)
+	slowclienttest.Get(t, srv, "/v1/bulk", nil)
 
 	select {
 	case err := <-bulkErrs:
@@ -133,10 +133,10 @@ func TestRouter_SSEStreamOutlivesRouteWriteDeadline(t *testing.T) {
 	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))
 	uid := ids.NewUserId(uuid.New())
 	sse := eventstream.NewEventStreamHandler(bus, 0).WithHeartbeat(routeWriteDeadline / 3)
-	srv := slowclient.NewServer(t, newDeadlineRouter(uid, sse, make(chan error, 1)))
+	srv := slowclienttest.NewServer(t, newDeadlineRouter(uid, sse, make(chan error, 1)))
 
-	conn, br := slowclient.Get(t, srv, "/v1/events", nil)
-	resp := slowclient.ReadResponse(t, conn, br)
+	conn, br := slowclienttest.Get(t, srv, "/v1/events", nil)
+	resp := slowclienttest.ReadResponse(t, conn, br)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -158,12 +158,12 @@ func TestRouter_SSEPerFrameDeadlineReachesConnection(t *testing.T) {
 	sse := eventstream.NewEventStreamHandler(bus, 0).WithWriteTimeout(routeWriteDeadline).WithHeartbeat(time.Hour)
 	done := make(chan struct{})
 	router := newDeadlineRouter(uid, sse, make(chan error, 1))
-	srv := slowclient.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := slowclienttest.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer close(done)
 		router.ServeHTTP(w, r)
 	}))
 
-	slowclient.Get(t, srv, "/v1/events", nil)
+	slowclienttest.Get(t, srv, "/v1/events", nil)
 
 	payload := map[string]any{"pad": strings.Repeat("x", 16<<10)}
 	giveUp := time.After(5 * time.Second)

@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/slowclient"
+	"altune/go-api/internal/shared/slowclienttest"
 	"altune/go-api/internal/shared/testpoll"
 	"bytes"
 	"context"
@@ -404,13 +404,13 @@ func serveAudioBehindRouteDeadline(t *testing.T, routeDeadline time.Duration, op
 	r.Use(httpserver.RequestLogger)
 	r.Use(asBearer)
 	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled), time.Now, opts...).Routes(r)
-	srv := slowclient.NewServer(t, r)
+	srv := slowclienttest.NewServer(t, r)
 
 	path := "/tracks/" + track.ID.UUID().String() + "/audio"
 	auth := http.Header{"Authorization": {"Bearer " + library.FixtureUserId().String()}}
 	get := func() *http.Response {
-		conn, br := slowclient.Get(t, srv, path, auth)
-		resp := slowclient.ReadResponse(t, conn, br)
+		conn, br := slowclienttest.Get(t, srv, path, auth)
+		resp := slowclienttest.ReadResponse(t, conn, br)
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("status = %d, want 200", resp.StatusCode)
 		}

@@ -8,7 +8,7 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
-	"altune/go-api/internal/shared/slowclient"
+	"altune/go-api/internal/shared/slowclienttest"
 	"altune/go-api/internal/shared/testpoll"
 	"bufio"
 	"bytes"
@@ -720,8 +720,8 @@ func TestStreams_OutliveTheRouteWriteDeadline(t *testing.T) {
 
 func openStalledStream(t *testing.T, srv *httptest.Server) {
 	t.Helper()
-	conn, br := slowclient.Get(t, srv, "/events/stream", nil)
-	resp := slowclient.ReadResponse(t, conn, br)
+	conn, br := slowclienttest.Get(t, srv, "/events/stream", nil)
+	resp := slowclienttest.ReadResponse(t, conn, br)
 	t.Cleanup(func() { _ = resp.Body.Close() })
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("stalled client status = %d, want 200", resp.StatusCode)
@@ -753,7 +753,7 @@ func slotReleasedWithin(t *testing.T, srv *httptest.Server, limit time.Duration)
 func TestStreams_StalledClientReleasesItsSlotAtTheWriteDeadline(t *testing.T) {
 	const idle = 200 * time.Millisecond
 	fx := newStreamFixture(t)
-	srv := slowclient.NewServer(t, boundedRouter(fx.deps, idleBounds(idle, 5*idle), httpserver.RequestLogger))
+	srv := slowclienttest.NewServer(t, boundedRouter(fx.deps, idleBounds(idle, 5*idle), httpserver.RequestLogger))
 	for i := 0; i < eventFeedCeiling; i++ {
 		openStalledStream(t, srv)
 	}

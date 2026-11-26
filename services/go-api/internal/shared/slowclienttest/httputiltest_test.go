@@ -1,7 +1,7 @@
-package slowclient_test
+package slowclienttest_test
 
 import (
-	"altune/go-api/internal/shared/slowclient"
+	"altune/go-api/internal/shared/slowclienttest"
 	"io"
 	"net/http"
 	"strings"
@@ -10,13 +10,13 @@ import (
 )
 
 func TestGet_SendsPathAndHeadersAndReadResponseReadsTheReply(t *testing.T) {
-	srv := slowclient.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := slowclienttest.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Echo", r.URL.Path+" "+strings.Join(r.Header.Values("X-Probe"), ","))
 		_, _ = io.WriteString(w, "hello")
 	}))
 
-	conn, br := slowclient.Get(t, srv, "/probe", http.Header{"X-Probe": {"a", "b"}})
-	resp := slowclient.ReadResponse(t, conn, br)
+	conn, br := slowclienttest.Get(t, srv, "/probe", http.Header{"X-Probe": {"a", "b"}})
+	resp := slowclienttest.ReadResponse(t, conn, br)
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("read body: %v", err)
@@ -38,7 +38,7 @@ func TestGet_SendsPathAndHeadersAndReadResponseReadsTheReply(t *testing.T) {
 
 func TestNewServer_WriteDeadlineFiresWhenTheClientStopsReading(t *testing.T) {
 	writeErr := make(chan error, 1)
-	srv := slowclient.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := slowclienttest.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(200 * time.Millisecond))
 		chunk := make([]byte, 32<<10)
 		var err error
@@ -48,7 +48,7 @@ func TestNewServer_WriteDeadlineFiresWhenTheClientStopsReading(t *testing.T) {
 		writeErr <- err
 	}))
 
-	slowclient.Get(t, srv, "/", nil)
+	slowclienttest.Get(t, srv, "/", nil)
 
 	select {
 	case err := <-writeErr:

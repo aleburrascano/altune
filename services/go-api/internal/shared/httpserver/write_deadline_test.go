@@ -2,7 +2,7 @@ package httpserver_test
 
 import (
 	"altune/go-api/internal/shared/httpserver"
-	"altune/go-api/internal/shared/slowclient"
+	"altune/go-api/internal/shared/slowclienttest"
 	"bytes"
 	"io"
 	"net/http"
@@ -46,12 +46,12 @@ func awaitWriteError(t *testing.T, errs <-chan error) {
 func TestWriteDeadline_CutsOffClientThatStopsReading(t *testing.T) {
 	errs := make(chan error, 1)
 	start := make(chan time.Time, 1)
-	srv := slowclient.NewServer(t, deadlineStack(func(w http.ResponseWriter, _ *http.Request) {
+	srv := slowclienttest.NewServer(t, deadlineStack(func(w http.ResponseWriter, _ *http.Request) {
 		start <- time.Now()
 		errs <- writeUntilError(w, 2*cutoffWait)
 	}))
 
-	slowclient.Get(t, srv, "/", nil)
+	slowclienttest.Get(t, srv, "/", nil)
 
 	began := <-start
 	awaitWriteError(t, errs)
@@ -61,7 +61,7 @@ func TestWriteDeadline_CutsOffClientThatStopsReading(t *testing.T) {
 }
 
 func TestClearWriteDeadline_StreamOutlivesRouteDeadline(t *testing.T) {
-	srv := slowclient.NewServer(t, deadlineStack(func(w http.ResponseWriter, _ *http.Request) {
+	srv := slowclienttest.NewServer(t, deadlineStack(func(w http.ResponseWriter, _ *http.Request) {
 		httpserver.ClearWriteDeadline(w)
 		w.WriteHeader(http.StatusOK)
 		rc := http.NewResponseController(w)
@@ -71,8 +71,8 @@ func TestClearWriteDeadline_StreamOutlivesRouteDeadline(t *testing.T) {
 		_ = rc.Flush()
 	}))
 
-	conn, br := slowclient.Get(t, srv, "/", nil)
-	resp := slowclient.ReadResponse(t, conn, br)
+	conn, br := slowclienttest.Get(t, srv, "/", nil)
+	resp := slowclienttest.ReadResponse(t, conn, br)
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil || string(body) != "late frame" {
@@ -82,13 +82,13 @@ func TestClearWriteDeadline_StreamOutlivesRouteDeadline(t *testing.T) {
 
 func TestExtendWriteDeadlineOnWrite_SlowButSteadyClientGetsWholeBody(t *testing.T) {
 	const size = 2 << 20
-	srv := slowclient.NewServer(t, deadlineStack(func(w http.ResponseWriter, _ *http.Request) {
+	srv := slowclienttest.NewServer(t, deadlineStack(func(w http.ResponseWriter, _ *http.Request) {
 		ew := httpserver.ExtendWriteDeadlineOnWrite(w, time.Second)
 		_, _ = io.Copy(ew, io.LimitReader(zeroReader{}, size))
 	}))
 
-	conn, br := slowclient.Get(t, srv, "/", nil)
-	resp := slowclient.ReadResponse(t, conn, br)
+	conn, br := slowclienttest.Get(t, srv, "/", nil)
+	resp := slowclienttest.ReadResponse(t, conn, br)
 	defer func() { _ = resp.Body.Close() }()
 	began := time.Now()
 	got := 0
@@ -111,11 +111,11 @@ func TestExtendWriteDeadlineOnWrite_SlowButSteadyClientGetsWholeBody(t *testing.
 
 func TestExtendWriteDeadlineOnWrite_CutsOffStalledClient(t *testing.T) {
 	errs := make(chan error, 1)
-	srv := slowclient.NewServer(t, deadlineStack(func(w http.ResponseWriter, _ *http.Request) {
+	srv := slowclienttest.NewServer(t, deadlineStack(func(w http.ResponseWriter, _ *http.Request) {
 		errs <- writeUntilError(httpserver.ExtendWriteDeadlineOnWrite(w, testWriteDeadline), 2*cutoffWait)
 	}))
 
-	slowclient.Get(t, srv, "/", nil)
+	slowclienttest.Get(t, srv, "/", nil)
 
 	awaitWriteError(t, errs)
 }

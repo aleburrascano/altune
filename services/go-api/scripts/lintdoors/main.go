@@ -8,28 +8,46 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 )
 
-const usage = "usage: go run ./scripts/lintdoors [--summary] [<go-api dir>]\n  every internal/<module> has one door, its root package; lists each import from outside a module of one of its non-root packages and exits 1 when there are any; --summary prints, per module, its open packages with their importers, and the exported identifiers of the root and of each open package"
+const usage = "usage: go run ./scripts/lintdoors [--summary] [--exports] [<go-api dir>]\n  every module (internal/<module>, or internal/<group>/<module> for a grouping directory) has one door, its root package, and may have a second, <module>test, that only _test.go files import; lists each outside import of any other package of a module and each non-test import of a test-support package, and exits 1 when there are any; --exports also lists each root identifier that no file outside the module uses (a name used only by its own module's root-package tests is unexported, a name its own subpackages or test door use must stay and those tests go through the real door; used means pkg.Name through a plain or aliased import, a dot import is not followed); --summary prints, per module, its door size, how much of it is used outside, and its open packages with their importers"
+
+var groups = map[string]bool{"platform": true, "shared": true}
+
+const (
+	kindSideDoor = iota
+	kindTestSupport
+	kindUnusedExport
+)
 
 type violation struct {
 	file     string
 	line     int
 	pkg      string
 	module   string
+	sub      string
 	importer string
-	test     bool
+	kind     int
+	col      int
 }
+
+const (
+	usedByProduction = 1
+	usedByTests      = 2
+	usedInside       = 4
+)
 
 type scan struct {
 	modulePath string
+	root       string
 	violations []violation
 	modules    map[string]bool
+	pkgNames   map[string]string
+	used       map[string]map[string]int
 }
 
 func main() {
@@ -42,11 +60,14 @@ func say(w io.Writer, format string, a ...any) {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	summary := false
+	exports := false
 	root := "."
 	for _, arg := range args {
 		switch {
 		case arg == "--summary":
 			summary = true
+		case arg == "--exports":
+			exports = true
 		case strings.HasPrefix(arg, "-"):
 			say(stderr, "%s\n", usage)
 			return 2
@@ -59,17 +80,31 @@ func run(args []string, stdout, stderr io.Writer) int {
 		say(stderr, "lintdoors: %v\n", err)
 		return 2
 	}
+	if exports {
+		if err := s.addUnusedExports(); err != nil {
+			say(stderr, "lintdoors: %v\n", err)
+			return 2
+		}
+	}
 	if summary {
-		if err := printSummary(stdout, root, s); err != nil {
+		if err := printSummary(stdout, s); err != nil {
 			say(stderr, "lintdoors: %v\n", err)
 			return 2
 		}
 	} else {
 		for _, v := range s.violations {
+			if v.kind == kindUnusedExport {
+				say(stdout, "%s:%d:%d: %s is exported by module %s but no file outside it uses it; unexport it and let the module's own tests go through the real door\n", v.file, v.line, v.col, v.pkg, v.module)
+				continue
+			}
+			if v.kind == kindTestSupport {
+				say(stdout, "%s:%d: non-test code imports the test-support package %s; only _test.go files may\n", v.file, v.line, v.pkg)
+				continue
+			}
 			say(stdout, "%s:%d: imports %s, a non-root package of module %s; import %s/internal/%s and move what is needed behind its root\n", v.file, v.line, v.pkg, v.module, s.modulePath, v.module)
 		}
 	}
-	say(stdout, "imports through a module's side door: %d\n", len(s.violations))
+	say(stdout, "imports through a module's side door, of test support from production, or unused root exports: %d\n", len(s.violations))
 	if len(s.violations) > 0 {
 		return 1
 	}
@@ -89,20 +124,88 @@ func modulePathOf(root string) (string, error) {
 	return "", fmt.Errorf("no module line in %s", filepath.Join(root, "go.mod"))
 }
 
+func splitModule(rest string) (module, sub string) {
+	parts := strings.Split(rest, "/")
+	n := 1
+	if groups[parts[0]] {
+		n = 2
+	}
+	if len(parts) < n {
+		return "", ""
+	}
+	return strings.Join(parts[:n], "/"), strings.Join(parts[n:], "/")
+}
+
+func lastSegment(p string) string {
+	return p[strings.LastIndex(p, "/")+1:]
+}
+
+func isTestSupport(module, sub string) bool {
+	if sub == "" {
+		name := lastSegment(module)
+		return strings.HasPrefix(name, "test") || strings.HasSuffix(name, "test")
+	}
+	return sub == lastSegment(module)+"test"
+}
+
+func discoverModules(root string) (map[string]bool, error) {
+	modules := map[string]bool{}
+	top, err := os.ReadDir(filepath.Join(root, "internal"))
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range top {
+		if !e.IsDir() {
+			continue
+		}
+		if !groups[e.Name()] {
+			modules[e.Name()] = true
+			continue
+		}
+		members, err := os.ReadDir(filepath.Join(root, "internal", e.Name()))
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range members {
+			if m.IsDir() {
+				modules[e.Name()+"/"+m.Name()] = true
+			}
+		}
+	}
+	return modules, nil
+}
+
+func packageName(dir string) string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(token.NewFileSet(), filepath.Join(dir, name), nil, parser.PackageClauseOnly)
+		if err == nil {
+			return f.Name.Name
+		}
+	}
+	return ""
+}
+
 func scanTree(root string) (*scan, error) {
 	modulePath, err := modulePathOf(root)
 	if err != nil {
 		return nil, err
 	}
-	s := &scan{modulePath: modulePath, modules: map[string]bool{}}
-	entries, err := os.ReadDir(filepath.Join(root, "internal"))
+	modules, err := discoverModules(root)
 	if err != nil {
 		return nil, err
 	}
-	for _, e := range entries {
-		if e.IsDir() {
-			s.modules[e.Name()] = true
-		}
+	s := &scan{modulePath: modulePath, root: root, modules: modules, pkgNames: map[string]string{}, used: map[string]map[string]int{}}
+	for m := range modules {
+		s.pkgNames[m] = packageName(filepath.Join(root, "internal", filepath.FromSlash(m)))
+		s.used[m] = map[string]int{}
 	}
 	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -118,7 +221,7 @@ func scanTree(root string) (*scan, error) {
 		if !strings.HasSuffix(p, ".go") {
 			return nil
 		}
-		return s.scanFile(root, p)
+		return s.scanFile(p)
 	})
 	if err != nil {
 		return nil, err
@@ -133,21 +236,22 @@ func scanTree(root string) (*scan, error) {
 	return s, nil
 }
 
-func (s *scan) scanFile(root, file string) error {
+func (s *scan) scanFile(file string) error {
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, file, nil, parser.ImportsOnly)
+	f, err := parser.ParseFile(fset, file, nil, 0)
 	if err != nil {
 		return fmt.Errorf("parse %s: %w", file, err)
 	}
-	rel, err := filepath.Rel(root, filepath.Dir(file))
+	rel, err := filepath.Rel(s.root, filepath.Dir(file))
 	if err != nil {
 		return err
 	}
 	importer := filepath.ToSlash(rel)
 	ownModule := ""
 	if rest, ok := strings.CutPrefix(importer, "internal/"); ok {
-		ownModule, _, _ = strings.Cut(rest, "/")
+		ownModule, _ = splitModule(rest)
 	}
+	isTest := strings.HasSuffix(file, "_test.go")
 	prefix := s.modulePath + "/internal/"
 	for _, imp := range f.Imports {
 		target, err := strconv.Unquote(imp.Path.Value)
@@ -158,61 +262,119 @@ func (s *scan) scanFile(root, file string) error {
 		if !ok {
 			continue
 		}
-		module, sub, _ := strings.Cut(rest, "/")
-		if sub == "" || module == ownModule || !s.modules[module] {
+		module, sub := splitModule(rest)
+		if !s.modules[module] {
 			continue
 		}
-		s.violations = append(s.violations, violation{
-			file:     file,
-			line:     fset.Position(imp.Pos()).Line,
-			pkg:      target,
-			module:   module,
-			importer: importer,
-			test:     strings.HasSuffix(file, "_test.go"),
-		})
+		v := violation{file: file, line: fset.Position(imp.Pos()).Line, pkg: target, module: module, sub: sub, importer: importer}
+		switch {
+		case isTestSupport(module, sub) && !isTest:
+			v.kind = kindTestSupport
+			s.violations = append(s.violations, v)
+		case sub == "" && module != ownModule:
+			s.recordUse(f, imp, module, outsideFlag(isTest))
+		case sub == "" && importer != "internal/"+module:
+			s.recordUse(f, imp, module, usedInside)
+		case sub != "" && module != ownModule && !isTestSupport(module, sub):
+			v.kind = kindSideDoor
+			s.violations = append(s.violations, v)
+		}
 	}
 	return nil
 }
 
-func printSummary(w io.Writer, root string, s *scan) error {
+func outsideFlag(isTest bool) int {
+	if isTest {
+		return usedByTests
+	}
+	return usedByProduction
+}
+
+func (s *scan) recordUse(f *ast.File, imp *ast.ImportSpec, module string, flag int) {
+	alias := s.pkgNames[module]
+	if imp.Name != nil {
+		alias = imp.Name.Name
+	}
+	if alias == "" || alias == "_" || alias == "." {
+		return
+	}
+	ast.Inspect(f, func(n ast.Node) bool {
+		sel, ok := n.(*ast.SelectorExpr)
+		if !ok || !sel.Sel.IsExported() {
+			return true
+		}
+		if id, ok := sel.X.(*ast.Ident); ok && id.Name == alias && id.Obj == nil {
+			s.used[module][sel.Sel.Name] |= flag
+		}
+		return true
+	})
+}
+
+type door struct {
+	exported    int
+	prod, tests int
+}
+
+func (s *scan) doorOf(module string) (door, error) {
+	names, err := rootExports(filepath.Join(s.root, "internal", filepath.FromSlash(module)))
+	if err != nil {
+		return door{}, err
+	}
+	d := door{exported: len(names)}
+	for name := range names {
+		switch s.used[module][name] &^ usedInside {
+		case usedByProduction, usedByProduction | usedByTests:
+			d.prod++
+		case usedByTests:
+			d.tests++
+		}
+	}
+	return d, nil
+}
+
+func printSummary(w io.Writer, s *scan) error {
 	modules := make([]string, 0, len(s.modules))
 	for m := range s.modules {
 		modules = append(modules, m)
 	}
 	sort.Strings(modules)
 	for _, m := range modules {
-		exported, err := rootExports(filepath.Join(root, "internal", m))
+		d, err := s.doorOf(m)
 		if err != nil {
 			return err
 		}
 		open := map[string]map[string]int{}
+		testSupport := 0
 		for _, v := range s.violations {
 			if v.module != m {
 				continue
 			}
-			sub := strings.TrimPrefix(v.pkg, s.modulePath+"/internal/")
-			if open[sub] == nil {
-				open[sub] = map[string]int{}
+			if v.kind == kindUnusedExport {
+				continue
 			}
-			open[sub][v.importer]++
+			if v.kind == kindTestSupport {
+				testSupport++
+				continue
+			}
+			if open[v.sub] == nil {
+				open[v.sub] = map[string]int{}
+			}
+			open[v.sub][v.importer]++
 		}
-		say(w, "%s: %d open non-root packages, %d exported identifiers at the root\n", m, len(open), exported)
-		pkgs := make([]string, 0, len(open))
+		say(w, "%s: %d exported at the root, %d used outside by production code, %d used outside only by tests, %d unused outside; %d open packages, %d production imports of test support\n",
+			m, d.exported, d.prod, d.tests, d.exported-d.prod-d.tests, len(open), testSupport)
+		subs := make([]string, 0, len(open))
 		for p := range open {
-			pkgs = append(pkgs, p)
+			subs = append(subs, p)
 		}
-		sort.Strings(pkgs)
-		for _, p := range pkgs {
+		sort.Strings(subs)
+		for _, p := range subs {
 			importers := make([]string, 0, len(open[p]))
 			for i := range open[p] {
 				importers = append(importers, i)
 			}
 			sort.Strings(importers)
-			exports, err := rootExports(filepath.Join(root, "internal", filepath.FromSlash(p)))
-			if err != nil {
-				return err
-			}
-			say(w, "  %s (%d exported identifiers)\n", p, exports)
+			say(w, "  %s\n", m+"/"+p)
 			for _, i := range importers {
 				say(w, "    %3d  %s\n", open[p][i], i)
 			}
@@ -221,50 +383,87 @@ func printSummary(w io.Writer, root string, s *scan) error {
 	return nil
 }
 
-func rootExports(dir string) (int, error) {
+type declPos struct {
+	file      string
+	line, col int
+}
+
+func (s *scan) addUnusedExports() error {
+	modules := make([]string, 0, len(s.modules))
+	for m := range s.modules {
+		modules = append(modules, m)
+	}
+	sort.Strings(modules)
+	for _, m := range modules {
+		names, err := rootExports(filepath.Join(s.root, "internal", filepath.FromSlash(m)))
+		if err != nil {
+			return err
+		}
+		for name, pos := range names {
+			if s.used[m][name] == 0 {
+				s.violations = append(s.violations, violation{file: pos.file, line: pos.line, col: pos.col, pkg: name, module: m, kind: kindUnusedExport})
+			}
+		}
+	}
+	sort.Slice(s.violations, func(i, j int) bool {
+		a, b := s.violations[i], s.violations[j]
+		if a.file != b.file {
+			return a.file < b.file
+		}
+		if a.line != b.line {
+			return a.line < b.line
+		}
+		return a.col < b.col
+	})
+	return nil
+}
+
+func rootExports(dir string) (map[string]declPos, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	count := 0
+	names := map[string]declPos{}
 	for _, e := range entries {
 		name := e.Name()
 		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
 			continue
 		}
-		f, err := parser.ParseFile(token.NewFileSet(), filepath.Join(dir, name), nil, 0)
+		file := filepath.Join(dir, name)
+		fset := token.NewFileSet()
+		f, err := parser.ParseFile(fset, file, nil, parser.SkipObjectResolution)
 		if err != nil {
-			return 0, fmt.Errorf("parse %s: %w", path.Join(dir, name), err)
+			return nil, fmt.Errorf("parse %s: %w", file, err)
 		}
-		count += exportedIn(f)
+		collectExported(fset, file, f, names)
 	}
-	return count, nil
+	return names, nil
 }
 
-func exportedIn(f *ast.File) int {
-	count := 0
+func collectExported(fset *token.FileSet, file string, f *ast.File, names map[string]declPos) {
+	add := func(id *ast.Ident) {
+		if id.IsExported() {
+			p := fset.Position(id.Pos())
+			names[id.Name] = declPos{file: file, line: p.Line, col: p.Column}
+		}
+	}
 	for _, decl := range f.Decls {
 		switch d := decl.(type) {
 		case *ast.FuncDecl:
-			if d.Recv == nil && d.Name.IsExported() {
-				count++
+			if d.Recv == nil {
+				add(d.Name)
 			}
 		case *ast.GenDecl:
 			for _, spec := range d.Specs {
 				switch sp := spec.(type) {
 				case *ast.TypeSpec:
-					if sp.Name.IsExported() {
-						count++
-					}
+					add(sp.Name)
 				case *ast.ValueSpec:
 					for _, n := range sp.Names {
-						if n.IsExported() {
-							count++
-						}
+						add(n)
 					}
 				}
 			}
 		}
 	}
-	return count
 }
