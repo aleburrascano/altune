@@ -361,6 +361,9 @@ if touches '^services/go-api/'; then
         if touches "^$m/.*\.go\$|^$m/go\.(mod|sum)\$"; then
           par check "go-api vet (whole module, so an importer a change broke fails here)" $m "${heavy[@]}" go vet ./...
         fi
+        if [ ${#staged_go[@]} -gt 0 ]; then
+          par check "go-api strict linters (changed packages, every linter, as CI runs them)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --new-from-rev="$base" --allow-parallel-runners "${staged_pkgs[@]}"
+        fi
         mapfile -t pkgs < <(go_pkgs $m)
         [ ${#pkgs[@]} -gt 0 ] && par go_test_check "go-api tests (race, changed packages)" $m "${heavy[@]}" go test -race -shuffle=on -count=1 "${pkgs[@]}"
       fi

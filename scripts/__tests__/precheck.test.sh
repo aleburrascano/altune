@@ -726,6 +726,7 @@ forbid_log "govulncheck"
 forbid_log "vet "
 expect_log "golangci-lint-cache run"
 expect_log "--fast-only"
+! grep -qE '^golangci-lint run --config \.golangci\.strict\.yml --new-from-rev=' "$WORK/tools.log" || fail "the commit stage should lint with the fast linters only"
 
 CASE="--lint lints a Go edit that is not staged, as in git commit -a, where git hands the hook a temporary index"
 new_repo
@@ -991,7 +992,7 @@ forbid_log "--new-from-rev"
 expect_log "go run ./scripts/lintnames $(git -C "$WORK/repo" rev-list --max-parents=0 HEAD | tail -n 1)"
 expect_log_line "go-arch-lint check"
 
-CASE="a push (no --full) lints only the changed package with the fast linters against the merge base"
+CASE="a push (no --full) lints only the changed package, with the fast linters and then every linter, against the merge base"
 new_repo
 add_go_fixture
 edit_go_file internal/shared/s/s.go
@@ -999,6 +1000,7 @@ run_push_scoped
 expect_rc 0
 expect_log "golangci-lint run --config .golangci.strict.yml --fast-only --new-from-rev="
 expect_log "./internal/shared/s"
+grep -qE '^golangci-lint run --config \.golangci\.strict\.yml --new-from-rev=[0-9a-f]+ --allow-parallel-runners \./internal/shared/s$' "$WORK/tools.log" || fail "a push should run every linter on the changed package, as CI does"
 forbid_log "--allow-serial-runners"
 forbid_log "--new-from-rev=HEAD"
 expect_log "go run ./scripts/lintcomments --all internal/shared/s/s.go"
