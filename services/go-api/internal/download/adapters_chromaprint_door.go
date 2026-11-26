@@ -7,8 +7,6 @@ var (
 	MustNewChromaprintIdentifier = chromaprint.MustNewIdentifier
 )
 
-var (
-	ErrChromaprintClientRequired = chromaprint.ErrClientRequired
-)
+var ErrChromaprintClientRequired = chromaprint.ErrClientRequired
 
 const ChromaprintMinScore = chromaprint.MinScore
