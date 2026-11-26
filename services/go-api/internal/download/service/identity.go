@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 )
 
 func (s *AcquireTrackAudioService) resolveIdentity(ctx context.Context, ac *AcquisitionContext) {
@@ -121,7 +120,7 @@ func (s *AcquireTrackAudioService) fingerprintInto(ctx context.Context, ac *Acqu
 		return 0, fmt.Errorf("fingerprint the stored file: %w", err)
 	}
 	input.Audio.AcoustID = match.Results
-	input.Audio.RecordingFacts = versionFactsOf(ctx, newRecordingFactsCache(time.Now), s.recordingLookup, *input)
+	input.Audio.RecordingFacts = versionFactsOf(ctx, newRecordingFactsCache(s.now), s.recordingLookup, *input)
 	return topScore(match.Results), nil
 }
 

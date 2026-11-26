@@ -72,7 +72,7 @@ func (a *App) wireCatalog(
 	tap *monitoring.EventTap,
 	disc *search.Discovery,
 ) (catalogWiring, error) {
-	download.SweepStaleTempDirs(download.NewTempWorkspace())
+	download.SweepStaleTempDirs(download.NewTempWorkspace(), time.Now)
 
 	audio, err := a.wireAudioSources(ctx, transport, tap, disc)
 	if err != nil {

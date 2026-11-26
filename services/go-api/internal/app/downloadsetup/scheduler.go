@@ -68,6 +68,7 @@ func NewScheduler(ctx context.Context, d Deps) *download.BackgroundAcquisitionSc
 			DownloadLimit: download.MustLimitedTo(d.Config.AcquisitionDownloadConcurrency),
 			Observer:      download.NoObserver(),
 			Sleep:         clock.Sleep,
+			Now:           time.Now,
 		},
 		opts...,
 	)

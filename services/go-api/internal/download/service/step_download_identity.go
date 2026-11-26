@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/internal/core/rejectedcandidates"
 	"altune/go-api/internal/shared/background"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/expiringcache"
 	"altune/go-api/internal/shared/redact"
 	"cmp"
@@ -44,14 +45,14 @@ func (s *DownloadStep) previewIdentification(
 		return nil, nil
 	}
 
-	started := time.Now()
+	started := s.now()
 	match, err := s.identifyPreview(ctx, ac, candidate, previewer)
 	if err != nil {
 		s.noteIdentifyFailure(ctx, ac, candidate, err, "acquisition.preview_fallback", ports.SkipPreviewFallback)
 		return nil, nil
 	}
 
-	return s.judgePreview(ctx, ac, candidate, match, time.Since(started))
+	return s.judgePreview(ctx, ac, candidate, match, s.now().Sub(started))
 }
 
 func (s *DownloadStep) judgePreview(
@@ -125,7 +126,7 @@ func (s *DownloadStep) identifyPreview(
 	if err != nil {
 		return ports.RecordingMatch{}, err
 	}
-	defer timeStage(ctx, "download.identify", time.Now())
+	defer timeStage(ctx, "download.identify", s.now(), s.now)
 	return s.identifier.Identify(ctx, previewPath, candidate.Duration)
 }
 
@@ -135,15 +136,15 @@ func (s *DownloadStep) fetchPreview(
 	candidate ports.AudioCandidate,
 	previewDir string,
 ) (string, error) {
-	queued := time.Now()
+	queued := s.now()
 	if err := s.limiter.Acquire(ctx); err != nil {
 		return "", err
 	}
 	defer s.limiter.Release()
-	timeStage(ctx, "download.queue", queued)
+	timeStage(ctx, "download.queue", queued, s.now)
 	fetchCtx, cancel := context.WithTimeout(ctx, s.candidateTimeout)
 	defer cancel()
-	defer timeStage(ctx, "download.preview", time.Now())
+	defer timeStage(ctx, "download.preview", s.now(), s.now)
 	path, err := previewer.FetchPreview(fetchCtx, candidate, previewDir, previewSeconds)
 	if err != nil {
 		return "", candidateTimedOut(ctx, fetchCtx, candidate, err)
@@ -162,9 +163,9 @@ func (s *DownloadStep) identify(
 		return nil
 	}
 
-	identifyStart := time.Now()
+	identifyStart := s.now()
 	match, err := s.identifier.Identify(ctx, filePath, 0)
-	timeStage(ctx, "download.identify", identifyStart)
+	timeStage(ctx, "download.identify", identifyStart, s.now)
 	if err != nil {
 		s.noteIdentifyFailure(ctx, ac, candidate, err, "acquisition.identify_failed", ports.SkipIdentifyFailed)
 		return nil
@@ -356,7 +357,7 @@ type recordingFactsCache struct {
 	flight singleflight.Group
 }
 
-func newRecordingFactsCache(now func() time.Time) *recordingFactsCache {
+func newRecordingFactsCache(now clock.Func) *recordingFactsCache {
 	return &recordingFactsCache{memo: expiringcache.New[string, recordedFacts](recordingFactsTTL, recordingFactsCap, now)}
 }
 

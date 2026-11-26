@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -32,8 +33,8 @@ func (noopJobReporter) fetched(_ ports.SourceFormat)              {}
 func (noopJobReporter) stored(_ ports.StoredFile)                 {}
 func (noopJobReporter) decided(_ float64, _ string, _, _ float64) {}
 
-func timeStage(ctx context.Context, stage string, start time.Time) {
-	jobReporterFrom(ctx).timing(stage, time.Since(start))
+func timeStage(ctx context.Context, stage string, start time.Time, now clock.Func) {
+	jobReporterFrom(ctx).timing(stage, now().Sub(start))
 }
 
 func withJobReporter(ctx context.Context, r jobReporter) context.Context {

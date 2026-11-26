@@ -30,7 +30,7 @@ func TestSweepStaleTempDirsSweepsOnceWithLiveJobCutoff(t *testing.T) {
 	fake := &recordingWorkspace{}
 
 	before := time.Now()
-	service.SweepStaleTempDirs(fake)
+	service.SweepStaleTempDirs(fake, time.Now)
 	after := time.Now()
 
 	if len(fake.cutoffs) != 1 {
@@ -45,7 +45,7 @@ func TestSweepStaleTempDirsSweepsOnceWithLiveJobCutoff(t *testing.T) {
 func TestSweepStaleTempDirsCutoffSparesJobsStillInsideAcquireTimeout(t *testing.T) {
 	fake := &recordingWorkspace{}
 
-	service.SweepStaleTempDirs(fake)
+	service.SweepStaleTempDirs(fake, time.Now)
 
 	if len(fake.cutoffs) != 1 {
 		t.Fatalf("SweepAbandoned calls = %d, want 1", len(fake.cutoffs))
@@ -58,8 +58,8 @@ func TestSweepStaleTempDirsCutoffSparesJobsStillInsideAcquireTimeout(t *testing.
 func TestSweepStaleTempDirsRepeatedCallsNeverMoveCutoffBack(t *testing.T) {
 	fake := &recordingWorkspace{}
 
-	service.SweepStaleTempDirs(fake)
-	service.SweepStaleTempDirs(fake)
+	service.SweepStaleTempDirs(fake, time.Now)
+	service.SweepStaleTempDirs(fake, time.Now)
 
 	if len(fake.cutoffs) != 2 {
 		t.Fatalf("SweepAbandoned calls = %d, want 2", len(fake.cutoffs))

@@ -102,7 +102,7 @@ func TestDownloadStep_Execute_NoSelected(t *testing.T) {
 func TestConstructors_RefuseAMissingTempWorkspace(t *testing.T) {
 	builders := map[string]func() error{
 		"NewDownloadStep": func() error {
-			_, err := service.NewDownloadStep(&fileWritingSearcher{}, nil, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited())
+			_, err := service.NewDownloadStep(&fileWritingSearcher{}, nil, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), time.Now)
 			return err
 		},
 		"NewStoreStep": func() error {
@@ -140,7 +140,7 @@ func TestConstructors_RefuseAMissingLedgerSourcesFetcherOrAudioStore(t *testing.
 			return err
 		},
 		"fetcher": func() error {
-			_, err := service.NewDownloadStep(nil, osWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited())
+			_, err := service.NewDownloadStep(nil, osWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), time.Now)
 			return err
 		},
 		"sleeper": func() error {
@@ -238,7 +238,7 @@ func TestDirectDeleteOrphans_RefusesAMissingAudioStore(t *testing.T) {
 }
 
 func TestCoreSteps_RefuseAMissingCollaborator(t *testing.T) {
-	_, err := service.CoreSteps(service.NewSourceRegistry(), nil, nil, nil, nil, nil, nil, nil, nil, nil, osWorkspace{}, nil, nil)
+	_, err := service.CoreSteps(service.NewSourceRegistry(), nil, nil, nil, nil, nil, nil, nil, nil, nil, time.Now, osWorkspace{}, nil, nil)
 
 	for _, name := range []string{"identifier", "tagger", "prober", "download limit", "orphan recorder"} {
 		if !errors.Is(err, service.ErrMissingCollaborator) || !strings.Contains(err.Error(), name) {
@@ -250,23 +250,23 @@ func TestCoreSteps_RefuseAMissingCollaborator(t *testing.T) {
 func TestNewDownloadStep_RefusesAMissingCollaborator(t *testing.T) {
 	builders := map[string]func() error{
 		"identifier": func() error {
-			_, err := service.NewDownloadStep(nil, osWorkspace{}, nil, ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited())
+			_, err := service.NewDownloadStep(nil, osWorkspace{}, nil, ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), time.Now)
 			return err
 		},
 		"recording lookup": func() error {
-			_, err := service.NewDownloadStep(nil, osWorkspace{}, ports.NoopAudioIdentifier(), nil, ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited())
+			_, err := service.NewDownloadStep(nil, osWorkspace{}, ports.NoopAudioIdentifier(), nil, ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), service.Unlimited(), time.Now)
 			return err
 		},
 		"prober": func() error {
-			_, err := service.NewDownloadStep(nil, osWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), nil, ports.NoopVerifySkipRecorder(), service.Unlimited())
+			_, err := service.NewDownloadStep(nil, osWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), nil, ports.NoopVerifySkipRecorder(), service.Unlimited(), time.Now)
 			return err
 		},
 		"skip recorder": func() error {
-			_, err := service.NewDownloadStep(nil, osWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), nil, service.Unlimited())
+			_, err := service.NewDownloadStep(nil, osWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), nil, service.Unlimited(), time.Now)
 			return err
 		},
 		"download limit": func() error {
-			_, err := service.NewDownloadStep(nil, osWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), nil)
+			_, err := service.NewDownloadStep(nil, osWorkspace{}, ports.NoopAudioIdentifier(), ports.NoopRecordingLookup(), ports.NoopAudioProber(), ports.NoopVerifySkipRecorder(), nil, time.Now)
 			return err
 		},
 	}

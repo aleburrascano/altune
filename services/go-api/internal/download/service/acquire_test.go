@@ -3057,6 +3057,7 @@ func noopStages() service.StagePorts {
 		DownloadLimit: service.Unlimited(),
 		Observer:      service.NoObserver(),
 		Sleep:         clock.Sleep,
+		Now:           time.Now,
 	}
 }
 
@@ -3232,7 +3233,7 @@ func outageSource() findOnlySource {
 }
 
 func mustNewDownloadStep(fetcher fetcherPort, workspace ports.ScratchFolder, identifier ports.AudioIdentifier, lookup ports.RecordingLookup, prober ports.AudioProber, skips ports.VerifySkipRecorder, limit *service.ConcurrencyLimit, opts ...func(*service.DownloadStep)) *service.DownloadStep {
-	step, err := service.NewDownloadStep(fetcher, workspace, identifier, lookup, prober, skips, limit, opts...)
+	step, err := service.NewDownloadStep(fetcher, workspace, identifier, lookup, prober, skips, limit, time.Now, opts...)
 	if err != nil {
 		panic(err)
 	}

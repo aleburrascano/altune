@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -135,6 +136,7 @@ func noStages(mods ...stageMod) service.StagePorts {
 		DownloadLimit: service.Unlimited(),
 		Observer:      service.NoObserver(),
 		Sleep:         clock.Sleep,
+		Now:           time.Now,
 	}
 	for _, mod := range mods {
 		mod(&stages)

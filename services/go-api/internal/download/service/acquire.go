@@ -40,6 +40,7 @@ type AcquireTrackAudioService struct {
 	storedAudio     ports.StoredAudioReader
 	contextObserver func(*AcquisitionContext)
 	sleep           clock.Sleeper
+	now             clock.Func
 	previews        ports.PreviewMatcher
 
 	cuts            audioverdict.Cuts
@@ -85,6 +86,7 @@ func NewAcquireTrackAudioService(
 		downloadLimiter: stages.DownloadLimit,
 		contextObserver: stages.Observer,
 		sleep:           stages.Sleep,
+		now:             stages.Now,
 		cuts:            audioverdict.DefaultCuts(),
 
 		confidenceFloor: defaultConfidenceFloor,
@@ -135,7 +137,7 @@ func (s *AcquireTrackAudioService) outcomes() outcomeReporter {
 }
 
 func (s *AcquireTrackAudioService) supersededAudio() supersededAudio {
-	return supersededAudio{ledger: s.ledger, orphans: s.orphans, grace: s.supersededGrace}
+	return supersededAudio{ledger: s.ledger, orphans: s.orphans, grace: s.supersededGrace, now: s.now}
 }
 
 func (s *AcquireTrackAudioService) storedFiles() storedFileFingerprinter {
@@ -257,9 +259,9 @@ func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, userId 
 func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId ids.UserId, trackId ids.TrackId, ac *AcquisitionContext) error {
 	defer s.recordRejections(ctx, ac)
 	defer reportDecision(ctx, ac)
-	identityStart := time.Now()
+	identityStart := s.now()
 	s.resolveIdentity(ctx, ac)
-	timeStage(ctx, "identity", identityStart)
+	timeStage(ctx, "identity", identityStart, s.now)
 	steps := s.buildSteps(userId, trackId)
 	if err := RunPipeline(ctx, steps, ac); err != nil {
 		if failure := s.takeRerecording(ctx, steps, ac, err); failure != nil {

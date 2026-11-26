@@ -16,6 +16,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -115,6 +116,7 @@ func acquireUnfoundTrack(t *testing.T, disc *search.Discovery, catalogMBID *stri
 			DownloadLimit: download.Unlimited(),
 			Observer:      download.NoObserver(),
 			Sleep:         clock.Sleep,
+			Now:           time.Now,
 		})
 
 	_ = svc.Execute(context.Background(), track.UserId, track.ID)

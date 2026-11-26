@@ -42,7 +42,7 @@ func (s *AcquireTrackAudioService) recordRejections(ctx context.Context, ac *Acq
 }
 
 func (s *AcquireTrackAudioService) loadPriorRejections(ctx context.Context, ac *AcquisitionContext) {
-	prior, err := s.rejections.Active(ctx, ac.Track.ID, time.Now().Add(-priorRejectionWindow))
+	prior, err := s.rejections.Active(ctx, ac.Track.ID, s.now().Add(-priorRejectionWindow))
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.rejection_load_failed",
 			"track_id", ac.Track.ID, "error", redact.LogError(err))

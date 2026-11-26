@@ -71,6 +71,7 @@ type Pipeline struct {
 	tag        stage[afterDownload, afterTag]
 	store      stage[afterTag, AfterStore]
 	finish     func(ctx context.Context, run *pipelineRun, stored AfterStore) error
+	now        clock.Func
 }
 
 func endsAtStore(context.Context, *pipelineRun, AfterStore) error { return nil }
@@ -100,10 +101,11 @@ type pipelineRun struct {
 	reporter  jobReporter
 	completed []undoable
 	current   named
+	now       clock.Func
 }
 
 func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) error {
-	run := &pipelineRun{ac: ac, reporter: jobReporterFrom(ctx), current: pendingStep{}}
+	run := &pipelineRun{ac: ac, reporter: jobReporterFrom(ctx), current: pendingStep{}, now: p.now}
 	var err error
 	panicked := background.SafeRun(ctx, "acquisition.pipeline_panic", func() { err = runStages(ctx, run, p) },
 		"step", run, "track_id", ac.Track.ID)
@@ -222,9 +224,9 @@ func execStage[In, Out any](ctx context.Context, run *pipelineRun, s finalStage[
 
 	announceStage(ctx, run, s)
 
-	start := time.Now()
+	start := run.now()
 	out, execErr := s.Execute(ctx, run.ac, prev)
-	timeStage(ctx, string(s.Name()), start)
+	timeStage(ctx, string(s.Name()), start, run.now)
 	if execErr != nil {
 		slog.ErrorContext(ctx, "pipeline step failed",
 			"step", s.Name(), "track_id", run.ac.Track.ID, "error", redact.LogError(execErr))
@@ -438,7 +440,7 @@ type TrackRef struct {
 }
 
 func (s *AcquireTrackAudioService) buildSteps(userId ids.UserId, trackId ids.TrackId) Pipeline {
-	return buildCoreSteps(s.sources, s.audioTagger, s.audioStore, s.audioProber, s.identifier, s.recordingLookup, s.verifySkips, s.orphans, s.ledger, s.sleep, s.workspace, s.downloadLimiter,
+	return buildCoreSteps(s.sources, s.audioTagger, s.audioStore, s.audioProber, s.identifier, s.recordingLookup, s.verifySkips, s.orphans, s.ledger, s.sleep, s.now, s.workspace, s.downloadLimiter,
 		[]func(*DownloadStep){
 			WithConfidenceFloor(s.confidenceFloor),
 			WithJudgeCuts(s.cuts),
@@ -459,18 +461,19 @@ func CoreSteps(
 	orphans ports.OrphanedAudioRecorder,
 	refs ports.AudioRefLookup,
 	sleep clock.Sleeper,
+	now clock.Func,
 	workspace ports.ScratchFolder,
 	limit *ConcurrencyLimit,
 	downloadOpts []func(*DownloadStep),
 	storeOpts ...func(*StoreStep),
 ) (Pipeline, error) {
-	download, downloadErr := NewDownloadStep(sources, workspace, identifier, lookup, prober, skips, limit, append([]func(*DownloadStep){WithVerifyWidth(ProdVerifyWidth)}, downloadOpts...)...)
+	download, downloadErr := NewDownloadStep(sources, workspace, identifier, lookup, prober, skips, limit, now, append([]func(*DownloadStep){WithVerifyWidth(ProdVerifyWidth)}, downloadOpts...)...)
 	tag, tagErr := NewTagStep(tagger)
 	stored, storeErr := NewStoreStep(store, workspace, prober, orphans, refs, sleep, storeOpts...)
 	if err := errors.Join(downloadErr, tagErr, storeErr); err != nil {
 		return Pipeline{}, err
 	}
-	return Pipeline{search: NewSearchStep(sources), selectBest: NewSelectStep(), download: download, tag: tag, store: stored, finish: endsAtStore}, nil
+	return Pipeline{search: NewSearchStep(sources), selectBest: NewSelectStep(), download: download, tag: tag, store: stored, finish: endsAtStore, now: now}, nil
 }
 
 func buildCoreSteps(
@@ -484,6 +487,7 @@ func buildCoreSteps(
 	orphans ports.OrphanedAudioRecorder,
 	refs ports.AudioRefLookup,
 	sleep clock.Sleeper,
+	now clock.Func,
 	workspace ports.ScratchFolder,
 	limit *ConcurrencyLimit,
 	downloadOpts []func(*DownloadStep),
@@ -492,9 +496,10 @@ func buildCoreSteps(
 	return Pipeline{
 		search:     NewSearchStep(sources),
 		selectBest: NewSelectStep(),
-		download:   buildDownloadStep(sources, workspace, identifier, lookup, prober, skips, limit, append([]func(*DownloadStep){WithVerifyWidth(ProdVerifyWidth)}, downloadOpts...)...),
+		download:   buildDownloadStep(sources, workspace, identifier, lookup, prober, skips, limit, now, append([]func(*DownloadStep){WithVerifyWidth(ProdVerifyWidth)}, downloadOpts...)...),
 		tag:        &TagStep{tagger: tagger},
 		store:      buildStoreStep(store, workspace, prober, orphans, refs, sleep, storeOpts...),
 		finish:     endsAtStore,
+		now:        now,
 	}
 }

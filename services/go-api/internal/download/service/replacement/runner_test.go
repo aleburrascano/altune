@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -249,6 +250,7 @@ func noStages(store audioDeleter) download.StagePorts {
 		DownloadLimit: download.Unlimited(),
 		Observer:      download.NoObserver(),
 		Sleep:         clock.Sleep,
+		Now:           time.Now,
 	}
 }
 

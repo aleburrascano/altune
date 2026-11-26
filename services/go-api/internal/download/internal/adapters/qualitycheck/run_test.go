@@ -21,6 +21,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestMain(m *testing.M) {
@@ -195,7 +196,7 @@ func TestRun_StoresTheCorrectRecording(t *testing.T) {
 			{Title: "Blinding Lights", URL: "master", Channel: "The Weeknd - Topic", Duration: 200, Correct: true},
 		},
 	}
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 	if !out.Pass {
 		t.Fatalf("expected pass, got %q (stored %q)", out.Reason, out.Stored)
 	}
@@ -210,7 +211,7 @@ func TestRun_FailsWhenWrongRecordingStored(t *testing.T) {
 		Track:      qualitycheck.Track{Title: "Blinding Lights", Artist: "The Weeknd", Duration: 200},
 		Candidates: []qualitycheck.Candidate{{Title: "Blinding Lights", URL: "cover", Channel: "Covers", Duration: 200}},
 	}
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 	if out.Pass {
 		t.Fatal("expected a fail: no candidate was the right recording")
 	}
@@ -225,7 +226,7 @@ func TestRun_PassesWhenNothingCorrectAndNothingStored(t *testing.T) {
 		Track:      qualitycheck.Track{Title: "Save Your Tears", Artist: "The Weeknd", Duration: 215},
 		Candidates: []qualitycheck.Candidate{{Title: "Cooking Tutorial Episode 47", URL: "cook", Channel: "Cooking", Duration: 215}},
 	}
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 	if !out.Pass {
 		t.Fatalf("expected pass, got %q", out.Reason)
 	}
@@ -240,7 +241,7 @@ func TestRun_LeavesNoTempFiles(t *testing.T) {
 		Track:      qualitycheck.Track{Title: "Circles", Artist: "Post Malone", Duration: 215},
 		Candidates: []qualitycheck.Candidate{{Title: "Circles", URL: "u", Channel: "Post Malone - Topic", Duration: 215, Correct: true}},
 	}
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 	if !out.Pass {
 		t.Fatalf("expected pass, got %q", out.Reason)
 	}
@@ -328,7 +329,7 @@ func TestEmbeddedSuiteMatchesCommittedBaseline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadBaseline: %v", err)
 	}
-	report := qualitycheck.Summarize(qualitycheck.RunAll(context.Background(), cases))
+	report := qualitycheck.Summarize(qualitycheck.RunAll(context.Background(), time.Now, cases))
 
 	if regressions := report.Regressions(base); len(regressions) > 0 {
 		t.Errorf("embedded suite regressed against the committed baseline: %v", regressions)
@@ -368,7 +369,7 @@ func embeddedCase(t *testing.T, id string) qualitycheck.Case {
 func TestRun_DrinkingInLAResolvesTheRemixMBIDToTheISRCRecording(t *testing.T) {
 	kase := embeddedCase(t, "rw-drinking-in-la-remix-mbid-anchored-to-isrc")
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if !out.Pass {
 		t.Fatalf("expected pass, got %q (err %q)", out.Reason, out.Err)
@@ -398,7 +399,7 @@ func TestRun_ResolvedSearchMBIDRejectsAnUploadTheFingerprintLinksToAnotherSong(t
 	kase.Candidates[0].AcoustIDResults = otherRecordingResults("album-ac", "album", "Different Song", 237)
 	kase.Candidates[0].Title = "Drinking in L.A. (Radio Edit)"
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if !out.Failed {
 		t.Fatalf("expected the fingerprint's other-song result and the radio-edit title together to reject the album upload, stored %q", out.Stored)
@@ -409,7 +410,7 @@ func TestRun_ISRCAnswerAloneSuppliesTheIdentity(t *testing.T) {
 	kase := remixMBIDCase(&qualitycheck.Resolution{ISRCRecordings: []qualitycheck.ISRCRecording{{MBID: "remix", Duration: 307}}}, "CAA509814003")
 	kase.Track.Duration = 0
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if out.Stored != "remix" {
 		t.Fatalf("stored %q, want the remix the ISRC answer names (its MBID and 307s length)", out.Stored)
@@ -422,7 +423,7 @@ func TestRun_CaseWithoutResolutionCopiesItsIdentity(t *testing.T) {
 	kase.Candidates[0].AcoustIDResults = otherRecordingResults("album-ac", "album", "Different Song", 237)
 	kase.Candidates[0].Title = "Drinking in L.A. (Radio Edit)"
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if !out.Failed {
 		t.Fatalf("expected the fingerprint's other-song result and the radio-edit title together to reject the album upload, stored %q", out.Stored)
@@ -433,7 +434,7 @@ func TestRun_MarksAPendingCase(t *testing.T) {
 	kase := remixMBIDCase(nil, "")
 	kase.Pending = "selection vetoes unrequested versions"
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if !out.Pending {
 		t.Error("expected a case naming an owning ticket to be reported as pending")
@@ -441,7 +442,7 @@ func TestRun_MarksAPendingCase(t *testing.T) {
 }
 
 func TestRun_ScoredCaseIsNotPending(t *testing.T) {
-	out := qualitycheck.Run(context.Background(), remixMBIDCase(nil, ""))
+	out := qualitycheck.Run(context.Background(), time.Now, remixMBIDCase(nil, ""))
 
 	if out.Pending {
 		t.Error("expected a case with no owning ticket to be scored, not pending")
@@ -553,7 +554,7 @@ func TestRunAll_ScoresEmbeddedMustHoldsInsteadOfLeavingThemPending(t *testing.T)
 		"mh11-radio-edit-only-with-wrong-length-fails":               true,
 	}
 
-	for _, o := range qualitycheck.RunAll(context.Background(), cases) {
+	for _, o := range qualitycheck.RunAll(context.Background(), time.Now, cases) {
 		if !want[o.Case.ID] {
 			continue
 		}
@@ -586,7 +587,7 @@ func TestRunAll_ScoresDrinkingInLAInTheRealWorldClass(t *testing.T) {
 		t.Fatalf("LoadEmbedded: %v", err)
 	}
 
-	report := qualitycheck.Summarize(qualitycheck.RunAll(context.Background(), cases))
+	report := qualitycheck.Summarize(qualitycheck.RunAll(context.Background(), time.Now, cases))
 
 	var rw *qualitycheck.ClassResult
 	for i := range report.Classes {
@@ -626,7 +627,7 @@ func TestRun_RemixMBIDAnchorsToTheISRCRecordingNearestTheTrackLength(t *testing.
 		},
 	}
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if out.Stored != "album" {
 		t.Fatalf("stored %q (reason %q), want the album recording whose 236s length matches the track", out.Stored, out.Reason)
@@ -653,7 +654,7 @@ func TestRun_EmptyResolutionStillAcquiresTheTrack(t *testing.T) {
 		Candidates: []qualitycheck.Candidate{{Title: "Circles", URL: "u", Channel: "Post Malone - Topic", Duration: 215, Correct: true}},
 	}
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if out.Stored != "u" {
 		t.Fatalf("stored %q (reason %q, err %q), want the only clean upload", out.Stored, out.Reason, out.Err)
@@ -674,7 +675,7 @@ func TestRun_TwoNamedSourcesMergeThroughTheRealRegistry(t *testing.T) {
 		},
 	}
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if !out.Pass {
 		t.Fatalf("expected pass, got %q (stored %q)", out.Reason, out.Stored)
@@ -694,7 +695,7 @@ func TestRun_CandidateBehindAnAbsentQueryVariantNeverBecomesACandidate(t *testin
 		}}},
 	}
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if !out.Pass {
 		t.Fatalf("expected pass, got %q (stored %q): the title_artist_album candidate must never surface without an album on the track", out.Reason, out.Stored)
@@ -729,7 +730,7 @@ func TestRun_ACandidateBehindTheAlbumOrISRCQueryIsFoundOnlyWhenTheTrackHasOne(t 
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			out := qualitycheck.Run(context.Background(), tt.kase)
+			out := qualitycheck.Run(context.Background(), time.Now, tt.kase)
 
 			if out.Stored != tt.stored {
 				t.Errorf("stored %q (%s), want %q", out.Stored, out.Reason, tt.stored)
@@ -747,7 +748,7 @@ func TestRun_SimulatedSecondsAndAttemptsAccumulateAlongThePath(t *testing.T) {
 		}}},
 	}
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if out.Attempts != 1 {
 		t.Fatalf("attempts = %d, want 1", out.Attempts)
@@ -771,7 +772,7 @@ func TestRun_FallbackTimeAddsToTheFirstTier(t *testing.T) {
 		},
 	}
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if out.Stored != "master" {
 		t.Fatalf("stored %q, want master from the fallback tier", out.Stored)
@@ -960,8 +961,8 @@ func expectationCase(provenance, failureCode string, candidate qualitycheck.Cand
 func TestRun_JudgesTheExpectedProvenanceAndFailureCode(t *testing.T) {
 	stored := qualitycheck.Candidate{Title: "Night Drive", URL: "u", Channel: "Halcyon Ferry - Topic", Duration: 205, Correct: true}
 	rejected := qualitycheck.Candidate{Title: "Cooking Tutorial Episode 47", URL: "cook", Channel: "Cooking", Duration: 204}
-	probe := qualitycheck.Run(context.Background(), expectationCase("", "", stored))
-	failProbe := qualitycheck.Run(context.Background(), expectationCase("", "", rejected))
+	probe := qualitycheck.Run(context.Background(), time.Now, expectationCase("", "", stored))
+	failProbe := qualitycheck.Run(context.Background(), time.Now, expectationCase("", "", rejected))
 	if probe.Failed || probe.Provenance == "" || !failProbe.Failed || failProbe.FailureCode == "" {
 		t.Fatalf("probe runs did not store/fail as assumed: %+v %+v", probe, failProbe)
 	}
@@ -983,7 +984,7 @@ func TestRun_JudgesTheExpectedProvenanceAndFailureCode(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			out := qualitycheck.Run(context.Background(), tc.kase)
+			out := qualitycheck.Run(context.Background(), time.Now, tc.kase)
 			if out.Pass != tc.pass {
 				t.Errorf("pass = %v (%s), want %v", out.Pass, out.Reason, tc.pass)
 			}
@@ -1023,7 +1024,7 @@ func TestRunAll_OverlappedDownloadsScoreAsTheSlowestOfTheWindow(t *testing.T) {
 		}}},
 	}
 
-	out := qualitycheck.RunAll(context.Background(), []qualitycheck.Case{kase})[0]
+	out := qualitycheck.RunAll(context.Background(), time.Now, []qualitycheck.Case{kase})[0]
 
 	if out.Stored != "master" {
 		t.Fatalf("stored %q, want master", out.Stored)
@@ -1048,7 +1049,7 @@ func TestRun_ArtTrackByTheSearchedArtistIsTrustedWithoutAFingerprint(t *testing.
 		}
 	}
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if !out.Pass {
 		t.Fatalf("expected pass, got %q (stored %q)", out.Reason, out.Stored)
@@ -1066,10 +1067,10 @@ func artTrack(url string, seconds float64, explicit bool) qualitycheck.Candidate
 func TestRun_TheCatalogLengthNotTheTrackLengthIsTheTarget(t *testing.T) {
 	track := qualitycheck.Track{Title: "t", Artist: "a", Duration: 167, CatalogDuration: 139}
 
-	if out := qualitycheck.Run(context.Background(), artTrackCase(track, artTrack("catalog-length", 139, false))); !out.Pass || out.Stored != "catalog-length" {
+	if out := qualitycheck.Run(context.Background(), time.Now, artTrackCase(track, artTrack("catalog-length", 139, false))); !out.Pass || out.Stored != "catalog-length" {
 		t.Errorf("stored %q (%s), want the 139 s candidate the catalog length asks for", out.Stored, out.Reason)
 	}
-	if out := qualitycheck.Run(context.Background(), artTrackCase(track, artTrack("track-length", 167, false))); out.Stored != "" {
+	if out := qualitycheck.Run(context.Background(), time.Now, artTrackCase(track, artTrack("track-length", 167, false))); out.Stored != "" {
 		t.Errorf("stored %q, want the 167 s candidate refused against the 139 s catalog length", out.Stored)
 	}
 }
@@ -1089,7 +1090,7 @@ func TestRun_TheCatalogExplicitFlagPicksBetweenTheCleanAndExplicitTwins(t *testi
 		t.Run(tt.name, func(t *testing.T) {
 			track := qualitycheck.Track{Title: "t", Artist: "a", CatalogDuration: 139, CatalogExplicit: tt.catalog}
 
-			out := qualitycheck.Run(context.Background(), artTrackCase(track, artTrack("clean", 139, false), artTrack("explicit", 139, true)))
+			out := qualitycheck.Run(context.Background(), time.Now, artTrackCase(track, artTrack("clean", 139, false), artTrack("explicit", 139, true)))
 
 			if out.Stored != tt.want {
 				t.Errorf("stored %q (%s), want the %s twin", out.Stored, out.Reason, tt.want)
@@ -1113,7 +1114,7 @@ func TestRun_TheShadowJudgeSeesEachCandidatesAlbum(t *testing.T) {
 			candidate := artTrack("art-track", 200, false)
 			candidate.Album, candidate.Artists = tt.album, []string{"a"}
 
-			out := qualitycheck.Run(context.Background(), artTrackCase(qualitycheck.Track{Title: "t", Artist: "a", Album: "Unapologetic"}, candidate))
+			out := qualitycheck.Run(context.Background(), time.Now, artTrackCase(qualitycheck.Track{Title: "t", Artist: "a", Album: "Unapologetic"}, candidate))
 
 			if out.Stored != "art-track" {
 				t.Fatalf("stored %q (%s), want the art track", out.Stored, out.Reason)
@@ -1128,7 +1129,7 @@ func TestRun_TheShadowJudgeSeesEachCandidatesAlbum(t *testing.T) {
 func TestRun_TheCatalogPinAloneVerifiesTheStoredUpload(t *testing.T) {
 	kase := embeddedCase(t, "rw-everybody-wants-pin-verifies-the-stored-upload")
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if !out.Pass {
 		t.Fatalf("expected pass, got %q (err %q)", out.Reason, out.Err)
@@ -1151,7 +1152,7 @@ func TestRun_PinnedTrackWithNoRecordedAnswersStillRejectsAnotherRecording(t *tes
 		},
 	}
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if !out.Pass || out.Stored != "pinned" {
 		t.Errorf("pass %v stored %q (%s), want the pinned recording's upload", out.Pass, out.Stored, out.Reason)
@@ -1195,14 +1196,14 @@ func TestRun_AYTMusicAdapterSourceEmitsTheCatalogPinnedVideoFirst(t *testing.T) 
 		}}},
 	}
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if !out.Pass || out.Stored != pinned {
 		t.Fatalf("stored %q (%s), want the catalog-pinned video", out.Stored, out.Reason)
 	}
 
 	kase.Track.CatalogSources = nil
-	if out := qualitycheck.Run(context.Background(), kase); out.Pass {
+	if out := qualitycheck.Run(context.Background(), time.Now, kase); out.Pass {
 		t.Errorf("without a catalog pin the adapter has no video to emit; stored %q", out.Stored)
 	}
 }
@@ -1231,14 +1232,14 @@ func TestRun_ACatalogPinAdapterSourceEmitsThePickedSoundCloudUpload(t *testing.T
 		}}},
 	}
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if !out.Pass || out.Stored != picked {
 		t.Fatalf("stored %q (%s), want the picked upload", out.Stored, out.Reason)
 	}
 
 	kase.Track.CatalogSources = nil
-	if out := qualitycheck.Run(context.Background(), kase); out.Pass {
+	if out := qualitycheck.Run(context.Background(), time.Now, kase); out.Pass {
 		t.Errorf("without a catalog pin the adapter emits nothing; stored %q", out.Stored)
 	}
 }
@@ -1260,7 +1261,7 @@ func TestRun_AFingerprintNamingTheTracksRecordingVerifiesAnUpload(t *testing.T) 
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			out := qualitycheck.Run(context.Background(), upload(tt.fingerprint))
+			out := qualitycheck.Run(context.Background(), time.Now, upload(tt.fingerprint))
 
 			if out.Stored != "upload" || out.Provenance != "verified" {
 				t.Errorf("stored %q with provenance %q (%s), want the upload verified by its fingerprint", out.Stored, out.Provenance, out.Reason)
@@ -1269,7 +1270,7 @@ func TestRun_AFingerprintNamingTheTracksRecordingVerifiesAnUpload(t *testing.T) 
 	}
 
 	t.Run("without a fingerprint", func(t *testing.T) {
-		out := qualitycheck.Run(context.Background(), upload(func(*qualitycheck.Candidate) {}))
+		out := qualitycheck.Run(context.Background(), time.Now, upload(func(*qualitycheck.Candidate) {}))
 
 		if out.Stored != "" || out.FailureCode != "no_confident_match" {
 			t.Errorf("stored %q, failure %q; want no_confident_match for an unfingerprinted upload", out.Stored, out.FailureCode)
@@ -1288,7 +1289,7 @@ func TestRun_GoldensAssertTheSavedTrack(t *testing.T) {
 			t.Fatalf("%s: the golden asserts nothing about the saved track", id)
 		}
 
-		out := qualitycheck.Run(context.Background(), kase)
+		out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 		if !out.Pass {
 			t.Errorf("%s: expected pass, got %q (err %q)", id, out.Reason, out.Err)
@@ -1297,7 +1298,7 @@ func TestRun_GoldensAssertTheSavedTrack(t *testing.T) {
 }
 
 func TestRun_SavesTheISRCAndTheMeasuredLengthThroughTheLedger(t *testing.T) {
-	out := qualitycheck.Run(context.Background(), embeddedCase(t, "rw-drinking-in-la-remix-mbid-anchored-to-isrc"))
+	out := qualitycheck.Run(context.Background(), time.Now, embeddedCase(t, "rw-drinking-in-la-remix-mbid-anchored-to-isrc"))
 
 	want := qualitycheck.SavedTrack{ISRC: "CAA509814003", ISRCSource: "catalog", Provenance: "best_effort", DurationSeconds: 237}
 	if out.Saved.ISRC != want.ISRC || out.Saved.ISRCSource != want.ISRCSource ||
@@ -1320,7 +1321,7 @@ func TestRun_AdoptsTheISRCTheFingerprintProves(t *testing.T) {
 		}},
 	}
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if out.Saved.ISRC != "CAA509814003" || out.Saved.ISRCSource != "fingerprint" {
 		t.Errorf("saved %+v, want the fingerprint-proven ISRC written back", out.Saved)
@@ -1344,7 +1345,7 @@ func TestRun_TheRecordedSearchKeepsEachHitsOwnTitle(t *testing.T) {
 		}},
 	}
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if out.Failed || out.Stored != "u" {
 		t.Fatalf("stored %q failed=%v err=%q, want the upload linked to the studio recording", out.Stored, out.Failed, out.Err)
@@ -1369,7 +1370,7 @@ func TestRun_JudgesTheExpectedSavedTrack(t *testing.T) {
 			kase := base
 			kase.ExpectSaved = &tt.want
 
-			out := qualitycheck.Run(context.Background(), kase)
+			out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 			if out.Pass || !strings.HasPrefix(out.Reason, tt.fail) {
 				t.Errorf("pass=%v reason=%q, want a failure starting %q", out.Pass, out.Reason, tt.fail)
@@ -1379,7 +1380,7 @@ func TestRun_JudgesTheExpectedSavedTrack(t *testing.T) {
 }
 
 func TestRun_ReplacingAFileOfUnknownSourceAimsAtTheCatalogNotTheStoredLength(t *testing.T) {
-	out := qualitycheck.Run(context.Background(), embeddedCase(t, "pl-replace-measured-length-is-not-the-target"))
+	out := qualitycheck.Run(context.Background(), time.Now, embeddedCase(t, "pl-replace-measured-length-is-not-the-target"))
 
 	if !out.Pass {
 		t.Fatalf("expected pass, got %q (err %q)", out.Reason, out.Err)
@@ -1392,14 +1393,14 @@ func TestRun_ReplacingAFileOfUnknownSourceAimsAtTheCatalogNotTheStoredLength(t *
 func TestRun_ReplaceNeverStoresTheFileTheTrackAlreadyHolds(t *testing.T) {
 	kase := embeddedCase(t, "replace-unknown-source-never-stores-the-current-file-again")
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if !out.Pass || out.Stored != "" {
 		t.Errorf("pass=%v stored=%q reason=%q, want nothing stored", out.Pass, out.Stored, out.Reason)
 	}
 	unfingerprinted := kase
 	unfingerprinted.Stored = &qualitycheck.StoredFile{Duration: kase.Stored.Duration}
-	if out := qualitycheck.Run(context.Background(), unfingerprinted); out.Pass {
+	if out := qualitycheck.Run(context.Background(), time.Now, unfingerprinted); out.Pass {
 		t.Errorf("without a fingerprint of the stored file the upload wins and the case must fail; stored %q", out.Stored)
 	}
 }
@@ -1407,7 +1408,7 @@ func TestRun_ReplaceNeverStoresTheFileTheTrackAlreadyHolds(t *testing.T) {
 func TestRun_ASeededRejectedSourceNeverComesBack(t *testing.T) {
 	kase := embeddedCase(t, "reacquire-fails-rather-than-return-the-only-upload-the-user-rejected")
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if !out.Pass || out.Stored != "" {
 		t.Errorf("pass=%v stored=%q reason=%q, want the rejected upload refused", out.Pass, out.Stored, out.Reason)
@@ -1421,7 +1422,7 @@ func TestRun_ATrackTheRunDidNotStoreKeepsItsCatalogLength(t *testing.T) {
 		Candidates: []qualitycheck.Candidate{{Title: "Cooking Tutorial Episode 47", URL: "cook", Channel: "Cooking", Duration: 215}},
 	}
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if !out.Failed || out.Stored != "" {
 		t.Fatalf("failed=%v stored=%q, want the run to store nothing", out.Failed, out.Stored)
@@ -1438,13 +1439,13 @@ func TestRun_TheTrackTitleIsTrimmedAsTheCatalogTrimsIt(t *testing.T) {
 		Candidates: []qualitycheck.Candidate{{Title: "Cooking Tutorial Episode 47", URL: "cook", Channel: "Cooking", Duration: 215}},
 	}
 
-	if got := qualitycheck.Run(context.Background(), kase).Saved.Title; got != "Save Your Tears" {
+	if got := qualitycheck.Run(context.Background(), time.Now, kase).Saved.Title; got != "Save Your Tears" {
 		t.Errorf("saved title %q, want %q: the catalog trims a new track's title", got, "Save Your Tears")
 	}
 }
 
 func TestRun_TheRejectedKeyStaysOnTheSavedTrack(t *testing.T) {
-	out := qualitycheck.Run(context.Background(), embeddedCase(t, "reacquire-never-returns-the-upload-the-user-rejected"))
+	out := qualitycheck.Run(context.Background(), time.Now, embeddedCase(t, "reacquire-never-returns-the-upload-the-user-rejected"))
 
 	if want := []string{"youtube:FjkkqbEbFOY"}; !slices.Equal(out.Saved.RejectedKeys, want) {
 		t.Errorf("saved rejected keys %v, want %v", out.Saved.RejectedKeys, want)
@@ -1518,7 +1519,7 @@ func TestRun_RejectedSourceKeysKeepTheNewestTwentyFiveLikeTheCatalog(t *testing.
 		Candidates: []qualitycheck.Candidate{{Title: "Cooking Tutorial Episode 47", URL: "cook", Channel: "Cooking", Duration: 215}},
 	}
 
-	got := qualitycheck.Run(context.Background(), kase).Saved.RejectedKeys
+	got := qualitycheck.Run(context.Background(), time.Now, kase).Saved.RejectedKeys
 
 	if len(got) != 25 || got[0] != "youtube:videoid0002" || got[24] != "youtube:videoid0000" {
 		t.Errorf("saved rejected keys %v, want videoid0002..videoid0025 then videoid0000 again: a key pushed out of the 25 can be rejected again", got)
@@ -1570,7 +1571,7 @@ func TestRun_FlatCandidatesRunInProdTiersByKind(t *testing.T) {
 		},
 	}
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if !out.Pass || out.Stored != "art" {
 		t.Fatalf("stored %q (%s), want the art track", out.Stored, out.Reason)
@@ -1749,7 +1750,7 @@ func TestRun_APinnedVideoIsGradedAsTheKindItsWatchReports(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			logged := capturedLog(t)
 
-			out := qualitycheck.Run(context.Background(), pinned(tt.candidate))
+			out := qualitycheck.Run(context.Background(), time.Now, pinned(tt.candidate))
 
 			if out.Stored != url {
 				t.Fatalf("stored %q (%s), want the pinned video %q", out.Stored, out.Reason, url)
@@ -1784,7 +1785,7 @@ func TestEmbedded_TheCatalogLengthGoldenIsWhatProdsAdaptersEmit(t *testing.T) {
 	if artTracks != 1 || uploads < 2 {
 		t.Errorf("got %d art tracks and %d uploads, want the one ytmsearch hit and the scsearch results", artTracks, uploads)
 	}
-	if out := qualitycheck.Run(context.Background(), kase); !out.Pass {
+	if out := qualitycheck.Run(context.Background(), time.Now, kase); !out.Pass {
 		t.Errorf("expected pass, got %q (err %q)", out.Reason, out.Err)
 	}
 }
@@ -1840,7 +1841,7 @@ func TestRun_AnUnplayableCandidateIsNeverStored(t *testing.T) {
 	const fullUpload = "https://soundcloud.com/koolandthegang/get-down-on-it"
 
 	t.Run("the full upload is stored beside the previews", func(t *testing.T) {
-		out := qualitycheck.Run(context.Background(), kase)
+		out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 		if !out.Pass || out.Stored != fullUpload {
 			t.Fatalf("Run stored %q (pass=%v: %s), want the full upload %q", out.Stored, out.Pass, out.Reason, fullUpload)
@@ -1863,7 +1864,7 @@ func TestRun_AnUnplayableCandidateIsNeverStored(t *testing.T) {
 		}
 		kase.Sources = []qualitycheck.Source{{Name: "ytdlp", SearchSeconds: 3, Candidates: previews}}
 
-		out := qualitycheck.Run(context.Background(), kase)
+		out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 		if out.Stored != "" || out.Attempts != 0 {
 			t.Errorf("stored %q after %d download attempts, want no download of a preview", out.Stored, out.Attempts)
@@ -1887,7 +1888,7 @@ func TestRun_AReplaceExcludesTheStoredSource(t *testing.T) {
 			kase := embeddedCase(t, "replace-known-source-excludes-the-stored-source-by-its-url")
 			kase.Track.AudioSourceURL = storedURL
 
-			out := qualitycheck.Run(context.Background(), kase)
+			out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 			if !out.Pass || out.Stored != "" {
 				t.Errorf("pass=%v stored=%q reason=%q, want nothing stored: the stored source is excluded by its url", out.Pass, out.Stored, out.Reason)
@@ -1932,7 +1933,7 @@ func TestRun_RecordedObservationsGoThroughTheRealAdapters(t *testing.T) {
 	}
 
 	t.Run("ytmsearch stores the strong hit its own tie-break picks among the recorded songs", func(t *testing.T) {
-		out := qualitycheck.Run(context.Background(), recorded(nil))
+		out := qualitycheck.Run(context.Background(), time.Now, recorded(nil))
 
 		if !out.Pass || out.Stored != explicitURL {
 			t.Fatalf("Run stored %q (pass=%v: %s), want the explicit art track %q", out.Stored, out.Pass, out.Reason, explicitURL)
@@ -1948,7 +1949,7 @@ func TestRun_RecordedObservationsGoThroughTheRealAdapters(t *testing.T) {
 	}
 
 	t.Run("ytmusic yields no candidate when the request pins no video", func(t *testing.T) {
-		out := qualitycheck.Run(context.Background(), watchesAlone(nil))
+		out := qualitycheck.Run(context.Background(), time.Now, watchesAlone(nil))
 
 		if out.Stored != "" || out.Attempts != 0 {
 			t.Errorf("stored %q after %d attempts, want no candidate at all", out.Stored, out.Attempts)
@@ -1958,7 +1959,7 @@ func TestRun_RecordedObservationsGoThroughTheRealAdapters(t *testing.T) {
 	t.Run("ytmusic emits the recorded watch of the pinned video as an art track", func(t *testing.T) {
 		logged := capturedLog(t)
 
-		out := qualitycheck.Run(context.Background(), watchesAlone([]qualitycheck.CatalogSource{{Provider: string(ports.ProviderYouTube), ExternalID: "abcdefghijk"}}))
+		out := qualitycheck.Run(context.Background(), time.Now, watchesAlone([]qualitycheck.CatalogSource{{Provider: string(ports.ProviderYouTube), ExternalID: "abcdefghijk"}}))
 
 		if out.Stored != cleanURL {
 			t.Fatalf("stored %q (%s), want the recorded watch of the pinned video at %q", out.Stored, out.Reason, cleanURL)
@@ -1998,7 +1999,7 @@ func TestLoadDir_RefusesARecordedSourceThatBreaksItsAdapter(t *testing.T) {
 func TestRun_ItsOnlyLoveStoresTheClassicVersionWhenTheOriginalIsNowhere(t *testing.T) {
 	kase := embeddedCase(t, "rw-its-only-love-original-nowhere-takes-classic-version")
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if !out.Pass {
 		t.Fatalf("expected pass, got %q (err %q, saved %+v)", out.Reason, out.Err, out.Saved)
@@ -2012,7 +2013,7 @@ func TestRun_ItsOnlyLoveWithoutTheRerecordingStoresNothing(t *testing.T) {
 	kase := embeddedCase(t, "rw-its-only-love-original-nowhere-takes-classic-version")
 	kase.Rerecording = nil
 
-	out := qualitycheck.Run(context.Background(), kase)
+	out := qualitycheck.Run(context.Background(), time.Now, kase)
 
 	if !out.Failed {
 		t.Fatalf("expected a failure, stored %q", out.Stored)
@@ -2027,7 +2028,7 @@ func TestRun_ItsOnlyLoveWithoutTheRerecordingStoresNothing(t *testing.T) {
 
 func TestRun_FailsOnADifferingSavedTitleAlbumYearOrMBID(t *testing.T) {
 	kase := embeddedCase(t, "rw-its-only-love-original-nowhere-takes-classic-version")
-	saved := qualitycheck.Run(context.Background(), kase).Saved
+	saved := qualitycheck.Run(context.Background(), time.Now, kase).Saved
 	if saved.Title == "" || saved.Album == "" || saved.Year == 0 || saved.CatalogMBID == "" {
 		t.Fatalf("saved %+v, want a title, album, year and mbid to compare against", saved)
 	}
@@ -2043,13 +2044,13 @@ func TestRun_FailsOnADifferingSavedTitleAlbumYearOrMBID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			kase.ExpectSaved = &tt.want
-			if out := qualitycheck.Run(context.Background(), kase); out.Pass || !strings.Contains(out.Reason, "want saved "+tt.name) {
+			if out := qualitycheck.Run(context.Background(), time.Now, kase); out.Pass || !strings.Contains(out.Reason, "want saved "+tt.name) {
 				t.Fatalf("pass=%v reason %q, want a failure for a differing %s", out.Pass, out.Reason, tt.name)
 			}
 		})
 	}
 	kase.ExpectSaved = &qualitycheck.SavedExpectation{Title: saved.Title, Album: saved.Album, Year: saved.Year, MBID: saved.CatalogMBID}
-	if out := qualitycheck.Run(context.Background(), kase); !out.Pass {
+	if out := qualitycheck.Run(context.Background(), time.Now, kase); !out.Pass {
 		t.Fatalf("expected a match, got %q", out.Reason)
 	}
 }
