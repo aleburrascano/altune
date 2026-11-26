@@ -12,6 +12,8 @@ func TestKeyConstants_NameTheWireKeys(t *testing.T) {
 		logging.KeyError:         "error",
 		logging.KeyMethod:        "method",
 		logging.KeyPath:          "path",
+		logging.KeyRoute:         "route",
+		logging.KeyUserID:        "user_id",
 		logging.KeyStatus:        "status",
 		logging.KeyCode:          "code",
 		logging.KeyDuration:      "duration",

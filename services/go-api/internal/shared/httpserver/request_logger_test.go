@@ -4,12 +4,15 @@ import (
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/logging"
 	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/go-chi/chi/v5"
 )
 
 func TestRequestLogger_DoesNotPanic(t *testing.T) {
@@ -25,6 +28,44 @@ func TestRequestLogger_DoesNotPanic(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
+}
+
+func TestRequestLogger_LogsTheRoutePatternAndTheUserTheHandlerRecorded(t *testing.T) {
+	ring := captureLogs(t)
+	router := chi.NewRouter()
+	router.Use(httpserver.RequestLogger)
+	router.Get("/tracks/{trackId}", func(w http.ResponseWriter, r *http.Request) {
+		httpserver.RecordRequestUser(r.Context(), "user-7")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/tracks/abc-123", nil))
+
+	complete := onlyRecord(t, ring, "request.complete")
+	if complete.Attrs["route"] != "/tracks/{trackId}" || complete.Attrs["path"] != "/tracks/abc-123" || complete.Attrs["user_id"] != "user-7" {
+		t.Fatalf("request.complete attrs = %v, want route /tracks/{trackId}, path /tracks/abc-123, user_id user-7", complete.Attrs)
+	}
+}
+
+func TestRequestLogger_AnUnmatchedRouteIsOneBucketAndAnAnonymousRequestHasNoUser(t *testing.T) {
+	ring := captureLogs(t)
+	router := chi.NewRouter()
+	router.Use(httpserver.RequestLogger)
+	router.Get("/health", func(http.ResponseWriter, *http.Request) {})
+
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/no/such/route", nil))
+
+	complete := onlyRecord(t, ring, "request.complete")
+	if complete.Attrs["route"] != "unmatched" {
+		t.Errorf("route = %q, want unmatched so scanners cannot mint a label per path", complete.Attrs["route"])
+	}
+	if _, present := complete.Attrs["user_id"]; present {
+		t.Errorf("user_id = %q on a request nobody authenticated, want the key absent", complete.Attrs["user_id"])
+	}
+}
+
+func TestRecordRequestUser_OutsideARequestLoggerIsANoOp(t *testing.T) {
+	httpserver.RecordRequestUser(context.Background(), "user-7")
 }
 
 func TestRequestLogger_TracksStatusCode(t *testing.T) {

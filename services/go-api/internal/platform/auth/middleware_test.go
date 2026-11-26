@@ -2,7 +2,9 @@ package auth_test
 
 import (
 	"altune/go-api/internal/platform/auth"
+	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/requestuser"
 	"bytes"
 	"context"
@@ -156,6 +158,26 @@ func TestMiddleware_OversizedBearerDoesNotSpendFailureBudget(t *testing.T) {
 	}
 	if rec := serveBearer(handler, "203.0.113.7:1", "valid"); rec.Code != http.StatusOK {
 		t.Fatalf("valid bearer after oversized ones: status %d, want 200", rec.Code)
+	}
+}
+
+func TestMiddleware_TheVerifiedUserReachesTheRequestCompleteLine(t *testing.T) {
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	ring := logging.Setup("info", false)
+	uid := ids.NewUserId(uuid.New())
+	next, _ := noopHandler()
+
+	serveBearer(httpserver.RequestLogger(auth.Middleware(stubVerifier(uid, nil))(next)), "203.0.113.7:1", "valid")
+
+	var complete []logging.CapturedRecord
+	for _, rec := range ring.Snapshot() {
+		if rec.Message == "request.complete" {
+			complete = append(complete, rec)
+		}
+	}
+	if len(complete) != 1 || complete[0].Attrs["user_id"] != uid.String() {
+		t.Fatalf("request.complete records = %+v, want one carrying user_id %s", complete, uid)
 	}
 }
 
