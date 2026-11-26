@@ -2,6 +2,9 @@ package handler_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/handler"
+	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
 	"context"
 	"encoding/json"
@@ -54,15 +57,15 @@ func errorContractRouter(t *testing.T) chi.Router {
 	}
 	timingOut := timingOutContentProvider{}
 	healthy := stubContentProvider{provider: search.ProviderSoundCloud}
-	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{
-		Album: searchtest.NewAlbumTracks(t, map[search.ProviderName]search.AlbumContentProvider{
-			search.ProviderITunes: timingOut, search.ProviderSoundCloud: healthy,
+	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
+		Album: searchtest.NewAlbumTracks(t, map[search.ProviderName]ports.AlbumContentProvider{
+			domain.ProviderITunes: timingOut, search.ProviderSoundCloud: healthy,
 		}, searchtest.AlbumBreaker(breaker)),
-		Artist: searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{
-			search.ProviderITunes: timingOut, search.ProviderSoundCloud: healthy,
+		Artist: searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
+			domain.ProviderITunes: timingOut, search.ProviderSoundCloud: healthy,
 		}, searchtest.ArtistBreaker(breaker)),
-		Related: searchtest.NewRelatedTracksWithBreaker(t, map[string]search.RelatedTracksProvider{
-			search.ProviderITunes.String(): timingOut, search.ProviderSoundCloud.String(): healthy,
+		Related: searchtest.NewRelatedTracksWithBreaker(t, map[string]ports.RelatedTracksProvider{
+			domain.ProviderITunes.String(): timingOut, search.ProviderSoundCloud.String(): healthy,
 		}, breaker),
 	}), time.Now)
 	router := chi.NewRouter()
@@ -139,7 +142,7 @@ type scriptedArtistProvider struct {
 }
 
 func (p scriptedArtistProvider) answer(kind search.ResultKind, id string, err error) ([]search.SearchResult, error) {
-	var partial *search.PartialResultError
+	var partial *domain.PartialResultError
 	if err != nil && !errors.As(err, &partial) {
 		return nil, err
 	}
@@ -160,7 +163,7 @@ func (p scriptedArtistProvider) GetArtistAlbums(_ context.Context, _ search.Prov
 }
 
 func TestArtistContent_OutcomeFollowsBothHalves(t *testing.T) {
-	partial := &search.PartialResultError{Page: 2, Err: errors.New("page 2 failed")}
+	partial := &domain.PartialResultError{Page: 2, Err: errors.New("page 2 failed")}
 	timeout := &url.Error{Op: "Get", URL: "https://upstream.example/x", Err: context.DeadlineExceeded}
 	broken := errors.New("upstream broke")
 	cases := []struct {
@@ -186,8 +189,8 @@ func TestArtistContent_OutcomeFollowsBothHalves(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{
-				Artist: searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{
+			h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
+				Artist: searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
 					search.ProviderDeezer: scriptedArtistProvider{tracksErr: tc.tracksErr, albumsErr: tc.albumsErr},
 				}),
 			}), time.Now)

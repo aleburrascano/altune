@@ -1,17 +1,19 @@
 package vocabulary_test
 
 import (
-	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/service/vocabulary"
 	"context"
 	"errors"
 	"testing"
 )
 
-func vocabEntry(term string) search.SpellingHintsEntry {
-	return search.SpellingHintsEntry{Term: term, TermNorm: term, Kind: search.VocabKindArtist}
+func vocabEntry(term string) domain.SpellingHintsEntry {
+	return domain.SpellingHintsEntry{Term: term, TermNorm: term, Kind: domain.VocabKindArtist}
 }
 
-func suggestTerms(entries []search.SpellingHintsEntry) []string {
+func suggestTerms(entries []domain.SpellingHintsEntry) []string {
 	out := make([]string, len(entries))
 	for i, e := range entries {
 		out[i] = e.Term
@@ -20,15 +22,15 @@ func suggestTerms(entries []search.SpellingHintsEntry) []string {
 }
 
 func TestSuggest_PrefixFirstThenFuzzyTopUp(t *testing.T) {
-	store := &search.FakeVocabularyStore{
-		SuggestByPrefixFn: func(_ string, _ int) ([]search.SpellingHintsEntry, error) {
-			return []search.SpellingHintsEntry{vocabEntry("drake"), vocabEntry("drakeo")}, nil
+	store := &memory.FakeVocabularyStore{
+		SuggestByPrefixFn: func(_ string, _ int) ([]domain.SpellingHintsEntry, error) {
+			return []domain.SpellingHintsEntry{vocabEntry("drake"), vocabEntry("drakeo")}, nil
 		},
-		FindClosestFn: func(_ string, _ int) ([]search.SpellingHintsEntry, error) {
-			return []search.SpellingHintsEntry{vocabEntry("dremke"), vocabEntry("droke")}, nil
+		FindClosestFn: func(_ string, _ int) ([]domain.SpellingHintsEntry, error) {
+			return []domain.SpellingHintsEntry{vocabEntry("dremke"), vocabEntry("droke")}, nil
 		},
 	}
-	svc := search.NewSuggestService(store)
+	svc := vocabulary.NewSuggestService(store)
 
 	got, err := svc.Execute(context.Background(), "drak", 4)
 	if err != nil {
@@ -46,15 +48,15 @@ func TestSuggest_PrefixFirstThenFuzzyTopUp(t *testing.T) {
 }
 
 func TestSuggest_FuzzyDuplicatesDeduped(t *testing.T) {
-	store := &search.FakeVocabularyStore{
-		SuggestByPrefixFn: func(_ string, _ int) ([]search.SpellingHintsEntry, error) {
-			return []search.SpellingHintsEntry{vocabEntry("drake")}, nil
+	store := &memory.FakeVocabularyStore{
+		SuggestByPrefixFn: func(_ string, _ int) ([]domain.SpellingHintsEntry, error) {
+			return []domain.SpellingHintsEntry{vocabEntry("drake")}, nil
 		},
-		FindClosestFn: func(_ string, _ int) ([]search.SpellingHintsEntry, error) {
-			return []search.SpellingHintsEntry{vocabEntry("drake"), vocabEntry("droke")}, nil
+		FindClosestFn: func(_ string, _ int) ([]domain.SpellingHintsEntry, error) {
+			return []domain.SpellingHintsEntry{vocabEntry("drake"), vocabEntry("droke")}, nil
 		},
 	}
-	svc := search.NewSuggestService(store)
+	svc := vocabulary.NewSuggestService(store)
 
 	got, err := svc.Execute(context.Background(), "drak", 5)
 	if err != nil {
@@ -67,12 +69,12 @@ func TestSuggest_FuzzyDuplicatesDeduped(t *testing.T) {
 }
 
 func TestSuggest_PrefixFillsLimitSkipsFuzzy(t *testing.T) {
-	store := &search.FakeVocabularyStore{
-		SuggestByPrefixFn: func(_ string, _ int) ([]search.SpellingHintsEntry, error) {
-			return []search.SpellingHintsEntry{vocabEntry("drake"), vocabEntry("drakeo")}, nil
+	store := &memory.FakeVocabularyStore{
+		SuggestByPrefixFn: func(_ string, _ int) ([]domain.SpellingHintsEntry, error) {
+			return []domain.SpellingHintsEntry{vocabEntry("drake"), vocabEntry("drakeo")}, nil
 		},
 	}
-	svc := search.NewSuggestService(store)
+	svc := vocabulary.NewSuggestService(store)
 
 	got, err := svc.Execute(context.Background(), "drak", 2)
 	if err != nil {
@@ -87,15 +89,15 @@ func TestSuggest_PrefixFillsLimitSkipsFuzzy(t *testing.T) {
 }
 
 func TestSuggest_LimitCapsCombined(t *testing.T) {
-	store := &search.FakeVocabularyStore{
-		SuggestByPrefixFn: func(_ string, _ int) ([]search.SpellingHintsEntry, error) {
-			return []search.SpellingHintsEntry{vocabEntry("drake")}, nil
+	store := &memory.FakeVocabularyStore{
+		SuggestByPrefixFn: func(_ string, _ int) ([]domain.SpellingHintsEntry, error) {
+			return []domain.SpellingHintsEntry{vocabEntry("drake")}, nil
 		},
-		FindClosestFn: func(_ string, _ int) ([]search.SpellingHintsEntry, error) {
-			return []search.SpellingHintsEntry{vocabEntry("droke"), vocabEntry("dreke"), vocabEntry("druke")}, nil
+		FindClosestFn: func(_ string, _ int) ([]domain.SpellingHintsEntry, error) {
+			return []domain.SpellingHintsEntry{vocabEntry("droke"), vocabEntry("dreke"), vocabEntry("druke")}, nil
 		},
 	}
-	svc := search.NewSuggestService(store)
+	svc := vocabulary.NewSuggestService(store)
 
 	got, err := svc.Execute(context.Background(), "drak", 2)
 	if err != nil {
@@ -107,8 +109,8 @@ func TestSuggest_LimitCapsCombined(t *testing.T) {
 }
 
 func TestSuggest_EmptyQueryReturnsEmptyWithoutStoreCalls(t *testing.T) {
-	store := &search.FakeVocabularyStore{}
-	svc := search.NewSuggestService(store)
+	store := &memory.FakeVocabularyStore{}
+	svc := vocabulary.NewSuggestService(store)
 
 	got, err := svc.Execute(context.Background(), "  !!  ", 5)
 	if err != nil {
@@ -124,12 +126,12 @@ func TestSuggest_EmptyQueryReturnsEmptyWithoutStoreCalls(t *testing.T) {
 }
 
 func TestSuggest_PrefixErrorPropagates(t *testing.T) {
-	store := &search.FakeVocabularyStore{
-		SuggestByPrefixFn: func(_ string, _ int) ([]search.SpellingHintsEntry, error) {
+	store := &memory.FakeVocabularyStore{
+		SuggestByPrefixFn: func(_ string, _ int) ([]domain.SpellingHintsEntry, error) {
 			return nil, errors.New("redis down")
 		},
 	}
-	svc := search.NewSuggestService(store)
+	svc := vocabulary.NewSuggestService(store)
 
 	if _, err := svc.Execute(context.Background(), "drak", 5); err == nil {
 		t.Fatal("want the prefix lookup error propagated, got nil")
@@ -137,15 +139,15 @@ func TestSuggest_PrefixErrorPropagates(t *testing.T) {
 }
 
 func TestSuggest_FuzzyErrorDegradesToPrefixOnly(t *testing.T) {
-	store := &search.FakeVocabularyStore{
-		SuggestByPrefixFn: func(_ string, _ int) ([]search.SpellingHintsEntry, error) {
-			return []search.SpellingHintsEntry{vocabEntry("drake")}, nil
+	store := &memory.FakeVocabularyStore{
+		SuggestByPrefixFn: func(_ string, _ int) ([]domain.SpellingHintsEntry, error) {
+			return []domain.SpellingHintsEntry{vocabEntry("drake")}, nil
 		},
-		FindClosestFn: func(_ string, _ int) ([]search.SpellingHintsEntry, error) {
+		FindClosestFn: func(_ string, _ int) ([]domain.SpellingHintsEntry, error) {
 			return nil, errors.New("redis down")
 		},
 	}
-	svc := search.NewSuggestService(store)
+	svc := vocabulary.NewSuggestService(store)
 
 	got, err := svc.Execute(context.Background(), "drak", 5)
 	if err != nil {

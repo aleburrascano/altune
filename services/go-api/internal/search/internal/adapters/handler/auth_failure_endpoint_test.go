@@ -2,6 +2,8 @@ package handler_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/handler"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/ids"
 	"net/http"
@@ -16,8 +18,8 @@ import (
 
 const validAuthFailureBody = `{"reason":"invalid_credentials","app_version":"1.2.3"}`
 
-func buildAuthFailureRouter(t *testing.T, store *recordingEventStore, limit search.RequestLimit) chi.Router {
-	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Event: searchtest.NewRecordEvent(t, store)}), time.Now)
+func buildAuthFailureRouter(t *testing.T, store *recordingEventStore, limit handler.RequestLimit) chi.Router {
+	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Event: searchtest.NewRecordEvent(t, store)}), time.Now)
 	r := chi.NewRouter()
 	h.PublicRoutes(r, limit)
 	return r
@@ -42,7 +44,7 @@ func TestAuthFailureEndpoint_RecordsAnonymousEvent(t *testing.T) {
 		t.Fatalf("appended %d events, want 1", len(store.events))
 	}
 	got := store.events[0]
-	if got.Type != search.EventTypeAuthFailed || got.UserId != ids.AnonymousUserId() {
+	if got.Type != domain.EventTypeAuthFailed || got.UserId != ids.AnonymousUserId() {
 		t.Errorf("event = %v for %v, want auth_failed for the anonymous user", got.Type, got.UserId)
 	}
 	want := map[string]any{"reason": "invalid_credentials", "app_version": "1.2.3"}
@@ -53,7 +55,7 @@ func TestAuthFailureEndpoint_RecordsAnonymousEvent(t *testing.T) {
 
 func TestAuthFailureEndpoint_RateLimitsPerClientIP(t *testing.T) {
 	store := &recordingEventStore{}
-	r := buildAuthFailureRouter(t, store, search.RequestLimit{Max: 2, Window: time.Minute})
+	r := buildAuthFailureRouter(t, store, handler.RequestLimit{Max: 2, Window: time.Minute})
 
 	for range 2 {
 		discAssertStatus(t, postAuthFailure(r, validAuthFailureBody, "203.0.113.5:1000"), http.StatusNoContent)

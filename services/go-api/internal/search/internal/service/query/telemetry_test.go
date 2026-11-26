@@ -2,6 +2,8 @@ package query_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
@@ -12,8 +14,8 @@ import (
 
 func TestService_EmitsSearchTelemetryV2(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	store := &search.FakeEventStore{}
-	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	store := &memory.FakeEventStore{}
+	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store })
 
 	runSearch(t, svc, "humble")
@@ -24,7 +26,7 @@ func TestService_EmitsSearchTelemetryV2(t *testing.T) {
 		t.Fatalf("got %d events, want 1", len(events))
 	}
 	e := events[0]
-	if e.Type != search.EventTypeSearchPerformed {
+	if e.Type != domain.EventTypeSearchPerformed {
 		t.Errorf("type = %v, want search_performed", e.Type)
 	}
 	if e.Payload["pipeline_version"] != "v2" {
@@ -46,8 +48,8 @@ func TestService_EmitsSearchTelemetryV2(t *testing.T) {
 
 func TestService_SearchTelemetryCarriesStageTimes(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	store := &search.FakeEventStore{}
-	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}, Delay: 30 * time.Millisecond}
+	store := &memory.FakeEventStore{}
+	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}, Delay: 30 * time.Millisecond}
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store })
 
 	runSearch(t, svc, "humble")
@@ -72,11 +74,11 @@ func TestService_SearchTelemetryCarriesStageTimes(t *testing.T) {
 
 func TestService_TelemetryFailureDoesNotSurface(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	store := &search.FakeEventStore{Err: errors.New("db down")}
-	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	store := &memory.FakeEventStore{Err: errors.New("db down")}
+	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store })
 
-	out, err := svc.Execute(context.Background(), search.NewUser(), search.NewQuery(t, "humble"))
+	out, err := svc.Execute(context.Background(), memory.NewUser(), memory.NewQuery(t, "humble"))
 	bg.Wait()
 
 	if err != nil {
@@ -89,7 +91,7 @@ func TestService_TelemetryFailureDoesNotSurface(t *testing.T) {
 
 func TestService_NoEventStoreNoEmit(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := searchtest.NewSearchService(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker())
 	runSearch(t, svc, "humble")
 	bg.Wait()
@@ -97,11 +99,11 @@ func TestService_NoEventStoreNoEmit(t *testing.T) {
 
 func TestService_SearchTelemetryRecordsShownSignatures(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	store := &search.FakeEventStore{}
-	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{
-		search.DeezerTrack("Humble", "Kendrick Lamar", 80),
-		search.DeezerTrack("Humble Pie", "Other Artist", 60),
-		search.DeezerTrack("Humble Beginnings", "Third Artist", 40),
+	store := &memory.FakeEventStore{}
+	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{
+		memory.DeezerTrack("Humble", "Kendrick Lamar", 80),
+		memory.DeezerTrack("Humble Pie", "Other Artist", 60),
+		memory.DeezerTrack("Humble Beginnings", "Third Artist", 40),
 	}}
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store })
 	q, err := search.NewSearchQuery("humble", map[search.ResultKind]bool{search.ResultKindTrack: true}, 1)
@@ -109,7 +111,7 @@ func TestService_SearchTelemetryRecordsShownSignatures(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := svc.Execute(context.Background(), search.NewUser(), q)
+	out, err := svc.Execute(context.Background(), memory.NewUser(), q)
 	bg.Wait()
 	if err != nil {
 		t.Fatal(err)
@@ -147,19 +149,19 @@ func TestService_SearchTelemetryRecordsShownSignatures(t *testing.T) {
 
 func TestSearchTelemetry_DroppedEventLogsSearchAndUser(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	store := &search.FakeEventStore{Err: errors.New("db down")}
-	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
+	store := &memory.FakeEventStore{Err: errors.New("db down")}
+	p := &memory.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{memory.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.Events = store })
-	user := search.NewUser()
-	ring := search.CaptureDetachedLogs(t)
+	user := memory.NewUser()
+	ring := memory.CaptureDetachedLogs(t)
 
-	out, err := svc.Execute(context.Background(), user, search.NewQuery(t, "humble"))
+	out, err := svc.Execute(context.Background(), user, memory.NewQuery(t, "humble"))
 	bg.Wait()
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	rec := search.OnlyRecord(t, ring, "search.v2.telemetry_emit_failed")
+	rec := memory.OnlyRecord(t, ring, "search.v2.telemetry_emit_failed")
 	if rec.Attrs["search_id"] != out.SearchId {
 		t.Errorf("search_id = %q, want %q: the dropped event is unfindable without it", rec.Attrs["search_id"], out.SearchId)
 	}

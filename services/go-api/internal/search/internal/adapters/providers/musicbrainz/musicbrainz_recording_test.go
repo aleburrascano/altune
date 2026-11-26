@@ -2,6 +2,7 @@ package musicbrainz_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/providers/musicbrainz"
 	"context"
 	"net/http"
 	"reflect"
@@ -16,7 +17,7 @@ const (
 	recordingLookup = "/ws/2/recording/"
 )
 
-func recordingServer(t *testing.T, bodies map[string]string) *search.MusicBrainzAdapter {
+func recordingServer(t *testing.T, bodies map[string]string) *musicbrainz.MusicBrainzAdapter {
 	t.Helper()
 	return mbServer(t, func(w http.ResponseWriter, r *http.Request) {
 		body, known := bodies[r.URL.Path]

@@ -2,8 +2,11 @@ package discogs_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/providers/artworkfallback"
+	"altune/go-api/internal/search/internal/adapters/providers/discogs"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
 	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/queuetimeout"
 	"bytes"
 	"context"
@@ -19,8 +22,8 @@ import (
 	"time"
 )
 
-func newTestDiscogsAdapter(server *httptest.Server) *search.DiscogsAdapter {
-	return search.NewDiscogsAdapter(providertest.NewClient(server.URL), "test-token", "altune-test/1.0")
+func newTestDiscogsAdapter(server *httptest.Server) *discogs.DiscogsAdapter {
+	return discogs.NewDiscogsAdapter(providertest.NewClient(server.URL), "test-token", "altune-test/1.0")
 }
 
 func writeJSON(w http.ResponseWriter, body string) {
@@ -139,7 +142,7 @@ func TestDiscogsAdapter_Resolve_429(t *testing.T) {
 	adapter := newTestDiscogsAdapter(srv)
 
 	url, err := adapter.Resolve(context.Background(), search.ResultKindArtist, "Artist", "", "")
-	if !errors.Is(err, search.ErrArtworkUnavailable) {
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Fatalf("expected ErrArtworkUnavailable on rate limit, got %v", err)
 	}
 	if url != "" {
@@ -237,7 +240,7 @@ func TestDiscogsAdapter_ResolveByIdentity(t *testing.T) {
 
 		adapter := newTestDiscogsAdapter(server)
 		url, err := adapter.ResolveByIdentity(context.Background(), search.ResultKindArtist,
-			search.ArtworkIdentity{ExternalIDs: map[search.ProviderKey]string{"discogs": "38"}})
+			ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}})
 		if err != nil {
 			t.Fatalf("ResolveByIdentity: %v", err)
 		}
@@ -258,7 +261,7 @@ func TestDiscogsAdapter_ResolveByIdentity(t *testing.T) {
 
 		adapter := newTestDiscogsAdapter(server)
 		url, err := adapter.ResolveByIdentity(context.Background(), search.ResultKindArtist,
-			search.ArtworkIdentity{ExternalIDs: map[search.ProviderKey]string{"discogs": "38"}})
+			ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}})
 		if err != nil || url != "https://img/only.jpg" {
 			t.Errorf("(%q, %v), want the first image", url, err)
 		}
@@ -273,7 +276,7 @@ func TestDiscogsAdapter_ResolveByIdentity(t *testing.T) {
 
 		adapter := newTestDiscogsAdapter(server)
 		url, err := adapter.ResolveByIdentity(context.Background(), search.ResultKindAlbum,
-			search.ArtworkIdentity{ExternalIDs: map[search.ProviderKey]string{"discogs": "38"}})
+			ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}})
 		if err != nil || url != "" {
 			t.Errorf("(%q, %v), want (\"\", nil)", url, err)
 		}
@@ -287,9 +290,9 @@ func TestDiscogsAdapter_ResolveByIdentity(t *testing.T) {
 		defer server.Close()
 
 		adapter := newTestDiscogsAdapter(server)
-		for _, id := range []search.ArtworkIdentity{
+		for _, id := range []ports.ArtworkIdentity{
 			{},
-			{ExternalIDs: map[search.ProviderKey]string{"discogs": "not-a-number"}},
+			{ExternalIDs: map[domain.ProviderKey]string{"discogs": "not-a-number"}},
 		} {
 			url, err := adapter.ResolveByIdentity(context.Background(), search.ResultKindArtist, id)
 			if err != nil || url != "" {
@@ -306,15 +309,15 @@ func TestDiscogsAdapter_ResolveByIdentity(t *testing.T) {
 
 		adapter := newTestDiscogsAdapter(server)
 		url, err := adapter.ResolveByIdentity(context.Background(), search.ResultKindArtist,
-			search.ArtworkIdentity{ExternalIDs: map[search.ProviderKey]string{"discogs": "38"}})
-		if !errors.Is(err, search.ErrArtworkUnavailable) || url != "" {
+			ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}})
+		if !errors.Is(err, ports.ErrArtworkUnavailable) || url != "" {
 			t.Errorf("(%q, %v), want (\"\", ErrArtworkUnavailable) — the chain degrades", url, err)
 		}
 	})
 }
 
 func TestDiscogsAdapter_ArtworkSource(t *testing.T) {
-	if search.NewDiscogsAdapter(http.DefaultClient, "t", "ua").ArtworkSource() != "discogs" {
+	if discogs.NewDiscogsAdapter(http.DefaultClient, "t", "ua").ArtworkSource() != "discogs" {
 		t.Error("ArtworkSource mismatch")
 	}
 }
@@ -355,7 +358,7 @@ func TestDiscogsAdapter_Resolve_SearchFailureIsArtworkUnavailable(t *testing.T) 
 	if url != "" {
 		t.Errorf("url = %q, want empty on a search failure", url)
 	}
-	if !errors.Is(err, search.ErrArtworkUnavailable) {
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("err = %v, want errors.Is(err, discovery.ErrArtworkUnavailable)", err)
 	}
 }
@@ -370,11 +373,11 @@ func TestDiscogsAdapter_ResolveByIdentity_DetailFailureIsArtworkUnavailable(t *t
 	adapter := newTestDiscogsAdapter(srv)
 
 	url, err := adapter.ResolveByIdentity(context.Background(), search.ResultKindArtist,
-		search.ArtworkIdentity{ExternalIDs: map[search.ProviderKey]string{"discogs": "38"}})
+		ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}})
 	if url != "" {
 		t.Errorf("url = %q, want empty on a detail failure", url)
 	}
-	if !errors.Is(err, search.ErrArtworkUnavailable) {
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("err = %v, want errors.Is(err, discovery.ErrArtworkUnavailable)", err)
 	}
 }
@@ -420,7 +423,7 @@ func TestDiscogsAdapter_Resolve_DetailFailureAfterAMatchIsArtworkUnavailable(t *
 	if url != "" {
 		t.Errorf("url = %q, want empty when the detail fetch fails", url)
 	}
-	if !errors.Is(err, search.ErrArtworkUnavailable) {
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("err = %v, want errors.Is(err, discovery.ErrArtworkUnavailable)", err)
 	}
 }
@@ -457,7 +460,7 @@ func TestDiscogsAdapter_Resolve_MalformedSearchBodyIsArtworkUnavailable(t *testi
 	adapter := newTestDiscogsAdapter(srv)
 
 	url, err := adapter.Resolve(context.Background(), search.ResultKindArtist, "Artist", "", "")
-	if url != "" || !errors.Is(err, search.ErrArtworkUnavailable) {
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("Resolve on a truncated body = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -469,7 +472,7 @@ func TestDiscogsAdapter_Resolve_TransportErrorIsArtworkUnavailable(t *testing.T)
 	srv.Close()
 
 	url, err := adapter.Resolve(context.Background(), search.ResultKindArtist, "Artist", "", "")
-	if url != "" || !errors.Is(err, search.ErrArtworkUnavailable) {
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("Resolve with the provider unreachable = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -490,7 +493,7 @@ func TestDiscogsAdapter_Resolve_CancelledContextIsArtworkUnavailable(t *testing.
 	if url != "" {
 		t.Errorf("url = %q, want empty on a cancelled lookup", url)
 	}
-	if !errors.Is(err, search.ErrArtworkUnavailable) {
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("err = %v, want errors.Is(err, discovery.ErrArtworkUnavailable)", err)
 	}
 }
@@ -505,8 +508,8 @@ func TestDiscogsAdapter_ResolveByIdentity_RateLimitIsArtworkUnavailable(t *testi
 	adapter := newTestDiscogsAdapter(srv)
 
 	url, err := adapter.ResolveByIdentity(context.Background(), search.ResultKindArtist,
-		search.ArtworkIdentity{ExternalIDs: map[search.ProviderKey]string{"discogs": "38"}})
-	if url != "" || !errors.Is(err, search.ErrArtworkUnavailable) {
+		ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}})
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("ResolveByIdentity on 429 = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
@@ -521,7 +524,7 @@ func TestDiscogsAdapter_ResolveByIdentity_UnknownArtistIsAVerifiedMiss(t *testin
 	adapter := newTestDiscogsAdapter(srv)
 
 	url, err := adapter.ResolveByIdentity(context.Background(), search.ResultKindArtist,
-		search.ArtworkIdentity{ExternalIDs: map[search.ProviderKey]string{"discogs": "38"}})
+		ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}})
 	if err != nil || url != "" {
 		t.Errorf("ResolveByIdentity on 404 = (%q, %v), want (\"\", nil)", url, err)
 	}
@@ -539,7 +542,7 @@ func TestDiscogsAdapter_ResolveByIdentity_ZeroDiscogsIDIsASilentMissWithNoReques
 
 	for _, raw := range []string{"0", "", " 38", "38abc"} {
 		url, err := adapter.ResolveByIdentity(context.Background(), search.ResultKindArtist,
-			search.ArtworkIdentity{ExternalIDs: map[search.ProviderKey]string{"discogs": raw}})
+			ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": raw}})
 		if err != nil || url != "" {
 			t.Errorf("discogs id %q: (%q, %v), want (\"\", nil)", raw, url, err)
 		}
@@ -589,10 +592,10 @@ func TestDiscogsAdapter_ResolveDiscogsArtist_DetailFailureLogsTheSkippedEnrichme
 
 func TestArtworkSourceTags(t *testing.T) {
 	tests := []struct {
-		got  search.ProviderKey
+		got  domain.ProviderKey
 		want string
 	}{
-		{search.NewDiscogsAdapter(nil, "", "").ArtworkSource(), "discogs"},
+		{discogs.NewDiscogsAdapter(nil, "", "").ArtworkSource(), "discogs"},
 	}
 	for _, tt := range tests {
 		if tt.got.String() != tt.want {
@@ -610,8 +613,8 @@ func inMemoryLookup() func(context.Context) error {
 			Request:    r,
 		}, nil
 	}}}
-	adapter := search.NewDiscogsAdapter(client, "test-token", "altune-test/1.0")
-	id := search.ArtworkIdentity{ExternalIDs: map[search.ProviderKey]string{"discogs": "38"}}
+	adapter := discogs.NewDiscogsAdapter(client, "test-token", "altune-test/1.0")
+	id := ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}}
 	return func(ctx context.Context) error {
 		_, err := adapter.ResolveByIdentity(ctx, search.ResultKindArtist, id)
 		return err
@@ -640,12 +643,12 @@ func TestDiscogsAdapter_PassesATransportQueueTimeoutThroughClassified(t *testing
 	client := &http.Client{Transport: providertest.FakeRoundTripper{Fn: func(*http.Request) (*http.Response, error) {
 		return nil, shed
 	}}}
-	adapter := search.NewDiscogsAdapter(client, "test-token", "altune-test/1.0")
-	id := search.ArtworkIdentity{ExternalIDs: map[search.ProviderKey]string{"discogs": "38"}}
+	adapter := discogs.NewDiscogsAdapter(client, "test-token", "altune-test/1.0")
+	id := ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}}
 
 	_, err := adapter.ResolveByIdentity(context.Background(), search.ResultKindArtist, id)
 
-	if !errors.Is(err, search.ErrProviderRateLimitQueueTimeout) || !errors.Is(err, context.DeadlineExceeded) {
+	if !errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v, want the shed to stay a queue timeout and a DeadlineExceeded", err)
 	}
 }
@@ -658,14 +661,14 @@ func TestChainedArtworkResolver_DiscogsIdentityOn500IsDegradedAndUnavailable(t *
 
 	discogsAdapterOn500 := newTestDiscogsAdapter(srv)
 
-	chain := search.NewChainedArtworkLookup(discogsAdapterOn500)
+	chain := artworkfallback.NewChainedArtworkLookup(discogsAdapterOn500)
 	url, _, err := chain.ResolveWithIdentityTagged(context.Background(), search.ResultKindArtist, "Artist", "",
-		search.ArtworkIdentity{ExternalIDs: map[search.ProviderKey]string{"discogs": "38"}})
+		ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}})
 
 	if url != "" {
 		t.Errorf("url = %q, want empty when discogs fails", url)
 	}
-	if !errors.Is(err, search.ErrArtworkDegraded) || !errors.Is(err, search.ErrArtworkUnavailable) {
+	if !errors.Is(err, ports.ErrArtworkDegraded) || !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("err = %v, want both ErrArtworkDegraded and ErrArtworkUnavailable", err)
 	}
 }

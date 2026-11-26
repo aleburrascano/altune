@@ -1,8 +1,9 @@
 package fansheets_test
 
 import (
-	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/providers/fansheets"
 	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/domain"
 	"bytes"
 	"context"
 	"errors"
@@ -120,29 +121,29 @@ func (s *sheetsServer) httpClient() *http.Client {
 }
 
 func (s *sheetsServer) client(t *testing.T, cache *fakeIndexCache) interface {
-	ArtistSongs(context.Context, string) ([]search.UnreleasedSong, error)
+	ArtistSongs(context.Context, string) ([]domain.UnreleasedSong, error)
 	Artists(context.Context) ([]string, error)
 } {
 	t.Helper()
 	if cache == nil {
-		return newTrackersClient(t, s.httpClient(), search.NoTrackerIndexCache{})
+		return newTrackersClient(t, s.httpClient(), fansheets.NoIndexCache{})
 	}
 	return newTrackersClient(t, s.httpClient(), cache)
 }
 
-func newTrackersClient(t *testing.T, httpClient *http.Client, index ports.TrackerIndexCache) *search.TrackersClient {
+func newTrackersClient(t *testing.T, httpClient *http.Client, index ports.TrackerIndexCache) *fansheets.Client {
 	t.Helper()
-	client, err := search.NewTrackersClient(httpClient, testKey, "HUB1234567890123456789", index)
+	client, err := fansheets.NewClient(httpClient, testKey, "HUB1234567890123456789", index)
 	if err != nil {
-		t.Fatalf("search.NewTrackersClient: %v", err)
+		t.Fatalf("fansheets.NewClient: %v", err)
 	}
 	return client
 }
 
 func TestNewClient_RefusesAMissingIndexCache(t *testing.T) {
-	client, err := search.NewTrackersClient(http.DefaultClient, testKey, "hub", nil)
+	client, err := fansheets.NewClient(http.DefaultClient, testKey, "hub", nil)
 
-	if client != nil || !errors.Is(err, search.ErrTrackersCollaboratorRequired) {
+	if client != nil || !errors.Is(err, fansheets.ErrCollaboratorRequired) {
 		t.Fatalf("got (%v, %v), want a refusal wrapping ErrTrackersCollaboratorRequired", client, err)
 	}
 }
@@ -282,7 +283,7 @@ func TestNewClient_UsesItsOwnTimeoutWithoutTouchingTheSharedClient(t *testing.T)
 	shared := srv.httpClient()
 	shared.Timeout = 10 * time.Millisecond
 
-	songs, err := newTrackersClient(t, shared, search.NoTrackerIndexCache{}).ArtistSongs(context.Background(), "Ken Carson")
+	songs, err := newTrackersClient(t, shared, fansheets.NoIndexCache{}).ArtistSongs(context.Background(), "Ken Carson")
 	if err != nil || len(songs) != 4 {
 		t.Errorf("ArtistSongs = %d songs, err %v; want the client's own timeout, not the shared 10ms", len(songs), err)
 	}
@@ -318,7 +319,7 @@ func TestClient_KeepsTheUnreleasedSongsWhenTheReleasedTabFails(t *testing.T) {
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), readFixture(t, "ken_carson_unreleased.json"))
 	srv.released, srv.releasedCode = []byte(`{}`), http.StatusInternalServerError
 	songs, err := srv.client(t, nil).ArtistSongs(context.Background(), "Ken Carson")
-	if !errors.Is(err, search.ErrTrackerPartial) || len(songs) != 4 {
+	if !errors.Is(err, ports.ErrTrackerPartial) || len(songs) != 4 {
 		t.Errorf("ArtistSongs = %d songs, err %v; want the 4 unreleased songs and a partial error", len(songs), err)
 	}
 }

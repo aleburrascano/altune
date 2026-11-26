@@ -2,6 +2,7 @@ package soundcloud_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/providers/soundcloud"
 	"context"
 	"errors"
 	"os/exec"
@@ -11,14 +12,14 @@ import (
 )
 
 func TestSoundCloudAdapter_Name(t *testing.T) {
-	adapter := search.NewSoundCloudAdapter()
+	adapter := soundcloud.NewSoundCloudAdapter()
 	if got := adapter.Name(); got != search.ProviderSoundCloud {
 		t.Errorf("Name() = %v, want %v", got, search.ProviderSoundCloud)
 	}
 }
 
 func TestSoundCloudAdapter_SupportedKinds(t *testing.T) {
-	adapter := search.NewSoundCloudAdapter()
+	adapter := soundcloud.NewSoundCloudAdapter()
 	kinds := adapter.SupportedKinds()
 
 	if !kinds[search.ResultKindTrack] {
@@ -33,14 +34,14 @@ func TestSoundCloudAdapter_SupportedKinds(t *testing.T) {
 }
 
 func TestSoundCloudAdapter_SearchTimeout(t *testing.T) {
-	adapter := search.NewSoundCloudAdapter()
+	adapter := soundcloud.NewSoundCloudAdapter()
 	if got := adapter.SearchTimeout(); got != 5*time.Second {
 		t.Errorf("SearchTimeout() = %v, want %v", got, 5*time.Second)
 	}
 }
 
 func TestSoundCloudAdapter_Search_UnsupportedKinds(t *testing.T) {
-	adapter := search.NewSoundCloudAdapter()
+	adapter := soundcloud.NewSoundCloudAdapter()
 	results, err := adapter.Search(context.Background(), "test query", map[search.ResultKind]bool{
 		search.ResultKindAlbum: true,
 	})
@@ -60,7 +61,7 @@ func TestSoundCloudAdapter_Search_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	adapter := search.NewSoundCloudAdapter()
+	adapter := soundcloud.NewSoundCloudAdapter()
 	_, err := adapter.Search(ctx, "test", map[search.ResultKind]bool{
 		search.ResultKindTrack: true,
 	})
@@ -72,7 +73,7 @@ func TestSoundCloudAdapter_Search_ContextCancelled(t *testing.T) {
 func TestSoundCloudAdapter_Search_CapsConcurrentYtdlp(t *testing.T) {
 	release := make(chan struct{})
 	var running, peak atomic.Int32
-	adapter := search.NewSoundCloudAdapterWithRunner(func(ctx context.Context, args []string) ([][]byte, string, error) {
+	adapter := soundcloud.NewSoundCloudAdapterWithRunner(func(ctx context.Context, args []string) ([][]byte, string, error) {
 		n := running.Add(1)
 		for {
 			p := peak.Load()
@@ -101,7 +102,7 @@ func TestSoundCloudAdapter_Search_CapsConcurrentYtdlp(t *testing.T) {
 	for shed < calls-slots {
 		select {
 		case err := <-errs:
-			if !errors.Is(err, search.ErrSoundCloudYtdlpBusy) {
+			if !errors.Is(err, soundcloud.ErrYtdlpBusy) {
 				t.Fatalf("unexpected early result: %v", err)
 			}
 			shed++
@@ -126,7 +127,7 @@ func TestSoundCloudAdapter_Search_CapsConcurrentYtdlp(t *testing.T) {
 }
 
 func TestSoundCloudAdapter_Search_YtdlpEntryFillsTheTypedDuration(t *testing.T) {
-	adapter := search.NewSoundCloudAdapterWithRunner(func(context.Context, []string) ([][]byte, string, error) {
+	adapter := soundcloud.NewSoundCloudAdapterWithRunner(func(context.Context, []string) ([][]byte, string, error) {
 		return [][]byte{[]byte(`{"title":"Song","uploader":"Artist","duration":226.5,"webpage_url":"https://soundcloud.com/a/s","id":"1","playback_count":9}`)}, "", nil
 	})
 

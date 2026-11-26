@@ -2,7 +2,9 @@ package applemusic_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/providers/applemusic"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
+	"altune/go-api/internal/search/internal/domain"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -67,7 +69,7 @@ func TestAdapterSearchTimeouts(t *testing.T) {
 		got  time.Duration
 		want time.Duration
 	}{
-		{"applemusic", (&search.AppleMusicAdapter{}).SearchTimeout(), 4 * time.Second},
+		{"applemusic", (&applemusic.AppleMusicAdapter{}).SearchTimeout(), 4 * time.Second},
 	}
 	for _, tt := range tests {
 		if tt.got != tt.want {
@@ -78,7 +80,7 @@ func TestAdapterSearchTimeouts(t *testing.T) {
 
 func TestAdapterSupportedKinds_allThree(t *testing.T) {
 	for name, kinds := range map[string]map[search.ResultKind]bool{
-		"applemusic": (&search.AppleMusicAdapter{}).SupportedKinds(),
+		"applemusic": (&applemusic.AppleMusicAdapter{}).SupportedKinds(),
 	} {
 		if !kinds[search.ResultKindTrack] || !kinds[search.ResultKindAlbum] || !kinds[search.ResultKindArtist] {
 			t.Errorf("%s SupportedKinds = %v, want track+album+artist", name, kinds)
@@ -88,10 +90,10 @@ func TestAdapterSupportedKinds_allThree(t *testing.T) {
 
 func TestArtworkSourceTags(t *testing.T) {
 	tests := []struct {
-		got  search.ProviderKey
+		got  domain.ProviderKey
 		want string
 	}{
-		{(&search.AppleMusicAdapter{}).ArtworkSource(), "applemusic"},
+		{(&applemusic.AppleMusicAdapter{}).ArtworkSource(), "applemusic"},
 	}
 	for _, tt := range tests {
 		if tt.got.String() != tt.want {

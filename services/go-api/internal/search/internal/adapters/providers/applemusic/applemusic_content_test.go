@@ -2,6 +2,7 @@ package applemusic_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/domain"
 	"net/http"
 	"strings"
 	"testing"
@@ -54,7 +55,7 @@ func TestAppleMusicAdapter_GetArtistAlbums(t *testing.T) {
 
 	a := newTestAppleMusicAdapter(t, api)
 
-	albums, err := a.GetArtistAlbums(t.Context(), search.ProviderAppleMusic, "artist-1")
+	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderAppleMusic, "artist-1")
 	if err != nil {
 		t.Fatalf("GetArtistAlbums error = %v", err)
 	}
@@ -70,7 +71,7 @@ func TestAppleMusicAdapter_GetArtistAlbums(t *testing.T) {
 	if albums[0].TrackCount != 14 {
 		t.Errorf("album[0].TrackCount = %d, want 14", albums[0].TrackCount)
 	}
-	if albums[0].Sources[0].Provider != search.ProviderAppleMusic {
+	if albums[0].Sources[0].Provider != domain.ProviderAppleMusic {
 		t.Errorf("source provider = %v, want applemusic", albums[0].Sources[0].Provider)
 	}
 }
@@ -88,7 +89,7 @@ func TestAppleMusicAdapter_GetArtistTopTracks(t *testing.T) {
 
 	a := newTestAppleMusicAdapter(t, api)
 
-	tracks, err := a.GetArtistTopTracks(t.Context(), search.ProviderAppleMusic, "artist-1")
+	tracks, err := a.GetArtistTopTracks(t.Context(), domain.ProviderAppleMusic, "artist-1")
 	if err != nil {
 		t.Fatalf("GetArtistTopTracks error = %v", err)
 	}
@@ -110,7 +111,7 @@ func TestAppleMusicAdapter_GetAlbumTracks_http500IsError(t *testing.T) {
 	}
 
 	a := newTestAppleMusicAdapter(t, api)
-	if _, err := a.GetAlbumTracks(t.Context(), search.ProviderAppleMusic, "al-1"); err == nil {
+	if _, err := a.GetAlbumTracks(t.Context(), domain.ProviderAppleMusic, "al-1"); err == nil {
 		t.Fatal("expected an error on a non-auth HTTP 500 (no token re-resolve applies)")
 	}
 }
@@ -121,7 +122,7 @@ func TestAppleMusicAdapter_GetAlbumTracks_malformedJSONIsError(t *testing.T) {
 	}
 
 	a := newTestAppleMusicAdapter(t, api)
-	_, err := a.GetAlbumTracks(t.Context(), search.ProviderAppleMusic, "al-1")
+	_, err := a.GetAlbumTracks(t.Context(), domain.ProviderAppleMusic, "al-1")
 	if err == nil || !strings.Contains(err.Error(), "decode") {
 		t.Fatalf("err = %v, want a decode error on an HTML-instead-of-JSON body", err)
 	}
@@ -143,7 +144,7 @@ func TestAppleMusicAdapter_fetchCatalog_reResolvesTokenOnAuthFailure(t *testing.
 	}
 	site := newAppleMusicSite(t, api, appleMusicFixtureJWT, refreshed)
 
-	tracks, err := site.adapter.GetArtistTopTracks(t.Context(), search.ProviderAppleMusic, "ar-1")
+	tracks, err := site.adapter.GetArtistTopTracks(t.Context(), domain.ProviderAppleMusic, "ar-1")
 	if err != nil {
 		t.Fatalf("GetArtistTopTracks: %v", err)
 	}

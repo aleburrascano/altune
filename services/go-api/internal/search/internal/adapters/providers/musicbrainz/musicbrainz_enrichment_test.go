@@ -2,7 +2,9 @@ package musicbrainz_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/providers/musicbrainz"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
+	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -11,7 +13,7 @@ import (
 	"time"
 )
 
-func mbServer(t *testing.T, handler http.HandlerFunc) *search.MusicBrainzAdapter {
+func mbServer(t *testing.T, handler http.HandlerFunc) *musicbrainz.MusicBrainzAdapter {
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
@@ -20,7 +22,7 @@ func mbServer(t *testing.T, handler http.HandlerFunc) *search.MusicBrainzAdapter
 		Timeout:   2 * time.Second,
 		Transport: &providertest.RewriteTransport{Base: srv.URL},
 	}
-	return search.NewMusicBrainzAdapter(client, "AltuneTest/1.0 ( test@altune )")
+	return musicbrainz.NewMusicBrainzAdapter(client, "AltuneTest/1.0 ( test@altune )")
 }
 
 const kendrickArtistLookup = `{
@@ -85,7 +87,7 @@ func TestMusicBrainzAdapter_Lookup_Artist(t *testing.T) {
 	if e.Rating != 4.3 || e.RatingVotes != 18 {
 		t.Errorf("rating = %v/%d, want 4.3/18", e.Rating, e.RatingVotes)
 	}
-	wantIDs := map[search.ProviderKey]string{
+	wantIDs := map[domain.ProviderKey]string{
 		"discogs":    "1539549",
 		"wikidata":   "Q130798",
 		"spotify":    "2YZyLoL8N0Wb9xBt1NhZWg",
@@ -213,7 +215,7 @@ func TestMusicBrainzAdapter_ResolveMBID_track(t *testing.T) {
 	}))
 	defer server.Close()
 
-	adapter := search.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
+	adapter := musicbrainz.NewMusicBrainzAdapter(providertest.NewClient(server.URL), "altune-test/1.0")
 	mbid, err := adapter.ResolveMBID(context.Background(), search.ResultKindTrack, "Paranoid Android", "Radiohead")
 	if err != nil {
 		t.Fatalf("ResolveMBID: %v", err)

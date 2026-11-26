@@ -2,6 +2,7 @@ package musicbrainz_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/providers/musicbrainz"
 	"context"
 	"net/http"
 	"reflect"
@@ -27,7 +28,7 @@ const (
 	classicDetail = `{"id":"25d68187-ee71-4f06-9e58-0b49d66bf8a8","title":"It’s Only Love (classic version)","length":194000,"first-release-date":"2025-04-25","isrcs":["IETLH2500023"],"artist-credit":[{"name":"Bryan Adams","joinphrase":" & ","artist":{"id":"4dbf5678-7a31-406a-abbe-232f8ac2cd63","name":"Bryan Adams"}},{"name":"Tina Turner","joinphrase":"","artist":{"id":"9072df14-b61e-42e2-b4f4-6bbb7fdb5586","name":"Tina Turner"}}],"releases":[{"title":"It’s Only Love","date":"2025-04-25","status":"Official"}]}`
 )
 
-func workServer(t *testing.T, status int) *search.MusicBrainzAdapter {
+func workServer(t *testing.T, status int) *musicbrainz.MusicBrainzAdapter {
 	t.Helper()
 	return mbServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if status != http.StatusOK {
@@ -101,7 +102,7 @@ func TestMusicBrainzAdapter_RecordingDetail(t *testing.T) {
 	}
 }
 
-func probeServer(t *testing.T, bodies map[string]string) *search.MusicBrainzAdapter {
+func probeServer(t *testing.T, bodies map[string]string) *musicbrainz.MusicBrainzAdapter {
 	t.Helper()
 	return mbServer(t, func(w http.ResponseWriter, r *http.Request) {
 		body, known := bodies[r.URL.Path+"?"+r.URL.Query().Get("inc")]

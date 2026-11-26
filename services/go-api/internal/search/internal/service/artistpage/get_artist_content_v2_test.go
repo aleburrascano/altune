@@ -2,6 +2,9 @@ package artistpage_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
 	"context"
 	"testing"
@@ -11,21 +14,21 @@ import (
 
 func TestFanOutByIdentity_SlowProviderIsCutOffAtTheTenSecondDeadline(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		fast := &search.FakeArtistContentProvider{
+		fast := &memory.ArtistContentProvider{
 			GetAlbumsFn: func(_ context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
-				return []search.SearchResult{search.V2Album(search.ProviderDeezer, "d-fl", "Fully Loaded", withDate("2026-04-01"))}, nil
+				return []search.SearchResult{memory.V2Album(search.ProviderDeezer, "d-fl", "Fully Loaded", withDate("2026-04-01"))}, nil
 			},
 		}
-		slow := &search.FakeArtistContentProvider{
+		slow := &memory.ArtistContentProvider{
 			GetAlbumsFn: func(ctx context.Context, _ search.ProviderName, _ string) ([]search.SearchResult, error) {
 				<-ctx.Done()
 				return nil, ctx.Err()
 			},
 		}
-		store := &search.FakeIdentityStore{Mbid: "mbid-che", Xref: map[search.ProviderKey]string{"deezer": "d1", "itunes": "i1"}}
-		svc := searchtest.NewArtistContent(t, map[search.ProviderName]search.ArtistContentProvider{
+		store := &memory.FakeIdentityStore{Mbid: "mbid-che", Xref: map[domain.ProviderKey]string{"deezer": "d1", "itunes": "i1"}}
+		svc := searchtest.NewArtistContent(t, map[search.ProviderName]ports.ArtistContentProvider{
 			search.ProviderDeezer: fast,
-			search.ProviderITunes: slow,
+			domain.ProviderITunes: slow,
 		}, searchtest.ArtistIdentities(store))
 
 		start := time.Now()

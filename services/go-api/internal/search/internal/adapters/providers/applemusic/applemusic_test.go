@@ -2,7 +2,9 @@ package applemusic_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/providers/applemusic"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
+	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -23,7 +25,7 @@ const (
 )
 
 type appleMusicSite struct {
-	adapter *search.AppleMusicAdapter
+	adapter *applemusic.AppleMusicAdapter
 	scrapes *atomic.Int32
 }
 
@@ -45,10 +47,10 @@ func newAppleMusicSite(t *testing.T, api http.HandlerFunc, tokens ...string) app
 		}
 	}))
 	t.Cleanup(srv.Close)
-	return appleMusicSite{adapter: search.NewAppleMusicAdapter(providertest.NewClient(srv.URL)), scrapes: scrapes}
+	return appleMusicSite{adapter: applemusic.NewAppleMusicAdapter(providertest.NewClient(srv.URL)), scrapes: scrapes}
 }
 
-func newTestAppleMusicAdapter(t *testing.T, api http.HandlerFunc) *search.AppleMusicAdapter {
+func newTestAppleMusicAdapter(t *testing.T, api http.HandlerFunc) *applemusic.AppleMusicAdapter {
 	t.Helper()
 	return newAppleMusicSite(t, api).adapter
 }
@@ -244,7 +246,7 @@ func TestAppleMusicAdapter_Search_reResolvesTokenOnAuthFailure(t *testing.T) {
 	}
 }
 
-func searchTwice(t *testing.T, a *search.AppleMusicAdapter) {
+func searchTwice(t *testing.T, a *applemusic.AppleMusicAdapter) {
 	t.Helper()
 	for i := range 2 {
 		if _, err := a.Search(t.Context(), "x", providertest.AllKinds()); err != nil {
@@ -304,9 +306,9 @@ func TestAppleMusicAdapter_bundleWithoutATokenFailsBeforeTheAPI(t *testing.T) {
 }
 
 func TestAppleMusicAdapter_Name(t *testing.T) {
-	a := search.NewAppleMusicAdapter(http.DefaultClient)
-	if got := a.Name(); got != search.ProviderAppleMusic {
-		t.Errorf("Name() = %v, want %v", got, search.ProviderAppleMusic)
+	a := applemusic.NewAppleMusicAdapter(http.DefaultClient)
+	if got := a.Name(); got != domain.ProviderAppleMusic {
+		t.Errorf("Name() = %v, want %v", got, domain.ProviderAppleMusic)
 	}
 }
 
@@ -326,7 +328,7 @@ func TestAppleMusicAdapter_GetAlbumTracks(t *testing.T) {
 	}
 
 	a := newTestAppleMusicAdapter(t, api)
-	tracks, err := a.GetAlbumTracks(t.Context(), search.ProviderAppleMusic, "al-1")
+	tracks, err := a.GetAlbumTracks(t.Context(), domain.ProviderAppleMusic, "al-1")
 	if err != nil {
 		t.Fatalf("GetAlbumTracks error = %v", err)
 	}
@@ -343,29 +345,29 @@ func TestAppleMusicAdapter_GetAlbumTracks(t *testing.T) {
 
 func appleMusicCallSites() []struct {
 	name       string
-	call       func(ctx context.Context, a *search.AppleMusicAdapter) error
+	call       func(ctx context.Context, a *applemusic.AppleMusicAdapter) error
 	decodeText string
 } {
 	all := map[search.ResultKind]bool{search.ResultKindTrack: true, search.ResultKindAlbum: true, search.ResultKindArtist: true}
 	return []struct {
 		name       string
-		call       func(ctx context.Context, a *search.AppleMusicAdapter) error
+		call       func(ctx context.Context, a *applemusic.AppleMusicAdapter) error
 		decodeText string
 	}{
-		{"search", func(ctx context.Context, a *search.AppleMusicAdapter) error {
+		{"search", func(ctx context.Context, a *applemusic.AppleMusicAdapter) error {
 			_, err := a.Search(ctx, "q", all)
 			return err
 		}, "decode catalog search response: "},
-		{"album tracks", func(ctx context.Context, a *search.AppleMusicAdapter) error {
-			_, err := a.GetAlbumTracks(ctx, search.ProviderAppleMusic, "al-1")
+		{"album tracks", func(ctx context.Context, a *applemusic.AppleMusicAdapter) error {
+			_, err := a.GetAlbumTracks(ctx, domain.ProviderAppleMusic, "al-1")
 			return err
 		}, "decode album tracks response: "},
-		{"artist albums", func(ctx context.Context, a *search.AppleMusicAdapter) error {
-			_, err := a.GetArtistAlbums(ctx, search.ProviderAppleMusic, "ar-1")
+		{"artist albums", func(ctx context.Context, a *applemusic.AppleMusicAdapter) error {
+			_, err := a.GetArtistAlbums(ctx, domain.ProviderAppleMusic, "ar-1")
 			return err
 		}, "decode catalog response: "},
-		{"artist top tracks", func(ctx context.Context, a *search.AppleMusicAdapter) error {
-			_, err := a.GetArtistTopTracks(ctx, search.ProviderAppleMusic, "ar-1")
+		{"artist top tracks", func(ctx context.Context, a *applemusic.AppleMusicAdapter) error {
+			_, err := a.GetArtistTopTracks(ctx, domain.ProviderAppleMusic, "ar-1")
 			return err
 		}, "decode catalog response: "},
 	}
@@ -434,8 +436,8 @@ func TestAlbumTracksLive_E2E(t *testing.T) {
 	ctx := context.Background()
 	client := &http.Client{Timeout: 15 * time.Second}
 
-	ap := search.NewAppleMusicAdapter(client)
-	apTracks, err := ap.GetAlbumTracks(ctx, search.ProviderAppleMusic, "1895185526")
+	ap := applemusic.NewAppleMusicAdapter(client)
+	apTracks, err := ap.GetAlbumTracks(ctx, domain.ProviderAppleMusic, "1895185526")
 	if err != nil {
 		t.Fatalf("apple GetAlbumTracks: %v", err)
 	}

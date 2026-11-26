@@ -2,6 +2,11 @@ package details_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/providers/artworkfallback"
+	"altune/go-api/internal/search/internal/adapters/providers/coverartarchive"
+	"altune/go-api/internal/search/internal/adapters/providers/discogs"
+	"altune/go-api/internal/search/internal/core/details"
+	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -28,32 +33,32 @@ func serverClient(serverURL string, followRedirects bool) *http.Client {
 }
 
 type callerMBIDEnricher struct {
-	enrichment search.MusicBrainzEnrichment
+	enrichment domain.MusicBrainzEnrichment
 }
 
 func (f *callerMBIDEnricher) ResolveMBID(context.Context, search.ResultKind, string, string) (string, error) {
 	return "", nil
 }
 
-func (f *callerMBIDEnricher) Lookup(context.Context, search.ResultKind, string) (search.MusicBrainzEnrichment, error) {
+func (f *callerMBIDEnricher) Lookup(context.Context, search.ResultKind, string) (domain.MusicBrainzEnrichment, error) {
 	return f.enrichment, nil
 }
 
 type memEnrichmentCache struct {
-	positive map[string]search.MusicBrainzEnrichment
+	positive map[string]domain.MusicBrainzEnrichment
 	negative map[string]bool
 }
 
 func newMemEnrichmentCache() *memEnrichmentCache {
-	return &memEnrichmentCache{positive: map[string]search.MusicBrainzEnrichment{}, negative: map[string]bool{}}
+	return &memEnrichmentCache{positive: map[string]domain.MusicBrainzEnrichment{}, negative: map[string]bool{}}
 }
 
-func (c *memEnrichmentCache) Get(_ context.Context, kind search.ResultKind, mbid string) (search.MusicBrainzEnrichment, bool, error) {
+func (c *memEnrichmentCache) Get(_ context.Context, kind search.ResultKind, mbid string) (domain.MusicBrainzEnrichment, bool, error) {
 	e, ok := c.positive[kind.String()+"|"+mbid]
 	return e, ok, nil
 }
 
-func (c *memEnrichmentCache) Set(_ context.Context, kind search.ResultKind, mbid string, e search.MusicBrainzEnrichment) error {
+func (c *memEnrichmentCache) Set(_ context.Context, kind search.ResultKind, mbid string, e domain.MusicBrainzEnrichment) error {
 	c.positive[kind.String()+"|"+mbid] = e
 	return nil
 }
@@ -75,11 +80,11 @@ func TestEnrichmentService_CallerSuppliedMBID_RealChainReachesCoverArtArchive(t 
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
-	caa := search.NewCoverArtArchiveResolver(serverClient(srv.URL, false))
-	chain := search.NewChainedArtworkLookup(caa, search.NewCoverArtArchiveIdentityResolver(caa))
-	enrichment := search.EmptyEnrichment()
+	caa := coverartarchive.NewCoverArtArchiveResolver(serverClient(srv.URL, false))
+	chain := artworkfallback.NewChainedArtworkLookup(caa, coverartarchive.NewCoverArtArchiveIdentityResolver(caa))
+	enrichment := domain.EmptyEnrichment()
 	enrichment.MBID, enrichment.Genres, enrichment.Year = "mbid-1", []string{"hip hop"}, 2017
-	svc := newService(t, &callerMBIDEnricher{enrichment: enrichment}, chain, newMemEnrichmentCache(), search.NoMBIDIndex{})
+	svc := newService(t, &callerMBIDEnricher{enrichment: enrichment}, chain, newMemEnrichmentCache(), details.NoMBIDIndex{})
 
 	got, err := svc.Execute(context.Background(), search.ResultKindAlbum, "Some Other Album", "Other Artist", "mbid-1")
 	if err != nil {
@@ -99,11 +104,11 @@ func TestEnrichmentService_CallerSuppliedMBID_RealChainForwardsBridgedExternalID
 		_, _ = w.Write([]byte(`{"id": 38, "images": [{"type": "primary", "uri": "https://img/real-cover.jpg"}]}`))
 	}))
 	defer srv.Close()
-	chain := search.NewChainedArtworkLookup(search.NewDiscogsAdapter(serverClient(srv.URL, true), "test-token", "altune-test/1.0"))
-	enrichment := search.EmptyEnrichment()
+	chain := artworkfallback.NewChainedArtworkLookup(discogs.NewDiscogsAdapter(serverClient(srv.URL, true), "test-token", "altune-test/1.0"))
+	enrichment := domain.EmptyEnrichment()
 	enrichment.MBID = "mbid-artist-1"
-	enrichment.ExternalIDs = map[search.ProviderKey]string{"discogs": "38"}
-	svc := newService(t, &callerMBIDEnricher{enrichment: enrichment}, chain, newMemEnrichmentCache(), search.NoMBIDIndex{})
+	enrichment.ExternalIDs = map[domain.ProviderKey]string{"discogs": "38"}
+	svc := newService(t, &callerMBIDEnricher{enrichment: enrichment}, chain, newMemEnrichmentCache(), details.NoMBIDIndex{})
 
 	got, err := svc.Execute(context.Background(), search.ResultKindArtist, "Some Other Artist Name", "", "mbid-artist-1")
 	if err != nil {

@@ -2,7 +2,9 @@ package deezer_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/providers/deezer"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
+	"altune/go-api/internal/search/internal/domain"
 	"net/http/httptest"
 	"testing"
 )
@@ -13,7 +15,7 @@ func TestProviderContracts(t *testing.T) {
 			Name:   "deezer track",
 			Golden: "contract_deezer_track.json",
 			Search: func(t *testing.T, srv *httptest.Server) ([]search.SearchResult, error) {
-				return search.NewDeezerAdapter(providertest.NewClient(srv.URL)).Search(t.Context(), "bohemian rhapsody", providertest.TrackKinds())
+				return deezer.NewDeezerAdapter(providertest.NewClient(srv.URL)).Search(t.Context(), "bohemian rhapsody", providertest.TrackKinds())
 			},
 			Required: func(t *testing.T, r search.SearchResult) {
 				if r.ISRC == "" {
@@ -37,7 +39,7 @@ func TestProviderContracts(t *testing.T) {
 			Name:   "deezer artist",
 			Golden: "contract_deezer_artist.json",
 			Search: func(t *testing.T, srv *httptest.Server) ([]search.SearchResult, error) {
-				return search.NewDeezerAdapter(providertest.NewClient(srv.URL)).Search(t.Context(), "radiohead", providertest.ArtistKinds())
+				return deezer.NewDeezerAdapter(providertest.NewClient(srv.URL)).Search(t.Context(), "radiohead", providertest.ArtistKinds())
 			},
 			Required: func(t *testing.T, r search.SearchResult) {
 				if r.FanCount == 0 {
@@ -49,7 +51,7 @@ func TestProviderContracts(t *testing.T) {
 			Name:   "deezer album",
 			Golden: "contract_deezer_album.json",
 			Search: func(t *testing.T, srv *httptest.Server) ([]search.SearchResult, error) {
-				return search.NewDeezerAdapter(providertest.NewClient(srv.URL)).Search(t.Context(), "ok computer", providertest.AlbumKinds())
+				return deezer.NewDeezerAdapter(providertest.NewClient(srv.URL)).Search(t.Context(), "ok computer", providertest.AlbumKinds())
 			},
 			Required: func(t *testing.T, r search.SearchResult) {
 				if r.ReleaseDate == "" {
@@ -70,7 +72,7 @@ func TestAdapterNames(t *testing.T) {
 	tests := []struct {
 		got, want search.ProviderName
 	}{
-		{(&search.DeezerAdapter{}).Name(), search.ProviderDeezer},
+		{(&deezer.DeezerAdapter{}).Name(), search.ProviderDeezer},
 	}
 	for _, tt := range tests {
 		if tt.got != tt.want {
@@ -81,7 +83,7 @@ func TestAdapterNames(t *testing.T) {
 
 func TestAdapterSupportedKinds_allThree(t *testing.T) {
 	for name, kinds := range map[string]map[search.ResultKind]bool{
-		"deezer": (&search.DeezerAdapter{}).SupportedKinds(),
+		"deezer": (&deezer.DeezerAdapter{}).SupportedKinds(),
 	} {
 		if !kinds[search.ResultKindTrack] || !kinds[search.ResultKindAlbum] || !kinds[search.ResultKindArtist] {
 			t.Errorf("%s SupportedKinds = %v, want track+album+artist", name, kinds)
@@ -91,10 +93,10 @@ func TestAdapterSupportedKinds_allThree(t *testing.T) {
 
 func TestArtworkSourceTags(t *testing.T) {
 	tests := []struct {
-		got  search.ProviderKey
+		got  domain.ProviderKey
 		want string
 	}{
-		{(&search.DeezerAdapter{}).ArtworkSource(), "deezer"},
+		{(&deezer.DeezerAdapter{}).ArtworkSource(), "deezer"},
 	}
 	for _, tt := range tests {
 		if tt.got.String() != tt.want {

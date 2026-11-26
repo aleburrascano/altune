@@ -7,5 +7,3 @@ var (
 	NewPostgresFavoritesRepository     = persistence.NewPostgresFavoritesRepository
 	NewPostgresSearchHistoryRepository = persistence.NewPostgresSearchHistoryRepository
 )
-
-const AggregateEventRetention = persistence.AggregateEventRetention

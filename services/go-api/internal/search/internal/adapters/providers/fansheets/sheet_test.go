@@ -1,7 +1,7 @@
 package fansheets_test
 
 import (
-	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -56,11 +56,11 @@ func pillowsLink(n int) string {
 	return fmt.Sprintf("https://pillowcase.su/f/%032d", n)
 }
 
-func pixeldrain(id string) []search.AudioLink {
-	return []search.AudioLink{{Provider: "pixeldrain", ExternalID: id, URL: "https://pixeldrain.com/u/" + id}}
+func pixeldrain(id string) []domain.AudioLink {
+	return []domain.AudioLink{{Provider: "pixeldrain", ExternalID: id, URL: "https://pixeldrain.com/u/" + id}}
 }
 
-func trackerSongs(t *testing.T, tabs string, unreleased, released []byte) []search.UnreleasedSong {
+func trackerSongs(t *testing.T, tabs string, unreleased, released []byte) []domain.UnreleasedSong {
 	t.Helper()
 	srv := newSheetsServer(t, readFixture(t, "hub_artists.json"), unreleased)
 	srv.tabs = tabs
@@ -74,17 +74,17 @@ func trackerSongs(t *testing.T, tabs string, unreleased, released []byte) []sear
 	return songs
 }
 
-func unreleasedSongs(t *testing.T, body []byte) []search.UnreleasedSong {
+func unreleasedSongs(t *testing.T, body []byte) []domain.UnreleasedSong {
 	t.Helper()
 	return trackerSongs(t, tabsBody("Unreleased"), body, nil)
 }
 
-func releasedSongs(t *testing.T, body []byte) []search.UnreleasedSong {
+func releasedSongs(t *testing.T, body []byte) []domain.UnreleasedSong {
 	t.Helper()
 	return trackerSongs(t, tabsBody("Released"), nil, body)
 }
 
-func versionTitles(songs []search.UnreleasedSong) []string {
+func versionTitles(songs []domain.UnreleasedSong) []string {
 	var out []string
 	for _, s := range songs {
 		for _, v := range s.Versions {
@@ -94,7 +94,7 @@ func versionTitles(songs []search.UnreleasedSong) []string {
 	return out
 }
 
-func songTitled(t *testing.T, songs []search.UnreleasedSong, title string) search.UnreleasedSong {
+func songTitled(t *testing.T, songs []domain.UnreleasedSong, title string) domain.UnreleasedSong {
 	t.Helper()
 	for _, s := range songs {
 		if s.Title == title {
@@ -102,7 +102,7 @@ func songTitled(t *testing.T, songs []search.UnreleasedSong, title string) searc
 		}
 	}
 	t.Fatalf("no song %q in %+v", title, songs)
-	return search.UnreleasedSong{}
+	return domain.UnreleasedSong{}
 }
 
 func TestSheet_KeepsOnlyWholeSongsWithAPixeldrainLink(t *testing.T) {
@@ -169,14 +169,14 @@ func oneLinkSheet(t *testing.T, raw string) []byte {
 }
 
 func TestSheet_ReadsEveryKnownFileHostAndSoundCloud(t *testing.T) {
-	cases := map[string]search.AudioLink{
+	cases := map[string]domain.AudioLink{
 		"https://pixeldrain.com/u/ozSpSjn7":                        {Provider: "pixeldrain", ExternalID: "ozSpSjn7", URL: "https://pixeldrain.com/u/ozSpSjn7"},
 		"https://pillowcase.su/f/84310b5d2c21df85e4570aec299d1ead": {Provider: "pillows", ExternalID: "84310b5d2c21df85e4570aec299d1ead", URL: "https://pillows.su/f/84310b5d2c21df85e4570aec299d1ead"},
 		"https://soundcloud.com/ken/dream?in=x":                    {Provider: "soundcloud", ExternalID: "https://soundcloud.com/ken/dream", URL: "https://soundcloud.com/ken/dream"},
 	}
 	for raw, want := range cases {
 		songs := unreleasedSongs(t, oneLinkSheet(t, raw))
-		if len(songs) != 1 || !slices.Equal(songs[0].AudioLinks, []search.AudioLink{want}) {
+		if len(songs) != 1 || !slices.Equal(songs[0].AudioLinks, []domain.AudioLink{want}) {
 			t.Errorf("link %q gave songs %+v, want the one link %+v", raw, songs, want)
 		}
 	}
@@ -266,7 +266,7 @@ func TestSheet_OpenURLKeepsAWholeSongWithOnlyAnUnsupportedHttpsLink(t *testing.T
 		songRow("Era", "Bad Scheme", "Full", "intent://x"),
 		songRow("Era", "Snip", "Snippet", "https://mega.nz/file/def"),
 	))
-	var got []search.UnreleasedSong
+	var got []domain.UnreleasedSong
 	for _, s := range songs {
 		if s.Title == "Song X" || s.Title == "Bad Scheme" || s.Title == "Snip" {
 			got = append(got, s)

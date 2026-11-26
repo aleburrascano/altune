@@ -2,13 +2,15 @@ package searchtest_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"errors"
 	"testing"
 )
 
 func TestLyricsProvider_EmptyLyricsIsNilErrorNotAnError(t *testing.T) {
-	f := &search.FakeLyricsProvider{Lyrics: search.EmptyDeezerLyrics()}
+	f := &memory.LyricsProvider{Lyrics: domain.EmptyDeezerLyrics()}
 
 	got, err := f.Lookup(context.Background(), "1")
 
@@ -19,7 +21,7 @@ func TestLyricsProvider_EmptyLyricsIsNilErrorNotAnError(t *testing.T) {
 
 func TestLyricsProvider_LookupErrorReturnsEmptyLyrics(t *testing.T) {
 	boom := errors.New("boom")
-	f := &search.FakeLyricsProvider{Lyrics: search.DeezerLyrics{Plain: "x"}, LookupErr: boom}
+	f := &memory.LyricsProvider{Lyrics: domain.DeezerLyrics{Plain: "x"}, LookupErr: boom}
 
 	got, err := f.Lookup(context.Background(), "1")
 
@@ -29,7 +31,7 @@ func TestLyricsProvider_LookupErrorReturnsEmptyLyrics(t *testing.T) {
 }
 
 func TestDeezerEnricher_ResolveRecordsArgumentsAndReturnsResolvedID(t *testing.T) {
-	f := &search.FakeDeezerEnricher{ResolvedID: "42"}
+	f := &memory.DeezerEnricher{ResolvedID: "42"}
 
 	id, err := f.ResolveID(context.Background(), search.ResultKindTrack, "a", "t")
 
@@ -40,7 +42,7 @@ func TestDeezerEnricher_ResolveRecordsArgumentsAndReturnsResolvedID(t *testing.T
 
 func TestDeezerEnricher_ResolveErrorReturnsEmptyID(t *testing.T) {
 	boom := errors.New("boom")
-	f := &search.FakeDeezerEnricher{ResolvedID: "42", ResolveErr: boom}
+	f := &memory.DeezerEnricher{ResolvedID: "42", ResolveErr: boom}
 
 	id, err := f.ResolveID(context.Background(), search.ResultKindTrack, "a", "t")
 

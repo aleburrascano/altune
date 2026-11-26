@@ -2,6 +2,7 @@ package deezer_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/providers/deezer"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
 	"context"
 	"net/http"
@@ -31,7 +32,7 @@ func deezerEnrichmentServer() *httptest.Server {
 func TestDeezerAdapter_ResolveAndLookupTrack(t *testing.T) {
 	server := deezerEnrichmentServer()
 	defer server.Close()
-	adapter := search.NewDeezerAdapter(providertest.NewClient(server.URL))
+	adapter := deezer.NewDeezerAdapter(providertest.NewClient(server.URL))
 
 	id, err := adapter.ResolveID(context.Background(), search.ResultKindTrack, "Eminem", "Lose Yourself")
 	if err != nil {
@@ -59,7 +60,7 @@ func TestDeezerAdapter_ResolveAndLookupTrack(t *testing.T) {
 func TestDeezerAdapter_ResolveAndLookupAlbum(t *testing.T) {
 	server := deezerEnrichmentServer()
 	defer server.Close()
-	adapter := search.NewDeezerAdapter(providertest.NewClient(server.URL))
+	adapter := deezer.NewDeezerAdapter(providertest.NewClient(server.URL))
 
 	id, err := adapter.ResolveID(context.Background(), search.ResultKindAlbum, "Daft Punk", "Discovery")
 	if err != nil {
@@ -90,7 +91,7 @@ func TestDeezerAdapter_ResolveAndLookupAlbum(t *testing.T) {
 func TestDeezerAdapter_ArtistKindResolvesToEmpty(t *testing.T) {
 	server := deezerEnrichmentServer()
 	defer server.Close()
-	adapter := search.NewDeezerAdapter(providertest.NewClient(server.URL))
+	adapter := deezer.NewDeezerAdapter(providertest.NewClient(server.URL))
 
 	id, err := adapter.ResolveID(context.Background(), search.ResultKindArtist, "Daft Punk", "Daft Punk")
 	if err != nil {
@@ -107,7 +108,7 @@ func TestDeezerAdapter_Resolve_PrefersXLArtwork(t *testing.T) {
 		w.Write([]byte(`{"data":[{"id":302127,"title":"Discovery","cover_big":"https://cdn.deezer.com/500x500.jpg","cover_xl":"https://cdn.deezer.com/1000x1000.jpg","artist":{"id":27,"name":"Daft Punk"}}]}`))
 	}))
 	defer server.Close()
-	adapter := search.NewDeezerAdapter(providertest.NewClient(server.URL))
+	adapter := deezer.NewDeezerAdapter(providertest.NewClient(server.URL))
 
 	img, err := adapter.Resolve(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
 	if err != nil {

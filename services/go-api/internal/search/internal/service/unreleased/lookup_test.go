@@ -2,6 +2,7 @@ package unreleased_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/service/unreleased"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/background"
 	"context"
@@ -11,11 +12,11 @@ import (
 )
 
 func TestService_Warm_RecordsEachArtistOnce(t *testing.T) {
-	store := &search.FakeUnreleasedStore{}
+	store := &searchtest.UnreleasedStore{}
 	var jobs background.Tracker
-	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.UnreleasedConfig{}, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store), searchtest.UnreleasedLifecycle(context.Background(), &jobs))))
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &searchtest.ArtistCatalogTitles{}, search.UnreleasedConfig{}, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store), searchtest.UnreleasedLifecycle(context.Background(), &jobs))))
 
-	svc.Warm([]search.ArtistToRefresh{
+	svc.Warm([]unreleased.ArtistToRefresh{
 		{Provider: search.ProviderDeezer, ExternalID: "27", Name: "Drake"},
 		{Provider: search.ProviderDeezer, ExternalID: "27", Name: "Drake"},
 		{Provider: search.ProviderDeezer, ExternalID: "5", Name: "  "},
@@ -29,11 +30,11 @@ func TestService_Warm_RecordsEachArtistOnce(t *testing.T) {
 }
 
 func TestService_Warm_StoreErrorIsOnlyLogged(t *testing.T) {
-	store := &search.FakeUnreleasedStore{RecordErr: errors.New("db down")}
+	store := &searchtest.UnreleasedStore{RecordErr: errors.New("db down")}
 	var jobs background.Tracker
-	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &search.ArtistCatalogTitles{}, search.UnreleasedConfig{}, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store), searchtest.UnreleasedLifecycle(context.Background(), &jobs))))
+	svc := searchtest.MustUnreleased(search.NewUnreleasedService(search.NoUnreleasedGenius{}, &searchtest.ArtistCatalogTitles{}, search.UnreleasedConfig{}, searchtest.UnreleasedWiring(search.NoUnreleasedCache{}, searchtest.UnreleasedStored(store), searchtest.UnreleasedLifecycle(context.Background(), &jobs))))
 
-	svc.Warm([]search.ArtistToRefresh{{Provider: search.ProviderDeezer, ExternalID: "27", Name: "Drake"}})
+	svc.Warm([]unreleased.ArtistToRefresh{{Provider: search.ProviderDeezer, ExternalID: "27", Name: "Drake"}})
 	jobs.Wait()
 
 	if got := store.Calls(); len(got) != 1 {

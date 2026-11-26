@@ -2,6 +2,11 @@ package handler_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/handler"
+	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/core/details"
+	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
 	"net/http"
 	"net/url"
@@ -19,20 +24,20 @@ const radioheadMBID = "a74b1b7f-71a5-4011-9441-d0b5e4122711"
 func paramValidationRouter(t *testing.T) chi.Router {
 	t.Helper()
 	bg := searchtest.NewTracker(t)
-	albumProviders := map[search.ProviderName]search.AlbumContentProvider{
-		search.ProviderDeezer: &search.FakeAlbumContentProvider{Results: seedTracks(3)},
+	albumProviders := map[search.ProviderName]ports.AlbumContentProvider{
+		search.ProviderDeezer: &memory.AlbumContentProvider{Results: seedTracks(3)},
 	}
-	artistProviders := map[search.ProviderName]search.ArtistContentProvider{
-		search.ProviderDeezer: &search.FakeArtistContentProvider{Albums: seedTracks(3)},
+	artistProviders := map[search.ProviderName]ports.ArtistContentProvider{
+		search.ProviderDeezer: &memory.ArtistContentProvider{Albums: seedTracks(3)},
 	}
 	historyRepo := &fakeSearchHistoryRepo{}
-	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{
+	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
 		Search:       searchtest.NewSearchServiceWith(t, bg, []search.SearchProvider{&fakeSearchProvider{name: search.ProviderDeezer}}, search.NewCircuitBreaker(), func(c *search.Collaborators) { c.History = historyRepo }),
 		History:      searchtest.NewListHistory(t, historyRepo),
 		ClearHistory: searchtest.NewClearHistory(t, historyRepo),
 		Album:        searchtest.NewAlbumTracks(t, albumProviders),
 		Artist:       searchtest.NewArtistContent(t, artistProviders),
-		Enrich:       mustEnrichment(search.NewEnrichmentService(&fakeMetadataEnricher{}, search.NoArtwork{}, search.NoEnrichmentCache{}, search.NoMBIDIndex{})),
+		Enrich:       mustEnrichment(details.NewEnrichmentService(&fakeMetadataEnricher{}, details.NoArtwork{}, details.NoEnrichmentCache{}, details.NoMBIDIndex{})),
 	}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
@@ -119,23 +124,23 @@ var realProviderIDs = []struct {
 	externalID string
 }{
 	{"deezer artist id", search.ProviderDeezer, "27"},
-	{"itunes artist id", search.ProviderITunes, "159260351"},
-	{"apple music artist id", search.ProviderAppleMusic, "1258279972"},
+	{"itunes artist id", domain.ProviderITunes, "159260351"},
+	{"apple music artist id", domain.ProviderAppleMusic, "1258279972"},
 	{"soundcloud user id", search.ProviderSoundCloud, "3207"},
 	{"spotify base62 id", search.ProviderSpotify, "4Z8W4fKeB5YxbusRsdQVPb"},
 	{"spotify uri", search.ProviderSpotify, "spotify:artist:4Z8W4fKeB5YxbusRsdQVPb"},
-	{"musicbrainz uuid", search.ProviderMusicBrainz, radioheadMBID},
+	{"musicbrainz uuid", domain.ProviderMusicBrainz, radioheadMBID},
 	{"youtube channel id", search.ProviderYouTube, "UCmMUZbaYdNH0bEd1PAlAqsA"},
 	{"youtube browse id", search.ProviderYouTube, "MPREb_4pL8gzRtw1p"},
-	{"theaudiodb artist id", search.ProviderTheAudioDB, "111239"},
-	{"discogs artist id", search.ProviderDiscogs, "3840"},
+	{"theaudiodb artist id", domain.ProviderTheAudioDB, "111239"},
+	{"discogs artist id", domain.ProviderDiscogs, "3840"},
 }
 
 func allProvidersArtistRouter(t *testing.T) chi.Router {
 	t.Helper()
-	artistProviders := make(map[search.ProviderName]search.ArtistContentProvider, len(realProviderIDs))
+	artistProviders := make(map[search.ProviderName]ports.ArtistContentProvider, len(realProviderIDs))
 	for _, c := range realProviderIDs {
-		artistProviders[c.provider] = &search.FakeArtistContentProvider{Albums: seedTracks(1)}
+		artistProviders[c.provider] = &memory.ArtistContentProvider{Albums: seedTracks(1)}
 	}
 	return buildDiscoveryRouter(t,
 		&fakeSearchProvider{name: search.ProviderDeezer}, &fakeSearchHistoryRepo{}, nil, artistProviders)

@@ -2,7 +2,13 @@ package soundcloud_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/adapters/providers/artworkfallback"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
+	"altune/go-api/internal/search/internal/adapters/providers/soundcloud"
+	"altune/go-api/internal/search/internal/adapters/providers/theaudiodb"
+	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"errors"
 	"fmt"
@@ -39,35 +45,35 @@ func soundCloudSite(api http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func mustSoundCloudAPI(t testing.TB, client *http.Client, fallback searchFallback) *search.SoundCloudAPIAdapter {
+func mustSoundCloudAPI(t testing.TB, client *http.Client, fallback searchFallback) *soundcloud.SoundCloudAPIAdapter {
 	t.Helper()
 	if fallback == nil {
-		fallback = search.NoSoundCloudFallback{}
+		fallback = soundcloud.NoFallback{}
 	}
-	adapter, err := search.NewSoundCloudAPIAdapter(client, fallback)
+	adapter, err := soundcloud.NewSoundCloudAPIAdapter(client, fallback)
 	if err != nil {
-		t.Fatalf("search.NewSoundCloudAPIAdapter: %v", err)
+		t.Fatalf("soundcloud.NewSoundCloudAPIAdapter: %v", err)
 	}
 	return adapter
 }
 
 func TestNewSoundCloudAPIAdapter_RefusesAMissingCollaborator(t *testing.T) {
-	for name, build := range map[string]func() (*search.SoundCloudAPIAdapter, error){
-		"client": func() (*search.SoundCloudAPIAdapter, error) {
-			return search.NewSoundCloudAPIAdapter(nil, search.NoSoundCloudFallback{})
+	for name, build := range map[string]func() (*soundcloud.SoundCloudAPIAdapter, error){
+		"client": func() (*soundcloud.SoundCloudAPIAdapter, error) {
+			return soundcloud.NewSoundCloudAPIAdapter(nil, soundcloud.NoFallback{})
 		},
-		"fallback": func() (*search.SoundCloudAPIAdapter, error) {
-			return search.NewSoundCloudAPIAdapter(http.DefaultClient, nil)
+		"fallback": func() (*soundcloud.SoundCloudAPIAdapter, error) {
+			return soundcloud.NewSoundCloudAPIAdapter(http.DefaultClient, nil)
 		},
 	} {
 		adapter, err := build()
-		if adapter != nil || !errors.Is(err, search.ErrSoundCloudCollaboratorRequired) {
+		if adapter != nil || !errors.Is(err, soundcloud.ErrCollaboratorRequired) {
 			t.Errorf("without %s: got (%v, %v), want a refusal wrapping ErrSoundCloudCollaboratorRequired", name, adapter, err)
 		}
 	}
 }
 
-func newSoundCloudAdapter(t *testing.T, site http.HandlerFunc, fallback searchFallback) *search.SoundCloudAPIAdapter {
+func newSoundCloudAdapter(t *testing.T, site http.HandlerFunc, fallback searchFallback) *soundcloud.SoundCloudAPIAdapter {
 	t.Helper()
 	srv := httptest.NewServer(site)
 	t.Cleanup(srv.Close)
@@ -78,7 +84,7 @@ func scHomeDown(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusInternalServerError)
 }
 
-func newTestSoundCloudAPI(t *testing.T, api http.HandlerFunc, fallback searchFallback) *search.SoundCloudAPIAdapter {
+func newTestSoundCloudAPI(t *testing.T, api http.HandlerFunc, fallback searchFallback) *soundcloud.SoundCloudAPIAdapter {
 	t.Helper()
 	return newSoundCloudAdapter(t, soundCloudSite(api), fallback)
 }
@@ -218,14 +224,14 @@ func TestSoundCloud_GetArtistAlbums_resolvesBridgeHandle(t *testing.T) {
 }
 
 func TestSoundCloudAPIAdapter_Name(t *testing.T) {
-	a := mustSoundCloudAPI(t, http.DefaultClient, search.NoSoundCloudFallback{})
+	a := mustSoundCloudAPI(t, http.DefaultClient, soundcloud.NoFallback{})
 	if got := a.Name(); got != search.ProviderSoundCloud {
 		t.Errorf("Name() = %v, want %v", got, search.ProviderSoundCloud)
 	}
 }
 
 func TestSoundCloudAPIAdapter_SupportedKinds(t *testing.T) {
-	a := mustSoundCloudAPI(t, http.DefaultClient, search.NoSoundCloudFallback{})
+	a := mustSoundCloudAPI(t, http.DefaultClient, soundcloud.NoFallback{})
 	kinds := a.SupportedKinds()
 	if !kinds[search.ResultKindTrack] || !kinds[search.ResultKindAlbum] || !kinds[search.ResultKindArtist] {
 		t.Errorf("expected track+album+artist supported, got %+v", kinds)
@@ -233,14 +239,14 @@ func TestSoundCloudAPIAdapter_SupportedKinds(t *testing.T) {
 }
 
 func TestSoundCloudAPIAdapter_SearchTimeout(t *testing.T) {
-	a := mustSoundCloudAPI(t, http.DefaultClient, search.NoSoundCloudFallback{})
+	a := mustSoundCloudAPI(t, http.DefaultClient, soundcloud.NoFallback{})
 	if got := a.SearchTimeout(); got != 3*time.Second {
 		t.Errorf("SearchTimeout() = %v, want 3s", got)
 	}
 }
 
 func TestSoundCloudAPIAdapter_Search_NoKindsRequested(t *testing.T) {
-	a := mustSoundCloudAPI(t, http.DefaultClient, search.NoSoundCloudFallback{})
+	a := mustSoundCloudAPI(t, http.DefaultClient, soundcloud.NoFallback{})
 	results, err := a.Search(context.Background(), "q", map[search.ResultKind]bool{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -295,7 +301,7 @@ func TestSoundCloudAPIAdapter_Search_AlbumsAndArtists(t *testing.T) {
 		case search.ResultKindArtist:
 			nArtist++
 			artist = r
-		case search.ResultKindUnknown, search.ResultKindPlaylist:
+		case domain.ResultKindUnknown, domain.ResultKindPlaylist:
 			t.Errorf("unexpected result kind %v: %+v", r.Kind, r)
 		}
 	}
@@ -630,7 +636,7 @@ func TestSoundCloudAPIAdapter_Resolve_SearchErrorIsUnavailable(t *testing.T) {
 	a := newTestSoundCloudAPI(t, api, nil)
 
 	got, err := a.Resolve(context.Background(), search.ResultKindTrack, "Nothing Here", "", "")
-	if !errors.Is(err, search.ErrArtworkUnavailable) {
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Fatalf("Resolve on search failure = %v, want discovery.ErrArtworkUnavailable", err)
 	}
 	if got != "" {
@@ -1037,7 +1043,7 @@ func TestSoundCloudAPIAdapter_Resolve_ProviderFailureIsUnavailable(t *testing.T)
 			a := newTestSoundCloudAPI(t, handler, nil)
 
 			url, err := a.Resolve(context.Background(), search.ResultKindTrack, "Creep", "Radiohead", "")
-			if url != "" || !errors.Is(err, search.ErrArtworkUnavailable) {
+			if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
 				t.Fatalf("Resolve on %s = (%q, %v), want (\"\", ErrArtworkUnavailable)", name, url, err)
 			}
 			if !strings.Contains(err.Error(), "soundcloud") {
@@ -1065,7 +1071,7 @@ func TestSoundCloudAPIAdapter_Resolve_CancelledMidRequestIsUnavailable(t *testin
 	a := newTestSoundCloudAPI(t, srv.Config.Handler.ServeHTTP, nil)
 
 	url, err := a.Resolve(ctx, search.ResultKindTrack, "Creep", "Radiohead", "")
-	if url != "" || !errors.Is(err, search.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
 		t.Errorf("Resolve cancelled mid-request = (%q, %v), want ErrArtworkUnavailable wrapping context.Canceled", url, err)
 	}
 }
@@ -1080,12 +1086,12 @@ func TestSoundCloudAPIAdapter_Resolve_AlreadyCancelledContextIsUnavailableNotAMi
 	cancel()
 
 	url, err := a.Resolve(ctx, search.ResultKindTrack, "Creep", "Radiohead", "")
-	if url != "" || !errors.Is(err, search.ErrArtworkUnavailable) {
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("Resolve with a cancelled context = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
 
-func inMemorySoundCloudAdapter(t testing.TB, site http.HandlerFunc) *search.SoundCloudAPIAdapter {
+func inMemorySoundCloudAdapter(t testing.TB, site http.HandlerFunc) *soundcloud.SoundCloudAPIAdapter {
 	client := &http.Client{Transport: providertest.FakeRoundTripper{Fn: func(r *http.Request) (*http.Response, error) {
 		rec := httptest.NewRecorder()
 		site(rec, r)
@@ -1093,7 +1099,7 @@ func inMemorySoundCloudAdapter(t testing.TB, site http.HandlerFunc) *search.Soun
 		res.Request = r
 		return res, nil
 	}}}
-	return mustSoundCloudAPI(t, client, search.NoSoundCloudFallback{})
+	return mustSoundCloudAPI(t, client, soundcloud.NoFallback{})
 }
 
 func TestSoundCloudAPIAdapter_ConcurrentSearchesShareOneScrape(t *testing.T) {
@@ -1215,9 +1221,9 @@ func TestChainedArtworkResolver_NextProviderStillReturnsArtworkAfterAProviderFai
 	}))
 	defer healthy.Close()
 
-	for name, broken := range map[string]search.ArtworkLookup{"soundcloud": newTestSoundCloudAPI(t, failing, nil)} {
+	for name, broken := range map[string]ports.ArtworkLookup{"soundcloud": newTestSoundCloudAPI(t, failing, nil)} {
 		t.Run(name, func(t *testing.T) {
-			chain := search.NewChainedArtworkLookup(broken, search.NewTheAudioDBAdapter(providertest.NewClient(healthy.URL), search.WithTheAudioDBAPIKey("k")))
+			chain := artworkfallback.NewChainedArtworkLookup(broken, theaudiodb.New(providertest.NewClient(healthy.URL), theaudiodb.WithAPIKey("k")))
 			url, source, err := chain.ResolveTagged(context.Background(), search.ResultKindArtist, "sombr", "", "")
 			if err != nil {
 				t.Fatalf("ResolveTagged after %s fails = (%q, %q, %v), want no error", name, url, source, err)
@@ -1234,14 +1240,14 @@ func TestChainedArtworkResolver_MissAfterAProviderFailsIsDegradedAndUnavailable(
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}
 
-	for name, broken := range map[string]search.ArtworkLookup{"soundcloud": newTestSoundCloudAPI(t, failing, nil)} {
+	for name, broken := range map[string]ports.ArtworkLookup{"soundcloud": newTestSoundCloudAPI(t, failing, nil)} {
 		t.Run(name, func(t *testing.T) {
-			chain := search.NewChainedArtworkLookup(broken, &search.FakeArtworkLookup{})
+			chain := artworkfallback.NewChainedArtworkLookup(broken, &memory.ArtworkLookup{})
 			url, _, err := chain.ResolveTagged(context.Background(), search.ResultKindArtist, "sombr", "", "")
-			if url != "" || !errors.Is(err, search.ErrArtworkDegraded) || !errors.Is(err, search.ErrArtworkUnavailable) {
+			if url != "" || !errors.Is(err, ports.ErrArtworkDegraded) || !errors.Is(err, ports.ErrArtworkUnavailable) {
 				t.Errorf("ResolveTagged after %s fails then a miss = (%q, %v), want ErrArtworkDegraded and ErrArtworkUnavailable", name, url, err)
 			}
-			if !search.IsUnverifiedArtworkMiss(url, err) {
+			if !ports.IsUnverifiedArtworkMiss(url, err) {
 				t.Error("IsUnverifiedArtworkMiss = false, want true so the miss is not negative-cached")
 			}
 		})

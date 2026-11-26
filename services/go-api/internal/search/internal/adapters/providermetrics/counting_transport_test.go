@@ -2,6 +2,8 @@ package providermetrics_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/providermetrics"
+	"altune/go-api/internal/search/internal/core/ports"
 	"errors"
 	"io"
 	"net/http"
@@ -44,8 +46,8 @@ func roundTrip(t *testing.T, base http.RoundTripper, rawURL string) (*http.Respo
 	return search.NewCountingTransport(base).RoundTrip(req)
 }
 
-func delta(before, after search.ProviderMetricsOutcomes) search.ProviderMetricsOutcomes {
-	return search.ProviderMetricsOutcomes{
+func delta(before, after providermetrics.Outcomes) providermetrics.Outcomes {
+	return providermetrics.Outcomes{
 		OK:    after.OK - before.OK,
 		Quota: after.Quota - before.Quota,
 		Error: after.Error - before.Error,
@@ -59,23 +61,23 @@ func TestCountsPerProviderAndOutcome(t *testing.T) {
 		status       int
 		err          error
 		wantProvider string
-		want         search.ProviderMetricsOutcomes
+		want         providermetrics.Outcomes
 	}{
-		{"deezer 2xx ok", "https://api.deezer.com/search?q=secret", 200, nil, "deezer", search.ProviderMetricsOutcomes{OK: 1}},
-		{"spotify 3xx ok", "https://api.spotify.com/v1/x", 302, nil, "spotify", search.ProviderMetricsOutcomes{OK: 1}},
-		{"soundcloud 429 quota", "https://api-v2.soundcloud.com/tracks", 429, nil, "soundcloud", search.ProviderMetricsOutcomes{Quota: 1}},
-		{"applemusic 403 error", "https://api.music.apple.com/v1/x", 403, nil, "applemusic", search.ProviderMetricsOutcomes{Error: 1}},
-		{"applemusic 404 error", "https://api.music.apple.com/v1/x", 404, nil, "applemusic", search.ProviderMetricsOutcomes{Error: 1}},
-		{"applemusic 429 quota", "https://api.music.apple.com/v1/x", 429, nil, "applemusic", search.ProviderMetricsOutcomes{Quota: 1}},
-		{"itunes search is not applemusic", "https://itunes.apple.com/search?term=x", 200, nil, "itunes", search.ProviderMetricsOutcomes{OK: 1}},
-		{"amazon 5xx error", "https://music.amazon.com/x", 503, nil, "amazonmusic", search.ProviderMetricsOutcomes{Error: 1}},
-		{"youtube transport error", "https://music.youtube.com/x", 0, errors.New("dial fail"), "youtube", search.ProviderMetricsOutcomes{Error: 1}},
-		{"musicbrainz 2xx ok", "https://musicbrainz.org/ws/2/x", 200, nil, "musicbrainz", search.ProviderMetricsOutcomes{OK: 1}},
-		{"a request shed by the pacing queue never reached the provider", "https://musicbrainz.org/ws/2/x", 0, search.ErrProviderRateLimitQueueTimeout, "musicbrainz", search.ProviderMetricsOutcomes{}},
-		{"lastfm 2xx ok", "https://ws.audioscrobbler.com/2.0/", 200, nil, "lastfm", search.ProviderMetricsOutcomes{OK: 1}},
-		{"lastfm image cdn host is lastfm", "https://lastfm.freetls.fastly.net/i/u/300x300/x.jpg", 200, nil, "lastfm", search.ProviderMetricsOutcomes{OK: 1}},
-		{"another tenant of the same cdn is other", "https://deezer.freetls.fastly.net/x.jpg", 200, nil, "other", search.ProviderMetricsOutcomes{OK: 1}},
-		{"unknown host is other", "https://example.com/x", 200, nil, "other", search.ProviderMetricsOutcomes{OK: 1}},
+		{"deezer 2xx ok", "https://api.deezer.com/search?q=secret", 200, nil, "deezer", providermetrics.Outcomes{OK: 1}},
+		{"spotify 3xx ok", "https://api.spotify.com/v1/x", 302, nil, "spotify", providermetrics.Outcomes{OK: 1}},
+		{"soundcloud 429 quota", "https://api-v2.soundcloud.com/tracks", 429, nil, "soundcloud", providermetrics.Outcomes{Quota: 1}},
+		{"applemusic 403 error", "https://api.music.apple.com/v1/x", 403, nil, "applemusic", providermetrics.Outcomes{Error: 1}},
+		{"applemusic 404 error", "https://api.music.apple.com/v1/x", 404, nil, "applemusic", providermetrics.Outcomes{Error: 1}},
+		{"applemusic 429 quota", "https://api.music.apple.com/v1/x", 429, nil, "applemusic", providermetrics.Outcomes{Quota: 1}},
+		{"itunes search is not applemusic", "https://itunes.apple.com/search?term=x", 200, nil, "itunes", providermetrics.Outcomes{OK: 1}},
+		{"amazon 5xx error", "https://music.amazon.com/x", 503, nil, "amazonmusic", providermetrics.Outcomes{Error: 1}},
+		{"youtube transport error", "https://music.youtube.com/x", 0, errors.New("dial fail"), "youtube", providermetrics.Outcomes{Error: 1}},
+		{"musicbrainz 2xx ok", "https://musicbrainz.org/ws/2/x", 200, nil, "musicbrainz", providermetrics.Outcomes{OK: 1}},
+		{"a request shed by the pacing queue never reached the provider", "https://musicbrainz.org/ws/2/x", 0, ports.ErrProviderRateLimitQueueTimeout, "musicbrainz", providermetrics.Outcomes{}},
+		{"lastfm 2xx ok", "https://ws.audioscrobbler.com/2.0/", 200, nil, "lastfm", providermetrics.Outcomes{OK: 1}},
+		{"lastfm image cdn host is lastfm", "https://lastfm.freetls.fastly.net/i/u/300x300/x.jpg", 200, nil, "lastfm", providermetrics.Outcomes{OK: 1}},
+		{"another tenant of the same cdn is other", "https://deezer.freetls.fastly.net/x.jpg", 200, nil, "other", providermetrics.Outcomes{OK: 1}},
+		{"unknown host is other", "https://example.com/x", 200, nil, "other", providermetrics.Outcomes{OK: 1}},
 	}
 
 	for _, c := range cases {
@@ -191,14 +193,14 @@ func TestConcurrentRoundTripsCountExactly(t *testing.T) {
 	wg.Wait()
 
 	got := delta(before, search.ReadProviderMetricsSnapshot()["deezer"])
-	if want := (search.ProviderMetricsOutcomes{OK: goroutines * perGoroutine}); got != want {
+	if want := (providermetrics.Outcomes{OK: goroutines * perGoroutine}); got != want {
 		t.Fatalf("concurrent deezer delta = %+v, want %+v", got, want)
 	}
 }
 
 func TestNilBaseDoesNotPanic(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "https://127.0.0.1:0/x", nil)
-	resp, err := (&search.ProviderMetricsCountingTransport{}).RoundTrip(req)
+	resp, err := (&providermetrics.CountingTransport{}).RoundTrip(req)
 	if resp != nil {
 		_ = resp.Body.Close()
 	}
@@ -231,10 +233,10 @@ func TestMetadataProvidersGetTheirOwnBucket(t *testing.T) {
 				_ = resp.Body.Close()
 			}
 			after := search.ReadProviderMetricsSnapshot()
-			if got := delta(before[c.provider], after[c.provider]); got != (search.ProviderMetricsOutcomes{OK: 1}) {
+			if got := delta(before[c.provider], after[c.provider]); got != (providermetrics.Outcomes{OK: 1}) {
 				t.Errorf("provider %q delta = %+v, want {OK:1}", c.provider, got)
 			}
-			if got := delta(before["other"], after["other"]); got != (search.ProviderMetricsOutcomes{}) {
+			if got := delta(before["other"], after["other"]); got != (providermetrics.Outcomes{}) {
 				t.Errorf("other delta = %+v, want unchanged", got)
 			}
 		})

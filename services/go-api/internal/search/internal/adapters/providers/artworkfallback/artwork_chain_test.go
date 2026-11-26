@@ -2,7 +2,17 @@ package artworkfallback_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/adapters/providers/artworkfallback"
+	"altune/go-api/internal/search/internal/adapters/providers/coverartarchive"
+	"altune/go-api/internal/search/internal/adapters/providers/deezer"
+	"altune/go-api/internal/search/internal/adapters/providers/genius"
+	"altune/go-api/internal/search/internal/adapters/providers/itunes"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
+	"altune/go-api/internal/search/internal/adapters/providers/theaudiodb"
+	"altune/go-api/internal/search/internal/adapters/providers/ytmusic"
+	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/random"
 	"context"
@@ -31,18 +41,18 @@ func TestChainedArtworkResolver_AggregateTimeoutCapsFullMiss(t *testing.T) {
 	const perCall = 200 * time.Millisecond
 	const resolverCount = 10
 
-	resolvers := make([]search.ArtworkLookup, resolverCount)
+	resolvers := make([]ports.ArtworkLookup, resolverCount)
 	for i := range resolvers {
 		resolvers[i] = &slowArtworkLookup{perCallDelay: perCall}
 	}
 	const aggregate = 500 * time.Millisecond
-	chain := search.NewChainedArtworkResolverWithin(aggregate, resolvers...)
+	chain := artworkfallback.NewChainedArtworkResolverWithin(aggregate, resolvers...)
 
 	start := time.Now()
 	url, _, err := chain.ResolveTagged(context.Background(), search.ResultKindTrack, "Song", "Artist", "mbid")
 	elapsed := time.Since(start)
 
-	if !errors.Is(err, search.ErrArtworkDegraded) {
+	if !errors.Is(err, ports.ErrArtworkDegraded) {
 		t.Fatalf("a miss cut short by the deadline must report ErrArtworkDegraded, got %v", err)
 	}
 	if url != "" {
@@ -59,11 +69,11 @@ func TestChainedArtworkResolver_AggregateTimeoutCapsFullMiss(t *testing.T) {
 }
 
 func TestChainedArtworkResolver_ShorterCallerDeadlineWins(t *testing.T) {
-	resolvers := []search.ArtworkLookup{
+	resolvers := []ports.ArtworkLookup{
 		&slowArtworkLookup{perCallDelay: time.Second},
 		&slowArtworkLookup{perCallDelay: time.Second},
 	}
-	chain := search.NewChainedArtworkResolverWithin(10*time.Second, resolvers...)
+	chain := artworkfallback.NewChainedArtworkResolverWithin(10*time.Second, resolvers...)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
@@ -78,10 +88,10 @@ func TestChainedArtworkResolver_ShorterCallerDeadlineWins(t *testing.T) {
 }
 
 func TestChainedArtworkResolver_ReturnsFirstNonEmpty(t *testing.T) {
-	chain := search.NewChainedArtworkLookup(
-		&search.FakeArtworkLookup{URL: "", Err: nil},
-		&search.FakeArtworkLookup{URL: "https://images.example.com/cover.jpg", Err: nil},
-		&search.FakeArtworkLookup{URL: "https://images.example.com/other.jpg", Err: nil},
+	chain := artworkfallback.NewChainedArtworkLookup(
+		&memory.ArtworkLookup{URL: "", Err: nil},
+		&memory.ArtworkLookup{URL: "https://images.example.com/cover.jpg", Err: nil},
+		&memory.ArtworkLookup{URL: "https://images.example.com/other.jpg", Err: nil},
 	)
 
 	url, _, err := chain.ResolveTagged(context.Background(), search.ResultKindTrack, "Song", "Artist", "mbid")
@@ -94,9 +104,9 @@ func TestChainedArtworkResolver_ReturnsFirstNonEmpty(t *testing.T) {
 }
 
 func TestChainedArtworkResolver_SkipsErrors(t *testing.T) {
-	chain := search.NewChainedArtworkLookup(
-		&search.FakeArtworkLookup{URL: "", Err: fmt.Errorf("network error")},
-		&search.FakeArtworkLookup{URL: "https://images.example.com/fallback.jpg", Err: nil},
+	chain := artworkfallback.NewChainedArtworkLookup(
+		&memory.ArtworkLookup{URL: "", Err: fmt.Errorf("network error")},
+		&memory.ArtworkLookup{URL: "https://images.example.com/fallback.jpg", Err: nil},
 	)
 
 	url, _, err := chain.ResolveTagged(context.Background(), search.ResultKindArtist, "Artist", "", "mbid")
@@ -109,9 +119,9 @@ func TestChainedArtworkResolver_SkipsErrors(t *testing.T) {
 }
 
 func TestChainedArtworkResolver_AllEmpty(t *testing.T) {
-	chain := search.NewChainedArtworkLookup(
-		&search.FakeArtworkLookup{URL: "", Err: nil},
-		&search.FakeArtworkLookup{URL: "", Err: nil},
+	chain := artworkfallback.NewChainedArtworkLookup(
+		&memory.ArtworkLookup{URL: "", Err: nil},
+		&memory.ArtworkLookup{URL: "", Err: nil},
 	)
 
 	url, _, err := chain.ResolveTagged(context.Background(), search.ResultKindTrack, "Song", "Artist", "mbid")
@@ -124,14 +134,14 @@ func TestChainedArtworkResolver_AllEmpty(t *testing.T) {
 }
 
 func TestChainedArtworkResolver_MissAfterAFailureIsDegraded(t *testing.T) {
-	chain := search.NewChainedArtworkLookup(
-		&search.FakeArtworkLookup{Err: fmt.Errorf("coverartarchive 503")},
-		&search.FakeArtworkLookup{URL: ""},
+	chain := artworkfallback.NewChainedArtworkLookup(
+		&memory.ArtworkLookup{Err: fmt.Errorf("coverartarchive 503")},
+		&memory.ArtworkLookup{URL: ""},
 	)
 
 	url, _, err := chain.ResolveTagged(context.Background(), search.ResultKindTrack, "Song", "Artist", "mbid")
 
-	if !errors.Is(err, search.ErrArtworkDegraded) {
+	if !errors.Is(err, ports.ErrArtworkDegraded) {
 		t.Fatalf("a miss with one provider down must report ErrArtworkDegraded, got %v", err)
 	}
 	if url != "" {
@@ -140,15 +150,15 @@ func TestChainedArtworkResolver_MissAfterAFailureIsDegraded(t *testing.T) {
 }
 
 func TestChainedArtworkResolver_IdentityMissAfterAFailureIsDegraded(t *testing.T) {
-	chain := search.NewChainedArtworkLookup(
+	chain := artworkfallback.NewChainedArtworkLookup(
 		&fakeIdentityResolver{err: fmt.Errorf("discogs 503")},
 		&fakeIdentityResolver{url: ""},
 	)
 
 	url, _, err := chain.ResolveWithIdentityTagged(
-		context.Background(), search.ResultKindAlbum, "DAMN.", "Kendrick Lamar", search.ArtworkIdentity{MBID: "mbid"})
+		context.Background(), search.ResultKindAlbum, "DAMN.", "Kendrick Lamar", ports.ArtworkIdentity{MBID: "mbid"})
 
-	if !errors.Is(err, search.ErrArtworkDegraded) {
+	if !errors.Is(err, ports.ErrArtworkDegraded) {
 		t.Fatalf("an identity miss with one provider down must report ErrArtworkDegraded, got %v", err)
 	}
 	if url != "" {
@@ -157,7 +167,7 @@ func TestChainedArtworkResolver_IdentityMissAfterAFailureIsDegraded(t *testing.T
 }
 
 func TestChainedArtworkResolver_NoResolvers(t *testing.T) {
-	chain := search.NewChainedArtworkLookup()
+	chain := artworkfallback.NewChainedArtworkLookup()
 
 	url, _, err := chain.ResolveTagged(context.Background(), search.ResultKindTrack, "Song", "Artist", "mbid")
 	if err != nil {
@@ -169,9 +179,9 @@ func TestChainedArtworkResolver_NoResolvers(t *testing.T) {
 }
 
 func TestChainedArtworkResolver_ResolveTagged_MovesOnFromAResolverThatFindsNothing(t *testing.T) {
-	chain := search.NewChainedArtworkLookup(
-		&search.FakeArtworkLookup{URL: ""},
-		&search.FakeArtworkLookup{URL: "https://images.example.com/real.jpg"},
+	chain := artworkfallback.NewChainedArtworkLookup(
+		&memory.ArtworkLookup{URL: ""},
+		&memory.ArtworkLookup{URL: "https://images.example.com/real.jpg"},
 	)
 
 	url, _, err := chain.ResolveTagged(context.Background(), search.ResultKindArtist, "Artist", "", "mbid")
@@ -193,24 +203,24 @@ func (f *fakeIdentityResolver) Resolve(context.Context, search.ResultKind, strin
 	return f.url, f.err
 }
 
-func (f *fakeIdentityResolver) ResolveByIdentity(context.Context, search.ResultKind, search.ArtworkIdentity) (string, error) {
+func (f *fakeIdentityResolver) ResolveByIdentity(context.Context, search.ResultKind, ports.ArtworkIdentity) (string, error) {
 	f.idCalled = true
 	return f.url, f.err
 }
 
-func (f *fakeIdentityResolver) ArtworkSource() search.ProviderKey {
-	return search.ProviderKey(f.source)
+func (f *fakeIdentityResolver) ArtworkSource() domain.ProviderKey {
+	return domain.ProviderKey(f.source)
 }
 
 func TestChainedArtworkResolver_ResolveWithIdentityTagged(t *testing.T) {
-	nameOnly := &search.FakeArtworkLookup{URL: "https://img/name-guess.jpg"}
+	nameOnly := &memory.ArtworkLookup{URL: "https://img/name-guess.jpg"}
 	failing := &fakeIdentityResolver{err: errors.New("boom"), source: "broken"}
 	identity := &fakeIdentityResolver{url: "https://img/identity.jpg", source: "discogs"}
 
-	chain := search.NewChainedArtworkLookup(nameOnly, failing, identity)
+	chain := artworkfallback.NewChainedArtworkLookup(nameOnly, failing, identity)
 	url, source, err := chain.ResolveWithIdentityTagged(
 		context.Background(), search.ResultKindArtist, "Che", "",
-		search.ArtworkIdentity{ExternalIDs: map[search.ProviderKey]string{"discogs": "38"}},
+		ports.ArtworkIdentity{ExternalIDs: map[domain.ProviderKey]string{"discogs": "38"}},
 	)
 	if err != nil {
 		t.Fatalf("ResolveWithIdentityTagged: %v", err)
@@ -233,18 +243,18 @@ func TestChainedArtworkResolver_ResolveWithIdentityTagged_MovesOnFromAResolverTh
 	empty := &fakeIdentityResolver{source: "spotify"}
 	real := &fakeIdentityResolver{url: "https://img/real.jpg", source: "discogs"}
 
-	chain := search.NewChainedArtworkLookup(empty, real)
+	chain := artworkfallback.NewChainedArtworkLookup(empty, real)
 	url, source, err := chain.ResolveWithIdentityTagged(
-		context.Background(), search.ResultKindArtist, "Che", "", search.ArtworkIdentity{})
+		context.Background(), search.ResultKindArtist, "Che", "", ports.ArtworkIdentity{})
 	if err != nil || url != "https://img/real.jpg" || source != "discogs" {
 		t.Errorf("(%q, %q, %v), want the second resolver's image", url, source, err)
 	}
 }
 
 func TestChainedArtworkResolver_ResolveWithIdentityTagged_noIdentitySourceIsEmpty(t *testing.T) {
-	chain := search.NewChainedArtworkLookup(&search.FakeArtworkLookup{URL: "https://img/name.jpg"})
+	chain := artworkfallback.NewChainedArtworkLookup(&memory.ArtworkLookup{URL: "https://img/name.jpg"})
 	url, source, err := chain.ResolveWithIdentityTagged(
-		context.Background(), search.ResultKindArtist, "Che", "", search.ArtworkIdentity{})
+		context.Background(), search.ResultKindArtist, "Che", "", ports.ArtworkIdentity{})
 	if err != nil || url != "" || source != "" {
 		t.Errorf("(%q, %q, %v), want empty — no identity-capable resolver in the chain", url, source, err)
 	}
@@ -252,9 +262,9 @@ func TestChainedArtworkResolver_ResolveWithIdentityTagged_noIdentitySourceIsEmpt
 
 func TestChainedArtworkResolver_ResolveTagged_skipsIdentityResolvers(t *testing.T) {
 	identity := &fakeIdentityResolver{url: "https://img/identity.jpg", source: "discogs"}
-	name := &search.FakeArtworkLookup{URL: "https://img/name.jpg"}
+	name := &memory.ArtworkLookup{URL: "https://img/name.jpg"}
 
-	chain := search.NewChainedArtworkLookup(identity, name)
+	chain := artworkfallback.NewChainedArtworkLookup(identity, name)
 	url, source, err := chain.ResolveTagged(context.Background(), search.ResultKindArtist, "Che", "", "")
 	if err != nil {
 		t.Fatalf("ResolveTagged: %v", err)
@@ -276,18 +286,18 @@ func TestChainedArtworkResolver_MissFromAFailingResolverIsDegradedAndUnavailable
 	}))
 	defer srv.Close()
 
-	coverArtArchiveOn500 := search.NewCoverArtArchiveResolver(providertest.NewClient(srv.URL))
+	coverArtArchiveOn500 := coverartarchive.NewCoverArtArchiveResolver(providertest.NewClient(srv.URL))
 
-	chain := search.NewChainedArtworkLookup(coverArtArchiveOn500)
+	chain := artworkfallback.NewChainedArtworkLookup(coverArtArchiveOn500)
 	url, _, err := chain.ResolveTagged(context.Background(), search.ResultKindAlbum, "Album", "Artist", "mbid-1")
 
 	if url != "" {
 		t.Errorf("url = %q, want empty on a failing resolver", url)
 	}
-	if !errors.Is(err, search.ErrArtworkDegraded) {
+	if !errors.Is(err, ports.ErrArtworkDegraded) {
 		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkDegraded)", err)
 	}
-	if !errors.Is(err, search.ErrArtworkUnavailable) {
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkUnavailable)", err)
 	}
 }
@@ -298,13 +308,13 @@ func TestChainedArtworkResolver_CoverArtArchive404IsAVerifiedMiss(t *testing.T) 
 	}))
 	defer srv.Close()
 
-	chain := search.NewChainedArtworkLookup(search.NewCoverArtArchiveResolver(providertest.NewClient(srv.URL)))
+	chain := artworkfallback.NewChainedArtworkLookup(coverartarchive.NewCoverArtArchiveResolver(providertest.NewClient(srv.URL)))
 	url, _, err := chain.ResolveTagged(context.Background(), search.ResultKindAlbum, "Album", "Artist", "mbid-1")
 
 	if url != "" || err != nil {
 		t.Errorf("ResolveTagged on a CAA 404 = (%q, %v), want (\"\", nil)", url, err)
 	}
-	if search.IsUnverifiedArtworkMiss(url, err) {
+	if ports.IsUnverifiedArtworkMiss(url, err) {
 		t.Error("IsUnverifiedArtworkMiss = true, want false so the verified miss is negative-cached")
 	}
 }
@@ -315,18 +325,18 @@ func TestChainedArtworkResolver_CoverArtArchiveAnswersIdentityWalkOnMBIDAlone(t 
 	}))
 	defer srv.Close()
 
-	caa := search.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(srv.URL))
-	chain := search.NewChainedArtworkLookup(caa, search.NewCoverArtArchiveIdentityResolver(caa))
+	caa := coverartarchive.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(srv.URL))
+	chain := artworkfallback.NewChainedArtworkLookup(caa, coverartarchive.NewCoverArtArchiveIdentityResolver(caa))
 	url, source, err := chain.ResolveWithIdentityTagged(context.Background(), search.ResultKindAlbum,
-		"An unrelated title", "An unrelated subtitle", search.ArtworkIdentity{MBID: "rg-1"})
+		"An unrelated title", "An unrelated subtitle", ports.ArtworkIdentity{MBID: "rg-1"})
 	if err != nil {
 		t.Fatalf("ResolveWithIdentityTagged: %v", err)
 	}
 	if url != "https://coverartarchive.org/release-group/rg-1/front-1200" {
 		t.Errorf("url = %q, want CoverArtArchive's mbid-native answer reached from the identity walk", url)
 	}
-	if source != search.ProviderKeyCoverArtArchive {
-		t.Errorf("source = %q, want %q", source, search.ProviderKeyCoverArtArchive)
+	if source != domain.ProviderKeyCoverArtArchive {
+		t.Errorf("source = %q, want %q", source, domain.ProviderKeyCoverArtArchive)
 	}
 }
 
@@ -336,8 +346,8 @@ func TestChainedArtworkResolver_CoverArtArchiveStillAnswersResolveTaggedAlongsid
 	}))
 	defer srv.Close()
 
-	caa := search.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(srv.URL))
-	chain := search.NewChainedArtworkLookup(caa, search.NewCoverArtArchiveIdentityResolver(caa))
+	caa := coverartarchive.NewCoverArtArchiveResolver(providertest.NewNoFollowClient(srv.URL))
+	chain := artworkfallback.NewChainedArtworkLookup(caa, coverartarchive.NewCoverArtArchiveIdentityResolver(caa))
 	url, source, err := chain.ResolveTagged(context.Background(), search.ResultKindAlbum, "Album", "Artist", "rg-1")
 	if err != nil {
 		t.Fatalf("ResolveTagged: %v", err)
@@ -345,16 +355,16 @@ func TestChainedArtworkResolver_CoverArtArchiveStillAnswersResolveTaggedAlongsid
 	if url != "https://coverartarchive.org/release-group/rg-1/front-1200" {
 		t.Errorf("url = %q, want CoverArtArchive still reachable from the name walk", url)
 	}
-	if source != search.ProviderKeyCoverArtArchive {
-		t.Errorf("source = %q, want %q", source, search.ProviderKeyCoverArtArchive)
+	if source != domain.ProviderKeyCoverArtArchive {
+		t.Errorf("source = %q, want %q", source, domain.ProviderKeyCoverArtArchive)
 	}
 }
 
-func failingArtworkProviders(srv *httptest.Server) map[string]search.ArtworkLookup {
-	return map[string]search.ArtworkLookup{
-		"genius":     search.NewGeniusArtworkLookup(providertest.NewClient(srv.URL), "token"),
-		"ytmusic":    search.MustNewYouTubeMusicArtworkLookup(&providertest.RedirectTransport{TargetURL: srv.URL}, clock.Sleep, random.Real),
-		"theaudiodb": search.NewTheAudioDBAdapter(providertest.NewClient(srv.URL), search.WithTheAudioDBAPIKey("k")),
+func failingArtworkProviders(srv *httptest.Server) map[string]ports.ArtworkLookup {
+	return map[string]ports.ArtworkLookup{
+		"genius":     genius.NewGeniusArtworkLookup(providertest.NewClient(srv.URL), "token"),
+		"ytmusic":    ytmusic.MustNewYouTubeMusicArtworkLookup(&providertest.RedirectTransport{TargetURL: srv.URL}, clock.Sleep, random.Real),
+		"theaudiodb": theaudiodb.New(providertest.NewClient(srv.URL), theaudiodb.WithAPIKey("k")),
 	}
 }
 
@@ -372,7 +382,7 @@ func TestChainedArtworkResolver_NextProviderStillReturnsArtworkAfterAProviderFai
 
 	for name, broken := range failingArtworkProviders(failing) {
 		t.Run(name, func(t *testing.T) {
-			chain := search.NewChainedArtworkLookup(broken, search.NewTheAudioDBAdapter(providertest.NewClient(healthy.URL), search.WithTheAudioDBAPIKey("k")))
+			chain := artworkfallback.NewChainedArtworkLookup(broken, theaudiodb.New(providertest.NewClient(healthy.URL), theaudiodb.WithAPIKey("k")))
 			url, source, err := chain.ResolveTagged(context.Background(), search.ResultKindArtist, "sombr", "", "")
 			if err != nil {
 				t.Fatalf("ResolveTagged after %s fails = (%q, %q, %v), want no error", name, url, source, err)
@@ -392,12 +402,12 @@ func TestChainedArtworkResolver_MissAfterAProviderFailsIsDegradedAndUnavailable(
 
 	for name, broken := range failingArtworkProviders(failing) {
 		t.Run(name, func(t *testing.T) {
-			chain := search.NewChainedArtworkLookup(broken, &search.FakeArtworkLookup{})
+			chain := artworkfallback.NewChainedArtworkLookup(broken, &memory.ArtworkLookup{})
 			url, _, err := chain.ResolveTagged(context.Background(), search.ResultKindArtist, "sombr", "", "")
-			if url != "" || !errors.Is(err, search.ErrArtworkDegraded) || !errors.Is(err, search.ErrArtworkUnavailable) {
+			if url != "" || !errors.Is(err, ports.ErrArtworkDegraded) || !errors.Is(err, ports.ErrArtworkUnavailable) {
 				t.Errorf("ResolveTagged after %s fails then a miss = (%q, %v), want ErrArtworkDegraded and ErrArtworkUnavailable", name, url, err)
 			}
-			if !search.IsUnverifiedArtworkMiss(url, err) {
+			if !ports.IsUnverifiedArtworkMiss(url, err) {
 				t.Error("IsUnverifiedArtworkMiss = false, want true so the miss is not negative-cached")
 			}
 		})
@@ -415,12 +425,12 @@ func TestChainedArtworkResolver_DeezerOutageThenITunesMissIsDegraded(t *testing.
 	}))
 	defer itunesSrv.Close()
 
-	chain := search.NewChainedArtworkLookup(
-		search.NewDeezerAdapter(providertest.NewClient(deezerSrv.URL)),
-		search.NewITunesAdapter(providertest.NewClient(itunesSrv.URL)),
+	chain := artworkfallback.NewChainedArtworkLookup(
+		deezer.NewDeezerAdapter(providertest.NewClient(deezerSrv.URL)),
+		itunes.NewITunesAdapter(providertest.NewClient(itunesSrv.URL)),
 	)
 	art, _, err := chain.ResolveTagged(context.Background(), search.ResultKindAlbum, "Discovery", "Daft Punk", "")
-	if art != "" || !errors.Is(err, search.ErrArtworkDegraded) {
+	if art != "" || !errors.Is(err, ports.ErrArtworkDegraded) {
 		t.Errorf("ResolveTagged with Deezer down and no iTunes match = (%q, %v), want (\"\", ErrArtworkDegraded)", art, err)
 	}
 }

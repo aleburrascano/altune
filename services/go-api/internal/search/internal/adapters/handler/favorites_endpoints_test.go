@@ -2,6 +2,9 @@ package handler_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/handler"
+	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -21,7 +24,7 @@ import (
 
 type erroringFavoritesRepo struct{ err error }
 
-func (r erroringFavoritesRepo) Add(context.Context, ids.UserId, search.Favorite) error {
+func (r erroringFavoritesRepo) Add(context.Context, ids.UserId, domain.Favorite) error {
 	return r.err
 }
 
@@ -29,13 +32,13 @@ func (r erroringFavoritesRepo) Remove(context.Context, ids.UserId, search.Result
 	return r.err
 }
 
-func (r erroringFavoritesRepo) ListForUser(context.Context, ids.UserId) ([]search.Favorite, error) {
+func (r erroringFavoritesRepo) ListForUser(context.Context, ids.UserId) ([]domain.Favorite, error) {
 	return nil, r.err
 }
 
 func buildFavoritesRouter(t *testing.T, err error) chi.Router {
 	svc := searchtest.NewFavorites(t, erroringFavoritesRepo{err: err})
-	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{Favorites: svc}), time.Now)
+	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{Favorites: svc}), time.Now)
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -51,7 +54,7 @@ func TestFavoritesEndpoints_EachFailureIsLoggedOnceByTheBoundary(t *testing.T) {
 		wantLoud   []string
 	}{
 		{name: "a store failure is one error record", err: errors.New("favorites store down"), wantStatus: http.StatusInternalServerError, wantLoud: []string{"request.failed"}},
-		{name: "a full list is a rejection, not an error", err: search.ErrFavoritesFull, wantStatus: http.StatusConflict},
+		{name: "a full list is a rejection, not an error", err: ports.ErrFavoritesFull, wantStatus: http.StatusConflict},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ring := captureLogs(t)
@@ -130,8 +133,8 @@ func TestFavoritesEndpoints_ServiceErrorsUseTypedContract(t *testing.T) {
 	}
 }
 
-func buildFavoritesLimitedRouter(t *testing.T, limits search.DiscoveryRateLimits) chi.Router {
-	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{
+func buildFavoritesLimitedRouter(t *testing.T, limits handler.DiscoveryRateLimits) chi.Router {
+	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
 		Favorites: searchtest.NewFavorites(t, erroringFavoritesRepo{}),
 	}), time.Now).WithRateLimits(limits)
 	r := chi.NewRouter()
@@ -141,8 +144,8 @@ func buildFavoritesLimitedRouter(t *testing.T, limits search.DiscoveryRateLimits
 }
 
 func TestFavoritesRateLimit_WritesShareOneBudgetThenReject(t *testing.T) {
-	router := buildFavoritesLimitedRouter(t, search.DiscoveryRateLimits{
-		Favorites: search.RequestLimit{Max: 2, Window: time.Hour},
+	router := buildFavoritesLimitedRouter(t, handler.DiscoveryRateLimits{
+		Favorites: handler.RequestLimit{Max: 2, Window: time.Hour},
 	})
 	const body = `{"kind":"album","title":"DAMN.","subtitle":"Kendrick Lamar"}`
 
@@ -154,15 +157,15 @@ func TestFavoritesRateLimit_WritesShareOneBudgetThenReject(t *testing.T) {
 }
 
 func TestFavoritesRateLimit_DefaultBudgetThenRejects(t *testing.T) {
-	router := buildFrozenDefaultLimitsRouter(searchtest.CompleteServices(t, search.DiscoveryServices{
+	router := buildFrozenDefaultLimitsRouter(searchtest.CompleteServices(t, handler.DiscoveryServices{
 		Favorites: searchtest.NewFavorites(t, erroringFavoritesRepo{}),
 	}))
 	const body = `{"kind":"album","title":"DAMN.","subtitle":"Kendrick Lamar"}`
 
-	for i := range search.DefaultDiscoveryRateLimits.Favorites.Max {
+	for i := range handler.DefaultDiscoveryRateLimits.Favorites.Max {
 		rec := discServe(t, router, http.MethodPut, "/discovery/favorites", strings.NewReader(body))
 		if rec.Code != http.StatusOK {
-			t.Fatalf("request %d of %d = %d inside the budget", i+1, search.DefaultDiscoveryRateLimits.Favorites.Max, rec.Code)
+			t.Fatalf("request %d of %d = %d inside the budget", i+1, handler.DefaultDiscoveryRateLimits.Favorites.Max, rec.Code)
 		}
 	}
 
@@ -170,7 +173,7 @@ func TestFavoritesRateLimit_DefaultBudgetThenRejects(t *testing.T) {
 }
 
 func TestFavoritesEndpoints_InvalidFavoriteIsATyped400(t *testing.T) {
-	router := buildFavoritesLimitedRouter(t, search.DefaultDiscoveryRateLimits)
+	router := buildFavoritesLimitedRouter(t, handler.DefaultDiscoveryRateLimits)
 	bodies := map[string]string{
 		"empty normalized key": `{"kind":"artist","title":"!!!"}`,
 		"oversize title":       `{"kind":"album","title":"` + strings.Repeat("a", 201) + `"}`,
@@ -185,7 +188,7 @@ func TestFavoritesEndpoints_InvalidFavoriteIsATyped400(t *testing.T) {
 }
 
 func TestFavoritesEndpoints_OversizedBodyIs413TooLarge(t *testing.T) {
-	router := buildFavoritesLimitedRouter(t, search.DefaultDiscoveryRateLimits)
+	router := buildFavoritesLimitedRouter(t, handler.DefaultDiscoveryRateLimits)
 	body := `{"kind":"album","title":"DAMN.","subtitle":"` + strings.Repeat("a", 16384) + `"}`
 	for _, method := range []string{http.MethodPut, http.MethodDelete} {
 		rec := discServe(t, router, method, "/discovery/favorites", strings.NewReader(body))
@@ -194,7 +197,7 @@ func TestFavoritesEndpoints_OversizedBodyIs413TooLarge(t *testing.T) {
 }
 
 func TestFavoritesEndpoints_UnparseableBodyKeepsTheDiscoveryCode(t *testing.T) {
-	router := buildFavoritesLimitedRouter(t, search.DefaultDiscoveryRateLimits)
+	router := buildFavoritesLimitedRouter(t, handler.DefaultDiscoveryRateLimits)
 	rec := discServe(t, router, http.MethodPut, "/discovery/favorites", strings.NewReader("{not json"))
 	assertErrorCode(t, rec, http.StatusBadRequest, "discovery.invalid_body")
 }

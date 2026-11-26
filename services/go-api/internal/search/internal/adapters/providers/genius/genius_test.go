@@ -2,7 +2,10 @@ package genius_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/providers/genius"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
+	"altune/go-api/internal/search/internal/core/ports"
+	"altune/go-api/internal/search/internal/domain"
 	"context"
 	"errors"
 	"fmt"
@@ -37,7 +40,7 @@ func TestGeniusArtworkResolver_Resolve_Song(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resolver := search.NewGeniusArtworkLookup(providertest.NewClient(server.URL), "test-token-123")
+	resolver := genius.NewGeniusArtworkLookup(providertest.NewClient(server.URL), "test-token-123")
 	url, err := resolver.Resolve(context.Background(), search.ResultKindTrack, "Creep", "Radiohead", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
@@ -67,7 +70,7 @@ func TestGeniusArtworkResolver_Resolve_Song_FallbackToHeader(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resolver := search.NewGeniusArtworkLookup(providertest.NewClient(server.URL), "token")
+	resolver := genius.NewGeniusArtworkLookup(providertest.NewClient(server.URL), "token")
 	url, err := resolver.Resolve(context.Background(), search.ResultKindTrack, "Creep", "Radiohead", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
@@ -95,7 +98,7 @@ func TestGeniusArtworkResolver_Resolve_Artist(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resolver := search.NewGeniusArtworkLookup(providertest.NewClient(server.URL), "token")
+	resolver := genius.NewGeniusArtworkLookup(providertest.NewClient(server.URL), "token")
 	url, err := resolver.Resolve(context.Background(), search.ResultKindArtist, "Radiohead", "", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
@@ -125,7 +128,7 @@ func TestGeniusArtworkResolver_Resolve_SkipsDefaultImages(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resolver := search.NewGeniusArtworkLookup(providertest.NewClient(server.URL), "token")
+	resolver := genius.NewGeniusArtworkLookup(providertest.NewClient(server.URL), "token")
 	url, err := resolver.Resolve(context.Background(), search.ResultKindTrack, "Something", "Test", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
@@ -136,7 +139,7 @@ func TestGeniusArtworkResolver_Resolve_SkipsDefaultImages(t *testing.T) {
 }
 
 func TestGeniusArtworkResolver_Resolve_NoSubtitle(t *testing.T) {
-	resolver := search.NewGeniusArtworkLookup(http.DefaultClient, "token")
+	resolver := genius.NewGeniusArtworkLookup(http.DefaultClient, "token")
 	url, err := resolver.Resolve(context.Background(), search.ResultKindTrack, "Song", "", "")
 	if err != nil {
 		t.Fatalf("Resolve returned error: %v", err)
@@ -152,9 +155,9 @@ func TestGeniusArtworkResolver_Resolve_HTTPErrorIsUnavailable(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resolver := search.NewGeniusArtworkLookup(providertest.NewClient(server.URL), "token")
+	resolver := genius.NewGeniusArtworkLookup(providertest.NewClient(server.URL), "token")
 	url, err := resolver.Resolve(context.Background(), search.ResultKindTrack, "Song", "Artist", "")
-	if !errors.Is(err, search.ErrArtworkUnavailable) {
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Fatalf("expected ErrArtworkUnavailable on HTTP 500, got: %v", err)
 	}
 	if url != "" {
@@ -168,9 +171,9 @@ func TestGeniusArtworkResolver_Resolve_Artist_HTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resolver := search.NewGeniusArtworkLookup(providertest.NewClient(server.URL), "token")
+	resolver := genius.NewGeniusArtworkLookup(providertest.NewClient(server.URL), "token")
 	url, err := resolver.Resolve(context.Background(), search.ResultKindArtist, "Radiohead", "", "")
-	if !errors.Is(err, search.ErrArtworkUnavailable) {
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
 		t.Fatalf("expected ErrArtworkUnavailable on HTTP 500, got: %v", err)
 	}
 	if url != "" {
@@ -185,9 +188,9 @@ func TestGeniusArtworkResolver_Resolve_ProviderFailureIsUnavailable(t *testing.T
 				srv := httptest.NewServer(handler)
 				defer srv.Close()
 
-				resolver := search.NewGeniusArtworkLookup(providertest.NewClient(srv.URL), "token")
+				resolver := genius.NewGeniusArtworkLookup(providertest.NewClient(srv.URL), "token")
 				url, err := resolver.Resolve(context.Background(), kind, "Creep", "Radiohead", "")
-				if url != "" || !errors.Is(err, search.ErrArtworkUnavailable) {
+				if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
 					t.Fatalf("Resolve(%s) on %s = (%q, %v), want (\"\", ErrArtworkUnavailable)", kind, name, url, err)
 				}
 				if !strings.Contains(err.Error(), "genius") {
@@ -210,7 +213,7 @@ func TestGeniusArtworkResolver_Resolve_VerifiedMissIsEmptyWithoutError(t *testin
 				srv := httptest.NewServer(handler)
 				defer srv.Close()
 
-				resolver := search.NewGeniusArtworkLookup(providertest.NewClient(srv.URL), "token")
+				resolver := genius.NewGeniusArtworkLookup(providertest.NewClient(srv.URL), "token")
 				url, err := resolver.Resolve(context.Background(), kind, "Creep", "Radiohead", "")
 				if url != "" || err != nil {
 					t.Errorf("Resolve(%s) on %s = (%q, %v), want (\"\", nil)", kind, name, url, err)
@@ -223,9 +226,9 @@ func TestGeniusArtworkResolver_Resolve_VerifiedMissIsEmptyWithoutError(t *testin
 func TestGeniusArtworkResolver_Resolve_CancelledMidRequestIsUnavailable(t *testing.T) {
 	srv, ctx := providertest.CancelMidRequestServer(t)
 
-	resolver := search.NewGeniusArtworkLookup(providertest.NewClient(srv.URL), "token")
+	resolver := genius.NewGeniusArtworkLookup(providertest.NewClient(srv.URL), "token")
 	url, err := resolver.Resolve(ctx, search.ResultKindTrack, "Creep", "Radiohead", "")
-	if url != "" || !errors.Is(err, search.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
 		t.Errorf("Resolve cancelled mid-request = (%q, %v), want ErrArtworkUnavailable wrapping context.Canceled", url, err)
 	}
 }
@@ -249,12 +252,12 @@ func songCatalogServer(t *testing.T, routes map[string]string) *httptest.Server 
 }
 
 type songDetailer interface {
-	SongDetail(ctx context.Context, songID int) (search.GeniusSongDetail, error)
+	SongDetail(ctx context.Context, songID int) (domain.GeniusSongDetail, error)
 }
 
 func songCatalog(t *testing.T, routes map[string]string) songDetailer {
 	t.Helper()
-	return search.NewSongCatalog(providertest.NewClient(songCatalogServer(t, routes).URL), "tok")
+	return genius.NewSongCatalog(providertest.NewClient(songCatalogServer(t, routes).URL), "tok")
 }
 
 func TestSongCatalog_ArtistSongs_KeepsPrimaryArtistSongsAndNeverUsesTheArtistPhotoAsCover(t *testing.T) {
@@ -264,7 +267,7 @@ func TestSongCatalog_ArtistSongs_KeepsPrimaryArtistSongsAndNeverUsesTheArtistPho
 		{"id":3,"title":"Header Only","url":"https://genius.com/h","song_art_image_url":"https://images.genius.com/x.jpg","header_image_url":"","primary_artist":{"id":7,"image_url":"https://images.genius.com/y.jpg","header_image_url":"https://images.genius.com/x.jpg"}},
 		{"id":4,"title":"Feature","url":"https://genius.com/f","song_art_image_url":"https://images.genius.com/f.jpg","primary_artist":{"id":99}}
 	]}}`})
-	catalog := search.NewSongCatalog(providertest.NewClient(server.URL), "tok")
+	catalog := genius.NewSongCatalog(providertest.NewClient(server.URL), "tok")
 
 	songs, err := catalog.ArtistSongs(context.Background(), 7, 3)
 	if err != nil {
@@ -292,7 +295,7 @@ func TestSongCatalog_ArtistSongs_StopsAtThePageCap(t *testing.T) {
 		fmt.Fprintf(w, `{"response":{"next_page":%d,"songs":[]}}`, pages+1)
 	}))
 	defer server.Close()
-	catalog := search.NewSongCatalog(providertest.NewClient(server.URL), "tok")
+	catalog := genius.NewSongCatalog(providertest.NewClient(server.URL), "tok")
 
 	if _, err := catalog.ArtistSongs(context.Background(), 7, 2); err != nil {
 		t.Fatalf("ArtistSongs: %v", err)
@@ -313,11 +316,11 @@ func TestSongCatalog_ArtistSongs_AFailedLaterPageIsAFailureWithNoSongs(t *testin
 		fmt.Fprint(w, `{"response":{"next_page":2,"songs":[{"id":1,"title":"A","primary_artist":{"id":7}}]}}`)
 	}))
 	defer server.Close()
-	catalog := search.NewSongCatalog(providertest.NewClient(server.URL), "tok")
+	catalog := genius.NewSongCatalog(providertest.NewClient(server.URL), "tok")
 
 	songs, err := catalog.ArtistSongs(context.Background(), 7, 3)
 
-	var partial *search.PartialResultError
+	var partial *domain.PartialResultError
 	if err == nil || errors.As(err, &partial) || songs != nil {
 		t.Errorf("got %v, %v; want a plain error and no songs, so the unreleased service treats the catalog as unread", songs, err)
 	}
@@ -329,7 +332,7 @@ func TestSongCatalog_FindArtistID_RequiresAnExactPrimaryArtistName(t *testing.T)
 		{"result":{"primary_artist":{"id":22,"name":"Don Toliver Jr"}}},
 		{"result":{"primary_artist":{"id":33,"name":"don toliver"}}}
 	]}}`})
-	catalog := search.NewSongCatalog(providertest.NewClient(server.URL), "tok")
+	catalog := genius.NewSongCatalog(providertest.NewClient(server.URL), "tok")
 
 	id, found, err := catalog.FindArtistID(context.Background(), "Don Toliver", nil)
 
@@ -340,7 +343,7 @@ func TestSongCatalog_FindArtistID_RequiresAnExactPrimaryArtistName(t *testing.T)
 
 func TestSongCatalog_FindArtistID_NoMatchIsNotFound(t *testing.T) {
 	server := songCatalogServer(t, map[string]string{"/search": `{"response":{"hits":[{"result":{"primary_artist":{"id":11,"name":"Internet Money"}}}]}}`})
-	catalog := search.NewSongCatalog(providertest.NewClient(server.URL), "tok")
+	catalog := genius.NewSongCatalog(providertest.NewClient(server.URL), "tok")
 
 	_, found, err := catalog.FindArtistID(context.Background(), "Don Toliver", []string{"Magnolia"})
 
@@ -351,10 +354,10 @@ func TestSongCatalog_FindArtistID_NoMatchIsNotFound(t *testing.T) {
 
 func TestArtworkSourceTags(t *testing.T) {
 	tests := []struct {
-		got  search.ProviderKey
+		got  domain.ProviderKey
 		want string
 	}{
-		{(&search.GeniusArtworkLookup{}).ArtworkSource(), "genius"},
+		{(&genius.GeniusArtworkLookup{}).ArtworkSource(), "genius"},
 	}
 	for _, tt := range tests {
 		if tt.got.String() != tt.want {
@@ -374,7 +377,7 @@ func TestGeniusArtworkResolver_Resolve_MalformedHitFailsTheResponse(t *testing.T
 			}))
 			defer server.Close()
 
-			resolver := search.NewGeniusArtworkLookup(providertest.NewClient(server.URL), "t")
+			resolver := genius.NewGeniusArtworkLookup(providertest.NewClient(server.URL), "t")
 			got, err := resolver.Resolve(context.Background(), search.ResultKindTrack, "Creep", "Radiohead", "")
 			if err == nil {
 				t.Fatalf("Resolve: got %q and no error, want an error", got)
@@ -392,9 +395,9 @@ func TestSongCatalog_SongDetail_ReadsStreamingLinksAndAlbum(t *testing.T) {
 		"/songs/2": `{"response":{"song":{"album":null,"apple_music_id":"1440","media":[]}}}`,
 		"/songs/3": `{"response":{"song":{"apple_music_id":"","media":[{"provider":"soundcloud"},{"provider":"apple_music"}]}}}`,
 	})
-	catalog := search.NewSongCatalog(providertest.NewClient(server.URL), "tok")
+	catalog := genius.NewSongCatalog(providertest.NewClient(server.URL), "tok")
 
-	want := map[int]search.GeniusSongDetail{
+	want := map[int]domain.GeniusSongDetail{
 		1: {HasMedia: true, OnStreamingSite: true, AlbumTitle: "Heaven or Hell"},
 		2: {OnStreamingSite: true},
 		3: {HasMedia: true},
@@ -411,11 +414,11 @@ func TestSongCatalog_SongDetail_KeepsNormalisedAudioLinks(t *testing.T) {
 	server := songCatalogServer(t, map[string]string{
 		"/songs/1": `{"response":{"song":{"media":[{"provider":"soundcloud","url":"http://soundcloud.com/a/b?in=x"},{"provider":"youtube","url":"https://youtu.be/dQw4w9WgXcQ"},{"provider":"youtube","url":"https://youtube.com/nope"},{"provider":"spotify","url":"https://open.spotify.com/t/1"}]}}}`,
 	})
-	catalog := search.NewSongCatalog(providertest.NewClient(server.URL), "tok")
+	catalog := genius.NewSongCatalog(providertest.NewClient(server.URL), "tok")
 
 	got, err := catalog.SongDetail(context.Background(), 1)
 
-	want := []search.AudioLink{
+	want := []domain.AudioLink{
 		{Provider: "soundcloud", ExternalID: "https://soundcloud.com/a/b", URL: "https://soundcloud.com/a/b"},
 		{Provider: "youtube", ExternalID: "dQw4w9WgXcQ", URL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
 	}
@@ -428,11 +431,11 @@ func TestSongCatalog_SongDetail_KeepsARepeatedAudioLinkOnce(t *testing.T) {
 	server := songCatalogServer(t, map[string]string{
 		"/songs/1": `{"response":{"song":{"media":[{"provider":"youtube","url":"https://youtu.be/dQw4w9WgXcQ"},{"provider":"youtube","url":"http://www.youtube.com/watch?v=dQw4w9WgXcQ"}]}}}`,
 	})
-	catalog := search.NewSongCatalog(providertest.NewClient(server.URL), "tok")
+	catalog := genius.NewSongCatalog(providertest.NewClient(server.URL), "tok")
 
 	got, err := catalog.SongDetail(context.Background(), 1)
 
-	want := []search.AudioLink{{Provider: "youtube", ExternalID: "dQw4w9WgXcQ", URL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}}
+	want := []domain.AudioLink{{Provider: "youtube", ExternalID: "dQw4w9WgXcQ", URL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}}
 	if err != nil || !reflect.DeepEqual(got.AudioLinks, want) {
 		t.Errorf("AudioLinks = (%+v, %v), want %+v", got.AudioLinks, err, want)
 	}
@@ -445,7 +448,7 @@ func TestSongCatalog_SongDetail_ReadsAlbumCoverAndSkipsPlaceholders(t *testing.T
 		"/songs/3": `{"response":{"song":{"album":{"name":"A","cover_art_url":"https://images.genius.com/no_image.png"}}}}`,
 		"/songs/4": `{"response":{"song":{"album":{"name":"A"}}}}`,
 	})
-	catalog := search.NewSongCatalog(providertest.NewClient(server.URL), "tok")
+	catalog := genius.NewSongCatalog(providertest.NewClient(server.URL), "tok")
 
 	want := map[int]string{1: "https://images.genius.com/a.jpg", 2: "", 3: "", 4: ""}
 	for id, w := range want {

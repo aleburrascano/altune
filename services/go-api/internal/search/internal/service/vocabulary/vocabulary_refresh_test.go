@@ -2,6 +2,8 @@ package vocabulary_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/domain"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -13,23 +15,23 @@ import (
 
 type fakeChartProvider struct {
 	name    search.ProviderName
-	entries []search.SpellingHintsEntry
+	entries []domain.SpellingHintsEntry
 	err     error
 }
 
 func (f *fakeChartProvider) Name() search.ProviderName { return f.name }
 
-func (f *fakeChartProvider) FetchCharts(_ context.Context, _ int) ([]search.SpellingHintsEntry, error) {
+func (f *fakeChartProvider) FetchCharts(_ context.Context, _ int) ([]domain.SpellingHintsEntry, error) {
 	return f.entries, f.err
 }
 
 func TestVocabularyRefresh_HappyPath(t *testing.T) {
-	store := &search.FakeVocabularyStore{}
+	store := &memory.FakeVocabularyStore{}
 	charts := []fakeChartProvider{
-		{entries: []search.SpellingHintsEntry{
+		{entries: []domain.SpellingHintsEntry{
 			{Term: "Drake", Kind: "artist", Popularity: 1000},
 		}},
-		{entries: []search.SpellingHintsEntry{
+		{entries: []domain.SpellingHintsEntry{
 			{Term: "Blinding Lights", Kind: "track", Popularity: 500},
 		}},
 	}
@@ -47,9 +49,9 @@ func TestVocabularyRefresh_HappyPath(t *testing.T) {
 }
 
 func TestVocabularyRefresh_NormalizesTerms(t *testing.T) {
-	store := &search.FakeVocabularyStore{}
+	store := &memory.FakeVocabularyStore{}
 	charts := []fakeChartProvider{
-		{entries: []search.SpellingHintsEntry{
+		{entries: []domain.SpellingHintsEntry{
 			{Term: "The Weeknd", Kind: "artist", Popularity: 900},
 		}},
 	}
@@ -71,10 +73,10 @@ func TestVocabularyRefresh_NormalizesTerms(t *testing.T) {
 }
 
 func TestVocabularyRefresh_OneProviderFails(t *testing.T) {
-	store := &search.FakeVocabularyStore{}
+	store := &memory.FakeVocabularyStore{}
 	charts := []fakeChartProvider{
-		{name: search.ProviderTheAudioDB, err: errors.New("network timeout")},
-		{name: search.ProviderDeezer, entries: []search.SpellingHintsEntry{
+		{name: domain.ProviderTheAudioDB, err: errors.New("network timeout")},
+		{name: search.ProviderDeezer, entries: []domain.SpellingHintsEntry{
 			{Term: "Bad Bunny", Kind: "artist", Popularity: 800},
 		}},
 	}
@@ -91,10 +93,10 @@ func TestVocabularyRefresh_OneProviderFails(t *testing.T) {
 }
 
 func TestVocabularyRefresh_AllProvidersFail(t *testing.T) {
-	store := &search.FakeVocabularyStore{}
+	store := &memory.FakeVocabularyStore{}
 	charts := []fakeChartProvider{
 		{name: search.ProviderDeezer, err: errors.New("error 1")},
-		{name: search.ProviderTheAudioDB, err: errors.New("error 2")},
+		{name: domain.ProviderTheAudioDB, err: errors.New("error 2")},
 	}
 	svc := newTestRefreshService(charts, store)
 
@@ -102,7 +104,7 @@ func TestVocabularyRefresh_AllProvidersFail(t *testing.T) {
 	if err == nil {
 		t.Fatal("RunOnce = nil, want a failure naming the providers that broke")
 	}
-	for _, provider := range []search.ProviderName{search.ProviderDeezer, search.ProviderTheAudioDB} {
+	for _, provider := range []search.ProviderName{search.ProviderDeezer, domain.ProviderTheAudioDB} {
 		if !strings.Contains(err.Error(), provider.String()) {
 			t.Errorf("error %q does not name provider %q", err, provider)
 		}
@@ -120,11 +122,11 @@ func TestVocabularyRefresh_ChartFailureWarnsWithTheProviderThatFailed(t *testing
 		Err: errors.New("connection refused"),
 	}
 	charts := []fakeChartProvider{
-		{name: search.ProviderDeezer, entries: []search.SpellingHintsEntry{{Term: "Drake", Kind: "artist"}}},
-		{name: search.ProviderTheAudioDB, err: leaky},
+		{name: search.ProviderDeezer, entries: []domain.SpellingHintsEntry{{Term: "Drake", Kind: "artist"}}},
+		{name: domain.ProviderTheAudioDB, err: leaky},
 	}
-	svc := newTestRefreshService(charts, &search.FakeVocabularyStore{})
-	buf := search.CaptureProductionLogs(t)
+	svc := newTestRefreshService(charts, &memory.FakeVocabularyStore{})
+	buf := memory.CaptureProductionLogs(t)
 
 	if err := svc.RunOnce(context.Background()); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -134,8 +136,8 @@ func TestVocabularyRefresh_ChartFailureWarnsWithTheProviderThatFailed(t *testing
 	if len(recs) != 1 {
 		t.Fatalf("got %d chart failure records at Info level, want 1:\n%s", len(recs), buf)
 	}
-	if recs[0]["provider"] != search.ProviderTheAudioDB.String() {
-		t.Errorf("provider = %v, want %q", recs[0]["provider"], search.ProviderTheAudioDB)
+	if recs[0]["provider"] != domain.ProviderTheAudioDB.String() {
+		t.Errorf("provider = %v, want %q", recs[0]["provider"], domain.ProviderTheAudioDB)
 	}
 	if errText, _ := recs[0]["error"].(string); !strings.Contains(errText, "connection refused") {
 		t.Errorf("error = %q, want the provider's failure", errText)
@@ -164,9 +166,9 @@ func chartFetchFailureRecords(t *testing.T, buf *bytes.Buffer) []map[string]any 
 }
 
 func TestVocabularyRefresh_EmptyResults(t *testing.T) {
-	store := &search.FakeVocabularyStore{}
+	store := &memory.FakeVocabularyStore{}
 	charts := []fakeChartProvider{
-		{entries: []search.SpellingHintsEntry{}},
+		{entries: []domain.SpellingHintsEntry{}},
 	}
 	svc := newTestRefreshService(charts, store)
 
@@ -180,9 +182,9 @@ func TestVocabularyRefresh_EmptyResults(t *testing.T) {
 }
 
 func TestVocabularyRefresh_StoreError(t *testing.T) {
-	store := &search.FakeVocabularyStore{Err: errors.New("redis down")}
+	store := &memory.FakeVocabularyStore{Err: errors.New("redis down")}
 	charts := []fakeChartProvider{
-		{entries: []search.SpellingHintsEntry{
+		{entries: []domain.SpellingHintsEntry{
 			{Term: "Taylor Swift", Kind: "artist", Popularity: 999},
 		}},
 	}
@@ -195,12 +197,12 @@ func TestVocabularyRefresh_StoreError(t *testing.T) {
 }
 
 func TestVocabularyRefresh_DuplicateTerms(t *testing.T) {
-	store := &search.FakeVocabularyStore{}
+	store := &memory.FakeVocabularyStore{}
 	charts := []fakeChartProvider{
-		{entries: []search.SpellingHintsEntry{
+		{entries: []domain.SpellingHintsEntry{
 			{Term: "Drake", Kind: "artist", Popularity: 1000},
 		}},
-		{entries: []search.SpellingHintsEntry{
+		{entries: []domain.SpellingHintsEntry{
 			{Term: "Drake", Kind: "artist", Popularity: 900},
 		}},
 	}
@@ -217,7 +219,7 @@ func TestVocabularyRefresh_DuplicateTerms(t *testing.T) {
 
 func newTestRefreshService(
 	charts []fakeChartProvider,
-	store *search.FakeVocabularyStore,
+	store *memory.FakeVocabularyStore,
 ) *search.SpellingHintsRefreshService {
 	providers := make([]search.ChartProvider, len(charts))
 	for i := range charts {
@@ -228,7 +230,7 @@ func newTestRefreshService(
 	)
 }
 
-func assertEntryTerm(t *testing.T, entry search.SpellingHintsEntry, want string) {
+func assertEntryTerm(t *testing.T, entry domain.SpellingHintsEntry, want string) {
 	t.Helper()
 	if entry.Term != want {
 		t.Errorf("got term %q, want %q", entry.Term, want)

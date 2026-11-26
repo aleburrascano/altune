@@ -2,6 +2,8 @@ package handler_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/handler"
+	"altune/go-api/internal/search/internal/service/vocabulary"
 	"altune/go-api/internal/search/searchtest"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
@@ -17,17 +19,17 @@ import (
 )
 
 func TestNewDiscoveryHandler_RefusesANilClock(t *testing.T) {
-	h, err := search.NewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{}), nil)
+	h, err := handler.NewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{}), nil)
 
-	if !errors.Is(err, search.ErrDiscoveryClockRequired) || h != nil {
+	if !errors.Is(err, handler.ErrClockRequired) || h != nil {
 		t.Fatalf("NewDiscoveryHandler(nil clock) = (%v, %v), want ErrDiscoveryClockRequired and no handler", h, err)
 	}
 }
 
 func TestNewDiscoveryHandler_NamesEveryMissingService(t *testing.T) {
-	h, err := search.NewDiscoveryHandler(search.DiscoveryServices{}, time.Now)
+	h, err := handler.NewDiscoveryHandler(handler.DiscoveryServices{}, time.Now)
 
-	if !errors.Is(err, search.ErrDiscoveryServiceRequired) || h != nil {
+	if !errors.Is(err, handler.ErrServiceRequired) || h != nil {
 		t.Fatalf("NewDiscoveryHandler(no services) = (%v, %v), want ErrDiscoveryServiceRequired and no handler", h, err)
 	}
 	for _, name := range []string{"search", "album", "unreleased", "lyrics", "ownership", "client events"} {
@@ -38,27 +40,27 @@ func TestNewDiscoveryHandler_NamesEveryMissingService(t *testing.T) {
 }
 
 func TestNewDiscoveryHandler_RefusesOneMissingService(t *testing.T) {
-	services := searchtest.CompleteServices(t, search.DiscoveryServices{})
+	services := searchtest.CompleteServices(t, handler.DiscoveryServices{})
 	services.ClientEvents = nil
 
-	_, err := search.NewDiscoveryHandler(services, time.Now)
+	_, err := handler.NewDiscoveryHandler(services, time.Now)
 
-	if !errors.Is(err, search.ErrDiscoveryServiceRequired) || !strings.Contains(err.Error(), "missing client events") {
+	if !errors.Is(err, handler.ErrServiceRequired) || !strings.Contains(err.Error(), "missing client events") {
 		t.Fatalf("err = %v, want only client events named", err)
 	}
 }
 
 func TestDiscoveryHandler_AttachOwnershipRefusesNil(t *testing.T) {
-	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{}), time.Now)
+	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{}), time.Now)
 
-	if err := h.AttachOwnership(nil); !errors.Is(err, search.ErrOwnershipStamperRequired) {
+	if err := h.AttachOwnership(nil); !errors.Is(err, handler.ErrOwnershipRequired) {
 		t.Fatalf("AttachOwnership(nil) = %v, want ErrOwnershipStamperRequired", err)
 	}
 }
 
-func buildFrozenDefaultLimitsRouter(services search.DiscoveryServices, middlewares ...func(http.Handler) http.Handler) chi.Router {
+func buildFrozenDefaultLimitsRouter(services handler.DiscoveryServices, middlewares ...func(http.Handler) http.Handler) chi.Router {
 	frozen := time.Unix(1_700_000_000, 0)
-	h := search.MustNewDiscoveryHandler(services, func() time.Time { return frozen })
+	h := handler.MustNewDiscoveryHandler(services, func() time.Time { return frozen })
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Use(middlewares...)
@@ -66,10 +68,10 @@ func buildFrozenDefaultLimitsRouter(services search.DiscoveryServices, middlewar
 	return r
 }
 
-func deezerSearchServices(t *testing.T) search.DiscoveryServices {
+func deezerSearchServices(t *testing.T) handler.DiscoveryServices {
 	bg := searchtest.NewTracker(t)
 	providers := []search.SearchProvider{&fakeSearchProvider{name: search.ProviderDeezer}}
-	return searchtest.CompleteServices(t, search.DiscoveryServices{Search: searchtest.NewSearchService(t, bg, providers, search.NewCircuitBreaker())})
+	return searchtest.CompleteServices(t, handler.DiscoveryServices{Search: searchtest.NewSearchService(t, bg, providers, search.NewCircuitBreaker())})
 }
 
 func TestSearchRateLimit_RapidSearchesAreThrottled(t *testing.T) {
@@ -82,7 +84,7 @@ func TestSearchRateLimit_RapidSearchesAreThrottled(t *testing.T) {
 			throttled++
 		}
 	}
-	if want := 200 - search.DefaultDiscoveryRateLimits.Search.Max; throttled != want {
+	if want := 200 - handler.DefaultDiscoveryRateLimits.Search.Max; throttled != want {
 		t.Fatalf("200 rapid /search requests from one user: %d throttled, want %d", throttled, want)
 	}
 }
@@ -98,13 +100,13 @@ func TestSearchRateLimit_DefaultBudgetsThenRejects(t *testing.T) {
 			name:   "search",
 			router: buildFrozenDefaultLimitsRouter(deezerSearchServices(t)),
 			path:   "/discovery/search?q=radiohead&save_history=false",
-			max:    search.DefaultDiscoveryRateLimits.Search.Max,
+			max:    handler.DefaultDiscoveryRateLimits.Search.Max,
 		},
 		{
 			name:   "suggest",
-			router: buildFrozenDefaultLimitsRouter(searchtest.CompleteServices(t, search.DiscoveryServices{Suggest: search.NewSuggestService(&fakeVocabStore{})})),
+			router: buildFrozenDefaultLimitsRouter(searchtest.CompleteServices(t, handler.DiscoveryServices{Suggest: vocabulary.NewSuggestService(&fakeVocabStore{})})),
 			path:   "/discovery/suggest?q=radio",
-			max:    search.DefaultDiscoveryRateLimits.Suggest.Max,
+			max:    handler.DefaultDiscoveryRateLimits.Suggest.Max,
 		},
 	}
 	for _, tc := range cases {
@@ -123,7 +125,7 @@ func TestSearchRateLimit_DefaultBudgetsThenRejects(t *testing.T) {
 }
 
 func TestContentRateLimit_RapidLyricsRequestsAreThrottled(t *testing.T) {
-	router := buildFrozenDefaultLimitsRouter(searchtest.CompleteServices(t, search.DiscoveryServices{}))
+	router := buildFrozenDefaultLimitsRouter(searchtest.CompleteServices(t, handler.DiscoveryServices{}))
 
 	var throttled *httptest.ResponseRecorder
 	count := 0
@@ -135,16 +137,16 @@ func TestContentRateLimit_RapidLyricsRequestsAreThrottled(t *testing.T) {
 		}
 	}
 
-	if want := 200 - search.DefaultDiscoveryRateLimits.Content.Max; count != want {
+	if want := 200 - handler.DefaultDiscoveryRateLimits.Content.Max; count != want {
 		t.Fatalf("200 rapid /lyrics requests from one user: %d throttled, want %d", count, want)
 	}
 	assertRateLimited(t, throttled)
 }
 
 func TestContentRateLimit_OneBudgetSpansEveryContentRoute(t *testing.T) {
-	router := buildRateLimitedRouter(t, search.DiscoveryRateLimits{
-		Search:  search.RequestLimit{Max: 10, Window: time.Hour},
-		Content: search.RequestLimit{Max: 2, Window: time.Hour},
+	router := buildRateLimitedRouter(t, handler.DiscoveryRateLimits{
+		Search:  handler.RequestLimit{Max: 10, Window: time.Hour},
+		Content: handler.RequestLimit{Max: 2, Window: time.Hour},
 	})
 
 	for range 2 {
@@ -157,15 +159,15 @@ func TestContentRateLimit_OneBudgetSpansEveryContentRoute(t *testing.T) {
 
 func TestEventRateLimit_DefaultBudgetThenRejects(t *testing.T) {
 	router := buildFrozenDefaultLimitsRouter(
-		searchtest.CompleteServices(t, search.DiscoveryServices{Event: searchtest.NewRecordEvent(t, &recordingEventStore{})}),
+		searchtest.CompleteServices(t, handler.DiscoveryServices{Event: searchtest.NewRecordEvent(t, &recordingEventStore{})}),
 		httpserver.MaxBodySize(1<<20),
 	)
 	body := discJsonBody(t, map[string]any{"type": "play"}).String()
 
-	for i := range search.DefaultDiscoveryRateLimits.Events.Max {
+	for i := range handler.DefaultDiscoveryRateLimits.Events.Max {
 		rec := discServe(t, router, http.MethodPost, "/discovery/events", strings.NewReader(body))
 		if rec.Code == http.StatusTooManyRequests {
-			t.Fatalf("request %d of %d throttled inside the budget", i+1, search.DefaultDiscoveryRateLimits.Events.Max)
+			t.Fatalf("request %d of %d throttled inside the budget", i+1, handler.DefaultDiscoveryRateLimits.Events.Max)
 		}
 	}
 
@@ -174,12 +176,12 @@ func TestEventRateLimit_DefaultBudgetThenRejects(t *testing.T) {
 
 func TestSearchRateLimit_BudgetsArePerUserAndPerRoute(t *testing.T) {
 	bg := searchtest.NewTracker(t)
-	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{
+	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
 		Search:  searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker()),
-		Suggest: search.NewSuggestService(&fakeVocabStore{}),
-	}), time.Now).WithRateLimits(search.DiscoveryRateLimits{
-		Search:  search.RequestLimit{Max: 2, Window: time.Hour},
-		Suggest: search.RequestLimit{Max: 2, Window: time.Hour},
+		Suggest: vocabulary.NewSuggestService(&fakeVocabStore{}),
+	}), time.Now).WithRateLimits(handler.DiscoveryRateLimits{
+		Search:  handler.RequestLimit{Max: 2, Window: time.Hour},
+		Suggest: handler.RequestLimit{Max: 2, Window: time.Hour},
 	})
 	r := chi.NewRouter()
 	r.Use(discAsTokenUser)
@@ -197,9 +199,9 @@ func TestSearchRateLimit_BudgetsArePerUserAndPerRoute(t *testing.T) {
 }
 
 func TestSearchRateLimit_UnauthenticatedStillGets401(t *testing.T) {
-	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{}), time.Now).WithRateLimits(search.DiscoveryRateLimits{
-		Search:  search.RequestLimit{Max: 0, Window: time.Hour},
-		Suggest: search.RequestLimit{Max: 0, Window: time.Hour},
+	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{}), time.Now).WithRateLimits(handler.DiscoveryRateLimits{
+		Search:  handler.RequestLimit{Max: 0, Window: time.Hour},
+		Suggest: handler.RequestLimit{Max: 0, Window: time.Hour},
 	})
 	r := chi.NewRouter()
 	r.Mount("/discovery", h.Routes())
@@ -210,9 +212,9 @@ func TestSearchRateLimit_UnauthenticatedStillGets401(t *testing.T) {
 func TestRequestLimit_BucketAdmitsBurstThenRefillsAtTheWindowRate(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	now := time.Unix(1_700_000_000, 0)
-	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{
+	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
 		Search: searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker()),
-	}), func() time.Time { return now }).WithRateLimits(search.DiscoveryRateLimits{Search: search.RequestLimit{Max: 2, Window: time.Minute}})
+	}), func() time.Time { return now }).WithRateLimits(handler.DiscoveryRateLimits{Search: handler.RequestLimit{Max: 2, Window: time.Minute}})
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())
@@ -259,9 +261,9 @@ var discAsTokenUser = signedInAs(func(token string) ids.UserId {
 	return discTestUserId
 })
 
-func buildRateLimitedRouter(t *testing.T, limits search.DiscoveryRateLimits) chi.Router {
+func buildRateLimitedRouter(t *testing.T, limits handler.DiscoveryRateLimits) chi.Router {
 	bg := searchtest.NewTracker(t)
-	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{
+	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
 		Search: searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker()),
 	}), time.Now).WithRateLimits(limits)
 	r := chi.NewRouter()
@@ -305,13 +307,13 @@ func TestUnmeteredUserRoutes_AreThrottledPerUser(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			historyRepo := &fakeSearchHistoryRepo{}
-			h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{
+			h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
 				History:      searchtest.NewListHistory(t, historyRepo),
 				ClearHistory: searchtest.NewClearHistory(t, historyRepo),
 				Favorites:    searchtest.NewFavorites(t, erroringFavoritesRepo{}),
-			}), time.Now).WithRateLimits(search.DiscoveryRateLimits{
-				History:   search.RequestLimit{Max: 1, Window: time.Hour},
-				Favorites: search.RequestLimit{Max: 1, Window: time.Hour},
+			}), time.Now).WithRateLimits(handler.DiscoveryRateLimits{
+				History:   handler.RequestLimit{Max: 1, Window: time.Hour},
+				Favorites: handler.RequestLimit{Max: 1, Window: time.Hour},
 			})
 			r := chi.NewRouter()
 			r.Use(discAsTokenUser)
@@ -339,9 +341,9 @@ func TestUnmeteredUserRoutes_AreThrottledPerUser(t *testing.T) {
 func TestSearchRateLimit_AdmitsAgainAfterWindowResets(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	now := time.Unix(1_700_000_000, 0)
-	h := search.MustNewDiscoveryHandler(searchtest.CompleteServices(t, search.DiscoveryServices{
+	h := handler.MustNewDiscoveryHandler(searchtest.CompleteServices(t, handler.DiscoveryServices{
 		Search: searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker()),
-	}), func() time.Time { return now }).WithRateLimits(search.DiscoveryRateLimits{Search: search.RequestLimit{Max: 1, Window: time.Minute}})
+	}), func() time.Time { return now }).WithRateLimits(handler.DiscoveryRateLimits{Search: handler.RequestLimit{Max: 1, Window: time.Minute}})
 	r := chi.NewRouter()
 	r.Use(discAsTestUser)
 	r.Mount("/discovery", h.Routes())

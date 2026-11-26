@@ -1,7 +1,9 @@
 package vocabulary_test
 
 import (
-	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/adapters/memory"
+	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/search/internal/service/vocabulary"
 	"altune/go-api/internal/search/searchtest"
 	"context"
 	"errors"
@@ -14,19 +16,19 @@ const (
 	maxCorrectionTokens     = 8
 )
 
-func vocabOffering(candidates ...search.SpellingHintsEntry) *search.FakeVocabularyStore {
-	return &search.FakeVocabularyStore{
-		FindClosestFn: func(string, int) ([]search.SpellingHintsEntry, error) {
+func vocabOffering(candidates ...domain.SpellingHintsEntry) *memory.FakeVocabularyStore {
+	return &memory.FakeVocabularyStore{
+		FindClosestFn: func(string, int) ([]domain.SpellingHintsEntry, error) {
 			return candidates, nil
 		},
 	}
 }
 
-func trackTerm(term string, score float64) search.SpellingHintsEntry {
-	return search.SpellingHintsEntry{Term: term, TermNorm: term, Kind: search.VocabKindTrack, MatchScore: score}
+func trackTerm(term string, score float64) domain.SpellingHintsEntry {
+	return domain.SpellingHintsEntry{Term: term, TermNorm: term, Kind: domain.VocabKindTrack, MatchScore: score}
 }
 
-func correctedTo(t *testing.T, store *search.FakeVocabularyStore, query string) string {
+func correctedTo(t *testing.T, store *memory.FakeVocabularyStore, query string) string {
 	t.Helper()
 	result := searchtest.NewCorrection(t, store).Correct(context.Background(), query)
 	if result == nil {
@@ -36,13 +38,13 @@ func correctedTo(t *testing.T, store *search.FakeVocabularyStore, query string) 
 }
 
 func TestCorrectTokens_PrefixLookupErrorDegrades(t *testing.T) {
-	store := &search.FakeVocabularyStore{
-		SuggestByPrefixFn: func(_ string, _ int) ([]search.SpellingHintsEntry, error) {
+	store := &memory.FakeVocabularyStore{
+		SuggestByPrefixFn: func(_ string, _ int) ([]domain.SpellingHintsEntry, error) {
 			return nil, errors.New("redis down")
 		},
-		FindClosestFn: func(token string, _ int) ([]search.SpellingHintsEntry, error) {
+		FindClosestFn: func(token string, _ int) ([]domain.SpellingHintsEntry, error) {
 			if token == "humbel" {
-				return []search.SpellingHintsEntry{trackTerm("humble", 0.8)}, nil
+				return []domain.SpellingHintsEntry{trackTerm("humble", 0.8)}, nil
 			}
 			return nil, nil
 		},
@@ -59,43 +61,43 @@ func TestCorrect_PicksTheBestCandidate(t *testing.T) {
 	cases := []struct {
 		name       string
 		query      string
-		candidates []search.SpellingHintsEntry
+		candidates []domain.SpellingHintsEntry
 		want       string
 	}{
 		{
 			name:       "closest by edit distance",
 			query:      "megamsn",
-			candidates: []search.SpellingHintsEntry{trackTerm("megaman", 0.72), {Term: "madonna", TermNorm: "madonna", Kind: search.VocabKindArtist, MatchScore: 0.30}},
+			candidates: []domain.SpellingHintsEntry{trackTerm("megaman", 0.72), {Term: "madonna", TermNorm: "madonna", Kind: domain.VocabKindArtist, MatchScore: 0.30}},
 			want:       "megaman",
 		},
 		{
 			name:       "nothing when every candidate is beyond the max edit distance",
 			query:      "megamsn",
-			candidates: []search.SpellingHintsEntry{trackTerm("zzzzzzz", 0.80), trackTerm("yyyyyyy", 0.90)},
+			candidates: []domain.SpellingHintsEntry{trackTerm("zzzzzzz", 0.80), trackTerm("yyyyyyy", 0.90)},
 			want:       "",
 		},
 		{
 			name:       "a lone candidate",
 			query:      "megamsn",
-			candidates: []search.SpellingHintsEntry{trackTerm("megaman", 0.72)},
+			candidates: []domain.SpellingHintsEntry{trackTerm("megaman", 0.72)},
 			want:       "megaman",
 		},
 		{
 			name:       "same distance breaks the tie by match score",
 			query:      "weekend",
-			candidates: []search.SpellingHintsEntry{trackTerm("weekand", 0.45), {Term: "weekynd", TermNorm: "weekynd", Kind: search.VocabKindArtist, MatchScore: 0.66}},
+			candidates: []domain.SpellingHintsEntry{trackTerm("weekand", 0.45), {Term: "weekynd", TermNorm: "weekynd", Kind: domain.VocabKindArtist, MatchScore: 0.66}},
 			want:       "weekynd",
 		},
 		{
 			name:       "same distance keeps the first when the later scores no higher",
 			query:      "weekend",
-			candidates: []search.SpellingHintsEntry{trackTerm("weekand", 0.66), trackTerm("weekynd", 0.66)},
+			candidates: []domain.SpellingHintsEntry{trackTerm("weekand", 0.66), trackTerm("weekynd", 0.66)},
 			want:       "weekand",
 		},
 		{
 			name:       "lower edit distance beats a higher score",
 			query:      "megamsn",
-			candidates: []search.SpellingHintsEntry{trackTerm("megaman", 0.50), trackTerm("megazan", 0.90)},
+			candidates: []domain.SpellingHintsEntry{trackTerm("megaman", 0.50), trackTerm("megazan", 0.90)},
 			want:       "megaman",
 		},
 	}
@@ -130,7 +132,7 @@ func TestCorrect_MaxEditDistanceGrowsWithQueryLength(t *testing.T) {
 }
 
 func TestCorrectAggressive_ManyTokenQueryIsBounded(t *testing.T) {
-	vocab := &search.CtxRecordingVocab{}
+	vocab := &memory.CtxRecordingVocab{}
 	svc := searchtest.NewCorrection(t, vocab)
 
 	hostile := strings.TrimSpace(strings.Repeat("zxqv ", 5000))
@@ -147,7 +149,7 @@ func TestCorrectAggressive_ManyTokenQueryIsBounded(t *testing.T) {
 }
 
 func TestCorrectAggressive_ShortMultiTokenQueryStillCorrectsEveryToken(t *testing.T) {
-	vocab := &search.CtxRecordingVocab{}
+	vocab := &memory.CtxRecordingVocab{}
 	svc := searchtest.NewCorrection(t, vocab)
 
 	svc.CorrectAggressive(context.Background(), "kendrik lamar humbel")
@@ -158,7 +160,7 @@ func TestCorrectAggressive_ShortMultiTokenQueryStillCorrectsEveryToken(t *testin
 }
 
 func TestCorrect_DoesNotLogRawQueryText(t *testing.T) {
-	buf := search.CaptureLogs(t)
+	buf := memory.CaptureLogs(t)
 
 	svc := searchtest.NewCorrection(t, vocabOffering(trackTerm("humble", 0.8)))
 
@@ -167,7 +169,7 @@ func TestCorrect_DoesNotLogRawQueryText(t *testing.T) {
 		t.Fatalf("want whole-query correction, got %+v", result)
 	}
 
-	event := search.LoggedEvent(t, buf, "correction.candidate")
+	event := memory.LoggedEvent(t, buf, "correction.candidate")
 	if strings.Contains(event, "humbel") {
 		t.Fatalf("candidate log leaks raw query text:\n%s", event)
 	}
@@ -177,7 +179,7 @@ func TestCorrect_DoesNotLogRawQueryText(t *testing.T) {
 }
 
 func TestCorrection_RefusesAMissingVocabulary(t *testing.T) {
-	if _, err := search.NewCorrectionService(nil); !errors.Is(err, search.ErrVocabularyCollaboratorRequired) {
+	if _, err := vocabulary.NewCorrectionService(nil); !errors.Is(err, vocabulary.ErrCollaboratorRequired) {
 		t.Fatalf("err = %v, want ErrVocabularyCollaboratorRequired", err)
 	}
 }
@@ -185,17 +187,20 @@ func TestCorrection_RefusesAMissingVocabulary(t *testing.T) {
 func TestVocabularyIngestor_RefusesAMissingStoreOrTracker(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	for name, build := range map[string]func() error{
-		"store":   func() error { _, err := search.NewVocabularyIngestor(nil, bg); return err },
-		"tracker": func() error { _, err := search.NewVocabularyIngestor(&search.FakeVocabularyStore{}, nil); return err },
+		"store": func() error { _, err := vocabulary.NewVocabularyIngestor(nil, bg); return err },
+		"tracker": func() error {
+			_, err := vocabulary.NewVocabularyIngestor(&memory.FakeVocabularyStore{}, nil)
+			return err
+		},
 	} {
-		if err := build(); !errors.Is(err, search.ErrVocabularyCollaboratorRequired) {
+		if err := build(); !errors.Is(err, vocabulary.ErrCollaboratorRequired) {
 			t.Errorf("missing %s: err = %v, want ErrVocabularyCollaboratorRequired", name, err)
 		}
 	}
 }
 
 func TestCorrection_CorrectWholeQuery(t *testing.T) {
-	store := vocabOffering(search.SpellingHintsEntry{Term: "Kendrick", TermNorm: "kendrick", Kind: search.VocabKindArtist, MatchScore: 0.9})
+	store := vocabOffering(domain.SpellingHintsEntry{Term: "Kendrick", TermNorm: "kendrick", Kind: domain.VocabKindArtist, MatchScore: 0.9})
 	s := searchtest.NewCorrection(t, store)
 
 	got := s.Correct(context.Background(), "kendrik")
@@ -209,40 +214,40 @@ func TestCorrection_CorrectWholeQuery(t *testing.T) {
 }
 
 func TestCorrection_WholeQueryErrorOrEmptyIsNil(t *testing.T) {
-	erroring := &search.FakeVocabularyStore{
-		FindClosestFn: func(string, int) ([]search.SpellingHintsEntry, error) {
+	erroring := &memory.FakeVocabularyStore{
+		FindClosestFn: func(string, int) ([]domain.SpellingHintsEntry, error) {
 			return nil, errors.New("redis down")
 		},
 	}
 	if got := searchtest.NewCorrection(t, erroring).Correct(context.Background(), "kendrik"); got != nil {
 		t.Errorf("store error must degrade to nil, got %+v", got)
 	}
-	empty := &search.FakeVocabularyStore{}
+	empty := &memory.FakeVocabularyStore{}
 	if got := searchtest.NewCorrection(t, empty).Correct(context.Background(), "kendrik"); got != nil {
 		t.Errorf("no candidates must yield nil, got %+v", got)
 	}
 }
 
 func TestCorrection_TokenPathSingleTokenIsNil(t *testing.T) {
-	s := searchtest.NewCorrection(t, &search.FakeVocabularyStore{})
+	s := searchtest.NewCorrection(t, &memory.FakeVocabularyStore{})
 	if got := s.CorrectAggressive(context.Background(), "kendrik"); got != nil {
 		t.Errorf("single-token aggressive miss = %+v, want nil", got)
 	}
 }
 
 func TestCorrection_TokenPathPrefixErrorDegrades(t *testing.T) {
-	store := &search.FakeVocabularyStore{
-		SuggestByPrefixFn: func(string, int) ([]search.SpellingHintsEntry, error) {
+	store := &memory.FakeVocabularyStore{
+		SuggestByPrefixFn: func(string, int) ([]domain.SpellingHintsEntry, error) {
 			return nil, errors.New("redis down")
 		},
-		FindClosestFn: func(query string, _ int) ([]search.SpellingHintsEntry, error) {
+		FindClosestFn: func(query string, _ int) ([]domain.SpellingHintsEntry, error) {
 			if query == "kendrik lamar" {
 				return nil, nil
 			}
 			if query == "kendrik" {
-				return []search.SpellingHintsEntry{{Term: "Kendrick", TermNorm: "kendrick", Kind: search.VocabKindArtist, MatchScore: 0.8}}, nil
+				return []domain.SpellingHintsEntry{{Term: "Kendrick", TermNorm: "kendrick", Kind: domain.VocabKindArtist, MatchScore: 0.8}}, nil
 			}
-			return []search.SpellingHintsEntry{{Term: "Lamar", TermNorm: "lamar", Kind: search.VocabKindArtist, MatchScore: 1}}, nil
+			return []domain.SpellingHintsEntry{{Term: "Lamar", TermNorm: "lamar", Kind: domain.VocabKindArtist, MatchScore: 1}}, nil
 		},
 	}
 	s := searchtest.NewCorrection(t, store)

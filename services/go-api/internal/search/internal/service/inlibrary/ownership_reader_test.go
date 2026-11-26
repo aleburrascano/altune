@@ -2,6 +2,7 @@ package inlibrary_test
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/search/internal/domain"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -34,7 +35,7 @@ func TestOwnedByTitleArtist_MatchesNormalizedTitleAndArtist(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	match, ok := owned[search.OwnershipKey("bohemian rhapsody (remastered)", "QUEEN")]
+	match, ok := owned[domain.OwnershipKey("bohemian rhapsody (remastered)", "QUEEN")]
 	if !ok {
 		t.Fatalf("expected a match for a differently-cased, bracket-suffixed title; got keys %v", owned)
 	}
@@ -51,7 +52,7 @@ func TestOwnedByTitleArtist_FirstRefWinsOnDuplicateKey(t *testing.T) {
 
 	owned, _ := reader.OwnedByTitleArtist(context.Background(), testUser())
 
-	if got := owned[search.OwnershipKey("Alive", "Pearl Jam")].TrackID; got != "first" {
+	if got := owned[domain.OwnershipKey("Alive", "Pearl Jam")].TrackID; got != "first" {
 		t.Errorf("TrackID = %q, want %q", got, "first")
 	}
 }
@@ -65,10 +66,10 @@ func TestOwnedByTitleArtist_LiveLibraryTrackIsNotKeyedAsTheStudioSong(t *testing
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if _, ok := owned[search.OwnershipKey("Song", "X")]; ok {
+	if _, ok := owned[domain.OwnershipKey("Song", "X")]; ok {
 		t.Errorf("studio Song keyed as owned by a live-only library: %v", owned)
 	}
-	if owned[search.OwnershipKey("Song (Live)", "X")].TrackID != "live" {
+	if owned[domain.OwnershipKey("Song (Live)", "X")].TrackID != "live" {
 		t.Errorf("live track not keyed by its own title: %v", owned)
 	}
 }
@@ -83,10 +84,10 @@ func TestOwnedByTitleArtist_ISRCReachesTheTrackThatLostTheNameKey(t *testing.T) 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got := owned[search.OwnershipISRCKey("USSM19100002")]; got.TrackID != "second" || got.ISRC != "USSM19100002" {
+	if got := owned[domain.OwnershipISRCKey("USSM19100002")]; got.TrackID != "second" || got.ISRC != "USSM19100002" {
 		t.Errorf("ISRC lookup = %+v, want second carrying the canonical ISRC USSM19100002", got)
 	}
-	if got := owned[search.OwnershipISRCKey("USSM19100001")].TrackID; got != "first" {
+	if got := owned[domain.OwnershipISRCKey("USSM19100001")].TrackID; got != "first" {
 		t.Errorf("ISRC lookup TrackID = %q, want first", got)
 	}
 }
@@ -124,7 +125,7 @@ func TestOwnedByTitleArtist_OneTrackKeepsEveryField(t *testing.T) {
 	if len(owned) != 1 {
 		t.Fatalf("len(owned) = %d, want 1", len(owned))
 	}
-	got := owned[search.OwnershipKey("Black", "Pearl Jam")]
+	got := owned[domain.OwnershipKey("Black", "Pearl Jam")]
 	if got.TrackID != "t-1" || got.Title != "Black" || got.Artist != "Pearl Jam" ||
 		got.AcquisitionStatus != "ready" || got.TrackNumber != &num {
 		t.Errorf("got %+v, want every field of the track unchanged", got)
@@ -144,7 +145,7 @@ func TestOwnedByTitleArtist_SameTitleArtistDifferentCaseKeepsFirst(t *testing.T)
 	if len(owned) != 1 {
 		t.Fatalf("len(owned) = %d, want 1", len(owned))
 	}
-	if got := owned[search.OwnershipKey("alive", "pearl jam")].TrackID; got != "first" {
+	if got := owned[domain.OwnershipKey("alive", "pearl jam")].TrackID; got != "first" {
 		t.Errorf("TrackID = %q, want %q", got, "first")
 	}
 }
@@ -176,10 +177,10 @@ func TestOwnedByTitleArtist_SecondCallReturnsSecondMap(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if first[search.OwnershipKey("One", "X")].TrackID != "a" || len(first) != 1 {
+	if first[domain.OwnershipKey("One", "X")].TrackID != "a" || len(first) != 1 {
 		t.Errorf("first = %v, want only a", first)
 	}
-	if len(second) != 1 || second[search.OwnershipKey("Two", "Y")].TrackID != "b" {
+	if len(second) != 1 || second[domain.OwnershipKey("Two", "Y")].TrackID != "b" {
 		t.Errorf("second = %v, want only b", second)
 	}
 }
