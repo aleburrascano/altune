@@ -2817,7 +2817,7 @@ func TestResolvedIdentity_StandingInTheDarkCatalogLengthConflictReachesTheReader
 		Verdict: AudioVerdict{Kind: VerdictHard, Surviving: []ports.LinkedRecording{{MBID: mbid}}},
 	}
 
-	ResolveIdentity(context.Background(), resolver, nil, ac)
+	ResolveIdentity(context.Background(), resolver, ac)
 
 	if ac.Identity.ReferenceDoubted || ac.Identity.Duration != 197 {
 		t.Fatalf("identity = %+v, want the 197s reference undoubted", ac.Identity)

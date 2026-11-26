@@ -16,10 +16,10 @@ import (
 )
 
 func (s *AcquireTrackAudioService) resolveIdentity(ctx context.Context, ac *AcquisitionContext) {
-	ResolveIdentity(ctx, s.recordings, s.identifier, ac)
+	ResolveIdentity(ctx, s.recordings, ac)
 }
 
-func ResolveIdentity(ctx context.Context, recordings ports.RecordingResolver, _ ports.AudioIdentifier, ac *AcquisitionContext) {
+func ResolveIdentity(ctx context.Context, recordings ports.RecordingResolver, ac *AcquisitionContext) {
 	identity, err := recordings.Resolve(ctx, ports.RecordingQuery{
 		Title:    ac.Track.Title,
 		Artist:   ac.Track.Artist,
