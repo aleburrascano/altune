@@ -2,6 +2,7 @@ package pacing_test
 
 import (
 	"altune/go-api/internal/platform/outbound/internal/pacing"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/queuetimeout"
 	"context"
 	"errors"
@@ -23,7 +24,7 @@ const shortDeadline = 50 * time.Millisecond
 
 func newPacer(t testing.TB) *pacing.Pacer {
 	t.Helper()
-	p, err := pacing.New(time.Now)
+	p, err := pacing.New(time.Now, clock.Sleep)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,10 +32,18 @@ func newPacer(t testing.TB) *pacing.Pacer {
 }
 
 func TestPacer_RefusesAMissingClock(t *testing.T) {
-	p, err := pacing.New(nil)
+	p, err := pacing.New(nil, clock.Sleep)
 
 	if p != nil || !errors.Is(err, pacing.ErrClockRequired) {
 		t.Fatalf("got (%v, %v), want a refusal wrapping ErrClockRequired", p, err)
+	}
+}
+
+func TestPacer_RefusesAMissingSleeper(t *testing.T) {
+	p, err := pacing.New(time.Now, nil)
+
+	if p != nil || !errors.Is(err, pacing.ErrSleeperRequired) {
+		t.Fatalf("got (%v, %v), want a refusal wrapping ErrSleeperRequired", p, err)
 	}
 }
 

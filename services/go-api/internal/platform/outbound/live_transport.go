@@ -3,6 +3,7 @@ package outbound
 import (
 	"altune/go-api/internal/platform/outbound/internal/pacing"
 	"altune/go-api/internal/platform/outbound/internal/retry"
+	"altune/go-api/internal/shared/clock"
 	"errors"
 	"fmt"
 	"net/http"
@@ -19,7 +20,7 @@ func NewLiveTransport(onRetry func(host string)) http.RoundTripper {
 	}
 	o := retry.SystemOptions()
 	o.OnRetry = onRetry
-	pacer, err := pacing.New(time.Now)
+	pacer, err := pacing.New(time.Now, clock.Sleep)
 	if err != nil {
 		return refusedTransport{err: fmt.Errorf("build the live transport pacer: %w", err)}
 	}

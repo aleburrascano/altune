@@ -3,12 +3,13 @@ package retry
 import (
 	"altune/go-api/internal/platform/outbound/internal/pacing"
 	"altune/go-api/internal/shared/backoff"
+	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/random"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
-	"math/rand/v2"
 	"net"
 	"net/http"
 	"time"
@@ -46,7 +47,7 @@ var (
 )
 
 func SystemOptions() Options {
-	return Options{Sleep: sleepOnTimer, Jitter: rand.Float64, OnRetry: func(string) {}}
+	return Options{Sleep: clock.Sleep, Jitter: random.Real, OnRetry: func(string) {}}
 }
 
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -176,15 +177,4 @@ var retryBackoff = backoff.MustCapped(backoffBase, backoffBase<<(maxAttempts-2),
 
 func (t *Transport) backoff(attempt int) time.Duration {
 	return retryBackoff.DelayAt(attempt, t.jitter())
-}
-
-func sleepOnTimer(ctx context.Context, d time.Duration) error {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
 }

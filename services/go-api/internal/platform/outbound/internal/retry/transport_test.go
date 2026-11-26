@@ -3,6 +3,7 @@ package retry_test
 import (
 	"altune/go-api/internal/platform/outbound/internal/pacing"
 	"altune/go-api/internal/platform/outbound/internal/retry"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/retrysafe"
 	"bytes"
 	"context"
@@ -67,7 +68,7 @@ func TestTransport_RefusesAMissingPacer(t *testing.T) {
 
 func newTransport(t *testing.T, base http.RoundTripper, opts retry.Options) *retry.Transport {
 	t.Helper()
-	pacer, err := pacing.New(time.Now)
+	pacer, err := pacing.New(time.Now, clock.Sleep)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +90,7 @@ func newTransport(t *testing.T, base http.RoundTripper, opts retry.Options) *ret
 }
 
 func TestTransport_RefusesAMissingOption(t *testing.T) {
-	pacer, err := pacing.New(time.Now)
+	pacer, err := pacing.New(time.Now, clock.Sleep)
 	if err != nil {
 		t.Fatal(err)
 	}
