@@ -1,8 +1,8 @@
 package featured
 
 import (
-	"altune/go-api/internal/library/domain"
 	"altune/go-api/internal/library/internal/core/ports"
+	"altune/go-api/internal/library/internal/domain"
 	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"

@@ -1,6 +1,6 @@
 package library
 
-import domain "altune/go-api/internal/library/domain"
+import domain "altune/go-api/internal/library/internal/domain"
 
 type (
 	SearchKeys = domain.SearchKeys

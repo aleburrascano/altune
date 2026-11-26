@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/logging"
@@ -24,7 +25,7 @@ import (
 )
 
 func streamOnlyRoute(repo *library.InMemoryTrackRepo, store library.AudioStore, scheduler library.AcquisitionScheduler) chi.Router {
-	h := library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, scheduler, library.NoopAudioStoreMetrics(), library.AlwaysEnabled), time.Now)
+	h := library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, scheduler, library.NoopAudioStoreMetrics(), library.AlwaysEnabled, clock.Now), time.Now)
 	router := chi.NewRouter()
 	router.Use(asBearer)
 	router.Get("/tracks/{trackId}/stream", h.HandleStreamAudio)
@@ -39,13 +40,13 @@ func streamRoutesAt(store library.AudioStore, now func() time.Time) (*library.In
 	repo := library.NewInMemoryTrackRepo()
 	router := chi.NewRouter()
 	router.Use(asBearer)
-	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled), now).Routes(router)
+	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled, clock.Now), now).Routes(router)
 	return repo, router
 }
 
 func seedReady(t *testing.T, repo *library.InMemoryTrackRepo, title, audioRef string) *library.Track {
 	t.Helper()
-	return library.SeedReadyTrack(t, repo, library.FixtureUserId(), title, "Artist", "Album", audioRef)
+	return librarytest.SeedReadyTrack(t, repo, librarytest.UserId(), title, "Artist", "Album", audioRef)
 }
 
 func TestHandleStreamAudio(t *testing.T) {
@@ -106,7 +107,7 @@ func TestHandleStreamAudio(t *testing.T) {
 		{
 			name: "pending track (not streamable) returns 404",
 			setup: func(t *testing.T, repo *library.InMemoryTrackRepo, store *library.InMemoryAudioStore) string {
-				track := library.SeedTrack(t, repo, library.FixtureUserId(), "Pending", "Artist", "Album")
+				track := librarytest.SeedTrack(t, repo, librarytest.UserId(), "Pending", "Artist", "Album")
 				return track.ID.UUID().String()
 			},
 			wantStatus: http.StatusNotFound,
@@ -171,12 +172,12 @@ func TestHandleStreamAudio_NoAuth(t *testing.T) {
 func TestHandleRecover(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
 	sched := &library.InMemoryScheduler{}
-	foreign := library.SeedReadyTrack(t, repo, library.FixtureOtherUserId(), "Theirs", "Artist", "Album", "audio/theirs.opus")
-	pending := library.SeedTrack(t, repo, library.FixtureUserId(), "Pending", "Artist", "Album")
+	foreign := librarytest.SeedReadyTrack(t, repo, librarytest.OtherUserId(), "Theirs", "Artist", "Album", "audio/theirs.opus")
+	pending := librarytest.SeedTrack(t, repo, librarytest.UserId(), "Pending", "Artist", "Album")
 	gone := seedReady(t, repo, "Gone", "audio/gone.opus")
 	router := chi.NewRouter()
 	router.Use(asBearer)
-	svc := library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), sched, library.NoopAudioStoreMetrics(), library.AlwaysEnabled)
+	svc := library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), sched, library.NoopAudioStoreMetrics(), library.AlwaysEnabled, clock.Now)
 	library.MustNewStreamHandler(svc, time.Now).Routes(router)
 
 	tests := []struct {
@@ -345,7 +346,7 @@ func TestHandleStreamAudio_ClientAbortIsNotAServerError(t *testing.T) {
 	ctx, abort := context.WithCancel(context.Background())
 	req := httptest.NewRequest(http.MethodGet, "/tracks/"+track.ID.UUID().String()+"/audio", nil).WithContext(ctx)
 	abort()
-	sendAs(router, req, library.FixtureUserId())
+	sendAs(router, req, librarytest.UserId())
 
 	served := findLogRecord(t, ring, "stream.served")
 	if served.Attrs["outcome"] != "aborted" {
@@ -366,7 +367,7 @@ func TestHandleStreamAudio_FramesPrivateAudio(t *testing.T) {
 	whole := request(t, router, http.MethodGet, path, nil)
 	rangeReq := httptest.NewRequest(http.MethodGet, path, nil)
 	rangeReq.Header.Set("Range", "bytes=1024-2047")
-	ranged := sendAs(router, rangeReq, library.FixtureUserId())
+	ranged := sendAs(router, rangeReq, librarytest.UserId())
 
 	assertStatus(t, whole, http.StatusOK)
 	assertPrivateAudioHeaders(t, whole, "private")
@@ -402,13 +403,13 @@ func serveAudioBehindRouteDeadline(t *testing.T, routeDeadline time.Duration, op
 		})
 	})
 	r.Use(httpserver.WriteDeadline(clock.Now, routeDeadline))
-	r.Use(httpserver.RequestLogger)
+	r.Use(httpserver.RequestLogger(clock.Now))
 	r.Use(asBearer)
-	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled), time.Now, opts...).Routes(r)
+	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled, clock.Now), time.Now, opts...).Routes(r)
 	srv := slowclienttest.NewServer(t, r)
 
 	path := "/tracks/" + track.ID.UUID().String() + "/audio"
-	auth := http.Header{"Authorization": {"Bearer " + library.FixtureUserId().String()}}
+	auth := http.Header{"Authorization": {"Bearer " + librarytest.UserId().String()}}
 	get := func() *http.Response {
 		conn, br := slowclienttest.Get(t, srv, path, auth)
 		resp := slowclienttest.ReadResponse(t, conn, br)

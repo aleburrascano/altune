@@ -1,8 +1,8 @@
 package playlist
 
 import (
-	"altune/go-api/internal/library/domain"
 	"altune/go-api/internal/library/internal/core/ports"
+	"altune/go-api/internal/library/internal/domain"
 	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"

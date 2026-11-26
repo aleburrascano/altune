@@ -172,9 +172,30 @@ function expectListEnvelope(tsLines: Map<string, string>, itemType: string): voi
 }
 
 const MOUNT_HANDLER_FILES: Record<string, string[]> = {
-  'cat.trackHandler': ['internal', 'library', 'adapters', 'handler', 'track_handler.go'],
-  'cat.libraryHandler': ['internal', 'library', 'adapters', 'handler', 'library_handler.go'],
-  'cat.playlistHandler': ['internal', 'library', 'adapters', 'handler', 'playlist_handler.go'],
+  'cat.trackHandler': [
+    'internal',
+    'library',
+    'internal',
+    'adapters',
+    'handler',
+    'track_handler.go',
+  ],
+  'cat.libraryHandler': [
+    'internal',
+    'library',
+    'internal',
+    'adapters',
+    'handler',
+    'library_handler.go',
+  ],
+  'cat.playlistHandler': [
+    'internal',
+    'library',
+    'internal',
+    'adapters',
+    'handler',
+    'playlist_handler.go',
+  ],
   get queueHandler() {
     return path
       .relative(GO_API_ROOT!, playbackGoFileDeclaring(QUEUE_HANDLER_ROUTES_DECLARATION))
@@ -184,9 +205,23 @@ const MOUNT_HANDLER_FILES: Record<string, string[]> = {
 };
 
 const SHARED_ROUTER_HANDLER_FILES: Record<string, string[]> = {
-  streamHandler: ['internal', 'library', 'adapters', 'handler', 'stream_handler.go'],
-  audioURLHandler: ['internal', 'library', 'adapters', 'handler', 'audio_url_handler.go'],
-  featuredArtist: ['internal', 'library', 'adapters', 'handler', 'featured_artist_handler.go'],
+  streamHandler: ['internal', 'library', 'internal', 'adapters', 'handler', 'stream_handler.go'],
+  audioURLHandler: [
+    'internal',
+    'library',
+    'internal',
+    'adapters',
+    'handler',
+    'audio_url_handler.go',
+  ],
+  featuredArtist: [
+    'internal',
+    'library',
+    'internal',
+    'adapters',
+    'handler',
+    'featured_artist_handler.go',
+  ],
 };
 
 function joinPath(prefix: string, sub: string): string {
@@ -475,7 +510,7 @@ describe('routes contract, derived from services/go-api and the apiClient source
 
 describe('TrackResponse (trackResponse.ts) <-> service.TrackDTO (aliased TrackResponse in track_handler.go)', () => {
   const trackDtoSource = fs.readFileSync(
-    goPath('internal', 'library', 'service', 'track', 'track_dto.go'),
+    goPath('internal', 'library', 'internal', 'service', 'track', 'track_dto.go'),
     'utf8',
   );
   const goFields = deriveGoFields(trackDtoSource, extractGoStruct(trackDtoSource, 'TrackDTO'));
@@ -514,7 +549,7 @@ describe('TrackResponse (trackResponse.ts) <-> service.TrackDTO (aliased TrackRe
 describe('ListTracksResponse (trackResponse.ts) <-> ListTracksResponse (track_handler.go)', () => {
   it('has the same field set on both sides', () => {
     const trackHandlerSource = fs.readFileSync(
-      goPath('internal', 'library', 'adapters', 'handler', 'track_handler.go'),
+      goPath('internal', 'library', 'internal', 'adapters', 'handler', 'track_handler.go'),
       'utf8',
     );
     const goFields = deriveGoFields(
@@ -533,7 +568,7 @@ describe('ListTracksResponse (trackResponse.ts) <-> ListTracksResponse (track_ha
 describe('CreateTrackRequest (trackResponse.ts) <-> CreateTrackRequest (track_handler.go)', () => {
   it('has the same field set on both sides, including the track_number the album-context save sends', () => {
     const trackHandlerSource = fs.readFileSync(
-      goPath('internal', 'library', 'adapters', 'handler', 'track_handler.go'),
+      goPath('internal', 'library', 'internal', 'adapters', 'handler', 'track_handler.go'),
       'utf8',
     );
     const goFields = deriveGoFields(
@@ -551,7 +586,7 @@ describe('CreateTrackRequest (trackResponse.ts) <-> CreateTrackRequest (track_ha
 
   it('every omitempty Go field is optional or nullable on the TS side', () => {
     const trackHandlerSource = fs.readFileSync(
-      goPath('internal', 'library', 'adapters', 'handler', 'track_handler.go'),
+      goPath('internal', 'library', 'internal', 'adapters', 'handler', 'track_handler.go'),
       'utf8',
     );
     const goFields = deriveGoFields(
@@ -571,7 +606,7 @@ describe('CreateTrackRequest (trackResponse.ts) <-> CreateTrackRequest (track_ha
 
 describe('Playlist DTOs (playlist_handler.go) <-> playlistResponse.ts', () => {
   const playlistHandlerSource = fs.readFileSync(
-    goPath('internal', 'library', 'adapters', 'handler', 'playlist_handler.go'),
+    goPath('internal', 'library', 'internal', 'adapters', 'handler', 'playlist_handler.go'),
     'utf8',
   );
   const typesSource = fs.readFileSync(path.join(CATALOG_CORE_DIR, 'playlistResponse.ts'), 'utf8');
@@ -606,7 +641,7 @@ describe('Playlist DTOs (playlist_handler.go) <-> playlistResponse.ts', () => {
 
 describe('Library lens DTOs (library_handler.go) <-> library.ts', () => {
   const libraryHandlerSource = fs.readFileSync(
-    goPath('internal', 'library', 'adapters', 'handler', 'library_handler.go'),
+    goPath('internal', 'library', 'internal', 'adapters', 'handler', 'library_handler.go'),
     'utf8',
   );
   const librarySource = fs.readFileSync(path.join(API_CLIENT_ADAPTERS_DIR, 'library.ts'), 'utf8');
@@ -637,7 +672,7 @@ describe('Library lens DTOs (library_handler.go) <-> library.ts', () => {
 describe('audioURLDTO (audio_url_handler.go) <-> ResolvedAudioUrl (audio.ts) — deliberate narrowing', () => {
   it('every ResolvedAudioUrl field maps to a Go audioURLDTO field, and expires_at is the one field dropped on purpose', () => {
     const audioUrlHandlerSource = fs.readFileSync(
-      goPath('internal', 'library', 'adapters', 'handler', 'audio_url_handler.go'),
+      goPath('internal', 'library', 'internal', 'adapters', 'handler', 'audio_url_handler.go'),
       'utf8',
     );
     const goFields = deriveGoFields(

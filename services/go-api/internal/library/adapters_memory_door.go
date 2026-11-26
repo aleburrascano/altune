@@ -2,7 +2,6 @@ package library
 
 import (
 	memory "altune/go-api/internal/library/internal/adapters/memory"
-	"altune/go-api/internal/library/internal/adapters/memory/fixturestest"
 )
 
 type (
@@ -21,14 +20,9 @@ var (
 	AssertAttrs                   = memory.AssertAttrs
 	AssertScheduleDeadline        = memory.AssertScheduleDeadline
 	CaptureAuditLogs              = memory.CaptureAuditLogs
-	FixtureOtherUserId            = fixturestest.OtherUserId
-	FixtureUserId                 = fixturestest.UserId
 	NewInMemoryAudioStore         = memory.NewAudioStore
 	NewInMemoryOrphanedAudioQueue = memory.NewOrphanedAudioQueue
 	NewInMemoryPlaylistRepo       = memory.NewPlaylistRepo
 	NewInMemoryTrackRepo          = memory.NewTrackRepo
 	WithInMemoryLibraryCap        = memory.WithLibraryCap
-	SeedPlaylist                  = fixturestest.SeedPlaylist
-	SeedReadyTrack                = fixturestest.SeedReadyTrack
-	SeedTrack                     = fixturestest.SeedTrack
 )

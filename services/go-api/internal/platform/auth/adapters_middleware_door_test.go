@@ -2,6 +2,7 @@ package auth_test
 
 import (
 	"altune/go-api/internal/platform/auth"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
@@ -168,7 +169,7 @@ func TestMiddleware_TheVerifiedUserReachesTheRequestCompleteLine(t *testing.T) {
 	uid := ids.NewUserId(uuid.New())
 	next, _ := noopHandler()
 
-	serveBearer(httpserver.RequestLogger(auth.MustMiddleware(stubVerifier(uid, nil), time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next)), "203.0.113.7:1", "valid")
+	serveBearer(httpserver.RequestLogger(clock.Now)(auth.MustMiddleware(stubVerifier(uid, nil), time.Now, auth.NoopAuthMetrics(), auth.DefaultFailureLimits)(next)), "203.0.113.7:1", "valid")
 
 	var complete []logging.CapturedRecord
 	for _, rec := range ring.Snapshot() {

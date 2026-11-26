@@ -2,6 +2,7 @@ package audio_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -40,12 +41,12 @@ func (r failingTrackLister) ListByIDs(context.Context, ids.UserId, []library.Tra
 
 func TestAudioURLService_Resolve(t *testing.T) {
 	ctx := context.Background()
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 
 	t.Run("ready tracks get signed urls, non-streamable and unknown ids are skipped", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
-		ready := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
-		pending := library.SeedTrack(t, repo, userId, "Pending", "Artist", "Album")
+		ready := librarytest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
+		pending := librarytest.SeedTrack(t, repo, userId, "Pending", "Artist", "Album")
 		svc := library.MustNewAudioURLService(repo, newRecordingSigner(), time.Now, library.NoopAudioStoreMetrics())
 
 		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID, pending.ID, library.NewTrackId()})
@@ -74,7 +75,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 
 	t.Run("a re-acquired track resolves under a new version so a cached client copy stops matching", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
-		ready := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
+		ready := librarytest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 		svc := library.MustNewAudioURLService(repo, newRecordingSigner(), time.Now, library.NoopAudioStoreMetrics())
 
 		before, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID})
@@ -103,7 +104,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 
 	t.Run("a track acquired before the column existed resolves with an empty version", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
-		ready := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
+		ready := librarytest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 		ready.AudioVersion = ""
 		if err := repo.Update(ctx, ready, ready.Version); err != nil {
 			t.Fatalf("update: %v", err)
@@ -139,7 +140,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 
 	t.Run("no signer returns nothing (client proxies)", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
-		ready := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
+		ready := librarytest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 		svc := library.MustNewAudioURLService(repo, library.NewInMemoryAudioStore(), time.Now, library.NoopAudioStoreMetrics())
 
 		out, err := svc.Resolve(ctx, userId, []library.TrackId{ready.ID})
@@ -153,7 +154,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 
 	t.Run("presign failure skips only that track and increments the failure metric", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
-		ready := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
+		ready := librarytest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 		metrics := &library.InMemoryAudioStoreMetrics{}
 		signer := newRecordingSigner()
 		signer.err = errors.New("boom")
@@ -173,7 +174,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 
 	t.Run("each url is signed for one hour and expires one hour past the injected clock", func(t *testing.T) {
 		repo := library.NewInMemoryTrackRepo()
-		ready := library.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
+		ready := librarytest.SeedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 		pinned := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
 		signer := newRecordingSigner()
 		svc := library.MustNewAudioURLService(repo, signer, func() time.Time { return pinned }, library.NoopAudioStoreMetrics())

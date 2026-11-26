@@ -1,6 +1,6 @@
 package library
 
-import track "altune/go-api/internal/library/service/track"
+import track "altune/go-api/internal/library/internal/service/track"
 
 type (
 	AddTrackInput         = track.AddTrackInput

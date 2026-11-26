@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"net/http"
 	"net/url"
 	"strings"
@@ -22,7 +23,7 @@ func TestLibraryHandler_NegativeOffsetRejected(t *testing.T) {
 	for _, path := range []string{"/library/albums", "/library/artists"} {
 		t.Run(path, func(t *testing.T) {
 			repo := library.NewInMemoryTrackRepo()
-			library.SeedTrack(t, repo, library.FixtureUserId(), "One", "Metallica", "And Justice for All")
+			librarytest.SeedTrack(t, repo, librarytest.UserId(), "One", "Metallica", "And Justice for All")
 			router := libraryRoutes(repo)
 
 			rec := request(t, router, http.MethodGet, path+"?offset=-1", nil)
@@ -52,7 +53,7 @@ func TestLibraryHandler_ZeroAndPositiveOffsetStillServed(t *testing.T) {
 	for _, path := range []string{"/library/albums?offset=0", "/library/artists?offset=5"} {
 		t.Run(path, func(t *testing.T) {
 			repo := library.NewInMemoryTrackRepo()
-			library.SeedTrack(t, repo, library.FixtureUserId(), "One", "Metallica", "And Justice for All")
+			librarytest.SeedTrack(t, repo, librarytest.UserId(), "One", "Metallica", "And Justice for All")
 			router := libraryRoutes(repo)
 
 			rec := request(t, router, http.MethodGet, path, nil)

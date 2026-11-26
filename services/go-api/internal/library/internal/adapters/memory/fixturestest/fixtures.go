@@ -1,8 +1,8 @@
 package fixturestest
 
 import (
-	"altune/go-api/internal/library/domain"
 	"altune/go-api/internal/library/internal/adapters/memory"
+	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/shared/ids"
 	"time"
 

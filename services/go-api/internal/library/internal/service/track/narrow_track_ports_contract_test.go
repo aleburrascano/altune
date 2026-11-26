@@ -2,6 +2,8 @@ package track_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/ids"
@@ -69,7 +71,7 @@ func (stubAudioRefLookup) AudioRefInUse(context.Context, string, library.TrackId
 
 func TestServicesDependOnNarrowTrackPorts(t *testing.T) {
 	ctx := context.Background()
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 	store := library.NewInMemoryAudioStore()
 	want := &library.Track{Title: "Narrow"}
 
@@ -80,7 +82,7 @@ func TestServicesDependOnNarrowTrackPorts(t *testing.T) {
 	if err := library.NewDeleteTrackService(struct {
 		stubDeleter
 		stubAudioRefLookup
-	}{stubDeleter: stubDeleter{deleted: true}}, store, events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo())).Execute(ctx, userId, library.NewTrackId()); err != nil {
+	}{stubDeleter: stubDeleter{deleted: true}}, store, events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, library.NewInMemoryOrphanedAudioQueue(library.NewInMemoryTrackRepo(), clock.Now)).Execute(ctx, userId, library.NewTrackId()); err != nil {
 		t.Fatalf("DeleteTrack via deleter-only port: %v", err)
 	}
 	if _, err := library.NewSetTrackNumberService(struct {
@@ -100,7 +102,7 @@ func TestServicesDependOnNarrowTrackPorts(t *testing.T) {
 	_ = library.NewStreamTrackService(struct {
 		stubGetter
 		stubUpdater
-	}{}, store, library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled)
+	}{}, store, library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled, clock.Now)
 	_ = library.MustNewPlaylistMembershipService(library.NewInMemoryPlaylistRepo(), struct {
 		stubGetter
 		stubBatchGetter
@@ -117,7 +119,7 @@ func (f featuringErrLister) ListTracksFeaturing(_ context.Context, _ ids.UserId,
 }
 
 func TestHotPaths_ClassifyTransientDBFailures(t *testing.T) {
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 	cause := context.DeadlineExceeded
 	transient := fmt.Errorf("%w: %w", library.ErrDBTransient, cause)
 	permanent := errors.New("relation \"tracks\" does not exist")
@@ -127,11 +129,11 @@ func TestHotPaths_ClassifyTransientDBFailures(t *testing.T) {
 		call func(repo *library.InMemoryTrackRepo) error
 	}{
 		{"stream", func(repo *library.InMemoryTrackRepo) error {
-			_, err := library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled).Execute(context.Background(), userId, library.NewTrackId())
+			_, err := library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled, clock.Now).Execute(context.Background(), userId, library.NewTrackId())
 			return err
 		}},
 		{"recover", func(repo *library.InMemoryTrackRepo) error {
-			return library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled).RecoverIfMissing(context.Background(), userId, library.NewTrackId())
+			return library.NewStreamTrackService(repo, library.NewInMemoryAudioStore(), library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled, clock.Now).RecoverIfMissing(context.Background(), userId, library.NewTrackId())
 		}},
 		{"status", func(repo *library.InMemoryTrackRepo) error {
 			_, err := library.NewGetTrackStatusService(repo).Execute(context.Background(), userId, library.NewTrackId())
@@ -175,7 +177,7 @@ func (l lensErrRepo) ListArtistsForUser(context.Context, ids.UserId, library.Lib
 
 func TestPlaylistAndLibraryPaths_ClassifyTransientDBFailures(t *testing.T) {
 	ctx := context.Background()
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 	playlistId := library.NewPlaylistId()
 	cause := context.DeadlineExceeded
 	transient := fmt.Errorf("%w: %w", library.ErrDBTransient, cause)
@@ -200,16 +202,16 @@ func TestPlaylistAndLibraryPaths_ClassifyTransientDBFailures(t *testing.T) {
 		}},
 		{"playlist rename write", func(e error) error {
 			repo := library.NewInMemoryPlaylistRepo()
-			p := library.SeedPlaylist(t, repo, userId, "before")
+			p := librarytest.SeedPlaylist(t, repo, userId, "before")
 			repo.ErrOnUpdate = e
 			_, _, err := library.MustNewPlaylistLifecycleService(repo, events.NoopPublisher(), time.Now).Rename(ctx, userId, p.ID, "after")
 			return err
 		}},
 		{"membership add track", func(e error) error {
 			plRepo := library.NewInMemoryPlaylistRepo()
-			p := library.SeedPlaylist(t, plRepo, userId, "mine")
+			p := librarytest.SeedPlaylist(t, plRepo, userId, "mine")
 			trRepo := library.NewInMemoryTrackRepo()
-			track := library.SeedTrack(t, trRepo, userId, "T", "A", "B")
+			track := librarytest.SeedTrack(t, trRepo, userId, "T", "A", "B")
 			plRepo.ErrOnAddTrack = e
 			return library.MustNewPlaylistMembershipService(plRepo, trRepo, events.NoopPublisher(), time.Now).AddTrack(ctx, userId, p.ID, track.ID)
 		}},

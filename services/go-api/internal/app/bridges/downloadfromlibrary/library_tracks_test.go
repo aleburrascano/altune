@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/app/bridges/downloadfromlibrary/upgradestatetest"
 	"altune/go-api/internal/download"
 	librarydoor "altune/go-api/internal/library"
-	"altune/go-api/internal/library/domain"
 	"altune/go-api/internal/shared/downloadprovenance"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/tracklength"
@@ -22,21 +21,21 @@ import (
 const ledgerCASAttempts = 5
 
 type fakeStore struct {
-	tracks    map[domain.TrackId]*domain.Track
+	tracks    map[librarydoor.TrackId]*librarydoor.Track
 	updates   []int
 	gets      int
 	conflicts int
 }
 
-func newFakeStore(tracks ...*domain.Track) *fakeStore {
-	s := &fakeStore{tracks: map[domain.TrackId]*domain.Track{}}
+func newFakeStore(tracks ...*librarydoor.Track) *fakeStore {
+	s := &fakeStore{tracks: map[librarydoor.TrackId]*librarydoor.Track{}}
 	for _, t := range tracks {
 		s.tracks[t.ID] = t
 	}
 	return s
 }
 
-func storedTrack(t *testing.T, s *fakeStore, id domain.TrackId) *domain.Track {
+func storedTrack(t *testing.T, s *fakeStore, id librarydoor.TrackId) *librarydoor.Track {
 	t.Helper()
 	got, ok := s.tracks[id]
 	if !ok || got == nil {
@@ -45,24 +44,24 @@ func storedTrack(t *testing.T, s *fakeStore, id domain.TrackId) *domain.Track {
 	return got
 }
 
-func (s *fakeStore) GetByID(_ context.Context, id domain.TrackId, userId ids.UserId) (*domain.Track, error) {
+func (s *fakeStore) GetByID(_ context.Context, id librarydoor.TrackId, userId ids.UserId) (*librarydoor.Track, error) {
 	s.gets++
 	t, ok := s.tracks[id]
 	if !ok || t.UserId != userId {
-		return nil, domain.ErrTrackNotFound
+		return nil, librarydoor.ErrTrackNotFound
 	}
 	cp := *t
 	return &cp, nil
 }
 
-func (s *fakeStore) UpdateFenced(ctx context.Context, track *domain.Track, expectedVersion, fence int) error {
+func (s *fakeStore) UpdateFenced(ctx context.Context, track *librarydoor.Track, expectedVersion, fence int) error {
 	if cur, ok := s.tracks[track.ID]; ok && cur != nil && fence > 0 && cur.AcquisitionFence > 0 && cur.AcquisitionFence != fence {
 		return librarydoor.ErrTrackFenceSuperseded
 	}
 	return s.Update(ctx, track, expectedVersion)
 }
 
-func (s *fakeStore) Update(_ context.Context, track *domain.Track, expectedVersion int) error {
+func (s *fakeStore) Update(_ context.Context, track *librarydoor.Track, expectedVersion int) error {
 	s.updates = append(s.updates, expectedVersion)
 	if s.conflicts > 0 {
 		s.conflicts--
@@ -81,18 +80,18 @@ func (s *fakeStore) Update(_ context.Context, track *domain.Track, expectedVersi
 	return nil
 }
 
-func (s *fakeStore) Requeue(context.Context, domain.TrackId) error {
+func (s *fakeStore) Requeue(context.Context, librarydoor.TrackId) error {
 	return nil
 }
 
-func (s *fakeStore) AudioRefInUse(context.Context, string, domain.TrackId) (bool, error) {
+func (s *fakeStore) AudioRefInUse(context.Context, string, librarydoor.TrackId) (bool, error) {
 	return false, nil
 }
 
-func newTrack(t *testing.T, version int) (*domain.Track, ids.UserId) {
+func newTrack(t *testing.T, version int) (*librarydoor.Track, ids.UserId) {
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "Title", "Artist", "Album", time.Now)
+	track, err := librarydoor.NewTrack(userId, "Title", "Artist", "Album", time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,8 +101,8 @@ func newTrack(t *testing.T, version int) (*domain.Track, ids.UserId) {
 
 type nothingStore struct{ *fakeStore }
 
-func (nothingStore) GetByID(context.Context, domain.TrackId, ids.UserId) (*domain.Track, error) {
-	var none *domain.Track
+func (nothingStore) GetByID(context.Context, librarydoor.TrackId, ids.UserId) (*librarydoor.Track, error) {
+	var none *librarydoor.Track
 	var noError error
 	return none, noError
 }
@@ -144,7 +143,7 @@ func TestGetMapsFieldsAndReportsAMissingTrackAsErrTrackNotFound(t *testing.T) {
 		t.Fatalf("status/streamable/version not mapped: %+v", snap)
 	}
 
-	missing, err := ledger.Get(context.Background(), domain.NewTrackId(), userId)
+	missing, err := ledger.Get(context.Background(), librarydoor.NewTrackId(), userId)
 	if !errors.Is(err, download.ErrTrackNotFound) || missing != nil {
 		t.Fatalf("want ErrTrackNotFound for a missing track, got %v, %v", missing, err)
 	}
@@ -172,7 +171,7 @@ func TestCompleteMarksPendingTrackReady(t *testing.T) {
 		t.Fatalf("want one update at version 4, got %v", store.updates)
 	}
 	got := storedTrack(t, store, track.ID)
-	if got.DownloadStatus != domain.AcquisitionReady || got.AudioRef == nil || *got.AudioRef != "ref-1" {
+	if got.DownloadStatus != librarydoor.AcquisitionReady || got.AudioRef == nil || *got.AudioRef != "ref-1" {
 		t.Fatalf("track not ready: %+v", got)
 	}
 	if got.DurationSeconds == nil || *got.DurationSeconds != 215.5 {
@@ -204,7 +203,7 @@ func TestCompleteWithReplaceAudioReplacesReadyTrack(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := storedTrack(t, store, track.ID)
-	if got.AudioRef == nil || *got.AudioRef != "new-ref" || got.DownloadStatus != domain.AcquisitionReady {
+	if got.AudioRef == nil || *got.AudioRef != "new-ref" || got.DownloadStatus != librarydoor.AcquisitionReady {
 		t.Fatalf("audio not replaced: %+v", got)
 	}
 }
@@ -221,7 +220,7 @@ func TestCompleteOnFailedTrackIsIllegalTransition(t *testing.T) {
 	if !errors.Is(err, download.ErrIllegalTransition) {
 		t.Fatalf("want ErrIllegalTransition, got %v", err)
 	}
-	if !errors.Is(err, domain.ErrIllegalAcquisitionTransition) {
+	if !errors.Is(err, librarydoor.ErrIllegalAcquisitionTransition) {
 		t.Fatalf("want domain cause preserved, got %v", err)
 	}
 	if len(store.updates) != 0 {
@@ -254,7 +253,7 @@ func TestMissingTrackReturnsNotFound(t *testing.T) {
 	_, userId := newTrack(t, 1)
 	ledger := downloadfromlibrary.NewLibraryTracks(newFakeStore(), time.Now, upgradestatetest.New())
 
-	err := ledger.Fail(context.Background(), domain.NewTrackId(), userId, 0, "boom")
+	err := ledger.Fail(context.Background(), librarydoor.NewTrackId(), userId, 0, "boom")
 	if !errors.Is(err, download.ErrTrackNotFound) {
 		t.Fatalf("want ErrTrackNotFound, got %v", err)
 	}
@@ -264,7 +263,7 @@ func TestRevertAtMissingTrackReturnsNotFound(t *testing.T) {
 	_, userId := newTrack(t, 1)
 	ledger := downloadfromlibrary.NewLibraryTracks(newFakeStore(), time.Now, upgradestatetest.New())
 
-	err := ledger.RevertAt(context.Background(), download.TrackSnapshot{ID: domain.NewTrackId(), UserId: userId, Version: 1})
+	err := ledger.RevertAt(context.Background(), download.TrackSnapshot{ID: librarydoor.NewTrackId(), UserId: userId, Version: 1})
 	if !errors.Is(err, download.ErrTrackNotFound) {
 		t.Fatalf("want download.ErrTrackNotFound, got %v", err)
 	}
@@ -278,7 +277,7 @@ func TestFailTransition(t *testing.T) {
 	if err := ledger.Fail(context.Background(), track.ID, userId, 0, "boom"); err != nil {
 		t.Fatal(err)
 	}
-	if got := storedTrack(t, store, track.ID); got.DownloadStatus != domain.AcquisitionFailed {
+	if got := storedTrack(t, store, track.ID); got.DownloadStatus != librarydoor.AcquisitionFailed {
 		t.Fatalf("want failed, got %v", got.DownloadStatus)
 	}
 }
@@ -295,7 +294,7 @@ func TestVersionConflictIsRetried(t *testing.T) {
 	if len(store.updates) != 2 {
 		t.Fatalf("want 2 update attempts, got %v", store.updates)
 	}
-	if got := storedTrack(t, store, track.ID); got.DownloadStatus != domain.AcquisitionFailed {
+	if got := storedTrack(t, store, track.ID); got.DownloadStatus != librarydoor.AcquisitionFailed {
 		t.Fatalf("want failed, got %v", got.DownloadStatus)
 	}
 }
@@ -346,12 +345,12 @@ func TestRevertAtRevertsAtSnapshotVersion(t *testing.T) {
 	if len(store.updates) != 1 || store.updates[0] != 5 {
 		t.Fatalf("want one update at version 5, got %v", store.updates)
 	}
-	if got := storedTrack(t, store, track.ID); got.DownloadStatus != domain.AcquisitionPending {
+	if got := storedTrack(t, store, track.ID); got.DownloadStatus != librarydoor.AcquisitionPending {
 		t.Fatalf("want pending, got %v", got.DownloadStatus)
 	}
 }
 
-func completeWithAudioLength(t *testing.T, catalogSeconds, audioSeconds float64) *domain.Track {
+func completeWithAudioLength(t *testing.T, catalogSeconds, audioSeconds float64) *librarydoor.Track {
 	t.Helper()
 	track, userId := newTrack(t, 1)
 	if err := track.SetCatalogDuration(catalogSeconds); err != nil {
@@ -547,7 +546,7 @@ func TestGetExposesTheCatalogIdentity(t *testing.T) {
 	track, userId := newTrack(t, 1)
 	mbid := "5b11f4ce-a62d-471e-81fc-a69a8278c7da"
 	explicit := true
-	sources := []domain.CatalogSource{{Provider: "deezer", ExternalID: "42"}}
+	sources := []librarydoor.CatalogSource{{Provider: "deezer", ExternalID: "42"}}
 	if err := track.SetCatalogIdentity(&mbid, &explicit, sources); err != nil {
 		t.Fatal(err)
 	}
@@ -598,7 +597,7 @@ func TestGetKeepsTheMeasuredFileLengthBesideTheCatalogLength(t *testing.T) {
 func TestGetExposesThePickedSourceURL(t *testing.T) {
 	track, userId := newTrack(t, 1)
 	const pick = "https://soundcloud.com/artist/track"
-	track.CatalogSources = []domain.CatalogSource{{Provider: "soundcloud", ExternalID: pick, URL: pick}}
+	track.CatalogSources = []librarydoor.CatalogSource{{Provider: "soundcloud", ExternalID: pick, URL: pick}}
 
 	snap, err := downloadfromlibrary.NewLibraryTracks(newFakeStore(track), time.Now, upgradestatetest.New()).Get(context.Background(), track.ID, userId)
 	if err != nil || snap == nil {
@@ -621,7 +620,7 @@ func TestTrackLedger_CompleteWithAStaleFenceIsLeaseLost(t *testing.T) {
 	if !errors.Is(err, download.ErrLeaseLost) {
 		t.Fatalf("err = %v, want ErrLeaseLost", err)
 	}
-	if got := storedTrack(t, store, track.ID); got.DownloadStatus != domain.AcquisitionPending || len(store.updates) != 0 {
+	if got := storedTrack(t, store, track.ID); got.DownloadStatus != librarydoor.AcquisitionPending || len(store.updates) != 0 {
 		t.Errorf("status = %v, updates = %v, want the track untouched", got.DownloadStatus, store.updates)
 	}
 }
@@ -637,7 +636,7 @@ func TestTrackLedger_FailWithAStaleFenceIsLeaseLost(t *testing.T) {
 	if !errors.Is(failErr, download.ErrLeaseLost) {
 		t.Fatalf("Fail = %v, want ErrLeaseLost", failErr)
 	}
-	if got := storedTrack(t, store, track.ID); got.DownloadStatus != domain.AcquisitionPending || len(store.updates) != 0 {
+	if got := storedTrack(t, store, track.ID); got.DownloadStatus != librarydoor.AcquisitionPending || len(store.updates) != 0 {
 		t.Errorf("status = %v, updates = %v, want the track untouched", got.DownloadStatus, store.updates)
 	}
 }
@@ -662,7 +661,7 @@ func TestTrackLedger_WritesThatOwnTheLeaseOrCarryNoFenceGoThrough(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := storedTrack(t, store, track.ID); got.DownloadStatus != domain.AcquisitionFailed {
+			if got := storedTrack(t, store, track.ID); got.DownloadStatus != librarydoor.AcquisitionFailed {
 				t.Errorf("status = %v, want failed", got.DownloadStatus)
 			}
 		})
@@ -679,7 +678,7 @@ func TestTrackLedger_AClaimBetweenReadAndUpdateFencesOutTheWriter(t *testing.T) 
 	if !errors.Is(err, download.ErrLeaseLost) {
 		t.Fatalf("err = %v, want ErrLeaseLost from the fenced write", err)
 	}
-	if got := storedTrack(t, store.fakeStore, track.ID); got.DownloadStatus != domain.AcquisitionPending {
+	if got := storedTrack(t, store.fakeStore, track.ID); got.DownloadStatus != librarydoor.AcquisitionPending {
 		t.Errorf("status = %v, want pending", got.DownloadStatus)
 	}
 }
@@ -689,7 +688,7 @@ type reclaimingStore struct {
 	reclaimed bool
 }
 
-func (s *reclaimingStore) UpdateFenced(ctx context.Context, track *domain.Track, expectedVersion, fence int) error {
+func (s *reclaimingStore) UpdateFenced(ctx context.Context, track *librarydoor.Track, expectedVersion, fence int) error {
 	if !s.reclaimed {
 		s.reclaimed = true
 		stored, ok := s.tracks[track.ID]
@@ -713,7 +712,7 @@ func TestTrackLedger_AFenceAheadOfTheTracksIsAlsoLeaseLost(t *testing.T) {
 	if !errors.Is(err, download.ErrLeaseLost) {
 		t.Fatalf("err = %v, want ErrLeaseLost: a fence that differs either way is not the owner", err)
 	}
-	if got := storedTrack(t, store, track.ID); got.DownloadStatus != domain.AcquisitionPending || got.AudioRef != nil {
+	if got := storedTrack(t, store, track.ID); got.DownloadStatus != librarydoor.AcquisitionPending || got.AudioRef != nil {
 		t.Errorf("status = %v, audio_ref = %v, want the track pending with no audio", got.DownloadStatus, got.AudioRef)
 	}
 }
@@ -732,7 +731,7 @@ func TestTrackLedger_AStaleReplaceKeepsTheTrackOnItsServingAudio(t *testing.T) {
 		t.Fatalf("err = %v, want ErrLeaseLost", err)
 	}
 	got := storedTrack(t, store, track.ID)
-	if got.DownloadStatus != domain.AcquisitionReady || got.AudioRef == nil || *got.AudioRef != "old-ref" {
+	if got.DownloadStatus != librarydoor.AcquisitionReady || got.AudioRef == nil || *got.AudioRef != "old-ref" {
 		t.Errorf("status = %v, audio_ref = %v, want ready on old-ref", got.DownloadStatus, got.AudioRef)
 	}
 	if len(store.updates) != 0 {
@@ -759,7 +758,7 @@ func TestTrackLedger_CompleteWithoutAFenceOnEitherSideGoesThrough(t *testing.T) 
 				t.Fatal(err)
 			}
 			got := storedTrack(t, store, track.ID)
-			if got.DownloadStatus != domain.AcquisitionReady || got.AudioRef == nil || *got.AudioRef != "ref-1" {
+			if got.DownloadStatus != librarydoor.AcquisitionReady || got.AudioRef == nil || *got.AudioRef != "ref-1" {
 				t.Errorf("status = %v, audio_ref = %v, want ready on ref-1", got.DownloadStatus, got.AudioRef)
 			}
 		})
@@ -777,7 +776,7 @@ func TestTrackLedger_AClaimBetweenReadAndUpdateStopsTheOldOwnerFailingTheTrack(t
 		t.Fatalf("err = %v, want ErrLeaseLost", err)
 	}
 	got := storedTrack(t, store.fakeStore, track.ID)
-	if got.DownloadStatus != domain.AcquisitionPending || got.FailureReason != nil {
+	if got.DownloadStatus != librarydoor.AcquisitionPending || got.FailureReason != nil {
 		t.Errorf("status = %v, reason = %v, want pending with no failure", got.DownloadStatus, got.FailureReason)
 	}
 	if got.AcquisitionFence != 3 {
@@ -796,7 +795,7 @@ func TestTrackLedger_RevertAtIgnoresTheLease(t *testing.T) {
 	if err := downloadfromlibrary.NewLibraryTracks(store, time.Now, upgradestatetest.New()).RevertAt(context.Background(), download.TrackSnapshot{ID: track.ID, UserId: userId, Version: 5}); err != nil {
 		t.Fatal(err)
 	}
-	if got := storedTrack(t, store, track.ID); got.DownloadStatus != domain.AcquisitionPending {
+	if got := storedTrack(t, store, track.ID); got.DownloadStatus != librarydoor.AcquisitionPending {
 		t.Errorf("status = %v, want pending", got.DownloadStatus)
 	}
 }
@@ -840,10 +839,10 @@ func goldenRelabel() *download.TrackLabel {
 	}
 }
 
-func studioLabelledTrack(t *testing.T) (*domain.Track, ids.UserId) {
+func studioLabelledTrack(t *testing.T) (*librarydoor.Track, ids.UserId) {
 	t.Helper()
 	userId := ids.NewUserId(uuid.New())
-	track, err := domain.NewTrack(userId, "It's Only Love", "Bryan Adams", "Reckless", time.Now)
+	track, err := librarydoor.NewTrack(userId, "It's Only Love", "Bryan Adams", "Reckless", time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -945,7 +944,7 @@ func TestTrackLedger_ARelabelSurvivesAVersionConflictRetry(t *testing.T) {
 	if got.CatalogMBID == nil || *got.CatalogMBID != "25d68187-ee71-4f06-9e58-0b49d66bf8a8" {
 		t.Errorf("CatalogMBID = %v, want the re-recording after the retry", got.CatalogMBID)
 	}
-	if got.DownloadStatus != domain.AcquisitionReady || got.AudioRef == nil || *got.AudioRef != "ref" {
+	if got.DownloadStatus != librarydoor.AcquisitionReady || got.AudioRef == nil || *got.AudioRef != "ref" {
 		t.Errorf("audio did not land with the relabel: status=%v ref=%v", got.DownloadStatus, got.AudioRef)
 	}
 }
@@ -1138,7 +1137,7 @@ func TestCompleteReturnsTheStateErrorAndLeavesTheTrackUntouchedSoTheSchedulerRet
 	if err == nil || !errors.Is(err, state.err) {
 		t.Fatalf("Complete = %v, want the state error", err)
 	}
-	if got := storedTrack(t, store, track.ID); got.DownloadStatus != domain.AcquisitionPending || len(store.updates) != 0 {
+	if got := storedTrack(t, store, track.ID); got.DownloadStatus != librarydoor.AcquisitionPending || len(store.updates) != 0 {
 		t.Errorf("status = %v, updates = %v, want the track untouched because Complete never ran", got.DownloadStatus, store.updates)
 	}
 }
@@ -1162,7 +1161,7 @@ func TestCompleteThatFailsAfterTheStateWriteIsRetriedWithTheSameStateWrite(t *te
 	if len(state.settled) != 2 || !reflect.DeepEqual(state.settled[0], state.settled[1]) {
 		t.Errorf("settled = %+v, want the identical idempotent write twice", state.settled)
 	}
-	if got := storedTrack(t, store, track.ID); got.DownloadStatus != domain.AcquisitionReady {
+	if got := storedTrack(t, store, track.ID); got.DownloadStatus != librarydoor.AcquisitionReady {
 		t.Errorf("status = %v, want ready after the retry", got.DownloadStatus)
 	}
 }
@@ -1181,7 +1180,7 @@ func TestCompleteHandsTheClaimFenceToTheStateWriteAndReturnsALostLease(t *testin
 	if len(state.settled) != 1 || state.settled[0].fence != 4 {
 		t.Errorf("settled = %+v, want one write carrying fence 4", state.settled)
 	}
-	if got := storedTrack(t, store, track.ID); got.DownloadStatus != domain.AcquisitionPending {
+	if got := storedTrack(t, store, track.ID); got.DownloadStatus != librarydoor.AcquisitionPending {
 		t.Errorf("status = %v, want pending because Complete never ran", got.DownloadStatus)
 	}
 }

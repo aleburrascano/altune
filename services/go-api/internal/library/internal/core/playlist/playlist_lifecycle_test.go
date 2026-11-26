@@ -2,6 +2,7 @@ package playlist_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -57,7 +58,7 @@ func TestMustNewPlaylistLifecycleService_PanicsOnANilClock(t *testing.T) {
 
 func TestPlaylistLifecycleService_Create(t *testing.T) {
 	ctx := context.Background()
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 	errRepo := errors.New("db error")
 
 	tests := []struct {
@@ -156,7 +157,7 @@ func (r *heldPlaylistsRepo) assertAskedForTheCap(t *testing.T) {
 
 func TestPlaylistLifecycleService_Create_RejectsPastUserCap(t *testing.T) {
 	ctx := context.Background()
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 	plRepo := newHeldPlaylistsRepo(userId, playlistCap)
 	svc := library.MustNewPlaylistLifecycleService(plRepo, events.NoopPublisher(), time.Now)
 
@@ -176,7 +177,7 @@ func TestPlaylistLifecycleService_Create_RejectsPastUserCap(t *testing.T) {
 
 func TestPlaylistLifecycleService_Create_AllowsTheLastPlaylistUnderTheCap(t *testing.T) {
 	ctx := context.Background()
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 	plRepo := newHeldPlaylistsRepo(userId, playlistCap-1)
 	svc := library.MustNewPlaylistLifecycleService(plRepo, events.NoopPublisher(), time.Now)
 
@@ -192,10 +193,10 @@ func TestPlaylistLifecycleService_Create_AllowsTheLastPlaylistUnderTheCap(t *tes
 
 func TestPlaylistLifecycleService_Create_CapCountsOnlyTheCallersPlaylists(t *testing.T) {
 	ctx := context.Background()
-	plRepo := newHeldPlaylistsRepo(library.FixtureOtherUserId(), playlistCap)
+	plRepo := newHeldPlaylistsRepo(librarytest.OtherUserId(), playlistCap)
 	svc := library.MustNewPlaylistLifecycleService(plRepo, events.NoopPublisher(), time.Now)
 
-	playlist, err := svc.Create(ctx, library.FixtureUserId(), "Mine")
+	playlist, err := svc.Create(ctx, librarytest.UserId(), "Mine")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -209,7 +210,7 @@ func TestPlaylistLifecycleService_Create_StampsWallClockInUTC(t *testing.T) {
 	svc := library.MustNewPlaylistLifecycleService(library.NewInMemoryPlaylistRepo(), events.NoopPublisher(), time.Now)
 
 	before := time.Now()
-	pl, err := svc.Create(context.Background(), library.FixtureUserId(), "Clocked")
+	pl, err := svc.Create(context.Background(), librarytest.UserId(), "Clocked")
 	after := time.Now()
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -224,7 +225,7 @@ func TestPlaylistLifecycleService_Create_StampsWallClockInUTC(t *testing.T) {
 
 func TestPlaylistLifecycleService_Get(t *testing.T) {
 	ctx := context.Background()
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 	errRepo := errors.New("db error")
 
 	tests := []struct {
@@ -236,7 +237,7 @@ func TestPlaylistLifecycleService_Get(t *testing.T) {
 		{
 			name: "found playlist with tracks",
 			setup: func(repo *library.InMemoryPlaylistRepo) library.PlaylistId {
-				pl := library.SeedPlaylist(t, repo, userId, "Rock")
+				pl := librarytest.SeedPlaylist(t, repo, userId, "Rock")
 				track, _ := library.NewTrack(userId, "Track", "Artist", "Album", time.Now)
 				repo.SeedWithTracks(t, pl, []*library.Track{track})
 				return pl.ID
@@ -292,7 +293,7 @@ func TestPlaylistLifecycleService_Get(t *testing.T) {
 
 func TestPlaylistLifecycleService_Delete(t *testing.T) {
 	ctx := context.Background()
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 	errRepo := errors.New("db error")
 
 	tests := []struct {
@@ -303,7 +304,7 @@ func TestPlaylistLifecycleService_Delete(t *testing.T) {
 		{
 			name: "existing playlist is deleted",
 			setup: func(repo *library.InMemoryPlaylistRepo) library.PlaylistId {
-				pl := library.SeedPlaylist(t, repo, userId, "To Delete")
+				pl := librarytest.SeedPlaylist(t, repo, userId, "To Delete")
 				return pl.ID
 			},
 			wantErr: nil,
@@ -351,7 +352,7 @@ func TestPlaylistLifecycleService_Delete(t *testing.T) {
 
 func TestPlaylistLifecycleService_Rename(t *testing.T) {
 	ctx := context.Background()
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 	errRepo := errors.New("db error")
 
 	tests := []struct {
@@ -364,7 +365,7 @@ func TestPlaylistLifecycleService_Rename(t *testing.T) {
 			name:    "valid rename succeeds",
 			newName: "New Name",
 			setup: func(repo *library.InMemoryPlaylistRepo) library.PlaylistId {
-				pl := library.SeedPlaylist(t, repo, userId, "Old Name")
+				pl := librarytest.SeedPlaylist(t, repo, userId, "Old Name")
 				return pl.ID
 			},
 		},
@@ -380,7 +381,7 @@ func TestPlaylistLifecycleService_Rename(t *testing.T) {
 			name:    "empty name returns validation error",
 			newName: "",
 			setup: func(repo *library.InMemoryPlaylistRepo) library.PlaylistId {
-				pl := library.SeedPlaylist(t, repo, userId, "Has Name")
+				pl := librarytest.SeedPlaylist(t, repo, userId, "Has Name")
 				return pl.ID
 			},
 			wantErr: "playlist name required",
@@ -444,9 +445,9 @@ func (r *playlistDeletedAfterRead) GetByID(ctx context.Context, id library.Playl
 
 func TestPlaylistLifecycleService_Rename_RefusesAPlaylistDeletedAfterTheRead(t *testing.T) {
 	ctx := context.Background()
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 	plRepo := library.NewInMemoryPlaylistRepo()
-	pl := library.SeedPlaylist(t, plRepo, userId, "Old Name")
+	pl := librarytest.SeedPlaylist(t, plRepo, userId, "Old Name")
 	pub := &library.InMemoryRecordingPublisher{}
 	svc := library.MustNewPlaylistLifecycleService(&playlistDeletedAfterRead{plRepo}, pub, time.Now)
 
@@ -462,9 +463,9 @@ func TestPlaylistLifecycleService_Rename_RefusesAPlaylistDeletedAfterTheRead(t *
 
 func TestPlaylistLifecycleService_Rename_PublishesTheNewName(t *testing.T) {
 	ctx := context.Background()
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 	plRepo := library.NewInMemoryPlaylistRepo()
-	pl := library.SeedPlaylist(t, plRepo, userId, "Old")
+	pl := librarytest.SeedPlaylist(t, plRepo, userId, "Old")
 	pub := &library.InMemoryRecordingPublisher{}
 	svc := library.MustNewPlaylistLifecycleService(plRepo, pub, time.Now)
 

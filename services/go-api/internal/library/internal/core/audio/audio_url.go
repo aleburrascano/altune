@@ -1,8 +1,8 @@
 package audio
 
 import (
-	"altune/go-api/internal/library/domain"
 	"altune/go-api/internal/library/internal/core/ports"
+	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -54,9 +54,9 @@ func (s *AudioLinkService) Resolve(ctx context.Context, userId ids.UserId, track
 		return nil, nil
 	}
 
-	dbStart := time.Now()
+	dbStart := s.now()
 	tracks, err := s.trackRepo.ListByIDs(ctx, userId, trackIds)
-	dbDuration := time.Since(dbStart)
+	dbDuration := s.now().Sub(dbStart)
 	if err != nil {
 		return nil, domain.WrapRepoError(ctx, "resolve audio urls", err)
 	}
@@ -67,7 +67,7 @@ func (s *AudioLinkService) Resolve(ctx context.Context, userId ids.UserId, track
 
 	expiresAt := s.now().Add(audioURLTTL)
 	out := make([]ResolvedAudioURL, 0, len(trackIds))
-	presignStart := time.Now()
+	presignStart := s.now()
 	for _, id := range trackIds {
 		track := byID[id]
 		if track == nil || !track.IsStreamable() {
@@ -86,7 +86,7 @@ func (s *AudioLinkService) Resolve(ctx context.Context, userId ids.UserId, track
 		"requested", len(trackIds),
 		"resolved", len(out),
 		"db_lookup_ms", dbDuration.Milliseconds(),
-		"presign_ms", time.Since(presignStart).Milliseconds(),
+		"presign_ms", s.now().Sub(presignStart).Milliseconds(),
 	)
 	return out, nil
 }

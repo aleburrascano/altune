@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -24,7 +25,7 @@ type backfillResponse struct {
 func seedTracks(t *testing.T, repo *library.InMemoryTrackRepo, titles ...string) {
 	t.Helper()
 	for _, title := range titles {
-		library.SeedTrack(t, repo, library.FixtureUserId(), title, "Artist", "Album")
+		librarytest.SeedTrack(t, repo, librarytest.UserId(), title, "Artist", "Album")
 	}
 }
 
@@ -149,7 +150,7 @@ func TestHandleListFeaturing_RequiresOneArtistKey(t *testing.T) {
 
 func TestHandleListFeaturing_AcceptsAPositiveDeezerID(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
-	track := library.SeedTrack(t, repo, library.FixtureUserId(), "Feature", "Artist", "Album")
+	track := librarytest.SeedTrack(t, repo, librarytest.UserId(), "Feature", "Artist", "Album")
 	track.FeaturedArtists = []library.FeaturedArtist{library.NewFeaturedArtistIdentityOnly("SZA", "", 42)}
 	router := trackRoutes(repo)
 

@@ -2,6 +2,7 @@ package libraryviews_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -18,11 +19,11 @@ func TestLibraryLensService_RejectsNegativeOffset(t *testing.T) {
 		call func() error
 	}{
 		{"albums", func() error {
-			_, err := svc.Albums(context.Background(), library.FixtureUserId(), query)
+			_, err := svc.Albums(context.Background(), librarytest.UserId(), query)
 			return err
 		}},
 		{"artists", func() error {
-			_, err := svc.Artists(context.Background(), library.FixtureUserId(), query)
+			_, err := svc.Artists(context.Background(), librarytest.UserId(), query)
 			return err
 		}},
 	}
@@ -45,7 +46,7 @@ func TestLibraryLensService_RejectsNegativeOffset(t *testing.T) {
 func TestLibraryLensService_ArtistsRejectYearSort(t *testing.T) {
 	svc := library.NewLibraryLensService(library.NewInMemoryTrackRepo())
 
-	_, err := svc.Artists(context.Background(), library.FixtureUserId(), library.LibraryQuery{Sort: library.SortYear})
+	_, err := svc.Artists(context.Background(), librarytest.UserId(), library.LibraryQuery{Sort: library.SortYear})
 
 	if err == nil {
 		t.Fatal("expected a validation error for sort=year on artists")
@@ -56,7 +57,7 @@ func TestLibraryLensService_ArtistsRejectYearSort(t *testing.T) {
 func TestLibraryLensService_ArtistsReportYearSortBeforeOffset(t *testing.T) {
 	svc := library.NewLibraryLensService(library.NewInMemoryTrackRepo())
 
-	_, err := svc.Artists(context.Background(), library.FixtureUserId(), library.LibraryQuery{Sort: library.SortYear, Offset: -1})
+	_, err := svc.Artists(context.Background(), librarytest.UserId(), library.LibraryQuery{Sort: library.SortYear, Offset: -1})
 
 	if err == nil {
 		t.Fatal("expected a validation error")
@@ -68,10 +69,10 @@ func TestLibraryLensService_ArtistsReportYearSortBeforeOffset(t *testing.T) {
 
 func TestLibraryLensService_GroupsOwnedTracks(t *testing.T) {
 	ctx := context.Background()
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 	repo := library.NewInMemoryTrackRepo()
-	library.SeedTrack(t, repo, userId, "One", "Metallica", "And Justice for All")
-	library.SeedTrack(t, repo, userId, "Blackened", "Metallica", "And Justice for All")
+	librarytest.SeedTrack(t, repo, userId, "One", "Metallica", "And Justice for All")
+	librarytest.SeedTrack(t, repo, userId, "Blackened", "Metallica", "And Justice for All")
 
 	albums, err := svcAlbums(ctx, repo, userId)
 	if err != nil {
@@ -95,7 +96,7 @@ func TestLibraryLensService_GroupsOwnedTracks(t *testing.T) {
 
 func TestLibraryLensService_ClampsLimit(t *testing.T) {
 	ctx := context.Background()
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 
 	cases := []struct {
 		name string

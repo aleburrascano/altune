@@ -1,9 +1,9 @@
 package handler
 
 import (
-	"altune/go-api/internal/library/domain"
 	audioservice "altune/go-api/internal/library/internal/core/audio"
 	"altune/go-api/internal/library/internal/core/ports"
+	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
@@ -63,7 +63,7 @@ func (h *StreamHandler) Routes(r chi.Router) {
 }
 
 func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request) {
-	start := time.Now()
+	start := h.now()
 	w = httpserver.ExtendWriteDeadlineOnWrite(h.now, w, h.writeIdleTimeout)
 	userId, ok := requestuser.RequireUserID(w, r)
 	if !ok {
@@ -85,14 +85,14 @@ func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request
 	slog.InfoContext(r.Context(), "stream.serving",
 		"track_id", trackId.String(),
 		"size_bytes", out.Size,
-		"setup_ms", time.Since(start).Milliseconds(),
+		"setup_ms", h.now().Sub(start).Milliseconds(),
 	)
 
 	setAudioBodyHeaders(w, *out.Track.AudioRef)
 	body := &countedAudioBody{stream: out.Reader}
 	http.ServeContent(w, r, "", time.Time{}, body)
 
-	logStreamOutcome(r.Context(), trackId, body, time.Since(start))
+	logStreamOutcome(r.Context(), trackId, body, h.now().Sub(start))
 }
 
 func setAudioBodyHeaders(w http.ResponseWriter, audioRef string) {

@@ -2,6 +2,7 @@ package track_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
@@ -64,9 +65,9 @@ func canonicalJSON(t *testing.T, raw []byte) string {
 
 func TestTrackToDTO_DoesNotSerializeAudioRef(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 	audioRef := userId.String() + "/m83/hurry-up/midnight-city.opus"
-	library.SeedReadyTrack(t, repo, userId, "Midnight City", "M83", "Hurry Up, We're Dreaming", audioRef)
+	librarytest.SeedReadyTrack(t, repo, userId, "Midnight City", "M83", "Hurry Up, We're Dreaming", audioRef)
 
 	body := listTracksBody(t, repo, userId)
 
@@ -83,7 +84,7 @@ func TestTrackToDTO_DoesNotSerializeAudioRef(t *testing.T) {
 
 func TestTrackToDTO_EmptyAlbumIsNull(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
-	userId := library.FixtureUserId()
+	userId := librarytest.UserId()
 	stored := &library.Track{ID: library.NewTrackId(), UserId: userId, Title: "Single", Artist: "Artist", Album: ""}
 	if _, _, err := repo.Add(context.Background(), stored); err != nil {
 		t.Fatalf("Add: %v", err)
@@ -98,8 +99,8 @@ func TestTrackToDTO_EmptyAlbumIsNull(t *testing.T) {
 
 func TestTrackToDTO_IDMarshalsAsCanonicalUUID(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
-	userId := library.FixtureUserId()
-	track := library.SeedTrack(t, repo, userId, "Midnight City", "M83", "")
+	userId := librarytest.UserId()
+	track := librarytest.SeedTrack(t, repo, userId, "Midnight City", "M83", "")
 
 	body := listTracksBody(t, repo, userId)
 

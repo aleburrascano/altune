@@ -1,6 +1,7 @@
 package httpserver_test
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/logging"
 	"log/slog"
@@ -82,7 +83,7 @@ func TestCorrelationID_AdoptsInboundHeader(t *testing.T) {
 
 	const inbound = "trace-abc12345"
 	var capturedID string
-	handler := httpserver.CorrelationID(httpserver.RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := httpserver.CorrelationID(httpserver.RequestLogger(clock.Now)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedID = logging.CorrelationIDFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	})))

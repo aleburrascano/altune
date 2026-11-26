@@ -2,6 +2,8 @@ package handler_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/library/librarytest"
+	"altune/go-api/internal/shared/clock"
 	sharedids "altune/go-api/internal/shared/ids"
 	"bytes"
 	"context"
@@ -99,7 +101,7 @@ func newAudioRig(now func() time.Time) *audioRig {
 	store := &countingAudioStore{InMemoryAudioStore: library.NewInMemoryAudioStore()}
 	r := chi.NewRouter()
 	r.Use(asBearer)
-	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled), now).Routes(r)
+	library.MustNewStreamHandler(library.NewStreamTrackService(repo, store, library.NoopAcquisitionScheduler(), library.NoopAudioStoreMetrics(), library.AlwaysEnabled, clock.Now), now).Routes(r)
 	library.MustNewAudioURLHandler(library.MustNewAudioURLService(repo, store, now, library.NoopAudioStoreMetrics()), now).Routes(r)
 	return &audioRig{router: r, store: store, repo: repo}
 }
@@ -109,7 +111,7 @@ func (rig *audioRig) seedTracks(t *testing.T, user sharedids.UserId, n int) []*l
 	tracks := make([]*library.Track, 0, n)
 	for i := range n {
 		ref := fmt.Sprintf("audio/%s-%d.opus", user.String(), i)
-		tracks = append(tracks, library.SeedReadyTrack(t, rig.repo, user, fmt.Sprintf("Track %d", i), "Artist", "Album", ref))
+		tracks = append(tracks, librarytest.SeedReadyTrack(t, rig.repo, user, fmt.Sprintf("Track %d", i), "Artist", "Album", ref))
 		rig.store.Seed(ref, bytes.Repeat([]byte{0x5a}, audioTestBytes))
 	}
 	return tracks
@@ -228,8 +230,8 @@ func TestWriteRateLimits_DefaultsAdmitRealClientTraffic(t *testing.T) {
 	clock := newFakeClock()
 	rig := newWriteRig(clock.now)
 	user := sharedids.NewUserId(uuid.New())
-	playlist := library.SeedPlaylist(t, rig.playlists, user, "Seeded")
-	track := library.SeedTrack(t, rig.tracks, user, "Seeded Track", "Artist", "Album")
+	playlist := librarytest.SeedPlaylist(t, rig.playlists, user, "Seeded")
+	track := librarytest.SeedTrack(t, rig.tracks, user, "Seeded Track", "Artist", "Album")
 
 	for i := range 150 {
 		if rec := rig.createTrack(t, user, fmt.Sprintf("Compilation Track %d", i)); rec.Code != http.StatusCreated {
@@ -260,18 +262,18 @@ type endpointProbe struct {
 
 func openStream(t *testing.T, clocks ...func() time.Time) endpointProbe {
 	rig := newAudioRig(firstClock(clocks))
-	track := rig.seedTracks(t, library.FixtureUserId(), 1)[0]
+	track := rig.seedTracks(t, librarytest.UserId(), 1)[0]
 	return endpointProbe{
-		hit:     func(int) *httptest.ResponseRecorder { return rig.stream(library.FixtureUserId(), track, "bytes=0-1") },
+		hit:     func(int) *httptest.ResponseRecorder { return rig.stream(librarytest.UserId(), track, "bytes=0-1") },
 		reached: func() int { return rig.store.streams },
 	}
 }
 
 func openAudioURLs(t *testing.T, clocks ...func() time.Time) endpointProbe {
 	rig := newAudioRig(firstClock(clocks))
-	track := rig.seedTracks(t, library.FixtureUserId(), 1)[0]
+	track := rig.seedTracks(t, librarytest.UserId(), 1)[0]
 	return endpointProbe{
-		hit:     func(int) *httptest.ResponseRecorder { return rig.resolve(library.FixtureUserId(), track) },
+		hit:     func(int) *httptest.ResponseRecorder { return rig.resolve(librarytest.UserId(), track) },
 		reached: func() int { return rig.store.presigns },
 	}
 }
@@ -280,7 +282,7 @@ func openTrackWrites(t *testing.T, clocks ...func() time.Time) endpointProbe {
 	rig := newWriteRig(firstClock(clocks))
 	return endpointProbe{
 		hit: func(i int) *httptest.ResponseRecorder {
-			return rig.createTrack(t, library.FixtureUserId(), fmt.Sprintf("Track %d", i))
+			return rig.createTrack(t, librarytest.UserId(), fmt.Sprintf("Track %d", i))
 		},
 		reached: func() int { return countHeld(t, rig.tracks.CountForUser) },
 	}
@@ -290,7 +292,7 @@ func openPlaylistWrites(t *testing.T, clocks ...func() time.Time) endpointProbe 
 	rig := newWriteRig(firstClock(clocks))
 	return endpointProbe{
 		hit: func(i int) *httptest.ResponseRecorder {
-			return rig.createPlaylist(t, library.FixtureUserId(), fmt.Sprintf("Playlist %d", i))
+			return rig.createPlaylist(t, librarytest.UserId(), fmt.Sprintf("Playlist %d", i))
 		},
 		reached: func() int { return countHeld(t, rig.playlists.CountForUser) },
 	}
@@ -298,7 +300,7 @@ func openPlaylistWrites(t *testing.T, clocks ...func() time.Time) endpointProbe 
 
 func countHeld(t *testing.T, count func(context.Context, sharedids.UserId, int) (int, error)) int {
 	t.Helper()
-	held, err := count(context.Background(), library.FixtureUserId(), 1<<20)
+	held, err := count(context.Background(), librarytest.UserId(), 1<<20)
 	if err != nil {
 		t.Fatalf("count stored rows: %v", err)
 	}

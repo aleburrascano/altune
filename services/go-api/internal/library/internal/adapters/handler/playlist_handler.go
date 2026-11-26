@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"altune/go-api/internal/library/domain"
 	playlistservice "altune/go-api/internal/library/internal/core/playlist"
+	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"

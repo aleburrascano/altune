@@ -1,7 +1,7 @@
 package ports
 
 import (
-	"altune/go-api/internal/library/domain"
+	"altune/go-api/internal/library/internal/domain"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"

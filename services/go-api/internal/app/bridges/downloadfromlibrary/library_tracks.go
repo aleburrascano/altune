@@ -3,7 +3,6 @@ package downloadfromlibrary
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/library"
-	"altune/go-api/internal/library/domain"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/redact"
@@ -17,11 +16,11 @@ import (
 const maxAttempts = 5
 
 type TrackStore interface {
-	GetByID(ctx context.Context, id domain.TrackId, userId ids.UserId) (*domain.Track, error)
-	Update(ctx context.Context, track *domain.Track, expectedVersion int) error
-	UpdateFenced(ctx context.Context, track *domain.Track, expectedVersion, fence int) error
-	AudioRefInUse(ctx context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error)
-	Requeue(ctx context.Context, id domain.TrackId) error
+	GetByID(ctx context.Context, id library.TrackId, userId ids.UserId) (*library.Track, error)
+	Update(ctx context.Context, track *library.Track, expectedVersion int) error
+	UpdateFenced(ctx context.Context, track *library.Track, expectedVersion, fence int) error
+	AudioRefInUse(ctx context.Context, audioRef string, excludeTrackID library.TrackId) (bool, error)
+	Requeue(ctx context.Context, id library.TrackId) error
 }
 
 type LibraryTracks struct {
@@ -53,7 +52,7 @@ func (e illegalTransitionError) Is(target error) bool {
 }
 
 func translate(err error) error {
-	if errors.Is(err, domain.ErrIllegalAcquisitionTransition) {
+	if errors.Is(err, library.ErrIllegalAcquisitionTransition) {
 		return illegalTransitionError{err: err}
 	}
 	return err
@@ -69,7 +68,7 @@ func (l *LibraryTracks) Requeue(ctx context.Context, id ids.TrackId) error {
 
 func (l *LibraryTracks) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*download.TrackSnapshot, error) {
 	track, err := l.store.GetByID(ctx, id, userId)
-	if errors.Is(err, domain.ErrTrackNotFound) {
+	if errors.Is(err, library.ErrTrackNotFound) {
 		return nil, download.ErrTrackNotFound
 	}
 	if err != nil {
@@ -90,7 +89,7 @@ func (l *LibraryTracks) Get(ctx context.Context, id ids.TrackId, userId ids.User
 	return snapshot, nil
 }
 
-func snapshotOf(track *domain.Track) *download.TrackSnapshot {
+func snapshotOf(track *library.Track) *download.TrackSnapshot {
 	snapshot := catalogFactsOf(track)
 	snapshot.AudioRef = track.AudioRef
 	snapshot.AudioSourceURL = track.AudioSourceURL
@@ -102,7 +101,7 @@ func snapshotOf(track *domain.Track) *download.TrackSnapshot {
 	return snapshot
 }
 
-func catalogFactsOf(track *domain.Track) *download.TrackSnapshot {
+func catalogFactsOf(track *library.Track) *download.TrackSnapshot {
 	return &download.TrackSnapshot{
 		ID:                     track.ID,
 		UserId:                 track.UserId,
@@ -121,7 +120,7 @@ func catalogFactsOf(track *domain.Track) *download.TrackSnapshot {
 	}
 }
 
-func snapshotSources(sources []domain.CatalogSource) []download.CatalogSource {
+func snapshotSources(sources []library.CatalogSource) []download.CatalogSource {
 	if len(sources) == 0 {
 		return nil
 	}
@@ -132,11 +131,11 @@ func snapshotSources(sources []domain.CatalogSource) []download.CatalogSource {
 	return out
 }
 
-func mapStatus(s domain.DownloadStatus) download.TrackStatus {
+func mapStatus(s library.DownloadStatus) download.TrackStatus {
 	switch s {
-	case domain.AcquisitionReady:
+	case library.AcquisitionReady:
 		return download.TrackReady
-	case domain.AcquisitionFailed:
+	case library.AcquisitionFailed:
 		return download.TrackFailed
 	default:
 		return download.TrackPending
@@ -147,7 +146,7 @@ func (l *LibraryTracks) Complete(ctx context.Context, id ids.TrackId, userId ids
 	if err := l.settleUpgradeState(ctx, id, userId, fence, c); err != nil {
 		return err
 	}
-	return l.loadAndUpdate(ctx, id, userId, fence, func(track *domain.Track) error {
+	return l.loadAndUpdate(ctx, id, userId, fence, func(track *library.Track) error {
 		return complete(ctx, track, c)
 	})
 }
@@ -157,7 +156,7 @@ func (l *LibraryTracks) settleUpgradeState(ctx context.Context, id ids.TrackId, 
 	if len(c.RejectedSourceKeys) == 0 && !reset {
 		return nil
 	}
-	if _, err := l.store.GetByID(ctx, id, userId); errors.Is(err, domain.ErrTrackNotFound) {
+	if _, err := l.store.GetByID(ctx, id, userId); errors.Is(err, library.ErrTrackNotFound) {
 		return download.ErrTrackNotFound
 	} else if err != nil {
 		return fmt.Errorf("get track: %w", err)
@@ -169,10 +168,10 @@ func (l *LibraryTracks) settleUpgradeState(ctx context.Context, id ids.TrackId, 
 }
 
 func evidenceAccepted(c download.Completion) bool {
-	return c.Evidence != nil && (&domain.Track{}).SetAcquisitionConfidence(c.Confidence, c.Evidence) == nil
+	return c.Evidence != nil && (&library.Track{}).SetAcquisitionConfidence(c.Confidence, c.Evidence) == nil
 }
 
-func complete(ctx context.Context, track *domain.Track, c download.Completion) error {
+func complete(ctx context.Context, track *library.Track, c download.Completion) error {
 	if err := settleAudio(track, c); err != nil {
 		return err
 	}
@@ -192,7 +191,7 @@ func complete(ctx context.Context, track *domain.Track, c download.Completion) e
 	return nil
 }
 
-func relabel(ctx context.Context, track *domain.Track, label download.TrackLabel) error {
+func relabel(ctx context.Context, track *library.Track, label download.TrackLabel) error {
 	oldMBID, oldTitle := "", track.Title
 	if track.CatalogMBID != nil {
 		oldMBID = *track.CatalogMBID
@@ -207,14 +206,14 @@ func relabel(ctx context.Context, track *domain.Track, label download.TrackLabel
 	return nil
 }
 
-func recordLengthCheck(ctx context.Context, track *domain.Track, measured tracklength.TrackLength) {
+func recordLengthCheck(ctx context.Context, track *library.Track, measured tracklength.TrackLength) {
 	if track.RecordAudioLength(measured) && track.AudioLengthMismatch {
 		slog.WarnContext(ctx, "acquisition.audio_length_mismatch",
 			"track_id", track.ID.String(), "catalog_seconds", *track.CatalogDurationSeconds, "audio_seconds", measured.Seconds())
 	}
 }
 
-func settleAudio(track *domain.Track, c download.Completion) error {
+func settleAudio(track *library.Track, c download.Completion) error {
 	if c.ReplaceAudio {
 		if err := track.ReplaceAudio(c.AudioRef); err != nil {
 			return fmt.Errorf("replace audio: %w", err)
@@ -227,7 +226,7 @@ func settleAudio(track *domain.Track, c download.Completion) error {
 	return nil
 }
 
-func recordMetadata(ctx context.Context, track *domain.Track, c download.Completion) {
+func recordMetadata(ctx context.Context, track *library.Track, c download.Completion) {
 	track.SetAcquisitionProvenance(c.Provenance)
 	if c.SourceURL != "" {
 		track.SetAudioSource(c.SourceURL)
@@ -241,14 +240,14 @@ func recordMetadata(ctx context.Context, track *domain.Track, c download.Complet
 }
 
 func (l *LibraryTracks) Fail(ctx context.Context, id ids.TrackId, userId ids.UserId, fence download.ClaimNumber, reason string) error {
-	return l.loadAndUpdate(ctx, id, userId, fence, func(track *domain.Track) error {
+	return l.loadAndUpdate(ctx, id, userId, fence, func(track *library.Track) error {
 		return track.FailAcquisition(reason)
 	})
 }
 
 func (l *LibraryTracks) RevertAt(ctx context.Context, snapshot download.TrackSnapshot) error {
 	track, err := l.store.GetByID(ctx, snapshot.ID, snapshot.UserId)
-	if errors.Is(err, domain.ErrTrackNotFound) {
+	if errors.Is(err, library.ErrTrackNotFound) {
 		return download.ErrTrackNotFound
 	}
 	if err != nil {
@@ -266,7 +265,7 @@ func (l *LibraryTracks) RevertAt(ctx context.Context, snapshot download.TrackSna
 	return nil
 }
 
-func (l *LibraryTracks) loadAndUpdate(ctx context.Context, id ids.TrackId, userId ids.UserId, fence download.ClaimNumber, mutate func(*domain.Track) error) error {
+func (l *LibraryTracks) loadAndUpdate(ctx context.Context, id ids.TrackId, userId ids.UserId, fence download.ClaimNumber, mutate func(*library.Track) error) error {
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		lastErr = l.attempt(ctx, id, userId, fence, mutate)
@@ -277,9 +276,9 @@ func (l *LibraryTracks) loadAndUpdate(ctx context.Context, id ids.TrackId, userI
 	return fmt.Errorf("update track: exhausted %d CAS attempts: %w", maxAttempts, lastErr)
 }
 
-func (l *LibraryTracks) attempt(ctx context.Context, id ids.TrackId, userId ids.UserId, fence download.ClaimNumber, mutate func(*domain.Track) error) error {
+func (l *LibraryTracks) attempt(ctx context.Context, id ids.TrackId, userId ids.UserId, fence download.ClaimNumber, mutate func(*library.Track) error) error {
 	track, err := l.store.GetByID(ctx, id, userId)
-	if errors.Is(err, domain.ErrTrackNotFound) {
+	if errors.Is(err, library.ErrTrackNotFound) {
 		return download.ErrTrackNotFound
 	}
 	if err != nil {
@@ -295,7 +294,7 @@ func (l *LibraryTracks) attempt(ctx context.Context, id ids.TrackId, userId ids.
 	return l.writeFenced(ctx, track, expectedVersion, fence)
 }
 
-func (l *LibraryTracks) writeFenced(ctx context.Context, track *domain.Track, expectedVersion int, fence download.ClaimNumber) error {
+func (l *LibraryTracks) writeFenced(ctx context.Context, track *library.Track, expectedVersion int, fence download.ClaimNumber) error {
 	if err := l.store.UpdateFenced(ctx, track, expectedVersion, int(fence)); err != nil {
 		if errors.Is(err, library.ErrTrackVersionConflict) {
 			return err

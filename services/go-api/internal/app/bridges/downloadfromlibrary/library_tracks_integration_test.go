@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/library"
-	"altune/go-api/internal/library/domain"
 	"altune/go-api/internal/shared/dbtest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -23,9 +22,9 @@ func newLedgerPool(t *testing.T) *pgxpool.Pool {
 	return dbtest.Pool(t)
 }
 
-func insertUnqueuedTrack(t *testing.T, pool *pgxpool.Pool) *domain.Track {
+func insertUnqueuedTrack(t *testing.T, pool *pgxpool.Pool) *library.Track {
 	t.Helper()
-	track, err := domain.NewTrack(ids.NewUserId(uuid.New()), "Blinding Lights", "The Weeknd", "After Hours", time.Now)
+	track, err := library.NewTrack(ids.NewUserId(uuid.New()), "Blinding Lights", "The Weeknd", "After Hours", time.Now)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}
@@ -42,7 +41,7 @@ func insertUnqueuedTrack(t *testing.T, pool *pgxpool.Pool) *domain.Track {
 	return track
 }
 
-func reclaimTrack(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId) download.ClaimNumber {
+func reclaimTrack(t *testing.T, pool *pgxpool.Pool, trackID library.TrackId) download.ClaimNumber {
 	t.Helper()
 	var attempts int
 	if err := pool.QueryRow(context.Background(),
@@ -53,7 +52,7 @@ func reclaimTrack(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId) down
 	return download.ClaimNumber(attempts)
 }
 
-func rowState(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId) (string, *string, *string) {
+func rowState(t *testing.T, pool *pgxpool.Pool, trackID library.TrackId) (string, *string, *string) {
 	t.Helper()
 	var status string
 	var audioRef, reason *string
@@ -100,7 +99,7 @@ type claimDuringUpdateStore struct {
 	claimed bool
 }
 
-func (s *claimDuringUpdateStore) UpdateFenced(ctx context.Context, track *domain.Track, expectedVersion, fence int) error {
+func (s *claimDuringUpdateStore) UpdateFenced(ctx context.Context, track *library.Track, expectedVersion, fence int) error {
 	if !s.claimed {
 		s.claimed = true
 		reclaimTrack(s.t, s.pool, track.ID)
@@ -130,15 +129,15 @@ type postgresLedger struct {
 	store *library.PostgresTrackRepository
 }
 
-var downloadStatusOf = map[download.TrackStatus]domain.DownloadStatus{
-	download.TrackPending: domain.AcquisitionPending,
-	download.TrackReady:   domain.AcquisitionReady,
-	download.TrackFailed:  domain.AcquisitionFailed,
+var downloadStatusOf = map[download.TrackStatus]library.DownloadStatus{
+	download.TrackPending: library.AcquisitionPending,
+	download.TrackReady:   library.AcquisitionReady,
+	download.TrackFailed:  library.AcquisitionFailed,
 }
 
 func (l postgresLedger) AddTrack(t *testing.T, snapshot download.TrackSnapshot) {
 	t.Helper()
-	track, err := domain.NewTrack(snapshot.UserId, snapshot.Title, snapshot.Artist, snapshot.Album, time.Now)
+	track, err := library.NewTrack(snapshot.UserId, snapshot.Title, snapshot.Artist, snapshot.Album, time.Now)
 	if err != nil {
 		t.Fatalf("new track: %v", err)
 	}

@@ -2,7 +2,7 @@ package searchfromlibrary_test
 
 import (
 	"altune/go-api/internal/app/bridges/searchfromlibrary"
-	librarydomain "altune/go-api/internal/library/domain"
+	"altune/go-api/internal/library"
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -15,11 +15,11 @@ import (
 )
 
 type fakeRefs struct {
-	refs []librarydomain.OwnedTrackRef
+	refs []library.OwnedTrackRef
 	err  error
 }
 
-func (f fakeRefs) ListOwnedTrackRefs(context.Context, ids.UserId) ([]librarydomain.OwnedTrackRef, error) {
+func (f fakeRefs) ListOwnedTrackRefs(context.Context, ids.UserId) ([]library.OwnedTrackRef, error) {
 	return f.refs, f.err
 }
 
@@ -29,7 +29,7 @@ func testUser() ids.UserId {
 
 func TestListOwnedTracks_CarriesEveryFieldOfEachRefInOrder(t *testing.T) {
 	num := 4
-	tracks, err := searchfromlibrary.NewOwnedTracks(fakeRefs{refs: []librarydomain.OwnedTrackRef{
+	tracks, err := searchfromlibrary.NewOwnedTracks(fakeRefs{refs: []library.OwnedTrackRef{
 		{ID: "t-1", Title: "Black", Artist: "Pearl Jam", DownloadStatus: "ready", TrackNumber: &num, ISRC: "us-sm1-91-00002", Album: "Ten"},
 		{ID: "t-2", Title: "Alive", Artist: "Pearl Jam"},
 	}}).ListOwnedTracks(context.Background(), testUser())
@@ -71,7 +71,7 @@ type recordingSetter struct {
 	err     error
 }
 
-func (r *recordingSetter) Execute(_ context.Context, _ ids.UserId, trackId librarydomain.TrackId, n int) (bool, error) {
+func (r *recordingSetter) Execute(_ context.Context, _ ids.UserId, trackId library.TrackId, n int) (bool, error) {
 	r.calls++
 	r.lastNum = n
 	r.lastId = trackId.String()
