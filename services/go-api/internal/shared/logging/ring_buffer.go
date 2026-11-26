@@ -2,6 +2,7 @@ package logging
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -52,7 +53,7 @@ func MustNewRingBuffer(capacity int, now func() time.Time) *RingBuffer {
 
 func NewRingBuffer(capacity int, now func() time.Time) (*RingBuffer, error) {
 	if now == nil {
-		return nil, ErrClockRequired
+		return nil, fmt.Errorf("NewRingBuffer: %w", ErrClockRequired)
 	}
 	if capacity < 1 {
 		capacity = 1

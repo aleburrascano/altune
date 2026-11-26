@@ -283,6 +283,9 @@ func TestNewRingBuffer_RefusesANilClock(t *testing.T) {
 	if !errors.Is(err, logging.ErrClockRequired) || ring != nil {
 		t.Fatalf("NewRingBuffer(nil clock) = (%v, %v), want ErrClockRequired and no buffer", ring, err)
 	}
+	if !strings.Contains(err.Error(), "NewRingBuffer") {
+		t.Fatalf("error %q does not name the constructor", err)
+	}
 }
 
 func TestWithClock_PanicsOnANilClock(t *testing.T) {
