@@ -3,6 +3,7 @@ package library
 import ports "altune/go-api/internal/library/internal/core/ports"
 
 type (
+	InPlaceVerdict        = ports.InPlaceVerdict
 	AcquisitionScheduler  = ports.AcquisitionScheduler
 	AudioAgeLister        = ports.AudioAgeLister
 	AudioLister           = ports.AudioLister

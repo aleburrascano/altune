@@ -2,8 +2,10 @@ package persistence
 
 import (
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/ids"
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -17,7 +19,7 @@ type PostgresUpgradeStore struct {
 
 var (
 	_ ports.UpgradeStore = (*PostgresUpgradeStore)(nil)
-	_ ports.InPlaceStore = (*PostgresUpgradeStore)(nil)
+	_ ports.UpgradeState = (*PostgresUpgradeStore)(nil)
 )
 
 func NewPostgresUpgradeStore(pool *pgxpool.Pool) *PostgresUpgradeStore {
@@ -27,26 +29,28 @@ func NewPostgresUpgradeStore(pool *pgxpool.Pool) *PostgresUpgradeStore {
 const upgradeCandidatesSQL = `
 SELECT t.id, t.user_id, COALESCE(t.acquisition_evidence->>'grade', 'D')
 FROM tracks t
+LEFT JOIN acquisition_upgrade_state s ON s.track_id = t.id
+LEFT JOIN acquisition_jobs j ON j.track_id = t.id
 WHERE t.acquisition_status = 'ready'
 	AND t.audio_ref IS NOT NULL
-	AND (COALESCE(t.audio_source_url, '') <> '' OR ($5::boolean AND COALESCE((t.acquisition_evidence->>'in_place_generation')::int, 0) < $2))
-	AND t.acquisition_available_at IS NULL
+	AND (COALESCE(t.audio_source_url, '') <> '' OR ($5::boolean AND COALESCE((s.evidence->>'in_place_generation')::int, 0) < $2))
+	AND j.available_at IS NULL
 	AND COALESCE(t.acquisition_evidence->>'grade', 'D') NOT IN ('A_user', 'best_available')
 	AND (
 		COALESCE(t.acquisition_evidence->>'grade', 'D') <> 'A'
-		OR ($5::boolean AND COALESCE((t.acquisition_evidence->>'in_place_generation')::int, 0) < $2)
+		OR ($5::boolean AND COALESCE((s.evidence->>'in_place_generation')::int, 0) < $2)
 		OR ($6::int > 0 AND (
 			t.acquisition_evidence->>'source_format_id' = '18'
 			OR COALESCE(NULLIF(t.acquisition_evidence->>'source_kbps', '')::int, 0) BETWEEN 1 AND $6::int - 1))
 	)
-	AND COALESCE((t.acquisition_evidence->>'best_available_generation')::int, 0) < $2
-	AND COALESCE((t.acquisition_evidence->>'upgrade_tried_at')::timestamptz, '-infinity') < now() - make_interval(secs => $3)
+	AND COALESCE((s.evidence->>'best_available_generation')::int, 0) < $2
+	AND COALESCE((s.evidence->>'upgrade_tried_at')::timestamptz, '-infinity') < now() - make_interval(secs => $3)
 	AND (
-		SELECT count(*) FROM tracks q
-		WHERE q.acquisition_job_kind = 'upgrade' AND q.acquisition_available_at IS NOT NULL
+		SELECT count(*) FROM acquisition_jobs q
+		WHERE q.job_kind = 'upgrade' AND q.available_at IS NOT NULL
 	) < $4
 ORDER BY COALESCE(t.acquisition_evidence->>'grade', 'D') DESC,
-	(t.acquisition_evidence->>'upgrade_tried_at')::timestamptz ASC NULLS FIRST,
+	(s.evidence->>'upgrade_tried_at')::timestamptz ASC NULLS FIRST,
 	t.id
 LIMIT $1`
 
@@ -83,20 +87,21 @@ func collectUpgradeCandidates(rows pgx.Rows) ([]ports.UpgradeCandidate, error) {
 }
 
 const noteUpgradeAttemptSQL = `
-UPDATE tracks
-SET acquisition_evidence = COALESCE(acquisition_evidence, '{}'::jsonb) || jsonb_build_object(
+INSERT INTO acquisition_upgrade_state AS s (track_id, evidence, rejected_source_keys)
+SELECT t.id,
+	jsonb_build_object('upgrade_tried_at', now(), 'upgrade_tries', $3::int),
+	CASE WHEN $2::text = '' THEN '{}'::text[] ELSE ARRAY[$2::text] END
+FROM tracks t WHERE t.id = $1
+ON CONFLICT (track_id) DO UPDATE SET
+	evidence = s.evidence || jsonb_build_object(
 		'upgrade_tried_at', now(),
-		'upgrade_tries', COALESCE((acquisition_evidence->>'upgrade_tries')::int, 0) + $3::int),
+		'upgrade_tries', COALESCE((s.evidence->>'upgrade_tries')::int, 0) + $3::int),
 	rejected_source_keys = CASE
-		WHEN $2::text = '' OR $2::text = ANY(COALESCE(rejected_source_keys, '{}')) THEN rejected_source_keys
-		ELSE (array_append(COALESCE(rejected_source_keys, '{}'), $2::text))[
-			greatest(cardinality(COALESCE(rejected_source_keys, '{}')) + 2 - $4::int, 1):]
-	END,
-	version = version + 1
-WHERE id = $1
-RETURNING (acquisition_evidence->>'upgrade_tries')::int`
-
-const maxRejectedSourceKeys = 25
+		WHEN $2::text = '' OR $2::text = ANY(s.rejected_source_keys) THEN s.rejected_source_keys
+		ELSE (array_append(s.rejected_source_keys, $2::text))[
+			greatest(cardinality(s.rejected_source_keys) + 2 - $4::int, 1):]
+	END
+RETURNING (evidence->>'upgrade_tries')::int`
 
 func (s *PostgresUpgradeStore) NoteAttempt(ctx context.Context, trackID ids.TrackId, attempt ports.UpgradeAttempt) (int, error) {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
@@ -108,7 +113,7 @@ func (s *PostgresUpgradeStore) NoteAttempt(ctx context.Context, trackID ids.Trac
 	}
 	var tries int
 	err := s.pool.QueryRow(ctx, noteUpgradeAttemptSQL,
-		trackID.UUID(), attempt.RejectedSourceKey, counted, maxRejectedSourceKeys).Scan(&tries)
+		trackID.UUID(), attempt.RejectedSourceKey, counted, ports.MaxRejectedSourceKeys).Scan(&tries)
 	if err != nil {
 		return 0, fmt.Errorf("note upgrade attempt: %w", err)
 	}
@@ -116,14 +121,15 @@ func (s *PostgresUpgradeStore) NoteAttempt(ctx context.Context, trackID ids.Trac
 }
 
 const giveUpUpgradeSQL = `
-UPDATE tracks
-SET acquisition_evidence = COALESCE(acquisition_evidence, '{}'::jsonb) || jsonb_build_object(
+INSERT INTO acquisition_upgrade_state AS s (track_id, evidence)
+SELECT t.id, jsonb_build_object(
 		'best_available_generation', $2::int,
 		'best_available_reason', $3::text,
 		'best_available_at', now(),
-		'upgrade_tries', 0),
-	version = version + 1
-WHERE id = $1`
+		'upgrade_tries', 0)
+FROM tracks t WHERE t.id = $1
+ON CONFLICT (track_id) DO UPDATE SET
+	evidence = s.evidence || EXCLUDED.evidence`
 
 func (s *PostgresUpgradeStore) GiveUp(ctx context.Context, trackID ids.TrackId, generation int, reason string) error {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
@@ -135,45 +141,36 @@ func (s *PostgresUpgradeStore) GiveUp(ctx context.Context, trackID ids.TrackId, 
 	return nil
 }
 
-const gradeRankSQL = `array_position(ARRAY['F', 'D', 'C', 'B', 'A', 'A_user'], %s)`
-
-var recordInPlaceSQL = fmt.Sprintf(`
-UPDATE tracks
-SET acquisition_evidence = (COALESCE(acquisition_evidence, '{}'::jsonb) - CASE WHEN $4::text = 'preview'
-			THEN ARRAY['in_place_failures', 'acoustid_score'] ELSE ARRAY['in_place_failures'] END) || jsonb_strip_nulls(jsonb_build_object(
-		'in_place_generation', $3::int,
+const recordInPlaceStateSQL = `
+INSERT INTO acquisition_upgrade_state AS s (track_id, evidence)
+SELECT t.id, jsonb_strip_nulls(jsonb_build_object(
+		'in_place_generation', $2::int,
 		'in_place_at', now(),
-		'in_place_basis', NULLIF($5::text, ''),
-		'in_place_bit_error_rate', NULLIF($9::float8, 0),
-		'verdict', NULLIF($4::text, ''),
-		'acoustid_score', NULLIF($6::float8, 0),
-		'grade', CASE WHEN NULLIF($7::text, '') IS NOT NULL AND COALESCE(acquisition_evidence->>'grade', 'D') <> 'best_available' AND ($10::boolean OR %s > %s) THEN $7::text END,
-		'user_upload_mismatch', CASE WHEN $8::boolean THEN true END)),
-	version = version + 1
-WHERE id = $1 AND audio_ref = $2 AND acquisition_status = 'ready'`,
-	fmt.Sprintf(gradeRankSQL, "NULLIF($7::text, '')"),
-	fmt.Sprintf(gradeRankSQL, "COALESCE(acquisition_evidence->>'grade', 'D')"))
+		'in_place_basis', NULLIF($3::text, ''),
+		'in_place_bit_error_rate', NULLIF($4::float8, 0)))
+FROM tracks t WHERE t.id = $1
+ON CONFLICT (track_id) DO UPDATE SET
+	evidence = (s.evidence - 'in_place_failures') || EXCLUDED.evidence`
 
-func (s *PostgresUpgradeStore) RecordInPlace(ctx context.Context, trackID ids.TrackId, record ports.InPlaceRecord) (bool, error) {
+func (s *PostgresUpgradeStore) RecordInPlaceState(ctx context.Context, trackID ids.TrackId, generation int, basis string, bitErrorRate float64) error {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
-	tag, err := s.pool.Exec(ctx, recordInPlaceSQL, trackID.UUID(), record.AudioRef, record.Generation,
-		record.Verdict, record.Basis, record.Score, record.Grade, record.UserUploadMismatch, record.BitErrorRate, record.MayLower)
-	if err != nil {
-		return false, fmt.Errorf("record in-place verdict: %w", err)
+	if _, err := s.pool.Exec(ctx, recordInPlaceStateSQL, trackID.UUID(), generation, basis, bitErrorRate); err != nil {
+		return fmt.Errorf("record in-place state: %w", err)
 	}
-	return tag.RowsAffected() == 1, nil
+	return nil
 }
 
 const noteInPlaceFailureSQL = `
-UPDATE tracks
-SET acquisition_evidence = COALESCE(acquisition_evidence, '{}'::jsonb) || jsonb_build_object(
+INSERT INTO acquisition_upgrade_state AS s (track_id, evidence)
+SELECT t.id, jsonb_build_object('upgrade_tried_at', now(), 'in_place_failures', 1)
+FROM tracks t WHERE t.id = $1
+ON CONFLICT (track_id) DO UPDATE SET
+	evidence = s.evidence || jsonb_build_object(
 		'upgrade_tried_at', now(),
-		'in_place_failures', COALESCE((acquisition_evidence->>'in_place_failures')::int, 0) + 1),
-	version = version + 1
-WHERE id = $1
-RETURNING (acquisition_evidence->>'in_place_failures')::int`
+		'in_place_failures', COALESCE((s.evidence->>'in_place_failures')::int, 0) + 1)
+RETURNING (evidence->>'in_place_failures')::int`
 
 func (s *PostgresUpgradeStore) NoteInPlaceFailure(ctx context.Context, trackID ids.TrackId) (int, error) {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
@@ -184,4 +181,58 @@ func (s *PostgresUpgradeStore) NoteInPlaceFailure(ctx context.Context, trackID i
 		return 0, fmt.Errorf("note in-place failure: %w", err)
 	}
 	return failures, nil
+}
+
+func (s *PostgresUpgradeStore) State(ctx context.Context, trackID ids.TrackId) (ports.UpgradeStateSnapshot, error) {
+	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
+	defer cancel()
+
+	var snapshot ports.UpgradeStateSnapshot
+	var evidence []byte
+	err := s.pool.QueryRow(ctx,
+		`SELECT evidence, rejected_source_keys FROM acquisition_upgrade_state WHERE track_id = $1`,
+		trackID.UUID()).Scan(&evidence, &snapshot.RejectedSourceKeys)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.UpgradeStateSnapshot{}, nil
+	}
+	if err != nil {
+		return ports.UpgradeStateSnapshot{}, fmt.Errorf("read upgrade state: %w", err)
+	}
+	snapshot.Evidence = evidence
+	return snapshot, nil
+}
+
+const ensureUpgradeStateSQL = `
+INSERT INTO acquisition_upgrade_state (track_id) SELECT id FROM tracks WHERE id = $1 ON CONFLICT (track_id) DO NOTHING`
+
+const lockUpgradeStateSQL = `SELECT rejected_source_keys FROM acquisition_upgrade_state WHERE track_id = $1 FOR UPDATE`
+
+const settleUpgradeStateSQL = `
+UPDATE acquisition_upgrade_state
+SET rejected_source_keys = $2,
+	evidence = CASE WHEN $3::boolean THEN '{}'::jsonb ELSE evidence END
+WHERE track_id = $1`
+
+func (s *PostgresUpgradeStore) SettleAcquisition(ctx context.Context, trackID ids.TrackId, rejectedSourceKeys []string, resetEvidence bool) error {
+	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
+	defer cancel()
+
+	err := database.InTx(ctx, s.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, ensureUpgradeStateSQL, trackID.UUID()); err != nil {
+			return fmt.Errorf("ensure upgrade state: %w", err)
+		}
+		var existing []string
+		if err := tx.QueryRow(ctx, lockUpgradeStateSQL, trackID.UUID()).Scan(&existing); err != nil {
+			return fmt.Errorf("lock upgrade state: %w", err)
+		}
+		merged := ports.AppendRejectedSourceKeys(existing, rejectedSourceKeys)
+		if _, err := tx.Exec(ctx, settleUpgradeStateSQL, trackID.UUID(), merged, resetEvidence); err != nil {
+			return fmt.Errorf("settle upgrade state: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("settle acquisition state: %w", err)
+	}
+	return nil
 }

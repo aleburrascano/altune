@@ -330,9 +330,14 @@ func insertReadyTrackGradedC(t *testing.T, pool *pgxpool.Pool) (ids.UserId, ids.
 	if _, err := pool.Exec(context.Background(), `
 UPDATE tracks SET acquisition_status = 'ready', audio_ref = 'stored.mp3',
 	audio_source_url = 'https://www.youtube.com/watch?v=storedvid01', acquisition_available_at = NULL,
-	acquisition_evidence = '{"grade": "C", "in_place_generation": 2}'
+	acquisition_evidence = '{"grade": "C"}'
 WHERE id = $1`, track.ID.UUID()); err != nil {
 		t.Fatalf("mark ready graded C: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(), `
+INSERT INTO acquisition_upgrade_state (track_id, evidence) VALUES ($1, '{"in_place_generation": 2}')
+ON CONFLICT (track_id) DO UPDATE SET evidence = EXCLUDED.evidence`, track.ID.UUID()); err != nil {
+		t.Fatalf("seed the upgrade state: %v", err)
 	}
 	return userID, track.ID
 }
@@ -349,9 +354,10 @@ func readUpgradeJobState(t *testing.T, pool *pgxpool.Pool, trackID ids.TrackId) 
 	t.Helper()
 	var s upgradeJobState
 	err := pool.QueryRow(context.Background(), `
-SELECT acquisition_job_kind, acquisition_available_at IS NOT NULL, acquisition_lease_until IS NOT NULL,
-	acquisition_run_attempts, COALESCE((acquisition_evidence->>'upgrade_tries')::int, 0)
-FROM tracks WHERE id = $1`, trackID.UUID()).Scan(&s.Kind, &s.Queued, &s.Leased, &s.Claims, &s.UpgradeTries)
+SELECT j.job_kind, j.available_at IS NOT NULL, j.lease_until IS NOT NULL,
+	j.run_attempts, COALESCE((s.evidence->>'upgrade_tries')::int, 0)
+FROM acquisition_jobs j LEFT JOIN acquisition_upgrade_state s ON s.track_id = j.track_id
+WHERE j.track_id = $1`, trackID.UUID()).Scan(&s.Kind, &s.Queued, &s.Leased, &s.Claims, &s.UpgradeTries)
 	if err != nil {
 		t.Fatalf("read upgrade job state: %v", err)
 	}
@@ -368,7 +374,7 @@ func TestNewScheduler_AnUpgradeWorkerClaimsAndSettlesAnEnqueuedUpgrade(t *testin
 		Config:     cfg,
 		Pool:       pool,
 		Events:     eventTap(t),
-		Ledger:     downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now),
+		Ledger:     downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now, downloadfromlibrary.WithUpgradeState(download.NewPostgresUpgradeStore(pool))),
 		AudioStore: library.NewFilesystemAudioStore(cfg.MusicDir),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    downloadsetup.SourceOrder{First: []download.AudioSource{sourceWithNothing{}}},

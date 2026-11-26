@@ -152,7 +152,8 @@ func TestGetMapsFieldsAndReportsAMissingTrackAsErrTrackNotFound(t *testing.T) {
 func TestCompleteMarksPendingTrackReady(t *testing.T) {
 	track, userId := newTrack(t, 4)
 	store := newFakeStore(track)
-	ledger := downloadfromlibrary.NewLibraryTracks(store, time.Now)
+	state := &fakeUpgradeState{}
+	ledger := downloadfromlibrary.NewLibraryTracks(store, time.Now, downloadfromlibrary.WithUpgradeState(state))
 
 	err := ledger.Complete(context.Background(), track.ID, userId, 0, download.Completion{
 		AudioRef:           "ref-1",
@@ -179,8 +180,8 @@ func TestCompleteMarksPendingTrackReady(t *testing.T) {
 	if got.AcquisitionProvenance == nil || *got.AcquisitionProvenance != string(downloadprovenance.ProvenanceVerified) {
 		t.Fatalf("provenance not set: %v", got.AcquisitionProvenance)
 	}
-	if len(got.RejectedSourceKeys) != 1 || got.RejectedSourceKeys[0] != "bad-key" {
-		t.Fatalf("rejected keys not set: %v", got.RejectedSourceKeys)
+	if len(state.settled) != 1 || len(state.settled[0].keys) != 1 || state.settled[0].keys[0] != "bad-key" || !state.settled[0].reset {
+		t.Fatalf("upgrade state settled = %+v, want the rejected key and a reset for the replaced evidence", state.settled)
 	}
 	if got.AudioSourceURL == nil || *got.AudioSourceURL != "https://example.test/a" {
 		t.Fatalf("source url not set: %v", got.AudioSourceURL)
@@ -1065,4 +1066,114 @@ func trackLength(t *testing.T, seconds float64) tracklength.TrackLength {
 		t.Fatalf("TrackLengthOf(%v) = %v", seconds, err)
 	}
 	return length
+}
+
+type settleCall struct {
+	keys  []string
+	reset bool
+}
+
+type fakeUpgradeState struct {
+	snapshot download.UpgradeStateSnapshot
+	settled  []settleCall
+	err      error
+}
+
+func (f *fakeUpgradeState) State(context.Context, ids.TrackId) (download.UpgradeStateSnapshot, error) {
+	return f.snapshot, f.err
+}
+
+func (f *fakeUpgradeState) SettleAcquisition(_ context.Context, _ ids.TrackId, keys []string, reset bool) error {
+	f.settled = append(f.settled, settleCall{keys: keys, reset: reset})
+	return f.err
+}
+
+func TestGetOverlaysTheUpgradeStateOnTheTrackEvidence(t *testing.T) {
+	track, userId := newTrack(t, 1)
+	track.EvidenceJSON = json.RawMessage(`{"grade":"B","upgrade_tries":9}`)
+	state := &fakeUpgradeState{snapshot: download.UpgradeStateSnapshot{
+		Evidence: json.RawMessage(`{"upgrade_tries":2}`), RejectedSourceKeys: []string{"bad"},
+	}}
+
+	snap, err := downloadfromlibrary.NewLibraryTracks(newFakeStore(track), time.Now, downloadfromlibrary.WithUpgradeState(state)).
+		Get(context.Background(), track.ID, userId)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got map[string]any
+	if err := json.Unmarshal(snap.Evidence, &got); err != nil {
+		t.Fatalf("evidence = %s: %v", snap.Evidence, err)
+	}
+	if got["grade"] != "B" || got["upgrade_tries"] != float64(2) {
+		t.Errorf("evidence = %v, want the track's grade and the state's upgrade_tries", got)
+	}
+	if len(snap.RejectedSourceKeys) != 1 || snap.RejectedSourceKeys[0] != "bad" {
+		t.Errorf("rejected keys = %v, want the state's", snap.RejectedSourceKeys)
+	}
+}
+
+func TestCompleteSettlesNothingWhenThereIsNoRejectionAndNoNewEvidence(t *testing.T) {
+	track, userId := newTrack(t, 1)
+	state := &fakeUpgradeState{}
+
+	err := downloadfromlibrary.NewLibraryTracks(newFakeStore(track), time.Now, downloadfromlibrary.WithUpgradeState(state)).
+		Complete(context.Background(), track.ID, userId, 0, download.Completion{AudioRef: "ref-1"})
+
+	if err != nil || len(state.settled) != 0 {
+		t.Errorf("Complete = %v, settled = %+v, want success and no state write", err, state.settled)
+	}
+}
+
+func TestCompleteReturnsTheStateErrorAndLeavesTheTrackUntouchedSoTheSchedulerRetries(t *testing.T) {
+	track, userId := newTrack(t, 1)
+	store := newFakeStore(track)
+	state := &fakeUpgradeState{err: errors.New("state unavailable")}
+
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now, downloadfromlibrary.WithUpgradeState(state)).
+		Complete(context.Background(), track.ID, userId, 0, download.Completion{AudioRef: "ref-1", RejectedSourceKeys: []string{"bad"}})
+
+	if err == nil || !errors.Is(err, state.err) {
+		t.Fatalf("Complete = %v, want the state error", err)
+	}
+	if got := storedTrack(t, store, track.ID); got.DownloadStatus != domain.AcquisitionPending || len(store.updates) != 0 {
+		t.Errorf("status = %v, updates = %v, want the track untouched because Complete never ran", got.DownloadStatus, store.updates)
+	}
+}
+
+func TestCompleteThatFailsAfterTheStateWriteIsRetriedWithTheSameStateWrite(t *testing.T) {
+	track, userId := newTrack(t, 1)
+	store := newFakeStore(track)
+	store.conflicts = 10
+	state := &fakeUpgradeState{}
+	ledger := downloadfromlibrary.NewLibraryTracks(store, time.Now, downloadfromlibrary.WithUpgradeState(state))
+	completion := download.Completion{AudioRef: "ref-1", RejectedSourceKeys: []string{"bad"}, Confidence: 0.5, Evidence: json.RawMessage(`{"k":1}`)}
+
+	if err := ledger.Complete(context.Background(), track.ID, userId, 0, completion); err == nil {
+		t.Fatal("Complete = nil, want the exhausted version conflict")
+	}
+	store.conflicts = 0
+	if err := ledger.Complete(context.Background(), track.ID, userId, 0, completion); err != nil {
+		t.Fatalf("retried Complete = %v", err)
+	}
+
+	if len(state.settled) != 2 || !reflect.DeepEqual(state.settled[0], state.settled[1]) {
+		t.Errorf("settled = %+v, want the identical idempotent write twice", state.settled)
+	}
+	if got := storedTrack(t, store, track.ID); got.DownloadStatus != domain.AcquisitionReady {
+		t.Errorf("status = %v, want ready after the retry", got.DownloadStatus)
+	}
+}
+
+func TestCompleteByALapsedOwnerWritesNoUpgradeState(t *testing.T) {
+	track, userId := newTrack(t, 1)
+	track.AcquisitionFence = 5
+	state := &fakeUpgradeState{}
+
+	err := downloadfromlibrary.NewLibraryTracks(newFakeStore(track), time.Now, downloadfromlibrary.WithUpgradeState(state)).
+		Complete(context.Background(), track.ID, userId, 4, download.Completion{AudioRef: "ref-1", RejectedSourceKeys: []string{"bad"}})
+
+	if !errors.Is(err, download.ErrLeaseLost) || len(state.settled) != 0 {
+		t.Errorf("Complete = %v, settled = %+v, want ErrLeaseLost and no state write", err, state.settled)
+	}
 }

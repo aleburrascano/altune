@@ -48,6 +48,15 @@ type TrackAudioRefLookup interface {
 	AudioRefInUse(ctx context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error)
 }
 
+type InPlaceVerdict struct {
+	Verdict            string
+	Score              float64
+	Grade              string
+	UserUploadMismatch bool
+	MayLower           bool
+	DropScore          bool
+}
+
 type ReadyAudioTrack struct {
 	Id       domain.TrackId
 	UserId   sharedids.UserId

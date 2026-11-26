@@ -114,7 +114,7 @@ func (a *App) wireAudioSources(
 	staging := audioSourcesStaging{
 		audioStore:     audioStore,
 		trackRepo:      trackRepo,
-		ledger:         downloadfromlibrary.NewLibraryTracks(trackRepo, clock.Now),
+		ledger:         downloadfromlibrary.NewLibraryTracks(trackRepo, clock.Now, downloadfromlibrary.WithUpgradeState(download.NewPostgresUpgradeStore(a.pool))),
 		ytDlpSearcher:  downloadsetup.YtDlpSearcher(a.cfg),
 		ytDlpAvailable: tools.YtDlp,
 		ytmCanary:      ytmCanary,
