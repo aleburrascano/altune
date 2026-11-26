@@ -14,8 +14,6 @@ type LedgerUnderTest interface {
 	AddTrack(t *testing.T, track ports.TrackSnapshot)
 }
 
-var contractIDs = ids.Source(ids.Real)
-
 const contractAudioRef = "audio/contract.opus"
 
 func contractTrack(status ports.TrackStatus) ports.TrackSnapshot {
