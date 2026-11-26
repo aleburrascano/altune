@@ -19,7 +19,7 @@ func TestRecordHistory_InsertFailureLogsUserAndSearchFingerprint(t *testing.T) {
 	const raw = "zqxj private diagnosis clinic"
 	ring := search.CaptureDetachedLogs(t)
 
-	search.NewRecordSearchHistoryService(repo).Record(context.Background(), user, search.NewQuery(t, raw), raw, true, time.Now())
+	search.NewRecordSearchHistoryService(repo).Record(context.Background(), user, search.NewQuery(t, raw), raw, time.Now())
 
 	rec := search.OnlyRecord(t, ring, "search.v2.history_persist_failed")
 	if rec.Attrs["user_id"] != user.String() {

@@ -29,7 +29,7 @@ var (
 )
 
 type Searcher interface {
-	Execute(ctx context.Context, userId ids.UserId, query *search.SearchQuery, saveHistory bool) (*search.SearchOutput, error)
+	Execute(ctx context.Context, userId ids.UserId, query *search.SearchQuery) (*search.SearchOutput, error)
 }
 
 type Downloader interface {
@@ -81,7 +81,7 @@ func runSearch(ctx context.Context, searcher Searcher) (int, error) {
 	}
 	searchCtx, cancel := context.WithTimeout(ctx, searchTimeout)
 	defer cancel()
-	output, err := searcher.Execute(searchCtx, ids.SystemUserId(), query, false)
+	output, err := searcher.Execute(searchCtx, ids.SystemUserId(), query)
 	if err != nil {
 		return 0, err
 	}

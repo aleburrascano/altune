@@ -68,7 +68,7 @@ func TestDetachedTasksStep_DrainingTheTrackerWaitsForInFlightSearchWork(t *testi
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	_, _ = svc.Execute(ctx, ids.NewUserId(uuid.New()), query, false)
+	_, _ = svc.Execute(ctx, ids.NewUserId(uuid.New()), query)
 	<-store.entered
 
 	inFlight := runOne(shutdown.DetachedTasks, 50*time.Millisecond, drain)

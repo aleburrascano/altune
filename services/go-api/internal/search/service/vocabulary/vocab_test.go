@@ -38,7 +38,7 @@ func searchAndIngest(t *testing.T, query string, kinds map[search.ResultKind]boo
 	if err != nil {
 		t.Fatalf("NewSearchQuery: %v", err)
 	}
-	out, err := svc.Execute(context.Background(), search.NewUser(), q, false)
+	out, err := svc.Execute(context.Background(), search.NewUser(), q)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -174,7 +174,7 @@ func searchWithVocabularyStore(t *testing.T, store *search.FakeVocabularyStore) 
 	if err != nil {
 		t.Fatalf("NewSearchQuery: %v", err)
 	}
-	if _, err := svc.Execute(context.Background(), search.NewUser(), q, false); err != nil {
+	if _, err := svc.Execute(context.Background(), search.NewUser(), q); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	bg.Wait()

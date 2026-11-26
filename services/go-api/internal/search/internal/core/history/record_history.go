@@ -27,10 +27,9 @@ func (s *RecordSearchHistoryService) Record(
 	userId ids.UserId,
 	query *domain.SearchQuery,
 	queryNorm string,
-	saveHistory bool,
 	startedAt time.Time,
 ) {
-	if !saveHistory || s.HistoryRepo == nil {
+	if s.HistoryRepo == nil {
 		return
 	}
 	if err := ids.GuardNotSystem(userId); err != nil {
@@ -63,6 +62,6 @@ func (s *RecordSearchHistoryService) RecordSubmitted(ctx context.Context, userId
 		return err
 	}
 	queryNorm := textnorm.NormalizeForMatch(domain.SearchText(query.Raw))
-	s.Record(ctx, userId, query, queryNorm, true, time.Now())
+	s.Record(ctx, userId, query, queryNorm, time.Now())
 	return nil
 }

@@ -39,7 +39,7 @@ func searchFor(t *testing.T, svc *search.SearchService, user ids.UserId) []strin
 	if err != nil {
 		t.Fatalf("NewSearchQuery: %v", err)
 	}
-	out, err := svc.Execute(context.Background(), user, q, false)
+	out, err := svc.Execute(context.Background(), user, q)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}

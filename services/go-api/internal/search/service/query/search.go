@@ -208,28 +208,60 @@ func assembleService(providers []ports.SearchProvider, circuitBreaker *providerg
 }
 
 type searchRun struct {
-	searchId    string
-	userId      ids.UserId
-	query       *domain.SearchQuery
-	queryNorm   string
-	saveHistory bool
-	startedAt   time.Time
+	searchId  string
+	userId    ids.UserId
+	query     *domain.SearchQuery
+	queryNorm string
+	history   historyMode
+	startedAt time.Time
 }
+
+type historyMode int
+
+const (
+	skipHistory historyMode = iota
+	recordHistory
+)
 
 func (s *Service) Execute(
 	ctx context.Context,
 	userId ids.UserId,
 	query *domain.SearchQuery,
-	saveHistory bool,
 ) (*SearchOutput, error) {
-	return s.ExecutePage(ctx, userId, query, saveHistory, ids.EntityId{})
+	return s.execute(ctx, userId, query, skipHistory, ids.EntityId{})
+}
+
+func (s *Service) ExecuteRecorded(
+	ctx context.Context,
+	userId ids.UserId,
+	query *domain.SearchQuery,
+) (*SearchOutput, error) {
+	return s.execute(ctx, userId, query, recordHistory, ids.EntityId{})
 }
 
 func (s *Service) ExecutePage(
 	ctx context.Context,
 	userId ids.UserId,
 	query *domain.SearchQuery,
-	saveHistory bool,
+	continues ids.EntityId,
+) (*SearchOutput, error) {
+	return s.execute(ctx, userId, query, skipHistory, continues)
+}
+
+func (s *Service) ExecutePageRecorded(
+	ctx context.Context,
+	userId ids.UserId,
+	query *domain.SearchQuery,
+	continues ids.EntityId,
+) (*SearchOutput, error) {
+	return s.execute(ctx, userId, query, recordHistory, continues)
+}
+
+func (s *Service) execute(
+	ctx context.Context,
+	userId ids.UserId,
+	query *domain.SearchQuery,
+	mode historyMode,
 	continues ids.EntityId,
 ) (*SearchOutput, error) {
 	startedAt := time.Now().UTC()
@@ -240,12 +272,12 @@ func (s *Service) ExecutePage(
 
 	resolution, searchId := s.slateForPage(ctx, query, searchQuery, queryNorm, continues)
 	run := searchRun{
-		searchId:    searchId.String(),
-		userId:      userId,
-		query:       query,
-		queryNorm:   queryNorm,
-		saveHistory: saveHistory,
-		startedAt:   startedAt,
+		searchId:  searchId.String(),
+		userId:    userId,
+		query:     query,
+		queryNorm: queryNorm,
+		history:   mode,
+		startedAt: startedAt,
 	}
 	stages := resolution.stages
 	favoritesDone := timeStage(&stages.favorites)
@@ -424,7 +456,9 @@ func (s *Service) recordFirstPageSideEffects(
 	run searchRun,
 	page firstPage,
 ) {
-	s.history.Record(ctx, run.userId, run.query, run.queryNorm, run.saveHistory, run.startedAt)
+	if run.history == recordHistory {
+		s.history.Record(ctx, run.userId, run.query, run.queryNorm, run.startedAt)
+	}
 	s.telemetry.emit(ctx, run, page, s.ranking.ExplorationRate)
 	s.vocab.Ingest(ctx, page.organic)
 }

@@ -76,7 +76,7 @@ func TestService_TelemetryFailureDoesNotSurface(t *testing.T) {
 	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), search.WithEventStore(store))
 
-	out, err := svc.Execute(context.Background(), search.NewUser(), search.NewQuery(t, "humble"), false)
+	out, err := svc.Execute(context.Background(), search.NewUser(), search.NewQuery(t, "humble"))
 	bg.Wait()
 
 	if err != nil {
@@ -109,7 +109,7 @@ func TestService_SearchTelemetryRecordsShownSignatures(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := svc.Execute(context.Background(), search.NewUser(), q, false)
+	out, err := svc.Execute(context.Background(), search.NewUser(), q)
 	bg.Wait()
 	if err != nil {
 		t.Fatal(err)
@@ -153,7 +153,7 @@ func TestSearchTelemetry_DroppedEventLogsSearchAndUser(t *testing.T) {
 	user := search.NewUser()
 	ring := search.CaptureDetachedLogs(t)
 
-	out, err := svc.Execute(context.Background(), user, search.NewQuery(t, "humble"), false)
+	out, err := svc.Execute(context.Background(), user, search.NewQuery(t, "humble"))
 	bg.Wait()
 	if err != nil {
 		t.Fatalf("Execute: %v", err)

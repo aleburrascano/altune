@@ -393,7 +393,7 @@ func TestDeadline_CallerGoneBeforeTheAnswerStopsTheProviders(t *testing.T) {
 	slow := newLateProvider(search.ProviderSpotify)
 	svc := search.NewSearchService(bg, []search.SearchProvider{slow}, search.NewCircuitBreaker(), search.WithSearchDeadline(time.Second))
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() { _, _ = svc.Execute(ctx, search.NewUser(), search.NewQuery(t, "dna"), false) }()
+	go func() { _, _ = svc.Execute(ctx, search.NewUser(), search.NewQuery(t, "dna")) }()
 	waitFor(t, slow.started, "the provider call to start")
 
 	cancel()

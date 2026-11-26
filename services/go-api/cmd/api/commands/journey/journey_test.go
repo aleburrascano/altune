@@ -19,14 +19,13 @@ import (
 )
 
 type fakeJourneySearcher struct {
-	results  int
-	err      error
-	gotUser  ids.UserId
-	gotSaved bool
+	results int
+	err     error
+	gotUser ids.UserId
 }
 
-func (f *fakeJourneySearcher) Execute(_ context.Context, userId ids.UserId, _ *search.SearchQuery, saveHistory bool) (*search.SearchOutput, error) {
-	f.gotUser, f.gotSaved = userId, saveHistory
+func (f *fakeJourneySearcher) Execute(_ context.Context, userId ids.UserId, _ *search.SearchQuery) (*search.SearchOutput, error) {
+	f.gotUser = userId
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -114,13 +113,13 @@ func TestRun(t *testing.T) {
 	}
 }
 
-func TestRunSearchesAsTheSystemUserWithoutSavingHistory(t *testing.T) {
-	searcher := &fakeJourneySearcher{results: 1, gotSaved: true}
+func TestRunSearchesAsTheSystemUser(t *testing.T) {
+	searcher := &fakeJourneySearcher{results: 1}
 
 	_ = journey.Run(context.Background(), searcher, &fakeJourneyDownloader{payload: []byte("x")}, &bytes.Buffer{})
 
-	if searcher.gotUser != ids.SystemUserId() || searcher.gotSaved {
-		t.Errorf("Execute(user=%v, saveHistory=%v), want user=%v, saveHistory=false", searcher.gotUser, searcher.gotSaved, ids.SystemUserId())
+	if searcher.gotUser != ids.SystemUserId() {
+		t.Errorf("Execute(user=%v), want user=%v", searcher.gotUser, ids.SystemUserId())
 	}
 }
 
@@ -130,10 +129,10 @@ type deadlineRecordingSearcher struct {
 	hasDeadline bool
 }
 
-func (d *deadlineRecordingSearcher) Execute(ctx context.Context, userId ids.UserId, query *search.SearchQuery, saveHistory bool) (*search.SearchOutput, error) {
+func (d *deadlineRecordingSearcher) Execute(ctx context.Context, userId ids.UserId, query *search.SearchQuery) (*search.SearchOutput, error) {
 	deadline, ok := ctx.Deadline()
 	d.hasDeadline, d.remaining = ok, time.Until(deadline)
-	return d.fakeJourneySearcher.Execute(ctx, userId, query, saveHistory)
+	return d.fakeJourneySearcher.Execute(ctx, userId, query)
 }
 
 func TestRunBoundsTheSearchWithAMinuteDeadline(t *testing.T) {

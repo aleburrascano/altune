@@ -30,7 +30,7 @@ const (
 
 func runSearch(t *testing.T, svc *search.SearchService, raw string) *search.SearchOutput {
 	t.Helper()
-	out, err := svc.Execute(context.Background(), search.NewUser(), search.NewQuery(t, raw), false)
+	out, err := svc.Execute(context.Background(), search.NewUser(), search.NewQuery(t, raw))
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestService_LimitTruncates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := svc.Execute(context.Background(), ids.NewUserId(uuid.New()), q, false)
+	out, err := svc.Execute(context.Background(), ids.NewUserId(uuid.New()), q)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,11 +194,11 @@ func TestPersistHistory_SavesEntryAndTrimsToRing(t *testing.T) {
 	svc := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), search.WithHistoryRepository(repo))
 
 	user := search.NewUser()
-	if _, err := svc.Execute(context.Background(), user, search.NewQuery(t, "  Humble  "), true); err != nil {
+	if _, err := svc.ExecuteRecorded(context.Background(), user, search.NewQuery(t, "  Humble  ")); err != nil {
 		t.Fatal(err)
 	}
 	if inserted == nil {
-		t.Fatal("saveHistory=true must insert a history entry")
+		t.Fatal("ExecuteRecorded must insert a history entry")
 	}
 	if inserted.UserId != user || inserted.Query != "  Humble  " || inserted.QueryNorm != "humble" {
 		t.Errorf("entry = user %v query %q norm %q", inserted.UserId, inserted.Query, inserted.QueryNorm)
@@ -212,7 +212,7 @@ func TestPersistHistory_SkippedWhenNotRequested(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	repo := &search.FakeHistoryWriter{
 		InsertFn: func(context.Context, *search.SearchHistoryEntry) error {
-			t.Error("saveHistory=false must not insert")
+			t.Error("Execute must not insert")
 			return nil
 		},
 	}
@@ -236,7 +236,7 @@ func TestPersistHistory_InsertFailureToleratedAndSkipsTrim(t *testing.T) {
 	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), search.WithHistoryRepository(repo))
 
-	out, err := svc.Execute(context.Background(), search.NewUser(), search.NewQuery(t, "humble"), true)
+	out, err := svc.ExecuteRecorded(context.Background(), search.NewUser(), search.NewQuery(t, "humble"))
 	if err != nil {
 		t.Fatalf("a history-insert failure must never fail the search: %v", err)
 	}
@@ -258,7 +258,7 @@ func TestPersistHistory_TrimFailureTolerated(t *testing.T) {
 	p := &search.FakeProvider{Provider: search.ProviderDeezer, Results: []search.SearchResult{search.DeezerTrack("Humble", "Kendrick Lamar", 80)}}
 	svc := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), search.WithHistoryRepository(repo))
 
-	if _, err := svc.Execute(context.Background(), search.NewUser(), search.NewQuery(t, "humble"), true); err != nil {
+	if _, err := svc.ExecuteRecorded(context.Background(), search.NewUser(), search.NewQuery(t, "humble")); err != nil {
 		t.Fatalf("a trim failure must never fail the search: %v", err)
 	}
 }
@@ -291,7 +291,7 @@ func TestEmitSearchEvent_PayloadShape(t *testing.T) {
 	svc := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(), search.WithEventStore(store), search.WithExploration(1.0))
 
 	user := search.NewUser()
-	out, err := svc.Execute(context.Background(), user, search.NewQuery(t, "humble"), false)
+	out, err := svc.Execute(context.Background(), user, search.NewQuery(t, "humble"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -541,7 +541,7 @@ func searchPage(
 		t.Fatal(err)
 	}
 	query.Offset = offset
-	out, err := svc.ExecutePage(context.Background(), userId, query, false, continues)
+	out, err := svc.ExecutePage(context.Background(), userId, query, continues)
 	if err != nil {
 		t.Fatalf("ExecutePage(offset=%d): %v", offset, err)
 	}
@@ -655,7 +655,7 @@ func TestExecute_SystemIdentityDoesNotTouchFavoritesOrTelemetry(t *testing.T) {
 	}
 
 	t.Run("real identity is personalized and recorded (control)", func(t *testing.T) {
-		store, favs, history := runExecuteAs(t, search.NewUser(), favorites, results, true)
+		store, favs, history := runExecuteAs(t, search.NewUser(), favorites, results)
 		if len(store.Snapshot()) == 0 {
 			t.Error("real identity should persist an InteractionEvent")
 		}
@@ -668,7 +668,7 @@ func TestExecute_SystemIdentityDoesNotTouchFavoritesOrTelemetry(t *testing.T) {
 	})
 
 	t.Run("system identity is neither personalized nor recorded", func(t *testing.T) {
-		store, favs, history := runExecuteAs(t, ids.SystemUserId(), favorites, results, true)
+		store, favs, history := runExecuteAs(t, ids.SystemUserId(), favorites, results)
 		if got := len(store.Snapshot()); got != 0 {
 			t.Errorf("system identity persisted %d InteractionEvents; want 0", got)
 		}
@@ -686,7 +686,6 @@ func runExecuteAs(
 	user ids.UserId,
 	favorites []search.Favorite,
 	results []search.SearchResult,
-	saveHistory bool,
 ) (*search.FakeEventStore, *search.FakeFavoritesRepo, []*search.SearchHistoryEntry) {
 	t.Helper()
 	bg := searchtest.NewTracker(t)
@@ -707,7 +706,7 @@ func runExecuteAs(
 		search.WithFavorites(favs),
 		search.WithHistoryRepository(history),
 	)
-	if _, err := svc.Execute(context.Background(), user, search.NewQuery(t, "humble"), saveHistory); err != nil {
+	if _, err := svc.ExecuteRecorded(context.Background(), user, search.NewQuery(t, "humble")); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	bg.Wait()
@@ -940,7 +939,7 @@ func TestService_Search_ColdStampedeSharesOneFanOut(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			out, err := svc.Execute(context.Background(), search.NewUser(), search.NewQuery(t, "humble"), false)
+			out, err := svc.Execute(context.Background(), search.NewUser(), search.NewQuery(t, "humble"))
 			if err != nil {
 				t.Errorf("Execute: %v", err)
 				return
@@ -968,13 +967,13 @@ func TestService_Search_CancelledCallerDoesNotFailSharedFanOut(t *testing.T) {
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	done := make(chan *search.SearchOutput, 1)
 	go func() {
-		out, _ := svc.Execute(cancelCtx, search.NewUser(), search.NewQuery(t, "humble"), false)
+		out, _ := svc.Execute(cancelCtx, search.NewUser(), search.NewQuery(t, "humble"))
 		done <- out
 	}()
 	time.Sleep(50 * time.Millisecond)
 	survivor := make(chan *search.SearchOutput, 1)
 	go func() {
-		out, _ := svc.Execute(context.Background(), search.NewUser(), search.NewQuery(t, "humble"), false)
+		out, _ := svc.Execute(context.Background(), search.NewUser(), search.NewQuery(t, "humble"))
 		survivor <- out
 	}()
 	time.Sleep(50 * time.Millisecond)
@@ -1018,7 +1017,7 @@ func TestService_PanicBelowResolveColdDegradesToPartial(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			outs[i], errs[i] = svc.Execute(context.Background(), search.NewUser(), search.NewQuery(t, "humble"), false)
+			outs[i], errs[i] = svc.Execute(context.Background(), search.NewUser(), search.NewQuery(t, "humble"))
 		}()
 	}
 	wg.Wait()
@@ -1099,7 +1098,7 @@ func TestService_Search_LastCallerCancelStopsProviderCalls(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		_, _ = svc.Execute(ctx, search.NewUser(), search.NewQuery(t, "humble"), false)
+		_, _ = svc.Execute(ctx, search.NewUser(), search.NewQuery(t, "humble"))
 		close(done)
 	}()
 	waitFor(t, p.started, "the provider call to start")
@@ -1116,7 +1115,7 @@ func TestService_Search_CallerAfterAbandonedSearchGetsAFreshAnswer(t *testing.T)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		_, _ = svc.Execute(ctx, search.NewUser(), search.NewQuery(t, "humble"), false)
+		_, _ = svc.Execute(ctx, search.NewUser(), search.NewQuery(t, "humble"))
 		close(done)
 	}()
 	time.Sleep(50 * time.Millisecond)
@@ -1124,7 +1123,7 @@ func TestService_Search_CallerAfterAbandonedSearchGetsAFreshAnswer(t *testing.T)
 	waitFor(t, done, "the cancelled caller to return")
 
 	close(release)
-	out, err := svc.Execute(context.Background(), search.NewUser(), search.NewQuery(t, "humble"), false)
+	out, err := svc.Execute(context.Background(), search.NewUser(), search.NewQuery(t, "humble"))
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -1691,7 +1690,7 @@ func libraryTitles(out *search.SearchOutput) []string {
 
 func searchAs(t *testing.T, svc *search.SearchService, userId ids.UserId, raw string) *search.SearchOutput {
 	t.Helper()
-	out, err := svc.Execute(context.Background(), userId, search.NewQuery(t, raw), false)
+	out, err := svc.Execute(context.Background(), userId, search.NewQuery(t, raw))
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -1799,7 +1798,7 @@ func TestSearch_RelatedLibraryMatches_NeverLeakAnotherUsersLibrary(t *testing.T)
 	svc := search.NewSearchService(bg, []search.SearchProvider{p}, search.NewCircuitBreaker(),
 		search.WithFindRelatedService(search.NewFindRelatedService(querier, nil, nil)))
 
-	out, err := svc.Execute(context.Background(), userB, search.NewQuery(t, "hit single"), false)
+	out, err := svc.Execute(context.Background(), userB, search.NewQuery(t, "hit single"))
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}

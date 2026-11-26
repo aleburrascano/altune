@@ -15,7 +15,7 @@ import (
 
 type answering []search.SearchResult
 
-func (a answering) Execute(context.Context, ids.UserId, *search.SearchQuery, bool) (*search.SearchOutput, error) {
+func (a answering) Execute(context.Context, ids.UserId, *search.SearchQuery) (*search.SearchOutput, error) {
 	return &search.SearchOutput{Results: a}, nil
 }
 
@@ -153,7 +153,6 @@ func (s scriptedSearcher) Execute(
 	_ context.Context,
 	_ ids.UserId,
 	query *search.SearchQuery,
-	_ bool,
 ) (*search.SearchOutput, error) {
 	if s.failing[query.Raw] {
 		return nil, errors.New("transient upstream failure")

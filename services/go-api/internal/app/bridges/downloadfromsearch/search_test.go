@@ -14,15 +14,14 @@ import (
 )
 
 type recordingSearcher struct {
-	out         *query.SearchOutput
-	err         error
-	query       *domain.SearchQuery
-	user        ids.UserId
-	saveHistory bool
+	out   *query.SearchOutput
+	err   error
+	query *domain.SearchQuery
+	user  ids.UserId
 }
 
-func (s *recordingSearcher) Execute(_ context.Context, user ids.UserId, query *domain.SearchQuery, saveHistory bool) (*query.SearchOutput, error) {
-	s.query, s.user, s.saveHistory = query, user, saveHistory
+func (s *recordingSearcher) Execute(_ context.Context, user ids.UserId, query *domain.SearchQuery) (*query.SearchOutput, error) {
+	s.query, s.user = query, user
 	return s.out, s.err
 }
 
@@ -41,8 +40,8 @@ func TestSearchRecordings_AsksDiscoveryForTracksAloneAsNoUserAndSavesNoHistory(t
 	if searcher.query == nil || !reflect.DeepEqual(*searcher.query, want) {
 		t.Errorf("query = %+v, want %+v", searcher.query, want)
 	}
-	if searcher.user != (ids.UserId{}) || searcher.saveHistory {
-		t.Errorf("user %v saveHistory %v, want no user and no history", searcher.user, searcher.saveHistory)
+	if searcher.user != (ids.UserId{}) {
+		t.Errorf("user %v, want no user", searcher.user)
 	}
 }
 

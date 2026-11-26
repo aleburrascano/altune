@@ -342,7 +342,7 @@ func TestService_Execute_CorrectionRunsUnderADeadline(t *testing.T) {
 		t.Fatalf("NewSearchQuery: %v", err)
 	}
 
-	if _, err := svc.Execute(context.Background(), search.NewUser(), query, false); err != nil {
+	if _, err := svc.Execute(context.Background(), search.NewUser(), query); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
