@@ -52,7 +52,7 @@ import { httpFeaturePorts, httpOfflinePort } from '@/mobile/wiring/httpFeaturePo
 import { PlaybackShortcuts, SystemNavigationBar } from '@/mobile/frame/platformExtras';
 import { reportOtaLaunchFailures } from '@/mobile/otaLaunchReport';
 import { ScreenViewsBridge, ServerEventsBridge } from '@/mobile/serverEvents';
-import { chainUncaughtErrorHandler, globalErrorHandlersFor } from '@/mobile/uncaughtErrors';
+import { chainUncaughtErrorHandler, runtimeErrorHandlers } from '@/mobile/uncaughtErrors';
 
 installApiBase(process.env.EXPO_PUBLIC_API_URL, __DEV__);
 installBuild({ platform: Platform.OS, commit: process.env.EXPO_PUBLIC_BUILD_COMMIT });
@@ -75,9 +75,7 @@ void SplashScreen.preventAutoHideAsync();
 
 installTelemetry(createAppTelemetry());
 followSignedInUser();
-installGlobalErrorReporting((onError) =>
-  chainUncaughtErrorHandler(onError, globalErrorHandlersFor(Platform.OS)),
-);
+installGlobalErrorReporting(chainUncaughtErrorHandler(runtimeErrorHandlers()));
 reportOtaLaunchFailures().catch((error: unknown) => {
   console.warn('[telemetry] reading update logs failed', error);
 });

@@ -12,17 +12,22 @@ export const noGlobalErrorHandlers: GlobalErrorHandlers = {
   setGlobalHandler: () => undefined,
 };
 
-export function globalErrorHandlersFor(os: string): GlobalErrorHandlers {
-  return os === 'web' ? noGlobalErrorHandlers : ErrorUtils;
+export function handlersOrNone(runtime: GlobalErrorHandlers | undefined): GlobalErrorHandlers {
+  return runtime ?? noGlobalErrorHandlers;
+}
+
+export function runtimeErrorHandlers(): GlobalErrorHandlers {
+  return handlersOrNone(ErrorUtils);
 }
 
 export function chainUncaughtErrorHandler(
-  onError: (error: unknown) => void,
   handlers: GlobalErrorHandlers,
-): void {
-  const previousHandler = handlers.getGlobalHandler();
-  handlers.setGlobalHandler((error, isFatal) => {
-    onError(error);
-    previousHandler(error, isFatal);
-  });
+): (onError: (error: unknown) => void) => void {
+  return (onError) => {
+    const previousHandler = handlers.getGlobalHandler();
+    handlers.setGlobalHandler((error, isFatal) => {
+      onError(error);
+      previousHandler(error, isFatal);
+    });
+  };
 }

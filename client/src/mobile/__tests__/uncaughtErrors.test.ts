@@ -1,7 +1,8 @@
 import {
   chainUncaughtErrorHandler,
-  globalErrorHandlersFor,
+  handlersOrNone,
   noGlobalErrorHandlers,
+  runtimeErrorHandlers,
   type GlobalErrorHandlers,
 } from '@/mobile';
 
@@ -24,7 +25,7 @@ describe('chainUncaughtErrorHandler', () => {
   it('reports nothing and throws nothing when given the no-op handlers of a platform without any', () => {
     const onError = jest.fn<void, [unknown]>();
 
-    chainUncaughtErrorHandler(onError, noGlobalErrorHandlers);
+    chainUncaughtErrorHandler(noGlobalErrorHandlers)(onError);
 
     expect(() =>
       noGlobalErrorHandlers.getGlobalHandler()(new Error('web error'), true),
@@ -32,10 +33,19 @@ describe('chainUncaughtErrorHandler', () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
-  it('wires the no-op handlers on web and the runtime handlers on native', () => {
-    expect(globalErrorHandlersFor('web')).toBe(noGlobalErrorHandlers);
-    expect(globalErrorHandlersFor('ios')).not.toBe(noGlobalErrorHandlers);
-    expect(globalErrorHandlersFor('android')).not.toBe(noGlobalErrorHandlers);
+  it('uses the handlers the runtime provides', () => {
+    const runtime = fakeGlobalHandlers(jest.fn());
+
+    expect(handlersOrNone(runtime)).toBe(runtime);
+  });
+
+  it('wires the native runtime handlers where the runtime has them', () => {
+    expect(runtimeErrorHandlers()).not.toBe(noGlobalErrorHandlers);
+    expect(runtimeErrorHandlers().getGlobalHandler()).toEqual(expect.any(Function));
+  });
+
+  it('falls back to the no-op handlers on a runtime that provides none', () => {
+    expect(handlersOrNone(undefined)).toBe(noGlobalErrorHandlers);
   });
 
   it('passes an uncaught error to the listener, then to the handler it replaced', () => {
@@ -48,7 +58,7 @@ describe('chainUncaughtErrorHandler', () => {
     });
     const handlers = fakeGlobalHandlers(previous);
 
-    chainUncaughtErrorHandler(onError, handlers);
+    chainUncaughtErrorHandler(handlers)(onError);
     const error = new Error('native crash');
     handlers.current(error, true);
 
