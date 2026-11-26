@@ -80,7 +80,12 @@ installAuthClient(
 );
 provideOfflinePort(httpOfflinePort);
 
-installArtworkPlaceholder(() => Asset.fromModule(require('@assets/artwork-placeholder.png')).uri);
+function artworkPlaceholderUri(): string {
+  const asset = Asset.fromModule(require('@assets/artwork-placeholder.png'));
+  return asset.localUri ?? asset.uri;
+}
+
+installArtworkPlaceholder(artworkPlaceholderUri);
 startPlaybackService();
 
 registerSearchStateSignOutReset();
