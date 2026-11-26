@@ -966,6 +966,7 @@ forbid_log "--allow-serial-runners"
 forbid_log "--new-from-rev=HEAD"
 expect_log "go run ./scripts/lintcomments --all internal/shared/s/s.go"
 expect_log "go run ./scripts/lintnames"
+expect_log "go run ./scripts/lintarch --rules role,edge"
 
 expect_lint_args_exist() {
     local arg missing=""

@@ -27,7 +27,14 @@
     "github.com/redis/..."
   ],
   "driver_imports": ["github.com/jackc/pgx/..."],
-  "driver_homes": ["adapters"],
+  "driver_homes": {
+    "segments": ["adapters"],
+    "modules": ["shared/database", "shared/testdb"]
+  },
+  "driver_composition": {
+    "dirs": ["cmd/...", "internal/app", "internal/app/downloadsetup", "internal/app/shutdown"],
+    "imports": ["github.com/jackc/pgx/v5/pgxpool"]
+  },
   "table_owners": {
     "tracks": "library",
     "playlists": "library",
@@ -35,6 +42,10 @@
     "featured_artists": "library",
     "track_featured_artists": "library",
     "orphaned_audio": "library",
+    "track_identity": "library",
+    "track_metadata_changes": "library",
+    "track_length_fixes": "download",
+    "entity_identity": "search",
     "acquisition_cooldowns": "download",
     "acquisition_outcomes": "download",
     "acquisition_rejections": "download",

@@ -27,8 +27,19 @@ type config struct {
 	PureLayers    []string            `json:"pure_layers"`
 	IOImports     []string            `json:"io_imports"`
 	DriverImports []string            `json:"driver_imports"`
-	DriverHomes   []string            `json:"driver_homes"`
+	DriverHomes   driverHomes         `json:"driver_homes"`
+	Composition   composition         `json:"driver_composition"`
 	TableOwners   map[string]string   `json:"table_owners"`
+}
+
+type driverHomes struct {
+	Segments []string `json:"segments"`
+	Modules  []string `json:"modules"`
+}
+
+type composition struct {
+	Dirs    []string `json:"dirs"`
+	Imports []string `json:"imports"`
 }
 
 type violation struct {
@@ -150,6 +161,11 @@ func newLinter(root string) (*linter, error) {
 	if err := dec.Decode(&l.cfg); err != nil {
 		return nil, fmt.Errorf("architecture.json: %w", err)
 	}
+	for module, role := range l.cfg.Roles {
+		if _, ok := l.cfg.MayImport[role]; !ok {
+			return nil, fmt.Errorf("architecture.json: %s has role %s, which has no entry in may_import", module, role)
+		}
+	}
 	l.modulePath, err = modulePathOf(root)
 	if err != nil {
 		return nil, err
@@ -173,7 +189,7 @@ func modulePathOf(root string) (string, error) {
 	return "", fmt.Errorf("no module line in %s", filepath.Join(root, "go.mod"))
 }
 
-var createTable = regexp.MustCompile(`(?i)CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"?([a-z_][a-z0-9_]*)"?`)
+var tableDDL = regexp.MustCompile(`(?i)\b(CREATE|DROP)\s+TABLE\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?(?:[a-z_]+\.)?"?([a-z_][a-z0-9_]*)"?`)
 
 func (l *linter) loadTables() error {
 	files, err := filepath.Glob(filepath.Join(l.root, "migrations", "*.sql"))
@@ -185,8 +201,13 @@ func (l *linter) loadTables() error {
 		if err != nil {
 			return err
 		}
-		for _, m := range createTable.FindAllStringSubmatch(string(body), -1) {
-			l.tables[strings.ToLower(m[1])] = true
+		for _, m := range tableDDL.FindAllStringSubmatch(string(body), -1) {
+			name := strings.ToLower(m[2])
+			if strings.EqualFold(m[1], "DROP") {
+				delete(l.tables, name)
+			} else {
+				l.tables[name] = true
+			}
 		}
 	}
 	return nil
@@ -228,7 +249,7 @@ func (l *linter) scan() error {
 	})
 }
 
-var writeStatement = regexp.MustCompile(`(?i)\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|MERGE\s+INTO|TRUNCATE(?:\s+TABLE)?)\s+(?:ONLY\s+)?"?([a-z_][a-z0-9_]*)"?`)
+var writeStatement = regexp.MustCompile(`(?i)\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|MERGE\s+INTO|TRUNCATE(?:\s+TABLE)?)\s+(?:ONLY\s+)?(?:[a-z_]+\.)?"?([a-z_][a-z0-9_]*)"?`)
 
 func (l *linter) scanFile(file string) error {
 	fset := token.NewFileSet()
@@ -245,8 +266,12 @@ func (l *linter) scanFile(file string) error {
 	if rest, ok := strings.CutPrefix(dir, "internal/"); ok {
 		ownModule, within = l.splitModule(rest)
 		if ownModule == "" {
+			l.add(file, 1, "role", dir, fmt.Sprintf("%s holds Go code that belongs to no module; put it in a module folder under %s", dir, dir))
 			return nil
 		}
+	} else if dir == "internal" {
+		l.add(file, 1, "role", dir, "internal holds Go code that belongs to no module; put it in a module folder")
+		return nil
 	} else if !strings.HasPrefix(dir, "cmd/") && dir != "cmd" {
 		return nil
 	}
@@ -261,7 +286,8 @@ func (l *linter) scanFile(file string) error {
 	}
 	segments := strings.Split(within, "/")
 	pure := !isTest && hasAny(segments, l.cfg.PureLayers) && !hasAny(segments, []string{"adapters"})
-	driverHome := hasAny(segments, l.cfg.DriverHomes)
+	driverHome := hasAny(segments, l.cfg.DriverHomes.Segments) || contains(l.cfg.DriverHomes.Modules, ownModule)
+	wiring := matchesAny(dir, l.cfg.Composition.Dirs)
 	prefix := l.modulePath + "/internal/"
 	for _, imp := range f.Imports {
 		target, err := strconv.Unquote(imp.Path.Value)
@@ -275,7 +301,7 @@ func (l *linter) scanFile(file string) error {
 		if pure && matchesAny(target, l.cfg.IOImports) {
 			l.add(file, line, "layer", ownModule, fmt.Sprintf("%s imports %s, I/O belongs in an adapter; core, service, domain, ports and shell packages stay pure", dir, target))
 		}
-		if !isTest && !driverHome && matchesAny(target, l.cfg.DriverImports) {
+		if !isTest && !driverHome && matchesAny(target, l.cfg.DriverImports) && !(wiring && matchesAny(target, l.cfg.Composition.Imports)) {
 			l.add(file, line, "driver", moduleLabel(ownModule, dir), fmt.Sprintf("%s imports the database driver %s outside an adapters package", dir, target))
 		}
 	}

@@ -14,7 +14,8 @@ const testConfig = `{
   "pure_layers": ["core", "service", "domain", "ports", "shell"],
   "io_imports": ["os", "net", "net/http/...", "github.com/jackc/pgx/..."],
   "driver_imports": ["github.com/jackc/pgx/..."],
-  "driver_homes": ["adapters"],
+  "driver_homes": {"segments": ["adapters"], "modules": ["shared/pool"]},
+  "driver_composition": {"dirs": ["cmd/...", "internal/app", "internal/app/setup"], "imports": ["github.com/jackc/pgx/v5/pgxpool"]},
   "table_owners": {"tracks": "feat"}
 }
 `
@@ -35,7 +36,8 @@ func newTree(t *testing.T) string {
 	dir := t.TempDir()
 	writeFile(t, dir, "go.mod", "module example/api\n\ngo 1.26\n")
 	writeFile(t, dir, "architecture.json", testConfig)
-	writeFile(t, dir, "migrations/001.sql", "CREATE TABLE IF NOT EXISTS tracks (id int);\nCREATE TABLE plays (id int);\n")
+	writeFile(t, dir, "migrations/001.sql", "CREATE TABLE IF NOT EXISTS tracks (id int);\nCREATE TABLE plays (id int);\nCREATE TABLE old_stuff (id int);\n")
+	writeFile(t, dir, "migrations/002.sql", "DROP TABLE IF EXISTS old_stuff;\n")
 	writeFile(t, dir, "internal/feat/f.go", "package feat\n")
 	writeFile(t, dir, "internal/other/o.go", "package other\n")
 	writeFile(t, dir, "internal/shared/clock/c.go", "package clock\n")
@@ -82,6 +84,55 @@ func TestEdges(t *testing.T) {
 				t.Fatalf("exit = %d, want 1 naming %q:\n%s", code, tc.want, out)
 			}
 		})
+	}
+}
+
+func TestTheDepguardDeniesAreCovered(t *testing.T) {
+	cases := map[string]struct{ file, body string }{
+		"shared imports a platform module": {"internal/shared/clock/c2.go", "package clock\n\nimport _ \"example/api/internal/plat/auth\"\n"},
+		"shared imports app":               {"internal/shared/clock/c2.go", "package clock\n\nimport _ \"example/api/internal/app\"\n"},
+		"platform imports a feature":       {"internal/plat/auth/a2.go", "package auth\n\nimport _ \"example/api/internal/feat\"\n"},
+		"platform imports app":             {"internal/plat/auth/a2.go", "package auth\n\nimport _ \"example/api/internal/app\"\n"},
+		"shared imports another feature":   {"internal/shared/clock/c2.go", "package clock\n\nimport _ \"example/api/internal/other\"\n"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := newTree(t)
+			writeFile(t, dir, "internal/app/app.go", "package app\n")
+			writeFile(t, dir, tc.file, tc.body)
+
+			code, out, _ := lint(t, "--rules", "edge", dir)
+
+			if code != 1 || !strings.Contains(out, "may import only") {
+				t.Fatalf("exit = %d:\n%s", code, out)
+			}
+		})
+	}
+}
+
+func TestGoCodeThatBelongsToNoModuleIsReported(t *testing.T) {
+	for _, file := range []string{"internal/x.go", "internal/shared/x.go", "internal/plat/x.go"} {
+		t.Run(file, func(t *testing.T) {
+			dir := newTree(t)
+			writeFile(t, dir, file, "package x\n\nimport _ \"example/api/internal/feat\"\n")
+
+			code, out, _ := lint(t, "--rules", "role", dir)
+
+			if code != 1 || !strings.Contains(out, "belongs to no module") {
+				t.Fatalf("exit = %d:\n%s", code, out)
+			}
+		})
+	}
+}
+
+func TestARoleWithoutAMayImportEntryIsAConfigError(t *testing.T) {
+	dir := newTree(t)
+	writeFile(t, dir, "architecture.json", strings.Replace(testConfig, `"app": ["feature", "platform", "shared"]`, `"extra": []`, 1))
+
+	code, _, stderr := lint(t, dir)
+
+	if code != 2 || !strings.Contains(stderr, "no entry in may_import") {
+		t.Fatalf("exit = %d, stderr %q", code, stderr)
 	}
 }
 
@@ -156,12 +207,17 @@ func TestDriverImportsStayInAdapters(t *testing.T) {
 	writeFile(t, dir, "internal/feat/internal/adapters/db/d.go", "package db\n\nimport _ \"github.com/jackc/pgx/v5/pgxpool\"\n")
 	writeFile(t, dir, "internal/feat/internal/adapters/db/d_test.go", "package db_test\n\nimport _ \"github.com/jackc/pgx/v5\"\n")
 	writeFile(t, dir, "internal/app/w.go", "package app\n\nimport _ \"github.com/jackc/pgx/v5/pgxpool\"\n")
+	writeFile(t, dir, "internal/app/setup/w.go", "package setup\n\nimport _ \"github.com/jackc/pgx/v5/pgxpool\"\n")
+	writeFile(t, dir, "cmd/api/x/w.go", "package x\n\nimport _ \"github.com/jackc/pgx/v5/pgxpool\"\n")
+	writeFile(t, dir, "internal/shared/pool/p.go", "package pool\n\nimport (\n\t_ \"github.com/jackc/pgx/v5\"\n\t_ \"github.com/jackc/pgx/v5/pgxpool\"\n)\n")
+	writeFile(t, dir, "internal/app/jobs/j.go", "package jobs\n\nimport _ \"github.com/jackc/pgx/v5/pgxpool\"\n")
+	writeFile(t, dir, "internal/app/w2.go", "package app\n\nimport _ \"github.com/jackc/pgx/v5\"\n")
 	writeFile(t, dir, "internal/feat/t_test.go", "package feat_test\n\nimport _ \"github.com/jackc/pgx/v5\"\n")
 
 	code, out, _ := lint(t, "--rules", "driver", dir)
 
-	if code != 1 || !strings.Contains(out, "internal/app/w.go:3: driver:") || !strings.Contains(out, "architecture violations: 1") {
-		t.Fatalf("only the app wiring should be flagged, exit = %d:\n%s", code, out)
+	if code != 1 || !strings.Contains(out, "internal/app/jobs/j.go:3: driver:") || !strings.Contains(out, "internal/app/w2.go:3: driver:") || !strings.Contains(out, "architecture violations: 2") {
+		t.Fatalf("only a job and a non-pool driver import in app should be flagged, exit = %d:\n%s", code, out)
 	}
 }
 
@@ -174,6 +230,7 @@ func TestOnlyTheOwnerWritesATable(t *testing.T) {
 		"another module inserts":         {"internal/other/s.go", "package other\n\nconst q = \"insert into tracks (id) values (1)\"\n", "module feat owns"},
 		"another module deletes":         {"internal/other/s.go", "package other\n\nconst q = \"DELETE FROM tracks WHERE id = 1\"\n", "module feat owns"},
 		"a table nobody owns is written": {"internal/feat/s.go", "package feat\n\nconst q = \"INSERT INTO plays (id) VALUES (1)\"\n", "no owner"},
+		"a schema-qualified write":       {"internal/other/s.go", "package other\n\nconst q = `UPDATE public.tracks SET x = 1`\n", "module feat owns"},
 		"a platform module writes":       {"internal/plat/auth/s.go", "package auth\n\nconst q = \"TRUNCATE TABLE tracks\"\n", "module feat owns"},
 	}
 	for name, tc := range cases {
@@ -196,6 +253,7 @@ func TestTableWritesThatAreFineAreNotFlagged(t *testing.T) {
 	writeFile(t, dir, "internal/other/s.go", "package other\n\nconst q = \"SELECT * FROM tracks WHERE id = 1\"\n")
 	writeFile(t, dir, "internal/other/s_test.go", "package other_test\n\nconst q = \"INSERT INTO tracks (id) VALUES (1)\"\n")
 	writeFile(t, dir, "internal/other/c.go", "package other\n\n// UPDATE tracks SET x = 1\nconst z = 1\n")
+	writeFile(t, dir, "internal/other/d.go", "package other\n\nconst z = \"DELETE FROM old_stuff\"\n")
 
 	code, out, _ := lint(t, "--rules", "table", dir)
 
