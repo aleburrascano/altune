@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"altune/go-api/internal/shared/clock"
+	"altune/go-api/internal/shared/expiringcache"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -27,13 +28,13 @@ func UserKey(userID func(context.Context) (ids.UserId, bool)) UserKeyFunc {
 }
 
 type UserRateLimiter struct {
-	mu        sync.Mutex
-	limit     RateLimit
-	now       clock.Func
-	active    map[string]*rate.Limiter
-	cooling   map[string]*rate.Limiter
-	rotatedAt time.Time
+	mu       sync.Mutex
+	limit    RateLimit
+	now      clock.Func
+	limiters *expiringcache.Keyed[string, *rate.Limiter]
 }
+
+const maxTrackedUsers = 200_000
 
 var ErrClockRequired = errors.New("httpserver: the rate limiter requires a clock")
 
@@ -45,10 +46,9 @@ func NewUserRateLimiter(limit RateLimit, now clock.Func) (*UserRateLimiter, erro
 		limit.Burst = 1
 	}
 	return &UserRateLimiter{
-		limit:   limit,
-		now:     now,
-		active:  make(map[string]*rate.Limiter),
-		cooling: make(map[string]*rate.Limiter),
+		limit:    limit,
+		now:      now,
+		limiters: expiringcache.NewKeyed[string, *rate.Limiter](limit.Every*time.Duration(limit.Burst), maxTrackedUsers, now),
 	}, nil
 }
 
@@ -60,45 +60,20 @@ func MustNewUserRateLimiter(limit RateLimit, now clock.Func) *UserRateLimiter {
 	return l
 }
 
-func (l *UserRateLimiter) idleTTL() time.Duration {
-	return l.limit.Every * time.Duration(l.limit.Burst)
-}
-
 func (l *UserRateLimiter) Allow(key string) (bool, time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	now := l.now()
-	l.rotate(now)
-	limiter := l.bucket(key)
+	limiter := l.limiters.Get(key, func() *rate.Limiter {
+		return rate.NewLimiter(rate.Every(l.limit.Every), l.limit.Burst)
+	})
 	if limiter.AllowN(now, 1) {
 		return true, 0
 	}
 	res := limiter.ReserveN(now, 1)
 	defer res.CancelAt(now)
 	return false, res.DelayFrom(now)
-}
-
-func (l *UserRateLimiter) bucket(key string) *rate.Limiter {
-	if limiter, ok := l.active[key]; ok {
-		return limiter
-	}
-	limiter, survived := l.cooling[key]
-	if !survived {
-		limiter = rate.NewLimiter(rate.Every(l.limit.Every), l.limit.Burst)
-	}
-	delete(l.cooling, key)
-	l.active[key] = limiter
-	return limiter
-}
-
-func (l *UserRateLimiter) rotate(now time.Time) {
-	if now.Sub(l.rotatedAt) < l.idleTTL() {
-		return
-	}
-	l.rotatedAt = now
-	l.cooling = l.active
-	l.active = make(map[string]*rate.Limiter)
 }
 
 func (l *UserRateLimiter) Middleware(userKey UserKeyFunc, refused error, onRefused func()) func(http.Handler) http.Handler {
