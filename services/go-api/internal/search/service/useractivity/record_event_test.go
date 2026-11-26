@@ -293,10 +293,10 @@ func TestRecordEventService_Execute_WrapsStoreError(t *testing.T) {
 func TestInvalidEventLookAlikeIsNotCoded(t *testing.T) {
 	var coded *apierror.CodedError
 	if errors.As(errors.New("discovery.invalid_event"), &coded) {
-		t.Error("a plain error whose text is the code must not match *shareddomain.CodedError")
+		t.Error("a plain error whose text is the code must not match *apierror.CodedError")
 	}
 	if !errors.As(domain.NewInvalidEventError("x"), &coded) || coded.Code().String() != "discovery.invalid_event" {
-		t.Errorf("NewInvalidEventError should match *shareddomain.CodedError with code discovery.invalid_event, got %v", coded)
+		t.Errorf("NewInvalidEventError should match *apierror.CodedError with code discovery.invalid_event, got %v", coded)
 	}
 }
 
