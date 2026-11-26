@@ -9,13 +9,16 @@ import (
 	sharedids "altune/go-api/internal/shared/ids"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -483,5 +486,59 @@ func TestPostgresUpgradeStore_ABookkeepingWriteForATrackThatIsGoneChangesNothing
 	var rows int
 	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM acquisition_upgrade_state WHERE track_id = $1`, gone.UUID()).Scan(&rows); err != nil || rows != 0 {
 		t.Errorf("state rows = %d, %v, want none", rows, err)
+	}
+}
+
+func TestPostgresUpgradeStore_BookkeepingWritesRacingATrackDeleteNeverDeadlock(t *testing.T) {
+	dbtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := download.NewPostgresUpgradeStore(pool)
+	ctx := context.Background()
+
+	ops := []struct {
+		name string
+		run  func(id sharedids.TrackId) error
+	}{
+		{"note attempt", func(id sharedids.TrackId) error {
+			_, err := store.NoteAttempt(ctx, id, ports.UpgradeAttempt{RejectedSourceKey: "yt:a", CountsAsTry: true})
+			return err
+		}},
+		{"give up", func(id sharedids.TrackId) error { return store.GiveUp(ctx, id, 1, "nothing better") }},
+		{"record in place", func(id sharedids.TrackId) error { return store.RecordInPlaceState(ctx, id, 1, "acoustid", 0.1) }},
+		{"note in-place failure", func(id sharedids.TrackId) error { _, err := store.NoteInPlaceFailure(ctx, id); return err }},
+		{"settle acquisition", func(id sharedids.TrackId) error { return store.SettleAcquisition(ctx, id, []string{"yt:b"}, true) }},
+	}
+	for _, op := range ops {
+		t.Run(op.name, func(t *testing.T) {
+			for i := 0; i < 30; i++ {
+				id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("C"), sourceURL: sourceURL("race")})
+				if _, err := store.NoteInPlaceFailure(ctx, id); err != nil {
+					t.Fatalf("seed the state row: %v", err)
+				}
+
+				var wg sync.WaitGroup
+				var opErr, deleteErr error
+				start := make(chan struct{})
+				wg.Add(2)
+				go func() { defer wg.Done(); <-start; opErr = op.run(id) }()
+				go func() {
+					defer wg.Done()
+					<-start
+					_, deleteErr = pool.Exec(ctx, `DELETE FROM tracks WHERE id = $1`, id.UUID())
+				}()
+				close(start)
+				wg.Wait()
+
+				for _, err := range []error{opErr, deleteErr} {
+					var pgErr *pgconn.PgError
+					if errors.As(err, &pgErr) && pgErr.Code == "40P01" {
+						t.Fatalf("round %d: %s raced a track delete into a deadlock: %v", i, op.name, err)
+					}
+				}
+				if deleteErr != nil {
+					t.Fatalf("round %d: delete = %v", i, deleteErr)
+				}
+			}
+		})
 	}
 }

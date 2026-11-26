@@ -2,6 +2,7 @@ package downloadfromlibrary_test
 
 import (
 	"altune/go-api/internal/app/bridges/downloadfromlibrary"
+	"altune/go-api/internal/app/bridges/downloadfromlibrary/upgradestatetest"
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/downloadtest"
 	"altune/go-api/internal/library"
@@ -65,7 +66,7 @@ func rowState(t *testing.T, pool *pgxpool.Pool, trackID domain.TrackId) (string,
 
 func TestTrackLedger_OnPostgresAReclaimedTrackRefusesTheOldOwnerAndAcceptsTheNew(t *testing.T) {
 	pool := newLedgerPool(t)
-	ledger := downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now)
+	ledger := downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now, upgradestatetest.New())
 	ctx := context.Background()
 	track := insertUnqueuedTrack(t, pool)
 
@@ -113,7 +114,7 @@ func TestTrackLedger_OnPostgresAClaimBetweenReadAndUpdateFencesOutTheWriter(t *t
 	held := reclaimTrack(t, pool, track.ID)
 	store := &claimDuringUpdateStore{PostgresTrackRepository: library.NewPostgresTrackRepository(pool), pool: pool, t: t}
 
-	err := downloadfromlibrary.NewLibraryTracks(store, time.Now).Complete(context.Background(), track.ID, track.UserId, held, download.Completion{AudioRef: "old-owner-ref"})
+	err := downloadfromlibrary.NewLibraryTracks(store, time.Now, upgradestatetest.New()).Complete(context.Background(), track.ID, track.UserId, held, download.Completion{AudioRef: "old-owner-ref"})
 
 	if !errors.Is(err, download.ErrLeaseLost) {
 		t.Fatalf("err = %v, want ErrLeaseLost from the fenced write", err)
@@ -162,6 +163,6 @@ func (l postgresLedger) AddTrack(t *testing.T, snapshot download.TrackSnapshot) 
 func TestTrackLedger_OnPostgresMeetsTheLedgerContract(t *testing.T) {
 	store := library.NewPostgresTrackRepository(newLedgerPool(t))
 	downloadtest.LedgerContract(t, func(*testing.T) downloadtest.LedgerUnderTest {
-		return postgresLedger{LibraryTracks: downloadfromlibrary.NewLibraryTracks(store, time.Now), store: store}
+		return postgresLedger{LibraryTracks: downloadfromlibrary.NewLibraryTracks(store, time.Now, upgradestatetest.New()), store: store}
 	})
 }

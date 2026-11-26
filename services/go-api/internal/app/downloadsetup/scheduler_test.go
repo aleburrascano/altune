@@ -2,6 +2,7 @@ package downloadsetup_test
 
 import (
 	"altune/go-api/internal/app/bridges/downloadfromlibrary"
+	"altune/go-api/internal/app/bridges/downloadfromlibrary/upgradestatetest"
 	"altune/go-api/internal/app/bridges/downloadfromsearch"
 	"altune/go-api/internal/app/downloadsetup"
 	"altune/go-api/internal/download"
@@ -79,7 +80,7 @@ func newOfflineScheduler(t *testing.T, cfg *config.Config, sources downloadsetup
 		Transport:  http.DefaultTransport,
 		Config:     cfg,
 		Events:     eventTap(t),
-		Ledger:     downloadfromlibrary.NewLibraryTracks(&fixtureTrackRepo{}, time.Now),
+		Ledger:     downloadfromlibrary.NewLibraryTracks(&fixtureTrackRepo{}, time.Now, upgradestatetest.New()),
 		AudioStore: library.NewFilesystemAudioStore(cfg.MusicDir),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    sources,
@@ -107,7 +108,7 @@ func acquireThroughPostgres(t *testing.T) (library.Track, string, download.Verif
 		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, AcquisitionUpgradeConcurrency: 1, MusicDir: musicDir},
 		Pool:       pool,
 		Events:     eventTap(t),
-		Ledger:     downloadfromlibrary.NewLibraryTracks(repo, time.Now),
+		Ledger:     downloadfromlibrary.NewLibraryTracks(repo, time.Now, upgradestatetest.New()),
 		AudioStore: library.NewFilesystemAudioStore(musicDir),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    fixtureTiers(),
@@ -172,7 +173,7 @@ func TestNewScheduler_ZeroUpgradeWorkersBuildsNoUpgradeLaneInsteadOfPanicking(t 
 		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, MusicDir: musicDir},
 		Pool:       pool,
 		Events:     eventTap(t),
-		Ledger:     downloadfromlibrary.NewLibraryTracks(&fixtureTrackRepo{}, time.Now),
+		Ledger:     downloadfromlibrary.NewLibraryTracks(&fixtureTrackRepo{}, time.Now, upgradestatetest.New()),
 		AudioStore: library.NewFilesystemAudioStore(musicDir),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    fixtureTiers(),
@@ -279,7 +280,7 @@ func TestNewScheduler_RecordsTheOutcomeThroughThePostgresStore(t *testing.T) {
 		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, AcquisitionUpgradeConcurrency: 1, MusicDir: t.TempDir()},
 		Pool:       pool,
 		Events:     eventTap(t),
-		Ledger:     downloadfromlibrary.NewLibraryTracks(trackRepo, time.Now),
+		Ledger:     downloadfromlibrary.NewLibraryTracks(trackRepo, time.Now, upgradestatetest.New()),
 		AudioStore: library.NewFilesystemAudioStore(t.TempDir()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    fixtureTiers(),
@@ -374,7 +375,7 @@ func TestNewScheduler_AnUpgradeWorkerClaimsAndSettlesAnEnqueuedUpgrade(t *testin
 		Config:     cfg,
 		Pool:       pool,
 		Events:     eventTap(t),
-		Ledger:     downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now, downloadfromlibrary.WithUpgradeState(download.NewPostgresUpgradeStore(pool))),
+		Ledger:     downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now, download.NewPostgresUpgradeStore(pool)),
 		AudioStore: library.NewFilesystemAudioStore(cfg.MusicDir),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    downloadsetup.SourceOrder{First: []download.AudioSource{sourceWithNothing{}}},
@@ -459,7 +460,7 @@ func TestNewScheduler_ShutdownCancelsAJobThatOutlivesTheConfiguredDrainBudget(t 
 		Config:     &config.Config{Env: "test", AcquisitionDownloadConcurrency: 1, AcquisitionUpgradeConcurrency: 1, MusicDir: t.TempDir(), AcquisitionDrainBudgetSeconds: 1},
 		Pool:       pool,
 		Events:     eventTap(t),
-		Ledger:     downloadfromlibrary.NewLibraryTracks(repo, time.Now),
+		Ledger:     downloadfromlibrary.NewLibraryTracks(repo, time.Now, upgradestatetest.New()),
 		AudioStore: library.NewFilesystemAudioStore(t.TempDir()),
 		Recording:  downloadfromsearch.NoRecording(),
 		Sources:    downloadsetup.SourceOrder{First: []download.AudioSource{hang}},

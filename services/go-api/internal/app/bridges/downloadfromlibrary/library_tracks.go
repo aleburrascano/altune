@@ -30,33 +30,14 @@ type LibraryTracks struct {
 	state download.UpgradeState
 }
 
-type TrackOption func(*LibraryTracks)
-
-func WithUpgradeState(state download.UpgradeState) TrackOption {
-	return func(l *LibraryTracks) { l.state = state }
-}
-
-type noUpgradeState struct{}
-
-func (noUpgradeState) State(context.Context, ids.TrackId) (download.UpgradeStateSnapshot, error) {
-	return download.UpgradeStateSnapshot{}, nil
-}
-
-func (noUpgradeState) SettleAcquisition(context.Context, ids.TrackId, []string, bool) error {
-	return nil
-}
-
-var _ download.TrackLedgerPort = (*LibraryTracks)(nil)
-
-func NewLibraryTracks(store TrackStore, now clock.Func, opts ...TrackOption) *LibraryTracks {
+func NewLibraryTracks(store TrackStore, now clock.Func, state download.UpgradeState) *LibraryTracks {
 	if now == nil {
 		panic("downloadfromlibrary: NewLibraryTracks requires a clock")
 	}
-	l := &LibraryTracks{store: store, now: now, state: noUpgradeState{}}
-	for _, opt := range opts {
-		opt(l)
+	if state == nil {
+		panic("downloadfromlibrary: NewLibraryTracks requires the upgrade state, or rejected source keys are silently dropped")
 	}
-	return l
+	return &LibraryTracks{store: store, now: now, state: state}
 }
 
 type illegalTransitionError struct {

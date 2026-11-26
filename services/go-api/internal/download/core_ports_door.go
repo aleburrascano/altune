@@ -24,7 +24,10 @@ type (
 
 const ProviderYouTube = ports.ProviderYouTube
 
-var MergeUpgradeEvidence = ports.MergeUpgradeEvidence
+var (
+	MergeUpgradeEvidence     = ports.MergeUpgradeEvidence
+	AppendRejectedSourceKeys = ports.AppendRejectedSourceKeys
+)
 
 type (
 	AudioCandidate = ports.AudioCandidate

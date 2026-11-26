@@ -77,6 +77,9 @@ func MergeUpgradeEvidence(trackEvidence, state json.RawMessage) (json.RawMessage
 		if err := json.Unmarshal(trackEvidence, &merged); err != nil {
 			return nil, fmt.Errorf("read track evidence: %w", err)
 		}
+		if merged == nil {
+			merged = map[string]json.RawMessage{}
+		}
 	}
 	for _, key := range UpgradeEvidenceKeys {
 		delete(merged, key)

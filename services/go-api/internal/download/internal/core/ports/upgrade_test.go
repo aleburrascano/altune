@@ -53,3 +53,12 @@ func TestMergeUpgradeEvidence_NoEvidenceStaysNone(t *testing.T) {
 		t.Errorf("MergeUpgradeEvidence(nil, nil) = %q, %v, want empty and nil", merged, err)
 	}
 }
+
+func TestMergeUpgradeEvidence_ANullTrackEvidenceTakesTheStateKeysWithoutPanicking(t *testing.T) {
+	t.Parallel()
+
+	merged, err := ports.MergeUpgradeEvidence(json.RawMessage(`null`), json.RawMessage(`{"upgrade_tries":1}`))
+	if err != nil || string(merged) != `{"upgrade_tries":1}` {
+		t.Errorf("MergeUpgradeEvidence = %s, %v, want the state keys", merged, err)
+	}
+}

@@ -2,6 +2,7 @@ package downloadfromlibrary_test
 
 import (
 	"altune/go-api/internal/app/bridges/downloadfromlibrary"
+	"altune/go-api/internal/app/bridges/downloadfromlibrary/upgradestatetest"
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/shared/dbtest"
@@ -452,7 +453,7 @@ func jobRowExists(t *testing.T, pool *pgxpool.Pool, id ids.TrackId) bool {
 func TestPostgresJobQueue_EnqueueWhoseStatusFlipFailsStillQueuesTheJobAndTheClaimConverges(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
-	ledger := download.TrackLedgerPort(downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now))
+	ledger := download.TrackLedgerPort(downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now, upgradestatetest.New()))
 	requeuer := &flakyRequeuer{inner: ledger}
 	queue := download.MustNewPostgresJobQueue(pool, requeuer)
 	ctx := context.Background()
@@ -481,7 +482,7 @@ func TestPostgresJobQueue_EnqueueWhoseStatusFlipFailsStillQueuesTheJobAndTheClai
 func TestPostgresJobQueue_ClaimWhoseStatusFlipFailsReleasesTheJob(t *testing.T) {
 	dbtest.RequireIntegration(t)
 	pool := newPool(t)
-	ledger := download.TrackLedgerPort(downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now))
+	ledger := download.TrackLedgerPort(downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now, upgradestatetest.New()))
 	requeuer := &flakyRequeuer{inner: ledger}
 	queue := download.MustNewPostgresJobQueue(pool, requeuer)
 	ctx := context.Background()
@@ -586,5 +587,5 @@ func TestPostgresJobQueue_HeartbeatReleaseAndSettleLeaveACatalogWriteLoadedDurin
 }
 
 func newQueue(pool *pgxpool.Pool) *download.PostgresJobQueue {
-	return download.MustNewPostgresJobQueue(pool, downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now))
+	return download.MustNewPostgresJobQueue(pool, downloadfromlibrary.NewLibraryTracks(library.NewPostgresTrackRepository(pool), time.Now, upgradestatetest.New()))
 }
