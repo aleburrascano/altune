@@ -11,7 +11,7 @@ func TestIsSecretKey_keepsNonSecretLookalikeNames(t *testing.T) {
 			t.Errorf("%q is not a credential name but was treated as one", name)
 		}
 	}
-	for _, name := range []string{"accessToken", "access_token", "client_secret", "refresh_token", "api_key", "supabase_anon_key", "password"} {
+	for _, name := range []string{"accessToken", "access_token", "client_secret", "refresh_token", "api_key", "supabase_anon_key", "password", "pwd", "key", "ACCESS_TOKEN", "Api_Key", "ClientSecret"} {
 		if !redact.IsSecretKey(name) {
 			t.Errorf("%q names a credential but was not treated as one", name)
 		}

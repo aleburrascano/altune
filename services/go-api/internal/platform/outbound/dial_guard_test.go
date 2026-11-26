@@ -47,7 +47,7 @@ func TestRefuseNonPublicDial_RefusesEveryNonPublicRange(t *testing.T) {
 	}
 }
 
-func TestRefuseNonPublicDial_AllowsPublicAddresses(t *testing.T) {
+func TestRefuseNonPublicDial_AllowsAddressesTheGuardTreatsAsPublic(t *testing.T) {
 	rt := liveTransport(t)
 	for _, addr := range []string{"192.0.2.1:9", "198.51.100.1:9", "203.0.113.1:9", "[2001:db8::1]:9", "[::ffff:192.0.2.1]:9"} {
 		if err := roundTrip(t, rt, addr, 100*time.Millisecond); errors.Is(err, outbound.ErrNonPublicAddr) {
