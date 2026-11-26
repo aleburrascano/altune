@@ -6,6 +6,4 @@ type (
 	SpellingHintsRefreshService = vocabulary.SpellingHintsRefreshService
 )
 
-var (
-	NewVocabularyRefreshService = vocabulary.NewVocabularyRefreshService
-)
+var NewVocabularyRefreshService = vocabulary.NewVocabularyRefreshService

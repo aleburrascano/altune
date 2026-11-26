@@ -20,8 +20,6 @@ type (
 	SpellingHintsStore         = ports.SpellingHintsStore
 )
 
-var (
-	ParseDiscographyGroupBy = ports.ParseDiscographyGroupBy
-)
+var ParseDiscographyGroupBy = ports.ParseDiscographyGroupBy
 
 var ErrIdentityStoreUnavailable = ports.ErrIdentityStoreUnavailable

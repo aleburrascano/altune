@@ -9,6 +9,4 @@ type (
 	NoUnreleasedGenius = unreleased.NoGenius
 )
 
-var (
-	NewUnreleasedService = unreleased.NewService
-)
+var NewUnreleasedService = unreleased.NewService
