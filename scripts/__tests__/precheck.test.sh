@@ -957,6 +957,22 @@ run_push_scoped
 expect_rc 0
 expect_out "ok    test files live with their unit"
 
+CASE="--full checks every go-api test file against its unit, a push does not"
+new_repo
+add_test_home_stub 0
+(
+    cd "$WORK/repo" || exit 1
+    printf 'echo "tree stub: %s"\nexit 1\n' '$1' >scripts/test-home-tree.sh
+    git add -A
+    git commit -qm "tree stub"
+)
+run_with_tools
+expect_rc 1
+expect_out "FAIL  go-api test files live with their unit (whole tree)"
+expect_out "tree stub: services/go-api"
+run_push_scoped
+forbid_out "whole tree)"
+
 CASE="precheck rejects an unknown flag and a flag after the base ref with the usage and exit 2"
 new_repo
 run_script --ful

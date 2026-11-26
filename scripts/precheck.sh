@@ -497,6 +497,9 @@ if touches '(_test\.go|\.(test|spec)\.[cm]?[jt]sx?)$|^scripts/test-home' && need
     3) echo "SKIP  test-home: could not run"; tail -n 5 "$log" | sed 's/^/      /'; missing=1 ;;
     *) rc=$?; echo "FAIL  test files live with their unit"; tail -n 40 "$log" | sed 's/^/      /'; record_fail "test files live with their unit" "$rc" "$(cat "$log")"; failed=1 ;;
   esac
+  if [ "$full" = 1 ]; then
+    check "go-api test files live with their unit (whole tree)" . bash scripts/test-home-tree.sh services/go-api
+  fi
   if touches '^scripts/test-home'; then
     test_check "test-home regression suite" . bash scripts/test-home.test.sh
   fi
