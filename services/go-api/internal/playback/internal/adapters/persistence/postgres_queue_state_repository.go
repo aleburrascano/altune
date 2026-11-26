@@ -3,6 +3,7 @@ package persistence
 import (
 	"altune/go-api/internal/playback/internal/core/domain"
 	"altune/go-api/internal/playback/internal/core/ports"
+	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -40,13 +41,14 @@ type QueueStateDB interface {
 type PostgresQueueStateRepository struct {
 	pool    QueueStateDB
 	metrics ports.QueueStateMetrics
+	now     clock.Func
 }
 
-func NewPostgresQueueStateRepository(pool QueueStateDB, metrics ports.QueueStateMetrics) *PostgresQueueStateRepository {
-	if pool == nil || metrics == nil {
-		panic("persistence: NewPostgresQueueStateRepository requires a database and metrics")
+func NewPostgresQueueStateRepository(pool QueueStateDB, metrics ports.QueueStateMetrics, now clock.Func) *PostgresQueueStateRepository {
+	if pool == nil || metrics == nil || now == nil {
+		panic("persistence: NewPostgresQueueStateRepository requires a database, metrics and a clock")
 	}
-	return &PostgresQueueStateRepository{pool: pool, metrics: metrics}
+	return &PostgresQueueStateRepository{pool: pool, metrics: metrics, now: now}
 }
 
 func (r *PostgresQueueStateRepository) recordTimeout(parent context.Context, err error) {
@@ -113,7 +115,7 @@ func (r *PostgresQueueStateRepository) Upsert(ctx context.Context, state *domain
 			state.RepeatMode.String(),
 			state.SourceId,
 			state.NaturalOrder,
-			handlingAge{stampedAt: state.UpdatedAt},
+			handlingAge{stampedAt: state.UpdatedAt, now: r.now},
 			defaultQueueStateOpTimeout.Microseconds(),
 		)
 		return err
@@ -159,7 +161,7 @@ func (r *PostgresQueueStateRepository) UpdatePosition(ctx context.Context, posit
 			position.UserId.UUID(),
 			position.CurrentIdx,
 			position.PositionMs,
-			handlingAge{stampedAt: position.UpdatedAt},
+			handlingAge{stampedAt: position.UpdatedAt, now: r.now},
 			position.CurrentTrackId,
 		).Scan(&applied, &matched)
 	})
@@ -180,10 +182,11 @@ func (r *PostgresQueueStateRepository) UpdatePosition(ctx context.Context, posit
 
 type handlingAge struct {
 	stampedAt time.Time
+	now       clock.Func
 }
 
 func (a handlingAge) Value() (driver.Value, error) {
-	age := time.Since(a.stampedAt)
+	age := a.now().Sub(a.stampedAt)
 	if age < 0 {
 		age = 0
 	}
