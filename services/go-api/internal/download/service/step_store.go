@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/download/internal/core/audiokey"
 	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/shared/backoff"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/redact"
 	"context"
@@ -14,6 +15,8 @@ import (
 )
 
 const rollbackDeleteTries = 3
+
+var rollbackDeleteBackoff = backoff.Policy{Base: 100 * time.Millisecond, Cap: time.Second}
 
 type StoreStep struct {
 	audioStore  ports.AudioWriter
@@ -160,7 +163,7 @@ func (s *StoreStep) deleteWithRetry(ctx context.Context, audioRef string) error 
 			break
 		}
 		if attempt < s.deleteTries {
-			s.sleep(time.Duration(attempt) * 100 * time.Millisecond)
+			s.sleep(rollbackDeleteBackoff.Delay(attempt))
 		}
 	}
 	slog.ErrorContext(ctx, "orphaned audio file after rollback",

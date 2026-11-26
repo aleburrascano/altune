@@ -1,6 +1,7 @@
 package previewcheck
 
 import (
+	"altune/go-api/internal/shared/backoff"
 	"altune/go-api/internal/shared/childprocess"
 	"altune/go-api/internal/shared/songfields"
 	"context"
@@ -108,7 +109,7 @@ type Previews struct {
 	client  *http.Client
 	baseURL string
 	limiter *rate.Limiter
-	backoff time.Duration
+	backoff backoff.Policy
 	pause   cooldown
 	printer RawFingerprint
 }
@@ -116,7 +117,7 @@ type Previews struct {
 func New(client *http.Client, baseURL string, requestsPerSecond float64, printer RawFingerprint) *Previews {
 	return &Previews{
 		client: client, baseURL: baseURL, limiter: rate.NewLimiter(rate.Limit(requestsPerSecond), 1),
-		backoff: deezerBackoff, printer: printer,
+		backoff: backoff.Policy{Base: deezerBackoff, Cap: deezerBackoff << (deezerAttempts - 1)}, printer: printer,
 	}
 }
 
@@ -214,7 +215,7 @@ func (d *Previews) get(ctx context.Context, target string, bodyCap int64, isThro
 		case err != nil:
 			return nil, err
 		case isThrottled(status, body):
-			d.pause.extendTo(time.Now().Add(d.backoff << (attempt - 1)))
+			d.pause.extendTo(time.Now().Add(d.backoff.Ceiling(attempt)))
 		case status != http.StatusOK:
 			return nil, fmt.Errorf("deezer %s: status %d", target, status)
 		default:
