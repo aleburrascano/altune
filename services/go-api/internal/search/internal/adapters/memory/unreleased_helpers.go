@@ -95,6 +95,7 @@ type StoredArtist struct {
 	Complete     bool
 	Built        bool
 	BuildVersion int
+	BuiltAt      time.Time
 }
 
 type UnreleasedStore struct {
@@ -113,11 +114,20 @@ type UnreleasedStore struct {
 
 var _ ports.UnreleasedStore = (*UnreleasedStore)(nil)
 
-func (u *UnreleasedStore) Record(context.Context, ports.UnreleasedArtistKey, string, map[domain.ProviderName]string) error {
+func (u *UnreleasedStore) Record(_ context.Context, key ports.UnreleasedArtistKey, _ string, _ map[domain.ProviderName]string) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.calls = append(u.calls, "record")
-	return u.RecordErr
+	if u.RecordErr != nil {
+		return u.RecordErr
+	}
+	if u.Artists == nil {
+		u.Artists = map[ports.UnreleasedArtistKey]StoredArtist{}
+	}
+	if _, known := u.Artists[key]; !known {
+		u.Artists[key] = StoredArtist{}
+	}
+	return nil
 }
 
 func (u *UnreleasedStore) Read(_ context.Context, key ports.UnreleasedArtistKey) ([]domain.UnreleasedSong, bool, bool, int, error) {
@@ -135,11 +145,12 @@ func (u *UnreleasedStore) Write(_ context.Context, key ports.UnreleasedArtistKey
 	if u.WriteErr != nil {
 		return u.WriteErr
 	}
-	u.writes = append(u.writes, StoreWrite{Key: key, Songs: slices.Clone(songs), Complete: complete, StartedAt: startedAt, BuildVersion: buildVersion})
-	if u.Artists == nil {
-		u.Artists = map[ports.UnreleasedArtistKey]StoredArtist{}
+	artist, recorded := u.Artists[key]
+	if !recorded || (artist.Built && !artist.BuiltAt.Before(startedAt)) {
+		return nil
 	}
-	u.Artists[key] = StoredArtist{Songs: slices.Clone(songs), Complete: complete, Built: true, BuildVersion: buildVersion}
+	u.writes = append(u.writes, StoreWrite{Key: key, Songs: slices.Clone(songs), Complete: complete, StartedAt: startedAt, BuildVersion: buildVersion})
+	u.Artists[key] = StoredArtist{Songs: slices.Clone(songs), Complete: complete, Built: true, BuildVersion: buildVersion, BuiltAt: startedAt}
 	return nil
 }
 

@@ -2,6 +2,7 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/search/domain"
+	"altune/go-api/internal/search/internal/adapters/memory"
 	"altune/go-api/internal/search/internal/adapters/persistence"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/shared/testdb"
@@ -31,6 +32,26 @@ func unreleasedTitles(songs []domain.UnreleasedSong) []string {
 		out[i] = s.Title
 	}
 	return out
+}
+
+type postgresUnreleasedUnderContract struct {
+	*persistence.PostgresUnreleasedStore
+	pool *pgxpool.Pool
+}
+
+func (p postgresUnreleasedUnderContract) NewRecordedArtist(t *testing.T) ports.UnreleasedArtistKey {
+	return newUnreleasedArtist(t, p.pool, p.PostgresUnreleasedStore)
+}
+
+func (p postgresUnreleasedUnderContract) NewUnrecordedArtist(*testing.T) ports.UnreleasedArtistKey {
+	return ports.UnreleasedArtistKey{Provider: domain.ProviderDeezer, ExternalID: "it-" + uuid.NewString()}
+}
+
+func TestPostgresUnreleasedStore_KeepsTheStoreContract(t *testing.T) {
+	pool := testdb.Pool(t)
+	memory.UnreleasedStoreContract(t, func(*testing.T) memory.UnreleasedStoreUnderTest {
+		return postgresUnreleasedUnderContract{PostgresUnreleasedStore: persistence.NewPostgresUnreleasedStore(pool), pool: pool}
+	})
 }
 
 func TestUnreleasedStoreWrite(t *testing.T) {

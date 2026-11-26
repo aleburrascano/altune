@@ -468,7 +468,7 @@ func storeService(genius *search.FakeGeniusSongCatalog, store *search.FakeUnrele
 
 func writtenBuildVersion(t *testing.T) int {
 	t.Helper()
-	store := &search.FakeUnreleasedStore{}
+	store := &search.FakeUnreleasedStore{Artists: map[search.UnreleasedArtistKey]search.StoredArtist{drakeKey: {}}}
 	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
 	if _, err := storeService(genius, store).Rebuild(context.Background(), drakeKey, "Drake", nil); err != nil {
 		t.Fatalf("Rebuild: %v", err)
@@ -542,7 +542,7 @@ func TestService_List_StoreAlwaysBuildsEvenWhenTheArtistIsBuilt(t *testing.T) {
 }
 
 func TestService_Rebuild_StoreWritesIncompleteWhenTheCatalogIsPartial(t *testing.T) {
-	store := &search.FakeUnreleasedStore{}
+	store := &search.FakeUnreleasedStore{Artists: map[search.UnreleasedArtistKey]search.StoredArtist{drakeKey: {}}}
 	genius := &search.FakeGeniusSongCatalog{ArtistFound: true, Songs: songs("Leak")}
 	catalog := &search.ArtistCatalogTitles{Err: search.ErrPartialCatalog}
 	svc := searchtest.MustUnreleased(search.NewUnreleasedService(genius, catalog, search.NoUnreleasedCache{}, search.UnreleasedConfig{MaxPages: 1, MaxDetails: 10}, search.WithUnreleasedStore(store)))
