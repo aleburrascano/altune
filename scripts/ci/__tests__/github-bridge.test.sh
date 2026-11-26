@@ -23,6 +23,7 @@ cat > "$work/git" <<'STUB'
 echo "$*" >> "$WORK/git.log"
 case " $* " in
   *" ls-remote "*) cat "$WORK/remote.txt" ;;
+  *' rev-parse --verify -q '*'^2 '*) echo "$PARENT2" ;;
   *" rev-parse "*) echo "$HEAD_SHA" ;;
   *" show "*) printf '%s\n' "$MERGE_SCRIPT" ;;
 esac
@@ -32,7 +33,7 @@ chmod +x "$work/curl" "$work/gh" "$work/git"
 
 run() {
   : > "$work/posts.log"; : > "$work/git.log"
-  PATH="$work:$PATH" WORK="$work" HEAD_SHA=abc123 MERGE_SCRIPT=${MERGE_SCRIPT:-'echo abc123'} BRIDGE_GIT="$work/bridge.git" \
+  PATH="$work:$PATH" WORK="$work" HEAD_SHA=abc123 PARENT2=${PARENT2:-} MERGE_SCRIPT=${MERGE_SCRIPT:-'echo abc123'} BRIDGE_GIT="$work/bridge.git" \
     GITEA_API=http://gitea/api/v1 GITEA_TOKEN=t REPO=o/r MIRROR_KEY=/k GITHUB_REMOTE=git@github.com:o/r.git \
     bash "$script" >"$work/out" 2>&1; got=$?
 }
@@ -79,6 +80,35 @@ grep -q 'push -q --force git@github.com:o/r.git def456:refs/heads/pr/7' "$work/g
 grep -q 'statuses/abc123' "$work/posts.log" || { echo "FAIL status for a merge result not posted to the pr head"; fail=1; }
 grep -q 'statuses/def456' "$work/posts.log" && { echo "FAIL status posted to the merge commit, which is not the pr head"; fail=1; }
 
+pushes() { grep -c ' push ' "$work/git.log"; }
+echo '{"check_runs":[{"id":2,"name":"pr-checks","status":"in_progress","html_url":"http://gh/run/2"}]}' > "$work/checks.json"
+PARENT2=abc123 MERGE_SCRIPT='echo def456' run
+check "main moved, run pending: no push" "0" "$(pushes)"
+check "main moved, run pending: reports pending" "1" "$(posted pending)"
+grep -q 'statuses/abc123' "$work/posts.log" || { echo "FAIL pending status not posted to the pr head"; fail=1; }
+
+echo '{"check_runs":[{"id":2,"name":"pr-checks","status":"completed","conclusion":"success"}]}' > "$work/checks.json"
+PARENT2=abc123 MERGE_SCRIPT='echo def456' run
+check "main moved, run completed, not posted: no push" "0" "$(pushes)"
+check "main moved, run completed, not posted: posts success" "1" "$(posted success)"
+grep -q 'statuses/abc123' "$work/posts.log" || { echo "FAIL completed status not posted to the pr head"; fail=1; }
+
+echo '[{"id":5,"context":"github / pr-checks","status":"success","description":"pr-checks passed on github"}]' > "$work/statuses.json"
+PARENT2=abc123 MERGE_SCRIPT='echo def456' run
+check "main moved, run completed and posted: push" "1" "$(pushes)"
+grep -q 'push -q --force git@github.com:o/r.git def456:refs/heads/pr/7' "$work/git.log" || { echo "FAIL completed run: merge result not pushed"; fail=1; }
+
+echo '{"check_runs":[{"id":2,"name":"pr-checks","status":"in_progress"}]}' > "$work/checks.json"
+PARENT2=other999 MERGE_SCRIPT='echo def456' run
+check "head moved, run pending: push" "1" "$(pushes)"
+
+echo '{"check_runs":[{"id":2,"name":"pr-checks","status":"in_progress"}]}' > "$work/checks.json"
+printf 'abc123\trefs/heads/pr/7\n' > "$work/remote.txt"
+MERGE_SCRIPT='echo def456' run
+check "pr/N is the head itself, run pending: no push" "0" "$(pushes)"
+printf 'oldsha\trefs/heads/pr/7\n' > "$work/remote.txt"
+
+echo '{"check_runs":[{"id":2,"name":"pr-checks","status":"completed","conclusion":"success"}]}' > "$work/checks.json"
 MERGE_SCRIPT='echo "conflict in x" >&2; exit 1' run
 check "conflict exits 0" "0" "$got"
 check "conflict posts failure" "1" "$(posted failure)"
