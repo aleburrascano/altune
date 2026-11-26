@@ -10,6 +10,7 @@ import {
 } from '@testing/queryHarness';
 
 import { handoffFor } from '@features/detail/__tests__/screenHandoff';
+import { recordingNavigator } from '@features/detail/__tests__/recordingNavigator';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -83,7 +84,11 @@ function renderScreen(where?: string) {
   return render(
     <Base>
       <DetailPortProvider port={httpDetailPort}>
-        <UnreleasedAllScreen handoff={handoffFor(ARTIST, '/discover/unreleased')} where={where} />
+        <UnreleasedAllScreen
+          handoff={handoffFor(ARTIST, '/discover/unreleased')}
+          navigator={recordingNavigator()}
+          where={where}
+        />
       </DetailPortProvider>
     </Base>,
   );

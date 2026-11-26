@@ -1,6 +1,7 @@
 import type { ComponentType, ReactElement, ReactNode } from 'react';
 import type { Navigator } from '@shared/navigation';
 import { DetailNavigatorProvider } from '@features/detail';
+import { createPlaybackWrapper } from '@testing/queryHarness';
 
 interface WrapperProps {
   children: ReactNode;
@@ -25,4 +26,10 @@ export function navigatorWrapper(navigator: Navigator, Outer?: Wrapper): Wrapper
     );
     return Outer ? <Outer>{inner}</Outer> : inner;
   };
+}
+
+type PlaybackWrapperArgs = Parameters<typeof createPlaybackWrapper>;
+
+export function playbackWithNavigator(...args: PlaybackWrapperArgs): Wrapper {
+  return navigatorWrapper(recordingNavigator(), createPlaybackWrapper(...args));
 }

@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 
-import type { DetailHandoff, TabRoot } from '@shared/navigation';
+import type { DetailHandoff, Navigator, TabRoot } from '@shared/navigation';
 import { featuredArtistsFromExtras } from '@shared/catalog';
 import { useArtistDiscovery } from '@features/detail/view/useEntityDiscovery';
 import { realPhotoUrl } from '@features/detail/core/artistPhoto';
@@ -8,6 +8,7 @@ import { useDetailEnrichments } from '@features/detail/view/useDetailEnrichments
 import { useResolveMissingSources } from '@features/detail/view/useResolveMissingSources';
 import { useDetailNavigator, useLateralNav } from '@features/detail/view/useDetailNavigation';
 import { DetailHandoffProvider } from '@features/detail/view/useDetailHandoff';
+import { DetailNavigatorProvider } from '@features/detail/view/DetailNavigatorProvider';
 import { detailRouteFor } from '@features/detail/core/detailNavigation';
 
 import { TrackDetailBody } from '@features/detail/view/TrackDetailBody';
@@ -16,17 +17,20 @@ import { ArtistDetailBody } from '@features/detail/view/ArtistDetailBody';
 import type { DetailChrome } from '@features/detail/view/DetailScaffold';
 import { secondaryLine } from '@features/detail/view/secondaryLine';
 
-type DetailScreenProps = { handoff: DetailHandoff; tabRoot: TabRoot };
+type DetailScreenProps = { handoff: DetailHandoff; tabRoot: TabRoot; navigator: Navigator };
+type ContentProps = Omit<DetailScreenProps, 'navigator'>;
 
-export function DetailScreen({ handoff, tabRoot }: DetailScreenProps): ReactElement {
+export function DetailScreen({ handoff, tabRoot, navigator }: DetailScreenProps): ReactElement {
   return (
-    <DetailHandoffProvider value={handoff}>
-      <DetailContent handoff={handoff} tabRoot={tabRoot} />
-    </DetailHandoffProvider>
+    <DetailNavigatorProvider navigator={navigator}>
+      <DetailHandoffProvider value={handoff}>
+        <DetailContent handoff={handoff} tabRoot={tabRoot} />
+      </DetailHandoffProvider>
+    </DetailNavigatorProvider>
   );
 }
 
-function DetailContent({ handoff, tabRoot }: DetailScreenProps): ReactElement {
+function DetailContent({ handoff, tabRoot }: ContentProps): ReactElement {
   const navigator = useDetailNavigator();
   const detailRoute = detailRouteFor(tabRoot);
   const rawResult = handoff.result;

@@ -6,12 +6,12 @@ import { warmUpFirstRender } from '@testing/warmUpFirstRender';
 import {
   createRecordingPorts,
   createTestQueryClient,
-  createPlaybackWrapper,
   idlePlayback,
   signInTestUser,
   type RecordingFeaturePorts,
 } from '@testing/queryHarness';
 import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
+import { playbackWithNavigator } from '@features/detail/__tests__/recordingNavigator';
 
 beforeEach(() => {
   recordLogs();
@@ -117,7 +117,7 @@ warmUpFirstRender(async () => {
       }}
       detailRoute="/library/detail"
     />,
-    { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
+    { wrapper: playbackWithNavigator(createTestQueryClient({ mutations: true })) },
   );
 
   await screen.findByTestId('detail-more-from-album');
@@ -176,7 +176,7 @@ describe('a library album\'s "More from this album" section', () => {
         result={libraryAlbum()}
         detailRoute="/library/detail"
       />,
-      { wrapper: createPlaybackWrapper(client, idlePlayback, ports) },
+      { wrapper: playbackWithNavigator(client, idlePlayback, ports) },
     );
   }
 
@@ -332,7 +332,7 @@ describe('the tracklist error', () => {
         result={sourcedAlbum()}
         detailRoute="/library/detail"
       />,
-      { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
+      { wrapper: playbackWithNavigator(createTestQueryClient({ mutations: true })) },
     );
   }
 
@@ -430,7 +430,7 @@ describe('AlbumDetailBody: the Save N pill', () => {
         result={sourcedAlbum()}
         detailRoute="/library/detail"
       />,
-      { wrapper: createPlaybackWrapper(client, idlePlayback, ports) },
+      { wrapper: playbackWithNavigator(client, idlePlayback, ports) },
     );
   }
 
@@ -588,7 +588,7 @@ describe('AlbumDetailBody: the facts row', () => {
         detailRoute="/library/detail"
         mbYear={1977}
       />,
-      { wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })) },
+      { wrapper: playbackWithNavigator(createTestQueryClient({ mutations: true })) },
     );
 
     await screen.findByTestId('detail-tracklist');

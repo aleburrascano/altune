@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState, type MutableRefObject } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { DiscoveryResult, DiscoveryKind, FeaturedArtist } from '@shared/catalog';
-import { useNavigator, type Navigator } from '@shared/navigation';
+import type { Navigator } from '@shared/navigation';
 import {
   openDetail,
   type DetailRoute,
@@ -15,8 +15,7 @@ import { useDetailPort } from '@features/detail/view/DetailPortProvider';
 import { useProvidedNavigator } from '@features/detail/view/DetailNavigatorProvider';
 
 export function useDetailNavigator(): Navigator {
-  const appNavigator = useNavigator();
-  return useProvidedNavigator() ?? appNavigator;
+  return useProvidedNavigator();
 }
 
 export function useOpenDetail(detailRoute: DetailRoute): (picked: DiscoveryResult) => void {

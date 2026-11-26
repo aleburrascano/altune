@@ -27,6 +27,7 @@ import {
 } from '@testing/queryHarness';
 import {
   navigatorWrapper,
+  playbackWithNavigator,
   recordingNavigator,
 } from '@features/detail/__tests__/recordingNavigator';
 
@@ -73,7 +74,7 @@ function renderDetail(): RecordingFeaturePorts {
       lateralNav={lateralNav}
       detailRoute="/discover/detail"
     />,
-    { wrapper: createPlaybackWrapper(client, idlePlayback, ports) },
+    { wrapper: playbackWithNavigator(client, idlePlayback, ports) },
   );
   return ports;
 }
@@ -168,7 +169,7 @@ function renderOwnedFailedDetail(): void {
       detailRoute="/discover/detail"
     />,
     {
-      wrapper: createPlaybackWrapper(
+      wrapper: playbackWithNavigator(
         createTestQueryClient({ mutations: true }),
         idlePlayback,
         createRecordingPorts(),
@@ -207,7 +208,7 @@ function renderDetailOf(result: DiscoveryResult, title: string = result.title): 
       detailRoute="/discover/detail"
     />,
     {
-      wrapper: createPlaybackWrapper(
+      wrapper: playbackWithNavigator(
         createTestQueryClient({ mutations: true }),
         idlePlayback,
         createRecordingPorts(),

@@ -10,6 +10,10 @@ import {
   gridCellWidthFor,
 } from '@features/detail';
 import { createTestQueryClient, createWrapper, signInTestUser } from '@testing/queryHarness';
+import {
+  navigatorWrapper,
+  recordingNavigator,
+} from '@features/detail/__tests__/recordingNavigator';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -141,7 +145,7 @@ describe('detail layout: current rendered widths and margins stay pinned', () =>
       sources: [{ provider: 'soundcloud', external_id: 'sc-1', url: 'https://sc/sc-1' }],
     };
     render(<RelatedTracksSection result={seed} detailRoute="/discover/detail" />, {
-      wrapper: createWrapper(createTestQueryClient()),
+      wrapper: navigatorWrapper(recordingNavigator(), createWrapper(createTestQueryClient())),
     });
 
     await screen.findByTestId('detail-related-0');

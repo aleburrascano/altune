@@ -10,7 +10,7 @@ import {
 import { fetchTallyingOutcome } from '@features/detail/core/detailHealth';
 import type { DetailPort } from '@features/detail/ports/detailPort';
 import { useDetailPort } from '@features/detail/view/DetailPortProvider';
-import { useContentFetchRetry } from '@features/detail/core/useContentFetchRetry';
+import { useContentFetchRetry } from '@features/detail/view/useContentFetchRetry';
 
 type UseRelatedTracksParams = {
   sources: DiscoverySource[];

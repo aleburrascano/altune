@@ -3,11 +3,8 @@ import type { DiscoveryResult } from '@shared/catalog';
 import { useTrackStatusStore } from '@shared/acquisition';
 
 import { useAlbumDetailState } from '@features/detail';
-import {
-  createTestQueryClient,
-  createPlaybackWrapper,
-  signInTestUser,
-} from '@testing/queryHarness';
+import { createTestQueryClient, signInTestUser } from '@testing/queryHarness';
+import { playbackWithNavigator } from '@features/detail/__tests__/recordingNavigator';
 
 const { __http } = require('@testing/doubles/fetch.js');
 
@@ -61,7 +58,7 @@ async function renderAlbum(tracks: readonly DiscoveryResult[]) {
     json: { items: tracks, provider_name: 'deezer', status: 'ok' },
   });
   const rendered = renderHook(() => useAlbumDetailState(albumResult, '/discover/detail'), {
-    wrapper: createPlaybackWrapper(createTestQueryClient({ mutations: true })),
+    wrapper: playbackWithNavigator(createTestQueryClient({ mutations: true })),
   });
   await waitFor(() => expect(rendered.result.current.tracks).toHaveLength(tracks.length));
   return rendered;
