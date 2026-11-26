@@ -32,7 +32,7 @@ type OutboxDeps = {
   appState: TelemetryAppState;
   log: TelemetryLog;
   recordEvent: RecordEvent;
-  onSignOut: (listener: () => void) => void;
+  onSignOut: (listener: () => void) => () => void;
 };
 
 type SendOutcome = 'sent' | 'dropped' | 'retry' | 'offline';
@@ -71,6 +71,7 @@ export function createOutbox(deps: OutboxDeps) {
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let owner: string | null = null;
   let disposed = false;
+  const unsubscribes: (() => void)[] = [];
 
   function capCritical(entries: readonly OutboxEntry[]): OutboxEntry[] {
     const capped = capOutbox(entries, MAX_ENTRIES, MAX_DIAGNOSTIC_ENTRIES);
@@ -91,6 +92,7 @@ export function createOutbox(deps: OutboxDeps) {
   }
 
   function commit(next: OutboxEntry[]): void {
+    if (disposed) return;
     queue = next;
     store.save(queue);
   }
@@ -144,9 +146,11 @@ export function createOutbox(deps: OutboxDeps) {
   function ensureFlushOnForeground(): void {
     if (listening) return;
     listening = true;
-    appState.subscribe((status) => {
-      if (status === 'active') void requestFlush();
-    });
+    unsubscribes.push(
+      appState.subscribe((status) => {
+        if (status === 'active') void requestFlush();
+      }),
+    );
   }
 
   function classifyFailure(entry: OutboxEntry, error: unknown): SendOutcome {
@@ -225,11 +229,13 @@ export function createOutbox(deps: OutboxDeps) {
     await requestFlush();
   }
 
-  onSignOut(() => {
-    restored = true;
-    resetBackoff();
-    commit([]);
-  });
+  unsubscribes.push(
+    onSignOut(() => {
+      restored = true;
+      resetBackoff();
+      commit([]);
+    }),
+  );
 
   function isDisposed(): boolean {
     return disposed;
@@ -238,6 +244,7 @@ export function createOutbox(deps: OutboxDeps) {
   function dispose(): void {
     disposed = true;
     cancelRetry();
+    unsubscribes.splice(0).forEach((unsubscribe) => unsubscribe());
   }
 
   return { enqueueCritical, flushOutbox, setOwner, dispose };

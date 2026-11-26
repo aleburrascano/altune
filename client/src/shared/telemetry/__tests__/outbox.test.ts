@@ -839,6 +839,68 @@ describe('Backoff: the flush loop retries on its own capped, jittered schedule',
   });
 });
 
+describe('Replacing the installed telemetry stops the instance it replaces', () => {
+  function installBooted(): Telemetry {
+    const instance = boot();
+    telemetryDoor.installTelemetry(instance);
+    return instance;
+  }
+
+  it('cancels the old instance retry timer, so it sends nothing once the new one is installed', async () => {
+    installBooted();
+    serverReplies(HTTP_UNAVAILABLE);
+    await enqueueCritical(event({ search_id: 'a' }));
+    resetServer();
+
+    installBooted();
+    await jest.advanceTimersByTimeAsync(FLUSH_BACKOFF_CAP_MS);
+
+    expect(sentEntries()).toHaveLength(0);
+    expect(lastPersisted().map((e) => e.search_id)).toEqual(['a']);
+  });
+
+  it('stops a flush already running in the old instance at its next entry', async () => {
+    installBooted();
+    const release = holdNextRequest();
+    const pending = enqueueCritical(event({ search_id: 'first' }));
+    await settle();
+    await enqueueCritical(event({ search_id: 'second' }));
+    expect(sentEntries().map((e) => e.search_id)).toEqual(['first']);
+
+    installBooted();
+    release();
+    await pending;
+    await settle();
+
+    expect(sentEntries().map((e) => e.search_id)).toEqual(['first']);
+  });
+
+  it('leaves the outbox file alone when the old instance is asked to queue or switch owner', async () => {
+    const old = installBooted();
+    installBooted();
+    const before = lastPersisted();
+
+    await old.enqueueCritical(event({ search_id: 'late' }));
+    old.setOutboxOwner('someone');
+
+    expect(lastPersisted()).toEqual(before);
+    expect(sentEntries()).toHaveLength(0);
+  });
+
+  it('stops answering sign-out, so only the new instance clears the outbox', async () => {
+    installBooted();
+    serverReplies(HTTP_UNAVAILABLE);
+    await enqueueCritical(event({ search_id: 'a' }));
+    const replacement = installBooted();
+
+    runSignOutCleanups();
+    resetServer();
+    await replacement.enqueueCritical(event({ search_id: 'b' }));
+
+    expect(sentEntries().map((e) => e.search_id)).toEqual(['b']);
+  });
+});
+
 describe('law: the flush backoff is exponential, jittered into [ceiling/2, ceiling], and capped', () => {
   const HALF = 0.5;
   const QUADRUPLE = 4;

@@ -17,7 +17,7 @@ export interface OutboxStore {
 
 export interface TelemetryAppState {
   isActive: () => boolean;
-  subscribe: (listener: (status: string) => void) => void;
+  subscribe: (listener: (status: string) => void) => () => void;
 }
 
 export interface TelemetryLog {
@@ -25,7 +25,7 @@ export interface TelemetryLog {
 }
 
 export interface TelemetrySession {
-  onSignOut: (listener: () => void) => void;
+  onSignOut: (listener: () => void) => () => void;
   onIdentityChange: (listener: (userId: string | null) => void) => () => void;
 }
 

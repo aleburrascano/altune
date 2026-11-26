@@ -81,7 +81,7 @@ describe('identity change wiring on the real modules', () => {
 
     await signIn(signedOutAtBoot());
 
-    expect(events).toContain(`identity:${USER_ID}:false`);
+    expect(events).toEqual(['identity:null:false', 'forget', `identity:${USER_ID}:false`]);
     expect(hasSignedInUser()).toBe(true);
     expect(readOwner()).toBe(USER_ID);
     await enqueueCritical({ type: 'library_add' });

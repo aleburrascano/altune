@@ -38,6 +38,7 @@ export function createTelemetry(deps: TelemetryDeps) {
     dispose: (): void => {
       unfollowers.splice(0).forEach((unfollow) => unfollow());
       outbox.dispose();
+      eventSession.dispose();
       errors.dispose();
     },
     followSignedInUser: (): (() => void) => {

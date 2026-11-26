@@ -10,7 +10,7 @@ type SessionState = { sessionId: string; lastActivity: number };
 type EventSessionDeps = {
   clock: TelemetryClock;
   appState: TelemetryAppState;
-  onSignOut: (listener: () => void) => void;
+  onSignOut: (listener: () => void) => () => void;
 };
 
 function makeSessionId(seed: number, random: number): string {
@@ -24,6 +24,7 @@ export function createEventSession({ clock, appState, onSignOut }: EventSessionD
     lastActivity: clock.now(),
   };
   let listening = false;
+  const unsubscribes: (() => void)[] = [];
   let tickAnchor: number | null = null;
 
   function advance(current: SessionState, now: number): SessionState {
@@ -49,17 +50,21 @@ export function createEventSession({ clock, appState, onSignOut }: EventSessionD
   function ensureForegroundRotation(): void {
     if (listening) return;
     listening = true;
-    appState.subscribe((status) => {
-      tickAnchor = null;
-      if (status === 'active') touch();
-    });
+    unsubscribes.push(
+      appState.subscribe((status) => {
+        tickAnchor = null;
+        if (status === 'active') touch();
+      }),
+    );
   }
 
-  onSignOut(() => {
-    const at = clock.now();
-    state = { sessionId: makeSessionId(at, clock.random()), lastActivity: at };
-    tickAnchor = null;
-  });
+  unsubscribes.push(
+    onSignOut(() => {
+      const at = clock.now();
+      state = { sessionId: makeSessionId(at, clock.random()), lastActivity: at };
+      tickAnchor = null;
+    }),
+  );
 
   function getSessionId(): string {
     ensureForegroundRotation();
@@ -67,5 +72,9 @@ export function createEventSession({ clock, appState, onSignOut }: EventSessionD
     return state.sessionId;
   }
 
-  return { getSessionId };
+  function dispose(): void {
+    unsubscribes.splice(0).forEach((unsubscribe) => unsubscribe());
+  }
+
+  return { getSessionId, dispose };
 }
