@@ -2,14 +2,14 @@ package cleanupjobs
 
 import (
 	"altune/go-api/internal/search"
+	"altune/go-api/internal/shared/clock"
 	"context"
-	"time"
 )
 
 const unreleasedArtistsPerRun = 2
 
-func RefreshDueUnreleased(svc *search.UnreleasedService) func(context.Context) error {
+func RefreshDueUnreleased(svc *search.UnreleasedService, clk clock.Func) func(context.Context) error {
 	return func(ctx context.Context) error {
-		return svc.RefreshDue(ctx, time.Now().UTC(), unreleasedArtistsPerRun)
+		return svc.RefreshDue(ctx, clk.UTC(), unreleasedArtistsPerRun)
 	}
 }

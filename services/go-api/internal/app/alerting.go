@@ -13,7 +13,10 @@ import (
 
 func (a *App) startAlertMonitor(ctx context.Context) error {
 	notifier := alerts.NewNotifier(ctx, a.cfg)
-	conditions := a.alertConditions(search.NewPostgresEventStore(a.pool))
+	conditions, err := a.alertConditions(search.NewPostgresEventStore(a.pool))
+	if err != nil {
+		return err
+	}
 	monitor, err := monitoring.NewAlertMonitor(notifier, 30*time.Second, conditions...)
 	if err != nil {
 		return fmt.Errorf("alert monitor: %w", err)
@@ -23,11 +26,12 @@ func (a *App) startAlertMonitor(ctx context.Context) error {
 	return nil
 }
 
-func (a *App) alertConditions(coverage alerts.CoverageEvents) []monitoring.Condition {
+func (a *App) alertConditions(coverage alerts.CoverageEvents) ([]monitoring.Condition, error) {
 	return alerts.Conditions(alerts.Sources{
 		DependencyHealth:      a.dependencyHealth,
 		Coverage:              coverage,
 		YouTubeSignedOutSince: downloadsetup.YtDlpSearcher(a.cfg).SignedOutSince,
 		Jobs:                  &a.jobs,
+		Clock:                 time.Now,
 	})
 }

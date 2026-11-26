@@ -1,0 +1,3 @@
+`clock` owns how code reads the time. A decision that depends on the time takes a `clock.Func` from its composition root and calls it, instead of calling `time.Now` itself, so a test can say what time it is. `time.Now` satisfies `clock.Func`, and `Func.UTC()` reads it in UTC, the form every stored timestamp uses. A required clock is a constructor parameter with no default. A constructor that takes it in a struct (`alerts.Conditions`) refuses a nil clock with an error, so startup fails instead of the alert monitor panicking mid-run; the housekeeping jobs take the clock positionally and do not check it.
+
+Measuring how long something took (`time.Since`) stays with the standard library; only the question "what time is it" goes through the port.

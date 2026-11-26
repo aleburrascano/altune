@@ -26,6 +26,61 @@ func captureLogs(t *testing.T, run func()) string {
 	return buf.String()
 }
 
+var testNow = time.Date(2026, 11, 25, 10, 30, 0, 0, time.FixedZone("UTC+2", 2*3600))
+
+func atTestNow() time.Time { return testNow }
+
+type timeRecordingPruner struct {
+	seen []time.Time
+}
+
+func (r *timeRecordingPruner) PruneDiscographyObserved(_ context.Context, now time.Time) (int64, error) {
+	r.seen = append(r.seen, now)
+	return 0, nil
+}
+
+func (r *timeRecordingPruner) PruneEvents(_ context.Context, now time.Time) (int64, error) {
+	r.seen = append(r.seen, now)
+	return 0, nil
+}
+
+func (r *timeRecordingPruner) Prune(_ context.Context, now time.Time) (int64, error) {
+	r.seen = append(r.seen, now)
+	return 0, nil
+}
+
+func assertAllAtTestNowInUTC(t *testing.T, seen []time.Time, wantCalls int) {
+	t.Helper()
+	if len(seen) != wantCalls {
+		t.Fatalf("pruners were called %d times, want %d", len(seen), wantCalls)
+	}
+	for _, got := range seen {
+		if !got.Equal(testNow) || got.Location() != time.UTC {
+			t.Errorf("pruner was given %v, want %v in UTC", got, testNow.UTC())
+		}
+	}
+}
+
+func TestPruneDiscoveryEvents_BothPrunesAreGivenTheClocksInstantInUTC(t *testing.T) {
+	pruner := &timeRecordingPruner{}
+
+	if err := cleanupjobs.PruneDiscoveryEvents(pruner, atTestNow)(context.Background()); err != nil {
+		t.Fatalf("run error = %v, want nil", err)
+	}
+
+	assertAllAtTestNowInUTC(t, pruner.seen, 2)
+}
+
+func TestPruneAcquisitionRows_BothPrunesAreGivenTheClocksInstantInUTC(t *testing.T) {
+	outcomes, rejections := &timeRecordingPruner{}, &timeRecordingPruner{}
+
+	if err := cleanupjobs.PruneAcquisitionRows(outcomes, rejections, atTestNow)(context.Background()); err != nil {
+		t.Fatalf("run error = %v, want nil", err)
+	}
+
+	assertAllAtTestNowInUTC(t, append(outcomes.seen, rejections.seen...), 2)
+}
+
 type failingPruner struct {
 	discographyErr, evtErr error
 }
@@ -62,7 +117,7 @@ func TestPruneDiscoveryEvents_LogsTheOldTextOnEachFailurePath(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var err error
-			logged := captureLogs(t, func() { err = cleanupjobs.PruneDiscoveryEvents(tc.pruner)(context.Background()) })
+			logged := captureLogs(t, func() { err = cleanupjobs.PruneDiscoveryEvents(tc.pruner, atTestNow)(context.Background()) })
 
 			if !errors.Is(err, boom) {
 				t.Errorf("run error = %v, want the prune's failure so the job counts it", err)
@@ -98,7 +153,7 @@ func TestPruneAcquisitionRows_LogsACountOnlyWhenRowsWereRemoved(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var err error
 			logged := captureLogs(t, func() {
-				err = cleanupjobs.PruneAcquisitionRows(stubPruner{pruned: tc.outcomes}, stubPruner{pruned: tc.rejections})(context.Background())
+				err = cleanupjobs.PruneAcquisitionRows(stubPruner{pruned: tc.outcomes}, stubPruner{pruned: tc.rejections}, atTestNow)(context.Background())
 			})
 
 			if err != nil {
@@ -124,7 +179,9 @@ func TestPruneAcquisitionRows_EachFailingPruneIsLoggedAndReturned(t *testing.T) 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var err error
-			logged := captureLogs(t, func() { err = cleanupjobs.PruneAcquisitionRows(tc.outcomes, tc.rejections)(context.Background()) })
+			logged := captureLogs(t, func() {
+				err = cleanupjobs.PruneAcquisitionRows(tc.outcomes, tc.rejections, atTestNow)(context.Background())
+			})
 
 			if !errors.Is(err, boom) {
 				t.Errorf("run error = %v, want the prune's failure so the job counts it", err)
@@ -161,7 +218,7 @@ func TestPruneDiscoveryEvents_LogsBothCountsOnlyWhenRowsWereRemoved(t *testing.T
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var err error
-			logged := captureLogs(t, func() { err = cleanupjobs.PruneDiscoveryEvents(tc.pruner)(context.Background()) })
+			logged := captureLogs(t, func() { err = cleanupjobs.PruneDiscoveryEvents(tc.pruner, atTestNow)(context.Background()) })
 
 			if err != nil {
 				t.Fatalf("run error = %v, want nil", err)

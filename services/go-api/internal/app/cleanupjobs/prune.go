@@ -1,6 +1,7 @@
 package cleanupjobs
 
 import (
+	"altune/go-api/internal/shared/clock"
 	"context"
 	"log/slog"
 	"time"
@@ -11,9 +12,9 @@ type DiscoveryEventPruner interface {
 	PruneEvents(ctx context.Context, now time.Time) (int64, error)
 }
 
-func PruneDiscoveryEvents(pruner DiscoveryEventPruner) func(context.Context) error {
+func PruneDiscoveryEvents(pruner DiscoveryEventPruner, clk clock.Func) func(context.Context) error {
 	return func(ctx context.Context) error {
-		now := time.Now().UTC()
+		now := clk.UTC()
 		discographyPruned, err := pruner.PruneDiscographyObserved(ctx, now)
 		if err != nil {
 			slog.WarnContext(ctx, "discography event prune failed", "error", err)
@@ -36,9 +37,9 @@ type RetentionPruner interface {
 	Prune(ctx context.Context, now time.Time) (int64, error)
 }
 
-func PruneAcquisitionRows(outcomes, rejections RetentionPruner) func(context.Context) error {
+func PruneAcquisitionRows(outcomes, rejections RetentionPruner, clk clock.Func) func(context.Context) error {
 	return func(ctx context.Context) error {
-		now := time.Now().UTC()
+		now := clk.UTC()
 		outcomesPruned, err := outcomes.Prune(ctx, now)
 		if err != nil {
 			slog.WarnContext(ctx, "acquisition outcome prune failed", "error", err)
