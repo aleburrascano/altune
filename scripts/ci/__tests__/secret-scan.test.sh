@@ -53,5 +53,31 @@ t 2 "a gitleaks run that fails is an error, not a pass" "nothing was checked" en
 t 2 "an unknown base is an error, not a pass" "nothing was checked" bash "$script" no-such-ref
 t 2 "no argument prints the usage" "usage:" bash "$script"
 
+: >"$work/go.log"
+t 0 "pending changes pass when clean" "no secrets added in the uncommitted changes" bash "$script" --pending
+grep -qF -- "--pre-commit --staged" "$work/go.log" || { echo "FAIL --pending does not scan the index: $(cat "$work/go.log")"; fail=1; }
+[ "$(grep -c -- "--pre-commit" "$work/go.log")" = 2 ] || { echo "FAIL --pending must run gitleaks on the index and on the working tree: $(cat "$work/go.log")"; fail=1; }
+
+real=$work/real
+git init -qb main "$real"
+gr() { git -C "$real" -c user.email=t@example.com -c user.name=t -c commit.gpgsign=false "$@"; }
+printf 'KEY=none\n' >"$real/config.env"
+cp "$(dirname "$script")/../../.gitleaks.toml" "$real/.gitleaks.toml"
+gr add -A
+gr commit -qm base
+token="ghp_$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 36)"
+real_run() { (cd "$real" && bash "$script" "$@" 2>&1); }
+
+printf 'KEY=%s\n' "$token" >"$real/config.env"
+out=$(real_run --pending) && rc=0 || rc=$?
+[ "$rc" = 1 ] || { echo "FAIL an unstaged secret was not caught by --pending (exit $rc): $out"; fail=1; }
+gr add config.env
+out=$(real_run --pending) && rc=0 || rc=$?
+[ "$rc" = 1 ] || { echo "FAIL a staged secret was not caught by --pending (exit $rc): $out"; fail=1; }
+grep -qF "$token" <<<"$out" && { echo "FAIL --pending printed the secret value"; fail=1; }
+gr reset -q --hard
+out=$(real_run --pending) && rc=0 || rc=$?
+[ "$rc" = 0 ] || { echo "FAIL a clean tree failed --pending (exit $rc): $out"; fail=1; }
+
 [ "$fail" = 0 ] && echo "secret-scan.test.sh: all cases pass"
 exit "$fail"

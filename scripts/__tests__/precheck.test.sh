@@ -332,8 +332,8 @@ expect_out 'Expected: "Ada Lovelace"'
 expect_out 'Received: ""'
 grep -qF "at frame 1 (node_modules/x.js" "$WORK/out.log" && fail "the first failure block should drop stack frames"
 grep -qF "at frame 80 (node_modules/y.js" "$WORK/out.log" && fail "the stack trace tail should not be printed"
-[ "$(grep -cF "● library rows › shows the artist name" "$WORK/out.log")" = 2 ] || fail "the first failed test should be named once in the list and once heading its block"
-[ "$(grep -cF "● player › resumes after a seek" "$WORK/out.log")" = 1 ] || fail "a later failed test should be named once, in the list only"
+[ "$(sed '/^precheck: red/q' "$WORK/out.log" | grep -cF "● library rows › shows the artist name")" = 2 ] || fail "the first failed test should be named once in the list and once heading its block"
+[ "$(sed '/^precheck: red/q' "$WORK/out.log" | grep -cF "● player › resumes after a seek")" = 1 ] || fail "a later failed test should be named once, in the list only"
 grep -qF "● Console" "$WORK/out.log" && fail "console blocks are not failed tests"
 
 CASE="a jest run that never exits is killed at the timeout and fails loud"
@@ -529,13 +529,40 @@ expect_log "govulncheck ./..."
 expect_log "vet altune/go-api/internal/discovery/adapters/x"
 forbid_log "vet ./..."
 
-CASE="--lint (the pre-commit hook) leaves govulncheck to CI"
+stage_go_file() {
+    (
+        cd "$WORK/repo" || exit 1
+        printf '\nvar edited = 1\n' >>"services/go-api/$1"
+        git add -A
+    )
+}
+
+CASE="--lint (the pre-commit hook) leaves govulncheck and vet to the push stage"
 new_repo
 add_go_fixture
-edit_go_file internal/discovery/adapters/x/x.go
+stage_go_file internal/discovery/adapters/x/x.go
 run_with_tools --lint
 forbid_log "govulncheck"
-expect_log "vet altune/go-api/internal/discovery/adapters/x"
+forbid_log "vet "
+expect_log "golangci-lint-cache run"
+expect_log "--fast-only"
+
+CASE="--lint lints a Go edit that is not staged, as in git commit -a, where git hands the hook a temporary index"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    printf '\nvar edited = 1\n' >>services/go-api/internal/discovery/adapters/x/x.go
+)
+run_with_tools --lint
+expect_log "golangci-lint-cache run"
+expect_log "--fast-only"
+
+CASE="--lint lints nothing when the working tree matches HEAD"
+new_repo
+add_go_fixture
+run_with_tools --lint
+forbid_log "golangci-lint"
 
 CASE="a go-api change runs deadcode, which reports nothing"
 new_repo
@@ -791,7 +818,7 @@ expect_log "test -race -shuffle=on -count=1 ./internal/discovery/adapters/x"
 CASE="every golangci-lint call runs with a cache inside the checkout"
 new_repo
 add_go_fixture
-edit_go_file internal/discovery/adapters/x/x.go
+stage_go_file internal/discovery/adapters/x/x.go
 run_with_tools --lint
 expect_log "golangci-lint-cache run $WORK/repo/.cache/golangci-lint"
 stray=$(grep "^golangci-lint-cache run " "$WORK/tools.log" | grep -vF " $WORK/repo/.cache/golangci-lint")
@@ -813,12 +840,59 @@ SECRET_SCAN_STUB_RC=1 run_with_tools
 expect_out "FAIL  secret scan (commits since base)"
 [ "$RC" != 0 ] || fail "a secret scan finding must make precheck exit non-zero"
 
-CASE="--lint (the pre-commit hook) leaves the secret scan to CI"
+CASE="--lint (the pre-commit hook) scans the uncommitted changes for secrets"
 new_repo
 commit_as_base
 add_plain_file
 run_with_tools --lint
-forbid_log "secret-scan"
+expect_log "secret-scan --pending"
+forbid_log "secret-scan $(git -C "$WORK/repo" rev-parse gitea/main)"
+
+CASE="a step that fails with no output is still named, with its exit code, in the last lines"
+new_repo
+commit_as_base
+add_plain_file
+SECRET_SCAN_STUB_RC=1 run_with_tools --lint
+expect_rc 1
+expect_out "FAIL secret scan (pending changes) (exit 1):"
+expect_out "(no output; exit 1)"
+[ "$(tail -n 2 "$WORK/out.log" | head -n 1)" = "FAIL secret scan (pending changes) (exit 1):" ] \
+    || fail "the failing step is not named in the last lines: $(tail -n 2 "$WORK/out.log" | tr '\n' '|')"
+
+CASE="a failing step's first output lines are repeated in the last lines"
+new_repo
+commit_as_base
+add_plain_file
+printf '#!/usr/bin/env bash\necho "leaked something at x.txt:3"\necho "second line"\nexit 1\n' >"$WORK/repo/scripts/ci/secret-scan.sh"
+run_with_tools --lint
+expect_rc 1
+[ "$(tail -n 3 "$WORK/out.log" | head -n 1)" = "FAIL secret scan (pending changes) (exit 1):" ] \
+    || fail "summary header is not in the last lines: $(tail -n 3 "$WORK/out.log" | tr '\n' '|')"
+grep -qF "leaked something at x.txt:3" <<<"$(tail -n 2 "$WORK/out.log")" || fail "the step's first output line is missing from the last lines"
+
+CASE="a precheck that is killed while a step runs names that step in its last line"
+new_repo
+commit_as_base
+add_plain_file
+cat >"$WORK/repo/scripts/ci/secret-scan.sh" <<'STUB'
+#!/usr/bin/env bash
+pid=$$
+top=
+fixture=$(git rev-parse --show-toplevel)
+while [ "$pid" -gt 1 ]; do
+    pid=$(ps -o ppid= -p "$pid" | tr -d ' ')
+    cmdline=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null)
+    if grep -q 'scripts/precheck.sh' <<<"$cmdline" && [ "$(readlink "/proc/$pid/cwd")" = "$fixture" ]; then
+        top=$pid
+    fi
+done
+kill -TERM "$top"
+sleep 5
+STUB
+run_with_tools --lint
+[ "$RC" != 0 ] || fail "a killed precheck must exit non-zero"
+[ "$(tail -n 1 "$WORK/out.log")" = "FAIL precheck itself (exit $RC): died during secret scan (pending changes)" ] \
+    || fail "the last line does not name the step it died in: $(tail -n 12 "$WORK/out.log" | tr '\n' '|')"
 
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
