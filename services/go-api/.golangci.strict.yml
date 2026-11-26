@@ -42,6 +42,7 @@ linters:
     - spancheck
     - depguard
     - importas
+    - contextcheck
 
   settings:
     importas:
@@ -143,6 +144,8 @@ linters:
           msg: build a client with outbound.NewClient and take the shared transport from outbound.DefaultTransport (internal/platform/outbound), the one home for outbound HTTP
         - pattern: ^context\.WithoutCancel$
           msg: outlive a request through background.Detach(ctx, budget) (internal/shared/background), which keeps the request's values and sets its own deadline
+        - pattern: ^context\.(Background|TODO)$
+          msg: take the caller's ctx; a context root belongs to a main package (cmd, scripts), and work that outlives the request goes through background.Detach (internal/shared/background)
         - pattern: ^time\.(Now|Since|Until|After|AfterFunc|NewTimer|NewTicker|Tick)$
           msg: take the clock as a clock.Func parameter and read it through clock.Now at the composition root (internal/shared/clock), the one home for time
     revive:
@@ -170,6 +173,7 @@ linters:
     rules:
       - path: _test\.go
         linters:
+          - contextcheck
           - dupl
           - errcheck
           - gocritic
@@ -196,6 +200,13 @@ linters:
         linters:
           - forbidigo
         text: internal/shared/config
+      - path: ^(cmd|scripts)/|/[^/]*test/
+        linters:
+          - forbidigo
+        text: 'use of `context\.(Background|TODO)`'
+      - path: /[^/]*test/
+        linters:
+          - contextcheck
       - linters:
           - sloglint
         text: DiscardHandler
