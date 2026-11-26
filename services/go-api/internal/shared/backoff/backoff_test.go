@@ -9,10 +9,13 @@ import (
 var policy = backoff.Policy{Base: 100 * time.Millisecond, Cap: time.Second}
 
 func TestPolicy_CeilingDoublesFromTheBaseAndStopsAtTheCap(t *testing.T) {
-	want := []time.Duration{100, 200, 400, 800, 1000, 1000}
+	want := []time.Duration{
+		100 * time.Millisecond, 200 * time.Millisecond, 400 * time.Millisecond,
+		800 * time.Millisecond, time.Second, time.Second,
+	}
 	for i, w := range want {
-		if got := policy.Ceiling(i + 1); got != w*time.Millisecond {
-			t.Errorf("Ceiling(%d) = %v, want %v", i+1, got, w*time.Millisecond)
+		if got := policy.Ceiling(i + 1); got != w {
+			t.Errorf("Ceiling(%d) = %v, want %v", i+1, got, w)
 		}
 	}
 }

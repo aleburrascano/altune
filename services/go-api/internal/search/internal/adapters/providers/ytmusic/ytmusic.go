@@ -4,11 +4,11 @@ import (
 	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/adapters/providers/providersearch"
+	"altune/go-api/internal/shared/backoff"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand/v2"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -18,7 +18,7 @@ import (
 
 const ytmusicTimeout = 8 * time.Second
 
-const ytmRetryBackoffBase = 250 * time.Millisecond
+var ytmChallengeBackoff = backoff.Policy{Base: 250 * time.Millisecond, Cap: 250 * time.Millisecond}
 
 func ytmHTTPClient(transport http.RoundTripper) *http.Client {
 	return &http.Client{Timeout: ytmusicTimeout, Transport: transport}
@@ -33,7 +33,7 @@ func ytmSearchRetry(ctx context.Context, client *http.Client, query string, filt
 		return res, err
 	}
 	select {
-	case <-time.After(ytmRetryBackoff()):
+	case <-time.After(ytmChallengeBackoff.Delay(1)):
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
@@ -47,11 +47,6 @@ type upstreamStatusCoder interface {
 func isAuthChallenge(err error) bool {
 	var status upstreamStatusCoder
 	return errors.As(err, &status) && providerrequests.IsAuthStatus(status.UpstreamStatus())
-}
-
-func ytmRetryBackoff() time.Duration {
-	half := ytmRetryBackoffBase / 2
-	return half + rand.N(half+1)
 }
 
 type YouTubeMusicAdapter struct {
