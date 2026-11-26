@@ -301,7 +301,7 @@ func (l *linter) scanFile(file string) error {
 		if pure && matchesAny(target, l.cfg.IOImports) {
 			l.add(file, line, "layer", ownModule, fmt.Sprintf("%s imports %s, I/O belongs in an adapter; core, service, domain, ports and shell packages stay pure", dir, target))
 		}
-		if !isTest && !driverHome && matchesAny(target, l.cfg.DriverImports) && !(wiring && matchesAny(target, l.cfg.Composition.Imports)) {
+		if !isTest && !driverHome && matchesAny(target, l.cfg.DriverImports) && (!wiring || !matchesAny(target, l.cfg.Composition.Imports)) {
 			l.add(file, line, "driver", moduleLabel(ownModule, dir), fmt.Sprintf("%s imports the database driver %s outside an adapters package", dir, target))
 		}
 	}
