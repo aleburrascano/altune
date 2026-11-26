@@ -1,7 +1,7 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/inmemoryqueue"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
@@ -228,7 +228,7 @@ func TestRunPipeline_FallbackWindowsContinueTheFirstTiersCount(t *testing.T) {
 
 func TestRunPipeline_PlainFailureDeletesTheStoredAudioAndQueuesNothing(t *testing.T) {
 	track := pending("Song", "Artist", "Album")
-	ledger, store, queue := acquisitiontest.NewLedger(track), newRecordingStore(), &recordingOrphanQueue{}
+	ledger, store, queue := inmemoryledger.NewLedger(track), newRecordingStore(), &recordingOrphanQueue{}
 	ledger.FailWrites(errors.New("database unavailable"))
 
 	err := storing{t, ledger, store, track}.executeStaged(noStages(orphaningInto(queue)))
@@ -244,7 +244,7 @@ func TestRunPipeline_PlainFailureDeletesTheStoredAudioAndQueuesNothing(t *testin
 	}
 }
 
-type waitingCommitLedger struct{ *acquisitiontest.Ledger }
+type waitingCommitLedger struct{ *inmemoryledger.Ledger }
 
 func (waitingCommitLedger) Complete(ctx context.Context, _ ids.TrackId, _ ids.UserId, _ ports.ClaimNumber, _ ports.Completion) error {
 	<-ctx.Done()
@@ -260,7 +260,7 @@ func (lostLeaseQueue) Heartbeat(context.Context, ids.TrackId, ports.ClaimNumber,
 type storedAndOrphaned struct {
 	store  *recordingStore
 	queued []ports.OrphanedAudio
-	track  acquisitiontest.LedgerTrack
+	track  inmemoryledger.LedgerTrack
 }
 
 func runJobWaitingOnItsCommit(t *testing.T, leaseLost bool) storedAndOrphaned {
@@ -269,7 +269,7 @@ func runJobWaitingOnItsCommit(t *testing.T, leaseLost bool) storedAndOrphaned {
 	synctest.Test(t, func(t *testing.T) {
 		track := pending("Song", "Artist", "Album")
 		store, orphans := newRecordingStore(), &recordingOrphanQueue{}
-		svc := service.MustNewAcquireTrackAudioService(waitingCommitLedger{acquisitiontest.NewLedger(track)}, sourceFor(track), store,
+		svc := service.MustNewAcquireTrackAudioService(waitingCommitLedger{inmemoryledger.NewLedger(track)}, sourceFor(track), store,
 			scratchfiles.New(), noVerification(), noStages(orphaningInto(orphans)))
 		opts := []any{}
 		queue := &firstOutcomeQueue{Queue: inmemoryqueue.New(make(chan struct{}, 1), time.Now), outcome: make(chan jobOutcome, 1)}
@@ -371,7 +371,7 @@ func assertNoCookiePath(t *testing.T, records []logging.CapturedRecord, message 
 }
 
 type failingCommitLedger struct {
-	*acquisitiontest.Ledger
+	*inmemoryledger.Ledger
 	err error
 }
 
@@ -379,7 +379,7 @@ func (l failingCommitLedger) Complete(context.Context, ids.TrackId, ids.UserId, 
 	return l.err
 }
 
-type panickingCommitLedger struct{ *acquisitiontest.Ledger }
+type panickingCommitLedger struct{ *inmemoryledger.Ledger }
 
 func (panickingCommitLedger) Complete(context.Context, ids.TrackId, ids.UserId, ports.ClaimNumber, ports.Completion) error {
 	panic("commit exploded")
@@ -389,7 +389,7 @@ func TestRunPipeline_APanicInTheLastStageRollsBackTheStoredAudio(t *testing.T) {
 	track := pending("Song", "Artist", "Album")
 	store := newRecordingStore()
 
-	err := storing{t, panickingCommitLedger{acquisitiontest.NewLedger(track)}, store, track}.execute()
+	err := storing{t, panickingCommitLedger{inmemoryledger.NewLedger(track)}, store, track}.execute()
 
 	var stepErr *service.StepError
 	if !errors.As(err, &stepErr) || stepErr.Step != "update_track" {
@@ -412,7 +412,7 @@ func TestRunPipeline_ACancelledJobStopsBeforeTheNextStage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	store := newRecordingStore()
-	svc := service.MustNewAcquireTrackAudioService(acquisitiontest.NewLedger(track), sourceFor(track), store,
+	svc := service.MustNewAcquireTrackAudioService(inmemoryledger.NewLedger(track), sourceFor(track), store,
 		scratchfiles.New(), noVerification(), noStages(taggedBy(cancellingTagger{cancel})))
 
 	err := svc.Execute(ctx, track.UserId, track.ID)
@@ -428,7 +428,7 @@ func TestRunPipeline_ACancelledJobStopsBeforeTheNextStage(t *testing.T) {
 func TestRunPipeline_StepFailedLogRedactsCookiePath(t *testing.T) {
 	ring := captureLogs(t)
 	track := pending("Song", "Artist", "Album")
-	ledger := failingCommitLedger{Ledger: acquisitiontest.NewLedger(track), err: ytdlpCookieErr()}
+	ledger := failingCommitLedger{Ledger: inmemoryledger.NewLedger(track), err: ytdlpCookieErr()}
 
 	err := storing{t, ledger, newRecordingStore(), track}.execute()
 
@@ -442,7 +442,7 @@ func TestRunPipeline_RollbackFailedLogRedactsCookiePath(t *testing.T) {
 	ring := captureLogs(t)
 	synctest.Test(t, func(t *testing.T) {
 		track := pending("Song", "Artist", "Album")
-		ledger := failingCommitLedger{Ledger: acquisitiontest.NewLedger(track), err: errors.New("boom")}
+		ledger := failingCommitLedger{Ledger: inmemoryledger.NewLedger(track), err: errors.New("boom")}
 		store := newRecordingStore()
 		store.deleteErr = ytdlpCookieErr()
 

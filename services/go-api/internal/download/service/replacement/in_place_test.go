@@ -2,7 +2,7 @@ package replacement_test
 
 import (
 	"altune/go-api/internal/download"
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/core/audioquality"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service/replacement"
@@ -62,7 +62,7 @@ var (
 )
 
 func (w *world) storedEvidence(evidence string) {
-	w.edit(func(track *acquisitiontest.LedgerTrack) { track.Evidence = json.RawMessage(evidence) })
+	w.edit(func(track *inmemoryledger.LedgerTrack) { track.Evidence = json.RawMessage(evidence) })
 }
 
 func (w *world) checkedRunner(cfg download.UpgradeConfig, checker replacement.InPlaceChecker, recorder ports.InPlaceStore) *replacement.Runner {

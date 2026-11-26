@@ -1,4 +1,4 @@
-package acquisitiontest
+package inmemoryledger
 
 import (
 	acqdomain "altune/go-api/internal/download/internal/core/domain"

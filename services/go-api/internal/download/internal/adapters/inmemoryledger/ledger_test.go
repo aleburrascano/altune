@@ -1,7 +1,7 @@
-package acquisitiontest_test
+package inmemoryledger_test
 
 import (
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/downloadfailure"
@@ -24,27 +24,27 @@ const (
 	freshRef   = "u/the weeknd/blinding lights (2).mp3"
 )
 
-func pendingTrack() acquisitiontest.LedgerTrack {
-	return acquisitiontest.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
+func pendingTrack() inmemoryledger.LedgerTrack {
+	return inmemoryledger.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
 		ID: ids.NewTrackId(), UserId: ids.NewUserId(uuid.New()),
 		Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours",
 	}}
 }
 
-func readyTrack() acquisitiontest.LedgerTrack {
+func readyTrack() inmemoryledger.LedgerTrack {
 	track := pendingTrack()
 	ref := servingRef
 	track.Status, track.AudioRef = ports.TrackReady, &ref
 	return track
 }
 
-func failedTrack() acquisitiontest.LedgerTrack {
+func failedTrack() inmemoryledger.LedgerTrack {
 	track := pendingTrack()
 	track.Status, track.FailureReason = ports.TrackFailed, string(downloadfailure.FailureNoMatchFound)
 	return track
 }
 
-func committed(t *testing.T, l *acquisitiontest.Ledger, id ids.TrackId) acquisitiontest.LedgerTrack {
+func committed(t *testing.T, l *inmemoryledger.Ledger, id ids.TrackId) inmemoryledger.LedgerTrack {
 	t.Helper()
 	track, ok := l.Track(id)
 	if !ok {
@@ -53,7 +53,7 @@ func committed(t *testing.T, l *acquisitiontest.Ledger, id ids.TrackId) acquisit
 	return track
 }
 
-func complete(t *testing.T, l *acquisitiontest.Ledger, track acquisitiontest.LedgerTrack, c ports.Completion) {
+func complete(t *testing.T, l *inmemoryledger.Ledger, track inmemoryledger.LedgerTrack, c ports.Completion) {
 	t.Helper()
 	if err := l.Complete(context.Background(), track.ID, track.UserId, 0, c); err != nil {
 		t.Fatalf("Complete: %v", err)
@@ -62,7 +62,7 @@ func complete(t *testing.T, l *acquisitiontest.Ledger, track acquisitiontest.Led
 
 func TestLedger_GetReturnsTheSeededTrackToItsOwnerOnly(t *testing.T) {
 	track := readyTrack()
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 
 	got, err := ledger.Get(context.Background(), track.ID, track.UserId)
 	if err != nil || got == nil || got.Title != "Blinding Lights" || !got.Streamable || got.Version != 0 {
@@ -82,9 +82,9 @@ func TestLedger_APendingTrackOrAReadyOneWithoutAFileIsNotStreamable(t *testing.T
 	pending := pendingTrack()
 	ref := servingRef
 	pending.AudioRef = &ref
-	ledger := acquisitiontest.NewLedger(pending, noFile)
+	ledger := inmemoryledger.NewLedger(pending, noFile)
 
-	for _, track := range []acquisitiontest.LedgerTrack{pending, noFile} {
+	for _, track := range []inmemoryledger.LedgerTrack{pending, noFile} {
 		if committed(t, ledger, track.ID).Streamable {
 			t.Errorf("Track(%+v) reads as streamable", track)
 		}
@@ -99,7 +99,7 @@ func TestLedger_ACallerCannotChangeTheLedgerThroughWhatItReadOrSeeded(t *testing
 	track.RejectedSourceKeys = []string{"youtube:a"}
 	track.CatalogSources = []ports.CatalogSource{{Provider: "deezer", ExternalID: "1"}}
 	track.Evidence = json.RawMessage(`{"grade":"a"}`)
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 	track.RejectedSourceKeys[0], track.CatalogSources[0].Provider, track.Evidence[2] = "changed", "changed", 'X'
 
 	got, _ := ledger.Get(context.Background(), track.ID, track.UserId)
@@ -113,7 +113,7 @@ func TestLedger_ACallerCannotChangeTheLedgerThroughWhatItReadOrSeeded(t *testing
 	}
 }
 
-func everyOptional(track *acquisitiontest.LedgerTrack) []any {
+func everyOptional(track *inmemoryledger.LedgerTrack) []any {
 	catalogSeconds, storedSeconds, mbid, explicit := 200.0, 201.0, "mbid", true
 	isrc, year, number, albumArtist, genre, ref, url := "ISRC", 2020, 3, "The Weeknd", "pop", servingRef, "https://youtu.be/a"
 	track.CatalogDurationSeconds, track.StoredDurationSeconds, track.CatalogMBID, track.CatalogExplicit = &catalogSeconds, &storedSeconds, &mbid, &explicit
@@ -122,14 +122,14 @@ func everyOptional(track *acquisitiontest.LedgerTrack) []any {
 	return optionals(*track)
 }
 
-func optionals(track acquisitiontest.LedgerTrack) []any {
+func optionals(track inmemoryledger.LedgerTrack) []any {
 	return []any{
 		*track.CatalogDurationSeconds, *track.StoredDurationSeconds, *track.CatalogMBID, *track.CatalogExplicit,
 		*track.ISRC, *track.Year, *track.TrackNumber, *track.AlbumArtist, *track.Genre, *track.AudioRef, *track.AudioSourceURL,
 	}
 }
 
-func overwriteOptionals(track acquisitiontest.LedgerTrack) {
+func overwriteOptionals(track inmemoryledger.LedgerTrack) {
 	*track.CatalogDurationSeconds, *track.StoredDurationSeconds, *track.CatalogMBID, *track.CatalogExplicit = 1, 1, "x", false
 	*track.ISRC, *track.Year, *track.TrackNumber, *track.AlbumArtist = "x", 1, 1, "x"
 	*track.Genre, *track.AudioRef, *track.AudioSourceURL = "x", "x", "x"
@@ -138,11 +138,11 @@ func overwriteOptionals(track acquisitiontest.LedgerTrack) {
 func TestLedger_ACallerCannotChangeTheLedgerThroughThePointersItReadOrSeeded(t *testing.T) {
 	track := pendingTrack()
 	want := everyOptional(&track)
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 	overwriteOptionals(track)
 
 	got, _ := ledger.Get(context.Background(), track.ID, track.UserId)
-	overwriteOptionals(acquisitiontest.LedgerTrack{TrackSnapshot: *got})
+	overwriteOptionals(inmemoryledger.LedgerTrack{TrackSnapshot: *got})
 	overwriteOptionals(committed(t, ledger, track.ID))
 
 	if again := optionals(committed(t, ledger, track.ID)); fmt.Sprint(again) != fmt.Sprint(want) {
@@ -151,7 +151,7 @@ func TestLedger_ACallerCannotChangeTheLedgerThroughThePointersItReadOrSeeded(t *
 }
 
 func TestLedger_TrackReportsAnUnknownTrackAsMissing(t *testing.T) {
-	if _, ok := acquisitiontest.NewLedger().Track(ids.NewTrackId()); ok {
+	if _, ok := inmemoryledger.NewLedger().Track(ids.NewTrackId()); ok {
 		t.Error("Track of an unknown id reports it as present")
 	}
 }
@@ -159,7 +159,7 @@ func TestLedger_TrackReportsAnUnknownTrackAsMissing(t *testing.T) {
 func TestLedger_CompleteMarksAPendingTrackReadyWithEverythingTheCompletionCarries(t *testing.T) {
 	track := pendingTrack()
 	track.RejectedSourceKeys = []string{"youtube:old"}
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 
 	complete(t, ledger, track, ports.Completion{
 		AudioRef: servingRef, Duration: trackLength(t, 201.5), ISRC: "USUG11904206", Provenance: downloadprovenance.ProvenanceVerified,
@@ -190,7 +190,7 @@ func TestLedger_CompleteLeavesWhatTheCompletionDoesNotCarry(t *testing.T) {
 	isrc, url, seconds := "GBAAA8000001", "https://www.youtube.com/watch?v=kept", 180.0
 	track.ISRC, track.AudioSourceURL, track.StoredDurationSeconds = &isrc, &url, &seconds
 	track.Provenance, track.Confidence, track.Evidence = downloadprovenance.ProvenanceCorroborated, 0.4, json.RawMessage(`{"grade":"b"}`)
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 
 	complete(t, ledger, track, ports.Completion{AudioRef: servingRef, ISRC: "USUG11904206", Provenance: "unknown"})
 
@@ -206,7 +206,7 @@ func TestLedger_CompleteLeavesWhatTheCompletionDoesNotCarry(t *testing.T) {
 func TestLedger_ACompletionLengthAtTheCatalogsCapIsStored(t *testing.T) {
 	const week = 7 * 24 * 60 * 60.0
 	track := pendingTrack()
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 
 	atTheCap, err := tracklength.TrackLengthOf(week)
 	if err != nil {
@@ -223,7 +223,7 @@ func TestLedger_CompleteAdoptsTheISRCWhenTheTrackHasAnEmptyOne(t *testing.T) {
 	track := pendingTrack()
 	empty := ""
 	track.ISRC = &empty
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 
 	complete(t, ledger, track, ports.Completion{AudioRef: servingRef, ISRC: "USUG11904206"})
 
@@ -234,7 +234,7 @@ func TestLedger_CompleteAdoptsTheISRCWhenTheTrackHasAnEmptyOne(t *testing.T) {
 
 func TestLedger_CompleteCanMarkAReadyTrackReadyAgainOnItsOwnFile(t *testing.T) {
 	track := readyTrack()
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 
 	complete(t, ledger, track, ports.Completion{AudioRef: servingRef})
 
@@ -245,7 +245,7 @@ func TestLedger_CompleteCanMarkAReadyTrackReadyAgainOnItsOwnFile(t *testing.T) {
 
 func TestLedger_CompleteOnAFailedTrackMarksItReadyAndClearsTheReason(t *testing.T) {
 	track := failedTrack()
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 
 	complete(t, ledger, track, ports.Completion{AudioRef: servingRef})
 
@@ -256,7 +256,7 @@ func TestLedger_CompleteOnAFailedTrackMarksItReadyAndClearsTheReason(t *testing.
 
 func TestLedger_CompleteRefusesAnotherFileOverAServingOneUnlessItReplaces(t *testing.T) {
 	track := readyTrack()
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 
 	err := ledger.Complete(context.Background(), track.ID, track.UserId, 0, ports.Completion{AudioRef: freshRef})
 	if !errors.Is(err, ports.ErrIllegalTransition) {
@@ -275,8 +275,8 @@ func TestLedger_CompleteRefusesAnotherFileOverAServingOneUnlessItReplaces(t *tes
 func TestLedger_AReplaceNeedsAServingFile(t *testing.T) {
 	noFile := pendingTrack()
 	noFile.Status = ports.TrackReady
-	for _, track := range []acquisitiontest.LedgerTrack{pendingTrack(), failedTrack(), noFile} {
-		ledger := acquisitiontest.NewLedger(track)
+	for _, track := range []inmemoryledger.LedgerTrack{pendingTrack(), failedTrack(), noFile} {
+		ledger := inmemoryledger.NewLedger(track)
 
 		err := ledger.Complete(context.Background(), track.ID, track.UserId, 0, ports.Completion{AudioRef: freshRef, ReplaceAudio: true})
 
@@ -288,7 +288,7 @@ func TestLedger_AReplaceNeedsAServingFile(t *testing.T) {
 
 func TestLedger_CompleteNeedsAnAudioRef(t *testing.T) {
 	track := pendingTrack()
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 
 	if err := ledger.Complete(context.Background(), track.ID, track.UserId, 0, ports.Completion{}); err == nil {
 		t.Error("Complete without an audio ref succeeded")
@@ -302,7 +302,7 @@ func TestLedger_ARelabelStoresTheRecordingActuallyStored(t *testing.T) {
 	track := pendingTrack()
 	isrc, year, seconds := "OLD000000001", 2019, 200.0
 	track.ISRC, track.Year, track.CatalogDurationSeconds = &isrc, &year, &seconds
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 
 	complete(t, ledger, track, ports.Completion{AudioRef: servingRef, ISRC: "RESOLVED0001", Relabel: &ports.TrackLabel{
 		MBID: "remix-mbid", Title: "Blinding Lights (Remix)", Album: "Remixes", Year: 2020, ISRC: "REMIX0000001", DurationSeconds: 222,
@@ -321,7 +321,7 @@ func TestLedger_ARelabelWithoutOptionalsClearsThemAndTakesTheResolvedISRC(t *tes
 	track := pendingTrack()
 	isrc, year, seconds := "OLD000000001", 2019, 200.0
 	track.ISRC, track.Year, track.CatalogDurationSeconds = &isrc, &year, &seconds
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 
 	complete(t, ledger, track, ports.Completion{AudioRef: servingRef, ISRC: "RESOLVED0001", Relabel: &ports.TrackLabel{MBID: "m", Title: "T"}})
 
@@ -333,7 +333,7 @@ func TestLedger_ARelabelWithoutOptionalsClearsThemAndTakesTheResolvedISRC(t *tes
 
 func TestLedger_FailFailsOnlyAPendingTrack(t *testing.T) {
 	track := pendingTrack()
-	ledger := acquisitiontest.NewLedger(track, readyTrack())
+	ledger := inmemoryledger.NewLedger(track, readyTrack())
 
 	if err := ledger.Fail(context.Background(), track.ID, track.UserId, 0, "no_match_found"); err != nil {
 		t.Fatalf("Fail: %v", err)
@@ -342,7 +342,7 @@ func TestLedger_FailFailsOnlyAPendingTrack(t *testing.T) {
 		t.Errorf("track = %+v, want failed with the reason at version 1", got)
 	}
 
-	for _, settled := range []acquisitiontest.LedgerTrack{readyTrack(), failedTrack()} {
+	for _, settled := range []inmemoryledger.LedgerTrack{readyTrack(), failedTrack()} {
 		ledger.Seed(settled)
 		err := ledger.Fail(context.Background(), settled.ID, settled.UserId, 0, "download_failed")
 		if !errors.Is(err, ports.ErrIllegalTransition) {
@@ -356,7 +356,7 @@ func TestLedger_FailFailsOnlyAPendingTrack(t *testing.T) {
 
 func TestLedger_WritesToAnUnknownTrackOrAnotherUsersTrackAreNotFound(t *testing.T) {
 	track := readyTrack()
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 	stranger := ids.NewUserId(uuid.New())
 	ctx := context.Background()
 
@@ -376,7 +376,7 @@ func TestLedger_WritesToAnUnknownTrackOrAnotherUsersTrackAreNotFound(t *testing.
 func TestLedger_AWriterHoldingAnotherFenceHasLostTheLease(t *testing.T) {
 	track := pendingTrack()
 	track.ClaimNumber = 2
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 	ctx := context.Background()
 
 	completeErr := ledger.Complete(ctx, track.ID, track.UserId, 1, ports.Completion{AudioRef: servingRef})
@@ -401,7 +401,7 @@ func TestLedger_TheLeaseHolderOrAWriterWithoutAFenceGoesThrough(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			track := pendingTrack()
 			track.ClaimNumber = tc.current
-			ledger := acquisitiontest.NewLedger(track)
+			ledger := inmemoryledger.NewLedger(track)
 
 			if err := ledger.Fail(context.Background(), track.ID, track.UserId, tc.held, "x"); err != nil {
 				t.Errorf("Fail = %v, want it to go through", err)
@@ -411,9 +411,9 @@ func TestLedger_TheLeaseHolderOrAWriterWithoutAFenceGoesThrough(t *testing.T) {
 }
 
 func TestLedger_RevertAtRevertsAReadyOrFailedTrackAtItsSnapshotVersion(t *testing.T) {
-	for _, track := range []acquisitiontest.LedgerTrack{readyTrack(), failedTrack()} {
+	for _, track := range []inmemoryledger.LedgerTrack{readyTrack(), failedTrack()} {
 		track.ClaimNumber = 5
-		ledger := acquisitiontest.NewLedger(track)
+		ledger := inmemoryledger.NewLedger(track)
 
 		if err := ledger.RevertAt(context.Background(), track.TrackSnapshot); err != nil {
 			t.Fatalf("RevertAt %v: %v", track.Status, err)
@@ -428,12 +428,12 @@ func TestLedger_RevertAtRevertsAReadyOrFailedTrackAtItsSnapshotVersion(t *testin
 
 func TestLedger_RevertAtAStaleVersionConflictsAndWritesNothing(t *testing.T) {
 	track := readyTrack()
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 	complete(t, ledger, track, ports.Completion{AudioRef: servingRef})
 
 	err := ledger.RevertAt(context.Background(), track.TrackSnapshot)
 
-	if !errors.Is(err, acquisitiontest.ErrVersionConflict) {
+	if !errors.Is(err, inmemoryledger.ErrVersionConflict) {
 		t.Errorf("RevertAt stale = %v, want ErrVersionConflict", err)
 	}
 	if got := committed(t, ledger, track.ID); got.Status != ports.TrackReady || got.Version != 1 {
@@ -443,7 +443,7 @@ func TestLedger_RevertAtAStaleVersionConflictsAndWritesNothing(t *testing.T) {
 
 func TestLedger_RevertAtAPendingTrackIsIllegal(t *testing.T) {
 	track := pendingTrack()
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 
 	if err := ledger.RevertAt(context.Background(), track.TrackSnapshot); !errors.Is(err, ports.ErrIllegalTransition) {
 		t.Errorf("RevertAt pending = %v, want ErrIllegalTransition", err)
@@ -453,7 +453,7 @@ func TestLedger_RevertAtAPendingTrackIsIllegal(t *testing.T) {
 func TestLedger_AFailedWriteChangesNothing(t *testing.T) {
 	writeErr := errors.New("db down")
 	pending, ready := pendingTrack(), readyTrack()
-	ledger := acquisitiontest.NewLedger(pending, ready)
+	ledger := inmemoryledger.NewLedger(pending, ready)
 	ledger.FailWrites(writeErr)
 	ctx := context.Background()
 
@@ -481,7 +481,7 @@ func TestLedger_AFailedWriteChangesNothing(t *testing.T) {
 
 func TestLedger_AnAudioRefIsInUseOnlyByAnotherTrack(t *testing.T) {
 	track := readyTrack()
-	ledger := acquisitiontest.NewLedger(track, pendingTrack())
+	ledger := inmemoryledger.NewLedger(track, pendingTrack())
 	ctx := context.Background()
 
 	if inUse, err := ledger.AudioRefInUse(ctx, servingRef, ids.NewTrackId()); !inUse || err != nil {
@@ -499,7 +499,7 @@ func TestLedger_FailDropsAFileThePendingTrackStillPointedAtAndNeedsAReason(t *te
 	track := pendingTrack()
 	ref := servingRef
 	track.AudioRef = &ref
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 
 	if err := ledger.Fail(context.Background(), track.ID, track.UserId, 0, ""); err == nil {
 		t.Fatal("Fail without a reason succeeded")
@@ -517,7 +517,7 @@ func TestLedger_FailDropsAFileThePendingTrackStillPointedAtAndNeedsAReason(t *te
 
 func TestLedger_TheRejectedSourceKeysKeepTheNewestTwentyFive(t *testing.T) {
 	track := pendingTrack()
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 	var keys []string
 	for i := range 26 {
 		keys = append(keys, fmt.Sprintf("youtube:%02d", i))
@@ -535,7 +535,7 @@ func TestLedger_AKeyPushedOutOfTheRejectedSourceKeysCanBeRejectedAgainInTheSameC
 	for i := range 25 {
 		track.RejectedSourceKeys = append(track.RejectedSourceKeys, fmt.Sprintf("youtube:%02d", i))
 	}
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 
 	complete(t, ledger, track, ports.Completion{AudioRef: servingRef, RejectedSourceKeys: []string{"youtube:new", "youtube:00"}})
 
@@ -556,7 +556,7 @@ func TestLedger_ACompletionWithAConfidenceOutOfRangeOrBrokenEvidenceKeepsTheStor
 		t.Run(name, func(t *testing.T) {
 			track := pendingTrack()
 			track.Confidence, track.Evidence = 0.4, json.RawMessage(`{"grade":"b"}`)
-			ledger := acquisitiontest.NewLedger(track)
+			ledger := inmemoryledger.NewLedger(track)
 			c.AudioRef = servingRef
 
 			complete(t, ledger, track, c)
@@ -576,7 +576,7 @@ func TestLedger_ACompletionAtTheConfidenceBoundsOrWithEmptyEvidenceIsStored(t *t
 	} {
 		track := pendingTrack()
 		track.Confidence, track.Evidence = 0.4, json.RawMessage(`{"grade":"b"}`)
-		ledger := acquisitiontest.NewLedger(track)
+		ledger := inmemoryledger.NewLedger(track)
 		c.AudioRef = servingRef
 
 		complete(t, ledger, track, c)
@@ -589,7 +589,7 @@ func TestLedger_ACompletionAtTheConfidenceBoundsOrWithEmptyEvidenceIsStored(t *t
 
 func TestLedger_ARelabelTrimsItsTitleAndFallsBackToItForTheAlbum(t *testing.T) {
 	track := pendingTrack()
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 
 	complete(t, ledger, track, ports.Completion{AudioRef: servingRef, Relabel: &ports.TrackLabel{MBID: "m", Title: "  Blinding Lights  ", Album: "  "}})
 
@@ -601,7 +601,7 @@ func TestLedger_ARelabelTrimsItsTitleAndFallsBackToItForTheAlbum(t *testing.T) {
 func TestLedger_ARelabelWithoutATitleOrAnMBIDFailsTheCompletionAndWritesNothing(t *testing.T) {
 	for _, label := range []ports.TrackLabel{{MBID: "m", Title: "  "}, {Title: "Blinding Lights"}} {
 		track := pendingTrack()
-		ledger := acquisitiontest.NewLedger(track)
+		ledger := inmemoryledger.NewLedger(track)
 
 		err := ledger.Complete(context.Background(), track.ID, track.UserId, 0, ports.Completion{AudioRef: servingRef, Relabel: &label})
 

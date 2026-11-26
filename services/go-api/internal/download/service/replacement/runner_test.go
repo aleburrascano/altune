@@ -2,7 +2,7 @@ package replacement_test
 
 import (
 	"altune/go-api/internal/download"
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/core/audioquality"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service/replacement"
@@ -115,7 +115,7 @@ func (p *publisher) Publish(context.Context, ids.UserId, events.Payload) {
 
 type world struct {
 	t        *testing.T
-	tracks   *acquisitiontest.Ledger
+	tracks   *inmemoryledger.Ledger
 	audio    *audioStore
 	source   *source
 	upgrades *upgradeStore
@@ -126,7 +126,7 @@ type world struct {
 func seed(t *testing.T, stored audioquality.Grade) *world {
 	t.Helper()
 	ref, sourceURL, isrc := originalRef, currentURL, "USUG11904206"
-	track := acquisitiontest.LedgerTrack{
+	track := inmemoryledger.LedgerTrack{
 		TrackSnapshot: download.TrackSnapshot{
 			ID: ids.NewTrackId(), UserId: ids.NewUserId(uuid.New()),
 			Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours",
@@ -137,7 +137,7 @@ func seed(t *testing.T, stored audioquality.Grade) *world {
 	}
 	return &world{
 		t:        t,
-		tracks:   acquisitiontest.NewLedger(track),
+		tracks:   inmemoryledger.NewLedger(track),
 		audio:    &audioStore{objects: map[string]string{originalRef: "original bytes"}},
 		source:   &source{},
 		upgrades: &upgradeStore{},
@@ -147,7 +147,7 @@ func seed(t *testing.T, stored audioquality.Grade) *world {
 }
 
 type unstreamableLedger struct {
-	*acquisitiontest.Ledger
+	*inmemoryledger.Ledger
 }
 
 func (l unstreamableLedger) Get(ctx context.Context, id ids.TrackId, userId ids.UserId) (*download.TrackSnapshot, error) {
@@ -172,18 +172,18 @@ func TestRunner_TrustsTheLedgersStreamableAndSkipsAFileItCallsUnplayable(t *test
 	}
 }
 
-func (w *world) edit(change func(*acquisitiontest.LedgerTrack)) {
+func (w *world) edit(change func(*inmemoryledger.LedgerTrack)) {
 	track, _ := w.tracks.Track(w.trackId)
 	change(&track)
 	w.tracks.Seed(track)
 }
 
 func (w *world) asUserUpload() {
-	w.edit(func(track *acquisitiontest.LedgerTrack) { track.AudioSourceURL = nil })
+	w.edit(func(track *inmemoryledger.LedgerTrack) { track.AudioSourceURL = nil })
 }
 
 func (w *world) storedLengths(catalogSeconds, storedSeconds float64) {
-	w.edit(func(track *acquisitiontest.LedgerTrack) {
+	w.edit(func(track *inmemoryledger.LedgerTrack) {
 		track.CatalogDurationSeconds, track.StoredDurationSeconds = &catalogSeconds, &storedSeconds
 	})
 }
@@ -269,7 +269,7 @@ func noVerification() download.VerificationPorts {
 	}
 }
 
-func (w *world) committed() acquisitiontest.LedgerTrack {
+func (w *world) committed() inmemoryledger.LedgerTrack {
 	track, _ := w.tracks.Track(w.trackId)
 	return track
 }

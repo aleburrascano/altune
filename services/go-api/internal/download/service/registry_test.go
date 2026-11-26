@@ -1,7 +1,7 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
@@ -311,7 +311,7 @@ func throttledSource() *stubSource {
 func searchFailureCode(t *testing.T, reg *service.SourceRegistry) downloadfailure.FailureCode {
 	t.Helper()
 	track := pendingSong()
-	ledger := acquisitiontest.NewLedger(track)
+	ledger := inmemoryledger.NewLedger(track)
 	if err := acquireService(ledger, reg, &objectStore{objects: map[string]string{}}).Execute(context.Background(), track.UserId, track.ID); err == nil {
 		t.Fatal("Execute succeeded, want a search failure")
 	}

@@ -1,7 +1,7 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/download/service"
@@ -167,7 +167,7 @@ func TestStoreRollback_ExhaustedDeleteQueuesTheOrphan(t *testing.T) {
 		userID, trackID := ids.NewUserId(uuid.New()), ids.NewTrackId()
 		store := &objectStore{objects: map[string]string{"u/new.mp3": "new bytes"}, deleteErr: errors.New("down")}
 		queue := &recordingOrphanQueue{}
-		step := mustNewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), queue, acquisitiontest.NewLedger(),
+		step := mustNewStoreStep(store, scratchfiles.New(), ports.NoopAudioProber(), queue, inmemoryledger.NewLedger(),
 			service.WithStoreOwner(userID, trackID))
 
 		if err := step.Rollback(context.Background(), &service.AcquisitionContext{AudioRef: "u/new.mp3"}); err == nil {
@@ -185,7 +185,7 @@ func TestStoreRollback_SharedRefIsNeverQueued(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		userID, own := ids.NewUserId(uuid.New()), ids.NewTrackId()
 		sharedRef := "u/shared.mp3"
-		refs := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
+		refs := inmemoryledger.NewLedger(inmemoryledger.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
 			ID: ids.NewTrackId(), UserId: userID, Status: ports.TrackReady, AudioRef: &sharedRef,
 		}})
 		queue := &recordingOrphanQueue{}

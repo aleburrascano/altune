@@ -1,7 +1,7 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
@@ -44,24 +44,24 @@ func pendingBlindingLights() ports.TrackSnapshot {
 	}
 }
 
-func acquireWith(t *testing.T, track ports.TrackSnapshot, source ports.AudioSource, opts ...func(*service.AcquireTrackAudioService)) (*acquisitiontest.Ledger, error) {
+func acquireWith(t *testing.T, track ports.TrackSnapshot, source ports.AudioSource, opts ...func(*service.AcquireTrackAudioService)) (*inmemoryledger.Ledger, error) {
 	t.Helper()
 	return acquireVerified(t, track, source, noVerification(), noStages(), opts...)
 }
 
-func acquireStaged(t *testing.T, track ports.TrackSnapshot, source ports.AudioSource, stages service.StagePorts, opts ...func(*service.AcquireTrackAudioService)) (*acquisitiontest.Ledger, error) {
+func acquireStaged(t *testing.T, track ports.TrackSnapshot, source ports.AudioSource, stages service.StagePorts, opts ...func(*service.AcquireTrackAudioService)) (*inmemoryledger.Ledger, error) {
 	t.Helper()
 	return acquireVerified(t, track, source, noVerification(), stages, opts...)
 }
 
-func acquireVerified(t *testing.T, track ports.TrackSnapshot, source ports.AudioSource, wiring service.VerificationPorts, stages service.StagePorts, opts ...func(*service.AcquireTrackAudioService)) (*acquisitiontest.Ledger, error) {
+func acquireVerified(t *testing.T, track ports.TrackSnapshot, source ports.AudioSource, wiring service.VerificationPorts, stages service.StagePorts, opts ...func(*service.AcquireTrackAudioService)) (*inmemoryledger.Ledger, error) {
 	t.Helper()
-	ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
+	ledger := inmemoryledger.NewLedger(inmemoryledger.LedgerTrack{TrackSnapshot: track})
 	svc := service.MustNewAcquireTrackAudioService(ledger, service.NewSourceRegistry(source), &objectStore{objects: map[string]string{}}, scratchfiles.New(), wiring, stages, opts...)
 	return ledger, svc.Execute(context.Background(), track.UserId, track.ID)
 }
 
-func requireReady(t *testing.T, ledger *acquisitiontest.Ledger, id ids.TrackId, err error) {
+func requireReady(t *testing.T, ledger *inmemoryledger.Ledger, id ids.TrackId, err error) {
 	t.Helper()
 	got, _ := ledger.Track(id)
 	if err != nil || got.Status != ports.TrackReady {

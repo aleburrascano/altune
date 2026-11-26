@@ -1,7 +1,7 @@
 package service_test
 
 import (
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	acqdomain "altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/ports"
@@ -84,7 +84,7 @@ func (freshAudioSource) Fetch(_ context.Context, _ ports.AudioCandidate, outDir 
 }
 
 type servedTrack struct {
-	ledger      *acquisitiontest.Ledger
+	ledger      *inmemoryledger.Ledger
 	store       *objectStore
 	userID      ids.UserId
 	trackID     ids.TrackId
@@ -99,7 +99,7 @@ func seedReadyTrack(t *testing.T) servedTrack {
 		Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours",
 	}, "audio.mp3")
 	sourceURL := "https://www.youtube.com/watch?v=currentAAAA"
-	ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
+	ledger := inmemoryledger.NewLedger(inmemoryledger.LedgerTrack{TrackSnapshot: ports.TrackSnapshot{
 		ID: trackID, UserId: userID, Title: "Blinding Lights", Artist: "The Weeknd", Album: "After Hours",
 		Status: ports.TrackReady, AudioRef: &originalRef, AudioSourceURL: &sourceURL,
 	}})

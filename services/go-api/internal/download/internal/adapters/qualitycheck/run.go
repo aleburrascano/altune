@@ -1,7 +1,7 @@
 package qualitycheck
 
 import (
-	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/inmemoryledger"
 	"altune/go-api/internal/download/internal/adapters/scratchfiles"
 	"altune/go-api/internal/download/internal/core/musicbrainzmatch"
 	"altune/go-api/internal/download/internal/core/ports"
@@ -46,7 +46,7 @@ type Outcome struct {
 func Run(ctx context.Context, now clock.Func, kase Case) Outcome {
 	p := newCasePorts(kase)
 	track := seededTrack(kase)
-	ledger := acquisitiontest.NewLedger(acquisitiontest.LedgerTrack{TrackSnapshot: track})
+	ledger := inmemoryledger.NewLedger(inmemoryledger.LedgerTrack{TrackSnapshot: track})
 
 	var observed *service.AcquisitionContext
 	wiring := service.VerificationPorts{
@@ -350,7 +350,7 @@ type SavedTrack struct {
 
 const unreadableEvidence = "unreadable-evidence"
 
-func savedTrackOf(ledger *acquisitiontest.Ledger, id ids.TrackId) SavedTrack {
+func savedTrackOf(ledger *inmemoryledger.Ledger, id ids.TrackId) SavedTrack {
 	saved, ok := ledger.Track(id)
 	if !ok {
 		return SavedTrack{}
