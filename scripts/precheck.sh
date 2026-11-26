@@ -24,10 +24,14 @@ if [ $stage = push ] && [ "${PRECHECK_NO_CACHE:-}" != 1 ] && [ -z "$(git status 
     {
       git rev-parse 'HEAD^{tree}'
       echo "$base"
+      git rev-parse "$base_ref"
       go version 2>/dev/null
       golangci-lint --version 2>/dev/null
       node --version 2>/dev/null
-      echo "integration=${INTEGRATION:-} client_mutate_elsewhere=${CLIENT_MUTATE_RUNS_ELSEWHERE:-}"
+      jq --version 2>/dev/null
+      shellcheck --version 2>/dev/null
+      date -u +%Y-%m-%d
+      echo "integration=${INTEGRATION:-} client_mutate_elsewhere=${CLIENT_MUTATE_RUNS_ELSEWHERE:-} lint_whole=${PRECHECK_LINT_WHOLE:-}"
     } | sha256sum | cut -d' ' -f1
   )
   if [ -f "$result_dir/$result_key" ]; then
@@ -206,13 +210,15 @@ if touches '^services/go-api/'; then
       elif [ ${#affected[@]} -gt 0 ]; then
         check "go-api vet" $m "${heavy[@]}" go vet "${affected[@]}"
       fi
-      if [ $whole_module = 1 ] || [ "${PRECHECK_LINT_WHOLE:-}" = 1 ]; then
+      if [ $whole_module = 1 ] || [ "${PRECHECK_LINT_WHOLE:-}" = 1 ] || touches "^$m/\.golangci"; then
         lint_scope=(./...)
+        lint_label="whole module"
       else
         lint_scope=("${affected[@]}")
+        lint_label="${#lint_scope[@]} package(s) and importers"
       fi
       if [ ${#lint_scope[@]} -gt 0 ]; then
-        check "go-api strict linters (new code, ${#lint_scope[@]} package(s) and importers)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --new-from-rev="$base" --allow-serial-runners "${lint_scope[@]}"
+        check "go-api strict linters (new code, $lint_label)" $m "${heavy[@]}" env GOLANGCI_LINT_CACHE="$lint_cache" golangci-lint run --config .golangci.strict.yml --new-from-rev="$base" --allow-serial-runners "${lint_scope[@]}"
       fi
       check "go-api no comments (whole tree)" $m go run ./scripts/lintcomments --all .
       check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
@@ -401,6 +407,7 @@ fi
 [ $missing = 1 ] && { echo "precheck: incomplete, see SKIP lines"; exit 3; }
 [ $lint_only = 1 ] && { echo "precheck: lint green, tests left to CI"; exit 0; }
 if [ -n "$result_key" ]; then
-  mkdir -p "$result_dir" && date -u +"green at %Y-%m-%dT%H:%M:%SZ" >"$result_dir/$result_key"
+  { mkdir -p "$result_dir" && date -u +"green at %Y-%m-%dT%H:%M:%SZ" >"$result_dir/$result_key"; } \
+    || echo "precheck: could not record this green run in $result_dir, so the next push will rerun it"
 fi
 echo "precheck: green"

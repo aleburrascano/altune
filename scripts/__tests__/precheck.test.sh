@@ -981,6 +981,63 @@ printf 'dirty\n' >>"$WORK/repo/added.txt"
 run_with_tools
 grep -qF "already proven" "$WORK/out.log" && fail "a dirty tree must rerun the checks"
 
+cached_green_repo() {
+    new_repo
+    printf '.cache/\n' >"$WORK/repo/.gitignore"
+    commit_as_base
+    add_plain_file
+    mkdir -p "$WORK/bin"
+    run_with_tools
+}
+
+expect_not_cached() {
+    grep -qF "already proven" "$WORK/out.log" && fail "$1"
+    expect_out "precheck: green"
+}
+
+CASE="a base ref that moved forward since the green run is not served from the cache"
+cached_green_repo
+(
+    cd "$WORK/repo" || exit 1
+    base_sha=$(git rev-parse gitea/main)
+    git checkout -q -b side "$base_sha"
+    printf 'newer\n' >newer.txt
+    git add -A
+    git commit -qm "newer main"
+    git update-ref refs/remotes/gitea/main HEAD
+    git checkout -q main
+)
+run_with_tools
+expect_not_cached "a moved base ref must rerun the checks, since some read its tip"
+
+CASE="a different INTEGRATION value is not served from the cache"
+cached_green_repo
+INTEGRATION=1 run_with_tools
+expect_not_cached "INTEGRATION changes which checks run"
+
+CASE="a different PRECHECK_LINT_WHOLE value is not served from the cache"
+cached_green_repo
+PRECHECK_LINT_WHOLE=1 run_with_tools
+expect_not_cached "PRECHECK_LINT_WHOLE changes what is linted"
+
+CASE="a different CLIENT_MUTATE_RUNS_ELSEWHERE value is not served from the cache"
+cached_green_repo
+CLIENT_MUTATE_RUNS_ELSEWHERE=1 run_with_tools
+expect_not_cached "CLIENT_MUTATE_RUNS_ELSEWHERE changes which checks run"
+
+CASE="a different tool version is not served from the cache"
+new_repo
+printf '.cache/\n' >"$WORK/repo/.gitignore"
+commit_as_base
+add_plain_file
+mkdir -p "$WORK/bin"
+printf '#!/bin/sh\necho "ShellCheck version: one"\n' >"$WORK/bin/shellcheck"
+chmod +x "$WORK/bin/shellcheck"
+run_with_tools
+printf '#!/bin/sh\necho "ShellCheck version: two"\n' >"$WORK/bin/shellcheck"
+run_with_tools
+expect_not_cached "a tool version change must rerun the checks"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1
