@@ -593,6 +593,8 @@ new_repo
 add_go_fixture
 mkdir -p "$WORK/repo/services/go-api/internal/shared/events" "$WORK/repo/client/src/x"
 printf 'package events\n' >"$WORK/repo/services/go-api/internal/shared/events/e.go"
+printf '#!/bin/sh\nexit 0\n' >"$WORK/bin/npx"
+chmod +x "$WORK/bin/npx"
 printf '#!/usr/bin/env bash\necho "worktree-deps $*" >>"%s/deps.log"\necho true\n' "$WORK" >"$WORK/repo/scripts/worktree-deps.sh"
 git -C "$WORK/repo" add -A
 git -C "$WORK/repo" commit -qm "events fixture and deps stub"
