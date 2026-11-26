@@ -19,11 +19,11 @@ var (
 )
 
 var (
-	ErrDeezerSleeperMissing = deezerpreview.ErrSleeperRequired
-	ErrDeezerThrottled    = deezerpreview.ErrDeezerThrottled
-	ErrFileReachesCap     = deezerpreview.ErrFileReachesCap
-	ErrPreviewTooShort    = deezerpreview.ErrPreviewTooShort
-	ErrPrintLongerThanRef = deezerpreview.ErrPrintLongerThanRef
+	ErrDeezerSleeperRequired = deezerpreview.ErrSleeperRequired
+	ErrDeezerThrottled       = deezerpreview.ErrDeezerThrottled
+	ErrFileReachesCap        = deezerpreview.ErrFileReachesCap
+	ErrPreviewTooShort       = deezerpreview.ErrPreviewTooShort
+	ErrPrintLongerThanRef    = deezerpreview.ErrPrintLongerThanRef
 )
 
 const (

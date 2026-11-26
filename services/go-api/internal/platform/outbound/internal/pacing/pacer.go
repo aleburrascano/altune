@@ -88,7 +88,7 @@ func New(now clock.Func, sleep clock.Sleeper) (*Pacer, error) {
 		return nil, ErrClockRequired
 	}
 	if sleep == nil {
-		return nil, ErrSleeperRequired
+		return nil, fmt.Errorf("pacing.New: %w", ErrSleeperRequired)
 	}
 	return &Pacer{now: now, sleep: sleep, limiters: map[string]*hostLimiter{}}, nil
 }

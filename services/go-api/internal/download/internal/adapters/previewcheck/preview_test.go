@@ -98,8 +98,8 @@ const trackJSON = `{"id":132201194,"title":"outside","isrc":"USSM11607554","prev
 func TestNewDeezerPreview_RefusesAMissingSleeper(t *testing.T) {
 	previews, err := download.NewDeezerPreview(&http.Client{}, deezer, fixedPrinter{}, nil)
 
-	if previews != nil || !errors.Is(err, download.ErrDeezerSleeperMissing) {
-		t.Fatalf("got (%v, %v), want a nil client and ErrDeezerSleeperMissing", previews, err)
+	if previews != nil || !errors.Is(err, download.ErrDeezerSleeperRequired) || !strings.Contains(err.Error(), "NewDeezerPreview") {
+		t.Fatalf("got (%v, %v), want a nil client and an error naming NewDeezerPreview wrapping ErrDeezerSleeperRequired", previews, err)
 	}
 }
 

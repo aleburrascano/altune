@@ -42,8 +42,8 @@ func TestPacer_RefusesAMissingClock(t *testing.T) {
 func TestPacer_RefusesAMissingSleeper(t *testing.T) {
 	p, err := pacing.New(time.Now, nil)
 
-	if p != nil || !errors.Is(err, pacing.ErrSleeperRequired) {
-		t.Fatalf("got (%v, %v), want a refusal wrapping ErrSleeperRequired", p, err)
+	if p != nil || !errors.Is(err, pacing.ErrSleeperRequired) || !strings.Contains(err.Error(), "pacing.New") {
+		t.Fatalf("got (%v, %v), want a refusal naming pacing.New wrapping ErrSleeperRequired", p, err)
 	}
 }
 

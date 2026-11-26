@@ -119,7 +119,7 @@ var ErrSleeperRequired = errors.New("previewcheck: the Deezer client needs a sle
 
 func New(client *http.Client, baseURL string, printer RawFingerprint, sleep clock.Sleeper) (*Previews, error) {
 	if sleep == nil {
-		return nil, fmt.Errorf("New: %w", ErrSleeperRequired)
+		return nil, fmt.Errorf("NewDeezerPreview: %w", ErrSleeperRequired)
 	}
 	return &Previews{client: client, baseURL: baseURL, backoff: deezerPause, printer: printer, sleep: sleep}, nil
 }
@@ -274,4 +274,3 @@ func (d *Previews) getOnce(ctx context.Context, target string, bodyCap int64) (i
 	}
 	return resp.StatusCode, body, nil
 }
-
