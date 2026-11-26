@@ -18,7 +18,7 @@ import { installApiBase } from '@shared/apiConfig';
 import { installAuthClient } from '@shared/auth';
 import { installBuild } from '@shared/device';
 import { createQueryClient } from '@shared/query';
-import { createAuthClient } from '@/mobile/authClient';
+import { appAuthParts, createAuthClient } from '@/mobile/authClient';
 import { StagingBanner } from '@/mobile/frame/StagingBanner';
 import { useNavigator } from '@shared/navigation';
 import {
@@ -52,11 +52,19 @@ import { httpFeaturePorts, httpOfflinePort } from '@/mobile/wiring/httpFeaturePo
 import { PlaybackShortcuts, SystemNavigationBar } from '@/mobile/frame/platformExtras';
 import { reportOtaLaunchFailures } from '@/mobile/otaLaunchReport';
 import { ScreenViewsBridge, ServerEventsBridge } from '@/mobile/serverEvents';
-import { chainUncaughtErrorHandler } from '@/mobile/uncaughtErrors';
+import { chainUncaughtErrorHandler, globalErrorHandlersFor } from '@/mobile/uncaughtErrors';
 
 installApiBase(process.env.EXPO_PUBLIC_API_URL, __DEV__);
 installBuild({ platform: Platform.OS, commit: process.env.EXPO_PUBLIC_BUILD_COMMIT });
-installAuthClient(createAuthClient());
+installAuthClient(
+  createAuthClient(
+    {
+      url: process.env.EXPO_PUBLIC_SUPABASE_URL,
+      anonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+    },
+    appAuthParts(),
+  ),
+);
 provideOfflinePort(httpOfflinePort);
 
 startPlaybackService();
@@ -67,7 +75,9 @@ void SplashScreen.preventAutoHideAsync();
 
 installTelemetry(createAppTelemetry());
 followSignedInUser();
-installGlobalErrorReporting(chainUncaughtErrorHandler);
+installGlobalErrorReporting((onError) =>
+  chainUncaughtErrorHandler(onError, globalErrorHandlersFor(Platform.OS)),
+);
 reportOtaLaunchFailures().catch((error: unknown) => {
   console.warn('[telemetry] reading update logs failed', error);
 });
@@ -125,7 +135,7 @@ export default function RootLayout() {
                   <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
                   <SystemNavigationBar scheme={scheme} />
                   <AuthDeepLinkBridge />
-                  <StagingBanner />
+                  <StagingBanner supabaseUrl={process.env.EXPO_PUBLIC_SUPABASE_URL} />
                   <AuthGate>
                     <ServerEventsBridge />
                     <ScreenViewsBridge />

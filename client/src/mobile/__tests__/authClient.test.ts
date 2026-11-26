@@ -318,14 +318,6 @@ describe('required configuration', () => {
     ])('throws naming %s when it is the empty string', (name, config) => {
       expect(() => createAuthClient(config, memoryParts())).toThrow(name);
     });
-
-    it('reads the app environment when no configuration is passed in', () => {
-      expect(() => createAuthClient()).not.toThrow();
-
-      process.env.EXPO_PUBLIC_SUPABASE_URL = '';
-
-      expect(() => createAuthClient()).toThrow('EXPO_PUBLIC_SUPABASE_URL');
-    });
   });
 
   describe('the documented environment', () => {

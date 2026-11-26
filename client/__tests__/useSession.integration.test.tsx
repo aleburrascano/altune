@@ -38,7 +38,8 @@ import {
   registerSearchStateSignOutReset,
   setSearchState,
 } from '@features/discovery';
-import { createAuthClient } from '@/mobile/authClient';
+import { appAuthParts, createAuthClient } from '@/mobile/authClient';
+import { appAuthConfig } from '@testing/appAuthConfig';
 import { scriptedAuth, type ScriptedAuth, type SignOutOutcome } from '@testing/scriptedAuth';
 
 const { __http } = require('@testing/doubles/fetch.js');
@@ -219,7 +220,7 @@ describe('session restore across process death', () => {
     it('restores the previously written session after the app "restarts" — no re-authentication is asked of the user', async () => {
       await secureStore.setItemAsync('sb-fixture-auth-token', JSON.stringify(seedSession()));
 
-      const restarted = createAuthClient();
+      const restarted = createAuthClient(appAuthConfig(), appAuthParts());
       installAuthClient(restarted);
 
       const queryClient = new QueryClient();
@@ -242,7 +243,7 @@ describe('session restore across process death', () => {
     });
 
     it('a device with no previously written session comes back signed-out, not stuck loading', async () => {
-      const fresh = createAuthClient();
+      const fresh = createAuthClient(appAuthConfig(), appAuthParts());
       installAuthClient(fresh);
       const queryClient = new QueryClient();
       const { result, unmount } = renderHook(() => useSession(), {

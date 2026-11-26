@@ -71,8 +71,6 @@ describe('FeaturePorts', () => {
     ['playlists', usePlaylistsPort],
     ['settings', useSettingsPort],
   ])('throws for the %s port when nothing provides it', (name, usePort) => {
-    jest.spyOn(console, 'error').mockImplementation(() => {});
-
     expect(() => renderHook(() => usePort())).toThrow(`no ${name} port provided`);
   });
 });

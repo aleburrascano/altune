@@ -47,6 +47,18 @@ function afterStartupWith<T>(env: Record<string, string>, read: () => T): T {
   return value;
 }
 
+describe('RootLayout — the app reads its auth configuration from the environment at startup', () => {
+  it('starts with the configured Supabase URL and anon key', () => {
+    expect(() => afterStartupWith({}, () => undefined)).not.toThrow();
+  });
+
+  it('fails fast naming the variable when the Supabase URL is empty', () => {
+    expect(() => afterStartupWith({ EXPO_PUBLIC_SUPABASE_URL: '' }, () => undefined)).toThrow(
+      'EXPO_PUBLIC_SUPABASE_URL',
+    );
+  });
+});
+
 describe('RootLayout — the app installs the API base from EXPO_PUBLIC_API_URL at startup', () => {
   it('sends requests to the base the build was given', () => {
     const base = afterStartupWith({ EXPO_PUBLIC_API_URL: 'https://altune.example.org' }, () =>
