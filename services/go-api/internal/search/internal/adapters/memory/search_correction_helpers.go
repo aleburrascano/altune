@@ -2,6 +2,7 @@ package memory
 
 import (
 	"altune/go-api/internal/search/internal/domain"
+	"altune/go-api/internal/shared/logging"
 	"bytes"
 	"context"
 	"log/slog"
@@ -30,9 +31,7 @@ func (p *QueryFakeProvider) SupportedKinds() map[domain.ResultKind]bool {
 func CaptureLogs(t TB) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	t.Cleanup(logging.Swap(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))))
 	return &buf
 }
 

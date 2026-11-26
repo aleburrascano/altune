@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/ids"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"flag"
 	"fmt"
@@ -31,7 +32,7 @@ func main() {
 	flag.Parse()
 
 	if !*verbose {
-		slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+		logging.Swap(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	}
 
 	if err := run(*goldenDir, *baselinePath, *updateBaseline); err != nil {

@@ -50,12 +50,12 @@ func (a *App) Run(ctx context.Context) error {
 
 func serve(ctx context.Context, httpServer *http.Server) error {
 	errCh := make(chan error, 1)
-	go func() {
+	background.Go(ctx, "app.server_panic", func() {
 		slog.InfoContext(ctx, "server listening", "addr", httpServer.Addr)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			errCh <- err
 		}
-	}()
+	})
 
 	select {
 	case err := <-errCh:

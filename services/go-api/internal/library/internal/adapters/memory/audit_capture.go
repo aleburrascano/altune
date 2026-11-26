@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"sync"
@@ -52,9 +53,7 @@ func (h *AuditCapture) Find(t TB, msg string) AuditRecord {
 func CaptureAuditLogs(t TB) *AuditCapture {
 	t.Helper()
 	h := &AuditCapture{}
-	prev := slog.Default()
-	slog.SetDefault(slog.New(h))
-	t.Cleanup(func() { slog.SetDefault(prev) })
+	t.Cleanup(logging.Swap(slog.New(h)))
 	return h
 }
 

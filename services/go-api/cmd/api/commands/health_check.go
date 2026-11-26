@@ -46,15 +46,15 @@ func healthCheck(ctx context.Context, cfg *config.Config, repo *library.Postgres
 
 	orphaned := orphans.Check(ctx, tracks, audioStore)
 	if mode != HealthCheckFix {
-		reportHealthCheck(totalChecked, len(orphaned), 0, false)
+		reportHealthCheck(ctx, totalChecked, len(orphaned), 0, false)
 		return nil
 	}
 	fixed := orphans.Fix(ctx, orphaned, repo)
-	reportHealthCheck(totalChecked, len(orphaned), fixed, true)
+	reportHealthCheck(ctx, totalChecked, len(orphaned), fixed, true)
 	return orphans.RepairOutcome(len(orphaned), fixed)
 }
 
-func reportHealthCheck(totalChecked, orphanedDB, fixed int, fix bool) {
+func reportHealthCheck(ctx context.Context, totalChecked, orphanedDB, fixed int, fix bool) {
 	printSummary("Health check complete:")
 	fmt.Printf("  Tracks checked:    %d\n", totalChecked)
 	fmt.Printf("  Orphaned DB rows:  %d\n", orphanedDB)
@@ -65,7 +65,7 @@ func reportHealthCheck(totalChecked, orphanedDB, fixed int, fix bool) {
 	}
 	fmt.Println()
 
-	slog.Info("health_check_completed",
+	slog.InfoContext(ctx, "health_check_completed",
 		"total_checked", totalChecked,
 		"orphaned_db", orphanedDB,
 		"fixed", fixed)

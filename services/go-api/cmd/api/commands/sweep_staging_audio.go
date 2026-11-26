@@ -41,10 +41,10 @@ func sweepAudioStore(ctx context.Context, cfg *config.Config, refs library.Audio
 	if err != nil {
 		return err
 	}
-	return reportSweep(tally.Deleted, tally.KeptReferenced, tally.KeptFresh, tally.Failed, execute)
+	return reportSweep(ctx, tally.Deleted, tally.KeptReferenced, tally.KeptFresh, tally.Failed, execute)
 }
 
-func reportSweep(deleted, keptReferenced, keptFresh, failed int, execute bool) error {
+func reportSweep(ctx context.Context, deleted, keptReferenced, keptFresh, failed int, execute bool) error {
 	printSummary("Sweep staging audio complete:")
 	fmt.Printf("  Deleted:         %d\n", deleted)
 	fmt.Printf("  Kept (in use):   %d\n", keptReferenced)
@@ -55,7 +55,7 @@ func reportSweep(deleted, keptReferenced, keptFresh, failed int, execute bool) e
 	}
 	fmt.Println()
 
-	slog.Info("sweep_staging_audio_completed",
+	slog.InfoContext(ctx, "sweep_staging_audio_completed",
 		"deleted", deleted, "kept_referenced", keptReferenced, "kept_fresh", keptFresh, "failed", failed)
 	if failed > 0 {
 		return fmt.Errorf("sweep-staging-audio: %d delete(s) failed", failed)

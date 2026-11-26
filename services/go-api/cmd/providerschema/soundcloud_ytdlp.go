@@ -1,11 +1,11 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/childprocess"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 )
@@ -29,12 +29,9 @@ func (soundCloud *soundCloudSession) ytdlpSearch(ctx context.Context, query stri
 }
 
 func execYtdlp(ctx context.Context, args []string) ([]byte, error) {
-	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
+	out, stderr, err := childprocess.Run(ctx, "yt-dlp", args...)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr.String()))
+		return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(stderr))
 	}
-	return out, nil
+	return []byte(out), nil
 }

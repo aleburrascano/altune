@@ -2,6 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/platform/monitoring/internal/shell/eventwatch"
+	"altune/go-api/internal/shared/background"
 	"altune/go-api/internal/shared/clock"
 	"altune/go-api/internal/shared/httpserver"
 	"altune/go-api/internal/shared/requestuser"
@@ -57,13 +58,13 @@ func streamSSE[T any](now clock.Func, newTicker clock.TickerFunc, w http.Respons
 
 func (h *Handler) untilShutdown(parent context.Context) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(parent)
-	go func() {
+	background.Go(ctx, "monitoring.sse_shutdown_panic", func() {
 		select {
 		case <-h.deps.Shutdown:
 			cancel()
 		case <-ctx.Done():
 		}
-	}()
+	})
 	return ctx, cancel
 }
 
