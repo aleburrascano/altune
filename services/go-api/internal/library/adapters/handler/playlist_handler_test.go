@@ -142,7 +142,6 @@ func TestHandleListPlaylistsServesOneWindow(t *testing.T) {
 		{name: "no limit serves the default page", query: "", wantItemsLen: 50},
 		{name: "limit and offset serve that window", query: "?limit=10&offset=55", wantItemsLen: 5},
 		{name: "an offset past the end serves nothing", query: "?offset=60", wantItemsLen: 0},
-		{name: "an unparseable limit falls back to the default page", query: "?limit=abc", wantItemsLen: 50},
 		{name: "a limit of zero falls back to the default page", query: "?limit=0", wantItemsLen: 50},
 	}
 
@@ -159,6 +158,22 @@ func TestHandleListPlaylistsServesOneWindow(t *testing.T) {
 			if len(body.Items) != tt.wantItemsLen {
 				t.Errorf("len(Items) = %d, want %d of %d seeded", len(body.Items), tt.wantItemsLen, seeded)
 			}
+		})
+	}
+}
+
+func TestHandleListPlaylistsRejectsAnUnparseableWindow(t *testing.T) {
+	for query, wantDetail := range map[string]string{
+		"?limit=abc":  "limit must be an integer",
+		"?offset=1.5": "offset must be an integer",
+	} {
+		t.Run(query, func(t *testing.T) {
+			router := playlistRoutes(seededPlaylistRepo(t, 3), library.NewInMemoryTrackRepo())
+
+			rec := request(t, router, http.MethodGet, "/playlists"+query, nil)
+
+			assertStatus(t, rec, http.StatusBadRequest)
+			assertProblem(t, rec, "catalog.validation_error", wantDetail)
 		})
 	}
 }
@@ -236,7 +251,7 @@ func TestHandleGetPlaylist(t *testing.T) {
 			setup: func(t *testing.T, plRepo *library.InMemoryPlaylistRepo, trRepo *library.InMemoryTrackRepo) string {
 				pl := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "Rock")
 				track := library.SeedTrack(t, plRepo.Tracks, library.FixtureUserId(), "Track", "Artist", "Album")
-				plRepo.SeedWithTracks(pl, []*library.Track{track})
+				plRepo.SeedWithTracks(t, pl, []*library.Track{track})
 				return pl.ID.UUID().String()
 			},
 			wantStatus: http.StatusOK,
@@ -771,7 +786,7 @@ func TestHandleGetPlaylist_EncodesAfterHugeDurationsSubmitted(t *testing.T) {
 	}
 	plRepo := library.NewInMemoryPlaylistRepo()
 	pl := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "Long")
-	plRepo.SeedWithTracks(pl, stored)
+	plRepo.SeedWithTracks(t, pl, stored)
 	playlistRouter := playlistRoutes(plRepo, trRepo)
 
 	rec := request(t, playlistRouter, http.MethodGet, "/playlists/"+pl.ID.UUID().String(), nil)
@@ -849,7 +864,7 @@ func TestPlaylistWrites_LeaveReadsAndRemovalsUnthrottled(t *testing.T) {
 func TestHandleListPlaylists_ReportsEachPlaylistsTrackCount(t *testing.T) {
 	plRepo := library.NewInMemoryPlaylistRepo()
 	pl := library.SeedPlaylist(t, plRepo, library.FixtureUserId(), "Rock")
-	plRepo.SeedWithTracks(pl, []*library.Track{
+	plRepo.SeedWithTracks(t, pl, []*library.Track{
 		library.SeedTrack(t, plRepo.Tracks, library.FixtureUserId(), "One", "Artist", "Album"),
 		library.SeedTrack(t, plRepo.Tracks, library.FixtureUserId(), "Two", "Artist", "Album"),
 	})
@@ -885,7 +900,7 @@ func TestHandleGetPlaylist_SumsTheTrackDurations(t *testing.T) {
 	two := library.SeedTrack(t, plRepo.Tracks, library.FixtureUserId(), "Two", "Artist", "Album")
 	two.DurationSeconds = &second
 	untimed := library.SeedTrack(t, plRepo.Tracks, library.FixtureUserId(), "Untimed", "Artist", "Album")
-	plRepo.SeedWithTracks(pl, []*library.Track{one, two, untimed})
+	plRepo.SeedWithTracks(t, pl, []*library.Track{one, two, untimed})
 	router := playlistRoutes(plRepo, library.NewInMemoryTrackRepo())
 
 	rec := request(t, router, http.MethodGet, "/playlists/"+pl.ID.UUID().String(), nil)

@@ -44,7 +44,7 @@ const (
 
 func corsHandler(s Settings) func(http.Handler) http.Handler {
 	headers := []string{
-		"Accept", "Authorization", "Content-Type", "Idempotency-Key",
+		"Accept", "Authorization", "Content-Type", httpserver.IdempotencyKeyHeader,
 		httpserver.CorrelationIDHeader, lastEventIDHeader,
 		telemetry.AppVersionHeader, telemetry.PlatformHeader,
 	}

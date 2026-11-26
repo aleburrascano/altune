@@ -486,7 +486,7 @@ func maxLengthQueue(t *testing.T, userId sharedids.UserId, trackIds []string, po
 		PositionMs:   positionMs,
 		RepeatMode:   playback.RepeatOff,
 		SourceId:     "library",
-	})
+	}, time.Now())
 	if err != nil {
 		t.Fatalf("NewQueueState: %v", err)
 	}

@@ -333,6 +333,8 @@ type SavedTrack struct {
 	CatalogMBID     string
 }
 
+const unreadableEvidence = "unreadable-evidence"
+
 func savedTrackOf(ledger *acquisitiontest.Ledger, id ids.TrackId) SavedTrack {
 	saved, ok := ledger.Track(id)
 	if !ok {
@@ -341,7 +343,11 @@ func savedTrackOf(ledger *acquisitiontest.Ledger, id ids.TrackId) SavedTrack {
 	var evidence struct {
 		ISRCSource string `json:"isrc_source"`
 	}
-	_ = json.Unmarshal(saved.Evidence, &evidence)
+	if len(saved.Evidence) > 0 {
+		if err := json.Unmarshal(saved.Evidence, &evidence); err != nil {
+			evidence.ISRCSource = unreadableEvidence
+		}
+	}
 	return SavedTrack{
 		ISRC:            derefOrZero(saved.ISRC),
 		ISRCSource:      evidence.ISRCSource,

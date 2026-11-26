@@ -261,6 +261,40 @@ func TestRingBuffer_EvictsRecordsPastRetention(t *testing.T) {
 	})
 }
 
+func TestSetup_RingBufferEvictsByTheInjectedClockNotTheWallClock(t *testing.T) {
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	now := time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC)
+	ring := logging.Setup("info", false, logging.WithClock(func() time.Time { return now }))
+
+	slog.Info("old")
+	now = now.Add(30*time.Minute + time.Nanosecond)
+	slog.Info("fresh")
+
+	snap := ring.Snapshot()
+	if len(snap) != 1 || snap[0].Message != "fresh" {
+		t.Fatalf("snapshot = %+v, want only fresh: old is a nanosecond past the window on the injected clock", snap)
+	}
+}
+
+func TestRingBufferClockIsRequired(t *testing.T) {
+	tests := map[string]func(){
+		"NewRingBuffer": func() { logging.NewRingBuffer(4, nil) },
+		"WithClock":     func() { logging.WithClock(nil) },
+	}
+	for name, build := range tests {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatal("a nil clock was accepted, want a panic at construction")
+				}
+			}()
+
+			build()
+		})
+	}
+}
+
 func TestRingBuffer_KeepsARecordExactlyAtTheRetentionEdge(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		logger, ring := newCaptureLogger(t)

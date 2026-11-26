@@ -36,7 +36,13 @@ func fixtureServer(t *testing.T, requests *[]recordedRequest) *httptest.Server {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
 		var body map[string]any
-		_ = json.Unmarshal(raw, &body)
+		if len(raw) > 0 {
+			if err := json.Unmarshal(raw, &body); err != nil {
+				t.Errorf("decode the request body %q: %v", raw, err)
+				http.Error(w, "bad request body", http.StatusBadRequest)
+				return
+			}
+		}
 		*requests = append(*requests, recordedRequest{path: r.URL.Path, body: body})
 		switch r.URL.Path {
 		case "/youtubei/v1/next":

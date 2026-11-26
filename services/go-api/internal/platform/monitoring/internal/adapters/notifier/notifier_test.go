@@ -46,7 +46,10 @@ func TestWebhookNotifier_PostsAlertJSON(t *testing.T) {
 	var method, contentType string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		method, contentType = r.Method, r.Header.Get("Content-Type")
-		_ = json.NewDecoder(r.Body).Decode(&got)
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Errorf("webhook body is not the alert JSON: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+		}
 	}))
 	defer srv.Close()
 

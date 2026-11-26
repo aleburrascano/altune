@@ -18,6 +18,8 @@ type (
 	TrackReadWriter       = ports.TrackReadWriter
 )
 
+var NoopAcquisitionScheduler = ports.NoopAcquisitionScheduler
+
 var (
 	ErrDBTransient                  = ports.ErrDBTransient
 	ErrPlaylistChangedDuringReorder = ports.ErrPlaylistChangedDuringReorder

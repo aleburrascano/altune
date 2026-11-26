@@ -7,7 +7,6 @@ import (
 	"altune/go-api/internal/shared/requestuser"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -195,7 +194,7 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 	}
 
 	input := trackservice.AddTrackInput{
-		IdempotencyKey:  idempotencyKey(r),
+		IdempotencyKey:  httpserver.IdempotencyKey(r),
 		Title:           req.Title,
 		Artist:          req.Artist,
 		Album:           album,
@@ -237,14 +236,6 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 	}
 
 	httpserver.WriteJSON(w, status, trackservice.TrackToDTO(result.Track))
-}
-
-func idempotencyKey(r *http.Request) *string {
-	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
-	if key == "" {
-		return nil
-	}
-	return &key
 }
 
 type TrackStatusResponse struct {

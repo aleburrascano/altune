@@ -7,11 +7,22 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
 
 var errTrailingData = errors.New("trailing data after JSON value")
+
+const IdempotencyKeyHeader = "Idempotency-Key"
+
+func IdempotencyKey(r *http.Request) *string {
+	key := strings.TrimSpace(r.Header.Get(IdempotencyKeyHeader))
+	if key == "" {
+		return nil
+	}
+	return &key
+}
 
 func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	return DecodeJSONWithCode(w, r, dst, apierror.CodeRequestInvalid)

@@ -154,7 +154,11 @@ func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit, offset := pageBounds(r)
+	limit, offset, err := pageBounds(r)
+	if err != nil {
+		httpserver.HandleServiceError(w, r, err)
+		return
+	}
 	playlists, err := h.lifecycle.List(r.Context(), userId, limit, offset)
 	if err != nil {
 		httpserver.HandleServiceError(w, r, err)

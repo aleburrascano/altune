@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/library"
 	"altune/go-api/internal/shared/downloadfailure"
 	"altune/go-api/internal/shared/events"
-	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/testdb"
 	"context"
 	"errors"
@@ -19,43 +18,30 @@ import (
 
 const (
 	addTrackScheduleBound = 5 * time.Second
-	libraryTrackCap       = 50_000
+	smallLibraryCap       = 2
 )
 
 func strptr(s string) *string { return &s }
 
-type fullLibraryRepo struct {
-	*library.InMemoryTrackRepo
-	fullFor     ids.UserId
-	askedAtMost []int
+func capInput(title string, key *string) library.AddTrackInput {
+	return library.AddTrackInput{Title: title, Artist: "Artist", Album: "Album", IdempotencyKey: key}
 }
 
-func newFullLibraryRepo(fullFor ids.UserId) *fullLibraryRepo {
-	return &fullLibraryRepo{InMemoryTrackRepo: library.NewInMemoryTrackRepo(), fullFor: fullFor}
-}
-
-func (r *fullLibraryRepo) CountForUser(ctx context.Context, userId ids.UserId, atMost int) (int, error) {
-	r.askedAtMost = append(r.askedAtMost, atMost)
-	if userId == r.fullFor {
-		return atMost, nil
-	}
-	return r.InMemoryTrackRepo.CountForUser(ctx, userId, atMost)
-}
-
-func (r *fullLibraryRepo) assertAskedForTheCap(t *testing.T) {
-	t.Helper()
-	if len(r.askedAtMost) != 1 || r.askedAtMost[0] != libraryTrackCap {
-		t.Errorf("CountForUser bounds = %v, want one count bounded at the %d-track cap", r.askedAtMost, libraryTrackCap)
-	}
+func newCappedService() (*library.AddTrackService, *library.InMemoryTrackRepo) {
+	repo := library.NewInMemoryTrackRepo(library.WithInMemoryLibraryCap(smallLibraryCap))
+	return library.NewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now), repo
 }
 
 func TestAddTrack_RejectsPastUserCap(t *testing.T) {
-	ctx := context.Background()
 	userId := library.FixtureUserId()
-	repo := newFullLibraryRepo(userId)
-	svc := library.NewAddTrackService(repo)
+	svc, repo := newCappedService()
+	for i := range smallLibraryCap {
+		if _, err := svc.Execute(context.Background(), userId, capInput(fmt.Sprintf("Track %d", i), nil)); err != nil {
+			t.Fatalf("save %d: %v", i, err)
+		}
+	}
 
-	out, err := svc.Execute(ctx, userId, library.AddTrackInput{Title: "One Too Many", Artist: "Artist", Album: "Album"})
+	out, err := svc.Execute(context.Background(), userId, capInput("One Too Many", nil))
 
 	if !errors.Is(err, library.ErrLibraryFull) {
 		t.Fatalf("error = %v, want ErrLibraryFull", err)
@@ -63,32 +49,56 @@ func TestAddTrack_RejectsPastUserCap(t *testing.T) {
 	if out != nil {
 		t.Fatalf("output = %+v, want nil", out)
 	}
-	if len(repo.Tracks) != 0 {
-		t.Fatalf("stored tracks = %d, want 0: the refused save must not insert", len(repo.Tracks))
+	if len(repo.Tracks) != smallLibraryCap {
+		t.Fatalf("stored tracks = %d, want %d: the refused save must not insert", len(repo.Tracks), smallLibraryCap)
 	}
-	repo.assertAskedForTheCap(t)
 }
 
 func TestAddTrack_CapCountsOnlyTheCallersTracks(t *testing.T) {
-	ctx := context.Background()
-	repo := newFullLibraryRepo(library.FixtureOtherUserId())
-	svc := library.NewAddTrackService(repo)
+	svc, _ := newCappedService()
+	for i := range smallLibraryCap {
+		if _, err := svc.Execute(context.Background(), library.FixtureOtherUserId(), capInput(fmt.Sprintf("Theirs %d", i), nil)); err != nil {
+			t.Fatalf("other owner save %d: %v", i, err)
+		}
+	}
 
-	out, err := svc.Execute(ctx, library.FixtureUserId(), library.AddTrackInput{Title: "Mine", Artist: "Artist", Album: "Album"})
+	out, err := svc.Execute(context.Background(), library.FixtureUserId(), capInput("Mine", nil))
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	if !out.Created {
 		t.Fatal("Created = false, want true: another owner's full library is not this caller's cap")
 	}
-	repo.assertAskedForTheCap(t)
+}
+
+func TestAddTrack_ReplayOfAKeyedSaveAtTheCapReturnsTheStoredTrack(t *testing.T) {
+	userId := library.FixtureUserId()
+	svc, repo := newCappedService()
+	first, err := svc.Execute(context.Background(), userId, capInput("Keyed", strptr("save-at-cap")))
+	if err != nil {
+		t.Fatalf("first save: %v", err)
+	}
+	if _, err := svc.Execute(context.Background(), userId, capInput("Filler", nil)); err != nil {
+		t.Fatalf("filler save: %v", err)
+	}
+
+	replay, err := svc.Execute(context.Background(), userId, capInput("Keyed", strptr("save-at-cap")))
+	if err != nil {
+		t.Fatalf("replay at the cap: %v, want the stored track", err)
+	}
+	if replay.Created || replay.Track.ID != first.Track.ID {
+		t.Fatalf("replay = created %v id %s, want created false id %s", replay.Created, replay.Track.ID, first.Track.ID)
+	}
+	if len(repo.Tracks) != smallLibraryCap {
+		t.Fatalf("stored tracks = %d, want %d", len(repo.Tracks), smallLibraryCap)
+	}
 }
 
 func TestAddTrackService_IdempotencyKeyReturnsExisting(t *testing.T) {
 	ctx := context.Background()
 	userId := library.FixtureUserId()
 	repo := library.NewInMemoryTrackRepo()
-	svc := library.NewAddTrackService(repo)
+	svc := library.NewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now)
 	key := "save-abc-123"
 
 	first, err := svc.Execute(ctx, userId, library.AddTrackInput{
@@ -121,7 +131,7 @@ func TestAddTrackService_IdempotencyKeyReturnsExisting(t *testing.T) {
 func TestAddTrackService_RejectsEmptyIdempotencyKey(t *testing.T) {
 	ctx := context.Background()
 	repo := library.NewInMemoryTrackRepo()
-	svc := library.NewAddTrackService(repo)
+	svc := library.NewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now)
 
 	_, err := svc.Execute(ctx, library.FixtureUserId(), library.AddTrackInput{
 		Title: "T", Artist: "A", Album: "Al", IdempotencyKey: strptr(""),
@@ -185,7 +195,7 @@ func TestAddTrackService_Execute(t *testing.T) {
 			if tt.setup != nil {
 				tt.setup(repo)
 			}
-			svc := library.NewAddTrackService(repo)
+			svc := library.NewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now)
 
 			out, err := svc.Execute(ctx, userId, tt.input)
 
@@ -217,8 +227,7 @@ func TestAddTrackService_Execute(t *testing.T) {
 func addWithRecordedEvents(t *testing.T, input library.AddTrackInput) (*library.Track, map[string]any) {
 	t.Helper()
 	pub := &library.InMemoryRecordingPublisher{}
-	svc := library.NewAddTrackService(library.NewInMemoryTrackRepo(),
-		library.WithAcquisitionScheduler(&library.InMemoryScheduler{}), library.WithAddTrackEvents(pub))
+	svc := library.NewAddTrackService(library.NewInMemoryTrackRepo(), pub, &library.InMemoryScheduler{}, time.Now)
 	out, err := svc.Execute(context.Background(), library.FixtureUserId(), input)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -265,8 +274,7 @@ func TestTrackAddedPayload_SingleCarriesTheTitleAsAlbum(t *testing.T) {
 
 func TestTrackAddedPayload_MatchesRESTDTOByteForByte(t *testing.T) {
 	pub := &library.InMemoryRecordingPublisher{}
-	svc := library.NewAddTrackService(library.NewInMemoryTrackRepo(),
-		library.WithAcquisitionScheduler(&library.InMemoryScheduler{}), library.WithAddTrackEvents(pub))
+	svc := library.NewAddTrackService(library.NewInMemoryTrackRepo(), pub, &library.InMemoryScheduler{}, time.Now)
 
 	status, restBody := postTrack(t, svc, library.FixtureUserId(), `{
 		"title": "Midnight City", "artist": "M83", "album": "Hurry Up, We're Dreaming",
@@ -297,7 +305,7 @@ func TestAddTrackService_RefusedScheduleFailsTrack(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
 	sched := &library.InMemoryScheduler{Err: errors.New("acquisition queue is full")}
 	pub := &library.InMemoryRecordingPublisher{}
-	svc := library.NewAddTrackService(repo, library.WithAcquisitionScheduler(sched), library.WithAddTrackEvents(pub))
+	svc := library.NewAddTrackService(repo, pub, sched, time.Now)
 
 	out, err := svc.Execute(ctx, library.FixtureUserId(), library.AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album"})
 	if err != nil {
@@ -328,7 +336,7 @@ func TestAddTrackService_RefusedScheduleUnpersistedStaysPending(t *testing.T) {
 	repo.ErrOnUpdate = errors.New("db down")
 	pub := &library.InMemoryRecordingPublisher{}
 	sched := &library.InMemoryScheduler{Err: errors.New("acquisition queue is full")}
-	svc := library.NewAddTrackService(repo, library.WithAcquisitionScheduler(sched), library.WithAddTrackEvents(pub))
+	svc := library.NewAddTrackService(repo, pub, sched, time.Now)
 
 	out, err := svc.Execute(ctx, library.FixtureUserId(), library.AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album"})
 	if err != nil {
@@ -346,7 +354,7 @@ func TestAddTrackService_AcceptedScheduleLeavesTrackPending(t *testing.T) {
 	ctx := context.Background()
 	repo := library.NewInMemoryTrackRepo()
 	pub := &library.InMemoryRecordingPublisher{}
-	svc := library.NewAddTrackService(repo, library.WithAcquisitionScheduler(&library.InMemoryScheduler{}), library.WithAddTrackEvents(pub))
+	svc := library.NewAddTrackService(repo, pub, &library.InMemoryScheduler{}, time.Now)
 
 	out, err := svc.Execute(ctx, library.FixtureUserId(), library.AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album"})
 	if err != nil {
@@ -363,7 +371,7 @@ func TestAddTrackService_AcceptedScheduleLeavesTrackPending(t *testing.T) {
 func TestAddTrackService_ForwardsSourceURLToScheduler(t *testing.T) {
 	ctx := context.Background()
 	sched := &library.InMemoryScheduler{}
-	svc := library.NewAddTrackService(library.NewInMemoryTrackRepo(), library.WithAcquisitionScheduler(sched))
+	svc := library.NewAddTrackService(library.NewInMemoryTrackRepo(), events.NoopPublisher(), sched, time.Now)
 
 	scURL := "https://soundcloud.com/liltecca/fell-in-love"
 	if _, err := svc.Execute(ctx, library.FixtureUserId(), library.AddTrackInput{
@@ -382,7 +390,7 @@ func TestAddTrackService_ForwardsSourceURLToScheduler(t *testing.T) {
 func TestAddTrackService_NoSourceURL_ForwardsEmpty(t *testing.T) {
 	ctx := context.Background()
 	sched := &library.InMemoryScheduler{}
-	svc := library.NewAddTrackService(library.NewInMemoryTrackRepo(), library.WithAcquisitionScheduler(sched))
+	svc := library.NewAddTrackService(library.NewInMemoryTrackRepo(), events.NoopPublisher(), sched, time.Now)
 
 	if _, err := svc.Execute(ctx, library.FixtureUserId(), library.AddTrackInput{Title: "Some Track", Artist: "Some Artist"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -396,7 +404,7 @@ func TestAddTrackService_NoSourceURL_ForwardsEmpty(t *testing.T) {
 func assertRejectedBeforePersistence(t *testing.T, input library.AddTrackInput, wantErr string) {
 	t.Helper()
 	repo := library.NewInMemoryTrackRepo()
-	out, err := library.NewAddTrackService(repo).Execute(context.Background(), library.FixtureUserId(), input)
+	out, err := library.NewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now).Execute(context.Background(), library.FixtureUserId(), input)
 
 	if err == nil {
 		t.Fatalf("expected a validation error, got nil (out=%+v)", out)
@@ -468,7 +476,7 @@ func TestAddTrackService_YearCeilingSitsOneYearPastTheClock(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := library.NewInMemoryTrackRepo()
-			svc := library.NewAddTrackService(repo, library.WithAddTrackClock(func() time.Time { return pinned }))
+			svc := library.NewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, func() time.Time { return pinned })
 			input := library.AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album", Year: &tt.year}
 
 			_, err := svc.Execute(ctx, userId, input)
@@ -485,16 +493,28 @@ func TestAddTrackService_YearCeilingSitsOneYearPastTheClock(t *testing.T) {
 	}
 }
 
-func TestAddTrackService_ANilClockKeepsTheWallClock(t *testing.T) {
+func TestNewAddTrackService_PanicsWithoutACollaborator(t *testing.T) {
 	repo := library.NewInMemoryTrackRepo()
-	nextYear := time.Now().UTC().Year() + 1
-	svc := library.NewAddTrackService(repo, library.WithAddTrackClock(nil))
-
-	_, err := svc.Execute(context.Background(), library.FixtureUserId(), library.AddTrackInput{
-		Title: "Track", Artist: "Artist", Album: "Album", Year: &nextYear,
-	})
-	if err != nil || len(repo.Tracks) != 1 {
-		t.Fatalf("Execute = %v, stored %d; want next year accepted against the wall clock", err, len(repo.Tracks))
+	pub := events.NoopPublisher()
+	sched := &library.InMemoryScheduler{}
+	tests := []struct {
+		name string
+		make func()
+	}{
+		{"repository", func() { library.NewAddTrackService(nil, pub, sched, time.Now) }},
+		{"events", func() { library.NewAddTrackService(repo, nil, sched, time.Now) }},
+		{"scheduler", func() { library.NewAddTrackService(repo, pub, nil, time.Now) }},
+		{"clock", func() { library.NewAddTrackService(repo, pub, sched, nil) }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatalf("construction without %s did not panic", tt.name)
+				}
+			}()
+			tt.make()
+		})
 	}
 }
 
@@ -540,7 +560,7 @@ func TestAddTrackService_AcceptsValidFreeFormFields(t *testing.T) {
 	isrc := "USUM71703861"
 	sourceURL := "https://example.com/song.mp3"
 
-	out, err := library.NewAddTrackService(library.NewInMemoryTrackRepo()).Execute(context.Background(), library.FixtureUserId(), library.AddTrackInput{
+	out, err := library.NewAddTrackService(library.NewInMemoryTrackRepo(), events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now).Execute(context.Background(), library.FixtureUserId(), library.AddTrackInput{
 		Title:       "Track",
 		Artist:      "Artist",
 		Album:       "Album",
@@ -566,7 +586,7 @@ func TestAddTrackService_AcceptsValidRanges(t *testing.T) {
 	trackNumber := 7
 	year := time.Now().UTC().Year()
 
-	out, err := library.NewAddTrackService(library.NewInMemoryTrackRepo()).Execute(context.Background(), library.FixtureUserId(), library.AddTrackInput{
+	out, err := library.NewAddTrackService(library.NewInMemoryTrackRepo(), events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now).Execute(context.Background(), library.FixtureUserId(), library.AddTrackInput{
 		Title:           "Track",
 		Artist:          "Artist",
 		Album:           "Album",
@@ -590,7 +610,7 @@ func TestAddTrackService_AcceptsValidRanges(t *testing.T) {
 
 func TestAddTrackService_ScheduleBoundedByTimeout(t *testing.T) {
 	sched := &library.InMemoryStuckScheduler{}
-	svc := library.NewAddTrackService(library.NewInMemoryTrackRepo(), library.WithAcquisitionScheduler(sched))
+	svc := library.NewAddTrackService(library.NewInMemoryTrackRepo(), events.NoopPublisher(), sched, time.Now)
 
 	start := time.Now()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -602,7 +622,7 @@ func TestAddTrackService_ScheduleBoundedByTimeout(t *testing.T) {
 }
 
 func TestAddTrackService_ScheduleTimeoutFailsTrack(t *testing.T) {
-	svc := library.NewAddTrackService(library.NewInMemoryTrackRepo(), library.WithAcquisitionScheduler(&library.InMemoryStuckScheduler{}))
+	svc := library.NewAddTrackService(library.NewInMemoryTrackRepo(), events.NoopPublisher(), &library.InMemoryStuckScheduler{}, time.Now)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
 
@@ -623,7 +643,7 @@ func TestAddTrackService_RefusedScheduleWithFailedPersistLeavesTrackClaimable(t 
 	repo := library.NewInMemoryTrackRepo()
 	repo.ErrOnUpdate = errors.New("db down")
 	sched := &library.InMemoryScheduler{Err: errors.New("acquisition queue is full")}
-	svc := library.NewAddTrackService(repo, library.WithAcquisitionScheduler(sched))
+	svc := library.NewAddTrackService(repo, events.NoopPublisher(), sched, time.Now)
 
 	out, err := svc.Execute(ctx, library.FixtureUserId(), library.AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album"})
 	if err != nil {
@@ -642,7 +662,7 @@ func TestAddTrackService_RefusedScheduleWithFailedPersistLeavesTrackClaimable(t 
 func TestAddTrackService_Execute_KeepsTheClientDurationAsCatalogLength(t *testing.T) {
 	duration := 235.0
 
-	out, err := library.NewAddTrackService(library.NewInMemoryTrackRepo()).Execute(context.Background(), library.FixtureUserId(), library.AddTrackInput{
+	out, err := library.NewAddTrackService(library.NewInMemoryTrackRepo(), events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now).Execute(context.Background(), library.FixtureUserId(), library.AddTrackInput{
 		Title: "Track", Artist: "Artist", Album: "Album", DurationSeconds: &duration,
 	})
 	if err != nil {
@@ -670,7 +690,7 @@ func TestAddTrackService_PinsTheCatalogIdentity(t *testing.T) {
 		},
 	}
 
-	out, err := library.NewAddTrackService(library.NewInMemoryTrackRepo()).Execute(context.Background(), library.FixtureUserId(), input)
+	out, err := library.NewAddTrackService(library.NewInMemoryTrackRepo(), events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now).Execute(context.Background(), library.FixtureUserId(), input)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -711,7 +731,7 @@ func TestAddTrackService_RejectsInvalidCatalogIdentity(t *testing.T) {
 			input := library.AddTrackInput{Title: "T", Artist: "A", Album: "B"}
 			tt.mutate(&input)
 
-			out, err := library.NewAddTrackService(repo).Execute(context.Background(), library.FixtureUserId(), input)
+			out, err := library.NewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now).Execute(context.Background(), library.FixtureUserId(), input)
 
 			testdb.AssertValidationError(t, err)
 			if out != nil || len(repo.Tracks) != 0 {
@@ -731,7 +751,7 @@ func TestAddTrackService_KeepsThePickedSoundCloudURLOnItsCatalogSource(t *testin
 		SourceURL:      &pick,
 	}
 
-	out, err := library.NewAddTrackService(repo).Execute(context.Background(), userId, input)
+	out, err := library.NewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now).Execute(context.Background(), userId, input)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -758,7 +778,7 @@ func TestAddTrackService_FullCatalogSourcesWithPickedSoundCloudURLStillAdds(t *t
 	}
 	input := library.AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album", CatalogSources: sources, SourceURL: &pick}
 
-	out, err := library.NewAddTrackService(repo).Execute(context.Background(), userId, input)
+	out, err := library.NewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now).Execute(context.Background(), userId, input)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}

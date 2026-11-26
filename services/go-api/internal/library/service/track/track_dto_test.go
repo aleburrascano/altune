@@ -2,6 +2,7 @@ package track_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
 	"context"
@@ -10,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func trackRoutes(addTrack *library.AddTrackService, repo *library.InMemoryTrackRepo) http.Handler {
@@ -36,7 +38,7 @@ func postTrack(t *testing.T, addTrack *library.AddTrackService, userId ids.UserI
 
 func listTracksBody(t *testing.T, repo *library.InMemoryTrackRepo, userId ids.UserId) string {
 	t.Helper()
-	status, body := serveAs(trackRoutes(library.NewAddTrackService(repo), repo), userId, http.MethodGet, "")
+	status, body := serveAs(trackRoutes(library.NewAddTrackService(repo, events.NoopPublisher(), &library.InMemoryScheduler{}, time.Now), repo), userId, http.MethodGet, "")
 	if status != http.StatusOK {
 		t.Fatalf("GET /tracks status = %d, body %s", status, body)
 	}

@@ -38,7 +38,11 @@ func (h *FeaturedArtistHandler) handleBackfillFeatured(w http.ResponseWriter, r 
 	if !ok {
 		return
 	}
-	_, offset := pageBounds(r)
+	_, offset, err := pageBounds(r)
+	if err != nil {
+		httpserver.HandleServiceError(w, r, err)
+		return
+	}
 	result, err := h.backfillFeatured.Execute(r.Context(), userId, offset)
 	if err != nil {
 		httpserver.HandleServiceError(w, r, withBackfillProgress(err, result))

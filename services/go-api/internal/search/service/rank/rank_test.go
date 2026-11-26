@@ -380,6 +380,8 @@ func TestRankPipeline_NoKindFavoritism(t *testing.T) {
 			albumPos = i
 		case domain.ResultKindTrack:
 			trackPos = i
+		case domain.ResultKindUnknown, domain.ResultKindArtist, domain.ResultKindPlaylist:
+			t.Fatalf("unexpected result kind %v in the ranked output", r.Kind)
 		}
 	}
 	if albumPos == -1 || trackPos == -1 {

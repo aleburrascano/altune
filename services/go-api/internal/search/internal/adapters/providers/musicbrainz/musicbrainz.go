@@ -115,6 +115,7 @@ func (a *MusicBrainzAdapter) searchKind(ctx context.Context, query string, kind 
 		for _, rg := range body.ReleaseGroups {
 			results = append(results, mapMBReleaseGroup(rg))
 		}
+	case domain.ResultKindUnknown, domain.ResultKindPlaylist:
 	}
 	return results, nil
 }

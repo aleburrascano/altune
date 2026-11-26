@@ -20,32 +20,17 @@ type QueueHandler struct {
 	limiter func(http.Handler) http.Handler
 }
 
-type queueHandlerConfig struct {
-	rateLimit        QueueSaveLimit
-	now              func() time.Time
-	rateLimitMetrics ports.RateLimitMetrics
-}
-
-type QueueHandlerOption func(*queueHandlerConfig)
-
-func WithQueueSaveLimit(limit QueueSaveLimit) QueueHandlerOption {
-	return func(c *queueHandlerConfig) { c.rateLimit = limit }
-}
-
-func WithQueueStateClock(now func() time.Time) QueueHandlerOption {
-	return func(c *queueHandlerConfig) { c.now = now }
-}
-
-func NewQueueHandler(svc *queue.Service, opts ...QueueHandlerOption) *QueueHandler {
-	cfg := queueHandlerConfig{
-		rateLimit:        DefaultQueueStateRateLimit,
-		now:              time.Now,
-		rateLimitMetrics: ports.NoopRateLimitMetrics(),
+func NewQueueHandler(svc *queue.Service, limit QueueSaveLimit, now func() time.Time, metrics ports.RateLimitMetrics) *QueueHandler {
+	if svc == nil {
+		panic("handler: NewQueueHandler requires a queue service")
 	}
-	for _, opt := range opts {
-		opt(&cfg)
+	if now == nil {
+		panic("handler: NewQueueHandler requires a clock")
 	}
-	return &QueueHandler{svc: svc, limiter: newUserRateLimiter(cfg.rateLimit, cfg.now, cfg.rateLimitMetrics)}
+	if metrics == nil {
+		panic("handler: NewQueueHandler requires rate limit metrics")
+	}
+	return &QueueHandler{svc: svc, limiter: newUserRateLimiter(limit, now, metrics)}
 }
 
 func (h *QueueHandler) Routes() chi.Router {

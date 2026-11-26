@@ -3,11 +3,12 @@ package track
 import (
 	"altune/go-api/internal/library/domain"
 	"altune/go-api/internal/library/internal/core/ports"
-	apierror "altune/go-api/internal/shared/apierror"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 )
@@ -17,10 +18,6 @@ const minPlausibleYear = 1860
 const maxTrackNumber = 2147483647
 
 const MaxFeaturedArtistsPerTrack = 100
-
-const MaxTracksPerUser = 50_000
-
-var ErrLibraryFull = apierror.NewError(apierror.CodeCatalogLibraryFull, "library is full")
 
 type AddTrackInput struct {
 	Title           string
@@ -53,48 +50,22 @@ type AddTrackService struct {
 	now       func() time.Time
 }
 
-func NewAddTrackService(trackRepo ports.TrackAddUpdater, opts ...func(*AddTrackService)) *AddTrackService {
-	s := &AddTrackService{
-		trackRepo: trackRepo,
-		events:    events.NoopPublisher(),
-		scheduler: ports.NoopAcquisitionScheduler(),
-		now:       time.Now,
+func NewAddTrackService(trackRepo ports.TrackAddUpdater, publisher events.Publisher, scheduler ports.AcquisitionScheduler, now func() time.Time) *AddTrackService {
+	switch {
+	case trackRepo == nil:
+		panic("track: NewAddTrackService requires a track repository")
+	case publisher == nil:
+		panic("track: NewAddTrackService requires an events publisher")
+	case scheduler == nil:
+		panic("track: NewAddTrackService requires an acquisition scheduler")
+	case now == nil:
+		panic("track: NewAddTrackService requires a clock")
 	}
-	for _, opt := range opts {
-		opt(s)
-	}
-	return s
-}
-
-func WithAddTrackClock(now func() time.Time) func(*AddTrackService) {
-	return func(s *AddTrackService) {
-		if now != nil {
-			s.now = now
-		}
-	}
-}
-
-func WithAddTrackEvents(pub events.Publisher) func(*AddTrackService) {
-	return func(s *AddTrackService) {
-		if pub != nil {
-			s.events = pub
-		}
-	}
-}
-
-func WithAcquisitionScheduler(scheduler ports.AcquisitionScheduler) func(*AddTrackService) {
-	return func(s *AddTrackService) {
-		if scheduler != nil {
-			s.scheduler = scheduler
-		}
-	}
+	return &AddTrackService{trackRepo: trackRepo, events: publisher, scheduler: scheduler, now: now}
 }
 
 func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input AddTrackInput) (*AddTrackOutput, error) {
 	if err := validateAddTrackInput(input, s.now()); err != nil {
-		return nil, err
-	}
-	if err := s.requireLibrarySpace(ctx, userId); err != nil {
 		return nil, err
 	}
 	track, err := domain.NewTrack(userId, input.Title, input.Artist, input.Album)
@@ -126,6 +97,10 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 
 	stored, created, err := s.trackRepo.Add(ctx, track)
 	if err != nil {
+		if errors.Is(err, domain.ErrLibraryFull) {
+			slog.WarnContext(ctx, "catalog.library_full", "user_id", userId.String(), "cap", domain.MaxTracksPerUser)
+			return nil, err
+		}
 		return nil, domain.WrapRepoError(ctx, "add track", err)
 	}
 	if stored != nil {
@@ -137,7 +112,11 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 			"track_id", track.ID.String(),
 			"user_id", userId.String(),
 		)
-		s.events.Publish(ctx, userId, events.TypeTrackAddedToLibrary, trackAddedPayload(track))
+		if payload, encodeErr := trackAddedPayload(track); encodeErr != nil {
+			slog.WarnContext(ctx, "catalog.track_added_event_dropped", "track_id", track.ID.String(), "error", encodeErr)
+		} else {
+			s.events.Publish(ctx, userId, events.TypeTrackAddedToLibrary, payload)
+		}
 		sourceURL := ""
 		if input.SourceURL != nil {
 			sourceURL = *input.SourceURL
@@ -146,18 +125,6 @@ func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input 
 	}
 
 	return &AddTrackOutput{Track: track, Created: created}, nil
-}
-
-func (s *AddTrackService) requireLibrarySpace(ctx context.Context, userId ids.UserId) error {
-	held, err := s.trackRepo.CountForUser(ctx, userId, MaxTracksPerUser)
-	if err != nil {
-		return domain.WrapRepoError(ctx, "count tracks", err)
-	}
-	if held >= MaxTracksPerUser {
-		slog.WarnContext(ctx, "catalog.library_full", "user_id", userId.String(), "cap", MaxTracksPerUser)
-		return ErrLibraryFull
-	}
-	return nil
 }
 
 const ScheduleTimeout = 5 * time.Second
@@ -279,11 +246,16 @@ func plausibleYear(year int, now time.Time) bool {
 	return year >= minPlausibleYear && year <= now.UTC().Year()+1
 }
 
-func trackAddedPayload(t *domain.Track) map[string]any {
+func trackAddedPayload(t *domain.Track) (map[string]any, error) {
 	dto := TrackToDTO(t)
-	raw, _ := json.Marshal(dto)
+	raw, err := json.Marshal(dto)
+	if err != nil {
+		return nil, fmt.Errorf("encode track %s: %w", dto.ID, err)
+	}
 	payload := map[string]any{}
-	_ = json.Unmarshal(raw, &payload)
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, fmt.Errorf("decode track %s payload: %w", dto.ID, err)
+	}
 	payload["track_id"] = dto.ID
-	return payload
+	return payload, nil
 }

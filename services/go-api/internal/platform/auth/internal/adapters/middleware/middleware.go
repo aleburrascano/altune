@@ -66,6 +66,7 @@ func middleware(verifier ports.TokenVerifier, throttle *failureThrottle, metrics
 				logging.KeyPath, r.URL.Path,
 			)
 
+			httpserver.RecordRequestUser(r.Context(), verified.UserID.String())
 			next.ServeHTTP(w, r.WithContext(contextFor(r.Context(), verified)))
 		})
 	}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestNewQueueState_Validation(t *testing.T) {
@@ -30,7 +31,7 @@ func TestNewQueueState_Validation(t *testing.T) {
 				TrackIds:   tt.trackIds,
 				CurrentIdx: tt.currentIdx,
 				PositionMs: tt.positionMs,
-			})
+			}, time.Now())
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got nil")
@@ -48,7 +49,7 @@ func TestNewQueueState_Validation(t *testing.T) {
 }
 
 func TestResume_WithNothingStoredIsAnEmptyQueue(t *testing.T) {
-	state, err := playback.NewQueueService(&storeSpy{}, nil).Resume(context.Background(), testUser())
+	state, err := playback.NewQueueService(&storeSpy{}, nil, time.Now).Resume(context.Background(), testUser())
 	if err != nil {
 		t.Fatalf("Resume: %v", err)
 	}
@@ -91,7 +92,7 @@ func TestQueueState_CurrentTrackId(t *testing.T) {
 }
 
 func TestQueueState_CurrentTrackId_ConstructedEmptyQueueHasNone(t *testing.T) {
-	state, err := playback.NewQueueState(playback.QueueStateInput{UserId: testUser(), CurrentIdx: 5})
+	state, err := playback.NewQueueState(playback.QueueStateInput{UserId: testUser(), CurrentIdx: 5}, time.Now())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -127,7 +128,7 @@ func TestNewQueueState_BoundsQueueLength(t *testing.T) {
 				UserId:       testUser(),
 				TrackIds:     tt.trackIds,
 				NaturalOrder: tt.naturalOrder,
-			})
+			}, time.Now())
 			if !tt.wantErr {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
@@ -164,7 +165,7 @@ func TestNewQueueState_BoundsStringLength(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := playback.NewQueueState(tt.input)
+			_, err := playback.NewQueueState(tt.input, time.Now())
 			if err == nil {
 				t.Fatal("expected oversized queue string to be rejected")
 			}
@@ -178,7 +179,7 @@ func TestNewQueueState_AcceptsStringAtMaxLength(t *testing.T) {
 	_, err := playback.NewQueueState(playback.QueueStateInput{
 		UserId:   testUser(),
 		SourceId: atLimit,
-	})
+	}, time.Now())
 	if err != nil {
 		t.Fatalf("string at max length should be accepted: %v", err)
 	}
@@ -205,7 +206,7 @@ func TestNewQueueState_RejectsNulBytes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := playback.NewQueueState(tt.input)
+			_, err := playback.NewQueueState(tt.input, time.Now())
 			if err == nil {
 				t.Fatal("expected NUL byte in string element to be rejected")
 			}
@@ -269,7 +270,7 @@ func TestQueueInvariants_ErrorNamesTheOffendingField(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			in := tt.input
 			in.UserId = testUser()
-			_, constructErr := playback.NewQueueState(in)
+			_, constructErr := playback.NewQueueState(in, time.Now())
 			validateErr := stateFromInput(in).Validate()
 
 			for _, site := range []struct {
@@ -295,7 +296,7 @@ func TestNewQueueState_RejectsEmptyCurrentTrackId(t *testing.T) {
 		UserId:     testUser(),
 		TrackIds:   []string{"a", ""},
 		CurrentIdx: 1,
-	})
+	}, time.Now())
 	if err == nil {
 		t.Fatal("expected an empty current-track id to be rejected")
 	}
@@ -315,7 +316,7 @@ func TestNewQueueState_AcceptsRealCurrentTrackId(t *testing.T) {
 		UserId:     testUser(),
 		TrackIds:   []string{canonicalTrackA, canonicalTrackB},
 		CurrentIdx: 1,
-	})
+	}, time.Now())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -396,13 +397,13 @@ func assertOneCodePerCause(t *testing.T, codeOfCause map[string]string) {
 func rejectedState(in playback.QueueStateInput) func() error {
 	return func() error {
 		in.UserId = testUser()
-		_, err := playback.NewQueueState(in)
+		_, err := playback.NewQueueState(in, time.Now())
 		return err
 	}
 }
 
 func TestQueueStateValidation_IsAnInvalidInputWithItsOwnCode(t *testing.T) {
-	_, err := playback.NewQueueState(playback.QueueStateInput{UserId: testUser(), TrackIds: []string{"a"}, PositionMs: -1})
+	_, err := playback.NewQueueState(playback.QueueStateInput{UserId: testUser(), TrackIds: []string{"a"}, PositionMs: -1}, time.Now())
 
 	if got := validationCode(t, err); got != "playback.position_ms_negative" {
 		t.Fatalf("code = %q, want playback.position_ms_negative", got)
@@ -415,7 +416,7 @@ func TestNewQueueState_StoresTrackIdsInCanonicalForm(t *testing.T) {
 		TrackIds:     []string{"3F2504E0-4F89-11D3-9A0C-0305E82C3301", "{6ba7b810-9dad-11d1-80b4-00c04fd430c8}"},
 		NaturalOrder: []string{"urn:uuid:6ba7b810-9dad-11d1-80b4-00c04fd430c8", "3f2504e04f8911d39a0c0305e82c3301"},
 		Shuffled:     true,
-	})
+	}, time.Now())
 	if err != nil {
 		t.Fatalf("NewQueueState: %v", err)
 	}
@@ -477,7 +478,7 @@ func TestNewQueueState_RejectsGarbageTrackIds(t *testing.T) {
 }
 
 func TestNewQueueState_UnshuffledQueueMayOmitNaturalOrder(t *testing.T) {
-	state, err := playback.NewQueueState(playback.QueueStateInput{UserId: testUser(), TrackIds: []string{canonicalTrackA, canonicalTrackB}})
+	state, err := playback.NewQueueState(playback.QueueStateInput{UserId: testUser(), TrackIds: []string{canonicalTrackA, canonicalTrackB}}, time.Now())
 	if err != nil {
 		t.Fatalf("an unshuffled queue with no natural order must still save: %v", err)
 	}

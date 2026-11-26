@@ -1,6 +1,7 @@
 package audiofiles
 
 import (
+	"altune/go-api/internal/library/domain"
 	"altune/go-api/internal/library/internal/core/ports"
 	"context"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -21,6 +23,7 @@ var (
 type FilesystemAudioStore struct {
 	baseDir   string
 	opTimeout time.Duration
+	gate      *fsGate
 }
 
 func NewFilesystemAudioStore(baseDir string) *FilesystemAudioStore {
@@ -31,7 +34,7 @@ func newFilesystemAudioStore(baseDir string, opTimeout time.Duration) *Filesyste
 	if opTimeout <= 0 {
 		opTimeout = storageOpTimeout
 	}
-	return &FilesystemAudioStore{baseDir: baseDir, opTimeout: opTimeout}
+	return &FilesystemAudioStore{baseDir: baseDir, opTimeout: opTimeout, gate: &fsGate{}}
 }
 
 func (s *FilesystemAudioStore) Exists(ctx context.Context, audioRef string) (bool, error) {
@@ -42,7 +45,7 @@ func (s *FilesystemAudioStore) Exists(ctx context.Context, audioRef string) (boo
 	ctx, cancel := context.WithTimeout(ctx, s.opTimeout)
 	defer cancel()
 
-	return boundedFSCall(ctx, "exists", func() (bool, error) {
+	return boundedFSCall(ctx, s.gate, "exists", func() (bool, error) {
 		_, err := os.Stat(path)
 		if os.IsNotExist(err) {
 			return false, nil
@@ -60,7 +63,7 @@ func (s *FilesystemAudioStore) Store(ctx context.Context, sourcePath, audioRef s
 		return err
 	}
 
-	_, err = boundedFSCall(ctx, "store", func() (struct{}, error) {
+	_, err = boundedFSCall(ctx, s.gate, "store", func() (struct{}, error) {
 		return struct{}{}, moveIntoPlace(ctx, sourcePath, destPath)
 	}, nil)
 	return err
@@ -126,7 +129,7 @@ func (s *FilesystemAudioStore) Stream(ctx context.Context, audioRef string) (por
 	ctx, cancel := context.WithTimeout(ctx, s.opTimeout)
 	defer cancel()
 
-	opened, err := boundedFSCall(ctx, "stream open", func() (openedAudio, error) {
+	opened, err := boundedFSCall(ctx, s.gate, "stream open", func() (openedAudio, error) {
 		return openAudio(path)
 	}, func(late openedAudio) { closeLateAudio(ctx, late) })
 	if err != nil {
@@ -165,7 +168,7 @@ func (s *FilesystemAudioStore) Delete(ctx context.Context, audioRef string) erro
 	ctx, cancel := context.WithTimeout(ctx, s.opTimeout)
 	defer cancel()
 
-	_, err = boundedFSCall(ctx, "delete", func() (struct{}, error) {
+	_, err = boundedFSCall(ctx, s.gate, "delete", func() (struct{}, error) {
 		err := os.Remove(path)
 		if os.IsNotExist(err) {
 			return struct{}{}, nil
@@ -186,7 +189,7 @@ func (s *FilesystemAudioStore) ListWithAge(ctx context.Context, prefix string) (
 	ctx, cancel := context.WithTimeout(ctx, s.opTimeout)
 	defer cancel()
 
-	objects, err := boundedFSCall(ctx, "list", func() ([]ports.ObjectAge, error) {
+	objects, err := boundedFSCall(ctx, s.gate, "list", func() ([]ports.ObjectAge, error) {
 		return walkObjectAges(ctx, s.baseDir, root)
 	}, nil)
 	if err != nil {
@@ -251,14 +254,35 @@ type fsCallResult[T any] struct {
 	err   error
 }
 
-func boundedFSCall[T any](ctx context.Context, op string, call func() (T, error), discard func(T)) (T, error) {
+const MaxInFlightFilesystemCalls = 64
+
+type fsGate struct {
+	inFlight atomic.Int64
+}
+
+func (g *fsGate) enter() bool {
+	if g.inFlight.Add(1) > MaxInFlightFilesystemCalls {
+		g.inFlight.Add(-1)
+		return false
+	}
+	return true
+}
+
+func (g *fsGate) leave() { g.inFlight.Add(-1) }
+
+func boundedFSCall[T any](ctx context.Context, gate *fsGate, op string, call func() (T, error), discard func(T)) (T, error) {
 	var zero T
 	if err := ctx.Err(); err != nil {
 		return zero, fmt.Errorf("filesystem %s: %w", op, err)
 	}
+	if !gate.enter() {
+		slog.WarnContext(ctx, "catalog.storage_stalled", "op", op, "in_flight", MaxInFlightFilesystemCalls)
+		return zero, fmt.Errorf("filesystem %s: %w", op, domain.ErrStorageStalled)
+	}
 
 	done := make(chan fsCallResult[T], 1)
 	go func() {
+		defer gate.leave()
 		value, err := call()
 		done <- fsCallResult[T]{value: value, err: err}
 	}()

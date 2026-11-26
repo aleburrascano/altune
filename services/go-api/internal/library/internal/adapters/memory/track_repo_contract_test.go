@@ -6,6 +6,12 @@ import (
 	"testing"
 )
 
+func TestTrackRepoFake_LibraryCapContract(t *testing.T) {
+	contract.TrackRepositoryLibraryCapContract(t, func(_ *testing.T, libraryCap int) contract.TrackRepositoryUnderTest {
+		return library.NewInMemoryTrackRepo(library.WithInMemoryLibraryCap(libraryCap))
+	})
+}
+
 func TestTrackRepoFake_Contract(t *testing.T) {
 	contract.TrackRepositoryContract(t, func(*testing.T) contract.TrackRepositoryUnderTest {
 		return library.NewInMemoryTrackRepo()

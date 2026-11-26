@@ -53,13 +53,17 @@ func newJWKSFixture(t *testing.T) jwksFixture {
 	set := jwk.NewSet()
 	_ = set.AddKey(pub)
 	keysDown := &atomic.Bool{}
+	setJSON, err := json.Marshal(set)
+	if err != nil {
+		t.Fatalf("encode the key set: %v", err)
+	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if keysDown.Load() {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(set)
+		_, _ = w.Write(setJSON)
 	}))
 	t.Cleanup(srv.Close)
 	operator := uuid.New()
@@ -70,6 +74,8 @@ func newJWKSFixture(t *testing.T) jwksFixture {
 		SupabaseJWTAud:        "authenticated",
 		OverseerPrincipalID:   operator.String(),
 		BackgroundMaxInFlight: 64,
+
+		PlaybackNowPlayingLookupTimeout: 3 * time.Second,
 	}}
 }
 

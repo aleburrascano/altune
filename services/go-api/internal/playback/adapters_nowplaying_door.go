@@ -12,9 +12,4 @@ var (
 	ErrNowPlayingTrackNotFound = ports.ErrNowPlayingTrackNotFound
 )
 
-var (
-	NewNowPlayingReader         = nowplaying.NewNowPlayingReader
-	WithNowPlayingMetrics       = nowplaying.WithNowPlayingMetrics
-	WithNowPlayingLookupTimeout = nowplaying.WithNowPlayingLookupTimeout
-	WithNowPlayingClock         = nowplaying.WithNowPlayingClock
-)
+var NewNowPlayingReader = nowplaying.NewNowPlayingReader

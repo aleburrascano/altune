@@ -17,7 +17,9 @@ type (
 
 var (
 	ErrIllegalAcquisitionTransition = domain.ErrIllegalAcquisitionTransition
+	ErrLibraryFull                  = domain.ErrLibraryFull
 	ErrPlaylistFull                 = domain.ErrPlaylistFull
+	ErrStorageStalled               = domain.ErrStorageStalled
 	ErrTrackAlreadyInPlaylist       = domain.ErrTrackAlreadyInPlaylist
 )
 
@@ -77,6 +79,7 @@ const (
 	MaxCatalogSources             = domain.MaxCatalogSources
 	MaxLibraryPageSize            = domain.MaxLibraryPageSize
 	MaxLibrarySearchLength        = domain.MaxLibrarySearchLength
+	MaxPlaylistTracks             = domain.MaxPlaylistTracks
 	ProvenanceVerified            = domain.ProvenanceVerified
 	RoleFeatured                  = domain.RoleFeatured
 	SortAlphabetical              = domain.SortAlphabetical

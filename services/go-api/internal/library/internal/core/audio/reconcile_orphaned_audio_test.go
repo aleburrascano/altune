@@ -2,6 +2,7 @@ package audio_test
 
 import (
 	"altune/go-api/internal/library"
+	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
@@ -31,7 +32,7 @@ func newOrphanFixture(opts ...func(*library.CleanUpUnusedAudioService)) *orphanF
 		store:   store,
 		queue:   queue,
 		metrics: metrics,
-		del:     library.NewDeleteTrackService(repo, store, library.WithDeleteTrackOrphanQueue(queue)),
+		del:     library.NewDeleteTrackService(repo, store, events.NoopPublisher(), &library.InMemoryAudioStoreMetrics{}, queue),
 		sweep:   library.NewReconcileOrphanedAudioService(queue, store, append(opts, library.WithReconcileMetrics(metrics))...),
 	}
 }

@@ -87,6 +87,9 @@ func (p *Playlist) AddTrack(trackId TrackId, now time.Time) error {
 			return ErrTrackAlreadyInPlaylist
 		}
 	}
+	if len(p.Tracks) >= MaxPlaylistTracks {
+		return ErrPlaylistFull
+	}
 	p.Tracks = append(p.Tracks, PlaylistTrack{
 		TrackId:  trackId,
 		Position: len(p.Tracks),

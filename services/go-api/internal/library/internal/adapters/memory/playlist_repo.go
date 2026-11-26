@@ -219,10 +219,15 @@ func (r *PlaylistRepo) AddTracks(_ context.Context, userId sharedids.UserId, pla
 		return nil, err
 	}
 	var added []domain.TrackId
+	keptTracks, keptAdded := len(p.Tracks), len(r.Added)
 	for _, id := range trackIds {
 		err := r.appendTrack(p, id)
 		if errors.Is(err, domain.ErrTrackAlreadyInPlaylist) {
 			continue
+		}
+		if errors.Is(err, domain.ErrPlaylistFull) {
+			p.Tracks, r.Added = p.Tracks[:keptTracks], r.Added[:keptAdded]
+			return nil, err
 		}
 		if err != nil {
 			return nil, err
@@ -307,13 +312,17 @@ func (r *PlaylistRepo) Seed(playlist *domain.Playlist) {
 	r.Playlists[playlist.ID.String()] = playlist
 }
 
-func (r *PlaylistRepo) SeedWithTracks(playlist *domain.Playlist, tracks []*domain.Track) {
+func (r *PlaylistRepo) SeedWithTracks(t TB, playlist *domain.Playlist, tracks []*domain.Track) {
+	t.Helper()
 	r.Playlists[playlist.ID.String()] = playlist
 	held := trackIdSet(playlist.Tracks)
-	for _, t := range tracks {
-		r.Tracks.Tracks[t.ID.String()] = t
-		if !held[t.ID] {
-			_ = playlist.AddTrack(t.ID, playlist.UpdatedAt)
+	for _, track := range tracks {
+		r.Tracks.Tracks[track.ID.String()] = track
+		if held[track.ID] {
+			continue
+		}
+		if err := playlist.AddTrack(track.ID, playlist.UpdatedAt); err != nil {
+			t.Fatalf("seed track %s into playlist %s: %v", track.ID, playlist.ID, err)
 		}
 	}
 }

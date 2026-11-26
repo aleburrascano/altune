@@ -58,6 +58,8 @@ func (cb *CircuitBreaker) AllowRequest(ctx context.Context, provider domain.Prov
 		return cb.allowOpen(ctx, entry, provider)
 	case CircuitHalfOpen:
 		return cb.allowHalfOpen(ctx, entry, provider)
+	case CircuitClosed:
+		return true
 	}
 	return true
 }

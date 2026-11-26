@@ -1,6 +1,7 @@
 package telemetry_test
 
 import (
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/telemetry"
 	"context"
 	"net"
@@ -114,6 +115,47 @@ func TestMiddlewareNamesTheSpanByRouteAndRecordsTheApp(t *testing.T) {
 	}
 	if span.Status().Code == codes.Error {
 		t.Fatal("a 404 marked the span as an error")
+	}
+}
+
+func TestMiddlewareTagsTheSpanWithTheCorrelationIDWhenOneIsSet(t *testing.T) {
+	recorder := recordSpans(t)
+	router := chi.NewRouter()
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r.WithContext(logging.WithCorrelationID(r.Context(), "corr-abc")))
+		})
+	})
+	router.Use(telemetry.Middleware(never))
+	router.Get("/v1/ping", func(http.ResponseWriter, *http.Request) {})
+
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/ping", nil))
+
+	spans := recorder.Ended()
+	if len(spans) != 1 {
+		t.Fatalf("spans = %d, want 1", len(spans))
+	}
+	got := map[string]string{}
+	for _, kv := range spans[0].Attributes() {
+		got[string(kv.Key)] = kv.Value.String()
+	}
+	if got["corr_id"] != "corr-abc" {
+		t.Fatalf("attributes = %v, want corr_id corr-abc", got)
+	}
+}
+
+func TestMiddlewareLeavesTheCorrelationAttributeOffWhenNoneIsSet(t *testing.T) {
+	recorder := recordSpans(t)
+	router := chi.NewRouter()
+	router.Use(telemetry.Middleware(never))
+	router.Get("/v1/ping", func(http.ResponseWriter, *http.Request) {})
+
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/ping", nil))
+
+	for _, kv := range recorder.Ended()[0].Attributes() {
+		if string(kv.Key) == "corr_id" {
+			t.Fatalf("corr_id = %q on a request with no correlation id, want the attribute absent", kv.Value.String())
+		}
 	}
 }
 

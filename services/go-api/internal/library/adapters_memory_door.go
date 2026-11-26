@@ -24,6 +24,7 @@ var (
 	NewInMemoryOrphanedAudioQueue = memory.NewOrphanedAudioQueue
 	NewInMemoryPlaylistRepo       = memory.NewPlaylistRepo
 	NewInMemoryTrackRepo          = memory.NewTrackRepo
+	WithInMemoryLibraryCap        = memory.WithLibraryCap
 	SeedPlaylist                  = memory.SeedPlaylist
 	SeedReadyTrack                = memory.SeedReadyTrack
 	SeedTrack                     = memory.SeedTrack

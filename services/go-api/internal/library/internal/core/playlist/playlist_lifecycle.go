@@ -22,20 +22,16 @@ type PlaylistLifecycleService struct {
 	now          func() time.Time
 }
 
-func NewPlaylistLifecycleService(playlistRepo ports.PlaylistLifecycleRepository, opts ...func(*PlaylistLifecycleService)) *PlaylistLifecycleService {
-	s := &PlaylistLifecycleService{playlistRepo: playlistRepo, events: events.NoopPublisher(), now: time.Now}
-	for _, opt := range opts {
-		opt(s)
+func NewPlaylistLifecycleService(playlistRepo ports.PlaylistLifecycleRepository, publisher events.Publisher, now func() time.Time) *PlaylistLifecycleService {
+	switch {
+	case playlistRepo == nil:
+		panic("playlist: NewPlaylistLifecycleService requires a playlist repository")
+	case publisher == nil:
+		panic("playlist: NewPlaylistLifecycleService requires an events publisher")
+	case now == nil:
+		panic("playlist: NewPlaylistLifecycleService requires a clock")
 	}
-	return s
-}
-
-func WithPlaylistLifecycleEvents(pub events.Publisher) func(*PlaylistLifecycleService) {
-	return func(s *PlaylistLifecycleService) {
-		if pub != nil {
-			s.events = pub
-		}
-	}
+	return &PlaylistLifecycleService{playlistRepo: playlistRepo, events: publisher, now: now}
 }
 
 func (s *PlaylistLifecycleService) Create(ctx context.Context, userId ids.UserId, name string) (*domain.Playlist, error) {

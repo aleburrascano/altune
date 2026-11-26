@@ -76,6 +76,8 @@ func (e EventType) ClientSubmittable() bool {
 		EventTypeSseReconnect, EventTypeOutboxFlushFailed, EventTypeDownloadFailed,
 		EventTypeScreenView, EventTypePlayStart:
 		return true
+	case EventTypeUnknown, EventTypeSearchPerformed, EventTypeDiscographyObserved, EventTypeAuthFailed:
+		return false
 	}
 	return false
 }

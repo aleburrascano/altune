@@ -6,6 +6,8 @@ const (
 	KeyError         = "error"
 	KeyMethod        = "method"
 	KeyPath          = "path"
+	KeyRoute         = "route"
+	KeyUserID        = "user_id"
 	KeyStatus        = "status"
 	KeyCode          = "code"
 	KeyDuration      = "duration"

@@ -71,13 +71,15 @@ function deriveGoEventTypeNames(eventsSource: string): Map<string, string> {
   return names;
 }
 
+const GO_CASE_RETURNING_TRUE = /case\s+([^:]+):\s*return true/g;
+
 function deriveGoClientSubmittableNames(
   eventsSource: string,
   byIdent: Map<string, string>,
 ): Set<string> {
   const body = extractBlock(eventsSource, 'func (e EventType) ClientSubmittable() bool {');
   const submittable = new Set<string>();
-  for (const m of body.matchAll(/case\s+([^:]+):/g)) {
+  for (const m of body.matchAll(GO_CASE_RETURNING_TRUE)) {
     for (const rawIdent of m[1]!.split(',')) {
       const ident = rawIdent.trim();
       const name = byIdent.get(ident);

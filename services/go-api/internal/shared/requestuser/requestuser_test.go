@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -211,8 +212,17 @@ func TestRequireUserID_AbsentLogsTheRejection(t *testing.T) {
 	requestuser.RequireUserID(httptest.NewRecorder(), req)
 
 	var record map[string]any
-	if err := json.Unmarshal(logs.Bytes(), &record); err != nil {
-		t.Fatalf("log %q is not one JSON record: %v", logs.String(), err)
+	for _, line := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
+		var candidate map[string]any
+		if err := json.Unmarshal([]byte(line), &candidate); err != nil {
+			t.Fatalf("log line %q is not a JSON record: %v", line, err)
+		}
+		if candidate["msg"] == "auth.token_rejected" {
+			record = candidate
+		}
+	}
+	if record == nil {
+		t.Fatalf("no auth.token_rejected record in %q", logs.String())
 	}
 	want := map[string]string{
 		"level":  "WARN",

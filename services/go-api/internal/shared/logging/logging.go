@@ -4,9 +4,27 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 )
 
-func Setup(logLevel string, development bool) *RingBuffer {
+type SetupOption func(*setupConfig)
+
+type setupConfig struct {
+	now func() time.Time
+}
+
+func WithClock(now func() time.Time) SetupOption {
+	if now == nil {
+		panic("logging: WithClock requires a clock")
+	}
+	return func(c *setupConfig) { c.now = now }
+}
+
+func Setup(logLevel string, development bool, opts ...SetupOption) *RingBuffer {
+	cfg := setupConfig{now: time.Now}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
 	level := parseLevel(logLevel)
 
 	var base slog.Handler
@@ -23,7 +41,7 @@ func Setup(logLevel string, development bool) *RingBuffer {
 		})
 	}
 
-	ring := NewRingBuffer(logRingCapacity)
+	ring := NewRingBuffer(logRingCapacity, cfg.now)
 	slog.SetDefault(slog.New(newCorrelationHandler(newRingHandler(base, ring))))
 	return ring
 }

@@ -270,7 +270,13 @@ func readJarFile(path string) (jarFile, error) {
 func loadSession(live string) jarSession {
 	var session jarSession
 	raw, _ := os.ReadFile(live + cookieJarSessionSuffix)
-	_ = json.Unmarshal(raw, &session)
+	if len(raw) == 0 {
+		return session
+	}
+	if err := json.Unmarshal(raw, &session); err != nil {
+		slog.Error("ytdlp.cookie_session_unreadable", "error", err)
+		return jarSession{}
+	}
 	return session
 }
 

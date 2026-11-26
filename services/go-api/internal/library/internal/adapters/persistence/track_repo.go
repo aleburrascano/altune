@@ -35,11 +35,25 @@ func prefixColumns(columns, prefix string) string {
 }
 
 type PostgresTrackRepository struct {
-	pool *pgxpool.Pool
+	pool       *pgxpool.Pool
+	libraryCap int
 }
 
-func NewPostgresTrackRepository(pool *pgxpool.Pool) *PostgresTrackRepository {
-	return &PostgresTrackRepository{pool: pool}
+func NewPostgresTrackRepository(pool *pgxpool.Pool, opts ...func(*PostgresTrackRepository)) *PostgresTrackRepository {
+	r := &PostgresTrackRepository{pool: pool, libraryCap: domain.MaxTracksPerUser}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
+}
+
+func WithLibraryCap(libraryCap int) func(*PostgresTrackRepository) {
+	return func(r *PostgresTrackRepository) {
+		if libraryCap < 1 {
+			panic("persistence: WithLibraryCap requires a positive cap")
+		}
+		r.libraryCap = libraryCap
+	}
 }
 
 func (r *PostgresTrackRepository) Add(ctx context.Context, track *domain.Track) (*domain.Track, bool, error) {
@@ -54,7 +68,13 @@ var errTrackAlreadyStored = errors.New("a track with the same identity is alread
 
 func (r *PostgresTrackRepository) addInTx(ctx context.Context, track *domain.Track) (*domain.Track, bool, error) {
 	err := database.InTx(ctx, r.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, lockLibraryOfUserSQL, track.UserId.UUID()); err != nil {
+			return fmt.Errorf("lock the library of user %s: %w", track.UserId.UUID(), err)
+		}
 		if err := insertTrack(ctx, tx, track); err != nil {
+			return err
+		}
+		if err := requireWithinLibraryCap(ctx, tx, track.UserId, r.libraryCap); err != nil {
 			return err
 		}
 		return writeTrackFeatured(ctx, tx, track.UserId.UUID(), track.ID.UUID(), track.FeaturedArtists)
@@ -72,6 +92,23 @@ func (r *PostgresTrackRepository) addInTx(ctx context.Context, track *domain.Tra
 	return track, true, nil
 }
 
+const lockLibraryOfUserSQL = `SELECT pg_advisory_xact_lock(hashtextextended($1::uuid::text, 2))`
+
+func requireWithinLibraryCap(ctx context.Context, tx pgx.Tx, userId sharedids.UserId, libraryCap int) error {
+	var held int
+	err := tx.QueryRow(ctx,
+		`SELECT COUNT(*) FROM (SELECT 1 FROM tracks WHERE user_id = $1 LIMIT $2) capped`,
+		userId.UUID(), libraryCap+1,
+	).Scan(&held)
+	if err != nil {
+		return fmt.Errorf("count the library of user %s: %w", userId.UUID(), err)
+	}
+	if held > libraryCap {
+		return domain.ErrLibraryFull
+	}
+	return nil
+}
+
 const insertTrackSQL = `INSERT INTO tracks (
 		id, user_id, title, artist, album, duration_seconds,
 		added_at, artwork_url, acquisition_status, dedup_key,
@@ -84,8 +121,12 @@ const insertTrackSQL = `INSERT INTO tracks (
 	RETURNING id`
 
 func insertTrack(ctx context.Context, tx pgx.Tx, track *domain.Track) error {
+	sources, err := catalogSourcesJSON(track.CatalogSources)
+	if err != nil {
+		return fmt.Errorf("insert track %s: %w", track.ID.UUID(), err)
+	}
 	var returnedID uuid.UUID
-	err := tx.QueryRow(ctx, insertTrackSQL,
+	err = tx.QueryRow(ctx, insertTrackSQL,
 		track.ID.UUID(), track.UserId.UUID(),
 		track.Title, track.Artist, track.Album, track.DurationSeconds,
 		track.AddedAt, track.ArtworkURL, track.DownloadStatus.String(), track.DedupKey,
@@ -93,7 +134,7 @@ func insertTrack(ctx context.Context, tx pgx.Tx, track *domain.Track) error {
 		track.ISRC, track.AudioRef, track.FailureReason, track.AcquisitionProvenance, track.AudioSourceURL,
 		track.RejectedSourceKeys, track.AudioVersion, track.AcquisitionStartedAt, track.IdempotencyKey,
 		track.ConfidenceScore, track.EvidenceJSON, track.CatalogDurationSeconds,
-		track.CatalogMBID, track.CatalogExplicit, catalogSourcesJSON(track.CatalogSources),
+		track.CatalogMBID, track.CatalogExplicit, sources,
 	).Scan(&returnedID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errTrackAlreadyStored
@@ -652,12 +693,15 @@ func pageTotal(ctx context.Context, pool *pgxpool.Pool, limit, offset, got int, 
 	return total, nil
 }
 
-func catalogSourcesJSON(sources []domain.CatalogSource) []byte {
+func catalogSourcesJSON(sources []domain.CatalogSource) ([]byte, error) {
 	if len(sources) == 0 {
-		return []byte("[]")
+		return []byte("[]"), nil
 	}
-	encoded, _ := json.Marshal(sources)
-	return encoded
+	encoded, err := json.Marshal(sources)
+	if err != nil {
+		return nil, fmt.Errorf("encode catalog_sources: %w", err)
+	}
+	return encoded, nil
 }
 
 func decodeCatalogSources(raw []byte) ([]domain.CatalogSource, error) {

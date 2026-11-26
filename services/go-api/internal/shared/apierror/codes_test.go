@@ -35,6 +35,7 @@ func TestCatalog_ListsEveryCodeTheAPICanAnswerWith(t *testing.T) {
 		{"eventstream.too_many_streams", apierror.KindRateLimited},
 		{"observe.principal_required", apierror.KindForbidden},
 		{"observe.invalid_group_by", apierror.KindInvalid},
+		{"observe.invalid_window_days", apierror.KindInvalid},
 		{"observe.discography_quality_timeout", apierror.KindTimeout},
 		{"observe.event_feed_unavailable", apierror.KindUnavailable},
 		{"observe.stream_subscriber_limit", apierror.KindRateLimited},

@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/search/internal/adapters/providers/providerrequests"
 	"altune/go-api/internal/search/internal/adapters/providers/providertest"
 	"altune/go-api/internal/search/internal/adapters/providers/spotify"
-	"encoding/json"
 	"errors"
 	"io"
 	"math"
@@ -29,7 +28,7 @@ func TestSpotifyAdapter_Search_transportErrorDoesNotLeakTOTP(t *testing.T) {
 		switch r.URL.Path {
 		case serverTimePath:
 			rec := httptest.NewRecorder()
-			_ = json.NewEncoder(rec).Encode(map[string]int64{"serverTime": fixedServerTime})
+			writeJSON(rec, map[string]int64{"serverTime": fixedServerTime})
 			return rec.Result(), nil
 		case accessTokenPath:
 			q := r.URL.Query()

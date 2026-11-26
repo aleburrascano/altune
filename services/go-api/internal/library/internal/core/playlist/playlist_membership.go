@@ -21,20 +21,18 @@ type PlaylistMembershipService struct {
 	now          func() time.Time
 }
 
-func NewPlaylistMembershipService(playlistRepo ports.PlaylistMembershipRepository, trackRepo ports.TrackLookup, opts ...func(*PlaylistMembershipService)) *PlaylistMembershipService {
-	s := &PlaylistMembershipService{playlistRepo: playlistRepo, trackRepo: trackRepo, events: events.NoopPublisher(), now: time.Now}
-	for _, opt := range opts {
-		opt(s)
+func NewPlaylistMembershipService(playlistRepo ports.PlaylistMembershipRepository, trackRepo ports.TrackLookup, publisher events.Publisher, now func() time.Time) *PlaylistMembershipService {
+	switch {
+	case playlistRepo == nil:
+		panic("playlist: NewPlaylistMembershipService requires a playlist repository")
+	case trackRepo == nil:
+		panic("playlist: NewPlaylistMembershipService requires a track lookup")
+	case publisher == nil:
+		panic("playlist: NewPlaylistMembershipService requires an events publisher")
+	case now == nil:
+		panic("playlist: NewPlaylistMembershipService requires a clock")
 	}
-	return s
-}
-
-func WithPlaylistMembershipEvents(pub events.Publisher) func(*PlaylistMembershipService) {
-	return func(s *PlaylistMembershipService) {
-		if pub != nil {
-			s.events = pub
-		}
-	}
+	return &PlaylistMembershipService{playlistRepo: playlistRepo, trackRepo: trackRepo, events: publisher, now: now}
 }
 
 func (s *PlaylistMembershipService) requirePlaylist(ctx context.Context, playlistId domain.PlaylistId, userId sharedids.UserId, op string) error {

@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-const defaultNowPlayingLookupTimeout = 3 * time.Second
-
 var errEnrichmentUnavailable = errors.New("now-playing enrichment temporarily unavailable")
 
 var _ ports.NowPlayingReader = (*NowPlayingReader)(nil)
@@ -21,40 +19,22 @@ type NowPlayingReader struct {
 	breaker *enrichmentBreaker
 	metrics ports.EnrichmentMetrics
 	timeout time.Duration
-	now     func() time.Time
 }
 
-func NewNowPlayingReader(tracks ports.TrackSource, opts ...func(*NowPlayingReader)) *NowPlayingReader {
-	r := &NowPlayingReader{tracks: tracks, metrics: ports.NoopEnrichmentMetrics(), timeout: defaultNowPlayingLookupTimeout, now: time.Now}
-	for _, opt := range opts {
-		opt(r)
+func NewNowPlayingReader(tracks ports.TrackSource, metrics ports.EnrichmentMetrics, now func() time.Time, lookupTimeout time.Duration) *NowPlayingReader {
+	if tracks == nil {
+		panic("nowplaying: NewNowPlayingReader requires a track source")
 	}
-	r.breaker = newEnrichmentBreaker(r.metrics, r.now)
-	return r
-}
-
-func WithNowPlayingMetrics(m ports.EnrichmentMetrics) func(*NowPlayingReader) {
-	return func(r *NowPlayingReader) {
-		if m != nil {
-			r.metrics = m
-		}
+	if metrics == nil {
+		panic("nowplaying: NewNowPlayingReader requires enrichment metrics")
 	}
-}
-
-func WithNowPlayingLookupTimeout(d time.Duration) func(*NowPlayingReader) {
-	return func(r *NowPlayingReader) {
-		if d > 0 {
-			r.timeout = d
-		}
+	if now == nil {
+		panic("nowplaying: NewNowPlayingReader requires a clock")
 	}
-}
-
-func WithNowPlayingClock(now func() time.Time) func(*NowPlayingReader) {
-	return func(r *NowPlayingReader) {
-		if now != nil {
-			r.now = now
-		}
+	if lookupTimeout <= 0 {
+		panic("nowplaying: NewNowPlayingReader requires a positive lookup timeout")
 	}
+	return &NowPlayingReader{tracks: tracks, breaker: newEnrichmentBreaker(metrics, now), metrics: metrics, timeout: lookupTimeout}
 }
 
 func isDependencyFailure(err error) bool {

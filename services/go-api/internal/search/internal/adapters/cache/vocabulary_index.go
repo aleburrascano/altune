@@ -26,7 +26,9 @@ func (s *RedisVocabularyStore) BulkAdd(ctx context.Context, entries []domain.Spe
 	for _, e := range entries {
 		norm := s.buildNorm(e)
 		if domain.IsIndexableVocabularyTerm(e.Term, norm) {
-			addEntryToPipeline(pipe, ctx, norm, e, s.metaphone, false)
+			if err := addEntryToPipeline(pipe, ctx, norm, e, s.metaphone, false); err != nil {
+				return err
+			}
 		}
 	}
 	if pipe.Len() == 0 {
@@ -48,7 +50,9 @@ func (s *RedisVocabularyStore) indexEntry(
 		return nil
 	}
 	pipe := s.client.Pipeline()
-	addEntryToPipeline(pipe, ctx, norm, entry, s.metaphone, true)
+	if err := addEntryToPipeline(pipe, ctx, norm, entry, s.metaphone, true); err != nil {
+		return err
+	}
 	_, err := pipe.Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("index one vocabulary entry: %w", err)
@@ -63,7 +67,15 @@ func addEntryToPipeline(
 	entry domain.SpellingHintsEntry,
 	metaphone MetaphoneFunc,
 	keepHigherPopularity bool,
-) {
+) error {
+	entryJSON, err := json.Marshal(vocabEntryData{
+		Term:       entry.Term,
+		Kind:       string(entry.Kind),
+		Popularity: entry.Popularity,
+	})
+	if err != nil {
+		return fmt.Errorf("encode vocabulary entry %q: %w", entry.Term, err)
+	}
 	member := encodeMember(norm, entry.Term, string(entry.Kind))
 	score := goredis.Z{Score: float64(entry.Popularity), Member: member}
 	if keepHigherPopularity {
@@ -72,11 +84,6 @@ func addEntryToPipeline(
 		pipe.ZAdd(ctx, vocabTermsKey, score)
 	}
 	pipe.ZAdd(ctx, vocabLexKey, goredis.Z{Score: 0, Member: member})
-	entryJSON, _ := json.Marshal(vocabEntryData{
-		Term:       entry.Term,
-		Kind:       string(entry.Kind),
-		Popularity: entry.Popularity,
-	})
 	if keepHigherPopularity {
 		pipe.SetNX(ctx, vocabEntryPfx+norm, entryJSON, vocabEntryTTL)
 	} else {
@@ -91,6 +98,7 @@ func addEntryToPipeline(
 			pipe.SAdd(ctx, vocabMetaPrefix+code, norm)
 		}
 	}
+	return nil
 }
 
 const vocabTrimAttempts = 5

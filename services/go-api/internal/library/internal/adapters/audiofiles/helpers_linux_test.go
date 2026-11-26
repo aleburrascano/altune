@@ -80,7 +80,8 @@ func otherFilesystemDir(t *testing.T, than string) string {
 		t.Fatalf("stat %s", than)
 	}
 	for _, root := range otherFilesystemRoots {
-		if dir, ok := tempDirOnOtherDevice(t, root, base); ok {
+		if dir, remove, ok := tempDirOnOtherDevice(root, base); ok {
+			t.Cleanup(remove)
 			return dir
 		}
 	}
@@ -88,18 +89,16 @@ func otherFilesystemDir(t *testing.T, than string) string {
 	return ""
 }
 
-func tempDirOnOtherDevice(t *testing.T, root string, base uint64) (string, bool) {
-	t.Helper()
-	dev, ok := deviceOf(root)
-	if !ok || dev == base {
-		return "", false
+func tempDirOnOtherDevice(root string, base uint64) (dir string, remove func(), ok bool) {
+	dev, found := deviceOf(root)
+	if !found || dev == base {
+		return "", nil, false
 	}
 	dir, err := os.MkdirTemp(root, "storage-test-")
 	if err != nil {
-		return "", false
+		return "", nil, false
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	return dir, true
+	return dir, func() { _ = os.RemoveAll(dir) }, true
 }
 
 func deviceOf(path string) (uint64, bool) {
