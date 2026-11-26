@@ -970,6 +970,7 @@ run_with_tools
 expect_rc 1
 expect_out "FAIL  go-api test files live with their unit (whole tree)"
 expect_out "tree stub: services/go-api"
+expect_out "tree stub: services/overseer"
 run_push_scoped
 forbid_out "whole tree)"
 

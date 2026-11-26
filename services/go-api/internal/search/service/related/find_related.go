@@ -75,6 +75,16 @@ func (s *FindRelatedService) Execute(
 	return groups
 }
 
+type relatedFanOut struct {
+	ctx           context.Context
+	lookups       *parallel.Limited
+	memo          *expiringcache.Memo[relatedMemoKey, []domain.SearchResult]
+	mu            sync.Mutex
+	groups        []domain.RelatedGroup
+	providerCalls atomic.Int32
+	memoHits      int
+}
+
 func (f *relatedFanOut) memoize(lookup relatedGroupLookup, items []domain.SearchResult) []domain.SearchResult {
 	f.memo.Put(lookup.memoKey(), items)
 	return items
@@ -90,16 +100,6 @@ func (f *relatedFanOut) serveMemoized(lookup relatedGroupLookup) bool {
 		f.addGroup(lookup, items)
 	}
 	return true
-}
-
-type relatedFanOut struct {
-	ctx           context.Context
-	lookups       *parallel.Limited
-	memo          *expiringcache.Memo[relatedMemoKey, []domain.SearchResult]
-	mu            sync.Mutex
-	groups        []domain.RelatedGroup
-	providerCalls atomic.Int32
-	memoHits      int
 }
 
 type relatedPanicLog struct {

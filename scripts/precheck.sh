@@ -499,6 +499,7 @@ if touches '(_test\.go|\.(test|spec)\.[cm]?[jt]sx?)$|^scripts/test-home' && need
   esac
   if [ "$full" = 1 ]; then
     check "go-api test files live with their unit (whole tree)" . bash scripts/test-home-tree.sh services/go-api
+    check "overseer test files live with their unit (whole tree)" . bash scripts/test-home-tree.sh services/overseer
   fi
   if touches '^scripts/test-home'; then
     test_check "test-home regression suite" . bash scripts/test-home.test.sh
