@@ -2,6 +2,7 @@ package config
 
 import (
 	"altune/go-api/internal/shared/config/internal/adapters/dirprobe"
+	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/redis"
 	"errors"
 	"fmt"
@@ -13,7 +14,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func (c *Config) validate() error {
@@ -134,20 +134,18 @@ func validateDatabaseTLS(databaseURL string) error {
 	if databaseURL == "" {
 		return nil
 	}
-	pgCfg, err := pgconn.ParseConfig(databaseURL)
+	endpoint, err := database.ParseEndpoint(databaseURL)
 	if err != nil {
 		return fmt.Errorf("DATABASE_URL is malformed: %w", err)
 	}
-	if isLoopbackHost(pgCfg.Host) {
+	if isLoopbackHost(endpoint.Host) {
 		return nil
 	}
-	if pgCfg.TLSConfig == nil {
+	if !endpoint.RequiresTLS {
 		return errors.New("DATABASE_URL must require TLS unless ENV is development, test or staging (use sslmode=require, verify-ca or verify-full)")
 	}
-	for _, fb := range pgCfg.Fallbacks {
-		if fb.TLSConfig == nil {
-			return errors.New("DATABASE_URL must not fall back to plaintext unless ENV is development, test or staging (use sslmode=require, verify-ca or verify-full)")
-		}
+	if endpoint.FallsBackToPlaintext {
+		return errors.New("DATABASE_URL must not fall back to plaintext unless ENV is development, test or staging (use sslmode=require, verify-ca or verify-full)")
 	}
 	return nil
 }
