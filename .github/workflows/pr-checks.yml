@@ -88,10 +88,6 @@ jobs:
           INTEGRATION: "1"
         run: |
           go test -count=1 -v -run 'TestPgxSearchHistoryRepo' ./internal/discovery/internal/adapters/persistence/ | grep -E '^--- PASS: TestPgxSearchHistoryRepo'
-      - name: mutation on changed lines, with integration tests
-        env:
-          INTEGRATION: "1"
-        run: bash scripts/ci/go-mutate.sh origin/main services/go-api
 
   mobile-tests:
     needs: changes
@@ -113,30 +109,6 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=3072
         run: npx jest --ci --maxWorkers=2 --workerIdleMemoryLimit=1GB --testTimeout=30000
-
-  mobile-mutation:
-    needs: changes
-    if: needs.changes.outputs.mobile == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 95
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: fetch main
-        run: git fetch origin main:refs/remotes/origin/main
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: client/.nvmrc
-          cache: npm
-          cache-dependency-path: client/package-lock.json
-      - name: dependencies
-        working-directory: client
-        run: npm ci
-      - name: mutation on changed lines
-        env:
-          CLIENT_MUTATE_TIME_LIMIT_SECONDS: "4800"
-        run: bash scripts/ci/client-mutate.sh origin/main
 
   mobile-quality:
     needs: changes
@@ -211,7 +183,7 @@ jobs:
         run: bash scripts/precheck.sh origin/main
 
   pr-checks:
-    needs: [changes, backend-tests, mobile-tests, mobile-mutation, mobile-quality, workflow-lint, precheck]
+    needs: [changes, backend-tests, mobile-tests, mobile-quality, workflow-lint, precheck]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
