@@ -351,7 +351,7 @@ if touches '^services/go-api/'; then
         check "go-api no new vague names" $m go run ./scripts/lintnames "$base"
       fi
       if [ $stage = push ]; then
-        check "go-api architecture: every module has a role and imports only what its role may (whole tree)" $m go run ./scripts/lintarch --rules role,edge
+        check "go-api architecture: every module has a role and imports only what its role may" $m go run ./scripts/lintarch --rules role,edge
         if touches "^$m/.*\.go\$|^$m/go\.(mod|sum)\$"; then
           par check "go-api vet (whole module, so an importer a change broke fails here)" $m "${heavy[@]}" go vet ./...
         fi
