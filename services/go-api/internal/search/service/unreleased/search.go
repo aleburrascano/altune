@@ -14,8 +14,8 @@ const (
 
 func (s *Service) Search(ctx context.Context, query string) ([]ports.UnreleasedHit, error) {
 	query = strings.TrimSpace(query)
-	if s.store == nil || utf8.RuneCountInString(query) < MinSearchRunes {
+	if utf8.RuneCountInString(query) < MinSearchRunes {
 		return []ports.UnreleasedHit{}, nil
 	}
-	return s.store.Search(ctx, query, SearchLimit)
+	return s.storage.search(ctx, query)
 }

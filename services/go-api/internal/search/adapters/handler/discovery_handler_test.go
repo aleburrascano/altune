@@ -232,7 +232,7 @@ func TestHandleRecordEvent_ServiceValidation(t *testing.T) {
 	bg := searchtest.NewTracker(t)
 	h := search.MustNewDiscoveryHandler(search.DiscoveryServices{
 		Search: searchtest.NewSearchService(t, bg, nil, search.NewCircuitBreaker()),
-		Event:  search.NewRecordEventService(nopEventStore{}),
+		Event:  searchtest.NewRecordEvent(t, nopEventStore{}),
 	}, time.Now)
 	router := chi.NewRouter()
 	router.Use(discAsTestUser)

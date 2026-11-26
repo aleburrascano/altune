@@ -3,7 +3,9 @@ package rank
 import (
 	"altune/go-api/internal/search/internal/core/ports"
 	"context"
+	"errors"
 	"log/slog"
+	"sync/atomic"
 	"time"
 )
 
@@ -23,11 +25,33 @@ func (c *ListeningFeedback) Signals(ctx context.Context, since time.Time) ([]por
 	return c.store.SatisfactionSignals(ctx, since)
 }
 
-func (r *RankingExperiments) RefreshBehavioralScores(ctx context.Context) error {
-	if r.BehavioralConsumer == nil {
-		return nil
+type BehavioralScorer interface {
+	Refresh(ctx context.Context) error
+	Snapshot() map[string]float64
+}
+
+type NoBehavioralScoring struct{}
+
+func (NoBehavioralScoring) Refresh(context.Context) error { return nil }
+
+func (NoBehavioralScoring) Snapshot() map[string]float64 { return nil }
+
+type listeningScoring struct {
+	consumer *ListeningFeedback
+	scores   atomic.Pointer[map[string]float64]
+}
+
+func NewBehavioralScoring(consumer *ListeningFeedback) (BehavioralScorer, error) {
+	if consumer == nil {
+		return nil, ErrBehavioralConsumerRequired
 	}
-	signals, err := r.BehavioralConsumer.Signals(ctx, time.Now().UTC().Add(-behavioralLookback))
+	return &listeningScoring{consumer: consumer}, nil
+}
+
+var ErrBehavioralConsumerRequired = errors.New("behavioral scoring needs its listening feedback consumer")
+
+func (l *listeningScoring) Refresh(ctx context.Context) error {
+	signals, err := l.consumer.Signals(ctx, time.Now().UTC().Add(-behavioralLookback))
 	if err != nil {
 		return err
 	}
@@ -35,18 +59,19 @@ func (r *RankingExperiments) RefreshBehavioralScores(ctx context.Context) error 
 	for _, sig := range signals {
 		scores[sig.ResultSignature] = sig.Score
 	}
-	r.behavioralScores.Store(&scores)
+	l.scores.Store(&scores)
 	slog.InfoContext(ctx, "discovery.behavioral_scores_refreshed",
-		"consumer", r.BehavioralConsumer.Name(), "signatures", len(scores))
+		"consumer", l.consumer.Name(), "signatures", len(scores))
 	return nil
 }
 
-func (r *RankingExperiments) behavioralScoresSnapshot() map[string]float64 {
-	if !r.BehavioralRanking {
-		return nil
-	}
-	if p := r.behavioralScores.Load(); p != nil {
+func (l *listeningScoring) Snapshot() map[string]float64 {
+	if p := l.scores.Load(); p != nil {
 		return *p
 	}
 	return nil
+}
+
+func (r *RankingExperiments) RefreshBehavioralScores(ctx context.Context) error {
+	return r.behavior.Refresh(ctx)
 }

@@ -139,6 +139,10 @@ func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 	if err != nil {
 		return handler.DiscoveryServices{}, fmt.Errorf("build the favorites service: %w", err)
 	}
+	eventService, err := newEventService(w.deps.Activity, s)
+	if err != nil {
+		return handler.DiscoveryServices{}, fmt.Errorf("build the event service: %w", err)
+	}
 	return handler.DiscoveryServices{
 		Search:        search,
 		History:       listHistory,
@@ -149,13 +153,16 @@ func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 		Related:       relatedTracks,
 		Enrich:        enrichment,
 		Suggest:       vocabulary.NewSuggestService(s.SpellingHints),
-		Event:         newEventService(w.deps.Activity, s),
+		Event:         eventService,
 		Favorites:     favoritesService,
 	}, nil
 }
 
-func newEventService(activity ports.ActivityFeed, s connections.Stores) *useractivity.RecordEventService {
-	return useractivity.NewRecordEventService(s.Events, useractivity.WithRecordEventActivityFeed(activity))
+func newEventService(activity ports.ActivityFeed, s connections.Stores) (*useractivity.RecordEventService, error) {
+	if activity == nil {
+		activity = useractivity.NoopActivityFeed{}
+	}
+	return useractivity.NewRecordEventService(s.Events, activity)
 }
 
 func newHandler(d connections.Deps, t *providerTable, s connections.Stores, services handler.DiscoveryServices, unreleasedLookup *unreleased.Service) (*handler.DiscoveryHandler, error) {

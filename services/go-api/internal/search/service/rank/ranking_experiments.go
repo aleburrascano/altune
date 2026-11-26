@@ -3,16 +3,15 @@ package rank
 import (
 	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/shared/background"
+	"errors"
 	"math/rand/v2"
 	"slices"
-	"sync/atomic"
 )
 
 type RankingConfig struct {
 	TailDemotion        bool
 	CrossKindProminence bool
-	BehavioralRanking   bool
-	BehavioralConsumer  *ListeningFeedback
+	Behavior            BehavioralScorer
 	ExplorationRate     float64
 }
 
@@ -21,31 +20,33 @@ type RankingExperiments struct {
 
 	CrossKindProminence bool
 
-	BehavioralRanking  bool
-	BehavioralConsumer *ListeningFeedback
-	behavioralScores   atomic.Pointer[map[string]float64]
+	behavior BehavioralScorer
 
 	ExplorationRate float64
 
 	bg *background.Tracker
 }
 
-func NewRankingExperiments(cfg RankingConfig, bg *background.Tracker) *RankingExperiments {
+var ErrBehaviorRequired = errors.New("ranking experiments need a behavioral scorer, pass NoBehavioralScoring to switch it off")
+
+func NewRankingExperiments(cfg RankingConfig, bg *background.Tracker) (*RankingExperiments, error) {
+	if cfg.Behavior == nil {
+		return nil, ErrBehaviorRequired
+	}
 	return &RankingExperiments{
 		TailDemotion:        cfg.TailDemotion,
 		CrossKindProminence: cfg.CrossKindProminence,
-		BehavioralRanking:   cfg.BehavioralRanking,
-		BehavioralConsumer:  cfg.BehavioralConsumer,
+		behavior:            cfg.Behavior,
 		ExplorationRate:     cfg.ExplorationRate,
 		bg:                  bg,
-	}
+	}, nil
 }
 
 func (r *RankingExperiments) RankOptions() RankOptions {
 	return RankOptions{
 		TailDemotion:        r.TailDemotion,
 		CrossKindProminence: r.CrossKindProminence,
-		Behavioral:          r.behavioralScoresSnapshot(),
+		Behavioral:          r.behavior.Snapshot(),
 	}
 }
 

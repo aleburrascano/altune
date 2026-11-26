@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -16,20 +17,13 @@ type RecordEventService struct {
 	activity   ports.ActivityFeed
 }
 
-func NewRecordEventService(eventStore ports.EventStore, opts ...func(*RecordEventService)) *RecordEventService {
-	s := &RecordEventService{eventStore: eventStore, activity: NoopActivityFeed{}}
-	for _, opt := range opts {
-		opt(s)
-	}
-	return s
-}
+var ErrCollaboratorRequired = errors.New("record event service needs its event store and activity feed, pass the noop feed to switch it off")
 
-func WithRecordEventActivityFeed(activity ports.ActivityFeed) func(*RecordEventService) {
-	return func(s *RecordEventService) {
-		if activity != nil {
-			s.activity = activity
-		}
+func NewRecordEventService(eventStore ports.EventStore, activity ports.ActivityFeed) (*RecordEventService, error) {
+	if eventStore == nil || activity == nil {
+		return nil, ErrCollaboratorRequired
 	}
+	return &RecordEventService{eventStore: eventStore, activity: activity}, nil
 }
 
 type NoopActivityFeed struct{}

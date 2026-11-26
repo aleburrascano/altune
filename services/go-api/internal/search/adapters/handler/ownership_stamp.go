@@ -5,7 +5,9 @@ import (
 	"altune/go-api/internal/search/service/providerguard"
 	"altune/go-api/internal/search/service/query"
 	"altune/go-api/internal/shared/httpserver"
+	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/requestuser"
+	"context"
 	"fmt"
 	"net/http"
 )
@@ -21,9 +23,21 @@ func (h *DiscoveryHandler) writeContentFetch(
 	}
 	dto := contentFetchToDTO(resp)
 	if userId, ok := requestuser.UserIDFromContext(r.Context()); ok {
-		h.ownership.StampOwnership(r.Context(), userId, ownableItems(dto.Items))
+		h.stampOwnership(r.Context(), userId, ownableItems(dto.Items))
 	}
 	httpserver.WriteJSON(w, http.StatusOK, dto)
+}
+
+func (h *DiscoveryHandler) stampOwnership(ctx context.Context, userId ids.UserId, items []inlibrary.OwnableItem) {
+	if h.ownership != nil {
+		h.ownership.StampOwnership(ctx, userId, items)
+	}
+}
+
+func (h *DiscoveryHandler) enrichAlbumOwnership(ctx context.Context, userId ids.UserId, items []inlibrary.OwnableItem) {
+	if h.ownership != nil {
+		h.ownership.EnrichAlbumTracks(ctx, userId, items)
+	}
 }
 
 func (h *DiscoveryHandler) WithOwnershipEnrichment(svc *inlibrary.OwnershipEnrichmentService) *DiscoveryHandler {

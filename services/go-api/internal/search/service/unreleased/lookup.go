@@ -4,10 +4,8 @@ import (
 	"altune/go-api/internal/search/domain"
 	"altune/go-api/internal/search/internal/core/ports"
 	"altune/go-api/internal/shared/background"
-	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -18,15 +16,6 @@ var errJobPanicked = errors.New("unreleased job panicked")
 type Lookup struct {
 	Songs   []domain.UnreleasedSong
 	Pending bool
-}
-
-type Option func(*Service)
-
-func WithLifecycle(ctx context.Context, jobs *background.Tracker) Option {
-	return func(s *Service) {
-		s.lifecycle = ctx
-		s.jobs = jobs
-	}
 }
 
 type job struct {
@@ -40,17 +29,7 @@ func (s *Service) Lookup(ctx context.Context, provider domain.ProviderName, exte
 	if artistName == "" {
 		return Lookup{Songs: []domain.UnreleasedSong{}}, nil
 	}
-	if s.store != nil {
-		return s.lookupStored(ctx, provider, externalID, artistName, known)
-	}
-	nameKey := textnorm.NormalizeForIdentity(artistName)
-	if songs, ok := s.cache.Get(ctx, provider, externalID, nameKey); ok {
-		return Lookup{Songs: songs}, nil
-	}
-	j := s.joinJob(fmt.Sprintf("%s:%s:%s", provider.Key(), externalID, nameKey), func(jobCtx context.Context) ([]domain.UnreleasedSong, error) {
-		return s.List(jobCtx, provider, externalID, artistName, known)
-	})
-	return s.awaitJob(ctx, j)
+	return s.storage.lookup(ctx, s, provider, externalID, artistName, known)
 }
 
 const warmTimeout = 5 * time.Second
@@ -63,13 +42,10 @@ type ArtistToRefresh struct {
 }
 
 func (s *Service) Warm(artists []ArtistToRefresh) {
-	if s.store == nil || len(artists) == 0 {
-		return
-	}
-	s.jobs.Track(func() { s.runWarm(artists) })
+	s.storage.warm(s, artists)
 }
 
-func (s *Service) runWarm(artists []ArtistToRefresh) {
+func (s *Service) runWarm(store ports.UnreleasedStore, artists []ArtistToRefresh) {
 	ctx, cancel := context.WithTimeout(s.lifecycle, warmTimeout)
 	defer cancel()
 	defer background.RecoverContext(ctx, "unreleased.warm_panic")
@@ -81,45 +57,10 @@ func (s *Service) runWarm(artists []ArtistToRefresh) {
 			continue
 		}
 		seen[key] = true
-		if err := s.store.Record(ctx, key, name, a.Known); err != nil {
+		if err := store.Record(ctx, key, name, a.Known); err != nil {
 			slog.WarnContext(ctx, "unreleased.warm_record_failed", "error", err)
 		}
 	}
-}
-
-func (s *Service) lookupStored(ctx context.Context, provider domain.ProviderName, externalID, artistName string, known map[domain.ProviderName]string) (Lookup, error) {
-	key := ports.UnreleasedArtistKey{Provider: provider, ExternalID: externalID}
-	songs, version, built := s.storedSongsOrNotBuilt(ctx, key, artistName, known)
-	jobKey := fmt.Sprintf("%s:%s:%s", provider.Key(), externalID, textnorm.NormalizeForIdentity(artistName))
-	if built && version >= CurrentBuildVersion {
-		return Lookup{Songs: nonNil(songs)}, nil
-	}
-	j := s.joinJob(jobKey, func(jobCtx context.Context) ([]domain.UnreleasedSong, error) {
-		return s.Rebuild(jobCtx, key, artistName, known)
-	})
-	if built {
-		return Lookup{Songs: nonNil(songs)}, nil
-	}
-	return s.awaitJob(ctx, j)
-}
-
-func (s *Service) storedSongsOrNotBuilt(ctx context.Context, key ports.UnreleasedArtistKey, artistName string, known map[domain.ProviderName]string) ([]domain.UnreleasedSong, int, bool) {
-	if err := s.store.Record(ctx, key, artistName, known); err != nil {
-		slog.WarnContext(ctx, "unreleased.store_record_failed", "error", err)
-	}
-	songs, _, built, version, err := s.store.Read(ctx, key)
-	if err != nil {
-		slog.WarnContext(ctx, "unreleased.store_read_failed", "error", err)
-		return nil, 0, false
-	}
-	return songs, version, built
-}
-
-func nonNil(songs []domain.UnreleasedSong) []domain.UnreleasedSong {
-	if songs == nil {
-		return []domain.UnreleasedSong{}
-	}
-	return songs
 }
 
 func (s *Service) awaitJob(ctx context.Context, j *job) (Lookup, error) {

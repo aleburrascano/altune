@@ -24,21 +24,42 @@ func newUnreleasedServices(d connections.Deps, t *providerTable, s connections.S
 	if songs != nil {
 		genius = songs
 	}
-	opts := []unreleased.Option{unreleased.WithLifecycle(d.Lifecycle, d.Background), unreleased.WithTrackers(lists)}
-	store := unreleasedStore(d, s)
-	if store == nil {
-		lookup, err := unreleased.NewService(genius, artists, cache.NewRedisUnreleasedCache(s.Redis, s.CacheOption()), d.Unreleased.Tuning, opts...)
-		if err != nil {
-			return unreleasedServices{}, fmt.Errorf("build the unreleased service: %w", err)
-		}
-		return unreleasedServices{lookup: lookup}, nil
+	var trackers ports.TrackerSongs = unreleased.NoTrackers{}
+	if lists != nil {
+		trackers = lists
 	}
-	opts = append(opts, unreleased.WithStore(store))
-	lookup, err := unreleased.NewService(genius, artists, unreleased.NoCache{}, d.Unreleased.Tuning, opts...)
+	storage, refreshes, err := unreleasedStorage(d, s)
+	if err != nil {
+		return unreleasedServices{}, err
+	}
+	lookup, err := unreleased.NewService(genius, artists, d.Unreleased.Tuning, unreleased.Wiring{
+		Trackers:  trackers,
+		Storage:   storage,
+		Lifecycle: d.Lifecycle,
+		Jobs:      d.Background,
+	})
 	if err != nil {
 		return unreleasedServices{}, fmt.Errorf("build the unreleased service: %w", err)
 	}
-	return unreleasedServices{lookup: lookup, refresh: lookup}, nil
+	if refreshes {
+		return unreleasedServices{lookup: lookup, refresh: lookup}, nil
+	}
+	return unreleasedServices{lookup: lookup}, nil
+}
+
+func unreleasedStorage(d connections.Deps, s connections.Stores) (unreleased.Storage, bool, error) {
+	if store := unreleasedStore(d, s); store != nil {
+		storage, err := unreleased.NewStoredStorage(store)
+		if err != nil {
+			return nil, false, fmt.Errorf("build the unreleased store storage: %w", err)
+		}
+		return storage, true, nil
+	}
+	storage, err := unreleased.NewCachedStorage(cache.NewRedisUnreleasedCache(s.Redis, s.CacheOption()))
+	if err != nil {
+		return nil, false, fmt.Errorf("build the unreleased cache storage: %w", err)
+	}
+	return storage, false, nil
 }
 
 func unreleasedStore(d connections.Deps, s connections.Stores) ports.UnreleasedStore {

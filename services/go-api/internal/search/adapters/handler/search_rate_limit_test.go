@@ -125,7 +125,7 @@ func TestContentRateLimit_OneBudgetSpansEveryContentRoute(t *testing.T) {
 
 func TestEventRateLimit_DefaultBudgetThenRejects(t *testing.T) {
 	router := buildFrozenDefaultLimitsRouter(
-		search.DiscoveryServices{Event: search.NewRecordEventService(&recordingEventStore{})},
+		search.DiscoveryServices{Event: searchtest.NewRecordEvent(t, &recordingEventStore{})},
 		httpserver.MaxBodySize(1<<20),
 	)
 	body := discJsonBody(t, map[string]any{"type": "play"}).String()

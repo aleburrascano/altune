@@ -102,7 +102,7 @@ func goldenRouter(t *testing.T, svcs search.DiscoveryServices, filler search.Tra
 
 func wireGoldenOwnership(t *testing.T, h *search.DiscoveryHandler, reader search.OwnershipReader, filler search.TrackNumberFiller) *search.DiscoveryHandler {
 	bg := searchtest.NewTracker(t)
-	return h.WithOwnershipEnrichment(search.NewOwnershipEnrichmentService(bg, reader, filler))
+	return h.WithOwnershipEnrichment(searchtest.NewOwnership(t, bg, reader, filler))
 }
 
 var searchIDPattern = regexp.MustCompile(`"search_id":"[^"]*"`)

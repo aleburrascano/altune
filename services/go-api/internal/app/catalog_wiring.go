@@ -220,7 +220,7 @@ func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServices
 	}
 }
 
-func newOwnershipEnrichment(cat catalogWiring, bg *background.Tracker) *search.OwnershipEnrichmentService {
+func newOwnershipEnrichment(cat catalogWiring, bg *background.Tracker) (*search.OwnershipEnrichmentService, error) {
 	return search.NewOwnershipEnrichmentService(
 		bg,
 		search.NewOwnershipReader(searchfromlibrary.NewOwnedTracks(cat.trackRepo)),

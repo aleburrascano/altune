@@ -17,9 +17,6 @@ type BreakerCall struct {
 }
 
 func AdmitProviderCall(ctx context.Context, cb *CircuitBreaker, provider domain.ProviderName) (BreakerCall, bool) {
-	if cb == nil {
-		return BreakerCall{ctx: ctx, provider: provider}, true
-	}
 	adm, ok := cb.AllowRequest(ctx, provider)
 	if !ok {
 		return BreakerCall{}, false
@@ -28,9 +25,6 @@ func AdmitProviderCall(ctx context.Context, cb *CircuitBreaker, provider domain.
 }
 
 func (c BreakerCall) settle(callerCtx context.Context, err error) {
-	if c.cb == nil {
-		return
-	}
 	switch {
 	case err == nil:
 		c.cb.RecordSuccess(callerCtx, c.provider, c.adm)
@@ -42,14 +36,11 @@ func (c BreakerCall) settle(callerCtx context.Context, err error) {
 }
 
 func (c BreakerCall) Release() {
-	if c.cb == nil {
-		return
-	}
 	c.cb.ReleaseProbe(c.provider, c.adm)
 }
 
 func (c BreakerCall) failPanicked(settled *bool) {
-	if c.cb == nil || *settled {
+	if *settled {
 		return
 	}
 	c.cb.RecordFailure(c.ctx, c.provider, c.adm)

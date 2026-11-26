@@ -445,7 +445,6 @@ func TestOptions_OutOfRangeValuesAreRefused(t *testing.T) {
 		"negative exploration rate": search.WithExploration(-0.5),
 		"zero deadline":             search.WithSearchDeadline(0),
 		"negative deadline":         search.WithSearchDeadline(-time.Second),
-		"behavioral without source": search.WithBehavioralRanking(nil),
 	} {
 		_, err := search.NewSearchService(searchtest.NewTracker(t), nil, search.NewCircuitBreaker(), search.AbsentCollaborators(), opt)
 		if !errors.Is(err, search.ErrSearchInvalidOption) {
@@ -474,6 +473,7 @@ func TestNewService_RefusesEveryMissingCollaborator(t *testing.T) {
 		"resultCache":   withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.ResultCache = nil }),
 		"providerCache": withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.ProviderCache = nil }),
 		"heldSlates":    withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.HeldSlates = nil }),
+		"behavior":      withoutCollaborator(bg, cb, func(c *search.Collaborators) { c.Behavior = nil }),
 	} {
 		svc, err := build()
 		if !errors.Is(err, search.ErrSearchCollaboratorRequired) || svc != nil {
