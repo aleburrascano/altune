@@ -505,7 +505,7 @@ if touches '(_test\.go|\.(test|spec)\.[cm]?[jt]sx?)$|^scripts/test-home' && need
   fi
 fi
 
-if [ "$full" = 1 ] && need node "test-home whole tree"; then
+if [ "$full" = 1 ] && [ $stage != commit ] && need node "test-home whole tree"; then
   check "go-api and overseer test files live with their unit (whole tree)" . bash scripts/test-home-tree.sh services/go-api services/overseer
 fi
 
