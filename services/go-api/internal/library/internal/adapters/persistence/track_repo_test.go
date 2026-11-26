@@ -807,12 +807,12 @@ func TestPostgresTrackRepo_Add_PendingRowIsClaimableWithoutEnqueue(t *testing.T)
 
 	var claimable bool
 	if err := pool.QueryRow(ctx,
-		`SELECT acquisition_available_at <= now() FROM tracks WHERE id = $1`,
+		`SELECT available_at <= now() FROM acquisition_jobs WHERE track_id = $1`,
 		track.ID.UUID()).Scan(&claimable); err != nil {
-		t.Fatalf("read acquisition_available_at: %v", err)
+		t.Fatalf("read job available_at: %v", err)
 	}
 	if !claimable {
-		t.Fatal("pending row has no acquisition_available_at, so no worker can ever claim it")
+		t.Fatal("pending row has no job available_at, so no worker can ever claim it")
 	}
 }
 
@@ -1064,7 +1064,7 @@ func TestPostgresTrackRepo_GetByIDCarriesTheAcquisitionLeaseGeneration(t *testin
 		t.Fatalf("Add: %v", err)
 	}
 	if _, err := pool.Exec(ctx,
-		`UPDATE tracks SET acquisition_attempts = 3 WHERE id = $1`, track.ID.UUID()); err != nil {
+		`UPDATE acquisition_jobs SET attempts = 3 WHERE track_id = $1`, track.ID.UUID()); err != nil {
 		t.Fatalf("simulate queue claims: %v", err)
 	}
 
@@ -1083,7 +1083,7 @@ func TestPostgresTrackRepo_GetByIDCarriesTheAcquisitionLeaseGeneration(t *testin
 	}
 	var stored int
 	if err := pool.QueryRow(ctx,
-		`SELECT acquisition_attempts FROM tracks WHERE id = $1`, track.ID.UUID()).Scan(&stored); err != nil {
+		`SELECT attempts FROM acquisition_jobs WHERE track_id = $1`, track.ID.UUID()).Scan(&stored); err != nil {
 		t.Fatalf("read acquisition_attempts: %v", err)
 	}
 	if stored != 3 {

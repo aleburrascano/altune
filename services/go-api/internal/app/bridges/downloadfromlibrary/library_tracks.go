@@ -157,17 +157,12 @@ func (l *LibraryTracks) settleUpgradeState(ctx context.Context, id ids.TrackId, 
 	if len(c.RejectedSourceKeys) == 0 && !reset {
 		return nil
 	}
-	track, err := l.store.GetByID(ctx, id, userId)
-	if errors.Is(err, domain.ErrTrackNotFound) {
+	if _, err := l.store.GetByID(ctx, id, userId); errors.Is(err, domain.ErrTrackNotFound) {
 		return download.ErrTrackNotFound
-	}
-	if err != nil {
+	} else if err != nil {
 		return fmt.Errorf("get track: %w", err)
 	}
-	if leaseSuperseded(fence, track.AcquisitionFence) {
-		return fmt.Errorf("track %s claimed by fence %d, caller holds %d: %w", id, track.AcquisitionFence, fence, download.ErrLeaseLost)
-	}
-	if err := l.state.SettleAcquisition(ctx, id, c.RejectedSourceKeys, reset); err != nil {
+	if err := l.state.SettleAcquisition(ctx, id, fence, c.RejectedSourceKeys, reset); err != nil {
 		return fmt.Errorf("settle upgrade state: %w", err)
 	}
 	return nil

@@ -34,11 +34,15 @@ func insertTrack(t *testing.T, pool *pgxpool.Pool, status, audioRef string, avai
 	t.Helper()
 	track := trackRow{ID: ids.NewTrackId(), UserId: ids.NewUserId(uuid.New())}
 	_, err := pool.Exec(context.Background(),
-		`INSERT INTO tracks (id, user_id, title, artist, album, dedup_key, acquisition_status, audio_ref, acquisition_available_at)
-		 VALUES ($1, $2, 'Blinding Lights', 'The Weeknd', 'After Hours', $3, $4, NULLIF($5, ''), $6)`,
-		track.ID.UUID(), track.UserId.UUID(), uuid.NewString(), status, audioRef, availableAt)
+		`INSERT INTO tracks (id, user_id, title, artist, album, dedup_key, acquisition_status, audio_ref)
+		 VALUES ($1, $2, 'Blinding Lights', 'The Weeknd', 'After Hours', $3, $4, NULLIF($5, ''))`,
+		track.ID.UUID(), track.UserId.UUID(), uuid.NewString(), status, audioRef)
 	if err != nil {
 		t.Fatalf("insert %s track: %v", status, err)
+	}
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE acquisition_jobs SET available_at = $2 WHERE track_id = $1`, track.ID.UUID(), availableAt); err != nil {
+		t.Fatalf("schedule job: %v", err)
 	}
 	t.Cleanup(func() {
 		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE id = $1`, track.ID.UUID())
@@ -64,7 +68,7 @@ func insertReadyTrack(t *testing.T, pool *pgxpool.Pool) trackRow {
 func expireLease(t *testing.T, pool *pgxpool.Pool, trackID ids.TrackId) {
 	t.Helper()
 	if _, err := pool.Exec(context.Background(),
-		`UPDATE tracks SET acquisition_lease_until = now() - interval '1 second' WHERE id = $1`, trackID.UUID()); err != nil {
+		`UPDATE acquisition_jobs SET lease_until = now() - interval '1 second' WHERE track_id = $1`, trackID.UUID()); err != nil {
 		t.Fatalf("expire lease: %v", err)
 	}
 }
