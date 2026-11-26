@@ -3,6 +3,8 @@ package logging
 const (
 	KeyCorrelationID = "corr_id"
 	KeyTraceID       = "trace_id"
+	KeyJob           = "job"
+	KeyRunID         = "run_id"
 	KeyError         = "error"
 	KeyMethod        = "method"
 	KeyPath          = "path"

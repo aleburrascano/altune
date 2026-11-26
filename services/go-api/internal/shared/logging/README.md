@@ -1,1 +1,1 @@
-`logging` owns how logs are formatted, keyed, redacted and kept in a ring buffer. Every log key a line carries is named in `keys.go`, and the correlation and trace ids are stamped on each line from its context.
+`logging` owns how logs are formatted, keyed, redacted and kept in a ring buffer. Every log key a line carries is named in `keys.go`, and the correlation and trace ids are stamped on each line from its context, and so are the `job` and `run_id` that `background.RunJob` binds with `WithJobRun` (an explicit `job` attr on the line wins).
