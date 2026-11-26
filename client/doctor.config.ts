@@ -135,6 +135,7 @@ export default {
       {
         files: [
           'src/mobile/frame/platformExtras.tsx',
+          'src/mobile/frame/platformExtras.android.tsx',
           'src/mobile/deviceFileStore.ts',
           'src/features/signIn/hooks/useOAuth.ts',
           'src/features/signIn/ui/AuthCallbackScreen.tsx',
