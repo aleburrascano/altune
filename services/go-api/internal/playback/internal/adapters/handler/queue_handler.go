@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/shared/requestuser"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -20,17 +21,29 @@ type QueueHandler struct {
 	limiter func(http.Handler) http.Handler
 }
 
-func NewQueueHandler(svc *queue.Service, limit QueueSaveLimit, now func() time.Time, metrics ports.RateLimitMetrics) *QueueHandler {
-	if svc == nil {
-		panic("handler: NewQueueHandler requires a queue service")
+var (
+	ErrCollaboratorRequired = errors.New("handler: a required collaborator is missing")
+	ErrClockRequired        = errors.New("handler: the queue handler requires a clock")
+)
+
+func NewQueueHandler(svc *queue.Service, limit QueueSaveLimit, now func() time.Time, metrics ports.RateLimitMetrics) (*QueueHandler, error) {
+	switch {
+	case svc == nil:
+		return nil, fmt.Errorf("NewQueueHandler: the queue service: %w", ErrCollaboratorRequired)
+	case now == nil:
+		return nil, fmt.Errorf("NewQueueHandler: %w", ErrClockRequired)
+	case metrics == nil:
+		return nil, fmt.Errorf("NewQueueHandler: the rate limit metrics: %w", ErrCollaboratorRequired)
 	}
-	if now == nil {
-		panic("handler: NewQueueHandler requires a clock")
+	return &QueueHandler{svc: svc, limiter: newUserRateLimiter(limit, now, metrics)}, nil
+}
+
+func MustNewQueueHandler(svc *queue.Service, limit QueueSaveLimit, now func() time.Time, metrics ports.RateLimitMetrics) *QueueHandler {
+	h, err := NewQueueHandler(svc, limit, now, metrics)
+	if err != nil {
+		panic(err)
 	}
-	if metrics == nil {
-		panic("handler: NewQueueHandler requires rate limit metrics")
-	}
-	return &QueueHandler{svc: svc, limiter: newUserRateLimiter(limit, now, metrics)}
+	return h
 }
 
 func (h *QueueHandler) Routes() chi.Router {

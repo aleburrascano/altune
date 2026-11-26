@@ -7,6 +7,11 @@ type (
 	QueueSaveLimit = handler.QueueSaveLimit
 )
 
-var NewQueueHandler = handler.NewQueueHandler
+var (
+	ErrQueueHandlerClockRequired        = handler.ErrClockRequired
+	ErrQueueHandlerCollaboratorRequired = handler.ErrCollaboratorRequired
+	MustNewQueueHandler                 = handler.MustNewQueueHandler
+	NewQueueHandler                     = handler.NewQueueHandler
+)
 
 var DefaultQueueStateRateLimit = handler.DefaultQueueStateRateLimit

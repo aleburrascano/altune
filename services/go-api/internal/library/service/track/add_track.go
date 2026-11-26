@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 )
@@ -48,18 +49,31 @@ type AddTrackService struct {
 	now       func() time.Time
 }
 
-func NewAddTrackService(trackRepo ports.TrackAddUpdater, publisher events.Publisher, scheduler ports.AcquisitionScheduler, now func() time.Time) *AddTrackService {
+var (
+	ErrCollaboratorRequired = errors.New("track: a required collaborator is missing")
+	ErrClockRequired        = errors.New("track: the service requires a clock")
+)
+
+func NewAddTrackService(trackRepo ports.TrackAddUpdater, publisher events.Publisher, scheduler ports.AcquisitionScheduler, now func() time.Time) (*AddTrackService, error) {
 	switch {
 	case trackRepo == nil:
-		panic("track: NewAddTrackService requires a track repository")
+		return nil, fmt.Errorf("NewAddTrackService: the track repository: %w", ErrCollaboratorRequired)
 	case publisher == nil:
-		panic("track: NewAddTrackService requires an events publisher")
+		return nil, fmt.Errorf("NewAddTrackService: the events publisher: %w", ErrCollaboratorRequired)
 	case scheduler == nil:
-		panic("track: NewAddTrackService requires an acquisition scheduler")
+		return nil, fmt.Errorf("NewAddTrackService: the acquisition scheduler: %w", ErrCollaboratorRequired)
 	case now == nil:
-		panic("track: NewAddTrackService requires a clock")
+		return nil, fmt.Errorf("NewAddTrackService: %w", ErrClockRequired)
 	}
-	return &AddTrackService{trackRepo: trackRepo, events: publisher, scheduler: scheduler, now: now}
+	return &AddTrackService{trackRepo: trackRepo, events: publisher, scheduler: scheduler, now: now}, nil
+}
+
+func MustNewAddTrackService(trackRepo ports.TrackAddUpdater, publisher events.Publisher, scheduler ports.AcquisitionScheduler, now func() time.Time) *AddTrackService {
+	s, err := NewAddTrackService(trackRepo, publisher, scheduler, now)
+	if err != nil {
+		panic(err)
+	}
+	return s
 }
 
 func (s *AddTrackService) Execute(ctx context.Context, userId ids.UserId, input AddTrackInput) (*AddTrackOutput, error) {

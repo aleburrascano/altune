@@ -30,7 +30,7 @@ func TestQueueService_ResumeView_EmbedsCurrentTrack(t *testing.T) {
 	reader := &fakeNowPlaying{Tracks: map[string]*playback.NowPlayingTrack{
 		trk("y"): {Id: trk("y"), Title: "Track Y", Artist: "Artist", AcquisitionStatus: "ready"},
 	}}
-	svc := playback.NewQueueService(repo, reader, time.Now)
+	svc := playback.MustNewQueueService(repo, reader, time.Now)
 	user := testUser()
 
 	if err := svc.Save(context.Background(), user, playback.SaveQueueStateInput{
@@ -56,7 +56,7 @@ func TestQueueService_ResumeView_EmbedsCurrentTrack(t *testing.T) {
 func TestQueueService_ResumeView_UnknownTrackOmitsCurrentTrackWithoutFailing(t *testing.T) {
 	repo := newInMemoryQueueRepo()
 	readerKnowingNoTracks := &fakeNowPlaying{Tracks: map[string]*playback.NowPlayingTrack{}}
-	svc := playback.NewQueueService(repo, readerKnowingNoTracks, time.Now)
+	svc := playback.MustNewQueueService(repo, readerKnowingNoTracks, time.Now)
 	user := testUser()
 
 	if err := svc.Save(context.Background(), user, playback.SaveQueueStateInput{
@@ -85,7 +85,7 @@ func TestQueueService_ResumeView_UnknownTrackOmitsCurrentTrackWithoutFailing(t *
 func TestQueueService_ResumeView_CatalogErrorDegradesButKeepsResume(t *testing.T) {
 	repo := newInMemoryQueueRepo()
 	catalogTimingOut := &erroringNowPlaying{err: errors.New("catalog db timeout")}
-	svc := playback.NewQueueService(repo, catalogTimingOut, time.Now)
+	svc := playback.MustNewQueueService(repo, catalogTimingOut, time.Now)
 	user := testUser()
 
 	if err := svc.Save(context.Background(), user, playback.SaveQueueStateInput{
@@ -114,7 +114,7 @@ func TestQueueService_ResumeView_CatalogErrorDegradesButKeepsResume(t *testing.T
 func TestQueueService_ResumeView_EnrichmentFailureLogsUserId(t *testing.T) {
 	logs := captureLogs(t)
 	repo := newInMemoryQueueRepo()
-	svc := playback.NewQueueService(repo, &erroringNowPlaying{err: errors.New("catalog db timeout")}, time.Now)
+	svc := playback.MustNewQueueService(repo, &erroringNowPlaying{err: errors.New("catalog db timeout")}, time.Now)
 	user := testUser()
 	const nowPlayingId = "5f0c1a52-8d3e-4b6a-9f21-0c7e4d2a9b18"
 
@@ -145,7 +145,7 @@ func TestQueueService_ResumeView_EnrichmentFailureLogsUserId(t *testing.T) {
 func TestQueueService_ResumeView_CanceledLookupDegradesButKeepsResume(t *testing.T) {
 	repo := newInMemoryQueueRepo()
 	clientDisconnected := &erroringNowPlaying{err: context.Canceled}
-	svc := playback.NewQueueService(repo, clientDisconnected, time.Now)
+	svc := playback.MustNewQueueService(repo, clientDisconnected, time.Now)
 	user := testUser()
 
 	if err := svc.Save(context.Background(), user, playback.SaveQueueStateInput{
@@ -168,7 +168,7 @@ func TestQueueService_ResumeView_CanceledLookupDegradesButKeepsResume(t *testing
 func TestQueueService_ResumeView_UnsavedEmptyQueueOmitsCurrentTrack(t *testing.T) {
 	repo := newInMemoryQueueRepo()
 	reader := &fakeNowPlaying{Tracks: map[string]*playback.NowPlayingTrack{}}
-	svc := playback.NewQueueService(repo, reader, time.Now)
+	svc := playback.MustNewQueueService(repo, reader, time.Now)
 	userWithNoSavedQueue := testUser()
 
 	view, err := svc.ResumeView(context.Background(), userWithNoSavedQueue)
@@ -193,7 +193,7 @@ func TestQueueService_ResumeView_OutOfRangeIdxOmitsCurrentTrack(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := newInMemoryQueueRepo()
 			failIfLookedUp := &erroringNowPlaying{err: errors.New("lookup must not be called")}
-			svc := playback.NewQueueService(repo, failIfLookedUp, time.Now)
+			svc := playback.MustNewQueueService(repo, failIfLookedUp, time.Now)
 			user := testUser()
 			repo.States[user.UUID()] = &playback.QueueState{UserId: user, TrackIds: tt.trackIds, CurrentIdx: tt.idx}
 
@@ -210,7 +210,7 @@ func TestQueueService_ResumeView_OutOfRangeIdxOmitsCurrentTrack(t *testing.T) {
 
 func TestQueueService_Save_PersistsValidState(t *testing.T) {
 	repo := newInMemoryQueueRepo()
-	svc := playback.NewQueueService(repo, &fakeNowPlaying{}, time.Now)
+	svc := playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now)
 	user := testUser()
 
 	err := svc.Save(context.Background(), user, playback.SaveQueueStateInput{
@@ -234,7 +234,7 @@ func TestQueueService_Save_PersistsValidState(t *testing.T) {
 }
 
 func TestQueueService_Save_RejectsInvalidRepeatMode(t *testing.T) {
-	svc := playback.NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{}, time.Now)
+	svc := playback.MustNewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{}, time.Now)
 	err := svc.Save(context.Background(), testUser(), playback.SaveQueueStateInput{
 		TrackIds:   []string{trk("a")},
 		RepeatMode: "bogus",
@@ -246,7 +246,7 @@ func TestQueueService_Save_RejectsInvalidRepeatMode(t *testing.T) {
 
 func TestQueueService_Save_FormatsTheStructuredSource(t *testing.T) {
 	repo := newInMemoryQueueRepo()
-	svc := playback.NewQueueService(repo, &fakeNowPlaying{}, time.Now)
+	svc := playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now)
 	user := testUser()
 
 	err := svc.Save(context.Background(), user, playback.SaveQueueStateInput{
@@ -266,7 +266,7 @@ func TestQueueService_Save_FormatsTheStructuredSource(t *testing.T) {
 
 func TestQueueService_Save_RejectsAMalformedSourceBeforeTheRepeatMode(t *testing.T) {
 	repo := newInMemoryQueueRepo()
-	svc := playback.NewQueueService(repo, &fakeNowPlaying{}, time.Now)
+	svc := playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now)
 
 	err := svc.Save(context.Background(), testUser(), playback.SaveQueueStateInput{RepeatMode: "sideways", LegacySourceId: "mixtape:7"})
 
@@ -282,7 +282,7 @@ func TestQueueService_Save_RejectsAMalformedSourceBeforeTheRepeatMode(t *testing
 func TestQueueService_StampsEveryStateWithTheInjectedClock(t *testing.T) {
 	repo := newInMemoryQueueRepo()
 	clock := time.Date(2026, 11, 25, 9, 30, 0, 0, time.UTC)
-	svc := playback.NewQueueService(repo, &fakeNowPlaying{}, func() time.Time { return clock })
+	svc := playback.MustNewQueueService(repo, &fakeNowPlaying{}, func() time.Time { return clock })
 	user := testUser()
 	ctx := context.Background()
 
@@ -308,19 +308,30 @@ func TestQueueService_StampsEveryStateWithTheInjectedClock(t *testing.T) {
 	}
 }
 
-func TestQueueService_ClockIsRequired(t *testing.T) {
+func TestNewQueueService_RefusesANilClock(t *testing.T) {
+	svc, err := playback.NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{}, nil)
+
+	if !errors.Is(err, playback.ErrQueueClockRequired) || svc != nil {
+		t.Fatalf("NewQueueService(nil clock) = (%v, %v), want ErrQueueClockRequired and no service", svc, err)
+	}
+	if !strings.Contains(err.Error(), "queue.New") {
+		t.Fatalf("error %q does not name the constructor", err)
+	}
+}
+
+func TestMustNewQueueService_PanicsOnANilClock(t *testing.T) {
 	defer func() {
 		if recover() == nil {
-			t.Fatal("a nil clock was accepted, want a panic at construction")
+			t.Fatal("MustNewQueueService accepted a nil clock")
 		}
 	}()
 
-	playback.NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{}, nil)
+	playback.MustNewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{}, nil)
 }
 
 func TestQueueService_SavePosition_MovesPositionWithinStoredQueue(t *testing.T) {
 	repo := newInMemoryQueueRepo()
-	svc := playback.NewQueueService(repo, &fakeNowPlaying{}, time.Now)
+	svc := playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now)
 	user := testUser()
 	ctx := context.Background()
 	if err := svc.Save(ctx, user, playback.SaveQueueStateInput{
@@ -359,7 +370,7 @@ func TestQueueService_SavePosition_RejectsInvalidInputWithoutWriting(t *testing.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := playback.NewQueueService(&panickingRepo{}, &fakeNowPlaying{}, time.Now)
+			svc := playback.MustNewQueueService(&panickingRepo{}, &fakeNowPlaying{}, time.Now)
 			err := svc.SavePosition(context.Background(), testUser(), tt.input)
 			var coded *apierror.CodedError
 			if !errors.As(err, &coded) || coded.Code().Kind() != apierror.KindInvalid {
@@ -370,7 +381,7 @@ func TestQueueService_SavePosition_RejectsInvalidInputWithoutWriting(t *testing.
 }
 
 func TestQueueService_SavePosition_UnmatchedQueueIsConflict(t *testing.T) {
-	svc := playback.NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{}, time.Now)
+	svc := playback.MustNewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{}, time.Now)
 
 	err := svc.SavePosition(context.Background(), testUser(), playback.SaveQueuePositionInput{CurrentTrackId: trk("a"), PositionMs: 1})
 
@@ -386,7 +397,7 @@ func (*panickingRepo) UpdatePosition(context.Context, *playback.QueuePosition) e
 }
 
 func TestQueueService_Resume_ReturnsEmptyWhenNoneStored(t *testing.T) {
-	svc := playback.NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{}, time.Now)
+	svc := playback.MustNewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{}, time.Now)
 
 	state, err := svc.Resume(context.Background(), testUser())
 	if err != nil {
@@ -402,7 +413,7 @@ func TestQueueService_Resume_ReturnsEmptyWhenNoneStored(t *testing.T) {
 
 func TestQueueService_Forget_ErasesPersistedState(t *testing.T) {
 	repo := newInMemoryQueueRepo()
-	svc := playback.NewQueueService(repo, &fakeNowPlaying{}, time.Now)
+	svc := playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now)
 	user := testUser()
 
 	if err := svc.Save(context.Background(), user, playback.SaveQueueStateInput{
@@ -431,7 +442,7 @@ func TestQueueService_Forget_ErasesPersistedState(t *testing.T) {
 }
 
 func TestQueueService_Forget_IsIdempotentForUnknownUser(t *testing.T) {
-	svc := playback.NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{}, time.Now)
+	svc := playback.MustNewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{}, time.Now)
 	if err := svc.Forget(context.Background(), testUser()); err != nil {
 		t.Fatalf("erasing a user with no stored state must not error: %v", err)
 	}
@@ -439,7 +450,7 @@ func TestQueueService_Forget_IsIdempotentForUnknownUser(t *testing.T) {
 
 func TestQueueService_Forget_LeavesAnAuditRecord(t *testing.T) {
 	logs := captureLogs(t)
-	svc := playback.NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{}, time.Now)
+	svc := playback.MustNewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{}, time.Now)
 	user := testUser()
 	const privateSourceId = "search:mac demarco"
 	const privateTrackId = "3b9c77e4-5d1a-4f0e-9c2b-7a6e1f4d8c30"
@@ -485,7 +496,7 @@ func TestQueueService_Forget_LeavesAnAuditRecord(t *testing.T) {
 func TestQueueService_Forget_FailedErasureIsNotAudited(t *testing.T) {
 	logs := captureLogs(t)
 	dbDown := errors.New("connection refused")
-	svc := playback.NewQueueService(&undeletableQueueRepo{Err: dbDown}, &fakeNowPlaying{}, time.Now)
+	svc := playback.MustNewQueueService(&undeletableQueueRepo{Err: dbDown}, &fakeNowPlaying{}, time.Now)
 
 	if err := svc.Forget(context.Background(), testUser()); !errors.Is(err, dbDown) {
 		t.Fatalf("a failed delete must propagate, got %v", err)
@@ -498,7 +509,7 @@ func TestQueueService_Forget_FailedErasureIsNotAudited(t *testing.T) {
 
 func TestQueueService_Resume_ReturnsStored(t *testing.T) {
 	repo := newInMemoryQueueRepo()
-	svc := playback.NewQueueService(repo, &fakeNowPlaying{}, time.Now)
+	svc := playback.MustNewQueueService(repo, &fakeNowPlaying{}, time.Now)
 	user := testUser()
 
 	if err := svc.Save(context.Background(), user, playback.SaveQueueStateInput{
@@ -532,7 +543,7 @@ func corruptStoredRow() error {
 }
 
 func TestQueueService_Resume_CorruptStoredRowFallsBackToEmpty(t *testing.T) {
-	svc := playback.NewQueueService(&failingQueueRepo{err: corruptStoredRow()}, &fakeNowPlaying{}, time.Now)
+	svc := playback.MustNewQueueService(&failingQueueRepo{err: corruptStoredRow()}, &fakeNowPlaying{}, time.Now)
 	user := testUser()
 
 	state, err := svc.Resume(context.Background(), user)
@@ -546,7 +557,7 @@ func TestQueueService_Resume_CorruptStoredRowFallsBackToEmpty(t *testing.T) {
 
 func TestQueueService_Resume_CorruptStoredRowIsStampedWithTheInjectedClock(t *testing.T) {
 	stamp := time.Date(2026, 11, 25, 9, 30, 0, 0, time.UTC)
-	svc := playback.NewQueueService(&failingQueueRepo{err: corruptStoredRow()}, &fakeNowPlaying{}, func() time.Time { return stamp })
+	svc := playback.MustNewQueueService(&failingQueueRepo{err: corruptStoredRow()}, &fakeNowPlaying{}, func() time.Time { return stamp })
 
 	state, err := svc.Resume(context.Background(), testUser())
 	if err != nil {
@@ -558,7 +569,7 @@ func TestQueueService_Resume_CorruptStoredRowIsStampedWithTheInjectedClock(t *te
 }
 
 func TestQueueService_ResumeView_CorruptStoredRowFallsBackToEmpty(t *testing.T) {
-	svc := playback.NewQueueService(&failingQueueRepo{err: corruptStoredRow()}, &fakeNowPlaying{}, time.Now)
+	svc := playback.MustNewQueueService(&failingQueueRepo{err: corruptStoredRow()}, &fakeNowPlaying{}, time.Now)
 
 	view, err := svc.ResumeView(context.Background(), testUser())
 	if err != nil {
@@ -571,7 +582,7 @@ func TestQueueService_ResumeView_CorruptStoredRowFallsBackToEmpty(t *testing.T) 
 
 func TestQueueService_Resume_InfrastructureErrorStillFails(t *testing.T) {
 	dbDown := errors.New("connection refused")
-	svc := playback.NewQueueService(&failingQueueRepo{err: dbDown}, &fakeNowPlaying{}, time.Now)
+	svc := playback.MustNewQueueService(&failingQueueRepo{err: dbDown}, &fakeNowPlaying{}, time.Now)
 
 	if _, err := svc.Resume(context.Background(), testUser()); !errors.Is(err, dbDown) {
 		t.Fatalf("non-corruption repo errors must still propagate, got %v", err)
@@ -589,7 +600,7 @@ func (c *countingNowPlaying) Lookup(_ context.Context, _ ids.UserId, trackId str
 
 func TestQueueService_ResumeView_LooksUpTheNowPlayingTrackWhilePlaying(t *testing.T) {
 	reader := &countingNowPlaying{}
-	svc := playback.NewQueueService(newInMemoryQueueRepo(), reader, time.Now)
+	svc := playback.MustNewQueueService(newInMemoryQueueRepo(), reader, time.Now)
 	user := testUser()
 	if err := svc.Save(context.Background(), user, playback.SaveQueueStateInput{
 		TrackIds: []string{trk("x"), trk("y")}, CurrentIdx: 1, RepeatMode: "off",

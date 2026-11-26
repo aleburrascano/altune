@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 )
@@ -22,16 +23,29 @@ type PlaylistLifecycleService struct {
 	now          func() time.Time
 }
 
-func NewPlaylistLifecycleService(playlistRepo ports.PlaylistLifecycleRepository, publisher events.Publisher, now func() time.Time) *PlaylistLifecycleService {
+var (
+	ErrCollaboratorRequired = errors.New("playlist: a required collaborator is missing")
+	ErrClockRequired        = errors.New("playlist: the service requires a clock")
+)
+
+func NewPlaylistLifecycleService(playlistRepo ports.PlaylistLifecycleRepository, publisher events.Publisher, now func() time.Time) (*PlaylistLifecycleService, error) {
 	switch {
 	case playlistRepo == nil:
-		panic("playlist: NewPlaylistLifecycleService requires a playlist repository")
+		return nil, fmt.Errorf("NewPlaylistLifecycleService: the playlist repository: %w", ErrCollaboratorRequired)
 	case publisher == nil:
-		panic("playlist: NewPlaylistLifecycleService requires an events publisher")
+		return nil, fmt.Errorf("NewPlaylistLifecycleService: the events publisher: %w", ErrCollaboratorRequired)
 	case now == nil:
-		panic("playlist: NewPlaylistLifecycleService requires a clock")
+		return nil, fmt.Errorf("NewPlaylistLifecycleService: %w", ErrClockRequired)
 	}
-	return &PlaylistLifecycleService{playlistRepo: playlistRepo, events: publisher, now: now}
+	return &PlaylistLifecycleService{playlistRepo: playlistRepo, events: publisher, now: now}, nil
+}
+
+func MustNewPlaylistLifecycleService(playlistRepo ports.PlaylistLifecycleRepository, publisher events.Publisher, now func() time.Time) *PlaylistLifecycleService {
+	s, err := NewPlaylistLifecycleService(playlistRepo, publisher, now)
+	if err != nil {
+		panic(err)
+	}
+	return s
 }
 
 func (s *PlaylistLifecycleService) Create(ctx context.Context, userId ids.UserId, name string) (*domain.Playlist, error) {

@@ -1110,7 +1110,7 @@ func TestPlaylistMembership_SingleTrackMutationCost_IsBoundedByTheChange(t *test
 
 	const n = 40
 	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, n)
-	svc := library.NewPlaylistMembershipService(library.NewPostgresPlaylistRepository(countedPool), library.NewPostgresTrackRepository(pool), events.NoopPublisher(), time.Now)
+	svc := library.MustNewPlaylistMembershipService(library.NewPostgresPlaylistRepository(countedPool), library.NewPostgresTrackRepository(pool), events.NoopPublisher(), time.Now)
 	trackRepo := library.NewPostgresTrackRepository(pool)
 
 	parent := t

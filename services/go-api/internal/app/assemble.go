@@ -131,7 +131,10 @@ func (a *App) wireFeatures(ctx context.Context, transport http.RoundTripper) (fe
 	if err := a.applyStartupSwitches(ctx); err != nil {
 		return features{}, fmt.Errorf("startup switches: %w", err)
 	}
-	playback := a.wirePlayback(ctx, cat.trackRepo)
+	playback, err := a.wirePlayback(ctx, cat.trackRepo)
+	if err != nil {
+		return features{}, fmt.Errorf("playback: %w", err)
+	}
 	disc.Handler.WithOwnershipEnrichment(newOwnershipEnrichment(cat, a.background))
 	return features{discovery: disc, catalog: cat, playback: playback}, nil
 }

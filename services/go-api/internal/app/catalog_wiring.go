@@ -76,7 +76,10 @@ func (a *App) wireCatalog(
 	if err != nil {
 		return catalogWiring{}, err
 	}
-	services := a.wireCatalogServices(tap, featuredBridge(disc), audio)
+	services, err := a.wireCatalogServices(tap, featuredBridge(disc), audio)
+	if err != nil {
+		return catalogWiring{}, err
+	}
 	return a.wireCatalogHandlers(audio, services), nil
 }
 
@@ -139,34 +142,42 @@ func (a *App) wireCatalogServices(
 	tap *monitoring.EventTap,
 	featuredBridge library.FeaturedArtistResolver,
 	audio audioSourcesStaging,
-) catalogServicesStaging {
+) (catalogServicesStaging, error) {
 	catalogTrackRepo := library.NewPostgresCatalogTrackRepository(a.pool)
 	playlistRepo := library.NewPostgresPlaylistRepository(a.pool)
 	orphanedAudio := library.NewPostgresOrphanedAudioRepository(a.pool)
 	audioStoreMetrics := library.NewExpvarAudioStoreMetrics()
 	library.SetDBCallMetrics(library.NewExpvarDBCallMetrics())
 
+	addTrackSvc, err := library.NewAddTrackService(catalogTrackRepo, tap, addTrackScheduler(audio.scheduler), time.Now)
+	if err != nil {
+		return catalogServicesStaging{}, fmt.Errorf("build the add-track service: %w", err)
+	}
+	playlistLifecycleSvc, err := library.NewPlaylistLifecycleService(playlistRepo, tap, time.Now)
+	if err != nil {
+		return catalogServicesStaging{}, fmt.Errorf("build the playlist lifecycle service: %w", err)
+	}
+	playlistMembershipSvc, err := library.NewPlaylistMembershipService(playlistRepo, catalogTrackRepo, tap, time.Now)
+	if err != nil {
+		return catalogServicesStaging{}, fmt.Errorf("build the playlist membership service: %w", err)
+	}
+
 	return catalogServicesStaging{
-		catalogTrackRepo: catalogTrackRepo,
-		orphanedAudio:    orphanedAudio,
-		addTrackSvc: library.NewAddTrackService(
-			catalogTrackRepo,
-			tap,
-			addTrackScheduler(audio.scheduler),
-			time.Now,
-		),
+		catalogTrackRepo:      catalogTrackRepo,
+		orphanedAudio:         orphanedAudio,
+		addTrackSvc:           addTrackSvc,
 		listTracksSvc:         library.NewListTracksService(catalogTrackRepo),
 		deleteTrackSvc:        library.NewDeleteTrackService(catalogTrackRepo, audio.audioStore, tap, audioStoreMetrics, orphanedAudio),
 		setTrackNumberSvc:     library.NewSetTrackNumberService(catalogTrackRepo),
-		playlistLifecycleSvc:  library.NewPlaylistLifecycleService(playlistRepo, tap, time.Now),
-		playlistMembershipSvc: library.NewPlaylistMembershipService(playlistRepo, catalogTrackRepo, tap, time.Now),
+		playlistLifecycleSvc:  playlistLifecycleSvc,
+		playlistMembershipSvc: playlistMembershipSvc,
 		backfillFeaturedSvc:   library.MustNewBackfillFeaturedService(catalogTrackRepo, catalogTrackRepo, featuredBridge, time.Now),
 		listFeaturingSvc:      library.NewListFeaturingService(catalogTrackRepo),
 		getTrackStatusSvc:     library.NewGetTrackStatusService(catalogTrackRepo),
 		streamTrackSvc:        library.NewStreamTrackService(catalogTrackRepo, audio.audioStore, library.WithStreamScheduler(audio.scheduler), library.WithStreamMetrics(audioStoreMetrics), library.WithStreamRecoverySwitch(a.jobs.Switch(jobs.StreamRecovery))),
 		audioURLSvc: library.MustNewAudioURLService(catalogTrackRepo, audio.audioStore, time.Now,
 			library.WithAudioURLMetrics(audioStoreMetrics)),
-	}
+	}, nil
 }
 
 func addTrackScheduler(scheduler library.AcquisitionScheduler) library.AcquisitionScheduler {

@@ -21,18 +21,26 @@ type PlaylistMembershipService struct {
 	now          func() time.Time
 }
 
-func NewPlaylistMembershipService(playlistRepo ports.PlaylistMembershipRepository, trackRepo ports.TrackLookup, publisher events.Publisher, now func() time.Time) *PlaylistMembershipService {
+func NewPlaylistMembershipService(playlistRepo ports.PlaylistMembershipRepository, trackRepo ports.TrackLookup, publisher events.Publisher, now func() time.Time) (*PlaylistMembershipService, error) {
 	switch {
 	case playlistRepo == nil:
-		panic("playlist: NewPlaylistMembershipService requires a playlist repository")
+		return nil, fmt.Errorf("NewPlaylistMembershipService: the playlist repository: %w", ErrCollaboratorRequired)
 	case trackRepo == nil:
-		panic("playlist: NewPlaylistMembershipService requires a track lookup")
+		return nil, fmt.Errorf("NewPlaylistMembershipService: the track lookup: %w", ErrCollaboratorRequired)
 	case publisher == nil:
-		panic("playlist: NewPlaylistMembershipService requires an events publisher")
+		return nil, fmt.Errorf("NewPlaylistMembershipService: the events publisher: %w", ErrCollaboratorRequired)
 	case now == nil:
-		panic("playlist: NewPlaylistMembershipService requires a clock")
+		return nil, fmt.Errorf("NewPlaylistMembershipService: %w", ErrClockRequired)
 	}
-	return &PlaylistMembershipService{playlistRepo: playlistRepo, trackRepo: trackRepo, events: publisher, now: now}
+	return &PlaylistMembershipService{playlistRepo: playlistRepo, trackRepo: trackRepo, events: publisher, now: now}, nil
+}
+
+func MustNewPlaylistMembershipService(playlistRepo ports.PlaylistMembershipRepository, trackRepo ports.TrackLookup, publisher events.Publisher, now func() time.Time) *PlaylistMembershipService {
+	s, err := NewPlaylistMembershipService(playlistRepo, trackRepo, publisher, now)
+	if err != nil {
+		panic(err)
+	}
+	return s
 }
 
 func (s *PlaylistMembershipService) requirePlaylist(ctx context.Context, playlistId domain.PlaylistId, userId sharedids.UserId, op string) error {

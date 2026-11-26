@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/playback"
 	"altune/go-api/internal/shared/config"
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -14,18 +15,25 @@ type playbackWiring struct {
 	forgetDeletedIdentities *playback.DeletedUserDataCleanup
 }
 
-func (a *App) wirePlayback(ctx context.Context, trackRepo *library.PostgresTrackRepository) playbackWiring {
+func (a *App) wirePlayback(ctx context.Context, trackRepo *library.PostgresTrackRepository) (playbackWiring, error) {
 	metrics := playback.NewExpvarPlaybackMetrics()
 	queueStateRepo := playback.NewPostgresQueueStateRepository(a.pool, playback.WithQueueStateMetrics(metrics))
-	queueSvc := newQueueService(queueStateRepo, trackRepo, metrics, a.cfg.PlaybackNowPlayingLookupTimeout)
+	queueSvc, err := newQueueService(queueStateRepo, trackRepo, metrics, a.cfg.PlaybackNowPlayingLookupTimeout)
+	if err != nil {
+		return playbackWiring{}, err
+	}
+	queueHandler, err := newQueueHandler(queueSvc, metrics, queueRateLimit(a.cfg))
+	if err != nil {
+		return playbackWiring{}, err
+	}
 	return playbackWiring{
-		handler: newQueueHandler(queueSvc, metrics, queueRateLimit(a.cfg)),
+		handler: queueHandler,
 		forgetDeletedIdentities: playback.NewErasureSweeper(
 			playback.NewPostgresDeletedIdentityRepository(a.pool), queueSvc,
 			playback.WithSweepRunBudget(a.cfg.PlaybackErasureScanTimeout),
 			playback.WithErasureSweepMetrics(metrics),
 			playback.WithErasedStateReaper(queueStateRepo)),
-	}
+	}, nil
 }
 
 type playbackMetricsSink interface {
@@ -38,13 +46,16 @@ func newQueueService(
 	trackRepo *library.PostgresTrackRepository,
 	metrics playbackMetricsSink,
 	lookupTimeout time.Duration,
-) *playback.QueueService {
-	nowPlayingReader := playback.NewNowPlayingReader(playbackfromlibrary.NewNowPlayingTracks(trackRepo),
+) (*playback.QueueService, error) {
+	nowPlayingReader, err := playback.NewNowPlayingReader(playbackfromlibrary.NewNowPlayingTracks(trackRepo),
 		metrics, time.Now, lookupTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("build the now-playing reader: %w", err)
+	}
 	return playback.NewQueueService(queueStateRepo, nowPlayingReader, time.Now)
 }
 
-func newQueueHandler(queueSvc *playback.QueueService, metrics playbackMetricsSink, limit playback.QueueSaveLimit) *playback.QueueHandler {
+func newQueueHandler(queueSvc *playback.QueueService, metrics playbackMetricsSink, limit playback.QueueSaveLimit) (*playback.QueueHandler, error) {
 	return playback.NewQueueHandler(queueSvc, limit, time.Now, metrics)
 }
 

@@ -15,9 +15,12 @@ type (
 const MaxFeaturedArtistsPerTrack = track.MaxFeaturedArtistsPerTrack
 
 var (
-	NewAddTrackService       = track.NewAddTrackService
-	NewDeleteTrackService    = track.NewDeleteTrackService
-	NewGetTrackStatusService = track.NewGetTrackStatusService
-	NewListTracksService     = track.NewListTracksService
-	NewSetTrackNumberService = track.NewSetTrackNumberService
+	ErrTrackClockRequired        = track.ErrClockRequired
+	ErrTrackCollaboratorRequired = track.ErrCollaboratorRequired
+	MustNewAddTrackService       = track.MustNewAddTrackService
+	NewAddTrackService           = track.NewAddTrackService
+	NewDeleteTrackService        = track.NewDeleteTrackService
+	NewGetTrackStatusService     = track.NewGetTrackStatusService
+	NewListTracksService         = track.NewListTracksService
+	NewSetTrackNumberService     = track.NewSetTrackNumberService
 )

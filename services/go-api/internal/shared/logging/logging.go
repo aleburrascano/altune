@@ -50,7 +50,7 @@ func install(logLevel string, newBase func(slog.Level) slog.Handler, opts []Setu
 	}
 	base := newBase(parseLevel(logLevel))
 
-	ring := NewRingBuffer(logRingCapacity, cfg.now)
+	ring := MustNewRingBuffer(logRingCapacity, cfg.now)
 	slog.SetDefault(slog.New(newCorrelationHandler(newRingHandler(base, ring))))
 	return ring
 }

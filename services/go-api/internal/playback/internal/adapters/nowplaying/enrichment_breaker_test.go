@@ -75,7 +75,7 @@ type scriptedReader struct {
 func newScriptedReader(clock func() time.Time) *scriptedReader {
 	gauge := &breakerGauge{}
 	return &scriptedReader{
-		reader: playback.NewNowPlayingReader(trackScript{}, gauge, clock, defaultLookupTimeout),
+		reader: playback.MustNewNowPlayingReader(trackScript{}, gauge, clock, defaultLookupTimeout),
 		gauge:  gauge,
 		user:   testUser(),
 	}
@@ -255,7 +255,7 @@ func TestEnrichmentBreaker_AFailureRecordedWhileOpenLogsNothing(t *testing.T) {
 	buf := captureBreakerLogs(t)
 	held, release := make(chan struct{}), make(chan struct{})
 	var calls atomic.Int32
-	reader := playback.NewNowPlayingReader(sourceFunc(func(context.Context) (*playback.NowPlayingTrack, error) {
+	reader := playback.MustNewNowPlayingReader(sourceFunc(func(context.Context) (*playback.NowPlayingTrack, error) {
 		if calls.Add(1) == 1 {
 			close(held)
 			<-release

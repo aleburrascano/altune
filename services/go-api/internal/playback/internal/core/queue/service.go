@@ -28,11 +28,21 @@ type Service struct {
 	now        func() time.Time
 }
 
-func New(repo ports.QueueStateRepository, nowPlaying ports.NowPlayingReader, now func() time.Time) *Service {
+var ErrClockRequired = errors.New("queue: the queue service requires a clock")
+
+func New(repo ports.QueueStateRepository, nowPlaying ports.NowPlayingReader, now func() time.Time) (*Service, error) {
 	if now == nil {
-		panic("queue: New requires a clock")
+		return nil, fmt.Errorf("queue.New: %w", ErrClockRequired)
 	}
-	return &Service{repo: repo, nowPlaying: nowPlaying, now: now}
+	return &Service{repo: repo, nowPlaying: nowPlaying, now: now}, nil
+}
+
+func MustNew(repo ports.QueueStateRepository, nowPlaying ports.NowPlayingReader, now func() time.Time) *Service {
+	s, err := New(repo, nowPlaying, now)
+	if err != nil {
+		panic(err)
+	}
+	return s
 }
 
 func (s *Service) Save(ctx context.Context, userId ids.UserId, input SaveQueueStateInput) error {

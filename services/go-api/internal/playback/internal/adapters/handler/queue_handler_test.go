@@ -68,7 +68,7 @@ type sourceDTO struct {
 }
 
 func newHandler(repo playback.QueueStateRepository) *playback.QueueHandler {
-	return playback.NewQueueHandler(playback.NewQueueService(repo, absentNowPlaying{}, time.Now), playback.DefaultQueueStateRateLimit, time.Now, noopRateLimitMetrics{})
+	return playback.MustNewQueueHandler(playback.MustNewQueueService(repo, absentNowPlaying{}, time.Now), playback.DefaultQueueStateRateLimit, time.Now, noopRateLimitMetrics{})
 }
 
 func savePut(body string) *http.Request {
@@ -300,7 +300,7 @@ func getResume(t *testing.T, nowPlaying nowPlayingReader) (int, map[string]json.
 		CurrentIdx:   1,
 		NaturalOrder: []string{"00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"},
 	}}
-	h := playback.NewQueueHandler(playback.NewQueueService(repo, nowPlaying, time.Now), playback.DefaultQueueStateRateLimit, time.Now, noopRateLimitMetrics{})
+	h := playback.MustNewQueueHandler(playback.MustNewQueueService(repo, nowPlaying, time.Now), playback.DefaultQueueStateRateLimit, time.Now, noopRateLimitMetrics{})
 	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
 	req = req.WithContext(requestuser.ContextWithUserID(req.Context(), ids.NewUserId(uuid.New())))
 	rec := httptest.NewRecorder()
@@ -404,32 +404,48 @@ type noopRateLimitMetrics struct{}
 func (noopRateLimitMetrics) QueueStateRateLimited() {}
 
 func TestNewQueueHandler_RequiresItsClockAndMetrics(t *testing.T) {
-	svc := playback.NewQueueService(&recordingRepo{}, absentNowPlaying{}, time.Now)
-	cases := map[string]func(){
-		"service": func() {
-			playback.NewQueueHandler(nil, playback.DefaultQueueStateRateLimit, time.Now, noopRateLimitMetrics{})
-		},
-		"clock": func() {
-			playback.NewQueueHandler(svc, playback.DefaultQueueStateRateLimit, nil, noopRateLimitMetrics{})
-		},
-		"metrics": func() {
-			playback.NewQueueHandler(svc, playback.DefaultQueueStateRateLimit, time.Now, nil)
-		},
+	svc := playback.MustNewQueueService(&recordingRepo{}, absentNowPlaying{}, time.Now)
+	cases := map[string]struct {
+		build func() (*playback.QueueHandler, error)
+		want  error
+	}{
+		"service": {func() (*playback.QueueHandler, error) {
+			return playback.NewQueueHandler(nil, playback.DefaultQueueStateRateLimit, time.Now, noopRateLimitMetrics{})
+		}, playback.ErrQueueHandlerCollaboratorRequired},
+		"clock": {func() (*playback.QueueHandler, error) {
+			return playback.NewQueueHandler(svc, playback.DefaultQueueStateRateLimit, nil, noopRateLimitMetrics{})
+		}, playback.ErrQueueHandlerClockRequired},
+		"metrics": {func() (*playback.QueueHandler, error) {
+			return playback.NewQueueHandler(svc, playback.DefaultQueueStateRateLimit, time.Now, nil)
+		}, playback.ErrQueueHandlerCollaboratorRequired},
 	}
-	for name, construct := range cases {
+	for name, tt := range cases {
 		t.Run(name, func(t *testing.T) {
-			defer func() {
-				if recover() == nil {
-					t.Fatalf("a nil %s was accepted, want a panic at construction", name)
-				}
-			}()
-			construct()
+			h, err := tt.build()
+
+			if !errors.Is(err, tt.want) || h != nil {
+				t.Fatalf("a nil %s = (%v, %v), want %v and no handler", name, h, err, tt.want)
+			}
+			if !strings.Contains(err.Error(), "NewQueueHandler") {
+				t.Fatalf("error %q does not name the constructor", err)
+			}
 		})
 	}
 }
 
+func TestMustNewQueueHandler_PanicsOnANilClock(t *testing.T) {
+	svc := playback.MustNewQueueService(&recordingRepo{}, absentNowPlaying{}, time.Now)
+	defer func() {
+		if recover() == nil {
+			t.Fatal("MustNewQueueHandler accepted a nil clock")
+		}
+	}()
+
+	playback.MustNewQueueHandler(svc, playback.DefaultQueueStateRateLimit, nil, noopRateLimitMetrics{})
+}
+
 func TestHandleSavePosition_SharesTheQueueStateRateLimit(t *testing.T) {
-	h := playback.NewQueueHandler(playback.NewQueueService(&recordingRepo{}, absentNowPlaying{}, time.Now), playback.QueueSaveLimit{Every: time.Hour, Burst: 1}, time.Now, noopRateLimitMetrics{})
+	h := playback.MustNewQueueHandler(playback.MustNewQueueService(&recordingRepo{}, absentNowPlaying{}, time.Now), playback.QueueSaveLimit{Every: time.Hour, Burst: 1}, time.Now, noopRateLimitMetrics{})
 	user := ids.NewUserId(uuid.New())
 	as := func(req *http.Request) *http.Request {
 		return req.WithContext(requestuser.ContextWithUserID(req.Context(), user))
@@ -446,7 +462,7 @@ func TestHandleSavePosition_SharesTheQueueStateRateLimit(t *testing.T) {
 }
 
 func TestHandleGet_ResponseIsUncachedAndNotSniffable(t *testing.T) {
-	h := playback.NewQueueHandler(playback.NewQueueService(&recordingRepo{saved: &playback.QueueState{
+	h := playback.MustNewQueueHandler(playback.MustNewQueueService(&recordingRepo{saved: &playback.QueueState{
 		TrackIds:     []string{"00000000-0000-4000-8000-000000000001"},
 		NaturalOrder: []string{"00000000-0000-4000-8000-000000000001"},
 	}}, absentNowPlaying{}, time.Now), playback.DefaultQueueStateRateLimit, time.Now, noopRateLimitMetrics{})

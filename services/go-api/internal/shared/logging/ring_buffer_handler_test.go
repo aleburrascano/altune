@@ -258,7 +258,7 @@ func TestRingBuffer_SubscribeRejectsPastCeiling(t *testing.T) {
 }
 
 func TestNewRingBuffer_StartsEmptyAndAcceptsSubscribers(t *testing.T) {
-	ring := logging.NewRingBuffer(0, time.Now)
+	ring := logging.MustNewRingBuffer(0, time.Now)
 
 	_, cancel, err := ring.Subscribe()
 	if err != nil {
