@@ -1,15 +1,15 @@
 package audioquality_test
 
 import (
-	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/audioquality"
 	"testing"
 )
 
 func TestBeats_AUserIsTheTopOfTheScale(t *testing.T) {
-	if !download.GradeAUser.Beats(download.GradeA) || download.GradeA.Beats(download.GradeAUser) || download.GradeAUser.Beats(download.GradeAUser) {
+	if !audioquality.AUser.Beats(audioquality.A) || audioquality.A.Beats(audioquality.AUser) || audioquality.AUser.Beats(audioquality.AUser) {
 		t.Error("A_user must beat A, and nothing beats A_user")
 	}
-	if !download.GradeAUser.IsKnown() || !download.GradeAUser.IsTop() || !download.GradeA.IsTop() || download.GradeB.IsTop() {
+	if !audioquality.AUser.IsKnown() || !audioquality.AUser.IsTop() || !audioquality.A.IsTop() || audioquality.B.IsTop() {
 		t.Error("only A and A_user are top grades")
 	}
 }
@@ -17,20 +17,20 @@ func TestBeats_AUserIsTheTopOfTheScale(t *testing.T) {
 func TestBeats(t *testing.T) {
 	cases := []struct {
 		name      string
-		candidate download.Grade
-		current   download.Grade
+		candidate audioquality.Grade
+		current   audioquality.Grade
 		want      bool
 	}{
-		{"A beats B", download.GradeA, download.GradeB, true},
-		{"B beats C", download.GradeB, download.GradeC, true},
-		{"C beats D", download.GradeC, download.GradeD, true},
-		{"D beats F", download.GradeD, download.GradeF, true},
-		{"A beats F", download.GradeA, download.GradeF, true},
-		{"an equal grade does not beat itself", download.GradeC, download.GradeC, false},
-		{"B does not beat A", download.GradeB, download.GradeA, false},
-		{"F does not beat D", download.GradeF, download.GradeD, false},
-		{"an unknown candidate beats nothing", download.Grade("Z"), download.GradeF, false},
-		{"nothing is beaten by an unknown current grade", download.GradeA, download.Grade(""), false},
+		{"A beats B", audioquality.A, audioquality.B, true},
+		{"B beats C", audioquality.B, audioquality.C, true},
+		{"C beats D", audioquality.C, audioquality.D, true},
+		{"D beats F", audioquality.D, audioquality.F, true},
+		{"A beats F", audioquality.A, audioquality.F, true},
+		{"an equal grade does not beat itself", audioquality.C, audioquality.C, false},
+		{"B does not beat A", audioquality.B, audioquality.A, false},
+		{"F does not beat D", audioquality.F, audioquality.D, false},
+		{"an unknown candidate beats nothing", audioquality.Grade("Z"), audioquality.F, false},
+		{"nothing is beaten by an unknown current grade", audioquality.A, audioquality.Grade(""), false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

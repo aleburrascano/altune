@@ -3,6 +3,9 @@ package service_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/ytmsearch"
+	"altune/go-api/internal/download/internal/core/audioquality"
+	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/download/internal/core/isrcwriteback"
 	"altune/go-api/internal/download/internal/core/musicbrainzmatch"
 	"altune/go-api/internal/download/internal/core/ports"
@@ -24,22 +27,22 @@ const (
 func TestSourceKindOf(t *testing.T) {
 	cases := []struct {
 		name    string
-		kind    download.CandidateKind
+		kind    ports.CandidateKind
 		omv     bool
 		channel string
-		want    download.SourceKind
+		want    audioquality.SourceKind
 	}{
-		{"art track", download.KindArtTrack, false, channelOther, download.ArtTrack},
-		{"observed official video", download.KindPinnedVideo, true, channelOther, download.OfficialVideo},
-		{"pinned video of an unknown type is not official", download.KindPinnedVideo, false, channelTopic, download.FanUpload},
-		{"upload from the artist's channel", download.KindUpload, false, channelArtist, download.LabelUpload},
-		{"upload from a topic channel", download.KindUpload, false, channelTopic, download.LabelUpload},
-		{"upload from any other channel", download.KindUpload, false, channelOther, download.FanUpload},
-		{"catalog pin is not assumed official", download.KindCatalogPin, false, channelTopic, download.FanUpload},
+		{"art track", ports.KindArtTrack, false, channelOther, audioquality.ArtTrack},
+		{"observed official video", ports.KindPinnedVideo, true, channelOther, audioquality.OfficialVideo},
+		{"pinned video of an unknown type is not official", ports.KindPinnedVideo, false, channelTopic, audioquality.FanUpload},
+		{"upload from the artist's channel", ports.KindUpload, false, channelArtist, audioquality.LabelUpload},
+		{"upload from a topic channel", ports.KindUpload, false, channelTopic, audioquality.LabelUpload},
+		{"upload from any other channel", ports.KindUpload, false, channelOther, audioquality.FanUpload},
+		{"catalog pin is not assumed official", ports.KindCatalogPin, false, channelTopic, audioquality.FanUpload},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := download.SourceKindOf(download.AudioCandidate{Kind: tc.kind, ObservedOMV: tc.omv}, tc.channel); got != tc.want {
+			if got := service.SourceKindOf(download.AudioCandidate{Kind: tc.kind, ObservedOMV: tc.omv}, tc.channel); got != tc.want {
 				t.Errorf("SourceKindOf = %q, want %q", got, tc.want)
 			}
 		})
@@ -49,16 +52,16 @@ func TestSourceKindOf(t *testing.T) {
 func TestUploaderSourceKind(t *testing.T) {
 	cases := []struct {
 		name, artist, channel string
-		want                  download.SourceKind
+		want                  audioquality.SourceKind
 	}{
-		{"the artist's own channel", "Daft Punk", "Daft Punk", download.LabelUpload},
-		{"a topic channel", "Daft Punk", "Daft Punk - Topic", download.LabelUpload},
-		{"someone else's channel", "Daft Punk", "lyrics hub", download.FanUpload},
-		{"no channel", "Daft Punk", "", download.FanUpload},
+		{"the artist's own channel", "Daft Punk", "Daft Punk", audioquality.LabelUpload},
+		{"a topic channel", "Daft Punk", "Daft Punk - Topic", audioquality.LabelUpload},
+		{"someone else's channel", "Daft Punk", "lyrics hub", audioquality.FanUpload},
+		{"no channel", "Daft Punk", "", audioquality.FanUpload},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := download.UploaderSourceKind(tc.artist, tc.channel); got != tc.want {
+			if got := service.UploaderSourceKind(tc.artist, tc.channel); got != tc.want {
 				t.Errorf("UploaderSourceKind = %q, want %q", got, tc.want)
 			}
 		})
@@ -66,16 +69,16 @@ func TestUploaderSourceKind(t *testing.T) {
 }
 
 func TestFingerprintOf(t *testing.T) {
-	cases := map[download.VerdictKind]download.FingerprintResult{
-		download.VerdictHard:          download.Matches,
-		download.VerdictSoft:          download.Approximates,
-		download.VerdictOtherVersion:  download.Contradicts,
-		download.VerdictDifferentSong: download.FingerprintUnsupported,
-		download.VerdictUnknown:       download.FingerprintSilent,
-		"":                            download.FingerprintSilent,
+	cases := map[service.VerdictKind]audioquality.FingerprintResult{
+		service.VerdictHard:          audioquality.Matches,
+		service.VerdictSoft:          audioquality.Approximates,
+		service.VerdictOtherVersion:  audioquality.Contradicts,
+		service.VerdictDifferentSong: audioquality.Unsupported,
+		service.VerdictUnknown:       audioquality.Silent,
+		"":                           audioquality.Silent,
 	}
 	for verdict, want := range cases {
-		if got := download.FingerprintOf(verdict); got != want {
+		if got := service.FingerprintOf(verdict); got != want {
 			t.Errorf("FingerprintOf(%q) = %v, want %v", verdict, got, want)
 		}
 	}
@@ -84,31 +87,31 @@ func TestFingerprintOf(t *testing.T) {
 func TestScoreConfidence(t *testing.T) {
 	tests := []struct {
 		name  string
-		e     download.ConfidenceEvidence
+		e     service.Evidence
 		track float64
 		want  float64
 	}{
-		{"hard", download.ConfidenceEvidence{Verdict: "hard", AcoustIDScore: 0.97}, 204, 0.95},
-		{"soft", download.ConfidenceEvidence{Verdict: "soft", AcoustIDScore: 0.95}, 204, 0.85},
-		{"hard with a low score", download.ConfidenceEvidence{Verdict: "hard", AcoustIDScore: 0.8}, 204, 0.85},
-		{"soft with a low score stays at the unknown cap", download.ConfidenceEvidence{Verdict: "soft", AcoustIDScore: 0.8}, 204, 0.8},
-		{"hard at exactly the low-score cutoff keeps full confidence", download.ConfidenceEvidence{Verdict: "hard", AcoustIDScore: 0.92}, 204, 0.95},
-		{"hard with no score recorded", download.ConfidenceEvidence{Verdict: "hard"}, 204, 0.95},
-		{"topic one second off", download.ConfidenceEvidence{Verdict: "unknown", Channel: channelTopic, DurationDeltaSeconds: secs(1)}, 204, 0.7},
-		{"other channel twenty seconds off", download.ConfidenceEvidence{Verdict: "unknown", Channel: channelOther, DurationDeltaSeconds: secs(20)}, 204, 0.2},
-		{"artist channel on the spot", download.ConfidenceEvidence{Verdict: "unknown", Channel: channelArtist, DurationDeltaSeconds: secs(0)}, 204, 0.7},
-		{"no fingerprint run", download.ConfidenceEvidence{Channel: channelTopic, DurationDeltaSeconds: secs(-1)}, 204, 0.7},
-		{"topic twenty seconds short earns no length bonus", download.ConfidenceEvidence{Channel: channelTopic, DurationDeltaSeconds: secs(-20)}, 204, 0.5},
-		{"loose duration window", download.ConfidenceEvidence{Channel: channelOther, DurationDeltaSeconds: secs(10)}, 204, 0.3},
-		{"loose window grows with the track", download.ConfidenceEvidence{Channel: channelOther, DurationDeltaSeconds: secs(20)}, 400, 0.3},
-		{"qualifier costs 0.2", download.ConfidenceEvidence{Channel: channelTopic, DurationDeltaSeconds: secs(0), Qualifiers: []string{"radio edit"}}, 204, 0.5},
-		{"resolved adds 0.1 and the cap holds", download.ConfidenceEvidence{Channel: channelTopic, Resolved: true, DurationDeltaSeconds: secs(0)}, 204, 0.8},
-		{"unknown length earns no length bonus", download.ConfidenceEvidence{Verdict: "unknown", Channel: channelTopic}, 204, 0.5},
-		{"never below zero", download.ConfidenceEvidence{Channel: channelOther, DurationDeltaSeconds: secs(90), Qualifiers: []string{"edit"}}, 204, 0},
+		{"hard", service.Evidence{Verdict: "hard", AcoustIDScore: 0.97}, 204, 0.95},
+		{"soft", service.Evidence{Verdict: "soft", AcoustIDScore: 0.95}, 204, 0.85},
+		{"hard with a low score", service.Evidence{Verdict: "hard", AcoustIDScore: 0.8}, 204, 0.85},
+		{"soft with a low score stays at the unknown cap", service.Evidence{Verdict: "soft", AcoustIDScore: 0.8}, 204, 0.8},
+		{"hard at exactly the low-score cutoff keeps full confidence", service.Evidence{Verdict: "hard", AcoustIDScore: 0.92}, 204, 0.95},
+		{"hard with no score recorded", service.Evidence{Verdict: "hard"}, 204, 0.95},
+		{"topic one second off", service.Evidence{Verdict: "unknown", Channel: channelTopic, DurationDeltaSeconds: secs(1)}, 204, 0.7},
+		{"other channel twenty seconds off", service.Evidence{Verdict: "unknown", Channel: channelOther, DurationDeltaSeconds: secs(20)}, 204, 0.2},
+		{"artist channel on the spot", service.Evidence{Verdict: "unknown", Channel: channelArtist, DurationDeltaSeconds: secs(0)}, 204, 0.7},
+		{"no fingerprint run", service.Evidence{Channel: channelTopic, DurationDeltaSeconds: secs(-1)}, 204, 0.7},
+		{"topic twenty seconds short earns no length bonus", service.Evidence{Channel: channelTopic, DurationDeltaSeconds: secs(-20)}, 204, 0.5},
+		{"loose duration window", service.Evidence{Channel: channelOther, DurationDeltaSeconds: secs(10)}, 204, 0.3},
+		{"loose window grows with the track", service.Evidence{Channel: channelOther, DurationDeltaSeconds: secs(20)}, 400, 0.3},
+		{"qualifier costs 0.2", service.Evidence{Channel: channelTopic, DurationDeltaSeconds: secs(0), Qualifiers: []string{"radio edit"}}, 204, 0.5},
+		{"resolved adds 0.1 and the cap holds", service.Evidence{Channel: channelTopic, Resolved: true, DurationDeltaSeconds: secs(0)}, 204, 0.8},
+		{"unknown length earns no length bonus", service.Evidence{Verdict: "unknown", Channel: channelTopic}, 204, 0.5},
+		{"never below zero", service.Evidence{Channel: channelOther, DurationDeltaSeconds: secs(90), Qualifiers: []string{"edit"}}, 204, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := download.ScoreConfidence(tt.e, tt.track); got != tt.want {
+			if got := service.ScoreConfidence(tt.e, tt.track); got != tt.want {
 				t.Errorf("ScoreConfidence = %v, want %v", got, tt.want)
 			}
 		})
@@ -119,9 +122,9 @@ func TestScoreConfidence_ALengthExactlyAtEachToleranceEarnsThatTiersBonus(t *tes
 	const short, long = 204.0, 400.0
 	const nudge = 0.01
 	const tight, loose, none = 0.4, 0.3, 0.2
-	tightEdge := download.LengthTight.Allowance(short)
-	looseSlackEdge := download.LengthLoose.Allowance(short)
-	looseFractionEdge := download.LengthLoose.Allowance(long)
+	tightEdge := domain.LengthTight.Allowance(short)
+	looseSlackEdge := domain.LengthLoose.Allowance(short)
+	looseFractionEdge := domain.LengthLoose.Allowance(long)
 	cases := []struct {
 		name  string
 		delta float64
@@ -143,8 +146,8 @@ func TestScoreConfidence_ALengthExactlyAtEachToleranceEarnsThatTiersBonus(t *tes
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			e := download.ConfidenceEvidence{Channel: channelOther, DurationDeltaSeconds: secs(tc.delta)}
-			if got := download.ScoreConfidence(e, tc.track); got != tc.want {
+			e := service.Evidence{Channel: channelOther, DurationDeltaSeconds: secs(tc.delta)}
+			if got := service.ScoreConfidence(e, tc.track); got != tc.want {
 				t.Errorf("ScoreConfidence(%v s off a %v s track) = %v, want %v", tc.delta, tc.track, got, tc.want)
 			}
 		})
@@ -152,9 +155,9 @@ func TestScoreConfidence_ALengthExactlyAtEachToleranceEarnsThatTiersBonus(t *tes
 }
 
 func TestScoreConfidence_RanksHardOverSoftOverEveryUnknown(t *testing.T) {
-	best := download.ScoreConfidence(download.ConfidenceEvidence{Channel: channelTopic, Resolved: true, DurationDeltaSeconds: secs(0)}, 204)
-	hard := download.ScoreConfidence(download.ConfidenceEvidence{Verdict: "hard", AcoustIDScore: 0.5}, 204)
-	soft := download.ScoreConfidence(download.ConfidenceEvidence{Verdict: "soft", AcoustIDScore: 0.5}, 204)
+	best := service.ScoreConfidence(service.Evidence{Channel: channelTopic, Resolved: true, DurationDeltaSeconds: secs(0)}, 204)
+	hard := service.ScoreConfidence(service.Evidence{Verdict: "hard", AcoustIDScore: 0.5}, 204)
+	soft := service.ScoreConfidence(service.Evidence{Verdict: "soft", AcoustIDScore: 0.5}, 204)
 	if !(hard > soft && soft >= best) {
 		t.Errorf("hard %v, soft %v, best unknown %v: want hard > soft >= unknown", hard, soft, best)
 	}
@@ -162,8 +165,8 @@ func TestScoreConfidence_RanksHardOverSoftOverEveryUnknown(t *testing.T) {
 
 type tornerWatch struct{}
 
-func (tornerWatch) Watch(context.Context, string) (download.YouTubeMusicWatch, error) {
-	return download.YouTubeMusicWatch{
+func (tornerWatch) Watch(context.Context, string) (ytmsearch.Watch, error) {
+	return ytmsearch.Watch{
 		VideoID: "UeGkPDoLKjI",
 		Title:   "Tornerò",
 		Artists: []string{"I Santo California"},
@@ -181,14 +184,14 @@ func TestScoreConfidence_ATopicChannelTrackSixSecondsShortClearsTheFloor(t *test
 	if err != nil || len(found) != 1 {
 		t.Fatalf("Find = %+v, %v", found, err)
 	}
-	evidence := download.ConfidenceEvidence{
+	evidence := service.Evidence{
 		Channel:              channelTopic,
 		Resolved:             found[0].IsResolved(),
 		DurationDeltaSeconds: secs(-6.08),
 		SourceTitle:          found[0].Title,
 	}
 
-	if got := download.ScoreConfidence(evidence, 245); got < confidenceFloor {
+	if got := service.ScoreConfidence(evidence, 245); got < confidenceFloor {
 		t.Errorf("confidence = %v, want at least the %v floor", got, confidenceFloor)
 	}
 }
@@ -196,14 +199,14 @@ func TestScoreConfidence_ATopicChannelTrackSixSecondsShortClearsTheFloor(t *test
 func secs(v float64) *float64 { return &v }
 
 func TestScoreConfidence_AnUnknownVerdictScoresFromZeroToTheUnknownCap(t *testing.T) {
-	lowest := download.ConfidenceEvidence{Channel: channelOther, DurationDeltaSeconds: secs(90), Qualifiers: []string{"edit"}}
-	highest := download.ConfidenceEvidence{Channel: channelTopic, Resolved: true, DurationDeltaSeconds: secs(0)}
-	unknownCap := download.ScoreConfidence(download.ConfidenceEvidence{Verdict: "soft", AcoustIDScore: 0.5}, 204)
+	lowest := service.Evidence{Channel: channelOther, DurationDeltaSeconds: secs(90), Qualifiers: []string{"edit"}}
+	highest := service.Evidence{Channel: channelTopic, Resolved: true, DurationDeltaSeconds: secs(0)}
+	unknownCap := service.ScoreConfidence(service.Evidence{Verdict: "soft", AcoustIDScore: 0.5}, 204)
 
-	if got := download.ScoreConfidence(lowest, 204); got != 0 {
+	if got := service.ScoreConfidence(lowest, 204); got != 0 {
 		t.Errorf("lowest unknown score = %v, want 0: a constant change that drops it below 0 needs the zero clamp back", got)
 	}
-	if got := download.ScoreConfidence(highest, 204); got != unknownCap {
+	if got := service.ScoreConfidence(highest, 204); got != unknownCap {
 		t.Errorf("highest unknown score = %v, want the unknown cap %v that a weak soft match falls to: a constant change that splits them needs the cap back", got, unknownCap)
 	}
 }

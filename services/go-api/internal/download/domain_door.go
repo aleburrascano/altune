@@ -7,25 +7,6 @@ import (
 
 type SourceName = domain.SourceName
 
-var (
-	IsYouTubeVideoID = sourcekey.IsYouTubeVideoID
-	SourceKey        = sourcekey.SourceKey
-)
+var IsYouTubeVideoID = sourcekey.IsYouTubeVideoID
 
-var (
-	ErrEmptyFingerprint  = domain.ErrEmptyFingerprint
-	ErrIdentifyThrottled = domain.ErrIdentifyThrottled
-)
-
-type LengthMargin = domain.LengthMargin
-
-var (
-	LengthLoose = domain.LengthLoose
-	LengthTight = domain.LengthTight
-)
-
-var (
-	CreditBrackets  = domain.CreditBrackets
-	FeaturedCredits = domain.FeaturedCredits
-	SplitCredit     = domain.SplitCredit
-)
+var ErrIdentifyThrottled = domain.ErrIdentifyThrottled

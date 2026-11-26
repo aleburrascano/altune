@@ -2,6 +2,7 @@ package ytdlp_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/ports"
 	"altune/go-api/internal/shared/clock"
 	"context"
 	"os"
@@ -313,7 +314,7 @@ func TestDownload_ReadsRealYtDlpStdout(t *testing.T) {
 	if want := "The Sound Of Silence (Simon & Garfunkel).m4a"; filepath.Base(got.Path) != want {
 		t.Fatalf("Download path = %q, want %q", got.Path, want)
 	}
-	if want := (download.SourceFormat{ID: "hls_aac_160k", Codec: "mp4a.40.2", Kbps: 160}); got.Format != want {
+	if want := (ports.SourceFormat{ID: "hls_aac_160k", Codec: "mp4a.40.2", Kbps: 160}); got.Format != want {
 		t.Fatalf("Download format = %+v, want %+v", got.Format, want)
 	}
 }
@@ -677,10 +678,10 @@ func TestYtDlpAudioSearcher_NoJSRuntimeEmitsNoComponentFlags(t *testing.T) {
 func TestYtDlpAudioSearcher_Download_ReportsTheFormatYtDlpFetched(t *testing.T) {
 	cases := []struct {
 		name, line string
-		want       download.SourceFormat
+		want       ports.SourceFormat
 	}{
-		{"audio-only opus", "251|opus|129.6", download.SourceFormat{ID: "251", Codec: "opus", Kbps: 130}},
-		{"combined video has no audio bitrate", "18|mp4a.40.2|NA", download.SourceFormat{ID: "18", Codec: "mp4a.40.2"}},
+		{"audio-only opus", "251|opus|129.6", ports.SourceFormat{ID: "251", Codec: "opus", Kbps: 130}},
+		{"combined video has no audio bitrate", "18|mp4a.40.2|NA", ports.SourceFormat{ID: "18", Codec: "mp4a.40.2"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -697,7 +698,7 @@ func TestYtDlpAudioSearcher_Download_ReportsTheFormatYtDlpFetched(t *testing.T) 
 
 func TestYtDlpAudioSearcher_Download_WithoutAFormatLineStillReturnsTheFile(t *testing.T) {
 	got, err := downloadWithScript(t, "truncate -s 20K OUT/a.m4a; echo altune-output-path:OUT/a.m4a")
-	if err != nil || filepath.Base(got.Path) != "a.m4a" || got.Format != (download.SourceFormat{}) {
+	if err != nil || filepath.Base(got.Path) != "a.m4a" || got.Format != (ports.SourceFormat{}) {
 		t.Fatalf("Download = %+v, %v, want a.m4a with an unknown format", got, err)
 	}
 }
@@ -816,7 +817,7 @@ func TestSearch_ASearchResultIsAnUpload(t *testing.T) {
 	}
 	want := download.AudioCandidate{
 		Title: "Bruno Mars - Finesse", Duration: 185, URL: "https://www.youtube.com/watch?v=aaaaaaaaaaa",
-		Channel: "Bruno Mars", Categories: []string{"Music"}, ViewCount: 42, Kind: download.KindUpload,
+		Channel: "Bruno Mars", Categories: []string{"Music"}, ViewCount: 42, Kind: ports.KindUpload,
 	}
 	if c := got[0]; c.Title != want.Title || c.Duration != want.Duration || c.URL != want.URL || c.Channel != want.Channel ||
 		!slices.Equal(c.Categories, want.Categories) || c.ViewCount != want.ViewCount || c.Kind != want.Kind {

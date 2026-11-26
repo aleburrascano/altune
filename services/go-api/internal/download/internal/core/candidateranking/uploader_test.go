@@ -2,6 +2,7 @@ package candidateranking_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/ports"
 	"testing"
 )
 
@@ -26,7 +27,7 @@ func TestRank_ArtistMatchesAChannelByItsWholeName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.artist+"_"+tt.channel, func(t *testing.T) {
-			c := download.AudioCandidate{Title: "Song", Channel: tt.channel, Kind: download.KindUpload}
+			c := download.AudioCandidate{Title: "Song", Channel: tt.channel, Kind: ports.KindUpload}
 			if got := evaluation(t, song("Song", tt.artist, 0), c)["artist_match"]; got != tt.want {
 				t.Errorf("artist_match(%q, %q) = %v, want %v", tt.artist, tt.channel, got, tt.want)
 			}
@@ -37,11 +38,11 @@ func TestRank_ArtistMatchesAChannelByItsWholeName(t *testing.T) {
 func TestRank_ACreditedKindMatchesTheArtistByItsCredits(t *testing.T) {
 	tests := []struct {
 		name string
-		kind download.CandidateKind
+		kind ports.CandidateKind
 		want bool
 	}{
-		{"credited art track", download.KindArtTrack, true},
-		{"credited pinned video", download.KindPinnedVideo, true},
+		{"credited art track", ports.KindArtTrack, true},
+		{"credited pinned video", ports.KindPinnedVideo, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

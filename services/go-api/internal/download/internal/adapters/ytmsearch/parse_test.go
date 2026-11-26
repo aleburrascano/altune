@@ -2,6 +2,7 @@ package ytmsearch_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/adapters/ytmsearch"
 	"context"
 	"errors"
 	"net/http"
@@ -25,27 +26,27 @@ func fixture(t *testing.T, name string) []byte {
 func TestClientWatch_ReadsTypeTitleArtistsAndExplicitBadge(t *testing.T) {
 	tests := map[string]struct {
 		videoID string
-		want    download.YouTubeMusicWatch
+		want    ytmsearch.Watch
 	}{
 		"official audio is ATV and explicit": {
 			videoID: "XDC3uH1FSgw",
-			want:    download.YouTubeMusicWatch{VideoID: "XDC3uH1FSgw", Title: "remember them days", Artists: []string{"slayr"}, Type: download.VideoTypeAudioOnly, Explicit: true},
+			want:    ytmsearch.Watch{VideoID: "XDC3uH1FSgw", Title: "remember them days", Artists: []string{"slayr"}, Type: download.VideoTypeAudioOnly, Explicit: true},
 		},
 		"music video is OMV and carries no badge": {
 			videoID: "u4GAeAYGAqE",
-			want:    download.YouTubeMusicWatch{VideoID: "u4GAeAYGAqE", Title: "remember them days", Artists: []string{"slayr"}, Type: download.VideoTypeOfficialVideo},
+			want:    ytmsearch.Watch{VideoID: "u4GAeAYGAqE", Title: "remember them days", Artists: []string{"slayr"}, Type: download.VideoTypeOfficialVideo},
 		},
 		"clean edit is ATV without the badge": {
 			videoID: "88oFlVnMEsc",
-			want:    download.YouTubeMusicWatch{VideoID: "88oFlVnMEsc", Title: "2021 Vibes", Artists: []string{"LUCKI"}, Type: download.VideoTypeAudioOnly},
+			want:    ytmsearch.Watch{VideoID: "88oFlVnMEsc", Title: "2021 Vibes", Artists: []string{"LUCKI"}, Type: download.VideoTypeAudioOnly},
 		},
 		"an id YouTube Music redirects to its canonical track": {
 			videoID: "B2alaIE1f5A",
-			want:    download.YouTubeMusicWatch{VideoID: "OFqIZypoMBY", Title: "New Life", Artists: []string{"Lucki", "Chuck L.I."}, Type: download.VideoTypeAudioOnly, Explicit: true},
+			want:    ytmsearch.Watch{VideoID: "OFqIZypoMBY", Title: "New Life", Artists: []string{"Lucki", "Chuck L.I."}, Type: download.VideoTypeAudioOnly, Explicit: true},
 		},
 		"explicit master is ATV with the badge": {
 			videoID: "LMDLNLM6Ji8",
-			want:    download.YouTubeMusicWatch{VideoID: "LMDLNLM6Ji8", Title: "2021 Vibes", Artists: []string{"LUCKI"}, Type: download.VideoTypeAudioOnly, Explicit: true},
+			want:    ytmsearch.Watch{VideoID: "LMDLNLM6Ji8", Title: "2021 Vibes", Artists: []string{"LUCKI"}, Type: download.VideoTypeAudioOnly, Explicit: true},
 		},
 	}
 
@@ -73,7 +74,7 @@ func watchAnswering(t *testing.T, body string) *download.YouTubeMusicSearchClien
 func TestClientWatch_ResponseWithoutATrackIsAnError(t *testing.T) {
 	_, err := watchAnswering(t, "{}").Watch(context.Background(), "XDC3uH1FSgw")
 
-	if !errors.Is(err, download.ErrNoWatchTrack) {
+	if !errors.Is(err, ytmsearch.ErrNoWatchTrack) {
 		t.Fatalf("err = %v, want ErrNoWatchTrack", err)
 	}
 }
@@ -110,14 +111,14 @@ func TestParseSongs_NonJSONIsAnError(t *testing.T) {
 }
 
 func TestParseOEmbed_ReadsTitleAndAuthor(t *testing.T) {
-	tests := map[string]download.YouTubeMusicOEmbed{
+	tests := map[string]ytmsearch.OEmbed{
 		"XDC3uH1FSgw": {Title: "remember them days", Author: "slayr - Topic"},
 		"u4GAeAYGAqE": {Title: "slayr - remember them days (OFFICIAL MUSIC VIDEO)", Author: "slayr"},
 	}
 
 	for videoID, want := range tests {
 		t.Run(videoID, func(t *testing.T) {
-			got, err := download.ParseYtmOEmbed(fixture(t, "oembed_"+videoID+".json"))
+			got, err := ytmsearch.ParseOEmbed(fixture(t, "oembed_"+videoID+".json"))
 			if err != nil {
 				t.Fatalf("ParseOEmbed: %v", err)
 			}

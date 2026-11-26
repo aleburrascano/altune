@@ -2,6 +2,7 @@ package ytdlp_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/shared/clock"
 	"bytes"
 	"context"
@@ -152,7 +153,7 @@ func loggedErrors(t *testing.T, logs *bytes.Buffer, msg string) []string {
 }
 
 func isSourceUnavailable(err error) bool {
-	var unavailable *download.SourceUnavailableError
+	var unavailable *domain.SourceUnavailableError
 	return errors.As(err, &unavailable)
 }
 

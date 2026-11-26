@@ -1,7 +1,7 @@
 package audioquality_test
 
 import (
-	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/audioquality"
 	"altune/go-api/internal/shared/downloadprovenance"
 	"testing"
 )
@@ -9,26 +9,26 @@ import (
 func TestOf(t *testing.T) {
 	cases := []struct {
 		name        string
-		fingerprint download.FingerprintResult
+		fingerprint audioquality.FingerprintResult
 		provenance  downloadprovenance.AcquisitionProvenance
-		kind        download.SourceKind
-		want        download.Grade
+		kind        audioquality.SourceKind
+		want        audioquality.Grade
 	}{
-		{"fingerprint matches an art track", download.Matches, downloadprovenance.ProvenanceVerified, download.ArtTrack, download.GradeA},
-		{"fingerprint matches an official video", download.Matches, downloadprovenance.ProvenanceVerified, download.OfficialVideo, download.GradeA},
-		{"fingerprint matches a label upload", download.Matches, downloadprovenance.ProvenanceVerified, download.LabelUpload, download.GradeA},
-		{"fingerprint matches a fan upload", download.Matches, downloadprovenance.ProvenanceVerified, download.FanUpload, download.GradeB},
-		{"fingerprint matches the user's own upload", download.Matches, downloadprovenance.ProvenanceVerified, download.UserUpload, download.GradeB},
-		{"fingerprint approximates an art track", download.Approximates, downloadprovenance.ProvenanceVerified, download.ArtTrack, download.GradeB},
-		{"length only", download.FingerprintSilent, downloadprovenance.ProvenanceCorroborated, download.ArtTrack, download.GradeC},
-		{"best effort", download.FingerprintSilent, downloadprovenance.ProvenanceBestEffort, download.ArtTrack, download.GradeD},
-		{"no evidence", download.FingerprintSilent, downloadprovenance.ProvenanceBestEffort, "", download.GradeD},
-		{"fingerprint finds a different song but proves nothing", download.FingerprintUnsupported, downloadprovenance.ProvenanceCorroborated, download.ArtTrack, download.GradeD},
-		{"fingerprint proves another version or song", download.Contradicts, downloadprovenance.ProvenanceVerified, download.ArtTrack, download.GradeF},
+		{"fingerprint matches an art track", audioquality.Matches, downloadprovenance.ProvenanceVerified, audioquality.ArtTrack, audioquality.A},
+		{"fingerprint matches an official video", audioquality.Matches, downloadprovenance.ProvenanceVerified, audioquality.OfficialVideo, audioquality.A},
+		{"fingerprint matches a label upload", audioquality.Matches, downloadprovenance.ProvenanceVerified, audioquality.LabelUpload, audioquality.A},
+		{"fingerprint matches a fan upload", audioquality.Matches, downloadprovenance.ProvenanceVerified, audioquality.FanUpload, audioquality.B},
+		{"fingerprint matches the user's own upload", audioquality.Matches, downloadprovenance.ProvenanceVerified, audioquality.UserUpload, audioquality.B},
+		{"fingerprint approximates an art track", audioquality.Approximates, downloadprovenance.ProvenanceVerified, audioquality.ArtTrack, audioquality.B},
+		{"length only", audioquality.Silent, downloadprovenance.ProvenanceCorroborated, audioquality.ArtTrack, audioquality.C},
+		{"best effort", audioquality.Silent, downloadprovenance.ProvenanceBestEffort, audioquality.ArtTrack, audioquality.D},
+		{"no evidence", audioquality.Silent, downloadprovenance.ProvenanceBestEffort, "", audioquality.D},
+		{"fingerprint finds a different song but proves nothing", audioquality.Unsupported, downloadprovenance.ProvenanceCorroborated, audioquality.ArtTrack, audioquality.D},
+		{"fingerprint proves another version or song", audioquality.Contradicts, downloadprovenance.ProvenanceVerified, audioquality.ArtTrack, audioquality.F},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := download.GradeOf(tc.fingerprint, tc.provenance, tc.kind); got != tc.want {
+			if got := audioquality.Of(tc.fingerprint, tc.provenance, tc.kind); got != tc.want {
 				t.Errorf("Of = %q, want %q", got, tc.want)
 			}
 		})
@@ -36,18 +36,18 @@ func TestOf(t *testing.T) {
 }
 
 func TestOf_GradesSortBestToWorstSoAQueryCanOrderWorstFirst(t *testing.T) {
-	if download.GradeA >= download.GradeB || download.GradeB >= download.GradeC || download.GradeC >= download.GradeD || download.GradeD >= download.GradeF {
+	if audioquality.A >= audioquality.B || audioquality.B >= audioquality.C || audioquality.C >= audioquality.D || audioquality.D >= audioquality.F {
 		t.Fatal("grades must sort best to worst as text")
 	}
 }
 
 func TestBestAvailable_IsNotOnTheLadderTheGradesAreOrderedBy(t *testing.T) {
-	for _, g := range []download.Grade{download.GradeA, download.GradeB, download.GradeC, download.GradeD, download.GradeF} {
-		if g == download.GradeBestAvailable {
+	for _, g := range []audioquality.Grade{audioquality.A, audioquality.B, audioquality.C, audioquality.D, audioquality.F} {
+		if g == audioquality.BestAvailable {
 			t.Errorf("%q must differ from every ladder grade", g)
 		}
 	}
-	if download.GradeBestAvailable <= download.GradeF {
+	if audioquality.BestAvailable <= audioquality.F {
 		t.Error("best_available must not sort among the grades A..F")
 	}
 }

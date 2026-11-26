@@ -2,6 +2,9 @@ package persistence_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/adapters/persistence"
+	"altune/go-api/internal/download/internal/core/audioquality"
+	"altune/go-api/internal/download/internal/core/ports"
 	sharedids "altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/testdb"
 	"context"
@@ -46,11 +49,11 @@ func sourceURL(id string) *string {
 
 func evidenceOf(g string) string { return fmt.Sprintf(`{"grade":%q}`, g) }
 
-func selectionOf(limit int) download.UpgradeSelection {
-	return download.UpgradeSelection{Limit: limit, Generation: download.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 10}
+func selectionOf(limit int) ports.UpgradeSelection {
+	return ports.UpgradeSelection{Limit: limit, Generation: audioquality.PipelineGeneration, RetryAfter: time.Hour, MaxQueued: 10}
 }
 
-func candidatesAmong(t *testing.T, store *download.PostgresUpgradeStore, selection download.UpgradeSelection, mine ...sharedids.TrackId) []sharedids.TrackId {
+func candidatesAmong(t *testing.T, store *persistence.PostgresUpgradeStore, selection ports.UpgradeSelection, mine ...sharedids.TrackId) []sharedids.TrackId {
 	t.Helper()
 	selection.Limit = 1000
 	candidates, err := store.Candidates(context.Background(), selection)
@@ -116,7 +119,7 @@ func TestPostgresUpgradeStore_AUserUploadIsNeverACandidate(t *testing.T) {
 	}
 }
 
-func uploadsIncluded() download.UpgradeSelection {
+func uploadsIncluded() ports.UpgradeSelection {
 	selection := selectionOf(10)
 	selection.CheckInPlace = true
 	return selection
@@ -128,7 +131,7 @@ func TestPostgresUpgradeStore_UnverifiedUserUploadsAreCandidatesOnlyWhenAsked(t 
 	store := download.NewPostgresUpgradeStore(pool)
 
 	unverified := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D")})
-	verified := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: fmt.Sprintf(`{"grade":"D","in_place_generation":%d}`, download.PipelineGeneration)})
+	verified := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: fmt.Sprintf(`{"grade":"D","in_place_generation":%d}`, audioquality.PipelineGeneration)})
 	graded := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("A_user")})
 
 	if got := candidatesAmong(t, store, selectionOf(10), unverified, verified, graded); len(got) != 0 {
@@ -187,7 +190,7 @@ func TestPostgresUpgradeStore_RecordInPlaceWritesTheVerdictAndGradeAndKeepsTheRe
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","verdict":"unknown","channel":"topic"}`, sourceURL: sourceURL("art")})
 
-	recorded, err := store.RecordInPlace(context.Background(), id, download.InPlaceRecord{
+	recorded, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{
 		AudioRef: "u/" + id.String() + ".mp3", Generation: 1, Verdict: "hard", Basis: "acoustid", Score: 0.97, Grade: "A",
 	})
 
@@ -206,7 +209,7 @@ func TestPostgresUpgradeStore_RecordInPlaceWithNoGradeOrVerdictOnlyStampsTheGene
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","verdict":"unknown"}`, sourceURL: sourceURL("art")})
 
-	if _, err := store.RecordInPlace(context.Background(), id, download.InPlaceRecord{AudioRef: "u/" + id.String() + ".mp3", Generation: 1}); err != nil {
+	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{AudioRef: "u/" + id.String() + ".mp3", Generation: 1}); err != nil {
 		t.Fatalf("RecordInPlace: %v", err)
 	}
 
@@ -222,7 +225,7 @@ func TestPostgresUpgradeStore_RecordInPlaceFlagsAMismatchedUserUploadWithoutRegr
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D")})
 
-	if _, err := store.RecordInPlace(context.Background(), id, download.InPlaceRecord{
+	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{
 		AudioRef: "u/" + id.String() + ".mp3", Generation: 1, Verdict: "other_version", Basis: "acoustid", Score: 0.9, UserUploadMismatch: true,
 	}); err != nil {
 		t.Fatalf("RecordInPlace: %v", err)
@@ -243,14 +246,14 @@ func TestPostgresUpgradeStore_RecordInPlaceNeverLowersTheStoredGrade(t *testing.
 	ref := "u/" + id.String() + ".mp3"
 
 	for _, grade := range []string{"F", "D", "C"} {
-		if _, err := store.RecordInPlace(ctx, id, download.InPlaceRecord{AudioRef: ref, Generation: 1, Verdict: "other_version", Grade: grade}); err != nil {
+		if _, err := store.RecordInPlace(ctx, id, ports.InPlaceRecord{AudioRef: ref, Generation: 1, Verdict: "other_version", Grade: grade}); err != nil {
 			t.Fatalf("RecordInPlace %s: %v", grade, err)
 		}
 		if got := readEvidence(t, pool, id); got.Grade != "C" || got.Verdict != "other_version" {
 			t.Errorf("after %s: evidence = %+v, want grade C kept and the verdict recorded", grade, got)
 		}
 	}
-	if _, err := store.RecordInPlace(ctx, id, download.InPlaceRecord{AudioRef: ref, Generation: 1, Verdict: "preview", Basis: "preview", BitErrorRate: 0.06, Grade: "A"}); err != nil {
+	if _, err := store.RecordInPlace(ctx, id, ports.InPlaceRecord{AudioRef: ref, Generation: 1, Verdict: "preview", Basis: "preview", BitErrorRate: 0.06, Grade: "A"}); err != nil {
 		t.Fatalf("RecordInPlace A: %v", err)
 	}
 	var rate float64
@@ -268,7 +271,7 @@ func TestPostgresUpgradeStore_RecordInPlaceLowersTheGradeOnlyForAContradictionTh
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("C"), sourceURL: sourceURL("art")})
 
-	recorded, err := store.RecordInPlace(context.Background(), id, download.InPlaceRecord{
+	recorded, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{
 		AudioRef: "u/" + id.String() + ".mp3", Generation: 1, Verdict: "other_version", Basis: "acoustid", Grade: "F", MayLower: true,
 	})
 
@@ -309,7 +312,7 @@ func TestPostgresUpgradeStore_RecordInPlaceIgnoresAFileThatChangedMeanwhile(t *t
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("C"), sourceURL: sourceURL("art")})
 
-	recorded, err := store.RecordInPlace(context.Background(), id, download.InPlaceRecord{AudioRef: "u/replaced-since.mp3", Generation: 1, Verdict: "hard", Grade: "A"})
+	recorded, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{AudioRef: "u/replaced-since.mp3", Generation: 1, Verdict: "hard", Grade: "A"})
 
 	if err != nil || recorded {
 		t.Fatalf("RecordInPlace = %v, %v, want a verdict on an old file to be dropped", recorded, err)
@@ -340,7 +343,7 @@ func TestPostgresUpgradeStore_ATrackGivenUpOnWaitsForTheNextGeneration(t *testin
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("stuck")})
 
-	if err := store.GiveUp(context.Background(), id, download.PipelineGeneration, "the extended mix exists only on a promo channel"); err != nil {
+	if err := store.GiveUp(context.Background(), id, audioquality.PipelineGeneration, "the extended mix exists only on a promo channel"); err != nil {
 		t.Fatalf("GiveUp: %v", err)
 	}
 
@@ -348,7 +351,7 @@ func TestPostgresUpgradeStore_ATrackGivenUpOnWaitsForTheNextGeneration(t *testin
 		t.Errorf("candidates in the same generation = %v, want none", got)
 	}
 	next := selectionOf(10)
-	next.Generation = download.PipelineGeneration + 1
+	next.Generation = audioquality.PipelineGeneration + 1
 	if got := candidatesAmong(t, store, next, id); !slices.Equal(got, []sharedids.TrackId{id}) {
 		t.Errorf("candidates after the generation bump = %v, want the track again", got)
 	}
@@ -369,7 +372,7 @@ func TestPostgresUpgradeStore_ATrackTriedRecentlyWaitsBeforeItsNextTry(t *testin
 	tried := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("F"), sourceURL: sourceURL("tried")})
 	fresh := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("fresh")})
 
-	if _, err := store.NoteAttempt(context.Background(), tried, download.UpgradeAttempt{}); err != nil {
+	if _, err := store.NoteAttempt(context.Background(), tried, ports.UpgradeAttempt{}); err != nil {
 		t.Fatalf("NoteAttempt: %v", err)
 	}
 
@@ -384,7 +387,7 @@ func TestPostgresUpgradeStore_NoCandidatesWhileTheUpgradeQueueIsFull(t *testing.
 	store := download.NewPostgresUpgradeStore(pool)
 	queued := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("F"), sourceURL: sourceURL("queued")})
 	waiting := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("waiting")})
-	if err := download.NewPostgresJobQueue(pool).Enqueue(context.Background(), queued, download.JobKindUpgrade, 0); err != nil {
+	if err := download.NewPostgresJobQueue(pool).Enqueue(context.Background(), queued, ports.JobKindUpgrade, 0); err != nil {
 		t.Fatalf("Enqueue: %v", err)
 	}
 	full := selectionOf(10)
@@ -402,15 +405,15 @@ func TestPostgresUpgradeStore_NoteAttemptCountsTriesAndRemembersTheRejectedSourc
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("current")})
 	ctx := context.Background()
 
-	first, err := store.NoteAttempt(ctx, id, download.UpgradeAttempt{RejectedSourceKey: "youtube:aaa", CountsAsTry: true})
+	first, err := store.NoteAttempt(ctx, id, ports.UpgradeAttempt{RejectedSourceKey: "youtube:aaa", CountsAsTry: true})
 	if err != nil {
 		t.Fatalf("NoteAttempt: %v", err)
 	}
-	second, err := store.NoteAttempt(ctx, id, download.UpgradeAttempt{RejectedSourceKey: "youtube:aaa", CountsAsTry: true})
+	second, err := store.NoteAttempt(ctx, id, ports.UpgradeAttempt{RejectedSourceKey: "youtube:aaa", CountsAsTry: true})
 	if err != nil {
 		t.Fatalf("NoteAttempt: %v", err)
 	}
-	uncounted, err := store.NoteAttempt(ctx, id, download.UpgradeAttempt{RejectedSourceKey: "youtube:bbb"})
+	uncounted, err := store.NoteAttempt(ctx, id, ports.UpgradeAttempt{RejectedSourceKey: "youtube:bbb"})
 	if err != nil {
 		t.Fatalf("NoteAttempt: %v", err)
 	}
@@ -438,7 +441,7 @@ func TestPostgresUpgradeStore_RejectedSourceKeysKeepTheNewestTwentyFive(t *testi
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("D"), sourceURL: sourceURL("current")})
 
 	for i := range 27 {
-		attempt := download.UpgradeAttempt{RejectedSourceKey: fmt.Sprintf("youtube:%02d", i)}
+		attempt := ports.UpgradeAttempt{RejectedSourceKey: fmt.Sprintf("youtube:%02d", i)}
 		if _, err := store.NoteAttempt(context.Background(), id, attempt); err != nil {
 			t.Fatalf("NoteAttempt: %v", err)
 		}
@@ -466,7 +469,7 @@ func TestPostgresUpgradeStore_ATrackGradedBestAvailableIsNeverACandidate(t *test
 	unchecked := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: judgedEvidenceOf("best_available", 0), sourceURL: sourceURL("leak2")})
 	worst := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("F"), sourceURL: sourceURL("ffff")})
 
-	for name, selection := range map[string]download.UpgradeSelection{"plain": selectionOf(10), "with unverified": uploadsIncluded()} {
+	for name, selection := range map[string]ports.UpgradeSelection{"plain": selectionOf(10), "with unverified": uploadsIncluded()} {
 		got := candidatesAmong(t, store, selection, bestAvailable, unchecked, worst)
 		if !slices.Equal(got, []sharedids.TrackId{worst}) {
 			t.Errorf("%s: candidates = %v, want only the F track: best_available is not on the ladder and sorts above F as text", name, got)
@@ -480,8 +483,8 @@ func TestPostgresUpgradeStore_AGradeATrackIsACandidateOnlyWhenNotYetJudgedThisGe
 	store := download.NewPostgresUpgradeStore(pool)
 
 	unjudged := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: judgedEvidenceOf("A", 0), sourceURL: sourceURL("old")})
-	staleJudgement := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: judgedEvidenceOf("A", download.PipelineGeneration-1), sourceURL: sourceURL("stale")})
-	judged := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: judgedEvidenceOf("A", download.PipelineGeneration), sourceURL: sourceURL("fresh")})
+	staleJudgement := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: judgedEvidenceOf("A", audioquality.PipelineGeneration-1), sourceURL: sourceURL("stale")})
+	judged := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: judgedEvidenceOf("A", audioquality.PipelineGeneration), sourceURL: sourceURL("fresh")})
 
 	if got := candidatesAmong(t, store, selectionOf(10), unjudged, staleJudgement, judged); len(got) != 0 {
 		t.Errorf("candidates = %v, want no grade A unless the in-place check is asked for", got)
@@ -498,7 +501,7 @@ func TestPostgresUpgradeStore_RecordInPlaceNeverReplacesAStoredBestAvailableGrad
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("best_available"), sourceURL: sourceURL("leak")})
 
-	if _, err := store.RecordInPlace(context.Background(), id, download.InPlaceRecord{
+	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{
 		AudioRef: "u/" + id.String() + ".mp3", Generation: 1, Verdict: "contradicted", Basis: "acoustid", Grade: "F", MayLower: true,
 	}); err != nil {
 		t.Fatalf("RecordInPlace: %v", err)
@@ -516,13 +519,13 @@ func TestPostgresUpgradeStore_RecordInPlaceLowersAWrongLengthGradeAToB(t *testin
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: evidenceOf("A"), sourceURL: sourceURL("art")})
 	ref := "u/" + id.String() + ".mp3"
 
-	if _, err := store.RecordInPlace(context.Background(), id, download.InPlaceRecord{AudioRef: ref, Generation: 2, Verdict: "hard", Grade: "B"}); err != nil {
+	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{AudioRef: ref, Generation: 2, Verdict: "hard", Grade: "B"}); err != nil {
 		t.Fatalf("RecordInPlace: %v", err)
 	}
 	if got := readEvidence(t, pool, id); got.Grade != "A" {
 		t.Fatalf("grade = %q, want A kept: weaker evidence alone never lowers", got.Grade)
 	}
-	if _, err := store.RecordInPlace(context.Background(), id, download.InPlaceRecord{AudioRef: ref, Generation: 2, Verdict: "hard", Grade: "B", MayLower: true}); err != nil {
+	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{AudioRef: ref, Generation: 2, Verdict: "hard", Grade: "B", MayLower: true}); err != nil {
 		t.Fatalf("RecordInPlace: %v", err)
 	}
 
@@ -537,7 +540,7 @@ func TestPostgresUpgradeStore_RecordInPlaceClearsTheFailureCountSoANewGeneration
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","in_place_failures":2}`, sourceURL: sourceURL("art")})
 
-	if _, err := store.RecordInPlace(context.Background(), id, download.InPlaceRecord{AudioRef: "u/" + id.String() + ".mp3", Generation: 2, Verdict: "hard", Grade: "A"}); err != nil {
+	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{AudioRef: "u/" + id.String() + ".mp3", Generation: 2, Verdict: "hard", Grade: "A"}); err != nil {
 		t.Fatalf("RecordInPlace: %v", err)
 	}
 	failures, err := store.NoteInPlaceFailure(context.Background(), id)
@@ -553,7 +556,7 @@ func TestPostgresUpgradeStore_RecordInPlaceClearsAStaleAcoustIDScoreOnAPreviewVe
 	store := download.NewPostgresUpgradeStore(pool)
 	id := insertUpgradableTrack(t, pool, readyTrackSpec{evidence: `{"grade":"C","acoustid_score":0.9}`, sourceURL: sourceURL("art")})
 
-	if _, err := store.RecordInPlace(context.Background(), id, download.InPlaceRecord{
+	if _, err := store.RecordInPlace(context.Background(), id, ports.InPlaceRecord{
 		AudioRef: "u/" + id.String() + ".mp3", Generation: 2, Verdict: "preview", Basis: "preview", BitErrorRate: 0.06,
 	}); err != nil {
 		t.Fatalf("RecordInPlace: %v", err)

@@ -2,6 +2,7 @@ package candidateranking_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/candidateranking"
 	"bufio"
 	"bytes"
 	"context"
@@ -11,15 +12,15 @@ import (
 	"testing"
 )
 
-func song(title, artist string, length float64) download.RankingTrack {
-	return download.RankingTrack{Title: title, Artist: artist, ExpectedLength: length}
+func song(title, artist string, length float64) candidateranking.Track {
+	return candidateranking.Track{Title: title, Artist: artist, ExpectedLength: length}
 }
 
-func rank(track download.RankingTrack, candidates ...download.AudioCandidate) ([]download.AudioCandidate, []download.RankingRefusal) {
-	return download.Rank(context.Background(), track, candidates)
+func rank(track candidateranking.Track, candidates ...download.AudioCandidate) ([]download.AudioCandidate, []candidateranking.Refusal) {
+	return candidateranking.Rank(context.Background(), track, candidates)
 }
 
-func best(track download.RankingTrack, candidates ...download.AudioCandidate) *download.AudioCandidate {
+func best(track candidateranking.Track, candidates ...download.AudioCandidate) *download.AudioCandidate {
 	ranked, _ := rank(track, candidates...)
 	if len(ranked) == 0 {
 		return nil
@@ -44,7 +45,7 @@ func captureLog(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-func evaluations(t *testing.T, track download.RankingTrack, candidates ...download.AudioCandidate) []map[string]any {
+func evaluations(t *testing.T, track candidateranking.Track, candidates ...download.AudioCandidate) []map[string]any {
 	t.Helper()
 	buf := captureLog(t)
 	rank(track, candidates...)
@@ -62,7 +63,7 @@ func evaluations(t *testing.T, track download.RankingTrack, candidates ...downlo
 	return records
 }
 
-func evaluation(t *testing.T, track download.RankingTrack, c download.AudioCandidate) map[string]any {
+func evaluation(t *testing.T, track candidateranking.Track, c download.AudioCandidate) map[string]any {
 	t.Helper()
 	records := evaluations(t, track, c)
 	if len(records) != 1 {

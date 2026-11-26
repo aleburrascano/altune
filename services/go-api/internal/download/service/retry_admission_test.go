@@ -3,6 +3,7 @@ package service_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/shared/clock/clocktest"
 	"altune/go-api/internal/shared/ids"
 	"context"
@@ -76,7 +77,7 @@ func TestRetryAdmission_RefusesASecondRetryInsideTheCooldownWithoutScheduling(t 
 
 	err := admission.Admit(context.Background(), track, spy.schedule)
 
-	if !errors.Is(err, download.ErrCooldownActive) {
+	if !errors.Is(err, domain.ErrCooldownActive) {
 		t.Errorf("second Admit = %v, want ErrCooldownActive", err)
 	}
 	if spy.calls != 0 {
@@ -118,7 +119,7 @@ func TestRetryAdmission_RefusesATrackThatHasNotFailed(t *testing.T) {
 
 			err := download.NewRetryAdmission(acquisitiontest.MustNewCooldownStore(time.Now)).Admit(context.Background(), track, spy.schedule)
 
-			if !errors.Is(err, download.ErrRetryNotFailed) || spy.calls != 0 {
+			if !errors.Is(err, domain.ErrRetryNotFailed) || spy.calls != 0 {
 				t.Errorf("Admit = %v with %d schedules, want ErrRetryNotFailed and none", err, spy.calls)
 			}
 		})
@@ -133,7 +134,7 @@ func TestReacquireAdmission_RefusesATrackThatIsNotStreamable(t *testing.T) {
 
 			err := download.NewReacquireAdmission(acquisitiontest.MustNewCooldownStore(time.Now)).Admit(context.Background(), track, spy.schedule)
 
-			if !errors.Is(err, download.ErrReacquireNotReady) || spy.calls != 0 {
+			if !errors.Is(err, domain.ErrReacquireNotReady) || spy.calls != 0 {
 				t.Errorf("Admit = %v with %d schedules, want ErrReacquireNotReady and none", err, spy.calls)
 			}
 		})
@@ -147,7 +148,7 @@ func TestReacquireAdmission_AdmitsAStreamableTrackOnceThenHoldsTheCooldown(t *te
 	if err := admission.Admit(context.Background(), track, scheduleQueued); err != nil {
 		t.Fatalf("first Admit = %v, want nil", err)
 	}
-	if err := admission.Admit(context.Background(), track, scheduleQueued); !errors.Is(err, download.ErrCooldownActive) {
+	if err := admission.Admit(context.Background(), track, scheduleQueued); !errors.Is(err, domain.ErrCooldownActive) {
 		t.Errorf("second Admit = %v, want ErrCooldownActive", err)
 	}
 }
@@ -175,10 +176,10 @@ func TestAdmission_TheCooldownLivesInTheStoreAndSurvivesARestart(t *testing.T) {
 		t.Fatalf("first reacquire Admit = %v, want nil", err)
 	}
 
-	if err := download.NewRetryAdmission(store).Admit(context.Background(), retryTrack, scheduleQueued); !errors.Is(err, download.ErrCooldownActive) {
+	if err := download.NewRetryAdmission(store).Admit(context.Background(), retryTrack, scheduleQueued); !errors.Is(err, domain.ErrCooldownActive) {
 		t.Errorf("retry Admit after restart = %v, want ErrCooldownActive", err)
 	}
-	if err := download.NewReacquireAdmission(store).Admit(context.Background(), reacquireTrack, scheduleQueued); !errors.Is(err, download.ErrCooldownActive) {
+	if err := download.NewReacquireAdmission(store).Admit(context.Background(), reacquireTrack, scheduleQueued); !errors.Is(err, domain.ErrCooldownActive) {
 		t.Errorf("reacquire Admit after restart = %v, want ErrCooldownActive", err)
 	}
 }

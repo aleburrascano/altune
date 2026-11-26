@@ -2,6 +2,8 @@ package ytmsearch_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/domain"
+	"altune/go-api/internal/download/internal/core/ports"
 	"context"
 	"errors"
 	"net/http"
@@ -217,7 +219,7 @@ func TestSource_TheArtTrackCarriesWhatTheSearchObserved(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("candidates = %v, want 1", got)
 	}
-	if got[0].Kind != download.KindArtTrack || got[0].Album != "24K Magic" || len(got[0].Artists) != 1 || got[0].Artists[0] != "Bruno Mars" {
+	if got[0].Kind != ports.KindArtTrack || got[0].Album != "24K Magic" || len(got[0].Artists) != 1 || got[0].Artists[0] != "Bruno Mars" {
 		t.Errorf("candidate = %+v, want the art track with its observed artists and album", got[0])
 	}
 }
@@ -268,7 +270,7 @@ func TestSource_AnOutageNamesYtmsearch(t *testing.T) {
 
 	_, err := download.NewYtmSearchSource(clientFor(down, time.Second), &recordingDownloader{}).Find(context.Background(), vibesRequest)
 
-	var unavailable *download.SourceUnavailableError
+	var unavailable *domain.SourceUnavailableError
 	if !errors.As(err, &unavailable) || unavailable.Source != download.SourceName("ytmsearch") {
 		t.Errorf("Find err = %v, want SourceUnavailableError{Source: ytmsearch}", err)
 	}

@@ -2,6 +2,9 @@ package candidateranking_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/candidateranking"
+	"altune/go-api/internal/download/internal/core/ports"
+	"altune/go-api/internal/download/service"
 	"fmt"
 	"math"
 	"testing"
@@ -21,7 +24,7 @@ const (
 	scorePrecision = 0.01
 )
 
-func metadataRank(t *testing.T, track download.RankingTrack, c download.AudioCandidate) float64 {
+func metadataRank(t *testing.T, track candidateranking.Track, c download.AudioCandidate) float64 {
 	t.Helper()
 	return number(t, evaluation(t, track, c), "metadata_rank")
 }
@@ -87,7 +90,7 @@ func TestRank_LengthScoreUsesTheConfidenceWindows(t *testing.T) {
 	lengthScoreOf := map[float64]float64{0.4: 1.0, 0.3: 0.5, 0.2: 0.0}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			confidence := download.ScoreConfidence(download.ConfidenceEvidence{Channel: download.ChannelOther, DurationDeltaSeconds: &tt.delta}, tt.expected)
+			confidence := service.ScoreConfidence(service.Evidence{Channel: candidateranking.ChannelOther, DurationDeltaSeconds: &tt.delta}, tt.expected)
 			want, known := lengthScoreOf[confidence]
 			if !known {
 				t.Fatalf("ScoreConfidence = %v, not a length bonus this test knows", confidence)
@@ -109,7 +112,7 @@ func TestRank_ChannelScoreTrustsTopicAndArtistThenVevo(t *testing.T) {
 		want      float64
 	}{
 		{"topic class", "The Weeknd", download.AudioCandidate{Channel: "The Weeknd - Topic"}, 1.0},
-		{"topic class without a channel", "The Weeknd", download.AudioCandidate{Kind: download.KindArtTrack, Artists: []string{"The Weeknd"}}, 1.0},
+		{"topic class without a channel", "The Weeknd", download.AudioCandidate{Kind: ports.KindArtTrack, Artists: []string{"The Weeknd"}}, 1.0},
 		{"artist class", "The Weeknd", download.AudioCandidate{Channel: "TheWeeknd"}, 1.0},
 		{"vevo channel", "Someone Else", download.AudioCandidate{Channel: "TheWeekndVEVO"}, 0.8},
 		{"vevo mixed case", "Someone Else", download.AudioCandidate{Channel: "SomeArtistVevo"}, 0.8},
@@ -221,7 +224,7 @@ func TestRank_BelowTheIdentityGateTheRefusalNamesTheScore(t *testing.T) {
 	track := song("Save Your Tears", "The Weeknd", 215)
 	_, refused := rank(track, c)
 
-	if len(refused) != 1 || refused[0].Stage != download.RankingStageIdentity || refused[0].Candidate.URL != "yt:cooking" {
+	if len(refused) != 1 || refused[0].Stage != candidateranking.StageIdentity || refused[0].Candidate.URL != "yt:cooking" {
 		t.Fatalf("refused = %+v, want one identity refusal for yt:cooking", refused)
 	}
 	score := number(t, evaluation(t, track, c), "identity_score")
@@ -231,7 +234,7 @@ func TestRank_BelowTheIdentityGateTheRefusalNamesTheScore(t *testing.T) {
 }
 
 func TestRank_TheEvaluationLogCarriesScoresAndCandidateAttributes(t *testing.T) {
-	track := download.RankingTrack{ID: "t1", Title: "Song", Artist: "Artist", ExpectedLength: 200}
+	track := candidateranking.Track{ID: "t1", Title: "Song", Artist: "Artist", ExpectedLength: 200}
 	c := download.AudioCandidate{Source: "youtube", Title: "Song", Channel: "Artist - Topic", Duration: 200, ViewCount: 50, Categories: []string{"Music"}}
 
 	record := evaluation(t, track, c)

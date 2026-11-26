@@ -2,6 +2,8 @@ package musicbrainzmatch_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/musicbrainzmatch"
+	"altune/go-api/internal/download/internal/core/ports"
 	"bytes"
 	"context"
 	"errors"
@@ -17,7 +19,7 @@ type lookups struct {
 	rerecording download.RerecordingLookup
 }
 
-func newResolver(t testing.TB, search download.RecordingSearch, with lookups) *download.RecordingResolver {
+func newResolver(t testing.TB, search download.RecordingSearch, with lookups) *musicbrainzmatch.Resolver {
 	t.Helper()
 	if with.isrc == nil {
 		with.isrc = download.NoopISRCLookup()
@@ -28,7 +30,7 @@ func newResolver(t testing.TB, search download.RecordingSearch, with lookups) *d
 	if with.rerecording == nil {
 		with.rerecording = download.NoopRerecordingLookup()
 	}
-	resolver, err := download.NewRecordingResolver(download.RecordingResolverPorts{
+	resolver, err := musicbrainzmatch.New(download.RecordingResolverPorts{
 		Search: search, ISRC: with.isrc, Recording: with.recording, Rerecording: with.rerecording,
 	})
 	if err != nil {
@@ -39,7 +41,7 @@ func newResolver(t testing.TB, search download.RecordingSearch, with lookups) *d
 
 func TestNewRecordingResolver_RefusesEachMissingPort(t *testing.T) {
 	full := download.RecordingResolverPorts{
-		Search:      download.NoopRecordingSearch(),
+		Search:      ports.NoopRecordingSearch(),
 		ISRC:        download.NoopISRCLookup(),
 		Recording:   download.NoopRecordingLookup(),
 		Rerecording: download.NoopRerecordingLookup(),
@@ -55,9 +57,9 @@ func TestNewRecordingResolver_RefusesEachMissingPort(t *testing.T) {
 			ports := full
 			drop(&ports)
 
-			resolver, err := download.NewRecordingResolver(ports)
+			resolver, err := musicbrainzmatch.New(ports)
 
-			if !errors.Is(err, download.ErrMissingRecordingResolverPort) || !strings.Contains(err.Error(), "Ports."+name) {
+			if !errors.Is(err, musicbrainzmatch.ErrMissingPort) || !strings.Contains(err.Error(), "Ports."+name) {
 				t.Fatalf("err = %v, want ErrMissingRecordingResolverPort naming Ports.%s", err, name)
 			}
 			if resolver != nil {
@@ -616,7 +618,7 @@ func TestResolve_AnotherVersionIsNotTheSavedSong(t *testing.T) {
 	acoustic := download.SearchedRecording{Title: "Take On Me (2017 Acoustic)", Artist: "a-ha", ISRC: "DEUM71724939", MBID: "acoustic-mbid"}
 	studio := download.SearchedRecording{Title: "Take on Me", Artist: "a-ha", ISRC: "USWB19901214", MBID: "studio-mbid"}
 	takeOnMe := download.RecordingQuery{Title: "Take on Me", Artist: "a-ha"}
-	resolve := func(results ...download.SearchedRecording) download.RecordingIdentity {
+	resolve := func(results ...download.SearchedRecording) ports.RecordingIdentity {
 		t.Helper()
 		identity, err := newResolver(t, stubSearcher{results: results}, lookups{}).Resolve(context.Background(), takeOnMe)
 		if err != nil {
@@ -724,7 +726,7 @@ func TestResolve_PinnedIdentityHoldsWhateverTheTextSearchDoes(t *testing.T) {
 	}{
 		{"search finds nothing", stubSearcher{}},
 		{"search fails", failingSearcher{}},
-		{"search is the explicit no-op", download.NoopRecordingSearch()},
+		{"search is the explicit no-op", ports.NoopRecordingSearch()},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -818,13 +820,13 @@ func TestResolve_PinSurvivesAnUnknownOrUnreachablePinnedRecording(t *testing.T) 
 }
 
 func TestResolver_RecordingByMBIDServesTheWiredLookup(t *testing.T) {
-	resolver := newResolver(t, download.NoopRecordingSearch(), lookups{recording: cureLookup()})
+	resolver := newResolver(t, ports.NoopRecordingSearch(), lookups{recording: cureLookup()})
 
 	facts, found, err := resolver.RecordingByMBID(context.Background(), cureLiveMBID)
 	if err != nil || !found || facts.Disambiguation != cureLiveFacts.Disambiguation {
 		t.Errorf("facts %+v found %v err %v; want the live recording's facts", facts, found, err)
 	}
-	if _, found, _ := newResolver(t, download.NoopRecordingSearch(), lookups{}).RecordingByMBID(context.Background(), cureLiveMBID); found {
+	if _, found, _ := newResolver(t, ports.NoopRecordingSearch(), lookups{}).RecordingByMBID(context.Background(), cureLiveMBID); found {
 		t.Error("a resolver without a lookup must report not found")
 	}
 }

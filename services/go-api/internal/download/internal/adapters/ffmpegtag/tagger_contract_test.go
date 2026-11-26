@@ -1,9 +1,9 @@
 package ffmpegtag_test
 
 import (
-	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/ffmpegtag"
 	"altune/go-api/internal/download/internal/adapters/id3"
+	"altune/go-api/internal/download/internal/core/ports"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -38,12 +38,12 @@ func audioFile(t *testing.T, name, content string) string {
 
 type recordingTagger struct{ paths []string }
 
-func (r *recordingTagger) Tag(_ context.Context, filePath string, _ download.TrackTags) error {
+func (r *recordingTagger) Tag(_ context.Context, filePath string, _ ports.TrackTags) error {
 	r.paths = append(r.paths, filePath)
 	return nil
 }
 
-var fullTags = download.TrackTags{
+var fullTags = ports.TrackTags{
 	Title: "Remember Them Days", Artist: "Slayr", Album: "Remember Them Days",
 	AlbumArtist: "Slayr", Year: 2024, TrackNumber: 3, Genre: "Hip-Hop",
 }
@@ -83,7 +83,7 @@ func TestTagger_LeavesOptionalTagsOutWhenUnknown(t *testing.T) {
 	binary, argvFile := fakeFfmpeg(t, `printf tagged > "$last"`)
 	path := audioFile(t, "audio.m4a", "original")
 
-	tags := download.TrackTags{Title: "Gorah", Artist: "Nitefreak"}
+	tags := ports.TrackTags{Title: "Gorah", Artist: "Nitefreak"}
 	if err := ffmpegtag.NewTagger(binary, &recordingTagger{}).Tag(context.Background(), path, tags); err != nil {
 		t.Fatalf("Tag() = %v", err)
 	}

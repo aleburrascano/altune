@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/ports"
 	"context"
 	"os"
 	"path/filepath"
@@ -9,18 +10,18 @@ import (
 )
 
 type resolver struct {
-	identity download.RecordingIdentity
+	identity ports.RecordingIdentity
 	err      error
 	queries  []download.RecordingQuery
 }
 
-func (r *resolver) Resolve(_ context.Context, q download.RecordingQuery) (download.RecordingIdentity, error) {
+func (r *resolver) Resolve(_ context.Context, q download.RecordingQuery) (ports.RecordingIdentity, error) {
 	r.queries = append(r.queries, q)
 	return r.identity, r.err
 }
 
 func resolvedTo(mbid string) *resolver {
-	return &resolver{identity: download.RecordingIdentity{MBID: mbid, MBIDs: []string{mbid}}}
+	return &resolver{identity: ports.RecordingIdentity{MBID: mbid, MBIDs: []string{mbid}}}
 }
 
 type identifier struct {

@@ -3,6 +3,7 @@ package persistence_test
 import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/acquisitiontest"
+	"altune/go-api/internal/download/internal/adapters/persistence"
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/testdb"
 	"testing"
@@ -11,7 +12,7 @@ import (
 )
 
 type contractPgxJobQueue struct {
-	*download.PostgresJobQueue
+	*persistence.PostgresJobQueue
 	pool *pgxpool.Pool
 }
 

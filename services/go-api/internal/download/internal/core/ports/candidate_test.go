@@ -2,6 +2,7 @@ package ports_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/domain"
 	"context"
 	"errors"
 	"fmt"
@@ -25,11 +26,11 @@ func (s stubSource) Fetch(context.Context, download.AudioCandidate, string) (dow
 }
 
 func unavailable() error {
-	return &download.SourceUnavailableError{Source: "yt", Err: errors.New("429")}
+	return &domain.SourceUnavailableError{Source: "yt", Err: errors.New("429")}
 }
 
 func isSourceUnavailable(err error) bool {
-	var u *download.SourceUnavailableError
+	var u *domain.SourceUnavailableError
 	return errors.As(err, &u)
 }
 
@@ -51,7 +52,7 @@ func TestFind_EmptyMergeBesidePlainFailureIsDegraded(t *testing.T) {
 
 	_, err := findBesideFailure(parseErr)
 
-	if !errors.Is(err, download.ErrSearchDegraded) || !errors.Is(err, parseErr) {
+	if !errors.Is(err, domain.ErrSearchDegraded) || !errors.Is(err, parseErr) {
 		t.Fatalf("err = %v, want ErrSearchDegraded wrapping the parse failure", err)
 	}
 }

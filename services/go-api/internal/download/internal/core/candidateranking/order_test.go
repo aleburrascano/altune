@@ -2,6 +2,7 @@ package candidateranking_test
 
 import (
 	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/ports"
 	"slices"
 	"testing"
 )
@@ -142,7 +143,7 @@ func TestRank_ResolvedCandidatesGoFirstThenTopicThenOther(t *testing.T) {
 	track := song("Song", "Artist", 200)
 	other := download.AudioCandidate{Title: "Artist - Song", Channel: "Uploader", Duration: 200, URL: "https://x.example/a"}
 	topic := topicUpload("Song", 200, "https://x.example/b")
-	art := download.AudioCandidate{Title: "Song", Duration: 200, URL: "https://x.example/c", Kind: download.KindArtTrack, Artists: []string{"Artist"}}
+	art := download.AudioCandidate{Title: "Song", Duration: 200, URL: "https://x.example/c", Kind: ports.KindArtTrack, Artists: []string{"Artist"}}
 
 	ranked, _ := rank(track, other, topic, art)
 

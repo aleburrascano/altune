@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/download"
 	"altune/go-api/internal/download/internal/adapters/youtubemusic"
 	"altune/go-api/internal/download/internal/adapters/ytmsearch"
+	"altune/go-api/internal/download/internal/core/ports"
 	"context"
 	"errors"
 	"os"
@@ -37,7 +38,7 @@ func pinnedTo(title, videoID string) download.FindRequest {
 	return download.FindRequest{
 		Title:    title,
 		Artist:   "slayr",
-		Identity: download.RecordingIdentity{Duration: 151, Sources: []download.ProviderRef{{Provider: "youtube", ExternalID: videoID}}},
+		Identity: ports.RecordingIdentity{Duration: 151, Sources: []download.ProviderRef{{Provider: "youtube", ExternalID: videoID}}},
 	}
 }
 
@@ -58,7 +59,7 @@ func TestFind_AFailedLookupIsAnUnresolvedUpload(t *testing.T) {
 	if err != nil || len(got) != 1 {
 		t.Fatalf("Find = %+v, %v", got, err)
 	}
-	if got[0].Kind != download.KindUpload || got[0].IsResolved() {
+	if got[0].Kind != ports.KindUpload || got[0].IsResolved() {
 		t.Errorf("candidate = %+v, want an unresolved upload", got[0])
 	}
 }
@@ -101,7 +102,7 @@ func TestFind_ResolvesFromTheIdentityVideoID(t *testing.T) {
 	req := download.FindRequest{
 		Title:  "Blinding Lights",
 		Artist: "The Weeknd",
-		Identity: download.RecordingIdentity{
+		Identity: ports.RecordingIdentity{
 			Duration: 200,
 			Sources:  []download.ProviderRef{{Provider: "youtube", ExternalID: "dQw4w9WgXcQ"}},
 		},
@@ -141,7 +142,7 @@ func TestFind_RejectsAVideoIDThatIsNotAWatchID(t *testing.T) {
 			src := youtubemusic.NewSource(&recordingFetcher{}, stubLookup{})
 			got, err := src.Find(context.Background(), download.FindRequest{
 				Title: "Song",
-				Identity: download.RecordingIdentity{
+				Identity: ports.RecordingIdentity{
 					Sources: []download.ProviderRef{{Provider: "youtube", ExternalID: videoID}},
 				},
 			})
@@ -172,7 +173,7 @@ func TestFind_IgnoresNonYouTubeSources(t *testing.T) {
 	req := download.FindRequest{
 		Title:  "T",
 		Artist: "A",
-		Identity: download.RecordingIdentity{
+		Identity: ports.RecordingIdentity{
 			Sources: []download.ProviderRef{{Provider: "deezer", ExternalID: "999"}},
 		},
 	}
@@ -216,13 +217,13 @@ func TestFind_TheCatalogLinkIsThePinnedVideo(t *testing.T) {
 	if err != nil || len(got) != 1 {
 		t.Fatalf("Find = %v, %v", got, err)
 	}
-	if got[0].Kind != download.KindPinnedVideo {
+	if got[0].Kind != ports.KindPinnedVideo {
 		t.Errorf("Kind = %q, want the pinned video", got[0].Kind)
 	}
 }
 
-func resolverVideoOnly(videoID string) download.RecordingIdentity {
-	return download.RecordingIdentity{Sources: []download.ProviderRef{{Provider: "youtube", ExternalID: videoID}}}
+func resolverVideoOnly(videoID string) ports.RecordingIdentity {
+	return ports.RecordingIdentity{Sources: []download.ProviderRef{{Provider: "youtube", ExternalID: videoID}}}
 }
 
 func findURLs(t *testing.T, req download.FindRequest) []string {
@@ -303,7 +304,7 @@ func TestFind_TheCatalogPinCarriesWhatThatVideoIs(t *testing.T) {
 	if err != nil || len(got) != 1 {
 		t.Fatalf("Find = %+v, %v", got, err)
 	}
-	if got[0].Kind != download.KindArtTrack || !got[0].IsResolved() || got[0].Title != "2021 Vibes" {
+	if got[0].Kind != ports.KindArtTrack || !got[0].IsResolved() || got[0].Title != "2021 Vibes" {
 		t.Errorf("candidate = %+v, want the art track, resolved video with its own title", got[0])
 	}
 }
@@ -319,16 +320,16 @@ func TestFind_TheObservedTypeIsTheKind(t *testing.T) {
 		name         string
 		lookup       stubLookup
 		req          download.FindRequest
-		wantKind     download.CandidateKind
+		wantKind     ports.CandidateKind
 		wantResolved bool
 		wantArtist   string
 	}{
-		{"art track is the art track", observedFixture(t, "88oFlVnMEsc"), resolverOnly("88oFlVnMEsc"), download.KindArtTrack, true, "LUCKI"},
-		{"official video is the pinned video", observedFixture(t, "u4GAeAYGAqE"), resolverOnly("u4GAeAYGAqE"), download.KindPinnedVideo, true, "slayr"},
-		{"user upload is an unresolved upload", stubLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeUserUpload}}, resolverOnly("dQw4w9WgXcQ"), download.KindUpload, false, ""},
-		{"user upload the catalog pinned stays resolved", stubLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeUserUpload}}, catalogPinned("dQw4w9WgXcQ"), download.KindPinnedVideo, true, ""},
-		{"failed lookup of a resolver video is unresolved", stubLookup{err: errors.New("ytm down")}, resolverOnly("dQw4w9WgXcQ"), download.KindUpload, false, ""},
-		{"failed lookup of a catalog pin stays resolved", stubLookup{err: errors.New("ytm down")}, catalogPinned("dQw4w9WgXcQ"), download.KindPinnedVideo, true, ""},
+		{"art track is the art track", observedFixture(t, "88oFlVnMEsc"), resolverOnly("88oFlVnMEsc"), ports.KindArtTrack, true, "LUCKI"},
+		{"official video is the pinned video", observedFixture(t, "u4GAeAYGAqE"), resolverOnly("u4GAeAYGAqE"), ports.KindPinnedVideo, true, "slayr"},
+		{"user upload is an unresolved upload", stubLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeUserUpload}}, resolverOnly("dQw4w9WgXcQ"), ports.KindUpload, false, ""},
+		{"user upload the catalog pinned stays resolved", stubLookup{watch: ytmsearch.Watch{Type: ytmsearch.VideoTypeUserUpload}}, catalogPinned("dQw4w9WgXcQ"), ports.KindPinnedVideo, true, ""},
+		{"failed lookup of a resolver video is unresolved", stubLookup{err: errors.New("ytm down")}, resolverOnly("dQw4w9WgXcQ"), ports.KindUpload, false, ""},
+		{"failed lookup of a catalog pin stays resolved", stubLookup{err: errors.New("ytm down")}, catalogPinned("dQw4w9WgXcQ"), ports.KindPinnedVideo, true, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

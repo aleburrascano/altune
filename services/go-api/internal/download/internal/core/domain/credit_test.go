@@ -1,7 +1,7 @@
 package domain_test
 
 import (
-	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/adapters/ytmsearch"
 	"testing"
 )
 
@@ -23,7 +23,7 @@ func TestCredits_OneKeyForEveryCreditCompare(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := download.CreditsArtist(tc.credited, tc.artist); got != tc.want {
+			if got := ytmsearch.CreditsArtist(tc.credited, tc.artist); got != tc.want {
 				t.Fatalf("CreditsArtist(%q, %q) = %v, want %v", tc.credited, tc.artist, got, tc.want)
 			}
 		})

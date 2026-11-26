@@ -1,7 +1,7 @@
 package domain_test
 
 import (
-	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/domain"
 	"altune/go-api/internal/shared/httpserver"
 	"encoding/json"
 	"errors"
@@ -25,12 +25,12 @@ func TestAdmissionSentinels(t *testing.T) {
 		code   string
 		msg    string
 	}{
-		{"ErrRetryNotFailed", download.ErrRetryNotFailed, 409, "acquisition.retry_not_failed", "track is not in failed state"},
-		{"ErrCooldownActive", download.ErrCooldownActive, 429, "acquisition.cooldown_active", "cooldown active, try again later"},
-		{"ErrReacquireNotReady", download.ErrReacquireNotReady, 409, "acquisition.reacquire_not_ready", "track has no audio to replace"},
-		{"ErrTrackJobInFlight", download.ErrTrackJobInFlight, 409, "acquisition.job_in_flight", "another acquisition for this track is already running, try again later"},
-		{"ErrSchedulerShutdown", download.ErrSchedulerShutdown, 503, "acquisition.shutting_down", "acquisition is shutting down, try again later"},
-		{"ErrAcquisitionPaused", download.ErrAcquisitionPaused, 503, "acquisition.paused", "acquisition is paused, try again later"},
+		{"ErrRetryNotFailed", domain.ErrRetryNotFailed, 409, "acquisition.retry_not_failed", "track is not in failed state"},
+		{"ErrCooldownActive", domain.ErrCooldownActive, 429, "acquisition.cooldown_active", "cooldown active, try again later"},
+		{"ErrReacquireNotReady", domain.ErrReacquireNotReady, 409, "acquisition.reacquire_not_ready", "track has no audio to replace"},
+		{"ErrTrackJobInFlight", domain.ErrTrackJobInFlight, 409, "acquisition.job_in_flight", "another acquisition for this track is already running, try again later"},
+		{"ErrSchedulerShutdown", domain.ErrSchedulerShutdown, 503, "acquisition.shutting_down", "acquisition is shutting down, try again later"},
+		{"ErrAcquisitionPaused", domain.ErrAcquisitionPaused, 503, "acquisition.paused", "acquisition is paused, try again later"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -50,10 +50,10 @@ func TestAdmissionSentinels(t *testing.T) {
 }
 
 func TestAdmissionSentinelIdentity(t *testing.T) {
-	if errors.Is(errors.New("track is not in failed state"), download.ErrRetryNotFailed) {
+	if errors.Is(errors.New("track is not in failed state"), domain.ErrRetryNotFailed) {
 		t.Error("look-alike error with the same text must not match ErrRetryNotFailed")
 	}
-	if !errors.Is(fmt.Errorf("x: %w", download.ErrCooldownActive), download.ErrCooldownActive) {
+	if !errors.Is(fmt.Errorf("x: %w", domain.ErrCooldownActive), domain.ErrCooldownActive) {
 		t.Error("wrapped ErrCooldownActive must match ErrCooldownActive")
 	}
 }

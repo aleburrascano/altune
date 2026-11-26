@@ -1,7 +1,7 @@
 package domain_test
 
 import (
-	"altune/go-api/internal/download"
+	"altune/go-api/internal/download/internal/core/domain"
 	"math"
 	"testing"
 )
@@ -9,10 +9,10 @@ import (
 func TestLengthTolerance_AnUnknownLengthNeverAgrees(t *testing.T) {
 	profiles := []struct {
 		name    string
-		profile download.LengthMargin
+		profile domain.LengthMargin
 	}{
-		{"tight", download.LengthTight},
-		{"loose", download.LengthLoose},
+		{"tight", domain.LengthTight},
+		{"loose", domain.LengthLoose},
 	}
 	for _, p := range profiles {
 		for _, pair := range [][2]float64{{10, 0}, {0, 10}, {0, 0}, {10, -1}} {
@@ -26,15 +26,15 @@ func TestLengthTolerance_AnUnknownLengthNeverAgrees(t *testing.T) {
 func TestLengthTolerance_NamedProfilesKeepTodaysWindows(t *testing.T) {
 	tests := []struct {
 		name          string
-		profile       download.LengthMargin
+		profile       domain.LengthMargin
 		expected      float64
 		wantAllowance float64
 		agrees        []float64
 		disagrees     []float64
 	}{
-		{"tight", download.LengthTight, 300, 2, []float64{298, 302}, []float64{297.9, 302.1}},
-		{"loose flat", download.LengthLoose, 100, 15, []float64{85, 115}, []float64{84.9, 115.1}},
-		{"loose fraction", download.LengthLoose, 400, 28, []float64{372, 428}, []float64{371.9, 428.1}},
+		{"tight", domain.LengthTight, 300, 2, []float64{298, 302}, []float64{297.9, 302.1}},
+		{"loose flat", domain.LengthLoose, 100, 15, []float64{85, 115}, []float64{84.9, 115.1}},
+		{"loose fraction", domain.LengthLoose, 400, 28, []float64{372, 428}, []float64{371.9, 428.1}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
