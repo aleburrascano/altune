@@ -89,6 +89,9 @@ func SettingsFromEnv(env func(string) string) (Settings, error) {
 }
 
 func ToolClient(ctx context.Context, env func(string) string, timeout time.Duration) (*http.Client, Settings, error) {
+	if timeout <= 0 {
+		return nil, Settings{}, outbound.ErrClientTimeoutRequired
+	}
 	settings, err := SettingsFromEnv(env)
 	if err != nil {
 		return nil, Settings{}, err
