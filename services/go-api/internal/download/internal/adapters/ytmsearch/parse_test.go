@@ -52,7 +52,7 @@ func TestClientWatch_ReadsTypeTitleArtistsAndExplicitBadge(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			var requests []recordedRequest
-			got, err := clientFor(fixtureServer(t, &requests), 0, time.Second).Watch(context.Background(), tc.videoID)
+			got, err := clientFor(fixtureServer(t, &requests), time.Second).Watch(context.Background(), tc.videoID)
 			if err != nil {
 				t.Fatalf("Watch: %v", err)
 			}
@@ -67,7 +67,7 @@ func watchAnswering(t *testing.T, body string) *download.YouTubeMusicSearchClien
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(body)) }))
 	t.Cleanup(srv.Close)
-	return clientFor(srv, 0, time.Second)
+	return clientFor(srv, time.Second)
 }
 
 func TestClientWatch_ResponseWithoutATrackIsAnError(t *testing.T) {

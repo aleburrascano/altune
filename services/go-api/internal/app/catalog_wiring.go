@@ -107,7 +107,7 @@ func (a *App) wireAudioSources(
 	if err != nil {
 		return audioSourcesStaging{}, err
 	}
-	ytmCanary, err := downloadsetup.CanaryYTMClient(a.cfg, a.redisClient)
+	ytmCanary, err := downloadsetup.CanaryYTMClient(a.cfg, a.redisClient, transport)
 	if err != nil {
 		return audioSourcesStaging{}, fmt.Errorf("build the ytmusic canary client: %w", err)
 	}
@@ -120,7 +120,7 @@ func (a *App) wireAudioSources(
 		ytmCanary:      ytmCanary,
 	}
 	if len(sources.All()) > 0 && audioStore != nil {
-		staging.background = downloadsetup.NewScheduler(ctx, a.schedulerDeps(tap, disc, staging, sources, tools))
+		staging.background = downloadsetup.NewScheduler(ctx, a.schedulerDeps(transport, tap, disc, staging, sources, tools))
 		staging.scheduler = staging.background
 		staging.acquisitionOn = true
 	}
@@ -134,9 +134,9 @@ func (a *App) liveTiers(ctx context.Context, transport http.RoundTripper, audioS
 	return downloadsetup.EnabledSources(ctx, a.cfg, a.redisClient, transport)
 }
 
-func (a *App) schedulerDeps(tap *monitoring.EventTap, disc *search.Discovery, staging audioSourcesStaging, sources downloadsetup.SourceOrder, tools download.Verification) downloadsetup.Deps {
+func (a *App) schedulerDeps(transport http.RoundTripper, tap *monitoring.EventTap, disc *search.Discovery, staging audioSourcesStaging, sources downloadsetup.SourceOrder, tools download.Verification) downloadsetup.Deps {
 	return downloadsetup.Deps{
-		Config: a.cfg, Pool: a.pool, Events: tap, Recording: downloadfromsearch.RecordingOptions(disc), Ledger: staging.ledger, AudioStore: staging.audioStore,
+		Config: a.cfg, Pool: a.pool, Transport: transport, Events: tap, Recording: downloadfromsearch.RecordingOptions(disc), Ledger: staging.ledger, AudioStore: staging.audioStore,
 		Sources: sources, Verification: tools,
 	}
 }

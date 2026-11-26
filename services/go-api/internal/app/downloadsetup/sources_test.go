@@ -261,17 +261,14 @@ func containsSource(list []download.SourceName, want download.SourceName) bool {
 	return false
 }
 
-func TestCanaryYTMClient_BoundsEveryCallAndPacesItsSearches(t *testing.T) {
-	client, err := downloadsetup.CanaryYTMClient(&config.Config{}, nil)
+func TestCanaryYTMClient_BoundsEveryCall(t *testing.T) {
+	client, err := downloadsetup.CanaryYTMClient(&config.Config{}, nil, http.DefaultTransport)
 	if err != nil {
 		t.Fatalf("CanaryYTMClient without redis: %v", err)
 	}
 
 	if client.Timeout() <= 0 {
 		t.Errorf("Timeout() = %s, want a positive bound on every InnerTube call", client.Timeout())
-	}
-	if client.MinInterval() <= 0 {
-		t.Errorf("MinInterval() = %s, want a positive pause between searches", client.MinInterval())
 	}
 }
 
@@ -285,7 +282,7 @@ func TestCanaryYTMClient_ACooldownAnotherInstanceRecordedInRedisHoldsItsSearches
 	if err := otherInstance.CoolDown(t.Context()); err != nil {
 		t.Fatalf("record the cooldown: %v", err)
 	}
-	client, err := downloadsetup.CanaryYTMClient(&config.Config{}, redis)
+	client, err := downloadsetup.CanaryYTMClient(&config.Config{}, redis, http.DefaultTransport)
 	if err != nil {
 		t.Fatalf("CanaryYTMClient with redis: %v", err)
 	}

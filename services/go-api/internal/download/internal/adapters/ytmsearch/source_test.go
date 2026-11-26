@@ -231,8 +231,8 @@ func TestSource_AnOutageIsSourceUnavailable(t *testing.T) {
 	t.Cleanup(func() { close(hung) })
 
 	for name, client := range map[string]*download.YouTubeMusicSearchClient{
-		"a 503":                clientFor(down, 0, time.Second),
-		"the client timed out": clientFor(slow, 0, 30*time.Millisecond),
+		"a 503":                clientFor(down, time.Second),
+		"the client timed out": clientFor(slow, 30*time.Millisecond),
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := download.NewYtmSearchSource(client, &recordingDownloader{}).Find(context.Background(), vibesRequest)
@@ -255,7 +255,7 @@ func TestSource_ACancelledCallerIsNotAnOutage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	time.AfterFunc(30*time.Millisecond, cancel)
 
-	_, err := download.NewYtmSearchSource(clientFor(slow, 0, time.Minute), &recordingDownloader{}).Find(ctx, vibesRequest)
+	_, err := download.NewYtmSearchSource(clientFor(slow, time.Minute), &recordingDownloader{}).Find(ctx, vibesRequest)
 
 	if !errors.Is(err, context.Canceled) || isSourceUnavailable(err) {
 		t.Errorf("Find err = %v, want the caller's cancellation, not an outage", err)
@@ -266,7 +266,7 @@ func TestSource_AnOutageNamesYtmsearch(t *testing.T) {
 	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTooManyRequests) }))
 	t.Cleanup(down.Close)
 
-	_, err := download.NewYtmSearchSource(clientFor(down, 0, time.Second), &recordingDownloader{}).Find(context.Background(), vibesRequest)
+	_, err := download.NewYtmSearchSource(clientFor(down, time.Second), &recordingDownloader{}).Find(context.Background(), vibesRequest)
 
 	var unavailable *download.SourceUnavailableError
 	if !errors.As(err, &unavailable) || unavailable.Source != download.SourceName("ytmsearch") {

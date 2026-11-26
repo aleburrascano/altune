@@ -19,9 +19,7 @@ import (
 )
 
 const (
-	liveIntervalEnv      = "ACQEVAL_LIVE_INTERVAL"
 	liveTimeoutEnv       = "ACQEVAL_LIVE_TIMEOUT"
-	defaultLiveInterval  = time.Second
 	defaultLiveTimeout   = 20 * time.Second
 	liveProgressEvery    = 25
 	liveMaxLineBytes     = 4 << 20
@@ -84,10 +82,6 @@ func (t liveTrack) evidenceSourceTitle() string {
 var errLiveTimeoutNotPositive = errors.New("the per-call timeout must be positive")
 
 func liveConfigFromEnv(getenv func(string) string) (download.YouTubeMusicSearchConfig, error) {
-	interval, err := durationFromEnv(getenv, liveIntervalEnv, defaultLiveInterval)
-	if err != nil {
-		return download.YouTubeMusicSearchConfig{}, err
-	}
 	timeout, err := durationFromEnv(getenv, liveTimeoutEnv, defaultLiveTimeout)
 	if err != nil {
 		return download.YouTubeMusicSearchConfig{}, err
@@ -95,7 +89,7 @@ func liveConfigFromEnv(getenv func(string) string) (download.YouTubeMusicSearchC
 	if timeout <= 0 {
 		return download.YouTubeMusicSearchConfig{}, fmt.Errorf("%s: %w, got %v", liveTimeoutEnv, errLiveTimeoutNotPositive, timeout)
 	}
-	return download.YouTubeMusicSearchConfig{MinInterval: interval, Timeout: timeout}, nil
+	return download.YouTubeMusicSearchConfig{Timeout: timeout}, nil
 }
 
 func durationFromEnv(getenv func(string) string, name string, fallback time.Duration) (time.Duration, error) {

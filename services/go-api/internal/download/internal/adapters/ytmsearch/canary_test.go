@@ -30,7 +30,7 @@ func TestClientCanary_NilWhenSearchAndNextAnswer(t *testing.T) {
 		func(w http.ResponseWriter) { _, _ = w.Write(fixture(t, "search_lucki_2021_vibes.json")) },
 		func(w http.ResponseWriter) { _, _ = w.Write(fixture(t, "next_u4GAeAYGAqE.json")) })
 
-	if err := clientFor(srv, 0, time.Second).Canary(context.Background()); err != nil {
+	if err := clientFor(srv, time.Second).Canary(context.Background()); err != nil {
 		t.Fatalf("Canary() = %v, want nil", err)
 	}
 }
@@ -51,7 +51,7 @@ func TestClientCanary_DarkWhenSearchOrNextFails(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := clientFor(canaryServer(t, tt.search, tt.next), 0, time.Second).Canary(context.Background())
+			err := clientFor(canaryServer(t, tt.search, tt.next), time.Second).Canary(context.Background())
 			if err == nil || !strings.HasPrefix(err.Error(), tt.want) {
 				t.Fatalf("Canary() = %v, want an error starting %q", err, tt.want)
 			}
