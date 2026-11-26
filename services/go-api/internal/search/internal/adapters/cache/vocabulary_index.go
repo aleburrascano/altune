@@ -26,7 +26,7 @@ func (s *RedisVocabularyStore) BulkAdd(ctx context.Context, entries []domain.Spe
 	for _, e := range entries {
 		norm := s.buildNorm(e)
 		if domain.IsIndexableVocabularyTerm(e.Term, norm) {
-			if err := addEntryToPipeline(pipe, ctx, norm, e, s.metaphone, false); err != nil {
+			if err := overwriteEntryInPipeline(pipe, ctx, norm, e, s.metaphone); err != nil {
 				return err
 			}
 		}
@@ -50,45 +50,65 @@ func (s *RedisVocabularyStore) indexEntry(
 		return nil
 	}
 	pipe := s.client.Pipeline()
-	if err := addEntryToPipeline(pipe, ctx, norm, entry, s.metaphone, true); err != nil {
+	if err := keepHigherEntryInPipeline(pipe, ctx, norm, entry, s.metaphone); err != nil {
 		return err
 	}
-	_, err := pipe.Exec(ctx)
-	if err != nil {
+	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("index one vocabulary entry: %w", err)
 	}
 	return nil
 }
 
-func addEntryToPipeline(
+func overwriteEntryInPipeline(
 	pipe goredis.Pipeliner,
 	ctx context.Context,
 	norm string,
 	entry domain.SpellingHintsEntry,
 	metaphone MetaphoneFunc,
-	keepHigherPopularity bool,
 ) error {
-	entryJSON, err := json.Marshal(vocabEntryData{
+	encoded, err := encodeEntryData(entry)
+	if err != nil {
+		return err
+	}
+	member := encodeMember(norm, entry.Term, string(entry.Kind))
+	pipe.ZAdd(ctx, vocabTermsKey, goredis.Z{Score: float64(entry.Popularity), Member: member})
+	pipe.Set(ctx, vocabEntryPfx+norm, encoded, vocabEntryTTL)
+	addEntryIndexes(pipe, ctx, norm, member, metaphone)
+	return nil
+}
+
+func keepHigherEntryInPipeline(
+	pipe goredis.Pipeliner,
+	ctx context.Context,
+	norm string,
+	entry domain.SpellingHintsEntry,
+	metaphone MetaphoneFunc,
+) error {
+	encoded, err := encodeEntryData(entry)
+	if err != nil {
+		return err
+	}
+	member := encodeMember(norm, entry.Term, string(entry.Kind))
+	pipe.ZAddGT(ctx, vocabTermsKey, goredis.Z{Score: float64(entry.Popularity), Member: member})
+	pipe.SetNX(ctx, vocabEntryPfx+norm, encoded, vocabEntryTTL)
+	addEntryIndexes(pipe, ctx, norm, member, metaphone)
+	return nil
+}
+
+func encodeEntryData(entry domain.SpellingHintsEntry) ([]byte, error) {
+	encoded, err := json.Marshal(vocabEntryData{
 		Term:       entry.Term,
 		Kind:       string(entry.Kind),
 		Popularity: entry.Popularity,
 	})
 	if err != nil {
-		return fmt.Errorf("encode vocabulary entry %q: %w", entry.Term, err)
+		return nil, fmt.Errorf("encode vocabulary entry: %w", err)
 	}
-	member := encodeMember(norm, entry.Term, string(entry.Kind))
-	score := goredis.Z{Score: float64(entry.Popularity), Member: member}
-	if keepHigherPopularity {
-		pipe.ZAddGT(ctx, vocabTermsKey, score)
-	} else {
-		pipe.ZAdd(ctx, vocabTermsKey, score)
-	}
+	return encoded, nil
+}
+
+func addEntryIndexes(pipe goredis.Pipeliner, ctx context.Context, norm, member string, metaphone MetaphoneFunc) {
 	pipe.ZAdd(ctx, vocabLexKey, goredis.Z{Score: 0, Member: member})
-	if keepHigherPopularity {
-		pipe.SetNX(ctx, vocabEntryPfx+norm, entryJSON, vocabEntryTTL)
-	} else {
-		pipe.Set(ctx, vocabEntryPfx+norm, entryJSON, vocabEntryTTL)
-	}
 	for _, tri := range spellingmatch.Trigrams(norm) {
 		pipe.SAdd(ctx, vocabTriPrefix+tri, norm)
 	}
@@ -98,7 +118,6 @@ func addEntryToPipeline(
 			pipe.SAdd(ctx, vocabMetaPrefix+code, norm)
 		}
 	}
-	return nil
 }
 
 const vocabTrimAttempts = 5

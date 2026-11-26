@@ -22,7 +22,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	logRing := logging.Setup(cfg.LogLevel, cfg.IsDevelopment(), logging.WithClock(time.Now))
+	setupLogging := logging.Setup
+	if cfg.IsDevelopment() {
+		setupLogging = logging.SetupDevelopment
+	}
+	logRing := setupLogging(cfg.LogLevel)
 
 	if len(os.Args) < 2 {
 		runServer(cfg, logRing)
@@ -34,7 +38,7 @@ func main() {
 	case "serve":
 		runServer(cfg, logRing)
 	case "health-check":
-		commands.RunHealthCheck(cfg, parseFix(cmd, args))
+		commands.RunHealthCheck(cfg, healthCheckMode(cmd, args))
 	case "journey-check":
 		commands.RunJourneyCheck(cfg)
 	case "sweep-staging-audio":
@@ -72,9 +76,12 @@ func parseExecute(name string, args []string) bool {
 	return *execute
 }
 
-func parseFix(name string, args []string) bool {
+func healthCheckMode(name string, args []string) commands.HealthCheckMode {
 	fs := flag.NewFlagSet(name, flag.ExitOnError)
 	fix := fs.Bool("fix", false, "apply fixes instead of a dry-run")
 	_ = fs.Parse(args)
-	return *fix
+	if *fix {
+		return commands.HealthCheckFix
+	}
+	return commands.HealthCheckReport
 }

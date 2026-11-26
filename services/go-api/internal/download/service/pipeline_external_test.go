@@ -19,7 +19,7 @@ func (panickingTagger) Tag(context.Context, string, ports.TrackTags) error {
 func TestExecute_APanickingStepIsLoggedAndReportedAsThatStep(t *testing.T) {
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })
-	ring := logging.Setup("error", false)
+	ring := logging.Setup("error")
 
 	_, err := acquireWith(t, pendingBlindingLights(), freshAudioSource{}, service.WithAudioTagger(panickingTagger{}))
 

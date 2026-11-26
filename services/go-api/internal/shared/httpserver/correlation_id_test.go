@@ -78,7 +78,7 @@ func TestGetCorrelationID_EmptyContext(t *testing.T) {
 func TestCorrelationID_AdoptsInboundHeader(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
-	ring := logging.Setup("info", false)
+	ring := logging.Setup("info")
 
 	const inbound = "trace-abc12345"
 	var capturedID string

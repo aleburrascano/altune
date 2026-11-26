@@ -275,7 +275,7 @@ func findLogRecord(t *testing.T, ring *logging.RingBuffer, message string) loggi
 func TestHandleStreamAudio_MidBodyReadErrorIsLoggedAsTruncated(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
-	ring := logging.Setup("info", false)
+	ring := logging.Setup("info")
 
 	const deliverable = 4096
 	store := &truncatingAudioStore{InMemoryAudioStore: library.NewInMemoryAudioStore(), failAfter: deliverable}
@@ -303,7 +303,7 @@ func TestHandleStreamAudio_MidBodyReadErrorIsLoggedAsTruncated(t *testing.T) {
 func TestHandleStreamAudio_WholeBodyIsLoggedAsServed(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
-	ring := logging.Setup("info", false)
+	ring := logging.Setup("info")
 
 	audio := []byte("fake-audio-data")
 	store := library.NewInMemoryAudioStore()
@@ -328,7 +328,7 @@ func TestHandleStreamAudio_WholeBodyIsLoggedAsServed(t *testing.T) {
 func TestHandleStreamAudio_ClientAbortIsNotAServerError(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
-	ring := logging.Setup("info", false)
+	ring := logging.Setup("info")
 
 	store := &truncatingAudioStore{InMemoryAudioStore: library.NewInMemoryAudioStore(), failAfter: 1024}
 	repo, router := streamRoutes(store)

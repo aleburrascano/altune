@@ -239,7 +239,7 @@ func waitForLog(t *testing.T, ring *logging.RingBuffer, msg string) logging.Capt
 func TestSSEHandler_ConnectDisconnectLogsCarryCorrelationID(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
-	ring := logging.Setup("debug", false)
+	ring := logging.Setup("debug")
 
 	const corrID = "corr-sse-1234"
 	bus := events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor"))

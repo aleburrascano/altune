@@ -9,11 +9,18 @@ import (
 	"log/slog"
 )
 
-func RunHealthCheck(cfg *config.Config, fix bool) {
-	exitOnError(runHealthCheck(cfg, fix))
+type HealthCheckMode int
+
+const (
+	HealthCheckReport HealthCheckMode = iota
+	HealthCheckFix
+)
+
+func RunHealthCheck(cfg *config.Config, mode HealthCheckMode) {
+	exitOnError(runHealthCheck(cfg, mode))
 }
 
-func runHealthCheck(cfg *config.Config, fix bool) error {
+func runHealthCheck(cfg *config.Config, mode HealthCheckMode) error {
 	ctx := context.Background()
 	pool, err := openPool(ctx, cfg)
 	if err != nil {
@@ -21,10 +28,10 @@ func runHealthCheck(cfg *config.Config, fix bool) error {
 	}
 	defer pool.Close()
 
-	return healthCheck(ctx, cfg, library.NewPostgresTrackRepository(pool), fix)
+	return healthCheck(ctx, cfg, library.NewPostgresTrackRepository(pool), mode)
 }
 
-func healthCheck(ctx context.Context, cfg *config.Config, repo *library.PostgresTrackRepository, fix bool) error {
+func healthCheck(ctx context.Context, cfg *config.Config, repo *library.PostgresTrackRepository, mode HealthCheckMode) error {
 	tracks, err := repo.ListReadyAudioTracks(ctx)
 	if err != nil {
 		return err
@@ -37,12 +44,18 @@ func healthCheck(ctx context.Context, cfg *config.Config, repo *library.Postgres
 		return err
 	}
 
-	orphanedDB, fixed := orphans.Check(ctx, tracks, audioStore, repo, fix)
-	reportHealthCheck(totalChecked, orphanedDB, fixed, fix)
+	orphaned := orphans.Check(ctx, tracks, audioStore)
+	if mode == HealthCheckFix {
+		fixed := orphans.Fix(ctx, orphaned, repo)
+		reportHealthCheck(totalChecked, len(orphaned), fixed, mode)
+		return nil
+	}
+	reportHealthCheck(totalChecked, len(orphaned), 0, mode)
 	return nil
 }
 
-func reportHealthCheck(totalChecked, orphanedDB, fixed int, fix bool) {
+func reportHealthCheck(totalChecked, orphanedDB, fixed int, mode HealthCheckMode) {
+	fix := mode == HealthCheckFix
 	printSummary("Health check complete:")
 	fmt.Printf("  Tracks checked:    %d\n", totalChecked)
 	fmt.Printf("  Orphaned DB rows:  %d\n", orphanedDB)

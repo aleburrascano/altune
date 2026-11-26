@@ -9,22 +9,29 @@ import (
 
 const missingAudioReason = "Audio file missing from storage (health-check)"
 
-func Check(ctx context.Context, tracks []library.ReadyAudioTrack, store library.AudioStore, repo library.TrackReadWriter, fix bool) (orphaned, fixed int) {
+func Check(ctx context.Context, tracks []library.ReadyAudioTrack, store library.AudioStore) []library.ReadyAudioTrack {
+	var orphaned []library.ReadyAudioTrack
 	for _, t := range tracks {
 		exists, err := store.Exists(ctx, t.AudioRef)
 		if err == nil && exists {
 			continue
 		}
-		orphaned++
+		orphaned = append(orphaned, t)
 		fmt.Printf("  ORPHANED: %s — %s  (id=%s, ref=%s)\n", t.Title, t.Artist, t.Id, t.AudioRef)
-
-		if fix {
-			_ = markTrackFailed(ctx, repo, t)
-			fixed++
-			fmt.Println("    → FIXED: marked as failed")
-		}
 	}
-	return orphaned, fixed
+	return orphaned
+}
+
+func Fix(ctx context.Context, orphaned []library.ReadyAudioTrack, repo library.TrackReadWriter) (fixed int) {
+	for _, t := range orphaned {
+		if err := markTrackFailed(ctx, repo, t); err != nil {
+			fmt.Printf("    → NOT FIXED: %s: %v\n", t.Id, err)
+			continue
+		}
+		fixed++
+		fmt.Printf("    → FIXED: %s marked as failed\n", t.Id)
+	}
+	return fixed
 }
 
 func markTrackFailed(ctx context.Context, repo library.TrackReadWriter, t library.ReadyAudioTrack) error {

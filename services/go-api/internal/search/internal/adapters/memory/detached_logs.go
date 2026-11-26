@@ -9,7 +9,7 @@ func CaptureDetachedLogs(t TB) *logging.RingBuffer {
 	t.Helper()
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })
-	return logging.Setup("error", false)
+	return logging.Setup("error")
 }
 
 func OnlyRecord(t TB, ring *logging.RingBuffer, msg string) logging.CapturedRecord {

@@ -424,7 +424,7 @@ func TestHandleSuggest(t *testing.T) {
 func TestHandleSuggest_StoreErrorDoesNotLogQueryText(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
-	ring := logging.Setup("error", false)
+	ring := logging.Setup("error")
 
 	const secret = "kendricksecretunreleasedcut"
 	router := buildSuggestRouter(&fakeVocabStore{err: context.DeadlineExceeded})
@@ -1369,7 +1369,7 @@ func captureLogs(t *testing.T) *logging.RingBuffer {
 	t.Helper()
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })
-	return logging.Setup("info", false)
+	return logging.Setup("info")
 }
 
 func findRecord(ring *logging.RingBuffer, msg string) (logging.CapturedRecord, bool) {

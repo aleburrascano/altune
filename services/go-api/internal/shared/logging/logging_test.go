@@ -26,7 +26,10 @@ func setupWritingTo(stdout *os.File, level string, development bool) *logging.Ri
 	realStdout := os.Stdout
 	os.Stdout = stdout
 	defer func() { os.Stdout = realStdout }()
-	return logging.Setup(level, development)
+	if development {
+		return logging.SetupDevelopment(level)
+	}
+	return logging.Setup(level)
 }
 
 func readFile(t *testing.T, path string) string {

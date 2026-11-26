@@ -46,7 +46,7 @@ func newStreamFixture(t *testing.T) streamFixture {
 	t.Helper()
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })
-	ring := logging.Setup("error", false)
+	ring := logging.Setup("error")
 	tap := monitoring.NewEventTap(events.NewInProcessBus(time.Now, filepath.Join(t.TempDir(), "event-id-floor")))
 	feed := monitoring.NewEventFeed()
 	ctx, stopFeed := context.WithCancel(context.Background())

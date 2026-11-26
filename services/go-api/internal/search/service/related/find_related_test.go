@@ -557,7 +557,7 @@ func TestFindRelated_PanickingDependenciesAreContained(t *testing.T) {
 func TestFindRelated_EachPanickingLookupIsLoggedUnderItsOwnEvent(t *testing.T) {
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })
-	ring := logging.Setup("error", false)
+	ring := logging.Setup("error")
 	svc := related.NewFindRelatedService(panickingQuerier{}, panickingAlbumProvider{}, panickingArtistProvider{})
 	mainTrack := searchtest.TrackResult(domain.ProviderDeezer, "1", "Main Track", "Artist", nil)
 	mainTrack.Album = "Some Album"

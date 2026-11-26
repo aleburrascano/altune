@@ -127,7 +127,7 @@ func captureLogs(t *testing.T) *logging.RingBuffer {
 	t.Helper()
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })
-	return logging.Setup("error", false)
+	return logging.Setup("error")
 }
 
 func onlyRecord(t *testing.T, ring *logging.RingBuffer, msg string) logging.CapturedRecord {

@@ -107,7 +107,7 @@ func (failingSigner) PresignGet(context.Context, string, time.Duration) (string,
 func TestCorrelationID_ReachesCatalogServiceLogs(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
-	ring := logging.Setup("info", false)
+	ring := logging.Setup("info")
 
 	repo := library.NewInMemoryTrackRepo()
 	track := library.SeedReadyTrack(t, repo, library.FixtureUserId(), "Track", "Artist", "Album", "audio/ok.opus")

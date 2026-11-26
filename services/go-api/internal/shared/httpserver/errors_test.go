@@ -61,7 +61,7 @@ func captureLogs(t *testing.T) *logging.RingBuffer {
 	t.Helper()
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })
-	return logging.Setup("debug", false)
+	return logging.Setup("debug")
 }
 
 func recordsNamed(ring *logging.RingBuffer, message string) []logging.CapturedRecord {

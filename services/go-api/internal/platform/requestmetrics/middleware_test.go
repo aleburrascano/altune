@@ -53,7 +53,7 @@ func TestLatencyMiddleware_RecordPanicDoesNotFailRequest(t *testing.T) {
 func TestLatencyMiddleware_RecordPanicIsLoggedOnceWithTheRequestID(t *testing.T) {
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })
-	ring := logging.Setup("error", false)
+	ring := logging.Setup("error")
 	panicRec := func(string, time.Duration, int) { panic("histogram exploded") }
 	req := httptest.NewRequest(http.MethodGet, "/v1/tracks/42", nil)
 	req = req.WithContext(logging.WithCorrelationID(context.Background(), "corr-reqm-3"))

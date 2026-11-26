@@ -49,7 +49,7 @@ func newRouter(s router.Settings) *chi.Mux {
 func TestRouter_PanickingHandlerLogsOneErrorAndRequestCompleteAt500(t *testing.T) {
 	prev := slog.Default()
 	defer slog.SetDefault(prev)
-	ring := logging.Setup("info", false)
+	ring := logging.Setup("info")
 
 	r := newRouter(router.Settings{})
 	r.Get("/v1/boom", func(http.ResponseWriter, *http.Request) {
