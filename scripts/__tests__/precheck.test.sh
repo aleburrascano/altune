@@ -735,6 +735,41 @@ forbid_log "--new-from-rev=HEAD"
 expect_log "go run ./scripts/lintcomments --all internal/shared/s/s.go"
 expect_log "go run ./scripts/lintnames"
 
+expect_lint_args_exist() {
+    local arg missing=""
+    while read -r arg; do
+        case "$arg" in ./*) [ -d "$WORK/repo/services/go-api/$arg" ] || missing="$missing $arg" ;; esac
+    done < <(grep '^golangci-lint run' "$WORK/tools.log" | tr ' ' '\n')
+    [ -z "$missing" ] || fail "golangci-lint was given directories that do not exist:$missing"
+}
+
+CASE="a push after a package moved lints only the directory it moved to, and never an import path or the old directory"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    git mv services/go-api/internal/discovery/adapters/x services/go-api/internal/discovery/adapters/y
+    git commit -qm "move x to y"
+)
+run_push_scoped
+expect_rc 0
+expect_log "./internal/discovery/adapters/y"
+forbid_log "adapters/x"
+forbid_log "altune/go-api/"
+expect_lint_args_exist
+
+CASE="a commit after a package moved lints only the directory it moved to"
+new_repo
+add_go_fixture
+(
+    cd "$WORK/repo" || exit 1
+    git mv services/go-api/internal/discovery/adapters/x services/go-api/internal/discovery/adapters/y
+)
+run_with_tools --lint
+expect_log "./internal/discovery/adapters/y"
+forbid_log "adapters/x"
+expect_lint_args_exist
+
 CASE="precheck rejects an unknown flag and a flag after the base ref with the usage and exit 2"
 new_repo
 run_script --ful
