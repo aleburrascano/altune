@@ -64,6 +64,11 @@ describe('mh09: an acquisition completing never restarts a stale pin on web', ()
   });
 });
 
+function ConnectedBridge() {
+  const reconcile = usePinnedStore((state) => state.reconcile);
+  return React.createElement(OfflineReconcileBridge, { reconcile });
+}
+
 describe('mh09: the reconcile bridge does nothing on web', () => {
   it('leaves a ready entry whose file is missing unchanged on web', () => {
     usePinnedStore.setState({
@@ -72,7 +77,7 @@ describe('mh09: the reconcile bridge does nothing on web', () => {
       isWorking: true,
     });
 
-    render(React.createElement(OfflineReconcileBridge));
+    render(React.createElement(ConnectedBridge));
 
     expect(usePinnedStore.getState().entries.t1?.status).toBe('ready');
   });

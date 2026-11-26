@@ -134,7 +134,7 @@ class File {
   }
 
   static async downloadFileAsync(url, dest, options) {
-    takeFailure('download', this.uri);
+    takeFailure('download', dest.uri);
     if (options?.signal?.aborted) throw new Error('AbortError: download aborted');
     for (const progress of pendingProgress.splice(0)) options?.onProgress?.(progress);
     fileContents.set(dest.uri, `downloaded:${url}`);

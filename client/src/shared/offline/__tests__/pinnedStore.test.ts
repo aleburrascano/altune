@@ -23,6 +23,7 @@ import {
   usePinnedStore,
   type PinnedEntry,
   type PinnedStatus,
+  type UnpinBatchResult,
   provideOfflinePort,
   resolvePinnedUri,
   repinIfPinned,
@@ -2968,8 +2969,12 @@ describe('unpinMany reports what a bulk removal left downloaded', () => {
         return deleteFile(uri);
       };
 
-      const result = await offline.usePinnedStore.getState().unpinMany(trackIds);
-      offline.dispose();
+      let result: UnpinBatchResult;
+      try {
+        result = await offline.usePinnedStore.getState().unpinMany(trackIds);
+      } finally {
+        offline.dispose();
+      }
 
       expect(result.requested).toBe(400);
       expect(result.failed).toBeGreaterThan(0);
@@ -3207,6 +3212,10 @@ describe('work stays bounded on a large pinned library', () => {
   });
 });
 
+function readyForSignOut(): PinnedEntry {
+  return { trackId: asTrackId('t1'), status: 'ready', uri: 'file:///missing.mp3' };
+}
+
 describe('downloads belong to one account and are cleared on sign-out', () => {
   const { __fs } = FileSystem as unknown as {
     __fs: {
@@ -3378,6 +3387,26 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
   });
 
   describe('sign-out cleanup registry', () => {
+    it('an offline instance that has not been disposed clears its downloads on sign-out', () => {
+      const offline = createOffline({ now: () => 0, random: Math.random });
+      offline.usePinnedStore.setState({ entries: { t1: readyForSignOut() } });
+
+      runSignOutCleanups();
+      offline.dispose();
+
+      expect(offline.usePinnedStore.getState().entries).toEqual({});
+    });
+
+    it('a disposed offline instance no longer reacts to sign-out', () => {
+      const offline = createOffline({ now: () => 0, random: Math.random });
+      offline.usePinnedStore.setState({ entries: { t1: readyForSignOut() } });
+      offline.dispose();
+
+      runSignOutCleanups();
+
+      expect(offline.usePinnedStore.getState().entries).toEqual({ t1: readyForSignOut() });
+    });
+
     it('removes every download when the signed-in identity changes', () => {
       seedReadyDownload();
 

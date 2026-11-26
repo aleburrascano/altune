@@ -30,8 +30,6 @@ import {
 } from '@shared/offline/shell/pinnedIndex';
 import { warn } from '@shared/log';
 
-export { pinnedBytes as pinnedByteTotal } from '@shared/offline/shell/pinnedFiles';
-
 export type { PinnedStatus } from '@shared/offline/core/pinnedEntry';
 
 function readyWithFileOnDisk(entries: Record<string, PinnedEntry>): Record<string, PinnedEntry> {
