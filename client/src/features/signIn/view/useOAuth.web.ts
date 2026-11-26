@@ -1,5 +1,3 @@
-import * as WebBrowser from 'expo-web-browser';
-
 import { startOAuth, withAuthDeadline } from '@shared/auth';
 import {
   failureReason,
@@ -12,8 +10,6 @@ import { useAuthPort } from '@features/signIn/view/AuthPortProvider';
 import type { AuthPort } from '@features/signIn/ports/authPort';
 
 import { useOAuthFlow } from '@features/signIn/view/useOAuthFlow';
-
-WebBrowser.maybeCompleteAuthSession();
 
 async function redirectToProvider(provider: OAuthProvider): Promise<OAuthFailure | null> {
   const { error } = await withAuthDeadline(

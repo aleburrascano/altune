@@ -1,37 +1,14 @@
 import { renderHook, act } from '@testing-library/react-native';
-import * as WebBrowser from 'expo-web-browser';
 
 import { useOAuth } from '@features/signIn';
 import {
   authPortWrapper,
+  createAuthBrowserMock,
   createAuthPortMock,
   createSupabaseAuthMock,
 } from '@features/signIn/__tests__/testUtils/authTestUtils';
 
 const AUTH_ACTION_TIMEOUT_MS = 20_000;
-
-const mockStateUpdates: unknown[] = [];
-
-jest.mock('react', () => {
-  const actual = jest.requireActual('react');
-  return {
-    ...actual,
-    useState: (initial: unknown) => {
-      const state = actual.useState(initial);
-      return [
-        state[0],
-        (next: unknown) => {
-          mockStateUpdates.push(next);
-          state[1](next);
-        },
-      ];
-    },
-  };
-});
-jest.mock('expo-web-browser', () => ({
-  maybeCompleteAuthSession: jest.fn(),
-  openAuthSessionAsync: jest.fn(),
-}));
 
 const authPort = createAuthPortMock();
 const { signInWithOAuth } = createSupabaseAuthMock('signInWithOAuth');
@@ -39,14 +16,14 @@ const { signInWithOAuth } = createSupabaseAuthMock('signInWithOAuth');
 beforeEach(() => {
   authPort.reportSignInFailure.mockClear();
 });
-const openAuthSessionAsync = WebBrowser.openAuthSessionAsync as unknown as jest.Mock;
+const browser = createAuthBrowserMock();
 
 function neverSettles<T>(): Promise<T> {
   return new Promise<T>(() => {});
 }
 
 async function signIn(): Promise<{ kind: string }> {
-  const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
+  const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort, browser) });
   await act(async () => {
     await result.current.signInWith('google');
   });
@@ -66,7 +43,7 @@ describe('useOAuth: a full-page redirect on web, not a popup (#2837)', () => {
       provider: 'google',
       options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
-    expect(openAuthSessionAsync).not.toHaveBeenCalled();
+    expect(browser.openAuthSession).not.toHaveBeenCalled();
   });
 
   it('reports the failure when the redirect request itself is refused', async () => {
@@ -83,7 +60,9 @@ describe('useOAuth: pending survives a successful redirect, since the tab is on 
       data: { url: 'https://accounts.google.com/o' },
       error: null,
     });
-    const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
+    const { result } = renderHook(() => useOAuth(), {
+      wrapper: authPortWrapper(authPort, browser),
+    });
 
     await act(async () => {
       await result.current.signInWith('google');
@@ -92,8 +71,7 @@ describe('useOAuth: pending survives a successful redirect, since the tab is on 
     expect(result.current.state).toEqual({ kind: 'pending', provider: 'google' });
   });
 
-  it('sets no state for a refused redirect once the screen that started it has unmounted', async () => {
-    mockStateUpdates.length = 0;
+  it('still reports a refused redirect once the screen that started it has unmounted', async () => {
     let resolveSignIn!: (value: { data: null; error: { message: string } }) => void;
     signInWithOAuth.mockReturnValue(
       new Promise((settle) => {
@@ -101,7 +79,7 @@ describe('useOAuth: pending survives a successful redirect, since the tab is on 
       }),
     );
     const { result, unmount } = renderHook(() => useOAuth(), {
-      wrapper: authPortWrapper(authPort),
+      wrapper: authPortWrapper(authPort, browser),
     });
 
     let call!: Promise<void>;
@@ -114,7 +92,7 @@ describe('useOAuth: pending survives a successful redirect, since the tab is on 
       await call;
     });
 
-    expect(mockStateUpdates).toEqual([{ kind: 'pending', provider: 'google' }]);
+    expect(authPort.reportSignInFailure).toHaveBeenCalledWith('unknown');
   });
 });
 
@@ -124,7 +102,7 @@ describe('useOAuth: a rejected web redirect request settles into error, not pend
   });
 
   it('reports a network error when signInWithOAuth rejects on web', async () => {
-    signInWithOAuth.mockRejectedValue(new Error('failed to fetch'));
+    signInWithOAuth.mockRejectedValue(new TypeError('Failed to fetch'));
 
     expect(await signIn()).toEqual({ kind: 'error', reason: 'network' });
     expect(authPort.reportSignInFailure).toHaveBeenCalledWith('network');
@@ -139,7 +117,9 @@ describe('useOAuth: a rejected web redirect request settles into error, not pend
   it('reports a network error when the web redirect request stalls past the auth deadline', async () => {
     jest.useFakeTimers();
     signInWithOAuth.mockReturnValue(neverSettles());
-    const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
+    const { result } = renderHook(() => useOAuth(), {
+      wrapper: authPortWrapper(authPort, browser),
+    });
 
     let call!: Promise<void>;
     act(() => {

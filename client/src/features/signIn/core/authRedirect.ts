@@ -1,4 +1,5 @@
 import { declaredAppScheme, webOrigin } from '@shared/device';
+import { isPresent } from '@features/signIn/core/isPresent';
 
 export type AuthLinkHost = { scheme: string; origin: string | null };
 
@@ -35,5 +36,5 @@ export function authRedirectUrl(
   host: AuthLinkHost = appLinkHost(),
 ): string {
   const path = REDIRECT_PATH_FOR_INTENT[intent];
-  return host.origin ? `${host.origin}/${path}` : `${host.scheme}${path}`;
+  return isPresent(host.origin) ? `${host.origin}/${path}` : `${host.scheme}${path}`;
 }

@@ -9,6 +9,6 @@ find music	availability	services/go-api/internal/app/latency_middleware.go:25 (s
 find music	latency	services/go-api/internal/app/latency_middleware.go:25 (server p95 via Overseer); missing: client results-shown timer	TBD	28d	200	measuring	device offline	2026-10-12	-
 find music	correctness	services/go-api/internal/app/eval_runner.go:117 eval score vs baseline + nightly discovery eval (synthetic)	TBD	28d	200	measuring	-	2026-10-12	-
 find music	correctness	none: discography completeness needs an expected-release reference set per artist (discography_observed counts contamination)	TBD	28d	200	measuring	-	2026-11-30	-
-sign in	availability	none: sign_in event with outcome/reason in client/src/features/signIn/shell/useSignIn.ts	TBD	28d	200	measuring	wrong password	2026-11-30	-
+sign in	availability	none: sign_in event with outcome/reason in client/src/features/signIn/view/useSignIn.ts	TBD	28d	200	measuring	wrong password	2026-11-30	-
 sign in	latency	none: duration_ms on the sign_in event	TBD	28d	200	measuring	wrong password	2026-11-30	-
 sign in	correctness	none: session_expired event with session age (client/src/shared/auth/view/sessionExpired.ts:23)	TBD	28d	200	measuring	-	2026-11-30	-

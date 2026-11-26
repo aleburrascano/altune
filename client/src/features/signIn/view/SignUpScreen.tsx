@@ -1,9 +1,9 @@
 import { useState, type ReactElement } from 'react';
 
 import { useEmailPasswordFields } from '@features/signIn/view/useEmailPasswordFields';
-import { useSignUp } from '@features/signIn/hooks/useSignUp';
+import { useSignUp } from '@features/signIn/view/useSignUp';
 import { newPasswordFormState } from '@features/signIn/core/validation';
-import { AuthForm } from '@features/signIn/ui/AuthForm';
+import { AuthForm } from '@features/signIn/view/AuthForm';
 import { CheckEmailNotice } from '@features/signIn/view/CheckEmailNotice';
 import {
   EmailPasswordFields,

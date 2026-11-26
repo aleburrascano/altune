@@ -1,32 +1,22 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import type { ReactNode } from 'react';
-
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { renderRouter } from 'expo-router/testing-library';
 import { CheckEmailNotice, SignUpScreen, PASSWORD_REQUIREMENTS_HINT } from '@features/signIn';
 import {
   authPortWrapper,
   createSupabaseAuthMock,
 } from '@features/signIn/__tests__/testUtils/authTestUtils';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 import { warmUpFirstRender } from '@testing/warmUpFirstRender';
-
-jest.mock('expo-router', () => {
-  const { View } = require('react-native');
-  return {
-    useRouter: () => ({ replace: jest.fn(), push: jest.fn(), back: jest.fn() }),
-    Link: ({ children, testID }: { children: ReactNode; testID?: string }) => (
-      <View testID={testID}>{children}</View>
-    ),
-  };
-});
 
 const { signUp } = createSupabaseAuthMock('signUp');
 
 warmUpFirstRender(async () => {
-  render(<SignUpScreen />, { wrapper: authPortWrapper() });
-  render(<CheckEmailNotice />);
+  renderRouter({ index: SignUpScreen }, { wrapper: authPortWrapper() });
+  renderRouter({ index: CheckEmailNotice });
 });
 
 function renderSignUp(): void {
-  render(<SignUpScreen />, { wrapper: authPortWrapper() });
+  renderRouter({ index: SignUpScreen }, { wrapper: authPortWrapper() });
 }
 
 function rejectedWith(code: string) {
@@ -114,7 +104,7 @@ describe('the sign-up screen', () => {
   });
 
   it('shows the sign-up copy in the shared banner when the attempt failed', async () => {
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const logs = recordLogs();
     signUp.mockResolvedValue(rejectedWith('some_future_code'));
     renderSignUp();
 
@@ -123,10 +113,11 @@ describe('the sign-up screen', () => {
     expect(await screen.findByTestId('auth-error')).toHaveTextContent(
       "Couldn't create your account. Please try again.",
     );
+    expect(logs.text()).toContain('[auth] sign-up failed');
   });
 
   it('tells the person sign-ups are closed when the server refused the sign-up', async () => {
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const logs = recordLogs();
     signUp.mockResolvedValue(rejectedWith('signup_disabled'));
     renderSignUp();
 
@@ -135,6 +126,7 @@ describe('the sign-up screen', () => {
     expect(await screen.findByTestId('auth-error')).toHaveTextContent(
       'Sign-ups are closed on staging.',
     );
+    expect(logs.text()).toContain('[auth] sign-up failed');
   });
 
   it('replaces the form with the check-email notice once the account is pending', async () => {

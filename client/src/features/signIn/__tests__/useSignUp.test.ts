@@ -5,6 +5,7 @@ import {
   createSupabaseAuthMock,
   runAsyncAuthHook,
 } from '@features/signIn/__tests__/testUtils/authTestUtils';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 const AUTH_ACTION_TIMEOUT_MS = 20_000;
 
 const { signUp: supabaseSignUp } = createSupabaseAuthMock('signUp');
@@ -239,17 +240,16 @@ describe('useSignUp: the confirmation redirect on native (#2837)', () => {
 
 describe('useSignUp: failure logging', () => {
   it('warns when the response carries no identities list', async () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const logs = recordLogs();
     supabaseSignUp.mockResolvedValue({ data: { user: { identities: undefined } }, error: null });
 
     await signUp();
 
-    expect(warn).toHaveBeenCalledTimes(1);
-    warn.mockRestore();
+    expect(logs.warnings).toHaveLength(1);
   });
 
   it('warns with the projected detail and never the email or password', async () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const logs = recordLogs();
     supabaseSignUp.mockResolvedValue({
       data: null,
       error: { name: 'AuthApiError', status: 400, code: 'x', message: 'Bad', extra: 'drop' },
@@ -257,12 +257,14 @@ describe('useSignUp: failure logging', () => {
 
     await signUp();
 
-    expect(warn).toHaveBeenCalledWith('[auth] sign-up failed', {
-      name: 'AuthApiError',
-      code: 'x',
-      status: 400,
-      message: 'Bad',
-    });
-    warn.mockRestore();
+    expect(logs.warnings).toContainEqual([
+      '[auth] sign-up failed',
+      {
+        name: 'AuthApiError',
+        code: 'x',
+        status: 400,
+        message: 'Bad',
+      },
+    ]);
   });
 });

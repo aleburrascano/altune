@@ -1,6 +1,5 @@
 import { signInWithPassword } from '@shared/auth';
 
-import { lockoutOnRepeatedFailure } from '@features/signIn/shell/attemptLockout';
 import {
   classifyAuthError,
   isInvalidCredentialsError,
@@ -8,9 +7,9 @@ import {
   type SignInFailureReason,
   type SupabaseAuthErrorLike,
 } from '@features/signIn/core/authError';
-import { useAuthPort } from '@features/signIn/view/AuthPortProvider';
+import { useAttemptLockout, useAuthPort } from '@features/signIn/view/AuthPortProvider';
 
-import { useAsyncAuthAction } from '@features/signIn/shell/useAsyncAuthAction';
+import { useAsyncAuthAction } from '@features/signIn/view/useAsyncAuthAction';
 
 type SignInResult =
   | { kind: 'idle' }
@@ -27,8 +26,9 @@ function signInErrorReason(error: SupabaseAuthErrorLike): SignInFailureReason {
 
 export function useSignIn() {
   const authPort = useAuthPort();
+  const lockout = useAttemptLockout();
   const { state, run } = useAsyncAuthAction<SignInResult, [string, string]>(
-    lockoutOnRepeatedFailure(
+    lockout.guard(
       'sign-in',
       async (email: string, password: string) => {
         const { error } = await signInWithPassword({ email, password });

@@ -3,8 +3,14 @@ import { act, renderHook } from '@testing-library/react-native';
 
 import { supabase } from '@shared/auth';
 
-import { _resetLockoutsForTest, AuthPortProvider } from '@features/signIn';
-import type { AuthPort } from '@features/signIn';
+import {
+  _resetLockoutsForTest,
+  attemptLockout,
+  authIntents,
+  AuthPortProvider,
+  recoveryUnlock,
+} from '@features/signIn';
+import type { AuthBrowser, AuthPort } from '@features/signIn';
 
 const { ensureAppAuthClient } = require('@testing/appAuthClient.js') as {
   ensureAppAuthClient: () => void;
@@ -36,13 +42,34 @@ export function createAuthPortMock(): AuthPortMock {
   };
 }
 
+export type AuthBrowserMock = {
+  [K in keyof AuthBrowser]: jest.Mock<ReturnType<AuthBrowser[K]>, Parameters<AuthBrowser[K]>>;
+};
+
+export function createAuthBrowserMock(): AuthBrowserMock {
+  return {
+    openAuthSession: jest.fn(),
+    dismissAuthSession: jest.fn(),
+  };
+}
+
 interface AuthPortWrapperProps {
   children: ReactNode;
 }
 
-export function authPortWrapper(port: AuthPort = createAuthPortMock()) {
+export function authPortWrapper(
+  port: AuthPort = createAuthPortMock(),
+  browser: AuthBrowser = createAuthBrowserMock(),
+) {
   return function AuthPortWrapper({ children }: AuthPortWrapperProps): ReactElement {
-    const props = { port, children };
+    const props = {
+      port,
+      browser,
+      lockout: attemptLockout,
+      recovery: recoveryUnlock,
+      intents: authIntents,
+      children,
+    };
     return createElement(AuthPortProvider, props);
   };
 }
@@ -51,8 +78,9 @@ export async function runAsyncAuthHook<H extends { state: unknown }>(
   useHook: () => H,
   invoke: (hook: H) => Promise<void>,
   port: AuthPort = createAuthPortMock(),
+  browser: AuthBrowser = createAuthBrowserMock(),
 ): Promise<H['state']> {
-  const { result } = renderHook(useHook, { wrapper: authPortWrapper(port) });
+  const { result } = renderHook(useHook, { wrapper: authPortWrapper(port, browser) });
   await act(async () => {
     await invoke(result.current);
   });

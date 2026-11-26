@@ -1,3 +1,4 @@
+import { warn } from '@shared/log';
 import { signUp } from '@shared/auth';
 
 import {
@@ -10,7 +11,7 @@ import {
 } from '@features/signIn/core/authError';
 import { authRedirectUrl } from '@features/signIn/core/authRedirect';
 
-import { useAsyncAuthAction } from '@features/signIn/shell/useAsyncAuthAction';
+import { useAsyncAuthAction } from '@features/signIn/view/useAsyncAuthAction';
 
 type SignUpResult =
   | { kind: 'idle' }
@@ -27,10 +28,10 @@ type SettledSignUp = Exclude<SignUpResult, { kind: 'idle' | 'pending' }>;
 type SignUpResponseData = Awaited<ReturnType<typeof signUp>>['data'];
 
 function signUpOutcome(data: SignUpResponseData): SettledSignUp {
-  if (data?.session) return { kind: 'ok' };
-  const identities = data?.user?.identities;
+  if (data.session) return { kind: 'ok' };
+  const identities = data.user?.identities;
   if (!Array.isArray(identities)) {
-    console.warn('[auth] sign-up response carried no identities list', {
+    warn('[auth] sign-up response carried no identities list', {
       identitiesType: typeof identities,
     });
     return { kind: 'error', reason: 'unknown' };
@@ -49,7 +50,7 @@ export function useSignUp() {
         options: { emailRedirectTo: authRedirectUrl('confirm') },
       });
       if (error) {
-        console.warn('[auth] sign-up failed', supabaseErrorDetail(error));
+        warn('[auth] sign-up failed', supabaseErrorDetail(error));
         return {
           kind: 'error',
           reason: classifyAuthError(error, [

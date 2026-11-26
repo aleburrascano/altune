@@ -2,10 +2,10 @@ import { useState, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Banner, Button, Text, TextField, spacing, AuthHeroLayout } from '@shared/ui';
-import { useResetPassword } from '@features/signIn/hooks/useResetPassword';
+import { useResetPassword } from '@features/signIn/view/useResetPassword';
 import { isValidEmail } from '@features/signIn/core/validation';
 import { AuthErrorBanner } from '@features/signIn/view/AuthErrorBanner';
-import { BackToSignInLink } from '@features/signIn/ui/BackToSignInLink';
+import { BackToSignInLink } from '@features/signIn/view/BackToSignInLink';
 import { FieldError } from '@features/signIn/view/AuthFields';
 const GENERIC_ERROR = "Couldn't send the reset email. Please try again.";
 const SENT_COPY =

@@ -2,7 +2,7 @@ import { StyleSheet, View } from 'react-native';
 import type { ReactElement } from 'react';
 
 import { Banner, Text, spacing, AuthHeroLayout } from '@shared/ui';
-import { BackToSignInLink } from '@features/signIn/ui/BackToSignInLink';
+import { BackToSignInLink } from '@features/signIn/view/BackToSignInLink';
 
 export function CheckEmailNotice(): ReactElement {
   return (

@@ -1,40 +1,21 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Navigator } from '@shared/navigation';
-
-import { withAuthDeadline } from '@shared/auth';
+import { authIntentClient, withAuthDeadline } from '@shared/auth';
 import {
   type SupabaseAuthErrorLike,
-  type SupabaseErrorDetail,
   supabaseErrorDetail,
   thrownErrorDetail,
 } from '@features/signIn/core/authError';
-import type { AuthLinkIntent, AuthLinkParams } from '@features/signIn/core/parseAuthLink';
 import {
-  markRecoveryUnlocked,
+  type AuthFailureCause,
+  type AuthIntentFailure,
+  type AuthIntentResult,
   RESET_PASSWORD_ROUTE_SEGMENT,
-} from '@features/signIn/shell/passwordRecovery';
+} from '@features/signIn/core/authIntent';
+import type { AuthLinkIntent, AuthLinkParams } from '@features/signIn/core/parseAuthLink';
+import type { AuthIntents, AuthRouter } from '@features/signIn/ports/authIntents';
+import { markRecoveryUnlocked } from '@features/signIn/shell/passwordRecovery';
+import { isPresent } from '@features/signIn/core/isPresent';
 
-type AuthClient = Pick<
-  SupabaseClient['auth'],
-  'exchangeCodeForSession' | 'verifyOtp' | 'getSession'
->;
-
-type AuthFailureCause =
-  | 'gotrue_rejected'
-  | 'no_spendable_credential'
-  | 'session_already_active'
-  | 'otp_type_not_allowed_for_path'
-  | 'verification_named_no_user'
-  | 'unhandled_intent_kind';
-
-type AuthIntentFailure = {
-  kind: 'failure';
-  cause: AuthFailureCause;
-  error?: SupabaseErrorDetail;
-};
-
-export type AuthIntentResult =
-  { kind: 'success' } | AuthIntentFailure | { kind: 'deduped' } | { kind: 'ignored' };
+type AuthClient = ReturnType<typeof authIntentClient>;
 
 function refused(cause: Exclude<AuthFailureCause, 'gotrue_rejected'>): AuthIntentFailure {
   return { kind: 'failure', cause };
@@ -49,10 +30,10 @@ type CredentialConsumption = { credential: string; outcome: Promise<AuthIntentRe
 let activeConsumption: CredentialConsumption | null = null;
 
 function credentialKey(params: AuthLinkParams): string | null {
-  if (params.code) {
+  if (isPresent(params.code)) {
     return `code:${params.code}`;
   }
-  if (params.token_hash) {
+  if (isPresent(params.token_hash)) {
     return `token_hash:${params.token_hash}`;
   }
   return null;
@@ -62,8 +43,6 @@ const OTP_TYPES_BY_LINK_KIND = {
   recovery: ['recovery'],
   confirm: ['signup', 'email'],
 } as const;
-
-export type AuthRouter = Pick<Navigator, 'replace'>;
 
 type OtpLinkKind = keyof typeof OTP_TYPES_BY_LINK_KIND;
 type SpendableOtpType = (typeof OTP_TYPES_BY_LINK_KIND)[OtpLinkKind][number];
@@ -83,7 +62,7 @@ async function verifyRecoveryOrConfirm(
   auth: AuthClient,
 ): Promise<VerifiedOtp> {
   const type = spendableOtpType(kind, params.type);
-  if (!params.token_hash) {
+  if (!isPresent(params.token_hash)) {
     return refused('no_spendable_credential');
   }
   if (!type) {
@@ -94,7 +73,7 @@ async function verifyRecoveryOrConfirm(
 }
 
 function openResetPasswordScreenFor(userId: string | null, router: AuthRouter): AuthIntentResult {
-  if (!userId) {
+  if (!isPresent(userId)) {
     return refused('verification_named_no_user');
   }
   markRecoveryUnlocked(userId);
@@ -103,7 +82,7 @@ function openResetPasswordScreenFor(userId: string | null, router: AuthRouter): 
 }
 
 async function exchangeOAuth(params: AuthLinkParams, auth: AuthClient): Promise<AuthIntentResult> {
-  if (!params.code) {
+  if (!isPresent(params.code)) {
     return refused('no_spendable_credential');
   }
   const { error } = await auth.exchangeCodeForSession(params.code);
@@ -226,3 +205,7 @@ export async function completeAuthIntent(
 export function _resetConsumedCredentialForTest(): void {
   activeConsumption = null;
 }
+
+export const authIntents: AuthIntents = {
+  complete: (intent, router) => completeAuthIntent(intent, router, authIntentClient()),
+};

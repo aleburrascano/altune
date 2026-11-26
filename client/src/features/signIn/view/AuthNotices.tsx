@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
 
 import { useSignOut } from '@shared/auth';
+import { useNavigator } from '@shared/navigation';
 import { Button, Text, spacing, useTheme } from '@shared/ui';
 type AuthFullScreenNoticeProps = {
   children: ReactNode;
@@ -71,7 +71,7 @@ export function SessionExpiredNotice() {
 }
 
 export function InvalidRecoveryLinkNotice() {
-  const router = useRouter();
+  const router = useNavigator();
 
   return (
     <AuthFullScreenNotice testID="invalid-recovery-link" padded>

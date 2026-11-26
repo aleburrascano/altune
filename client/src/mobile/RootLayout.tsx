@@ -23,8 +23,12 @@ import { StagingBanner } from '@/mobile/frame/StagingBanner';
 import { useNavigator } from '@shared/navigation';
 import {
   AuthGate,
+  attemptLockout,
+  authIntents,
   AuthPortProvider,
+  recoveryUnlock,
   httpAuthPort,
+  nativeAuthBrowser,
   nativeLinkEvents,
   startAppAuthDeepLinks,
 } from '@features/signIn';
@@ -141,7 +145,13 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
-        <AuthPortProvider port={httpAuthPort}>
+        <AuthPortProvider
+          port={httpAuthPort}
+          browser={nativeAuthBrowser}
+          lockout={attemptLockout}
+          recovery={recoveryUnlock}
+          intents={authIntents}
+        >
           <FeaturePorts ports={httpFeaturePorts}>
             <TapFeedbackProvider feedback={tapFeedback}>
               <ThemeProvider>

@@ -1,11 +1,22 @@
 import { renderHook } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { AuthPortProvider, useAuthPort } from '@features/signIn';
-import type { AuthPort } from '@features/signIn';
+import {
+  attemptLockout,
+  authIntents,
+  AuthPortProvider,
+  recoveryUnlock,
+  useAuthPort,
+} from '@features/signIn';
+import type { AuthBrowser, AuthPort } from '@features/signIn';
 
 const port: AuthPort = {
   reportSignInFailure: () => undefined,
+};
+
+const browser: AuthBrowser = {
+  openAuthSession: () => Promise.resolve({ type: 'cancel' }),
+  dismissAuthSession: () => undefined,
 };
 
 interface WrapperProps {
@@ -15,17 +26,25 @@ interface WrapperProps {
 describe('AuthPortProvider', () => {
   it('provides the port to useAuthPort', () => {
     function wrapper({ children }: WrapperProps) {
-      return <AuthPortProvider port={port}>{children}</AuthPortProvider>;
+      return (
+        <AuthPortProvider
+          port={port}
+          browser={browser}
+          lockout={attemptLockout}
+          recovery={recoveryUnlock}
+          intents={authIntents}
+        >
+          {children}
+        </AuthPortProvider>
+      );
     }
     const { result } = renderHook(() => useAuthPort(), { wrapper });
     expect(result.current).toBe(port);
   });
 
   it('throws when no provider is mounted', () => {
-    const spy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     expect(() => renderHook(() => useAuthPort())).toThrow(
       'no auth port provided: mount AuthPortProvider',
     );
-    spy.mockRestore();
   });
 });

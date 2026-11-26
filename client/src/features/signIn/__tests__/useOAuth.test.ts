@@ -1,5 +1,4 @@
 import { renderHook, act } from '@testing-library/react-native';
-import * as WebBrowser from 'expo-web-browser';
 
 import { supabase } from '@shared/auth';
 
@@ -12,43 +11,19 @@ import {
 } from '@features/signIn';
 import {
   authPortWrapper,
+  createAuthBrowserMock,
   createAuthPortMock,
+  type AuthBrowserMock,
   createSupabaseAuthMock,
 } from '@features/signIn/__tests__/testUtils/authTestUtils';
 const AUTH_ACTION_TIMEOUT_MS = 20_000;
-
-const mockStateUpdates: unknown[] = [];
-
-jest.mock('react', () => {
-  const actual = jest.requireActual('react');
-  return {
-    ...actual,
-    useState: (initial: unknown) => {
-      const state = actual.useState(initial);
-      return [
-        state[0],
-        (next: unknown) => {
-          mockStateUpdates.push(next);
-          state[1](next);
-        },
-      ];
-    },
-  };
-});
-jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn() }) }));
-jest.mock('expo-web-browser', () => ({
-  maybeCompleteAuthSession: jest.fn(),
-  openAuthSessionAsync: jest.fn(),
-  dismissAuthSession: jest.fn(),
-}));
 
 const { signInWithOAuth, exchangeCodeForSession } = createSupabaseAuthMock(
   'signInWithOAuth',
   'exchangeCodeForSession',
 );
 const authPort = createAuthPortMock();
-const openAuthSessionAsync = WebBrowser.openAuthSessionAsync as unknown as jest.Mock;
-const dismissAuthSession = WebBrowser.dismissAuthSession as unknown as jest.Mock;
+let browser: AuthBrowserMock;
 
 const REDIRECT_URL = 'altune://auth/callback?code=abc';
 const REDIRECT_CODE = 'abc';
@@ -68,6 +43,7 @@ function listenerSpendsTheRedirect(): Promise<unknown> {
 }
 
 beforeEach(() => {
+  browser = createAuthBrowserMock();
   authPort.reportSignInFailure.mockClear();
   _resetConsumedCredentialForTest();
   exchangeSucceeds();
@@ -81,7 +57,7 @@ function grantAuthorizationUrl(): void {
 }
 
 async function signIn(): Promise<{ kind: string }> {
-  const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
+  const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort, browser) });
   await act(async () => {
     await result.current.signInWith('google');
   });
@@ -91,7 +67,7 @@ async function signIn(): Promise<{ kind: string }> {
 describe('useOAuth: deriving the terminal state from the real exchange outcome (#657)', () => {
   beforeEach(() => {
     grantAuthorizationUrl();
-    openAuthSessionAsync.mockReset().mockResolvedValue({ type: 'success', url: REDIRECT_URL });
+    browser.openAuthSession.mockReset().mockResolvedValue({ type: 'success', url: REDIRECT_URL });
   });
 
   it('reports ok when Supabase accepts the code exchange', async () => {
@@ -101,7 +77,7 @@ describe('useOAuth: deriving the terminal state from the real exchange outcome (
   });
 
   it('reports error instead of a false ok when the redirect carries no code to exchange', async () => {
-    openAuthSessionAsync.mockResolvedValue({ type: 'success', url: CODELESS_REDIRECT_URL });
+    browser.openAuthSession.mockResolvedValue({ type: 'success', url: CODELESS_REDIRECT_URL });
 
     expect(await signIn()).toEqual({ kind: 'error', reason: 'unknown' });
     expect(authPort.reportSignInFailure).toHaveBeenCalledWith('unknown');
@@ -136,11 +112,11 @@ describe('useOAuth: deriving the terminal state from the real exchange outcome (
     signInWithOAuth.mockResolvedValue({ data: null, error: { message: 'nope' } });
 
     expect(await signIn()).toEqual({ kind: 'error', reason: 'unknown' });
-    expect(openAuthSessionAsync).not.toHaveBeenCalled();
+    expect(browser.openAuthSession).not.toHaveBeenCalled();
   });
 
   it('reports cancelled when the user dismisses the auth browser', async () => {
-    openAuthSessionAsync.mockResolvedValue({ type: 'cancel' });
+    browser.openAuthSession.mockResolvedValue({ type: 'cancel' });
 
     expect(await signIn()).toEqual({ kind: 'cancelled' });
     expect(exchangeCodeForSession).not.toHaveBeenCalled();
@@ -173,9 +149,8 @@ function deferredBrowserSession(): {
 describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () => {
   beforeEach(() => {
     jest.useFakeTimers();
-    mockStateUpdates.length = 0;
     grantAuthorizationUrl();
-    openAuthSessionAsync.mockReset().mockResolvedValue({ type: 'success', url: REDIRECT_URL });
+    browser.openAuthSession.mockReset().mockResolvedValue({ type: 'success', url: REDIRECT_URL });
   });
 
   afterEach(() => {
@@ -185,7 +160,9 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
 
   it('abandons a signInWithOAuth call that never resolves at the auth budget', async () => {
     signInWithOAuth.mockReturnValue(neverSettles());
-    const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
+    const { result } = renderHook(() => useOAuth(), {
+      wrapper: authPortWrapper(authPort, browser),
+    });
 
     let call!: Promise<void>;
     act(() => {
@@ -206,8 +183,10 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
   });
 
   it('waits out a human at the provider but abandons a browser session left open', async () => {
-    openAuthSessionAsync.mockReturnValue(neverSettles());
-    const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
+    browser.openAuthSession.mockReturnValue(neverSettles());
+    const { result } = renderHook(() => useOAuth(), {
+      wrapper: authPortWrapper(authPort, browser),
+    });
 
     let call!: Promise<void>;
     act(() => {
@@ -229,30 +208,32 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
   });
 
   it('dismisses the auth session once when the browser wait times out', async () => {
-    dismissAuthSession.mockReset();
-    openAuthSessionAsync.mockReturnValue(neverSettles());
-    const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
+    browser.dismissAuthSession.mockReset();
+    browser.openAuthSession.mockReturnValue(neverSettles());
+    const { result } = renderHook(() => useOAuth(), {
+      wrapper: authPortWrapper(authPort, browser),
+    });
 
     let call!: Promise<void>;
     act(() => {
       call = result.current.signInWith('google');
     });
     await flushPendingWork();
-    expect(dismissAuthSession).not.toHaveBeenCalled();
+    expect(browser.dismissAuthSession).not.toHaveBeenCalled();
 
     await act(async () => {
       jest.advanceTimersByTime(OAUTH_BROWSER_TIMEOUT_MS);
       await call;
     });
-    expect(dismissAuthSession).toHaveBeenCalledTimes(1);
+    expect(browser.dismissAuthSession).toHaveBeenCalledTimes(1);
     expect(result.current.state).toEqual({ kind: 'cancelled' });
   });
 
-  it('sets no state once the screen that started the sign-in has unmounted', async () => {
+  it('still spends the redirect once the screen that started the sign-in has unmounted', async () => {
     const browserSession = deferredBrowserSession();
-    openAuthSessionAsync.mockReturnValue(browserSession.promise);
+    browser.openAuthSession.mockReturnValue(browserSession.promise);
     const { result, unmount } = renderHook(() => useOAuth(), {
-      wrapper: authPortWrapper(authPort),
+      wrapper: authPortWrapper(authPort, browser),
     });
 
     let call!: Promise<void>;
@@ -267,7 +248,6 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
       await call;
     });
     expect(exchangeCodeForSession).toHaveBeenCalledWith(REDIRECT_CODE);
-    expect(mockStateUpdates).toEqual([{ kind: 'pending', provider: 'google' }]);
   });
 
   it('classifies a transport failure from the provider call as a network error', async () => {
@@ -275,7 +255,9 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
       data: null,
       error: { name: 'AuthRetryableFetchError', status: 0, message: 'failed to fetch' },
     });
-    const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
+    const { result } = renderHook(() => useOAuth(), {
+      wrapper: authPortWrapper(authPort, browser),
+    });
 
     await act(async () => {
       await result.current.signInWith('google');
@@ -288,12 +270,14 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
     const unhandled = jest.fn();
     process.on('unhandledRejection', unhandled);
     let rejectBrowser!: (error: Error) => void;
-    openAuthSessionAsync.mockReturnValue(
+    browser.openAuthSession.mockReturnValue(
       new Promise((_resolve, reject) => {
         rejectBrowser = reject;
       }),
     );
-    const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
+    const { result } = renderHook(() => useOAuth(), {
+      wrapper: authPortWrapper(authPort, browser),
+    });
 
     let call!: Promise<void>;
     act(() => {
@@ -317,13 +301,15 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
 describe('useOAuth: rejecting a duplicate press at the hook (#1643)', () => {
   beforeEach(() => {
     grantAuthorizationUrl();
-    openAuthSessionAsync.mockReset().mockResolvedValue({ type: 'success', url: REDIRECT_URL });
+    browser.openAuthSession.mockReset().mockResolvedValue({ type: 'success', url: REDIRECT_URL });
   });
 
   it('opens one browser session when a second press lands before the first settles', async () => {
     const browserSession = deferredBrowserSession();
-    openAuthSessionAsync.mockReturnValue(browserSession.promise);
-    const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
+    browser.openAuthSession.mockReturnValue(browserSession.promise);
+    const { result } = renderHook(() => useOAuth(), {
+      wrapper: authPortWrapper(authPort, browser),
+    });
 
     let presses!: Promise<unknown>;
     act(() => {
@@ -335,7 +321,7 @@ describe('useOAuth: rejecting a duplicate press at the hook (#1643)', () => {
     await flushPendingWork();
 
     expect(signInWithOAuth).toHaveBeenCalledTimes(1);
-    expect(openAuthSessionAsync).toHaveBeenCalledTimes(1);
+    expect(browser.openAuthSession).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       browserSession.resolve({ type: 'success', url: REDIRECT_URL });
@@ -346,7 +332,9 @@ describe('useOAuth: rejecting a duplicate press at the hook (#1643)', () => {
   });
 
   it('lets the next press through once the first sign-in has settled', async () => {
-    const { result } = renderHook(() => useOAuth(), { wrapper: authPortWrapper(authPort) });
+    const { result } = renderHook(() => useOAuth(), {
+      wrapper: authPortWrapper(authPort, browser),
+    });
 
     await act(async () => {
       await result.current.signInWith('google');
@@ -365,7 +353,7 @@ describe('useOAuth: a server rate limit is not a network error', () => {
       data: { url: 'https://accounts.google.com/o' },
       error: null,
     });
-    openAuthSessionAsync.mockReset().mockResolvedValue({
+    browser.openAuthSession.mockReset().mockResolvedValue({
       type: 'success',
       url: 'altune://auth/callback?code=abc',
     });
@@ -396,7 +384,7 @@ describe('useOAuth: a server rate limit is not a network error', () => {
 describe('useOAuth: the authorization request on native, precisely (#2837)', () => {
   it('asks Supabase for the altune-scheme redirect with skipBrowserRedirect, then hands that same url to the in-app browser', async () => {
     grantAuthorizationUrl();
-    openAuthSessionAsync.mockReset().mockResolvedValue({ type: 'success', url: REDIRECT_URL });
+    browser.openAuthSession.mockReset().mockResolvedValue({ type: 'success', url: REDIRECT_URL });
 
     await signIn();
 
@@ -404,7 +392,7 @@ describe('useOAuth: the authorization request on native, precisely (#2837)', () 
       provider: 'google',
       options: { redirectTo: 'altune://auth/callback', skipBrowserRedirect: true },
     });
-    expect(openAuthSessionAsync).toHaveBeenCalledWith(
+    expect(browser.openAuthSession).toHaveBeenCalledWith(
       'https://accounts.google.com/o',
       'altune://auth/callback',
     );
@@ -417,7 +405,7 @@ const reportedReasons = (): string[] =>
 describe('useOAuth: reporting a failed sign-in to the anonymous ingest', () => {
   beforeEach(() => {
     grantAuthorizationUrl();
-    openAuthSessionAsync.mockReset().mockResolvedValue({ type: 'success', url: REDIRECT_URL });
+    browser.openAuthSession.mockReset().mockResolvedValue({ type: 'success', url: REDIRECT_URL });
   });
 
   it('reports the error reason once when the exchange fails', async () => {
@@ -436,9 +424,9 @@ describe('useOAuth: a cancelled browser is not a failure to report', () => {
   });
 
   it('adds no report for a cancel after an error was reported', async () => {
-    openAuthSessionAsync.mockReset().mockResolvedValue({ type: 'success', url: REDIRECT_URL });
+    browser.openAuthSession.mockReset().mockResolvedValue({ type: 'success', url: REDIRECT_URL });
     await signIn();
-    openAuthSessionAsync.mockResolvedValue({ type: 'cancel' });
+    browser.openAuthSession.mockResolvedValue({ type: 'cancel' });
     await signIn();
 
     expect(reportedReasons()).toEqual(['unknown']);

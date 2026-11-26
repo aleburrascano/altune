@@ -3,24 +3,28 @@ import * as Linking from 'expo-linking';
 import { isWebPlatform } from '@shared/device';
 import type { LinkEvents } from '@features/signIn/ports/linkEvents';
 
-export function initialUrl(): Promise<string | null> {
-  return Linking.getInitialURL();
+export interface UrlEvent {
+  url: string;
 }
 
-export function subscribeUrl(listener: (url: string) => void): () => void {
-  const subscription = Linking.addEventListener('url', ({ url }) => listener(url));
-  return () => subscription.remove();
+export interface LinkSubscription {
+  remove(): void;
 }
 
-function initialAppUrl(): Promise<string | null> {
-  return isWebPlatform() ? Promise.resolve(null) : initialUrl();
+export interface LinkingSource {
+  getInitialURL(): Promise<string | null>;
+  addEventListener(type: 'url', onUrl: (event: UrlEvent) => void): LinkSubscription;
 }
 
-function subscribeAppUrl(listener: (url: string) => void): () => void {
-  return isWebPlatform() ? () => {} : subscribeUrl(listener);
+export function createLinkEvents(linking: LinkingSource): LinkEvents {
+  return {
+    initialUrl: () => (isWebPlatform() ? Promise.resolve(null) : linking.getInitialURL()),
+    subscribeUrl: (listener) => {
+      if (isWebPlatform()) return () => {};
+      const subscription = linking.addEventListener('url', ({ url }) => listener(url));
+      return () => subscription.remove();
+    },
+  };
 }
 
-export const nativeLinkEvents: LinkEvents = {
-  initialUrl: initialAppUrl,
-  subscribeUrl: subscribeAppUrl,
-};
+export const nativeLinkEvents: LinkEvents = createLinkEvents(Linking);

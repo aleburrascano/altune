@@ -1,18 +1,16 @@
 import * as WebBrowser from 'expo-web-browser';
 
+import type { AuthBrowser } from '@features/signIn/ports/authBrowser';
+
 WebBrowser.maybeCompleteAuthSession();
 
-export function openAuthSession(
-  url: string,
-  redirectUrl: string,
-): Promise<{ type: string; url?: string }> {
-  return WebBrowser.openAuthSessionAsync(url, redirectUrl);
-}
-
-export function dismissAuthSession(): void {
-  try {
-    WebBrowser.dismissAuthSession();
-  } catch {
-    return;
-  }
-}
+export const nativeAuthBrowser: AuthBrowser = {
+  openAuthSession: (url, redirectUrl) => WebBrowser.openAuthSessionAsync(url, redirectUrl),
+  dismissAuthSession: () => {
+    try {
+      WebBrowser.dismissAuthSession();
+    } catch {
+      return;
+    }
+  },
+};

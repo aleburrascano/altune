@@ -1,11 +1,11 @@
-import { Link } from 'expo-router';
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { AppLink } from '@shared/navigation';
 import { Text, spacing } from '@shared/ui';
 import { useEmailPasswordFields } from '@features/signIn/view/useEmailPasswordFields';
-import { useSignIn } from '@features/signIn/shell/useSignIn';
-import { AuthForm } from '@features/signIn/ui/AuthForm';
+import { useSignIn } from '@features/signIn/view/useSignIn';
+import { AuthForm } from '@features/signIn/view/AuthForm';
 import { EmailPasswordFields } from '@features/signIn/view/AuthFields';
 
 const GENERIC_SIGN_IN_ERROR = "Couldn't sign you in. Please try again.";
@@ -41,11 +41,11 @@ export function SignInScreen(): ReactElement {
         showPasswordError={false}
       />
       <View style={styles.forgotRow}>
-        <Link href="/forgot-password" testID="link-to-forgot-password">
+        <AppLink href="/forgot-password" testID="link-to-forgot-password">
           <Text variant="caption" tone="accent">
             Forgot password?
           </Text>
-        </Link>
+        </AppLink>
       </View>
     </AuthForm>
   );

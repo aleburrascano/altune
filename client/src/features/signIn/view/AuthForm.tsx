@@ -1,7 +1,7 @@
-import { Link } from 'expo-router';
 import type { ComponentProps, ReactElement, ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { AppLink } from '@shared/navigation';
 import { Button, Text, spacing, AuthHeroLayout } from '@shared/ui';
 import { AuthErrorBanner } from '@features/signIn/view/AuthErrorBanner';
 import { OAuthButtons } from '@features/signIn/view/OAuthButtons';
@@ -52,14 +52,14 @@ export function AuthForm({
         />
         <OAuthButtons />
         <View style={styles.linkWrap}>
-          <Link href={linkHref} testID={linkTestID}>
+          <AppLink href={linkHref} testID={linkTestID}>
             <Text variant="label" tone="secondary">
               {linkQuestion}{' '}
               <Text variant="label" tone="accent">
                 {linkAction}
               </Text>
             </Text>
-          </Link>
+          </AppLink>
         </View>
       </View>
     </AuthHeroLayout>

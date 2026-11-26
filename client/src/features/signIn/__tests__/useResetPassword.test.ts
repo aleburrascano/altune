@@ -3,6 +3,7 @@ import {
   createSupabaseAuthMock,
   runAsyncAuthHook,
 } from '@features/signIn/__tests__/testUtils/authTestUtils';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 const { resetPasswordForEmail } = createSupabaseAuthMock('resetPasswordForEmail');
 
 const requestResetFor = (email: string) =>
@@ -191,18 +192,20 @@ describe('useResetPassword: only an unknown failure feeds the lockout', () => {
 
 describe('useResetPassword: failure logging', () => {
   it('warns with the projected detail and no email', async () => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const logs = recordLogs();
     resetPasswordForEmail.mockResolvedValue(REJECTED);
 
     await requestResetFor('secret@b.co');
 
-    expect(warn).toHaveBeenCalledWith('[auth] password reset request failed', {
-      name: 'AuthApiError',
-      code: 'validation_failed',
-      status: 400,
-      message: 'Bad request',
-    });
-    expect(JSON.stringify(warn.mock.calls)).not.toContain('secret@b.co');
-    warn.mockRestore();
+    expect(logs.warnings).toContainEqual([
+      '[auth] password reset request failed',
+      {
+        name: 'AuthApiError',
+        code: 'validation_failed',
+        status: 400,
+        message: 'Bad request',
+      },
+    ]);
+    expect(logs.text()).not.toContain('secret@b.co');
   });
 });

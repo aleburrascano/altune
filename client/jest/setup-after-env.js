@@ -1,3 +1,11 @@
+function restoreRealTimersBeforeRntlCleanup() {
+  jest.useRealTimers();
+}
+
+if (typeof document !== 'undefined') {
+  afterEach(restoreRealTimersBeforeRntlCleanup);
+}
+
 const { configure } = require('@testing-library/react-native');
 
 configure({ asyncUtilTimeout: 5000 });
@@ -10,8 +18,12 @@ if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
   window.matchMedia = (query) => ({
     matches: false,
     media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
     addEventListener: () => {},
     removeEventListener: () => {},
+    dispatchEvent: () => false,
   });
 }
 
@@ -45,7 +57,12 @@ const { ensureAppAuthClient } = require('./appAuthClient.js');
 
 beforeAll(ensureAppAuthClient);
 
+function fireFakeTimersBeforeStopping() {
+  if ('clock' in setTimeout) jest.runOnlyPendingTimers();
+}
+
 async function stopTelemetryWork() {
+  fireFakeTimersBeforeStopping();
   __http.abortHanging();
   await require('../src/shared/telemetry').stopTelemetry();
   installStoppedTelemetry();

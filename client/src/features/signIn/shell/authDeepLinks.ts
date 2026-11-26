@@ -1,14 +1,13 @@
 import { authIntentClient } from '@shared/auth';
 import { warn } from '@shared/log';
 import { showFailureAlert } from '@shared/ui';
-import {
-  type AuthIntentResult,
-  type AuthRouter,
-  completeAuthIntent,
-} from '@features/signIn/adapters/completeAuthIntent';
+import type { AuthIntentResult } from '@features/signIn/core/authIntent';
+import type { AuthRouter } from '@features/signIn/ports/authIntents';
+import { completeAuthIntent } from '@features/signIn/shell/completeAuthIntent';
 import { thrownErrorDetail } from '@features/signIn/core/authError';
 import { type AuthLinkIntent, parseAuthLink } from '@features/signIn/core/parseAuthLink';
 import type { LinkEvents } from '@features/signIn/ports/linkEvents';
+import { isPresent } from '@features/signIn/core/isPresent';
 
 type LinkKind = AuthLinkIntent['kind'];
 type AuthClient = Parameters<typeof completeAuthIntent>[2];
@@ -59,7 +58,7 @@ export function startAuthDeepLinks({ links, router, auth, log }: AuthDeepLinkDep
   let active = true;
 
   const handle = (url: string | null): void => {
-    if (!url || !active) {
+    if (!isPresent(url) || !active) {
       return;
     }
     const intent = parseAuthLink(url);

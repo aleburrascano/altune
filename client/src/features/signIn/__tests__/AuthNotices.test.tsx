@@ -1,15 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { renderRouter } from 'expo-router/testing-library';
 import { StyleSheet } from 'react-native';
 
 import { darkTheme, spacing } from '@shared/ui';
 import { AuthGate, InvalidRecoveryLinkNotice, SessionExpiredNotice } from '@features/signIn';
-import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
-jest.mock('expo-router', () => ({
-  useSegments: () => [],
-  useRouter: () => ({ replace: jest.fn(), push: jest.fn(), back: jest.fn() }),
-  Redirect: () => null,
-}));
+import {
+  authPortWrapper,
+  createSupabaseAuthMock,
+} from '@features/signIn/__tests__/testUtils/authTestUtils';
+import { recordLogs } from '@testing/fakes/log/inMemoryLogger';
 
 const { getSession, onAuthStateChange, signOut } = createSupabaseAuthMock(
   'getSession',
@@ -37,10 +37,13 @@ function holdSignOut(): () => void {
 function renderSessionExpired(): QueryClient {
   const queryClient = new QueryClient();
   queryClient.setQueryData(['library'], ['previous user track']);
-  render(
-    <QueryClientProvider client={queryClient}>
-      <SessionExpiredNotice />
-    </QueryClientProvider>,
+  renderRouter(
+    { index: SessionExpiredNotice },
+    {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      ),
+    },
   );
   return queryClient;
 }
@@ -53,34 +56,50 @@ const centered = {
   backgroundColor: darkTheme.color.canvas,
 };
 
+const Ports = authPortWrapper();
+
 function noticeStyle(testID: string) {
   return StyleSheet.flatten(screen.getByTestId(testID).props.style);
 }
 
 describe('the auth notice screens share one full-screen centered layout', () => {
   it('centers the splash on the canvas with no padding', () => {
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <AuthGate>
-          <></>
-        </AuthGate>
-      </QueryClientProvider>,
+    renderRouter(
+      {
+        index: () => (
+          <AuthGate>
+            <></>
+          </AuthGate>
+        ),
+      },
+      {
+        wrapper: ({ children }) => (
+          <QueryClientProvider client={new QueryClient()}>
+            <Ports>{children}</Ports>
+          </QueryClientProvider>
+        ),
+      },
     );
 
     expect(noticeStyle('auth-splash')).toEqual(centered);
   });
 
   it('centers the invalid-recovery-link notice and pads it', () => {
-    render(<InvalidRecoveryLinkNotice />);
+    renderRouter({ index: InvalidRecoveryLinkNotice });
 
     expect(noticeStyle('invalid-recovery-link')).toEqual({ ...centered, padding: spacing.lg });
   });
 
   it('centers the session-expired notice and pads it', () => {
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <SessionExpiredNotice />
-      </QueryClientProvider>,
+    renderRouter(
+      { index: SessionExpiredNotice },
+      {
+        wrapper: ({ children }) => (
+          <QueryClientProvider client={new QueryClient()}>
+            <Ports>{children}</Ports>
+          </QueryClientProvider>
+        ),
+      },
     );
 
     expect(noticeStyle('session-expired')).toEqual({ ...centered, padding: spacing.lg });
@@ -89,7 +108,7 @@ describe('the auth notice screens share one full-screen centered layout', () => 
 
 describe('SessionExpiredNotice', () => {
   it('shows the error copy under the button when sign-out failed', async () => {
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    recordLogs();
     supabaseSignOut.mockResolvedValue({ error: { name: 'AuthApiError', status: 500 } });
     renderSessionExpired();
 

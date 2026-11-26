@@ -1,7 +1,7 @@
-import { Link } from 'expo-router';
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { AppLink } from '@shared/navigation';
 import { Text, spacing } from '@shared/ui';
 
 export function BackToSignInLink({
@@ -11,11 +11,11 @@ export function BackToSignInLink({
 }): ReactElement {
   return (
     <View style={styles.linkWrap}>
-      <Link href="/sign-in" testID={testID}>
+      <AppLink href="/sign-in" testID={testID}>
         <Text variant="label" tone="accent">
           Back to sign in
         </Text>
-      </Link>
+      </AppLink>
     </View>
   );
 }

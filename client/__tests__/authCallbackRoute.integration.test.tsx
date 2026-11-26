@@ -6,6 +6,7 @@ import { act, renderRouter, screen } from 'expo-router/testing-library';
 
 import { installAuthClient } from '@shared/auth';
 import { authClientOver } from '@testing/fakeAuthClient';
+import { authPortWrapper } from '@features/signIn/__tests__/testUtils/authTestUtils';
 
 import { useNavigator } from '@shared/navigation';
 import {
@@ -78,8 +79,14 @@ afterEach(() => {
   act(() => clearRecoveryUnlock());
 });
 
+const Ports = authPortWrapper();
+
 function wrapper({ children }: { children: ReactNode }) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <Ports>{children}</Ports>
+    </QueryClientProvider>
+  );
 }
 
 function AuthDeepLinkBridge() {

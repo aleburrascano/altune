@@ -1,32 +1,26 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import * as WebBrowser from 'expo-web-browser';
+import { fireEvent, waitFor } from '@testing-library/react-native';
+import { renderRouter, screen } from 'expo-router/testing-library';
 
 import { OAuthButtons } from '@features/signIn';
 import {
   authPortWrapper,
+  createAuthBrowserMock,
   createAuthPortMock,
   createSupabaseAuthMock,
 } from '@features/signIn/__tests__/testUtils/authTestUtils';
 
 const NETWORK_ERROR_COPY = "Can't reach the server. Check your connection and try again.";
-jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn() }) }));
-jest.mock('expo-web-browser', () => ({
-  maybeCompleteAuthSession: jest.fn(),
-  openAuthSessionAsync: jest.fn(),
-  dismissAuthSession: jest.fn(),
-}));
-
 const { signInWithOAuth } = createSupabaseAuthMock('signInWithOAuth');
-const openAuthSessionAsync = jest.mocked(WebBrowser.openAuthSessionAsync);
-
 const authPort = createAuthPortMock();
+let browser: ReturnType<typeof createAuthBrowserMock>;
 
 beforeEach(() => {
   authPort.reportSignInFailure.mockClear();
+  browser = createAuthBrowserMock();
 });
 
 function pressGoogle(): void {
-  render(<OAuthButtons />, { wrapper: authPortWrapper(authPort) });
+  renderRouter({ index: OAuthButtons }, { wrapper: authPortWrapper(authPort, browser) });
   fireEvent.press(screen.getByTestId('oauth-google'));
 }
 
@@ -57,13 +51,11 @@ describe('OAuthButtons: telling the user which failure they hit (#1642)', () => 
       data: { url: 'https://accounts.google.com/o' },
       error: null,
     });
-    openAuthSessionAsync.mockResolvedValue({
-      type: 'cancel' as WebBrowser.WebBrowserResultType.CANCEL,
-    });
+    browser.openAuthSession.mockResolvedValue({ type: 'cancel' });
 
     pressGoogle();
 
-    await waitFor(() => expect(openAuthSessionAsync).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(browser.openAuthSession).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(screen.getByTestId('oauth-google').props.accessibilityState.disabled).toBe(false),
     );

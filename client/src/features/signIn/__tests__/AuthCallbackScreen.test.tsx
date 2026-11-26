@@ -1,20 +1,13 @@
-import { render, screen, waitFor } from '@testing-library/react-native';
-import { Platform } from 'react-native';
+import { screen, waitFor } from '@testing-library/react-native';
+import { renderRouter } from 'expo-router/testing-library';
+import { Platform, Text } from 'react-native';
 
 import { AuthCallbackScreen } from '@features/signIn';
 import { createSupabaseAuthMock } from '@features/signIn/__tests__/testUtils/authTestUtils';
-const mockRouter = { replace: jest.fn() };
-
-jest.mock('expo-router', () => {
-  const { View } = require('react-native');
-  return {
-    useRouter: () => mockRouter,
-    Link: ({ children, testID }: { children: React.ReactNode; testID?: string }) => (
-      <View testID={testID}>{children}</View>
-    ),
-    Redirect: ({ href }: { href: string }) => <View testID={`redirect-${href}`} />,
-  };
-});
+const ROUTES = {
+  index: () => <Text>home-screen</Text>,
+  'auth/callback': AuthCallbackScreen,
+};
 
 const { exchangeCodeForSession, verifyOtp, getSession } = createSupabaseAuthMock(
   'exchangeCodeForSession',
@@ -40,10 +33,6 @@ function setWebUrl(url: string): { replaceState: jest.Mock } {
   return { replaceState };
 }
 
-beforeEach(() => {
-  mockRouter.replace.mockReset();
-});
-
 afterEach(() => {
   Platform.OS = 'ios';
   Reflect.deleteProperty(globalThis, 'window');
@@ -54,9 +43,10 @@ describe('AuthCallbackScreen: native redirects home without a page URL (#2924)',
     Platform.OS = 'ios';
     Reflect.deleteProperty(globalThis, 'window');
 
-    render(<AuthCallbackScreen />);
+    const router = renderRouter(ROUTES, { initialUrl: '/auth/callback' });
 
-    await waitFor(() => expect(screen.getByTestId('redirect-/')).toBeTruthy());
+    await waitFor(() => expect(router.getPathname()).toBe('/'));
+    expect(screen.getByText('home-screen')).toBeTruthy();
     expect(screen.queryByTestId('auth-callback-error')).toBeNull();
     expectNothingSpent();
   });
@@ -65,9 +55,10 @@ describe('AuthCallbackScreen: native redirects home without a page URL (#2924)',
     const { replaceState } = setWebUrl('https://app.altune.example/auth/callback?code=abc123');
     Platform.OS = 'ios';
 
-    render(<AuthCallbackScreen />);
+    const router = renderRouter(ROUTES, { initialUrl: '/auth/callback' });
 
-    await waitFor(() => expect(screen.getByTestId('redirect-/')).toBeTruthy());
+    await waitFor(() => expect(router.getPathname()).toBe('/'));
+    expect(screen.getByText('home-screen')).toBeTruthy();
     expect(screen.queryByTestId('auth-callback-error')).toBeNull();
     expectNothingSpent();
     expect(replaceState).not.toHaveBeenCalled();
@@ -80,7 +71,7 @@ describe('AuthCallbackScreen: native never attempts the exchange (#2991)', () =>
     Platform.OS = 'ios';
     exchangeCodeForSession.mockResolvedValue({ data: { session: {} }, error: null });
 
-    render(<AuthCallbackScreen />);
+    renderRouter(ROUTES, { initialUrl: '/auth/callback' });
     await Promise.resolve();
 
     expectNothingSpent();

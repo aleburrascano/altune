@@ -1,22 +1,11 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import type { ReactNode } from 'react';
-
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
+import { renderRouter } from 'expo-router/testing-library';
 import { SignInScreen } from '@features/signIn';
 import {
   authPortWrapper,
   createAuthPortMock,
   createSupabaseAuthMock,
 } from '@features/signIn/__tests__/testUtils/authTestUtils';
-jest.mock('expo-router', () => {
-  const { View } = require('react-native');
-  return {
-    useRouter: () => ({ replace: jest.fn(), push: jest.fn(), back: jest.fn() }),
-    Link: ({ children, testID }: { children: ReactNode; testID?: string }) => (
-      <View testID={testID}>{children}</View>
-    ),
-  };
-});
-
 const { signInWithPassword } = createSupabaseAuthMock('signInWithPassword');
 
 const authPort = createAuthPortMock();
@@ -26,7 +15,7 @@ beforeEach(() => {
 });
 
 function renderSignIn(): void {
-  render(<SignInScreen />, { wrapper: authPortWrapper(authPort) });
+  renderRouter({ index: SignInScreen }, { wrapper: authPortWrapper(authPort) });
 }
 
 function rejectedWith(code: string) {

@@ -1,3 +1,4 @@
+import { warn } from '@shared/log';
 import { signOutOtherSessions, updatePassword, withAuthDeadline } from '@shared/auth';
 import {
   classifyAuthError,
@@ -9,7 +10,7 @@ import {
   type TransientAuthReason,
 } from '@features/signIn/core/authError';
 
-import { useAsyncAuthAction } from '@features/signIn/shell/useAsyncAuthAction';
+import { useAsyncAuthAction } from '@features/signIn/view/useAsyncAuthAction';
 
 type UpdatePasswordResult =
   | { kind: 'idle' }
@@ -23,7 +24,7 @@ type UpdatePasswordResult =
 const REVOKE_OTHERS_TIMEOUT_MS = 5_000;
 
 function reportRevokeFailure(detail: ThrownErrorDetail | SupabaseErrorDetail): void {
-  console.warn('[auth] revoking the other sessions after a password change failed', detail);
+  warn('[auth] revoking the other sessions after a password change failed', detail);
 }
 
 async function requestRevoke(): Promise<SupabaseErrorDetail | null> {
@@ -52,7 +53,7 @@ export function useUpdatePassword() {
     if (!error) {
       return { kind: 'ok', othersRevoked: await revokeOtherSessions() };
     }
-    console.warn('[auth] password update failed', supabaseErrorDetail(error));
+    warn('[auth] password update failed', supabaseErrorDetail(error));
     return {
       kind: 'error',
       reason: classifyAuthError(error, [[isWeakPasswordError, 'weak_password']]),

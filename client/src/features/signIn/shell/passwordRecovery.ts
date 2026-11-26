@@ -2,8 +2,6 @@ import { onSignOut } from '@shared/session';
 import { monotonicNow } from '@shared/timing';
 import type { RecoveryUnlockSource } from '@features/signIn/core/recoveryUnlockSource';
 
-export const RESET_PASSWORD_ROUTE_SEGMENT = 'reset-password';
-
 const RECOVERY_UNLOCK_WINDOW_MS = 300_000;
 
 type RecoveryUnlock = { userId: string; openedAt: number; openedTick: number };
@@ -76,6 +74,7 @@ export function subscribeRecoveryUnlock(listener: () => void): () => void {
 export const recoveryUnlock: RecoveryUnlockSource = {
   subscribe: subscribeRecoveryUnlock,
   isUnlocked: isRecoveryUnlocked,
+  clear: clearRecoveryUnlock,
 };
 
 onSignOut(clearRecoveryUnlock);
