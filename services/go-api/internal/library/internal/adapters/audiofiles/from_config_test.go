@@ -96,6 +96,47 @@ func TestFromConfig_MusicDirTimeoutCapsAStalledOpenWithoutACallerDeadline(t *tes
 	}
 }
 
+func TestFromConfig_AStalledMountRefusesNewCallsInsteadOfPilingUpGoroutines(t *testing.T) {
+	dir := t.TempDir()
+	store, err := library.NewAudioStoreFromConfig(&config.Config{MusicDir: dir, MusicDirTimeout: 50 * time.Millisecond}, slog.Default())
+	if err != nil {
+		t.Fatalf("FromConfig: %v", err)
+	}
+	makeStalledAudio(t, dir, "stalled.opus")
+	const callers = library.MaxInFlightFilesystemCalls + 5
+	errs := make(chan error, callers)
+	for range callers {
+		go func() {
+			rc, _, err := store.Stream(context.Background(), "stalled.opus")
+			if err == nil {
+				rc.Close()
+			}
+			errs <- err
+		}()
+	}
+
+	timedOut, refused := 0, 0
+	for range callers {
+		select {
+		case err := <-errs:
+			switch {
+			case errors.Is(err, library.ErrStorageStalled):
+				refused++
+			case errors.Is(err, context.DeadlineExceeded):
+				timedOut++
+			default:
+				t.Fatalf("Stream on a stalled mount = %v, want a deadline or ErrStorageStalled", err)
+			}
+		case <-time.After(stallHangGuard):
+			t.Fatal("a Stream call on a stalled mount never returned")
+		}
+	}
+
+	if timedOut != library.MaxInFlightFilesystemCalls || refused != callers-library.MaxInFlightFilesystemCalls {
+		t.Fatalf("timed out %d and refused %d, want %d timed out and %d refused", timedOut, refused, library.MaxInFlightFilesystemCalls, callers-library.MaxInFlightFilesystemCalls)
+	}
+}
+
 func TestFromConfig_AnUnsetMusicDirTimeoutKeepsTheDefaultCap(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "song.opus"), []byte("audio"), 0o600); err != nil {

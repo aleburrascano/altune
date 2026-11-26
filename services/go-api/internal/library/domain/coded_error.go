@@ -9,6 +9,7 @@ var (
 	ErrAudioTemporarilyUnavailable   = apierror.NewError(apierror.CodeCatalogAudioTemporarilyDown, "audio temporarily unavailable")
 	ErrCatalogTemporarilyUnavailable = apierror.NewError(apierror.CodeCatalogTemporarilyDown, "catalog temporarily unavailable")
 	ErrAudioOrphaned                 = apierror.NewError(apierror.CodeCatalogAudioOrphaned, "track deleted but audio file orphaned")
+	ErrStorageStalled                = apierror.NewError(apierror.CodeCatalogAudioTemporarilyDown, "audio storage is stalled")
 )
 
 var ErrTrackAlreadyInPlaylist = apierror.NewError(apierror.CodeCatalogTrackAlreadyInPlaylist, "track already in playlist")

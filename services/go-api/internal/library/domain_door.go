@@ -19,6 +19,7 @@ var (
 	ErrIllegalAcquisitionTransition = domain.ErrIllegalAcquisitionTransition
 	ErrLibraryFull                  = domain.ErrLibraryFull
 	ErrPlaylistFull                 = domain.ErrPlaylistFull
+	ErrStorageStalled               = domain.ErrStorageStalled
 	ErrTrackAlreadyInPlaylist       = domain.ErrTrackAlreadyInPlaylist
 )
 
