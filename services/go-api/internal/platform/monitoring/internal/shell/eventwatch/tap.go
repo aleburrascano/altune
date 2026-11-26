@@ -33,11 +33,21 @@ type EventWatcher struct {
 
 var _ events.Publisher = (*EventWatcher)(nil)
 
-func New(inner events.Publisher, now clock.Func) *EventWatcher {
+var ErrClockRequired = errors.New("eventtap: the tap requires a clock")
+
+func New(inner events.Publisher, now clock.Func) (*EventWatcher, error) {
 	if now == nil {
-		panic("eventwatch: New requires a clock")
+		return nil, ErrClockRequired
 	}
-	return &EventWatcher{inner: inner, now: now}
+	return &EventWatcher{inner: inner, now: now}, nil
+}
+
+func MustNew(inner events.Publisher, now clock.Func) *EventWatcher {
+	t, err := New(inner, now)
+	if err != nil {
+		panic(err)
+	}
+	return t
 }
 
 func (t *EventWatcher) Publish(ctx context.Context, userId ids.UserId, payload events.Payload) {

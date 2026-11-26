@@ -3,6 +3,7 @@ package history_test
 import (
 	"altune/go-api/internal/search"
 	"altune/go-api/internal/search/searchtest"
+	"altune/go-api/internal/shared/clock/clocktest"
 	"context"
 	"errors"
 	"strings"
@@ -11,7 +12,7 @@ import (
 )
 
 func TestRecordHistory_RefusesAMissingRepository(t *testing.T) {
-	if _, err := search.NewRecordSearchHistoryService(nil); !errors.Is(err, search.ErrHistoryCollaboratorRequired) {
+	if _, err := search.NewRecordSearchHistoryService(nil, time.Now); !errors.Is(err, search.ErrHistoryCollaboratorRequired) {
 		t.Fatalf("err = %v, want ErrHistoryCollaboratorRequired", err)
 	}
 }
@@ -51,7 +52,7 @@ func TestRecordSubmitted_StampsTheEntryWithTheInjectedClockInUTC(t *testing.T) {
 			return nil
 		},
 	}
-	svc := search.NewRecordSearchHistoryService(repo, clocktest.NewManual(at).Func())
+	svc := search.MustNewRecordSearchHistoryService(repo, clocktest.NewManual(at).Func())
 
 	if err := svc.RecordSubmitted(context.Background(), search.NewUser(), "some query"); err != nil {
 		t.Fatalf("RecordSubmitted: %v", err)
@@ -63,11 +64,9 @@ func TestRecordSubmitted_StampsTheEntryWithTheInjectedClockInUTC(t *testing.T) {
 }
 
 func TestNewRecordSearchHistoryService_RefusesANilClock(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Fatal("a nil clock was accepted, want a panic at construction")
-		}
-	}()
+	svc, err := search.NewRecordSearchHistoryService(&search.FakeHistoryWriter{}, nil)
 
-	search.NewRecordSearchHistoryService(&search.FakeHistoryWriter{}, nil)
+	if !errors.Is(err, search.ErrHistoryClockRequired) || svc != nil {
+		t.Fatalf("NewRecordSearchHistoryService(nil clock) = (%v, %v), want ErrHistoryClockRequired and no service", svc, err)
+	}
 }

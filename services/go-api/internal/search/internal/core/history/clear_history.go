@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/ids"
 	"altune/go-api/internal/shared/logging"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -18,11 +19,21 @@ type ClearSearchHistoryService struct {
 	now         clock.Func
 }
 
-func NewClearSearchHistoryService(historyRepo ports.HistoryEraser, now clock.Func) *ClearSearchHistoryService {
+var ErrClockRequired = errors.New("history: the service requires a clock")
+
+func NewClearSearchHistoryService(historyRepo ports.HistoryEraser, now clock.Func) (*ClearSearchHistoryService, error) {
 	if now == nil {
-		panic("history: NewClearSearchHistoryService requires a clock")
+		return nil, ErrClockRequired
 	}
-	return &ClearSearchHistoryService{historyRepo: historyRepo, now: now}
+	return &ClearSearchHistoryService{historyRepo: historyRepo, now: now}, nil
+}
+
+func MustNewClearSearchHistoryService(historyRepo ports.HistoryEraser, now clock.Func) *ClearSearchHistoryService {
+	s, err := NewClearSearchHistoryService(historyRepo, now)
+	if err != nil {
+		panic(err)
+	}
+	return s
 }
 
 func (s *ClearSearchHistoryService) Execute(ctx context.Context, userId ids.UserId) error {

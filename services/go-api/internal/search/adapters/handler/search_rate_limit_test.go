@@ -267,7 +267,7 @@ func TestUnmeteredUserRoutes_AreThrottledPerUser(t *testing.T) {
 			historyRepo := &fakeSearchHistoryRepo{}
 			h := search.NewDiscoveryHandler(search.DiscoveryServices{
 				History:      search.NewListSearchHistoryService(historyRepo),
-				ClearHistory: search.NewClearSearchHistoryService(historyRepo, time.Now),
+				ClearHistory: search.MustNewClearSearchHistoryService(historyRepo, time.Now),
 				Favorites:    search.NewFavoritesService(erroringFavoritesRepo{}),
 			}).WithRateLimits(search.DiscoveryRateLimits{
 				History:   search.RequestLimit{Max: 1, Window: time.Hour},

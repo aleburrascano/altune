@@ -28,9 +28,17 @@ func NewRecordSearchHistoryService(historyRepo ports.HistoryWriter, now clock.Fu
 		return nil, ErrCollaboratorRequired
 	}
 	if now == nil {
-		panic("history: NewRecordSearchHistoryService requires a clock")
+		return nil, ErrClockRequired
 	}
 	return &RecordSearchHistoryService{HistoryRepo: historyRepo, now: now}, nil
+}
+
+func MustNewRecordSearchHistoryService(historyRepo ports.HistoryWriter, now clock.Func) *RecordSearchHistoryService {
+	s, err := NewRecordSearchHistoryService(historyRepo, now)
+	if err != nil {
+		panic(err)
+	}
+	return s
 }
 
 func (s *RecordSearchHistoryService) Record(

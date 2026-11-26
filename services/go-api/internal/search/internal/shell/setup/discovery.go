@@ -123,11 +123,15 @@ func newHandlerServices(w wiring) (handler.DiscoveryServices, error) {
 	if err != nil {
 		return handler.DiscoveryServices{}, fmt.Errorf("build the related tracks service: %w", err)
 	}
+	clearHistory, err := history.NewClearSearchHistoryService(s.History, time.Now)
+	if err != nil {
+		return handler.DiscoveryServices{}, fmt.Errorf("build the clear-history service: %w", err)
+	}
 	return handler.DiscoveryServices{
 		Search:        search,
 		History:       history.NewListSearchHistoryService(s.History),
 		RecordHistory: recordHistory,
-		ClearHistory:  history.NewClearSearchHistoryService(s.History, time.Now),
+		ClearHistory:  clearHistory,
 		Album:         album,
 		Artist:        artist,
 		Related:       relatedTracks,

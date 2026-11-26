@@ -80,7 +80,9 @@ func (a *App) compose(ctx context.Context, transport http.RoundTripper) (http.Ha
 	if err != nil {
 		return nil, err
 	}
-	a.openEventBus()
+	if err := a.openEventBus(); err != nil {
+		return nil, err
+	}
 	if err := a.applyDisabledJobs(ctx); err != nil {
 		return nil, fmt.Errorf("startup switches: %w", err)
 	}
@@ -98,9 +100,14 @@ func (a *App) compose(ctx context.Context, transport http.RoundTripper) (http.Ha
 	return r, nil
 }
 
-func (a *App) openEventBus() {
+func (a *App) openEventBus() error {
 	a.eventBus = events.NewInProcessBus(time.Now, filepath.Join(os.TempDir(), eventIDFloorFile))
-	a.eventTap = monitoring.NewEventTap(a.eventBus, time.Now)
+	tap, err := monitoring.NewEventTap(a.eventBus, time.Now)
+	if err != nil {
+		return fmt.Errorf("event tap: %w", err)
+	}
+	a.eventTap = tap
+	return nil
 }
 
 type features struct {
